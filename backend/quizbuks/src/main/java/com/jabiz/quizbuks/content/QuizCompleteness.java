@@ -89,6 +89,12 @@ public final class QuizCompleteness {
                 "Material " + material.no() + " has no content of its kind " + kind,
                 Map.of("material", material.no(), "kind", kind.name())));
         }
+        // Q75 (D-Q75-5): the start checks the watching against the duration, so the video to watch needs one.
+        if (material.watchToAnswer() && material.durationSec() == null) {
+            problems.add(new Violation(path + ".durationSec", ContentCodes.MATERIAL_DURATION_REQUIRED,
+                "Material " + material.no() + " is the video to watch and has no duration",
+                Map.of("material", material.no())));
+        }
         return problems;
     }
 

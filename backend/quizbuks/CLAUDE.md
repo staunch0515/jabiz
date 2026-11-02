@@ -112,6 +112,7 @@
   语句数由 `AttemptStatementBudgetIT` 断言确切值与所取的锁（平台 16p-2 的事务内写缓冲之后：开始共 10、开始锁内 3；付奖的提交共 13、发布锁内 7；使发布结束的完成共 18、锁内 12；暂停共 10、锁内 7；锁内自事务的第一把锁之后的一条起到 `COMMIT`；应急开关 `jabiz.storage.write-batching.enabled=false` 时为 16p-1 的 12 / 5、20 / 14、29 / 23、12 / 9，`AttemptStatementBudgetWithoutHeldWritesIT`），改答题流程须同时改预算并在压测报告中说明；不在锁内增加读取。
   **超时自动提交**只由逐项任务 `qb.attempt-expire`（每分钟，模板 `qb.system.attempts-due`）对每个会话运行 `QB_ATTEMPT_EXPIRE`。**逐项取锁或可能逐项失败的批量系统工作写成逐项任务**
   （`JobDefinition.forEach`，平台决策 D42），不写成根流程 + `CallProcess.forEach`（一批一个事务会违反锁序、阻塞热门发布、一项失败拖住整批；不取锁的统计任务除外）；每项流程是 `internal()`，先取锁、再读取、已不到期即什么也不做。
+  **看完视频才能开始**（Q75，`docs/quizbuks/plans/Q75-video-playback.md`）：卡片上线与版本切换都经 `PublicationEditing.cardVideo` 冻结 `video`、`watchRequired`、`videoDurationSec`（商户在资料上填的 `durationSec`，"看完即可"的视频没有它就不能保存版本，`QuizCompleteness`）；开始的输入 `playback` 是 App 从播放器接口读到的报告，规则只在 `play.WatchRules`（App 的 `video/playback.ts` 同一规则、同一组用例），不满足即 422 `QB_ATTEMPT_WATCH_REQUIRED`，`UNKNOWN` 放行；报告写进会话的那条插入（`watchedSec`、`videoEnded`、`playbackStatus`），不读新的行，`AttemptStatementBudgetIT` 不变。商家后台的资料对话框以播放器预览读时长，因此 `/sponsor` 的内容安全策略同 App 多 `frame-src` 两个播放器。
   **正确答案只在完成后出现**：开始与继续的输出不含选项的正误，详情只取快照的简介与资料，`result` 列在完成时才写；答题人读不到版本（`AnswerSecrecyIT`）。
   **选项按位置编号**（Q10b，评审 M1）：开始、保存、提交、`answers` 与 `result` 中的选项编号都是本次显示的位置 1..k，只有评分经 `optionOrder` 换回版本的编号（`Scoring.scoreShown`、`Answers.inVersion`）；
   `optionOrder` 是敏感字段，任何读接口都不返回。
@@ -358,9 +359,10 @@
 - **商店 App 的外壳**（Q49，`quizbuks-mobile/`，`docs/quizbuks/plans/Q49b-android.md`）：只上架答题者的 App（`/taker/`），商家后台与充值不进 App。
   Android 是 TWA（`quizbuks-mobile/android`，设置只在 `twa-manifest.json`，构建由它读取；App Links 只认 `/taker/` 前缀），启动地址与 App Links 都带 `shell=android`；
   App 中只以 `src/shell.ts` 的 `nativeShell()` 判断是否在商店 App 中（参数或 Chrome 的 `android-app://` referrer，按标签页记住），在外壳中不显示任何安装提示（`install.tsx`）。
-  `assetlinks.json` 暂由 Caddy 站点提供（`deploy/quizbuks/assetlinks.sh`，环境变量 `QUIZBUKS_ANDROID_PACKAGE` / `QUIZBUKS_ANDROID_CERT_SHA256`），平台 17l 合入后改用平台的。
+  `assetlinks.json` 由 Caddy 站点提供（`deploy/quizbuks/assetlinks.sh`，环境变量 `QUIZBUKS_ANDROID_PACKAGE` / `QUIZBUKS_ANDROID_CERT_SHA256`）：维护模式中也能取到；需求方 2026-11-02 决定不改用平台 17l 的 `jabiz.web.native-apps`。
   上传密钥与 Play 服务账号只在 GitHub Environment `play` 的 secrets 中（workflow `quizbuks-mobile.yml`）。改了 App 的前缀、包名或颜色时两边一起改（`scripts/consistency.test.mjs`）。
-  iOS 是 Capacitor（`quizbuks-mobile/ios`，设置只在 `capacitor.config.json`，Swift 的 `QuizBuksScope` 让网页只停在 `/taker/`、其他地址交给 Safari；User-Agent 带 `QuizBuksApp/ios`），`shell.ts` 同样认它；`apple-app-site-association` 暂由 Caddy 提供（`deploy/quizbuks/apple-app-site-association.sh`，变量 `QUIZBUKS_IOS_APP_ID`）；签名只在 workflow `quizbuks-ios.yml` 中以 App Store Connect API 密钥进行（Environment `appstore`）。
+  iOS 是 Capacitor（`quizbuks-mobile/ios`，设置只在 `capacitor.config.json`，Swift 的 `QuizBuksScope` 让网页只停在 `/taker/`、其他地址交给 Safari；User-Agent 带 `QuizBuksApp/ios`），`shell.ts` 同样认它；`apple-app-site-association` 同样由 Caddy 提供（`deploy/quizbuks/apple-app-site-association.sh`，变量 `QUIZBUKS_IOS_APP_ID`）；签名只在 workflow `quizbuks-ios.yml` 中以 App Store Connect API 密钥进行（Environment `appstore`）。
+  推送通知（平台 17k，D69）：profile `push`（`application-push.yml`，VAPID 密钥只来自环境变量）；只有中奖通知 `MessageProcesses.PRIZE_WON`（`qb.prize-won`，入口 `app`），由 `QB_MESSAGE_FROM_EVENT` 在写下"中奖"的那条消息时以 `SendPush` 发出，同一奖品只推一次（`prizeWon`）；答题者在"账户 → 通知"以平台积木 `PushPreferences` 开关。新的推送先加 `PushTemplate` 与三语消息 `push.qb.<名>.*`，不自己调用推送服务。
   商店资料（Q49d，`docs/quizbuks/store/`）：说明文字三语同构并由 `tools/quizbuks/store/listing.test.mjs` 检查；数据安全表按隐私政策逐格写，政策或 App 收集的数据改了就同步；截图只由 `quizbuks-web/e2e/store`（workflow `quizbuks-store.yml`）生成，不提交。
 
 ## 6. 测试与命令（在 `backend/` 下）

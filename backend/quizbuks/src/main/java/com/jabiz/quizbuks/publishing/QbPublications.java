@@ -364,6 +364,10 @@ public final class QbPublications {
         eb.field("cover", f -> f.physicalColumn("cover").asText(36));
         // Q19: the player of the version's video to watch (VideoEmbeds), shown on the App's home.
         eb.field("video", f -> f.physicalColumn("video").asText(80));
+        // Q75: whether that video is the one to watch before answering (the start requires its watching, D-Q75-4), and
+        // how long it is as the sponsor gave it (none on a card from before Q75: then only its end counts).
+        eb.field("watchRequired", f -> f.physicalColumn("watch_required").required(true).asBool());
+        eb.field("videoDurationSec", f -> f.physicalColumn("video_duration_sec").asNumeric(5, 0));
         eb.field("versionId", f -> f.physicalColumn("version_id").required(true)
             .asReference(QbContent.VERSION));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").immutable(true).required(true)

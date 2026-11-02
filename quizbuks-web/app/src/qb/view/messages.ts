@@ -105,6 +105,7 @@ const en = {
   feed: {
     videoTitle: 'Video: {{name}}',
     hasVideo: 'With a video',
+    watchFirst: 'Watch to answer',
     upTo: 'Up to {{amount}}',
     sponsorPage: "{{name}}'s page",
     survey: 'Survey',
@@ -210,6 +211,7 @@ const zh: typeof en = {
   feed: {
     videoTitle: '视频：{{name}}',
     hasVideo: '有视频',
+    watchFirst: '看完即可答题',
     upTo: '最高 {{amount}}',
     sponsorPage: '{{name}}的主页',
     survey: '问卷',
@@ -315,6 +317,7 @@ const ja: typeof en = {
   feed: {
     videoTitle: '動画：{{name}}',
     hasVideo: '動画あり',
+    watchFirst: '見れば回答できる',
     upTo: '最高 {{amount}}',
     sponsorPage: '{{name}}のページ',
     survey: 'アンケート',

@@ -1,7 +1,7 @@
 import { getAccountDeletion, useAuth, type IdentityLinked } from '@jabiz/client'
 import { BecomeSponsor } from '../mysponsor/BecomeSponsor'
 import { TitleBadge } from './TitleBadge'
-import { AccountDeletion, PageState } from '@jabiz/ui'
+import { AccountDeletion, PageState, PushPreferences } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft,
@@ -92,7 +92,7 @@ const ICONS: Record<AccountPart, LucideIcon> = {
 /**
  * The taker's own account (U-70, U-71; M-02 for sign-ins), as a menu of its parts (Q56): the profile, the details for
  * matching (Q47), signing in and security (the address, which cannot be changed, U-70; the password, two-step
- * verification, linked accounts, the sessions and the latest sign-ins), the mail (Q7a), the app's settings (the
+ * verification, linked accounts, the sessions and the latest sign-ins), the notifications (the mail, Q7a; push on this device, platform 17k), the app's settings (the
  * interface language, the sound effects, installing the app), the taker's ID and their place on a sponsor's staff (Q39); then help and
  * the legal texts. The old `/account?section=details` still opens the details.
  */
@@ -111,11 +111,11 @@ export function AccountPage({ path }: { path: string }) {
 type T = (key: string) => string
 
 /** A part's title: the same words on its page and in the menu. */
-function partTitle(part: AccountPart, t: T, tApp: T): string {
+function partTitle(part: AccountPart, tApp: T): string {
   switch (part) {
     case 'profile': return tApp('profile.title')
     case 'details': return tApp('details.title')
-    case 'mail': return t('account.mail')
+    case 'mail': return tApp('account.titles.mail')
     default: return tApp(`account.titles.${part}`)
   }
 }
@@ -140,7 +140,7 @@ function AccountMenu() {
       </div>
       <MenuList label={tApp('account.settings')}>
         {ACCOUNT_PARTS.map((part) => (
-          <MenuItem key={part} to={accountPath(part)} icon={ICONS[part]} title={partTitle(part, t, tApp)}
+          <MenuItem key={part} to={accountPath(part)} icon={ICONS[part]} title={partTitle(part, tApp)}
             hint={tApp(`account.hints.${part}`)} testId={`account-menu-${part}`} />
         ))}
       </MenuList>
@@ -197,7 +197,6 @@ function DeletionPage() {
 
 /** A part of the account on its own page, with the way back to the menu. */
 function AccountPartPage({ part }: { part: AccountPart }) {
-  const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
   return (
     <section className="flex flex-col gap-6" aria-labelledby="account-part-title" data-testid={`account-${part}-page`}>
@@ -207,7 +206,7 @@ function AccountPartPage({ part }: { part: AccountPart }) {
           <ArrowLeft aria-hidden className="size-4" />
           {tApp('account.back')}
         </Link>
-        <h1 id="account-part-title" className="text-xl font-semibold">{partTitle(part, t, tApp)}</h1>
+        <h1 id="account-part-title" className="text-xl font-semibold">{partTitle(part, tApp)}</h1>
       </div>
       <PartContent part={part} />
     </section>
@@ -251,9 +250,17 @@ function SecurityPart() {
   )
 }
 
+/** The notifications: the mail (Q7a) and, on this device, the push notifications (platform 17k). */
 function MailPart() {
   const { t: tApp } = useTranslation(APP)
-  return <MailSection hint={tApp('mail.hint')} title={false} />
+  return (
+    <div className="flex flex-col gap-8">
+      <MailSection hint={tApp('mail.hint')} />
+      <AccountSection title={tApp('account.push')} testId="account-push">
+        <PushPreferences />
+      </AccountSection>
+    </div>
+  )
 }
 
 /** The app's own settings: the interface language, the quizzes' languages (Q59a), the sound (Q57), installing the app. */

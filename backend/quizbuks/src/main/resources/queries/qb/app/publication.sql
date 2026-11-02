@@ -32,6 +32,8 @@ results:
   name:           { from: QbPublicationCard.name }
   quizTitle:      { from: QbPublicationCard.quizTitle }
   cover:          { from: QbPublicationCard.cover }
+  watchRequired:  { from: QbPublicationCard.watchRequired }
+  videoDurationSec: { from: QbPublicationCard.videoDurationSec }
   kind:           { from: QbPublicationCard.kind }
   language:       { from: QbPublicationCard.language }
   languages:      { from: QbPublicationCard.languages }
@@ -93,6 +95,8 @@ SELECT
     d.name AS name,
     d.quizTitle AS quizTitle,
     d.cover AS cover,
+    d.watchRequired AS watchRequired,
+    d.videoDurationSec AS videoDurationSec,
     d.kind AS kind,
     d.language AS language,
     d.languages AS languages,
@@ -148,6 +152,10 @@ SELECT
     coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'quizTitle',
              c.{{QbPublicationCard.quizTitle}}) AS quizTitle,
     c.{{QbPublicationCard.cover}}          AS cover,
+    -- Q75: whether the card's video must be watched before starting (the App disables the start until then), and
+    -- how long it is as the sponsor gave it.
+    c.{{QbPublicationCard.watchRequired}}  AS watchRequired,
+    c.{{QbPublicationCard.videoDurationSec}} AS videoDurationSec,
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.language}}       AS language,
     coalesce(c.{{QbPublicationCard.languages}}, c.{{QbPublicationCard.language}}) AS languages,
@@ -158,6 +166,9 @@ SELECT
     (SELECT CAST(coalesce(jsonb_agg(coalesce(
                 (SELECT own || jsonb_build_object('language', dl.lang) || CASE WHEN bm ? 'watchToAnswer'
                      THEN jsonb_build_object('watchToAnswer', bm -> 'watchToAnswer') ELSE '{}'::jsonb END
+                     -- Q75: the duration is the base's too.
+                     || CASE WHEN bm ? 'durationSec' THEN jsonb_build_object('durationSec', bm -> 'durationSec')
+                        ELSE '{}'::jsonb END
                  FROM jsonb_array_elements(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'translations' -> dl.lang
                                            -> 'materials') own
                  WHERE own -> 'no' = bm -> 'no'), bm) ORDER BY CAST(bm ->> 'no' AS integer)), '[]'::jsonb) AS text)

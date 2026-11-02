@@ -110,8 +110,9 @@ tools/quizbuks/local-demo.sh status | logs | seed
   - LINE Developers：建 LINE Login 渠道（Web 应用），回调 URL 登记两个地址；在"OpenID Connect"中申请并获准取得邮箱；Channel ID 与 Channel secret 设为 `JABIZ_OIDC_LINE_CLIENT_ID` / `_SECRET`（secret 至少 32 字节，否则启动失败）。
   Facebook、LINE 不担保邮箱：首次登录开的账号邮箱未验证，并寄出验证邮件；在登录着的浏览器中打开链接即完成验证（账号与关联都保留），之前不能写入任何东西
   （答题人不能保存资料、商家不能申请入驻）。用户拒绝提供邮箱或 LINE 渠道未获准取得邮箱时不开户，请其用邮箱注册。邮箱已被使用的处理同 Google。
-- **Apple 登录（App 与商家后台，平台 17j）**：`social` 同时声明 Apple（App Store 要求有第三方登录的 App 也提供 Apple 登录，审核指南 4.8），**开着 `social` 的部署升级时必须先设好 Apple 的五个变量**，
-  否则部署前的检查（`server/required-env`）即停止部署。在 Apple Developer 中：
+- **Apple 登录（App 与商家后台，平台 17j）**：有了 Apple 的凭据后改用 `SPRING_PROFILES_ACTIVE=apple`（`application-apple.yml`，代替 `social`：它声明 Google、Apple、Facebook、LINE，
+  四家都要设；App Store 要求有第三方登录的 App 也提供 Apple 登录，审核指南 4.8，上架前须开）。Apple 的五个变量缺少或格式不对（包括留着占位）时，
+  部署前的检查（`server/required-env`）即停止部署。`google`、`social`、`apple` 只开一个。在 Apple Developer 中：
   - Identifiers 建 App ID 并勾选 Sign in with Apple；再建一个 **Services ID**（如 `com.example.quizbuks.web`）作为客户端编号 `JABIZ_OIDC_APPLE_CLIENT_ID`，
     勾选 Sign in with Apple，配置中填域名 `<主机>` 与 **Return URL** `https://<主机>/api/auth/oidc/apple/form-post`（同一值设为 `QB_OIDC_APPLE_FORM_POST`）。
     staging 与 production 可共用一个 Services ID，两个主机与两个 Return URL 都登记。
@@ -120,6 +121,15 @@ tools/quizbuks/local-demo.sh status | logs | seed
   - 回调地址与其他三家相同（`QB_OIDC_REDIRECT_APP`、`QB_OIDC_REDIRECT_SPONSOR`），不需要在 Apple 登记：Apple 把答复送到 Return URL，服务器再转到这两个页面。
   Apple 担保邮箱：首次登录即开户、邮箱已验证；用户选择"隐藏邮件地址"时邮箱是 `…@privaterelay.appleid.com`，同样可用，但**要寄到这种地址，须在 Apple Developer 的
   "Sign in with Apple for Email Communication"中登记发信的域名与地址**（`JABIZ_MAIL_FROM` 的域名，并设好 SPF / DKIM），否则 Apple 不转发。名字只在首次授权时给出，用作显示名。
+- **推送通知（App，平台 17k）**：在 `SPRING_PROFILES_ACTIVE` 中加 `push`（`application-push.yml`，与登录的 profile 并用）。答题者在 App 的"账户 → 通知"中开启此设备的推送，
+  可单独关掉"中奖通知"；中奖（平台 Kudos 待发或已发、现金或到店兑换的奖品、数字奖品）时推送一次，点按打开结果页。Android 的 App 与桌面、手机浏览器都用 Web Push，
+  iPhone 上只有加到主屏幕的网页能收到（iOS App 的推送在平台 17k-b 之后）。VAPID 密钥对只生成一次：
+  ```sh
+  openssl ecparam -name prime256v1 -genkey -noout -out vapid.pem
+  openssl ec -in vapid.pem -pubout -outform DER | tail -c 65 | base64 | tr '/+' '_-' | tr -d '=\n'   # JABIZ_PUSH_PUBLIC_KEY
+  openssl ec -in vapid.pem -outform DER | tail -c +8 | head -c 32 | base64 | tr '/+' '_-' | tr -d '=\n'   # JABIZ_PUSH_PRIVATE_KEY
+  ```
+  两个值放进 `.env` 后删除 `vapid.pem`（私钥另存离线副本）；应用启动时检查两把是一对。`JABIZ_PUSH_SUBJECT` 写运营者的 `mailto:` 地址。
   删除账号时平台撤销 Apple 的授权（定时任务每 15 分钟；令牌以 `JABIZ_SEAL_KEY` 密封保存）；连续失败 12 次后管理后台出现待办，须在 Apple ID 的"使用 Apple 登录的 App"中由用户本人移除或联系 Apple。
 - **Stripe 的返回地址**由配置决定，不在 Stripe 后台设置：充值跳回 `QB_SPONSOR_LINK` 下的 `wallet/topups/<编号>`，开通收款账户跳回 `QB_APP_LINK` 下的 `wallet/payout`。
 - **本机注册**：`docker compose -f deploy/quizbuks/compose.dev.yaml --profile tools up -d` 另起 Mailpit（<http://localhost:8025> 查看邮件）；
@@ -288,16 +298,18 @@ tools/quizbuks/local-demo.sh status | logs | seed
 | `JABIZ_MAIL_BASE_URL` | 开启邮件时 | 主机的根地址，如 `https://quizbuks.example.com`（链接按入口指向各自的前端，退订页也是） |
 | `SPRING_MAIL_HOST` / `SPRING_MAIL_PORT` / `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | 开启邮件时 | 邮件服务器（SMTP） |
 | `QB_SPONSOR_LINK` | 否 | 商家后台的绝对地址，Stripe 支付后跳回（`…/wallet/topups/…`）；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
-| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与商家后台的 Google 登录（`application-google.yml`）；`social` 开启 Google、Apple、Facebook 与 LINE（`application-social.yml`，Q40、平台 17j），见"前端" |
+| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与商家后台的 Google 登录（`application-google.yml`）；`social` 开启 Google、Facebook 与 LINE（`application-social.yml`，Q40）；`apple` 开启这三家与 Apple（`application-apple.yml`，平台 17j）；只开其中一个，见"前端" |
 | `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `JABIZ_OIDC_GOOGLE_CLIENT_SECRET` | 开启 Google 时 | Google OAuth 客户端（Web 应用）；密钥只放在环境变量中 |
 | `QB_OIDC_REDIRECT_APP` | 开启 Google 时 | App 的回调地址 `https://<主机>/taker/login/oidc`，与 Google 控制台中登记的完全相同 |
 | `QB_OIDC_REDIRECT_SPONSOR` | 开启 Google 时 | 商家后台的回调地址 `https://<主机>/sponsor/login/oidc`（Q37），与 Google 控制台中登记的完全相同 |
 | `JABIZ_OIDC_FACEBOOK_CLIENT_ID` / `JABIZ_OIDC_FACEBOOK_CLIENT_SECRET` | 开启 `social` 时 | Facebook 应用的编号与密钥（Q40） |
 | `JABIZ_OIDC_LINE_CLIENT_ID` / `JABIZ_OIDC_LINE_CLIENT_SECRET` | 开启 `social` 时 | LINE Login 渠道的 Channel ID 与 Channel secret（至少 32 字节，Q40） |
-| `JABIZ_OIDC_APPLE_CLIENT_ID` | 开启 `social` 时 | Apple 的 Services ID（平台 17j） |
-| `JABIZ_OIDC_APPLE_TEAM_ID` / `JABIZ_OIDC_APPLE_KEY_ID` | 开启 `social` 时 | Apple 的团队编号与 Sign in with Apple 密钥的编号（各 10 个字符） |
-| `JABIZ_OIDC_APPLE_PRIVATE_KEY` | 开启 `social` 时 | 该密钥的 `.p8` 文件内容（EC P-256；PEM 的换行可写成 `\n`）；只放在环境变量中 |
-| `QB_OIDC_APPLE_FORM_POST` | 开启 `social` 时 | `https://<主机>/api/auth/oidc/apple/form-post`，与 Services ID 中登记的 Return URL 完全相同 |
+| `JABIZ_OIDC_APPLE_CLIENT_ID` | 开启 `apple` 时 | Apple 的 Services ID（平台 17j） |
+| `JABIZ_OIDC_APPLE_TEAM_ID` / `JABIZ_OIDC_APPLE_KEY_ID` | 开启 `apple` 时 | Apple 的团队编号与 Sign in with Apple 密钥的编号（各 10 个字符） |
+| `JABIZ_OIDC_APPLE_PRIVATE_KEY` | 开启 `apple` 时 | 该密钥的 `.p8` 文件内容（EC P-256；PEM 的换行可写成 `\n`）；只放在环境变量中 |
+| `QB_OIDC_APPLE_FORM_POST` | 开启 `apple` 时 | `https://<主机>/api/auth/oidc/apple/form-post`，与 Services ID 中登记的 Return URL 完全相同 |
+| `JABIZ_PUSH_PUBLIC_KEY` / `JABIZ_PUSH_PRIVATE_KEY` | 开启 `push` 时 | 推送通知的 VAPID 密钥对（Base64url，公钥 87 个字符、私钥 43 个字符；见"推送通知"）；私钥只放在环境变量中，**保留副本**：换了密钥对，所有设备都要重新开启推送 |
+| `JABIZ_PUSH_SUBJECT` | 开启 `push` 时 | 推送服务联系运营者的地址 `mailto:<地址>`（部署前的检查要求以 `mailto:` 开头） |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后 | 可信代理的地址或网段（逗号分隔），登录记录与限流据此取客户端地址；不得含 `0.0.0.0/0`、`::/0`（启动错误），见"密钥与部署" |
 
 外部服务（Q6a 起 Stripe 为必需；见上节"充值与核对"）：

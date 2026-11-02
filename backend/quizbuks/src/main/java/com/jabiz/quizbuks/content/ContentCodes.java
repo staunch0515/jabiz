@@ -55,6 +55,10 @@ public final class ContentCodes {
     /** Q19: the video to watch is a YouTube or Vimeo video, one per quiz. */
     public static final String MATERIAL_VIDEO_NOT_EMBEDDABLE = "QB_MATERIAL_VIDEO_NOT_EMBEDDABLE";
     public static final String QUIZ_ONE_WATCH_VIDEO = "QB_QUIZ_ONE_WATCH_VIDEO";
+    /** Q75: the video to watch needs its duration before a version is saved (D-Q75-5). */
+    public static final String MATERIAL_DURATION_REQUIRED = "QB_MATERIAL_DURATION_REQUIRED";
+    /** Q75: a duration outside 1 second to 2 hours ({@link ContentLimits#MAX_VIDEO_SECONDS}). */
+    public static final String MATERIAL_DURATION_RANGE = "QB_MATERIAL_DURATION_RANGE";
 
     // Q73a: a quiz's other languages (docs/quizbuks/plans/Q73-content-languages.md).
     public static final String BASE_HAS_TRANSLATIONS = "QB_QUIZ_BASE_HAS_TRANSLATIONS";
@@ -74,7 +78,8 @@ public final class ContentCodes {
         NO_QUESTIONS, STEM_REQUIRED, OPTION_COUNT, NO_CORRECT, SELECTION_REQUIRED, SURVEY_SCORED, OPTION_EMPTY, MATERIAL_TITLE_REQUIRED, MATERIAL_CONTENT_REQUIRED, MATERIAL_NO_IMAGES,
         VERSION_UNCHANGED, TOO_LARGE, MATERIAL_VIDEO_NOT_EMBEDDABLE, QUIZ_ONE_WATCH_VIDEO, BASE_HAS_TRANSLATIONS,
         LANGUAGE_IS_BASE, TRANSLATION_LANGUAGE, TRANSLATION_KEY, TRANSLATION_NO_SOURCE, TRANSLATION_TOO_LONG,
-        TRANSLATION_FIELD, MATERIAL_VARIANT_EXISTS, MATERIAL_VARIANT_FIXED);
+        TRANSLATION_FIELD, MATERIAL_VARIANT_EXISTS, MATERIAL_VARIANT_FIXED, MATERIAL_DURATION_REQUIRED,
+        MATERIAL_DURATION_RANGE);
 
     private ContentCodes() {}
 }

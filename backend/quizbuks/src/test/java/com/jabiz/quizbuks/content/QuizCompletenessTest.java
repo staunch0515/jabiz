@@ -85,6 +85,20 @@ class QuizCompletenessTest {
             new QuizSnapshot.Option(1, null, Drafts.PICTURE, true), Drafts.option(2, "b", false)))))).isEmpty();
     }
 
+    /** Q75 (D-Q75-5): the video to watch needs its duration; an ordinary video does not. */
+    @Test
+    void theVideoToWatchNeedsItsDuration() {
+        QuizSnapshot.Material watched = new QuizSnapshot.Material(1, "VIDEO_LINK", "V", null, null,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", null, null, List.of(), true);
+        assertThat(QuizCompleteness.check(withMaterials(watched))).singleElement().satisfies(v -> {
+            assertThat(v.ruleCode()).isEqualTo(ContentCodes.MATERIAL_DURATION_REQUIRED);
+            assertThat(v.field()).isEqualTo("materials[0].durationSec");
+        });
+        assertThat(QuizCompleteness.check(withMaterials(watched.withDuration(90)))).isEmpty();
+        assertThat(QuizCompleteness.check(withMaterials(material(1, "VIDEO_LINK", "V", null,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", null, null, 0)))).isEmpty();
+    }
+
     @Test
     void materialsNeedATitleAndContentOfTheirKind() {
         assertThat(codes(withMaterials(material(1, "ARTICLE", null, "b", null, null, null, 0))))

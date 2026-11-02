@@ -155,7 +155,10 @@ SHOPIFY_API_SECRET=<API secret 或占位>
 **部署前的检查**：workflow 在服务器上改动任何东西之前，按所部署提交的 `deploy/quizbuks/server/required-env` 检查 `.env`
 （`check-env.sh`，只列出缺少、过短或格式不对的变量名，不显示值）：有问题即停止，镜像不拉取、数据库不迁移。新增必需变量的提交同时把它加进这个清单；
 可选的变量以 `?` 标出，给了才查（如 `JABIZ_ERASURE_DATASOURCE_URL` 必须以 `r2dbc:` 开头）；写作 `<profile>:NAME` 的只在 `.env` 的 `SPRING_PROFILES_ACTIVE`
-含该 Spring profile 时才要（如 `social` 的四家提供方：开着 `social` 而缺 Apple 的变量即停止，而不是迁移后启动失败）。
+含该 Spring profile 时才要（如 `apple` 的四家提供方：开着 `apple` 而缺 Apple 的变量即停止，而不是迁移后启动失败）。
+应用启动时还检查格式的变量，清单中写明同样的格式，检查与应用一致：Apple 的 Team ID 与 Key ID 是 10 个大写字母或数字（`apple-id`），
+回调与 Return URL 是有主机名的 `https://` 地址（`url`，留着 `<主机>` 这样的占位即不通过），`.p8` 密钥是 PEM（换行写作 `\n`）或其 Base64 正文（`p8`）。
+填占位不能让检查通过：还没有 Apple 的凭据时开 `social`（Google、Facebook、LINE）或 `google`，不开 `apple`。以 Windows 换行保存的 `.env`（值的末尾带回车）同样停止。
 
 `QB_LOCAL_SECRETS=false`、`QB_STRIPE_PLACEHOLDERS=false` 已写在 compose 中：缺少任何密钥时应用拒绝启动，不会自己生成。
 **关于可信代理**：`proxy` 网络上还有其他应用（包括另一个环境）的容器，它们能直接访问本环境的容器。只信任 Caddy 的地址，它们就不能伪造客户端地址；
@@ -240,7 +243,8 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
    - Stripe 只用测试模式的密钥（`sk_test_` / `rk_test_`）。在 Stripe 后台（测试模式）建两个端点 `https://staging.quizbuks.com/api/inbound/stripe` 与
      `/api/inbound/stripe-connect`（订阅的事件见 `docs/quizbuks/stripe-test-mode.md` §4.2），`STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` 是
      **这两个端点各自的签名密钥**（`whsec_…`，由 Stripe 给出，不能自己生成：签名对不上时每个事件都被拒绝，充值停在 `OPEN`）。经 Cloudflare 时先做"3a. Cloudflare"。
-   - `SPRING_PROFILES_ACTIVE=staging` 只标出环境，应用中没有按环境写死的配置：环境的差异全部在这个 `.env` 中。同时开 Google 登录时写 `staging,google`（再加 Apple、Facebook、LINE 时写 `staging,social`，Q40、平台 17j），并设 Google 客户端与两个回调地址（`QB_OIDC_REDIRECT_APP`、`QB_OIDC_REDIRECT_SPONSOR`，见 README"前端"）。
+   - `SPRING_PROFILES_ACTIVE=staging` 只标出环境，应用中没有按环境写死的配置：环境的差异全部在这个 `.env` 中。同时开 Google 登录时写 `staging,google`（再加 Facebook、LINE 时写 `staging,social`，Q40；四家再加 Apple 时写 `staging,apple`，平台 17j；只写其中一个），并设 Google 客户端与两个回调地址（`QB_OIDC_REDIRECT_APP`、`QB_OIDC_REDIRECT_SPONSOR`，见 README"前端"）。
+   - 推送通知（平台 17k）：在 `SPRING_PROFILES_ACTIVE` 中再加 `push`（如 `staging,google,push`），并设 VAPID 密钥对与联系方式（`JABIZ_PUSH_PUBLIC_KEY`、`JABIZ_PUSH_PRIVATE_KEY`、`JABIZ_PUSH_SUBJECT`，生成方法见 README"推送通知"）；缺少时部署前的检查停止部署。
    - `JABIZ_WEB_ENVIRONMENT=staging`（平台 16zd）让三个前端的每一页顶部都显示 "STAGING · 测试环境，不是正式版" 的横条，标题前加 `[STAGING]`；
      不写也一样（缺省 `test`）。**绝不能写 `production`**：workflow 部署前检查，staging 的 `.env` 写了 production 即停止。
 3. **DNS**：给 `staging.<基础域名>` 添加 A 记录（及 AAAA），指向同一台服务器。
@@ -379,7 +383,7 @@ rm /opt/apps/$APP/maintenance/maintenance.lock
 ## Android App 的 assetlinks（Q49b）
 
 Android App（`quizbuks-mobile/android`，`docs/quizbuks/plans/Q49b-android.md`）以 `https://<域名>/.well-known/assetlinks.json` 证明它属于这个域名：
-没有它（或指纹不对）时 App 照常可用，只是顶部显示浏览器的地址栏，邮件链接不直接打开 App。平台 17l 合入前由 Caddy 站点提供：
+没有它（或指纹不对）时 App 照常可用，只是顶部显示浏览器的地址栏，邮件链接不直接打开 App。由 Caddy 站点提供（维护模式中也能取到，所以不改用平台 17l 的 `jabiz.web.native-apps`）：
 
 1. Settings → Environments → `production` → Variables 中设两个变量（是公开的值，不是 secret）：
    - `QUIZBUKS_ANDROID_PACKAGE`：`com.quizbuks.app`（`twa-manifest.json` 的 `packageId`）；
@@ -389,7 +393,7 @@ Android App（`quizbuks-mobile/android`，`docs/quizbuks/plans/Q49b-android.md`�
 3. 确认：`curl -s https://<域名>/.well-known/assetlinks.json` 返回这份 JSON（维护模式中也返回）；再以 Google 的
    [Statement List Tester](https://developers.google.com/digital-asset-links/tools/generator) 对包名与指纹测试一次。
 
-Caddy 容器须能看到 `/opt/apps/<APP_NAME>/well-known/`，与维护页同一前提（见上节"第一次使用前给 Caddy 挂载这两个目录"）。17l 之后改由平台提供，本节与站点中的这一段随之删除。
+Caddy 容器须能看到 `/opt/apps/<APP_NAME>/well-known/`，与维护页同一前提（见上节"第一次使用前给 Caddy 挂载这两个目录"）。
 
 ## Android App 的构建与上传（Q49b）
 
@@ -410,7 +414,7 @@ Settings → Environments → 新建 `play`（建议设 Required reviewers 与 D
 ## iOS App 的 apple-app-site-association（Q49c）
 
 iOS App（`quizbuks-mobile/ios`，`docs/quizbuks/plans/Q49c-ios.md`）的 Universal Links 要域名上的 `https://<域名>/.well-known/apple-app-site-association`：没有它时邮件链接在 Safari 打开。
-平台 17l 合入前由 Caddy 站点提供，同 `assetlinks.json`：
+由 Caddy 站点提供，同 `assetlinks.json`：
 
 1. Settings → Environments → `production` → Variables：`QUIZBUKS_IOS_APP_ID` = `<Team ID>.com.quizbuks.app`（Team ID 在 Apple Developer 的 Membership 页）。
 2. 部署一次：workflow 以 `deploy/quizbuks/apple-app-site-association.sh` 生成（只认 `/taker/*`）并上传到 `/opt/apps/<APP_NAME>/well-known/apple-app-site-association`；变量没有时删除这个文件。

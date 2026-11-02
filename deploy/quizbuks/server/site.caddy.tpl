@@ -7,7 +7,7 @@ __DOMAIN__ {
 	encode zstd gzip
 
 	# Android App Links (docs/quizbuks/plans/Q49b-android.md): the statement the deploy workflow wrote to
-	# well-known/assetlinks.json in the environment's directory, until the platform serves it (17l). Before maintenance
+	# well-known/assetlinks.json in the environment's directory (kept here rather than the platform's native-apps, 17l). Before maintenance
 	# so that Android's verification of the app still succeeds during maintenance; an environment without the file
 	# (no Android app configured) falls through to the application, which answers 404.
 	@assetlinks {
@@ -26,7 +26,7 @@ __DOMAIN__ {
 	}
 
 	# iOS Universal Links (docs/quizbuks/plans/Q49c-ios.md), the same way: well-known/apple-app-site-association
-	# written by the deploy workflow, served as JSON without a redirect (Apple's CDN follows none), until 17l.
+	# written by the deploy workflow, served as JSON without a redirect (Apple's CDN follows none), during maintenance too.
 	@aasa {
 		path /.well-known/apple-app-site-association
 		file {

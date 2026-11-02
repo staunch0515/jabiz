@@ -55,12 +55,18 @@ public record QuizFile(String kind, String title, String intro, String cover, In
 
     /**
      * A material; its file fields are keys of {@link #files}. {@code watchToAnswer} (Q19, optional in version 1, absent
-     * is false): the video watching which is enough to answer.
+     * is false): the video watching which is enough to answer. {@code durationSec} (Q75, optional, a video of the base
+     * language only): how long the video is.
      */
     public record Material(String kind, String title, String description, String body, String url, String pdf,
-        String audio, List<Image> images, boolean watchToAnswer) {
+        String audio, List<Image> images, boolean watchToAnswer, Integer durationSec) {
         public Material {
             images = List.copyOf(Objects.requireNonNull(images, "images must not be null"));
+        }
+
+        public Material(String kind, String title, String description, String body, String url, String pdf,
+            String audio, List<Image> images, boolean watchToAnswer) {
+            this(kind, title, description, body, url, pdf, audio, images, watchToAnswer, null);
         }
 
         public Material(String kind, String title, String description, String body, String url, String pdf,

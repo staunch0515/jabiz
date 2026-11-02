@@ -53,6 +53,27 @@ class QuizSnapshotsTest {
         assertThat(QuizSnapshots.hash(with)).isNotEqualTo(QuizSnapshots.hash(without));
     }
 
+    /** Q75: the duration is written on the video to watch only, when the sponsor gave it; nothing else changes. */
+    @Test
+    void onlyTheVideoToWatchCarriesItsDuration() {
+        QuizSnapshot.Material plain = new QuizSnapshot.Material(1, "VIDEO_LINK", "V", null, null,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", null, null, List.of()).withDuration(120);
+        QuizSnapshot.Material watched = new QuizSnapshot.Material(1, "VIDEO_LINK", "V", null, null,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", null, null, List.of(), true);
+        QuizSnapshot.Material timed = watched.withDuration(120);
+        List<QuizSnapshot.Question> questions = Drafts.complete().questions();
+        // An ordinary video's duration is not written: its text and hash are as before Q75.
+        assertThat(QuizSnapshots.toJson(new QuizSnapshot("T", null, null, null, false, List.of(plain), questions)))
+            .doesNotContain("durationSec");
+        assertThat(QuizSnapshots.toJson(new QuizSnapshot("T", null, null, null, false, List.of(watched), questions)))
+            .doesNotContain("durationSec");
+        QuizSnapshot with = new QuizSnapshot("T", null, null, null, false, List.of(timed), questions);
+        String text = QuizSnapshots.toJson(with);
+        assertThat(text).contains("\"durationSec\":120", "\"watchToAnswer\":true");
+        assertThat(QuizSnapshots.fromJson(text)).isEqualTo(with);
+        assertThat(QuizSnapshots.fromJson(text).materials().getFirst().durationSec()).isEqualTo(120);
+    }
+
     @Test
     void writesSortedKeysWithoutSpaceAndEveryAbsentValueAsNull() {
         String text = QuizSnapshots.toJson(new QuizSnapshot("T", null, null, null, false, List.of(), List.of(

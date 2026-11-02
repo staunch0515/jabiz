@@ -112,7 +112,8 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
 
     /**
      * Q19: the App frames the two video players it shows (YouTube without cookies, Vimeo) and nothing else; its policy
-     * is otherwise the platform's default, which the sponsor console and the administration keep.
+     * is otherwise the platform's default, which the administration keeps. Q75: the sponsor console frames the same
+     * two (the material dialog's preview reads the video's duration from the player).
      */
     @Test
     void theAppFramesOnlyTheVideoPlayers() {
@@ -121,7 +122,8 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
             JabizWebProperties.Spa::path, JabizWebProperties.Spa::contentSecurityPolicy));
         assertThat(policies.get("/taker")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY
             + "; frame-src https://www.youtube-nocookie.com https://player.vimeo.com");
-        assertThat(policies.get("/sponsor")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
+        assertThat(policies.get("/sponsor")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY
+            + "; frame-src https://www.youtube-nocookie.com https://player.vimeo.com");
         assertThat(policies.get("/admin")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
         assertThat(policies.get("/biz")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
     }

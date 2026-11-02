@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { SKIP_WAITING, startWorker, type SwConfig, type WorkerScope } from './worker'
+import {
+  notificationTarget, pushMessage, SKIP_WAITING, startWorker, type SwConfig, type WindowClientLike, type WorkerScope,
+} from './worker'
 
 const ORIGIN = 'https://shop.example.com'
 
@@ -42,8 +44,12 @@ function scope() {
   const listeners = new Map<string, (event: never) => void>()
   const worker = {
     location: { origin: ORIGIN },
-    registration: { unregister: vi.fn(async () => true) },
-    clients: { claim: vi.fn(async () => undefined) },
+    registration: { unregister: vi.fn(async () => true), showNotification: vi.fn(async () => undefined) },
+    clients: {
+      claim: vi.fn(async () => undefined),
+      matchAll: vi.fn(async (): Promise<WindowClientLike[]> => []),
+      openWindow: vi.fn(async () => undefined),
+    },
     skipWaiting: vi.fn(async () => undefined),
     addEventListener: vi.fn((type: string, listener: (event: never) => void) => listeners.set(type, listener)),
   }
@@ -142,5 +148,51 @@ describe('the worker', () => {
     expect([...stores.keys()]).toEqual(['jabiz-shell-root-x'])
     expect(worker.registration.unregister).toHaveBeenCalled()
     expect(listens('fetch')).toBe(false)
+  })
+})
+
+describe('push notifications (decision D69)', () => {
+  const data = (value: unknown) => ({ json: () => value })
+
+  it('shows what the server sent, and nothing else', async () => {
+    const { worker, dispatch } = scope()
+    startWorker(worker as unknown as WorkerScope, CONFIG, cacheStorage().storage, vi.fn())
+    await dispatch('push', { data: data({ title: 'Shipped', body: 'Order 7', url: '/portal/orders', tag: 'x' }) })
+    expect(worker.registration.showNotification).toHaveBeenCalledWith('Shipped',
+      { body: 'Order 7', tag: 'x', data: { url: '/portal/orders' } })
+    await dispatch('push', { data: data('not a message') })
+    await dispatch('push', { data: null })
+    await dispatch('push', { data: { json: () => { throw new Error('not JSON') } } })
+    expect(worker.registration.showNotification).toHaveBeenCalledTimes(1)
+  })
+
+  it("opens the notification's page in a window of the SPA, or a new one", async () => {
+    const { worker, dispatch } = scope()
+    startWorker(worker as unknown as WorkerScope, CONFIG, cacheStorage().storage, vi.fn())
+    const close = vi.fn()
+    await dispatch('notificationclick', { notification: { data: { url: '/portal/orders' }, close } })
+    expect(close).toHaveBeenCalled()
+    expect(worker.clients.openWindow).toHaveBeenCalledWith(`${ORIGIN}/portal/orders`)
+    const window = {
+      url: `${ORIGIN}/portal/account`, focus: vi.fn(async () => undefined), navigate: vi.fn(async () => undefined),
+    }
+    worker.clients.matchAll.mockResolvedValueOnce([window])
+    await dispatch('notificationclick', { notification: { data: { url: '/portal/orders' }, close } })
+    expect(window.focus).toHaveBeenCalled()
+    expect(window.navigate).toHaveBeenCalledWith(`${ORIGIN}/portal/orders`)
+    // A window the worker does not control: navigate() rejects, so the page opens in a new one.
+    const uncontrolled = { ...window, navigate: vi.fn(async () => { throw new TypeError('not controlled') }) }
+    worker.clients.matchAll.mockResolvedValueOnce([uncontrolled])
+    worker.clients.openWindow.mockClear()
+    await dispatch('notificationclick', { notification: { data: { url: '/portal/orders' }, close } })
+    expect(worker.clients.openWindow).toHaveBeenCalledWith(`${ORIGIN}/portal/orders`)
+  })
+
+  it('never opens another site', () => {
+    expect(notificationTarget({ url: 'https://evil.example.com/' }, ORIGIN, '/portal/')).toBe(`${ORIGIN}/portal/`)
+    expect(notificationTarget({ url: '//evil.example.com/' }, ORIGIN, '/portal/')).toBe(`${ORIGIN}/portal/`)
+    expect(notificationTarget(null, ORIGIN, '/portal/')).toBe(`${ORIGIN}/portal/`)
+    expect(notificationTarget({ url: '/portal/x?y=1' }, ORIGIN, '/portal/')).toBe(`${ORIGIN}/portal/x?y=1`)
+    expect(pushMessage({ json: () => ({ title: '' }) })).toBeNull()
   })
 })

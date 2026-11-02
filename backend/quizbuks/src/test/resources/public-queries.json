@@ -432,6 +432,14 @@
         "precision" : 5,
         "scale" : 0,
         "type" : "numeric"
+      },
+      "videoDurationSec" : {
+        "precision" : 5,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "watchRequired" : {
+        "type" : "bool"
       }
     }
   }, {

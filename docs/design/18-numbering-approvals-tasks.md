@@ -434,3 +434,28 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
 
 示范：`backend/app` 的 `ORDER_SHIP` 给客户主数据 `Customer`（管理员维护，可选 `userId`）中有账号且有地址的客户发 NOTIFICATION `commerce.order-shipped`（三语）——收件人来自主数据，不来自下单输入；场景
 `commerce/order_shipped_mail`。测试：core `MailTemplateTest`、`MailRendererTest`；runtime `MailChecksTest`、`MailSenderTimeoutsTest`、`JwtServiceTest`；app `MailIT`、`MailDisabledIT`、`MailPreferencesIT`（16s）；前端 `MailUnsubscribePage.test`、`mail.test`（client）、`MailPreferences.test`（ui，含 axe）、`AccountSecurityPage.test`。
+
+### 5.7 推送通知（17k，决策 D69）
+
+需要立刻知道的事（新问卷、中奖、发货）除邮件外也可推送到用户的设备。
+- **模板**：`PushTemplate` Bean（core `com.jabiz.push`），`PushTemplate.define("shop.shipped", t -> t.param("orderNo").entries("portal"))`；标题与正文为消息
+  `push.<名>.title` / `push.<名>.body`（纯文本，参数写作 `{名}`），偏好中的显示名 `push.<名>.name`，应用的每种语言都要有（启动检查 `PUSH`）。只发给用户。
+- **发送**：流程步骤 `SendPush.of(模板, ctx -> 用户编号, 参数, ctx -> 链接)`（`.when(...)` 同 `SendMail`）：在流程的事务中发出事件 `jabiz.push.queued`，提交后由消费者
+  `PUSH_DELIVER`（`internal()`）推送；回滚即不推送。链接是相对该设备所属入口前端根（`app-path`）的页面（`orders/42`），只能是本站的相对路径。参数不能是秘密（`PUSH_PARAM_SECRET`）。
+  `jabiz.push.enabled` 缺省关闭，关闭时步骤什么也不做。
+- **设备**：本人登录后以 `POST /api/auth/account/push/devices` 登记此浏览器的 Web Push 订阅（`SEC_DEVICE_REGISTER`，`entryOnly()`），记在普通表 `sec_user_device`
+  （实体 `SecUserDevice`：入口、种类 `webpush` / `apns`、端点与密钥为敏感字段、登记时的会话）。同一端点再登记即取代（换了账号的同一浏览器）；每人至多 20 台，多出的去掉最早的。
+  `POST …/devices/remove`（按编号或端点，`SEC_DEVICE_REMOVE`）；`GET /api/auth/account/push` 给出是否开启、VAPID 公钥、该入口的模板与本人的选择、本人的设备。
+  端点必须是 `jabiz.push.web-push.allowed-hosts` 中的推送服务（缺省 Chrome / Android、Firefox、Safari、Edge 的），否则 422 `PUSH_SUBSCRIPTION_INVALID`：服务器要向它发请求。
+- **投递**：用户关闭了该模板（`SecUserPushPreference`，同邮件偏好，`POST /api/auth/account/push/preferences`，`SEC_PUSH_PREFERENCE_SET`）即不推送；
+  只推给模板适用的入口的设备；登记它的会话已结束（退出、吊销、过期、超过入口的闲置时长，同刷新时的判断）的设备与推送服务答 404 / 410 的设备随之删除。
+  内容按用户的语言为 `{title, body, url, tag}`，至多 3993 字节（任何推送服务都接受的 4096 字节正文减去加密的开销），过长时先截短正文、再截短标题（按字符，带省略号）；
+  `tag` 与请求头 `Topic` 是这条通知自己的编号（事件编号），重试时再发的一份取代先到的，不显示两条。
+  以 RFC 8291（`aes128gcm`）加密、以 VAPID（RFC 8292，`jabiz.push.web-push.public-key` / `private-key` 只来自环境变量，两者须是一对，`subject` 为 `mailto:` 或 `https:`）签名，`TTL` 一天，5 秒超时，几台设备同时发。
+  没有一台收到且有连不上的，流程失败、由 Outbox 稍后重试。
+- **前端**：`@jabiz/client` 的 `enablePush()`（请求权限、以服务器公钥订阅、登记）、`disablePush()`、`pushEnabledHere()`（浏览器已订阅且服务器有本会话的设备：
+  重新登录或换了账号后，浏览器留下的订阅要再登记一次才算开启）、`setPushPreference()`；平台的 Service Worker
+  显示通知，点按在该 SPA 的窗口（没有、或该窗口还不受这个 Worker 控制即新开）中打开其页面，只开本站的地址。`@jabiz/ui` 的积木 `PushPreferences`（此设备的开关与每种模板的开关）。需要 PWA（`Pwa.ON`）。
+- **账号删除**：`ACCOUNT_ERASE` 删除用户的设备与推送偏好。
+- 原生 App 的推送（iOS 的 APNs）在 17k-b。
+

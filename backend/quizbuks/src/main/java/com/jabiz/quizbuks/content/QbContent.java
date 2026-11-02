@@ -151,6 +151,8 @@ public final class QbContent {
         eb.field("audio", f -> f.physicalColumn("audio").kind(FileKind.of(AUDIO_POLICY)));
         // Q19: a video watching which is enough to answer; the App shows it on the publication's card.
         eb.field("watchToAnswer", f -> f.physicalColumn("watch_to_answer").required(true).asBool());
+        // Q75: how long the video is, as the sponsor gives it (D-Q75-5); the start checks the watching against it.
+        eb.field("durationSec", f -> f.physicalColumn("duration_sec").asNumeric(5, 0));
         // Q73a (§2.2b): a material in another language of the quiz stands for the base material variantOf there;
         // a base material has neither.
         eb.field("variantOf", f -> f.physicalColumn("variant_of").immutable(true).asReference(MATERIAL));
