@@ -41,3 +41,33 @@ export function openAuthorization(url: string): Promise<void> {
 export function nativeShell(): string | null {
   return shell
 }
+
+/**
+ * Push notifications through the native shell (phase 17k-b, decision D69): an iOS shell's web view has no Web Push, so
+ * the shell asks the system for permission and Apple's device token, and the platform registers the token for the
+ * session as a device of kind `apns`. `enablePush`, `disablePush`, `pushEnabledHere` and the `PushPreferences` block
+ * then use it instead of the browser's Push API. A tap on a notification is the shell's to handle: it opens the
+ * notification's `url` in its web view.
+ */
+export interface NativePush {
+  /** The kind of device the shell registers; Apple's push service for an iOS shell. */
+  kind: 'apns'
+  /** Asks the user's permission and returns this device's token (hexadecimal), or `null` when the user refused. */
+  register(): Promise<string | null>
+  /** This device's token, when the app has one already; `null` otherwise. */
+  token(): Promise<string | null>
+  /** Stops the app's notifications on this device (optional: the server forgets the token either way). */
+  unregister?(): Promise<void>
+}
+
+let nativePushHandle: NativePush | null = null
+
+/** Sets the shell's push notifications; `null` for a browser (the default). */
+export function configureNativePush(push: NativePush | null) {
+  nativePushHandle = push
+}
+
+/** The shell's push notifications, or `null` in a browser. */
+export function nativePush(): NativePush | null {
+  return nativePushHandle
+}

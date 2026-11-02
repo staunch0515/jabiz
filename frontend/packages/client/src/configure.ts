@@ -1,6 +1,8 @@
 import { configureSession } from './api/session'
 import { forgetEntryInfo } from './auth/account'
-import { configureNativeShell, configureOpenAuthorization, type OpenAuthorization } from './native'
+import {
+  configureNativePush, configureNativeShell, configureOpenAuthorization, type NativePush, type OpenAuthorization,
+} from './native'
 
 /** What a frontend tells `@jabiz/client` about itself (decision D43). */
 export interface ClientOptions {
@@ -19,6 +21,11 @@ export interface ClientOptions {
    * hidden in a shell. Absent: unchanged.
    */
   nativeShell?: string | null
+  /**
+   * Push notifications through the native shell (phase 17k-b): an iOS shell hands over Apple's device token, which the
+   * platform registers as the device. Absent: unchanged; `null`: the browser's Web Push (the default).
+   */
+  nativePush?: NativePush | null
 }
 
 /** Configures the client; call it once before the first render (before `AuthProvider` reads the session). */
@@ -29,4 +36,5 @@ export function configureClient(options: ClientOptions) {
   }
   if (options.openAuthorization !== undefined) configureOpenAuthorization(options.openAuthorization)
   if (options.nativeShell !== undefined) configureNativeShell(options.nativeShell)
+  if (options.nativePush !== undefined) configureNativePush(options.nativePush)
 }

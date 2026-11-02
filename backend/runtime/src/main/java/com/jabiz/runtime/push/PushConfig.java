@@ -28,6 +28,12 @@ public class PushConfig {
         return new WebPushSender(properties, clock);
     }
 
+    /** Apple's push service for the iOS shell (17k-b); used only when {@code jabiz.push.apns.team-id} is set. */
+    @Bean
+    ApnsSender apnsSender(PushProperties properties, Clock clock) {
+        return new ApnsSender(properties.apns(), clock);
+    }
+
     /**
      * Reported at once: the settings ({@link PushProperties#problems}), a template declared twice, a template's title,
      * body or display name missing in a language of the application, a placeholder the template does not declare, an

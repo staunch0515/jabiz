@@ -221,12 +221,21 @@ configureClient({
   entry: 'app',
   nativeShell: shell(),            // 'ios' / 'android' / null：应用自己从参数或 User-Agent 识别
   openAuthorization: shell() === 'ios' ? (url) => NativeAuth.open(url) : null,  // 外壳的插件：在系统浏览器中打开
+  nativePush: shell() === 'ios' ? {                 // 外壳的推送插件（17k-b）：Apple 的设备令牌
+    kind: 'apns',
+    register: () => NativePush.register(),          // 请求权限，返回十六进制的令牌；拒绝时 null
+    token: () => NativePush.token(),                // 已有的令牌，没有时 null
+    unregister: () => NativePush.unregister(),      // 可选
+  } : null,
 })
 ```
 
 - `openAuthorization`：提供方的页面在系统浏览器中打开（Google 拒绝在嵌入的网页视图中登录）。发起照旧在网页中（binder 留在网页的 `sessionStorage`），
   提供方送回入口的回调页 `login/oidc`；外壳把它作为 App 的关联链接，在**同一个**网页视图中打开，`OidcCallback` 照常完成登录或关联。
 - `nativeShell`：在外壳中 `useInstallPrompt` 的结果视同已安装，`InstallPrompt` 与账户页的安装入口都不出现。
+- `nativePush`（17k-b，决策 D69）：iOS 外壳的网页视图没有 Web Push，`enablePush`、`disablePush`、`pushEnabledHere` 与积木 `PushPreferences`
+  改由外壳取得 Apple 的设备令牌，平台把它登记为本会话的设备（种类 `apns`）；服务器须配置 `jabiz.push.apns.*`，否则积木显示"不可用"。
+  通知的负载是 Apple 的提醒加上 `url`（入口前端中的页面）与 `tag`：点按时由外壳在网页视图中打开 `url`。Android 的 TWA 是 Chrome，照常用 Web Push，不设 `nativePush`。
 - 关联文件见第 6 节；回调页的路径要在 App 的关联域名与 manifest 中。
 
 ## 7. 已知限制
@@ -235,4 +244,4 @@ configureClient({
 - 没有 Web Locks 的浏览器（Safari 15.4 之前）一律按 `tab`。"复制标签页"会复制 `sessionStorage`（`tab` 下原有问题）。
 - iOS 上安装到主屏幕的 PWA 与 Safari 的存储分开：在 Safari 中登录不会让 PWA 也登录。
 - 提示安装用 `@jabiz/ui` 的 `PwaInstallBanner`（12 §PWA，16zj），在用户做完一件有价值的事之后渲染；账户页放一个 `dismissible={false}` 的作为固定入口。不自己监听 `beforeinstallprompt` 或判断 iOS。
-- 不做推送、后台同步与数据离线；离线时只能打开外壳并提示离线。
+- 不做后台同步与数据离线；离线时只能打开外壳并提示离线。推送见 18 §5.7（Web Push；iOS 外壳经 `nativePush`）。
