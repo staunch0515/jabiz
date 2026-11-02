@@ -169,4 +169,26 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
     public int fullScore() {
         return questions.stream().mapToInt(Question::points).sum();
     }
+
+    /**
+     * The quiz with only the questions numbered in {@code nos}, in that order, keeping their numbers (Q81, D-Q81-4: an
+     * attempt given k of the version's questions scores, shows and records them through this snapshot; the texts of a
+     * language are keyed by the version's numbers, so a language is applied before the subset is taken).
+     *
+     * @throws IllegalArgumentException when a number is not a question's
+     */
+    public QuizSnapshot subset(List<Integer> nos) {
+        Map<Integer, Question> byNo = new LinkedHashMap<>();
+        questions.forEach(question -> byNo.put(question.no(), question));
+        List<Question> chosen = new java.util.ArrayList<>();
+        for (Integer no : nos) {
+            Question question = byNo.get(no);
+            if (question == null) {
+                throw new IllegalArgumentException("The quiz has no question " + no);
+            }
+            chosen.add(question);
+        }
+        return new QuizSnapshot(title, intro, cover, timeLimitSec, aiGenerated, materials, chosen, survey,
+            translations);
+    }
 }

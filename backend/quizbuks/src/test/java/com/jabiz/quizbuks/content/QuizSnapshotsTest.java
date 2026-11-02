@@ -159,4 +159,18 @@ class QuizSnapshotsTest {
         assertThat(new QuizSnapshot.Question(1, "Q", null, 1, List.of(a, b), QbContent.SINGLE).choice())
             .isEqualTo(QbContent.SINGLE);
     }
+
+    /** Q81 (D-Q81-4): an attempt given some questions scores and shows them through a subset keeping their numbers. */
+    @Test
+    void aSubsetKeepsTheQuestionsNumbersAndOrder() {
+        QuizSnapshot whole = Drafts.complete();
+        List<Integer> nos = whole.questions().stream().map(QuizSnapshot.Question::no).toList();
+        QuizSnapshot one = whole.subset(List.of(nos.getLast()));
+        assertThat(one.questions()).containsExactly(whole.questions().getLast());
+        assertThat(one.title()).isEqualTo(whole.title());
+        assertThat(one.materials()).isEqualTo(whole.materials());
+        assertThat(one.fullScore()).isEqualTo(whole.questions().getLast().points());
+        assertThat(whole.subset(nos)).isEqualTo(whole);
+        assertThatThrownBy(() -> whole.subset(List.of(999))).isInstanceOf(IllegalArgumentException.class);
+    }
 }

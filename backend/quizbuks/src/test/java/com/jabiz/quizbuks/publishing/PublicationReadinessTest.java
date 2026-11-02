@@ -184,4 +184,54 @@ class PublicationReadinessTest {
         assertThat(PublicationReadiness.check(cash, tiers(), quiz(), NOW)).isEmpty();
         assertThat(base.rewardMethod()).isEqualTo(RewardMethod.PLATFORM);
     }
+
+    /** Q81: three questions of one point each, full score 3. */
+    private static QuizSnapshot equalPoints() {
+        return new QuizSnapshot("Capitals", null, null, 300, false, List.of(), List.of(
+            new QuizSnapshot.Question(1, "France?", null, 1, List.of(new QuizSnapshot.Option(1, "Paris", null, true),
+                new QuizSnapshot.Option(2, "Lyon", null, false))),
+            new QuizSnapshot.Question(2, "Japan?", null, 1, List.of(new QuizSnapshot.Option(1, "Tokyo", null, true),
+                new QuizSnapshot.Option(2, "Osaka", null, false))),
+            new QuizSnapshot.Question(3, "Italy?", null, 1, List.of(new QuizSnapshot.Option(1, "Rome", null, true),
+                new QuizSnapshot.Option(2, "Milan", null, false)))));
+    }
+
+    private static PublicationReadiness.Draft picking(Integer pickCount, int passScore) {
+        return new PublicationReadiness.Draft(VERSION, "Pick", "GLOBAL", NOW.plus(Duration.ofDays(1)),
+            NOW.plus(Duration.ofDays(8)), 300, passScore, BigDecimal.valueOf(10_000), 50, RewardMethod.PLATFORM, null,
+            Audience.PUBLIC, null, null, false, null, pickCount);
+    }
+
+    /** Q81 (D-Q81-1, D-Q81-2): a pick of equal-point questions sets the full score; the pass mark and tiers follow. */
+    @Test
+    void aPickSetsTheFullScoreToKTimesThePoints() {
+        assertThat(PublicationReadiness.fullScore(equalPoints(), 2)).isEqualTo(2);
+        assertThat(PublicationReadiness.fullScore(equalPoints(), null)).isEqualTo(3);
+        assertThat(PublicationReadiness.commonPoints(equalPoints())).isEqualTo(1);
+        assertThat(PublicationReadiness.commonPoints(quiz())).isNull();
+        List<TierCoverage.Tier> tiers = List.of(new TierCoverage.Tier(0, 1, BigDecimal.ZERO),
+            new TierCoverage.Tier(2, 2, BigDecimal.TEN));
+        assertThat(PublicationReadiness.check(picking(2, 2), tiers, equalPoints(), NOW)).isEmpty();
+        // Over the version's full score the pass mark and the top tier are too high.
+        assertThat(PublicationReadiness.check(picking(2, 3), tiers(), equalPoints(), NOW))
+            .extracting(Violation::ruleCode).containsExactly(PublishingCodes.PASS_SCORE_RANGE,
+                PublishingCodes.TIER_NOT_TO_FULL);
+    }
+
+    @Test
+    void aPickNeedsEqualPointsAndIsLessThanEveryQuestion() {
+        assertThat(PublicationReadiness.check(picking(3, 2), List.of(new TierCoverage.Tier(0, 2, BigDecimal.ZERO)),
+            equalPoints(), NOW)).extracting(Violation::field, Violation::ruleCode)
+            .contains(tuple("pickCount", PublishingCodes.PICK_RANGE));
+        assertThat(PublicationReadiness.pickProblems(0, equalPoints())).extracting(Violation::ruleCode)
+            .containsExactly(PublishingCodes.PICK_RANGE);
+        // Unequal points: the pick is refused and the full score stays the version's (5).
+        assertThat(PublicationReadiness.pickProblems(1, quiz())).extracting(Violation::ruleCode)
+            .containsExactly(PublishingCodes.PICK_UNEQUAL_POINTS);
+        assertThat(PublicationReadiness.fullScore(quiz(), 1)).isEqualTo(5);
+        assertThat(PublicationReadiness.pickProblems(1, survey())).extracting(Violation::ruleCode)
+            .containsExactly(PublishingCodes.PICK_SURVEY);
+        assertThat(PublicationReadiness.pickProblems(null, quiz())).isEmpty();
+        assertThat(PublicationReadiness.pickProblems(1, null)).isEmpty();
+    }
 }

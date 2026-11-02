@@ -109,7 +109,20 @@ public final class PublicationProcesses {
         @Valid ReferralInput referral, @Size(max = 3) List<@NotNull @Size(max = 2) String> languages,
         @Size(max = 3) Map<@NotNull @Size(max = 2) String, @Size(max = 4) Map<@NotNull @Size(max = 30) String,
             @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH + 1) String>> translations,
-        @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed) {
+        @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed, Integer pickCount) {
+
+        /** As before Q81: every question of the version is asked. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription, String audience,
+            String digitalDelivery, String digitalDescription, Integer digitalSendDays, String digitalContent,
+            UUID cover, ReferralInput referral, List<String> languages,
+            Map<String, Map<String, String>> translations, List<String> confirmed) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
+                confirmed, null);
+        }
 
         /**
          * As before the confirmation of translations (Q73c): {@code confirmed} lists the translations still right for a
@@ -342,6 +355,8 @@ public final class PublicationProcesses {
         values.put("passScore", decimal(input.passScore()));
         values.put("budgetCap", input.budgetCap());
         values.put("maxWinners", decimal(input.maxWinners()));
+        // Q81: before the version's part, whose full score depends on it.
+        values.put("pickCount", decimal(input.pickCount()));
         putVersion(values, version);
         putDerived(values, tiers);
         UUID publicationId;
@@ -396,12 +411,15 @@ public final class PublicationProcesses {
         }
     }
 
-    /** The version's part of a publication: its quiz, label and full score (none without a version). */
+    /**
+     * The version's part of a publication: its quiz, label and full score (none without a version). The full score is
+     * the pick's when {@code values} has one (Q81, D-Q81-2), so the pick is put first.
+     */
     private static void putVersion(Map<String, Object> values, EntityInstance version) {
         values.put("versionId", version == null ? null : version.id());
         values.put("quizId", version == null ? null : version.get("quizId"));
         values.put("versionLabel", version == null ? null : version.get("label"));
-        values.put("fullScore", version == null ? null : version.get("fullScore"));
+        values.put("fullScore", PublicationEditing.fullScoreOf(values, version));
     }
 
     /** The values derived from the tiers and the money policy (D-Q4-3). */
@@ -597,7 +615,7 @@ public final class PublicationProcesses {
         // Q64: the cover too, the copier's own file as the source's was (both are the caller's publications).
         for (String field : List.of("cover", "regions", "startAt", "endAt", "timeLimitSec", "passScore", "budgetCap",
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
-            "sealedDigitalContent", "referral", "languages", "translations")) {
+            "sealedDigitalContent", "referral", "languages", "translations", "pickCount")) {
             values.put(field, source.get(field));
         }
         values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));

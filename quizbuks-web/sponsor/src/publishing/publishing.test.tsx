@@ -413,7 +413,7 @@ describe('the publication wizard', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/publications/p9'))
     expect(window.location.search).toBe('?step=1')
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: null, versionId: null, name: 'Tea week',
-      cover: null, regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, budgetCap: null,
+      cover: null, regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, pickCount: null, budgetCap: null,
       maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null }])
   })
 
@@ -568,10 +568,28 @@ describe('the publication wizard', () => {
     expect(document.activeElement).toBe(screen.getByTestId('publication-step-title'))
     expect(processCalls('QB_PUBLICATION_SAVE').at(-1)).toEqual({ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
       cover: null, regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
-      passScore: 2, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
+      passScore: 2, pickCount: null, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
       tiers: [{ tierId: 't9', fromScore: 0, toScore: 2, reward: 100 }] })
     // The conditions were not touched: not sent.
     expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toEqual([])
+  })
+
+  it('sends the questions drawn per taker and anticipates the full score they give (Q81)', async () => {
+    const { processCalls } = server({ versions: [{ ...VERSIONS[0], questionCount: 4, fullScore: 4 }],
+      processes: { QB_PUBLICATION_SAVE: [saved(4, { fullScore: 3 }), saved(5, { fullScore: 3 })] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const pick = await screen.findByTestId('publication-pick-count')
+    await waitFor(() => expect(pick).toHaveAccessibleDescription(/4 questions/))
+    await userEvent.type(pick, '3')
+    // Three one-point questions of four: the pass mark is asked up to 3, not the version's 4.
+    await waitFor(() => expect(screen.getByTestId('publication-pass-score')).toHaveAccessibleDescription(/\(3\)/))
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ pickCount: 3, passScore: 2 })
+    await userEvent.click(await screen.findByTestId('publication-next'))
+    const summary = await screen.findByTestId('publication-summary')
+    expect(within(summary).getByTestId('summary-pick')).toHaveTextContent('3 of 4 at random')
   })
 
   it('asks a survey for its one reward and sends the pass mark and tiers it stands for (Q12)', async () => {

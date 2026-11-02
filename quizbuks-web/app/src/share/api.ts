@@ -31,6 +31,8 @@ export interface PagePublication {
   endAt: string
   timeLimitSec: number
   questionCount: number
+  /** Q81: the questions drawn per taker; null (or absent) asks all of them. */
+  pickCount?: number | null
   maxReward: unknown
   rewardMethod: RewardMethod
   /** Q76: the listed publications it requires first, as JSON (`PublicationPrerequisite` without names); none: `[]`. */

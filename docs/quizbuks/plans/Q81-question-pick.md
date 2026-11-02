@@ -1,4 +1,4 @@
-# Q81 发布从题库抽题：每人随机 k 题（计划，2026-11-02，待需求方确认）
+# Q81 发布从题库抽题：每人随机 k 题（计划，2026-11-02，需求方已确认；已实现）
 
 `05-console-requests.md` 第二项（"允许发布通过题库中的题目选择几个，这样可以提高考试难度"）；需求方定下的顺序是 Q78 → Q79 → 17zc / Q80 → **Q81** → Q82。编号 Q81 是建议（下一个空号），确认时可改。
 **这只是计划**：确认 §9 的决定后开发，一个 PR，工作分支 `1.3/quizbuks-81-question-pick`。
@@ -19,7 +19,7 @@
 - 题目统计：`qb.system.analytics-attempts` 从每个会话的 `result` 按 `no` 数每题的完成数与答对数（`qCompletions`、`qCorrect`），`QuestionTotals` 按版本累计，`AnalyticsJob.showQuestions` 在版本新增 ≥ k 个完成时整版发表（`basedOn` = 版本完成数），`qb.sponsor.analytics.questions` 以版本快照的题目连接、每题 `completions ≥ k` 才显示。
 - 店面（S2）的开始走同一个 `AttemptProcesses.start`（`ChannelPlay`），活动没有发布的设置。
 
-## 2. 决定（草案）
+## 2. 决定（需求方 2026-11-02 确认）
 
 | # | 决定 |
 |---|---|
@@ -132,3 +132,23 @@
 4. D-Q81-7：版本切换对抽题发布的新规则。
 5. D-Q81-8：店面第一步不支持。
 6. 编号 Q81，一个 PR，4.5 天。
+
+## 10. 实施记录（2026-11-02，分支 `1.3/quizbuks-81-question-pick`）
+
+需求方 2026-11-02 确认 §9 的六项（“同意 Q81 的决定，开始开发”）。按计划实施，与计划的差别与细节：
+
+- 迁移 V61：`qb_publication_version.pick_count`、`qb_publication_card.pick_count`、`qb_attempt.question_set varchar(500)`。
+- 发布：`QbPublications` 两个 `pickCount`；`PublicationReadiness.Draft` 加 `pickCount`（旧构造器保留），`pickProblems` / `fullScore` / `commonPoints` 是公开的纯 Java；`PublicationEditing.fullScoreOf`
+  由 `PublicationProcesses.putVersion` 调用（保存与复制都先放 `pickCount` 再放版本的部分）；卡片与复制的字段清单加 `pickCount`；`PublicationApprovals.content` 只在有抽题时写 `pickCount`（旧哈希不变）；
+  `PublicationVersions` 先查 `SWITCH_PICK` 再比较满分（抽题的满分按新版本算）。`SaveInput` 加最后一个组件 `pickCount`（旧构造器保留）。
+- 答题：`QuestionPick`（照 `OptionShuffle`，`toJson` / `fromJson` 复用 `Answers` 的 mapper）；`QuizSnapshot.subset`；`QbPlay.ATTEMPT.questionSet` **标 `sensitive()`**（计划写 `processOnly`、不进答题人视图：敏感字段任何读接口都不返回，与 `optionOrder` 同一规则，更直接）；
+  `PlaySteps.subset` / `forAttempt`；`AttemptProcesses.start(shuffle, pick)`（`ChannelPlay.start` 同），开始时 `pickCount` 取自卡片；`questions()` 的 `no` = 位置；`AttemptFinishing` 的提交输出与 `AttemptResults` 的结果行都按位置编号（计划只写了结果页，提交输出同理，否则 App 的结果页对不上）。
+- 统计：`AnalyticsJob.showQuestions` 多一个 `k`，逐题 `MinGroup.publish(该题完成数, 已发表行的 completions, k)`；模板不改。
+- 模板：`qb.app.feed`、`qb.app.publication`、`qb.public.publication`、`qb.public.sponsor-page-publications` 加 `pickCount`；`PublishingConfig` 的公开白名单加它；`public-queries.json` 快照更新。
+  列表模板（`qb.sponsor.publications`、`qb.admin.publications`）不带分数字段，未加；商户详情与审核页经数据视图读发布，自然带 `pickCount`。
+- 文案：四个规则代码与三个实体字段三语；商户后台 `publishing.field.pickCount*`、`publishing.summary.pickCountOf|pickCountOnly`（`pick` 与现有键重名，改名）；App `detail.pickCount`；后台扩展 `publication.pickCount|pickCountValue`。
+- 前端：向导第二步“每人抽题数”（`publication-pick-count`，提示给题数与每题分；满分只在版本同分、k 合法时由页面预估，否则取保存返回的）；摘要行 `summary-pick`（详情页由版本给出 n）；App 详情与分享页“从 n 题中随机 k 题”；审核页一行 `review-pick-count`。答题页、结果页不改。
+- 测试：`QuestionPickTest`、`QuizSnapshotsTest.aSubsetKeepsTheQuestionsNumbersAndOrder`、`PublicationReadinessTest` 两个；`QuestionPickIT`（三题 1..3、题集在 1..5 内递增、继续相同、答题人视图无 `questionSet` / `optionOrder`、第四题 422、满分 3 与顶档、存储记版本题号、结果页位置；十二个人的题集不止一组；保存 / 复制 / 切换的规则）、`AnalyticsPickIT`（每题按被抽到的完成数、少于 k 的题没有行）；
+  现有 `AttemptOptionIdsIT`、`AttemptResultIT`、`PublicationSwitchIT`、`AnalyticsVersionsIT`、`AttemptStatementBudgetIT`（四个数不变）、`AnswerSecrecyIT` 通过。**没有加场景 `play-pick.yml`**（计划 §5）：场景要先发布 72 个受控提案，`QuestionPickIT` 以测试的固定密钥断言确切的行为已够。
+  前端：商户向导的 Q81 测试（发送 `pickCount: 3`、及格线提示 (3)、摘要“3 of 4 at random”）、App 详情的 Q81 测试；e2e `transactions.spec.ts` 加抽 3 / 5 题的答题（本机未运行，CI 的 e2e 作业运行）。
+- 未做：店面（D-Q81-8）；后台扩展只显示。

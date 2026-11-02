@@ -160,7 +160,7 @@ public class PublishingConfig {
                 .fixed("publisherKind", PublisherKind.SPONSOR))
             // Q60b: the version, for the template of the products its quiz shows (no template returns it).
             .publicRead(p -> p.fields("publicationId", "publisherId", "versionId", "name", "quizTitle", "kind",
-                "startAt", "endAt", "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward",
+                "startAt", "endAt", "timeLimitSec", "questionCount", "pickCount", "fullScore", "passScore", "maxReward",
                 "rewardMethod", "redeemDescription", "digitalDelivery", "digitalDescription",
                 // Q75: the share page says the video must be watched first, and how long it is.
                 "watchRequired", "videoDurationSec"))

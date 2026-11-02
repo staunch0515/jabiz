@@ -22,6 +22,7 @@ const FORM: PublicationForm = {
   endAt: '2026-11-30T00:00:00.000Z',
   timeLimitSec: '',
   passScore: '2',
+  pickCount: '',
   budgetCap: '1000',
   maxWinners: ' 10 ',
   tiers: [
@@ -62,7 +63,7 @@ describe('the wizard\'s form', () => {
     expect(inputOf(FORM, 'p1', 4)).toEqual({ input: {
       publicationId: 'p1', versionId: 'v1', name: 'Spring quiz', cover: null, regions: ['GLOBAL', 'JP', 'ASIA'],
       startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-30T00:00:00.000Z', timeLimitSec: null, passScore: 2,
-      budgetCap: 1000, maxWinners: 10, baseRevision: 4, tiers: [
+      pickCount: null, budgetCap: 1000, maxWinners: 10, baseRevision: 4, tiers: [
         { tierId: 't1', fromScore: 0, toScore: 1, reward: 0 },
         { tierId: null, fromScore: 2, toScore: 2, reward: 100 },
       ], rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null } })

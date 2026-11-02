@@ -178,6 +178,9 @@ function Settings({ publication, tiers, quiz, finance }: {
       value: publication.passScore == null ? notSet
         : t('publication.passScoreValue', { pass: publication.passScore, full: publication.fullScore ?? '?' }),
     },
+    // Q81: a publication drawing questions says how many each taker gets (the approval's content names it).
+    ...(publication.pickCount != null ? [{ key: 'pickCount', label: t('publication.pickCount'),
+      value: <span data-testid="review-pick-count">{t('publication.pickCountValue', { count: publication.pickCount })}</span> }] : []),
     { key: 'budgetCap', label: t('publication.budgetCap'), value: money(publication.budgetCap) || notSet },
     { key: 'maxReward', label: t('publication.maxReward'), value: money(publication.maxReward) || notSet },
     { key: 'maxSpend', label: t('publication.maxSpend'), value: money(publication.maxSpend) || notSet },

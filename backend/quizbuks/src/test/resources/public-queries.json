@@ -390,6 +390,11 @@
         "scale" : 0,
         "type" : "numeric"
       },
+      "pickCount" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
+      },
       "publicationId" : {
         "targetEntity" : "QbPublication",
         "type" : "reference"
@@ -710,6 +715,11 @@
         "maxLength" : 100,
         "multiline" : false,
         "type" : "text"
+      },
+      "pickCount" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
       },
       "prerequisites" : {
         "multiline" : false,

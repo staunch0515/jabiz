@@ -219,7 +219,9 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
       {/* Q65: the facts in a line or two of small type, each with its icon; what each is, for assistive technology. */}
       <dl className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 px-0.5 text-sm" data-testid="detail-facts"
         aria-label={t('detail.facts')}>
-        <Fact icon={ListChecks} label={t('detail.questions')} value={t('detail.questionCount', { count: p.questionCount })} />
+        <Fact icon={ListChecks} label={t('detail.questions')} value={p.pickCount != null
+          ? t('detail.pickCount', { count: p.pickCount, total: p.questionCount })
+          : t('detail.questionCount', { count: p.questionCount })} />
         {survey
           ? <Fact icon={BookOpen} label={t('detail.kind')} value={t('detail.survey')} />
           : <Fact icon={Target} label={t('detail.passScore')}

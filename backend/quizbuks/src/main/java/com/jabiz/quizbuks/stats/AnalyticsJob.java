@@ -471,7 +471,7 @@ public final class AnalyticsJob {
                 .max().orElse(0);
             if (MinGroup.publish(version.getValue().attempts(), shownOfVersion, k)) {
                 written += showQuestions(ctx, id, publisherKind, publisherId, version.getKey(), version.getValue(),
-                    existing, at);
+                    existing, at, k);
             }
         }
         // The average time is over the attempts submitted in time only: it changes after k new ones of those, or k
@@ -503,13 +503,22 @@ public final class AnalyticsJob {
         return written + 1;
     }
 
-    /** Writes the question figures of a version the sponsor is shown; returns the rows written. */
+    /**
+     * Writes the question figures of a version the sponsor is shown; returns the rows written. Each question's figures
+     * change only after k new completions of that question (Q81, D-Q81-6): a publication drawing questions gives each
+     * to a part of the version's completions, and k new ones of the version may hold one of a question; for a
+     * publication asking every question the questions grow with the version, as before.
+     */
     private static int showQuestions(ProcessContext ctx, UUID publicationId, String publisherKind, String publisherId,
-        String versionId, QuestionTotals.Version version, Map<Integer, Map<String, Object>> existing, Instant at) {
+        String versionId, QuestionTotals.Version version, Map<Integer, Map<String, Object>> existing, Instant at,
+        int k) {
         int written = 0;
         for (Map.Entry<Integer, QuestionTotals.Count> question : version.questions().entrySet()) {
             Map<String, Object> row = existing.get(question.getKey());
             QuestionTotals.Count count = question.getValue();
+            if (!MinGroup.publish(count.completions(), row == null ? 0 : number(column(row, "completions")), k)) {
+                continue;
+            }
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("completions", count.completions());
             values.put("correct", count.correct());

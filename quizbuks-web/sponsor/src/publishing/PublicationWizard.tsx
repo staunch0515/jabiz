@@ -196,7 +196,14 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     placeholderData: keepPreviousData,
   })
   const { versions, version } = useVersionOf(form.quizId, form.versionId)
-  const fullScore = version?.fullScore ?? output?.fullScore ?? detail?.publication.fullScore ?? null
+  // Q81: a pick of k equal-point questions scores k times the points; the server decides (SaveOutput.fullScore),
+  // the page only anticipates it for the hints when the version's points are all the same.
+  const pick = form.pickCount.trim() === '' ? null : Number(form.pickCount)
+  const points = version && version.questionCount > 0 && version.fullScore % version.questionCount === 0
+    ? version.fullScore / version.questionCount : null
+  const fullScore = version && pick !== null && points !== null && Number.isInteger(pick) && pick >= 1
+    && pick < version.questionCount ? pick * points
+    : version?.fullScore ?? output?.fullScore ?? detail?.publication.fullScore ?? null
   const quizTitle = version?.title ?? versions.data?.[0]?.title
     ?? quizzes.data?.items.find((quiz) => quiz.quizId === form.quizId)?.title ?? null
   // A survey (Q12) has one reward for a complete response: the page builds its pass mark and tiers.
@@ -570,6 +577,17 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
             )}
           </Field>
         )}
+        {!survey && (
+          <Field id={`${id}-pick`} label={t('publishing.field.pickCount')} problem={problemOf('pickCount')}
+            hint={version && points !== null
+              ? t('publishing.field.pickCountHint', { questionCount: version.questionCount, points })
+              : t('publishing.field.pickCountHintNone')}>
+            {(aria) => (
+              <Input {...aria} inputMode="numeric" value={form.pickCount} autoComplete="off" disabled={locked}
+                data-testid="publication-pick-count" onChange={(event) => set('pickCount', event.target.value)} />
+            )}
+          </Field>
+        )}
       </div>
       {!survey && (
         <TiersEditor tiers={form.tiers} onChange={(tiers) => set('tiers', tiers)} fullScore={fullScore}
@@ -710,6 +728,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         timeLimitSec: form.timeLimitSec.trim() === '' ? detail?.publication.timeLimitSec ?? null
           : Number(form.timeLimitSec),
         passScore: form.passScore.trim() === '' ? null : Number(form.passScore),
+        pickCount: pick !== null && Number.isInteger(pick) ? pick : null,
+        questionCount: version?.questionCount ?? null,
         fullScore,
         budgetCap: form.budgetCap.trim() === '' ? null : form.budgetCap,
         maxWinners: form.maxWinners.trim() === '' ? null : Number(form.maxWinners),

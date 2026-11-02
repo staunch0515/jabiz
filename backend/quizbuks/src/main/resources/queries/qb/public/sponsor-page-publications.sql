@@ -23,6 +23,7 @@ results:
   endAt:         { from: QbPublicationCard.endAt }
   timeLimitSec:  { from: QbPublicationCard.timeLimitSec }
   questionCount: { from: QbPublicationCard.questionCount }
+  pickCount:     { from: QbPublicationCard.pickCount }
   maxReward:     { from: QbPublicationCard.maxReward }
   rewardMethod:  { from: QbPublicationCard.rewardMethod }
   prerequisites: { kind: { type: text } }
@@ -44,6 +45,7 @@ SELECT
     c.{{QbPublicationCard.endAt}}         AS endAt,
     c.{{QbPublicationCard.timeLimitSec}}  AS timeLimitSec,
     c.{{QbPublicationCard.questionCount}} AS questionCount,
+    c.{{QbPublicationCard.pickCount}}     AS pickCount,
     c.{{QbPublicationCard.maxReward}}     AS maxReward,
     c.{{QbPublicationCard.rewardMethod}}  AS rewardMethod,
     (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(

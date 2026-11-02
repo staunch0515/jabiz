@@ -459,7 +459,8 @@ public final class AttemptFinishing {
             answers = Answers.merge(answers, order.size(), input.answers());
             currentIndex = input.currentIndex();
         }
-        QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
+        // Q81 (D-Q81-4): only the questions the attempt was given; the result keeps the version's numbers.
+        QuizSnapshot snapshot = PlaySteps.subset(PlaySteps.snapshot(ctx), attempt);
         if (!expire && snapshot.survey()) {
             // A survey is submitted complete (Q12, D-Q12-5); at its deadline it ends with what was saved (D-Q12-6).
             List<Violation> problems = Answers.incomplete(snapshot, answers);
@@ -604,8 +605,12 @@ public final class AttemptFinishing {
         String message = notice == null ? null : messages.find(notice,
             java.util.Objects.requireNonNullElse(ctx.request().locale(), java.util.Locale.ENGLISH))
             .map(text -> MessageTemplate.format(text, Map.of("code", QbRewards.codeOf(attempt.id())))).orElse(null);
-        List<QuestionOutput> questions = plan.result().questions().stream().map(q -> new QuestionOutput(q.no(),
-            q.selected(), q.correct(), q.points(), q.earned())).toList();
+        // Q81 (D-Q81-5): the taker's rows are numbered by position (the record keeps the version's numbers).
+        List<QuestionOutput> questions = new java.util.ArrayList<>();
+        for (int i = 0; i < plan.result().questions().size(); i++) {
+            Scoring.QuestionResult q = plan.result().questions().get(i);
+            questions.add(new QuestionOutput(i + 1, q.selected(), q.correct(), q.points(), q.earned()));
+        }
         ctx.put(OUTPUT, new SubmitOutput(String.valueOf(attempt.id()), plan.status(), plan.result().score(),
             plan.result().fullScore(), plan.passScore(), plan.passed(), plan.reward(), settlement.rewardStatus(),
             message, questions, plan.card().get("kind")));

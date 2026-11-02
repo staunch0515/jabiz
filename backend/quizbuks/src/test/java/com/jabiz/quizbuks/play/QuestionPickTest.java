@@ -1,0 +1,70 @@
+package com.jabiz.quizbuks.play;
+
+import com.jabiz.quizbuks.content.QuizSnapshot;
+import net.jqwik.api.ForAll;
+import net.jqwik.api.Property;
+import net.jqwik.api.constraints.AlphaChars;
+import net.jqwik.api.constraints.IntRange;
+import org.junit.jupiter.api.Test;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** Q81 (D-Q81-3): which of a version's questions an attempt is given. */
+class QuestionPickTest {
+
+    static final QuestionPick PICK = new QuestionPick(OptionShuffleTest.key("the-question-pick-key-of-these-tests-00001"));
+
+    @Property(tries = 200)
+    void aPickIsKDistinctQuestionsInTheVersionsOrder(@ForAll @AlphaChars String user,
+        @ForAll @IntRange(min = 2, max = 30) int n, @ForAll @IntRange(min = 1, max = 29) int k) {
+        int count = Math.min(k, n - 1);
+        List<QuizSnapshot.Question> questions = OptionShuffleTest.questions(n, 2);
+        List<Integer> picked = PICK.pick(user, "publication", questions, count);
+        assertThat(picked).hasSize(count).doesNotHaveDuplicates().isSorted()
+            .allSatisfy(no -> assertThat(no).isBetween(1, n));
+        // The same taker of the same publication always gets the same set (a continued start shows the same questions).
+        assertThat(PICK.pick(user, "publication", questions, count)).isEqualTo(picked);
+    }
+
+    @Test
+    void everyQuestionAndAllOfThemAreNotAPick() {
+        List<QuizSnapshot.Question> questions = OptionShuffleTest.questions(4, 2);
+        assertThatThrownBy(() -> PICK.pick("user", "pub", questions, 4)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PICK.pick("user", "pub", questions, 0)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /** Different takers get different sets, and the set is not a function of what the taker knows (the server's key). */
+    @Test
+    void theSetDependsOnTheTakerAndTheServersKey() {
+        List<QuizSnapshot.Question> questions = OptionShuffleTest.questions(10, 2);
+        Set<List<Integer>> sets = new HashSet<>();
+        QuestionPick other = new QuestionPick(OptionShuffleTest.key("another-question-pick-key-of-the-tests-002"));
+        int differ = 0;
+        for (int i = 0; i < 100; i++) {
+            List<Integer> mine = PICK.pick("user-" + i, "pub", questions, 3);
+            sets.add(mine);
+            if (!mine.equals(other.pick("user-" + i, "pub", questions, 3))) {
+                differ++;
+            }
+        }
+        // 120 possible sets: a hundred takers do not all draw the same few.
+        assertThat(sets.size()).isGreaterThan(20);
+        // Two keys agree on a set of 3 of 10 with probability 1/120: not on most of a hundred.
+        assertThat(differ).isGreaterThan(90);
+        assertThat(PICK.pick("user", "pub", questions, 3)).isNotEqualTo(PICK.pick("user", "other-pub", questions, 3));
+    }
+
+    @Test
+    void theSetIsStoredAsJsonAndNoneForEveryQuestion() {
+        assertThat(QuestionPick.toJson(List.of(2, 5, 7))).isEqualTo("[2,5,7]");
+        assertThat(QuestionPick.fromJson("[2,5,7]")).containsExactly(2, 5, 7);
+        assertThat(QuestionPick.toJson(null)).isNull();
+        assertThat(QuestionPick.fromJson(null)).isNull();
+        assertThat(QuestionPick.fromJson("")).isNull();
+    }
+}
