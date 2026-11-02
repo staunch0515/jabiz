@@ -72,6 +72,8 @@ interface Server {
   /** The versions the publication ran on (Q51b); one (the current) when not given. */
   versions?: unknown[]
   export?: { status: number; body: unknown }
+  /** Q73e-1: the figures by answer language. */
+  languages?: unknown[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what the pages asked for. */
@@ -114,6 +116,8 @@ function server(options: Server = {}) {
         return page(options.questions ?? QUESTIONS_SMALL)
       case '/api/queries/qb.sponsor.analytics.versions':
         return page(options.versions ?? [VERSION_2])
+      case '/api/queries/qb.sponsor.analytics.languages':
+        return page(options.languages ?? [])
       default:
         if (path.includes('/export?format=')) {
           if (options.export) return json(options.export.status, options.export.body)
@@ -275,6 +279,33 @@ describe('a publication\'s analytics', () => {
 
     // The App's own windows beside the trend.
     expect(screen.getByTestId('app-last24h')).toHaveTextContent('4')
+  })
+
+  it('shows a publication of several languages by answer language, its results over the minimum group (Q73e-1)',
+    async () => {
+      server({ overview: [OVERVIEW_BIG], questions: QUESTIONS_BIG, languages: [
+        { language: 'zh', starts: 12, completions: 10, passes: 8, completionRate: '0.8333', passRate: '0.8',
+          averageScore: '4.2', suppressed: false, minGroup: 5 },
+        { language: 'en', starts: 3, completions: 2, passes: null, completionRate: null, passRate: null,
+          averageScore: null, suppressed: true, minGroup: 5 }] })
+      window.history.replaceState(null, '', `/publications/${P1}/analytics`)
+      const { container } = render(<App />)
+      const section = await screen.findByTestId('analytics-languages')
+      const rows = within(section).getAllByTestId('analytics-language')
+      expect(rows.map((r) => r.dataset.language)).toEqual(['zh', 'en'])
+      expect(rows[0]).toHaveTextContent('80%')
+      expect(rows[0]).toHaveTextContent('4.2')
+      expect(rows[1]).toHaveTextContent('Fewer than 5')
+      await expectAccessible(container)
+    })
+
+  it('shows no language section for a publication of one language (Q73e-1)', async () => {
+    server({ overview: [OVERVIEW_BIG], questions: QUESTIONS_BIG, languages: [{ language: 'en', starts: 3,
+      completions: 2, suppressed: true, minGroup: 5 }] })
+    window.history.replaceState(null, '', `/publications/${P1}/analytics`)
+    render(<App />)
+    await screen.findAllByTestId('question-row')
+    expect(screen.queryByTestId('analytics-languages')).toBeNull()
   })
 
   it('shows each question\'s right rate and difficulty over the minimum group', async () => {

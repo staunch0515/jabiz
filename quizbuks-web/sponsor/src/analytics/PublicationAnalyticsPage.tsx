@@ -34,6 +34,7 @@ import {
   ANALYTICS_QUERY,
   percent,
   readOverview,
+  readLanguages,
   readQuestions,
   readVersions,
   REFRESH_MS,
@@ -41,6 +42,7 @@ import {
   zoneTime,
   type AnalyticsVersion,
   type Difficulty,
+  type LanguageFigures,
   type Overview,
   type QuestionFigures,
   type TrendRange,
@@ -210,6 +212,52 @@ function VersionPicker({ versions, value, onChange }: {
   )
 }
 
+/**
+ * Q73e-1: the publication by answer language, shown when it offers several: the counts of each, and its rates and
+ * average score once at least k have finished in it (the server holds them back below).
+ */
+function LanguagesSection({ rows }: { rows: LanguageFigures[] }) {
+  const { t, i18n } = useTranslation(SPONSOR)
+  const { t: tQb } = useTranslation(QB)
+  const locale = i18n.language
+  const k = rows[0]?.minGroup ?? 0
+  const hidden = <span className="text-muted-foreground">{t('analytics.languages.hidden', { k })}</span>
+  return (
+    <section className="flex flex-col gap-3" aria-labelledby="languages-title" data-testid="analytics-languages">
+      <h2 id="languages-title" className="text-base font-semibold">{t('analytics.languages.title')}</h2>
+      <p className="text-muted-foreground text-sm">{t('analytics.languages.hint', { k })}</p>
+      <Table aria-labelledby="languages-title">
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t('analytics.languages.language')}</TableHead>
+            <TableHead className="text-right">{t('analytics.languages.starts')}</TableHead>
+            <TableHead className="text-right">{t('analytics.languages.completions')}</TableHead>
+            <TableHead className="text-right">{t('analytics.languages.completionRate')}</TableHead>
+            <TableHead className="text-right">{t('analytics.languages.passRate')}</TableHead>
+            <TableHead className="text-right">{t('analytics.languages.averageScore')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.language} data-testid="analytics-language" data-language={row.language}
+              data-suppressed={row.suppressed}>
+              <TableCell>{tQb(`languages.${row.language}`, { defaultValue: row.language })}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.starts.toLocaleString(locale)}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.completions.toLocaleString(locale)}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {row.completionRate === null ? hidden : percent(row.completionRate, locale)}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {row.passRate === null ? hidden : percent(row.passRate, locale)}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {row.averageScore === null ? hidden : row.averageScore.toLocaleString(locale)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </section>
+  )
+}
+
 /** Each question's right rate and difficulty (M-42), or that it is shown once at least k people have answered. */
 function QuestionsSection({ questions, o, picker }: {
   questions: QuestionFigures[]
@@ -322,6 +370,13 @@ export function PublicationAnalyticsPage({ publicationId }: { publicationId: str
     ...live,
   })
   const trend = useTrend(range, publicationId, found)
+  // Q73e-1: by answer language (shown for a publication of several).
+  const languages = useQuery({
+    queryKey: [...ANALYTICS_QUERY, 'languages', publicationId],
+    queryFn: () => readLanguages(publicationId),
+    enabled: found,
+    ...live,
+  })
 
   if (overview.isPending) return <PageState kind="loading" />
   if (overview.isError) {
@@ -354,6 +409,7 @@ export function PublicationAnalyticsPage({ publicationId }: { publicationId: str
         <Funnel overview={o} />
       </section>
       <TrendSection o={o} range={range} onRange={setRange} trend={trend} />
+      {languages.isSuccess && languages.data.length > 1 && <LanguagesSection rows={languages.data} />}
       {questions.isPending && <PageState kind="loading" />}
       {questions.isError && <PageState kind="error" description={t('analytics.failed')}
         action={<Button variant="outline" onClick={() => void questions.refetch()}>{tQb('retry')}</Button>} />}

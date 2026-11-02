@@ -86,7 +86,9 @@ class OperatorScopesIT extends QbItSupport {
         "urn:jabiz:dataset:platform:SecUser", "urn:jabiz:dataset:default:QbUserBan",
         "urn:jabiz:dataset:default:QbSponsorOperator", "urn:jabiz:dataset:default:QbOperator",
         // Q73d-2: a reviewer's AI check, joined to the publication it is of (qb.admin.ai-translation-check).
-        "urn:jabiz:dataset:default:QbAiJob");
+        "urn:jabiz:dataset:default:QbAiJob",
+        // Q73e-1: a publication's attempts by language, joined to the publication (qb.admin.publication-languages).
+        "urn:jabiz:dataset:default:QbAttempt");
 
     /** The operators' own templates read the caller's membership (limited to the caller) and filter by it. */
     static final String MEMBERSHIP = QbOperators.OWN_MEMBERSHIP_DATASET;

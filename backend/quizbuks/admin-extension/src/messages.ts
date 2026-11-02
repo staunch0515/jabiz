@@ -140,6 +140,15 @@ export const messages = {
       languageBase: 'base',
       languageSeen: 'I have read the quiz and the texts in {{language}}',
       needsLanguages: 'The decision is offered once every language offered is ticked as read.',
+      figures: {
+        title: 'By answer language',
+        language: 'Language',
+        starts: 'Starts',
+        completions: 'Finished',
+        passRate: 'Pass rate',
+        averageScore: 'Average score',
+        hidden: 'Fewer than {{k}}',
+      },
       check: {
         run: 'Compare with AI',
         hint: 'For reference only: the AI compares each translated text with its base. The decision stays yours.',
@@ -416,6 +425,15 @@ export const messages = {
       languageBase: '原文',
       languageSeen: '我已阅读{{language}}的 Quiz 与文字',
       needsLanguages: '提供的每种语言都勾选为已阅读之后才能决定。',
+      figures: {
+        title: '按答题语言',
+        language: '语言',
+        starts: '开始',
+        completions: '完成',
+        passRate: '通过率',
+        averageScore: '平均分',
+        hidden: '不足 {{k}} 人',
+      },
       check: {
         run: '用 AI 对照检查',
         hint: '仅供参考：AI 逐段比较译文与原文。决定仍由你作出。',
@@ -692,6 +710,15 @@ export const messages = {
       languageBase: '原文',
       languageSeen: '{{language}}の Quiz と文言を読みました',
       needsLanguages: '提供するすべての言語を「読みました」にチェックしてから判断できます。',
+      figures: {
+        title: '回答言語別',
+        language: '言語',
+        starts: '開始',
+        completions: '完了',
+        passRate: '合格率',
+        averageScore: '平均点',
+        hidden: '{{k}} 人未満',
+      },
       check: {
         run: 'AI で照合する',
         hint: '参考情報です：AI が訳文と原文を一つずつ比べます。判断はあなたが行います。',

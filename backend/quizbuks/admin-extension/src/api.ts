@@ -722,3 +722,26 @@ export function storedTexts(value: unknown): Record<string, Record<string, strin
     return {}
   }
 }
+
+/** Q73e-1: one answer language's figures of a publication (`qb.admin.publication-languages`). */
+export interface LanguageFigures {
+  language: string
+  starts: number
+  completions: number
+  passRate: number | null
+  averageScore: number | null
+  minGroup: number
+}
+
+export async function readPublicationLanguages(publicationId: string): Promise<LanguageFigures[]> {
+  const page = await runQuery<Record<string, unknown>>(TEMPLATE.publicationLanguages,
+    { params: { publicationId }, limit: 10 })
+  return page.items.map((row) => ({
+    language: String(row.language ?? ''),
+    starts: Number(row.starts) || 0,
+    completions: Number(row.completions) || 0,
+    passRate: row.passRate == null ? null : Number(row.passRate),
+    averageScore: row.averageScore == null ? null : Number(row.averageScore),
+    minGroup: Number(row.minGroup) || 0,
+  }))
+}
