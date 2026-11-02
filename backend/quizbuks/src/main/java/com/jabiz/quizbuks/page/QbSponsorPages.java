@@ -64,6 +64,10 @@ public final class QbSponsorPages {
         eb.field("headline", f -> f.physicalColumn("headline").required(true).asText(HEADLINE_LENGTH)
             .apply(Rules.notBlank(SponsorPageCodes.HEADLINE_BLANK)));
         eb.field("cover", f -> f.physicalColumn("cover").kind(FileKind.of(IMAGE_POLICY)));
+        // Q73c: the languages offered (the first its main one; none: `language` only) and the headline in each other
+        // one, with the hash of the headline it translates ({language: {headline: {text, hash}}}).
+        eb.field("languages", f -> f.physicalColumn("languages").asText(20));
+        eb.field("translations", f -> f.physicalColumn("translations").asText(null, true));
         eb.field("website", f -> f.physicalColumn("website").asText(WEBSITE_LENGTH)
             .apply(Rules.pattern(SponsorPageCodes.WEBSITE_FORMAT, WEBSITE_PATTERN)));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()

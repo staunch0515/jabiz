@@ -24,7 +24,9 @@ const LIVE = { publicationId: 'pub1', name: 'Bread quiz', quizTitle: 'Bread', ki
 /** The public templates of a sponsor's page and of a share link; nobody is signed in. */
 function server(options: { page?: Record<string, unknown> | null; live?: Record<string, unknown>[];
   shared?: Record<string, unknown>; products?: Record<string, unknown>[];
-  publicationProducts?: Record<string, unknown>[] } = {}) {
+  publicationProducts?: Record<string, unknown>[];
+  /** Q73c: the page as asked in the languages given (`p.languages`). */
+  pageIn?: (languages: string) => Record<string, unknown> } = {}) {
   const asked: string[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
@@ -37,6 +39,9 @@ function server(options: { page?: Record<string, unknown> | null; live?: Record<
       case '/api/auth/oidc/providers':
         return json(200, [])
       case '/api/public/queries/qb.public.sponsor-page':
+        if (options.pageIn) {
+          return json(200, { items: [options.pageIn(url.searchParams.get('p.languages') ?? '')], offset: 0, limit: 1 })
+        }
         return json(200, { items: options.page === null ? [] : [options.page ?? PAGE], offset: 0, limit: 1 })
       case '/api/public/queries/qb.public.sponsor-page-publications':
         return json(200, { items: options.live ?? [LIVE], offset: 0, limit: 50 })
@@ -66,6 +71,20 @@ afterEach(() => {
 })
 
 describe("a sponsor's page (Q60a)", () => {
+  it('shows a page of several languages in the one chosen on it (Q73c)', async () => {
+    const { asked } = server({ pageIn: (languages) => languages.startsWith('zh')
+      ? { ...PAGE, headline: '新鲜面包', languages: 'en,zh', displayLanguage: 'zh' }
+      : { ...PAGE, languages: 'en,zh', displayLanguage: 'en' } })
+    window.history.replaceState(null, '', '/s/acme-bakery')
+    render(<App />)
+    const choice = await screen.findByTestId('sponsor-page-languages')
+    expect(within(choice).getByTestId('sponsor-page-language-en')).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(within(choice).getByTestId('sponsor-page-language-zh'))
+    await waitFor(() => expect(screen.getByTestId('sponsor-page-headline')).toHaveTextContent('新鲜面包'))
+    expect(screen.getByTestId('sponsor-page-headline')).toHaveAttribute('lang', 'zh')
+    expect(asked.some((a) => a.includes('p.languages=zh'))).toBe(true)
+  })
+
   it('knows its path', () => {
     expect(sponsorPageOf('/s/Acme-Bakery')).toBe('acme-bakery')
     expect(sponsorPageOf('/s/acme/more')).toBeNull()

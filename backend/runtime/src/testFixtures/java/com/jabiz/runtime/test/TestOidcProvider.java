@@ -41,7 +41,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * on a local port. Tests make the ID token themselves ({@link #idToken}, any claims, any key) and register it for an
  * authorization code ({@link #code}); the token endpoint checks the client credentials (Basic, or in the form as
  * Facebook and LINE take them: {@link #clientAuthentication}), the redirect URI and the PKCE verifier like a real
- * provider, then hands the token out.
+ * provider, then hands the token out. As Apple ({@link #asApple}), the client secret in the form must be an ES256
+ * token signed by the developer's key, and the response carries a refresh token.
  */
 public final class TestOidcProvider implements AutoCloseable {
 
@@ -61,6 +62,11 @@ public final class TestOidcProvider implements AutoCloseable {
     private final String clientSecret;
     private volatile int jwksReads;
     private volatile String clientAuthentication;
+    private volatile ECKey appleKey;
+    private volatile String appleTeam;
+    private final List<String> refreshTokens = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<String> revoked = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private volatile int revocationStatus = 200;
 
     public TestOidcProvider() {
         this(CLIENT_SECRET);
@@ -83,12 +89,14 @@ public final class TestOidcProvider implements AutoCloseable {
         published.add(ec.toPublicJWK());
         server.createContext("/idp/.well-known/openid-configuration", exchange -> json(exchange, 200, """
             {"issuer": "%s", "authorization_endpoint": "%s/authorize", "token_endpoint": "%s/token",
-             "jwks_uri": "%s/jwks"}""".formatted(issuer, issuer, issuer, issuer)));
+             "jwks_uri": "%s/jwks", "revocation_endpoint": "%s/revoke"}""".formatted(issuer, issuer, issuer, issuer,
+            issuer)));
         server.createContext("/idp/jwks", exchange -> {
             jwksReads++;
             json(exchange, 200, new JWKSet(List.copyOf(published)).toString(true));
         });
         server.createContext("/idp/token", this::token);
+        server.createContext("/idp/revoke", this::revoke);
         server.start();
     }
 
@@ -104,6 +112,38 @@ public final class TestOidcProvider implements AutoCloseable {
     /** How the last token request authenticated: {@code basic}, {@code post}, or null before any. */
     public String clientAuthentication() {
         return clientAuthentication;
+    }
+
+    /**
+     * Takes the client's credentials as Apple does (decision D67): in the form, the secret a token signed with ES256 by
+     * {@code developerKey} (key id, team as issuer, the client as subject, Apple as audience, not expired); the response
+     * carries a refresh token ({@link #refreshTokens}). Returns the developer key's PKCS #8 PEM, the
+     * {@code apple.private-key} setting.
+     */
+    public String asApple(String teamId, String keyId) {
+        try {
+            appleKey = new ECKeyGenerator(Curve.P_256).keyID(keyId).generate();
+            appleTeam = teamId;
+            return "-----BEGIN PRIVATE KEY-----\n" + Base64.getEncoder().encodeToString(appleKey.toECPrivateKey()
+                .getEncoded()) + "\n-----END PRIVATE KEY-----";
+        } catch (JOSEException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** The refresh tokens handed out as Apple, oldest first. */
+    public List<String> refreshTokens() {
+        return List.copyOf(refreshTokens);
+    }
+
+    /** The tokens revoked (as the revocation endpoint accepted them), oldest first. */
+    public List<String> revoked() {
+        return List.copyOf(revoked);
+    }
+
+    /** The status the revocation endpoint answers with (200 by default: revoked); another one refuses. */
+    public void revocationStatus(int status) {
+        revocationStatus = status;
     }
 
     /** How often the JWKS was read. */
@@ -168,7 +208,10 @@ public final class TestOidcProvider implements AutoCloseable {
         }
     }
 
-    /** Registers the token the code will be exchanged for; the verifier must match {@code codeChallenge}. */
+    /**
+     * Registers the token the code will be exchanged for; the verifier must match {@code codeChallenge}, or be absent
+     * when it is null (a round trip without PKCE, as Apple's).
+     */
     public String code(String codeChallenge, String idToken) {
         return code(codeChallenge, idToken, REDIRECT_URI);
     }
@@ -195,6 +238,36 @@ public final class TestOidcProvider implements AutoCloseable {
         return params;
     }
 
+    /** RFC 7009 as Apple takes it: the client authenticated as for the token request, then the token. */
+    private void revoke(HttpExchange exchange) throws IOException {
+        Map<String, String> form = form(exchange);
+        String header = exchange.getRequestHeaders().getFirst("Authorization");
+        boolean post = header == null && CLIENT_ID.equals(form.get("client_id"))
+            && (appleKey == null ? clientSecret.equals(form.get("client_secret")) : appleSecret(form.get("client_secret")));
+        if (!post || form.get("token") == null) {
+            json(exchange, 400, "{\"error\": \"invalid_client\"}");
+            return;
+        }
+        if (revocationStatus != 200) {
+            json(exchange, revocationStatus, "{\"error\": \"server_error\"}");
+            return;
+        }
+        revoked.add(form.get("token"));
+        json(exchange, 200, "{}");
+    }
+
+    private static Map<String, String> form(HttpExchange exchange) throws IOException {
+        Map<String, String> form = new LinkedHashMap<>();
+        for (String pair : new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8).split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq > 0) {
+                form.put(URLDecoder.decode(pair.substring(0, eq), StandardCharsets.UTF_8),
+                    URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8));
+            }
+        }
+        return form;
+    }
+
     private void token(HttpExchange exchange) throws IOException {
         String expected = "Basic " + Base64.getEncoder().encodeToString((CLIENT_ID + ":" + clientSecret)
             .getBytes(StandardCharsets.UTF_8));
@@ -207,10 +280,11 @@ public final class TestOidcProvider implements AutoCloseable {
             }
         }
         String header = exchange.getRequestHeaders().getFirst("Authorization");
-        boolean basic = expected.equals(header);
+        boolean basic = appleKey == null && expected.equals(header);
         // client_secret_post: the credentials in the form, and no Authorization header beside them.
         boolean post = header == null && CLIENT_ID.equals(form.get("client_id"))
-            && clientSecret.equals(form.get("client_secret"));
+            && (appleKey == null ? clientSecret.equals(form.get("client_secret"))
+            : appleSecret(form.get("client_secret")));
         if (!basic && !post) {
             json(exchange, 401, "{\"error\": \"invalid_client\"}");
             return;
@@ -219,12 +293,37 @@ public final class TestOidcProvider implements AutoCloseable {
         Grant grant = grants.remove(String.valueOf(form.get("code")));
         if (grant == null || !"authorization_code".equals(form.get("grant_type"))
             || !grant.redirectUri().equals(form.get("redirect_uri"))
-            || !grant.codeChallenge().equals(challenge(String.valueOf(form.get("code_verifier"))))) {
+            || (grant.codeChallenge() == null ? form.containsKey("code_verifier")
+            : !grant.codeChallenge().equals(challenge(String.valueOf(form.get("code_verifier")))))) {
             json(exchange, 400, "{\"error\": \"invalid_grant\"}");
             return;
         }
+        String refresh = "";
+        if (appleKey != null) {
+            String token = "rt-" + UUID.randomUUID();
+            refreshTokens.add(token);
+            refresh = ", \"refresh_token\": \"" + token + "\"";
+        }
         json(exchange, 200, "{\"access_token\": \"at\", \"token_type\": \"Bearer\", \"id_token\": \""
-            + grant.idToken() + "\"}");
+            + grant.idToken() + "\"" + refresh + "}");
+    }
+
+    /** Whether the secret is a client secret as Apple takes it, signed by the developer's key. */
+    private boolean appleSecret(String secret) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(secret);
+            JWTClaimsSet claims = jwt.getJWTClaimsSet();
+            return JWSAlgorithm.ES256.equals(jwt.getHeader().getAlgorithm())
+                && appleKey.getKeyID().equals(jwt.getHeader().getKeyID())
+                && jwt.verify(new com.nimbusds.jose.crypto.ECDSAVerifier(appleKey.toPublicJWK()))
+                && appleTeam.equals(claims.getIssuer()) && CLIENT_ID.equals(claims.getSubject())
+                && List.of("https://appleid.apple.com").equals(claims.getAudience())
+                // Tests run on a fixed clock: the lifetime is checked, not the time of day.
+                && claims.getExpirationTime().after(claims.getIssueTime())
+                && claims.getExpirationTime().getTime() - claims.getIssueTime().getTime() <= 180L * 24 * 3600 * 1000;
+        } catch (java.text.ParseException | JOSEException | RuntimeException e) {
+            return false;
+        }
     }
 
     private static String challenge(String verifier) {

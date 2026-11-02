@@ -76,12 +76,33 @@ fi
 run $'PLAIN=a\nLONG=12345678\nMAYBE='
 expect "an optional variable left empty" 0
 
+# Variables of a Spring profile: needed only when SPRING_PROFILES_ACTIVE names it.
+cp "$work/required" "$work/plain"
+cat >>"$work/required" <<'LIST'
+social:SOCIAL_ID
+social:SOCIAL_URL - https://
+LIST
+run $'PLAIN=a\nLONG=12345678\nSPRING_PROFILES_ACTIVE=staging'
+expect "a profile not active asks for nothing" 0
+run $'PLAIN=a\nLONG=12345678'
+expect "no profiles ask for nothing" 0
+run $'PLAIN=a\nLONG=12345678\nSPRING_PROFILES_ACTIVE="staging, social"'
+expect "an active profile asks for its variables" 1 "SOCIAL_ID is not set"
+expect "each of them" 1 "SOCIAL_URL is not set"
+run $'PLAIN=a\nLONG=12345678\nSPRING_PROFILES_ACTIVE=staging,social\nSOCIAL_ID=x\nSOCIAL_URL=http://x'
+expect "checked like the others" 1 "SOCIAL_URL must start with https://"
+run $'PLAIN=a\nLONG=12345678\nSPRING_PROFILES_ACTIVE=staging,social\nSOCIAL_ID=x\nSOCIAL_URL=https://x'
+expect "an active profile's variables given" 0
+run $'PLAIN=a\nLONG=12345678\nSPRING_PROFILES_ACTIVE=socials'
+expect "only the profile's own name" 0
+cp "$work/plain" "$work/required"
+
 status=0
 out="$(/bin/sh "$script" "$work/none" "$work/required" 2>&1)" || status=$?
 expect "no .env" 1 "cannot read"
 
 # The committed list: names (`?` when optional), each with an optional length (`-` for any) and start.
-if grep -vE '^(#.*|\??[A-Z][A-Z0-9_]*( ([0-9]+|-)( [^ ]+)?)?|)$' "$root/deploy/quizbuks/server/required-env"; then
+if grep -vE '^(#.*|\??([a-z][a-z0-9-]*:)?[A-Z][A-Z0-9_]*( ([0-9]+|-)( [^ ]+)?)?|)$' "$root/deploy/quizbuks/server/required-env"; then
   echo "FAIL required-env has a line that is not a name with an optional length and start"
   failures=$((failures + 1))
 else

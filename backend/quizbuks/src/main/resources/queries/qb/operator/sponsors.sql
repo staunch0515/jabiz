@@ -18,6 +18,7 @@ results:
   company:           { from: QbSponsor.company }
   contactName:       { from: QbSponsor.contactName }
   intro:             { from: QbSponsor.intro }
+  introTranslations: { from: QbSponsor.introTranslations }
   avatar:            { from: QbSponsor.avatar }
   termsAcceptedAt:   { from: QbSponsor.termsAcceptedAt }
   email:             { from: SecUser.email }
@@ -53,6 +54,7 @@ SELECT
     s.{{QbSponsor.company}}           AS company,
     s.{{QbSponsor.contactName}}       AS contactName,
     s.{{QbSponsor.intro}}             AS intro,
+    s.{{QbSponsor.introTranslations}} AS introTranslations,
     s.{{QbSponsor.avatar}}            AS avatar,
     s.{{QbSponsor.termsAcceptedAt}}   AS termsAcceptedAt,
     u.{{SecUser.email}}               AS email,

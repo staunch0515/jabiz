@@ -110,6 +110,8 @@ public final class QbAccounts {
             .apply(Rules.notBlank(AccountCodes.COMPANY_BLANK)));
         // Markdown in one language, rendered by the frontends only, without raw HTML.
         eb.field("intro", f -> f.physicalColumn("intro").asText(AccountLimits.INTRO_LENGTH, true));
+        // Q73c: the introduction in other languages ({language: {intro: {text, hash}}}), reviewed with it.
+        eb.field("introTranslations", f -> f.physicalColumn("intro_translations").asText(null, true));
         eb.field("avatar", f -> f.physicalColumn("avatar").kind(FileKind.of(AVATAR_POLICY)));
         eb.field("reviewStatus", f -> f.physicalColumn("review_status").required(true).processOnly()
             .asCode(REVIEW_STATUS_DICTIONARY, SponsorStatus.ALL.toArray(String[]::new)));

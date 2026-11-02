@@ -75,7 +75,8 @@ public class SponsorPageConfig {
         return DatasetDefinition.define(QbSponsorPages.PUBLIC_DATASET, d -> d
             .targetEntityType(QbSponsorPages.PAGE)
             .scope(s -> s.fixed("status", QbSponsorPages.PUBLISHED))
-            .publicRead(p -> p.fields("userId", "handle", "language", "headline", "cover", "website"))
+            .publicRead(p -> p.fields("userId", "handle", "language", "headline", "cover", "website", "languages",
+                "translations"))
             .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));

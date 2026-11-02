@@ -5,6 +5,7 @@ import {
   AlertTitle,
   Badge,
   Button,
+  Checkbox,
   FileUpload,
   Input,
   Label,
@@ -16,9 +17,11 @@ import { CircleCheck } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { neutralName } from '../content/api'
+import { parseStoredTranslations, TextTranslationsFields, type TextsByLanguage } from '../content/TextTranslationsFields'
 import { SPONSOR } from '../messages'
 import { ShownAt } from '../content/ShownAt'
-import { applyAsSponsor, readMySponsor, saveSponsorProfile, type Sponsor, type SponsorOutput } from '../qb/api'
+import { applyAsSponsor, CONTENT_LANGUAGES, readMySponsor, saveSponsorProfile, type ContentLanguage, type Sponsor,
+  type SponsorOutput } from '../qb/api'
 import { claimSource, remembered } from '../trial/claim'
 import { FileImage } from '../qb/FileImage'
 import { CONSENTS_QUERY, useMyConsents } from '../qb/ConsentGate'
@@ -109,6 +112,7 @@ export function OnboardingPage() {
 
 function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
   const { t } = useTranslation(SPONSOR)
+  const { t: tQb } = useTranslation(QB)
   const { displayName: signedUpAs } = useAuth()
   const queryClient = useQueryClient()
   const id = useId()
@@ -116,6 +120,13 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
   const [displayName, setDisplayName] = useState(() => sponsor?.contactName || signedUpAs || '')
   const [company, setCompany] = useState(() => sponsor?.company ?? '')
   const [intro, setIntro] = useState(() => sponsor?.intro ?? '')
+  // Q73c: the introduction in other languages (optional), those chosen, and those confirmed after a change of it.
+  const storedIntro = parseStoredTranslations(sponsor?.introTranslations)
+  const [introLanguages, setIntroLanguages] = useState<ContentLanguage[]>(
+    () => Object.keys(storedIntro.texts) as ContentLanguage[])
+  const [introTranslations, setIntroTranslations] = useState<TextsByLanguage>(() => storedIntro.texts)
+  const [introConfirmed, setIntroConfirmed] = useState<string[]>([])
+  const translatedIntro = introLanguages.length > 0 || Object.keys(storedIntro.texts).length > 0
   const [avatar, setAvatar] = useState<string | null>(() => sponsor?.avatar ?? null)
   const [acceptTerms, setAcceptTerms] = useState(false)
   const [done, setDone] = useState<string | null>(null)
@@ -130,6 +141,8 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
         intro: intro.trim() === '' ? null : intro,
         avatar,
         baseRevision: sponsor?.revision ?? null,
+        ...(translatedIntro ? { introTranslations: Object.fromEntries(introLanguages.map((l) =>
+          [l, introTranslations[l] ?? {}])), introConfirmed } : {}),
       }
       return approved ? saveSponsorProfile(input)
         : applyAsSponsor({ ...input, acceptTerms, ...acceptedVersions(terms.data), trialKey: remembered() })
@@ -166,7 +179,7 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
   const invalid = (field: string) => (problem(field) ? true : undefined)
   const errorOf = (field: string) => problem(field)
     && <p id={errorId(field)} className="text-destructive text-sm">{problem(field)}</p>
-  const general = generalProblem(save.error, FIELDS)
+  const general = generalProblem(save.error, [...FIELDS, ...introLanguages.map((l) => `translations.${l}.intro`)])
   const label = approved ? t('onboarding.save') : sponsor ? t('onboarding.applyAgain') : t('onboarding.apply')
 
   return (
@@ -194,6 +207,28 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
         {errorOf('intro')}
         <ShownAt field="sponsorIntro" />
       </div>
+      {intro.trim() !== '' && (
+        <fieldset className="flex flex-col gap-2" data-testid="onboarding-intro-languages">
+          <legend className="text-sm font-medium">{t('pageLanguages.intro')}</legend>
+          <p className="text-muted-foreground text-sm">{t('pageLanguages.introHint')}</p>
+          <div className="flex flex-wrap gap-4">
+            {CONTENT_LANGUAGES.map((language) => (
+              <div key={language} className="flex items-center gap-2">
+                <Checkbox id={`${id}-intro-${language}`} checked={introLanguages.includes(language)}
+                  data-testid={`onboarding-intro-language-${language}`}
+                  onCheckedChange={(checked) => setIntroLanguages((all) => checked === true
+                    ? [...all.filter((l) => l !== language), language] : all.filter((l) => l !== language))} />
+                <Label htmlFor={`${id}-intro-${language}`} className="font-normal">{tQb(`languages.${language}`)}</Label>
+              </div>
+            ))}
+          </div>
+          <TextTranslationsFields id={`${id}-intro-tr`} languages={introLanguages} value={introTranslations}
+            hashes={storedIntro.hashes} confirmed={introConfirmed} onChange={setIntroTranslations}
+            onConfirmed={setIntroConfirmed} problemOf={problem} testId="onboarding-intro-translations"
+            fields={[{ field: 'intro', label: t('onboarding.intro2'), source: intro, maxLength: INTRO_LENGTH,
+              multiline: true }]} />
+        </fieldset>
+      )}
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-avatar`}>{t('onboarding.avatar')}</Label>
         {avatar && (

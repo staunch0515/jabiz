@@ -1,26 +1,44 @@
 #!/bin/sh
 # check-env.sh <.env> <required-env>: whether the environment's .env gives every variable of the list (required-env in
 # this directory), each non-empty, as long as the list asks and starting as it asks; a name marked `?` may be absent,
-# but when given is checked the same. Run by the deploy workflow on the server before the image is pulled. Prints the
-# names of what is missing, too short or of the wrong form, never a value; exits 1 if anything is.
+# but when given is checked the same; a name written `<profile>:NAME` is needed only when the .env's
+# SPRING_PROFILES_ACTIVE names that Spring profile (the providers of "social", say). Run by the deploy workflow on the
+# server before the image is pulled. Prints the names of what is missing, too short or of the wrong form, never a
+# value; exits 1 if anything is.
 set -eu
 
 env_file="$1"
 required="$2"
 [ -r "$env_file" ] || { echo "cannot read $env_file" >&2; exit 1; }
 
+# value_of NAME: its value in the .env. The last definition counts, as in compose; a value in one pair of quotes is
+# the text inside them.
+value_of() {
+  v=$(sed -n "s/^$1=//p" "$env_file" | tail -n 1)
+  case "$v" in
+    \'*\') v=${v#\'}; v=${v%\'} ;;
+    \"*\") v=${v#\"}; v=${v%\"} ;;
+  esac
+  printf '%s' "$v"
+}
+
+# The active Spring profiles, one per line, without blanks.
+profiles=$(value_of SPRING_PROFILES_ACTIVE | tr ',' '\n' | tr -d ' \t')
+
 problems=
 while read -r name min prefix rest; do
   case "$name" in '' | '#'*) continue ;; esac
   optional=
   case "$name" in '?'*) optional=yes; name=${name#?} ;; esac
-  [ "$min" = - ] && min=
-  # The last definition counts, as in compose; a value in one pair of quotes is the text inside them.
-  value=$(sed -n "s/^${name}=//p" "$env_file" | tail -n 1)
-  case "$value" in
-    \'*\') value=${value#\'}; value=${value%\'} ;;
-    \"*\") value=${value#\"}; value=${value%\"} ;;
+  case "$name" in
+    *:*)
+      profile=${name%%:*}
+      name=${name#*:}
+      printf '%s\n' "$profiles" | grep -qx -- "$profile" || continue
+      ;;
   esac
+  [ "$min" = - ] && min=
+  value=$(value_of "$name")
   if [ -z "$value" ]; then
     [ -n "$optional" ] || problems="$problems
   $name is not set"

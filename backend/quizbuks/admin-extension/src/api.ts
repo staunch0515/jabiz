@@ -396,6 +396,8 @@ export interface Sponsor {
   contactName: string | null
   company: string | null
   intro: string | null
+  /** Q73c: the introduction in other languages, reviewed with it. */
+  introTranslations: Record<string, Record<string, string>>
   avatar: string | null
   reviewStatus: string
   termsAcceptedAt: string | null
@@ -414,6 +416,7 @@ export async function readSponsor(userId: string): Promise<Sponsor | null> {
     contactName: str(row.contactName),
     company: str(row.company),
     intro: str(row.intro),
+    introTranslations: storedTexts(row.introTranslations),
     avatar: str(row.avatar),
     reviewStatus: String(row.reviewStatus ?? ''),
     termsAcceptedAt: str(row.termsAcceptedAt),
@@ -702,6 +705,22 @@ export async function readTranslationCheck(publicationId: string, language: stri
 export const requestTranslationCheck = (publicationId: string, language: string) =>
   runProcess<{ aiJobId: string; status: string }>(TRANSLATION_CHECK_PROCESS, { publicationId, language })
 
+/** Q73c: a sponsor's stored translations (`{language: {field: {text, hash}}}`): their texts by language and field. */
+export function storedTexts(value: unknown): Record<string, Record<string, string>> {
+  if (value == null || value === '') return {}
+  try {
+    const parsed = JSON.parse(String(value)) as Record<string, Record<string, { text?: unknown }>>
+    const out: Record<string, Record<string, string>> = {}
+    for (const [language, fields] of Object.entries(parsed ?? {})) {
+      out[language] = {}
+      for (const [field, entry] of Object.entries(fields ?? {})) {
+        if (typeof entry?.text === 'string') out[language][field] = entry.text
+      }
+    }
+    return out
+  } catch {
+    return {}
+  }
 /** Q73e-1: one answer language's figures of a publication (`qb.admin.publication-languages`). */
 export interface LanguageFigures {
   language: string

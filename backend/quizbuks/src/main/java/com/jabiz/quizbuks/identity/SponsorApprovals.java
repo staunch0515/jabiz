@@ -35,6 +35,15 @@ public final class SponsorApprovals {
      */
     public static Map<String, Object> content(String contactName, String company, String intro, UUID avatar,
         Instant termsAcceptedAt, Integer termsVersionNo) {
+        return content(contactName, company, intro, avatar, termsAcceptedAt, termsVersionNo, null);
+    }
+
+    /**
+     * Q73c: with the introduction's translations as stored; left out when there are none, so that an onboarding of
+     * one language hashes as before.
+     */
+    public static Map<String, Object> content(String contactName, String company, String intro, UUID avatar,
+        Instant termsAcceptedAt, Integer termsVersionNo, Object introTranslations) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("contactName", contactName);
         content.put("company", company);
@@ -46,6 +55,9 @@ public final class SponsorApprovals {
         // requests then pending still bind it (review L2).
         if (termsVersionNo != null) {
             content.put("termsVersionNo", termsVersionNo);
+        }
+        if (introTranslations != null) {
+            content.put("introTranslations", introTranslations.toString());
         }
         return content;
     }

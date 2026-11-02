@@ -39,7 +39,7 @@
 
 ### 2.2 Information from sign-in with another service
 
-When you sign in or sign up with Google, Facebook or LINE, we receive from that company your identifier at that service, your email address (and whether it is verified) and your display name. We do not receive your password or anything else.
+When you sign in or sign up with Google, Apple, Facebook or LINE, we receive from that company your identifier at that service, your email address (and whether it is verified) and your display name. We do not receive your password or anything else. With Apple, you may hide your email address: we then receive an address of Apple's private relay service, which forwards our mail to you, and your name only the first time you sign in. To revoke your authorization at Apple when your account is deleted or you unlink Apple, we keep the token Apple gave us, encrypted, until it has been revoked.
 
 ### 2.3 Information collected automatically
 
@@ -153,7 +153,7 @@ You can also do the following yourself in the Service:
 - see the devices you are signed in on, and sign them out
 - choose which mail and notifications you receive
 
-To have the information we received from Google, Facebook or LINE deleted, unlink that account on your account page and then contact us at the address above.
+To have the information we received from Google, Apple, Facebook or LINE deleted, unlink that account on your account page and then contact us at the address above.
 
 **Deleting your account.** You can ask for your account to be deleted in the app (Account → Delete account) or, without the app, at https://quizbuks.com/taker/delete-account (we send a link to your registered email address to confirm). Sponsors can ask on the account page of the Sponsor console. The account is deleted after a waiting period of 14 days; until then you can sign in and take the request back. When it is deleted, we erase your name, email address, profile, About me, bank account details and the invitations addressed to you, together with their copies in our history and logs. Records that must be kept under section 8 (your answers, rewards, withdrawals, receipts and accounting records) are kept until their retention period ends, without your name: they are linked only to a number that no longer identifies anyone. Kudos left in your wallet are not paid out. Information held by the providers in section 5 (for example Stripe) is kept by them under their own policies.
 

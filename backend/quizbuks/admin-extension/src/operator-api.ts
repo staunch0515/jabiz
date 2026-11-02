@@ -1,4 +1,5 @@
 import { runProcess, runQuery, type Filter } from '@jabiz/admin'
+import { storedTexts } from './api'
 import type { Page, Sponsor, SponsorRow } from './api'
 import { OPERATOR_PROCESS, TEMPLATE } from './ids'
 import type { SortSpec } from './api'
@@ -262,6 +263,8 @@ export interface OperatorSponsor {
   company: string
   contactName: string
   intro: string | null
+  /** Q73c: the introduction in other languages. */
+  introTranslations: Record<string, Record<string, string>>
   email: string | null
   reviewStatus: string
   submittedAt: string | null
@@ -287,6 +290,7 @@ export function toOperatorSponsor(row: Row): OperatorSponsor {
     company: String(row.company ?? ''),
     contactName: String(row.contactName ?? ''),
     intro: str(row.intro),
+    introTranslations: storedTexts(row.introTranslations),
     email: str(row.email),
     reviewStatus: String(row.reviewStatus ?? ''),
     submittedAt: str(row.submittedAt),
@@ -352,7 +356,7 @@ export async function readSponsorAsOperator(userId: string):
   if (!s) return null
   return {
     sponsor: { userId: s.userId, contactName: s.contactName || null, company: s.company || null, intro: s.intro,
-      avatar: s.avatar, reviewStatus: s.reviewStatus, termsAcceptedAt: s.termsAcceptedAt,
+      introTranslations: s.introTranslations, avatar: s.avatar, reviewStatus: s.reviewStatus, termsAcceptedAt: s.termsAcceptedAt,
       approvalRequestId: s.approvalRequestId, submittedAt: s.submittedAt, approvedAt: s.approvedAt,
       rejectReason: s.rejectReason },
     email: s.email,

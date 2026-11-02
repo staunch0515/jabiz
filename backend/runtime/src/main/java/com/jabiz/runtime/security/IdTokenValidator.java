@@ -72,6 +72,11 @@ public final class IdTokenValidator {
             this(subject, amr, authTime, null, false, null, null);
         }
 
+        /** The same identity with {@code name} (cleaned as a token's name is), for a provider that tells it apart. */
+        public Identity withName(String name) {
+            return new Identity(subject, amr, authTime, email, emailVerified, IdTokenValidator.name(name), hostedDomain);
+        }
+
         /**
          * The address the provider vouches for, or null: verified by the provider, and for Google an address Google
          * itself owns (gmail) or one of a Workspace account ({@code hd}); Google verified other addresses once, when

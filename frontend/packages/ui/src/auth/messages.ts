@@ -40,6 +40,7 @@ const en = {
     byEmailLink: 'Sign in by a link in your mail',
     byPassword: 'Sign in with your password',
     otherWays: 'Other ways to sign in',
+    withApple: 'Sign in with Apple',
     providerFailed: 'Signing in through the identity provider did not work.',
     accountExists: 'There is already an account with this e-mail address. Sign in the way you did before, then link this provider under Security in your account.',
     linkFailed: 'Linking the account did not work.',
@@ -99,6 +100,7 @@ const en = {
     haveAccount: 'Already have an account? Sign in',
     orWith: 'or sign up with',
     otherWays: 'Other ways to sign up',
+    withApple: 'Sign up with Apple',
   },
   password: {
     changeTitle: 'Change your password',
@@ -332,6 +334,7 @@ const zh: Messages = {
     byEmailLink: '用邮件中的链接登录',
     byPassword: '用密码登录',
     otherWays: '其他方式登录',
+    withApple: '通过 Apple 登录',
     providerFailed: '通过身份提供方登录未成功。',
     accountExists: '此邮箱已有账号。请用原来的方式登录，再在账户的"安全设置"中关联此登录方式。',
     linkFailed: '关联账号未成功。',
@@ -391,6 +394,7 @@ const zh: Messages = {
     haveAccount: '已有账号？登录',
     orWith: '或通过以下方式注册',
     otherWays: '其他方式注册',
+    withApple: '通过 Apple 注册',
   },
   password: {
     changeTitle: '修改密码',
@@ -622,6 +626,7 @@ const ja: Messages = {
     byEmailLink: 'メールのリンクでログイン',
     byPassword: 'パスワードでログイン',
     otherWays: 'その他の方法でログイン',
+    withApple: 'Appleでサインイン',
     providerFailed: 'ID プロバイダーでのログインに失敗しました。',
     accountExists: 'このメールアドレスのアカウントはすでにあります。これまでの方法でログインし、アカウントの「セキュリティ」でこのログイン方法を連携してください。',
     linkFailed: 'アカウントを連携できませんでした。',
@@ -681,6 +686,7 @@ const ja: Messages = {
     haveAccount: 'アカウントをお持ちの方はログイン',
     orWith: 'または次の方法で登録',
     otherWays: 'その他の方法で登録',
+    withApple: 'Appleでサインアップ',
   },
   password: {
     changeTitle: 'パスワードの変更',

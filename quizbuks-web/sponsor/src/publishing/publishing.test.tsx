@@ -453,6 +453,22 @@ describe('the publication wizard', () => {
     expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ translations: { zh: { name: '咖啡周（AI）' } } })
   })
 
+  it('marks a translation of an older name and sends it as confirmed when still right (Q73c)', async () => {
+    const { processCalls } = server({ versions: [{ ...VERSIONS[0], language: 'en', languages: 'en,zh' }],
+      publication: { ...DRAFT, languages: 'en,zh',
+        translations: JSON.stringify({ zh: { name: { text: '咖啡周', hash: '0000000000000000' } } }) },
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const texts = await screen.findByTestId('publication-texts-zh')
+    expect(await within(texts).findByTestId('publication-text-stale')).toHaveTextContent('Out of date')
+    await userEvent.click(within(texts).getByTestId('publication-text-confirm'))
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ translations: { zh: { name: '咖啡周' } },
+      confirmed: ['zh.name'] })
+  })
+
   it('uploads the publication\'s own cover and sends it with the save (Q64)', async () => {
     const { processCalls, uploads } = server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
     window.history.replaceState(null, '', '/publications/p1')
