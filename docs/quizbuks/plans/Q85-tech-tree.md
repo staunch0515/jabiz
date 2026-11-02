@@ -20,7 +20,7 @@
 - **答题者看商户**：公开的商户主页（`/s/<handle>`，`qb.public.sponsor-page-publications`，公开模板不知道读者）按层分组列出进行中的发布；发布页按本人给出 `prerequisites[].met`；历史页列自己的会话。
 - **画图**：两个 SPA 只有 Recharts 的统计图与内联 SVG 插画（`qb/Illustrations.tsx`）；没有图布局库，扩展与 SPA 不自带依赖（CLAUDE.md 第 4 节"前端"）。
 
-## 2. 决定（草案）
+## 2. 决定（需求方 2026-11-02 确认）
 
 | # | 决定 |
 |---|---|
