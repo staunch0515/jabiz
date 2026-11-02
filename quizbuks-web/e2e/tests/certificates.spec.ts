@@ -13,7 +13,7 @@ test.beforeEach(async ({ request }) => {
 })
 
 test('a holder issues a certificate, anybody verifies it and sees it on the public page', async ({ page, browser,
-  request }) => {
+  baseURL, request }) => {
   test.setTimeout(180_000)
   const name = unique('Cert ')
   const me = await taker(request, name)
@@ -50,7 +50,9 @@ test('a holder issues a certificate, anybody verifies it and sees it on the publ
   await expect(page.getByTestId('certificates-page-link')).toBeVisible()
 
   // Anybody, signed out: the verify page and the public page.
-  const visitor = await browser.newPage()
+  // A context of its own (signed out; axe needs a page of a context, not of the bare browser), at the tests' address.
+  const visitorContext = await browser.newContext({ baseURL })
+  const visitor = await visitorContext.newPage()
   await visitor.goto(address)
   await expect(visitor.getByTestId('verify-state')).toHaveText('Valid')
   await expect(visitor.getByTestId('verify-holder')).toHaveText(name)
@@ -67,5 +69,5 @@ test('a holder issues a certificate, anybody verifies it and sees it on the publ
   await expect(page.getByTestId('certificates-page-link')).toBeHidden()
   await visitor.goto(`/taker/u/${handle}`)
   await expect(visitor.getByText('This page is not available')).toBeVisible()
-  await visitor.close()
+  await visitorContext.close()
 })
