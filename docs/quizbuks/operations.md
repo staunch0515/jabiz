@@ -221,6 +221,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    `qb.broadcast-stats`（每日 04:47 UTC，商家通知统计的快照；`quizbuks.messaging.stats-cron`）、`qb.payout-reminder`（每日 03:17 UTC；`quizbuks.messaging.payout-reminder-cron`）。
    商家看到的统计的下限 `qb.broadcast.stats.min-audience`（50，普通参数）：到达不足它时不显示点击与开始答题（评审 M2）。
    限流（`application.yml` 的 `jabiz.process.rate-limits`）：已读与点击每人每分钟 120 次、全部已读与推广开关各 30 次、商家保存通知 60 次、发送每小时 10 次。
+   对话（Q82，`plans/Q82-conversations.md`）：任务 `qb.conversation-expire`（每日 03:41 UTC，关闭 `qb.conversation.close-days`（90，普通参数）天无消息的对话；`quizbuks.conversations.expire-cron`；停了它只是安静的对话不自动关闭，恢复后一次补做）；每侧每对话每日条数 `qb.conversation.daily-cap`（20，普通参数）；限流：发送每人每小时 30 次、开启 10 次。商户的回复经消费者 `qb.msg-conversation-reply` 写站内信并推送。对话内容的纠纷由内容管理员（与运营商，限其商户）在后台扩展的举报页经“查看对话”只读查看。
 
 **阶段一（推广期）的设置（Q28，`plans/Q28-phase1-defaults.md`）**：推广期只有线下奖品、商家免费、不经手资金（招商网站 §7.11 的承诺）。由超级管理员提出、财务管理员发布（都是受控参数，四眼），按顺序：
 
@@ -299,7 +300,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 外部调用 | `jabiz.external.call{service="stripe", outcome}` | `5xx`、`timeout`、`refused` 比率 > 5 % |
 | AI 作业暂停（§7.8） | 量规 `jabiz.external.job.held{job_type="qb.ai.questions"|"qb.ai.cover"}`（`qb.ai.enabled` 不是 `true` 时为 1） | 不是有意关闭时（变更记录中没有关闭）为 1 超过 5 分钟：参数被删或读不出来，作业都在等待 |
 | 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
-| 站内信与公告（Q7c） | `jabiz.job.item{job="qb.broadcast-dispatch"|"qb.broadcast-expire"|"qb.broadcast-stats"|"qb.payout-reminder", result}`；`jabiz.query.template{template="qb.app.inbox-unread"}` 的耗时（徽标，每个在线用户每 5 分钟一次；目标 < 5 ms，`docs/quizbuks/perf/Q7c-inbox.md`）；`jabiz.outbox.delivery{result="FAILED"}`（消费者 `qb.msg-*`） | 定时发送的项连续失败（公告迟迟不出）；消费者失败持续 15 分钟 |
+| 站内信与公告（Q7c） | `jabiz.job.item{job="qb.broadcast-dispatch"|"qb.broadcast-expire"|"qb.broadcast-stats"|"qb.payout-reminder"|"qb.conversation-expire", result}`；`jabiz.query.template{template="qb.app.inbox-unread"}` 的耗时（徽标，每个在线用户每 5 分钟一次；目标 < 5 ms，`docs/quizbuks/perf/Q7c-inbox.md`）；`jabiz.outbox.delivery{result="FAILED"}`（消费者 `qb.msg-*`） | 定时发送的项连续失败（公告迟迟不出）；消费者失败持续 15 分钟 |
 | 商家分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
 | 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |

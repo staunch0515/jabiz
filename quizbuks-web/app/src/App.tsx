@@ -71,6 +71,8 @@ import { badgeText, inboxItemOf, INBOX_PATH } from './inbox/api'
 import { MY_SPONSOR_PATH, MY_SPONSOR_QUERY, readFigures, useMySponsor } from './mysponsor/api'
 import { MySponsorPage } from './mysponsor/MySponsorPage'
 import { ReferralPage, ReferralsPage } from './referral/ReferralsPage'
+import { ConversationPage, ConversationsPage } from './conversation/ConversationPages'
+import { conversationOf, CONVERSATIONS_PATH } from './conversation/api'
 import { REFERRALS_PATH } from './referral/api'
 import { InboxItemPage } from './inbox/InboxItemPage'
 import { InboxPage } from './inbox/InboxPage'
@@ -334,7 +336,7 @@ function BottomNav({ path }: { path: string }) {
   // account's parts (Q56) to the account.
   const item = itemPage(path)
   const section = item ? (item.page === 'p' ? HOME : HISTORY) : isWalletPath(path) ? WALLET_PATH
-    : inboxItemOf(path) ? INBOX_PATH : path === STAFF_PATH || path === HANDLED_PATH || isAccountPath(path) ? ACCOUNT_PATH : path
+    : inboxItemOf(path) || path === CONVERSATIONS_PATH || conversationOf(path) ? INBOX_PATH : path === STAFF_PATH || path === HANDLED_PATH || isAccountPath(path) ? ACCOUNT_PATH : path
   return (
     <nav aria-label={t('nav.label')}
       className="bg-card fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-12px_var(--overlay)]">
@@ -416,6 +418,8 @@ function SignedIn({ path }: { path: string }) {
   else if (path === HANDLED_PATH) page = <StaffHandledPage />
   else if (path === MY_SPONSOR_PATH) page = <MySponsorPage />
   else if (path === REFERRALS_PATH) page = <ReferralsPage />
+  else if (path === CONVERSATIONS_PATH) page = <ConversationsPage />
+  else if (conversationOf(path)) page = <ConversationPage key={path} conversationId={conversationOf(path)!} />
   else if (path === SCAN_PATH) page = <ScanPage />
   else if (inboxItemOf(path)) {
     const message = inboxItemOf(path)!

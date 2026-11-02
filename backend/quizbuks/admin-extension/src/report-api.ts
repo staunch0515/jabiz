@@ -19,6 +19,8 @@ export interface ReportedPublication {
   inappropriate: number
   rewardNotGiven: number
   spam: number
+  /** Q82: reports of what a sponsor wrote in a conversation. */
+  message: number
   other: number
   lastReportedAt: string | null
 }
@@ -31,6 +33,28 @@ export interface Report {
   status: string
   createdAt: string | null
   resolution: string | null
+  /** Q82: the conversation reported (reason MESSAGE), else null. */
+  conversationId: string | null
+}
+
+/** Q82: a conversation as the reviewers read it (the two sides stay ids). */
+export interface Conversation {
+  conversationId: string
+  takerId: string
+  publisherId: string
+  publicationId: string
+  status: string
+  closedBy: string | null
+  openedAt: string | null
+}
+
+/** Q82: a message of a conversation, with who wrote it (an id) and when; the text is plain. */
+export interface ConversationMessage {
+  messageId: string
+  sender: string
+  senderUserId: string
+  body: string | null
+  createdAt: string | null
 }
 
 type Row = Record<string, unknown>
@@ -54,6 +78,7 @@ export async function readReportedPublications(offset: number, limit: number, so
       inappropriate: num(row.inappropriate),
       rewardNotGiven: num(row.rewardNotGiven),
       spam: num(row.spam),
+      message: num(row.message),
       other: num(row.other),
       lastReportedAt: str(row.lastReportedAt),
     })),
@@ -71,6 +96,35 @@ export async function readReports(publicationId: string): Promise<Report[]> {
   return (answer.items ?? []).map((item) => {
     const row = (item.attributes ?? {}) as Row
     return { reportId: String(item.id ?? ''), reason: String(row.reason ?? ''), note: str(row.note),
-      status: String(row.status ?? ''), createdAt: str(row.createdAt), resolution: str(row.resolution) }
+      status: String(row.status ?? ''), createdAt: str(row.createdAt), resolution: str(row.resolution),
+      conversationId: str(row.conversationId) }
+  })
+}
+
+/** Q82: one conversation, or null when it is none the caller may read. */
+export async function readConversation(conversationId: string): Promise<Conversation | null> {
+  const answer = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+    params: { path: { resourceId: DATASET.conversation } },
+    body: { offset: 0, limit: 1, filters: [{ field: 'conversationId', op: 'eq', value: conversationId }] },
+  }))
+  const item = (answer.items ?? [])[0]
+  if (!item) return null
+  const row = (item.attributes ?? {}) as Row
+  return { conversationId: String(item.id ?? conversationId), takerId: String(row.takerId ?? ''),
+    publisherId: String(row.publisherId ?? ''), publicationId: String(row.publicationId ?? ''),
+    status: String(row.status ?? ''), closedBy: str(row.closedBy), openedAt: str(row.openedAt) }
+}
+
+/** Q82: a conversation's messages, oldest first (at most 500). */
+export async function readConversationMessages(conversationId: string): Promise<ConversationMessage[]> {
+  const answer = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+    params: { path: { resourceId: DATASET.conversationMessage } },
+    body: { offset: 0, limit: 500, filters: [{ field: 'conversationId', op: 'eq', value: conversationId }],
+      sorts: [{ field: 'createdAt', asc: true }] },
+  }))
+  return (answer.items ?? []).map((item) => {
+    const row = (item.attributes ?? {}) as Row
+    return { messageId: String(item.id ?? ''), sender: String(row.sender ?? ''),
+      senderUserId: String(row.senderUserId ?? ''), body: str(row.body), createdAt: str(row.createdAt) }
   })
 }

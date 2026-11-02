@@ -26,6 +26,8 @@ import { CASH_REWARDS_PATH } from '../publishing/CashRewardsPage'
 import { REDEEM_PATH } from '../publishing/RedeemPage'
 import { useRegionLabel } from '../publishing/shared'
 import { Link } from '../qb/router'
+import { CONVERSATIONS_TAB } from '../conversations/api'
+import { ConversationsTab, useUnreadConversations } from '../conversations/ConversationsPages'
 import {
   ANNOUNCEMENTS_QUERY,
   cancelNotice,
@@ -283,18 +285,26 @@ function Announcements() {
  * The message centre (M-60, M-61; Q7c): the sponsor's notices to the takers of their publications, with their state
  * and statistics, written in an editor that shows how they look in the app; and QuizBuks's announcements to sponsors.
  */
-export function MessagesPage() {
+export function MessagesPage({ tab }: { tab?: string | null } = {}) {
   const { t } = useTranslation(SPONSOR)
+  const unread = useUnreadConversations()
   return (
     <section className="flex flex-col gap-4" data-testid="messages-page">
       <PageHeader title={t('notices.title')} description={t('notices.intro')} />
-      <Tabs defaultValue="mine">
+      {/* Q82: the takers' conversations are the third tab (?tab=conversations opens it). */}
+      <Tabs defaultValue={tab === CONVERSATIONS_TAB ? CONVERSATIONS_TAB : 'mine'}>
         <TabsList aria-label={t('notices.tabs.label')}>
           <TabsTrigger value="mine" data-testid="messages-tab-mine">{t('notices.tabs.mine')}</TabsTrigger>
           <TabsTrigger value="inbox" data-testid="messages-tab-inbox">{t('notices.tabs.inbox')}</TabsTrigger>
+          <TabsTrigger value={CONVERSATIONS_TAB} data-testid="messages-tab-conversations">
+            {t('conversations.tab')}
+            {unread > 0 && <Badge className="ml-1" data-testid="messages-tab-conversations-unread">
+              {unread > 99 ? '99+' : unread}</Badge>}
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="mine" className="pt-2"><Notices /></TabsContent>
         <TabsContent value="inbox" className="pt-2"><Announcements /></TabsContent>
+        <TabsContent value={CONVERSATIONS_TAB} className="pt-2"><ConversationsTab /></TabsContent>
       </Tabs>
     </section>
   )

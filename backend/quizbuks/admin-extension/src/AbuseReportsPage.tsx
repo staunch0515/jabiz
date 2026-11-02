@@ -35,6 +35,7 @@ const REASONS = [
   ['INAPPROPRIATE', 'inappropriate'],
   ['REWARD_NOT_GIVEN', 'rewardNotGiven'],
   ['SPAM', 'spam'],
+  ['MESSAGE', 'message'],
   ['OTHER', 'other'],
 ] as const
 
@@ -69,6 +70,11 @@ function Reports({ publication }: { publication: ReportedPublication }) {
             </span>
             {/* Plain text: what a taker wrote is never rendered as markup. */}
             <span className="text-sm whitespace-pre-wrap">{report.note ?? t('abuseReports.noNote')}</span>
+            {/* Q82: a report of a conversation's messages leads to the conversation. */}
+            {report.conversationId && (
+              <Link to={PATH.conversation(report.conversationId)} className={`${linkClass} text-sm`}
+                data-testid="report-conversation">{t('abuseReports.conversation.open')}</Link>
+            )}
             {report.resolution && (
               <span className="text-muted-foreground text-xs">
                 {t('abuseReports.resolution', { note: report.resolution })}</span>

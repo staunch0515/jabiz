@@ -28,6 +28,7 @@ import { Banknote, CircleCheck, CircleX, Clock, Copy, ExternalLink, Gift, Hourgl
   from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ContactSponsor } from '../conversation/ConversationPages'
 import { ResultInstallOffer } from '../install'
 import { CelebrateArt } from '../qb/Illustrations'
 import { APP } from '../messages'
@@ -636,6 +637,10 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
                 product={productOf.get(result.no)} />)}
           </ol>
         </section>
+      )}
+      {/* Q82: a completed attempt may write to the sponsor about it. */}
+      {publication.data && (
+        <ContactSponsor publicationId={data.publicationId} company={publication.data.sponsorCompany ?? null} />
       )}
       {publication.data && (
         <SponsorVisit handle={publication.data.sponsorHandle} avatar={publication.data.sponsorAvatar}

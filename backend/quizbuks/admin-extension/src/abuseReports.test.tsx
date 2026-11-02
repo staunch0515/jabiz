@@ -8,6 +8,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE } from '@jabiz/admin'
 import { expectAccessible } from '@jabiz/admin/testing'
 import AbuseReportsPage from './AbuseReportsPage'
+import ConversationPage from './ConversationPage'
 import { DATASET, PERMISSION, REPORT_PROCESS, TEMPLATE } from './ids'
 import { messages } from './messages'
 import { abuseReportMessages } from './report-messages'
@@ -58,9 +59,25 @@ beforeEach(() => {
     if (path === '/api/datasets/{resourceId}/query' && request.params?.path?.resourceId === DATASET.report) {
       return { items: [
         { id: 'r2', attributes: { reason: 'MISLEADING', note: '<b>No prize</b>', status: 'OPEN',
-          createdAt: '2026-10-30T01:00:00Z', resolution: null } },
+          createdAt: '2026-10-30T01:00:00Z', resolution: null, conversationId: 'c1' } },
         { id: 'r1', attributes: { reason: 'REWARD_NOT_GIVEN', note: null, status: 'DISMISSED',
           createdAt: '2026-10-29T01:00:00Z', resolution: 'Paid since' } },
+      ] }
+    }
+    // Q82: the conversation a report names, and its messages.
+    if (path === '/api/datasets/{resourceId}/query' && request.params?.path?.resourceId === DATASET.conversation) {
+      return { items: [{ id: 'c1', attributes: { takerId: 'taker-1', publisherId: 'sponsor-1', publicationId: PUB,
+        status: 'OPEN', closedBy: null, openedAt: '2026-10-29T00:00:00Z' } }] }
+    }
+    if (path === '/api/datasets/{resourceId}/query'
+      && request.params?.path?.resourceId === DATASET.conversationMessage) {
+      return { items: [
+        { id: 'm1', attributes: { sender: 'TAKER', senderUserId: 'taker-1', body: 'Where is my prize?',
+          createdAt: '2026-10-29T00:00:00Z' } },
+        { id: 'm2', attributes: { sender: 'SPONSOR', senderUserId: 'sponsor-1', body: '<i>Buy more</i>',
+          createdAt: '2026-10-29T01:00:00Z' } },
+        { id: 'm3', attributes: { sender: 'TAKER', senderUserId: 'taker-1', body: null,
+          createdAt: '2026-10-29T02:00:00Z' } },
       ] }
     }
     throw new ApiError(404, { detail: 'Not found' })
@@ -119,6 +136,9 @@ describe("takers' reports (Q49a)", () => {
     const items = await within(detail).findAllByTestId('report-item')
     expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent('<b>No prize</b>')
+    // Q82: a report of a conversation leads to it.
+    expect(within(items[0]).getByTestId('report-conversation')).toHaveAttribute('href', '/qb/conversations/c1')
+    expect(within(items[1]).queryByTestId('report-conversation')).toBeNull()
     expect(items[1]).toHaveTextContent('No note')
     expect(items[1]).toHaveTextContent('Paid since')
 
@@ -141,5 +161,27 @@ describe("takers' reports (Q49a)", () => {
     renderPage()
     const readOnly = await screen.findAllByTestId('report-row')
     expect(within(readOnly[0]).queryByTestId('report-dismiss')).toBeNull()
+  })
+})
+
+describe('a reported conversation (Q82)', () => {
+  it('shows both sides and every message as plain text, read only', async () => {
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <AppearanceProvider>
+          <MemoryRouter initialEntries={['/qb/conversations/c1']}>
+            <Routes>
+              <Route path="/qb/conversations/:conversationId" element={<ConversationPage />} />
+            </Routes>
+          </MemoryRouter>
+        </AppearanceProvider>
+      </QueryClientProvider>,
+    )
+    const messages = await screen.findAllByTestId('conversation-message')
+    expect(messages.map((m) => m.dataset.sender)).toEqual(['TAKER', 'SPONSOR', 'TAKER'])
+    expect(messages[1]).toHaveTextContent('<i>Buy more</i>')
+    expect(messages[2]).toHaveTextContent('Deleted with its writer')
+    expect(screen.queryByRole('textbox')).toBeNull()
+    await expectAccessible(container)
   })
 })

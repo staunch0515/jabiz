@@ -42,6 +42,7 @@ import {
 } from './api'
 import './messages'
 import { useMySponsor } from '../mysponsor/api'
+import { ConversationsLink } from '../conversation/ConversationPages'
 
 /** Items per page of the inbox. */
 export const INBOX_PAGE = 20
@@ -165,6 +166,8 @@ export function InboxPage() {
           {t('inbox.readAll')}
         </Button>
       </div>
+      {/* Q82: the conversations with sponsors have their own page. */}
+      <ConversationsLink />
       <p role="status" className="text-muted-foreground text-sm empty:hidden" data-testid="inbox-read-all-done">
         {done ? t('inbox.readAllDone') : ''}
       </p>
