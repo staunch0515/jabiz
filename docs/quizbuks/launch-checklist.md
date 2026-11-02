@@ -21,6 +21,7 @@
 - [ ] **Facebook 与 LINE 登录（Q40，开 `social` 时）**：Facebook 应用已切换为正式模式、LINE 渠道已获准取得邮箱；用真实账号在 App 与商家后台各走一遍：首次登录开户、收到验证邮件、在登录着的浏览器中打开链接后能保存资料或申请入驻、退出后再用同一方式登录（平台 D61 的端点与签名只以存根测试过）
 - [ ] **安装到主屏幕（Q38）**：iPhone Safari 与 Android Chrome 各装一次（账户页的入口、答完测验后的提示）；LINE 与微信中打开分享链接看到"在浏览器中打开"；iPhone 桌面 App 中邮件链接（验证、邮件登录）与 Google 登录的表现可以接受（`plans/Q38-install.md` §4）
 - [ ] **国产安卓手机的"添加到桌面"（Q50）**：找两三台（最好有华为、小米与一台 vivo 或 OPPO），各用系统自带的浏览器与 QQ 浏览器或 UC 打开 `/taker/`，按账户页的"查看步骤"添加；确认步骤的文字与手机上的菜单一致（不一致时把实际的写法告诉开发，改平台的文案），没有图标时按提示开启"桌面快捷方式"权限后能添加；微信与 QQ 中打开分享链接，第一屏就看到"点右上角的'···'"的提示
+- [ ] **Apple 登录（平台 17j）**：提交 App Store 审核前，production 的 `SPRING_PROFILES_ACTIVE` 由 `social` 改为 `apple`，设好 Apple 的五个变量（`deploy/quizbuks/README.md`"前端"），以真实的 Services ID 在网页与 App 中各登录一次
 - [ ] **iOS App（Q49c）**：TestFlight 版装在 iPhone 上：打开即 App 的首页、没有安装提示；邮件中的验证与邮件登录链接打开 App；`/sponsor/` 与 `/biz/` 的链接在 Safari 打开；问卷中嵌入的视频能播放；Q49c-2 之后 Google、Facebook、LINE 与 Apple 登录回到 App、推送能收到（`plans/Q49c-ios.md` §3）
 - [ ] **Android App（Q49b）**：封闭测试版装在一台 Android 手机上：打开后没有浏览器地址栏（`assetlinks.json` 验证通过）；首页、结果页、账户页都没有安装提示；验证与邮件登录的邮件链接在 App 中打开，`/sponsor/` 与 `/biz/` 的链接在浏览器打开；Google、Facebook、LINE 登录回到 App；返回键与断网时的表现可以接受（`plans/Q49b-android.md` §4）
 

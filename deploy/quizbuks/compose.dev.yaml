@@ -75,7 +75,7 @@ services:
       QB_APP_LINK: ${QB_APP_LINK:-}
       JABIZ_TRUSTED_PROXIES: ${JABIZ_TRUSTED_PROXIES:-}
       # Google sign-in (README.md, "前端"): SPRING_PROFILES_ACTIVE=google with the client from .env; social adds
-      # Apple (platform 17j), Facebook and LINE (Q40) with their clients.
+      # Facebook and LINE (Q40), apple adds Apple to those three (platform 17j), each with its clients.
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
       QB_OIDC_REDIRECT_APP: ${QB_OIDC_REDIRECT_APP:-}
       QB_OIDC_REDIRECT_SPONSOR: ${QB_OIDC_REDIRECT_SPONSOR:-}

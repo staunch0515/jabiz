@@ -1,0 +1,66 @@
+# Signing in with Google, Apple, Facebook and LINE (docs/quizbuks/plans/Q40-social-sign-in.md; platform decisions D61
+# and D67), switched on by the deployment with the Spring profile "apple" (SPRING_PROFILES_ACTIVE=apple) in place of
+# "social", once the Apple Developer account has its Services ID and key: Spring replaces a list set in two profiles as
+# a whole, so this profile declares all four providers, the other three as the profile "social" does (keep them alike).
+# Name one of "google", "social" and "apple", not several: of two, the one named last would win.
+#
+# Apple is needed on the App Store beside the others (guideline 4.8). It posts its answer to the server,
+# QB_OIDC_APPLE_FORM_POST, which sends the browser on to the callbacks of the app and the sponsor console
+# (QB_OIDC_REDIRECT_APP, QB_OIDC_REDIRECT_SPONSOR, as for the others); its tokens are kept sealed (JABIZ_SEAL_KEY) to
+# revoke the authorization when an account is deleted (guideline 5.1.1(v)). Apple vouches for its addresses, its
+# private relay addresses too: accounts open verified. Facebook and LINE as in application-social.yml.
+jabiz:
+  security:
+    oidc:
+      providers:
+        - id: google
+          kind: google
+          client-id: ${JABIZ_OIDC_GOOGLE_CLIENT_ID}
+          client-secret: ${JABIZ_OIDC_GOOGLE_CLIENT_SECRET}
+          redirect-uris:
+            app: ${QB_OIDC_REDIRECT_APP}
+            sponsor: ${QB_OIDC_REDIRECT_SPONSOR}
+          labels: { en: Google, zh: Google, ja: Google }
+          auto-provision: true
+        # Apple Developer: a Services ID (the client id) with Sign in with Apple, the site's domain and the return URL
+        # QB_OIDC_APPLE_FORM_POST (https://<host>/api/auth/oidc/apple/form-post); a key with Sign in with Apple, whose
+        # .p8 file is JABIZ_OIDC_APPLE_PRIVATE_KEY (PEM, line breaks may be written \n). Apple vouches for its
+        # addresses, its private relay addresses too: accounts open verified. The button says Apple's own title.
+        - id: apple
+          kind: apple
+          client-id: ${JABIZ_OIDC_APPLE_CLIENT_ID}
+          apple:
+            team-id: ${JABIZ_OIDC_APPLE_TEAM_ID}
+            key-id: ${JABIZ_OIDC_APPLE_KEY_ID}
+            private-key: ${JABIZ_OIDC_APPLE_PRIVATE_KEY}
+            form-post-uri: ${QB_OIDC_APPLE_FORM_POST}
+          redirect-uris:
+            app: ${QB_OIDC_REDIRECT_APP}
+            sponsor: ${QB_OIDC_REDIRECT_SPONSOR}
+          labels: { en: Apple, zh: Apple, ja: Apple }
+          auto-provision: true
+        # Meta for Developers: a Facebook Login app with "openid" and "email"; both callbacks as valid OAuth redirect URIs.
+        - id: facebook
+          kind: facebook
+          client-id: ${JABIZ_OIDC_FACEBOOK_CLIENT_ID}
+          client-secret: ${JABIZ_OIDC_FACEBOOK_CLIENT_SECRET}
+          scopes: [openid, email, public_profile]
+          redirect-uris:
+            app: ${QB_OIDC_REDIRECT_APP}
+            sponsor: ${QB_OIDC_REDIRECT_SPONSOR}
+          labels: { en: Facebook, zh: Facebook, ja: Facebook }
+          auto-provision: true
+          sign-up-unverified-email: true
+        # LINE Developers: a LINE Login channel (web app), its e-mail permission applied for and granted; the channel
+        # secret is the HS256 key of its ID tokens (at least 32 bytes, checked at startup).
+        - id: line
+          kind: line
+          client-id: ${JABIZ_OIDC_LINE_CLIENT_ID}
+          client-secret: ${JABIZ_OIDC_LINE_CLIENT_SECRET}
+          scopes: [openid, profile, email]
+          redirect-uris:
+            app: ${QB_OIDC_REDIRECT_APP}
+            sponsor: ${QB_OIDC_REDIRECT_SPONSOR}
+          labels: { en: LINE, zh: LINE, ja: LINE }
+          auto-provision: true
+          sign-up-unverified-email: true
