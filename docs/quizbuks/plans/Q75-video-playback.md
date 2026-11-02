@@ -153,7 +153,7 @@ ALTER TABLE qb_attempt ADD COLUMN playback_status varchar(10) CHECK (playback_st
 4. D-Q75-6：取不到事件时放行并标记（缺省）还是拒绝。
 5. 编号 Q75。
 
-## 10. 实施记录（2026-11-01）
+## 10. 实施记录（2026-11-01，PR #411）
 
 - **决定**：§9 的四项按缺省确认；老数据不回填（§3.1 的回填语句与 §5 的回填用例随之取消：V58 只加列，`qb_publication_card.watch_required` 缺省 `false`）。
 - **后端**：迁移 V58（`qb_material_version.duration_sec`，`qb_publication_card.watch_required` / `video_duration_sec`，`qb_attempt.watched_sec` / `video_ended` / `playback_status`）；
