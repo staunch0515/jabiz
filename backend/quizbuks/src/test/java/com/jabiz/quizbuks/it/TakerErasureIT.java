@@ -6,6 +6,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.certification.CertificateProcesses;
+import com.jabiz.quizbuks.certification.CertificationProcesses;
+import com.jabiz.runtime.test.TestTokens;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -90,6 +94,40 @@ class TakerErasureIT extends PayoutItSupport {
         assertThat(query("SELECT account_number FROM qb_bank_account WHERE user_id = ?", bob))
             .singleElement().satisfies(row -> assertThat(row.get("account_number")).isEqualTo(bobNumber));
         assertThat(query("SELECT 1 FROM qb_invitation WHERE user_id = ?", bob)).isNotEmpty();
+    }
+
+    @Test
+    void anErasedTakersCertificatesAndPublicNameGo() {
+        String cat = payee("t-q77-cat-" + UUID.randomUUID().toString().substring(0, 8));
+        String name = "Cat Q77 " + UUID.randomUUID().toString().substring(0, 8);
+        String handle = "cat-" + UUID.randomUUID().toString().substring(0, 8);
+        run("QB_PROFILE_SAVE", taker(cat), body("displayName", name, "countryCode", "JP", "preferredCurrency",
+            "JPY"));
+        run(CertificationProcesses.GRANT, TestTokens.bearer(tokens, "q77-hq", QbPermissions.CERTIFICATION_ADMIN,
+            QbPermissions.CERTIFICATION_MANAGE), body("userId", cat, "certification", "SPONSOR_APPLY", "reason",
+            "Met at the fair"));
+        String key = (String) run(CertificateProcesses.ISSUE, taker(cat), body("certification", "SPONSOR_APPLY",
+            "language", "en")).get("verifyKey");
+        run("QB_SETTINGS_SAVE", taker(cat), body("publicHandle", handle, "publicPage", true));
+        List<Object> runs = query("SELECT run_id FROM sys_document_run WHERE layout_id = 'qb.certificate' AND "
+            + "document_no = ?", key).stream().map(row -> row.get("run_id")).toList();
+        assertThat(runs).hasSize(1);
+
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", cat, "requestedBy", "it-support"));
+        deliverEvents();
+
+        assertThat(query("SELECT 1 FROM qb_certificate WHERE user_id = ?", cat)).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_user_settings WHERE user_id = ?", cat)).isEmpty();
+        // Her page name is found nowhere. The certificate's archived document is not purged yet: QuizBuks keeps every
+        // document run for the receipts' ten years (TopUpConfig.qbDocumentRunRetention; the platform's retention is by
+        // entity, not by layout), so her name stays in it alone (plan Q77 §10, open item).
+        assertThat(occurrences(handle)).as("where the page name still is").isEmpty();
+        assertThat(occurrences(name)).allMatch(where -> where.startsWith("sys_document_run."));
+        // The key, which leads to nobody once the certificate is gone: the document's number and its issued event.
+        assertThat(occurrences(key)).allMatch(where -> where.startsWith("sys_document_run.")
+            || where.equals("sys_outbox_event.payload"));
+        assertThat(query("SELECT pdf FROM sys_document_run WHERE run_id = ?::uuid", String.valueOf(runs.getFirst())))
+            .singleElement().satisfies(row -> assertThat(row.get("pdf")).isNotNull());
     }
 
     private static Map<String, Object> account(String number, String holder) {

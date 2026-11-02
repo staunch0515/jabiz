@@ -1,5 +1,57 @@
 {
   "queries" : [ {
+    "cacheSeconds" : 60,
+    "description" : "A certificate as its verify page (/taker/verify/<key>) shows it to anybody who has its key (Q77, D-Q77-6): the holder's name when issued, the certification, the holding and the latest revocation of it after the holding began; none for an unknown key. Whether it is still valid the page reads from validUntil.",
+    "id" : "qb.public.certificate",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "key" : {
+        "kind" : {
+          "maxLength" : 32,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "certification" : {
+        "allowedValues" : [ "SPONSOR_APPLY", "REFERRER" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:certification",
+        "type" : "code"
+      },
+      "certificationVersion" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "heldFrom" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "holderName" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "issuedAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "revokedAt" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "validUntil" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      }
+    }
+  }, {
     "cacheSeconds" : 300,
     "description" : "The help centre's published questions and answers for the app or the sponsor console (U-72, P-05; Q7b D-Q7-6), in their order; searched by text in any language",
     "id" : "qb.public.faq",
@@ -742,6 +794,60 @@
         "precision" : 5,
         "scale" : 0,
         "type" : "numeric"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
+    "description" : "A taker's public certification page (/taker/u/<name>, Q77, D-Q77-5) as anybody sees it: the certificates they issued that no revocation ended, the latest of each certification, with the name on it and its key for the verify link; none when the page is off or the name unknown. The page leaves out the ones whose validUntil passed.",
+    "id" : "qb.public.taker-page",
+    "list" : {
+      "filters" : [ ],
+      "sorts" : [ ]
+    },
+    "params" : {
+      "handle" : {
+        "kind" : {
+          "maxLength" : 30,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "certification" : {
+        "allowedValues" : [ "SPONSOR_APPLY", "REFERRER" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:certification",
+        "type" : "code"
+      },
+      "certificationVersion" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "handle" : {
+        "maxLength" : 30,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "heldFrom" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "holderName" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "validUntil" : {
+        "role" : "EVENT_TIME",
+        "type" : "temporal"
+      },
+      "verifyKey" : {
+        "maxLength" : 32,
+        "multiline" : false,
+        "type" : "text"
       }
     }
   } ]

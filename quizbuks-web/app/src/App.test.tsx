@@ -350,7 +350,7 @@ describe('a signed-in taker', () => {
     expect(await within(menu).findByTestId('account-who')).toHaveTextContent('Mei · mei@example.com')
     const settings = within(menu).getByRole('navigation', { name: 'Settings' })
     expect(within(settings).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
-      '/account/profile', '/account/details', '/account/security', '/account/mail', '/account/preferences',
+      '/account/profile', '/account/details', '/account/certificates', '/account/security', '/account/mail', '/account/preferences',
       '/account/id'])
     expect(within(menu).getByTestId('account-menu-security')).toHaveTextContent('Sign-in and security')
     // Only the menu: no form of a part on it.
@@ -482,7 +482,7 @@ describe('a signed-in taker', () => {
     expect(soundEnabled()).toBe(false)
     await userEvent.click(toggle)
     await waitFor(() => expect(posted).toContainEqual({ path: '/api/processes/QB_SETTINGS_SAVE/latest',
-      body: { soundOn: true, contentLanguages: null } }))
+      body: { soundOn: true, contentLanguages: null, publicHandle: null, publicPage: null } }))
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     expect(soundEnabled()).toBe(true)
     await expectAccessible()
@@ -507,7 +507,7 @@ describe('a signed-in taker', () => {
     expect(within(section).getByTestId('quiz-languages-following')).toHaveTextContent('English')
     await userEvent.click(within(section).getByRole('checkbox', { name: '日本語' }))
     await waitFor(() => expect(posted).toContainEqual({ path: '/api/processes/QB_SETTINGS_SAVE/latest',
-      body: { soundOn: null, contentLanguages: ['ja', 'en'] } }))
+      body: { soundOn: null, contentLanguages: ['ja', 'en'], publicHandle: null, publicPage: null } }))
     expect(within(section).getByRole('checkbox', { name: '日本語' })).toBeChecked()
     expect(english).toBeEnabled()
     expect(within(section).queryByTestId('quiz-languages-following')).toBeNull()

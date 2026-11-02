@@ -101,7 +101,7 @@ public class SponsorErasure {
                     ErasedEntity.delete(QbInvitations.INVITATION, "publisherId", "email"),
                     // The account's own: profile, settings and inbox.
                     ErasedEntity.delete(QbAccounts.PROFILE, "userId", "displayName", "city"),
-                    ErasedEntity.delete(QbSettings.SETTINGS, "userId"),
+                    ErasedEntity.delete(QbSettings.SETTINGS, "userId", "publicHandle"),
                     ErasedEntity.delete(QbInbox.STATE, "userId"),
                     ErasedEntity.delete(QbInbox.MESSAGE, "recipientId", "title", "body"),
                     ErasedEntity.delete(QbMessaging.NOTICE, "recipientId"),

@@ -53,6 +53,7 @@ import {
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
+import { takerHandleOf, TakerPage, verifyKeyOf, VerifyPage } from './certificates/PublicCertificates'
 import { ACCOUNT_PATH, ACCOUNT_SECURITY_PATH, AccountPage, isAccountPath, rememberLinked } from './pages/AccountPage'
 import { VideoStage } from './video/stage'
 import { FeedControlsProvider, FeedFiltersButton, FeedPage, searchOf, searchPath } from './pages/FeedPage'
@@ -537,6 +538,15 @@ function Routes() {
   }
   if (!ready) return <PageState kind="loading" />
   if (isPublic(path)) return <PublicPage path={path} signedIn={signedIn} />
+  // Q77: a certificate's verify page and a taker's public certification page, anybody's.
+  const verifyKey = verifyKeyOf(path)
+  if (verifyKey) {
+    return <PublicPage path={path} signedIn={signedIn}><VerifyPage key={verifyKey} verifyKey={verifyKey} /></PublicPage>
+  }
+  const takerHandle = takerHandleOf(path)
+  if (takerHandle) {
+    return <PublicPage path={path} signedIn={signedIn}><TakerPage key={takerHandle} handle={takerHandle} /></PublicPage>
+  }
   // A sponsor's page (Q60a): anybody's, signed in or not, from the public templates.
   const sponsorHandle = sponsorPageOf(path)
   if (sponsorHandle) {
