@@ -33,6 +33,8 @@ export interface PagePublication {
   questionCount: number
   maxReward: unknown
   rewardMethod: RewardMethod
+  /** Q76: the listed publications it requires first, as JSON (`PublicationPrerequisite` without names); none: `[]`. */
+  prerequisites?: string | null
 }
 
 /** A published page by its handle (typed in any case); null when there is none. */

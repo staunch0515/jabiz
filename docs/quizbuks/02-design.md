@@ -178,6 +178,10 @@ docs/quizbuks/               本文件等
 | `QbConsent` | W | `userId`、`kind`、`legalVersionId`、`versionNumber`、`acceptedAt`、`entry`、`source`（`WELCOME` / `ONBOARDING` / `RECONSENT`） | 同意记录；须同意版本 = 已生效版本中须同意的最大版本号（第一版总是），已同意的版本不低于它即可 |
 | `QbFaqEntry` | T | `audience`（APP / SPONSOR / ALL）、`category`、`question`、`answer`（多语言，英语必填）、`seq`、`published` | 帮助中心（Q7b）；内容管理员在通用后台直接编辑，公开视图固定为已发布 |
 
+- **前置条件**（Q76，`plans/Q76-prerequisites.md`）：普通表 `QbPublicationPrerequisite`（发布、前置发布、要求 `PASSED` / `ANSWERED`、发布方那一对），
+  一个发布至多 5 条，只能指向本商户已提交过的发布，不能成环（深度 20）；只经 `QB_PUBLICATION_PREREQUISITES_SAVE` 在草稿时整体替换，提交即冻结，复制时随发布复制。
+  满足的唯一定义是 `play.PrerequisiteCheck`：在前置发布上有已完成的会话（进行中不算），`PASSED` 另要求合格；学过就算，没有有效期。
+
 ## 4. 账本
 
 ### 4.1 科目（本位币 JPY，小数位 0）
@@ -553,6 +557,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 正确答案只在提交后返回：答题人的数据视图与模板都不含 `correct`；结果页由提交流程的输出给出。
 - 选项按会话打乱（`optionOrder`），题目顺序不打乱。打乱的种子是服务端密钥下的 HMAC-SHA256（用户 | 发布 | 题号；密钥 = HMAC(`JABIZ_INTEGRITY_KEY`, `qb.option-shuffle`)，Q10b 评审 M-a），答题人无法自行算出。答题人看到、保存、提交与结果中的选项编号都是本次显示的位置 1..k（Q10b，评审 M1），只在评分时经 `optionOrder` 换回版本的编号；`optionOrder` 是敏感字段，任何读接口（含答题人本人的数据视图）都不返回。
 - 一人一次：`QbAttempt (userId, publicationId)` 唯一。
+- **开始前的三条规则**，都在锁外、三个模板写同一段 SQL：客户匹配（Q47，`AudienceMatch`，422 `QB_AUDIENCE_NOT_MATCHED`）、持有该轮的认证（Q70a，`RoundHolders`，422 `QB_CERTIFICATION_HELD`）、
+  前置条件（Q76，`PrerequisiteCheck`，422 `QB_PREREQUISITE_NOT_MET`）。首页只列出三条都满足的；发布页照样显示并说明缺什么。普通发布一条语句也不加（有前置的开始多一条锁外语句）。
 - **管理员下架之后**（Q10b，评审 M-d）："被下架"= 管理员结束的，或管理员暂停（含封禁的暂停）而没有被管理员恢复的，此后因时间或名额结束的也算（`pausedBy = ADMIN` 保留，只有管理员恢复清除它；核查修正）。被下架的发布不能复制（422 `QB_PUBLICATION_TAKEN_DOWN`）；同一 Quiz 以后的任何发布都要人工审核：
   提交时案件的事实 `autoApprove = false`、`takenDown = true`（不论免审核开关），规则仍不要求审核或会沿用以前的批准时拒绝提交（422 `QB_PUBLICATION_REVIEW_REQUIRED`）；
   后台扩展的审核页以模板 `qb.admin.quiz-takedowns` 显示被下架的发布与理由，读好之前不给出决定面板。封禁的暂停记固定的理由 `QB_ACCOUNT_SUSPENDED`（评审 L3，封禁的理由是内部的），封禁期间管理员不能恢复（评审 L9；恢复先取商家的账户锁，与封禁依次进行）。

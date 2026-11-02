@@ -103,6 +103,8 @@ const en = {
     entries: { app: 'App', sponsor: 'Sponsor console', admin: 'Administration' },
     unknownDevice: 'Unknown device',
   },
+  /** Q76: what a prerequisite asks of the taker on the required publication. */
+  prerequisite: { PASSED: 'Pass', ANSWERED: 'Answer', passed: 'Passed', answered: 'Answered' },
   audience: {
     gender: 'Gender',
     age: 'Age',
@@ -218,6 +220,7 @@ const zh: typeof en = {
     entries: { app: 'App', sponsor: '商家后台', admin: '管理后台' },
     unknownDevice: '未知设备',
   },
+  prerequisite: { PASSED: '通过', ANSWERED: '作答', passed: '已通过', answered: '已作答' },
   audience: {
     gender: '性别',
     age: '年龄',
@@ -332,6 +335,7 @@ const ja: typeof en = {
     entries: { app: 'アプリ', sponsor: 'スポンサー管理画面', admin: '管理画面' },
     unknownDevice: '不明なデバイス',
   },
+  prerequisite: { PASSED: '合格する', ANSWERED: '回答する', passed: '合格済み', answered: '回答済み' },
   audience: {
     gender: '性別',
     age: '年齢',

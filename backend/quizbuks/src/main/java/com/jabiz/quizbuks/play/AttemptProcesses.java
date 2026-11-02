@@ -246,7 +246,9 @@ public final class AttemptProcesses {
                     AudienceRows.conditions(ctx -> ctx.get(PUB_KEY), CONDITIONS),
                     AudienceRows.callers(ATTRIBUTES),
                     // Q70a: whether the publication is a certification's round, in the same statement.
-                    RoundHolders.round(ctx -> ctx.get(PUB_KEY))))
+                    RoundHolders.round(ctx -> ctx.get(PUB_KEY)),
+                    // Q76: the publication's prerequisites, in the same statement (frozen with the publication).
+                    PrerequisiteRows.of(ctx -> ctx.get(PUB_KEY), PrerequisiteRows.PREREQUISITES)))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
                 // Q51: an attempt keeps the version it started with, whichever the publication has switched to since;
                 // a new one takes the card's (checked again against the card read under the lock).
@@ -274,6 +276,14 @@ public final class AttemptProcesses {
                 .compute("Refuse a holder of the round's certification", (metadata, ctx) -> {
                     if (starting(ctx)) {
                         RoundHolders.refuse(ctx, "publicationId", ctx.get(PUB_KEY));
+                    }
+                })
+                // Q76 (D-Q76-2, D-Q76-7): a publication with prerequisites reads the caller's attempts on them, one
+                // statement more before the lock (an ordinary publication's query is empty and sends nothing).
+                .steps(b -> PrerequisiteRows.loadAttempts(b, AttemptProcesses::starting))
+                .compute("Refuse unmet prerequisites", (metadata, ctx) -> {
+                    if (starting(ctx)) {
+                        PrerequisiteRows.refuse(ctx, "publicationId");
                     }
                 })
                 // Without the wallet's lock (D-Q5-5): a soft check, so before the publication's lock too (Q10a: one

@@ -1,4 +1,5 @@
 import { readPublicationProducts } from '../share/api'
+import { sharePath } from '../share/share'
 import { quizProducts } from '../qb/products'
 import { countProductClick } from '../share/counting'
 import { ProductCards } from '../qb/view/ProductCards'
@@ -6,7 +7,7 @@ import { QBVIEW } from '../qb/view/messages'
 import { formatDateTime, i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { BadgeCheck, MailWarning, Play, UserRoundSearch } from 'lucide-react'
+import { BadgeCheck, Circle, CircleCheck, ListChecks, MailWarning, Play, UserRoundSearch } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -117,6 +118,31 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
           <Link to={ACCOUNT_DETAILS_PATH} className="text-primary underline" data-testid="detail-complete-profile">
             {t('detail.completeProfile')}
           </Link>
+        </AlertDescription>
+      </Alert>
+    )
+  } else if (!publication.prerequisitesMet) {
+    // Q76 (D-Q76-3): what to finish first, each leading to its page; done ones ticked.
+    action = (
+      <Alert data-testid="detail-prerequisites">
+        <ListChecks aria-hidden />
+        <AlertDescription className="text-current flex flex-col items-start gap-2">
+          <span>{t('detail.prerequisites')}</span>
+          <ul className="flex flex-col gap-1">
+            {publication.prerequisites.map((p) => (
+              <li key={p.requiredPublicationId} className="flex flex-wrap items-center gap-x-2"
+                data-testid="detail-prerequisite" data-met={p.met}>
+                {p.met
+                  ? <CircleCheck aria-hidden className="text-primary size-4" />
+                  : <Circle aria-hidden className="text-muted-foreground size-4" />}
+                <Link to={sharePath(p.requiredPublicationId)} className="text-primary underline">{p.name}</Link>
+                <span className="text-muted-foreground text-sm">
+                  {p.met ? tQb(`prerequisite.${p.requirement.toLowerCase()}`) : tQb(`prerequisite.${p.requirement}`)}
+                  {!p.met && !p.live && ` · ${t('detail.prerequisiteClosed')}`}
+                </span>
+              </li>
+            ))}
+          </ul>
         </AlertDescription>
       </Alert>
     )

@@ -186,6 +186,17 @@ class SponsorPageIT extends PlayItSupport {
         String publication = livePublication(sponsor, "Ann's bread quiz");
         assertThat(publicItems(PUBLICATIONS_TEMPLATE, handle)).extracting(row -> row.get("publicationId"))
             .containsExactly(publication);
+        // Q76 (D-Q76-8): a publication requiring another names it, so the page draws the levels; what it requires
+        // is named only while listed itself (live and public).
+        String next = liveRequiring(sponsor, "Ann's cake quiz", Map.of(), List.of(prerequisite(publication,
+            "PASSED")));
+        assertThat(publicItems(PUBLICATIONS_TEMPLATE, handle)).hasSize(2).anySatisfy(row -> assertThat(row)
+            .containsEntry("publicationId", next).hasEntrySatisfying("prerequisites", json -> assertThat((String) json)
+                .contains(publication).contains("PASSED")));
+        run("QB_PUBLICATION_PAUSE", token, body("publicationId", publication));
+        assertThat(publicItems(PUBLICATIONS_TEMPLATE, handle)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("publicationId", next).containsEntry("prerequisites", "[]"));
+        run("QB_PUBLICATION_RESUME", token, body("publicationId", publication));
         // The publication's pages name the page the sponsor's name links to (Q60a-2): its share page and the app's.
         assertThat(sponsorHandleOf(publication)).isEqualTo(handle);
 

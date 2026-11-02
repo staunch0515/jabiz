@@ -170,6 +170,66 @@ public class PublishingConfig {
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
+    // ---- Q76: prerequisites ----------------------------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbPublicationPrerequisiteEntity() {
+        return QbPrerequisites.ENTITY;
+    }
+
+    /** Written by the processes only; the administration reads every publication's prerequisites. */
+    @Bean
+    DatasetDefinition qbPublicationPrerequisiteDataset() {
+        return DatasetDefinition.define(QbPrerequisites.DEFAULT_DATASET, d -> d
+            .targetEntityType(QbPrerequisites.PREREQUISITE)
+            .asDefault()
+            .scope(OperatorScopes.of(QbPrerequisites.PREREQUISITE))
+            .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(2 * QbPrerequisites.MAX_PREREQUISITES))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    /** The sponsor's own publications' prerequisites, read only (its write permission is no role's). */
+    @Bean
+    DatasetDefinition qbSponsorPublicationPrerequisiteDataset() {
+        return DatasetDefinition.define(QbPrerequisites.SPONSOR_DATASET, d -> d
+            .targetEntityType(QbPrerequisites.PREREQUISITE)
+            .permissions(QbPermissions.PUBLICATION_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("publisherId", "actorId", RequestContext::actorId)
+                .fixed("publisherKind", PublisherKind.SPONSOR)));
+    }
+
+    /**
+     * D-Q76-8: the sponsor's page shows which of its live publications lead to which; the public template joins both
+     * ends to the public cards (live, public), so a row of a paused or invited publication is never shown. Read through
+     * the template only, as the public cards.
+     */
+    @Bean
+    DatasetDefinition qbPublicPublicationPrerequisiteDataset() {
+        return DatasetDefinition.define(QbPrerequisites.PUBLIC_DATASET, d -> d
+            .targetEntityType(QbPrerequisites.PREREQUISITE)
+            .scope(s -> s.fixed("publisherKind", PublisherKind.SPONSOR))
+            .publicRead(p -> p.fields("publicationId", "requiredPublicationId", "requirement"))
+            .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    StaticDictionary qbPrerequisiteRequirementDictionary() {
+        return StaticDictionary.define(QbPrerequisites.DICTIONARY, d -> d
+            .item(QbPrerequisites.PASSED, "en", "Passed", "zh", "已通过", "ja", "合格済み")
+            .item(QbPrerequisites.ANSWERED, "en", "Answered", "zh", "已作答", "ja", "回答済み"));
+    }
+
+    @Bean
+    ProcessDefinition<PublicationPrerequisites.PrerequisitesInput, PublicationOutput, ProcessContext>
+        qbPublicationPrerequisitesSave() {
+        return PublicationPrerequisites.save();
+    }
+
     @Bean
     EntityDefinition qbPublicationOwnerEntity() {
         return QbPublications.OWNER_ENTITY;

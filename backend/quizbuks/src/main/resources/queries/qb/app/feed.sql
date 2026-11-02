@@ -1,7 +1,7 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -14,6 +14,7 @@ datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
+  QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
 params:
@@ -171,6 +172,17 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
                                  - pa.{{QbProfileAttribute.valueNumber}}
                              ELSE pa.{{QbProfileAttribute.valueNumber}} END
                          BETWEEN pc.{{QbPublicationCriterion.minValue}} AND pc.{{QbPublicationCriterion.maxValue}})))))
+  -- Q76 (D-Q76-2, D-Q76-3): not listed until the caller has finished an attempt of every publication it requires (a
+  -- pass where it asks for one; in progress does not count): the way to it is the required publication's page
+  -- (qb.app.publication, the same rule, shows it; play.PrerequisiteCheck is the one definition).
+  AND NOT EXISTS (
+      SELECT 1 FROM {{QbPublicationPrerequisite}} pr
+      WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}
+        AND NOT EXISTS (
+            SELECT 1 FROM {{QbAttempt}} ra
+            WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+              AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
+              AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
   -- Q70a (D-Q70-1, option B): a certification's round is not listed to whoever holds the certification now. The
   -- holding is CertificationHolding's rule over the caller's records and the passes not recorded yet (RoundHolders, the
   -- same; the catalog's versions and validity as Certifications, CertificationTemplatesTest), as in qb.app.publication.

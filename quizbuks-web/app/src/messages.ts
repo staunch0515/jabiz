@@ -343,6 +343,8 @@ const en = {
     certificationHeld: 'You hold this certification (until {{time}}): you can answer its quiz again once it ends.',
     notMatched: 'This quiz is for people whose profile matches what the sponsor is looking for. Telling more about yourself may let you answer it.',
     completeProfile: 'Complete my profile',
+    prerequisites: 'Finish these quizzes first:',
+    prerequisiteClosed: 'not open now',
     verifyFirst: 'Verify your e-mail address to answer quizzes: open the link we sent you.',
   },
   play: {
@@ -477,6 +479,8 @@ const en = {
     upTo: 'Up to {{amount}}',
     endsAt: 'Until {{time}}',
     home: 'See all quizzes',
+    level: 'Level {{n}}',
+    after: 'After: {{names}}',
   },
   share: {
     by: 'By {{sponsor}}',
@@ -848,6 +852,8 @@ const zh: typeof en = {
     certificationHeld: '你已持有该资格（至 {{time}}），到期后才能再次回答这份认证题。',
     notMatched: '这份答卷面向资料符合商家条件的人。完善你的资料后，也许就能回答。',
     completeProfile: '完善我的资料',
+    prerequisites: '请先完成这些答卷：',
+    prerequisiteClosed: '现在未开放',
     verifyFirst: '验证邮箱后才能答题：请打开我们发送的链接。',
   },
   play: {
@@ -982,6 +988,8 @@ const zh: typeof en = {
     upTo: '最高 {{amount}}',
     endsAt: '截至 {{time}}',
     home: '查看所有 Quiz',
+    level: '第 {{n}} 级',
+    after: '先完成：{{names}}',
   },
   share: {
     by: '来自 {{sponsor}}',
@@ -1353,6 +1361,8 @@ const ja: typeof en = {
     certificationHeld: 'この資格をお持ちです（{{time}} まで）。有効期限が切れると、もう一度この認定クイズに回答できます。',
     notMatched: 'このクイズは、スポンサーが求める条件にプロフィールが合う方向けです。プロフィールを充実させると回答できるかもしれません。',
     completeProfile: 'プロフィールを充実させる',
+    prerequisites: '先にこれらのクイズを終えてください：',
+    prerequisiteClosed: '現在は開いていません',
     verifyFirst: 'クイズに回答するにはメールアドレスの確認が必要です。お送りしたリンクを開いてください。',
   },
   play: {
@@ -1487,6 +1497,8 @@ const ja: typeof en = {
     upTo: '最大 {{amount}}',
     endsAt: '{{time}} まで',
     home: 'すべてのクイズを見る',
+    level: 'レベル {{n}}',
+    after: '先に：{{names}}',
   },
   share: {
     by: '提供：{{sponsor}}',
