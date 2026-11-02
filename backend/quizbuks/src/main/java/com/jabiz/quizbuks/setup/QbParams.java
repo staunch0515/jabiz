@@ -172,6 +172,10 @@ public final class QbParams {
     /** Q70 (D-Q70-19b): how many referees one referrer brings to a publication in 24 hours, and in all. */
     public static final String REFERRAL_PER_REFERRER_DAILY = "qb.referral.per-referrer-daily";
     public static final String REFERRAL_PER_REFERRER_TOTAL = "qb.referral.per-referrer-total";
+    /** Q82 (D-Q82-4): how many messages one side sends in one conversation in 24 hours. */
+    public static final String CONVERSATION_DAILY_CAP = "qb.conversation.daily-cap";
+    /** Q82 (D-Q82-5): days without a message after which the daily job closes a conversation. */
+    public static final String CONVERSATION_CLOSE_DAYS = "qb.conversation.close-days";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -336,6 +340,9 @@ public final class QbParams {
         new Param(REFERRAL_PER_REFERRER_DAILY, DAYS, "3",
             "How many referees one referrer may bring to a publication in 24 hours"),
         new Param(REFERRAL_PER_REFERRER_TOTAL, DAYS, "10", "How many referees one referrer may bring to a publication"),
+        // Q82: the conversations between takers and sponsors.
+        new Param(CONVERSATION_DAILY_CAP, DAYS, "20", "How many messages one side may send in a conversation a day"),
+        new Param(CONVERSATION_CLOSE_DAYS, DAYS, "90", "Days without a message before a conversation is closed"),
         // Q8a: AI generation (the controlled ones last, in the order of AI_CONTROLLED).
         new Param(AI_ENABLED, BOOL, false, "Whether sponsors may ask the AI for questions (Claude)"),
         new Param(AI_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",

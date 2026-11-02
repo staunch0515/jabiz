@@ -132,6 +132,33 @@ class TakerErasureIT extends PayoutItSupport {
             || where.equals("sys_outbox_event.payload"));
     }
 
+    @Test
+    void anErasedTakersMessagesLoseTheirTextAndTheirBlocksGo() {
+        // Q82 (D-Q82-11): the conversation stays for the sponsor (holding only her id), what she wrote goes, what
+        // the sponsor wrote stays; the sponsors she blocked are no longer recorded.
+        String sponsor = newSponsor("s-q82-" + UUID.randomUUID().toString().substring(0, 8));
+        credit(sponsor, 1_000);
+        String publication = livePublication(sponsor, "Q82 erased", Map.of("regions", List.of("GLOBAL")));
+        String dee = newTaker("t-q82-dee-" + UUID.randomUUID().toString().substring(0, 8), "JP");
+        play(dee, publication, true, true);
+        String hers = "Dee asks about the prize " + UUID.randomUUID();
+        String theirs = "The sponsor answers " + UUID.randomUUID();
+        String id = (String) run("QB_CONVERSATION_OPEN", taker(dee), body("publicationId", publication, "body", hers))
+            .get("conversationId");
+        advance(Duration.ofMinutes(1));
+        run("QB_CONVERSATION_SEND", sponsorToken(sponsor), body("conversationId", id, "body", theirs));
+        run("QB_CONVERSATION_BLOCK", taker(dee), body("conversationId", id));
+
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", dee, "requestedBy", "it-support"));
+        deliverEvents();
+
+        assertThat(query("SELECT 1 FROM qb_conversation WHERE conversation_id = ?", id)).hasSize(1);
+        assertThat(query("SELECT 1 FROM qb_conversation_block WHERE taker_id = ?", dee)).isEmpty();
+        assertThat(query("SELECT sender, body FROM qb_conversation_message WHERE conversation_id = ? ORDER BY "
+            + "created_at", id)).extracting(row -> row.get("body")).containsExactly(null, theirs);
+        assertThat(occurrences(hers)).as("where her message still is").isEmpty();
+    }
+
     private static Map<String, Object> account(String number, String holder) {
         return body("bankCode", "０００１", "bankName", "みずほ銀行", "branchCode", "001", "branchName", "東京営業部",
             "accountType", "ORDINARY", "bankAccountNumber", number, "accountHolder", holder);

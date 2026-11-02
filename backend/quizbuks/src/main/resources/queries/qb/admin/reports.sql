@@ -24,6 +24,7 @@ results:
   inappropriate:   { kind: { type: numeric, precision: 9, scale: 0 } }
   rewardNotGiven:  { kind: { type: numeric, precision: 9, scale: 0 } }
   spam:            { kind: { type: numeric, precision: 9, scale: 0 } }
+  message:         { kind: { type: numeric, precision: 9, scale: 0 } }
   other:           { kind: { type: numeric, precision: 9, scale: 0 } }
   lastReportedAt:  { from: QbReport.createdAt }
 list:
@@ -48,6 +49,7 @@ SELECT
     r.inappropriate          AS inappropriate,
     r.reward_not_given       AS rewardNotGiven,
     r.spam                   AS spam,
+    r.message                AS message,
     r.other                  AS other,
     r.last_reported_at       AS lastReportedAt
 FROM (
@@ -61,6 +63,7 @@ FROM (
         count(*) FILTER (WHERE x.{{QbReport.reason}} = 'INAPPROPRIATE')       AS inappropriate,
         count(*) FILTER (WHERE x.{{QbReport.reason}} = 'REWARD_NOT_GIVEN')    AS reward_not_given,
         count(*) FILTER (WHERE x.{{QbReport.reason}} = 'SPAM')                AS spam,
+        count(*) FILTER (WHERE x.{{QbReport.reason}} = 'MESSAGE')             AS message,
         count(*) FILTER (WHERE x.{{QbReport.reason}} = 'OTHER')               AS other,
         max(x.{{QbReport.createdAt}})                                         AS last_reported_at
     FROM {{QbReport}} x

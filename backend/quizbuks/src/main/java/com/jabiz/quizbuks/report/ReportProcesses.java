@@ -58,14 +58,22 @@ public final class ReportProcesses {
     static final String OPEN_REPORTS = "openReports";
     static final String SPONSOR_OPERATOR = "sponsorOperator";
     static final String FIRST_OPEN = "firstOpen";
+    static final String CONVERSATION = "conversation";
 
     /**
      * @param publicationId the quiz reported
      * @param reason        one of {@link QbReports#REASONS}
      * @param note          what the taker adds, optional
+     * @param conversationId Q82: the caller's conversation about the publication that is reported, optional
      */
     public record SubmitInput(@NotNull UUID publicationId, @NotBlank String reason,
-        @Size(max = QbReports.NOTE_LENGTH) String note) {}
+        @Size(max = QbReports.NOTE_LENGTH) String note, @Size(max = 36) String conversationId) {
+
+        /** Q82: the input before a conversation could be named. */
+        public SubmitInput(UUID publicationId, String reason, String note) {
+            this(publicationId, reason, note, null);
+        }
+    }
 
     /** @param reportId the report written */
     public record SubmitOutput(String reportId) {}
@@ -131,7 +139,13 @@ public final class ReportProcesses {
                                 .where(new QueryPredicate.And(List.of(
                                     new QueryPredicate.Eq("publicationId", input(ctx).publicationId()),
                                     new QueryPredicate.Eq("status", QbReports.OPEN))))
-                                .limit(1).build(), OPEN_REPORTS)))
+                                .limit(1).build(), OPEN_REPORTS),
+                            // Q82: the conversation named, when one is.
+                            QueryEntities.query(com.jabiz.quizbuks.conversation.QbConversations.defaultDataset(
+                                com.jabiz.quizbuks.conversation.QbConversations.CONVERSATION),
+                                ctx -> EntityQuery.builder().where(new QueryPredicate.In("conversationId",
+                                    input(ctx).conversationId() == null ? List.of()
+                                        : List.of(input(ctx).conversationId()))).limit(1).build(), CONVERSATION)))
                     .step("Load the sponsor's operator", QueryEntities.<ProcessContext>of(
                         QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> {
                             EntityInstance card = first(ctx, CARD);
@@ -155,8 +169,16 @@ public final class ReportProcesses {
         SubmitInput input = input(ctx);
         EntityInstance card = first(ctx, CARD);
         // A channel's publication (a shop's storefront quiz) is no App taker's: as good as none.
-        // A quiz the caller never opened (one not shown to them, a draft, an invitee's) is as good as none.
-        if (card == null || !PublisherKind.sponsor(card.get("publisherKind")) || first(ctx, VIEWED) == null) {
+        // A quiz the caller never opened (one not shown to them, a draft, an invitee's) is as good as none; so is one
+        // about which they have a conversation (Q82: a referrer may never have opened it).
+        EntityInstance conversation = first(ctx, CONVERSATION);
+        if (input.conversationId() != null && (conversation == null
+            || !ctx.request().actorId().equals(String.valueOf((Object) conversation.get("takerId")))
+            || !input.publicationId().toString().equals(String.valueOf((Object) conversation.get("publicationId"))))) {
+            throw new EntityNotFoundException("QbConversation " + input.conversationId() + " not found");
+        }
+        if (card == null || !PublisherKind.sponsor(card.get("publisherKind"))
+            || first(ctx, VIEWED) == null && conversation == null) {
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + input.publicationId() + " not found");
         }
         if (!QbReports.REASONS.contains(input.reason())) {
@@ -180,6 +202,7 @@ public final class ReportProcesses {
         values.put("reporterId", ctx.request().actorId());
         values.put("reason", input.reason());
         values.put("note", input.note() == null || input.note().isBlank() ? null : input.note().strip());
+        values.put("conversationId", conversation == null ? null : String.valueOf(conversation.id()));
         values.put("status", QbReports.OPEN);
         values.put("createdAt", ctx.opTime());
         Object id = ctx.changes().insert(QbReports.REPORT, values);

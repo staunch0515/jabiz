@@ -5,6 +5,7 @@ import com.jabiz.dataset.DatasetScope;
 import com.jabiz.dataset.EntryScopeVia;
 import com.jabiz.quizbuks.audience.QbAudience;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.conversation.QbConversations;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.invitation.QbInvitations;
 import com.jabiz.quizbuks.page.QbSponsorPages;
@@ -45,7 +46,9 @@ public final class OperatorScopes {
         for (String entity : new String[] {QbPublications.PUBLICATION, QbPublications.TIER, QbPublications.CARD,
             QbRewards.CASH_REWARD, QbRewards.REDEMPTION, QbDigitalPrizes.DIGITAL_PRIZE, QbDigitalPrizes.DIGITAL_CODE,
             QbInvitations.INVITATION, QbAudience.CRITERION, QbPrerequisites.PREREQUISITE, QbAnalytics.HOUR, QbAnalytics.CURSOR,
-            QbAnalytics.QUESTION_STAT, QbReports.REPORT}) {
+            QbAnalytics.QUESTION_STAT, QbReports.REPORT,
+            // Q82: the conversations with the operator's sponsors.
+            QbConversations.CONVERSATION, QbConversations.MESSAGE, QbConversations.BLOCK}) {
             fields.put(entity, "publisherId");
         }
         fields.put(QbRewards.REDEEM_TOKEN, "sponsorId");

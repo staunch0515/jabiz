@@ -55,6 +55,12 @@ public class InboxConfig {
         return MessageProcesses.PRIZE_WON;
     }
 
+    /** Q82: the taker's push notification of a sponsor's reply in a conversation. */
+    @Bean
+    com.jabiz.push.PushTemplate qbConversationReplyPush() {
+        return MessageProcesses.CONVERSATION_REPLY;
+    }
+
     @Bean
     EntityDefinition qbMessageEntity() {
         return QbInbox.MESSAGE_ENTITY;
@@ -229,7 +235,8 @@ public class InboxConfig {
             .item(QbInbox.REFERRAL_REWARDED, "en", "Referral rewarded", "zh", "推荐成功", "ja", "紹介の成立")
             .item(QbInbox.REFERRAL_EXPIRED, "en", "Referral ended", "zh", "推荐已结束", "ja", "紹介の終了")
             .item(QbInbox.REFERRAL_FUNDS_SHORT, "en", "Referral reward waiting for funds", "zh",
-                "推荐奖励待充值", "ja", "紹介報酬の残高不足"));
+                "推荐奖励待充值", "ja", "紹介報酬の残高不足")
+            .item(QbInbox.CONVERSATION_REPLY, "en", "Sponsor replied", "zh", "商户回复", "ja", "スポンサーからの返信"));
     }
 
     @Bean
@@ -446,6 +453,16 @@ public class InboxConfig {
     }
 
     // ---- subscriptions ---------------------------------------------------------------------------------------------
+
+    /** Q82 (D-Q82-9): a sponsor's message in a conversation tells its taker. */
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageConversationReplySubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.CONVERSATION_REPLY_CONSUMER,
+            com.jabiz.quizbuks.conversation.QbConversations.MESSAGE_EVENT, qbMessageFromEvent,
+            MessageProcesses::conversationInput);
+    }
 
     @Bean
     EventSubscription<MessageProcesses.EventInput> qbMessageRewardSettledSubscription(
