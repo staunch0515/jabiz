@@ -2,7 +2,7 @@ import { api, ApiError, runProcess, runQuery, toApiError, unwrap, type Filter, t
 import { CONTENT_LANGUAGES, readDictionary, type ContentLanguage, type DictionaryItem } from '../qb/api'
 import { minuteNow } from '../qb/legal'
 import { CRITERIA, type Condition } from '../qb/audience'
-import { AUDIENCE } from '../qb/ids'
+import { AUDIENCE, PREREQUISITES, type Requirement } from '../qb/ids'
 import { referralPolicy, type ReferralPolicy } from '../qb/play'
 import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_PROCESS, PUBLISHING_TEMPLATE } from './ids'
 
@@ -1448,3 +1448,42 @@ export const saveConditions = (publicationId: string, baseRevision: number | nul
 /** How many takers the saved regions and conditions reach now, rounded. */
 export const countAudience = (publicationId: string) =>
   runProcess<AudienceCount>(AUDIENCE.count, { publicationId })
+
+// ---- Q76: prerequisites -------------------------------------------------------------------------------------------
+
+/** `PublicationPrerequisites.PrerequisiteInput`: a publication the taker must first have passed or answered. */
+export interface Prerequisite {
+  requiredPublicationId: string
+  requirement: Requirement
+}
+
+/** A row of `qb.sponsor.publication-prerequisites`: a stored prerequisite with the required publication as it is now. */
+export interface PrerequisiteRow extends Prerequisite {
+  prerequisiteId: string
+  name: string
+  status: PublicationStatus
+  startAt: string | null
+  endAt: string | null
+}
+
+/** The query of a publication's prerequisites: apart from the publications' (a draft's save sets it from what it sent). */
+export const prerequisitesQuery = (publicationId: string | null) =>
+  ['qb', 'publication-prerequisites', publicationId] as const
+
+/** A draft's (or a frozen publication's) prerequisites, by the required publications' names. */
+export async function readPrerequisites(publicationId: string): Promise<PrerequisiteRow[]> {
+  const page = await runQuery<Row>(PREREQUISITES.sponsorTemplate, { params: { publicationId }, limit: PAGE })
+  return page.items.map((row): PrerequisiteRow => ({
+    prerequisiteId: String(row.prerequisiteId),
+    requiredPublicationId: String(row.requiredPublicationId),
+    requirement: row.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED',
+    name: String(row.name ?? ''),
+    status: (row.status as PublicationStatus) ?? 'DRAFT',
+    startAt: str(row.startAt),
+    endAt: str(row.endAt),
+  }))
+}
+
+/** Replaces a draft's prerequisites with these (none: nothing to do first). */
+export const savePrerequisites = (publicationId: string, baseRevision: number | null, prerequisites: Prerequisite[]) =>
+  runProcess<PublicationOutput>(PREREQUISITES.save, { publicationId, baseRevision, prerequisites })

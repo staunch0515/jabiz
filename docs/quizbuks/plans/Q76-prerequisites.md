@@ -22,7 +22,7 @@
 | 向导 | 四步：内容 → 时间与奖励 → **客户匹配**（受众、地区、条件与"查看符合人数"）→ 检查并提交；条件在提交前以单独的流程保存 |
 | 审核 | 审批内容不含条件（Q47b"审核时显示条件"未做） |
 
-## 2. 决定（草案，待确认）
+## 2. 决定（需求方 2026-11-02 确认）
 
 | # | 决定 |
 |---|---|
@@ -145,3 +145,29 @@ CREATE INDEX qb_publication_prerequisite_required_idx ON qb_publication_prerequi
 3. D-Q76-5：邀请制的发布也可以设前置。
 4. D-Q76-8：商户主页按前置分层显示。
 5. 编号 Q76。
+
+## 10. 实施记录（2026-11-02，分支 `1.3/quizbuks-76-prerequisites`）
+
+需求方 2026-11-02 确认 §2 与 §9 的决定（"同意 Q76 的决定，开始"；首页不列出未满足的，路径在商户主页上显示）。按计划实施，与计划的差别：
+
+- **迁移是 V60**（`V60__quizbuks_prerequisites.sql`），不是 §3.1 写的 V59：Q75 的分支（PR #411）用了 V59。表 `qb_publication_prerequisite`，
+  唯一 `(publication_id, required_publication_id)`、检查约束 `publication_id <> required_publication_id`、索引 `(publisher_id, required_publication_id)`（保存时读本商户的整条链）。
+- **后端**：实体 `QbPublicationPrerequisite`（`publishing.QbPrerequisites`：常量、字典 `urn:jabiz:dict:quizbuks:prerequisite-requirement`、上限 5 / 深度 20）；
+  纯 Java 规则 `publishing.PrerequisiteRules`（太多、重复、自己、不是本商户的、草稿、成环、太深，各在 `prerequisites[i]`）与 `play.PrerequisiteCheck`（满足的唯一定义）；
+  流程 `QB_PUBLICATION_PREREQUISITES_SAVE`（`publishing.PublicationPrerequisites`：发布锁内，一条 `QueryEntities.all` 读本商户的全部边与所选发布（商户视图：不是本商户的即不存在），整体替换，`baseRevision`、revision + 1）；
+  删除草稿时一起删除，复制时随发布复制（`PublicationProcesses`）；运营商范围登记在 `OperatorScopes`（默认视图要求每个实体都有）。
+  三个数据视图：默认（`processOnlyWrites`，管理员读）、商户（只读、限本人）、公开（`publicRead` 白名单 `publicationId`、`requiredPublicationId`、`requirement`，只供公开模板）。
+  开始答题（`play.PrerequisiteRows`）：前置行在锁外既有的 `QueryEntities.all` 中读；本人在前置发布上的会话另一条语句、只在有前置时（`taker:QbAttempt`）；
+  不满足即 422 `QB_PREREQUISITE_NOT_MET`（字段 `publicationId`，参数为第一条未满足的前置与未满足的条数）。店面（`ChannelPlay`）不查前置：店铺的发布没有向导，也没有保存前置的入口。
+  模板：`qb.app.feed`（`NOT EXISTS` 一段）、`qb.app.publication`（`prerequisitesMet` 进入 `canStart`；`prerequisites` 为 JSON：编号、按显示语言的名字、要求、`met`、`live`）、
+  `qb.system.audience-count`（同一段，按 `user_id`）、`qb.public.sponsor-page-publications`（`prerequisites` JSON，只列两端都在榜上的）、新模板 `qb.sponsor.publication-prerequisites`（向导与发布页读名字与状态）。
+- **测试**：`PrerequisiteRulesTest`、`PrerequisiteCheckTest`、`PrerequisiteIT`（保存与校验、复制与删除、冻结；首页、发布页与开始随本人的会话变化，进行中不算，前置发布暂停后已学的仍算；
+  `qb.system.audience-count` 与 Java 的 `PrerequisiteCheck` 对全部答题者一致，`PASSED` 比 `ANSWERED` 少算一个只答没过的人）、`AttemptStatementBudgetIT.aStartWithPrerequisites`
+  （有前置的开始 = 普通开始 + 1 条锁外语句，锁内不变；普通开始的数字不变）、`SponsorPageIT`（公开模板的 `prerequisites`，前置发布暂停后为 `[]`）。
+  `AudienceIT.theTemplatesCountAgreesWithTheJavaMatch` 的答题者没有已验证的邮箱，两边都数到 0（空洞地一致）；`PrerequisiteIT` 的计数测试为答题者写入已验证的邮箱（照 `OperatorIT.verifiedUser`），断言人数为正。
+- **前端**：共用 `qb/ids.ts` 的 `PREREQUISITES` 与 `REQUIREMENTS`、`qb/play.ts` 的 `prerequisitesMet` / `prerequisites`（`prerequisitesOf` 解析 JSON）、`qb/messages.ts` 的 `prerequisite.*`。
+  商户后台：向导第三步的区块 `Prerequisites.tsx`（勾选本商户已提交的发布，各选"合格"或"作答"，至多 5 条；没有可选的即提示先提交），
+  随每次保存在条件之后以 `QB_PUBLICATION_PREREQUISITES_SAVE` 保存（只在改过时），摘要与发布页一行"前置条件"。
+  App：发布页在不满足时显示"先完成这些答卷"（每条链到前置发布、已满足的打勾、未开放的注明）；商户主页按 `share/levels.ts` 分层（只有一层时照旧是平面列表），每条写"先完成：X"。
+  e2e `prerequisites.spec.ts`（本机未运行：需要打包的 jar 与 Mailpit，由 CI 的 `e2e` 作业运行）。
+- **未做**（计划 §7 以后）：商户后台的预览按层显示（D-Q76-8 的最后一句）——预览只有一个发布，没有分层可画；首页的"锁着的卡片"（04 §6.3）。
