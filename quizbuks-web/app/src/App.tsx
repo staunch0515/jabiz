@@ -11,7 +11,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  EnvironmentBanner,
   Input,
   MailLinkPage,
   MailUnsubscribe,
@@ -105,7 +104,7 @@ import { StaffDeskPage } from './staff/StaffDeskPage'
 import { StaffHandledPage } from './staff/StaffHandledPage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
-import { ONE_LINE_BANNER } from './banner'
+import { AppEnvironmentBanner } from './banner'
 import { MaintenanceRedirect } from './maintenance'
 
 /** Where a signed-in taker starts. */
@@ -241,7 +240,7 @@ function Header({ scan = false, search = false }: { scan?: boolean; search?: boo
   if (searching) {
     return (
       <header className="bg-background sticky top-0 z-10 border-b">
-        <EnvironmentBanner className={ONE_LINE_BANNER} />
+        <AppEnvironmentBanner />
         <HeaderSearch initial={path === HOME ? searchOf(query) : ''} onClose={() => setSearching(false)} />
       </header>
     )
@@ -249,7 +248,7 @@ function Header({ scan = false, search = false }: { scan?: boolean; search?: boo
   return (
     <header className="bg-background sticky top-0 z-10 border-b">
       {/* A test system says so on every page (platform 16zd); the app's frame is its own, so it places the banner. */}
-      <EnvironmentBanner className={ONE_LINE_BANNER} />
+      <AppEnvironmentBanner />
       <div className="mx-auto flex max-w-md items-center gap-1 px-4 py-2">
         {/* Q64: a page opened from another (a quiz's start page, a result) goes back from here. */}
         {backable(path) && (
@@ -468,7 +467,7 @@ function PublicPage({ path, signedIn, children }: { path: string; signedIn: bool
   return (
     <div className="flex min-h-full flex-col">
       <header className="bg-background sticky top-0 z-10 border-b">
-        <EnvironmentBanner className={ONE_LINE_BANNER} />
+        <AppEnvironmentBanner />
         <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-2">
           <Wordmark name={t('brand')} compact className="text-primary mr-auto" />
           <ThemeToggle />
