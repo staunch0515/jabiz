@@ -487,8 +487,9 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByTestId('data-table-view').getByRole('radio', { name: 'Cards' }).click()
     await expect(page.locator('[data-slot="data-table"]')).toHaveAttribute('data-view', 'cards')
     await expectAccessible(page, at('sponsor transactions cards'))
+    // The reload drops the one-user filter (it is the page's state), so every row is back: the first shows the mode.
     await page.reload()
-    await expect(page.getByTestId('transaction-row')).toHaveAttribute('data-slot', 'data-table-card')
+    await expect(page.getByTestId('transaction-row').first()).toHaveAttribute('data-slot', 'data-table-card')
   })
 }
 
