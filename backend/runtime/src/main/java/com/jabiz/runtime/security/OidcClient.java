@@ -4,6 +4,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.util.JSONObjectUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -43,8 +44,24 @@ public class OidcClient {
         }
     }
 
+    /**
+     * What the token endpoint gave: the ID token, and the refresh token where the provider gives one (Apple's is what
+     * revokes the user's authorization when the account goes, decision D67 item 5).
+     */
+    record Tokens(String idToken, String refreshToken) {
+        @Override
+        public String toString() {
+            return "Tokens[***]";
+        }
+    }
+
     /** The endpoints the discovery document names. */
-    record Metadata(String authorizationEndpoint, String tokenEndpoint, String jwksUri) {}
+    record Metadata(String authorizationEndpoint, String tokenEndpoint, String jwksUri, String revocationEndpoint) {
+
+        Metadata(String authorizationEndpoint, String tokenEndpoint, String jwksUri) {
+            this(authorizationEndpoint, tokenEndpoint, jwksUri, null);
+        }
+    }
 
     private record Cached<T>(T value, Instant fetchedAt) {}
 
@@ -52,6 +69,7 @@ public class OidcClient {
     private final Clock clock;
     private final Map<String, Cached<Metadata>> metadata = new ConcurrentHashMap<>();
     private final Map<String, Cached<JWKSet>> keys = new ConcurrentHashMap<>();
+    private final AppleClientSecret appleSecrets;
 
     public OidcClient(Clock clock) {
         this(HttpClient.newBuilder().connectTimeout(TIMEOUT).followRedirects(HttpClient.Redirect.NEVER).build(),
@@ -61,6 +79,7 @@ public class OidcClient {
     OidcClient(HttpClient http, Clock clock) {
         this.http = Objects.requireNonNull(http);
         this.clock = Objects.requireNonNull(clock);
+        this.appleSecrets = new AppleClientSecret(clock);
     }
 
     Mono<Metadata> metadata(OidcProvider provider) {
@@ -76,8 +95,11 @@ public class OidcClient {
             // Facebook's document names no token endpoint: its Graph API's is the one (decision D61 item 1).
             String tokenEndpoint = document.get("token_endpoint") == null && provider.defaultTokenEndpoint() != null
                 ? provider.defaultTokenEndpoint() : endpoint(document, "token_endpoint");
+            // Optional (RFC 7009 via the discovery document): only Apple's tokens are revoked (decision D67 item 5).
+            String revocation = document.get("revocation_endpoint") == null ? null
+                : endpoint(document, "revocation_endpoint");
             Metadata found = new Metadata(endpoint(document, "authorization_endpoint"), tokenEndpoint,
-                endpoint(document, "jwks_uri"));
+                endpoint(document, "jwks_uri"), revocation);
             metadata.put(provider.id(), new Cached<>(found, clock.instant()));
             return found;
         });
@@ -101,31 +123,57 @@ public class OidcClient {
             }));
     }
 
-    /** The provider's page to send the user to; it sends them back to {@code redirectUri} (the entry's callback). */
+    /**
+     * The provider's page to send the user to; it sends them back to {@code redirectUri}
+     * ({@link OidcProvider#providerRedirectUri}). Apple posts its answer as a form (it must, to give the name and the
+     * address) and takes no PKCE challenge (decision D67 items 1 and 2).
+     */
     Mono<String> authorizationUrl(OidcProvider provider, OidcStateStore.Started started, String redirectUri) {
-        return metadata(provider).map(found -> UriComponentsBuilder.fromUriString(found.authorizationEndpoint())
-            .queryParam("response_type", "code")
-            .queryParam("client_id", provider.clientId())
-            .queryParam("redirect_uri", redirectUri)
-            .queryParam("scope", String.join(" ", provider.scopes()))
-            .queryParam("state", started.state())
-            .queryParam("nonce", started.nonce())
-            .queryParam("code_challenge", started.codeChallenge())
-            .queryParam("code_challenge_method", "S256")
-            .encode().build().toUriString());
+        return metadata(provider).map(found -> {
+            UriComponentsBuilder url = UriComponentsBuilder.fromUriString(found.authorizationEndpoint())
+                .queryParam("response_type", "code")
+                .queryParam("client_id", provider.clientId())
+                .queryParam("redirect_uri", redirectUri)
+                .queryParam("scope", String.join(" ", provider.scopes()))
+                .queryParam("state", started.state())
+                .queryParam("nonce", started.nonce());
+            if (provider.isApple()) {
+                url.queryParam("response_mode", "form_post");
+            }
+            if (provider.pkce()) {
+                url.queryParam("code_challenge", started.codeChallenge()).queryParam("code_challenge_method", "S256");
+            }
+            return url.encode().build().toUriString();
+        });
     }
 
     /**
      * Exchanges an authorization code (PKCE) for the ID token, naming the callback the authorization request named
      * ({@code redirectUri}), as the provider requires. The client authenticates with Basic (client_secret_basic), or
-     * in the form for the providers that take only that ({@link OidcProvider#clientSecretPost}).
+     * in the form for the providers that take only that ({@link OidcProvider#clientSecretPost}); Apple's secret is a
+     * token signed for the purpose ({@link AppleClientSecret}). No verifier where the round trip had no challenge.
      */
-    Mono<String> idToken(OidcProvider provider, String code, String codeVerifier, String redirectUri) {
-        Map<String, String> fields = new java.util.LinkedHashMap<>(Map.of("grant_type", "authorization_code",
-            "code", code, "redirect_uri", redirectUri, "code_verifier", codeVerifier));
+    Mono<Tokens> tokens(OidcProvider provider, String code, String codeVerifier, String redirectUri) {
+        // Signing Apple's secret draws on the system's random source, which may block: not on an event loop.
+        Mono<String> secret = provider.isApple()
+            ? Mono.fromCallable(() -> appleSecrets.secretOf(provider)).subscribeOn(Schedulers.boundedElastic())
+            : Mono.justOrEmpty(provider.clientSecret());
+        return secret.defaultIfEmpty("").flatMap(clientSecret -> tokens(provider, code, codeVerifier, redirectUri,
+            clientSecret));
+    }
+
+    private Mono<Tokens> tokens(OidcProvider provider, String code, String codeVerifier, String redirectUri,
+        String clientSecret) {
+        Map<String, String> fields = new java.util.LinkedHashMap<>();
+        fields.put("grant_type", "authorization_code");
+        fields.put("code", code);
+        fields.put("redirect_uri", redirectUri);
+        if (provider.pkce()) {
+            fields.put("code_verifier", codeVerifier);
+        }
         if (provider.clientSecretPost()) {
             fields.put("client_id", provider.clientId());
-            fields.put("client_secret", provider.clientSecret());
+            fields.put("client_secret", clientSecret);
         }
         String form = fields.entrySet().stream()
             .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
@@ -137,17 +185,51 @@ public class OidcClient {
             if (!provider.clientSecretPost()) {
                 // RFC 6749 section 2.3.1: client credentials are form-encoded before Basic authentication.
                 request.header("Authorization", "Basic " + Base64.getEncoder().encodeToString((encode(
-                    provider.clientId()) + ":" + encode(provider.clientSecret())).getBytes(StandardCharsets.UTF_8)));
+                    provider.clientId()) + ":" + encode(clientSecret)).getBytes(StandardCharsets.UTF_8)));
             }
             return send(request, "token request");
         })
             .map(body -> {
-                Object token = json(body, "token response").get("id_token");
-                if (!(token instanceof String text) || text.isBlank()) {
+                Map<String, Object> response = json(body, "token response");
+                if (!(response.get("id_token") instanceof String token) || token.isBlank()) {
                     throw new ProviderException("The token response has no ID token");
                 }
-                return text;
+                return new Tokens(token, response.get("refresh_token") instanceof String refresh && !refresh.isBlank()
+                    ? refresh : null);
             });
+    }
+
+    /**
+     * Revokes a refresh token at the provider's revocation endpoint (RFC 7009; Apple's {@code /auth/revoke}, decision
+     * D67 item 5), authenticating as for the token request. Completes when the provider answers 200, which it also
+     * does for a token it no longer knows; fails with {@link ProviderException} otherwise, or when the discovery
+     * document names no revocation endpoint.
+     */
+    Mono<Void> revoke(OidcProvider provider, String refreshToken) {
+        Mono<String> secret = provider.isApple()
+            ? Mono.fromCallable(() -> appleSecrets.secretOf(provider)).subscribeOn(Schedulers.boundedElastic())
+            : Mono.justOrEmpty(provider.clientSecret());
+        return secret.defaultIfEmpty("").zipWith(metadata(provider)).flatMap(found -> {
+            if (found.getT2().revocationEndpoint() == null) {
+                return Mono.error(new ProviderException("The discovery document names no revocation_endpoint"));
+            }
+            Map<String, String> fields = new java.util.LinkedHashMap<>();
+            fields.put("token", refreshToken);
+            fields.put("token_type_hint", "refresh_token");
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(found.getT2().revocationEndpoint()))
+                .header("Content-Type", "application/x-www-form-urlencoded");
+            if (provider.clientSecretPost()) {
+                fields.put("client_id", provider.clientId());
+                fields.put("client_secret", found.getT1());
+            } else {
+                request.header("Authorization", "Basic " + Base64.getEncoder().encodeToString((encode(
+                    provider.clientId()) + ":" + encode(found.getT1())).getBytes(StandardCharsets.UTF_8)));
+            }
+            String form = fields.entrySet().stream()
+                .map(entry -> encode(entry.getKey()) + "=" + encode(entry.getValue()))
+                .collect(Collectors.joining("&"));
+            return send(request.POST(HttpRequest.BodyPublishers.ofString(form)), "revocation").then();
+        });
     }
 
     private Mono<String> send(HttpRequest.Builder request, String what) {

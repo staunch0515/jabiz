@@ -34,6 +34,8 @@ export const DATASET = {
 
 /** SQL templates (`queries/qb/admin`). */
 export const TEMPLATE = {
+  /** Q73e-1: a publication by the language its attempts are answered in. */
+  publicationLanguages: 'qb.admin.publication-languages',
   /** Q73d-2: the latest AI comparison of a publication's translations in one language (its reviewers). */
   translationCheck: 'qb.admin.ai-translation-check',
   /** Q70: every referral, with its people (support and finance). */

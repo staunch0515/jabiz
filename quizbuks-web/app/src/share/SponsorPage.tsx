@@ -1,10 +1,10 @@
 import { readPageProducts } from './api'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
-import { formatDateTime } from '@jabiz/client'
-import { MarkdownView, PageState } from '@jabiz/ui'
-import { useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { formatDateTime, i18n } from '@jabiz/client'
+import { Button, MarkdownView, PageState } from '@jabiz/ui'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 import { ExternalLink, Trophy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -16,6 +16,7 @@ import { readPagePublications, readPublicSponsorPage } from './api'
 import { Link } from '../qb/router'
 import { sharePath } from './share'
 import { countPageView, countProductClick } from './counting'
+import { linkLanguageOf } from '../linkLanguage'
 
 const SPONSOR_PAGE = /^\/s\/([^/]+)$/
 
@@ -43,10 +44,15 @@ function httpsUrl(url: string | null): string | null {
 export function SponsorPage({ handle }: { handle: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
-  const page = useQuery({ queryKey: ['qb', 'sponsor-page', handle], queryFn: () => readPublicSponsorPage(handle) })
+  // Q73c: in the language chosen on the page (a link's ?lang= first), else the interface's, else the page's main one.
+  const [chosen, setChosen] = useState<string | null>(() => linkLanguageOf(window.location.pathname))
+  const languages = [chosen, i18n.language.slice(0, 2)].filter((l, i, all): l is string => !!l && all.indexOf(l) === i)
+  const page = useQuery({ queryKey: ['qb', 'sponsor-page', handle, languages],
+    queryFn: () => readPublicSponsorPage(handle, languages), placeholderData: keepPreviousData })
   // Q60b: the page's listed products, in the sponsor's order.
-  const products = useQuery({ queryKey: ['qb', 'sponsor-page-products', handle],
-    queryFn: () => readPageProducts(handle), enabled: !!page.data, retry: false })
+  const products = useQuery({ queryKey: ['qb', 'sponsor-page-products', handle, languages],
+    queryFn: () => readPageProducts(handle, languages), enabled: !!page.data, retry: false,
+    placeholderData: keepPreviousData })
   const { t: tView } = useTranslation(QBVIEW)
   const publications = useQuery({ queryKey: ['qb', 'sponsor-page-publications', handle],
     queryFn: () => readPagePublications(handle), enabled: !!page.data })
@@ -68,8 +74,22 @@ export function SponsorPage({ handle }: { handle: string }) {
     )
   }
   const website = httpsUrl(p.website)
+  const offered = String(p.languages ?? p.language).split(',').filter(Boolean)
+  const shownIn = p.displayLanguage ?? p.language
   return (
     <article className="flex flex-col gap-6" aria-labelledby="sponsor-page-title" data-testid="sponsor-page">
+      {offered.length > 1 && (
+        <div className="flex flex-wrap items-center justify-end gap-1" role="group"
+          aria-label={t('sponsorPage.language')} data-testid="sponsor-page-languages">
+          {offered.map((language) => (
+            <Button key={language} type="button" size="sm" lang={language}
+              variant={language === shownIn ? 'secondary' : 'ghost'} aria-pressed={language === shownIn}
+              data-testid={`sponsor-page-language-${language}`} onClick={() => setChosen(language)}>
+              {tQb(`languages.${language}`)}
+            </Button>
+          ))}
+        </div>
+      )}
       <header className="flex flex-col gap-3">
         <div className="relative -mx-4 aspect-video overflow-hidden sm:mx-0 sm:border">
           {p.cover
@@ -83,7 +103,7 @@ export function SponsorPage({ handle }: { handle: string }) {
           <div className="flex min-w-0 flex-col">
             <h1 id="sponsor-page-title" className="text-xl font-semibold" data-testid="sponsor-page-company">{p.company}</h1>
             {/* The sponsor's own words are in the page's language; the rest is the interface's. */}
-            <p className="text-muted-foreground text-sm" lang={p.language} data-testid="sponsor-page-headline">
+            <p className="text-muted-foreground text-sm" lang={shownIn} data-testid="sponsor-page-headline">
               {p.headline}</p>
           </div>
         </div>
@@ -98,7 +118,7 @@ export function SponsorPage({ handle }: { handle: string }) {
       {p.story && (
         <section aria-labelledby="sponsor-page-story" className="flex flex-col gap-2">
           <h2 id="sponsor-page-story" className="text-lg font-semibold">{t('sponsorPage.story')}</h2>
-          <div lang={p.language} data-testid="sponsor-page-story"><MarkdownView text={p.story} /></div>
+          <div lang={shownIn} data-testid="sponsor-page-story"><MarkdownView text={p.story} /></div>
         </section>
       )}
       <ProductCards products={products.data ?? []} title={tView('products.title')} testId="sponsor-page-products"

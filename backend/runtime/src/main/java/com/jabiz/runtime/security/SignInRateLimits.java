@@ -77,7 +77,12 @@ public class SignInRateLimits implements PlatformCheck {
         /** {@code POST /api/auth/refresh}: the refresh token names nobody before it is looked up. */
         REFRESH(false),
         /** {@code POST /api/auth/external-token} (decision D59): nobody is named before the token is checked. */
-        EXTERNAL_TOKEN(false);
+        EXTERNAL_TOKEN(false),
+        /**
+         * {@code POST /api/auth/oidc/{id}/form-post} (decision D67): Apple's answer, posted by the browser; nobody is
+         * named before the callback.
+         */
+        OIDC_FORM_POST(false);
 
         private final boolean named;
 

@@ -217,6 +217,15 @@ export default function SponsorReviewPage() {
           <h3 className="font-semibold">{t('sponsor.intro')}</h3>
           {s.intro ? <MarkdownView text={s.intro} /> : <p className="text-muted-foreground text-sm">{notSet}</p>}
         </div>
+        {/* Q73c: the introduction in other languages, part of what is approved. */}
+        {Object.entries(s.introTranslations).filter(([, texts]) => texts.intro).map(([language, texts]) => (
+          <div key={language} className="flex flex-col gap-1" data-testid="sponsor-intro-translation">
+            <h3 className="font-semibold">
+              {t('sponsor.introIn', { language: t(`preview.languages.${language}`, { defaultValue: language }) })}
+            </h3>
+            <div lang={language}><MarkdownView text={texts.intro} /></div>
+          </div>
+        ))}
       </Section>
       <Section title={t('publication.decision')} testId="sponsor-decision">{decision}</Section>
       <RewardMethods userId={userId} />

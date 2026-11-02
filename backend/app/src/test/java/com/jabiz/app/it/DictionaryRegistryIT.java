@@ -121,8 +121,10 @@ class DictionaryRegistryIT extends PostgresIntegrationTest {
         assertThat(dictionaries.cachedDictionaries()).isEqualTo(before);
 
         execute("INSERT INTO sys_dict_item (dict_urn, item_code) VALUES (?, 'KG')", units);
-        assertThat(enabled(units)).containsExactly("KG");
-        assertThat(dictionaries.cachedDictionaries()).isEqualTo(before + 1);
+        // The insert's change notification invalidates the URN asynchronously: a read cached before it arrives is
+        // removed again. Read until the cache holds the known dictionary.
+        awaitTrue(() -> enabled(units).equals(java.util.Set.of("KG"))
+            && dictionaries.cachedDictionaries() == before + 1);
     }
 
     /** Review finding: an SQL dictionary naming an unknown dataset or entity fails at startup, not on first use. */

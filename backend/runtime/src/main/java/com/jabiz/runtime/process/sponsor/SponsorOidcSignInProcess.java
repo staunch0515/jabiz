@@ -3,6 +3,7 @@ package com.jabiz.runtime.process.sponsor;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.security.Rbac;
 import com.jabiz.runtime.security.SecurityEntities;
@@ -65,7 +66,16 @@ public final class SponsorOidcSignInProcess {
                 .steps(SponsorSignInProcess::accessSteps)
                 .steps(SponsorSignInProcess::entrySteps)
                 .steps(SponsorSignInProcess::secondFactorSteps)
-                .step("Create the login record", OidcLoginRecordStep.class, NoMetadata.INSTANCE));
+                .step("Create the login record", OidcLoginRecordStep.class, NoMetadata.INSTANCE)
+                // Apple's token of a linked subject, whatever the sign-in's outcome: the authorization exists at Apple
+                // either way, and revoking it when the link goes needs the token (decision D67 item 5). A subject
+                // nobody linked has no account to delete, and its token is not kept.
+                .step("Keep the provider's token", CallProcess.<OidcContext>when(
+                    ctx -> ctx.input().refreshToken() != null && ctx.identityId() != null,
+                    com.jabiz.runtime.security.IdentityTokens.KEEP, 1,
+                    ctx -> new com.jabiz.runtime.security.IdentityTokens.KeepInput(
+                        java.util.UUID.fromString(ctx.identityId()), ctx.input().provider(), ctx.input().subject(),
+                        ctx.input().refreshToken()), null)));
     }
 
     private SponsorOidcSignInProcess() {}

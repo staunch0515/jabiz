@@ -63,6 +63,8 @@ public final class QbSponsorProducts {
             .apply(Rules.notBlank(SponsorPageCodes.PRODUCT_NAME_BLANK)));
         eb.field("description", f -> f.physicalColumn("description").asText(DESCRIPTION_LENGTH, true));
         eb.field("image", f -> f.physicalColumn("image").kind(FileKind.of(QbSponsorPages.IMAGE_POLICY)));
+        // Q73c: the name and description in the page's other languages ({language: {field: {text, hash}}}); optional.
+        eb.field("translations", f -> f.physicalColumn("translations").asText(null, true));
         eb.field("price", f -> f.physicalColumn("price").required(true).asNumeric(12, 2));
         eb.field("currency", f -> f.physicalColumn("currency").required(true)
             .asCode(QbAccounts.CURRENCY_DICTIONARY, QbAccounts.CURRENCIES.toArray(String[]::new)));

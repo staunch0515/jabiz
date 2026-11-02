@@ -17,6 +17,8 @@ export interface PublicProduct {
   currency: string
   shopUrl: string
   seq: number
+  /** Q73c: the language its name and description are in (a sponsor's page shows untranslated ones as written). */
+  textLanguage?: string | null
 }
 
 /** A product a publication shows: with its quiz (question 0) or with the question of that number. */

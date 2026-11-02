@@ -46,6 +46,9 @@ export interface OidcCallbackProps {
   finishLink?: (state: string, code: string, binder: string) => Promise<IdentityLinked>
 }
 
+/** What Apple sends back when the person cancelled; other refusals are shown as they came. */
+const CANCELLED = ['user_cancelled_authorize']
+
 const missing = () => Promise.reject(new Error('OidcCallback needs an AuthProvider around it, or the auth property'))
 
 /**
@@ -77,6 +80,11 @@ export function OidcCallback({
   const state = params.get('state')
   const code = params.get('code')
   // The provider refused, or the page was opened without what it needs.
+  // The person cancelled at Apple (decision D67): back to signing in, no failure shown.
+  const cancelled = !code && CANCELLED.includes(params.get('error') ?? '')
+  useEffect(() => {
+    if (cancelled) onBack()
+  }, [cancelled, onBack])
   const refused = !state || !code
     ? params.get('error_description') ?? params.get('error') ?? t(purpose === 'LINK' ? 'login.linkFailed' : 'login.providerFailed')
     : null
@@ -106,7 +114,7 @@ export function OidcCallback({
 
   return (
     <main className="bg-background text-foreground flex min-h-screen items-start justify-center px-4 pt-20">
-      {!error ? (
+      {cancelled || !error ? (
         <PageState kind="loading" title={t('common.loading')} />
       ) : (
         <PageState

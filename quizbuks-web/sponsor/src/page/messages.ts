@@ -4,6 +4,21 @@
  * (`QB_SPONSOR_PAGE_*`).
  */
 export const pageEn = {
+  textTranslations: {
+    in: 'In {{language}}',
+    stale: 'Out of date',
+    confirm: 'Still right for the new text',
+  },
+  pageLanguages: {
+    title: 'Other languages',
+    hint: 'Offer the page in more languages: its headline in each, and your introduction and products when you translate them. Visitors see it in their language, else in the main one.',
+    main: 'Main language',
+    mainHint: 'Shown to visitors whose language the page does not offer.',
+    own: 'written in',
+    intro: 'Introduction in other languages',
+    introHint: 'Optional. Visitors of a language without it see the introduction as written.',
+    productHint: 'Optional: visitors of a language without it see the product as written.',
+  },
   page: {
     title: 'Shop page',
     intro: 'Your own page in the app: a headline, a cover, your website and your quizzes that are live. Anybody can open it by its link, also before signing in. Its first publication is reviewed; once published, your changes show at once.',
@@ -52,6 +67,21 @@ export const pageEn = {
 }
 
 export const pageZh: typeof pageEn = {
+  textTranslations: {
+    in: '{{language}}',
+    stale: '已过时',
+    confirm: '对新的原文仍然正确',
+  },
+  pageLanguages: {
+    title: '其他语言',
+    hint: '以更多语言提供主页：每种语言都要有标语；简介和商品可以翻译。访客看到自己的语言，没有则看到主要语言。',
+    main: '主要语言',
+    mainHint: '主页不提供访客的语言时，显示这种语言。',
+    own: '原文语言',
+    intro: '简介的其他语言',
+    introHint: '可选。没有译文的语言显示原文的简介。',
+    productHint: '可选：没有译文的语言显示原文。',
+  },
   page: {
     title: '店铺主页',
     intro: '您在 App 中的主页：标题、封面图、网站，以及您正在进行的 Quiz。任何人都能通过链接打开，登录前也可以。首次发布需要审核；发布后，修改会立即生效。',
@@ -100,6 +130,21 @@ export const pageZh: typeof pageEn = {
 }
 
 export const pageJa: typeof pageEn = {
+  textTranslations: {
+    in: '{{language}}',
+    stale: '古い訳',
+    confirm: '新しい原文でも正しい',
+  },
+  pageLanguages: {
+    title: 'ほかの言語',
+    hint: 'ページをほかの言語でも提供します。各言語にキャッチコピーが必要で、紹介と商品も翻訳できます。訪問者には自分の言語で、なければメインの言語で表示されます。',
+    main: 'メインの言語',
+    mainHint: '訪問者の言語をページが提供していないときに表示されます。',
+    own: '原文の言語',
+    intro: '紹介のほかの言語',
+    introHint: '任意です。訳のない言語では原文の紹介が表示されます。',
+    productHint: '任意です。訳のない言語では原文が表示されます。',
+  },
   page: {
     title: 'ショップページ',
     intro: 'アプリ内のあなたのページです。見出し、カバー画像、ウェブサイト、公開中のクイズが表示されます。リンクを知っていれば誰でも、ログイン前でも開けます。最初の公開は審査があり、公開後の変更はすぐに反映されます。',

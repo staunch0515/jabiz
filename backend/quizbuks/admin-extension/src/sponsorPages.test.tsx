@@ -126,6 +126,15 @@ describe("sponsors' pages (Q60a-3)", () => {
     expect(screen.getByTestId('sponsor-page-row')).toHaveAttribute('data-id', 'u2')
   })
 
+  it('show the headline in every language the page offers, reviewed with it (Q73c)', async () => {
+    server.pages = [page({ languages: 'zh,en', translations: JSON.stringify({ zh: { headline: { text: '新鲜面包',
+      hash: 'h' } } }) })]
+    renderAt(`/qb/sponsor-pages/${SPONSOR}`, '/qb/sponsor-pages/:userId', <SponsorPageReviewPage />)
+    const languages = await screen.findByTestId('sponsor-page-languages')
+    expect(languages).toHaveTextContent('Chinese, English')
+    expect(within(languages).getByTestId('sponsor-page-headline-translation')).toHaveTextContent('Chinese: 新鲜面包')
+  })
+
   it('show a waiting page with its content and the decision', async () => {
     const { container } = renderAt(`/qb/sponsor-pages/${SPONSOR}`, '/qb/sponsor-pages/:userId', <SponsorPageReviewPage />)
     expect(await screen.findByTestId('sponsor-page-review')).toHaveAttribute('data-status', 'PENDING')

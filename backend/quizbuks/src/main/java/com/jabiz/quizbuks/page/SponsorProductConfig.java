@@ -97,7 +97,7 @@ public class SponsorProductConfig {
             .targetEntityType(QbSponsorProducts.PRODUCT)
             .scope(s -> s.fixed("status", QbSponsorProducts.LISTED))
             .publicRead(p -> p.fields("productId", "userId", "name", "description", "image", "price", "currency",
-                "shopUrl", "seq"))
+                "shopUrl", "seq", "translations"))
             .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));

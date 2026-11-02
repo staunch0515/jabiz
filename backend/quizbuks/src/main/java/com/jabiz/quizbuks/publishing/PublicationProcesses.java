@@ -108,7 +108,23 @@ public final class PublicationProcesses {
         @Sensitive @Size(max = PublishingLimits.DIGITAL_CONTENT_LENGTH) String digitalContent, UUID cover,
         @Valid ReferralInput referral, @Size(max = 3) List<@NotNull @Size(max = 2) String> languages,
         @Size(max = 3) Map<@NotNull @Size(max = 2) String, @Size(max = 4) Map<@NotNull @Size(max = 30) String,
-            @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH + 1) String>> translations) {
+            @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH + 1) String>> translations,
+        @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed) {
+
+        /**
+         * As before the confirmation of translations (Q73c): {@code confirmed} lists the translations still right for a
+         * changed base text ({@code <language>.<field>}), which then take the present base text's hash.
+         */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription,
+            String audience, String digitalDelivery, String digitalDescription, Integer digitalSendDays,
+            String digitalContent, UUID cover, ReferralInput referral, List<String> languages,
+            Map<String, Map<String, String>> translations) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations, null);
+        }
 
         /**
          * As before Q73b: the version's base language only.
@@ -124,7 +140,7 @@ public final class PublicationProcesses {
             String digitalContent, UUID cover, ReferralInput referral) {
             this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
                 maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
-                digitalDescription, digitalSendDays, digitalContent, cover, referral, null, null);
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, null, null, null);
         }
 
         /** As before Q70: no referrals. */
@@ -317,7 +333,7 @@ public final class PublicationProcesses {
             PublicationLanguages.parse(publication == null ? null : publication.get("translations")),
             PublicationLanguages.sources((String) values.get("name"), (String) values.get("redeemDescription"),
                 (String) values.get("digitalDescription"), referral),
-            offered.isEmpty() && base != null ? List.of(base) : offered, base)));
+            offered.isEmpty() && base != null ? List.of(base) : offered, base, input.confirmed())));
         values.put("startAt", input.startAt());
         values.put("endAt", input.endAt());
         Integer limit = input.timeLimitSec() == null && version != null

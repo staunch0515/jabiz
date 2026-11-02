@@ -172,7 +172,7 @@ class IdentityLinkController {
                         + " at entry " + entry));
                 return reauthenticated(context, user, body, http)
                     .then(states.start(provider.id(), entry, OidcStateStore.Purpose.LINK, user.toString()))
-                    .flatMap(started -> client.authorizationUrl(provider, started, provider.redirectUri(entry))
+                    .flatMap(started -> client.authorizationUrl(provider, started, provider.providerRedirectUri(entry))
                         .map(url -> new OidcController.StartResponse(url, started.binder())))
                     .onErrorMap(OidcClient.ProviderException.class, e -> {
                         log.warn("Identity provider {} unavailable: {}", provider.id(), e.getMessage());
@@ -211,9 +211,9 @@ class IdentityLinkController {
                                 || e instanceof IdTokenValidator.InvalidIdTokenException
                                 || e instanceof IdTokenValidator.UnknownKeyException
                                 || e instanceof IllegalStateException, e -> linkFailed(e.getMessage()))
-                            .flatMap(identity -> processes.executeAtEntry(link, new IdentityProcesses.LinkInput(
-                                user.toString(), provider.id(), identity.subject(), identity.email(),
-                                provider.label(language))))
+                            .flatMap(exchanged -> processes.executeAtEntry(link, new IdentityProcesses.LinkInput(
+                                user.toString(), provider.id(), exchanged.identity().subject(),
+                                exchanged.identity().email(), provider.label(language), exchanged.refreshToken())))
                             // Linked to someone else at the same time.
                             .onErrorMap(IdentityLinkController::raceLost, e -> new BusinessRuleViolationException(
                                 new Violation(null, PlatformErrorCodes.IDENTITY_IN_USE, "The provider account was "

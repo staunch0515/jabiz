@@ -527,6 +527,15 @@
         },
         "list" : false,
         "required" : true
+      },
+      "languages" : {
+        "kind" : {
+          "maxLength" : 20,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : false
       }
     },
     "results" : {
@@ -539,6 +548,11 @@
         "kindId" : "jabiz.file",
         "policy" : "qb.sponsor-page-image",
         "type" : "custom"
+      },
+      "displayLanguage" : {
+        "allowedValues" : [ "ja", "zh", "en" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:content-language",
+        "type" : "code"
       },
       "handle" : {
         "maxLength" : 30,
@@ -554,6 +568,11 @@
         "allowedValues" : [ "ja", "zh", "en" ],
         "dictUrn" : "urn:jabiz:dict:quizbuks:content-language",
         "type" : "code"
+      },
+      "languages" : {
+        "maxLength" : 20,
+        "multiline" : false,
+        "type" : "text"
       },
       "logo" : {
         "kindId" : "jabiz.file",
@@ -592,6 +611,15 @@
         },
         "list" : false,
         "required" : true
+      },
+      "languages" : {
+        "kind" : {
+          "maxLength" : 20,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : false
       }
     },
     "results" : {
@@ -633,6 +661,11 @@
         "maxLength" : 300,
         "multiline" : false,
         "type" : "text"
+      },
+      "textLanguage" : {
+        "allowedValues" : [ "ja", "zh", "en" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:content-language",
+        "type" : "code"
       }
     }
   }, {

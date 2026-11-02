@@ -517,6 +517,15 @@ describe('OidcCallback', () => {
     expect(onBack).toHaveBeenCalled()
   })
 
+  it('goes straight back when the person cancelled at Apple', async () => {
+    window.history.replaceState(null, '', '/portal/login/oidc?state=s&error=user_cancelled_authorize')
+    const onBack = vi.fn()
+    render(<OidcCallback fallbackPath="/portal/" auth={{ signInWithProvider: vi.fn() }} onSignedIn={vi.fn()}
+      onSecondStep={vi.fn()} onBack={onBack} />)
+    expect(onBack).toHaveBeenCalled()
+    expect(screen.queryByTestId('oidc-error')).toBeNull()
+  })
+
   it('finishes a link instead when the round trip was started to link an account', async () => {
     window.history.replaceState(null, '', '/portal/login/oidc?state=s2&code=c2')
     window.sessionStorage.setItem('jabiz.session.portal.oidcBinder', 'b2')
@@ -576,6 +585,21 @@ describe('OidcButtons', () => {
     expect(screen.getByTestId('oidc-corp').querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user().click(screen.getByRole('button', { name: 'LINE' }))
     expect(start).toHaveBeenCalledWith('line', '/portal/')
+    await expectAccessible()
+  })
+  it("says Apple's own title on Apple's button, whatever the label, with its logo in the text colour", async () => {
+    const start = vi.fn(async () => undefined)
+    const apple = { id: 'apple', label: 'Apple ID', kind: 'apple' }
+    const { unmount } = render(<OidcButtons returnTo="/portal/" providers={[apple]} start={start} />)
+    const button = screen.getByRole('button', { name: 'Sign in with Apple' })
+    expect(button).toHaveAttribute('data-kind', 'apple')
+    expect(button.querySelector('path')).toHaveAttribute('fill', 'currentColor')
+    await expectAccessible()
+    await user().click(button)
+    expect(start).toHaveBeenCalledWith('apple', '/portal/')
+    unmount()
+    render(<OidcButtons returnTo="/portal/" layout="icons" purpose="signUp" providers={[apple]} start={start} />)
+    expect(screen.getByRole('button', { name: 'Sign up with Apple' })).toHaveAttribute('title', 'Sign up with Apple')
     await expectAccessible()
   })
 })

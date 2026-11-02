@@ -34,6 +34,7 @@ import {
   readTakedowns,
   readTiers,
   readVersion,
+  readPublicationLanguages,
   readTranslationCheck,
   requestTranslationCheck,
   PUBLICATION_TEXT_FIELDS,
@@ -347,6 +348,47 @@ function Languages({ publication, others, seen, onSeen, content }: {
 }
 
 /**
+ * Q73e-1: a publication of several languages by answer language, as its sponsor sees it (the counts, and the pass
+ * rate and average score once the minimum group has finished in a language).
+ */
+function LanguageFiguresSection({ publicationId }: { publicationId: string }) {
+  const { t, i18n } = useTranslation(EXTENSION_NAMESPACE)
+  const figures = useQuery({ queryKey: ['qb-ext', 'publication-languages', publicationId],
+    queryFn: () => readPublicationLanguages(publicationId), refetchOnWindowFocus: false })
+  if (!figures.isSuccess || figures.data.length < 2) return null
+  const k = figures.data[0].minGroup
+  const hidden = t('publication.figures.hidden', { k })
+  return (
+    <Section title={t('publication.figures.title')} testId="publication-language-figures">
+      <Table aria-label={t('publication.figures.title')}>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t('publication.figures.language')}</TableHead>
+            <TableHead className="text-right">{t('publication.figures.starts')}</TableHead>
+            <TableHead className="text-right">{t('publication.figures.completions')}</TableHead>
+            <TableHead className="text-right">{t('publication.figures.passRate')}</TableHead>
+            <TableHead className="text-right">{t('publication.figures.averageScore')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {figures.data.map((row) => (
+            <TableRow key={row.language} data-testid="publication-language-figure" data-language={row.language}>
+              <TableCell>{t(`preview.languages.${row.language}`, { defaultValue: row.language })}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.starts.toLocaleString(i18n.language)}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.completions.toLocaleString(i18n.language)}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.passRate === null ? hidden
+                : row.passRate.toLocaleString(i18n.language, { style: 'percent' })}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.averageScore === null ? hidden
+                : row.averageScore.toLocaleString(i18n.language)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Section>
+  )
+}
+
+/**
  * Q73d-2 (§5.3, D-Q73-4): the AI's comparison of the translations into one language with their base texts, asked for
  * by any reviewer and charged to the platform; only the texts it finds different are listed, with what differs. For
  * reference only: the decision is the reviewer's, and the panel does not wait for it.
@@ -618,6 +660,7 @@ export default function PublicationReviewPage() {
         <Languages publication={p} others={others} content={shownVersion?.content} seen={seen} onSeen={(language, on) => setSeenLanguages((all) =>
           on ? [...all.filter((k) => k !== seenKey(language)), seenKey(language)] : all.filter((k) => k !== seenKey(language)))} />
       )}
+      {p.languages.length > 1 && <LanguageFiguresSection publicationId={p.publicationId} />}
       <Section title={t('publication.decision')} testId="publication-decision">{decision}</Section>
       {can(PERMISSION.contentWrite) && <AdminActions publication={p} processes={PUBLICATION_ADMIN} />}
       {/* Q48a: an operator's member takes it down with the operator's processes (headquarters' come first). */}

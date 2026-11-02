@@ -110,7 +110,7 @@ public class AccountsConfig {
         return DatasetDefinition.define(QbAccounts.PUBLIC_SPONSOR_DATASET, d -> d
             .targetEntityType(QbAccounts.SPONSOR)
             .scope(s -> s.fixed("reviewStatus", SponsorStatus.APPROVED))
-            .publicRead(p -> p.fields("userId", "company", "intro", "avatar"))
+            .publicRead(p -> p.fields("userId", "company", "intro", "avatar", "introTranslations"))
             .permissions(QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
