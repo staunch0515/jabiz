@@ -11,11 +11,14 @@ import {
   type SortingState,
   type Updater,
 } from '@tanstack/react-table'
-import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
+import { ArrowDownIcon, ArrowUpDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon, LayoutGridIcon, TableIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { useIsMobile } from '../hooks/use-mobile'
 import { UI_NAMESPACE } from '../i18n'
 import { cn } from '../lib/utils'
+import { DescriptionList, type DescriptionItem } from './description-list'
+import { SegmentedControl } from './segmented-control'
 import { Button } from './ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Skeleton } from './ui/skeleton'
@@ -31,6 +34,35 @@ declare module '@tanstack/react-table' {
     className?: string
     /** Kept at the right edge while the table scrolls sideways (the row actions). */
     pinned?: 'right'
+    /**
+     * The column's place on a card (17zc): the card's title, its subtitle, a badge beside the title, the buttons at
+     * the card's foot (without one, a `pinned` column), or not shown (an ID). Columns without a place are listed as
+     * label and value. A table whose columns have no places has no card view.
+     */
+    card?: 'title' | 'subtitle' | 'badge' | 'actions' | 'hidden'
+  }
+}
+
+export type DataTableView = 'table' | 'cards'
+
+const VIEW_STORAGE_PREFIX = 'jabiz.data-table.view.'
+
+function storedView(key: string | undefined): DataTableView | null {
+  if (!key) return null
+  try {
+    const value = window.localStorage.getItem(VIEW_STORAGE_PREFIX + key)
+    return value === 'table' || value === 'cards' ? value : null
+  } catch {
+    return null
+  }
+}
+
+function storeView(key: string | undefined, view: DataTableView) {
+  if (!key) return
+  try {
+    window.localStorage.setItem(VIEW_STORAGE_PREFIX + key, view)
+  } catch {
+    // A browser without storage (private mode): the choice lasts the page.
   }
 }
 
@@ -86,8 +118,21 @@ export interface DataTableProps<Row> {
    * Further attributes of a row's <tr> (test ids, a selected state, classes added to the row's own). The row's
    * `data-slot` is the table's; `data-state` is "expanded" while the row is open.
    */
-  rowProps?: (row: Row) => HTMLAttributes<HTMLTableRowElement> & Record<`data-${string}`, string | undefined>
+  rowProps?: (row: Row) => HTMLAttributes<HTMLElement> & Record<`data-${string}`, string | undefined>
   className?: string
+  /**
+   * The card view (17zc): `'auto'` (the default when a column has a `meta.card` place or {@link renderCard} is given)
+   * shows cards below the `md` breakpoint and the table from it, with a switch for the user; `true` always offers the
+   * switch and starts with cards; `false` never shows cards.
+   */
+  cards?: boolean | 'auto'
+  /** The view, when the caller holds it; otherwise the table remembers the user's choice under {@link storageKey}. */
+  view?: DataTableView
+  onViewChange?: (view: DataTableView) => void
+  /** Remembers the user's choice of view in the browser (`localStorage`) under this key; none: for the page only. */
+  storageKey?: string
+  /** A card of the caller's own, instead of the one built from the columns' places. */
+  renderCard?: (row: Row) => ReactNode
 }
 
 function apply<T>(updater: Updater<T>, current: T): T {
@@ -143,10 +188,28 @@ export function DataTable<Row>({
   renderExpanded,
   rowProps,
   className,
+  cards,
+  view: controlledView,
+  onViewChange,
+  storageKey,
+  renderCard,
 }: DataTableProps<Row>) {
   const { t } = useTranslation(UI_NAMESPACE)
   const [scrollRef, scrolls] = useScrollsSideways<HTMLDivElement>()
   const [expanded, setExpanded] = useState<ExpandedState>({})
+  // 17zc: whether cards are on offer, and which view shows: the caller's, else the user's remembered choice, else
+  // cards on a phone and the table elsewhere (or cards everywhere when asked for).
+  const placed = renderCard !== undefined || columns.some((column) => column.meta?.card !== undefined)
+  const cardsOffered = cards === undefined ? placed : cards !== false
+  const mobile = useIsMobile()
+  const [chosenView, setChosenView] = useState<DataTableView | null>(() => storedView(storageKey))
+  const view: DataTableView = !cardsOffered ? 'table'
+    : controlledView ?? chosenView ?? (cards === true || mobile ? 'cards' : 'table')
+  const chooseView = (next: DataTableView) => {
+    setChosenView(next)
+    storeView(storageKey, next)
+    onViewChange?.(next)
+  }
   // Other rows (another page, another order) close what was open: without getRowId the keys are row indexes and
   // would open the wrong rows. Reset while rendering, React's pattern for state derived from a prop.
   const [expandedRows, setExpandedRows] = useState(data)
@@ -196,9 +259,146 @@ export function DataTable<Row>({
     : pageCount !== undefined
       ? pagination.pageIndex + 1 < pageCount
       : (hasNextPage ?? data.length >= pagination.pageSize)
+  const pager = paged && (
+    <Pager t={t} pagination={pagination} onPaginationChange={onPaginationChange} rowCount={rowCount}
+      pageCount={pageCount} hasNext={hasNext} pageSizeOptions={pageSizeOptions} />
+  )
+
+  const sortable = onSortingChange !== undefined
+    ? table.getAllLeafColumns().filter((column) => column.getCanSort()) : []
+  const sortValue = sorting[0] ? `${sorting[0].id}:${sorting[0].desc ? 'desc' : 'asc'}` : 'none'
+  const headerOf = (columnId: string): ReactNode => {
+    const header = table.getFlatHeaders().find((h) => h.column.id === columnId)
+    return header && !header.isPlaceholder ? flexRender(header.column.columnDef.header, header.getContext()) : null
+  }
+
+  const toolbar = cardsOffered && (
+    <div className="flex flex-wrap items-center justify-between gap-2" data-slot="data-table-toolbar">
+      {view === 'cards' && sortable.length > 0 ? (
+        <Select value={sortValue} onValueChange={(value) => {
+          if (value === 'none') onSortingChange?.([])
+          else {
+            const at = value.lastIndexOf(':')
+            onSortingChange?.([{ id: value.slice(0, at), desc: value.slice(at + 1) === 'desc' }])
+          }
+        }}>
+          <SelectTrigger size="sm" aria-label={t('dataTable.sortBy')} data-slot="data-table-sort">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">{t('dataTable.sortNone')}</SelectItem>
+            {sortable.flatMap((column) => [
+              <SelectItem key={`${column.id}:asc`} value={`${column.id}:asc`}>
+                {headerOf(column.id)} <ArrowUpIcon aria-hidden className="inline size-3" />
+                <span className="sr-only">{t('dataTable.sortAscending')}</span>
+              </SelectItem>,
+              <SelectItem key={`${column.id}:desc`} value={`${column.id}:desc`}>
+                {headerOf(column.id)} <ArrowDownIcon aria-hidden className="inline size-3" />
+                <span className="sr-only">{t('dataTable.sortDescending')}</span>
+              </SelectItem>,
+            ])}
+          </SelectContent>
+        </Select>
+      ) : <span />}
+      <SegmentedControl<DataTableView> value={view} onChange={chooseView} aria-label={t('dataTable.view')}
+        data-testid="data-table-view" options={[
+          { value: 'table', label: <><TableIcon aria-hidden className="size-4" /><span className="sr-only sm:not-sr-only">{t('dataTable.viewTable')}</span></> },
+          { value: 'cards', label: <><LayoutGridIcon aria-hidden className="size-4" /><span className="sr-only sm:not-sr-only">{t('dataTable.viewCards')}</span></> },
+        ]} />
+    </div>
+  )
+
+  if (view === 'cards') {
+    const leaf = table.getAllLeafColumns()
+    const place = (column: typeof leaf[number]) => column.columnDef.meta?.card
+    const titleColumn = leaf.find((c) => place(c) === 'title') ?? leaf.find((c) => place(c) === undefined && c.columnDef.meta?.pinned !== 'right')
+    const actionColumns = leaf.some((c) => place(c) === 'actions') ? leaf.filter((c) => place(c) === 'actions')
+      : leaf.filter((c) => c.columnDef.meta?.pinned === 'right')
+    const listed = leaf.filter((c) => c !== titleColumn && !actionColumns.includes(c)
+      && !['subtitle', 'badge', 'hidden'].includes(place(c) ?? ''))
+    return (
+      <div data-slot="data-table" data-view="cards" className={cn('flex flex-col gap-3', className)}>
+        {toolbar}
+        {loading && data.length === 0 ? (
+          <ul aria-label={label} aria-busy="true" className="flex flex-col gap-3">
+            {Array.from({ length: 3 }, (_, i) => (
+              <li key={`loading-${i}`} className="bg-card rounded-md border p-4">
+                <Skeleton className="h-5 w-2/3" />
+                <Skeleton className="mt-3 h-4 w-full" />
+                <span className="sr-only">{i === 0 ? t('loading') : ''}</span>
+              </li>
+            ))}
+          </ul>
+        ) : table.getRowModel().rows.length === 0 ? (
+          <p aria-label={label} className="text-muted-foreground rounded-md border py-10 text-center text-sm">
+            {empty ?? t('dataTable.empty')}
+          </p>
+        ) : (
+          <ul aria-label={label} aria-busy={loading || stale || undefined} inert={stale || undefined}
+            data-stale={stale || undefined} className={cn('flex flex-col gap-3', stale && 'opacity-60')}>
+            {table.getRowModel().rows.map((row) => {
+              const open = row.getIsExpanded()
+              const extra = rowProps?.(row.original) ?? {}
+              const cellOf = (column: typeof leaf[number]) => {
+                const cell = row.getAllCells().find((c) => c.column.id === column.id)
+                return cell ? flexRender(cell.column.columnDef.cell, cell.getContext()) : null
+              }
+              return (
+                <li
+                  {...extra}
+                  key={row.id}
+                  data-slot="data-table-card"
+                  data-state={open ? 'expanded' : extra['data-state']}
+                  className={cn('bg-card flex flex-col gap-3 rounded-md border p-4', extra.className)}
+                >
+                  {renderCard ? renderCard(row.original) : (
+                    <>
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="flex min-w-0 flex-col gap-1">
+                          {titleColumn && <div className="font-medium" data-slot="data-table-card-title">{cellOf(titleColumn)}</div>}
+                          {leaf.filter((c) => place(c) === 'subtitle').map((c) => (
+                            <div key={c.id} className="text-muted-foreground text-sm">{cellOf(c)}</div>
+                          ))}
+                        </div>
+                        {leaf.some((c) => place(c) === 'badge') && (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {leaf.filter((c) => place(c) === 'badge').map((c) => <Fragment key={c.id}>{cellOf(c)}</Fragment>)}
+                          </div>
+                        )}
+                      </div>
+                      {listed.length > 0 && (
+                        <DescriptionList className="text-sm" items={listed.map((c): DescriptionItem => ({
+                          key: c.id, label: headerOf(c.id), value: cellOf(c) }))} />
+                      )}
+                      {(actionColumns.length > 0 || renderExpanded) && (
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {renderExpanded && (
+                            <Button variant="ghost" size="sm" aria-expanded={open} onClick={row.getToggleExpandedHandler()}>
+                              <ChevronRightIcon aria-hidden className={cn('transition-transform', open && 'rotate-90')} />
+                              {open ? t('dataTable.collapseRow') : t('dataTable.expandRow')}
+                            </Button>
+                          )}
+                          {actionColumns.map((c) => <Fragment key={c.id}>{cellOf(c)}</Fragment>)}
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {open && renderExpanded && (
+                    <div className="bg-muted/40 rounded-md p-3">{renderExpanded(row.original)}</div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        {pager}
+      </div>
+    )
+  }
 
   return (
-    <div data-slot="data-table" className={cn('flex flex-col gap-3', className)}>
+    <div data-slot="data-table" data-view="table" className={cn('flex flex-col gap-3', className)}>
+      {toolbar}
       <div className="rounded-md border">
         {/* shadcn's Table with its container here: a container that scrolls is a named, focusable region. */}
         <div
@@ -340,7 +540,22 @@ export function DataTable<Row>({
           </table>
         </div>
       </div>
-      {paged && (
+      {pager}
+    </div>
+  )
+}
+
+/** The footer shared by both views: the count, the page size, the page and the arrows. */
+function Pager({ t, pagination, onPaginationChange, rowCount, pageCount, hasNext, pageSizeOptions }: {
+  t: (key: string, options?: Record<string, unknown>) => string
+  pagination: PaginationState
+  onPaginationChange: (pagination: PaginationState) => void
+  rowCount: number | undefined
+  pageCount: number | undefined
+  hasNext: boolean
+  pageSizeOptions: number[]
+}) {
+  return (
         <div className="flex flex-wrap items-center justify-end gap-4 text-sm">
           {rowCount !== undefined && <span>{t('dataTable.total', { count: rowCount })}</span>}
           <div className="flex items-center gap-2">
@@ -384,7 +599,5 @@ export function DataTable<Row>({
             </Button>
           </div>
         </div>
-      )}
-    </div>
   )
 }
