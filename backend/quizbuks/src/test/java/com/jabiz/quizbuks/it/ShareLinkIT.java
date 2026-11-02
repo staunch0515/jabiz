@@ -60,6 +60,8 @@ class ShareLinkIT extends PlayItSupport {
             assertThat(row).containsOnlyKeys("publicationId", "name", "quizTitle", "kind", "startAt", "endAt",
                 "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
                 "redeemDescription", "digitalDelivery", "digitalDescription", "sponsorCompany",
+                // Q75: whether the video must be watched first, and how long it is.
+                "watchRequired", "videoDurationSec",
                 // Q60a-2: the sponsor's published page (public itself), none here.
                 "sponsorHandle");
             assertThat(row).containsEntry("publicationId", publicationId).containsEntry("name", "Shared")
