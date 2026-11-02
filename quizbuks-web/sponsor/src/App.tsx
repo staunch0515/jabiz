@@ -23,11 +23,8 @@ import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, R
   Wallet,
   HandCoins,
   Gift,
-  ShoppingBag,
   ChartColumn,
-  Mail,
   Ticket,
-  UsersRound,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -45,17 +42,20 @@ import { PublicationPage } from './publishing/PublicationPage'
 import { CASH_REWARDS_PATH, CashRewardsPage } from './publishing/CashRewardsPage'
 import { DIGITAL_PRIZES_PATH, DigitalPrizesPage } from './publishing/DigitalPrizesPage'
 import { REDEEM_PATH, RedeemPage } from './publishing/RedeemPage'
-import { STAFF_PATH, StaffPage } from './publishing/StaffPage'
+import { StaffPage } from './publishing/StaffPage'
 import { MailServerPage } from './publishing/MailServerPage'
-import { MAIL_SERVER_PATH } from './publishing/paths'
 import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { PreviewPage } from './preview/PreviewPage'
 import { previewOf } from './preview/paths'
 import { rememberSource } from './trial/claim'
 import TrialPage, { trialKeyOf } from './trial/TrialPage'
-import { OnboardingPage, useMySponsor } from './pages/OnboardingPage'
-import { SPONSOR_PAGE_PATH } from './page/SponsorPageEditor'
-import { PRODUCTS_PATH, ProductsPage } from './products/ProductsPage'
+import { useMySponsor } from './profile/api'
+import { BasicsPage } from './profile/BasicsPage'
+import { OverviewPage } from './profile/OverviewPage'
+import { LEGACY_PROFILE_PATHS, PROFILE_PATH, profilePath, profileSectionOf } from './profile/paths'
+import { ProfileLayout } from './profile/ProfileLayout'
+import { SponsorPagePage } from './page/SponsorPageEditor'
+import { ProductsPage } from './products/ProductsPage'
 import { STATS_PATH, StatsPage } from './stats/StatsPage'
 import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
@@ -78,7 +78,6 @@ import { TopUpPage } from './wallet/TopUpPage'
 import { WalletPage } from './wallet/WalletPage'
 
 const DASHBOARD = '/dashboard'
-const ONBOARDING = '/onboarding'
 const HELP = '/help'
 
 /** The texts the console links to (the sponsors' terms, the privacy policy and the commerce notice). */
@@ -144,7 +143,8 @@ function SignedIn({ path }: { path: string }) {
 
   if (path === '/' || path === '') {
     if (sponsor.isPending) return <PageState kind="loading" />
-    return <Redirect to={sponsor.data?.reviewStatus === 'APPROVED' ? DASHBOARD : ONBOARDING} />
+    // Q79: a sponsor not yet approved starts at the hub's basics (the application); approved, at the dashboard.
+    return <Redirect to={sponsor.data?.reviewStatus === 'APPROVED' ? DASHBOARD : profilePath('basics')} />
   }
 
   let page: ReactNode
@@ -153,6 +153,8 @@ function SignedIn({ path }: { path: string }) {
   const bankTopUpId = bankTopUpIdOf(path)
   const open = publicPage(path)
   const preview = previewOf(path)
+  const profileSection = profileSectionOf(path)
+  const legacyProfile = LEGACY_PROFILE_PATHS[path]
   if (open) page = open
   else if (preview) page = <PreviewPage key={path} target={preview} />
   else if (path === DASHBOARD) page = <DashboardPage />
@@ -162,18 +164,25 @@ function SignedIn({ path }: { path: string }) {
   else if (path === CASH_REWARDS_PATH) page = <CashRewardsPage />
   else if (path === DIGITAL_PRIZES_PATH) page = <DigitalPrizesPage />
   else if (path === REDEEM_PATH) page = <RedeemPage />
-  else if (path === STAFF_PATH) page = <StaffPage />
   else if (analyticsIdOf(path)) page = <PublicationAnalyticsPage key={path} publicationId={analyticsIdOf(path)!} />
   else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
-  else if (path === ONBOARDING) page = <OnboardingPage />
-  // Q65b: the shop page is a section of the sponsor profile; its old address ("My page") leads there.
-  else if (path === SPONSOR_PAGE_PATH) page = <Redirect to={ONBOARDING} />
-  else if (path === PRODUCTS_PATH) page = <ProductsPage />
+  // Q79: the sponsor hub and its sections; the pages' old addresses lead to them.
+  else if (profileSection) {
+    page = (
+      <ProfileLayout section={profileSection}>
+        {profileSection === 'overview' ? <OverviewPage />
+          : profileSection === 'basics' ? <BasicsPage />
+            : profileSection === 'page' ? <SponsorPagePage />
+              : profileSection === 'products' ? <ProductsPage />
+                : profileSection === 'staff' ? <StaffPage />
+                  : <MailServerPage />}
+      </ProfileLayout>
+    )
+  } else if (legacyProfile) page = <Redirect to={profilePath(legacyProfile)} />
   else if (path === STATS_PATH) page = <StatsPage />
   else if (path === WALLET_PATH && kudos) page = <WalletPage />
   else if (topUpId && kudos) page = <TopUpPage key={topUpId} topUpId={topUpId} />
   else if (bankTopUpId && kudos) page = <BankTopUpPage key={bankTopUpId} topUpId={bankTopUpId} />
-  else if (path === MAIL_SERVER_PATH) page = <MailServerPage />
   else if (path === TRANSACTIONS_PATH) page = <TransactionsPage key={search} />
   else if (path === MESSAGES_PATH) page = <MessagesPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
@@ -192,17 +201,15 @@ function SignedIn({ path }: { path: string }) {
       { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
       { key: 'digital', label: t('publishing.digital.nav'), path: DIGITAL_PRIZES_PATH, icon: Ticket },
       { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
-      { key: 'staff', label: t('publishing.staff.nav'), path: STAFF_PATH, icon: UsersRound },
     ] },
     { key: 'money', label: t('nav.groups.money'), items: [
       ...(kudos ? [{ key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet }] : []),
       { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },
     ] },
+    // Q79: the sponsor's own things (profile, page, products, staff, mail server) are the hub's sections.
     { key: 'settings', label: t('nav.groups.settings'), items: [
-      { key: 'onboarding', label: t('nav.onboarding'), path: ONBOARDING, icon: Store },
-      { key: 'products', label: t('products.nav'), path: PRODUCTS_PATH, icon: ShoppingBag },
+      { key: 'onboarding', label: t('nav.onboarding'), path: PROFILE_PATH, icon: Store },
       { key: 'stats', label: t('stats.nav'), path: STATS_PATH, icon: ChartColumn },
-      { key: 'mailServer', label: t('publishing.mailServer.nav'), path: MAIL_SERVER_PATH, icon: Mail },
       { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare },
       { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
       { key: 'help', label: t('nav.help'), path: HELP, icon: CircleHelp },

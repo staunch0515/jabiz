@@ -5,6 +5,11 @@ import {
   AlertTitle,
   Badge,
   Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
   Checkbox,
   FileUpload,
   Input,
@@ -12,7 +17,7 @@ import {
   PageState,
   Textarea,
 } from '@jabiz/ui'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -20,7 +25,7 @@ import { neutralName } from '../content/api'
 import { parseStoredTranslations, TextTranslationsFields, type TextsByLanguage } from '../content/TextTranslationsFields'
 import { SPONSOR } from '../messages'
 import { ShownAt } from '../content/ShownAt'
-import { applyAsSponsor, CONTENT_LANGUAGES, readMySponsor, saveSponsorProfile, type ContentLanguage, type Sponsor,
+import { applyAsSponsor, CONTENT_LANGUAGES, saveSponsorProfile, type ContentLanguage, type Sponsor,
   type SponsorOutput } from '../qb/api'
 import { claimSource, remembered } from '../trial/claim'
 import { FileImage } from '../qb/FileImage'
@@ -29,15 +34,9 @@ import { CODE, FILE_POLICY, LEGAL } from '../qb/ids'
 import { QB } from '../qb/messages'
 import { fieldProblem, generalProblem } from '../qb/problems'
 import { TermsAgreement, acceptedVersions } from '../qb/TermsAgreement'
-import { SponsorPageSection } from '../page/SponsorPageEditor'
 
-/** The query of the sponsor's onboarding, which the routes and the dashboard read too. */
-export const SPONSOR_QUERY = ['qb', 'sponsor'] as const
-
-/** The sponsor's onboarding, or null before applying. */
-export function useMySponsor() {
-  return useQuery({ queryKey: SPONSOR_QUERY, queryFn: readMySponsor })
-}
+import { SPONSOR_QUERY, useMySponsor } from './api'
+import { ProfileColumns } from './ProfileLayout'
 
 const FIELDS = ['displayName', 'company', 'intro', 'avatar', 'acceptTerms'] as const
 /** `AccountLimits.INTRO_LENGTH`: the shop page's "About us" too (Q65b). */
@@ -77,36 +76,50 @@ function OnboardingStatus({ sponsor }: { sponsor: Sponsor | null }) {
 }
 
 /**
- * The sponsor profile, one page in two sections (Q65b; docs/quizbuks/plans/Q65-start-and-profile.md section 1).
- * The basic profile is the onboarding (M-01, M-03, P-09; D-Q2-3): name, company, introduction (Markdown) and a logo.
- * Before approval, saving applies (`QB_SPONSOR_APPLY`, with the terms accepted; applying again while in review
- * replaces the request); after approval it changes the profile without a review (`QB_SPONSOR_PROFILE_SAVE`). The shop
- * page (`SponsorPageSection`, Q60a) holds only what is the page's own; it shows the basic profile's logo and
- * introduction. As "My page" was, it is there before approval too (only an approved sponsor publishes it).
+ * The basic profile (Q79, the hub's "Basics"; before, the first section of the one-page sponsor profile, Q65b): the
+ * onboarding (M-01, M-03, P-09; D-Q2-3): name, company, introduction (Markdown) and a logo. Before approval, saving
+ * applies (`QB_SPONSOR_APPLY`, with the terms accepted; applying again while in review replaces the request); after
+ * approval it changes the profile without a review (`QB_SPONSOR_PROFILE_SAVE`). The shop page is the hub's next
+ * section; it shows this profile's logo and introduction.
  */
-export function OnboardingPage() {
+export function BasicsPage() {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const sponsor = useMySponsor()
   return (
-    <section className="flex max-w-xl flex-col gap-6" aria-labelledby="onboarding-title" data-testid="onboarding">
-      <div className="flex flex-col gap-2">
-        <h1 id="onboarding-title" className="text-xl font-semibold">{t('onboarding.title')}</h1>
+    <section className="flex flex-col gap-4" aria-labelledby="onboarding-title" data-testid="onboarding">
+      <div className="flex flex-col gap-1">
+        <h2 id="onboarding-title" className="text-xl font-semibold">{t('onboarding.basicTitle')}</h2>
         <p className="text-muted-foreground text-sm">{t('onboarding.intro')}</p>
       </div>
       {sponsor.isPending && <PageState kind="loading" />}
       {sponsor.isError && <PageState kind="error" description={tQb('failed')} />}
       {sponsor.isSuccess && (
-        <>
-          <section className="flex flex-col gap-4" aria-labelledby="onboarding-basic-title" data-testid="onboarding-basic">
-            <h2 id="onboarding-basic-title" className="text-lg font-semibold">{t('onboarding.basicTitle')}</h2>
+        <ProfileColumns aside={<BasicsAside />}>
+          <div className="flex flex-col gap-4" data-testid="onboarding-basic">
             <OnboardingStatus sponsor={sponsor.data} />
             <OnboardingForm sponsor={sponsor.data} />
-          </section>
-          <SponsorPageSection />
-        </>
+          </div>
+        </ProfileColumns>
       )}
     </section>
+  )
+}
+
+/** What the review looks at and where the profile shows (D-Q79-5). */
+function BasicsAside() {
+  const { t } = useTranslation(SPONSOR)
+  return (
+    <Card data-testid="profile-basics-aside">
+      <CardHeader>
+        <CardTitle className="text-base">{t('profile.aside.basics.title')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="text-muted-foreground flex flex-col gap-2 text-sm">
+          {(['review', 'shown', 'logo'] as const).map((key) => <li key={key}>{t(`profile.aside.basics.${key}`)}</li>)}
+        </ul>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -184,6 +197,12 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
 
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-4" data-testid="onboarding-form">
+      <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t('profile.basics.identity')}</CardTitle>
+        <CardDescription>{t('profile.basics.identityHint')}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-name`}>{t('onboarding.displayName')}</Label>
         <Input id={`${id}-name`} value={displayName} required maxLength={100} autoComplete="name"
@@ -198,6 +217,14 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
           data-testid="onboarding-company" onChange={(event) => setCompany(event.target.value)} />
         {errorOf('company')}
       </div>
+      </CardContent>
+      </Card>
+      <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t('profile.basics.story')}</CardTitle>
+        <CardDescription>{t('profile.basics.storyHint')}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor={`${id}-intro`}>{t('onboarding.intro2')}</Label>
         <Textarea id={`${id}-intro`} value={intro} rows={6} maxLength={INTRO_LENGTH}
@@ -229,8 +256,16 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
               multiline: true }]} />
         </fieldset>
       )}
+      </CardContent>
+      </Card>
+      <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t('onboarding.avatar')}</CardTitle>
+        <CardDescription>{t('profile.basics.logoHint')}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`${id}-avatar`}>{t('onboarding.avatar')}</Label>
+        <Label htmlFor={`${id}-avatar`} className="sr-only">{t('onboarding.avatar')}</Label>
         {avatar && (
           <div className="flex items-center gap-3">
             <FileImage fileId={avatar} variant="w128" alt={t('onboarding.avatarAlt')}
@@ -251,6 +286,8 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
           }} />
         {errorOf('avatar')}
       </div>
+      </CardContent>
+      </Card>
       {!approved && (
         <div className="flex flex-col gap-2">
           <TermsAgreement id={`${id}-terms`} kinds={LEGAL.sponsorKinds} rows={terms.data ?? []}

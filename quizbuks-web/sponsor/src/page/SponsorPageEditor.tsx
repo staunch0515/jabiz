@@ -5,6 +5,11 @@ import {
   AlertTitle,
   Badge,
   Button,
+  CardTitle,
+  CardHeader,
+  CardDescription,
+  CardContent,
+  Card,
   Checkbox,
   ConfirmDialog,
   FileUpload,
@@ -30,6 +35,7 @@ import { CONTENT_LANGUAGES, contentLanguageOf, type ContentLanguage } from '../q
 import { FileImage } from '../qb/FileImage'
 import { QB } from '../qb/messages'
 import { sponsorPageLink } from '../qb/page'
+import { Link } from '../qb/router'
 import {
   HEADLINE_LENGTH,
   HANDLE_LENGTH,
@@ -42,10 +48,14 @@ import {
   type SponsorPageInput,
 } from './api'
 import { SPONSOR_PAGE } from './ids'
+import { useMySponsor } from '../profile/api'
+import { profilePath } from '../profile/paths'
+import { PreviewCard } from '../profile/PreviewCard'
+import { ProfileColumns } from '../profile/ProfileLayout'
 import { fieldProblem, generalProblem } from '../qb/problems'
 
 /** The page's own address before Q65b ("My page"): it leads to the sponsor profile, which holds the page now. */
-export const SPONSOR_PAGE_PATH = '/page'
+export const SPONSOR_PAGE_PATH = profilePath('page')
 export const SPONSOR_PAGE_QUERY = ['qb', 'sponsor-page'] as const
 
 const FIELDS = ['handle', 'language', 'headline', 'cover', 'website', 'baseRevision'] as const
@@ -59,18 +69,20 @@ const IMAGE_BYTES = 5 * 1024 * 1024
  * (`QB_SPONSOR_PAGE_SUBMIT`), after which changes show at once; taken back with `QB_SPONSOR_PAGE_UNPUBLISH`. Its logo
  * and "About us" are the basic profile's avatar and introduction.
  */
-export function SponsorPageSection() {
+export function SponsorPagePage() {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const page = useQuery({ queryKey: SPONSOR_PAGE_QUERY, queryFn: readMySponsorPage })
   // Here, not in the form: the form starts again from each revision a write makes, and the message must outlive it.
   const [done, setDone] = useState<string | null>(null)
   return (
-    <section className="flex max-w-xl flex-col gap-6" aria-labelledby="sponsor-page-title" data-testid="sponsor-page">
-      <div className="flex flex-col gap-2">
-        <h2 id="sponsor-page-title" className="text-lg font-semibold">{t('page.title')}</h2>
+    <section className="flex flex-col gap-4" aria-labelledby="sponsor-page-title" data-testid="sponsor-page">
+      <div className="flex flex-col gap-1">
+        <h2 id="sponsor-page-title" className="text-xl font-semibold">{t('page.title')}</h2>
         <p className="text-muted-foreground text-sm">{t('page.intro')}</p>
-        <p className="text-muted-foreground text-sm" data-testid="sponsor-page-from-profile">{t('page.fromProfile')}</p>
+        <p className="text-muted-foreground text-sm" data-testid="sponsor-page-from-profile">
+          {t('page.fromProfile')} <Link to={profilePath('basics')} className="text-primary underline">{t('profile.nav.basics')}</Link>
+        </p>
       </div>
       {page.isPending && <PageState kind="loading" />}
       {page.isError && <PageState kind="error" description={tQb('failed')} />}
@@ -125,6 +137,8 @@ function PageForm({ page, done, setDone }: {
   const { t: tQb } = useTranslation(QB)
   const queryClient = useQueryClient()
   const id = useId()
+  // Q79: the preview beside the form shows the basic profile's company and logo with what is typed here.
+  const sponsor = useMySponsor()
   const stored: SponsorPageInput = {
     handle: page?.handle ?? '',
     language: page?.language ?? contentLanguageOf(i18n.language),
@@ -235,8 +249,31 @@ function PageForm({ page, done, setDone }: {
     </div>
   )
 
-  return (
+  const aside = (
     <>
+      <PreviewCard testId="profile-page-preview" values={{
+        company: sponsor.data?.company ?? null,
+        avatar: sponsor.data?.avatar ?? null,
+        headline: form.headline,
+        cover: form.cover,
+        handle: form.handle.trim().toLowerCase(),
+        status: page?.status ?? 'NONE',
+      }} />
+      <Card data-testid="profile-page-aside">
+        <CardHeader>
+          <CardTitle className="text-base">{t('profile.aside.page.title')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="text-muted-foreground flex flex-col gap-2 text-sm">
+            {(['where', 'review', 'live'] as const).map((key) => <li key={key}>{t(`profile.aside.page.${key}`)}</li>)}
+          </ul>
+        </CardContent>
+      </Card>
+    </>
+  )
+
+  return (
+    <ProfileColumns aside={aside}>
       <PageStatus page={page} />
       {status === 'PUBLISHED' && page && (
         <div className="flex flex-wrap gap-2">
@@ -259,6 +296,12 @@ function PageForm({ page, done, setDone }: {
         </div>
       )}
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4" data-testid="sponsor-page-form">
+        <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t('profile.page.address')}</CardTitle>
+          <CardDescription>{t('profile.page.addressHint')}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-handle`}>{t('page.handle')}</Label>
           <Input id={`${id}-handle`} value={form.handle} required maxLength={HANDLE_LENGTH} autoCapitalize="none"
@@ -285,6 +328,14 @@ function PageForm({ page, done, setDone }: {
           </Select>
           <p id={`${id}-language-hint`} className="text-muted-foreground text-sm">{t('page.languageHint')}</p>
         </div>
+        </CardContent>
+        </Card>
+        <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t('profile.page.headline')}</CardTitle>
+          <CardDescription>{t('profile.page.headlineHint')}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-headline`}>{t('page.headline')}</Label>
           <Input id={`${id}-headline`} value={form.headline} required maxLength={HEADLINE_LENGTH}
@@ -332,6 +383,14 @@ function PageForm({ page, done, setDone }: {
             testId="sponsor-page-translations"
             fields={[{ field: 'headline', label: t('page.headline'), source: form.headline, maxLength: HEADLINE_LENGTH }]} />
         </fieldset>
+        </CardContent>
+        </Card>
+        <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t('profile.page.look')}</CardTitle>
+          <CardDescription>{t('profile.page.lookHint')}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
         {image('cover', t('page.coverAlt'), 'aspect-video w-48 border object-cover')}
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-website`}>{t('page.website')}</Label>
@@ -342,6 +401,8 @@ function PageForm({ page, done, setDone }: {
           <p id={`${id}-website-hint`} className="text-muted-foreground text-sm">{t('page.websiteHint')}</p>
           {errorOf('website')}
         </div>
+        </CardContent>
+        </Card>
         {general && (
           <Alert variant="destructive" data-testid="sponsor-page-error">
             <AlertDescription>{general}</AlertDescription>
@@ -353,7 +414,8 @@ function PageForm({ page, done, setDone }: {
             {done}
           </p>
         )}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Q79: the actions stay in reach while the form scrolls. */}
+        <div className="bg-background sticky bottom-0 flex flex-wrap items-center gap-2 border-t py-3" data-testid="sponsor-page-actions">
           <Button type="submit" disabled={busy} aria-busy={save.isPending || undefined} data-testid="sponsor-page-save">
             {t('page.save')}
           </Button>
@@ -385,6 +447,6 @@ function PageForm({ page, done, setDone }: {
           <p id={`${id}-submit-hint`} className="text-muted-foreground text-sm">{t('page.submitHint')}</p>
         )}
       </form>
-    </>
+    </ProfileColumns>
   )
 }

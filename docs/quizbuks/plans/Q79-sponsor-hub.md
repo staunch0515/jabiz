@@ -25,7 +25,7 @@
 
 `AppShell` 的菜单以 `isActive(path)` 判断高亮（App 传入），子页面可按前缀匹配。
 
-## 2. 决定（草案，待确认）
+## 2. 决定（需求方 2026-11-02 确认）
 
 | # | 决定 |
 |---|---|
@@ -100,3 +100,18 @@
 4. D-Q79-7：统计页留在"设置"组，概况只给一行与链接。
 5. 新商户第一次登录落在 `/profile/basics`。
 6. 编号 Q79。
+
+## 9. 实施记录（2026-11-02，分支 `1.3/quizbuks-79-sponsor-hub`）
+
+需求方 2026-11-02 确认 §8 的六项（"同意 Q79 的决定，开始开发"）。按计划实施：
+
+- `profile/paths.ts`（`PROFILE_PATH`、六个节、`profilePath` / `profileSectionOf`、旧地址表 `LEGACY_PROFILE_PATHS`）；各页原来导出的路径常量（`PRODUCTS_PATH`、`STAFF_PATH`、`MAIL_SERVER_PATH`、`SPONSOR_PAGE_PATH`）改为指向节的地址，引用处不改。
+- `profile/ProfileLayout.tsx`：页头 + 子导航 `profile-nav`（`profile-nav-<节>`，当前 `aria-current="page"`；`lg` 左列带一句说明，窄屏一行横向滚动）+ 内容；`ProfileColumns`（左表单、右 `aside`，`lg` 两栏）。
+- `profile/OverviewPage.tsx`：状态卡 `profile-status`（下一步 `profile-next`：未通过 → 基本信息，已通过没发布主页 → 公开主页）、清单 `profile-checklist`（`checklist.ts` 纯函数，`profile-check-<key>` 带 `data-done`，可选项标注，"去完成 / 打开"链到节）、主页预览卡 `profile-preview`（`PreviewCard.tsx`，已发布时 `profile-links`：打开、复制、二维码对话框 `profile-qr-dialog` 下载 PNG / SVG，复用 `publishing/qr.ts`）、奖励方式 `profile-methods`（`REWARD_SETTINGS_QUERY`）、统计页的链接。只读现有数据。
+- `profile/BasicsPage.tsx`（原 `pages/OnboardingPage.tsx` 搬入并改名）：表单分三张卡（身份、简介与语言、标志），右栏说明卡 `profile-basics-aside`；`useMySponsor` / `SPONSOR_QUERY` 移到 `profile/api.ts`（仪表盘、预览页改引用）。
+- `page/SponsorPageEditor.tsx`：`SponsorPageSection` → `SponsorPagePage`；表单分三张卡（地址与语言、标语、封面与网站），操作条 `sponsor-page-actions` 固定在底部；右栏实时预览 `profile-page-preview`（随表单值变，公司与标志取基本信息）与说明卡；"来自基本信息"的提示链到基本信息节（文案 `page.fromProfile` 三语改为不说"上方"）。
+- 商品、店员、邮件服务器三页只换外壳：页内标题由 h1 改为 h2（页组已有 h1），字段、列表、对话框与 testid 不变。
+- `App.tsx`：`/profile*` 由 `profileSectionOf` 选节；旧地址 `Redirect`；`/` 未通过审核 → `/profile/basics`；菜单"设置"组收为商户中心（文字沿用 `nav.onboarding`）、统计、消息、账户、帮助；"奖励"组不再有店员（它成了节；Q78 若先合入，这里合并时以本分支为准）。
+- 文案三语 `profile.*`（`src/messages.ts`）。
+- 测试：新 `profile/profile.test.tsx`（概况四块、二维码、子导航与 `aria-current`、新商户落在基本信息、五个旧地址的转向、已通过没发布的"下一步"）与 `checklist.test.ts`；`page.test.tsx`、`App.test.tsx`、`publishing.test.tsx` 改为新地址与结构；e2e `a11y.spec.ts`（概况与各节的 axe）、`mail-server.spec.ts`、`reward-methods.spec.ts` 经子导航到节（本机未运行，CI 跑）；`pwa.spec.ts` 的 `/sponsor/onboarding` 仍由后端给出页面壳（前端转向）。
+- 未做：概况不给统计数字，只给链接（D-Q79-7 的后半）；统计页仍在"设置"组。

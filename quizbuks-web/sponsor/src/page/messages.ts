@@ -22,7 +22,7 @@ export const pageEn = {
   page: {
     title: 'Shop page',
     intro: 'Your own page in the app: a headline, a cover, your website and your quizzes that are live. Anybody can open it by its link, also before signing in. Its first publication is reviewed; once published, your changes show at once.',
-    fromProfile: 'The page shows your company, logo and introduction from the basic profile above (as “About us”): change them there.',
+    fromProfile: 'The page shows your company, logo and introduction from the basic profile (as “About us”): change them in',
     statusLabel: 'Status',
     status: {
       NONE: 'Not created',
@@ -85,7 +85,7 @@ export const pageZh: typeof pageEn = {
   page: {
     title: '店铺主页',
     intro: '您在 App 中的主页：标题、封面图、网站，以及您正在进行的 Quiz。任何人都能通过链接打开，登录前也可以。首次发布需要审核；发布后，修改会立即生效。',
-    fromProfile: '主页显示上方基本资料中的公司名、标志与简介（作为"介绍"），请在那里修改。',
+    fromProfile: '主页显示基本信息中的公司名、标志与简介（作为"介绍"），修改请到',
     statusLabel: '状态',
     status: {
       NONE: '尚未创建',
@@ -148,7 +148,7 @@ export const pageJa: typeof pageEn = {
   page: {
     title: 'ショップページ',
     intro: 'アプリ内のあなたのページです。見出し、カバー画像、ウェブサイト、公開中のクイズが表示されます。リンクを知っていれば誰でも、ログイン前でも開けます。最初の公開は審査があり、公開後の変更はすぐに反映されます。',
-    fromProfile: 'ページには上の基本情報の会社名、ロゴ、紹介文（「紹介」として）が表示されます。変更はそちらで行ってください。',
+    fromProfile: 'ページには基本情報の会社名、ロゴ、紹介文（「紹介」として）が表示されます。変更はこちら：',
     statusLabel: '状態',
     status: {
       NONE: '未作成',
