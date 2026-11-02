@@ -3,7 +3,7 @@ id: qb.public.certificate
 description: >-
   A certificate as its verify page (/taker/verify/<key>) shows it to anybody who has its key (Q77, D-Q77-6): the
   holder's name when issued, the certification, the holding and the latest revocation of it after the holding began;
-  none for an unknown key. Whether it is still valid the page reads from validUntil against the response's date.
+  none for an unknown key. Whether it is still valid the page reads from validUntil.
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
