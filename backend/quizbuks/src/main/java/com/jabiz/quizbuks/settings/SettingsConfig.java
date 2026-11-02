@@ -48,6 +48,18 @@ public class SettingsConfig {
             .scope(s -> s.fromContext("userId", "actorId", RequestContext::actorId)));
     }
 
+    /** Q77: which public name is whose, for the pages turned on only (the public template shows neither). */
+    @Bean
+    DatasetDefinition qbPublicUserSettingsDataset() {
+        return DatasetDefinition.define(QbSettings.PUBLIC_DATASET, d -> d
+            .targetEntityType(QbSettings.SETTINGS)
+            .scope(s -> s.fixed("publicPage", true))
+            .publicRead(p -> p.fields("userId", "publicHandle"))
+            .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
     @Bean
     ProcessDefinition<SettingsProcesses.SaveInput, SettingsProcesses.SettingsOutput, ProcessContext> qbSettingsSave() {
         return SettingsProcesses.save();

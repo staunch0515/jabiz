@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.identity;
 
 import com.jabiz.quizbuks.audience.QbAudience;
+import com.jabiz.quizbuks.certification.QbCertificates;
 import com.jabiz.quizbuks.invitation.QbInvitations;
 import com.jabiz.quizbuks.report.QbReports;
 import com.jabiz.quizbuks.reward.CashRewardStatus;
@@ -66,6 +67,9 @@ public class TakerErasure {
                     // Found by who claimed them, not by who sent them as the sponsor's are (decision D62 item 8).
                     ErasedEntity.delete(QbInvitations.INVITATION, "userId", "email"),
                     ErasedEntity.delete(QbRewards.STAFF, "userId"),
+                    // Q77: their certificates (the verify page finds none since) and the PDFs issued of them.
+                    ErasedEntity.delete(QbCertificates.CERTIFICATE, "userId", "holderName", "verifyKey")
+                        .documents(QbCertificates.LAYOUT_ID),
                     // Records the accounts need (ten years): who was paid stays a number, not a name.
                     ErasedEntity.keep(QbPayouts.TRANSFER, "userId", "accountNumber", "accountHolder"),
                     ErasedEntity.keep(QbRewards.CASH_REWARD, "userId", "markedPaidNote", "disputeNote",
