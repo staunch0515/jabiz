@@ -22,6 +22,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 class RetentionIT extends SecurityItSupport {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    com.jabiz.runtime.retention.DeletionGuard guard;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.jabiz.runtime.storage.StorageAdapterRegistry storages;
+    @org.springframework.beans.factory.annotation.Autowired
+    com.jabiz.runtime.entity.EntityDefinitionRegistry entities;
+
     private static final String RECORDS = "/api/datasets/" + ItRetentionFixtures.RECORD_DATASET + "/commit";
     private static final String DOCUMENTS = "/api/datasets/" + ItRetentionFixtures.DOCUMENT_DATASET + "/commit";
     private static final String VOUCHERS = "/api/datasets/" + ItRetentionFixtures.VOUCHER_DATASET + "/commit";
@@ -193,6 +200,53 @@ class RetentionIT extends SecurityItSupport {
         assertThat(count(runs, "expired") - count(runsBefore, "expired")).isEqualTo(1);
     }
 
+    /** Decision D70: a document run is kept by the policy of its layout; a layout without one is not kept. */
+    @Test
+    void documentRunsAreKeptByTheirLayoutsPolicy() {
+        Map<String, Object> noticesBefore = status("DocumentRun", "it.notice");
+        Map<String, Object> invoicesBefore = status("DocumentRun", "it.invoice");
+        String subject = unique("S");
+        String invoice = documentRun("2025-03-01T00:00:00Z", subject, "it.invoice");
+        String recentNotice = documentRun("2025-03-01T00:00:00Z", subject, "it.notice");
+        String oldNotice = documentRun("2024-12-01T00:00:00Z", subject, "it.notice");
+        String certificate = documentRun("2025-03-01T00:00:00Z", subject, "it.certificate");
+
+        // On 2026-01-31: the invoice for ten years, the notice of 2025-03-01 for one, nothing keeps the rest.
+        assertThat(refusal(invoice)).isEqualTo("RETENTION_ACTIVE");
+        assertThat(refusal(recentNotice)).isEqualTo("RETENTION_ACTIVE");
+        assertThat(refusal(oldNotice)).isNull();
+        assertThat(refusal(certificate)).isNull();
+
+        // The report counts each policy's own layouts.
+        Map<String, Object> notices = status("DocumentRun", "it.notice");
+        assertThat(notices).containsEntry("keep", "P1Y").containsEntry("onlyField", "layoutId")
+            .containsEntry("onlyValues", List.of("it.notice")).containsEntry("expiredThrough", "2025-01-31");
+        assertThat(count(notices, "entries") - count(noticesBefore, "entries")).isEqualTo(2);
+        assertThat(count(notices, "expired") - count(noticesBefore, "expired")).isEqualTo(1);
+        Map<String, Object> invoices = status("DocumentRun", "it.invoice");
+        assertThat(count(invoices, "entries") - count(invoicesBefore, "entries")).isEqualTo(1);
+        assertThat(count(invoices, "expired") - count(invoicesBefore, "expired")).isZero();
+        // An unscoped policy says so.
+        assertThat(status("GeneratedFile")).containsEntry("onlyField", null).containsEntry("onlyValues", null);
+    }
+
+    /** The guard's answer for a document run as the erasure purge asks it: the refusal's code, or null. */
+    private String refusal(String runId) {
+        Map<String, Object> row = query("SELECT * FROM sys_document_run WHERE run_id = ?::uuid", runId).getFirst();
+        var def = entities.getOrThrow("DocumentRun");
+        Map<String, Object> attributes = new HashMap<>();
+        def.fields.values().forEach(field -> {
+            if (row.containsKey(field.physicalColumn())) {
+                // Read over JDBC here; the purge reads over R2DBC, whose times are OffsetDateTime.
+                Object value = row.get(field.physicalColumn());
+                attributes.put(field.name(), value instanceof java.sql.Timestamp time
+                    ? time.toInstant().atOffset(java.time.ZoneOffset.UTC) : value);
+            }
+        });
+        var violation = guard.refusal(storages.getEngine("default"), def, runId, attributes).block();
+        return violation == null ? null : violation.ruleCode();
+    }
+
     @Test
     void aLegalHoldOnADocumentRunCountsAsHeld() {
         Map<String, Object> runsBefore = status("DocumentRun");
@@ -264,14 +318,18 @@ class RetentionIT extends SecurityItSupport {
 
     /** An issued document, written as {@code DOCUMENT_ISSUE} writes it; its title, parameters and PDF must not show. */
     private String documentRun(String issuedTime, String subjectId) {
+        return documentRun(issuedTime, subjectId, "it.invoice");
+    }
+
+    private String documentRun(String issuedTime, String subjectId, String layoutId) {
         String id = java.util.UUID.randomUUID().toString();
         execute("INSERT INTO sys_document_run (run_id, layout_id, layout_version, layout_source, template_versions,"
             + " permissions, scope, subject_entity, subject_id, document_no, title, language, page_size, params, as_of,"
             + " read_at, known_at, content, content_hash, recomputable, pdf, pdf_hash, pdf_size, page_count, issued_by,"
-            + " issued_time, process_seq_id, version) VALUES (?::uuid, 'it.invoice', ?, 'source', '{}', 'it.read',"
+            + " issued_time, process_seq_id, version) VALUES (?::uuid, ?, ?, 'source', '{}', 'it.read',"
             + " '{}', 'ItOrder', ?, 'INV-1', 'Secret title', 'en', 'A4', '{\"p\":\"secret-param\"}', NULL,"
             + " ?::timestamptz, ?::timestamptz, '{}', ?, true, ?, ?, 3, 1, 'it-user', ?::timestamptz, ?, 1)",
-            id, "b".repeat(64), subjectId, issuedTime, issuedTime, "c".repeat(64), new byte[] {4, 5, 6},
+            id, layoutId, "b".repeat(64), subjectId, issuedTime, issuedTime, "c".repeat(64), new byte[] {4, 5, 6},
             "d".repeat(64), issuedTime, anyOperation());
         return id;
     }
@@ -332,10 +390,18 @@ class RetentionIT extends SecurityItSupport {
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> status(String entity) {
+        // The document runs' policy of invoices (the fixture declares one per layout, decision D70).
+        return status(entity, "DocumentRun".equals(entity) ? "it.invoice" : null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> status(String entity, String only) {
         Map<String, Object> report = get("/api/retention", bearer("retention.read")).expectStatus().isOk()
             .expectBody(MAP).returnResult().getResponseBody();
         return ((List<Map<String, Object>>) report.get("policies")).stream()
-            .filter(p -> entity.equals(p.get("entity"))).findFirst().orElseThrow();
+            .filter(p -> entity.equals(p.get("entity")))
+            .filter(p -> only == null || ((List<Object>) p.get("onlyValues")).contains(only))
+            .findFirst().orElseThrow();
     }
 
     private static long count(Map<String, Object> status, String name) {
