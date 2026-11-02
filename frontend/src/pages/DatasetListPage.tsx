@@ -165,18 +165,21 @@ function DatasetList({
 
   const columns = useMemo<ColumnDef<Row, unknown>[]>(
     () => [
-      idColumn(t),
+      // 17zc: on a phone the list is cards: the key's copy button is left out, the display field (else the first
+      // column) is the card's title, the actions sit at the card's foot.
+      { ...idColumn(t), meta: { ...idColumn(t).meta, card: 'hidden' } },
       ...dataColumns(entity, view, dictionaries, t, i18n.language, {
         labels,
         defaultLocale: entity.defaultLocale,
         can,
         // At another point in time there is no current value to show in plain.
         datasetId: timeTravel ? undefined : datasetId,
-      }),
+      }).map((column, index, all) => (column.id === entity.display || (!all.some((c) => c.id === entity.display) && index === 0))
+        ? { ...column, meta: { ...column.meta, card: 'title' as const } } : column),
       {
         id: '__actions',
         header: t('list.actions'),
-        meta: { pinned: 'right' },
+        meta: { pinned: 'right', card: 'actions' },
         cell: ({ row: { original: row } }) => (
           <span className="flex flex-wrap items-center gap-1">
             <Button
@@ -273,6 +276,7 @@ function DatasetList({
         loading={query.isFetching}
         stale={query.isPlaceholderData}
         tableRef={tableRef}
+        storageKey={datasetId}
         pagination={pagination}
         onPaginationChange={setPagination}
         rowCount={query.data?.total}

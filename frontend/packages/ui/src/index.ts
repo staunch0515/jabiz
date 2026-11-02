@@ -62,6 +62,7 @@ export type { EnvironmentBannerProps } from './components/environment-banner'
 export { DataTable } from './components/data-table'
 export type {
   DataTableProps,
+  DataTableView,
   ColumnDef,
   ColumnFiltersState,
   PaginationState,

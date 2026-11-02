@@ -4902,6 +4902,28 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17zb 状态**：✅ 17zb 完成（#392）；17zb-2 📝 待评审（分支 `1.3/phase-17zb2-erasure-deleted-rows`）。
 
+### 17zc 列表的卡片模式：手机上的 `DataTable`（需求 2026-11-02，QuizBuks 第三项）
+
+**缘由**：需求方 2026-11-02（QuizBuks，`docs/quizbuks/05-console-requests.md` 第三项）："商户的所有列表页面增加 Card 模式，这样在手机显示比较友好。"
+`@jabiz/ui` 的 `DataTable`（TanStack Table，服务端分页、排序、筛选）没有响应式行为：手机上横向滚动，列多的列表（交易、发布、审计）难用。
+界面组件只在平台一处（决策 D34），所以先在平台给 `DataTable` 加卡片模式，应用（QuizBuks 的 11 个列表页、门户）只给列加标注。
+
+| # | 内容 |
+|---|---|
+| 17zc-1 | **列的卡片标注** `ColumnMeta.card`：`'title'`（卡片标题，一列）、`'subtitle'`、`'badge'`（标题旁的徽章行）、`'actions'`（卡片底部的按钮；缺省取 `pinned: 'right'` 的列）、`'hidden'`（卡片不显示，如编号）；其余列按"标签：值"排成 `DescriptionList`（标签即列头的文字，`header` 是函数时取其渲染结果；`layout="horizontal"`）。没有任何列标注即照旧只有表格。`renderCard?: (row) => ReactNode` 可整张自定义。卡片是 `<ul>` / `<li data-slot="data-table-card">`，`rowProps` 的属性（`data-testid`、`data-state`、`className`）照样加到卡片上（类型放宽为 `HTMLAttributes<HTMLElement>`）；`renderExpanded` 在卡片上是"展开 / 收起"按钮与其下的内容；加载为三张骨架卡，空与 `stale`（`inert`、变淡）同表格 |
+| 17zc-2 | **显示方式**：有卡片标注时在表格右上角给 `SegmentedControl`"表格 / 卡片"（图标 + 文字，`aria-label`"显示方式"）；缺省 `'auto'`：窄于 `md`（768px，新钩子 `useMediaQuery`，SSR 与测试安全）为卡片、否则表格；用户的选择按 `storageKey` 记在 `localStorage`（`jabiz.data-table.view.<storageKey>`，没有 `storageKey` 即不记）；也可受控（`view` / `onViewChange`）。切换不重新读取数据 |
+| 17zc-3 | **卡片模式下的排序与筛选**：有 `onSortingChange` 时卡片列表上方给一个 `Select`"排序"（可排序的列 × 升 / 降，"名称 ↑"），同一个 `sorting` 状态；列头里的筛选控件（`column.setFilterValue`）只在表格里有，筛选照既有做法放 `FilterBar`（设计 12 §6 写明）；分页器两种方式共用 |
+| 17zc-4 | 文案三语（`dataTable.view*`、`sortBy`、`sortAscending` 等已有的复用）；`index.ts` 导出类型；设计 12 §6（卡片模式与标注）、§11（卡片列表的角色与名称）各一段；`docs/guide/app-spa.md` 一行（应用的列表怎样给标注） |
+| 17zc-5 | **平台自己的列表**：`DatasetListPage`（元数据生成的列表）给标注——实体的显示字段（`eb.display`，没有即第一列）为标题，编号列 `hidden`，操作列 `actions`，`storageKey` 为数据视图编号：所有元数据列表在手机上自动成卡片；审计、单据等以展开行为主的页面暂不标注（照旧表格）。示范门户（`backend/app/portal` 的 `OrdersPage`）给标注作为应用的示例 |
+| 17zc-6 | 测试：`data-table.test.tsx`（切换与记忆、按宽度的缺省（`matchMedia` 桩）、卡片的标题 / 徽章 / 标签值 / 隐藏 / 操作、`rowProps` 到卡片、排序下拉调用 `onSortingChange`、卡片上的展开、加载 / 空 / `stale`、两种方式都过 axe）；`DatasetListPage` 的卡片测试；门户 `OrdersPage` 的测试；e2e：后台 `a11y.spec.ts` 以手机视口打开一个列表（卡片）过 axe |
+
+未包括：虚拟滚动、卡片的多选、拖拽排序。**估计 2 天**（17zc-1–3 一天，17zc-4–6 一天）。
+**风险**：按 `role="row"` 计数的既有测试在桌面不受影响（缺省表格）；QuizBuks e2e 的 `dataRows` 辅助在桌面视口照旧；窄屏自动成卡片后，手机上既有的 e2e（App 为手机视口，但 App 不用 `DataTable`）不受影响。
+
+**需要确认**：（1）缺省按宽度自动（窄于 `md` 为卡片），切换按钮在所有宽度都显示；（2）卡片模式的排序用下拉，筛选只经 `FilterBar`；（3）元数据列表的标题取显示字段；（4）编号 17zc，分支 `1.3/phase-17zc-data-table-cards`。合入后 QuizBuks 一侧为 Q80（11 个列表页给标注，1.5 天）。
+
+**17zc 状态**：需求方 2026-11-02 确认；📝 待评审（分支 `1.3/phase-17zc-data-table-cards`）。实施：`data-table.tsx`（`meta.card`、`cards` / `view` / `onViewChange` / `storageKey` / `renderCard`、卡片模式的排序下拉、两种方式共用的 `Pager`，`useIsMobile` 给按宽度的缺省）、文案三语、`DatasetListPage` 与门户 `OrdersPage` 的标注、`data-table.test.tsx` 的卡片测试、`DatasetListPage` 与门户的测试、`a11y.spec.ts` 的手机视口、设计 12 §6 / §11、`app-spa.md`。
+
 ### 17zd 保留期按字段的值：单据按版式（需求 2026-11-02，QuizBuks Q77；决策 D70）
 
 **缘由**：保留期按实体、一个实体一个策略；QuizBuks 为收据把 `DocumentRun` 保留 10 年，答题者的证书因而在删除账号后仍保留在单据存档中（Q77 计划 §10 第 10 条）。
