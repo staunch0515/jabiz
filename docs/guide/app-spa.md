@@ -102,6 +102,8 @@ export default defineConfig({
   15d 之前写的应用页面若依赖浏览器的默认样式（未写工具类的标题、列表、链接），合并后请自查；`UI_SCOPE` 已不需要。
 - 测试：Vitest + Testing Library，`setup.ts` 补上 jsdom 缺少的 `matchMedia`、`ResizeObserver` 与指针捕获（示范门户的 `src/test/setup.ts`）。
   示范门户的 CI：`pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test`，以及 `pnpm app:check ../backend/app/portal`。
+- 列表（17zc）：用 `@jabiz/ui` 的 `DataTable`；手机上要成卡片时只给列加 `meta.card`（`title` / `subtitle` / `badge` / `actions` / `hidden`，其余列按"标签：值"列出）并给 `storageKey`，
+  切换、按宽度的缺省、排序下拉、分页都是组件的（示范门户的 `OrdersPage`）；整张自定义用 `renderCard`。筛选放 `FilterBar`，不放列头。
 - 无障碍检查（16v-1）：不要复制平台的 axe 辅助函数，从 `@jabiz/ui` 引用。组件与页面测试：
 
   ```ts

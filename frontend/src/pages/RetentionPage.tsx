@@ -69,6 +69,11 @@ function Part({ title, children }: { title: ReactNode; children: ReactNode }) {
  * legal holds keep (retention.read), the legal holds (their generated pages), and the open-format export of datasets
  * with the issued reports (data.export). The server checks every permission again.
  */
+/** A policy's key: its entity, and the values it covers when it covers only some (decision D70). */
+function policyKey(p: RetentionPolicyStatus): string {
+  return p.onlyValues?.length ? `${p.entity}:${p.onlyValues.join(',')}` : (p.entity ?? '')
+}
+
 export default function RetentionPage() {
   const { t } = useTranslation()
   const { can } = useAuth()
@@ -82,7 +87,21 @@ export default function RetentionPage() {
   const columns = useMemo<ColumnDef<RetentionPolicyStatus, unknown>[]>(() => {
     const right = { className: 'text-right tabular-nums' }
     return [
-      { id: 'entity', header: t('retention.entity'), cell: ({ row }) => row.original.entity },
+      {
+        id: 'entity',
+        header: t('retention.entity'),
+        // Decision D70: a policy of some values of a field says which.
+        cell: ({ row: { original: p } }) => (
+          <span className="flex flex-col">
+            <span>{p.entity}</span>
+            {p.onlyField && p.onlyValues && (
+              <span className="text-muted-foreground text-xs" data-testid="retention-only">
+                {t('retention.only', { field: p.onlyField, values: p.onlyValues.join(', ') })}
+              </span>
+            )}
+          </span>
+        ),
+      },
       {
         id: 'keep',
         header: t('retention.keep'),
@@ -100,7 +119,7 @@ export default function RetentionPage() {
         id: 'expired',
         header: t('retention.expired'),
         meta: right,
-        cell: ({ row: { original: p } }) => <span data-testid={`retention-expired-${p.entity}`}>{p.expired}</span>,
+        cell: ({ row: { original: p } }) => <span data-testid={`retention-expired-${policyKey(p)}`}>{p.expired}</span>,
       },
       { id: 'held', header: t('retention.held'), meta: right, cell: ({ row }) => row.original.held },
     ]
@@ -119,7 +138,7 @@ export default function RetentionPage() {
             <DataTable
               label={t('retention.policies')}
               columns={columns}
-              getRowId={(p) => p.entity ?? ''}
+              getRowId={policyKey}
               loading={report.isLoading}
               data={report.data?.policies ?? []}
             />
