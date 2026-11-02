@@ -26,7 +26,7 @@
 | 主页统计（原生 `Table` ×2） | `stats/StatsPage.tsx`（`stats-day`、`stats-product`） | — | — |
 | 分析的两张表、推荐的表 | `analytics/PublicationAnalyticsPage.tsx`、`publishing/ReferralsSection.tsx` | 数字对照表 | — |
 
-## 2. 决定（草案，待确认）
+## 2. 决定（需求方 2026-11-02 确认；开发等 17zc 合入 `1.3/platform` 并同步后开始）
 
 | # | 决定 |
 |---|---|
