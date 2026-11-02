@@ -303,6 +303,9 @@ class SetupIT extends QbItSupport {
         // Q70: the referrers' limits (not controlled).
         expected.put(QbParams.REFERRAL_PER_REFERRER_DAILY, "3");
         expected.put(QbParams.REFERRAL_PER_REFERRER_TOTAL, "10");
+        // Q82: the conversations' daily cap and quiet days (not controlled).
+        expected.put(QbParams.CONVERSATION_DAILY_CAP, "20");
+        expected.put(QbParams.CONVERSATION_CLOSE_DAYS, "90");
         // Q48e-2: the operators' five plans (fixed fee, platform's share) and their withdrawals.
         expected.putAll(Map.of(QbParams.operatorPlanFee("1"), "0", QbParams.operatorPlanShare("1"), "0.5000",
             QbParams.operatorPlanFee("2"), "20000", QbParams.operatorPlanShare("2"), "0.4000",
