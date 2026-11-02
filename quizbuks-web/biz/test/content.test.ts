@@ -43,6 +43,8 @@ describe('the rendered pages', () => {
         expect(html).toContain(`<link rel="canonical" href="${siteUrl}${pagePath(language, page, '/biz/')}" />`)
         // A classic script in the head: the language redirect runs before the page is painted.
         expect(html).toContain(`<script src="${assets.js}"></script>`)
+        // Google AdSense: the account's tag (the loader comes from site.js).
+        expect(html).toContain('<meta name="google-adsense-account" content="ca-pub-8399814237019515" />')
         expect(html).not.toMatch(/<script>[^<]/)
         expect(html.replace(/ style="--w:\d+%"/g, '')).not.toMatch(/ style="/)
         expect(html).not.toMatch(/ on[a-z]+="/)

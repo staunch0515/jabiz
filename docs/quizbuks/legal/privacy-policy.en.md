@@ -48,7 +48,7 @@ When you sign in or sign up with Google, Apple, Facebook or LINE, we receive fro
 - Only if you turn on push notifications on a device: the address its push service gives for it and the keys that encrypt the notifications for it, kept with that device's session; deleted when you turn them off, sign out on that device or delete your account
 - Records of operations in the Service: when, by whom and which operation. Secret values such as passwords are not recorded.
 
-We do not collect your location (GPS or similar) or estimate it from your IP address. We use no advertising and no third-party behavioural analytics.
+We do not collect your location (GPS or similar) or estimate it from your IP address. We use no third-party behavioural analytics. The website, the Takers' app in a browser and the Sponsors' console show ads served by Google (Google AdSense; see sections 5 and 7); the store apps show none.
 When you scan a code in a shop with the app's "Scan", the camera's picture is used on your device only to read the code, and is neither stored nor sent (the service only opens its own page the code links to).
 
 ### 2.4 Information businesses publish
@@ -98,6 +98,7 @@ We do not give personal information to third parties without your consent, excep
 | Our mail provider [name, e.g. Google LLC (USA)] | Verification, password reset and notification emails | Email address, language, the content of the email |
 | The mail server provider a Sponsor registers | Sending that Sponsor's invitations | The invitee's email address and the content of the email |
 | Anthropic, PBC (USA) | AI help for Sponsors writing quizzes (only when a Sponsor uses it) | Only the quiz and material content the Sponsor chooses. No information about Takers, and not the Sponsor's name or company. See the “AI notice” |
+| Google LLC (Google AdSense) (USA) | Showing ads on the website, the Takers' app in a browser and the Sponsors' console | When a page with ads is shown, your browser sends Google your IP address, the page's address and similar information; Google and its partners may set cookies or use similar identifiers to show and measure ads, which may be based on your earlier visits to this and other sites. How Google uses this information: https://policies.google.com/technologies/partner-sites . You can turn off personalised ads at https://adssettings.google.com |
 | Google LLC (YouTube) (USA), Vimeo, Inc. (USA) | Playing videos embedded in quizzes | When a video is shown, your browser sends your IP address and similar information to these companies. YouTube is embedded in its cookie-free mode; Vimeo may set cookies |
 | Operators (agents under contract with us; [Operator name (country)]) | Reviewing Sponsors' applications and publications, managing and supporting Sponsors, introducing the Service to businesses (on our behalf) | Sponsors' company names, contact names, introductions, logos, business email addresses, their publications and their reviews, and attempt totals. Never information that identifies a Taker (email address, profile, individual answers) |
 | Anthropic, PBC (USA) | Preparing our introductions to businesses (sorting public information, drafting the trial quiz and the email) | Only what a business publishes on its website (2.4) |
@@ -109,7 +110,7 @@ Some of the companies in section 5 are in the USA, so personal information is ha
 
 ## 7. Information stored on your device
 
-The Service does not use cookies. It stores the following in your browser's storage (localStorage, sessionStorage, IndexedDB):
+The Service itself does not use cookies; Google sets cookies on pages with ads (Google AdSense, section 5). The Service stores the following in your browser's storage (localStorage, sessionStorage, IndexedDB):
 
 - whether you are signed in
 - your display settings (light or dark appearance, language, list layout)

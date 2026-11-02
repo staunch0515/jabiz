@@ -339,12 +339,15 @@ jabiz:
       - path: /taker
         entry: app
         pwa: "on"
-        content-security-policy: "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com"
+        # Google AdSense (qb/ads.ts; not in the store apps' shells): its loader, the frames it draws ads in, their images
+        # (from many hosts) and its requests.
+        content-security-policy: "default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.google.co.jp https://*.gstatic.com https://*.adtrafficquality.google; img-src 'self' blob: data: https:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.adtrafficquality.google; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://*.doubleclick.net https://*.googlesyndication.com https://*.google.com https://*.adtrafficquality.google"
       - path: /sponsor
         entry: sponsor
         pwa: "off"
-        # Q75: the material dialog previews the video to watch to read its duration from the player.
-        content-security-policy: "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com"
+        # Q75: the material dialog previews the video to watch to read its duration from the player. Google AdSense as
+        # in the app.
+        content-security-policy: "default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.google.co.jp https://*.gstatic.com https://*.adtrafficquality.google; img-src 'self' blob: data: https:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.adtrafficquality.google; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://*.doubleclick.net https://*.googlesyndication.com https://*.google.com https://*.adtrafficquality.google"
       - path: /admin
         entry: admin
         pwa: "off"
@@ -366,6 +369,8 @@ jabiz:
           support-email: ${QB_SHOPIFY_SUPPORT_EMAIL:@QB_BRAND_SUPPORT_EMAIL@}
         content-security-policy: "default-src 'self'; script-src 'self' https://cdn.shopify.com; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'"
       - path: /biz
+        # The platform's policy and Google AdSense (its loader in every page's head).
+        content-security-policy: "default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.google.co.jp https://*.gstatic.com https://*.adtrafficquality.google; img-src 'self' blob: data: https:; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.adtrafficquality.google; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src https://*.doubleclick.net https://*.googlesyndication.com https://*.google.com https://*.adtrafficquality.google"
       # S4a: QuizBuks for Shopify's public pages (landing, privacy policy, support): static, no sign-in.
       - path: /shopify-app
 
