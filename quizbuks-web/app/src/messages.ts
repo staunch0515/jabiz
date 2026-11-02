@@ -499,6 +499,7 @@ const en = {
     earned: 'Points: {{earned}} of {{points}}',
     more: 'More quizzes',
     toQuiz: 'About this quiz',
+    nextStep: 'See what comes next',
   },
   history: {
     title: 'History',
@@ -570,6 +571,10 @@ const en = {
     home: 'See all quizzes',
     level: 'Level {{n}}',
     after: 'After: {{names}}',
+    tree: 'Tree',
+    list: 'List',
+    treeLabel: 'The quizzes of {{company}} and how you stand on them',
+    treeHint: 'Lit quizzes are yours; ready ones you can start now; locked ones open after the quiz they name.',
   },
   share: {
     by: 'By {{sponsor}}',
@@ -1097,6 +1102,7 @@ const zh: typeof en = {
     earned: '得分：{{earned}} / {{points}}',
     more: '更多 Quiz',
     toQuiz: '问答介绍',
+    nextStep: '看看下一步',
   },
   history: {
     title: '答题记录',
@@ -1168,6 +1174,10 @@ const zh: typeof en = {
     home: '查看所有 Quiz',
     level: '第 {{n}} 级',
     after: '先完成：{{names}}',
+    tree: '科技树',
+    list: '列表',
+    treeLabel: '{{company}} 的答卷与你的位置',
+    treeHint: '已点亮的是你完成的；可开始的现在就能答；锁定的要先完成它标出的那份。',
   },
   share: {
     by: '来自 {{sponsor}}',
@@ -1695,6 +1705,7 @@ const ja: typeof en = {
     earned: '得点：{{earned}} / {{points}}',
     more: 'ほかのクイズ',
     toQuiz: 'クイズの紹介',
+    nextStep: '次のステップを見る',
   },
   history: {
     title: '回答履歴',
@@ -1766,6 +1777,10 @@ const ja: typeof en = {
     home: 'すべてのクイズを見る',
     level: 'レベル {{n}}',
     after: '先に：{{names}}',
+    tree: 'ツリー',
+    list: 'リスト',
+    treeLabel: '{{company}} のクイズとあなたの現在地',
+    treeHint: '達成したものはあなたのもの。挑戦できるものは今すぐ回答できます。ロック中のものは先に示されたクイズを終えると開きます。',
   },
   share: {
     by: '提供：{{sponsor}}',

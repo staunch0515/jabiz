@@ -1,7 +1,10 @@
+import { runQuery } from '@jabiz/client'
 import { publicQuery } from '../qb/legal'
 import type { ContentLanguage } from '../qb/api'
 import type { QuizKind, RewardMethod } from '../qb/play'
 import type { PublicProduct, PublicationProduct } from '../qb/products'
+import { PLAY } from '../qb/ids'
+import { edgesOf, treeStateOf, type TreeEdge, type TreeState } from '../qb/tree'
 import { SPONSOR_PAGE_TEMPLATE } from './ids'
 
 /* A sponsor's page as anybody reads it in the app (Q60a, Q60b): from the public templates only. */
@@ -62,4 +65,59 @@ export function readPageProducts(handle: string, languages: readonly string[] = 
 export async function readPublicationProducts(publicationId: string): Promise<PublicationProduct[]> {
   const rows = await publicQuery<PublicationProduct>(SPONSOR_PAGE_TEMPLATE.publicationProducts, { publicationId }, 200)
   return [...rows].sort((a, b) => Number(a.questionNo) - Number(b.questionNo) || Number(a.seq) - Number(b.seq))
+}
+
+/** A node of `qb.app.sponsor-tree` (Q85): one of the sponsor's publications as the caller stands on it. */
+export interface SponsorTreeNode {
+  id: string
+  name: string
+  kind: QuizKind
+  endAt: string
+  maxReward: unknown
+  live: boolean
+  state: TreeState
+  requires: TreeEdge[]
+  /** The required publications' names, by their id (from the `prerequisites` JSON). */
+  requiredNames: Record<string, string>
+}
+
+/**
+ * The sponsor's tree for the signed-in caller: their live public publications and those the caller answered, each
+ * with the caller's state. None when the page is not published.
+ */
+export async function readSponsorTree(handle: string, at: string, lang: string): Promise<SponsorTreeNode[]> {
+  const page = await runQuery<Record<string, unknown>>(PLAY.sponsorTree, { params: { handle: handle.toLowerCase(),
+    at, lang }, limit: 200 })
+  return page.items.flatMap((row): SponsorTreeNode[] => {
+    const state = treeStateOf(row.state)
+    if (typeof row.publicationId !== 'string' || !state) return []
+    const requiredNames: Record<string, string> = {}
+    let raw: unknown = row.prerequisites
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw)
+      } catch {
+        raw = []
+      }
+    }
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        if (item && typeof item === 'object' && typeof (item as Record<string, unknown>).requiredPublicationId === 'string'
+          && typeof (item as Record<string, unknown>).name === 'string') {
+          requiredNames[(item as Record<string, string>).requiredPublicationId] = (item as Record<string, string>).name
+        }
+      }
+    }
+    return [{
+      id: row.publicationId,
+      name: String(row.name ?? ''),
+      kind: (row.kind as QuizKind) ?? 'QUIZ',
+      endAt: String(row.endAt ?? ''),
+      maxReward: row.maxReward,
+      live: row.live === true || row.live === 'true',
+      state,
+      requires: edgesOf(row.prerequisites),
+      requiredNames,
+    }]
+  })
 }
