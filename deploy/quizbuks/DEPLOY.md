@@ -455,10 +455,12 @@ Settings → Environments → 新建 `appstore`（建议 Required reviewers 与 
 
 AdSense 只接受 production 的域名 quizbuks.com，而 production 尚未部署（Caddy 没有 quizbuks.com 的站点，经 Cloudflare 访问是 525）。
 为了先通过网站验证，quizbuks.com 暂时由 staging 的应用回答：服务器上另有一个站点文件 `/opt/infra/sites/quizbuks-com-temp.caddy`（不由 workflow 管理，部署不会改它），
-内容是 quizbuks.com 的 `ads.txt` 与反向代理到 `quizbuks-staging-app:8080`：
+内容是 quizbuks.com（与 www）的 `ads.txt` 与反向代理到 `quizbuks-staging-app:8080`。证书用 Caddy 自己的（`tls internal`），
+所以 Cloudflare 的 SSL/TLS 模式须为 **Full**（不是 Full (strict)；staging 用的是真证书，Full 下同样可用）：
 
 ```caddy
-quizbuks.com {
+quizbuks.com, www.quizbuks.com {
+	tls internal
 	encode zstd gzip
 
 	handle /ads.txt {
@@ -475,7 +477,8 @@ quizbuks.com {
 
 - 共用期间，quizbuks.com 上的页面就是 staging：顶部有 "STAGING · 测试环境" 的横条、标题带 `[STAGING]`，邮件中的链接是 `staging.quizbuks.com`。
   这足够 AdSense 的**网站验证**（选 ads.txt 方式），但**不要在共用期间申请审核**：审核看到的是测试站点，可能以内容未完成为由拒绝。
-- Caddy 申请不到 quizbuks.com 的证书时（日志中有证书错误，仍是 525），在该文件的 `quizbuks.com {` 下加一行 `tls internal`，并在 Cloudflare 的 SSL/TLS 中用 **Full**（不是 Full (strict)）。
+- 没有这个文件时，Caddy 没有 quizbuks.com 的站点，经 Cloudflare 访问是 **525**（握手失败），ads.txt 与页面都取不到。
+- production 的站点用 Caddy 自动申请的证书；移交之后 Cloudflare 可以改回 Full (strict)。
 - **移交（production 第一次部署之前，见上文"首次部署前"第 4 步）**：production 的部署会把 `site.caddy.tpl` 渲染成 quizbuks.com 的站点并指向 `quizbuks-app`。
   临时文件仍在时，Caddy 看到两个 quizbuks.com 的站点，拒绝整个配置（同一台服务器上的其他网站也无法重新加载）。所以在推送 `1.3/quizbuks-release` 之前：
 
