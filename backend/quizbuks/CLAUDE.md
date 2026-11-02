@@ -361,6 +361,7 @@
 
 - **Google AdSense**（需求方 2026-11-02，`deploy/quizbuks/DEPLOY.md`"Google AdSense"）：只经 `qb/ads.ts` 的 `loadAds`（App 中 `skip: nativeShell() !== null`，商店外壳与自动化浏览器中不加载）与招商网站 `site.js` 的 `loadAds`；
   页面头部的 `google-adsense-account` 标记、三个前端 CSP 中的广告域名（`QuizbuksAppIT` 检查）、Caddy 的 `/ads.txt` 一起改。不在 Shopify 嵌入页、店面、`/shopify-app/` 与维护页加广告。
+  品牌自己的站点（品牌档案 `siteUrl` 的主机及 `www.`）不显示测试系统的横条：两个 SPA 以 `qb/environment.ts` 的 `siteEnvironment()` 经 `configureClient({ environment })`（平台 17ze）改写，登录页与商家后台的外框随之；上线前 quizbuks.com 由 staging 回答（`deploy/quizbuks/DEPLOY.md`），staging 自己的地址照旧显示横条。
 - **商店 App 的外壳**（Q49，`quizbuks-mobile/`，`docs/quizbuks/plans/Q49b-android.md`）：只上架答题者的 App（`/taker/`），商家后台与充值不进 App。
   Android 是 TWA（`quizbuks-mobile/android`，设置只在 `twa-manifest.json`，构建由它读取；App Links 只认 `/taker/` 前缀），启动地址与 App Links 都带 `shell=android`；
   App 中只以 `src/shell.ts` 的 `nativeShell()` 判断是否在商店 App 中（参数或 Chrome 的 `android-app://` referrer，按标签页记住），在外壳中不显示任何安装提示（`install.tsx`）。
