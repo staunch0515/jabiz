@@ -29,7 +29,9 @@ vi.mock('../meta/hooks', () => ({
 const REPORT = {
   today: '2026-01-31', fiscalYearEnd: 12,
   policies: [{ entity: 'FreightCharge', keep: 'P7Y', from: 'shippedTime', fromFiscalYearEnd: true,
-    expiredThrough: '2018-12-31', entries: 120, expired: 7, held: 2 }],
+    expiredThrough: '2018-12-31', entries: 120, expired: 7, held: 2 },
+  { entity: 'DocumentRun', keep: 'P10Y', from: 'issuedTime', fromFiscalYearEnd: false, expiredThrough: '2016-01-31',
+    entries: 4, expired: 0, held: 0, onlyField: 'layoutId', onlyValues: ['it.invoice', 'it.receipt'] }],
 }
 
 describe('RetentionPage', () => {
@@ -51,6 +53,9 @@ describe('RetentionPage', () => {
     )
 
     expect((await screen.findByTestId('retention-expired-FreightCharge')).textContent).toBe('7')
+    // Decision D70: a policy of some layouts says which.
+    expect(screen.getByTestId('retention-only')).toHaveTextContent('only layoutId: it.invoice, it.receipt')
+    expect(screen.getByTestId('retention-expired-DocumentRun:it.invoice,it.receipt')).toHaveTextContent('0')
     expect(get).toHaveBeenCalledWith('/api/retention')
     expect(screen.getByText('after the fiscal year end')).toBeTruthy()
     expect(screen.getByTestId('retention-holds').getAttribute('href'))

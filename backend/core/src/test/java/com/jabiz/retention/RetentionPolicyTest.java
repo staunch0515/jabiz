@@ -99,4 +99,32 @@ class RetentionPolicyTest {
         assertThatThrownBy(() -> new LegalHold("h", "Invoice", List.of("1"), "f", "v"))
             .hasMessageContaining("either ids or a field");
     }
+
+    /** Decision D70: a policy may cover only the entries of some values of a field. */
+    @Test
+    void aScopedPolicyCoversOnlyItsValues() {
+        RetentionPolicy all = RetentionPolicy.of("DocumentRun").keep(Period.ofYears(10)).from("issuedTime");
+        assertThat(all.scoped()).isFalse();
+        assertThat(all.covers(Map.of("layoutId", "anything"))).isTrue();
+        assertThat(all.covers(null)).isTrue();
+
+        RetentionPolicy receipts = RetentionPolicy.of("DocumentRun").only("layoutId", "receipt", "statement")
+            .keep(Period.ofYears(10)).from("issuedTime").afterFiscalYearEnd();
+        assertThat(receipts.scoped()).isTrue();
+        assertThat(receipts.complete()).isTrue();
+        assertThat(receipts.fromFiscalYearEnd()).isTrue();
+        assertThat(receipts.onlyValues()).containsExactly("receipt", "statement");
+        assertThat(receipts.covers(Map.of("layoutId", "statement"))).isTrue();
+        assertThat(receipts.covers(Map.of("layoutId", "certificate"))).isFalse();
+        assertThat(receipts.covers(Map.of())).isFalse();
+        assertThat(receipts.covers(null)).isFalse();
+        // Compared as text, whatever the value's type.
+        assertThat(RetentionPolicy.of("Invoice").only("kind", "7").covers(Map.of("kind", 7L))).isTrue();
+        // The scope survives the other steps in any order.
+        assertThat(RetentionPolicy.of("DocumentRun").keep(Period.ofYears(1)).only("layoutId", "a").from("issuedTime")
+            .onlyField()).isEqualTo("layoutId");
+
+        assertThatThrownBy(() -> RetentionPolicy.of("DocumentRun").only("layoutId"))
+            .hasMessageContaining("covers no value of layoutId");
+    }
 }

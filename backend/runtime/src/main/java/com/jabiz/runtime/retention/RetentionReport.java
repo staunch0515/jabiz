@@ -38,9 +38,11 @@ public class RetentionReport {
      * @param entries        current entries (temporal: current versions that are not deleted)
      * @param expired        entries past their retention
      * @param held           of those, entries under a legal hold
+     * @param onlyField      the field whose values the policy covers (decision D70); null: every entry
+     * @param onlyValues     the values it covers; null when it covers every entry
      */
     public record RetentionPolicyStatus(String entity, String keep, String from, boolean fromFiscalYearEnd,
-        LocalDate expiredThrough, long entries, long expired, long held) {}
+        LocalDate expiredThrough, long entries, long expired, long held, String onlyField, List<String> onlyValues) {}
 
     public record RetentionReportResult(LocalDate today, int fiscalYearEnd, List<RetentionPolicyStatus> policies) {}
 
@@ -69,6 +71,8 @@ public class RetentionReport {
         return Flux.fromIterable(policies.all())
             .filter(RetentionPolicy::complete)
             .filter(policy -> entities.find(policy.entity()).isPresent())
+            .filter(policy -> !policy.scoped()
+                || entities.getOrThrow(policy.entity()).fields.containsKey(policy.onlyField()))
             .concatMap(policy -> status(engine, policy, entities.getOrThrow(policy.entity()), now, today))
             .collectList()
             .map(list -> new RetentionReportResult(today, policies.fiscalYearEnd().getValue(), list));
@@ -98,13 +102,20 @@ public class RetentionReport {
             }
             String date = "r." + column(def.fields.get(policy.from()).physicalColumn());
             String held = covered.isEmpty() ? "FALSE" : "(" + String.join(" OR ", covered) + ")";
+            // Decision D70: a scoped policy counts only the entries of its values.
+            String scope = "";
+            if (policy.scoped()) {
+                params.put("only", BoundValue.of(policy.onlyValues().toArray(String[]::new)));
+                scope = (def.temporal ? " AND " : " WHERE ") + "r."
+                    + column(def.fields.get(policy.onlyField()).physicalColumn()) + "::text = ANY(:only)";
+            }
             String sql = "SELECT count(*) AS entries, count(*) FILTER (WHERE " + date + " < :bound) AS expired,"
                 + " count(*) FILTER (WHERE " + date + " < :bound AND " + held + ") AS held FROM "
-                + relation(def, params, now);
+                + relation(def, params, now) + scope;
             return engine.select(sql, params).next().map(row -> new RetentionPolicyStatus(policy.entity(),
                 policy.keep().toString(), policy.from(), policy.fromFiscalYearEnd(), through,
                 Rows.longValue(row.get("entries")), Rows.longValue(row.get("expired")),
-                Rows.longValue(row.get("held"))));
+                Rows.longValue(row.get("held")), policy.onlyField(), policy.scoped() ? policy.onlyValues() : null));
         });
     }
 

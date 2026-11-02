@@ -72,7 +72,7 @@ public class DeletionGuard {
     }
 
     private Violation retention(EntityDefinition def, Map<String, ?> attributes) {
-        RetentionPolicy policy = policies.of(def.name).orElse(null);
+        RetentionPolicy policy = policies.covering(def.name, attributes).orElse(null);
         if (policy == null || !policy.complete()) {
             return null;
         }
