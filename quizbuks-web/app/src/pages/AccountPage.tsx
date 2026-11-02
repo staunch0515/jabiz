@@ -5,6 +5,7 @@ import { AccountDeletion, PageState, PushPreferences } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowLeft,
+  Award,
   CircleHelp,
   FileText,
   IdCard,
@@ -33,12 +34,13 @@ import { ProfileDetails } from './ProfileDetails'
 import { QuizLanguages } from './QuizLanguages'
 import { PROFILE_QUERY, ProfileForm } from './ProfileForm'
 import { StaffAccount } from '../staff/StaffAccount'
+import { CertificatesPart } from '../certificates/CertificatesPart'
 
 /** The account's menu (Q56); each part of the account is a page of its own under it. */
 export const ACCOUNT_PATH = '/account'
 
 /** The parts of the account, each at `/account/<part>` (docs/quizbuks/plans/Q56-account-menu.md). */
-export const ACCOUNT_PARTS = ['profile', 'details', 'security', 'mail', 'preferences', 'id'] as const
+export const ACCOUNT_PARTS = ['profile', 'details', 'certificates', 'security', 'mail', 'preferences', 'id'] as const
 export type AccountPart = (typeof ACCOUNT_PARTS)[number]
 
 /** Deleting the account (Q71): its own page, in the menu only where the entry allows it. */
@@ -83,6 +85,7 @@ function takeLinked(): IdentityLinked | null {
 const ICONS: Record<AccountPart, LucideIcon> = {
   profile: UserRound,
   details: Sparkles,
+  certificates: Award,
   security: ShieldCheck,
   mail: Mail,
   preferences: SlidersHorizontal,
@@ -217,6 +220,7 @@ function PartContent({ part }: { part: AccountPart }) {
   switch (part) {
     case 'profile': return <ProfilePart />
     case 'details': return <div data-testid="account-details"><ProfileDetails /></div>
+    case 'certificates': return <CertificatesPart />
     case 'security': return <SecurityPart />
     case 'mail': return <MailPart />
     case 'preferences': return <PreferencesPart />

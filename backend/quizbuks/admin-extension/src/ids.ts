@@ -108,6 +108,8 @@ export const TEMPLATE = {
   journalMapping: 'qb.admin.journal-mapping',
   /** A user's acceptances of the terms and the privacy policy (Q7b; `qb.admin.users.read`). */
   consents: 'qb.admin.consents',
+  /** Q77: the certificates people issued (support checks one a verifier asks about). */
+  certificates: 'qb.admin.certificates',
   /** The published versions of the legal texts and their withdrawals (Q7b review M1; `qb.admin.content.write`). */
   legalVersions: 'qb.admin.legal-versions',
   /** AI generation (Q8a; `qb.admin.ai.read`): usage by sponsor and month, the jobs, the parameters in force. */

@@ -31,6 +31,7 @@ import { useTranslation } from 'react-i18next'
 import { neutralName } from '../content/api'
 import { TextTranslationsFields, type TextsByLanguage } from '../content/TextTranslationsFields'
 import { SPONSOR } from '../messages'
+import { profilePath } from '../profile/paths'
 import { FileImage } from '../qb/FileImage'
 import { QB } from '../qb/messages'
 import { readMySponsorPage } from '../page/api'
@@ -51,7 +52,7 @@ import {
   type ProductInput,
 } from './api'
 
-export const PRODUCTS_PATH = '/products'
+export const PRODUCTS_PATH = profilePath('products')
 export const PRODUCTS_QUERY = ['qb', 'my-products'] as const
 
 const FIELDS = ['name', 'description', 'image', 'price', 'currency', 'shopUrl', 'baseRevision'] as const
@@ -110,7 +111,7 @@ export function ProductsPage() {
   return (
     <section className="flex max-w-3xl flex-col gap-6" aria-labelledby="products-title" data-testid="products">
       <div className="flex flex-col gap-2">
-        <h1 id="products-title" className="text-xl font-semibold">{t('products.title')}</h1>
+        <h2 id="products-title" className="text-xl font-semibold">{t('products.title')}</h2>
         <p className="text-muted-foreground text-sm">{t('products.intro', { max: MAX_PRODUCTS })}</p>
       </div>
       {products.isPending && <PageState kind="loading" />}

@@ -195,6 +195,9 @@ Cloudflare 的浏览器检查（Browser Integrity Check）与 Bot Fight Mode 把
 
 ### 4. 第一次部署
 
+**production 的第一次部署之前，先把 quizbuks.com 从 staging 移交出来**：上线前 quizbuks.com 暂时与 staging 共用（见"Google AdSense"中的"上线前 quizbuks.com 与 staging 共用"），
+不先移交，部署写入的 production 站点与临时站点都定义 quizbuks.com，Caddy 拒绝整个配置，服务器上所有网站都无法重新加载。
+
 production：推送 `1.3/quizbuks-release`（见上文"一次性设置"第 3 步）；staging：推送 `1.3/quizbuks`。或 GitHub → Actions → **QuizBuks deploy** →
 Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启动在空库上迁移并运行全部启动检查，需要一两分钟（健康检查的 `start_period` 为 180 秒）。
 日志：`docker logs -f quizbuks-app`（staging：`quizbuks-staging-app`）。
@@ -447,6 +450,46 @@ Settings → Environments → 新建 `appstore`（建议 Required reviewers 与 
 - **没加的**：商店 App 的外壳中（AdSense 不允许直接投放到 App 的网页视图，且要改商店的数据声明）、自动化浏览器中（e2e 与商店截图，Google 视为无效流量）、
   管理后台与运营商后台（平台的页面、只给内部人员）、嵌在 Shopify 后台中的页面与商户的店面、Shopify 应用的公开页 `/shopify-app/`（刻意不带任何脚本，供 Shopify 审核）、维护页（AdSense 不允许在错误页上投放）。
 - **`ads.txt`**：Caddy 站点在域名根下提供（`server/site.caddy.tpl`，维护模式中也能取到）：`google.com, pub-8399814237019515, DIRECT, f08c47fec0942fa0`。
+
+### 上线前 quizbuks.com 与 staging 共用（2026-11-02 起，临时）
+
+AdSense 只接受 production 的域名 quizbuks.com，而 production 尚未部署（Caddy 没有 quizbuks.com 的站点，经 Cloudflare 访问是 525）。
+为了先通过网站验证，quizbuks.com 暂时由 staging 的应用回答：服务器上另有一个站点文件 `/opt/infra/sites/quizbuks-com-temp.caddy`（不由 workflow 管理，部署不会改它），
+内容是 quizbuks.com（与 www）的 `ads.txt` 与反向代理到 `quizbuks-staging-app:8080`。证书用 Caddy 自己的（`tls internal`），
+所以 Cloudflare 的 SSL/TLS 模式须为 **Full**（不是 Full (strict)；staging 用的是真证书，Full 下同样可用）：
+
+```caddy
+quizbuks.com, www.quizbuks.com {
+	tls internal
+	encode zstd gzip
+
+	handle /ads.txt {
+		header Content-Type "text/plain; charset=utf-8"
+		header Cache-Control "public, max-age=3600"
+		respond "google.com, pub-8399814237019515, DIRECT, f08c47fec0942fa0" 200
+	}
+
+	handle {
+		reverse_proxy quizbuks-staging-app:8080
+	}
+}
+```
+
+- 共用期间，quizbuks.com 上的页面就是 staging：顶部有 "STAGING · 测试环境" 的横条、标题带 `[STAGING]`，邮件中的链接是 `staging.quizbuks.com`。
+  这足够 AdSense 的**网站验证**（选 ads.txt 方式），但**不要在共用期间申请审核**：审核看到的是测试站点，可能以内容未完成为由拒绝。
+- 没有这个文件时，Caddy 没有 quizbuks.com 的站点，经 Cloudflare 访问是 **525**（握手失败），ads.txt 与页面都取不到。
+- production 的站点用 Caddy 自动申请的证书；移交之后 Cloudflare 可以改回 Full (strict)。
+- **移交（production 第一次部署之前，见上文"首次部署前"第 4 步）**：production 的部署会把 `site.caddy.tpl` 渲染成 quizbuks.com 的站点并指向 `quizbuks-app`。
+  临时文件仍在时，Caddy 看到两个 quizbuks.com 的站点，拒绝整个配置（同一台服务器上的其他网站也无法重新加载）。所以在推送 `1.3/quizbuks-release` 之前：
+
+  ```sh
+  rm /opt/infra/sites/quizbuks-com-temp.caddy
+  docker exec caddy caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile \
+    && docker exec caddy caddy reload --adapter caddyfile --config /etc/caddy/Caddyfile
+  ```
+
+  从这一刻到 production 启动完成，quizbuks.com 无法访问（几分钟）；staging.quizbuks.com 不受影响。production 起来之后检查
+  `curl -s https://quizbuks.com/ads.txt`，再在 AdSense 中申请审核。
 
 在 AdSense 账户中（需求方操作）：
 

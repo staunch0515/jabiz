@@ -641,6 +641,20 @@ describe('UserSummaryPage', () => {
       { params: { userId: SPONSOR_ID }, offset: 0, limit: 20 })
   })
 
+  it('shows the certificates the user issued, with their numbers (Q77)', async () => {
+    server.templates.set(TEMPLATE.certificates, [{ certificateId: 'cert-1', certification: 'SPONSOR_APPLY',
+      holderName: 'Mei', heldFrom: '2026-10-01T00:00:00Z', validUntil: '2027-10-01T00:00:00Z',
+      verifyKey: '0123456789abcdef0123456789abcdef', language: 'en', issuedAt: '2026-10-02T00:00:00Z' }])
+    renderUser()
+    const certificates = await screen.findByTestId('user-certificates')
+    expect(await within(certificates).findByTestId('certificate-number'))
+      .toHaveTextContent('0123456789abcdef0123456789abcdef')
+    expect(certificates).toHaveTextContent('May apply to become a sponsor')
+    expect(certificates).toHaveTextContent('Mei')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.certificates,
+      { params: { userId: SPONSOR_ID }, offset: 0, limit: 20 })
+  })
+
   it('shows the ban with its reason', async () => {
     server.templates.set(TEMPLATE.users, [{ ...USER, banned: true }])
     server.datasets.set(DATASET.ban, [{ userId: SPONSOR_ID, banned: true, reason: 'Shared answers.',

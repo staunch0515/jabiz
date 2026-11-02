@@ -15,7 +15,9 @@ test('a sponsor sets up the mail server: the test mail arrives, a wrong port is 
   const sponsor = await approvedSponsor(request, 'Mia')
   await signIn(page, '/sponsor/', sponsor.email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.getByRole('link', { name: 'Mail server' }).click()
+  // Q79: a section of the sponsor hub.
+  await page.getByRole('link', { name: 'Sponsor profile' }).click()
+  await page.getByTestId('profile-nav-mail-server').click()
   await expect(page.getByTestId('mail-server-status')).toHaveAttribute('data-status', 'NONE')
   await expectAccessible(page, 'mail server, empty')
 

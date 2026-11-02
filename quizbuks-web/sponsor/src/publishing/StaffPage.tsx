@@ -8,7 +8,6 @@ import {
   Input,
   Label,
   notify,
-  PageHeader,
   PageState,
   type ColumnDef,
 } from '@jabiz/ui'
@@ -17,12 +16,13 @@ import { Search, UserMinus, UserPlus } from 'lucide-react'
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
+import { profilePath } from '../profile/paths'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
 import { addStaff, findStaff, readStaff, removeStaff, type StaffCandidate, type StaffMember } from './api'
 
-export const STAFF_PATH = '/staff'
-const STAFF_QUERY = ['qb', 'staff'] as const
+export const STAFF_PATH = profilePath('staff')
+export const STAFF_QUERY = ['qb', 'staff'] as const
 /** A user id: 36 characters; the form takes a little more so a pasted one with spaces still fits. */
 const ID_LENGTH = 64
 
@@ -163,7 +163,10 @@ export function StaffPage() {
   const { t } = useTranslation(SPONSOR)
   return (
     <section className="flex flex-col gap-6" data-testid="staff-page">
-      <PageHeader title={t('publishing.staff.title')} description={t('publishing.staff.intro')} />
+      <div className="flex flex-col gap-1">
+        <h2 className="text-xl font-semibold">{t('publishing.staff.title')}</h2>
+        <p className="text-muted-foreground text-sm">{t('publishing.staff.intro')}</p>
+      </div>
       <AddStaff />
       <StaffList />
     </section>

@@ -117,7 +117,7 @@ test('a sponsor registers, verifies at the console\'s own page, applies and is a
   await signUp(page, '/sponsor/', email, 'Sara')
   // The console signs the sponsor in unverified (Q40) and says to verify; applying waits for it.
   await signIn(page, '/sponsor/', email)
-  await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
+  await expect(page).toHaveURL(/\/sponsor\/profile\/basics$/)
   await expect(page.getByTestId('verify-email-banner')).toBeVisible()
   // The link opened where the console is signed in verifies without a password (platform D61 item 4).
   const mail = await mailTo(request, email, /verify|confirm|address/i)
@@ -131,8 +131,8 @@ test('a sponsor registers, verifies at the console\'s own page, applies and is a
   // Back in the console, the session's next token knows the address is verified.
   await page.goto('/sponsor/')
   await expect(page.getByTestId('verify-email-banner')).toHaveCount(0)
-  // Not applied yet: the console leads to the onboarding.
-  await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
+  // Not applied yet: the console leads to the hub's basics (Q79; the old /onboarding redirects there).
+  await expect(page).toHaveURL(/\/sponsor\/profile\/basics$/)
   await expect(page.getByTestId('onboarding-status')).toHaveAttribute('data-status', 'NONE')
   await expect(page.getByTestId('onboarding-name')).toHaveValue('Sara')
   await page.getByTestId('onboarding-company').fill('Acme Quizzes')

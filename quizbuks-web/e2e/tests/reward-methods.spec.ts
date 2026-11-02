@@ -268,8 +268,10 @@ test('a sponsor names a taker to the staff by their ID, who hands out a prize at
     await signOut()
     await signIn(page, '/sponsor/', owed.sponsor.email)
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
-    await page.getByRole('link', { name: 'Staff', exact: true }).click()
-    await expect(page).toHaveURL(/\/sponsor\/staff$/)
+    // Q79: a section of the sponsor hub.
+    await page.getByRole('link', { name: 'Sponsor profile' }).click()
+    await page.getByTestId('profile-nav-staff').click()
+    await expect(page).toHaveURL(/\/sponsor\/profile\/staff$/)
     await page.getByTestId('staff-id').fill(kaiId)
     await page.getByTestId('staff-find').click()
     await expect(page.getByTestId('staff-candidate')).toContainText('Kai')

@@ -265,8 +265,8 @@ describe('the quiz editor', () => {
     expect(within(questions[0]).getByTestId('question-option-count')).toHaveTextContent('2 options')
     expect(within(questions[1]).getByTestId('question-option-count')).toHaveTextContent('0 options')
     expect(screen.queryByTestId('option-row')).toBeNull()
-    // Q78: the staff sit with the sponsor's settings in the menu.
-    expect(within(screen.getByTestId('menu-group-settings')).getByTestId('menu-staff')).toBeInTheDocument()
+    // Q79 (after Q78 moved them to the settings): the staff are a section of the sponsor hub, in no menu group.
+    expect(within(screen.getByTestId('menu-group-settings')).queryByTestId('menu-staff')).toBeNull()
     expect(within(screen.getByTestId('menu-group-rewards')).queryByTestId('menu-staff')).toBeNull()
     const summary = screen.getByTestId('questions-summary')
     expect(summary).toHaveTextContent('2 / 100 questions')

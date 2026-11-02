@@ -20,6 +20,7 @@ import {
   readAttemptRewards,
   readAttempts,
   readBan,
+  readCertificates,
   readConsents,
   readPayoutAccount,
   readTopUps,
@@ -27,6 +28,7 @@ import {
   readUser,
   type AttemptRewardRow,
   type AttemptRow,
+  type CertificateRow,
   type ConsentRow,
   type TopUpRow,
   type TransferRow,
@@ -176,6 +178,36 @@ function Consents({ userId }: { userId: string }) {
 }
 
 /**
+ * The certificates the user issued (Q77): which certification, the name on it, the holding and its number, which a
+ * verifier quotes (the verify page `/taker/verify/<number>`). Revocations are the certification page's.
+ */
+function Certificates({ userId }: { userId: string }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const { query: certificates, table } = usePaged(['qb-ext', 'certificates', userId],
+    (offset, limit, sorts) => readCertificates(userId, offset, limit, sorts))
+  const columns = useMemo<ColumnDef<CertificateRow, unknown>[]>(() => [
+    { id: 'certification', header: t('user.certificateCertification'),
+      cell: ({ row }) => t(`certification.names.${row.original.certification}`,
+        { defaultValue: row.original.certification }) },
+    { id: 'holderName', header: t('user.certificateHolder'), cell: ({ row }) => row.original.holderName },
+    { id: 'validUntil', header: t('user.certificateHeld'),
+      cell: ({ row }) => `${when(row.original.heldFrom)} – ${when(row.original.validUntil)}` },
+    { id: 'verifyKey', header: t('user.certificateNumber'),
+      cell: ({ row }) => <span className="font-mono text-xs break-all" data-testid="certificate-number">
+        {row.original.verifyKey}</span> },
+    { id: 'issuedAt', header: t('user.certificateIssuedAt'), cell: ({ row }) => when(row.original.issuedAt) },
+  ], [t])
+  return (
+    <Section title={t('user.certificates')} testId="user-certificates">
+      {certificates.isError ? <LoadFailed error={certificates.error} onRetry={() => void certificates.refetch()} /> : (
+        <DataTable label={t('user.certificatesTable')} columns={columns} {...table}
+          getRowId={(row) => row.certificateId} empty={<EmptyState art="inbox" title={t('user.noCertificates')} />} />
+      )}
+    </Section>
+  )
+}
+
+/**
  * The money of a user: their attempts' rewards, transfers to them, their payout account and (as a sponsor) their
  * top-ups. Finance only: the templates are `qb.admin.finance.read`'s.
  */
@@ -301,6 +333,7 @@ export default function UserSummaryPage() {
       <Profile user={user.data} />
       <Attempts userId={userId} />
       <Consents userId={userId} />
+      <Certificates userId={userId} />
       {can(PERMISSION.financeRead) && <Finance userId={userId} sponsor={!!user.data.sponsorStatus} />}
     </div>
   )
