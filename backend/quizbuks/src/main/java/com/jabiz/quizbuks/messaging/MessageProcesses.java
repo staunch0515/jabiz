@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.messaging;
 import com.jabiz.event.DomainEvent;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.push.PushTemplate;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
@@ -22,6 +23,7 @@ import com.jabiz.quizbuks.wallet.TransferRules;
 import com.jabiz.quizbuks.wallet.TransferStatus;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.push.SendPush;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -91,6 +93,12 @@ public final class MessageProcesses {
     public static final String DIGITAL_RESOLVED_CONSUMER = "qb.msg-digital-resolved";
     public static final String DIGITAL_RESOLVED_SPONSOR_CONSUMER = "qb.msg-digital-resolved-sponsor";
 
+    /**
+     * The taker's push notification of a prize won (platform 17k, decision D69): the moment a taker learns of a prize,
+     * once per prize, beside the message; off in the taker's push settings like any other. To the app only.
+     */
+    public static final PushTemplate PRIZE_WON = PushTemplate.define("qb.prize-won", t -> t.entries("app"));
+
     /** An event older than this makes no message (a replay to a new subscription, a long backlog). */
     public static final Duration MAX_AGE = Duration.ofDays(7);
     /** The default of {@code qb.payout.reminder-days}. */
@@ -128,6 +136,11 @@ public final class MessageProcesses {
     static final String LAST = "lastReminder";
     static final String PARAMS = "params";
     static final String OUTPUT = "output";
+    static final String PENDING_BEFORE = "pendingBefore";
+    static final String PUSH = "push";
+
+    /** A prize won's push: to whom, and the page of the app a tap opens. */
+    record Push(String userId, String link) {}
 
     private MessageProcesses() {}
 
@@ -153,6 +166,11 @@ public final class MessageProcesses {
                         .where(new QueryPredicate.Eq("sourceKey", ctx.get(SOURCE_KEY))).limit(1).build(), EXISTING),
                     QueryEntities.query(QbPlay.defaultDataset(QbPlay.ATTEMPT), ctx -> byId("attemptId",
                         attemptReward(ctx) ? input(ctx).sourceId() : null), ATTEMPT),
+                    // A paid reward that was pending first: the taker heard of the prize then (no second push).
+                    QueryEntities.query(QbInbox.defaultDataset(QbInbox.MESSAGE), ctx -> byId("sourceKey",
+                        QbInbox.REWARD_PAID.equals(input(ctx).kind()) ? sourceKey(new EventInput(
+                            QbInbox.REWARD_PENDING, input(ctx).sourceId(), null, input(ctx).occurredAt())) : null),
+                        PENDING_BEFORE),
                     QueryEntities.query(QbPublications.defaultDataset(QbPublications.CARD), ctx -> byId(
                         "publicationId", reward(ctx) ? uuid(input(ctx).publicationId()) : null), CARD),
                     QueryEntities.query(QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> byId("transferId",
@@ -174,7 +192,9 @@ public final class MessageProcesses {
                     QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE),
                         ctx -> byId("digitalPrizeId", QbInbox.DIGITAL_KINDS.contains(input(ctx).kind())
                             ? uuid(input(ctx).sourceId()) : null), DIGITAL)))
-                .compute("Make the message", (metadata, ctx) -> fromEvent(ctx, texts)));
+                .compute("Make the message", (metadata, ctx) -> fromEvent(ctx, texts))
+                .step("Push a prize won", SendPush.<ProcessContext>when(ctx -> ctx.contains(PUSH), PRIZE_WON,
+                    ctx -> ctx.get(PUSH, Push.class).userId(), Map.of(), ctx -> ctx.get(PUSH, Push.class).link())));
     }
 
     /** One message per attempt and kind, per transfer and kind, per user held back and day. */
@@ -242,7 +262,39 @@ public final class MessageProcesses {
         };
         if (draft != null) {
             insert(ctx, texts, draft, params, (String) ctx.get(SOURCE_KEY));
+            if (prizeWon(ctx, input)) {
+                ctx.put(PUSH, new Push(draft.recipientId(), link(draft)));
+            }
         }
+    }
+
+    /**
+     * Whether the message tells the taker of a prize for the first time: a platform reward pending, or paid without
+     * having been pending; a cash reward or a prize to collect owed; a digital prize delivered or owed (both only from
+     * the prize-won event). The later steps of the same prize (marked paid, sent, confirmed …) push nothing.
+     */
+    static boolean prizeWon(ProcessContext ctx, EventInput input) {
+        return switch (input.kind()) {
+            case QbInbox.REWARD_PENDING, QbInbox.CASH_DUE, QbInbox.REDEEM_DUE, QbInbox.DIGITAL_DELIVERED,
+                 QbInbox.DIGITAL_DUE -> true;
+            case QbInbox.REWARD_PAID -> first(ctx, PENDING_BEFORE) == null;
+            default -> false;
+        };
+    }
+
+    /** The page of the app the message leads to, as the inbox opens it (relative to the app's root); null: home. */
+    static String link(Draft draft) {
+        if (QbInbox.ACTION_RESULT.equals(draft.action()) && draft.actionId() != null) {
+            return "result/" + draft.actionId();
+        }
+        if (QbInbox.ACTION_WALLET.equals(draft.action())) {
+            return "wallet";
+        }
+        if (QbInbox.ACTION_REFERRALS.equals(draft.action())) {
+            // Q70: a prize a referral earned has no result; its referral's page.
+            return draft.actionId() == null ? "referrals" : "referral/" + draft.actionId();
+        }
+        return draft.publicationId() == null ? null : "p/" + draft.publicationId();
     }
 
     /** What a message will be, but its texts. */

@@ -55,3 +55,9 @@ social:QB_OIDC_REDIRECT_SPONSOR - https://
 # Account deletion's maintenance connection (platform 17i, DEPLOY.md "1a"): optional; when given, the R2DBC URL, not
 # the JDBC one Flyway takes (the application refuses to start with it)
 ?JABIZ_ERASURE_DATASOURCE_URL - r2dbc:
+
+# Push notifications (platform 17k): with the Spring profile "push", the VAPID key pair (Base64url: the public key 87
+# characters, the private key 43) and the push services' contact (a mailto: address)
+push:JABIZ_PUSH_PUBLIC_KEY 87
+push:JABIZ_PUSH_PRIVATE_KEY 43
+push:JABIZ_PUSH_SUBJECT - mailto:

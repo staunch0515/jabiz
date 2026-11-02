@@ -241,6 +241,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
      `/api/inbound/stripe-connect`（订阅的事件见 `docs/quizbuks/stripe-test-mode.md` §4.2），`STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` 是
      **这两个端点各自的签名密钥**（`whsec_…`，由 Stripe 给出，不能自己生成：签名对不上时每个事件都被拒绝，充值停在 `OPEN`）。经 Cloudflare 时先做"3a. Cloudflare"。
    - `SPRING_PROFILES_ACTIVE=staging` 只标出环境，应用中没有按环境写死的配置：环境的差异全部在这个 `.env` 中。同时开 Google 登录时写 `staging,google`（再加 Apple、Facebook、LINE 时写 `staging,social`，Q40、平台 17j），并设 Google 客户端与两个回调地址（`QB_OIDC_REDIRECT_APP`、`QB_OIDC_REDIRECT_SPONSOR`，见 README"前端"）。
+   - 推送通知（平台 17k）：在 `SPRING_PROFILES_ACTIVE` 中再加 `push`（如 `staging,google,push`），并设 VAPID 密钥对与联系方式（`JABIZ_PUSH_PUBLIC_KEY`、`JABIZ_PUSH_PRIVATE_KEY`、`JABIZ_PUSH_SUBJECT`，生成方法见 README"推送通知"）；缺少时部署前的检查停止部署。
    - `JABIZ_WEB_ENVIRONMENT=staging`（平台 16zd）让三个前端的每一页顶部都显示 "STAGING · 测试环境，不是正式版" 的横条，标题前加 `[STAGING]`；
      不写也一样（缺省 `test`）。**绝不能写 `production`**：workflow 部署前检查，staging 的 `.env` 写了 production 即停止。
 3. **DNS**：给 `staging.<基础域名>` 添加 A 记录（及 AAAA），指向同一台服务器。
@@ -379,7 +380,7 @@ rm /opt/apps/$APP/maintenance/maintenance.lock
 ## Android App 的 assetlinks（Q49b）
 
 Android App（`quizbuks-mobile/android`，`docs/quizbuks/plans/Q49b-android.md`）以 `https://<域名>/.well-known/assetlinks.json` 证明它属于这个域名：
-没有它（或指纹不对）时 App 照常可用，只是顶部显示浏览器的地址栏，邮件链接不直接打开 App。平台 17l 合入前由 Caddy 站点提供：
+没有它（或指纹不对）时 App 照常可用，只是顶部显示浏览器的地址栏，邮件链接不直接打开 App。由 Caddy 站点提供（维护模式中也能取到，所以不改用平台 17l 的 `jabiz.web.native-apps`）：
 
 1. Settings → Environments → `production` → Variables 中设两个变量（是公开的值，不是 secret）：
    - `QUIZBUKS_ANDROID_PACKAGE`：`com.quizbuks.app`（`twa-manifest.json` 的 `packageId`）；
@@ -389,7 +390,7 @@ Android App（`quizbuks-mobile/android`，`docs/quizbuks/plans/Q49b-android.md`�
 3. 确认：`curl -s https://<域名>/.well-known/assetlinks.json` 返回这份 JSON（维护模式中也返回）；再以 Google 的
    [Statement List Tester](https://developers.google.com/digital-asset-links/tools/generator) 对包名与指纹测试一次。
 
-Caddy 容器须能看到 `/opt/apps/<APP_NAME>/well-known/`，与维护页同一前提（见上节"第一次使用前给 Caddy 挂载这两个目录"）。17l 之后改由平台提供，本节与站点中的这一段随之删除。
+Caddy 容器须能看到 `/opt/apps/<APP_NAME>/well-known/`，与维护页同一前提（见上节"第一次使用前给 Caddy 挂载这两个目录"）。
 
 ## Android App 的构建与上传（Q49b）
 
@@ -410,7 +411,7 @@ Settings → Environments → 新建 `play`（建议设 Required reviewers 与 D
 ## iOS App 的 apple-app-site-association（Q49c）
 
 iOS App（`quizbuks-mobile/ios`，`docs/quizbuks/plans/Q49c-ios.md`）的 Universal Links 要域名上的 `https://<域名>/.well-known/apple-app-site-association`：没有它时邮件链接在 Safari 打开。
-平台 17l 合入前由 Caddy 站点提供，同 `assetlinks.json`：
+由 Caddy 站点提供，同 `assetlinks.json`：
 
 1. Settings → Environments → `production` → Variables：`QUIZBUKS_IOS_APP_ID` = `<Team ID>.com.quizbuks.app`（Team ID 在 Apple Developer 的 Membership 页）。
 2. 部署一次：workflow 以 `deploy/quizbuks/apple-app-site-association.sh` 生成（只认 `/taker/*`）并上传到 `/opt/apps/<APP_NAME>/well-known/apple-app-site-association`；变量没有时删除这个文件。
