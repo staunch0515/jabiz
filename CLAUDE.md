@@ -191,7 +191,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   （在维护连接上覆盖只追加表中的个人字段，`jabiz.erasure.datasource.*`，凭据只来自环境变量，登录属于 `jabiz_maintenance`；应用自己的登录绝不属于它），
   不自己写抹除 SQL、不关触发器、不删除只追加的行。应用保存个人信息的实体以 `PersonalDataEraser` Bean 声明（`ErasedEntity.delete` / `clear` / `keep`，`.documents(版式)`；同一实体可按不同的用户字段声明几次，D62 第 8 条），
   申请前的提示以 `notices` 与消息 `erasure.notice.<代码>` 给出。新增保存个人信息副本的平台表时，同时登记到 `ErasurePurger` 的清除范围，并让 `ErasureIT` 的全表搜索覆盖它。
-- **保留、保全与导出**（见 21 §3–§4 与决策 D27）：保留期只以 `RetentionPolicy` Bean 声明（自时间字段或会计年度末 `jabiz.fiscal-year-end` 起算，日期按 `jabiz.fiscal-year-zone`，缺省 UTC，D48），法律保全只经
+- **保留、保全与导出**（见 21 §3–§4 与决策 D27）：保留期只以 `RetentionPolicy` Bean 声明（自时间字段或会计年度末 `jabiz.fiscal-year-end` 起算，日期按 `jabiz.fiscal-year-zone`，缺省 UTC，D48；只适用于部分记录时以 `only(不可变字段, 值…)` 声明，如单据按版式，一个实体的几个策略值不重叠，D70），法律保全只经
   `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`；删除拦截由平台在删除路径中做（422 `RETENTION_ACTIVE` / `LEGAL_HOLD`），业务代码不自己判断。
   归档导出只经 `POST /api/exports/data`（CSV + `schema.json` + `manifest.json` + 报表 PDF），不另写导出。
   生成的文件与签发的单据的保留期同样以 `RetentionPolicy.of("GeneratedFile" | "DocumentRun")` 声明（只读平台实体，`audit.read`，不含内容与名称，21 §3.1）。
