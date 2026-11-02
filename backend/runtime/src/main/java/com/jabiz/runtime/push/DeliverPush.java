@@ -46,15 +46,19 @@ public class DeliverPush<C extends ProcessContext> implements StepHandler<NoMeta
     private final PushTemplates templates;
     private final MessageCatalog messages;
     private final WebPushSender webPush;
+    private final ApnsSender apns;
+    private final boolean apnsConfigured;
     private final RefreshTokenStore sessions;
     private final SignInEntries entries;
     private final JsonMapper json;
 
-    public DeliverPush(PushTemplates templates, MessageCatalog messages, WebPushSender webPush,
-        RefreshTokenStore sessions, SignInEntries entries, JsonMapper json) {
+    public DeliverPush(PushTemplates templates, MessageCatalog messages, WebPushSender webPush, ApnsSender apns,
+        PushProperties properties, RefreshTokenStore sessions, SignInEntries entries, JsonMapper json) {
         this.templates = templates;
         this.messages = messages;
         this.webPush = webPush;
+        this.apns = apns;
+        this.apnsConfigured = properties.apns().configured();
         this.sessions = sessions;
         this.entries = entries;
         this.json = json;
@@ -104,13 +108,20 @@ public class DeliverPush<C extends ProcessContext> implements StepHandler<NoMeta
             // Signed out, revoked, expired or idle: the device was this session's.
             return Mono.just(new Sent(device, WebPushSender.Outcome.GONE));
         }
+        if (PushEntities.APNS.equals(device.get("kind"))) {
+            if (!apnsConfigured) {
+                // APNs taken out of the settings: the device stays for when it is back, and is not pushed to.
+                return Mono.empty();
+            }
+            return apns.send(device.get("endpoint"), payload(Shape.APNS, template, input, locale, entry),
+                    tag(template, input))
+                .map(outcome -> new Sent(device, outcome));
+        }
         if (!PushEntities.WEB_PUSH.equals(device.get("kind"))) {
-            // Store apps' tokens are pushed by their own service (17k-b); until then left as they are.
             return Mono.empty();
         }
-        byte[] payload = payload(template, input, locale, entry);
-        return webPush.send(device.get("endpoint"), device.get("p256dh"), device.get("auth"), payload,
-                input.notification())
+        return webPush.send(device.get("endpoint"), device.get("p256dh"), device.get("auth"),
+                payload(Shape.WEB_PUSH, template, input, locale, entry), input.notification())
             .map(outcome -> new Sent(device, outcome));
     }
 
@@ -147,34 +158,70 @@ public class DeliverPush<C extends ProcessContext> implements StepHandler<NoMeta
     }
 
     /**
-     * {@code {title, body, url, tag}} in the user's language, at most what every push service accepts: the body, then
-     * the title, shortened (on characters) when the whole is longer. The tag is the notification's own: should a
-     * delivery be tried again after a device received it, the second copy replaces the first instead of showing twice.
+     * How a notification is written for a kind of device, and the most it may weigh: for Web Push
+     * {@code {title, body, url, tag}}, which the platform's Service Worker shows, at most what every push service
+     * accepts once encrypted ({@link WebPushCrypto#MAX_PLAINTEXT}); for APNs Apple's alert
+     * {@code {aps: {alert: {title, body}, sound}, url, tag}}, which iOS shows and whose {@code url} the app's shell
+     * opens on a tap, at most {@link ApnsSender#MAX_PAYLOAD}.
      */
-    byte[] payload(PushTemplate template, PushProcesses.DeliverInput input, Locale locale, String entry) {
-        return fit(json, render(template.titleKey(), input.params(), locale),
-            render(template.bodyKey(), input.params(), locale), url(entry, input.link()),
-            input.notification() == null ? template.name() : input.notification());
+    enum Shape {
+        WEB_PUSH(WebPushCrypto.MAX_PLAINTEXT),
+        APNS(ApnsSender.MAX_PAYLOAD);
+
+        final int max;
+
+        Shape(int max) {
+            this.max = max;
+        }
     }
 
-    /** The message as JSON, its body and then its title shortened until it fits {@link WebPushCrypto#MAX_PLAINTEXT}. */
+    /**
+     * The notification in the user's language: the body, then the title, shortened (on characters) when the whole is
+     * longer than the kind takes. The tag is the notification's own: should a delivery be tried again after a device
+     * received it, the second copy replaces the first instead of showing twice.
+     */
+    byte[] payload(Shape shape, PushTemplate template, PushProcesses.DeliverInput input, Locale locale, String entry) {
+        return fit(json, shape, render(template.titleKey(), input.params(), locale),
+            render(template.bodyKey(), input.params(), locale), url(entry, input.link()), tag(template, input));
+    }
+
+    /** The notification's own id (its event's), or the template's name for one without; the tag and collapse id. */
+    static String tag(PushTemplate template, PushProcesses.DeliverInput input) {
+        return input.notification() == null ? template.name() : input.notification();
+    }
+
+    /** As {@link #fit(JsonMapper, Shape, String, String, String, String)} for Web Push. */
     static byte[] fit(JsonMapper json, String title, String body, String url, String tag) {
+        return fit(json, Shape.WEB_PUSH, title, body, url, tag);
+    }
+
+    /** The message as JSON of the shape, its body and then its title shortened until it fits. */
+    static byte[] fit(JsonMapper json, Shape shape, String title, String body, String url, String tag) {
         Fitted fittedTitle = new Fitted(title);
         Fitted fittedBody = new Fitted(body);
-        byte[] bytes = encode(json, fittedTitle, fittedBody, url, tag);
+        byte[] bytes = encode(json, shape, fittedTitle, fittedBody, url, tag);
         for (Fitted part : List.of(fittedBody, fittedTitle)) {
-            while (bytes.length > WebPushCrypto.MAX_PLAINTEXT
-                && part.shorten(bytes.length - WebPushCrypto.MAX_PLAINTEXT)) {
-                bytes = encode(json, fittedTitle, fittedBody, url, tag);
+            while (bytes.length > shape.max && part.shorten(bytes.length - shape.max)) {
+                bytes = encode(json, shape, fittedTitle, fittedBody, url, tag);
             }
         }
         return bytes;
     }
 
-    private static byte[] encode(JsonMapper json, Fitted title, Fitted body, String url, String tag) {
+    private static byte[] encode(JsonMapper json, Shape shape, Fitted title, Fitted body, String url, String tag) {
         Map<String, Object> message = new LinkedHashMap<>();
-        message.put("title", title.text());
-        message.put("body", body.text());
+        if (shape == Shape.APNS) {
+            Map<String, Object> alert = new LinkedHashMap<>();
+            alert.put("title", title.text());
+            alert.put("body", body.text());
+            Map<String, Object> aps = new LinkedHashMap<>();
+            aps.put("alert", alert);
+            aps.put("sound", "default");
+            message.put("aps", aps);
+        } else {
+            message.put("title", title.text());
+            message.put("body", body.text());
+        }
         message.put("url", url);
         message.put("tag", tag);
         return json.writeValueAsBytes(message);

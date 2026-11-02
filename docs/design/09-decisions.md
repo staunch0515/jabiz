@@ -2443,7 +2443,8 @@ Android 的 App 是 TWA（在 Chrome 中运行），iOS 是 Capacitor 外壳。�
 4. **偏好按模板**：`SecUserPushPreference`（时态，同邮件偏好），只能设本会话入口的模板与本人在别处关掉的模板；`@jabiz/ui` 的 `PushPreferences` 积木。
 5. **投递失败**：没有一台收到且有连不上的才让流程失败并由 Outbox 重试。推送在投递流程的事务中发出，提交失败时会重发：
    通知的 `tag` 与 `Topic` 是事件编号，重发的一份在设备上取代先到的（推送服务也以 `Topic` 取代尚未送达的），不显示两条。
-6. **iOS（17k-b）**：APNs 以令牌认证（`.p8`，环境变量），设备种类 `apns`，同一套模板、偏好与设备登记。
+6. **iOS（17k-b）**：APNs 以令牌认证（`.p8`，环境变量；ES256 的提供方令牌每 40 分钟换一次），HTTP/2，设备种类 `apns`，同一套模板、偏好与设备登记。
+   iOS 外壳经 `configureClient({ nativePush })` 交出设备令牌，`enablePush` 与 `PushPreferences` 不变；不引入 Firebase 或第三方推送 SDK。
 
 **理由**：与邮件同一个模型（模板、步骤、事件、消费者、偏好），应用只学一次；Web Push 是标准、浏览器与 TWA 通用，不依赖第三方账号与 SDK。设备跟着会话走，"退出后不再收到"无需额外的钩子。
 

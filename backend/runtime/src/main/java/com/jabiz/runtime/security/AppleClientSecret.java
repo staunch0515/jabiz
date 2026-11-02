@@ -72,7 +72,7 @@ public class AppleClientSecret {
      *
      * @throws IllegalArgumentException when it is not such a key; the message never contains the key
      */
-    static ECPrivateKey privateKey(String text) {
+    public static ECPrivateKey privateKey(String text) {
         String body = text.replace("\\n", "\n")
             .replaceAll("-----(BEGIN|END) [A-Z ]*PRIVATE KEY-----", "")
             .replaceAll("\\s", "");

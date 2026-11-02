@@ -57,6 +57,37 @@ class PushPropertiesTest {
     }
 
     @Test
+    void applesPushServiceIsCheckedWhenItsTeamIsSet() {
+        String[] keys = TestPushService.vapidKeys();
+        try (com.jabiz.runtime.test.TestApnsService apns = new com.jabiz.runtime.test.TestApnsService()) {
+            java.util.function.Function<PushProperties.Apns, List<String>> problems = settings -> new PushProperties(
+                true, new PushProperties.WebPush(keys[0], keys[1], "mailto:ops@example.com", null), settings)
+                .problems();
+            // Not set up: nothing asked of it.
+            assertThat(problems.apply(null)).isEmpty();
+            assertThat(problems.apply(new PushProperties.Apns("TEAM123456", "KEY1234567", apns.privateKey(),
+                "com.example.app", null, null))).isEmpty();
+            assertThat(new PushProperties.Apns("TEAM123456", null, null, null, null, null).baseUrl())
+                .isEqualTo("https://api.push.apple.com");
+            assertThat(new PushProperties.Apns("TEAM123456", null, null, null, "sandbox", null).baseUrl())
+                .isEqualTo("https://api.sandbox.push.apple.com");
+            assertThat(problems.apply(new PushProperties.Apns("team", "KEY", "YOUR_KEY", "app", "staging",
+                "https://evil.example.com"))).containsExactly(
+                "jabiz.push.apns.team-id: must be the team's ten-character id",
+                "jabiz.push.apns.key-id: must be the key's ten-character id",
+                "jabiz.push.apns.private-key: not a PEM or Base64 PKCS #8 key",
+                "jabiz.push.apns.topic: must be the app's bundle id",
+                "jabiz.push.apns.environment: must be production or sandbox",
+                "jabiz.push.apns.url: only a local address for tests; leave it unset");
+            // The other settings without the team: said, rather than APNs left off without a word.
+            assertThat(problems.apply(new PushProperties.Apns(null, "KEY1234567", apns.privateKey(), "a.b", null,
+                null))).containsExactly("jabiz.push.apns.team-id: is required with the other jabiz.push.apns settings");
+            assertThat(new PushProperties.Apns("TEAM123456", "KEY1234567", apns.privateKey(), "a.b", null, null)
+                .toString()).doesNotContain(apns.privateKey());
+        }
+    }
+
+    @Test
     void pushServicesAnswersMeanDeliveredGoneOrTryAgain() {
         assertThat(WebPushSender.outcome(201)).isEqualTo(WebPushSender.Outcome.DELIVERED);
         assertThat(WebPushSender.outcome(404)).isEqualTo(WebPushSender.Outcome.GONE);

@@ -12,6 +12,7 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.push.ApnsSender;
 import com.jabiz.runtime.push.PushEntities;
 import com.jabiz.runtime.push.PushProcesses;
 import com.jabiz.runtime.push.PushProperties;
@@ -50,8 +51,10 @@ class PushDeviceController {
 
     /**
      * @param webPushKey the VAPID public key a browser subscribes with (Base64url); null while push is off
+     * @param apns       whether the iOS shell's device tokens are taken (Apple's push service set up, 17k-b)
      */
-    record PushSettings(boolean enabled, String webPushKey, List<TemplateChoice> templates, List<DeviceView> devices) {}
+    record PushSettings(boolean enabled, String webPushKey, boolean apns, List<TemplateChoice> templates,
+        List<DeviceView> devices) {}
 
     /** @param otherEntry a template of another entry, listed because the user turned it off there */
     record TemplateChoice(String template, String name, boolean subscribed, boolean otherEntry) {}
@@ -140,15 +143,17 @@ class PushDeviceController {
                     }
                     listed.sort(java.util.Comparator.comparing(TemplateChoice::name));
                     return new PushSettings(properties.enabled(), properties.enabled()
-                        ? properties.webPush().publicKey().trim() : null, listed, found.getT2());
+                        ? properties.webPush().publicKey().trim() : null,
+                        properties.enabled() && properties.apns().configured(), listed, found.getT2());
                 });
             }));
     }
 
     /**
-     * Registers this browser's subscription (or a store app's token, 17k-b) for the session in use: 422
-     * {@code PUSH_DISABLED} while push is off, {@code PUSH_SUBSCRIPTION_INVALID} for an endpoint of no allowed push
-     * service or keys that are not a subscription's; a caller of no session cannot register (422
+     * Registers this browser's subscription, or the iOS shell's APNs device token ({@code kind: apns}, the token as
+     * {@code endpoint}, 17k-b), for the session in use: 422 {@code PUSH_DISABLED} while push is off,
+     * {@code PUSH_SUBSCRIPTION_INVALID} for an endpoint of no allowed push service, keys that are not a subscription's,
+     * or a device token while APNs is not set up; a caller of no session cannot register (422
      * {@code SESSION_UNKNOWN}).
      */
     @PostMapping(BASE + "/devices")
@@ -161,14 +166,15 @@ class PushDeviceController {
                 }
                 UUID current = session.orElseThrow(() -> new BusinessRuleViolationException(new Violation(null,
                     PlatformErrorCodes.SESSION_UNKNOWN, "A device is registered for a session")));
-                if (request == null || !PushEntities.WEB_PUSH.equals(request.kind())
-                    || !properties.allowedEndpoint(request.endpoint()) || !subscription(request)) {
+                if (request == null || !usable(request)) {
                     return Mono.error(refused(PlatformErrorCodes.PUSH_SUBSCRIPTION_INVALID,
                         "Not a usable push subscription"));
                 }
+                boolean apple = PushEntities.APNS.equals(request.kind());
                 return processes.executeAtEntry(register, new PushProcesses.RegisterInput(user.toString(),
-                        entryOf(context), current.toString(), request.kind(), request.endpoint(), request.p256dh(),
-                        request.auth()))
+                        entryOf(context), current.toString(), request.kind(),
+                        apple ? deviceToken(request.endpoint()) : request.endpoint(),
+                        apple ? null : request.p256dh(), apple ? null : request.auth()))
                     .map(output -> new Registered(output.deviceId()));
             }));
     }
@@ -184,7 +190,7 @@ class PushDeviceController {
                     return Mono.error(new com.jabiz.runtime.EntityNotFoundException("No device named"));
                 }
                 return processes.executeAtEntry(remove, new PushProcesses.RemoveInput(user.toString(),
-                    request.deviceId(), request.endpoint())).then();
+                    request.deviceId(), request.endpoint() == null ? null : deviceToken(request.endpoint()))).then();
             })));
     }
 
@@ -200,6 +206,31 @@ class PushDeviceController {
                 return processes.executeAtEntry(preference, new PushProcesses.PreferenceInput(user.toString(),
                     request.template(), request.subscribed()));
             })));
+    }
+
+    /**
+     * A browser's Web Push subscription (an allowed push service, a subscription's keys), or the iOS shell's APNs
+     * device token (hexadecimal, while APNs is set up; no keys).
+     */
+    private boolean usable(RegisterRequest request) {
+        if (PushEntities.APNS.equals(request.kind())) {
+            return properties.apns().configured() && ApnsSender.DEVICE_TOKEN.matcher(deviceToken(request.endpoint()))
+                .matches() && request.p256dh() == null && request.auth() == null;
+        }
+        return PushEntities.WEB_PUSH.equals(request.kind()) && properties.allowedEndpoint(request.endpoint())
+            && subscription(request);
+    }
+
+    /**
+     * An endpoint as stored: a device token (hexadecimal, as iOS may write it in capitals) in small letters; a Web
+     * Push endpoint, a URL, as it is.
+     */
+    static String deviceToken(String endpoint) {
+        if (endpoint == null) {
+            return "";
+        }
+        String lower = endpoint.toLowerCase(Locale.ROOT);
+        return ApnsSender.DEVICE_TOKEN.matcher(lower).matches() ? lower : endpoint;
     }
 
     /** A Web Push subscription's keys: a P-256 point and a 16-byte secret. */

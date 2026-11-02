@@ -46,4 +46,18 @@ class DeliverPushTest {
         assertThat(message.get("title").codePoints().limit(message.get("title").codePointCount(0,
             message.get("title").length()) - 1)).allMatch(c -> c == 0x1F600);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void forAnIphoneItIsApplesAlertUpToApplesLimit() {
+        byte[] bytes = DeliverPush.fit(JSON, DeliverPush.Shape.APNS, "Shipped", "注文".repeat(3000), "/portal/orders",
+            "t1");
+        assertThat(bytes.length).isLessThanOrEqualTo(ApnsSender.MAX_PAYLOAD).isGreaterThan(ApnsSender.MAX_PAYLOAD - 8);
+        Map<String, Object> message = JSON.readValue(bytes, Map.class);
+        Map<String, Object> aps = (Map<String, Object>) message.get("aps");
+        assertThat(aps).containsEntry("sound", "default");
+        assertThat((Map<String, String>) aps.get("alert")).containsEntry("title", "Shipped")
+            .hasEntrySatisfying("body", body -> assertThat(body).endsWith("…"));
+        assertThat(message).containsEntry("url", "/portal/orders").containsEntry("tag", "t1");
+    }
 }
