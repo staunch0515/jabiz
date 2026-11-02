@@ -258,6 +258,7 @@ function CardVideo({ card, player }: { card: FeedCard; player: string }) {
     navigate(`/p/${card.publicationId}`)
   }, [card.publicationId, player])
   return <VideoSlot id={`card:${card.publicationId}`} player={player} mode="card" onOpen={open}
+    publicationId={card.publicationId}
     title={t('feed.videoTitle', { name: card.name })} />
 }
 

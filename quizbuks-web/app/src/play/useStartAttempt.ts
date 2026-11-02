@@ -2,7 +2,7 @@ import { ApiError } from '@jabiz/client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { CODE } from '../qb/ids'
-import { startAttempt } from '../qb/play'
+import { startAttempt, type Playback } from '../qb/play'
 import { navigate } from '../qb/router'
 import { retryWhenBusy } from './busy'
 import { handOver } from './storage'
@@ -29,12 +29,13 @@ export function useStartAttempt() {
     return () => controller.abort()
   }, [])
   const mutation = useMutation({
-    mutationFn: (start: string | { publicationId: string; language: string | null }) => {
-      const { publicationId, language } = typeof start === 'string' ? { publicationId: start, language: null } : start
+    mutationFn: (start: string | { publicationId: string; language: string | null; playback?: Playback | null }) => {
+      const { publicationId, language, playback } = typeof start === 'string'
+        ? { publicationId: start, language: null, playback: null } : start
       // One key for this start and its retries. Each click is a new start: the server keeps one attempt per taker
       // and publication (its unique key) and a second start continues the one in progress.
       const key = crypto.randomUUID()
-      return retryWhenBusy(() => startAttempt(publicationId, key, language),
+      return retryWhenBusy(() => startAttempt(publicationId, key, language, playback),
         { onBusy: setBusy, signal: page.current?.signal })
     },
     onSuccess: (output) => {

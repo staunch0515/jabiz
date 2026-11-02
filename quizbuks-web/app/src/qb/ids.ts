@@ -124,6 +124,8 @@ export const CODE = {
   attemptExpired: 'QB_ATTEMPT_EXPIRED',
   attemptNotInProgress: 'QB_ATTEMPT_NOT_IN_PROGRESS',
   attemptFinished: 'QB_ATTEMPT_FINISHED',
+  /** 422 (Q75): the video to watch was not watched enough before starting. */
+  attemptWatchRequired: 'QB_ATTEMPT_WATCH_REQUIRED',
   /** 422: the terms in effect are to be accepted first (the consent prompt shows them). */
   consentRequired: 'QB_CONSENT_REQUIRED',
   /** 422: the page showed versions no longer in effect (reload them). */

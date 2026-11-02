@@ -49,6 +49,12 @@ public class InboxConfig {
         return new MessageTexts(messages);
     }
 
+    /** The taker's push notification of a prize won (platform 17k). */
+    @Bean
+    com.jabiz.push.PushTemplate qbPrizeWonPush() {
+        return MessageProcesses.PRIZE_WON;
+    }
+
     @Bean
     EntityDefinition qbMessageEntity() {
         return QbInbox.MESSAGE_ENTITY;

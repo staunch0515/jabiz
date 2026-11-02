@@ -11,6 +11,7 @@ import './messages'
 import { stagedPlayer } from './video/stage'
 import { activeFilterCount, containsPattern, feedFilters, NO_FILTERS } from './pages/FeedPage'
 import { forgetAttempts, storeResult, storeStart } from './play/storage'
+import { forgetPlayback } from './video/playback'
 import type { StartOutput, SubmitOutput } from './qb/play'
 
 function json(status: number, body: unknown) {
@@ -1830,5 +1831,130 @@ describe("the sponsor's products (Q60b)", () => {
     expect(items).toHaveLength(1)
     expect(items[0]).toHaveTextContent('Rye loaf')
     expect(within(items[0]).getByTestId('publication-products-shop')).toHaveAttribute('href', 'https://shop.example/rye')
+  })
+})
+
+describe('the video to watch first (Q75)', () => {
+  const PLAYER = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'
+  const WATCH = JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Watch first', description: null, body: null,
+    url: 'https://youtu.be/dQw4w9WgXcQ', pdf: null, audio: null, images: [], watchToAnswer: true, durationSec: 100 }])
+  const required = () => json(200, { items: [publication({ watchRequired: true, videoDurationSec: 100, materials: WATCH })],
+    offset: 0, limit: 1 })
+
+  /** The player says something: a message from the stage's frame, as YouTube's player posts it. */
+  function hear(frame: HTMLIFrameElement, data: unknown) {
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: JSON.stringify(data) }))
+    })
+  }
+
+  afterEach(() => forgetPlayback())
+
+  it('waits for the video to be watched before the start and reports the watching (D-Q75-2, D-Q75-4)', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    const { posted } = server({ publicationPage: required })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const frame = await screen.findByTitle('Watch first') as HTMLIFrameElement
+    const start = await screen.findByTestId('detail-start')
+    expect(start).toBeDisabled()
+    expect(screen.getByTestId('detail-watch')).toHaveTextContent('Watch the video first: 0:00 of 1:40 watched, 90 s to go.')
+    // Sixty seconds of the video over sixty seconds: counted, not yet enough.
+    hear(frame, { event: 'infoDelivery', info: { playerState: 1, currentTime: 0, duration: 100 } })
+    now.mockReturnValue(1_060_000)
+    hear(frame, { event: 'infoDelivery', info: { currentTime: 60 } })
+    expect(screen.getByTestId('detail-watch')).toHaveTextContent('1:00 of 1:40 watched, 30 s to go')
+    expect(start).toBeDisabled()
+    // A jump back is not watching: counting goes on from there.
+    now.mockReturnValue(1_061_000)
+    hear(frame, { event: 'infoDelivery', info: { currentTime: 20 } })
+    expect(screen.getByTestId('detail-watch')).toHaveTextContent('1:00 of 1:40')
+    // Thirty more seconds at pace: nine tenths, enough.
+    now.mockReturnValue(1_091_000)
+    hear(frame, { event: 'infoDelivery', info: { currentTime: 50 } })
+    expect(screen.getByTestId('detail-watch')).toHaveTextContent('Video watched: you can start.')
+    expect(start).toBeEnabled()
+    // (No axe here: it cannot look into the player's frame in jsdom; the start page is checked without one above.)
+    await userEvent.click(start)
+    await waitFor(() => expect(posted('QB_ATTEMPT_START')).toHaveLength(1))
+    expect(posted('QB_ATTEMPT_START')[0]).toMatchObject({ publicationId: PUB,
+      playback: { status: 'REPORTED', watchedSec: 90, ended: false, reportedDurationSec: 100 } })
+  })
+
+  it('takes the end of the video, whatever was watched', async () => {
+    const { posted } = server({ publicationPage: required })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const frame = await screen.findByTitle('Watch first') as HTMLIFrameElement
+    expect(await screen.findByTestId('detail-start')).toBeDisabled()
+    hear(frame, { event: 'onStateChange', info: 0 })
+    expect(screen.getByTestId('detail-start')).toBeEnabled()
+    await userEvent.click(screen.getByTestId('detail-start'))
+    await waitFor(() => expect(posted('QB_ATTEMPT_START')).toHaveLength(1))
+    expect(posted('QB_ATTEMPT_START')[0]).toMatchObject({ playback: { status: 'REPORTED', watchedSec: 0, ended: true } })
+  })
+
+  it("does not count the home card's muted playback; the start page's counts (D-Q75-3)", async () => {
+    const io = intersections()
+    const now = vi.spyOn(Date, 'now').mockReturnValue(2_000_000)
+    server({ feed: [{ ...CARD, video: PLAYER, watchRequired: true, videoDurationSec: 100 }], publicationPage: required })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    // Q75: the card says the video must be watched.
+    expect(within(card).getByTestId('feed-card-watch')).toHaveTextContent('Watch to answer')
+    io.fire(card, true, MIDDLE)
+    const frame = await screen.findByTitle('Video: Capitals week') as HTMLIFrameElement
+    // And still says so while it plays (the player takes the picture's place).
+    expect(card).toHaveAttribute('data-playing', 'true')
+    expect(within(card).getByTestId('feed-card-watch')).toHaveTextContent('Watch to answer')
+    hear(frame, { event: 'infoDelivery', info: { playerState: 1, currentTime: 0, muted: true } })
+    now.mockReturnValue(2_050_000)
+    hear(frame, { event: 'infoDelivery', info: { currentTime: 50 } })
+    // The tap opens the start page with the same player; what played muted on the card did not count.
+    await userEvent.click(screen.getByTestId('video-open'))
+    await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
+    expect(await screen.findByTestId('detail-watch')).toHaveTextContent('0:00 of 1:40 watched')
+    // From here it counts: fifty more seconds, then forty, make ninety.
+    now.mockReturnValue(2_051_000)
+    hear(frame, { event: 'infoDelivery', info: { currentTime: 51 } })
+    now.mockReturnValue(2_141_000)
+    hear(frame, { event: 'infoDelivery', info: { currentTime: 141 } })
+    expect(screen.getByTestId('detail-watch')).toHaveTextContent('Video watched')
+    expect(screen.getByTestId('detail-start')).toBeEnabled()
+  })
+
+  it('lets the start through, marked, when the player is never heard from (D-Q75-6)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const { posted } = server({ publicationPage: required })
+      window.history.replaceState(null, '', `/p/${PUB}`)
+      render(<App />)
+      await screen.findByTitle('Watch first')
+      expect(await screen.findByTestId('detail-start')).toBeDisabled()
+      await act(async () => {
+        vi.advanceTimersByTime(8_500)
+      })
+      expect(screen.getByTestId('detail-watch')).toHaveTextContent("Your browser does not report the video's progress")
+      expect(screen.getByTestId('detail-start')).toBeEnabled()
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      await user.click(screen.getByTestId('detail-start'))
+      await waitFor(() => expect(posted('QB_ATTEMPT_START')).toHaveLength(1))
+      expect(posted('QB_ATTEMPT_START')[0]).toMatchObject({ playback: { status: 'UNKNOWN' } })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('asks nothing of a publication whose video is not the one to watch, nor of an attempt in progress', async () => {
+    const { posted } = server({ publicationPage: () => json(200, { items: [publication({ watchRequired: false,
+      videoDurationSec: null })], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const start = await screen.findByTestId('detail-start')
+    expect(start).toBeEnabled()
+    expect(screen.queryByTestId('detail-watch')).toBeNull()
+    await userEvent.click(start)
+    await waitFor(() => expect(posted('QB_ATTEMPT_START')).toHaveLength(1))
+    expect(posted('QB_ATTEMPT_START')[0]).not.toHaveProperty('playback')
   })
 })

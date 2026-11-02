@@ -69,12 +69,19 @@ public final class AttemptProcesses {
      * @param language Q73b: the language to answer in when starting, one the publication offers (422
      *                 {@code QB_ATTEMPT_LANGUAGE} otherwise); its main language when not given. A view and a continued
      *                 attempt take none (an attempt keeps the language it started in).
+     * @param playback Q75: what the App read from the video's player (seconds watched, whether it ended, or that it
+     *                 could not read it); a card whose video must be watched refuses a new start without enough of
+     *                 it ({@link WatchRules}, 422 {@code QB_ATTEMPT_WATCH_REQUIRED}). Recorded on the attempt.
      */
     public record PublicationRef(@NotNull UUID publicationId, @jakarta.validation.constraints.Pattern(
-        regexp = "ja|zh|en") String language) {
+        regexp = "ja|zh|en") String language, @Valid WatchRules.Playback playback) {
 
         public PublicationRef(UUID publicationId) {
-            this(publicationId, null);
+            this(publicationId, null, null);
+        }
+
+        public PublicationRef(UUID publicationId, String language) {
+            this(publicationId, language, null);
         }
     }
 
@@ -275,6 +282,10 @@ public final class AttemptProcesses {
                     }
                 })
                 .compute("Continue an attempt in progress", (metadata, ctx) -> resume(ctx))
+                // Q75 (D-Q75-4): a card whose video must be watched refuses a new start without the App's report of
+                // enough watching; the card read outside the lock says so and how long the video is. A continued
+                // attempt is not asked again. No read: nothing changes in the statement budget (D-Q75-7).
+                .compute("Refuse an unwatched video", (metadata, ctx) -> refuseUnwatched(ctx))
                 // Q70a (D-Q70-1, option B): who holds the certification of a round starts none of its rounds. A round
                 // only reads more (an ordinary publication's queries are empty and send nothing), before the lock.
                 .steps(b -> RoundHolders.load(b, AttemptProcesses::starting))
@@ -348,6 +359,28 @@ public final class AttemptProcesses {
 
     static boolean starting(ProcessContext ctx) {
         return Boolean.TRUE.equals(ctx.get(NEW)) && !ctx.hasViolations();
+    }
+
+    /** The App's report of the playback, when the input is the App's (a channel's start has none). */
+    static WatchRules.Playback playback(ProcessContext ctx) {
+        return ctx.get(INPUT) instanceof PublicationRef ref ? ref.playback() : null;
+    }
+
+    static void refuseUnwatched(ProcessContext ctx) {
+        if (!starting(ctx)) {
+            return;
+        }
+        EntityInstance card = first(ctx, CARD_BEFORE);
+        if (!WatchRules.required(card)) {
+            return;
+        }
+        Integer duration = WatchRules.duration(card);
+        WatchRules.Playback playback = playback(ctx);
+        if (!WatchRules.satisfied(duration, playback)) {
+            ctx.reject(new com.jabiz.entity.Violation("playback", PlayCodes.WATCH_REQUIRED, "The video must be "
+                + "watched before answering", Map.of("shortfallSec", WatchRules.shortfallSec(duration, playback),
+                "durationSec", duration == null ? 0 : duration)));
+        }
     }
 
     /** An attempt of the caller's already exists: continue it while in time, else refuse; or note a new start. */
@@ -472,6 +505,8 @@ public final class AttemptProcesses {
         values.put("currentIndex", BigDecimal.ZERO);
         values.put("optionOrder", Answers.toJson(order));
         values.put("answers", Answers.toJson(Answers.none(order.size())));
+        // Q75 (D-Q75-9): the App's report of the playback, in the same insert (the budget stays).
+        values.putAll(WatchRules.values(card, playback(ctx)));
         Object attemptId = ctx.changes().insert(QbPlay.ATTEMPT, values);
         BigDecimal maxReward = PlaySteps.money(card.get("maxReward"));
         // Only the starts' side (Q10a4): the completions' side is the publication's lock's.

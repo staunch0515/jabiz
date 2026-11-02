@@ -35,6 +35,8 @@ function material(m: SnapshotMaterial | Draft['materials'][number], no: number):
     no, kind: m.kind, title: m.title, description: m.description, body: m.body, url: m.url, pdf: m.pdf,
     audio: m.audio, images: m.images.map((image, index) => ({ no: index + 1, image: image.image, caption: image.caption })),
     watchToAnswer: (m as { watchToAnswer?: boolean }).watchToAnswer === true,
+    durationSec: typeof (m as { durationSec?: number | null }).durationSec === 'number'
+      ? (m as { durationSec?: number }).durationSec! : null,
   }
 }
 
@@ -42,10 +44,14 @@ function material(m: SnapshotMaterial | Draft['materials'][number], no: number):
  * The home card's video, as the server's card has it (Q63, `PublicationEditing.cardVideo`): the video watching which
  * is enough to answer, else the first the app plays.
  */
-function videoOf(materials: { kind: string; url: string | null; watchToAnswer?: boolean }[]): string | null {
+function videoOf(materials: { kind: string; url: string | null; watchToAnswer?: boolean; durationSec?: number | null }[]):
+  { player: string | null; watchRequired: boolean; videoDurationSec: number | null } {
   const playable = (m: (typeof materials)[number]) => (m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
-  const watch = materials.find((m) => m.watchToAnswer && playable(m)) ?? materials.find((m) => playable(m))
-  return watch ? playable(watch) : null
+  const watch = materials.find((m) => m.watchToAnswer && playable(m))
+  // Q75: the card says whether its video is the one to watch, and how long it is (the sponsor's figure).
+  if (watch) return { player: playable(watch), watchRequired: true, videoDurationSec: watch.durationSec ?? null }
+  const first = materials.find((m) => playable(m))
+  return { player: first ? playable(first) : null, watchRequired: false, videoDurationSec: null }
 }
 
 function base(given: Sponsor | null) {
@@ -65,9 +71,10 @@ function base(given: Sponsor | null) {
 export function publicationPreview(p: Publication, tiers: SponsorTier[], snapshot: Snapshot | null,
   sponsor: Sponsor | null, now: Date = new Date()): Preview {
   const questions = snapshot?.questions ?? []
+  const video = videoOf(snapshot?.materials ?? [])
   return {
     draft: false,
-    video: videoOf(snapshot?.materials ?? []),
+    video: video.player,
     tiers: tiers.map((tier, index) => ({ seq: index + 1, fromScore: tier.fromScore, toScore: tier.toScore,
       reward: tier.reward })),
     questions: questions.map((q) => ({ no: q.no, stem: q.stem, image: q.image, points: q.points,
@@ -80,6 +87,8 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
       quizTitle: snapshot?.title ?? '',
       // Q64: the publication's own cover, as its card shows it; else the version's.
       cover: p.cover ?? snapshot?.cover ?? null,
+      watchRequired: video.watchRequired,
+      videoDurationSec: video.videoDurationSec,
       kind: snapshot?.kind === 'SURVEY' ? 'SURVEY' : 'QUIZ',
       intro: snapshot?.intro ?? null,
       materials: (snapshot?.materials ?? []).map((m) => material(m, m.no)),
@@ -103,9 +112,10 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
 /** A quiz's draft as it would read once published: what the quiz itself says, with no reward yet. */
 export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = new Date()): Preview {
   const q = draft.quiz
+  const video = videoOf(draft.materials)
   return {
     draft: true,
-    video: videoOf(draft.materials),
+    video: video.player,
     tiers: [],
     questions: draft.questions.map((question, index) => ({ no: index + 1, stem: question.stem, image: question.image,
       points: question.points,
@@ -117,6 +127,8 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
       name: q.title,
       quizTitle: q.title,
       cover: q.cover,
+      watchRequired: video.watchRequired,
+      videoDurationSec: video.videoDurationSec,
       kind: q.kind,
       intro: q.intro,
       materials: draft.materials.map((m, index) => material(m, index + 1)),

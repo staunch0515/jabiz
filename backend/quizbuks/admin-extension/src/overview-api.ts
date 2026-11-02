@@ -195,6 +195,8 @@ export async function readDraft(quiz: QuizRow): Promise<Snapshot> {
       audio: str(m.audio),
       images: (imagesOf.get(String(m.materialId)) ?? []).filter((image) => str(image.image))
         .map((image, n) => ({ no: n + 1, image: String(image.image), caption: str(image.caption) })),
+      watchToAnswer: m.watchToAnswer === true,
+      durationSec: typeof m.durationSec === 'number' ? m.durationSec : m.durationSec == null ? null : num(m.durationSec),
     })),
     questions: [...questions].sort(bySeq).map((q, i) => ({
       no: i + 1,

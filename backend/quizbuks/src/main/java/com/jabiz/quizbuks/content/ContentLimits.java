@@ -35,6 +35,10 @@ public final class ContentLimits {
     public static final int MIN_TIME_LIMIT_SEC = 30;
     public static final int MAX_TIME_LIMIT_SEC = 7_200;
 
+    /** Q75: the duration a sponsor gives the video to watch, in seconds (D-Q75-5). */
+    public static final int MIN_VIDEO_SECONDS = 1;
+    public static final int MAX_VIDEO_SECONDS = 7_200;
+
     public static final int MIN_POINTS = 1;
     public static final int MAX_POINTS = 1_000;
 

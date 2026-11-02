@@ -21,6 +21,9 @@ results:
   passed:              { from: QbAttempt.passed }
   rewardStatus:        { from: QbAttempt.rewardStatus }
   rewardPaidAt:        { from: QbAttempt.rewardPaidAt }
+  watchedSec:          { from: QbAttempt.watchedSec }
+  videoEnded:          { from: QbAttempt.videoEnded }
+  playbackStatus:      { from: QbAttempt.playbackStatus }
 list:
   filters: [userId, publicationId, publisherKind, publisherId, status, rewardStatus, startedAt, submittedAt]
   sorts:   [startedAt, submittedAt, status, score]
@@ -44,6 +47,10 @@ SELECT
     m.{{QbAttempt.fullScore}}           AS fullScore,
     m.{{QbAttempt.passed}}              AS passed,
     m.{{QbAttempt.rewardStatus}}        AS rewardStatus,
-    m.{{QbAttempt.rewardPaidAt}}        AS rewardPaidAt
+    m.{{QbAttempt.rewardPaidAt}}        AS rewardPaidAt,
+    -- Q75 (D-Q75-9): what the App reported of the video's playback at the start.
+    m.{{QbAttempt.watchedSec}}          AS watchedSec,
+    m.{{QbAttempt.videoEnded}}          AS videoEnded,
+    m.{{QbAttempt.playbackStatus}}      AS playbackStatus
 FROM {{QbAttempt}} m
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = m.{{QbAttempt.publicationId}}

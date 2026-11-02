@@ -90,6 +90,10 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 - 数据期限（10 §13.2）：`/api/auth/me` 的 `dataFrom` / `dataTo` 不为空时，页头显示期限标签（列表与报表只含该期间，由服务端过滤）。
 - 所有请求带 `Accept-Language`（界面语言），服务端据此返回错误文案、标签与字典。
 
+
+**原生外壳中的登录与安装提示**（17l，决策 D68）：`configureClient({ openAuthorization })` 把提供方的页面交给外壳在系统浏览器中打开（缺省由页面自己跳转），回调照旧是入口的
+`login/oidc`（外壳以关联链接在同一个网页视图中打开，binder 不变）；`configureClient({ nativeShell })` 声明外壳，安装提示视同已安装、不出现（指南 `app-spa.md` 6a）。
+
 ## 5. 适配层
 
 | 语义类型 | 输入控件 | 展示 | 列表筛选 |

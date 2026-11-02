@@ -113,9 +113,11 @@ public final class ChannelPublishing {
             questions.add(new QuizSnapshot.Question(questions.size() + 1, question.stem().strip(), null, 1, options,
                 null));
         }
+        // Q75: a channel's video is shown, never required (the storefront reports no playback and has no duration):
+        // an ordinary video, which the card still carries as the first the player plays (PublicationEditing.cardVideo).
         List<QuizSnapshot.Material> materials = input.video() == null || input.video().isBlank() ? List.of()
             : List.of(new QuizSnapshot.Material(1, MaterialKind.VIDEO_LINK.name(), input.name().strip(), null, null,
-                input.video().strip(), null, null, List.of(), true));
+                input.video().strip(), null, null, List.of()));
         return new QuizSnapshot(input.name().strip(), null, null, input.timeLimitSec(), false, materials, questions);
     }
 

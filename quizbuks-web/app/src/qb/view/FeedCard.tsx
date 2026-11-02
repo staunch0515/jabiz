@@ -116,6 +116,13 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen 
             <RewardText card={card} />
             <span aria-hidden>·</span>
             <span data-testid="feed-card-completions">{t('feed.completions', { count: card.completions })}</span>
+            {/* Q75: the video is the one to watch before answering; in the facts, which stay while it plays (Q66). */}
+            {card.video && card.watchRequired && (
+              <>
+                <span aria-hidden>·</span>
+                <span data-testid="feed-card-watch">{t('feed.watchFirst')}</span>
+              </>
+            )}
             {note && (
               <>
                 <span aria-hidden>·</span>

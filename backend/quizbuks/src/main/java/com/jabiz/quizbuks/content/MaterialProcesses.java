@@ -51,12 +51,22 @@ public final class MaterialProcesses {
      * {@code variantOf} and {@code language} (Q73a, §2.2b): a material of one of the quiz's other languages, standing
      * for the base material {@code variantOf} there, of its kind; one per base material and language, made with both
      * and changed with the same. It follows the base's place and the base's {@code watchToAnswer}.
+     * {@code durationSec} (Q75, VIDEO_LINK of the base language only): how long the video is, 1 second to 2 hours;
+     * the video to watch needs it before a version is saved (D-Q75-5), so that the start can check the watching.
      */
     public record MaterialInput(@NotNull UUID quizId, UUID materialId,
         @NotNull @Pattern(regexp = "ARTICLE|LINK|VIDEO_LINK|PDF|IMAGES|AUDIO") String kind, String title,
         String description, String body, String url, UUID pdf, UUID audio,
         @Size(max = ContentLimits.MAX_IMAGES) List<@Valid @NotNull ImageInput> images, Long baseRevision,
-        Boolean watchToAnswer, UUID variantOf, @Pattern(regexp = "ja|zh|en") String language) {
+        Boolean watchToAnswer, UUID variantOf, @Pattern(regexp = "ja|zh|en") String language, Integer durationSec) {
+
+        /** A material as before Q75: without a duration. */
+        public MaterialInput(UUID quizId, UUID materialId, String kind, String title, String description, String body,
+            String url, UUID pdf, UUID audio, List<ImageInput> images, Long baseRevision, Boolean watchToAnswer,
+            UUID variantOf, String language) {
+            this(quizId, materialId, kind, title, description, body, url, pdf, audio, images, baseRevision,
+                watchToAnswer, variantOf, language, null);
+        }
 
         /** A material of the base language. */
         public MaterialInput(UUID quizId, UUID materialId, String kind, String title, String description, String body,
@@ -207,6 +217,19 @@ public final class MaterialProcesses {
         if (watch) {
             watchProblems(ctx, kind, input.url(), materials, material);
         }
+        // Q75: the duration belongs to a video of the base language, within its range; the video to watch is asked
+        // for it when a version is saved (QuizCompleteness), not here: a draft may still lack it.
+        Integer duration = input.durationSec();
+        if (duration != null && (kind != MaterialKind.VIDEO_LINK || variant)) {
+            ctx.reject(new Violation("durationSec", ContentCodes.MATERIAL_FIELD_NOT_ALLOWED, "A material of kind " + kind
+                + (variant ? " of another language" : "") + " has no durationSec",
+                Map.of("kind", kind.name(), "field", "durationSec")));
+        } else if (duration != null
+            && (duration < ContentLimits.MIN_VIDEO_SECONDS || duration > ContentLimits.MAX_VIDEO_SECONDS)) {
+            ctx.reject(new Violation("durationSec", ContentCodes.MATERIAL_DURATION_RANGE, "A video lasts "
+                + ContentLimits.MIN_VIDEO_SECONDS + " to " + ContentLimits.MAX_VIDEO_SECONDS + " seconds",
+                Map.of("min", ContentLimits.MIN_VIDEO_SECONDS, "max", ContentLimits.MAX_VIDEO_SECONDS)));
+        }
         // A video to watch is watched in every language: its other languages' videos must be playable too.
         if (variant && base != null && Boolean.TRUE.equals(base.get("watchToAnswer"))
             && VideoEmbeds.player(text(input.url())).isEmpty() && text(input.url()) != null) {
@@ -243,6 +266,8 @@ public final class MaterialProcesses {
         values.put("pdf", input.pdf());
         values.put("audio", input.audio());
         values.put("watchToAnswer", watch);
+        values.put("durationSec", kind == MaterialKind.VIDEO_LINK && !variant && duration != null
+            ? decimal(duration) : null);
         boolean changed = false;
         Object materialId;
         if (material == null) {

@@ -37,15 +37,76 @@ export interface MessageEventLike extends ExtendableEventLike {
   data: unknown
 }
 
+/** A push message: its data as the server sent it (decision D69). */
+export interface PushEventLike extends ExtendableEventLike {
+  data: { json(): unknown } | null
+}
+
+/** A tap on a notification this worker showed. */
+export interface NotificationEventLike extends ExtendableEventLike {
+  notification: { data: unknown; close(): void }
+}
+
+/** A window of the origin, as `clients.matchAll` gives it. */
+export interface WindowClientLike {
+  url: string
+  focus(): Promise<unknown>
+  navigate(url: string): Promise<unknown>
+}
+
 /** The parts of `ServiceWorkerGlobalScope` the worker uses. */
 export interface WorkerScope {
   location: { origin: string }
-  registration: { unregister(): Promise<boolean> }
-  clients: { claim(): Promise<void> }
+  registration: {
+    unregister(): Promise<boolean>
+    showNotification(title: string, options: { body?: string; tag?: string; data?: unknown }): Promise<void>
+  }
+  clients: {
+    claim(): Promise<void>
+    matchAll(options: { type: 'window'; includeUncontrolled: boolean }): Promise<readonly WindowClientLike[]>
+    openWindow(url: string): Promise<unknown>
+  }
   skipWaiting(): Promise<void>
   addEventListener(type: 'install' | 'activate', listener: (event: ExtendableEventLike) => void): void
   addEventListener(type: 'fetch', listener: (event: FetchEventLike) => void): void
   addEventListener(type: 'message', listener: (event: MessageEventLike) => void): void
+  addEventListener(type: 'push', listener: (event: PushEventLike) => void): void
+  addEventListener(type: 'notificationclick', listener: (event: NotificationEventLike) => void): void
+}
+
+/** A push notification as the platform sends it (`{title, body, url, tag}`); null for anything else. */
+export function pushMessage(data: PushEventLike['data']): { title: string; body: string; url: string; tag?: string }
+  | null {
+  if (!data) return null
+  let value: unknown
+  try {
+    value = data.json()
+  } catch {
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  const message = value as Record<string, unknown>
+  if (typeof message.title !== 'string' || message.title === '') return null
+  return {
+    title: message.title,
+    body: typeof message.body === 'string' ? message.body : '',
+    url: typeof message.url === 'string' ? message.url : '',
+    tag: typeof message.tag === 'string' ? message.tag : undefined,
+  }
+}
+
+/** The page a notification opens: a path of this origin, else the SPA's home; never another site. */
+export function notificationTarget(data: unknown, origin: string, base: string): string {
+  const url = data && typeof data === 'object' ? (data as { url?: unknown }).url : undefined
+  if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//')) {
+    try {
+      const target = new URL(url, origin)
+      if (target.origin === origin) return target.href
+    } catch {
+      // Not a URL: the home.
+    }
+  }
+  return new URL(base, origin).href
 }
 
 /** The message the page sends when the user agrees to the new version (`registerServiceWorker`). */
@@ -107,5 +168,25 @@ export function startWorker(scope: WorkerScope, config: SwConfig, caches: CacheS
       )
     }
     // 'pass': no respondWith, the browser fetches as without a worker.
+  })
+  // Push notifications (decision D69): shown as the server sent them; a tap opens their page in a window of this SPA
+  // when there is one, else in a new one.
+  scope.addEventListener('push', (event) => {
+    const message = pushMessage(event.data)
+    if (!message) return
+    event.waitUntil(scope.registration.showNotification(message.title, {
+      body: message.body, tag: message.tag, data: { url: message.url },
+    }))
+  })
+  scope.addEventListener('notificationclick', (event) => {
+    event.notification.close()
+    const target = notificationTarget(event.notification.data, ctx.origin, config.base)
+    const home = new URL(config.base, ctx.origin).href
+    event.waitUntil(scope.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const own = windows.find((window) => window.url.startsWith(home))
+      if (!own) return scope.clients.openWindow(target)
+      // navigate() rejects for a window this worker does not control yet (opened before it took over): then a new one.
+      return own.focus().then(() => own.navigate(target)).catch(() => scope.clients.openWindow(target))
+    }))
   })
 }

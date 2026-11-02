@@ -39,7 +39,7 @@
 
 ## 3. 后端（`backend/quizbuks`）
 
-### 3.1 迁移 V60 `quizbuks_prerequisites`（V59 给了 Q75）
+### 3.1 迁移 V60 `quizbuks_prerequisites`（Q75 用了 V59）
 
 ```sql
 CREATE TABLE qb_publication_prerequisite (
@@ -150,7 +150,7 @@ CREATE INDEX qb_publication_prerequisite_required_idx ON qb_publication_prerequi
 
 按 §2–§6 做完，与计划的不同：
 
-- **迁移是 V60**：Q75（#411）用了 V59。**#411 须先合并**：Flyway 拒绝比已执行的最大版本小的新迁移，本 PR 先合时 #411 的迁移要改成 V61。
+- **迁移是 V60**：Q75（#411，已合并）用了 V59（Flyway 拒绝比已执行的最大版本小的新迁移，所以要在它之后）。
 - **`requirement` 是文本列加检查约束**，没有建字典（只有两个值，前端与流程的输入都以 `@Pattern` / 类型限定）。
 - **多一个错误码** `QB_PREREQUISITE_TOO_DEEP`（链长超过 20，计划只写了深度上限）与 `QB_PREREQUISITE_IN_USE`：一个发布可能先提交、被另一个发布要求、再因驳回回到草稿，这时删除它会留下指向它的前置行，所以被要求的草稿不能删除。环检查因此也有意义（回到草稿的发布可以要求要求它的发布）。
 - **没有新的商户模板 `qb.sponsor.publication-prerequisites`**：商户后台像读条件一样经本人的数据视图 `sponsor:QbPublicationPrerequisite` 读前置行，名字取自已有的 `qb.sponsor.publications`。
