@@ -58,7 +58,7 @@ class ShareLinkIT extends PlayItSupport {
         String publicationId = livePublication(sponsorA(), "Shared");
         assertThat(page(publicationId)).singleElement().satisfies(row -> {
             assertThat(row).containsOnlyKeys("publicationId", "name", "quizTitle", "kind", "startAt", "endAt",
-                "timeLimitSec", "questionCount", "fullScore", "passScore", "maxReward", "rewardMethod",
+                "timeLimitSec", "questionCount", "pickCount", "fullScore", "passScore", "maxReward", "rewardMethod",
                 "redeemDescription", "digitalDelivery", "digitalDescription", "sponsorCompany",
                 // Q75: whether the video must be watched first, and how long it is.
                 "watchRequired", "videoDurationSec",
