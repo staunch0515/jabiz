@@ -98,6 +98,10 @@ public final class QbPublications {
                 decimal(PublishingLimits.MAX_TIME_LIMIT_SEC))));
         eb.field("passScore", f -> f.physicalColumn("pass_score").asNumeric(6, 0)
             .apply(Rules.range(PublishingCodes.SCORE_RANGE, BigDecimal.ZERO, decimal(PublishingLimits.MAX_SCORE))));
+        // Q81 (D-Q81-1): how many of the version's questions each taker is given, drawn at the start; none is all of
+        // them. Frozen with the policy; the full score is then this many times the common points (D-Q81-2).
+        eb.field("pickCount", f -> f.physicalColumn("pick_count").asNumeric(4, 0)
+            .apply(Rules.range(PublishingCodes.PICK_RANGE, BigDecimal.ONE, decimal(ContentLimits.MAX_QUESTIONS))));
         eb.field("budgetCap", f -> f.physicalColumn("budget_cap").asMonetary("JPY", 0)
             .apply(Rules.range(PublishingCodes.BUDGET_RANGE, BigDecimal.ONE, PublishingLimits.MAX_MONEY)));
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").asNumeric(9, 0)
@@ -378,6 +382,8 @@ public final class QbPublications {
             .asNumeric(5, 0));
         eb.field("questionCount", f -> f.physicalColumn("question_count").required(true)
             .asNumeric(4, 0));
+        // Q81: how many of them each taker is given (none: all); the feed and the page say "k of n".
+        eb.field("pickCount", f -> f.physicalColumn("pick_count").immutable(true).asNumeric(4, 0));
         eb.field("budgetCap", f -> f.physicalColumn("budget_cap").immutable(true).asMonetary("JPY", 0));
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").immutable(true).asNumeric(9, 0));
         // CardTiers' JSON: the tiers are frozen at submission too.

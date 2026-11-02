@@ -216,7 +216,8 @@ public final class AttemptProcesses {
     // ---- start -----------------------------------------------------------------------------------------------------
 
     /** @param shuffle the order of each attempt's options, keyed by the server (Q10b, review M-a) */
-    public static ProcessDefinition<PublicationRef, StartOutput, ProcessContext> start(OptionShuffle shuffle) {
+    public static ProcessDefinition<PublicationRef, StartOutput, ProcessContext> start(OptionShuffle shuffle,
+        QuestionPick pick) {
         return ProcessDefinition.define(START, 1, PublicationRef.class, StartOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Starts the caller's attempt of a publication, or continues the one in progress.")
@@ -319,7 +320,7 @@ public final class AttemptProcesses {
                 // (the start writes it), by their account or their verified address.
                 .steps(b -> Invitations.loadForTaker(b,
                     ctx -> starting(ctx) && PlaySteps.invited(first(ctx, CARD_BEFORE)) ? ctx.get(PUB_KEY) : null))
-                .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle)));
+                .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle, pick)));
     }
 
     static EntityQuery mine(Object publicationId) {
@@ -399,15 +400,16 @@ public final class AttemptProcesses {
             String.valueOf(ctx.get(PUB_KEY)))));
     }
 
-    static void start(ProcessContext ctx, OptionShuffle shuffle) {
-        start(ctx, shuffle, ctx.request().actorId(), PlaySteps.userRegions(ctx));
+    static void start(ProcessContext ctx, OptionShuffle shuffle, QuestionPick pick) {
+        start(ctx, shuffle, pick, ctx.request().actorId(), PlaySteps.userRegions(ctx));
     }
 
     /**
      * Starts the attempt of {@code userId}, whose country is in {@code userRegions}: the caller for a taker of the
      * App, the channel's taker for a channel's publication ({@link ChannelPlay}, S2).
      */
-    static void start(ProcessContext ctx, OptionShuffle shuffle, String userId, String userRegions) {
+    static void start(ProcessContext ctx, OptionShuffle shuffle, QuestionPick pick, String userId,
+        String userRegions) {
         if (!starting(ctx)) {
             return;
         }
@@ -461,7 +463,14 @@ public final class AttemptProcesses {
         QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
         Object publicationId = ctx.get(PUB_KEY);
         Instant deadline = AttemptRules.deadline(ctx.opTime(), PlaySteps.integer(card.get("timeLimitSec")));
-        List<List<Integer>> order = shuffle.order(userId, publicationId, snapshot.questions());
+        // Q81 (D-Q81-3, D-Q81-4): a publication drawing k questions gives this taker their set, in the version's order;
+        // from here on the attempt's snapshot is that subset (the language first: its texts are keyed by the
+        // version's numbers).
+        Integer pickCount = PlaySteps.integerOrNull(card.get("pickCount"));
+        List<Integer> questionSet = pickCount == null ? null
+            : pick.pick(userId, publicationId, snapshot.questions(), pickCount);
+        QuizSnapshot given = questionSet == null ? snapshot : snapshot.subset(questionSet);
+        List<List<Integer>> order = shuffle.order(userId, publicationId, given.questions());
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("userId", userId);
         values.put("publicationId", publicationId);
@@ -475,6 +484,7 @@ public final class AttemptProcesses {
         values.put("currentIndex", BigDecimal.ZERO);
         values.put("optionOrder", Answers.toJson(order));
         values.put("answers", Answers.toJson(Answers.none(order.size())));
+        values.put("questionSet", QuestionPick.toJson(questionSet));
         // Q75 (D-Q75-9): the App's report of the playback, in the same insert (the budget stays).
         values.putAll(WatchRules.values(card, playback(ctx)));
         Object attemptId = ctx.changes().insert(QbPlay.ATTEMPT, values);
@@ -495,7 +505,8 @@ public final class AttemptProcesses {
         ctx.put(OUTPUT, new StartOutput(String.valueOf(attemptId), PlaySteps.uuid(publicationId),
             AttemptStatus.IN_PROGRESS, ctx.opTime(), deadline, ctx.opTime(),
             PlaySteps.integer(card.get("timeLimitSec")), 0, false,
-            questions(com.jabiz.quizbuks.content.QuizSnapshots.in(snapshot, language), order),
+            questions(questionSet == null ? com.jabiz.quizbuks.content.QuizSnapshots.in(snapshot, language)
+                : com.jabiz.quizbuks.content.QuizSnapshots.in(snapshot, language).subset(questionSet), order),
             List.of(), snapshot.kind()));
     }
 
@@ -503,8 +514,9 @@ public final class AttemptProcesses {
     private static StartOutput output(ProcessContext ctx, EntityInstance attempt, QuizSnapshot snapshot,
         boolean resumed) {
         List<List<Integer>> order = Answers.fromJson(attempt.get("optionOrder"));
-        // Q73b: the questions in the attempt's language (the version's base for one made before).
-        snapshot = PlaySteps.inLanguage(snapshot, attempt);
+        // Q73b: the questions in the attempt's language (the version's base for one made before); Q81: only the
+        // ones it was given.
+        snapshot = PlaySteps.forAttempt(snapshot, attempt);
         Instant startedAt = PlaySteps.instant(attempt.get("startedAt"));
         Instant deadline = PlaySteps.instant(attempt.get("deadline"));
         return new StartOutput(String.valueOf(attempt.id()), PlaySteps.uuid(attempt.get("publicationId")),
@@ -515,9 +527,11 @@ public final class AttemptProcesses {
     }
 
     /**
-     * The questions as the taker sees them: every question in order with its options in {@code order}, numbered by
-     * their position (Q10b, M1: never by the version's number, which follows the author's order), without the
-     * options' correctness (design section 9: the correct answers appear only once the attempt is finished).
+     * The questions as the taker sees them: every question of the attempt's snapshot in order, numbered by its
+     * position (Q81, D-Q81-5: the version's number stays in the attempt, as the options' positions do, Q10b M1), with
+     * its options in {@code order}, numbered by their position (never by the version's number, which follows the
+     * author's order), without the options' correctness (design section 9: the correct answers appear only once the
+     * attempt is finished).
      */
     static List<QuestionView> questions(QuizSnapshot snapshot, List<List<Integer>> order) {
         List<QuestionView> questions = new ArrayList<>();
@@ -531,7 +545,7 @@ public final class AttemptProcesses {
                 QuizSnapshot.Option option = byNo.get(no);
                 options.add(new OptionView(options.size() + 1, option.text(), option.image()));
             }
-            questions.add(new QuestionView(question.no(), question.stem(), question.image(), question.points(),
+            questions.add(new QuestionView(i + 1, question.stem(), question.image(), question.points(),
                 List.copyOf(options), question.choice()));
         }
         return List.copyOf(questions);

@@ -120,17 +120,21 @@ public final class AttemptResults {
 
     static void read(ProcessContext ctx) {
         EntityInstance attempt = ctx.get(ATTEMPT, EntityInstance.class);
-        QuizSnapshot snapshot = PlaySteps.inLanguage(PlaySteps.snapshot(ctx), attempt);
+        QuizSnapshot snapshot = PlaySteps.forAttempt(PlaySteps.snapshot(ctx), attempt);
         EntityInstance card = first(ctx, CARD);
         boolean finished = AttemptStatus.finished(attempt.get("status"));
         Integer passScore = snapshot.survey() || card == null ? null : PlaySteps.integer(card.get("passScore"));
         List<AttemptProcesses.QuestionView> questions = finished
             ? AttemptProcesses.questions(snapshot, Answers.fromJson(attempt.get("optionOrder"))) : List.of();
-        List<AttemptFinishing.QuestionOutput> result = finished
-            ? Scoring.fromJson(attempt.get("result")).stream().map(question -> new AttemptFinishing.QuestionOutput(
-                question.no(), question.selected(), question.correct(), question.points(), question.earned()))
-                .toList()
-            : List.of();
+        // Q81 (D-Q81-5): the result's rows follow the attempt's questions, so a row's position is its number to the
+        // taker (the row keeps the version's number for the statistics).
+        List<Scoring.QuestionResult> rows = finished ? Scoring.fromJson(attempt.get("result")) : List.of();
+        List<AttemptFinishing.QuestionOutput> result = new java.util.ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            Scoring.QuestionResult question = rows.get(i);
+            result.add(new AttemptFinishing.QuestionOutput(i + 1, question.selected(), question.correct(),
+                question.points(), question.earned()));
+        }
         Object passed = attempt.get("passed");
         ctx.put(OUTPUT, new ResultOutput(String.valueOf(attempt.id()), PlaySteps.uuid(attempt.get("publicationId")),
             card == null ? null : com.jabiz.quizbuks.publishing.PublicationLanguages.cardText(card,

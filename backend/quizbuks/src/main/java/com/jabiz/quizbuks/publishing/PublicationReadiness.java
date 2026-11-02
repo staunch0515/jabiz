@@ -24,7 +24,17 @@ public final class PublicationReadiness {
     public record Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
         Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
         String redeemDescription, String audience, String digitalDelivery, String digitalDescription,
-        boolean hasDigitalContent, ReferralPolicy referral) {
+        boolean hasDigitalContent, ReferralPolicy referral, Integer pickCount) {
+
+        /** As before Q81: every question of the version is asked. */
+        public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
+            Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
+            String redeemDescription, String audience, String digitalDelivery, String digitalDescription,
+            boolean hasDigitalContent, ReferralPolicy referral) {
+            this(versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners,
+                rewardMethod, redeemDescription, audience, digitalDelivery, digitalDescription, hasDigitalContent,
+                referral, null);
+        }
 
         /** As before Q70: no referrals. */
         public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
@@ -97,7 +107,10 @@ public final class PublicationReadiness {
     public static List<Violation> check(Draft draft, List<TierCoverage.Tier> tiers, QuizSnapshot version,
         Instant now, BigDecimal maxRewardPerAttempt) {
         List<Violation> problems = new ArrayList<>();
-        Integer fullScore = version == null ? null : version.fullScore();
+        // Q81 (D-Q81-2): a pick's full score is k times the common points; a pick that cannot stand (reported below)
+        // leaves the version's.
+        Integer fullScore = version == null ? null : fullScore(version, draft.pickCount());
+        problems.addAll(pickProblems(draft.pickCount(), version));
         if (draft.versionId() == null || version == null) {
             problems.add(new Violation("versionId", PublishingCodes.NO_VERSION, "Choose a version of a quiz",
                 Map.of()));
@@ -216,6 +229,51 @@ public final class PublicationReadiness {
      * question answered) and only the tier of the full score has a reward. The sponsor console builds these tiers;
      * the coverage itself is {@link TierCoverage}'s.
      */
+    /**
+     * Q81 (D-Q81-2): the full score an attempt of the version can reach: {@code pickCount} times the common points when
+     * each taker is given that many questions and the pick stands ({@link #pickProblems}), else the version's.
+     */
+    public static int fullScore(QuizSnapshot version, Integer pickCount) {
+        Integer points = pickCount == null || !pickProblems(pickCount, version).isEmpty() ? null : commonPoints(version);
+        return points == null ? version.fullScore() : pickCount * points;
+    }
+
+    /** The points every question of the version scores; null when they differ (or there are no questions). */
+    public static Integer commonPoints(QuizSnapshot version) {
+        List<QuizSnapshot.Question> questions = version.questions();
+        if (questions.isEmpty()) {
+            return null;
+        }
+        int points = questions.getFirst().points();
+        return questions.stream().allMatch(question -> question.points() == points) ? points : null;
+    }
+
+    /**
+     * Q81 (D-Q81-1, D-Q81-2): why {@code pickCount} questions cannot be drawn from the version: not 1..n-1 of its n
+     * questions (all of them is left empty), a survey (answered whole), or questions of unequal points (each taker's
+     * full score would differ). None without a pick or a version.
+     */
+    public static List<Violation> pickProblems(Integer pickCount, QuizSnapshot version) {
+        if (pickCount == null || version == null) {
+            return List.of();
+        }
+        int n = version.questions().size();
+        if (pickCount < 1 || pickCount >= n) {
+            return List.of(new Violation("pickCount", PublishingCodes.PICK_RANGE, "The pick must be between 1 and "
+                + (n - 1) + " of the version's " + n + " questions; leave it empty to ask all of them",
+                Map.of("pickCount", pickCount, "questionCount", n)));
+        }
+        if (version.survey()) {
+            return List.of(new Violation("pickCount", PublishingCodes.PICK_SURVEY, "A survey is answered whole",
+                Map.of()));
+        }
+        if (commonPoints(version) == null) {
+            return List.of(new Violation("pickCount", PublishingCodes.PICK_UNEQUAL_POINTS, "A pick needs every "
+                + "question of the version to score the same", Map.of()));
+        }
+        return List.of();
+    }
+
     private static List<Violation> survey(Draft draft, List<TierCoverage.Tier> tiers, int fullScore) {
         List<Violation> problems = new ArrayList<>();
         if (draft.passScore() != null && draft.passScore() != fullScore) {

@@ -76,6 +76,8 @@ export interface Publication {
   endAt: string | null
   timeLimitSec: number | null
   passScore: number | null
+  /** Q81: how many of the version's questions each taker is given, drawn at the start; null asks all of them. */
+  pickCount: number | null
   budgetCap: string | null
   maxWinners: number | null
   /** How the reward reaches the taker (Q22); a prize at the sponsor's place is described. */
@@ -176,6 +178,8 @@ export interface SaveInput {
   endAt: string | null
   timeLimitSec: number | null
   passScore: number | null
+  /** Q81: the questions drawn per taker; null asks all of them. */
+  pickCount: number | null
   budgetCap: number | null
   maxWinners: number | null
   /** The whole list in its order. */
@@ -336,6 +340,7 @@ export function toPublication(row: Row): Publication {
     endAt: str(row.endAt),
     timeLimitSec: numOrNull(row.timeLimitSec),
     passScore: numOrNull(row.passScore),
+    pickCount: numOrNull(row.pickCount),
     budgetCap: str(row.budgetCap),
     maxWinners: numOrNull(row.maxWinners),
     rewardMethod: methodOf(row.rewardMethod),
@@ -855,6 +860,8 @@ export interface PublicationForm {
   endAt: string | null
   timeLimitSec: string
   passScore: string
+  /** Q81: the questions drawn per taker; empty asks all of them. */
+  pickCount: string
   budgetCap: string
   maxWinners: string
   tiers: TierDraft[]
@@ -907,6 +914,7 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     endAt: p?.endAt ?? null,
     timeLimitSec: text(p?.timeLimitSec),
     passScore: text(p?.passScore),
+    pickCount: text(p?.pickCount),
     budgetCap: text(p?.budgetCap),
     maxWinners: text(p?.maxWinners),
     rewardMethod: p?.rewardMethod ?? 'PLATFORM',
@@ -958,6 +966,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
   }
   const timeLimitSec = read('timeLimitSec', form.timeLimitSec)
   const passScore = read('passScore', form.passScore)
+  const pickCount = read('pickCount', form.pickCount)
   const budgetCap = read('budgetCap', form.budgetCap)
   const maxWinners = read('maxWinners', form.maxWinners)
   const digital = form.rewardMethod === 'DIGITAL_PRIZE'
@@ -995,6 +1004,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       endAt: form.endAt,
       timeLimitSec,
       passScore,
+      pickCount,
       budgetCap,
       maxWinners,
       tiers,
@@ -1058,7 +1068,7 @@ export function nextTier(tiers: readonly TierDraft[], fullScore: number | null):
 
 /** The fields of the publication the pages name (`entity.QbPublication.<field>` on the server). */
 export const PUBLICATION_FIELDS = ['name', 'versionId', 'regions', 'startAt', 'endAt', 'timeLimitSec', 'passScore',
-  'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'digitalDelivery', 'digitalDescription',
+  'pickCount', 'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'digitalDelivery', 'digitalDescription',
   'digitalSendDays', 'digitalContent', 'audience', 'referral'] as const
 export type PublicationField = (typeof PUBLICATION_FIELDS)[number]
 

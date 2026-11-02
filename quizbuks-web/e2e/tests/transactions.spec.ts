@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import type { Page } from '@playwright/test'
-import { expect, prepareQuizbuks, signIn, test, unique } from './support'
+import { expect, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { completeQuiz, query } from './content'
+import { decideReview } from './publishing'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
 import { fundedSponsor, takerInJapan } from './wallet'
 
@@ -93,3 +95,41 @@ test('a sponsor reads, filters and exports their transactions', async ({ page, r
   await expect(page.getByRole('combobox', { name: 'Publication' })).toContainText(name)
 })
 
+/**
+ * Q81 (docs/quizbuks/plans/Q81-question-pick.md): a publication drawing three of its version's five questions gives a
+ * taker three of them, numbered 1..3, and scores them over a full score of 3; answering by the numbers shown pays the
+ * top tier.
+ */
+test('a publication drawing three of five questions gives a taker three and pays full marks (Q81)',
+  async ({ request }) => {
+    const sponsor = await fundedSponsor(request, 1000)
+    const quiz = await completeQuiz(request, sponsor.token, { questions: 5 })
+    const versionId = (await query(request, sponsor.token, 'qb.sponsor.quiz-versions', { quizId: quiz.quizId }))[0]
+      .versionId as string
+    const now = Date.now()
+    const saved = await run(request, sponsor.token, 'QB_PUBLICATION_SAVE', { versionId, name: unique('Picked quiz '),
+      regions: ['GLOBAL'], startAt: new Date(now - 60_000).toISOString(),
+      endAt: new Date(now + 7 * 86_400_000).toISOString(), passScore: 2, pickCount: 3, budgetCap: 500,
+      maxWinners: 5, tiers: [{ fromScore: 0, toScore: 1, reward: 0 }, { fromScore: 2, toScore: 2, reward: 10 },
+        { fromScore: 3, toScore: 3, reward: 100 }] })
+    expect(saved.fullScore).toBe(3)
+    expect(saved.problems).toEqual([])
+    const publicationId = saved.publicationId as string
+    await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
+    await decideReview(request, sponsor.token, publicationId, 'APPROVE')
+    const taker = await takerInJapan(request, 'Pick')
+    const started = await run(request, taker.token, 'QB_ATTEMPT_START', { publicationId })
+    const questions = started.questions as { no: number; stem: string }[]
+    expect(questions.map((q) => q.no)).toEqual([1, 2, 3])
+    expect(new Set(questions.map((q) => q.stem)).size).toBe(3)
+    const result = await run(request, taker.token, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, publicationId,
+      answers: (started.questions as { no: number; options: { no: number; text: string }[] }[]).map((q) => ({
+        questionNo: q.no, selected: q.options.filter((o) => o.text.startsWith('Right')).map((o) => o.no) })) })
+    expect(result.score).toBe(3)
+    expect(result.fullScore).toBe(3)
+    expect(result.rewardStatus).toBe('PAID')
+    expect((result.questions as { no: number }[]).map((q) => q.no)).toEqual([1, 2, 3])
+    // The result page reads the same three, numbered the same.
+    const detail = await run(request, taker.token, 'QB_ATTEMPT_RESULT', { attemptId: started.attemptId })
+    expect((detail.questions as { no: number }[]).map((q) => q.no)).toEqual([1, 2, 3])
+  })

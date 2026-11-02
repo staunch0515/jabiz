@@ -69,6 +69,11 @@ public final class QbPlay {
         eb.field("optionOrder", f -> f.physicalColumn("option_order").immutable(true).required(true)
             .sensitive().asText(PlayLimits.ANSWERS_LENGTH));
         eb.field("answers", f -> f.physicalColumn("answers").required(true).asText(PlayLimits.ANSWERS_LENGTH));
+        // Q81 (D-Q81-3): the version's numbers of the questions this attempt was given, when its publication draws
+        // some; none for every question. Sensitive like the option order: the taker answers by position, and no read
+        // interface says which of the version's questions a position is.
+        eb.field("questionSet", f -> f.physicalColumn("question_set").immutable(true).sensitive()
+            .asText(PlayLimits.QUESTION_SET_LENGTH));
         eb.field("result", f -> f.physicalColumn("result").processOnly().asText(PlayLimits.RESULT_LENGTH));
         eb.field("submittedAt", f -> f.physicalColumn("submitted_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));

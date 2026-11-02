@@ -14,6 +14,8 @@ export interface SharedPublication {
   endAt: string
   timeLimitSec: number
   questionCount: number
+  /** Q81: the questions drawn per taker; null (or absent) asks all of them. */
+  pickCount?: number | null
   fullScore: number
   passScore: number
   maxReward: unknown

@@ -84,6 +84,21 @@ final class PlaySteps {
         return language == null ? snapshot : QuizSnapshots.in(snapshot, language.toString());
     }
 
+    /**
+     * Q81 (D-Q81-4): the questions the attempt was given, out of {@code snapshot} (already in the attempt's language
+     * when that matters: the texts are keyed by the version's numbers); the whole snapshot for an attempt given every
+     * question.
+     */
+    static QuizSnapshot subset(QuizSnapshot snapshot, EntityInstance attempt) {
+        List<Integer> set = attempt == null ? null : QuestionPick.fromJson(attempt.get("questionSet"));
+        return set == null ? snapshot : snapshot.subset(set);
+    }
+
+    /** The version's snapshot as the attempt sees it: in its language, and only its questions (Q73b, Q81). */
+    static QuizSnapshot forAttempt(QuizSnapshot snapshot, EntityInstance attempt) {
+        return subset(inLanguage(snapshot, attempt), attempt);
+    }
+
     static QuizSnapshot snapshot(ProcessContext ctx) {
         EntityInstance version = first(ctx, VERSION);
         if (version == null) {

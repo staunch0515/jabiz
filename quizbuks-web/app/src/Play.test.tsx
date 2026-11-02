@@ -1021,6 +1021,15 @@ describe('a publication\'s page', () => {
     }
   })
 
+  it('says how many of the questions each taker is given when the publication draws some (Q81)', async () => {
+    server({ publicationPage: () => json(200, { items: [publication({ pickCount: 1, materials: '[]' })],
+      offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const facts = await screen.findByTestId('detail-facts')
+    expect(facts).toHaveTextContent('1 of 2 questions, drawn at random')
+  })
+
   it('lays the page out as a picture, one row of facts and titled cards (Q34)', async () => {
     // Without the embedded video: axe cannot look into a frame in jsdom.
     server({ publicationPage: () => json(200, { items: [publication({ quizTitle: 'World capitals',

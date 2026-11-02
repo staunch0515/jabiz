@@ -149,6 +149,7 @@ function PublicationView({ detail, stale, onStale }: {
       <PublicationSummary values={{
         ...publication,
         quizTitle: version?.title ?? null,
+        questionCount: version?.questionCount ?? null,
         tiers,
         conditions: conditions.data,
         prerequisites: prerequisites.data,

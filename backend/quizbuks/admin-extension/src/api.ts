@@ -211,6 +211,8 @@ export interface Publication {
   endAt: string | null
   timeLimitSec: number | null
   passScore: number | null
+  /** Q81: the questions drawn per taker; null asks all of the version's. */
+  pickCount: number | null
   fullScore: number | null
   budgetCap: string | null
   maxReward: string | null
@@ -293,6 +295,7 @@ export async function readPublication(publicationId: string): Promise<Publicatio
     endAt: str(row.endAt),
     timeLimitSec: num(row.timeLimitSec),
     passScore: num(row.passScore),
+    pickCount: num(row.pickCount),
     fullScore: num(row.fullScore),
     budgetCap: amount(row.budgetCap),
     maxReward: amount(row.maxReward),

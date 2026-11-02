@@ -85,6 +85,8 @@ export interface FeedCard {
   endAt: string
   timeLimitSec: number
   questionCount: number
+  /** Q81: how many of them each taker is given, drawn at random; null asks all of them. */
+  pickCount: number | null
   fullScore: number
   /** Q64: the sponsor's published page (its link name); none while it is not published, and on a preview's card. */
   sponsorHandle?: string | null
@@ -148,6 +150,7 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     endAt: String(row.endAt ?? ''),
     timeLimitSec: numberOf(row.timeLimitSec),
     questionCount: numberOf(row.questionCount),
+    pickCount: row.pickCount == null ? null : numberOf(row.pickCount),
     fullScore: numberOf(row.fullScore),
     sponsorHandle: textOrNull(row.sponsorHandle),
     myAttemptId: textOrNull(row.myAttemptId),
@@ -250,6 +253,8 @@ export interface PublicationView {
   endAt: string
   timeLimitSec: number
   questionCount: number
+  /** Q81: how many of them each taker is given, drawn at random; null asks all of them. */
+  pickCount: number | null
   fullScore: number
   passScore: number
   maxReward: unknown
@@ -382,6 +387,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     endAt: String(row.endAt ?? ''),
     timeLimitSec: numberOf(row.timeLimitSec),
     questionCount: numberOf(row.questionCount),
+    pickCount: row.pickCount == null ? null : numberOf(row.pickCount),
     fullScore: numberOf(row.fullScore),
     passScore: numberOf(row.passScore),
     maxReward: row.maxReward,

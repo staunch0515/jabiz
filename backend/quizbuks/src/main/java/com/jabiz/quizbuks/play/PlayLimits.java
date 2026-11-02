@@ -57,5 +57,8 @@ public final class PlayLimits {
      */
     public static final int RESULT_LENGTH = 4 + ContentLimits.MAX_QUESTIONS * 120;
 
+    /** Q81: the JSON of the version's numbers of the questions an attempt was given (at most every question). */
+    public static final int QUESTION_SET_LENGTH = 2 + ContentLimits.MAX_QUESTIONS * 5;
+
     private PlayLimits() {}
 }

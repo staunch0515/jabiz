@@ -183,7 +183,18 @@ public final class PublicationVersions {
             return;
         }
         long fullScore = number(publication.get("fullScore"));
-        long newFullScore = number(version.get("fullScore"));
+        // Q81 (D-Q81-7): a publication drawing k questions needs a version that can give them (equal points, more
+        // than k questions); its full score is then k times the points, compared as before.
+        Integer pickCount = PublicationEditing.integer(publication.get("pickCount"));
+        QuizSnapshot newSnapshot = pickCount == null ? null : PublicationEditing.snapshot(version);
+        if (pickCount != null && !PublicationReadiness.pickProblems(pickCount, newSnapshot).isEmpty()) {
+            ctx.reject(new Violation("versionId", PublishingCodes.SWITCH_PICK, "Version " + version.get("label")
+                + " cannot give each taker " + pickCount + " questions of equal points",
+                Map.of("pickCount", pickCount, "questionCount", newSnapshot.questions().size())));
+            return;
+        }
+        long newFullScore = pickCount == null ? number(version.get("fullScore"))
+            : PublicationReadiness.fullScore(newSnapshot, pickCount);
         if (fullScore != newFullScore) {
             ctx.reject(new Violation("versionId", PublishingCodes.SWITCH_FULL_SCORE, "Version " + version.get("label")
                 + " scores up to " + newFullScore + ", the publication's tiers up to " + fullScore,

@@ -54,7 +54,7 @@ public final class ChannelPlay {
     // ---- start -----------------------------------------------------------------------------------------------------
 
     public static ProcessDefinition<Channel.StartInput, Channel.StartOutput, ProcessContext> start(
-        OptionShuffle shuffle) {
+        OptionShuffle shuffle, QuestionPick pick) {
         return ProcessDefinition.define(START, 1, Channel.StartInput.class, Channel.StartOutput.class,
             ProcessContext.class, pb -> pb
                 .description("Starts a channel's taker's attempt of a channel's publication, or continues it.")
@@ -102,7 +102,7 @@ public final class ChannelPlay {
                         PlaySteps.counter(ctx -> AttemptProcesses.starting(ctx) ? ctx.get(AttemptProcesses.PUB_KEY)
                             : null, AttemptProcesses.COUNTER)))
                 // Every region: a channel's publication is open to all of its visitors (its card says GLOBAL).
-                .compute("Start the attempt", (metadata, ctx) -> AttemptProcesses.start(ctx, shuffle,
+                .compute("Start the attempt", (metadata, ctx) -> AttemptProcesses.start(ctx, shuffle, pick,
                     ctx.get(CHANNEL_INPUT, Channel.StartInput.class).takerId(), Regions.GLOBAL)));
     }
 

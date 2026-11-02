@@ -64,7 +64,8 @@ export function SharePage({ publicationId }: { publicationId: string }) {
       </header>
       <DescriptionList data-testid="share-facts" items={[
         ...(survey ? [{ key: 'kind', label: t('detail.kind'), value: t('detail.survey') }] : []),
-        { key: 'questions', label: t('detail.questions'), value: p.questionCount },
+        { key: 'questions', label: t('detail.questions'), value: p.pickCount != null
+          ? t('detail.pickCount', { count: p.pickCount, total: p.questionCount }) : p.questionCount },
         { key: 'timeLimit', label: t('detail.timeLimit'), value: duration(p.timeLimitSec) },
         { key: 'maxReward', label: survey ? t('detail.surveyReward') : t('detail.maxReward'),
           value: formatKudos(p.maxReward) },

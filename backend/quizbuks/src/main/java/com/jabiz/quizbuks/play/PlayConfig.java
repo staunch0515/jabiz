@@ -152,7 +152,7 @@ public class PlayConfig {
     @Bean
     ProcessDefinition<AttemptProcesses.PublicationRef, AttemptProcesses.StartOutput, ProcessContext>
         qbAttemptStart(com.jabiz.integrity.IntegrityKey integrityKey) {
-        return AttemptProcesses.start(OptionShuffle.of(integrityKey));
+        return AttemptProcesses.start(OptionShuffle.of(integrityKey), QuestionPick.of(integrityKey));
     }
 
     @Bean
@@ -177,7 +177,7 @@ public class PlayConfig {
     ProcessDefinition<com.jabiz.quizbuks.channel.Channel.StartInput, com.jabiz.quizbuks.channel.Channel.StartOutput,
         ProcessContext> qbChannelAttemptStart(
         com.jabiz.integrity.IntegrityKey integrityKey) {
-        return ChannelPlay.start(OptionShuffle.of(integrityKey));
+        return ChannelPlay.start(OptionShuffle.of(integrityKey), QuestionPick.of(integrityKey));
     }
 
     @Bean

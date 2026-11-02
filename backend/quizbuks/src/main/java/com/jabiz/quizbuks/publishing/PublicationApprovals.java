@@ -75,6 +75,10 @@ public final class PublicationApprovals {
         content.put("endAt", draft.endAt());
         content.put("timeLimitSec", draft.timeLimitSec());
         content.put("passScore", draft.passScore());
+        // Q81: only a publication drawing questions names its pick, so earlier hashes stand.
+        if (draft.pickCount() != null) {
+            content.put("pickCount", draft.pickCount());
+        }
         content.put("budgetCap", draft.budgetCap());
         content.put("maxWinners", draft.maxWinners());
         // Q22: only when the sponsor settles the reward themselves, so the publications paid by the platform (all of

@@ -22,6 +22,7 @@ results:
   endAt:          { from: QbPublicationCard.endAt }
   timeLimitSec:   { from: QbPublicationCard.timeLimitSec }
   questionCount:  { from: QbPublicationCard.questionCount }
+  pickCount:      { from: QbPublicationCard.pickCount }
   fullScore:      { from: QbPublicationCard.fullScore }
   passScore:      { from: QbPublicationCard.passScore }
   maxReward:      { from: QbPublicationCard.maxReward }
@@ -49,6 +50,7 @@ SELECT
     c.{{QbPublicationCard.endAt}}         AS endAt,
     c.{{QbPublicationCard.timeLimitSec}}  AS timeLimitSec,
     c.{{QbPublicationCard.questionCount}} AS questionCount,
+    c.{{QbPublicationCard.pickCount}}     AS pickCount,
     c.{{QbPublicationCard.fullScore}}     AS fullScore,
     c.{{QbPublicationCard.passScore}}     AS passScore,
     c.{{QbPublicationCard.maxReward}}     AS maxReward,

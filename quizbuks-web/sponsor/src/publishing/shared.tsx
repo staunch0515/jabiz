@@ -174,6 +174,9 @@ export interface SummaryValues {
   endAt: string | null
   timeLimitSec: number | null
   passScore: number | null
+  /** Q81: the questions drawn per taker (null: all of them), and the version's count when known. */
+  pickCount?: number | null
+  questionCount?: number | null
   fullScore: number | null
   budgetCap: string | null
   maxWinners: number | null
@@ -263,6 +266,10 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
       value: values.timeLimitSec === null ? notSet : t('publishing.summary.timeLimit', { seconds: values.timeLimitSec }),
     },
     { key: 'passScore', label: t('publishing.field.passScore'), value: values.passScore ?? notSet },
+    ...(values.pickCount != null ? [{ key: 'pickCount', label: t('publishing.field.pickCount'),
+      value: <span data-testid="summary-pick">{values.questionCount
+        ? t('publishing.summary.pickCountOf', { k: values.pickCount, n: values.questionCount })
+        : t('publishing.summary.pickCountOnly', { k: values.pickCount })}</span> }] : []),
     { key: 'fullScore', label: t('publishing.summary.fullScore'), value: values.fullScore ?? notSet },
     { key: 'budgetCap', label: t('publishing.field.budgetCap'),
       value: values.budgetCap === null ? noLimit : formatKudos(values.budgetCap) },

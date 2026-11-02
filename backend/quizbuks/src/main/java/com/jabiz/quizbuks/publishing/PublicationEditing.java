@@ -590,7 +590,7 @@ final class PublicationEditing {
         card.put("status", status);
         for (String field : List.of("regions", "startAt", "endAt", "name", "versionId", "maxReward", "fullScore",
             "passScore", "timeLimitSec", "budgetCap", "maxWinners", "redeemDescription", "digitalDelivery",
-            "digitalDescription", "digitalSendDays", "sealedDigitalContent", "referral")) {
+            "digitalDescription", "digitalSendDays", "sealedDigitalContent", "referral", "pickCount")) {
             card.put(field, publication.get(field));
         }
         if (card.get("regions") == null) {
@@ -670,7 +670,20 @@ final class PublicationEditing {
             integer(values.get("maxWinners")), methodOf(values), (String) values.get("redeemDescription"),
             Audience.of(values.get("audience")), DigitalDelivery.of(values.get("digitalDelivery")),
             (String) values.get("digitalDescription"), values.get("sealedDigitalContent") != null,
-            ReferralPolicy.fromJson(values.get("referral")));
+            ReferralPolicy.fromJson(values.get("referral")), integer(values.get("pickCount")));
+    }
+
+    /**
+     * Q81 (D-Q81-2): the full score the publication's values give, from the version's snapshot and the pick in
+     * {@code values} ({@link PublicationReadiness#fullScore}); the version's own without a pick.
+     */
+    static Object fullScoreOf(Map<String, Object> values, EntityInstance version) {
+        if (version == null) {
+            return null;
+        }
+        Integer pickCount = integer(values.get("pickCount"));
+        return pickCount == null ? version.get("fullScore")
+            : BigDecimal.valueOf(PublicationReadiness.fullScore(snapshot(version), pickCount));
     }
 
     /**
