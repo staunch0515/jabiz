@@ -4924,6 +4924,16 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17zc 状态**：需求方 2026-11-02 确认；📝 待评审（分支 `1.3/phase-17zc-data-table-cards`）。实施：`data-table.tsx`（`meta.card`、`cards` / `view` / `onViewChange` / `storageKey` / `renderCard`、卡片模式的排序下拉、两种方式共用的 `Pager`，`useIsMobile` 给按宽度的缺省）、文案三语、`DatasetListPage` 与门户 `OrdersPage` 的标注、`data-table.test.tsx` 的卡片测试、`DatasetListPage` 与门户的测试、`a11y.spec.ts` 的手机视口、设计 12 §6 / §11、`app-spa.md`。
 
+### 17zd 保留期按字段的值：单据按版式（需求 2026-11-02，QuizBuks Q77；决策 D70）
+
+**缘由**：保留期按实体、一个实体一个策略；QuizBuks 为收据把 `DocumentRun` 保留 10 年，答题者的证书因而在删除账号后仍保留在单据存档中（Q77 计划 §10 第 10 条）。
+
+| # | 内容 |
+|---|---|
+| 17zd | core `RetentionPolicy.only(字段, 值…)`、`covers`；`RetentionPolicies.covering` 按记录的值选用策略，删除拦截（与账号抹除对单据的清除）随之；启动检查：同一实体的几个策略须都以 `only` 覆盖同一字段、值不重叠，字段须已声明且不可变；到期报告每个策略一行并给出范围（OpenAPI 加 `onlyField` / `onlyValues`），通用后台的保留期页显示范围。测试：`RetentionPolicyTest`、`RetentionChecksTest`、`RetentionIT`（`app` 的夹具按版式声明：发票 10 年、通知 1 年、其他版式不保留，删除拦截与到期报告各自计算）、`RetentionPage.test.tsx` |
+
+**17zd 状态**：📝 待评审（分支 `1.3/phase-17zd-retention-scopes`）。
+
 ### 17k 推送通知（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D69）
 
 **缘由**：答题者 App 要以推送告诉用户新问卷、中奖与审核结果；App Store 不收"只是网站外壳"的 App（审核指南 4.2）。需求方确认：Android 与浏览器用 Web Push，偏好按模板。分 17k-a（Web Push）与 17k-b（APNs）。
