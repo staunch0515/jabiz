@@ -519,6 +519,30 @@ export const readConsents = (userId: string, offset: number, limit: number, sort
     effectiveAt: str(row.effectiveAt),
   }), { params: { userId }, sorts, offset, limit })
 
+/** A row of `qb.admin.certificates` (Q77): a certificate a user issued, with its number (the verify key). */
+export interface CertificateRow {
+  certificateId: string
+  certification: string
+  holderName: string
+  heldFrom: string | null
+  validUntil: string | null
+  verifyKey: string
+  language: string
+  issuedAt: string | null
+}
+
+export const readCertificates = (userId: string, offset: number, limit: number, sorts?: SortSpec[]) =>
+  page(TEMPLATE.certificates, (row): CertificateRow => ({
+    certificateId: String(row.certificateId),
+    certification: String(row.certification ?? ''),
+    holderName: String(row.holderName ?? ''),
+    heldFrom: str(row.heldFrom),
+    validUntil: str(row.validUntil),
+    verifyKey: String(row.verifyKey ?? ''),
+    language: String(row.language ?? ''),
+    issuedAt: str(row.issuedAt),
+  }), { params: { userId }, sorts, offset, limit })
+
 /** A row of `qb.admin.attempts`. */
 export interface AttemptRow {
   attemptId: string

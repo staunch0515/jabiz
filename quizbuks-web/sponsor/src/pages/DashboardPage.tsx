@@ -5,7 +5,8 @@ import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { navigate } from '../qb/router'
 import { GrowthArt, PlanArt } from '../qb/Illustrations'
-import { useMySponsor } from './OnboardingPage'
+import { useMySponsor } from '../profile/api'
+import { profilePath } from '../profile/paths'
 
 /**
  * The console's first page: where the onboarding stands, leading to it while the sponsor is not approved; once
@@ -37,7 +38,7 @@ export function DashboardPage() {
               dark on dark green in the dark appearance). */}
           {sponsor.isSuccess && status !== 'APPROVED' && (
             <Button size="sm" className="bg-qb-hero-foreground text-qb-hero-from hover:bg-qb-hero-muted hover:text-qb-hero-from self-start"
-              onClick={() => navigate('/onboarding')}>
+              onClick={() => navigate(profilePath('basics'))}>
               {t('dashboard.toOnboarding')}
             </Button>
           )}

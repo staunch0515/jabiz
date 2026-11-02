@@ -146,7 +146,9 @@ public final class QbRoles {
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
             QbPermissions.SPONSOR_AVATAR_READ, QbPermissions.CONTENT_FILE_READ,
             // Q68: a sponsor's own figures and publications in the app, and pausing or resuming them.
-            QbPermissions.SPONSOR_APP));
+            QbPermissions.SPONSOR_APP,
+            // Q77: the PDFs of their own certificates (the platform shows a reader only what they issued).
+            "document.archive.read"));
         add(SPONSOR, labels("Sponsor", "商家", "スポンサー"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
             QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,

@@ -36,7 +36,7 @@
 
 ## 3. 后端（`backend/quizbuks`）
 
-### 3.1 迁移 V61 `quizbuks_question_pick`（Q76 用了 V60）
+### 3.1 迁移 V62 `quizbuks_question_pick`（Q76 用了 V60，Q77 用了 V61）
 
 - `qb_publication_version ADD COLUMN pick_count integer`（只追加表，只加列，D58；`SealedColumnsHistory` 照常）。
 - `qb_publication_card ADD COLUMN pick_count integer`（普通表）。
@@ -137,7 +137,7 @@
 
 需求方 2026-11-02 确认 §9 的六项（“同意 Q81 的决定，开始开发”）。按计划实施，与计划的差别与细节：
 
-- 迁移 V61：`qb_publication_version.pick_count`、`qb_publication_card.pick_count`、`qb_attempt.question_set varchar(500)`。
+- 迁移 V62（计划写 V61；Q77 先合入用了它）：`qb_publication_version.pick_count`、`qb_publication_card.pick_count`、`qb_attempt.question_set varchar(500)`。
 - 发布：`QbPublications` 两个 `pickCount`；`PublicationReadiness.Draft` 加 `pickCount`（旧构造器保留），`pickProblems` / `fullScore` / `commonPoints` 是公开的纯 Java；`PublicationEditing.fullScoreOf`
   由 `PublicationProcesses.putVersion` 调用（保存与复制都先放 `pickCount` 再放版本的部分）；卡片与复制的字段清单加 `pickCount`；`PublicationApprovals.content` 只在有抽题时写 `pickCount`（旧哈希不变）；
   `PublicationVersions` 先查 `SWITCH_PICK` 再比较满分（抽题的满分按新版本算）。`SaveInput` 加最后一个组件 `pickCount`（旧构造器保留）。

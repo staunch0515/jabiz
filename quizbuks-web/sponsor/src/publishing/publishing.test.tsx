@@ -1522,6 +1522,6 @@ describe('the mail server (Q29)', () => {
     expect(await within(section).findByTestId('invitations-needs-server')).toHaveTextContent('own mail server')
     expect(within(section).getByTestId('invitations-send')).toBeDisabled()
     await userEvent.click(within(section).getByRole('link', { name: 'Set up the mail server' }))
-    expect(window.location.pathname).toBe('/mail-server')
+    expect(window.location.pathname).toBe('/profile/mail-server')
   })
 })

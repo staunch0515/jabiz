@@ -2361,6 +2361,15 @@
           },
           "keep" : {
             "type" : "string"
+          },
+          "onlyField" : {
+            "type" : "string"
+          },
+          "onlyValues" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
           }
         },
         "type" : "object"

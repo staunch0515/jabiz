@@ -51,4 +51,18 @@ class CertificationHoldingTest {
         Entry granted = new Entry(CertificationHolding.GRANTED, CERT.version(), T, T.plus(CERT.validity()));
         assertThat(CertificationHolding.heldUntil(List.of(granted), CERT, T)).contains(T.plus(CERT.validity()));
     }
+
+    @Test
+    void theHoldingIsTheEntryWithTheLatestEndAndStartsWhenItWasRecorded() {
+        Instant later = T.plus(Duration.ofDays(100));
+        Entry granted = new Entry(CertificationHolding.GRANTED, CERT.version(), later, later.plus(CERT.validity()));
+        assertThat(CertificationHolding.holding(List.of(passed(T), granted), CERT, later)).hasValueSatisfying(h -> {
+            assertThat(h.kind()).isEqualTo(CertificationHolding.GRANTED);
+            assertThat(h.from()).isEqualTo(later);
+            assertThat(h.until()).isEqualTo(later.plus(CERT.validity()));
+        });
+        Entry revoked = new Entry(CertificationHolding.REVOKED, CERT.version(), later.plusSeconds(1), null);
+        assertThat(CertificationHolding.holding(List.of(passed(T), granted, revoked), CERT, later.plusSeconds(2)))
+            .isEmpty();
+    }
 }

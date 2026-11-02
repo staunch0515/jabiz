@@ -107,6 +107,8 @@ docs/quizbuks/               本文件等
 | `QbCountry` | T（字典） | `code`（ISO 3166-1）、`name`（多语言）、`regions`（多值：GLOBAL、JP、CN、US、EUROPE、ASIA、NORTH_AMERICA、SOUTH_AMERICA） | 【缺省 Q7】国家到地区的映射。平台没有多值字段：`regions` 存为按固定顺序、以逗号连接的地区代码（`GLOBAL,JP,ASIA`），总含 GLOBAL（Q1）。只经流程写入（`QB_SETUP` 导入） |
 | `QbPayoutAccount` | P（Q6b） | `userId`（唯一）、`provider`（STRIPE_CONNECT）、`externalAccountId`（唯一，`f.masked(qb.admin.finance.read, LAST4)`）、`country`、`status`（PENDING / ENABLED / RESTRICTED / DEAUTHORIZED）、`payoutsEnabled`、`detailsSubmitted`、`requirementsDue`、`stripeUpdatedAt`（以上 `processOnly`，由 Stripe 的 Connect 通知更新，只取更新的报告） | 用户的收款账户；银行信息由 Stripe 保存，平台不存银行账号。普通表（不是计划中的时态表）：通知按 Stripe 账户号查找，且只有表的唯一约束能保证一个 Stripe 账户只属于一个用户；历史由平台审计保留。开通链接另存普通表 `QbPayoutOnboarding`（每人一行、覆盖，只有本人的数据视图给出） |
 
+| `QbCertificate` | P（Q77） | 主键 `certificateId`；`userId`、`certification`、`certificationVersion`、`heldFrom`、`validUntil`（与前三项唯一：同一段持有一张）、`holderName`（签发时冻结）、`verifyKey`（随机 128 位，唯一）、`language`、`issuedAt` | 本人签发的证书（`plans/Q77-certificates.md`），只经 `QB_CERTIFICATE_ISSUE` 插入；PDF 是平台单据 `qb.certificate`（主体即此行）。`QbUserSettings` 另有 `publicHandle`（唯一）与 `publicPage`（缺省关闭）：公开认证页 `/taker/u/<名>` |
+
 ### 3.2 内容：模版、版本、题目、资料
 
 | 实体 | 类型 | 主要字段 | 说明 |
@@ -499,7 +501,11 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 会话只在标签页中（`persistence: tab`），闲置 30 分钟锁定（缺省 Q12）；开了 Google 时与 App 一样可用 Google 登录与开户（Q37，取代 Q2-16 的"只给 App"）。未入驻通过的商家进入 `/onboarding`。
 - 内容工坊是最重的页面：题目与选项的编辑、排序、图片、版本列表；发布向导三步。
   题目编辑页（Q78，`plans/Q78-editor-compact.md`）：题目是折叠行（题号、题干首行、分数、单/多选、选项数），一次展开一题，操作（编辑、"移到…"、删除）在行上；上方摘要行（题数、满分、单选 / 多选、没标正确答案的题数）；AI 出题面板空闲时只有一行；页头一次只显示一条告警（stale > 版本被拒 > 译文不完整 > 已保存）；店员在菜单的"设置"组。
+<<<<<<< HEAD
 - 抽题（Q81，`plans/Q81-question-pick.md`）：发布的设置 `pickCount`（1 ≤ k < n，空 = 全考），只允许同分的题库（满分 = k × 每题分，问卷不抽）；每次开始以服务端密钥的 HMAC 种子从 n 题中取 k 题、保留题序，记在会话 `questionSet`（敏感，不返回），会话的快照只经 `PlaySteps.forAttempt`（先按语言投影、再取子集）；答题人看到的题号是位置 1..k（开始、继续、提交、结果都如此），存储的 `result` 仍记版本题号；题目统计按被抽到的完成数、逐题最小分组发表；版本切换要求新版本能承接 k；卡片带 `pickCount`，App 显示“从 n 题中随机 k 题”；店面不支持。
+=======
+- **商户中心**（Q79，`plans/Q79-sponsor-hub.md`，`sponsor/src/profile/`）：页组 `/profile` 带子导航——概况（审核状态与下一步、完成度清单、主页预览卡与链接 / 二维码、允许的奖励方式）、基本信息（入驻表单）、公开主页（编辑器 + 实时预览）、商品、店员、邮件服务器；表单页在 `lg` 两栏（左表单分卡、右说明与预览），操作条固定在底部。菜单"设置"组只有商户中心、统计、消息、账户、帮助；旧地址（`/onboarding`、`/page`、`/products`、`/staff`、`/mail-server`）前端转向到节；未通过审核的商户从 `/` 落在基本信息。
+>>>>>>> origin/1.3/quizbuks
 - 钱包页（Q9d）：已到账的充值行有"收据"：首次以当前界面语言签发（`QB_TOPUP_RECEIPT_ISSUE`），之后下载同一份存档 PDF。
 - 分析（Q9e2，`sponsor/src/analytics/`）：概览（`/dashboard`，入驻通过后）显示指标卡（各状态的发布数、正在答题、今日支出、可用余额与待支付、剩余预算、本月 AI 用量（Q8a））、近 7 天的趋势（完成人数折线与支出柱，上下两个小图，不用双 Y 轴）与近 7 天热门发布前 5；
   发布分析页 `/publications/<id>/analytics`（发布页的"分析"）显示概览、漏斗（流失最大的一段以徽标、斜纹与文字标出）、过去 24 小时（按小时）/ 过去 7 天（按天）的趋势与 App 的四个窗口、每题正确率与难度（不足 k 时注明"至少 k 人作答后显示"）与导出（趋势、概览、题目的 CSV 与 Excel）。
@@ -575,6 +581,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   只按服务端记录的金额、对记录的商家入账，锁名也取自记录；不成立的开待办而不入账。客户端唯一的输入是金额（受控上下限），
   返回地址由配置生成（没有开放重定向），浏览器回跳不入账。测试与正式模式、密钥前缀与开发入账由启动检查与消费流程共同隔离。
   密钥只来自环境变量，不进日志与作业的输入；原样事件可能含付款人信息，只有财务管理员能读，保留 7 年。
+- **证书与公开认证页**（Q77）：核实页只按随机的核实键取一张证书，公开模板不返回用户编号；公开认证页缺省关闭、只列已签发且未收回的证书、显示证书上的名字（没有资料的公开视图），两页都是 `noindex`；不显示分数。删除账号时证书记录、公开名随之删除（证书 PDF 的抹除见计划 §10 第 10 条）。
 - 限流：开始答题、提交、AI 请求、充值按用户限流（平台限流能力只覆盖公开接口与上传，若不够在 G1 中补"按用户的接口限流"——计划时评估）。
 
 ## 10. 依赖的平台能力（`1.2/platform`）

@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.settings;
 
+import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessStart;
@@ -34,21 +35,30 @@ public final class SettingsProcesses {
      * @param soundOn          the sound effects (Q57)
      * @param contentLanguages the languages of the quizzes shown (Q59a), each once; empty: the interface language
      *                         only, whichever it is
+     * @param publicHandle     Q77: the public certification page's name ({@link PublicHandles}); blank clears it
+     * @param publicPage       Q77: whether that page is shown; on needs a name
      */
     public record SaveInput(Boolean soundOn,
-        @Size(max = 3) List<@Pattern(regexp = "ja|zh|en") String> contentLanguages) {
+        @Size(max = 3) List<@Pattern(regexp = "ja|zh|en") String> contentLanguages,
+        @Size(max = 60) String publicHandle, Boolean publicPage) {
 
         public SaveInput(Boolean soundOn) {
             this(soundOn, null);
         }
+
+        public SaveInput(Boolean soundOn, List<String> contentLanguages) {
+            this(soundOn, contentLanguages, null, null);
+        }
     }
 
     /** The settings after the save; no content languages: the interface language. */
-    public record SettingsOutput(boolean soundOn, List<String> contentLanguages) {
+    public record SettingsOutput(boolean soundOn, List<String> contentLanguages, String publicHandle,
+        boolean publicPage) {
     }
 
     private static final String INPUT = "input";
     private static final String CURRENT = "current";
+    private static final String HOLDER = "handleHolder";
     private static final String OUTPUT = "output";
 
     public static ProcessDefinition<SaveInput, SettingsOutput, ProcessContext> save() {
@@ -62,6 +72,14 @@ public final class SettingsProcesses {
                 ctx -> QbSettings.lockName(ctx.request().actorId())));
             pb.step("Load the settings", QueryEntities.<ProcessContext>of(QbSettings.DEFAULT_DATASET,
                 ctx -> mine(ctx.request().actorId()), CURRENT));
+            // Q77: whoever has the public name asked for (the unique index stands behind it).
+            pb.step("Load who has the public name", QueryEntities.<ProcessContext>of(QbSettings.DEFAULT_DATASET,
+                ctx -> {
+                    String handle = PublicHandles.normalized(ctx.get(INPUT, SaveInput.class).publicHandle());
+                    List<Object> handles = handle == null ? List.of() : List.of(handle);
+                    return EntityQuery.builder().where(new QueryPredicate.In("publicHandle", handles)).limit(1)
+                        .build();
+                }, HOLDER));
             pb.compute("Save", (metadata, ctx) -> write(ctx, ctx.get(INPUT, SaveInput.class)));
         });
     }
@@ -72,21 +90,45 @@ public final class SettingsProcesses {
             : current != null && Boolean.TRUE.equals(current.get("soundOff"));
         String languages = input.contentLanguages() != null ? languages(input.contentLanguages())
             : current == null ? null : (String) current.get("contentLanguages");
+        String handle = input.publicHandle() != null ? PublicHandles.normalized(input.publicHandle())
+            : current == null ? null : (String) current.get("publicHandle");
+        boolean publicPage = input.publicPage() != null ? input.publicPage()
+            : current != null && Boolean.TRUE.equals(current.get("publicPage"));
+        if (input.publicHandle() != null && handle != null) {
+            String problem = PublicHandles.problem(handle);
+            if (problem != null) {
+                ctx.reject(new Violation("publicHandle", problem, "Not a public name to use: " + handle));
+            } else if (holderOtherThan(ctx, ctx.request().actorId())) {
+                ctx.reject(new Violation("publicHandle", PublicHandles.TAKEN, "The public name is taken"));
+            }
+        }
+        if (publicPage && handle == null) {
+            ctx.reject(new Violation("publicPage", PublicHandles.NO_HANDLE, "A public page needs a public name"));
+        }
+        if (ctx.hasViolations()) {
+            return;
+        }
         if (current == null) {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("userId", ctx.request().actorId());
             row.put("soundOff", soundOff);
             row.put("contentLanguages", languages);
+            row.put("publicHandle", handle);
+            row.put("publicPage", publicPage);
             ctx.changes().insert(QbSettings.SETTINGS, row);
         } else if (!Boolean.valueOf(soundOff).equals(current.get("soundOff"))
-            || !Objects.equals(languages, current.get("contentLanguages"))) {
+            || !Objects.equals(languages, current.get("contentLanguages"))
+            || !Objects.equals(handle, current.get("publicHandle"))
+            || !Boolean.valueOf(publicPage).equals(current.get("publicPage"))) {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("soundOff", soundOff);
             values.put("contentLanguages", languages);
+            values.put("publicHandle", handle);
+            values.put("publicPage", publicPage);
             ctx.changes().update(QbSettings.SETTINGS, current.id(), current.version(), values);
         }
         ctx.put(OUTPUT, new SettingsOutput(!soundOff, languages == null ? List.of()
-            : Arrays.asList(languages.split(","))));
+            : Arrays.asList(languages.split(",")), handle, publicPage));
     }
 
     /** The languages as stored: in the platform's order, each once; none as null. */
@@ -101,6 +143,12 @@ public final class SettingsProcesses {
             ids.add(userId);
         }
         return EntityQuery.builder().where(new QueryPredicate.In("userId", ids)).limit(1).build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static boolean holderOtherThan(ProcessContext ctx, Object userId) {
+        List<EntityInstance> rows = ctx.contains(HOLDER) ? (List<EntityInstance>) ctx.get(HOLDER) : List.of();
+        return rows.stream().anyMatch(row -> !Objects.equals(String.valueOf(row.id()), String.valueOf(userId)));
     }
 
     @SuppressWarnings("unchecked")

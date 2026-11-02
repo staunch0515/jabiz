@@ -2808,6 +2808,8 @@ export interface components {
             /** Format: int64 */
             held?: number;
             keep?: string;
+            onlyField?: string;
+            onlyValues?: string[];
         };
         RetentionReportResult: {
             /** Format: int32 */
