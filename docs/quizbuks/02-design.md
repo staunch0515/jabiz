@@ -178,6 +178,10 @@ docs/quizbuks/               本文件等
 | `QbConsent` | W | `userId`、`kind`、`legalVersionId`、`versionNumber`、`acceptedAt`、`entry`、`source`（`WELCOME` / `ONBOARDING` / `RECONSENT`） | 同意记录；须同意版本 = 已生效版本中须同意的最大版本号（第一版总是），已同意的版本不低于它即可 |
 | `QbFaqEntry` | T | `audience`（APP / SPONSOR / ALL）、`category`、`question`、`answer`（多语言，英语必填）、`seq`、`published` | 帮助中心（Q7b）；内容管理员在通用后台直接编辑，公开视图固定为已发布 |
 
+- **前置条件**（Q76，`plans/Q76-prerequisites.md`）：普通表 `QbPublicationPrerequisite`（发布、前置发布、要求 `PASSED` / `ANSWERED`、发布方那一对），
+  一个发布至多 5 条，只能指向本商户已提交过的发布，不能成环（深度 20）；只经 `QB_PUBLICATION_PREREQUISITES_SAVE` 在草稿时整体替换，提交即冻结，复制时随发布复制。
+  满足的唯一定义是 `play.PrerequisiteCheck`：在前置发布上有已完成的会话（进行中不算），`PASSED` 另要求合格；学过就算，没有有效期。
+
 ## 4. 账本
 
 ### 4.1 科目（本位币 JPY，小数位 0）
@@ -494,6 +498,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   英 / 中 / 日（设计缺省 Q16 是中 / 英，按 Q-4 照常提供三种，平台不支持按 SPA 的语言）；深色模式（`@jabiz/ui` 的外观切换）；图表用平台选定的图表库（G11）。
 - 会话只在标签页中（`persistence: tab`），闲置 30 分钟锁定（缺省 Q12）；开了 Google 时与 App 一样可用 Google 登录与开户（Q37，取代 Q2-16 的"只给 App"）。未入驻通过的商家进入 `/onboarding`。
 - 内容工坊是最重的页面：题目与选项的编辑、排序、图片、版本列表；发布向导三步。
+  题目编辑页（Q78，`plans/Q78-editor-compact.md`）：题目是折叠行（题号、题干首行、分数、单/多选、选项数），一次展开一题，操作（编辑、"移到…"、删除）在行上；上方摘要行（题数、满分、单选 / 多选、没标正确答案的题数）；AI 出题面板空闲时只有一行；页头一次只显示一条告警（stale > 版本被拒 > 译文不完整 > 已保存）；店员在菜单的"设置"组。
 - **商户中心**（Q79，`plans/Q79-sponsor-hub.md`，`sponsor/src/profile/`）：页组 `/profile` 带子导航——概况（审核状态与下一步、完成度清单、主页预览卡与链接 / 二维码、允许的奖励方式）、基本信息（入驻表单）、公开主页（编辑器 + 实时预览）、商品、店员、邮件服务器；表单页在 `lg` 两栏（左表单分卡、右说明与预览），操作条固定在底部。菜单"设置"组只有商户中心、统计、消息、账户、帮助；旧地址（`/onboarding`、`/page`、`/products`、`/staff`、`/mail-server`）前端转向到节；未通过审核的商户从 `/` 落在基本信息。
 - 钱包页（Q9d）：已到账的充值行有"收据"：首次以当前界面语言签发（`QB_TOPUP_RECEIPT_ISSUE`），之后下载同一份存档 PDF。
 - 分析（Q9e2，`sponsor/src/analytics/`）：概览（`/dashboard`，入驻通过后）显示指标卡（各状态的发布数、正在答题、今日支出、可用余额与待支付、剩余预算、本月 AI 用量（Q8a））、近 7 天的趋势（完成人数折线与支出柱，上下两个小图，不用双 Y 轴）与近 7 天热门发布前 5；
@@ -555,6 +560,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 选项按会话打乱（`optionOrder`），题目顺序不打乱。打乱的种子是服务端密钥下的 HMAC-SHA256（用户 | 发布 | 题号；密钥 = HMAC(`JABIZ_INTEGRITY_KEY`, `qb.option-shuffle`)，Q10b 评审 M-a），答题人无法自行算出。答题人看到、保存、提交与结果中的选项编号都是本次显示的位置 1..k（Q10b，评审 M1），只在评分时经 `optionOrder` 换回版本的编号；`optionOrder` 是敏感字段，任何读接口（含答题人本人的数据视图）都不返回。
 - 一人一次：`QbAttempt (userId, publicationId)` 唯一。
 - **看完视频才能开始**（Q75，`plans/Q75-video-playback.md`）：卡片冻结 `watchRequired` 与 `videoDurationSec`（商户填的时长）；要求看完的发布，新的开始须带 App 从播放器接口读到的报告（播完，或已看 ≥ 时长的 90%），否则 422 `QB_ATTEMPT_WATCH_REQUIRED`；读不到播放器的报告 `UNKNOWN` 放行并记在会话上。规则只在 `play.WatchRules`（App 的 `video/playback.ts` 同一规则）。**服务器不能验证报告的真伪**：它保证的是诚实的客户端不看完不能开始，并把报告记下来供分析与防刷使用；伪造报告的脚本由最短作答时间等后续手段对付。继续进行中的会话不查；答题路径不多一条语句。
+- **开始前的三条规则**，都在锁外、三个模板写同一段 SQL：客户匹配（Q47，`AudienceMatch`，422 `QB_AUDIENCE_NOT_MATCHED`）、持有该轮的认证（Q70a，`RoundHolders`，422 `QB_CERTIFICATION_HELD`）、
+  前置条件（Q76，`PrerequisiteCheck`，422 `QB_PREREQUISITE_NOT_MET`）。首页只列出三条都满足的；发布页照样显示并说明缺什么。普通发布一条语句也不加（有前置的开始多一条锁外语句）。
 - **管理员下架之后**（Q10b，评审 M-d）："被下架"= 管理员结束的，或管理员暂停（含封禁的暂停）而没有被管理员恢复的，此后因时间或名额结束的也算（`pausedBy = ADMIN` 保留，只有管理员恢复清除它；核查修正）。被下架的发布不能复制（422 `QB_PUBLICATION_TAKEN_DOWN`）；同一 Quiz 以后的任何发布都要人工审核：
   提交时案件的事实 `autoApprove = false`、`takenDown = true`（不论免审核开关），规则仍不要求审核或会沿用以前的批准时拒绝提交（422 `QB_PUBLICATION_REVIEW_REQUIRED`）；
   后台扩展的审核页以模板 `qb.admin.quiz-takedowns` 显示被下架的发布与理由，读好之前不给出决定面板。封禁的暂停记固定的理由 `QB_ACCOUNT_SUSPENDED`（评审 L3，封禁的理由是内部的），封禁期间管理员不能恢复（评审 L9；恢复先取商家的账户锁，与封禁依次进行）。

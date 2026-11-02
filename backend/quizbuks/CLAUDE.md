@@ -133,6 +133,11 @@
   **匹配的定义只有一个**：`AudienceMatch`（同一条件内任一选项即可，各条件都须满足，没有回答即不满足，年龄 = 当前 UTC 年 − 出生年）；模板 `qb.app.feed`（不列出）、`qb.app.publication`（`matched`，进入 `canStart`；页面照样显示，以便请人完善资料）与 `qb.system.audience-count` 写同一段 SQL（改一处即改四处，`AudienceIT` 比较模板与 Java），开始答题在锁外既有的 `QueryEntities.all` 中读条件与本人的回答（语句数不变）、`INVITED` 以外不满足即 422 `QB_AUDIENCE_NOT_MATCHED`。
   **原始回答谁也读不到**：默认数据视图的读权限 `qb.audience.system` 不授予任何角色（`*` 照平台规则例外，只有首个管理员），答题者只经 `me:` 读自己的；商家只经 `QB_AUDIENCE_COUNT`（本人的发布，不是本人的 404）得到取整的人数（`AudienceCount`：少于 20 只说"少于 20"，否则向下取整到 10），计数模板只由该流程运行。以后换成专用的匹配服务器时，替换的是这几个模板与开始的读取，不是 `AudienceMatch` 的含义。
   按规则计费（Q47c：按发布、按所用条件种类、按有效期折算到天，从 Kudos 钱包扣）尚未实现，计费键已在条件种类上。
+- **前置条件**（Q76，`publishing.QbPrerequisites` / `PublicationPrerequisites` / `PrerequisiteRules`、`play.PrerequisiteCheck` / `PrerequisiteRows`，`docs/quizbuks/plans/Q76-prerequisites.md`）：一个发布可以要求答题者先在**本商户的另一个发布**上合格过（`PASSED`）或答过（`ANSWERED`），至多 5 条、全部满足才算。
+  普通表 `QbPublicationPrerequisite`（带发布方那一对）只经 `QB_PUBLICATION_PREREQUISITES_SAVE` 在草稿时整体替换（发布锁内，一条 `QueryEntities.all` 读本商户的整条链与所选发布：不是本商户的、草稿、自己、重复、成环（深度 20）都在 `prerequisites[i]` 上报错），提交即冻结，复制时随发布复制，删除草稿时一起删除。
+  **满足的定义只有一个**：`PrerequisiteCheck`（在前置发布上有已完成的会话，进行中不算；`PASSED` 另要求合格；学过就算，前置发布结束了也算）；`qb.app.feed`（不列出）、`qb.app.publication`（`prerequisitesMet` 进入 `canStart`，`prerequisites` JSON 供页面显示"先完成：X"）与 `qb.system.audience-count` 写同一段 SQL（改一处即改四处，`PrerequisiteIT` 比较）。
+  开始答题在锁外既有的 `QueryEntities.all` 中读前置行，**只在有前置时**另读一条本人在前置发布上的会话（`taker:QbAttempt`，像 `RoundHolders.load`），不满足即 422 `QB_PREREQUISITE_NOT_MET`；普通开始的语句数不变，有前置的多一条锁外语句（`AttemptStatementBudgetIT.aStartWithPrerequisites`）。店面的开始不查前置。
+  商户主页经公开模板 `qb.public.sponsor-page-publications` 的 `prerequisites`（只列两端都在榜上的）按层显示（App `share/levels.ts`）；前端的名字在 `qb/ids.ts` 的 `PREREQUISITES`，要求的文案在 `qb/messages.ts` 的 `prerequisite.*`。新的默认数据视图别忘了登记 `OperatorScopes`（缺少即启动失败）。
 - **商家自己的邮件服务器**（包 `mailserver`，`docs/quizbuks/plans/Q29-merchant-mail-server.md`，平台 D56）：实体 `QbSponsorMailServer`（每个商家一行）只经 `QB_MAIL_SERVER_SET`（平台步骤 `SealSecret` 密封密码，阻塞步骤 `TestMailServer` 用平台的 `MailSenders` 检查设置并给商家自己的地址发测试邮件，结果写 `verifiedAt` / `lastError`）与 `QB_MAIL_SERVER_REMOVE` 写入；
   平台的 `MailSenderSource` Bean（`MailServerConfig`）只交出验证过的行。邀请只经 `SendMail.via(商家编号)` 发出（`QB_INVITATION_SEND` 没有验证过的服务器即 422 `QB_INVITATION_NO_MAIL_SERVER`；`QB_INVITATION_MAIL` 发现服务器不可用即退回 `ADDED`），绝不回退到平台的服务器；
   平台自己的邮件照旧。模板 `qb.sponsor.mail-server` 从不返回密码。`JABIZ_SEAL_KEY` 是部署必需（入口脚本检查、本机演示自己生成）；`jabiz.mail.senders.trust-all-for-tests` 只在测试配置与 e2e 中开。
@@ -293,6 +298,7 @@
 - **内容工坊**（`sponsor/src/content/`，QP3a）：每次编辑带上页面所见的 `revision` 作 `baseRevision`；`QB_QUIZ_CHANGED` / `QB_ORDER_MISMATCH` 或读到别人的新 revision 即提示重新加载，
   重新加载之前不再提交。上传只经 `uploadFile(内容策略)`（`qb.content.image|pdf|audio`），文件名用中性的 `<种类>.<扩展名>`（`content/api.ts` 的 `neutralName`，Q10b：答题人能读内容文件的元数据；商家头像同样以 `avatar.<扩展名>` 上传，内容与头像的策略都声明 `privateMetadata()`），页面的类型与大小检查只为省一次往返；图片按文件自己的变体显示（小图没有变体，`ContentImage`）。
   Markdown 只经 `MarkdownView`，外链只放 http(s) 并在新标签页打开。e2e 的数据准备（文件、完整的 Quiz 与版本）在 `e2e/tests/content.ts`，发布的测试从它开始。
+  题目列表是只读的折叠行（Q78，`content/Disclosure.tsx`：一次展开一题，操作在行上，排序经"移到…"下拉发出整表顺序；上方摘要行）；AI 出题面板只在有作业时展开成卡片；页头一次只显示一条告警。新的列表项照 `Disclosure` 写。
 - **发布页**（`sponsor/src/publishing/`，QP3b）：向导每一步都以 `QB_PUBLICATION_SAVE` 保存**整个**草稿（档位给出即完整列表，带上次保存得到的 `tierId`；带 `baseRevision`），
   提交前的问题与预计最大支出**只取保存的输出**（`problems`、`maxSpend`），页面不重算规则；`QB_PUBLICATION_CHANGED` / `QB_PUBLICATION_NOT_DRAFT` 即提示重新加载。
   非草稿只显示、不编辑（提交即冻结），操作按状态给出且都先确认。e2e 的数据准备（已通过的商家、审核的决定、上架的发布）在 `e2e/tests/publishing.ts`。
@@ -352,13 +358,15 @@
   **站内信与公告**（Q7c）：后台扩展的写入要已验证的邮箱（首个管理员没有），测试以 `contentAdmin`（`tests/legal.ts`，角色 `QB_E2E_CONTENT`、不绑定二次验证）登录后台；每次要求二次验证的撤回经 API 以 `legalAdmin` 运行。e2e 的公告用推广（只到发送前注册的人），不让以后测试新建的答题人收到。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。
 
+- **Google AdSense**（需求方 2026-11-02，`deploy/quizbuks/DEPLOY.md`"Google AdSense"）：只经 `qb/ads.ts` 的 `loadAds`（App 中 `skip: nativeShell() !== null`，商店外壳与自动化浏览器中不加载）与招商网站 `site.js` 的 `loadAds`；
+  页面头部的 `google-adsense-account` 标记、三个前端 CSP 中的广告域名（`QuizbuksAppIT` 检查）、Caddy 的 `/ads.txt` 一起改。不在 Shopify 嵌入页、店面、`/shopify-app/` 与维护页加广告。
 - **商店 App 的外壳**（Q49，`quizbuks-mobile/`，`docs/quizbuks/plans/Q49b-android.md`）：只上架答题者的 App（`/taker/`），商家后台与充值不进 App。
   Android 是 TWA（`quizbuks-mobile/android`，设置只在 `twa-manifest.json`，构建由它读取；App Links 只认 `/taker/` 前缀），启动地址与 App Links 都带 `shell=android`；
   App 中只以 `src/shell.ts` 的 `nativeShell()` 判断是否在商店 App 中（参数或 Chrome 的 `android-app://` referrer，按标签页记住），在外壳中不显示任何安装提示（`install.tsx`）。
   `assetlinks.json` 由 Caddy 站点提供（`deploy/quizbuks/assetlinks.sh`，环境变量 `QUIZBUKS_ANDROID_PACKAGE` / `QUIZBUKS_ANDROID_CERT_SHA256`）：维护模式中也能取到；需求方 2026-11-02 决定不改用平台 17l 的 `jabiz.web.native-apps`。
   上传密钥与 Play 服务账号只在 GitHub Environment `play` 的 secrets 中（workflow `quizbuks-mobile.yml`）。改了 App 的前缀、包名或颜色时两边一起改（`scripts/consistency.test.mjs`）。
   iOS 是 Capacitor（`quizbuks-mobile/ios`，设置只在 `capacitor.config.json`，Swift 的 `QuizBuksScope` 让网页只停在 `/taker/`、其他地址交给 Safari；User-Agent 带 `QuizBuksApp/ios`），`shell.ts` 同样认它；`apple-app-site-association` 同样由 Caddy 提供（`deploy/quizbuks/apple-app-site-association.sh`，变量 `QUIZBUKS_IOS_APP_ID`）；签名只在 workflow `quizbuks-ios.yml` 中以 App Store Connect API 密钥进行（Environment `appstore`）。
-  推送通知（平台 17k，D69）：profile `push`（`application-push.yml`，VAPID 密钥只来自环境变量）；只有中奖通知 `MessageProcesses.PRIZE_WON`（`qb.prize-won`，入口 `app`），由 `QB_MESSAGE_FROM_EVENT` 在写下"中奖"的那条消息时以 `SendPush` 发出，同一奖品只推一次（`prizeWon`）；答题者在"账户 → 通知"以平台积木 `PushPreferences` 开关。新的推送先加 `PushTemplate` 与三语消息 `push.qb.<名>.*`，不自己调用推送服务。
+  推送通知（平台 17k，D69）：profile `push`（`application-push.yml`，VAPID 密钥只来自环境变量）；只有中奖通知 `MessageProcesses.PRIZE_WON`（`qb.prize-won`，入口 `app`），由 `QB_MESSAGE_FROM_EVENT` 在写下"中奖"的那条消息时以 `SendPush` 发出，同一奖品只推一次（`prizeWon`）；答题者在"账户 → 通知"以平台积木 `PushPreferences` 开关。新的推送先加 `PushTemplate` 与三语消息 `push.qb.<名>.*`，不自己调用推送服务。 iOS App（平台 17k-b）：profile `apns`（`application-apns.yml`，与 `push` 并用，APNs 的 `.p8` 只来自环境变量），外壳经 `configureClient({ nativePush })` 交出设备令牌（Q49c-2）。
   商店资料（Q49d，`docs/quizbuks/store/`）：说明文字三语同构并由 `tools/quizbuks/store/listing.test.mjs` 检查；数据安全表按隐私政策逐格写，政策或 App 收集的数据改了就同步；截图只由 `quizbuks-web/e2e/store`（workflow `quizbuks-store.yml`）生成，不提交。
 
 ## 6. 测试与命令（在 `backend/` 下）

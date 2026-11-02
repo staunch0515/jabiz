@@ -2097,6 +2097,9 @@
       },
       "PushSettings" : {
         "properties" : {
+          "apns" : {
+            "type" : "boolean"
+          },
           "devices" : {
             "items" : {
               "$ref" : "#/components/schemas/DeviceView"

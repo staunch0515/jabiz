@@ -1,8 +1,6 @@
 import {
   Badge,
   Button,
-  Card,
-  CardContent,
   Checkbox,
   ConfirmDialog,
   Dialog,
@@ -16,15 +14,21 @@ import {
   notify,
   RadioGroup,
   RadioGroupItem,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Textarea,
 } from '@jabiz/ui'
 import { useMutation } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Image as ImageIcon, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { fieldProblem } from '../qb/problems'
 import { choiceOf, deleteQuestion, moved, reorderQuestions, saveQuestion, type Question, type Selection } from './api'
+import { Disclosure } from './Disclosure'
 import {
   failedRemoval,
   FileField,
@@ -37,7 +41,7 @@ import {
 } from './editing'
 import { ContentImage } from './ContentImage'
 import { LIMITS } from './limits'
-import { useMoveFocus } from './moving'
+import { useMoveToFocus } from './moving'
 
 interface OptionDraft {
   key: string
@@ -56,7 +60,7 @@ const FIELDS = ['stem', 'image', 'points', 'options', 'selection'] as const
  * their order). A draft may be incomplete: two to six options with at least one correct are checked when a version
  * is saved. A survey's question (Q12) has no points and no correct option: it is single or multiple choice.
  */
-function QuestionDialog({ question, number, survey, open, onOpenChange }: {
+function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved }: {
   /** The question to change; a new one at the end when null. */
   question: Question | null
   /** Its place, from 1. */
@@ -64,6 +68,8 @@ function QuestionDialog({ question, number, survey, open, onOpenChange }: {
   survey: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** The saved question's id (a new one's from the output), to show it open. */
+  onSaved?: (questionId: string | null) => void
 }) {
   const { t } = useTranslation(SPONSOR)
   const editing = useEditing()
@@ -94,6 +100,7 @@ function QuestionDialog({ question, number, survey, open, onOpenChange }: {
     onSuccess: async (output) => {
       onOpenChange(false)
       notify.success(t('questions.saved', { number }))
+      onSaved?.(question?.questionId ?? output.itemId)
       await editing.edited(output)
     },
     onError: editing.failed,
@@ -267,27 +274,58 @@ function ChoiceHint({ correct }: { correct: number }) {
   )
 }
 
+/** Q78: the summary line over the list: how many, the full score, how many of each choice, how many unmarked. */
+function QuestionsSummary({ questions, survey, onUnmarked }: { questions: Question[]; survey: boolean;
+  onUnmarked: (questionId: string) => void }) {
+  const { t } = useTranslation(SPONSOR)
+  const correctOf = (q: Question) => q.options.filter((o) => o.correct).length
+  const single = questions.filter((q) => choiceOf(correctOf(q)) === 'SINGLE').length
+  const multiple = questions.filter((q) => choiceOf(correctOf(q)) === 'MULTIPLE').length
+  const unmarked = questions.filter((q) => correctOf(q) === 0)
+  const score = questions.reduce((sum, q) => sum + q.points, 0)
+  return (
+    <p className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-testid="questions-summary">
+      <span data-testid="questions-count">{t('questions.summary.count', { count: questions.length, max: LIMITS.questions })}</span>
+      {!survey && <span data-testid="questions-score">{t('questions.summary.score', { score })}</span>}
+      {!survey && <span>{t('questions.summary.choices', { single, multiple })}</span>}
+      {!survey && unmarked.length > 0 && (
+        <Button type="button" variant="link" size="sm" className="text-destructive h-auto p-0"
+          data-testid="questions-unmarked" onClick={() => onUnmarked(unmarked[0].questionId)}>
+          {t('questions.summary.unmarked', { count: unmarked.length })}
+        </Button>
+      )}
+    </p>
+  )
+}
+
 /**
- * The questions of the quiz in their order (M-24): each with its options, the correct ones marked; added, changed,
- * moved up or down (`QB_QUESTION_REORDER` with the whole order) and deleted. A survey's (Q12) say single or multiple
- * choice instead of points and correct options.
+ * The questions of the quiz in their order (M-24): each a row (Q78: number, first line, points, single or multiple
+ * choice, option count) that opens into its options with the correct ones marked; added, changed, moved to any place
+ * (`QB_QUESTION_REORDER` with the whole order) and deleted from the row. A survey's (Q12) say single or multiple
+ * choice instead of points and correct options. One question is open at a time; the one just added, changed or
+ * moved opens.
  */
 export function QuestionsPanel({ questions, survey = false }: { questions: Question[]; survey?: boolean }) {
   const { t } = useTranslation(SPONSOR)
   const scoredBadge = useScoredBadge()
   const editing = useEditing()
   const [editingQuestion, setEditingQuestion] = useState<{ question: Question | null; number: number } | null>(null)
+  const [chosen, setExpanded] = useState<string | null>(null)
+  // A question deleted (here or elsewhere) is not open.
+  const expanded = chosen && questions.some((q) => q.questionId === chosen) ? chosen : null
   const addRef = useRef<HTMLButtonElement>(null)
+  const rowRefs = useRef(new Map<string, HTMLLIElement>())
   const reorder = useMutation({
-    mutationFn: ({ ids }: { ids: string[]; id: string; to: number; by: -1 | 1 }) =>
+    mutationFn: ({ ids }: { ids: string[]; id: string; to: number }) =>
       reorderQuestions(editing.quizId, ids, editing.revision()),
-    onSuccess: async (output, { id, to, by }) => {
+    onSuccess: async (output, { id, to }) => {
       await editing.edited(output)
-      afterMove(id, by, t('questions.moved', { number: to + 1 }))
+      setExpanded(id)
+      afterMove(id, t('questions.moved', { number: to + 1 }))
     },
     onError: editing.failed,
   })
-  const { announcement, moved: afterMove } = useMoveFocus(reorder.isPending)
+  const { announcement, moved: afterMove } = useMoveToFocus(reorder.isPending)
   const remove = (question: Question, number: number) =>
     deleteQuestion(editing.quizId, question.questionId, editing.revision()).then(
       async (output) => {
@@ -297,100 +335,142 @@ export function QuestionsPanel({ questions, survey = false }: { questions: Quest
       (error: unknown) => failedRemoval(editing, error),
     )
 
-  const move = (index: number, by: -1 | 1) => {
-    const ids = moved(questions.map((q) => q.questionId), index, by)
-    reorder.mutate({ ids, id: questions[index].questionId, to: index + by, by })
+  const moveTo = (index: number, to: number) => {
+    if (to === index) return
+    const ids = questions.map((q) => q.questionId)
+    const [id] = ids.splice(index, 1)
+    ids.splice(to, 0, id)
+    reorder.mutate({ ids, id, to })
+  }
+  const open = (questionId: string) => {
+    setExpanded(questionId)
+    requestAnimationFrame(() => rowRefs.current.get(questionId)?.scrollIntoView?.({ block: 'nearest' }))
   }
 
   return (
     <div className="flex flex-col gap-4" data-testid="questions-panel">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-muted-foreground text-sm">{t('questions.hint', { max: LIMITS.questions })}</p>
-        <Button ref={addRef} disabled={questions.length >= LIMITS.questions || editing.stale} data-testid="question-add"
-          onClick={() => setEditingQuestion({ question: null, number: questions.length + 1 })}>
-          <Plus aria-hidden />
-          {t('questions.add')}
-        </Button>
+      <div className="bg-background sticky top-0 z-10 flex flex-col gap-2 border-b py-2" data-testid="questions-toolbar">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-muted-foreground text-sm">{t('questions.hint', { max: LIMITS.questions })}</p>
+          <Button ref={addRef} disabled={questions.length >= LIMITS.questions || editing.stale} data-testid="question-add"
+            onClick={() => setEditingQuestion({ question: null, number: questions.length + 1 })}>
+            <Plus aria-hidden />
+            {t('questions.add')}
+          </Button>
+        </div>
+        {questions.length > 0 && <QuestionsSummary questions={questions} survey={survey} onUnmarked={open} />}
       </div>
       <p role="status" className="sr-only">{announcement}</p>
       <ProblemList problems={formProblem(reorder.error, [])} />
       {questions.length === 0
         ? <p className="text-muted-foreground text-sm" data-testid="questions-empty">{t('questions.none')}</p>
         : (
-          <ol className="flex flex-col gap-3">
-            {questions.map((question, index) => (
-              <li key={question.questionId} data-testid="question" data-question={question.questionId}>
-                <Card>
-                  <CardContent className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <h2 className="font-medium">{t('questions.number', { number: index + 1 })}</h2>
-                      <Badge variant="outline" data-testid="question-badge">
-                        {survey ? question.selection ? t(`questions.selections.${question.selection}`)
-                          : t('questions.noSelection')
-                          : scoredBadge(question.options.filter((o) => o.correct).length, question.points)}
-                      </Badge>
+          <ol className="flex flex-col gap-2">
+            {questions.map((question, index) => {
+              const correct = question.options.filter((o) => o.correct).length
+              const badge = survey ? question.selection ? t(`questions.selections.${question.selection}`)
+                : t('questions.noSelection')
+                : scoredBadge(correct, question.points)
+              const isOpen = expanded === question.questionId
+              return (
+                <li key={question.questionId} data-testid="question" data-question={question.questionId}
+                  ref={(node) => {
+                    if (node) rowRefs.current.set(question.questionId, node)
+                    else rowRefs.current.delete(question.questionId)
+                  }}>
+                  <Disclosure expanded={isOpen} testId="question-row"
+                    label={t(isOpen ? 'questions.collapse' : 'questions.expand', { number: index + 1 })}
+                    onToggle={() => setExpanded(isOpen ? null : question.questionId)}
+                    summary={
+                      <>
+                        <span className="font-medium">{t('questions.number', { number: index + 1 })}</span>
+                        <span className="text-foreground line-clamp-1 min-w-0 flex-1 basis-40" data-testid="question-first-line">
+                          {question.stem?.split('\n')[0] ?? <span className="text-muted-foreground">{t('questions.noStem')}</span>}
+                        </span>
+                        <Badge variant="outline" data-testid="question-badge">{badge}</Badge>
+                        <span className="text-muted-foreground text-xs" data-testid="question-option-count">
+                          {t('questions.optionCount', { count: question.options.length })}
+                        </span>
+                        {!survey && correct === 0 && question.options.length > 0 && (
+                          <Badge variant="destructive" data-testid="question-unmarked">{t('questions.unmarked')}</Badge>
+                        )}
+                        {(question.image || question.options.some((o) => o.image)) && (
+                          <ImageIcon aria-label={t('questions.hasImage')} className="text-muted-foreground size-4" />
+                        )}
+                      </>
+                    }
+                    actions={
+                      <>
+                        <Button variant="outline" size="sm" disabled={editing.stale} data-testid="question-edit"
+                          aria-label={t('questions.edit', { number: index + 1 })}
+                          onClick={() => setEditingQuestion({ question, number: index + 1 })}>
+                          <Pencil aria-hidden />
+                          {t('editor.edit')}
+                        </Button>
+                        <Select value={String(index)} disabled={reorder.isPending || editing.stale || questions.length < 2}
+                          onValueChange={(value) => {
+                            if (value) moveTo(index, Number(value))
+                          }}>
+                          <SelectTrigger size="sm" className="w-auto" aria-label={t('questions.moveTo', { number: index + 1 })}
+                            data-move={question.questionId} data-testid="question-move">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {questions.map((_, place) => (
+                              <SelectItem key={place} value={String(place)} data-testid="question-move-place">
+                                {t('questions.place', { number: place + 1 })}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <ConfirmDialog destructive title={t('questions.deleteTitle', { number: index + 1 })}
+                          description={t('questions.deleteText')} confirmLabel={t('editor.delete')}
+                          cancelLabel={t('common.cancel')} returnFocus={() => addRef.current}
+                          onConfirm={() => remove(question, index + 1)}
+                          trigger={
+                            <Button variant="outline" size="sm" disabled={editing.stale} data-testid="question-delete"
+                              aria-label={t('questions.delete', { number: index + 1 })}>
+                              <Trash2 aria-hidden />
+                              <span className="sr-only sm:not-sr-only">{t('editor.delete')}</span>
+                            </Button>
+                          } />
+                      </>
+                    }>
+                    <div className="flex flex-col gap-3">
+                      <p className="whitespace-pre-wrap" data-testid="question-stem-text">
+                        {question.stem ?? <span className="text-muted-foreground">{t('questions.noStem')}</span>}
+                      </p>
+                      {question.image && <ContentImage fileId={question.image} width={160} />}
+                      {question.options.length === 0
+                        ? <p className="text-muted-foreground text-sm">{t('questions.noOptions')}</p>
+                        : (
+                          <ol className="flex flex-col gap-1 text-sm">
+                            {question.options.map((option, n) => (
+                              <li key={option.optionId} className="flex items-center gap-2" data-testid="option-row"
+                                data-correct={option.correct}>
+                                {option.correct
+                                  ? <Check aria-hidden className="text-success size-4 shrink-0" />
+                                  : <span aria-hidden className="size-4 shrink-0" />}
+                                <span>{n + 1}.</span>
+                                <span>{option.text ?? (option.image ? t('questions.imageOnly') : t('questions.emptyOption'))}</span>
+                                {option.correct && <span className="sr-only">{t('questions.correctMark')}</span>}
+                                {option.image && <ContentImage fileId={option.image} width={64} />}
+                              </li>
+                            ))}
+                          </ol>
+                        )}
                     </div>
-                    <p className="whitespace-pre-wrap" data-testid="question-stem-text">
-                      {question.stem ?? <span className="text-muted-foreground">{t('questions.noStem')}</span>}
-                    </p>
-                    {question.image && <ContentImage fileId={question.image} width={160} />}
-                    {question.options.length === 0
-                      ? <p className="text-muted-foreground text-sm">{t('questions.noOptions')}</p>
-                      : (
-                        <ol className="flex flex-col gap-1 text-sm">
-                          {question.options.map((option, n) => (
-                            <li key={option.optionId} className="flex items-center gap-2" data-testid="option-row"
-                              data-correct={option.correct}>
-                              {option.correct
-                                ? <Check aria-hidden className="text-success size-4 shrink-0" />
-                                : <span aria-hidden className="size-4 shrink-0" />}
-                              <span>{n + 1}.</span>
-                              <span>{option.text ?? (option.image ? t('questions.imageOnly') : t('questions.emptyOption'))}</span>
-                              {option.correct && <span className="sr-only">{t('questions.correctMark')}</span>}
-                              {option.image && <ContentImage fileId={option.image} width={64} />}
-                            </li>
-                          ))}
-                        </ol>
-                      )}
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" disabled={editing.stale} data-testid="question-edit"
-                        aria-label={t('questions.edit', { number: index + 1 })}
-                        onClick={() => setEditingQuestion({ question, number: index + 1 })}>
-                        <Pencil aria-hidden />
-                        {t('editor.edit')}
-                      </Button>
-                      <Button variant="outline" size="sm" disabled={index === 0 || reorder.isPending || editing.stale}
-                        aria-label={t('questions.up', { number: index + 1 })} data-move={`${question.questionId}:-1`}
-                        data-testid="question-up" onClick={() => move(index, -1)}>
-                        <ArrowUp aria-hidden />
-                      </Button>
-                      <Button variant="outline" size="sm"
-                        disabled={index === questions.length - 1 || reorder.isPending || editing.stale}
-                        aria-label={t('questions.down', { number: index + 1 })} data-move={`${question.questionId}:1`}
-                        data-testid="question-down" onClick={() => move(index, 1)}>
-                        <ArrowDown aria-hidden />
-                      </Button>
-                      <ConfirmDialog destructive title={t('questions.deleteTitle', { number: index + 1 })}
-                        description={t('questions.deleteText')} confirmLabel={t('editor.delete')}
-                        cancelLabel={t('common.cancel')} returnFocus={() => addRef.current}
-                        onConfirm={() => remove(question, index + 1)}
-                        trigger={
-                          <Button variant="outline" size="sm" disabled={editing.stale} data-testid="question-delete"
-                            aria-label={t('questions.delete', { number: index + 1 })}>
-                            <Trash2 aria-hidden />
-                            {t('editor.delete')}
-                          </Button>
-                        } />
-                    </div>
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
+                  </Disclosure>
+                </li>
+              )
+            })}
           </ol>
         )}
       {editingQuestion && (
         <QuestionDialog key={editingQuestion.question?.questionId ?? 'new'} question={editingQuestion.question}
-          number={editingQuestion.number} survey={survey} open onOpenChange={(open) => {
+          number={editingQuestion.number} survey={survey} open onSaved={(id) => {
+            if (id) open(id)
+          }} onOpenChange={(open) => {
             if (!open) setEditingQuestion(null)
           }} />
       )}

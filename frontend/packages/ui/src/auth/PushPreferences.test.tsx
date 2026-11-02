@@ -71,4 +71,11 @@ describe('PushPreferences (decision D69)', () => {
     renderBlock({ load: async () => settings, enabledHere: async () => false, supported: () => false })
     expect(await screen.findByTestId('push-preferences-unavailable')).toHaveTextContent('cannot receive notifications')
   })
+
+  it('in a native shell, says so while the server takes no device tokens (17k-b)', async () => {
+    renderBlock({ load: async () => ({ ...settings, apns: false }), enabledHere: async () => false,
+      native: () => ({ kind: 'apns', register: async () => null, token: async () => null }) })
+    expect(await screen.findByTestId('push-preferences-unavailable')).toHaveTextContent('not available here')
+    expect(screen.queryByRole('switch')).toBeNull()
+  })
 })

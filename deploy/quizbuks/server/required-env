@@ -70,3 +70,9 @@ apple:QB_OIDC_REDIRECT_SPONSOR - https:// url
 push:JABIZ_PUSH_PUBLIC_KEY 87 - vapid-public
 push:JABIZ_PUSH_PRIVATE_KEY 43 - vapid-private
 push:JABIZ_PUSH_SUBJECT - mailto:
+
+# Push notifications to the iOS app (platform 17k-b): with the Spring profile "apns" (beside "push"), the key of the
+# Apple Developer team with Apple Push Notifications service
+apns:JABIZ_APNS_TEAM_ID 10 - apple-id
+apns:JABIZ_APNS_KEY_ID 10 - apple-id
+apns:JABIZ_APNS_PRIVATE_KEY - - p8

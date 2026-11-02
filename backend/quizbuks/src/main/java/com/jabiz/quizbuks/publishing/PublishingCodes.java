@@ -118,6 +118,20 @@ public final class PublishingCodes {
     public static final String TEXT_STALE = "QB_PUBLICATION_TEXT_STALE";
     public static final String TEXT_TOO_LONG = "QB_PUBLICATION_TEXT_TOO_LONG";
     public static final String SWITCH_LANGUAGES = "QB_PUBLICATION_VERSION_LANGUAGES";
+    /** Q76: more prerequisites than {@link QbPrerequisites#MAX_PREREQUISITES}. */
+    public static final String PREREQUISITE_TOO_MANY = "QB_PREREQUISITE_TOO_MANY";
+    /** Q76: the same publication required twice. */
+    public static final String PREREQUISITE_REPEATED = "QB_PREREQUISITE_REPEATED";
+    /** Q76: a publication requiring itself. */
+    public static final String PREREQUISITE_SELF = "QB_PREREQUISITE_SELF";
+    /** Q76: the required publication is not the sponsor's own (or does not exist). */
+    public static final String PREREQUISITE_NOT_OWN = "QB_PREREQUISITE_NOT_OWN";
+    /** Q76: the required publication is still a draft. */
+    public static final String PREREQUISITE_DRAFT = "QB_PREREQUISITE_DRAFT";
+    /** Q76: the required publication requires this one, directly or through others. */
+    public static final String PREREQUISITE_CYCLE = "QB_PREREQUISITE_CYCLE";
+    /** Q76: the chain would be longer than {@link QbPrerequisites#MAX_DEPTH}. */
+    public static final String PREREQUISITE_TOO_DEEP = "QB_PREREQUISITE_TOO_DEEP";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -132,7 +146,9 @@ public final class PublishingCodes {
         SWITCH_ENDED, REFERRAL_INVITED, REFERRAL_QUOTA_RANGE, REFERRAL_DAYS_RANGE, REFERRAL_AMOUNT_RANGE,
         REFERRAL_METHOD_INVALID, REFERRAL_REQUIREMENT_INVALID, REFERRAL_SURVEY_PASS, REFERRAL_RULE_INVALID,
         REFERRAL_POOL_SHORT, LANGUAGES_INVALID, LANGUAGE_NOT_IN_VERSION, TEXT_MISSING, TEXT_STALE, TEXT_TOO_LONG,
-        SWITCH_LANGUAGES);
+        SWITCH_LANGUAGES,
+        PREREQUISITE_TOO_MANY, PREREQUISITE_REPEATED, PREREQUISITE_SELF, PREREQUISITE_NOT_OWN, PREREQUISITE_DRAFT,
+        PREREQUISITE_CYCLE, PREREQUISITE_TOO_DEEP);
 
     private PublishingCodes() {}
 }

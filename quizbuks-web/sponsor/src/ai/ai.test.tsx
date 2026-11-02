@@ -140,6 +140,9 @@ describe('the AI questions panel', () => {
     const user = userEvent.setup()
     wrap(<AiQuestionsPanel quiz={QUIZ} materials={MATERIALS} />)
     expect(await screen.findByTestId('ai-remaining')).toHaveTextContent('1,984,600')
+    // Q78: nothing going on: one line with the button, no card.
+    expect(screen.getByTestId('ai-panel')).toHaveAttribute('data-collapsed', 'true')
+    expect(screen.queryByText('AI questions')).toBeNull()
     await user.click(screen.getByTestId('ai-generate'))
     const dialog = await screen.findByTestId('ai-dialog')
     // A non-article is sent by its title and description only.
@@ -161,6 +164,7 @@ describe('the AI questions panel', () => {
     expect(calls.of('/api/processes/QB_AI_QUESTIONS_REQUEST/latest')[0]).toEqual({ quizId: 'q1',
       materialIds: ['m2'], count: 5, difficulty: 'MEDIUM', language: 'en', avoidExisting: true, aiNoticeVersionNo: 2 })
     expect(await screen.findByTestId('ai-running')).toHaveTextContent('writing 5 questions')
+    expect(screen.getByTestId('ai-panel')).not.toHaveAttribute('data-collapsed')
   })
 
   it('does not ask for more than one request can hold', async () => {

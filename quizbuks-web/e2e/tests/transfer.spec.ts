@@ -24,7 +24,7 @@ test('a quiz is exported to a file and imported back as a new draft', async ({ p
 
   await signIn(page, '/sponsor/', me.email)
   // Signed in once the console leads to the onboarding (not approved yet; the quizzes are open).
-  await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
+  await expect(page).toHaveURL(/\/sponsor\/profile\/basics$/)
   await page.getByRole('link', { name: 'Quizzes' }).click()
   await expect(page.getByTestId('quiz-list')).toBeVisible()
   // Other tests' quizzes share the database: find this one by its title.

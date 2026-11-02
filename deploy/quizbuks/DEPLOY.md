@@ -244,6 +244,7 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
      `/api/inbound/stripe-connect`（订阅的事件见 `docs/quizbuks/stripe-test-mode.md` §4.2），`STRIPE_WEBHOOK_SECRET` / `STRIPE_CONNECT_WEBHOOK_SECRET` 是
      **这两个端点各自的签名密钥**（`whsec_…`，由 Stripe 给出，不能自己生成：签名对不上时每个事件都被拒绝，充值停在 `OPEN`）。经 Cloudflare 时先做"3a. Cloudflare"。
    - `SPRING_PROFILES_ACTIVE=staging` 只标出环境，应用中没有按环境写死的配置：环境的差异全部在这个 `.env` 中。同时开 Google 登录时写 `staging,google`（再加 Facebook、LINE 时写 `staging,social`，Q40；四家再加 Apple 时写 `staging,apple`，平台 17j；只写其中一个），并设 Google 客户端与两个回调地址（`QB_OIDC_REDIRECT_APP`、`QB_OIDC_REDIRECT_SPONSOR`，见 README"前端"）。
+   - iOS App 的推送（平台 17k-b）：再加 `apns`，并设 Apple 的 APNs 密钥（`JABIZ_APNS_TEAM_ID`、`JABIZ_APNS_KEY_ID`、`JABIZ_APNS_PRIVATE_KEY`，见 README"iOS App 的推送"）；格式不对时部署前的检查停止部署。
    - 推送通知（平台 17k）：在 `SPRING_PROFILES_ACTIVE` 中再加 `push`（如 `staging,google,push`），并设 VAPID 密钥对与联系方式（`JABIZ_PUSH_PUBLIC_KEY`、`JABIZ_PUSH_PRIVATE_KEY`、`JABIZ_PUSH_SUBJECT`，生成方法见 README"推送通知"）；缺少时部署前的检查停止部署。
    - `JABIZ_WEB_ENVIRONMENT=staging`（平台 16zd）让三个前端的每一页顶部都显示 "STAGING · 测试环境，不是正式版" 的横条，标题前加 `[STAGING]`；
      不写也一样（缺省 `test`）。**绝不能写 `production`**：workflow 部署前检查，staging 的 `.env` 写了 production 即停止。
@@ -435,6 +436,25 @@ Settings → Environments → 新建 `appstore`（建议 Required reviewers 与 
 | `APPLE_TEAM_ID` | 变量 | Membership 页的 Team ID（10 位） |
 
 密钥泄露或丢失时在 App Store Connect 吊销并新建，更新上面的 secrets；已上架的 App 不受影响。
+
+## Google AdSense（广告）
+
+需求方 2026-11-02 要求在所有能加的页面加上 Google AdSense（发布商 `ca-pub-8399814237019515`）：
+
+- **加了的**：答题 App（浏览器与安装的 PWA）、商家后台、招商网站 `/biz/`。各页面头部有验证标记 `<meta name="google-adsense-account">`，
+  加载脚本由 `quizbuks-web/{app,sponsor}/src/qb/ads.ts` 与 `quizbuks-web/biz/src/assets/site.js` 加入；三个前端的 CSP（`application.yml`）放开 Google 的广告域名。
+  广告放在哪里由 AdSense 的"自动广告"决定。
+- **没加的**：商店 App 的外壳中（AdSense 不允许直接投放到 App 的网页视图，且要改商店的数据声明）、自动化浏览器中（e2e 与商店截图，Google 视为无效流量）、
+  管理后台与运营商后台（平台的页面、只给内部人员）、嵌在 Shopify 后台中的页面与商户的店面、Shopify 应用的公开页 `/shopify-app/`（刻意不带任何脚本，供 Shopify 审核）、维护页（AdSense 不允许在错误页上投放）。
+- **`ads.txt`**：Caddy 站点在域名根下提供（`server/site.caddy.tpl`，维护模式中也能取到）：`google.com, pub-8399814237019515, DIRECT, f08c47fec0942fa0`。
+
+在 AdSense 账户中（需求方操作）：
+
+1. "网站"中添加 production 的域名并等待审核；**不要添加 staging 的域名**，未核准的网站不投放广告。
+2. "广告 → 自动广告"中开启，并在"已排除的网页"中排除登录、注册、找回密码与邮件链接的页面（`/taker/login`、`/taker/signup`、`/taker/password-reset`、`/taker/mail/`、
+   `/sponsor/login` 等）：AdSense 不允许在没有内容的页面（登录、错误页）上投放。
+3. "隐私权和消息"中为欧洲经济区、英国与瑞士的访问者开启 Google 的同意管理（CMP）：Google 要求向这些地区投放时取得同意。
+4. 隐私政策草稿（三语）已写上 Google AdSense 与 Cookie：**在管理后台发布新版本后再上线广告**。
 
 ## 备份
 

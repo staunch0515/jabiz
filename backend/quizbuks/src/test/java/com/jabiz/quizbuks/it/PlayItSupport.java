@@ -190,6 +190,30 @@ abstract class PlayItSupport extends AccountItSupport {
         return livePublication(sponsorId, name, Map.of());
     }
 
+    /**
+     * Q76: a live publication with prerequisites (set while a draft, frozen on submission): each is a required
+     * publication's id and {@code PASSED} or {@code ANSWERED}, as {@link #prerequisite}.
+     */
+    String liveRequiring(String sponsorId, String name, Map<String, Object> overrides,
+        List<Map<String, Object>> prerequisites) {
+        String token = sponsorToken(sponsorId);
+        String versionId = version(token, name + " quiz");
+        Instant now = clock.instant();
+        Map<String, Object> save = complete(versionId, name, now, now.plus(Duration.ofDays(7)));
+        save.put("maxWinners", 1000);
+        save.putAll(overrides);
+        String publicationId = (String) run("QB_PUBLICATION_SAVE", token, save).get("publicationId");
+        run("QB_PUBLICATION_PREREQUISITES_SAVE", token, body("publicationId", publicationId, "prerequisites",
+            prerequisites));
+        Map<String, Object> submitted = run("QB_PUBLICATION_SUBMIT", token, body("publicationId", publicationId));
+        assertThat(submitted.get("status")).as("submitted " + submitted).isIn("LIVE", "SCHEDULED");
+        return publicationId;
+    }
+
+    static Map<String, Object> prerequisite(String requiredPublicationId, String requirement) {
+        return body("requiredPublicationId", requiredPublicationId, "requirement", requirement);
+    }
+
     Map<String, Object> start(String token, String publicationId) {
         return run("QB_ATTEMPT_START", token, body("publicationId", publicationId));
     }
