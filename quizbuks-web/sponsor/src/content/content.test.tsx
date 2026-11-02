@@ -253,15 +253,44 @@ describe('the quiz editor', () => {
     expect(processCalls('QB_QUIZ_SAVE').map((b) => b.baseRevision)).toEqual([7, 9])
   })
 
-  it('shows the questions in their order and moves one with the whole order', async () => {
+  it('shows the questions folded in their order, opens one at a time, and moves one with the whole order', async () => {
     const { processCalls } = server({ processes: { QB_QUESTION_REORDER: [edit(8)] } })
     render(<App />)
     await userEvent.click(await screen.findByTestId('tab-questions'))
     const questions = await screen.findAllByTestId('question')
     expect(questions.map((q) => q.getAttribute('data-question'))).toEqual(['k1', 'k2'])
+    // Q78: folded rows: the first line, the badge and the option count; the options only once opened.
+    expect(within(questions[0]).getByTestId('question-first-line')).toHaveTextContent('First?')
+    expect(within(questions[0]).getByTestId('question-badge')).toHaveTextContent('Single choice · Points: 2')
+    expect(within(questions[0]).getByTestId('question-option-count')).toHaveTextContent('2 options')
+    expect(within(questions[1]).getByTestId('question-option-count')).toHaveTextContent('0 options')
+    expect(screen.queryByTestId('option-row')).toBeNull()
+    // Q78: the staff sit with the sponsor's settings in the menu.
+    expect(within(screen.getByTestId('menu-group-settings')).getByTestId('menu-staff')).toBeInTheDocument()
+    expect(within(screen.getByTestId('menu-group-rewards')).queryByTestId('menu-staff')).toBeNull()
+    const summary = screen.getByTestId('questions-summary')
+    expect(summary).toHaveTextContent('2 / 100 questions')
+    expect(summary).toHaveTextContent('Full score 3')
+    expect(summary).toHaveTextContent('Single choice 1 · multiple choice 0')
+    expect(within(summary).getByTestId('questions-unmarked')).toHaveTextContent('1 question has no correct option')
+    const toggle = within(questions[0]).getByTestId('question-row-toggle')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
     const options = within(questions[0]).getAllByTestId('option-row')
     expect(options.map((o) => o.textContent)).toEqual(['1.Coffee(correct)', '2.Tea'])
-    await userEvent.click(within(questions[0]).getByRole('button', { name: 'Move question 1 down' }))
+    await expectAccessible()
+    // Opening another closes it; the summary's link opens the unmarked one.
+    await userEvent.click(within(questions[1]).getByTestId('question-row-toggle'))
+    expect(within(questions[0]).queryByTestId('option-row')).toBeNull()
+    expect(within(questions[1]).getByTestId('question-row-toggle')).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(within(questions[1]).getByTestId('question-row-toggle'))
+    expect(screen.queryByTestId('question-row-detail')).toBeNull()
+    await userEvent.click(within(summary).getByTestId('questions-unmarked'))
+    expect(within(questions[1]).getByTestId('question-row-toggle')).toHaveAttribute('aria-expanded', 'true')
+    // "Move to" sends the whole order.
+    await userEvent.click(screen.getByRole('combobox', { name: 'Move question 1 to' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Place 2' }))
     await waitFor(() => expect(processCalls('QB_QUESTION_REORDER')).toEqual([{ quizId: 'q1',
       questionIds: ['k2', 'k1'], baseRevision: 7 }]))
   })
@@ -396,7 +425,10 @@ describe('the quiz editor', () => {
   })
 
   it('lists every reason a version was refused', async () => {
-    server({ processes: { QB_QUIZ_PUBLISH_VERSION: [{ status: 422, body: { detail: 'Refused', violations: [
+    const changed = { status: 422, body: { detail: 'Refused', violations: [{ field: 'baseRevision',
+      ruleCode: 'QB_QUIZ_CHANGED', message: 'The quiz was changed meanwhile.' }] } }
+    server({ processes: { QB_QUIZ_SAVE: [changed], QB_QUIZ_PUBLISH_VERSION: [{ status: 422, body: { detail: 'Refused',
+      violations: [
       { field: 'questions[0].options', ruleCode: 'QB_QUESTION_OPTION_COUNT', message: 'Question 1 needs 2 to 6 options.' },
       { field: 'questions[1].stem', ruleCode: 'QB_QUESTION_STEM_REQUIRED', message: 'Question 2 has no text.' },
     ] } }] } })
@@ -405,6 +437,10 @@ describe('the quiz editor', () => {
     const problems = await screen.findByTestId('version-problems')
     expect(within(problems).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       'Question 1 needs 2 to 6 options.', 'Question 2 has no text.'])
+    // Q78: one notice at a time: a page out of date is the more pressing one.
+    await userEvent.click(screen.getByTestId('heading-save'))
+    await screen.findByTestId('stale')
+    expect(screen.queryByTestId('version-problems')).toBeNull()
   })
 
   it('says so when the quiz is not the sponsor\'s', async () => {

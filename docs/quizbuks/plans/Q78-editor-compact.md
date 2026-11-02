@@ -21,7 +21,7 @@
 
 `@jabiz/ui` 没有 Accordion / Collapsible 组件（`components/ui` 里没有）；规则是组件只在平台一处（D34），应用不自己复制 shadcn 组件。
 
-## 2. 决定（草案，待确认）
+## 2. 决定（需求方 2026-11-02 确认）
 
 | # | 决定 |
 |---|---|
@@ -101,3 +101,19 @@
 4. D-Q78-7：店员放在"设置"组的"入驻"之后。
 5. D-Q78-8：资料页这次不动。
 6. 编号 Q78。
+
+## 9. 实施记录（2026-11-02，分支 `1.3/quizbuks-78-editor-compact`）
+
+需求方 2026-11-02 确认 §8 的六项（"同意 Q78 的决定，开始开发"）。按计划实施，与计划的差别与细节：
+
+- `content/Disclosure.tsx`：披露行（`Button` 带 `aria-expanded` / `aria-controls`，面板只在展开时渲染；`<testId>-toggle`、`<testId>-detail`），行上另有操作区。
+- `QuestionsPanel.tsx`：每题一行（`question-row`：题号、题干首行 `question-first-line`、徽章 `question-badge`、选项数 `question-option-count`、没标正确答案的红徽章 `question-unmarked`、有图的图标），
+  行上的操作：编辑、**"移到…"**（`Select`，`question-move`，选项 `question-move-place`）、删除；展开为原来的题干、题图、选项列表（`option-row` 照旧）。一次只开一题；刚添加（对话框经 `onSaved` 回报新题的 `itemId`）、编辑、移动的题自动展开并滚到视野内（`scrollIntoView?.`：jsdom 没有）。
+  工具条（提示 + 添加 + 摘要 `questions-summary`：`questions-count`、`questions-score`、单选 / 多选、`questions-unmarked` 链接）`sticky`。移动后的焦点经新的 `useMoveToFocus`（`data-move="<题号>"`）；资料页仍用原来的 `useMoveFocus`（上下两个按钮）。
+  `question-up` / `question-down` 不再存在。
+- `AiQuestionsPanel.tsx`：没有进行中、失败、过期、待校对的作业时只渲染一行（`ai-panel` 带 `data-collapsed="true"`：按钮 `ai-generate` + `ai-remaining`，`ai-off` 照旧），其他状态渲染原来的卡片；`ai-*` 的 testid 不变。
+- `QuizEditorPage.tsx`：告警只渲染第一条成立的（stale > 版本被拒 > 译文不完整 > 已保存）；复制与删除从 `sm` 起并排，窄屏收进 `DropdownMenu`（`editor-more`），删除的确认改为受控的 `ConfirmDialog`（没有触发器）。
+- `App.tsx`：店员移到 `settings` 组，入驻之后。
+- 文案三语：`questions.moveTo` / `place` / `expand` / `collapse` / `optionCount` / `unmarked` / `hasImage` / `summary.*`（复数键 `_one` / `_other`，中日文两键同文）、`editor.more`。
+- 测试：`content.test.tsx`（折叠行、摘要、一次一题、摘要链接展开、"移到"发出整表顺序、菜单分组、只有一条告警）、`ai.test.tsx`（空闲一行、进行中为卡片）；e2e `content.spec.ts` 的上移改为"移到第 1 位"并断言焦点在 `question-move`（本机未运行，CI 的 e2e 作业运行）。
+- 未做：资料页不动（D-Q78-8）；没有记住每题的开合。
