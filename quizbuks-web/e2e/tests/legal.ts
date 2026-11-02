@@ -11,7 +11,10 @@ import { adminToken, expect, insert, PASSWORD, rows, tokenOf, verifiedUser } fro
 
 export const CONTENT_ROLE = 'QB_E2E_CONTENT'
 // Q22: the content administrator also allows a sponsor's reward methods (reward-methods.spec).
-const CONTENT_PERMISSIONS = ['qb.admin.content.write', 'qb.admin.users.read', 'qb.admin.reward-methods']
+// Q77: qb.certification.manage, so that the certificates' test can grant one by hand (the first administrator has
+// no verified address).
+const CONTENT_PERMISSIONS = ['qb.admin.content.write', 'qb.admin.users.read', 'qb.admin.reward-methods',
+  'qb.certification.manage']
 
 const ROLES = 'urn:jabiz:dataset:platform:SecRole'
 const ROLE_PERMISSIONS = 'urn:jabiz:dataset:platform:SecRolePermission'
