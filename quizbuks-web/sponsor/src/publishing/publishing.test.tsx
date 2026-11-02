@@ -782,6 +782,27 @@ describe('the reward method (Q22)', () => {
     await waitFor(() => expect(processCalls('QB_CASH_REWARD_MARK_PAID')).toEqual([{ cashRewardId: 'c1', note: 'Receipt 17' }]))
     await waitFor(() => expect(screen.queryByTestId('cash-mark-dialog')).toBeNull())
   })
+
+  it('shows the cash rewards as cards on request: the taker as the title, the status a badge, the button at the foot (Q80)', async () => {
+    const reward = { cashRewardId: 'c1', code: 'C-ABCD1234', publicationId: 'p1', publicationName: 'Coffee week',
+      takerName: 'Mei', amount: '100', status: 'DUE', dueAt: '2026-10-20T01:00:00Z', payBy: '2026-11-03T01:00:00Z',
+      markedPaidAt: null, markedPaidNote: null, confirmBy: null, confirmedAt: null, disputedAt: null,
+      disputeNote: null, resolution: null, resolveNote: null }
+    server({ cashRewards: [reward] })
+    window.history.replaceState(null, '', '/cash-rewards')
+    render(<App />)
+    await screen.findByTestId('cash-row')
+    await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+    const card = await screen.findByTestId('cash-row')
+    expect(card).toHaveAttribute('data-slot', 'data-table-card')
+    expect(card.querySelector('[data-slot="data-table-card-title"]')).toHaveTextContent('Mei')
+    expect(within(card).getByTestId('cash-code')).toHaveTextContent('C-ABCD1234')
+    expect(within(card).getByTestId('cash-status')).toBeInTheDocument()
+    expect(within(card).getByTestId('cash-mark')).toBeInTheDocument()
+    expect(card).toHaveTextContent('100 Kudos')
+    await expectAccessible()
+    window.localStorage.clear()
+  })
 })
 
 describe('digital prizes (Q33)', () => {
@@ -1079,6 +1100,20 @@ describe('the staff (Q39)', () => {
     await userEvent.click(within(row).getByTestId('staff-remove'))
     await userEvent.click(await screen.findByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(processCalls('QB_SPONSOR_STAFF_REMOVE')).toEqual([{ userId: KAI }]))
+  })
+
+  it('shows the staff as cards on request: the name as the title, the ID under it, the removal at the foot (Q80)', async () => {
+    server({ staff: [{ userId: KAI, displayName: 'Kai', addedAt: '2026-10-20T00:00:00Z' }] })
+    window.history.replaceState(null, '', '/staff')
+    render(<App />)
+    await screen.findByTestId('staff-row')
+    await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+    const card = await screen.findByTestId('staff-row')
+    expect(card).toHaveAttribute('data-slot', 'data-table-card')
+    expect(card.querySelector('[data-slot="data-table-card-title"]')).toHaveTextContent('Kai')
+    expect(card).toHaveTextContent(KAI)
+    expect(within(card).getByTestId('staff-remove')).toBeInTheDocument()
+    window.localStorage.clear()
   })
 })
 

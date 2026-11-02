@@ -1,5 +1,7 @@
 import {
   Badge,
+  DataTable,
+  type ColumnDef,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -22,12 +24,13 @@ import { useQuery } from '@tanstack/react-query'
 import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
-import { DataDisclosure, ScrollRegion } from '../analytics/charts'
+import { DataDisclosure } from '../analytics/charts'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import {
   periodOf,
   readProductClicks,
+  type ProductClicks,
   readStatsDays,
   STATS_PERIODS,
   type StatsDay,
@@ -85,6 +88,17 @@ export function StatsPage() {
   const locale = i18n.language
   const sum = (measure: 'views' | 'clicks') => (daily.data ?? []).reduce((total, d) => total + d[measure], 0)
 
+  // Q80: the products' clicks as a `DataTable` (cards on a phone): the name as the title, its state a badge.
+  const productColumns = useMemo<ColumnDef<ProductClicks, unknown>[]>(() => [
+    { id: 'name', header: t('stats.product'), enableSorting: false, meta: { card: 'title' },
+      cell: ({ row }) => row.original.name },
+    { id: 'status', header: t('stats.productStatus'), enableSorting: false, meta: { card: 'badge' },
+      cell: ({ row }) => row.original.status !== 'LISTED'
+        ? <Badge variant="outline">{t(`stats.status.${row.original.status}`, row.original.status)}</Badge> : null },
+    { id: 'clicks', header: t('stats.clicks'), enableSorting: false, meta: { className: 'text-right tabular-nums' },
+      cell: ({ row }) => <span data-testid="stats-product-clicks">{row.original.clicks.toLocaleString(locale)}</span> },
+  ], [t, locale])
+
   return (
     <div className="flex flex-col gap-4" data-testid="stats-page">
       <div className="flex flex-col gap-1">
@@ -138,33 +152,9 @@ export function StatsPage() {
             : products.data.length === 0
               ? <p className="text-muted-foreground text-sm" data-testid="stats-no-products">{t('stats.noProducts')}</p>
               : (
-                <ScrollRegion label={t('stats.products')}>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead scope="col">{t('stats.product')}</TableHead>
-                        <TableHead scope="col" className="text-right">{t('stats.clicks')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {products.data.map((p) => (
-                        <TableRow key={p.productId} data-testid="stats-product">
-                          <TableHead scope="row" className="font-normal">
-                            <span className="flex flex-wrap items-center gap-2">
-                              {p.name}
-                              {p.status !== 'LISTED' && (
-                                <Badge variant="outline">{t(`stats.status.${p.status}`, p.status)}</Badge>
-                              )}
-                            </span>
-                          </TableHead>
-                          <TableCell className="text-right tabular-nums" data-testid="stats-product-clicks">
-                            {p.clicks.toLocaleString(locale)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollRegion>
+                <DataTable label={t('stats.products')} columns={productColumns} data={products.data}
+                  storageKey="qb.sponsor.stats-products" getRowId={(p) => p.productId}
+                  rowProps={() => ({ 'data-testid': 'stats-product' })} />
               )}
       </section>
     </div>

@@ -122,8 +122,10 @@ export function VersionsPanel({ quizId, stale }: { quizId: string; stale: boolea
   const [viewing, setViewing] = useState<VersionRow | null>(null)
 
   const columns = useMemo<ColumnDef<VersionRow, unknown>[]>(() => [
-    { id: 'label', header: t('versions.label'), cell: ({ row }) => <span className="font-medium">{row.original.label}</span> },
-    { id: 'title', header: t('versions.title'), cell: ({ row }) => row.original.title },
+    // Q80: on a phone each version is a card: the label as its title, the quiz title under it.
+    { id: 'label', header: t('versions.label'), meta: { card: 'title' },
+      cell: ({ row }) => <span className="font-medium">{row.original.label}</span> },
+    { id: 'title', header: t('versions.title'), meta: { card: 'subtitle' }, cell: ({ row }) => row.original.title },
     // Q73a: the version's languages, the base first.
     { id: 'languages', header: t('translations.versionLanguages'), cell: ({ row }) => (
       <span data-testid="version-languages">
@@ -138,6 +140,7 @@ export function VersionsPanel({ quizId, stale }: { quizId: string; stale: boolea
     {
       id: 'actions',
       header: () => <span className="sr-only">{t('versions.actions')}</span>,
+      meta: { card: 'actions' },
       cell: ({ row }) => (
         <span className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" size="sm" data-testid="version-view"
@@ -177,7 +180,7 @@ export function VersionsPanel({ quizId, stale }: { quizId: string; stale: boolea
   return (
     <div className="flex flex-col gap-4" data-testid="versions-panel">
       <p className="text-muted-foreground text-sm">{t('versions.hint')}</p>
-      <DataTable label={t('versions.table')} columns={columns} data={versions.data ?? []}
+      <DataTable label={t('versions.table')} columns={columns} data={versions.data ?? []} storageKey="qb.sponsor.versions"
         getRowId={(row) => row.versionId} loading={versions.isPending} empty={t('versions.none')}
         rowProps={(row) => ({ 'data-testid': 'version-row', 'data-label': row.label })} />
       <Dialog open={viewing !== null} onOpenChange={(open) => {

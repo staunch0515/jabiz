@@ -160,6 +160,15 @@ describe('the message centre', () => {
     expect(within(rows[2]).getByTestId('notice-edit')).toBeInTheDocument()
     expect(within(rows[2]).getByTestId('notice-discard')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Messages' })).toHaveAttribute('aria-current', 'page')
+    // Q80: a DataTable now, cards on request: the notice as the title, the status a badge, the figures listed.
+    expect(within(screen.getByTestId('notices-table')).getByRole('table')).toBeInTheDocument()
+    await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+    const cards = await screen.findAllByTestId('notice-row')
+    expect(cards).toHaveLength(3)
+    expect(cards[0]).toHaveAttribute('data-slot', 'data-table-card')
+    expect(within(cards[0]).getByTestId('notice-reached')).toHaveTextContent('200+')
+    expect(within(cards[0]).getByTestId('notice-withdraw')).toBeInTheDocument()
+    window.localStorage.clear()
   })
 
   it('writes a notice, shows the server\'s problems and sends it only once there are none', async () => {

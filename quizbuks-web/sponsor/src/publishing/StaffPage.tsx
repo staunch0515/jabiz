@@ -119,14 +119,15 @@ function StaffList() {
     onError: (error) => notify.error(problemText(error)),
   })
   const columns = useMemo<ColumnDef<StaffMember, unknown>[]>(() => [
-    { id: 'name', header: t('publishing.staff.name'), enableSorting: false,
+    // Q80: as a card, the name is the title, the ID under it, the removal at the foot.
+    { id: 'name', header: t('publishing.staff.name'), enableSorting: false, meta: { card: 'title' },
       cell: ({ row }) => <span data-testid="staff-name">{nameOf(row.original.displayName, t('publishing.staff.unnamed'))}</span> },
-    { id: 'id', header: t('publishing.staff.id'), enableSorting: false,
+    { id: 'id', header: t('publishing.staff.id'), enableSorting: false, meta: { card: 'subtitle' },
       cell: ({ row }) => <span className="font-mono text-xs break-all">{row.original.userId}</span> },
     { id: 'addedAt', header: t('publishing.staff.addedAt'), enableSorting: false,
       cell: ({ row }) => formatDateTime(row.original.addedAt) },
     { id: 'actions', header: () => <span className="sr-only">{t('publishing.staff.remove')}</span>,
-      enableSorting: false,
+      enableSorting: false, meta: { card: 'actions' },
       cell: ({ row }) => {
         const name = nameOf(row.original.displayName, t('publishing.staff.unnamed'))
         return (
@@ -146,7 +147,7 @@ function StaffList() {
         <PageState kind="error" description={problemText(staff.error)}
           action={<Button variant="outline" onClick={() => void staff.refetch()}>{tQb('retry')}</Button>} />
       ) : (
-        <DataTable label={t('publishing.staff.listTitle')} columns={columns} data={staff.data ?? []}
+        <DataTable label={t('publishing.staff.listTitle')} columns={columns} data={staff.data ?? []} storageKey="qb.sponsor.staff"
           getRowId={(row) => row.userId} loading={staff.isPending} empty={t('publishing.staff.none')}
           rowProps={() => ({ 'data-testid': 'staff-row' })} />
       )}

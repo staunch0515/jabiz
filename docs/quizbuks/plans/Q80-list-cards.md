@@ -26,7 +26,7 @@
 | 主页统计（原生 `Table` ×2） | `stats/StatsPage.tsx`（`stats-day`、`stats-product`） | — | — |
 | 分析的两张表、推荐的表 | `analytics/PublicationAnalyticsPage.tsx`、`publishing/ReferralsSection.tsx` | 数字对照表 | — |
 
-## 2. 决定（需求方 2026-11-02 确认；开发等 17zc 合入 `1.3/platform` 并同步后开始）
+## 2. 决定（需求方 2026-11-02 确认；17zc 合入后 2026-11-02 开发）
 
 | # | 决定 |
 |---|---|
@@ -94,3 +94,16 @@
 2. D-Q80-3 / D-Q80-4：通告页与主页统计页改为 `DataTable` 并成卡片；分析页与推荐的数字对照表保持表格。
 3. §3 的标注（哪一列作标题、徽章）。
 4. 编号 Q80，前提是 17zc 合入并同步。
+
+## 9. 实施记录（2026-11-02，分支 `1.3/quizbuks-80-list-cards`）
+
+需求方 2026-11-02 确认 §8 的四项（"同意 Q80 的决定，等 17zc 合入后开始开发"→"17zc 已合入，开始开发 Q80"）。分支从 `1.3/quizbuks` 拉出并合并了 `origin/1.3/platform`（含 17zc，#418；无冲突），没有另开 §4 的同步分支。与计划的差别与细节：
+
+- 九个 `DataTable` 按 §3 标注，`storageKey`：`qb.sponsor.versions` / `cash-rewards` / `digital-prizes` / `digital-pool` / `invitations` / `redeem-handlers` / `redemptions` / `staff` / `transactions` / `topups`。
+  版本列表的徽章列未标 `badge`（语言是一串小徽章，作"标签：值"更清楚）；码池的 `seq` 为 `hidden`。
+- `notices/MessagesPage.tsx`：原生 `Table` → `DataTable`（`qb.sponsor.notices`，`getRowId` 为 `broadcastId`；`notice-row` 与 `data-status` / `data-id` 经 `rowProps`；统计列右对齐）。
+- `stats/StatsPage.tsx`：**只有商品表**改为 `DataTable`（`qb.sponsor.stats-products`：商品名为标题、非在售的状态为徽章（新文案 `stats.productStatus` 三语）、点击数）。
+  **按日表保持原生 `Table`**（与 D-Q80-3 的差别）：它在图表的"数据"披露里，是两张图的数据表（日期 / 浏览 / 点击三列的数字对照），与 D-Q80-4 同理不成卡片。
+- 测试：现金奖励、店员（新测试）、交易、充值、通告、统计（现有测试加一段）切到卡片：行 testid 仍在且为 `data-slot="data-table-card"`、标题在 `data-table-card-title`、徽章与操作在卡片上、`localStorage` 记下选择；现金奖励的卡片过 axe。
+  e2e `a11y.spec.ts` 的交易页：390px 下 `data-view="cards"`、行为卡片并过 axe；回到桌面为表格，手动切到卡片、过 axe、刷新后仍是卡片（本机未运行，CI 的 e2e 作业运行）。
+- 未做：后台扩展（D-Q80-4）；模版与发布的表格视图不加卡片（D-Q80-1）。
