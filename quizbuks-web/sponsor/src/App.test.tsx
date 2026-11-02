@@ -193,7 +193,7 @@ describe('a signed-in sponsor', () => {
   it('signed in with an unverified address is told so above the onboarding (Q40)', async () => {
     server({ sponsor: null, emailVerified: false })
     render(<App />)
-    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'))
+    await waitFor(() => expect(window.location.pathname).toBe('/profile/basics'))
     expect(await screen.findByTestId('verify-email-banner')).toHaveTextContent('sara@example.com')
   })
 
@@ -201,7 +201,7 @@ describe('a signed-in sponsor', () => {
     const { posted } = server({ sponsor: null, applied: { status: 200, body: { output: { userId: 'u2',
       onboardingId: 'o1', reviewStatus: 'PENDING', revision: 1, approval: 'PENDING', approvalRequestId: 'r1' } } } })
     render(<App />)
-    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'))
+    await waitFor(() => expect(window.location.pathname).toBe('/profile/basics'))
     expect(await screen.findByTestId('onboarding-status')).toHaveAttribute('data-status', 'NONE')
     expect(screen.getByTestId('onboarding-name')).toHaveValue('Sara')
     await userEvent.type(screen.getByTestId('onboarding-company'), 'Acme Quiz')
@@ -220,7 +220,7 @@ describe('a signed-in sponsor', () => {
     const { posted } = server({ sponsor: null, applied: { status: 200, body: { output: { userId: 'u2',
       onboardingId: 'o1', reviewStatus: 'PENDING', revision: 1, approval: 'PENDING', approvalRequestId: 'r1' } } } })
     render(<App />)
-    await waitFor(() => expect(window.location.pathname).toBe('/onboarding'))
+    await waitFor(() => expect(window.location.pathname).toBe('/profile/basics'))
     expect(await screen.findByTestId('onboarding-status')).toHaveAttribute('data-status', 'NONE')
     await userEvent.type(screen.getByTestId('onboarding-company'), 'Acme Quiz')
     await userEvent.click(screen.getByTestId('onboarding-terms'))
@@ -235,7 +235,7 @@ describe('a signed-in sponsor', () => {
     const { posted } = server({ sponsor: null, consents: [terms(2, true), privacy], applied: { status: 200,
       body: { output: { userId: 'u2', onboardingId: 'o1', reviewStatus: 'PENDING', revision: 1, approval: 'PENDING',
         approvalRequestId: 'r1' } } } })
-    window.history.replaceState(null, '', '/onboarding')
+    window.history.replaceState(null, '', '/profile/basics')
     render(<App />)
     // Before applying there is nothing to accept again: no prompt, the form accepts with the application.
     expect(await screen.findByTestId('legal-link-TERMS_SPONSOR')).toHaveAttribute('href', '/legal/sponsor-terms')
@@ -288,7 +288,7 @@ describe('a signed-in sponsor', () => {
       { field: 'acceptTerms', ruleCode: 'QB_SPONSOR_TERMS_REQUIRED', message: 'Accept the terms to apply.' },
       { field: null, ruleCode: 'QB_USER_BANNED', message: 'Your account is banned.' },
     ] } } })
-    window.history.replaceState(null, '', '/onboarding')
+    window.history.replaceState(null, '', '/profile/basics')
     render(<App />)
     await userEvent.type(await screen.findByTestId('onboarding-company'), 'Acme')
     await userEvent.click(screen.getByTestId('onboarding-submit'))
@@ -303,7 +303,7 @@ describe('a signed-in sponsor', () => {
   it('sent back, sees why and applies again', async () => {
     server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null, reviewStatus: 'REJECTED',
       rejectReason: 'Add a company website.', revision: 2 } })
-    window.history.replaceState(null, '', '/onboarding')
+    window.history.replaceState(null, '', '/profile/basics')
     render(<App />)
     expect(await screen.findByTestId('onboarding-reject-reason')).toHaveTextContent('Add a company website.')
     expect(screen.getByTestId('onboarding-submit')).toHaveTextContent('Apply again')
@@ -319,8 +319,6 @@ describe('a signed-in sponsor', () => {
     expect(screen.getByTestId('dashboard-hero')).toHaveTextContent('Hello, Acme')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Hello, Acme')
     expect(screen.getByTestId('wordmark')).toHaveTextContent('QuizBuks')
-    // The mail server page (Q29) is in the navigation of an approved sponsor.
-    expect(screen.getByRole('link', { name: 'Mail server' })).toHaveAttribute('href', '/mail-server')
     // The digital prizes (Q33) follow the cash rewards in the navigation.
     const links = screen.getAllByRole('link').map((link) => link.textContent)
     expect(links.indexOf('Digital prizes')).toBe(links.indexOf('Cash rewards') + 1)
@@ -329,14 +327,17 @@ describe('a signed-in sponsor', () => {
     const nav = screen.getByRole('navigation', { name: 'Sponsor console' })
     expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
       .map((link) => link.textContent))).toEqual([
+      // Q79: the sponsor's own pages (profile, products, staff, mail server) are the hub's sections, one entry here.
       ['Dashboard'], ['Quizzes', 'Publications'], ['Cash rewards', 'Digital prizes', 'Prizes'],
-      // Q78: the staff with the sponsor's settings.
-      ['Wallet', 'Transactions'], ['Sponsor profile', 'Staff', 'My products', 'Page statistics', 'Mail server',
-        'Messages', 'Account', 'Help']])
+      ['Wallet', 'Transactions'], ['Sponsor profile', 'Page statistics', 'Messages', 'Account', 'Help']])
     expect(within(nav).getByRole('group', { name: 'Rewards' })).toBeInTheDocument()
     expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(4)
     await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))
-    expect(window.location.pathname).toBe('/onboarding')
+    expect(window.location.pathname).toBe('/profile')
+    expect(await screen.findByTestId('profile-status')).toHaveAttribute('data-status', 'APPROVED')
+    // The mail server (Q29) and the others are sections of the hub.
+    expect(screen.getByTestId('profile-nav-mail-server')).toHaveAttribute('href', '/profile/mail-server')
+    await userEvent.click(screen.getByTestId('profile-nav-basics'))
     expect(await screen.findByTestId('onboarding-submit')).toHaveTextContent('Save')
     expect(screen.queryByTestId('onboarding-terms')).toBeNull()
   })
@@ -441,7 +442,7 @@ describe('a signed-in sponsor', () => {
       { field: 'intro', ruleCode: 'X', message: 'Too long.' },
       { field: 'avatar', ruleCode: 'QB_FILE_NOT_OWN', message: 'Upload your own image.' },
     ] } } })
-    window.history.replaceState(null, '', '/onboarding')
+    window.history.replaceState(null, '', '/profile/basics')
     render(<App />)
     await userEvent.click(await screen.findByTestId('onboarding-submit'))
     await screen.findByText('Enter a name.')

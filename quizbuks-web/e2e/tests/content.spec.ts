@@ -34,7 +34,7 @@ test('a sponsor makes a quiz with questions, images and materials, and saves ver
   const title = unique('Coffee ')
   await signIn(page, '/sponsor/', email)
   // Not approved yet: the onboarding, but the quizzes are open (editing needs no approval).
-  await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
+  await expect(page).toHaveURL(/\/sponsor\/profile\/basics$/)
   await page.getByRole('link', { name: 'Quizzes' }).click()
   await expect(page.getByTestId('quiz-list')).toBeVisible()
 
@@ -167,7 +167,7 @@ test('a sponsor copies a version into a new quiz and deletes the copy', async ({
     { text: 'Yes', correct: true }, { text: 'No', correct: false }] })
 
   await signIn(page, '/sponsor/', email)
-  await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
+  await expect(page).toHaveURL(/\/sponsor\/profile\/basics$/)
   await page.goto(`/sponsor/quizzes/${quizId}`)
   await page.getByTestId('tab-versions').click()
   await page.getByTestId('version-copy').click()
@@ -206,7 +206,7 @@ test('an edit of a quiz changed elsewhere asks to reload first', async ({ page, 
   const quiz = await run(request, token, 'QB_QUIZ_SAVE', { title, cover })
   const quizId = quiz.quizId as string
   await signIn(page, '/sponsor/', email)
-  await expect(page).toHaveURL(/\/sponsor\/onboarding$/)
+  await expect(page).toHaveURL(/\/sponsor\/profile\/basics$/)
   await page.goto(`/sponsor/quizzes/${quizId}`)
   await expect(page.getByTestId('heading-title')).toHaveValue(title)
 

@@ -1,3 +1,4 @@
+import { profilePath } from '../profile/paths'
 /** The publishing pages and the keys of what they read (invalidated together after a change). */
 export const PUBLICATIONS_PATH = '/publications'
 export const NEW_PUBLICATION = 'new'
@@ -15,7 +16,7 @@ export function publicationIdOf(path: string): string | null {
 export const PUBLICATIONS_QUERY = ['qb', 'publications'] as const
 
 /** The sponsor's own mail server (Q29): the page, and the key of what it reads. */
-export const MAIL_SERVER_PATH = '/mail-server'
+export const MAIL_SERVER_PATH = profilePath('mail-server')
 export const MAIL_SERVER_QUERY = ['qb', 'mail-server'] as const
 export const publicationQuery = (publicationId: string) => [...PUBLICATIONS_QUERY, 'one', publicationId] as const
 

@@ -24,8 +24,10 @@ const DRAFT = { userId: 's1', handle: 'acme-bakery', language: 'en', headline: '
 const SPONSOR_ROW = { contactName: 'Sara', company: 'Acme Bakery', intro: 'Since **1990**.', avatar: null,
   reviewStatus: 'APPROVED', approvedAt: '2026-10-14T00:00:00Z', revision: 2 }
 
-/** The sponsor profile, which holds the shop page since Q65b (`/page` leads there). */
-const PROFILE_PATH = '/onboarding'
+/** The sponsor hub (Q79): the basic profile and the shop page are two of its sections; the old addresses lead there. */
+const HUB_PATH = '/profile'
+const BASICS_PATH = '/profile/basics'
+const PAGE_PATH = '/profile/page'
 const OLD_PAGE_PATH = '/page'
 
 /** The server as the page editor sees it, for an approved sponsor. Records what the page sent. */
@@ -102,32 +104,40 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
     }
   })
 
-  it('is one entry of the menu: the sponsor profile, with the basic profile and the shop page', async () => {
+  it('is a section of the sponsor hub, reached from the one menu entry; the old address leads to it (Q79)', async () => {
     server(DRAFT)
-    // The old address of "My page" leads to the sponsor profile.
+    // The old address of "My page" leads to the hub's shop page.
     window.history.replaceState(null, '', OLD_PAGE_PATH)
     render(<App />)
-    await waitFor(() => expect(window.location.pathname).toBe(PROFILE_PATH))
+    await waitFor(() => expect(window.location.pathname).toBe(PAGE_PATH))
     const nav = screen.getByRole('navigation', { name: 'Sponsor console' })
-    expect(within(nav).getByRole('link', { name: 'Sponsor profile' })).toHaveAttribute('href', PROFILE_PATH)
+    expect(within(nav).getByRole('link', { name: 'Sponsor profile' })).toHaveAttribute('href', HUB_PATH)
     expect(within(nav).queryByRole('link', { name: 'My page' })).toBeNull()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sponsor profile')
-    expect(await screen.findByRole('heading', { level: 2, name: 'Basic profile' })).toBeInTheDocument()
+    const sections = screen.getByTestId('profile-nav')
+    expect(within(sections).getByTestId('profile-nav-page')).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByRole('heading', { level: 2, name: 'Shop page' })).toBeInTheDocument()
     // The page's logo and "About us" are the basic profile's: the shop page has no fields of its own for them.
-    expect(screen.getByTestId('sponsor-page-from-profile')).toHaveTextContent('from the basic profile above')
+    expect(screen.getByTestId('sponsor-page-from-profile')).toHaveTextContent('from the basic profile')
+    expect(within(screen.getByTestId('sponsor-page-from-profile')).getByRole('link')).toHaveAttribute('href', BASICS_PATH)
     expect(screen.queryByTestId('sponsor-page-story')).toBeNull()
     expect(screen.queryByTestId('sponsor-page-logo')).toBeNull()
     expect(screen.getByTestId('sponsor-page-cover')).toBeInTheDocument()
-    // The introduction takes up to 5,000 characters (the page's "About us").
-    expect(screen.getByTestId('onboarding-intro')).toHaveAttribute('maxlength', '5000')
+    // The preview beside the form follows what is typed.
+    expect(screen.getByTestId('profile-page-preview-company')).toHaveTextContent('Acme Bakery')
+    expect(screen.getByTestId('profile-page-preview-headline')).toHaveTextContent('Fresh bread')
+    await expectAccessible()
+    // The basics: the introduction takes up to 5,000 characters (the page's "About us").
+    await userEvent.click(within(sections).getByTestId('profile-nav-basics'))
+    expect(window.location.pathname).toBe(BASICS_PATH)
+    expect(await screen.findByTestId('onboarding-intro')).toHaveAttribute('maxlength', '5000')
     expect(screen.getByText('Up to 5,000 characters. Markdown is allowed (no HTML).')).toBeInTheDocument()
     await expectAccessible()
   })
 
   it('saves the basic profile and the shop page each with its own process', async () => {
     const { calls } = server(DRAFT)
-    window.history.replaceState(null, '', PROFILE_PATH)
+    window.history.replaceState(null, '', BASICS_PATH)
     render(<App />)
     const intro = await screen.findByTestId('onboarding-intro')
     await userEvent.clear(intro)
@@ -137,6 +147,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
     expect(calls('QB_SPONSOR_PROFILE_SAVE')[0]).toMatchObject({ company: 'Acme Bakery', intro: 'Bread since 1990.' })
     expect(calls('QB_SPONSOR_PAGE_SAVE')).toEqual([])
 
+    await userEvent.click(screen.getByTestId('profile-nav-page'))
     await userEvent.type(await screen.findByTestId('sponsor-page-headline'), '!')
     await userEvent.click(screen.getByTestId('sponsor-page-save'))
     await waitFor(() => expect(calls('QB_SPONSOR_PAGE_SAVE')).toHaveLength(1))
@@ -149,7 +160,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
 
   it('offers the page in more languages, its headline and the introduction in each (Q73c)', async () => {
     const { calls } = server(DRAFT)
-    window.history.replaceState(null, '', PROFILE_PATH)
+    window.history.replaceState(null, '', BASICS_PATH)
     render(<App />)
     // The introduction in Chinese too (optional), sent with the basic profile.
     await userEvent.click(await screen.findByTestId('onboarding-intro-language-zh'))
@@ -162,6 +173,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
       introConfirmed: [] })
 
     // The page in Chinese as well, Chinese its main language, with its headline.
+    await userEvent.click(screen.getByTestId('profile-nav-page'))
     await userEvent.click(await screen.findByTestId('sponsor-page-offer-zh'))
     const headlineZh = within(screen.getByTestId('sponsor-page-translations-zh'))
       .getByTestId('sponsor-page-translations-input')
@@ -176,7 +188,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
 
   it('creates the draft, then publishes it once saved', async () => {
     const { calls } = server(null)
-    window.history.replaceState(null, '', PROFILE_PATH)
+    window.history.replaceState(null, '', PAGE_PATH)
     render(<App />)
     expect(await screen.findByTestId('sponsor-page-status')).toHaveAttribute('data-status', 'NONE')
     // Nothing to publish before the first save.
@@ -201,7 +213,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
 
   it('asks to save before publishing changes', async () => {
     server(DRAFT)
-    window.history.replaceState(null, '', PROFILE_PATH)
+    window.history.replaceState(null, '', PAGE_PATH)
     render(<App />)
     const submit = await screen.findByTestId('sponsor-page-submit')
     expect(submit).toBeEnabled()
@@ -212,7 +224,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
 
   it('shows the reasons of a takedown and of a review that sent it back', async () => {
     server({ ...DRAFT, status: 'TAKEN_DOWN', takedownReason: 'QB_ACCOUNT_SUSPENDED', reviewRequired: true })
-    window.history.replaceState(null, '', PROFILE_PATH)
+    window.history.replaceState(null, '', PAGE_PATH)
     const { unmount } = render(<App />)
     expect(await screen.findByTestId('sponsor-page-takedown-reason')).toHaveTextContent('Your account was suspended.')
     unmount()
@@ -224,7 +236,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
 
   it('offers the link of a published page, and unpublishes it on confirmation', async () => {
     const { calls } = server({ ...DRAFT, status: 'PUBLISHED', publishedAt: '2026-10-30T00:00:00Z', revision: 4 })
-    window.history.replaceState(null, '', PROFILE_PATH)
+    window.history.replaceState(null, '', PAGE_PATH)
     render(<App />)
     expect(await screen.findByTestId('sponsor-page-open'))
       .toHaveAttribute('href', `${window.location.origin}/taker/s/acme-bakery`)
@@ -239,7 +251,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
       QB_SPONSOR_PAGE_SAVE: () => json(422, { title: 'Unprocessable', status: 422, violations: [{ field: 'handle',
         ruleCode: 'QB_SPONSOR_PAGE_HANDLE_TAKEN', message: 'This link name is taken. Choose another.' }] }),
     })
-    window.history.replaceState(null, '', PROFILE_PATH)
+    window.history.replaceState(null, '', PAGE_PATH)
     render(<App />)
     await userEvent.click(await screen.findByTestId('sponsor-page-save'))
     expect(await screen.findByText('This link name is taken. Choose another.')).toBeInTheDocument()

@@ -61,7 +61,7 @@ export function MailServerPage() {
   return (
     <div className="flex flex-col gap-6" data-testid="mail-server-page">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t('publishing.mailServer.title')}</h1>
+        <h2 className="text-xl font-semibold">{t('publishing.mailServer.title')}</h2>
         <p className="text-muted-foreground text-sm">{t('publishing.mailServer.intro')}</p>
       </div>
       <MailServerStatus server={server.data} />

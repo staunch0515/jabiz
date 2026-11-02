@@ -294,6 +294,7 @@
 - **共用代码只在 `src/qb/`**，两个 SPA 中各一份、**完全相同**（CI `diff -r`）：改一处即复制到另一处。流程、模板、数据视图、字典与文件策略的名字只写在 `qb/ids.ts`；
   流程的输入输出对照 Java record 手写在 `qb/api.ts`（答题的在 `qb/play.ts`；QuizBuks 没有自己的接口，因此没有 OpenAPI 类型），改了 record 就改这里并由 e2e 覆盖。
   **只有一个 SPA 用到的功能**（商家后台的内容工坊）在该 SPA 自己的功能目录中照此各写一份：名字在 `<功能>/ids.ts`、手写类型与调用在 `<功能>/api.ts`（如 `sponsor/src/content/`），不进 `qb/`。
+- **商户中心**（Q79，`sponsor/src/profile/`，`docs/quizbuks/plans/Q79-sponsor-hub.md`）：商户自己的设置页都是页组 `/profile` 的节（概况、基本信息、公开主页、商品、店员、邮件服务器），由 `ProfileLayout` 给出页头与子导航，节内只用 h2；新的商户设置页加为一个节（`profile/paths.ts` 的 `PROFILE_SECTIONS` 与文案 `profile.nav.*` / `navHint.*`），不另加菜单项；旧地址在 `LEGACY_PROFILE_PATHS` 中转向。概况的完成度清单是纯函数 `profile/checklist.ts`，只读各节已有的读取。
 - **内容工坊**（`sponsor/src/content/`，QP3a）：每次编辑带上页面所见的 `revision` 作 `baseRevision`；`QB_QUIZ_CHANGED` / `QB_ORDER_MISMATCH` 或读到别人的新 revision 即提示重新加载，
   重新加载之前不再提交。上传只经 `uploadFile(内容策略)`（`qb.content.image|pdf|audio`），文件名用中性的 `<种类>.<扩展名>`（`content/api.ts` 的 `neutralName`，Q10b：答题人能读内容文件的元数据；商家头像同样以 `avatar.<扩展名>` 上传，内容与头像的策略都声明 `privateMetadata()`），页面的类型与大小检查只为省一次往返；图片按文件自己的变体显示（小图没有变体，`ContentImage`）。
   Markdown 只经 `MarkdownView`，外链只放 http(s) 并在新标签页打开。e2e 的数据准备（文件、完整的 Quiz 与版本）在 `e2e/tests/content.ts`，发布的测试从它开始。
