@@ -28,7 +28,8 @@ test('a sponsor requires one quiz before another; a taker passes the first and u
     options: [{ text: 'Arabica', correct: true }, { text: 'Liberica' }] })
   await run(request, sponsor.token, 'QB_QUIZ_PUBLISH_VERSION', { quizId })
   const basicsName = unique('Basics ')
-  const basics = await livePublication(request, sponsor.token, quizId, basicsName)
+  // One question of a point: the full score is 1.
+  const basics = await livePublication(request, sponsor.token, quizId, basicsName, 1)
   const versionId = (await publicationOf(request, sponsor.token, basics)).versionId as string
   const advancedName = unique('Advanced ')
   const now = Date.now()
