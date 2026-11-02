@@ -351,6 +351,8 @@
   **站内信与公告**（Q7c）：后台扩展的写入要已验证的邮箱（首个管理员没有），测试以 `contentAdmin`（`tests/legal.ts`，角色 `QB_E2E_CONTENT`、不绑定二次验证）登录后台；每次要求二次验证的撤回经 API 以 `legalAdmin` 运行。e2e 的公告用推广（只到发送前注册的人），不让以后测试新建的答题人收到。
   启动方式与环境变量照 `.github/workflows/quizbuks.yml` 的 `e2e` 作业；然后 `E2E_BASE_URL=… E2E_ADMIN_USER=… E2E_ADMIN_PASSWORD=… pnpm e2e`。测试只增数据，可重复运行。
 
+- **Google AdSense**（需求方 2026-11-02，`deploy/quizbuks/DEPLOY.md`"Google AdSense"）：只经 `qb/ads.ts` 的 `loadAds`（App 中 `skip: nativeShell() !== null`，商店外壳与自动化浏览器中不加载）与招商网站 `site.js` 的 `loadAds`；
+  页面头部的 `google-adsense-account` 标记、三个前端 CSP 中的广告域名（`QuizbuksAppIT` 检查）、Caddy 的 `/ads.txt` 一起改。不在 Shopify 嵌入页、店面、`/shopify-app/` 与维护页加广告。
 - **商店 App 的外壳**（Q49，`quizbuks-mobile/`，`docs/quizbuks/plans/Q49b-android.md`）：只上架答题者的 App（`/taker/`），商家后台与充值不进 App。
   Android 是 TWA（`quizbuks-mobile/android`，设置只在 `twa-manifest.json`，构建由它读取；App Links 只认 `/taker/` 前缀），启动地址与 App Links 都带 `shell=android`；
   App 中只以 `src/shell.ts` 的 `nativeShell()` 判断是否在商店 App 中（参数或 Chrome 的 `android-app://` referrer，按标签页记住），在外壳中不显示任何安装提示（`install.tsx`）。

@@ -8,7 +8,8 @@ import './messages'
 import './qb/kudos'
 import { rememberInstalled } from './install'
 import { applyLinkLanguage } from './linkLanguage'
-import { rememberShell } from './shell'
+import { loadAds } from './qb/ads'
+import { nativeShell, rememberShell } from './shell'
 import { takeReferralFromAddress } from './referral/api'
 
 // The app's sign-in entry (jabizApp passes it as VITE_JABIZ_ENTRY; named here as well for `pnpm dev`): its sessions,
@@ -27,6 +28,8 @@ applyAppearance()
 void registerServiceWorker()
 // Installed (now or while open): the business site's "start answering" then opens the app's window (Q41).
 rememberInstalled()
+// Google AdSense in the browser and the installed PWA; not in the store apps' shells (qb/ads.ts).
+loadAds({ skip: nativeShell() !== null })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

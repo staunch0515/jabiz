@@ -42,6 +42,14 @@ __DOMAIN__ {
 		file_server
 	}
 
+	# Google AdSense's ads.txt at the domain's root (the sellers allowed to sell this site's ads; the publisher id is
+	# QuizBuks' AdSense account, quizbuks-web/app/src/qb/ads.ts). Before maintenance, as the app-link files.
+	handle /ads.txt {
+		header Content-Type "text/plain; charset=utf-8"
+		header Cache-Control "public, max-age=3600"
+		respond "google.com, pub-8399814237019515, DIRECT, f08c47fec0942fa0" 200
+	}
+
 	# Maintenance mode (DEPLOY.md "维护模式"): while the file maintenance/maintenance.lock exists in the environment's
 	# directory every request gets the static page maintenance/maintenance.html with 503, the application is not
 	# reached. The file is looked up on each request, so creating or removing it needs no reload. The root is given

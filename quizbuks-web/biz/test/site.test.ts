@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { APP_INSTALLED, cameFromThisSite, isModifiedClick, isPhone, openSignUp, opensInApp, parsePath, pathFor, pickLanguage, redirectTarget,
+import { ADSENSE_SRC, APP_INSTALLED, cameFromThisSite, loadAds, isModifiedClick, isPhone, openSignUp, opensInApp, parsePath, pathFor, pickLanguage, redirectTarget,
   phoneWindow, PHONE_HEIGHT, PHONE_WIDTH } from '../src/assets/site.js'
 import { readTryQuizzes } from '../scripts/build.mjs'
 
@@ -166,5 +166,32 @@ describe('the try-it quizzes file', () => {
     expect(() => readTryQuizzes('{"en":{"url":"http://quizbuks.com/x","qr":""}}')).toThrow(/en.url/)
     expect(() => readTryQuizzes('{"en":{"url":"","qr":"../secret.png"}}')).toThrow(/en.qr/)
     expect(() => readTryQuizzes('{"en":{"url":"","qr":"qr.txt"}}')).toThrow(/en.qr/)
+  })
+})
+
+describe('Google AdSense', () => {
+  /** A page's document as far as the loader uses it: its head's scripts, found by src. */
+  function page() {
+    const scripts: Record<string, unknown>[] = []
+    const doc = {
+      head: { appendChild: (script: Record<string, unknown>) => scripts.push(script) },
+      createElement: () => ({}),
+      querySelector: (selector: string) => scripts.find((script) => selector === `script[src="${script.src}"]`) ?? null,
+    }
+    return { doc, scripts }
+  }
+
+  it('adds the loader to the head once, as AdSense gives it; not in an automated browser', () => {
+    const { doc, scripts } = page()
+    const win = { document: doc, navigator: { webdriver: false } } as unknown as Window
+    expect(loadAds(win)).toBe(true)
+    expect(scripts).toEqual([{ async: true, crossOrigin: 'anonymous',
+      src: 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8399814237019515' }])
+    expect(scripts[0].src).toBe(ADSENSE_SRC)
+    expect(loadAds(win)).toBe(false)
+    expect(scripts).toHaveLength(1)
+    const robot = page()
+    expect(loadAds({ document: robot.doc, navigator: { webdriver: true } } as unknown as Window)).toBe(false)
+    expect(robot.scripts).toHaveLength(0)
   })
 })

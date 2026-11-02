@@ -9,6 +9,9 @@ const PAGE_PATH = { home: '', merchants: 'merchants/', takers: 'takers/', survey
 const LANGUAGE_NAMES = { en: 'English', zh: '中文', ja: '日本語' }
 const LOCALES = { en: 'en', zh: 'zh-Hans', ja: 'ja' }
 
+/** Google AdSense's publisher (the account's verification tag here; the loader from site.js, `loadAds`). */
+export const ADSENSE_CLIENT = 'ca-pub-8399814237019515'
+
 export function esc(text) {
   return String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
     "'": '&#39;' })[c])
@@ -368,6 +371,7 @@ export function renderPage(ctx) {
     <link rel="alternate" hreflang="x-default" href="${siteUrl}${pagePath('en', page, base)}" />
     <link rel="stylesheet" href="${assets.css}" />
     <script src="${assets.js}"></script>
+    <meta name="google-adsense-account" content="${ADSENSE_CLIENT}" />
     <title>${esc(meta.title)}</title>
   </head>
   <body>

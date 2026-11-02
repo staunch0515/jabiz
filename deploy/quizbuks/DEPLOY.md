@@ -436,6 +436,25 @@ Settings → Environments → 新建 `appstore`（建议 Required reviewers 与 
 
 密钥泄露或丢失时在 App Store Connect 吊销并新建，更新上面的 secrets；已上架的 App 不受影响。
 
+## Google AdSense（广告）
+
+需求方 2026-11-02 要求在所有能加的页面加上 Google AdSense（发布商 `ca-pub-8399814237019515`）：
+
+- **加了的**：答题 App（浏览器与安装的 PWA）、商家后台、招商网站 `/biz/`。各页面头部有验证标记 `<meta name="google-adsense-account">`，
+  加载脚本由 `quizbuks-web/{app,sponsor}/src/qb/ads.ts` 与 `quizbuks-web/biz/src/assets/site.js` 加入；三个前端的 CSP（`application.yml`）放开 Google 的广告域名。
+  广告放在哪里由 AdSense 的"自动广告"决定。
+- **没加的**：商店 App 的外壳中（AdSense 不允许直接投放到 App 的网页视图，且要改商店的数据声明）、自动化浏览器中（e2e 与商店截图，Google 视为无效流量）、
+  管理后台与运营商后台（平台的页面、只给内部人员）、嵌在 Shopify 后台中的页面与商户的店面、Shopify 应用的公开页 `/shopify-app/`（刻意不带任何脚本，供 Shopify 审核）、维护页（AdSense 不允许在错误页上投放）。
+- **`ads.txt`**：Caddy 站点在域名根下提供（`server/site.caddy.tpl`，维护模式中也能取到）：`google.com, pub-8399814237019515, DIRECT, f08c47fec0942fa0`。
+
+在 AdSense 账户中（需求方操作）：
+
+1. "网站"中添加 production 的域名并等待审核；**不要添加 staging 的域名**，未核准的网站不投放广告。
+2. "广告 → 自动广告"中开启，并在"已排除的网页"中排除登录、注册、找回密码与邮件链接的页面（`/taker/login`、`/taker/signup`、`/taker/password-reset`、`/taker/mail/`、
+   `/sponsor/login` 等）：AdSense 不允许在没有内容的页面（登录、错误页）上投放。
+3. "隐私权和消息"中为欧洲经济区、英国与瑞士的访问者开启 Google 的同意管理（CMP）：Google 要求向这些地区投放时取得同意。
+4. 隐私政策草稿（三语）已写上 Google AdSense 与 Cookie：**在管理后台发布新版本后再上线广告**。
+
 ## 备份
 
 production 的数据库 `quizbuks` 按服务器的方案备份；另外备份数据卷 `quizbuks_files`（上传的文件不在数据库中），并离线保存 `JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY`。

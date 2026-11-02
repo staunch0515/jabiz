@@ -133,6 +133,24 @@ export function isModifiedClick(event) {
   return Boolean(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || (event.button ?? 0) !== 0)
 }
 
+/** Google AdSense's loader (Auto ads), as AdSense gives it. */
+export const ADSENSE_SRC = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8399814237019515'
+
+/**
+ * Adds Google AdSense's loader to the head once; not in automated browsers (`navigator.webdriver`: the e2e tests),
+ * whose views Google counts as invalid traffic. Whether it was added.
+ */
+export function loadAds(win) {
+  const doc = win.document
+  if (win.navigator.webdriver || doc.querySelector(`script[src="${ADSENSE_SRC}"]`)) return false
+  const script = doc.createElement('script')
+  script.async = true
+  script.src = ADSENSE_SRC
+  script.crossOrigin = 'anonymous'
+  doc.head.appendChild(script)
+  return true
+}
+
 function install(win) {
   const doc = win.document
   const base = doc.documentElement.dataset.base ?? '/biz/'
@@ -148,6 +166,7 @@ function install(win) {
     win.location.replace(target + win.location.search + win.location.hash)
     return
   }
+  loadAds(win)
   // The visible switch remembers the choice; a direct visit of a language page counts as a choice too.
   if (store) {
     try { store.setItem(STORAGE_KEY, language) } catch { /* private mode: nothing to remember */ }

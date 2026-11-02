@@ -111,20 +111,34 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
     }
 
     /**
-     * Q19: the App frames the two video players it shows (YouTube without cookies, Vimeo) and nothing else; its policy
-     * is otherwise the platform's default, which the administration keeps. Q75: the sponsor console frames the same
-     * two (the material dialog's preview reads the video's duration from the player).
+     * Q19: the App frames the two video players it shows (YouTube without cookies, Vimeo); Q75: the sponsor console
+     * frames the same two (the material dialog's preview reads the video's duration from the player). Google AdSense in
+     * the App, the console and the business site: its loader and requests from Google's ad hosts, its frames, ad images
+     * from any https host. The administration keeps the platform's default.
      */
     @Test
-    void theAppFramesOnlyTheVideoPlayers() {
+    void theAppFramesOnlyTheVideoPlayersAndGooglesAds() {
         // The policy each SPA's responses carry (SpaFallbackFilter); the test has no built pages to fetch.
         java.util.Map<String, String> policies = web.spa().stream().collect(java.util.stream.Collectors.toMap(
             JabizWebProperties.Spa::path, JabizWebProperties.Spa::contentSecurityPolicy));
-        assertThat(policies.get("/taker")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY
-            + "; frame-src https://www.youtube-nocookie.com https://player.vimeo.com");
-        assertThat(policies.get("/sponsor")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY
-            + "; frame-src https://www.youtube-nocookie.com https://player.vimeo.com");
+        String adScripts = "https://pagead2.googlesyndication.com https://*.googlesyndication.com https://*.doubleclick.net "
+            + "https://*.google.com https://*.google.co.jp https://*.gstatic.com https://*.adtrafficquality.google";
+        String adFrames = "https://*.doubleclick.net https://*.googlesyndication.com https://*.google.com "
+            + "https://*.adtrafficquality.google";
+        String adRequests = "https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com "
+            + "https://*.adtrafficquality.google";
+        String withAds = "default-src 'self'; script-src 'self' " + adScripts + "; img-src 'self' blob: data: https:; "
+            + "style-src 'self' 'unsafe-inline'; connect-src 'self' " + adRequests + "; frame-ancestors 'none'; "
+            + "base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src ";
+        String players = "https://www.youtube-nocookie.com https://player.vimeo.com ";
+        assertThat(policies.get("/taker")).isEqualTo(withAds + players + adFrames);
+        assertThat(policies.get("/sponsor")).isEqualTo(withAds + players + adFrames);
+        assertThat(policies.get("/biz")).isEqualTo(withAds + adFrames);
         assertThat(policies.get("/admin")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
-        assertThat(policies.get("/biz")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
+        // Never scripts other than the origin's and Google's ad hosts, never framed.
+        for (String path : java.util.List.of("/taker", "/sponsor", "/biz")) {
+            assertThat(policies.get(path)).doesNotContain("'unsafe-eval'").contains("frame-ancestors 'none'")
+                .doesNotContain("script-src 'self' 'unsafe-inline'");
+        }
     }
 }
