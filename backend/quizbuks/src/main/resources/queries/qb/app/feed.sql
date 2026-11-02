@@ -1,7 +1,7 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -16,6 +16,7 @@ datasets:
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
+  QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
 params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
@@ -171,6 +172,17 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
                                  - pa.{{QbProfileAttribute.valueNumber}}
                              ELSE pa.{{QbProfileAttribute.valueNumber}} END
                          BETWEEN pc.{{QbPublicationCriterion.minValue}} AND pc.{{QbPublicationCriterion.maxValue}})))))
+  -- Q76: the caller meets every prerequisite of the publication: a finished attempt of the required publication,
+  -- passed for PASSED (play.PrerequisiteCheck; qb.app.publication and qb.system.audience-count write the same). The
+  -- view holds the caller's own attempts only. An attempt of theirs on this one was started when they met them.
+  AND (m.{{QbAttempt.attemptId}} IS NOT NULL OR NOT EXISTS (
+      SELECT 1 FROM {{QbPublicationPrerequisite}} pr
+      WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}
+        AND NOT EXISTS (
+            SELECT 1 FROM {{QbAttempt}} pre
+            WHERE pre.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+              AND pre.{{QbAttempt.status}} IN ('SUBMITTED', 'EXPIRED')
+              AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR pre.{{QbAttempt.passed}}))))
   -- Q70a (D-Q70-1, option B): a certification's round is not listed to whoever holds the certification now. The
   -- holding is CertificationHolding's rule over the caller's records and the passes not recorded yet (RoundHolders, the
   -- same; the catalog's versions and validity as Certifications, CertificationTemplatesTest), as in qb.app.publication.

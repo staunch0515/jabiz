@@ -44,7 +44,8 @@ public final class OperatorScopes {
         for (String entity : new String[] {QbPublications.PUBLICATION, QbPublications.TIER, QbPublications.CARD,
             QbRewards.CASH_REWARD, QbRewards.REDEMPTION, QbDigitalPrizes.DIGITAL_PRIZE, QbDigitalPrizes.DIGITAL_CODE,
             QbInvitations.INVITATION, QbAudience.CRITERION, QbAnalytics.HOUR, QbAnalytics.CURSOR,
-            QbAnalytics.QUESTION_STAT, QbReports.REPORT}) {
+            QbAnalytics.QUESTION_STAT, QbReports.REPORT,
+            com.jabiz.quizbuks.publishing.QbPrerequisites.PREREQUISITE}) {
             fields.put(entity, "publisherId");
         }
         fields.put(QbRewards.REDEEM_TOKEN, "sponsorId");

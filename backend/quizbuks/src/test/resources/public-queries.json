@@ -703,6 +703,10 @@
         "multiline" : false,
         "type" : "text"
       },
+      "prerequisites" : {
+        "multiline" : false,
+        "type" : "text"
+      },
       "publicationId" : {
         "targetEntity" : "QbPublication",
         "type" : "reference"

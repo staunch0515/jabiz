@@ -1,13 +1,15 @@
 /*---
 id: qb.system.audience-count
-description: How many takers a publication's regions and matching conditions reach now (Q47), exactly; run by QB_AUDIENCE_COUNT only, which rounds it
-entities: [SecUser, QbProfile, QbCountry, QbUserBan, QbProfileAttribute, QbPublicationCriterion]
+description: How many takers a publication's regions, matching conditions (Q47) and prerequisites (Q76) reach now, exactly; run by QB_AUDIENCE_COUNT only, which rounds it
+entities: [SecUser, QbProfile, QbCountry, QbUserBan, QbProfileAttribute, QbPublicationCriterion, QbPublicationPrerequisite, QbAttempt]
 datasets:
   QbProfile: urn:jabiz:dataset:default:QbProfile
   QbCountry: urn:jabiz:dataset:default:QbCountry
   QbUserBan: urn:jabiz:dataset:default:QbUserBan
   QbProfileAttribute: urn:jabiz:dataset:default:QbProfileAttribute
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
+  QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
+  QbAttempt: urn:jabiz:dataset:default:QbAttempt
 params:
   publicationId: { like: QbPublicationCriterion.publicationId, required: true, description: The publication whose conditions count }
   regions:       { kind: { type: text, maxLength: 64 }, description: "The publication's regions (comma separated); none is GLOBAL" }
@@ -47,3 +49,13 @@ WHERE string_to_array(coalesce(CAST(:regions AS text), 'GLOBAL'), ',') && string
                                  - pa.{{QbProfileAttribute.valueNumber}}
                              ELSE pa.{{QbProfileAttribute.valueNumber}} END
                          BETWEEN pc.{{QbPublicationCriterion.minValue}} AND pc.{{QbPublicationCriterion.maxValue}})))))
+  -- Q76: and who meets every prerequisite (play.PrerequisiteCheck; qb.app.feed and qb.app.publication, the same).
+  AND NOT EXISTS (
+      SELECT 1 FROM {{QbPublicationPrerequisite}} pr
+      WHERE pr.{{QbPublicationPrerequisite.publicationId}} = CAST(:publicationId AS uuid)
+        AND NOT EXISTS (
+            SELECT 1 FROM {{QbAttempt}} pre
+            WHERE pre.{{QbAttempt.userId}} = p.{{QbProfile.userId}}
+              AND pre.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+              AND pre.{{QbAttempt.status}} IN ('SUBMITTED', 'EXPIRED')
+              AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR pre.{{QbAttempt.passed}})))

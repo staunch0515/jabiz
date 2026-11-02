@@ -118,6 +118,16 @@ public final class PublishingCodes {
     public static final String TEXT_STALE = "QB_PUBLICATION_TEXT_STALE";
     public static final String TEXT_TOO_LONG = "QB_PUBLICATION_TEXT_TOO_LONG";
     public static final String SWITCH_LANGUAGES = "QB_PUBLICATION_VERSION_LANGUAGES";
+    // Q76: a publication's prerequisites (docs/quizbuks/plans/Q76-prerequisites.md).
+    public static final String PREREQUISITE_NOT_OWN = "QB_PREREQUISITE_NOT_OWN";
+    public static final String PREREQUISITE_DRAFT = "QB_PREREQUISITE_DRAFT";
+    public static final String PREREQUISITE_SELF = "QB_PREREQUISITE_SELF";
+    public static final String PREREQUISITE_REPEATED = "QB_PREREQUISITE_REPEATED";
+    public static final String PREREQUISITE_TOO_MANY = "QB_PREREQUISITE_TOO_MANY";
+    public static final String PREREQUISITE_CYCLE = "QB_PREREQUISITE_CYCLE";
+    public static final String PREREQUISITE_TOO_DEEP = "QB_PREREQUISITE_TOO_DEEP";
+    /** A draft another publication requires (one that went back to draft) is not deleted. */
+    public static final String PREREQUISITE_IN_USE = "QB_PREREQUISITE_IN_USE";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -132,7 +142,8 @@ public final class PublishingCodes {
         SWITCH_ENDED, REFERRAL_INVITED, REFERRAL_QUOTA_RANGE, REFERRAL_DAYS_RANGE, REFERRAL_AMOUNT_RANGE,
         REFERRAL_METHOD_INVALID, REFERRAL_REQUIREMENT_INVALID, REFERRAL_SURVEY_PASS, REFERRAL_RULE_INVALID,
         REFERRAL_POOL_SHORT, LANGUAGES_INVALID, LANGUAGE_NOT_IN_VERSION, TEXT_MISSING, TEXT_STALE, TEXT_TOO_LONG,
-        SWITCH_LANGUAGES);
+        SWITCH_LANGUAGES, PREREQUISITE_NOT_OWN, PREREQUISITE_DRAFT, PREREQUISITE_SELF, PREREQUISITE_REPEATED,
+        PREREQUISITE_TOO_MANY, PREREQUISITE_CYCLE, PREREQUISITE_TOO_DEEP, PREREQUISITE_IN_USE);
 
     private PublishingCodes() {}
 }

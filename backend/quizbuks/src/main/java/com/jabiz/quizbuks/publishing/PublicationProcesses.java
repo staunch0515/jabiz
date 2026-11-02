@@ -528,10 +528,16 @@ public final class PublicationProcesses {
                 .steps(PublicationEditing::lockAndLoad)
                 .steps(PublicationEditing::loadTiers)
                 .steps(PublicationAudience::loadCriteria)
+                .steps(PublicationPrerequisites::loadForDeletion)
                 .compute("Delete the publication", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
                     if (!PublicationEditing.draft(ctx, publication) || !PublicationEditing.current(ctx,
                         publication, ctx.get(INPUT, PublicationRef.class).baseRevision())) {
+                        return;
+                    }
+                    // Q76: its prerequisites first; a draft that another publication requires (one that went back
+                    // to draft after that one was submitted) stays.
+                    if (!PublicationPrerequisites.delete(ctx)) {
                         return;
                     }
                     // Tiers before what they belong to: an instance still referred to cannot be deleted.
@@ -562,6 +568,8 @@ public final class PublicationProcesses {
                 PUB_ID, PUBLICATION))
             .steps(PublicationEditing::loadTiers)
             .steps(PublicationAudience::loadCriteria)
+            // Q76: the prerequisites travel with the copy too.
+            .steps(PublicationPrerequisites::load)
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
@@ -626,6 +634,7 @@ public final class PublicationProcesses {
             condition.put("publisherId", ctx.request().actorId());
             ctx.changes().insert(com.jabiz.quizbuks.audience.QbAudience.CRITERION, condition);
         });
+        PublicationPrerequisites.copy(ctx, publicationId, PublisherKind.SPONSOR, ctx.request().actorId());
         ctx.put(OUTPUT, output(ctx, messages, publicationId, 1, ctx.opTime(), values, tiers, version, tierIds));
     }
 

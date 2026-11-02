@@ -126,6 +126,9 @@ public final class AttemptProcesses {
     static final String START_COUNTER = "play.startCounter";
     static final String WALLET = "play.wallet";
     static final String CONDITIONS = "play.conditions";
+    /** Q76: the publication's prerequisites, and the caller's attempts on the publications they require. */
+    static final String PREREQUISITES = "play.prerequisites";
+    static final String PREREQUISITE_ATTEMPTS = "play.prerequisiteAttempts";
     static final String ATTRIBUTES = "play.attributes";
     static final String VIEWS = "play.views";
     static final String ATTEMPT = "play.attempt";
@@ -246,7 +249,11 @@ public final class AttemptProcesses {
                     AudienceRows.conditions(ctx -> ctx.get(PUB_KEY), CONDITIONS),
                     AudienceRows.callers(ATTRIBUTES),
                     // Q70a: whether the publication is a certification's round, in the same statement.
-                    RoundHolders.round(ctx -> ctx.get(PUB_KEY))))
+                    RoundHolders.round(ctx -> ctx.get(PUB_KEY)),
+                    // Q76: its prerequisites, in the same statement.
+                    QueryEntities.query(com.jabiz.quizbuks.publishing.QbPrerequisites.DATASET,
+                        ctx -> EntityQuery.builder().where(new QueryPredicate.In("publicationId",
+                            ids(ctx.get(PUB_KEY)))).limit(20).build(), PREREQUISITES)))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
                 // Q51: an attempt keeps the version it started with, whichever the publication has switched to since;
                 // a new one takes the card's (checked again against the card read under the lock).
@@ -276,6 +283,21 @@ public final class AttemptProcesses {
                         RoundHolders.refuse(ctx, "publicationId", ctx.get(PUB_KEY));
                     }
                 })
+                // Q76: a publication with prerequisites only reads the caller's attempts on those it requires (one
+                // statement before the lock; without any, the query is empty and sends nothing).
+                .step("Load the caller's attempts on the required publications", QueryEntities.<ProcessContext>of(
+                    QbPlay.TAKER_ATTEMPTS, ctx -> {
+                        List<Object> required = starting(ctx) ? PlaySteps.list(ctx, PREREQUISITES).stream()
+                            .map(row -> (Object) String.valueOf((Object) row.get("requiredPublicationId"))).toList()
+                            : List.of();
+                        return EntityQuery.builder().where(new QueryPredicate.In("publicationId", required))
+                            .limit(20).build();
+                    }, PREREQUISITE_ATTEMPTS))
+                .compute("Refuse unmet prerequisites", (metadata, ctx) -> {
+                    if (starting(ctx)) {
+                        refuseUnmet(ctx);
+                    }
+                })
                 // Without the wallet's lock (D-Q5-5): a soft check, so before the publication's lock too (Q10a: one
                 // read less while it is held); a reward the sponsor cannot pay at the end is pending.
                 .step("Read the sponsor's wallet", QueryEntities.<ProcessContext>of(
@@ -299,6 +321,24 @@ public final class AttemptProcesses {
                 .steps(b -> Invitations.loadForTaker(b,
                     ctx -> starting(ctx) && PlaySteps.invited(first(ctx, CARD_BEFORE)) ? ctx.get(PUB_KEY) : null))
                 .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle)));
+    }
+
+    /** Q76: refuses a new start whose caller has not met the publication's prerequisites (D-Q76-7). */
+    static void refuseUnmet(ProcessContext ctx) {
+        List<PrerequisiteCheck.Prerequisite> prerequisites = PlaySteps.list(ctx, PREREQUISITES).stream()
+            .map(row -> new PrerequisiteCheck.Prerequisite(String.valueOf((Object) row.get("requiredPublicationId")),
+                String.valueOf((Object) row.get("requirement")))).toList();
+        if (prerequisites.isEmpty()) {
+            return;
+        }
+        List<PrerequisiteCheck.Attempt> attempts = PlaySteps.list(ctx, PREREQUISITE_ATTEMPTS).stream()
+            .map(row -> new PrerequisiteCheck.Attempt(String.valueOf((Object) row.get("publicationId")),
+                String.valueOf((Object) row.get("status")), (Boolean) row.get("passed"))).toList();
+        List<String> unmet = PrerequisiteCheck.unmet(prerequisites, attempts);
+        if (!unmet.isEmpty()) {
+            ctx.reject(new com.jabiz.entity.Violation("publicationId", PlayCodes.PREREQUISITE_NOT_MET,
+                "The publication's prerequisites are not met", Map.of("unmet", String.join(",", unmet))));
+        }
     }
 
     static EntityQuery mine(Object publicationId) {

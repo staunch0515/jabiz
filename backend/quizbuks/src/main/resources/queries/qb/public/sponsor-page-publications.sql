@@ -6,11 +6,12 @@ description: >-
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
-entities: [QbPublicationCard, QbSponsorPage, QbSponsor]
+entities: [QbPublicationCard, QbSponsorPage, QbSponsor, QbPublicationPrerequisite]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:public:QbPublicationCard
   QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
   QbSponsor: urn:jabiz:dataset:public:QbSponsor
+  QbPublicationPrerequisite: urn:jabiz:dataset:public:QbPublicationPrerequisite
 params:
   handle: { like: QbSponsorPage.handle, required: true, description: The page's handle (lowercase) }
 results:
@@ -24,6 +25,7 @@ results:
   questionCount: { from: QbPublicationCard.questionCount }
   maxReward:     { from: QbPublicationCard.maxReward }
   rewardMethod:  { from: QbPublicationCard.rewardMethod }
+  prerequisites: { kind: { type: text } }
 list:
   key: [publicationId]
   sorts: [endAt]
@@ -41,7 +43,16 @@ SELECT
     c.{{QbPublicationCard.timeLimitSec}}  AS timeLimitSec,
     c.{{QbPublicationCard.questionCount}} AS questionCount,
     c.{{QbPublicationCard.maxReward}}     AS maxReward,
-    c.{{QbPublicationCard.rewardMethod}}  AS rewardMethod
+    c.{{QbPublicationCard.rewardMethod}}  AS rewardMethod,
+    -- Q76 (D-Q76-8): the publications this one requires and how, those among the live public ones (the page lays
+    -- them out in layers; whether a reader meets them is the publication page's, which knows the reader).
+    (SELECT CAST(jsonb_agg(jsonb_build_object('publicationId', pr.{{QbPublicationPrerequisite.requiredPublicationId}},
+                                              'requirement', pr.{{QbPublicationPrerequisite.requirement}})
+                           ORDER BY pr.{{QbPublicationPrerequisite.requiredPublicationId}}) AS text)
+     FROM {{QbPublicationPrerequisite}} pr
+     JOIN {{QbPublicationCard}} rc
+         ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+     WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}) AS prerequisites
 FROM {{QbPublicationCard}} c
 JOIN {{QbSponsorPage}} p ON p.{{QbSponsorPage.userId}} = c.{{QbPublicationCard.publisherId}}
 JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = p.{{QbSponsorPage.userId}}
