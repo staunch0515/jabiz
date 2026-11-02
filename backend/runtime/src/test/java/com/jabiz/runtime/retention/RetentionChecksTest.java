@@ -73,6 +73,31 @@ class RetentionChecksTest {
                 + "each cover some values with only(...)");
     }
 
+    /** Decision D70: an entry is kept by the policy of its value; one without the field is kept, not let go. */
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void anEntryIsCoveredByThePolicyOfItsValue() {
+        GenericApplicationContext beans = new GenericApplicationContext();
+        RetentionPolicy receipts = runs(10, "receipt");
+        RetentionPolicy notices = runs(1, "notice");
+        beans.registerBean("receipts", RetentionPolicy.class, () -> receipts);
+        beans.registerBean("notices", RetentionPolicy.class, () -> notices);
+        beans.refresh();
+        try {
+            RetentionPolicies declared = new RetentionPolicies((ObjectProvider) beans.getBeanProvider(
+                RetentionPolicy.class), 12, "UTC");
+            assertThat(declared.covering("DocumentRun", java.util.Map.of("layoutId", "notice"))).contains(notices);
+            assertThat(declared.covering("DocumentRun", java.util.Map.of("layoutId", "receipt"))).contains(receipts);
+            assertThat(declared.covering("DocumentRun", java.util.Map.of("layoutId", "certificate"))).isEmpty();
+            assertThat(declared.covering("GeneratedFile", java.util.Map.of("layoutId", "receipt"))).isEmpty();
+            // Without the field nothing says which: kept.
+            assertThat(declared.covering("DocumentRun", java.util.Map.of("subjectId", "x"))).isPresent();
+            assertThat(declared.covering("DocumentRun", null)).isPresent();
+        } finally {
+            beans.close();
+        }
+    }
+
     @Test
     void aScopeRestsOnADeclaredImmutableField() {
         assertThat(problems(
