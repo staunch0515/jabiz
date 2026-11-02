@@ -4,7 +4,7 @@ import type { ContentLanguage } from '../qb/api'
 import type { QuizKind, RewardMethod } from '../qb/play'
 import type { PublicProduct, PublicationProduct } from '../qb/products'
 import { PLAY } from '../qb/ids'
-import { edgesOf, treeStateOf, type TreeEdge, type TreeState } from '../qb/tree'
+import { edgesOf, readAllRows, treeStateOf, type TreeEdge, type TreeState } from '../qb/tree'
 import { SPONSOR_PAGE_TEMPLATE } from './ids'
 
 /* A sponsor's page as anybody reads it in the app (Q60a, Q60b): from the public templates only. */
@@ -86,9 +86,9 @@ export interface SponsorTreeNode {
  * with the caller's state. None when the page is not published.
  */
 export async function readSponsorTree(handle: string, at: string, lang: string): Promise<SponsorTreeNode[]> {
-  const page = await runQuery<Record<string, unknown>>(PLAY.sponsorTree, { params: { handle: handle.toLowerCase(),
-    at, lang }, limit: 200 })
-  return page.items.flatMap((row): SponsorTreeNode[] => {
+  const rows = await readAllRows((offset, limit) => runQuery<Record<string, unknown>>(PLAY.sponsorTree,
+    { params: { handle: handle.toLowerCase(), at, lang }, offset, limit }))
+  return rows.flatMap((row): SponsorTreeNode[] => {
     const state = treeStateOf(row.state)
     if (typeof row.publicationId !== 'string' || !state) return []
     const requiredNames: Record<string, string> = {}

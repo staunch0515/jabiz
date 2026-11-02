@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_LAYOUT, edgesOf, layoutTree, levelsOf, progressOf, treeStateOf } from './tree'
+import { DEFAULT_LAYOUT, edgesOf, layoutTree, levelsOf, progressOf, readAllRows, TREE_PAGE, treeStateOf } from './tree'
 
 const node = (id: string, ...requires: string[]) => ({ id, name: id, requires: requires.map((r) => ({ id: r,
   requirement: 'PASSED' as const })) })
@@ -48,5 +48,16 @@ describe('the tree\'s layout (Q85)', () => {
   it('counts what is lit and names what could start next', () => {
     expect(progressOf([{ ...node('a'), state: 'LIT' }, { ...node('b', 'a'), state: 'UNLOCKED' },
       { ...node('c', 'b'), state: 'LOCKED' }])).toEqual({ lit: 1, total: 3, next: [expect.objectContaining({ id: 'b' })] })
+  })
+
+  it('reads every page of a large tree, stopping at a short page', async () => {
+    const asked: number[] = []
+    const rows = await readAllRows(async (offset, limit) => {
+      asked.push(offset)
+      const n = offset === 0 ? limit : offset === TREE_PAGE ? limit : 3
+      return { items: Array.from({ length: n }, (_, i) => offset + i) }
+    })
+    expect(rows).toHaveLength(2 * TREE_PAGE + 3)
+    expect(asked).toEqual([0, TREE_PAGE, 2 * TREE_PAGE])
   })
 })

@@ -1,5 +1,5 @@
 import { runQuery } from '@jabiz/client'
-import { edgesOf, treeStateOf, type TreeEdge, type TreeState } from '../qb/tree'
+import { edgesOf, readAllRows, treeStateOf, type TreeEdge, type TreeState } from '../qb/tree'
 import { TREE_TEMPLATE } from './ids'
 
 /*
@@ -52,8 +52,8 @@ const num = (value: unknown) => (typeof value === 'number' ? value : Number(valu
 const str = (value: unknown) => (typeof value === 'string' && value !== '' ? value : null)
 
 export async function readTree(at: string): Promise<TreeRow[]> {
-  const page = await runQuery<Row>(TREE_TEMPLATE.tree, { params: { at }, limit: 500 })
-  return page.items.flatMap((row): TreeRow[] => typeof row.publicationId !== 'string' ? [] : [{
+  const rows = await readAllRows((offset, limit) => runQuery<Row>(TREE_TEMPLATE.tree, { params: { at }, offset, limit }))
+  return rows.flatMap((row): TreeRow[] => typeof row.publicationId !== 'string' ? [] : [{
     id: row.publicationId,
     name: String(row.name ?? ''),
     status: String(row.status ?? ''),
@@ -85,14 +85,15 @@ export interface PersonTree {
 
 /** One customer's states on every node, or null when the key is nobody's. */
 export async function readPerson(userKey: string, at: string): Promise<PersonTree | null> {
-  const page = await runQuery<Row>(TREE_TEMPLATE.person, { params: { userKey, at }, limit: 500 })
-  if (page.items.length === 0) return null
+  const rows = await readAllRows((offset, limit) => runQuery<Row>(TREE_TEMPLATE.person,
+    { params: { userKey, at }, offset, limit }))
+  if (rows.length === 0) return null
   const states: Record<string, TreeState> = {}
-  for (const row of page.items) {
+  for (const row of rows) {
     const state = treeStateOf(row.state)
     if (typeof row.publicationId === 'string' && state) states[row.publicationId] = state
   }
-  return { userName: str(page.items[0].userName), states }
+  return { userName: str(rows[0].userName), states }
 }
 
 /** A transactions-page key as the sponsor may paste it: 32 hex digits. */

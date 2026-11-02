@@ -196,3 +196,24 @@ export function progressOf<T extends TreeNodeInput & { state?: TreeState | null 
     next: nodes.filter((node) => node.state === 'UNLOCKED'),
   }
 }
+
+/** The most rows a template answers at once (the platform's page limit): a tree reads page after page. */
+export const TREE_PAGE = 100
+
+/** How many pages a tree reads at most (a sponsor with more than this many publications is nobody we expect). */
+export const TREE_PAGES = 20
+
+/**
+ * Every row of a template, read page by page until a short page (the platform caps a page at TREE_PAGE whatever the
+ * limit asked, so one read would cut a large tree silently).
+ */
+export async function readAllRows<Row>(readPage: (offset: number, limit: number) => Promise<{ items: Row[] }>):
+  Promise<Row[]> {
+  const all: Row[] = []
+  for (let page = 0; page < TREE_PAGES; page++) {
+    const { items } = await readPage(page * TREE_PAGE, TREE_PAGE)
+    all.push(...items)
+    if (items.length < TREE_PAGE) break
+  }
+  return all
+}
