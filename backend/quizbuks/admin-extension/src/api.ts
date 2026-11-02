@@ -721,6 +721,8 @@ export function storedTexts(value: unknown): Record<string, Record<string, strin
   } catch {
     return {}
   }
+}
+
 /** Q73e-1: one answer language's figures of a publication (`qb.admin.publication-languages`). */
 export interface LanguageFigures {
   language: string

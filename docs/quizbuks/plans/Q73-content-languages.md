@@ -610,6 +610,7 @@ Quiz「ラーメン通？」 基准：日本語   翻译：中文 ✓  English �
 - `SiteLanguagesIT`：缺少、语言须含主页自己的语言、过时被拒与确认、访客语言与主要语言、商品的有译文与无译文、商品过时。
 - `SponsorPageIT`、`SponsorProductIT` 的公开字段白名单加入新列；公开模板快照已更新。
 - 前端：商家后台的语言区与简介、App 的语言切换、后台审核页的标语。
+
 ### Q73e-1（2026-11-01）：按答题语言的统计（需求方 2026-11-01："默认建议，开始"）
 
 **模板**：`qb.sponsor.analytics.languages`（`qb.stats.read`）、`qb.admin.publication-languages`（`qb.admin.publication.read`，运营商的成员只看自己商户的发布）。
