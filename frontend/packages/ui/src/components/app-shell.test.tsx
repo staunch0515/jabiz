@@ -1,6 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { forgetEnvironment, i18n, setEnvironment } from '@jabiz/client'
+import { configureClient, forgetEnvironment, i18n, setEnvironment } from '@jabiz/client'
 import { DatabaseIcon } from 'lucide-react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { expectAccessible } from '@jabiz/ui/testing'
@@ -167,6 +167,22 @@ describe('AppShell and ShellNav', () => {
       renderShell('/data')
       expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument()
     } finally {
+      forgetEnvironment()
+    }
+  })
+
+  it('shows what the application\'s override chooses for this page (phase 17ze)', () => {
+    setEnvironment('staging')
+    try {
+      configureClient({ environment: () => ({ name: 'production', production: true }) })
+      const { unmount } = renderShell('/data')
+      expect(screen.queryByTestId('environment-banner')).not.toBeInTheDocument()
+      unmount()
+      configureClient({ environment: null })
+      renderShell('/data')
+      expect(screen.getByTestId('environment-banner')).toHaveTextContent('staging')
+    } finally {
+      configureClient({ environment: null })
       forgetEnvironment()
     }
   })

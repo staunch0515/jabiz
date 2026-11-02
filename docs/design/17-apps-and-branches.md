@@ -143,6 +143,8 @@ jabizApp {
   `GET /api/auth/entries/{name}` 返回它（`environment`），前端登录前就读到（`@jabiz/client` 的 `useEnvironment()`）。`@jabiz/ui` 的 `EnvironmentBanner` 是警示色的通栏横条
   （环境名大写 + "测试环境，不是正式版"，三种语言；文档标题前加 `[TEST]`；正式系统与尚未读到时什么也不显示），`AppShell` 把它与顶栏一起固定在页面顶部、`AuthFrame` 放在卡片之上，
   所以通用后台与建在这两者上的前端每一页都有；自带外框的前端（如手机式的 App）把它放在自己外框的顶部。部署时只有正式环境设置 `JABIZ_WEB_ENVIRONMENT=production`。
+  **应用的改写**（17ze）：`configureClient({ environment })` 让应用按页面的主机改变 `useEnvironment()` 给出的环境（横条、标题前缀、`AppShell` 与 `AuthFrame` 都随之），
+  用于暂时由测试系统的应用回答的公开地址；返回空或抛出即照服务器所说（应用的错误不能藏起测试系统）。通用后台不设，管理员看到的永远是服务器所说的。服务器的设置不变。
 - 构建：插件为每个 `spa(...)` 注册安装任务（平台前端为 `pnpmInstallPlatformFrontend`，其他目录为 `pnpmInstall<名>`）与 `spaBuild<名>`
   （`VITE_BASE=<前缀>/`，输出到本模块的 `build/spa/<名>`，因此两个应用可用不同的 base 构建同一个 `frontend/`；全部 pnpm 任务串行），
   应用自己的 SPA 另有 `spaCheck<名>`（§3.1），`bootJar` 把输出放到 `static/<前缀>`。
