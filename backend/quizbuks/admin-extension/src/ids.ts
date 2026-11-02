@@ -9,6 +9,9 @@ export const DATASET = {
   publication: 'urn:jabiz:dataset:default:QbPublication',
   /** Q49a: takers' reports of publications (an operator's session: its own sponsors'). */
   report: 'urn:jabiz:dataset:default:QbReport',
+  /** Q82: takers' conversations with sponsors and their messages (an operator's session: its own sponsors'). */
+  conversation: 'urn:jabiz:dataset:default:QbConversation',
+  conversationMessage: 'urn:jabiz:dataset:default:QbConversationMessage',
   tier: 'urn:jabiz:dataset:default:QbRewardTier',
   /** A version holds the correct answers: only `qb.admin.quiz.read` (the content administrators) reads it. */
   version: 'urn:jabiz:dataset:default:QbQuizVersion',
@@ -482,6 +485,8 @@ export const PATH = {
   sponsorProducts: '/qb/sponsor-products',
   /** Q49a: takers' reports of quizzes. */
   abuseReports: '/qb/abuse-reports',
+  /** Q82: one conversation between a taker and a sponsor, read only (from a report of it). */
+  conversation: (conversationId: string) => `/qb/conversations/${encodeURIComponent(conversationId)}`,
   users: '/qb/users',
   /** Every attempt (Q14), by user, publication and state. */
   attempts: '/qb/attempts',

@@ -32,8 +32,11 @@ class QbRolesTest {
             .contains(QbPermissions.OPERATOR_USE, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 "approval.decide", QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 // Q69: its own certification rounds, grants and revocations (headquarters marks the official ones).
-                QbPermissions.CERTIFICATION_MANAGE)
-            .doesNotContain(QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ, QbPermissions.ADMIN_USERS_READ,
+                QbPermissions.CERTIFICATION_MANAGE,
+                // Q82: its sponsors' conversations with takers (the entry scope limits them), never writing in them.
+                QbPermissions.CONVERSATION_READ)
+            .doesNotContain(QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
+                QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN, QbPermissions.CASH_RESOLVE,
                 QbPermissions.TOPUP_BANK_APPROVE, QbPermissions.OPERATORS_READ, QbPermissions.OPERATORS_WRITE,
@@ -122,7 +125,9 @@ class QbRolesTest {
             // Q68: a sponsor's own figures and publications in the app; the sponsor datasets hold the caller's own.
             QbPermissions.SPONSOR_APP,
             // Q77: the PDFs of their own certificates.
-            "document.archive.read");
+            "document.archive.read",
+            // Q82: writing to the sponsors of the quizzes they answered (each process finds their side).
+            QbPermissions.CONVERSATION_USE);
         // Q9d: besides their own (qb.*), the receipts they issued (the platform shows each sponsor only theirs).
         assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).allMatch(p -> p.startsWith("qb.")
                 || "document.archive.read".equals(p))

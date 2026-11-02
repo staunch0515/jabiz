@@ -92,12 +92,21 @@ public final class MessageProcesses {
     public static final String DIGITAL_DISPUTED_CONSUMER = "qb.msg-digital-disputed";
     public static final String DIGITAL_RESOLVED_CONSUMER = "qb.msg-digital-resolved";
     public static final String DIGITAL_RESOLVED_SPONSOR_CONSUMER = "qb.msg-digital-resolved-sponsor";
+    /** Q82: a sponsor's reply in a conversation. */
+    public static final String CONVERSATION_REPLY_CONSUMER = "qb.msg-conversation-reply";
 
     /**
      * The taker's push notification of a prize won (platform 17k, decision D69): the moment a taker learns of a prize,
      * once per prize, beside the message; off in the taker's push settings like any other. To the app only.
      */
     public static final PushTemplate PRIZE_WON = PushTemplate.define("qb.prize-won", t -> t.entries("app"));
+
+    /**
+     * Q82 (D-Q82-9): the taker's push notification of a sponsor's reply, with the message (at most one an hour per
+     * conversation, as the message). To the app only.
+     */
+    public static final PushTemplate CONVERSATION_REPLY = PushTemplate.define("qb.conversation-reply",
+        t -> t.entries("app"));
 
     /** An event older than this makes no message (a replay to a new subscription, a long backlog). */
     public static final Duration MAX_AGE = Duration.ofDays(7);
@@ -138,9 +147,10 @@ public final class MessageProcesses {
     static final String OUTPUT = "output";
     static final String PENDING_BEFORE = "pendingBefore";
     static final String PUSH = "push";
+    static final String CONVERSATION = "conversation";
 
-    /** A prize won's push: to whom, and the page of the app a tap opens. */
-    record Push(String userId, String link) {}
+    /** A push: which, to whom, and the page of the app a tap opens. */
+    record Push(PushTemplate template, String userId, String link) {}
 
     private MessageProcesses() {}
 
@@ -188,12 +198,21 @@ public final class MessageProcesses {
                     QueryEntities.query(com.jabiz.quizbuks.referral.QbReferrals.defaultDataset(
                         com.jabiz.quizbuks.referral.QbReferrals.REFERRAL), ctx -> byId("referralId",
                         QbInbox.REFERRAL_KINDS.contains(input(ctx).kind()) ? referralId(ctx) : null), REFERRAL),
+                    // Q82: the conversation the event names.
+                    QueryEntities.query(com.jabiz.quizbuks.conversation.QbConversations.defaultDataset(
+                        com.jabiz.quizbuks.conversation.QbConversations.CONVERSATION), ctx -> byId("conversationId",
+                        QbInbox.CONVERSATION_REPLY.equals(input(ctx).kind()) ? input(ctx).sourceId() : null),
+                        CONVERSATION),
                     // Q33: the digital prize the event names.
                     QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE),
                         ctx -> byId("digitalPrizeId", QbInbox.DIGITAL_KINDS.contains(input(ctx).kind())
                             ? uuid(input(ctx).sourceId()) : null), DIGITAL)))
                 .compute("Make the message", (metadata, ctx) -> fromEvent(ctx, texts))
-                .step("Push a prize won", SendPush.<ProcessContext>when(ctx -> ctx.contains(PUSH), PRIZE_WON,
+                .step("Push a prize won", SendPush.<ProcessContext>when(ctx -> ctx.contains(PUSH)
+                        && ctx.get(PUSH, Push.class).template() == PRIZE_WON, PRIZE_WON,
+                    ctx -> ctx.get(PUSH, Push.class).userId(), Map.of(), ctx -> ctx.get(PUSH, Push.class).link()))
+                .step("Push a sponsor's reply", SendPush.<ProcessContext>when(ctx -> ctx.contains(PUSH)
+                        && ctx.get(PUSH, Push.class).template() == CONVERSATION_REPLY, CONVERSATION_REPLY,
                     ctx -> ctx.get(PUSH, Push.class).userId(), Map.of(), ctx -> ctx.get(PUSH, Push.class).link())));
     }
 
@@ -202,6 +221,11 @@ public final class MessageProcesses {
         String id = input.sourceId();
         if (QbInbox.PAYOUT_ACTION_NEEDED.equals(input.kind())) {
             return "payout-action:" + id + ":" + input.occurredAt().atOffset(ZoneOffset.UTC).toLocalDate();
+        }
+        if (QbInbox.CONVERSATION_REPLY.equals(input.kind())) {
+            // Q82: at most one an hour per conversation, however many replies came in it.
+            return "conversation:" + id + ":" + input.occurredAt().atOffset(ZoneOffset.UTC)
+                .truncatedTo(java.time.temporal.ChronoUnit.HOURS).toLocalDateTime();
         }
         if (QbInbox.REFERRAL_FUNDS_SHORT.equals(input.kind())) {
             // Q70: one a day to the sponsor, however many referrals wait (the source is "<sponsor>|<referral>").
@@ -223,7 +247,7 @@ public final class MessageProcesses {
     /** The kinds that read the publication's card: the platform's reward, and the cash or prize of Q22. */
     private static boolean reward(ProcessContext ctx) {
         String kind = input(ctx).kind();
-        return attemptReward(ctx) || QbInbox.CASH_KINDS.contains(kind) || QbInbox.REDEEM_KINDS.contains(kind)
+        return attemptReward(ctx) || QbInbox.CONVERSATION_REPLY.equals(kind) || QbInbox.CASH_KINDS.contains(kind) || QbInbox.REDEEM_KINDS.contains(kind)
             || QbInbox.DIGITAL_KINDS.contains(kind) || QbInbox.REFERRAL_KINDS.contains(kind);
     }
 
@@ -258,12 +282,15 @@ public final class MessageProcesses {
                 digitalMessage(ctx, input, params, texts);
             case QbInbox.REFERRAL_CLAIMED, QbInbox.REFERRAL_REWARDED, QbInbox.REFERRAL_EXPIRED,
                  QbInbox.REFERRAL_FUNDS_SHORT -> referralMessage(ctx, input, params, texts);
+            case QbInbox.CONVERSATION_REPLY -> conversationMessage(ctx, params);
             default -> null;
         };
         if (draft != null) {
             insert(ctx, texts, draft, params, (String) ctx.get(SOURCE_KEY));
             if (prizeWon(ctx, input)) {
-                ctx.put(PUSH, new Push(draft.recipientId(), link(draft)));
+                ctx.put(PUSH, new Push(PRIZE_WON, draft.recipientId(), link(draft)));
+            } else if (QbInbox.CONVERSATION_REPLY.equals(input.kind())) {
+                ctx.put(PUSH, new Push(CONVERSATION_REPLY, draft.recipientId(), link(draft)));
             }
         }
     }
@@ -289,6 +316,9 @@ public final class MessageProcesses {
         }
         if (QbInbox.ACTION_WALLET.equals(draft.action())) {
             return "wallet";
+        }
+        if (QbInbox.ACTION_CONVERSATION.equals(draft.action()) && draft.actionId() != null) {
+            return "conversations/" + draft.actionId();
         }
         if (QbInbox.ACTION_REFERRALS.equals(draft.action())) {
             // Q70: a prize a referral earned has no result; its referral's page.
@@ -482,6 +512,29 @@ public final class MessageProcesses {
         Object referrer = referral.get("referrerId");
         return referrer == null ? null : new Draft(String.valueOf(referrer), QbInbox.TYPE_REWARD, input.kind(),
             card.id(), QbInbox.ACTION_REFERRALS, String.valueOf(referral.id()));
+    }
+
+    /**
+     * A sponsor's reply (Q82): to the taker, naming the sponsor's company and the publication, never the text (the
+     * conversation shows it). Only while the conversation is open and the sponsor wrote last.
+     */
+    private static Draft conversationMessage(ProcessContext ctx, Map<String, MessageTexts.Value> params) {
+        EntityInstance conversation = first(ctx, CONVERSATION);
+        EntityInstance card = first(ctx, CARD);
+        if (conversation == null || card == null
+            || !com.jabiz.quizbuks.conversation.QbConversations.OPEN.equals(conversation.get("status"))
+            || !com.jabiz.quizbuks.conversation.QbConversations.SPONSOR.equals(conversation.get("lastSender"))) {
+            return null;
+        }
+        params.put("name", MessageTexts.publicationName(card));
+        return new Draft(String.valueOf((Object) conversation.get("takerId")), QbInbox.TYPE_SYSTEM,
+            QbInbox.CONVERSATION_REPLY, card.id(), QbInbox.ACTION_CONVERSATION, String.valueOf(conversation.id()));
+    }
+
+    /** Q82: a sponsor's message: the conversation and its publication. */
+    static EventInput conversationInput(DomainEvent event) {
+        return new EventInput(QbInbox.CONVERSATION_REPLY, text(event, "conversationId"),
+            text(event, "publicationId"), event.createdTime());
     }
 
     /** The referral an event names (the funds-short event names it after its sponsor, for the day's key). */

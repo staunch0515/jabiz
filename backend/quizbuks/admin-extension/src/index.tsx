@@ -60,6 +60,7 @@ import SponsorPagesPage from './SponsorPagesPage'
 import SponsorPageReviewPage from './SponsorPageReviewPage'
 import SponsorProductsPage from './SponsorProductsPage'
 import AbuseReportsPage from './AbuseReportsPage'
+import ConversationPage from './ConversationPage'
 import CashRewardsPage from './CashRewardsPage'
 import DigitalPrizesPage from './DigitalPrizesPage'
 import TopUpsPage from './TopUpsPage'
@@ -103,6 +104,7 @@ export default defineExtension({
     { path: PATH.sponsorProducts, element: <SponsorProductsPage /> },
     // Q49a: takers' reports of quizzes, for headquarters and the operators (their own sponsors').
     { path: PATH.abuseReports, element: <AbuseReportsPage /> },
+    { path: '/qb/conversations/:conversationId', element: <ConversationPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },

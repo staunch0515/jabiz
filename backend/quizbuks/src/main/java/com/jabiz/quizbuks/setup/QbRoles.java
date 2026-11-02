@@ -60,7 +60,9 @@ public final class QbRoles {
         // Q69: the certifications' rounds, grants and revocations, and the official publishers.
         QbPermissions.CERTIFICATION_MANAGE, QbPermissions.CERTIFICATION_ADMIN,
         // Q70: every referral (support: who referred whom, and what came of it).
-        QbPermissions.REFERRAL_READ);
+        QbPermissions.REFERRAL_READ,
+        // Q82: every conversation between takers and sponsors (disputes and reports).
+        QbPermissions.CONVERSATION_READ);
 
     /**
      * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's
@@ -77,7 +79,9 @@ public final class QbRoles {
         // Q48c: the operator's own AI prospecting (its own directions, drafts and blocks).
         QbPermissions.PROSPECT_USE,
         // Q69: the rounds of its official publisher, and grants and revocations, in its own name.
-        QbPermissions.CERTIFICATION_MANAGE);
+        QbPermissions.CERTIFICATION_MANAGE,
+        // Q82: its sponsors' conversations with takers (disputes and reports).
+        QbPermissions.CONVERSATION_READ);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
@@ -148,7 +152,9 @@ public final class QbRoles {
             // Q68: a sponsor's own figures and publications in the app, and pausing or resuming them.
             QbPermissions.SPONSOR_APP,
             // Q77: the PDFs of their own certificates (the platform shows a reader only what they issued).
-            "document.archive.read"));
+            "document.archive.read",
+            // Q82: writing to the sponsors of the publications they answered.
+            QbPermissions.CONVERSATION_USE));
         add(SPONSOR, labels("Sponsor", "商家", "スポンサー"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
             QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,
@@ -159,7 +165,9 @@ public final class QbRoles {
             // Q9e: the analytics of their own publications (aggregates only).
             QbPermissions.STATS_READ,
             // Q68: the dashboard, the trend, pausing and resuming are shared with the app (see SPONSOR_APP).
-            QbPermissions.SPONSOR_APP));
+            QbPermissions.SPONSOR_APP,
+            // Q82: answering their takers' conversations.
+            QbPermissions.CONVERSATION_USE));
         add(SHOPIFY_SHOP, labels("Shopify shop staff", "Shopify 店铺员工", "Shopify ストアのスタッフ"), false,
             List.of(com.jabiz.quizbuks.shopify.Shopify.USE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);

@@ -59,6 +59,8 @@ import { ProductsPage } from './products/ProductsPage'
 import { STATS_PATH, StatsPage } from './stats/StatsPage'
 import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
+import { conversationOf } from './conversations/api'
+import { ConversationPage, useUnreadConversations } from './conversations/ConversationsPages'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { Wordmark } from './qb/Illustrations'
 import { HelpPage } from './qb/HelpPage'
@@ -138,6 +140,8 @@ function SignedIn({ path }: { path: string }) {
   const kudos = rewards.data ? rewards.data.methods.includes('PLATFORM') : true
   // The transactions page starts from its address's filters: another address (the nav, back, forward) starts it anew.
   const { search } = useLocation()
+  // Q82: the menu's badge of the takers' conversations.
+  const unreadConversations = useUnreadConversations(!!userId)
   // The pages start from who is signed in (the sign-up name prefills the onboarding): wait until the server said so.
   if (!userId) return <PageState kind="loading" />
 
@@ -184,7 +188,8 @@ function SignedIn({ path }: { path: string }) {
   else if (topUpId && kudos) page = <TopUpPage key={topUpId} topUpId={topUpId} />
   else if (bankTopUpId && kudos) page = <BankTopUpPage key={bankTopUpId} topUpId={bankTopUpId} />
   else if (path === TRANSACTIONS_PATH) page = <TransactionsPage key={search} />
-  else if (path === MESSAGES_PATH) page = <MessagesPage />
+  else if (path === MESSAGES_PATH) page = <MessagesPage tab={new URLSearchParams(search).get('tab')} />
+  else if (conversationOf(path)) page = <ConversationPage key={path} conversationId={conversationOf(path)!} />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
 
@@ -210,7 +215,9 @@ function SignedIn({ path }: { path: string }) {
     { key: 'settings', label: t('nav.groups.settings'), items: [
       { key: 'onboarding', label: t('nav.onboarding'), path: PROFILE_PATH, icon: Store },
       { key: 'stats', label: t('stats.nav'), path: STATS_PATH, icon: ChartColumn },
-      { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare },
+      // Q82: the badge counts the takers' conversations with something unread.
+      { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare,
+        badge: unreadConversations },
       { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
       { key: 'help', label: t('nav.help'), path: HELP, icon: CircleHelp },
     ] },

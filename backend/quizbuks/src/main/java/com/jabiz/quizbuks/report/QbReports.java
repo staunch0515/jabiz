@@ -28,8 +28,11 @@ public final class QbReports {
     public static final String REWARD_NOT_GIVEN = "REWARD_NOT_GIVEN";
     /** Advertising or spam. */
     public static final String SPAM = "SPAM";
+    /** Q82: what the sponsor wrote in a conversation (the report names the conversation). */
+    public static final String MESSAGE = "MESSAGE";
     public static final String OTHER = "OTHER";
-    public static final List<String> REASONS = List.of(MISLEADING, INAPPROPRIATE, REWARD_NOT_GIVEN, SPAM, OTHER);
+    public static final List<String> REASONS = List.of(MISLEADING, INAPPROPRIATE, REWARD_NOT_GIVEN, SPAM, MESSAGE,
+        OTHER);
 
     /** Waiting for a reviewer. */
     public static final String OPEN = "OPEN";
@@ -75,6 +78,9 @@ public final class QbReports {
             .asText(128));
         eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true).processOnly()
             .asCode(REASON_DICTIONARY, REASONS.toArray(String[]::new)));
+        // Q82 (D-Q82-7): the conversation reported, the reporter's own.
+        eb.field("conversationId", f -> f.physicalColumn("conversation_id").immutable(true).processOnly()
+            .asText(36));
         eb.field("note", f -> f.physicalColumn("note").immutable(true).processOnly().asText(NOTE_LENGTH, true));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUS_DICTIONARY, STATUSES.toArray(String[]::new)));
@@ -87,7 +93,7 @@ public final class QbReports {
             .asText(RESOLUTION_LENGTH, true));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
-            .columns("publicationId", "reason", "note", "status", "createdAt", "resolvedAt", "resolvedBy",
+            .columns("publicationId", "reason", "conversationId", "note", "status", "createdAt", "resolvedAt", "resolvedBy",
                 "resolution")
             .filters("publicationId", "publisherId", "reporterId", "reason", "status", "createdAt")
             .sorts("createdAt", "resolvedAt")

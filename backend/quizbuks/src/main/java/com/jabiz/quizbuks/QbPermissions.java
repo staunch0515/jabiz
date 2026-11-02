@@ -198,6 +198,15 @@ public final class QbPermissions {
     public static final String REFERRAL_SYSTEM = "qb.referral.system";
     /** Q70: reading every referral (headquarters' finance and support pages). */
     public static final String REFERRAL_READ = "qb.admin.referrals.read";
+    /**
+     * Q82: writing in the conversations between a taker and a sponsor (opening, sending, closing, reading, blocking);
+     * takers and sponsors. Each process finds the caller's side in the conversation itself.
+     */
+    public static final String CONVERSATION_USE = "qb.conversation.use";
+    /** Q82: reading every conversation (headquarters' content administrators, the operators their sponsors'). */
+    public static final String CONVERSATION_READ = "qb.conversation.read";
+    /** Q82: the conversations' expiry ({@code QB_CONVERSATION_EXPIRE}, {@code internal()}). Granted to no role. */
+    public static final String CONVERSATION_SYSTEM = "qb.conversation.system";
     /** Marking the official publishers whose publications may be rounds (Q69): headquarters' content administrators. */
     public static final String CERTIFICATION_ADMIN = "qb.certification.admin";
     /**

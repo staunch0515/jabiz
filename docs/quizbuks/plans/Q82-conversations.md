@@ -1,4 +1,4 @@
-# Q82 答题者与商户的对话（计划，2026-11-02，待需求方确认）
+# Q82 答题者与商户的对话（计划，2026-11-02；需求方 2026-11-02 确认 §9 全部按建议）
 
 `05-console-requests.md` 第五项（"允许答题者和商户之间手工通信"）；需求方定下的顺序 Q78 → Q79 → 17zc / Q80 → Q81 → **Q82**。编号 Q82 是建议（下一个空号），确认时可改。
 **这只是计划**：确认 §9 的决定后开发，一个 PR，工作分支 `1.3/quizbuks-82-conversations`。
@@ -39,7 +39,7 @@
 
 ## 3. 后端（`backend/quizbuks`）
 
-### 3.1 迁移 V62 `quizbuks_conversations`（Q81 用了 V61）
+### 3.1 迁移 V63 `quizbuks_conversations`（Q77 用了 V61，Q81 用了 V62）
 
 - `qb_conversation`（主键 `conversation_id`，`publisher_kind` / `publisher_id`、`taker_id`、`publication_id → entity_registry`、`attempt_id`、`status`、`opened_at`、`last_message_at`、`last_sender`、`taker_read_at`、`sponsor_read_at`、`closed_at`、`closed_by`、`version`；`UNIQUE (taker_id, publication_id)`；索引 `(publisher_id, status, last_message_at DESC)`（商户列表）、`(taker_id, last_message_at DESC)`（答题者列表）、`(status, last_message_at)`（到期任务）。
 - `qb_conversation_message`（主键 `message_id`，`conversation_id → qb_conversation`、`publisher_kind` / `publisher_id`、`sender`、`sender_user_id`、`body varchar(1000)`、`created_at`、`version`；索引 `(conversation_id, created_at)`）。
@@ -129,3 +129,17 @@
 5. D-Q82-13：不允许图片；不显示回复时限。
 6. 条款与隐私政策的补充文本由需求方 / 法务给出。
 7. 编号 Q82，一个 PR，7.5 天（05 的估计 5–6 天没算屏蔽、举报链接与后台只读页）。
+
+## 10. 实施记录（2026-11-02，分支 `1.3/quizbuks-82-conversations`）
+
+按 §9 全部建议实现。与 §2–§4 不同或补充的地方：
+
+1. **权限**：平台的流程要求声明的权限**全部**持有，发送、关闭、已读两侧共用一个流程，所以新增 `qb.conversation.use`（答题者与商户的角色都有），流程自己判断调用者是哪一侧（`ConversationRules.sideOf`：答题者本人，或 `SPONSOR` 发布的商户本人；都不是即 404）。读全部对话的 `qb.conversation.read` 给内容管理员与运营商（`QbRolesTest`），到期任务的 `qb.conversation.system` 不授予任何角色。
+2. **锁**：一把锁 `qb.conversation:<答题者>:<发布>`（开启、发送、关闭、已读、到期都取它；一对的两个编号从不改变，所以开启时还没有对话也能取同一把锁），取代 §2 的 `qb.conversation:<编号>` 与 `qb.conversation-open:…` 两把。屏蔽取 `qb.account:<答题者>`，按读到的版本关闭该商户的对话（同时有人发送时其中一方 409，重试时发送方读到屏蔽）；平台的锁步骤一次只取一个名字，逐个取对话锁做不到。
+3. **代码**：404 没有错误码（平台的 `EntityNotFoundException`），不用 `QB_CONVERSATION_NOT_YOURS`；`_SPONSOR_ONLY`、`_LIMITS` 也不需要。新增 `QB_CONVERSATION_UNAVAILABLE`（对方被封禁）、`_BODY_REQUIRED`、`_BODY_TOO_LONG`。
+4. **模板**：商户的对话页拆成 `qb.sponsor.conversation-messages` 与 `qb.sponsor.conversation-rewards`（现金、到店领取、电子奖品，含推荐的奖励），列表 `qb.sponsor.conversations` 带 `waitingReply`（待回复的排在前面）。答题者另有 `qb.app.conversation-messages`、`qb.app.conversations-unread`。两侧都经各自限本人的数据视图（`taker:` / `sponsor:QbConversation`，读权限不授予任何角色，只供模板）。`qb.admin.reports` 加 `message` 计数；举报的 `conversationId` 在 `QbReport` 的默认数据视图中。
+5. **站内信**：标题与正文写发布名，不写公司名（`QB_MESSAGE_FROM_EVENT` 不多读商户），不写消息内容。答题者在 App 底部的未读徽标仍只数站内信（每次回复已有一条站内信）；对话列表的未读数显示在收件箱顶部的“与商户的对话”入口上。
+6. **入口**：“屏蔽的商户”放在对话列表页的下方，没有加进账户页的菜单。
+7. **删除账号**：`keep` 必须清空至少一个字段，对话行只有用户编号，原样保留（不声明）；每个账号写的消息在 `SponsorErasure`（每个账号都运行）中清空 `body`（列可空），屏蔽在 `TakerErasure` 中删除。`TakerErasureIT` 的全表搜索覆盖。
+8. **测试**：`ConversationRulesTest`（7 组）、`ConversationIT`（5 个：开启与回复、站内信每小时一条与推送、只读本人、地址规则；关闭与重开、每日条数；屏蔽与解除；到期任务；举报带对话）、`TakerErasureIT` 新增一项、`QbRolesTest`；App `conversation.test.tsx`（6）、商户后台 `conversations.test.tsx`（3）、后台扩展 `abuseReports.test.tsx` 加只读对话页，各页 axe；e2e `conversations.spec.ts`。答题路径不变（`AttemptStatementBudgetIT` 未改）。
+9. **未做**：店员回复（D-Q82-4，另议）；条款与隐私政策的补充文本（需求方 / 法务给出后由内容管理员发布）。

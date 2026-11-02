@@ -105,6 +105,10 @@ public class SponsorErasure {
                     ErasedEntity.delete(QbInbox.STATE, "userId"),
                     ErasedEntity.delete(QbInbox.MESSAGE, "recipientId", "title", "body"),
                     ErasedEntity.delete(QbMessaging.NOTICE, "recipientId"),
+                    // Q82: what the user wrote in conversations, as a taker or as a sponsor: the rows stay (the other
+                    // side sees a message was there), the text goes.
+                    ErasedEntity.keep(com.jabiz.quizbuks.conversation.QbConversations.MESSAGE, "senderUserId",
+                        "body"),
                     // The onboarding: tombstoned; the purge overwrites who they are in every version.
                     ErasedEntity.delete(QbAccounts.SPONSOR, "userId", "contactName", "company", "intro", "avatar",
                         "introTranslations"),
