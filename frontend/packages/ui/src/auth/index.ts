@@ -47,6 +47,8 @@ export { SessionList, SessionDeviceIcon, sessionDeviceName, effectiveMinutes } f
 export type { SessionListProps } from './SessionList'
 export { MailPreferences } from './MailPreferences'
 export type { MailPreferencesProps } from './MailPreferences'
+export { PushPreferences } from './PushPreferences'
+export type { PushPreferencesProps } from './PushPreferences'
 export { offerMailLanguage } from './offerMailLanguage'
 export { MailUnsubscribe } from './MailUnsubscribe'
 export type { MailUnsubscribeProps, MailUnsubscribeState } from './MailUnsubscribe'

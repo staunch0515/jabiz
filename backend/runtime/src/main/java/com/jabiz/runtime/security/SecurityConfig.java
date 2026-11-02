@@ -92,6 +92,12 @@ public class SecurityConfig {
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, OidcController.BASE + "/providers"),
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, OidcController.BASE + "/*/start",
             OidcController.BASE + "/callback", OidcController.BASE + "/*/form-post"),
+        // The store apps' association files (decision D68): public by nature, fetched by Apple's and Google's servers;
+        // credentials sent along are not looked at.
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, com.jabiz.runtime.web.NativeAppAssociations.APPLE,
+            com.jabiz.runtime.web.NativeAppAssociations.ANDROID),
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.HEAD, com.jabiz.runtime.web.NativeAppAssociations.APPLE,
+            com.jabiz.runtime.web.NativeAppAssociations.ANDROID),
         // Signing in with another platform's signed token (decision D59): the token is the credential, used once.
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, ExternalTokenController.PATH),
         // Inbound webhooks (decision D37): the provider's signature is the credential; credentials sent along are

@@ -40,9 +40,13 @@ import java.util.regex.Pattern;
  * @param environment  the system's name: {@value #PRODUCTION} or a test system's
  * @param rootRedirect the path a request for exactly {@code /} is redirected to; none by default
  * @param redirects    the prefixes moved for good, each to another prefix of this host; none by default
+ * @param nativeApps   the store apps that open an SPA's addresses (phase 17l, decision D68): the platform serves
+ *                     their association files ({@link NativeAppAssociations}); none by default. A list of its own,
+ *                     by the SPA's path, so that a deployment adds it without restating the SPAs the build declared
  */
 @ConfigurationProperties("jabiz.web")
-public record JabizWebProperties(List<Spa> spa, String environment, String rootRedirect, List<Redirect> redirects) {
+public record JabizWebProperties(List<Spa> spa, String environment, String rootRedirect, List<Redirect> redirects,
+    List<NativeApp> nativeApps) {
 
     /** The environment of the real system: the only one the pages show no banner for. */
     public static final String PRODUCTION = "production";
@@ -78,6 +82,44 @@ public record JabizWebProperties(List<Spa> spa, String environment, String rootR
         rootRedirect = rootRedirect == null || rootRedirect.isBlank() ? null : rootRedirect.trim();
         redirects = redirects == null ? List.of()
             : List.copyOf(redirects.stream().map(r -> r == null ? new Redirect(null, null) : r).toList());
+        nativeApps = nativeApps == null ? List.of()
+            : List.copyOf(nativeApps.stream().map(n -> n == null ? new NativeApp(null, null, null) : n).toList());
+    }
+
+    /** Without store apps. */
+    public JabizWebProperties(List<Spa> spa, String environment, String rootRedirect, List<Redirect> redirects) {
+        this(spa, environment, rootRedirect, redirects, null);
+    }
+
+    /**
+     * The store apps that open one SPA's addresses (phase 17l, decision D68): {@code jabiz.web.native-apps[i].path}
+     * names the SPA, {@code .ios} its iOS apps ({@code <Team ID>.<bundle ID>}, for Universal Links) and
+     * {@code .android} its Android apps (package and SHA-256 fingerprints of their signing certificates, for App Links
+     * and trusted web activities).
+     */
+    public record NativeApp(String path, List<String> ios, List<AndroidApp> android) {
+
+        @ConstructorBinding
+        public NativeApp {
+            ios = ios == null ? List.of() : List.copyOf(ios.stream().map(id -> id == null ? "" : id.trim()).toList());
+            android = android == null ? List.of()
+                : List.copyOf(android.stream().map(a -> a == null ? new AndroidApp(null, null) : a).toList());
+        }
+    }
+
+    /**
+     * @param packageName  the app's package (application id)
+     * @param fingerprints the SHA-256 fingerprints of the certificates it is signed with, as {@code AA:BB:…} (the
+     *                     upload key's and Play App Signing's)
+     */
+    public record AndroidApp(String packageName, List<String> fingerprints) {
+
+        @ConstructorBinding
+        public AndroidApp {
+            fingerprints = fingerprints == null ? List.of()
+                : List.copyOf(fingerprints.stream().map(f -> f == null ? "" : f.trim().toUpperCase(Locale.ROOT))
+                    .toList());
+        }
     }
 
     /** The SPAs, on a test system, without redirects. */
@@ -304,6 +346,45 @@ public record JabizWebProperties(List<Spa> spa, String environment, String rootR
                 }
             });
         }
+        List<String> withApps = new ArrayList<>();
+        for (int i = 0; i < nativeApps.size(); i++) {
+            NativeApp n = nativeApps.get(i);
+            String where = "jabiz.web.native-apps[" + i + "]";
+            if (n.path() == null || !seen.contains(n.path())) {
+                problems.add(where + ".path: must be the path of a configured single-page application, was "
+                    + quoted(n.path()));
+            } else if (withApps.contains(n.path())) {
+                problems.add(where + ".path: " + quoted(n.path()) + " has its apps configured more than once");
+            } else {
+                withApps.add(n.path());
+            }
+            if (n.ios().isEmpty() && n.android().isEmpty()) {
+                problems.add(where + ": names no app (ios or android)");
+            }
+            for (int j = 0; j < n.ios().size(); j++) {
+                if (!IOS_APP.matcher(n.ios().get(j)).matches()) {
+                    problems.add(where + ".ios[" + j + "]: must be <Team ID>.<bundle ID>, like "
+                        + "\"ABCDE12345.com.example.app\", was " + quoted(n.ios().get(j)));
+                }
+            }
+            for (int j = 0; j < n.android().size(); j++) {
+                AndroidApp a = n.android().get(j);
+                String app = where + ".android[" + j + "]";
+                if (a.packageName() == null || !ANDROID_PACKAGE.matcher(a.packageName()).matches()) {
+                    problems.add(app + ".package-name: must be an Android package like \"com.example.app\", was "
+                        + quoted(a.packageName()));
+                }
+                if (a.fingerprints().isEmpty()) {
+                    problems.add(app + ".fingerprints: at least one SHA-256 fingerprint of a signing certificate");
+                }
+                for (int k = 0; k < a.fingerprints().size(); k++) {
+                    if (!FINGERPRINT.matcher(a.fingerprints().get(k)).matches()) {
+                        problems.add(app + ".fingerprints[" + k + "]: must be 32 hexadecimal bytes separated by "
+                            + "colons (AA:BB:…), as keytool and the Play Console print it");
+                    }
+                }
+            }
+        }
         return problems;
     }
 
@@ -317,6 +398,10 @@ public record JabizWebProperties(List<Spa> spa, String environment, String rootR
     private static final Pattern INDEX =
         Pattern.compile("(/[A-Za-z0-9][A-Za-z0-9._-]*)*/[A-Za-z0-9._-]+\\.html");
     private static final Pattern ENTRY = Pattern.compile("[a-z][a-z0-9-]{0,39}");
+    /** An iOS app id: the ten-character team id, then the bundle id. */
+    private static final Pattern IOS_APP = Pattern.compile("[A-Z0-9]{10}\\.[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+");
+    private static final Pattern ANDROID_PACKAGE = Pattern.compile("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+");
+    private static final Pattern FINGERPRINT = Pattern.compile("([0-9A-F]{2}:){31}[0-9A-F]{2}");
     /** A system's name as the banner shows it: a word or a few, nothing that could be markup. */
     private static final Pattern ENVIRONMENT = Pattern.compile("[A-Za-z0-9][A-Za-z0-9 -]{0,31}");
 }

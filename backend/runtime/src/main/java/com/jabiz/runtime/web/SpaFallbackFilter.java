@@ -199,7 +199,7 @@ class SpaFallbackFilter implements WebFilter {
 
     /** The API and the actuator: never rewritten, and their responses carry no page policy. */
     static boolean excluded(String path) {
-        return path.startsWith("/api") || path.startsWith("/actuator");
+        return path.startsWith("/api") || path.startsWith("/actuator") || NativeAppAssociations.PATHS.contains(path);
     }
 
     private static final String CONTENT_SECURITY_POLICY = "Content-Security-Policy";

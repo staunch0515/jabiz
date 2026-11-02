@@ -4902,6 +4902,22 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17zb 状态**：✅ 17zb 完成（#392）；17zb-2 📝 待评审（分支 `1.3/phase-17zb2-erasure-deleted-rows`）。
 
+### 17k 推送通知（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D69）
+
+**缘由**：答题者 App 要以推送告诉用户新问卷、中奖与审核结果；App Store 不收"只是网站外壳"的 App（审核指南 4.2）。需求方确认：Android 与浏览器用 Web Push，偏好按模板。分 17k-a（Web Push）与 17k-b（APNs）。
+
+| # | 内容 | PR |
+|---|---|---|
+| 17k-1 | core `PushTemplate`；runtime `SendPush`（事件 `jabiz.push.queued`）、消费者 `PUSH_DELIVER`、`DeliverPush`（偏好、入口、会话、语言、链接）；`PushTemplates`、启动检查 `PUSH`；错误码 `PUSH_DISABLED`、`PUSH_SUBSCRIPTION_INVALID`、`PUSH_PARAM_SECRET` | 17k-a |
+| 17k-2 | `WebPushCrypto`（RFC 8291 `aes128gcm`，以 RFC 的例子测试）、`WebPushSender`（VAPID、只限允许的推送服务、5 秒、404 / 410 即删除设备）、`PushProperties`（`jabiz.push.*`） | 17k-a |
+| 17k-3 | 设备与偏好：迁移 `V56__push.sql`（`sec_user_device`、`sec_user_push_preference_version`）、实体 `SecUserDevice` / `SecUserPushPreference`、流程 `SEC_DEVICE_REGISTER` / `SEC_DEVICE_REMOVE` / `SEC_PUSH_PREFERENCE_SET`、接口 `/api/auth/account/push/**`；设备随会话；`ACCOUNT_ERASE` 删除设备与偏好 | 17k-a |
+| 17k-4 | 前端：Service Worker 显示通知与点按打开页面（只开本站）；`@jabiz/client` 的 `enablePush` / `disablePush` / `pushEnabledHere` / `pushSettings` / `setPushPreference`；`@jabiz/ui` 的 `PushPreferences`；OpenAPI 快照与类型 | 17k-a |
+| 17k-5 | 示范：发货时推送 `commerce.order-shipped`（门户的用户，链接到订单）；测试 `WebPushCryptoTest`、`PushPropertiesTest`、`PushIT`（测试推送服务：加密、签名、语言、链接、偏好、入口、回滚、410、退出、抹除、不允许的端点与坏的密钥、换账号）、`worker.test.ts`、`push.test.ts`、`PushPreferences.test.tsx`；测试夹具 `TestPushService` | 17k-a |
+| 17k-6 | 文档：决策 D69、18 §5.7、根 `CLAUDE.md` | 17k-a |
+| 17k-7 | APNs（令牌认证、`.p8` 来自环境变量、种类 `apns`） | 17k-b |
+
+**17k 状态**：17k-a 📝 待评审（分支 `1.3/phase-17k-push`）；17k-b 待开发。
+
 ### 17j Sign in with Apple（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D67；即推后的 16f-2）
 
 **缘由**：App Store 要求提供第三方登录的 App 也提供 Apple 登录（审核指南 4.8），App 内删除的账号要撤销 Apple 的授权（5.1.1(v)）。需求方确认：App 与商户后台两个入口都提供，撤销在本阶段。
@@ -4916,4 +4932,20 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17j-5 | 文档：决策 D67、10 §12、根 `CLAUDE.md` 单点登录一条 | 17j-a |
 | 17j-6 | 刷新令牌密封保存（`SEC_IDENTITY_TOKEN_KEEP`、实体 `SecIdentityToken`、迁移 `V55__identity_token.sql`、没有密封密钥即启动报错）；定时任务 `jabiz.identity-token-revocation` 找出关联已不在的令牌，`SEC_IDENTITY_TOKEN_REVOKE` 经提供方客户端调用 `revocation_endpoint`（重试的间隔倍增、至多 12 次）；同一 Apple 账号的新关联取代旧令牌；放弃后给管理员登记待办；测试 `IdentityTokensTest`、`OidcClientTest`、`OidcAppleIT`（密封保存、审计与操作记录中没有、关联在时不撤销、抹除后撤销并删除、本人解除后撤销、拒绝后按间隔重试、再次登录换令牌、新关联取代旧令牌不撤销、12 次后登记待办并不再尝试）；10 §12 | 17j-b |
 
-**17j 状态**：✅ 17j-a 完成（#401）；17j-b 📝 待评审（分支 `1.3/phase-17j-apple-revoke`）。
+**17j 状态**：✅ 完成（17j-a #401，17j-b #402）。
+
+
+### 17l 原生 App 的接入（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D68）
+
+**缘由**：答题者 App 以原生外壳上架（Q49b TWA、Q49c Capacitor）。Google 拒绝在嵌入的网页视图中登录，第三方登录要在系统浏览器中进行再回到 App；邮件中的链接要直接打开 App，
+需要域名根上的关联文件（此前由 QuizBuks 以 Caddy 与脚本提供）；外壳中的网页不是 standalone，安装提示会请已经装了 App 的人"添加到主屏幕"。
+
+| # | 内容 |
+|---|---|
+| 17l-1 | `@jabiz/client`：`configureClient({ openAuthorization })`（缺省页面自己跳转），`startProviderSignIn` 与 `startIdentityLink` 经它打开提供方的页面，回调照旧是入口的 `login/oidc`（binder 不变） |
+| 17l-2 | `configureClient({ nativeShell })` 与 `nativeShell()`：外壳中安装的判断视同已安装，安装提示与指引不出现 |
+| 17l-3 | `jabiz.web.native-apps[i]`（`path`、`ios`、`android[j].package-name` / `.fingerprints`）：`NativeAppAssociations` 提供 `/.well-known/apple-app-site-association`（只开该 SPA 的路径）与 `/.well-known/assetlinks.json`；公开（凭据不看）、JSON、一小时缓存、`GET` 与 `HEAD`；过滤器而不是接口（不在 OpenAPI 中），没有 App 时请求往下走（静态文件或 404）；SPA 的路由不应答它们；`SpaConfigCheck` 检查；外壳打不开页面时忘掉这一轮的 binder |
+| 17l-4 | 测试：`NativeAppAssociationsTest`（两个文件、404、不归 SPA、全部格式问题）、`MultiSpaIT`（经完整的过滤链：公开、JSON、缓存、无页面策略、带过期令牌也 200）、`oidc.test.ts`（外壳打开页面、关联同样、外壳失败即失败）、`install.test.ts`（外壳中视同已安装） |
+| 17l-5 | 文档：决策 D68、12 §4、17 §3.2、指南 `app-spa.md` 6a、根 `CLAUDE.md` |
+
+**17l 状态**：📝 待评审（分支 `1.3/phase-17l-native-apps`）。

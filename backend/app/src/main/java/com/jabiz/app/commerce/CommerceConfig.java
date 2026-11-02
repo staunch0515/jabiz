@@ -36,6 +36,12 @@ class CommerceConfig {
         return CommerceProcesses.ORDER_SHIPPED_MAIL;
     }
 
+    /** The shipment notice as a push notification (decision D69). */
+    @Bean
+    com.jabiz.push.PushTemplate orderShippedPush() {
+        return CommerceProcesses.ORDER_SHIPPED_PUSH;
+    }
+
     @Bean
     EntityDefinition customerEntityDefinition() {
         return CommerceEntities.CUSTOMER_ENTITY;
