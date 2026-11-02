@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { configureNativePush, type NativePush } from './native'
 import { base64urlBytes, disablePush, enablePush, pushEnabledHere, pushSupported } from './push'
 
 const KEY = 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4'
@@ -32,6 +33,7 @@ function browser(permission: NotificationPermission, existing: PushSubscription 
 }
 
 afterEach(() => {
+  configureNativePush(null)
   vi.unstubAllGlobals()
   Reflect.deleteProperty(navigator, 'serviceWorker')
 })
@@ -85,5 +87,41 @@ describe('push on this device (decision D69)', () => {
     expect(await pushEnabledHere({ enabled: true, devices: [{ ...device, current: true }] })).toBe(true)
     browser('granted')
     expect(await pushEnabledHere({ enabled: true, devices: [{ ...device, current: true }] })).toBe(false)
+  })
+
+  it('in a native shell registers Apple\'s device token instead of a Web Push subscription (17k-b)', async () => {
+    const token = 'ab'.repeat(32)
+    let held: string | null = null
+    const shell: NativePush = {
+      kind: 'apns',
+      register: vi.fn(async () => { held = token; return token }),
+      token: vi.fn(async () => held),
+      unregister: vi.fn(async () => { held = null }),
+    }
+    configureNativePush(shell)
+    expect(pushSupported()).toBe(true)
+    const fetch = vi.fn<(request: Request) => Promise<Response>>(async (request) =>
+      request.url.endsWith('/api/auth/account/push') ? json({ enabled: true, webPushKey: KEY, apns: true, templates: [],
+        devices: [] }) : request.url.endsWith('/remove') ? new Response(null, { status: 204 }) : json({ deviceId: 'd1' }))
+    vi.stubGlobal('fetch', fetch)
+    expect(await enablePush()).toBe('enabled')
+    const register = fetch.mock.calls[1][0]
+    expect(new URL(register.url).pathname).toBe('/api/auth/account/push/devices')
+    expect(await register.json()).toEqual({ kind: 'apns', endpoint: token })
+    const device = { id: 'd1', kind: 'apns', entry: 'portal', createdAt: '2026-11-02T00:00:00Z', current: true }
+    expect(await pushEnabledHere({ enabled: true, apns: true, devices: [device] })).toBe(true)
+
+    await disablePush()
+    expect(shell.unregister).toHaveBeenCalled()
+    expect(await fetch.mock.calls.at(-1)![0].json()).toEqual({ endpoint: token })
+    expect(await pushEnabledHere({ enabled: true, apns: true, devices: [device] })).toBe(false)
+  })
+
+  it('in a native shell says push is off while the server has no APNs, and denied when the user refuses', async () => {
+    configureNativePush({ kind: 'apns', register: async () => null, token: async () => null })
+    vi.stubGlobal('fetch', vi.fn(async () => json({ enabled: true, webPushKey: KEY, apns: false })))
+    expect(await enablePush()).toBe('disabled')
+    vi.stubGlobal('fetch', vi.fn(async () => json({ enabled: true, webPushKey: KEY, apns: true })))
+    expect(await enablePush()).toBe('denied')
   })
 })

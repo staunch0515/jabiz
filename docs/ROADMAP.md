@@ -4914,9 +4914,11 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17k-4 | 前端：Service Worker 显示通知与点按打开页面（只开本站）；`@jabiz/client` 的 `enablePush` / `disablePush` / `pushEnabledHere` / `pushSettings` / `setPushPreference`；`@jabiz/ui` 的 `PushPreferences`；OpenAPI 快照与类型 | 17k-a |
 | 17k-5 | 示范：发货时推送 `commerce.order-shipped`（门户的用户，链接到订单）；测试 `WebPushCryptoTest`、`PushPropertiesTest`、`PushIT`（测试推送服务：加密、签名、语言、链接、偏好、入口、回滚、410、退出、抹除、不允许的端点与坏的密钥、换账号）、`worker.test.ts`、`push.test.ts`、`PushPreferences.test.tsx`；测试夹具 `TestPushService` | 17k-a |
 | 17k-6 | 文档：决策 D69、18 §5.7、根 `CLAUDE.md` | 17k-a |
-| 17k-7 | APNs（令牌认证、`.p8` 来自环境变量、种类 `apns`） | 17k-b |
+| 17k-7 | `PushProperties.Apns`（`jabiz.push.apns.*`：团队、密钥、bundle ID、环境；启动检查）、`ApnsSender`（ES256 的提供方令牌共用、每 40 分钟换一次、被拒满 20 分钟才重签；HTTP/2；只有 410 删除设备，`BadDeviceToken` 记警告；`apns-collapse-id`）、`DeliverPush` 的 Apple 提醒负载（至多 4096 字节）；登记 `kind: apns`（十六进制令牌）；设置的 `apns` | 17k-b |
+| 17k-8 | 前端：`configureClient({ nativePush })`（iOS 外壳交出设备令牌），`enablePush` / `disablePush` / `pushEnabledHere` / `PushPreferences` 经它工作；OpenAPI 快照与类型；指南 `app-spa.md` 6a | 17k-b |
+| 17k-9 | 测试：测试夹具 `TestApnsService`（本地的 APNs：验证提供方令牌、按令牌回答）、`ApnsSenderTest`、`PushPropertiesTest`、`DeliverPushTest`、`PushIT`（iPhone 的令牌收到 Apple 的提醒、不是令牌的拒绝、410 即删除）、`push.test.ts`、`PushPreferences.test.tsx`；文档 D69 第 6 条、18 §5.7、根 `CLAUDE.md` | 17k-b |
 
-**17k 状态**：17k-a 📝 待评审（分支 `1.3/phase-17k-push`）；17k-b 待开发。
+**17k 状态**：17k-a ✅ 已合并（#408）；17k-b 📝 待评审（分支 `1.3/phase-17k-apns`）。
 
 ### 17j Sign in with Apple（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D67；即推后的 16f-2）
 

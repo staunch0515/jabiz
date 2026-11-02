@@ -1,5 +1,6 @@
 import { api, unwrap } from './api/client'
 import type { components } from './api/schema'
+import { nativePush } from './native'
 
 /**
  * Push notifications on this device (decision D69): the browser's Web Push subscription, registered for the signed-in
@@ -12,8 +13,12 @@ export type PushSettings = components['schemas']['PushSettings']
 /** What enabling came to. */
 export type PushOutcome = 'enabled' | 'denied' | 'unsupported' | 'disabled'
 
-/** Whether this browser can receive Web Push at all (a Service Worker, the Push API and notifications). */
+/**
+ * Whether this device can receive push: through the native shell (`configureClient({ nativePush })`), or in a browser
+ * with a Service Worker, the Push API and notifications.
+ */
 export function pushSupported(): boolean {
+  if (nativePush()) return true
   return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window
     && 'Notification' in window
 }
@@ -29,6 +34,15 @@ export async function pushSettings(): Promise<PushSettings> {
  */
 export async function enablePush(): Promise<PushOutcome> {
   if (!pushSupported()) return 'unsupported'
+  const native = nativePush()
+  if (native) {
+    const settings = await pushSettings()
+    if (!settings.enabled || !settings.apns) return 'disabled'
+    const token = await native.register()
+    if (!token) return 'denied'
+    await unwrap(api.POST('/api/auth/account/push/devices', { body: { kind: native.kind, endpoint: token } }))
+    return 'enabled'
+  }
   const settings = await pushSettings()
   if (!settings.enabled || !settings.webPushKey) return 'disabled'
   const permission = await Notification.requestPermission()
@@ -52,6 +66,16 @@ export async function enablePush(): Promise<PushOutcome> {
 /** Unsubscribes this browser and removes its device; nothing when it was not subscribed. */
 export async function disablePush(): Promise<void> {
   if (!pushSupported()) return
+  const native = nativePush()
+  if (native) {
+    const token = await native.token()
+    await native.unregister?.()
+    if (token) {
+      await unwrap(api.POST('/api/auth/account/push/devices/remove', { body: { endpoint: token.toLowerCase() } }))
+        .catch(() => undefined)
+    }
+    return
+  }
   const registration = await navigator.serviceWorker.ready
   const subscription = await registration.pushManager.getSubscription()
   if (!subscription) return
@@ -69,6 +93,8 @@ export async function pushEnabledHere(settings?: PushSettings): Promise<boolean>
   if (!pushSupported()) return false
   const current = settings ?? await pushSettings()
   if (!current.devices?.some((device) => device.current)) return false
+  const native = nativePush()
+  if (native) return (await native.token()) !== null
   const registration = await navigator.serviceWorker.getRegistration()
   return !!registration && !!(await registration.pushManager.getSubscription())
 }

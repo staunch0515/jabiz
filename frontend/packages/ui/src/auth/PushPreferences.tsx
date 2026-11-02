@@ -1,10 +1,12 @@
 import {
   disablePush,
   enablePush,
+  nativePush,
   pushEnabledHere,
   pushSettings,
   pushSupported,
   setPushPreference,
+  type NativePush,
   type PushOutcome,
   type PushSettings,
 } from '@jabiz/client'
@@ -25,6 +27,8 @@ export interface PushPreferencesProps {
   load?: () => Promise<PushSettings>
   /** Whether this browser can receive push; `pushSupported` by default. */
   supported?: () => boolean
+  /** The native shell's push, if any; `nativePush` of `@jabiz/client` (set by `configureClient`) by default. */
+  native?: () => NativePush | null
   /** Whether push is on here for the session, given the settings; `pushEnabledHere` by default. Pass a stable function. */
   enabledHere?: (settings: PushSettings) => Promise<boolean>
   /** Turns push on for this device; `enablePush` by default. */
@@ -44,6 +48,7 @@ export interface PushPreferencesProps {
 export function PushPreferences({
   load = pushSettings,
   supported = pushSupported,
+  native = nativePush,
   enabledHere = pushEnabledHere,
   enable = enablePush,
   disable = disablePush,
@@ -119,7 +124,8 @@ export function PushPreferences({
   }
 
   if (!settings && !error) return <Spinner />
-  const unavailable = settings && !settings.enabled ? t('pushPreferences.disabled')
+  // In a native shell the device is Apple's token: unavailable while the server has no APNs.
+  const unavailable = settings && (!settings.enabled || (native() && !settings.apns)) ? t('pushPreferences.disabled')
     : !supported() ? t('pushPreferences.unsupported') : null
   return (
     <div className={cn('flex flex-col gap-4', className)} data-testid="push-preferences">
