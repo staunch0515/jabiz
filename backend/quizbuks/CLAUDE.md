@@ -238,7 +238,7 @@
     的唯一例外，同一张上另写存入钱包的 Kudos 与卡片实际扣款的币种和金额）。收据不声称是适格请求书；登记号与税的表述待财务、法务确认。
   - **商家持有 `document.archive.read`**（为读自己的收据）：平台按版式的权限与对象决定能读哪些单据，所以以后新增的单据版式必须把对象限定在本商家（如 `subject` 经商家数据视图），
     或者其权限不能是商家权限的子集，否则商家能读到别人的单据。
-  - **保留期**（Q10b）：导出（`periodTo`）、明细段与外部凭证号（`createdTime`）、充值（`paidAt`）、收据（`issuedAt`，迁移 V11）、入站 Stripe 事件、导出存档的文件（平台的 `GeneratedFile`，`createdTime`：QuizBuks 唯一的服务器生成文件）与收据的 PDF 存档（平台的 `DocumentRun`，`issuedTime`：QuizBuks 唯一的单据；两者平台 16v-1）都以 `RetentionPolicy` 保留 10 年，自会计年度末起算（`RetentionIT`）。
+  - **保留期**（Q10b）：导出（`periodTo`）、明细段与外部凭证号（`createdTime`）、充值（`paidAt`）、收据（`issuedAt`，迁移 V11）、入站 Stripe 事件、导出存档的文件（平台的 `GeneratedFile`，`createdTime`：QuizBuks 唯一的服务器生成文件）与收据、运营商结算单的 PDF 存档（平台的 `DocumentRun`，`issuedTime`，**只限这两种版式**：`only("layoutId", …)`，平台 17zd；证书 `qb.certificate` 不保留，删除账号时随之清除；新增单据版式时决定它是否加进这个范围；两者平台 16v-1）都以 `RetentionPolicy` 保留 10 年，自会计年度末起算（`RetentionIT`）。
 - **商家分析**（`stats`，`docs/quizbuks/plans/Q9e-analytics.md`）：**答题路径不写任何分析数据**（开始、提交、超时与 `QB_VIEW` 不变，`AttemptStatementBudgetIT` 不变，`qb_attempt` 不加索引），分析只由逐项任务 `qb.analytics`（每 10 分钟，`JobDefinition.forEach`，模板 `qb.system.analytics-items` 给出项：按发布编号的块、结束后的整体重算、最后一项运行记录；每项一个事务的 `QB_ANALYTICS_ITEM` `internal()`，权限 `qb.stats.system` 不授予任何角色；不取业务锁、只写自己的三张表；一项失败不拖住其他项，Q9e1 评审 M3）聚合：
   每块**一条语句读两侧计数**、游标、新增浏览，把增量加进一个按小时（UTC）的桶（`AnalyticsBuckets`：跨过整点后的第一次运行加进上一次运行的小时，停机的增量记在一个小时并标 `gap`）；已完成的会话按水位线 `(submittedAt, attemptId)`、滞后 5 分钟（`AnalyticsLimits.LAG`）从现有索引读、每块至多 `quizbuks.analytics.max-attempts-per-chunk` 个，结束 30 分钟且没有进行中的会话时整体重算一次并定稿（结束一天后不论是否还有进行中的都定稿；完成多于 `quizbuks.analytics.max-recount` 的不重算，读完即定稿，使重算不超过读取时限）。只写变化了的行（审计照常；游标的题目合计 `auditMasked`）。
   **最小分组 k**（`qb.stats.min-group`，缺省 5、下限 3，`MinGroup`）：可推出个人作答的数字（每题正确率与难度、平均用时、超时人数）只在至少 k 个完成时给出，且公开值只在**新增至少 k 个完成后**才变化（含结束后的重算），两次查看之差推不出一个人；人数不受 k 约束（E-4）。k 的读法在每个模板中写同一段 SQL（`greatest(3, … 5)`），改规则时全部一起改并由 `AnalyticsIT` 覆盖。
@@ -303,6 +303,7 @@
   重新加载之前不再提交。上传只经 `uploadFile(内容策略)`（`qb.content.image|pdf|audio`），文件名用中性的 `<种类>.<扩展名>`（`content/api.ts` 的 `neutralName`，Q10b：答题人能读内容文件的元数据；商家头像同样以 `avatar.<扩展名>` 上传，内容与头像的策略都声明 `privateMetadata()`），页面的类型与大小检查只为省一次往返；图片按文件自己的变体显示（小图没有变体，`ContentImage`）。
   Markdown 只经 `MarkdownView`，外链只放 http(s) 并在新标签页打开。e2e 的数据准备（文件、完整的 Quiz 与版本）在 `e2e/tests/content.ts`，发布的测试从它开始。
   题目列表是只读的折叠行（Q78，`content/Disclosure.tsx`：一次展开一题，操作在行上，排序经"移到…"下拉发出整表顺序；上方摘要行）；AI 出题面板只在有作业时展开成卡片；页头一次只显示一条告警。新的列表项照 `Disclosure` 写。
+- **商户后台的列表**（Q80）：新的 `DataTable` 都给 `meta.card`（一列 `title`，按需 `subtitle` / `badge` / `actions` / `hidden`）与 `storageKey="qb.sponsor.<列表>"`，手机上缺省卡片、桌面表格（平台 17zc，不自写卡片）；行的 testid 经 `rowProps` 给出，卡片照样带着。菜单里的列表页不用原生 `Table`（图表的数据表、数字对照表除外）。例外：模版与发布保留 Q34b 的画廊卡片（`ListView.tsx`），不加第二种。
 - **发布页**（`sponsor/src/publishing/`，QP3b）：向导每一步都以 `QB_PUBLICATION_SAVE` 保存**整个**草稿（档位给出即完整列表，带上次保存得到的 `tierId`；带 `baseRevision`），
   提交前的问题与预计最大支出**只取保存的输出**（`problems`、`maxSpend`），页面不重算规则；`QB_PUBLICATION_CHANGED` / `QB_PUBLICATION_NOT_DRAFT` 即提示重新加载。
   非草稿只显示、不编辑（提交即冻结），操作按状态给出且都先确认。e2e 的数据准备（已通过的商家、审核的决定、上架的发布）在 `e2e/tests/publishing.ts`。
@@ -364,6 +365,7 @@
 
 - **Google AdSense**（需求方 2026-11-02，`deploy/quizbuks/DEPLOY.md`"Google AdSense"）：只经 `qb/ads.ts` 的 `loadAds`（App 中 `skip: nativeShell() !== null`，商店外壳与自动化浏览器中不加载）与招商网站 `site.js` 的 `loadAds`；
   页面头部的 `google-adsense-account` 标记、三个前端 CSP 中的广告域名（`QuizbuksAppIT` 检查）、Caddy 的 `/ads.txt` 一起改。不在 Shopify 嵌入页、店面、`/shopify-app/` 与维护页加广告。
+  品牌自己的站点（品牌档案 `siteUrl` 的主机及 `www.`）不显示测试系统的横条：两个 SPA 以 `qb/environment.ts` 的 `siteEnvironment()` 经 `configureClient({ environment })`（平台 17ze）改写，登录页与商家后台的外框随之；上线前 quizbuks.com 由 staging 回答（`deploy/quizbuks/DEPLOY.md`），staging 自己的地址照旧显示横条。
 - **商店 App 的外壳**（Q49，`quizbuks-mobile/`，`docs/quizbuks/plans/Q49b-android.md`）：只上架答题者的 App（`/taker/`），商家后台与充值不进 App。
   Android 是 TWA（`quizbuks-mobile/android`，设置只在 `twa-manifest.json`，构建由它读取；App Links 只认 `/taker/` 前缀），启动地址与 App Links 都带 `shell=android`；
   App 中只以 `src/shell.ts` 的 `nativeShell()` 判断是否在商店 App 中（参数或 Chrome 的 `android-app://` referrer，按标签页记住），在外壳中不显示任何安装提示（`install.tsx`）。

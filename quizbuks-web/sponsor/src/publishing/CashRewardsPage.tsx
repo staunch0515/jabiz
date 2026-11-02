@@ -122,9 +122,10 @@ export function CashRewardsPage() {
     placeholderData: keepPreviousData,
   })
   const columns = useMemo<ColumnDef<CashRewardRow, unknown>[]>(() => [
-    { id: 'code', header: t('publishing.cash.code'), enableSorting: false,
+    // Q80: as a card, the taker is the title, the code under it, the status a badge, the button at the foot.
+    { id: 'code', header: t('publishing.cash.code'), enableSorting: false, meta: { card: 'subtitle' },
       cell: ({ row }) => <span className="font-mono" data-testid="cash-code">{row.original.code}</span> },
-    { id: 'taker', header: t('publishing.cash.taker'), enableSorting: false,
+    { id: 'taker', header: t('publishing.cash.taker'), enableSorting: false, meta: { card: 'title' },
       cell: ({ row }) => row.original.takerName ?? <span className="text-muted-foreground">?</span> },
     { id: 'publication', header: t('publishing.cash.publication'), enableSorting: false,
       cell: ({ row }) => (
@@ -134,7 +135,7 @@ export function CashRewardsPage() {
       ) },
     { id: 'amount', header: t('publishing.cash.amount'), enableSorting: false, meta: { className: 'text-right tabular-nums' },
       cell: ({ row }) => formatKudos(row.original.amount) },
-    { id: 'status', header: t('publishing.cash.status'), enableSorting: false,
+    { id: 'status', header: t('publishing.cash.status'), enableSorting: false, meta: { card: 'badge' },
       cell: ({ row }) => (
         <span className="flex flex-col gap-1">
           <Badge variant={STATUS_BADGES[row.original.status]} className="w-fit" data-testid="cash-status"
@@ -157,7 +158,7 @@ export function CashRewardsPage() {
       ) },
     { id: 'dueAt', header: t('publishing.cash.dueAt'), enableSorting: false,
       cell: ({ row }) => formatDateTime(row.original.dueAt) },
-    { id: 'actions', header: '', enableSorting: false,
+    { id: 'actions', header: '', enableSorting: false, meta: { card: 'actions' },
       cell: ({ row }) => row.original.status === 'DUE' ? (
         <Button size="sm" variant="outline" data-testid="cash-mark" onClick={() => setMarking(row.original)}>
           <HandCoins aria-hidden />
@@ -205,7 +206,7 @@ export function CashRewardsPage() {
           action={<Button variant="outline" onClick={() => void rewards.refetch()}>{tQb('retry')}</Button>} />
       ) : (
         <DataTable label={t('publishing.cash.title')} columns={columns} data={rewards.data?.items ?? []}
-          getRowId={(row) => row.cashRewardId} loading={rewards.isPending} stale={rewards.isPlaceholderData}
+          storageKey="qb.sponsor.cash-rewards" getRowId={(row) => row.cashRewardId} loading={rewards.isPending} stale={rewards.isPlaceholderData}
           empty={t('publishing.cash.none')} pagination={pagination} onPaginationChange={setPagination}
           rowCount={rewards.data?.total}
           rowProps={(row) => ({ 'data-testid': 'cash-row', 'data-status': row.status })} />

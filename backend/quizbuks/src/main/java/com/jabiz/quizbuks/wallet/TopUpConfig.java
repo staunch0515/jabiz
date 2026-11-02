@@ -18,6 +18,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.AccountLinks;
+import com.jabiz.quizbuks.operator.OperatorSettlements;
 import com.jabiz.retention.RetentionPolicy;
 import com.jabiz.runtime.approval.ApprovalProcesses;
 import com.jabiz.runtime.inbound.InboundEntities;
@@ -248,12 +249,15 @@ class TopUpConfig {
     }
 
     /**
-     * The receipts' PDFs as issued (DOCUMENT_ISSUE keeps them in the platform's DocumentRun, platform 16v-1 item 8),
-     * as long as the receipts: QuizBuks issues no other document, so the platform's entity as a whole is kept so.
+     * The PDFs as issued (DOCUMENT_ISSUE keeps them in the platform's DocumentRun, platform 16v-1 item 8) of the
+     * records the accounts keep, as long as those: the top-up receipts and the operators' settlement statements only
+     * (platform 17zd, decision D70). The takers' certificates (Q77) are kept by no policy, so deleting an account
+     * clears their PDFs with the rest.
      */
     @Bean
     RetentionPolicy qbDocumentRunRetention() {
-        return RetentionPolicy.of("DocumentRun").keep(RETENTION).from("issuedTime").afterFiscalYearEnd();
+        return RetentionPolicy.of("DocumentRun").only("layoutId", TopUpReceipts.LAYOUT_ID, OperatorSettlements.LAYOUT_ID)
+            .keep(RETENTION).from("issuedTime").afterFiscalYearEnd();
     }
 
     // ---- jobs of Stripe --------------------------------------------------------------------------------------------

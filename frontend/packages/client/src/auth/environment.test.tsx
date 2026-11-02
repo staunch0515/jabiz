@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { configureSession } from '../api/session'
 import { json, urlOf } from '../test/locks'
 import { forgetEntryInfo } from './account'
+import { configureClient } from '../configure'
 import { forgetEnvironment, setEnvironment, toEnvironment, useEnvironment } from './environment'
 
 function server(environment: string | undefined, status = 200) {
@@ -89,5 +90,65 @@ describe('useEnvironment (phase 16zd)', () => {
     expect(result.current).toEqual({ name: 'uat', production: false })
     act(() => forgetEnvironment())
     expect(result.current).toBeUndefined()
+  })
+})
+
+describe('the application\'s override (phase 17ze)', () => {
+  beforeEach(() => {
+    configureSession('admin')
+    forgetEntryInfo()
+    forgetEnvironment()
+  })
+  afterEach(() => {
+    configureClient({ environment: null })
+    vi.unstubAllGlobals()
+  })
+
+  it('shows what the override chooses for this page, given the server\'s word and the host', async () => {
+    server('staging')
+    const seen: { name: string; hostname: string }[] = []
+    configureClient({ environment: (server, location) => {
+      seen.push({ name: server.name, hostname: location.hostname })
+      return { name: 'production', production: true }
+    } })
+    const { result } = renderHook(() => useEnvironment())
+    await waitFor(() => expect(result.current).toEqual({ name: 'production', production: true }))
+    expect(seen).toContainEqual({ name: 'staging', hostname: 'localhost' })
+  })
+
+  it('keeps the server\'s word when the override returns nothing or throws', async () => {
+    server('staging')
+    configureClient({ environment: () => undefined })
+    const kept = renderHook(() => useEnvironment())
+    await waitFor(() => expect(kept.result.current).toEqual({ name: 'staging', production: false }))
+    configureClient({ environment: () => {
+      throw new Error('broken')
+    } })
+    expect(kept.result.current).toEqual({ name: 'staging', production: false })
+  })
+
+  it('applies at once when set or removed, without asking the server again', async () => {
+    const calls = server('staging')
+    const { result } = renderHook(() => useEnvironment())
+    await waitFor(() => expect(result.current).toEqual({ name: 'staging', production: false }))
+    act(() => configureClient({ environment: () => ({ name: 'production', production: true }) }))
+    expect(result.current).toEqual({ name: 'production', production: true })
+    act(() => configureClient({ environment: null }))
+    expect(result.current).toEqual({ name: 'staging', production: false })
+    // Configuring something else leaves the override as it is.
+    act(() => configureClient({ environment: () => ({ name: 'demo', production: false }) }))
+    act(() => configureClient({ nativeShell: null }))
+    expect(result.current).toEqual({ name: 'demo', production: false })
+    expect(calls.filter((path) => path.startsWith('/api/auth/entries/'))).toHaveLength(1)
+  })
+
+  it('is applied to an environment set without the server too', () => {
+    configureClient({ environment: (server) => (server.name === 'staging' ? { name: 'production', production: true }
+      : undefined) })
+    setEnvironment('staging')
+    const { result } = renderHook(() => useEnvironment())
+    expect(result.current).toEqual({ name: 'production', production: true })
+    act(() => setEnvironment('test'))
+    expect(result.current).toEqual({ name: 'test', production: false })
   })
 })

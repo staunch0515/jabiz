@@ -130,6 +130,14 @@ describe('the wallet', () => {
       '/wallet/topups/t1')
     expect(within(rows[1]).getByRole('link', { name: /Details/ })).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent('JPY')
+    // Q80: as cards: the amount as the title, the status a badge, the buttons at the foot.
+    await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+    const cards = await screen.findAllByTestId('topup-row')
+    expect(cards[0]).toHaveAttribute('data-slot', 'data-table-card')
+    expect(cards[0].querySelector('[data-slot="data-table-card-title"]')).toHaveTextContent('Kudos')
+    expect(within(cards[0]).getByTestId('topup-row-status')).toHaveTextContent('Awaiting payment')
+    expect(within(cards[0]).getByRole('link', { name: /Continue to payment/ })).toBeInTheDocument()
+    window.localStorage.clear()
     expect(screen.getByRole('link', { name: 'Wallet' })).toHaveAttribute('aria-current', 'page')
   })
 

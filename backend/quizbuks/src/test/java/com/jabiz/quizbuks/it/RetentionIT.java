@@ -41,11 +41,14 @@ class RetentionIT extends PayoutItSupport {
             "QbJournalExportConfirmation createdTime P10Y true",
             // The export's archived files (FILE_ARCHIVE), QuizBuks's only generated files (platform 16v-1).
             "GeneratedFile createdTime P10Y true",
-            // The receipts' archived PDFs (DOCUMENT_ISSUE), QuizBuks's only documents (platform 16v-1).
+            // The archived PDFs (DOCUMENT_ISSUE) of the receipts and the settlement statements only (platform 17zd).
             "DocumentRun issuedTime P10Y true",
             "QbTopUp paidAt P10Y true",
             "QbTopUpReceipt issuedAt P10Y true",
             "InboundEvent receivedTime P10Y true");
+        // Not the takers' certificates (Q77): no policy keeps them, so deleting the account clears them (TakerErasureIT).
+        assertThat(policy("DocumentRun")).containsEntry("onlyField", "layoutId")
+            .containsEntry("onlyValues", List.of("qb.topup_receipt", "qb.operator_settlement"));
 
         String sponsor = newSponsor("s-retention");
         String topUpId = openTopUp(sponsor, 5_000);

@@ -118,16 +118,18 @@ class TakerErasureIT extends PayoutItSupport {
 
         assertThat(query("SELECT 1 FROM qb_certificate WHERE user_id = ?", cat)).isEmpty();
         assertThat(query("SELECT 1 FROM qb_user_settings WHERE user_id = ?", cat)).isEmpty();
-        // Her page name is found nowhere. The certificate's archived document is not purged yet: QuizBuks keeps every
-        // document run for the receipts' ten years (TopUpConfig.qbDocumentRunRetention; the platform's retention is by
-        // entity, not by layout), so her name stays in it alone (plan Q77 §10, open item).
-        assertThat(occurrences(handle)).as("where the page name still is").isEmpty();
-        assertThat(occurrences(name)).allMatch(where -> where.startsWith("sys_document_run."));
+        // The certificate's archived document is purged with the rest: QuizBuks keeps only the receipts' and the
+        // settlement statements' for ten years (platform 17zd, TopUpConfig.qbDocumentRunRetention), so its PDF is emptied
+        // (the column takes no null) and her name and page name are found nowhere.
+        assertThat(query("SELECT octet_length(pdf) AS size FROM sys_document_run WHERE run_id = ?::uuid",
+            String.valueOf(runs.getFirst()))).singleElement()
+            .satisfies(row -> assertThat(((Number) row.get("size")).longValue()).isZero());
+        for (String needle : List.of(name, handle)) {
+            assertThat(occurrences(needle)).as("where %s still is", needle).isEmpty();
+        }
         // The key, which leads to nobody once the certificate is gone: the document's number and its issued event.
-        assertThat(occurrences(key)).allMatch(where -> where.startsWith("sys_document_run.")
+        assertThat(occurrences(key)).allMatch(where -> where.equals("sys_document_run.document_no")
             || where.equals("sys_outbox_event.payload"));
-        assertThat(query("SELECT pdf FROM sys_document_run WHERE run_id = ?::uuid", String.valueOf(runs.getFirst())))
-            .singleElement().satisfies(row -> assertThat(row.get("pdf")).isNotNull());
     }
 
     private static Map<String, Object> account(String number, String holder) {

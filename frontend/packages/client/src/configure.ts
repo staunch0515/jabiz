@@ -1,5 +1,6 @@
 import { configureSession } from './api/session'
 import { forgetEntryInfo } from './auth/account'
+import { configureEnvironment, type EnvironmentOverride } from './auth/environment'
 import {
   configureNativePush, configureNativeShell, configureOpenAuthorization, type NativePush, type OpenAuthorization,
 } from './native'
@@ -26,6 +27,13 @@ export interface ClientOptions {
    * platform registers as the device. Absent: unchanged; `null`: the browser's Web Push (the default).
    */
   nativePush?: NativePush | null
+  /**
+   * The application's say over the environment its pages show (phase 17ze): given what the server said
+   * (`jabiz.web.environment`) and the page's host name, the environment to show instead, or nothing to keep the
+   * server's. For a public site answered for a while by a test system's application. Absent: unchanged; `null`: the
+   * server's (the default).
+   */
+  environment?: EnvironmentOverride | null
 }
 
 /** Configures the client; call it once before the first render (before `AuthProvider` reads the session). */
@@ -37,4 +45,5 @@ export function configureClient(options: ClientOptions) {
   if (options.openAuthorization !== undefined) configureOpenAuthorization(options.openAuthorization)
   if (options.nativeShell !== undefined) configureNativeShell(options.nativeShell)
   if (options.nativePush !== undefined) configureNativePush(options.nativePush)
+  if (options.environment !== undefined) configureEnvironment(options.environment)
 }

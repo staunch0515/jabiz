@@ -1,17 +1,13 @@
 import { formatDateTime, i18n } from '@jabiz/client'
 import {
   Badge,
+  DataTable,
+  type ColumnDef,
   Button,
   ConfirmDialog,
   MarkdownView,
   PageHeader,
   PageState,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   Tabs,
   TabsContent,
   TabsList,
@@ -20,7 +16,7 @@ import {
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { pickText } from '../qb/legal'
@@ -142,6 +138,48 @@ function Notices() {
   // The latest of the day's counts (all notices are counted by one run).
   const counted = (notices.data ?? []).map((row) => row.snapshotAt).filter((at): at is string => !!at).sort().at(-1)
   const [editing, setEditing] = useState<NoticeRow | 'new' | null>(null)
+  // Q80: the notices as a `DataTable` (cards on a phone): the title with its target and fate, the status a badge, the
+  // time under the title, the figures listed, the actions at the foot.
+  const noticeColumns = useMemo<ColumnDef<NoticeRow, unknown>[]>(() => [
+    { id: 'notice', header: t('notices.columns.notice'), enableSorting: false, meta: { card: 'title', className: 'max-w-72 whitespace-normal' },
+      cell: ({ row }) => {
+        const title = pickText(row.original.title, i18n.language)
+        return (
+          <>
+            <p className="font-medium" lang={title.lang}>{title.text || '—'}</p>
+            <p className="text-muted-foreground text-xs">
+              {row.original.publicationName ?? ''}{row.original.regions.length > 0
+                ? ` · ${row.original.regions.map(regionLabel).join(', ')}` : ''}
+            </p>
+            <Fate row={row.original} />
+          </>
+        )
+      } },
+    { id: 'status', header: t('notices.columns.status'), enableSorting: false, meta: { card: 'badge' },
+      cell: ({ row }) => <Badge variant={VARIANT[row.original.status]}>{status(row.original.status)}</Badge> },
+    { id: 'when', header: t('notices.columns.when'), enableSorting: false, meta: { card: 'subtitle' },
+      cell: ({ row }) => {
+        const when = row.original.sentAt ?? row.original.scheduledAt
+        return when ? formatDateTime(when) : '—'
+      } },
+    { id: 'reached', header: t('notices.columns.reached'), enableSorting: false, meta: { className: 'text-right' },
+      cell: ({ row }) => (
+        <span data-testid="notice-reached">
+          {row.original.status !== 'SENT' && row.original.status !== 'WITHDRAWN' ? '–'
+            : row.original.audienceCount == null ? t('notices.fewerReach')
+              : t('notices.reach', { count: row.original.audienceCount })}
+        </span>
+      ) },
+    { id: 'reads', header: t('notices.columns.reads'), enableSorting: false, meta: { className: 'text-right' },
+      cell: ({ row }) => <Stat row={row.original} value={row.original.reads} base={row.original.audienceCount} testId="notice-reads" /> },
+    { id: 'clicks', header: t('notices.columns.clicks'), enableSorting: false, meta: { className: 'text-right' },
+      cell: ({ row }) => <Stat row={row.original} value={row.original.clicks} base={row.original.reads} testId="notice-clicks" /> },
+    { id: 'conversions', header: t('notices.columns.conversions'), enableSorting: false, meta: { className: 'text-right' },
+      cell: ({ row }) => <Stat row={row.original} value={row.original.conversions} base={row.original.clicks} testId="notice-conversions" /> },
+    { id: 'actions', header: t('notices.columns.actions'), enableSorting: false, meta: { card: 'actions' },
+      cell: ({ row }) => <Actions row={row.original} onEdit={() => setEditing(row.original)} /> },
+  ], [t, status, regionLabel])
+
   return (
     <div className="flex flex-col gap-4">
       {editing ? (
@@ -164,56 +202,11 @@ function Notices() {
         <PageState kind="empty" title={t('notices.empty')} data-testid="notices-empty" />
       ) : (
         <>
-          <Table data-testid="notices-table">
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('notices.columns.notice')}</TableHead>
-                <TableHead>{t('notices.columns.status')}</TableHead>
-                <TableHead>{t('notices.columns.when')}</TableHead>
-                <TableHead className="text-right">{t('notices.columns.reached')}</TableHead>
-                <TableHead className="text-right">{t('notices.columns.reads')}</TableHead>
-                <TableHead className="text-right">{t('notices.columns.clicks')}</TableHead>
-                <TableHead className="text-right">{t('notices.columns.conversions')}</TableHead>
-                <TableHead>{t('notices.columns.actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {notices.data.map((row) => {
-                const title = pickText(row.title, i18n.language)
-                const when = row.sentAt ?? row.scheduledAt
-                return (
-                  <TableRow key={row.broadcastId} data-testid="notice-row" data-status={row.status}
-                    data-id={row.broadcastId}>
-                    <TableCell className="max-w-72 whitespace-normal">
-                      <p className="font-medium" lang={title.lang}>{title.text || '—'}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {row.publicationName ?? ''}{row.regions.length > 0
-                          ? ` · ${row.regions.map(regionLabel).join(', ')}` : ''}
-                      </p>
-                      <Fate row={row} />
-                    </TableCell>
-                    <TableCell><Badge variant={VARIANT[row.status]}>{status(row.status)}</Badge></TableCell>
-                    <TableCell>{when ? formatDateTime(when) : '—'}</TableCell>
-                    <TableCell className="text-right" data-testid="notice-reached">
-                      {row.status !== 'SENT' && row.status !== 'WITHDRAWN' ? '–'
-                        : row.audienceCount == null ? t('notices.fewerReach')
-                          : t('notices.reach', { count: row.audienceCount })}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Stat row={row} value={row.reads} base={row.audienceCount} testId="notice-reads" />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Stat row={row} value={row.clicks} base={row.reads} testId="notice-clicks" />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Stat row={row} value={row.conversions} base={row.clicks} testId="notice-conversions" />
-                    </TableCell>
-                    <TableCell><Actions row={row} onEdit={() => setEditing(row)} /></TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+          <div data-testid="notices-table">
+            <DataTable label={t('notices.columns.notice')} columns={noticeColumns} data={notices.data}
+              storageKey="qb.sponsor.notices" getRowId={(row) => row.broadcastId}
+              rowProps={(row) => ({ 'data-testid': 'notice-row', 'data-status': row.status, 'data-id': row.broadcastId })} />
+          </div>
           <p className="text-muted-foreground text-xs" data-testid="notices-stats-hint">
             {t('notices.statsHint')}
             {counted && <> {t('notices.countedAt', { time: formatDateTime(counted) })}</>}

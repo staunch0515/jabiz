@@ -90,13 +90,14 @@ export function DigitalPoolSection({ publicationId, status }: { publicationId: s
   const revocable = status === 'DRAFT' || status === 'ENDED'
 
   const columns = useMemo<ColumnDef<DigitalCodeRow, unknown>[]>(() => [
-    { id: 'seq', header: t('publishing.digital.pool.seq'), enableSorting: false, meta: { className: 'tabular-nums' },
+    // Q80: as a card, the hint is the title, the status a badge; the sequence number is the table's.
+    { id: 'seq', header: t('publishing.digital.pool.seq'), enableSorting: false, meta: { className: 'tabular-nums', card: 'hidden' },
       cell: ({ row }) => row.original.seq },
-    { id: 'hint', header: t('publishing.digital.pool.hint'), enableSorting: false,
+    { id: 'hint', header: t('publishing.digital.pool.hint'), enableSorting: false, meta: { card: 'title' },
       cell: ({ row }) => row.original.hint
         ? <span className="font-mono" data-testid="digital-code-hint">{row.original.hint}</span>
         : <span className="text-muted-foreground">{t('publishing.digital.pool.noHint')}</span> },
-    { id: 'status', header: t('publishing.digital.pool.status'), enableSorting: false,
+    { id: 'status', header: t('publishing.digital.pool.status'), enableSorting: false, meta: { card: 'badge' },
       cell: ({ row }) => (
         <Badge variant={STATUS_BADGES[row.original.status]} data-testid="digital-code-status"
           data-status={row.original.status}>
@@ -165,7 +166,7 @@ export function DigitalPoolSection({ publicationId, status }: { publicationId: s
           action={<Button variant="outline" onClick={() => void list.refetch()}>{tQb('retry')}</Button>} />
       ) : (
         <DataTable label={t('publishing.digital.pool.title')} columns={columns} data={list.data?.items ?? []}
-          getRowId={(row) => row.codeId} loading={list.isPending} stale={list.isPlaceholderData}
+          storageKey="qb.sponsor.digital-pool" getRowId={(row) => row.codeId} loading={list.isPending} stale={list.isPlaceholderData}
           empty={<EmptyState testId="digital-pool-empty">{t('publishing.digital.pool.none')}</EmptyState>}
           pagination={pagination} onPaginationChange={setPagination} rowCount={list.data?.total}
           rowProps={(row) => ({ 'data-testid': 'digital-code-row', 'data-status': row.status })} />

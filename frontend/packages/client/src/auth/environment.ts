@@ -17,6 +17,9 @@ export interface Environment {
 const RETRY_MS = [5_000, 15_000, 60_000]
 
 let current: Environment | undefined
+/** What the pages show: `current` after the application's override (phase 17ze); recomputed when either changes. */
+let shown: Environment | undefined
+let override: EnvironmentOverride | null = null
 let loading = false
 let generation = 0
 let failures = 0
@@ -25,6 +28,37 @@ const listeners = new Set<() => void>()
 
 function notify() {
   for (const listener of listeners) listener()
+}
+
+/**
+ * An application's say over the environment its pages show (phase 17ze), given what the server said and where the page
+ * is: e.g. a public site answered for a while by a test system's application. Returning nothing (or throwing) keeps the
+ * server's. The platform's own frontends set none, so the administration always shows what the server says.
+ */
+export type EnvironmentOverride = (server: Environment, location: { hostname: string }) => Environment | null | undefined
+
+function applyOverride(environment: Environment | undefined): Environment | undefined {
+  if (!environment || !override) return environment
+  try {
+    const hostname = typeof window === 'undefined' ? '' : window.location.hostname
+    const chosen = override(environment, { hostname })
+    return chosen ? { name: chosen.name, production: chosen.production } : environment
+  } catch {
+    // An application's mistake must not hide a test system: the server's word stands.
+    return environment
+  }
+}
+
+function setCurrent(environment: Environment | undefined) {
+  current = environment
+  shown = applyOverride(environment)
+}
+
+/** Sets (or, with `null`, removes) the application's override; the pages show its result at once. */
+export function configureEnvironment(next: EnvironmentOverride | null) {
+  override = next
+  shown = applyOverride(current)
+  notify()
 }
 
 /** An environment from the entry's answer; absent (an older server) means a test system is not ruled out: `test`. */
@@ -41,7 +75,7 @@ function load() {
     .then((info) => {
       if (asked !== generation) return
       failures = 0
-      current = toEnvironment(info.environment)
+      setCurrent(toEnvironment(info.environment))
       notify()
     })
     .catch(() => {
@@ -78,7 +112,7 @@ function subscribe(listener: () => void) {
  * page, through the entry's public settings.
  */
 export function useEnvironment(): Environment | undefined {
-  return useSyncExternalStore(subscribe, () => current, () => undefined)
+  return useSyncExternalStore(subscribe, () => shown, () => undefined)
 }
 
 /** Forgets what was read and stops any pending or in-flight request from writing it. */
@@ -95,13 +129,13 @@ function reset() {
 /** Sets the environment without asking the server (tests; an application that knows it from elsewhere). */
 export function setEnvironment(environment: Environment | string | undefined) {
   reset()
-  current = typeof environment === 'string' ? toEnvironment(environment) : environment
+  setCurrent(typeof environment === 'string' ? toEnvironment(environment) : environment)
   notify()
 }
 
 /** Forgets the environment read (tests, or after the configured entry changed): asked again on the next use. */
 export function forgetEnvironment() {
   reset()
-  current = undefined
+  setCurrent(undefined)
   notify()
 }

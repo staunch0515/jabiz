@@ -129,6 +129,9 @@ export default defineConfig({
 
 - **测试系统的标志**（17 §3.2）：用 `AppShell` / `SignInForm` 等平台外框的页面自动在顶部显示测试系统的横条；自己写外框的前端在外框顶部放 `<EnvironmentBanner />`（`@jabiz/ui`），
   正式环境以 `JABIZ_WEB_ENVIRONMENT=production` 关掉它，其他环境什么都不用设。
+  一个公开的地址暂时由测试系统的应用回答时（如上线前的正式域名），应用可以按地址改变页面所示的环境（17ze）：
+  `configureClient({ environment: (server, { hostname }) => (hostname === '…' ? { name: 'production', production: true } : undefined) })`。
+  返回空（或抛出）即照服务器所说；平台自己的前端（通用后台）不设，管理员看到的永远是服务器所说的。示范：`backend/app/portal/src/environment.ts`（构建变量 `VITE_PORTAL_PUBLIC_HOST`，示范中不设）。
 
 - **入口**（10 §15.1）：
 

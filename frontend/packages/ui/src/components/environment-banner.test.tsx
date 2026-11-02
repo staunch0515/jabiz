@@ -1,5 +1,5 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
-import { i18n, setEnvironment, forgetEnvironment } from '@jabiz/client'
+import { configureClient, i18n, setEnvironment, forgetEnvironment } from '@jabiz/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { expectAccessible } from '@jabiz/ui/testing'
 import { EnvironmentBanner } from './environment-banner'
@@ -49,5 +49,17 @@ describe('EnvironmentBanner (phase 16zd)', () => {
     expect(screen.getByRole('note')).toHaveTextContent('测试环境，不是正式版')
     await act(() => i18n.changeLanguage('ja'))
     expect(screen.getByRole('note')).toHaveTextContent('テスト環境、本番ではありません')
+  })
+
+  it('follows the application\'s override, title included (phase 17ze)', () => {
+    try {
+      configureClient({ environment: (server, location) => (location.hostname === 'localhost'
+        ? { name: 'production', production: true } : server) })
+      render(<EnvironmentBanner />)
+      expect(screen.queryByRole('note')).toBeNull()
+      expect(document.title).toBe('Carriers')
+    } finally {
+      configureClient({ environment: null })
+    }
   })
 })
