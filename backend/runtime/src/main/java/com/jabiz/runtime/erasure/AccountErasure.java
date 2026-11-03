@@ -73,6 +73,7 @@ public class AccountErasure {
     /** The user's push devices and push preferences (decision D69): deleted with the account. */
     static final String DEVICES = "devices";
     static final String PUSH_PREFERENCES = "push_preferences";
+    static final String PASSKEYS = "passkeys";
     static final String ERASURE_ID = "erasure_id";
 
     /** The user's personal fields that a version clears now; the purge overwrites them in every version. */
@@ -106,7 +107,9 @@ public class AccountErasure {
                 QueryEntities.query(com.jabiz.runtime.push.PushEntities.DEVICE_DATASET, AccountErasure::ofUser,
                     DEVICES),
                 QueryEntities.query(com.jabiz.runtime.push.PushEntities.PREFERENCE_DATASET, AccountErasure::ofUser,
-                    PUSH_PREFERENCES)))
+                    PUSH_PREFERENCES),
+                QueryEntities.query(com.jabiz.runtime.security.PasskeyEntities.PASSKEY_DATASET, AccountErasure::ofUser,
+                    PASSKEYS)))
             .step("Erase the account", EraseAccountStep.class, new EraseAccountStep.Metadata())
             .step("End the user's sessions", RevokeSessionsStep.class,
                 new RevokeSessionsStep.Metadata(USER, RefreshTokenStore.REASON_ERASED))
@@ -187,7 +190,8 @@ public class AccountErasure {
             cleared.put("erasedAt", ctx.opTime());
             USER_FIELDS.forEach(field -> cleared.put(field, null));
             ctx.changes().update(SecurityEntities.USER, user.id(), user.version(), cleared);
-            for (String rows : List.of(IDENTITIES, FACTORS, ROLES, PREFERENCES, DEVICES, PUSH_PREFERENCES)) {
+            for (String rows : List.of(IDENTITIES, FACTORS, ROLES, PREFERENCES, DEVICES, PUSH_PREFERENCES,
+                PASSKEYS)) {
                 for (EntityInstance row : instances(ctx, rows)) {
                     ctx.changes().delete(row.entityType(), row.id(), row.version());
                 }

@@ -15,6 +15,17 @@
         },
         "type" : "object"
       },
+      "AddOptionsRequest" : {
+        "properties" : {
+          "currentPassword" : {
+            "type" : "string"
+          },
+          "passkeyToken" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "AuditFieldChange" : {
         "properties" : {
           "after" : { },
@@ -103,6 +114,20 @@
             "type" : "string"
           },
           "state" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ChallengeAnswer" : {
+        "properties" : {
+          "challenge" : {
+            "type" : "string"
+          },
+          "credential" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          },
+          "name" : {
             "type" : "string"
           }
         },
@@ -233,6 +258,17 @@
               "$ref" : "#/components/schemas/Conflict"
             },
             "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "CredentialRequest" : {
+        "properties" : {
+          "credential" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          },
+          "name" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -779,6 +815,9 @@
           "name" : {
             "type" : "string"
           },
+          "passkeys" : {
+            "type" : "boolean"
+          },
           "requireVerifiedEmail" : {
             "type" : "boolean"
           },
@@ -787,6 +826,14 @@
           },
           "sessionPersistence" : {
             "enum" : [ "tab", "device" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "EntryRequest" : {
+        "properties" : {
+          "entry" : {
             "type" : "string"
           }
         },
@@ -1705,6 +1752,85 @@
         },
         "type" : "object"
       },
+      "JsonNode" : {
+        "properties" : {
+          "array" : {
+            "type" : "boolean"
+          },
+          "bigDecimal" : {
+            "type" : "boolean"
+          },
+          "bigInteger" : {
+            "type" : "boolean"
+          },
+          "binary" : {
+            "type" : "boolean"
+          },
+          "boolean" : {
+            "type" : "boolean"
+          },
+          "container" : {
+            "type" : "boolean"
+          },
+          "double" : {
+            "type" : "boolean"
+          },
+          "embeddedValue" : {
+            "type" : "boolean"
+          },
+          "empty" : {
+            "type" : "boolean"
+          },
+          "float" : {
+            "type" : "boolean"
+          },
+          "floatingPointNumber" : {
+            "type" : "boolean"
+          },
+          "int" : {
+            "type" : "boolean"
+          },
+          "integralNumber" : {
+            "type" : "boolean"
+          },
+          "long" : {
+            "type" : "boolean"
+          },
+          "missingNode" : {
+            "type" : "boolean"
+          },
+          "nodeType" : {
+            "enum" : [ "ARRAY", "BINARY", "BOOLEAN", "MISSING", "NULL", "NUMBER", "OBJECT", "POJO", "STRING" ],
+            "type" : "string"
+          },
+          "null" : {
+            "type" : "boolean"
+          },
+          "number" : {
+            "type" : "boolean"
+          },
+          "object" : {
+            "type" : "boolean"
+          },
+          "pojo" : {
+            "type" : "boolean"
+          },
+          "short" : {
+            "type" : "boolean"
+          },
+          "string" : {
+            "type" : "boolean"
+          },
+          "textual" : {
+            "deprecated" : true,
+            "type" : "boolean"
+          },
+          "valueNode" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "LabelsRequest" : {
         "properties" : {
           "ids" : {
@@ -1881,6 +2007,10 @@
           "enrolled" : {
             "type" : "boolean"
           },
+          "passkeys" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
           "pending" : {
             "type" : "boolean"
           },
@@ -1957,6 +2087,45 @@
         "properties" : {
           "last" : {
             "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
+      "PasskeyOptions" : {
+        "properties" : {
+          "publicKey" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          }
+        },
+        "type" : "object"
+      },
+      "PasskeyOutput" : {
+        "properties" : {
+          "passkeyId" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PasskeyView" : {
+        "properties" : {
+          "backedUp" : {
+            "type" : "boolean"
+          },
+          "createdAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "lastUsedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -2272,7 +2441,7 @@
       },
       "Registered" : {
         "properties" : {
-          "deviceId" : {
+          "passkeyId" : {
             "type" : "string"
           }
         },
@@ -2284,6 +2453,14 @@
             "type" : "string"
           },
           "endpoint" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RenameRequest" : {
+        "properties" : {
+          "name" : {
             "type" : "string"
           }
         },
@@ -2754,6 +2931,17 @@
             "type" : "boolean"
           },
           "userAgent" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "SignInRequest" : {
+        "properties" : {
+          "credential" : {
+            "$ref" : "#/components/schemas/JsonNode"
+          },
+          "entry" : {
             "type" : "string"
           }
         },
@@ -3616,6 +3804,144 @@
         "tags" : [ "account-controller" ]
       }
     },
+    "/api/auth/account/passkeys" : {
+      "get" : {
+        "operationId" : "list_1",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/PasskeyView"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      },
+      "post" : {
+        "operationId" : "add_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CredentialRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Registered"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/account/passkeys/confirmation" : {
+      "post" : {
+        "operationId" : "confirmation",
+        "responses" : {
+          "202" : {
+            "description" : "Accepted"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/account/passkeys/options" : {
+      "post" : {
+        "operationId" : "addOptions",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AddOptionsRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PasskeyOptions"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/account/passkeys/{passkeyId}/remove" : {
+      "post" : {
+        "operationId" : "remove_1",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "passkeyId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/account/passkeys/{passkeyId}/rename" : {
+      "post" : {
+        "operationId" : "rename",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "passkeyId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RenameRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PasskeyOutput"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
     "/api/auth/account/password" : {
       "post" : {
         "operationId" : "changePassword",
@@ -3893,6 +4219,114 @@
           }
         },
         "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/challenge/passkey" : {
+      "post" : {
+        "operationId" : "secondStep",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChallengeAnswer"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/challenge/passkey/options" : {
+      "post" : {
+        "operationId" : "secondStepOptions",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PasskeyOptions"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/challenge/passkey/register" : {
+      "post" : {
+        "operationId" : "enrol",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChallengeAnswer"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Registered"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/challenge/passkey/register/options" : {
+      "post" : {
+        "operationId" : "enrolOptions",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PasskeyOptions"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
       }
     },
     "/api/auth/challenge/verify" : {
@@ -4382,6 +4816,60 @@
         "tags" : [ "oidc-controller" ]
       }
     },
+    "/api/auth/passkey" : {
+      "post" : {
+        "operationId" : "signIn",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SignInRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/passkey/options" : {
+      "post" : {
+        "operationId" : "signInOptions",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EntryRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PasskeyOptions"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
     "/api/auth/password-reset/confirm" : {
       "post" : {
         "operationId" : "resetConfirm",
@@ -4494,6 +4982,51 @@
           }
         },
         "tags" : [ "mfa-controller" ]
+      }
+    },
+    "/api/auth/step-up/passkey" : {
+      "post" : {
+        "operationId" : "stepUp_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CredentialRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StepUpResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
+      }
+    },
+    "/api/auth/step-up/passkey/options" : {
+      "post" : {
+        "operationId" : "stepUpOptions",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PasskeyOptions"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "passkey-controller" ]
       }
     },
     "/api/auth/verify-email" : {
@@ -5965,7 +6498,7 @@
     },
     "/api/jobs" : {
       "get" : {
-        "operationId" : "list_3",
+        "operationId" : "list_4",
         "responses" : {
           "200" : {
             "content" : {
@@ -6437,7 +6970,7 @@
     },
     "/api/reports/runs" : {
       "get" : {
-        "operationId" : "list_2",
+        "operationId" : "list_3",
         "parameters" : [ {
           "in" : "query",
           "name" : "template",
@@ -6596,7 +7129,7 @@
     },
     "/api/security/access-reviews" : {
       "get" : {
-        "operationId" : "list_1",
+        "operationId" : "list_2",
         "responses" : {
           "200" : {
             "content" : {

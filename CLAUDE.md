@@ -93,6 +93,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   被另一个平台内嵌、以其签发的短时令牌登录（如 Shopify 的会话令牌）只经入口的 `external-token` 与提供方 `jabiz.security.external-tokens.<名>`（密钥只取自环境变量）、平台接口 `/api/auth/external-token`（前端 `signInWithExternalToken`）；
   身份是租户中的一个人（`SecUserIdentity(ext:<名>, <租户>/<sub>)`），流程中核对店员递来的令牌只用步骤 `VerifyExternalToken`；页面要被该租户内嵌时 SPA 声明 `embedding`，不自己改 CSP 或 `X-Frame-Options`（10 §15.12、决策 D59）。
   会话的有效期、闲置时长与存放方式按入口配置（`jabiz.security.entries.<名>.session.*`，D43）；`admin` 入口不能用 `device`。
+  通行密钥（Passkey）只是已有账号的附加凭据（不能只凭它开户）：入口以 `passkeys` 开启、RP ID 与来源只在 `jabiz.security.passkeys.*`，登录、第二步、step-up 与本人管理只经平台接口
+  （`/api/auth/passkey`、`/api/auth/challenge/passkey/**`、`/api/auth/step-up/passkey`、`/api/auth/account/passkeys/**`）；用户验证的通行密钥算作两个因素（10 §15.16、决策 D71），不自写 WebAuthn 校验或挑战存储。
 - **应用前端与 PWA**（见 17 §4.1、指南 `docs/guide/app-spa.md` 与决策 D43）：需要登录的应用前端放在应用目录中（自己的 lockfile，经 `link:` 用 `@jabiz/client` / `@jabiz/ui`，
   版本与平台一致：`app:check`），以 `jabizApp { spa(路径, 目录, entry = 入口, pwa = Pwa.ON) }` 构建、用预设 `@jabiz/client/vite`；页面用 `@jabiz/ui` 的登录与账户积木，
   会话按入口（`configureClient({ entry })`）；暂时由测试系统的应用回答的公开地址不显示测试系统的横条时，只经 `configureClient({ environment })` 按地址改写（17ze），不改服务器的 `jabiz.web.environment`、不自己隐藏横条。入口的 `app-path` 是该前端的根：邮件链接只用 `{entryUrl}` / `{entryUrl.<入口>}`，OIDC 回调为提供方的 `redirect-uris.<入口>`。
