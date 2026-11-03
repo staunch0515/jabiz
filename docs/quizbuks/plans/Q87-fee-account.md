@@ -1,86 +1,107 @@
-# Q87 商户的费用账户：平台费与学分分开，抽成先设为 0%（计划，2026-11-03，待需求方确认 §9）
+# Q87 商户的现金账户：钱先进现金账户，再换学分；平台费预付或后付由运营商定（计划，2026-11-03 第二稿，待需求方确认 §9）
 
-需求方 2026-11-03 的要求：在法律问题（01 §4.6 資金決済法）处理好之前先开通 Kudos 奖励；答题者奖励的抽成**功能保留、设为 0%**；另给商户建**真正的现金账户**收平台费，与学分分开，便于处理与收费。
-编号 Q87 是建议，确认时可改。**这只是计划**：确认 §9 后开发，一个 PR，工作分支 `1.3/quizbuks-87-fee-account`。
+需求方 2026-11-03 的要求（两次）：
+1. 法律问题（01 §4.6 資金決済法）处理好之前先开通 Kudos 奖励；答题者奖励的抽成**功能保留、设为 0%**。
+2. 给商户建**真正的现金账户**收平台费，与学分分开。**预付与后付都支持，由运营商按商户决定**（有的企业客户可以后付，不确定的要先付）。
+3. **学分最终是花钱买的**：钱先进商户的现金账户，再由商户自己把现金换成学分去奖励答题者；请一并增加这个功能。
+4. 以后：商户升级后可以建自己的科技树、只给认证而不给学分（与平台的官方账号一样）；答题也可能要答题者付出学分。本计划为此留余地（§7）。
+
+编号 Q87 是建议，确认时可改。**这只是计划**：确认 §9 后开发，一个 PR，工作分支 `1.3/quizbuks-87-cash-account`。
 
 ## 0. 为什么
 
-- 学分（Kudos）钱包是商户**预付、替答题者保管、最终付给第三方**的钱（账本 2110 商家预收款），正是資金決済法要看的那一块；平台费是平台**自己的服务收入**，要开适格请求书、算消费税。混在一个余额里，"存款"与"费用"说不清，监管面与税务面都大。
-- 分开之后：Kudos 钱包只做一件事——付奖励，抽成设为 0% 即"奖励全额归答题者"，平台在这一侧不取任何收入；平台的收入全部在费用账户，以**账单**而不是余额的形式存在，平台不替商户持有任何现金。这比"再建一个预付的现金余额"更干净：预付给平台自己的钱同样是前払式支払手段（自家型）的范围。
-- 04 §6.10 说平台使用费"要一次规划"：费用账户就是那一次规划的容器，各种费（月费、规则费、CPK、AI 超额）以后只是加一个种类。
+- 现在商户充值直接进学分钱包（账本 2110 商家预收款），这笔钱既是奖励预算又是（抽成的）平台收入来源，性质混在一起。分成**两个账户**：
+  **现金账户**是商户在平台的钱（充值进来的、还没决定用途的），**学分钱包**只做一件事——付奖励。平台费从现金账户扣（预付）或记账单（后付）；学分由商户自己从现金账户换出。
+- 这样每一笔钱的用途在换出的那一刻才定下来，法律陈述也清楚：现金账户是商户预付给平台的款（自家型前払），学分是替答题者保管的奖励（抽成 0%，平台在这一侧不取利）。
+- 预付 / 后付由运营商按商户定，是运营商（Q48）已有的"收费全部记在运营商名下"的自然延伸：信用由认识商户的人判断。
 
 ## 1. 现状
 
-- 抽成：受控参数 `qb.creator-fee-rate`（四眼修改），结算每笔奖励时从奖励里扣（`RewardSplit`，向下取整），分录 2110 → 2120 + 4110；**代码已支持 0**（`RewardSplit.validRate` 接受 0；`fee = 0` 时不出 4110 行，`QbWallets` 的过账只在 `fee > 0` 时加那一行；运营商分成 = 抽成 × 比例 = 0）。
-- 充值：Stripe Checkout（`QB_TOPUP_*`，Q6a）与银行转账登记（Q13a），到账过账 1110/1120 → 2110，收据单据 `qb.topup-receipt`（Q9d，适格请求书的开具方 `qb.issuer.*`）。
-- 运营商：抽成按运营商记账、按月结算单、分成比例受控参数（Q48b）；"直接收款"以后（D-Q48-8）。
-- 没有平台使用费、规则费（Q47c 以后）、CPK；AI 用量只有配额没有收费（Q8a）。
+- 抽成：受控参数 `qb.creator-fee-rate`，结算每笔奖励时从奖励里扣（`RewardSplit`），分录 2110 → 2120 + 4110；**代码已支持 0**（`RewardSplit.validRate` 接受 0；`fee = 0` 时不出 4110 行；运营商分成 = 0）。
+- 充值：Stripe Checkout（`QB_TOPUP_*`，Q6a）与银行转账登记（Q13a），到账 1110 / 1120 → 2110（直接成为学分），收据单据 `qb.topup-receipt`（Q9d）；管理员手工加币（Q18b，5120 推广费用）。
+- 运营商：商户归属运营商（`QbSponsor.operatorId`）；抽成按运营商记账、月结算单、分成比例（Q48b）。
+- 学分钱包：`QbWallet(kind = SPONSOR)`，余额缓存 + 账本为真相、每日核对（F-06）；奖励、待支付、冻结都在它上面。
+- 官方账号（Q69）出认证题时也要给奖励（发布至少一档 > 0，D-Q69-6），它的学分来自总部的充值或手工加币。
 
 ## 2. 决定（草案）
 
 | # | 决定 |
 |---|---|
-| D-Q87-0 | **抽成设为 0% 是运营步骤，不改代码**：上线时以 `CONTROL_CHANGE_PROPOSE` / `_PUBLISH`（四眼）把 `qb.creator-fee-rate` 改为 0；功能、参数、报表、月结算都保留（为 0 的行不出）。本计划只补一个 IT 用例（`RewardSplitTest` 与 `AttemptIT` 的"0% 时答题者得全额、账本没有 4110 行、运营商结算为 0"）与 `operations.md` 的步骤。 |
-| D-Q87-1 | **费用账户 = 应收账单，不是余额**：平台记"费用"、按月出账单、商户付账单；平台不替商户持有费用的预付款。学分钱包不动。 |
-| D-Q87-2 | **费用** `QbFeeCharge`（只追加：商户、发布方那一对、`kind`、`period`（日本时间的自然月）、`amount`（JPY，整数）、`taxRate`、`tax`、`sourceEntity` / `sourceId`、`createdAt`、`invoiceId`（出账单时填）），只经 `QB_FEE_CHARGE`（`internal()`，由产生费用的定时任务或流程以子流程调用）写入。**种类在代码中**（`FeeKinds`）：第一步 `MONTHLY`（平台月费，受控参数 `qb.fee.monthly`，缺省 0 = 不收，每月 1 日的逐项任务 `qb.fee-monthly` 对已入驻的商户记一条，为 0 时不记）、`MANUAL`（总部手工记一笔，`QB_FEE_CHARGE_MANUAL`，必须填理由，四眼：经平台审批）；以后的规则费（Q47c）、CPK、AI 超额只是加种类。 |
-| D-Q87-3 | **账单** `QbFeeInvoice`（普通表、`processOnlyWrites`：商户、`period`、`invoiceNo`（`NumberSequence`，`QBF-<年>-00001`）、`subtotal`、`tax`、`total`、`status` ISSUED / PAID / OVERDUE / VOID、`dueAt`（出单后 30 天）、`documentRunId`（单据 PDF）、`paidAt`、`paymentId`）：每月 2 日的逐项任务 `qb.fee-invoice` 把上月未出单的费用合成一张（没有费用即不出单），以子流程 `DOCUMENT_ISSUE` 签发版式 `qb.fee-invoice`（**适格请求书**：开具方 `qb.issuer.*` 与登録番号、按税率的小计、消费税、合计、支付方式与期限；语言按商户的邮件语言），事务邮件通知（`mail.qb.fee-invoice`，不可退订）。 |
-| D-Q87-4 | **支付**：两种，复用充值的机器。① Stripe：`QB_FEE_PAYMENT_START` 为账单开一个 Checkout（金额 = 合计，同 `QB_TOPUP_START` 的外部服务与核对 `TopUpChecks` 的写法），`checkout.session.completed` 经同一入站 Webhook 路由到 `QB_FEE_PAYMENT_CONFIRM`（`internal()`）：核对后过账并记 PAID；Stripe 手续费照 5110。② 银行转账：`QB_FEE_BANK_REPORT` / `_RECORD`（照 Q13a：商户报告已汇、财务登记实收、差额另记）。**不做**绑卡自动扣（off-session），留第二步。 |
-| D-Q87-5 | **账本**：科目 1130 应收平台费（资产，维度：商户）、4120 平台使用费收入（收入）、2150 应付消费税（负债）。出账单：1130 → 4120 + 2150；收到：1110 / 1120 → 1130。作废（`QB_FEE_INVOICE_VOID`，总部，四眼，必须填理由）：冲正。每日核对（F-06）加"应收 = 未付账单合计"。运营商：**平台费第一步不分成**（D-Q48-7 的分成只对抽成），运营商月结算单不含它；以后要分成只加一个比例参数。 |
-| D-Q87-6 | **逾期**：每日任务 `qb.fee-overdue` 把过期未付的记 OVERDUE、发一封提醒（不可退订，7 天一封至多三封）、写待办给总部财务；**不自动停用商户**。逾期 ≥ 30 天的商户不能提交新发布（`PublicationRules` 一条检查，422 `QB_FEE_OVERDUE`，发布页与向导显示原因与账单链接）；已上架的照常运行。 |
-| D-Q87-7 | **界面**：商户后台"钱包"分两页签——"学分"（现页）与"费用账户"（本月已记的费用、账单列表与状态、支付按钮、下载 PDF、银行转账的报告）；概览的指标卡加"待付账单"。管理后台扩展：费用与账单的列表（按商户、状态、期间）、手工记费、作废、银行实收登记、逾期待办。 |
-| D-Q87-8 | **不做**：费用的预付余额、绑卡自动扣、运营商直收（D-Q48-8）、抽成搬到账单（奖励照旧由 Kudos 钱包结算，0% 即不扣）、多币种。 |
+| D-Q87-0 | **抽成设为 0% 是运营步骤，不改代码**：上线时以 `CONTROL_CHANGE_PROPOSE` / `_PUBLISH`（四眼）把 `qb.creator-fee-rate` 改为 0；功能、参数、报表、月结算保留。只补用例（0% 时答题者得全额、账本没有 4110 行、运营商结算为 0）与 `operations.md` 的步骤。 |
+| D-Q87-1 | **现金账户**：每个商户一个（`QbWallet` 加种类 `CASH`，复用余额缓存与每日核对；账本新科目 **2160 商户现金账户**，负债，维度：商户）。**充值改为进现金账户**（Stripe Checkout 与银行转账都是：1110 / 1120 → 2160），收据照旧。`QbTopUp` 不改结构，只改过账的对方科目。学分钱包（2110）不再直接充值。 |
+| D-Q87-2 | **换学分** `QB_KUDOS_BUY`（商户，`qb.wallet.topup` 的权限，要求已验证邮箱、已同意当前条款）：输入金额（整数 JPY，1 : 1 换成 Kudos），取 `qb.wallet:SPONSOR:<商户>` 的锁（现金账户与学分钱包是同一把锁的两个种类，避免两把锁的顺序问题），可用现金 ≥ 金额即过账 2160 → 2110 并同步两边的余额缓存；发布 `qb.sponsor.kudos-bought`（既有的 `qb.sponsor.settle-pending` 照旧由到账触发，改为由换学分触发）。**只能单向**：学分不能换回现金（退还是資金決済法的事，等法务）。换学分的单据：不出（它不是对价，收据在充值时已开）。 |
+| D-Q87-3 | **平台费 = 费用记录 + 账单**：`QbFeeCharge`（只追加：商户、发布方那一对、`kind`、`period`、`amount`、`taxRate`、`tax`、来源单据、`invoiceId`），只经 `QB_FEE_CHARGE`（`subProcessOnly()`）写入；种类在代码中（`FeeKinds`）：第一步 `MONTHLY`（月费，受控参数 `qb.fee.monthly`，缺省 0 = 不收）与 `MANUAL`（总部手工记费，四眼）。以后的规则费、CPK、AI 超额只是加种类。 |
+| D-Q87-4 | **预付 / 后付由运营商按商户定**：`QbSponsor` 加 `billingMode`（`PREPAID` / `POSTPAID`，缺省 `PREPAID`）与 `creditLimit`（后付的信用额，JPY，缺省 0），只经运营商（或总部）的流程 `QB_OPERATOR_BILLING_SET` 修改（`qb.operator.sponsor.write`，理由必填，写审计；本商户在自己范围内）。<br>**预付**：记费时立即从现金账户扣（`QB_FEE_CHARGE` 内：2160 → 4120 + 2150，同一事务；可用现金不足即费用仍记、账单到期未付的处理照后付，并且**不能换学分、不能提交新发布**直到付清）。<br>**后付**：记费只记应收（1130 → 4120 + 2150），每月 2 日合成账单（`QbFeeInvoice`，适格请求书，`invoiceNo` 由 `NumberSequence`，到期 `qb.fee.due-days` 天）；未付账单合计 > `creditLimit` 即不能换学分、不能提交新发布。预付的商户也每月出一张"已付账单"（同一版式，状态 PAID）作为凭证。 |
+| D-Q87-5 | **付账单**：① 从现金账户付（`QB_FEE_INVOICE_PAY`，商户，可用现金 ≥ 合计：2160 → 1130）；② 充值即可付——商户充值进现金账户后再付，所以**不另做**账单的 Checkout 与银行转账流程，支付只有一条路（现金账户）。总部可作废账单（`QB_FEE_INVOICE_VOID`，四眼，冲正）。 |
+| D-Q87-6 | **逾期**：每日任务 `qb.fee-overdue` 把过期未付的记 OVERDUE、提醒邮件（不可退订，7 天一封至多三封）、待办给运营商与总部财务；**不自动停用商户**；拦的只有换学分与提交新发布（422 `QB_FEE_OVERDUE`，页面写明并链到账单）。 |
+| D-Q87-7 | **账本与运营商**：科目 2160 商户现金账户、1130 应收平台费（维度：商户）、4120 平台使用费收入、2150 应付消费税。每日核对加：现金账户余额 = 2160 按商户的余额；应收 = 未付账单合计。运营商月结算（Q48b）**第一步不含平台费的分成**（分成只对抽成，而抽成为 0），要分成时只加一个比例参数。 |
+| D-Q87-8 | **官方账号的学分**：与普通商户同一条路——总部给官方账号的现金账户充值（银行转账登记）或手工加币（Q18b，推广费用 5120），再换成学分付认证题的奖励。不另开"平台的学分"来源。 |
+| D-Q87-9 | **界面**：商户后台"钱包"分三块——现金账户（余额、充值、换学分、账单与支付、计费方式与信用额的说明）、学分（现页）、账单列表；概览加"现金余额""待付账单"两张卡。运营商后台：商户行的"计费方式"（预付 / 后付、信用额、理由）。管理后台扩展：费用、账单、手工记费、作废、逾期待办。 |
+| D-Q87-10 | **不做**：学分换回现金；账单的在线支付（充值即可）；绑卡自动扣；运营商直收（D-Q48-8）；抽成搬到账单；多币种；为答题者建现金账户（答题者的学分照旧经 Q6b 的转账提现）。 |
 
-## 3. 后端（`backend/quizbuks`，包 `fee`）
+## 3. 后端（`backend/quizbuks`，包 `fee` 与 `wallet`）
 
-- 迁移（编号以合入时为准）：`qb_fee_charge`（只追加：主键、索引 `(sponsor_id, period)`、`invoice_id`；`jabiz_protect_append_only`）、`qb_fee_invoice`（普通表：`invoice_no` 唯一、`(sponsor_id, period)` 唯一、索引 `status, due_at`）、`qb_fee_payment`（普通表：账单、方式、Checkout 的编号与状态，同 `qb_topup` 的那几列）；账本科目 1130 / 4120 / 2150 与 `qb.journal.account.<科目>` 的受控参数（Q9d）。
-- 实体与字典：`QbFees`（三个实体、字典 `fee-kind`、`fee-invoice-status`）；`FeeKinds`（纯 Java 目录）；`FeeRules`（纯 Java：税率、取整、逾期、能否提交）。
-- 流程：`QB_FEE_CHARGE`（`subProcessOnly()`）、`QB_FEE_CHARGE_MANUAL`（总部，`requiresMfa`，`RequireApproval`）、`QB_FEE_MONTHLY_ITEM`（`internal()`，逐项任务 `qb.fee-monthly`）、`QB_FEE_INVOICE_ISSUE_ITEM`（`internal()`，逐项任务 `qb.fee-invoice`，`AssignNumber` + `DOCUMENT_ISSUE` + `LEDGER_POST` + `SendMail`）、`QB_FEE_PAYMENT_START`（商户，`qb.wallet.topup` 的权限或新权限 `qb.fee.pay`）、`QB_FEE_PAYMENT_CONFIRM`（`internal()`）、`QB_FEE_BANK_REPORT` / `QB_FEE_BANK_RECORD`、`QB_FEE_INVOICE_VOID`（总部，四眼）、`QB_FEE_OVERDUE_ITEM`（`internal()`，逐项任务 `qb.fee-overdue`）。锁：`qb.fee:<商户>`，不与钱包锁同时持有（费用账户与学分互不相干）。
-- 单据：`DocumentLayout` `qb.fee-invoice`（模板 `qb.document.fee-invoice`），文案 `document.qb.fee-invoice.*`（三语）；保留期 `RetentionPolicy.of("DocumentRun").only(layout)` 与收据相同（Q77 的做法）。
-- 模板：`qb.sponsor.fee-charges`、`qb.sponsor.fee-invoices`、`qb.admin.fee-invoices`、`qb.admin.fee-charges`；每日核对加一项。
+- 迁移（编号以合入时为准）：`qb_wallet` 的种类检查加 `CASH`；`qb_sponsor` 加 `billing_mode`、`credit_limit`；`qb_fee_charge`（只追加，`jabiz_protect_append_only`，索引 `(sponsor_id, period)`、`invoice_id`）；`qb_fee_invoice`（普通表：`invoice_no` 唯一、`(sponsor_id, period)` 唯一、索引 `status, due_at`）。科目参数 `qb.journal.account.2160 / 1130 / 4120 / 2150`（Q9d 的做法）。
+- 钱包：`QbWallets` 加 `CASH` 种类与 `cashPosting`；`TopUpProcesses` 的到账过账对方科目改为 2160（`TopUpChecks` 不变）；`QB_KUDOS_BUY`（`wallet`）；每日核对的两项。`StatementBudgetIT`：到账与换学分各一个预算（答题路径不变）。
+- 费用：`QbFees`、`FeeKinds`、`FeeRules`（纯 Java：税、取整、预付 / 后付的可用性判断 `canBuyKudos` / `canSubmit`）；流程 `QB_FEE_CHARGE`、`QB_FEE_CHARGE_MANUAL`、`QB_FEE_MONTHLY_ITEM`（逐项任务 `qb.fee-monthly`）、`QB_FEE_INVOICE_ISSUE_ITEM`（逐项任务 `qb.fee-invoice`：`AssignNumber` + `DOCUMENT_ISSUE` + `SendMail`）、`QB_FEE_INVOICE_PAY`、`QB_FEE_INVOICE_VOID`、`QB_FEE_OVERDUE_ITEM`（逐项任务 `qb.fee-overdue`）；`PublicationRules` 与 `QB_KUDOS_BUY` 各一条检查（`FeeRules`）。锁：费用与账单取 `qb.wallet:SPONSOR:<商户>`（扣现金时要）。
+- 运营商：`QB_OPERATOR_BILLING_SET`（`operator`，范围核对 `RequireScope`），字典 `billing-mode`。
+- 单据：`DocumentLayout` `qb.fee-invoice`（适格请求书：开具方 `qb.issuer.*`、登録番号、按税率小计、消费税、合计、计费方式），文案 `document.qb.fee-invoice.*` 三语；保留期同收据。
+- 模板：`qb.sponsor.cash`（余额与最近流水）、`qb.sponsor.fee-charges`、`qb.sponsor.fee-invoices`、`qb.operator.sponsor-billing`、`qb.admin.fee-*`；`qb.sponsor.wallet` 加现金余额与待付账单。
 - 参数：`qb.fee.monthly`（受控，缺省 0）、`qb.fee.tax-rate`（受控，缺省 0.10）、`qb.fee.due-days`（普通，缺省 30）。
 
 ## 4. 前端
 
-- 商户后台：钱包页的两个页签（`sponsor/src/wallet/FeeAccount.tsx`）、概览卡、发布向导与发布页的逾期提示。
-- 管理后台扩展：`FeesPage.tsx`（账单与费用、手工记费、作废、银行登记）。
+- 商户后台：钱包页三块（`sponsor/src/wallet/`：`CashAccount.tsx`、`BuyKudos.tsx`、`Invoices.tsx`），概览两张卡，发布向导与提交处的"逾期 / 超信用额"提示与链接。
+- 运营商后台扩展：商户的计费方式与信用额（理由必填）。
+- 管理后台扩展：`FeesPage.tsx`。
 - 邮件模板三语：账单已出、逾期提醒。
 
 ## 5. 测试
 
-- `FeeRulesTest`、`FeeKindsTest`；`RewardSplitTest` 与 `AttemptIT` 的 0% 用例（D-Q87-0）；`FeeIT`（月费记费、出账单与单据、Stripe 支付的核对与过账、银行登记、作废冲正、逾期与提交被拒、每日核对）；`JournalExportIT` 的新科目；`StatementBudgetIT` 不涉及（答题路径不变）。
-- 场景 `fees.yml`（固定时钟：记费 → 月初出单 → 支付 → 逾期）；快照随新科目与参数更新。
-- 前端 Vitest 与 e2e `fees.spec.ts`（商户看到账单、用 Checkout 存根付款、状态变 PAID）。
+- `RewardSplitTest` 与 `AttemptIT` 的 0% 用例；`FeeRulesTest`、`FeeKindsTest`；`CashAccountIT`（充值进现金、换学分、不能换回、锁与余额缓存、每日核对）；`FeeIT`（预付：记费即扣、不足时的拦截；后付：账单、信用额、从现金付、作废冲正、逾期与提交被拒；运营商改计费方式只能在范围内）；`JournalExportIT` 的新科目；`StatementBudgetIT` 的到账与换学分。
+- 场景 `cash.yml`（固定时钟：充值 → 换学分 → 发布付奖励 → 月费 → 预付扣、后付出单 → 付 → 逾期）；`setup.yml` 快照随新科目与参数。
+- 前端 Vitest 与 e2e `cash-account.spec.ts`（充值到现金、换学分、发布、后付商户看到账单并从现金付）。
 
 ## 6. 文档
 
-`02-design.md` §3.4（费用账户三实体）、§4.1（新科目）、§4.2（分录）、§5.2（流程）、§7.2 / §7.3；`backend/quizbuks/CLAUDE.md` 第 4 节"费用账户"一条（费用只经 `QB_FEE_CHARGE`、账单只经任务出、学分钱包不碰费用）；`04-product-direction.md` §6.10 指向本计划；`operations.md`：抽成设 0%、登録番号与税率、逾期处理；`launch-checklist.md`；`03-plan.md` 的 Q87 行；本文件 §10。
+`02-design.md` §3.1（计费方式）、§3.4（现金账户与费用）、§4.1 / §4.2（科目与分录）、§5.2、§7.2 / §7.3；`backend/quizbuks/CLAUDE.md` 第 4 节"钱包"改写（充值进现金、学分只由换出、费用只经 `QB_FEE_CHARGE`）；`04-product-direction.md` §6.10；`operations.md`（抽成 0%、登録番号与税率、计费方式的操作）；`launch-checklist.md`；`03-plan.md` 的 Q87 行；本文件 §10。
 
-## 7. 估计
+## 7. 以后（本计划留的余地，不在这一期）
+
+- **商户自己的认证与只给认证的树**（D-Q69-10、需求方 2026-11-03 第 4 条）：商户升级（Q69e 商户等级）后可以把自己的发布登记为自己的认证的轮（放宽"只能是官方账号"为"只在本商户的树上有效"），发布的奖励档位允许"只给认证、不给学分"（放宽 D-Q69-6，改为"有奖励档位或是认证轮"）；Q86 的"持有认证"作前置届时自然涵盖商户自己的认证。
+- **答题者付出学分**（04 §6.3"消耗 Kudos 解锁"）：开始答题时从答题者的学分钱包扣一笔到商户的现金账户或学分钱包，这是答题者的钱流向商户，資金決済法的判断先于它；现金账户是它的落点。
+- **学分换回现金**、**账单的在线支付**、**绑卡自动扣**、**运营商直收**、**平台费分成**。
+
+## 8. 估计
 
 | 部分 | 天 |
 |---|---|
 | 0% 抽成的用例与运营步骤 | 0.5 |
-| 实体、迁移、科目、规则、记费与账单任务、单据 | 2.5 |
-| 支付：Checkout 与 Webhook 路由、银行转账、作废、逾期 | 2 |
-| 商户后台与管理后台扩展 | 2 |
+| 现金账户：钱包种类、充值改道、换学分、核对、预算 | 2 |
+| 费用：实体、迁移、科目、规则、记费与账单任务、预付 / 后付、单据、逾期 | 3 |
+| 运营商的计费方式 | 0.5 |
+| 商户后台、运营商后台、管理后台 | 2.5 |
 | 测试（IT、场景、e2e）与文档 | 1.5 |
-| **合计** | **8.5** |
+| **合计** | **10** |
 
-## 8. 风险
+## 9. 风险
 
 | 等级 | 风险 | 对策 |
 |---|---|---|
-| 高 | 适格请求书的格式、税率、取整要会计师确认；登録番号未取得就不能开 | 版式与税率都是参数；`qb.fee.monthly` 缺省 0，上线不出任何账单，确认后再开 |
-| 中 | Kudos 钱包的資金決済法问题分开后变小但没消失 | 法务意见仍要；抽成 0% 使平台在资金流中不取利，陈述更简单 |
-| 中 | 同一入站 Webhook 路由两种 Checkout（充值与账单） | 以 Checkout 的 `metadata.kind` 区分，`TopUpChecks` 核对两边都要，`FeeIT` 覆盖串线 |
-| 低 | 逾期停提交误伤 | 只在 ≥ 30 天、只拦新提交、页面写明、总部可作废 |
+| 高 | 适格请求书的格式、税率、取整要会计师确认；登録番号未取得就不能开 | 版式与税率都是参数；`qb.fee.monthly` 缺省 0，上线不出任何账单 |
+| 中 | 充值改道进现金账户后，老商户的习惯是"充值即可用"：多一步"换学分" | 充值成功页直接给"换成学分"按钮，并可勾选"以后充值自动换成学分"（商户设置，缺省开；预付的平台费从剩余现金扣） |
+| 中 | 两种余额、两套拦截让规则变多 | 全部规则只在 `FeeRules` 一处；页面只读模板给出的 `canBuyKudos` / `canSubmit` 与原因 |
+| 中 | Kudos 钱包的資金決済法问题仍在 | 法务意见仍要；现金账户让"预付给平台"与"替答题者保管"分开陈述 |
+| 低 | 逾期拦提交误伤 | 只拦新提交与换学分、页面写明、总部可作废 |
 
-## 9. 需要需求方确认的
+## 10. 需要需求方确认的
 
-1. D-Q87-0：抽成以受控参数设为 0%，代码不改（只补用例与运营步骤）。
-2. D-Q87-1：费用账户是**后付的账单**，不是预付余额；平台不持有费用的预付款。
-3. D-Q87-2：第一步只有两种费用——月费（缺省 0，不出单）与总部手工记费（四眼）；规则费、CPK、AI 超额以后加种类。
-4. D-Q87-4 / D-Q87-6：支付用 Stripe Checkout 与银行转账，不绑卡自动扣；逾期 30 天只拦新提交。
-5. D-Q87-5：平台费第一步不与运营商分成。
-6. 会计师 / 法务：适格请求书与税率；Kudos 钱包与資金決済法（旧问题）。
-7. 编号 Q87，一个 PR，约 8.5 天，三张表的迁移。建议 Q86 先做（纯增量），Q87 等会计师的答复后做。
+1. D-Q87-0：抽成以受控参数设为 0%，代码不改。
+2. D-Q87-1 / D-Q87-2：充值一律进现金账户；学分只由商户从现金账户换出（1 : 1，单向）；充值成功后可一键或自动换成学分。
+3. D-Q87-4：预付 / 后付与信用额由运营商按商户设置，缺省预付；预付即记费即扣，后付即月初出账单。
+4. D-Q87-5：账单只能从现金账户付（充值即可付），不另做在线支付。
+5. D-Q87-7：平台费第一步不与运营商分成。
+6. D-Q87-8：官方账号的学分也是充值或手工加币后换出，不另设来源。
+7. §7 的"以后"方向（商户自己的认证与只给认证、答题者付出学分）先记下，等 Q69e 商户等级与法务结论。
+8. 会计师 / 法务：适格请求书与税率；Kudos 钱包与資金決済法。
+9. 编号 Q87，一个 PR，约 10 天，迁移改两张表、加两张。建议 Q86 先做（纯增量），Q87 等会计师答复后做。
