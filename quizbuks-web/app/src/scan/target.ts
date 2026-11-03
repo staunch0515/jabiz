@@ -1,9 +1,12 @@
 import { BASE } from '../qb/router'
 import { itemPage } from '../routes'
 
-/** What a scanned code may open in the app: a publication (a shop's poster) or a sponsor's redeem code. */
+/**
+ * What a scanned code may open in the app: a publication (a shop's poster), a sponsor's redeem code, or (Q89c) a
+ * taker's pass the counter scans.
+ */
 export interface ScanTarget {
-  page: 'p' | 'redeem'
+  page: 'p' | 'redeem' | 'pass'
   id: string
 }
 
@@ -24,7 +27,7 @@ export function scanTarget(text: string, origin: string = window.location.origin
   const prefix = base.endsWith('/') ? base.slice(0, -1) : base
   const path = prefix && url.pathname.startsWith(`${prefix}/`) ? url.pathname.slice(prefix.length) : url.pathname
   const item = itemPage(path)
-  if (!item || (item.page !== 'p' && item.page !== 'redeem')) return null
+  if (!item || (item.page !== 'p' && item.page !== 'redeem' && item.page !== 'pass')) return null
   return { page: item.page, id: item.id }
 }
 

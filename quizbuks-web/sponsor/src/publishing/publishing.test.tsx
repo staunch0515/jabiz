@@ -1012,6 +1012,29 @@ describe('the redeem page (Q22b)', () => {
     expect(screen.getByTestId('redeem-today')).toHaveTextContent('Nothing collected yet today.')
   })
 
+  it('looks up a taker\'s pass by its digits and hands the prize over (Q89c)', async () => {
+    const { processCalls } = server({ processes: {
+      QB_REDEEM_CODE_ISSUE: [issued('ROTATING', 'rot-key-9')],
+      QB_REDEMPTION_PASS_CHECK: [{ status: 200, body: { output: { passId: 'pass-1', redemptionId: 'r1',
+        publicationName: 'Coffee week', description: 'A coffee at our counter', amount: 100, takerName: 'Mei',
+        status: 'DUE', passExpiresAt: '2099-01-01T00:01:00Z' } } }],
+      QB_REDEMPTION_PASS_REDEEM: [{ status: 200, body: { output: { redemptionId: 'r1', status: 'REDEEMED',
+        revision: 2 } } }] } })
+    window.history.replaceState(null, '', '/redeem')
+    render(<App />)
+    const section = await screen.findByTestId('redeem-customer-pass')
+    expect(within(section).getByTestId('redeem-pass-read')).toBeDisabled()
+    await userEvent.type(within(section).getByTestId('redeem-pass-digits'), '123 456')
+    await userEvent.click(within(section).getByTestId('redeem-pass-read'))
+    expect(await within(section).findByTestId('redeem-pass-description')).toHaveTextContent('A coffee at our counter')
+    expect(within(section).getByTestId('redeem-pass-taker')).toHaveTextContent('Mei')
+    expect(processCalls('QB_REDEMPTION_PASS_CHECK')).toEqual([{ typedDigits: '123456' }])
+    await userEvent.click(within(section).getByTestId('redeem-pass-hand-over'))
+    await waitFor(() => expect(processCalls('QB_REDEMPTION_PASS_REDEEM')).toEqual([{ passId: 'pass-1' }]))
+    expect(await within(section).findByTestId('redeem-pass-next')).toBeInTheDocument()
+    await expectAccessible()
+  })
+
   it('lists the claims from the printed code and confirms or declines them, and shows every prize', async () => {
     const { processCalls } = server({
       redemptions: [prize({ status: 'CLAIMED', claimKind: 'PRINTED', claimedAt: '2026-10-20T01:00:00Z',

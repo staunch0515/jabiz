@@ -42,6 +42,7 @@ import {
   type RedemptionRow,
   type RedemptionStatus,
 } from './api'
+import { CustomerPass } from './CustomerPass'
 import { publicationPath, redeemLink } from './paths'
 import { posterPng, qrFileName, qrImageUrl, qrPng, qrSvg } from './qr'
 import { useRedemptionStatusLabel } from './shared'
@@ -481,6 +482,7 @@ function History() {
  */
 export function RedeemPage() {
   const { t } = useTranslation(SPONSOR)
+  const queryClient = useQueryClient()
   return (
     <section className="flex flex-col gap-6" data-testid="redeem-page">
       <PageHeader title={t('publishing.redeem.title')} description={t('publishing.redeem.intro')} />
@@ -490,6 +492,8 @@ export function RedeemPage() {
         <RotatingCode />
         <PrintedCode />
       </div>
+      {/* Q89c: the taker's pass, by its digits. */}
+      <CustomerPass onHandedOver={() => void queryClient.invalidateQueries({ queryKey: REDEMPTIONS_QUERY })} />
       <Today />
       <Handlers />
       <History />

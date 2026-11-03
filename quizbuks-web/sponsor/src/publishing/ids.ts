@@ -23,6 +23,9 @@ export const PUBLISHING_PROCESS = {
   redeemIssue: 'QB_REDEEM_CODE_ISSUE',
   redemptionConfirm: 'QB_REDEMPTION_CONFIRM',
   redemptionDecline: 'QB_REDEMPTION_DECLINE',
+  /** Q89c: a taker's pass, read by the digits they read out, and the prize handed over by it. */
+  passCheck: 'QB_REDEMPTION_PASS_CHECK',
+  passRedeem: 'QB_REDEMPTION_PASS_REDEEM',
   /** The sponsor's staff, who hand out prizes at the counter in the app (Q39): looked up by ID, named, removed. */
   staffFind: 'QB_SPONSOR_STAFF_FIND',
   staffAdd: 'QB_SPONSOR_STAFF_ADD',

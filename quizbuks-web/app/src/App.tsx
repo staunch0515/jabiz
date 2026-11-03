@@ -104,6 +104,7 @@ import { SponsorPage, sponsorPageOf } from './share/SponsorPage'
 import { HANDLED_PATH, STAFF_PATH } from './staff/api'
 import { SCAN_PATH, ScanPage } from './scan/ScanPage'
 import { StaffDeskPage } from './staff/StaffDeskPage'
+import { PassPage } from './pass/PassPage'
 import { StaffHandledPage } from './staff/StaffHandledPage'
 import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
@@ -430,6 +431,7 @@ function SignedIn({ path }: { path: string }) {
   else if (item?.page === 'result') page = <ResultPage key={item.id} attemptId={item.id} />
   else if (item?.page === 'referral') page = <ReferralPage key={item.id} referralId={item.id} />
   else if (item?.page === 'redeem') page = <RedeemPage key={item.id} scannedKey={item.id} />
+  else if (item?.page === 'pass') page = <PassPage key={item.id} passKey={item.id} />
   else page = <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
   // The navigation is the app's; the welcome step stands alone, and answering keeps the screen to the question.
   const nav = path !== WELCOME && item?.page !== 'play'

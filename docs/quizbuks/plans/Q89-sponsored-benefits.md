@@ -172,3 +172,17 @@
 - **测试**：`BenefitDigitalIT`（2：电影通行证——咖啡店不能装码、提供方装码与模板、陌生商户读不到、上架、获奖者打开提供方的码；共用码与手工发送被拒、数字产品不能做到店兑换）；前端 `benefits.test.tsx` 的提供方装码。
 
 未做（记下）：**提供方手工发送**要 Q33b 的发送功能（Q33 计划中商户发送的那一步从未实现），做 Q33b 时再开放 `SPONSOR_SENT`。
+
+### Q89c（2026-11-03，分支 `1.3/quizbuks-89c-redemption-pass`）：答题者的通行码
+
+D-Q89-10 的第二条领取路线，对所有到店兑换开放（不限赞助权益）。
+
+做了什么：
+
+- **通行码** `QbRedemptionPass`（普通表，迁移 V71）：每个奖品一行，再签发即更新该行（前一个随即失效）；只存二维码密钥与 6 位数字的 SHA-256 哈希（数字与履约方编号一起哈希，同样的数字在别的柜台是另一个哈希），60 秒有效（`QbRewards.PASS_LIFE`）、用一次（`usedAt`）。迁移同时让兑换的 `claim_kind` 接受 `PASS`。
+- **流程**（`reward.PassProcesses`）：答题者 `QB_REDEMPTION_PASS_ISSUE`（`qb.me`，奖品锁内，只给本人 `DUE` / `CLAIMED` 的奖品，输出 `passKey` 与 `passDigits`，标 `@Sensitive(returned = true)`）；商户 `QB_REDEMPTION_PASS_CHECK` / `_REDEEM` 与店员 `QB_STAFF_REDEMPTION_PASS_CHECK` / `_REDEEM`（店员照 Q39 经共享的店员锁）。查询只认本柜台（`QbRewards.handlerOf`）：按密钥找到别的柜台的即 404，按数字只在本柜台未用、未过期的通行码中找（两个相同即 `QB_REDEMPTION_PASS_AMBIGUOUS`，请扫码）；交付在奖品锁内重读奖品与通行码，`REDEEMED`、`claimKind = PASS`、`redeemedBy` 为操作人，店员不交付自己的奖品。两个查询流程每人每分钟至多 10 次（`jabiz.process.rate-limits`）。
+- **与计划不同**：查询的输入名是 `typedDigits` 而不是 `passDigits`：平台按名字在整个 JSON 中遮蔽，签发的输出 `passDigits` 是"返回给调用者"的，若输入也叫它，较严的规则使输出也被遮蔽。
+- **删除账号**：答题者的通行码与商户柜台的通行码随之删除（`TakerErasure`、`SponsorErasure`）。
+- **App**：结果页的奖品有"出示领奖码"（`pass/PassDialog.tsx`：二维码、6 位数字、按收到回答起算的 60 秒倒计时、过期即"换一个新码"；出示期间每 3 秒重读奖品，交付后对话框说"已交付"）；扫一扫认得 `/pass/<密钥>`（`scan/target.ts`），在店员手机上打开交付页（`pass/PassPage.tsx`），在别人手机上只说"这是顾客的领奖码"；店员柜台加"顾客的奖品"（扫码链接与输入数字）。
+- **商户后台**：奖品领取页加"顾客的领奖码"（输入数字、查询、交付）。
+- **测试**：`RedemptionPassIT`（4：按二维码与数字读取并交付、只存哈希、别的柜台 404、用过与再签发失效、60 秒过期、店员交付与店码同时领取只成功一次、店员不交付自己的、猜数字被限流）；App `pass.test.tsx`（4，含 axe）、商户后台 `publishing.test.tsx` 的一例。

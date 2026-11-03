@@ -11,6 +11,20 @@ export const STAFF_PROCESS = {
   confirm: 'QB_STAFF_REDEMPTION_CONFIRM',
   decline: 'QB_STAFF_REDEMPTION_DECLINE',
   leave: 'QB_STAFF_LEAVE',
+  /** Q89c: a taker's pass, read by its QR or its digits, and the prize handed over by it. */
+  passCheck: 'QB_STAFF_REDEMPTION_PASS_CHECK',
+  passRedeem: 'QB_STAFF_REDEMPTION_PASS_REDEEM',
+} as const
+
+/** Q89c: the taker's own pass for a prize (`reward.PassProcesses`). */
+export const PASS_PROCESS = {
+  issue: 'QB_REDEMPTION_PASS_ISSUE',
+} as const
+
+/** Q89c: how long a pass is good for (`QbRewards.PASS_LIFE`), and the digits read out instead of the QR. */
+export const PASS = {
+  lifeMs: 60_000,
+  digits: 6,
 } as const
 
 /** SQL templates (`queries/qb/app`). */

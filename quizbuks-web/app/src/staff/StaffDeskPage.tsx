@@ -6,6 +6,7 @@ import QRCode from 'qrcode'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { QB } from '../qb/messages'
+import { CustomerPass } from '../pass/PassCounter'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 import { playSound } from '../qb/sound'
@@ -206,6 +207,8 @@ export function StaffDeskPage() {
         <AlertDescription>{t('staff.deskIntro')}</AlertDescription>
       </Alert>
       <RotatingCode />
+      {/* Q89c: the other way round: the customer shows their pass. */}
+      <CustomerPass />
       <Claims />
       <Today />
     </section>

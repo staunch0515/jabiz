@@ -1,4 +1,5 @@
 import { questionProducts, type PublicationProduct } from '../qb/products'
+import { PassButton } from '../pass/PassDialog'
 import { readPublicationProducts, readSponsorTree } from '../share/api'
 import { i18n } from '@jabiz/client'
 import { countProductClick } from '../share/counting'
@@ -300,6 +301,10 @@ export function Redemption({ redeem, outcome }: { redeem: RedeemView | null; out
           </span>
         )}
         {status === 'DUE' && <span className="text-xs">{t('redeem.scanHint')}</span>}
+        {/* Q89c: or the other way round, the counter scans the taker's pass. */}
+        {redeem && status !== 'EXPIRED' && status !== 'VOID' && (
+          <PassButton redemptionId={redeem.redemptionId} collected={status === 'REDEEMED'} />
+        )}
         {outcome.message && !redeem && <span>{outcome.message}</span>}
       </AlertDescription>
     </Alert>
