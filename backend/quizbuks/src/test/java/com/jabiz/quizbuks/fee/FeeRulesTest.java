@@ -59,6 +59,19 @@ class FeeRulesTest {
     }
 
     @Test
+    void whatWasPaidEarlyIsPaidNotDue() {
+        // 231 owed, 115 of it paid before the invoice: 116 is due (the adjustment with it).
+        FeeRules.Invoice part = FeeRules.invoice(List.of(line(105, true), line(105, true)), d(115), d(0));
+        assertThat(part.due()).isEqualByComparingTo("116");
+        assertThat(part.paid()).isEqualByComparingTo("115");
+        // All of it paid early: the adjustment comes from the cash account when it covers it.
+        FeeRules.Invoice all = FeeRules.invoice(List.of(line(105, true), line(105, true)), d(230), d(10));
+        assertThat(all.due()).isZero();
+        assertThat(all.adjustDue()).isFalse();
+        assertThat(all.paid()).isEqualByComparingTo("231");
+    }
+
+    @Test
     void whatUnpaidFeesStop() {
         BigDecimal credit = d(10_000);
         assertThat(FeeRules.refusals(new FeeRules.Standing(FeeRules.PREPAID, null, d(0), false), true)).isEmpty();

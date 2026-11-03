@@ -81,6 +81,36 @@ class MessagingConfig {
     }
 
     @Bean
+    MailTemplate qbFeeInvoiceMail() {
+        return NotificationMails.FEE_INVOICE;
+    }
+
+    @Bean
+    MailTemplate qbFeeOverdueMail() {
+        return NotificationMails.FEE_OVERDUE;
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.FeeMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoice(
+        MessageCatalog messages) {
+        return MailProcesses.feeInvoice(messages);
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.FeeMailInput> qbMailFeeInvoiceSubscription(
+        ProcessDefinition<MailProcesses.FeeMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoice) {
+        return EventSubscription.of(MailProcesses.FEE_INVOICE_CONSUMER,
+            com.jabiz.quizbuks.fee.FeeProcesses.INVOICE_EVENT, qbMailFeeInvoice, MailProcesses::feeInvoiceInput);
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.FeeMailInput> qbMailFeeOverdueSubscription(
+        ProcessDefinition<MailProcesses.FeeMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoice) {
+        return EventSubscription.of(MailProcesses.FEE_OVERDUE_CONSUMER,
+            com.jabiz.quizbuks.fee.FeeProcesses.OVERDUE_EVENT, qbMailFeeInvoice, MailProcesses::feeOverdueInput);
+    }
+
+    @Bean
     MailTemplate qbTopUpGrantedMail() {
         return NotificationMails.TOPUP_GRANTED;
     }

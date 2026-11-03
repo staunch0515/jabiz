@@ -255,5 +255,15 @@ public final class QbPermissions {
     /** The prospecting jobs' items and outcomes ({@code internal()}). Granted to no role. */
     public static final String PROSPECT_SYSTEM = "qb.prospect.system";
 
+    /**
+     * Q87b: the platform fees' processes only the platform runs: a charge (a sub-process), the monthly fee, the
+     * invoices, overdue invoices and the requests' approval results. Granted to no role.
+     */
+    public static final String FEE_SYSTEM = "qb.fee.system";
+    /** Q87b: ask for a platform fee charged by hand or an invoice voided (another administrator approves). Finance. */
+    public static final String FEE_RECORD = "qb.fee.record";
+    /** Q87b: set a sponsor's billing mode and credit: an operator's member for its own sponsors, and finance. */
+    public static final String BILLING_WRITE = "qb.billing.write";
+
     private QbPermissions() {}
 }

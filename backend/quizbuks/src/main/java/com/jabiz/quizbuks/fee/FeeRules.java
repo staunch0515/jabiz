@@ -62,6 +62,14 @@ public final class FeeRules {
      * else it becomes due.
      */
     public static Invoice invoice(List<Line> lines, BigDecimal availableCash) {
+        return invoice(lines, BigDecimal.ZERO, availableCash);
+    }
+
+    /**
+     * As {@link #invoice(List, BigDecimal)}, with {@code paidEarly} of the receivable charges already paid from the cash
+     * account before the invoice ({@code QB_FEE_PAY} without an invoice): counted as paid, not as due.
+     */
+    public static Invoice invoice(List<Line> lines, BigDecimal paidEarly, BigDecimal availableCash) {
         Map<BigDecimal, BigDecimal[]> byRate = new TreeMap<>();
         BigDecimal provisional = BigDecimal.ZERO;
         BigDecimal paid = BigDecimal.ZERO;
@@ -88,6 +96,9 @@ public final class FeeRules {
             amount = amount.add(rateAmount);
             tax = tax.add(rateTax);
         }
+        BigDecimal early = paidEarly == null ? BigDecimal.ZERO : paidEarly.min(owed).max(BigDecimal.ZERO);
+        owed = owed.subtract(early);
+        paid = paid.add(early);
         BigDecimal adjustment = tax.subtract(provisional);
         boolean adjustDue;
         if (adjustment.signum() == 0) {

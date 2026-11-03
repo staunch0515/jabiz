@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.setup;
 
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.fee.FeeProcesses;
 import com.jabiz.quizbuks.operator.OperatorPlans;
 import com.jabiz.quizbuks.operator.OperatorSettlements;
 import com.jabiz.quizbuks.operator.OperatorWithdrawals;
@@ -97,6 +98,15 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
         "An operator's plan changes only after another administrator approves it");
 
+    /**
+     * Q87b: a platform fee charged by hand, or an invoice voided, waits for another administrator's approval (D-Q87-4,
+     * D-Q87-6); the approvers are those of the bank top-ups.
+     */
+    public static final Rule FEE_REVIEW = new Rule(FeeProcesses.REVIEW_RULE, FeeProcesses.APPROVAL_SUBJECT,
+        entries("fact", "fee", "op", "eq", "value", true),
+        List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
+        "Platform fees charged by hand and invoices voided take effect only after another administrator approves them");
+
     /** Q48e-2: every payment of an operator's withdrawal finance records waits for another administrator's approval. */
     public static final Rule OPERATOR_WITHDRAWAL_REVIEW = new Rule(OperatorWithdrawals.REVIEW_RULE,
         OperatorWithdrawals.APPROVAL_SUBJECT, entries("fact", "operatorWithdrawal", "op", "eq", "value", true),
@@ -116,7 +126,7 @@ public final class QbApprovalRules {
     // New rules go last: those already installed keep their place in the proposals.
     public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW,
         BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW, SPONSOR_PAGE_REVIEW,
-        OPERATOR_PLAN_REVIEW, OPERATOR_WITHDRAWAL_REVIEW);
+        OPERATOR_PLAN_REVIEW, OPERATOR_WITHDRAWAL_REVIEW, FEE_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();

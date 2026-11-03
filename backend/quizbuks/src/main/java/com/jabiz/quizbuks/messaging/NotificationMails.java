@@ -69,9 +69,17 @@ public final class NotificationMails {
     public static final MailTemplate PUBLICATION_ENDED = MailTemplate.define("qb.publication.ended", t -> t
         .category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "reason", "completions"));
 
+    /** Q87b: a sponsor's invoice of the platform fees was issued (paid already, or with an amount due). */
+    public static final MailTemplate FEE_INVOICE = MailTemplate.define("qb.fee.invoice", t -> t
+        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "due", "dueOn"));
+
+    /** Q87b: a sponsor's invoice is past its due date (once a week, three times at most; not unsubscribable). */
+    public static final MailTemplate FEE_OVERDUE = MailTemplate.define("qb.fee.overdue", t -> t
+        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "due", "dueOn"));
+
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
         TOPUP_PAID, TOPUP_GRANTED, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
-        PUBLICATION_ENDED);
+        PUBLICATION_ENDED, FEE_INVOICE, FEE_OVERDUE);
 
     /**
      * At most one throttled notice per user and kind in this time: a sponsor's "short of funds" (a wallet may run dry

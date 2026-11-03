@@ -86,6 +86,9 @@ public final class MailProcesses {
     public static final String TRANSFER_FAILED_CONSUMER = "qb.mail-transfer-failed";
     public static final String PAYOUT_RESTRICTED_CONSUMER = "qb.mail-payout-restricted";
     public static final String TOPUP_PAID_CONSUMER = "qb.mail-topup-paid";
+    public static final String FEE = "QB_MAIL_FEE_INVOICE";
+    public static final String FEE_INVOICE_CONSUMER = "qb.mail-fee-invoice";
+    public static final String FEE_OVERDUE_CONSUMER = "qb.mail-fee-overdue";
     public static final String PUBLICATION_CONSUMER = "qb.publication-notify";
 
     /** The hourly per-sponsor job that sends the deferred short-of-funds mail once their window has passed. */
@@ -110,6 +113,9 @@ public final class MailProcesses {
     public record PayoutMailInput(@NotBlank String userId, @NotNull Instant occurredAt) {}
 
     public record TopUpMailInput(@NotBlank String topUpId, @NotNull Instant occurredAt) {}
+
+    /** Q87b: an invoice issued ({@code overdue} false) or overdue, and when the event was published. */
+    public record FeeMailInput(@NotBlank String invoiceId, boolean overdue, @NotNull Instant occurredAt) {}
 
     /**
      * The payload of {@link PublicationNotices#EVENT}, and when it was published. The publisher is not validated: an
@@ -231,6 +237,45 @@ public final class MailProcesses {
 
     static TopUpMailInput topUpInput(DomainEvent event) {
         return new TopUpMailInput(text(event, "topUpId"), event.createdTime());
+    }
+
+    // ---- Q87b: platform fee invoices -------------------------------------------------------------------------------
+
+    /** Mails a sponsor their invoice, or that it is overdue (the invoice as it is now: one paid since is not). */
+    public static ProcessDefinition<FeeMailInput, MailOutput, ProcessContext> feeInvoice(MessageCatalog messages) {
+        return define(FEE, "Mails a sponsor their platform fee invoice, or that it is overdue.", FeeMailInput.class,
+            FeeMailInput::occurredAt, pb -> pb
+                .step("Load the invoice", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.fee.QbFees.defaultDataset(com.jabiz.quizbuks.fee.QbFees.INVOICE),
+                    ctx -> byId("invoiceId", input(ctx, FeeMailInput.class).invoiceId()), RECORD))
+                .step("Load the sponsor", loadUser(ctx -> record(ctx) == null ? null
+                    : record(ctx).get("sponsorId"))),
+            ctx -> {
+                EntityInstance invoice = record(ctx);
+                if (invoice == null) {
+                    return;
+                }
+                Object dueOn = invoice.get("dueOn");
+                String status = invoice.get("status");
+                if (input(ctx, FeeMailInput.class).overdue()) {
+                    if (com.jabiz.quizbuks.fee.QbFees.OVERDUE.equals(status)) {
+                        decide(ctx, NotificationMails.FEE_OVERDUE, Map.of("invoiceNo", invoice.get("invoiceNo"),
+                            "due", MailValues.amount(invoice.get("due")), "dueOn", String.valueOf(dueOn)));
+                    }
+                } else if (!com.jabiz.quizbuks.fee.QbFees.VOID.equals(status)) {
+                    decide(ctx, NotificationMails.FEE_INVOICE, Map.of("invoiceNo", invoice.get("invoiceNo"),
+                        "total", MailValues.amount(invoice.get("total")), "due", MailValues.amount(invoice.get("due")),
+                        "dueOn", dueOn == null ? "-" : dueOn.toString()));
+                }
+            }, messages, NotificationMails.FEE_INVOICE, NotificationMails.FEE_OVERDUE);
+    }
+
+    static FeeMailInput feeInvoiceInput(DomainEvent event) {
+        return new FeeMailInput(text(event, "invoiceId"), false, event.createdTime());
+    }
+
+    static FeeMailInput feeOverdueInput(DomainEvent event) {
+        return new FeeMailInput(text(event, "invoiceId"), true, event.createdTime());
     }
 
     // ---- publications ----------------------------------------------------------------------------------------------
