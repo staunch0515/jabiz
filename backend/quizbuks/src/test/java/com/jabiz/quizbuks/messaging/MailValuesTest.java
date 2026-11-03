@@ -85,6 +85,6 @@ class MailValuesTest {
         });
         // The transactional ones are always sent and name no entry (entries mean nothing for them, D49 item 5).
         assertThat(NotificationMails.ALL).filteredOn(template -> template.category() == MailCategory.TRANSACTIONAL)
-            .hasSize(8).allSatisfy(template -> assertThat(template.entries()).isEmpty());
+            .hasSize(11).allSatisfy(template -> assertThat(template.entries()).isEmpty());
     }
 }

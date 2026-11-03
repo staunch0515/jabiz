@@ -52,8 +52,9 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
         int rules = count - com.jabiz.quizbuks.setup.QbApprovalRules.ALL.size();
 
         // Nothing published yet: the switch has no value, which refuses.
+        // (Q87: the fee switches are controlled parameters too, each reported.)
         assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorA(), body("publicationId", id), 422)))
-            .containsExactly("PARAM_NOT_FOUND");
+            .isNotEmpty().containsOnly("PARAM_NOT_FOUND");
 
         // The parameters and the sponsors' rule published (the sponsor is onboarded), not the publications' rule: no
         // review would be asked for, which is refused too.

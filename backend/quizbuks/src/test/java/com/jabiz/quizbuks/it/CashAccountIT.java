@@ -67,7 +67,7 @@ class CashAccountIT extends TopUpItSupport {
             Map.of("topUpId", topUpId, "language", "en"))).getFirst().get("credited").toString())
             .isEqualTo("3,000 (into the cash account)");
         assertThat(run("QB_TOPUP_RECEIPT_ISSUE", sponsorToken(sponsor), body("topUpId", topUpId, "language", "en"))
-            .get("documentRunId")).isNotNull();
+            .get("runId")).isNotNull();
         deliverEvents();
         assertThat(query("SELECT template FROM sys_mail_message WHERE user_id = ?::uuid", sponsor))
             .extracting(row -> row.get("template")).contains("qb.topup.paid-cash").doesNotContain("qb.topup.paid");
