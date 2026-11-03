@@ -266,6 +266,8 @@ export interface PublicationView {
   digitalDescription: string | null
   sponsorName: string | null
   sponsorCompany: string | null
+  /** Q89b-1: the sponsor whose benefit the prize is, which hands it over (none: the publisher). */
+  fulfillerCompany?: string | null
   sponsorIntro: string | null
   sponsorAvatar: string | null
   /** Q60a: the sponsor's published page (`/s/<handle>`), which the name links to; none while it is not published. */
@@ -404,6 +406,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     digitalDelivery: digitalDeliveryOf(row.digitalDelivery),
     digitalDescription: textOrNull(row.digitalDescription),
     sponsorName: textOrNull(row.sponsorName),
+    fulfillerCompany: textOrNull(row.fulfillerCompany),
     sponsorCompany: textOrNull(row.sponsorCompany),
     sponsorIntro: textOrNull(row.sponsorIntro),
     sponsorAvatar: textOrNull(row.sponsorAvatar),

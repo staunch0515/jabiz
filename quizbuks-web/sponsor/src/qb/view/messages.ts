@@ -31,6 +31,7 @@ const en = {
     surveyReward: 'Reward for a complete response',
     surveyHint: 'A survey has no right or wrong answers. Answer every question and submit to earn the reward.',
     by: 'By {{sponsor}}',
+    collectAt: 'Sponsored by the publisher, collected at {{company}}',
     materials: 'Before you start',
     material: 'Material',
     kinds: {
@@ -138,6 +139,7 @@ const zh: typeof en = {
     surveyReward: '完整作答的奖励',
     surveyHint: '问卷没有对错。回答全部题目并提交即可获得奖励。',
     by: '发布人：{{sponsor}}',
+    collectAt: '由发布方赞助，在 {{company}} 领取',
     materials: '答题前请阅读',
     material: '资料',
     kinds: {
@@ -245,6 +247,7 @@ const ja: typeof en = {
     surveyReward: 'すべて回答した場合の報酬',
     surveyHint: 'アンケートに正解・不正解はありません。すべての問題に回答して送信すると報酬がもらえます。',
     by: '提供：{{sponsor}}',
+    collectAt: '発行者の協賛により、{{company}} で受け取り',
     materials: '回答の前に',
     material: '資料',
     kinds: {

@@ -14,7 +14,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.jabiz.job.JobDefinition;
+import com.jabiz.job.JobItems;
+
 import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.Map;
 
 /**
  * Registers sponsored benefits (Q89a): the four entities, their default datasets (written by the processes only; read
@@ -51,6 +56,42 @@ public class BenefitConfig {
     @Bean
     EntityDefinition qbBenefitPurchaseEntity() {
         return QbBenefits.PURCHASE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbBenefitAllocationEntity() {
+        return QbBenefits.ALLOCATION_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbBenefitAllocationDataset() {
+        return defaultDataset(QbBenefits.ALLOCATION);
+    }
+
+    @Bean
+    StaticDictionary qbBenefitAllocationStatusDictionary() {
+        return StaticDictionary.define(QbBenefits.ALLOCATION_STATUS_DICTIONARY, d -> d
+            .item(QbBenefits.OPEN, "en", "Held", "zh", "占用中", "ja", "割り当て中")
+            .item(QbBenefits.RELEASED, "en", "Released", "zh", "已退回", "ja", "返却済み"));
+    }
+
+    @Bean
+    ProcessDefinition<AllocationProcesses.AllocationRef, AllocationProcesses.ReleaseOutput, ProcessContext>
+        qbBenefitAllocationRelease() {
+        return AllocationProcesses.release();
+    }
+
+    /** Every ten minutes, at an odd second: each due allocation in its own transaction (decision D42). */
+    @Bean
+    JobDefinition<AllocationProcesses.AllocationRef> qbBenefitAllocationReleaseJob(
+        @Value("${quizbuks.benefits.release-cron:17 */10 * * * *}") String cron,
+        ProcessDefinition<AllocationProcesses.AllocationRef, AllocationProcesses.ReleaseOutput, ProcessContext>
+            qbBenefitAllocationRelease) {
+        return JobDefinition.forEach(QbBenefits.RELEASE_JOB, cron, ZoneOffset.UTC,
+                JobItems.template(QbBenefits.RELEASE_DUE_TEMPLATE, scheduledTime -> Map.of(), "allocationId"),
+                qbBenefitAllocationRelease, (scheduledTime, row) -> new AllocationProcesses.AllocationRef(
+                    String.valueOf(row.get("allocationId"))))
+            .maxItems(5_000);
     }
 
     private DatasetDefinition defaultDataset(String entity) {
@@ -92,6 +133,19 @@ public class BenefitConfig {
     DatasetDefinition qbBenefitPurchaseDataset() {
         return defaultDataset(QbBenefits.PURCHASE);
     }
+
+    /** Q89b-1: the prizes the caller hands over as the provider of other sponsors' benefits (its templates only). */
+    @Bean
+    DatasetDefinition qbFulfillerRedemptionDataset() {
+        return DatasetDefinition.define(FULFILLER_REDEMPTIONS, d -> d
+            .targetEntityType(com.jabiz.quizbuks.reward.QbRewards.REDEMPTION)
+            .permissions(QbPermissions.BENEFIT_SYSTEM, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("fulfillerId", "actorId", RequestContext::actorId)));
+    }
+
+    static final String FULFILLER_REDEMPTIONS = "urn:jabiz:dataset:fulfiller:QbRedemption";
 
     @Bean
     DatasetDefinition qbProviderBenefitOfferDataset() {

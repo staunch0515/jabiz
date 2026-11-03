@@ -29,6 +29,15 @@ public final class QbBenefits {
     public static final String CONVERSATION = "QbBenefitConversation";
     public static final String MESSAGE = "QbBenefitMessage";
     public static final String PURCHASE = "QbBenefitPurchase";
+    /** Q89b-1: how many of a purchase one publication holds (D-Q89-7). */
+    public static final String ALLOCATION = "QbBenefitAllocation";
+    public static final String ALLOCATION_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:benefit-allocation-status";
+    public static final String OPEN = "OPEN";
+    public static final String RELEASED = "RELEASED";
+    public static final List<String> ALLOCATION_STATUSES = List.of(OPEN, RELEASED);
+    /** The job that releases the allocations of publications back to their draft or ended. */
+    public static final String RELEASE_JOB = "qb.benefit-allocation-release";
+    public static final String RELEASE_DUE_TEMPLATE = "qb.system.benefit-allocations-due";
 
     /** The images of a benefit; the proofs of a purchase (both re-encoded or checked, names and uploaders private). */
     public static final String IMAGE_POLICY = "qb.benefit-image";
@@ -246,6 +255,35 @@ public final class QbBenefits {
             .filters("offerId", "sponsorId", "providerId", "status")
             .sorts("editedAt")
             .defaultSort("editedAt", false));
+    });
+
+    public static final EntityDefinition ALLOCATION_ENTITY = EntityDefinition.define(ALLOCATION, eb -> {
+        eb.physicalTable("qb_benefit_allocation");
+        eb.primaryKey("allocationId");
+        eb.field("allocationId", f -> f.physicalColumn("allocation_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:benefit-allocation"));
+        eb.field("purchaseId", f -> f.physicalColumn("purchase_id").immutable(true).required(true).processOnly()
+            .asText(36));
+        eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
+            .processOnly().asReference(com.jabiz.quizbuks.publishing.QbPublications.PUBLICATION));
+        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).processOnly()
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("providerId", f -> f.physicalColumn("provider_id").immutable(true).required(true).processOnly()
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("quantity", f -> f.physicalColumn("quantity").required(true).processOnly().asNumeric(9, 0));
+        eb.field("used", f -> f.physicalColumn("used").processOnly().asNumeric(9, 0));
+        eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
+            .asCode(ALLOCATION_STATUS_DICTIONARY, ALLOCATION_STATUSES.toArray(String[]::new)));
+        eb.field("allocatedAt", f -> f.physicalColumn("allocated_at").required(true).processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("releasedAt", f -> f.physicalColumn("released_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("purchaseId", "publicationId", "quantity", "used", "status", "allocatedAt", "releasedAt")
+            .filters("purchaseId", "publicationId", "sponsorId", "providerId", "status")
+            .sorts("allocatedAt")
+            .defaultSort("allocatedAt", false));
     });
 
     /** {@code image1} → {@code image_1}. */

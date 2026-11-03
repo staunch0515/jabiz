@@ -647,6 +647,8 @@ public final class AttemptFinishing {
             values.put("description", plan.card().get("redeemDescription") == null ? ""
                 : plan.card().get("redeemDescription"));
             values.put("expiresAt", end != null && end.isAfter(expires) ? end : expires);
+            // Q89b-1: another sponsor's benefit is handed over by its provider, as the card froze it.
+            values.put("fulfillerId", plan.card().get("fulfillerId"));
             ctx.put(EXTERNAL_ID, ctx.changes().insert(QbRewards.REDEMPTION, values));
         }
     }

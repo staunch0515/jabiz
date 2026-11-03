@@ -8,6 +8,9 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.benefit.BenefitAllocations;
+import com.jabiz.quizbuks.benefit.BenefitPublishing;
+import com.jabiz.quizbuks.benefit.QbBenefits;
 import com.jabiz.quizbuks.reward.DigitalPrizeStatus;
 import com.jabiz.quizbuks.reward.QbDigitalPrizes;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
@@ -159,10 +162,48 @@ public final class PublicationLifecycle {
                             // Q70: the referral quota may come from the pool too.
                             .limit(PublishingLimits.MAX_POOL_WINNERS + ReferralPolicy.MAX_QUOTA).build();
                     }, POOL))
+                // Q89b-1 (D-Q89-7): a prize of another sponsor's goods takes its share of the purchase under the
+                // purchase's lock (after the publication's, before the approvals'); others take none and read nothing.
+                .step("Lock the purchase", HoldLock.<ProcessContext>exclusive(ctx -> {
+                    Object purchaseId = PublicationEditing.publication(ctx).get("benefitPurchaseId");
+                    return purchaseId == null ? null : QbBenefits.purchaseLock(purchaseId);
+                }))
+                .step("Load the purchase and its allocations", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbBenefits.defaultDataset(QbBenefits.PURCHASE), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("purchaseId", benefitIds(ctx))).limit(1).build(), BENEFIT_PURCHASE),
+                    QueryEntities.query(QbBenefits.defaultDataset(QbBenefits.ALLOCATION), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("purchaseId", benefitIds(ctx)))
+                        .limit(PublishingLimits.MAX_BENEFIT_ALLOCATIONS).build(), BENEFIT_ALLOCATIONS)))
                 .compute("Check the publication", (metadata, ctx) -> check(ctx))
                 .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
                     PublicationApprovals.SUBJECT, ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL))
                 .compute("Submit", (metadata, ctx) -> submitted(ctx)));
+    }
+
+    static final String BENEFIT_PURCHASE = "benefitPurchase";
+    static final String BENEFIT_ALLOCATIONS = "benefitAllocations";
+
+    /** The purchase the publication draws on, as a list for a query (none: nothing is read). */
+    private static List<Object> benefitIds(ProcessContext ctx) {
+        Object purchaseId = PublicationEditing.publication(ctx).get("benefitPurchaseId");
+        return purchaseId == null ? List.of() : List.of(String.valueOf(purchaseId));
+    }
+
+    /** Q89b-1: what a publication drawing on a purchase meets (the purchase and the allocations read under its lock). */
+    private static void benefitProblems(ProcessContext ctx, EntityInstance publication) {
+        if (publication.get("benefitPurchaseId") == null) {
+            return;
+        }
+        EntityInstance purchase = first(ctx, BENEFIT_PURCHASE);
+        List<BenefitPublishing.Allocation> others = list(ctx, BENEFIT_ALLOCATIONS).stream()
+            .filter(a -> !String.valueOf((Object) a.get("publicationId")).equals(String.valueOf(publication.id())))
+            .map(BenefitAllocations::of).toList();
+        BenefitPublishing.problems(String.valueOf((Object) publication.get("publisherId")),
+            PublicationEditing.methodOf(publication.attributes()),
+            BenefitPublishing.fromJson(publication.get("benefitSnapshot")), purchase == null ? null
+                : purchase.attributes(), PublicationEditing.integer(publication.get("maxWinners")),
+            PublicationEditing.tiersOf(list(ctx, TIERS)).stream().map(TierCoverage.Tier::reward).toList(), others)
+            .forEach(ctx::reject);
     }
 
     private static boolean autoApprove(ProcessContext ctx) {
@@ -196,6 +237,7 @@ public final class PublicationLifecycle {
         PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
             .forEach(ctx::reject);
         PublicationEditing.languageProblems(publication.attributes(), version).forEach(ctx::reject);
+        benefitProblems(ctx, publication);
         // Q70: the referral reward's method is one the sponsor may still use (a copy keeps the one it had).
         ReferralPolicy referral = ReferralPolicy.fromJson(publication.get("referral"));
         if (referral != null && RewardMethod.ALL.contains(referral.method())) {
@@ -246,6 +288,7 @@ public final class PublicationLifecycle {
             default -> throw new IllegalStateException("Unknown approval outcome " + approval.status());
         }
         PublicationEditing.write(ctx, publication, values);
+        BenefitAllocations.take(ctx, publication, first(ctx, BENEFIT_PURCHASE), list(ctx, BENEFIT_ALLOCATIONS));
     }
 
     // ---- withdraw, pause, resume -----------------------------------------------------------------------------------

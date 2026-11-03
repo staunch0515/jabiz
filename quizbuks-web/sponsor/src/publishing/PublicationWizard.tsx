@@ -86,6 +86,7 @@ import { LabelledProblems, PublicationSummary, useAudienceLabel, useDebounced, u
   useRewardMethodLabel, useVersionOf } from './shared'
 import { TiersEditor } from './TiersEditor'
 import { playSound } from '../qb/sound'
+import { BenefitPurchaseField } from '../benefits/BenefitPurchaseField'
 
 export const STEP_COUNT = 4
 
@@ -461,6 +462,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
             <p id={`${id}-method-error`} className="text-destructive text-sm">{problemOf('rewardMethod')}</p>
           )}
         </fieldset>
+      )}
+      {rewardMethod === 'OFFLINE_REDEEM' && (
+        <BenefitPurchaseField id={`${id}-benefit`} value={form.benefitPurchaseId} disabled={locked}
+          problem={problemOf('benefitPurchaseId')} onChange={(value) => set('benefitPurchaseId', value)} />
       )}
       {rewardMethod === 'OFFLINE_REDEEM' && (
         <Field id={`${id}-redeem`} label={t('publishing.field.redeemDescription')} problem={problemOf('redeemDescription')}

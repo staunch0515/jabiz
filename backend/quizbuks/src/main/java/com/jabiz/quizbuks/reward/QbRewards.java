@@ -111,6 +111,15 @@ public final class QbRewards {
      * The code the taker and the sponsor say to each other at the counter: {@code C-} and the last eight characters of
      * the attempt's id (its random part, so two codes of one sponsor seldom coincide; the id itself stays the key).
      */
+    /**
+     * Q89b-1: who hands a prize to collect over: the sponsor whose benefit it is ({@code fulfillerId}), or its
+     * publisher (every prize before Q89b, and the sponsors' own).
+     */
+    public static String handlerOf(java.util.Map<String, Object> redemption) {
+        Object fulfiller = redemption.get("fulfillerId");
+        return String.valueOf(fulfiller != null ? fulfiller : redemption.get("publisherId"));
+    }
+
     public static String codeOf(Object attemptId) {
         String id = String.valueOf(attemptId).replace("-", "");
         return "C-" + id.substring(Math.max(0, id.length() - 8)).toUpperCase(java.util.Locale.ROOT);
@@ -200,6 +209,8 @@ public final class QbRewards {
         eb.field("description", f -> f.physicalColumn("description").immutable(true).required(true)
             .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
         eb.field("code", f -> f.physicalColumn("code").immutable(true).required(true).asText(CODE_LENGTH));
+        // Q89b-1: the sponsor who hands it over when it is another sponsor's benefit (none: the publisher).
+        eb.field("fulfillerId", f -> f.physicalColumn("fulfiller_id").immutable(true).processOnly().asText(128));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(REDEMPTION_STATUS_DICTIONARY, RedemptionStatus.ALL.toArray(String[]::new)));
         eb.field("dueAt", f -> f.physicalColumn("due_at").immutable(true).required(true).processOnly()

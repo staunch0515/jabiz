@@ -58,6 +58,7 @@ results:
   invited:        { kind: { type: bool } }
   sponsorName:    { from: QbSponsor.contactName }
   sponsorCompany: { from: QbSponsor.company }
+  fulfillerCompany: { from: QbSponsor.company }
   sponsorIntro:   { from: QbSponsor.intro }
   sponsorAvatar:  { from: QbSponsor.avatar }
   sponsorHandle:  { from: QbSponsorPage.handle }
@@ -122,6 +123,7 @@ SELECT
     d.invited AS invited,
     d.sponsorName AS sponsorName,
     d.sponsorCompany AS sponsorCompany,
+    d.fulfillerCompany AS fulfillerCompany,
     d.sponsorIntro AS sponsorIntro,
     d.sponsorAvatar AS sponsorAvatar,
     d.sponsorHandle AS sponsorHandle,
@@ -194,6 +196,9 @@ SELECT
     (inv.{{QbInvitation.invitationId}} IS NOT NULL) AS invited,
     sp.{{QbSponsor.contactName}}           AS sponsorName,
     sp.{{QbSponsor.company}}               AS sponsorCompany,
+    -- Q89b-1: another sponsor's benefit is collected at its provider's place.
+    (SELECT fs.{{QbSponsor.company}} FROM {{QbSponsor}} fs
+     WHERE fs.{{QbSponsor.userId}} = c.{{QbPublicationCard.fulfillerId}}) AS fulfillerCompany,
     -- Q73c: the sponsor's introduction in the page's language when translated.
     coalesce(CAST(sp.{{QbSponsor.introTranslations}} AS jsonb) -> dl.lang -> 'intro' ->> 'text',
              sp.{{QbSponsor.intro}})       AS sponsorIntro,

@@ -590,7 +590,9 @@ final class PublicationEditing {
         card.put("status", status);
         for (String field : List.of("regions", "startAt", "endAt", "name", "versionId", "maxReward", "fullScore",
             "passScore", "timeLimitSec", "budgetCap", "maxWinners", "redeemDescription", "digitalDelivery",
-            "digitalDescription", "digitalSendDays", "sealedDigitalContent", "referral", "pickCount")) {
+            "digitalDescription", "digitalSendDays", "sealedDigitalContent", "referral", "pickCount",
+            // Q89b-1: the purchase the prizes come from and who hands them over.
+            "benefitPurchaseId", "fulfillerId")) {
             card.put(field, publication.get(field));
         }
         if (card.get("regions") == null) {
@@ -768,6 +770,11 @@ final class PublicationEditing {
         String texts = PublicationLanguages.cardJson(publication.get("translations"));
         if (texts != null) {
             content.put("translations", texts);
+        }
+        // Q89b-1 (D-Q89-8): the purchase the prizes come from, as the draft saw it (provider, benefit, quantity, what
+        // was paid, the proofs): the reviewer approves it with the publication, and a change of it is reviewed again.
+        if (publication.get("benefitSnapshot") != null) {
+            content.put("benefit", publication.get("benefitSnapshot"));
         }
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));
     }
