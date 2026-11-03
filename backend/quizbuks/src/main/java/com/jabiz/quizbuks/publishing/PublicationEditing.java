@@ -223,8 +223,16 @@ final class PublicationEditing {
                 QbPublications.defaultDataset(QbPublications.SPONSOR_METHODS), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.Eq("userId", ctx.request().actorId())).limit(1).build(), SPONSOR_METHODS))
             // Optional: before setup the parameters are missing and their declared values apply (a draft is saved).
+            // Q88b: the entry fee's switch in the same read (D-Q88-14: it only decides whether a fee can be set).
             .step("Load the reward parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, REWARD_PARAMS,
-                QbParams.REWARD_DEFAULT_METHODS, QbParams.REWARD_MAX_PER_ATTEMPT));
+                QbParams.REWARD_DEFAULT_METHODS, QbParams.REWARD_MAX_PER_ATTEMPT, QbParams.ENTRY_FEE_ENABLED));
+    }
+
+    /** Q88b (D-Q88-14): whether a fee may be set now, from {@link #loadSponsorMethods}; unpublished reads as off. */
+    static boolean entryFeeEnabled(ProcessContext ctx) {
+        ParamValues params = rewardParams(ctx);
+        return params != null
+            && Boolean.TRUE.equals(params.find(QbParams.ENTRY_FEE_ENABLED, Boolean.class).orElse(null));
     }
 
     private static ParamValues rewardParams(ProcessContext ctx) {
@@ -592,7 +600,9 @@ final class PublicationEditing {
             "passScore", "timeLimitSec", "budgetCap", "maxWinners", "redeemDescription", "digitalDelivery",
             "digitalDescription", "digitalSendDays", "sealedDigitalContent", "referral", "pickCount",
             // Q89b-1: the purchase the prizes come from and who hands them over.
-            "benefitPurchaseId", "fulfillerId")) {
+            "benefitPurchaseId", "fulfillerId",
+            // Q88b: the entry fee the start charges.
+            "entryFee")) {
             card.put(field, publication.get(field));
         }
         if (card.get("regions") == null) {
@@ -672,7 +682,8 @@ final class PublicationEditing {
             integer(values.get("maxWinners")), methodOf(values), (String) values.get("redeemDescription"),
             Audience.of(values.get("audience")), DigitalDelivery.of(values.get("digitalDelivery")),
             (String) values.get("digitalDescription"), values.get("sealedDigitalContent") != null,
-            ReferralPolicy.fromJson(values.get("referral")), integer(values.get("pickCount")));
+            ReferralPolicy.fromJson(values.get("referral")), integer(values.get("pickCount")),
+            money(values.get("entryFee")));
     }
 
     /**

@@ -186,6 +186,8 @@ public final class ChannelPublishing {
         publication.put("fullScore", BigDecimal.valueOf(snapshot.fullScore()));
         publication.put("maxReward", BigDecimal.ZERO);
         publication.put("maxSpend", BigDecimal.ZERO);
+        // Q88b: a channel's publication charges no entry fee (its takers have no wallet, D-Q88-9).
+        publication.put("entryFee", BigDecimal.ZERO);
         publication.put("tierCount", one);
         publication.put("status", PublicationStatus.LIVE);
         publication.put("submittedAt", ctx.opTime());

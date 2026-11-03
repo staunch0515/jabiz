@@ -11,6 +11,7 @@ results:
   methods:             { kind: { type: text, maxLength: 100 } }
   own:                 { kind: { type: bool } }
   maxRewardPerAttempt: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  entryFeeEnabled:     { kind: { type: bool } }
 permissions: [qb.publication.write]
 ---*/
 -- One row, for the wizard's choice and the console's navigation. The rule is the processes' (publishing.RewardMethod
@@ -22,9 +23,12 @@ permissions: [qb.publication.write]
 WITH params AS (
     SELECT
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.reward.default-methods' THEN p.{{SysParam.value}} END) AS p_methods,
-        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.reward.max-per-attempt' THEN p.{{SysParam.value}} END) AS p_max
+        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.reward.max-per-attempt' THEN p.{{SysParam.value}} END) AS p_max,
+        -- Q88b (D-Q88-14): whether the wizard offers the entry fee; the save refuses one when it is off.
+        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.play.entry-fee.enabled' THEN p.{{SysParam.value}} END) AS p_fee
     FROM {{SysParam}} p
-    WHERE p.{{SysParam.paramKey}} IN ('qb.reward.default-methods', 'qb.reward.max-per-attempt')),
+    WHERE p.{{SysParam.paramKey}} IN ('qb.reward.default-methods', 'qb.reward.max-per-attempt',
+        'qb.play.entry-fee.enabled')),
 mine AS (
     SELECT max(m.{{QbSponsorRewardMethods.methods}}) AS methods, count(*) AS rows_found
     FROM {{QbSponsorRewardMethods}} m)
@@ -32,5 +36,6 @@ SELECT
     coalesce(mine.methods, nullif(btrim(params.p_methods), ''), 'PLATFORM') AS methods,
     mine.rows_found > 0 AS own,
     CASE WHEN params.p_max ~ '^[0-9]{1,18}$' AND CAST(params.p_max AS numeric) > 0
-        THEN CAST(params.p_max AS numeric) END AS maxRewardPerAttempt
+        THEN CAST(params.p_max AS numeric) END AS maxRewardPerAttempt,
+    coalesce(lower(btrim(params.p_fee)) = 'true', false) AS entryFeeEnabled
 FROM mine CROSS JOIN params

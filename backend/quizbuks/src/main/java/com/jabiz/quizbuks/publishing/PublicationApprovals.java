@@ -79,6 +79,10 @@ public final class PublicationApprovals {
         if (draft.pickCount() != null) {
             content.put("pickCount", draft.pickCount());
         }
+        // Q88b: likewise only a publication charging an entry fee names it, so earlier hashes stand.
+        if (draft.chargesEntryFee()) {
+            content.put("entryFee", draft.entryFee());
+        }
         content.put("budgetCap", draft.budgetCap());
         content.put("maxWinners", draft.maxWinners());
         // Q22: only when the sponsor settles the reward themselves, so the publications paid by the platform (all of

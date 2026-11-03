@@ -110,7 +110,21 @@ public final class PublicationProcesses {
         @Size(max = 3) Map<@NotNull @Size(max = 2) String, @Size(max = 4) Map<@NotNull @Size(max = 30) String,
             @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH + 1) String>> translations,
         @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed, Integer pickCount,
-        @Size(max = 36) String benefitPurchaseId) {
+        @Size(max = 36) String benefitPurchaseId, BigDecimal entryFee) {
+
+        /** As before Q88b: no entry fee. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription, String audience,
+            String digitalDelivery, String digitalDescription, Integer digitalSendDays, String digitalContent,
+            UUID cover, ReferralInput referral, List<String> languages,
+            Map<String, Map<String, String>> translations, List<String> confirmed, Integer pickCount,
+            String benefitPurchaseId) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
+                confirmed, pickCount, benefitPurchaseId, null);
+        }
 
         /** As before Q89b-1: the prize is the sponsor's own. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
@@ -122,7 +136,7 @@ public final class PublicationProcesses {
             this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
                 maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
                 digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
-                confirmed, pickCount, null);
+                confirmed, pickCount, null, null);
         }
 
         /** As before Q81: every question of the version is asked. */
@@ -395,6 +409,13 @@ public final class PublicationProcesses {
         values.put("maxWinners", decimal(input.maxWinners()));
         // Q81: before the version's part, whose full score depends on it.
         values.put("pickCount", decimal(input.pickCount()));
+        // Q88b (D-Q88-9, D-Q88-14): the entry fee, none by default; set only while the switch is on.
+        BigDecimal entryFee = input.entryFee() == null ? BigDecimal.ZERO : input.entryFee();
+        if (entryFee.signum() > 0 && !PublicationEditing.entryFeeEnabled(ctx)) {
+            ctx.reject(new Violation("entryFee", PublishingCodes.ENTRY_FEE_OFF, "Entry fees are not offered at the "
+                + "moment", Map.of()));
+        }
+        values.put("entryFee", entryFee);
         putVersion(values, version);
         putDerived(values, tiers);
         UUID publicationId;
@@ -703,7 +724,9 @@ public final class PublicationProcesses {
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
             "sealedDigitalContent", "referral", "languages", "translations", "pickCount",
             // Q89b-1: the purchase, as the source saw it; the copy's submission checks it again.
-            "benefitPurchaseId", "benefitSnapshot", "fulfillerId")) {
+            "benefitPurchaseId", "benefitSnapshot", "fulfillerId",
+            // Q88b: the entry fee (the copy keeps it whatever the switch says now: what was set stays set).
+            "entryFee")) {
             values.put(field, source.get(field));
         }
         values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));
