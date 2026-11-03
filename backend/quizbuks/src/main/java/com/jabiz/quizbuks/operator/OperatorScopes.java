@@ -53,6 +53,7 @@ public final class OperatorScopes {
         }
         fields.put(QbRewards.REDEEM_TOKEN, "sponsorId");
         fields.put(QbRewards.STAFF, "sponsorId");
+        fields.put(QbRewards.PASS, "handlerId");
         fields.put(QbInvitations.QUOTA, "sponsorId");
         fields.put(QbPublications.SPONSOR_METHODS, "userId");
         fields.put(QbAccounts.SPONSOR, "userId");

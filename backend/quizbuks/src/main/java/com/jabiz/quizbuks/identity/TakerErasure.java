@@ -67,6 +67,8 @@ public class TakerErasure {
                     // Found by who claimed them, not by who sent them as the sponsor's are (decision D62 item 8).
                     ErasedEntity.delete(QbInvitations.INVITATION, "userId", "email"),
                     ErasedEntity.delete(QbRewards.STAFF, "userId"),
+                    // Q89c: the taker's passes go with them (only hashes, but the rows say whose prize).
+                    ErasedEntity.delete(QbRewards.PASS, "userId"),
                     // Q82: the sponsors they blocked (their conversations stay, holding only their id; what they wrote
                     // is emptied with every account's messages, SponsorErasure).
                     ErasedEntity.delete(com.jabiz.quizbuks.conversation.QbConversations.BLOCK, "takerId"),

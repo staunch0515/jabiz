@@ -69,6 +69,10 @@ jabiz:
       "[QB_JOURNAL_PREVIEW]": { per-user: 10, period: 1m }
       # Q20: the result page polls it every 5 s while an expired attempt is finished; a script could loop on it.
       "[QB_ATTEMPT_RESULT]": { per-user: 120, period: 1m }
+      # Q89c (D-Q89-10): reading a taker's pass: six digits are guessable, so a counter reads at most 10 a minute.
+      "[QB_REDEMPTION_PASS_CHECK]": { per-user: 10, period: 1m }
+      "[QB_STAFF_REDEMPTION_PASS_CHECK]": { per-user: 10, period: 1m }
+      "[QB_REDEMPTION_PASS_ISSUE]": { per-user: 30, period: 1m }
       # Q82 (D-Q82-12): conversations are written by hand; a script writing to many sponsors or flooding one is not.
       "[QB_CONVERSATION_SEND]": { per-user: 30, period: 1h }
       "[QB_CONVERSATION_OPEN]": { per-user: 10, period: 1h }
