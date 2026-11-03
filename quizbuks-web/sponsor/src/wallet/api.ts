@@ -49,6 +49,8 @@ export interface SponsorWallet {
   overdueCount: number
   billingMode: BillingMode
   creditLimit: number
+  /** Q87b: the postpaid fees charged but not on an invoice yet (paid early from the page, or invoiced monthly). */
+  uninvoicedTotal: number
 }
 
 /** How the platform's fees are billed (Q87b): taken from the cash account at once, or invoiced monthly within a credit. */
@@ -125,6 +127,7 @@ export async function readWallet(): Promise<SponsorWallet> {
     overdueCount: num(row.overdueCount),
     billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
     creditLimit: num(row.creditLimit),
+    uninvoicedTotal: num(row.uninvoicedTotal),
   }
 }
 
@@ -484,6 +487,21 @@ export async function payInvoice(invoiceId: string): Promise<InvoicePayOutput> {
   const out = await runProcess<Record<string, unknown>>(WALLET_PROCESS.invoicePay, { invoiceId })
   return { invoiceId: String(out.invoiceId), invoiceNo: String(out.invoiceNo ?? ''), status: invoiceStatusOf(out.status),
     total: num(out.total), cashBalance: num(out.cashBalance) }
+}
+
+/** What `QB_FEE_PAY_EARLY` answers: how many fees were settled, their total, the cash left, their invoices. */
+export interface EarlyPayOutput {
+  count: number
+  total: number
+  cashBalance: number
+  invoiceNos: string[]
+}
+
+/** Pays the postpaid fees not invoiced yet from the cash account; the server checks there are some and the cash. */
+export async function payEarly(): Promise<EarlyPayOutput> {
+  const out = await runProcess<Record<string, unknown>>(WALLET_PROCESS.payEarly, {})
+  return { count: num(out.count), total: num(out.total), cashBalance: num(out.cashBalance),
+    invoiceNos: Array.isArray(out.invoiceNos) ? out.invoiceNos.map(String) : [] }
 }
 
 /**

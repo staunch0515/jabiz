@@ -18,6 +18,8 @@ export const WALLET_PROCESS = {
   kudosSell: 'QB_KUDOS_SELL',
   /** Q87b (`fee.FeeProcesses`): an invoice paid from the cash account; its document, issued once and kept. */
   invoicePay: 'QB_FEE_INVOICE_PAY',
+  /** Q87b: the postpaid fees not invoiced yet, paid early (each gets an invoice of its own, paid). */
+  payEarly: 'QB_FEE_PAY_EARLY',
   invoiceDocument: 'QB_FEE_INVOICE_DOCUMENT',
 } as const
 

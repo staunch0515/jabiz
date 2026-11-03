@@ -51,4 +51,6 @@ LEFT JOIN {{QbFeeInvoice}} i
        ON (i.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text))
        OR (i.{{QbFeeInvoice.chargeId}} IS NULL AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
            AND i.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
-           AND i.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}})
+           AND i.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}}
+           AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} o
+                           WHERE o.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)))

@@ -31,6 +31,7 @@ import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import com.jabiz.runtime.task.CloseTasks;
 import com.jabiz.runtime.task.CreateTask;
@@ -67,6 +68,9 @@ import java.util.function.Function;
  *   <li>{@value #INVOICE_ITEM} ({@code internal()}, the item of {@value #INVOICE_JOB}): one postpaid sponsor's
  *       invoice of a month, all its postpaid charges, once; announces it ({@code qb.fee.invoice-issued}).</li>
  *   <li>{@value #PAY} (the sponsor): pays an open or overdue invoice from the cash account.</li>
+ *   <li>{@value #PAY_EARLY} (the sponsor): pays the postpaid fees not invoiced yet from the cash account, each
+ *       getting an invoice of its own, paid ({@value #SETTLE_ITEM}, one a charge); the month's invoice then covers
+ *       what remains.</li>
  *   <li>{@value #DOCUMENT} (the sponsor): the invoice's PDF ({@value #LAYOUT_ID}), issued the first time it is asked
  *       for (a job holds no permission to issue a document), given again after.</li>
  *   <li>{@value #OVERDUE_ITEM} ({@code internal()}, the item of the daily job {@value #OVERDUE_JOB}): marks an
@@ -82,6 +86,8 @@ public final class FeeProcesses {
     public static final String MONTHLY_ITEM = "QB_FEE_MONTHLY_ITEM";
     public static final String INVOICE_ITEM = "QB_FEE_INVOICE_ISSUE_ITEM";
     public static final String PAY = "QB_FEE_INVOICE_PAY";
+    public static final String PAY_EARLY = "QB_FEE_PAY_EARLY";
+    public static final String SETTLE_ITEM = "QB_FEE_SETTLE_ITEM";
     public static final String DOCUMENT = "QB_FEE_INVOICE_DOCUMENT";
     public static final String OVERDUE_ITEM = "QB_FEE_OVERDUE_ITEM";
     public static final String BILLING_SET = "QB_OPERATOR_BILLING_SET";
@@ -93,6 +99,7 @@ public final class FeeProcesses {
     public static final String OVERDUE_DUE_TEMPLATE = "qb.system.fee-overdue-due";
     public static final String DOCUMENT_TEMPLATE = "qb.sponsor.fee-invoice-doc";
     public static final String LINES_TEMPLATE = "qb.sponsor.fee-invoice-lines";
+    public static final String UNINVOICED_TEMPLATE = "qb.sponsor.fee-uninvoiced";
     public static final String ISSUER_TEMPLATE = "qb.sponsor.receipt-issuer";
     public static final String LAYOUT_ID = "qb.fee_invoice";
 
@@ -130,6 +137,22 @@ public final class FeeProcesses {
     /** @param language the document's language ({@code en}, {@code zh}, {@code ja}); none: the caller's */
     public record DocumentInput(@NotBlank @Size(max = 36) String invoiceId, @Size(max = 10) String language) {}
 
+    /** @param period only this month's fees ({@code yyyy-MM}); none: every month's */
+    public record EarlyInput(@Pattern(regexp = "\\d{4}-\\d{2}") String period) {}
+
+    /** @param invoiceNos the invoices made, one a fee, all paid; {@code cashBalance} the cash after */
+    public record EarlyOutput(int count, BigDecimal total, BigDecimal cashBalance, List<String> invoiceNos) {}
+
+    /** One postpaid fee settled early (the item of {@value #PAY_EARLY}): what the caller read under its lock. */
+    public record SettleInput(@NotBlank @Size(max = 128) String sponsorId, @NotBlank @Size(max = 36) String chargeId,
+        @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period,
+        @NotNull @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
+        @NotNull @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal tax,
+        @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal total,
+        @Size(max = 36) String operatorId, @NotBlank @Size(max = 100) String reference) {}
+
+    public record SettleOutput(String invoiceId, String invoiceNo) {}
+
     /** @param status the invoice's status after; {@code cashBalance} the cash after a payment */
     public record InvoiceOutput(String invoiceId, String invoiceNo, String status, BigDecimal total,
         BigDecimal cashBalance, String documentRunId, String documentNo) {}
@@ -156,8 +179,13 @@ public final class FeeProcesses {
     static final String CASH_WALLET = "cashWallet";
     static final String EXISTING = "existing";
     static final String CHARGES = "charges";
+    static final String INVOICES = "invoices";
+    static final String EARLY = "early";
+    static final String SETTLED = "settled";
     /** How many charges of a month are read for its invoice: more than any sponsor has; as many is a failure. */
     static final int MAX_CHARGES = 500;
+    /** How many fees one early payment settles at most: more than wait for an invoice (one a month, by hand a few). */
+    static final int MAX_EARLY = 100;
     static final String CHARGE_ID = "chargeId";
     static final String CHARGE_POSTING = "chargePosting";
     static final String PAY_INPUT = "payInput";
@@ -388,7 +416,8 @@ public final class FeeProcesses {
                     QbParams.FEE_DUE_DAYS))
                 .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbWallets.lockName(QbWallets.SPONSOR, invoiceInput(ctx).sponsorId())))
-                .step("Load the month's postpaid charges and its invoice", QueryEntities.<ProcessContext>all(
+                // The month's invoices: the month's own (one at most) and those of its charges paid early.
+                .step("Load the month's postpaid charges and its invoices", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbFees.defaultDataset(QbFees.CHARGE), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.Eq("sponsorId", invoiceInput(ctx).sponsorId()),
@@ -397,17 +426,41 @@ public final class FeeProcesses {
                     QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.Eq("sponsorId", invoiceInput(ctx).sponsorId()),
-                            new QueryPredicate.Eq("period", invoiceInput(ctx).period()),
-                            new QueryPredicate.IsNull("chargeId")))).limit(1).build(), EXISTING),
+                            new QueryPredicate.Eq("period", invoiceInput(ctx).period())))).limit(MAX_CHARGES).build(),
+                        INVOICES),
                     QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
                         ctx -> bySponsor("userId", invoiceInput(ctx).sponsorId()), ASSIGNMENT)))
-                .compute("Decide", (metadata, ctx) -> ctx.put(OUTCOME,
-                    first(ctx, EXISTING) == null && !list(ctx, CHARGES).isEmpty() ? "ISSUED" : "NONE"))
+                .compute("Decide", (metadata, ctx) -> decideMonthInvoice(ctx))
                 .step("Number the invoice", AssignNumber.<ProcessContext>when(ctx -> "ISSUED".equals(ctx.get(OUTCOME)),
                     QbFees.INVOICE_SEQUENCE, ctx -> yearOf(invoiceInput(ctx).period()), INVOICE_NO))
                 .compute("Record the invoice", (metadata, ctx) -> insertPeriodInvoice(ctx, zone))
                 .step("Announce the invoice", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(INVOICE_ID),
                     QbFees.INVOICE_ISSUED_EVENT, FeeProcesses::invoicePayload)));
+    }
+
+    /** The month's invoice is issued once, for the postpaid charges not paid early (none left: nothing). */
+    static void decideMonthInvoice(ProcessContext ctx) {
+        if (list(ctx, CHARGES).size() >= MAX_CHARGES || list(ctx, INVOICES).size() >= MAX_CHARGES) {
+            // Never invoice short of what is receivable: the item fails and is seen, instead of a lasting difference.
+            throw new IllegalStateException("More than " + MAX_CHARGES + " postpaid charges or invoices in one month");
+        }
+        boolean issued = false;
+        List<Object> own = new ArrayList<>();
+        for (EntityInstance invoice : list(ctx, INVOICES)) {
+            if (invoice.get("chargeId") == null) {
+                issued = true;
+            } else {
+                own.add(String.valueOf((Object) invoice.get("chargeId")));
+            }
+        }
+        List<EntityInstance> remaining = new ArrayList<>();
+        for (EntityInstance charge : list(ctx, CHARGES)) {
+            if (!own.contains(String.valueOf(charge.id()))) {
+                remaining.add(charge);
+            }
+        }
+        ctx.put(CHARGES, remaining);
+        ctx.put(OUTCOME, !issued && !remaining.isEmpty() ? "ISSUED" : "NONE");
     }
 
     static void insertPeriodInvoice(ProcessContext ctx, ZoneId zone) {
@@ -417,10 +470,6 @@ public final class FeeProcesses {
         InvoiceInput input = invoiceInput(ctx);
         BigDecimal amount = BigDecimal.ZERO;
         BigDecimal tax = BigDecimal.ZERO;
-        if (list(ctx, CHARGES).size() >= MAX_CHARGES) {
-            // Never invoice short of what is receivable: the item fails and is seen, instead of a lasting difference.
-            throw new IllegalStateException("More than " + MAX_CHARGES + " postpaid charges in one month");
-        }
         for (EntityInstance charge : list(ctx, CHARGES)) {
             amount = amount.add(money(charge.get("amount")));
             tax = tax.add(money(charge.get("tax")));
@@ -507,6 +556,132 @@ public final class FeeProcesses {
         values.put("paymentTransactionId", ctx.get(PAY_POSTING, LedgerProcesses.PostOutput.class).transactionId());
         ctx.changes().update(QbFees.INVOICE, invoice.id(), invoice.version(), values);
         ctx.put(OUTCOME, QbFees.PAID);
+    }
+
+    // ---- paying early -----------------------------------------------------------------------------------------------
+
+    public static ProcessDefinition<EarlyInput, EarlyOutput, ProcessContext> payEarly() {
+        return ProcessDefinition.define(PAY_EARLY, 1, EarlyInput.class, EarlyOutput.class, ProcessContext.class, pb -> pb
+            .description("Pays one's own postpaid platform fees not invoiced yet from the cash account: each gets an "
+                + "invoice of its own, paid; the month's invoice then covers what remains.")
+            .permissions(QbPermissions.TOPUP)
+            .requiresVerifiedEmail()
+            .steps(CallerChecks::refuseBanned)
+            .steps(ConsentChecks.sponsor())
+            .contextFactory(FeeProcesses::context)
+            .outputMapper(ctx -> new EarlyOutput(settled(ctx).size(), ctx.get(TOTAL, BigDecimal.class),
+                ctx.get(CASH_AFTER, BigDecimal.class), settled(ctx).stream().map(SettleOutput::invoiceNo).toList()))
+            .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(
+                ctx -> QbWallets.lockName(QbWallets.SPONSOR, ctx.request().actorId())))
+            // Through the sponsor's own datasets: the fees of the caller only.
+            .step("Read the fees not invoiced yet", RunTemplate.<ProcessContext>of(UNINVOICED_TEMPLATE, ctx -> {
+                Map<String, Object> params = new LinkedHashMap<>();
+                params.put("period", ctx.get(INPUT, EarlyInput.class).period());
+                return params;
+            }, EARLY))
+            .step("Load the cash and the operator", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
+                    ctx -> QbWallets.query(QbWallets.CASH, ctx.request().actorId()), CASH_WALLET),
+                QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
+                    ctx -> bySponsor("userId", ctx.request().actorId()), ASSIGNMENT)))
+            .compute("Check the payment", (metadata, ctx) -> checkEarlyPayment(ctx))
+            .step("Settle each fee", CallProcess.forEach(SETTLE_ITEM, 1, FeeProcesses::settleInputs, SETTLED))
+            .compute("Take the cash", (metadata, ctx) -> {
+                BigDecimal total = ctx.get(TOTAL, BigDecimal.class);
+                EntityInstance cash = first(ctx, CASH_WALLET);
+                QbWallets.change(ctx, cash, QbWallets.CASH, ctx.request().actorId(), total.negate(), 0, BigDecimal.ZERO);
+                ctx.put(CASH_AFTER, QbWallets.balance(cash).subtract(total));
+            }));
+    }
+
+    static void checkEarlyPayment(ProcessContext ctx) {
+        List<Map<String, Object>> rows = rows(ctx, EARLY);
+        if (rows.isEmpty()) {
+            throw new BusinessRuleViolationException(new Violation(null, FeeCodes.FEE_NOTHING_DUE,
+                "No platform fee is waiting for its invoice", Map.of()));
+        }
+        if (rows.size() > MAX_EARLY) {
+            // The oldest first; the page offers the rest after.
+            rows = rows.subList(0, MAX_EARLY);
+            ctx.put(EARLY, rows);
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        for (Map<String, Object> row : rows) {
+            total = total.add(money(row.get("total")));
+        }
+        BigDecimal available = QbWallets.available(first(ctx, CASH_WALLET));
+        if (available.compareTo(total) < 0) {
+            throw new BusinessRuleViolationException(new Violation(null, FeeCodes.FEE_CASH_SHORT, "The cash account has "
+                + available + " available; the fees are " + total, Map.of("available", available.toPlainString(),
+                "total", total.toPlainString())));
+        }
+        ctx.put(TOTAL, total);
+    }
+
+    static List<SettleInput> settleInputs(ProcessContext ctx) {
+        EntityInstance assignment = first(ctx, ASSIGNMENT);
+        String operatorId = assignment == null ? null : String.valueOf((Object) assignment.get("operatorId"));
+        List<SettleInput> inputs = new ArrayList<>();
+        for (Map<String, Object> row : rows(ctx, EARLY)) {
+            inputs.add(new SettleInput(ctx.request().actorId(), String.valueOf(row.get("chargeId")),
+                String.valueOf(row.get("period")), money(row.get("amount")), money(row.get("tax")),
+                money(row.get("total")), operatorId,
+                "fee_" + String.valueOf(row.get("kind")).toLowerCase(java.util.Locale.ROOT) + "_" + row.get("period")));
+        }
+        return inputs;
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<SettleOutput> settled(ProcessContext ctx) {
+        List<Object> outputs = (List<Object>) ctx.get(SETTLED);
+        return outputs == null ? List.of() : outputs.stream().map(SettleOutput.class::cast).toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<Map<String, Object>> rows(ProcessContext ctx, String key) {
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(key);
+        return rows == null ? List.of() : rows;
+    }
+
+    /** One fee paid early: its payment posted from the charge (as a prepaid one's), its invoice numbered and paid. */
+    public static ProcessDefinition<SettleInput, SettleOutput, ProcessContext> settleItem(ZoneId zone) {
+        return ProcessDefinition.define(SETTLE_ITEM, 1, SettleInput.class, SettleOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Settles one postpaid platform fee early: paid from the cash account, invoiced on its own.")
+                .permissions(QbPermissions.TOPUP)
+                .subProcessOnly()
+                .contextFactory(FeeProcesses::context)
+                .outputMapper(ctx -> new SettleOutput((String) ctx.get(INVOICE_ID), (String) ctx.get(INVOICE_NO)))
+                .step("Load the due days", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+                    QbParams.FEE_DUE_DAYS))
+                .step("Post the payment", CallProcess.<ProcessContext>of(LedgerProcesses.POST, 1,
+                    ctx -> payment(ctx.opTime(), settleInput(ctx).sponsorId(), settleInput(ctx).total(), QbFees.CHARGE,
+                        settleInput(ctx).chargeId(), settleInput(ctx).reference()), PAY_POSTING))
+                .step("Number the invoice", AssignNumber.<ProcessContext>of(QbFees.INVOICE_SEQUENCE,
+                    ctx -> yearOf(settleInput(ctx).period()), INVOICE_NO))
+                .compute("Record the invoice", (metadata, ctx) -> insertSettledInvoice(ctx, zone)));
+    }
+
+    static void insertSettledInvoice(ProcessContext ctx, ZoneId zone) {
+        SettleInput input = settleInput(ctx);
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("invoiceNo", ctx.get(INVOICE_NO));
+        values.put("sponsorId", input.sponsorId());
+        values.put("operatorId", input.operatorId());
+        values.put("billingMode", FeeRules.POSTPAID);
+        values.put("period", input.period());
+        values.put("chargeId", input.chargeId());
+        values.put("amount", input.amount());
+        values.put("tax", input.tax());
+        values.put("total", input.total());
+        values.put("status", QbFees.PAID);
+        values.put("issuedAt", ctx.opTime());
+        values.put("dueOn", FeeRules.dueOn(ctx.opTime(),
+            ctx.get(PARAMS, ParamValues.class).get(QbParams.FEE_DUE_DAYS, BigDecimal.class), zone));
+        values.put("paidAt", ctx.opTime());
+        values.put("paymentTransactionId", ctx.get(PAY_POSTING, LedgerProcesses.PostOutput.class).transactionId());
+        values.put("remindersSent", BigDecimal.ZERO);
+        ctx.put(INVOICE_ID, String.valueOf(ctx.changes().insert(QbFees.INVOICE, values)));
     }
 
     // ---- the document -----------------------------------------------------------------------------------------------
@@ -732,6 +907,10 @@ public final class FeeProcesses {
 
     static BillingInput billingInput(ProcessContext ctx) {
         return ctx.get(INPUT, BillingInput.class);
+    }
+
+    static SettleInput settleInput(ProcessContext ctx) {
+        return ctx.get(INPUT, SettleInput.class);
     }
 
     static EntityInstance invoice(ProcessContext ctx) {

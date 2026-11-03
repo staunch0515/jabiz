@@ -1,10 +1,11 @@
 /*---
 id: qb.sponsor.wallet
 description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, and (Q87a) the cash account
-entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbSponsor, SysParam]
+entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbFeeCharge, QbSponsor, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:sponsor:QbWallet
   QbFeeInvoice: urn:jabiz:dataset:sponsor:QbFeeInvoice
+  QbFeeCharge: urn:jabiz:dataset:sponsor:QbFeeCharge
   QbSponsor: urn:jabiz:dataset:sponsor:QbSponsor
   SysParam: urn:jabiz:dataset:now:SysParam
   QbTopUp: urn:jabiz:dataset:sponsor:QbTopUp
@@ -25,6 +26,7 @@ results:
   overdueCount:  { kind: { type: numeric, precision: 9, scale: 0 } }
   billingMode:   { kind: { type: text, maxLength: 10 } }
   creditLimit:   { kind: { type: monetary, currency: JPY, scale: 0 } }
+  uninvoicedTotal: { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
@@ -45,7 +47,8 @@ SELECT
     coalesce(f.f_count, 0)          AS unpaidCount,
     coalesce(f.f_overdue, 0)        AS overdueCount,
     CAST(coalesce(sp.sp_mode, d.d_mode, 'PREPAID') AS varchar(10)) AS billingMode,
-    coalesce(sp.sp_limit, 0)        AS creditLimit
+    coalesce(sp.sp_limit, 0)        AS creditLimit,
+    coalesce(u.u_total, 0)          AS uninvoicedTotal
 FROM (SELECT 1 AS one) base
 LEFT JOIN (
     SELECT x.{{QbWallet.balance}} AS w_balance, x.{{QbWallet.held}} AS w_held,
@@ -64,6 +67,15 @@ CROSS JOIN (
            count(*) FILTER (WHERE i.{{QbFeeInvoice.status}} = 'OVERDUE') AS f_overdue
     FROM {{QbFeeInvoice}} i
     WHERE i.{{QbFeeInvoice.status}} IN ('OPEN', 'OVERDUE')) f
+-- Q87b: the postpaid fees not on an invoice yet (the month's, or one of their own when paid early).
+CROSS JOIN (
+    SELECT sum(c.{{QbFeeCharge.total}}) AS u_total
+    FROM {{QbFeeCharge}} c
+    WHERE c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
+      AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} v
+                      WHERE v.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
+                         OR (v.{{QbFeeInvoice.chargeId}} IS NULL
+                             AND v.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}}))) u
 LEFT JOIN (
     SELECT z.{{QbSponsor.billingMode}} AS sp_mode, z.{{QbSponsor.creditLimit}} AS sp_limit
     FROM {{QbSponsor}} z) sp ON true

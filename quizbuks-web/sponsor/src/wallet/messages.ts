@@ -121,6 +121,10 @@ const en = {
       paid: 'Invoice {{number}} paid. Cash: {{cash}}.',
       document: 'Invoice (PDF)',
       billingMode: { PREPAID: 'Prepaid', POSTPAID: 'Monthly' },
+      uninvoiced: 'Not invoiced yet',
+      uninvoicedHint: 'Fees of {{amount}} wait for the month’s invoice. You can pay them from your cash account now; each gets an invoice of its own, paid.',
+      payEarly: 'Pay now from cash account',
+      paidEarly: 'Paid {{amount}} early (invoices: {{count}}). Cash: {{cash}}.',
     },
     bank: {
       method: 'How do you pay?',
@@ -282,6 +286,10 @@ const zh: typeof en = {
       paid: '账单 {{number}} 已支付。现金：{{cash}}。',
       document: '账单（PDF）',
       billingMode: { PREPAID: '预付', POSTPAID: '月结' },
+      uninvoiced: '尚未开账单',
+      uninvoicedHint: '有 {{amount}} 的费用在等月底的账单。您可以现在就用现金账户付清；每笔费用各开一张已付的账单。',
+      payEarly: '现在用现金账户付清',
+      paidEarly: '已提前付清 {{amount}}（账单数：{{count}}）。现金：{{cash}}。',
     },
     bank: {
       method: '支付方式',
@@ -443,6 +451,10 @@ const ja: typeof en = {
       paid: '請求書 {{number}} を支払いました。現金：{{cash}}。',
       document: '請求書（PDF）',
       billingMode: { PREPAID: '前払い', POSTPAID: '月次' },
+      uninvoiced: '未請求',
+      uninvoicedHint: '{{amount}} の料金が月次の請求書を待っています。いま現金口座から支払うこともできます。料金ごとに支払済みの請求書が発行されます。',
+      payEarly: 'いま現金口座から支払う',
+      paidEarly: '{{amount}} を前払いしました（請求書：{{count}} 件）。現金：{{cash}}。',
     },
     bank: {
       method: 'お支払い方法',

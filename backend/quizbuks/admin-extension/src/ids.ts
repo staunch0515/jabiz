@@ -132,6 +132,8 @@ export const TEMPLATE = {
   /** Q48a, an operator's own pages (`qb.operator.use`): the totals and the sponsors, never a taker's profile. */
   operatorOverview: 'qb.operator.overview',
   operatorSponsors: 'qb.operator.sponsors',
+  /** Q87b: how the operator's sponsors pay the platform's fees. */
+  operatorBilling: 'qb.operator.sponsor-billing',
   /** Q48c, AI prospecting: an operator's own (`qb.prospect.use`) and headquarters' for any owner (`qb.admin.prospect`). */
   operatorProspects: 'qb.operator.prospects',
   operatorProspectSetting: 'qb.operator.prospect-setting',
@@ -573,6 +575,8 @@ export const PATH = {
   /** Q48a, an operator's own pages: home (totals and team) and the sponsors. */
   operatorHome: '/qb/operator',
   operatorSponsors: '/qb/operator/sponsors',
+  /** Q87b: the billing of the operator's sponsors. */
+  operatorBilling: '/qb/operator/billing',
   /** Q48c: AI prospecting: the businesses found, one business's draft, and the settings. */
   prospects: '/qb/prospects',
   prospect: (prospectId: string) => `/qb/prospects/${encodeURIComponent(prospectId)}`,

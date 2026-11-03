@@ -23,9 +23,11 @@ public final class FeeCodes {
     public static final String FEE_BILLING_MODE = "QB_FEE_BILLING_MODE";
     /** One's own sponsor account is charged, voided or billed by another administrator. */
     public static final String FEE_OWN = "QB_FEE_OWN";
+    /** Nothing to pay early: no postpaid fee is waiting for its invoice. */
+    public static final String FEE_NOTHING_DUE = "QB_FEE_NOTHING_DUE";
 
     public static final List<String> ALL = List.of(FEE_UNPAID, FEE_CASH_SHORT, FEE_INVOICE_STATE, FEE_SPONSOR,
-        FEE_PERIOD, FEE_PARAMS, FEE_NO_REVIEW, FEE_BILLING_MODE, FEE_OWN);
+        FEE_PERIOD, FEE_PARAMS, FEE_NO_REVIEW, FEE_BILLING_MODE, FEE_OWN, FEE_NOTHING_DUE);
 
     private FeeCodes() {}
 }

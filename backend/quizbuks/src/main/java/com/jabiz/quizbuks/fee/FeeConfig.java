@@ -184,6 +184,16 @@ public class FeeConfig {
     }
 
     @Bean
+    ProcessDefinition<FeeProcesses.EarlyInput, FeeProcesses.EarlyOutput, ProcessContext> qbFeePayEarly() {
+        return FeeProcesses.payEarly();
+    }
+
+    @Bean
+    ProcessDefinition<FeeProcesses.SettleInput, FeeProcesses.SettleOutput, ProcessContext> qbFeeSettleItem() {
+        return FeeProcesses.settleItem(zone);
+    }
+
+    @Bean
     ProcessDefinition<FeeProcesses.DocumentInput, FeeProcesses.InvoiceOutput, ProcessContext> qbFeeInvoiceDocument() {
         return FeeProcesses.document();
     }
