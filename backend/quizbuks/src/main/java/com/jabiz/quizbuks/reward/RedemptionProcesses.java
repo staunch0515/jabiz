@@ -14,6 +14,7 @@ import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.operator.OperatorChecks;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.PublishEvent;

@@ -99,6 +99,6 @@ public final class AllocationProcesses {
     private static com.jabiz.query.EntityQuery byPublication(ProcessContext ctx, String field) {
         EntityInstance found = first(ctx, FOUND);
         return com.jabiz.query.EntityQuery.builder().where(new com.jabiz.query.QueryPredicate.In(field,
-            found == null ? List.of() : List.of(found.get("publicationId")))).limit(1).build();
+            found == null ? List.of() : List.of((Object) found.get("publicationId")))).limit(1).build();
     }
 }

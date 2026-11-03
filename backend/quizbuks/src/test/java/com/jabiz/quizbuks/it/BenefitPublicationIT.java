@@ -113,7 +113,10 @@ class BenefitPublicationIT extends PlayItSupport {
             + "ORDER BY allocated_at", purchaseId);
     }
 
+    /** Runs the release job as its schedule would (its lock from a run before is released, as the other ITs do). */
     private void release() {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        clock.advance(Duration.ofMinutes(10));
         jobs.run(releaseJob, clock.instant());
     }
 
@@ -166,7 +169,10 @@ class BenefitPublicationIT extends PlayItSupport {
             .hasSize(100).anySatisfy(row -> assertThat(row).containsEntry("status", "REDEEMED"));
         assertThat(items("qb.sponsor.redemptions", sponsorToken(s.maker()), Map.of("limit", 500))).isEmpty();
 
-        // Ended: its share is given back with what it used (all of it).
+        // Ended (its winners reached its quota): its share is given back with what it used (all of it).
+        assertThat(query("SELECT status, end_reason FROM (SELECT DISTINCT ON (publication_id) * FROM "
+            + "qb_publication_version WHERE publication_id = CAST(? AS uuid) ORDER BY publication_id, version_no DESC) p",
+            publicationId).getFirst()).containsEntry("status", "ENDED").containsEntry("end_reason", "QUOTA");
         release();
         assertThat(allocations(s.purchaseId())).singleElement().satisfies(a -> assertThat(a)
             .containsEntry("status", QbBenefits.RELEASED).containsEntry("used", java.math.BigDecimal.valueOf(100)));
@@ -191,12 +197,11 @@ class BenefitPublicationIT extends PlayItSupport {
         assertThat(submit(token, first)).containsEntry("status", "PENDING_REVIEW");
         assertThat(codes(refused("QB_PUBLICATION_SUBMIT", token, body("publicationId", second), 422)))
             .containsExactly(BenefitCodes.STOCK_SHORT);
-        // The review approves the purchase with the publication.
-        String requestId = (String) query("SELECT approval_request_id FROM (SELECT DISTINCT ON (publication_id) * FROM "
+        // The review approves the purchase as the draft saw it (the review's content is built from it).
+        assertThat(String.valueOf(query("SELECT benefit_snapshot FROM (SELECT DISTINCT ON (publication_id) * FROM "
             + "qb_publication_version WHERE publication_id = CAST(? AS uuid) ORDER BY publication_id, version_no DESC) p",
-            first).getFirst().get("approval_request_id");
-        assertThat(String.valueOf(query("SELECT content FROM sys_approval_request WHERE request_id = CAST(? AS uuid)",
-            requestId).getFirst().get("content"))).contains(s.purchaseId()).contains("Beef noodles");
+            first).getFirst().get("benefit_snapshot"))).contains(s.purchaseId()).contains("Beef noodles")
+            .contains(s.shop());
         // Withdrawn: back to its draft; the job gives its six back and the second fits.
         run("QB_PUBLICATION_WITHDRAW", token, body("publicationId", first));
         release();
@@ -212,6 +217,8 @@ class BenefitPublicationIT extends PlayItSupport {
         String token = sponsorToken(s.maker());
         // Another sponsor's purchase is none.
         String stranger = newSponsor(unique("s-q89b-stranger"));
+        run(RewardMethodProcesses.SET, hq(), body("userId", stranger, "methods",
+            List.of(RewardMethod.PLATFORM, RewardMethod.OFFLINE_REDEEM), "note", "Q89b test"));
         String versionId = version(sponsorToken(stranger), "Stranger quiz");
         Instant now = clock.instant();
         Map<String, Object> save = complete(versionId, "Not mine", now, now.plus(Duration.ofDays(7)));
