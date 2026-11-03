@@ -191,9 +191,13 @@ export async function prepareQuizbuks(request: APIRequestContext) {
   if (prepared) return
   const admin = await adminToken(request)
   await run(request, admin, 'QB_SETUP', {})
-  const proposed = await rows(request, admin, CONTROL_CHANGES, [{ field: 'status', op: 'eq', value: 'PROPOSED' }])
-  if (proposed.length > 0) {
-    const publisher = await publisherToken(request, admin)
+  // Page by page until none is left: QB_SETUP proposes more than one page (Q87 took it past 100), and a published
+  // change leaves the filter, so each read starts again from the first page.
+  let publisher: string | undefined
+  for (let pass = 0; pass < 20; pass++) {
+    const proposed = await rows(request, admin, CONTROL_CHANGES, [{ field: 'status', op: 'eq', value: 'PROPOSED' }])
+    if (proposed.length === 0) break
+    publisher ??= await publisherToken(request, admin)
     for (const change of proposed) {
       await run(request, publisher, 'CONTROL_CHANGE_PUBLISH', { changeId: change.id })
     }

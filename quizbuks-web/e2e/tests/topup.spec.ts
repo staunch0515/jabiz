@@ -37,7 +37,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await setAppearance(page, appearance)
     const sponsor = await approvedSponsor(request)
     await signIn(page, '/sponsor/', sponsor.email)
-    await page.getByRole('link', { name: 'Wallet' }).click()
+    await page.getByRole('link', { name: 'Wallet', exact: true }).click()
     await expect(page).toHaveURL(/\/sponsor\/wallet$/)
     await expect(page.getByTestId('wallet-available')).toContainText('0 Kudos')
     await expect(page.getByTestId('topup-row')).toHaveCount(0)
@@ -81,7 +81,7 @@ test('the browser\'s return credits nothing; a cancelled checkout expires', asyn
   test.setTimeout(150_000)
   const sponsor = await approvedSponsor(request)
   await signIn(page, '/sponsor/', sponsor.email)
-  await page.getByRole('link', { name: 'Wallet' }).click()
+  await page.getByRole('link', { name: 'Wallet', exact: true }).click()
 
   // An amount outside the range: the server's own words, next to the field.
   await page.getByTestId('topup-open').click()
