@@ -19,11 +19,14 @@ class CertificationTemplatesTest {
         assertThat(Certifications.sqlValues())
             .isEqualTo("(VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), "
                 + "('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), "
-                + "('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000))");
+                + "('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), "
+                + "('BENEFIT_SPONSOR', 1, 31536000))");
         // Q86: every template that tells whether somebody holds a certification writes the catalog.
         for (String template : new String[] {"queries/qb/app/feed.sql", "queries/qb/app/publication.sql",
             "queries/qb/app/understanding.sql", "queries/qb/app/sponsor-tree.sql", "queries/qb/system/audience-count.sql",
-            "queries/qb/sponsor/tree.sql", "queries/qb/sponsor/tree-people.sql", "queries/qb/sponsor/tree-person.sql"}) {
+            "queries/qb/sponsor/tree.sql", "queries/qb/sponsor/tree-people.sql", "queries/qb/sponsor/tree-person.sql",
+            // Q89a: whether a sponsor holds a benefit certification (the page, and the catalog shown only then).
+            "queries/qb/sponsor/benefit-access.sql", "queries/qb/sponsor/benefit-catalog.sql"}) {
             try (InputStream in = getClass().getClassLoader().getResourceAsStream(template)) {
                 assertThat(in).as(template).isNotNull();
                 assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).as(template)

@@ -40,8 +40,20 @@ public final class Certifications {
     public static final Certification TERMS_SPONSOR_UNDERSTOOD = new Certification("TERMS_SPONSOR_UNDERSTOOD",
         Duration.ofDays(365), 1);
 
+    /**
+     * Q89 (docs/quizbuks/plans/Q89-sponsored-benefits.md, D-Q89-1): a sponsor's capabilities in sponsored benefits,
+     * one each (the requirement owner: "能分就分"): holders list goods, services or digital products other sponsors may
+     * buy for their takers ({@code BENEFIT_PROVIDER}), or buy them and offer them as rewards ({@code BENEFIT_SPONSOR}).
+     * A year, like the others; what was made while one was held keeps running after it ends.
+     */
+    public static final Certification BENEFIT_PROVIDER = new Certification("BENEFIT_PROVIDER", Duration.ofDays(365), 1);
+    public static final Certification BENEFIT_SPONSOR = new Certification("BENEFIT_SPONSOR", Duration.ofDays(365), 1);
+
     public static final List<Certification> ALL = List.of(SPONSOR_APPLY, REFERRER, TERMS_APP_UNDERSTOOD,
-        CONTEST_RULES_UNDERSTOOD, TERMS_SPONSOR_UNDERSTOOD);
+        CONTEST_RULES_UNDERSTOOD, TERMS_SPONSOR_UNDERSTOOD, BENEFIT_PROVIDER, BENEFIT_SPONSOR);
+
+    /** Q89: the sponsors' capabilities in sponsored benefits (not a taker's prerequisite). */
+    public static final List<Certification> BENEFITS = List.of(BENEFIT_PROVIDER, BENEFIT_SPONSOR);
 
     /** The certifications of takers: those a sponsor's publication may require (Q86, D-Q86-5). */
     public static final List<Certification> FOR_TAKERS = List.of(SPONSOR_APPLY, REFERRER, TERMS_APP_UNDERSTOOD,

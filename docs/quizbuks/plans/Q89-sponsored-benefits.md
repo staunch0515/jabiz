@@ -116,3 +116,29 @@
 5. 通行码（店员扫答题者）**对所有到店兑换开放**（D-Q89-10）。
 6. 答题者有问题找发布方（D-Q89-12）：按建议。
 7. 编号 Q89，四期（§7）。
+
+## 10. 实施记录
+
+### Q89a（2026-11-03，分支 `1.3/quizbuks-89a-benefit-purchases`）
+
+做了什么：
+
+- **认证**：`Certifications` 加 `BENEFIT_PROVIDER`、`BENEFIT_SPONSOR`（一年、版本 1，`BENEFITS` 列表；不在 `FOR_TAKERS` 中：是商户的能力，不是答题的前置）。字典、三语证书名 `qb.certification.<键>`、两个 SPA 的 `qb/ids.ts` 与 `certification.names`、App 的证书名、后台扩展的 `ids.ts` 与名字、八个模板的 `VALUES` 目录与 `CertificationTemplatesTest` 一起改。
+- **权限**：`qb.benefit.use`（`QB_SPONSOR`）、`qb.admin.benefit.read`（内容管理员，超级管理员随之）、`qb.benefit.system`（不授予任何角色，两侧的自有数据视图）。部署后执行一次 `QB_SETUP`。
+- **包 `benefit`**：`QbBenefits`（四个实体）、`BenefitCodes`、`BenefitRules` 与 `PurchaseStatus`（纯 Java）、`BenefitSteps`（共用步骤：权限、已验证邮箱、封禁、认证、对方的封禁、文件归属）、`OfferProcesses`、`BenefitConversationProcesses`、`PurchaseProcesses`、`BenefitConfig`。
+  - 持有认证只经 `RoundHolders.loadHoldings` / `heldKeys` 判断（含尚未认领的合格），模板 `qb.sponsor.benefit-access` / `-catalog` 写同一段 SQL。
+  - 新建权益与重新上架要 `BENEFIT_PROVIDER`；隐藏与修改不要（认证到期不妨碍下架）。开启洽谈与新建采购单要 `BENEFIT_SPONSOR`；已有的洽谈与采购单照常。
+  - 采购单：保存即从权益复制快照；`CONFIRMED` 或 `PENDING_PROVIDER` 的修改回到 `PENDING_PROVIDER`；提交至少一个凭证；提供方确认与退回都带 `baseRevision`（确认必填）；待办 `qb.benefit.confirm`（提供方）与 `qb.benefit.resubmit`（赞助方，退回时）。
+- **迁移 V67**：`qb_benefit_offer`、`qb_benefit_conversation`（`(offer_id, sponsor_id)` 唯一）、`qb_benefit_message`、`qb_benefit_purchase_version`（时态，只插入）。
+- **模板**（`queries/qb/sponsor/benefit-*.sql`，权限 `qb.benefit.use`）：`access`、`catalog`、`offers`、按侧分开的 `conversations` / `inquiries`、`messages` / `inquiry-messages`、`purchases` / `orders`。
+- **删除账号**（`SponsorErasure`）：消息 `keep(senderUserId, body)`；权益 `clear` 图片（目录只显示入驻仍在的提供方）；采购单两侧各 `keep` 自己写的自由文字（`note` / `declineReason`）。
+- **商户后台**（`quizbuks-web/sponsor/src/benefits/`）：菜单组"赞助权益"：权益目录（认证卡、搜索、种类、联系提供方、登记采购）、我的权益（列表与编辑对话框，图片至多 4 张）、洽谈（我发起的 / 收到的）、采购单（我购买的 / 向我购买的；赞助方编辑、提交、撤回，提供方确认或退回）。
+- **测试**：`BenefitRulesTest`（7）、`BenefitIT`（4：目录与认证、洽谈允许联系方式、确认与退回的修订号与只插入、自己的与未上架的不能买）、`CertificationTemplatesTest`、`QbRolesTest`、`PublicQueriesSnapshotIT` 快照（认证的取值多两项）；前端 `benefits.test.tsx`（5，含 axe）。
+
+与计划不同之处（有理由，均在 Q89a 内定下）：
+
+1. **凭证是采购单上的五个文件字段**（`proof1`–`proof5`），不是子实体：数量小、随采购单的版本一起保存，比时态子表简单（D-Q89-5 的"≤ 10"改为 ≤ 5）。
+2. **模板按侧分开**：平台的模板一个实体只对应一个数据视图，不能把"我是赞助方"与"我是提供方"的行合在一张表里；页面本来就分两个标签。
+3. **目录也列出自己的权益**（标"您自己的权益"）：模板无法排除调用者自己的行；买自己的由流程拒绝（`QB_BENEFIT_OWN_OFFER`）。
+4. **洽谈每日条数沿用 `qb.conversation.daily-cap`**，不加新参数（新参数会使场景的编号移位）；需要分开时再加。
+5. **洽谈与采购单的站内信、运营商的读取与下架**放到 Q89d（Q89a 只有待办）；默认数据视图已登记 `OperatorScopes`（按赞助方），运营商的权限还没有它们。
