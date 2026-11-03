@@ -405,6 +405,9 @@
 - `./gradlew :quizbuks:check`（测试 + `platformCheck`）；单个类：`./gradlew :quizbuks:test --tests '*SetupIT'`。
 - 集成测试连接真实 PostgreSQL（同平台：Testcontainers 或 `JABIZ_TEST_DB_*`），测试类放在 `com.jabiz.quizbuks.*` 下。
 - 场景回放：`src/test/resources/scenarios/qb/**.yml`，`./gradlew :quizbuks:test --tests '*ScenarioTest'`；确认变化正确后加 `-Dscenario.update-snapshots=true`。
+- **端到端在本机跑**（仓库根目录）：`tools/quizbuks/e2e.sh run -- tests/<文件>.spec.ts`（全部：`run`；`deploy/quizbuks/README.md` "本机 e2e"）。它以 CI 同一个 `quizbuks-web/e2e/app.env` 启动 jar、数据库、两个 Mailpit 与两个桩。
+  **改了页面、流程的输入输出或 e2e 本身的 PR，先在本机跑相关的用例再提**，"本地只做了类型检查、由 CI 运行"不算完成；CI 红的不合（`DEPLOY.md` "合并前的门槛"）。
+  应用在 e2e 中的环境变量只改 `app.env`（两边同源），不在 workflow 里另写。
 - 性能（不在 `check` 中）：进程内基线 `./gradlew :quizbuks:perfTest`（`PlayThroughputIT`；分析任务 `--tests '*AnalyticsPerfIT'`，`docs/quizbuks/perf/Q9e-analytics.md`）；对运行中的 jar 压测单个热门发布 `./gradlew :quizbuks:loadTest`（参数 `LOAD_*`，含客户端时限 `LOAD_TIMEOUT` 与照 App 重试忙的 `LOAD_RETRY_BUSY`；方法与结果见 `docs/quizbuks/perf/Q10a-load-test.md`，准入之后的重测在其 §8、16p-1 之后 §9、锁拆分之后 §10、16p-2 之后 §11）。答题锁内的时间取决于语句条数（每条约 0.8 ms），改答题流程时不要在开始锁或发布锁内增加读取；语句数的确切值在 `AttemptStatementBudgetIT`。
   `LOAD_METRICS=yes` 时从只绑定回环地址的独立管理端口读取指标（jar 以 `-Dmanagement.server.address=127.0.0.1 -Dmanagement.server.port=8081 -Dmanagement.endpoints.web.exposure.include=health,info,metrics` 启动，工具读 `LOAD_METRICS_URL`，缺省 `http://127.0.0.1:8081`，不是回环地址即拒绝，`LOAD_ALLOW_REMOTE` 也不放行；指标绝不在应用端口上暴露：那里不要认证，根 CLAUDE.md 与设计 13 不允许匿名的指标端点；也不写进仓库的配置），报告每次完成的许可持有时间与每次运行的语句数（`jabiz.process.statements`），并报告压测期间本机的 CPU；16p-1 之后的重测在报告 §9。
 
