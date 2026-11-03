@@ -81,6 +81,11 @@ class MessagingConfig {
     }
 
     @Bean
+    MailTemplate qbTopUpPaidCashMail() {
+        return NotificationMails.TOPUP_PAID_CASH;
+    }
+
+    @Bean
     MailTemplate qbTopUpGrantedMail() {
         return NotificationMails.TOPUP_GRANTED;
     }
