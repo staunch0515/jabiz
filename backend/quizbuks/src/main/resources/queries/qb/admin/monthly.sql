@@ -25,6 +25,7 @@ results:
   promotion:        { kind: { type: monetary, currency: JPY, scale: 0 } }
   operatorPayable:  { kind: { type: monetary, currency: JPY, scale: 0 } }
   operatorShares:   { kind: { type: monetary, currency: JPY, scale: 0 } }
+  sponsorCash:      { kind: { type: monetary, currency: JPY, scale: 0 } }
 list:
   filters: [category]
   sorts:   [seq]
@@ -85,7 +86,8 @@ per_tx AS (
            coalesce(sum(net) FILTER (WHERE code = '5110'), 0) AS a5110,
            coalesce(sum(net) FILTER (WHERE code = '5120'), 0) AS a5120,
            coalesce(sum(net) FILTER (WHERE code = '2140'), 0) AS a2140,
-           coalesce(sum(net) FILTER (WHERE code = '5130'), 0) AS a5130
+           coalesce(sum(net) FILTER (WHERE code = '5130'), 0) AS a5130,
+           coalesce(sum(net) FILTER (WHERE code = '2160'), 0) AS a2160
     FROM moves
     GROUP BY tx_key, src, ref_kind, reversal
 ),
@@ -130,6 +132,20 @@ kinds AS (
                     AND p.a5130 > 0 AND p.a2140 <= 0 AND p.a4110 <= 0 THEN 'OPERATOR_SHARE'
                WHEN p.src IN ('QbOperatorSettlement', 'QbOperatorWithdrawal') AND NOT p.reversal
                     AND p.accts = '1120,2140' AND p.a2140 > 0 AND p.a1120 < 0 THEN 'OPERATOR_PAID'
+               -- Q87a: top-ups into the cash account (2160 in place of 2110), as the Kudos ones.
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2160'
+                    AND p.a1110 > 0 AND p.a2160 < 0 THEN 'CASH_TOPUP'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1120,2160'
+                    AND p.a1120 > 0 AND p.a2160 < 0 AND p.ref_kind <> 'mn_' THEN 'CASH_BANK_TOPUP'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2160'
+                    AND p.a1110 < 0 AND p.a2160 > 0 AND p.ref_kind IN ('ch_', 'py_') THEN 'CASH_REFUND'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2160'
+                    AND p.a1110 < 0 AND p.a2160 > 0 AND p.ref_kind IN ('dp_', 'du_') THEN 'CASH_DISPUTE'
+               -- Q87a: cash turned into Kudos, and Kudos back into cash.
+               WHEN p.src = 'QbKudosExchange' AND NOT p.reversal AND p.accts = '2110,2160'
+                    AND p.a2160 > 0 AND p.a2110 < 0 THEN 'KUDOS_BOUGHT'
+               WHEN p.src = 'QbKudosExchange' AND NOT p.reversal AND p.accts = '2110,2160'
+                    AND p.a2110 > 0 AND p.a2160 < 0 THEN 'KUDOS_SOLD'
                ELSE 'OTHER'
            END AS kind
     FROM per_tx p
@@ -148,11 +164,14 @@ SELECT
     coalesce(sum(k.a5110), 0)   AS paymentFees,
     coalesce(sum(k.a5120), 0)   AS promotion,
     coalesce(sum(k.a2140), 0)   AS operatorPayable,
-    coalesce(sum(k.a5130), 0)   AS operatorShares
+    coalesce(sum(k.a5130), 0)   AS operatorShares,
+    coalesce(sum(k.a2160), 0)   AS sponsorCash
 FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'), (5, 'REFUND'), (6, 'DISPUTE'),
              (7, 'STRIPE_FEE'), (8, 'REWARD'), (9, 'TRANSFER_SENT'), (10, 'TRANSFER_SETTLED'), (11, 'WITHDRAWAL_PAID'),
              (12, 'TRANSFER_FAILED'), (13, 'TRANSFER_REVERSED'), (14, 'PAYOUT'), (15, 'PAYOUT_FAILED'),
-             (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'REFERRAL_REWARD'), (19, 'OTHER'))
+             (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'REFERRAL_REWARD'), (19, 'CASH_TOPUP'),
+             (20, 'CASH_BANK_TOPUP'), (21, 'CASH_REFUND'), (22, 'CASH_DISPUTE'), (23, 'KUDOS_BOUGHT'),
+             (24, 'KUDOS_SOLD'), (25, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

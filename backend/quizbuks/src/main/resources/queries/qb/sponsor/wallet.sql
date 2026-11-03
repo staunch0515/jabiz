@@ -1,6 +1,6 @@
 /*---
 id: qb.sponsor.wallet
-description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, and what came in and went out
+description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, and (Q87a) the cash account
 entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount]
 datasets:
   QbWallet: urn:jabiz:dataset:sponsor:QbWallet
@@ -15,6 +15,8 @@ results:
   takenBack:     { kind: { type: monetary, currency: JPY, scale: 0 } }
   topUpCount:    { kind: { type: numeric, precision: 9, scale: 0 } }
   spent:         { kind: { type: monetary, currency: JPY, scale: 0 } }
+  cashBalance:   { kind: { type: monetary, currency: JPY, scale: 0 } }
+  cashHeld:      { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
@@ -28,7 +30,9 @@ SELECT
     coalesce(p.p_paid, 0)           AS toppedUp,
     coalesce(p.p_taken, 0)          AS takenBack,
     coalesce(p.p_count, 0)          AS topUpCount,
-    coalesce(s.s_spent, 0)          AS spent
+    coalesce(s.s_spent, 0)          AS spent,
+    coalesce(c.c_balance, 0)        AS cashBalance,
+    coalesce(c.c_held, 0)           AS cashHeld
 FROM (SELECT 1 AS one) base
 LEFT JOIN (
     SELECT x.{{QbWallet.balance}} AS w_balance, x.{{QbWallet.held}} AS w_held,
@@ -36,6 +40,11 @@ LEFT JOIN (
            x.{{QbWallet.pendingAmount}} AS w_pending_amount
     FROM {{QbWallet}} x
     WHERE x.{{QbWallet.kind}} = 'SPONSOR') w ON true
+-- Q87a: the cash account, the second row of the same owner.
+LEFT JOIN (
+    SELECT x.{{QbWallet.balance}} AS c_balance, x.{{QbWallet.held}} AS c_held
+    FROM {{QbWallet}} x
+    WHERE x.{{QbWallet.kind}} = 'CASH') c ON true
 CROSS JOIN (
     SELECT sum(t.{{QbTopUp.amount}}) AS p_paid,
            sum(t.{{QbTopUp.refundedAmount}} + t.{{QbTopUp.disputeClawback}}) AS p_taken,

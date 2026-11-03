@@ -40,6 +40,9 @@ export interface SponsorWallet {
   takenBack: number
   topUpCount: number
   spent: number
+  /** Q87a: the cash account (money with the platform, turned into Kudos when the sponsor wants). */
+  cashBalance: number
+  cashHeld: number
 }
 
 /** A row of `qb.sponsor.topups` (the checkout's address only while it can be paid). */
@@ -55,6 +58,8 @@ export interface TopUpRow {
   method: TopUpMethod
   transferCode: string | null
   manualKind: ManualKind | null
+  /** Q87a: where it is credited. */
+  target: TopUpTarget
 }
 
 /** The top-up as the sponsor's dataset has it. */
@@ -104,8 +109,59 @@ export async function readWallet(): Promise<SponsorWallet> {
     takenBack: num(row.takenBack),
     topUpCount: num(row.topUpCount),
     spent: num(row.spent),
+    cashBalance: num(row.cashBalance),
+    cashHeld: num(row.cashHeld),
   }
 }
+
+/** Q87a: where a top-up is credited - the Kudos wallet or the cash account. */
+export type TopUpTarget = 'KUDOS' | 'CASH'
+export const TOPUP_TARGETS: readonly TopUpTarget[] = ['KUDOS', 'CASH']
+export const targetOf = (value: unknown): TopUpTarget => (value === 'CASH' ? 'CASH' : 'KUDOS')
+
+/** `qb.sponsor.cash-settings` (Q87a): the controlled switches, as the processes read them. */
+export interface CashSettings {
+  /** Where a top-up may go (at least one); the dialog offers a choice only when there are two. */
+  targets: TopUpTarget[]
+  defaultTarget: TopUpTarget
+  buyEnabled: boolean
+  sellEnabled: boolean
+}
+
+/** The targets a parameter lists, in the order the page shows them; Kudos when none is known. */
+export function targetsOf(text: unknown): TopUpTarget[] {
+  const listed = String(text ?? '').split(',').map((part) => part.trim().toUpperCase())
+  const targets = TOPUP_TARGETS.filter((target) => listed.includes(target))
+  return targets.length > 0 ? targets : ['KUDOS']
+}
+
+export async function readCashSettings(): Promise<CashSettings> {
+  const row = (await runQuery<Row>(WALLET_TEMPLATE.cashSettings, { limit: 1 })).items[0] ?? {}
+  const targets = targetsOf(row.targets)
+  const fallback = targetOf(row.defaultTarget)
+  return {
+    targets,
+    defaultTarget: targets.includes(fallback) ? fallback : targets[0],
+    buyEnabled: row.buyEnabled === true,
+    sellEnabled: row.sellEnabled === true,
+  }
+}
+
+/** What the cash account can give now: its balance less what open disputes hold. */
+export const availableCash = (wallet: SponsorWallet): number => Math.max(0, wallet.cashBalance - wallet.cashHeld)
+
+/** `KudosExchanges.Output`. */
+export interface ExchangeOutput {
+  exchangeId: string
+  amount: number
+  kudosBalance: number
+  cashBalance: number
+}
+
+/** Turns `amount` of cash into Kudos (`toKudos`) or Kudos back into cash, one to one (one per key). */
+export const exchangeKudos = (toKudos: boolean, amount: number, idempotencyKey: string) =>
+  runProcess<ExchangeOutput>(toKudos ? WALLET_PROCESS.kudosBuy : WALLET_PROCESS.kudosSell, { amount },
+    { idempotencyKey })
 
 /**
  * What the sponsor may top up now (`qb.sponsor.topup-limit`, Q10b): each top-up's range and, while the new sponsors'
@@ -168,6 +224,7 @@ export async function searchTopUps({ sorts, offset, limit }: TopUpSearch) {
       method: methodOf(row.method),
       transferCode: str(row.transferCode),
       manualKind: manualKindOf(row.manualKind),
+      target: targetOf(row.target),
     })),
   }
 }
@@ -215,8 +272,8 @@ export function payableUrl(topUp: Pick<TopUp, 'status' | 'checkoutUrl' | 'expire
  * Starts a top-up of `amount` whole Kudos. The same key is passed when the sponsor retries the same submission, so a
  * retried call starts one top-up only.
  */
-export const startTopUp = (amount: number, idempotencyKey: string) =>
-  runProcess<StartOutput>(WALLET_PROCESS.topUpStart, { amount }, { idempotencyKey })
+export const startTopUp = (amount: number, idempotencyKey: string, target: TopUpTarget | null = null) =>
+  runProcess<StartOutput>(WALLET_PROCESS.topUpStart, { amount, ...(target ? { target } : {}) }, { idempotencyKey })
 
 /** The platform's receiving account (`qb.sponsor.bank-account`, Q13a); a part not set is null. */
 export interface BankAccount {
@@ -256,8 +313,9 @@ export interface BankStartOutput {
 }
 
 /** Asks for a bank top-up of `amount` whole Kudos (one per key, as with a card top-up). */
-export const startBankTopUp = (amount: number, idempotencyKey: string) =>
-  runProcess<BankStartOutput>(WALLET_PROCESS.bankStart, { amount }, { idempotencyKey })
+export const startBankTopUp = (amount: number, idempotencyKey: string, target: TopUpTarget | null = null) =>
+  runProcess<BankStartOutput>(WALLET_PROCESS.bankStart, { amount, ...(target ? { target } : {}) },
+    { idempotencyKey })
 
 /** Says the money was sent: the payer's name as the bank shows it and the day (`YYYY-MM-DD`, in Japan). */
 export const reportBankTransfer = (topUpId: string, payerName: string, transferDate: string) =>

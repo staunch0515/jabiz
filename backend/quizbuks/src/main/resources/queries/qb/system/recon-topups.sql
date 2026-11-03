@@ -17,7 +17,7 @@ list:
 permissions: [qb.wallet.system]
 ---*/
 -- One statement, one snapshot: a top-up's state and its postings are written in one transaction. The postings whose
--- source is a top-up, summed per top-up: the credit of 2110 (the top-up arriving: exactly one transaction, of the
+-- source is a top-up, summed per top-up: the credit of its target's account, 2110 or (Q87a) 2160 (the top-up arriving: exactly one transaction, of the
 -- amount, when paid; none otherwise), the debits of 2110 (refunds and lost disputes taken back) and the fee (5110).
 SELECT
     t.{{QbTopUp.topUpId}}   AS topUpId,
@@ -34,6 +34,13 @@ LEFT JOIN (
                AND e.{{LedgerEntry.direction}} = 'CREDIT' THEN tx.{{LedgerTransaction.transactionId}} END) AS s_arrivals,
            sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '2110' AND e.{{LedgerEntry.direction}} = 'DEBIT'
                THEN e.{{LedgerEntry.amount}} ELSE 0 END) AS s_debit,
+           sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '2160' AND e.{{LedgerEntry.direction}} = 'CREDIT'
+               THEN e.{{LedgerEntry.amount}} ELSE 0 END) AS s_cash_credit,
+           count(DISTINCT CASE WHEN a.{{LedgerAccount.accountCode}} = '2160'
+               AND e.{{LedgerEntry.direction}} = 'CREDIT' THEN tx.{{LedgerTransaction.transactionId}} END)
+               AS s_cash_arrivals,
+           sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '2160' AND e.{{LedgerEntry.direction}} = 'DEBIT'
+               THEN e.{{LedgerEntry.amount}} ELSE 0 END) AS s_cash_debit,
            sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '5110' THEN CASE WHEN e.{{LedgerEntry.direction}} = 'DEBIT'
                THEN e.{{LedgerEntry.amount}} ELSE -e.{{LedgerEntry.amount}} END ELSE 0 END) AS s_fee
     FROM {{LedgerTransaction}} tx
@@ -44,13 +51,16 @@ LEFT JOIN (
 CROSS JOIN LATERAL (VALUES
     (CAST('TOPUP_LEDGER' AS varchar(30)),
         CAST(CASE WHEN t.{{QbTopUp.status}} = 'PAID' THEN t.{{QbTopUp.amount}} ELSE 0 END AS numeric),
-        CAST(coalesce(s.s_credit, 0) AS numeric)),
+        CAST(coalesce(CASE WHEN t.{{QbTopUp.target}} = 'CASH' THEN s.s_cash_credit ELSE s.s_credit END, 0)
+            AS numeric)),
     (CAST('TOPUP_ARRIVALS' AS varchar(30)),
         CAST(CASE WHEN t.{{QbTopUp.status}} = 'PAID' THEN 1 ELSE 0 END AS numeric),
-        CAST(coalesce(s.s_arrivals, 0) AS numeric)),
+        CAST(coalesce(CASE WHEN t.{{QbTopUp.target}} = 'CASH' THEN s.s_cash_arrivals ELSE s.s_arrivals END, 0)
+            AS numeric)),
     (CAST('TOPUP_REFUNDS' AS varchar(30)),
         CAST(t.{{QbTopUp.refundedAmount}} + t.{{QbTopUp.disputeClawback}} AS numeric),
-        CAST(coalesce(s.s_debit, 0) AS numeric)),
+        CAST(coalesce(CASE WHEN t.{{QbTopUp.target}} = 'CASH' THEN s.s_cash_debit ELSE s.s_debit END, 0)
+            AS numeric)),
     (CAST('TOPUP_FEE' AS varchar(30)),
         CAST(coalesce(t.{{QbTopUp.stripeFee}}, 0) AS numeric),
         CAST(coalesce(s.s_fee, 0) AS numeric))) AS c (c_check, c_expected, c_actual)

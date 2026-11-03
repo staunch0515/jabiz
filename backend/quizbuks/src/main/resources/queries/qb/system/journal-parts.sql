@@ -33,7 +33,7 @@ WITH taken AS (
     SELECT t.{{LedgerTransaction.transactionId}} AS tx,
            CAST(a.{{LedgerAccount.accountCode}} AS text) AS acct,
            e.{{LedgerEntry.direction}} AS side,
-           CAST(CASE WHEN a.{{LedgerAccount.accountCode}} = '2110' THEN e.{{LedgerEntry.dimension1}} END AS text) AS party,
+           CAST(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160') THEN e.{{LedgerEntry.dimension1}} END AS text) AS party,
            CAST(t.{{LedgerTransaction.sourceEntity}} AS text) AS src,
            CAST(t.{{LedgerTransaction.sourceId}} AS text) AS src_id,
            CAST(t.{{LedgerTransaction.reference}} AS text) AS ref

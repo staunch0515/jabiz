@@ -147,6 +147,14 @@ public final class TransferProcesses {
 
     static final String INPUT = "input";
     static final String PARAMS = "params";
+    static final String FEE_RATE = "feeRate";
+
+    /** {@code qb.transfer.fee-rate} as read; the declared rate (0) before it is published. */
+    static BigDecimal feeRate(ProcessContext ctx) {
+        ParamValues params = ctx.get(FEE_RATE, ParamValues.class);
+        return params == null ? BigDecimal.ZERO : params.find(QbParams.TRANSFER_FEE_RATE, BigDecimal.class)
+            .orElse(new BigDecimal(QbParams.defaultOf(QbParams.TRANSFER_FEE_RATE)));
+    }
     static final String BAN = "ban";
     static final String ACCOUNT = "account";
     static final String LATEST = "latest";
@@ -248,6 +256,9 @@ public final class TransferProcesses {
                 .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_THRESHOLD, QbParams.TRANSFER_REVIEW_ABOVE,
                     QbParams.TRANSFER_FEE, QbParams.TRANSFER_HOLD_DAYS))
+                // Q87a: optional, so a set-up not yet published reads as the declared rate (0).
+                .step("Load the fee rate", LoadParams.<ProcessContext>optional(ProcessContext::opTime, FEE_RATE,
+                    QbParams.TRANSFER_FEE_RATE))
                 .steps(b -> loadTaker(b, TransferProcesses::userOf))
                 .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(userOf(ctx)), LATEST))
@@ -273,6 +284,9 @@ public final class TransferProcesses {
                 .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_THRESHOLD, QbParams.TRANSFER_REVIEW_ABOVE,
                     QbParams.TRANSFER_FEE, QbParams.TRANSFER_HOLD_DAYS))
+                // Q87a: optional, so a set-up not yet published reads as the declared rate (0).
+                .step("Load the fee rate", LoadParams.<ProcessContext>optional(ProcessContext::opTime, FEE_RATE,
+                    QbParams.TRANSFER_FEE_RATE))
                 .steps(b -> loadTaker(b, TransferProcesses::userOf))
                 .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(userOf(ctx)), LATEST))
@@ -346,7 +360,8 @@ public final class TransferProcesses {
                 params.get(QbParams.TRANSFER_THRESHOLD, BigDecimal.class),
                 params.get(QbParams.TRANSFER_REVIEW_ABOVE, BigDecimal.class),
                 params.get(QbParams.TRANSFER_FEE, BigDecimal.class),
-                params.get(QbParams.TRANSFER_HOLD_DAYS, BigDecimal.class)),
+                params.get(QbParams.TRANSFER_HOLD_DAYS, BigDecimal.class),
+                feeRate(ctx)),
             new TransferRules.Facts(BanRules.banned(ban == null ? null : ban.attributes()),
                 account == null ? null : account.get("status"),
                 latest.stream().anyMatch(t -> TransferStatus.UNFINISHED.contains(t.status())),

@@ -35,7 +35,9 @@ public final class JournalLines {
     public static final int EXTERNAL_VOUCHER_LENGTH = 50;
 
     /** The accounts carrying a line per sponsor. */
-    private static final String PER_SPONSOR = QbLedger.SPONSOR_PREPAYMENTS;
+    /** The accounts kept per sponsor: the Kudos wallets (2110) and, Q87a, the cash accounts (2160). */
+    private static final java.util.Set<String> PER_SPONSOR = java.util.Set.of(QbLedger.SPONSOR_PREPAYMENTS,
+        QbLedger.SPONSOR_CASH);
 
     /** The detail's times, in Japan's time as the periods are. */
     private static final DateTimeFormatter TIME = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
@@ -63,7 +65,7 @@ public final class JournalLines {
 
         /** The sponsor of a 2110 line; none on the other accounts. */
         String sponsor() {
-            return PER_SPONSOR.equals(accountCode) ? party : null;
+            return PER_SPONSOR.contains(accountCode) ? party : null;
         }
     }
 
@@ -107,7 +109,7 @@ public final class JournalLines {
         for (Map<String, Object> row : rows) {
             String account = text(row.get("accountCode"));
             groups.add(new Group(account, text(row.get("direction")),
-                PER_SPONSOR.equals(account) ? text(row.get("party")) : null, decimal(row.get("amount")),
+                PER_SPONSOR.contains(account) ? text(row.get("party")) : null, decimal(row.get("amount")),
                 decimal(row.get("transactions")).intValue()));
         }
         return groups;

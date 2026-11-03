@@ -89,9 +89,30 @@ public final class TransferRules {
      * The values of the parameters on the day.
      *
      * @param holdDays how long a reward is held back from transfers ({@code qb.transfer.hold-days}, Q10b)
+     * @param feeRate  Q87a: the platform's share of the amount ({@code qb.transfer.fee-rate}), added to the fixed
+     *                 {@code fee}; from 0 to below 1
      */
     public record Params(Boolean enabled, BigDecimal threshold, BigDecimal reviewAbove, BigDecimal fee,
-        BigDecimal holdDays) {}
+        BigDecimal holdDays, BigDecimal feeRate) {
+
+        /** The parameters before Q87a: no share of the amount. */
+        public Params(Boolean enabled, BigDecimal threshold, BigDecimal reviewAbove, BigDecimal fee,
+            BigDecimal holdDays) {
+            this(enabled, threshold, reviewAbove, fee, holdDays, BigDecimal.ZERO);
+        }
+    }
+
+    /**
+     * The platform's fee on a transfer of {@code amount} (Q87a, D-Q87-0): the fixed fee plus the share of the amount,
+     * rounded down to a whole Kudos; null when a parameter is unusable (a negative fee, a rate outside 0 to below 1).
+     */
+    public static BigDecimal fee(BigDecimal amount, BigDecimal fixed, BigDecimal rate) {
+        BigDecimal share = rate == null ? BigDecimal.ZERO : rate;
+        if (!wholeAndNotNegative(fixed) || share.signum() < 0 || share.compareTo(BigDecimal.ONE) >= 0) {
+            return null;
+        }
+        return fixed.add(amount.multiply(share).setScale(0, java.math.RoundingMode.DOWN));
+    }
 
     /**
      * What the transfer process read under the user's wallet lock.
@@ -173,7 +194,11 @@ public final class TransferRules {
             || balance.stripTrailingZeros().scale() > 0) {
             return Plan.skip(REWARDS_HELD);
         }
-        BigDecimal net = balance.subtract(params.fee());
+        BigDecimal fee = fee(balance, params.fee(), params.feeRate());
+        if (fee == null) {
+            return Plan.skip(INVALID_PARAMS);
+        }
+        BigDecimal net = balance.subtract(fee);
         if (net.signum() <= 0) {
             return Plan.skip(FEE_TOO_HIGH);
         }
@@ -181,7 +206,7 @@ public final class TransferRules {
         if (review && !facts.reviewConfigured()) {
             return Plan.skip(REVIEW_NOT_CONFIGURED);
         }
-        return new Plan(null, balance, params.fee(), net, review);
+        return new Plan(null, balance, fee, net, review);
     }
 
     /**

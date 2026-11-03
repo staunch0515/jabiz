@@ -55,6 +55,10 @@ public final class QbTopUps {
         eb.field("amount", f -> f.physicalColumn("amount").required(true).asMonetary("JPY", 0));
         eb.field("method", f -> f.physicalColumn("method").immutable(true).required(true).processOnly()
             .asCode(METHOD_DICTIONARY, STRIPE, BANK, MANUAL));
+        // Q87a (D-Q87-2): where it is credited - the Kudos wallet (2110) or the cash account (2160); chosen when it
+        // starts and never changed, so every later posting of it (refunds, disputes) moves the same account.
+        eb.field("target", f -> f.physicalColumn("target").immutable(true).required(true).processOnly()
+            .asCode(TopUpTargets.DICTIONARY, TopUpTargets.KUDOS, TopUpTargets.CASH));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUS_DICTIONARY, TopUpStatus.ALL.toArray(String[]::new)));
         eb.field("createdAt", f -> f.physicalColumn("created_at").immutable(true).required(true).processOnly()
