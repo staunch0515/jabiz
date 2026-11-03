@@ -22,6 +22,7 @@ import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.wallet.PayoutAccountStatus;
 import com.jabiz.quizbuks.wallet.QbPayouts;
 import com.jabiz.quizbuks.wallet.QbTopUps;
+import com.jabiz.quizbuks.wallet.TopUpTargets;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.quizbuks.wallet.TransferRules;
 import com.jabiz.quizbuks.wallet.TransferStatus;
@@ -231,7 +232,7 @@ public final class MailProcesses {
                 if (topUp != null && topUp.get("paidAt") != null) {
                     // Kudos granted by hand (Q18b) are no payment received; money into the cash account (Q87) is no Kudos.
                     decide(ctx, QbTopUps.GRANT.equals(topUp.get("manualKind")) ? NotificationMails.TOPUP_GRANTED
-                        : QbTopUps.CASH.equals(topUp.get("target")) ? NotificationMails.TOPUP_PAID_CASH
+                        : TopUpTargets.CASH.equals(topUp.get("target")) ? NotificationMails.TOPUP_PAID_CASH
                         : NotificationMails.TOPUP_PAID, Map.of("amount", MailValues.amount(topUp.get("amount"))));
                 }
             }, messages, NotificationMails.TOPUP_PAID, NotificationMails.TOPUP_PAID_CASH, NotificationMails.TOPUP_GRANTED);

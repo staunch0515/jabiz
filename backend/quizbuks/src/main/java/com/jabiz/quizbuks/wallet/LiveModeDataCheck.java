@@ -121,7 +121,7 @@ public class LiveModeDataCheck implements PlatformCheck {
             return List.of();
         }
         String message = "Live mode (quizbuks.stripe.livemode=true) on a database with test mode's money: "
-            + data.testTopUps() + " test-mode top-up(s), account 2110 (sponsor wallets) at "
+            + data.testTopUps() + " test-mode top-up(s), accounts 2110 and 2160 (sponsor wallets and cash accounts) at "
             + data.sponsorWallets().toPlainString() + ". Start live on a fresh database";
         List<CheckProblem> problems = new ArrayList<>();
         problems.add(allow ? CheckProblem.warning(CountryCatalog.CATEGORY, ALLOW, message + " (allowed by " + ALLOW
@@ -171,7 +171,7 @@ public class LiveModeDataCheck implements PlatformCheck {
         String wallets = "SELECT coalesce(sum(CASE WHEN e." + column(entry, "direction") + " = 'CREDIT' THEN e."
             + column(entry, "amount") + " ELSE -e." + column(entry, "amount") + " END), 0) FROM " + table(entry)
             + " e WHERE e." + column(entry, "accountId") + " IN (SELECT a." + column(account, "accountId") + " FROM "
-            + table(account) + " a WHERE a." + column(account, "accountCode") + " = ?)";
+            + table(account) + " a WHERE a." + column(account, "accountCode") + " IN (?, ?))";
         long count;
         try (PreparedStatement statement = connection.prepareStatement(topUps)) {
             statement.setString(1, TEST_SESSION);
@@ -182,7 +182,9 @@ public class LiveModeDataCheck implements PlatformCheck {
         }
         BigDecimal sum;
         try (PreparedStatement statement = connection.prepareStatement(wallets)) {
+            // Q87a: test-mode money in the cash accounts (2160) counts as in the Kudos wallets (2110).
             statement.setString(1, QbLedger.SPONSOR_PREPAYMENTS);
+            statement.setString(2, QbLedger.SPONSOR_CASH);
             try (ResultSet rows = statement.executeQuery()) {
                 rows.next();
                 sum = rows.getBigDecimal(1);

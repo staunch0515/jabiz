@@ -3,7 +3,7 @@ id: qb.system.journal-detail
 description: >-
   One part of a journal export's detail (Q9d, D-Q9d-3): the postings of the transactions from firstTransaction to
   lastTransaction (both included, in the order of their keys) that the export takes, by account and side (and the
-  sponsor on 2110, 2160 and 1130, Q87); the parts come from qb.system.journal-parts, each within the platform's read limit
+  sponsor on 2110); the parts come from qb.system.journal-parts, each within the platform's read limit
 entities: [LedgerAccount, LedgerTransaction, LedgerEntry]
 params:
   to:               { like: LedgerTransaction.bookingTime, required: true, description: "The period's end: transactions booked before it" }

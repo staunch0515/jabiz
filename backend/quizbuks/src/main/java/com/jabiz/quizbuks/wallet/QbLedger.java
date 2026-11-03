@@ -22,10 +22,11 @@ public final class QbLedger {
     public static final String OPERATOR_SHARES_PAYABLE = "2140";
     public static final String OPERATOR_SHARES = "5130";
     /**
-     * Q87 (docs/quizbuks/plans/Q87-fee-account.md): a sponsor's cash account (money of theirs the platform holds, not
-     * yet Kudos; by party), the platform's fees receivable (by party), the fee revenue and the consumption tax on it.
+     * Q87a (D-Q87-1): the sponsors' cash accounts, apart from their Kudos (2110): money a sponsor has with the
+     * platform, its use decided when it is turned into Kudos or (Q87b) pays a fee. Its lines carry the sponsor.
      */
     public static final String SPONSOR_CASH = "2160";
+    /** Q87b: the platform's fees receivable (by sponsor), the fee revenue and the consumption tax on it. */
     public static final String FEES_RECEIVABLE = "1130";
     public static final String PLATFORM_FEE_REVENUE = "4120";
     public static final String TAX_PAYABLE = "2150";

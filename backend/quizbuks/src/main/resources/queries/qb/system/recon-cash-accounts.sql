@@ -1,6 +1,6 @@
 /*---
-id: qb.system.recon-sponsor-cash
-description: Sponsors whose cached cash balance differs from account 2160 for them (the daily reconciliation, Q87; differences only)
+id: qb.system.recon-cash-accounts
+description: Sponsors whose cached cash balance differs from account 2160 for them (Q87a) (the daily reconciliation; differences only)
 entities: [QbWallet, LedgerEntry, LedgerAccount]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
@@ -14,7 +14,9 @@ list:
   key: [partyId]
 permissions: [qb.wallet.system]
 ---*/
--- As qb.system.recon-sponsor-wallets, for the cash account (the wallet rows of kind CASH against 2160 by party).
+-- One statement, so one snapshot: a settlement posts and changes the cache in one transaction, and is either wholly in
+-- this comparison or wholly not. A sponsor with lines but no wallet, or a wallet without lines, counts as 0 on the
+-- missing side. Only the rows that differ come back (the full list grows with the sponsors; platform gap 25).
 SELECT
     coalesce(w.w_owner, l.l_party) AS partyId,
     coalesce(l.l_balance, 0)       AS expected,

@@ -17,7 +17,6 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,8 +54,8 @@ class AdminFinanceIT extends PayoutItSupport {
         COLUMNS.put("5120", "promotion");
         COLUMNS.put("2140", "operatorPayable");
         COLUMNS.put("5130", "operatorShares");
-        // Q87: the cash accounts, the fees receivable, the fee revenue and the tax on it (nothing posted here).
         COLUMNS.put("2160", "sponsorCash");
+        // Q87b: the fees receivable, the fee revenue and the tax on it (FeeIT posts them; nothing here).
         COLUMNS.put("1130", "feesReceivable");
         COLUMNS.put("4120", "feeRevenue");
         COLUMNS.put("2150", "taxPayable");
@@ -256,7 +255,11 @@ class AdminFinanceIT extends PayoutItSupport {
             row("OPERATOR_PAID", 0, 0),
             // Q70: a referral reward's posting (ReferralIT pays one and finds it here).
             row("REFERRAL_REWARD", 0, 0),
-            // Q87: cash and Kudos exchanged, the platform's fees (CashAccountIT and FeeIT post them and find them here).
+            // Q87a: the cash account's postings (CashAccountIT finds them here).
+            row("CASH_TOPUP", 0, 0),
+            row("CASH_BANK_TOPUP", 0, 0),
+            row("CASH_REFUND", 0, 0),
+            row("CASH_DISPUTE", 0, 0),
             row("KUDOS_BOUGHT", 0, 0),
             row("KUDOS_SOLD", 0, 0),
             row("FEE_CHARGED", 0, 0),
@@ -299,14 +302,8 @@ class AdminFinanceIT extends PayoutItSupport {
         Map<String, BigDecimal> opening = accountBalances(from.minusNanos(1_000), to);
         Map<String, BigDecimal> closing = accountBalances(to.minusNanos(1_000), to);
         assertThat(opening.get("2110")).isEqualByComparingTo("-700");
-        Map<String, Long> debits = new HashMap<>(Map.of("1110", 17_300L, "1120", 6_070L, "2110", 3_100L,
-            "2120", 3_500L, "2130", 3_300L, "2140", 0L, "4110", 100L, "5110", 360L, "5120", 0L, "5130", 0L));
-        Map<String, Long> credits = new HashMap<>(Map.of("1110", 11_330L, "1120", 1_000L, "2110", 12_300L,
-            "2120", 5_580L, "2130", 3_300L, "2140", 0L, "4110", 220L, "5110", 0L, "5120", 0L, "5130", 0L));
-        for (String code : List.of("2160", "1130", "4120", "2150")) {
-            debits.put(code, 0L);
-            credits.put(code, 0L);
-        }
+        Map<String, Long> debits = Map.ofEntries(Map.entry("1110", 17_300L), Map.entry("1120", 6_070L), Map.entry("2110", 3_100L), Map.entry("2120", 3_500L), Map.entry("2130", 3_300L), Map.entry("2140", 0L), Map.entry("4110", 100L), Map.entry("5110", 360L), Map.entry("5120", 0L), Map.entry("5130", 0L), Map.entry("2160", 0L), Map.entry("1130", 0L), Map.entry("4120", 0L), Map.entry("2150", 0L));
+        Map<String, Long> credits = Map.ofEntries(Map.entry("1110", 11_330L), Map.entry("1120", 1_000L), Map.entry("2110", 12_300L), Map.entry("2120", 5_580L), Map.entry("2130", 3_300L), Map.entry("2140", 0L), Map.entry("4110", 220L), Map.entry("5110", 0L), Map.entry("5120", 0L), Map.entry("5130", 0L), Map.entry("2160", 0L), Map.entry("1130", 0L), Map.entry("4120", 0L), Map.entry("2150", 0L));
         List<Map<String, Object>> balances = report(BALANCES, from, to, to);
         Map<String, Map<String, Object>> accounts = balances.stream().filter(r -> "ACCOUNT".equals(r.get("rowKind")))
             .collect(Collectors.toMap(r -> (String) r.get("code"), Function.identity()));
@@ -339,7 +336,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // the archive reproduces it.
         Map<String, Object> issued = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
             period(from, to)));
-        assertThat(issued).containsEntry("rowCount", 24).containsEntry("recomputable", true);
+        assertThat(issued).containsEntry("rowCount", 28).containsEntry("recomputable", true);
         advance(Duration.ofMinutes(5));
         credit(sponsor, 25);
         Map<String, Object> again = run("REPORT_ISSUE", finance(), body("templateId", MONTHLY, "params",
@@ -360,7 +357,7 @@ class AdminFinanceIT extends PayoutItSupport {
         // The export is the platform's, of the same rows; as known at the month's end, without the late posting,
         // and so is the run issued as known then (its archived rows, not run again).
         String csv = exportCsv(MONTHLY, period(from, to));
-        assertThat(csv.lines().count()).isEqualTo(25);
+        assertThat(csv.lines().count()).isEqualTo(29);
         assertThat(csv).contains("TRANSFER_REVERSED");
         String known = exportCsv(MONTHLY, period(from, to, to));
         assertThat(line(known, "OTHER")).isNotEqualTo(line(csv, "OTHER")).contains(",4,");

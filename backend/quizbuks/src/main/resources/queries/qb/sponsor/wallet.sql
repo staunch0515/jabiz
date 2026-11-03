@@ -1,14 +1,14 @@
 /*---
 id: qb.sponsor.wallet
-description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out; the cash account, the unpaid platform fees and the billing (Q87)
+description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, and (Q87a) the cash account
 entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbSponsor, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:sponsor:QbWallet
-  QbTopUp: urn:jabiz:dataset:sponsor:QbTopUp
-  LedgerEntry: urn:jabiz:dataset:sponsor:LedgerEntry
   QbFeeInvoice: urn:jabiz:dataset:sponsor:QbFeeInvoice
   QbSponsor: urn:jabiz:dataset:sponsor:QbSponsor
   SysParam: urn:jabiz:dataset:now:SysParam
+  QbTopUp: urn:jabiz:dataset:sponsor:QbTopUp
+  LedgerEntry: urn:jabiz:dataset:sponsor:LedgerEntry
 results:
   balance:       { from: QbWallet.balance }
   held:          { from: QbWallet.held }
@@ -29,8 +29,7 @@ permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
 -- wallet's cache, which the daily reconciliation compares with the ledger. Spent is the rewards paid: the lines of
--- account 2110 debited with a publication (refunds taken back carry none). Q87: the cash account is the wallet row of
--- kind CASH; the billing mode is the sponsor's own, else the platform's default (qb.fee.default-billing-mode).
+-- account 2110 debited with a publication (refunds taken back carry none).
 SELECT
     coalesce(w.w_balance, 0)        AS balance,
     coalesce(w.w_held, 0)           AS held,
@@ -54,16 +53,12 @@ LEFT JOIN (
            x.{{QbWallet.pendingAmount}} AS w_pending_amount
     FROM {{QbWallet}} x
     WHERE x.{{QbWallet.kind}} = 'SPONSOR') w ON true
-CROSS JOIN (
-    SELECT sum(t.{{QbTopUp.amount}}) AS p_paid,
-           sum(t.{{QbTopUp.refundedAmount}} + t.{{QbTopUp.disputeClawback}}) AS p_taken,
-           count(*) AS p_count
-    FROM {{QbTopUp}} t
-    WHERE t.{{QbTopUp.status}} = 'PAID') p
+-- Q87a: the cash account, the second row of the same owner.
 LEFT JOIN (
-    SELECT y.{{QbWallet.balance}} AS c_balance, y.{{QbWallet.held}} AS c_held
-    FROM {{QbWallet}} y
-    WHERE y.{{QbWallet.kind}} = 'CASH') c ON true
+    SELECT x.{{QbWallet.balance}} AS c_balance, x.{{QbWallet.held}} AS c_held
+    FROM {{QbWallet}} x
+    WHERE x.{{QbWallet.kind}} = 'CASH') c ON true
+-- Q87b: the platform fees still owed, and the billing mode in effect (the sponsor's own, else the platform's default).
 CROSS JOIN (
     SELECT sum(i.{{QbFeeInvoice.total}}) AS f_total, count(*) AS f_count,
            count(*) FILTER (WHERE i.{{QbFeeInvoice.status}} = 'OVERDUE') AS f_overdue
@@ -76,6 +71,12 @@ LEFT JOIN (
     SELECT CASE WHEN p.{{SysParam.value}} IN ('PREPAID', 'POSTPAID') THEN p.{{SysParam.value}} END AS d_mode
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.fee.default-billing-mode') d ON true
+CROSS JOIN (
+    SELECT sum(t.{{QbTopUp.amount}}) AS p_paid,
+           sum(t.{{QbTopUp.refundedAmount}} + t.{{QbTopUp.disputeClawback}}) AS p_taken,
+           count(*) AS p_count
+    FROM {{QbTopUp}} t
+    WHERE t.{{QbTopUp.status}} = 'PAID') p
 CROSS JOIN (
     SELECT sum(e.{{LedgerEntry.amount}}) AS s_spent
     FROM {{LedgerEntry}} e

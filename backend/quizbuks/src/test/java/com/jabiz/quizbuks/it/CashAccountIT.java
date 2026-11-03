@@ -1,68 +1,193 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.setup.QbParams;
-import com.jabiz.quizbuks.wallet.KudosExchange;
-import com.jabiz.quizbuks.wallet.QbWallets;
-import com.jabiz.quizbuks.wallet.Reconciliation;
+import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.quizbuks.wallet.WalletCodes;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.runtime.job.JobRunner;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The cash account (docs/quizbuks/plans/Q87-fee-account.md, D-Q87-1 – D-Q87-3): a top-up into it, the switches of
- * the targets, cash turned into Kudos (which pays the rewards waiting) and Kudos back into cash, and the daily
- * reconciliation of it.
+ * The sponsors' cash accounts (Q87a, docs/quizbuks/plans/Q87-fee-account.md): a top-up goes into the Kudos wallet
+ * (2110) or the cash account (2160) as the switches allow; a refund takes back from where it went; cash is turned into
+ * Kudos and back one to one under the wallet's lock as the switches allow; the daily reconciliation and the monthly
+ * report know the cash accounts.
  */
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CashAccountIT extends TopUpItSupport {
 
-    Map<String, Object> wallet(String sponsor, String kind) {
-        List<Map<String, Object>> rows = query("SELECT * FROM qb_wallet WHERE owner_id = ? AND kind = ?", sponsor, kind);
-        return rows.isEmpty() ? Map.of() : rows.getFirst();
+    @Autowired
+    @Qualifier("qbReconcileJob")
+    JobDefinition<?> reconcileJob;
+
+    void param(String key, String value) {
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", key, "value", value), "reason", "Q87a"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
     }
 
-    BigDecimal balance(String sponsor, String kind) {
-        Object value = wallet(sponsor, kind).get("balance");
-        return value == null ? BigDecimal.ZERO : (BigDecimal) value;
+    Map<String, Object> cashAccount(String sponsorId) {
+        List<Map<String, Object>> rows = query("SELECT * FROM qb_wallet WHERE owner_id = ? AND kind = 'CASH'",
+            sponsorId);
+        return rows.isEmpty() ? null : rows.getFirst();
     }
 
-    Map<String, Object> myWallet(String sponsor) {
-        return items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst();
+    BigDecimal cash(String sponsorId) {
+        Map<String, Object> account = cashAccount(sponsorId);
+        return account == null ? BigDecimal.ZERO : (BigDecimal) account.get("balance");
     }
 
-    static List<String> lines(String sourceEntity, String sourceId) {
-        return query("SELECT a.account_code, e.direction, e.amount, e.dimension_1 FROM ledger_transaction_version t "
-            + "JOIN ledger_entry_version e ON e.transaction_id = t.transaction_id "
-            + "JOIN ledger_account_version a ON a.account_id = e.account_id "
-            + "WHERE t.source_entity = ? AND t.source_id = ? ORDER BY t.process_seq_id, e.line_no", sourceEntity,
-            sourceId).stream().map(p -> p.get("account_code") + " " + p.get("direction") + " "
-            + ((BigDecimal) p.get("amount")).stripTrailingZeros().toPlainString()
-            + (p.get("dimension_1") == null ? "" : " @" + p.get("dimension_1"))).toList();
+    /** A card top-up to {@code target}, paid; returns its id. */
+    String paidTopUp(String sponsor, long amount, String target) {
+        String topUpId = (String) run("QB_TOPUP_START", sponsorToken(sponsor), body("amount", amount, "target",
+            target)).get("topUpId");
+        runJobs();
+        deliver(event(eventId(), "checkout.session.completed", completed(topUpId)));
+        assertThat(topUp(topUpId)).containsEntry("status", "PAID").containsEntry("target", target);
+        return topUpId;
+    }
+
+    Map<String, Object> refund(String topUpId, long amount, long refunded) {
+        Map<String, Object> charge = new LinkedHashMap<>();
+        charge.put("id", "ch_" + topUpId.replace("-", ""));
+        charge.put("object", "charge");
+        charge.put("payment_intent", paymentOf(topUpId));
+        charge.put("amount", amount);
+        charge.put("amount_refunded", refunded);
+        charge.put("currency", "jpy");
+        charge.put("livemode", false);
+        return event(eventId(), "charge.refunded", charge);
+    }
+
+    static int count(Map<String, Object> row) {
+        return ((Number) row.get("transactionCount")).intValue();
+    }
+
+    static List<Map<String, Object>> exchangePostings(String sponsorId) {
+        return query("SELECT x.direction AS exchange, a.account_code, e.direction, e.amount, e.dimension_1 "
+            + "FROM qb_kudos_exchange x JOIN ledger_transaction_version t ON t.source_entity = 'QbKudosExchange' "
+            + "AND t.source_id = x.exchange_id JOIN ledger_entry_version e ON e.transaction_id = t.transaction_id "
+            + "JOIN ledger_account_version a ON a.account_id = e.account_id WHERE x.sponsor_id = ? "
+            + "ORDER BY t.process_seq_id, e.line_no", sponsorId);
     }
 
     @Test
-    @Order(1)
-    void aTopUpIntoTheCashAccountIsCreditedThereAndPaysNoReward() {
-        String sponsor = newSponsor(unique("s-q87-cash"));
-        // A reward waits: a cash top-up pays it not, a Kudos one would.
+    void cashIsToppedUpRefundedAndTurnedIntoKudosAsTheSwitchesAllow() {
+        String sponsor = newSponsor("s-q87a-cash");
+        String token = sponsorToken(sponsor);
+
+        // Only the Kudos wallet offered: the cash account is refused, the default goes to Kudos as before.
+        param(QbParams.TOPUP_TARGETS, "KUDOS");
+        assertThat(codes(refused("QB_TOPUP_START", token, body("amount", 5000, "target", "CASH"), 422)))
+            .containsExactly(WalletCodes.TOPUP_TARGET);
+        String kudos = paidTopUp(sponsor, 2000, "KUDOS");
+        assertThat(postingsOf(kudos)).extracting(line -> line.get("account_code")).containsExactly("1110", "2110");
+        assertThat(balance(sponsor)).isEqualByComparingTo("2000");
+
+        // Both offered: a top-up into the cash account credits 2160 and the cash account, not the Kudos.
+        param(QbParams.TOPUP_TARGETS, "KUDOS,CASH");
+        String cash = paidTopUp(sponsor, 5000, "CASH");
+        assertThat(postingsOf(cash)).extracting(line -> line.get("account_code") + ":" + line.get("direction"))
+            .containsExactly("1110:DEBIT", "2160:CREDIT");
+        assertThat(cash(sponsor)).isEqualByComparingTo("5000");
+        assertThat(balance(sponsor)).isEqualByComparingTo("2000");
+        // The default may be the cash account.
+        param(QbParams.TOPUP_DEFAULT_TARGET, "CASH");
+        String byDefault = (String) run("QB_TOPUP_START", token, body("amount", 1000)).get("topUpId");
+        assertThat(topUp(byDefault)).containsEntry("target", "CASH");
+
+        // A refund takes back from where the top-up went.
+        deliver(refund(cash, 5000, 1000));
+        assertThat(cash(sponsor)).isEqualByComparingTo("4000");
+        assertThat(postingsOf(cash)).filteredOn(line -> "DEBIT".equals(line.get("direction"))
+            && "2160".equals(line.get("account_code"))).singleElement()
+            .satisfies(line -> assertThat(money(line.get("amount"))).isEqualByComparingTo("1000"));
+
+        // Buying Kudos: switched off, then on; never more than what is available.
+        param(QbParams.KUDOS_BUY_ENABLED, "false");
+        assertThat(codes(refused("QB_KUDOS_BUY", token, body("amount", 1000), 422)))
+            .containsExactly(WalletCodes.KUDOS_EXCHANGE_OFF);
+        param(QbParams.KUDOS_BUY_ENABLED, "true");
+        Map<String, Object> bought = run("QB_KUDOS_BUY", token, body("amount", 3000));
+        assertThat(money(bought.get("kudosBalance"))).isEqualByComparingTo("5000");
+        assertThat(money(bought.get("cashBalance"))).isEqualByComparingTo("1000");
+        assertThat(balance(sponsor)).isEqualByComparingTo("5000");
+        assertThat(cash(sponsor)).isEqualByComparingTo("1000");
+        assertThat(codes(refused("QB_KUDOS_BUY", token, body("amount", 1001), 422)))
+            .containsExactly(WalletCodes.KUDOS_EXCHANGE_FUNDS);
+
+        // Selling Kudos back: off by default (not set), then on.
+        assertThat(codes(refused("QB_KUDOS_SELL", token, body("amount", 100), 422)))
+            .containsExactly(WalletCodes.KUDOS_EXCHANGE_OFF);
+        param(QbParams.KUDOS_SELL_ENABLED, "true");
+        run("QB_KUDOS_SELL", token, body("amount", 500));
+        assertThat(balance(sponsor)).isEqualByComparingTo("4500");
+        assertThat(cash(sponsor)).isEqualByComparingTo("1500");
+        assertThat(exchangePostings(sponsor)).extracting(row -> row.get("exchange") + " " + row.get("account_code")
+            + ":" + row.get("direction") + ":" + money(row.get("amount")).stripTrailingZeros().toPlainString())
+            .containsExactly("TO_KUDOS 2160:DEBIT:3000", "TO_KUDOS 2110:CREDIT:3000",
+                "TO_CASH 2110:DEBIT:500", "TO_CASH 2160:CREDIT:500");
+        assertThat(exchangePostings(sponsor)).allSatisfy(row -> assertThat(row).containsEntry("dimension_1", sponsor));
+
+        // The sponsor reads both on the wallet's template, and the page's switches.
+        Map<String, Object> wallet = items("qb.sponsor.wallet", token, Map.of()).getFirst();
+        assertThat(money(wallet.get("balance"))).isEqualByComparingTo("4500");
+        assertThat(money(wallet.get("cashBalance"))).isEqualByComparingTo("1500");
+        assertThat(items("qb.sponsor.cash-settings", token, Map.of()).getFirst())
+            .containsEntry("targets", "KUDOS,CASH").containsEntry("defaultTarget", "CASH")
+            .containsEntry("buyEnabled", true).containsEntry("sellEnabled", true);
+        // Nobody else's.
+        refused("QB_KUDOS_BUY", sponsorToken(newSponsor("s-q87a-other")), body("amount", 1), 422);
+        assertThat(cash(sponsor)).isEqualByComparingTo("1500");
+        assertBooksBalance();
+
+        // The reconciliation finds the cash accounts as the ledger has them.
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        Instant at = clock.instant().plusSeconds(60);
+        assertThat(jobs.run(reconcileJob, at)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
+        assertThat(query("SELECT r.status FROM qb_recon_run_version r WHERE r.scheduled_time = ?",
+            java.sql.Timestamp.from(at)).getFirst()).containsEntry("status", "OK");
+
+        // The monthly report classes the cash account's postings.
+        YearMonth month = YearMonth.from(clock.instant().atZone(ZoneOffset.UTC));
+        Instant from = month.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant to = month.plusMonths(1).atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Map<String, Map<String, Object>> monthly = new LinkedHashMap<>();
+        items("qb.admin.monthly", tokenOf(user("f-q87a"), QbRoles.ADMIN_FINANCE), Map.of("params",
+            Map.of("from", from.toString(), "to", to.toString()), "limit", 100))
+            .forEach(row -> monthly.put((String) row.get("category"), row));
+        assertThat(count(monthly.get("CASH_TOPUP"))).isEqualTo(1);
+        assertThat(money(monthly.get("CASH_TOPUP").get("sponsorCash"))).isEqualByComparingTo("-5000");
+        assertThat(count(monthly.get("CASH_REFUND"))).isEqualTo(1);
+        assertThat(count(monthly.get("KUDOS_BOUGHT"))).isEqualTo(1);
+        assertThat(money(monthly.get("KUDOS_BOUGHT").get("sponsorWallets"))).isEqualByComparingTo("-3000");
+        assertThat(count(monthly.get("KUDOS_SOLD"))).isEqualTo(1);
+        assertThat(count(monthly.get("OTHER"))).isEqualTo(0);
+    }
+
+    /** Q87b: the receipt and the mail of a top-up into the cash account say so, not "Kudos". */
+    @Test
+    void aCashTopUpsReceiptAndMailNameTheCashAccount() {
+        param(QbParams.TOPUP_TARGETS, "KUDOS,CASH");
+        param(QbParams.TOPUP_DEFAULT_TARGET, "KUDOS");
+        param(QbParams.ISSUER_NAME, "QuizBuks Operations K.K.");
+        String sponsor = newSponsor(unique("s-q87b-receipt"));
         String topUpId = (String) run("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 3000, "target", "CASH"))
             .get("topUpId");
-        assertThat(topUp(topUpId)).containsEntry("target", "CASH");
         runJobs();
         deliver(event(eventId(), "checkout.session.completed", completed(topUpId)));
         assertThat(topUp(topUpId)).containsEntry("status", "PAID");
-        assertThat(lines("QbTopUp", topUpId)).containsExactly("1110 DEBIT 3000", "2160 CREDIT 3000 @" + sponsor);
-        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("3000");
-        // The receipt and the mail say the money went into the cash account, not into Kudos (the issuer named first).
-        param(QbParams.ISSUER_NAME, "QuizBuks Operations K.K.");
         assertThat(items("qb.sponsor.topup-receipt", sponsorToken(sponsor), Map.of("params",
             Map.of("topUpId", topUpId, "language", "en"))).getFirst().get("credited").toString())
             .isEqualTo("3,000 (into the cash account)");
@@ -71,126 +196,5 @@ class CashAccountIT extends TopUpItSupport {
         deliverEvents();
         assertThat(query("SELECT template FROM sys_mail_message WHERE user_id = ?::uuid", sponsor))
             .extracting(row -> row.get("template")).contains("qb.topup.paid-cash").doesNotContain("qb.topup.paid");
-        assertThat(wallet(sponsor, QbWallets.SPONSOR)).isEmpty();
-        assertThat(outboxEvents(QbWallets.SETTLE_EVENT, "sponsorId", sponsor)).isZero();
-        Map<String, Object> mine = myWallet(sponsor);
-        assertThat(mine).containsEntry("cashBalance", 3000).containsEntry("balance", 0)
-            .containsEntry("billingMode", "PREPAID");
-        // The sponsor's top-ups name the target.
-        assertThat(items("qb.sponsor.topups", sponsorToken(sponsor), Map.of())).singleElement()
-            .satisfies(row -> assertThat(row).containsEntry("target", "CASH"));
-        // The settings the page reads: both targets, Kudos by default, buying on, selling off.
-        assertThat(items("qb.sponsor.topup-settings", sponsorToken(sponsor), Map.of()).getFirst())
-            .containsEntry("targets", "KUDOS,CASH").containsEntry("defaultTarget", "KUDOS")
-            .containsEntry("buyEnabled", true).containsEntry("sellEnabled", false);
-    }
-
-    @Test
-    @Order(2)
-    void onlyTheTargetsTheAdministratorsOfferAreTakenAndTheDefaultWhenNoneIsNamed() {
-        String sponsor = newSponsor(unique("s-q87-target"));
-        param(QbParams.TOPUP_TARGETS, "KUDOS");
-        try {
-            Map<String, Object> problem = refused("QB_TOPUP_START", sponsorToken(sponsor),
-                body("amount", 2000, "target", "CASH"), 422);
-            assertThat(codes(problem)).containsExactly(WalletCodes.TOPUP_TARGET);
-            String topUpId = (String) run("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 2000)).get("topUpId");
-            assertThat(topUp(topUpId)).containsEntry("target", "KUDOS");
-        } finally {
-            param(QbParams.TOPUP_TARGETS, "KUDOS,CASH");
-        }
-        param(QbParams.TOPUP_DEFAULT_TARGET, "CASH");
-        try {
-            String topUpId = (String) run("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 2000)).get("topUpId");
-            assertThat(topUp(topUpId)).containsEntry("target", "CASH");
-        } finally {
-            param(QbParams.TOPUP_DEFAULT_TARGET, "KUDOS");
-        }
-    }
-
-    @Test
-    @Order(3)
-    void cashBecomesKudosOneForOneAndPaysTheRewardsWaiting() {
-        String sponsor = newSponsor(unique("s-q87-buy"));
-        String topUpId = (String) run("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 5000, "target", "CASH"))
-            .get("topUpId");
-        runJobs();
-        deliver(event(eventId(), "checkout.session.completed", completed(topUpId)));
-        // Nothing can be published yet: the cash is not Kudos.
-        assertThat(wallet(sponsor, QbWallets.SPONSOR)).isEmpty();
-
-        Map<String, Object> problem = refused(KudosExchange.BUY, sponsorToken(sponsor), body("amount", 6000), 422);
-        assertThat(codes(problem)).containsExactly(WalletCodes.KUDOS_EXCHANGE_SHORT);
-        Map<String, Object> bought = run(KudosExchange.BUY, sponsorToken(sponsor), body("amount", 3000));
-        assertThat(bought).containsEntry("direction", KudosExchange.BOUGHT).containsEntry("kudosBalance", 3000)
-            .containsEntry("cashBalance", 2000);
-        String exchangeId = (String) bought.get("exchangeId");
-        assertThat(lines(KudosExchange.EXCHANGE, exchangeId))
-            .containsExactly("2160 DEBIT 3000 @" + sponsor, "2110 CREDIT 3000 @" + sponsor);
-        // Buying Kudos settles rewards waiting, like a top-up (the event is published; nothing waits here).
-        assertThat(outboxEvents(QbWallets.SETTLE_EVENT, "sponsorId", sponsor)).isEqualTo(1);
-        deliverEvents();
-        assertThat(balance(sponsor, QbWallets.SPONSOR)).isEqualByComparingTo("3000");
-        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("2000");
-        assertThat(items("qb.sponsor.kudos-exchanges", sponsorToken(sponsor), Map.of())).singleElement()
-            .satisfies(row -> assertThat(row).containsEntry("direction", "BUY").containsEntry("amount", 3000));
-
-        // Selling is off by default; on, only what is available goes back.
-        assertThat(codes(refused(KudosExchange.SELL, sponsorToken(sponsor), body("amount", 100), 422)))
-            .containsExactly(WalletCodes.KUDOS_EXCHANGE_OFF);
-        param(QbParams.KUDOS_SELL_ENABLED, "true");
-        try {
-            assertThat(codes(refused(KudosExchange.SELL, sponsorToken(sponsor), body("amount", 3001), 422)))
-                .containsExactly(WalletCodes.KUDOS_EXCHANGE_SHORT);
-            Map<String, Object> sold = run(KudosExchange.SELL, sponsorToken(sponsor), body("amount", 400));
-            assertThat(sold).containsEntry("kudosBalance", 2600).containsEntry("cashBalance", 2400);
-            assertThat(lines(KudosExchange.EXCHANGE, (String) sold.get("exchangeId")))
-                .containsExactly("2110 DEBIT 400 @" + sponsor, "2160 CREDIT 400 @" + sponsor);
-        } finally {
-            param(QbParams.KUDOS_SELL_ENABLED, "false");
-        }
-        // Buying is switched off too, by the administrators.
-        param(QbParams.KUDOS_BUY_ENABLED, "false");
-        try {
-            assertThat(codes(refused(KudosExchange.BUY, sponsorToken(sponsor), body("amount", 100), 422)))
-                .containsExactly(WalletCodes.KUDOS_EXCHANGE_OFF);
-        } finally {
-            param(QbParams.KUDOS_BUY_ENABLED, "true");
-        }
-
-        // The daily reconciliation finds the cash accounts and the exchanges in order.
-        Reconciliation.ReconcileOutput recon = (Reconciliation.ReconcileOutput) systemRun(Reconciliation.RUN,
-            body("scheduledTime", clock.instant().toString()));
-        assertThat(recon.status()).isEqualTo("OK");
-    }
-
-    @Test
-    @Order(4)
-    void aRefundOfACashTopUpIsTakenBackFromTheCashAccount() {
-        String sponsor = newSponsor(unique("s-q87-refund"));
-        String topUpId = (String) run("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 4000, "target", "CASH"))
-            .get("topUpId");
-        runJobs();
-        deliver(event(eventId(), "checkout.session.completed", completed(topUpId)));
-        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("4000");
-        Map<String, Object> charge = new java.util.LinkedHashMap<>();
-        charge.put("id", "ch_" + topUpId.replace("-", ""));
-        charge.put("object", "charge");
-        charge.put("payment_intent", paymentOf(topUpId));
-        charge.put("amount", 4000);
-        charge.put("amount_refunded", 1000);
-        charge.put("currency", "jpy");
-        charge.put("refunded", false);
-        charge.put("livemode", false);
-        deliver(event(eventId(), "charge.refunded", charge));
-        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("3000");
-        assertThat(lines("QbTopUp", topUpId)).contains("2160 DEBIT 1000 @" + sponsor);
-        assertThat(topUp(topUpId).get("refunded_amount")).isEqualTo(new BigDecimal("1000"));
-    }
-
-    void param(String key, String value) {
-        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
-            "values", Map.of("paramKey", key, "value", value), "reason", "Q87 test"));
-        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
     }
 }

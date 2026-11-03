@@ -37,9 +37,9 @@ public final class QbWallets {
     public static final String SPONSOR = "SPONSOR";
     public static final String TAKER = "TAKER";
     /**
-     * Q87 (D-Q87-1): a sponsor's cash account, money of theirs the platform holds that is not Kudos yet (account
-     * 2160 for them); it pays no reward and holds nothing pending. Changed under the sponsor's wallet lock
-     * ({@link #lockName} of {@link #SPONSOR}: the cash and the Kudos are two kinds under one lock, D-Q87-3).
+     * Q87a (D-Q87-1): a sponsor's cash account, a second row of the same owner beside its {@link #SPONSOR} (Kudos)
+     * wallet: the cache of account 2160 for them. It is changed under the same lock as the Kudos wallet
+     * ({@code lockName(SPONSOR, sponsor)}), so a purchase of Kudos moves both under one lock.
      */
     public static final String CASH = "CASH";
 

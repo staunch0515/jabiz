@@ -2,7 +2,7 @@
 id: qb.system.journal-summary
 description: >-
   The summary voucher of a journal export (Q9d, D-Q9d-2, D-Q9d-4): what it takes from the ledger summed by account and
-  side, and by sponsor on 2110, 2160 and 1130 (Q87; the takers' accounts summed), with how many transactions each line sums - a few hundred
+  side, and by sponsor on 2110 (the takers' accounts summed), with how many transactions each line sums - a few hundred
   rows however many postings the month has
 entities: [LedgerAccount, LedgerTransaction, LedgerEntry]
 params:

@@ -182,6 +182,28 @@ public final class QbParams {
     public static final String AUDIENCE_PRICE_FALLBACK = "qb.audience.price.fallback";
     /** Q47c: whether the unused days are refunded when a publication ends early (Q47c-2 charges; controlled). */
     public static final String AUDIENCE_REFUND_UNUSED_DAYS = "qb.audience.fee.refund-unused-days";
+    /**
+     * Q87a (D-Q87-2): where a top-up may go - {@code KUDOS} (straight into the Kudos wallet, as before) and
+     * {@code CASH} (the sponsor's cash account) - as a comma-separated list, and where it goes when the sponsor does
+     * not choose. Controlled.
+     */
+    public static final String TOPUP_TARGETS = "qb.topup.targets";
+    public static final String TOPUP_DEFAULT_TARGET = "qb.topup.default-target";
+    /** Q87a (D-Q87-3): whether sponsors may buy Kudos with their cash (on) and sell Kudos back to cash (off). */
+    public static final String KUDOS_BUY_ENABLED = "qb.kudos.buy.enabled";
+    public static final String KUDOS_SELL_ENABLED = "qb.kudos.sell.enabled";
+    /** Q87a (D-Q87-0): the platform's share of each transfer, as a fraction, added to the fixed fee (rounded down). */
+    public static final String TRANSFER_FEE_RATE = "qb.transfer.fee-rate";
+    /**
+     * Q87b (D-Q87-4, D-Q87-5, D-Q87-7): the platform's fees - the monthly fee (0: none), the consumption tax rate,
+     * the billing mode of a sponsor without one of their own, whether unpaid fees block submitting and converting
+     * (all controlled); and (ordinary) the days an invoice is due in.
+     */
+    public static final String FEE_MONTHLY = "qb.fee.monthly";
+    public static final String FEE_TAX_RATE = "qb.fee.tax-rate";
+    public static final String FEE_DEFAULT_BILLING_MODE = "qb.fee.default-billing-mode";
+    public static final String FEE_OVERDUE_BLOCK = "qb.fee.overdue.block-submit";
+    public static final String FEE_DUE_DAYS = "qb.fee.due-days";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -234,8 +256,9 @@ public final class QbParams {
     /** Q48b: the operators' shares payable and their expense. */
     public static final String JOURNAL_ACCOUNT_2140 = JOURNAL_ACCOUNT_PREFIX + "2140";
     public static final String JOURNAL_ACCOUNT_5130 = JOURNAL_ACCOUNT_PREFIX + "5130";
-    /** Q87: the cash accounts, the fees receivable, the fee revenue and the tax on it. */
+    /** Q87a: the sponsors' cash accounts. */
     public static final String JOURNAL_ACCOUNT_2160 = JOURNAL_ACCOUNT_PREFIX + "2160";
+    /** Q87b: the fees receivable, the fee revenue and the tax on it. */
     public static final String JOURNAL_ACCOUNT_1130 = JOURNAL_ACCOUNT_PREFIX + "1130";
     public static final String JOURNAL_ACCOUNT_4120 = JOURNAL_ACCOUNT_PREFIX + "4120";
     public static final String JOURNAL_ACCOUNT_2150 = JOURNAL_ACCOUNT_PREFIX + "2150";
@@ -263,26 +286,12 @@ public final class QbParams {
     /** Q86 (D-Q86-4): the handle of the headquarters' official account's page, whose tree is the platform's; empty: none. */
     public static final String TREE_PLATFORM_HANDLE = "qb.tree.platform-handle";
 
-    /**
-     * Q87 (docs/quizbuks/plans/Q87-fee-account.md): every road of a sponsor's money is built, and the switches are
-     * the administrators' (controlled). Top-ups: which targets a sponsor may choose ({@code KUDOS}: Kudos at once,
-     * as before; {@code CASH}: the cash account) and the one chosen by default. Converting cash to Kudos and back.
-     * The proportional fee on transfers (with the fixed one). The platform's fees: the monthly fee (0: none), the
-     * consumption tax rate, the billing mode of a sponsor without one of their own, whether unpaid fees block
-     * submitting and converting; and (ordinary) the days an invoice is due in.
-     */
-    public static final String TOPUP_TARGETS = "qb.topup.targets";
-    public static final String TOPUP_DEFAULT_TARGET = "qb.topup.default-target";
-    public static final String KUDOS_BUY_ENABLED = "qb.kudos.buy.enabled";
-    public static final String KUDOS_SELL_ENABLED = "qb.kudos.sell.enabled";
-    public static final String TRANSFER_FEE_RATE = "qb.transfer.fee-rate";
-    public static final String FEE_MONTHLY = "qb.fee.monthly";
-    public static final String FEE_TAX_RATE = "qb.fee.tax-rate";
-    public static final String FEE_DEFAULT_BILLING_MODE = "qb.fee.default-billing-mode";
-    public static final String FEE_OVERDUE_BLOCK = "qb.fee.overdue.block-submit";
-    public static final String FEE_DUE_DAYS = "qb.fee.due-days";
-    public static final List<String> CASH_CONTROLLED = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET, KUDOS_BUY_ENABLED,
-        KUDOS_SELL_ENABLED, TRANSFER_FEE_RATE, FEE_MONTHLY, FEE_TAX_RATE, FEE_DEFAULT_BILLING_MODE, FEE_OVERDUE_BLOCK);
+    /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
+    public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
+        KUDOS_BUY_ENABLED, KUDOS_SELL_ENABLED, TRANSFER_FEE_RATE);
+    /** Q87b: the platform fees' switches (controlled, after the cash account's, in this order). */
+    public static final List<String> FEE_PARAMS = List.of(FEE_MONTHLY, FEE_TAX_RATE, FEE_DEFAULT_BILLING_MODE,
+        FEE_OVERDUE_BLOCK);
 
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
@@ -293,7 +302,7 @@ public final class QbParams {
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
-        List.of(UNDERSTANDING_ENABLED), CASH_CONTROLLED).flatMap(List::stream).toList();
+        List.of(UNDERSTANDING_ENABLED), CASH_ACCOUNT_PARAMS, FEE_PARAMS).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -304,8 +313,6 @@ public final class QbParams {
 
     private static final Map<String, Object> KUDOS = Map.of("type", "monetary", "currency", "JPY", "scale", 0);
     private static final Map<String, Object> BOOL = Map.of("type", "bool");
-    /** A fraction from 0 to below 1 (numeric(4, 4)). */
-    private static final Map<String, Object> RATE = Map.of("type", "numeric", "precision", 4, "scale", 4);
     private static final Map<String, Object> DAYS = Map.of("type", "numeric", "precision", 3, "scale", 0);
     private static final Map<String, Object> TOKENS = Map.of("type", "numeric", "precision", 12, "scale", 0);
     private static final Map<String, Object> USD = Map.of("type", "numeric", "precision", 8, "scale", 4);
@@ -462,19 +469,23 @@ public final class QbParams {
             "Whether the app and the console offer the quiz about an agreement after it is accepted (Q86)"),
         new Param(TREE_PLATFORM_HANDLE, Map.of("type", "text", "maxLength", 60), "",
             "The page handle of the headquarters' official account, whose tree is the platform's (Q86); empty: none"),
-        // Q87: the cash account and the platform's fees. The due days are ordinary; the rest controlled (last, in the
-        // order of CONTROLLED). The declared values keep what the platform did before: Kudos at once, no fee.
-        new Param(FEE_DUE_DAYS, DAYS, "30", "Days after a platform fee invoice is issued that it is due in"),
+        // Q87a: the cash account (controlled, last, in the order of CASH_ACCOUNT_PARAMS). The defaults keep what was:
+        // a top-up goes straight into the Kudos wallet unless the sponsor chooses the cash account.
         new Param(TOPUP_TARGETS, Map.of("type", "text", "maxLength", 20), "KUDOS,CASH",
-            "What a sponsor may top up into: KUDOS (Kudos at once), CASH (the cash account), comma-separated"),
-        new Param(TOPUP_DEFAULT_TARGET, Map.of("type", "text", "maxLength", 10), "KUDOS",
-            "The target chosen by default when a sponsor tops up: KUDOS or CASH"),
-        new Param(KUDOS_BUY_ENABLED, BOOL, true, "Whether sponsors may turn their cash into Kudos (1 : 1)"),
-        new Param(KUDOS_SELL_ENABLED, BOOL, false, "Whether sponsors may turn Kudos back into cash (1 : 1)"),
-        new Param(TRANSFER_FEE_RATE, RATE, "0",
-            "The platform's fee on each transfer as a fraction of it, added to the fixed fee (0.1 = 10%; 0: none)"),
+            "Where a top-up may go, comma-separated: KUDOS (the Kudos wallet) and CASH (the cash account)"),
+        new Param(TOPUP_DEFAULT_TARGET, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:topup-target",
+            "allowedValues", List.of("KUDOS", "CASH")), "KUDOS", "Where a top-up goes when the sponsor does not choose"),
+        new Param(KUDOS_BUY_ENABLED, BOOL, true, "Whether sponsors may turn cash into Kudos"),
+        new Param(KUDOS_SELL_ENABLED, BOOL, false, "Whether sponsors may turn Kudos back into cash"),
+        new Param(TRANSFER_FEE_RATE, Map.of("type", "numeric", "precision", 4, "scale", 4), "0",
+            "The platform's share of each transfer, as a fraction from 0 to below 1, added to the fixed fee "
+                + "(rounded down; 0: none)"),
+        // Q87b: the platform's fees. The due days are ordinary; the rest controlled (last, in the order of
+        // FEE_PARAMS). The declared values keep what the platform did before: no fee, prepaid.
+        new Param(FEE_DUE_DAYS, DAYS, "30", "Days after a platform fee invoice is issued that it is due in"),
         new Param(FEE_MONTHLY, KUDOS, "0", "The platform's monthly fee of each approved sponsor, in yen (0: none)"),
-        new Param(FEE_TAX_RATE, RATE, "0.10", "The consumption tax rate on the platform's fees (0.1 = 10%)"),
+        new Param(FEE_TAX_RATE, Map.of("type", "numeric", "precision", 4, "scale", 4), "0.10",
+            "The consumption tax rate on the platform's fees (0.1 = 10%)"),
         new Param(FEE_DEFAULT_BILLING_MODE, Map.of("type", "text", "maxLength", 10), "PREPAID",
             "How a sponsor without a billing mode of their own pays the platform's fees: PREPAID or POSTPAID"),
         new Param(FEE_OVERDUE_BLOCK, BOOL, true,

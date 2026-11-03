@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   DataTable,
+  DescriptionList,
   type ColumnDef,
   type PaginationState,
   type SortingState,
@@ -133,6 +134,23 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
     <section aria-labelledby="wallet-invoices" className="flex flex-col gap-3" data-testid="wallet-invoices">
       <h2 id="wallet-invoices" className="text-lg font-semibold">{t('wallet.invoices.title')}</h2>
       <p className="text-muted-foreground text-sm">{t('wallet.invoices.intro')}</p>
+      {wallet.overdueCount > 0 ? (
+        <Alert variant="destructive" data-testid="wallet-overdue">
+          <AlertDescription>{t('wallet.invoices.overdueAlert', { count: wallet.overdueCount })}</AlertDescription>
+        </Alert>
+      ) : wallet.unpaidCount > 0 && (
+        <Alert variant="warning" data-testid="wallet-unpaid">
+          <AlertDescription>{t('wallet.invoices.unpaidAlert', { amount: formatKudos(wallet.unpaidTotal) })}</AlertDescription>
+        </Alert>
+      )}
+      <DescriptionList columns={3} data-testid="wallet-billing" data-mode={wallet.billingMode} items={[
+        { key: 'unpaid', label: t('wallet.invoices.unpaid'), value: wallet.unpaidCount > 0
+          ? t('wallet.invoices.unpaidValue', { amount: formatKudos(wallet.unpaidTotal), count: wallet.unpaidCount })
+          : t('wallet.invoices.none') },
+        { key: 'billing', label: t('wallet.invoices.billing'), value: t(`wallet.invoices.billingModes.${wallet.billingMode}`) },
+        ...(wallet.billingMode === 'POSTPAID'
+          ? [{ key: 'credit', label: t('wallet.invoices.creditLimit'), value: formatKudos(wallet.creditLimit) }] : []),
+      ]} />
       {notice && (
         <Alert variant={notice.kind === 'error' ? 'destructive' : undefined} data-testid="invoice-notice">
           <AlertDescription>{notice.text}</AlertDescription>

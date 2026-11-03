@@ -174,50 +174,12 @@ class TopUpConfig {
             .item(QbTopUps.MANUAL, "en", "Manual credit", "zh", "手工加币", "ja", "手動付与"));
     }
 
-    /** Q87 (D-Q87-3): the exchanges of cash and Kudos; finance reads them all, a sponsor their own. */
-    @Bean
-    EntityDefinition qbKudosExchangeEntity() {
-        return KudosExchange.EXCHANGE_ENTITY;
-    }
-
-    @Bean
-    DatasetDefinition qbKudosExchangeDataset() {
-        return processOnly(QbTopUps.defaultDataset(KudosExchange.EXCHANGE), KudosExchange.EXCHANGE,
-            QbPermissions.ADMIN_FINANCE_READ, 10);
-    }
-
-    @Bean
-    DatasetDefinition qbSponsorKudosExchangeDataset() {
-        return DatasetDefinition.define(KudosExchange.SPONSOR_EXCHANGES, d -> d
-            .targetEntityType(KudosExchange.EXCHANGE)
-            .permissions(QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.readOnly(true).allowTimeTravel(false))
-            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
-            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
-    }
-
-    @Bean
-    StaticDictionary qbKudosExchangeDirectionDictionary() {
-        return StaticDictionary.define(KudosExchange.DIRECTION_DICTIONARY, d -> d
-            .item(KudosExchange.BOUGHT, "en", "Cash to Kudos", "zh", "现金换学分", "ja", "現金→クドス")
-            .item(KudosExchange.SOLD, "en", "Kudos to cash", "zh", "学分换现金", "ja", "クドス→現金"));
-    }
-
-    @Bean
-    ProcessDefinition<KudosExchange.ExchangeInput, KudosExchange.ExchangeOutput, ProcessContext> qbKudosBuy() {
-        return KudosExchange.buy();
-    }
-
-    @Bean
-    ProcessDefinition<KudosExchange.ExchangeInput, KudosExchange.ExchangeOutput, ProcessContext> qbKudosSell() {
-        return KudosExchange.sell();
-    }
-
+    /** Q87a: where a top-up goes. */
     @Bean
     StaticDictionary qbTopUpTargetDictionary() {
-        return StaticDictionary.define(QbTopUps.TARGET_DICTIONARY, d -> d
-            .item(QbTopUps.KUDOS, "en", "Kudos", "zh", "学分", "ja", "クドス")
-            .item(QbTopUps.CASH, "en", "Cash account", "zh", "现金账户", "ja", "現金口座"));
+        return StaticDictionary.define(TopUpTargets.DICTIONARY, d -> d
+            .item(TopUpTargets.KUDOS, "en", "Kudos wallet", "zh", "学分钱包", "ja", "クドスウォレット")
+            .item(TopUpTargets.CASH, "en", "Cash account", "zh", "现金账户", "ja", "現金口座"));
     }
 
     @Bean
@@ -262,15 +224,17 @@ class TopUpConfig {
             .item(ReconChecks.TOPUP_REFUNDS, "en", "Top-up refunds", "zh", "充值退款", "ja", "チャージの返金")
             .item(ReconChecks.TOPUP_FEE, "en", "Top-up fee", "zh", "充值手续费", "ja", "チャージの手数料")
             .item(ReconChecks.TAKER_WALLET, "en", "Taker wallet", "zh", "用户钱包", "ja", "回答者ウォレット")
-            .item(ReconChecks.SPONSOR_CASH, "en", "Sponsor cash account", "zh", "商家现金账户", "ja", "スポンサー現金口座")
-            .item(ReconChecks.TOTAL_2160, "en", "Total of cash accounts", "zh", "现金账户合计", "ja", "現金口座合計")
-            .item(ReconChecks.FEES_RECEIVABLE, "en", "Platform fees receivable", "zh", "应收平台费", "ja", "未収プラットフォーム料金")
             .item(ReconChecks.TAKER_IN_TRANSFER, "en", "Taker wallet (in transfer)", "zh", "用户钱包（转账中）",
                 "ja", "回答者ウォレット（送金中）")
             .item(ReconChecks.TAKER_WALLET_LAG, "en", "Taker wallet behind (note)", "zh", "用户钱包落后（提示）",
                 "ja", "回答者ウォレットの遅れ（注記）")
             .item(ReconChecks.TRANSFER_LEDGER, "en", "Transfer posting", "zh", "转账分录", "ja", "送金の仕訳")
-            .item(ReconChecks.TRANSFER_IN_TRANSIT, "en", "Transfer in transit", "zh", "转账在途", "ja", "送金の未達"));
+            .item(ReconChecks.TRANSFER_IN_TRANSIT, "en", "Transfer in transit", "zh", "转账在途", "ja", "送金の未達")
+            .item(ReconChecks.CASH_ACCOUNT, "en", "Sponsor cash account", "zh", "商家现金账户", "ja", "スポンサーの現金口座")
+            .item(ReconChecks.TOTAL_2160, "en", "Total of sponsor cash accounts", "zh", "商家现金账户合计",
+                "ja", "スポンサーの現金口座合計")
+            .item(ReconChecks.FEES_RECEIVABLE, "en", "Platform fees receivable", "zh", "应收平台费",
+                "ja", "未収プラットフォーム料金"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */
@@ -289,6 +253,12 @@ class TopUpConfig {
     @Bean
     RetentionPolicy qbTopUpRetention() {
         return RetentionPolicy.of(QbTopUps.TOPUP).keep(RETENTION).from("paidAt").afterFiscalYearEnd();
+    }
+
+    /** Q87a: an exchange between cash and Kudos is a posting's source document: kept as the top-ups are. */
+    @Bean
+    RetentionPolicy qbKudosExchangeRetention() {
+        return RetentionPolicy.of(KudosExchanges.EXCHANGE).keep(RETENTION).from("createdAt").afterFiscalYearEnd();
     }
 
     /** A receipt from the end of the fiscal year it was issued in (those issued before Q10b have no date: kept). */

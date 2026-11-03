@@ -214,6 +214,10 @@
     **开发入账** `QB_WALLET_DEV_CREDIT` 只留在 `dev` 与测试中，与正式模式或正式密钥同时开启即启动失败。
   - 入站提供方 `stripe` 的密钥只来自 `STRIPE_WEBHOOK_SECRET`（`platformCheck` 用一次性的值，见 `build.gradle.kts`）；白名单只列各阶段订阅的类型。
   - 核对模板（`qb.system.recon-*`）每项比较是一条语句、只返回差异行；结果 `QbReconRun` / `QbReconItem` 只写一次。
+  - **现金账户与学分的两种来源**（Q87a，`wallet.TopUpTargets`、`KudosExchanges`，`docs/quizbuks/plans/Q87-fee-account.md`）：每个商户除学分钱包（`QbWallet` 的 `SPONSOR` 行，科目 2110）外还有现金账户（同一所有者的 `CASH` 行，科目 2160，维度为商户），两者都在 `qb.wallet:SPONSOR:<商户>` 一把锁内改。
+    充值（卡与银行转账）的去向 `QbTopUp.target`（`KUDOS` / `CASH`，开始时定、不可变）只由受控参数 `qb.topup.targets`、`qb.topup.default-target` 决定（未发布时同 Q87 之前：只进学分钱包）；入账、退款、争议都按充值的去向取科目与钱包（`TopUpTargets.account` / `walletKind`），进现金的不触发补发待支付奖励；手工加币只进学分。
+    现金与学分的兑换只经 `QB_KUDOS_BUY` / `QB_KUDOS_SELL`（一比一，规则只在 `KudosExchanges.problems`：开关 `qb.kudos.buy.enabled` 缺省开、`qb.kudos.sell.enabled` 缺省关，未发布即关；只换可用的、换回不越过待支付的奖励），记录 `QbKudosExchange` 是过账的来源（月报 `KUDOS_BOUGHT` / `KUDOS_SOLD`），先 `SaveChanges.now` 再 `LEDGER_POST`。
+    每日核对另比 2160 与现金账户（`CASH_ACCOUNT`、`TOTAL_2160`）；分录导出按商户列 2160 的行；月报加列 `sponsorCash` 与现金的充值、退款、争议各类。转账手续费 = 固定 `qb.transfer.fee` + 比例 `qb.transfer.fee-rate`（受控，缺省 0，向下取整，`TransferRules.fee`）。平台费、预付与后付、账单是 Q87b。
   - **收款与转账（Q6b）**：收款账户 `QbPayoutAccount` 是普通表，`userId` 与 Stripe 账户号都唯一（一个 Stripe 账户永远只属于一个用户），只由开通作业的结果与
     `stripe-connect` 提供方（密钥只来自 `STRIPE_CONNECT_WEBHOOK_SECRET`）的通知写入，在 `qb.account:<用户>` 锁内、只取更新的报告。
     用户钱包缓存（`QbWallet` 的 `TAKER` 行）只经 `TakerWallets`（`QB_TAKER_WALLET_SYNC` 与转账流程）**按账本重算后覆盖**，不做加减；结算奖励不取用户钱包锁。
@@ -226,16 +230,13 @@
     同一键重试余额不足或 5xx 永远得到同样的回答：这两者立即结束作业（`StripeTransferHandler.kept`），次日的新转账用新键。
     被驳回或被撤回（含部分）的转账使用户暂停，直到财务以 `QB_TRANSFER_HOLD_RELEASE` 放行；审核人的意见不写进用户可读的字段。
     开通链接只由本人的数据视图读取（默认数据视图的读权限是不授予任何角色的 `qb.payout.system`）。大额审批的准备人是收款人（平台挡住自审）。撤回按累计金额只记一次。新增 Stripe 交互照 `PayoutJobs` / `StripeTransferHandler` 的写法。
-- **现金账户与平台费**（Q87，`wallet.QbWallets.CASH`、`wallet.KudosExchange`、`wallet.TopUpTargets`、包 `fee`，`docs/quizbuks/plans/Q87-fee-account.md`）：
-  - **学分只有三个来源**：充值直接成为学分（`QbTopUp.target = KUDOS`，现状）、现金换学分（`QB_KUDOS_BUY`，1 : 1）、手工加币（Q18b）。充值的目标只经 `TopUpTargets.resolve`（受控参数 `qb.topup.targets` / `qb.topup.default-target`）决定，
-    三种到账（Stripe、银行、手工）都按记录的 `target` 选贷方科目（2110 或 2160）与钱包种类（`TopUpCrediting`），进现金的不补发待支付、不发 `qb.sponsor.settle-pending`；赠送（`GRANT`）只能给学分。
-  - **现金账户是 `QbWallet` 的种类 `CASH`**，与学分钱包同一把锁 `qb.wallet:SPONSOR:<商户>`（不另加锁名），余额只经 `QbWallets.change` 在锁内改，科目 2160 按当事人；每日核对多三项（`SPONSOR_CASH`、`TOTAL_2160`、`FEES_RECEIVABLE`）。换回现金（`QB_KUDOS_SELL`）只换可用余额（余额 − 冻结），开关 `qb.kudos.sell.enabled` 缺省关。
+- **平台费、预付 / 后付与账单**（Q87b，包 `fee`，在 Q87a 的现金账户之上，`docs/quizbuks/plans/Q87-fee-account.md`）：
   - **平台费只经 `QB_FEE_CHARGE`**（`subProcessOnly()`，权限 `qb.fee.system` 不授予任何角色）记入只追加的 `QbFeeCharge`（`qb_fee_charge_version`，`writeOnce`），新的收费种类只是加一个 `kind`（`FeeRules`），不另写记账；
     预付（`FeeRules.PREPAID`）即扣、不够即 `OPEN` 的账单，后付（`POSTPAID`）记应收、月初由 `qb.fee-invoice` 合成账单；判断"能否换学分 / 提交"只在 `fee.FeeGate`（一条 `QueryEntities.all` 读入驻行与未付账单，`FeeRules.Standing.blocked()`：预付有未付即拦，后付未付合计 > 信用额即拦，开关 `qb.fee.overdue.block-submit`），
     提交发布与换学分都调它（422 `QB_FEE_UNPAID`），不在别处自己判断。账单只从现金账户付（`QB_FEE_INVOICE_PAY`）；账单的 PDF（版式 `qb.fee_invoice`，开具方 `qb.issuer.*`）由商户按需签发（`QB_FEE_INVOICE_DOCUMENT`，任务不能签发单据：系统身份没有权限）。
   - 手工记费与作废只经 `QB_FEE_REQUEST`（`QbFeeRequest`，四眼：审批对象 `qb.fee-request`、规则 `qb.fee-request.review` 由 `QB_SETUP` 提出）与审批结果 `QB_FEE_REQUEST_APPROVAL_RESULT`（`internal()`，只认申请自己的审批请求，驳回按存储的请求与内容哈希判断）；作废 = 冲正该账单的全部分录（模板 `qb.system.fee-invoice-transactions` 按来源找）+ `VOID`，已付的退回现金。
   - 计费方式与信用额在商户入驻行上（`QbSponsor.billingMode` / `creditLimit`，`processOnly`），只经 `QB_OPERATOR_BILLING_SET`（`qb.fee.billing`，运营商以 `OperatorChecks.ownSponsor` 核对范围，理由必填）；缺省为受控参数 `qb.fee.default-billing-mode`。平台费记在记费时商户所属运营商名下（`QbFeeCharge.operatorId`），
-    月结算的分成基数 = 抽成 + 平台费（`qb.system.operator-fees`，`QbOperatorSettlement.platformFees`）。新增一种过账时同步改月报 `qb.admin.monthly` 的分类（`KUDOS_BOUGHT` / `KUDOS_SOLD` / `FEE_CHARGED` / `FEE_PAID` / `FEE_VOIDED`）与 `AdminFinanceIT`。
+    月结算的分成基数 = 抽成 + 平台费（`qb.system.operator-fees`，`QbOperatorSettlement.platformFees`）。新增一种过账时同步改月报 `qb.admin.monthly` 的分类（`FEE_CHARGED` / `FEE_PAID` / `FEE_VOIDED`）与 `AdminFinanceIT`。
 - **分录导出与收据**（`journal`、`wallet.TopUpReceipts`，`docs/quizbuks/plans/Q9d-journal-receipts.md`）：
   - 平台账本本身是复式总账，导出只把平台科目映射到会计系统的科目代码（`QbParams.JOURNAL_ACCOUNTS`，每个 `QbLedger` 科目一个，启动检查 `JournalMappingCheck`）；新增科目时同时加映射参数。
   - 一期 = 一个**日本日期**的月（`JournalPeriods`，D-1；Q9c 的月报仍按 UTC），按顺序导出（`QB_JOURNAL_EXPORT`，命名锁 `qb.journal`，`(periodFrom, granularity)` 唯一），

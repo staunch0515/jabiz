@@ -121,17 +121,18 @@ public final class TopUpClawback {
                     QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> TopUpCrediting.byId(
                         TopUpCrediting.first(ctx, FOUND) == null ? null
                             : String.valueOf(TopUpCrediting.first(ctx, FOUND).id())), TOPUP))
-                // Q87: a cash top-up is taken back from the cash account, a Kudos one from the Kudos.
+                // Q87a: what the top-up credited is taken back from there: the Kudos wallet or the cash account.
                 .step("Read the wallet", QueryEntities.<ProcessContext>of(QbWallets.defaultDataset(QbWallets.WALLET),
-                    ctx -> QbWallets.query(TopUpCrediting.walletKind(TopUpCrediting.first(ctx, TOPUP)),
+                    ctx -> QbWallets.query(TopUpTargets.walletKind(TopUpTargets.of(TopUpCrediting.first(ctx, TOPUP))),
                         TopUpCrediting.first(ctx, TOPUP) == null ? null
-                        : TopUpCrediting.first(ctx, TOPUP).get("sponsorId")), WALLET))
+                            : TopUpCrediting.first(ctx, TOPUP).get("sponsorId")), WALLET))
                 .compute("Decide", (metadata, ctx) -> decide(ctx, kind, settings))
                 .step("Post the clawback", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
                     LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
                 .compute("Record it", (metadata, ctx) -> record(ctx))
                 .step("Ask for the pending rewards to be paid", PublishEvent.<ProcessContext>when(
-                    TopUpClawback::released, QbWallets.SETTLE_EVENT,
+                    ctx -> released(ctx) && TopUpTargets.paysRewards(TopUpTargets.of(TopUpCrediting.first(ctx, TOPUP))),
+                    QbWallets.SETTLE_EVENT,
                     ctx -> Map.of("sponsorId", TopUpCrediting.first(ctx, TOPUP).get("sponsorId"))))
                 .step("Ask a person", CreateTask.<ProcessContext>when(ctx -> ctx.contains(REASON), ctx -> {
                     EntityInstance topUp = TopUpCrediting.first(ctx, TOPUP);
@@ -304,8 +305,8 @@ public final class TopUpClawback {
                 }
                 ctx.put(POST_INPUT, new LedgerProcesses.PostInput(TopUpEvents.happened(event), description,
                     TopUpCrediting.reference(stripeId), List.of(
-                        new LedgerProcesses.Line(TopUpCrediting.creditAccount(topUp), Direction.DEBIT, plan.amount(),
-                            null, Map.of(QbLedger.PARTY, sponsorId)),
+                        new LedgerProcesses.Line(TopUpTargets.account(TopUpTargets.of(topUp)), Direction.DEBIT,
+                            plan.amount(), null, Map.of(QbLedger.PARTY, sponsorId)),
                         new LedgerProcesses.Line(QbLedger.STRIPE_BALANCE, Direction.CREDIT, plan.amount())),
                     QbTopUps.TOPUP, String.valueOf(topUp.id())));
             }
@@ -324,7 +325,7 @@ public final class TopUpClawback {
         BigDecimal heldDelta = ctx.contains(HELD_DELTA) ? (BigDecimal) ctx.get(HELD_DELTA) : BigDecimal.ZERO;
         if (balanceDelta.signum() != 0 || heldDelta.signum() != 0) {
             // The hold is no ledger movement: only the balance follows the posting, the hold only what is spendable.
-            QbWallets.change(ctx, TopUpCrediting.first(ctx, WALLET), TopUpCrediting.walletKind(topUp),
+            QbWallets.change(ctx, TopUpCrediting.first(ctx, WALLET), TopUpTargets.walletKind(TopUpTargets.of(topUp)),
                 topUp.get("sponsorId"), balanceDelta, 0, BigDecimal.ZERO, heldDelta);
         }
         ctx.changes().update(QbTopUps.TOPUP, topUp.id(), topUp.version(), values);

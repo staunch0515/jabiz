@@ -89,10 +89,13 @@ public final class TransferRules {
      * The values of the parameters on the day.
      *
      * @param holdDays how long a reward is held back from transfers ({@code qb.transfer.hold-days}, Q10b)
+     * @param feeRate  Q87a: the platform's share of the amount ({@code qb.transfer.fee-rate}), added to the fixed
+     *                 {@code fee}; from 0 to below 1
      */
     public record Params(Boolean enabled, BigDecimal threshold, BigDecimal reviewAbove, BigDecimal fee,
         BigDecimal holdDays, BigDecimal feeRate) {
-        /** Without a proportional fee (Q87, {@code qb.transfer.fee-rate}): the fixed fee only. */
+
+        /** The parameters before Q87a: no share of the amount. */
         public Params(Boolean enabled, BigDecimal threshold, BigDecimal reviewAbove, BigDecimal fee,
             BigDecimal holdDays) {
             this(enabled, threshold, reviewAbove, fee, holdDays, BigDecimal.ZERO);
@@ -100,14 +103,15 @@ public final class TransferRules {
     }
 
     /**
-     * The platform's fee on a transfer of {@code amount} (Q87, D-Q87-0): the fixed fee plus the amount times the
-     * rate, rounded down to the yen; null when either parameter cannot be used (a rate is 0 or more and below 1).
+     * The platform's fee on a transfer of {@code amount} (Q87a, D-Q87-0): the fixed fee plus the share of the amount,
+     * rounded down to a whole Kudos; null when a parameter is unusable (a negative fee, a rate outside 0 to below 1).
      */
     public static BigDecimal fee(BigDecimal amount, BigDecimal fixed, BigDecimal rate) {
-        if (!wholeAndNotNegative(fixed) || rate == null || rate.signum() < 0 || rate.compareTo(BigDecimal.ONE) >= 0) {
+        BigDecimal share = rate == null ? BigDecimal.ZERO : rate;
+        if (!wholeAndNotNegative(fixed) || share.signum() < 0 || share.compareTo(BigDecimal.ONE) >= 0) {
             return null;
         }
-        return fixed.add(amount.multiply(rate).setScale(0, java.math.RoundingMode.FLOOR));
+        return fixed.add(amount.multiply(share).setScale(0, java.math.RoundingMode.DOWN));
     }
 
     /**
@@ -160,8 +164,7 @@ public final class TransferRules {
             return Plan.skip(DISABLED);
         }
         if (!wholeAndNotNegative(params.threshold()) || !wholeAndNotNegative(params.reviewAbove())
-            || !wholeAndNotNegative(params.fee()) || !wholeAndNotNegative(params.holdDays())
-            || fee(BigDecimal.ONE, params.fee(), params.feeRate()) == null) {
+            || !wholeAndNotNegative(params.fee()) || !wholeAndNotNegative(params.holdDays())) {
             return Plan.skip(INVALID_PARAMS);
         }
         if (facts.banned()) {
@@ -192,6 +195,9 @@ public final class TransferRules {
             return Plan.skip(REWARDS_HELD);
         }
         BigDecimal fee = fee(balance, params.fee(), params.feeRate());
+        if (fee == null) {
+            return Plan.skip(INVALID_PARAMS);
+        }
         BigDecimal net = balance.subtract(fee);
         if (net.signum() <= 0) {
             return Plan.skip(FEE_TOO_HIGH);

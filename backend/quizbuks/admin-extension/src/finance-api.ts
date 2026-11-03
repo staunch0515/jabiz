@@ -360,8 +360,9 @@ export const MONTHLY_COLUMNS: Record<string, string> = {
   '5120': 'promotion',
   '2140': 'operatorPayable',
   '5130': 'operatorShares',
-  // Q87: the sponsors' cash accounts, the fees receivable, the fee revenue and the tax on it.
+  /** Q87a: the sponsors' cash accounts. */
   '2160': 'sponsorCash',
+  // Q87b: the fees receivable, the fee revenue and the tax on it.
   '1130': 'feesReceivable',
   '4120': 'feeRevenue',
   '2150': 'taxPayable',

@@ -11,7 +11,7 @@ import com.jabiz.quizbuks.operator.OperatorProcesses;
 import com.jabiz.quizbuks.operator.QbOperators;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
-import com.jabiz.quizbuks.wallet.KudosExchange;
+import com.jabiz.quizbuks.wallet.KudosExchanges;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.runtime.context.Actor;
 import com.jabiz.runtime.test.TestTokens;
@@ -75,7 +75,7 @@ class FeeIT extends PlayItSupport {
     /** Money in the sponsor's cash account: Kudos credited and sold back (the dev credit knows no cash). */
     void cash(String sponsor, long amount) {
         credit(sponsor, amount);
-        run(KudosExchange.SELL, sponsorToken(sponsor), body("amount", amount));
+        run(KudosExchanges.SELL, sponsorToken(sponsor), body("amount", amount));
     }
 
     BigDecimal balance(String sponsor, String kind) {
@@ -104,7 +104,13 @@ class FeeIT extends PlayItSupport {
     }
 
     static List<String> lines(String sourceEntity, String sourceId) {
-        return CashAccountIT.lines(sourceEntity, sourceId);
+        return query("SELECT a.account_code, e.direction, e.amount, e.dimension_1 FROM ledger_transaction_version t "
+            + "JOIN ledger_entry_version e ON e.transaction_id = t.transaction_id "
+            + "JOIN ledger_account_version a ON a.account_id = e.account_id "
+            + "WHERE t.source_entity = ? AND t.source_id = ? ORDER BY t.process_seq_id, e.line_no", sourceEntity,
+            sourceId).stream().map(p -> p.get("account_code") + " " + p.get("direction") + " "
+            + ((BigDecimal) p.get("amount")).stripTrailingZeros().toPlainString()
+            + (p.get("dimension_1") == null ? "" : " @" + p.get("dimension_1"))).toList();
     }
 
     static List<Map<String, Object>> openTasks(String permission, String source) {
@@ -173,7 +179,7 @@ class FeeIT extends PlayItSupport {
             .containsEntry("unpaidTotal", 1100).containsEntry("unpaidCount", 1);
         cash(sponsor, 2000);
         // Buying is stopped, submitting too (D-Q87-5).
-        assertThat(codes(refused(KudosExchange.BUY, sponsorToken(sponsor), body("amount", 100), 422)))
+        assertThat(codes(refused(KudosExchanges.BUY, sponsorToken(sponsor), body("amount", 100), 422)))
             .contains(FeeCodes.FEE_UNPAID);
         String token = sponsorToken(sponsor);
         String versionId = version(token, "Q87 gated quiz");
@@ -185,7 +191,7 @@ class FeeIT extends PlayItSupport {
         // The switch off: nothing is stopped.
         param(QbParams.FEE_OVERDUE_BLOCK, "false");
         try {
-            run(KudosExchange.BUY, token, body("amount", 100));
+            run(KudosExchanges.BUY, token, body("amount", 100));
         } finally {
             param(QbParams.FEE_OVERDUE_BLOCK, "true");
         }
@@ -198,7 +204,7 @@ class FeeIT extends PlayItSupport {
             .containsExactly("2160 DEBIT 1100 @" + sponsor, "1130 CREDIT 1100 @" + sponsor);
         assertThat(codes(refused(FeeProcesses.PAY, token, body("invoiceId", invoice.get("invoice_id")), 422)))
             .containsExactly(FeeCodes.FEE_INVOICE_STATE);
-        run(KudosExchange.BUY, token, body("amount", 100));
+        run(KudosExchanges.BUY, token, body("amount", 100));
         assertThat(run("QB_PUBLICATION_SUBMIT", token, body("publicationId", publicationId)).get("status"))
             .isIn("LIVE", "SCHEDULED");
     }
@@ -231,7 +237,7 @@ class FeeIT extends PlayItSupport {
             Map.of("invoiceId", invoiceId)))).hasSize(1);
         // Within the credit limit: buying goes on. Overdue: stopped, reminded (once a week, three times), a task.
         cash(sponsor, 3000);
-        run(KudosExchange.BUY, sponsorToken(sponsor), body("amount", 100));
+        run(KudosExchanges.BUY, sponsorToken(sponsor), body("amount", 100));
         String source = QbFees.overdueTaskSource(invoiceId);
         assertThat(item(FeeProcesses.OVERDUE_ITEM, body("invoiceId", invoiceId))).isEqualTo("NONE");
         clock.set(clock.instant().plus(Duration.ofDays(31)));
@@ -241,7 +247,7 @@ class FeeIT extends PlayItSupport {
         assertThat(openTasks(QbPermissions.FEE_MANAGE, source)).singleElement()
             .satisfies(task -> assertThat(task).containsEntry("status", "OPEN"));
         assertThat(item(FeeProcesses.OVERDUE_ITEM, body("invoiceId", invoiceId))).isEqualTo("NONE");
-        assertThat(codes(refused(KudosExchange.BUY, sponsorToken(sponsor), body("amount", 100), 422)))
+        assertThat(codes(refused(KudosExchanges.BUY, sponsorToken(sponsor), body("amount", 100), 422)))
             .contains(FeeCodes.FEE_UNPAID);
         // Paid: the task is done.
         run(FeeProcesses.PAY, sponsorToken(sponsor), body("invoiceId", invoiceId));

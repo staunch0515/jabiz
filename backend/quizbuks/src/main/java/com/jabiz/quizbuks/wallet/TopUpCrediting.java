@@ -88,10 +88,10 @@ public final class TopUpCrediting {
             }))
             .step("Read the top-up again", QueryEntities.<ProcessContext>of(QbTopUps.defaultDataset(QbTopUps.TOPUP),
                 ctx -> byId(first(ctx, FOUND) == null ? null : String.valueOf(first(ctx, FOUND).id())), TOPUP))
-            // Q87: the wallet of the top-up's target (Kudos, or the cash account), one query either way.
+            // Q87a: the wallet its target credits (the Kudos wallet or the cash account), under the same lock.
             .step("Read the wallet", QueryEntities.<ProcessContext>of(QbWallets.defaultDataset(QbWallets.WALLET),
-                ctx -> QbWallets.query(walletKind(first(ctx, TOPUP)), first(ctx, TOPUP) == null ? null
-                    : first(ctx, TOPUP).get("sponsorId")), WALLET));
+                ctx -> QbWallets.query(TopUpTargets.walletKind(TopUpTargets.of(first(ctx, TOPUP))),
+                    first(ctx, TOPUP) == null ? null : first(ctx, TOPUP).get("sponsorId")), WALLET));
     }
 
     /** Decides on the {@link Report} under the lock and acts: the posting, the record, the events, the fee's job. */
@@ -100,9 +100,9 @@ public final class TopUpCrediting {
             .step("Post the top-up", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
                 LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
             .compute("Record the outcome", (metadata, ctx) -> record(ctx))
-            // Only Kudos pay rewards: a cash top-up asks for nothing (Q87).
             .step("Ask for the pending rewards to be paid", PublishEvent.<ProcessContext>when(
-                ctx -> credited(ctx) && !cash(first(ctx, TOPUP)), QbWallets.SETTLE_EVENT,
+                ctx -> credited(ctx) && TopUpTargets.paysRewards(TopUpTargets.of(first(ctx, TOPUP))),
+                QbWallets.SETTLE_EVENT,
                 ctx -> Map.of("sponsorId", first(ctx, TOPUP).get("sponsorId"))))
             .step("Announce the top-up", PublishEvent.<ProcessContext>when(TopUpCrediting::credited,
                 QbTopUps.PAID_EVENT, ctx -> {
@@ -143,8 +143,8 @@ public final class TopUpCrediting {
             ctx.put(POST_INPUT, new LedgerProcesses.PostInput(report.bookingTime(), "Top-up",
                 reference(report.session().paymentIntentId()), List.of(
                     new LedgerProcesses.Line(QbLedger.STRIPE_BALANCE, Direction.DEBIT, amount),
-                    new LedgerProcesses.Line(creditAccount(topUp), Direction.CREDIT, amount, null,
-                        Map.of(QbLedger.PARTY, view.sponsorId()))), QbTopUps.TOPUP, view.topUpId()));
+                    new LedgerProcesses.Line(TopUpTargets.account(TopUpTargets.of(topUp)), Direction.CREDIT, amount,
+                        null, Map.of(QbLedger.PARTY, view.sponsorId()))), QbTopUps.TOPUP, view.topUpId()));
         }
     }
 
@@ -160,8 +160,8 @@ public final class TopUpCrediting {
         switch (verdict.outcome()) {
             case CREDIT -> {
                 BigDecimal amount = QbTopUps.money(topUp.get("amount"));
-                QbWallets.change(ctx, first(ctx, WALLET), walletKind(topUp), topUp.get("sponsorId"), amount, 0,
-                    BigDecimal.ZERO);
+                QbWallets.change(ctx, first(ctx, WALLET), TopUpTargets.walletKind(TopUpTargets.of(topUp)),
+                    topUp.get("sponsorId"), amount, 0, BigDecimal.ZERO);
                 values.put("status", TopUpStatus.PAID);
                 values.put("checkoutSessionId", session.id());
                 values.put("paymentIntentId", session.paymentIntentId());
@@ -201,23 +201,8 @@ public final class TopUpCrediting {
             verdict == null ? null : verdict.reason());
     }
 
-    private static boolean credited(ProcessContext ctx) {
+    static boolean credited(ProcessContext ctx) {
         return ctx.contains(POSTING);
-    }
-
-    /** Q87: whether a top-up goes to the cash account (none: Kudos, as before Q87). */
-    static boolean cash(EntityInstance topUp) {
-        return topUp != null && QbTopUps.CASH.equals(TopUpTargets.of(topUp.get("target")));
-    }
-
-    /** The wallet kind a top-up is credited to. */
-    static String walletKind(EntityInstance topUp) {
-        return TopUpTargets.walletKind(topUp == null ? null : TopUpTargets.of(topUp.get("target")));
-    }
-
-    /** The account a top-up is credited to (and a refund of it is taken back from). */
-    static String creditAccount(EntityInstance topUp) {
-        return TopUpTargets.account(topUp == null ? null : TopUpTargets.of(topUp.get("target")));
     }
 
     /** The presentment amount when it is a whole number of the currency's minor unit; null otherwise. */

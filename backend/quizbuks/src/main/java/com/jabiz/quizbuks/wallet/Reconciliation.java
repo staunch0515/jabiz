@@ -43,13 +43,14 @@ public final class Reconciliation {
     public static final String CHECK_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-check";
 
     public static final String WALLETS_TEMPLATE = "qb.system.recon-sponsor-wallets";
+    /** Q87a: the sponsors' cash accounts against account 2160. */
+    public static final String CASH_TEMPLATE = "qb.system.recon-cash-accounts";
     public static final String PENDING_TEMPLATE = "qb.system.recon-sponsor-pending";
     public static final String TOTALS_TEMPLATE = "qb.system.recon-totals";
     public static final String TOPUPS_TEMPLATE = "qb.system.recon-topups";
     public static final String TAKERS_TEMPLATE = "qb.system.recon-taker-wallets";
     public static final String TRANSFERS_TEMPLATE = "qb.system.recon-transfers";
-    /** Q87: the cash accounts against 2160, and the fees receivable against 1130. */
-    static final String CASH_TEMPLATE = "qb.system.recon-sponsor-cash";
+    /** Q87b: the fees receivable (1130 by sponsor) against the invoices and charges still owed. */
     static final String RECEIVABLE_TEMPLATE = "qb.system.recon-fee-receivable";
 
     public record ReconcileInput(@NotNull Instant scheduledTime) {}
@@ -104,12 +105,12 @@ public final class Reconciliation {
     static final String INPUT = "input";
     static final String EXISTING = "existing";
     static final String WALLETS = "wallets";
+    static final String CASH_ACCOUNTS = "cashAccounts";
     static final String PENDING = "pending";
     static final String TOTALS = "totals";
     static final String TOPUPS = "topUps";
     static final String TAKERS = "takers";
     static final String TRANSFERS = "transfers";
-    static final String CASH = "cash";
     static final String RECEIVABLE = "receivable";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
@@ -139,6 +140,8 @@ public final class Reconciliation {
                 // Each comparison is one statement: its snapshot is consistent, whatever commits meanwhile.
                 .step("Compare the sponsor wallets", RunTemplate.<ProcessContext>of(WALLETS_TEMPLATE,
                     ctx -> Map.of(), WALLETS))
+                .step("Compare the cash accounts", RunTemplate.<ProcessContext>of(CASH_TEMPLATE,
+                    ctx -> Map.of(), CASH_ACCOUNTS))
                 .step("Compare the pending rewards", RunTemplate.<ProcessContext>of(PENDING_TEMPLATE,
                     ctx -> Map.of(), PENDING))
                 .step("Compare the totals", RunTemplate.<ProcessContext>of(TOTALS_TEMPLATE, ctx -> Map.of(), TOTALS))
@@ -148,8 +151,7 @@ public final class Reconciliation {
                     TAKERS))
                 .step("Compare the transfers", RunTemplate.<ProcessContext>of(TRANSFERS_TEMPLATE, ctx -> Map.of(),
                     TRANSFERS))
-                // Q87: the cash accounts (2160 by sponsor, and its total) and the fees receivable (1130 by sponsor).
-                .step("Compare the cash accounts", RunTemplate.<ProcessContext>of(CASH_TEMPLATE, ctx -> Map.of(), CASH))
+                // Q87b: the fees receivable (1130 by sponsor) against the invoices and uninvoiced charges.
                 .step("Compare the fees receivable", RunTemplate.<ProcessContext>of(RECEIVABLE_TEMPLATE,
                     ctx -> Map.of(), RECEIVABLE))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
@@ -190,11 +192,11 @@ public final class Reconciliation {
         }
         List<ReconChecks.Item> found = new ArrayList<>();
         found.addAll(ReconChecks.perParty(ReconChecks.SPONSOR_WALLET, rows(ctx, WALLETS)));
+        found.addAll(ReconChecks.perParty(ReconChecks.CASH_ACCOUNT, rows(ctx, CASH_ACCOUNTS)));
         found.addAll(ReconChecks.pending(rows(ctx, PENDING)));
         found.addAll(ReconChecks.coded(rows(ctx, TOTALS)));
         found.addAll(ReconChecks.coded(rows(ctx, TOPUPS)));
         found.addAll(ReconChecks.coded(rows(ctx, TRANSFERS)));
-        found.addAll(ReconChecks.perParty(ReconChecks.SPONSOR_CASH, rows(ctx, CASH)));
         found.addAll(ReconChecks.coded(rows(ctx, RECEIVABLE)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));

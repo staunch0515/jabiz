@@ -1,4 +1,4 @@
-# Q87 商户的现金账户与学分的来源：路都修好，开关交给管理人员（计划，2026-11-03 第三稿，待需求方确认 §10）
+# Q87 商户的现金账户与学分的来源：路都修好，开关交给管理人员（计划，2026-11-03 第三稿，**需求方 2026-11-03 确认 §10 全部**）
 
 需求方 2026-11-03 的要求（三次，以最后一次为准）：
 
@@ -9,7 +9,7 @@
 5. 运营商的收费与分成**按 Q48 已定的来**（收费全部记在运营商名下，平台按比例分成），不另立规则。
 6. 以后：答题既可以给答题者学分和某种认证，也可以要求答题者付学分、持有某种认证才能答；平台要有这些能力，何时开放由管理人员定。
 
-编号 Q87 是建议。**这只是计划**：确认 §10 后开发，一个 PR，工作分支 `1.3/quizbuks-87-cash-account`。
+编号 Q87。需求方 2026-11-03 确认 §10 全部八条，并同意拆成两个 PR 依次合并：**Q87a**（现金账户、充值目标、换学分 / 换回、提现按比例的抽成、核对，工作分支 `1.3/quizbuks-87a-cash-account`）与 **Q87b**（平台费、预付 / 后付、账单、逾期、运营商的计费方式、并入运营商结算）；Q47c-2 在 Q87b 合入后接着做。
 
 ## 0. 原则
 
@@ -99,7 +99,7 @@
 | 中 | 适格请求书的格式、税率、取整 | 都是参数与版式，`qb.fee.monthly` 缺省 0，上线不出任何账单 |
 | 低 | 逾期拦提交误伤 | 只拦新提交与换学分、开关可关、页面写明、总部可作废 |
 
-## 10. 需要需求方确认的
+## 10. 需要需求方确认的（2026-11-03 全部确认；拆成 Q87a / Q87b）
 
 1. D-Q87-0：结算抽成 `qb.creator-fee-rate` 设为 0 保留功能；转账固定手续费已是 0；新加提现按比例的抽成参数，缺省 0。
 2. D-Q87-2：充值两条路都保留，目标与缺省由开关定，缺省仍是"直接成为学分"（现状不变）。
@@ -110,9 +110,21 @@
 7. §7：答题给认证、答题要付学分两项另立计划（Q88），本计划只留落点（商户认证的轮、报名费进现金账户）。
 8. 编号 Q87，一个 PR，约 11.5 天。建议顺序：Q86 → Q87 → Q88。
 
-## 11. 实施记录（2026-11-03，分支 `1.3/quizbuks-87-cash-account`，一个 PR）
+## 11. 实施记录
 
-按 §2 的决定实现；与 §3 / §4 写法不同的地方：
+### Q87a（现金账户、充值目标、兑换、提现比例抽成）
+
+- 迁移 V66（V65 是 Q86 的）：`qb_wallet.kind` 加 `CASH`；`qb_topup.target`（缺省 `KUDOS`，手工加币只能是 `KUDOS`）；`qb_kudos_exchange`（兑换记录，过账的来源，只写一次）。
+- 科目 2160 由 `QB_SETUP` 开立，映射参数 `qb.journal.account.2160`（受控，首个值为空）。
+- **未发布的开关等于 Q87 之前**：去向未发布时只进学分钱包；兑换的两个开关未发布时都关（与 D-Q87-3 的缺省"换学分开"不冲突：`QB_SETUP` 提出的首个值是开，发布后才生效）。页面经 `qb.sponsor.cash-settings` 以同样的读法读开关。
+- 兑换借用充值的权限 `qb.topup`（商户在平台内动自己的钱，同充值），不另加权限；要求已验证邮箱、先查封禁、同意条款、入驻已通过。
+- 现金在商户后台也显示为学分（"Kudos 以外不写币种名"），一比一。
+- 测试：`TopUpTargetsTest`、`KudosExchangesTest`、`TransferRulesTest`（比例）、`CashAccountIT`（卡充值进现金、退款扣回现金、兑换与开关、核对、月报）、`AdminFinanceIT` 的新类；前端 `wallet.test.tsx`；e2e `cash-account.spec.ts`。
+- 留给 Q87b：平台费记录、预付 / 后付与信用额、账单与适格请求书、逾期、运营商的计费方式、并入运营商结算；拦"有未付账单时换学分"随 Q87b 加在 `KudosExchanges.problems`。
+
+### Q87b（平台费、预付 / 后付、账单、运营商结算）
+
+分支 `1.3/quizbuks-87-cash-account`（PR #433；在 Q87a 合入之后以它的现金账户为底）。按 §2 的决定实现；与 §3 / §4 写法不同的地方：
 
 | 计划 | 实施 | 原因 |
 |---|---|---|
@@ -122,12 +134,14 @@
 | `QB_FEE_CHARGE_MANUAL`、`QB_FEE_INVOICE_VOID` 两个四眼流程 | 一个 `QB_FEE_REQUEST`（`kind = MANUAL / VOID`）+ `QbFeeRequest` + 审批结果 `QB_FEE_REQUEST_APPROVAL_RESULT`（照手工加币） | 审批绑定的内容要有一行可读回（Q18b 的做法），两种申请一张表 |
 | `FeeKinds` 类 | 种类是 `FeeRules` 的常量 | 两个种类不值一个类 |
 | 422 `QB_FEE_OVERDUE` | 422 `QB_FEE_UNPAID`（预付有未付、后付超信用额都用它） | 拦的条件不只是逾期 |
-| 模板 `qb.sponsor.cash`、`qb.operator.sponsor-billing` | `qb.sponsor.wallet` 加现金与账单的列；`qb.operator.sponsors` 加 `billingMode` / `creditLimit`；另有 `qb.sponsor.topup-settings`、`qb.sponsor.kudos-exchanges`、`qb.sponsor.fee-charges` / `fee-invoices` / `fee-invoice-lines`、`qb.admin.fee-charges` / `fee-invoices` / `fee-requests` | 少两次读取 |
-| `TransferFees` | `TransferRules.fee(amount, fixed, rate)`（`Params` 多一个 `feeRate`） | 已有 `TransferRules` |
-| 科目参数 | `qb.journal.account.2160 / 1130 / 4120 / 2150` 四个受控参数（`QB_SETUP` 提出），场景的提案因此 86 个（合并 Q47c-1 与 Q86 后 90 个） | Q9d 的做法 |
-| 迁移 | `V66__quizbuks_cash_account.sql`（Q86 用 V65） | 合入顺序 |
+| 模板 `qb.operator.sponsor-billing` | `qb.operator.sponsors` 加 `billingMode` / `creditLimit`（按平台缺省回落）；`qb.sponsor.wallet` 加未付与计费的列；另有 `qb.sponsor.fee-charges` / `fee-invoices` / `fee-invoice-lines`、`qb.admin.fee-charges` / `fee-invoices` / `fee-requests` | 少两次读取 |
+| 科目参数 | `qb.journal.account.1130 / 4120 / 2150` 三个受控参数（`QB_SETUP` 提出） | Q9d 的做法 |
+| 迁移 | `V67__quizbuks_platform_fees.sql`（Q87a 占 V66） | 合入顺序 |
 
+- 开关未发布时同 Q87 之前（`LoadParams.optional`：不拦、不记费），与 Q87a 的读法一致；拦"有未付账单时换学分"加在 `KudosExchanges`（只拦换出）。
 - 提交发布多一条语句（`FeeGate`：入驻行 + 未付账单，`QueryEntities.all`）；答题路径不变（`AttemptStatementBudgetIT` 不变）。
-- 月报 `qb.admin.monthly` 多五类：`KUDOS_BOUGHT`、`KUDOS_SOLD`、`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`（`AdminFinanceIT` 逐行）。
+- 月报 `qb.admin.monthly` 多三类：`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`（`AdminFinanceIT` 逐行），多三列 1130 / 4120 / 2150。每日核对多 `FEES_RECEIVABLE`（未开账单的后付记费也算应收）。
 - 任务：`qb.fee-monthly`（每月 2 日 01:07 日本时间）、`qb.fee-invoice`（01:17）、`qb.fee-overdue`（每日 02:37）。
+- 进现金账户的充值：收据的"计入"一行与邮件 `qb.topup.paid-cash` 写明进了现金账户（Q87a 的收据与邮件说"存入学分"）。
 - 未做：换学分与进现金到账的 `StatementBudgetIT` 预算（§3）；账单的在线支付（D-Q87-6 本来就不做）。
+
