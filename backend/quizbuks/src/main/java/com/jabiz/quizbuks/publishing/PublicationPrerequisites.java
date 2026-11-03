@@ -42,9 +42,25 @@ public final class PublicationPrerequisites {
     static final String SPONSOR_EDGES = "sponsorEdges";
     static final String TARGETS = "prerequisiteTargets";
 
-    /** One prerequisite: the publication required and what the taker must have done on it. */
-    public record PrerequisiteInput(@NotNull UUID requiredPublicationId,
-        @NotNull @Pattern(regexp = "PASSED|ANSWERED") String requirement) {}
+    /**
+     * One prerequisite: the publication required and what the taker must have done on it, or (Q86, D-Q86-5) a
+     * certification the taker must hold (its requirement is then PASSED whatever is given).
+     */
+    public record PrerequisiteInput(UUID requiredPublicationId, @Size(max = 40) String certification,
+        @Pattern(regexp = "PASSED|ANSWERED") String requirement) {
+        public PrerequisiteInput(UUID requiredPublicationId, String requirement) {
+            this(requiredPublicationId, null, requirement);
+        }
+
+        /** The key a row is kept by: the publication, or the certification. */
+        String key() {
+            return certification != null ? "c:" + certification : "p:" + requiredPublicationId;
+        }
+
+        String storedRequirement() {
+            return certification != null || requirement == null ? QbPrerequisites.PASSED : requirement;
+        }
+    }
 
     /**
      * @param prerequisites the whole of the draft's prerequisites: those not given are removed, none means no
@@ -105,7 +121,8 @@ public final class PublicationPrerequisites {
             return;
         }
         List<PrerequisiteRules.Wanted> wanted = input.prerequisites().stream()
-            .map(p -> new PrerequisiteRules.Wanted(p.requiredPublicationId(), p.requirement())).toList();
+            .map(p -> new PrerequisiteRules.Wanted(p.requiredPublicationId(), p.certification(), p.storedRequirement()))
+            .toList();
         Map<UUID, PrerequisiteRules.Target> targets = new HashMap<>();
         for (EntityInstance target : PublicationEditing.list(ctx, TARGETS)) {
             targets.put(PublicationEditing.uuid(target.id()), new PrerequisiteRules.Target(
@@ -119,42 +136,50 @@ public final class PublicationPrerequisites {
         if (ctx.hasViolations()) {
             return;
         }
-        Map<UUID, String> rows = new LinkedHashMap<>();
+        Map<String, PrerequisiteInput> rows = new LinkedHashMap<>();
         for (PrerequisiteInput p : input.prerequisites()) {
-            rows.put(p.requiredPublicationId(), p.requirement());
+            rows.put(p.key(), p);
         }
         replace(ctx, publication, rows);
         PublicationEditing.write(ctx, publication, Map.of());
     }
 
-    /** Replaces the publication's rows by {@code wanted} (required publication → requirement), leaving those that stay. */
-    static void replace(ProcessContext ctx, EntityInstance publication, Map<UUID, String> wanted) {
-        Set<UUID> kept = new HashSet<>();
+    /** Replaces the publication's rows by {@code wanted} (by key: publication or certification), leaving those that stay. */
+    static void replace(ProcessContext ctx, EntityInstance publication, Map<String, PrerequisiteInput> wanted) {
+        Set<String> kept = new HashSet<>();
         for (EntityInstance row : PublicationEditing.list(ctx, PREREQUISITES)) {
-            UUID required = PublicationEditing.uuid(row.get("requiredPublicationId"));
-            if (wanted.containsKey(required) && wanted.get(required).equals(row.get("requirement"))) {
-                kept.add(required);
+            String key = keyOf(row);
+            PrerequisiteInput want = wanted.get(key);
+            if (want != null && want.storedRequirement().equals(row.get("requirement"))) {
+                kept.add(key);
             } else {
                 ctx.changes().delete(QbPrerequisites.PREREQUISITE, row.id(), row.version());
             }
         }
-        wanted.forEach((required, requirement) -> {
-            if (!kept.contains(required)) {
+        wanted.forEach((key, want) -> {
+            if (!kept.contains(key)) {
                 Map<String, Object> values = new LinkedHashMap<>();
                 values.put("publicationId", publication.id());
                 values.put("publisherKind", publication.get("publisherKind"));
                 values.put("publisherId", publication.get("publisherId"));
-                values.put("requiredPublicationId", required);
-                values.put("requirement", requirement);
+                values.put("requiredPublicationId", want.requiredPublicationId());
+                values.put("certification", want.certification());
+                values.put("requirement", want.storedRequirement());
                 ctx.changes().insert(QbPrerequisites.PREREQUISITE, values);
             }
         });
     }
 
-    /** The values of a stored row for a copy of the publication (Q76: the same publications are required). */
+    static String keyOf(EntityInstance row) {
+        Object certification = row.get("certification");
+        return certification != null ? "c:" + certification : "p:" + PublicationEditing.uuid(row.get("requiredPublicationId"));
+    }
+
+    /** The values of a stored row for a copy of the publication (Q76: the same publications or certifications are required). */
     static Map<String, Object> copyOf(EntityInstance row) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("requiredPublicationId", row.get("requiredPublicationId"));
+        values.put("certification", row.get("certification"));
         values.put("requirement", row.get("requirement"));
         return values;
     }

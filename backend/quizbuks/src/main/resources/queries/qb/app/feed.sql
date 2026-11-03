@@ -185,17 +185,41 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
   AND NOT EXISTS (
       SELECT 1 FROM {{QbPublicationPrerequisite}} pr
       WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}
-        AND NOT EXISTS (
-            SELECT 1 FROM {{QbAttempt}} ra
-            WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
-              AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
-              AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
+        -- Q86 (D-Q86-5): or a certification the caller must hold now (the holding as below).
+        AND NOT ((pr.{{QbPublicationPrerequisite.requiredPublicationId}} IS NOT NULL AND EXISTS (
+              SELECT 1 FROM {{QbAttempt}} ra
+              WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+                AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
+                AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
+         OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
+                SELECT 1
+                FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000)) AS cat(cert, ver, secs)
+                CROSS JOIN LATERAL (
+                    SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
+                           rec.{{QbCertificationRecord.validUntil}} AS until
+                    FROM {{QbCertificationRecord}} rec
+                    WHERE rec.{{QbCertificationRecord.certification}} = cat.cert
+                      AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
+                    UNION ALL
+                    SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
+                           a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
+                    FROM {{QbCertificationRound}} r2
+                    JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
+                    WHERE r2.{{QbCertificationRound.certification}} = cat.cert
+                      AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
+                      AND (r2.{{QbCertificationRound.closedAt}} IS NULL
+                           OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
+                WHERE cat.cert = pr.{{QbPublicationPrerequisite.certification}}
+                  AND e.ver = cat.ver AND e.until > CAST(:at AS timestamptz)
+                  AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
+                                       WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
+                                         AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')))))
   -- Q70a (D-Q70-1, option B): a certification's round is not listed to whoever holds the certification now. The
   -- holding is CertificationHolding's rule over the caller's records and the passes not recorded yet (RoundHolders, the
   -- same; the catalog's versions and validity as Certifications, CertificationTemplatesTest), as in qb.app.publication.
   AND (SELECT max(e.until)
        FROM {{QbCertificationRound}} cr
-       JOIN (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000)) AS cat(cert, ver, secs)
+       JOIN (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000)) AS cat(cert, ver, secs)
            ON cat.cert = cr.{{QbCertificationRound.certification}}
        CROSS JOIN LATERAL (
            SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,

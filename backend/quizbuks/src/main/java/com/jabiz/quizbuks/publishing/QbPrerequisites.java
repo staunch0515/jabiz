@@ -1,5 +1,7 @@
 package com.jabiz.quizbuks.publishing;
 
+import com.jabiz.quizbuks.certification.Certifications;
+
 import com.jabiz.entity.EntityDefinition;
 
 import java.util.List;
@@ -40,15 +42,20 @@ public final class QbPrerequisites {
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
             .asReference(QbPublications.PUBLICATION));
         PublisherKind.declare(eb, false);
+        // Q86 (D-Q86-5): a prerequisite is another publication (required, passed or answered) or a certification
+        // (held now), one or the other (the migration's CHECK); a certification's requirement is stored as PASSED.
         eb.field("requiredPublicationId", f -> f.physicalColumn("required_publication_id").immutable(true)
-            .required(true).asReference(QbPublications.PUBLICATION));
+            .asReference(QbPublications.PUBLICATION));
+        eb.field("certification", f -> f.physicalColumn("certification").immutable(true)
+            .asCode(Certifications.DICTIONARY, Certifications.keys()));
         eb.field("requirement", f -> f.physicalColumn("requirement").immutable(true).required(true)
             .asCode(DICTIONARY, PASSED, ANSWERED));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_publication_prerequisite", "publicationId", "requiredPublicationId");
+        eb.unique("uk_qb_publication_prerequisite_cert", "publicationId", "certification");
         eb.listView("default", lv -> lv
-            .columns("publicationId", "requiredPublicationId", "requirement")
-            .filters("publicationId", "publisherKind", "publisherId", "requiredPublicationId")
+            .columns("publicationId", "requiredPublicationId", "certification", "requirement")
+            .filters("publicationId", "publisherKind", "publisherId", "requiredPublicationId", "certification")
             .sorts("requiredPublicationId")
             .defaultSort("requiredPublicationId", true));
     });

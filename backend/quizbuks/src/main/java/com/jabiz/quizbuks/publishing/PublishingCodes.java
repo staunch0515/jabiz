@@ -140,6 +140,10 @@ public final class PublishingCodes {
     public static final String PREREQUISITE_CYCLE = "QB_PREREQUISITE_CYCLE";
     /** Q76: the chain would be longer than {@link QbPrerequisites#MAX_DEPTH}. */
     public static final String PREREQUISITE_TOO_DEEP = "QB_PREREQUISITE_TOO_DEEP";
+    /** Q86: a prerequisite names a publication or a certification, not both, not neither. */
+    public static final String PREREQUISITE_ONE_OF = "QB_PREREQUISITE_ONE_OF";
+    /** Q86: the certification required is not one takers can hold. */
+    public static final String PREREQUISITE_CERTIFICATION = "QB_PREREQUISITE_CERTIFICATION";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -156,7 +160,7 @@ public final class PublishingCodes {
         REFERRAL_POOL_SHORT, LANGUAGES_INVALID, LANGUAGE_NOT_IN_VERSION, TEXT_MISSING, TEXT_STALE, TEXT_TOO_LONG,
         SWITCH_LANGUAGES,
         PREREQUISITE_TOO_MANY, PREREQUISITE_REPEATED, PREREQUISITE_SELF, PREREQUISITE_NOT_OWN, PREREQUISITE_DRAFT,
-        PREREQUISITE_CYCLE, PREREQUISITE_TOO_DEEP, SWITCH_PICK, PICK_RANGE, PICK_UNEQUAL_POINTS, PICK_SURVEY);
+        PREREQUISITE_CYCLE, PREREQUISITE_TOO_DEEP, PREREQUISITE_ONE_OF, PREREQUISITE_CERTIFICATION, SWITCH_PICK, PICK_RANGE, PICK_UNEQUAL_POINTS, PICK_SURVEY);
 
     private PublishingCodes() {}
 }

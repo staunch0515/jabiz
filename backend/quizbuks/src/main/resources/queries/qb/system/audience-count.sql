@@ -1,7 +1,7 @@
 /*---
 id: qb.system.audience-count
 description: How many takers a publication's regions, matching conditions (Q47) and prerequisites (Q76) reach now, exactly; run by QB_AUDIENCE_COUNT only, which rounds it
-entities: [SecUser, QbProfile, QbCountry, QbUserBan, QbProfileAttribute, QbPublicationCriterion, QbPublicationPrerequisite, QbAttempt]
+entities: [SecUser, QbProfile, QbCountry, QbUserBan, QbProfileAttribute, QbPublicationCriterion, QbPublicationPrerequisite, QbAttempt, QbCertificationRound, QbCertificationRecord]
 datasets:
   QbProfile: urn:jabiz:dataset:default:QbProfile
   QbCountry: urn:jabiz:dataset:default:QbCountry
@@ -10,6 +10,8 @@ datasets:
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
   QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
+  QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbCertificationRecord: urn:jabiz:dataset:default:QbCertificationRecord
 params:
   publicationId: { like: QbPublicationCriterion.publicationId, required: true, description: The publication whose conditions count }
   regions:       { kind: { type: text, maxLength: 64 }, description: "The publication's regions (comma separated); none is GLOBAL" }
@@ -53,9 +55,36 @@ WHERE string_to_array(coalesce(CAST(:regions AS text), 'GLOBAL'), ',') && string
   AND NOT EXISTS (
       SELECT 1 FROM {{QbPublicationPrerequisite}} pr
       WHERE pr.{{QbPublicationPrerequisite.publicationId}} = CAST(:publicationId AS uuid)
-        AND NOT EXISTS (
-            SELECT 1 FROM {{QbAttempt}} ra
-            WHERE ra.{{QbAttempt.userId}} = p.{{QbProfile.userId}}
-              AND ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
-              AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
-              AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
+        -- Q86 (D-Q86-5): or a certification the taker must hold now (CertificationHolding's rule per taker).
+        AND NOT ((pr.{{QbPublicationPrerequisite.requiredPublicationId}} IS NOT NULL AND EXISTS (
+              SELECT 1 FROM {{QbAttempt}} ra
+              WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+                  AND ra.{{QbAttempt.userId}} = p.{{QbProfile.userId}}
+                AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
+                AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
+         OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
+                SELECT 1
+                FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000)) AS cat(cert, ver, secs)
+                CROSS JOIN LATERAL (
+                    SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
+                           rec.{{QbCertificationRecord.validUntil}} AS until
+                    FROM {{QbCertificationRecord}} rec
+                    WHERE rec.{{QbCertificationRecord.certification}} = cat.cert
+                      AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
+                      AND rec.{{QbCertificationRecord.userId}} = p.{{QbProfile.userId}}
+                    UNION ALL
+                    SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
+                           a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
+                    FROM {{QbCertificationRound}} r2
+                    JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
+                    WHERE r2.{{QbCertificationRound.certification}} = cat.cert
+                      AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
+                      AND a.{{QbAttempt.userId}} = p.{{QbProfile.userId}}
+                      AND (r2.{{QbCertificationRound.closedAt}} IS NULL
+                           OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
+                WHERE cat.cert = pr.{{QbPublicationPrerequisite.certification}}
+                  AND e.ver = cat.ver AND e.until > CAST(:at AS timestamptz)
+                  AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
+                                       WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
+                                         AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'
+                                             AND rv.{{QbCertificationRecord.userId}} = p.{{QbProfile.userId}}), '-infinity')))))

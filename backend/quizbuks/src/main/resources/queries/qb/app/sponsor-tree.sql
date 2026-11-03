@@ -3,12 +3,14 @@ id: qb.app.sponsor-tree
 description: >-
   A sponsor's tree as the caller stands on it (Q85, D-Q85-6): the sponsor's public publications open now and those
   the caller answered, each with what it requires first (Q76) and the caller's state on it
-entities: [QbPublicationCard, QbSponsorPage, QbPublicationPrerequisite, QbAttempt]
+entities: [QbPublicationCard, QbSponsorPage, QbPublicationPrerequisite, QbAttempt, QbCertificationRound, QbCertificationRecord]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
   QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
+  QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
 params:
   handle: { like: QbSponsorPage.handle, required: true, description: The sponsor's page (lowercase) }
   at:     { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the tree is for (the client's now) }
@@ -69,21 +71,77 @@ SELECT
                       WHERE a.{{QbAttempt.publicationId}} = n.id) THEN 'IN_PROGRESS'
          WHEN EXISTS (SELECT 1 FROM {{QbPublicationPrerequisite}} pr
                       WHERE pr.{{QbPublicationPrerequisite.publicationId}} = n.id
-                        AND NOT EXISTS (SELECT 1 FROM {{QbAttempt}} ra
-                                        WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
-                                          AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
-                                          AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED'
-                                               OR ra.{{QbAttempt.passed}}))) THEN 'LOCKED'
+                        AND NOT ((pr.{{QbPublicationPrerequisite.requiredPublicationId}} IS NOT NULL AND EXISTS (
+                              SELECT 1 FROM {{QbAttempt}} ra
+                              WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+                                AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
+                                AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
+                         OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
+                                SELECT 1
+                                FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000)) AS cat(cert, ver, secs)
+                                CROSS JOIN LATERAL (
+                                    SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
+                                           rec.{{QbCertificationRecord.validUntil}} AS until
+                                    FROM {{QbCertificationRecord}} rec
+                                    WHERE rec.{{QbCertificationRecord.certification}} = cat.cert
+                                      AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
+                                    UNION ALL
+                                    SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
+                                           a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
+                                    FROM {{QbCertificationRound}} r2
+                                    JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
+                                    WHERE r2.{{QbCertificationRound.certification}} = cat.cert
+                                      AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
+                                      AND (r2.{{QbCertificationRound.closedAt}} IS NULL
+                                           OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
+                                WHERE cat.cert = pr.{{QbPublicationPrerequisite.certification}}
+                                  AND e.ver = cat.ver AND e.until > CAST(:at AS timestamptz)
+                                  AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
+                                                       WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
+                                                         AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity'))))) THEN 'LOCKED'
          WHEN n.live THEN 'UNLOCKED'
          ELSE 'CLOSED' END                AS state,
     (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
                 'requiredPublicationId', pr.{{QbPublicationPrerequisite.requiredPublicationId}},
+                'certification', pr.{{QbPublicationPrerequisite.certification}},
                 'requirement', pr.{{QbPublicationPrerequisite.requirement}},
                 'name', coalesce(CAST(rc.{{QbPublicationCard.translations}} AS jsonb) -> CAST(:lang AS text) ->> 'name',
-                                 rc.{{QbPublicationCard.name}}))
+                                 rc.{{QbPublicationCard.name}}),
+                -- Q86: whether the caller holds the certification, and its current round to send them to.
+                'held', pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
+                    SELECT 1
+                    FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000)) AS cat(cert, ver, secs)
+                    CROSS JOIN LATERAL (
+                        SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
+                               rec.{{QbCertificationRecord.validUntil}} AS until
+                        FROM {{QbCertificationRecord}} rec
+                        WHERE rec.{{QbCertificationRecord.certification}} = cat.cert
+                          AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
+                        UNION ALL
+                        SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
+                               a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
+                        FROM {{QbCertificationRound}} r2
+                        JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
+                        WHERE r2.{{QbCertificationRound.certification}} = cat.cert
+                          AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
+                          AND (r2.{{QbCertificationRound.closedAt}} IS NULL
+                               OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
+                    WHERE cat.cert = pr.{{QbPublicationPrerequisite.certification}}
+                      AND e.ver = cat.ver AND e.until > CAST(:at AS timestamptz)
+                      AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
+                                           WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
+                                             AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')),
+                'roundPublicationId', (SELECT min(cr2.{{QbCertificationRound.publicationId}})
+                                       FROM {{QbCertificationRound}} cr2
+                                       JOIN {{QbPublicationCard}} rp ON CAST(rp.{{QbPublicationCard.publicationId}} AS text)
+                                           = cr2.{{QbCertificationRound.publicationId}}
+                                       WHERE cr2.{{QbCertificationRound.certification}} = pr.{{QbPublicationPrerequisite.certification}}
+                                         AND cr2.{{QbCertificationRound.closedAt}} IS NULL
+                                         AND rp.{{QbPublicationCard.status}} = 'LIVE' AND rp.{{QbPublicationCard.startAt}} <= CAST(:at AS timestamptz)
+                                         AND rp.{{QbPublicationCard.endAt}} > CAST(:at AS timestamptz)))
                 ORDER BY pr.{{QbPublicationPrerequisite.requiredPublicationId}}), '[]') AS text)
      FROM {{QbPublicationPrerequisite}} pr
-     JOIN {{QbPublicationCard}} rc
+     LEFT JOIN {{QbPublicationCard}} rc
          ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
      WHERE pr.{{QbPublicationPrerequisite.publicationId}} = n.id) AS prerequisites
 FROM node n
