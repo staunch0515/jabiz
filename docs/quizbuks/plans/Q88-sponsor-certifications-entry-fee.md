@@ -148,3 +148,71 @@ Q87 §7 把"答题的能力"列成四项：**给学分**（已有）、**给认�
 12. **开关关着时仍可取消草稿的轮**（`QB_SPONSOR_ROUND_SET` 的 `certificationId` 为空），只有登记新轮受开关约束。
 
 未做：D-Q88-8 的人工授予与收回商户认证；Q88b（报名费）另一个 PR。
+
+## 11. Q88b 实施计划（报名费，2026-11-03，待确认）
+
+按 §2 的 B 部分（D-Q88-9…16）做，分支 `1.3/quizbuks-88b-entry-fee`，一个 PR。读过代码之后与 §3.3 不同或更具体的地方用 **粗体** 标出。
+
+### 11.1 迁移 `V74__quizbuks_entry_fee.sql`
+
+- `qb_publication_version` 加 `entry_fee numeric(7,0) NOT NULL DEFAULT 0`（只追加表只加列）；`qb_publication_card` 同。
+- **`qb_attempt` 加 `entry_fee numeric(7,0) NOT NULL DEFAULT 0`**（计划没写）：开始时付了多少记在会话上，App 的学分记录、商户发布页的"已收报名费"与月报都从它或账本读，不用从 2170 + 2160 的来源反推（D-Q88-16 的"不另建表"仍成立）。
+- 科目 **2170 报名费待入账**（`QbLedger.ENTRY_FEES_UNSETTLED`，负债，行带 `party` = 商户与 `publication`）：`QB_SETUP` 再执行一次即开户（只补从未存在过的）；映射参数 `qb.journal.account.2170`（受控，首个值空，`JournalMappingCheck` 自动覆盖）；受控开关 `qb.play.entry-fee.enabled`（缺省 `false`，`QbParams.ALL` 末尾、`CONTROLLED`）。
+- 任务 `qb.entry-fee-settle`：cron `quizbuks.entry-fee.settle-cron`（`QB_ENTRY_FEE_SETTLE_CRON`，缺省每日 18:07 UTC = 03:07 日本；`app.env` 每分钟）。
+
+### 11.2 发布（`publishing`）
+
+- `QbPublications`：发布的 `entryFee`（`asMonetary("JPY", 0)`，`Rules.range(QB_ENTRY_FEE_RANGE, 0, PublishingLimits.MAX_ENTRY_FEE = 10000)`），卡片的 `entryFee`（不可变）；`PublicationEditing` 的冻结字段表加 `entryFee`，`draftOf` → `PublicationReadiness.Draft` 加 `entryFee`；复制随发布；审批内容（`PublicationApprovals`）含它。
+- `PublicationReadiness.check`：`entryFee > 0` 只允许 `QUIZ`（问卷 422 `QB_ENTRY_FEE_NOT_ALLOWED`）。店面（S2）的发布从不设它（渠道流程没有这个输入，卡片为 0）。
+- `QB_PUBLICATION_SAVE`：`SaveInput.entryFee`；**开关只在保存时读**（`LoadParams.optional(qb.play.entry-fee.enabled)`，未发布即关）：关着而 `entryFee > 0` 即 422 `QB_ENTRY_FEE_OFF`。提交不再读开关（D-Q88-14：已上架的照收）。
+- 商户后台知道开关：**`qb.sponsor.reward-methods` 加一列 `entryFeeEnabled`**（向导本来就读它），不另建模板。
+
+### 11.3 答题路径（`play`）
+
+- 新纯 Java `play.EntryFees`：`check(available, held, cacheBalance, fee)`（可转出 = 2120 余额 − 保留中；可转出 ≥ 费且缓存余额 ≥ 费，否则 `QB_ENTRY_FEE_SHORT` 带 `fee`、`available`、`short`）；`posting(...)`：2120 借（`party` = 答题者，`publication`）→ 2170 贷（`party` = 商户，`publication`），来源 `QbAttempt` / 会话号，描述 `Entry fee`。
+- `QB_ATTEMPT_START`，只在 `starting && 卡片.entryFee > 0 && 发布方是 SPONSOR` 时有语句（普通发布的查询为空、锁名为 null，**语句数与锁不变**），都在开始锁**之前**：
+  1. `LoadParams`（`qb.transfer.hold-days`，可转出模板需要；未发布同转账：`INVALID_PARAMS`）；
+  2. `HoldLock.exclusive(qb.wallet:TAKER:<本人>)`；
+  3. 一条 `QueryEntities.of` 读本人钱包行 + `RunTemplate.of(qb.wallet.taker-transferable)`（两条语句）；
+  4. `compute`：`EntryFees.check`，不够即拒绝（锁内读、锁内判，之后照常取开始锁）。
+  写入：会话的那条插入多 `entryFee`；`QbWallets.change(TAKER, −费)`（锁内读到的版本）；"Start the attempt" 之后一步 `CallProcess.when(有报名费, LEDGER_POST, EntryFees.posting(...))`。`ChannelPlay`（S2）走同一个 `start(...)`，卡片 `entryFee` 为 0 即什么也不做。
+- **锁序的变化**：`qb.wallet:TAKER:<用户>` 原来"独立、持有它的流程不取其他锁"；现在开始会先取它、再取 `qb.pub-start:<发布>`。反向不存在：完成只取发布锁与商户钱包锁，同步与转账只取用户钱包锁。`backend/quizbuks/CLAUDE.md` 的两处锁序与 `02-design.md` §4.3 改写。
+- `AttemptStatementBudgetIT.aStartWithAnEntryFee`：断言取的两把锁及其顺序，总数与锁内数按实测写死（锁内自第一把锁即钱包锁起算，所以比普通开始多：预计锁外 +1 参数、+1 钱包行、+1 模板，锁内 +1 开始锁、+ 子流程 `LEDGER_POST` 的语句与钱包行的更新）；`aStartAndAPaidSubmission` 等既有数字不变。
+
+### 11.4 入账（`wallet.EntryFeeSettlements`）与核对
+
+- `QB_ENTRY_FEE_SETTLE`（`internal()`，`qb.wallet.system`）：输入 `sponsorId`；商户钱包锁 → 一条语句读 `CASH` 行 + 模板 `qb.system.entry-fees-unsettled`（2170 按 `party` 的余额）；> 0 时 `LEDGER_POST` 2170 借 → 2160 贷（两行 `party` = 商户，来源 **`QbWallet` 的现金行、引用为日期**，描述 `Entry fees settled`）并 `QbWallets.change(CASH, +额)`；0 即什么也不写。
+- 任务 `qb.entry-fee-settle` = `JobDefinition.forEach`（项来自模板 `qb.system.entry-fees-due`：2170 余额 > 0 的商户），每项一个事务，同 `qb.fee-*`。
+- 核对：`ReconChecks.ENTRY_FEES_UNSETTLED`（模板 `qb.system.recon-entry-fees`：2170 按商户不为负），既有的 2120 = 答题者缓存、2160 = 现金缓存不变（两边都在锁内一起写）。月报 `qb.admin.monthly` 加 `ENTRY_FEE`（来源 `QbAttempt`，科目 `2120,2170`）与 `ENTRY_FEE_SETTLED`（来源 `QbWallet`，`2160,2170`），`AdminFinanceIT` 加逐行期望；`qb.admin.finance-summary` 加 `entryFeesUnsettled`（2170 合计），总览多一张卡。
+
+### 11.5 模板与文案
+
+- `qb.app.feed` / `qb.app.publication`：`entryFee`（卡片）。`qb.app.ledger`：多一类行 `ENTRY_FEE`（会话的 `entryFee > 0`，`occurredAt` = 开始时刻，`status` = `COMPLETED`，发布名）。`qb.app.wallet` 与 `qb.wallet.taker-transferable` 不改（借方按方向识别；注释说明报名费也是借方）。
+- `qb.sponsor.wallet`：`entryFeesUnsettled`（2170 按本人）；`qb.sponsor.publications`：`entryFees`（该发布会话的 `entry_fee` 合计）。
+- 三语：`QB_ENTRY_FEE_SHORT` / `_OFF` / `_NOT_ALLOWED` / `_RANGE`，字段 `entity.QbPublication.entryFee` 等，流程、任务、参数、核对项、月报类名。
+
+### 11.6 前端
+
+- 商户后台：向导"时间与奖励"一步加"报名费（Kudos）"（`entryFeeEnabled` 为真且是测验时显示；0 = 不收）、确认页与发布页显示；钱包页现金块加"报名费待入账 N（每日入账）"；发布列表 / 发布页显示"已收报名费"。
+- App（`qb/` 两份相同）：卡片"报名费 N"；发布页的事实"报名费"，开始按钮"付 N Kudos 开始"，点击先弹确认（显示可转出 = `qb.app.wallet` 的 `available − held`；`QB_ENTRY_FEE_SHORT` 时显示"还差 N"与去赚学分的入口）；学分记录多一类"报名费：<发布名>"。
+- 后台扩展：财务总览的 2170 卡、月报的两类名字。
+
+### 11.7 测试
+
+- `EntryFeeIT`：不够 422 与 `short`、近期奖励不能付、付后缓存与 2120 一致、2170 按商户、任务入账到 2160 与现金缓存、问卷不能设、开关关着不能设但已上架的照收、店面发布不收、账本平衡；`AttemptStatementBudgetIT.aStartWithAnEntryFee`；`ReconcileIT`（2170）；`AdminFinanceIT`；`ProcessAccessIT`（`QB_ENTRY_FEE_SETTLE` 内部）；`SetupIT`（参数与科目）；`PublishingIT`（范围、问卷、开关）；场景 `play` 加报名费（含 `runJob`）；`PublicQueriesSnapshotIT` / `OpenApiSnapshotIT` 照常。
+- e2e `entry-fee.spec.ts`：开关四眼打开 → 商户设报名费并上架 → 没钱的答题者看到"还差 N" → 有奖励（过了保留期）的答题者付费开始并合格 → 学分记录有报名费行 → 商户钱包显示待入账 → 每分钟的任务入账后现金余额增加。
+
+### 11.8 文档
+
+`02-design.md`（§3.3 `entryFee`、§4.1 科目 2170、§4.3 锁序、§5.2 新流程与任务）、`operations.md` §7.20（开关、上线时配 2170 的映射、任务、争议以手工加币处理）、`backend/quizbuks/CLAUDE.md`（"答题"与"支付"的锁序一句、2170）、本文 §12 实施记录。
+
+### 11.9 风险
+
+| 等级 | 风险 | 对策 |
+|---|---|---|
+| 中 | 答题热路径：报名费的开始多一把锁、多四条锁外语句 | 普通开始一条不加、一把不加（`AttemptStatementBudgetIT` 既有数字不变）；报名费的检查全在开始锁之外 |
+| 中 | 用户钱包锁与开始锁的新顺序 | 只有开始按"钱包锁 → 开始锁"取；反向不存在（逐个流程核对，写进 CLAUDE.md） |
+| 低 | 缓存落后于账本（结算奖励不取用户锁，事后同步） | 可转出与缓存都要 ≥ 费才收；缓存在锁内按已知版本减，`qb_wallet.balance >= 0` 兜底 |
+| 低 | 入账任务失败时 2170 累积 | 核对项 `ENTRY_FEES_UNSETTLED`；任务可补跑（按余额，不按日期） |
+
+估计：后端 3 天、前端 1.5 天、测试与 e2e 1 天、文档 0.5 天。
