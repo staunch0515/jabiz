@@ -1426,6 +1426,40 @@ describe('prerequisites (Q76)', () => {
     expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toHaveLength(1)
   })
 
+  it('requires a certification of the platform (Q86) beside a publication, and names it in the summary', async () => {
+    const { processCalls } = server({
+      publications: [ROW, LEVEL1],
+      prerequisites: [{ prerequisiteId: 'TERMS_APP_UNDERSTOOD', requiredPublicationId: null,
+        certification: 'TERMS_APP_UNDERSTOOD', requirement: 'PASSED', name: '', status: 'LIVE', startAt: null, endAt: null }],
+      processes: {
+        QB_PUBLICATION_SAVE: [saved(4)],
+        QB_PUBLICATION_PREREQUISITES_SAVE: [prerequisitesSaved(5)],
+      },
+    })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    const panel = await screen.findByTestId('publication-prerequisites')
+    // The takers' certifications are offered in the catalog's order; the stored one is ticked.
+    const certifications = within(panel).getAllByTestId('prerequisite-certification')
+    expect(certifications.map((row) => row.getAttribute('data-certification')))
+      .toEqual(['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD'])
+    expect(certifications[2]).toHaveAttribute('data-chosen', 'true')
+    expect(certifications[2]).toHaveTextContent('Understood: Terms and Privacy Policy')
+    await expectAccessible()
+    // A publication first, then another certification: publications come first in what is sent.
+    await userEvent.click(within(within(panel).getByTestId('prerequisite')).getByTestId('prerequisite-on'))
+    await userEvent.click(within(certifications[3]).getByTestId('prerequisite-certification-on'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toEqual([{ publicationId: 'p1', baseRevision: 4,
+      prerequisites: [{ requiredPublicationId: 'p0', requirement: 'PASSED' },
+        { certification: 'TERMS_APP_UNDERSTOOD', requirement: 'PASSED' },
+        { certification: 'CONTEST_RULES_UNDERSTOOD', requirement: 'PASSED' }] }])
+    await userEvent.click(screen.getByTestId('publication-next'))
+    expect(await screen.findByTestId('summary-prerequisites')).toHaveTextContent(
+      'Coffee basics (Passed) · Understood: Terms and Privacy Policy (Held) · Understood: Contest Rules (Held)')
+  })
+
   it('says when nothing can be required yet, and shows the server\'s refusal', async () => {
     const refused = { status: 422, body: { detail: 'Refused', violations: [{ field: 'prerequisites[0]',
       ruleCode: 'QB_PREREQUISITE_DRAFT', message: 'A draft cannot be required: submit it first.' }] } }

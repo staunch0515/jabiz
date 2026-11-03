@@ -20,7 +20,7 @@ steps:
         qb.reward.cash.pay-days, qb.reward.redeem-days, qb.reward.digital.send-days, qb.referral.per-referrer-daily,
         qb.referral.per-referrer-total, qb.conversation.daily-cap, qb.conversation.close-days,
         qb.ai.candidates.expire-days,
-        qb.ai.price.input-per-mtok-usd, qb.ai.price.output-per-mtok-usd]
+        qb.ai.price.input-per-mtok-usd, qb.ai.price.output-per-mtok-usd, qb.tree.platform-handle]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,
@@ -38,7 +38,7 @@ steps:
         qb.topup.bank.max, qb.bank.receiving.bank, qb.bank.receiving.branch, qb.bank.receiving.account-type,
         qb.bank.receiving.account-number, qb.bank.receiving.account-holder, qb.withdrawal.bank.enabled,
         qb.withdrawal.bank.fee, qb.withdrawal.bank.cooldown-hours, qb.audience.billing.enabled,
-        qb.audience.price.fallback, qb.audience.fee.refund-unused-days]
+        qb.audience.price.fallback, qb.audience.fee.refund-unused-days, qb.understanding.enabled]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review,
         qb.sod.control-changes, qb.sod.security-administration]

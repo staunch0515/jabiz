@@ -252,6 +252,11 @@ public final class QbParams {
     public static final List<String> AUDIENCE_BILLING_PARAMS = List.of(AUDIENCE_BILLING_ENABLED, AUDIENCE_PRICE_FALLBACK,
         AUDIENCE_REFUND_UNUSED_DAYS);
 
+    /** Q86: whether the "confirm your understanding" cards show after consenting (controlled: a switch for the administrators). */
+    public static final String UNDERSTANDING_ENABLED = "qb.understanding.enabled";
+    /** Q86 (D-Q86-4): the handle of the headquarters' official account's page, whose tree is the platform's; empty: none. */
+    public static final String TREE_PLATFORM_HANDLE = "qb.tree.platform-handle";
+
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
      * another): the money settings, and the review switches, since turning one on removes a person's review.
@@ -260,7 +265,8 @@ public final class QbParams {
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
-        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS).flatMap(List::stream).toList();
+        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
+        List.of(UNDERSTANDING_ENABLED)).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -417,7 +423,12 @@ public final class QbParams {
             "allowedValues", List.of("DIRECT", "FREE")), "DIRECT",
             "How sponsors of an operator without a price list are priced: headquarters' list, or free"),
         new Param(AUDIENCE_REFUND_UNUSED_DAYS, BOOL, false,
-            "Whether the unused days of the audience rules are refunded when a publication ends early"));
+            "Whether the unused days of the audience rules are refunded when a publication ends early"),
+        // Q86: the understanding quizzes (controlled, last, in the order of CONTROLLED) and the platform's tree.
+        new Param(UNDERSTANDING_ENABLED, BOOL, true,
+            "Whether the app and the console offer the quiz about an agreement after it is accepted (Q86)"),
+        new Param(TREE_PLATFORM_HANDLE, Map.of("type", "text", "maxLength", 60), "",
+            "The page handle of the headquarters' official account, whose tree is the platform's (Q86); empty: none"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

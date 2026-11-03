@@ -1,5 +1,5 @@
 import { Button, cn } from '@jabiz/ui'
-import { CircleCheck, CircleDashed, Hourglass, Lock, Minus, Play, Plus } from 'lucide-react'
+import { Award, CircleCheck, CircleDashed, Hourglass, Lock, Minus, Play, Plus } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { QB } from './messages'
@@ -31,8 +31,8 @@ export interface TechTreeProps {
   selected?: string | null
   /** Told when a node is picked; the node is a button then. */
   onSelect?: (id: string) => void
-  /** Where a node leads; the node is a link then. */
-  hrefOf?: (node: TechTreeNode) => string
+  /** Where a node leads; the node is a link then (null: this node leads nowhere, a plain box). */
+  hrefOf?: (node: TechTreeNode) => string | null
   /** `auto`: by the screen's width. */
   direction?: Direction | 'auto'
   /** What the picture is of, for assistive technology. */
@@ -194,21 +194,30 @@ export function TechTree({ nodes, selected, onSelect, hrefOf, direction = 'auto'
             const body = (
               <NodeBody node={node} after={after} />
             )
-            const nodeClass = cn('flex size-full flex-col justify-center gap-0.5 rounded-lg border px-3 py-1.5 text-left',
+            // Q86 (D-Q86-7): a certification is a platform node, dashed and rounded, never counted.
+            const certification = node.nodeKind === 'certification'
+            const nodeClass = cn('flex size-full flex-col justify-center gap-0.5 border px-3 py-1.5 text-left',
               'text-sm leading-tight transition-colors hover:brightness-95 focus-visible:ring-ring focus-visible:ring-2',
-              'focus-visible:outline-none', stateClass(node.state), selected === node.id && 'ring-ring ring-2')
+              'focus-visible:outline-none', certification ? 'rounded-2xl border-dashed' : 'rounded-lg',
+              stateClass(node.state), selected === node.id && 'ring-ring ring-2')
+            const href = hrefOf ? hrefOf(node) : null
+            const label = `${certification ? `${t('tree.certification')}: ` : ''}${node.name}. ${description}`
+            const data = { 'data-id': node.id, 'data-state': node.state ?? undefined,
+              'data-kind': node.nodeKind ?? 'publication' }
             return (
               <foreignObject key={item.id} {...common}>
-                {hrefOf
-                  ? <Link to={hrefOf(node)} className={nodeClass} aria-label={`${node.name}. ${description}`}
-                    data-testid={`${testId}-node`} {...{ 'data-id': node.id, 'data-state': node.state ?? undefined }}>
+                {href
+                  ? <Link to={href} className={nodeClass} aria-label={label} data-testid={`${testId}-node`} {...data}>
                     {body}
                   </Link>
-                  : <button type="button" className={cn(nodeClass, 'w-full')} onClick={() => onSelect?.(node.id)}
-                    aria-pressed={selected === node.id} aria-label={`${node.name}. ${description}`}
-                    data-testid={`${testId}-node`} data-id={node.id} data-state={node.state ?? undefined}>
-                    {body}
-                  </button>}
+                  : hrefOf && !onSelect
+                    ? <div className={nodeClass} role="img" aria-label={label} data-testid={`${testId}-node`} {...data}>
+                      {body}
+                    </div>
+                    : <button type="button" className={cn(nodeClass, 'w-full')} onClick={() => onSelect?.(node.id)}
+                      aria-pressed={selected === node.id} aria-label={label} data-testid={`${testId}-node`} {...data}>
+                      {body}
+                    </button>}
               </foreignObject>
             )
           }))}
@@ -224,7 +233,7 @@ export function TechTree({ nodes, selected, onSelect, hrefOf, direction = 'auto'
 
 function NodeBody({ node, after }: { node: TechTreeNode; after: string }) {
   const { t } = useTranslation(QB)
-  const Icon = node.state ? STATE_ICON[node.state] : null
+  const Icon = node.state ? STATE_ICON[node.state] : node.nodeKind === 'certification' ? Award : null
   return (
     <>
       <span className="flex items-start gap-1.5">

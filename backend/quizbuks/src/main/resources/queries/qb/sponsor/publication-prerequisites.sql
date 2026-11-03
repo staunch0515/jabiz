@@ -11,6 +11,7 @@ results:
   prerequisiteId:        { from: QbPublicationPrerequisite.prerequisiteId }
   requiredPublicationId: { from: QbPublicationPrerequisite.requiredPublicationId }
   requirement:           { from: QbPublicationPrerequisite.requirement }
+  certification:         { from: QbPublicationPrerequisite.certification }
   name:                  { from: QbPublication.name }
   status:                { from: QbPublication.status }
   startAt:               { from: QbPublication.startAt }
@@ -27,10 +28,11 @@ SELECT
     pr.{{QbPublicationPrerequisite.prerequisiteId}}        AS prerequisiteId,
     pr.{{QbPublicationPrerequisite.requiredPublicationId}} AS requiredPublicationId,
     pr.{{QbPublicationPrerequisite.requirement}}           AS requirement,
+    pr.{{QbPublicationPrerequisite.certification}}         AS certification,
     p.{{QbPublication.name}}                               AS name,
     p.{{QbPublication.status}}                             AS status,
     p.{{QbPublication.startAt}}                            AS startAt,
     p.{{QbPublication.endAt}}                              AS endAt
 FROM {{QbPublicationPrerequisite}} pr
-JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
+LEFT JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
 WHERE pr.{{QbPublicationPrerequisite.publicationId}} = :publicationId

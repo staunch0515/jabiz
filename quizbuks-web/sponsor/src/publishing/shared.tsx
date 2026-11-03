@@ -202,8 +202,10 @@ export function usePrerequisitesText(): (prerequisites: readonly PrerequisiteRow
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   return (prerequisites) => prerequisites.length === 0 ? t('publishing.prerequisites.none') : prerequisites
-    .map((p) => t('publishing.prerequisites.item', { name: p.name,
-      requirement: tQb(`prerequisite.${p.requirement.toLowerCase()}`) })).join(' · ')
+    .map((p) => t('publishing.prerequisites.item', {
+      name: p.certification ? tQb(`certification.names.${p.certification}`) : p.name,
+      requirement: p.certification ? tQb('certification.held') : tQb(`prerequisite.${p.requirement.toLowerCase()}`) }))
+    .join(' · ')
 }
 
 /** The conditions in a line each criterion: "Gender: Female, Other · Age: 20–39 years"; none is everybody. */

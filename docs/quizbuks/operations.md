@@ -498,6 +498,20 @@ AI 为运营商（或总部，`direct`）找商家、调研、写体验问卷与
 - **费用** = max（最低使用费，Σ 所用计费规则的日价 × 天数），天数为发布期间按 24 小时向上取整；没用计费规则的不收。
 - **开关**（受控参数，四眼）：`qb.audience.billing.enabled`（缺省关：报价为 0）、`qb.audience.price.fallback`、`qb.audience.fee.refund-unused-days`（Q47c-2 才起作用）。打开之前先设好价目表；**Q47c-2 上线之前不要打开**（打开后商户看到费用，但提交时还不扣款）。部署后执行一次 `QB_SETUP` 提出这三个参数，由另一位管理员发布。
 
+### 7.16 协议答题（Q86）
+
+协议理解是三种普通的认证（`TERMS_APP_UNDERSTOOD` 条款 + 隐私、`CONTEST_RULES_UNDERSTOOD` 有奖活动规则、`TERMS_SPONSOR_UNDERSTOOD` 商户条款，`plans/Q86-agreement-quiz-tree.md`）：
+同意照旧，答题自愿；题目与轮次照 Q69 / Q70 的办法由官方账号出。出一轮：
+
+1. 总部经营一个普通的商户账号（入驻、审核通过、充值换学分：它的奖励由它自己的学分出），持 `qb.certification.admin` 的管理员以 `QB_OFFICIAL_PUBLISHER_SET` 把它标为官方账号（后台扩展「认证」页）。
+2. 以该账号出题（题库 ≥ 15 题、每人抽 5 题 `pickCount`、同分、合格线 = 满分、每题写解析；三语以日文为准，AI 初稿由内容管理员校对）并发布一个公开的发布（至少一档奖励 > 0）。
+3. 持 `qb.certification.manage` 的管理员以 `QB_CERTIFICATION_ROUND_ADD` 把该发布登记为该认证的一轮；每月关闭旧轮（`QB_CERTIFICATION_ROUND_CLOSE`）、换题再登记新轮。
+4. 法律文本发布了**须重新同意**的新版时，由开发升 `Certifications` 中该认证的版本（启动检查 `CERTIFICATION_LEGAL` 在版本落后时警告，不是错误：先发文本再出题是正常顺序），再出新一轮；措辞修订不升。
+
+- **开关**：受控参数 `qb.understanding.enabled`（缺省 `true`，四眼）关闭即两个前端都不再显示"确认你的理解"卡；已持有的认证、证书与前置照旧。
+- **平台之树**：官方账号用向导的前置把自己的发布连起来；普通参数 `qb.tree.platform-handle`（`PARAM_SET`，缺省空）填上总部官方账号已发布的主页 handle，App 的账户页即出现"平台之树"入口，商户树上的认证节点链到它。
+- **商户的前置**：商户可以在向导"客户匹配"一步要求答题者先持有四种认证之一（条款理解、规则理解、推荐资格、商户申请资格）；没有进行中的轮时前置仍成立（持有的人照常），新人在首页看不到该发布。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
