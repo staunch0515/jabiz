@@ -84,8 +84,8 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
     mutationFn: () => payEarly(),
     onMutate: () => setNotice(null),
     onSuccess: async (output) => {
-      setNotice({ kind: 'ok', text: t('wallet.invoices.paidEarly', { count: output.count, amount: formatKudos(output.total),
-        cash: formatKudos(output.cashBalance) }) })
+      setNotice({ kind: 'ok', text: t(output.remaining > 0 ? 'wallet.invoices.paidEarlyMore' : 'wallet.invoices.paidEarly',
+        { count: output.count, amount: formatKudos(output.total), cash: formatKudos(output.cashBalance), remaining: output.remaining }) })
       await queryClient.invalidateQueries({ queryKey: WALLET_QUERY })
     },
     onError: (error) => setNotice({ kind: 'error', text: problemText(error) }),

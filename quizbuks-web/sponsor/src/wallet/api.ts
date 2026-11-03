@@ -495,13 +495,15 @@ export interface EarlyPayOutput {
   total: number
   cashBalance: number
   invoiceNos: string[]
+  /** How many fees still wait: the server settles a hundred at a time, oldest first. */
+  remaining: number
 }
 
 /** Pays the postpaid fees not invoiced yet from the cash account; the server checks there are some and the cash. */
 export async function payEarly(): Promise<EarlyPayOutput> {
   const out = await runProcess<Record<string, unknown>>(WALLET_PROCESS.payEarly, {})
   return { count: num(out.count), total: num(out.total), cashBalance: num(out.cashBalance),
-    invoiceNos: Array.isArray(out.invoiceNos) ? out.invoiceNos.map(String) : [] }
+    invoiceNos: Array.isArray(out.invoiceNos) ? out.invoiceNos.map(String) : [], remaining: num(out.remaining) }
 }
 
 /**

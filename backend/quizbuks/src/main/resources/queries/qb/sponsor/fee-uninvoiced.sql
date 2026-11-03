@@ -15,6 +15,7 @@ results:
   tax:       { from: QbFeeCharge.tax }
   total:     { from: QbFeeCharge.total }
   chargedAt: { from: QbFeeCharge.chargedAt }
+  operatorId: { from: QbFeeCharge.operatorId }
 list:
   sorts: [chargedAt]
   defaultSort: { field: chargedAt, asc: true }
@@ -29,7 +30,8 @@ SELECT
     c.{{QbFeeCharge.amount}}    AS amount,
     c.{{QbFeeCharge.tax}}       AS tax,
     c.{{QbFeeCharge.total}}     AS total,
-    c.{{QbFeeCharge.chargedAt}} AS chargedAt
+    c.{{QbFeeCharge.chargedAt}} AS chargedAt,
+    c.{{QbFeeCharge.operatorId}} AS operatorId
 FROM {{QbFeeCharge}} c
 WHERE c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
   AND (CAST(:period AS text) IS NULL OR c.{{QbFeeCharge.period}} = CAST(:period AS text))

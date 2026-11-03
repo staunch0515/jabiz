@@ -125,6 +125,7 @@ const en = {
       uninvoicedHint: 'Fees of {{amount}} wait for the month’s invoice. You can pay them from your cash account now; each gets an invoice of its own, paid.',
       payEarly: 'Pay now from cash account',
       paidEarly: 'Paid {{amount}} early (invoices: {{count}}). Cash: {{cash}}.',
+      paidEarlyMore: 'Paid {{amount}} early (invoices: {{count}}); {{remaining}} more fees wait, pay again for them. Cash: {{cash}}.',
     },
     bank: {
       method: 'How do you pay?',
@@ -290,6 +291,7 @@ const zh: typeof en = {
       uninvoicedHint: '有 {{amount}} 的费用在等月底的账单。您可以现在就用现金账户付清；每笔费用各开一张已付的账单。',
       payEarly: '现在用现金账户付清',
       paidEarly: '已提前付清 {{amount}}（账单数：{{count}}）。现金：{{cash}}。',
+      paidEarlyMore: '已提前付清 {{amount}}（账单数：{{count}}）；还有 {{remaining}} 笔费用在等，再付一次即可。现金：{{cash}}。',
     },
     bank: {
       method: '支付方式',
@@ -455,6 +457,7 @@ const ja: typeof en = {
       uninvoicedHint: '{{amount}} の料金が月次の請求書を待っています。いま現金口座から支払うこともできます。料金ごとに支払済みの請求書が発行されます。',
       payEarly: 'いま現金口座から支払う',
       paidEarly: '{{amount}} を前払いしました（請求書：{{count}} 件）。現金：{{cash}}。',
+      paidEarlyMore: '{{amount}} を前払いしました（請求書：{{count}} 件）。あと {{remaining}} 件の料金が残っています。もう一度お支払いください。現金：{{cash}}。',
     },
     bank: {
       method: 'お支払い方法',

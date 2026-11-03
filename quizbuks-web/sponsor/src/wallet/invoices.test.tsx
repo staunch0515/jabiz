@@ -73,7 +73,8 @@ function server(options: Server = {}) {
         return json(options.pay?.status ?? 200, options.pay?.body
           ?? { output: { invoiceId: 'i1', invoiceNo: 'QBF-2026-00001', status: 'PAID', total: 1100, cashBalance: 2900 } })
       case '/api/processes/QB_FEE_PAY_EARLY/latest':
-        return json(200, { output: { count: 2, total: 2200, cashBalance: 1800, invoiceNos: ['QBF-2026-00002', 'QBF-2026-00003'] } })
+        return json(200, { output: { count: 2, total: 2200, cashBalance: 1800, invoiceNos: ['QBF-2026-00002', 'QBF-2026-00003'],
+          remaining: 0 } })
       case '/api/processes/QB_FEE_INVOICE_DOCUMENT/latest':
         return json(200, { output: { documentRunId: 'd1', documentNo: 'QBF-2026-00001' } })
       case '/api/documents/runs/d1/pdf':

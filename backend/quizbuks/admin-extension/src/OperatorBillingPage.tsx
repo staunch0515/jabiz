@@ -21,7 +21,7 @@ import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { readOperatorBilling, type OperatorBilling } from './operator-api'
 
 /** The columns sorted on the server, by the template's `list.sorts` field. */
-const SORTS = { company: 'company', unpaid: 'unpaidTotal', setAt: 'billingSetAt' } as const
+const SORTS = { company: 'company', unpaid: 'unpaidTotal' } as const
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
@@ -109,7 +109,7 @@ export default function OperatorBillingPage() {
       },
     },
     {
-      id: 'setAt',
+      id: 'actions',
       header: () => <span className="sr-only">{t('operator.billingPage.set')}</span>,
       cell: ({ row }) => biller && (
         <Button size="sm" variant="outline" data-testid="billing-row-set" onClick={() => setBilling(row.original)}>

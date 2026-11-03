@@ -28,4 +28,7 @@ WHERE c.{{QbFeeCharge.operatorId}} = :operatorId
                          OR (i.{{QbFeeInvoice.chargeId}} IS NULL
                              AND i.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
                              AND i.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}}
-                             AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID')))
+                             AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
+                             -- Paid early: on an invoice of its own, not the month's.
+                             AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} o
+                                             WHERE o.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)))))
