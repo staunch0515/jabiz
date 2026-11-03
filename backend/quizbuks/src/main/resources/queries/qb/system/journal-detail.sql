@@ -36,7 +36,7 @@ SELECT
     t.{{LedgerTransaction.createdTime}}   AS recordedAt,
     a.{{LedgerAccount.accountCode}}       AS accountCode,
     e.{{LedgerEntry.direction}}           AS direction,
-    CAST(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160') THEN e.{{LedgerEntry.dimension1}} END AS varchar(128))
+    CAST(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160', '1130') THEN e.{{LedgerEntry.dimension1}} END AS varchar(128))
                                           AS party,
     sum(e.{{LedgerEntry.amount}})         AS amount,
     t.{{LedgerTransaction.sourceEntity}}  AS sourceEntity,
@@ -54,5 +54,5 @@ WHERE t.{{LedgerTransaction.transactionId}} >= :firstTransaction
        OR t.{{LedgerTransaction.createdTime}} > :previousKnownAt)
 GROUP BY t.{{LedgerTransaction.transactionId}}, t.{{LedgerTransaction.bookingTime}},
          t.{{LedgerTransaction.createdTime}}, a.{{LedgerAccount.accountCode}}, e.{{LedgerEntry.direction}},
-         CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160') THEN e.{{LedgerEntry.dimension1}} END,
+         CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160', '1130') THEN e.{{LedgerEntry.dimension1}} END,
          t.{{LedgerTransaction.sourceEntity}}, t.{{LedgerTransaction.sourceId}}, t.{{LedgerTransaction.reference}}

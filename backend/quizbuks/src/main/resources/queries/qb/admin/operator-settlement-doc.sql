@@ -13,6 +13,7 @@ results:
   contactName:     { from: QbOperator.contactName }
   month:           { from: QbOperatorSettlement.month }
   revenue:         { from: QbOperatorSettlement.revenue }
+  platformFees: { from: QbOperatorSettlement.platformFees }
   platformShare:   { kind: { type: text, maxLength: 10 } }
   operatorShare:   { from: QbOperatorSettlement.operatorShare }
   prospectingCost: { from: QbOperatorSettlement.prospectingCost }
@@ -30,6 +31,7 @@ SELECT
     o.{{QbOperator.contactName}} AS contactName,
     s.{{QbOperatorSettlement.month}} AS month,
     s.{{QbOperatorSettlement.revenue}} AS revenue,
+    s.{{QbOperatorSettlement.platformFees}} AS platformFees,
     CAST(trim(to_char(s.{{QbOperatorSettlement.platformShare}} * 100, 'FM990.99')) || '%' AS varchar(10)) AS platformShare,
     s.{{QbOperatorSettlement.operatorShare}} AS operatorShare,
     s.{{QbOperatorSettlement.prospectingCost}} AS prospectingCost,

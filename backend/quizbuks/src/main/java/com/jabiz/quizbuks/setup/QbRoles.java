@@ -85,7 +85,9 @@ public final class QbRoles {
         // Q69: the rounds of its official publisher, and grants and revocations, in its own name.
         QbPermissions.CERTIFICATION_MANAGE,
         // Q82: its sponsors' conversations with takers (disputes and reports).
-        QbPermissions.CONVERSATION_READ);
+        QbPermissions.CONVERSATION_READ,
+        // Q87: how its sponsors pay the platform's fees (prepaid, or postpaid within a credit limit).
+        QbPermissions.FEE_BILLING);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
@@ -111,7 +113,10 @@ public final class QbRoles {
         // Q70: the referrals, whose rewards the monthly report counts.
         QbPermissions.REFERRAL_READ,
         // Q47c: headquarters' price lists of the audience rules, their own and the operators'.
-        QbPermissions.AUDIENCE_PRICES_WRITE);
+        QbPermissions.AUDIENCE_PRICES_WRITE,
+        // Q87: the platform's fees (charged by hand and voided with another administrator's approval) and the
+        // sponsors' billing mode.
+        QbPermissions.FEE_MANAGE, QbPermissions.FEE_BILLING);
 
     /**
      * What the super administrator holds beyond the other two: bans, reading parameters, proposing controlled changes,

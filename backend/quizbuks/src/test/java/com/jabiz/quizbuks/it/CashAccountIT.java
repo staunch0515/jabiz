@@ -175,4 +175,26 @@ class CashAccountIT extends TopUpItSupport {
         assertThat(count(monthly.get("KUDOS_SOLD"))).isEqualTo(1);
         assertThat(count(monthly.get("OTHER"))).isEqualTo(0);
     }
+
+    /** Q87b: the receipt and the mail of a top-up into the cash account say so, not "Kudos". */
+    @Test
+    void aCashTopUpsReceiptAndMailNameTheCashAccount() {
+        param(QbParams.TOPUP_TARGETS, "KUDOS,CASH");
+        param(QbParams.TOPUP_DEFAULT_TARGET, "KUDOS");
+        param(QbParams.ISSUER_NAME, "QuizBuks Operations K.K.");
+        String sponsor = newSponsor(unique("s-q87b-receipt"));
+        String topUpId = (String) run("QB_TOPUP_START", sponsorToken(sponsor), body("amount", 3000, "target", "CASH"))
+            .get("topUpId");
+        runJobs();
+        deliver(event(eventId(), "checkout.session.completed", completed(topUpId)));
+        assertThat(topUp(topUpId)).containsEntry("status", "PAID");
+        assertThat(items("qb.sponsor.topup-receipt", sponsorToken(sponsor), Map.of("params",
+            Map.of("topUpId", topUpId, "language", "en"))).getFirst().get("credited").toString())
+            .isEqualTo("3,000 (into the cash account)");
+        assertThat(run("QB_TOPUP_RECEIPT_ISSUE", sponsorToken(sponsor), body("topUpId", topUpId, "language", "en"))
+            .get("runId")).isNotNull();
+        deliverEvents();
+        assertThat(query("SELECT template FROM sys_mail_message WHERE user_id = ?::uuid", sponsor))
+            .extracting(row -> row.get("template")).contains("qb.topup.paid-cash").doesNotContain("qb.topup.paid");
+    }
 }

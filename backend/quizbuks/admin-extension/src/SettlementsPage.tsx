@@ -130,6 +130,8 @@ export default function SettlementsPage() {
     { id: 'month', header: t('settlement.month'), cell: ({ row }) => row.original.month },
     { id: 'plan', header: t('settlement.plan'), cell: ({ row }) => planLabel(row.original.plan) },
     { id: 'revenue', header: t('settlement.revenue'), meta: right, cell: ({ row }) => amount(row.original.revenue) },
+    { id: 'platformFees', header: t('settlement.platformFees'), meta: right,
+      cell: ({ row }) => <span data-testid="settlement-platform-fees">{amount(row.original.platformFees)}</span> },
     { id: 'share', header: t('settlement.share'), meta: right, cell: ({ row }) => amount(row.original.operatorShare) },
     { id: 'fixedFee', header: t('settlement.fixedFee'), meta: right, cell: ({ row }) => amount(row.original.fixedFee) },
     { id: 'payable', header: t('settlement.payable'), meta: right, cell: ({ row }) => amount(row.original.payable) },

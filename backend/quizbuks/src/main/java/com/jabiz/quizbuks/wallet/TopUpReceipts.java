@@ -52,7 +52,7 @@ public final class TopUpReceipts {
         .number(RECEIPT_TEMPLATE, "receiptNo")
         .party("issuer", ISSUER_TEMPLATE, "name", "address", "registrationNo")
         .party("sponsor", RECEIPT_TEMPLATE, "company", "contactName")
-        .facts(RECEIPT_TEMPLATE, "paidAt", "paymentReference", "paidIn", "kudos")
+        .facts(RECEIPT_TEMPLATE, "paidAt", "paymentReference", "paidIn", "credited")
         .totals(RECEIPT_TEMPLATE, "amount")
         .note("note"));
 
@@ -128,7 +128,8 @@ public final class TopUpReceipts {
             // receipt shows when the payment arrived.
             .step("Issue the receipt", CallProcess.<ProcessContext>when(ctx -> existing(ctx) == null,
                 DocumentProcesses.ISSUE, 1, ctx -> new DocumentProcesses.IssueInput(LAYOUT_ID,
-                    Map.of(TOPUP_ID, ctx.get(TOPUP_ID)), null, null, ctx.get(INPUT, IssueInput.class).language()),
+                    Map.of(TOPUP_ID, ctx.get(TOPUP_ID), "language", ctx.get(INPUT, IssueInput.class).language()),
+                    null, null, ctx.get(INPUT, IssueInput.class).language()),
                 ISSUED))
             .compute("Record it", (metadata, ctx) -> record(ctx)));
     }

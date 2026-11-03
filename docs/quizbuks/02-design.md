@@ -98,7 +98,7 @@ docs/quizbuks/               本文件等
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
 | `QbProfile` | T | 主键 `profileId`；`userId`（文本，不可变、唯一、有索引）、`displayName`、`countryCode`（字典，可空）、`city`、`preferredCurrency`（USD/EUR/GBP/JPY/CNY/INR，只用于显示参考，可空）；`processOnly`：`createdAt`（资料第一次保存的时间；管理员页面的"注册时间"即此，商家入驻建立的只有名字的资料也算）、`editedAt`、`revision` | 答题人与商家共用的资料（商家只有名字，由入驻写入）；激活即邮箱已验证，由平台（G1）管；封禁另见 `QbUserBan` |
-| `QbSponsor` | T | 主键 `onboardingId`；`userId`（文本，不可变、唯一）、`contactName`（商家的名字，随入驻审核）、`company`、`intro`（Markdown）、`avatar`（文件，策略 `qb.sponsor-avatar`）；`processOnly`：`reviewStatus`（PENDING / APPROVED / REJECTED，状态机）、`termsAcceptedAt`、`approvalRequestId`、`submittedAt`、`approvedAt`、`rejectReason`、`rejectedAt`、`revision`、`editedAt` | 商家入驻（审批对象 `qb.sponsor`）；发布人的公开信息来自这里（U-10 发布人名称 / 头像） |
+| `QbSponsor` | T | 主键 `onboardingId`；`userId`（文本，不可变、唯一）、`contactName`（商家的名字，随入驻审核）、`company`、`intro`（Markdown）、`avatar`（文件，策略 `qb.sponsor-avatar`）；`processOnly`：`reviewStatus`（PENDING / APPROVED / REJECTED，状态机）、`termsAcceptedAt`、`approvalRequestId`、`submittedAt`、`approvedAt`、`rejectReason`、`rejectedAt`、`revision`、`editedAt`；Q87：`billingMode`（PREPAID / POSTPAID，空 = 受控参数 `qb.fee.default-billing-mode`）、`creditLimit`（后付的信用额）、`billingReason`、`billingSetBy` / `billingSetAt`（只经 `QB_OPERATOR_BILLING_SET`） | 商家入驻（审批对象 `qb.sponsor`）；发布人的公开信息来自这里（U-10 发布人名称 / 头像）；平台费的计费方式由所属运营商（或总部）按商户设（Q87） |
 | `QbUserBan` | T | 主键 `banId`；`userId`（引用平台用户，不可变、唯一）；`processOnly`：`banned`、`reason`、`bannedAt` / `bannedBy`、`liftedAt` / `liftedBy` / `liftNote`、`revision` | 封禁（Q2 D-Q2-4）：与资料分开，没有资料的人也能封禁；历史即封禁与解封的记录 |
 | `QbOperator` | P（Q48a） | 主键 `operatorId`；`name`、`contactName`、`contactEmail`、`collection`（PLATFORM；DIRECT 留给以后的直接收款）、`status`（ACTIVE / SUSPENDED）、`note`、`createdAt` / `createdBy`、`revision` | 运营商（代理商）。直营（总部）没有记录：没有归属的商户即总部的 |
 | `QbOperatorMember` | P（Q48a） | `operatorId`、`userId`（引用平台用户：登录检查按 UUID 读）、`lead`、`operatorActive`（随运营商的状态，登录检查只读本人的行）、`addedAt` / `addedBy`、`removedAt` / `removedBy` | 成员关系；移除只写移除时间（抽查按决定时的成员关系判断），一人同时只属于一个运营商（部分唯一索引） |
@@ -153,11 +153,15 @@ docs/quizbuks/               本文件等
 
 | 实体 | 类型 | 主要字段 | 说明 |
 |---|---|---|---|
-| `QbWallet` | P | `walletId`、`ownerId` + `kind`（SPONSOR / TAKER，二者唯一）、`balance`（`>= 0` 检查约束）、`pendingCount`、`pendingAmount`（待支付）、`pendingOut`（转账中，Q6b）、`held`（开立中的争议冻结，`0 ≤ held ≤ balance`，Q6a；不是账本分录，可用余额 = 余额 − 冻结） | 余额缓存，只在钱包锁内由记账流程同步更新；真相在账本，每日核对（F-06）。Q5 只为商家建（第一次入账或记待支付时在锁内建立，没有行即余额 0）；充值到账、退款扣回同样在商家钱包锁内改（Q6a）。用户（`TAKER`）的行由 Q6b 按账本重算维护；在此之前用户余额按账本维度汇总（`qb.app.wallet`） |
-| `QbTopUp` | P（Q6a） | `topUpId`、`sponsorId`、`method`（STRIPE / BANK，Q13a，不可变）、`amount`（`> 0`；银行转账登记时改为实收）、`status`（OPENING / OPEN / PAID / EXPIRED / FAILED；银行转账为 AWAITING / REPORTED / REVIEW / PAID / EXPIRED / CANCELLED，状态机）、`createdAt`；支付页：`checkoutSessionId`（唯一）、`checkoutUrl`、`expiresAt`、`failureCode`；到账：`paymentIntentId`（唯一）、`chargeId`、`balanceTransactionId`、`livemode`、`paidAt`、`confirmedBy`（入站事件号或 `job:<核实作业>`）、`ledgerTransactionId`（唯一）；手续费：`stripeFee`、`netAmount`、`feeTransactionId`；原币（F-04）：`presentmentCurrency`、`presentmentAmount`、`fxRate`；退款与争议：`refundedAmount`、`refundShortfall`、`disputeId`、`disputeStatus`、`disputeAmount`、`disputeClawback`、`disputeShortfall`、`disputeHeld`（开立中的争议冻结的部分）；`checkReason`、`checkRequestedAt`；银行转账（Q13a）：`transferCode`（唯一）、`requestedAmount`、`payerName`、`transferDate`、`reportedAt`、`receivedOn`、`bankReference`（与 `receivedOn` 一起唯一）、`recordedBy`、`recordedAt`、`reviewFrom`、`approvalRequestId` | 充值（`plans/Q6-payments.md` D-Q6-2；银行转账 `plans/Q13-bank-transfer.md`）。普通表：通知按后写入的会话与付款编号查找、状态在几分钟内连续变化；历史由平台审计保留。除金额外都是 `processOnly`，只在商家钱包锁内由流程改；数据库兜底：`PAID` 必有分录、扣回不超过金额 |
+| `QbWallet` | P | `walletId`、`ownerId` + `kind`（SPONSOR / TAKER / CASH，二者唯一；CASH 是商户的现金账户，Q87：钱是商户的、还不是学分，同一把锁 `qb.wallet:SPONSOR:<商户>`）、`balance`（`>= 0` 检查约束）、`pendingCount`、`pendingAmount`（待支付）、`pendingOut`（转账中，Q6b）、`held`（开立中的争议冻结，`0 ≤ held ≤ balance`，Q6a；不是账本分录，可用余额 = 余额 − 冻结） | 余额缓存，只在钱包锁内由记账流程同步更新；真相在账本，每日核对（F-06）。Q5 只为商家建（第一次入账或记待支付时在锁内建立，没有行即余额 0）；充值到账、退款扣回同样在商家钱包锁内改（Q6a）。用户（`TAKER`）的行由 Q6b 按账本重算维护；在此之前用户余额按账本维度汇总（`qb.app.wallet`） |
+| `QbTopUp` | P（Q6a） | `topUpId`、`sponsorId`、`method`（STRIPE / BANK / MANUAL，Q13a、Q18b，不可变）、`target`（KUDOS / CASH，Q87，不可变：到账成为学分（2110）或进现金账户（2160）；缺省与可选由受控参数 `qb.topup.default-target` / `qb.topup.targets` 定）、`amount`（`> 0`；银行转账登记时改为实收）、`status`（OPENING / OPEN / PAID / EXPIRED / FAILED；银行转账为 AWAITING / REPORTED / REVIEW / PAID / EXPIRED / CANCELLED，状态机）、`createdAt`；支付页：`checkoutSessionId`（唯一）、`checkoutUrl`、`expiresAt`、`failureCode`；到账：`paymentIntentId`（唯一）、`chargeId`、`balanceTransactionId`、`livemode`、`paidAt`、`confirmedBy`（入站事件号或 `job:<核实作业>`）、`ledgerTransactionId`（唯一）；手续费：`stripeFee`、`netAmount`、`feeTransactionId`；原币（F-04）：`presentmentCurrency`、`presentmentAmount`、`fxRate`；退款与争议：`refundedAmount`、`refundShortfall`、`disputeId`、`disputeStatus`、`disputeAmount`、`disputeClawback`、`disputeShortfall`、`disputeHeld`（开立中的争议冻结的部分）；`checkReason`、`checkRequestedAt`；银行转账（Q13a）：`transferCode`（唯一）、`requestedAmount`、`payerName`、`transferDate`、`reportedAt`、`receivedOn`、`bankReference`（与 `receivedOn` 一起唯一）、`recordedBy`、`recordedAt`、`reviewFrom`、`approvalRequestId` | 充值（`plans/Q6-payments.md` D-Q6-2；银行转账 `plans/Q13-bank-transfer.md`）。普通表：通知按后写入的会话与付款编号查找、状态在几分钟内连续变化；历史由平台审计保留。除金额外都是 `processOnly`，只在商家钱包锁内由流程改；数据库兜底：`PAID` 必有分录、扣回不超过金额 |
 | `QbReconRun` / `QbReconItem` | W（Q6a） | 运行：`scheduledTime`（唯一）、`status`（OK / DIFF）、`checkedAt`、`itemCount`、`summary`（各项差异数的规范 JSON）；差异：`runId`、`check`（字典 `recon-check`）、`partyId`、`reference`、`expected`、`actual`、`difference` | 每日核对（F-06）的结果，只写一次 |
 | `QbJournalExport` / `QbJournalExportConfirmation` | W（Q9d） | 导出：`periodFrom`、`periodTo`（日本日期，含两端）、`granularity`（MONTH）、`voucherNo`（`QBJ-<年>-00001`，唯一）、`periodEnd`（期末时刻，下一次导出以它为上一期末）、`knownAt`（截止的记录时刻）、`previousExportId`（唯一：导出成链）、`lineCount`、`transactionCount`、`debitTotal` = `creditTotal`、`fileId` / `fileSha256`（导入用的凭证 CSV）、`detailPartCount`（明细的文件数；各文件为 `QbJournalExportPart`：`exportId`、`partNo`、`fileId`、`sha256`、`rowCount`）、`exportedBy`；确认：`exportId`（唯一）、`externalVoucherNo`、`confirmedBy` | 分录导出（F-01 – F-03，`plans/Q9d-journal-receipts.md`）：一月一张汇总凭证，`(periodFrom, granularity)` 唯一，CSV 原样存于平台 `sys_generated_file`；只写一次、只插入 |
 | `QbTopUpReceipt` | W（Q9d） | `topUpId`（唯一）、`sponsorId`、`runId`（平台单据 `sys_document_run`）、`documentNo`、`language` | 充值收据（F-09）：每笔已到账的充值至多一张，PDF 原样存于平台单据存档 |
+| `QbKudosExchange` | P（Q87） | `exchangeId`、`sponsorId`、`direction`（BUY / SELL）、`amount`、`exchangedAt`、`ledgerTransactionId`（唯一） | 现金与学分的互换（`plans/Q87-fee-account.md` D-Q87-3）：1 : 1，只经 `QB_KUDOS_BUY` / `QB_KUDOS_SELL` 在商户钱包锁内写入；换出受 `qb.kudos.buy.enabled`、换回受 `qb.kudos.sell.enabled`（缺省关）与可用余额约束 |
+| `QbFeeCharge` | W（Q87） | `chargeId`、`sponsorId`、`operatorId`（记费时商户所属的运营商，结算归属）、`billingMode`、`kind`（MONTHLY / MANUAL）、`period`（`YYYY-MM`，日本时间的月）、`amount`、`taxRate`、`tax`、`total`、`reason`、`sourceKey`、`chargedAt` / `chargedBy` | 平台费的记录（D-Q87-4），只经 `QB_FEE_CHARGE`（`subProcessOnly()`）插入；每商户每月至多一条月费（部分唯一索引）；分录以它为来源（`QbFeeCharge`），作废由冲正表达，不改记录 |
+| `QbFeeInvoice` | P（Q87） | `invoiceId`、`invoiceNo`（`QBF-<年>-00001`，`NumberSequence`，唯一）、`sponsorId`、`operatorId`、`billingMode`、`period`、`chargeId`（预付：每条记费一张，唯一；后付：空，整月一张，`(sponsorId, period)` 唯一）、`amount`、`tax`、`total`、`status`（OPEN / OVERDUE / PAID / VOID，状态机）、`issuedAt`、`dueOn`（`qb.fee.due-days`）、`paidAt`、`paymentTransactionId`、`voidedAt` / `voidedBy` / `voidReason`、`remindersSent`、`lastReminderAt`、`documentNo` / `documentRunId` | 账单（D-Q87-5、D-Q87-6）：预付的记费时即出、现金够即 `PAID`；后付的每月 2 日由任务合成；只从现金账户付（`QB_FEE_INVOICE_PAY`）；PDF 是平台单据 `qb.fee_invoice`，由商户按需签发一次（`QB_FEE_INVOICE_DOCUMENT`） |
+| `QbFeeRequest` | P（Q87） | `requestId`、`kind`（MANUAL / VOID）、`sponsorId`、`amount`、`invoiceId`、`reason`、`status`（REVIEW / DONE / REJECTED）、`requestedBy` / `requestedAt`、`approvalRequestId`、`decidedAt`、`chargeId` | 总部财务的手工记费与作废账单（四眼）：`QB_FEE_REQUEST` 登记并 `RequireApproval`（审批对象 `qb.fee-request`，规则 `qb.fee-request.review`），另一位管理员批准后由 `QB_FEE_REQUEST_APPROVAL_RESULT` 记费或冲正并作废（已付的退回现金账户）；商户本人批准即驳回 |
 | `QbTransfer` | P（Q6b） | `userId`、`externalAccountId`（遮蔽）、`amount`、`fee`、`net`（`amount = fee + net`、`net > 0`）、`status`（REVIEW / SENDING / SENT / FAILED / CHECK / REJECTED / REVERSED）、`approvalRequestId`、`stripeTransferId`（唯一）、`sendTransactionId`（唯一）、`settleTransactionId`、`reversalTransactionId`、`reversedAmount`、`failureCode`、`failureMessage`（只有系统的说明，审核人的意见留在审批中）、`sendEndedAt`、`releasedBy` / `releasedAt`、时间 | 自动转账（4.7）。每人至多一笔未结束的（REVIEW / SENDING / CHECK，部分唯一索引）。大额先进 REVIEW 走审批（准备人 = 收款人）。被驳回或被 Stripe 撤回（含部分）的转账使用户暂停，直到财务放行（`QB_TRANSFER_HOLD_RELEASE`）。`QbStripePayout`（P）记平台余额打款到银行（`payoutId` 唯一） |
 | `QbFxRate` | T | `currency`、`rateDate`、`perJpy`、`source`（ECB / MANUAL） | 显示用参考汇率（"约合 X USD"），可手动覆盖；不参与记账 |
 | `QbStripeEvent` | — | — | 不建：Stripe 通知由平台入站 Webhook（G9）原样存档与去重 |
@@ -202,6 +206,10 @@ docs/quizbuks/               本文件等
 | 5120 | 推广费用（赠送的 Kudos，Q18b） | 费用 | — |
 | 2140 | 应付运营商分成（Q48b） | 负债 | — |
 | 5130 | 运营商分成（Q48b） | 费用 | — |
+| 2160 | 商户现金账户（Q87） | 负债 | 当事人（商家） |
+| 1130 | 应收平台费（Q87） | 资产 | 当事人（商家） |
+| 4120 | 平台使用费收入（Q87） | 收入 | — |
+| 2150 | 应付消费税（Q87） | 负债 | — |
 
 维度"当事人"（`LedgerDimension` 位置 1，取值为用户编号）与"发布"（位置 2，`QbPublication.publicationId`，Q5：商家花费与汇总凭证按发布从账本汇总）。运营商不另设维度（Q48b）：发布的卡片在上线时冻结商家当时的运营商（`QbPublicationCard.operatorId`），月结算按发布维度把 4110 归给运营商，答题路径因此不多读一条。每笔分录带来源（`sourceEntity` / `sourceId`）：充值、答题会话、转账。
 
@@ -218,6 +226,12 @@ docs/quizbuks/               本文件等
 | 答题奖励结算 | `QB_ATTEMPT_SUBMIT` / `QB_ATTEMPT_EXPIRE` / `QB_PENDING_PAY` | 2110 商家预收款（商家，发布）：奖励 | 2120 应付用户奖励（用户，发布）：奖励 − 抽成；4110（发布）：抽成（当前 0，为 0 时不出该行） |
 | 运营商月结算（Q48b，日本时间的自然月；抽成 × (1 − 平台分成)，取整到日元） | `QB_OPERATOR_SETTLEMENT_RUN`（逐项任务 `qb.operator-settlement`） | 5130 运营商分成 | 2140 应付运营商分成 |
 | 运营商分成付款获批（财务登记、另一位管理员批准） | `QB_OPERATOR_SETTLEMENT_APPROVAL_RESULT` | 2140 应付运营商分成 | 1120 银行存款 |
+| 充值进现金账户（Q87，`target = CASH`；三种到账途径同上，只换贷方；不补发待支付） | `QB_TOPUP_CONFIRM` / `QB_TOPUP_BANK_APPROVAL_RESULT` / `QB_TOPUP_MANUAL_APPROVAL_RESULT` | 1110 / 1120 | 2160 商户现金账户（商家） |
+| 现金换学分 / 学分换回现金（Q87，1 : 1；来源 `QbKudosExchange`） | `QB_KUDOS_BUY` / `QB_KUDOS_SELL` | 2160（商家）/ 2110（商家） | 2110（商家）/ 2160（商家） |
+| 平台费记费（Q87：月费 `qb.fee.monthly` 或手工；税 = 费 × `qb.fee.tax-rate` 向下取整；来源 `QbFeeCharge`，参照 `fee_<种类>_<期间>`） | `QB_FEE_CHARGE` | 1130 应收平台费（商家）：费 + 税 | 4120 平台使用费收入：费；2150 应付消费税：税（为 0 时不出该行） |
+| 预付商户的记费立即从现金付（同一事务，现金够时；不够即账单 `OPEN`，直到付清） | `QB_FEE_CHARGE` | 2160 商户现金账户（商家） | 1130 应收平台费（商家） |
+| 付账单（Q87，只从现金账户） | `QB_FEE_INVOICE_PAY` | 2160 商户现金账户（商家） | 1130 应收平台费（商家） |
+| 作废账单（四眼，Q87） | `QB_FEE_REQUEST_APPROVAL_RESULT` | `LEDGER_REVERSE` 该账单各条记费的记费与付款分录 | |
 | 转账发出（Q6b） | `QB_TRANSFER_CREATE` / `QB_TRANSFER_APPROVAL_RESULT` | 2120 应付用户奖励（用户）：金额 | 2130 转账中（用户）：实付；4110：手续费（为 0 时不出该行） |
 | 转账成功（作业结果或核实） | `QB_TRANSFER_SENT` / `QB_TRANSFER_CHECKED` | 2130 转账中（用户） | 1110 Stripe 余额 |
 | 转账确定失败（Stripe 拒绝创建，或核实确定没有） | `QB_TRANSFER_SEND_FAILED` / `QB_TRANSFER_CHECKED` | `LEDGER_REVERSE` 发出交易（2130 与 4110 回到 2120） | |
@@ -233,6 +247,7 @@ docs/quizbuks/               本文件等
   全部分录借贷平衡；每笔充值的到账、扣回与手续费分录与记录相符；Q6b 另加：用户钱包 = 2120 / 2130 按当事人的余额（缓存由事件同步，只有连续两次运行都不符才算差异，
   其间发布 `qb.taker-wallet.resync`），每笔转账的 2120 与 2130 分录与其状态相符。每项比较是一条语句（一个快照），模板只返回差异行；
   有差异则记 `QbReconRun` / `QbReconItem`、建待办给财务、发布 `qb.reconcile.diff`（Q9 的导出据此停止）。
+  Q87 另加：每个商户的现金余额 = 2160 按当事人的余额（`SPONSOR_CASH`）、2160 合计 = 现金余额合计（`TOTAL_2160`）、1130 按当事人的余额 = 该商户未付（`OPEN` / `OVERDUE`）账单的合计（`FEES_RECEIVABLE`）。
 
 ### 4.3 并发与锁
 
@@ -377,6 +392,12 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_TOPUP_BANK_APPROVAL_RESULT` / `QB_TOPUP_BANK_EXPIRE`（Q13a） | 系统（审批事件 / 每日 19:23 UTC 的逐项任务） | 只认充值自己的请求：批准即过账 1120 / 2110、钱包增加、`PAID`，发布 `qb.sponsor.settle-pending` 与 `qb.topup.paid`；驳回即回到登记前的状态、金额恢复为申请金额；30 天仍在等待的 `EXPIRED`（之后到的钱仍可登记） |
 | `QB_TOPUP_MANUAL_RECORD`（Q18b） | `qb.topup.manual.record`，要求已验证 | 手工加币（`plans/Q18-bank-settings-credit.md`）：商家已通过审核、不是本人；`PAID_OUTSIDE` 须有收款日（不晚于今天）与未被用过的流水号，`GRANT` 不得有；审批规则 `qb.topup-manual.review` 已生效 → 写入 `MANUAL` / `REVIEW`（编号取自转账码序列，对商家不可见）→ `RequireApproval`（准备人 = 登记人，内容为商家、种类、金额、理由与流水）→ 记审批请求 |
 | `QB_TOPUP_MANUAL_APPROVAL_RESULT`（Q18b） | 系统（审批事件，`internal()`） | 只认加币自己的请求：批准即过账 1120（系统外收款）或 5120（赠送）/ 2110、钱包增加、`PAID` 并对商家可见，发布 `qb.sponsor.settle-pending` 与 `qb.topup.paid`（赠送的邮件为 `qb.topup.granted`）；驳回或商家本人批准即 `CANCELLED`（流水号释放；本人批准另给财务待办） |
+| `QB_KUDOS_BUY` / `QB_KUDOS_SELL`（Q87） | `qb.topup`，要求已验证 | 未封禁、已同意条款、入驻已通过；开关 `qb.kudos.buy.enabled` / `qb.kudos.sell.enabled`（422 `QB_KUDOS_EXCHANGE_OFF`）；商户钱包锁内重读两个钱包：换出要可用现金 ≥ 金额且没有未付的账单拦着（`FeeGate`，422 `QB_FEE_UNPAID`），换回要可用学分（余额 − 冻结）≥ 金额（`QB_KUDOS_EXCHANGE_SHORT`）→ 过账、两个余额同时改、记 `QbKudosExchange`；换出后发布 `qb.sponsor.settle-pending`（补发待支付） |
+| `QB_FEE_CHARGE`（Q87） | `qb.fee.system`，`subProcessOnly()` | 记一条平台费（种类、期间、金额、理由、来源键），税按 `qb.fee.tax-rate`；过账 1130 / 4120 + 2150；预付且现金够即同一事务从现金付（2160 / 1130）并出一张 `PAID` 的账单（预付每条记费一张），否则出 `OPEN` 的账单并发布 `qb.fee.invoice-issued`；后付只记应收，账单由月任务合成 |
+| `QB_FEE_MONTHLY_ITEM` / `QB_FEE_INVOICE_ISSUE_ITEM` / `QB_FEE_OVERDUE_ITEM`（Q87） | 系统（`internal()`） | 逐项任务 `qb.fee-monthly`（每月 2 日 01:07 日本时间：对每个已通过的商户记当月月费，`qb.fee.monthly` 为 0 即什么也不记）、`qb.fee-invoice`（每月 2 日 01:17：后付商户上月的记费合成一张 `OPEN` 账单，到期 `qb.fee.due-days` 天）、`qb.fee-overdue`（每日 02:37：过了到期日的 `OPEN` → `OVERDUE`，发布 `qb.fee.invoice-overdue`（提醒邮件，7 天一封至多三封）、给 `qb.fee.manage` 与商户的运营商各一个待办）；每项一个事务，商户钱包锁内 |
+| `QB_FEE_INVOICE_PAY` / `QB_FEE_INVOICE_DOCUMENT`（Q87） | `qb.topup`，要求已验证 | 本人的账单（商户视图，不是本人的 404）：付——`OPEN` / `OVERDUE` 且可用现金 ≥ 合计（422 `QB_FEE_INVOICE_STATE` / `QB_FEE_CASH_SHORT`）→ 2160 / 1130、`PAID`、关闭逾期待办；单据——按需签发一次版式 `qb.fee_invoice` 的 PDF（开具方 `qb.issuer.*` 须已设），再次请求返回同一份 |
+| `QB_FEE_REQUEST` / `QB_FEE_REQUEST_APPROVAL_RESULT`（Q87） | `qb.fee.manage`，要求已验证 / 系统（审批事件，`internal()`） | 财务手工记费（商户、金额、理由）或作废账单（账单、理由）→ `QbFeeRequest` `REVIEW` + `RequireApproval`（准备人 = 登记人；规则 `qb.fee-request.review` 未生效即 422 `QB_FEE_NO_REVIEW`）；批准即 `CallProcess` `QB_FEE_CHARGE`（`MANUAL`，当月）或冲正该账单的全部分录并 `VOID`（已付的退回现金账户）；驳回或商户本人批准即 `REJECTED` |
+| `QB_OPERATOR_BILLING_SET`（Q87） | `qb.fee.billing`（运营商与财务），要求已验证 | 商户的计费方式与信用额（理由必填）：运营商只能设自己范围内的商户（`RequireScope`，不是即 404；总部任何商户）；`PREPAID` 的信用额须为 0（422 `QB_FEE_BILLING_MODE`）；写入商户入驻行（时态），审计照常 |
 | `QB_TOPUP_CHECK` / `QB_TOPUP_CHECKED` / `QB_TOPUP_CHECK_FAILED` | 系统（逐项任务 `qb.topup-stale` 每小时 / 作业） | 支付页过期一小时仍无通知的充值向 Stripe 核实（6 小时内不重复），按回答与通知同一套步骤入账或过期 |
 | `QB_TOPUP_FEE_RECORD` / `QB_TOPUP_FEE_FAILED` | 系统（作业） | Stripe 手续费：核对币种与 `fee + net = 金额` 后过账 5110 / 1110 并记流水号；不符或失败即待办 |
 | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_OPENED` / `QB_TOPUP_DISPUTE_CLOSED` | 系统（`charge.refunded`、`charge.dispute.*`） | 按累计退款额只处理一次（`RefundMath`），扣回可用余额以内的部分、余下记差额并开待办（差额不再自动扣回）；争议开立即待办并冻结争议金额（钱包 `held`，不付奖励），败诉同退款（先从冻结扣），胜诉释放并结算待付奖励；付款尚未确认的退款先失败重试 30 分钟 |
@@ -520,6 +541,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   认证前置（Q86）画成平台节点：不计人数、点它不出名单。向导"客户匹配"一步的前置区块在本商户的发布之下另有"须持有的认证"一组（目录中对象是答题者的四种），摘要写"X（持有）"；
   概况页在商户条款理解的轮进行中、本人未持有时显示"确认你的理解"卡，"开始"在新标签页打开 App 的发布页（一个账号、两个前端）。
 - 钱包页（Q9d）：已到账的充值行有"收据"：首次以当前界面语言签发（`QB_TOPUP_RECEIPT_ISSUE`），之后下载同一份存档 PDF。
+- 钱包页的现金账户（Q87a / Q87b，`sponsor/src/wallet/`）：三块——现金账户（余额、现金换学分、按开关显示换回；Q87b 加未付账单与逾期提醒、计费方式与信用额）、学分（现页；充值对话框按 `qb.sponsor.cash-settings` 显示目标 KUDOS / CASH，只给一个目标时不显示选择）、账单（Q87b：列表、从现金账户付、下载账单 PDF）；换出与提交被未付账单拦住时页面写明并链到账单。概览加"现金余额""待付账单"两张卡。
 - 分析（Q9e2，`sponsor/src/analytics/`）：概览（`/dashboard`，入驻通过后）显示指标卡（各状态的发布数、正在答题、今日支出、可用余额与待支付、剩余预算、本月 AI 用量（Q8a））、近 7 天的趋势（完成人数折线与支出柱，上下两个小图，不用双 Y 轴）与近 7 天热门发布前 5；
   发布分析页 `/publications/<id>/analytics`（发布页的"分析"）显示概览、漏斗（流失最大的一段以徽标、斜纹与文字标出）、过去 24 小时（按小时）/ 过去 7 天（按天）的趋势与 App 的四个窗口、每题正确率与难度（不足 k 时注明"至少 k 人作答后显示"）与导出（趋势、概览、题目的 CSV 与 Excel）。
   每个图表有名称与合计的文字、下方可展开的数据表；颜色只用 `--chart-1` / `--chart-2`；时刻与日期按任务记下的部署时区显示（不按浏览器）；每 60 秒与回到前台时重读，并注明"每 10 分钟更新，最近更新 …"。
@@ -544,6 +566,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   - Q17：全部 Quiz（`/qb/quizzes`，含已删除）与一个 Quiz 的详情（`/qb/quizzes/:quizId`：发布、版本（按要求显示冻结内容）、当前草稿，只读，`qb.admin.quiz.read`），每个状态的全部发布（`/qb/publications`，`qb.admin.publication.read`；审核页只列待审的），链到发布页与答题记录（`plans/Q17-admin-overview.md`）。
   - Q18a：银行转账充值的设置（`/qb/finance/bank-settings`）：现行值、一次提出七个设置（`QB_BANK_SETTINGS_PROPOSE`）、他人一键发布（`plans/Q18-bank-settings-credit.md`）。
   - Q18b：手工加币（`/qb/finance/manual-credits`，`qb.topup.bank.approve` 可读）：列表、新建（`qb.topup.manual.record`：商家、种类、金额、理由，系统外收款再填收款日与流水号）、详情页经平台的 `ApprovalPanel` 由另一位管理员审批；商家在审批通过后才看到。
+  - Q87：平台费（`/qb/finance/fees`，`qb.admin.finance.read`）：记费、账单（筛选状态、期间、商户）、手工记费与作废的申请（`qb.fee.manage` 新建，`qb.topup.bank.approve` 的另一位管理员在详情页经 `ApprovalPanel` 批准）；运营商的商户页加计费方式与信用额（`QB_OPERATOR_BILLING_SET`，理由必填）；结算页与结算单显示该月的平台费（并入分成的基数）；财务总览多四个科目。
 
 ### 7.4 "Kudos"
 

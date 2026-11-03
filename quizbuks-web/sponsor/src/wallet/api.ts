@@ -43,7 +43,16 @@ export interface SponsorWallet {
   /** Q87a: the cash account (money with the platform, turned into Kudos when the sponsor wants). */
   cashBalance: number
   cashHeld: number
+  /** Q87b: the platform's invoices not yet paid, how many of them are overdue, and how the sponsor is billed. */
+  unpaidTotal: number
+  unpaidCount: number
+  overdueCount: number
+  billingMode: BillingMode
+  creditLimit: number
 }
+
+/** How the platform's fees are billed (Q87b): taken from the cash account at once, or invoiced monthly within a credit. */
+export type BillingMode = 'PREPAID' | 'POSTPAID'
 
 /** A row of `qb.sponsor.topups` (the checkout's address only while it can be paid). */
 export interface TopUpRow {
@@ -111,6 +120,11 @@ export async function readWallet(): Promise<SponsorWallet> {
     spent: num(row.spent),
     cashBalance: num(row.cashBalance),
     cashHeld: num(row.cashHeld),
+    unpaidTotal: num(row.unpaidTotal),
+    unpaidCount: num(row.unpaidCount),
+    overdueCount: num(row.overdueCount),
+    billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+    creditLimit: num(row.creditLimit),
   }
 }
 
@@ -368,6 +382,132 @@ export async function downloadReceipt(topUpId: string, language: string | undefi
 
 /** The labels of the top-up states, in the request's language. */
 export const readTopUpStatuses = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.topUpStatus)
+
+/** The labels of the invoice states (Q87b), in the request's language. */
+export const readInvoiceStatuses = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.feeInvoiceStatus)
+
+// ---- Q87b: the platform's invoices -----------------------------------------------------------------------------------
+
+
+/** The states of the platform's invoices (`fee.QbFees`): only the server moves them. */
+export type InvoiceStatus = 'OPEN' | 'OVERDUE' | 'PAID' | 'VOID'
+export const INVOICE_UNPAID: readonly InvoiceStatus[] = ['OPEN', 'OVERDUE']
+const invoiceStatusOf = (value: unknown): InvoiceStatus =>
+  value === 'OVERDUE' || value === 'PAID' || value === 'VOID' ? value : 'OPEN'
+
+/** A row of `qb.sponsor.fee-invoices`. */
+export interface InvoiceRow {
+  invoiceId: string
+  invoiceNo: string
+  /** The month billed, `YYYY-MM`. */
+  period: string
+  billingMode: BillingMode
+  amount: number
+  tax: number
+  total: number
+  status: InvoiceStatus
+  issuedAt: string
+  dueOn: string | null
+  paidAt: string | null
+  documentRunId: string | null
+}
+
+export async function searchFeeInvoices({ sorts, offset, limit }: TopUpSearch) {
+  const page = await runQuery<Row>(WALLET_TEMPLATE.feeInvoices, { sorts, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row): InvoiceRow => ({
+      invoiceId: String(row.invoiceId),
+      invoiceNo: String(row.invoiceNo ?? ''),
+      period: String(row.period ?? ''),
+      billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+      amount: num(row.amount),
+      tax: num(row.tax),
+      total: num(row.total),
+      status: invoiceStatusOf(row.status),
+      issuedAt: String(row.issuedAt ?? ''),
+      dueOn: str(row.dueOn),
+      paidAt: str(row.paidAt),
+      documentRunId: str(row.documentRunId),
+    })),
+  }
+}
+
+/** A row of `qb.sponsor.fee-charges`: a fee the platform charged, and the invoice it is on. */
+export interface ChargeRow {
+  chargeId: string
+  kind: 'MONTHLY' | 'MANUAL'
+  period: string
+  billingMode: BillingMode
+  amount: number
+  tax: number
+  total: number
+  reason: string | null
+  chargedAt: string
+  invoiceId: string | null
+  invoiceNo: string | null
+  invoiceStatus: InvoiceStatus | null
+}
+
+export async function searchFeeCharges({ sorts, offset, limit }: TopUpSearch) {
+  const page = await runQuery<Row>(WALLET_TEMPLATE.feeCharges, { sorts, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row): ChargeRow => ({
+      chargeId: String(row.chargeId),
+      kind: row.kind === 'MANUAL' ? 'MANUAL' : 'MONTHLY',
+      period: String(row.period ?? ''),
+      billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+      amount: num(row.amount),
+      tax: num(row.tax),
+      total: num(row.total),
+      reason: str(row.reason),
+      chargedAt: String(row.chargedAt ?? ''),
+      invoiceId: str(row.invoiceId),
+      invoiceNo: str(row.invoiceNo),
+      invoiceStatus: row.invoiceStatus == null ? null : invoiceStatusOf(row.invoiceStatus),
+    })),
+  }
+}
+
+/** What `QB_FEE_INVOICE_PAY` answers: the invoice's state after, and the cash left. */
+export interface InvoicePayOutput {
+  invoiceId: string
+  invoiceNo: string
+  status: InvoiceStatus
+  total: number
+  cashBalance: number
+}
+
+/** Pays an invoice from the cash account; the server checks the state and the cash. */
+export async function payInvoice(invoiceId: string): Promise<InvoicePayOutput> {
+  const out = await runProcess<Record<string, unknown>>(WALLET_PROCESS.invoicePay, { invoiceId })
+  return { invoiceId: String(out.invoiceId), invoiceNo: String(out.invoiceNo ?? ''), status: invoiceStatusOf(out.status),
+    total: num(out.total), cashBalance: num(out.cashBalance) }
+}
+
+/**
+ * The invoice's document (Q87b): issued by the server the first time, in the sponsor's language, the same one every
+ * time after; then its PDF exactly as kept, handed to the browser (as the receipts).
+ */
+export async function downloadInvoiceDocument(invoiceId: string, language: string | undefined) {
+  const issued = await runProcess<{ documentRunId: string; documentNo: string | null }>(WALLET_PROCESS.invoiceDocument,
+    { invoiceId, language: receiptLanguage(language) })
+  const response = await sessionFetch(`/api/documents/runs/${encodeURIComponent(issued.documentRunId)}/pdf`)
+  if (!response.ok) throw await toApiError(response)
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileNameOf(response.headers.get('Content-Disposition')) ?? `${issued.documentNo ?? invoiceId}.pdf`
+    link.rel = 'noopener'
+    link.click()
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+  return issued
+}
 
 /** A whole, positive number of Kudos as typed (digits only, separators allowed); null otherwise. */
 export function parseKudos(text: string): number | null {

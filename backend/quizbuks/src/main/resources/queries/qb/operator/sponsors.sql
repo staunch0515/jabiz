@@ -1,8 +1,9 @@
 /*---
 id: qb.operator.sponsors
 description: "The sponsors an operator looks after (Q48a; its own only since Q59c-2, the dataset of the sponsors being limited to them), with their review, ban and running publications"
-entities: [QbSponsor, SecUser, QbSponsorOperator, QbOperator, QbOperatorMember, QbUserBan, QbPublicationCard]
+entities: [QbSponsor, SecUser, QbSponsorOperator, QbOperator, QbOperatorMember, QbUserBan, QbPublicationCard, SysParam]
 datasets:
+  SysParam: urn:jabiz:dataset:now:SysParam
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbSponsorOperator: urn:jabiz:dataset:default:QbSponsorOperator
   QbOperator: urn:jabiz:dataset:default:QbOperator
@@ -21,6 +22,8 @@ results:
   introTranslations: { from: QbSponsor.introTranslations }
   avatar:            { from: QbSponsor.avatar }
   termsAcceptedAt:   { from: QbSponsor.termsAcceptedAt }
+  billingMode:       { from: QbSponsor.billingMode }
+  creditLimit:       { from: QbSponsor.creditLimit }
   email:             { from: SecUser.email }
   emailVerified:     { kind: { type: bool } }
   reviewStatus:      { from: QbSponsor.reviewStatus }
@@ -57,6 +60,8 @@ SELECT
     s.{{QbSponsor.introTranslations}} AS introTranslations,
     s.{{QbSponsor.avatar}}            AS avatar,
     s.{{QbSponsor.termsAcceptedAt}}   AS termsAcceptedAt,
+    CAST(coalesce(s.{{QbSponsor.billingMode}}, d.d_mode, 'PREPAID') AS varchar(10)) AS billingMode,
+    s.{{QbSponsor.creditLimit}}       AS creditLimit,
     u.{{SecUser.email}}               AS email,
     coalesce(lower(u.{{SecUser.verifiedEmail}}) = lower(u.{{SecUser.email}}), false) AS emailVerified,
     s.{{QbSponsor.reviewStatus}}      AS reviewStatus,
@@ -81,6 +86,11 @@ LEFT JOIN {{SecUser}} u ON CAST(u.{{SecUser.userId}} AS text) = s.{{QbSponsor.us
 LEFT JOIN {{QbSponsorOperator}} a ON a.{{QbSponsorOperator.userId}} = s.{{QbSponsor.userId}}
 LEFT JOIN {{QbOperator}} o ON o.{{QbOperator.operatorId}} = a.{{QbSponsorOperator.operatorId}}
 LEFT JOIN {{QbUserBan}} b ON CAST(b.{{QbUserBan.userId}} AS text) = s.{{QbSponsor.userId}}
+-- Q87: the billing mode in effect is the sponsor's own, else the platform's default (qb.fee.default-billing-mode).
+LEFT JOIN LATERAL (
+    SELECT CASE WHEN p.{{SysParam.value}} IN ('PREPAID', 'POSTPAID') THEN p.{{SysParam.value}} END AS d_mode
+    FROM {{SysParam}} p
+    WHERE p.{{SysParam.paramKey}} = 'qb.fee.default-billing-mode') d ON true
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(s.{{QbSponsor.company}}), lower(CAST(:q AS text))) > 0
        OR strpos(lower(s.{{QbSponsor.contactName}}), lower(CAST(:q AS text))) > 0

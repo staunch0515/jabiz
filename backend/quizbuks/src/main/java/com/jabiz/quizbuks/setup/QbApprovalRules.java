@@ -114,9 +114,18 @@ public final class QbApprovalRules {
         "Sponsor pages are reviewed unless qb.review.sponsor.auto is on (always after a takedown)");
 
     // New rules go last: those already installed keep their place in the proposals.
+    /**
+     * Q87 (D-Q87-4, D-Q87-6): a platform fee charged by hand, or an invoice voided, waits for another administrator's
+     * approval; the approvers are those of the bank top-ups.
+     */
+    public static final Rule FEE_REQUEST_REVIEW = new Rule(com.jabiz.quizbuks.fee.QbFees.REVIEW_RULE,
+        com.jabiz.quizbuks.fee.QbFees.APPROVAL_SUBJECT, entries("fact", "feeRequest", "op", "eq", "value", true),
+        List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
+        "Platform fees charged by hand and invoices voided take another administrator's approval");
+
     public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW,
         BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW, SPONSOR_PAGE_REVIEW,
-        OPERATOR_PLAN_REVIEW, OPERATOR_WITHDRAWAL_REVIEW);
+        OPERATOR_PLAN_REVIEW, OPERATOR_WITHDRAWAL_REVIEW, FEE_REQUEST_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();

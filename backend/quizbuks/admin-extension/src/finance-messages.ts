@@ -42,6 +42,9 @@ export const financeMessages = {
       CASH_DISPUTE: 'Lost disputes taken back from cash accounts',
       KUDOS_BOUGHT: 'Cash turned into Kudos',
       KUDOS_SOLD: 'Kudos turned back into cash',
+      FEE_CHARGED: 'Platform fees charged',
+      FEE_PAID: 'Platform fees paid',
+      FEE_VOIDED: 'Platform fees voided',
       OTHER: 'Other postings',
     },
     overview: {
@@ -350,6 +353,9 @@ export const financeMessages = {
       CASH_DISPUTE: '从现金账户扣回的败诉争议',
       KUDOS_BOUGHT: '现金换成学分',
       KUDOS_SOLD: '学分换回现金',
+      FEE_CHARGED: '平台费记费',
+      FEE_PAID: '平台费已付',
+      FEE_VOIDED: '平台费作废',
       OTHER: '其他分录',
     },
     overview: {
@@ -658,6 +664,9 @@ export const financeMessages = {
       CASH_DISPUTE: '現金口座から差し戻した敗訴の争議',
       KUDOS_BOUGHT: '現金からクドスへの交換',
       KUDOS_SOLD: 'クドスから現金への交換',
+      FEE_CHARGED: 'プラットフォーム料金の請求',
+      FEE_PAID: 'プラットフォーム料金の支払い',
+      FEE_VOIDED: 'プラットフォーム料金の取り消し',
       OTHER: 'その他の仕訳',
     },
     overview: {

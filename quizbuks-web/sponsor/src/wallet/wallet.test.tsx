@@ -75,6 +75,10 @@ function server(options: Server = {}) {
         return json(200, { items: [{ balance: '5000', held: '1000', pendingCount: 2, pendingAmount: '700',
           toppedUp: '6000', takenBack: '0', topUpCount: 2, spent: '1000', cashBalance: options.cashBalance ?? '0',
           cashHeld: '0' }], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.fee-invoices':
+        return json(200, { items: [], offset: 0, limit: 10, total: 0 })
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:fee-invoice-status':
+        return json(200, [{ code: 'OPEN', label: 'Open' }, { code: 'PAID', label: 'Paid' }])
       case '/api/queries/qb.sponsor.cash-settings':
         return json(200, { items: [options.cash ?? { targets: 'KUDOS', defaultTarget: 'KUDOS', buyEnabled: false,
           sellEnabled: false }], offset: 0, limit: 1 })
@@ -145,7 +149,8 @@ describe('the wallet', () => {
     expect(within(rows[1]).getByRole('link', { name: /Details/ })).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent('JPY')
     // Q80: as cards: the amount as the title, the status a badge, the buttons at the foot.
-    await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+    await userEvent.click(within(within(screen.getByTestId('wallet-topups-section')).getByTestId('data-table-view'))
+      .getByRole('radio', { name: 'Cards' }))
     const cards = await screen.findAllByTestId('topup-row')
     expect(cards[0]).toHaveAttribute('data-slot', 'data-table-card')
     expect(cards[0].querySelector('[data-slot="data-table-card-title"]')).toHaveTextContent('Kudos')

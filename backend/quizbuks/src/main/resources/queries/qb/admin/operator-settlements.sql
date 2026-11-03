@@ -16,6 +16,7 @@ results:
   periodStart: { from: QbOperatorSettlement.periodStart }
   periodEnd: { from: QbOperatorSettlement.periodEnd }
   revenue: { from: QbOperatorSettlement.revenue }
+  platformFees: { from: QbOperatorSettlement.platformFees }
   platformShare: { from: QbOperatorSettlement.platformShare }
   operatorShare: { from: QbOperatorSettlement.operatorShare }
   prospectingCost: { from: QbOperatorSettlement.prospectingCost }
@@ -50,6 +51,7 @@ SELECT
     s.{{QbOperatorSettlement.periodStart}} AS periodStart,
     s.{{QbOperatorSettlement.periodEnd}} AS periodEnd,
     s.{{QbOperatorSettlement.revenue}} AS revenue,
+    s.{{QbOperatorSettlement.platformFees}} AS platformFees,
     s.{{QbOperatorSettlement.platformShare}} AS platformShare,
     s.{{QbOperatorSettlement.operatorShare}} AS operatorShare,
     s.{{QbOperatorSettlement.prospectingCost}} AS prospectingCost,

@@ -194,6 +194,16 @@ public final class QbParams {
     public static final String KUDOS_SELL_ENABLED = "qb.kudos.sell.enabled";
     /** Q87a (D-Q87-0): the platform's share of each transfer, as a fraction, added to the fixed fee (rounded down). */
     public static final String TRANSFER_FEE_RATE = "qb.transfer.fee-rate";
+    /**
+     * Q87b (D-Q87-4, D-Q87-5, D-Q87-7): the platform's fees - the monthly fee (0: none), the consumption tax rate,
+     * the billing mode of a sponsor without one of their own, whether unpaid fees block submitting and converting
+     * (all controlled); and (ordinary) the days an invoice is due in.
+     */
+    public static final String FEE_MONTHLY = "qb.fee.monthly";
+    public static final String FEE_TAX_RATE = "qb.fee.tax-rate";
+    public static final String FEE_DEFAULT_BILLING_MODE = "qb.fee.default-billing-mode";
+    public static final String FEE_OVERDUE_BLOCK = "qb.fee.overdue.block-submit";
+    public static final String FEE_DUE_DAYS = "qb.fee.due-days";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -248,9 +258,14 @@ public final class QbParams {
     public static final String JOURNAL_ACCOUNT_5130 = JOURNAL_ACCOUNT_PREFIX + "5130";
     /** Q87a: the sponsors' cash accounts. */
     public static final String JOURNAL_ACCOUNT_2160 = JOURNAL_ACCOUNT_PREFIX + "2160";
+    /** Q87b: the fees receivable, the fee revenue and the tax on it. */
+    public static final String JOURNAL_ACCOUNT_1130 = JOURNAL_ACCOUNT_PREFIX + "1130";
+    public static final String JOURNAL_ACCOUNT_4120 = JOURNAL_ACCOUNT_PREFIX + "4120";
+    public static final String JOURNAL_ACCOUNT_2150 = JOURNAL_ACCOUNT_PREFIX + "2150";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
         JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
-        JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160);
+        JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160, JOURNAL_ACCOUNT_1130,
+        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -274,6 +289,9 @@ public final class QbParams {
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
         KUDOS_BUY_ENABLED, KUDOS_SELL_ENABLED, TRANSFER_FEE_RATE);
+    /** Q87b: the platform fees' switches (controlled, after the cash account's, in this order). */
+    public static final List<String> FEE_PARAMS = List.of(FEE_MONTHLY, FEE_TAX_RATE, FEE_DEFAULT_BILLING_MODE,
+        FEE_OVERDUE_BLOCK);
 
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
@@ -284,7 +302,7 @@ public final class QbParams {
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
-        List.of(UNDERSTANDING_ENABLED), CASH_ACCOUNT_PARAMS).flatMap(List::stream).toList();
+        List.of(UNDERSTANDING_ENABLED), CASH_ACCOUNT_PARAMS, FEE_PARAMS).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -341,6 +359,9 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_2140, "2140 Operator shares payable"),
         journal(JOURNAL_ACCOUNT_5130, "5130 Operator shares"),
         journal(JOURNAL_ACCOUNT_2160, "2160 Sponsor cash accounts"),
+        journal(JOURNAL_ACCOUNT_1130, "1130 Platform fees receivable"),
+        journal(JOURNAL_ACCOUNT_4120, "4120 Platform fee revenue"),
+        journal(JOURNAL_ACCOUNT_2150, "2150 Consumption tax payable"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
@@ -458,7 +479,17 @@ public final class QbParams {
         new Param(KUDOS_SELL_ENABLED, BOOL, false, "Whether sponsors may turn Kudos back into cash"),
         new Param(TRANSFER_FEE_RATE, Map.of("type", "numeric", "precision", 4, "scale", 4), "0",
             "The platform's share of each transfer, as a fraction from 0 to below 1, added to the fixed fee "
-                + "(rounded down; 0: none)"));
+                + "(rounded down; 0: none)"),
+        // Q87b: the platform's fees. The due days are ordinary; the rest controlled (last, in the order of
+        // FEE_PARAMS). The declared values keep what the platform did before: no fee, prepaid.
+        new Param(FEE_DUE_DAYS, DAYS, "30", "Days after a platform fee invoice is issued that it is due in"),
+        new Param(FEE_MONTHLY, KUDOS, "0", "The platform's monthly fee of each approved sponsor, in yen (0: none)"),
+        new Param(FEE_TAX_RATE, Map.of("type", "numeric", "precision", 4, "scale", 4), "0.10",
+            "The consumption tax rate on the platform's fees (0.1 = 10%)"),
+        new Param(FEE_DEFAULT_BILLING_MODE, Map.of("type", "text", "maxLength", 10), "PREPAID",
+            "How a sponsor without a billing mode of their own pays the platform's fees: PREPAID or POSTPAID"),
+        new Param(FEE_OVERDUE_BLOCK, BOOL, true,
+            "Whether unpaid platform fees stop a sponsor from converting cash to Kudos and submitting publications"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

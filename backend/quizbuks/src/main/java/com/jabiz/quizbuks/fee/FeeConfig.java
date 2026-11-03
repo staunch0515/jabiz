@@ -1,0 +1,287 @@
+package com.jabiz.quizbuks.fee;
+
+import com.jabiz.approval.ApprovalSubject;
+import com.jabiz.context.RequestContext;
+import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dictionary.StaticDictionary;
+import com.jabiz.document.DocumentLayout;
+import com.jabiz.entity.EntityDefinition;
+import com.jabiz.event.EventSubscription;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.job.JobItems;
+import com.jabiz.numbering.NumberSequence;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.wallet.TransferProcesses;
+import com.jabiz.retention.RetentionPolicy;
+import com.jabiz.runtime.approval.ApprovalProcesses;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.time.Period;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.Map;
+
+/** The beans of the platform's fees (Q87): entities, datasets, dictionaries, processes, jobs, the document, retention. */
+@Configuration
+public class FeeConfig {
+
+    private final String poolRef;
+    private final ZoneId zone;
+
+    FeeConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+        @Value("${jabiz.fiscal-year-zone:UTC}") String zone) {
+        this.poolRef = poolRef;
+        ZoneId zoneId;
+        try {
+            zoneId = ZoneId.of(zone);
+        } catch (RuntimeException e) {
+            zoneId = ZoneOffset.UTC;
+        }
+        this.zone = zoneId;
+    }
+
+    // ---- entities and datasets ---------------------------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbFeeChargeEntity() {
+        return QbFees.CHARGE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbFeeInvoiceEntity() {
+        return QbFees.INVOICE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbFeeRequestEntity() {
+        return QbFees.REQUEST_ENTITY;
+    }
+
+    /** Finance reads every charge, invoice and request; only the processes write them. */
+    @Bean
+    DatasetDefinition qbFeeChargeDataset() {
+        return processOnly(QbFees.CHARGE);
+    }
+
+    @Bean
+    DatasetDefinition qbFeeInvoiceDataset() {
+        return processOnly(QbFees.INVOICE);
+    }
+
+    @Bean
+    DatasetDefinition qbFeeRequestDataset() {
+        return processOnly(QbFees.REQUEST);
+    }
+
+    /** A sponsor's own charges and invoices, read only. */
+    @Bean
+    DatasetDefinition qbSponsorFeeChargeDataset() {
+        return own(QbFees.SPONSOR_CHARGES, QbFees.CHARGE);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorFeeInvoiceDataset() {
+        return own(QbFees.SPONSOR_INVOICES, QbFees.INVOICE);
+    }
+
+    private DatasetDefinition processOnly(String entity) {
+        return DatasetDefinition.define(QbFees.defaultDataset(entity), d -> d
+            .targetEntityType(entity)
+            .asDefault()
+            .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(10))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    private DatasetDefinition own(String id, String entity) {
+        return DatasetDefinition.define(id, d -> d
+            .targetEntityType(entity)
+            .permissions(QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+    }
+
+    @Bean
+    StaticDictionary qbFeeKindDictionary() {
+        return StaticDictionary.define(QbFees.KIND_DICTIONARY, d -> d
+            .item(FeeRules.MONTHLY, "en", "Monthly fee", "zh", "月费", "ja", "月額料金")
+            .item(FeeRules.MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金"));
+    }
+
+    @Bean
+    StaticDictionary qbBillingModeDictionary() {
+        return StaticDictionary.define(QbFees.BILLING_MODE_DICTIONARY, d -> d
+            .item(FeeRules.PREPAID, "en", "Prepaid", "zh", "预付", "ja", "前払い")
+            .item(FeeRules.POSTPAID, "en", "Postpaid", "zh", "后付", "ja", "後払い"));
+    }
+
+    @Bean
+    StaticDictionary qbFeeInvoiceStatusDictionary() {
+        return StaticDictionary.define(QbFees.INVOICE_STATUS_DICTIONARY, d -> d
+            .item(QbFees.OPEN, "en", "Open", "zh", "待付", "ja", "未払い")
+            .item(QbFees.OVERDUE, "en", "Overdue", "zh", "逾期", "ja", "期限超過")
+            .item(QbFees.PAID, "en", "Paid", "zh", "已付", "ja", "支払済み")
+            .item(QbFees.VOID, "en", "Voided", "zh", "已作废", "ja", "取消済み"));
+    }
+
+    @Bean
+    StaticDictionary qbFeeRequestKindDictionary() {
+        return StaticDictionary.define(QbFees.REQUEST_KIND_DICTIONARY, d -> d
+            .item(QbFees.REQUEST_MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
+            .item(QbFees.REQUEST_VOID, "en", "Invoice voided", "zh", "作废账单", "ja", "請求書の取消"));
+    }
+
+    @Bean
+    StaticDictionary qbFeeRequestStatusDictionary() {
+        return StaticDictionary.define(QbFees.REQUEST_STATUS_DICTIONARY, d -> d
+            .item(QbFees.REVIEW, "en", "Awaiting approval", "zh", "待批准", "ja", "承認待ち")
+            .item(QbFees.DONE, "en", "Done", "zh", "已执行", "ja", "実行済み")
+            .item(QbFees.REJECTED, "en", "Rejected", "zh", "已拒绝", "ja", "却下"));
+    }
+
+    /** {@code QBF-2026-00001}: one count per year, without gaps. */
+    @Bean
+    NumberSequence qbFeeInvoiceNumbers() {
+        return NumberSequence.define(QbFees.INVOICE_SEQUENCE, s -> s.format("QBF-{scope}-{n:5}").scoped());
+    }
+
+    @Bean
+    ApprovalSubject qbFeeRequestApprovalSubject() {
+        return ApprovalSubject.define(QbFees.APPROVAL_SUBJECT, s -> s.entity(QbFees.REQUEST).bool("feeRequest")
+            .text("kind").text("sponsorId").number("amount"));
+    }
+
+    @Bean
+    DocumentLayout qbFeeInvoiceLayout() {
+        return FeeDocuments.LAYOUT;
+    }
+
+    // ---- processes ----------------------------------------------------------------------------------------------------
+
+    @Bean
+    ProcessDefinition<FeeProcesses.ChargeInput, FeeProcesses.ChargeOutput, ProcessContext> qbFeeCharge() {
+        return FeeProcesses.charge(zone);
+    }
+
+    @Bean
+    ProcessDefinition<FeeProcesses.MonthlyInput, FeeProcesses.ItemOutput, ProcessContext> qbFeeMonthlyItem() {
+        return FeeProcesses.monthlyItem();
+    }
+
+    @Bean
+    ProcessDefinition<FeeProcesses.InvoiceInput, FeeProcesses.ItemOutput, ProcessContext> qbFeeInvoiceItem() {
+        return FeeProcesses.invoiceItem(zone);
+    }
+
+    @Bean
+    ProcessDefinition<FeeProcesses.InvoiceRef, FeeProcesses.InvoiceOutput, ProcessContext> qbFeeInvoicePay() {
+        return FeeProcesses.pay();
+    }
+
+    @Bean
+    ProcessDefinition<FeeProcesses.DocumentInput, FeeProcesses.InvoiceOutput, ProcessContext> qbFeeInvoiceDocument() {
+        return FeeProcesses.document();
+    }
+
+    @Bean
+    ProcessDefinition<FeeProcesses.InvoiceRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeOverdueItem() {
+        return FeeProcesses.overdueItem(zone);
+    }
+
+    @Bean
+    ProcessDefinition<FeeProcesses.BillingInput, FeeProcesses.BillingOutput, ProcessContext> qbOperatorBillingSet() {
+        return FeeProcesses.billingSet();
+    }
+
+    @Bean
+    ProcessDefinition<FeeRequests.RequestInput, FeeRequests.RequestOutput, ProcessContext> qbFeeRequest() {
+        return FeeRequests.record();
+    }
+
+    @Bean
+    ProcessDefinition<TransferProcesses.ApprovalResultInput, FeeRequests.RequestOutput, ProcessContext>
+        qbFeeRequestApprovalResult() {
+        return FeeRequests.approvalResult(zone);
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbFeeRequestApprovedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, FeeRequests.RequestOutput, ProcessContext>
+            qbFeeRequestApprovalResult) {
+        return EventSubscription.of("qb.fee-request-approved", ApprovalProcesses.APPROVED_EVENT,
+            qbFeeRequestApprovalResult, TransferProcesses::resultInput);
+    }
+
+    @Bean
+    EventSubscription<TransferProcesses.ApprovalResultInput> qbFeeRequestRejectedSubscription(
+        ProcessDefinition<TransferProcesses.ApprovalResultInput, FeeRequests.RequestOutput, ProcessContext>
+            qbFeeRequestApprovalResult) {
+        return EventSubscription.of("qb.fee-request-rejected", ApprovalProcesses.REJECTED_EVENT,
+            qbFeeRequestApprovalResult, TransferProcesses::resultInput);
+    }
+
+    // ---- jobs (the second of each month, Japan's: the fee of the month that begins, the invoices of the month that ended)
+
+    /** The monthly fee, charged on the 2nd at 01:07 (Japan) for the month that began. */
+    @Bean
+    JobDefinition<FeeProcesses.MonthlyInput> qbFeeMonthlyJob(
+        ProcessDefinition<FeeProcesses.MonthlyInput, FeeProcesses.ItemOutput, ProcessContext> qbFeeMonthlyItem) {
+        return JobDefinition.forEach(FeeProcesses.MONTHLY_JOB, "0 7 16 1 * *", ZoneOffset.UTC,
+                JobItems.template(FeeProcesses.MONTHLY_DUE_TEMPLATE,
+                    scheduledTime -> Map.of("period", FeeRules.period(scheduledTime, zone)), "sponsorId"),
+                qbFeeMonthlyItem,
+                (scheduledTime, row) -> new FeeProcesses.MonthlyInput(String.valueOf(row.get("sponsorId")),
+                    FeeRules.period(scheduledTime, zone)))
+            .maxItems(10_000);
+    }
+
+    /** The postpaid invoices, issued on the 2nd at 01:17 (Japan) for the month that ended. */
+    @Bean
+    JobDefinition<FeeProcesses.InvoiceInput> qbFeeInvoiceJob(
+        ProcessDefinition<FeeProcesses.InvoiceInput, FeeProcesses.ItemOutput, ProcessContext> qbFeeInvoiceItem) {
+        return JobDefinition.forEach(FeeProcesses.INVOICE_JOB, "0 17 16 1 * *", ZoneOffset.UTC,
+                JobItems.template(FeeProcesses.INVOICES_DUE_TEMPLATE,
+                    scheduledTime -> Map.of("period", previousPeriod(scheduledTime)), "sponsorId"),
+                qbFeeInvoiceItem,
+                (scheduledTime, row) -> new FeeProcesses.InvoiceInput(String.valueOf(row.get("sponsorId")),
+                    previousPeriod(scheduledTime)))
+            .maxItems(10_000);
+    }
+
+    /** Every day at 02:37 (Japan): the invoices past their due day whose reminder is due. */
+    @Bean
+    JobDefinition<FeeProcesses.InvoiceRef> qbFeeOverdueJob(
+        ProcessDefinition<FeeProcesses.InvoiceRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeOverdueItem) {
+        return JobDefinition.forEach(FeeProcesses.OVERDUE_JOB, "0 37 17 * * *", ZoneOffset.UTC,
+                JobItems.template(FeeProcesses.OVERDUE_DUE_TEMPLATE, scheduledTime -> Map.of(
+                    "today", scheduledTime.atZone(zone).toLocalDate(),
+                    "remindedBefore", scheduledTime.minus(java.time.Duration.ofDays(QbFees.REMINDER_DAYS))),
+                    "invoiceId"),
+                qbFeeOverdueItem,
+                (scheduledTime, row) -> new FeeProcesses.InvoiceRef(String.valueOf(row.get("invoiceId"))))
+            .maxItems(10_000);
+    }
+
+    private String previousPeriod(java.time.Instant scheduledTime) {
+        return FeeRules.period(FeeRules.periodStart(FeeRules.period(scheduledTime, zone), zone).minusSeconds(1), zone);
+    }
+
+    // ---- retention (platform 16v-1): ten years from the fiscal year's end, as the receipts ----------------------------
+
+    static final Period RETENTION = Period.ofYears(10);
+
+    @Bean
+    RetentionPolicy qbFeeChargeRetention() {
+        return RetentionPolicy.of(QbFees.CHARGE).keep(RETENTION).from("chargedAt").afterFiscalYearEnd();
+    }
+
+    @Bean
+    RetentionPolicy qbFeeInvoiceRetention() {
+        return RetentionPolicy.of(QbFees.INVOICE).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
+    }
+}
