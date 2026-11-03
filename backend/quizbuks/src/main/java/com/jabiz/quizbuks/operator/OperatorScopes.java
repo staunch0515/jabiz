@@ -65,6 +65,7 @@ public final class OperatorScopes {
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.CONVERSATION, "sponsorId");
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.MESSAGE, "sponsorId");
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.PURCHASE, "sponsorId");
+        fields.put(com.jabiz.quizbuks.benefit.QbBenefits.ALLOCATION, "sponsorId");
         // Q60c-2: the public counters' counts of sponsors' pages and products, by their owner (the sponsor).
         fields.put(PublicCounterEntities.ENTITY, "ownerKey");
         for (String entity : new String[] {QbPublications.COUNTER, QbPublications.START_COUNTER,

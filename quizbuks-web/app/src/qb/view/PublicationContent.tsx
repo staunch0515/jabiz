@@ -259,6 +259,10 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
               data-testid="detail-method-note" data-method={p.rewardMethod}>
               <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
               {prizeText && <span className="font-medium whitespace-pre-line" data-testid="detail-prize">{prizeText}</span>}
+              {/* Q89b-1: another sponsor's benefit is collected at its provider's place. */}
+              {p.rewardMethod === 'OFFLINE_REDEEM' && p.fulfillerCompany && (
+                <span data-testid="detail-fulfiller">{t('detail.collectAt', { company: p.fulfillerCompany })}</span>
+              )}
             </div>
           )}
           {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}

@@ -57,4 +57,6 @@ public final class PublishingLimits {
     public static final int DIGITAL_CODES_PER_LOAD = 1_000;
     /** Q33: the most winners a pool-delivered publication may name (the pool is checked to cover them). */
     public static final int MAX_POOL_WINNERS = 10_000;
+    /** Q89b-1: the most publications one purchase is shared among (each holds one allocation). */
+    public static final int MAX_BENEFIT_ALLOCATIONS = 1_000;
 }

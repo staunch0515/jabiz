@@ -58,6 +58,8 @@ handed AS (
     FROM {{QbRedemption}} r
     CROSS JOIN bounds b
     WHERE r.{{QbRedemption.status}} = 'REDEEMED' AND r.{{QbRedemption.redeemedBy}} IS NOT NULL
+      -- Q89b-1: the sponsor's own prizes (another sponsor's benefit is its provider's to hand over).
+      AND r.{{QbRedemption.fulfillerId}} IS NULL
     GROUP BY r.{{QbRedemption.redeemedBy}}, b.z)
 SELECT
     h.handler                     AS handlerId,

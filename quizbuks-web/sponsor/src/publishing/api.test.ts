@@ -13,6 +13,7 @@ import {
 import { publicationIdOf, publicationPath } from './paths'
 
 const FORM: PublicationForm = {
+  benefitPurchaseId: '',
   name: '  Spring quiz ',
   cover: null,
   quizId: 'q1',

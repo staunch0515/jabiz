@@ -48,7 +48,15 @@ export const digitalPoolQuery = (publicationId: string) => ['qb', 'digital-pool'
  * (`QB_DIGITAL_CODES_REVOKE`; refused while the publication is in review or running), and the rows with each code's
  * last characters only: the codes themselves are never read back.
  */
-export function DigitalPoolSection({ publicationId, status }: { publicationId: string; status: PublicationStatus }) {
+export function DigitalPoolSection({ publicationId, status, mode = 'own' }: {
+  publicationId: string
+  status: PublicationStatus
+  /**
+   * Q89b-2: `own` for the publisher's own pool; `provided` for the provider of another sponsor's digital product, who
+   * loads its codes (its own templates); `watch` for the publisher of such a publication, who only follows the pool.
+   */
+  mode?: 'own' | 'provided' | 'watch'
+}) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const id = useId()
@@ -58,13 +66,14 @@ export function DigitalPoolSection({ publicationId, status }: { publicationId: s
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [confirmRevoke, setConfirmRevoke] = useState(false)
   const key = digitalPoolQuery(publicationId)
+  const provided = mode === 'provided'
   const refresh = () => queryClient.invalidateQueries({ queryKey: key })
 
-  const summary = useQuery({ queryKey: [...key, 'summary'], queryFn: () => readDigitalPoolSummary(publicationId) })
+  const summary = useQuery({ queryKey: [...key, 'summary'], queryFn: () => readDigitalPoolSummary(publicationId, provided) })
   const list = useQuery({
     queryKey: [...key, 'list', pagination],
     queryFn: () => searchDigitalCodes({ publicationId, offset: pagination.pageIndex * pagination.pageSize,
-      limit: pagination.pageSize }),
+      limit: pagination.pageSize, provided }),
     placeholderData: keepPreviousData,
   })
   const count = countCodeLines(lines)
@@ -134,6 +143,11 @@ export function DigitalPoolSection({ publicationId, status }: { publicationId: s
           </dl>
         )}
       </div>
+      {mode === 'watch' ? (
+        <p className="text-muted-foreground text-sm" data-testid="digital-pool-by-provider">
+          {t('publishing.digital.pool.byProvider')}
+        </p>
+      ) : (
       <form noValidate className="flex flex-col gap-2" onSubmit={(event) => {
         event.preventDefault()
         if (count > 0 && count <= DIGITAL_CODES_PER_LOAD && !load.isPending) load.mutate()
@@ -161,6 +175,7 @@ export function DigitalPoolSection({ publicationId, status }: { publicationId: s
           )}
         </div>
       </form>
+      )}
       {list.isError ? (
         <PageState kind="error" description={problemText(list.error)}
           action={<Button variant="outline" onClick={() => void list.refetch()}>{tQb('retry')}</Button>} />

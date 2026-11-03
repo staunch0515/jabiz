@@ -27,8 +27,11 @@ const PENDING = { purchaseId: 'p1', offerId: 'o1', otherCompany: 'Fridge A', kin
   submittedAt: '2026-11-03T01:00:00Z', confirmedAt: null, confirmedRevision: null, declineReason: null,
   editedAt: '2026-11-03T01:00:00Z', revision: 3 }
 
+const DIGITAL_CONFIRMED = { ...PENDING, purchaseId: 'p2', kind: 'DIGITAL', title: 'Film pass', pickupAddress: null,
+  pickupHours: null, status: 'CONFIRMED', confirmedAt: '2026-11-03T02:00:00Z', confirmedRevision: 3 }
+
 /** The server for an approved sponsor; `held` is whether it holds the sponsor's benefit certification. */
-function server({ held = true }: { held?: boolean } = {}) {
+function server({ held = true, digital = false }: { held?: boolean; digital?: boolean } = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
@@ -60,7 +63,17 @@ function server({ held = true }: { held?: boolean } = {}) {
       case '/api/queries/qb.sponsor.benefit-offers':
         return json(200, { items: [], offset: 0, limit: 100 })
       case '/api/queries/qb.sponsor.benefit-orders':
-        return json(200, { items: [PENDING], offset: 0, limit: 200 })
+        return json(200, { items: [digital ? DIGITAL_CONFIRMED : PENDING], offset: 0, limit: 200 })
+      case '/api/queries/qb.sponsor.benefit-publications':
+        return json(200, { items: params.purchaseId === 'p2' ? [{ publicationId: 'pub1', name: 'Film quiz', status: 'DRAFT',
+          rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'POOL', maxWinners: 50, benefitPurchaseId: 'p2',
+          sponsorCompany: 'Fridge A', available: 0, issued: 0 }] : [], offset: 0, limit: 200 })
+      case '/api/queries/qb.sponsor.benefit-digital-pool-summary':
+        return json(200, { items: [{ available: 0, issued: 0, revoked: 0 }], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.benefit-digital-codes':
+        return json(200, { items: [], offset: 0, limit: 20, total: 0 })
+      case '/api/processes/QB_DIGITAL_CODES_LOAD/latest':
+        return json(200, { output: { publicationId: 'pub1', loaded: 2, available: 2 } })
       case '/api/queries/qb.sponsor.benefit-purchases':
         return json(200, { items: [], offset: 0, limit: 200 })
       case '/api/processes/QB_BENEFIT_CONVERSATION_OPEN/latest':
@@ -154,5 +167,20 @@ describe('sponsored benefits (Q89a)', () => {
     const dialog = await screen.findByRole('alertdialog')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm: received and will provide' }))
     await waitFor(() => expect(calls('QB_BENEFIT_PURCHASE_CONFIRM')).toEqual([{ purchaseId: 'p1', baseRevision: 3 }]))
+  })
+
+  it('let the provider of a digital product load the codes of a buyer\'s publication (Q89b-2)', async () => {
+    const { calls } = server({ digital: true })
+    window.history.replaceState(null, '', purchasePath('p2', 'PROVIDER'))
+    render(<App />)
+    const row = await screen.findByTestId('benefit-provided-row')
+    expect(row).toHaveTextContent('Film quiz')
+    expect(row).toHaveTextContent('Fridge A')
+    await userEvent.click(within(row).getByTestId('benefit-provided-codes'))
+    await userEvent.type(await within(row).findByTestId('digital-pool-lines'), 'CODE-1{enter}CODE-2')
+    await userEvent.click(within(row).getByTestId('digital-pool-load'))
+    await waitFor(() => expect(calls('QB_DIGITAL_CODES_LOAD')).toEqual([
+      { publicationId: 'pub1', pastedCodes: 'CODE-1\nCODE-2' }]))
+    await expectAccessible()
   })
 })

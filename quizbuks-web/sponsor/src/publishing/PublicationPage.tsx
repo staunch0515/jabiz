@@ -89,6 +89,8 @@ function AdminNotice({ publication }: { publication: Publication }) {
 /** Whether the publication hands out digital prizes from a pool of codes (Q33): its page then carries the pool. */
 const pooled = (publication: Publication) =>
   publication.rewardMethod === 'DIGITAL_PRIZE' && publication.digitalDelivery === 'POOL'
+/** Q89b-2: a pool of another sponsor's digital product is its provider's to load; the publisher follows it. */
+const poolMode = (publication: Publication) => (publication.benefitPurchaseId ? 'watch' : 'own')
 
 /** A submitted publication: frozen (D-Q4-2), shown as it is with what can still be done in its state. */
 function PublicationView({ detail, stale, onStale }: {
@@ -166,7 +168,8 @@ function PublicationView({ detail, stale, onStale }: {
       {publication.referral && publication.status !== 'DRAFT' && (
         <ReferralsSection publicationId={publication.publicationId} />
       )}
-      {pooled(publication) && <DigitalPoolSection publicationId={publication.publicationId} status={publication.status} />}
+      {pooled(publication) && <DigitalPoolSection publicationId={publication.publicationId} status={publication.status}
+        mode={poolMode(publication)} />}
       {dates.length > 0 && (
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-medium">{t('publishing.detail.dates')}</h2>
@@ -256,7 +259,8 @@ export function PublicationPage({ publicationId }: { publicationId: string }) {
         <PublicationWizard key={generation} detail={detail} initialStep={initialStep} stale={stale}
           onStale={() => setStale(true)} header={draftHeader(detail)} />
         {pooled(detail.publication) && (
-          <DigitalPoolSection publicationId={detail.publication.publicationId} status={detail.publication.status} />
+          <DigitalPoolSection publicationId={detail.publication.publicationId} status={detail.publication.status}
+            mode={poolMode(detail.publication)} />
         )}
       </div>
     )

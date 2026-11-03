@@ -25,6 +25,9 @@ export const BENEFIT_TEMPLATE = {
   inquiryMessages: 'qb.sponsor.benefit-inquiry-messages',
   purchases: 'qb.sponsor.benefit-purchases',
   orders: 'qb.sponsor.benefit-orders',
+  publications: 'qb.sponsor.benefit-publications',
+  digitalPoolSummary: 'qb.sponsor.benefit-digital-pool-summary',
+  digitalCodes: 'qb.sponsor.benefit-digital-codes',
 } as const
 
 /** `benefit.QbBenefits` and `BenefitRules`: the policies, kinds and limits the server applies. */

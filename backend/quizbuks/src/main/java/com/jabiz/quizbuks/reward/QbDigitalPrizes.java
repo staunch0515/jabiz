@@ -112,7 +112,9 @@ public final class QbDigitalPrizes {
         eb.field("deliveredAt", f -> f.physicalColumn("delivered_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("deliveredBy", f -> f.physicalColumn("delivered_by").processOnly().asText(10));
-        // The content sealed under the sponsor's id: opened for the winner only.
+        // Q89b-2: the sponsor whose digital product it is (its provider loaded the codes); none: the publisher.
+        eb.field("fulfillerId", f -> f.physicalColumn("fulfiller_id").immutable(true).processOnly().asText(128));
+        // The content sealed under its hander's id (QbRewards.handlerOf): opened for the winner only.
         eb.field("sealedContent", f -> f.physicalColumn("sealed_content").sensitive()
             .asText(PublishingLimits.SEALED_LENGTH));
         eb.field("hint", f -> f.physicalColumn("hint").processOnly().asText(HINT_LENGTH + 1));

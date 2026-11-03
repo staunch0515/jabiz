@@ -647,6 +647,8 @@ public final class AttemptFinishing {
             values.put("description", plan.card().get("redeemDescription") == null ? ""
                 : plan.card().get("redeemDescription"));
             values.put("expiresAt", end != null && end.isAfter(expires) ? end : expires);
+            // Q89b-1: another sponsor's benefit is handed over by its provider, as the card froze it.
+            values.put("fulfillerId", plan.card().get("fulfillerId"));
             ctx.put(EXTERNAL_ID, ctx.changes().insert(QbRewards.REDEMPTION, values));
         }
     }
@@ -666,6 +668,8 @@ public final class AttemptFinishing {
         values.remove("code");
         values.put("description", card.get("digitalDescription"));
         values.put("delivery", delivery == null ? DigitalDelivery.SPONSOR_SENT : delivery);
+        // Q89b-2: another sponsor's digital product: its provider loaded the code (sealed under its key).
+        values.put("fulfillerId", card.get("fulfillerId"));
         EntityInstance code = DigitalDelivery.POOL.equals(delivery) ? first(ctx, POOL_CODE) : null;
         String sealed = code != null ? code.get("sealedContent")
             : DigitalDelivery.SHARED.equals(delivery) ? card.get("sealedDigitalContent") : null;

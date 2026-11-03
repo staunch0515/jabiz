@@ -92,6 +92,23 @@ public final class DigitalCodeProcesses {
         return ctx.get(PUBLICATION, EntityInstance.class);
     }
 
+    /**
+     * Q89b-2: the caller loads and revokes the pool's codes only as its hander, the provider of the digital product
+     * when it is another sponsor's, the publisher otherwise (the codes are sealed under the caller's key, and opened
+     * under the hander's); anybody else finds no publication (404).
+     */
+    static void requireHandler(ProcessContext ctx) {
+        EntityInstance publication = publication(ctx);
+        Object fulfiller = publication.get("fulfillerId");
+        boolean handler = fulfiller != null ? ctx.request().actorId().equals(String.valueOf(fulfiller))
+            : com.jabiz.quizbuks.publishing.PublisherKind.sponsor(publication.get("publisherKind"))
+                && ctx.request().actorId().equals(String.valueOf((Object) publication.get("publisherId")));
+        if (!handler) {
+            throw new com.jabiz.runtime.EntityNotFoundException(QbPublications.PUBLICATION + " "
+                + ctx.get(PUB_ID) + " not found");
+        }
+    }
+
     /** Whether the publication is a digital prize delivered from a pool; otherwise 422. */
     static boolean pooled(ProcessContext ctx) {
         EntityInstance publication = publication(ctx);
@@ -132,15 +149,17 @@ public final class DigitalCodeProcesses {
             .outputMapper(ctx -> ctx.get(OUTPUT, LoadOutput.class))
             .step("Lock the pool", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbDigitalPrizes.poolLockName(ctx.get(PUB_ID))))
-            .step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
+            // Q89b-2: the codes are its hander's to load: the publisher's, or the provider's of a digital product.
+            .step("Load the publication", LoadEntity.by(QbPublications.defaultDataset(QbPublications.PUBLICATION),
                 PUB_ID, PUBLICATION))
+            .compute("Refuse a pool the caller does not load", (metadata, ctx) -> requireHandler(ctx))
             .compute("Read the lines", (metadata, ctx) -> parse(ctx))
             // The last sequence number, and how many are available: the output tells the sponsor where they stand.
             .step("Load the pool's end", QueryEntities.<ProcessContext>all(
-                QueryEntities.query(QbDigitalPrizes.sponsorDataset(QbDigitalPrizes.DIGITAL_CODE), ctx -> EntityQuery.builder()
+                QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_CODE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("publicationId", ctx.hasViolations() ? List.of()
                         : List.of(ctx.get(PUB_ID)))).orderBy("seq", false).limit(1).build(), LAST),
-                QueryEntities.query(QbDigitalPrizes.sponsorDataset(QbDigitalPrizes.DIGITAL_CODE), ctx -> codes(ctx,
+                QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_CODE), ctx -> codes(ctx,
                     DigitalPrizeStatus.CODE_AVAILABLE, !ctx.hasViolations()), AVAILABLE)))
             .step("Seal the codes", StepSpec.of(SealDigitalCodes.class, NoMetadata.INSTANCE))
             .compute("Add them to the pool", (metadata, ctx) -> insert(ctx)));
@@ -236,8 +255,9 @@ public final class DigitalCodeProcesses {
                     ctx -> PublicationMoves.lockName(ctx.get(PUB_ID))))
                 .step("Lock the pool", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbDigitalPrizes.poolLockName(ctx.get(PUB_ID))))
-                .step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
+                .step("Load the publication", LoadEntity.by(QbPublications.defaultDataset(QbPublications.PUBLICATION),
                     PUB_ID, PUBLICATION))
+                .compute("Refuse a pool the caller does not load", (metadata, ctx) -> requireHandler(ctx))
                 .compute("Check the publication", (metadata, ctx) -> {
                     if (!pooled(ctx)) {
                         return;
@@ -251,7 +271,7 @@ public final class DigitalCodeProcesses {
                     }
                 })
                 .step("Load the available codes", QueryEntities.<ProcessContext>of(
-                    QbDigitalPrizes.sponsorDataset(QbDigitalPrizes.DIGITAL_CODE),
+                    QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_CODE),
                     ctx -> codes(ctx, DigitalPrizeStatus.CODE_AVAILABLE, !ctx.hasViolations()), AVAILABLE))
                 .compute("Revoke them", (metadata, ctx) -> {
                     if (ctx.hasViolations()) {

@@ -42,5 +42,19 @@ public final class BenefitCodes {
     /** The purchase changed since the caller read it: the provider confirms what it read. */
     public static final String PURCHASE_CHANGED = "QB_BENEFIT_PURCHASE_CHANGED";
 
+    /** Q89b-1: the purchase a publication draws on is not a confirmed purchase of its sponsor's. */
+    public static final String PURCHASE_NOT_USABLE = "QB_BENEFIT_PURCHASE_NOT_USABLE";
+    /** Q89b-1: goods and services are prizes collected at the provider's (OFFLINE_REDEEM). */
+    public static final String METHOD = "QB_BENEFIT_METHOD";
+    /** Q89b-1: one tier pays, and it pays the benefit's value (one prize per winner). */
+    public static final String ONE_TIER = "QB_BENEFIT_ONE_TIER";
+    /** Q89b-1: a publication drawing on a purchase says how many winners it has. */
+    public static final String QUOTA_REQUIRED = "QB_BENEFIT_QUOTA_REQUIRED";
+    /** Q89b-1: fewer of the purchase are left than the publication asks for. */
+    public static final String STOCK_SHORT = "QB_BENEFIT_STOCK_SHORT";
+
+    /** Q89b-2: a digital product is issued from codes its provider loads (the pool). */
+    public static final String DIGITAL_DELIVERY = "QB_BENEFIT_DIGITAL_DELIVERY";
+
     private BenefitCodes() {}
 }

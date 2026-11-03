@@ -41,7 +41,10 @@ import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } f
 import { useTranslation } from 'react-i18next'
 import { neutralName } from '../content/api'
 import { SPONSOR } from '../messages'
+import { type PublicationStatus } from '../publishing/api'
+import { DigitalPoolSection } from '../publishing/DigitalPool'
 import { APP_BASE } from '../publishing/paths'
+import { useStatusLabel } from '../publishing/shared'
 import { FileImage } from '../qb/FileImage'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
@@ -64,6 +67,7 @@ import {
   readConversations,
   readMessages,
   readMyOffers,
+  readProvidedPublications,
   readPurchases,
   saveOffer,
   savePurchase,
@@ -666,6 +670,7 @@ export function PurchasePage({ purchaseId, side, offerId }: { purchaseId: string
       {side === 'SPONSOR'
         ? <PurchaseForm key={`${data?.purchaseId}:${data?.revision}`} purchase={data ?? null} offerId={offerId ?? null} />
         : <ProviderAnswer purchase={data!} />}
+      {side === 'PROVIDER' && data && data.status !== 'DRAFT' && <ProvidedPublications purchase={data} />}
     </section>
   )
 }
@@ -864,5 +869,52 @@ function ProviderAnswer({ purchase }: { purchase: Purchase }) {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+/**
+ * Q89b-2: the buyer's publications that give the purchase away. A digital product's pool is the provider's to load
+ * (its codes are sealed under the provider's key and opened under it), so each pooled one opens its pool here.
+ */
+function ProvidedPublications({ purchase }: { purchase: Purchase }) {
+  const { t } = useTranslation(SPONSOR)
+  const statusLabel = useStatusLabel()
+  const [open, setOpen] = useState<string | null>(null)
+  const publications = useQuery({ queryKey: [...BENEFITS_QUERY, 'provided', purchase.purchaseId],
+    queryFn: () => readProvidedPublications(purchase.purchaseId) })
+  return (
+    <section className="flex flex-col gap-3" aria-labelledby="benefit-provided-title" data-testid="benefit-provided">
+      <h2 id="benefit-provided-title" className="text-lg font-semibold">{t('benefits.provided.title')}</h2>
+      <p className="text-muted-foreground text-sm">{t('benefits.provided.intro')}</p>
+      {publications.isError && <p className="text-destructive text-sm" role="alert">{problemText(publications.error)}</p>}
+      {publications.data?.length === 0 && (
+        <p className="text-muted-foreground text-sm" data-testid="benefit-provided-empty">{t('benefits.provided.empty')}</p>
+      )}
+      <ul className="flex flex-col gap-3">
+        {publications.data?.map((p) => {
+          const pooled = p.rewardMethod === 'DIGITAL_PRIZE' && p.digitalDelivery === 'POOL'
+          return (
+            <li key={p.publicationId} className="flex flex-col gap-3 rounded-md border p-3" data-testid="benefit-provided-row">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{p.name}</span>
+                <Badge variant="outline">{statusLabel(p.status)}</Badge>
+                {p.sponsorCompany && <span className="text-muted-foreground text-sm">
+                  {t('benefits.provided.by', { company: p.sponsorCompany })}</span>}
+                {pooled && <span className="text-muted-foreground text-sm tabular-nums">
+                  {t('benefits.provided.pool', { available: p.available, issued: p.issued })}</span>}
+                {pooled && (
+                  <Button variant="outline" size="sm" className="ml-auto" aria-expanded={open === p.publicationId}
+                    onClick={() => setOpen(open === p.publicationId ? null : p.publicationId)}
+                    data-testid="benefit-provided-codes">{t('benefits.provided.manage')}</Button>
+                )}
+              </div>
+              {pooled && open === p.publicationId && (
+                <DigitalPoolSection publicationId={p.publicationId} status={p.status as PublicationStatus} mode="provided" />
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

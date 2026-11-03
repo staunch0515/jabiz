@@ -36,7 +36,7 @@ public class OpenDigitalPrize implements BlockingStep<NoMetadata, ProcessContext
             return;
         }
         try {
-            ctx.put(DigitalPrizeProcesses.CONTENT, sealer.open(sealed, String.valueOf((Object) prize.get("publisherId"))));
+            ctx.put(DigitalPrizeProcesses.CONTENT, sealer.open(sealed, QbRewards.handlerOf(prize.attributes())));
         } catch (SealedSecrets.UnreadableSecretException e) {
             ctx.reject(new Violation("digitalPrizeId", RewardCodes.DIGITAL_UNREADABLE, "The prize's content cannot "
                 + "be opened: ask the sponsor to send it again", Map.of()));

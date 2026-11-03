@@ -4,6 +4,7 @@ import { minuteNow } from '../qb/legal'
 import { CRITERIA, type Condition } from '../qb/audience'
 import { AUDIENCE, PREREQUISITES, type Requirement } from '../qb/ids'
 import { referralPolicy, type ReferralPolicy } from '../qb/play'
+import { BENEFIT_TEMPLATE } from '../benefits/ids'
 import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_PROCESS, PUBLISHING_TEMPLATE } from './ids'
 
 /*
@@ -83,6 +84,8 @@ export interface Publication {
   /** How the reward reaches the taker (Q22); a prize at the sponsor's place is described. */
   rewardMethod: RewardMethod
   redeemDescription: string | null
+  /** Q89b-1: the confirmed purchase of another sponsor's goods the prize is (none: the sponsor's own prize). */
+  benefitPurchaseId: string | null
   /** A digital prize (Q33): how it reaches the winner, what it is, and the days a sponsor has to send one by hand. */
   digitalDelivery: DigitalDelivery | null
   digitalDescription: string | null
@@ -168,6 +171,8 @@ export interface TierInput {
 
 /** `PublicationProcesses.SaveInput`: every field is written as given (empty clears it; the time limit is then the version's). */
 export interface SaveInput {
+  /** Q89b-1: the purchase a prize collected at a provider's place is (none: the sponsor's own). */
+  benefitPurchaseId?: string | null
   publicationId: string | null
   versionId: string | null
   name: string
@@ -345,6 +350,7 @@ export function toPublication(row: Row): Publication {
     maxWinners: numOrNull(row.maxWinners),
     rewardMethod: methodOf(row.rewardMethod),
     redeemDescription: str(row.redeemDescription),
+    benefitPurchaseId: str(row.benefitPurchaseId),
     digitalDelivery: deliveryOf(row.digitalDelivery),
     digitalDescription: str(row.digitalDescription),
     digitalSendDays: numOrNull(row.digitalSendDays),
@@ -643,8 +649,16 @@ export interface DigitalPrizeRow {
   resolveNote: string | null
 }
 
-export async function readDigitalPoolSummary(publicationId: string): Promise<DigitalPoolSummary> {
-  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.digitalPoolSummary, { params: { publicationId }, limit: 1 })
+/**
+ * Q89b-2: the provider of another sponsor's digital product reads the pool through its own templates (`provided`);
+ * the publisher through the sponsor's.
+ */
+const poolTemplates = (provided: boolean) => provided
+  ? { summary: BENEFIT_TEMPLATE.digitalPoolSummary, codes: BENEFIT_TEMPLATE.digitalCodes }
+  : { summary: PUBLISHING_TEMPLATE.digitalPoolSummary, codes: PUBLISHING_TEMPLATE.digitalCodes }
+
+export async function readDigitalPoolSummary(publicationId: string, provided = false): Promise<DigitalPoolSummary> {
+  const page = await runQuery<Row>(poolTemplates(provided).summary, { params: { publicationId }, limit: 1 })
   const row = page.items[0] ?? {}
   return { available: num(row.available), issued: num(row.issued), revoked: num(row.revoked) }
 }
@@ -654,10 +668,11 @@ export interface DigitalCodeSearch {
   status?: DigitalCodeStatus | null
   offset: number
   limit: number
+  provided?: boolean
 }
 
-export async function searchDigitalCodes({ publicationId, status, offset, limit }: DigitalCodeSearch) {
-  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.digitalCodes, {
+export async function searchDigitalCodes({ publicationId, status, offset, limit, provided = false }: DigitalCodeSearch) {
+  const page = await runQuery<Row>(poolTemplates(provided).codes, {
     params: { publicationId },
     filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
     offset,
@@ -867,6 +882,8 @@ export interface PublicationForm {
   tiers: TierDraft[]
   rewardMethod: RewardMethod
   redeemDescription: string
+  /** Q89b-1: the purchase the prize is ('' for the sponsor's own prize). */
+  benefitPurchaseId: string
   /** Q33: the digital prize's delivery, description and send days as typed; the shared content as typed now only. */
   digitalDelivery: DigitalDelivery | null
   digitalDescription: string
@@ -919,6 +936,7 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     maxWinners: text(p?.maxWinners),
     rewardMethod: p?.rewardMethod ?? 'PLATFORM',
     redeemDescription: p?.redeemDescription ?? '',
+    benefitPurchaseId: p?.benefitPurchaseId ?? '',
     digitalDelivery: p?.digitalDelivery ?? null,
     digitalDescription: p?.digitalDescription ?? '',
     digitalSendDays: text(p?.digitalSendDays),
@@ -1012,6 +1030,9 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       rewardMethod: form.rewardMethod,
       redeemDescription: form.rewardMethod === 'OFFLINE_REDEEM' && form.redeemDescription.trim()
         ? form.redeemDescription.trim() : null,
+      // Q89b-1, Q89b-2: a prize collected at a provider's place or a digital prize draws on a purchase.
+      ...((form.rewardMethod === 'OFFLINE_REDEEM' || form.rewardMethod === 'DIGITAL_PRIZE') && form.benefitPurchaseId
+        ? { benefitPurchaseId: form.benefitPurchaseId } : {}),
       // The digital fields travel only with a digital prize; what another method left behind is not sent (Q33).
       ...(digital ? {
         digitalDelivery: form.digitalDelivery,
@@ -1069,7 +1090,7 @@ export function nextTier(tiers: readonly TierDraft[], fullScore: number | null):
 /** The fields of the publication the pages name (`entity.QbPublication.<field>` on the server). */
 export const PUBLICATION_FIELDS = ['name', 'versionId', 'regions', 'startAt', 'endAt', 'timeLimitSec', 'passScore',
   'pickCount', 'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'digitalDelivery', 'digitalDescription',
-  'digitalSendDays', 'digitalContent', 'audience', 'referral'] as const
+  'digitalSendDays', 'digitalContent', 'audience', 'referral', 'benefitPurchaseId'] as const
 export type PublicationField = (typeof PUBLICATION_FIELDS)[number]
 
 /**
@@ -1146,15 +1167,20 @@ export interface RedemptionSearch {
   handledBy?: string | null
   offset: number
   limit: number
+  provided?: boolean
 }
 
-export async function searchRedemptions({ q, status, since, handledBy, offset, limit }: RedemptionSearch) {
+/**
+ * Q89b-1: `provided` reads the prizes of other sponsors' benefits the caller hands over
+ * (`qb.sponsor.benefit-redemptions`), the same rows as its own.
+ */
+export async function searchRedemptions({ q, status, since, handledBy, offset, limit, provided }: RedemptionSearch) {
   const text = q?.trim()
   const params: Record<string, unknown> = {}
   if (text) params.q = text
   if (since) params.since = since
   if (handledBy) params.handledBy = handledBy
-  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.redemptions, {
+  const page = await runQuery<Row>(provided ? 'qb.sponsor.benefit-redemptions' : PUBLISHING_TEMPLATE.redemptions, {
     params,
     filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
     offset,

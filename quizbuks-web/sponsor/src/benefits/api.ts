@@ -261,3 +261,32 @@ export const declinePurchase = (purchaseId: string, reason: string, baseRevision
   runProcess<PurchaseOutput>(BENEFIT_PROCESS.decline, { purchaseId, reason, baseRevision })
 export const cancelPurchase = (purchaseId: string, baseRevision: number) =>
   runProcess<PurchaseOutput>(BENEFIT_PROCESS.cancel, { purchaseId, baseRevision })
+
+/** Q89b-2: a row of `qb.sponsor.benefit-publications`: a buyer's publication giving away what the caller provides. */
+export interface ProvidedPublication {
+  publicationId: string
+  name: string
+  status: string
+  rewardMethod: string
+  digitalDelivery: string | null
+  maxWinners: number | null
+  sponsorCompany: string | null
+  available: number
+  issued: number
+}
+
+export async function readProvidedPublications(purchaseId: string): Promise<ProvidedPublication[]> {
+  const page = await runQuery<Record<string, unknown>>(BENEFIT_TEMPLATE.publications,
+    { params: { purchaseId }, limit: 200 })
+  return page.items.map((row) => ({
+    publicationId: String(row.publicationId),
+    name: String(row.name ?? ''),
+    status: String(row.status ?? ''),
+    rewardMethod: String(row.rewardMethod ?? ''),
+    digitalDelivery: row.digitalDelivery == null ? null : String(row.digitalDelivery),
+    maxWinners: row.maxWinners == null ? null : Number(row.maxWinners),
+    sponsorCompany: row.sponsorCompany == null ? null : String(row.sponsorCompany),
+    available: Number(row.available ?? 0),
+    issued: Number(row.issued ?? 0),
+  }))
+}

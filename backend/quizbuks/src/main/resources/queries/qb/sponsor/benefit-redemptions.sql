@@ -1,0 +1,74 @@
+/*---
+id: qb.sponsor.benefit-redemptions
+description: "Q89b-1: the prizes of other sponsors' benefits the caller provides, collected at its place, newest first: claims to confirm, collected and open ones; searched by code or taker"
+entities: [QbRedemption, QbPublicationCard, QbProfile]
+datasets:
+  QbRedemption: urn:jabiz:dataset:fulfiller:QbRedemption
+  QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
+  QbProfile: urn:jabiz:dataset:default:QbProfile
+params:
+  q:     { kind: { type: text, maxLength: 100 }, description: "Only prizes whose code or the taker's name contains this text" }
+  since: { like: QbRedemption.dueAt, description: "Only prizes claimed or collected at or after this time (the redeem page's recent list)" }
+  handledBy: { kind: { type: text, maxLength: 128 }, description: "Q74: only prizes handed over by this user (one of qb.sponsor.redemption-handlers' handlerId), or SELF for the sponsor's own" }
+results:
+  redemptionId:    { from: QbRedemption.redemptionId }
+  code:            { from: QbRedemption.code }
+  publicationId:   { from: QbRedemption.publicationId }
+  publicationName: { from: QbPublicationCard.name }
+  sourceKind:      { from: QbRedemption.sourceKind }
+  takerName:       { from: QbProfile.displayName }
+  amount:          { from: QbRedemption.amount }
+  description:     { from: QbRedemption.description }
+  status:          { from: QbRedemption.status }
+  dueAt:           { from: QbRedemption.dueAt }
+  expiresAt:       { from: QbRedemption.expiresAt }
+  claimKind:       { from: QbRedemption.claimKind }
+  claimedAt:       { from: QbRedemption.claimedAt }
+  confirmBy:       { from: QbRedemption.confirmBy }
+  redeemedAt:      { from: QbRedemption.redeemedAt }
+  redeemedByName:  { from: QbProfile.displayName }
+  redeemedBy:      { from: QbRedemption.redeemedBy }
+  handledBySelf:   { kind: { type: bool } }
+list:
+  filters: [status, publicationId, dueAt, claimedAt, redeemedAt]
+  sorts:   [dueAt, claimedAt, redeemedAt, amount, status]
+  defaultSort: { field: dueAt, asc: false }
+  key: [redemptionId]
+permissions: [qb.benefit.use]
+---*/
+-- Q89b-1: the view holds the prizes the caller hands over for other sponsors; "self" is the provider itself.
+-- The taker's name as their profile gives it (none without a profile): what the sponsor sees at the counter next to
+-- the code; who handed it over when one of the sponsor's staff did (Q39; none when the sponsor did). The text is
+-- found as written: strpos takes it literally, so % _ and \ match themselves.
+SELECT
+    r.{{QbRedemption.sourceKind}}     AS sourceKind,
+    r.{{QbRedemption.redemptionId}}   AS redemptionId,
+    r.{{QbRedemption.code}}           AS code,
+    r.{{QbRedemption.publicationId}}  AS publicationId,
+    c.{{QbPublicationCard.name}}      AS publicationName,
+    p.{{QbProfile.displayName}}       AS takerName,
+    r.{{QbRedemption.amount}}         AS amount,
+    r.{{QbRedemption.description}}    AS description,
+    r.{{QbRedemption.status}}         AS status,
+    r.{{QbRedemption.dueAt}}          AS dueAt,
+    r.{{QbRedemption.expiresAt}}      AS expiresAt,
+    r.{{QbRedemption.claimKind}}      AS claimKind,
+    r.{{QbRedemption.claimedAt}}      AS claimedAt,
+    r.{{QbRedemption.confirmBy}}      AS confirmBy,
+    r.{{QbRedemption.redeemedAt}}     AS redeemedAt,
+    b.{{QbProfile.displayName}}       AS redeemedByName,
+    r.{{QbRedemption.redeemedBy}}     AS redeemedBy,
+    (r.{{QbRedemption.redeemedBy}} = r.{{QbRedemption.fulfillerId}}) AS handledBySelf
+FROM {{QbRedemption}} r
+JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbRedemption.publicationId}}
+LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = r.{{QbRedemption.userId}}
+LEFT JOIN {{QbProfile}} b ON b.{{QbProfile.userId}} = r.{{QbRedemption.redeemedBy}}
+                         AND r.{{QbRedemption.redeemedBy}} <> r.{{QbRedemption.fulfillerId}}
+WHERE (CAST(:q AS text) IS NULL
+       OR strpos(lower(r.{{QbRedemption.code}}), lower(CAST(:q AS text))) > 0
+       OR strpos(lower(coalesce(p.{{QbProfile.displayName}}, '')), lower(CAST(:q AS text))) > 0)
+  AND (CAST(:handledBy AS text) IS NULL
+       OR CAST(:handledBy AS text) = 'SELF' AND r.{{QbRedemption.redeemedBy}} = r.{{QbRedemption.fulfillerId}}
+       OR r.{{QbRedemption.redeemedBy}} = CAST(:handledBy AS text))
+  AND (CAST(:since AS timestamptz) IS NULL
+       OR r.{{QbRedemption.claimedAt}} >= :since OR r.{{QbRedemption.redeemedAt}} >= :since)
