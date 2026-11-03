@@ -18,6 +18,7 @@ results:
   zone:       { kind: { type: text, maxLength: 64 } }
 permissions: [qb.me]
 ---*/
+-- Q89b-1: a sponsor's counter hands over its own prizes and the other sponsors' benefits it provides (fulfillerId).
 -- One row (none when the caller is on no staff): the bounds are qb.app.staff-handled's, through the caller's own place.
 WITH run AS (
     SELECT coalesce(max(r.{{QbStatsRun.zone}}), 'UTC') AS z
@@ -45,7 +46,7 @@ SELECT
 FROM {{QbSponsorStaff}} s
 CROSS JOIN bounds b
 LEFT JOIN {{QbRedemption}} r ON r.{{QbRedemption.publisherKind}} = 'SPONSOR'
-                            AND r.{{QbRedemption.publisherId}} = s.{{QbSponsorStaff.sponsorId}}
+                            AND coalesce(r.{{QbRedemption.fulfillerId}}, r.{{QbRedemption.publisherId}}) = s.{{QbSponsorStaff.sponsorId}}
                             AND r.{{QbRedemption.redeemedBy}} = s.{{QbSponsorStaff.userId}}
                             AND r.{{QbRedemption.status}} = 'REDEEMED'
 GROUP BY b.z

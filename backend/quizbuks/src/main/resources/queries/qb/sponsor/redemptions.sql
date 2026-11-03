@@ -71,3 +71,5 @@ WHERE (CAST(:q AS text) IS NULL
        OR r.{{QbRedemption.redeemedBy}} = CAST(:handledBy AS text))
   AND (CAST(:since AS timestamptz) IS NULL
        OR r.{{QbRedemption.claimedAt}} >= :since OR r.{{QbRedemption.redeemedAt}} >= :since)
+  -- Q89b-1: another sponsor's benefit is handed over by its provider (qb.sponsor.benefit-redemptions), not here.
+  AND r.{{QbRedemption.fulfillerId}} IS NULL

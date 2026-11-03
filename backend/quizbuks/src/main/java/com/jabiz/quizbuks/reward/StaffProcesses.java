@@ -236,8 +236,9 @@ public final class StaffProcesses {
                 RedemptionProcesses.lockAndLoad(pb, QbRewards.defaultDataset(QbRewards.REDEMPTION));
                 pb.compute(confirm ? "Confirm" : "Decline", (metadata, ctx) -> {
                         EntityInstance redemption = RedemptionProcesses.redemption(ctx);
-                        if (!PublisherKind.sponsor(redemption.get("publisherKind")) || !String.valueOf(
-                            (Object) redemption.get("publisherId")).equals(ctx.get(SPONSOR_ID, String.class))) {
+                        // Q89b-1: the staff of the prize's hander (the provider of another sponsor's benefit).
+                        if (!PublisherKind.sponsor(redemption.get("publisherKind")) || !QbRewards.handlerOf(
+                            redemption.attributes()).equals(ctx.get(SPONSOR_ID, String.class))) {
                             // Another sponsor's prize: as if there were none.
                             throw new EntityNotFoundException(QbRewards.REDEMPTION + " " + redemption.id()
                                 + " not found");

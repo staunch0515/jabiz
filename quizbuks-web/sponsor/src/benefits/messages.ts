@@ -83,6 +83,14 @@ const en = {
       send: 'Send',
       hint: 'Contact and payment details are allowed here. Payments are between you: the platform does not take part in them.',
     },
+    redeem: { claimsTitle: 'Other sponsors\' benefits you provide: {{count}} claims to confirm' },
+    publishing: {
+      label: 'Prize from a benefit purchase',
+      own: 'My own prize',
+      option: '{{title}} · {{quantity}} bought · {{value}} each',
+      hint: 'Give away goods or a service you bought from another sponsor: its provider hands it over.',
+      chosen: 'One tier gives the benefit, worth {{value}}; the number of winners is taken from what is left of the purchase when you submit.',
+    },
     purchases: {
       title: 'Purchases',
       intro: 'What you bought from providers, and what other sponsors bought from you. The provider confirms each one.',
@@ -209,6 +217,14 @@ const zh: Texts = {
       send: '发送',
       hint: '这里可以交换联系方式与收款信息。付款在你们之间进行，平台不参与。',
     },
+    redeem: { claimsTitle: '您为其他商户提供的权益：{{count}} 个领取待确认' },
+    publishing: {
+      label: '奖品来自权益采购单',
+      own: '我自己的奖品',
+      option: '{{title}} · 已购 {{quantity}} 份 · 每份 {{value}}',
+      hint: '发放您向其他商户购买的商品或服务：由提供方交付。',
+      chosen: '只能有一档发放该权益（价值 {{value}}）；提交时从采购单剩余的份数中划拨获奖人数。',
+    },
     purchases: {
       title: '采购单',
       intro: '您向提供方购买的，以及其他商户向您购买的权益。每一张都由提供方确认。',
@@ -332,6 +348,14 @@ const ja: Texts = {
       reply: 'メッセージ',
       send: '送信',
       hint: '連絡先や振込先を書いてかまいません。支払いは当事者間で行い、プラットフォームは関与しません。',
+    },
+    redeem: { claimsTitle: 'ほかのスポンサーに提供している特典：確認待ちの受け取り {{count}} 件' },
+    publishing: {
+      label: '特典の購入から賞品にする',
+      own: '自社の賞品',
+      option: '{{title}} · {{quantity}} 点購入 · 1 点 {{value}}',
+      hint: 'ほかのスポンサーから購入した商品・サービスを配ります。引き渡しは提供者が行います。',
+      chosen: '特典を出す段階は 1 つだけ（価値 {{value}}）。提出時に購入の残りから当選者の数を割り当てます。',
     },
     purchases: {
       title: '購入',

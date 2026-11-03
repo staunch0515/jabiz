@@ -14,6 +14,7 @@ import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.operator.OperatorChecks;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.PublishEvent;
@@ -275,7 +276,13 @@ public final class RedemptionProcesses {
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.In("userId", List.of(ctx.request().actorId())),
                             new QueryPredicate.Eq("publisherKind", PublisherKind.SPONSOR),
-                            new QueryPredicate.In("publisherId", List.of(ctx.get(SPONSOR_ID))),
+                            // Q89b-1: the prizes this sponsor hands over: its own, and other sponsors' benefits it
+                            // provides.
+                            new QueryPredicate.Or(List.of(
+                                new QueryPredicate.And(List.of(
+                                    new QueryPredicate.In("publisherId", List.of(ctx.get(SPONSOR_ID))),
+                                    new QueryPredicate.IsNull("fulfillerId"))),
+                                new QueryPredicate.In("fulfillerId", List.of(ctx.get(SPONSOR_ID))))),
                             new QueryPredicate.In("status", List.<Object>copyOf(RedemptionStatus.OPEN)))))
                         .limit(50).build(), PRIZES),
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
@@ -355,8 +362,9 @@ public final class RedemptionProcesses {
     static void claim(ProcessContext ctx) {
         EntityInstance redemption = redemption(ctx);
         EntityInstance token = validToken(ctx);
+        // Q89b-1: the code is the hander's: the publisher's, or the provider's of another sponsor's benefit.
         if (!PublisherKind.sponsor(redemption.get("publisherKind")) || !String.valueOf((Object) token.get("sponsorId"))
-            .equals(String.valueOf((Object) redemption.get("publisherId")))) {
+            .equals(QbRewards.handlerOf(redemption.attributes()))) {
             ctx.reject(new Violation("scannedKey", RewardCodes.REDEEM_TOKEN_SPONSOR, "The prize is another sponsor's",
                 Map.of()));
             return;
@@ -405,7 +413,9 @@ public final class RedemptionProcesses {
                     .actsOn(QbRewards.REDEMPTION, "redemptionId", a -> a.whenField("status", RedemptionStatus.CLAIMED))
                     .contextFactory((s, input) -> start(s, input, input.redemptionId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, RedemptionOutput.class));
-                lockAndLoad(pb, QbRewards.sponsorDataset(QbRewards.REDEMPTION));
+                // Q89b-1: its hander answers (the provider of another sponsor's benefit); anybody else finds none.
+                lockAndLoad(pb, QbRewards.defaultDataset(QbRewards.REDEMPTION));
+                refuseNotHandler(pb);
                 pb.compute("Confirm", (metadata, ctx) -> confirm(ctx))
                     .step("Tell the taker", PublishEvent.<ProcessContext>when(RedemptionProcesses::changed,
                         REDEEMED_EVENT, RedemptionProcesses::payload));
@@ -456,7 +466,8 @@ public final class RedemptionProcesses {
                     .actsOn(QbRewards.REDEMPTION, "redemptionId", a -> a.whenField("status", RedemptionStatus.CLAIMED))
                     .contextFactory((s, input) -> start(s, input, input.redemptionId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, RedemptionOutput.class));
-                lockAndLoad(pb, QbRewards.sponsorDataset(QbRewards.REDEMPTION));
+                lockAndLoad(pb, QbRewards.defaultDataset(QbRewards.REDEMPTION));
+                refuseNotHandler(pb);
                 pb.compute("Decline", (metadata, ctx) -> decline(ctx))
                     .step("Tell the taker", PublishEvent.<ProcessContext>when(RedemptionProcesses::changed,
                         DECLINED_EVENT, RedemptionProcesses::payload));
@@ -558,6 +569,17 @@ public final class RedemptionProcesses {
     }
 
     // ---- shared ------------------------------------------------------------------------------------------------------
+
+    /** A prize the caller does not hand over is none (404): the sponsor's own, or a benefit it provides. */
+    static <I, O> void refuseNotHandler(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.compute("Refuse a prize the caller does not hand over", (metadata, ctx) -> {
+            EntityInstance redemption = redemption(ctx);
+            if (redemption != null && (!PublisherKind.sponsor(redemption.get("publisherKind"))
+                || !ctx.request().actorId().equals(QbRewards.handlerOf(redemption.attributes())))) {
+                throw new EntityNotFoundException(QbRewards.REDEMPTION + " " + redemption.id() + " not found");
+            }
+        });
+    }
 
     /** Locks the redemption and loads it through {@code dataset}: 404 unless the caller may see it. */
     static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, String dataset) {

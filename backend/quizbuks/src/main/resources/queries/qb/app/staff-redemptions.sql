@@ -27,6 +27,7 @@ list:
   key: [redemptionId]
 permissions: [qb.me]
 ---*/
+-- Q89b-1: a sponsor's counter hands over its own prizes and the other sponsors' benefits it provides (fulfillerId).
 -- The staff dataset is the caller's own place (none: no rows, and s.userId is the caller); the sponsor's prizes are read
 -- through it. A staff member sees what the counter needs (D-Q39-3): the claims waiting for an answer, and the prizes they
 -- handed over themselves; not the sponsor's history, nor what others handed over.
@@ -43,7 +44,7 @@ SELECT
     r.{{QbRedemption.redeemedAt}}    AS redeemedAt
 FROM {{QbSponsorStaff}} s
 JOIN {{QbRedemption}} r ON r.{{QbRedemption.publisherKind}} = 'SPONSOR'
-                       AND r.{{QbRedemption.publisherId}} = s.{{QbSponsorStaff.sponsorId}}
+                       AND coalesce(r.{{QbRedemption.fulfillerId}}, r.{{QbRedemption.publisherId}}) = s.{{QbSponsorStaff.sponsorId}}
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbRedemption.publicationId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = r.{{QbRedemption.userId}}
 WHERE (r.{{QbRedemption.status}} = 'CLAIMED' OR r.{{QbRedemption.redeemedBy}} = s.{{QbSponsorStaff.userId}})

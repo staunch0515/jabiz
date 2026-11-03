@@ -113,6 +113,12 @@ public final class QbPublications {
             .asCode(RewardMethod.DICTIONARY, RewardMethod.CODES.toArray(String[]::new)));
         eb.field("redeemDescription", f -> f.physicalColumn("redeem_description")
             .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
+        // Q89b-1: the confirmed purchase of another sponsor's goods or services the prize is (none: the sponsor's own
+        // prize); the benefit and purchase as the draft saw them (BenefitPublishing's JSON, what the review approves);
+        // and who hands the prize over, the purchase's provider.
+        eb.field("benefitPurchaseId", f -> f.physicalColumn("benefit_purchase_id").asText(36));
+        eb.field("benefitSnapshot", f -> f.physicalColumn("benefit_snapshot").processOnly().asText(4000, true));
+        eb.field("fulfillerId", f -> f.physicalColumn("fulfiller_id").processOnly().asText(128));
         // Q33: a digital prize's delivery, what it is (as the winner reads it), the days the sponsor has to send one
         // by hand, and the shared code or link sealed (sensitive: never read back, opened for a winner only).
         eb.field("digitalDelivery", f -> f.physicalColumn("digital_delivery")
@@ -404,6 +410,9 @@ public final class QbPublications {
             .asCode(RewardMethod.DICTIONARY, RewardMethod.CODES.toArray(String[]::new)));
         eb.field("redeemDescription", f -> f.physicalColumn("redeem_description").immutable(true)
             .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
+        // Q89b-1: the purchase the prizes come from and who hands them over (none: the publisher).
+        eb.field("benefitPurchaseId", f -> f.physicalColumn("benefit_purchase_id").immutable(true).asText(36));
+        eb.field("fulfillerId", f -> f.physicalColumn("fulfiller_id").immutable(true).asText(128));
         // Q33: the digital prize's delivery and description, and the shared content sealed (copied to each winner).
         eb.field("digitalDelivery", f -> f.physicalColumn("digital_delivery").immutable(true)
             .asCode(DigitalDelivery.DICTIONARY, DigitalDelivery.ALL.toArray(String[]::new)));

@@ -26,6 +26,7 @@ list:
   key: [redemptionId]
 permissions: [qb.me]
 ---*/
+-- Q89b-1: a sponsor's counter hands over its own prizes and the other sponsors' benefits it provides (fulfillerId).
 -- As the counter (qb.app.staff-redemptions, D-Q39-3): through the caller's own place on a staff only, so a former
 -- staff member sees nothing of that sponsor any more (D-Q74-1), and only what they handed over themselves. The days are
 -- the deployment's (jabiz.fiscal-year-zone, as the analytics job records it), the same bounds as
@@ -53,7 +54,7 @@ SELECT
 FROM {{QbSponsorStaff}} s
 CROSS JOIN bounds b
 JOIN {{QbRedemption}} r ON r.{{QbRedemption.publisherKind}} = 'SPONSOR'
-                       AND r.{{QbRedemption.publisherId}} = s.{{QbSponsorStaff.sponsorId}}
+                       AND coalesce(r.{{QbRedemption.fulfillerId}}, r.{{QbRedemption.publisherId}}) = s.{{QbSponsorStaff.sponsorId}}
                        AND r.{{QbRedemption.redeemedBy}} = s.{{QbSponsorStaff.userId}}
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbRedemption.publicationId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = r.{{QbRedemption.userId}}

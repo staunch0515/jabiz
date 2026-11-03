@@ -46,6 +46,7 @@ import { publicationPath, redeemLink } from './paths'
 import { posterPng, qrFileName, qrImageUrl, qrPng, qrSvg } from './qr'
 import { useRedemptionStatusLabel } from './shared'
 import { playSound } from '../qb/sound'
+import '../benefits/messages'
 
 export const REDEEM_PATH = '/redeem'
 export const REDEMPTIONS_QUERY = ['qb', 'redemptions'] as const
@@ -209,12 +210,15 @@ function PrintedCode() {
   )
 }
 
-/** The claims from the printed code waiting for the sponsor: the person at the counter, or not. */
-function Claims() {
+/**
+ * The claims from the printed code waiting for the sponsor: the person at the counter, or not. Q89b-1: `provided`
+ * lists those of other sponsors' benefits the sponsor provides (answered alike).
+ */
+function Claims({ provided = false }: { provided?: boolean }) {
   const { t } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
-  const claims = useQuery({ queryKey: [...REDEMPTIONS_QUERY, 'claims'],
-    queryFn: () => searchRedemptions({ status: 'CLAIMED', offset: 0, limit: 50 }),
+  const claims = useQuery({ queryKey: [...REDEMPTIONS_QUERY, 'claims', provided],
+    queryFn: () => searchRedemptions({ status: 'CLAIMED', offset: 0, limit: 50, provided }),
     refetchInterval: POLL_EVERY, refetchIntervalInBackground: false })
   const answer = useMutation({
     mutationFn: ({ redemptionId, confirm }: { redemptionId: string; confirm: boolean }) =>
@@ -235,9 +239,10 @@ function Claims() {
   const items = (claims.data?.items ?? []).filter((row) => !row.confirmBy || new Date(row.confirmBy).getTime() > now)
   if (items.length === 0) return null
   return (
-    <Alert variant="warning" data-testid="redeem-claims">
+    <Alert variant="warning" data-testid={provided ? 'redeem-provided-claims' : 'redeem-claims'}>
       <Gift aria-hidden />
-      <AlertTitle>{t('publishing.redeem.claimsTitle', { count: items.length })}</AlertTitle>
+      <AlertTitle>{t(provided ? 'benefits.redeem.claimsTitle' : 'publishing.redeem.claimsTitle',
+        { count: items.length })}</AlertTitle>
       <AlertDescription className="text-current">
         <ul className="flex flex-col gap-2">
           {items.map((row) => (
@@ -480,6 +485,7 @@ export function RedeemPage() {
     <section className="flex flex-col gap-6" data-testid="redeem-page">
       <PageHeader title={t('publishing.redeem.title')} description={t('publishing.redeem.intro')} />
       <Claims />
+      <Claims provided />
       <div className="grid gap-4 md:grid-cols-2">
         <RotatingCode />
         <PrintedCode />

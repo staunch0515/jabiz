@@ -109,7 +109,21 @@ public final class PublicationProcesses {
         @Valid ReferralInput referral, @Size(max = 3) List<@NotNull @Size(max = 2) String> languages,
         @Size(max = 3) Map<@NotNull @Size(max = 2) String, @Size(max = 4) Map<@NotNull @Size(max = 30) String,
             @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH + 1) String>> translations,
-        @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed, Integer pickCount) {
+        @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed, Integer pickCount,
+        @Size(max = 36) String benefitPurchaseId) {
+
+        /** As before Q89b-1: the prize is the sponsor's own. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription, String audience,
+            String digitalDelivery, String digitalDescription, Integer digitalSendDays, String digitalContent,
+            UUID cover, ReferralInput referral, List<String> languages,
+            Map<String, Map<String, String>> translations, List<String> confirmed, Integer pickCount) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
+                confirmed, pickCount, null);
+        }
 
         /** As before Q81: every question of the version is asked. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
@@ -121,7 +135,7 @@ public final class PublicationProcesses {
             this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
                 maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
                 digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
-                confirmed, null);
+                confirmed, null, null);
         }
 
         /**
@@ -252,10 +266,21 @@ public final class PublicationProcesses {
             }, true))
             // Q33: a shared digital prize's code or link, sealed for this sponsor before anything is written (the
             // step draws random bytes, so it is a blocking one); blank keeps the stored one.
+            // Q89b-1: the purchase the prize is, as it is now (the draft keeps what it saw for the review).
+            .step("Load the purchase", QueryEntities.<ProcessContext>of(
+                com.jabiz.quizbuks.benefit.QbBenefits.defaultDataset(com.jabiz.quizbuks.benefit.QbBenefits.PURCHASE),
+                ctx -> {
+                    String purchaseId = ctx.get(INPUT, SaveInput.class).benefitPurchaseId();
+                    return EntityQuery.builder().where(new QueryPredicate.In("purchaseId",
+                        purchaseId == null || purchaseId.isBlank() ? List.of() : List.of(purchaseId))).limit(1).build();
+                }, BENEFIT_PURCHASE))
             .step("Seal the shared prize", SealSecret.<ProcessContext>of(PublicationProcesses::sharedContent,
                 ctx -> String.valueOf((Object) ctx.request().actorId()), SEALED_DIGITAL))
             .compute("Save the publication", (metadata, ctx) -> save(ctx, messages)));
     }
+
+    /** The context key of the purchase the save names (Q89b-1). */
+    static final String BENEFIT_PURCHASE = "benefitPurchase";
 
     /** The context key of the shared content sealed, when the save gives one. */
     static final String SEALED_DIGITAL = "sealedDigital";
@@ -315,6 +340,11 @@ public final class PublicationProcesses {
         values.put("redeemDescription", !RewardMethod.OFFLINE_REDEEM.equals(method)
             || input.redeemDescription() == null || input.redeemDescription().isBlank() ? null
             : input.redeemDescription().strip());
+        // Q89b-1: before the texts' translations, which take the prize's description as written.
+        benefit(ctx, input, method, values);
+        if (ctx.hasViolations()) {
+            return;
+        }
         // Q33: a digital prize's delivery and description; the shared content sealed, kept when the save leaves it
         // blank; nothing of them for the other methods.
         boolean digital = RewardMethod.DIGITAL_PRIZE.equals(method);
@@ -395,6 +425,44 @@ public final class PublicationProcesses {
                 ctx.changes().delete(com.jabiz.quizbuks.audience.QbAudience.CRITERION, row.id(), row.version()));
         }
         ctx.put(OUTPUT, output(ctx, messages, publicationId, revision, editedAt, values, tiers, version, tierIds));
+    }
+
+    /**
+     * Q89b-1 (D-Q89-6): the purchase a prize collected at the provider's place is. Only a confirmed purchase of the
+     * caller's own is taken (another's is not found); the draft keeps it as it is now (what the review approves, and
+     * what the submission checks again), its provider hands the prizes over, and the prize's description is the
+     * benefit's when the sponsor wrote none. Without one (or with another method), nothing of it.
+     */
+    static void benefit(ProcessContext ctx, SaveInput input, String method, Map<String, Object> values) {
+        String purchaseId = input.benefitPurchaseId() == null || input.benefitPurchaseId().isBlank() ? null
+            : input.benefitPurchaseId().strip();
+        EntityInstance purchase = first(ctx, BENEFIT_PURCHASE);
+        if (purchaseId == null || !RewardMethod.OFFLINE_REDEEM.equals(method)) {
+            values.put("benefitPurchaseId", null);
+            values.put("benefitSnapshot", null);
+            values.put("fulfillerId", null);
+            return;
+        }
+        if (purchase == null || !ctx.request().actorId().equals(String.valueOf((Object) purchase.get("sponsorId")))) {
+            throw new EntityNotFoundException(com.jabiz.quizbuks.benefit.QbBenefits.PURCHASE + " " + purchaseId
+                + " not found");
+        }
+        com.jabiz.quizbuks.benefit.BenefitPublishing.Snapshot snapshot =
+            com.jabiz.quizbuks.benefit.BenefitPublishing.of(purchase.id(), purchase.attributes());
+        if (!com.jabiz.quizbuks.benefit.PurchaseStatus.CONFIRMED.equals(purchase.get("status"))
+            || com.jabiz.quizbuks.benefit.QbBenefits.DIGITAL.equals(snapshot.kind())) {
+            ctx.reject(new Violation("benefitPurchaseId", com.jabiz.quizbuks.benefit.BenefitCodes.PURCHASE_NOT_USABLE,
+                "Only a confirmed purchase of goods or a service is a prize collected at its provider's place",
+                Map.of("status", String.valueOf((Object) purchase.get("status")))));
+            return;
+        }
+        values.put("benefitPurchaseId", String.valueOf(purchase.id()));
+        values.put("benefitSnapshot", com.jabiz.quizbuks.benefit.BenefitPublishing.toJson(snapshot));
+        values.put("fulfillerId", snapshot.providerId());
+        if (values.get("redeemDescription") == null) {
+            values.put("redeemDescription", com.jabiz.quizbuks.benefit.BenefitPublishing.defaultDescription(snapshot,
+                PublishingLimits.REDEEM_DESCRIPTION_LENGTH));
+        }
     }
 
     /** The regions in their written form; null when none are chosen yet. */
@@ -615,7 +683,9 @@ public final class PublicationProcesses {
         // Q64: the cover too, the copier's own file as the source's was (both are the caller's publications).
         for (String field : List.of("cover", "regions", "startAt", "endAt", "timeLimitSec", "passScore", "budgetCap",
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
-            "sealedDigitalContent", "referral", "languages", "translations", "pickCount")) {
+            "sealedDigitalContent", "referral", "languages", "translations", "pickCount",
+            // Q89b-1: the purchase, as the source saw it; the copy's submission checks it again.
+            "benefitPurchaseId", "benefitSnapshot", "fulfillerId")) {
             values.put(field, source.get(field));
         }
         values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));
