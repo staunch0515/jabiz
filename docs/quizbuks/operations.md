@@ -489,7 +489,16 @@ AI 为运营商（或总部，`direct`）找商家、调研、写体验问卷与
 - **费用**：每次搜索 0.01 美元加 tokens（按所选模型的标价）；后台「设置」页按月显示。达到所有者的每月上限后不再开新的找与研究，已批准的邮件照常发出。
 - **事故**：Console 吊销密钥 → 四眼关闭 `qb.prospect.enabled`（排队的作业等待，不用掉尝试）→ 必要时平台的 `EXTERNAL_JOB_CANCEL` 逐个取消（类型 `qb.prospect.find` / `qb.prospect.research`）。投诉或要求停止时：后台「AI 获客」丢弃并勾选"屏蔽"，或 `QB_PROSPECT_BLOCK_ADD`（地址或整个域名，全平台不再发送）。
 
-### 7.15 协议答题（Q86）
+### 7.15 按规则计费（Q47c）
+
+客户匹配的规则是平台的产品，运营商自定价格（`plans/Q47c-audience-billing.md`）。Q47c-1 只给出价目与报价，**不扣款**（扣款与退回在 Q87 之后的 Q47c-2）。
+
+- **规则目录**：内容管理员（`qb.audience.rules.write`）在后台「受众规则」决定每种规则是否开放给商户、是否计费、排序；没改过的规则即开放、计费。关闭的规则商户不能再选，已提交的发布照旧。新增一种规则要开发。
+- **价目表**：每个所有者（直营 `direct` 与每个运营商）一张：每种规则的日价与每次最低使用费，理由必填，历史在审计中。直营与任何运营商的由财务（`qb.audience.prices.write`）在后台改，运营商的负责人在 `/operator/` 改自己的。没有价目表的直营即免费；运营商没有价目表时按受控参数 `qb.audience.price.fallback`（`DIRECT` 用直营的价，`FREE` 免费）。
+- **费用** = max（最低使用费，Σ 所用计费规则的日价 × 天数），天数为发布期间按 24 小时向上取整；没用计费规则的不收。
+- **开关**（受控参数，四眼）：`qb.audience.billing.enabled`（缺省关：报价为 0）、`qb.audience.price.fallback`、`qb.audience.fee.refund-unused-days`（Q47c-2 才起作用）。打开之前先设好价目表；**Q47c-2 上线之前不要打开**（打开后商户看到费用，但提交时还不扣款）。部署后执行一次 `QB_SETUP` 提出这三个参数，由另一位管理员发布。
+
+### 7.16 协议答题（Q86）
 
 协议理解是三种普通的认证（`TERMS_APP_UNDERSTOOD` 条款 + 隐私、`CONTEST_RULES_UNDERSTOOD` 有奖活动规则、`TERMS_SPONSOR_UNDERSTOOD` 商户条款，`plans/Q86-agreement-quiz-tree.md`）：
 同意照旧，答题自愿；题目与轮次照 Q69 / Q70 的办法由官方账号出。出一轮：

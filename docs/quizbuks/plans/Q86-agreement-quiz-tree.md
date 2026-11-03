@@ -35,7 +35,7 @@
 
 ## 3. 后端（`backend/quizbuks`）
 
-### 3.1 迁移（编号以合入时为准，Q83 的计划占了 V64）
+### 3.1 迁移（编号以合入时为准）
 
 - `ALTER TABLE qb_publication_prerequisite ADD COLUMN certification varchar(40)`；`ALTER COLUMN required_publication_id DROP NOT NULL`；`CHECK ((required_publication_id IS NULL) <> (certification IS NULL))`；唯一约束改为 `(publication_id, required_publication_id)` 与 `(publication_id, certification)` 两条（部分唯一索引）。普通表，可改。
 - `QB_SETUP`：新参数 `qb.tree.platform-handle`（普通参数，文本，缺省空）；三种认证的字典值与消息 `qb.certification.<键>`（三语）。
@@ -101,7 +101,7 @@
 
 按 §2 实现；与计划不同的地方：
 
-1. **迁移是 `V64__quizbuks_certification_prerequisites.sql`**（Q83 的计划也写了 V64：谁后合入谁改号）。唯一约束是一条普通的 `UNIQUE (publication_id, certification)`，不是部分唯一索引；原来的 `(publication_id, required_publication_id)` 不动。
+1. **迁移是 `V65__quizbuks_certification_prerequisites.sql`**（Q47c-1 先合入、占了 V64，合并时改号）。唯一约束是一条普通的 `UNIQUE (publication_id, certification)`，不是部分唯一索引；原来的 `(publication_id, required_publication_id)` 不动。
 2. **语句数是普通开始 + 2，不是 + 1**（D-Q86-6）：有认证前置时锁外多一条 `QueryEntities.all`（记录与轮）再多一条读本人在轮上的会话（与 `RoundHolders` 一样的两步），`AttemptStatementBudgetIT.aStartWithACertificationPrerequisite` 写明；普通开始与只有发布前置的开始不变。
 3. **卡的位置**（D-Q86-2）：没有改欢迎页与 `ConsentGate`（需求方"已有的不改"），卡放在 App 的**首页顶部**（只列未持有、有进行中的轮的）与**账户页"我的认证"**（已持有的也显示"已通过，至 …"），商户后台放在**概况页**（"开始"在新标签页打开 App 的发布页）。首页的"还没点亮根节点"横幅（D-Q86-4）没有做：首页的卡已经是入口。
 4. **新模板 `qb.app.understanding`**（权限 `qb.account.read`）一次给出三种认证的开关、持有、当前一轮与平台之树的 handle；受控参数 `qb.understanding.enabled`（缺省 `true`）与普通参数 `qb.tree.platform-handle` 由 `QB_SETUP` 建立（追加在 `QbParams.ALL` 末尾，`SetupIT` 按顺序比较）。

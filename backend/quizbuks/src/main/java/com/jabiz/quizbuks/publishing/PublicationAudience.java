@@ -49,6 +49,7 @@ public final class PublicationAudience {
 
     static final String CRITERIA = "criteria";
     static final String COUNTED = "counted";
+    static final String RULES = "audienceRules";
 
     /**
      * @param criteria     the whole of the draft's conditions: those not given are removed, none means everybody
@@ -70,7 +71,10 @@ public final class PublicationAudience {
                     .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class));
                 PublicationEditing.lockAndLoad(pb);
                 loadCriteria(pb);
-                pb.compute("Save the conditions", (metadata, ctx) -> save(ctx));
+                // Q47c: the rules headquarters closed cannot be chosen.
+                pb.step("Load the rules", QueryEntities.<ProcessContext>all(
+                        com.jabiz.quizbuks.audience.AudiencePricingProcesses.loadRules(RULES)))
+                    .compute("Save the conditions", (metadata, ctx) -> save(ctx));
             });
     }
 
@@ -121,8 +125,26 @@ public final class PublicationAudience {
         if (ctx.hasViolations()) {
             return;
         }
+        java.util.Set<String> closed = new java.util.HashSet<>(com.jabiz.quizbuks.audience.AudienceBilling.closed(
+            input.criteria().stream().map(AudienceCriteria.ConditionInput::key).toList(),
+            com.jabiz.quizbuks.audience.AudiencePricingProcesses.rules(rows(ctx))));
+        for (int i = 0; i < input.criteria().size(); i++) {
+            if (closed.contains(input.criteria().get(i).key())) {
+                ctx.reject(new Violation("criteria[" + i + "].key", AudienceCodes.RULE_CLOSED,
+                    "The rule " + input.criteria().get(i).key() + " is closed", Map.of()));
+            }
+        }
+        if (ctx.hasViolations()) {
+            return;
+        }
         replace(ctx, publication, rowsOf(input.criteria()));
         PublicationEditing.write(ctx, publication, Map.of());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<EntityInstance> rows(ProcessContext ctx) {
+        Object value = ctx.contains(RULES) ? ctx.get(RULES) : null;
+        return value == null ? List.of() : (List<EntityInstance>) value;
     }
 
     /** The rows the conditions make, by the table's key (an option, or the criterion's one range). */

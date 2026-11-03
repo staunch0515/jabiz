@@ -176,6 +176,12 @@ public final class QbParams {
     public static final String CONVERSATION_DAILY_CAP = "qb.conversation.daily-cap";
     /** Q82 (D-Q82-5): days without a message after which the daily job closes a conversation. */
     public static final String CONVERSATION_CLOSE_DAYS = "qb.conversation.close-days";
+    /** Q47c: whether publications pay for the audience rules they use (controlled; off: everything is free). */
+    public static final String AUDIENCE_BILLING_ENABLED = "qb.audience.billing.enabled";
+    /** Q47c: how a sponsor whose operator has no price list is priced: {@code DIRECT} (headquarters' list) or {@code FREE}. */
+    public static final String AUDIENCE_PRICE_FALLBACK = "qb.audience.price.fallback";
+    /** Q47c: whether the unused days are refunded when a publication ends early (Q47c-2 charges; controlled). */
+    public static final String AUDIENCE_REFUND_UNUSED_DAYS = "qb.audience.fee.refund-unused-days";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -242,6 +248,10 @@ public final class QbParams {
     public static final String ISSUER_REGISTRATION_NO = "qb.issuer.registration-no";
     public static final List<String> ISSUER = List.of(ISSUER_NAME, ISSUER_ADDRESS, ISSUER_REGISTRATION_NO);
 
+    /** Q47c: the audience rules' charging (controlled, last, in this order). */
+    public static final List<String> AUDIENCE_BILLING_PARAMS = List.of(AUDIENCE_BILLING_ENABLED, AUDIENCE_PRICE_FALLBACK,
+        AUDIENCE_REFUND_UNUSED_DAYS);
+
     /** Q86: whether the "confirm your understanding" cards show after consenting (controlled: a switch for the administrators). */
     public static final String UNDERSTANDING_ENABLED = "qb.understanding.enabled";
     /** Q86 (D-Q86-4): the handle of the headquarters' official account's page, whose tree is the platform's; empty: none. */
@@ -255,7 +265,7 @@ public final class QbParams {
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
-        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK,
+        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         List.of(UNDERSTANDING_ENABLED)).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -407,6 +417,13 @@ public final class QbParams {
         new Param(WITHDRAWAL_BANK_FEE, KUDOS, "0", "The platform's fee on each bank withdrawal, in Kudos (0: none)"),
         new Param(WITHDRAWAL_BANK_COOLDOWN_HOURS, Map.of("type", "numeric", "precision", 4, "scale", 0), "72",
             "Hours after a bank account is saved or changed before anything may be withdrawn to it"),
+        // Q47c: the audience rules' charging (controlled, last, in the order of AUDIENCE_BILLING_PARAMS).
+        new Param(AUDIENCE_BILLING_ENABLED, BOOL, false, "Whether publications pay for the audience rules they use"),
+        new Param(AUDIENCE_PRICE_FALLBACK, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:audience-fallback",
+            "allowedValues", List.of("DIRECT", "FREE")), "DIRECT",
+            "How sponsors of an operator without a price list are priced: headquarters' list, or free"),
+        new Param(AUDIENCE_REFUND_UNUSED_DAYS, BOOL, false,
+            "Whether the unused days of the audience rules are refunded when a publication ends early"),
         // Q86: the understanding quizzes (controlled, last, in the order of CONTROLLED) and the platform's tree.
         new Param(UNDERSTANDING_ENABLED, BOOL, true,
             "Whether the app and the console offer the quiz about an agreement after it is accepted (Q86)"),

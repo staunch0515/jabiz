@@ -37,7 +37,7 @@ import { noticeConsentProblem } from '../qb/ConsentGate'
 import { fieldProblem, problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
 import type { Condition } from '../qb/audience'
-import { AudienceConditions, AudienceCountPanel } from './AudienceConditions'
+import { AudienceConditions, AudienceCountPanel, AudienceFeePanel } from './AudienceConditions'
 import { Prerequisites } from './Prerequisites'
 import { LanguagesFields } from './LanguagesFields'
 import { ReferralFields } from './ReferralFields'
@@ -51,6 +51,8 @@ import {
   type Prerequisite,
   type PrerequisiteRow,
   countAudience,
+  feeQuoteQuery,
+  readFeeQuote,
   readConditions,
   saveConditions,
   formOf,
@@ -161,6 +163,12 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const [editedConditions, setEditedConditions] = useState<Condition[] | null>(null)
   const conditions = editedConditions ?? savedConditions.data ?? []
   const [count, setCount] = useState<AudienceCount | null>(null)
+  // Q47c: the rules' states and prices, and the fee of what is saved (read again after each save).
+  const feeQuote = useQuery({
+    queryKey: feeQuoteQuery(publicationId),
+    queryFn: () => readFeeQuote(publicationId!),
+    enabled: publicationId !== null,
+  })
   // Q76: the prerequisites, saved with each save of the draft once changed (their own process); the sponsor's other
   // submitted publications are what can be required.
   const savedPrerequisites = useQuery({
@@ -276,6 +284,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         setEditedPrerequisites(null)
       }
       setOutput(saved)
+      void queryClient.invalidateQueries({ queryKey: feeQuoteQuery(saved.publicationId) })
       // New tiers get their keys: the next save sends them as the same tiers.
       const ids = new Map(keys.map((key, i) => [key, saved.tierIds[i]]))
       setForm((f) => ({ ...f, tiers: f.tiers.map((tier) => ({ ...tier, tierId: ids.get(tier.key) ?? tier.tierId })) }))
@@ -668,13 +677,15 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           </div>
           {publicationId && savedConditions.isPending
             ? <p className="text-muted-foreground text-sm">{t('publishing.audience.loading')}</p>
-            : <AudienceConditions value={conditions} disabled={locked} onChange={(next) => {
+            : <AudienceConditions value={conditions} disabled={locked} rules={feeQuote.data?.rules}
+              charged={feeQuote.data?.quote.enabled ?? false} onChange={(next) => {
               setEditedConditions(next)
               setCount(null)
             }} />}
           <AudienceCountPanel count={count} pending={counter.isPending || (save.isPending
             && save.variables?.then === 'count')} disabled={locked} onCount={() => run('count')} />
           {counter.isError && <p className="text-destructive text-sm" role="alert">{problemText(counter.error)}</p>}
+          <AudienceFeePanel quote={feeQuote.data?.quote ?? null} pending={feeQuote.isFetching && !feeQuote.data} />
         </div>
       )}
       {/* Q76: what a taker must have done first, whoever the publication is for. */}
@@ -707,6 +718,9 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           <p className="text-sm font-medium">{t('publishing.wizard.submitRefused')}</p>
           <LabelledProblems problems={refusalProblems(submitError)} testId="publication-submit-problems" />
         </div>
+      )}
+      {form.audience === 'PUBLIC' && (
+        <AudienceFeePanel quote={feeQuote.data?.quote ?? null} pending={feeQuote.isFetching && !feeQuote.data} />
       )}
       <PublicationSummary values={{
         name: form.name,

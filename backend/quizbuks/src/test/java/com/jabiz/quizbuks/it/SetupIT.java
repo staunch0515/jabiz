@@ -310,6 +310,9 @@ class SetupIT extends QbItSupport {
         // Q82: the conversations' daily cap and quiet days (not controlled).
         expected.put(QbParams.CONVERSATION_DAILY_CAP, "20");
         expected.put(QbParams.CONVERSATION_CLOSE_DAYS, "90");
+        // Q47c: charging for the audience rules (off), its fallback and the unused-days refund (all controlled).
+        expected.putAll(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "false", QbParams.AUDIENCE_PRICE_FALLBACK, "DIRECT",
+            QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "false"));
         // Q48e-2: the operators' five plans (fixed fee, platform's share) and their withdrawals.
         expected.putAll(Map.of(QbParams.operatorPlanFee("1"), "0", QbParams.operatorPlanShare("1"), "0.5000",
             QbParams.operatorPlanFee("2"), "20000", QbParams.operatorPlanShare("2"), "0.4000",

@@ -84,6 +84,13 @@ export const AUDIENCE = {
   sponsorConditions: 'urn:jabiz:dataset:sponsor:QbPublicationCriterion',
   /** 422: the caller's profile does not meet the publication's conditions. */
   notMatched: 'QB_AUDIENCE_NOT_MATCHED',
+  /**
+   * Q47c (docs/quizbuks/plans/Q47c-audience-billing.md): a draft's rule fee as its saved conditions and run would
+   * cost, with each rule's state and the daily price that applies to the sponsor.
+   */
+  feeQuote: 'QB_AUDIENCE_FEE_QUOTE',
+  /** 422: headquarters closed the rule; sponsors cannot choose it now. */
+  ruleClosed: 'QB_AUDIENCE_RULE_CLOSED',
 } as const
 
 /**
