@@ -15,7 +15,7 @@ import OperatorsPage from './OperatorsPage'
 import OperatorSponsorsPage from './OperatorSponsorsPage'
 import ReviewsPage from './ReviewsPage'
 import SponsorReviewPage from './SponsorReviewPage'
-import { OPERATOR_PROCESS, PERMISSION, TEMPLATE } from './ids'
+import { FEE_PROCESS, OPERATOR_PROCESS, PERMISSION, TEMPLATE } from './ids'
 import { messages } from './messages'
 
 type Row = Record<string, unknown>
@@ -204,7 +204,8 @@ describe('headquarters', () => {
 
 describe('the operator', () => {
   beforeEach(() => {
-    server.permissions = new Set([PERMISSION.operatorUse, PERMISSION.reviewSponsor, PERMISSION.reviewPublication])
+    server.permissions = new Set([PERMISSION.operatorUse, PERMISSION.reviewSponsor, PERMISSION.reviewPublication,
+      PERMISSION.feeBilling])
   })
 
   it('reads its totals and team; the lead removes a member', async () => {
@@ -243,6 +244,36 @@ describe('the operator', () => {
     await user.click(within(dialog).getByTestId('ban-submit'))
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(OPERATOR_PROCESS.ban,
       { userId: SPONSOR, reason: 'Fake prizes' }))
+  })
+
+  it('sets how its own sponsor is billed, with a reason (Q87)', async () => {
+    server.get.mockImplementation(async (path: string) => {
+      if (path === '/api/dictionaries/{urn}') return [{ code: 'PREPAID', label: 'Prepaid' },
+        { code: 'POSTPAID', label: 'Postpaid' }, { code: 'APPROVED', label: 'Approved' }]
+      throw new ApiError(404, { detail: 'Not found' })
+    })
+    server.sponsors = [sponsor({ billingMode: 'PREPAID', creditLimit: 0 }),
+      sponsor({ onboardingId: 'o2', userId: 'other', company: 'Beta', mine: false, billingMode: 'POSTPAID', creditLimit: 50000 })]
+    const { container } = renderAt('/qb/operator/sponsors', '/qb/operator/sponsors', <OperatorSponsorsPage />)
+    const rows = await screen.findAllByTestId('sponsor-row')
+    expect(within(rows[0]).getByTestId('sponsor-billing')).toHaveAttribute('data-mode', 'PREPAID')
+    expect(within(rows[1]).getByTestId('sponsor-billing')).toHaveTextContent('50,000')
+    // Another operator's sponsor is not the caller's to bill.
+    expect(within(rows[1]).queryByTestId('sponsor-billing-set')).not.toBeInTheDocument()
+    await expectAccessible(container)
+    const user = userEvent.setup()
+    await user.click(within(rows[0]).getByTestId('sponsor-billing-set'))
+    const dialog = await screen.findByTestId('billing-dialog')
+    expect(within(dialog).getByTestId('billing-submit')).toBeDisabled()
+    expect(within(dialog).queryByTestId('billing-credit')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByTestId('billing-mode-POSTPAID'))
+    await user.clear(within(dialog).getByTestId('billing-credit'))
+    await user.type(within(dialog).getByTestId('billing-credit'), '20,000')
+    await user.type(within(dialog).getByTestId('billing-reason'), 'Known company')
+    await user.click(within(dialog).getByTestId('billing-submit'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(FEE_PROCESS.billingSet,
+      { userId: SPONSOR, billingMode: 'POSTPAID', creditLimit: 20000, reason: 'Known company' }))
+    await waitFor(() => expect(screen.queryByTestId('billing-dialog')).not.toBeInTheDocument())
   })
 
   it('lifts a ban its operator made', async () => {

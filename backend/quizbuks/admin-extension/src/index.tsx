@@ -15,6 +15,7 @@ import {
   ListChecks,
   Megaphone,
   PiggyBank,
+  FileText,
   Rocket,
   Scale,
   ScrollText,
@@ -33,6 +34,8 @@ import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
 import BankWithdrawalsPage from './BankWithdrawalsPage'
 import ManualCreditPage from './ManualCreditPage'
+import FeesPage from './FeesPage'
+import FeeRequestPage from './FeeRequestPage'
 import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
 import { AudiencePricesPage, AudienceRulesPage, OperatorAudiencePricesPage } from './AudiencePricingPages'
@@ -125,6 +128,9 @@ export default defineExtension({
     { path: PATH.bankWithdrawals, element: <BankWithdrawalsPage /> },
     { path: PATH.manualCredits, element: <ManualCreditsPage /> },
     { path: '/qb/finance/manual-credits/:topUpId', element: <ManualCreditPage /> },
+    // Q87: the platform's fees, their invoices, and the requests another administrator approves.
+    { path: PATH.fees, element: <FeesPage /> },
+    { path: '/qb/finance/fees/requests/:requestId', element: <FeeRequestPage /> },
     { path: PATH.reconciliation, element: <ReconciliationPage /> },
     { path: PATH.reports, element: <ReportsPage /> },
     { path: PATH.investorMetrics, element: <InvestorMetricsPage /> },
@@ -269,6 +275,9 @@ export default defineExtension({
         // Q18b: finance records manual credits; the bank top-ups' approvers approve them.
         { key: 'qb-manual-credits', label: 'menu.manualCredits', path: PATH.manualCredits, icon: HandCoins,
           permission: PERMISSION.bankApprove },
+        // Q87: the platform's fees charged to sponsors and their invoices.
+        { key: 'qb-fees', label: 'menu.fees', path: PATH.fees, icon: FileText,
+          permission: PERMISSION.financeRead },
         // Q13b: finance reviews (the transfers' review), pays and records them.
         { key: 'qb-bank-withdrawals', label: 'menu.bankWithdrawals', path: PATH.bankWithdrawals, icon: Landmark,
           permission: PERMISSION.financeRead },

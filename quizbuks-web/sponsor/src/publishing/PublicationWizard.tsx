@@ -35,7 +35,8 @@ import { FileField } from '../content/editing'
 import { kudosName } from '../qb/kudos'
 import { noticeConsentProblem } from '../qb/ConsentGate'
 import { fieldProblem, problemText } from '../qb/problems'
-import { navigate } from '../qb/router'
+import { Link, navigate } from '../qb/router'
+import { WALLET_PATH } from '../wallet/api'
 import type { Condition } from '../qb/audience'
 import { AudienceConditions, AudienceCountPanel, AudienceFeePanel } from './AudienceConditions'
 import { Prerequisites } from './Prerequisites'
@@ -110,6 +111,14 @@ function Field({ id, label, hint, problem, shown, children }: {
       {shown && <ShownAt field={shown} />}
     </div>
   )
+}
+
+/** The server's rule code of an unpaid platform invoice (backend `fee.FeeCodes`, Q87). */
+const FEE_UNPAID = 'QB_FEE_UNPAID'
+
+/** Whether a refusal carries the rule. */
+function hasRule(error: unknown, ruleCode: string): boolean {
+  return error instanceof ApiError && error.violations.some((v) => v.ruleCode === ruleCode)
 }
 
 /** A refusal's violations as problems (field and message), or its one text. */
@@ -722,6 +731,12 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         <div className="flex flex-col gap-2" role="alert">
           <p className="text-sm font-medium">{t('publishing.wizard.submitRefused')}</p>
           <LabelledProblems problems={refusalProblems(submitError)} testId="publication-submit-problems" />
+          {/* Q87: an unpaid invoice stops submitting until it is paid from the cash account, on the wallet page. */}
+          {hasRule(submitError, FEE_UNPAID) && (
+            <Link to={WALLET_PATH} className="text-sm underline underline-offset-4" data-testid="publication-submit-wallet">
+              {t('publishing.wizard.payInvoices')}
+            </Link>
+          )}
         </div>
       )}
       {form.audience === 'PUBLIC' && (

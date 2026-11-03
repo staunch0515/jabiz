@@ -98,6 +98,10 @@ export const TEMPLATE = {
   reconItems: 'qb.admin.recon-items',
   monthly: 'qb.admin.monthly',
   balances: 'qb.admin.balances',
+  /** Q87: the platform's fees charged to sponsors, their invoices, and the requests another administrator approves. */
+  feeCharges: 'qb.admin.fee-charges',
+  feeInvoices: 'qb.admin.fee-invoices',
+  feeRequests: 'qb.admin.fee-requests',
   /** The investors' figures (Q27): a row per UTC month of a period, and the merchants behind them (finance). */
   investorMetrics: 'qb.admin.investor-metrics',
   investorSponsors: 'qb.admin.investor-sponsors',
@@ -251,6 +255,15 @@ export const PROCESS = {
   digitalResolve: 'QB_DIGITAL_PRIZE_RESOLVE',
 } as const
 
+/**
+ * The platform's fees (backend `fee`, Q87): finance asks another administrator to approve a fee charged by hand or an
+ * invoice voided; an operator (or finance) sets how a sponsor of theirs is billed, with a reason.
+ */
+export const FEE_PROCESS = {
+  request: 'QB_FEE_REQUEST',
+  billingSet: 'QB_OPERATOR_BILLING_SET',
+} as const
+
 /** The platform's controlled changes (four eyes, decision D40): the mapping changes only through them. */
 export const CONTROL = {
   propose: 'CONTROL_CHANGE_PROPOSE',
@@ -268,7 +281,9 @@ export const ACCOUNT_SUSPENDED = 'QB_ACCOUNT_SUSPENDED'
 export type ReportId = (typeof REPORTS)[number]
 
 /** The ledger's accounts (backend `QbLedger`), in the order the overview shows them. */
-export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120'] as const
+export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120',
+  // Q87: the sponsors' cash accounts, the fees receivable, the fee revenue and the tax on it.
+  '2160', '1130', '4120', '2150'] as const
 
 /** A transfer still sending this long after it was created is in doubt (the backend's `STALE_AFTER`). */
 export const STALE_AFTER_MS = 60 * 60 * 1000
@@ -329,6 +344,12 @@ export const DICTIONARY = {
   operatorPlan: 'urn:jabiz:dict:quizbuks:operator-plan',
   operatorPlanStatus: 'urn:jabiz:dict:quizbuks:operator-plan-status',
   bankAccountType: 'urn:jabiz:dict:quizbuks:bank-account-type',
+  /** Q87: the platform's fees. */
+  billingMode: 'urn:jabiz:dict:quizbuks:billing-mode',
+  feeKind: 'urn:jabiz:dict:quizbuks:fee-kind',
+  feeInvoiceStatus: 'urn:jabiz:dict:quizbuks:fee-invoice-status',
+  feeRequestKind: 'urn:jabiz:dict:quizbuks:fee-request-kind',
+  feeRequestStatus: 'urn:jabiz:dict:quizbuks:fee-request-status',
 } as const
 
 /** Certifications (Q69, backend `certification.CertificationProcesses`). */
@@ -408,6 +429,9 @@ export const PERMISSION = {
   /** Q47c: the audience rules (content administrators) and every owner's price list (finance). */
   audienceRulesWrite: 'qb.audience.rules.write',
   audiencePricesWrite: 'qb.audience.prices.write',
+  /** Q87: fees charged by hand and invoices voided (finance; another administrator approves), and a sponsor's billing. */
+  feeManage: 'qb.fee.manage',
+  feeBilling: 'qb.fee.billing',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
@@ -532,6 +556,10 @@ export const PATH = {
   investorMetrics: '/qb/finance/investor-metrics',
   journal: '/qb/finance/journal',
   journalMapping: '/qb/finance/journal/mapping',
+  /** Q87: the platform's fees: charges, invoices and the requests waiting for approval. */
+  fees: '/qb/finance/fees',
+  feesWhere: (filter: Record<string, string>) => `/qb/finance/fees?${new URLSearchParams(filter)}`,
+  feeRequest: (requestId: string) => `/qb/finance/fees/requests/${encodeURIComponent(requestId)}`,
   /** The legal texts: publishing the drafts and withdrawing announced versions (Q7b). */
   legal: '/qb/legal',
   /** Announcements and notices: writing, sending and withdrawing them, with their statistics (Q7c). */

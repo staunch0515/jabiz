@@ -45,7 +45,8 @@ test('a taker writes to the sponsor from a result, the sponsor answers, the take
   baseURL, request }) => {
   test.setTimeout(240_000)
   const company = unique('Talk Co ')
-  const sponsor = await fundedSponsor(request, 100, 'Tal', company)
+  // The smallest top-up (qb.topup.min, 1000); the reward is 100.
+  const sponsor = await fundedSponsor(request, 1000, 'Tal', company)
   const taker = await takerInJapan(request, 'Kai')
   const quiz = await liveQuiz(request, sponsor.token, taker.token)
   const started = await run(request, taker.token, 'QB_ATTEMPT_START', { publicationId: quiz.publicationId })

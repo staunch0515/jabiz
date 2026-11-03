@@ -222,4 +222,6 @@ class TransferRulesTest {
             assertThat(plan.amount()).isGreaterThanOrEqualTo(d(threshold));
         }
     }
+
+    // Q87 (D-Q87-0): a proportional fee beside the fixed one, rounded down; both 0 by default.
 }

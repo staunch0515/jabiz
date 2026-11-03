@@ -223,6 +223,12 @@ public final class QbPermissions {
     public static final String AUDIENCE_PRICES_WRITE = "qb.audience.prices.write";
     /** Marking the official publishers whose publications may be rounds (Q69): headquarters' content administrators. */
     public static final String CERTIFICATION_ADMIN = "qb.certification.admin";
+    /** Q87: the platform's fees. The jobs and sub-processes (granted to no role). */
+    public static final String FEE_SYSTEM = "qb.fee.system";
+    /** Q87: finance records fees by hand and voids invoices (another administrator approves), reads them all. */
+    public static final String FEE_MANAGE = "qb.fee.manage";
+    /** Q87: setting a sponsor's billing mode and credit limit (an operator for its own, headquarters for any). */
+    public static final String FEE_BILLING = "qb.fee.billing";
     /**
      * The analytics job's item process ({@code QB_ANALYTICS_ITEM}, {@code internal()}), its templates and its own
      * datasets. Granted to no role.

@@ -22,7 +22,7 @@ permissions: [qb.journal.export]
 SELECT
     a.{{LedgerAccount.accountCode}} AS accountCode,
     e.{{LedgerEntry.direction}}     AS direction,
-    CAST(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160') THEN e.{{LedgerEntry.dimension1}} END AS varchar(128))
+    CAST(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160', '1130') THEN e.{{LedgerEntry.dimension1}} END AS varchar(128))
                                     AS party,
     sum(e.{{LedgerEntry.amount}})   AS amount,
     count(DISTINCT t.{{LedgerTransaction.transactionId}}) AS transactions
@@ -35,4 +35,4 @@ WHERE t.{{LedgerTransaction.bookingTime}} < :to
        OR t.{{LedgerTransaction.bookingTime}} >= :previousTo
        OR t.{{LedgerTransaction.createdTime}} > :previousKnownAt)
 GROUP BY a.{{LedgerAccount.accountCode}}, e.{{LedgerEntry.direction}},
-         CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160') THEN e.{{LedgerEntry.dimension1}} END
+         CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160', '1130') THEN e.{{LedgerEntry.dimension1}} END

@@ -132,6 +132,18 @@ public final class QbAccounts {
         eb.field("revision", f -> f.physicalColumn("revision").required(true).processOnly().asNumeric(9, 0));
         eb.field("editedAt", f -> f.physicalColumn("edited_at").required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
+        // Q87 (D-Q87-5): how the sponsor pays the platform's fees, set by their operator or headquarters
+        // (QB_OPERATOR_BILLING_SET); none: the platform's default (qb.fee.default-billing-mode).
+        eb.field("billingMode", f -> f.physicalColumn("billing_mode").processOnly()
+            .asCode(com.jabiz.quizbuks.fee.QbFees.BILLING_MODE_DICTIONARY,
+                com.jabiz.quizbuks.fee.FeeRules.BILLING_MODES.toArray(String[]::new)));
+        eb.field("creditLimit", f -> f.physicalColumn("credit_limit").processOnly().asMonetary("JPY", 0));
+        eb.field("billingReason", f -> f.physicalColumn("billing_reason").processOnly()
+            .asText(AccountLimits.REASON_LENGTH, true));
+        eb.field("billingSetBy", f -> f.physicalColumn("billing_set_by").processOnly()
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("billingSetAt", f -> f.physicalColumn("billing_set_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
         // D-Q2-3. Applying makes it pending, or approved at once when no review is needed (the switch, or the same
         // content approved before); a rejected one applies again. Approved is final, so it cannot be a first state
         // (the platform wants a way out of every initial state): a first application approved at once is written

@@ -27,6 +27,8 @@ export interface Settlement {
   /** The plan's fixed fee taken from the share (Q48e-2). */
   fixedFee: string
   revenue: string
+  /** Q87: the platform's fees charged to the operator's sponsors in the month; the share is on both. */
+  platformFees: string
   platformShare: string
   operatorShare: string
   prospectingCost: string
@@ -51,6 +53,7 @@ function toSettlement(row: Row): Settlement {
     plan: str(row.plan),
     fixedFee: amount(row.fixedFee),
     revenue: amount(row.revenue),
+    platformFees: amount(row.platformFees),
     platformShare: amount(row.platformShare),
     operatorShare: amount(row.operatorShare),
     prospectingCost: amount(row.prospectingCost),

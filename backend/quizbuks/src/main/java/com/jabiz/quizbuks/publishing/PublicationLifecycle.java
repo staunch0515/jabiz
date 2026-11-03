@@ -116,6 +116,7 @@ public final class PublicationLifecycle {
     /** Whether an administrator took down another publication of the submitted one's quiz (Q10b, M-d). */
     static final String TAKEN_DOWN = "takenDown";
     static final String PARAMS = "params";
+    static final String FEE_PARAMS = "feeParams";
     static final String REQUEST = "request";
 
     // ---- submit ----------------------------------------------------------------------------------------------------
@@ -144,6 +145,11 @@ public final class PublicationLifecycle {
                 .steps(b -> PublicationEditing.loadSponsorProfile(b, PublicationEditing::publication))
                 .step("Load the review switch", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.REVIEW_PUBLICATION_AUTO))
+                // Q87b: the fee gate's switches; not published yet reads as before (no gate), like the cash account's.
+                .step("Load the fee switches", LoadParams.<ProcessContext>optional(ProcessContext::opTime, FEE_PARAMS,
+                    QbParams.FEE_OVERDUE_BLOCK, QbParams.FEE_DEFAULT_BILLING_MODE))
+                // Q87 (D-Q87-5): unpaid platform fees beyond what the sponsor's billing allows stop a submission.
+                .steps(b -> com.jabiz.quizbuks.fee.FeeGate.load(b, ctx -> ctx.request().actorId()))
                 .steps(PublicationEditing::loadTiers)
                 .steps(b -> PublicationEditing.loadVersion(b,
                     ctx -> PublicationEditing.publication(ctx).get("versionId"), true))
@@ -234,6 +240,12 @@ public final class PublicationLifecycle {
         PublicationReadiness.pool(PublicationEditing.draftOf(publication), list(ctx, POOL).size())
             .forEach(ctx::reject);
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
+        com.jabiz.entity.Violation unpaidFees = com.jabiz.quizbuks.fee.FeeGate.refusal(ctx,
+            ctx.get(FEE_PARAMS, ParamValues.class).find(QbParams.FEE_OVERDUE_BLOCK, Boolean.class).orElse(null),
+            ctx.get(FEE_PARAMS, ParamValues.class).find(QbParams.FEE_DEFAULT_BILLING_MODE, String.class).orElse(null));
+        if (unpaidFees != null) {
+            ctx.reject(unpaidFees);
+        }
         PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
             .forEach(ctx::reject);
         PublicationEditing.languageProblems(publication.attributes(), version).forEach(ctx::reject);

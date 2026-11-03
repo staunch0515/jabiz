@@ -16,6 +16,9 @@ export const WALLET_PROCESS = {
   /** Q87a: cash of the cash account into Kudos, and back (`wallet.KudosExchanges`). */
   kudosBuy: 'QB_KUDOS_BUY',
   kudosSell: 'QB_KUDOS_SELL',
+  /** Q87b (`fee.FeeProcesses`): an invoice paid from the cash account; its document, issued once and kept. */
+  invoicePay: 'QB_FEE_INVOICE_PAY',
+  invoiceDocument: 'QB_FEE_INVOICE_DOCUMENT',
 } as const
 
 /** SQL templates (`queries/qb/sponsor`). */
@@ -28,6 +31,10 @@ export const WALLET_TEMPLATE = {
   bankAccount: 'qb.sponsor.bank-account',
   /** Q87a: where top-ups may go and whether cash and Kudos may be exchanged (the controlled switches). */
   cashSettings: 'qb.sponsor.cash-settings',
+  /** Q87b: the platform's invoices, the fees charged and an invoice's lines. */
+  feeInvoices: 'qb.sponsor.fee-invoices',
+  feeCharges: 'qb.sponsor.fee-charges',
+  feeInvoiceLines: 'qb.sponsor.fee-invoice-lines',
 } as const
 
 /** The sponsor's own top-ups, read only (the checkout's address included: it is theirs). */
@@ -38,4 +45,6 @@ export const WALLET_DATASET = {
 /** Dictionaries, labelled by the server in the request's language. */
 export const WALLET_DICTIONARY = {
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
+  /** Q87b: the states of the platform's invoices. */
+  feeInvoiceStatus: 'urn:jabiz:dict:quizbuks:fee-invoice-status',
 } as const

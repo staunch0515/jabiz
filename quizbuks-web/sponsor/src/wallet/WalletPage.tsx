@@ -27,6 +27,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { FileDown, Plus } from 'lucide-react'
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Invoices } from './Invoices'
+
 import { SPONSOR } from '../messages'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
@@ -521,7 +523,8 @@ export function WalletPage() {
         </section>
       )}
       {data && <CashAccount wallet={data} />}
-      <section aria-labelledby="wallet-topups" className="flex flex-col gap-3">
+      {data && <Invoices wallet={data} />}
+      <section aria-labelledby="wallet-topups" className="flex flex-col gap-3" data-testid="wallet-topups-section">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="wallet-topups" className="text-lg font-semibold">{t('wallet.topUps')}</h2>
           <Link to={TRANSACTIONS_PATH} className="text-sm underline underline-offset-4" data-testid="wallet-transactions">

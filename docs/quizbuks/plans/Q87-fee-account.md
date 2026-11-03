@@ -121,3 +121,27 @@
 - 现金在商户后台也显示为学分（"Kudos 以外不写币种名"），一比一。
 - 测试：`TopUpTargetsTest`、`KudosExchangesTest`、`TransferRulesTest`（比例）、`CashAccountIT`（卡充值进现金、退款扣回现金、兑换与开关、核对、月报）、`AdminFinanceIT` 的新类；前端 `wallet.test.tsx`；e2e `cash-account.spec.ts`。
 - 留给 Q87b：平台费记录、预付 / 后付与信用额、账单与适格请求书、逾期、运营商的计费方式、并入运营商结算；拦"有未付账单时换学分"随 Q87b 加在 `KudosExchanges.problems`。
+
+### Q87b（平台费、预付 / 后付、账单、运营商结算）
+
+分支 `1.3/quizbuks-87-cash-account`（PR #433；在 Q87a 合入之后以它的现金账户为底）。按 §2 的决定实现；与 §3 / §4 写法不同的地方：
+
+| 计划 | 实施 | 原因 |
+|---|---|---|
+| `QbFeeCharge` 带发布方那一对与 `invoiceId` | `QbFeeCharge` 记 `sponsorId` + `operatorId`（记费时的归属），没有 `invoiceId` / 交易号；账单 `QbFeeInvoice.chargeId` 指向记费（预付每条一张），分录按来源 `QbFeeCharge` 找（`qb.system.fee-invoice-transactions`） | 平台费是商户账户自己的记录（CLAUDE.md"商家账户自己的记录保持 `sponsorId`"）；只追加表上不回写账单号，作废由冲正表达 |
+| 预付商户每月出一张已付账单作凭证 | 预付：**每条记费一张账单**，现金够即 `PAID`、不够即 `OPEN`；后付：每月一张 | 预付不够时账单就是未付的凭证，与"每月一张"合不到一起；手工记费也自然各有一张 |
+| `qb.fee-invoice` 任务 `AssignNumber` + `DOCUMENT_ISSUE` + `SendMail` | 任务只出账单行并发布 `qb.fee.invoice-issued`；邮件由消费者 `QB_MAIL_FEE_INVOICE`（`internal()`）发；PDF 由商户按需签发一次（`QB_FEE_INVOICE_DOCUMENT`，账单号在记费 / 合成时取） | 系统身份不能签发平台单据（版式的权限），邮件只由事件的消费者发（现有约定） |
+| `QB_FEE_CHARGE_MANUAL`、`QB_FEE_INVOICE_VOID` 两个四眼流程 | 一个 `QB_FEE_REQUEST`（`kind = MANUAL / VOID`）+ `QbFeeRequest` + 审批结果 `QB_FEE_REQUEST_APPROVAL_RESULT`（照手工加币） | 审批绑定的内容要有一行可读回（Q18b 的做法），两种申请一张表 |
+| `FeeKinds` 类 | 种类是 `FeeRules` 的常量 | 两个种类不值一个类 |
+| 422 `QB_FEE_OVERDUE` | 422 `QB_FEE_UNPAID`（预付有未付、后付超信用额都用它） | 拦的条件不只是逾期 |
+| 模板 `qb.operator.sponsor-billing` | `qb.operator.sponsors` 加 `billingMode` / `creditLimit`（按平台缺省回落）；`qb.sponsor.wallet` 加未付与计费的列；另有 `qb.sponsor.fee-charges` / `fee-invoices` / `fee-invoice-lines`、`qb.admin.fee-charges` / `fee-invoices` / `fee-requests` | 少两次读取 |
+| 科目参数 | `qb.journal.account.1130 / 4120 / 2150` 三个受控参数（`QB_SETUP` 提出） | Q9d 的做法 |
+| 迁移 | `V68__quizbuks_platform_fees.sql`（Q87a 占 V66，Q89a 占 V67） | 合入顺序 |
+
+- 开关未发布时同 Q87 之前（`LoadParams.optional`：不拦、不记费），与 Q87a 的读法一致；拦"有未付账单时换学分"加在 `KudosExchanges`（只拦换出）。
+- 提交发布多一条语句（`FeeGate`：入驻行 + 未付账单，`QueryEntities.all`）；答题路径不变（`AttemptStatementBudgetIT` 不变）。
+- 月报 `qb.admin.monthly` 多三类：`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`（`AdminFinanceIT` 逐行），多三列 1130 / 4120 / 2150。每日核对多 `FEES_RECEIVABLE`（未开账单的后付记费也算应收）。
+- 任务：`qb.fee-monthly`（每月 2 日 01:07 日本时间）、`qb.fee-invoice`（01:17）、`qb.fee-overdue`（每日 02:37）。
+- 进现金账户的充值：收据的"计入"一行与邮件 `qb.topup.paid-cash` 写明进了现金账户（Q87a 的收据与邮件说"存入学分"）。
+- 未做：换学分与进现金到账的 `StatementBudgetIT` 预算（§3）；账单的在线支付（D-Q87-6 本来就不做）。
+

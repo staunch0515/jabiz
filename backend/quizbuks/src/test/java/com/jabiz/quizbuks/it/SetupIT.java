@@ -51,6 +51,7 @@ class SetupIT extends QbItSupport {
             com.jabiz.quizbuks.page.SponsorPageApprovals.RULE,
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_PLAN_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_WITHDRAWAL_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.FEE_REQUEST_REVIEW.code(),
             QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
@@ -83,6 +84,13 @@ class SetupIT extends QbItSupport {
         assertThat(query("SELECT rule_code, subject, enabled, priority, condition, levels "
             + "FROM sys_approval_rule_version ORDER BY rule_code"))
             .satisfiesExactly(
+                // Q87b: a fee by hand or an invoice voided takes another administrator's approval.
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.fee.QbFees.REVIEW_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.fee.QbFees.APPROVAL_SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("feeRequest"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.TOPUP_BANK_APPROVE)),
                 // Q48e-2: an operator's plan changes only after another administrator approves it.
                 rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.operator.OperatorPlans.REVIEW_RULE)
                     .containsEntry("subject", com.jabiz.quizbuks.operator.OperatorPlans.APPROVAL_SUBJECT)
@@ -184,7 +192,8 @@ class SetupIT extends QbItSupport {
                 : "code".equals(type) ? String.valueOf(((List<?>) kind.get("allowedValues")).getLast())
                 : "numeric".equals(type) && !Integer.valueOf(0).equals(kind.get("scale"))
                     // Q48e-2: a value other than the one in effect (plan 5's share is 0.1).
-                    ? ("0.1".equals(param.value()) ? "0.2" : "0.1") : "1";
+                    ? (new java.math.BigDecimal(String.valueOf(param.value())).compareTo(new java.math.BigDecimal("0.1")) == 0
+                        ? "0.2" : "0.1") : "1";
             Map<String, Object> refused = client.post().uri("/api/processes/PARAM_SET/latest")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .header("Authorization", admin()).bodyValue(Map.of("key", key, "value", value)).exchange()
@@ -235,6 +244,10 @@ class SetupIT extends QbItSupport {
             "5110", "EXPENSE", "5120", "EXPENSE", "5130", "EXPENSE"));
         // Q87a: the sponsors' cash accounts.
         expected.put("2160", "LIABILITY");
+        // Q87b: the fees receivable, the fee revenue and the tax on it.
+        expected.put("1130", "ASSET");
+        expected.put("4120", "REVENUE");
+        expected.put("2150", "LIABILITY");
         assertThat(accounts).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
@@ -320,6 +333,9 @@ class SetupIT extends QbItSupport {
         expected.putAll(Map.of(QbParams.TOPUP_TARGETS, "KUDOS,CASH", QbParams.TOPUP_DEFAULT_TARGET, "KUDOS",
             QbParams.KUDOS_BUY_ENABLED, "true", QbParams.KUDOS_SELL_ENABLED, "false", QbParams.TRANSFER_FEE_RATE,
             "0.0000"));
+        // Q87b: the platform's fees; the declared values keep what the platform did before (no fee, prepaid).
+        expected.putAll(Map.of(QbParams.FEE_DUE_DAYS, "30", QbParams.FEE_MONTHLY, "0", QbParams.FEE_TAX_RATE, "0.1000",
+            QbParams.FEE_DEFAULT_BILLING_MODE, "PREPAID", QbParams.FEE_OVERDUE_BLOCK, "true"));
         // Q48e-2: the operators' five plans (fixed fee, platform's share) and their withdrawals.
         expected.putAll(Map.of(QbParams.operatorPlanFee("1"), "0", QbParams.operatorPlanShare("1"), "0.5000",
             QbParams.operatorPlanFee("2"), "20000", QbParams.operatorPlanShare("2"), "0.4000",

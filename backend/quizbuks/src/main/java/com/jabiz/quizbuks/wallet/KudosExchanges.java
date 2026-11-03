@@ -140,7 +140,10 @@ public final class KudosExchanges {
             })
             .outputMapper(ctx -> output(ctx, toKudos))
             .steps(SponsorChecks::load)
-            .step("Load the switch", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS, switchKey))
+            .step("Load the switch", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS, switchKey,
+                QbParams.FEE_OVERDUE_BLOCK, QbParams.FEE_DEFAULT_BILLING_MODE))
+            // Q87b: unpaid platform fees stop buying Kudos (never selling), read outside the lock like the sponsor.
+            .steps(b -> { if (toKudos) { com.jabiz.quizbuks.fee.FeeGate.load(b, ctx -> ctx.request().actorId()); } })
             .step("Lock the sponsor's wallets", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbWallets.lockName(QbWallets.SPONSOR, ctx.request().actorId())))
             .step("Read both wallets", QueryEntities.<ProcessContext>all(
@@ -163,6 +166,15 @@ public final class KudosExchanges {
         List<Violation> problems = new ArrayList<>(SponsorChecks.problems(ctx));
         Boolean enabled = ctx.get(PARAMS, ParamValues.class).find(switchKey, Boolean.class).orElse(null);
         problems.addAll(problems(toKudos, enabled, amount(ctx), first(ctx, KUDOS_WALLET), first(ctx, CASH_WALLET)));
+        if (toKudos) {
+            ParamValues params = ctx.get(PARAMS, ParamValues.class);
+            Violation unpaid = com.jabiz.quizbuks.fee.FeeGate.refusal(ctx,
+                params.find(QbParams.FEE_OVERDUE_BLOCK, Boolean.class).orElse(null),
+                params.find(QbParams.FEE_DEFAULT_BILLING_MODE, String.class).orElse(null));
+            if (unpaid != null) {
+                problems.add(unpaid);
+            }
+        }
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems);
         }

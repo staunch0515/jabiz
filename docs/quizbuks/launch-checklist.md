@@ -8,6 +8,8 @@
 - [ ] **Q6b 转账的法务意见**（资金決済法：Kudos 与转账是否构成资金移动、前払式支付手段等；`03-plan.md` 第 4 节）已取得，结论允许按现设计开放转账；否则 `qb.transfer.enabled` 保持 false 上线
 - [ ] **收据**：登记号（`qb.issuer.registration-no`，适格请求书发行事业者登记号）与税的表述（收据不声称是适格请求书；日元金额与 Kudos 的写法）经财务或法务确认
 - [ ] 收据开具方的名称与地址（`qb.issuer.name`、`qb.issuer.address`）已以受控变更设好
+- [ ] **平台费的账单**（Q87，版式 `qb.fee_invoice`）：是否收月费（`qb.fee.monthly`）、税率（`qb.fee.tax-rate`）与账单上登录番号、税的写法经财务确认；不收费时 `qb.fee.monthly` 保持 `0`（不出任何账单）
+- [ ] **现金账户**（Q87）：充值的目标（`qb.topup.targets` / `qb.topup.default-target`）、现金换学分与换回的开关（`qb.kudos.buy.enabled` / `qb.kudos.sell.enabled`）按需求方的决定设好（缺省：两个目标、缺省直接成学分、能换出、不能换回）；抽成 `qb.creator-fee-rate` 与 `qb.transfer.fee-rate` 按决定设（上线为 `0`）
 - [ ] **隐私政策**（个人信息的取得与利用目的、第三方提供：Stripe、邮件服务商、Google、Facebook 与 LINE 登录；保存期间；海外传输）已发布，App 与商家后台可达；草稿见 `legal/`（填好【】占位后发布）
 - [ ] **利用条款**（答题人、商家各自的条款；商家入驻时同意的版本）已发布
 - [ ] 特定商取引法的表示（商家充值是有偿的）已发布
@@ -69,7 +71,7 @@
 
 - [ ] **备份已测试**：WAL 归档与每日基础备份在运行，恢复演练（`operations.md` §2.4）做过一次并记录了 RTO 与 RPO；文件卷有备份
 - [ ] **监控与告警已上线**（`operations.md` §5）：OTLP 已接入，健康、准入与提交 503、核对差异、转账失败、Webhook 被拒、分录导出被拒、备份与磁盘的告警都已配置并试发过一次；告警送达值班的人
-- [ ] 首次启动（`operations.md` §3）完成：`QB_SETUP` 的提案已发布，科目映射已设，审批规则已发布
+- [ ] 首次启动（`operations.md` §3）完成：`QB_SETUP` 的提案已发布，科目映射已设（含 Q87 的 `qb.journal.account.2160 / 1130 / 4120 / 2150`），审批规则已发布（含 `qb.fee-request.review`）
 - [ ] 值班与联系方式：Stripe 支持、邮件服务商、数据库托管方
 - [ ] 本清单与 `operations.md` 中的步骤由将要值班的人读过
 

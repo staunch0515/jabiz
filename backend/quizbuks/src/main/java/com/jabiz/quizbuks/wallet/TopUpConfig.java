@@ -232,7 +232,9 @@ class TopUpConfig {
             .item(ReconChecks.TRANSFER_IN_TRANSIT, "en", "Transfer in transit", "zh", "转账在途", "ja", "送金の未達")
             .item(ReconChecks.CASH_ACCOUNT, "en", "Sponsor cash account", "zh", "商家现金账户", "ja", "スポンサーの現金口座")
             .item(ReconChecks.TOTAL_2160, "en", "Total of sponsor cash accounts", "zh", "商家现金账户合计",
-                "ja", "スポンサーの現金口座合計"));
+                "ja", "スポンサーの現金口座合計")
+            .item(ReconChecks.FEES_RECEIVABLE, "en", "Platform fees receivable", "zh", "应收平台费",
+                "ja", "未収プラットフォーム料金"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */
@@ -273,7 +275,8 @@ class TopUpConfig {
      */
     @Bean
     RetentionPolicy qbDocumentRunRetention() {
-        return RetentionPolicy.of("DocumentRun").only("layoutId", TopUpReceipts.LAYOUT_ID, OperatorSettlements.LAYOUT_ID)
+        return RetentionPolicy.of("DocumentRun").only("layoutId", TopUpReceipts.LAYOUT_ID, OperatorSettlements.LAYOUT_ID,
+                com.jabiz.quizbuks.fee.FeeProcesses.LAYOUT_ID)
             .keep(RETENTION).from("issuedTime").afterFiscalYearEnd();
     }
 

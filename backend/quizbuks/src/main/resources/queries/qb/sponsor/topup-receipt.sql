@@ -7,6 +7,7 @@ datasets:
   QbSponsor: urn:jabiz:dataset:sponsor:QbSponsor
 params:
   topUpId: { like: QbTopUp.topUpId, required: true, description: The top-up }
+  language: { kind: { type: text, maxLength: 10 }, description: "The receipt's language (en, zh, ja): the wording of what was credited" }
 results:
   receiptNo:        { from: QbTopUp.topUpId }
   company:          { from: QbSponsor.company }
@@ -14,7 +15,7 @@ results:
   paidAt:           { from: QbTopUp.paidAt }
   paymentReference: { kind: { type: text, maxLength: 20 } }
   paidIn:           { kind: { type: text, maxLength: 40 } }
-  kudos:            { kind: { type: numeric, precision: 19, scale: 0 } }
+  credited:         { kind: { type: text, maxLength: 60 } }
   amount:           { from: QbTopUp.amount }
 permissions: [qb.topup]
 ---*/
@@ -45,7 +46,15 @@ SELECT
         ELSE upper(t.{{QbTopUp.presentmentCurrency}}) || ' '
             || to_char(t.{{QbTopUp.presentmentAmount}} / 100.0, 'FM999,999,999,990.00')
     END AS varchar(40)) AS paidIn,
-    t.{{QbTopUp.amount}} AS kudos,
+    -- Q87: a top-up becomes Kudos (the default) or money in the cash account; the receipt says which.
+    CAST(to_char(t.{{QbTopUp.amount}}, 'FM999,999,999,999,990') || ' ' ||
+        CASE WHEN t.{{QbTopUp.target}} = 'CASH' THEN
+                 CASE CAST(:language AS text) WHEN 'zh' THEN '（存入现金账户）' WHEN 'ja' THEN '（現金口座へ入金）'
+                     ELSE '(into the cash account)' END
+             ELSE
+                 CASE CAST(:language AS text) WHEN 'zh' THEN '学分（存入钱包）' WHEN 'ja' THEN 'クドス（ウォレットへ）'
+                     ELSE 'Kudos (into the wallet)' END
+        END AS varchar(60)) AS credited,
     t.{{QbTopUp.amount}} AS amount
 FROM {{QbTopUp}} t
 LEFT JOIN {{QbSponsor}} s ON s.{{QbSponsor.userId}} = t.{{QbTopUp.sponsorId}}

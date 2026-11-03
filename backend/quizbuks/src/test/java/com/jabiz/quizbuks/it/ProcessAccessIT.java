@@ -121,6 +121,13 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_REDEMPTION_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_INVITATION_MAIL", ProcessAccess.INTERNAL),
         Map.entry("QB_REDEMPTION_LAPSE", ProcessAccess.INTERNAL),
+        // Q87: the platform fees' charge (a sub-process), its job items, the approval result and the invoice mails.
+        Map.entry("QB_FEE_CHARGE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_FEE_MONTHLY_ITEM", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_INVOICE_ISSUE_ITEM", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_OVERDUE_ITEM", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_REQUEST_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_FEE_INVOICE", ProcessAccess.INTERNAL),
         // Q70: the referrals' reward and expiry jobs.
         Map.entry("QB_REFERRAL_EXPIRE", ProcessAccess.INTERNAL), Map.entry("QB_REFERRAL_REWARD", ProcessAccess.INTERNAL),
         // Q48c/d: AI prospecting's job items and the outcomes of its external jobs; Q48b: the operators' settlements.

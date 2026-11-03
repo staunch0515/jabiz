@@ -79,6 +79,8 @@ public final class OperatorSettlements {
     public static final String JOB = "qb.operator-settlement";
     public static final String DUE_TEMPLATE = "qb.system.operator-settlements-due";
     public static final String REVENUE_TEMPLATE = "qb.system.operator-revenue";
+    /** Q87 (D-Q87-8): the platform fees charged to the operator's sponsors in the month (not voided). */
+    public static final String FEES_TEMPLATE = "qb.system.operator-fees";
     public static final String DOCUMENT_TEMPLATE = "qb.admin.operator-settlement-doc";
     public static final String ISSUER_TEMPLATE = "qb.admin.settlement-issuer";
     public static final String LAYOUT_ID = "qb.operator_settlement";
@@ -110,8 +112,8 @@ public final class OperatorSettlements {
         .number(DOCUMENT_TEMPLATE, "settlementNo")
         .party("issuer", ISSUER_TEMPLATE, "name", "address", "registrationNo")
         .party("operator", DOCUMENT_TEMPLATE, "operatorName", "contactName")
-        .facts(DOCUMENT_TEMPLATE, "month", "plan", "revenue", "platformShare", "operatorShare", "fixedFee",
-            "prospectingCost", "carriedIn", "carriedOut")
+        .facts(DOCUMENT_TEMPLATE, "month", "plan", "revenue", "platformFees", "platformShare", "operatorShare",
+            "fixedFee", "prospectingCost", "carriedIn", "carriedOut")
         .totals(DOCUMENT_TEMPLATE, "payable")
         .note("note"));
 
@@ -128,6 +130,9 @@ public final class OperatorSettlements {
         eb.field("periodEnd", f -> f.physicalColumn("period_end").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("revenue", f -> f.physicalColumn("revenue").immutable(true).required(true).asMonetary("JPY", 0));
+        // Q87: the platform fees charged to its sponsors in the month, shared as the commission is (0 before Q87).
+        eb.field("platformFees", f -> f.physicalColumn("platform_fees").immutable(true).required(true)
+            .asMonetary("JPY", 0));
         eb.field("platformShare", f -> f.physicalColumn("platform_share").immutable(true).required(true)
             .asNumeric(5, 4));
         eb.field("operatorShare", f -> f.physicalColumn("operator_share").immutable(true).required(true)
@@ -194,6 +199,7 @@ public final class OperatorSettlements {
     static final String PLANS = "plans";
     static final String USAGE = "usage";
     static final String REVENUE = "revenue";
+    static final String FEES = "platformFees";
     static final String NEW_ID = "newId";
     static final String NEW_ROW = "newRow";
     static final String POST_INPUT = "postInput";
@@ -274,6 +280,10 @@ public final class OperatorSettlements {
                 "operatorId", runInput(ctx).operatorId(),
                 "from", monthStart(runInput(ctx).month(), zone),
                 "to", monthEnd(runInput(ctx).month(), zone)), REVENUE))
+            .step("Add up the platform fees", RunTemplate.<ProcessContext>of(FEES_TEMPLATE, ctx -> Map.of(
+                "operatorId", runInput(ctx).operatorId(),
+                "from", monthStart(runInput(ctx).month(), zone),
+                "to", monthEnd(runInput(ctx).month(), zone)), FEES))
             .compute("Settle", (metadata, ctx) -> settle(ctx, zone))
             .step("Save the settlement", SaveChanges.now())
             .step("Post the share owed", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
@@ -305,7 +315,10 @@ public final class OperatorSettlements {
             : BigDecimal.ZERO;
         Map<String, Object> revenueRow = rows(ctx, REVENUE).isEmpty() ? Map.of() : rows(ctx, REVENUE).getFirst();
         BigDecimal revenue = money(revenueRow.get("revenue"));
-        BigDecimal operatorShare = operatorShare(revenue, share);
+        // Q87 (D-Q87-8): the platform fees of the month are shared as the commission is, the rule unchanged.
+        Map<String, Object> feesRow = rows(ctx, FEES).isEmpty() ? Map.of() : rows(ctx, FEES).getFirst();
+        BigDecimal platformFees = money(feesRow.get("fees"));
+        BigDecimal operatorShare = operatorShare(revenue.add(platformFees), share);
         EntityInstance previous = first(ctx, PREVIOUS);
         BigDecimal carriedIn = previous == null ? BigDecimal.ZERO : money(previous.get("carriedOut"));
         BigDecimal cost = prospectingCost(ctx);
@@ -320,6 +333,7 @@ public final class OperatorSettlements {
         values.put("periodStart", monthStart(input.month(), zone));
         values.put("periodEnd", monthEnd(input.month(), zone));
         values.put("revenue", revenue);
+        values.put("platformFees", platformFees);
         values.put("platformShare", share);
         values.put("operatorShare", operatorShare);
         values.put("prospectingCost", cost);

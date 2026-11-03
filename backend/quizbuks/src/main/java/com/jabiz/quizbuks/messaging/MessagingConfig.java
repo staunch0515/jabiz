@@ -81,6 +81,11 @@ class MessagingConfig {
     }
 
     @Bean
+    MailTemplate qbTopUpPaidCashMail() {
+        return NotificationMails.TOPUP_PAID_CASH;
+    }
+
+    @Bean
     MailTemplate qbTopUpGrantedMail() {
         return NotificationMails.TOPUP_GRANTED;
     }
@@ -126,6 +131,22 @@ class MessagingConfig {
     ProcessDefinition<MailProcesses.TopUpMailInput, MailProcesses.MailOutput, ProcessContext> qbMailTopUp(
         MessageCatalog messages) {
         return MailProcesses.topUp(messages);
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.FeeInvoiceMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoice(
+        MessageCatalog messages) {
+        return MailProcesses.feeInvoice(messages);
+    }
+
+    @Bean
+    MailTemplate qbFeeInvoiceIssuedMail() {
+        return NotificationMails.FEE_INVOICE_ISSUED;
+    }
+
+    @Bean
+    MailTemplate qbFeeInvoiceOverdueMail() {
+        return NotificationMails.FEE_INVOICE_OVERDUE;
     }
 
     @Bean
@@ -175,6 +196,20 @@ class MessagingConfig {
             qbMailPayoutAccount) {
         return EventSubscription.of(MailProcesses.PAYOUT_RESTRICTED_CONSUMER, PayoutProcesses.RESTRICTED_EVENT,
             qbMailPayoutAccount, MailProcesses::payoutInput);
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.FeeInvoiceMailInput> qbMailFeeInvoiceIssuedSubscription(
+        ProcessDefinition<MailProcesses.FeeInvoiceMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoice) {
+        return EventSubscription.of(MailProcesses.FEE_INVOICE_ISSUED_CONSUMER,
+            com.jabiz.quizbuks.fee.QbFees.INVOICE_ISSUED_EVENT, qbMailFeeInvoice, MailProcesses::feeInvoiceIssuedInput);
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.FeeInvoiceMailInput> qbMailFeeInvoiceOverdueSubscription(
+        ProcessDefinition<MailProcesses.FeeInvoiceMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeInvoice) {
+        return EventSubscription.of(MailProcesses.FEE_INVOICE_OVERDUE_CONSUMER,
+            com.jabiz.quizbuks.fee.QbFees.INVOICE_OVERDUE_EVENT, qbMailFeeInvoice, MailProcesses::feeInvoiceOverdueInput);
     }
 
     @Bean
