@@ -209,14 +209,23 @@ class SponsorCertificationIT extends LegalItSupport {
         assertThat(codes(refused(PublicationRounds.CLOSE, token, body("publicationId", gated), 422)))
             .containsExactly(CertificationCodes.NOT_A_ROUND);
 
-        // A new version: what was held under the old one counts no more (D-Q88-1).
+        // A new version: what was held under the old one counts no more (D-Q88-1), and the open rounds close
+        // (their passes would count under the old version): the draft registered before the raise is one.
+        String third = freeDraft(sponsor, "Q88 keyboard III");
+        setRound(sponsor, third, certificationId);
+        assertThat(round(sponsor, third).getFirst()).containsEntry("certificationVersion", 1)
+            .containsEntry("closedAt", null);
         run(SponsorCertificationProcesses.UPDATE, token, body("certificationId", certificationId, "name",
             Map.of("en", "Keyboard expert v2"), "raiseVersion", true));
         assertThat(claim(passer, key)).containsEntry("heldUntil", null);
+        assertThat(round(sponsor, third).getFirst()).containsEntry("currentVersion", 2)
+            .doesNotContainEntry("closedAt", null);
+        // Registering the draft again replaces the closed round by one of the new version.
+        setRound(sponsor, third, certificationId);
+        assertThat(round(sponsor, third).getFirst()).containsEntry("certificationVersion", 2)
+            .containsEntry("closedAt", null);
 
         // Retired: no new round, no new prerequisite; its draft is refused, a draft deleted takes its round.
-        String third = freeDraft(sponsor, "Q88 keyboard III");
-        setRound(sponsor, third, certificationId);
         run(SponsorCertificationProcesses.RETIRE, token, body("certificationId", certificationId));
         String fourth = freeDraft(sponsor, "Q88 keyboard IV");
         assertThat(codes(refused(PublicationRounds.SET, token, body("publicationId", fourth, "certificationId",

@@ -42,7 +42,8 @@ import { CERTIFICATION_LIMITS } from './ids'
 import './messages'
 
 const LANGUAGES = ['en', 'zh', 'ja'] as const
-const FIELDS = ['name', 'description', 'validityDays', 'certificationId']
+/** The fields the dialog shows beside their problems; the switch's refusal (on certificationId) is general. */
+const FIELDS = ['name', 'description', 'validityDays']
 
 /**
  * The sponsor's own certifications (Q88a, docs/quizbuks/plans/Q88-sponsor-certifications-entry-fee.md): defined,

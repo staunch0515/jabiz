@@ -109,9 +109,14 @@ public final class PublicationRounds {
             }, ROUND));
     }
 
-    /** Whether the publication is a round of a certification (D-Q88-5), from what {@link #load} read. */
+    /**
+     * Whether the publication is an open round of a certification (D-Q88-5), from what {@link #load} read: a round
+     * closed (by a raise of the certification's version, or by hand) gives nothing, so it does not let the tiers pay
+     * nothing.
+     */
     static boolean isRound(ProcessContext ctx) {
-        return PublicationEditing.first(ctx, ROUND) != null;
+        EntityInstance round = PublicationEditing.first(ctx, ROUND);
+        return round != null && round.get("closedAt") == null;
     }
 
     /** The round's key, for the save's output; null for none. */
@@ -123,7 +128,9 @@ public final class PublicationRounds {
     static void set(ProcessContext ctx) {
         SetInput input = ctx.get(INPUT, SetInput.class);
         EntityInstance publication = PublicationEditing.publication(ctx);
-        if (!SponsorCertificationProcesses.enabled(ctx.get(PARAMS, ParamValues.class))) {
+        // Taking the round off a draft is allowed while the switch is off (what it did before stays undone).
+        if (input.certificationId() != null
+            && !SponsorCertificationProcesses.enabled(ctx.get(PARAMS, ParamValues.class))) {
             ctx.reject(SponsorCertificationProcesses.off());
             return;
         }

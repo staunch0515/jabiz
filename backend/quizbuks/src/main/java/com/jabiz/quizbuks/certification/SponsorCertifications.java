@@ -58,28 +58,24 @@ public final class SponsorCertifications {
         return rows.stream().filter(r -> key.equals(keyOf(r.id()))).findFirst().map(SponsorCertifications::of);
     }
 
+    /** The fallback order when a text is not in the reader's language (as the legal texts fall back). */
+    private static final List<String> FALLBACK = List.of("ja", "en", "zh");
+
     /**
      * A multilingual text in {@code language}, else in the platform's languages' order (ja, en, zh as the legal texts
-     * fall back), else any; null when there is none.
+     * fall back); null when there is none.
      */
     public static String text(Map<?, ?> texts, String language) {
         if (texts == null || texts.isEmpty()) {
             return null;
         }
-        List<String> order = new ArrayList<>();
-        if (language != null) {
-            order.add(language);
-        }
-        order.addAll(List.of("ja", "en", "zh"));
-        order.addAll(PlatformLanguages.CODES);
-        for (String code : order) {
+        for (String code : language == null ? FALLBACK : List.of(language, "ja", "en", "zh")) {
             Object value = texts.get(code);
             if (value != null && !value.toString().isBlank()) {
                 return value.toString();
             }
         }
-        return texts.values().stream().filter(v -> v != null && !v.toString().isBlank()).map(Object::toString)
-            .findFirst().orElse(null);
+        return null;
     }
 
     /**

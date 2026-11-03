@@ -144,5 +144,7 @@ Q87 §7 把"答题的能力"列成四项：**给学分**（已有）、**给认�
 8. 前端的认证名字只经共用的 `qb/certifications.ts`（目录的用文案 `certification.names.<键>`，商户的用模板给的 `certificationNames`）；树的边多带 `certificationNames`，商户自己的认证在自己的树上是节点、不链到平台之树。
 9. 后台扩展的"认证"页只加了一节只读的"商户自己的认证"（模板 `qb.admin.sponsor-certifications`，按公司名搜索），没有在"轮次"表里解析 `sp:` 键的名字（显示键）。
 10. e2e `sponsor-certification.spec.ts`：商户定义认证 → 0 奖励的发布登记为轮并提交 → 答题者看到"合格授予"、合格、"我的认证"签发证书、核实页写颁发方 → 商户的列表计 1 人 → 总部的模板列出它。
+11. **升版关闭进行中的轮**（自查发现）：轮的 `certificationVersion` 不可改、合格按轮的版本记，升版后旧轮上的合格永远不算。所以 `_UPDATE` 的 `raiseVersion` 像停用一样关闭该认证进行中的轮（含草稿的；草稿重新设轮即换成新版本的轮），商户把新版本的测验在草稿上重新登记；界面的说明写明。已关闭的轮不再让 0 奖励的草稿通过提交检查（`PublicationRounds.isRound` 只算开着的轮）。
+12. **开关关着时仍可取消草稿的轮**（`QB_SPONSOR_ROUND_SET` 的 `certificationId` 为空），只有登记新轮受开关约束。
 
 未做：D-Q88-8 的人工授予与收回商户认证；Q88b（报名费）另一个 PR。

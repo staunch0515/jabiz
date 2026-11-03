@@ -96,7 +96,11 @@ public final class SponsorCertificationProcesses {
     public static ProcessDefinition<UpdateInput, Output, ProcessContext> update() {
         return ProcessDefinition.define(UPDATE, 1, UpdateInput.class, Output.class, ProcessContext.class, pb -> {
             open(pb, "Changes a certification's texts or validity, or raises its version when its rules changed "
-                + "(what was held under the old version counts no more).");
+                + "(what was held under the old version counts no more; its open rounds close, since their passes "
+                + "would count under the old version).");
+            // The rounds' version is immutable (a pass counts under the round's): a raise closes the open ones, and
+            // the sponsor registers the drafts of the new version's exams (D-Q88-1).
+            loadOpenRounds(pb);
             pb.compute("Update it", (metadata, ctx) -> {
                 UpdateInput input = ctx.get(INPUT, UpdateInput.class);
                 EntityInstance row = own(ctx, input.certificationId());
@@ -112,7 +116,11 @@ public final class SponsorCertificationProcesses {
                 if (ctx.hasViolations()) {
                     return;
                 }
-                int version = number(row.get("certificationVersion")) + (Boolean.TRUE.equals(input.raiseVersion()) ? 1 : 0);
+                boolean raise = Boolean.TRUE.equals(input.raiseVersion());
+                int version = number(row.get("certificationVersion")) + (raise ? 1 : 0);
+                if (raise) {
+                    closeRounds(ctx);
+                }
                 Map<String, Object> values = new LinkedHashMap<>();
                 values.put("name", texts(input.name()));
                 values.put("description", texts(input.description()));
@@ -132,14 +140,8 @@ public final class SponsorCertificationProcesses {
             open(pb, "Retires a certification: its open rounds close, no new round or prerequisite names it; what "
                 + "is held runs out by itself.");
             // Its open rounds, to close them with it (D-Q88-1).
-            pb.step("Load its open rounds", QueryEntities.<ProcessContext>of(
-                    QbCertifications.defaultDataset(QbCertifications.ROUND), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.And(List.of(
-                            new QueryPredicate.Eq("certification",
-                                SponsorCertifications.keyOf(ctx.get(INPUT, Ref.class).certificationId())),
-                            new QueryPredicate.IsNull("closedAt"))))
-                        .limit(CertificationProcesses.MAX_ROWS).build(), ROUNDS))
-                .compute("Retire it", (metadata, ctx) -> {
+            loadOpenRounds(pb);
+            pb.compute("Retire it", (metadata, ctx) -> {
                     Ref input = ctx.get(INPUT, Ref.class);
                     EntityInstance row = own(ctx, input.certificationId());
                     if (refused(ctx)) {
@@ -149,10 +151,7 @@ public final class SponsorCertificationProcesses {
                         ctx.reject(retired(input.certificationId()));
                         return;
                     }
-                    for (EntityInstance round : list(ctx, ROUNDS)) {
-                        ctx.changes().update(QbCertifications.ROUND, round.id(), round.version(),
-                            Map.of("closedAt", ctx.opTime()));
-                    }
+                    closeRounds(ctx);
                     ctx.changes().update(QbSponsorCertifications.CERTIFICATION, row.id(), row.version(),
                         Map.of("status", QbSponsorCertifications.RETIRED, "updatedAt", ctx.opTime()));
                     ctx.put(OUTPUT, new Output(String.valueOf(row.id()), SponsorCertifications.keyOf(row.id()),
@@ -183,6 +182,29 @@ public final class SponsorCertificationProcesses {
             .step("Load the sponsor's certifications", QueryEntities.<ProcessContext>of(
                 QbSponsorCertifications.SPONSOR_DATASET,
                 ctx -> EntityQuery.builder().limit(SponsorCertifications.MAX_PER_SPONSOR + 1).build(), MINE));
+    }
+
+    /** The open rounds of the certification the input names ({@code certificationId}), after {@link #open}. */
+    private static <I> void loadOpenRounds(ProcessDefinitionBuilder<I, Output, ProcessContext> pb) {
+        pb.step("Load its open rounds", QueryEntities.<ProcessContext>of(
+            QbCertifications.defaultDataset(QbCertifications.ROUND), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.And(List.of(
+                    new QueryPredicate.Eq("certification", SponsorCertifications.keyOf(certificationId(ctx))),
+                    new QueryPredicate.IsNull("closedAt"))))
+                .limit(CertificationProcesses.MAX_ROWS).build(), ROUNDS));
+    }
+
+    private static UUID certificationId(ProcessContext ctx) {
+        Object input = ctx.get(INPUT);
+        return input instanceof UpdateInput u ? u.certificationId() : ((Ref) input).certificationId();
+    }
+
+    /** Closes the open rounds {@link #loadOpenRounds} read: passes from now on count no more. */
+    private static void closeRounds(ProcessContext ctx) {
+        for (EntityInstance round : list(ctx, ROUNDS)) {
+            ctx.changes().update(QbCertifications.ROUND, round.id(), round.version(),
+                Map.of("closedAt", ctx.opTime()));
+        }
     }
 
     /** Rejects when the switch is off or the caller may not act as a sponsor; true when rejected. */
