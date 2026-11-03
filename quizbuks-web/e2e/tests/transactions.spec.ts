@@ -42,7 +42,7 @@ test('a sponsor reads, filters and exports their transactions', async ({ page, r
   expect(await submitRight(request, noah.token, noahAttempt)).toBe('PENDING')
 
   await signIn(page, '/sponsor/', sponsor.email)
-  await page.getByRole('link', { name: 'Wallet' }).click()
+  await page.getByRole('link', { name: 'Wallet', exact: true }).click()
   await page.getByTestId('wallet-transactions').click()
   await expect(page).toHaveURL(/\/sponsor\/transactions$/)
   const rows = page.getByTestId('transaction-row')
