@@ -16,10 +16,19 @@ export function treeStateOf(value: unknown): TreeState | null {
 
 export type Requirement = 'PASSED' | 'ANSWERED'
 
-/** An edge: the node requires another first, passed or merely answered. */
+/** An edge: the node requires another first, passed or merely answered; or (Q86) a certification held, a node of its own. */
 export interface TreeEdge {
   id: string
   requirement: Requirement
+  /** Q86: the certification's key when the edge leads to one (its node's id is `certificationNodeId(key)`). */
+  certification?: string | null
+}
+
+/** The id of a certification's node on a tree (Q86, D-Q86-7): the same for every tree. */
+export const certificationNodeId = (key: string) => `cert:${key}`
+
+export function certificationOfNode(id: string): string | null {
+  return id.startsWith('cert:') ? id.slice(5) : null
 }
 
 /** What the layout needs of a node; the pages add what they show. */
@@ -27,6 +36,8 @@ export interface TreeNodeInput {
   id: string
   name: string
   requires: TreeEdge[]
+  /** Q86: a certification is drawn as a platform node; a publication is the default. */
+  nodeKind?: 'publication' | 'certification'
 }
 
 /** Edges as the templates give them (`prerequisites` JSON: `requiredPublicationId`, `requirement`); none on bad JSON. */
@@ -43,6 +54,9 @@ export function edgesOf(value: unknown): TreeEdge[] {
   return raw.flatMap((item): TreeEdge[] => {
     if (!item || typeof item !== 'object') return []
     const p = item as Record<string, unknown>
+    if (typeof p.certification === 'string' && p.certification) {
+      return [{ id: certificationNodeId(p.certification), requirement: 'PASSED', certification: p.certification }]
+    }
     if (typeof p.requiredPublicationId !== 'string') return []
     return [{ id: p.requiredPublicationId, requirement: p.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED' }]
   })

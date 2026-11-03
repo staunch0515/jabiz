@@ -78,6 +78,8 @@ export const publishingEn = {
       full: 'At most {{max}} prerequisites: untick one to choose another.',
       none: 'Nothing to do first',
       item: '{{name}} ({{requirement}})',
+      certifications: 'Certifications to hold',
+      certificationsHint: 'Takers must hold these certifications of the platform (quizzes about the terms, the contest rules, referring, applying): nodes of the platform\'s tree your quiz hangs from.',
     },
     audience: {
       title: 'Matching conditions',
@@ -620,6 +622,8 @@ export const publishingZh: typeof publishingEn = {
       full: '前置条件至多 {{max}} 个：取消一个才能再选。',
       none: '无需先完成其他答卷',
       item: '{{name}}（{{requirement}}）',
+      certifications: '须持有的认证',
+      certificationsHint: '答题者须持有平台的这些认证（关于条款、比赛规则、推荐、申请的答题）：你的题挂在平台之树的这些节点之下。',
     },
     audience: {
       title: '匹配条件',
@@ -1162,6 +1166,8 @@ export const publishingJa: typeof publishingEn = {
       full: '前提条件は最大 {{max}} 件です。別のものを選ぶには、1 件外してください。',
       none: '先に終えるものはありません',
       item: '{{name}}（{{requirement}}）',
+      certifications: '保持が必要な認定',
+      certificationsHint: '回答者はプラットフォームのこれらの認定（規約・コンテスト規則・紹介・申請についてのクイズ）を保持している必要があります。あなたのクイズはプラットフォームのツリーのこれらのノードにつながります。',
     },
     audience: {
       title: 'マッチング条件',

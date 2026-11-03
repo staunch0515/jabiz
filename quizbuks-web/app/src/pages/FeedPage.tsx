@@ -27,6 +27,8 @@ import { Gift, HandCoins, LayoutGrid, SlidersHorizontal, X, type LucideIcon } fr
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
+import { UNDERSTANDING_TAKER } from '../qb/ids'
+import { UnderstandingCards } from '../qb/UnderstandingCards'
 import { EmptyArt } from '../qb/Illustrations'
 import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
 import { readCountries, shownLanguages } from '../qb/api'
@@ -432,6 +434,9 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
       {/* Q66: no greeting band; the page's heading is for assistive technology only. */}
       <h1 id="home-title" className="sr-only">{t('home.greeting', { name })}</h1>
       <HomeInstallOffer />
+      {/* Q86 (D-Q86-2): after accepting the terms, a quiz about them is offered here (while a round is open). */}
+      <UnderstandingCards kinds={UNDERSTANDING_TAKER} held={false} hrefOf={(id) => `/p/${encodeURIComponent(id)}`}
+        testId="home-understanding" />
       {openCash.length > 0 && (
         <Alert variant={openCash.some((r) => r.status === 'OVERDUE') ? 'warning' : 'default'} data-testid="home-cash">
           <HandCoins aria-hidden />

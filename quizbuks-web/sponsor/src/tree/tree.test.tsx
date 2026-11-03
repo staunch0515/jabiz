@@ -182,6 +182,31 @@ describe('the sponsor\'s tree (Q85)', () => {
     await expectAccessible()
   })
 
+  it('draws a certification required as a platform node without counts or a panel (Q86)', async () => {
+    server({ tree: [
+      node(BASICS, 'Coffee basics', { prerequisites: JSON.stringify([{ requiredPublicationId: null,
+        certification: 'TERMS_APP_UNDERSTOOD', requirement: 'PASSED' }]), lit: 1 }),
+      node(ADVANCED, 'Roasting', { prerequisites: JSON.stringify([{ requiredPublicationId: BASICS, requirement: 'PASSED' },
+        { requiredPublicationId: null, certification: 'TERMS_APP_UNDERSTOOD', requirement: 'PASSED' }]) }),
+    ] })
+    window.history.replaceState(null, '', '/tree')
+    render(<App />)
+    const page = await screen.findByTestId('tree-page')
+    const nodes = await within(page).findAllByTestId('tech-tree-node')
+    expect(nodes.map((n) => `${n.getAttribute('data-kind')}:${n.getAttribute('data-id')}`))
+      .toEqual(['certification:cert:TERMS_APP_UNDERSTOOD', `publication:${BASICS}`, `publication:${ADVANCED}`])
+    expect(nodes[0]).toHaveTextContent('Understood: Terms and Privacy Policy')
+    expect(within(nodes[0]).queryByTestId('tree-counts')).toBeNull()
+    expect(within(page).queryByTestId('tree-no-edges')).toBeNull()
+    expect(within(page).getAllByTestId('tech-tree-edge')).toHaveLength(3)
+    await expectAccessible()
+    // The certification has no people of the sponsor's: picking it changes nothing.
+    await userEvent.click(nodes[0])
+    expect(within(page).getByTestId('tree-node-panel')).toHaveTextContent('Pick a node')
+    await userEvent.click(nodes[1])
+    expect(within(within(page).getByTestId('tree-node-panel')).getByTestId('tree-node-name')).toHaveTextContent('Coffee basics')
+  })
+
   it('says when nothing leads anywhere, and when nothing was submitted', async () => {
     server({ tree: [node(BASICS, 'Coffee basics', { isolated: true })] })
     window.history.replaceState(null, '', '/tree')

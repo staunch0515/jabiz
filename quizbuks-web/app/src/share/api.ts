@@ -79,6 +79,8 @@ export interface SponsorTreeNode {
   requires: TreeEdge[]
   /** The required publications' names, by their id (from the `prerequisites` JSON). */
   requiredNames: Record<string, string>
+  /** Q86: the certifications the node requires, whether the caller holds each and its current round. */
+  certifications: { key: string; held: boolean; roundPublicationId: string | null }[]
 }
 
 /**
@@ -92,6 +94,7 @@ export async function readSponsorTree(handle: string, at: string, lang: string):
     const state = treeStateOf(row.state)
     if (typeof row.publicationId !== 'string' || !state) return []
     const requiredNames: Record<string, string> = {}
+    const certifications: SponsorTreeNode['certifications'] = []
     let raw: unknown = row.prerequisites
     if (typeof raw === 'string') {
       try {
@@ -102,9 +105,13 @@ export async function readSponsorTree(handle: string, at: string, lang: string):
     }
     if (Array.isArray(raw)) {
       for (const item of raw) {
-        if (item && typeof item === 'object' && typeof (item as Record<string, unknown>).requiredPublicationId === 'string'
-          && typeof (item as Record<string, unknown>).name === 'string') {
-          requiredNames[(item as Record<string, string>).requiredPublicationId] = (item as Record<string, string>).name
+        if (!item || typeof item !== 'object') continue
+        const p = item as Record<string, unknown>
+        if (typeof p.certification === 'string' && p.certification) {
+          certifications.push({ key: p.certification, held: p.held === true || p.held === 'true',
+            roundPublicationId: typeof p.roundPublicationId === 'string' ? p.roundPublicationId : null })
+        } else if (typeof p.requiredPublicationId === 'string' && typeof p.name === 'string') {
+          requiredNames[p.requiredPublicationId] = p.name
         }
       }
     }
@@ -118,6 +125,7 @@ export async function readSponsorTree(handle: string, at: string, lang: string):
       state,
       requires: edgesOf(row.prerequisites),
       requiredNames,
+      certifications,
     }]
   })
 }

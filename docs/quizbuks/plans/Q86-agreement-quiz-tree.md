@@ -1,4 +1,4 @@
-# Q86 协议答题、平台之树与"持有认证"作前置（计划，2026-11-03，待需求方确认 §9）
+# Q86 协议答题、平台之树与"持有认证"作前置（计划，2026-11-03；需求方确认，已实现，见 §10）
 
 需求方 2026-11-03 的要求：（1）各种协议同意之后加**一个答题环节**，确认用户了解协议内容，作为平台的特色，引导其他网站跟风；**已有的东西都不改**（同意照旧、不拦任何操作）；
 （2）协议答题与科技树（Q85）**统一考虑**。编号 Q86 是建议（Q83、Q84、Q85 已占用），确认时可改。**这只是计划**：确认 §9 后开发，一个 PR，工作分支 `1.3/quizbuks-86-agreement-quiz`。
@@ -96,3 +96,19 @@
 3. D-Q86-4：平台之树 = 总部官方账号的主页树，参数 `qb.tree.platform-handle` 指向它。
 4. D-Q86-5 / D-Q86-7：这一期一并做"持有认证"作前置，商户的树可以挂到平台的节点上。
 5. 编号 Q86，一个 PR，约 6.5 天，一条迁移。
+
+## 10. 实施记录（2026-11-03，分支 `1.3/quizbuks-86-agreement-quiz`）
+
+按 §2 实现；与计划不同的地方：
+
+1. **迁移是 `V64__quizbuks_certification_prerequisites.sql`**（Q83 的计划也写了 V64：谁后合入谁改号）。唯一约束是一条普通的 `UNIQUE (publication_id, certification)`，不是部分唯一索引；原来的 `(publication_id, required_publication_id)` 不动。
+2. **语句数是普通开始 + 2，不是 + 1**（D-Q86-6）：有认证前置时锁外多一条 `QueryEntities.all`（记录与轮）再多一条读本人在轮上的会话（与 `RoundHolders` 一样的两步），`AttemptStatementBudgetIT.aStartWithACertificationPrerequisite` 写明；普通开始与只有发布前置的开始不变。
+3. **卡的位置**（D-Q86-2）：没有改欢迎页与 `ConsentGate`（需求方"已有的不改"），卡放在 App 的**首页顶部**（只列未持有、有进行中的轮的）与**账户页"我的认证"**（已持有的也显示"已通过，至 …"），商户后台放在**概况页**（"开始"在新标签页打开 App 的发布页）。首页的"还没点亮根节点"横幅（D-Q86-4）没有做：首页的卡已经是入口。
+4. **新模板 `qb.app.understanding`**（权限 `qb.account.read`）一次给出三种认证的开关、持有、当前一轮与平台之树的 handle；受控参数 `qb.understanding.enabled`（缺省 `true`）与普通参数 `qb.tree.platform-handle` 由 `QB_SETUP` 建立（追加在 `QbParams.ALL` 末尾，`SetupIT` 按顺序比较）。
+5. **认证节点的画法**（D-Q86-7）：虚线圆角而不是菱形（同一个 `foreignObject` 节点，便于文字与焦点），带奖章图标与"平台认证"小字；App 的商户主页上点它去平台之树（有 handle 且不是本页时）或当前一轮，商户后台的树上它没有链接也没有右栏。
+6. **八个模板写同一段持有 SQL**（feed、publication、understanding、audience-count、sponsor/tree、tree-people、tree-person、app/sponsor-tree），`CertificationTemplatesTest` 核对目录；`qb.public.sponsor-page-publications` 与 `qb.sponsor.publication-prerequisites` 只把认证前置按名列出（没有本人、不算持有），公开模板的 `prerequisites` 多一个 `certification` 字段，白名单随之。
+7. **后台扩展**只加了三种认证的名字（认证页的下拉即可登记轮次）；"对应的法律文本版本（只读）"没有做——启动检查已经报告脱节。
+8. 场景快照随新参数变化（`setup.yml` 的两个参数；其他场景只是新参数使 UUIDv7 的顺序变化后选项位置移动，答案已按新位置改）。
+9. e2e `agreement-quiz.spec.ts`：测试的内容管理员角色加 `qb.certification.admin`（标官方账号）；每轮的题目都一样，卡可能链到上一次运行的轮。
+
+未做：D-Q86-8 的全部；商户自己的认证与"付学分答题"（Q88）。
