@@ -68,6 +68,8 @@ public final class RedemptionProcesses {
     public static final String VOID = "QB_REDEMPTION_VOID";
     public static final String EXPIRE = "QB_REDEMPTION_EXPIRE";
     public static final String LAPSE = "QB_REDEMPTION_LAPSE";
+    /** Q89d-1: a prize of a suspended purchase, voided when the suspension asked for it (the job's item). */
+    public static final String SUSPEND_VOID = "QB_REDEMPTION_SUSPEND_VOID";
 
     public static final String EXPIRE_JOB = "qb.redemption-expire";
     public static final String LAPSE_JOB = "qb.redemption-lapse";
@@ -567,6 +569,51 @@ public final class RedemptionProcesses {
                 });
             });
     }
+
+    /**
+     * {@value #SUSPEND_VOID} (Q89d-1, D-Q89-12): a prize not collected yet goes void when its publication's benefit
+     * purchase was suspended with {@code voidUnused} and still is; its taker is told as for any void. The item of the
+     * job {@code qb.benefit-void}: one transaction each, under the prize's lock; one collected, already void, or whose
+     * purchase was resumed meanwhile, is left as it is.
+     */
+    public static ProcessDefinition<SuspendVoidInput, RedemptionOutput, ProcessContext> suspendVoid() {
+        return ProcessDefinition.define(SUSPEND_VOID, 1, SuspendVoidInput.class, RedemptionOutput.class,
+            ProcessContext.class, pb -> {
+                pb.description("Voids a prize of a suspended benefit purchase (the item of the job qb.benefit-void).")
+                    .permissions(QbPermissions.PLAY_SYSTEM)
+                    .internal()
+                    .contextFactory((s, input) -> start(s, input, UUID.fromString(input.redemptionId())))
+                    .outputMapper(ctx -> ctx.get(OUTPUT, RedemptionOutput.class));
+                lockAndLoad(pb, QbRewards.defaultDataset(QbRewards.REDEMPTION));
+                pb.step("Load its purchase", QueryEntities.<ProcessContext>of(
+                        com.jabiz.quizbuks.benefit.QbBenefits.defaultDataset(com.jabiz.quizbuks.benefit.QbBenefits
+                            .PURCHASE), ctx -> EntityQuery.builder().where(new QueryPredicate.In("purchaseId",
+                            List.of(ctx.get(INPUT, SuspendVoidInput.class).purchaseId()))).limit(1).build(), "purchase"))
+                    .compute("Void it", (metadata, ctx) -> {
+                        EntityInstance redemption = redemption(ctx);
+                        EntityInstance purchase = first(ctx, "purchase");
+                        String status = effectiveStatus(redemption, ctx.opTime());
+                        if (purchase == null || !com.jabiz.quizbuks.benefit.PurchaseStatus.SUSPENDED.equals(
+                            purchase.get("status")) || !Boolean.TRUE.equals(purchase.get("voidUnused"))
+                            || !RedemptionStatus.OPEN.contains(status)) {
+                            unchanged(ctx, redemption);
+                            return;
+                        }
+                        Map<String, Object> values = new LinkedHashMap<>();
+                        values.put("status", RedemptionStatus.VOID);
+                        values.put("voidedBy", purchase.get("suspendedBy"));
+                        values.put("voidNote", purchase.get("suspendReason"));
+                        values.put("confirmBy", null);
+                        write(ctx, redemption, values);
+                    })
+                    .step("Tell the taker", PublishEvent.<ProcessContext>when(RedemptionProcesses::changed,
+                        VOIDED_EVENT, RedemptionProcesses::payload));
+            });
+    }
+
+    /** The item of {@code qb.benefit-void}: the prize, and the suspended purchase its publication draws on. */
+    public record SuspendVoidInput(@NotBlank @Size(max = 36) String redemptionId,
+        @NotBlank @Size(max = 36) String purchaseId) {}
 
     // ---- shared ------------------------------------------------------------------------------------------------------
 

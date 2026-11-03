@@ -120,6 +120,10 @@ public class SponsorErasure {
                     ErasedEntity.clear(QbBenefits.OFFER, "providerId", "image1", "image2", "image3", "image4"),
                     ErasedEntity.keep(QbBenefits.PURCHASE, "sponsorId", "note"),
                     ErasedEntity.keep(QbBenefits.PURCHASE, "providerId", "declineReason"),
+                    // Q89d-1: a suspension's reason, and the incidents' texts, as written by the erased sponsor.
+                    ErasedEntity.keep(QbBenefits.PURCHASE, "suspendedBy", "suspendReason"),
+                    ErasedEntity.keep(QbBenefits.INCIDENT, "recordedBy", "note"),
+                    ErasedEntity.keep(QbBenefits.INCIDENT, "resolvedBy", "resolution"),
                     // The onboarding: tombstoned; the purge overwrites who they are in every version.
                     ErasedEntity.delete(QbAccounts.SPONSOR, "userId", "contactName", "company", "intro", "avatar",
                         "introTranslations"),

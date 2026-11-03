@@ -94,6 +94,78 @@ public class BenefitConfig {
             .maxItems(5_000);
     }
 
+    // ---- Q89d-1: suspension and incidents ---------------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbBenefitIncidentEntity() {
+        return QbBenefits.INCIDENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbBenefitIncidentDataset() {
+        return defaultDataset(QbBenefits.INCIDENT);
+    }
+
+    @Bean
+    StaticDictionary qbBenefitIncidentKindDictionary() {
+        return StaticDictionary.define(QbBenefits.INCIDENT_KIND_DICTIONARY, d -> d
+            .item("NOT_FULFILLED", "en", "Not provided", "zh", "未提供", "ja", "提供されない")
+            .item("CLOSED_BUSINESS", "en", "Closed or out of business", "zh", "停业或歇业", "ja", "休業・廃業")
+            .item("QUANTITY_MISMATCH", "en", "Quantity does not match", "zh", "数量不符", "ja", "数量の不一致")
+            .item("QUALITY", "en", "Quality", "zh", "质量问题", "ja", "品質")
+            .item("COMPLAINT", "en", "Complaint", "zh", "投诉", "ja", "苦情")
+            .item("OTHER", "en", "Other", "zh", "其他", "ja", "その他"));
+    }
+
+    @Bean
+    ProcessDefinition<IncidentProcesses.SuspendInput, IncidentProcesses.PurchaseState, ProcessContext>
+        qbBenefitPurchaseSuspend() {
+        return IncidentProcesses.suspend();
+    }
+
+    @Bean
+    ProcessDefinition<IncidentProcesses.ResumeInput, IncidentProcesses.PurchaseState, ProcessContext>
+        qbBenefitPurchaseResume() {
+        return IncidentProcesses.resume();
+    }
+
+    @Bean
+    ProcessDefinition<IncidentProcesses.RecordInput, IncidentProcesses.IncidentOutput, ProcessContext>
+        qbBenefitIncidentRecord() {
+        return IncidentProcesses.record();
+    }
+
+    @Bean
+    ProcessDefinition<IncidentProcesses.ResolveInput, IncidentProcesses.IncidentOutput, ProcessContext>
+        qbBenefitIncidentResolve() {
+        return IncidentProcesses.resolve();
+    }
+
+    @Bean
+    ProcessDefinition<com.jabiz.quizbuks.publishing.PublicationLifecycle.BenefitPauseInput,
+        com.jabiz.quizbuks.publishing.PublicationOutput, ProcessContext> qbPublicationBenefitPause() {
+        return com.jabiz.quizbuks.publishing.PublicationLifecycle.benefitPause();
+    }
+
+    @Bean
+    ProcessDefinition<com.jabiz.quizbuks.reward.RedemptionProcesses.SuspendVoidInput,
+        com.jabiz.quizbuks.reward.RedemptionProcesses.RedemptionOutput, ProcessContext> qbRedemptionSuspendVoid() {
+        return com.jabiz.quizbuks.reward.RedemptionProcesses.suspendVoid();
+    }
+
+    /** Every ten minutes, at another odd second: each prize to void in its own transaction (decision D42). */
+    @Bean
+    JobDefinition<com.jabiz.quizbuks.reward.RedemptionProcesses.SuspendVoidInput> qbBenefitVoidJob(
+        @Value("${quizbuks.benefits.void-cron:37 */10 * * * *}") String cron,
+        ProcessDefinition<com.jabiz.quizbuks.reward.RedemptionProcesses.SuspendVoidInput,
+            com.jabiz.quizbuks.reward.RedemptionProcesses.RedemptionOutput, ProcessContext> qbRedemptionSuspendVoid) {
+        return JobDefinition.forEach(QbBenefits.VOID_JOB, cron, ZoneOffset.UTC,
+                JobItems.template(QbBenefits.VOID_DUE_TEMPLATE, scheduledTime -> Map.of(), "redemptionId"),
+                qbRedemptionSuspendVoid, (scheduledTime, row) -> new com.jabiz.quizbuks.reward.RedemptionProcesses
+                    .SuspendVoidInput(String.valueOf(row.get("redemptionId")), String.valueOf(row.get("purchaseId"))))
+            .maxItems(5_000);
+    }
+
     private DatasetDefinition defaultDataset(String entity) {
         return DatasetDefinition.define(QbBenefits.defaultDataset(entity), d -> d
             .targetEntityType(entity)
