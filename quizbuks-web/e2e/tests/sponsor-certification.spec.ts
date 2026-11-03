@@ -14,6 +14,15 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
+/** The browser's session cleared, so the next sign-in shows the form (as digital-prize.spec.ts does). */
+async function signOut(page: import('@playwright/test').Page) {
+  await page.context().clearCookies()
+  await page.evaluate(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+  })
+}
+
 async function choose(page: import('@playwright/test').Page, text: string) {
   const saved = page.waitForResponse((r) => r.url().includes('/api/processes/QB_ATTEMPT_SAVE/') && r.ok())
   await page.getByRole('radio', { name: text }).click()
@@ -80,6 +89,7 @@ test('a sponsor defines a certification, a quiz paying nothing gives it, a taker
 
   // A taker: the page says what passing gives, they pass, hold it and can issue the certificate.
   const me = await taker(request, 'Kei')
+  await signOut(page)
   await signIn(page, '/taker/', me.email)
   await expect(page).not.toHaveURL(/\/login/)
   await page.goto(`/taker/p/${publicationId}`)
@@ -94,7 +104,7 @@ test('a sponsor defines a certification, a quiz paying nothing gives it, a taker
   await expect(page.getByTestId('result-passed')).toHaveText('Passed')
 
   const key = `sp:${certificationId}`
-  await page.goto('/taker/account')
+  await page.goto('/taker/account/certificates')
   const item = page.getByTestId(`certificate-${key}`)
   await expect(item).toBeVisible()
   await expect(item).toContainText(name)
@@ -112,15 +122,15 @@ test('a sponsor defines a certification, a quiz paying nothing gives it, a taker
   await expectAccessible(page, 'verify page of a sponsor certification')
 
   // The sponsor's list counts the holder.
+  await signOut(page)
   await signIn(page, '/sponsor/', sponsor.email)
+  await expect(page).not.toHaveURL(/\/login/)
   await page.goto('/sponsor/certifications')
   await expect(row.getByTestId('certification-holders')).toHaveText('1')
 
   // The administration's template lists it (read only; the page is covered by the extension's tests).
   const admin = await adminToken(request)
-  const listed = await request.get(`/api/queries/qb.admin.sponsor-certifications?p.at=${encodeURIComponent(
-    new Date().toISOString())}&p.q=${encodeURIComponent('Quiz Co')}`, { headers: { Authorization: `Bearer ${admin}` } })
-  expect(listed.ok()).toBe(true)
-  expect(((await listed.json()).items as { certificationId: string }[]).some((r) => r.certificationId === certificationId))
-    .toBe(true)
+  const listed = await query(request, admin, 'qb.admin.sponsor-certifications', { at: new Date().toISOString(),
+    q: 'Quiz Co' })
+  expect(listed.some((r) => r.certificationId === certificationId)).toBe(true)
 })
