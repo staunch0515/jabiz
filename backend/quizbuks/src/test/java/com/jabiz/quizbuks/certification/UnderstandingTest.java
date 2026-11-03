@@ -30,7 +30,10 @@ class UnderstandingTest {
     @Test
     void theCatalogNamesTheAgreementsEachCertificationStandsFor() {
         assertThat(Certifications.ALL).extracting(Certifications.Certification::key).containsExactly("SPONSOR_APPLY",
-            "REFERRER", "TERMS_APP_UNDERSTOOD", "CONTEST_RULES_UNDERSTOOD", "TERMS_SPONSOR_UNDERSTOOD");
+            "REFERRER", "TERMS_APP_UNDERSTOOD", "CONTEST_RULES_UNDERSTOOD", "TERMS_SPONSOR_UNDERSTOOD",
+            // Q89a: the sponsors' capabilities in sponsored benefits stand for no agreement.
+            "BENEFIT_PROVIDER", "BENEFIT_SPONSOR");
+        assertThat(Certifications.legalKinds(Certifications.BENEFIT_SPONSOR)).isEmpty();
         assertThat(Certifications.legalKinds(Certifications.TERMS_APP_UNDERSTOOD)).containsExactly("TERMS_APP", "PRIVACY");
         assertThat(Certifications.legalKinds(Certifications.CONTEST_RULES_UNDERSTOOD)).containsExactly("CONTEST_RULES");
         assertThat(Certifications.legalKinds(Certifications.TERMS_SPONSOR_UNDERSTOOD)).containsExactly("TERMS_SPONSOR",
