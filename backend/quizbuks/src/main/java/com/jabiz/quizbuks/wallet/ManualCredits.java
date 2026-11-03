@@ -204,6 +204,8 @@ public final class ManualCredits {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", input.sponsorId());
         values.put("method", QbTopUps.MANUAL);
+        // Promotion and money received by hand go to the Kudos wallet, as before (Q87a keeps the manual credit).
+        values.put("target", TopUpTargets.KUDOS);
         values.put("manualKind", input.kind());
         values.put("manualReason", input.reason().strip());
         values.put("transferCode", ctx.get(CODE));

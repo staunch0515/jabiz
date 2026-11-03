@@ -100,6 +100,15 @@ public final class WalletCodes {
      */
     public static final String RECEIPT_REFUNDED = "QB_RECEIPT_REFUNDED";
 
+    /** Q87a: a top-up cannot go to the chosen target now ({@code qb.topup.targets}). */
+    public static final String TOPUP_TARGET = "QB_TOPUP_TARGET";
+    /** Q87a: turning cash into Kudos (or back) is switched off ({@code qb.kudos.buy|sell.enabled}). */
+    public static final String KUDOS_EXCHANGE_OFF = "QB_KUDOS_EXCHANGE_OFF";
+    /** Q87a: what is available (the balance less what open disputes hold) does not cover the amount. */
+    public static final String KUDOS_EXCHANGE_FUNDS = "QB_KUDOS_EXCHANGE_FUNDS";
+    /** Q87a: Kudos cannot go back to cash while rewards wait to be paid from them. */
+    public static final String KUDOS_EXCHANGE_PENDING = "QB_KUDOS_EXCHANGE_PENDING";
+
     public static final List<String> ALL = List.of(TOPUP_AMOUNT_RANGE, TOPUP_TOO_MANY_OPEN, TOPUP_UNAVAILABLE,
         TOPUP_NEW_SPONSOR_LIMIT, TOPUP_BANK_UNAVAILABLE, TOPUP_BANK_STATE, TOPUP_BANK_PAYER_NAME, TOPUP_BANK_DATE_FUTURE,
         TOPUP_BANK_NO_REVIEW, TOPUP_BANK_REFERENCE_USED, TOPUP_BANK_OWN,
@@ -108,7 +117,8 @@ public final class WalletCodes {
         WITHDRAWAL_UNAVAILABLE, WITHDRAWAL_AMOUNT, WITHDRAWAL_STATE, WITHDRAWAL_OWN, WITHDRAWAL_APPROVER, WITHDRAWAL_REFERENCE_USED,
         RECEIPT_NOT_PAID, RECEIPT_NO_ISSUER, RECEIPT_REFUNDED, BANK_SETTINGS_RANGE, BANK_SETTINGS_OPEN,
         BANK_SETTINGS_UNCHANGED, BANK_SETTINGS_NOTHING, TOPUP_MANUAL_SPONSOR, TOPUP_MANUAL_KIND, TOPUP_MANUAL_OWN,
-        TOPUP_MANUAL_NO_REVIEW, RECEIPT_GRANT);
+        TOPUP_MANUAL_NO_REVIEW, RECEIPT_GRANT, TOPUP_TARGET, KUDOS_EXCHANGE_OFF, KUDOS_EXCHANGE_FUNDS,
+        KUDOS_EXCHANGE_PENDING);
 
     private WalletCodes() {}
 }

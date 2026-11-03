@@ -112,11 +112,45 @@ class WalletConfig {
             .scope(s -> s.fromContext("dimension1", "actorId", RequestContext::actorId)));
     }
 
+    /** Q87a: the record of each exchange between a sponsor's cash and Kudos, read by finance, written once. */
+    @Bean
+    EntityDefinition qbKudosExchangeEntity() {
+        return KudosExchanges.EXCHANGE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbKudosExchangeDataset() {
+        return DatasetDefinition.define(QbWallets.defaultDataset(KudosExchanges.EXCHANGE), d -> d
+            .targetEntityType(KudosExchanges.EXCHANGE)
+            .asDefault()
+            .permissions(QbPermissions.ADMIN_FINANCE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(10))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    StaticDictionary qbKudosExchangeDirectionDictionary() {
+        return StaticDictionary.define(KudosExchanges.DIRECTION_DICTIONARY, d -> d
+            .item(KudosExchanges.TO_KUDOS, "en", "Cash to Kudos", "zh", "现金换学分", "ja", "現金からクドスへ")
+            .item(KudosExchanges.TO_CASH, "en", "Kudos to cash", "zh", "学分换回现金", "ja", "クドスから現金へ"));
+    }
+
+    @Bean
+    ProcessDefinition<KudosExchanges.Input, KudosExchanges.Output, ProcessContext> qbKudosBuy() {
+        return KudosExchanges.buy();
+    }
+
+    @Bean
+    ProcessDefinition<KudosExchanges.Input, KudosExchanges.Output, ProcessContext> qbKudosSell() {
+        return KudosExchanges.sell();
+    }
+
     @Bean
     StaticDictionary qbWalletKindDictionary() {
         return StaticDictionary.define(QbWallets.KIND_DICTIONARY, d -> d
             .item(QbWallets.SPONSOR, "en", "Sponsor", "zh", "商家", "ja", "スポンサー")
-            .item(QbWallets.TAKER, "en", "Quiz taker", "zh", "答题人", "ja", "回答者"));
+            .item(QbWallets.TAKER, "en", "Quiz taker", "zh", "答题人", "ja", "回答者")
+            .item(QbWallets.CASH, "en", "Sponsor cash account", "zh", "商家现金账户", "ja", "スポンサーの現金口座"));
     }
 
     @Bean

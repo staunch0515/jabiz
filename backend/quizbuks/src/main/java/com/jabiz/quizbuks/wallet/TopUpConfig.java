@@ -174,6 +174,14 @@ class TopUpConfig {
             .item(QbTopUps.MANUAL, "en", "Manual credit", "zh", "手工加币", "ja", "手動付与"));
     }
 
+    /** Q87a: where a top-up goes. */
+    @Bean
+    StaticDictionary qbTopUpTargetDictionary() {
+        return StaticDictionary.define(TopUpTargets.DICTIONARY, d -> d
+            .item(TopUpTargets.KUDOS, "en", "Kudos wallet", "zh", "学分钱包", "ja", "クドスウォレット")
+            .item(TopUpTargets.CASH, "en", "Cash account", "zh", "现金账户", "ja", "現金口座"));
+    }
+
     @Bean
     StaticDictionary qbTopUpManualKindDictionary() {
         return StaticDictionary.define(QbTopUps.MANUAL_KIND_DICTIONARY, d -> d
@@ -221,7 +229,10 @@ class TopUpConfig {
             .item(ReconChecks.TAKER_WALLET_LAG, "en", "Taker wallet behind (note)", "zh", "用户钱包落后（提示）",
                 "ja", "回答者ウォレットの遅れ（注記）")
             .item(ReconChecks.TRANSFER_LEDGER, "en", "Transfer posting", "zh", "转账分录", "ja", "送金の仕訳")
-            .item(ReconChecks.TRANSFER_IN_TRANSIT, "en", "Transfer in transit", "zh", "转账在途", "ja", "送金の未達"));
+            .item(ReconChecks.TRANSFER_IN_TRANSIT, "en", "Transfer in transit", "zh", "转账在途", "ja", "送金の未達")
+            .item(ReconChecks.CASH_ACCOUNT, "en", "Sponsor cash account", "zh", "商家现金账户", "ja", "スポンサーの現金口座")
+            .item(ReconChecks.TOTAL_2160, "en", "Total of sponsor cash accounts", "zh", "商家现金账户合计",
+                "ja", "スポンサーの現金口座合計"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */
@@ -240,6 +251,12 @@ class TopUpConfig {
     @Bean
     RetentionPolicy qbTopUpRetention() {
         return RetentionPolicy.of(QbTopUps.TOPUP).keep(RETENTION).from("paidAt").afterFiscalYearEnd();
+    }
+
+    /** Q87a: an exchange between cash and Kudos is a posting's source document: kept as the top-ups are. */
+    @Bean
+    RetentionPolicy qbKudosExchangeRetention() {
+        return RetentionPolicy.of(KudosExchanges.EXCHANGE).keep(RETENTION).from("createdAt").afterFiscalYearEnd();
     }
 
     /** A receipt from the end of the fiscal year it was issued in (those issued before Q10b have no date: kept). */

@@ -169,6 +169,30 @@ class BankTopUpIT extends PlayItSupport {
     }
 
     @Test
+    @Order(2)
+    void aTransferToTheCashAccountIsCreditedThere() {
+        // Q87a: the target is chosen when asking, and the approval credits 2160 and the cash account.
+        bankSetUp();
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", QbParams.TOPUP_TARGETS, "value", "KUDOS,CASH"), "reason", "Q87a"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+        String sponsor = newSponsor("s-bank-cash");
+        String topUpId = (String) run(BankTopUps.START, sponsorToken(sponsor), body("amount", 20_000, "target",
+            "CASH")).get("topUpId");
+        assertThat(topUp(topUpId)).containsEntry("target", "CASH");
+        String requestId = (String) record(finance(), topUpId, 20_000, "ST-CASH").get("approvalRequestId");
+        run("APPROVAL_DECIDE", content(), body("requestId", requestId, "decision", "APPROVE"));
+        deliverEvents();
+        assertThat(topUp(topUpId)).containsEntry("status", "PAID");
+        assertThat(postings(topUpId)).extracting(p -> p.get("account_code") + " " + p.get("direction"))
+            .containsExactly("1120 DEBIT", "2160 CREDIT");
+        assertThat(balance(sponsor)).isEqualByComparingTo("0");
+        assertThat((BigDecimal) query("SELECT balance FROM qb_wallet WHERE owner_id = ? AND kind = 'CASH'", sponsor)
+            .getFirst().get("balance")).isEqualByComparingTo("20000");
+        assertBooksBalance();
+    }
+
+    @Test
     @Order(3)
     void aRejectedRecordGoesBackAndTheRightEntryIsRecordedAgain() {
         bankSetUp();

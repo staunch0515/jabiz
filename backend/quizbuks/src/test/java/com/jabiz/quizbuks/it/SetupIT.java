@@ -230,9 +230,12 @@ class SetupIT extends QbItSupport {
     private void assertAccounts() {
         Map<Object, Object> accounts = query("SELECT account_code, account_type FROM ledger_account_version")
             .stream().collect(Collectors.toMap(row -> row.get("account_code"), row -> row.get("account_type")));
-        assertThat(accounts).containsExactlyInAnyOrderEntriesOf(Map.of("1110", "ASSET", "1120", "ASSET",
+        Map<Object, Object> expected = new java.util.HashMap<>(Map.of("1110", "ASSET", "1120", "ASSET",
             "2110", "LIABILITY", "2120", "LIABILITY", "2130", "LIABILITY", "2140", "LIABILITY", "4110", "REVENUE",
             "5110", "EXPENSE", "5120", "EXPENSE", "5130", "EXPENSE"));
+        // Q87a: the sponsors' cash accounts.
+        expected.put("2160", "LIABILITY");
+        assertThat(accounts).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
     private void assertCountries() {
@@ -313,6 +316,10 @@ class SetupIT extends QbItSupport {
         // Q47c: charging for the audience rules (off), its fallback and the unused-days refund (all controlled).
         expected.putAll(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "false", QbParams.AUDIENCE_PRICE_FALLBACK, "DIRECT",
             QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "false"));
+        // Q87a: where top-ups go, the exchange's switches and the transfers' rate (all controlled).
+        expected.putAll(Map.of(QbParams.TOPUP_TARGETS, "KUDOS,CASH", QbParams.TOPUP_DEFAULT_TARGET, "KUDOS",
+            QbParams.KUDOS_BUY_ENABLED, "true", QbParams.KUDOS_SELL_ENABLED, "false", QbParams.TRANSFER_FEE_RATE,
+            "0.0000"));
         // Q48e-2: the operators' five plans (fixed fee, platform's share) and their withdrawals.
         expected.putAll(Map.of(QbParams.operatorPlanFee("1"), "0", QbParams.operatorPlanShare("1"), "0.5000",
             QbParams.operatorPlanFee("2"), "20000", QbParams.operatorPlanShare("2"), "0.4000",

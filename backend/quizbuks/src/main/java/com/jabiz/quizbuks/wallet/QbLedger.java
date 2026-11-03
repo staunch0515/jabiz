@@ -21,6 +21,11 @@ public final class QbLedger {
     /** Q48b: what the platform owes operators of their settled months, and the expense it is. */
     public static final String OPERATOR_SHARES_PAYABLE = "2140";
     public static final String OPERATOR_SHARES = "5130";
+    /**
+     * Q87a (D-Q87-1): the sponsors' cash accounts, apart from their Kudos (2110): money a sponsor has with the
+     * platform, its use decided when it is turned into Kudos or (Q87b) pays a fee. Its lines carry the sponsor.
+     */
+    public static final String SPONSOR_CASH = "2160";
 
     /** The name of the dimension that carries the party (a user's id) on the wallet accounts. */
     public static final String PARTY = "party";
@@ -39,7 +44,8 @@ public final class QbLedger {
         new Account(PAYMENT_FEES, "Payment fees (Stripe)", "EXPENSE"),
         new Account(PROMOTION_EXPENSES, "Promotion expenses (Kudos granted)", "EXPENSE"),
         new Account(OPERATOR_SHARES_PAYABLE, "Operator shares payable", "LIABILITY"),
-        new Account(OPERATOR_SHARES, "Operator shares (expense)", "EXPENSE"));
+        new Account(OPERATOR_SHARES, "Operator shares (expense)", "EXPENSE"),
+        new Account(SPONSOR_CASH, "Sponsor cash accounts", "LIABILITY"));
 
     private QbLedger() {}
 }

@@ -129,7 +129,7 @@
   - 持有认证只经 `RoundHolders.loadHoldings` / `heldKeys` 判断（含尚未认领的合格），模板 `qb.sponsor.benefit-access` / `-catalog` 写同一段 SQL。
   - 新建权益与重新上架要 `BENEFIT_PROVIDER`；隐藏与修改不要（认证到期不妨碍下架）。开启洽谈与新建采购单要 `BENEFIT_SPONSOR`；已有的洽谈与采购单照常。
   - 采购单：保存即从权益复制快照；`CONFIRMED` 或 `PENDING_PROVIDER` 的修改回到 `PENDING_PROVIDER`；提交至少一个凭证；提供方确认与退回都带 `baseRevision`（确认必填）；待办 `qb.benefit.confirm`（提供方）与 `qb.benefit.resubmit`（赞助方，退回时）。
-- **迁移 V66**：`qb_benefit_offer`、`qb_benefit_conversation`（`(offer_id, sponsor_id)` 唯一）、`qb_benefit_message`、`qb_benefit_purchase_version`（时态，只插入）。
+- **迁移 V67**：`qb_benefit_offer`、`qb_benefit_conversation`（`(offer_id, sponsor_id)` 唯一）、`qb_benefit_message`、`qb_benefit_purchase_version`（时态，只插入）。
 - **模板**（`queries/qb/sponsor/benefit-*.sql`，权限 `qb.benefit.use`）：`access`、`catalog`、`offers`、按侧分开的 `conversations` / `inquiries`、`messages` / `inquiry-messages`、`purchases` / `orders`。
 - **删除账号**（`SponsorErasure`）：消息 `keep(senderUserId, body)`；权益 `clear` 图片（目录只显示入驻仍在的提供方）；采购单两侧各 `keep` 自己写的自由文字（`note` / `declineReason`）。
 - **商户后台**（`quizbuks-web/sponsor/src/benefits/`）：菜单组"赞助权益"：权益目录（认证卡、搜索、种类、联系提供方、登记采购）、我的权益（列表与编辑对话框，图片至多 4 张）、洽谈（我发起的 / 收到的）、采购单（我购买的 / 向我购买的；赞助方编辑、提交、撤回，提供方确认或退回）。

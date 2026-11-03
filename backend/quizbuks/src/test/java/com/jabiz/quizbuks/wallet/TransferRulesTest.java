@@ -48,6 +48,26 @@ class TransferRulesTest {
     }
 
     @Test
+    void aShareOfTheAmountIsAddedToTheFixedFeeRoundedDown() {
+        // Q87a (D-Q87-0): qb.transfer.fee-rate, 0 by default.
+        TransferRules.Params rate = new TransferRules.Params(true, d(1000), d(50000), d(100), d(7),
+            new BigDecimal("0.05"));
+        TransferRules.Plan plan = TransferRules.plan(rate, facts(1999));
+        assertThat(plan.fee()).isEqualByComparingTo("199");
+        assertThat(plan.net()).isEqualByComparingTo("1800");
+        assertThat(TransferRules.fee(d(1000), d(0), BigDecimal.ZERO)).isEqualByComparingTo("0");
+        assertThat(TransferRules.fee(d(1000), d(0), null)).isEqualByComparingTo("0");
+        // A rate outside 0 to below 1 is unusable: nothing is sent.
+        assertThat(TransferRules.plan(new TransferRules.Params(true, d(1000), d(50000), d(0), d(7), BigDecimal.ONE),
+            facts(5000)).skip()).isEqualTo(TransferRules.INVALID_PARAMS);
+        assertThat(TransferRules.plan(new TransferRules.Params(true, d(1000), d(50000), d(0), d(7),
+            new BigDecimal("-0.01")), facts(5000)).skip()).isEqualTo(TransferRules.INVALID_PARAMS);
+        // A rate that takes everything left after the fixed fee.
+        assertThat(TransferRules.plan(new TransferRules.Params(true, d(1000), d(50000), d(500), d(7),
+            new BigDecimal("0.5")), facts(1000)).skip()).isEqualTo(TransferRules.FEE_TOO_HIGH);
+    }
+
+    @Test
     void aFeeIsTakenFromTheAmount() {
         TransferRules.Params fee = new TransferRules.Params(true, d(1000), d(50000), d(100), d(7));
         TransferRules.Plan plan = TransferRules.plan(fee, facts(1500));

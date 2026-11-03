@@ -13,6 +13,9 @@ export const WALLET_PROCESS = {
   bankStart: 'QB_TOPUP_BANK_START',
   bankReport: 'QB_TOPUP_BANK_REPORT',
   bankCancel: 'QB_TOPUP_BANK_CANCEL',
+  /** Q87a: cash of the cash account into Kudos, and back (`wallet.KudosExchanges`). */
+  kudosBuy: 'QB_KUDOS_BUY',
+  kudosSell: 'QB_KUDOS_SELL',
 } as const
 
 /** SQL templates (`queries/qb/sponsor`). */
@@ -23,6 +26,8 @@ export const WALLET_TEMPLATE = {
   topUpLimit: 'qb.sponsor.topup-limit',
   /** Q13a: the platform's receiving account and a bank top-up's range. */
   bankAccount: 'qb.sponsor.bank-account',
+  /** Q87a: where top-ups may go and whether cash and Kudos may be exchanged (the controlled switches). */
+  cashSettings: 'qb.sponsor.cash-settings',
 } as const
 
 /** The sponsor's own top-ups, read only (the checkout's address included: it is theirs). */

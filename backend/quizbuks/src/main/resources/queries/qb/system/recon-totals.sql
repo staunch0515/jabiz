@@ -1,6 +1,6 @@
 /*---
 id: qb.system.recon-totals
-description: Whether account 2110 adds up to the sponsors' wallets and the whole ledger to zero (the daily reconciliation; differences only)
+description: Whether accounts 2110 and 2160 add up to the sponsors' wallets and cash accounts and the whole ledger to zero (the daily reconciliation; differences only)
 entities: [QbWallet, LedgerEntry, LedgerAccount]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
@@ -27,6 +27,20 @@ CROSS JOIN (
     SELECT coalesce(sum(x.{{QbWallet.balance}}), 0) AS w_total
     FROM {{QbWallet}} x
     WHERE x.{{QbWallet.kind}} = 'SPONSOR') w
+WHERE l.l_total <> w.w_total
+UNION ALL
+-- Q87a, TOTAL_2160: account 2160 against every cash account's cached balance.
+SELECT CAST('TOTAL_2160' AS varchar(30)) AS checkCode, l.l_total AS expected, w.w_total AS actual
+FROM (
+    SELECT coalesce(sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
+               ELSE -e.{{LedgerEntry.amount}} END), 0) AS l_total
+    FROM {{LedgerEntry}} e
+    JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
+    WHERE a.{{LedgerAccount.accountCode}} = '2160') l
+CROSS JOIN (
+    SELECT coalesce(sum(x.{{QbWallet.balance}}), 0) AS w_total
+    FROM {{QbWallet}} x
+    WHERE x.{{QbWallet.kind}} = 'CASH') w
 WHERE l.l_total <> w.w_total
 UNION ALL
 SELECT CAST('LEDGER_ZERO' AS varchar(30)) AS checkCode, CAST(0 AS numeric) AS expected, z.z_total AS actual
