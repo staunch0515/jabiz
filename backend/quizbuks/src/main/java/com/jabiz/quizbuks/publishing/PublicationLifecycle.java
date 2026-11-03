@@ -8,6 +8,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.fee.FeeProcesses;
 import com.jabiz.quizbuks.reward.DigitalPrizeStatus;
 import com.jabiz.quizbuks.reward.QbDigitalPrizes;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
@@ -159,6 +160,8 @@ public final class PublicationLifecycle {
                             // Q70: the referral quota may come from the pool too.
                             .limit(PublishingLimits.MAX_POOL_WINNERS + ReferralPolicy.MAX_QUOTA).build();
                     }, POOL))
+                // Q87b: unpaid platform fees stop new publications (D-Q87-5, D-Q87-7).
+                .steps(b -> FeeProcesses.standing(b, ctx -> ctx.request().actorId()))
                 .compute("Check the publication", (metadata, ctx) -> check(ctx))
                 .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
                     PublicationApprovals.SUBJECT, ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL))
@@ -193,6 +196,7 @@ public final class PublicationLifecycle {
         PublicationReadiness.pool(PublicationEditing.draftOf(publication), list(ctx, POOL).size())
             .forEach(ctx::reject);
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);
+        FeeProcesses.refusals(ctx).forEach(ctx::reject);
         PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
             .forEach(ctx::reject);
         PublicationEditing.languageProblems(publication.attributes(), version).forEach(ctx::reject);

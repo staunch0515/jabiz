@@ -34,10 +34,12 @@ public final class JournalLines {
     public static final Pattern ACCOUNT_CODE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,19}");
     public static final int EXTERNAL_VOUCHER_LENGTH = 50;
 
-    /** The accounts carrying a line per sponsor. */
-    /** The accounts kept per sponsor: the Kudos wallets (2110) and, Q87a, the cash accounts (2160). */
+    /**
+     * The accounts kept per sponsor: the Kudos wallets (2110), Q87a the cash accounts (2160), and Q87b the platform
+     * fees owed (1130).
+     */
     private static final java.util.Set<String> PER_SPONSOR = java.util.Set.of(QbLedger.SPONSOR_PREPAYMENTS,
-        QbLedger.SPONSOR_CASH);
+        QbLedger.SPONSOR_CASH, QbLedger.FEES_RECEIVABLE);
 
     /** The detail's times, in Japan's time as the periods are. */
     private static final DateTimeFormatter TIME = DateTimeFormatter.ISO_OFFSET_DATE_TIME;

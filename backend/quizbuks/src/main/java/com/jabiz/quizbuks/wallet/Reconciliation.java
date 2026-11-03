@@ -45,6 +45,8 @@ public final class Reconciliation {
     public static final String WALLETS_TEMPLATE = "qb.system.recon-sponsor-wallets";
     /** Q87a: the sponsors' cash accounts against account 2160. */
     public static final String CASH_TEMPLATE = "qb.system.recon-cash-accounts";
+    /** Q87b: account 1130 for each sponsor against their fee records. */
+    public static final String FEE_TEMPLATE = "qb.system.recon-fee-receivables";
     public static final String PENDING_TEMPLATE = "qb.system.recon-sponsor-pending";
     public static final String TOTALS_TEMPLATE = "qb.system.recon-totals";
     public static final String TOPUPS_TEMPLATE = "qb.system.recon-topups";
@@ -104,6 +106,7 @@ public final class Reconciliation {
     static final String EXISTING = "existing";
     static final String WALLETS = "wallets";
     static final String CASH_ACCOUNTS = "cashAccounts";
+    static final String FEE_RECEIVABLES = "feeReceivables";
     static final String PENDING = "pending";
     static final String TOTALS = "totals";
     static final String TOPUPS = "topUps";
@@ -139,6 +142,8 @@ public final class Reconciliation {
                     ctx -> Map.of(), WALLETS))
                 .step("Compare the cash accounts", RunTemplate.<ProcessContext>of(CASH_TEMPLATE,
                     ctx -> Map.of(), CASH_ACCOUNTS))
+                .step("Compare the fees owed", RunTemplate.<ProcessContext>of(FEE_TEMPLATE,
+                    ctx -> Map.of(), FEE_RECEIVABLES))
                 .step("Compare the pending rewards", RunTemplate.<ProcessContext>of(PENDING_TEMPLATE,
                     ctx -> Map.of(), PENDING))
                 .step("Compare the totals", RunTemplate.<ProcessContext>of(TOTALS_TEMPLATE, ctx -> Map.of(), TOTALS))
@@ -187,6 +192,7 @@ public final class Reconciliation {
         List<ReconChecks.Item> found = new ArrayList<>();
         found.addAll(ReconChecks.perParty(ReconChecks.SPONSOR_WALLET, rows(ctx, WALLETS)));
         found.addAll(ReconChecks.perParty(ReconChecks.CASH_ACCOUNT, rows(ctx, CASH_ACCOUNTS)));
+        found.addAll(ReconChecks.perParty(ReconChecks.FEE_RECEIVABLE, rows(ctx, FEE_RECEIVABLES)));
         found.addAll(ReconChecks.pending(rows(ctx, PENDING)));
         found.addAll(ReconChecks.coded(rows(ctx, TOTALS)));
         found.addAll(ReconChecks.coded(rows(ctx, TOPUPS)));

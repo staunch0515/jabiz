@@ -20,17 +20,17 @@ permissions: [qb.fee.system]
 -- cash: what the posting took from the sponsor's cash account (2160 debits less credits): its reversal gives it back.
 -- Postings already reversed are not reversed again.
 WITH inv AS (
-    SELECT i.{{QbFeeInvoice.invoiceId}} AS invoice_id, i.{{QbFeeInvoice.sponsorId}} AS sponsor_id,
-           i.{{QbFeeInvoice.period}} AS period
+    SELECT i.{{QbFeeInvoice.invoiceId}} AS inv_key, i.{{QbFeeInvoice.sponsorId}} AS inv_sponsor,
+           i.{{QbFeeInvoice.period}} AS inv_month
     FROM {{QbFeeInvoice}} i WHERE i.{{QbFeeInvoice.invoiceId}} = :invoiceId
 ), sources AS (
-    SELECT 'QbFeeInvoice' AS entity, CAST(inv.invoice_id AS text) AS id FROM inv
+    SELECT 'QbFeeInvoice' AS entity, CAST(inv.inv_key AS text) AS id FROM inv
     UNION ALL
     SELECT 'QbFeeCharge', CAST(c.{{QbFeeCharge.chargeId}} AS text) FROM {{QbFeeCharge}} c JOIN inv
-        ON c.{{QbFeeCharge.sponsorId}} = inv.sponsor_id AND c.{{QbFeeCharge.period}} = inv.period
+        ON c.{{QbFeeCharge.sponsorId}} = inv.inv_sponsor AND c.{{QbFeeCharge.period}} = inv.inv_month
     UNION ALL
     SELECT 'QbFeePayment', CAST(p.{{QbFeePayment.paymentId}} AS text) FROM {{QbFeePayment}} p JOIN inv
-        ON p.{{QbFeePayment.sponsorId}} = inv.sponsor_id AND p.{{QbFeePayment.period}} = inv.period
+        ON p.{{QbFeePayment.sponsorId}} = inv.inv_sponsor AND p.{{QbFeePayment.period}} = inv.inv_month
 )
 SELECT t.{{LedgerTransaction.transactionId}} AS transactionId,
        coalesce((SELECT sum(CASE WHEN e.{{LedgerEntry.direction}} = 'DEBIT' THEN e.{{LedgerEntry.amount}}

@@ -1,7 +1,7 @@
 /*---
 id: qb.system.fee-monthly-items
-description: "Q87b: the approved sponsors not yet charged the month's platform fee (the monthly job's items; none while the fee is 0)"
-entities: [QbSponsor, QbFeeCharge, SysParam]
+description: "Q87b: the approved sponsors with an account, not yet charged the month's platform fee (the monthly job's items; none while the fee is 0)"
+entities: [QbSponsor, QbFeeCharge, SysParam, SecUser]
 datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbFeeCharge: urn:jabiz:dataset:default:QbFeeCharge
@@ -19,6 +19,7 @@ permissions: [qb.fee.system]
 SELECT s.{{QbSponsor.userId}} AS sponsorId
 FROM {{QbSponsor}} s
 WHERE s.{{QbSponsor.reviewStatus}} = 'APPROVED'
+  AND EXISTS (SELECT 1 FROM {{SecUser}} u WHERE CAST(u.{{SecUser.userId}} AS text) = s.{{QbSponsor.userId}})
   AND EXISTS (SELECT 1 FROM {{SysParam}} p WHERE p.{{SysParam.paramKey}} = 'qb.fee.monthly'
       AND p.{{SysParam.value}} ~ '^[0-9]+$' AND CAST(p.{{SysParam.value}} AS numeric) > 0)
   AND NOT EXISTS (SELECT 1 FROM {{QbFeeCharge}} c WHERE c.{{QbFeeCharge.sponsorId}} = s.{{QbSponsor.userId}}

@@ -32,6 +32,8 @@ public final class QbFees {
     public static final String KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:fee-kind";
     public static final String MODE_DICTIONARY = "urn:jabiz:dict:quizbuks:billing-mode";
     public static final String INVOICE_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:fee-invoice-status";
+    public static final String REQUEST_KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:fee-request-kind";
+    public static final String REQUEST_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:fee-request-status";
 
     /** The kinds of charge; later ones (Q47c-2's audience rules) only add a kind. */
     public static final String MONTHLY = "MONTHLY";
@@ -178,14 +180,16 @@ public final class QbFees {
         eb.primaryKey("requestId");
         eb.field("requestId", f -> f.physicalColumn("request_id").immutable(true).required(true).generated(true)
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:fee-request"));
-        eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true).processOnly().asText(10));
+        eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true).processOnly()
+            .asCode(REQUEST_KIND_DICTIONARY, REQUEST_CHARGE, REQUEST_VOID));
         eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).processOnly()
             .asText(128));
         eb.field("invoiceId", f -> f.physicalColumn("invoice_id").immutable(true).processOnly().asText(36));
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).processOnly().asMonetary("JPY", 0));
         eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true).processOnly()
             .asText(REASON_LENGTH));
-        eb.field("status", f -> f.physicalColumn("status").required(true).processOnly().asText(10));
+        eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
+            .asCode(REQUEST_STATUS_DICTIONARY, REVIEW, APPROVED, REJECTED));
         eb.field("requestedBy", f -> f.physicalColumn("requested_by").immutable(true).required(true).processOnly()
             .asText(128));
         eb.field("requestedAt", f -> f.physicalColumn("requested_at").immutable(true).required(true).processOnly()

@@ -26,6 +26,9 @@ results:
   operatorPayable:  { kind: { type: monetary, currency: JPY, scale: 0 } }
   operatorShares:   { kind: { type: monetary, currency: JPY, scale: 0 } }
   sponsorCash:      { kind: { type: monetary, currency: JPY, scale: 0 } }
+  feesReceivable:   { kind: { type: monetary, currency: JPY, scale: 0 } }
+  feeRevenue:       { kind: { type: monetary, currency: JPY, scale: 0 } }
+  taxPayable:       { kind: { type: monetary, currency: JPY, scale: 0 } }
 list:
   filters: [category]
   sorts:   [seq]
@@ -49,6 +52,8 @@ report:
 -- operator's settled share (with the prospecting cost it recovers, Q48d) and its payment (Q48b) are posted from the
 -- settlement. A reversal
 -- keeps its original's source and reference: a transfer's is the failed sending, a payout's the failed payout.
+-- Q87b: a platform fee is posted from its charge (from the cash account, or owed), the tax's rounding from the
+-- invoice, a payment from the payment; a voided invoice's reversals keep those sources.
 -- amount is what the transactions moved (the sum of their debits); the account columns are each account's debit less
 -- credit, as in jabiz.ledger.account_balances (an asset grows positive, a liability or revenue negative), so that a
 -- row adds up to 0 and a column to the account's movement in the month (qb.admin.balances: debit less credit).
@@ -87,7 +92,10 @@ per_tx AS (
            coalesce(sum(net) FILTER (WHERE code = '5120'), 0) AS a5120,
            coalesce(sum(net) FILTER (WHERE code = '2140'), 0) AS a2140,
            coalesce(sum(net) FILTER (WHERE code = '5130'), 0) AS a5130,
-           coalesce(sum(net) FILTER (WHERE code = '2160'), 0) AS a2160
+           coalesce(sum(net) FILTER (WHERE code = '2160'), 0) AS a2160,
+           coalesce(sum(net) FILTER (WHERE code = '1130'), 0) AS a1130,
+           coalesce(sum(net) FILTER (WHERE code = '4120'), 0) AS a4120,
+           coalesce(sum(net) FILTER (WHERE code = '2150'), 0) AS a2150
     FROM moves
     GROUP BY tx_key, src, ref_kind, reversal
 ),
@@ -146,6 +154,16 @@ kinds AS (
                     AND p.a2160 > 0 AND p.a2110 < 0 THEN 'KUDOS_BOUGHT'
                WHEN p.src = 'QbKudosExchange' AND NOT p.reversal AND p.accts = '2110,2160'
                     AND p.a2110 > 0 AND p.a2160 < 0 THEN 'KUDOS_SOLD'
+               -- Q87b: the platform fees.
+               WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('2160,4120', '2150,2160,4120')
+                    AND p.a2160 > 0 AND p.a4120 < 0 THEN 'FEE_FROM_CASH'
+               WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
+                    AND p.a1130 > 0 AND p.a4120 < 0 THEN 'FEE_OWED'
+               WHEN p.src = 'QbFeeInvoice' AND NOT p.reversal AND p.accts IN ('1130,2150', '2150,2160')
+                    THEN 'FEE_TAX_ROUNDING'
+               WHEN p.src = 'QbFeePayment' AND NOT p.reversal AND p.accts = '1130,2160'
+                    AND p.a2160 > 0 AND p.a1130 < 0 THEN 'FEE_PAID'
+               WHEN p.src IN ('QbFeeCharge', 'QbFeeInvoice', 'QbFeePayment') AND p.reversal THEN 'FEE_VOIDED'
                ELSE 'OTHER'
            END AS kind
     FROM per_tx p
@@ -165,13 +183,17 @@ SELECT
     coalesce(sum(k.a5120), 0)   AS promotion,
     coalesce(sum(k.a2140), 0)   AS operatorPayable,
     coalesce(sum(k.a5130), 0)   AS operatorShares,
-    coalesce(sum(k.a2160), 0)   AS sponsorCash
+    coalesce(sum(k.a2160), 0)   AS sponsorCash,
+    coalesce(sum(k.a1130), 0)   AS feesReceivable,
+    coalesce(sum(k.a4120), 0)   AS feeRevenue,
+    coalesce(sum(k.a2150), 0)   AS taxPayable
 FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'), (5, 'REFUND'), (6, 'DISPUTE'),
              (7, 'STRIPE_FEE'), (8, 'REWARD'), (9, 'TRANSFER_SENT'), (10, 'TRANSFER_SETTLED'), (11, 'WITHDRAWAL_PAID'),
              (12, 'TRANSFER_FAILED'), (13, 'TRANSFER_REVERSED'), (14, 'PAYOUT'), (15, 'PAYOUT_FAILED'),
              (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'REFERRAL_REWARD'), (19, 'CASH_TOPUP'),
              (20, 'CASH_BANK_TOPUP'), (21, 'CASH_REFUND'), (22, 'CASH_DISPUTE'), (23, 'KUDOS_BOUGHT'),
-             (24, 'KUDOS_SOLD'), (25, 'OTHER'))
+             (24, 'KUDOS_SOLD'), (25, 'FEE_FROM_CASH'), (26, 'FEE_OWED'), (27, 'FEE_TAX_ROUNDING'), (28, 'FEE_PAID'),
+             (29, 'FEE_VOIDED'), (30, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

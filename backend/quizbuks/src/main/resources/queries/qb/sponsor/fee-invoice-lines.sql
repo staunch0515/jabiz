@@ -10,7 +10,7 @@ params:
 results:
   chargedAt: { from: QbFeeCharge.chargedAt }
   kind:      { from: QbFeeCharge.kind }
-  note:      { from: QbFeeCharge.note }
+  description: { from: QbFeeCharge.note }
   taxRate:   { from: QbFeeCharge.taxRate }
   amount:    { from: QbFeeCharge.amount }
 list:
@@ -19,7 +19,7 @@ list:
   key: [chargedAt, kind]
 permissions: [qb.topup]
 ---*/
-SELECT c.{{QbFeeCharge.chargedAt}} AS chargedAt, c.{{QbFeeCharge.kind}} AS kind, c.{{QbFeeCharge.note}} AS note,
+SELECT c.{{QbFeeCharge.chargedAt}} AS chargedAt, c.{{QbFeeCharge.kind}} AS kind, c.{{QbFeeCharge.note}} AS description,
        c.{{QbFeeCharge.taxRate}} AS taxRate, c.{{QbFeeCharge.amount}} AS amount
 FROM {{QbFeeInvoice}} i
 JOIN {{QbFeeCharge}} c ON c.{{QbFeeCharge.sponsorId}} = i.{{QbFeeInvoice.sponsorId}}

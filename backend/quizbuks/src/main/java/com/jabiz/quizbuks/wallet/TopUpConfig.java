@@ -232,7 +232,8 @@ class TopUpConfig {
             .item(ReconChecks.TRANSFER_IN_TRANSIT, "en", "Transfer in transit", "zh", "转账在途", "ja", "送金の未達")
             .item(ReconChecks.CASH_ACCOUNT, "en", "Sponsor cash account", "zh", "商家现金账户", "ja", "スポンサーの現金口座")
             .item(ReconChecks.TOTAL_2160, "en", "Total of sponsor cash accounts", "zh", "商家现金账户合计",
-                "ja", "スポンサーの現金口座合計"));
+                "ja", "スポンサーの現金口座合計")
+            .item(ReconChecks.FEE_RECEIVABLE, "en", "Platform fees owed", "zh", "应收平台费", "ja", "未収の利用料"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */

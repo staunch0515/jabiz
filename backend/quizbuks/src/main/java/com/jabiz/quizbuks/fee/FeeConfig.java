@@ -157,6 +157,21 @@ class FeeConfig {
             .item(QbFees.VOID, "en", "Void", "zh", "已作废", "ja", "無効"));
     }
 
+    @Bean
+    StaticDictionary qbFeeRequestKindDictionary() {
+        return StaticDictionary.define(QbFees.REQUEST_KIND_DICTIONARY, d -> d
+            .item(QbFees.REQUEST_CHARGE, "en", "Charge by hand", "zh", "手工记费", "ja", "手動の請求")
+            .item(QbFees.REQUEST_VOID, "en", "Void an invoice", "zh", "作废账单", "ja", "請求書の無効化"));
+    }
+
+    @Bean
+    StaticDictionary qbFeeRequestStatusDictionary() {
+        return StaticDictionary.define(QbFees.REQUEST_STATUS_DICTIONARY, d -> d
+            .item(QbFees.REVIEW, "en", "Awaiting approval", "zh", "待审批", "ja", "承認待ち")
+            .item(QbFees.APPROVED, "en", "Approved", "zh", "已批准", "ja", "承認済み")
+            .item(QbFees.REJECTED, "en", "Rejected", "zh", "已驳回", "ja", "却下"));
+    }
+
     // ---- the invoices -----------------------------------------------------------------------------------------------
 
     /** {@code QBF-<year>-00001}: never repeated, never a gap (platform decision D23), counted per year. */
@@ -180,7 +195,7 @@ class FeeConfig {
             .party("sponsor", FeeProcesses.DOCUMENT_TEMPLATE, "company", "contactName")
             .facts(FeeProcesses.DOCUMENT_TEMPLATE, "period", "issuedAt", "dueOn", "billingMode", "amount", "tax",
                 "paidAtCharge", "due")
-            .table(FeeProcesses.LINES_TEMPLATE, "chargedAt", "kind", "note", "taxRate", "amount")
+            .table(FeeProcesses.LINES_TEMPLATE, "chargedAt", "kind", "description", "taxRate", "amount")
             .totals(FeeProcesses.DOCUMENT_TEMPLATE, "total")
             .note("note"));
     }

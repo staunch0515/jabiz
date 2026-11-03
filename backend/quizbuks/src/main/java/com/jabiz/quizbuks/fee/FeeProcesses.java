@@ -957,8 +957,9 @@ public final class FeeProcesses {
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(
                         QbWallets.CASH, first(ctx, EXISTING) == null ? null : first(ctx, EXISTING).get("sponsorId")),
                         CASH_WALLET),
+                    // By the request read before the lock (this batch reads the request again at the same time).
                     QueryEntities.query(ApprovalEntities.REQUEST_DATASET, ctx -> byIds("requestId",
-                        ownRequest(ctx) ? approvalInput(ctx).requestId() : null), APPROVAL_REQUEST)))
+                        ownRequest(ctx, EXISTING) ? approvalInput(ctx).requestId() : null), APPROVAL_REQUEST)))
                 .step("Check the approval", RequireApproval.<ProcessContext>when(
                     ctx -> ownRequest(ctx) && ApprovalEntities.APPROVED.equals(approvalInput(ctx).status()),
                     APPROVAL_SUBJECT, ctx -> approvalCase(first(ctx, FEE_REQUEST))
@@ -983,7 +984,11 @@ public final class FeeProcesses {
     }
 
     private static boolean ownRequest(ProcessContext ctx) {
-        EntityInstance request = first(ctx, FEE_REQUEST);
+        return ownRequest(ctx, FEE_REQUEST);
+    }
+
+    private static boolean ownRequest(ProcessContext ctx, String key) {
+        EntityInstance request = first(ctx, key);
         TransferProcesses.ApprovalResultInput input = approvalInput(ctx);
         return request != null && QbFees.REVIEW.equals(request.get("status")) && input.requestId() != null
             && input.requestId().equals(request.get("approvalRequestId"));

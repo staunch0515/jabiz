@@ -8,6 +8,7 @@ import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.fee.FeeProcesses;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.publishing.SponsorChecks;
@@ -38,7 +39,8 @@ import java.util.Map;
  * wallet lock ({@code qb.wallet:SPONSOR:<sponsor>}: the Kudos wallet and the cash account are two rows of one owner
  * under one lock), read both rows in one statement, and record the exchange ({@code QbKudosExchange}, written once, the
  * postings' source). Whether each is allowed now is a controlled parameter ({@code qb.kudos.buy.enabled}, on;
- * {@code qb.kudos.sell.enabled}, off); what may be moved is decided by {@link #problems} from the rows alone.
+ * {@code qb.kudos.sell.enabled}, off); what may be moved is decided by {@link #problems} from the rows alone, and
+ * unpaid platform fees stop buying (Q87b, {@link FeeProcesses#refusals}).
  */
 public final class KudosExchanges {
 
@@ -148,6 +150,12 @@ public final class KudosExchanges {
                     ctx -> QbWallets.query(QbWallets.SPONSOR, ctx.request().actorId()), KUDOS_WALLET),
                 QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                     ctx -> QbWallets.query(QbWallets.CASH, ctx.request().actorId()), CASH_WALLET)))
+            // Q87b: unpaid platform fees stop buying Kudos (D-Q87-5, D-Q87-7); selling back is not stopped.
+            .steps(b -> {
+                if (toKudos) {
+                    FeeProcesses.standing(b, ctx -> ctx.request().actorId());
+                }
+            })
             .compute("Check and record the exchange", (metadata, ctx) -> record(ctx, toKudos, switchKey))
             // The posting checks that its source document exists: the exchange is written first.
             .step("Save the exchange", SaveChanges.now())
@@ -163,6 +171,9 @@ public final class KudosExchanges {
         List<Violation> problems = new ArrayList<>(SponsorChecks.problems(ctx));
         Boolean enabled = ctx.get(PARAMS, ParamValues.class).find(switchKey, Boolean.class).orElse(null);
         problems.addAll(problems(toKudos, enabled, amount(ctx), first(ctx, KUDOS_WALLET), first(ctx, CASH_WALLET)));
+        if (toKudos && problems.isEmpty()) {
+            problems.addAll(FeeProcesses.refusals(ctx));
+        }
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems);
         }
