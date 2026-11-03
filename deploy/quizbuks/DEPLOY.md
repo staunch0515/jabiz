@@ -42,6 +42,17 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 3. **production 分支**：staging 部署正常之后，从 `1.3/quizbuks` 建 `1.3/quizbuks-release` 并推送（`git push origin origin/1.3/quizbuks:refs/heads/1.3/quizbuks-release`）。
    推送即第一次部署 production，所以先完成下面 production 的服务器设置。
 
+## 合并前的门槛（GitHub 分支保护）
+
+部署分支只接受 CI 绿的合并：Settings → Branches → Add branch ruleset（或 classic branch protection），对 `1.3/quizbuks` 与 `1.3/platform` 各建一条：
+
+- **Require a pull request before merging**（直接推送只留给计划文档这类不跑代码的改动时也可不勾，但下面的检查照样要）。
+- **Require status checks to pass before merging**，勾上 **Require branches to be up to date**，检查选这些作业（名字取自 workflow）：
+  平台 `ci.yml` 的 `scope`、`build-application`、`app-paths`、`e2e`；QuizBuks `quizbuks.yml` 的 `web`、`package`、`e2e`、`local-demo`（`e2e` 是两个分片的汇总，分片名带 `(1/2)`，不用选）。
+- `1.3/quizbuks-release` 只由 `1.3/quizbuks` 合并进来（上文第 3 步），同样勾 Require status checks。
+
+红的不合：CI 失败的 PR 先修到绿再合（修法与本机复现：`README.md` "本机 e2e"）。这些设置改不动 workflow，只在 GitHub 的仓库设置里。
+
 ## 首次部署前（在服务器上，每个环境各做一次）
 
 下文以 production 为例；staging 的不同之处见"staging 环境"一节。

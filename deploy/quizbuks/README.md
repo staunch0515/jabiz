@@ -86,6 +86,25 @@ tools/quizbuks/local-demo.sh status | logs | seed
 - **只用于本机**：管理操作不要求二次验证，演示用的第二位管理员（角色 `QB_DEMO_PUBLISHER`，只有 `control.publish`）没有二次验证，账号密码固定。
   不要让它对外可达，也不要把这些设置用于任何部署。CI 作业 `local-demo` 照此运行一遍。
 
+## 本机 e2e（一条命令）
+
+CI 的端到端作业（`.github/workflows/quizbuks.yml` 的 `e2e`）在本机照样跑：`tools/quizbuks/e2e.sh` 构建（没有时）并启动打包的 jar，
+附 compose 的数据库（另建 `quizbuks_e2e`）、两个 Mailpit（第二个带自签证书与任意登录，是测试里商家自己的邮件服务器，Q29）、Stripe 桩与 Claude 桩，
+以 `quizbuks-web/e2e/app.env` 的环境变量启动——CI 读的是同一个文件，两边不会漂移——然后在 `quizbuks-web/e2e` 下 `pnpm e2e`，结束后停掉它启动的东西。
+需要 JDK 21、pnpm、curl、openssl；数据库与 Mailpit 的端口上没有东西在听时用 Docker 启动（`QB_E2E_DB_*`、`QB_E2E_SMTP_PORT` 等可改）。
+
+```sh
+tools/quizbuks/e2e.sh run                                   # 全部用例（约 20 分钟）
+tools/quizbuks/e2e.sh run --keep -- tests/topup.spec.ts     # 只跑一个文件，跑完不停，下次直接重跑
+tools/quizbuks/e2e.sh run -- -g "tops up"                   # Playwright 的参数都放在 -- 之后
+tools/quizbuks/e2e.sh run --fresh                           # 先删掉 e2e 数据库（用例只增不删数据，平时不用）
+tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的环境变量（密钥遮蔽）
+```
+
+- 失败的用例在 `quizbuks-web/e2e/test-results/`（截图、`error-context.md`、trace），应用日志在 `quizbuks-web/e2e/.local/app.log`。
+- 改了页面或流程的输入输出的 PR，先在本机跑相关的用例再提（`backend/quizbuks/CLAUDE.md` §6）；CI 只是复核。
+- **只用于本机**：管理操作不要求二次验证、密钥是一次性的（存在 `quizbuks-web/e2e/.local/env`）。`tools/quizbuks/test/e2e.test.sh` 离线检查脚本给应用的环境变量就是 `app.env` 的。
+
 ## 前端（QP1）
 
 - **三个前端在同一个 jar 中**（`docs/quizbuks/plans/QP-pages.md`）：答题 App 在 `/taker/`（`quizbuks-web/app`，PWA，入口 `app`；Q30 从 `/` 搬来，旧地址 301）、招商网站在 `/biz/`（`quizbuks-web/biz`，Q31：三语静态页面，`/biz/zh/…`、`/biz/ja/…`；裸域名 302 到它）、商家后台在 `/sponsor/`
