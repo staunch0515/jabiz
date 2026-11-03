@@ -336,6 +336,8 @@ class SetupIT extends QbItSupport {
         // Q87b: the platform's fees; the declared values keep what the platform did before (no fee, prepaid).
         expected.putAll(Map.of(QbParams.FEE_DUE_DAYS, "30", QbParams.FEE_MONTHLY, "0", QbParams.FEE_TAX_RATE, "0.1000",
             QbParams.FEE_DEFAULT_BILLING_MODE, "PREPAID", QbParams.FEE_OVERDUE_BLOCK, "true"));
+        // Q88a: the sponsors' own certifications, off until the administrators turn them on (D-Q88-7).
+        expected.put(QbParams.SPONSOR_ROUNDS_ENABLED, "false");
         // Q48e-2: the operators' five plans (fixed fee, platform's share) and their withdrawals.
         expected.putAll(Map.of(QbParams.operatorPlanFee("1"), "0", QbParams.operatorPlanShare("1"), "0.5000",
             QbParams.operatorPlanFee("2"), "20000", QbParams.operatorPlanShare("2"), "0.4000",
