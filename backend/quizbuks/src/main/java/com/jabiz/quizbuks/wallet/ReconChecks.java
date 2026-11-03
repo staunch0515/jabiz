@@ -50,10 +50,17 @@ public final class ReconChecks {
     /** What a transfer holds in transit (2130) against its state (Q6b). */
     public static final String TRANSFER_IN_TRANSIT = "TRANSFER_IN_TRANSIT";
 
+    /** Q87: a sponsor's cached cash balance against 2160 for them; the total of 2160 against the cash caches. */
+    public static final String SPONSOR_CASH = "SPONSOR_CASH";
+    public static final String TOTAL_2160 = "TOTAL_2160";
+    /** Q87: 1130 for a sponsor against their open and overdue invoices. */
+    public static final String FEES_RECEIVABLE = "FEES_RECEIVABLE";
+
     /** Every check, in the order of the summary. */
     public static final List<String> ALL = List.of(SPONSOR_WALLET, SPONSOR_PENDING_COUNT, SPONSOR_PENDING_AMOUNT,
         TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE, TAKER_WALLET,
-        TAKER_IN_TRANSFER, TAKER_WALLET_LAG, TRANSFER_LEDGER, TRANSFER_IN_TRANSIT);
+        TAKER_IN_TRANSFER, TAKER_WALLET_LAG, TRANSFER_LEDGER, TRANSFER_IN_TRANSIT, SPONSOR_CASH, TOTAL_2160,
+        FEES_RECEIVABLE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG);

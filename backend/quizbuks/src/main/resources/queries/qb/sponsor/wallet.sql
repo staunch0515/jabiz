@@ -1,11 +1,14 @@
 /*---
 id: qb.sponsor.wallet
-description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, and what came in and went out
-entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount]
+description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out; the cash account, the unpaid platform fees and the billing (Q87)
+entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbSponsor, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:sponsor:QbWallet
   QbTopUp: urn:jabiz:dataset:sponsor:QbTopUp
   LedgerEntry: urn:jabiz:dataset:sponsor:LedgerEntry
+  QbFeeInvoice: urn:jabiz:dataset:sponsor:QbFeeInvoice
+  QbSponsor: urn:jabiz:dataset:sponsor:QbSponsor
+  SysParam: urn:jabiz:dataset:now:SysParam
 results:
   balance:       { from: QbWallet.balance }
   held:          { from: QbWallet.held }
@@ -15,11 +18,19 @@ results:
   takenBack:     { kind: { type: monetary, currency: JPY, scale: 0 } }
   topUpCount:    { kind: { type: numeric, precision: 9, scale: 0 } }
   spent:         { kind: { type: monetary, currency: JPY, scale: 0 } }
+  cashBalance:   { kind: { type: monetary, currency: JPY, scale: 0 } }
+  cashHeld:      { kind: { type: monetary, currency: JPY, scale: 0 } }
+  unpaidTotal:   { kind: { type: monetary, currency: JPY, scale: 0 } }
+  unpaidCount:   { kind: { type: numeric, precision: 9, scale: 0 } }
+  overdueCount:  { kind: { type: numeric, precision: 9, scale: 0 } }
+  billingMode:   { kind: { type: text, maxLength: 10 } }
+  creditLimit:   { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
 -- wallet's cache, which the daily reconciliation compares with the ledger. Spent is the rewards paid: the lines of
--- account 2110 debited with a publication (refunds taken back carry none).
+-- account 2110 debited with a publication (refunds taken back carry none). Q87: the cash account is the wallet row of
+-- kind CASH; the billing mode is the sponsor's own, else the platform's default (qb.fee.default-billing-mode).
 SELECT
     coalesce(w.w_balance, 0)        AS balance,
     coalesce(w.w_held, 0)           AS held,
@@ -28,7 +39,14 @@ SELECT
     coalesce(p.p_paid, 0)           AS toppedUp,
     coalesce(p.p_taken, 0)          AS takenBack,
     coalesce(p.p_count, 0)          AS topUpCount,
-    coalesce(s.s_spent, 0)          AS spent
+    coalesce(s.s_spent, 0)          AS spent,
+    coalesce(c.c_balance, 0)        AS cashBalance,
+    coalesce(c.c_held, 0)           AS cashHeld,
+    coalesce(f.f_total, 0)          AS unpaidTotal,
+    coalesce(f.f_count, 0)          AS unpaidCount,
+    coalesce(f.f_overdue, 0)        AS overdueCount,
+    CAST(coalesce(sp.sp_mode, d.d_mode, 'PREPAID') AS varchar(10)) AS billingMode,
+    coalesce(sp.sp_limit, 0)        AS creditLimit
 FROM (SELECT 1 AS one) base
 LEFT JOIN (
     SELECT x.{{QbWallet.balance}} AS w_balance, x.{{QbWallet.held}} AS w_held,
@@ -42,6 +60,22 @@ CROSS JOIN (
            count(*) AS p_count
     FROM {{QbTopUp}} t
     WHERE t.{{QbTopUp.status}} = 'PAID') p
+LEFT JOIN (
+    SELECT y.{{QbWallet.balance}} AS c_balance, y.{{QbWallet.held}} AS c_held
+    FROM {{QbWallet}} y
+    WHERE y.{{QbWallet.kind}} = 'CASH') c ON true
+CROSS JOIN (
+    SELECT sum(i.{{QbFeeInvoice.total}}) AS f_total, count(*) AS f_count,
+           count(*) FILTER (WHERE i.{{QbFeeInvoice.status}} = 'OVERDUE') AS f_overdue
+    FROM {{QbFeeInvoice}} i
+    WHERE i.{{QbFeeInvoice.status}} IN ('OPEN', 'OVERDUE')) f
+LEFT JOIN (
+    SELECT z.{{QbSponsor.billingMode}} AS sp_mode, z.{{QbSponsor.creditLimit}} AS sp_limit
+    FROM {{QbSponsor}} z) sp ON true
+LEFT JOIN (
+    SELECT CASE WHEN p.{{SysParam.value}} IN ('PREPAID', 'POSTPAID') THEN p.{{SysParam.value}} END AS d_mode
+    FROM {{SysParam}} p
+    WHERE p.{{SysParam.paramKey}} = 'qb.fee.default-billing-mode') d ON true
 CROSS JOIN (
     SELECT sum(e.{{LedgerEntry.amount}}) AS s_spent
     FROM {{LedgerEntry}} e

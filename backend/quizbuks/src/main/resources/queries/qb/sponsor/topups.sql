@@ -25,6 +25,7 @@ results:
   reportedAt:      { from: QbTopUp.reportedAt }
   receivedOn:      { from: QbTopUp.receivedOn }
   manualKind:      { from: QbTopUp.manualKind }
+  target:          { from: QbTopUp.target }
 list:
   filters: [status, createdAt, paidAt, amount, method]
   sorts:   [createdAt, paidAt, amount]
@@ -56,5 +57,6 @@ SELECT
     t.{{QbTopUp.transferDate}} AS transferDate,
     t.{{QbTopUp.reportedAt}} AS reportedAt,
     CASE WHEN t.{{QbTopUp.status}} = 'PAID' THEN t.{{QbTopUp.receivedOn}} END AS receivedOn,
-    t.{{QbTopUp.manualKind}} AS manualKind
+    t.{{QbTopUp.manualKind}} AS manualKind,
+    t.{{QbTopUp.target}} AS target
 FROM {{QbTopUp}} t

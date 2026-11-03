@@ -19,6 +19,7 @@ permissions: [qb.wallet.system]
 -- One statement, one snapshot: a top-up's state and its postings are written in one transaction. The postings whose
 -- source is a top-up, summed per top-up: the credit of 2110 (the top-up arriving: exactly one transaction, of the
 -- amount, when paid; none otherwise), the debits of 2110 (refunds and lost disputes taken back) and the fee (5110).
+-- Q87: a top-up into the cash account is credited to and taken back from 2160 instead: the target's account.
 SELECT
     t.{{QbTopUp.topUpId}}   AS topUpId,
     t.{{QbTopUp.sponsorId}} AS sponsorId,
@@ -28,11 +29,11 @@ SELECT
 FROM {{QbTopUp}} t
 LEFT JOIN (
     SELECT tx.{{LedgerTransaction.sourceId}} AS s_topup,
-           sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '2110' AND e.{{LedgerEntry.direction}} = 'CREDIT'
+           sum(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160') AND e.{{LedgerEntry.direction}} = 'CREDIT'
                THEN e.{{LedgerEntry.amount}} ELSE 0 END) AS s_credit,
-           count(DISTINCT CASE WHEN a.{{LedgerAccount.accountCode}} = '2110'
+           count(DISTINCT CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160')
                AND e.{{LedgerEntry.direction}} = 'CREDIT' THEN tx.{{LedgerTransaction.transactionId}} END) AS s_arrivals,
-           sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '2110' AND e.{{LedgerEntry.direction}} = 'DEBIT'
+           sum(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160') AND e.{{LedgerEntry.direction}} = 'DEBIT'
                THEN e.{{LedgerEntry.amount}} ELSE 0 END) AS s_debit,
            sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '5110' THEN CASE WHEN e.{{LedgerEntry.direction}} = 'DEBIT'
                THEN e.{{LedgerEntry.amount}} ELSE -e.{{LedgerEntry.amount}} END ELSE 0 END) AS s_fee

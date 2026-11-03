@@ -47,7 +47,7 @@ public final class Reconciliation {
     public static final String TOTALS_TEMPLATE = "qb.system.recon-totals";
     public static final String TOPUPS_TEMPLATE = "qb.system.recon-topups";
     public static final String TAKERS_TEMPLATE = "qb.system.recon-taker-wallets";
-    public static final String TRANSFERS_TEMPLATE = "qb.system.recon-transfers";
+    public static final String TRANSFERS_TEMPLATE = "qb.system.recon-transfers"; static final String CASH_TEMPLATE = "qb.system.recon-sponsor-cash"; static final String RECEIVABLE_TEMPLATE = "qb.system.recon-fee-receivable";
 
     public record ReconcileInput(@NotNull Instant scheduledTime) {}
 
@@ -106,6 +106,8 @@ public final class Reconciliation {
     static final String TOPUPS = "topUps";
     static final String TAKERS = "takers";
     static final String TRANSFERS = "transfers";
+    static final String CASH = "cash";
+    static final String RECEIVABLE = "receivable";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
     static final String RESYNC = "resync";
@@ -143,6 +145,10 @@ public final class Reconciliation {
                     TAKERS))
                 .step("Compare the transfers", RunTemplate.<ProcessContext>of(TRANSFERS_TEMPLATE, ctx -> Map.of(),
                     TRANSFERS))
+                // Q87: the cash accounts (2160 by sponsor, and its total) and the fees receivable (1130 by sponsor).
+                .step("Compare the cash accounts", RunTemplate.<ProcessContext>of(CASH_TEMPLATE, ctx -> Map.of(), CASH))
+                .step("Compare the fees receivable", RunTemplate.<ProcessContext>of(RECEIVABLE_TEMPLATE,
+                    ctx -> Map.of(), RECEIVABLE))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",
@@ -185,6 +191,8 @@ public final class Reconciliation {
         found.addAll(ReconChecks.coded(rows(ctx, TOTALS)));
         found.addAll(ReconChecks.coded(rows(ctx, TOPUPS)));
         found.addAll(ReconChecks.coded(rows(ctx, TRANSFERS)));
+        found.addAll(ReconChecks.perParty(ReconChecks.SPONSOR_CASH, rows(ctx, CASH)));
+        found.addAll(ReconChecks.coded(rows(ctx, RECEIVABLE)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
         ReconChecks.TakerItems takers = ReconChecks.takers(rows(ctx, TAKERS), foundBefore);

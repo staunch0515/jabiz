@@ -44,6 +44,11 @@ public final class NotificationMails {
     /** Kudos granted to a sponsor by hand are on their wallet (Q18b): no money was received, so no receipt. */
     public static final MailTemplate TOPUP_GRANTED = MailTemplate.define("qb.topup.granted", t -> t
         .category(MailCategory.TRANSACTIONAL).param("amount"));
+    /** Q87: a platform fee invoice issued, and a reminder of one overdue (transactional: a bill is not opted out of). */
+    public static final MailTemplate FEE_INVOICE_ISSUED = MailTemplate.define("qb.fee.invoice-issued", t -> t
+        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "dueOn"));
+    public static final MailTemplate FEE_INVOICE_OVERDUE = MailTemplate.define("qb.fee.invoice-overdue", t -> t
+        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "dueOn"));
 
     /** A sponsor's publication passed its review. */
     public static final MailTemplate PUBLICATION_APPROVED = MailTemplate.define("qb.publication.approved", t -> t
@@ -70,7 +75,7 @@ public final class NotificationMails {
         .category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "reason", "completions"));
 
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
-        TOPUP_PAID, TOPUP_GRANTED, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
+        TOPUP_PAID, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
         PUBLICATION_ENDED);
 
     /**

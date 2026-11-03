@@ -51,6 +51,7 @@ class SetupIT extends QbItSupport {
             com.jabiz.quizbuks.page.SponsorPageApprovals.RULE,
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_PLAN_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_WITHDRAWAL_REVIEW.code(),
+            com.jabiz.quizbuks.fee.QbFees.REVIEW_RULE,
             QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
@@ -83,6 +84,13 @@ class SetupIT extends QbItSupport {
         assertThat(query("SELECT rule_code, subject, enabled, priority, condition, levels "
             + "FROM sys_approval_rule_version ORDER BY rule_code"))
             .satisfiesExactly(
+                // Q87: a fee by hand or an invoice voided takes another administrator's approval.
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.fee.QbFees.REVIEW_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.fee.QbFees.APPROVAL_SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("feeRequest"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.TOPUP_BANK_APPROVE)),
                 // Q48e-2: an operator's plan changes only after another administrator approves it.
                 rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.operator.OperatorPlans.REVIEW_RULE)
                     .containsEntry("subject", com.jabiz.quizbuks.operator.OperatorPlans.APPROVAL_SUBJECT)
@@ -179,11 +187,13 @@ class SetupIT extends QbItSupport {
             Object type = kind.get("type");
             // The commission rate is a fraction below 1; the days (Q10b) are whole.
             // Q8a: a code (the AI model and effort) takes a listed value other than its first one.
-            String value = "bool".equals(type) ? "true"
+            // Q87: a switch takes the value it does not have (buying Kudos is on by default).
+            String value = "bool".equals(type) ? String.valueOf(!Boolean.parseBoolean(String.valueOf(param.value())))
                 : "code".equals(type) ? String.valueOf(((List<?>) kind.get("allowedValues")).getLast())
                 : "numeric".equals(type) && !Integer.valueOf(0).equals(kind.get("scale"))
                     // Q48e-2: a value other than the one in effect (plan 5's share is 0.1).
-                    ? ("0.1".equals(param.value()) ? "0.2" : "0.1") : "1";
+                    ? (new java.math.BigDecimal(String.valueOf(param.value())).compareTo(new java.math.BigDecimal("0.1")) == 0
+                        ? "0.2" : "0.1") : "1";
             Map<String, Object> refused = client.post().uri("/api/processes/PARAM_SET/latest")
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                 .header("Authorization", admin()).bodyValue(Map.of("key", key, "value", value)).exchange()
@@ -229,9 +239,12 @@ class SetupIT extends QbItSupport {
     private void assertAccounts() {
         Map<Object, Object> accounts = query("SELECT account_code, account_type FROM ledger_account_version")
             .stream().collect(Collectors.toMap(row -> row.get("account_code"), row -> row.get("account_type")));
-        assertThat(accounts).containsExactlyInAnyOrderEntriesOf(Map.of("1110", "ASSET", "1120", "ASSET",
+        Map<String, String> expected = new TreeMap<>(Map.of("1110", "ASSET", "1120", "ASSET",
             "2110", "LIABILITY", "2120", "LIABILITY", "2130", "LIABILITY", "2140", "LIABILITY", "4110", "REVENUE",
             "5110", "EXPENSE", "5120", "EXPENSE", "5130", "EXPENSE"));
+        // Q87: the cash accounts, the fees receivable, the fee revenue and the tax on it.
+        expected.putAll(Map.of("2160", "LIABILITY", "1130", "ASSET", "4120", "REVENUE", "2150", "LIABILITY"));
+        assertThat(accounts).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
     private void assertCountries() {
@@ -314,6 +327,12 @@ class SetupIT extends QbItSupport {
             QbParams.operatorPlanFee("5"), "100000", QbParams.operatorPlanShare("5"), "0.1000"));
         expected.putAll(Map.of(QbParams.OPERATOR_WITHDRAWAL_MIN, "10000",
             QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
+        // Q87: the cash account and the platform's fees; the declared values keep what the platform did before.
+        expected.putAll(Map.of(QbParams.FEE_DUE_DAYS, "30", QbParams.TOPUP_TARGETS, "KUDOS,CASH",
+            QbParams.TOPUP_DEFAULT_TARGET, "KUDOS", QbParams.KUDOS_BUY_ENABLED, "true",
+            QbParams.KUDOS_SELL_ENABLED, "false", QbParams.TRANSFER_FEE_RATE, "0.0000", QbParams.FEE_MONTHLY, "0",
+            QbParams.FEE_TAX_RATE, "0.1000", QbParams.FEE_DEFAULT_BILLING_MODE, "PREPAID",
+            QbParams.FEE_OVERDUE_BLOCK, "true"));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

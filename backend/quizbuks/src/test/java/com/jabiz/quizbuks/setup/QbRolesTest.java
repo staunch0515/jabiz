@@ -34,8 +34,10 @@ class QbRolesTest {
                 // Q69: its own certification rounds, grants and revocations (headquarters marks the official ones).
                 QbPermissions.CERTIFICATION_MANAGE,
                 // Q82: its sponsors' conversations with takers (the entry scope limits them), never writing in them.
-                QbPermissions.CONVERSATION_READ)
-            .doesNotContain(QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
+                QbPermissions.CONVERSATION_READ,
+                // Q87: its sponsors' billing mode (prepaid or postpaid), not the fees themselves.
+                QbPermissions.FEE_BILLING)
+            .doesNotContain(QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
                 QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN, QbPermissions.CASH_RESOLVE,

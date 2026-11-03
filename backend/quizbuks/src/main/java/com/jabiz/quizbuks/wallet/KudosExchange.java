@@ -9,6 +9,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.fee.FeeGate;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.publishing.SponsorChecks;
@@ -16,7 +17,7 @@ import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.ledger.LedgerProcesses;
-import com.jabiz.runtime.param.ParamValues;
+import com.jabiz.param.ParamValues;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
@@ -129,7 +130,8 @@ public final class KudosExchange {
                         input(ctx).amount(), ctx.get(KUDOS_AFTER, BigDecimal.class), ctx.get(CASH_AFTER, BigDecimal.class)))
                     .steps(SponsorChecks::load)
                     .step("Load the switches", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                        buy ? QbParams.KUDOS_BUY_ENABLED : QbParams.KUDOS_SELL_ENABLED, QbParams.FEE_OVERDUE_BLOCK))
+                        buy ? QbParams.KUDOS_BUY_ENABLED : QbParams.KUDOS_SELL_ENABLED, QbParams.FEE_OVERDUE_BLOCK,
+                        QbParams.FEE_DEFAULT_BILLING_MODE))
                     .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(
                         ctx -> QbWallets.lockName(QbWallets.SPONSOR, ctx.request().actorId())))
                     .step("Read the Kudos and the cash", QueryEntities.<ProcessContext>all(
@@ -173,11 +175,10 @@ public final class KudosExchange {
                 problems.add(new Violation("amount", WalletCodes.KUDOS_EXCHANGE_SHORT, "The cash account has "
                     + available + " available", Map.of("available", available.toPlainString())));
             }
-            if (Boolean.TRUE.equals(params.get(QbParams.FEE_OVERDUE_BLOCK, Boolean.class))) {
-                Violation blocked = FeeGate.refusal(ctx);
-                if (blocked != null) {
-                    problems.add(blocked);
-                }
+            Violation blocked = FeeGate.refusal(ctx, params.get(QbParams.FEE_OVERDUE_BLOCK, Boolean.class),
+                params.get(QbParams.FEE_DEFAULT_BILLING_MODE, String.class));
+            if (blocked != null) {
+                problems.add(blocked);
             }
         } else {
             BigDecimal available = QbWallets.available(kudos);

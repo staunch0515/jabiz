@@ -250,6 +250,12 @@ class AdminFinanceIT extends PayoutItSupport {
             row("OPERATOR_PAID", 0, 0),
             // Q70: a referral reward's posting (ReferralIT pays one and finds it here).
             row("REFERRAL_REWARD", 0, 0),
+            // Q87: cash and Kudos exchanged, the platform's fees (CashAccountIT and FeeIT post them and find them here).
+            row("KUDOS_BOUGHT", 0, 0),
+            row("KUDOS_SOLD", 0, 0),
+            row("FEE_CHARGED", 0, 0),
+            row("FEE_PAID", 0, 0),
+            row("FEE_VOIDED", 0, 0),
             row("OTHER", 4, 3_870, "1110", 3_730, "1120", 70, "2110", -300, "2120", -3_500));
         // As recorded at the month's end: the late posting is not in it.
         List<Map<String, Object>> monthly = report(MONTHLY, from, to, to);

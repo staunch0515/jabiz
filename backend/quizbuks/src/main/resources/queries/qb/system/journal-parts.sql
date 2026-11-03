@@ -24,7 +24,7 @@ results:
 permissions: [qb.journal.export]
 ---*/
 -- The same transactions as qb.system.journal-detail takes (see there), and its rows: one per transaction, account,
--- side and (on 2110) sponsor. A row's bytes are an upper bound of its CSV line (JournalLines.detailCsv): 260 for the
+-- side and (on 2110, 2160 and 1130, Q87) sponsor. A row's bytes are an upper bound of its CSV line (JournalLines.detailCsv): 260 for the
 -- fixed cells, quotes and separators, then each text cell with its doubled quotes and a possible leading "'".
 -- Each transaction costs the larger of its share of the part's rows and of its bytes; a part is the transactions whose
 -- cost starts within one unit. So a part holds less than one unit plus one transaction: with half the platform's limits
@@ -33,7 +33,7 @@ WITH taken AS (
     SELECT t.{{LedgerTransaction.transactionId}} AS tx,
            CAST(a.{{LedgerAccount.accountCode}} AS text) AS acct,
            e.{{LedgerEntry.direction}} AS side,
-           CAST(CASE WHEN a.{{LedgerAccount.accountCode}} = '2110' THEN e.{{LedgerEntry.dimension1}} END AS text) AS party,
+           CAST(CASE WHEN a.{{LedgerAccount.accountCode}} IN ('2110', '2160', '1130') THEN e.{{LedgerEntry.dimension1}} END AS text) AS party,
            CAST(t.{{LedgerTransaction.sourceEntity}} AS text) AS src,
            CAST(t.{{LedgerTransaction.sourceId}} AS text) AS src_id,
            CAST(t.{{LedgerTransaction.reference}} AS text) AS ref

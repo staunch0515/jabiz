@@ -18,7 +18,7 @@ steps:
     expectOutput:
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review,
-        qb.operator-withdrawal.review, qb.sod.control-changes, qb.sod.security-administration]
+        qb.operator-withdrawal.review, qb.fee-request.review, qb.sod.control-changes, qb.sod.security-administration]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
       p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
@@ -34,7 +34,8 @@ steps:
       p48: "$.proposals[47]", p49: "$.proposals[48]",
       p50: "$.proposals[49]", p51: "$.proposals[50]", p52: "$.proposals[51]", p53: "$.proposals[52]", p54: "$.proposals[53]", p55: "$.proposals[54]", p56: "$.proposals[55]", p57: "$.proposals[56]", p58: "$.proposals[57]",
       p59: "$.proposals[58]", p60: "$.proposals[59]", p61: "$.proposals[60]", p62: "$.proposals[61]", p63: "$.proposals[62]", p64: "$.proposals[63]", p65: "$.proposals[64]",
-      p66: "$.proposals[65]", p67: "$.proposals[66]", p68: "$.proposals[67]", p69: "$.proposals[68]", p70: "$.proposals[69]", p71: "$.proposals[70]", p72: "$.proposals[71]" }
+      p66: "$.proposals[65]", p67: "$.proposals[66]", p68: "$.proposals[67]", p69: "$.proposals[68]", p70: "$.proposals[69]", p71: "$.proposals[70]", p72: "$.proposals[71]",
+      p73: "$.proposals[72]", p74: "$.proposals[73]", p75: "$.proposals[74]", p76: "$.proposals[75]", p77: "$.proposals[76]", p78: "$.proposals[77]", p79: "$.proposals[78]", p80: "$.proposals[79]", p81: "$.proposals[80]", p82: "$.proposals[81]", p83: "$.proposals[82]", p84: "$.proposals[83]", p85: "$.proposals[84]", p86: "$.proposals[85]" }
   - note: A second administrator publishes the parameters and the two review rules.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -252,6 +253,48 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p72}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p73}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p74}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p75}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p76}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p77}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p78}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p79}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p80}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p81}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p82}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p83}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p84}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p85}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p86}" }
 
   - note: Registration at the app and at the sponsor console; the administration takes none.
     advanceClock: PT1H

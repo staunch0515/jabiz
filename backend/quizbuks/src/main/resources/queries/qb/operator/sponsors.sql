@@ -21,6 +21,8 @@ results:
   introTranslations: { from: QbSponsor.introTranslations }
   avatar:            { from: QbSponsor.avatar }
   termsAcceptedAt:   { from: QbSponsor.termsAcceptedAt }
+  billingMode:       { from: QbSponsor.billingMode }
+  creditLimit:       { from: QbSponsor.creditLimit }
   email:             { from: SecUser.email }
   emailVerified:     { kind: { type: bool } }
   reviewStatus:      { from: QbSponsor.reviewStatus }
@@ -57,6 +59,8 @@ SELECT
     s.{{QbSponsor.introTranslations}} AS introTranslations,
     s.{{QbSponsor.avatar}}            AS avatar,
     s.{{QbSponsor.termsAcceptedAt}}   AS termsAcceptedAt,
+    s.{{QbSponsor.billingMode}}       AS billingMode,
+    s.{{QbSponsor.creditLimit}}       AS creditLimit,
     u.{{SecUser.email}}               AS email,
     coalesce(lower(u.{{SecUser.verifiedEmail}}) = lower(u.{{SecUser.email}}), false) AS emailVerified,
     s.{{QbSponsor.reviewStatus}}      AS reviewStatus,

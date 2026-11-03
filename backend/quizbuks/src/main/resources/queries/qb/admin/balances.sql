@@ -75,7 +75,7 @@ parties AS (
     SELECT w.{{LedgerAccount.accountCode}} AS code, m.party, sum(m.debit - m.credit) AS party_balance
     FROM moves m
     JOIN {{LedgerAccount}} w ON w.{{LedgerAccount.accountId}} = m.acct
-    WHERE w.{{LedgerAccount.accountCode}} IN ('2110', '2120', '2130') AND m.party IS NOT NULL
+    WHERE w.{{LedgerAccount.accountCode}} IN ('2110', '2120', '2130', '2160', '1130') AND m.party IS NOT NULL
     GROUP BY w.{{LedgerAccount.accountCode}}, m.party
 )
 SELECT CAST(row_number() OVER (ORDER BY code) AS integer) AS seq,

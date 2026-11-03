@@ -85,23 +85,38 @@ per_tx AS (
            coalesce(sum(net) FILTER (WHERE code = '5110'), 0) AS a5110,
            coalesce(sum(net) FILTER (WHERE code = '5120'), 0) AS a5120,
            coalesce(sum(net) FILTER (WHERE code = '2140'), 0) AS a2140,
-           coalesce(sum(net) FILTER (WHERE code = '5130'), 0) AS a5130
+           coalesce(sum(net) FILTER (WHERE code = '5130'), 0) AS a5130,
+           coalesce(sum(net) FILTER (WHERE code = '2160'), 0) AS a2160,
+           coalesce(sum(net) FILTER (WHERE code = '1130'), 0) AS a1130,
+           coalesce(sum(net) FILTER (WHERE code = '4120'), 0) AS a4120,
+           coalesce(sum(net) FILTER (WHERE code = '2150'), 0) AS a2150
     FROM moves
     GROUP BY tx_key, src, ref_kind, reversal
 ),
 kinds AS (
     SELECT p.*,
            CASE
-               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2110'
-                    AND p.a1110 > 0 AND p.a2110 < 0 THEN 'TOPUP'
-               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2110'
-                    AND p.a1110 < 0 AND p.a2110 > 0 AND p.ref_kind IN ('ch_', 'py_') THEN 'REFUND'
-               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,2110'
-                    AND p.a1110 < 0 AND p.a2110 > 0 AND p.ref_kind IN ('dp_', 'du_') THEN 'DISPUTE'
-               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1120,2110'
-                    AND p.a1120 > 0 AND p.a2110 < 0 AND p.ref_kind = 'mn_' THEN 'MANUAL_TOPUP'
-               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1120,2110'
-                    AND p.a1120 > 0 AND p.a2110 < 0 AND p.ref_kind <> 'mn_' THEN 'BANK_TOPUP'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts IN ('1110,2110', '1110,2160')
+                    AND p.a1110 > 0 AND p.a2110 + p.a2160 < 0 THEN 'TOPUP'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts IN ('1110,2110', '1110,2160')
+                    AND p.a1110 < 0 AND p.a2110 + p.a2160 > 0 AND p.ref_kind IN ('ch_', 'py_') THEN 'REFUND'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts IN ('1110,2110', '1110,2160')
+                    AND p.a1110 < 0 AND p.a2110 + p.a2160 > 0 AND p.ref_kind IN ('dp_', 'du_') THEN 'DISPUTE'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts IN ('1120,2110', '1120,2160')
+                    AND p.a1120 > 0 AND p.a2110 + p.a2160 < 0 AND p.ref_kind = 'mn_' THEN 'MANUAL_TOPUP'
+               WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts IN ('1120,2110', '1120,2160')
+                    AND p.a1120 > 0 AND p.a2110 + p.a2160 < 0 AND p.ref_kind <> 'mn_' THEN 'BANK_TOPUP'
+               -- Q87: cash and Kudos exchanged (D-Q87-3), and the platform's fees (D-Q87-4 - D-Q87-6).
+               WHEN p.src = 'QbKudosExchange' AND NOT p.reversal AND p.accts = '2110,2160'
+                    AND p.a2160 > 0 AND p.a2110 < 0 THEN 'KUDOS_BOUGHT'
+               WHEN p.src = 'QbKudosExchange' AND NOT p.reversal AND p.accts = '2110,2160'
+                    AND p.a2110 > 0 AND p.a2160 < 0 THEN 'KUDOS_SOLD'
+               WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
+                    AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 THEN 'FEE_CHARGED'
+               WHEN p.src IN ('QbFeeCharge', 'QbFeeInvoice') AND NOT p.reversal AND p.accts = '1130,2160'
+                    AND p.a2160 > 0 AND p.a1130 < 0 THEN 'FEE_PAID'
+               WHEN p.src IN ('QbFeeCharge', 'QbFeeInvoice') AND p.reversal
+                    AND p.accts IN ('1130,4120', '1130,2150,4120', '1130,2160') THEN 'FEE_VOIDED'
                WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '2110,5120'
                     AND p.a5120 > 0 AND p.a2110 < 0 AND p.ref_kind = 'mn_' THEN 'GRANT'
                WHEN p.src = 'QbTopUp' AND NOT p.reversal AND p.accts = '1110,5110'
@@ -152,7 +167,8 @@ SELECT
 FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'), (5, 'REFUND'), (6, 'DISPUTE'),
              (7, 'STRIPE_FEE'), (8, 'REWARD'), (9, 'TRANSFER_SENT'), (10, 'TRANSFER_SETTLED'), (11, 'WITHDRAWAL_PAID'),
              (12, 'TRANSFER_FAILED'), (13, 'TRANSFER_REVERSED'), (14, 'PAYOUT'), (15, 'PAYOUT_FAILED'),
-             (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'REFERRAL_REWARD'), (19, 'OTHER'))
+             (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'REFERRAL_REWARD'), (19, 'KUDOS_BOUGHT'),
+             (20, 'KUDOS_SOLD'), (21, 'FEE_CHARGED'), (22, 'FEE_PAID'), (23, 'FEE_VOIDED'), (24, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind
