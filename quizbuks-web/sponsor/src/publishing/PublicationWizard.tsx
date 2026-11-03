@@ -182,8 +182,9 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     select: (page) => page.items.filter((row) => row.status !== 'DRAFT' && row.publicationId !== publicationId),
   })
   const [editedPrerequisites, setEditedPrerequisites] = useState<Prerequisite[] | null>(null)
-  const prerequisites: Prerequisite[] = editedPrerequisites ?? (savedPrerequisites.data ?? []).map((row) => ({
-    requiredPublicationId: row.requiredPublicationId, requirement: row.requirement }))
+  const prerequisites: Prerequisite[] = editedPrerequisites ?? (savedPrerequisites.data ?? []).map((row) => (
+    row.certification ? { certification: row.certification, requirement: 'PASSED' }
+      : { requiredPublicationId: row.requiredPublicationId, requirement: row.requirement }))
 
   // After moving between steps, focus goes to the new step's heading (its content replaced what had focus).
   useEffect(() => {
@@ -277,7 +278,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         // What was just stored, named by the candidates the page chose from.
         queryClient.setQueryData(prerequisitesQuery(saved.publicationId), wanted.map((p): PrerequisiteRow => {
           const candidate = candidates.data?.find((row) => row.publicationId === p.requiredPublicationId)
-          return { ...p, prerequisiteId: p.requiredPublicationId, name: candidate?.name ?? '',
+          return { ...p, prerequisiteId: p.certification ?? p.requiredPublicationId ?? '', name: candidate?.name ?? '',
             status: candidate?.status ?? 'LIVE', startAt: candidate?.startAt ?? null, endAt: candidate?.endAt ?? null }
         }))
         setEditedPrerequisites(null)
@@ -730,9 +731,11 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         audience: form.audience,
         conditions: form.audience === 'INVITED' ? [] : conditions,
         prerequisites: prerequisites.map((p): PrerequisiteRow => {
-          const known = savedPrerequisites.data?.find((row) => row.requiredPublicationId === p.requiredPublicationId)
-          const candidate = candidates.data?.find((row) => row.publicationId === p.requiredPublicationId)
-          return { ...p, prerequisiteId: known?.prerequisiteId ?? p.requiredPublicationId,
+          const known = savedPrerequisites.data?.find((row) => p.certification
+            ? row.certification === p.certification : row.requiredPublicationId === p.requiredPublicationId)
+          const candidate = p.certification ? undefined
+            : candidates.data?.find((row) => row.publicationId === p.requiredPublicationId)
+          return { ...p, prerequisiteId: known?.prerequisiteId ?? p.certification ?? p.requiredPublicationId ?? '',
             name: candidate?.name ?? known?.name ?? '', status: candidate?.status ?? known?.status ?? 'LIVE',
             startAt: candidate?.startAt ?? known?.startAt ?? null, endAt: candidate?.endAt ?? known?.endAt ?? null }
         }),

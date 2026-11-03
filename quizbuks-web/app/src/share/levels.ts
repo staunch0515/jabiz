@@ -15,8 +15,10 @@ export interface Level<T> {
 }
 
 export function levelsOf<T extends { publicationId: string; prerequisites?: unknown }>(items: readonly T[]): Level<T>[] {
+  // Q86: a certification required is no listed publication: it does not raise the level.
   const levels = treeLevels(items.map((item) => ({ id: item.publicationId, name: '',
-    requires: prerequisitesOf(item.prerequisites).map((p) => ({ id: p.requiredPublicationId, requirement: p.requirement })) })))
+    requires: prerequisitesOf(item.prerequisites).flatMap((p) => p.requiredPublicationId
+      ? [{ id: p.requiredPublicationId, requirement: p.requirement }] : []) })))
   const groups = new Map<number, T[]>()
   for (const item of items) {
     const level = levels.get(item.publicationId) ?? 1

@@ -266,6 +266,11 @@ public final class QbParams {
     public static final List<String> AUDIENCE_BILLING_PARAMS = List.of(AUDIENCE_BILLING_ENABLED, AUDIENCE_PRICE_FALLBACK,
         AUDIENCE_REFUND_UNUSED_DAYS);
 
+    /** Q86: whether the "confirm your understanding" cards show after consenting (controlled: a switch for the administrators). */
+    public static final String UNDERSTANDING_ENABLED = "qb.understanding.enabled";
+    /** Q86 (D-Q86-4): the handle of the headquarters' official account's page, whose tree is the platform's; empty: none. */
+    public static final String TREE_PLATFORM_HANDLE = "qb.tree.platform-handle";
+
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
         KUDOS_BUY_ENABLED, KUDOS_SELL_ENABLED, TRANSFER_FEE_RATE);
@@ -278,7 +283,8 @@ public final class QbParams {
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
-        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS, CASH_ACCOUNT_PARAMS).flatMap(List::stream).toList();
+        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
+        List.of(UNDERSTANDING_ENABLED), CASH_ACCOUNT_PARAMS).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -437,6 +443,11 @@ public final class QbParams {
             "How sponsors of an operator without a price list are priced: headquarters' list, or free"),
         new Param(AUDIENCE_REFUND_UNUSED_DAYS, BOOL, false,
             "Whether the unused days of the audience rules are refunded when a publication ends early"),
+        // Q86: the understanding quizzes (controlled, last, in the order of CONTROLLED) and the platform's tree.
+        new Param(UNDERSTANDING_ENABLED, BOOL, true,
+            "Whether the app and the console offer the quiz about an agreement after it is accepted (Q86)"),
+        new Param(TREE_PLATFORM_HANDLE, Map.of("type", "text", "maxLength", 60), "",
+            "The page handle of the headquarters' official account, whose tree is the platform's (Q86); empty: none"),
         // Q87a: the cash account (controlled, last, in the order of CASH_ACCOUNT_PARAMS). The defaults keep what was:
         // a top-up goes straight into the Kudos wallet unless the sponsor chooses the cash account.
         new Param(TOPUP_TARGETS, Map.of("type", "text", "maxLength", 20), "KUDOS,CASH",

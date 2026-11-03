@@ -114,7 +114,7 @@
 
 ### Q87a（现金账户、充值目标、兑换、提现比例抽成）
 
-- 迁移 V65：`qb_wallet.kind` 加 `CASH`；`qb_topup.target`（缺省 `KUDOS`，手工加币只能是 `KUDOS`）；`qb_kudos_exchange`（兑换记录，过账的来源，只写一次）。
+- 迁移 V66（V65 是 Q86 的）：`qb_wallet.kind` 加 `CASH`；`qb_topup.target`（缺省 `KUDOS`，手工加币只能是 `KUDOS`）；`qb_kudos_exchange`（兑换记录，过账的来源，只写一次）。
 - 科目 2160 由 `QB_SETUP` 开立，映射参数 `qb.journal.account.2160`（受控，首个值为空）。
 - **未发布的开关等于 Q87 之前**：去向未发布时只进学分钱包；兑换的两个开关未发布时都关（与 D-Q87-3 的缺省"换学分开"不冲突：`QB_SETUP` 提出的首个值是开，发布后才生效）。页面经 `qb.sponsor.cash-settings` 以同样的读法读开关。
 - 兑换借用充值的权限 `qb.topup`（商户在平台内动自己的钱，同充值），不另加权限；要求已验证邮箱、先查封禁、同意条款、入驻已通过。

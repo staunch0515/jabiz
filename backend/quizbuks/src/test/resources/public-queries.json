@@ -20,7 +20,7 @@
     },
     "results" : {
       "certification" : {
-        "allowedValues" : [ "SPONSOR_APPLY", "REFERRER" ],
+        "allowedValues" : [ "SPONSOR_APPLY", "REFERRER", "TERMS_APP_UNDERSTOOD", "CONTEST_RULES_UNDERSTOOD", "TERMS_SPONSOR_UNDERSTOOD" ],
         "dictUrn" : "urn:jabiz:dict:quizbuks:certification",
         "type" : "code"
       },
@@ -827,7 +827,7 @@
     },
     "results" : {
       "certification" : {
-        "allowedValues" : [ "SPONSOR_APPLY", "REFERRER" ],
+        "allowedValues" : [ "SPONSOR_APPLY", "REFERRER", "TERMS_APP_UNDERSTOOD", "CONTEST_RULES_UNDERSTOOD", "TERMS_SPONSOR_UNDERSTOOD" ],
         "dictUrn" : "urn:jabiz:dict:quizbuks:certification",
         "type" : "code"
       },

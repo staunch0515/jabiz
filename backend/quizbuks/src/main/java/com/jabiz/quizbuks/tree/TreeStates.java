@@ -4,6 +4,7 @@ import com.jabiz.quizbuks.play.AttemptStatus;
 import com.jabiz.quizbuks.play.PrerequisiteCheck;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -41,6 +42,12 @@ public final class TreeStates {
      */
     public static State of(UUID node, boolean live, List<PrerequisiteCheck.Prerequisite> prerequisites,
         List<PrerequisiteCheck.Attempt> attempts) {
+        return of(node, live, prerequisites, attempts, Set.of());
+    }
+
+    /** @param held the keys of the certifications the person holds now (Q86: a certification required is an edge too) */
+    public static State of(UUID node, boolean live, List<PrerequisiteCheck.Prerequisite> prerequisites,
+        List<PrerequisiteCheck.Attempt> attempts, Set<String> held) {
         boolean inProgress = false;
         boolean answered = false;
         for (PrerequisiteCheck.Attempt attempt : attempts) {
@@ -62,7 +69,7 @@ public final class TreeStates {
         if (inProgress) {
             return State.IN_PROGRESS;
         }
-        if (!PrerequisiteCheck.unmet(prerequisites, attempts).isEmpty()) {
+        if (!PrerequisiteCheck.unmet(prerequisites, attempts, held).isEmpty()) {
             return State.LOCKED;
         }
         return live ? State.UNLOCKED : State.CLOSED;

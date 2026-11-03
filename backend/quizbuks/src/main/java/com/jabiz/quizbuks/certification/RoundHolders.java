@@ -10,9 +10,12 @@ import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -85,6 +88,78 @@ public final class RoundHolders {
                         new QueryPredicate.In("publicationId", publications))))
                         .limit(CertificationProcesses.MAX_ROWS).build();
                 }, ATTEMPTS));
+    }
+
+    /**
+     * Q86 (D-Q86-5, D-Q86-6): what tells which of {@code certifications} the caller holds, under keys of their own
+     * ({@code prefix}, so that a round's own load is untouched): their records of them and the rounds of them (one
+     * statement; only rounds open or closed within the longest validity asked, the others cannot confer a holding
+     * now), then their attempts on those rounds (one more). None asked: nothing is read, no statement.
+     */
+    public static <I, O> void loadHoldings(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, List<Certification>> certifications, String prefix) {
+        pb.step("Load the caller's records and the rounds of the certifications required", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.RECORD), ctx -> {
+                    List<Object> keys = keys(certifications.apply(ctx));
+                    return keys.isEmpty() ? nothing("userId") : EntityQuery.builder().where(new QueryPredicate.And(
+                        List.of(new QueryPredicate.Eq("userId", ctx.request().actorId()),
+                            new QueryPredicate.In("certification", keys)))).limit(CertificationProcesses.MAX_ROWS).build();
+                }, prefix + RECORDS),
+                QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.ROUND), ctx -> {
+                    List<Certification> asked = certifications.apply(ctx);
+                    List<Object> keys = keys(asked);
+                    if (keys.isEmpty()) {
+                        return nothing("publicationId");
+                    }
+                    Duration longest = asked.stream().map(Certification::validity).max(Duration::compareTo).orElseThrow();
+                    return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("certification", keys),
+                            new QueryPredicate.Or(List.of(new QueryPredicate.IsNull("closedAt"),
+                                new QueryPredicate.Gt("closedAt", ctx.opTime().minus(longest)))))))
+                        .limit(CertificationProcesses.MAX_ROWS).build();
+                }, prefix + ROUNDS)))
+            .step("Load the caller's attempts on the rounds of the certifications required", QueryEntities.<ProcessContext>of(
+                QbPublications.defaultDataset(QbPlay.ATTEMPT), ctx -> {
+                    List<Object> publications = new ArrayList<>();
+                    for (EntityInstance r : CertificationProcesses.list(ctx, prefix + ROUNDS)) {
+                        publications.add(UUID.fromString(String.valueOf((Object) r.get("publicationId"))));
+                    }
+                    if (publications.isEmpty()) {
+                        return nothing("publicationId");
+                    }
+                    return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("userId", ctx.request().actorId()),
+                        new QueryPredicate.In("publicationId", publications))))
+                        .limit(CertificationProcesses.MAX_ROWS).build();
+                }, prefix + ATTEMPTS));
+    }
+
+    /** The keys of those of {@code certifications} the caller holds now, from what {@link #loadHoldings} read. */
+    public static Set<String> heldKeys(ProcessContext ctx, List<Certification> certifications, String prefix) {
+        Set<String> held = new HashSet<>();
+        List<EntityInstance> records = CertificationProcesses.list(ctx, prefix + RECORDS);
+        List<EntityInstance> rounds = CertificationProcesses.list(ctx, prefix + ROUNDS);
+        List<EntityInstance> attempts = CertificationProcesses.list(ctx, prefix + ATTEMPTS);
+        for (Certification certification : certifications) {
+            List<EntityInstance> mine = records.stream()
+                .filter(r -> certification.key().equals(r.get("certification"))).toList();
+            List<CertificationHolding.Entry> entries = new ArrayList<>(mine.stream()
+                .map(CertificationProcesses::entry).toList());
+            List<EntityInstance> its = rounds.stream()
+                .filter(r -> certification.key().equals(r.get("certification"))).toList();
+            for (Map<String, Object> pass : CertificationProcesses.unrecordedPasses(certification, its, mine, attempts,
+                ctx.request().actorId())) {
+                entries.add(CertificationProcesses.passEntry(pass));
+            }
+            if (CertificationHolding.heldUntil(entries, certification, ctx.opTime()).isPresent()) {
+                held.add(certification.key());
+            }
+        }
+        return held;
+    }
+
+    private static List<Object> keys(List<Certification> certifications) {
+        return certifications == null ? List.of() : certifications.stream().map(c -> (Object) c.key()).toList();
     }
 
     /** Until when the caller holds the certification of the publication's round; empty when not, or not a round. */

@@ -293,6 +293,9 @@ public final class AttemptProcesses {
                 // Q76 (D-Q76-2, D-Q76-7): a publication with prerequisites reads the caller's attempts on them, one
                 // statement more before the lock (an ordinary publication's query is empty and sends nothing).
                 .steps(b -> PrerequisiteRows.loadAttempts(b, AttemptProcesses::starting))
+                // Q86 (D-Q86-6): a certification required reads the caller's holding of it, two statements more
+                // before the lock, only then.
+                .steps(b -> PrerequisiteRows.loadHoldings(b, AttemptProcesses::starting))
                 .compute("Refuse unmet prerequisites", (metadata, ctx) -> {
                     if (starting(ctx)) {
                         PrerequisiteRows.refuse(ctx, "publicationId");

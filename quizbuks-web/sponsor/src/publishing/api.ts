@@ -1502,15 +1502,20 @@ export const readFeeQuote = (publicationId: string) =>
 
 // ---- Q76: prerequisites -------------------------------------------------------------------------------------------
 
-/** `PublicationPrerequisites.PrerequisiteInput`: a publication the taker must first have passed or answered. */
+/**
+ * `PublicationPrerequisites.PrerequisiteInput`: a publication the taker must first have passed or answered, or (Q86)
+ * a certification the taker must hold (`certification` set, `requiredPublicationId` absent, requirement PASSED).
+ */
 export interface Prerequisite {
-  requiredPublicationId: string
+  requiredPublicationId?: string
+  certification?: string
   requirement: Requirement
 }
 
 /** A row of `qb.sponsor.publication-prerequisites`: a stored prerequisite with the required publication as it is now. */
 export interface PrerequisiteRow extends Prerequisite {
   prerequisiteId: string
+  /** The required publication's name; empty for a certification (named by `certification.names`). */
   name: string
   status: PublicationStatus
   startAt: string | null
@@ -1526,7 +1531,8 @@ export async function readPrerequisites(publicationId: string): Promise<Prerequi
   const page = await runQuery<Row>(PREREQUISITES.sponsorTemplate, { params: { publicationId }, limit: PAGE })
   return page.items.map((row): PrerequisiteRow => ({
     prerequisiteId: String(row.prerequisiteId),
-    requiredPublicationId: String(row.requiredPublicationId),
+    ...(typeof row.certification === 'string' && row.certification
+      ? { certification: row.certification } : { requiredPublicationId: String(row.requiredPublicationId) }),
     requirement: row.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED',
     name: String(row.name ?? ''),
     status: (row.status as PublicationStatus) ?? 'DRAFT',

@@ -1,6 +1,6 @@
 import { configureClient, session } from '@jabiz/client'
 import { expectAccessible } from '@jabiz/ui/testing'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
@@ -27,6 +27,7 @@ interface Server {
   staff?: Record<string, unknown>[]
   mailServer?: Record<string, unknown> | null
   methods?: string
+  understanding?: Record<string, unknown>[]
 }
 
 /** The server as the hub sees it: the sponsor, the page, the products, the staff, the mail server, the methods. */
@@ -66,6 +67,8 @@ function server(options: Server = {}) {
           { code: 'OFFLINE_REDEEM', label: "Prize at the sponsor's place" }])
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
+      case '/api/queries/qb.app.understanding':
+        return json(200, { items: options.understanding ?? [], offset: 0, limit: 10 })
       default:
         if (/^\/api\/files\/[^/]+$/.test(path)) return json(200, { fileId: path.split('/').at(-1), variants: [] })
         return json(404, {})
@@ -154,6 +157,33 @@ describe('the sponsor hub (Q79)', () => {
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe(to))
     expect(await screen.findByTestId('profile')).toHaveAttribute('data-section', to.slice('/profile/'.length))
+  })
+
+  it('offers the terms quiz while its round is open, leading to the app (Q86)', async () => {
+    const row = (more: Record<string, unknown>) => ({ certification: 'TERMS_SPONSOR_UNDERSTOOD', enabled: true,
+      heldUntil: null, roundPublicationId: 'round-1', platformHandle: 'quizbuks', ...more })
+    server({ understanding: [row({})] })
+    window.history.replaceState(null, '', '/profile')
+    render(<App />)
+    const cards = await screen.findByTestId('profile-understanding')
+    const card = within(cards).getByTestId('understanding-card')
+    expect(card).toHaveAttribute('data-certification', 'TERMS_SPONSOR_UNDERSTOOD')
+    expect(card).toHaveTextContent('Understood: Sponsor Terms')
+    expect(within(card).getByTestId('understanding-start'))
+      .toHaveAttribute('href', `${window.location.origin}/taker/p/round-1`)
+    await expectAccessible()
+    cleanup()
+    vi.restoreAllMocks()
+    // Held already, or switched off, or no round: nothing on the overview.
+    for (const more of [{ heldUntil: '2027-11-01T00:00:00Z' }, { enabled: false }, { roundPublicationId: null }]) {
+      server({ understanding: [row(more)] })
+      window.history.replaceState(null, '', '/profile')
+      render(<App />)
+      await screen.findByTestId('profile-checklist')
+      expect(screen.queryByTestId('profile-understanding')).toBeNull()
+      cleanup()
+      vi.restoreAllMocks()
+    }
   })
 
   it('tells an approved sponsor without a page to publish it next', async () => {

@@ -105,6 +105,24 @@ const en = {
   },
   /** Q76: what a prerequisite asks of the taker on the required publication. */
   prerequisite: { PASSED: 'Pass', ANSWERED: 'Answer', passed: 'Passed', answered: 'Answered' },
+  /** Q86: the certifications by key (the catalog), and a certification required first. */
+  certification: {
+    names: { SPONSOR_APPLY: `${BRAND.names.en} Sponsor Certification`, REFERRER: `${BRAND.names.en} Referrer Certification`,
+      TERMS_APP_UNDERSTOOD: 'Understood: Terms and Privacy Policy', CONTEST_RULES_UNDERSTOOD: 'Understood: Contest Rules',
+      TERMS_SPONSOR_UNDERSTOOD: 'Understood: Sponsor Terms' },
+    hold: 'Hold', held: 'Held', required: 'Certification required',
+  },
+  /** Q86: the card offered after accepting an agreement. */
+  understanding: {
+    title: 'Confirm your understanding',
+    body: { TERMS_APP_UNDERSTOOD: 'A short quiz about the terms and the privacy policy you accepted: five questions, a few minutes, and a certification you hold for a year.',
+      CONTEST_RULES_UNDERSTOOD: 'A short quiz about the contest rules: five questions, a few minutes, and a certification you hold for a year.',
+      TERMS_SPONSOR_UNDERSTOOD: 'A short quiz about the sponsor terms you accepted: five questions, a few minutes, and a certification you hold for a year.' },
+    start: 'Start the quiz',
+    held: 'Passed · until {{until}}',
+    platformTree: 'The platform\'s tree',
+    platformTreeHint: 'Where you stand on the platform\'s own quizzes.',
+  },
   /** Q85: a sponsor's tree, drawn the same in the app and the console. */
   tree: {
     state: { LIT: 'Lit', ANSWERED: 'Answered', IN_PROGRESS: 'In progress', UNLOCKED: 'Ready', LOCKED: 'Locked',
@@ -123,6 +141,7 @@ const en = {
     progress: 'Lit {{lit}} of {{total}}',
     next: 'Next: {{names}}',
     noNext: 'Nothing to start right now',
+    certification: 'Certification',
   },
   audience: {
     gender: 'Gender',
@@ -240,6 +259,22 @@ const zh: typeof en = {
     unknownDevice: '未知设备',
   },
   prerequisite: { PASSED: '通过', ANSWERED: '作答', passed: '已通过', answered: '已作答' },
+  certification: {
+    names: { SPONSOR_APPLY: `${BRAND.names.zh} 赞助商认证`, REFERRER: `${BRAND.names.zh} 推荐人认证`,
+      TERMS_APP_UNDERSTOOD: '已理解：条款与隐私政策', CONTEST_RULES_UNDERSTOOD: '已理解：有奖活动规则',
+      TERMS_SPONSOR_UNDERSTOOD: '已理解：商户条款' },
+    hold: '持有', held: '已持有', required: '需要持有认证',
+  },
+  understanding: {
+    title: '确认你的理解',
+    body: { TERMS_APP_UNDERSTOOD: '关于你同意的条款与隐私政策的小测：五道题、几分钟，答对即持有一年的认证。',
+      CONTEST_RULES_UNDERSTOOD: '关于有奖活动规则的小测：五道题、几分钟，答对即持有一年的认证。',
+      TERMS_SPONSOR_UNDERSTOOD: '关于你同意的商户条款的小测：五道题、几分钟，答对即持有一年的认证。' },
+    start: '开始答题',
+    held: '已通过 · 至 {{until}}',
+    platformTree: '平台之树',
+    platformTreeHint: '你在平台自己的答卷上走到哪里了。',
+  },
   tree: {
     state: { LIT: '已点亮', ANSWERED: '答过未合格', IN_PROGRESS: '进行中', UNLOCKED: '可开始', LOCKED: '锁定',
       CLOSED: '未开放' },
@@ -257,6 +292,7 @@ const zh: typeof en = {
     progress: '已点亮 {{lit}} / {{total}}',
     next: '下一步：{{names}}',
     noNext: '现在没有可以开始的',
+    certification: '认证',
   },
   audience: {
     gender: '性别',
@@ -373,6 +409,22 @@ const ja: typeof en = {
     unknownDevice: '不明なデバイス',
   },
   prerequisite: { PASSED: '合格する', ANSWERED: '回答する', passed: '合格済み', answered: '回答済み' },
+  certification: {
+    names: { SPONSOR_APPLY: `${BRAND.names.ja} スポンサー認定`, REFERRER: `${BRAND.names.ja} 紹介者認定`,
+      TERMS_APP_UNDERSTOOD: '理解済み：利用規約とプライバシーポリシー', CONTEST_RULES_UNDERSTOOD: '理解済み：懸賞規約',
+      TERMS_SPONSOR_UNDERSTOOD: '理解済み：スポンサー規約' },
+    hold: '保有する', held: '保有済み', required: '認定が必要です',
+  },
+  understanding: {
+    title: '理解の確認',
+    body: { TERMS_APP_UNDERSTOOD: '同意した利用規約とプライバシーポリシーについての小テストです。5 問、数分で、合格すると 1 年間有効な認定を保有できます。',
+      CONTEST_RULES_UNDERSTOOD: '懸賞規約についての小テストです。5 問、数分で、合格すると 1 年間有効な認定を保有できます。',
+      TERMS_SPONSOR_UNDERSTOOD: '同意したスポンサー規約についての小テストです。5 問、数分で、合格すると 1 年間有効な認定を保有できます。' },
+    start: 'クイズを始める',
+    held: '合格 · {{until}} まで',
+    platformTree: 'プラットフォームのツリー',
+    platformTreeHint: 'プラットフォーム自身のクイズでの現在地です。',
+  },
   tree: {
     state: { LIT: '達成', ANSWERED: '回答済み（不合格）', IN_PROGRESS: '進行中', UNLOCKED: '挑戦できます', LOCKED: 'ロック中',
       CLOSED: '受付外' },
@@ -390,6 +442,7 @@ const ja: typeof en = {
     progress: '{{total}} 件中 {{lit}} 件を達成',
     next: '次は：{{names}}',
     noNext: '今すぐ挑戦できるものはありません',
+    certification: '認定',
   },
   audience: {
     gender: '性別',

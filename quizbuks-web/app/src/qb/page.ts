@@ -13,3 +13,13 @@ export function sponsorPagePath(handle: string): string {
 export function sponsorPageLink(handle: string, origin: string = window.location.origin): string {
   return `${origin}/taker${sponsorPagePath(handle)}`
 }
+
+/** The app's path of a publication (its page `/p/<id>`). */
+export function appPublicationPath(publicationId: string): string {
+  return `/p/${encodeURIComponent(publicationId)}`
+}
+
+/** The link to a publication in the app, from anywhere on this site (the console's understanding cards, Q86). */
+export function appPublicationLink(publicationId: string, origin: string = window.location.origin): string {
+  return `${origin}/taker${appPublicationPath(publicationId)}`
+}

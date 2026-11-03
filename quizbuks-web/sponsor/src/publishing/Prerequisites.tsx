@@ -2,6 +2,7 @@ import { Checkbox, Label, RadioGroup, RadioGroupItem } from '@jabiz/ui'
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PREREQUISITES, REQUIREMENTS, type Requirement } from '../qb/ids'
+import { Award } from 'lucide-react'
 import { QB } from '../qb/messages'
 import { SPONSOR } from '../messages'
 import type { Prerequisite, PublicationRow } from './api'
@@ -24,17 +25,26 @@ export function Prerequisites({ value, candidates, onChange, disabled }: {
   const statusLabel = useStatusLabel()
   const find = (publicationId: string) => value.find((p) => p.requiredPublicationId === publicationId)
   const full = value.length >= PREREQUISITES.max
+  // Q86 (D-Q86-5): the certifications required come after the publications, in the catalog's order.
+  const certifications = value.filter((p) => p.certification)
+  const hasCertification = (key: string) => certifications.some((p) => p.certification === key)
   // Kept in the candidates' order (by name), so that the server's paths (prerequisites[i]) follow the page.
-  const put = (publicationId: string, requirement: Requirement | null) => onChange(candidates.flatMap((candidate) => {
+  const put = (publicationId: string, requirement: Requirement | null) => onChange([...candidates.flatMap((candidate) => {
     if (candidate.publicationId !== publicationId) {
       const kept = find(candidate.publicationId)
       return kept ? [kept] : []
     }
     return requirement ? [{ requiredPublicationId: publicationId, requirement }] : []
-  }))
+  }), ...certifications])
+  const putCertification = (key: string, on: boolean) => onChange([
+    ...value.filter((p) => !p.certification),
+    ...PREREQUISITES.certifications.flatMap((c): Prerequisite[] => (c === key ? on : hasCertification(c))
+      ? [{ certification: c, requirement: 'PASSED' }] : []),
+  ])
   // A stored prerequisite whose publication is not among the candidates any more (none expected: a required
   // publication stays the sponsor's) is kept as it is.
-  const orphans = value.filter((p) => !candidates.some((c) => c.publicationId === p.requiredPublicationId))
+  const orphans = value.filter((p) => !p.certification
+    && !candidates.some((c) => c.publicationId === p.requiredPublicationId))
 
   return (
     <div className="flex flex-col gap-3" data-testid="publication-prerequisites">
@@ -84,12 +94,33 @@ export function Prerequisites({ value, candidates, onChange, disabled }: {
           <li key={orphan.requiredPublicationId} className="flex items-center gap-2 rounded-md border p-3"
             data-testid="prerequisite-orphan">
             <Checkbox id={`${id}-${orphan.requiredPublicationId}`} checked disabled={disabled}
-              onCheckedChange={() => put(orphan.requiredPublicationId, null)} />
+              onCheckedChange={() => put(orphan.requiredPublicationId!, null)} />
             <Label htmlFor={`${id}-${orphan.requiredPublicationId}`} className="font-normal">
               {orphan.requiredPublicationId} · {tQb(`prerequisite.${orphan.requirement}`)}
             </Label>
           </li>
         ))}
+      </ul>
+      {/* Q86: the certifications of the platform a taker must hold; they are nodes of the platform's tree. */}
+      <div className="flex flex-col gap-1">
+        <h4 className="flex items-center gap-1.5 text-sm font-medium">
+          <Award aria-hidden className="size-4" />{t('publishing.prerequisites.certifications')}
+        </h4>
+        <p className="text-muted-foreground text-sm">{t('publishing.prerequisites.certificationsHint')}</p>
+      </div>
+      <ul className="flex flex-col gap-2" data-testid="prerequisite-certifications">
+        {PREREQUISITES.certifications.map((key) => {
+          const chosen = hasCertification(key)
+          return (
+            <li key={key} className="flex items-center gap-2 rounded-md border p-3" data-testid="prerequisite-certification"
+              data-certification={key} data-chosen={chosen}>
+              <Checkbox id={`${id}-cert-${key}`} checked={chosen} disabled={disabled || (!chosen && full)}
+                data-testid="prerequisite-certification-on"
+                onCheckedChange={(checked) => putCertification(key, checked === true)} />
+              <Label htmlFor={`${id}-cert-${key}`} className="font-normal">{tQb(`certification.names.${key}`)}</Label>
+            </li>
+          )
+        })}
       </ul>
       {full && (
         <p className="text-muted-foreground text-sm" data-testid="prerequisites-full">

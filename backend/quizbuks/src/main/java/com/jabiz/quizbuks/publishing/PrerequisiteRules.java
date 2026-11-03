@@ -1,5 +1,7 @@
 package com.jabiz.quizbuks.publishing;
 
+import com.jabiz.quizbuks.certification.Certifications;
+
 import com.jabiz.entity.Violation;
 
 import java.util.ArrayDeque;
@@ -21,7 +23,11 @@ import java.util.UUID;
 public final class PrerequisiteRules {
 
     /** One prerequisite as asked for. */
-    public record Wanted(UUID requiredPublicationId, String requirement) {}
+    public record Wanted(UUID requiredPublicationId, String certification, String requirement) {
+        public Wanted(UUID requiredPublicationId, String requirement) {
+            this(requiredPublicationId, null, requirement);
+        }
+    }
 
     /** An edge of the sponsor's chain: {@code publicationId} requires {@code requiredPublicationId}. */
     public record Edge(UUID publicationId, UUID requiredPublicationId) {}
@@ -46,11 +52,25 @@ public final class PrerequisiteRules {
                 Map.of("max", QbPrerequisites.MAX_PREREQUISITES)));
         }
         Set<UUID> seen = new HashSet<>();
+        Set<String> certifications = new HashSet<>();
         List<UUID> accepted = new ArrayList<>();
         for (int i = 0; i < wanted.size(); i++) {
             Wanted w = wanted.get(i);
             String at = "prerequisites[" + i + "]";
-            if (w.requiredPublicationId() == null) {
+            // Q86 (D-Q86-5): a certification instead of a publication: one of the catalog's that takers hold.
+            if ((w.requiredPublicationId() == null) == (w.certification() == null)) {
+                problems.add(new Violation(at, PublishingCodes.PREREQUISITE_ONE_OF, "A prerequisite names a "
+                    + "publication or a certification, one of the two", Map.of()));
+                continue;
+            }
+            if (w.certification() != null) {
+                if (!Certifications.forTakers(w.certification())) {
+                    problems.add(new Violation(at, PublishingCodes.PREREQUISITE_CERTIFICATION, "Not a certification "
+                        + "takers can hold", Map.of("certification", w.certification())));
+                } else if (!certifications.add(w.certification())) {
+                    problems.add(new Violation(at, PublishingCodes.PREREQUISITE_REPEATED, "The same certification is "
+                        + "required twice", Map.of("certification", w.certification())));
+                }
                 continue;
             }
             if (!seen.add(w.requiredPublicationId())) {
