@@ -44,10 +44,10 @@ public final class PublicationPrerequisites {
 
     /**
      * One prerequisite: the publication required and what the taker must have done on it, or (Q86, D-Q86-5) a
-     * certification the taker must hold (its requirement is then PASSED whatever is given).
+     * certification the taker must hold (its requirement is then stored as PASSED whatever is given).
      */
     public record PrerequisiteInput(UUID requiredPublicationId, @Size(max = 40) String certification,
-        @Pattern(regexp = "PASSED|ANSWERED") String requirement) {
+        @NotNull @Pattern(regexp = "PASSED|ANSWERED") String requirement) {
         public PrerequisiteInput(UUID requiredPublicationId, String requirement) {
             this(requiredPublicationId, null, requirement);
         }
@@ -58,7 +58,7 @@ public final class PublicationPrerequisites {
         }
 
         String storedRequirement() {
-            return certification != null || requirement == null ? QbPrerequisites.PASSED : requirement;
+            return certification != null ? QbPrerequisites.PASSED : requirement;
         }
     }
 

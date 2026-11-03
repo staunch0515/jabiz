@@ -285,7 +285,7 @@ SELECT
                 'live', rc.{{QbPublicationCard.status}} = 'LIVE' AND rc.{{QbPublicationCard.startAt}} <= :at
                         AND rc.{{QbPublicationCard.endAt}} > :at,
                 -- Q86: a certification's current round (open, its publication live), to send the taker to.
-                'roundPublicationId', (SELECT min(cr2.{{QbCertificationRound.publicationId}})
+                'roundPublicationId', (SELECT max(cr2.{{QbCertificationRound.publicationId}})
                                        FROM {{QbCertificationRound}} cr2
                                        JOIN {{QbPublicationCard}} rp ON CAST(rp.{{QbPublicationCard.publicationId}} AS text)
                                            = cr2.{{QbCertificationRound.publicationId}}

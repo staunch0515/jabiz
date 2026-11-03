@@ -10,6 +10,7 @@ import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -92,7 +93,8 @@ public final class RoundHolders {
     /**
      * Q86 (D-Q86-5, D-Q86-6): what tells which of {@code certifications} the caller holds, under keys of their own
      * ({@code prefix}, so that a round's own load is untouched): their records of them and the rounds of them (one
-     * statement), then their attempts on those rounds (one more). None asked: nothing is read, no statement.
+     * statement; only rounds open or closed within the longest validity asked, the others cannot confer a holding
+     * now), then their attempts on those rounds (one more). None asked: nothing is read, no statement.
      */
     public static <I, O> void loadHoldings(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, List<Certification>> certifications, String prefix) {
@@ -104,9 +106,17 @@ public final class RoundHolders {
                             new QueryPredicate.In("certification", keys)))).limit(CertificationProcesses.MAX_ROWS).build();
                 }, prefix + RECORDS),
                 QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.ROUND), ctx -> {
-                    List<Object> keys = keys(certifications.apply(ctx));
-                    return keys.isEmpty() ? nothing("publicationId") : EntityQuery.builder()
-                        .where(new QueryPredicate.In("certification", keys)).limit(CertificationProcesses.MAX_ROWS).build();
+                    List<Certification> asked = certifications.apply(ctx);
+                    List<Object> keys = keys(asked);
+                    if (keys.isEmpty()) {
+                        return nothing("publicationId");
+                    }
+                    Duration longest = asked.stream().map(Certification::validity).max(Duration::compareTo).orElseThrow();
+                    return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("certification", keys),
+                            new QueryPredicate.Or(List.of(new QueryPredicate.IsNull("closedAt"),
+                                new QueryPredicate.Gt("closedAt", ctx.opTime().minus(longest)))))))
+                        .limit(CertificationProcesses.MAX_ROWS).build();
                 }, prefix + ROUNDS)))
             .step("Load the caller's attempts on the rounds of the certifications required", QueryEntities.<ProcessContext>of(
                 QbPublications.defaultDataset(QbPlay.ATTEMPT), ctx -> {

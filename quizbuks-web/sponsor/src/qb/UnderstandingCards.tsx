@@ -14,15 +14,18 @@ import { readUnderstanding, UNDERSTANDING_QUERY, type Understanding } from './un
  * is on and a round is open; a held one says so instead. Nothing here blocks anything: consent is unchanged, the quiz
  * is an offer. `hrefOf` says where the round's publication is opened (the app's own page, or the app from the console).
  */
-export function UnderstandingCards({ kinds, hrefOf, held = true, className, testId = 'understanding' }: {
+export function UnderstandingCards({ kinds, hrefOf, held = true, at: given, className, testId = 'understanding' }: {
   kinds: readonly CertificationKey[]
   hrefOf: (publicationId: string) => string
   /** Whether a certification held is shown too (the account page); the home shows open ones only. */
   held?: boolean
+  /** The time the cards are for; a page reading the same rows elsewhere passes its own so the query is one. */
+  at?: string
   className?: string
   testId?: string
 }) {
-  const [at] = useState(() => new Date().toISOString())
+  const [own] = useState(() => new Date().toISOString())
+  const at = given ?? own
   const rows = useQuery({ queryKey: [...UNDERSTANDING_QUERY, at], queryFn: () => readUnderstanding(at), retry: false })
   if (!rows.isSuccess) return null
   const shown = rows.data.filter((row) => kinds.includes(row.certification) && row.enabled

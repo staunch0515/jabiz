@@ -27,9 +27,8 @@ import {
 export const CERTIFICATIONS_QUERY = ['qb', 'my-certifications']
 
 /** The way to the platform's tree (Q86, D-Q86-4), when the headquarters' official account is named. */
-function PlatformTreeLink() {
+function PlatformTreeLink({ at }: { at: string }) {
   const { t: tQb } = useTranslation(QB)
-  const [at] = useState(() => new Date().toISOString())
   const rows = useQuery({ queryKey: [...UNDERSTANDING_QUERY, at], queryFn: () => readUnderstanding(at), retry: false })
   const handle = rows.data?.[0]?.platformHandle ?? null
   if (!handle) return null
@@ -63,6 +62,8 @@ async function copy(text: string, done: string, failed: string) {
 export function CertificatesPart() {
   const { t } = useTranslation(APP)
   const held = useQuery({ queryKey: CERTIFICATIONS_QUERY, queryFn: readMyCertifications })
+  // Q86: the understanding cards and the platform tree's link read the same rows, once.
+  const [at] = useState(() => new Date().toISOString())
   return (
     <div className="flex flex-col gap-8">
       <AccountSection title={t('certificates.held')} testId="certificates">
@@ -78,9 +79,9 @@ export function CertificatesPart() {
         )}
         <p className="text-muted-foreground text-sm">{t('certificates.hint')}</p>
         {/* Q86: the understanding quizzes, held or to answer, and the platform's tree when one is named. */}
-        <UnderstandingCards kinds={UNDERSTANDING_TAKER} hrefOf={(id) => `/p/${encodeURIComponent(id)}`}
+        <UnderstandingCards kinds={UNDERSTANDING_TAKER} hrefOf={(id) => `/p/${encodeURIComponent(id)}`} at={at}
           testId="account-understanding" />
-        <PlatformTreeLink />
+        <PlatformTreeLink at={at} />
       </AccountSection>
       <AccountSection title={t('certificates.page.title')} testId="certificates-page">
         <PublicPageSettings />

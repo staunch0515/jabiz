@@ -74,9 +74,9 @@ class UnderstandingIT extends PlayItSupport {
             "prerequisites", List.of(
                 body("requiredPublicationId", basics, "certification", CERT),
                 body("requirement", "PASSED"),
-                body("certification", "TERMS_SPONSOR_UNDERSTOOD"),
-                body("certification", CERT),
-                body("certification", CERT))), 422);
+                body("certification", "TERMS_SPONSOR_UNDERSTOOD", "requirement", "PASSED"),
+                body("certification", CERT, "requirement", "PASSED"),
+                body("certification", CERT, "requirement", "PASSED"))), 422);
         assertThat(violations(problem)).extracting(v -> v.get("field") + ":" + v.get("ruleCode")).containsExactly(
             "prerequisites[0]:" + PublishingCodes.PREREQUISITE_ONE_OF,
             "prerequisites[1]:" + PublishingCodes.PREREQUISITE_ONE_OF,
@@ -85,7 +85,7 @@ class UnderstandingIT extends PlayItSupport {
         // A certification beside a publication: saved as PASSED, named by the sponsor's template, copied.
         run("QB_PUBLICATION_PREREQUISITES_SAVE", token, body("publicationId", draft, "prerequisites", List.of(
             body("requiredPublicationId", basics, "requirement", QbPrerequisites.ANSWERED),
-            body("certification", CERT))));
+            body("certification", CERT, "requirement", "PASSED"))));
         assertThat(items("qb.sponsor.publication-prerequisites", token, Map.of("params", Map.of("publicationId", draft))))
             .extracting(row -> row.get("certification") + "/" + row.get("name") + "/" + row.get("requirement"))
             .containsExactlyInAnyOrder("null/Q86 basics/ANSWERED", CERT + "/null/PASSED");
@@ -97,7 +97,7 @@ class UnderstandingIT extends PlayItSupport {
         // Live, open to every region (the draft above keeps the sponsor's default regions).
         String advanced = liveRequiring(sponsor, "Q86 advanced", Map.of("regions", List.of("GLOBAL")), List.of(
             body("requiredPublicationId", basics, "requirement", QbPrerequisites.ANSWERED),
-            body("certification", CERT)));
+            body("certification", CERT, "requirement", "PASSED")));
 
         // A taker who answered the basics but holds nothing: not listed, the page names the certification, no start.
         String taker = verifiedTaker("t-q86-" + UUID.randomUUID());
@@ -159,6 +159,11 @@ class UnderstandingIT extends PlayItSupport {
         run("PARAM_SET", TestTokens.bearer(tokens, "q86-admin", "*"), body("key", QbParams.TREE_PLATFORM_HANDLE,
             "value", "quizbuks-hq"));
         assertThat(understanding(mine).get(kind)).containsEntry("platformHandle", "quizbuks-hq");
+        // A sponsor's session (the console's overview) reads the same template: the sponsor terms, not held yet.
+        String sponsor = newSponsor(unique("s-q86-und"));
+        Map<String, Map<String, Object>> theirs = understanding(sponsorToken(sponsor));
+        assertThat(theirs.get("TERMS_SPONSOR_UNDERSTOOD")).containsEntry("enabled", true).containsEntry("heldUntil", null)
+            .containsEntry("platformHandle", "quizbuks-hq");
     }
 
     @Test
@@ -167,7 +172,7 @@ class UnderstandingIT extends PlayItSupport {
         credit(sponsor, 100_000);
         String token = sponsorToken(sponsor);
         Map<String, Object> global = Map.of("regions", List.of("GLOBAL"));
-        String gated = liveRequiring(sponsor, "Q86 gated", global, List.of(body("certification", CERT)));
+        String gated = liveRequiring(sponsor, "Q86 gated", global, List.of(body("certification", CERT, "requirement", "PASSED")));
         String handle = "q86-" + UUID.randomUUID().toString().substring(0, 8);
         run(SponsorPageProcesses.SAVE, token, body("handle", handle, "language", "en", "headline", "Q86"));
         Map<String, Object> submitted = run(SponsorPageProcesses.SUBMIT, token, body());

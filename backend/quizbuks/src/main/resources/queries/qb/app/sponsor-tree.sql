@@ -131,7 +131,7 @@ SELECT
                       AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
                                            WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
                                              AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')),
-                'roundPublicationId', (SELECT min(cr2.{{QbCertificationRound.publicationId}})
+                'roundPublicationId', (SELECT max(cr2.{{QbCertificationRound.publicationId}})
                                        FROM {{QbCertificationRound}} cr2
                                        JOIN {{QbPublicationCard}} rp ON CAST(rp.{{QbPublicationCard.publicationId}} AS text)
                                            = cr2.{{QbCertificationRound.publicationId}}

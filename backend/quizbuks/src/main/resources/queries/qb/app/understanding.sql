@@ -26,7 +26,8 @@ permissions: [qb.account.read]
 ---*/
 -- One row per understanding certification (the catalog as Certifications writes it, CertificationTemplatesTest). The
 -- holding is CertificationHolding's rule over the caller's records and their passes not recorded yet (as qb.app.feed);
--- the round is an open one whose publication is live now. The switch and the platform's handle are parameters.
+-- the round is the newest open one whose publication is live now (UUIDv7: the greatest id; one forgotten open does
+-- not keep the card on last month's questions). The switch and the platform's handle are parameters.
 SELECT
     cat.cert AS certification,
     coalesce((SELECT CAST(sp.{{SysParam.value}} AS text) = 'true' FROM {{SysParam}} sp
@@ -50,7 +51,7 @@ SELECT
        AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
                             WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
                               AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) AS heldUntil,
-    (SELECT min(cr.{{QbCertificationRound.publicationId}})
+    (SELECT max(cr.{{QbCertificationRound.publicationId}})
      FROM {{QbCertificationRound}} cr
      JOIN {{QbPublicationCard}} rp ON CAST(rp.{{QbPublicationCard.publicationId}} AS text) = cr.{{QbCertificationRound.publicationId}}
      WHERE cr.{{QbCertificationRound.certification}} = cat.cert AND cr.{{QbCertificationRound.closedAt}} IS NULL

@@ -93,8 +93,11 @@ public final class PrerequisiteRows {
         if (!unmet.isEmpty()) {
             PrerequisiteCheck.Prerequisite first = unmet.get(0);
             Map<String, Object> params = new java.util.LinkedHashMap<>();
-            params.put("requiredPublicationId", String.valueOf(first.requiredPublicationId()));
-            params.put("certification", first.certification() == null ? "" : first.certification());
+            if (first.certification() != null) {
+                params.put("certification", first.certification());
+            } else {
+                params.put("requiredPublicationId", String.valueOf(first.requiredPublicationId()));
+            }
             params.put("requirement", first.requirement());
             params.put("unmet", String.valueOf(unmet.size()));
             ctx.reject(new Violation(field, PlayCodes.PREREQUISITE_NOT_MET, first.certification() != null
