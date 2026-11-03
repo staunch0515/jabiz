@@ -79,7 +79,11 @@ public class CertificationConfig {
         return StaticDictionary.define(Certifications.DICTIONARY, d -> d
             .item(Certifications.SPONSOR_APPLY.key(), "en", "May apply to become a sponsor", "zh", "可申请成为商户",
                 "ja", "スポンサー申請の資格")
-            .item(Certifications.REFERRER.key(), "en", "May refer friends", "zh", "可推荐朋友", "ja", "友だち紹介の資格"));
+            .item(Certifications.REFERRER.key(), "en", "May refer friends", "zh", "可推荐朋友", "ja", "友だち紹介の資格")
+            .item(Certifications.BENEFIT_PROVIDER.key(), "en", "May provide sponsored benefits", "zh", "可提供赞助权益",
+                "ja", "協賛特典の提供の資格")
+            .item(Certifications.BENEFIT_SPONSOR.key(), "en", "May sponsor others' benefits", "zh", "可赞助他人权益",
+                "ja", "他社特典の協賛の資格"));
     }
 
     @Bean

@@ -329,9 +329,11 @@ describe('a signed-in sponsor', () => {
       .map((link) => link.textContent))).toEqual([
       // Q79: the sponsor's own pages (profile, products, staff, mail server) are the hub's sections, one entry here.
       ['Dashboard'], ['Quizzes', 'Publications', 'Tree'], ['Cash rewards', 'Digital prizes', 'Prizes'],
+      // Q89a: buying other sponsors' benefits, and offering one's own.
+      ['Benefit catalog', 'My benefits', 'Inquiries', 'Purchases'],
       ['Wallet', 'Transactions'], ['Sponsor profile', 'Page statistics', 'Messages', 'Account', 'Help']])
     expect(within(nav).getByRole('group', { name: 'Rewards' })).toBeInTheDocument()
-    expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(4)
+    expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(5)
     await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))
     expect(window.location.pathname).toBe('/profile')
     expect(await screen.findByTestId('profile-status')).toHaveAttribute('data-status', 'APPROVED')

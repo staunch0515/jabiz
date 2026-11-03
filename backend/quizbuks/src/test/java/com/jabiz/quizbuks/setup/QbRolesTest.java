@@ -133,7 +133,13 @@ class QbRolesTest {
         // Q9d: besides their own (qb.*), the receipts they issued (the platform shows each sponsor only theirs).
         assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).allMatch(p -> p.startsWith("qb.")
                 || "document.archive.read".equals(p))
-            .doesNotContain(QbPermissions.PLAY, QbPermissions.SETUP, "document.issue");
+            .doesNotContain(QbPermissions.PLAY, QbPermissions.SETUP, "document.issue")
+            // Q89: sponsored benefits are a sponsor's (the certifications decide which side); only their templates
+            // read their own datasets.
+            .contains(QbPermissions.BENEFIT_USE).doesNotContain(QbPermissions.BENEFIT_SYSTEM,
+                QbPermissions.BENEFIT_READ);
+        assertThat(QbRoles.of(QbRoles.TAKER).permissions()).doesNotContain(QbPermissions.BENEFIT_USE);
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.BENEFIT_READ);
     }
 
     @Test

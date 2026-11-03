@@ -136,7 +136,7 @@
 | 422 `QB_FEE_OVERDUE` | 422 `QB_FEE_UNPAID`（预付有未付、后付超信用额都用它） | 拦的条件不只是逾期 |
 | 模板 `qb.operator.sponsor-billing` | `qb.operator.sponsors` 加 `billingMode` / `creditLimit`（按平台缺省回落）；`qb.sponsor.wallet` 加未付与计费的列；另有 `qb.sponsor.fee-charges` / `fee-invoices` / `fee-invoice-lines`、`qb.admin.fee-charges` / `fee-invoices` / `fee-requests` | 少两次读取 |
 | 科目参数 | `qb.journal.account.1130 / 4120 / 2150` 三个受控参数（`QB_SETUP` 提出） | Q9d 的做法 |
-| 迁移 | `V67__quizbuks_platform_fees.sql`（Q87a 占 V66） | 合入顺序 |
+| 迁移 | `V68__quizbuks_platform_fees.sql`（Q87a 占 V66，Q89a 占 V67） | 合入顺序 |
 
 - 开关未发布时同 Q87 之前（`LoadParams.optional`：不拦、不记费），与 Q87a 的读法一致；拦"有未付账单时换学分"加在 `KudosExchanges`（只拦换出）。
 - 提交发布多一条语句（`FeeGate`：入驻行 + 未付账单，`QueryEntities.all`）；答题路径不变（`AttemptStatementBudgetIT` 不变）。

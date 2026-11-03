@@ -1,0 +1,245 @@
+package com.jabiz.quizbuks.benefit;
+
+import com.jabiz.context.RequestContext;
+import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dictionary.StaticDictionary;
+import com.jabiz.entity.EntityDefinition;
+import com.jabiz.file.FilePolicy;
+import com.jabiz.file.MediaTypes;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.operator.OperatorScopes;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.time.ZoneId;
+
+/**
+ * Registers sponsored benefits (Q89a): the four entities, their default datasets (written by the processes only; read
+ * by headquarters' content administrators), each side's own rows for its templates (no role reads those datasets
+ * themselves), the dictionaries, the two file policies and the processes.
+ */
+@Configuration
+public class BenefitConfig {
+
+    private final String poolRef;
+    private final ZoneId zone;
+
+    BenefitConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+        @Value("${jabiz.fiscal-year-zone:UTC}") String zone) {
+        this.poolRef = poolRef;
+        this.zone = ZoneId.of(zone);
+    }
+
+    @Bean
+    EntityDefinition qbBenefitOfferEntity() {
+        return QbBenefits.OFFER_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbBenefitConversationEntity() {
+        return QbBenefits.CONVERSATION_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbBenefitMessageEntity() {
+        return QbBenefits.MESSAGE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbBenefitPurchaseEntity() {
+        return QbBenefits.PURCHASE_ENTITY;
+    }
+
+    private DatasetDefinition defaultDataset(String entity) {
+        return DatasetDefinition.define(QbBenefits.defaultDataset(entity), d -> d
+            .targetEntityType(entity)
+            .asDefault()
+            .permissions(QbPermissions.BENEFIT_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .scope(OperatorScopes.of(entity))
+            .policy(p -> p.processOnlyWrites())
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    /** One side's own rows ({@code field} is the caller), for its templates only. */
+    private DatasetDefinition own(String side, String entity, String field) {
+        return DatasetDefinition.define(QbBenefits.sideDataset(side, entity), d -> d
+            .targetEntityType(entity)
+            .permissions(QbPermissions.BENEFIT_SYSTEM, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext(field, "actorId", RequestContext::actorId)));
+    }
+
+    @Bean
+    DatasetDefinition qbBenefitOfferDataset() {
+        return defaultDataset(QbBenefits.OFFER);
+    }
+
+    @Bean
+    DatasetDefinition qbBenefitConversationDataset() {
+        return defaultDataset(QbBenefits.CONVERSATION);
+    }
+
+    @Bean
+    DatasetDefinition qbBenefitMessageDataset() {
+        return defaultDataset(QbBenefits.MESSAGE);
+    }
+
+    @Bean
+    DatasetDefinition qbBenefitPurchaseDataset() {
+        return defaultDataset(QbBenefits.PURCHASE);
+    }
+
+    @Bean
+    DatasetDefinition qbProviderBenefitOfferDataset() {
+        return own(QbBenefits.PROVIDER, QbBenefits.OFFER, "providerId");
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorBenefitConversationDataset() {
+        return own(QbBenefits.SPONSOR, QbBenefits.CONVERSATION, "sponsorId");
+    }
+
+    @Bean
+    DatasetDefinition qbProviderBenefitConversationDataset() {
+        return own(QbBenefits.PROVIDER, QbBenefits.CONVERSATION, "providerId");
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorBenefitMessageDataset() {
+        return own(QbBenefits.SPONSOR, QbBenefits.MESSAGE, "sponsorId");
+    }
+
+    @Bean
+    DatasetDefinition qbProviderBenefitMessageDataset() {
+        return own(QbBenefits.PROVIDER, QbBenefits.MESSAGE, "providerId");
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorBenefitPurchaseDataset() {
+        return own(QbBenefits.SPONSOR, QbBenefits.PURCHASE, "sponsorId");
+    }
+
+    @Bean
+    DatasetDefinition qbProviderBenefitPurchaseDataset() {
+        return own(QbBenefits.PROVIDER, QbBenefits.PURCHASE, "providerId");
+    }
+
+    /** A benefit's images: re-encoded without metadata; shown to sponsors, the name and the upload stay private. */
+    @Bean
+    FilePolicy qbBenefitImagePolicy() {
+        return FilePolicy.define(QbBenefits.IMAGE_POLICY)
+            .allow(MediaTypes.JPEG, MediaTypes.PNG)
+            .maxBytes(5 * FilePolicy.MB)
+            .image(i -> i.maxPixels(40_000_000).variants(256, 640, 1280))
+            .permissions(QbPermissions.BENEFIT_USE, QbPermissions.BENEFIT_USE)
+            .privateMetadata()
+            .build();
+    }
+
+    /**
+     * A purchase's proofs (receipts, contracts): images re-encoded, or a PDF; read by the two sides, whose pages are
+     * the only places their random keys appear. The name and the upload stay private.
+     */
+    @Bean
+    FilePolicy qbBenefitProofPolicy() {
+        return FilePolicy.define(QbBenefits.PROOF_POLICY)
+            .allow(MediaTypes.JPEG, MediaTypes.PNG, MediaTypes.PDF)
+            .maxBytes(10 * FilePolicy.MB)
+            .image(i -> i.maxPixels(40_000_000))
+            .permissions(QbPermissions.BENEFIT_USE, QbPermissions.BENEFIT_USE)
+            .privateMetadata()
+            .build();
+    }
+
+    @Bean
+    StaticDictionary qbBenefitKindDictionary() {
+        return StaticDictionary.define(QbBenefits.KIND_DICTIONARY, d -> d
+            .item(QbBenefits.GOODS, "en", "Goods", "zh", "实物", "ja", "商品")
+            .item(QbBenefits.SERVICE, "en", "Service", "zh", "服务", "ja", "サービス")
+            .item(QbBenefits.DIGITAL, "en", "Digital product", "zh", "数字产品", "ja", "デジタル商品"));
+    }
+
+    @Bean
+    StaticDictionary qbBenefitOfferStatusDictionary() {
+        return StaticDictionary.define(QbBenefits.OFFER_STATUS_DICTIONARY, d -> d
+            .item(QbBenefits.LISTED, "en", "Shown", "zh", "上架", "ja", "掲載中")
+            .item(QbBenefits.UNLISTED, "en", "Hidden", "zh", "未上架", "ja", "非掲載")
+            .item(QbBenefits.TAKEN_DOWN, "en", "Taken down", "zh", "已下架", "ja", "掲載停止"));
+    }
+
+    @Bean
+    StaticDictionary qbBenefitSideDictionary() {
+        return StaticDictionary.define(QbBenefits.SIDE_DICTIONARY, d -> d
+            .item(QbBenefits.SPONSOR, "en", "Sponsor", "zh", "赞助方", "ja", "協賛者")
+            .item(QbBenefits.PROVIDER, "en", "Provider", "zh", "提供方", "ja", "提供者"));
+    }
+
+    @Bean
+    StaticDictionary qbBenefitPurchaseStatusDictionary() {
+        return StaticDictionary.define(QbBenefits.PURCHASE_STATUS_DICTIONARY, d -> d
+            .item(PurchaseStatus.DRAFT, "en", "Draft", "zh", "草稿", "ja", "下書き")
+            .item(PurchaseStatus.PENDING_PROVIDER, "en", "Waiting for the provider", "zh", "等待提供方确认",
+                "ja", "提供者の確認待ち")
+            .item(PurchaseStatus.CONFIRMED, "en", "Confirmed", "zh", "已确认", "ja", "確認済み")
+            .item(PurchaseStatus.SUSPENDED, "en", "Suspended", "zh", "已暂停", "ja", "停止中")
+            .item(PurchaseStatus.CLOSED, "en", "Closed", "zh", "已完成", "ja", "完了")
+            .item(PurchaseStatus.CANCELLED, "en", "Withdrawn", "zh", "已撤回", "ja", "取り下げ"));
+    }
+
+    @Bean
+    ProcessDefinition<OfferProcesses.SaveInput, OfferProcesses.OfferOutput, ProcessContext> qbBenefitOfferSave() {
+        return OfferProcesses.save();
+    }
+
+    @Bean
+    ProcessDefinition<BenefitConversationProcesses.OpenInput, BenefitConversationProcesses.MessageOutput,
+        ProcessContext> qbBenefitConversationOpen() {
+        return BenefitConversationProcesses.open();
+    }
+
+    @Bean
+    ProcessDefinition<BenefitConversationProcesses.SendInput, BenefitConversationProcesses.MessageOutput,
+        ProcessContext> qbBenefitConversationSend() {
+        return BenefitConversationProcesses.send();
+    }
+
+    @Bean
+    ProcessDefinition<BenefitConversationProcesses.ConversationRef, BenefitConversationProcesses.ReadOutput,
+        ProcessContext> qbBenefitConversationRead() {
+        return BenefitConversationProcesses.read();
+    }
+
+    @Bean
+    ProcessDefinition<PurchaseProcesses.SaveInput, PurchaseProcesses.PurchaseOutput, ProcessContext>
+        qbBenefitPurchaseSave() {
+        return PurchaseProcesses.save(zone);
+    }
+
+    @Bean
+    ProcessDefinition<PurchaseProcesses.PurchaseRef, PurchaseProcesses.PurchaseOutput, ProcessContext>
+        qbBenefitPurchaseSubmit() {
+        return PurchaseProcesses.submit();
+    }
+
+    @Bean
+    ProcessDefinition<PurchaseProcesses.PurchaseRef, PurchaseProcesses.PurchaseOutput, ProcessContext>
+        qbBenefitPurchaseConfirm() {
+        return PurchaseProcesses.confirm();
+    }
+
+    @Bean
+    ProcessDefinition<PurchaseProcesses.DeclineInput, PurchaseProcesses.PurchaseOutput, ProcessContext>
+        qbBenefitPurchaseDecline() {
+        return PurchaseProcesses.decline();
+    }
+
+    @Bean
+    ProcessDefinition<PurchaseProcesses.PurchaseRef, PurchaseProcesses.PurchaseOutput, ProcessContext>
+        qbBenefitPurchaseCancel() {
+        return PurchaseProcesses.cancel();
+    }
+}

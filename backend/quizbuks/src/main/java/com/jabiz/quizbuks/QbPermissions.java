@@ -207,6 +207,16 @@ public final class QbPermissions {
     public static final String CONVERSATION_READ = "qb.conversation.read";
     /** Q82: the conversations' expiry ({@code QB_CONVERSATION_EXPIRE}, {@code internal()}). Granted to no role. */
     public static final String CONVERSATION_SYSTEM = "qb.conversation.system";
+    /**
+     * Q89: sponsored benefits as a sponsor (listing benefits, talking with other sponsors about them, purchase orders as
+     * either side). Every sponsor holds it; the certifications {@code BENEFIT_PROVIDER} / {@code BENEFIT_SPONSOR} decide
+     * what each may do, and each process finds the caller's side itself.
+     */
+    public static final String BENEFIT_USE = "qb.benefit.use";
+    /** Q89: reading every benefit, conversation between sponsors and purchase order (headquarters' content). */
+    public static final String BENEFIT_READ = "qb.admin.benefit.read";
+    /** Q89: the sponsors' own benefit datasets, read by their templates only. Granted to no role. */
+    public static final String BENEFIT_SYSTEM = "qb.benefit.system";
     /** Q47c: opening and closing the kinds of audience rule and whether they are charged for (headquarters' content). */
     public static final String AUDIENCE_RULES_WRITE = "qb.audience.rules.write";
     /** Q47c: headquarters' price lists of the audience rules, their own and the operators' (finance). */

@@ -25,6 +25,7 @@ import com.jabiz.quizbuks.wallet.QbTopUps;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.quizbuks.benefit.QbBenefits;
 import com.jabiz.security.erasure.ErasedEntity;
 import com.jabiz.security.erasure.ErasureLoad;
 import com.jabiz.security.erasure.ErasureNotice;
@@ -109,6 +110,14 @@ public class SponsorErasure {
                     // side sees a message was there), the text goes.
                     ErasedEntity.keep(com.jabiz.quizbuks.conversation.QbConversations.MESSAGE, "senderUserId",
                         "body"),
+                    // Q89a: what they wrote to other sponsors stays as a row, the text goes (as Q82); a benefit they
+                    // listed keeps its business description but loses its images (the catalog no longer shows it: its
+                    // provider's onboarding is gone); purchases are business records between two sponsors and stay,
+                    // only the free text each side wrote is overwritten.
+                    ErasedEntity.keep(QbBenefits.MESSAGE, "senderUserId", "body"),
+                    ErasedEntity.clear(QbBenefits.OFFER, "providerId", "image1", "image2", "image3", "image4"),
+                    ErasedEntity.keep(QbBenefits.PURCHASE, "sponsorId", "note"),
+                    ErasedEntity.keep(QbBenefits.PURCHASE, "providerId", "declineReason"),
                     // The onboarding: tombstoned; the purge overwrites who they are in every version.
                     ErasedEntity.delete(QbAccounts.SPONSOR, "userId", "contactName", "company", "intro", "avatar",
                         "introTranslations"),
