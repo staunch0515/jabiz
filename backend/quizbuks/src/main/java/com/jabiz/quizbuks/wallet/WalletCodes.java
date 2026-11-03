@@ -11,6 +11,14 @@ public final class WalletCodes {
     public static final String TOPUP_TOO_MANY_OPEN = "QB_TOPUP_TOO_MANY_OPEN";
     /** Top-ups are not configured here: the sponsor console's address, where Stripe returns, is missing. */
     public static final String TOPUP_UNAVAILABLE = "QB_TOPUP_UNAVAILABLE";
+    /** Q87: the top-up's target (Kudos or the cash account) is not one the administrators offer. */
+    public static final String TOPUP_TARGET = "QB_TOPUP_TARGET";
+    /** Q87: converting cash to Kudos (or back) is switched off. */
+    public static final String KUDOS_EXCHANGE_OFF = "QB_KUDOS_EXCHANGE_OFF";
+    /** Q87: the cash account (or the Kudos available) does not cover the amount to convert. */
+    public static final String KUDOS_EXCHANGE_SHORT = "QB_KUDOS_EXCHANGE_SHORT";
+    /** Q87: Kudos are not converted back while rewards wait to be paid. */
+    public static final String KUDOS_EXCHANGE_PENDING = "QB_KUDOS_EXCHANGE_PENDING";
     /**
      * A new sponsor's top-ups in all would pass {@code qb.topup.new-sponsor.max-total} (Q10b, M3; params
      * {@code remaining}, {@code max} and {@code until}, "-" before the first paid top-up).
@@ -101,6 +109,7 @@ public final class WalletCodes {
     public static final String RECEIPT_REFUNDED = "QB_RECEIPT_REFUNDED";
 
     public static final List<String> ALL = List.of(TOPUP_AMOUNT_RANGE, TOPUP_TOO_MANY_OPEN, TOPUP_UNAVAILABLE,
+        TOPUP_TARGET, KUDOS_EXCHANGE_OFF, KUDOS_EXCHANGE_SHORT, KUDOS_EXCHANGE_PENDING,
         TOPUP_NEW_SPONSOR_LIMIT, TOPUP_BANK_UNAVAILABLE, TOPUP_BANK_STATE, TOPUP_BANK_PAYER_NAME, TOPUP_BANK_DATE_FUTURE,
         TOPUP_BANK_NO_REVIEW, TOPUP_BANK_REFERENCE_USED, TOPUP_BANK_OWN,
         PAYOUT_COUNTRY_UNSUPPORTED, PAYOUT_UNAVAILABLE, PAYOUT_ACCOUNT_CLOSED, TRANSFER_NOT_HELD, TRANSFER_RELEASE_OWN,

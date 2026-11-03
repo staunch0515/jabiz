@@ -91,7 +91,24 @@ public final class TransferRules {
      * @param holdDays how long a reward is held back from transfers ({@code qb.transfer.hold-days}, Q10b)
      */
     public record Params(Boolean enabled, BigDecimal threshold, BigDecimal reviewAbove, BigDecimal fee,
-        BigDecimal holdDays) {}
+        BigDecimal holdDays, BigDecimal feeRate) {
+        /** Without a proportional fee (Q87, {@code qb.transfer.fee-rate}): the fixed fee only. */
+        public Params(Boolean enabled, BigDecimal threshold, BigDecimal reviewAbove, BigDecimal fee,
+            BigDecimal holdDays) {
+            this(enabled, threshold, reviewAbove, fee, holdDays, BigDecimal.ZERO);
+        }
+    }
+
+    /**
+     * The platform's fee on a transfer of {@code amount} (Q87, D-Q87-0): the fixed fee plus the amount times the
+     * rate, rounded down to the yen; null when either parameter cannot be used (a rate is 0 or more and below 1).
+     */
+    public static BigDecimal fee(BigDecimal amount, BigDecimal fixed, BigDecimal rate) {
+        if (!wholeAndNotNegative(fixed) || rate == null || rate.signum() < 0 || rate.compareTo(BigDecimal.ONE) >= 0) {
+            return null;
+        }
+        return fixed.add(amount.multiply(rate).setScale(0, java.math.RoundingMode.FLOOR));
+    }
 
     /**
      * What the transfer process read under the user's wallet lock.
@@ -143,7 +160,8 @@ public final class TransferRules {
             return Plan.skip(DISABLED);
         }
         if (!wholeAndNotNegative(params.threshold()) || !wholeAndNotNegative(params.reviewAbove())
-            || !wholeAndNotNegative(params.fee()) || !wholeAndNotNegative(params.holdDays())) {
+            || !wholeAndNotNegative(params.fee()) || !wholeAndNotNegative(params.holdDays())
+            || fee(BigDecimal.ONE, params.fee(), params.feeRate()) == null) {
             return Plan.skip(INVALID_PARAMS);
         }
         if (facts.banned()) {
@@ -173,7 +191,8 @@ public final class TransferRules {
             || balance.stripTrailingZeros().scale() > 0) {
             return Plan.skip(REWARDS_HELD);
         }
-        BigDecimal net = balance.subtract(params.fee());
+        BigDecimal fee = fee(balance, params.fee(), params.feeRate());
+        BigDecimal net = balance.subtract(fee);
         if (net.signum() <= 0) {
             return Plan.skip(FEE_TOO_HIGH);
         }
@@ -181,7 +200,7 @@ public final class TransferRules {
         if (review && !facts.reviewConfigured()) {
             return Plan.skip(REVIEW_NOT_CONFIGURED);
         }
-        return new Plan(null, balance, params.fee(), net, review);
+        return new Plan(null, balance, fee, net, review);
     }
 
     /**

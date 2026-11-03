@@ -116,7 +116,8 @@ class WalletConfig {
     StaticDictionary qbWalletKindDictionary() {
         return StaticDictionary.define(QbWallets.KIND_DICTIONARY, d -> d
             .item(QbWallets.SPONSOR, "en", "Sponsor", "zh", "商家", "ja", "スポンサー")
-            .item(QbWallets.TAKER, "en", "Quiz taker", "zh", "答题人", "ja", "回答者"));
+            .item(QbWallets.TAKER, "en", "Quiz taker", "zh", "答题人", "ja", "回答者")
+            .item(QbWallets.CASH, "en", "Sponsor cash account", "zh", "商家现金账户", "ja", "スポンサー現金口座"));
     }
 
     @Bean

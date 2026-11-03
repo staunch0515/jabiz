@@ -21,6 +21,14 @@ public final class QbLedger {
     /** Q48b: what the platform owes operators of their settled months, and the expense it is. */
     public static final String OPERATOR_SHARES_PAYABLE = "2140";
     public static final String OPERATOR_SHARES = "5130";
+    /**
+     * Q87 (docs/quizbuks/plans/Q87-fee-account.md): a sponsor's cash account (money of theirs the platform holds, not
+     * yet Kudos; by party), the platform's fees receivable (by party), the fee revenue and the consumption tax on it.
+     */
+    public static final String SPONSOR_CASH = "2160";
+    public static final String FEES_RECEIVABLE = "1130";
+    public static final String PLATFORM_FEE_REVENUE = "4120";
+    public static final String TAX_PAYABLE = "2150";
 
     /** The name of the dimension that carries the party (a user's id) on the wallet accounts. */
     public static final String PARTY = "party";
@@ -39,7 +47,11 @@ public final class QbLedger {
         new Account(PAYMENT_FEES, "Payment fees (Stripe)", "EXPENSE"),
         new Account(PROMOTION_EXPENSES, "Promotion expenses (Kudos granted)", "EXPENSE"),
         new Account(OPERATOR_SHARES_PAYABLE, "Operator shares payable", "LIABILITY"),
-        new Account(OPERATOR_SHARES, "Operator shares (expense)", "EXPENSE"));
+        new Account(OPERATOR_SHARES, "Operator shares (expense)", "EXPENSE"),
+        new Account(SPONSOR_CASH, "Sponsor cash accounts", "LIABILITY"),
+        new Account(FEES_RECEIVABLE, "Platform fees receivable", "ASSET"),
+        new Account(PLATFORM_FEE_REVENUE, "Platform fee revenue", "REVENUE"),
+        new Account(TAX_PAYABLE, "Consumption tax payable", "LIABILITY"));
 
     private QbLedger() {}
 }

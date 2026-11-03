@@ -37,6 +37,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -92,8 +93,13 @@ public final class BankTopUps {
     static final String TASK_TYPE = "qb.topup-bank";
 
     /** @param amount whole Kudos within {@code qb.topup.bank.min} – {@code qb.topup.bank.max} */
+    /** @param target Q87: {@code KUDOS} or {@code CASH}, within {@code qb.topup.targets}; none: the default */
     public record StartInput(@NotNull @DecimalMin("1") @DecimalMax("1000000000000")
-        @Digits(integer = 13, fraction = 0) BigDecimal amount) {}
+        @Digits(integer = 13, fraction = 0) BigDecimal amount, @Pattern(regexp = "KUDOS|CASH") String target) {
+        public StartInput(BigDecimal amount) {
+            this(amount, null);
+        }
+    }
 
     /** @param transferCode what the sponsor puts before the payer's name */
     public record StartOutput(String topUpId, String transferCode, BigDecimal amount, String status) {}
@@ -119,6 +125,7 @@ public final class BankTopUps {
 
     static final String INPUT = "input";
     static final String PARAMS = "params";
+    static final String TARGET = "target";
     static final String TOPUP_ID = "topUpId";
     static final String OPEN = "open";
     static final String CODE = "code";
@@ -173,7 +180,8 @@ public final class BankTopUps {
     }
 
     private static String[] params() {
-        List<String> keys = new ArrayList<>(List.of(QbParams.TOPUP_BANK_MIN, QbParams.TOPUP_BANK_MAX));
+        List<String> keys = new ArrayList<>(List.of(QbParams.TOPUP_BANK_MIN, QbParams.TOPUP_BANK_MAX,
+            QbParams.TOPUP_TARGETS, QbParams.TOPUP_DEFAULT_TARGET));
         keys.addAll(QbParams.BANK_RECEIVING);
         return keys.toArray(String[]::new);
     }
@@ -197,6 +205,16 @@ public final class BankTopUps {
             problems.add(new Violation(null, WalletCodes.TOPUP_TOO_MANY_OPEN, "Finish or withdraw the open bank "
                 + "top-ups first", Map.of("max", BankTransfers.MAX_OPEN)));
         }
+        // Q87 (D-Q87-2): the target, within what the administrators allow.
+        String target = TopUpTargets.resolve(ctx.get(INPUT, StartInput.class).target(),
+            params.find(QbParams.TOPUP_TARGETS, String.class).orElse(null),
+            params.find(QbParams.TOPUP_DEFAULT_TARGET, String.class).orElse(null));
+        if (target == null) {
+            problems.add(new Violation("target", WalletCodes.TOPUP_TARGET, "The top-up's target is not offered",
+                Map.of("targets", params.find(QbParams.TOPUP_TARGETS, String.class).orElse(""))));
+        } else {
+            ctx.put(TARGET, target);
+        }
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems);
         }
@@ -207,6 +225,7 @@ public final class BankTopUps {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", ctx.request().actorId());
         values.put("method", QbTopUps.BANK);
+        values.put("target", ctx.get(TARGET));
         values.put("transferCode", ctx.get(CODE));
         values.put("requestedAmount", amount);
         values.put("amount", amount);
@@ -500,7 +519,7 @@ public final class BankTopUps {
                     LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
                 .compute("Credit the wallet", (metadata, ctx) -> credit(ctx))
                 .step("Ask for the pending rewards to be paid", PublishEvent.<ProcessContext>when(
-                    ctx -> ctx.contains(POSTING), QbWallets.SETTLE_EVENT,
+                    ctx -> ctx.contains(POSTING) && !TopUpCrediting.cash(first(ctx, TOPUP)), QbWallets.SETTLE_EVENT,
                     ctx -> Map.of("sponsorId", first(ctx, TOPUP).get("sponsorId"))))
                 .step("Announce the top-up", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(POSTING),
                     QbTopUps.PAID_EVENT, ctx -> {
@@ -548,7 +567,7 @@ public final class BankTopUps {
             ctx.put(POST_INPUT, new LedgerProcesses.PostInput(ctx.opTime(), "Bank top-up",
                 topUp.get("transferCode"), List.of(
                     new LedgerProcesses.Line(QbLedger.BANK, Direction.DEBIT, amount),
-                    new LedgerProcesses.Line(QbLedger.SPONSOR_PREPAYMENTS, Direction.CREDIT, amount, null,
+                    new LedgerProcesses.Line(TopUpCrediting.creditAccount(topUp), Direction.CREDIT, amount, null,
                         Map.of(QbLedger.PARTY, topUp.get("sponsorId")))), QbTopUps.TOPUP,
                 String.valueOf(topUp.id())));
         } else if (ApprovalEntities.REJECTED.equals(input.status()) && rejected(ctx, topUp)) {
@@ -597,8 +616,8 @@ public final class BankTopUps {
         }
         EntityInstance topUp = first(ctx, TOPUP);
         BigDecimal amount = QbTopUps.money(topUp.get("amount"));
-        QbWallets.change(ctx, first(ctx, WALLET), QbWallets.SPONSOR, topUp.get("sponsorId"), amount, 0,
-            BigDecimal.ZERO);
+        QbWallets.change(ctx, first(ctx, WALLET), TopUpCrediting.walletKind(topUp), topUp.get("sponsorId"), amount,
+            0, BigDecimal.ZERO);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("status", TopUpStatus.PAID);
         values.put("paidAt", ctx.opTime());

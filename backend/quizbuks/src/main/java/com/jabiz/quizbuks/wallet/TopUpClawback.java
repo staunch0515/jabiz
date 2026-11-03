@@ -121,8 +121,10 @@ public final class TopUpClawback {
                     QbTopUps.defaultDataset(QbTopUps.TOPUP), ctx -> TopUpCrediting.byId(
                         TopUpCrediting.first(ctx, FOUND) == null ? null
                             : String.valueOf(TopUpCrediting.first(ctx, FOUND).id())), TOPUP))
+                // Q87: a cash top-up is taken back from the cash account, a Kudos one from the Kudos.
                 .step("Read the wallet", QueryEntities.<ProcessContext>of(QbWallets.defaultDataset(QbWallets.WALLET),
-                    ctx -> QbWallets.query(QbWallets.SPONSOR, TopUpCrediting.first(ctx, TOPUP) == null ? null
+                    ctx -> QbWallets.query(TopUpCrediting.walletKind(TopUpCrediting.first(ctx, TOPUP)),
+                        TopUpCrediting.first(ctx, TOPUP) == null ? null
                         : TopUpCrediting.first(ctx, TOPUP).get("sponsorId")), WALLET))
                 .compute("Decide", (metadata, ctx) -> decide(ctx, kind, settings))
                 .step("Post the clawback", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
@@ -302,8 +304,8 @@ public final class TopUpClawback {
                 }
                 ctx.put(POST_INPUT, new LedgerProcesses.PostInput(TopUpEvents.happened(event), description,
                     TopUpCrediting.reference(stripeId), List.of(
-                        new LedgerProcesses.Line(QbLedger.SPONSOR_PREPAYMENTS, Direction.DEBIT, plan.amount(), null,
-                            Map.of(QbLedger.PARTY, sponsorId)),
+                        new LedgerProcesses.Line(TopUpCrediting.creditAccount(topUp), Direction.DEBIT, plan.amount(),
+                            null, Map.of(QbLedger.PARTY, sponsorId)),
                         new LedgerProcesses.Line(QbLedger.STRIPE_BALANCE, Direction.CREDIT, plan.amount())),
                     QbTopUps.TOPUP, String.valueOf(topUp.id())));
             }
@@ -322,8 +324,8 @@ public final class TopUpClawback {
         BigDecimal heldDelta = ctx.contains(HELD_DELTA) ? (BigDecimal) ctx.get(HELD_DELTA) : BigDecimal.ZERO;
         if (balanceDelta.signum() != 0 || heldDelta.signum() != 0) {
             // The hold is no ledger movement: only the balance follows the posting, the hold only what is spendable.
-            QbWallets.change(ctx, TopUpCrediting.first(ctx, WALLET), QbWallets.SPONSOR, topUp.get("sponsorId"),
-                balanceDelta, 0, BigDecimal.ZERO, heldDelta);
+            QbWallets.change(ctx, TopUpCrediting.first(ctx, WALLET), TopUpCrediting.walletKind(topUp),
+                topUp.get("sponsorId"), balanceDelta, 0, BigDecimal.ZERO, heldDelta);
         }
         ctx.changes().update(QbTopUps.TOPUP, topUp.id(), topUp.version(), values);
     }

@@ -28,6 +28,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -72,9 +73,16 @@ public final class TopUpProcesses {
     public static final String STALE_JOB = "qb.topup-stale";
     public static final String STALE_TEMPLATE = "qb.system.topups-stale";
 
-    /** @param amount whole Kudos within {@code qb.topup.min} – {@code qb.topup.max} */
+    /**
+     * @param amount whole Kudos within {@code qb.topup.min} – {@code qb.topup.max}
+     * @param target Q87: {@code KUDOS} or {@code CASH}, within {@code qb.topup.targets}; none: the default target
+     */
     public record StartInput(@NotNull @DecimalMin("1") @DecimalMax("1000000000000")
-        @Digits(integer = 13, fraction = 0) BigDecimal amount) {}
+        @Digits(integer = 13, fraction = 0) BigDecimal amount, @Pattern(regexp = "KUDOS|CASH") String target) {
+        public StartInput(BigDecimal amount) {
+            this(amount, null);
+        }
+    }
 
     /** @param jobId the job creating the checkout */
     public record StartOutput(String topUpId, String status, String jobId) {}
@@ -116,7 +124,7 @@ public final class TopUpProcesses {
             .steps(SponsorChecks::load)
             .step("Load the limits", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                 QbParams.TOPUP_MIN, QbParams.TOPUP_MAX, QbParams.TOPUP_NEW_SPONSOR_DAYS,
-                QbParams.TOPUP_NEW_SPONSOR_MAX_TOTAL))
+                QbParams.TOPUP_NEW_SPONSOR_MAX_TOTAL, QbParams.TOPUP_TARGETS, QbParams.TOPUP_DEFAULT_TARGET))
             // The new sponsors' limit (Q10b, M3) counts the unfinished top-ups too, so two starts at once must not
             // both fit in it: a sponsor's starts take turns. Nothing else takes this lock, and nothing is locked
             // after it.
@@ -178,12 +186,20 @@ public final class TopUpProcesses {
             problems.add(new Violation(null, WalletCodes.TOPUP_UNAVAILABLE, "Top-ups are not configured",
                 Map.of()));
         }
+        // Q87 (D-Q87-2): what the top-up becomes, within what the administrators allow.
+        String target = TopUpTargets.resolve(ctx.get(INPUT, StartInput.class).target(),
+            params.get(QbParams.TOPUP_TARGETS, String.class), params.get(QbParams.TOPUP_DEFAULT_TARGET, String.class));
+        if (target == null) {
+            problems.add(new Violation("target", WalletCodes.TOPUP_TARGET, "The top-up's target is not offered",
+                Map.of("targets", String.valueOf(params.get(QbParams.TOPUP_TARGETS, String.class)))));
+        }
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems);
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", ctx.request().actorId());
         values.put("method", QbTopUps.STRIPE);
+        values.put("target", target);
         values.put("amount", amount);
         values.put("status", TopUpStatus.OPENING);
         values.put("createdAt", ctx.opTime());

@@ -36,6 +36,12 @@ public final class QbWallets {
     public static final String KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:wallet-kind";
     public static final String SPONSOR = "SPONSOR";
     public static final String TAKER = "TAKER";
+    /**
+     * Q87 (D-Q87-1): a sponsor's cash account, money of theirs the platform holds that is not Kudos yet (account
+     * 2160 for them); it pays no reward and holds nothing pending. Changed under the sponsor's wallet lock
+     * ({@link #lockName} of {@link #SPONSOR}: the cash and the Kudos are two kinds under one lock, D-Q87-3).
+     */
+    public static final String CASH = "CASH";
 
     /** The process that pays a sponsor's pending rewards, in their order (in the {@code play} module). */
     public static final String PENDING_SETTLE = "QB_PENDING_SETTLE";
@@ -80,7 +86,7 @@ public final class QbWallets {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:wallet"));
         eb.field("ownerId", f -> f.physicalColumn("owner_id").immutable(true).required(true).asText(128));
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)
-            .asCode(KIND_DICTIONARY, SPONSOR, TAKER));
+            .asCode(KIND_DICTIONARY, SPONSOR, TAKER, CASH));
         eb.field("balance", f -> f.physicalColumn("balance").required(true).asMonetary("JPY", 0));
         eb.field("pendingCount", f -> f.physicalColumn("pending_count").required(true).asNumeric(9, 0));
         eb.field("pendingAmount", f -> f.physicalColumn("pending_amount").required(true).asMonetary("JPY", 0));

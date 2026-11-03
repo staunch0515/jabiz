@@ -175,6 +175,13 @@ class TopUpConfig {
     }
 
     @Bean
+    StaticDictionary qbTopUpTargetDictionary() {
+        return StaticDictionary.define(QbTopUps.TARGET_DICTIONARY, d -> d
+            .item(QbTopUps.KUDOS, "en", "Kudos", "zh", "学分", "ja", "クドス")
+            .item(QbTopUps.CASH, "en", "Cash account", "zh", "现金账户", "ja", "現金口座"));
+    }
+
+    @Bean
     StaticDictionary qbTopUpManualKindDictionary() {
         return StaticDictionary.define(QbTopUps.MANUAL_KIND_DICTIONARY, d -> d
             .item(QbTopUps.PAID_OUTSIDE, "en", "Paid outside the system", "zh", "系统外收款", "ja", "システム外の入金")

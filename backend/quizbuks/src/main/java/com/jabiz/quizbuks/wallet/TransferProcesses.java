@@ -247,7 +247,7 @@ public final class TransferProcesses {
                 })
                 .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_THRESHOLD, QbParams.TRANSFER_REVIEW_ABOVE,
-                    QbParams.TRANSFER_FEE, QbParams.TRANSFER_HOLD_DAYS))
+                    QbParams.TRANSFER_FEE, QbParams.TRANSFER_HOLD_DAYS, QbParams.TRANSFER_FEE_RATE))
                 .steps(b -> loadTaker(b, TransferProcesses::userOf))
                 .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(userOf(ctx)), LATEST))
@@ -272,7 +272,7 @@ public final class TransferProcesses {
                     ctx -> QbWallets.lockName(QbWallets.TAKER, userOf(ctx))))
                 .step("Load the parameters", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                     QbParams.TRANSFER_ENABLED, QbParams.TRANSFER_THRESHOLD, QbParams.TRANSFER_REVIEW_ABOVE,
-                    QbParams.TRANSFER_FEE, QbParams.TRANSFER_HOLD_DAYS))
+                    QbParams.TRANSFER_FEE, QbParams.TRANSFER_HOLD_DAYS, QbParams.TRANSFER_FEE_RATE))
                 .steps(b -> loadTaker(b, TransferProcesses::userOf))
                 .step("Load the latest transfers", QueryEntities.<ProcessContext>of(
                     QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> latest(userOf(ctx)), LATEST))
@@ -346,7 +346,8 @@ public final class TransferProcesses {
                 params.get(QbParams.TRANSFER_THRESHOLD, BigDecimal.class),
                 params.get(QbParams.TRANSFER_REVIEW_ABOVE, BigDecimal.class),
                 params.get(QbParams.TRANSFER_FEE, BigDecimal.class),
-                params.get(QbParams.TRANSFER_HOLD_DAYS, BigDecimal.class)),
+                params.get(QbParams.TRANSFER_HOLD_DAYS, BigDecimal.class),
+                params.get(QbParams.TRANSFER_FEE_RATE, BigDecimal.class)),
             new TransferRules.Facts(BanRules.banned(ban == null ? null : ban.attributes()),
                 account == null ? null : account.get("status"),
                 latest.stream().anyMatch(t -> TransferStatus.UNFINISHED.contains(t.status())),

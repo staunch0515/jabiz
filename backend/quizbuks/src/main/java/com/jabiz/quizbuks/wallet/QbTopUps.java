@@ -5,6 +5,7 @@ import com.jabiz.entity.TemporalRole;
 import com.jabiz.runtime.EntityInstance;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * A sponsor's top-up (docs/quizbuks/plans/Q6-payments.md, D-Q6-2): an ordinary table, since Stripe's notices find it
@@ -37,6 +38,15 @@ public final class QbTopUps {
     public static final String PAID_OUTSIDE = "PAID_OUTSIDE";
     /** Kudos given with no money (debit 5120 Promotion expenses); it has no receipt. */
     public static final String GRANT = "GRANT";
+    /**
+     * Q87 (D-Q87-2): what a top-up becomes when it is paid: Kudos at once ({@code KUDOS}, as every top-up before Q87;
+     * 2110) or money in the sponsor's cash account ({@code CASH}; 2160), chosen when it starts, within
+     * {@code qb.topup.targets}.
+     */
+    public static final String TARGET_DICTIONARY = "urn:jabiz:dict:quizbuks:topup-target";
+    public static final String KUDOS = "KUDOS";
+    public static final String CASH = "CASH";
+    public static final List<String> TARGETS = List.of(KUDOS, CASH);
     /** The sequence of the codes a sponsor puts before the payer's name of a bank transfer (Q13a). */
     public static final String TRANSFER_CODE_SEQUENCE = "qb.topup.transfer-code";
 
@@ -57,6 +67,8 @@ public final class QbTopUps {
             .asCode(METHOD_DICTIONARY, STRIPE, BANK, MANUAL));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUS_DICTIONARY, TopUpStatus.ALL.toArray(String[]::new)));
+        eb.field("target", f -> f.physicalColumn("target").immutable(true).required(true).processOnly()
+            .asCode(TARGET_DICTIONARY, KUDOS, CASH));
         eb.field("createdAt", f -> f.physicalColumn("created_at").immutable(true).required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         // The checkout.

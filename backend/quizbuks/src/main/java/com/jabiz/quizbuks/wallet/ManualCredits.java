@@ -85,12 +85,20 @@ public final class ManualCredits {
      * @param reason        why, as the approver reads it
      * @param receivedOn    money received outside: the statement's day of the deposit, in Japan; a grant has none
      * @param bankReference money received outside: the statement's reference of the deposit; a grant has none
+     * @param target        Q87: money received outside may go to the cash account ({@code CASH}); none, or a grant:
+     *                      Kudos
      */
     public record RecordInput(@NotBlank @Size(max = 128) String sponsorId,
         @NotBlank @Pattern(regexp = "PAID_OUTSIDE|GRANT") String kind,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @NotBlank @Size(max = QbTopUps.MANUAL_REASON_LENGTH) String reason, LocalDate receivedOn,
-        @Size(max = BankTransfers.REFERENCE_LENGTH) String bankReference) {}
+        @Size(max = BankTransfers.REFERENCE_LENGTH) String bankReference,
+        @Pattern(regexp = "KUDOS|CASH") String target) {
+        public RecordInput(String sponsorId, String kind, BigDecimal amount, String reason, LocalDate receivedOn,
+            String bankReference) {
+            this(sponsorId, kind, amount, reason, receivedOn, bankReference, null);
+        }
+    }
 
     /** @param approvalRequestId the request another administrator decides */
     public record ManualOutput(String topUpId, String status, String approvalRequestId) {}
@@ -185,6 +193,11 @@ public final class ManualCredits {
             problems.add(new Violation("bankReference", WalletCodes.TOPUP_BANK_REFERENCE_USED, "The statement's entry "
                 + "is recorded against another top-up", Map.of()));
         }
+        // Q87: only money received may become cash; a grant is Kudos (the platform's promotion, not money owed).
+        if (!outside && QbTopUps.CASH.equals(input.target())) {
+            problems.add(new Violation("target", WalletCodes.TOPUP_TARGET, "A grant is Kudos, not cash",
+                Map.of("targets", QbTopUps.KUDOS)));
+        }
         if (first(ctx, RULES) == null) {
             problems.add(noReview());
         }
@@ -204,6 +217,7 @@ public final class ManualCredits {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", input.sponsorId());
         values.put("method", QbTopUps.MANUAL);
+        values.put("target", outside ? TopUpTargets.of(input.target()) : QbTopUps.KUDOS);
         values.put("manualKind", input.kind());
         values.put("manualReason", input.reason().strip());
         values.put("transferCode", ctx.get(CODE));
@@ -255,6 +269,7 @@ public final class ManualCredits {
         content.put("sponsorId", topUp.get("sponsorId"));
         content.put("code", topUp.get("transferCode"));
         content.put("kind", topUp.get("manualKind"));
+        content.put("target", TopUpTargets.of(topUp.get("target")));
         content.put("amount", amount);
         content.put("reason", topUp.get("manualReason"));
         content.put("receivedOn", receivedOn == null ? null : receivedOn.toString());
@@ -303,7 +318,7 @@ public final class ManualCredits {
                     LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
                 .compute("Credit the wallet", (metadata, ctx) -> credit(ctx))
                 .step("Ask for the pending rewards to be paid", PublishEvent.<ProcessContext>when(
-                    ctx -> ctx.contains(POSTING), QbWallets.SETTLE_EVENT,
+                    ctx -> ctx.contains(POSTING) && !TopUpCrediting.cash(first(ctx, TOPUP)), QbWallets.SETTLE_EVENT,
                     ctx -> Map.of("sponsorId", first(ctx, TOPUP).get("sponsorId"))))
                 .step("Announce the top-up", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(POSTING),
                     QbTopUps.PAID_EVENT, ctx -> {
@@ -353,7 +368,7 @@ public final class ManualCredits {
                 REFERENCE_PREFIX + topUp.get("transferCode"), List.of(
                     new LedgerProcesses.Line(grant ? QbLedger.PROMOTION_EXPENSES : QbLedger.BANK, Direction.DEBIT,
                         amount),
-                    new LedgerProcesses.Line(QbLedger.SPONSOR_PREPAYMENTS, Direction.CREDIT, amount, null,
+                    new LedgerProcesses.Line(TopUpCrediting.creditAccount(topUp), Direction.CREDIT, amount, null,
                         Map.of(QbLedger.PARTY, topUp.get("sponsorId")))), QbTopUps.TOPUP,
                 String.valueOf(topUp.id())));
         } else if (ApprovalEntities.REJECTED.equals(input.status()) && rejected(ctx, topUp)) {
@@ -391,8 +406,8 @@ public final class ManualCredits {
         }
         EntityInstance topUp = first(ctx, TOPUP);
         BigDecimal amount = QbTopUps.money(topUp.get("amount"));
-        QbWallets.change(ctx, first(ctx, WALLET), QbWallets.SPONSOR, topUp.get("sponsorId"), amount, 0,
-            BigDecimal.ZERO);
+        QbWallets.change(ctx, first(ctx, WALLET), TopUpCrediting.walletKind(topUp), topUp.get("sponsorId"), amount,
+            0, BigDecimal.ZERO);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("status", TopUpStatus.PAID);
         values.put("paidAt", ctx.opTime());

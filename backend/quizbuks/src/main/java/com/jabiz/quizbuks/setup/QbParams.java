@@ -228,9 +228,15 @@ public final class QbParams {
     /** Q48b: the operators' shares payable and their expense. */
     public static final String JOURNAL_ACCOUNT_2140 = JOURNAL_ACCOUNT_PREFIX + "2140";
     public static final String JOURNAL_ACCOUNT_5130 = JOURNAL_ACCOUNT_PREFIX + "5130";
+    /** Q87: the cash accounts, the fees receivable, the fee revenue and the tax on it. */
+    public static final String JOURNAL_ACCOUNT_2160 = JOURNAL_ACCOUNT_PREFIX + "2160";
+    public static final String JOURNAL_ACCOUNT_1130 = JOURNAL_ACCOUNT_PREFIX + "1130";
+    public static final String JOURNAL_ACCOUNT_4120 = JOURNAL_ACCOUNT_PREFIX + "4120";
+    public static final String JOURNAL_ACCOUNT_2150 = JOURNAL_ACCOUNT_PREFIX + "2150";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
         JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
-        JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130);
+        JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160, JOURNAL_ACCOUNT_1130,
+        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -243,6 +249,27 @@ public final class QbParams {
     public static final List<String> ISSUER = List.of(ISSUER_NAME, ISSUER_ADDRESS, ISSUER_REGISTRATION_NO);
 
     /**
+     * Q87 (docs/quizbuks/plans/Q87-fee-account.md): every road of a sponsor's money is built, and the switches are
+     * the administrators' (controlled). Top-ups: which targets a sponsor may choose ({@code KUDOS}: Kudos at once,
+     * as before; {@code CASH}: the cash account) and the one chosen by default. Converting cash to Kudos and back.
+     * The proportional fee on transfers (with the fixed one). The platform's fees: the monthly fee (0: none), the
+     * consumption tax rate, the billing mode of a sponsor without one of their own, whether unpaid fees block
+     * submitting and converting; and (ordinary) the days an invoice is due in.
+     */
+    public static final String TOPUP_TARGETS = "qb.topup.targets";
+    public static final String TOPUP_DEFAULT_TARGET = "qb.topup.default-target";
+    public static final String KUDOS_BUY_ENABLED = "qb.kudos.buy.enabled";
+    public static final String KUDOS_SELL_ENABLED = "qb.kudos.sell.enabled";
+    public static final String TRANSFER_FEE_RATE = "qb.transfer.fee-rate";
+    public static final String FEE_MONTHLY = "qb.fee.monthly";
+    public static final String FEE_TAX_RATE = "qb.fee.tax-rate";
+    public static final String FEE_DEFAULT_BILLING_MODE = "qb.fee.default-billing-mode";
+    public static final String FEE_OVERDUE_BLOCK = "qb.fee.overdue.block-submit";
+    public static final String FEE_DUE_DAYS = "qb.fee.due-days";
+    public static final List<String> CASH_CONTROLLED = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET, KUDOS_BUY_ENABLED,
+        KUDOS_SELL_ENABLED, TRANSFER_FEE_RATE, FEE_MONTHLY, FEE_TAX_RATE, FEE_DEFAULT_BILLING_MODE, FEE_OVERDUE_BLOCK);
+
+    /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
      * another): the money settings, and the review switches, since turning one on removes a person's review.
      */
@@ -250,7 +277,8 @@ public final class QbParams {
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
-        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK).flatMap(List::stream).toList();
+        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK,
+        CASH_CONTROLLED).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -261,6 +289,8 @@ public final class QbParams {
 
     private static final Map<String, Object> KUDOS = Map.of("type", "monetary", "currency", "JPY", "scale", 0);
     private static final Map<String, Object> BOOL = Map.of("type", "bool");
+    /** A fraction from 0 to below 1 (numeric(4, 4)). */
+    private static final Map<String, Object> RATE = Map.of("type", "numeric", "precision", 4, "scale", 4);
     private static final Map<String, Object> DAYS = Map.of("type", "numeric", "precision", 3, "scale", 0);
     private static final Map<String, Object> TOKENS = Map.of("type", "numeric", "precision", 12, "scale", 0);
     private static final Map<String, Object> USD = Map.of("type", "numeric", "precision", 8, "scale", 4);
@@ -306,6 +336,10 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_5120, "5120 Promotion expenses"),
         journal(JOURNAL_ACCOUNT_2140, "2140 Operator shares payable"),
         journal(JOURNAL_ACCOUNT_5130, "5130 Operator shares"),
+        journal(JOURNAL_ACCOUNT_2160, "2160 Sponsor cash accounts"),
+        journal(JOURNAL_ACCOUNT_1130, "1130 Platform fees receivable"),
+        journal(JOURNAL_ACCOUNT_4120, "4120 Platform fee revenue"),
+        journal(JOURNAL_ACCOUNT_2150, "2150 Consumption tax payable"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
@@ -400,7 +434,24 @@ public final class QbParams {
         new Param(WITHDRAWAL_BANK_ENABLED, BOOL, false, "Whether takers may withdraw to a bank account"),
         new Param(WITHDRAWAL_BANK_FEE, KUDOS, "0", "The platform's fee on each bank withdrawal, in Kudos (0: none)"),
         new Param(WITHDRAWAL_BANK_COOLDOWN_HOURS, Map.of("type", "numeric", "precision", 4, "scale", 0), "72",
-            "Hours after a bank account is saved or changed before anything may be withdrawn to it"));
+            "Hours after a bank account is saved or changed before anything may be withdrawn to it"),
+        // Q87: the cash account and the platform's fees. The due days are ordinary; the rest controlled (last, in the
+        // order of CONTROLLED). The declared values keep what the platform did before: Kudos at once, no fee.
+        new Param(FEE_DUE_DAYS, DAYS, "30", "Days after a platform fee invoice is issued that it is due in"),
+        new Param(TOPUP_TARGETS, Map.of("type", "text", "maxLength", 20), "KUDOS,CASH",
+            "What a sponsor may top up into: KUDOS (Kudos at once), CASH (the cash account), comma-separated"),
+        new Param(TOPUP_DEFAULT_TARGET, Map.of("type", "text", "maxLength", 10), "KUDOS",
+            "The target chosen by default when a sponsor tops up: KUDOS or CASH"),
+        new Param(KUDOS_BUY_ENABLED, BOOL, true, "Whether sponsors may turn their cash into Kudos (1 : 1)"),
+        new Param(KUDOS_SELL_ENABLED, BOOL, false, "Whether sponsors may turn Kudos back into cash (1 : 1)"),
+        new Param(TRANSFER_FEE_RATE, RATE, "0",
+            "The platform's fee on each transfer as a fraction of it, added to the fixed fee (0.1 = 10%; 0: none)"),
+        new Param(FEE_MONTHLY, KUDOS, "0", "The platform's monthly fee of each approved sponsor, in yen (0: none)"),
+        new Param(FEE_TAX_RATE, RATE, "0.10", "The consumption tax rate on the platform's fees (0.1 = 10%)"),
+        new Param(FEE_DEFAULT_BILLING_MODE, Map.of("type", "text", "maxLength", 10), "PREPAID",
+            "How a sponsor without a billing mode of their own pays the platform's fees: PREPAID or POSTPAID"),
+        new Param(FEE_OVERDUE_BLOCK, BOOL, true,
+            "Whether unpaid platform fees stop a sponsor from converting cash to Kudos and submitting publications"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {
