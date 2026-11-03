@@ -70,7 +70,8 @@ public final class FeeRequests {
     public record RequestInput(@NotBlank @Pattern(regexp = "MANUAL|VOID") String kind,
         @Size(max = 128) String sponsorId,
         @DecimalMin("1") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
-        @Size(max = 36) String invoiceId, @NotBlank @Size(max = QbFees.REASON_LENGTH) String reason) {}
+        @Pattern(regexp = "[0-9a-fA-F-]{36}") String invoiceId,
+        @NotBlank @Size(max = QbFees.REASON_LENGTH) String reason) {}
 
     /** @param approvalRequestId the request another administrator decides */
     public record RequestOutput(String requestId, String kind, String status, String approvalRequestId,
