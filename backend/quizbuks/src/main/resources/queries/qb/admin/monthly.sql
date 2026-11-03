@@ -25,6 +25,10 @@ results:
   promotion:        { kind: { type: monetary, currency: JPY, scale: 0 } }
   operatorPayable:  { kind: { type: monetary, currency: JPY, scale: 0 } }
   operatorShares:   { kind: { type: monetary, currency: JPY, scale: 0 } }
+  sponsorCash:      { kind: { type: monetary, currency: JPY, scale: 0 } }
+  feesReceivable:   { kind: { type: monetary, currency: JPY, scale: 0 } }
+  feeRevenue:       { kind: { type: monetary, currency: JPY, scale: 0 } }
+  taxPayable:       { kind: { type: monetary, currency: JPY, scale: 0 } }
 list:
   filters: [category]
   sorts:   [seq]
@@ -163,7 +167,11 @@ SELECT
     coalesce(sum(k.a5110), 0)   AS paymentFees,
     coalesce(sum(k.a5120), 0)   AS promotion,
     coalesce(sum(k.a2140), 0)   AS operatorPayable,
-    coalesce(sum(k.a5130), 0)   AS operatorShares
+    coalesce(sum(k.a5130), 0)   AS operatorShares,
+    coalesce(sum(k.a2160), 0)   AS sponsorCash,
+    coalesce(sum(k.a1130), 0)   AS feesReceivable,
+    coalesce(sum(k.a4120), 0)   AS feeRevenue,
+    coalesce(sum(k.a2150), 0)   AS taxPayable
 FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'), (5, 'REFUND'), (6, 'DISPUTE'),
              (7, 'STRIPE_FEE'), (8, 'REWARD'), (9, 'TRANSFER_SENT'), (10, 'TRANSFER_SETTLED'), (11, 'WITHDRAWAL_PAID'),
              (12, 'TRANSFER_FAILED'), (13, 'TRANSFER_REVERSED'), (14, 'PAYOUT'), (15, 'PAYOUT_FAILED'),

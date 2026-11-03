@@ -278,6 +278,9 @@ export interface OperatorSponsor {
   bannedByOperator: boolean
   bannedAt: string | null
   runningPublications: number
+  /** Q87: how the sponsor is billed for the platform's fees, and the credit a postpaid one has. */
+  billingMode: 'PREPAID' | 'POSTPAID'
+  creditLimit: string
 }
 
 export function toOperatorSponsor(row: Row): OperatorSponsor {
@@ -304,6 +307,8 @@ export function toOperatorSponsor(row: Row): OperatorSponsor {
     bannedByOperator: bool(row.bannedByOperator),
     bannedAt: str(row.bannedAt),
     runningPublications: num(row.runningPublications),
+    billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+    creditLimit: row.creditLimit === null || row.creditLimit === undefined ? '0' : String(row.creditLimit),
   }
 }
 

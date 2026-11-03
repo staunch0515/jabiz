@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +55,11 @@ class AdminFinanceIT extends PayoutItSupport {
         COLUMNS.put("5120", "promotion");
         COLUMNS.put("2140", "operatorPayable");
         COLUMNS.put("5130", "operatorShares");
+        // Q87: the cash accounts, the fees receivable, the fee revenue and the tax on it (nothing posted here).
+        COLUMNS.put("2160", "sponsorCash");
+        COLUMNS.put("1130", "feesReceivable");
+        COLUMNS.put("4120", "feeRevenue");
+        COLUMNS.put("2150", "taxPayable");
     }
 
     @BeforeEach
@@ -293,10 +299,14 @@ class AdminFinanceIT extends PayoutItSupport {
         Map<String, BigDecimal> opening = accountBalances(from.minusNanos(1_000), to);
         Map<String, BigDecimal> closing = accountBalances(to.minusNanos(1_000), to);
         assertThat(opening.get("2110")).isEqualByComparingTo("-700");
-        Map<String, Long> debits = Map.of("1110", 17_300L, "1120", 6_070L, "2110", 3_100L, "2120", 3_500L,
-            "2130", 3_300L, "2140", 0L, "4110", 100L, "5110", 360L, "5120", 0L, "5130", 0L);
-        Map<String, Long> credits = Map.of("1110", 11_330L, "1120", 1_000L, "2110", 12_300L, "2120", 5_580L,
-            "2130", 3_300L, "2140", 0L, "4110", 220L, "5110", 0L, "5120", 0L, "5130", 0L);
+        Map<String, Long> debits = new HashMap<>(Map.of("1110", 17_300L, "1120", 6_070L, "2110", 3_100L,
+            "2120", 3_500L, "2130", 3_300L, "2140", 0L, "4110", 100L, "5110", 360L, "5120", 0L, "5130", 0L));
+        Map<String, Long> credits = new HashMap<>(Map.of("1110", 11_330L, "1120", 1_000L, "2110", 12_300L,
+            "2120", 5_580L, "2130", 3_300L, "2140", 0L, "4110", 220L, "5110", 0L, "5120", 0L, "5130", 0L));
+        for (String code : List.of("2160", "1130", "4120", "2150")) {
+            debits.put(code, 0L);
+            credits.put(code, 0L);
+        }
         List<Map<String, Object>> balances = report(BALANCES, from, to, to);
         Map<String, Map<String, Object>> accounts = balances.stream().filter(r -> "ACCOUNT".equals(r.get("rowKind")))
             .collect(Collectors.toMap(r -> (String) r.get("code"), Function.identity()));

@@ -21,12 +21,17 @@ import {
   Label,
   notify,
   PageHeader,
+  RadioGroup,
+  RadioGroupItem,
   Textarea,
+  useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
 import { EmptyState, LoadFailed } from './components'
-import { useLabels, usePaged } from './hooks'
-import { DICTIONARY, PATH } from './ids'
+import { BILLING_MODES, setBilling, type BillingMode } from './fee-api'
+import { parseAmount } from './finance'
+import { useLabels, usePaged, usePoints } from './hooks'
+import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { banSponsor, readOperatorSponsors, unbanSponsor, type OperatorSponsor } from './operator-api'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
@@ -93,6 +98,99 @@ function BanDialog({ sponsor, lift, onClose }: { sponsor: OperatorSponsor; lift:
 }
 
 /**
+ * Sets how a sponsor of the operator's is billed for the platform's fees (`QB_OPERATOR_BILLING_SET`, Q87): prepaid
+ * (taken from the cash account when charged) or postpaid within a credit, with a reason headquarters reads. The server
+ * refuses a sponsor that is not the operator's own, and a credit on a prepaid sponsor.
+ */
+function BillingDialog({ sponsor, onClose }: { sponsor: OperatorSponsor; onClose: () => void }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const id = useId()
+  const queryClient = useQueryClient()
+  const [mode, setMode] = useState<BillingMode>(sponsor.billingMode)
+  const [credit, setCredit] = useState(sponsor.billingMode === 'POSTPAID' ? sponsor.creditLimit : '0')
+  const [reason, setReason] = useState('')
+  const [invalid, setInvalid] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const postpaid = mode === 'POSTPAID'
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const limit = postpaid ? parseAmount(credit) : 0
+    const bad = limit === null || limit < 0
+    setInvalid(bad)
+    if (bad || busy || !reason.trim()) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      const output = await setBilling({ userId: sponsor.userId, billingMode: mode, creditLimit: limit!, reason: reason.trim() })
+      notify.success(t(output.changed ? 'operator.billing.saved' : 'operator.billing.unchanged', { name: sponsor.company }))
+      void queryClient.invalidateQueries({ queryKey: KEY })
+      onClose()
+    } catch (e) {
+      setProblem(e instanceof ApiError ? e.display : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent data-testid="billing-dialog">
+        <form noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>{t('operator.billing.title', { name: sponsor.company })}</DialogTitle>
+            <DialogDescription>{t('operator.billing.hint')}</DialogDescription>
+          </DialogHeader>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-sm font-medium">{t('operator.billing.mode')}</legend>
+            <RadioGroup value={mode} onValueChange={(value) => setMode(value as BillingMode)} data-testid="billing-mode">
+              {BILLING_MODES.map((value) => (
+                <div key={value} className="flex items-start gap-2">
+                  <RadioGroupItem id={`${id}-mode-${value}`} value={value} className="mt-1"
+                    aria-describedby={`${id}-mode-${value}-hint`} data-testid={`billing-mode-${value}`} />
+                  <div className="flex flex-col">
+                    <Label htmlFor={`${id}-mode-${value}`}>{t(`operator.billing.modes.${value}`)}</Label>
+                    <span id={`${id}-mode-${value}-hint`} className="text-muted-foreground text-sm">
+                      {t(`operator.billing.modeHints.${value}`)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </RadioGroup>
+          </fieldset>
+          {postpaid && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`${id}-credit`}>{t('operator.billing.creditLimit')}</Label>
+              <Input id={`${id}-credit`} value={credit} inputMode="numeric" autoComplete="off" required maxLength={17}
+                aria-invalid={invalid ? true : undefined}
+                aria-describedby={`${id}-credit-hint${invalid ? ` ${id}-credit-error` : ''}`}
+                data-testid="billing-credit" onChange={(event) => {
+                  setCredit(event.target.value)
+                  setInvalid(false)
+                }} />
+              <p id={`${id}-credit-hint`} className="text-muted-foreground text-sm">{t('operator.billing.creditLimitHint')}</p>
+              {invalid && <p id={`${id}-credit-error`} className="text-destructive text-sm">{t('operator.billing.invalid')}</p>}
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`${id}-reason`}>{t('operator.billing.reason')}</Label>
+            <Textarea id={`${id}-reason`} value={reason} maxLength={500} required aria-describedby={`${id}-reason-hint`}
+              data-testid="billing-reason" onChange={(event) => setReason(event.target.value)} />
+            <p id={`${id}-reason-hint`} className="text-muted-foreground text-sm">{t('operator.billing.reasonHint')}</p>
+          </div>
+          {problem && <Alert variant="destructive" data-testid="billing-problem"><AlertDescription>{problem}</AlertDescription></Alert>}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>{t('operator.cancel')}</Button>
+            <Button type="submit" disabled={busy || !reason.trim()} aria-busy={busy || undefined} data-testid="billing-submit">
+              {t('operator.billing.save')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
  * The sponsors in the operator's back office (Q48a): every ordinary sponsor while there is one operator (D-Q48-2),
  * the operator's own marked, by search; each opens on its review page. The operator bans a sponsor here and lifts only
  * its own bans; headquarters' come first.
@@ -101,6 +199,11 @@ export default function OperatorSponsorsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const id = useId()
   const review = useLabels(DICTIONARY.sponsorReviewStatus)
+  const billingMode = useLabels(DICTIONARY.billingMode)
+  const points = usePoints()
+  const { can } = useAuth()
+  const biller = can(PERMISSION.feeBilling)
+  const [billing, setBilling_] = useState<OperatorSponsor | null>(null)
   const [search, setSearch] = useSearchParams()
   const q = search.get('q') ?? ''
   const mine = search.get('mine') === 'true'
@@ -135,6 +238,29 @@ export default function OperatorSponsorsPage() {
     { id: 'review', header: t('operator.sponsors.review'), cell: ({ row }) => review(row.original.reviewStatus) },
     { id: 'running', header: t('operator.sponsors.running'), meta: right,
       cell: ({ row }) => row.original.runningPublications },
+    // Q87: how the sponsor is billed for the platform's fees; the operator (or finance) changes it with a reason.
+    {
+      id: 'billing',
+      header: t('operator.sponsors.billing'),
+      cell: ({ row }) => {
+        const s = row.original
+        return (
+          <span className="flex flex-wrap items-center gap-2" data-testid="sponsor-billing" data-mode={s.billingMode}>
+            <span>{billingMode(s.billingMode)}</span>
+            {s.billingMode === 'POSTPAID' && (
+              <span className="text-muted-foreground text-sm">
+                {t('operator.sponsors.creditLimit', { amount: points(s.creditLimit) })}
+              </span>
+            )}
+            {biller && s.mine && (
+              <Button size="sm" variant="outline" data-testid="sponsor-billing-set" onClick={() => setBilling_(s)}>
+                {t('operator.sponsors.billingSet')}<span className="sr-only">: {s.company}</span>
+              </Button>
+            )}
+          </span>
+        )
+      },
+    },
     {
       id: 'ban',
       header: t('operator.sponsors.ban'),
@@ -162,7 +288,7 @@ export default function OperatorSponsorsPage() {
         )
       },
     },
-  ], [t, review])
+  ], [t, review, billingMode, points, biller])
   return (
     <div className="flex flex-col gap-4" data-testid="operator-sponsors-page">
       <PageHeader title={t('operator.sponsors.pageTitle')} description={t('operator.sponsors.description')}
@@ -191,6 +317,7 @@ export default function OperatorSponsorsPage() {
             rowProps={(row) => ({ 'data-testid': 'sponsor-row', 'data-id': row.userId })} />
         )}
       {acting && <BanDialog sponsor={acting.sponsor} lift={acting.lift} onClose={() => setActing(null)} />}
+      {billing && <BillingDialog sponsor={billing} onClose={() => setBilling_(null)} />}
     </div>
   )
 }

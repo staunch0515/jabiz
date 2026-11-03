@@ -67,7 +67,16 @@ function server(options: Server = {}) {
           { code: 'PAID', label: 'Paid' }, { code: 'EXPIRED', label: 'Expired' }, { code: 'FAILED', label: 'Failed' }])
       case '/api/queries/qb.sponsor.wallet':
         return json(200, { items: [{ balance: '5000', held: '1000', pendingCount: 2, pendingAmount: '700',
-          toppedUp: '6000', takenBack: '0', topUpCount: 2, spent: '1000' }], offset: 0, limit: 1 })
+          toppedUp: '6000', takenBack: '0', topUpCount: 2, spent: '1000', cashBalance: '0', cashHeld: '0',
+          unpaidTotal: '0', unpaidCount: 0, overdueCount: 0, billingMode: 'PREPAID', creditLimit: '0' }],
+        offset: 0, limit: 1 })
+      // Q87: the switches as the platform declares them (one target, buying on, selling off), nothing exchanged, no invoices.
+      case '/api/queries/qb.sponsor.topup-settings':
+        return json(200, { items: [{ targets: 'KUDOS', defaultTarget: 'KUDOS', buyEnabled: true, sellEnabled: false,
+          feeBlock: true }], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.kudos-exchanges':
+      case '/api/queries/qb.sponsor.fee-invoices':
+        return json(200, { items: [], offset: 0, limit: 10, total: 0 })
       case '/api/queries/qb.sponsor.topup-limit':
         return options.limit ? json(200, { items: [options.limit], offset: 0, limit: 1 }) : json(404, {})
       case '/api/queries/qb.sponsor.topups':

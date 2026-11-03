@@ -301,6 +301,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | AI 作业暂停（§7.8） | 量规 `jabiz.external.job.held{job_type="qb.ai.questions"|"qb.ai.cover"}`（`qb.ai.enabled` 不是 `true` 时为 1） | 不是有意关闭时（变更记录中没有关闭）为 1 超过 5 分钟：参数被删或读不出来，作业都在等待 |
 | 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
 | 站内信与公告（Q7c） | `jabiz.job.item{job="qb.broadcast-dispatch"|"qb.broadcast-expire"|"qb.broadcast-stats"|"qb.payout-reminder"|"qb.conversation-expire", result}`；`jabiz.query.template{template="qb.app.inbox-unread"}` 的耗时（徽标，每个在线用户每 5 分钟一次；目标 < 5 ms，`docs/quizbuks/perf/Q7c-inbox.md`）；`jabiz.outbox.delivery{result="FAILED"}`（消费者 `qb.msg-*`） | 定时发送的项连续失败（公告迟迟不出）；消费者失败持续 15 分钟 |
+| 平台费（Q87，§7.17） | `jabiz.job.item{job="qb.fee-monthly"|"qb.fee-invoice"|"qb.fee-overdue", result}`；核对项 `SPONSOR_CASH` / `TOTAL_2160` / `FEES_RECEIVABLE` | 任一项 `FAILED`；核对 `DIFF` 持续两天 |
 | 商家分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
 | 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
@@ -488,6 +489,25 @@ AI 为运营商（或总部，`direct`）找商家、调研、写体验问卷与
 - **配置**：`quizbuks.prospect.max-concurrency`（每种作业的全实例并发，缺省 4）。
 - **费用**：每次搜索 0.01 美元加 tokens（按所选模型的标价）；后台「设置」页按月显示。达到所有者的每月上限后不再开新的找与研究，已批准的邮件照常发出。
 - **事故**：Console 吊销密钥 → 四眼关闭 `qb.prospect.enabled`（排队的作业等待，不用掉尝试）→ 必要时平台的 `EXTERNAL_JOB_CANCEL` 逐个取消（类型 `qb.prospect.find` / `qb.prospect.research`）。投诉或要求停止时：后台「AI 获客」丢弃并勾选"屏蔽"，或 `QB_PROSPECT_BLOCK_ADD`（地址或整个域名，全平台不再发送）。
+
+### 7.17 现金账户与平台费（Q87）
+
+商户的钱有两处：**学分**（现页的钱包，2110）与**现金账户**（2160；充值进去的钱还是商户的、不是学分）。学分只来自充值直接成为学分、现金换学分（1 : 1）与手工加币（`plans/Q87-fee-account.md`）。缺省 = 现状：充值直接成为学分、不收月费、预付、不换回。
+
+- **开关都是受控参数**（`QB_SETUP` 提出缺省值，另一位管理员发布；之后改任何一个都是四眼）：
+  `qb.topup.targets`（充值可选的目标，缺省 `KUDOS,CASH`）、`qb.topup.default-target`（`KUDOS`）、`qb.kudos.buy.enabled`（现金换学分，`true`）、`qb.kudos.sell.enabled`（学分换回现金，**`false`**）、
+  `qb.transfer.fee-rate`（答题者提现的比例抽成，与固定费 `qb.transfer.fee` 相加、向下取整，`0`）、`qb.fee.monthly`（每商户每月的平台费，`0` = 不收，也不出账单）、`qb.fee.tax-rate`（消费税率，`0.10`）、
+  `qb.fee.default-billing-mode`（`PREPAID`）、`qb.fee.overdue.block-submit`（有未付账单时拦提交与换学分，`true`）；普通参数 `qb.fee.due-days`（账单到期天数，`30`）。
+  抽成 `qb.creator-fee-rate` 两处都保留（结算、提现）：需求方决定上线时设为 `0`（受控变更），什么时候收、收多少都只改参数。
+- **部署后**：运行一次 `QB_SETUP`（新科目 2160 / 1130 / 4120 / 2150、新权限 `qb.fee.manage` / `qb.fee.billing`、九个受控参数与审批规则 `qb.fee-request.review` 的提案），发布提案；科目映射多四项 `qb.journal.account.2160 / 1130 / 4120 / 2150`（不设即下个月的分录导出被拒 `QB_JOURNAL_ACCOUNT_UNMAPPED`）；
+  账单 PDF 的开具方沿用收据的 `qb.issuer.*`（没设名称时商户下载账单被拒 `QB_FEE_PARAMS`）。
+- **预付 / 后付**：缺省全平台预付；运营商（或总部财务）在「运营商 → 商户」给单个商户设后付与信用额（理由必填，`QB_OPERATOR_BILLING_SET`，审计中可查）。预付的商户记费时立即从现金扣、不够即一张 `OPEN` 账单；后付的商户每月 2 日 01:17（日本时间）出上月的账单。
+  **有未付账单的商户不能换学分、不能提交新发布**（预付：任何未付；后付：未付合计超过信用额；开关 `qb.fee.overdue.block-submit`），其他一切照常；不自动停用。
+- **任务**：`qb.fee-monthly`（每月 2 日 01:07 日本时间，记当月月费）、`qb.fee-invoice`（每月 2 日 01:17，后付的账单）、`qb.fee-overdue`（每日 02:37，过期的账单 → `OVERDUE`，提醒邮件 7 天一封至多三封，待办给 `qb.fee.manage` 与商户的运营商）。都是逐项任务、每项一个事务，可补跑（已记过的月份不再记）。
+- **手工记费与作废**：后台「QuizBuks 财务 → 平台费」：财务（`qb.fee.manage`）登记手工记费（商户、金额、理由）或作废账单（理由），另一位持有 `qb.topup.bank.approve` 的管理员在待办中批准；作废 = 冲正该账单的分录，已付的退回商户的现金账户。更正一律这样做，不改记录。
+- **核对**（每日 `qb.reconcile`）多三项：`SPONSOR_CASH`（商户现金余额 ≠ 2160）、`TOTAL_2160`、`FEES_RECEIVABLE`（1130 ≠ 未付账单）；处理同 §7.2。
+- **月报** `qb.admin.monthly` 多五类：`KUDOS_BOUGHT`、`KUDOS_SOLD`、`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`；运营商的结算单多一行"平台费"（并入分成的基数）。
+- **告警**：`jabiz.job.item{job="qb.fee-monthly"|"qb.fee-invoice"|"qb.fee-overdue", result="FAILED"}`；`qb.fee.invoice-overdue` 的待办堆积（商户长期不付）。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

@@ -28,7 +28,13 @@ export const manualKindOf = (value: unknown): ManualKind | null =>
 /** The bank top-ups the sponsor may still report or withdraw (no money recorded yet). */
 export const BANK_WAITING: readonly TopUpStatus[] = ['AWAITING', 'REPORTED']
 
-/** The row of `qb.sponsor.wallet` (M-04). */
+/** Where a top-up goes (Q87): the Kudos wallet, or the sponsor's cash account (money held, not yet Kudos). */
+export type TopUpTarget = 'KUDOS' | 'CASH'
+export const targetOf = (value: unknown): TopUpTarget => (value === 'CASH' ? 'CASH' : 'KUDOS')
+/** How the platform's fee is billed (Q87): taken from the cash account at once, or invoiced monthly within a credit. */
+export type BillingMode = 'PREPAID' | 'POSTPAID'
+
+/** The row of `qb.sponsor.wallet` (M-04; Q87 adds the cash account, the fees unpaid and the billing). */
 export interface SponsorWallet {
   balance: number
   /** Held while a dispute is open: not available for rewards. */
@@ -40,6 +46,15 @@ export interface SponsorWallet {
   takenBack: number
   topUpCount: number
   spent: number
+  /** The cash account (Q87): money the platform holds for the sponsor, one unit per Kudos, and what is held of it. */
+  cashBalance: number
+  cashHeld: number
+  /** The platform's invoices not yet paid, and how many of them are overdue. */
+  unpaidTotal: number
+  unpaidCount: number
+  overdueCount: number
+  billingMode: BillingMode
+  creditLimit: number
 }
 
 /** A row of `qb.sponsor.topups` (the checkout's address only while it can be paid). */
@@ -55,6 +70,8 @@ export interface TopUpRow {
   method: TopUpMethod
   transferCode: string | null
   manualKind: ManualKind | null
+  /** Q87: the Kudos wallet or the cash account. */
+  target: TopUpTarget
 }
 
 /** The top-up as the sponsor's dataset has it. */
@@ -76,6 +93,8 @@ export interface TopUp {
   receivedOn: string | null
   /** A manual credit's kind (Q18b); null for the other methods. */
   manualKind: ManualKind | null
+  /** Q87: the Kudos wallet or the cash account. */
+  target: TopUpTarget
 }
 
 /** `TopUpProcesses.StartOutput`. */
@@ -104,6 +123,41 @@ export async function readWallet(): Promise<SponsorWallet> {
     takenBack: num(row.takenBack),
     topUpCount: num(row.topUpCount),
     spent: num(row.spent),
+    cashBalance: num(row.cashBalance),
+    cashHeld: num(row.cashHeld),
+    unpaidTotal: num(row.unpaidTotal),
+    unpaidCount: num(row.unpaidCount),
+    overdueCount: num(row.overdueCount),
+    billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+    creditLimit: num(row.creditLimit),
+  }
+}
+
+const bool = (value: unknown): boolean => value === true || value === 'true'
+
+/**
+ * The administrators' switches the wallet page follows (`qb.sponsor.topup-settings`, Q87, controlled parameters):
+ * where a top-up may go and where it goes when not said, whether Kudos are bought from and sold back to the cash
+ * account, and whether an unpaid invoice stops submitting. The server decides each call; the page only shows or hides.
+ */
+export interface TopUpSettings {
+  targets: TopUpTarget[]
+  defaultTarget: TopUpTarget
+  buyEnabled: boolean
+  sellEnabled: boolean
+  feeBlock: boolean
+}
+
+export async function readTopUpSettings(): Promise<TopUpSettings> {
+  const row = (await runQuery<Row>(WALLET_TEMPLATE.topUpSettings, { limit: 1 })).items[0] ?? {}
+  const targets = String(row.targets ?? 'KUDOS').split(',').map((part) => part.trim())
+    .filter((part): part is TopUpTarget => part === 'KUDOS' || part === 'CASH')
+  return {
+    targets: targets.length > 0 ? targets : ['KUDOS'],
+    defaultTarget: targetOf(row.defaultTarget),
+    buyEnabled: bool(row.buyEnabled),
+    sellEnabled: bool(row.sellEnabled),
+    feeBlock: bool(row.feeBlock),
   }
 }
 
@@ -168,6 +222,7 @@ export async function searchTopUps({ sorts, offset, limit }: TopUpSearch) {
       method: methodOf(row.method),
       transferCode: str(row.transferCode),
       manualKind: manualKindOf(row.manualKind),
+      target: targetOf(row.target),
     })),
   }
 }
@@ -198,6 +253,7 @@ export async function readTopUp(topUpId: string): Promise<TopUp | null> {
     transferDate: str(row.transferDate),
     receivedOn: row.status === 'PAID' ? str(row.receivedOn) : null,
     manualKind: manualKindOf(row.manualKind),
+    target: targetOf(row.target),
   }
 }
 
@@ -215,8 +271,8 @@ export function payableUrl(topUp: Pick<TopUp, 'status' | 'checkoutUrl' | 'expire
  * Starts a top-up of `amount` whole Kudos. The same key is passed when the sponsor retries the same submission, so a
  * retried call starts one top-up only.
  */
-export const startTopUp = (amount: number, idempotencyKey: string) =>
-  runProcess<StartOutput>(WALLET_PROCESS.topUpStart, { amount }, { idempotencyKey })
+export const startTopUp = (amount: number, idempotencyKey: string, target?: TopUpTarget) =>
+  runProcess<StartOutput>(WALLET_PROCESS.topUpStart, target ? { amount, target } : { amount }, { idempotencyKey })
 
 /** The platform's receiving account (`qb.sponsor.bank-account`, Q13a); a part not set is null. */
 export interface BankAccount {
@@ -256,8 +312,8 @@ export interface BankStartOutput {
 }
 
 /** Asks for a bank top-up of `amount` whole Kudos (one per key, as with a card top-up). */
-export const startBankTopUp = (amount: number, idempotencyKey: string) =>
-  runProcess<BankStartOutput>(WALLET_PROCESS.bankStart, { amount }, { idempotencyKey })
+export const startBankTopUp = (amount: number, idempotencyKey: string, target?: TopUpTarget) =>
+  runProcess<BankStartOutput>(WALLET_PROCESS.bankStart, target ? { amount, target } : { amount }, { idempotencyKey })
 
 /** Says the money was sent: the payer's name as the bank shows it and the day (`YYYY-MM-DD`, in Japan). */
 export const reportBankTransfer = (topUpId: string, payerName: string, transferDate: string) =>
@@ -310,6 +366,175 @@ export async function downloadReceipt(topUpId: string, language: string | undefi
 
 /** The labels of the top-up states, in the request's language. */
 export const readTopUpStatuses = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.topUpStatus)
+/** The labels of the invoice states (Q87), in the request's language. */
+export const readInvoiceStatuses = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.feeInvoiceStatus)
+
+// ---- Q87: the cash account, the exchange and the platform's invoices -------------------------------------------------
+
+/** What `QB_KUDOS_BUY` / `QB_KUDOS_SELL` answer: the exchange recorded and both balances after it. */
+export interface ExchangeOutput {
+  exchangeId: string
+  direction: 'BUY' | 'SELL'
+  amount: number
+  kudosBalance: number
+  cashBalance: number
+}
+
+const exchangeOutput = (out: Record<string, unknown>): ExchangeOutput => ({
+  exchangeId: String(out.exchangeId),
+  direction: out.direction === 'SELL' ? 'SELL' : 'BUY',
+  amount: num(out.amount),
+  kudosBalance: num(out.kudosBalance),
+  cashBalance: num(out.cashBalance),
+})
+
+/** Buys `amount` Kudos with the cash account, one for one; the server checks the switch, the cash and the fees. */
+export const buyKudos = async (amount: number): Promise<ExchangeOutput> =>
+  exchangeOutput(await runProcess<Record<string, unknown>>(WALLET_PROCESS.kudosBuy, { amount }))
+/** Sells `amount` Kudos back to the cash account; only what is available, and only when the administrators allow it. */
+export const sellKudos = async (amount: number): Promise<ExchangeOutput> =>
+  exchangeOutput(await runProcess<Record<string, unknown>>(WALLET_PROCESS.kudosSell, { amount }))
+
+/** A row of `qb.sponsor.kudos-exchanges`. */
+export interface ExchangeRow {
+  exchangeId: string
+  direction: 'BUY' | 'SELL'
+  amount: number
+  exchangedAt: string
+}
+
+export async function searchKudosExchanges({ sorts, offset, limit }: TopUpSearch) {
+  const page = await runQuery<Row>(WALLET_TEMPLATE.kudosExchanges, { sorts, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row): ExchangeRow => ({
+      exchangeId: String(row.exchangeId),
+      direction: row.direction === 'SELL' ? 'SELL' : 'BUY',
+      amount: num(row.amount),
+      exchangedAt: String(row.exchangedAt ?? ''),
+    })),
+  }
+}
+
+/** The states of the platform's invoices (`fee.QbFees`): only the server moves them. */
+export type InvoiceStatus = 'OPEN' | 'OVERDUE' | 'PAID' | 'VOID'
+export const INVOICE_UNPAID: readonly InvoiceStatus[] = ['OPEN', 'OVERDUE']
+const invoiceStatusOf = (value: unknown): InvoiceStatus =>
+  value === 'OVERDUE' || value === 'PAID' || value === 'VOID' ? value : 'OPEN'
+
+/** A row of `qb.sponsor.fee-invoices`. */
+export interface InvoiceRow {
+  invoiceId: string
+  invoiceNo: string
+  /** The month billed, `YYYY-MM`. */
+  period: string
+  billingMode: BillingMode
+  amount: number
+  tax: number
+  total: number
+  status: InvoiceStatus
+  issuedAt: string
+  dueOn: string | null
+  paidAt: string | null
+  documentRunId: string | null
+}
+
+export async function searchFeeInvoices({ sorts, offset, limit }: TopUpSearch) {
+  const page = await runQuery<Row>(WALLET_TEMPLATE.feeInvoices, { sorts, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row): InvoiceRow => ({
+      invoiceId: String(row.invoiceId),
+      invoiceNo: String(row.invoiceNo ?? ''),
+      period: String(row.period ?? ''),
+      billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+      amount: num(row.amount),
+      tax: num(row.tax),
+      total: num(row.total),
+      status: invoiceStatusOf(row.status),
+      issuedAt: String(row.issuedAt ?? ''),
+      dueOn: str(row.dueOn),
+      paidAt: str(row.paidAt),
+      documentRunId: str(row.documentRunId),
+    })),
+  }
+}
+
+/** A row of `qb.sponsor.fee-charges`: a fee the platform charged, and the invoice it is on. */
+export interface ChargeRow {
+  chargeId: string
+  kind: 'MONTHLY' | 'MANUAL'
+  period: string
+  billingMode: BillingMode
+  amount: number
+  tax: number
+  total: number
+  reason: string | null
+  chargedAt: string
+  invoiceId: string | null
+  invoiceNo: string | null
+  invoiceStatus: InvoiceStatus | null
+}
+
+export async function searchFeeCharges({ sorts, offset, limit }: TopUpSearch) {
+  const page = await runQuery<Row>(WALLET_TEMPLATE.feeCharges, { sorts, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row): ChargeRow => ({
+      chargeId: String(row.chargeId),
+      kind: row.kind === 'MANUAL' ? 'MANUAL' : 'MONTHLY',
+      period: String(row.period ?? ''),
+      billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+      amount: num(row.amount),
+      tax: num(row.tax),
+      total: num(row.total),
+      reason: str(row.reason),
+      chargedAt: String(row.chargedAt ?? ''),
+      invoiceId: str(row.invoiceId),
+      invoiceNo: str(row.invoiceNo),
+      invoiceStatus: row.invoiceStatus == null ? null : invoiceStatusOf(row.invoiceStatus),
+    })),
+  }
+}
+
+/** What `QB_FEE_INVOICE_PAY` answers: the invoice's state after, and the cash left. */
+export interface InvoicePayOutput {
+  invoiceId: string
+  invoiceNo: string
+  status: InvoiceStatus
+  total: number
+  cashBalance: number
+}
+
+/** Pays an invoice from the cash account; the server checks the state and the cash. */
+export async function payInvoice(invoiceId: string): Promise<InvoicePayOutput> {
+  const out = await runProcess<Record<string, unknown>>(WALLET_PROCESS.invoicePay, { invoiceId })
+  return { invoiceId: String(out.invoiceId), invoiceNo: String(out.invoiceNo ?? ''), status: invoiceStatusOf(out.status),
+    total: num(out.total), cashBalance: num(out.cashBalance) }
+}
+
+/**
+ * The invoice's document (Q87): issued by the server the first time, in the sponsor's language, the same one every
+ * time after; then its PDF exactly as kept, handed to the browser (as the receipts).
+ */
+export async function downloadInvoiceDocument(invoiceId: string, language: string | undefined) {
+  const issued = await runProcess<{ documentRunId: string; documentNo: string | null }>(WALLET_PROCESS.invoiceDocument,
+    { invoiceId, language: receiptLanguage(language) })
+  const response = await sessionFetch(`/api/documents/runs/${encodeURIComponent(issued.documentRunId)}/pdf`)
+  if (!response.ok) throw await toApiError(response)
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileNameOf(response.headers.get('Content-Disposition')) ?? `${issued.documentNo ?? invoiceId}.pdf`
+    link.rel = 'noopener'
+    link.click()
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+  return issued
+}
 
 /** A whole, positive number of Kudos as typed (digits only, separators allowed); null otherwise. */
 export function parseKudos(text: string): number | null {

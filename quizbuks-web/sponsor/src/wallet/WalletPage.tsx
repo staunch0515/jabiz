@@ -42,6 +42,7 @@ import {
   pathOfTopUp,
   readBankAccount,
   readTopUpLimit,
+  readTopUpSettings,
   readTopUpStatuses,
   readWallet,
   rememberJustStarted,
@@ -53,8 +54,16 @@ import {
   type TopUpMethod,
   type TopUpRow,
   type TopUpStatus,
+  type TopUpTarget,
 } from './api'
+import { CashAccount } from './CashAccount'
+import { Invoices } from './Invoices'
 import './messages'
+
+/** The administrators' switches (Q87); read once per page, kept while the page lives. */
+export function useTopUpSettings() {
+  return useQuery({ queryKey: [...WALLET_QUERY, 'settings'], queryFn: readTopUpSettings, staleTime: 60_000 })
+}
 
 /** The labels of the top-up states, from the server's dictionary (the code until it answered). */
 export function useTopUpStatusLabel() {
@@ -136,13 +145,18 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
   // Bank transfers are chosen only once the platform's account is set up (Q18): until then the choice says so.
   const account = useQuery({ queryKey: [...WALLET_QUERY, 'bank-account'], queryFn: readBankAccount, enabled: open })
   const bankReady = account.data !== undefined && bankAccountSet(account.data)
+  // Q87: where the top-up goes is chosen only when the administrators allow both; else the server's default applies.
+  const settings = useTopUpSettings()
+  const targets = settings.data?.targets ?? []
+  const [chosenTarget, setChosenTarget] = useState<TopUpTarget | null>(null)
+  const target = targets.length > 1 ? (chosenTarget ?? settings.data?.defaultTarget ?? 'KUDOS') : undefined
   const [text, setText] = useState('')
   const [key, setKey] = useState(() => crypto.randomUUID())
   const [invalid, setInvalid] = useState(false)
   const start = useMutation({
     mutationFn: async (amount: number) => method === 'BANK'
-      ? { method, topUpId: (await startBankTopUp(amount, key)).topUpId }
-      : { method, topUpId: (await startTopUp(amount, key)).topUpId },
+      ? { method, topUpId: (await startBankTopUp(amount, key, target)).topUpId }
+      : { method, topUpId: (await startTopUp(amount, key, target)).topUpId },
     onSuccess: (output) => {
       close()
       if (output.method === 'BANK') {
@@ -162,6 +176,7 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
   /** Every way of closing (Cancel, Escape, the overlay, a started top-up) starts the next opening afresh. */
   function close() {
     setMethod('STRIPE')
+    setChosenTarget(null)
     setText('')
     setInvalid(false)
     setKey(crypto.randomUUID())
@@ -203,6 +218,30 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
               ))}
             </RadioGroup>
           </fieldset>
+          {targets.length > 1 && (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-2 text-sm font-medium">{t('wallet.target.legend')}</legend>
+              <RadioGroup value={target} data-testid="topup-target" onValueChange={(next) => {
+                setChosenTarget(next as TopUpTarget)
+                // Another target is another submission.
+                setKey(crypto.randomUUID())
+                start.reset()
+              }}>
+                {targets.map((value) => (
+                  <div key={value} className="flex items-start gap-2">
+                    <RadioGroupItem id={`${id}-target-${value}`} value={value} aria-describedby={`${id}-target-${value}-hint`}
+                      data-testid={`topup-target-${value}`} />
+                    <span className="flex flex-col gap-0.5">
+                      <Label htmlFor={`${id}-target-${value}`}>{t(`wallet.target.names.${value}`)}</Label>
+                      <span id={`${id}-target-${value}-hint`} className="text-muted-foreground text-xs">
+                        {t(`wallet.target.hints.${value}`)}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </RadioGroup>
+            </fieldset>
+          )}
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${id}-amount`}>{t('wallet.dialog.amount')}</Label>
             <Input id={`${id}-amount`} value={text} inputMode="numeric" autoComplete="off" required maxLength={17}
@@ -274,6 +313,7 @@ export function WalletPage() {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }])
   const wallet = useQuery({ queryKey: [...WALLET_QUERY, 'summary'], queryFn: readWallet })
+  const settings = useTopUpSettings()
   const topUps = useQuery({
     queryKey: [...WALLET_QUERY, 'topups', pagination, sorting],
     queryFn: () => searchTopUps({
@@ -311,6 +351,9 @@ export function WalletPage() {
           </Badge>
           {row.original.refundedAmount > 0 && (
             <Badge variant="outline">{t('wallet.refunded')}: {formatKudos(row.original.refundedAmount)}</Badge>
+          )}
+          {row.original.target === 'CASH' && (
+            <Badge variant="outline" data-testid="topup-row-target">{t('wallet.target.names.CASH')}</Badge>
           )}
           {row.original.method === 'BANK' && (
             <Badge variant="outline" data-testid="topup-row-bank">
@@ -393,6 +436,8 @@ export function WalletPage() {
           ]} />
         </section>
       )}
+      {data && <CashAccount wallet={data} settings={settings.data} />}
+      {data && <Invoices wallet={data} />}
       <section aria-labelledby="wallet-topups" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="wallet-topups" className="text-lg font-semibold">{t('wallet.topUps')}</h2>

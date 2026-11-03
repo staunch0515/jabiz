@@ -1,5 +1,6 @@
 import { Button, PageState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@jabiz/ui'
-import { Coins, HandCoins, Hourglass, Megaphone, PiggyBank, Users } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Coins, HandCoins, Hourglass, Megaphone, PiggyBank, Receipt, Users, Wallet } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { AiUsageMetric } from '../ai/AiUsageMetric'
 import { SPONSOR } from '../messages'
@@ -7,6 +8,7 @@ import { StatusBadge } from '../publishing/shared'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { Link } from '../qb/router'
+import { readWallet, WALLET_PATH, WALLET_QUERY } from '../wallet/api'
 import { analyticsPath, zoneTime, type Dashboard } from './api'
 import { ScrollRegion, TrendCharts } from './charts'
 import { useDashboard, useTop, useTrend } from './hooks'
@@ -25,6 +27,31 @@ export function UpdatedNote({ refreshedAt, zone }: { refreshedAt: string | null;
         ? t('analytics.updated', { time: zoneTime(refreshedAt, zone, i18n.language), zone })
         : t('analytics.notYet')}
     </p>
+  )
+}
+
+/**
+ * Q87: the cash account and the platform's invoices unpaid (`qb.sponsor.wallet`), each leading to the wallet page;
+ * nothing while the wallet is not read (the finance permission is the wallet page's).
+ */
+function CashMetrics() {
+  const { t, i18n } = useTranslation(SPONSOR)
+  const wallet = useQuery({ queryKey: [...WALLET_QUERY, 'summary'], queryFn: readWallet })
+  if (!wallet.data) return null
+  const w = wallet.data
+  const link = <Link to={WALLET_PATH} className="underline underline-offset-4">{t('analytics.metrics.toWallet')}</Link>
+  return (
+    <>
+      <Metric testId="metric-cash" label={t('analytics.metrics.cash')} value={formatKudos(w.cashBalance)} icon={Wallet}
+        hint={link} />
+      <Metric testId="metric-invoices" label={t('analytics.metrics.invoices')} icon={Receipt}
+        value={w.unpaidCount > 0
+          ? t('analytics.metrics.invoicesValue', { amount: formatKudos(w.unpaidTotal), n: w.unpaidCount.toLocaleString(i18n.language) })
+          : t('analytics.metrics.invoicesNone')}
+        hint={w.overdueCount > 0
+          ? <span className="text-destructive" data-testid="metric-invoices-overdue">{t('analytics.metrics.invoicesOverdue', { n: w.overdueCount })}</span>
+          : link} />
+    </>
   )
 }
 
@@ -55,6 +82,7 @@ function Metrics({ d }: { d: Dashboard }) {
         value={t('analytics.metrics.pendingValue', { amount: formatKudos(d.pendingAmount), n: n(d.pendingCount) })} />
       <Metric testId="metric-budget" label={t('analytics.metrics.budgetRemaining')} icon={PiggyBank}
         value={formatKudos(d.budgetRemaining)} hint={t('analytics.metrics.budgetRemainingHint')} />
+      <CashMetrics />
       {/* Q8a: the AI usage (tokens) of the month (M-10). */}
       <AiUsageMetric zone={d.zone} />
     </section>

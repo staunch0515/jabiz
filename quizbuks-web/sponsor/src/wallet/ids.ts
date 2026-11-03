@@ -13,6 +13,12 @@ export const WALLET_PROCESS = {
   bankStart: 'QB_TOPUP_BANK_START',
   bankReport: 'QB_TOPUP_BANK_REPORT',
   bankCancel: 'QB_TOPUP_BANK_CANCEL',
+  /** Q87 (`wallet.KudosExchange`): cash in the sponsor's account becomes Kudos one for one, and back when allowed. */
+  kudosBuy: 'QB_KUDOS_BUY',
+  kudosSell: 'QB_KUDOS_SELL',
+  /** Q87 (`fee.FeeProcesses`): an invoice paid from the cash account; its document, issued once and kept. */
+  invoicePay: 'QB_FEE_INVOICE_PAY',
+  invoiceDocument: 'QB_FEE_INVOICE_DOCUMENT',
 } as const
 
 /** SQL templates (`queries/qb/sponsor`). */
@@ -23,6 +29,12 @@ export const WALLET_TEMPLATE = {
   topUpLimit: 'qb.sponsor.topup-limit',
   /** Q13a: the platform's receiving account and a bank top-up's range. */
   bankAccount: 'qb.sponsor.bank-account',
+  /** Q87: the switches of the top-up's target and the exchange, the exchanges, the platform's fees and invoices. */
+  topUpSettings: 'qb.sponsor.topup-settings',
+  kudosExchanges: 'qb.sponsor.kudos-exchanges',
+  feeInvoices: 'qb.sponsor.fee-invoices',
+  feeCharges: 'qb.sponsor.fee-charges',
+  feeInvoiceLines: 'qb.sponsor.fee-invoice-lines',
 } as const
 
 /** The sponsor's own top-ups, read only (the checkout's address included: it is theirs). */
@@ -33,4 +45,6 @@ export const WALLET_DATASET = {
 /** Dictionaries, labelled by the server in the request's language. */
 export const WALLET_DICTIONARY = {
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
+  topUpTarget: 'urn:jabiz:dict:quizbuks:topup-target',
+  feeInvoiceStatus: 'urn:jabiz:dict:quizbuks:fee-invoice-status',
 } as const

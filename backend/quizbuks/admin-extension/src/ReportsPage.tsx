@@ -30,6 +30,7 @@ import {
   previousMonth,
   readBalances,
   readIssuedRuns,
+  MONTHLY_COLUMNS,
   readMonthly,
   type ExportFormat,
   type Period,
@@ -41,6 +42,8 @@ import { ACCOUNTS, PERMISSION, TEMPLATE, type ReportId } from './ids'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = 'text-right tabular-nums'
+/** The accounts the monthly report has a column for (Q87's accounts are read in the balances, not here). */
+const MONTHLY_ACCOUNTS = ACCOUNTS.filter((code) => code in MONTHLY_COLUMNS)
 
 /** The runs of a report issued for the period, newest first (`report.archive.read`; none asked for without it). */
 function useIssued(id: ReportId, period: Period) {
@@ -164,7 +167,7 @@ function Monthly({ period }: { period: Period }) {
             <TableHead>{t('finance.reports.category')}</TableHead>
             <TableHead className="text-right">{t('finance.reports.count')}</TableHead>
             <TableHead className="text-right">{t('finance.reports.amount')}</TableHead>
-            {ACCOUNTS.map((code) => <TableHead key={code} className="text-right">{code}</TableHead>)}
+            {MONTHLY_ACCOUNTS.map((code) => <TableHead key={code} className="text-right">{code}</TableHead>)}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -174,7 +177,7 @@ function Monthly({ period }: { period: Period }) {
               <TableCell>{t(`finance.category.${row.category}`, { defaultValue: row.category })}</TableCell>
               <TableCell className={right}>{row.transactionCount.toLocaleString()}</TableCell>
               <TableCell className={right}>{money(row.amount)}</TableCell>
-              {ACCOUNTS.map((code) => <TableCell key={code} className={right}>{money(row.moves[code])}</TableCell>)}
+              {MONTHLY_ACCOUNTS.map((code) => <TableCell key={code} className={right}>{money(row.moves[code])}</TableCell>)}
             </TableRow>
           ))}
         </TableBody>
