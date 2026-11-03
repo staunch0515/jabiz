@@ -186,3 +186,17 @@ D-Q89-10 的第二条领取路线，对所有到店兑换开放（不限赞助�
 - **App**：结果页的奖品有"出示领奖码"（`pass/PassDialog.tsx`：二维码、6 位数字、按收到回答起算的 60 秒倒计时、过期即"换一个新码"；出示期间每 3 秒重读奖品，交付后对话框说"已交付"）；扫一扫认得 `/pass/<密钥>`（`scan/target.ts`），在店员手机上打开交付页（`pass/PassPage.tsx`），在别人手机上只说"这是顾客的领奖码"；店员柜台加"顾客的奖品"（扫码链接与输入数字）。
 - **商户后台**：奖品领取页加"顾客的领奖码"（输入数字、查询、交付）。
 - **测试**：`RedemptionPassIT`（4：按二维码与数字读取并交付、只存哈希、别的柜台 404、用过与再签发失效、60 秒过期、店员交付与店码同时领取只成功一次、店员不交付自己的、猜数字被限流）；App `pass.test.tsx`（4，含 axe）、商户后台 `publishing.test.tsx` 的一例。
+
+### Q89d-1（2026-11-03，分支 `1.3/quizbuks-89d-benefit-incidents`）：异常、暂停与统计
+
+Q89d 分成两期：d-1（本期：暂停与恢复、作废未用的奖品、异常记录、按采购单的统计与商户后台）与 d-2（站内信通知、总部与运营商的后台页面、审核页的"赞助权益"区块、场景 B 的 e2e、文档）。
+
+做了什么：
+
+- **暂停**（`benefit.IncidentProcesses`）：`QB_BENEFIT_PURCHASE_SUSPEND`（任何一方，附理由，可选 `voidUnused`）只对 `CONFIRMED` 的采购单。同一事务中先按发布编号升序以子流程 `QB_PUBLICATION_BENEFIT_PAUSE`（`subProcessOnly`，`pausedBy = SPONSOR`）暂停用到它的进行中的发布，再取采购单锁、重读采购单与分配，写 `SUSPENDED`。锁序与提交相同（发布锁 → 采购单锁）；其间若有发布刚取得份额而没被暂停，即 `QB_BENEFIT_PURCHASE_CHANGED` 请重试。
+- **作废未用的奖品**：逐项任务 `qb.benefit-void`（每 10 分钟，模板 `qb.system.benefit-void-due`），每项 `QB_REDEMPTION_SUSPEND_VOID`（`internal()`，奖品锁内重读：采购单仍暂停且要求作废、奖品仍未领取才作废，`voidNote` 为暂停理由），沿用作废事件通知答题者。没有放在暂停的事务里，以免一次取上千把奖品锁。
+- **恢复**：`QB_BENEFIT_PURCHASE_RESUME` 回到 `CONFIRMED`、停止作废；发布照旧暂停，由发布方自己恢复（`QB_PUBLICATION_RESUME` 在采购单暂停时拒绝 `QB_BENEFIT_PURCHASE_SUSPENDED`；没有采购单的发布不多读一条）。**与计划不同**：暂停与恢复只改状态、不加修订号，用到它的草稿不必重存。
+- **异常**：普通表 `QbBenefitIncident`（迁移 V72），`QB_BENEFIT_INCIDENT_RECORD`（任何一方，可指一个本采购单的奖品，别的即 `QB_BENEFIT_INCIDENT_PRIZE`）与 `_RESOLVE`（任何一方写处理结果，一次，`QB_BENEFIT_INCIDENT_RESOLVED`）；两侧经 `qb.sponsor.benefit-incidents` / `-order-incidents` 读，记录人只显示为一方，不给编号。删除账号保留记录、清空该商户写的文字。
+- **统计**（D-Q89-13）：两个采购单列表模板加 `allocated`（进行中的发布占用）、`given`（已结束的发布发出）、`issued`、`collected`、`expired`、`voided`（到店兑换与电子奖品按卡片的 `benefitPurchaseId` 合计）与暂停的字段。
+- **商户后台**：采购单页对已确认、已暂停、已完成的单显示"使用情况"、暂停（理由、是否作废）与恢复、异常记录（记录、写处理结果）。
+- **测试**：`BenefitSuspendIT`（2：暂停两个进行中的发布、不能恢复发布、不能用于新草稿、任务作废奖品、统计、恢复后修订号不变；任何一方记录与处理异常、别人的 404、别的采购单的奖品被拒、只处理一次）；`ProcessAccessIT` 加两个流程；商户后台 `benefits.test.tsx` 的一例。

@@ -1,6 +1,6 @@
 import { runProcess, runQuery } from '@jabiz/client'
 import { minuteNow } from '../qb/legal'
-import { BENEFIT_PROCESS, BENEFIT_TEMPLATE, type BenefitCertification, type BenefitKind } from './ids'
+import { BENEFIT_PROCESS, BENEFIT_TEMPLATE, type BenefitCertification, type BenefitKind, type IncidentKind } from './ids'
 
 /*
  * Sponsored benefits (Q89a): typed by hand after `OfferProcesses`, `BenefitConversationProcesses`,
@@ -119,6 +119,20 @@ export interface Purchase {
   declineReason: string | null
   editedAt: string
   revision: number
+  /** Q89d-1: what became of it (shares held and given; its prizes by where they stand) and its suspension. */
+  stats: PurchaseStats
+  suspendedAt: string | null
+  suspendReason: string | null
+  voidUnused: boolean
+}
+
+export interface PurchaseStats {
+  allocated: number
+  given: number
+  issued: number
+  collected: number
+  expired: number
+  voided: number
 }
 
 export interface PurchaseInput {
@@ -246,6 +260,11 @@ export async function readPurchases(side: Side, purchaseId?: string): Promise<Pu
     declineReason: text(row.declineReason),
     editedAt: String(row.editedAt ?? ''),
     revision: number(row.revision),
+    stats: { allocated: number(row.allocated), given: number(row.given), issued: number(row.issued),
+      collected: number(row.collected), expired: number(row.expired), voided: number(row.voided) },
+    suspendedAt: text(row.suspendedAt),
+    suspendReason: text(row.suspendReason),
+    voidUnused: row.voidUnused === true,
   }))
 }
 
@@ -290,3 +309,44 @@ export async function readProvidedPublications(purchaseId: string): Promise<Prov
     issued: Number(row.issued ?? 0),
   }))
 }
+
+/** Q89d-1: `IncidentProcesses.PurchaseState`. */
+type PurchaseState = { purchaseId: string; status: PurchaseStatus; paused: number }
+
+export const suspendPurchase = (purchaseId: string, reason: string, voidUnused: boolean) =>
+  runProcess<PurchaseState>(BENEFIT_PROCESS.suspend, { purchaseId, reason, voidUnused })
+export const resumePurchase = (purchaseId: string) => runProcess<PurchaseState>(BENEFIT_PROCESS.resume, { purchaseId })
+
+/** Q89d-1: a row of `qb.sponsor.benefit-incidents` / `-order-incidents`; who wrote what is a side, never an id. */
+export interface Incident {
+  incidentId: string
+  redemptionId: string | null
+  kind: IncidentKind
+  note: string
+  recordedAt: string
+  recordedBy: Side
+  resolution: string | null
+  resolvedAt: string | null
+  resolvedBy: Side | null
+}
+
+export async function readIncidents(side: Side, purchaseId: string): Promise<Incident[]> {
+  const template = side === 'PROVIDER' ? BENEFIT_TEMPLATE.orderIncidents : BENEFIT_TEMPLATE.incidents
+  const page = await runQuery<Row>(template, { params: { purchaseId }, limit: 100 })
+  return page.items.map((row) => ({
+    incidentId: String(row.incidentId),
+    redemptionId: text(row.redemptionId),
+    kind: String(row.kind) as IncidentKind,
+    note: String(row.note ?? ''),
+    recordedAt: String(row.recordedAt ?? ''),
+    recordedBy: String(row.recordedBy) as Side,
+    resolution: text(row.resolution),
+    resolvedAt: text(row.resolvedAt),
+    resolvedBy: row.resolvedBy ? (String(row.resolvedBy) as Side) : null,
+  }))
+}
+
+export const recordIncident = (purchaseId: string, kind: IncidentKind, note: string) =>
+  runProcess<{ incidentId: string }>(BENEFIT_PROCESS.incidentRecord, { purchaseId, kind, note: note.trim() })
+export const resolveIncident = (incidentId: string, resolution: string) =>
+  runProcess<{ incidentId: string }>(BENEFIT_PROCESS.incidentResolve, { incidentId, resolution: resolution.trim() })
