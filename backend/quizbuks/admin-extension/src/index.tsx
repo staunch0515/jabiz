@@ -27,7 +27,7 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags } from 'lucide-react'
 import BankTopUpPage from './BankTopUpPage'
 import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
@@ -35,6 +35,7 @@ import BankWithdrawalsPage from './BankWithdrawalsPage'
 import ManualCreditPage from './ManualCreditPage'
 import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
+import { AudiencePricesPage, AudienceRulesPage, OperatorAudiencePricesPage } from './AudiencePricingPages'
 import CertificationsPage from './CertificationsPage'
 import ReferralsPage from './ReferralsPage'
 import AiPage from './AiPage'
@@ -151,6 +152,10 @@ export default defineExtension({
     // Q69: certification rounds and records by hand (headquarters and operators), and the official publishers.
     { path: PATH.certifications, element: <CertificationsPage /> },
     { path: PATH.referrals, element: <ReferralsPage /> },
+    // Q47c: the audience rules and their prices (headquarters), and an operator's own prices.
+    { path: PATH.audienceRules, element: <AudienceRulesPage /> },
+    { path: PATH.audiencePrices, element: <AudiencePricesPage /> },
+    { path: PATH.operatorAudiencePrices, element: <OperatorAudiencePricesPage /> },
   ],
   menu: [
     // Q48a: the operator's own pages, first in its back office (only its members hold qb.operator.use).
@@ -179,6 +184,9 @@ export default defineExtension({
         // Q48e-2: the operator's account: balance, plan, bank account and withdrawals.
         { key: 'qb-operator-account', label: 'menu.operatorAccount', path: PATH.operatorAccount,
           icon: PiggyBank, permission: PERMISSION.operatorUse },
+        // Q47c: the operator's own prices of the audience rules.
+        { key: 'qb-operator-audience-prices', label: 'menu.audiencePrices', path: PATH.operatorAudiencePrices,
+          icon: Tags, permission: PERMISSION.operatorUse },
       ],
     },
     {
@@ -236,6 +244,11 @@ export default defineExtension({
         // Q70: every referral (content and finance administrators).
         { key: 'qb-referrals', label: 'menu.referrals', path: PATH.referrals, icon: UserRoundPlus,
           permission: PERMISSION.referralsRead },
+        // Q47c: the audience rules (content administrators) and every owner's prices (finance).
+        { key: 'qb-audience-rules', label: 'menu.audienceRules', path: PATH.audienceRules, icon: SlidersHorizontal,
+          permission: PERMISSION.audienceRulesWrite },
+        { key: 'qb-audience-prices', label: 'menu.audiencePrices', path: PATH.audiencePrices, icon: Tags,
+          permission: PERMISSION.audiencePricesWrite },
       ],
     },
     {

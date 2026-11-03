@@ -25,6 +25,8 @@ public final class AudienceCodes {
     public static final String BIRTH_YEAR = "QB_AUDIENCE_BIRTH_YEAR";
     /** An invited publication (Q25) takes its list, not conditions. */
     public static final String INVITED = "QB_AUDIENCE_INVITED";
+    /** Q47c: a rule headquarters closed: sponsors cannot choose it now (published ones keep theirs). */
+    public static final String RULE_CLOSED = "QB_AUDIENCE_RULE_CLOSED";
     /** The taker's profile does not match the publication's conditions (the start's check). */
     public static final String NOT_MATCHED = "QB_AUDIENCE_NOT_MATCHED";
 

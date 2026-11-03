@@ -404,6 +404,9 @@ export const PERMISSION = {
   /** Q70: every referral. */
   referralsRead: 'qb.admin.referrals.read',
   certificationAdmin: 'qb.certification.admin',
+  /** Q47c: the audience rules (content administrators) and every owner's price list (finance). */
+  audienceRulesWrite: 'qb.audience.rules.write',
+  audiencePricesWrite: 'qb.audience.prices.write',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
@@ -554,9 +557,32 @@ export const PATH = {
   /** Q69: certification rounds, records by hand and the official publishers. */
   certifications: '/qb/certifications',
   referrals: '/qb/referrals',
+  /** Q47c: the audience rules, every owner's price list (headquarters), and the operator's own. */
+  audienceRules: '/qb/audience/rules',
+  audiencePrices: '/qb/audience/prices',
+  operatorAudiencePrices: '/qb/operator/audience-prices',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const
 
 /** The publisher kind of the sponsors' console (S0, `PublisherKind.SPONSOR`); other kinds come with their modules. */
 export const SPONSOR_KIND = 'SPONSOR'
+
+/**
+ * Q47c (backend `audience.AudiencePricingProcesses`, docs/quizbuks/plans/Q47c-audience-billing.md): the audience rules
+ * as a product line and their prices. The kinds are the code's (`audience.AudienceCriteria.ALL`, in its order; the
+ * sponsor console's `qb/audience.ts`): a kind without a record is open and charged for.
+ */
+export const AUDIENCE_RULE_KEYS = ['gender', 'age', 'occupation', 'interest'] as const
+
+/** The owner of headquarters' own price list (the sponsors no operator looks after). */
+export const AUDIENCE_DIRECT = 'direct'
+
+export const AUDIENCE_PRICING = {
+  rulesSet: 'QB_AUDIENCE_RULES_SET',
+  pricesSet: 'QB_AUDIENCE_PRICES_SET',
+  operatorPricesSet: 'QB_OPERATOR_AUDIENCE_PRICES_SET',
+  rulesTemplate: 'qb.admin.audience-rules',
+  pricesTemplate: 'qb.admin.audience-prices',
+  operatorPricesTemplate: 'qb.operator.audience-prices',
+} as const
