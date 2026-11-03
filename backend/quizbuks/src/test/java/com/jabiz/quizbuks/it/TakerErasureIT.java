@@ -141,8 +141,9 @@ class TakerErasureIT extends PayoutItSupport {
         String publication = livePublication(sponsor, "Q82 erased", Map.of("regions", List.of("GLOBAL")));
         String dee = newTaker("t-q82-dee-" + UUID.randomUUID().toString().substring(0, 8), "JP");
         play(dee, publication, true, true);
-        String hers = "Dee asks about the prize " + UUID.randomUUID();
-        String theirs = "The sponsor answers " + UUID.randomUUID();
+        // Letters only: a random UUID now and then holds a run of digits the messages refuse as a phone number.
+        String hers = "Dee asks about the prize " + letters();
+        String theirs = "The sponsor answers " + letters();
         String id = (String) run("QB_CONVERSATION_OPEN", taker(dee), body("publicationId", publication, "body", hers))
             .get("conversationId");
         advance(Duration.ofMinutes(1));
@@ -202,5 +203,14 @@ class TakerErasureIT extends PayoutItSupport {
     private static void staff(String sponsor, String userId) {
         execute("INSERT INTO qb_sponsor_staff (staff_id, sponsor_id, user_id, added_at, added_by, version) VALUES ('"
             + UUID.randomUUID() + "', '" + sponsor + "', '" + userId + "', now(), '" + sponsor + "', 1)");
+    }
+
+    /** A random word of letters (a UUID's hexadecimal digits, each turned into a letter). */
+    private static String letters() {
+        StringBuilder word = new StringBuilder();
+        for (char c : UUID.randomUUID().toString().replace("-", "").toCharArray()) {
+            word.append(Character.isDigit(c) ? (char) ('g' + (c - '0')) : c);
+        }
+        return word.toString();
     }
 }

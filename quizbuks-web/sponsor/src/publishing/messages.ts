@@ -531,6 +531,7 @@ export const publishingEn = {
       resolveNote: `${BRAND.names.en}: {{note}}`,
       none: 'No digital prizes yet.',
       pool: {
+        byProvider: 'The provider of the digital product loads the codes of this pool; they are handed out from it.',
         title: 'Code pool',
         intro: `The one-time codes ${BRAND.names.en} hands out, one to each winner, in the order loaded. Codes are sealed when loaded and never shown again; a code's last four characters tell them apart.`,
         available: 'Available',
@@ -1089,6 +1090,7 @@ export const publishingZh: typeof publishingEn = {
       resolveNote: `${BRAND.names.zh}：{{note}}`,
       none: '还没有电子奖品。',
       pool: {
+        byProvider: '这个码池的码由数字产品的提供方装入，并从中发放。',
         title: '码池',
         intro: `${BRAND.names.zh}按加载顺序发给每位获奖者一个的一次性码。码在加载时密封，此后不再显示；以末四位区分。`,
         available: '可用',
@@ -1647,6 +1649,7 @@ export const publishingJa: typeof publishingEn = {
       resolveNote: `${BRAND.names.ja}：{{note}}`,
       none: 'デジタル賞品はまだありません。',
       pool: {
+        byProvider: 'このプールのコードはデジタル商品の提供者が登録し、ここから配ります。',
         title: 'コードプール',
         intro: `${BRAND.names.ja}が読み込んだ順に当選者へ 1 つずつ渡す使い切りのコードです。コードは読み込み時に封印され、再び表示されることはありません。末尾 4 文字で見分けます。`,
         available: '利用可',

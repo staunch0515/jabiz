@@ -205,7 +205,7 @@ public final class PublicationLifecycle {
             .filter(a -> !String.valueOf((Object) a.get("publicationId")).equals(String.valueOf(publication.id())))
             .map(BenefitAllocations::of).toList();
         BenefitPublishing.problems(String.valueOf((Object) publication.get("publisherId")),
-            PublicationEditing.methodOf(publication.attributes()),
+            PublicationEditing.methodOf(publication.attributes()), publication.get("digitalDelivery"),
             BenefitPublishing.fromJson(publication.get("benefitSnapshot")), purchase == null ? null
                 : purchase.attributes(), PublicationEditing.integer(publication.get("maxWinners")),
             PublicationEditing.tiersOf(list(ctx, TIERS)).stream().map(TierCoverage.Tier::reward).toList(), others)

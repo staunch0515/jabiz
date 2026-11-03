@@ -360,6 +360,12 @@ public final class PublicationProcesses {
         values.put("digitalDelivery", delivery);
         values.put("digitalDescription", !digital || input.digitalDescription() == null
             || input.digitalDescription().isBlank() ? null : input.digitalDescription().strip());
+        // Q89b-2: a digital product's prize says what it is, as the benefit does, when the sponsor wrote nothing.
+        if (digital && values.get("digitalDescription") == null && values.get("benefitSnapshot") != null) {
+            values.put("digitalDescription", com.jabiz.quizbuks.benefit.BenefitPublishing.defaultDescription(
+                com.jabiz.quizbuks.benefit.BenefitPublishing.fromJson(values.get("benefitSnapshot")),
+                PublishingLimits.REDEEM_DESCRIPTION_LENGTH));
+        }
         values.put("digitalSendDays", digital && DigitalDelivery.SPONSOR_SENT.equals(delivery)
             ? decimal(input.digitalSendDays()) : null);
         String sealed = ctx.contains(SEALED_DIGITAL) ? ctx.get(SEALED_DIGITAL, String.class) : null;
@@ -437,7 +443,7 @@ public final class PublicationProcesses {
         String purchaseId = input.benefitPurchaseId() == null || input.benefitPurchaseId().isBlank() ? null
             : input.benefitPurchaseId().strip();
         EntityInstance purchase = first(ctx, BENEFIT_PURCHASE);
-        if (purchaseId == null || !RewardMethod.OFFLINE_REDEEM.equals(method)) {
+        if (purchaseId == null || !BENEFIT_METHODS.contains(method)) {
             values.put("benefitPurchaseId", null);
             values.put("benefitSnapshot", null);
             values.put("fulfillerId", null);
@@ -449,21 +455,26 @@ public final class PublicationProcesses {
         }
         com.jabiz.quizbuks.benefit.BenefitPublishing.Snapshot snapshot =
             com.jabiz.quizbuks.benefit.BenefitPublishing.of(purchase.id(), purchase.attributes());
+        // Goods and services are collected at the provider's place, a digital product is a digital prize (Q89b-2).
+        boolean digital = com.jabiz.quizbuks.benefit.QbBenefits.DIGITAL.equals(snapshot.kind());
         if (!com.jabiz.quizbuks.benefit.PurchaseStatus.CONFIRMED.equals(purchase.get("status"))
-            || com.jabiz.quizbuks.benefit.QbBenefits.DIGITAL.equals(snapshot.kind())) {
+            || digital != RewardMethod.DIGITAL_PRIZE.equals(method)) {
             ctx.reject(new Violation("benefitPurchaseId", com.jabiz.quizbuks.benefit.BenefitCodes.PURCHASE_NOT_USABLE,
-                "Only a confirmed purchase of goods or a service is a prize collected at its provider's place",
-                Map.of("status", String.valueOf((Object) purchase.get("status")))));
+                "Only a confirmed purchase: goods or a service collected at its provider's place, a digital product "
+                    + "as a digital prize", Map.of("status", String.valueOf((Object) purchase.get("status")))));
             return;
         }
         values.put("benefitPurchaseId", String.valueOf(purchase.id()));
         values.put("benefitSnapshot", com.jabiz.quizbuks.benefit.BenefitPublishing.toJson(snapshot));
         values.put("fulfillerId", snapshot.providerId());
-        if (values.get("redeemDescription") == null) {
+        if (!digital && values.get("redeemDescription") == null) {
             values.put("redeemDescription", com.jabiz.quizbuks.benefit.BenefitPublishing.defaultDescription(snapshot,
                 PublishingLimits.REDEEM_DESCRIPTION_LENGTH));
         }
     }
+
+    /** Q89b-1/-2: the reward methods a purchase can be: goods and services collected, digital products sent. */
+    static final List<String> BENEFIT_METHODS = List.of(RewardMethod.OFFLINE_REDEEM, RewardMethod.DIGITAL_PRIZE);
 
     /** The regions in their written form; null when none are chosen yet. */
     private static String regions(ProcessContext ctx, List<String> given) {

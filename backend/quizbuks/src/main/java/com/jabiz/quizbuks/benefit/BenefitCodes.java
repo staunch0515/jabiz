@@ -53,5 +53,8 @@ public final class BenefitCodes {
     /** Q89b-1: fewer of the purchase are left than the publication asks for. */
     public static final String STOCK_SHORT = "QB_BENEFIT_STOCK_SHORT";
 
+    /** Q89b-2: a digital product is issued from codes its provider loads (the pool). */
+    public static final String DIGITAL_DELIVERY = "QB_BENEFIT_DIGITAL_DELIVERY";
+
     private BenefitCodes() {}
 }
