@@ -121,3 +121,17 @@
 - 现金在商户后台也显示为学分（"Kudos 以外不写币种名"），一比一。
 - 测试：`TopUpTargetsTest`、`KudosExchangesTest`、`TransferRulesTest`（比例）、`CashAccountIT`（卡充值进现金、退款扣回现金、兑换与开关、核对、月报）、`AdminFinanceIT` 的新类；前端 `wallet.test.tsx`；e2e `cash-account.spec.ts`。
 - 留给 Q87b：平台费记录、预付 / 后付与信用额、账单与适格请求书、逾期、运营商的计费方式、并入运营商结算；拦"有未付账单时换学分"随 Q87b 加在 `KudosExchanges.problems`。
+
+### Q87b（平台费、预付 / 后付、账单、逾期、运营商的计费方式与结算）的实施设计
+
+照 D-Q87-4 至 D-Q87-8，实施中定下的做法（与 §3 不同的地方注明）：
+
+- **计费方式不加在 `QbSponsor` 上**（与 §3 不同）：入驻行是审批绑定内容的时态行，另建普通表 `qb_sponsor_billing`（商户一行：`billingMode`、`creditLimit`、理由、改的人与时间），**没有记录即全平台的缺省** `qb.fee.default-billing-mode`；只经运营商的 `QB_OPERATOR_BILLING_SET`（`RequireScope`，自己的商户）与总部财务的 `QB_SPONSOR_BILLING_SET` 写入。
+- **费用记录** `QbFeeCharge` 只写一次（时态、`writeOnce`）：商户、种类、所属月份 `period`（日本日期的月）、金额（不含税）、税率、**暂定税额**、是否从现金付清 `settlement`（`CASH` / `RECEIVABLE`）、当时商户所属的运营商 `operatorId`（冻结，结算按它）、来源单据。账单与费用按（商户、月份）对应，不回写费用。
+- **税按账单每个税率取整一次**（适格请求书）：记费时按费用暂定税额过账，出账单时 `FeeRules.invoice` 算出每个税率的税额，差额（几日元）过一笔调整：有应付部分时进应付（1130），否则从现金账户扣（2160），现金不够即成为应付。
+- **记费**只经子流程 `QB_FEE_CHARGE`（`subProcessOnly`，在商户钱包锁内）：预付且可用现金足够即 2160 → 4120 + 2150，否则 1130 → 4120 + 2150（预付的商户此后有未付即被拦，D-Q87-5）；Q47c-2 以"必须付得起"调用它（`FeeRules.uncovered`：不足即拒绝、什么也不写）。
+- **账单** `QbFeeInvoice`（普通表）：每月 2 日的逐项任务 `qb.fee-invoice` 为上个月有费用的每个商户出一张（`AssignNumber` 取 `QBF-<年>-00001`、单据 `qb.fee-invoice` 存档 PDF，开具方取 `qb.issuer.*`），无应付的为 `PAID`，有应付的 `ISSUED`、到期 `qb.fee.due-days` 天后；出账单经事件由消费者寄邮件。
+- **付账单**只从现金账户（`QB_FEE_INVOICE_PAY`，商户本人，钱包锁内，2160 → 1130）；**作废**与**手工记费**由财务申请、另一位管理员经平台审批（审批对象 `qb.fee`，规则由 `QB_SETUP` 以受控变更提出），作废以冲正的分录退回。
+- **逾期**：每日任务 `qb.fee-overdue` 把过期未付的账单记 `OVERDUE`、经事件寄提醒（7 天一封、至多三封，`reminders`）、给财务开待办；`FeeRules.refusals` 在换学分与提交发布时拦（未付 / 超信用额 / 逾期，逾期一项可由 `qb.fee.overdue.block-submit` 关掉）。
+- **科目**：1130 应收平台费（资产，维度：商户）、4120 平台使用费收入、2150 应付消费税；各加映射参数。核对加 1130 = 未付的应付；月报加三列与类（记费从现金、记费为应付、调整、付账单、作废）。
+- **运营商结算**：收费合计 = 抽成 + 当月记在该运营商名下的平台费（不含税），分成规则照旧。

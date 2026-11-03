@@ -26,6 +26,10 @@ public final class QbLedger {
      * platform, its use decided when it is turned into Kudos or (Q87b) pays a fee. Its lines carry the sponsor.
      */
     public static final String SPONSOR_CASH = "2160";
+    /** Q87b (D-Q87-8): the platform fees sponsors owe (lines carry the sponsor), their revenue and their tax. */
+    public static final String FEES_RECEIVABLE = "1130";
+    public static final String PLATFORM_FEE_REVENUE = "4120";
+    public static final String CONSUMPTION_TAX_PAYABLE = "2150";
 
     /** The name of the dimension that carries the party (a user's id) on the wallet accounts. */
     public static final String PARTY = "party";
@@ -45,7 +49,10 @@ public final class QbLedger {
         new Account(PROMOTION_EXPENSES, "Promotion expenses (Kudos granted)", "EXPENSE"),
         new Account(OPERATOR_SHARES_PAYABLE, "Operator shares payable", "LIABILITY"),
         new Account(OPERATOR_SHARES, "Operator shares (expense)", "EXPENSE"),
-        new Account(SPONSOR_CASH, "Sponsor cash accounts", "LIABILITY"));
+        new Account(SPONSOR_CASH, "Sponsor cash accounts", "LIABILITY"),
+        new Account(FEES_RECEIVABLE, "Platform fees receivable", "ASSET"),
+        new Account(PLATFORM_FEE_REVENUE, "Platform fee revenue", "REVENUE"),
+        new Account(CONSUMPTION_TAX_PAYABLE, "Consumption tax payable", "LIABILITY"));
 
     private QbLedger() {}
 }
