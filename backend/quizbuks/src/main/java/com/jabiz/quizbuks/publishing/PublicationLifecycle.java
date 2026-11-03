@@ -359,6 +359,40 @@ public final class PublicationLifecycle {
                 }));
     }
 
+    /** Q89d-1: the publication a suspended purchase pauses. */
+    public record BenefitPauseInput(@jakarta.validation.constraints.NotNull java.util.UUID publicationId) {}
+
+    public static final String BENEFIT_PAUSE = "QB_PUBLICATION_BENEFIT_PAUSE";
+
+    /**
+     * {@value #BENEFIT_PAUSE} (Q89d-1, D-Q89-12): a suspended purchase pauses a publication drawing on it, as its
+     * sponsor's pause; its sponsor resumes it once the purchase is resumed ({@code QB_BENEFIT_PURCHASE_SUSPENDED}
+     * until then). One no longer running is left as it is. Only a sub-process of the suspension.
+     */
+    public static ProcessDefinition<BenefitPauseInput, PublicationOutput, ProcessContext> benefitPause() {
+        return ProcessDefinition.define(BENEFIT_PAUSE, 1, BenefitPauseInput.class, PublicationOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Pauses a publication whose benefit purchase is suspended (part of the suspension only).")
+                .permissions(QbPermissions.PUBLICATION_SYSTEM)
+                .subProcessOnly()
+                .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                .steps(PublicationEditing::lockStatesAndLoadAny)
+                .compute("Pause", (metadata, ctx) -> {
+                    EntityInstance publication = PublicationEditing.publication(ctx);
+                    String status = String.valueOf((Object) publication.get("status"));
+                    if (!java.util.Set.of(SCHEDULED, LIVE, FUNDS_SHORT).contains(status)) {
+                        PublicationEditing.unchanged(ctx, publication);
+                        return;
+                    }
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("status", PAUSED);
+                    values.put("pausedAt", ctx.opTime());
+                    values.put("pausedBy", PublicationStatus.BY_SPONSOR);
+                    PublicationEditing.write(ctx, publication, values);
+                }));
+    }
+
     public static ProcessDefinition<PublicationRef, PublicationOutput, ProcessContext> resume() {
         return ProcessDefinition.define(RESUME, 1, PublicationRef.class, PublicationOutput.class,
             ProcessContext.class, pb -> pb
@@ -371,8 +405,25 @@ public final class PublicationLifecycle {
                 .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
                 .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
                 .steps(PublicationEditing::lockStatesAndLoad)
+                // Q89d-1: its benefit purchase, when it draws on one (none read otherwise: an IN of no values).
+                .step("Load its benefit purchase", com.jabiz.runtime.process.steps.QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.benefit.QbBenefits.defaultDataset(com.jabiz.quizbuks.benefit.QbBenefits.PURCHASE),
+                    ctx -> {
+                        Object purchaseId = PublicationEditing.publication(ctx).get("benefitPurchaseId");
+                        return com.jabiz.query.EntityQuery.builder().where(new com.jabiz.query.QueryPredicate.In(
+                            "purchaseId", purchaseId == null ? List.of() : List.of(purchaseId))).limit(1).build();
+                    }, BENEFIT_PURCHASE))
                 .compute("Resume", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
+                    @SuppressWarnings("unchecked")
+                    List<EntityInstance> purchase = (List<EntityInstance>) ctx.get(BENEFIT_PURCHASE);
+                    if (purchase != null && !purchase.isEmpty() && com.jabiz.quizbuks.benefit.PurchaseStatus.SUSPENDED
+                        .equals(purchase.getFirst().get("status"))) {
+                        ctx.reject(new Violation("publicationId", com.jabiz.quizbuks.benefit.BenefitCodes
+                            .PURCHASE_SUSPENDED, "Its benefit purchase is suspended: resume the purchase first",
+                            Map.of()));
+                        return;
+                    }
                     // What an administrator paused only an administrator resumes (Q10b, M2).
                     if (PAUSED.equals(publication.get("status"))
                         && PublicationStatus.BY_ADMIN.equals(publication.get("pausedBy"))) {

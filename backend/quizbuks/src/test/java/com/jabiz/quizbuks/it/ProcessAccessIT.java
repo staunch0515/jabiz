@@ -35,6 +35,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_SPONSOR_PAGE_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_BAN_PAUSE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_PUBLICATION_BENEFIT_PAUSE", ProcessAccess.SUB_PROCESS_ONLY),
         // Q72: after a sponsor's account was erased (on jabiz.account.erased), and its sub-process.
         Map.entry("QB_SPONSOR_ERASED", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_ERASED_END", ProcessAccess.SUB_PROCESS_ONLY),
@@ -119,6 +120,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_CONVERSATION_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_CASH_REWARD_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_REDEMPTION_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_REDEMPTION_SUSPEND_VOID", ProcessAccess.INTERNAL),
         Map.entry("QB_INVITATION_MAIL", ProcessAccess.INTERNAL),
         Map.entry("QB_REDEMPTION_LAPSE", ProcessAccess.INTERNAL),
         // Q87: the platform fees' charge (a sub-process), its job items, the approval result and the invoice mails.

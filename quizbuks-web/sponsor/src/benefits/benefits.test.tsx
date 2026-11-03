@@ -30,8 +30,13 @@ const PENDING = { purchaseId: 'p1', offerId: 'o1', otherCompany: 'Fridge A', kin
 const DIGITAL_CONFIRMED = { ...PENDING, purchaseId: 'p2', kind: 'DIGITAL', title: 'Film pass', pickupAddress: null,
   pickupHours: null, status: 'CONFIRMED', confirmedAt: '2026-11-03T02:00:00Z', confirmedRevision: 3 }
 
+const CONFIRMED_WITH_STATS = { ...PENDING, purchaseId: 'p3', status: 'CONFIRMED', confirmedAt: '2026-11-03T02:00:00Z',
+  confirmedRevision: 3, allocated: 60, given: 10, issued: 25, collected: 20, expired: 2, voided: 1,
+  suspendedAt: null, suspendReason: null, voidUnused: null }
+
 /** The server for an approved sponsor; `held` is whether it holds the sponsor's benefit certification. */
-function server({ held = true, digital = false }: { held?: boolean; digital?: boolean } = {}) {
+function server({ held = true, digital = false, confirmed = false }: { held?: boolean; digital?: boolean;
+  confirmed?: boolean } = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
@@ -63,7 +68,16 @@ function server({ held = true, digital = false }: { held?: boolean; digital?: bo
       case '/api/queries/qb.sponsor.benefit-offers':
         return json(200, { items: [], offset: 0, limit: 100 })
       case '/api/queries/qb.sponsor.benefit-orders':
-        return json(200, { items: [digital ? DIGITAL_CONFIRMED : PENDING], offset: 0, limit: 200 })
+        return json(200, { items: [confirmed ? CONFIRMED_WITH_STATS : digital ? DIGITAL_CONFIRMED : PENDING], offset: 0,
+          limit: 200 })
+      case '/api/queries/qb.sponsor.benefit-order-incidents':
+        return json(200, { items: [{ incidentId: 'i1', purchaseId: 'p3', redemptionId: null, kind: 'NOT_FULFILLED',
+          note: 'Closed on Monday', recordedAt: '2026-11-03T03:00:00Z', recordedBy: 'SPONSOR', resolution: null,
+          resolvedAt: null, resolvedBy: null }], offset: 0, limit: 100 })
+      case '/api/processes/QB_BENEFIT_PURCHASE_SUSPEND/latest':
+        return json(200, { output: { purchaseId: 'p3', status: 'SUSPENDED', paused: 2 } })
+      case '/api/processes/QB_BENEFIT_INCIDENT_RESOLVE/latest':
+        return json(200, { output: { incidentId: 'i1', resolved: true } })
       case '/api/queries/qb.sponsor.benefit-publications':
         return json(200, { items: params.purchaseId === 'p2' ? [{ publicationId: 'pub1', name: 'Film quiz', status: 'DRAFT',
           rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'POOL', maxWinners: 50, benefitPurchaseId: 'p2',
@@ -182,5 +196,28 @@ describe('sponsored benefits (Q89a)', () => {
     await waitFor(() => expect(calls('QB_DIGITAL_CODES_LOAD')).toEqual([
       { publicationId: 'pub1', pastedCodes: 'CODE-1\nCODE-2' }]))
     await expectAccessible()
+  })
+
+  it('show what became of a confirmed purchase, suspend it, and settle an incident (Q89d-1)', async () => {
+    const { calls } = server({ confirmed: true })
+    window.history.replaceState(null, '', purchasePath('p3', 'PROVIDER'))
+    render(<App />)
+    expect(await screen.findByTestId('benefit-stat-left')).toHaveTextContent('30')
+    expect(screen.getByTestId('benefit-stat-collected')).toHaveTextContent('20')
+    const incident = await screen.findByTestId('benefit-incident')
+    expect(incident).toHaveTextContent('Closed on Monday')
+    expect(incident).toHaveTextContent('By the other side')
+    await expectAccessible()
+    await userEvent.type(within(incident).getByTestId('benefit-incident-resolution-input'), 'Handed over Tuesday')
+    await userEvent.click(within(incident).getByTestId('benefit-incident-resolve'))
+    await waitFor(() => expect(calls('QB_BENEFIT_INCIDENT_RESOLVE')).toEqual([
+      { incidentId: 'i1', resolution: 'Handed over Tuesday' }]))
+    await userEvent.click(screen.getByTestId('benefit-suspend'))
+    const dialog = await screen.findByTestId('benefit-suspend-dialog')
+    await userEvent.type(within(dialog).getByTestId('benefit-suspend-reason-input'), 'Shop closed')
+    await userEvent.click(within(dialog).getByTestId('benefit-suspend-void'))
+    await userEvent.click(within(dialog).getByTestId('benefit-suspend-send'))
+    await waitFor(() => expect(calls('QB_BENEFIT_PURCHASE_SUSPEND')).toEqual([
+      { purchaseId: 'p3', reason: 'Shop closed', voidUnused: true }]))
   })
 })
