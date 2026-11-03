@@ -1459,6 +1459,47 @@ export const saveConditions = (publicationId: string, baseRevision: number | nul
 export const countAudience = (publicationId: string) =>
   runProcess<AudienceCount>(AUDIENCE.count, { publicationId })
 
+// ---- Q47c: rule fees ----------------------------------------------------------------------------------------------
+
+/** `AudienceBilling.Item`: a charged rule the draft uses, at the daily price that applies to the sponsor. */
+export interface FeeItem {
+  ruleKey: string
+  dailyPrice: number
+}
+
+/** `AudienceBilling.Quote`: what the saved conditions cost over the run (0 while charging is off). */
+export interface FeeQuote {
+  enabled: boolean
+  /** Whose price list applies (`direct` or an operator); null when none does: free. */
+  owner: string | null
+  days: number
+  items: FeeItem[]
+  subtotal: number
+  minimumFee: number
+  fee: number
+}
+
+/** `AudiencePricingProcesses.RulePrice`: a rule as headquarters manage it and its daily price for this sponsor. */
+export interface RulePrice {
+  ruleKey: string
+  enabled: boolean
+  billable: boolean
+  sortOrder: number
+  dailyPrice: number
+}
+
+export interface FeeQuoteOutput {
+  quote: FeeQuote
+  rules: RulePrice[]
+}
+
+/** The query of a draft's quote: read again after each save (the server quotes what is stored). */
+export const feeQuoteQuery = (publicationId: string | null) => ['qb', 'publication-fee-quote', publicationId] as const
+
+/** The rule fee of a publication's saved conditions and run, and every rule's state and daily price. */
+export const readFeeQuote = (publicationId: string) =>
+  runProcess<FeeQuoteOutput>(AUDIENCE.feeQuote, { publicationId })
+
 // ---- Q76: prerequisites -------------------------------------------------------------------------------------------
 
 /** `PublicationPrerequisites.PrerequisiteInput`: a publication the taker must first have passed or answered. */

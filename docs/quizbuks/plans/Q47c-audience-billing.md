@@ -101,3 +101,19 @@
 5. D-Q47c-5：驳回、撤回、审核过期全额退回；上线后退不退未用天数由开关定，缺省不退。
 6. D-Q47c-6：照 Q87 记在运营商名下并分成，不另开收据。
 7. 顺序 Q86 → Q87 → Q47c，一个 PR，约 5.5 天（不含 Q87）。
+
+## 10. 实施记录
+
+Q87（现金账户、`QB_FEE_CHARGE`）尚未实现，需求方要求先开始，所以分成两步（第 7 条的"一个 PR"随之改为两个）：
+
+- **Q47c-1（本次）**：规则目录、价目表、报价，开关缺省关、**不扣款**。
+  - 迁移 V64：`qb_audience_rule`、`qb_audience_price_list`、`qb_audience_price`（没有 `effective_at`：改价即刻对此后的报价生效，历史在审计中；Q47c-2 提交时把明细冻结在费用记录上）。
+  - **记录在第一次保存时建立**：没有记录的规则即开放、计费（`AudienceBilling.Rule.DEFAULT`），没有价目表的所有者即没有价（直营没有价目表 = 免费），`QB_SETUP` 因此不建规则记录与空价目表（与 D-Q47c-1、§3.2 不同：效果相同，少一种由设置流程补的数据）。
+  - 流程：`QB_AUDIENCE_RULES_SET`（总部 `qb.audience.rules.write`，内容管理员：整表保存给出的规则，未知或重复的键 `QB_AUDIENCE_UNKNOWN` / `REPEATED`）；`QB_AUDIENCE_PRICES_SET`（总部 `qb.audience.prices.write`，财务：`owner` 缺省 `direct`，不存在的运营商 404）；
+    `QB_OPERATOR_AUDIENCE_PRICES_SET`（运营商 `qb.operator.use`，入口范围给出运营商，`OperatorChecks.member` 后只许负责人 `QB_OPERATOR_NOT_LEAD`）；`QB_AUDIENCE_FEE_QUOTE`（商户 `qb.publication.write`，本人的发布，否则 404）给出报价与每种规则适用的日价，向导用它（不另建 `qb.sponsor.audience-prices` 模板）。都要求已验证邮箱、先查封禁。
+  - 价目表整表保存：给出的规则写入、未给出的删除；锁 `qb.audience-prices:<所有者>`，规则 `qb.audience-rules`。
+  - `QB_PUBLICATION_AUDIENCE_SAVE` 拒绝关闭的规则（`criteria[i].key`，`QB_AUDIENCE_RULE_CLOSED`）。
+  - 参数（受控）：`qb.audience.billing.enabled`（false）、`qb.audience.price.fallback`（`DIRECT`）、`qb.audience.fee.refund-unused-days`（false，Q47c-2 才用）。
+  - 模板：`qb.admin.audience-rules`、`qb.admin.audience-prices`、`qb.operator.audience-prices`（只有本运营商的）。
+  - 测试：`AudienceBillingTest`、`AudiencePricingIT`。
+- **Q47c-2（Q87 合入后）**：D-Q47c-4 至 D-Q47c-6：提交时经 `QB_FEE_CHARGE` 扣款、不足拒绝、三处退回、未用天数退回、运营商结算、费用列表与发布页明细，e2e 的扣款与退回。
