@@ -217,7 +217,11 @@
   - **现金账户与学分的两种来源**（Q87a，`wallet.TopUpTargets`、`KudosExchanges`，`docs/quizbuks/plans/Q87-fee-account.md`）：每个商户除学分钱包（`QbWallet` 的 `SPONSOR` 行，科目 2110）外还有现金账户（同一所有者的 `CASH` 行，科目 2160，维度为商户），两者都在 `qb.wallet:SPONSOR:<商户>` 一把锁内改。
     充值（卡与银行转账）的去向 `QbTopUp.target`（`KUDOS` / `CASH`，开始时定、不可变）只由受控参数 `qb.topup.targets`、`qb.topup.default-target` 决定（未发布时同 Q87 之前：只进学分钱包）；入账、退款、争议都按充值的去向取科目与钱包（`TopUpTargets.account` / `walletKind`），进现金的不触发补发待支付奖励；手工加币只进学分。
     现金与学分的兑换只经 `QB_KUDOS_BUY` / `QB_KUDOS_SELL`（一比一，规则只在 `KudosExchanges.problems`：开关 `qb.kudos.buy.enabled` 缺省开、`qb.kudos.sell.enabled` 缺省关，未发布即关；只换可用的、换回不越过待支付的奖励），记录 `QbKudosExchange` 是过账的来源（月报 `KUDOS_BOUGHT` / `KUDOS_SOLD`），先 `SaveChanges.now` 再 `LEDGER_POST`。
-    每日核对另比 2160 与现金账户（`CASH_ACCOUNT`、`TOTAL_2160`）；分录导出按商户列 2160 的行；月报加列 `sponsorCash` 与现金的充值、退款、争议各类。转账手续费 = 固定 `qb.transfer.fee` + 比例 `qb.transfer.fee-rate`（受控，缺省 0，向下取整，`TransferRules.fee`）。平台费、预付与后付、账单是 Q87b。
+    每日核对另比 2160 与现金账户（`CASH_ACCOUNT`、`TOTAL_2160`）；分录导出按商户列 2160 的行；月报加列 `sponsorCash` 与现金的充值、退款、争议各类。转账手续费 = 固定 `qb.transfer.fee` + 比例 `qb.transfer.fee-rate`（受控，缺省 0，向下取整，`TransferRules.fee`）。平台费、预付与后付、账单见下一条。
+  - **平台费、预付 / 后付与账单**（Q87b，`fee.FeeProcesses`、`FeeRules`，`docs/quizbuks/plans/Q87-fee-account.md` §11）：平台费只经子流程 `QB_FEE_CHARGE`（`subProcessOnly`，在商户钱包锁内）记一笔只写一次的 `QbFeeCharge`（种类、月份、不含税金额、税率、暂定税额、当时的运营商），预付且可用现金足够即 2160 → 4120 + 2150，否则记应收 1130；必须付得起的（Q47c-2）以 `mustCover` 调用，不足即拒绝、什么也不写（`FeeRules.uncovered`）。新的费用种类只加 `QbFees.KINDS` 的一项与调用方，不另写记费或过账。
+    计费方式与信用额在 `qb_sponsor_billing`（没有记录即受控参数 `qb.fee.default-billing-mode`），只经 `QB_SPONSOR_BILLING_SET`（运营商只改自己的商户，总部财务任意，理由必填）。月费、账单、逾期都是逐项任务（`qb.fee-monthly` 每月 1 日、`qb.fee-invoice` 每月 2 日出上月的账单、`qb.fee-overdue` 每日），日期与月份按日本时间（`FeeProcesses.ZONE`）；账单的税按税率取整一次（`FeeRules.invoice`），差额过一笔调整；账单 PDF 由商户第一次下载时以 `QB_FEE_INVOICE_DOCUMENT` 签发（系统身份不持有版式的权限）。
+    付款只从现金账户（`QB_FEE_PAY`：一张账单，或不带账单时付清尚未出账单的月份，`QbFeePayment` 是过账来源）；手工记费与作废账单只经 `QB_FEE_REQUEST`（财务申请、审批对象 `qb.fee`、另一位管理员批准，结果 `QB_FEE_REQUEST_RESULT`），作废即冲正该月的全部过账并退回现金。
+    未付、超信用额、逾期（`FeeProcesses.standing` + `FeeProcesses.refusals`，逾期一项由 `qb.fee.overdue.block-submit` 开关）拦换学分与提交发布；新的"要先付清"的入口照此加，不自己读 1130。运营商结算的收入 = 抽成 + 记在该运营商名下的平台费（不含税）；每日核对比 1130 与费用记录（`FEE_RECEIVABLE`）。
   - **收款与转账（Q6b）**：收款账户 `QbPayoutAccount` 是普通表，`userId` 与 Stripe 账户号都唯一（一个 Stripe 账户永远只属于一个用户），只由开通作业的结果与
     `stripe-connect` 提供方（密钥只来自 `STRIPE_CONNECT_WEBHOOK_SECRET`）的通知写入，在 `qb.account:<用户>` 锁内、只取更新的报告。
     用户钱包缓存（`QbWallet` 的 `TAKER` 行）只经 `TakerWallets`（`QB_TAKER_WALLET_SYNC` 与转账流程）**按账本重算后覆盖**，不做加减；结算奖励不取用户钱包锁。
