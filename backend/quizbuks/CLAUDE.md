@@ -282,7 +282,7 @@
   模板 `qb.system.consent-state`、`qb.me.consents` 与公开的 `qb.public.legal*` 写同样的规则（改规则时一起改）。**同意按版本记录**（`QbConsent`，只插入，`ConsentChecks.record`）：欢迎页（`QB_PROFILE_SAVE` 第一次完成资料）、入驻申请（`QB_SPONSOR_APPLY`，审批内容含 `termsVersionNo`）
   与登录后的重新同意（`QB_CONSENT_ACCEPT`，只接受本入口的种类与当前版本）。**资金与合约类写入**（充值、提交发布、开通收款；以后新增的同类流程照此）以 `.steps(ConsentChecks.sponsor())` / `.steps(ConsentChecks.taker())` 在锁外再查（422 `QB_CONSENT_REQUIRED`），开始答题不查（Q7-2）。
   没有已生效版本时不要求同意（开发、测试与新装）。匿名读取只经公开模板 `qb.public.*`（公开视图：法律文本的已发布版本、已发布的 FAQ；草稿没有公开视图，公开视图不放发布人与哈希），`JABIZ_PUBLIC_ENABLED` 缺省开。
-  QB_SETUP 新建的行使场景的 ID 序列后移：答题场景中的答案按显示位置写，随之按新位置改写（得分不变）。
+  场景的主键按实体分计数（平台 07 §3.2）：`QB_SETUP` 多建一个参数、规则或角色不再移动用户、发布与尝试的键，答题场景的答案（按显示位置写）因此不随之改写；只有同一实体在场景更早处多插一行时才要重排。
 - **有奖活动规则与举报**（Q49a，`docs/quizbuks/plans/Q49a-contest-report.md`）：有奖活动规则是法律文本的种类 `CONTEST_RULES`（不在 `APP_KINDS`：不要求同意），有奖励档位的测验页面与 App 账户页链接 `/legal/contest-rules`；正文写明 Apple / Google 不是主办方。
   举报只经 `QB_REPORT_SUBMIT`（答题者）与 `QB_REPORT_RESOLVE` / `QB_OPERATOR_REPORT_RESOLVE`（总部与运营商，二次验证，按测验一次关闭全部待处理的举报并关闭待办）；`QbReport` 是普通表，数据视图经 `OperatorScopes` 限定；举报人只给审核者看，不给商家。下架测验仍用已有的管理员与运营商流程。
 - **站内信与公告**（`messaging`，`docs/quizbuks/plans/Q7-messages-legal.md` Q7c）：**个人消息 `QbMessage` 只由事件的消费者写**（`QB_MESSAGE_FROM_EVENT`，`internal()`；收款提醒为逐项任务 `qb.payout-reminder`），

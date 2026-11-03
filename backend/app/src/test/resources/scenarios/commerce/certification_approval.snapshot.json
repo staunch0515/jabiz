@@ -52,10 +52,13 @@
       "preparerId" : "buyer",
       "ruleId" : "#uuid:3",
       "ruleVersionNo" : "1",
-      "contentHash" : "f2023aa727d9557e35624f9aa15e2a28dd8e293df69bcd9ae633cb575519af98",
+      "contentHash" : "d93efe442fa21e50f48bc518e2d6681ba6b2c7ae9cf642e369bd2dc4bf6946c9",
       "levels" : "[{\"permission\":\"commerce.certification.review\"}]",
       "currentLevel" : "1",
-      "facts" : "{\"supplierId\":\"019e80b1-da80-7000-8000-000000000001\",\"languages\":1,\"hasBody\":true}",
+      "facts" : "{\"supplierId\":\"019e80b1-da80-7000-a82d-977b00000001\",\"languages\":1,\"hasBody\":true}",
+      "reference" : null,
+      "scopeName" : null,
+      "scopeValue" : null,
       "versionNo" : 2,
       "effectStartTime" : "2026-06-01T03:00:00Z",
       "createdTime" : "2026-06-01T03:00:00Z",
@@ -70,6 +73,8 @@
       "reason" : "Certificate checked.",
       "decidedTime" : "2026-06-01T03:00:00Z",
       "processSeqId" : "#op:2",
+      "scopeName" : null,
+      "scopeValue" : null,
       "version" : 1
     } ]
   }
