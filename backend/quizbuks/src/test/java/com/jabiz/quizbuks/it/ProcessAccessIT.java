@@ -137,7 +137,14 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_OPERATOR_SETTLEMENT_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         // Q48e-2: a plan change and a withdrawal, put in effect once approved.
         Map.entry("QB_OPERATOR_PLAN_APPROVAL_RESULT", ProcessAccess.INTERNAL),
-        Map.entry("QB_OPERATOR_WITHDRAWAL_APPROVAL_RESULT", ProcessAccess.INTERNAL));
+        Map.entry("QB_OPERATOR_WITHDRAWAL_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        // Q87b: the platform fees.
+        Map.entry("QB_FEE_CHARGE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_FEE_MONTHLY_ITEM", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_INVOICE_ISSUE_ITEM", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_OVERDUE_ITEM", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_REQUEST_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_FEE_INVOICE", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;
