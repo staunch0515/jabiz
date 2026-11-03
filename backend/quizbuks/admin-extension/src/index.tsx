@@ -36,6 +36,7 @@ import ManualCreditPage from './ManualCreditPage'
 import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
 import { AudiencePricesPage, AudienceRulesPage, OperatorAudiencePricesPage } from './AudiencePricingPages'
+import { FeesPage, OperatorBillingPage } from './FeesPages'
 import CertificationsPage from './CertificationsPage'
 import ReferralsPage from './ReferralsPage'
 import AiPage from './AiPage'
@@ -156,6 +157,9 @@ export default defineExtension({
     { path: PATH.audienceRules, element: <AudienceRulesPage /> },
     { path: PATH.audiencePrices, element: <AudiencePricesPage /> },
     { path: PATH.operatorAudiencePrices, element: <OperatorAudiencePricesPage /> },
+    // Q87b: the platform fees (finance), and the operator's sponsors' billing.
+    { path: PATH.fees, element: <FeesPage /> },
+    { path: PATH.operatorBilling, element: <OperatorBillingPage /> },
   ],
   menu: [
     // Q48a: the operator's own pages, first in its back office (only its members hold qb.operator.use).
@@ -187,6 +191,9 @@ export default defineExtension({
         // Q47c: the operator's own prices of the audience rules.
         { key: 'qb-operator-audience-prices', label: 'menu.audiencePrices', path: PATH.operatorAudiencePrices,
           icon: Tags, permission: PERMISSION.operatorUse },
+        // Q87b: how the operator's sponsors pay the platform fees.
+        { key: 'qb-operator-billing', label: 'menu.operatorBilling', path: PATH.operatorBilling,
+          icon: Receipt, permission: PERMISSION.operatorUse },
       ],
     },
     {
@@ -269,6 +276,8 @@ export default defineExtension({
         // Q18b: finance records manual credits; the bank top-ups' approvers approve them.
         { key: 'qb-manual-credits', label: 'menu.manualCredits', path: PATH.manualCredits, icon: HandCoins,
           permission: PERMISSION.bankApprove },
+        // Q87b: the platform fees: invoices, charges by hand, voidings and billing.
+        { key: 'qb-fees', label: 'menu.fees', path: PATH.fees, icon: Receipt, permission: PERMISSION.feeRecord },
         // Q13b: finance reviews (the transfers' review), pays and records them.
         { key: 'qb-bank-withdrawals', label: 'menu.bankWithdrawals', path: PATH.bankWithdrawals, icon: Landmark,
           permission: PERMISSION.financeRead },

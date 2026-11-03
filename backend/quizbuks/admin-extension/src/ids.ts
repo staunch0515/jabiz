@@ -408,6 +408,9 @@ export const PERMISSION = {
   /** Q47c: the audience rules (content administrators) and every owner's price list (finance). */
   audienceRulesWrite: 'qb.audience.rules.write',
   audiencePricesWrite: 'qb.audience.prices.write',
+  /** Q87b: charges by hand and voidings (finance; another administrator approves), and sponsors' billing. */
+  feeRecord: 'qb.fee.record',
+  billingWrite: 'qb.billing.write',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
@@ -562,6 +565,9 @@ export const PATH = {
   audienceRules: '/qb/audience/rules',
   audiencePrices: '/qb/audience/prices',
   operatorAudiencePrices: '/qb/operator/audience-prices',
+  /** Q87b: the platform fees (finance), and the operator's sponsors' billing. */
+  fees: '/qb/finance/fees',
+  operatorBilling: '/qb/operator/billing',
   /** The platform's own pages. */
   tasks: '/tasks',
 } as const
@@ -586,4 +592,13 @@ export const AUDIENCE_PRICING = {
   rulesTemplate: 'qb.admin.audience-rules',
   pricesTemplate: 'qb.admin.audience-prices',
   operatorPricesTemplate: 'qb.operator.audience-prices',
+} as const
+
+/** Q87b (backend `fee.FeeProcesses`): the platform fees' processes and templates the extension uses. */
+export const FEES = {
+  request: 'QB_FEE_REQUEST',
+  billingSet: 'QB_SPONSOR_BILLING_SET',
+  invoicesTemplate: 'qb.admin.fee-invoices',
+  requestsTemplate: 'qb.admin.fee-requests',
+  operatorBillingTemplate: 'qb.operator.sponsor-billing',
 } as const

@@ -61,6 +61,7 @@ import {
   type TopUpStatus,
 } from './api'
 import './messages'
+import { FeesSection } from './FeesSection'
 
 /** The labels of the top-up states, from the server's dictionary (the code until it answered). */
 export function useTopUpStatusLabel() {
@@ -521,6 +522,7 @@ export function WalletPage() {
         </section>
       )}
       {data && <CashAccount wallet={data} />}
+      {data && <FeesSection />}
       <section aria-labelledby="wallet-topups" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="wallet-topups" className="text-lg font-semibold">{t('wallet.topUps')}</h2>
