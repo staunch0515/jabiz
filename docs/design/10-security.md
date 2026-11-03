@@ -994,6 +994,57 @@ class PortalSignUpGuard implements SignUpGuard {
   `SignUpGuardIT`（加入、重复加入不改、未验证 403、不开放注册与不存在同为 404、未登录 401、受保护的注册角色 422、守卫拒绝与抛异常、注册时没有用户且对新旧地址答复相同、
   邮件加入在链接处被拒且链接仍可用、邮件登录链接开户被拒）、`PortalIT`（被封禁客户的账号不能加入门户，解除封禁后同一链接可用；日文消息）、前端 `account.test.tsx`。
 
+### 15.16 通行密钥（Passkey / WebAuthn）（阶段 17zf，决策 D71）
+
+通行密钥是已有账号的附加凭据：本人在账户中绑定，之后不填名字、以指纹或面容登录，并可作为第二因素。不能只凭通行密钥开户。
+
+```yaml
+jabiz:
+  security:
+    passkeys:
+      rp-id: example.com                 # 网页所在的域名或其上级；改动使已有的通行密钥全部失效
+      rp-name: Example                   # 系统对话框中显示的名称，缺省为 rp-id
+      origins: https://app.example.com, https://admin.example.com
+      challenge-ttl: PT5M
+      max-per-user: 10
+    entries:
+      app:
+        passkeys: true                   # 缺省 false
+```
+
+- **启动检查**（`SECURITY`）：有入口开启而 `rp-id` 或 `origins` 未配置；来源不是 `https://`（`http://localhost` 除外）或带路径；`rp-id` 不是每个来源的主机或其上级域名；
+  `max-per-user` 不在 1–50；`challenge-ttl` 不在 30 秒到 15 分钟。`GET /api/auth/entries/{name}` 的 `passkeys` 说明入口是否可用。
+- **数据**：`sec_user_passkey`（普通表，只经流程写入，经 `DatasetEntityManager` 记审计）：用户、凭据编号（base64url，唯一）、公钥（COSE 形式的凭据数据，**敏感**）、
+  签名计数、名称、传输方式、是否已同步（backup）、AAGUID、创建与最后使用时刻。数据视图 `SecUserPasskey` 只读（`security.user.read`），本人另有接口。
+  `sec_passkey_challenge`：挑战的 SHA-256、用途（`SIGN_IN` / `SECOND_FACTOR` / `STEP_UP` / `REGISTER`）、用户（登录时为空）、入口、到期时刻；取出即删，开始新的一轮时删去过期的。
+- **校验**（`PasskeyVerifier`，webauthn4j，纯计算）：来源在 `origins` 中、RP ID 的哈希、挑战、`type`、要求用户在场与用户验证、算法 ES256 / RS256 / EdDSA；
+  attestation 不验证。断言另核对 `userHandle` 是凭据所属的用户、签名计数（D71 第 7 条）。
+
+| 接口 | 认证 | 说明 |
+|---|---|---|
+| `POST /api/auth/passkey/options {entry}` | 公开 | 登录的选项（`allowCredentials` 为空，`userVerification: required`）；入口未开启 422 `PASSKEY_DISABLED` |
+| `POST /api/auth/passkey {entry, credential}` | 公开 | 答复同登录（`SIGNED_IN`）；其他一律 401 `LOGIN_FAILED`（守卫与邮箱的 403 照旧） |
+| `POST /api/auth/challenge/passkey/options {challenge}`、`POST /api/auth/challenge/passkey {challenge, credential}` | 挑战令牌（`verify`） | 密码之后的第二步以该用户的通行密钥完成 |
+| `POST /api/auth/challenge/passkey/register/options {challenge}`、`…/register {challenge, credential, name?}` | 挑战令牌（`enroll`） | 角色要求二次验证而未设置时，绑定通行密钥代替 TOTP（201）；之后重新登录 |
+| `POST /api/auth/step-up/passkey/options`、`POST /api/auth/step-up/passkey {credential}` | 已认证 | 同 step-up（§10）：同一会话的新访问令牌，`mfa_at` 为现在；没有通行密钥 422 `MFA_NOT_ENROLLED`，答复无效 422 `PASSKEY_INVALID` |
+| `GET /api/auth/account/passkeys` | 已认证 | 本人的通行密钥：编号、名称、创建与最后使用、是否已同步 |
+| `POST /api/auth/account/passkeys/options {currentPassword?, passkeyToken?}` | 已认证 | 绑定的选项：近期二次验证、当前密码或确认邮件的令牌之一（否则 422 `REAUTHENTICATION_REQUIRED`）；`excludeCredentials` 为已有的 |
+| `POST /api/auth/account/passkeys/confirmation` | 已认证 | 寄确认邮件（`jabiz.auth.passkey-confirm`，链接 `{entryUrl}auth/passkey-confirm?entry=…&token=…`），202 |
+| `POST /api/auth/account/passkeys {credential, name?}` | 已认证 | 绑定（`SEC_PASSKEY_REGISTER`），201：上限 422 `PASSKEY_LIMIT`、已绑定 422 `PASSKEY_EXISTS`、无效或挑战不对 422 `PASSKEY_INVALID`；寄"已添加"通知 |
+| `POST /api/auth/account/passkeys/{id}/rename {name}`、`POST /api/auth/account/passkeys/{id}/remove` | 已认证 | `SEC_PASSKEY_RENAME` / `SEC_PASSKEY_REMOVE`，别人的与不存在同为 404 |
+
+- **登录流程** `SPONSOR_PASSKEY_SIGN_IN`（`entryOnly`）：入口 → 按凭据编号找通行密钥与其用户 → 最近的登录记录 → 校验（无效：不写记录，401）→ 锁定、停用 →
+  §15.2 的角色与入口检查 → 不需要第二步（算作两个因素）→ 登录记录（因素 `PASSKEY`）→ 更新签名计数与最后使用。第二步与 step-up 用同一个流程，指定须是哪个用户。
+- 第二步的判断（§9）：有已确认的 TOTP **或**（入口开启通行密钥时）有通行密钥即 `MFA_REQUIRED`；入口不收通行密钥时它们不算，否则第二步无从完成；`GET /api/auth/mfa` 增加 `passkeys`（个数）。`SPONSOR_MFA_VERIFY` 不变（只认 TOTP 与恢复码）。
+- **管理员**：`SEC_PASSKEY_REMOVE_ADMIN {userId, passkeyId, reason}`（`security.user.mfa-reset`，管理级二次验证），不能代为绑定。
+- **流程**：`SEC_PASSKEY_REGISTER`（核对答复、上限、已绑定；寄 `jabiz.auth.passkey-added`）、`SEC_PASSKEY_RENAME`、`SEC_PASSKEY_REMOVE`、
+  `SEC_PASSKEY_PASSWORD_CHECK`（绑定前核对当前密码，同关联外部账号，错误计入锁定）、`SEC_PASSKEY_CONFIRMATION_SEND` / `_USE`（确认邮件，令牌用途 `jabiz.passkey`，
+  `jabiz.security.passkeys.confirmation-ttl` 缺省 30 分钟；只寄往本人已验证的地址，只能由本人的会话使用）。名称去掉控制字符、至多 100 字，缺省 `Passkey`。
+- **限流**：登录与其选项计 `PASSKEY`（按地址，不按名字：登录时不填名字）；第二步与 step-up 计 `SECOND_FACTOR`（按地址与该用户），同 §4.1。
+- **抹除与审计**：`ACCOUNT_ERASE` 删除用户的通行密钥（§17.1）。名称是用户自己的话，审计中遮蔽（`auditMasked`），公钥为敏感字段；
+  挑战码只有用户编号、至多几分钟即过期删去，不另清除。
+- **测试**：`PasskeyPropertiesTest`、`PasskeyVerifierTest`、`PasskeyIT`（软件实现的认证器，测试夹具 `TestAuthenticator`：ES256、"none"、可答错来源、不验证用户、回退计数）、`ErasureIT`。
+
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 
 一个管理员不能独自让某人（包括自己或另一个账号）得到能改权限、能审批、能记账的权限，也不能独自接管持有这类权限的账号。

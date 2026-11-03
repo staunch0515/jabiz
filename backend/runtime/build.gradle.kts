@@ -20,6 +20,8 @@ dependencies {
     // Authentication (docs/design/10-security.md): Spring Security for WebFlux, JWT access tokens, BCrypt.
     api("org.springframework.boot:spring-boot-starter-security")
     implementation("com.nimbusds:nimbus-jose-jwt:10.10")
+    // Passkeys (docs/design/10-security.md section 15.16; decision D71): WebAuthn responses checked, nothing stored.
+    implementation("com.webauthn4j:webauthn4j-core:0.32.0.RELEASE")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     // Scheduled jobs (docs/design/11-ledger-events-jobs.md section 4): one instance per run, locked through R2DBC.
     // JobRunner takes a LockProvider, so the core API is part of runtime's.

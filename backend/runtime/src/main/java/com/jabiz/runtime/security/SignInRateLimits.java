@@ -82,7 +82,12 @@ public class SignInRateLimits implements PlatformCheck {
          * {@code POST /api/auth/oidc/{id}/form-post} (decision D67): Apple's answer, posted by the browser; nobody is
          * named before the callback.
          */
-        OIDC_FORM_POST(false);
+        OIDC_FORM_POST(false),
+        /**
+         * {@code POST /api/auth/passkey} and its options (decision D71): nobody is named before the passkey is checked.
+         * The second step and step-up with a passkey count as {@link #SECOND_FACTOR}.
+         */
+        PASSKEY(false);
 
         private final boolean named;
 

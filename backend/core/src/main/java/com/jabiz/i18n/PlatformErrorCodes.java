@@ -289,6 +289,14 @@ public final class PlatformErrorCodes {
     public static final String MFA_NOT_ENROLLED = "MFA_NOT_ENROLLED";
     /** The user has set up a second factor already; an administrator resets it first. */
     public static final String MFA_ALREADY_ENROLLED = "MFA_ALREADY_ENROLLED";
+    /** 422: the sign-in entry does not take passkeys, or none are configured (decision D71). */
+    public static final String PASSKEY_DISABLED = "PASSKEY_DISABLED";
+    /** 422: the user keeps the most passkeys allowed already ({@code jabiz.security.passkeys.max-per-user}). */
+    public static final String PASSKEY_LIMIT = "PASSKEY_LIMIT";
+    /** 422: the passkey is registered already. */
+    public static final String PASSKEY_EXISTS = "PASSKEY_EXISTS";
+    /** 422: the passkey's answer does not hold: another challenge, origin or relying party, or a bad signature. */
+    public static final String PASSKEY_INVALID = "PASSKEY_INVALID";
 
     // Conflicts (409)
     public static final String IDEMPOTENCY_KEY_REUSED = "IDEMPOTENCY_KEY_REUSED";
@@ -396,6 +404,7 @@ public final class PlatformErrorCodes {
         PROTECTED_CHANGE_REQUIRES_APPROVAL, BOOTSTRAP_ADMIN_RETIRED, APPROVAL_TARGET_USER, PROTECTED_CHANGE_NOT_PENDING,
         EMAIL_SET_BY_ANOTHER, INVITATION_NOT_NEEDED, INVITATION_ADDRESS_CHANGED, INVITATION_USER_DISABLED,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,
+        PASSKEY_DISABLED, PASSKEY_LIMIT, PASSKEY_EXISTS, PASSKEY_INVALID,
         IDEMPOTENCY_KEY_REUSED,
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN, APP_PROXY_REFUSED,
         SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, PROCESS_INTERNAL, SIGN_IN_REFUSED, SIGN_UP_DISABLED, SIGN_UP_REFUSED,

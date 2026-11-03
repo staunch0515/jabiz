@@ -32,6 +32,8 @@ public record SignInAttempt(String userId, String userName, String entry, Set<St
         EMAIL_LINK,
         /** A token another platform signed for the person it embeds us for (decision D59): that platform's word. */
         EXTERNAL_TOKEN,
+        /** A passkey the user registered (decision D71): the device and its biometrics or PIN, two factors in one. */
+        PASSKEY,
         /** Renewing a session: no credentials, the refresh token stands for the sign-in. */
         REFRESH
     }

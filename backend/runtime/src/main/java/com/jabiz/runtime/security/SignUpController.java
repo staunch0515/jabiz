@@ -131,9 +131,10 @@ class SignUpController {
      *                           {@code device} ({@code localStorage}; decision D43 item 2)
      * @param environment        the system the pages run on ({@code jabiz.web.environment}, phase 16zd):
      *                           {@code production}, or a test system's name, which every page shows
+     * @param passkeys           whether users sign in here with passkeys (decision D71)
      */
     record EntryInfo(String name, boolean selfRegistration, boolean requireVerifiedEmail, String appPath,
-        SignInEntries.Persistence sessionPersistence, boolean emailLink, String environment) {}
+        SignInEntries.Persistence sessionPersistence, boolean emailLink, String environment, boolean passkeys) {}
 
     private final ProcessExecutor processes;
     private final SignInEntries entries;
@@ -373,7 +374,8 @@ class SignUpController {
     Mono<EntryInfo> entry(@PathVariable String name) {
         return Mono.fromCallable(() -> entries.find(name)
             .map(entry -> new EntryInfo(entry.name(), entry.selfRegistration(), entry.requireVerifiedEmail(),
-                entry.appPath(), entry.session().persistence(), entry.emailLink(), web.environment()))
+                entry.appPath(), entry.session().persistence(), entry.emailLink(), web.environment(),
+                entry.passkeys()))
             .orElseThrow(() -> new ResourceNotFoundException("No sign-in entry " + name)));
     }
 

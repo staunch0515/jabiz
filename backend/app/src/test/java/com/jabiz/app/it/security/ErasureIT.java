@@ -127,9 +127,14 @@ class ErasureIT extends SecurityItSupport {
         Map<String, Object> session = signIn(name, "eve-password-1");
         insert(CommerceEntities.CUSTOMER_DATASET, Map.of("customerCode", unique("C"), "customerName", customerName,
             "userId", userId), null);
+        // A passkey the user named after themselves (decision D71 item 9): it goes with the account.
+        execute("INSERT INTO sec_user_passkey (passkey_id, user_id, credential_id, credential_data, sign_count, name,"
+            + " backed_up, created_at, version) VALUES (?, ?::uuid, ?, 'x', 0, ?, true, now(), 1)",
+            UUID.randomUUID().toString(), userId, "cred-" + UUID.randomUUID(), display + " phone");
         long sealNo = sealNo(seal());
 
         Map<String, Object> erased = erase(userId);
+        assertThat(query("SELECT 1 FROM sec_user_passkey WHERE user_id = ?::uuid", userId)).isEmpty();
         String erasureId = (String) erased.get("erasureId");
         Map<String, Object> user = query("SELECT * FROM sec_user_version WHERE user_id = ?::uuid"
             + " ORDER BY version_no DESC LIMIT 1", userId).getFirst();

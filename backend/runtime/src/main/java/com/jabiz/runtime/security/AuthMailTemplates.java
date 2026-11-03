@@ -45,7 +45,9 @@ public class AuthMailTemplates {
     public static final java.util.Set<String> NAMES = java.util.Set.of(VERIFY_EMAIL, ACCOUNT_EXISTS, PASSWORD_RESET,
         PASSWORD_CHANGED, IDENTITY_LINKED, EMAIL_CHANGED, INVITATION, EmailLinkProcesses.TEMPLATE,
         // The account deletion's (AccountDeletionProcesses, section 17.5).
-        "jabiz.auth.account-deletion", "jabiz.auth.account-deletion-requested");
+        "jabiz.auth.account-deletion", "jabiz.auth.account-deletion-requested",
+        // The passkeys' (decision D71, section 15.16).
+        "jabiz.auth.passkey-confirm", "jabiz.auth.passkey-added");
 
     /**
      * Purposes of the tokens, which are also their placeholders: in the platform's namespace, so that no application
@@ -58,6 +60,22 @@ public class AuthMailTemplates {
 
     /** The only parameter: the sign-in entry whose pages the link finishes at. */
     public static final String ENTRY = "entry";
+
+    /** A link confirming the user before a passkey is added, for users without a password (decision D71 item 4). */
+    public static final String PASSKEY_CONFIRM = "jabiz.auth.passkey-confirm";
+    /** Tells a user that a passkey was added to their account. */
+    public static final String PASSKEY_ADDED = "jabiz.auth.passkey-added";
+    /** The token purpose of {@value #PASSKEY_CONFIRM}. */
+    public static final String PASSKEY = "jabiz.passkey";
+    /** The parameter naming the passkey of {@value #PASSKEY_ADDED} (the name its user gave it). */
+    public static final String PASSKEY_NAME = "passkey";
+
+    /** Tells a user that a passkey was added (no token; the entry and the passkey's name its parameters). */
+    public static final MailTemplate PASSKEY_ADDED_MAIL = MailTemplate.define(PASSKEY_ADDED,
+        t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY).param(PASSKEY_NAME));
+
+    /** The confirmation link before a passkey is added, as the processes that send it use it. */
+    public record PasskeyConfirmation(MailTemplate mail) {}
 
     /** The three templates, as the processes that send them use them. */
     public record Templates(MailTemplate verifyEmail, MailTemplate accountExists, MailTemplate passwordReset) {}
@@ -129,6 +147,23 @@ public class AuthMailTemplates {
     @Bean
     MailTemplate authIdentityLinkedMail() {
         return IDENTITY_LINKED_MAIL;
+    }
+
+    @Bean
+    MailTemplate authPasskeyAddedMail() {
+        return PASSKEY_ADDED_MAIL;
+    }
+
+    @Bean
+    PasskeyConfirmation authPasskeyConfirmation(
+        @Value("${jabiz.security.passkeys.confirmation-ttl:PT30M}") Duration validity) {
+        return new PasskeyConfirmation(MailTemplate.define(PASSKEY_CONFIRM, t -> t.category(MailCategory.TRANSACTIONAL)
+            .param(ENTRY).token(PASSKEY, validity)));
+    }
+
+    @Bean
+    MailTemplate authPasskeyConfirmMail(PasskeyConfirmation confirmation) {
+        return confirmation.mail();
     }
 
     @Bean

@@ -116,18 +116,24 @@ public final class SponsorSignInProcess {
 
     /**
      * Whether the sign-in needs a second factor next (docs/design/10-security.md section 9): a user who has set one
-     * up does, unless the attempt passed one already (an identity provider's, section 12); a user without one whose
+     * up (TOTP, or a passkey where the entry takes passkeys) does, unless the attempt passed one already (an identity provider's, section 12); a user without one whose
      * role requires one sets it up first.
      */
     static <I, O, C extends LoginContext> void secondFactorSteps(ProcessDefinitionBuilder<I, O, C> pb) {
-        pb.step("Load the second factor", QueryEntities.<C>of(SecurityEntities.USER_MFA_DATASET,
-                ctx -> Rbac.all(new QueryPredicate.In("userId", ctx.outcome() == LoginOutcome.SUCCESS
-                    ? List.of(ctx.userId()) : List.of()), "userId"), LoginContext.KEY_MFA))
+        // Passkeys count where the entry takes them (decision D71 item 3): elsewhere the second step could not use them.
+        pb.step("Load the second factor", QueryEntities.all(
+                QueryEntities.<C>query(SecurityEntities.USER_MFA_DATASET,
+                    ctx -> Rbac.all(new QueryPredicate.In("userId", ctx.outcome() == LoginOutcome.SUCCESS
+                        ? List.of(ctx.userId()) : List.of()), "userId"), LoginContext.KEY_MFA),
+                QueryEntities.<C>query(com.jabiz.runtime.security.PasskeyEntities.PASSKEY_DATASET,
+                    ctx -> Rbac.all(new QueryPredicate.In("userId", ctx.outcome() == LoginOutcome.SUCCESS
+                        && !ctx.secondFactorPassed() && ctx.entry() != null && ctx.entry().passkeys()
+                        ? List.of(ctx.userId()) : List.of()), "userId"), LoginContext.KEY_PASSKEYS)))
             .compute("Second factor needed", (metadata, ctx) -> {
                 if (ctx.outcome() != LoginOutcome.SUCCESS || ctx.secondFactorPassed()) {
                     return;
                 }
-                if (ctx.confirmedMfa().isPresent()) {
+                if (ctx.confirmedMfa().isPresent() || !ctx.list(LoginContext.KEY_PASSKEYS).isEmpty()) {
                     ctx.setOutcome(LoginOutcome.MFA_REQUIRED);
                 } else if (ctx.access().mfaRequired()) {
                     ctx.setOutcome(LoginOutcome.MFA_ENROLLMENT_REQUIRED);
