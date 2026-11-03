@@ -15,7 +15,7 @@ import OperatorsPage from './OperatorsPage'
 import OperatorSponsorsPage from './OperatorSponsorsPage'
 import ReviewsPage from './ReviewsPage'
 import SponsorReviewPage from './SponsorReviewPage'
-import { OPERATOR_PROCESS, PERMISSION, TEMPLATE } from './ids'
+import { FEE_PROCESS, OPERATOR_PROCESS, PERMISSION, TEMPLATE } from './ids'
 import { messages } from './messages'
 
 type Row = Record<string, unknown>

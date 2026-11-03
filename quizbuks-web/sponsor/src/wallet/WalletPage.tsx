@@ -438,7 +438,7 @@ export function WalletPage() {
       )}
       {data && <CashAccount wallet={data} settings={settings.data} />}
       {data && <Invoices wallet={data} />}
-      <section aria-labelledby="wallet-topups" className="flex flex-col gap-3">
+      <section aria-labelledby="wallet-topups" className="flex flex-col gap-3" data-testid="wallet-topups-section">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="wallet-topups" className="text-lg font-semibold">{t('wallet.topUps')}</h2>
           <Link to={TRANSACTIONS_PATH} className="text-sm underline underline-offset-4" data-testid="wallet-transactions">

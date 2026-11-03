@@ -34,7 +34,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { EmptyState, LoadFailed, StatusBadge } from './components'
-import { INVOICE_STATUSES, readFeeCharges, readFeeInvoices, readFeeRequests, recordFeeRequest, REQUEST_REVIEW,
+import { FEES_KEY, INVOICE_STATUSES, readFeeCharges, readFeeInvoices, readFeeRequests, recordFeeRequest, REQUEST_REVIEW,
   REQUEST_STATUSES, type FeeCharge, type FeeInvoice, type FeeRequest, type RequestKind } from './fee-api'
 import { parseAmount } from './finance'
 import { StatusFilter } from './finance-components'
@@ -45,8 +45,6 @@ import { useMoreFilters } from './moreFilters'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
-/** The lists' query keys: every list of the page under one, so that a request recorded refreshes them all. */
-export const FEES_KEY = ['qb-ext', 'finance', 'fees'] as const
 /** The columns sorted on the server, by each template's `list.sorts` field (Q53a). */
 const CHARGE_SORTS = { chargedAt: 'chargedAt', total: 'total' } as const
 const INVOICE_SORTS = { issuedAt: 'issuedAt', dueOn: 'dueOn', total: 'total', status: 'status' } as const

@@ -200,12 +200,15 @@ export const recordFeeRequest = (input: FeeRequestInput) =>
     FEE_PROCESS.request, input)
 
 /** `FeeProcesses.BillingInput`: how a sponsor is billed from now on, with the credit (postpaid) and the reason. */
-export interface BillingInput {
+export type BillingInput = {
   userId: string
   billingMode: BillingMode
   creditLimit: number
   reason: string
 }
+
+/** The fee pages' query keys: every list under one, so that a request recorded refreshes them all. */
+export const FEES_KEY = ['qb-ext', 'finance', 'fees'] as const
 
 /** Sets a sponsor's billing (an operator's own sponsor, or any for finance); `changed` says whether anything moved. */
 export const setBilling = (input: BillingInput) =>

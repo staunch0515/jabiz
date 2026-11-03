@@ -140,7 +140,9 @@ describe('the wallet', () => {
     expect(within(rows[1]).getByRole('link', { name: /Details/ })).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent('JPY')
     // Q80: as cards: the amount as the title, the status a badge, the buttons at the foot.
-    await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
+    // Q87 added the exchanges' and the invoices' tables: the top-ups' switcher is the one in their section.
+    const topUpsSection = screen.getByTestId('wallet-topups-section')
+    await userEvent.click(within(within(topUpsSection).getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
     const cards = await screen.findAllByTestId('topup-row')
     expect(cards[0]).toHaveAttribute('data-slot', 'data-table-card')
     expect(cards[0].querySelector('[data-slot="data-table-card-title"]')).toHaveTextContent('Kudos')

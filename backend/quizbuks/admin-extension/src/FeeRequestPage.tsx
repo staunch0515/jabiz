@@ -14,8 +14,7 @@ import {
   useAuth,
 } from '@jabiz/admin'
 import { LoadFailed, Section, StatusBadge } from './components'
-import { readFeeInvoice, readFeeRequest, REQUEST_REVIEW } from './fee-api'
-import { FEES_KEY } from './FeesPage'
+import { FEES_KEY, readFeeInvoice, readFeeRequest, REQUEST_REVIEW } from './fee-api'
 import { money, useLabels, when } from './hooks'
 import { DICTIONARY, isUserId, PATH, PERMISSION } from './ids'
 

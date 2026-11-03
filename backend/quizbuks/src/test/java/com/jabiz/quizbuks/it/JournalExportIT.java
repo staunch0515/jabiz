@@ -305,7 +305,8 @@ class JournalExportIT extends JournalItSupport {
         items("qb.admin.journal-mapping", finance(), Map.of()).forEach(r -> mapping.put((String) r.get("accountCode"),
             r.get("paramKey")));
         assertThat(mapping).containsOnlyKeys("1110", "1120", "2110", "2120", "2130", "2140", "4110", "5110",
-            "5120", "5130")
-            .containsEntry("2110", QbParams.JOURNAL_ACCOUNT_2110);
+            "5120", "5130", "2160", "1130", "4120", "2150")
+            .containsEntry("2110", QbParams.JOURNAL_ACCOUNT_2110)
+            .containsEntry("2160", QbParams.JOURNAL_ACCOUNT_2160);
     }
 }

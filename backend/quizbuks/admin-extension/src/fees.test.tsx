@@ -195,7 +195,8 @@ describe('FeeRequestPage', () => {
     server.requests = [request({ kind: 'VOID', amount: null, invoiceId: INVOICE, status: 'DONE',
       decidedAt: '2026-11-03T02:00:00Z' })]
     renderAt(`/qb/finance/fees/requests/${REQUEST}`, '/qb/finance/fees/requests/:requestId', <FeeRequestPage />)
-    expect(await screen.findByTestId('fee-invoice')).toHaveTextContent('QBF-2026-00002')
+    // The invoice is read after the request names it.
+    expect(await within(await screen.findByTestId('fee-invoice')).findByText('QBF-2026-00002')).toBeInTheDocument()
     expect(screen.getByTestId('fee-not-pending')).toHaveTextContent('Done')
     expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
   })
