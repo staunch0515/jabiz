@@ -111,7 +111,7 @@ export const PREREQUISITES = {
 
 /** The certifications' keys (`certification.Certifications`); names in `qb/messages.ts` `certification.names`. */
 export const CERTIFICATIONS = ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD',
-  'TERMS_SPONSOR_UNDERSTOOD'] as const
+  'TERMS_SPONSOR_UNDERSTOOD', 'BENEFIT_PROVIDER', 'BENEFIT_SPONSOR'] as const
 export type CertificationKey = (typeof CERTIFICATIONS)[number]
 /** Q86: the understanding certifications the app's takers answer, and the sponsors' one. */
 export const UNDERSTANDING_TAKER: readonly CertificationKey[] = ['TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD']

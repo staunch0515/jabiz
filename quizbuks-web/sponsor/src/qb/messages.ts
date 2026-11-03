@@ -109,7 +109,8 @@ const en = {
   certification: {
     names: { SPONSOR_APPLY: `${BRAND.names.en} Sponsor Certification`, REFERRER: `${BRAND.names.en} Referrer Certification`,
       TERMS_APP_UNDERSTOOD: 'Understood: Terms and Privacy Policy', CONTEST_RULES_UNDERSTOOD: 'Understood: Contest Rules',
-      TERMS_SPONSOR_UNDERSTOOD: 'Understood: Sponsor Terms' },
+      TERMS_SPONSOR_UNDERSTOOD: 'Understood: Sponsor Terms',
+      BENEFIT_PROVIDER: `${BRAND.names.en} Benefit Provider Certification`, BENEFIT_SPONSOR: `${BRAND.names.en} Benefit Sponsor Certification` },
     hold: 'Hold', held: 'Held', required: 'Certification required',
   },
   /** Q86: the card offered after accepting an agreement. */
@@ -262,7 +263,8 @@ const zh: typeof en = {
   certification: {
     names: { SPONSOR_APPLY: `${BRAND.names.zh} 赞助商认证`, REFERRER: `${BRAND.names.zh} 推荐人认证`,
       TERMS_APP_UNDERSTOOD: '已理解：条款与隐私政策', CONTEST_RULES_UNDERSTOOD: '已理解：有奖活动规则',
-      TERMS_SPONSOR_UNDERSTOOD: '已理解：商户条款' },
+      TERMS_SPONSOR_UNDERSTOOD: '已理解：商户条款',
+      BENEFIT_PROVIDER: `${BRAND.names.zh} 权益提供认证`, BENEFIT_SPONSOR: `${BRAND.names.zh} 权益赞助认证` },
     hold: '持有', held: '已持有', required: '需要持有认证',
   },
   understanding: {
@@ -412,7 +414,8 @@ const ja: typeof en = {
   certification: {
     names: { SPONSOR_APPLY: `${BRAND.names.ja} スポンサー認定`, REFERRER: `${BRAND.names.ja} 紹介者認定`,
       TERMS_APP_UNDERSTOOD: '理解済み：利用規約とプライバシーポリシー', CONTEST_RULES_UNDERSTOOD: '理解済み：懸賞規約',
-      TERMS_SPONSOR_UNDERSTOOD: '理解済み：スポンサー規約' },
+      TERMS_SPONSOR_UNDERSTOOD: '理解済み：スポンサー規約',
+      BENEFIT_PROVIDER: `${BRAND.names.ja} 特典提供認定`, BENEFIT_SPONSOR: `${BRAND.names.ja} 特典協賛認定` },
     hold: '保有する', held: '保有済み', required: '認定が必要です',
   },
   understanding: {

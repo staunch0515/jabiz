@@ -64,7 +64,9 @@ public final class QbRoles {
         // Q82: every conversation between takers and sponsors (disputes and reports).
         QbPermissions.CONVERSATION_READ,
         // Q47c: which kinds of audience rule sponsors may use and which are charged for.
-        QbPermissions.AUDIENCE_RULES_WRITE);
+        QbPermissions.AUDIENCE_RULES_WRITE,
+        // Q89: every sponsored benefit, conversation between sponsors and purchase order (disputes).
+        QbPermissions.BENEFIT_READ);
 
     /**
      * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's
@@ -171,7 +173,9 @@ public final class QbRoles {
             // Q68: the dashboard, the trend, pausing and resuming are shared with the app (see SPONSOR_APP).
             QbPermissions.SPONSOR_APP,
             // Q82: answering their takers' conversations.
-            QbPermissions.CONVERSATION_USE));
+            QbPermissions.CONVERSATION_USE,
+            // Q89: sponsored benefits, as a provider or a sponsor (the certifications decide which).
+            QbPermissions.BENEFIT_USE));
         add(SHOPIFY_SHOP, labels("Shopify shop staff", "Shopify 店铺员工", "Shopify ストアのスタッフ"), false,
             List.of(com.jabiz.quizbuks.shopify.Shopify.USE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);

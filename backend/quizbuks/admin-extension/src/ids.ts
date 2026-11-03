@@ -343,7 +343,7 @@ export const CERTIFICATION_PROCESS = {
 
 /** The certifications' keys (backend `certification.Certifications`); their names are `certification.names.<key>`. */
 export const CERTIFICATIONS = ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD',
-  'TERMS_SPONSOR_UNDERSTOOD'] as const
+  'TERMS_SPONSOR_UNDERSTOOD', 'BENEFIT_PROVIDER', 'BENEFIT_SPONSOR'] as const
 export type Certification = (typeof CERTIFICATIONS)[number]
 
 /** The owner of headquarters' own rounds and official publishers (`QbCertifications.DIRECT`). */

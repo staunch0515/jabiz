@@ -25,6 +25,10 @@ import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, N
   Gift,
   ChartColumn,
   Ticket,
+  Handshake,
+  Package,
+  MessageCircle,
+  ClipboardList,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -63,6 +67,23 @@ import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
 import { conversationOf } from './conversations/api'
 import { ConversationPage, useUnreadConversations } from './conversations/ConversationsPages'
+import {
+  BENEFIT_CONVERSATIONS_PATH,
+  BENEFITS_PATH,
+  idOf,
+  NEW_PURCHASE,
+  OFFERS_PATH,
+  PURCHASES_PATH,
+  sideOf,
+} from './benefits/api'
+import {
+  BenefitConversationPage,
+  BenefitConversationsPage,
+  CatalogPage,
+  OffersPage,
+  PurchasePage,
+  PurchasesPage,
+} from './benefits/BenefitsPages'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { Wordmark } from './qb/Illustrations'
 import { HelpPage } from './qb/HelpPage'
@@ -171,6 +192,21 @@ function SignedIn({ path }: { path: string }) {
   else if (path === CASH_REWARDS_PATH) page = <CashRewardsPage />
   else if (path === DIGITAL_PRIZES_PATH) page = <DigitalPrizesPage />
   else if (path === REDEEM_PATH) page = <RedeemPage />
+  // Q89a: sponsored benefits between sponsors (the catalog, one's own, inquiries and purchases, by side).
+  else if (path === BENEFITS_PATH) page = <CatalogPage />
+  else if (path === OFFERS_PATH) page = <OffersPage />
+  else if (path === BENEFIT_CONVERSATIONS_PATH) page = <BenefitConversationsPage key={search} side={sideOf(search)} />
+  else if (idOf(path, BENEFIT_CONVERSATIONS_PATH)) {
+    page = <BenefitConversationPage key={path + search} conversationId={idOf(path, BENEFIT_CONVERSATIONS_PATH)!}
+      side={sideOf(search)} />
+  } else if (path === PURCHASES_PATH) page = <PurchasesPage key={search} side={sideOf(search)} />
+  else if (idOf(path, PURCHASES_PATH)) {
+    const purchaseId = idOf(path, PURCHASES_PATH)!
+    page = purchaseId === NEW_PURCHASE
+      ? <PurchasePage key={path + search} purchaseId={null} side="SPONSOR"
+        offerId={new URLSearchParams(search).get('offer')} />
+      : <PurchasePage key={path + search} purchaseId={purchaseId} side={sideOf(search)} />
+  }
   else if (analyticsIdOf(path)) page = <PublicationAnalyticsPage key={path} publicationId={analyticsIdOf(path)!} />
   else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
   // Q79: the sponsor hub and its sections; the pages' old addresses lead to them.
@@ -212,6 +248,14 @@ function SignedIn({ path }: { path: string }) {
       { key: 'digital', label: t('publishing.digital.nav'), path: DIGITAL_PRIZES_PATH, icon: Ticket },
       { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
     ] },
+    // Q89a: buying other sponsors' benefits for one's takers, and offering one's own.
+    { key: 'benefits', label: t('benefits.nav.group'), items: [
+      { key: 'benefit-catalog', label: t('benefits.nav.catalog'), path: BENEFITS_PATH, icon: Handshake },
+      { key: 'benefit-offers', label: t('benefits.nav.offers'), path: OFFERS_PATH, icon: Package },
+      { key: 'benefit-conversations', label: t('benefits.nav.conversations'), path: BENEFIT_CONVERSATIONS_PATH,
+        icon: MessageCircle },
+      { key: 'benefit-purchases', label: t('benefits.nav.purchases'), path: PURCHASES_PATH, icon: ClipboardList },
+    ] },
     { key: 'money', label: t('nav.groups.money'), items: [
       ...(kudos ? [{ key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet }] : []),
       { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },
@@ -231,7 +275,7 @@ function SignedIn({ path }: { path: string }) {
     <AppShell
       brand={<Wordmark name={t('brand')} compact className="px-2 py-1" />}
       navigation={
-        <ShellNav label={t('nav.label')} groups={groups} isActive={(p) => path === p || path.startsWith(`${p}/`)}
+        <ShellNav label={t('nav.label')} groups={groups} isActive={(p) => path === p || (p !== BENEFITS_PATH && path.startsWith(`${p}/`))}
           renderLink={(item, props) => (
             <a href={hrefOf(item.path)} onClick={(event) => {
               props.onClick()
