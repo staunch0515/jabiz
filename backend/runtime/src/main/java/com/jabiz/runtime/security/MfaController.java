@@ -64,8 +64,9 @@ class MfaController {
      * @param enrolled          a confirmed second factor is set up
      * @param pending           an enrolment has started and awaits its code
      * @param recoveryCodesLeft unused recovery codes
+     * @param passkeys          the user's passkeys (decision D71): a second factor too, where the entry takes them
      */
-    record MfaStatus(boolean enrolled, boolean pending, int recoveryCodesLeft) {}
+    record MfaStatus(boolean enrolled, boolean pending, int recoveryCodesLeft, int passkeys) {}
 
     record StepUpResponse(String accessToken, Instant accessTokenExpiresAt, Instant mfaAt) {
         @Override
@@ -162,10 +163,16 @@ class MfaController {
                 .map(mfa -> {
                     boolean confirmed = Boolean.TRUE.equals(mfa.get("confirmed"));
                     return new MfaStatus(confirmed, !confirmed,
-                        confirmed ? MfaCodes.hashes(mfa.get("recoveryCodes")).size() : 0);
+                        confirmed ? MfaCodes.hashes(mfa.get("recoveryCodes")).size() : 0, 0);
                 })
-                .defaultIfEmpty(new MfaStatus(false, false, 0)))
-            .orElseGet(() -> Mono.just(new MfaStatus(false, false, 0))));
+                .defaultIfEmpty(new MfaStatus(false, false, 0, 0))
+                .zipWith(entities.query(datasets.findById(PasskeyEntities.PASSKEY_DATASET).orElseThrow(),
+                        PasskeyEntities.PASSKEY_ENTITY, EntityQuery.builder()
+                            .where(new QueryPredicate.Eq("userId", user)).limit(Rbac.MAX_ROWS).build())
+                    .count(),
+                    (status, passkeys) -> new MfaStatus(status.enrolled(), status.pending(),
+                        status.recoveryCodesLeft(), passkeys.intValue())))
+            .orElseGet(() -> Mono.just(new MfaStatus(false, false, 0, 0))));
     }
 
     @PostMapping("/api/auth/mfa/enroll")

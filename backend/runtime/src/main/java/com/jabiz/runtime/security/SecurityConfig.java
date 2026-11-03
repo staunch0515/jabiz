@@ -70,6 +70,9 @@ public class SecurityConfig {
     static final ServerWebExchangeMatcher PUBLIC = new OrServerWebExchangeMatcher(
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, AuthController.LOGIN, AuthController.REFRESH,
             AuthController.LOGOUT, MfaController.CHALLENGE + "/**"),
+        // Signing in with a passkey (decision D71): the passkey's answer is the credential.
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, PasskeyController.SIGN_IN,
+            PasskeyController.SIGN_IN + "/options"),
         // The unsubscribe link of a notification mail: its signed token is the credential
         // (docs/design/18-numbering-approvals-tasks.md section 5.6).
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, MailUnsubscribeController.UNSUBSCRIBE),

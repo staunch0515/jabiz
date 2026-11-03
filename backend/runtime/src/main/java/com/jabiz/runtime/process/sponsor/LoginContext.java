@@ -25,6 +25,8 @@ public class LoginContext extends ProcessContext {
     public static final String KEY_ROLES = "roles";
     public static final String KEY_ROLE_PERMISSIONS = "role_permissions";
     public static final String KEY_MFA = "mfa";
+    /** The user's passkeys, where the entry takes them (decision D71). */
+    public static final String KEY_PASSKEYS = "passkeys";
 
     private final String userName;
     private final SignInSource source;
@@ -176,6 +178,7 @@ public class LoginContext extends ProcessContext {
             case SecurityEntities.FACTOR_OIDC -> SignInAttempt.Factor.OIDC;
             case SecurityEntities.FACTOR_EMAIL_LINK -> SignInAttempt.Factor.EMAIL_LINK;
             case SecurityEntities.FACTOR_EXTERNAL_TOKEN -> SignInAttempt.Factor.EXTERNAL_TOKEN;
+            case SecurityEntities.FACTOR_PASSKEY -> SignInAttempt.Factor.PASSKEY;
             default -> SignInAttempt.Factor.PASSWORD;
         };
     }
