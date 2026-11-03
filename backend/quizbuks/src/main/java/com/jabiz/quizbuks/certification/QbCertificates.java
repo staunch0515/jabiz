@@ -33,7 +33,7 @@ public final class QbCertificates {
             .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:certificate"));
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         eb.field("certification", f -> f.physicalColumn("certification").immutable(true).required(true)
-            .asCode(Certifications.DICTIONARY, Certifications.keys()));
+            .asText(40));
         eb.field("certificationVersion", f -> f.physicalColumn("certification_version").immutable(true)
             .required(true).asNumeric(4, 0));
         eb.field("heldFrom", f -> f.physicalColumn("held_from").immutable(true).required(true)

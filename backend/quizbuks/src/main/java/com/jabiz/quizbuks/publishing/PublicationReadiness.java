@@ -106,6 +106,15 @@ public final class PublicationReadiness {
      */
     public static List<Violation> check(Draft draft, List<TierCoverage.Tier> tiers, QuizSnapshot version,
         Instant now, BigDecimal maxRewardPerAttempt) {
+        return check(draft, tiers, version, now, maxRewardPerAttempt, false);
+    }
+
+    /**
+     * As {@link #check(Draft, List, QuizSnapshot, Instant, BigDecimal)}, with whether the publication is a round of a
+     * certification (Q88a, D-Q88-5): then its tiers may all pay 0 (passing gives the certification).
+     */
+    public static List<Violation> check(Draft draft, List<TierCoverage.Tier> tiers, QuizSnapshot version,
+        Instant now, BigDecimal maxRewardPerAttempt, boolean round) {
         List<Violation> problems = new ArrayList<>();
         // Q81 (D-Q81-2): a pick's full score is k times the common points; a pick that cannot stand (reported below)
         // leaves the version's.
@@ -155,7 +164,7 @@ public final class PublicationReadiness {
             problems.add(new Violation("passScore", PublishingCodes.PASS_SCORE_RANGE, "The pass mark must be between "
                 + "0 and the full score " + fullScore, Map.of("fullScore", fullScore == null ? 0 : fullScore)));
         }
-        problems.addAll(TierCoverage.check(tiers, fullScore));
+        problems.addAll(TierCoverage.check(tiers, fullScore, round));
         BigDecimal maxReward = TierCoverage.maxReward(tiers);
         if (draft.budgetCap() != null && maxReward != null && draft.budgetCap().compareTo(maxReward) < 0) {
             problems.add(new Violation("budgetCap", PublishingCodes.BUDGET_BELOW_MAX_REWARD, "The budget "

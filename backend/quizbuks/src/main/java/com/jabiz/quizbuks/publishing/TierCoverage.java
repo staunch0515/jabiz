@@ -30,6 +30,14 @@ public final class TierCoverage {
      *                  version is reported on its own)
      */
     public static List<Violation> check(List<Tier> tiers, Integer fullScore) {
+        return check(tiers, fullScore, false);
+    }
+
+    /**
+     * As {@link #check(List, Integer)}; with {@code rewardOptional} (Q88a, D-Q88-5: the publication is a round of a
+     * certification, which is what passing it gives) every tier may pay 0. The tiers still cover every score.
+     */
+    public static List<Violation> check(List<Tier> tiers, Integer fullScore, boolean rewardOptional) {
         List<Violation> problems = new ArrayList<>();
         if (tiers.isEmpty()) {
             problems.add(new Violation("tiers", PublishingCodes.TIER_NO_REWARD, "A publication needs a tier with a "
@@ -83,7 +91,7 @@ public final class TierCoverage {
                 + "tier ends at " + tiers.get(highest).toScore() + ", not at the full score " + fullScore,
                 Map.of("tier", highest + 1, "toScore", tiers.get(highest).toScore(), "fullScore", fullScore)));
         }
-        if (tiers.stream().noneMatch(tier -> tier.reward().signum() > 0)) {
+        if (!rewardOptional && tiers.stream().noneMatch(tier -> tier.reward().signum() > 0)) {
             problems.add(new Violation("tiers", PublishingCodes.TIER_NO_REWARD, "No tier has a reward", Map.of()));
         }
         return List.copyOf(problems);

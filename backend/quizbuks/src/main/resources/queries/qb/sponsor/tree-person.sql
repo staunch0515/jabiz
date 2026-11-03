@@ -3,13 +3,14 @@ id: qb.sponsor.tree-person
 description: >-
   One customer's states on every node of the sponsor's tree (Q85, D-Q85-4), the customer named by the key the
   transactions page filters by; no rows for a key that is nobody's
-entities: [QbPublication, QbPublicationPrerequisite, QbAttempt, QbProfile, QbCertificationRound, QbCertificationRecord]
+entities: [QbPublication, QbPublicationPrerequisite, QbAttempt, QbProfile, QbCertificationRound, QbCertificationRecord, QbSponsorCertification]
 datasets:
   QbPublication: urn:jabiz:dataset:sponsor:QbPublication
   QbPublicationPrerequisite: urn:jabiz:dataset:sponsor:QbPublicationPrerequisite
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
   QbProfile: urn:jabiz:dataset:default:QbProfile
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:default:QbCertificationRecord
 params:
   userKey: { kind: { type: text, maxLength: 32 }, required: true, description: "The customer, md5(sponsor : user) as the transactions page gives it" }
@@ -63,7 +64,7 @@ SELECT
                                 AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
                          OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
                                 SELECT 1
-                                FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+                                FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
                                 CROSS JOIN LATERAL (
                                     SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
                                            rec.{{QbCertificationRecord.validUntil}} AS until

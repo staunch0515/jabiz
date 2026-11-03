@@ -8,6 +8,7 @@ import { APP } from '../messages'
 import { AccountSection } from '../qb/AccountSections'
 import { DEFAULT_SETTINGS, saveMySettings, type UserSettings } from '../qb/api'
 import { problemText } from '../qb/problems'
+import { certificationName } from '../qb/certifications'
 import { Link } from '../qb/router'
 import { UNDERSTANDING_TAKER } from '../qb/ids'
 import { QB } from '../qb/messages'
@@ -92,6 +93,7 @@ export function CertificatesPart() {
 
 function HeldItem({ held }: { held: HeldCertification }) {
   const { t } = useTranslation(APP)
+  const { t: tQb } = useTranslation(QB)
   const queryClient = useQueryClient()
   const issue = useMutation({
     mutationFn: () => issueCertificate(held.certification, i18n.language),
@@ -108,8 +110,12 @@ function HeldItem({ held }: { held: HeldCertification }) {
       <div className="flex items-start gap-2">
         <Award aria-hidden className="text-primary mt-0.5 size-5 shrink-0" />
         <div className="min-w-0">
-          <p className="font-medium">{t(`certificates.names.${held.certification}`,
-            { defaultValue: held.certification })}</p>
+          <p className="font-medium">{certificationName(held.certification, held.name, i18n.language, tQb)}</p>
+          {held.sponsorName && (
+            <p className="text-muted-foreground text-sm" data-testid="certificate-issuer">
+              {tQb('certification.issuedBy', { sponsor: held.sponsorName })}
+            </p>
+          )}
           <p className="text-muted-foreground text-sm">
             {t(`certificates.source.${held.source === 'GRANTED' ? 'GRANTED' : 'PASSED'}`)}
             {' · '}

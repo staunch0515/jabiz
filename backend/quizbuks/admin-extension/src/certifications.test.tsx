@@ -8,7 +8,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
 import { expectAccessible } from '@jabiz/admin/testing'
 import CertificationsPage from './CertificationsPage'
-import { CERTIFICATION_PROCESS, DATASET, PATH, PERMISSION } from './ids'
+import { CERTIFICATION_PROCESS, DATASET, PATH, PERMISSION, TEMPLATE } from './ids'
 import { messages } from './messages'
 
 const server = vi.hoisted(() => ({
@@ -16,6 +16,7 @@ const server = vi.hoisted(() => ({
   overview: {} as Record<string, unknown>,
   official: [] as Record<string, unknown>[],
   runProcess: vi.fn(),
+  runQuery: vi.fn(),
   get: vi.fn(),
   post: vi.fn(),
 }))
@@ -27,6 +28,7 @@ vi.mock('@jabiz/admin', async (original) => {
     api: { GET: server.get, POST: server.post },
     unwrap: async (call: Promise<unknown>) => call,
     runProcess: server.runProcess,
+    runQuery: server.runQuery,
     useAuth: () => ({ can: (p: string) => server.permissions.has(p) }),
     UserName: ({ id }: { id: string | null }) => <span data-testid="user-name">{id}</span>,
   }
@@ -68,6 +70,13 @@ beforeEach(() => {
       closedAt: null, recordId: 'h3', kind: 'GRANTED', validUntil: null }
   })
   server.get.mockReset().mockRejectedValue(new ApiError(404, { detail: 'Not found' }))
+  // Q88a: the sponsors' own certifications (the template; narrowed by the company name typed).
+  server.runQuery.mockReset().mockImplementation(async (id: string, options: { params?: { q?: string } }) => {
+    if (id !== TEMPLATE.sponsorCertifications) throw new ApiError(403, { detail: 'Forbidden' })
+    const rows = [{ certificationId: 'sc1', key: 'sp:sc1', sponsorId: SPONSOR, company: 'Keys Co', name: '{"en":"Keyboard expert","ja":"キーボード達人"}',
+      validityDays: 365, certificationVersion: 2, status: 'ACTIVE', createdAt: '2026-11-01T01:00:00Z', rounds: 3, holders: 7 }]
+    return { items: options.params?.q && !'Keys Co'.includes(options.params.q) ? [] : rows, total: 1 }
+  })
   server.post.mockReset().mockImplementation(async (_path: string, options: { params: { path: { resourceId: string } } }) => {
     if (options.params.path.resourceId !== DATASET.officialPublisher) throw new ApiError(403, { detail: 'Forbidden' })
     return { items: server.official.map((attributes) => ({ attributes })) }
@@ -90,6 +99,21 @@ function renderPage() {
 }
 
 describe('the certifications page', () => {
+  it('lists the sponsors’ own certifications (Q88a), named by their rows, narrowed by the company', async () => {
+    renderPage()
+    const section = await screen.findByTestId('sponsor-certifications-section')
+    const row = await within(section).findByTestId('sponsor-certification-row')
+    expect(row).toHaveTextContent('Keys Co')
+    expect(within(row).getByTestId('sponsor-certification-name')).toHaveTextContent('Keyboard expert')
+    expect(row).toHaveTextContent('365 days')
+    expect(row).toHaveTextContent('7')
+    expect(within(row).getByTestId('sponsor-certification-sponsor')).toHaveAttribute('href', PATH.user(SPONSOR))
+    const user = userEvent.setup()
+    await user.type(within(section).getByTestId('sponsor-certifications-search'), 'Nobody{enter}')
+    await waitFor(() => expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.sponsorCertifications,
+      expect.objectContaining({ params: expect.objectContaining({ q: 'Nobody' }) })))
+    await waitFor(() => expect(within(section).queryByTestId('sponsor-certification-row')).not.toBeInTheDocument())
+  })
   it('shows the rounds and the records by hand', async () => {
     const { container } = renderPage()
     const rows = await screen.findAllByTestId('round-row')

@@ -86,7 +86,8 @@ describe('the understanding quizzes (Q86)', () => {
   it('parses a certification required, as an edge to a node of its own', () => {
     const json = JSON.stringify([{ requiredPublicationId: null, certification: 'REFERRER', requirement: 'PASSED',
       name: null, held: true, roundPublicationId: ROUND }, { requiredPublicationId: 'p1', requirement: 'ANSWERED', name: 'B' }])
-    expect(edgesOf(json)).toEqual([{ id: certificationNodeId('REFERRER'), requirement: 'PASSED', certification: 'REFERRER' },
+    expect(edgesOf(json)).toEqual([{ id: certificationNodeId('REFERRER'), requirement: 'PASSED', certification: 'REFERRER',
+      certificationNames: null },
       { id: 'p1', requirement: 'ANSWERED' }])
     expect(certificationOfNode(certificationNodeId('REFERRER'))).toBe('REFERRER')
     expect(certificationOfNode('p1')).toBeNull()

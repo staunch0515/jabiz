@@ -112,6 +112,9 @@ const en = {
       TERMS_SPONSOR_UNDERSTOOD: 'Understood: Sponsor Terms',
       BENEFIT_PROVIDER: `${BRAND.names.en} Benefit Provider Certification`, BENEFIT_SPONSOR: `${BRAND.names.en} Benefit Sponsor Certification` },
     hold: 'Hold', held: 'Held', required: 'Certification required',
+    /** Q88a: a sponsor's own certification, given by passing its round. */
+    gives: 'Passing gives: {{name}}', issuedBy: 'Issued by {{sponsor}}', ofSponsor: '{{name}} · {{sponsor}}',
+    sponsorNode: 'Certification of {{sponsor}}',
   },
   /** Q86: the card offered after accepting an agreement. */
   understanding: {
@@ -266,6 +269,8 @@ const zh: typeof en = {
       TERMS_SPONSOR_UNDERSTOOD: '已理解：商户条款',
       BENEFIT_PROVIDER: `${BRAND.names.zh} 权益提供认证`, BENEFIT_SPONSOR: `${BRAND.names.zh} 权益赞助认证` },
     hold: '持有', held: '已持有', required: '需要持有认证',
+    gives: '合格授予：{{name}}', issuedBy: '由 {{sponsor}} 颁发', ofSponsor: '{{name}} · {{sponsor}}',
+    sponsorNode: '{{sponsor}} 的认证',
   },
   understanding: {
     title: '确认你的理解',
@@ -417,6 +422,8 @@ const ja: typeof en = {
       TERMS_SPONSOR_UNDERSTOOD: '理解済み：スポンサー規約',
       BENEFIT_PROVIDER: `${BRAND.names.ja} 特典提供認定`, BENEFIT_SPONSOR: `${BRAND.names.ja} 特典協賛認定` },
     hold: '保有する', held: '保有済み', required: '認定が必要です',
+    gives: '合格で付与：{{name}}', issuedBy: '{{sponsor}} 発行', ofSponsor: '{{name}} · {{sponsor}}',
+    sponsorNode: '{{sponsor}} の認定',
   },
   understanding: {
     title: '理解の確認',

@@ -6,12 +6,13 @@ description: >-
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
-entities: [QbPublicationCard, QbSponsorPage, QbSponsor, QbPublicationPrerequisite]
+entities: [QbPublicationCard, QbSponsorPage, QbSponsor, QbPublicationPrerequisite, QbSponsorCertification]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:public:QbPublicationCard
   QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
   QbSponsor: urn:jabiz:dataset:public:QbSponsor
   QbPublicationPrerequisite: urn:jabiz:dataset:public:QbPublicationPrerequisite
+  QbSponsorCertification: urn:jabiz:dataset:public:QbSponsorCertification
 params:
   handle: { like: QbSponsorPage.handle, required: true, description: The page's handle (lowercase) }
 results:
@@ -51,9 +52,13 @@ SELECT
     (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
                 'requiredPublicationId', pr.{{QbPublicationPrerequisite.requiredPublicationId}},
                 'certification', pr.{{QbPublicationPrerequisite.certification}},
+                -- Q88a: a sponsor's own certification is named by its row (the catalog's by the front ends' texts).
+                'certificationNames', psc.{{QbSponsorCertification.name}},
                 'requirement', pr.{{QbPublicationPrerequisite.requirement}})
                 ORDER BY pr.{{QbPublicationPrerequisite.requiredPublicationId}}), '[]') AS text)
      FROM {{QbPublicationPrerequisite}} pr
+     LEFT JOIN {{QbSponsorCertification}} psc
+         ON 'sp:' || psc.{{QbSponsorCertification.certificationId}} = pr.{{QbPublicationPrerequisite.certification}}
      -- Q86: a certification required is named as such (no publication to find); a required publication only when listed.
      LEFT JOIN {{QbPublicationCard}} rc
          ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}

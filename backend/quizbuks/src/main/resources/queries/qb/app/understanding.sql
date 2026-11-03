@@ -3,10 +3,11 @@ id: qb.app.understanding
 description: >-
   The understanding certifications (Q86): whether the cards show, which the caller holds and until when, and the
   publication of each one's current round (none: no round open now); the platform's tree handle (D-Q86-4)
-entities: [SysParam, QbCertificationRound, QbCertificationRecord, QbPublicationCard, QbAttempt]
+entities: [SysParam, QbCertificationRound, QbCertificationRecord, QbPublicationCard, QbAttempt, QbSponsorCertification]
 datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
@@ -59,5 +60,5 @@ SELECT
        AND rp.{{QbPublicationCard.endAt}} > CAST(:at AS timestamptz)) AS roundPublicationId,
     (SELECT CAST(sp.{{SysParam.value}} AS text) FROM {{SysParam}} sp
      WHERE sp.{{SysParam.paramKey}} = 'qb.tree.platform-handle') AS platformHandle
-FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
 WHERE cat.cert IN ('TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD', 'TERMS_SPONSOR_UNDERSTOOD')

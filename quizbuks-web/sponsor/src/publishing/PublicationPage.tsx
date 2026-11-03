@@ -1,6 +1,6 @@
 import { formatDateTime } from '@jabiz/client'
-import { Alert, AlertDescription, AlertTitle, Button, DescriptionList, PageHeader, PageState } from '@jabiz/ui'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Alert, AlertDescription, AlertTitle, Button, ConfirmDialog, DescriptionList, notify, PageHeader, PageState } from '@jabiz/ui'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
@@ -24,6 +24,10 @@ import { PublicationSummary, StatusBadge, useEndReasonLabel, useVersionOf } from
 import { PreviewButton } from '../preview/PreviewButton'
 import { previewOfPublication } from '../preview/paths'
 import { VersionNotice } from './VersionNotice'
+import { closePublicationRound, readPublicationRound, roundQuery, type PublicationRound } from '../certifications/api'
+import '../certifications/messages'
+import { certificationName } from '../qb/certifications'
+import { problemText } from '../qb/problems'
 
 /** The way back to the list, above a publication's title. */
 function Breadcrumb() {
@@ -53,6 +57,40 @@ function SentBack({ publication }: { publication: Publication }) {
       <AlertTitle>{t('publishing.detail.sentBack')}</AlertTitle>
       <AlertDescription>{text}</AlertDescription>
     </Alert>
+  )
+}
+
+/**
+ * Q88a: the round a submitted publication is of a certification (D-Q88-3): open since when, or closed when; the
+ * sponsor closes it (passes from then on do not count), never changes it.
+ */
+function RoundSection({ publicationId, round, disabled }: { publicationId: string; round: PublicationRound;
+  disabled: boolean }) {
+  const { t } = useTranslation(SPONSOR)
+  const queryClient = useQueryClient()
+  const close = useMutation({
+    mutationFn: () => closePublicationRound(publicationId),
+    onSuccess: (out) => {
+      notify.success(t('certifications.round.closedNotice'))
+      queryClient.setQueryData(roundQuery(publicationId), { ...round, closedAt: out.closedAt })
+    },
+    onError: (error) => notify.error(problemText(error)),
+  })
+  return (
+    <div className="flex flex-col gap-2" data-testid="publication-round-section" data-closed={!!round.closedAt}>
+      <h2 className="text-sm font-medium">{t('certifications.round.title')}</h2>
+      <p className="text-muted-foreground text-sm">
+        {round.closedAt ? t('certifications.round.closed', { when: formatDateTime(round.closedAt) })
+          : t('certifications.round.open', { when: formatDateTime(round.addedAt) })}
+        {' · '}{t('certifications.round.frozen')}
+      </p>
+      {!round.closedAt && (
+        <ConfirmDialog title={t('certifications.round.closeTitle')} description={t('certifications.round.closeText')}
+          confirmLabel={t('certifications.round.close')} onConfirm={() => close.mutate()}
+          trigger={<Button variant="outline" size="sm" className="w-fit" disabled={disabled || close.isPending}
+            data-testid="publication-round-close">{t('certifications.round.close')}</Button>} />
+      )}
+    </div>
   )
 }
 
@@ -108,6 +146,10 @@ function PublicationView({ detail, stale, onStale }: {
   // Q76: what a taker must have done first (frozen with it too).
   const prerequisites = useQuery({ queryKey: prerequisitesQuery(publication.publicationId),
     queryFn: () => readPrerequisites(publication.publicationId) })
+  // Q88a: the certification passing it gives (its round), which can only be closed once submitted.
+  const round = useQuery({ queryKey: roundQuery(publication.publicationId),
+    queryFn: () => readPublicationRound(publication.publicationId) })
+  const { t: tQb, i18n } = useTranslation(QB)
   const dates = [
     { key: 'submittedAt', value: publication.submittedAt },
     { key: 'approvedAt', value: publication.approvedAt },
@@ -161,7 +203,10 @@ function PublicationView({ detail, stale, onStale }: {
         tiers,
         conditions: conditions.data,
         prerequisites: prerequisites.data,
+        roundName: round.isPending ? undefined : round.data
+          ? certificationName(round.data.certification, round.data.name, i18n.language, tQb) : null,
       }} />
+      {round.data && <RoundSection publicationId={publication.publicationId} round={round.data} disabled={stale} />}
       {publication.audience === 'INVITED' && (
         <InvitationsSection publicationId={publication.publicationId} status={publication.status} />
       )}

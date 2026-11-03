@@ -1,6 +1,5 @@
 package com.jabiz.quizbuks.publishing;
 
-import com.jabiz.quizbuks.certification.Certifications;
 
 import com.jabiz.entity.EntityDefinition;
 
@@ -47,7 +46,7 @@ public final class QbPrerequisites {
         eb.field("requiredPublicationId", f -> f.physicalColumn("required_publication_id").immutable(true)
             .asReference(QbPublications.PUBLICATION));
         eb.field("certification", f -> f.physicalColumn("certification").immutable(true)
-            .asCode(Certifications.DICTIONARY, Certifications.keys()));
+            .asText(40));
         eb.field("requirement", f -> f.physicalColumn("requirement").immutable(true).required(true)
             .asCode(DICTIONARY, PASSED, ANSWERED));
         eb.field("version", f -> f.physicalColumn("version").asVersion());

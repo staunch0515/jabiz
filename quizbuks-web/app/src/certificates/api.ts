@@ -1,5 +1,6 @@
 import { fileNameOf, runProcess, sessionFetch, toApiError } from '@jabiz/client'
-import { publicQuery, serverNow } from '../qb/legal'
+import { certificationNamesOf } from '../qb/certifications'
+import { publicQuery, serverNow, type I18nText } from '../qb/legal'
 import { hrefOf } from '../qb/router'
 import { CERTIFICATE_LAYOUT, CERTIFICATE_PROCESS, CERTIFICATE_TEMPLATE } from './ids'
 
@@ -18,6 +19,9 @@ export interface HeldCertification {
   /** The certificate of this holding, once issued. */
   certificateId: string | null
   verifyKey: string | null
+  /** Q88a: a sponsor's own certification's names by language and the sponsor's name; null for the catalog's. */
+  name?: I18nText | null
+  sponsorName?: string | null
 }
 
 export async function readMyCertifications(): Promise<HeldCertification[]> {
@@ -79,6 +83,9 @@ export function takerPagePath(handle: string): string {
 export interface VerifiedCertificate {
   certification: string
   certificationVersion: number
+  /** Q88a: a sponsor's own certification's names and the sponsor as the issuer; null for the catalog's. */
+  certificationNames: I18nText | null
+  issuerName: string | null
   holderName: string
   heldFrom: string
   validUntil: string
@@ -89,13 +96,15 @@ export interface VerifiedCertificate {
 /** The certificate of a key (as printed, in any case); null when there is none. */
 export async function readVerifiedCertificate(key: string): Promise<VerifiedCertificate | null> {
   const rows = await publicQuery<VerifiedCertificate>(CERTIFICATE_TEMPLATE.verify, { key: key.toLowerCase() }, 1)
-  return rows[0] ?? null
+  return rows[0] ? withNames(rows[0]) : null
 }
 
 /** A certificate on a public certification page. */
 export interface PublicCertificate {
   handle: string
   certification: string
+  certificationNames: I18nText | null
+  issuerName: string | null
   holderName: string
   heldFrom: string
   validUntil: string
@@ -106,7 +115,12 @@ export interface PublicCertificate {
 export async function readTakerPage(handle: string, now: number = serverNow()): Promise<PublicCertificate[]> {
   const rows = await publicQuery<PublicCertificate>(CERTIFICATE_TEMPLATE.takerPage, { handle: handle.toLowerCase() },
     20)
-  return rows.filter((row) => Date.parse(row.validUntil) > now)
+  return rows.filter((row) => Date.parse(row.validUntil) > now).map(withNames)
+}
+
+/** The names column as the template gives it (a JSON text) read into an object. */
+function withNames<T extends { certificationNames: I18nText | null }>(row: T): T {
+  return { ...row, certificationNames: certificationNamesOf(row.certificationNames) }
 }
 
 export type CertificateState = 'VALID' | 'EXPIRED' | 'REVOKED'

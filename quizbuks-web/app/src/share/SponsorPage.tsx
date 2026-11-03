@@ -17,6 +17,7 @@ import { prerequisitesOf } from '../qb/play'
 import { readPagePublications, readPublicSponsorPage, readSponsorTree } from './api'
 import { Link, useLocation } from '../qb/router'
 import { TechTree, TreeProgress, type TechTreeNode } from '../qb/TechTree'
+import { certificationName, isSponsorCertification } from '../qb/certifications'
 import { certificationNodeId, certificationOfNode, progressOf } from '../qb/tree'
 import { readUnderstanding, UNDERSTANDING_QUERY } from '../qb/understanding'
 import { sharePath } from './share'
@@ -78,28 +79,36 @@ export function SponsorPage({ handle }: { handle: string }) {
   const platformHandle = understanding.data?.[0]?.platformHandle ?? null
   const treeNodes: TechTreeNode[] = useMemo(() => {
     const rows = tree.data ?? []
-    const certifications = new Map<string, { held: boolean; roundPublicationId: string | null }>()
+    const certifications = new Map<string, { held: boolean; roundPublicationId: string | null;
+      names: Record<string, string> | null }>()
     for (const row of rows) {
       for (const c of row.certifications) {
         const before = certifications.get(c.key)
         certifications.set(c.key, { held: c.held || !!before?.held,
-          roundPublicationId: c.roundPublicationId ?? before?.roundPublicationId ?? null })
+          roundPublicationId: c.roundPublicationId ?? before?.roundPublicationId ?? null,
+          names: c.names ?? before?.names ?? null })
       }
     }
     return [
       ...rows.map((row): TechTreeNode => ({ id: row.id, name: row.name, requires: row.requires, state: row.state,
         live: row.live, nodeKind: 'publication' })),
+      // Q88a (D-Q88-4): a sponsor's own certification is a node of this sponsor's tree, named by its row.
       ...[...certifications.entries()].map(([key, c]): TechTreeNode => ({ id: certificationNodeId(key),
-        name: tQb(`certification.names.${key}`), requires: [], nodeKind: 'certification', state: c.held ? 'LIT' : 'LOCKED',
-        subtitle: tQb('tree.certification') })),
+        name: certificationName(key, c.names, lang, tQb), requires: [], nodeKind: 'certification',
+        state: c.held ? 'LIT' : 'LOCKED',
+        subtitle: isSponsorCertification(key) ? tQb('certification.sponsorNode', { sponsor: page.data?.company ?? '' })
+          : tQb('tree.certification') })),
     ]
-  }, [tree.data, tQb])
+  }, [tree.data, tQb, lang, page.data?.company])
   const rounds = useMemo(() => new Map((tree.data ?? []).flatMap((row) => row.certifications
     .filter((c) => c.roundPublicationId).map((c) => [c.key, c.roundPublicationId!]))), [tree.data])
   const hrefOf = (node: TechTreeNode): string | null => {
     const key = certificationOfNode(node.id)
     if (!key) return `/p/${encodeURIComponent(node.id)}`
-    if (platformHandle && platformHandle !== handle) return `/s/${encodeURIComponent(platformHandle)}`
+    // A sponsor's own certification (Q88a) is earned here: its round, never the platform's tree.
+    if (!isSponsorCertification(key) && platformHandle && platformHandle !== handle) {
+      return `/s/${encodeURIComponent(platformHandle)}`
+    }
     const round = rounds.get(key)
     return round ? `/p/${encodeURIComponent(round)}` : null
   }

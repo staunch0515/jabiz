@@ -22,7 +22,7 @@ const HELD = { certification: 'SPONSOR_APPLY', source: 'PASSED', heldFrom: '2026
 
 const VERIFIED: VerifiedCertificate = { certification: 'SPONSOR_APPLY', certificationVersion: 1, holderName: 'Mei',
   heldFrom: '2026-10-01T00:00:00Z', validUntil: '2099-10-01T00:00:00Z', issuedAt: '2026-10-02T00:00:00Z',
-  revokedAt: null }
+  revokedAt: null, certificationNames: null, issuerName: null }
 
 interface Server {
   signedIn?: boolean

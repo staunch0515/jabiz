@@ -325,16 +325,21 @@ public final class CertificationProcesses {
             .outputMapper(ctx -> ctx.get(OUTPUT, ClaimOutput.class))
             .step("Lock the caller's certifications", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbCertifications.lockName(ctx.request().actorId())))
-            .step("Load the rounds", QueryEntities.<ProcessContext>of(
-                QbCertifications.defaultDataset(QbCertifications.ROUND),
-                ctx -> rounds(certification(input(ctx, ClaimInput.class).certification())), ROUNDS))
-            .step("Load the caller's records", QueryEntities.<ProcessContext>of(
-                QbCertifications.defaultDataset(QbCertifications.RECORD),
-                ctx -> records(ctx.request().actorId(), input(ctx, ClaimInput.class).certification()), RECORDS))
+            // Q88a: the certification may be a sponsor's (sp:<id>), whose row is read with the rounds and records.
+            .step("Load the rounds, the caller's records and the sponsor's certification", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.ROUND),
+                    ctx -> roundsOf(input(ctx, ClaimInput.class).certification()), ROUNDS),
+                QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.RECORD),
+                    ctx -> records(ctx.request().actorId(), input(ctx, ClaimInput.class).certification()), RECORDS),
+                QueryEntities.query(QbSponsorCertifications.DEFAULT_DATASET,
+                    ctx -> RoundHolders.sponsorRows(List.of(input(ctx, ClaimInput.class).certification())),
+                    RoundHolders.SPONSOR_ROWS)))
             .step("Load the caller's attempts on them", QueryEntities.<ProcessContext>of(
                 QbPublications.defaultDataset(com.jabiz.quizbuks.play.QbPlay.ATTEMPT), ctx -> attempts(ctx), ATTEMPTS))
             .compute("Record the passes", (metadata, ctx) -> {
-                Certification certification = certification(input(ctx, ClaimInput.class).certification());
+                String key = input(ctx, ClaimInput.class).certification();
+                Certification certification = RoundHolders.resolve(ctx, key)
+                    .orElseThrow(() -> new EntityNotFoundException("Certification " + key));
                 List<EntityInstance> rounds = list(ctx, ROUNDS);
                 List<CertificationHolding.Entry> entries = new ArrayList<>(list(ctx, RECORDS).stream()
                     .map(CertificationProcesses::entry).toList());
@@ -426,8 +431,12 @@ public final class CertificationProcesses {
     }
 
     static EntityQuery rounds(Certification certification) {
-        return EntityQuery.builder().where(new QueryPredicate.Eq("certification", certification.key()))
-            .limit(MAX_ROWS).build();
+        return roundsOf(certification.key());
+    }
+
+    /** The rounds of the certification {@code key} names (the catalog's, or a sponsor's, Q88a). */
+    static EntityQuery roundsOf(String key) {
+        return EntityQuery.builder().where(new QueryPredicate.Eq("certification", key)).limit(MAX_ROWS).build();
     }
 
     static EntityQuery records(Object userId, String certification) {

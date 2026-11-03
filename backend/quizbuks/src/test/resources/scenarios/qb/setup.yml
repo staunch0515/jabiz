@@ -42,7 +42,7 @@ steps:
         qb.withdrawal.bank.fee, qb.withdrawal.bank.cooldown-hours, qb.audience.billing.enabled,
         qb.audience.price.fallback, qb.audience.fee.refund-unused-days, qb.understanding.enabled,
         qb.topup.targets, qb.topup.default-target, qb.kudos.buy.enabled, qb.kudos.sell.enabled, qb.transfer.fee-rate, qb.fee.monthly, qb.fee.tax-rate,
-        qb.fee.default-billing-mode, qb.fee.overdue.block-submit]
+        qb.fee.default-billing-mode, qb.fee.overdue.block-submit, qb.certification.sponsor-rounds.enabled]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review,
         qb.sod.control-changes, qb.sod.security-administration]

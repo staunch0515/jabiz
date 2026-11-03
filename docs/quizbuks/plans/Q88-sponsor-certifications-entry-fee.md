@@ -129,3 +129,20 @@ Q87 §7 把"答题的能力"列成四项：**给学分**（已有）、**给认�
 5. **D-Q88-13**：不退（含被下架）。备选：被总部下架且会话未开始答题时退。
 6. **D-Q88-14**：开关只管能不能设报名费，已上架的照收。
 7. 两个 PR 的拆分（Q88a 认证、Q88b 报名费）与编号。
+
+## 10. 实施记录（Q88a，2026-11-03，分支 `1.3/quizbuks-88a-sponsor-certifications`）
+
+按 §2 的 A 部分实现；与计划不同的地方：
+
+1. **迁移是 `V72__quizbuks_sponsor_certifications.sql`**，只建一张表。四张表（轮、记录、前置、证书）的 `certification` 列原来是目录的码字段（`asCode`），为了放下 `sp:<id>` 改成了文本字段（列不变、没有迁移）；目录的字典仍给前端与后台用。
+2. **证书的签发方就是商户**（D-Q88-6 写的是"多一个事实'颁发方'"）：平台的单据版式把每个事实都印出来，空的也印标签，所以没有加事实，而是让当事方"签发方"在商户认证时写商户的公司名（`qb.me.certificate-issuer` 的可选参数 `issuerName`，签发流程只对 `sp:` 键给出），平台认证照旧是 `qb.issuer.name`。核实页与公开认证页另给 `issuerName`，App 显示"由 <商户> 颁发"。
+3. **目录与商户的行在同一段 SQL 里**：`Certifications.sqlValues()` 现在写的是 `(SELECT * FROM (VALUES …) UNION ALL SELECT 'sp:' || id, version, days * 86400 FROM qb_sponsor_certification)`，十个模板（计划说八个：Q89 的两个权益模板也写这段）都换成它，`CertificationTemplatesTest` 照旧核对。
+4. **`QB_SPONSOR_ROUND_SET` 不单独取一步**，而是向导"时间与奖励"一步档位下面的一个下拉（只在商户有启用的认证时显示；开关关着时建不出认证，所以也不显示），随每次保存在前置之后调用；没有加第五步。非草稿在发布页显示"合格授予的认证"一节与"关闭这一轮"。
+5. **0 奖励的检查没有移动**：`QB_TIER_NO_REWARD` 本来就在提交时由 `PublicationReadiness` 经 `TierCoverage.check` 检查，这次只是多一个输入"已是一轮"，保存草稿的 `problems` 也按它给（向导在设轮之前会列出"没有奖励"的问题，设了就消失）。
+6. **删除草稿连带删除它的轮**（计划没写）；复制发布不复制轮。停用认证时关闭它进行中的轮。
+7. **`QB_MY_CERTIFICATIONS` 的读法改了**：原来读目录全部的轮再读本人的会话（≤ 500 轮），现在先读本人合格的会话，再读这些发布的轮（目录的与商户的一样），再读涉及的商户认证与商户名；输出多 `name`（多语言）与 `sponsorName`。
+8. 前端的认证名字只经共用的 `qb/certifications.ts`（目录的用文案 `certification.names.<键>`，商户的用模板给的 `certificationNames`）；树的边多带 `certificationNames`，商户自己的认证在自己的树上是节点、不链到平台之树。
+9. 后台扩展的"认证"页只加了一节只读的"商户自己的认证"（模板 `qb.admin.sponsor-certifications`，按公司名搜索），没有在"轮次"表里解析 `sp:` 键的名字（显示键）。
+10. e2e `sponsor-certification.spec.ts`：商户定义认证 → 0 奖励的发布登记为轮并提交 → 答题者看到"合格授予"、合格、"我的认证"签发证书、核实页写颁发方 → 商户的列表计 1 人 → 总部的模板列出它。
+
+未做：D-Q88-8 的人工授予与收回商户认证；Q88b（报名费）另一个 PR。

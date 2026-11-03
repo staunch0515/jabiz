@@ -3,13 +3,14 @@ id: qb.app.sponsor-tree
 description: >-
   A sponsor's tree as the caller stands on it (Q85, D-Q85-6): the sponsor's public publications open now and those
   the caller answered, each with what it requires first (Q76) and the caller's state on it
-entities: [QbPublicationCard, QbSponsorPage, QbPublicationPrerequisite, QbAttempt, QbCertificationRound, QbCertificationRecord]
+entities: [QbPublicationCard, QbSponsorPage, QbPublicationPrerequisite, QbAttempt, QbCertificationRound, QbCertificationRecord, QbSponsorCertification]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
   QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
 params:
   handle: { like: QbSponsorPage.handle, required: true, description: The sponsor's page (lowercase) }
@@ -78,7 +79,7 @@ SELECT
                                 AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
                          OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
                                 SELECT 1
-                                FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+                                FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
                                 CROSS JOIN LATERAL (
                                     SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
                                            rec.{{QbCertificationRecord.validUntil}} AS until
@@ -104,13 +105,15 @@ SELECT
     (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
                 'requiredPublicationId', pr.{{QbPublicationPrerequisite.requiredPublicationId}},
                 'certification', pr.{{QbPublicationPrerequisite.certification}},
+                -- Q88a: a sponsor's own certification is named by its row (the catalog's by the front ends' texts).
+                'certificationNames', psc.{{QbSponsorCertification.name}},
                 'requirement', pr.{{QbPublicationPrerequisite.requirement}},
                 'name', coalesce(CAST(rc.{{QbPublicationCard.translations}} AS jsonb) -> CAST(:lang AS text) ->> 'name',
                                  rc.{{QbPublicationCard.name}}),
                 -- Q86: whether the caller holds the certification, and its current round to send them to.
                 'held', pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
                     SELECT 1
-                    FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+                    FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
                     CROSS JOIN LATERAL (
                         SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
                                rec.{{QbCertificationRecord.validUntil}} AS until
@@ -141,6 +144,8 @@ SELECT
                                          AND rp.{{QbPublicationCard.endAt}} > CAST(:at AS timestamptz)))
                 ORDER BY pr.{{QbPublicationPrerequisite.requiredPublicationId}}), '[]') AS text)
      FROM {{QbPublicationPrerequisite}} pr
+     LEFT JOIN {{QbSponsorCertification}} psc
+         ON 'sp:' || psc.{{QbSponsorCertification.certificationId}} = pr.{{QbPublicationPrerequisite.certification}}
      LEFT JOIN {{QbPublicationCard}} rc
          ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
      WHERE pr.{{QbPublicationPrerequisite.publicationId}} = n.id) AS prerequisites

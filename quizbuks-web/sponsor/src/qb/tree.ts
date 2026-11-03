@@ -6,6 +6,8 @@
  * then a position for every node. No drawing library: the picture is inline SVG (`TechTree.tsx`).
  */
 
+import { certificationNamesOf } from './certifications'
+
 export type TreeState = 'LIT' | 'ANSWERED' | 'IN_PROGRESS' | 'UNLOCKED' | 'LOCKED' | 'CLOSED'
 
 export const TREE_STATES: readonly TreeState[] = ['LIT', 'ANSWERED', 'IN_PROGRESS', 'UNLOCKED', 'LOCKED', 'CLOSED']
@@ -22,6 +24,8 @@ export interface TreeEdge {
   requirement: Requirement
   /** Q86: the certification's key when the edge leads to one (its node's id is `certificationNodeId(key)`). */
   certification?: string | null
+  /** Q88a: a sponsor's own certification's names by language, as the template gives them; null for the catalog's. */
+  certificationNames?: Record<string, string> | null
 }
 
 /** The id of a certification's node on a tree (Q86, D-Q86-7): the same for every tree. */
@@ -55,7 +59,8 @@ export function edgesOf(value: unknown): TreeEdge[] {
     if (!item || typeof item !== 'object') return []
     const p = item as Record<string, unknown>
     if (typeof p.certification === 'string' && p.certification) {
-      return [{ id: certificationNodeId(p.certification), requirement: 'PASSED', certification: p.certification }]
+      return [{ id: certificationNodeId(p.certification), requirement: 'PASSED', certification: p.certification,
+        certificationNames: certificationNamesOf(p.certificationNames) }]
     }
     if (typeof p.requiredPublicationId !== 'string') return []
     return [{ id: p.requiredPublicationId, requirement: p.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED' }]

@@ -9,7 +9,9 @@ import { problemText } from '../qb/problems'
 import { QB } from '../qb/messages'
 import { Link, useLocation } from '../qb/router'
 import { StateLabel, TechTree, type TechTreeNode } from '../qb/TechTree'
+import { certificationName, isSponsorCertification } from '../qb/certifications'
 import { certificationNodeId, certificationOfNode, progressOf, type TreeState } from '../qb/tree'
+import '../certifications/messages'
 import { publicationPath, PUBLICATIONS_PATH } from '../publishing/paths'
 import { transactionsOf } from '../transactions/api'
 import { nodeOf, PEOPLE_PAGE, PEOPLE_STATES, readPeople, readPerson, readTree, TREE_QUERY, USER_KEY,
@@ -24,7 +26,7 @@ import './messages'
  */
 export function TreePage() {
   const { t } = useTranslation(SPONSOR)
-  const { t: tQb } = useTranslation(QB)
+  const { t: tQb, i18n } = useTranslation(QB)
   const id = useId()
   const { search } = useLocation()
   const [at] = useState(() => new Date().toISOString())
@@ -44,8 +46,16 @@ export function TreePage() {
   const lit = userKey && person.isSuccess && person.data ? person.data : null
   // Q86 (D-Q86-7): a certification required is drawn as a platform node, without counts (the platform's, not the
   // sponsor's customers'); it has no panel.
-  const certifications = useMemo(() => [...new Set(rows.flatMap((row) => row.requires
-    .flatMap((edge) => edge.certification ? [edge.certification] : [])))], [rows])
+  // Q88a: the sponsor's own certification is named by its row (the edge carries the names), the catalog's by the texts.
+  const certifications = useMemo(() => {
+    const found = new Map<string, Record<string, string> | null>()
+    for (const row of rows) {
+      for (const edge of row.requires) {
+        if (edge.certification) found.set(edge.certification, edge.certificationNames ?? found.get(edge.certification) ?? null)
+      }
+    }
+    return [...found.entries()]
+  }, [rows])
   const nodes = useMemo<TechTreeNode[]>(() => [
     ...rows.map((row): TechTreeNode => ({
       id: row.id, name: row.name,
@@ -53,9 +63,10 @@ export function TreePage() {
       live: row.live, nodeKind: 'publication',
       ...(lit ? { state: lit.states[row.id] ?? 'CLOSED' } : { counts: row.counts }),
     })),
-    ...certifications.map((key): TechTreeNode => ({ id: certificationNodeId(key), name: tQb(`certification.names.${key}`),
-      requires: [], nodeKind: 'certification', subtitle: tQb('tree.certification') })),
-  ], [rows, shownKeys, lit, certifications, tQb])
+    ...certifications.map(([key, names]): TechTreeNode => ({ id: certificationNodeId(key),
+      name: certificationName(key, names, i18n.language, tQb), requires: [], nodeKind: 'certification',
+      subtitle: isSponsorCertification(key) ? t('certifications.round.ownNode') : tQb('tree.certification') })),
+  ], [rows, shownKeys, lit, certifications, tQb, t, i18n.language])
   const publications = useMemo(() => nodes.filter((node) => node.nodeKind !== 'certification'), [nodes])
   const hasEdges = (tree.data ?? []).some((row) => row.requires.length > 0)
   const current = rows.find((row) => row.id === selected) ?? null
