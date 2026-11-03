@@ -52,6 +52,7 @@ class ProcessAccessIT extends QbItSupport {
         // event; Q6's top-up confirmation as the system), underfunded publications back on (an event), the
         // statistics (a job).
         Map.entry("QB_ATTEMPT_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_BENEFIT_ALLOCATION_RELEASE", ProcessAccess.INTERNAL),
         Map.entry("QB_PENDING_SETTLE", ProcessAccess.INTERNAL),
         Map.entry("QB_PENDING_PAY", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_FUNDS_RESTORED", ProcessAccess.INTERNAL),
