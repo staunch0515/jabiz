@@ -269,7 +269,10 @@ public final class ManualCredits {
         content.put("sponsorId", topUp.get("sponsorId"));
         content.put("code", topUp.get("transferCode"));
         content.put("kind", topUp.get("manualKind"));
-        content.put("target", TopUpTargets.of(topUp.get("target")));
+        if (!QbTopUps.KUDOS.equals(TopUpTargets.of(topUp.get("target")))) {
+            // Only a cash credit names its target: the content hash of credits recorded before Q87 is unchanged.
+            content.put("target", TopUpTargets.of(topUp.get("target")));
+        }
         content.put("amount", amount);
         content.put("reason", topUp.get("manualReason"));
         content.put("receivedOn", receivedOn == null ? null : receivedOn.toString());

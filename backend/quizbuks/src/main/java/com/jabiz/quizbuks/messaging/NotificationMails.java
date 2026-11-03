@@ -41,6 +41,10 @@ public final class NotificationMails {
     public static final MailTemplate TOPUP_PAID = MailTemplate.define("qb.topup.paid", t -> t
         .category(MailCategory.TRANSACTIONAL).param("amount"));
 
+    /** Q87: a sponsor's top-up is in their cash account (not Kudos yet). */
+    public static final MailTemplate TOPUP_PAID_CASH = MailTemplate.define("qb.topup.paid-cash", t -> t
+        .category(MailCategory.TRANSACTIONAL).param("amount"));
+
     /** Kudos granted to a sponsor by hand are on their wallet (Q18b): no money was received, so no receipt. */
     public static final MailTemplate TOPUP_GRANTED = MailTemplate.define("qb.topup.granted", t -> t
         .category(MailCategory.TRANSACTIONAL).param("amount"));
@@ -75,7 +79,7 @@ public final class NotificationMails {
         .category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "reason", "completions"));
 
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
-        TOPUP_PAID, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
+        TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
         PUBLICATION_ENDED);
 
     /**

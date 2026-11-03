@@ -1,9 +1,10 @@
 /*---
 id: qb.system.recon-fee-receivable
 description: Whether account 1130 (platform fees receivable) agrees with the open and overdue invoices, by sponsor, and 2160 in all with the cash caches (the daily reconciliation, Q87; differences only)
-entities: [QbFeeInvoice, QbWallet, LedgerEntry, LedgerAccount]
+entities: [QbFeeInvoice, QbFeeCharge, QbWallet, LedgerEntry, LedgerAccount]
 datasets:
   QbFeeInvoice: urn:jabiz:dataset:default:QbFeeInvoice
+  QbFeeCharge: urn:jabiz:dataset:default:QbFeeCharge
   QbWallet: urn:jabiz:dataset:default:QbWallet
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
@@ -23,10 +24,22 @@ SELECT CAST('FEES_RECEIVABLE' AS varchar(30)) AS checkCode,
        CAST(coalesce(i.i_sponsor, l.l_party) AS varchar(128)) AS sponsorId,
        coalesce(i.i_owed, 0) AS expected, coalesce(l.l_balance, 0) AS actual
 FROM (
-    SELECT x.{{QbFeeInvoice.sponsorId}} AS i_sponsor, sum(x.{{QbFeeInvoice.total}}) AS i_owed
-    FROM {{QbFeeInvoice}} x
-    WHERE x.{{QbFeeInvoice.status}} IN ('OPEN', 'OVERDUE')
-    GROUP BY x.{{QbFeeInvoice.sponsorId}}) i
+    SELECT o.o_sponsor AS i_sponsor, sum(o.o_total) AS i_owed
+    FROM (
+        SELECT x.{{QbFeeInvoice.sponsorId}} AS o_sponsor, x.{{QbFeeInvoice.total}} AS o_total
+        FROM {{QbFeeInvoice}} x
+        WHERE x.{{QbFeeInvoice.status}} IN ('OPEN', 'OVERDUE')
+        UNION ALL
+        -- A postpaid charge is receivable from the day it is made; its month's invoice comes on the 2nd of the next.
+        SELECT c.{{QbFeeCharge.sponsorId}}, c.{{QbFeeCharge.total}}
+        FROM {{QbFeeCharge}} c
+        WHERE c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
+          AND NOT EXISTS (
+              SELECT 1 FROM {{QbFeeInvoice}} v
+              WHERE v.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
+                AND v.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}}
+                AND v.{{QbFeeInvoice.chargeId}} IS NULL)) o
+    GROUP BY o.o_sponsor) i
 FULL OUTER JOIN (
     SELECT e.{{LedgerEntry.dimension1}} AS l_party,
            sum(CASE WHEN e.{{LedgerEntry.direction}} = 'DEBIT' THEN e.{{LedgerEntry.amount}}

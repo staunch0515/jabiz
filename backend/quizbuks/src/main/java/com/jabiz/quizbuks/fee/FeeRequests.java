@@ -238,9 +238,15 @@ public final class FeeRequests {
                         ? approvalInput(ctx).entityId() : null), FOUND))
                 .step("Lock the sponsor's wallet", HoldLock.<ProcessContext>exclusive(ctx -> first(ctx, FOUND) == null
                     ? null : QbWallets.lockName(QbWallets.SPONSOR, first(ctx, FOUND).get("sponsorId"))))
-                .step("Read the request, the invoice, the cash and the approval", QueryEntities.<ProcessContext>all(
+                .step("Read the request, the sponsor, the invoice, the cash and the approval", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbFees.defaultDataset(QbFees.REQUEST), ctx -> FeeProcesses.byId("requestId",
                         first(ctx, FOUND) == null ? null : String.valueOf(first(ctx, FOUND).id())), ROW),
+                    // A fee by hand still needs an approved sponsor (the charge refuses otherwise): rejected, not stuck.
+                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("userId", FeeGate.ids(first(ctx, FOUND) == null ? null
+                                : first(ctx, FOUND).get("sponsorId"))),
+                            new QueryPredicate.Eq("reviewStatus", SponsorStatus.APPROVED)))).limit(1).build(), SPONSOR),
                     QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> FeeProcesses.byId("invoiceId",
                         first(ctx, FOUND) == null ? null : (String) first(ctx, FOUND).get("invoiceId")), INVOICE),
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(QbWallets.CASH,
@@ -323,11 +329,21 @@ public final class FeeRequests {
                 ctx.put(STATUS_AFTER, QbFees.REJECTED);
                 return;
             }
+            if (manual && first(ctx, SPONSOR) == null) {
+                ctx.put(STATUS_AFTER, QbFees.REJECTED);
+                return;
+            }
             ctx.put(manual ? DO_CHARGE : DO_VOID, true);
             ctx.put(STATUS_AFTER, QbFees.DONE);
         } else if (ApprovalEntities.REJECTED.equals(input.status()) && rejected(ctx, row)) {
             ctx.put(STATUS_AFTER, QbFees.REJECTED);
         }
+    }
+
+    /** Who approved: the last decision read (the requester prepared it; the platform keeps them apart). */
+    private static Object approver(ProcessContext ctx) {
+        List<EntityInstance> decisions = list(ctx, DECISIONS);
+        return decisions.isEmpty() ? approvalInput(ctx).preparerId() : decisions.getLast().get("approverId");
     }
 
     /** Whether the stored request (not the event) says that the request, as it is, was rejected. */
@@ -360,7 +376,7 @@ public final class FeeRequests {
             Map<String, Object> voided = new LinkedHashMap<>();
             voided.put("status", QbFees.VOID);
             voided.put("voidedAt", ctx.opTime());
-            voided.put("voidedBy", approvalInput(ctx).preparerId());
+            voided.put("voidedBy", approver(ctx));
             voided.put("voidReason", row.get("reason"));
             voided.put("voidRequestedBy", row.get("requestedBy"));
             ctx.changes().update(QbFees.INVOICE, invoice.id(), invoice.version(), voided);

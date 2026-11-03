@@ -20,7 +20,7 @@ permissions: [qb.fee.system]
 -- A prepaid invoice's charge is the one it names; a postpaid month's are the sponsor's postpaid charges of the month.
 -- The postings whose source is one of them, and the invoice's own payment, that no reversal names yet.
 WITH charges AS (
-    SELECT c.{{QbFeeCharge.chargeId}} AS charge_id
+    SELECT c.{{QbFeeCharge.chargeId}} AS ch_id
     FROM {{QbFeeInvoice}} i
     JOIN {{QbFeeCharge}} c ON (i.{{QbFeeInvoice.chargeId}} IS NOT NULL
                                    AND CAST(c.{{QbFeeCharge.chargeId}} AS text) = i.{{QbFeeInvoice.chargeId}})
@@ -35,7 +35,7 @@ SELECT t.{{LedgerTransaction.transactionId}} AS transactionId
 FROM {{LedgerTransaction}} t
 WHERE t.{{LedgerTransaction.reversesTransactionId}} IS NULL
   AND ((t.{{LedgerTransaction.sourceEntity}} = 'QbFeeCharge'
-        AND t.{{LedgerTransaction.sourceId}} IN (SELECT CAST(charge_id AS text) FROM charges))
+        AND t.{{LedgerTransaction.sourceId}} IN (SELECT CAST(ch_id AS text) FROM charges))
        OR (t.{{LedgerTransaction.sourceEntity}} = 'QbFeeInvoice' AND t.{{LedgerTransaction.sourceId}} = :invoiceId))
   AND NOT EXISTS (SELECT 1 FROM {{LedgerTransaction}} r
                   WHERE r.{{LedgerTransaction.reversesTransactionId}} = t.{{LedgerTransaction.transactionId}})

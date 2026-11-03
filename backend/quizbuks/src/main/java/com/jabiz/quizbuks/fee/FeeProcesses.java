@@ -156,6 +156,8 @@ public final class FeeProcesses {
     static final String CASH_WALLET = "cashWallet";
     static final String EXISTING = "existing";
     static final String CHARGES = "charges";
+    /** How many charges of a month are read for its invoice: more than any sponsor has; as many is a failure. */
+    static final int MAX_CHARGES = 500;
     static final String CHARGE_ID = "chargeId";
     static final String CHARGE_POSTING = "chargePosting";
     static final String PAY_INPUT = "payInput";
@@ -391,7 +393,7 @@ public final class FeeProcesses {
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.Eq("sponsorId", invoiceInput(ctx).sponsorId()),
                             new QueryPredicate.Eq("period", invoiceInput(ctx).period()),
-                            new QueryPredicate.Eq("billingMode", FeeRules.POSTPAID)))).limit(500).build(), CHARGES),
+                            new QueryPredicate.Eq("billingMode", FeeRules.POSTPAID)))).limit(MAX_CHARGES).build(), CHARGES),
                     QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.Eq("sponsorId", invoiceInput(ctx).sponsorId()),
@@ -415,6 +417,10 @@ public final class FeeProcesses {
         InvoiceInput input = invoiceInput(ctx);
         BigDecimal amount = BigDecimal.ZERO;
         BigDecimal tax = BigDecimal.ZERO;
+        if (list(ctx, CHARGES).size() >= MAX_CHARGES) {
+            // Never invoice short of what is receivable: the item fails and is seen, instead of a lasting difference.
+            throw new IllegalStateException("More than " + MAX_CHARGES + " postpaid charges in one month");
+        }
         for (EntityInstance charge : list(ctx, CHARGES)) {
             amount = amount.add(money(charge.get("amount")));
             tax = tax.add(money(charge.get("tax")));

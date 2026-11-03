@@ -93,7 +93,7 @@ class ReconChecksTest {
         ReconChecks.Result result = ReconChecks.result(List.of(), 10);
         assertThat(result.status()).isEqualTo(ReconChecks.OK);
         assertThat(result.total()).isZero();
-        assertThat(result.summary()).startsWith("{\"LEDGER_ZERO\":0,").contains("\"TOPUP_FEE\":0");
+        assertThat(result.summary()).startsWith("{\"FEES_RECEIVABLE\":0,\"LEDGER_ZERO\":0,").contains("\"TOPUP_FEE\":0");
     }
 
     @Test

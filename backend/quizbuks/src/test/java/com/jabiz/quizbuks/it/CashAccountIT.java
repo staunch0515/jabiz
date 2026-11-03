@@ -61,6 +61,16 @@ class CashAccountIT extends TopUpItSupport {
         assertThat(topUp(topUpId)).containsEntry("status", "PAID");
         assertThat(lines("QbTopUp", topUpId)).containsExactly("1110 DEBIT 3000", "2160 CREDIT 3000 @" + sponsor);
         assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("3000");
+        // The receipt and the mail say the money went into the cash account, not into Kudos (the issuer named first).
+        param(QbParams.ISSUER_NAME, "QuizBuks Operations K.K.");
+        assertThat(items("qb.sponsor.topup-receipt", sponsorToken(sponsor), Map.of("params",
+            Map.of("topUpId", topUpId, "language", "en"))).getFirst().get("credited").toString())
+            .isEqualTo("3,000 (into the cash account)");
+        assertThat(run("QB_TOPUP_RECEIPT_ISSUE", sponsorToken(sponsor), body("topUpId", topUpId, "language", "en"))
+            .get("documentRunId")).isNotNull();
+        deliverEvents();
+        assertThat(query("SELECT template FROM sys_mail_message WHERE user_id = ?::uuid", sponsor))
+            .extracting(row -> row.get("template")).contains("qb.topup.paid-cash").doesNotContain("qb.topup.paid");
         assertThat(wallet(sponsor, QbWallets.SPONSOR)).isEmpty();
         assertThat(outboxEvents(QbWallets.SETTLE_EVENT, "sponsorId", sponsor)).isZero();
         Map<String, Object> mine = myWallet(sponsor);

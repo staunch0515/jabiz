@@ -91,13 +91,22 @@ public final class FeeRules {
      *
      * @param unpaid the total of their open and overdue invoices
      */
-    public record Standing(String billingMode, BigDecimal creditLimit, BigDecimal unpaid, boolean overdue) {
+    public record Standing(String billingMode, BigDecimal creditLimit, BigDecimal unpaid, boolean overdue,
+        boolean moreUnpaid) {
+
+        public Standing(String billingMode, BigDecimal creditLimit, BigDecimal unpaid, boolean overdue) {
+            this(billingMode, creditLimit, unpaid, overdue, false);
+        }
 
         /**
          * Whether unpaid fees stop the sponsor from converting cash to Kudos and submitting publications (D-Q87-5):
          * prepaid, anything unpaid; postpaid, more unpaid than the credit limit, or anything overdue.
          */
         public boolean blocked() {
+            if (moreUnpaid) {
+                // More unpaid invoices than were read: whatever their sum, the sponsor is stopped.
+                return true;
+            }
             BigDecimal owed = unpaid == null ? BigDecimal.ZERO : unpaid;
             if (owed.signum() <= 0) {
                 return false;

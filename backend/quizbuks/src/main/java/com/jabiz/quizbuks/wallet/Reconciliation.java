@@ -47,7 +47,10 @@ public final class Reconciliation {
     public static final String TOTALS_TEMPLATE = "qb.system.recon-totals";
     public static final String TOPUPS_TEMPLATE = "qb.system.recon-topups";
     public static final String TAKERS_TEMPLATE = "qb.system.recon-taker-wallets";
-    public static final String TRANSFERS_TEMPLATE = "qb.system.recon-transfers"; static final String CASH_TEMPLATE = "qb.system.recon-sponsor-cash"; static final String RECEIVABLE_TEMPLATE = "qb.system.recon-fee-receivable";
+    public static final String TRANSFERS_TEMPLATE = "qb.system.recon-transfers";
+    /** Q87: the cash accounts against 2160, and the fees receivable against 1130. */
+    static final String CASH_TEMPLATE = "qb.system.recon-sponsor-cash";
+    static final String RECEIVABLE_TEMPLATE = "qb.system.recon-fee-receivable";
 
     public record ReconcileInput(@NotNull Instant scheduledTime) {}
 

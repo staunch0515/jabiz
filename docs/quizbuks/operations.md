@@ -499,7 +499,7 @@ AI 为运营商（或总部，`direct`）找商家、调研、写体验问卷与
   `qb.transfer.fee-rate`（答题者提现的比例抽成，与固定费 `qb.transfer.fee` 相加、向下取整，`0`）、`qb.fee.monthly`（每商户每月的平台费，`0` = 不收，也不出账单）、`qb.fee.tax-rate`（消费税率，`0.10`）、
   `qb.fee.default-billing-mode`（`PREPAID`）、`qb.fee.overdue.block-submit`（有未付账单时拦提交与换学分，`true`）；普通参数 `qb.fee.due-days`（账单到期天数，`30`）。
   抽成 `qb.creator-fee-rate` 两处都保留（结算、提现）：需求方决定上线时设为 `0`（受控变更），什么时候收、收多少都只改参数。
-- **部署后**：运行一次 `QB_SETUP`（新科目 2160 / 1130 / 4120 / 2150、新权限 `qb.fee.manage` / `qb.fee.billing`、九个受控参数与审批规则 `qb.fee-request.review` 的提案），发布提案；科目映射多四项 `qb.journal.account.2160 / 1130 / 4120 / 2150`（不设即下个月的分录导出被拒 `QB_JOURNAL_ACCOUNT_UNMAPPED`）；
+- **部署后**：运行一次 `QB_SETUP`（新科目 2160 / 1130 / 4120 / 2150、新权限 `qb.fee.manage` / `qb.fee.billing`、九个受控参数与审批规则 `qb.fee-request.review` 的提案），**随即发布提案**（同 Q10b 的做法：提案发布之前，提交发布、充值、换学分被拒 `PARAM_NOT_FOUND` / `QB_TOPUP_UNAVAILABLE`，每日转账 `INVALID_PARAMS`；不在流程里给缺省值）；科目映射多四项 `qb.journal.account.2160 / 1130 / 4120 / 2150`（不设即下个月的分录导出被拒 `QB_JOURNAL_ACCOUNT_UNMAPPED`）；
   账单 PDF 的开具方沿用收据的 `qb.issuer.*`（没设名称时商户下载账单被拒 `QB_FEE_PARAMS`）。
 - **预付 / 后付**：缺省全平台预付；运营商（或总部财务）在「运营商 → 商户」给单个商户设后付与信用额（理由必填，`QB_OPERATOR_BILLING_SET`，审计中可查）。预付的商户记费时立即从现金扣、不够即一张 `OPEN` 账单；后付的商户每月 2 日 01:17（日本时间）出上月的账单。
   **有未付账单的商户不能换学分、不能提交新发布**（预付：任何未付；后付：未付合计超过信用额；开关 `qb.fee.overdue.block-submit`），其他一切照常；不自动停用。

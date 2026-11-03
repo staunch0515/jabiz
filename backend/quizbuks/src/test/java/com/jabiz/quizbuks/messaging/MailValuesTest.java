@@ -75,7 +75,7 @@ class MailValuesTest {
 
     @Test
     void onlyTheSponsorsTwoNotificationsMayBeTurnedOffAndOnlyAtTheSponsorConsole() {
-        assertThat(NotificationMails.ALL).hasSize(10);
+        assertThat(NotificationMails.ALL).hasSize(13);
         assertThat(NotificationMails.ALL).filteredOn(MailTemplate::unsubscribable).extracting(MailTemplate::name)
             .containsExactly("qb.publication.funds-short", "qb.publication.ended");
         assertThat(NotificationMails.ALL).filteredOn(MailTemplate::unsubscribable).allSatisfy(template -> {

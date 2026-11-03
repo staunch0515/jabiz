@@ -53,7 +53,8 @@ public final class FeeGate {
             overdue |= QbFees.OVERDUE.equals(invoice.get("status"));
         }
         return new FeeRules.Standing(FeeRules.billingModeOf(sponsor == null ? null : sponsor.get("billingMode"),
-            defaultBillingMode), sponsor == null ? null : money(sponsor.get("creditLimit")), unpaid, overdue);
+            defaultBillingMode), sponsor == null ? null : money(sponsor.get("creditLimit")), unpaid, overdue,
+            list(ctx, UNPAID).size() >= MAX_UNPAID);
     }
 
     /**
