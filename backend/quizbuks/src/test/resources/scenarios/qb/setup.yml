@@ -37,7 +37,8 @@ steps:
         qb.operator.withdrawal.cooldown-hours, qb.topup.bank.min,
         qb.topup.bank.max, qb.bank.receiving.bank, qb.bank.receiving.branch, qb.bank.receiving.account-type,
         qb.bank.receiving.account-number, qb.bank.receiving.account-holder, qb.withdrawal.bank.enabled,
-        qb.withdrawal.bank.fee, qb.withdrawal.bank.cooldown-hours]
+        qb.withdrawal.bank.fee, qb.withdrawal.bank.cooldown-hours, qb.audience.billing.enabled,
+        qb.audience.price.fallback, qb.audience.fee.refund-unused-days]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review,
         qb.sod.control-changes, qb.sod.security-administration]
