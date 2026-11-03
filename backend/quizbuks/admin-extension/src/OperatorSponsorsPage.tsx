@@ -102,6 +102,7 @@ function BanDialog({ sponsor, lift, onClose }: { sponsor: OperatorSponsor; lift:
 export default function OperatorSponsorsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const id = useId()
+  const queryClient = useQueryClient()
   const review = useLabels(DICTIONARY.sponsorReviewStatus)
   const billingMode = useLabels(DICTIONARY.billingMode)
   const points = usePoints()
