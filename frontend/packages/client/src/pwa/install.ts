@@ -49,6 +49,14 @@ const QQ_APP = /\sQQ\/\d/i
 const IN_APP = [WECHAT, QQ_APP,
   /\bLine\/|Weibo|DingTalk|AlipayClient|Instagram|FBAN|FBAV|FB_IAB|\bKAKAOTALK\b|; wv\)/i]
 
+/**
+ * Whether the page runs in another app's browser (WeChat, QQ, an Android web view): passkeys and installing do not work
+ * there, so pages point to "open in the browser" (pure).
+ */
+export function inAppBrowser(userAgent: string): boolean {
+  return IN_APP.some((app) => app.test(userAgent))
+}
+
 /** Chrome itself (Brave and others say the same) and Samsung Internet: they offer `beforeinstallprompt`. */
 const PROMPTING = / Chrome\/[\d.]+ (?:Mobile )?Safari\/[\d.]+$|SamsungBrowser\//
 

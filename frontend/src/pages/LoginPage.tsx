@@ -15,7 +15,7 @@ import { BrandTitle } from '../extension/BrandTitle'
  */
 export default function LoginPage() {
   const { t, i18n } = useTranslation()
-  const { signIn, verify, signedIn, ready } = useAuth()
+  const { signIn, verify, signInWithPasskey, verifyWithPasskey, signedIn, ready } = useAuth()
   const navigate = useNavigate()
   const navigation = useRouterNavigation()
   const location = useLocation()
@@ -45,7 +45,8 @@ export default function LoginPage() {
       passwordResetPath="/auth/password-reset"
       providers={providers.data ?? []}
       startProvider={startProviderSignIn}
-      auth={{ signIn, verify }}
+      auth={{ signIn, verify, signInWithPasskey, verifyWithPasskey }}
+      passkey
       footer={commit ? t('app.build', { commit }) : undefined}
     />
   )

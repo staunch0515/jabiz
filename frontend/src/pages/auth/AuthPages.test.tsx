@@ -8,6 +8,7 @@ import JoinPage from './JoinPage'
 import PasswordResetPage from './PasswordResetPage'
 import VerifyEmailPage from './VerifyEmailPage'
 import InvitationPage from './InvitationPage'
+import PasskeyConfirmPage from './PasskeyConfirmPage'
 
 type Answer = { status: number; body?: unknown }
 
@@ -50,6 +51,7 @@ function page(path: string) {
           <Route path="/auth/join" element={<JoinPage />} />
           <Route path="/auth/password-reset" element={<PasswordResetPage />} />
           <Route path="/auth/invitation" element={<InvitationPage />} />
+          <Route path="/auth/passkey-confirm" element={<PasskeyConfirmPage />} />
           <Route path="/login" element={<div data-testid="login" />} />
         </Routes>
       </MemoryRouter>
@@ -253,6 +255,23 @@ describe('account pages', () => {
       await i18n.changeLanguage('ja')
       page('/auth/password-reset')
       expect(screen.getByRole('button', { name: 'リンクを送る' })).toBeTruthy()
+    })
+  })
+
+  describe('PasskeyConfirmPage', () => {
+    it('takes the token out of the address and asks a signed-out person to sign in first (decision D71)', async () => {
+      vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {})
+      Object.defineProperty(navigator, 'credentials', { configurable: true, value: {} })
+      try {
+        const posts = server({})
+        const { container } = page('/auth/passkey-confirm?entry=admin&token=k1')
+        expect(window.location.search).not.toContain('token')
+        expect(await screen.findByTestId('passkey-confirm-state')).toHaveTextContent('Sign in on this device first')
+        expect(posts).toEqual([])
+        await expectAccessible(container)
+      } finally {
+        Reflect.deleteProperty(navigator, 'credentials')
+      }
     })
   })
 

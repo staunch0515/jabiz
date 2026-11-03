@@ -321,13 +321,17 @@ jabizApp {
   名称"显示输入的字符"不含"密码"，按名称定位密码栏时不会同时命中；表单提交时恢复隐藏；17p）。`AuthFrame`（品牌与标题由属性给出，带语言与外观切换）、`SignInForm`（密码、二次验证码、
   绑定三步，身份提供方按钮，"忘记密码 / 注册"链接；403 `EMAIL_NOT_VERIFIED` 提示并可重发验证邮件，`SIGN_IN_REFUSED` 只给通用文案；
   17m：`emailLink` 在入口开启了 `email-link` 时把"以邮件链接登录"（`EmailLinkForm`，链接回到 `returnTo`）放在最上面、密码在"或用密码登录"之下，
-  `userNameLabel="email"` 把名字一栏写作"邮箱"（服务端照旧接受用户名或邮箱）；身份提供方始终在最后）、
+  `userNameLabel="email"` 把名字一栏写作"邮箱"（服务端照旧接受用户名或邮箱）；17zf-b：`passkey` 在入口收通行密钥（`passkeys`）且浏览器能用时，
+  在密码之上给"用通行密钥登录"，名字一栏 `autocomplete="username webauthn"` 并以浏览器的建议（conditional mediation）等待通行密钥（按钮或提交密码先停下它），
+  二次验证码一步与绑定一步各有"改用通行密钥"；在微信、QQ 与安卓网页视图中只说"在浏览器打开"；`auth` 属性的 `signInWithPasskey` / `verifyWithPasskey` 可选；身份提供方始终在最后）、
   `SignUpForm` + `SignUpSent`（邮箱、两次密码、显示名、邮件语言，应用的附加字段经 `extra` 插槽；202 后一律提示查收邮件并可重发）、
   `MailLinkPage`（按路径末段分派到 `VerifyEmailPanel`、`JoinPanel`、`PasswordResetConfirm`，无令牌的 `password-reset` 为 `PasswordResetRequest`）、
   `MfaCodeStep`、`MfaEnrollment`、`MfaSettings`（本人的两步验证：状态与剩余恢复码数，未绑定时绑定；默认调用 `/api/auth/mfa*`，可经属性替换；`refreshKey` 改变即重读；15c-2，后台安全设置与示范门户共用）、`StepUpProvider`、
   `OidcButtons`（按提供方的 `kind` 画标志，Google 为品牌指南的四色"G"（D44），16f-1；Facebook 与 LINE 的标志与 `layout="icons"`（"其他方式登录"下的一排圆形图标按钮，`SignInForm` 的 `oidcLayout`）见 D61 第 5 条，16zk；`purpose="signUp"` 时写作"其他方式注册"，`SignUpForm` 的 `oidc` 把它放进注册卡片，`note` 是卡片底部的小字，17u）、`OidcCallback`（登录与本人关联共用：按
   `startIdentityLink` 记下的用途完成关联后调用 `onLinked`；403 `OIDC_ACCOUNT_EXISTS` 时说明用原方式登录后关联）、`LinkedIdentities`（本人的外部账号：列表、关联（需要时先问当前密码）、
-  确认后解除；10 §12，16f-1）、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
+  确认后解除；10 §12，16f-1）、`Passkeys`（本人的通行密钥：列表（添加与最近使用时间、"已同步"）、改名、确认后删除、添加（需要时先问当前密码，
+  没有密码的用户改为寄确认邮件，链接打开 `MailLinkPage` 的 `passkey-confirm`）；入口不收通行密钥时不显示；`useEntryPasskeys()` 读入口是否收；`passkeyDeviceName()` 为新通行密钥取名；
+  10 §15.16，17zf-b）、`StepUpProvider` 的对话框在用户有通行密钥时另给"使用通行密钥"、`ChangePasswordForm`（`POST /api/auth/account/password`，16m）、
   `SessionList`（本人当前入口的有效会话：设备、地址、最近使用与登录时间，本机标记；确认后结束单个会话（本机即退出登录）或"退出其他全部设备"，
   提示按 `effectiveWithinSeconds` 给出生效时间；16g，10 §15.9；另导出 `SessionDeviceIcon`、`sessionDeviceName`、`effectiveMinutes` 供应用自绘列表）、
   `MailPreferences`（本人的邮件：当前入口的每个可退订通知一个开关（`Switch` 加 `Label`，名称为服务端给出的显示名），其后"您关闭的其他邮件"（其他入口、用户关闭过的，可重新开启），邮件语言的选择（应用语言多于一种时，含"默认"一项）；每次改动即时保存并以状态提示说明，失败时保持原值；读取失败时有"重试"；界面语言变化时重读显示名；别处设置的邮件语言经 `onMailLanguageChange` 立即显示；默认调用下面的函数，可经属性替换；18 §5.6，16s，D49）、

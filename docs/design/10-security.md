@@ -1043,6 +1043,9 @@ jabiz:
 - **限流**：登录与其选项计 `PASSKEY`（按地址，不按名字：登录时不填名字）；第二步与 step-up 计 `SECOND_FACTOR`（按地址与该用户），同 §4.1。
 - **抹除与审计**：`ACCOUNT_ERASE` 删除用户的通行密钥（§17.1）。名称是用户自己的话，审计中遮蔽（`auditMasked`），公钥为敏感字段；
   挑战码只有用户编号、至多几分钟即过期删去，不另清除。
+- **前端**（17zf-b）：`@jabiz/client` 的 `passkeySupport()`（`available` / `in-app-browser` / `unsupported`）、`passkeyAutofill()`、`AuthState.signInWithPasskey` /
+  `verifyWithPasskey`、`enrolPasskey`、`stepUpWithPasskey`、`listPasskeys` / `addPasskey(proof, name)` / `requestPasskeyConfirmation` / `renamePasskey` / `removePasskey`
+  （关闭系统对话框即 `PasskeyCancelledError`，什么也不发送）；积木见 12"登录与账户的积木"。原生外壳的 `webcredentials` 见 17 §3.2。
 - **测试**：`PasskeyPropertiesTest`、`PasskeyVerifierTest`、`PasskeyIT`（软件实现的认证器，测试夹具 `TestAuthenticator`：ES256、"none"、可答错来源、不验证用户、回退计数）、`ErasureIT`。
 
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
