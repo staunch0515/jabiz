@@ -92,6 +92,8 @@ public class SponsorErasure {
                         "fromName", "lastError"),
                     ErasedEntity.delete(QbRewards.REDEEM_TOKEN, "sponsorId"),
                     ErasedEntity.delete(QbRewards.STAFF, "sponsorId"),
+                    // Q89c: the passes for the sponsor's counter.
+                    ErasedEntity.delete(QbRewards.PASS, "handlerId"),
                     ErasedEntity.delete(QbSponsorProducts.QUIZ_LINK, "ownerId"),
                     ErasedEntity.delete(QbSponsorProducts.PRODUCT, "userId", "name", "description", "image",
                         "shopUrl", "translations"),

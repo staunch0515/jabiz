@@ -1,0 +1,118 @@
+import { addMessages } from '@jabiz/client'
+import { APP } from '../messages'
+
+/** The taker's pass (Q89c), part of the app's namespace `app`: shown by the taker, read at the counter. */
+const en = {
+  pass: {
+    show: 'Show my pass',
+    title: 'Your pass for this prize',
+    intro: 'Show this to the staff at the counter: they scan the code or type the six digits.',
+    qrAlt: 'QR code of your prize pass',
+    digits: 'Or read out: {{digits}}',
+    digitsLabel: 'Digits',
+    left_one: 'Good for {{count}} more second.',
+    left_other: 'Good for {{count}} more seconds.',
+    expired: 'This pass ran out.',
+    renew: 'Show a new one',
+    collected: 'Handed over. Enjoy!',
+    close: 'Close',
+    qrFailed: 'The code could not be drawn: read out the digits instead.',
+    counter: {
+      title: 'Customer\'s prize',
+      intro: 'Scan the customer\'s pass, or type the six digits they read out.',
+      scan: 'Scan the customer\'s code',
+      digits: 'Six digits',
+      digitsHint: 'As the customer reads them out, spaces allowed.',
+      read: 'Look up',
+      prize: 'Prize',
+      publication: 'Quiz',
+      taker: 'Customer',
+      value: 'Value',
+      handOver: 'Hand over',
+      handedOver: 'Prize handed over.',
+      another: 'Next customer',
+      scanned: 'Pass scanned at the counter',
+      notStaffTitle: 'This is a customer\'s prize pass',
+      notStaff: 'It is for the staff at the sponsor\'s counter to scan. If it is yours, show it at the counter.',
+      toDesk: 'Back to the counter',
+    },
+  },
+}
+
+const zh: typeof en = {
+  pass: {
+    show: '出示领奖码',
+    title: '这个奖品的领奖码',
+    intro: '请出示给柜台的店员：扫描二维码或输入 6 位数字。',
+    qrAlt: '领奖码的二维码',
+    digits: '或报出数字：{{digits}}',
+    digitsLabel: '数字',
+    left_one: '还有 {{count}} 秒有效。',
+    left_other: '还有 {{count}} 秒有效。',
+    expired: '这个领奖码已过期。',
+    renew: '换一个新码',
+    collected: '已交付，请享用！',
+    close: '关闭',
+    qrFailed: '二维码没能显示，请报出数字。',
+    counter: {
+      title: '顾客的奖品',
+      intro: '扫描顾客的领奖码，或输入顾客报出的 6 位数字。',
+      scan: '扫顾客的码',
+      digits: '6 位数字',
+      digitsHint: '按顾客报出的输入，可以带空格。',
+      read: '查询',
+      prize: '奖品',
+      publication: '测验',
+      taker: '顾客',
+      value: '价值',
+      handOver: '交付',
+      handedOver: '奖品已交付。',
+      another: '下一位顾客',
+      scanned: '在柜台扫到的领奖码',
+      notStaffTitle: '这是顾客的领奖码',
+      notStaff: '它是给商户柜台的店员扫描的。如果是你的，请在柜台出示。',
+      toDesk: '回到柜台',
+    },
+  },
+}
+
+const ja: typeof en = {
+  pass: {
+    show: '引き換えパスを表示',
+    title: 'この賞品のパス',
+    intro: '窓口のスタッフに見せてください。コードを読み取るか、6 桁の数字を入力します。',
+    qrAlt: '引き換えパスの QR コード',
+    digits: 'または数字を伝える：{{digits}}',
+    digitsLabel: '数字',
+    left_one: 'あと {{count}} 秒有効です。',
+    left_other: 'あと {{count}} 秒有効です。',
+    expired: 'このパスは期限切れです。',
+    renew: '新しいパスを表示',
+    collected: 'お渡ししました。お楽しみください！',
+    close: '閉じる',
+    qrFailed: 'コードを表示できませんでした。数字を伝えてください。',
+    counter: {
+      title: 'お客様の賞品',
+      intro: 'お客様のパスを読み取るか、お客様が伝える 6 桁の数字を入力してください。',
+      scan: 'お客様のコードを読み取る',
+      digits: '6 桁の数字',
+      digitsHint: 'お客様が伝えたとおりに。空白があっても構いません。',
+      read: '照会',
+      prize: '賞品',
+      publication: 'クイズ',
+      taker: 'お客様',
+      value: '価値',
+      handOver: '渡す',
+      handedOver: '賞品を渡しました。',
+      another: '次のお客様',
+      scanned: '窓口で読み取ったパス',
+      notStaffTitle: 'これはお客様の引き換えパスです',
+      notStaff: 'スポンサーの窓口のスタッフが読み取るためのものです。ご自身のものなら窓口で見せてください。',
+      toDesk: '窓口に戻る',
+    },
+  },
+}
+
+export const passMessages = { en, zh, ja }
+
+addMessages(APP, passMessages)

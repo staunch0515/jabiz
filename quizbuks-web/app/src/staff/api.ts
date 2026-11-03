@@ -1,7 +1,7 @@
 import { ApiError, runProcess, runQuery } from '@jabiz/client'
 import { minuteNow } from '../qb/legal'
 import { hrefOf } from '../qb/router'
-import { STAFF_CODE, STAFF_PROCESS, STAFF_TEMPLATE } from './ids'
+import { PASS_PROCESS, STAFF_CODE, STAFF_PROCESS, STAFF_TEMPLATE } from './ids'
 
 /*
  * The staff pages' calls (Q39), typed by hand after the Java records of backend/quizbuks `reward.StaffProcesses`.
@@ -155,4 +155,44 @@ export async function readHandledTotals(): Promise<HandledTotals | null> {
     monthCount: Number(row.monthCount ?? 0), monthValue: row.monthValue,
     zone: String(row.zone ?? 'UTC'),
   } : null
+}
+
+/** Q89c: the App's page a taker's pass leads to (`/pass/<key>`, under the app's base), which the counter scans. */
+export function passLink(passKey: string, origin: string = window.location.origin): string {
+  return origin + hrefOf(`/pass/${encodeURIComponent(passKey)}`)
+}
+
+/** `PassProcesses.IssueOutput`: the QR's key and the digits, good for a minute. */
+export interface IssuedPass {
+  redemptionId: string
+  passKey: string
+  passDigits: string
+  expiresAt: string
+}
+
+export const issuePass = (redemptionId: string) => runProcess<IssuedPass>(PASS_PROCESS.issue, { redemptionId })
+
+/** What the counter read: by the QR's key or by the digits, one of them. */
+export type PassRead = { scannedPass: string } | { typedDigits: string }
+
+/** `PassProcesses.CheckOutput`: the prize a pass is for, before handing it over. */
+export interface PassPrize {
+  passId: string
+  redemptionId: string
+  publicationName: string | null
+  description: string | null
+  amount: unknown
+  takerName: string | null
+  status: CounterStatus
+  passExpiresAt: string
+}
+
+export const checkPass = (read: PassRead) => runProcess<PassPrize>(STAFF_PROCESS.passCheck, read)
+
+export const redeemPass = (passId: string) => runProcess<RedemptionOutput>(STAFF_PROCESS.passRedeem, { passId })
+
+/** Six digits as typed: spaces and dashes dropped; null unless exactly six digits are left. */
+export function digitsOf(text: string): string | null {
+  const digits = text.replace(/[\s-]/g, '')
+  return /^\d{6}$/.test(digits) ? digits : null
 }

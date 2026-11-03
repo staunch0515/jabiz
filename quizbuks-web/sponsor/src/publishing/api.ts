@@ -1570,3 +1570,29 @@ export async function readPrerequisites(publicationId: string): Promise<Prerequi
 /** Replaces a draft's prerequisites with these (none: nothing to do first). */
 export const savePrerequisites = (publicationId: string, baseRevision: number | null, prerequisites: Prerequisite[]) =>
   runProcess<PublicationOutput>(PREREQUISITES.save, { publicationId, baseRevision, prerequisites })
+
+/** Q89c: `PassProcesses.CheckOutput`: the prize a taker's pass is for, before handing it over. */
+export interface PassPrize {
+  passId: string
+  redemptionId: string
+  publicationName: string | null
+  description: string | null
+  amount: unknown
+  takerName: string | null
+  status: string
+  passExpiresAt: string
+}
+
+/** Q89c: reads a taker's pass by the six digits they read out (the console has no camera to scan it). */
+export const checkPass = (typedDigits: string) =>
+  runProcess<PassPrize>(PUBLISHING_PROCESS.passCheck, { typedDigits })
+
+/** Q89c: hands over the prize of the pass read. */
+export const redeemPass = (passId: string) =>
+  runProcess<RedemptionOutput>(PUBLISHING_PROCESS.passRedeem, { passId })
+
+/** Six digits as typed: spaces and dashes dropped; null unless exactly six digits are left. */
+export function passDigitsOf(text: string): string | null {
+  const digits = text.replace(/[\s-]/g, '')
+  return /^\d{6}$/.test(digits) ? digits : null
+}

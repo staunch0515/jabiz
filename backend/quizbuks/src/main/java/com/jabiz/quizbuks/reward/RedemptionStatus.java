@@ -24,6 +24,10 @@ public final class RedemptionStatus {
     public static final String KIND_ROTATING = "ROTATING";
     public static final String KIND_PRINTED = "PRINTED";
     public static final List<String> KINDS = List.of(KIND_ROTATING, KIND_PRINTED);
+    /** Q89c: the counter scanned the taker's pass (a code of the taker's, not the sponsor's). */
+    public static final String KIND_PASS = "PASS";
+    /** How a prize was claimed: by one of the sponsor's codes or by the taker's pass. */
+    public static final List<String> CLAIM_KINDS = List.of(KIND_ROTATING, KIND_PRINTED, KIND_PASS);
 
     private RedemptionStatus() {}
 }

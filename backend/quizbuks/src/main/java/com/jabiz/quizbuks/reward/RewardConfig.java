@@ -219,6 +219,45 @@ public class RewardConfig {
             QbPermissions.PUBLICATION_WRITE);
     }
 
+    /** Q89c: the takers' passes, written by the processes only and read by them alone (hashes only). */
+    @Bean
+    EntityDefinition qbRedemptionPassEntity() {
+        return QbRewards.PASS_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbRedemptionPassDataset() {
+        return defaultDataset(QbRewards.PASS);
+    }
+
+    @Bean
+    ProcessDefinition<PassProcesses.IssueInput, PassProcesses.IssueOutput, ProcessContext> qbRedemptionPassIssue() {
+        return PassProcesses.issue();
+    }
+
+    @Bean
+    ProcessDefinition<PassProcesses.CheckInput, PassProcesses.CheckOutput, ProcessContext> qbRedemptionPassCheck() {
+        return PassProcesses.check();
+    }
+
+    @Bean
+    ProcessDefinition<PassProcesses.CheckInput, PassProcesses.CheckOutput, ProcessContext>
+        qbStaffRedemptionPassCheck() {
+        return PassProcesses.staffCheck();
+    }
+
+    @Bean
+    ProcessDefinition<PassProcesses.RedeemInput, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbRedemptionPassRedeem() {
+        return PassProcesses.redeem();
+    }
+
+    @Bean
+    ProcessDefinition<PassProcesses.RedeemInput, RedemptionProcesses.RedemptionOutput, ProcessContext>
+        qbStaffRedemptionPassRedeem() {
+        return PassProcesses.staffRedeem();
+    }
+
     /** Q39: a sponsor's staff, written by the processes only; the sponsor reads theirs, a staff member their place. */
     @Bean
     EntityDefinition qbSponsorStaffEntity() {
@@ -349,7 +388,8 @@ public class RewardConfig {
         return StaticDictionary.define(QbRewards.REDEEM_KIND_DICTIONARY, d -> d
             .item(RedemptionStatus.KIND_ROTATING, "en", "Code on the console's screen", "zh", "商家后台屏幕上的码",
                 "ja", "コンソール画面のコード")
-            .item(RedemptionStatus.KIND_PRINTED, "en", "Printed code", "zh", "打印的固定码", "ja", "印刷したコード"));
+            .item(RedemptionStatus.KIND_PRINTED, "en", "Printed code", "zh", "打印的固定码", "ja", "印刷したコード")
+            .item(RedemptionStatus.KIND_PASS, "en", "Taker's pass", "zh", "答题者的通行码", "ja", "回答者のパス"));
     }
 
     @Bean

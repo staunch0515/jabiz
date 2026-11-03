@@ -327,7 +327,7 @@ public final class StaffProcesses {
      * {@link #SPONSOR_ID}; otherwise 422 {@code QB_NOT_STAFF}; 422 {@code QB_STAFF_SPONSOR_BANNED} when the sponsor is
      * banned.
      */
-    private static <I, O> void staffPlace(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+    static <I, O> void staffPlace(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Hold the caller's place", HoldLock.<ProcessContext>shared(
             ctx -> QbRewards.staffLockName(ctx.request().actorId())));
         loadPlace(pb, PLACE);

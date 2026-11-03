@@ -33,6 +33,8 @@ public final class QbRewards {
     public static final String REDEEM_TOKEN = "QbRedeemToken";
     /** A sponsor's staff (Q39): takers the sponsor named to hand out prizes at the counter. An ordinary table. */
     public static final String STAFF = "QbSponsorStaff";
+    /** Q89c: the pass a taker shows the counter to collect a prize by. */
+    public static final String PASS = "QbRedemptionPass";
     /** The most staff a sponsor may name. */
     public static final int MAX_STAFF = 50;
 
@@ -104,6 +106,8 @@ public final class QbRewards {
     public static final int TOKEN_LENGTH = 64;
     /** How long the console's rotating code is good for; the console asks for a new one every minute. */
     public static final java.time.Duration ROTATING_TOKEN_LIFE = java.time.Duration.ofMinutes(2);
+    /** Q89c (D-Q89-10): how long a taker's pass is good for; the App asks for a new one when it runs out. */
+    public static final java.time.Duration PASS_LIFE = java.time.Duration.ofSeconds(60);
     /** How long the sponsor has to confirm a claim made by scanning their printed code. */
     public static final java.time.Duration PRINTED_CLAIM_LIFE = java.time.Duration.ofMinutes(10);
 
@@ -223,7 +227,7 @@ public final class QbRewards {
         // completes the redemption at once. redeemedBy is who confirmed (the sponsor or, Q39, one of their staff),
         // or who asked for the rotating code that was scanned.
         eb.field("claimKind", f -> f.physicalColumn("claim_kind").processOnly()
-            .asCode(REDEEM_KIND_DICTIONARY, RedemptionStatus.KINDS.toArray(String[]::new)));
+            .asCode(REDEEM_KIND_DICTIONARY, RedemptionStatus.CLAIM_KINDS.toArray(String[]::new)));
         eb.field("claimedAt", f -> f.physicalColumn("claimed_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("confirmBy", f -> f.physicalColumn("confirm_by").processOnly()
@@ -305,6 +309,37 @@ public final class QbRewards {
             .filters("sponsorId", "userId", "addedAt")
             .sorts("addedAt")
             .defaultSort("addedAt", false));
+    });
+
+    /**
+     * Q89c (D-Q89-10): the pass a taker shows at the counter, one per prize (asking again replaces it). The QR's key
+     * and the six digits are never stored: only their hashes, the digits' with the hander's id (so a lookup by digits
+     * stays within one counter's passes). Good for {@link #PASS_LIFE}, used once.
+     */
+    public static final EntityDefinition PASS_ENTITY = EntityDefinition.define(PASS, eb -> {
+        eb.physicalTable("qb_redemption_pass");
+        eb.primaryKey("passId");
+        eb.field("passId", f -> f.physicalColumn("pass_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:redemption-pass"));
+        eb.field("redemptionId", f -> f.physicalColumn("redemption_id").immutable(true).required(true)
+            .asText(36));
+        eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
+        // Who hands the prize over (QbRewards.handlerOf): the counter that may scan it.
+        eb.field("handlerId", f -> f.physicalColumn("handler_id").immutable(true).required(true).asText(128));
+        eb.field("passHash", f -> f.physicalColumn("pass_hash").required(true).asText(64).sensitive());
+        eb.field("digitsHash", f -> f.physicalColumn("digits_hash").required(true).asText(64).sensitive());
+        eb.field("issuedAt", f -> f.physicalColumn("issued_at").required(true).asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("expiresAt", f -> f.physicalColumn("expires_at").required(true).asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("usedAt", f -> f.physicalColumn("used_at").asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("usedBy", f -> f.physicalColumn("used_by").asText(128));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.unique("uk_qb_redemption_pass_redemption", "redemptionId");
+        eb.unique("uk_qb_redemption_pass_hash", "passHash");
+        eb.listView("default", lv -> lv
+            .columns("redemptionId", "userId", "handlerId", "issuedAt", "expiresAt", "usedAt", "usedBy")
+            .filters("redemptionId", "userId", "handlerId", "issuedAt")
+            .sorts("issuedAt")
+            .defaultSort("issuedAt", false));
     });
 
     static BigDecimal decimal(long value) {

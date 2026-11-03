@@ -64,11 +64,19 @@ public final class RewardCodes {
     /** Q39: a staff member does not hand over their own prize. */
     public static final String STAFF_OWN_PRIZE = "QB_STAFF_OWN_PRIZE";
 
+    /** Q89c: the pass scanned or typed is no counter's now (unknown, expired, used or replaced). */
+    public static final String PASS_INVALID = "QB_REDEMPTION_PASS_INVALID";
+    /** Q89c: the digits match more than one of the counter's passes: scan the QR instead. */
+    public static final String PASS_AMBIGUOUS = "QB_REDEMPTION_PASS_AMBIGUOUS";
+    /** Q89c: give the scanned pass or its digits, one of them. */
+    public static final String PASS_INPUT = "QB_REDEMPTION_PASS_INPUT";
+
     public static final List<String> ALL = List.of(CASH_STATE, CASH_DISPUTE_NOTE, CASH_RESOLUTION, CASH_CONFIRM_DUE,
         REDEMPTION_STATE, REDEEM_TOKEN_INVALID, REDEEM_TOKEN_SPONSOR, REDEEM_TOKEN_KIND, REDEMPTION_CLAIM_LAPSED,
         DIGITAL_STATE, DIGITAL_UNREADABLE, DIGITAL_DISPUTE_NOTE, DIGITAL_RESOLUTION, DIGITAL_CODES_EMPTY,
         DIGITAL_CODES_TOO_MANY, DIGITAL_CODE_TOO_LONG, DIGITAL_NOT_POOLED, DIGITAL_POOL_LOCKED, DIGITAL_POOL_ENDED,
-        STAFF_NOT_A_TAKER, STAFF_SELF, STAFF_ELSEWHERE, STAFF_FULL, NOT_STAFF, STAFF_OWN_PRIZE, STAFF_SPONSOR_BANNED);
+        STAFF_NOT_A_TAKER, STAFF_SELF, STAFF_ELSEWHERE, STAFF_FULL, NOT_STAFF, STAFF_OWN_PRIZE, STAFF_SPONSOR_BANNED,
+        PASS_INVALID, PASS_AMBIGUOUS, PASS_INPUT);
 
     private RewardCodes() {}
 }
