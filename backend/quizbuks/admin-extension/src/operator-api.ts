@@ -312,6 +312,48 @@ export function toOperatorSponsor(row: Row): OperatorSponsor {
   }
 }
 
+/** A row of `qb.operator.sponsor-billing` (Q87b): how one of the operator's sponsors pays the platform's fees. */
+export interface OperatorBilling {
+  userId: string
+  company: string
+  contactName: string
+  reviewStatus: string
+  billingMode: 'PREPAID' | 'POSTPAID'
+  /** Set for this sponsor (else the platform's default applies). */
+  own: boolean
+  creditLimit: string
+  unpaidTotal: string
+  overdueCount: number
+  uninvoicedTotal: string
+  billingReason: string | null
+  billingSetBy: string | null
+  billingSetAt: string | null
+}
+
+const amount = (value: unknown): string => (value === null || value === undefined ? '0' : String(value))
+
+/** The operator's own sponsors with their billing, by company; searched by `q`. */
+export async function readOperatorBilling(q: string, offset: number, limit: number, sorts?: SortSpec[]):
+  Promise<Page<OperatorBilling>> {
+  const page = await runQuery<Row>(TEMPLATE.operatorBilling, { params: { q: q.trim() || null }, sorts, offset, limit,
+    count: true })
+  return { total: page.total, items: page.items.map((row): OperatorBilling => ({
+    userId: String(row.userId),
+    company: String(row.company ?? ''),
+    contactName: String(row.contactName ?? ''),
+    reviewStatus: String(row.reviewStatus ?? ''),
+    billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+    own: bool(row.own),
+    creditLimit: amount(row.creditLimit),
+    unpaidTotal: amount(row.unpaidTotal),
+    overdueCount: num(row.overdueCount),
+    uninvoicedTotal: amount(row.uninvoicedTotal),
+    billingReason: str(row.billingReason),
+    billingSetBy: str(row.billingSetBy),
+    billingSetAt: str(row.billingSetAt),
+  })) }
+}
+
 /** The sponsors, newest application first: only the operator's own when `mine`, searched by `q`. */
 export async function readOperatorSponsors(q: string, mine: boolean, offset: number, limit: number, sorts?: SortSpec[]):
   Promise<Page<OperatorSponsor>> {

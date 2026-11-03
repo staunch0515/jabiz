@@ -145,3 +145,13 @@
 - 进现金账户的充值：收据的"计入"一行与邮件 `qb.topup.paid-cash` 写明进了现金账户（Q87a 的收据与邮件说"存入学分"）。
 - 未做：换学分与进现金到账的 `StatementBudgetIT` 预算（§3）；账单的在线支付（D-Q87-6 本来就不做）。
 
+#### Q87b 的补充（另一份实现 #434 中有而 #433 没有的三样）
+
+#434 是按同一份计划独立写出的第二套 Q87b，需求方 2026-11-03 决定以 #433 为准、关闭 #434，其中三样在 #433 的实现之上补上（分支 `1.3/quizbuks-87-fee-followup`）：
+
+- **提前付清**：后付的商户可以在月底账单之前付清尚未开账单的费用（`QB_FEE_PAY_EARLY`，本人、从现金账户；可选只付某个月）。不另建付款表：每笔费用各开一张自己的 `PAID` 账单（`chargeId` 指向它，同预付的做法；子流程 `QB_FEE_SETTLE_ITEM`，一笔一个编号与一笔付款分录），
+  月初的 `qb.fee-invoice` 只合成还没有自己账单的费用（`QB_FEE_INVOICE_ISSUE_ITEM` 读该月的全部账单，`fee-invoices-due`、`fee-invoice-lines`、`fee-invoice-transactions`、`recon-fee-receivable` 与两个费用列表都排除已单独开账单的费用）。钱包页多"尚未开账单"一行与"现在用现金账户付清"按钮（模板 `qb.sponsor.fee-uninvoiced`，`qb.sponsor.wallet.uninvoicedTotal`）。
+  一次至多结清 100 笔（最早的先），不够即 422 `QB_FEE_CASH_SHORT`，没有即 422 `QB_FEE_NOTHING_DUE`。作废一张提前付清的账单与作废预付的一样（分录按来源 `QbFeeCharge` 找）。
+- **运营商的"商户的计费方式"页**：后台扩展 `/qb/operator/billing`（模板 `qb.operator.sponsor-billing`：生效的计费方式与是否单独设定、信用额、未付与逾期、尚未开账单、理由与设定人）；设定对话框与商户页共用（`BillingDialog`）。
+- **e2e** `platform-fees.spec.ts`：财务把商户改为后付 → 商户钱包显示计费方式与信用额；后台的平台费页与运营商的计费页各过一次 axe。记费与账单由 `FeeIT` 覆盖（e2e 里建不出第二位审批人）。
+

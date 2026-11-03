@@ -30,15 +30,17 @@ FROM (
         FROM {{QbFeeInvoice}} x
         WHERE x.{{QbFeeInvoice.status}} IN ('OPEN', 'OVERDUE')
         UNION ALL
-        -- A postpaid charge is receivable from the day it is made; its month's invoice comes on the 2nd of the next.
+        -- A postpaid charge is receivable from the day it is made; its month's invoice comes on the 2nd of the next
+        -- (or its own, when the sponsor paid it early).
         SELECT c.{{QbFeeCharge.sponsorId}}, c.{{QbFeeCharge.total}}
         FROM {{QbFeeCharge}} c
         WHERE c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
           AND NOT EXISTS (
               SELECT 1 FROM {{QbFeeInvoice}} v
               WHERE v.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
-                AND v.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}}
-                AND v.{{QbFeeInvoice.chargeId}} IS NULL)) o
+                AND (v.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)
+                     OR (v.{{QbFeeInvoice.chargeId}} IS NULL
+                         AND v.{{QbFeeInvoice.period}} = c.{{QbFeeCharge.period}})))) o
     GROUP BY o.o_sponsor) i
 FULL OUTER JOIN (
     SELECT e.{{LedgerEntry.dimension1}} AS l_party,

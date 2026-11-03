@@ -22,5 +22,6 @@ WHERE c.{{QbFeeCharge.period}} = :period
   AND c.{{QbFeeCharge.billingMode}} = 'POSTPAID'
   AND NOT EXISTS (SELECT 1 FROM {{QbFeeInvoice}} i
                   WHERE i.{{QbFeeInvoice.sponsorId}} = c.{{QbFeeCharge.sponsorId}}
-                    AND i.{{QbFeeInvoice.period}} = :period
-                    AND i.{{QbFeeInvoice.chargeId}} IS NULL)
+                    AND ((i.{{QbFeeInvoice.period}} = :period AND i.{{QbFeeInvoice.chargeId}} IS NULL)
+                         -- Paid early: on an invoice of its own.
+                         OR i.{{QbFeeInvoice.chargeId}} = CAST(c.{{QbFeeCharge.chargeId}} AS text)))

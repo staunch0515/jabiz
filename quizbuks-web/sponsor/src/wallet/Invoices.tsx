@@ -21,6 +21,7 @@ import { problemText } from '../qb/problems'
 import {
   downloadInvoiceDocument,
   INVOICE_UNPAID,
+  payEarly,
   payInvoice,
   readInvoiceStatuses,
   searchFeeInvoices,
@@ -50,7 +51,8 @@ function useInvoiceStatusLabel() {
 /**
  * The platform's invoices to the sponsor (Q87, `qb.sponsor.fee-invoices`): paid from the cash account when open
  * (`QB_FEE_INVOICE_PAY`; the server checks the state and the cash), their document issued once and downloaded as kept
- * (`QB_FEE_INVOICE_DOCUMENT`). The page records nothing itself.
+ * (`QB_FEE_INVOICE_DOCUMENT`); the postpaid fees not invoiced yet paid early (`QB_FEE_PAY_EARLY`, each getting an
+ * invoice of its own). The page records nothing itself.
  */
 export function Invoices({ wallet }: { wallet: SponsorWallet }) {
   const { t, i18n } = useTranslation(SPONSOR)
@@ -74,6 +76,16 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
     onMutate: () => setNotice(null),
     onSuccess: async (output) => {
       setNotice({ kind: 'ok', text: t('wallet.invoices.paid', { number: output.invoiceNo, cash: formatKudos(output.cashBalance) }) })
+      await queryClient.invalidateQueries({ queryKey: WALLET_QUERY })
+    },
+    onError: (error) => setNotice({ kind: 'error', text: problemText(error) }),
+  })
+  const early = useMutation({
+    mutationFn: () => payEarly(),
+    onMutate: () => setNotice(null),
+    onSuccess: async (output) => {
+      setNotice({ kind: 'ok', text: t(output.remaining > 0 ? 'wallet.invoices.paidEarlyMore' : 'wallet.invoices.paidEarly',
+        { count: output.count, amount: formatKudos(output.total), cash: formatKudos(output.cashBalance), remaining: output.remaining }) })
       await queryClient.invalidateQueries({ queryKey: WALLET_QUERY })
     },
     onError: (error) => setNotice({ kind: 'error', text: problemText(error) }),
@@ -150,7 +162,20 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
         { key: 'billing', label: t('wallet.invoices.billing'), value: t(`wallet.invoices.billingModes.${wallet.billingMode}`) },
         ...(wallet.billingMode === 'POSTPAID'
           ? [{ key: 'credit', label: t('wallet.invoices.creditLimit'), value: formatKudos(wallet.creditLimit) }] : []),
+        ...(wallet.uninvoicedTotal > 0
+          ? [{ key: 'uninvoiced', label: t('wallet.invoices.uninvoiced'), value: formatKudos(wallet.uninvoicedTotal) }] : []),
       ]} />
+      {wallet.uninvoicedTotal > 0 && (
+        <div className="flex flex-wrap items-center gap-3" data-testid="wallet-uninvoiced">
+          <p className="text-muted-foreground text-sm">{t('wallet.invoices.uninvoicedHint', { amount: formatKudos(wallet.uninvoicedTotal) })}</p>
+          <Button size="sm" variant="outline" disabled={cashAvailable < wallet.uninvoicedTotal || early.isPending}
+            aria-busy={early.isPending || undefined} data-testid="invoice-pay-early" onClick={() => early.mutate()}>
+            <Wallet aria-hidden />
+            {cashAvailable >= wallet.uninvoicedTotal ? t('wallet.invoices.payEarly')
+              : t('wallet.invoices.payShort', { cash: formatKudos(cashAvailable) })}
+          </Button>
+        </div>
+      )}
       {notice && (
         <Alert variant={notice.kind === 'error' ? 'destructive' : undefined} data-testid="invoice-notice">
           <AlertDescription>{notice.text}</AlertDescription>

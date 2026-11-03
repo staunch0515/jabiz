@@ -123,6 +123,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_REDEMPTION_LAPSE", ProcessAccess.INTERNAL),
         // Q87: the platform fees' charge (a sub-process), its job items, the approval result and the invoice mails.
         Map.entry("QB_FEE_CHARGE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_FEE_SETTLE_ITEM", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_MONTHLY_ITEM", ProcessAccess.INTERNAL),
         Map.entry("QB_FEE_INVOICE_ISSUE_ITEM", ProcessAccess.INTERNAL),
         Map.entry("QB_FEE_OVERDUE_ITEM", ProcessAccess.INTERNAL),

@@ -330,8 +330,88 @@ class FeeIT extends PlayItSupport {
             "creditLimit", 20000, "reason", "Not ours"), 404);
         assertThat(latest("qb_sponsor_version", "onboarding_id", "user_id = '" + mine + "'").getFirst())
             .containsEntry("billing_mode", "POSTPAID").containsEntry("billing_set_by", member);
-        // The operator sees the billing on its sponsors' page.
+        // The operator sees the billing on its sponsors' page, and its own sponsors only on the billing page.
         assertThat(items("qb.operator.sponsors", session, Map.of("params", Map.of("userId", mine)))).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("billingMode", "POSTPAID").containsEntry("creditLimit", 20000));
+        assertThat(items("qb.operator.sponsor-billing", session, Map.of())).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("userId", mine).containsEntry("billingMode", "POSTPAID")
+                .containsEntry("own", true).containsEntry("creditLimit", 20000).containsEntry("unpaidTotal", 0)
+                .containsEntry("uninvoicedTotal", 0).containsEntry("billingReason", "Trusted")
+                .containsEntry("billingSetBy", member));
+    }
+
+    @Test
+    @Order(6)
+    void aPostpaidSponsorPaysTheMonthsFeesEarlyEachOnAnInvoiceOfItsOwn() {
+        switches();
+        String sponsor = newSponsor(unique("s-q87-early"));
+        run(FeeProcesses.BILLING_SET, hq(), body("userId", sponsor, "billingMode", "POSTPAID", "creditLimit", 5000,
+            "reason", "Known company"));
+        // Two months' fees wait for their invoices.
+        assertThat(monthly(sponsor)).containsEntry("outcome", "CHARGED");
+        String first = period();
+        clock.set(clock.instant().plus(Duration.ofDays(31)));
+        String second = period();
+        assertThat(monthly(sponsor)).containsEntry("outcome", "CHARGED");
+        List<String> chargeIds = charges(sponsor).stream().map(c -> String.valueOf(c.get("charge_id"))).toList();
+        assertThat(chargeIds).hasSize(2);
+        // The wallet shows what waits; without the cash, paying early is refused.
+        assertThat(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst())
+            .containsEntry("uninvoicedTotal", 2200).containsEntry("unpaidTotal", 0);
+        assertThat(items("qb.sponsor.fee-uninvoiced", sponsorToken(sponsor), Map.of())).hasSize(2)
+            .allSatisfy(row -> assertThat(row).containsEntry("total", 1100).containsEntry("kind", "MONTHLY"));
+        assertThat(items("qb.sponsor.fee-uninvoiced", sponsorToken(sponsor), Map.of("params", Map.of("period", first))))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("period", first));
+        assertThat(codes(refused(FeeProcesses.PAY_EARLY, sponsorToken(sponsor), body(), 422)))
+            .containsExactly(FeeCodes.FEE_CASH_SHORT);
+        cash(sponsor, 5000);
+        // Both at once: each fee gets an invoice of its own, paid from the charge as a prepaid one's is.
+        Map<String, Object> paid = run(FeeProcesses.PAY_EARLY, sponsorToken(sponsor), body());
+        assertThat(paid).containsEntry("count", 2).containsEntry("total", 2200).containsEntry("cashBalance", 2800)
+            .containsEntry("remaining", 0);
+        assertThat((List<?>) paid.get("invoiceNos")).hasSize(2).allMatch(no -> String.valueOf(no).matches("QBF-\\d{4}-\\d{5}"));
+        List<Map<String, Object>> invoices = invoices(sponsor);
+        assertThat(invoices).hasSize(2).allSatisfy(invoice -> assertThat(invoice).containsEntry("status", "PAID")
+            .containsEntry("billing_mode", "POSTPAID"));
+        assertThat(invoices.stream().map(i -> String.valueOf(i.get("charge_id")))).containsExactlyInAnyOrderElementsOf(chargeIds);
+        for (String chargeId : chargeIds) {
+            assertThat(lines(QbFees.CHARGE, chargeId)).containsExactly("1130 DEBIT 1100 @" + sponsor, "4120 CREDIT 1000",
+                "2150 CREDIT 100", "2160 DEBIT 1100 @" + sponsor, "1130 CREDIT 1100 @" + sponsor);
+        }
+        assertThat(balance(sponsor, QbWallets.CASH)).isEqualByComparingTo("2800");
+        assertThat(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst())
+            .containsEntry("uninvoicedTotal", 0);
+        assertThat(items("qb.sponsor.fee-charges", sponsorToken(sponsor), Map.of())).hasSize(2)
+            .allSatisfy(row -> assertThat(row).containsEntry("invoiceStatus", "PAID"));
+        Map<String, Object> invoice = invoices.getFirst();
+        assertThat(items("qb.sponsor.fee-invoice-lines", sponsorToken(sponsor), Map.of("params",
+            Map.of("invoiceId", String.valueOf(invoice.get("invoice_id")))))).singleElement()
+            .satisfies(row -> assertThat(String.valueOf(row.get("chargeId"))).isEqualTo(invoice.get("charge_id")));
+        // Nothing waits any more: paying early again is refused, and the months' invoices have nothing to cover.
+        assertThat(codes(refused(FeeProcesses.PAY_EARLY, sponsorToken(sponsor), body(), 422)))
+            .containsExactly(FeeCodes.FEE_NOTHING_DUE);
+        assertThat(item(FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor, "period", first))).isEqualTo("NONE");
+        assertThat(item(FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor, "period", second))).isEqualTo("NONE");
+        assertThat(invoices(sponsor)).hasSize(2);
+        // One month only: the third month's fee is paid by its month, a month that has nothing is refused.
+        clock.set(clock.instant().plus(Duration.ofDays(31)));
+        String third = period();
+        assertThat(monthly(sponsor)).containsEntry("outcome", "CHARGED");
+        assertThat(codes(refused(FeeProcesses.PAY_EARLY, sponsorToken(sponsor), body("period", first), 422)))
+            .containsExactly(FeeCodes.FEE_NOTHING_DUE);
+        assertThat(run(FeeProcesses.PAY_EARLY, sponsorToken(sponsor), body("period", third)))
+            .containsEntry("count", 1).containsEntry("total", 1100).containsEntry("cashBalance", 1700);
+        // The next month's fee is invoiced by the job as before, the early-paid ones left out.
+        clock.set(clock.instant().plus(Duration.ofDays(31)));
+        assertThat(monthly(sponsor)).containsEntry("outcome", "CHARGED");
+        assertThat(item(FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor, "period", period()))).isEqualTo("ISSUED");
+        Map<String, Object> monthInvoice = invoices(sponsor).getLast();
+        assertThat(monthInvoice).containsEntry("status", "OPEN");
+        assertThat(monthInvoice.get("charge_id")).isNull();
+        assertThat((BigDecimal) monthInvoice.get("total")).isEqualByComparingTo("1100");
+        assertThat(items("qb.sponsor.fee-invoice-lines", sponsorToken(sponsor), Map.of("params",
+            Map.of("invoiceId", String.valueOf(monthInvoice.get("invoice_id")))))).hasSize(1);
+        assertThat(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst())
+            .containsEntry("uninvoicedTotal", 0).containsEntry("unpaidTotal", 1100);
     }
 }

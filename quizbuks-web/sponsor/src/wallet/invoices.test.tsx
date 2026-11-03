@@ -72,6 +72,9 @@ function server(options: Server = {}) {
       case '/api/processes/QB_FEE_INVOICE_PAY/latest':
         return json(options.pay?.status ?? 200, options.pay?.body
           ?? { output: { invoiceId: 'i1', invoiceNo: 'QBF-2026-00001', status: 'PAID', total: 1100, cashBalance: 2900 } })
+      case '/api/processes/QB_FEE_PAY_EARLY/latest':
+        return json(200, { output: { count: 2, total: 2200, cashBalance: 1800, invoiceNos: ['QBF-2026-00002', 'QBF-2026-00003'],
+          remaining: 0 } })
       case '/api/processes/QB_FEE_INVOICE_DOCUMENT/latest':
         return json(200, { output: { documentRunId: 'd1', documentNo: 'QBF-2026-00001' } })
       case '/api/documents/runs/d1/pdf':
@@ -142,6 +145,30 @@ describe("the platform's invoices", () => {
     expect(processCalls()[1]).toEqual({ path: '/api/processes/QB_FEE_INVOICE_DOCUMENT/latest',
       body: { invoiceId: 'i1', language: 'en' } })
     expect(click.mock.contexts[0]).toHaveProperty('download', 'QBF-2026-00001.pdf')
+  })
+
+  it('pays the fees not invoiced yet early, from the cash account', async () => {
+    const { processCalls } = server({ wallet: { ...WALLET, unpaidTotal: '0', unpaidCount: 0, billingMode: 'POSTPAID',
+      creditLimit: '20000', uninvoicedTotal: '2200' }, invoices: [] })
+    window.history.replaceState(null, '', '/wallet')
+    const user = userEvent.setup()
+    render(<App />)
+    const billing = await screen.findByTestId('wallet-billing')
+    expect(billing).toHaveTextContent('Not invoiced yet')
+    expect(billing).toHaveTextContent('2,200 Kudos')
+    expect(screen.queryByTestId('wallet-unpaid')).not.toBeInTheDocument()
+    await user.click(screen.getByTestId('invoice-pay-early'))
+    expect(await screen.findByTestId('invoice-notice')).toHaveTextContent('Paid 2,200 Kudos early (invoices: 2). Cash: 1,800 Kudos.')
+    expect(processCalls()[0]).toEqual({ path: '/api/processes/QB_FEE_PAY_EARLY/latest', body: {} })
+  })
+
+  it('cannot pay early what the cash does not cover', async () => {
+    server({ wallet: { ...WALLET, cashBalance: '500', uninvoicedTotal: '2200' } })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    const button = await screen.findByTestId('invoice-pay-early')
+    expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('cash 500 Kudos is not enough')
   })
 
   it('cannot pay an invoice the cash does not cover', async () => {

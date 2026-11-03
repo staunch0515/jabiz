@@ -13,6 +13,7 @@ import OperatorPage from './OperatorPage'
 import OperatorReviewsPage from './OperatorReviewsPage'
 import OperatorsPage from './OperatorsPage'
 import OperatorSponsorsPage from './OperatorSponsorsPage'
+import OperatorBillingPage from './OperatorBillingPage'
 import ReviewsPage from './ReviewsPage'
 import SponsorReviewPage from './SponsorReviewPage'
 import { FEE_PROCESS, OPERATOR_PROCESS, PERMISSION, TEMPLATE } from './ids'
@@ -27,6 +28,7 @@ const server = vi.hoisted(() => ({
   members: [] as Record<string, unknown>[],
   reviews: [] as Record<string, unknown>[],
   sponsors: [] as Record<string, unknown>[],
+  billing: [] as Record<string, unknown>[],
   team: {} as Record<string, unknown>,
   runQuery: vi.fn(),
   runProcess: vi.fn(),
@@ -92,9 +94,10 @@ beforeEach(() => {
       : id === TEMPLATE.operatorMembers ? server.members
         : id === TEMPLATE.operatorReviews ? server.reviews
           : id === TEMPLATE.operatorSponsors ? server.sponsors
-            : id === TEMPLATE.operatorOverview ? [{ mySponsors: 1, sponsors: 9, sponsorsInReview: 2,
-              publicationsInReview: 3, livePublications: 4, myLivePublications: 1, myCompletions: 120 }]
-              : id === TEMPLATE.sponsors ? [{ userId: SPONSOR, company: 'Acme', reviewStatus: 'APPROVED' }] : []
+            : id === TEMPLATE.operatorBilling ? server.billing
+              : id === TEMPLATE.operatorOverview ? [{ mySponsors: 1, sponsors: 9, sponsorsInReview: 2,
+                publicationsInReview: 3, livePublications: 4, myLivePublications: 1, myCompletions: 120 }]
+                : id === TEMPLATE.sponsors ? [{ userId: SPONSOR, company: 'Acme', reviewStatus: 'APPROVED' }] : []
     return { items, offset: 0, limit: 20, ...(options.count ? { total: items.length } : {}) }
   })
   server.runProcess.mockReset().mockImplementation(async (name: string) =>
@@ -273,6 +276,47 @@ describe('the operator', () => {
     await user.click(within(dialog).getByTestId('billing-submit'))
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(FEE_PROCESS.billingSet,
       { userId: SPONSOR, billingMode: 'POSTPAID', creditLimit: 20000, reason: 'Known company' }))
+    await waitFor(() => expect(screen.queryByTestId('billing-dialog')).not.toBeInTheDocument())
+  })
+
+  it('lists how its sponsors are billed and sets one with a reason (Q87b)', async () => {
+    server.get.mockImplementation(async (path: string) => {
+      if (path === '/api/dictionaries/{urn}') return [{ code: 'PREPAID', label: 'Prepaid' },
+        { code: 'POSTPAID', label: 'Postpaid' }]
+      throw new ApiError(404, { detail: 'Not found' })
+    })
+    server.billing = [
+      { userId: SPONSOR, company: 'Acme', contactName: 'Alice', reviewStatus: 'APPROVED', billingMode: 'POSTPAID',
+        own: true, creditLimit: 50000, unpaidTotal: 1100, overdueCount: 1, uninvoicedTotal: 2200,
+        billingReason: 'Known company', billingSetBy: LEAD, billingSetAt: '2026-10-30T01:00:00Z' },
+      { userId: 'other', company: 'Beta', contactName: 'Bob', reviewStatus: 'APPROVED', billingMode: 'PREPAID',
+        own: false, creditLimit: 0, unpaidTotal: 0, overdueCount: 0, uninvoicedTotal: 0, billingReason: null,
+        billingSetBy: null, billingSetAt: null },
+    ]
+    const { container } = renderAt('/qb/operator/billing', '/qb/operator/billing', <OperatorBillingPage />)
+    const rows = await screen.findAllByTestId('billing-row')
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByTestId('billing-row-mode')).toHaveAttribute('data-mode', 'POSTPAID')
+    expect(within(rows[0]).getByTestId('billing-row-mode')).toHaveTextContent('50,000')
+    expect(within(rows[0]).getByTestId('billing-row-unpaid')).toHaveTextContent('1,100')
+    expect(within(rows[0]).getByTestId('billing-row-unpaid')).toHaveTextContent('Overdue: 1')
+    expect(within(rows[0]).getByTestId('billing-row-uninvoiced')).toHaveTextContent('2,200')
+    expect(rows[0]).toHaveTextContent('Known company')
+    expect(within(rows[0]).getByTestId('user-name')).toHaveTextContent(LEAD)
+    expect(within(rows[1]).getByTestId('billing-row-mode')).toHaveTextContent('Platform default')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.operatorBilling, expect.objectContaining({
+      params: { q: null } }))
+    await expectAccessible(container)
+    const user = userEvent.setup()
+    await user.click(within(rows[1]).getByTestId('billing-row-set'))
+    const dialog = await screen.findByTestId('billing-dialog')
+    await user.click(within(dialog).getByTestId('billing-mode-POSTPAID'))
+    await user.clear(within(dialog).getByTestId('billing-credit'))
+    await user.type(within(dialog).getByTestId('billing-credit'), '10000')
+    await user.type(within(dialog).getByTestId('billing-reason'), 'Trusted')
+    await user.click(within(dialog).getByTestId('billing-submit'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(FEE_PROCESS.billingSet,
+      { userId: 'other', billingMode: 'POSTPAID', creditLimit: 10000, reason: 'Trusted' }))
     await waitFor(() => expect(screen.queryByTestId('billing-dialog')).not.toBeInTheDocument())
   })
 

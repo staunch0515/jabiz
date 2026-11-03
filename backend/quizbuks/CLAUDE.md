@@ -233,7 +233,7 @@
 - **平台费、预付 / 后付与账单**（Q87b，包 `fee`，在 Q87a 的现金账户之上，`docs/quizbuks/plans/Q87-fee-account.md`）：
   - **平台费只经 `QB_FEE_CHARGE`**（`subProcessOnly()`，权限 `qb.fee.system` 不授予任何角色）记入只追加的 `QbFeeCharge`（`qb_fee_charge_version`，`writeOnce`），新的收费种类只是加一个 `kind`（`FeeRules`），不另写记账；
     预付（`FeeRules.PREPAID`）即扣、不够即 `OPEN` 的账单，后付（`POSTPAID`）记应收、月初由 `qb.fee-invoice` 合成账单；判断"能否换学分 / 提交"只在 `fee.FeeGate`（一条 `QueryEntities.all` 读入驻行与未付账单，`FeeRules.Standing.blocked()`：预付有未付即拦，后付未付合计 > 信用额即拦，开关 `qb.fee.overdue.block-submit`），
-    提交发布与换学分都调它（422 `QB_FEE_UNPAID`），不在别处自己判断。账单只从现金账户付（`QB_FEE_INVOICE_PAY`）；账单的 PDF（版式 `qb.fee_invoice`，开具方 `qb.issuer.*`）由商户按需签发（`QB_FEE_INVOICE_DOCUMENT`，任务不能签发单据：系统身份没有权限）。
+    提交发布与换学分都调它（422 `QB_FEE_UNPAID`），不在别处自己判断。账单只从现金账户付（`QB_FEE_INVOICE_PAY`）；后付的费用在月底账单之前付清只经 `QB_FEE_PAY_EARLY`（每笔费用各开一张自己的 `PAID` 账单，子流程 `QB_FEE_SETTLE_ITEM`；月初的账单与所有按月份找费用的模板都排除已有自己账单的费用），不另建付款表；账单的 PDF（版式 `qb.fee_invoice`，开具方 `qb.issuer.*`）由商户按需签发（`QB_FEE_INVOICE_DOCUMENT`，任务不能签发单据：系统身份没有权限）。
   - 手工记费与作废只经 `QB_FEE_REQUEST`（`QbFeeRequest`，四眼：审批对象 `qb.fee-request`、规则 `qb.fee-request.review` 由 `QB_SETUP` 提出）与审批结果 `QB_FEE_REQUEST_APPROVAL_RESULT`（`internal()`，只认申请自己的审批请求，驳回按存储的请求与内容哈希判断）；作废 = 冲正该账单的全部分录（模板 `qb.system.fee-invoice-transactions` 按来源找）+ `VOID`，已付的退回现金。
   - 计费方式与信用额在商户入驻行上（`QbSponsor.billingMode` / `creditLimit`，`processOnly`），只经 `QB_OPERATOR_BILLING_SET`（`qb.fee.billing`，运营商以 `OperatorChecks.ownSponsor` 核对范围，理由必填）；缺省为受控参数 `qb.fee.default-billing-mode`。平台费记在记费时商户所属运营商名下（`QbFeeCharge.operatorId`），
     月结算的分成基数 = 抽成 + 平台费（`qb.system.operator-fees`，`QbOperatorSettlement.platformFees`）。新增一种过账时同步改月报 `qb.admin.monthly` 的分类（`FEE_CHARGED` / `FEE_PAID` / `FEE_VOIDED`）与 `AdminFinanceIT`。

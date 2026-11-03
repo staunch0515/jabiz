@@ -77,6 +77,7 @@ import OperatorPage from './OperatorPage'
 import OperatorReviewsPage from './OperatorReviewsPage'
 import OperatorsPage from './OperatorsPage'
 import OperatorSponsorsPage from './OperatorSponsorsPage'
+import OperatorBillingPage from './OperatorBillingPage'
 import ProspectPage from './ProspectPage'
 import ProspectSettingsPage from './ProspectSettingsPage'
 import ProspectsPage from './ProspectsPage'
@@ -145,6 +146,8 @@ export default defineExtension({
     { path: PATH.operatorReviews, element: <OperatorReviewsPage /> },
     { path: PATH.operatorHome, element: <OperatorHomePage /> },
     { path: PATH.operatorSponsors, element: <OperatorSponsorsPage /> },
+    // Q87b: how the operator's sponsors pay the platform's fees.
+    { path: PATH.operatorBilling, element: <OperatorBillingPage /> },
     // Q48c: AI prospecting, for an operator's members and headquarters alike (each reads its own templates).
     { path: PATH.prospects, element: <ProspectsPage /> },
     { path: PATH.prospectSettings, element: <ProspectSettingsPage /> },
@@ -172,6 +175,9 @@ export default defineExtension({
         { key: 'qb-operator-home', label: 'menu.operatorHome', path: PATH.operatorHome, icon: House,
           permission: PERMISSION.operatorUse },
         { key: 'qb-operator-sponsors', label: 'menu.operatorSponsors', path: PATH.operatorSponsors, icon: Users,
+          permission: PERMISSION.operatorUse },
+        // Q87b: how the operator's sponsors pay the platform's fees.
+        { key: 'qb-operator-billing', label: 'menu.operatorBilling', path: PATH.operatorBilling, icon: Receipt,
           permission: PERMISSION.operatorUse },
         // Q60a-3: the pages of the operator's sponsors.
         { key: 'qb-operator-sponsor-pages', label: 'menu.sponsorPages', path: PATH.sponsorPages, icon: Globe,

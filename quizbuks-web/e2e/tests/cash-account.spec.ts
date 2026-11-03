@@ -14,6 +14,8 @@ test('a sponsor tops up the cash account and turns part of it into Kudos', async
   test.setTimeout(120_000)
   const sponsor = await approvedSponsor(request)
   await signIn(page, '/sponsor/', sponsor.email)
+  // Signed in once the console has left the sign-in page (going elsewhere before would load it signed out).
+  await expect(page).toHaveURL(/\/sponsor\/dashboard$/)
   await page.goto('/sponsor/wallet')
   await expect(page.getByTestId('wallet-cash')).toBeVisible()
   await expect(page.getByTestId('wallet-cash-balance')).toHaveText('0 Kudos')
