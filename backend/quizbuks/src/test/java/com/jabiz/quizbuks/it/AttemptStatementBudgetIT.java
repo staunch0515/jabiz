@@ -184,7 +184,7 @@ class AttemptStatementBudgetIT extends PlayItSupport {
         String sponsor = newSponsor("s-budget-cert");
         credit(sponsor, 100_000);
         String gated = liveRequiring(sponsor, "Budget gated", Map.of("regions", List.of("GLOBAL"),
-            "maxWinners", 100_000, "budgetCap", 1_000_000), List.of(body("certification", "REFERRER")));
+            "maxWinners", 100_000, "budgetCap", 1_000_000), List.of(body("certification", "REFERRER", "requirement", "PASSED")));
         String hq = com.jabiz.runtime.test.TestTokens.bearer(tokens, "budget-hq",
             com.jabiz.quizbuks.QbPermissions.CERTIFICATION_ADMIN, com.jabiz.quizbuks.QbPermissions.CERTIFICATION_MANAGE);
         String official = newSponsor("s-budget-official");

@@ -72,7 +72,7 @@ class UnderstandingIT extends PlayItSupport {
         // Every problem at once: both names, neither, a sponsor's certification, twice.
         Map<String, Object> problem = refused("QB_PUBLICATION_PREREQUISITES_SAVE", token, body("publicationId", draft,
             "prerequisites", List.of(
-                body("requiredPublicationId", basics, "certification", CERT),
+                body("requiredPublicationId", basics, "certification", CERT, "requirement", "PASSED"),
                 body("requirement", "PASSED"),
                 body("certification", "TERMS_SPONSOR_UNDERSTOOD", "requirement", "PASSED"),
                 body("certification", CERT, "requirement", "PASSED"),
