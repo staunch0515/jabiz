@@ -252,6 +252,8 @@ public final class PublicationProcesses {
             .steps(PublicationEditing::loadTiers)
             // Q47: an invited publication takes its list; switching to it clears the matching conditions.
             .steps(PublicationAudience::loadCriteria)
+            // Q88a (D-Q88-5): a round of a certification may pay nothing; the problems say so as submitting would.
+            .steps(PublicationRounds::load)
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
             // Q64: who uploaded the cover given, which must be the sponsor's own file.
@@ -593,7 +595,8 @@ public final class PublicationProcesses {
         List<UUID> tierIds) {
         List<TierCoverage.Tier> ranges = tiers.stream().map(TierPlan::tier).toList();
         List<Violation> problems = new ArrayList<>(PublicationReadiness.check(PublicationEditing.draftOf(values),
-            ranges, PublicationEditing.snapshot(version), ctx.opTime(), PublicationEditing.maxRewardPerAttempt(ctx)));
+            ranges, PublicationEditing.snapshot(version), ctx.opTime(), PublicationEditing.maxRewardPerAttempt(ctx),
+            PublicationRounds.isRound(ctx)));
         // What submitting would also say: the caller is no approved sponsor, or is banned (D-Q2-6); the method is
         // one they may not use (Q22: a copy of a publication made before the method was taken away).
         problems.addAll(PublicationEditing.sponsorProblems(ctx));
@@ -626,6 +629,7 @@ public final class PublicationProcesses {
                 .steps(PublicationEditing::loadTiers)
                 .steps(PublicationAudience::loadCriteria)
                 .steps(PublicationPrerequisites::load)
+                .steps(PublicationRounds::load)
                 .compute("Delete the publication", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
                     if (!PublicationEditing.draft(ctx, publication) || !PublicationEditing.current(ctx,
@@ -641,6 +645,9 @@ public final class PublicationProcesses {
                     // Q76: and the prerequisites (a draft is required by nobody: only a submitted one can be).
                     list(ctx, PublicationPrerequisites.PREREQUISITES).forEach(row -> ctx.changes().delete(
                         QbPrerequisites.PREREQUISITE, row.id(), row.version()));
+                    // Q88a: and its round (a draft's round has no record on it).
+                    list(ctx, PublicationRounds.ROUND).forEach(row -> ctx.changes().delete(
+                        com.jabiz.quizbuks.certification.QbCertifications.ROUND, row.id(), row.version()));
                     ctx.changes().delete(QbPublications.PUBLICATION, publication.id(), publication.version());
                     ctx.put(OUTPUT, new PublicationOutput(uuid(publication.id()), PublicationStatus.DRAFT,
                         number(publication.get("revision")), null, null));

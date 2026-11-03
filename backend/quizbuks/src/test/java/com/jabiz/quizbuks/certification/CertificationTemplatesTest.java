@@ -16,11 +16,14 @@ class CertificationTemplatesTest {
 
     @Test
     void theAppsTemplatesWriteTheCatalog() throws IOException {
+        // Q88a (D-Q88-2): the sponsors' own certifications follow the catalog, under their keys sp:<id>.
         assertThat(Certifications.sqlValues())
-            .isEqualTo("(VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), "
+            .isEqualTo("(SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), "
                 + "('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), "
                 + "('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), "
-                + "('BENEFIT_SPONSOR', 1, 31536000))");
+                + "('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || "
+                + "sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, "
+                + "sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc)");
         // Q86: every template that tells whether somebody holds a certification writes the catalog.
         for (String template : new String[] {"queries/qb/app/feed.sql", "queries/qb/app/publication.sql",
             "queries/qb/app/understanding.sql", "queries/qb/app/sponsor-tree.sql", "queries/qb/system/audience-count.sql",

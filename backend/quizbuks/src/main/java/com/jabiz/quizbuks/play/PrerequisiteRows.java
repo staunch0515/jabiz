@@ -1,6 +1,5 @@
 package com.jabiz.quizbuks.play;
 
-import com.jabiz.quizbuks.certification.Certifications;
 import com.jabiz.quizbuks.certification.RoundHolders;
 
 import com.jabiz.process.ProcessContext;
@@ -71,17 +70,20 @@ public final class PrerequisiteRows {
      */
     public static <I, O> void loadHoldings(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, Boolean> starting) {
-        RoundHolders.loadHoldings(pb, ctx -> Boolean.TRUE.equals(starting.apply(ctx)) ? certifications(ctx) : List.of(),
-            HOLDINGS);
+        RoundHolders.loadHoldingsOf(pb, ctx -> Boolean.TRUE.equals(starting.apply(ctx)) ? certifications(ctx)
+            : List.of(), HOLDINGS);
     }
 
-    /** The certifications the publication requires, from its prerequisite rows. */
-    static List<Certifications.Certification> certifications(ProcessContext ctx) {
-        List<Certifications.Certification> found = new ArrayList<>();
+    /**
+     * The keys of the certifications the publication requires, from its prerequisite rows (the catalog's, or Q88a
+     * the sponsor's own {@code sp:<id>}; one nobody defines is read as held by nobody).
+     */
+    static List<String> certifications(ProcessContext ctx) {
+        List<String> found = new ArrayList<>();
         for (EntityInstance row : PlaySteps.list(ctx, PREREQUISITES)) {
             Object key = row.get("certification");
             if (key != null) {
-                Certifications.of(String.valueOf(key)).ifPresent(found::add);
+                found.add(String.valueOf(key));
             }
         }
         return found;
@@ -119,7 +121,8 @@ public final class PrerequisiteRows {
         List<PrerequisiteCheck.Attempt> attempts = PlaySteps.list(ctx, ATTEMPTS).stream()
             .map(row -> new PrerequisiteCheck.Attempt(uuid(row.get("publicationId")), row.get("status"),
                 row.get("passed"))).toList();
-        return PrerequisiteCheck.unmet(prerequisites, attempts, RoundHolders.heldKeys(ctx, certifications(ctx), HOLDINGS));
+        return PrerequisiteCheck.unmet(prerequisites, attempts, RoundHolders.heldKeysOf(ctx, certifications(ctx),
+            HOLDINGS));
     }
 
     private static UUID uuid(Object value) {

@@ -1,6 +1,6 @@
-import { api, runProcess, unwrap } from '@jabiz/admin'
-import type { Page } from './api'
-import { CERTIFICATION_PROCESS, DATASET } from './ids'
+import { api, runProcess, runQuery, unwrap } from '@jabiz/admin'
+import type { Page, SortSpec } from './api'
+import { CERTIFICATION_PROCESS, DATASET, TEMPLATE } from './ids'
 
 /*
  * Certifications (backend `certification.CertificationProcesses`, docs/quizbuks/plans/Q69-certifications.md), typed by
@@ -108,3 +108,58 @@ export async function readOfficialPublishers(offset: number, limit: number): Pro
 /** `OfficialInput`: an empty operator is headquarters' own (direct) publisher. */
 export const setOfficialPublisher = (input: { userId: string; operatorId: string | null; active: boolean }) =>
   runProcess<{ userId: string; owner: string; active: boolean }>(CERTIFICATION_PROCESS.officialSet, { ...input })
+
+/** Q88a: a row of `qb.admin.sponsor-certifications`: a sponsor's own certification, whose, how many rounds and holders. */
+export interface SponsorCertificationRow {
+  certificationId: string
+  key: string
+  sponsorId: string
+  company: string | null
+  /** The name by language, as the sponsor wrote it. */
+  name: Record<string, string>
+  validityDays: number
+  certificationVersion: number
+  status: string
+  createdAt: string
+  rounds: number
+  holders: number
+}
+
+export const SPONSOR_CERTIFICATION_SORTS: Readonly<Record<string, string>> = { createdAt: 'createdAt', company: 'company' }
+
+function namesOf(value: unknown): Record<string, string> {
+  let raw: unknown = value
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw)
+    } catch {
+      return {}
+    }
+  }
+  if (!raw || typeof raw !== 'object') return {}
+  return Object.fromEntries(Object.entries(raw as Record<string, unknown>)
+    .filter(([, text]) => typeof text === 'string' && text.trim()) as [string, string][])
+}
+
+/** The sponsors' certifications, a page at a time; `q` narrows to sponsors whose company name contains it. */
+export async function readSponsorCertifications(q: string, offset: number, limit: number,
+  sorts?: SortSpec[]): Promise<Page<SponsorCertificationRow>> {
+  const page = await runQuery<Row>(TEMPLATE.sponsorCertifications,
+    { params: { at: new Date().toISOString(), ...(q ? { q } : {}) }, offset, limit, sorts })
+  return {
+    items: page.items.map((row): SponsorCertificationRow => ({
+      certificationId: String(row.certificationId),
+      key: String(row.key ?? ''),
+      sponsorId: String(row.sponsorId ?? ''),
+      company: str(row.company),
+      name: namesOf(row.name),
+      validityDays: Number(row.validityDays ?? 0),
+      certificationVersion: Number(row.certificationVersion ?? 0),
+      status: String(row.status ?? ''),
+      createdAt: String(row.createdAt ?? ''),
+      rounds: Number(row.rounds ?? 0),
+      holders: Number(row.holders ?? 0),
+    })),
+    total: page.total,
+  }
+}

@@ -204,6 +204,11 @@ public final class QbParams {
     public static final String FEE_DEFAULT_BILLING_MODE = "qb.fee.default-billing-mode";
     public static final String FEE_OVERDUE_BLOCK = "qb.fee.overdue.block-submit";
     public static final String FEE_DUE_DAYS = "qb.fee.due-days";
+    /**
+     * Q88a (D-Q88-7): whether sponsors define certifications of their own and make their publications rounds of
+     * them (controlled: a switch for the administrators; off keeps what is held, required and drawn as it is).
+     */
+    public static final String SPONSOR_ROUNDS_ENABLED = "qb.certification.sponsor-rounds.enabled";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -302,7 +307,8 @@ public final class QbParams {
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
-        List.of(UNDERSTANDING_ENABLED), CASH_ACCOUNT_PARAMS, FEE_PARAMS).flatMap(List::stream).toList();
+        List.of(UNDERSTANDING_ENABLED), CASH_ACCOUNT_PARAMS, FEE_PARAMS, List.of(SPONSOR_ROUNDS_ENABLED))
+        .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -489,7 +495,10 @@ public final class QbParams {
         new Param(FEE_DEFAULT_BILLING_MODE, Map.of("type", "text", "maxLength", 10), "PREPAID",
             "How a sponsor without a billing mode of their own pays the platform's fees: PREPAID or POSTPAID"),
         new Param(FEE_OVERDUE_BLOCK, BOOL, true,
-            "Whether unpaid platform fees stop a sponsor from converting cash to Kudos and submitting publications"));
+            "Whether unpaid platform fees stop a sponsor from converting cash to Kudos and submitting publications"),
+        // Q88a: the sponsors' own certifications (controlled, last). Off keeps what the platform did before.
+        new Param(SPONSOR_ROUNDS_ENABLED, BOOL, false,
+            "Whether sponsors define certifications of their own and make their publications rounds of them (Q88)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

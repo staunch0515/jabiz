@@ -1,10 +1,12 @@
 import { formatDateTime } from '@jabiz/client'
 import { MarkdownView, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@jabiz/ui'
-import { BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Store, Target, Timer, TrendingUp, Trophy,
+import { Award, BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Store, Target, Timer, TrendingUp, Trophy,
   type LucideIcon } from 'lucide-react'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { certificationName } from '../certifications'
 import { FileImage } from '../FileImage'
+import { QB } from '../messages'
 import { sponsorPagePath } from '../page'
 import { Link } from '../router'
 import { CoverPlaceholder } from '../Illustrations'
@@ -153,8 +155,13 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   video?: (player: string, title: string) => ReactNode
 }) {
   const { t } = useTranslation(QBVIEW)
+  const { t: tQb, i18n } = useTranslation(QB)
   const duration = useDuration()
   const sponsor = p.sponsorCompany ?? p.sponsorName
+  // Q88a (D-Q88-5): a round of a certification says what passing gives; one paying nothing says only that.
+  const gives = p.certification
+    ? certificationName(p.certification, p.certificationNames, i18n.language, tQb) : null
+  const rewardOnly = !gives || Number(p.maxReward ?? 0) > 0
   const survey = p.kind === 'SURVEY'
   const MethodIcon = REWARD_METHOD_ICONS[p.rewardMethod]
   const prize = p.rewardMethod === 'OFFLINE_REDEEM' || p.rewardMethod === 'DIGITAL_PRIZE'
@@ -163,9 +170,10 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   const lead = leadVideo(p.materials)
   const reward = (
     <span className="bg-primary text-primary-foreground inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold shadow-sm">
-      <Trophy aria-hidden className="size-3.5" />
-      {survey ? t('feed.surveyReward', { amount: formatKudos(p.maxReward) })
-        : t('feed.upTo', { amount: formatKudos(p.maxReward) })}
+      {rewardOnly ? <Trophy aria-hidden className="size-3.5" /> : <Award aria-hidden className="size-3.5" />}
+      {!rewardOnly ? tQb('certification.gives', { name: gives })
+        : survey ? t('feed.surveyReward', { amount: formatKudos(p.maxReward) })
+          : t('feed.upTo', { amount: formatKudos(p.maxReward) })}
     </span>
   )
   const sponsorLine = (tone: string) => sponsor && (
@@ -229,6 +237,7 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
         <Fact icon={Timer} label={t('detail.timeLimit')} value={duration(p.timeLimitSec)} />
         <Fact icon={Trophy} label={survey ? t('detail.surveyReward') : prize ? t('detail.prizeValue') : t('detail.maxReward')}
           value={draft ? '–' : formatKudos(p.maxReward)} />
+        {gives && <Fact icon={Award} label={t('detail.gives')} testId="detail-certification" value={gives} />}
         <Fact icon={MethodIcon} label={t('detail.method')} testId="detail-method-fact"
           value={draft ? '–' : <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}Short`)}</span>} />
         <Fact icon={CalendarClock} label={t('detail.endAt')}

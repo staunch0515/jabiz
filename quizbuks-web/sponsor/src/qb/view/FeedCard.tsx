@@ -1,7 +1,9 @@
 import { Banknote, Coins, Gift, Play, Ticket, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { certificationName } from '../certifications'
 import { CoverPlaceholder } from '../Illustrations'
+import { QB } from '../messages'
 import { formatKudos } from '../kudos'
 import type { FeedCard, RewardMethod } from '../play'
 import { sponsorPagePath } from '../page'
@@ -21,10 +23,16 @@ export const REWARD_METHOD_ICONS: Record<RewardMethod, LucideIcon> = {
 /** What passing earns (a survey: what answering earns), in the card's line of small facts (Q66). */
 export function RewardText({ card }: { card: FeedCard }) {
   const { t } = useTranslation(QBVIEW)
+  const { t: tQb, i18n } = useTranslation(QB)
+  // Q88a (D-Q88-5): a round of a certification says what passing gives; one paying nothing says only that.
+  const gives = card.certification
+    ? tQb('certification.gives', { name: certificationName(card.certification, card.certificationNames, i18n.language, tQb) })
+    : null
+  const reward = card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
+    : t('feed.upTo', { amount: formatKudos(card.maxReward) })
   return (
-    <span className="text-foreground font-medium" data-testid="feed-card-reward">
-      {card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
-        : t('feed.upTo', { amount: formatKudos(card.maxReward) })}
+    <span className="text-foreground font-medium" data-testid="feed-card-reward" data-certification={card.certification ?? undefined}>
+      {gives && Number(card.maxReward ?? 0) <= 0 ? gives : gives ? `${reward} · ${gives}` : reward}
     </span>
   )
 }

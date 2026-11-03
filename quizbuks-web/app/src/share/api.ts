@@ -4,6 +4,8 @@ import type { ContentLanguage } from '../qb/api'
 import type { QuizKind, RewardMethod } from '../qb/play'
 import type { PublicProduct, PublicationProduct } from '../qb/products'
 import { PLAY } from '../qb/ids'
+import { certificationNamesOf } from '../qb/certifications'
+import type { I18nText } from '../qb/legal'
 import { edgesOf, readAllRows, treeStateOf, type TreeEdge, type TreeState } from '../qb/tree'
 import { SPONSOR_PAGE_TEMPLATE } from './ids'
 
@@ -80,7 +82,7 @@ export interface SponsorTreeNode {
   /** The required publications' names, by their id (from the `prerequisites` JSON). */
   requiredNames: Record<string, string>
   /** Q86: the certifications the node requires, whether the caller holds each and its current round. */
-  certifications: { key: string; held: boolean; roundPublicationId: string | null }[]
+  certifications: { key: string; held: boolean; roundPublicationId: string | null; names: I18nText | null }[]
 }
 
 /**
@@ -109,7 +111,8 @@ export async function readSponsorTree(handle: string, at: string, lang: string):
         const p = item as Record<string, unknown>
         if (typeof p.certification === 'string' && p.certification) {
           certifications.push({ key: p.certification, held: p.held === true || p.held === 'true',
-            roundPublicationId: typeof p.roundPublicationId === 'string' ? p.roundPublicationId : null })
+            roundPublicationId: typeof p.roundPublicationId === 'string' ? p.roundPublicationId : null,
+            names: certificationNamesOf(p.certificationNames) })
         } else if (typeof p.requiredPublicationId === 'string' && typeof p.name === 'string') {
           requiredNames[p.requiredPublicationId] = p.name
         }

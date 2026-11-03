@@ -328,7 +328,8 @@ describe('a signed-in sponsor', () => {
     expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
       .map((link) => link.textContent))).toEqual([
       // Q79: the sponsor's own pages (profile, products, staff, mail server) are the hub's sections, one entry here.
-      ['Dashboard'], ['Quizzes', 'Publications', 'Tree'], ['Cash rewards', 'Digital prizes', 'Prizes'],
+      // Q88a: the sponsor's own certifications, beside the quizzes they give them for.
+      ['Dashboard'], ['Quizzes', 'Publications', 'Tree', 'Certifications'], ['Cash rewards', 'Digital prizes', 'Prizes'],
       // Q89a: buying other sponsors' benefits, and offering one's own.
       ['Benefit catalog', 'My benefits', 'Inquiries', 'Purchases'],
       ['Wallet', 'Transactions'], ['Sponsor profile', 'Page statistics', 'Messages', 'Account', 'Help']])

@@ -1,7 +1,7 @@
 /*---
 id: qb.system.audience-count
 description: How many takers a publication's regions, matching conditions (Q47) and prerequisites (Q76) reach now, exactly; run by QB_AUDIENCE_COUNT only, which rounds it
-entities: [SecUser, QbProfile, QbCountry, QbUserBan, QbProfileAttribute, QbPublicationCriterion, QbPublicationPrerequisite, QbAttempt, QbCertificationRound, QbCertificationRecord]
+entities: [SecUser, QbProfile, QbCountry, QbUserBan, QbProfileAttribute, QbPublicationCriterion, QbPublicationPrerequisite, QbAttempt, QbCertificationRound, QbCertificationRecord, QbSponsorCertification]
 datasets:
   QbProfile: urn:jabiz:dataset:default:QbProfile
   QbCountry: urn:jabiz:dataset:default:QbCountry
@@ -11,6 +11,7 @@ datasets:
   QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:default:QbCertificationRecord
 params:
   publicationId: { like: QbPublicationCriterion.publicationId, required: true, description: The publication whose conditions count }
@@ -64,7 +65,7 @@ WHERE string_to_array(coalesce(CAST(:regions AS text), 'GLOBAL'), ',') && string
                 AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
          OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
                 SELECT 1
-                FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+                FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
                 CROSS JOIN LATERAL (
                     SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
                            rec.{{QbCertificationRecord.validUntil}} AS until

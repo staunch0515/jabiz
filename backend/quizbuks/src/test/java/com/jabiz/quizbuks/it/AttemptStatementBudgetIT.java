@@ -212,6 +212,43 @@ class AttemptStatementBudgetIT extends PlayItSupport {
     }
 
     /**
+     * Q88a (D-Q88-3, D-Q88-6 of Q86): a sponsor's publication that is a round of the sponsor's own certification
+     * reads, before the lock, the caller's records, the rounds and the certification's row (one statement) and their
+     * attempts on the rounds (one more), as an official publisher's round does (Q70a): two statements more; the
+     * lock's budget is unchanged, and so is an ordinary publication's (above).
+     */
+    @Test
+    void aStartOfASponsorsRound() {
+        warmUp();
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", com.jabiz.quizbuks.setup.QbParams.SPONSOR_ROUNDS_ENABLED, "value", "true"),
+            "reason", "Q88a"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+        String sponsor = newSponsor("s-budget-round");
+        credit(sponsor, 100_000);
+        String token = sponsorToken(sponsor);
+        String certificationId = (String) run(com.jabiz.quizbuks.certification.SponsorCertificationProcesses.CREATE,
+            token, body("name", Map.of("en", "Budget expert"), "validityDays", 365)).get("certificationId");
+        String versionId = version(token, "Budget round quiz");
+        java.time.Instant now = clock.instant();
+        Map<String, Object> save = complete(versionId, "Budget sponsor round", now, now.plus(java.time.Duration.ofDays(7)));
+        save.putAll(Map.of("regions", List.of("GLOBAL"), "maxWinners", 100_000, "budgetCap", 1_000_000));
+        String round = (String) run("QB_PUBLICATION_SAVE", token, save).get("publicationId");
+        run(com.jabiz.quizbuks.publishing.PublicationRounds.SET, token, body("publicationId", round,
+            "certificationId", certificationId));
+        assertThat(run("QB_PUBLICATION_SUBMIT", token, body("publicationId", round)).get("status")).isEqualTo("LIVE");
+        play(newTaker("t-budget-round-warm-" + UUID.randomUUID(), null), round, true, true);
+        String userId = newTaker("t-budget-round-" + UUID.randomUUID(), null);
+
+        SqlStatementLog.clear();
+        keyed("QB_ATTEMPT_START", taker(userId), body("publicationId", round));
+        List<List<String>> start = SqlStatementLog.transactions();
+        report("QB_ATTEMPT_START (sponsor's round)", start);
+        assertBudget("QB_ATTEMPT_START (sponsor's round)", start, budget(START_TOTAL) + 2, budget(START_LOCKED));
+        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(round));
+    }
+
+    /**
      * The completion that ends the publication (its last winner's place) moves it under the publication's lock alone;
      * a pause takes the start lock after the publication's (Q10a4, Q10-lock-split.md 6.1).
      */

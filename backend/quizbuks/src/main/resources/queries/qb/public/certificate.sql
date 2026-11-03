@@ -7,15 +7,19 @@ description: >-
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
-entities: [QbCertificate, QbCertificationRecord]
+entities: [QbCertificate, QbCertificationRecord, QbSponsorCertification, QbSponsor]
 datasets:
   QbCertificate: urn:jabiz:dataset:public:QbCertificate
   QbCertificationRecord: urn:jabiz:dataset:public:QbCertificationRecord
+  QbSponsorCertification: urn:jabiz:dataset:public:QbSponsorCertification
+  QbSponsor: urn:jabiz:dataset:public:QbSponsor
 params:
   key: { like: QbCertificate.verifyKey, required: true, description: "The certificate's key (32 hex digits, lowercase)" }
 results:
   certification:        { from: QbCertificate.certification }
   certificationVersion: { from: QbCertificate.certificationVersion }
+  certificationNames:   { kind: { type: text } }
+  issuerName:           { from: QbSponsor.company }
   holderName:           { from: QbCertificate.holderName }
   heldFrom:             { from: QbCertificate.heldFrom }
   validUntil:           { from: QbCertificate.validUntil }
@@ -28,6 +32,10 @@ list:
 SELECT
     c.{{QbCertificate.certification}}        AS certification,
     c.{{QbCertificate.certificationVersion}} AS certificationVersion,
+    -- Q88a (D-Q88-6): a sponsor's certification is named by its row and issued by the sponsor; the catalog's
+    -- names are the App's texts and their issuer the platform.
+    CAST(sc.{{QbSponsorCertification.name}} AS text) AS certificationNames,
+    sp.{{QbSponsor.company}}                 AS issuerName,
     c.{{QbCertificate.holderName}}           AS holderName,
     c.{{QbCertificate.heldFrom}}             AS heldFrom,
     c.{{QbCertificate.validUntil}}           AS validUntil,
@@ -37,4 +45,7 @@ SELECT
        AND r.{{QbCertificationRecord.certification}} = c.{{QbCertificate.certification}}
        AND r.{{QbCertificationRecord.at}} > c.{{QbCertificate.heldFrom}}) AS revokedAt
 FROM {{QbCertificate}} c
+LEFT JOIN {{QbSponsorCertification}} sc
+    ON 'sp:' || sc.{{QbSponsorCertification.certificationId}} = c.{{QbCertificate.certification}}
+LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = sc.{{QbSponsorCertification.sponsorId}}
 WHERE c.{{QbCertificate.verifyKey}} = :key

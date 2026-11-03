@@ -45,6 +45,15 @@ public final class PrerequisiteRules {
      */
     public static List<Violation> problems(UUID publicationId, List<Wanted> wanted, Map<UUID, Target> targets,
         List<Edge> edges) {
+        return problems(publicationId, wanted, targets, edges, Set.of());
+    }
+
+    /**
+     * As {@link #problems(UUID, List, Map, List)}, with the keys of the sponsor's own active certifications (Q88a,
+     * D-Q88-4: a publication may require one of those too, never another sponsor's or a retired one).
+     */
+    public static List<Violation> problems(UUID publicationId, List<Wanted> wanted, Map<UUID, Target> targets,
+        List<Edge> edges, Set<String> ownCertifications) {
         List<Violation> problems = new ArrayList<>();
         if (wanted.size() > QbPrerequisites.MAX_PREREQUISITES) {
             problems.add(new Violation("prerequisites", PublishingCodes.PREREQUISITE_TOO_MANY, "A publication requires "
@@ -64,7 +73,7 @@ public final class PrerequisiteRules {
                 continue;
             }
             if (w.certification() != null) {
-                if (!Certifications.forTakers(w.certification())) {
+                if (!Certifications.forTakers(w.certification()) && !ownCertifications.contains(w.certification())) {
                     problems.add(new Violation(at, PublishingCodes.PREREQUISITE_CERTIFICATION, "Not a certification "
                         + "takers can hold", Map.of("certification", w.certification())));
                 } else if (!certifications.add(w.certification())) {

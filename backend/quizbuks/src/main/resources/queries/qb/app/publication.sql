@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral, QbPublicationPrerequisite]
+entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral, QbPublicationPrerequisite, QbSponsorCertification]
 datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -18,6 +18,7 @@ datasets:
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
   QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
   QbReferral: urn:jabiz:dataset:referee:QbReferral
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
@@ -74,6 +75,8 @@ results:
   prerequisitesMet: { kind: { type: bool } }
   prerequisites:  { kind: { type: text } }
   heldUntil:      { from: QbCertificationRecord.validUntil }
+  certification:  { from: QbCertificationRound.certification }
+  certificationNames: { kind: { type: text } }
   referral:       { from: QbPublicationCard.referral }
   myReferralStatus:    { from: QbReferral.status }
   myReferralExpiresAt: { from: QbReferral.expiresAt }
@@ -139,6 +142,8 @@ SELECT
     d.prerequisitesMet AS prerequisitesMet,
     d.prerequisites AS prerequisites,
     d.heldUntil AS heldUntil,
+    d.certification AS certification,
+    d.certificationNames AS certificationNames,
     d.referral AS referral,
     d.myReferralStatus AS myReferralStatus,
     d.myReferralExpiresAt AS myReferralExpiresAt,
@@ -257,7 +262,7 @@ SELECT
                    AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
             OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
                    SELECT 1
-                   FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+                   FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
                    CROSS JOIN LATERAL (
                        SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
                               rec.{{QbCertificationRecord.validUntil}} AS until
@@ -284,6 +289,8 @@ SELECT
     (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
                 'requiredPublicationId', pr.{{QbPublicationPrerequisite.requiredPublicationId}},
                 'certification', pr.{{QbPublicationPrerequisite.certification}},
+                -- Q88a: a sponsor's own certification is named by its row (the catalog's by the front ends' texts).
+                'certificationNames', psc.{{QbSponsorCertification.name}},
                 'requirement', pr.{{QbPublicationPrerequisite.requirement}},
                 'name', coalesce(CAST(rc.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'name',
                                  rc.{{QbPublicationCard.name}}),
@@ -305,7 +312,7 @@ SELECT
                         AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
                  OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
                         SELECT 1
-                        FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+                        FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
                         CROSS JOIN LATERAL (
                             SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
                                    rec.{{QbCertificationRecord.validUntil}} AS until
@@ -328,13 +335,15 @@ SELECT
                                                  AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')))))
                 ORDER BY rc.{{QbPublicationCard.name}}, pr.{{QbPublicationPrerequisite.requiredPublicationId}}), '[]') AS text)
          FROM {{QbPublicationPrerequisite}} pr
+         LEFT JOIN {{QbSponsorCertification}} psc
+             ON 'sp:' || psc.{{QbSponsorCertification.certificationId}} = pr.{{QbPublicationPrerequisite.certification}}
          LEFT JOIN {{QbPublicationCard}} rc
              ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
          WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}) AS prerequisites,
     -- Q70a (D-Q70-1, option B): until when the caller holds the certification of this round (qb.app.feed, the same).
     (SELECT max(e.until)
          FROM {{QbCertificationRound}} cr
-         JOIN (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+         JOIN (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
              ON cat.cert = cr.{{QbCertificationRound.certification}}
          CROSS JOIN LATERAL (
              SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
@@ -356,6 +365,9 @@ SELECT
            AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
                                 WHERE rv.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
                                   AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) AS heldUntil,
+    -- Q88a (D-Q88-5): the certification this is a round of, and its name when it is a sponsor's.
+    cr0.{{QbCertificationRound.certification}} AS certification,
+    CAST(sc0.{{QbSponsorCertification.name}} AS text) AS certificationNames,
     -- Q70: "referrals welcome" as frozen on the card, and the caller's own referral to it, if a friend referred them
     -- (the view holds the caller's as referee only; the places left come with the referrer's link).
     c.{{QbPublicationCard.referral}}       AS referral,
@@ -377,6 +389,12 @@ LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.pu
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 LEFT JOIN {{QbSponsorPage}} sp_page ON sp_page.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
+-- Q88a: the round the card is, if any, and the name of a sponsor's certification (the catalog's names are the
+-- front ends' texts).
+LEFT JOIN {{QbCertificationRound}} cr0
+    ON cr0.{{QbCertificationRound.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
+LEFT JOIN {{QbSponsorCertification}} sc0
+    ON 'sp:' || sc0.{{QbSponsorCertification.certificationId}} = cr0.{{QbCertificationRound.certification}}
 -- Q73b: the language shown: the caller's attempt's, else the first of the asked ones the card offers, else its main.
 CROSS JOIN LATERAL (
     SELECT coalesce(m.{{QbAttempt.language}},

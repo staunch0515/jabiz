@@ -80,12 +80,19 @@ public final class Certifications {
     public static final String DICTIONARY = "urn:jabiz:dict:quizbuks:certification";
 
     /**
-     * The catalog as the App's templates write it (qb.app.feed, qb.app.publication: a {@code VALUES} list of key,
-     * version and validity in seconds), which CertificationTemplatesTest finds in each.
+     * The catalog as the templates write it (qb.app.feed, qb.app.publication and the others
+     * CertificationTemplatesTest names): a {@code VALUES} list of key, version and validity in seconds, and (Q88a,
+     * D-Q88-2) the sponsors' own certifications after it under their keys {@code sp:<id>}, as one derived table
+     * {@code cat(cert, ver, secs)}. The sponsors' rows are the entity's table, so a template that writes this
+     * declares {@code QbSponsorCertification} among its entities.
      */
     public static String sqlValues() {
         return ALL.stream().map(c -> "('" + c.key() + "', " + c.version() + ", " + c.validity().toSeconds() + ")")
-            .collect(java.util.stream.Collectors.joining(", ", "(VALUES ", ")"));
+            .collect(java.util.stream.Collectors.joining(", ", "(SELECT * FROM (VALUES ", ") AS v(cert, ver, secs)"
+                + " UNION ALL SELECT '" + SponsorCertifications.PREFIX
+                + "' || sc.{{QbSponsorCertification.certificationId}},"
+                + " sc.{{QbSponsorCertification.certificationVersion}},"
+                + " sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc)"));
     }
 
     public static Optional<Certification> of(String key) {

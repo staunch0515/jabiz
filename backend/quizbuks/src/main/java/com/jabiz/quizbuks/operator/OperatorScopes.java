@@ -58,6 +58,8 @@ public final class OperatorScopes {
         fields.put(QbInvitations.QUOTA, "sponsorId");
         fields.put(QbPublications.SPONSOR_METHODS, "userId");
         fields.put(QbAccounts.SPONSOR, "userId");
+        // Q88a: a sponsor's own certifications.
+        fields.put(com.jabiz.quizbuks.certification.QbSponsorCertifications.CERTIFICATION, "sponsorId");
         fields.put(QbSponsorPages.PAGE, "userId");
         fields.put(QbSponsorProducts.PRODUCT, "userId");
         fields.put(QbSponsorProducts.QUIZ_LINK, "ownerId");

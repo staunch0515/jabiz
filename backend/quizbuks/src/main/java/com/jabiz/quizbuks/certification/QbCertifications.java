@@ -43,7 +43,7 @@ public final class QbCertifications {
         eb.field("roundId", f -> f.physicalColumn("round_id").immutable(true).required(true).generated(true)
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:certification-round"));
         eb.field("certification", f -> f.physicalColumn("certification").immutable(true).required(true)
-            .asCode(Certifications.DICTIONARY, Certifications.keys()));
+            .asText(40));
         eb.field("certificationVersion", f -> f.physicalColumn("certification_version").immutable(true)
             .required(true).asNumeric(4, 0));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true).asText(36));
@@ -72,7 +72,7 @@ public final class QbCertifications {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:certification-record"));
         eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
         eb.field("certification", f -> f.physicalColumn("certification").immutable(true).required(true)
-            .asCode(Certifications.DICTIONARY, Certifications.keys()));
+            .asText(40));
         eb.field("certificationVersion", f -> f.physicalColumn("certification_version").immutable(true)
             .required(true).asNumeric(4, 0));
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)

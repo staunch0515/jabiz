@@ -34,6 +34,12 @@ public final class RoundHolders {
     static final String RECORDS = "certificationRecords";
     static final String ROUNDS = "certificationRounds";
     static final String ATTEMPTS = "certificationAttempts";
+    /**
+     * Q88a (D-Q88-2): the sponsors' own certifications a key names ({@code sp:<id>}), read in the same statement as
+     * the records and the rounds (none for the catalog's keys): their validity and version make the
+     * {@link Certification} the holding rule needs.
+     */
+    static final String SPONSOR_ROWS = "certificationSponsorRows";
 
     /** The round {@code publicationId} is: a query for the start's statement before the lock. */
     public static <C extends ProcessContext> QueryEntities.Metadata<C> round(Function<C, Object> publicationId) {
@@ -51,7 +57,7 @@ public final class RoundHolders {
      */
     public static <I, O> void load(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, Boolean> starting) {
-        loadHolding(pb, ctx -> certification(ctx, starting));
+        loadHoldingOf(pb, ctx -> key(ctx, starting));
     }
 
     /**
@@ -62,20 +68,36 @@ public final class RoundHolders {
      */
     public static <I, O> void loadHolding(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, Certification> certification) {
+        loadHoldingOf(pb, ctx -> {
+            Certification c = certification.apply(ctx);
+            return c == null ? null : c.key();
+        });
+    }
+
+    /**
+     * As {@link #loadHolding}, by the certification's key (the catalog's, or a sponsor's {@code sp:<id>}, Q88a): the
+     * sponsor's row is read in the same statement, so the certification is known only after the read
+     * ({@link #resolve}); the statement budget is the same.
+     */
+    public static <I, O> void loadHoldingOf(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, String> key) {
         pb.step("Load the caller's records and the rounds of the certification", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.RECORD), ctx -> {
-                    Certification c = certification.apply(ctx);
-                    return c == null ? nothing("userId")
-                        : CertificationProcesses.records(ctx.request().actorId(), c.key());
+                    String k = key.apply(ctx);
+                    return k == null ? nothing("userId") : CertificationProcesses.records(ctx.request().actorId(), k);
                 }, RECORDS),
                 QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.ROUND), ctx -> {
-                    Certification c = certification.apply(ctx);
-                    return c == null ? nothing("publicationId") : CertificationProcesses.rounds(c);
-                }, ROUNDS)))
+                    String k = key.apply(ctx);
+                    return k == null ? nothing("publicationId") : CertificationProcesses.roundsOf(k);
+                }, ROUNDS),
+                QueryEntities.query(QbSponsorCertifications.DEFAULT_DATASET, ctx -> {
+                    String k = key.apply(ctx);
+                    return sponsorRows(k == null ? List.of() : List.of(k));
+                }, SPONSOR_ROWS)))
             .step("Load the caller's attempts on those rounds", QueryEntities.<ProcessContext>of(
                 QbPublications.defaultDataset(QbPlay.ATTEMPT), ctx -> {
                     List<Object> publications = new ArrayList<>();
-                    if (certification.apply(ctx) != null) {
+                    if (key.apply(ctx) != null) {
                         for (EntityInstance r : CertificationProcesses.list(ctx, ROUNDS)) {
                             publications.add(UUID.fromString(String.valueOf((Object) r.get("publicationId"))));
                         }
@@ -98,6 +120,18 @@ public final class RoundHolders {
      */
     public static <I, O> void loadHoldings(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, List<Certification>> certifications, String prefix) {
+        loadHoldingsOf(pb, ctx -> {
+            List<Certification> asked = certifications.apply(ctx);
+            return asked == null ? List.of() : asked.stream().map(Certification::key).toList();
+        }, prefix);
+    }
+
+    /**
+     * As {@link #loadHoldings}, by the certifications' keys (Q88a: a sponsor's {@code sp:<id>} among them, whose row
+     * is read in the same statement); {@link #heldKeysOf} answers from them.
+     */
+    public static <I, O> void loadHoldingsOf(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+        Function<ProcessContext, List<String>> certifications, String prefix) {
         pb.step("Load the caller's records and the rounds of the certifications required", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.RECORD), ctx -> {
                     List<Object> keys = keys(certifications.apply(ctx));
@@ -106,18 +140,25 @@ public final class RoundHolders {
                             new QueryPredicate.In("certification", keys)))).limit(CertificationProcesses.MAX_ROWS).build();
                 }, prefix + RECORDS),
                 QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.ROUND), ctx -> {
-                    List<Certification> asked = certifications.apply(ctx);
+                    List<String> asked = certifications.apply(ctx);
                     List<Object> keys = keys(asked);
                     if (keys.isEmpty()) {
                         return nothing("publicationId");
                     }
-                    Duration longest = asked.stream().map(Certification::validity).max(Duration::compareTo).orElseThrow();
+                    // Only rounds open or closed within the longest validity asked can confer a holding now; a
+                    // sponsor's validity is not known before the read, so its longest possible is taken.
+                    Duration longest = asked.stream().map(k -> SponsorCertifications.isSponsor(k)
+                            ? Duration.ofDays(SponsorCertifications.MAX_VALIDITY_DAYS)
+                            : Certifications.of(k).map(Certification::validity).orElse(Duration.ZERO))
+                        .max(Duration::compareTo).orElseThrow();
                     return EntityQuery.builder().where(new QueryPredicate.And(List.of(
                             new QueryPredicate.In("certification", keys),
                             new QueryPredicate.Or(List.of(new QueryPredicate.IsNull("closedAt"),
                                 new QueryPredicate.Gt("closedAt", ctx.opTime().minus(longest)))))))
                         .limit(CertificationProcesses.MAX_ROWS).build();
-                }, prefix + ROUNDS)))
+                }, prefix + ROUNDS),
+                QueryEntities.query(QbSponsorCertifications.DEFAULT_DATASET,
+                    ctx -> sponsorRows(certifications.apply(ctx)), prefix + SPONSOR_ROWS)))
             .step("Load the caller's attempts on the rounds of the certifications required", QueryEntities.<ProcessContext>of(
                 QbPublications.defaultDataset(QbPlay.ATTEMPT), ctx -> {
                     List<Object> publications = new ArrayList<>();
@@ -136,11 +177,22 @@ public final class RoundHolders {
 
     /** The keys of those of {@code certifications} the caller holds now, from what {@link #loadHoldings} read. */
     public static Set<String> heldKeys(ProcessContext ctx, List<Certification> certifications, String prefix) {
+        return heldKeysOf(ctx, certifications.stream().map(Certification::key).toList(), prefix);
+    }
+
+    /** The keys of those of {@code keys} the caller holds now, from what {@link #loadHoldingsOf} read. */
+    public static Set<String> heldKeysOf(ProcessContext ctx, List<String> keys, String prefix) {
         Set<String> held = new HashSet<>();
         List<EntityInstance> records = CertificationProcesses.list(ctx, prefix + RECORDS);
         List<EntityInstance> rounds = CertificationProcesses.list(ctx, prefix + ROUNDS);
         List<EntityInstance> attempts = CertificationProcesses.list(ctx, prefix + ATTEMPTS);
-        for (Certification certification : certifications) {
+        List<EntityInstance> sponsorRows = CertificationProcesses.list(ctx, prefix + SPONSOR_ROWS);
+        for (String key : keys) {
+            // A key nobody defines (gone from the catalog, or a sponsor's row missing) is held by nobody.
+            Certification certification = SponsorCertifications.resolve(key, sponsorRows).orElse(null);
+            if (certification == null) {
+                continue;
+            }
             List<EntityInstance> mine = records.stream()
                 .filter(r -> certification.key().equals(r.get("certification"))).toList();
             List<CertificationHolding.Entry> entries = new ArrayList<>(mine.stream()
@@ -158,13 +210,34 @@ public final class RoundHolders {
         return held;
     }
 
-    private static List<Object> keys(List<Certification> certifications) {
-        return certifications == null ? List.of() : certifications.stream().map(c -> (Object) c.key()).toList();
+    private static List<Object> keys(List<String> keys) {
+        return keys == null ? List.of() : keys.stream().filter(k -> k != null).map(k -> (Object) k).toList();
+    }
+
+    /** The sponsors' rows the keys name (none for the catalog's: the query then finds nothing). */
+    static EntityQuery sponsorRows(List<String> keys) {
+        List<Object> ids = new ArrayList<>();
+        if (keys != null) {
+            for (String key : keys) {
+                String id = SponsorCertifications.idOf(key);
+                if (id != null) {
+                    ids.add(id);
+                }
+            }
+        }
+        return ids.isEmpty() ? nothing("certificationId") : EntityQuery.builder()
+            .where(new QueryPredicate.In("certificationId", ids)).limit(ids.size()).build();
+    }
+
+    /** The certification {@code key} names, from the catalog or the sponsors' rows {@link #loadHoldingOf} read. */
+    public static Optional<Certification> resolve(ProcessContext ctx, String key) {
+        return key == null ? Optional.empty()
+            : SponsorCertifications.resolve(key, CertificationProcesses.list(ctx, SPONSOR_ROWS));
     }
 
     /** Until when the caller holds the certification of the publication's round; empty when not, or not a round. */
     public static Optional<Instant> heldUntil(ProcessContext ctx) {
-        return heldUntil(ctx, certification(ctx, c -> true));
+        return heldUntil(ctx, resolve(ctx, key(ctx, c -> true)).orElse(null));
     }
 
     /** Until when the caller holds {@code certification}, from what {@link #loadHolding} read; empty when not. */
@@ -190,17 +263,14 @@ public final class RoundHolders {
                 "heldUntil", until.toString()))));
     }
 
-    /** The certification of the publication's round, when there is one and {@code starting} holds. */
-    private static Certification certification(ProcessContext ctx, Function<ProcessContext, Boolean> starting) {
+    /** The key of the publication's round's certification, when there is one and {@code starting} holds. */
+    private static String key(ProcessContext ctx, Function<ProcessContext, Boolean> starting) {
         if (!Boolean.TRUE.equals(starting.apply(ctx))) {
             return null;
         }
         List<EntityInstance> round = CertificationProcesses.list(ctx, ROUND);
-        if (round.isEmpty()) {
-            return null;
-        }
-        // A key no longer in the catalog holds nothing: its round is an ordinary publication now.
-        return Certifications.of(String.valueOf((Object) round.get(0).get("certification"))).orElse(null);
+        // A key nobody defines any more holds nothing (resolve): its round is an ordinary publication now.
+        return round.isEmpty() ? null : String.valueOf((Object) round.get(0).get("certification"));
     }
 
     private static EntityQuery nothing(String field) {

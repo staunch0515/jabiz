@@ -20,6 +20,7 @@ import { versionsQuery } from '../content/paths'
 import { SPONSOR } from '../messages'
 import { criterionOf, type Condition } from '../qb/audience'
 import { formatKudos } from '../qb/kudos'
+import { certificationName } from '../qb/certifications'
 import { QB } from '../qb/messages'
 import {
   problemPlace,
@@ -167,6 +168,8 @@ export interface SummaryValues {
   conditions?: readonly Condition[]
   /** Q76: what a taker must have done first; undefined while unknown (not shown). */
   prerequisites?: readonly PrerequisiteRow[]
+  /** Q88a: the name of the certification passing gives; null for none; undefined while unknown (not shown). */
+  roundName?: string | null
   quizTitle: string | null
   versionLabel: string | null
   regions: readonly string[]
@@ -200,10 +203,10 @@ export interface SummaryValues {
 /** Q76: the prerequisites in a line: "Level 1 (passed) · Survey (answered)"; none is nothing to do first. */
 export function usePrerequisitesText(): (prerequisites: readonly PrerequisiteRow[]) => string {
   const { t } = useTranslation(SPONSOR)
-  const { t: tQb } = useTranslation(QB)
+  const { t: tQb, i18n } = useTranslation(QB)
   return (prerequisites) => prerequisites.length === 0 ? t('publishing.prerequisites.none') : prerequisites
     .map((p) => t('publishing.prerequisites.item', {
-      name: p.certification ? tQb(`certification.names.${p.certification}`) : p.name,
+      name: p.certification ? certificationName(p.certification, p.certificationNames, i18n.language, tQb) : p.name,
       requirement: p.certification ? tQb('certification.held') : tQb(`prerequisite.${p.requirement.toLowerCase()}`) }))
     .join(' · ')
 }
@@ -261,6 +264,9 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
     ...(values.prerequisites
       ? [{ key: 'prerequisites', label: t('publishing.prerequisites.title'),
         value: <span data-testid="summary-prerequisites">{prerequisitesText(values.prerequisites)}</span> }] : []),
+    ...(values.roundName !== undefined
+      ? [{ key: 'round', label: t('certifications.round.summary'),
+        value: <span data-testid="summary-round">{values.roundName ?? t('certifications.round.none')}</span> }] : []),
     { key: 'period', label: t('publishing.list.period'), value: <Period startAt={values.startAt} endAt={values.endAt} /> },
     {
       key: 'timeLimit',

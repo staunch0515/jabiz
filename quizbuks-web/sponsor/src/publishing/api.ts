@@ -4,6 +4,8 @@ import { minuteNow } from '../qb/legal'
 import { CRITERIA, type Condition } from '../qb/audience'
 import { AUDIENCE, PREREQUISITES, type Requirement } from '../qb/ids'
 import { referralPolicy, type ReferralPolicy } from '../qb/play'
+import { certificationNamesOf } from '../qb/certifications'
+import type { I18nText } from '../qb/legal'
 import { BENEFIT_TEMPLATE } from '../benefits/ids'
 import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_PROCESS, PUBLISHING_TEMPLATE } from './ids'
 
@@ -1541,8 +1543,10 @@ export interface Prerequisite {
 /** A row of `qb.sponsor.publication-prerequisites`: a stored prerequisite with the required publication as it is now. */
 export interface PrerequisiteRow extends Prerequisite {
   prerequisiteId: string
-  /** The required publication's name; empty for a certification (named by `certification.names`). */
+  /** The required publication's name; empty for a certification (named by `certification.names`, or Q88a its row). */
   name: string
+  /** Q88a: a sponsor's own certification's names by language; null for the catalog's or a required publication. */
+  certificationNames?: I18nText | null
   status: PublicationStatus
   startAt: string | null
   endAt: string | null
@@ -1560,6 +1564,7 @@ export async function readPrerequisites(publicationId: string): Promise<Prerequi
     ...(typeof row.certification === 'string' && row.certification
       ? { certification: row.certification } : { requiredPublicationId: String(row.requiredPublicationId) }),
     requirement: row.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED',
+    certificationNames: certificationNamesOf(row.certificationNames),
     name: String(row.name ?? ''),
     status: (row.status as PublicationStatus) ?? 'DRAFT',
     startAt: str(row.startAt),

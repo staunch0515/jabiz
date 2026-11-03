@@ -1,3 +1,5 @@
+import { certificationNamesOf } from './certifications'
+import type { I18nText } from './legal'
 import { runProcess, runQuery, type Filter, type QueryPage, type Sort } from '@jabiz/client'
 import { trustedPlayer } from './video'
 import { PLAY } from './ids'
@@ -71,6 +73,9 @@ export interface FeedCard {
   language?: string | null
   /** The highest reward, in Kudos. */
   maxReward: unknown
+  /** Q88a (D-Q88-5): the certification passing it gives (the key of its round), and a sponsor's own one's names. */
+  certification?: string | null
+  certificationNames?: I18nText | null
   /** How the reward reaches the taker (Q22). */
   rewardMethod: RewardMethod
   /** Q33: how a digital prize is delivered and what it is; null for the other methods. */
@@ -138,6 +143,8 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     kind: kindOf(row.kind),
     language: textOrNull(row.language),
     maxReward: row.maxReward,
+    certification: textOrNull(row.certification),
+    certificationNames: certificationNamesOf(row.certificationNames),
     rewardMethod: methodOf(row.rewardMethod),
     digitalDelivery: digitalDeliveryOf(row.digitalDelivery),
     digitalDescription: textOrNull(row.digitalDescription),
@@ -258,6 +265,9 @@ export interface PublicationView {
   fullScore: number
   passScore: number
   maxReward: unknown
+  /** Q88a (D-Q88-5): the certification passing it gives (the key of its round), and a sponsor's own one's names. */
+  certification: string | null
+  certificationNames: I18nText | null
   /** How the reward reaches the taker (Q22), and the prize when it is collected at the sponsor's place. */
   rewardMethod: RewardMethod
   redeemDescription: string | null
@@ -330,6 +340,8 @@ export interface PublicationPrerequisite {
   met: boolean
   /** Q86: the publication of the certification's current round, to send the taker to; null when none is open. */
   roundPublicationId: string | null
+  /** Q88a: a sponsor's own certification's names by language; null for the catalog's (named by the texts). */
+  certificationNames: I18nText | null
 }
 
 /** The `prerequisites` JSON of `qb.app.publication` (and `qb.public.sponsor-page-publications`); none on bad JSON. */
@@ -356,6 +368,7 @@ export function prerequisitesOf(value: unknown): PublicationPrerequisite[] {
       live: p.live === true || p.live === 'true',
       met: p.met === true || p.met === 'true' || p.held === true || p.held === 'true',
       roundPublicationId: typeof p.roundPublicationId === 'string' ? p.roundPublicationId : null,
+      certificationNames: certificationNamesOf(p.certificationNames),
     }]
   })
 }
@@ -401,6 +414,8 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     fullScore: numberOf(row.fullScore),
     passScore: numberOf(row.passScore),
     maxReward: row.maxReward,
+    certification: textOrNull(row.certification),
+    certificationNames: certificationNamesOf(row.certificationNames),
     rewardMethod: methodOf(row.rewardMethod),
     redeemDescription: textOrNull(row.redeemDescription),
     digitalDelivery: digitalDeliveryOf(row.digitalDelivery),

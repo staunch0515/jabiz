@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 /**
  * A taker's certifications and certificates (Q77, docs/quizbuks/plans/Q77-certificates.md): {@link #MINE} says which
@@ -60,9 +59,17 @@ public final class CertificateProcesses {
      *
      * @param source        {@code PASSED} (a round passed) or {@code GRANTED} (by hand)
      * @param certificateId the certificate of this holding, once issued; its PDF is the document whose subject it is
+     * @param name          Q88a: a sponsor's certification's name by language (null for the catalog's, whose names
+     *                      are the App's texts)
+     * @param sponsorName   Q88a: the sponsor whose certification it is (null for the catalog's)
      */
     public record Held(String certification, String source, Instant heldFrom, Instant heldUntil,
-        String certificateId, String verifyKey) {}
+        String certificateId, String verifyKey, Map<String, String> name, String sponsorName) {
+        public Held(String certification, String source, Instant heldFrom, Instant heldUntil, String certificateId,
+            String verifyKey) {
+            this(certification, source, heldFrom, heldUntil, certificateId, verifyKey, null, null);
+        }
+    }
 
     public record MineOutput(List<Held> held) {}
 
@@ -77,8 +84,11 @@ public final class CertificateProcesses {
     static final String OUTPUT = "output";
     static final String RECORDS = "certRecords";
     static final String ROUNDS = "certRounds";
-    static final String ATTEMPTS = "certAttempts";
     static final String CERTIFICATES = "certificates";
+    /** Q88a: the caller's passed attempts (the rounds are read for their publications), the sponsors' rows, the sponsors. */
+    static final String PASSES = "certPasses";
+    static final String SPONSOR_ROWS = "certSponsorRows";
+    static final String SPONSORS = "certSponsors";
     static final String PROFILE = "profile";
     static final String RANDOM = "random";
     static final String NEW_ID = "newCertificateId";
@@ -121,49 +131,102 @@ public final class CertificateProcesses {
                 // At the issue time: the certificate shows the holding as it is now.
                 .step("Issue the document", CallProcess.<ProcessContext>when(ctx -> ctx.contains(NEW_ID),
                     DocumentProcesses.ISSUE, 1, ctx -> new DocumentProcesses.IssueInput(QbCertificates.LAYOUT_ID,
-                        Map.of("certificateId", String.valueOf(ctx.get(NEW_ID)), "certificationName",
-                            name(messages, ctx.get(INPUT, IssueInput.class)), "verifyAddress",
-                            verifyAddress(siteUrl, ctx.get(OUTPUT, IssueOutput.class).verifyKey())), null, null,
+                        documentParams(messages, siteUrl, ctx), null, null,
                         ctx.get(INPUT, IssueInput.class).language()), ISSUED));
         });
     }
 
-    /** The caller's records, every round and the caller's attempts on them: three statements, for every certification. */
+    /**
+     * What tells which certifications the caller holds (four statements, not on the answering path): their records,
+     * certificates and passed attempts; the rounds of the publications they passed (a pass counts only on a round,
+     * whichever certification's: the catalog's or, Q88a, a sponsor's); the sponsors' certifications those name and
+     * the sponsors' names.
+     */
     static <I, O> void loadHoldings(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
-        pb.step("Load the caller's records and certificates", QueryEntities.<ProcessContext>all(
+        pb.step("Load the caller's records, certificates and passes", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.RECORD), ctx ->
                     EntityQuery.builder().where(new QueryPredicate.Eq("userId", ctx.request().actorId()))
                         .limit(CertificationProcesses.MAX_ROWS).build(), RECORDS),
-                QueryEntities.query(QbCertifications.defaultDataset(QbCertifications.ROUND), ctx ->
-                    EntityQuery.builder().where(new QueryPredicate.In("certification",
-                        List.of((Object[]) Certifications.keys()))).limit(CertificationProcesses.MAX_ROWS).build(),
-                    ROUNDS),
                 QueryEntities.query(QbCertificates.MY_DATASET, ctx -> EntityQuery.builder()
-                    .limit(CertificationProcesses.MAX_ROWS).build(), CERTIFICATES)))
-            .step("Load the caller's attempts on the rounds", QueryEntities.<ProcessContext>of(
-                QbPublications.defaultDataset(QbPlay.ATTEMPT), ctx -> {
+                    .limit(CertificationProcesses.MAX_ROWS).build(), CERTIFICATES),
+                QueryEntities.query(QbPublications.defaultDataset(QbPlay.ATTEMPT), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("userId", ctx.request().actorId()),
+                        new QueryPredicate.Eq("passed", true)))).limit(CertificationProcesses.MAX_ROWS).build(),
+                    PASSES)))
+            .step("Load the rounds of the publications passed", QueryEntities.<ProcessContext>of(
+                QbCertifications.defaultDataset(QbCertifications.ROUND), ctx -> {
                     List<Object> publications = new ArrayList<>();
-                    CertificationProcesses.list(ctx, ROUNDS).forEach(r ->
-                        publications.add(UUID.fromString(String.valueOf((Object) r.get("publicationId")))));
-                    return EntityQuery.builder().where(new QueryPredicate.And(List.of(
-                        new QueryPredicate.Eq("userId", ctx.request().actorId()),
-                        new QueryPredicate.In("publicationId", publications))))
+                    CertificationProcesses.list(ctx, PASSES).forEach(a ->
+                        publications.add(String.valueOf((Object) a.get("publicationId"))));
+                    return EntityQuery.builder().where(new QueryPredicate.In("publicationId", publications))
                         .limit(CertificationProcesses.MAX_ROWS).build();
-                }, ATTEMPTS));
+                }, ROUNDS))
+            .step("Load the sponsors' certifications named", QueryEntities.<ProcessContext>of(
+                QbSponsorCertifications.DEFAULT_DATASET, ctx -> RoundHolders.sponsorRows(sponsorKeys(ctx)),
+                SPONSOR_ROWS))
+            .step("Load the sponsors named", QueryEntities.<ProcessContext>of(
+                QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> {
+                    List<Object> sponsors = CertificationProcesses.list(ctx, SPONSOR_ROWS).stream()
+                        .map(r -> (Object) String.valueOf((Object) r.get("sponsorId"))).distinct().toList();
+                    return EntityQuery.builder().where(new QueryPredicate.In("userId", sponsors))
+                        .limit(CertificationProcesses.MAX_ROWS).build();
+                }, SPONSORS));
     }
 
-    /** Each certification of the catalog the caller holds now, in the catalog's order. */
+    /** The keys of the sponsors' certifications among the caller's records and the rounds they passed. */
+    private static List<String> sponsorKeys(ProcessContext ctx) {
+        List<String> keys = new ArrayList<>();
+        for (String key : List.of(RECORDS, ROUNDS)) {
+            for (EntityInstance row : CertificationProcesses.list(ctx, key)) {
+                String certification = String.valueOf((Object) row.get("certification"));
+                if (SponsorCertifications.isSponsor(certification) && !keys.contains(certification)) {
+                    keys.add(certification);
+                }
+            }
+        }
+        return keys;
+    }
+
+    /** The certifications the caller may hold: the catalog's in its order, then (Q88a) the sponsors' named, by key. */
+    static List<Certification> candidates(ProcessContext ctx) {
+        List<Certification> all = new ArrayList<>(Certifications.ALL);
+        CertificationProcesses.list(ctx, SPONSOR_ROWS).stream().map(SponsorCertifications::of)
+            .sorted(java.util.Comparator.comparing(Certification::key)).forEach(all::add);
+        return all;
+    }
+
+    /** The certification {@code key} names, from the catalog or the sponsors' rows read. */
+    static Optional<Certification> resolve(ProcessContext ctx, String key) {
+        return SponsorCertifications.resolve(key, CertificationProcesses.list(ctx, SPONSOR_ROWS));
+    }
+
+    /** Each certification the caller holds now, the catalog's in its order, then the sponsors'. */
     static List<Held> held(ProcessContext ctx) {
         List<Held> held = new ArrayList<>();
-        for (Certification certification : Certifications.ALL) {
+        for (Certification certification : candidates(ctx)) {
             holding(ctx, certification).ifPresent(h -> {
                 EntityInstance certificate = certificateOf(ctx, certification, h.until());
+                EntityInstance row = sponsorRow(ctx, certification.key());
                 held.add(new Held(certification.key(), h.kind(), h.from(), h.until(),
                     certificate == null ? null : String.valueOf(certificate.id()),
-                    certificate == null ? null : certificate.get("verifyKey")));
+                    certificate == null ? null : certificate.get("verifyKey"),
+                    row == null ? null : SponsorCertificationProcesses.texts(row.get("name")),
+                    row == null ? null : sponsorName(ctx, row)));
             });
         }
         return List.copyOf(held);
+    }
+
+    private static EntityInstance sponsorRow(ProcessContext ctx, String key) {
+        return CertificationProcesses.list(ctx, SPONSOR_ROWS).stream()
+            .filter(r -> key.equals(SponsorCertifications.keyOf(r.id()))).findFirst().orElse(null);
+    }
+
+    /** The company name of the sponsor whose certification {@code row} is; null when the onboarding is gone. */
+    private static String sponsorName(ProcessContext ctx, EntityInstance row) {
+        return CertificationProcesses.list(ctx, SPONSORS).stream()
+            .filter(s -> String.valueOf((Object) s.get("userId")).equals(String.valueOf((Object) row.get("sponsorId"))))
+            .map(s -> (String) s.get("company")).findFirst().orElse(null);
     }
 
     /** The caller's holding of {@code certification} now, from what {@link #loadHoldings} read. */
@@ -175,7 +238,7 @@ public final class CertificateProcesses {
         List<CertificationHolding.Entry> entries = new ArrayList<>(records.stream()
             .map(CertificationProcesses::entry).toList());
         for (Map<String, Object> pass : CertificationProcesses.unrecordedPasses(certification, rounds, records,
-            CertificationProcesses.list(ctx, ATTEMPTS), ctx.request().actorId())) {
+            CertificationProcesses.list(ctx, PASSES), ctx.request().actorId())) {
             entries.add(CertificationProcesses.passEntry(pass));
         }
         return CertificationHolding.holding(entries, certification, ctx.opTime());
@@ -191,7 +254,7 @@ public final class CertificateProcesses {
     /** The certificate to issue, or the one issued before; 422 when the certification is not held now. */
     static void prepare(ProcessContext ctx) {
         IssueInput input = ctx.get(INPUT, IssueInput.class);
-        Certification certification = Certifications.of(input.certification()).orElse(null);
+        Certification certification = resolve(ctx, input.certification()).orElse(null);
         Optional<CertificationHolding.Holding> holding = certification == null ? Optional.empty()
             : holding(ctx, certification);
         if (holding.isEmpty()) {
@@ -232,7 +295,31 @@ public final class CertificateProcesses {
     /** The App's verify page (the entry {@code app}'s path and the route). */
     public static final String VERIFY_PATH = "/taker/verify/";
 
-    /** The certification's name in the certificate's language. */
+    /**
+     * What the certificate's templates take: the row, the certification's name in the certificate's language and the
+     * verify address; for a sponsor's certification (Q88a, D-Q88-6) the name from its row and the sponsor as the
+     * issuer (the platform's issuer otherwise, qb.me.certificate-issuer).
+     */
+    static Map<String, Object> documentParams(MessageCatalog messages, String siteUrl, ProcessContext ctx) {
+        IssueInput input = ctx.get(INPUT, IssueInput.class);
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("certificateId", String.valueOf(ctx.get(NEW_ID)));
+        params.put("verifyAddress", verifyAddress(siteUrl, ctx.get(OUTPUT, IssueOutput.class).verifyKey()));
+        EntityInstance row = sponsorRow(ctx, input.certification());
+        if (row == null) {
+            params.put("certificationName", name(messages, input));
+        } else {
+            String name = SponsorCertifications.text(row.get("name"), input.language());
+            params.put("certificationName", name == null ? input.certification() : name);
+            String issuer = sponsorName(ctx, row);
+            if (issuer != null && !issuer.isBlank()) {
+                params.put("issuerName", issuer);
+            }
+        }
+        return params;
+    }
+
+    /** The certification's name in the certificate's language (the catalog's: a message). */
     static String name(MessageCatalog messages, IssueInput input) {
         return messages.find(NAME_KEY + input.certification(), Locale.forLanguageTag(input.language()))
             .orElse(input.certification());

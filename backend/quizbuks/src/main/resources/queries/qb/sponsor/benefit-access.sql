@@ -3,9 +3,10 @@ id: qb.sponsor.benefit-access
 description: >-
   Q89a (D-Q89-1): until when the caller holds each of the two benefit certifications (none: not held), and the
   publication of each one's current round (none: no round open now), for the pages that need one
-entities: [QbCertificationRound, QbCertificationRecord, QbPublicationCard, QbAttempt]
+entities: [QbCertificationRound, QbCertificationRecord, QbPublicationCard, QbAttempt, QbSponsorCertification]
 datasets:
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
@@ -51,5 +52,5 @@ SELECT
      WHERE cr.{{QbCertificationRound.certification}} = cat.cert AND cr.{{QbCertificationRound.closedAt}} IS NULL
        AND rp.{{QbPublicationCard.status}} = 'LIVE' AND rp.{{QbPublicationCard.startAt}} <= CAST(:at AS timestamptz)
        AND rp.{{QbPublicationCard.endAt}} > CAST(:at AS timestamptz)) AS roundPublicationId
-FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
 WHERE cat.cert IN ('BENEFIT_PROVIDER', 'BENEFIT_SPONSOR')

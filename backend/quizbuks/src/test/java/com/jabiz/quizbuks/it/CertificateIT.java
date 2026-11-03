@@ -55,7 +55,7 @@ class CertificateIT extends LegalItSupport {
             .map(row -> (Map<String, Object>) row).toList();
     }
 
-    private static String text(byte[] pdf) throws Exception {
+    static String text(byte[] pdf) throws Exception {
         try (PDDocument document = Loader.loadPDF(pdf)) {
             return new PDFTextStripper().getText(document);
         }

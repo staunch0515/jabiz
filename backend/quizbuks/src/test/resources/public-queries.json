@@ -20,9 +20,13 @@
     },
     "results" : {
       "certification" : {
-        "allowedValues" : [ "SPONSOR_APPLY", "REFERRER", "TERMS_APP_UNDERSTOOD", "CONTEST_RULES_UNDERSTOOD", "TERMS_SPONSOR_UNDERSTOOD", "BENEFIT_PROVIDER", "BENEFIT_SPONSOR" ],
-        "dictUrn" : "urn:jabiz:dict:quizbuks:certification",
-        "type" : "code"
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "certificationNames" : {
+        "multiline" : false,
+        "type" : "text"
       },
       "certificationVersion" : {
         "precision" : 4,
@@ -41,6 +45,11 @@
       "issuedAt" : {
         "role" : "EVENT_TIME",
         "type" : "temporal"
+      },
+      "issuerName" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
       },
       "revokedAt" : {
         "role" : "EVENT_TIME",
@@ -827,9 +836,13 @@
     },
     "results" : {
       "certification" : {
-        "allowedValues" : [ "SPONSOR_APPLY", "REFERRER", "TERMS_APP_UNDERSTOOD", "CONTEST_RULES_UNDERSTOOD", "TERMS_SPONSOR_UNDERSTOOD", "BENEFIT_PROVIDER", "BENEFIT_SPONSOR" ],
-        "dictUrn" : "urn:jabiz:dict:quizbuks:certification",
-        "type" : "code"
+        "maxLength" : 40,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "certificationNames" : {
+        "multiline" : false,
+        "type" : "text"
       },
       "certificationVersion" : {
         "precision" : 4,
@@ -846,6 +859,11 @@
         "type" : "temporal"
       },
       "holderName" : {
+        "maxLength" : 100,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "issuerName" : {
         "maxLength" : 100,
         "multiline" : false,
         "type" : "text"

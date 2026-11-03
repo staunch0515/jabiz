@@ -14,6 +14,7 @@ import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
 import { useStartAttempt } from '../play/useStartAttempt'
 import { ACCOUNT_DETAILS_PATH } from './AccountPage'
+import { certificationName } from '../qb/certifications'
 import { QB } from '../qb/messages'
 import { shownLanguages } from '../qb/api'
 import { useSoundSetting } from '../qb/SoundSettings'
@@ -40,7 +41,7 @@ export function minutesUntil(time: string | null, now: number = Date.now()): num
 /** What the caller can do: start, continue the attempt in progress, see their result, or nothing now. */
 function Action({ publication, onLanguage }: { publication: PublicationView; onLanguage: (language: string) => void }) {
   const { t } = useTranslation(APP)
-  const { t: tQb } = useTranslation(QB)
+  const { t: tQb, i18n: qbI18n } = useTranslation(QB)
   const { emailVerified } = useAuth()
   const start = useStartAttempt()
   const duration = useDuration()
@@ -160,8 +161,8 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
                 {p.certification
                   ? p.roundPublicationId && !p.met
                     ? <Link to={sharePath(p.roundPublicationId)} className="text-primary underline">
-                      {tQb(`certification.names.${p.certification}`)}</Link>
-                    : <span>{tQb(`certification.names.${p.certification}`)}</span>
+                      {certificationName(p.certification, p.certificationNames, qbI18n.language, tQb)}</Link>
+                    : <span>{certificationName(p.certification, p.certificationNames, qbI18n.language, tQb)}</span>
                   : <Link to={sharePath(p.requiredPublicationId!)} className="text-primary underline">{p.name}</Link>}
                 <span className="text-muted-foreground text-sm">
                   {p.certification

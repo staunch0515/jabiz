@@ -3,12 +3,13 @@ id: qb.sponsor.benefit-catalog
 description: >-
   Q89a (D-Q89-3): the benefits sponsors list, for a sponsor holding a benefit certification (none otherwise),
   newest first; with the provider's company and the caller's conversation about each
-entities: [QbBenefitOffer, QbBenefitConversation, QbSponsor, QbCertificationRound, QbCertificationRecord, QbAttempt]
+entities: [QbBenefitOffer, QbBenefitConversation, QbSponsor, QbCertificationRound, QbCertificationRecord, QbAttempt, QbSponsorCertification]
 datasets:
   QbBenefitOffer: urn:jabiz:dataset:default:QbBenefitOffer
   QbBenefitConversation: urn:jabiz:dataset:sponsor:QbBenefitConversation
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
+  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
 params:
@@ -45,7 +46,7 @@ permissions: [qb.benefit.use]
 -- it literally.
 WITH held AS (
     SELECT 1 AS yes
-    FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS cat(cert, ver, secs)
+    FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
     WHERE cat.cert IN ('BENEFIT_PROVIDER', 'BENEFIT_SPONSOR')
       AND (SELECT max(e.until)
      FROM (SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,

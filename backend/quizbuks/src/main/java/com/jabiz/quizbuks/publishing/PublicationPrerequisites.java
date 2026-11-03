@@ -41,6 +41,8 @@ public final class PublicationPrerequisites {
     static final String PREREQUISITES = "prerequisites";
     static final String SPONSOR_EDGES = "sponsorEdges";
     static final String TARGETS = "prerequisiteTargets";
+    /** Q88a: the sponsor's own active certifications, which the draft may require too. */
+    static final String OWN_CERTIFICATIONS = "prerequisiteOwnCertifications";
 
     /**
      * One prerequisite: the publication required and what the taker must have done on it, or (Q86, D-Q86-5) a
@@ -101,7 +103,13 @@ public final class PublicationPrerequisites {
                         }
                         return EntityQuery.builder().where(new QueryPredicate.In("publicationId", ids))
                             .limit(QbPrerequisites.MAX_PREREQUISITES + 1).build();
-                    }, TARGETS)));
+                    }, TARGETS),
+                    // Q88a (D-Q88-4): the sponsor's own active certifications, which may be required too.
+                    QueryEntities.query(com.jabiz.quizbuks.certification.QbSponsorCertifications.SPONSOR_DATASET,
+                        ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("status",
+                            com.jabiz.quizbuks.certification.QbSponsorCertifications.ACTIVE))
+                            .limit(com.jabiz.quizbuks.certification.SponsorCertifications.MAX_PER_SPONSOR + 1).build(),
+                        OWN_CERTIFICATIONS)));
                 pb.compute("Save the prerequisites", (metadata, ctx) -> save(ctx));
             });
     }
@@ -131,7 +139,11 @@ public final class PublicationPrerequisites {
         List<PrerequisiteRules.Edge> edges = PublicationEditing.list(ctx, SPONSOR_EDGES).stream()
             .map(row -> new PrerequisiteRules.Edge(PublicationEditing.uuid(row.get("publicationId")),
                 PublicationEditing.uuid(row.get("requiredPublicationId")))).toList();
-        PrerequisiteRules.problems(PublicationEditing.uuid(publication.id()), wanted, targets, edges)
+        Set<String> own = new HashSet<>();
+        for (EntityInstance row : PublicationEditing.list(ctx, OWN_CERTIFICATIONS)) {
+            own.add(com.jabiz.quizbuks.certification.SponsorCertifications.keyOf(row.id()));
+        }
+        PrerequisiteRules.problems(PublicationEditing.uuid(publication.id()), wanted, targets, edges, own)
             .forEach(ctx::reject);
         if (ctx.hasViolations()) {
             return;

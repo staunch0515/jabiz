@@ -34,11 +34,14 @@ import {
   OFFICIAL_KEY,
   readOfficialPublishers,
   readOverview,
+  readSponsorCertifications,
   recordByHand,
   setOfficialPublisher,
+  SPONSOR_CERTIFICATION_SORTS,
   type HandRecord,
   type OfficialPublisher,
   type Round,
+  type SponsorCertificationRow,
 } from './certification-api'
 import { EmptyState, LoadFailed, Section } from './components'
 import { usePaged, when } from './hooks'
@@ -50,10 +53,67 @@ const REASON_MAX = 500
 
 const problemOf = (e: unknown) => (e instanceof ApiError ? e.display : String(e))
 
-/** A certification's name in the interface language (its key when the page does not know it). */
+/**
+ * A certification's name in the interface language (its key when the page does not know it). Q88a: a sponsor's own
+ * (key `sp:<id>`) is named by its row where the page has it ({@link sponsorName}), else by its key.
+ */
 function useCertificationName() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   return (key: string) => t(`certification.names.${key}`, { defaultValue: key })
+}
+
+/** The name of a sponsor's certification in the interface language, else any; the key when it has none. */
+function sponsorName(row: SponsorCertificationRow, language: string): string {
+  const base = language.split('-')[0]
+  return row.name[base] ?? row.name.en ?? row.name.ja ?? row.name.zh ?? Object.values(row.name)[0] ?? row.key
+}
+
+/** Q88a (D-Q88-8): the sponsors' own certifications, read only; an operator sees its sponsors' only. */
+function SponsorCertifications() {
+  const { t, i18n } = useTranslation(EXTENSION_NAMESPACE)
+  const [q, setQ] = useState('')
+  const [typed, setTyped] = useState('')
+  const { query, table, sortable } = usePaged(['qb-ext', 'sponsor-certifications', q],
+    (offset, limit, sorts) => readSponsorCertifications(q, offset, limit, sorts), true, SPONSOR_CERTIFICATION_SORTS)
+  const columns = useMemo<ColumnDef<SponsorCertificationRow, unknown>[]>(() => [
+    { id: 'company', header: t('certification.sponsor'),
+      cell: ({ row }) => <Link to={PATH.user(row.original.sponsorId)} className={linkClass}
+        data-testid="sponsor-certification-sponsor">{row.original.company ?? row.original.sponsorId}</Link> },
+    { id: 'name', header: t('certification.certification'),
+      cell: ({ row }) => <span data-testid="sponsor-certification-name">{sponsorName(row.original, i18n.language)}</span> },
+    { id: 'validityDays', header: t('certification.validity'), meta: right,
+      cell: ({ row }) => t('certification.days', { count: row.original.validityDays }) },
+    { id: 'certificationVersion', header: t('certification.version'), meta: right,
+      cell: ({ row }) => row.original.certificationVersion },
+    { id: 'status', header: t('certification.status'), cell: ({ row }) => (
+      <Badge variant={row.original.status === 'ACTIVE' ? 'success' : 'outline'} data-status={row.original.status}>
+        {t(`certification.statuses.${row.original.status}`, { defaultValue: row.original.status })}
+      </Badge>
+    ) },
+    { id: 'rounds', header: t('certification.roundsCount'), meta: right, cell: ({ row }) => row.original.rounds },
+    { id: 'holders', header: t('certification.holders'), meta: right, cell: ({ row }) => row.original.holders },
+    { id: 'createdAt', header: t('certification.createdAt'),
+      cell: ({ row }) => when(row.original.createdAt) },
+  ], [t, i18n.language])
+  return (
+    <Section title={t('certification.sponsors')} testId="sponsor-certifications-section">
+      <p className="text-muted-foreground text-sm">{t('certification.sponsorsHint')}</p>
+      <form className="flex flex-wrap items-end gap-2" onSubmit={(event: FormEvent) => { event.preventDefault(); setQ(typed.trim()) }}>
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="sponsor-certifications-q">{t('certification.search')}</Label>
+          <Input id="sponsor-certifications-q" value={typed} onChange={(event) => setTyped(event.target.value)}
+            className="w-64" data-testid="sponsor-certifications-search" />
+        </div>
+        <Button type="submit" variant="outline">{t('certification.searchSubmit')}</Button>
+      </form>
+      {query.isError
+        ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
+        : <DataTable label={t('certification.sponsors')} columns={sortable(columns)} {...table}
+          getRowId={(row) => row.certificationId}
+          empty={<EmptyState art="inbox" title={t('certification.sponsorsNone')} />}
+          rowProps={(row) => ({ 'data-testid': 'sponsor-certification-row', 'data-id': row.certificationId })} />}
+    </Section>
+  )
 }
 
 /** The certifications to choose from. */
@@ -359,6 +419,7 @@ export default function CertificationsPage() {
             </Section>
           </>
         )}
+      <SponsorCertifications />
       {can(PERMISSION.certificationAdmin) && <OfficialPublishers />}
     </div>
   )

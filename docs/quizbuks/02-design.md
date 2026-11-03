@@ -108,6 +108,7 @@ docs/quizbuks/               本文件等
 | `QbPayoutAccount` | P（Q6b） | `userId`（唯一）、`provider`（STRIPE_CONNECT）、`externalAccountId`（唯一，`f.masked(qb.admin.finance.read, LAST4)`）、`country`、`status`（PENDING / ENABLED / RESTRICTED / DEAUTHORIZED）、`payoutsEnabled`、`detailsSubmitted`、`requirementsDue`、`stripeUpdatedAt`（以上 `processOnly`，由 Stripe 的 Connect 通知更新，只取更新的报告） | 用户的收款账户；银行信息由 Stripe 保存，平台不存银行账号。普通表（不是计划中的时态表）：通知按 Stripe 账户号查找，且只有表的唯一约束能保证一个 Stripe 账户只属于一个用户；历史由平台审计保留。开通链接另存普通表 `QbPayoutOnboarding`（每人一行、覆盖，只有本人的数据视图给出） |
 
 | `QbCertificate` | P（Q77） | 主键 `certificateId`；`userId`、`certification`、`certificationVersion`、`heldFrom`、`validUntil`（与前三项唯一：同一段持有一张）、`holderName`（签发时冻结）、`verifyKey`（随机 128 位，唯一）、`language`、`issuedAt` | 本人签发的证书（`plans/Q77-certificates.md`），只经 `QB_CERTIFICATE_ISSUE` 插入；PDF 是平台单据 `qb.certificate`（主体即此行）。`QbUserSettings` 另有 `publicHandle`（唯一）与 `publicPage`（缺省关闭）：公开认证页 `/taker/u/<名>` |
+| `QbSponsorCertification` | P（Q88a） | 主键 `certificationId`；`sponsorId`、`name` 与 `description`（多语言 `I18nText`）、`validityDays`（30–3650）、`certificationVersion`（商户升版）、`status`（`ACTIVE` / `RETIRED`）、`createdAt`、`updatedAt` | 商户自己的认证（`plans/Q88-sponsor-certifications-entry-fee.md`），只经 `QB_SPONSOR_CERTIFICATION_CREATE` / `_UPDATE` / `_RETIRE` 写入；在轮、记录、前置、证书中的键是 `sp:<certificationId>`（四张表的 `certification` 列改为文本，目录不变）。商户以 `QB_SPONSOR_ROUND_SET` 把自己的草稿登记为一轮（同一张 `QbCertificationRound`，`owner` 为商户的运营商），提交后只能 `QB_SPONSOR_ROUND_CLOSE`；0 奖励的发布只在已是一轮时能提交。受控开关 `qb.certification.sponsor-rounds.enabled`（缺省关）只管建立、修改与设轮 |
 
 ### 3.2 内容：模版、版本、题目、资料
 

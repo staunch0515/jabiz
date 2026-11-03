@@ -74,6 +74,75 @@ public class CertificationConfig {
         return defaultDataset(QbCertifications.OFFICIAL);
     }
 
+    // ---- Q88a: the sponsors' own certifications --------------------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbSponsorCertificationEntity() {
+        return QbSponsorCertifications.ENTITY;
+    }
+
+    /** Headquarters reads every sponsor's; an operator its sponsors' (the scope); nobody writes through it. */
+    @Bean
+    DatasetDefinition qbSponsorCertificationDataset() {
+        return DatasetDefinition.define(QbSponsorCertifications.DEFAULT_DATASET, d -> d
+            .targetEntityType(QbSponsorCertifications.CERTIFICATION)
+            .asDefault()
+            .scope(com.jabiz.quizbuks.operator.OperatorScopes.of(QbSponsorCertifications.CERTIFICATION))
+            .permissions(QbPermissions.CERTIFICATION_ADMIN, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(SponsorCertifications.MAX_PER_SPONSOR))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    /** The sponsor's own, read only (its write permission is no role's). */
+    @Bean
+    DatasetDefinition qbMySponsorCertificationDataset() {
+        return DatasetDefinition.define(QbSponsorCertifications.SPONSOR_DATASET, d -> d
+            .targetEntityType(QbSponsorCertifications.CERTIFICATION)
+            .permissions(QbPermissions.PUBLICATION_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+    }
+
+    /**
+     * What the public pages show of a sponsor's certification (the verify page, the public certification page, the
+     * sponsor's page: its name and whose it is), through the public templates only.
+     */
+    @Bean
+    DatasetDefinition qbPublicSponsorCertificationDataset() {
+        return DatasetDefinition.define(QbSponsorCertifications.PUBLIC_DATASET, d -> d
+            .targetEntityType(QbSponsorCertifications.CERTIFICATION)
+            .publicRead(p -> p.allRows().fields("certificationId", "sponsorId", "name", "status"))
+            .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    StaticDictionary qbSponsorCertificationStatusDictionary() {
+        return StaticDictionary.define(QbSponsorCertifications.STATUS_DICTIONARY, d -> d
+            .item(QbSponsorCertifications.ACTIVE, "en", "Active", "zh", "启用", "ja", "有効")
+            .item(QbSponsorCertifications.RETIRED, "en", "Retired", "zh", "已停用", "ja", "終了"));
+    }
+
+    @Bean
+    ProcessDefinition<SponsorCertificationProcesses.CreateInput, SponsorCertificationProcesses.Output, ProcessContext>
+        qbSponsorCertificationCreate() {
+        return SponsorCertificationProcesses.create();
+    }
+
+    @Bean
+    ProcessDefinition<SponsorCertificationProcesses.UpdateInput, SponsorCertificationProcesses.Output, ProcessContext>
+        qbSponsorCertificationUpdate() {
+        return SponsorCertificationProcesses.update();
+    }
+
+    @Bean
+    ProcessDefinition<SponsorCertificationProcesses.Ref, SponsorCertificationProcesses.Output, ProcessContext>
+        qbSponsorCertificationRetire() {
+        return SponsorCertificationProcesses.retire();
+    }
+
     @Bean
     StaticDictionary qbCertificationDictionary() {
         return StaticDictionary.define(Certifications.DICTIONARY, d -> d

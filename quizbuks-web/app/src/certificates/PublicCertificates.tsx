@@ -1,4 +1,4 @@
-import { formatDate } from '@jabiz/client'
+import { formatDate, i18n } from '@jabiz/client'
 import { Badge, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import { Award, BadgeCheck, CircleX, Clock } from 'lucide-react'
@@ -6,6 +6,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { QB } from '../qb/messages'
+import { certificationName } from '../qb/certifications'
 import { Link } from '../qb/router'
 import { readTakerPage, readVerifiedCertificate, stateOf, verifyPath } from './api'
 
@@ -79,8 +80,13 @@ export function VerifyPage({ verifyKey }: { verifyKey: string }) {
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           <dt className="text-muted-foreground">{t('certificates.verify.certification')}</dt>
-          <dd data-testid="verify-certification">{t(`certificates.names.${c.certification}`,
-            { defaultValue: c.certification })}</dd>
+          <dd data-testid="verify-certification">{certificationName(c.certification, c.certificationNames, i18n.language, tQb)}</dd>
+          {c.issuerName && (
+            <>
+              <dt className="text-muted-foreground">{t('certificates.verify.issuer')}</dt>
+              <dd data-testid="verify-issuer">{c.issuerName}</dd>
+            </>
+          )}
           <dt className="text-muted-foreground">{t('certificates.verify.holder')}</dt>
           <dd data-testid="verify-holder">{c.holderName}</dd>
           <dt className="text-muted-foreground">{t('certificates.verify.held')}</dt>
@@ -129,8 +135,10 @@ export function TakerPage({ handle }: { handle: string }) {
               className="hover:bg-accent flex items-start gap-2 rounded-lg border p-3">
               <Award aria-hidden className="text-primary mt-0.5 size-5 shrink-0" />
               <span className="flex min-w-0 flex-col">
-                <span className="font-medium">{t(`certificates.names.${c.certification}`,
-                  { defaultValue: c.certification })}</span>
+                <span className="font-medium">{certificationName(c.certification, c.certificationNames, i18n.language, tQb)}</span>
+                {c.issuerName && (
+                  <span className="text-muted-foreground text-sm">{tQb('certification.issuedBy', { sponsor: c.issuerName })}</span>
+                )}
                 <span className="text-muted-foreground text-sm">
                   {t('certificates.period', { from: formatDate(c.heldFrom), until: formatDate(c.validUntil) })}
                 </span>

@@ -232,6 +232,18 @@ public class PublishingConfig {
         return PublicationPrerequisites.save();
     }
 
+    /** Q88a: a sponsor's publication as a round of the sponsor's own certification. */
+    @Bean
+    ProcessDefinition<PublicationRounds.SetInput, PublicationOutput, ProcessContext> qbSponsorRoundSet() {
+        return PublicationRounds.set();
+    }
+
+    @Bean
+    ProcessDefinition<PublicationProcesses.PublicationRef, com.jabiz.quizbuks.certification.CertificationProcesses
+        .RoundOutput, ProcessContext> qbSponsorRoundClose() {
+        return PublicationRounds.close();
+    }
+
     @Bean
     EntityDefinition qbPublicationOwnerEntity() {
         return QbPublications.OWNER_ENTITY;
