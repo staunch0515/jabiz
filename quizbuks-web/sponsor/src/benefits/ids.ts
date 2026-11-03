@@ -13,6 +13,11 @@ export const BENEFIT_PROCESS = {
   confirm: 'QB_BENEFIT_PURCHASE_CONFIRM',
   decline: 'QB_BENEFIT_PURCHASE_DECLINE',
   cancel: 'QB_BENEFIT_PURCHASE_CANCEL',
+  /** Q89d-1: suspending and resuming a purchase; its incidents. */
+  suspend: 'QB_BENEFIT_PURCHASE_SUSPEND',
+  resume: 'QB_BENEFIT_PURCHASE_RESUME',
+  incidentRecord: 'QB_BENEFIT_INCIDENT_RECORD',
+  incidentResolve: 'QB_BENEFIT_INCIDENT_RESOLVE',
 } as const
 
 export const BENEFIT_TEMPLATE = {
@@ -25,6 +30,8 @@ export const BENEFIT_TEMPLATE = {
   inquiryMessages: 'qb.sponsor.benefit-inquiry-messages',
   purchases: 'qb.sponsor.benefit-purchases',
   orders: 'qb.sponsor.benefit-orders',
+  incidents: 'qb.sponsor.benefit-incidents',
+  orderIncidents: 'qb.sponsor.benefit-order-incidents',
   publications: 'qb.sponsor.benefit-publications',
   digitalPoolSummary: 'qb.sponsor.benefit-digital-pool-summary',
   digitalCodes: 'qb.sponsor.benefit-digital-codes',
@@ -51,6 +58,11 @@ export const BENEFIT = {
   /** 422: a purchase changed since the page read it. */
   purchaseChanged: 'QB_BENEFIT_PURCHASE_CHANGED',
 } as const
+
+/** Q89d-1: `QbBenefits.INCIDENT_KINDS`. */
+export const INCIDENT_KINDS = ['NOT_FULFILLED', 'CLOSED_BUSINESS', 'QUANTITY_MISMATCH', 'QUALITY', 'COMPLAINT',
+  'OTHER'] as const
+export type IncidentKind = (typeof INCIDENT_KINDS)[number]
 
 export type BenefitKind = (typeof BENEFIT.kinds)[number]
 export type BenefitCertification = (typeof BENEFIT.certifications)[number]

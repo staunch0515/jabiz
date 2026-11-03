@@ -81,6 +81,7 @@ import {
   type Side,
 } from './api'
 import { BENEFIT, type BenefitKind } from './ids'
+import { PurchaseFollowUp } from './PurchaseFollowUp'
 import './messages'
 
 const IMAGE_TYPES = 'image/jpeg,image/png'
@@ -671,6 +672,10 @@ export function PurchasePage({ purchaseId, side, offerId }: { purchaseId: string
         ? <PurchaseForm key={`${data?.purchaseId}:${data?.revision}`} purchase={data ?? null} offerId={offerId ?? null} />
         : <ProviderAnswer purchase={data!} />}
       {side === 'PROVIDER' && data && data.status !== 'DRAFT' && <ProvidedPublications purchase={data} />}
+      {/* Q89d-1: what became of it, its suspension and incidents (both sides). */}
+      {data && (data.status === 'CONFIRMED' || data.status === 'SUSPENDED' || data.status === 'CLOSED') && (
+        <PurchaseFollowUp purchase={data} side={side} />
+      )}
     </section>
   )
 }

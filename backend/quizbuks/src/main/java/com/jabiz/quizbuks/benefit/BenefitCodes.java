@@ -55,6 +55,14 @@ public final class BenefitCodes {
 
     /** Q89b-2: a digital product is issued from codes its provider loads (the pool). */
     public static final String DIGITAL_DELIVERY = "QB_BENEFIT_DIGITAL_DELIVERY";
+    /** Q89d-1: the purchase is suspended: its publications stay paused until it is resumed. */
+    public static final String PURCHASE_SUSPENDED = "QB_BENEFIT_PURCHASE_SUSPENDED";
+    /** Q89d-1: an incident's note or resolution is blank or too long. */
+    public static final String INCIDENT_TEXT = "QB_BENEFIT_INCIDENT_TEXT";
+    /** Q89d-1: the prize named is not one of the purchase's. */
+    public static final String INCIDENT_PRIZE = "QB_BENEFIT_INCIDENT_PRIZE";
+    /** Q89d-1: the incident was resolved already. */
+    public static final String INCIDENT_RESOLVED = "QB_BENEFIT_INCIDENT_RESOLVED";
 
     private BenefitCodes() {}
 }

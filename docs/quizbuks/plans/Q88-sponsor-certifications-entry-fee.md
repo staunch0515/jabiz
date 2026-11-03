@@ -134,7 +134,7 @@ Q87 §7 把"答题的能力"列成四项：**给学分**（已有）、**给认�
 
 按 §2 的 A 部分实现；与计划不同的地方：
 
-1. **迁移是 `V72__quizbuks_sponsor_certifications.sql`**，只建一张表。四张表（轮、记录、前置、证书）的 `certification` 列原来是目录的码字段（`asCode`），为了放下 `sp:<id>` 改成了文本字段（列不变、没有迁移）；目录的字典仍给前端与后台用。
+1. **迁移是 `V73__quizbuks_sponsor_certifications.sql`**，只建一张表。四张表（轮、记录、前置、证书）的 `certification` 列原来是目录的码字段（`asCode`），为了放下 `sp:<id>` 改成了文本字段（列不变、没有迁移）；目录的字典仍给前端与后台用。
 2. **证书的签发方就是商户**（D-Q88-6 写的是"多一个事实'颁发方'"）：平台的单据版式把每个事实都印出来，空的也印标签，所以没有加事实，而是让当事方"签发方"在商户认证时写商户的公司名（`qb.me.certificate-issuer` 的可选参数 `issuerName`，签发流程只对 `sp:` 键给出），平台认证照旧是 `qb.issuer.name`。核实页与公开认证页另给 `issuerName`，App 显示"由 <商户> 颁发"。
 3. **目录与商户的行在同一段 SQL 里**：`Certifications.sqlValues()` 现在写的是 `(SELECT * FROM (VALUES …) UNION ALL SELECT 'sp:' || id, version, days * 86400 FROM qb_sponsor_certification)`，十个模板（计划说八个：Q89 的两个权益模板也写这段）都换成它，`CertificationTemplatesTest` 照旧核对。
 4. **`QB_SPONSOR_ROUND_SET` 不单独取一步**，而是向导"时间与奖励"一步档位下面的一个下拉（只在商户有启用的认证时显示；开关关着时建不出认证，所以也不显示），随每次保存在前置之后调用；没有加第五步。非草稿在发布页显示"合格授予的认证"一节与"关闭这一轮"。

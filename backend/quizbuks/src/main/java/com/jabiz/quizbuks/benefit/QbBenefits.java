@@ -31,6 +31,14 @@ public final class QbBenefits {
     public static final String PURCHASE = "QbBenefitPurchase";
     /** Q89b-1: how many of a purchase one publication holds (D-Q89-7). */
     public static final String ALLOCATION = "QbBenefitAllocation";
+    /** Q89d-1: incidents of a purchase, and the job that voids a suspended purchase's unused prizes. */
+    public static final String INCIDENT = "QbBenefitIncident";
+    public static final String INCIDENT_KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:benefit-incident-kind";
+    public static final List<String> INCIDENT_KINDS = List.of("NOT_FULFILLED", "CLOSED_BUSINESS", "QUANTITY_MISMATCH",
+        "QUALITY", "COMPLAINT", "OTHER");
+    public static final int INCIDENT_TEXT_LENGTH = 2000;
+    public static final String VOID_JOB = "qb.benefit-void";
+    public static final String VOID_DUE_TEMPLATE = "qb.system.benefit-void-due";
     public static final String ALLOCATION_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:benefit-allocation-status";
     public static final String OPEN = "OPEN";
     public static final String RELEASED = "RELEASED";
@@ -246,6 +254,16 @@ public final class QbBenefits {
             .asText(REASON_LENGTH, true));
         eb.field("cancelledAt", f -> f.physicalColumn("cancelled_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
+        // Q89d-1 (D-Q89-12): a suspension, who made it and why, and whether the unused prizes go void with it.
+        eb.field("suspendedAt", f -> f.physicalColumn("suspended_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("suspendedBy", f -> f.physicalColumn("suspended_by").processOnly()
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("suspendReason", f -> f.physicalColumn("suspend_reason").processOnly()
+            .asText(REASON_LENGTH, true));
+        eb.field("voidUnused", f -> f.physicalColumn("void_unused").processOnly().asBool());
+        eb.field("resumedAt", f -> f.physicalColumn("resumed_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("editedAt", f -> f.physicalColumn("edited_at").required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("revision", f -> f.physicalColumn("revision").required(true).processOnly().asNumeric(9, 0));
@@ -284,6 +302,43 @@ public final class QbBenefits {
             .filters("purchaseId", "publicationId", "sponsorId", "providerId", "status")
             .sorts("allocatedAt")
             .defaultSort("allocatedAt", false));
+    });
+
+    /**
+     * Q89d-1 (D-Q89-12): what went wrong with a purchase or one of its prizes, recorded by either side, and how it
+     * ended. Both sides' ids are kept so each side (and their operators) find it.
+     */
+    public static final EntityDefinition INCIDENT_ENTITY = EntityDefinition.define(INCIDENT, eb -> {
+        eb.physicalTable("qb_benefit_incident");
+        eb.primaryKey("incidentId");
+        eb.field("incidentId", f -> f.physicalColumn("incident_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:benefit-incident"));
+        eb.field("purchaseId", f -> f.physicalColumn("purchase_id").immutable(true).required(true).processOnly()
+            .asText(36));
+        eb.field("redemptionId", f -> f.physicalColumn("redemption_id").immutable(true).processOnly().asText(36));
+        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).processOnly()
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("providerId", f -> f.physicalColumn("provider_id").immutable(true).required(true).processOnly()
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true).processOnly()
+            .asCode(INCIDENT_KIND_DICTIONARY, INCIDENT_KINDS.toArray(String[]::new)));
+        eb.field("note", f -> f.physicalColumn("note").immutable(true).required(true).processOnly()
+            .asText(INCIDENT_TEXT_LENGTH, true));
+        eb.field("recordedBy", f -> f.physicalColumn("recorded_by").immutable(true).required(true).processOnly()
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("recordedAt", f -> f.physicalColumn("recorded_at").immutable(true).required(true).processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("resolution", f -> f.physicalColumn("resolution").processOnly().asText(INCIDENT_TEXT_LENGTH, true));
+        eb.field("resolvedBy", f -> f.physicalColumn("resolved_by").processOnly()
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("resolvedAt", f -> f.physicalColumn("resolved_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("purchaseId", "kind", "recordedAt", "resolvedAt")
+            .filters("purchaseId", "sponsorId", "providerId", "kind")
+            .sorts("recordedAt")
+            .defaultSort("recordedAt", false));
     });
 
     /** {@code image1} → {@code image_1}. */
