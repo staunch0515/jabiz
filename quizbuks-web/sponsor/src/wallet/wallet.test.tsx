@@ -2,6 +2,7 @@ import { configureClient, session } from '@jabiz/client'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { expectAccessible } from '@jabiz/ui/testing'
 import App from '../App'
 import '../messages'
 import { goToStripe } from './stripePage'
@@ -38,6 +39,11 @@ interface Server {
   moreRows?: Record<string, unknown>[]
   /** The rows of `qb.me.consents` once a top-up was refused (a new version took effect meanwhile); none before. */
   consentsAfterStart?: Record<string, unknown>[]
+  /** Q87a: the row of `qb.sponsor.cash-settings`; none: as before Q87a (Kudos only, no exchange). */
+  cash?: Record<string, unknown>
+  /** Q87a: the cash account's figures of `qb.sponsor.wallet`. */
+  cashBalance?: string
+  exchange?: { status: number; body: unknown }
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -67,7 +73,15 @@ function server(options: Server = {}) {
           { code: 'PAID', label: 'Paid' }, { code: 'EXPIRED', label: 'Expired' }, { code: 'FAILED', label: 'Failed' }])
       case '/api/queries/qb.sponsor.wallet':
         return json(200, { items: [{ balance: '5000', held: '1000', pendingCount: 2, pendingAmount: '700',
-          toppedUp: '6000', takenBack: '0', topUpCount: 2, spent: '1000' }], offset: 0, limit: 1 })
+          toppedUp: '6000', takenBack: '0', topUpCount: 2, spent: '1000', cashBalance: options.cashBalance ?? '0',
+          cashHeld: '0' }], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.cash-settings':
+        return json(200, { items: [options.cash ?? { targets: 'KUDOS', defaultTarget: 'KUDOS', buyEnabled: false,
+          sellEnabled: false }], offset: 0, limit: 1 })
+      case '/api/processes/QB_KUDOS_BUY/latest':
+      case '/api/processes/QB_KUDOS_SELL/latest':
+        return json(options.exchange?.status ?? 200, options.exchange?.body
+          ?? { output: { exchangeId: 'x1', amount: 1000, kudosBalance: 6000, cashBalance: 2000 } })
       case '/api/queries/qb.sponsor.topup-limit':
         return options.limit ? json(200, { items: [options.limit], offset: 0, limit: 1 }) : json(404, {})
       case '/api/queries/qb.sponsor.topups':
@@ -253,6 +267,63 @@ describe('the wallet', () => {
     await user.click(screen.getByTestId('topup-submit'))
     await waitFor(() => expect(processCalls()).toHaveLength(2))
     expect(processCalls()[1].key).not.toBe(processCalls()[0].key)
+  })
+})
+
+describe('the cash account (Q87a)', () => {
+  it('stays out of the way while top-ups go to the Kudos wallet only', async () => {
+    const { processCalls } = server()
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    expect(await screen.findByTestId('wallet-available')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByTestId('wallet-cash')).toBeNull())
+    await userEvent.click(screen.getByTestId('topup-open'))
+    await userEvent.type(await screen.findByTestId('topup-amount'), '1500')
+    expect(screen.queryByTestId('topup-target')).toBeNull()
+    await userEvent.click(screen.getByTestId('topup-submit'))
+    await waitFor(() => expect(processCalls()).toHaveLength(1))
+    // No target sent: the server's default (as before Q87a).
+    expect(processCalls()[0].body).toEqual({ amount: 1500 })
+  })
+
+  it('tops up into the cash account when chosen and turns cash into Kudos', async () => {
+    const { processCalls } = server({ cashBalance: '3000', cash: { targets: 'KUDOS,CASH', defaultTarget: 'KUDOS',
+      buyEnabled: true, sellEnabled: false },
+    moreRows: [{ topUpId: 't2', amount: '3000', status: 'PAID', createdAt: '2026-10-12T01:00:00Z',
+      expiresAt: LATER, checkoutUrl: null, paidAt: '2026-10-12T01:01:00Z', refundedAmount: '0', target: 'CASH' }] })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    const cash = await screen.findByTestId('wallet-cash')
+    expect(within(cash).getByTestId('wallet-cash-balance')).toHaveTextContent('3,000 Kudos')
+    expect(screen.queryByTestId('cash-sell')).toBeNull()
+    const rows = await screen.findAllByTestId('topup-row')
+    expect(within(rows[2]).getByTestId('topup-row-cash')).toHaveTextContent('Cash account')
+    await expectAccessible()
+
+    await userEvent.type(within(cash).getByTestId('cash-buy-amount'), '1000')
+    await userEvent.click(within(cash).getByTestId('cash-buy-submit'))
+    await waitFor(() => expect(processCalls().find((c) => c.path.includes('QB_KUDOS_BUY'))?.body)
+      .toEqual({ amount: 1000 }))
+    expect(processCalls().find((c) => c.path.includes('QB_KUDOS_BUY'))?.key).toBeTruthy()
+
+    await userEvent.click(screen.getByTestId('topup-open'))
+    await userEvent.click(await screen.findByTestId('topup-target-CASH'))
+    await userEvent.type(screen.getByTestId('topup-amount'), '2000')
+    await userEvent.click(screen.getByTestId('topup-submit'))
+    await waitFor(() => expect(processCalls().find((c) => c.path.includes('QB_TOPUP_START'))?.body)
+      .toEqual({ amount: 2000, target: 'CASH' }))
+  })
+
+  it('shows the server\'s refusal of an exchange', async () => {
+    server({ cashBalance: '500', cash: { targets: 'CASH', defaultTarget: 'CASH', buyEnabled: true,
+      sellEnabled: true }, exchange: { status: 422, body: { detail: 'Refused', violations: [{ field: 'amount',
+      ruleCode: 'QB_KUDOS_EXCHANGE_FUNDS', message: 'Not enough is available: 500.' }] } } })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    const sell = await screen.findByTestId('cash-sell')
+    await userEvent.type(within(sell).getByTestId('cash-sell-amount'), '9000')
+    await userEvent.click(within(sell).getByTestId('cash-sell-submit'))
+    expect(await within(sell).findByText('Not enough is available: 500.')).toBeInTheDocument()
   })
 })
 

@@ -43,6 +43,8 @@ public final class Reconciliation {
     public static final String CHECK_DICTIONARY = "urn:jabiz:dict:quizbuks:recon-check";
 
     public static final String WALLETS_TEMPLATE = "qb.system.recon-sponsor-wallets";
+    /** Q87a: the sponsors' cash accounts against account 2160. */
+    public static final String CASH_TEMPLATE = "qb.system.recon-cash-accounts";
     public static final String PENDING_TEMPLATE = "qb.system.recon-sponsor-pending";
     public static final String TOTALS_TEMPLATE = "qb.system.recon-totals";
     public static final String TOPUPS_TEMPLATE = "qb.system.recon-topups";
@@ -101,6 +103,7 @@ public final class Reconciliation {
     static final String INPUT = "input";
     static final String EXISTING = "existing";
     static final String WALLETS = "wallets";
+    static final String CASH_ACCOUNTS = "cashAccounts";
     static final String PENDING = "pending";
     static final String TOTALS = "totals";
     static final String TOPUPS = "topUps";
@@ -134,6 +137,8 @@ public final class Reconciliation {
                 // Each comparison is one statement: its snapshot is consistent, whatever commits meanwhile.
                 .step("Compare the sponsor wallets", RunTemplate.<ProcessContext>of(WALLETS_TEMPLATE,
                     ctx -> Map.of(), WALLETS))
+                .step("Compare the cash accounts", RunTemplate.<ProcessContext>of(CASH_TEMPLATE,
+                    ctx -> Map.of(), CASH_ACCOUNTS))
                 .step("Compare the pending rewards", RunTemplate.<ProcessContext>of(PENDING_TEMPLATE,
                     ctx -> Map.of(), PENDING))
                 .step("Compare the totals", RunTemplate.<ProcessContext>of(TOTALS_TEMPLATE, ctx -> Map.of(), TOTALS))
@@ -181,6 +186,7 @@ public final class Reconciliation {
         }
         List<ReconChecks.Item> found = new ArrayList<>();
         found.addAll(ReconChecks.perParty(ReconChecks.SPONSOR_WALLET, rows(ctx, WALLETS)));
+        found.addAll(ReconChecks.perParty(ReconChecks.CASH_ACCOUNT, rows(ctx, CASH_ACCOUNTS)));
         found.addAll(ReconChecks.pending(rows(ctx, PENDING)));
         found.addAll(ReconChecks.coded(rows(ctx, TOTALS)));
         found.addAll(ReconChecks.coded(rows(ctx, TOPUPS)));

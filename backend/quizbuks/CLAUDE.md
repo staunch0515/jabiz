@@ -212,6 +212,10 @@
     **开发入账** `QB_WALLET_DEV_CREDIT` 只留在 `dev` 与测试中，与正式模式或正式密钥同时开启即启动失败。
   - 入站提供方 `stripe` 的密钥只来自 `STRIPE_WEBHOOK_SECRET`（`platformCheck` 用一次性的值，见 `build.gradle.kts`）；白名单只列各阶段订阅的类型。
   - 核对模板（`qb.system.recon-*`）每项比较是一条语句、只返回差异行；结果 `QbReconRun` / `QbReconItem` 只写一次。
+  - **现金账户与学分的两种来源**（Q87a，`wallet.TopUpTargets`、`KudosExchanges`，`docs/quizbuks/plans/Q87-fee-account.md`）：每个商户除学分钱包（`QbWallet` 的 `SPONSOR` 行，科目 2110）外还有现金账户（同一所有者的 `CASH` 行，科目 2160，维度为商户），两者都在 `qb.wallet:SPONSOR:<商户>` 一把锁内改。
+    充值（卡与银行转账）的去向 `QbTopUp.target`（`KUDOS` / `CASH`，开始时定、不可变）只由受控参数 `qb.topup.targets`、`qb.topup.default-target` 决定（未发布时同 Q87 之前：只进学分钱包）；入账、退款、争议都按充值的去向取科目与钱包（`TopUpTargets.account` / `walletKind`），进现金的不触发补发待支付奖励；手工加币只进学分。
+    现金与学分的兑换只经 `QB_KUDOS_BUY` / `QB_KUDOS_SELL`（一比一，规则只在 `KudosExchanges.problems`：开关 `qb.kudos.buy.enabled` 缺省开、`qb.kudos.sell.enabled` 缺省关，未发布即关；只换可用的、换回不越过待支付的奖励），记录 `QbKudosExchange` 是过账的来源（月报 `KUDOS_BOUGHT` / `KUDOS_SOLD`），先 `SaveChanges.now` 再 `LEDGER_POST`。
+    每日核对另比 2160 与现金账户（`CASH_ACCOUNT`、`TOTAL_2160`）；分录导出按商户列 2160 的行；月报加列 `sponsorCash` 与现金的充值、退款、争议各类。转账手续费 = 固定 `qb.transfer.fee` + 比例 `qb.transfer.fee-rate`（受控，缺省 0，向下取整，`TransferRules.fee`）。平台费、预付与后付、账单是 Q87b。
   - **收款与转账（Q6b）**：收款账户 `QbPayoutAccount` 是普通表，`userId` 与 Stripe 账户号都唯一（一个 Stripe 账户永远只属于一个用户），只由开通作业的结果与
     `stripe-connect` 提供方（密钥只来自 `STRIPE_CONNECT_WEBHOOK_SECRET`）的通知写入，在 `qb.account:<用户>` 锁内、只取更新的报告。
     用户钱包缓存（`QbWallet` 的 `TAKER` 行）只经 `TakerWallets`（`QB_TAKER_WALLET_SYNC` 与转账流程）**按账本重算后覆盖**，不做加减；结算奖励不取用户钱包锁。

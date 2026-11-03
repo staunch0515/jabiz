@@ -182,6 +182,18 @@ public final class QbParams {
     public static final String AUDIENCE_PRICE_FALLBACK = "qb.audience.price.fallback";
     /** Q47c: whether the unused days are refunded when a publication ends early (Q47c-2 charges; controlled). */
     public static final String AUDIENCE_REFUND_UNUSED_DAYS = "qb.audience.fee.refund-unused-days";
+    /**
+     * Q87a (D-Q87-2): where a top-up may go - {@code KUDOS} (straight into the Kudos wallet, as before) and
+     * {@code CASH} (the sponsor's cash account) - as a comma-separated list, and where it goes when the sponsor does
+     * not choose. Controlled.
+     */
+    public static final String TOPUP_TARGETS = "qb.topup.targets";
+    public static final String TOPUP_DEFAULT_TARGET = "qb.topup.default-target";
+    /** Q87a (D-Q87-3): whether sponsors may buy Kudos with their cash (on) and sell Kudos back to cash (off). */
+    public static final String KUDOS_BUY_ENABLED = "qb.kudos.buy.enabled";
+    public static final String KUDOS_SELL_ENABLED = "qb.kudos.sell.enabled";
+    /** Q87a (D-Q87-0): the platform's share of each transfer, as a fraction, added to the fixed fee (rounded down). */
+    public static final String TRANSFER_FEE_RATE = "qb.transfer.fee-rate";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -234,9 +246,11 @@ public final class QbParams {
     /** Q48b: the operators' shares payable and their expense. */
     public static final String JOURNAL_ACCOUNT_2140 = JOURNAL_ACCOUNT_PREFIX + "2140";
     public static final String JOURNAL_ACCOUNT_5130 = JOURNAL_ACCOUNT_PREFIX + "5130";
+    /** Q87a: the sponsors' cash accounts. */
+    public static final String JOURNAL_ACCOUNT_2160 = JOURNAL_ACCOUNT_PREFIX + "2160";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
         JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
-        JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130);
+        JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -252,6 +266,10 @@ public final class QbParams {
     public static final List<String> AUDIENCE_BILLING_PARAMS = List.of(AUDIENCE_BILLING_ENABLED, AUDIENCE_PRICE_FALLBACK,
         AUDIENCE_REFUND_UNUSED_DAYS);
 
+    /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
+    public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
+        KUDOS_BUY_ENABLED, KUDOS_SELL_ENABLED, TRANSFER_FEE_RATE);
+
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
      * another): the money settings, and the review switches, since turning one on removes a person's review.
@@ -260,7 +278,7 @@ public final class QbParams {
         TRANSFER_THRESHOLD, TRANSFER_REVIEW_ABOVE, TRANSFER_ENABLED, REVIEW_SPONSOR_AUTO, REVIEW_PUBLICATION_AUTO,
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
-        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS).flatMap(List::stream).toList();
+        OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS, CASH_ACCOUNT_PARAMS).flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
     public record Param(String key, Map<String, Object> valueKind, Object value, String description) {
@@ -316,6 +334,7 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_5120, "5120 Promotion expenses"),
         journal(JOURNAL_ACCOUNT_2140, "2140 Operator shares payable"),
         journal(JOURNAL_ACCOUNT_5130, "5130 Operator shares"),
+        journal(JOURNAL_ACCOUNT_2160, "2160 Sponsor cash accounts"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
@@ -417,7 +436,18 @@ public final class QbParams {
             "allowedValues", List.of("DIRECT", "FREE")), "DIRECT",
             "How sponsors of an operator without a price list are priced: headquarters' list, or free"),
         new Param(AUDIENCE_REFUND_UNUSED_DAYS, BOOL, false,
-            "Whether the unused days of the audience rules are refunded when a publication ends early"));
+            "Whether the unused days of the audience rules are refunded when a publication ends early"),
+        // Q87a: the cash account (controlled, last, in the order of CASH_ACCOUNT_PARAMS). The defaults keep what was:
+        // a top-up goes straight into the Kudos wallet unless the sponsor chooses the cash account.
+        new Param(TOPUP_TARGETS, Map.of("type", "text", "maxLength", 20), "KUDOS,CASH",
+            "Where a top-up may go, comma-separated: KUDOS (the Kudos wallet) and CASH (the cash account)"),
+        new Param(TOPUP_DEFAULT_TARGET, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:topup-target",
+            "allowedValues", List.of("KUDOS", "CASH")), "KUDOS", "Where a top-up goes when the sponsor does not choose"),
+        new Param(KUDOS_BUY_ENABLED, BOOL, true, "Whether sponsors may turn cash into Kudos"),
+        new Param(KUDOS_SELL_ENABLED, BOOL, false, "Whether sponsors may turn Kudos back into cash"),
+        new Param(TRANSFER_FEE_RATE, Map.of("type", "numeric", "precision", 4, "scale", 4), "0",
+            "The platform's share of each transfer, as a fraction from 0 to below 1, added to the fixed fee "
+                + "(rounded down; 0: none)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

@@ -54,6 +54,7 @@ class AdminFinanceIT extends PayoutItSupport {
         COLUMNS.put("5120", "promotion");
         COLUMNS.put("2140", "operatorPayable");
         COLUMNS.put("5130", "operatorShares");
+        COLUMNS.put("2160", "sponsorCash");
     }
 
     @BeforeEach
@@ -250,6 +251,13 @@ class AdminFinanceIT extends PayoutItSupport {
             row("OPERATOR_PAID", 0, 0),
             // Q70: a referral reward's posting (ReferralIT pays one and finds it here).
             row("REFERRAL_REWARD", 0, 0),
+            // Q87a: the cash account's postings (CashAccountIT finds them here).
+            row("CASH_TOPUP", 0, 0),
+            row("CASH_BANK_TOPUP", 0, 0),
+            row("CASH_REFUND", 0, 0),
+            row("CASH_DISPUTE", 0, 0),
+            row("KUDOS_BOUGHT", 0, 0),
+            row("KUDOS_SOLD", 0, 0),
             row("OTHER", 4, 3_870, "1110", 3_730, "1120", 70, "2110", -300, "2120", -3_500));
         // As recorded at the month's end: the late posting is not in it.
         List<Map<String, Object>> monthly = report(MONTHLY, from, to, to);

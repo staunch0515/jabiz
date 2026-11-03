@@ -23,6 +23,10 @@ public final class ReconChecks {
     public static final String SPONSOR_PENDING_COUNT = "SPONSOR_PENDING_COUNT";
     /** A sponsor's cached pending amount against their pending attempts' rewards. */
     public static final String SPONSOR_PENDING_AMOUNT = "SPONSOR_PENDING_AMOUNT";
+    /** Q87a: a sponsor's cached cash balance against account 2160 for them. */
+    public static final String CASH_ACCOUNT = "CASH_ACCOUNT";
+    /** Q87a: account 2160 in all against all sponsors' cached cash balances. */
+    public static final String TOTAL_2160 = "TOTAL_2160";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -53,7 +57,7 @@ public final class ReconChecks {
     /** Every check, in the order of the summary. */
     public static final List<String> ALL = List.of(SPONSOR_WALLET, SPONSOR_PENDING_COUNT, SPONSOR_PENDING_AMOUNT,
         TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE, TAKER_WALLET,
-        TAKER_IN_TRANSFER, TAKER_WALLET_LAG, TRANSFER_LEDGER, TRANSFER_IN_TRANSIT);
+        TAKER_IN_TRANSFER, TAKER_WALLET_LAG, TRANSFER_LEDGER, TRANSFER_IN_TRANSIT, CASH_ACCOUNT, TOTAL_2160);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG);
