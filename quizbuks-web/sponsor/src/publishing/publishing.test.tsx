@@ -1333,6 +1333,58 @@ describe('customer matching (Q47)', () => {
   })
 })
 
+describe('condition fees (Q47c)', () => {
+  const rules = (dailyPrice: number) => [
+    { ruleKey: 'gender', enabled: true, billable: true, sortOrder: 10, dailyPrice },
+    { ruleKey: 'age', enabled: true, billable: false, sortOrder: 20, dailyPrice: 0 },
+    { ruleKey: 'occupation', enabled: true, billable: true, sortOrder: 30, dailyPrice: 0 },
+    { ruleKey: 'interest', enabled: false, billable: true, sortOrder: 40, dailyPrice: 0 },
+  ]
+  const quote = (fee: Record<string, unknown>, dailyPrice = 100) => ({ status: 200, body: { output: {
+    quote: { enabled: true, owner: 'direct', days: 7, items: [], subtotal: 0, minimumFee: 0, fee: 0, ...fee },
+    rules: rules(dailyPrice) } } })
+
+  it('shows the daily prices, closes the closed rule, and the fee the server quotes, read again after a save', async () => {
+    const { processCalls } = server({
+      processes: {
+        QB_PUBLICATION_SAVE: [saved(4)],
+        QB_PUBLICATION_AUDIENCE_SAVE: [{ status: 200, body: { output: { publicationId: 'p1', status: 'DRAFT',
+          revision: 5, approval: null, approvalRequestId: null } } }],
+        QB_AUDIENCE_FEE_QUOTE: [quote({}),
+          quote({ items: [{ ruleKey: 'gender', dailyPrice: 100 }], subtotal: 700, minimumFee: 1000, fee: 1000 })],
+      },
+    })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    expect(await screen.findByTestId('audience-gender-price')).toHaveTextContent('100')
+    // Not charged for: no price.
+    expect(screen.queryByTestId('audience-age-price')).toBeNull()
+    expect(screen.getByTestId('audience-interest-closed')).toBeInTheDocument()
+    expect(screen.getByTestId('audience-interest-on')).toBeDisabled()
+    expect(screen.getByTestId('audience-fee-none')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('audience-gender-on'))
+    await userEvent.click(screen.getByTestId('audience-gender-FEMALE'))
+    await expectAccessible()
+    await userEvent.click(screen.getByTestId('publication-save'))
+    expect(await screen.findByTestId('audience-fee-total')).toHaveTextContent('1,000')
+    expect(screen.getByTestId('audience-fee-line')).toHaveTextContent('100 Kudos × 7 days')
+    expect(screen.getByTestId('audience-fee-minimum')).toBeInTheDocument()
+    expect(processCalls('QB_AUDIENCE_FEE_QUOTE')).toEqual([{ publicationId: 'p1' }, { publicationId: 'p1' }])
+  })
+
+  it('shows nothing while conditions are not charged for', async () => {
+    server({ processes: { QB_AUDIENCE_FEE_QUOTE: [{ status: 200, body: { output: {
+      quote: { enabled: false, owner: 'direct', days: 7, items: [], subtotal: 0, minimumFee: 0, fee: 0 },
+      rules: rules(100) } } }] } })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    expect(await screen.findByTestId('audience-gender')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('audience-interest-closed')).toBeInTheDocument())
+    expect(screen.queryByTestId('audience-gender-price')).toBeNull()
+    expect(screen.queryByTestId('audience-fee')).toBeNull()
+  })
+})
+
 describe('prerequisites (Q76)', () => {
   const prerequisitesSaved = (revision: number) => ({ status: 200, body: { output: { publicationId: 'p1',
     status: 'DRAFT', revision, approval: null, approvalRequestId: null } } })
@@ -1372,6 +1424,40 @@ describe('prerequisites (Q76)', () => {
     await userEvent.click(screen.getByTestId('publication-next'))
     expect(await screen.findByTestId('summary-prerequisites')).toHaveTextContent('Coffee basics (Answered) · Tea week (Passed)')
     expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toHaveLength(1)
+  })
+
+  it('requires a certification of the platform (Q86) beside a publication, and names it in the summary', async () => {
+    const { processCalls } = server({
+      publications: [ROW, LEVEL1],
+      prerequisites: [{ prerequisiteId: 'TERMS_APP_UNDERSTOOD', requiredPublicationId: null,
+        certification: 'TERMS_APP_UNDERSTOOD', requirement: 'PASSED', name: '', status: 'LIVE', startAt: null, endAt: null }],
+      processes: {
+        QB_PUBLICATION_SAVE: [saved(4)],
+        QB_PUBLICATION_PREREQUISITES_SAVE: [prerequisitesSaved(5)],
+      },
+    })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    const panel = await screen.findByTestId('publication-prerequisites')
+    // The takers' certifications are offered in the catalog's order; the stored one is ticked.
+    const certifications = within(panel).getAllByTestId('prerequisite-certification')
+    expect(certifications.map((row) => row.getAttribute('data-certification')))
+      .toEqual(['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD'])
+    expect(certifications[2]).toHaveAttribute('data-chosen', 'true')
+    expect(certifications[2]).toHaveTextContent('Understood: Terms and Privacy Policy')
+    await expectAccessible()
+    // A publication first, then another certification: publications come first in what is sent.
+    await userEvent.click(within(within(panel).getByTestId('prerequisite')).getByTestId('prerequisite-on'))
+    await userEvent.click(within(certifications[3]).getByTestId('prerequisite-certification-on'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_PREREQUISITES_SAVE')).toEqual([{ publicationId: 'p1', baseRevision: 4,
+      prerequisites: [{ requiredPublicationId: 'p0', requirement: 'PASSED' },
+        { certification: 'TERMS_APP_UNDERSTOOD', requirement: 'PASSED' },
+        { certification: 'CONTEST_RULES_UNDERSTOOD', requirement: 'PASSED' }] }])
+    await userEvent.click(screen.getByTestId('publication-next'))
+    expect(await screen.findByTestId('summary-prerequisites')).toHaveTextContent(
+      'Coffee basics (Passed) · Understood: Terms and Privacy Policy (Held) · Understood: Contest Rules (Held)')
   })
 
   it('says when nothing can be required yet, and shows the server\'s refusal', async () => {

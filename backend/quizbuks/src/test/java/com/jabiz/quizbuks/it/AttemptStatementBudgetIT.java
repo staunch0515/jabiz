@@ -174,6 +174,44 @@ class AttemptStatementBudgetIT extends PlayItSupport {
     }
 
     /**
+     * Q86 (D-Q86-6): a start that requires a certification reads the caller's holding of it, two statements more
+     * outside the lock (records and rounds in one, the attempts on those rounds in another); the lock's part is the
+     * same as an ordinary start.
+     */
+    @Test
+    void aStartWithACertificationPrerequisite() {
+        warmUp();
+        String sponsor = newSponsor("s-budget-cert");
+        credit(sponsor, 100_000);
+        String gated = liveRequiring(sponsor, "Budget gated", Map.of("regions", List.of("GLOBAL"),
+            "maxWinners", 100_000, "budgetCap", 1_000_000), List.of(body("certification", "REFERRER", "requirement", "PASSED")));
+        String hq = com.jabiz.runtime.test.TestTokens.bearer(tokens, "budget-hq",
+            com.jabiz.quizbuks.QbPermissions.CERTIFICATION_ADMIN, com.jabiz.quizbuks.QbPermissions.CERTIFICATION_MANAGE);
+        String official = newSponsor("s-budget-official");
+        credit(official, 100_000);
+        run(com.jabiz.quizbuks.certification.CertificationProcesses.OFFICIAL_SET, hq, body("userId", official,
+            "active", true));
+        String round = livePublication(official, "Budget round", Map.of("regions", List.of("GLOBAL"), "maxWinners",
+            100_000, "budgetCap", 1_000_000));
+        run(com.jabiz.quizbuks.certification.CertificationProcesses.ROUND_ADD, hq, body("publicationId", round,
+            "certification", "REFERRER"));
+        String warm = newTaker("t-budget-cert-warm-" + UUID.randomUUID(), null);
+        play(warm, round, true, true);
+        keyed("QB_ATTEMPT_START", taker(warm), body("publicationId", gated));
+        String userId = newTaker("t-budget-cert-" + UUID.randomUUID(), null);
+        play(userId, round, true, true);
+        String token = taker(userId);
+
+        SqlStatementLog.clear();
+        keyed("QB_ATTEMPT_START", token, body("publicationId", gated));
+        List<List<String>> start = SqlStatementLog.transactions();
+        report("QB_ATTEMPT_START (certification prerequisite)", start);
+        assertBudget("QB_ATTEMPT_START (certification prerequisite)", start, budget(START_TOTAL) + 2,
+            budget(START_LOCKED));
+        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(gated));
+    }
+
+    /**
      * The completion that ends the publication (its last winner's place) moves it under the publication's lock alone;
      * a pause takes the start lock after the publication's (Q10a4, Q10-lock-split.md 6.1).
      */

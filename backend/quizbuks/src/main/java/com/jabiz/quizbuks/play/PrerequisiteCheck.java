@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -17,15 +18,29 @@ import java.util.UUID;
  */
 public final class PrerequisiteCheck {
 
-    public record Prerequisite(UUID requiredPublicationId, String requirement) {}
+    /** A required publication with its requirement, or (Q86) a certification to hold ({@code requiredPublicationId} null). */
+    public record Prerequisite(UUID requiredPublicationId, String certification, String requirement) {
+        public Prerequisite(UUID requiredPublicationId, String requirement) {
+            this(requiredPublicationId, null, requirement);
+        }
+    }
 
     /** The taker's attempt as the check reads it. */
     public record Attempt(UUID publicationId, String status, Boolean passed) {}
 
     private PrerequisiteCheck() {}
 
-    /** The prerequisites not met, in the given order; empty when every one is (or there are none). */
+    /** The prerequisites not met, in the given order; a certification counts as unmet (none held is assumed). */
     public static List<Prerequisite> unmet(List<Prerequisite> prerequisites, List<Attempt> attempts) {
+        return unmet(prerequisites, attempts, Set.of());
+    }
+
+    /**
+     * The prerequisites not met, in the given order; empty when every one is (or there are none).
+     *
+     * @param held the keys of the certifications the taker holds now (Q86, D-Q86-5: CertificationHolding's rule)
+     */
+    public static List<Prerequisite> unmet(List<Prerequisite> prerequisites, List<Attempt> attempts, Set<String> held) {
         Map<UUID, Attempt> finished = new HashMap<>();
         for (Attempt attempt : attempts) {
             if (attempt.publicationId() != null && AttemptStatus.finished(attempt.status())) {
@@ -34,9 +49,14 @@ public final class PrerequisiteCheck {
         }
         List<Prerequisite> unmet = new ArrayList<>();
         for (Prerequisite prerequisite : prerequisites) {
-            Attempt attempt = finished.get(prerequisite.requiredPublicationId());
-            boolean met = attempt != null
-                && (QbPrerequisites.ANSWERED.equals(prerequisite.requirement()) || Boolean.TRUE.equals(attempt.passed()));
+            boolean met;
+            if (prerequisite.certification() != null) {
+                met = held.contains(prerequisite.certification());
+            } else {
+                Attempt attempt = finished.get(prerequisite.requiredPublicationId());
+                met = attempt != null && (QbPrerequisites.ANSWERED.equals(prerequisite.requirement())
+                    || Boolean.TRUE.equals(attempt.passed()));
+            }
             if (!met) {
                 unmet.add(prerequisite);
             }

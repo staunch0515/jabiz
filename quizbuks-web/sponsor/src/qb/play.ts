@@ -316,13 +316,18 @@ export interface PublicationView {
 
 /** Q76: one of a publication's prerequisites as `qb.app.publication` gives it (its `prerequisites` JSON). */
 export interface PublicationPrerequisite {
-  requiredPublicationId: string
+  /** The required publication; null for a certification required (Q86). */
+  requiredPublicationId: string | null
+  /** Q86: the certification the taker must hold, by its key; null for a required publication. */
+  certification: string | null
   requirement: 'PASSED' | 'ANSWERED'
   name: string
   /** Whether the required publication accepts attempts now (ended or paused: the taker cannot meet it there). */
   live: boolean
   /** Whether the caller met it. */
   met: boolean
+  /** Q86: the publication of the certification's current round, to send the taker to; null when none is open. */
+  roundPublicationId: string | null
 }
 
 /** The `prerequisites` JSON of `qb.app.publication` (and `qb.public.sponsor-page-publications`); none on bad JSON. */
@@ -339,13 +344,16 @@ export function prerequisitesOf(value: unknown): PublicationPrerequisite[] {
   return raw.flatMap((item): PublicationPrerequisite[] => {
     if (!item || typeof item !== 'object') return []
     const p = item as Record<string, unknown>
-    if (typeof p.requiredPublicationId !== 'string') return []
+    const certification = typeof p.certification === 'string' && p.certification ? p.certification : null
+    if (typeof p.requiredPublicationId !== 'string' && !certification) return []
     return [{
-      requiredPublicationId: p.requiredPublicationId,
+      requiredPublicationId: typeof p.requiredPublicationId === 'string' ? p.requiredPublicationId : null,
+      certification,
       requirement: p.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED',
       name: typeof p.name === 'string' ? p.name : '',
       live: p.live === true || p.live === 'true',
-      met: p.met === true || p.met === 'true',
+      met: p.met === true || p.met === 'true' || p.held === true || p.held === 'true',
+      roundPublicationId: typeof p.roundPublicationId === 'string' ? p.roundPublicationId : null,
     }]
   })
 }

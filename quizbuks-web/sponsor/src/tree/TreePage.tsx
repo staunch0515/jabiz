@@ -9,7 +9,7 @@ import { problemText } from '../qb/problems'
 import { QB } from '../qb/messages'
 import { Link, useLocation } from '../qb/router'
 import { StateLabel, TechTree, type TechTreeNode } from '../qb/TechTree'
-import { progressOf, type TreeState } from '../qb/tree'
+import { certificationNodeId, certificationOfNode, progressOf, type TreeState } from '../qb/tree'
 import { publicationPath, PUBLICATIONS_PATH } from '../publishing/paths'
 import { transactionsOf } from '../transactions/api'
 import { nodeOf, PEOPLE_PAGE, PEOPLE_STATES, readPeople, readPerson, readTree, TREE_QUERY, USER_KEY,
@@ -42,14 +42,26 @@ export function TreePage() {
     && (!hideIsolated || !row.isolated)), [tree.data, hideEnded, hideIsolated])
   const shownKeys = useMemo(() => new Set(rows.map((row) => row.id)), [rows])
   const lit = userKey && person.isSuccess && person.data ? person.data : null
-  const nodes = useMemo<TechTreeNode[]>(() => rows.map((row) => ({
-    id: row.id, name: row.name,
-    requires: row.requires.filter((edge) => shownKeys.has(edge.id)),
-    live: row.live,
-    ...(lit ? { state: lit.states[row.id] ?? 'CLOSED' } : { counts: row.counts }),
-  })), [rows, shownKeys, lit])
+  // Q86 (D-Q86-7): a certification required is drawn as a platform node, without counts (the platform's, not the
+  // sponsor's customers'); it has no panel.
+  const certifications = useMemo(() => [...new Set(rows.flatMap((row) => row.requires
+    .flatMap((edge) => edge.certification ? [edge.certification] : [])))], [rows])
+  const nodes = useMemo<TechTreeNode[]>(() => [
+    ...rows.map((row): TechTreeNode => ({
+      id: row.id, name: row.name,
+      requires: row.requires.filter((edge) => edge.certification || shownKeys.has(edge.id)),
+      live: row.live, nodeKind: 'publication',
+      ...(lit ? { state: lit.states[row.id] ?? 'CLOSED' } : { counts: row.counts }),
+    })),
+    ...certifications.map((key): TechTreeNode => ({ id: certificationNodeId(key), name: tQb(`certification.names.${key}`),
+      requires: [], nodeKind: 'certification', subtitle: tQb('tree.certification') })),
+  ], [rows, shownKeys, lit, certifications, tQb])
+  const publications = useMemo(() => nodes.filter((node) => node.nodeKind !== 'certification'), [nodes])
   const hasEdges = (tree.data ?? []).some((row) => row.requires.length > 0)
   const current = rows.find((row) => row.id === selected) ?? null
+  const select = (id: string) => {
+    if (!certificationOfNode(id)) setSelected(id)
+  }
 
   const showPerson = (event: FormEvent) => {
     event.preventDefault()
@@ -113,12 +125,12 @@ export function TreePage() {
             {lit && (
               <p className="text-sm" data-testid="tree-customer-shown">
                 {t('tree.customer.shown', { name: lit.userName ?? t('tree.customer.someone') })}
-                {' · '}{tQb('tree.progress', { lit: progressOf(nodes).lit, total: nodes.length })}
+                {' · '}{tQb('tree.progress', { lit: progressOf(publications).lit, total: publications.length })}
               </p>
             )}
           </form>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-            <TechTree nodes={nodes} selected={selected} onSelect={setSelected} label={t('tree.label')}
+            <TechTree nodes={nodes} selected={selected} onSelect={select} label={t('tree.label')}
               className="min-w-0 flex-1" />
             <aside className="bg-card flex w-full flex-col gap-3 rounded-lg border p-4 lg:w-96 lg:shrink-0"
               aria-labelledby={`${id}-node`} data-testid="tree-node-panel">

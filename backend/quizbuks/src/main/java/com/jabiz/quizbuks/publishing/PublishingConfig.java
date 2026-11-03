@@ -213,7 +213,7 @@ public class PublishingConfig {
         return DatasetDefinition.define(QbPrerequisites.PUBLIC_DATASET, d -> d
             .targetEntityType(QbPrerequisites.PREREQUISITE)
             .scope(s -> s.fixed("publisherKind", PublisherKind.SPONSOR))
-            .publicRead(p -> p.fields("publicationId", "requiredPublicationId", "requirement"))
+            .publicRead(p -> p.fields("publicationId", "requiredPublicationId", "certification", "requirement"))
             .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));

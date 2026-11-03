@@ -1459,17 +1459,63 @@ export const saveConditions = (publicationId: string, baseRevision: number | nul
 export const countAudience = (publicationId: string) =>
   runProcess<AudienceCount>(AUDIENCE.count, { publicationId })
 
+// ---- Q47c: rule fees ----------------------------------------------------------------------------------------------
+
+/** `AudienceBilling.Item`: a charged rule the draft uses, at the daily price that applies to the sponsor. */
+export interface FeeItem {
+  ruleKey: string
+  dailyPrice: number
+}
+
+/** `AudienceBilling.Quote`: what the saved conditions cost over the run (0 while charging is off). */
+export interface FeeQuote {
+  enabled: boolean
+  /** Whose price list applies (`direct` or an operator); null when none does: free. */
+  owner: string | null
+  days: number
+  items: FeeItem[]
+  subtotal: number
+  minimumFee: number
+  fee: number
+}
+
+/** `AudiencePricingProcesses.RulePrice`: a rule as headquarters manage it and its daily price for this sponsor. */
+export interface RulePrice {
+  ruleKey: string
+  enabled: boolean
+  billable: boolean
+  sortOrder: number
+  dailyPrice: number
+}
+
+export interface FeeQuoteOutput {
+  quote: FeeQuote
+  rules: RulePrice[]
+}
+
+/** The query of a draft's quote: read again after each save (the server quotes what is stored). */
+export const feeQuoteQuery = (publicationId: string | null) => ['qb', 'publication-fee-quote', publicationId] as const
+
+/** The rule fee of a publication's saved conditions and run, and every rule's state and daily price. */
+export const readFeeQuote = (publicationId: string) =>
+  runProcess<FeeQuoteOutput>(AUDIENCE.feeQuote, { publicationId })
+
 // ---- Q76: prerequisites -------------------------------------------------------------------------------------------
 
-/** `PublicationPrerequisites.PrerequisiteInput`: a publication the taker must first have passed or answered. */
+/**
+ * `PublicationPrerequisites.PrerequisiteInput`: a publication the taker must first have passed or answered, or (Q86)
+ * a certification the taker must hold (`certification` set, `requiredPublicationId` absent, requirement PASSED).
+ */
 export interface Prerequisite {
-  requiredPublicationId: string
+  requiredPublicationId?: string
+  certification?: string
   requirement: Requirement
 }
 
 /** A row of `qb.sponsor.publication-prerequisites`: a stored prerequisite with the required publication as it is now. */
 export interface PrerequisiteRow extends Prerequisite {
   prerequisiteId: string
+  /** The required publication's name; empty for a certification (named by `certification.names`). */
   name: string
   status: PublicationStatus
   startAt: string | null
@@ -1485,7 +1531,8 @@ export async function readPrerequisites(publicationId: string): Promise<Prerequi
   const page = await runQuery<Row>(PREREQUISITES.sponsorTemplate, { params: { publicationId }, limit: PAGE })
   return page.items.map((row): PrerequisiteRow => ({
     prerequisiteId: String(row.prerequisiteId),
-    requiredPublicationId: String(row.requiredPublicationId),
+    ...(typeof row.certification === 'string' && row.certification
+      ? { certification: row.certification } : { requiredPublicationId: String(row.requiredPublicationId) }),
     requirement: row.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED',
     name: String(row.name ?? ''),
     status: (row.status as PublicationStatus) ?? 'DRAFT',

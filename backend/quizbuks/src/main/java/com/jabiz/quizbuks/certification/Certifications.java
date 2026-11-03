@@ -27,7 +27,43 @@ public final class Certifications {
      */
     public static final Certification REFERRER = new Certification("REFERRER", Duration.ofDays(365), 1);
 
-    public static final List<Certification> ALL = List.of(SPONSOR_APPLY, REFERRER);
+    /**
+     * Q86 (docs/quizbuks/plans/Q86-agreement-quiz-tree.md): understanding an agreement, earned by answering a quiz about
+     * it after consenting to it (consent itself is unchanged: this is a voluntary, verifiable record). A year; the
+     * version is raised by hand when a version of the legal text that requires consent again is published
+     * ({@link #legalKinds}; {@code CertificationLegalCheck} warns while it lags).
+     */
+    public static final Certification TERMS_APP_UNDERSTOOD = new Certification("TERMS_APP_UNDERSTOOD",
+        Duration.ofDays(365), 1);
+    public static final Certification CONTEST_RULES_UNDERSTOOD = new Certification("CONTEST_RULES_UNDERSTOOD",
+        Duration.ofDays(365), 1);
+    public static final Certification TERMS_SPONSOR_UNDERSTOOD = new Certification("TERMS_SPONSOR_UNDERSTOOD",
+        Duration.ofDays(365), 1);
+
+    public static final List<Certification> ALL = List.of(SPONSOR_APPLY, REFERRER, TERMS_APP_UNDERSTOOD,
+        CONTEST_RULES_UNDERSTOOD, TERMS_SPONSOR_UNDERSTOOD);
+
+    /** The certifications of takers: those a sponsor's publication may require (Q86, D-Q86-5). */
+    public static final List<Certification> FOR_TAKERS = List.of(SPONSOR_APPLY, REFERRER, TERMS_APP_UNDERSTOOD,
+        CONTEST_RULES_UNDERSTOOD);
+
+    /** The understanding certifications (Q86), the agreements each stands for, in the order the cards show them. */
+    public static final List<Certification> UNDERSTANDING = List.of(TERMS_APP_UNDERSTOOD, CONTEST_RULES_UNDERSTOOD,
+        TERMS_SPONSOR_UNDERSTOOD);
+
+    /** The kinds of legal text (QbLegal) a certification stands for understanding; empty for the others. */
+    public static List<String> legalKinds(Certification certification) {
+        return switch (certification.key()) {
+            case "TERMS_APP_UNDERSTOOD" -> List.of("TERMS_APP", "PRIVACY");
+            case "CONTEST_RULES_UNDERSTOOD" -> List.of("CONTEST_RULES");
+            case "TERMS_SPONSOR_UNDERSTOOD" -> List.of("TERMS_SPONSOR", "PRIVACY", "COMMERCE_NOTICE");
+            default -> List.of();
+        };
+    }
+
+    public static boolean forTakers(String key) {
+        return FOR_TAKERS.stream().anyMatch(c -> c.key().equals(key));
+    }
 
     public static final String DICTIONARY = "urn:jabiz:dict:quizbuks:certification";
 

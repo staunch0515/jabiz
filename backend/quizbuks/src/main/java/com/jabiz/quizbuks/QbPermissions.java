@@ -207,6 +207,10 @@ public final class QbPermissions {
     public static final String CONVERSATION_READ = "qb.conversation.read";
     /** Q82: the conversations' expiry ({@code QB_CONVERSATION_EXPIRE}, {@code internal()}). Granted to no role. */
     public static final String CONVERSATION_SYSTEM = "qb.conversation.system";
+    /** Q47c: opening and closing the kinds of audience rule and whether they are charged for (headquarters' content). */
+    public static final String AUDIENCE_RULES_WRITE = "qb.audience.rules.write";
+    /** Q47c: headquarters' price lists of the audience rules, their own and the operators' (finance). */
+    public static final String AUDIENCE_PRICES_WRITE = "qb.audience.prices.write";
     /** Marking the official publishers whose publications may be rounds (Q69): headquarters' content administrators. */
     public static final String CERTIFICATION_ADMIN = "qb.certification.admin";
     /** Q87: the platform's fees. The jobs and sub-processes (granted to no role). */

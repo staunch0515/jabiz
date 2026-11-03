@@ -68,6 +68,8 @@ export const PLAY = {
   history: 'qb.app.history',
   /** Q85: a sponsor's tree as the caller stands on it (`qb.app.sponsor-tree`). */
   sponsorTree: 'qb.app.sponsor-tree',
+  /** Q86: the understanding certifications' cards (whether offered, held, the round to answer; the platform tree's handle). */
+  understanding: 'qb.app.understanding',
 } as const
 
 /**
@@ -82,6 +84,13 @@ export const AUDIENCE = {
   sponsorConditions: 'urn:jabiz:dataset:sponsor:QbPublicationCriterion',
   /** 422: the caller's profile does not meet the publication's conditions. */
   notMatched: 'QB_AUDIENCE_NOT_MATCHED',
+  /**
+   * Q47c (docs/quizbuks/plans/Q47c-audience-billing.md): a draft's rule fee as its saved conditions and run would
+   * cost, with each rule's state and the daily price that applies to the sponsor.
+   */
+  feeQuote: 'QB_AUDIENCE_FEE_QUOTE',
+  /** 422: headquarters closed the rule; sponsors cannot choose it now. */
+  ruleClosed: 'QB_AUDIENCE_RULE_CLOSED',
 } as const
 
 /**
@@ -93,10 +102,20 @@ export const PREREQUISITES = {
   save: 'QB_PUBLICATION_PREREQUISITES_SAVE',
   /** The sponsor's own rows, with the required publications' names (`queries/qb/sponsor`). */
   sponsorTemplate: 'qb.sponsor.publication-prerequisites',
-  /** 422: the caller has not yet passed (or answered) a publication this one requires. */
+  /** 422: the caller has not yet passed (or answered) a publication this one requires, or holds no certification it requires. */
   notMet: 'QB_PREREQUISITE_NOT_MET',
   max: 5,
+  /** Q86 (D-Q86-5): the certifications a publication may require (takers' ones, `Certifications.FOR_TAKERS`). */
+  certifications: ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD'],
 } as const
+
+/** The certifications' keys (`certification.Certifications`); names in `qb/messages.ts` `certification.names`. */
+export const CERTIFICATIONS = ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD',
+  'TERMS_SPONSOR_UNDERSTOOD'] as const
+export type CertificationKey = (typeof CERTIFICATIONS)[number]
+/** Q86: the understanding certifications the app's takers answer, and the sponsors' one. */
+export const UNDERSTANDING_TAKER: readonly CertificationKey[] = ['TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD']
+export const UNDERSTANDING_SPONSOR: readonly CertificationKey[] = ['TERMS_SPONSOR_UNDERSTOOD']
 
 /** What a prerequisite asks of the taker on the required publication. */
 export const REQUIREMENTS = ['PASSED', 'ANSWERED'] as const

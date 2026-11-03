@@ -62,7 +62,9 @@ public final class QbRoles {
         // Q70: every referral (support: who referred whom, and what came of it).
         QbPermissions.REFERRAL_READ,
         // Q82: every conversation between takers and sponsors (disputes and reports).
-        QbPermissions.CONVERSATION_READ);
+        QbPermissions.CONVERSATION_READ,
+        // Q47c: which kinds of audience rule sponsors may use and which are charged for.
+        QbPermissions.AUDIENCE_RULES_WRITE);
 
     /**
      * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's
@@ -108,6 +110,8 @@ public final class QbRoles {
         QbPermissions.PAYOUT_BANK_REVEAL, QbPermissions.WITHDRAWAL_PAY,
         // Q70: the referrals, whose rewards the monthly report counts.
         QbPermissions.REFERRAL_READ,
+        // Q47c: headquarters' price lists of the audience rules, their own and the operators'.
+        QbPermissions.AUDIENCE_PRICES_WRITE,
         // Q87: the platform's fees (charged by hand and voided with another administrator's approval) and the
         // sponsors' billing mode.
         QbPermissions.FEE_MANAGE, QbPermissions.FEE_BILLING);

@@ -187,8 +187,8 @@ class SetupIT extends QbItSupport {
             Object type = kind.get("type");
             // The commission rate is a fraction below 1; the days (Q10b) are whole.
             // Q8a: a code (the AI model and effort) takes a listed value other than its first one.
-            // Q87: a switch takes the value it does not have (buying Kudos is on by default).
-            String value = "bool".equals(type) ? String.valueOf(!Boolean.parseBoolean(String.valueOf(param.value())))
+            // A switch is set to what it is not (Q86: qb.understanding.enabled starts true).
+            String value = "bool".equals(type) ? String.valueOf(!Boolean.TRUE.equals(param.value()))
                 : "code".equals(type) ? String.valueOf(((List<?>) kind.get("allowedValues")).getLast())
                 : "numeric".equals(type) && !Integer.valueOf(0).equals(kind.get("scale"))
                     // Q48e-2: a value other than the one in effect (plan 5's share is 0.1).
@@ -295,6 +295,9 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.BROADCAST_STATS_MIN_AUDIENCE, "50");
         // Q13a: bank top-ups' range, and the receiving account empty until finance sets it with four eyes.
         expected.put(QbParams.TOPUP_BANK_MIN, "1000");
+        // Q86: the understanding quizzes are offered; no platform tree until an official account is named.
+        expected.put(QbParams.UNDERSTANDING_ENABLED, "true");
+        expected.put(QbParams.TREE_PLATFORM_HANDLE, "");
         expected.put(QbParams.TOPUP_BANK_MAX, "10000000");
         QbParams.BANK_RECEIVING.forEach(key -> expected.put(key, ""));
         expected.put(QbParams.WITHDRAWAL_BANK_ENABLED, "false");
@@ -319,6 +322,9 @@ class SetupIT extends QbItSupport {
         // Q82: the conversations' daily cap and quiet days (not controlled).
         expected.put(QbParams.CONVERSATION_DAILY_CAP, "20");
         expected.put(QbParams.CONVERSATION_CLOSE_DAYS, "90");
+        // Q47c: charging for the audience rules (off), its fallback and the unused-days refund (all controlled).
+        expected.putAll(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "false", QbParams.AUDIENCE_PRICE_FALLBACK, "DIRECT",
+            QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "false"));
         // Q48e-2: the operators' five plans (fixed fee, platform's share) and their withdrawals.
         expected.putAll(Map.of(QbParams.operatorPlanFee("1"), "0", QbParams.operatorPlanShare("1"), "0.5000",
             QbParams.operatorPlanFee("2"), "20000", QbParams.operatorPlanShare("2"), "0.4000",

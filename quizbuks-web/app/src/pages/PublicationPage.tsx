@@ -151,15 +151,23 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
           <span>{t('detail.prerequisites')}</span>
           <ul className="flex flex-col gap-1">
             {publication.prerequisites.map((p) => (
-              <li key={p.requiredPublicationId} className="flex flex-wrap items-center gap-x-2"
-                data-testid="detail-prerequisite" data-met={p.met}>
+              <li key={p.certification ?? p.requiredPublicationId ?? ''} className="flex flex-wrap items-center gap-x-2"
+                data-testid="detail-prerequisite" data-met={p.met} data-certification={p.certification ?? undefined}>
                 {p.met
                   ? <CircleCheck aria-hidden className="text-primary size-4" />
                   : <Circle aria-hidden className="text-muted-foreground size-4" />}
-                <Link to={sharePath(p.requiredPublicationId)} className="text-primary underline">{p.name}</Link>
+                {/* Q86 (D-Q86-5): a certification to hold, leading to its current round when one is open. */}
+                {p.certification
+                  ? p.roundPublicationId && !p.met
+                    ? <Link to={sharePath(p.roundPublicationId)} className="text-primary underline">
+                      {tQb(`certification.names.${p.certification}`)}</Link>
+                    : <span>{tQb(`certification.names.${p.certification}`)}</span>
+                  : <Link to={sharePath(p.requiredPublicationId!)} className="text-primary underline">{p.name}</Link>}
                 <span className="text-muted-foreground text-sm">
-                  {p.met ? tQb(`prerequisite.${p.requirement.toLowerCase()}`) : tQb(`prerequisite.${p.requirement}`)}
-                  {!p.met && !p.live && ` · ${t('detail.prerequisiteClosed')}`}
+                  {p.certification
+                    ? (p.met ? tQb('certification.held') : tQb('certification.hold'))
+                    : p.met ? tQb(`prerequisite.${p.requirement.toLowerCase()}`) : tQb(`prerequisite.${p.requirement}`)}
+                  {!p.met && !p.live && !p.certification && ` · ${t('detail.prerequisiteClosed')}`}
                 </span>
               </li>
             ))}

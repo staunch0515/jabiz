@@ -50,13 +50,17 @@ SELECT
     c.{{QbPublicationCard.rewardMethod}}  AS rewardMethod,
     (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
                 'requiredPublicationId', pr.{{QbPublicationPrerequisite.requiredPublicationId}},
+                'certification', pr.{{QbPublicationPrerequisite.certification}},
                 'requirement', pr.{{QbPublicationPrerequisite.requirement}})
                 ORDER BY pr.{{QbPublicationPrerequisite.requiredPublicationId}}), '[]') AS text)
      FROM {{QbPublicationPrerequisite}} pr
-     JOIN {{QbPublicationCard}} rc
+     -- Q86: a certification required is named as such (no publication to find); a required publication only when listed.
+     LEFT JOIN {{QbPublicationCard}} rc
          ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
         AND rc.{{QbPublicationCard.publisherId}} = c.{{QbPublicationCard.publisherId}}
-     WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}) AS prerequisites
+     WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}
+       AND (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL
+            OR rc.{{QbPublicationCard.publicationId}} IS NOT NULL)) AS prerequisites
 FROM {{QbPublicationCard}} c
 JOIN {{QbSponsorPage}} p ON p.{{QbSponsorPage.userId}} = c.{{QbPublicationCard.publisherId}}
 JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = p.{{QbSponsorPage.userId}}
