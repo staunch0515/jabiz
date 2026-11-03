@@ -472,8 +472,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           )}
         </fieldset>
       )}
-      {rewardMethod === 'OFFLINE_REDEEM' && (
-        <BenefitPurchaseField id={`${id}-benefit`} value={form.benefitPurchaseId} disabled={locked}
+      {(rewardMethod === 'OFFLINE_REDEEM' || rewardMethod === 'DIGITAL_PRIZE') && (
+        <BenefitPurchaseField id={`${id}-benefit`} method={rewardMethod} value={form.benefitPurchaseId} disabled={locked}
           problem={problemOf('benefitPurchaseId')} onChange={(value) => set('benefitPurchaseId', value)} />
       )}
       {rewardMethod === 'OFFLINE_REDEEM' && (

@@ -4,6 +4,7 @@ import { minuteNow } from '../qb/legal'
 import { CRITERIA, type Condition } from '../qb/audience'
 import { AUDIENCE, PREREQUISITES, type Requirement } from '../qb/ids'
 import { referralPolicy, type ReferralPolicy } from '../qb/play'
+import { BENEFIT_TEMPLATE } from '../benefits/ids'
 import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_PROCESS, PUBLISHING_TEMPLATE } from './ids'
 
 /*
@@ -648,8 +649,16 @@ export interface DigitalPrizeRow {
   resolveNote: string | null
 }
 
-export async function readDigitalPoolSummary(publicationId: string): Promise<DigitalPoolSummary> {
-  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.digitalPoolSummary, { params: { publicationId }, limit: 1 })
+/**
+ * Q89b-2: the provider of another sponsor's digital product reads the pool through its own templates (`provided`);
+ * the publisher through the sponsor's.
+ */
+const poolTemplates = (provided: boolean) => provided
+  ? { summary: BENEFIT_TEMPLATE.digitalPoolSummary, codes: BENEFIT_TEMPLATE.digitalCodes }
+  : { summary: PUBLISHING_TEMPLATE.digitalPoolSummary, codes: PUBLISHING_TEMPLATE.digitalCodes }
+
+export async function readDigitalPoolSummary(publicationId: string, provided = false): Promise<DigitalPoolSummary> {
+  const page = await runQuery<Row>(poolTemplates(provided).summary, { params: { publicationId }, limit: 1 })
   const row = page.items[0] ?? {}
   return { available: num(row.available), issued: num(row.issued), revoked: num(row.revoked) }
 }
@@ -659,10 +668,11 @@ export interface DigitalCodeSearch {
   status?: DigitalCodeStatus | null
   offset: number
   limit: number
+  provided?: boolean
 }
 
-export async function searchDigitalCodes({ publicationId, status, offset, limit }: DigitalCodeSearch) {
-  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.digitalCodes, {
+export async function searchDigitalCodes({ publicationId, status, offset, limit, provided = false }: DigitalCodeSearch) {
+  const page = await runQuery<Row>(poolTemplates(provided).codes, {
     params: { publicationId },
     filters: status ? [{ field: 'status', op: 'eq', value: status }] : [],
     offset,
@@ -1020,8 +1030,8 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       rewardMethod: form.rewardMethod,
       redeemDescription: form.rewardMethod === 'OFFLINE_REDEEM' && form.redeemDescription.trim()
         ? form.redeemDescription.trim() : null,
-      // Q89b-1: only a prize collected at a provider's place draws on a purchase.
-      ...(form.rewardMethod === 'OFFLINE_REDEEM' && form.benefitPurchaseId
+      // Q89b-1, Q89b-2: a prize collected at a provider's place or a digital prize draws on a purchase.
+      ...((form.rewardMethod === 'OFFLINE_REDEEM' || form.rewardMethod === 'DIGITAL_PRIZE') && form.benefitPurchaseId
         ? { benefitPurchaseId: form.benefitPurchaseId } : {}),
       // The digital fields travel only with a digital prize; what another method left behind is not sent (Q33).
       ...(digital ? {

@@ -147,6 +147,17 @@ public class BenefitConfig {
 
     static final String FULFILLER_REDEMPTIONS = "urn:jabiz:dataset:fulfiller:QbRedemption";
 
+    /** Q89b-2: the publications whose prizes the caller hands over (its templates only). */
+    @Bean
+    DatasetDefinition qbFulfillerPublicationDataset() {
+        return DatasetDefinition.define("urn:jabiz:dataset:fulfiller:QbPublication", d -> d
+            .targetEntityType(com.jabiz.quizbuks.publishing.QbPublications.PUBLICATION)
+            .permissions(QbPermissions.BENEFIT_SYSTEM, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("fulfillerId", "actorId", RequestContext::actorId)));
+    }
+
     @Bean
     DatasetDefinition qbProviderBenefitOfferDataset() {
         return own(QbBenefits.PROVIDER, QbBenefits.OFFER, "providerId");

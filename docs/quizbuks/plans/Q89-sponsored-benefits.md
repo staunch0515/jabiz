@@ -158,3 +158,17 @@
 - **迁移 V69**（Q87b 先占了 V68）：上述列（只追加表只加列）与 `qb_benefit_allocation`（`publication_id` 唯一）。
 - **前端**：商户后台向导"奖品来自权益采购单"（只列已确认的实物与服务采购单）、兑换页的"您为其他商户提供的权益"待确认；App 发布页"由发布方赞助，在 X 领取"（`qb.app.publication` 的 `fulfillerCompany`）。
 - **测试**：`BenefitPublicationIT`（4：**验收场景 B**——100 碗牛肉面，100 位合格者都在面馆领取、第 101 位不能开始、发布方的码被拒、面馆列出 100 个、结束后分配记用掉 100；提交只能取剩余、撤回经任务退回；只认本人已确认的采购单、一档等值、采购单改后须重存；提供方的店员确认固定码的申请、发布方不能确认）。
+
+### Q89b-2（2026-11-03，分支 `1.3/quizbuks-89b2-benefit-digital`）：数字产品
+
+需求方 2026-11-03 同意的方案：数字产品只经码池（`POOL`）由提供方装码；共用码（`SHARED`）与发布方手工发送（`SPONSOR_SENT`）一律拒绝（`QB_BENEFIT_DIGITAL_DELIVERY`）。
+
+做了什么：
+
+- **发布**：`DIGITAL_PRIZE` 可引用本人已确认的数字产品采购单（实物与服务仍只配 `OFFLINE_REDEEM`，方式不配即 `QB_BENEFIT_PURCHASE_NOT_USABLE`）；没写说明时以产品的名称与条件作说明；提交时 `BenefitPublishing.problems` 另查 `digitalDelivery = POOL`，码池的可用数照 Q33 由 `PublicationReadiness.pool` 查。
+- **码池是提供方的**：`QB_DIGITAL_CODES_LOAD` / `REVOKE` 经默认数据视图读发布，`DigitalCodeProcesses.requireHandler`：有履约方的只认履约方，没有的只认发布方（`SPONSOR`），其他人 404。码以装码人的编号为上下文密封，`QB_DIGITAL_PRIZE_OPEN` 以 `QbRewards.handlerOf` 打开，两者因此一致。码行仍带发布方那一对：发布方经原有的 `qb.sponsor.digital-pool-summary` / `digital-codes` 看得到计数与末四位，但不能装或收回。
+- **结算**：`QbDigitalPrize.fulfillerId`（迁移 V70，只追加表只加列）由卡片写入，不多读；答题路径的语句数不变。
+- **提供方的页面**：模板 `qb.sponsor.benefit-publications`（数据视图 `fulfiller:QbPublication`：用到本人权益的发布，含草稿，按采购单筛选，带码池的可用与已发数）、`qb.sponsor.benefit-digital-pool-summary` 与 `benefit-digital-codes`（经同一数据视图限定）；商户后台的采购单页（提供方一侧）列出这些发布，数字产品的可展开码池（`DigitalPoolSection` 的 `provided` 模式）；发布方的发布页对这种码池只显示计数（`watch` 模式）。向导在 `DIGITAL_PRIZE` 时只列数字产品的采购单。
+- **测试**：`BenefitDigitalIT`（2：电影通行证——咖啡店不能装码、提供方装码与模板、陌生商户读不到、上架、获奖者打开提供方的码；共用码与手工发送被拒、数字产品不能做到店兑换）；前端 `benefits.test.tsx` 的提供方装码。
+
+未做（记下）：**提供方手工发送**要 Q33b 的发送功能（Q33 计划中商户发送的那一步从未实现），做 Q33b 时再开放 `SPONSOR_SENT`。

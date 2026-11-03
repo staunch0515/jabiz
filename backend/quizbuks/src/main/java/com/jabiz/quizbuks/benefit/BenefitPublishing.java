@@ -23,6 +23,9 @@ public final class BenefitPublishing {
 
     /** The reward method a purchase of goods or a service is given by (no new method, D-Q89-6). */
     public static final String OFFLINE_REDEEM = "OFFLINE_REDEEM";
+    /** Q89b-2: the reward method of a digital product, and the one delivery it may have: codes the provider loads. */
+    public static final String DIGITAL_PRIZE = "DIGITAL_PRIZE";
+    public static final String POOL = "POOL";
 
     private static final JsonMapper JSON = JsonMapper.builder()
         .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
@@ -117,13 +120,14 @@ public final class BenefitPublishing {
      *
      * @param publisherId  the publication's sponsor
      * @param method       its reward method
+     * @param delivery     a digital prize's delivery (none for the other methods)
      * @param stored       the purchase as the draft saw it
      * @param purchase     the purchase now (read under its lock); null when gone
      * @param maxWinners   the quota the publication asks for (null: none given)
      * @param rewards      its tiers' rewards
      * @param allocations  the purchase's allocations of the other publications (read under its lock)
      */
-    public static List<Violation> problems(String publisherId, String method, Snapshot stored,
+    public static List<Violation> problems(String publisherId, String method, String delivery, Snapshot stored,
         Map<String, Object> purchase, Integer maxWinners, List<BigDecimal> rewards, List<Allocation> allocations) {
         List<Violation> problems = new ArrayList<>();
         if (purchase == null || stored == null) {
@@ -141,9 +145,16 @@ public final class BenefitPublishing {
             problems.add(new Violation("benefitPurchaseId", BenefitCodes.PURCHASE_CHANGED, "The purchase changed "
                 + "since the draft was saved: save it again", Map.of("revision", whole(purchase.get("revision")))));
         }
-        if (!OFFLINE_REDEEM.equals(method) || QbBenefits.DIGITAL.equals(stored.kind())) {
+        boolean digital = QbBenefits.DIGITAL.equals(stored.kind());
+        if (!(digital ? DIGITAL_PRIZE : OFFLINE_REDEEM).equals(method)) {
             problems.add(new Violation("rewardMethod", BenefitCodes.METHOD, "Goods and services are prizes collected "
-                + "at the provider's place", Map.of("kind", String.valueOf(stored.kind()))));
+                + "at the provider's place, a digital product is a digital prize", Map.of("kind",
+                    String.valueOf(stored.kind()))));
+        } else if (digital && !POOL.equals(delivery)) {
+            // Q89b-2: the provider loads one code or link for each winner; a shared code is the publisher's, and a
+            // prize sent by hand needs the sending the platform does not have yet (Q33b).
+            problems.add(new Violation("digitalDelivery", BenefitCodes.DIGITAL_DELIVERY, "A digital product is issued "
+                + "from codes its provider loads", Map.of("delivery", String.valueOf(delivery))));
         }
         // One prize per winner, worth the benefit (D-Q89-6): one tier pays, and it pays the benefit's value.
         List<BigDecimal> paying = rewards.stream().filter(r -> r != null && r.signum() > 0).toList();
