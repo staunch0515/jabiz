@@ -66,6 +66,8 @@ export const PLAY = {
   publication: 'qb.app.publication',
   publicationTiers: 'qb.app.publication-tiers',
   history: 'qb.app.history',
+  /** Q85: a sponsor's tree as the caller stands on it (`qb.app.sponsor-tree`). */
+  sponsorTree: 'qb.app.sponsor-tree',
 } as const
 
 /**

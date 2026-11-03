@@ -1,8 +1,8 @@
 import { readPageProducts } from './api'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
-import { formatDateTime, i18n } from '@jabiz/client'
-import { Button, MarkdownView, PageState } from '@jabiz/ui'
+import { formatDateTime, i18n, useAuth } from '@jabiz/client'
+import { Button, MarkdownView, PageState, SegmentedControl } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { ExternalLink, Trophy } from 'lucide-react'
@@ -14,8 +14,10 @@ import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { levelsOf } from './levels'
 import { prerequisitesOf } from '../qb/play'
-import { readPagePublications, readPublicSponsorPage } from './api'
-import { Link } from '../qb/router'
+import { readPagePublications, readPublicSponsorPage, readSponsorTree } from './api'
+import { Link, useLocation } from '../qb/router'
+import { TechTree, TreeProgress } from '../qb/TechTree'
+import { progressOf } from '../qb/tree'
 import { sharePath } from './share'
 import { countPageView, countProductClick } from './counting'
 import { linkLanguageOf } from '../linkLanguage'
@@ -58,6 +60,16 @@ export function SponsorPage({ handle }: { handle: string }) {
   const { t: tView } = useTranslation(QBVIEW)
   const publications = useQuery({ queryKey: ['qb', 'sponsor-page-publications', handle],
     queryFn: () => readPagePublications(handle), enabled: !!page.data })
+  // Q85 (D-Q85-6): signed in, the tree as the caller stands on it (their own attempts), the picture by default;
+  // the list stays for anybody. `?node=` marks a node (the result page's "what comes next").
+  const { signedIn } = useAuth()
+  const { search } = useLocation()
+  const [at] = useState(() => new Date().toISOString())
+  const lang = i18n.language.slice(0, 2)
+  const tree = useQuery({ queryKey: ['qb', 'sponsor-tree', handle, lang],
+    queryFn: () => readSponsorTree(handle, at, lang), enabled: signedIn && !!page.data })
+  const [view, setView] = useState<'tree' | 'list'>('tree')
+  const selected = new URLSearchParams(search).get('node')
 
   // Q60c: a view of a page that exists (published), once per page shown; the server counts a visitor once a day.
   const shown = page.data ? page.data.handle : null
@@ -126,7 +138,26 @@ export function SponsorPage({ handle }: { handle: string }) {
       <ProductCards products={products.data ?? []} title={tView('products.title')} testId="sponsor-page-products"
         onOpen={countProductClick} />
       <section aria-labelledby="sponsor-page-quizzes" className="flex flex-col gap-3">
-        <h2 id="sponsor-page-quizzes" className="text-lg font-semibold">{t('sponsorPage.quizzes')}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="sponsor-page-quizzes" className="text-lg font-semibold">{t('sponsorPage.quizzes')}</h2>
+          {signedIn && tree.isSuccess && tree.data.length > 0 && (
+            <SegmentedControl value={view} onChange={setView} aria-label={t('sponsorPage.quizzes')}
+              data-testid="sponsor-page-view" options={[
+                { value: 'tree', label: t('sponsorPage.tree') },
+                { value: 'list', label: t('sponsorPage.list') },
+              ]} />
+          )}
+        </div>
+        {signedIn && view === 'tree' && tree.isSuccess && tree.data.length > 0 && (
+          <div className="flex flex-col gap-2" data-testid="sponsor-page-tree">
+            <TreeProgress lit={progressOf(tree.data).lit} total={tree.data.length}
+              next={progressOf(tree.data).next.map((node) => node.name)} />
+            <TechTree nodes={tree.data} selected={selected} label={t('sponsorPage.treeLabel', { company: p.company })}
+              hrefOf={(node) => `/p/${encodeURIComponent(node.id)}`} />
+            <p className="text-muted-foreground text-xs">{t('sponsorPage.treeHint')}</p>
+          </div>
+        )}
+        {(!signedIn || view === 'list' || !tree.isSuccess || tree.data.length === 0) && <>
         {publications.isPending && <PageState kind="loading" />}
         {publications.isError && <PageState kind="error" description={tQb('failed')} />}
         {publications.isSuccess && publications.data.length === 0 && (
@@ -165,6 +196,7 @@ export function SponsorPage({ handle }: { handle: string }) {
             </ul>
           </div>
         ))}
+        </>}
       </section>
     </article>
   )

@@ -434,6 +434,26 @@ describe('the ways a reward is paid (Q22)', () => {
     expect(visit).toHaveTextContent('See their products and story')
     // Opened first (from the history's link or a mail), the header's arrow goes home.
     expect(screen.getByTestId('header-back')).toBeInTheDocument()
+    // Q85: no tree (the sponsor's quizzes lead to no other): no "what comes next".
+    expect(screen.queryByTestId('result-next-step')).toBeNull()
+  })
+
+  it('leads from the result to the sponsor\'s tree when their quizzes lead to one another (Q85)', async () => {
+    server({ publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals' })], offset: 0, limit: 1 }),
+      extra: (path) => path === '/api/queries/qb.app.sponsor-tree'
+        ? json(200, { items: [
+          { publicationId: PUB, name: 'Capitals week', kind: 'QUIZ', endAt: '2099-01-01T00:00:00Z', maxReward: '100',
+            live: true, state: 'LIT', prerequisites: '[]' },
+          { publicationId: 'p-next', name: 'Rivers', kind: 'QUIZ', endAt: '2099-01-01T00:00:00Z', maxReward: '200',
+            live: true, state: 'UNLOCKED',
+            prerequisites: JSON.stringify([{ requiredPublicationId: PUB, requirement: 'PASSED', name: 'Capitals week' }]) },
+        ], offset: 0, limit: 200 })
+        : undefined })
+    window.history.replaceState(null, '', `/result/${ATTEMPT}`)
+    render(<App />)
+    const next = await screen.findByTestId('result-next-step')
+    expect(next).toHaveAttribute('href', `/s/capitals?node=${PUB}`)
+    expect(next).toHaveTextContent('See what comes next')
   })
 
   it('shows a prize with what it is and until when', async () => {

@@ -143,3 +143,4 @@
 7. **删除账号**：`keep` 必须清空至少一个字段，对话行只有用户编号，原样保留（不声明）；每个账号写的消息在 `SponsorErasure`（每个账号都运行）中清空 `body`（列可空），屏蔽在 `TakerErasure` 中删除。`TakerErasureIT` 的全表搜索覆盖。
 8. **测试**：`ConversationRulesTest`（7 组）、`ConversationIT`（5 个：开启与回复、站内信每小时一条与推送、只读本人、地址规则；关闭与重开、每日条数；屏蔽与解除；到期任务；举报带对话）、`TakerErasureIT` 新增一项、`QbRolesTest`；App `conversation.test.tsx`（6）、商户后台 `conversations.test.tsx`（3）、后台扩展 `abuseReports.test.tsx` 加只读对话页，各页 axe；e2e `conversations.spec.ts`。答题路径不变（`AttemptStatementBudgetIT` 未改）。
 9. **未做**：店员回复（D-Q82-4，另议）；条款与隐私政策的补充文本（需求方 / 法务给出后由内容管理员发布）。
+10. **码的显示**（D-Q82-13 写“码的末 4 位”）：`qb.sponsor.conversation-rewards` 给商户的是现金与到店领取的**完整**码，不是末 4 位——同一商户在现金奖励与兑换列表中本就看到完整的码（确认与支付要用），对话旁不多露出什么；电子奖品照计划只给提示（末几位），不给内容。
