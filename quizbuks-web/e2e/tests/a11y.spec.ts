@@ -415,6 +415,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
     await page.goto('/admin/qb/finance')
     await expect(page.getByTestId('finance-in-review')).toBeVisible()
+    // The extension's ACCOUNTS: Q9c's eight and Q87's four (cash accounts, fees receivable, fee revenue, tax).
     await expect(page.getByTestId('finance-account')).toHaveCount(12)
     if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)
     await expectAccessible(page, at('admin finance overview'))
