@@ -160,28 +160,35 @@ function Monthly({ period }: { period: Period }) {
   if (rows.isError) body = <LoadFailed error={rows.error} onRetry={() => void rows.refetch()} />
   else if (rows.isPending) body = <PageState kind="loading" />
   else {
+    // Q87 made the table wider than the page: the region scrolls and takes the keyboard's focus (axe
+    // scrollable-region-focusable); the inner box is as wide as the table, so the platform's own container never scrolls.
     body = (
-      <Table aria-label={t('finance.reports.monthlyTable')} data-testid="monthly-table">
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t('finance.reports.category')}</TableHead>
-            <TableHead className="text-right">{t('finance.reports.count')}</TableHead>
-            <TableHead className="text-right">{t('finance.reports.amount')}</TableHead>
-            {MONTHLY_ACCOUNTS.map((code) => <TableHead key={code} className="text-right">{code}</TableHead>)}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.data.map((row) => (
-            <TableRow key={row.category} data-testid="monthly-row" data-category={row.category}
-              data-count={row.transactionCount} data-amount={row.amount}>
-              <TableCell>{t(`finance.category.${row.category}`, { defaultValue: row.category })}</TableCell>
-              <TableCell className={right}>{row.transactionCount.toLocaleString()}</TableCell>
-              <TableCell className={right}>{money(row.amount)}</TableCell>
-              {MONTHLY_ACCOUNTS.map((code) => <TableCell key={code} className={right}>{money(row.moves[code])}</TableCell>)}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={t('finance.reports.monthlyTable')}
+        data-testid="monthly-scroll">
+        <div className="w-max min-w-full">
+          <Table aria-label={t('finance.reports.monthlyTable')} data-testid="monthly-table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('finance.reports.category')}</TableHead>
+                <TableHead className="text-right">{t('finance.reports.count')}</TableHead>
+                <TableHead className="text-right">{t('finance.reports.amount')}</TableHead>
+                {MONTHLY_ACCOUNTS.map((code) => <TableHead key={code} className="text-right">{code}</TableHead>)}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.data.map((row) => (
+                <TableRow key={row.category} data-testid="monthly-row" data-category={row.category}
+                  data-count={row.transactionCount} data-amount={row.amount}>
+                  <TableCell>{t(`finance.category.${row.category}`, { defaultValue: row.category })}</TableCell>
+                  <TableCell className={right}>{row.transactionCount.toLocaleString()}</TableCell>
+                  <TableCell className={right}>{money(row.amount)}</TableCell>
+                  {MONTHLY_ACCOUNTS.map((code) => <TableCell key={code} className={right}>{money(row.moves[code])}</TableCell>)}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
     )
   }
   return (
