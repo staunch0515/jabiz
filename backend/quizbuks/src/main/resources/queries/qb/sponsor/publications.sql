@@ -39,7 +39,7 @@ results:
   rejectCode:    { from: QbPublication.rejectCode }
   editedAt:      { from: QbPublication.editedAt }
 list:
-  filters: [status, startAt, fundsShort]
+  filters: [status, startAt, fundsShort, publicationId]
   sorts:   [editedAt, startAt, name]
   defaultSort: { field: editedAt, asc: false }
   key: [publicationId]

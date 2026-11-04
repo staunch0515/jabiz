@@ -256,6 +256,18 @@ describe('the wallet', () => {
     await expectAccessible()
   })
 
+  it('lists an entry fee paid as money out, by the quiz it was paid for (Q88b)', async () => {
+    server({ ledger: [{ entryId: 'fee:a3', type: 'ENTRY_FEE', status: 'COMPLETED', amount: '30',
+      occurredAt: '2026-10-15T01:00:00Z', publicationId: 'p3', name: 'Keyboard expert exam', quizTitle: 'Keyboards' }] })
+    window.history.replaceState(null, '', '/wallet/history')
+    render(<App />)
+    const [row] = await screen.findAllByTestId('ledger-row')
+    expect(row).toHaveAttribute('data-type', 'ENTRY_FEE')
+    expect(row).toHaveTextContent('Entry fee')
+    expect(row).toHaveTextContent('Keyboard expert exam')
+    expect(within(row).getByTestId('ledger-amount')).toHaveTextContent('−30 Kudos')
+  })
+
   it('shows the transactions and searches them', async () => {
     const { queryBodies } = server()
     window.history.replaceState(null, '', '/wallet/history')

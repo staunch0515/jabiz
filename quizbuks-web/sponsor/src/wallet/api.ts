@@ -51,6 +51,8 @@ export interface SponsorWallet {
   creditLimit: number
   /** Q87b: the postpaid fees charged but not on an invoice yet (paid early from the page, or invoiced monthly). */
   uninvoicedTotal: number
+  /** Q88b: the entry fees takers paid, waiting for the daily settlement into the cash account. */
+  entryFeesUnsettled: number
 }
 
 /** How the platform's fees are billed (Q87b): taken from the cash account at once, or invoiced monthly within a credit. */
@@ -128,6 +130,7 @@ export async function readWallet(): Promise<SponsorWallet> {
     billingMode: row.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
     creditLimit: num(row.creditLimit),
     uninvoicedTotal: num(row.uninvoicedTotal),
+    entryFeesUnsettled: num(row.entryFeesUnsettled),
   }
 }
 

@@ -1324,6 +1324,37 @@ describe('answering', () => {
     await waitFor(() => expect(posted('QB_ATTEMPT_START')).toEqual([{ publicationId: PUB, language: 'zh' }]))
   })
 
+  it('says how much is missing for an entry fee, and asks before paying one (Q88b)', async () => {
+    const page = () => json(200, { items: [publication({ entryFee: 30 })], offset: 0, limit: 1 })
+    const wallet = (held: string) => (path: string) => path === '/api/queries/qb.app.wallet'
+      ? json(200, { items: [{ available: '100', totalEarned: '100', pendingCount: 0, pendingAmount: '0',
+        inTransfer: '0', held, heldOpen: '0', heldUntil: null }], offset: 0, limit: 1 }) : undefined
+    // Rewards just won are held back: 20 can be spent, 10 more are needed.
+    server({ publicationPage: page, extra: wallet('80') })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    const { unmount } = render(<App />)
+    expect(await screen.findByTestId('detail-entry-fee')).toHaveTextContent('30 Kudos')
+    const short = await screen.findByTestId('detail-entry-fee-short')
+    expect(short).toHaveTextContent('you can spend 20 Kudos: 10 Kudos more needed')
+    expect(within(short).getByTestId('detail-earn-kudos')).toHaveAttribute('href', '/')
+    expect(screen.queryByTestId('detail-start')).not.toBeInTheDocument()
+    unmount()
+    vi.restoreAllMocks()
+
+    const { posted } = server({ publicationPage: page, extra: wallet('0') })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const start = await screen.findByTestId('detail-start')
+    await waitFor(() => expect(start).toBeEnabled())
+    expect(start).toHaveTextContent('Pay 30 Kudos and start')
+    await userEvent.click(start)
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('100 Kudos now')
+    expect(posted('QB_ATTEMPT_START')).toEqual([])
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Pay 30\sKudos and start$/ }))
+    await waitFor(() => expect(posted('QB_ATTEMPT_START')).toEqual([{ publicationId: PUB }]))
+  })
+
   it('starts, saves answers and moves, submits after asking, and shows the result with the texts', async () => {
     const { posted } = server()
     window.history.replaceState(null, '', `/p/${PUB}`)

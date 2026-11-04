@@ -5,7 +5,7 @@ import { countProductClick } from '../share/counting'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
 import { formatDateTime, i18n, useAuth } from '@jabiz/client'
-import { Alert, AlertDescription, Button, PageState } from '@jabiz/ui'
+import { Alert, AlertDescription, Button, ConfirmDialog, PageState } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { BadgeCheck, Circle, CircleCheck, ListChecks, MailWarning, Play, UserRoundSearch } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -27,6 +27,8 @@ import { SponsorVisit } from './SponsorVisit'
 import { VideoSlot } from '../video/stage'
 import { clock, satisfied, shortfallSec, toInput, usePlayback } from '../video/playback'
 import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
+import { formatKudos } from '../qb/kudos'
+import { readWallet, transferable, WALLET_QUERY } from '../wallet/api'
 import { ReferralPanel } from '../referral/ReferralPanel'
 import { ReportButton } from '../report/ReportButton'
 import { legalPath } from '../qb/legal'
@@ -36,6 +38,42 @@ import { claimReferral, forgetReferral, pendingReferral } from '../referral/api'
 export function minutesUntil(time: string | null, now: number = Date.now()): number {
   const end = time ? Date.parse(time) : NaN
   return Number.isFinite(end) ? Math.max(0, Math.ceil((end - now) / 60_000)) : 0
+}
+
+/**
+ * Q88b (D-Q88-10, D-Q88-16): the start of a quiz charging an entry fee. It is paid from the Kudos that can be
+ * transferred (rewards still held back cannot pay it); short, the page says how much is missing and where Kudos are
+ * earned instead of offering the start; otherwise starting asks first. The server decides (`QB_ENTRY_FEE_SHORT`).
+ */
+function EntryFeeStart({ fee, disabled, busy, describedBy, onStart }: { fee: number; disabled: boolean; busy: boolean;
+  describedBy: string; onStart: () => void }) {
+  const { t } = useTranslation(APP)
+  const wallet = useQuery({ queryKey: [...WALLET_QUERY, 'entry-fee'], queryFn: readWallet })
+  const usable = wallet.data ? transferable(wallet.data) : null
+  if (usable !== null && usable < fee) {
+    return (
+      <Alert data-testid="detail-entry-fee-short">
+        <AlertDescription className="text-current flex flex-col items-start gap-2">
+          <span>{t('detail.entryFeeShort', { fee: formatKudos(fee), available: formatKudos(usable),
+            short: formatKudos(fee - usable) })}</span>
+          <Link to="/" className="text-primary underline" data-testid="detail-earn-kudos">{t('detail.earnKudos')}</Link>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+  return (
+    <ConfirmDialog title={t('detail.entryFeeConfirm', { fee: formatKudos(fee) })}
+      description={usable === null ? undefined
+        : t('detail.entryFeeConfirmText', { fee: formatKudos(fee), available: formatKudos(usable) })}
+      confirmLabel={t('detail.entryFeePay', { fee: formatKudos(fee) })} onConfirm={onStart}
+      trigger={
+        <Button size="lg" className="w-full" disabled={disabled || usable === null} aria-busy={busy || undefined}
+          aria-describedby={describedBy} data-testid="detail-start" data-entry-fee={fee}>
+          <Play aria-hidden />
+          {t('detail.startWithFee', { fee: formatKudos(fee) })}
+        </Button>
+      } />
+  )
 }
 
 /** What the caller can do: start, continue the attempt in progress, see their result, or nothing now. */
@@ -54,6 +92,11 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
   const watching = publication.watchRequired && !inProgress && !mine
   const watched = !watching || noPlayer || satisfied(playback, publication.videoDurationSec)
   const report = noPlayer && !toInput(playback) ? { status: 'UNKNOWN' as const } : toInput(playback)
+  // Q88b: the entry fee a new start pays (an attempt in progress paid it already).
+  const fee = publication.entryFee ?? 0
+  const begin = () => start.mutate({ publicationId: publication.publicationId,
+    language: inProgress ? null : publication.displayLanguage,
+    playback: inProgress ? null : report })
 
   let action
   if (mine && !inProgress) {
@@ -107,17 +150,20 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
                   : t('detail.watchToEnd')}
           </p>
         )}
-        <Button size="lg" className="w-full" disabled={start.isPending || !watched} aria-busy={start.isPending || undefined}
-          aria-describedby={watching && !noPlayer ? 'detail-start-hint detail-watch-hint' : 'detail-start-hint'}
-          data-testid="detail-start"
-          onClick={() => start.mutate({ publicationId: publication.publicationId,
-            language: inProgress ? null : publication.displayLanguage,
-            playback: inProgress ? null : report })}>
-          <Play aria-hidden />
-          {inProgress
-            ? t('detail.continue', { count: minutesUntil(publication.myDeadline) })
-            : t('detail.start')}
-        </Button>
+        {!inProgress && fee > 0 ? (
+          <EntryFeeStart fee={fee} disabled={start.isPending || !watched} busy={start.isPending}
+            describedBy={watching && !noPlayer ? 'detail-start-hint detail-watch-hint' : 'detail-start-hint'}
+            onStart={begin} />
+        ) : (
+          <Button size="lg" className="w-full" disabled={start.isPending || !watched} aria-busy={start.isPending || undefined}
+            aria-describedby={watching && !noPlayer ? 'detail-start-hint detail-watch-hint' : 'detail-start-hint'}
+            data-testid="detail-start" onClick={begin}>
+            <Play aria-hidden />
+            {inProgress
+              ? t('detail.continue', { count: minutesUntil(publication.myDeadline) })
+              : t('detail.start')}
+          </Button>
+        )}
       </>
     )
   } else if (publication.heldUntil) {

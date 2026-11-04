@@ -80,6 +80,11 @@ function PublicationCard({ publication: p, methodLabel, regionsText }: { publica
             : t('publishing.list.winnersOf', { winners: p.winners.toLocaleString(), max: p.maxWinners.toLocaleString() })}</dd></div>
           <div><dt>{t('publishing.list.spent')}</dt><dd className="text-foreground font-medium">{cap === null ? formatKudos(p.spent)
             : t('publishing.list.spentOf', { spent: formatKudos(p.spent), max: formatKudos(cap) })}</dd></div>
+          {/* Q88b: what its takers paid to enter, shown once there is any. */}
+          {Number(p.entryFees) > 0 && (
+            <div><dt>{t('publishing.list.entryFees')}</dt>
+              <dd className="text-foreground font-medium" data-testid="publication-entry-fees">{formatKudos(p.entryFees)}</dd></div>
+          )}
         </dl>
         <span className="text-muted-foreground flex flex-wrap justify-between gap-x-3 text-xs">
           <span><Period startAt={p.startAt} endAt={p.endAt} /></span>

@@ -105,6 +105,7 @@ const en = {
       rewards: 'Rewards',
       transfers: 'Payouts',
       reward: 'Reward',
+      entryFee: 'Entry fee',
       transfer: 'Payout to your bank account',
       statuses: {
         COMPLETED: 'Completed',
@@ -261,6 +262,7 @@ const zh: typeof en = {
       rewards: '奖励',
       transfers: '转出',
       reward: '奖励',
+      entryFee: '报名费',
       transfer: '转入您的银行账户',
       statuses: {
         COMPLETED: '已完成',
@@ -417,6 +419,7 @@ const ja: typeof en = {
       rewards: '報酬',
       transfers: '送金',
       reward: '報酬',
+      entryFee: '参加費',
       transfer: '銀行口座への送金',
       statuses: {
         COMPLETED: '完了',

@@ -92,6 +92,8 @@ export interface FeedCard {
   questionCount: number
   /** Q81: how many of them each taker is given, drawn at random; null asks all of them. */
   pickCount: number | null
+  /** Q88b: the entry fee in Kudos the start charges (0: none); a preview's card has none. */
+  entryFee?: number
   fullScore: number
   /** Q64: the sponsor's published page (its link name); none while it is not published, and on a preview's card. */
   sponsorHandle?: string | null
@@ -158,6 +160,7 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     timeLimitSec: numberOf(row.timeLimitSec),
     questionCount: numberOf(row.questionCount),
     pickCount: row.pickCount == null ? null : numberOf(row.pickCount),
+    entryFee: row.entryFee == null ? 0 : numberOf(row.entryFee),
     fullScore: numberOf(row.fullScore),
     sponsorHandle: textOrNull(row.sponsorHandle),
     myAttemptId: textOrNull(row.myAttemptId),
@@ -262,6 +265,8 @@ export interface PublicationView {
   questionCount: number
   /** Q81: how many of them each taker is given, drawn at random; null asks all of them. */
   pickCount: number | null
+  /** Q88b: the entry fee in Kudos the start charges (0: none); a preview's card has none. */
+  entryFee?: number
   fullScore: number
   passScore: number
   maxReward: unknown
@@ -411,6 +416,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     timeLimitSec: numberOf(row.timeLimitSec),
     questionCount: numberOf(row.questionCount),
     pickCount: row.pickCount == null ? null : numberOf(row.pickCount),
+    entryFee: row.entryFee == null ? 0 : numberOf(row.entryFee),
     fullScore: numberOf(row.fullScore),
     passScore: numberOf(row.passScore),
     maxReward: row.maxReward,

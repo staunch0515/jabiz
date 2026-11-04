@@ -8,8 +8,9 @@ import { QB } from '../qb/messages'
 import { Link, navigate, useLocation } from '../qb/router'
 import { treePathOf } from '../tree/api'
 import '../tree/messages'
-import { conditionsQuery, prerequisitesQuery, readConditions, readPrerequisites, readPublication, type Publication,
-  type PublicationDetail } from './api'
+import { conditionsQuery, prerequisitesQuery, readConditions, readEntryFeesCollected, readPrerequisites,
+  readPublication, type Publication, type PublicationDetail } from './api'
+import { formatKudos } from '../qb/kudos'
 import { NEW_PUBLICATION, publicationQuery, PUBLICATIONS_PATH, PUBLICATIONS_QUERY } from './paths'
 import { analyticsPath } from '../analytics/api'
 import '../analytics/messages'
@@ -206,6 +207,9 @@ function PublicationView({ detail, stale, onStale }: {
         roundName: round.isPending ? undefined : round.data
           ? certificationName(round.data.certification, round.data.name, i18n.language, tQb) : null,
       }} />
+      {publication.entryFee > 0 && publication.status !== 'DRAFT' && (
+        <EntryFeesCollected publicationId={publication.publicationId} fee={publication.entryFee} />
+      )}
       {round.data && <RoundSection publicationId={publication.publicationId} round={round.data} disabled={stale} />}
       {publication.audience === 'INVITED' && (
         <InvitationsSection publicationId={publication.publicationId} status={publication.status} />
@@ -315,5 +319,18 @@ export function PublicationPage({ publicationId }: { publicationId: string }) {
       {banner}
       <PublicationView key={generation} detail={detail} stale={stale} onStale={() => setStale(true)} />
     </div>
+  )
+}
+
+/** Q88b (D-Q88-16): what the publication's takers paid to enter it (settled into the cash account daily). */
+function EntryFeesCollected({ publicationId, fee }: { publicationId: string; fee: number }) {
+  const { t } = useTranslation(SPONSOR)
+  const collected = useQuery({ queryKey: ['qb', 'sponsor', 'entry-fees', publicationId],
+    queryFn: () => readEntryFeesCollected(publicationId) })
+  return (
+    <p className="text-muted-foreground text-sm" data-testid="publication-entry-fees">
+      {t('publishing.detail.entryFeesCollected', { fee: formatKudos(fee),
+        collected: collected.data === undefined ? '…' : formatKudos(collected.data) })}
+    </p>
   )
 }

@@ -30,9 +30,13 @@ export function RewardText({ card }: { card: FeedCard }) {
     : null
   const reward = card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
     : t('feed.upTo', { amount: formatKudos(card.maxReward) })
+  const line = gives && Number(card.maxReward ?? 0) <= 0 ? gives : gives ? `${reward} · ${gives}` : reward
+  // Q88b (D-Q88-16): what starting it costs, after what it gives.
+  const fee = card.entryFee ? t('feed.entryFee', { amount: formatKudos(card.entryFee) }) : null
   return (
-    <span className="text-foreground font-medium" data-testid="feed-card-reward" data-certification={card.certification ?? undefined}>
-      {gives && Number(card.maxReward ?? 0) <= 0 ? gives : gives ? `${reward} · ${gives}` : reward}
+    <span className="text-foreground font-medium" data-testid="feed-card-reward" data-certification={card.certification ?? undefined}
+      data-entry-fee={card.entryFee || undefined}>
+      {fee ? `${line} · ${fee}` : line}
     </span>
   )
 }

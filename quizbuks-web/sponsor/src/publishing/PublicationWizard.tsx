@@ -656,6 +656,17 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
             )}
           </Field>
         )}
+        {/* Q88b (D-Q88-14, D-Q88-16): a quiz may charge an entry fee while the switch is on; one set before stays
+            visible (the server refuses a new one while it is off). */}
+        {!survey && (settings.data?.entryFeeEnabled || form.entryFee.trim() !== '') && (
+          <Field id={`${id}-entry-fee`} label={t('publishing.field.entryFee')} problem={problemOf('entryFee')}
+            hint={t('publishing.field.entryFeeHint')}>
+            {(aria) => (
+              <Input {...aria} inputMode="numeric" value={form.entryFee} autoComplete="off" disabled={locked}
+                data-testid="publication-entry-fee" onChange={(event) => set('entryFee', event.target.value)} />
+            )}
+          </Field>
+        )}
       </div>
       {!survey && (
         <TiersEditor tiers={form.tiers} onChange={(tiers) => set('tiers', tiers)} fullScore={fullScore}
@@ -834,6 +845,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           : Number(form.timeLimitSec),
         passScore: form.passScore.trim() === '' ? null : Number(form.passScore),
         pickCount: pick !== null && Number.isInteger(pick) ? pick : null,
+        entryFee: form.entryFee.trim() === '' ? 0 : Number(form.entryFee),
         questionCount: version?.questionCount ?? null,
         fullScore,
         budgetCap: form.budgetCap.trim() === '' ? null : form.budgetCap,
