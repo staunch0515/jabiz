@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, endSession, refreshSession as refreshTokens, unwrap, type RefreshOptions } from '../api/client'
 import { session } from '../api/session'
 import { loadSessionSettings } from './account'
+import { passkeySecondStep, passkeySignIn, type PasskeySignInOptions } from './passkey'
 
 /**
  * How far a sign-in got (docs/design/10-security.md section 9): signed in, or a second factor (or its enrolment)
@@ -36,6 +37,13 @@ export interface AuthState {
   signIn(userName: string, password: string): Promise<SignInStep>
   /** The second step of a sign-in: a TOTP or recovery code under the challenge. */
   verify(challenge: string, code: string): Promise<void>
+  /**
+   * Signs in with one of the user's passkeys at this entry (decision D71): two factors, so no second step follows.
+   * Throws `PasskeyCancelledError` when the person closed the system's dialog.
+   */
+  signInWithPasskey(options?: PasskeySignInOptions): Promise<void>
+  /** The second step of a sign-in with one of the challenge's user's passkeys instead of a code. */
+  verifyWithPasskey(challenge: string): Promise<void>
   /** The return from an identity provider (docs/design/10-security.md section 12): state and code. */
   signInWithProvider(state: string, code: string, binder: string): Promise<SignInStep>
   /** The token of a mailed sign-in link (decision D54); used once, whatever the answer. */
@@ -197,6 +205,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [queryClient],
   )
 
+  const signInWithPasskey = useCallback(
+    async (options?: PasskeySignInOptions) => {
+      const tokens = await passkeySignIn(options)
+      session.store(tokens.accessToken!, tokens.refreshToken!)
+      queryClient.clear()
+    },
+    [queryClient],
+  )
+
+  const verifyWithPasskey = useCallback(
+    async (challenge: string) => {
+      const tokens = await passkeySecondStep(challenge)
+      session.store(tokens.accessToken!, tokens.refreshToken!)
+      queryClient.clear()
+    },
+    [queryClient],
+  )
+
   const signOut = useCallback(async () => {
     const ended = endSession()
     queryClient.clear()
@@ -218,6 +244,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       dataPeriod: identity?.dataPeriod ?? null,
       signIn,
       verify,
+      signInWithPasskey,
+      verifyWithPasskey,
       signInWithProvider,
       signInWithEmailLink,
       signInWithExternalToken,
@@ -226,7 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       can: (permission: string) => permissions.has('*') || permissions.has(permission),
     }
-  }, [ready, token, identity, signIn, verify, signInWithProvider, signInWithEmailLink, signInWithExternalToken,
+  }, [ready, token, identity, signIn, verify, signInWithPasskey, verifyWithPasskey, signInWithProvider, signInWithEmailLink, signInWithExternalToken,
     signOut])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

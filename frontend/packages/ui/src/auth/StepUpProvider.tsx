@@ -1,5 +1,7 @@
-import { isProblem, setStepUpHandler, stepUp } from '@jabiz/client'
-import { CircleAlert, TriangleAlert } from 'lucide-react'
+import {
+  PasskeyCancelledError, api, isProblem, passkeySupport, setStepUpHandler, stepUp, stepUpWithPasskey, unwrap,
+} from '@jabiz/client'
+import { CircleAlert, Fingerprint, TriangleAlert } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
@@ -33,6 +35,8 @@ export function StepUpProvider({ children, securityPath, securityLabel, onNaviga
   const [error, setError] = useState<string | null>(null)
   const [notEnrolled, setNotEnrolled] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Whether the user has a passkey this browser can use (decision D71): asked when the prompt opens.
+  const [passkeys, setPasskeys] = useState(false)
   const pending = useRef<((passed: boolean) => void) | null>(null)
 
   useEffect(() => {
@@ -43,7 +47,13 @@ export function StepUpProvider({ children, securityPath, securityLabel, onNaviga
           setCode('')
           setError(null)
           setNotEnrolled(false)
+          setPasskeys(false)
           setOpen(true)
+          if (passkeySupport() === 'available') {
+            unwrap(api.GET('/api/auth/mfa'))
+              .then((status) => setPasskeys((status.passkeys ?? 0) > 0))
+              .catch(() => undefined)
+          }
         }),
     )
     return () => setStepUpHandler(null)
@@ -70,6 +80,20 @@ export function StepUpProvider({ children, securityPath, securityLabel, onNaviga
     }
   }
 
+  const withPasskey = async () => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await stepUpWithPasskey()
+      finish(true)
+    } catch (e) {
+      if (!(e instanceof PasskeyCancelledError)) setError(refusal(e, t('common.error')))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <>
       {children}
@@ -84,10 +108,25 @@ export function StepUpProvider({ children, securityPath, securityLabel, onNaviga
           >
             <DialogHeader>
               <DialogTitle>{t('mfa.stepUpTitle')}</DialogTitle>
-              <DialogDescription>{notEnrolled ? t('mfa.stepUpNotEnrolled') : t('mfa.stepUpHint')}</DialogDescription>
+              <DialogDescription>
+                {notEnrolled && !passkeys ? t('mfa.stepUpNotEnrolled') : t('mfa.stepUpHint')}
+              </DialogDescription>
             </DialogHeader>
+            {passkeys && (
+              <Button type="button" variant="outline" disabled={busy} data-testid="step-up-passkey"
+                onClick={() => void withPasskey()}>
+                <Fingerprint aria-hidden />
+                {t('passkeys.stepUp')}
+              </Button>
+            )}
+            {passkeys && notEnrolled && error && (
+              <Alert variant="destructive" data-testid="step-up-error">
+                <CircleAlert aria-hidden />
+                <AlertTitle>{error}</AlertTitle>
+              </Alert>
+            )}
             {notEnrolled ? (
-              securityPath && (
+              securityPath && !passkeys && (
                 // The description above says why; the alert leads to where it is set up.
                 <Alert variant="warning">
                   <TriangleAlert aria-hidden />

@@ -94,7 +94,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   身份是租户中的一个人（`SecUserIdentity(ext:<名>, <租户>/<sub>)`），流程中核对店员递来的令牌只用步骤 `VerifyExternalToken`；页面要被该租户内嵌时 SPA 声明 `embedding`，不自己改 CSP 或 `X-Frame-Options`（10 §15.12、决策 D59）。
   会话的有效期、闲置时长与存放方式按入口配置（`jabiz.security.entries.<名>.session.*`，D43）；`admin` 入口不能用 `device`。
   通行密钥（Passkey）只是已有账号的附加凭据（不能只凭它开户）：入口以 `passkeys` 开启、RP ID 与来源只在 `jabiz.security.passkeys.*`，登录、第二步、step-up 与本人管理只经平台接口
-  （`/api/auth/passkey`、`/api/auth/challenge/passkey/**`、`/api/auth/step-up/passkey`、`/api/auth/account/passkeys/**`）；用户验证的通行密钥算作两个因素（10 §15.16、决策 D71），不自写 WebAuthn 校验或挑战存储。
+  （`/api/auth/passkey`、`/api/auth/challenge/passkey/**`、`/api/auth/step-up/passkey`、`/api/auth/account/passkeys/**`；前端 `SignInForm` 的 `passkey`、积木 `Passkeys`、`MailLinkPage` 的 `passkey-confirm`）；用户验证的通行密钥算作两个因素（10 §15.16、决策 D71），不自写 WebAuthn 校验或挑战存储。
 - **应用前端与 PWA**（见 17 §4.1、指南 `docs/guide/app-spa.md` 与决策 D43）：需要登录的应用前端放在应用目录中（自己的 lockfile，经 `link:` 用 `@jabiz/client` / `@jabiz/ui`，
   版本与平台一致：`app:check`），以 `jabizApp { spa(路径, 目录, entry = 入口, pwa = Pwa.ON) }` 构建、用预设 `@jabiz/client/vite`；页面用 `@jabiz/ui` 的登录与账户积木，
   会话按入口（`configureClient({ entry })`）；暂时由测试系统的应用回答的公开地址不显示测试系统的横条时，只经 `configureClient({ environment })` 按地址改写（17ze），不改服务器的 `jabiz.web.environment`、不自己隐藏横条。入口的 `app-path` 是该前端的根：邮件链接只用 `{entryUrl}` / `{entryUrl.<入口>}`，OIDC 回调为提供方的 `redirect-uris.<入口>`。
@@ -286,6 +286,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
 - 应用分支 `<线>/<应用>`（如 `1.0/culture`）= 该线的平台 + 应用专有目录（列在应用分支根目录的 `.jabiz-app-paths` 中）；应用工作分支 `<线>/<应用>-<N>-<名>`。
   **线内的合并方向只有 `<线>/platform` → `<线>/<应用>`**；应用分支不修改平台目录与 `.jabiz-platform-line`（CI 的 `app-paths` 作业运行 `tools/check-app-paths.sh`，
   以该线的平台分支为基准，并检查以线命名的分支与线号一致；其测试为 `tools/test/check-app-paths.test.sh`），平台需要的改动先在该线的平台分支上完成（带平台自己的测试与示范）。
+  只改文档或前端内容的拉取请求不跑后端检查：路径全在 `docs/**` 下或匹配应用的 `.jabiz-ci-no-backend`（`tools/ci-backend-scope.sh`，17 §2）。
 - **修复向前合并**：做在最旧的受影响线上，再合并到更新的线，各线再合并到自己的应用；只合并，不变基、不拣选。
 - **应用升级**：`<新线>/<应用>` 从 `<旧线>/<应用>` 拉出，再合并 `<新线>/platform` 并适配；旧线上的应用分支随之冻结。
 - **迁移**：不是最新的线不增加迁移（平台与应用都不加）。操作步骤见 `docs/guide/version-lines.md`。

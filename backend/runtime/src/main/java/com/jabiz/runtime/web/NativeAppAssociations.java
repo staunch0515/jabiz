@@ -27,7 +27,8 @@ import java.util.Set;
  * {@value #ANDROID} lets an Android app open them as App Links or show them in a trusted web activity. Public, JSON,
  * never redirected (the systems refuse that), cached for an hour. A filter, not an API: without an app of that system
  * the request goes on as before (a static file of the build, else 404), and the files are no part of the OpenAPI
- * document.
+ * document. Where passkeys are on ({@code jabiz.security.passkeys}, decision D71), Apple's file also lets the iOS apps
+ * use this domain's passkeys ({@code webcredentials}); the apps declare {@code webcredentials:<domain>} themselves.
  */
 @Component
 public class NativeAppAssociations implements WebFilter {
@@ -40,10 +41,18 @@ public class NativeAppAssociations implements WebFilter {
 
     private final JabizWebProperties properties;
     private final JsonMapper json;
+    private final boolean passkeys;
 
-    NativeAppAssociations(JabizWebProperties properties, JsonMapper json) {
+    @org.springframework.beans.factory.annotation.Autowired
+    NativeAppAssociations(JabizWebProperties properties, JsonMapper json,
+        com.jabiz.runtime.security.PasskeyProperties passkeys) {
         this.properties = properties;
         this.json = json;
+        this.passkeys = passkeys != null && passkeys.configured();
+    }
+
+    NativeAppAssociations(JabizWebProperties properties, JsonMapper json) {
+        this(properties, json, null);
     }
 
     @Override
@@ -71,7 +80,8 @@ public class NativeAppAssociations implements WebFilter {
 
     /**
      * Apple's format: one entry per SPA with iOS apps, its apps opening the addresses under its path only (all of
-     * them for an SPA at {@code /}); the empty {@code apps} that systems before iOS 13 require. Empty without iOS apps.
+     * them for an SPA at {@code /}); the empty {@code apps} that systems before iOS 13 require; with passkeys on, every
+     * iOS app in {@code webcredentials}. Empty without iOS apps.
      */
     Optional<Object> apple() {
         List<Map<String, Object>> details = new ArrayList<>();
@@ -89,7 +99,13 @@ public class NativeAppAssociations implements WebFilter {
         Map<String, Object> applinks = new LinkedHashMap<>();
         applinks.put("apps", List.of());
         applinks.put("details", details);
-        return Optional.of(Map.of("applinks", applinks));
+        Map<String, Object> file = new LinkedHashMap<>();
+        file.put("applinks", applinks);
+        if (passkeys) {
+            file.put("webcredentials", Map.of("apps", properties.nativeApps().stream()
+                .flatMap(app -> app.ios().stream()).distinct().toList()));
+        }
+        return Optional.of(file);
     }
 
     /** Digital Asset Links: every Android app may handle this site's links (its manifest says which). */

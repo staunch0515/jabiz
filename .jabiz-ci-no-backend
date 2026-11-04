@@ -1,0 +1,12 @@
+# Paths whose changes cannot change the backend's check (platform 17zg, tools/ci-backend-scope.sh; written like
+# .jabiz-app-paths). A pull request that changes only these and docs/** skips build-application. Only folders the
+# backend's check never reads: not the SPAs' package.json or lockfiles (spaCheck reads them), not quizbuks-web/brands
+# (BrandTest and the build read it), not deploy/ or tools/.
+quizbuks-web/biz/src/**
+quizbuks-web/biz/test/**
+quizbuks-web/biz/public/**
+quizbuks-web/app/src/**
+quizbuks-web/sponsor/src/**
+quizbuks-web/shopify/src/**
+quizbuks-web/shopify-site/src/**
+quizbuks-web/e2e/tests/**

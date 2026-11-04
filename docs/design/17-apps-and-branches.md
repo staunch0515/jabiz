@@ -49,6 +49,9 @@ tools/culture/**
 .github/workflows/culture.yml
 ```
 
+- **只改文档或前端内容的 PR 不跑后端检查**（17zg）：CI 的 `scope` 作业以 `tools/ci-backend-scope.sh` 判断拉取请求改动的路径；全部在 `docs/**` 下，
+  或匹配根目录可选文件 `.jabiz-ci-no-backend` 中的模式（写法同 `.jabiz-app-paths`），就跳过 `build` / `build-application`（以及依赖 `build` 的 `e2e`、`compose`）。
+  推送与手动运行总是检查。应用分支自己写 `.jabiz-ci-no-backend` 并把它列入 `.jabiz-app-paths`；只列后端检查确实不读的路径（如 SPA 的 `src/**`，不列 `package.json`：`spaCheck` 读它）。
 - 平台提供 `tools/check-app-paths.sh`：在应用分支上计算 `git diff --name-only --no-renames origin/<线>/platform...HEAD`（自共同祖先以来应用分支的改动，
   改名按删除 + 新增计），任何不匹配 `.jabiz-app-paths` 的路径都报错。合并平台分支带来的改动不计入（它们在共同祖先之后同时出现在两边）。
   - 基准：参数，否则 `$APP_PATHS_BASE`，否则由 `.jabiz-platform-line` 得到 `origin/<线>/platform`；没有该文件的旧分支用 `origin/platform`。
@@ -120,7 +123,8 @@ jabizApp {
 - **原生 App 的关联文件**（17l，决策 D68，`NativeAppAssociations`）：`jabiz.web.native-apps[i].path`（一个已配置 SPA 的路径）、`.ios[j]`（`<Team ID>.<bundle ID>`）、
   `.android[j].package-name` 与 `.android[j].fingerprints[k]`（签名证书的 SHA-256，`AA:BB:…`，上传密钥与 Play App Signing 的都写）。平台在域名根提供
   `/.well-known/apple-app-site-association`（`applinks` 只开该 SPA 路径之下的地址，带旧系统要的空 `apps`）与 `/.well-known/assetlinks.json`（`handle_all_urls`）：JSON、不转向、公开、`max-age=3600`；
-  由过滤器提供（不在 OpenAPI 中），没有该系统的 App 时请求照常往下走（构建中的静态文件，否则 404）。这两个地址从不由 SPA 的路由应答。单独一个列表、按路径，部署只加它、不重写构建声明的 SPA；`SpaConfigCheck` 一次报告全部格式问题。
+  由过滤器提供（不在 OpenAPI 中），没有该系统的 App 时请求照常往下走（构建中的静态文件，否则 404）。配置了通行密钥（`jabiz.security.passkeys`，D71）时，
+  Apple 的文件另有 `webcredentials`（全部 iOS App），App 声明 `webcredentials:<域名>` 后即可在外壳中使用该域名的通行密钥；RP ID 是上级域名时，此文件也要在 RP ID 的域名上。这两个地址从不由 SPA 的路由应答。单独一个列表、按路径，部署只加它、不重写构建声明的 SPA；`SpaConfigCheck` 一次报告全部格式问题。
 - **静态站点的多页**（16zf-b，`StaticPages`）：没有登录入口的 SPA 可以每个目录一页（`static/biz/zh/index.html`、`static/biz/zh/pricing/index.html`，由 Vite 的多页构建产生）；
   启动时扫描 jar 中该前缀下的 `**/index.html` 一次，请求命中这样的目录（带不带尾部斜杠都行）即交出该目录的页面而不是站点首页，其他客户端路由照旧回退到首页；
   这些页面与首页一样 `Cache-Control: no-cache`。带入口的 SPA 不受影响（路由全部回退到它的 `index.html`）。

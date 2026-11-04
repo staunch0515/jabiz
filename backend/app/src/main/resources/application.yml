@@ -27,6 +27,13 @@ jabiz:
     # the dev profile. Lifetimes, lock rules and password rules have defaults (see SecurityConfig).
     jwt:
       secret: ${JABIZ_JWT_SECRET:}
+    # Passkeys (decision D71; docs/design/10-security.md section 15.16): bound to a domain (the RP ID; changing it makes
+    # every passkey useless) and usable by the pages of these origins. The defaults fit this machine (localhost:8080,
+    # and the dev server at 5173); a deployment sets its own domain and https origins.
+    passkeys:
+      rp-id: ${JABIZ_PASSKEYS_RP_ID:localhost}
+      rp-name: ${JABIZ_PASSKEYS_RP_NAME:Jabiz Shop}
+      origins: ${JABIZ_PASSKEYS_ORIGINS:http://localhost:8080,http://localhost:5173}
     # Sign-in entries (docs/design/10-security.md section 15; decision D36). The administration (admin) accepts the
     # back-office roles only (comma-separated JABIZ_ADMIN_ROLES; ADMIN is the first administrator's): never CUSTOMER,
     # which anybody can get by registering (the startup check refuses "*" or a registration role here while
@@ -46,6 +53,9 @@ jabiz:
         require-verified-email: ${JABIZ_PORTAL_REQUIRE_VERIFIED_EMAIL:true}
         # Signing in by a mailed link, offered above the password on the portal's sign-in page (decision D54; phase 17m).
         email-link: ${JABIZ_PORTAL_EMAIL_LINK:true}
+        # Passkeys as a quicker way in for existing customers (decision D71): a button on the sign-in page and a block on
+        # the account page. Needs jabiz.security.passkeys below.
+        passkeys: ${JABIZ_PORTAL_PASSKEYS:true}
         # Customers may ask for the deletion of their account, in the portal or from a mailed link (section 17.5;
         # decision D62). Off by default: it needs the maintenance connection that purges personal data
         # (JABIZ_ERASURE_DATASOURCE_*, a login of the role jabiz_maintenance), or the start fails outside dev.

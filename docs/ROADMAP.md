@@ -5010,8 +5010,20 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zf-5 | 本人管理：`/api/auth/account/passkeys/**`（列出、绑定须近期二次验证或当前密码或邮件确认、改名、删除），流程 `SEC_PASSKEY_REGISTER` / `_RENAME` / `_REMOVE`、邮件 `jabiz.auth.passkey-confirm`（确认链接）与 `jabiz.auth.passkey-added`（已添加的通知）；管理员 `SEC_PASSKEY_REMOVE_ADMIN`（`security.user.mfa-reset`，管理级二次验证）；`ACCOUNT_ERASE` 删除通行密钥 | 17zf-a |
 | 17zf-6 | 测试：`PasskeyPropertiesTest`、`PasskeyVerifierTest`、`PasskeyIT`（测试夹具 `TestAuthenticator` 经真实接口）、`ErasureIT`、OpenAPI 快照 | 17zf-a |
 | 17zf-7 | 文档：决策 D71、10 §15.16、根 `CLAUDE.md` | 17zf-a |
-| 17zf-8 | `@jabiz/client`（`passkeySupport`、`signInWithPasskey`、`registerPasskey` 等）、`@jabiz/ui`（`SignInForm` 的 `passkey`、积木 `Passkeys`、第二步与 step-up 的通行密钥）、通用后台账户页、`MailLinkPage` 的 `passkey-confirm`、`jabiz.web.native-apps[i].ios.webcredentials`、示范门户、e2e（Chromium 虚拟认证器） | 17zf-b |
+| 17zf-8 | `@jabiz/client`（`passkeySupport`、`signInWithPasskey`、`addPasskey` 等）、`@jabiz/ui`（`SignInForm` 的 `passkey`、积木 `Passkeys`、第二步与 step-up 的通行密钥）、通用后台账户页、`MailLinkPage` 的 `passkey-confirm`、Apple 关联文件的 `webcredentials`（配置了通行密钥时自动列出 iOS App）、示范门户（`JABIZ_PORTAL_PASSKEYS`，`JABIZ_PASSKEYS_RP_ID` / `_ORIGINS`）、e2e `passkey.spec.ts`（Chromium 虚拟认证器） | 17zf-b |
 
 **不做**：只凭通行密钥开户；验证厂商证明（attestation）；Capacitor 的 Android 原生外壳（TWA 即 Chrome，照常可用）。
 
-**17zf 状态**：17zf-a 🚧 进行中（分支 `1.3/phase-17zf-passkeys`）。
+**17zf 状态**：17zf-a ✅ 已合并（#441）；17zf-b 📝 待评审（分支 `1.3/phase-17zf-passkeys-b`）。
+
+### 17zg 只改文档或前端内容的拉取请求不跑后端检查（需求 2026-11-04，QuizBuks Q95）
+
+**缘由**：需求方 2026-11-04：只改招商网站的 PR 也要等四五十分钟的 `build-application`。
+
+| # | 内容 |
+|---|---|
+| 17zg-1 | `tools/ci-backend-scope.sh`：读改动的路径，全部在 `docs/**` 下或匹配 `.jabiz-ci-no-backend`（写法同 `.jabiz-app-paths`）时输出 `false`；空列表与其他一律 `true` |
+| 17zg-2 | `ci.yml`：`scope` 作业输出 `backend`（拉取请求按合并提交的两个父提交比较；推送与手动运行总是 `true`），`build` 与 `build-application` 以它为条件；测试 `tools/test/ci-backend-scope.test.sh` 在 `app-paths` 作业中运行 |
+| 17zg-3 | 文档：17 §2、根 `CLAUDE.md` §8 |
+
+**17zg 状态**：📝 待评审（分支 `1.3/phase-17zg-ci-scope`）。
