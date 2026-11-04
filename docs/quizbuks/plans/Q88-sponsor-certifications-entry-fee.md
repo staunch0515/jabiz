@@ -216,3 +216,19 @@ Q87 §7 把"答题的能力"列成四项：**给学分**（已有）、**给认�
 | 低 | 入账任务失败时 2170 累积 | 核对项 `ENTRY_FEES_UNSETTLED`；任务可补跑（按余额，不按日期） |
 
 估计：后端 3 天、前端 1.5 天、测试与 e2e 1 天、文档 0.5 天。
+
+## 12. 实施记录（Q88b，2026-11-04，分支 `1.3/quizbuks-88b-entry-fee`）
+
+按 §11 实现；与 §11 不同或更具体的地方：
+
+1. **迁移是 `V74__quizbuks_entry_fee.sql`**：发布（只追加表只加列）、卡片、会话三处 `entry_fee numeric(7,0) NOT NULL DEFAULT 0`。
+2. **平台补了两个工厂**（`1.3/platform` 的 PR，先合入平台）：`RunTemplate.when`（读可转出额：普通开始不发这条语句）与 `SaveChanges.when`（报名费的分录以刚插入的会话作来源，`LEDGER_POST` 经数据视图核对来源存在，须先提交；普通开始不提前写出）。入账的流程同样以 `SaveChanges.when` 在过账前保存首次建立的现金钱包行。
+3. **平台另修了一处**（另一个 PR）：17zf-a 的通行密钥邮件参数 `passkey` 与 QuizBuks 的 `@Sensitive passKey`（领奖通行码）小写后同名，`MailChecks` 报错，QuizBuks 的 `platformCheck` 因此失败；平台的参数改为 `passkeyName`。
+4. **持有期参数不另用 `LoadParams`**：钱包行与 `qb.transfer.hold-days` 在钱包锁内一条 `QueryEntities.all` 读（经 `now:SysParam`），没有或不合格的值按 0 天（转账在这种情况下拒绝；开始不是转账）。
+5. **语句数**：收报名费的开始共 17 条（普通 11 条），自第一把锁（钱包锁）起 10 条；关掉写缓冲时 22 / 15。多出的 6 条：钱包锁、钱包行与参数、可转出额、`LEDGER_POST` 的科目锁、一次读取与写出。普通开始与其他既有数字不变。
+6. **可用额**：可转出额与钱包缓存余额两者都要够（`EntryFees.shortfall` 取两者的小者）；拒绝的消息与参数里的金额去掉账本的四位小数。
+7. **商户的"已收报名费"**：发布列表多一项（`qb.sponsor.publications.entryFees`，会话 `entry_fee` 之和），发布页以同一模板按 `publicationId` 过滤读一行（模板的 `filters` 加了 `publicationId`）。
+8. **App**：报名费的开始先读本人钱包（只在收费的发布上）；不够时不给开始按钮，只说还差多少与去答其他测验；够时按钮写"付 N 开始"并弹确认。服务端照样判断。
+9. 场景回放没有加报名费的场景（`EntryFeeIT` 覆盖整条路径：拒绝、持有期、付费、缓存、分录、入账、核对、月报、账本平衡）；快照只因 `QB_SETUP` 多了参数与科目而变。
+
+未做：无（§2 B 部分全部实现）。

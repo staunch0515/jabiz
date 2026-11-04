@@ -202,7 +202,7 @@
     签名的事件同样逐项核对（`TopUpChecks`、`RefundMath`），不成立的开待办（`TopUpTasks`，给 `qb.reconcile`）、不入账、不让流程失败。浏览器跳回不入账。
   - **只入账一次的四层**：平台按事件号去重；每个（消费者，事件）只处理一次；同一会话的各种报告（通知、核实）走同一套步骤 `TopUpCrediting`，在商家钱包锁内重读，
     只有 `OPENING` / `OPEN` 能变为 `PAID`；数据库兜底（会话、付款、交易号唯一，`PAID` 必有分录）。新的入账来源照此接入，不另写入账步骤。
-  - **锁序**：`qb.account:<用户>` → `qb.quiz:<模版>`（共享）→ `qb.pub:<发布>` → `qb.pub-start:<发布>`（Q10a4，只有状态流程）→ `qb.wallet:SPONSOR:<商家>`；`qb.wallet:TAKER:<用户>` 独立（Q6b：只由同步与转账持有，
+  - **锁序**：`qb.account:<用户>` → `qb.quiz:<模版>`（共享）→ `qb.pub:<发布>` → `qb.pub-start:<发布>`（Q10a4，只有状态流程）→ `qb.wallet:SPONSOR:<商家>`；`qb.wallet:TAKER:<用户>` 独立（Q88b 的例外：收报名费的开始在开始锁**之前**取它，锁序 `qb.wallet:TAKER:<用户>` → `qb.pub-start:<发布>`，没有流程反过来取；Q6b：其余只由同步与转账持有，
     持有它的流程不取其他锁；重算多人时按用户编号排序依次取）。
     充值、到账、过期、核实、手续费、退款与争议只取商家钱包锁（先在锁外按编号或付款找到充值，锁内重读）；每日核对不取业务锁。
     充值开始（Q10b）单独取 `qb.topup:<商家>`：**新商家上限**（`wallet.NewSponsorLimit`）在首次充值成功前与之后 `qb.topup.new-sponsor.days` 天内，把已付（含退款的）与未结的充值（创建中的直到其作业结束或失败，评审 L4；开立的直到过期）连同本次限制在
@@ -230,6 +230,9 @@
     同一键重试余额不足或 5xx 永远得到同样的回答：这两者立即结束作业（`StripeTransferHandler.kept`），次日的新转账用新键。
     被驳回或被撤回（含部分）的转账使用户暂停，直到财务以 `QB_TRANSFER_HOLD_RELEASE` 放行；审核人的意见不写进用户可读的字段。
     开通链接只由本人的数据视图读取（默认数据视图的读权限是不授予任何角色的 `qb.payout.system`）。大额审批的准备人是收款人（平台挡住自审）。撤回按累计金额只记一次。新增 Stripe 交互照 `PayoutJobs` / `StripeTransferHandler` 的写法。
+- **报名费**（Q88b，`play.EntryFees`、`wallet.EntryFeeSettlements`，`docs/quizbuks/plans/Q88-sponsor-certifications-entry-fee.md` §11）：发布的 `entryFee`（0 = 不收，只有测验，随卡片冻结），受控开关 `qb.play.entry-fee.enabled` 只在保存草稿时读（`PublicationEditing.entryFeeEnabled`），不在答题路径上。
+  开始时（`starting` 且卡片收费）在开始锁之前取用户钱包锁、一条语句读钱包行与持有期参数、`RunTemplate.when` 读可转出额（`qb.wallet.taker-transferable`），`EntryFees.shortfall` 不够即 422 `QB_ENTRY_FEE_SHORT`；写入时会话记 `entryFee`、钱包缓存按读到的版本减、`SaveChanges.when` 后 `LEDGER_POST` 2120 → 2170（来源 `QbAttempt`）；普通开始的语句数与锁不变（`AttemptStatementBudgetIT.aStartWithAnEntryFee`）。
+  入账只由逐项任务 `qb.entry-fee-settle`（`QB_ENTRY_FEE_SETTLE`，`internal()`，商户钱包锁内 2170 → 2160，来源是现金钱包行）；不退。月报 `ENTRY_FEE` / `ENTRY_FEE_SETTLED`，核对 `ENTRY_FEES_UNSETTLED`。
 - **平台费、预付 / 后付与账单**（Q87b，包 `fee`，在 Q87a 的现金账户之上，`docs/quizbuks/plans/Q87-fee-account.md`）：
   - **平台费只经 `QB_FEE_CHARGE`**（`subProcessOnly()`，权限 `qb.fee.system` 不授予任何角色）记入只追加的 `QbFeeCharge`（`qb_fee_charge_version`，`writeOnce`），新的收费种类只是加一个 `kind`（`FeeRules`），不另写记账；
     预付（`FeeRules.PREPAID`）即扣、不够即 `OPEN` 的账单，后付（`POSTPAID`）记应收、月初由 `qb.fee-invoice` 合成账单；判断"能否换学分 / 提交"只在 `fee.FeeGate`（一条 `QueryEntities.all` 读入驻行与未付账单，`FeeRules.Standing.blocked()`：预付有未付即拦，后付未付合计 > 信用额即拦，开关 `qb.fee.overdue.block-submit`），
