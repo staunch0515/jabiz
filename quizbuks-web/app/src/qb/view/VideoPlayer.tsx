@@ -1,13 +1,15 @@
-import { autoplaying } from '../video'
+import { autoplaying, trackable } from '../video'
 
 /**
  * A video's own player in the page (Q19): YouTube's no-cookie player or Vimeo's, loaded when it comes near the
  * screen. It plays when the viewer presses its play button, or at once and muted when `autoplay` (Q63: the home's card
  * in the middle of the screen, the start page). The frame is sandboxed to what the players need; it cannot navigate
- * the App. Its address is one of the two players (`qb/video.ts`), never anything else.
+ * the App. Its address is one of the players of `qb/video.ts`, never anything else. Q99: only YouTube's and Vimeo's
+ * start by themselves; the other sites' wait for the viewer's tap on their own play button.
  */
 export function VideoPlayer({ player, title, autoplay = false, className }: { player: string; title: string;
   autoplay?: boolean; className?: string }) {
+  autoplay = autoplay && trackable(player)
   return (
     <div className={className ?? 'bg-muted aspect-video w-full overflow-hidden rounded-md'} data-testid="video-player"
       data-autoplay={autoplay || undefined}>

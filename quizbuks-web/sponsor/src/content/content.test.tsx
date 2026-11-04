@@ -389,6 +389,26 @@ describe('the quiz editor', () => {
       url: 'https://youtu.be/dQw4w9WgXcQ', watchToAnswer: true })
   })
 
+  it('offers watching first only for a video whose player says how much was watched (Q99)', async () => {
+    server({})
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-materials'))
+    await userEvent.click(await screen.findByTestId('material-add'))
+    const dialog = await screen.findByTestId('material-dialog')
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
+    expect(within(dialog).getByTestId('material-url')).toHaveAccessibleDescription(/Bilibili, Niconico, Dailymotion/)
+    await userEvent.type(within(dialog).getByTestId('material-url'), 'https://www.bilibili.com/video/BV1GJ411x7h7')
+    const watch = within(dialog).getByRole('checkbox', { name: 'Watching this video is enough to answer' })
+    expect(watch).toBeDisabled()
+    expect(within(dialog).getByTestId('material-watch-unavailable')).toHaveTextContent('does not tell how much was watched')
+    expect(watch).toHaveAccessibleDescription(/does not tell how much was watched/)
+    await userEvent.clear(within(dialog).getByTestId('material-url'))
+    await userEvent.type(within(dialog).getByTestId('material-url'), 'https://vimeo.com/76979871')
+    expect(watch).toBeEnabled()
+    expect(within(dialog).queryByTestId('material-watch-unavailable')).toBeNull()
+    await expectAccessible()
+  })
+
   it('takes the duration of the video to watch, read from its player or typed (Q75)', async () => {
     const { processCalls } = server({ processes: { QB_MATERIAL_SAVE: [edit(8, { itemId: 'm2' })] } })
     render(<App />)

@@ -649,11 +649,11 @@ final class PublicationEditing {
 
     /**
      * The video on the publication's card (Q19, Q63): the one watching which is enough to answer, else the first
-     * material's video the App plays (YouTube or Vimeo), so that the taker learns from it before answering; else none.
+     * material's video the App plays (any site of {@link VideoEmbeds}; Q99), so that the taker learns from it before answering; else none.
      */
     static CardVideo cardVideo(List<QuizSnapshot.Material> materials) {
         return materials.stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
-            .flatMap(material -> VideoEmbeds.player(material.url())
+            .flatMap(material -> VideoEmbeds.trackablePlayer(material.url())
                 .map(player -> new CardVideo(player, true, material.durationSec())))
             .or(() -> materials.stream()
                 .filter(material -> "VIDEO_LINK".equals(material.kind()) && material.url() != null)

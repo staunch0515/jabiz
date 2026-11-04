@@ -116,8 +116,9 @@ public final class MaterialProcesses {
     }
 
     /**
-     * Why a material cannot be the video to watch (Q19): only a video link, only one the App can show (YouTube or
-     * Vimeo, {@link VideoEmbeds}), and only one per quiz.
+     * Why a material cannot be the video to watch (Q19): only a video link, only one whose player says where it
+     * is (YouTube or Vimeo, {@link VideoEmbeds#trackable}; Q99: other sites play, but their watching cannot be told),
+     * and only one per quiz.
      */
     private static void watchProblems(ProcessContext ctx, MaterialKind kind, String url,
         List<EntityInstance> materials, EntityInstance material) {
@@ -126,9 +127,9 @@ public final class MaterialProcesses {
                 + kind + " has no watchToAnswer", Map.of("kind", kind.name(), "field", "watchToAnswer")));
             return;
         }
-        if (VideoEmbeds.player(text(url)).isEmpty()) {
+        if (VideoEmbeds.trackablePlayer(text(url)).isEmpty()) {
             ctx.reject(new Violation("url", ContentCodes.MATERIAL_VIDEO_NOT_EMBEDDABLE,
-                "Only a YouTube or Vimeo video can be watched in the App"));
+                "Only a YouTube or Vimeo video can be the one to watch before answering"));
         }
         boolean another = QuizLanguages.bases(materials).stream()
             .anyMatch(other -> Boolean.TRUE.equals(other.get("watchToAnswer"))
@@ -232,9 +233,9 @@ public final class MaterialProcesses {
         }
         // A video to watch is watched in every language: its other languages' videos must be playable too.
         if (variant && base != null && Boolean.TRUE.equals(base.get("watchToAnswer"))
-            && VideoEmbeds.player(text(input.url())).isEmpty() && text(input.url()) != null) {
+            && VideoEmbeds.trackablePlayer(text(input.url())).isEmpty() && text(input.url()) != null) {
             ctx.reject(new Violation("url", ContentCodes.MATERIAL_VIDEO_NOT_EMBEDDABLE,
-                "Only a YouTube or Vimeo video can be watched in the App"));
+                "Only a YouTube or Vimeo video can be the one to watch before answering"));
         }
         // Loaded by the input's materialId: only when that material is in this quiz are they its images.
         List<EntityInstance> existing = material == null ? List.of() : list(ctx, IMAGES);

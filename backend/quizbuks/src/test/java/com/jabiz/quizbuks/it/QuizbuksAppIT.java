@@ -130,7 +130,9 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
         String withAds = "default-src 'self'; script-src 'self' " + adScripts + "; img-src 'self' blob: data: https:; "
             + "style-src 'self' 'unsafe-inline'; connect-src 'self' " + adRequests + "; frame-ancestors 'none'; "
             + "base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src ";
-        String players = "https://www.youtube-nocookie.com https://player.vimeo.com ";
+        String players = "https://www.youtube-nocookie.com https://player.vimeo.com https://player.bilibili.com "
+            + "https://embed.nicovideo.jp https://www.dailymotion.com https://geo.dailymotion.com https://player.youku.com "
+            + "https://v.qq.com ";
         assertThat(policies.get("/taker")).isEqualTo(withAds + players + adFrames);
         assertThat(policies.get("/sponsor")).isEqualTo(withAds + players + adFrames);
         assertThat(policies.get("/biz")).isEqualTo(withAds + adFrames);

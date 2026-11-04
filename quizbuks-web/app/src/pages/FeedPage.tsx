@@ -38,7 +38,7 @@ import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemp
   from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, navigate, useLocation } from '../qb/router'
-import { prefersStillVideo } from '../qb/video'
+import { prefersStillVideo, trackable } from '../qb/video'
 import { QBVIEW } from '../qb/view/messages'
 import { openWithSound, VideoSlot } from '../video/stage'
 import { useSoundSetting } from '../qb/SoundSettings'
@@ -514,8 +514,8 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
             {cards.map((card) => (
               <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`}
                 playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
-                video={card.video && <CardVideo card={card} player={card.video} />}
-                onOpen={card.video ? () => openWithSound(card.video!) : undefined} />
+                video={trackable(card.video) && <CardVideo card={card} player={card.video!} />}
+                onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />
             ))}
           </ul>
           <div ref={setEnd} aria-hidden data-testid="feed-end" />

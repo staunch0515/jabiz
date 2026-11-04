@@ -22,7 +22,8 @@ import { linkLanguageOf } from '../linkLanguage'
 import { readPublication, readTiers, recordView, type PublicationView } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
-import { prefersStillVideo } from '../qb/video'
+import { prefersStillVideo, trackable } from '../qb/video'
+import { VideoPlayer } from '../qb/view/VideoPlayer'
 import { SponsorVisit } from './SponsorVisit'
 import { VideoSlot } from '../video/stage'
 import { clock, satisfied, shortfallSec, toInput, usePlayback } from '../video/playback'
@@ -318,10 +319,12 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       {/* Q65: the home's player carries on here, its sound on from the tap that opened the page; a viewer who
           asked for less motion gets a player that waits for their own tap. */}
       <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor autoplay={!prefersStillVideo()}
-        video={prefersStillVideo() ? undefined : (player, title) => (
-          <VideoSlot id={`page:${p.publicationId}`} player={player} title={title} mode="page"
+        video={prefersStillVideo() ? undefined : (player, title) => (trackable(player)
+          ? <VideoSlot id={`page:${p.publicationId}`} player={player} title={title} mode="page"
             publicationId={p.publicationId}
             className="bg-muted relative aspect-video w-full sm:border" />
+          // Q99: another site's player is the page's own and waits for the viewer's tap.
+          : <VideoPlayer player={player} title={title} className="bg-muted aspect-video w-full overflow-hidden sm:border" />
         )} />
       <ProductCards products={quizProducts(products.data)}
         title={tView('products.title')} testId="publication-products" onOpen={countProductClick} />

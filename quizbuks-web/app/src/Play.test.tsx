@@ -742,6 +742,30 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(api.posted('QB_ATTEMPT_START')).toEqual([])
   })
 
+  it('shows another site\'s video on the start page with its own play button, and never plays it by itself (Q99)',
+    async () => {
+    const io = intersections()
+    const bilibili = 'https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&autoplay=0'
+    server({ feed: [{ ...CARD, video: bilibili }], publicationPage: () => Promise.resolve(json(200, { items: [publication({
+      materials: JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Learn first', description: null, body: null,
+        url: 'https://www.bilibili.com/video/BV1GJ411x7h7', pdf: null, audio: null, images: [], watchToAnswer: false }]) })],
+    offset: 0, limit: 1 })) })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    // The card keeps its play mark, but is not one of those that play in the middle of the screen.
+    expect(within(card).getByTestId('feed-card-video-mark')).toHaveTextContent('With a video')
+    expect(card).not.toHaveAttribute('data-video')
+    io.fire(card, true, MIDDLE)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(document.querySelector('iframe')).toBeNull()
+    await userEvent.click(within(card).getByTestId('feed-card-picture'))
+    const hero = await screen.findByTestId('detail-hero')
+    const frame = await within(hero).findByTitle('Learn first')
+    expect(frame).toHaveAttribute('src', bilibili)
+    expect(frame.getAttribute('allow')).not.toContain('autoplay')
+    expect(within(hero).queryByTestId('video-slot')).toBeNull()
+  })
+
   it('opens the start page from a tap on the playing video, the same player playing on with its sound (Q65)',
     async () => {
     const io = intersections()

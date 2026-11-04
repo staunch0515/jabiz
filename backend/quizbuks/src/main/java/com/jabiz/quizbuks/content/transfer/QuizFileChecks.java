@@ -289,9 +289,9 @@ public final class QuizFileChecks {
         if (material.watchToAnswer() && kind != MaterialKind.VIDEO_LINK) {
             problems.add(new Violation(at + ".watchToAnswer", ContentCodes.MATERIAL_FIELD_NOT_ALLOWED, "A "
                 + kind + " material has no watchToAnswer"));
-        } else if (material.watchToAnswer() && VideoEmbeds.player(material.url()).isEmpty()) {
+        } else if (material.watchToAnswer() && VideoEmbeds.trackablePlayer(material.url()).isEmpty()) {
             problems.add(new Violation(at + ".url", ContentCodes.MATERIAL_VIDEO_NOT_EMBEDDABLE,
-                "Only a YouTube or Vimeo video can be watched in the App"));
+                "Only a YouTube or Vimeo video can be the one to watch before answering"));
         }
         // Q75: the duration, as editing has it: a video's, within its range.
         if (material.durationSec() != null && kind != MaterialKind.VIDEO_LINK) {

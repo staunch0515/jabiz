@@ -23,6 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class WatchVideoIT extends PlayItSupport {
 
+    private static final String BILIBILI = "https://www.bilibili.com/video/BV1GJ411x7h7/?spm_id_from=333.1007";
+
     private static final String WATCH = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
     private static final String PLAYER = "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ";
 
@@ -47,6 +49,9 @@ class WatchVideoIT extends PlayItSupport {
         assertThat(codes(refused("QB_MATERIAL_SAVE", token, body("quizId", quizId, "kind", "LINK", "title", "L",
             "url", WATCH, "watchToAnswer", true), 422))).containsExactly(ContentCodes.MATERIAL_FIELD_NOT_ALLOWED);
         assertThat(codes(refused("QB_MATERIAL_SAVE", token, video(quizId, "https://video.example/1", true), 422)))
+            .containsExactly(ContentCodes.MATERIAL_VIDEO_NOT_EMBEDDABLE);
+        // Q99: a video the App plays whose player does not say where it is cannot be the one either.
+        assertThat(codes(refused("QB_MATERIAL_SAVE", token, video(quizId, BILIBILI, true), 422)))
             .containsExactly(ContentCodes.MATERIAL_VIDEO_NOT_EMBEDDABLE);
         String first = (String) run("QB_MATERIAL_SAVE", token, video(quizId, WATCH, true)).get("itemId");
         // A second one is refused; an ordinary video beside it is not.
@@ -171,6 +176,36 @@ class WatchVideoIT extends PlayItSupport {
                 .containsEntry("watchRequired", false));
         // Q75: an ordinary video asks for no watching, whatever is reported.
         run("QB_ATTEMPT_START", taker(newTaker("t-watch-learn-start", null)), body("publicationId", learn));
+    }
+
+    /** Q99 (D-Q99-1, D-Q99-2): a video of another site is the card's video too, never one to watch. */
+    @Test
+    void aVideoOfAnotherSiteIsTheCardsVideoAndAsksForNoWatching() {
+        String sponsor = newSponsor("s-watch-other-site");
+        credit(sponsor, 10_000);
+        String token = sponsorToken(sponsor);
+        String quizId = newQuiz(token, "Other site quiz");
+        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", "Other site quiz", "timeLimitSec", 300));
+        run("QB_MATERIAL_SAVE", token, video(quizId, BILIBILI, null));
+        run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of France?", "points", 2,
+            "options", List.of(body("text", "Paris", "correct", true), body("text", "Lyon"))));
+        run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of Japan?", "points", 3,
+            "options", List.of(body("text", "Tokyo", "correct", true), body("text", "Osaka"))));
+        String versionId = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
+        Instant now = clock.instant();
+        Map<String, Object> save = complete(versionId, "Other site run", now, now.plus(Duration.ofDays(7)));
+        save.put("regions", List.of("GLOBAL"));
+        String publicationId = (String) run("QB_PUBLICATION_SAVE", token, save).get("publicationId");
+        run("QB_PUBLICATION_SUBMIT", token, body("publicationId", publicationId));
+
+        List<Map<String, Object>> feed = items("qb.app.feed", taker(newTaker("t-watch-other-site", null)),
+            body("params", body("at", clock.instant().toString()), "limit", 200));
+        assertThat(feed).filteredOn(row -> row.get("publicationId").equals(publicationId)).singleElement()
+            .satisfies(row -> assertThat(row)
+                .containsEntry("video", "https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&autoplay=0")
+                .containsEntry("watchRequired", false));
+        run("QB_ATTEMPT_START", taker(newTaker("t-watch-other-site-start", null)), body("publicationId",
+            publicationId));
     }
 
     /** Q75 (D-Q75-5): the duration belongs to a video of the base language, within one second and two hours. */

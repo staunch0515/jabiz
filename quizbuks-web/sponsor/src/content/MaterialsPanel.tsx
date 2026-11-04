@@ -55,7 +55,7 @@ import {
 import { ContentImage } from './ContentImage'
 import { formatDuration, parseDuration } from './duration'
 import { VideoDurationProbe } from './VideoDurationProbe'
-import { videoPlayer } from '../qb/video'
+import { trackable, videoPlayer } from '../qb/video'
 import { DOCUMENT_FIELD, LIMITS } from './limits'
 import { useMoveFocus } from './moving'
 
@@ -116,6 +116,9 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
   const [body, setBody] = useState(material?.body ?? '')
   const [url, setUrl] = useState(material?.url ?? '')
   const [watch, setWatch] = useState(material?.watchToAnswer ?? false)
+  // Q99: a video the App plays whose player cannot say how much was watched.
+  const shownPlayer = videoPlayer(url)
+  const untrackable = shownPlayer !== null && !trackable(shownPlayer)
   // Q75: the video's duration as typed (m:ss or seconds); read from the player's preview until the sponsor types.
   const [duration, setDuration] = useState(material?.durationSec != null ? formatDuration(material.durationSec) : '')
   const [durationTyped, setDurationTyped] = useState(material?.durationSec != null)
@@ -248,18 +251,27 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
                 aria-invalid={problem('url') ? true : undefined}
                 aria-describedby={[`${id}-url-hint`, problem('url') ? `${id}-url-error` : ''].join(' ').trim()}
                 data-testid="material-url" onChange={(event) => setUrl(event.target.value)} />
-              <p id={`${id}-url-hint`} className="text-muted-foreground text-sm">{t('materials.urlHint')}</p>
+              <p id={`${id}-url-hint`} className="text-muted-foreground text-sm">
+                {kind === 'VIDEO_LINK' ? t('materials.videoUrlHint') : t('materials.urlHint')}
+              </p>
               {problem('url') && <p id={`${id}-url-error`} className="text-destructive text-sm">{problem('url')}</p>}
               {kind === 'VIDEO_LINK' && !variant && (
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
+                    {/* Q99 (D-Q99-2): only a player that says where it is can be the one to watch; unticking stays
+                        possible. */}
                     <Checkbox id={`${id}-watch`} checked={watch} data-testid="material-watch"
-                      aria-describedby={[`${id}-watch-hint`, problem('watchToAnswer') ? `${id}-watch-error` : '']
-                        .join(' ').trim()}
+                      disabled={untrackable && !watch}
+                      aria-describedby={[`${id}-watch-hint`, untrackable ? `${id}-watch-unavailable` : '',
+                        problem('watchToAnswer') ? `${id}-watch-error` : ''].filter(Boolean).join(' ')}
                       onCheckedChange={(checked) => setWatch(checked === true)} />
                     <Label htmlFor={`${id}-watch`}>{t('materials.watchToAnswer')}</Label>
                   </div>
                   <p id={`${id}-watch-hint`} className="text-muted-foreground text-sm">{t('materials.watchHint')}</p>
+                  {untrackable && (
+                    <p id={`${id}-watch-unavailable`} className="text-muted-foreground text-sm"
+                      data-testid="material-watch-unavailable">{t('materials.watchUnavailable')}</p>
+                  )}
                   {problem('watchToAnswer') && (
                     <p id={`${id}-watch-error`} className="text-destructive text-sm">{problem('watchToAnswer')}</p>
                   )}
@@ -268,8 +280,8 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
               {kind === 'VIDEO_LINK' && !variant && (
                 // Q75 (D-Q75-5): the duration, read from the player's preview when the video is the one to watch.
                 <div className="flex flex-col gap-2" data-testid="material-duration-field">
-                  {watch && videoPlayer(url) && (
-                    <VideoDurationProbe player={videoPlayer(url)!} title={t('materials.durationPreview')}
+                  {watch && shownPlayer && !untrackable && (
+                    <VideoDurationProbe player={shownPlayer} title={t('materials.durationPreview')}
                       onDuration={onDuration} />
                   )}
                   <Label htmlFor={`${id}-duration`}>{t('materials.duration')}</Label>

@@ -10,6 +10,7 @@ import { sponsorPagePath } from '../page'
 import { Link } from '../router'
 import { LazyImage } from './LazyImage'
 import { QBVIEW } from './messages'
+import { trackable } from '../video'
 import { VideoPlayer } from './VideoPlayer'
 
 /** The icon of each way a reward is paid (Q34): on the cards, the quiz's page and the home's reward menu. */
@@ -96,11 +97,14 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen 
     : <span aria-hidden className="bg-accent text-accent-foreground flex size-12 items-center justify-center rounded-full text-base font-semibold">
       {(sponsor ?? card.name).trim().charAt(0).toUpperCase()}
     </span>
+  // Q99: only a player that starts by itself plays on the home; another site's video waits on the start page for
+  // the viewer's tap (the card keeps its play mark).
+  const plays = !!card.video && trackable(card.video)
   return (
     <li className="flex flex-col" data-testid="feed-card" data-publication={card.publicationId}
-      data-video={card.video ? true : undefined} data-playing={playing || undefined}>
-      {card.video && playing
-        ? video ?? <VideoPlayer player={card.video} autoplay title={t('feed.videoTitle', { name: card.name })}
+      data-video={plays || undefined} data-playing={(plays && playing) || undefined}>
+      {plays && playing
+        ? video ?? <VideoPlayer player={card.video!} autoplay title={t('feed.videoTitle', { name: card.name })}
           className="bg-muted aspect-video w-full overflow-hidden" />
         : href
           ? <Link to={href} aria-label={card.name} data-testid="feed-card-picture" onNavigate={onOpen}>{picture}</Link>
