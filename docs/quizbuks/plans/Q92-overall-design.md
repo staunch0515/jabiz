@@ -151,6 +151,10 @@
 10. 自己申报的称呼是资源，走平台费。
 11. 运营商的分成基础改为"其发起方付的工具与资源费"，奖励抽成整体取消。
 12. 业务规定不抽成，但系统要能支持抽成（§4.6）。
+13. **现金奖励平台不管**（附录 A.7-1）：发起方直接付给答题者的现金奖励是交易，平台不处理其争议；总部现在的 `qb.cash.resolve` 拿掉，争议按交易的规则由发起方所属的运营商处理。
+14. **其他运营商的方案不动**（附录 A.7-2）：Q48e 的五种方案（含月固定费）照旧；"没有固定费、平台 50%"只是说平台运营商（与 Shopify 运营商）用方案 1 的条件。
+15. **获客照常计费**（附录 A.7-3）：运营商在**自己的直营发起方**里做获客（获客的所有者是运营商的直营发起方，不再有 `direct`），费用照现在的做法从结算中扣。
+16. **Shopify 店的活动**（附录 A.7-4）：由 Shopify 运营商审核；Shopify 的应用费记为工具与资源费，进入 Shopify 运营商的结算。
 
 ## 11. 待定（需求方说先留着）
 
@@ -194,7 +198,7 @@
 
 ### A.2 总部后台只留监控层；日常经营搬到运营商后台（Q92a）
 
-**搬到运营商（平台运营商的成员用运营商后台做）**：入驻审核（`SponsorReviewPage`）、发布审核（`ReviewsPage`）、主页审核与下架、商品下架与恢复、举报处理（`QB_REPORT_RESOLVE` → 运营商的 `QB_OPERATOR_REPORT_RESOLVE`）、现金奖励争议（`qb.cash.resolve`，**现在只有总部**，待定 A.7-1）、兑换作废与数字奖品争议、每个发起方的奖励方式（`qb.admin.reward-methods`，现在只有总部）、获客（所有者 `direct`）、价目表（`direct` 的那张）、发起方的计费方式、认证的轮次（Q90 后改为挑战发布）、赞助权益的处理、对话（纠纷）。
+**搬到运营商（平台运营商的成员用运营商后台做）**：入驻审核（`SponsorReviewPage`）、发布审核（`ReviewsPage`）、主页审核与下架、商品下架与恢复、举报处理（`QB_REPORT_RESOLVE` → 运营商的 `QB_OPERATOR_REPORT_RESOLVE`）、现金奖励争议（总部的 `qb.cash.resolve` 拿掉，平台不管，§10-13）、兑换作废与数字奖品争议、每个发起方的奖励方式（`qb.admin.reward-methods`，现在只有总部）、获客（所有者 `direct`）、价目表（`direct` 的那张）、发起方的计费方式、认证的轮次（Q90 后改为挑战发布）、赞助权益的处理、对话（纠纷）。
 
 **留在平台**：运营商管理（建立、成员、方案四眼、改派）、抽查（`OperatorReviewsPage`、`QB_REVIEW_SPOT_CHECK`）、全部财务页面（总览、转账、充值、银行、手工记账、平台费、提现、对账、月报、投资者指标、分录、结算、运营商提现）、全局规则（法律文本、参数与受控变更、受众规则目录、AI 总开关、平台公告）、答题者账号层面（用户与答题记录、推荐、封禁 `qb.admin.users.ban`）、应急（平台暂停发布、下架、封号）。
 
@@ -203,8 +207,8 @@
 ### A.3 Shopify（Q92a）
 
 - 建 Shopify 运营商；Shopify 店的归属：新建以 `QbsShop`（`publisherKind`+`publisherId`）为键的归属，或把 `qb_sponsor_operator` 扩展到发布方种类。
-- 渠道发布（`ChannelPublishing`）的卡片带上运营商；Shopify 运营商可下架店的活动（审核是否需要，待定 A.7-4）。
-- 收费：店现在经 Shopify 的 App 定价付费（`QbsBilling`、`docs/quizbuks/shopify/S3-billing.md`），不走平台费。按 §4.6 进入结算时，要把这笔收入记为工具与资源费（"怎么方便怎么来"，待定 A.7-4）。
+- 渠道发布（`ChannelPublishing`）的卡片带上运营商；店的活动**由 Shopify 运营商审核**（现在直接上线，改为进审核）、可下架（§10-16）。
+- 收费：店经 Shopify 的 App 定价付费（`QbsBilling`、`docs/quizbuks/shopify/S3-billing.md`），这笔收入**记为工具与资源费**，进入 Shopify 运营商的结算（§10-16）。
 - 注意命名：Shopify 模块里的 "operator" 指店的员工，与运营商无关。
 - `OperatorScopes`、数据视图只限 `SPONSOR`（`AnalyticsConfig` l.156、`InvitationConfig` l.83）、举报拒绝非发起方的发布（`ReportProcesses` l.180）、封禁与抹除只限 `SPONSOR`：逐处决定是否扩展到店。
 
@@ -227,10 +231,10 @@
 ### A.5 运营商结算（Q92a）
 
 - 公式（`OperatorSettlements.settle`）：现在 = （4110 抽成 + 平台费）×（1 − 平台分成），再减获客费与固定费，不足结转。改为 = **归运营商分成的各项费用合计** × 运营商的分成比例（§4.6）；`REVENUE_TEMPLATE`（`S/system/operator-revenue.sql`）退出基础，`S/system/operator-fees.sql` 推广为"按费用规则归运营商的费用"。
-- 方案（`OperatorPlans`、`qb.operator.plan.{1..5}.fee|share`，`share` 是**平台的**比例）：平台运营商与 Shopify 运营商为"固定费 0、平台 50%"；固定费是否保留给其他运营商（待定 A.7-2）。
+- 方案（`OperatorPlans`、`qb.operator.plan.{1..5}.fee|share`，`share` 是**平台的**比例）：**不动**；平台运营商与 Shopify 运营商用方案 1（固定费 0、平台 50%），其他运营商照旧选方案（§10-14）。
 - 结算单（版式 `qb.operator_settlement`，事实 revenue、platformFees、fixedFee、prospectingCost……）、实体列 `revenue`、`fixedFee`、`platform_fees`（`M/V39`、`M/V68`）、界面 `AX/SettlementsPage.tsx`、`settlement-messages.ts`（"其发起方发布的抽成"）随之改。
 - 付款一步加"内部结算"（平台运营商、Shopify 运营商，§11-3）。
-- 获客费用的扣除（`qb.prospect.operator-monthly-cap-usd`、`qb.prospect.usd-jpy`）：是否保留（待定 A.7-3）。
+- 获客费用的扣除（`qb.prospect.operator-monthly-cap-usd`、`qb.prospect.usd-jpy`）：**照旧**；获客的所有者改为运营商的直营发起方（§10-15）。
 
 ### A.6 赞助权益（Q89）→ 通用交易（Q93）
 
@@ -239,7 +243,7 @@
 - 要补：买方运营商的暂停、恢复与异常处理（现在 `IncidentProcesses` 只许双方，`BenefitRules.sideOf`）；卖方运营商下架可售项的流程（`TAKEN_DOWN` 现在没有流程设置）；卖方运营商的只读页与通知；后台扩展的权益页面。Q89 计划 D-Q89-12"双方的运营商"改为"买方的运营商"。
 - 费用规则 = 0；钱在双方之间线下付，平台不经手。
 
-### A.7 盘点中出现的新问题（待需求方定）
+### A.7 盘点中出现的新问题（需求方 2026-11-04 已答复，见 §10-13 至 §10-16）
 
 1. **现金奖励的争议**（`qb.cash.resolve`，现在只有总部能处理）：争议是答题者与发起方之间的，按 §2 交给发起方所属的运营商；但它牵涉"钱是否付了"，是否算资金事务留在平台？建议交给运营商（钱在线下付，平台不经手）。
 2. **其他运营商的固定费**：方案 2–5 有月固定费。"没有固定费、50% 分成"只对平台运营商与 Shopify 运营商，还是全部运营商都取消固定费？
