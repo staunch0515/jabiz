@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Runs a registered SQL template and puts its rows, a {@code List<Map<String, Object>>} of result column to value,
@@ -32,23 +33,43 @@ public class RunTemplate<C extends ProcessContext> implements StepHandler<RunTem
     CheckedStep<RunTemplate.Metadata<C>> {
 
     /**
-     * @param asOf    effective time the template's temporal entities are read at (null: now)
-     * @param knownAt recorded time they are read as of (null: everything recorded so far)
+     * @param asOf      effective time the template's temporal entities are read at (null: now)
+     * @param knownAt   recorded time they are read as of (null: everything recorded so far)
+     * @param condition whether to run at all, decided on the context when the step is reached; when it does not
+     *                  hold the template is not run (no statement is sent) and {@code targetKey} holds an empty list
      */
     public record Metadata<C>(String templateId, Function<C, Map<String, Object>> params, Function<C, Instant> asOf,
-        Function<C, Instant> knownAt, String targetKey) {
+        Function<C, Instant> knownAt, String targetKey, Predicate<C> condition) {
         public Metadata {
             Objects.requireNonNull(templateId, "templateId must not be null");
             Objects.requireNonNull(params, "params must not be null");
             Objects.requireNonNull(asOf, "asOf must not be null");
             Objects.requireNonNull(knownAt, "knownAt must not be null");
             Objects.requireNonNull(targetKey, "targetKey must not be null");
+            condition = condition == null ? ctx -> true : condition;
+        }
+
+        public Metadata(String templateId, Function<C, Map<String, Object>> params, Function<C, Instant> asOf,
+            Function<C, Instant> knownAt, String targetKey) {
+            this(templateId, params, asOf, knownAt, targetKey, null);
         }
     }
 
     public static <C extends ProcessContext> StepSpec<Metadata<C>, C> of(String templateId,
         Function<C, Map<String, Object>> params, String targetKey) {
         return at(templateId, params, ctx -> null, ctx -> null, targetKey);
+    }
+
+    /**
+     * Runs the template only when {@code condition} holds on the context when the step is reached; otherwise the step
+     * sends no statement and puts an empty list under {@code targetKey}, so what reads the rows needs no second
+     * path. For a read that only some inputs need on a path whose statement count is budgeted (a hot path whose
+     * ordinary case must not read more).
+     */
+    public static <C extends ProcessContext> StepSpec<Metadata<C>, C> when(Predicate<C> condition, String templateId,
+        Function<C, Map<String, Object>> params, String targetKey) {
+        return StepSpec.of(RunTemplate.class, new Metadata<>(templateId, params, ctx -> null, ctx -> null, targetKey,
+            Objects.requireNonNull(condition, "condition must not be null")));
     }
 
     /**
@@ -76,6 +97,10 @@ public class RunTemplate<C extends ProcessContext> implements StepHandler<RunTem
     @Override
     public Mono<Void> execute(Metadata<C> metadata, C ctx) {
         return Mono.defer(() -> {
+            if (!metadata.condition().test(ctx)) {
+                ctx.put(metadata.targetKey(), List.of());
+                return Mono.<Void>empty();
+            }
             AdvancedQueryDefinition template = templates.find(metadata.templateId()).orElseThrow();
             Map<String, Object> params = metadata.params().apply(ctx);
             AdvancedQueryExecutor.At at = new AdvancedQueryExecutor.At(metadata.asOf().apply(ctx),
