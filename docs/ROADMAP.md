@@ -5014,4 +5014,4 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **不做**：只凭通行密钥开户；验证厂商证明（attestation）；Capacitor 的 Android 原生外壳（TWA 即 Chrome，照常可用）。
 
-**17zf 状态**：17zf-a 📝 待评审（#441）；17zf-b 📝 待评审（分支 `1.3/phase-17zf-passkeys-b`，基于 17zf-a）。
+**17zf 状态**：17zf-a ✅ 已合并（#441）；17zf-b 📝 待评审（分支 `1.3/phase-17zf-passkeys-b`）。
