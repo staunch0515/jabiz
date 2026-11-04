@@ -27,6 +27,9 @@ interface Me {
   refusal?: Record<string, unknown>
 }
 
+/** Whether the entry takes passkeys (Q97): off unless a test turns it on. */
+let entryPasskeys = false
+
 /** What the account's deletion says (Q71): off unless a test turns it on. */
 let deletionStatus: Record<string, unknown> = { available: false, pending: null, notices: [] }
 
@@ -48,9 +51,11 @@ function server(me?: Me, providers: unknown[] = []) {
     if (request.method === 'POST') posted.push({ path, body })
     switch (path) {
       case '/api/auth/entries/app':
-        return json(200, ENTRY)
+        return json(200, { ...ENTRY, passkeys: entryPasskeys })
       case '/api/auth/oidc/providers':
         return json(200, providers)
+      case '/api/auth/account/passkeys':
+        return json(200, [])
       case '/api/auth/account/deletion':
         return json(200, deletionStatus)
       case '/api/auth/me':
@@ -107,6 +112,9 @@ function server(me?: Me, providers: unknown[] = []) {
 
 beforeAll(() => configureClient({ entry: 'app' }))
 beforeEach(() => {
+  entryPasskeys = false
+  // The entry is read once a page load (configuring the entry forgets it): each test's server answers it again.
+  configureClient({ entry: 'app' })
   session.clear()
   window.localStorage.clear()
   window.history.replaceState(null, '', '/')
@@ -234,6 +242,50 @@ describe('a visitor', () => {
     await screen.findByTestId('login-user-name')
     // In Safari the offer to install waits for a finished quiz (D-Q38-1).
     expect(screen.queryByTestId('pwa-install')).toBeNull()
+  })
+
+  it('offers passkeys at the sign-in and in the account where the entry takes them (Q97)', async () => {
+    // A browser with passkeys.
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {})
+    Object.defineProperty(navigator, 'credentials', { value: {}, configurable: true })
+    try {
+      window.localStorage.setItem('qb.intro.seen', '1')
+      entryPasskeys = true
+      server()
+      const first = render(<App />)
+      expect(await screen.findByTestId('login-passkey')).toBeInTheDocument()
+      first.unmount()
+      vi.restoreAllMocks()
+      configureClient({ entry: 'app' })
+
+      server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
+      session.store('access', 'refresh')
+      window.history.replaceState(null, '', '/account/security')
+      const second = render(<App />)
+      expect(await screen.findByTestId('passkeys')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Passkeys' })).toBeInTheDocument()
+      second.unmount()
+      vi.restoreAllMocks()
+
+      // An entry without passkeys: neither.
+      entryPasskeys = false
+      configureClient({ entry: 'app' })
+      server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 } })
+      render(<App />)
+      expect(await screen.findByTestId('account-email')).toBeInTheDocument()
+      expect(screen.queryByTestId('passkeys')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+      Reflect.deleteProperty(navigator, 'credentials')
+    }
+  })
+
+  it('opens the passkey confirmation of a mailed link as a mailed-link page (Q97)', async () => {
+    server()
+    window.history.replaceState(null, '', '/auth/passkey-confirm?entry=app&token=abc')
+    render(<App />)
+    await waitFor(() => expect(window.location.search).not.toContain('token'))
+    expect(window.location.pathname).toBe('/auth/passkey-confirm')
   })
 
   it('opens the pages of mailed links without signing in, and drops the token from the address', async () => {

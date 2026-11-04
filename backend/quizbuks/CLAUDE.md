@@ -180,6 +180,7 @@
   `QB_STAFF_LEAVE` 写入；店员不另有角色或权限，店员的流程用 `qb.me`、每次经共享锁 `qb.staff:<用户>` 读本人的店员关系（加入与移除取排他锁），商家被封禁即拒绝
   （`QB_STAFF_SPONSOR_BANNED`）；锁的顺序 `qb.sponsor-staff:<商家>` → `qb.staff:<用户>` → `qb.redeem-token:<商家>`。店员只看待处理的申请与本人交付的（`qb.app.staff-redemptions`），不看商家的历史。Q74（`docs/quizbuks/plans/Q74-staff-handled.md`）：店员的"我的交付"（`qb.app.staff-handled` 与 `-totals`）同样只经本人当前的店员关系读取，离开即看不到；商户按经手人看统计（`qb.sponsor.redemption-handlers`，含已移除的店员）与筛选（`qb.sponsor.redemptions` 的 `handledBy`）；期间按部署时区的日界（`qb_stats_run.zone`），"现在"由页面按服务端时钟给出。
 - **账户**（`identity`，`docs/quizbuks/plans/Q2-accounts.md`）：三个登录入口 `admin` / `app` / `sponsor` 写在 `application.yml`（平台 10 §15）；`app` 允许未验证的用户登录浏览，`sponsor` 要求已验证。
+  **通行密钥**（Q97，`docs/quizbuks/plans/Q97-passkeys.md`，平台 D71）：`app`、`sponsor`、`admin`、`operator` 以 `QB_PASSKEYS`（缺省开）开启，`shopify` 不开；依赖方与来源只由 `identity.PasskeyDefaults` 从 `jabiz.mail.base-url` 得出（或 `QB_PASSKEY_RP_ID` / `QB_PASSKEY_ORIGINS` 显式给出），不在代码中写域名。App 与商家后台只用平台的 `SignInForm` 的 `passkey`、积木 `Passkeys` 与 `MailLinkPage` 的 `passkey-confirm`，不自写 WebAuthn。
   **QuizBuks 的一切写入流程声明 `requiresVerifiedEmail()`**（未验证即"待激活"；预占他人邮箱的人因此留不下应用数据），以后的阶段照此。
   资料、入驻、封禁各是一人一行的时态实体（主键是生成的 UUID，`userId` 不可变、唯一；资料与入驻的 `userId` 是操作人编号的文本，封禁的是平台用户的引用），只经 `QB_PROFILE_*` / `QB_SPONSOR_*` / `QB_USER_*BAN` 写入；
   写一个用户账户的流程先取 `HoldLock.exclusive("qb.account:" + userId)` 再读取（锁的顺序：账户锁在模版锁、发布锁、钱包锁之前；目前不同时持有）。本人流程的用户取自操作人，不取自输入。

@@ -7,7 +7,9 @@ import {
   MailPreferences,
   MfaSettings,
   PageState,
+  Passkeys,
   SessionList,
+  useEntryPasskeys,
   useOidcProviders,
 } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
@@ -94,6 +96,7 @@ export function SecuritySections({ returnTo, linked, onSignedOut }: {
   // Accounts linked earlier stay visible (and removable) when the entry no longer offers their provider.
   const identities = useQuery({ queryKey: ['qb', 'identities'], queryFn: listIdentities })
   const hasLinked = (identities.data?.length ?? 0) > 0
+  const passkeys = useEntryPasskeys()
   return (
     <>
       <AccountSection title={t('account.email')} testId="account-email">
@@ -106,6 +109,12 @@ export function SecuritySections({ returnTo, linked, onSignedOut }: {
       <AccountSection title={t('account.mfa')}>
         <MfaSettings />
       </AccountSection>
+      {/* Q97: only where this frontend's entry takes passkeys (platform decision D71). */}
+      {passkeys && (
+        <AccountSection title={tAuth('passkeys.title')}>
+          <Passkeys offered />
+        </AccountSection>
+      )}
       {(providers.length > 0 || linked || hasLinked) && (
         <AccountSection title={tAuth('identities.title')}>
           <LinkedIdentities returnTo={returnTo} linked={linked} providers={providers} />

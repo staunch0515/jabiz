@@ -151,10 +151,21 @@ jabiz:
     # (the administration cannot keep it on the device).
     # The app also signs in by a mailed link (Q15, decision D54): a publication's share link asks only for the address;
     # the link signs the taker in, or opens a verified account (self-registration on), and leads back to /p/<id>.
+    # Passkeys (docs/quizbuks/plans/Q97-passkeys.md; platform decision D71, design 10 section 15.16): signing in with
+    # the fingerprint or face, on the app, the sponsor console, the administration and the operators' back office.
+    # The relying party and the origins are the deployment's own host, taken from JABIZ_MAIL_BASE_URL unless given
+    # (QB_PASSKEY_RP_ID, QB_PASSKEY_ORIGINS; identity.PasskeyDefaults): staging's passkeys are not production's. Once
+    # users have passkeys, the relying party must not change (theirs would stop working). QB_PASSKEYS=false turns them
+    # off; without a host to take they are off.
+    passkeys:
+      rp-id: ${QB_PASSKEY_RP_ID:${quizbuks.passkeys.rp-id:}}
+      rp-name: ${QB_PASSKEY_RP_NAME:@QB_BRAND_NAME@}
+      origins: ${QB_PASSKEY_ORIGINS:${quizbuks.passkeys.origins:}}
     entries:
       admin:
         accepted-roles: ${QB_ADMIN_ROLES:ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE}
         app-path: /admin/
+        passkeys: ${QB_PASSKEYS:${quizbuks.passkeys.default:false}}
         session:
           idle-timeout: PT30M
       app:
@@ -168,6 +179,7 @@ jabiz:
         # needs the maintenance connection that purges personal data (deploy/quizbuks/DEPLOY.md section 1a).
         account-deletion: ${QB_APP_ACCOUNT_DELETION:false}
         app-path: /taker/
+        passkeys: ${QB_PASSKEYS:${quizbuks.passkeys.default:false}}
         session:
           persistence: device
           refresh-token-ttl: P30D
@@ -182,6 +194,7 @@ jabiz:
         # (JABIZ_ERASURE_DATASOURCE_URL / _USERNAME / _PASSWORD, a login of the role jabiz_maintenance; deploy/quizbuks/DEPLOY.md).
         account-deletion: ${QB_SPONSOR_ACCOUNT_DELETION:false}
         app-path: /sponsor/
+        passkeys: ${QB_PASSKEYS:${quizbuks.passkeys.default:false}}
         session:
           persistence: tab
           idle-timeout: PT30M
@@ -192,6 +205,7 @@ jabiz:
       operator:
         accepted-roles: QB_OPERATOR
         app-path: /operator/
+        passkeys: ${QB_PASSKEYS:${quizbuks.passkeys.default:false}}
         session:
           persistence: tab
           idle-timeout: PT30M

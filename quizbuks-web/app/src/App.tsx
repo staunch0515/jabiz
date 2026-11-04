@@ -122,7 +122,7 @@ const ABOUT = '/about'
 let pendingStep: SignInStep | undefined
 
 const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link',
-  '/auth/account-deletion'])
+  '/auth/account-deletion', '/auth/passkey-confirm'])
 
 /**
  * Asking for the deletion of an account without the app (Q71; Google Play's account deletion policy): the address
@@ -598,7 +598,7 @@ function Routes() {
         rememberSeen()
         navigate(to, { replace: true })
       }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons"
-      emailLink={mailFirst(i18n.language)} userNameLabel="email" />)
+      emailLink={mailFirst(i18n.language)} userNameLabel="email" passkey />)
   }
   // A visitor's first time at the root: the introduction (Q32), remembered on the device; then the sign-in.
   if (!signedIn && path === HOME && !introSeen()) return <IntroPage />

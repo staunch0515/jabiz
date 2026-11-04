@@ -36,6 +36,9 @@ const privacy = { kind: 'PRIVACY', versionId: 'p1', versionNo: 1, title: { en: '
  * The server as the console sees it (built with the base / in tests): its entry, the identity providers given, and for a
  * signed-in sponsor their identity and onboarding. Records what was asked and posted.
  */
+/** Whether the entry takes passkeys (Q97): off unless a test turns it on. */
+let entryPasskeys = false
+
 /** What the account's deletion says (Q72): off unless a test turns it on. */
 let deletionStatus: Record<string, unknown> = { available: false, pending: null, notices: [] }
 
@@ -53,7 +56,9 @@ function server(me?: Me, providers: unknown[] = []) {
     if (request.method === 'POST') posted.push({ path, body })
     switch (path) {
       case '/api/auth/entries/sponsor':
-        return json(200, ENTRY)
+        return json(200, { ...ENTRY, passkeys: entryPasskeys })
+      case '/api/auth/account/passkeys':
+        return json(200, [])
       case '/api/auth/oidc/providers':
         return json(200, providers)
       case '/api/auth/account/deletion':
@@ -111,6 +116,9 @@ function server(me?: Me, providers: unknown[] = []) {
 
 beforeAll(() => configureClient({ entry: 'sponsor' }))
 beforeEach(() => {
+  entryPasskeys = false
+  // The entry is read once a page load (configuring the entry forgets it): each test's server answers it again.
+  configureClient({ entry: 'sponsor' })
   session.clear()
   window.history.replaceState(null, '', '/')
 })
@@ -147,6 +155,48 @@ describe('a visitor', () => {
     // Sponsors sign in with their address (Q50); the console offers no mailed link.
     expect(screen.getByTestId('login-user-name')).toHaveAttribute('placeholder', 'E-mail address')
     expect(screen.queryByTestId('email-link-form')).toBeNull()
+  })
+
+  it('offers passkeys at the sign-in and in the account where the entry takes them (Q97)', async () => {
+    // A browser with passkeys.
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {})
+    Object.defineProperty(navigator, 'credentials', { value: {}, configurable: true })
+    try {
+      entryPasskeys = true
+      server()
+      const first = render(<App />)
+      expect(await screen.findByTestId('login-passkey')).toBeInTheDocument()
+      first.unmount()
+      vi.restoreAllMocks()
+
+      configureClient({ entry: 'sponsor' })
+      server({ sponsor: null })
+      session.store('access', 'refresh')
+      window.history.replaceState(null, '', '/account')
+      const second = render(<App />)
+      expect(await screen.findByTestId('passkeys')).toBeInTheDocument()
+      second.unmount()
+      vi.restoreAllMocks()
+
+      // An entry without passkeys: neither.
+      entryPasskeys = false
+      configureClient({ entry: 'sponsor' })
+      server({ sponsor: null })
+      render(<App />)
+      expect(await screen.findByTestId('account')).toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByTestId('passkeys')).toBeNull())
+    } finally {
+      vi.unstubAllGlobals()
+      Reflect.deleteProperty(navigator, 'credentials')
+    }
+  })
+
+  it('opens the passkey confirmation of a mailed link as a mailed-link page (Q97)', async () => {
+    server()
+    window.history.replaceState(null, '', '/auth/passkey-confirm?entry=sponsor&token=abc')
+    render(<App />)
+    await waitFor(() => expect(window.location.search).not.toContain('token'))
+    expect(window.location.pathname).toBe('/auth/passkey-confirm')
   })
 
   it('signs in and signs up with Google, Facebook and LINE as a row of icons (Q37, Q40)', async () => {

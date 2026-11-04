@@ -574,6 +574,16 @@ AI 为运营商（或总部，`direct`）找商家、调研、写体验问卷与
 - **答题路径**：只有收报名费的开始多取用户的钱包锁（在开始锁之前）、多读钱包行与可转出额、多一笔分录；普通的开始一条语句也不多（`AttemptStatementBudgetIT`）。
 - **争议**：报名费不退（超时、放弃、下架都不退）；答题者投诉时由运营商以手工加币处理。报名费不是平台收入，不进月结算与运营商分成。
 
+### 7.15 通行密钥（Q97）
+
+指纹、面容登录（平台 D71）在 App、商家后台、管理后台与运营商后台开启（`QB_PASSKEYS`，缺省开；`docs/quizbuks/plans/Q97-passkeys.md`）。
+
+- **依赖方**是部署自己的主机（取 `JABIZ_MAIL_BASE_URL`，或 `QB_PASSKEY_RP_ID` / `QB_PASSKEY_ORIGINS`）。**换域名或改依赖方会使全部已绑定的通行密钥失效**：用户只能改用密码或邮件登录后重新绑定。换之前先发公告。
+- 用户在"账户 → 登录与安全"中添加、改名、删除；没有密码的用户（邮件链接、Google / Facebook / LINE 登录）先经确认邮件（`auth/passkey-confirm`），所以需要邮件已开启。
+- 用户丢了设备：本人在另一台设备上删除；管理员可代为删除（平台的 `SEC_PASSKEY_REMOVE_ADMIN`，要求二次验证），不能代为绑定。
+- 通行密钥登录算两个因素：要求二次验证的管理员与运营商可以只用它登录。封禁与运营商成员关系的检查照旧。
+- 商店 App（iOS / Android 外壳）暂未开启：外壳中的网页暂时不能用通行密钥（需要 `apple-app-site-association` 的 `webcredentials` 与 `assetlinks.json` 的登录凭据授权，另立阶段）。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。

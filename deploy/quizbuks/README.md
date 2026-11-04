@@ -320,6 +320,9 @@ tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的
 | `JABIZ_MAIL_ENABLED` | 注册时必需 | `true` 开启邮件（缺省关闭：消息只记录为 `SKIPPED`） |
 | `JABIZ_MAIL_FROM` | 开启邮件时 | 发件人地址 |
 | `JABIZ_MAIL_BASE_URL` | 开启邮件时 | 主机的根地址，如 `https://quizbuks.example.com`（链接按入口指向各自的前端，退订页也是） |
+| `QB_PASSKEYS` | 否 | 通行密钥（指纹、面容登录，Q97）：缺省开（App、商家后台、管理后台、运营商后台）；`false` 全部关闭。依赖方取 `JABIZ_MAIL_BASE_URL` 的主机（staging 与正式环境的通行密钥互不通用），得不出时自动不开 |
+| `QB_PASSKEY_RP_ID` / `QB_PASSKEY_ORIGINS` | 否 | 显式给出通行密钥的依赖方（域名）与来源（`https://主机`，逗号分隔）；两者都给才生效。**有用户绑定之后不要再改依赖方**：已有的通行密钥会全部失效 |
+| `QB_PASSKEY_RP_NAME` | 否 | 系统对话框中显示的名称，缺省为品牌名 |
 | `SPRING_MAIL_HOST` / `SPRING_MAIL_PORT` / `SPRING_MAIL_USERNAME` / `SPRING_MAIL_PASSWORD` | 开启邮件时 | 邮件服务器（SMTP） |
 | `QB_SPONSOR_LINK` | 否 | 商家后台的绝对地址，Stripe 支付后跳回（`…/wallet/topups/…`）；缺省为 `JABIZ_MAIL_BASE_URL` 主机上的 `/sponsor/` |
 | `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与商家后台的 Google 登录（`application-google.yml`）；`social` 开启 Google、Facebook 与 LINE（`application-social.yml`，Q40）；`apple` 开启这三家与 Apple（`application-apple.yml`，平台 17j）；只开其中一个，见"前端" |

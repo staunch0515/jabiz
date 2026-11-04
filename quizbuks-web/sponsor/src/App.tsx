@@ -127,7 +127,7 @@ let pendingStep: SignInStep | undefined
 /** Set when the session was locked for idleness, for the sign-in page to say so once. */
 let lockedIdle = false
 
-const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset'])
+const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/passkey-confirm'])
 
 /**
  * The unsubscribe page of the console's notification mail (platform decision D52 item 3):
@@ -411,7 +411,8 @@ function Routes() {
           pendingStep = undefined
           lockedIdle = false
           navigate(to, { replace: true })
-        }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons" userNameLabel="email" />
+        }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons" userNameLabel="email"
+        passkey />
       {/* A taker's account (with a password or Google alone) has no sponsor role yet: the console refuses it until
           the account joins by signing up with its address (Q37). */}
       <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"
