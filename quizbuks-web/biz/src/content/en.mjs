@@ -11,7 +11,7 @@ export const en = {
   cta: { taker: 'Start answering', sponsor: 'Become a sponsor', takerLong: 'Start answering — it’s free',
     sponsorLong: 'Become a sponsor' },
   meta: {
-    home: { title: `${BRAND.names.en} — Attention you can see`, description: `${BRAND.names.en} turns your ad budget into a short quiz people actually read; the ones who pass collect a prize in your shop. Knowledge maps let them learn you step by step, light up nodes and earn certificates. Free for now.` },
+    home: { title: `${BRAND.names.en} — Attention you can measure`, description: `${BRAND.names.en} turns your ad budget into a short quiz people actually read; the ones who pass collect a prize in your shop. Knowledge maps let them learn you step by step, light up nodes and earn certificates. Free for now.` },
     maps: { title: `${BRAND.names.en} knowledge maps`, description: 'A map drawn in advance and visible as a whole: each node is one thing to learn, a passed challenge lights it up, and a lit node carries a certificate anyone can verify.' },
     sponsors: { title: `${BRAND.names.en} for sponsors`, description: 'Publish quizzes about your shop or products, reward the people who pass, and grow customers who really know you with your own knowledge map. In-store and digital prizes, free for now.' },
     takers: { title: `${BRAND.names.en} for takers`, description: 'Two-minute quizzes about the shops, products and places around you. Pass to collect a prize in store or a digital one in the app, light up your knowledge map and earn certificates.' },
@@ -21,7 +21,7 @@ export const en = {
   },
   home: {
     eyebrow: 'Quizzes, prizes and knowledge maps for local businesses',
-    title: 'Attention you can see.',
+    title: 'Attention you can measure.',
     lead: `${BRAND.names.en} turns your ad budget into a two-minute quiz about your shop, your products or your town. Customers answer on their phones, and the ones who pass collect a prize in your shop. You pay for understanding, not for impressions.`,
     heroNote: 'Free for now: no app to install, no card needed.',
     mock: { chip: 'Question 2 of 5', question: 'Which roast does Kissa Coffee serve by default?', a: 'Light', b: 'Medium', c: 'Dark', reward: '4 of 5 right → a free coffee', statLabel: 'Pass rate this week', statValue: '78%' },

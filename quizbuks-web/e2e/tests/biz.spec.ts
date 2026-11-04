@@ -79,7 +79,7 @@ test('an English browser stays on the English pages', async ({ browser }) => {
   await context.close()
 })
 
-test('the taker button opens a phone-sized window on a desktop, the merchant button a new tab', async ({
+test('the taker button opens a phone-sized window on a desktop, the sponsor button a new tab', async ({
   browser,
 }) => {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1366, height: 800 } })
@@ -100,14 +100,14 @@ test('the taker button opens a phone-sized window on a desktop, the merchant but
 
   const [tab] = await Promise.all([
     context.waitForEvent('page'),
-    page.getByRole('link', { name: 'Register your business' }).first().click(),
+    page.getByRole('link', { name: 'Become a sponsor' }).first().click(),
   ])
   await tab.waitForLoadState()
   expect(new URL(tab.url()).pathname).toBe('/sponsor/signup')
   await context.close()
 })
 
-test('the header signs a taker in through the phone-sized window and a merchant in a new tab (Q34)', async ({
+test('the header signs a taker in through the phone-sized window and a sponsor in a new tab (Q34)', async ({
   browser,
 }) => {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1366, height: 800 } })
@@ -124,7 +124,7 @@ test('the header signs a taker in through the phone-sized window and a merchant 
   await phone.close()
   const [tab] = await Promise.all([
     context.waitForEvent('page'),
-    signIn.getByRole('link', { name: 'Merchant sign-in' }).click(),
+    signIn.getByRole('link', { name: 'Sponsor sign-in' }).click(),
   ])
   await tab.waitForLoadState()
   expect(new URL(tab.url()).pathname).toBe('/sponsor/login')
