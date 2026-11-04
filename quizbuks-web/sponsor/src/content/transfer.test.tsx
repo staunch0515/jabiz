@@ -11,6 +11,7 @@ import {
   exportDraft,
   exportFileName,
   importQuiz,
+  ImportStepError,
   MissingFileData,
   QUIZ_FILE_FORMAT,
   withoutData,
@@ -226,10 +227,33 @@ describe('the quiz file helpers', () => {
       .rejects.toBeInstanceOf(MissingFileData)
     expect(uploads).toEqual([])
     vi.restoreAllMocks()
-    server({ uploads: [{ status: 422, body: { status: 422, violations: [
-      { field: 'file', ruleCode: 'FILE_TYPE_NOT_ALLOWED', message: 'No' }] } }] })
-    await expect(importQuiz({ files: { f1: { data: btoa('x') }, f2: { data: btoa('y') } } }, CHECK, undefined,
-      vi.fn())).rejects.toBeInstanceOf(ApiError)
+    const { uploads: refused } = server({ uploads: [{ status: 201, body: {} }, { status: 422, body: { status: 422,
+      violations: [{ field: 'file', ruleCode: 'FILE_TYPE_NOT_ALLOWED', message: 'No' }] } }] })
+    // A refusal says which step it was: here the second file's upload.
+    const error = await importQuiz({ files: { f1: { data: btoa('x') }, f2: { data: btoa('y') } } }, CHECK, undefined,
+      vi.fn()).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ImportStepError)
+    expect((error as ImportStepError).step).toEqual({ kind: 'file', index: 2, total: 2, key: 'f2',
+      type: 'application/pdf', size: 3 })
+    expect((error as ImportStepError).cause).toBeInstanceOf(ApiError)
+    expect(refused).toHaveLength(2)
+  })
+
+  it('refuse a file whose data is not base64 before uploading anything', async () => {
+    const { uploads } = server()
+    const error = await importQuiz({ files: { f1: { data: btoa('x') }, f2: { data: '%%%not base64' } } }, CHECK,
+      undefined, vi.fn()).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ImportStepError)
+    expect((error as ImportStepError).step).toMatchObject({ kind: 'file', index: 2, key: 'f2' })
+    expect(uploads).toEqual([])
+  })
+
+  it('say that making the draft failed when the files are uploaded', async () => {
+    server({ processes: { QB_QUIZ_IMPORT: [{ status: 500, body: { status: 500, title: 'Internal Server Error' } }] } })
+    const error = await importQuiz({ files: { f1: { data: btoa('x') }, f2: { data: btoa('y') } } }, CHECK, undefined,
+      vi.fn()).catch((e: unknown) => e)
+    expect((error as ImportStepError).step).toEqual({ kind: 'draft' })
+    expect(((error as ImportStepError).cause as ApiError).status).toBe(500)
   })
 })
 
@@ -276,6 +300,37 @@ describe('the quiz list', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/quizzes/q1'))
     expect(uploads).toEqual([{ policy: 'qb.content.image', name: 'image.jpg', type: 'image/jpeg' }])
     expect(processCalls('QB_QUIZ_IMPORT')).toHaveLength(1)
+  })
+
+  // The dialog said only "Something went wrong" (2026-11-04): it now says which step failed and why.
+  it.each([
+    ['a file the server refuses', { uploads: [{ status: 422, body: { status: 422, violations: [
+      { field: 'file', ruleCode: 'FILE_TOO_LARGE', message: 'The file is larger than 10 MB.' }] } }] },
+    'Uploading file 1 of 1 (f1, image/jpeg, 3 B): file: The file is larger than 10 MB.'],
+    ['a file too large for the server in front', { uploads: [{ status: 413, body: null }] },
+      'Uploading file 1 of 1 (f1, image/jpeg, 3 B): The file is too large for the server (HTTP 413).'],
+    ['an error of the server', { uploads: [{ status: 201, body: {} }], processes: {
+      QB_QUIZ_IMPORT: [{ status: 500, body: { status: 500, title: 'Internal Server Error' } }] } },
+    'Making the draft: The server failed (HTTP 500).'],
+    ['a refusal of the server with its reason', { uploads: [{ status: 201, body: {} }], processes: {
+      QB_QUIZ_IMPORT: [{ status: 422, body: { status: 422, violations: [
+        { field: 'questions[3].options', ruleCode: 'QB_QUIZ_FILE_VALUE', message: 'At most 6 options.' }] } }] } },
+    'Making the draft: questions[3].options: At most 6 options.'],
+  ])('says which step of the import failed and why: %s', async (_name, answers, expected) => {
+    const { processes = {}, uploads } = answers as Server
+    server({ uploads, processes: { QB_QUIZ_IMPORT_CHECK: [{ status: 200, body: { output: { ...CHECK, readers: [1],
+      files: [CHECK.files[0]] } } }], ...processes } })
+    window.history.replaceState(null, '', '/quizzes')
+    render(<App />)
+    await screen.findByTestId('quiz-row')
+    await userEvent.upload(screen.getByTestId('quiz-import-file'), new File([JSON.stringify({ format: QUIZ_FILE_FORMAT,
+      formatVersion: 1, quiz: { title: 'Coffee' }, files: { f1: { name: 'a.jpg', type: 'image/jpeg', size: 3,
+        data: btoa('abc') } } })], 'quiz.json', { type: 'application/json' }))
+    await userEvent.click(await screen.findByTestId('quiz-import-confirm'))
+    const problems = await screen.findByTestId('quiz-import-problems')
+    expect(problems).toHaveTextContent('The quiz could not be imported:')
+    expect(problems).toHaveTextContent(expected)
+    expect(problems).not.toHaveTextContent('Something went wrong')
   })
 
   it('lists why a file cannot be imported', async () => {

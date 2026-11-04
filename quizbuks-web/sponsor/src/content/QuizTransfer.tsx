@@ -16,17 +16,19 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Download, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { QB } from '../qb/messages'
 import { SPONSOR } from '../messages'
-import { problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
 import { quizPath, QUIZZES_QUERY } from './paths'
 import {
   checkImport,
+  CorruptFileData,
   download,
   exportFile,
   exportQuiz,
   importQuiz,
+  ImportStepError,
   LARGE_EXPORT_BYTES,
   MissingFileData,
   readJsonFile,
@@ -91,13 +93,40 @@ type ImportState =
   | { kind: 'importing'; done: number; total: number }
   | { kind: 'failed'; problems: string[] }
 
-/** The lines a refusal lists: each violation's text, else the general one. */
-function problemsOf(error: unknown, missing: (key: string) => string): string[] {
-  if (error instanceof MissingFileData) return [missing(error.key)]
-  if (error instanceof ApiError && error.violations.length > 0) {
-    return error.violations.map((v) => (v.field ? `${v.field}: ${v.message}` : v.message))
+/**
+ * The lines a refusal lists, each saying why and, for an import that failed after the check, at which step (which
+ * file, or making the draft): "Something went wrong" alone leaves the sponsor nothing to change.
+ */
+function problemsOf(error: unknown, t: TFunction): string[] {
+  if (error instanceof MissingFileData) return [t('quizzes.transfer.missingData', { key: error.key })]
+  if (!(error instanceof ImportStepError)) return reasonsOf(error, t)
+  const { step } = error
+  const where = step.kind === 'file'
+    ? t('quizzes.transfer.stepFile', { index: step.index, total: step.total, key: step.key, type: step.type,
+      size: formatBytes(step.size) })
+    : t('quizzes.transfer.stepDraft')
+  return reasonsOf(error.cause, t).map((reason) => t('quizzes.transfer.failedAt', { step: where, reason }))
+}
+
+/** Why a call failed: the server's own words where it gave them, else what its status or the browser's error means. */
+function reasonsOf(error: unknown, t: TFunction): string[] {
+  if (error instanceof CorruptFileData) return [t('quizzes.transfer.reason.corrupt', { key: error.key })]
+  if (error instanceof ApiError) {
+    if (error.violations.length > 0) {
+      return error.violations.map((v) => (v.field ? `${v.field}: ${v.message}` : v.message))
+    }
+    const { status } = error
+    if (status === 401) return [t('quizzes.transfer.reason.signedOut')]
+    if (status === 413) return [t('quizzes.transfer.reason.tooLarge')]
+    if (status === 429) return [t('quizzes.transfer.reason.rateLimited')]
+    if (status >= 500) return [t('quizzes.transfer.reason.server', { status })]
+    // A 4xx the server explained (its detail is in the request's language), else its status.
+    if (!/^HTTP \d+$/.test(error.message)) return [t('quizzes.transfer.reason.refused', { text: error.message, status })]
+    return [t('quizzes.transfer.reason.http', { status })]
   }
-  return [problemText(error)]
+  // fetch rejects with a TypeError when the server cannot be reached at all.
+  if (error instanceof TypeError) return [t('quizzes.transfer.reason.network')]
+  return [error instanceof Error && error.message ? error.message : t('quizzes.transfer.reason.unknown')]
 }
 
 /**
@@ -111,7 +140,6 @@ export function ImportQuizButton() {
   const queryClient = useQueryClient()
   const input = useRef<HTMLInputElement>(null)
   const [state, setState] = useState<ImportState | null>(null)
-  const missing = (key: string) => t('quizzes.transfer.missingData', { key })
 
   const chosen = async (file: File) => {
     setState({ kind: 'checking' })
@@ -125,7 +153,7 @@ export function ImportQuizButton() {
     try {
       setState({ kind: 'checked', document, check: await checkImport(document) })
     } catch (e) {
-      setState({ kind: 'refused', problems: problemsOf(e, missing) })
+      setState({ kind: 'refused', problems: problemsOf(e, t) })
     }
   }
 
@@ -138,7 +166,7 @@ export function ImportQuizButton() {
       await queryClient.invalidateQueries({ queryKey: QUIZZES_QUERY })
       navigate(quizPath(imported.quizId))
     } catch (e) {
-      setState({ kind: 'failed', problems: problemsOf(e, missing) })
+      setState({ kind: 'failed', problems: problemsOf(e, t) })
     }
   }
 

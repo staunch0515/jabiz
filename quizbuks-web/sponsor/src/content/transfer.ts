@@ -231,6 +231,15 @@ export function withoutData(document: Record<string, unknown>): Record<string, u
 }
 
 /** `QuizTransferProcesses.CheckOutput`. */
+/** A file the import uploads, as the server's check names it. */
+export interface ImportFile {
+  key: string
+  policy: string
+  name: string
+  type: string
+  size: number
+}
+
 export interface ImportCheck {
   formatVersion: number
   currentVersion: number
@@ -240,7 +249,7 @@ export interface ImportCheck {
   title: string
   questions: number
   materials: number
-  files: { key: string; policy: string; name: string; type: string; size: number }[]
+  files: ImportFile[]
   /** Q73a: the base language the file names (none in a version 1 file), and its other languages. */
   language: ContentLanguage | null
   languages: ContentLanguage[]
@@ -289,25 +298,66 @@ async function uploadPaced(policy: string, blob: Blob, name: string, wait: (ms: 
 export async function importQuiz(document: Record<string, unknown>, check: ImportCheck, onProgress?: Progress,
   wait: (ms: number) => Promise<unknown> = sleep): Promise<Imported> {
   const files = (document.files ?? {}) as Record<string, Partial<QuizFileEntry>>
-  // Every file's data before the first upload: a file missing one would leave the others uploaded for nothing.
+  const total = check.files.length
+  const stepOf = (need: ImportFile, i: number): ImportStep =>
+    ({ kind: 'file', index: i + 1, total, key: need.key, type: need.type, size: need.size })
+  // Every file's data, decoded, before the first upload: a file missing or spoiling one would leave the others
+  // uploaded for nothing.
   for (const need of check.files) {
     if (!KNOWN_POLICIES.has(need.policy) || typeof files[need.key]?.data !== 'string') {
       throw new MissingFileData(need.key)
     }
   }
+  const blobs = check.files.map((need, i) => {
+    try {
+      return blobOf(files[need.key].data as string, need.type)
+    } catch (e) {
+      throw new ImportStepError(stepOf(need, i), new CorruptFileData(need.key, e))
+    }
+  })
   const uploaded: Record<string, string> = {}
-  let done = 0
-  onProgress?.(0, check.files.length)
-  for (const need of check.files) {
-    const entry = files[need.key]
+  onProgress?.(0, total)
+  for (const [i, need] of check.files.entries()) {
     const kind = need.policy === CONTENT_FILE_POLICY.pdf ? 'pdf' : need.policy === CONTENT_FILE_POLICY.audio
       ? 'audio' : 'image'
-    const blob = blobOf(entry.data as string, need.type)
-    const file = await uploadPaced(need.policy, blob, nameOf(kind, need.type), wait)
-    uploaded[need.key] = String(file.fileId)
-    onProgress?.(++done, check.files.length)
+    try {
+      const file = await uploadPaced(need.policy, blobs[i], nameOf(kind, need.type), wait)
+      uploaded[need.key] = String(file.fileId)
+    } catch (e) {
+      throw new ImportStepError(stepOf(need, i), e)
+    }
+    onProgress?.(i + 1, total)
   }
-  return runProcess<Imported>(CONTENT_PROCESS.quizImport, { document: withoutData(document), files: uploaded })
+  try {
+    return await runProcess<Imported>(CONTENT_PROCESS.quizImport, { document: withoutData(document), files: uploaded })
+  } catch (e) {
+    throw new ImportStepError({ kind: 'draft' }, e)
+  }
+}
+
+/** The step of an import that failed: uploading one of the file's files (counted from 1), or making the draft. */
+export type ImportStep =
+  | { kind: 'file'; index: number; total: number; key: string; type: string; size: number }
+  | { kind: 'draft' }
+
+/** An import that failed at one step; `cause` is why (an `ApiError`, a network error, {@link CorruptFileData}). */
+export class ImportStepError extends Error {
+  readonly step: ImportStep
+
+  constructor(step: ImportStep, cause: unknown) {
+    super(`The import failed at ${step.kind === 'file' ? `file ${step.key}` : 'the draft'}`, { cause })
+    this.step = step
+  }
+}
+
+/** A file whose data is not base64 (the quiz file was changed or cut short). */
+export class CorruptFileData extends Error {
+  readonly key: string
+
+  constructor(key: string, cause: unknown) {
+    super(`The quiz file's data of the file ${key} is not base64`, { cause })
+    this.key = key
+  }
 }
 
 /** The file names a file it does not carry the data of. */
