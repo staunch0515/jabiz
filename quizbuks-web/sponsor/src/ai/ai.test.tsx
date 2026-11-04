@@ -9,10 +9,9 @@ import type { Material, Quiz } from '../content/api'
 import { EditingProvider, type Editing } from '../content/editing'
 import '../messages'
 import { resetServerClock } from '../qb/legal'
-import { AiCoverPanel } from './AiCoverPanel'
 import { AiQuestionsPanel } from './AiQuestionsPanel'
 import { AiUsageMetric } from './AiUsageMetric'
-import { materialBytes, parseCandidates, parseCoverParams, parseCovers, stillPolling, toAiJob } from './api'
+import { materialBytes, parseCandidates, stillPolling, toAiJob } from './api'
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -53,8 +52,6 @@ interface Server {
   /** The usage rows in turn (the last repeats), in place of `usage`. */
   usages?: Record<string, unknown>[]
   jobs?: Record<string, unknown>[][]
-  /** The cover jobs (Q8b), read with `kind: COVER`. */
-  coverJobs?: Record<string, unknown>[][]
   mustAccept?: boolean
 }
 
@@ -62,7 +59,6 @@ interface Server {
 function server(options: Server = {}) {
   const asked: { path: string; body: Record<string, unknown> }[] = []
   let jobCalls = 0
-  let coverCalls = 0
   let usageCalls = 0
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
@@ -76,18 +72,9 @@ function server(options: Server = {}) {
         return page([options.usages ? options.usages[Math.min(usageCalls++, options.usages.length - 1)]
           : options.usage ?? USAGE])
       case '/api/queries/qb.sponsor.ai-jobs': {
-        if ((body as { params?: { kind?: string } } | null)?.params?.kind === 'COVER') {
-          const covers = options.coverJobs ?? [[]]
-          return page(covers[Math.min(coverCalls++, covers.length - 1)])
-        }
         const pages = options.jobs ?? [[]]
         return page(pages[Math.min(jobCalls++, pages.length - 1)])
       }
-      case '/api/processes/QB_AI_COVER_REQUEST/latest':
-        return json(200, { output: { aiJobId: 'c1', externalJobId: 'x2', status: 'QUEUED', estimatedTokens: 9000 } })
-      case '/api/processes/QB_AI_COVER_ACCEPT/latest':
-        return json(200, { output: { quizId: 'q1', revision: 8, editedAt: '2026-10-18T00:00:00Z', itemId: null,
-          partIds: [] } })
       case '/api/queries/qb.me.consents':
         return page([{ kind: 'AI_NOTICE', versionId: 'v', versionNo: 2, title: { en: 'AI notice' },
           changeSummary: null, requiresConsent: true, effectiveAt: '2026-10-01T00:00:00Z', toAccept: 2,
@@ -312,155 +299,6 @@ describe('the AI questions panel', () => {
     expect(parseCandidates(null)).toEqual([])
     expect(parseCandidates('{"questions":[{"stem":"x","options":[{"text":"a","correct":"yes"}]}]}')[0])
       .toEqual({ no: 1, stem: 'x', points: 10, materials: [], options: [{ text: 'a', correct: false }] })
-  })
-})
-
-const COVERS = JSON.stringify({ schema: 2, style: 'ILLUSTRATION', covers: [
-  { no: 1, style: 'ILLUSTRATION', text: 'Rivers <b>1</b>', placement: 'bottom', fileId: 'f1' },
-] })
-const OLD_COVERS = JSON.stringify({ schema: 1, covers: [
-  { no: 1, palette: 'ocean', layout: 'center', motif: 'circles', text: 'Rivers 1', fileId: 'f1' },
-  { no: 2, palette: 'sunset', layout: 'band', motif: 'waves', text: 'Rivers 2', fileId: 'f2' },
-] })
-
-const coverJob = (status: string, extra: Record<string, unknown> = {}) => job(status, { aiJobId: 'c1',
-  kind: 'COVER', params: JSON.stringify({ count: 1, language: 'ja', style: 'ILLUSTRATION',
-    requirements: 'A river at dawn', titleOverlay: true, titleText: null }), ...extra })
-
-describe('the AI cover panel', () => {
-  it('asks for an illustration with requirements, the AI notice accepted', async () => {
-    const calls = server({ coverJobs: [[], [coverJob('QUEUED')]] })
-    const user = userEvent.setup()
-    wrap(<AiCoverPanel quiz={QUIZ} />)
-    await user.click(await screen.findByTestId('ai-cover-generate'))
-    const dialog = await screen.findByTestId('ai-cover-dialog')
-    expect(within(dialog).getByTestId('ai-cover-sent')).toHaveTextContent('what you write here')
-    expect(within(dialog).getByTestId('ai-cover-style-ILLUSTRATION')).toBeChecked()
-    expect(within(dialog).queryByTestId('ai-cover-replacing')).toBeNull()
-    await within(dialog).findByTestId('ai-notice')
-    await expectAccessible()
-    await user.click(within(dialog).getByTestId('ai-cover-submit'))
-    expect(await within(dialog).findByTestId('ai-cover-local-problem')).toHaveTextContent('Agree to the AI notice')
-    expect(calls.of('/api/processes/QB_AI_COVER_REQUEST/latest')).toEqual([])
-    await user.type(within(dialog).getByTestId('ai-cover-requirements'), 'Blue tones, a river')
-    expect(dialog).toHaveTextContent('19 / 500')
-    await user.type(within(dialog).getByTestId('ai-cover-text'), 'Rivers!')
-    await user.click(within(dialog).getByTestId('ai-notice-agree'))
-    await user.click(within(dialog).getByTestId('ai-cover-submit'))
-    await waitFor(() => expect(calls.of('/api/processes/QB_AI_COVER_REQUEST/latest')).toEqual([
-      { quizId: 'q1', language: 'en', aiNoticeVersionNo: 2, style: 'ILLUSTRATION', requirements: 'Blue tones, a river',
-        titleOverlay: true, titleText: 'Rivers!' }]))
-    expect(await screen.findByTestId('ai-cover-running')).toHaveTextContent('making the cover')
-    // The cover jobs are read apart from the questions'.
-    expect(calls.of('/api/queries/qb.sponsor.ai-jobs')).toEqual(expect.arrayContaining([
-      expect.objectContaining({ params: { quizId: 'q1', kind: 'COVER' } })]))
-  })
-
-  it('asks for a simple graphic, or an illustration without text', async () => {
-    const calls = server({ coverJobs: [[], [coverJob('QUEUED')]], mustAccept: false })
-    const user = userEvent.setup()
-    wrap(<AiCoverPanel quiz={QUIZ} />)
-    await user.click(await screen.findByTestId('ai-cover-generate'))
-    const dialog = await screen.findByTestId('ai-cover-dialog')
-    // No title: no text and no language to ask for.
-    await user.click(within(dialog).getByTestId('ai-cover-overlay'))
-    expect(within(dialog).queryByTestId('ai-cover-text')).toBeNull()
-    // A simple graphic always shows its text.
-    await user.click(within(dialog).getByTestId('ai-cover-style-GRAPHIC'))
-    expect(within(dialog).queryByTestId('ai-cover-overlay')).toBeNull()
-    expect(within(dialog).getByTestId('ai-cover-text')).toBeInTheDocument()
-    await user.click(within(dialog).getByTestId('ai-cover-submit'))
-    await waitFor(() => expect(calls.of('/api/processes/QB_AI_COVER_REQUEST/latest')).toEqual([
-      { quizId: 'q1', language: 'en', aiNoticeVersionNo: null, style: 'GRAPHIC', requirements: null,
-        titleOverlay: true, titleText: null }]))
-  })
-
-  it('uses the cover as a quiz edit', async () => {
-    const calls = server({ coverJobs: [[coverJob('READY', { candidates: COVERS, candidateCount: 1,
-      expiresAt: '2026-10-25T00:00:00Z' })]] })
-    const edit = editing()
-    const applied = vi.fn()
-    const user = userEvent.setup()
-    wrap(<AiCoverPanel quiz={QUIZ} onApplied={applied} />, edit)
-    const choice = await screen.findByTestId('ai-cover-choice')
-    expect(within(choice).getAllByTestId('ai-cover-candidate')).toHaveLength(1)
-    // The text in the picture's description, as plain text; what was asked for.
-    expect(within(choice).getByTestId('ai-cover-shown-text')).toHaveTextContent('Text on the cover: Rivers <b>1</b>')
-    expect(choice.querySelector('b')).toBeNull()
-    expect(within(choice).getByTestId('ai-cover-asked')).toHaveTextContent('A river at dawn')
-    await expectAccessible()
-    await user.click(within(choice).getByTestId('ai-cover-apply'))
-    await waitFor(() => expect(calls.of('/api/processes/QB_AI_COVER_ACCEPT/latest')).toEqual([
-      { aiJobId: 'c1', quizId: 'q1', candidateNo: 1, baseRevision: 7 }]))
-    await waitFor(() => expect(edit.edited).toHaveBeenCalledWith(expect.objectContaining({ revision: 8 })))
-    await waitFor(() => expect(applied).toHaveBeenCalled())
-  })
-
-  it('asks again from the cover\'s own requirements, which the new one replaces', async () => {
-    const calls = server({ coverJobs: [[coverJob('READY', { candidates: COVERS, candidateCount: 1 })],
-      [coverJob('QUEUED')]], mustAccept: false })
-    const user = userEvent.setup()
-    wrap(<AiCoverPanel quiz={QUIZ} />)
-    await user.click(await screen.findByTestId('ai-cover-again'))
-    const dialog = await screen.findByTestId('ai-cover-dialog')
-    expect(within(dialog).getByTestId('ai-cover-requirements')).toHaveValue('A river at dawn')
-    expect(within(dialog).getByTestId('ai-cover-replacing')).toHaveTextContent('replaced by the new one')
-    await expectAccessible()
-    await user.clear(within(dialog).getByTestId('ai-cover-requirements'))
-    await user.type(within(dialog).getByTestId('ai-cover-requirements'), 'Warmer colours')
-    await user.click(within(dialog).getByTestId('ai-cover-submit'))
-    await waitFor(() => expect(calls.of('/api/processes/QB_AI_COVER_REQUEST/latest')).toEqual([
-      { quizId: 'q1', language: 'ja', aiNoticeVersionNo: null, style: 'ILLUSTRATION', requirements: 'Warmer colours',
-        titleOverlay: true, titleText: null }]))
-  })
-
-  it('says that a queued cover job waits while AI is paused', async () => {
-    server({ coverJobs: [[coverJob('QUEUED', { requestedAt: new Date().toISOString() })]],
-      usage: { ...USAGE, enabled: false } })
-    wrap(<AiCoverPanel quiz={QUIZ} />)
-    expect(await screen.findByTestId('ai-cover-running')).toHaveTextContent('AI is paused')
-    expect(screen.getByTestId('ai-cover-cancel')).toBeEnabled()
-    await expectAccessible()
-  })
-
-  it('says why a cover job failed or expired, and discards', async () => {
-    server({ coverJobs: [[coverJob('FAILED', { failureCode: 'QB_AI_NO_CANDIDATES' })]] })
-    const first = wrap(<AiCoverPanel quiz={QUIZ} />)
-    expect(await screen.findByTestId('ai-cover-failed')).toHaveTextContent('could not be drawn')
-    first.unmount()
-    vi.restoreAllMocks()
-    server({ coverJobs: [[coverJob('FAILED', { failureCode: 'QB_AI_COVER_FONT' })]] })
-    const second = wrap(<AiCoverPanel quiz={QUIZ} />)
-    expect(await screen.findByTestId('ai-cover-failed')).toHaveTextContent('cannot show')
-    second.unmount()
-    vi.restoreAllMocks()
-    server({ coverJobs: [[coverJob('EXPIRED')]] })
-    const third = wrap(<AiCoverPanel quiz={QUIZ} />)
-    expect(await screen.findByTestId('ai-cover-expired')).toHaveTextContent('not used in time')
-    third.unmount()
-    vi.restoreAllMocks()
-    const calls = server({ coverJobs: [[coverJob('READY', { candidates: COVERS, candidateCount: 1 })]] })
-    const user = userEvent.setup()
-    wrap(<AiCoverPanel quiz={QUIZ} />)
-    await user.click(await screen.findByTestId('ai-cover-discard'))
-    await user.click(await screen.findByRole('button', { name: 'Discard' }))
-    await waitFor(() => expect(calls.of('/api/processes/QB_AI_DISCARD/latest')).toEqual([{ aiJobId: 'c1' }]))
-  })
-
-  it('reads the stored covers and what they were asked with defensively', () => {
-    expect(parseCovers(COVERS)).toEqual([{ no: 1, style: 'ILLUSTRATION', text: 'Rivers <b>1</b>', fileId: 'f1' }])
-    // A job of before Q96: catalogue designs.
-    expect(parseCovers(OLD_COVERS)).toHaveLength(2)
-    expect(parseCovers(OLD_COVERS)[0]).toMatchObject({ style: 'GRAPHIC', text: 'Rivers 1' })
-    expect(parseCovers('{"covers":[{"no":1,"text":"no file"}]}')).toEqual([])
-    expect(parseCovers('not json')).toEqual([])
-    expect(toAiJob(coverJob('READY', { candidates: COVERS }))).toMatchObject({ kind: 'COVER', candidates: [],
-      coverParams: { style: 'ILLUSTRATION', requirements: 'A river at dawn', titleOverlay: true, titleText: '',
-        language: 'ja' } })
-    expect(parseCoverParams({ count: 3, language: 'en' })).toEqual({ style: 'GRAPHIC', requirements: '',
-      titleOverlay: true, titleText: '', language: 'en' })
-    expect(toAiJob(job('READY', { candidates: CANDIDATES })).covers).toEqual([])
-    expect(toAiJob(job('READY', { candidates: CANDIDATES })).coverParams).toBeNull()
   })
 })
 

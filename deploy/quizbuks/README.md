@@ -283,7 +283,7 @@ tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的
 - 提供方是 Claude（Anthropic API，`docs/quizbuks/plans/Q8-ai.md` A-1），外部服务 `anthropic`，只经平台的 JDK HTTP；密钥 `ANTHROPIC_API_KEY` 只来自环境变量（密钥库）。
 - **缺省关闭**：`qb.ai.enabled` 是受控参数，`QB_SETUP` 提出 `false`；有了正式密钥、AI 说明（法律文本种类 `AI_NOTICE`）以正式文本发布之后，由一位管理员在后台 `/qb/ai`（或平台的受控变更）提出开启，另一位发布。没有已生效的 AI 说明时，开关打开也不发送任何内容（`QB_AI_NOTICE_MISSING`）。
 - 模型 `qb.ai.model`（只能是 `claude-opus-5-5`（缺省）、`claude-sonnet-5-5`、`claude-haiku-5-5`）、`qb.ai.effort`（`low` / `medium`（缺省）/ `high`）与限额（每商家每日次数、每月 Token、全体每月 Token）都是受控参数；Q8a 之前装过的库中 `qb.ai.model` 是旧的 `gpt-4o-mini`：AI 因此不可用，须以受控变更改为清单中的值（该参数的种类在旧库中仍是文本，改值时只认清单中的三个之一由请求时再查保证）。
-- **封面与 PDF 资料（Q8b）**：同一个外部服务与密钥。封面的中日文字体取 `JABIZ_REPORTS_PDF_FONTS`（镜像已设 IPA Gothic 与 Droid Sans Fallback）；自建镜像缺少时，中日文标题的封面请求在调用之前即失败（`QB_AI_COVER_FONT`）。
+- **PDF 资料（Q8b）**：同一个外部服务与密钥。（AI 封面已于 Q98a 撤销。）
   封面图与上传的图一样存于 `JABIZ_FILES_LOCAL_ROOT`（未选的候选在 24 小时后由清扫删除）；PDF 资料由作业执行器在尝试期间复制到同一卷的上传区（平台检查可用空间，`jabiz.external-jobs.files.min-free-disk`）。每实例的输出预算（`jabiz.external-jobs.files.output-budget`，缺省 256 MB）足够封面作业（每次尝试至多 3 × 4 MiB）。
 - 本机开发：`java tools/quizbuks/claude-stub/ClaudeStub.java`（端口 8094，`dev` 配置已指向它），它只按请求生成假的题目，从不访问网络；标题含 `[refuse]` 的模版被拒答，含 `[busy]` 的得到 529。
 - 发送给提供方的只有商家自己的模版内容（标题、简介、所选资料、已有题干），`metadata.user_id` 是商家编号的 HMAC（以 `JABIZ_INTEGRITY_KEY` 派生的密钥），不含答题人的任何数据与商家的身份信息。

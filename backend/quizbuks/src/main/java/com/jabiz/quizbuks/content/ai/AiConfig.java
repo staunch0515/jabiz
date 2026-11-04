@@ -91,7 +91,7 @@ public class AiConfig {
         return AiTranslateJob.type(maxConcurrency);
     }
 
-    /** Candidate covers (Q8b): the same concurrency setting, counted for this type of its own. */
+    /** AI covers (Q8b), withdrawn (Q98a): registered so that jobs queued before end. */
     @Bean
     ExternalJobType<AiCoverJob.Input, AiCoverJob.Result> qbAiCoverJob(
         @Value("${quizbuks.ai.max-concurrency:" + AiQuestionsJob.DEFAULT_CONCURRENCY + "}") int maxConcurrency) {
@@ -199,17 +199,6 @@ public class AiConfig {
     ProcessDefinition<AiProcesses.RequestInput, AiProcesses.RequestOutput, ProcessContext> qbAiQuestionsRequest(
         AiUserKeys userKeys, AiPdfs.Limits pdfs) {
         return AiProcesses.request(zone, userKeys, pdfs);
-    }
-
-    @Bean
-    ProcessDefinition<AiProcesses.CoverRequestInput, AiProcesses.RequestOutput, ProcessContext> qbAiCoverRequest(
-        AiUserKeys userKeys) {
-        return AiProcesses.coverRequest(zone, userKeys);
-    }
-
-    @Bean
-    ProcessDefinition<AiProcesses.CoverAcceptInput, EditOutput, ProcessContext> qbAiCoverAccept() {
-        return AiProcesses.coverAccept();
     }
 
     /** Q73d-1: candidate translations of a quiz's text, asked for as questions are. */

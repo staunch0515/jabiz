@@ -89,25 +89,6 @@ class AiCancelIT extends AiItSupport {
     }
 
     @Test
-    void aSponsorsCancellationOfACoverJobCancelsThePlatformsCoverJob() {
-        String sponsor = newSponsor("ai-cancel-cover-" + UUID.randomUUID());
-        String token = sponsorFull(sponsor);
-        List<String> quiz = quizWithArticle(token, title(), "Material.");
-        Map<String, Object> queued = requestCovers(token, quiz.get(0));
-        int calls = CLAUDE.requests(MESSAGES).size();
-
-        assertThat(run(AiProcesses.CANCEL, token, body("aiJobId", queued.get("aiJobId"))))
-            .containsEntry("status", QbAi.CANCELLED);
-        assertThat(cancelledBy(queued.get("externalJobId"))).containsExactly(sponsor);
-        runJobs();
-        assertThat(CLAUDE.requests(MESSAGES)).hasSize(calls);
-        Map<String, Object> job = job(queued.get("aiJobId"));
-        assertThat(job).containsEntry("status", QbAi.CANCELLED).containsEntry("cover_1", null);
-        assertThat(job.get("finished_at")).isNotNull();
-        assertThat(usage(sponsor)).isEmpty();
-    }
-
-    @Test
     void cancellingARunningJobChargesWhatItsAttemptRecordedOnce() throws Exception {
         String sponsor = newSponsor("ai-cancel-running-" + UUID.randomUUID());
         String token = sponsorFull(sponsor);
@@ -250,37 +231,4 @@ class AiCancelIT extends AiItSupport {
         assertThat(usageRows(sponsor)).isEqualTo(rows);
     }
 
-    @Test
-    void aCoverJobCancelledAfterItsPicturesWereStoredNeverRefersToThem() {
-        String sponsor = newSponsor("ai-cancel-late-cover-" + UUID.randomUUID());
-        String token = sponsorFull(sponsor);
-        List<String> quiz = quizWithArticle(token, title(), "Material.");
-        Map<String, Object> queued = requestCovers(token, quiz.get(0));
-        assertThat(jobExecutor.runPending().block()).isEqualTo(1);
-        String externalJobId = String.valueOf(queued.get("externalJobId"));
-        // The platform stored the picture the attempt drew.
-        List<Object> pictures = query("SELECT file_id FROM sys_external_job_file WHERE job_id = ?"
-            + " AND direction = 'OUTPUT'", externalJobId).stream().map(row -> row.get("file_id")).toList();
-        assertThat(pictures).hasSize(1);
-
-        assertThat(run(AiProcesses.CANCEL, token, body("aiJobId", queued.get("aiJobId"))))
-            .containsEntry("status", QbAi.CANCELLED);
-        deliverEvents();
-        runJobs();
-
-        Map<String, Object> job = job(queued.get("aiJobId"));
-        assertThat(job).containsEntry("status", QbAi.CANCELLED).containsEntry("candidates", null)
-            .containsEntry("cover_1", null).containsEntry("cover_2", null).containsEntry("cover_3", null);
-        assertThat(number(job.get("input_tokens")) + number(job.get("output_tokens"))).isEqualTo(500);
-        // Nothing refers to the pictures: the platform's sweep removes them.
-        assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quiz.get(0) + "'").getFirst())
-            .containsEntry("cover", null);
-        assertThat(countOf("SELECT count(*) AS n FROM qb_ai_job WHERE cover_1 = ANY(?::uuid[]) OR cover_2 = ANY(?::uuid[])"
-            + " OR cover_3 = ANY(?::uuid[])", ids(pictures), ids(pictures), ids(pictures))).isZero();
-        assertThat(number(usageRows(sponsor).getFirst().get("jobs"))).isEqualTo(1);
-    }
-
-    private static String ids(List<Object> values) {
-        return "{" + String.join(",", values.stream().map(String::valueOf).toList()) + "}";
-    }
 }

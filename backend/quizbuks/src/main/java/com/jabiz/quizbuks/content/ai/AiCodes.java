@@ -66,10 +66,8 @@ public final class AiCodes {
     public static final String PDF_TOO_LONG = "QB_AI_PDF_TOO_LONG";
     /** A PDF material has a password or is no readable PDF: nothing was sent (Q8b). */
     public static final String PDF_UNREADABLE = "QB_AI_PDF_UNREADABLE";
-    /** The quiz's title has characters no font of the server can draw: nothing was sent (Q8b covers). */
-    public static final String COVER_FONT = "QB_AI_COVER_FONT";
-    /** Q96: the cover's text or requirements are not plain text of their length. */
-    public static final String COVER_TEXT = "QB_AI_COVER_TEXT";
+    /** Q98a: AI covers were withdrawn; a cover job queued before ends with this, nothing sent. */
+    public static final String COVER_WITHDRAWN = "QB_AI_COVER_WITHDRAWN";
     /** Q73d-1: every text of the language is translated and up to date (or the quiz has no text). */
     public static final String NOTHING_TO_TRANSLATE = "QB_AI_NOTHING_TO_TRANSLATE";
     /** Q73d-2: the publication has no translation into the language to compare. */
@@ -81,7 +79,7 @@ public final class AiCodes {
         MATERIAL_NOT_IN_QUIZ, QUIZ_BUSY, TOO_MANY_OPEN, DAILY_LIMIT, MONTHLY_LIMIT, GLOBAL_LIMIT, JOB_NOT_READY,
         JOB_EXPIRED, CANDIDATE_UNKNOWN, NOT_REVIEWED, TEXT_TOO_LONG, RATE_LIMITED, PROVIDER_UNAVAILABLE, AUTH,
         REQUEST_INVALID, BAD_RESPONSE, REFUSED, TRUNCATED, NO_CANDIDATES, COUNT_TOO_HIGH, STOPPED,
-        PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_FONT, COVER_TEXT, SURVEY_UNSUPPORTED);
+        PDF_TOO_LARGE, WRONG_KIND, PDF_TOO_LONG, PDF_UNREADABLE, COVER_WITHDRAWN, SURVEY_UNSUPPORTED);
 
     private AiCodes() {}
 }

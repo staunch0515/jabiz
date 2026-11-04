@@ -93,10 +93,6 @@ import java.util.UUID;
 public final class AiProcesses {
 
     public static final String REQUEST = "QB_AI_QUESTIONS_REQUEST";
-    /** Candidate covers of a quiz (Q8b, M-25): as {@value #REQUEST}, from the quiz's title and introduction. */
-    public static final String COVER_REQUEST = "QB_AI_COVER_REQUEST";
-    /** The sponsor's choice of one candidate cover, written into the quiz's {@code cover} (Q8b). */
-    public static final String COVER_ACCEPT = "QB_AI_COVER_ACCEPT";
     /** Q73d-1: candidate translations of a quiz's text, and the sponsor's reviewed ones written. */
     public static final String TRANSLATE_REQUEST = "QB_AI_TRANSLATE_REQUEST";
     public static final String TRANSLATION_ACCEPT = "QB_AI_TRANSLATION_ACCEPT";
@@ -132,27 +128,6 @@ public final class AiProcesses {
         @NotNull @Pattern(regexp = "EASY|MEDIUM|HARD") String difficulty,
         @NotNull @Pattern(regexp = "en|zh|ja") String language, Boolean avoidExisting,
         @Positive Integer aiNoticeVersionNo) implements Requested {}
-
-    /**
-     * A candidate cover of a quiz (Q8b; Q96): drawn from its title and introduction and the sponsor's requirements.
-     * Asked again, the quiz's cover not used yet is closed (D-Q96-3).
-     *
-     * @param language          the cover's text's: {@code en}, {@code zh} or {@code ja}
-     * @param aiNoticeVersionNo the version of the AI notice the page showed, when the sponsor accepts it now
-     * @param style             {@code ILLUSTRATION} (none given) or {@code GRAPHIC}
-     * @param requirements      what the picture should show or look like
-     * @param titleOverlay      whether an illustration shows a title (none given: yes)
-     * @param titleText         the text the cover shows (none: Claude words the quiz's title)
-     */
-    public record CoverRequestInput(@NotNull UUID quizId, @NotNull @Pattern(regexp = "en|zh|ja") String language,
-        @Positive Integer aiNoticeVersionNo, @Pattern(regexp = "ILLUSTRATION|GRAPHIC") String style,
-        @Size(max = AiCoverJob.MAX_REQUIREMENTS) String requirements, Boolean titleOverlay,
-        @Size(max = 200) String titleText) implements Requested {
-
-        public CoverRequestInput(UUID quizId, String language, Integer aiNoticeVersionNo) {
-            this(quizId, language, aiNoticeVersionNo, null, null, null, null);
-        }
-    }
 
     /**
      * Candidate translations of a quiz's text (Q73d-1) into one of its other languages.
@@ -197,10 +172,6 @@ public final class AiProcesses {
 
         Integer aiNoticeVersionNo();
     }
-
-    /** The chosen candidate cover ({@code 1..3}) of a ready cover job of the quiz. */
-    public record CoverAcceptInput(@NotNull UUID aiJobId, @NotNull UUID quizId,
-        @NotNull @Min(1) @Max(CoverDesigns.COVERS) Integer candidateNo, Long baseRevision) {}
 
     /** @param estimatedTokens what the job may use at most, counted against the month until it finishes */
     public record RequestOutput(String aiJobId, String externalJobId, String status, long estimatedTokens) {}
@@ -247,8 +218,6 @@ public final class AiProcesses {
     static final String MATERIAL_ROWS = "materialRows";
     static final String QUESTION_ROWS = "questionRows";
     static final String GLOBAL_OPEN = "globalOpen";
-    /** Q96: the quiz's ready cover jobs of the caller, closed when a new cover is asked for. */
-    static final String READY_COVERS = "readyCovers";
     static final String FIRST_READ = "firstRead";
     static final String ESTIMATE = "estimate";
     static final String KIND = "kind";
@@ -268,14 +237,6 @@ public final class AiProcesses {
         return requestProcess(REQUEST, RequestInput.class,
             "Asks the AI for candidate questions of one of the sponsor's quizzes, to review.", AiQuestionsJob.TYPE,
             Loads.QUESTIONS, zone, ctx -> prepare(ctx, userKeys, pdfs));
-    }
-
-    /** Candidate covers (Q8b): the same checks, locks and limits as questions, of the job {@value AiCoverJob#TYPE}. */
-    public static ProcessDefinition<CoverRequestInput, RequestOutput, ProcessContext> coverRequest(ZoneId zone,
-        AiUserKeys userKeys) {
-        return requestProcess(COVER_REQUEST, CoverRequestInput.class,
-            "Asks the AI for candidate covers of one of the sponsor's quizzes, to choose from.", AiCoverJob.TYPE,
-            Loads.NONE, zone, ctx -> prepareCover(ctx, userKeys));
     }
 
     /**
@@ -349,15 +310,6 @@ public final class AiProcesses {
             }
             pb.compute("Prepare the request", (metadata, ctx) -> prepare.accept(ctx));
             limited(pb, zone);
-            if (AiCoverJob.TYPE.equals(jobType)) {
-                // Q96 (D-Q96-3): asking again closes the quiz's cover not used yet, under the same lock.
-                pb.step("Load the quiz's cover not used yet", QueryEntities.<ProcessContext>of(
-                    QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder().where(and(
-                        new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
-                        new QueryPredicate.Eq("quizId", ctx.get(QuizEditing.QUIZ_ID)),
-                        new QueryPredicate.Eq("kind", QbAi.KIND_COVER),
-                        new QueryPredicate.Eq("status", QbAi.READY))).limit(100).build(), READY_COVERS));
-            }
             StartExternalJob.Spec<ProcessContext> start = StartExternalJob.<ProcessContext>of(jobType,
                     ctx -> ctx.get(JOB_INPUT))
                 .reference(ctx -> loads == Loads.PUBLICATION ? "publication:" + ctx.get(PUBLICATION_ID)
@@ -368,18 +320,6 @@ public final class AiProcesses {
             }
             pb.step("Start the job", start)
                 .compute("Record the job", (metadata, ctx) -> record(ctx, zone));
-            if (AiCoverJob.TYPE.equals(jobType)) {
-                pb.compute("Close the cover not used", (metadata, ctx) -> {
-                    for (EntityInstance job : rows(ctx, READY_COVERS)) {
-                        Map<String, Object> values = new LinkedHashMap<>();
-                        values.put("status", QbAi.DISCARDED);
-                        values.put("candidates", null);
-                        values.put("closedAt", ctx.opTime());
-                        clearCovers(values, job);
-                        ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
-                    }
-                });
-            }
         });
     }
 
@@ -608,61 +548,6 @@ public final class AiProcesses {
             job.count(), job.difficulty(), job.title(), job.intro(), job.materials(), job.existingStems(),
             job.userKey(), reservedInput);
         prepared(ctx, common, QbAi.KIND_QUESTIONS, reserved, params, size, estimate, pdfs);
-    }
-
-    static void prepareCover(ProcessContext ctx, AiUserKeys userKeys) {
-        CoverRequestInput input = ctx.get(INPUT, CoverRequestInput.class);
-        Common common = common(ctx);
-        EntityInstance quiz = QuizEditing.quiz(ctx);
-        AiSettings settings = common.settings();
-        String style = input.style() == null ? AiCoverJob.ILLUSTRATION : input.style();
-        String requirements = blankToNull(input.requirements());
-        String titleText = blankToNull(input.titleText());
-        if (requirements != null && !plain(requirements)) {
-            common.problems().add(new Violation("requirements", AiCodes.COVER_TEXT, "The requirements hold "
-                + "control or invisible characters"));
-        }
-        if (titleText != null && !CoverDesigns.text(titleText.replaceAll("\\s+", " "))) {
-            common.problems().add(new Violation("titleText", AiCodes.COVER_TEXT, "The cover text is at most "
-                + CoverDesigns.MAX_TEXT + " plain characters", Map.of("max", CoverDesigns.MAX_TEXT)));
-        }
-        boolean overlay = !Boolean.FALSE.equals(input.titleOverlay());
-        AiCoverJob.Input job = new AiCoverJob.Input(settings.model(), AiCoverJob.ILLUSTRATION.equals(style)
-            ? AiCoverJob.ILLUSTRATION_EFFORT : settings.effort(), input.language(), quiz.get("title"),
-            quiz.get("intro"), userKeys.of(ctx.request().actorId()), null, style, requirements, overlay,
-            titleText == null ? null : titleText.replaceAll("\\s+", " "));
-        String user = AiCoverJob.ILLUSTRATION.equals(style) ? AiCoverPrompt.illustrationUser(job, JSON)
-            : AiCoverPrompt.user(job, JSON);
-        String system = AiCoverJob.ILLUSTRATION.equals(style) ? AiCoverPrompt.ILLUSTRATION_SYSTEM
-            : AiCoverPrompt.SYSTEM;
-        int size = Math.max(bytes(system) + bytes(user), bytes(JSON.writeValueAsString(job)));
-        if (size > ClaudeApi.MAX_INPUT_BYTES) {
-            common.problems().add(new Violation(null, AiCodes.INPUT_TOO_LARGE, "The request is " + size
-                + " bytes, more than " + ClaudeApi.MAX_INPUT_BYTES, Map.of("size", size, "max",
-                ClaudeApi.MAX_INPUT_BYTES)));
-        }
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("count", CoverDesigns.COVERS);
-        params.put("language", input.language());
-        params.put("style", style);
-        params.put("titleOverlay", overlay);
-        params.put("requirements", requirements);
-        params.put("titleText", job.titleText());
-        long reservedInput = AiLimits.reservedInput(size, 0);
-        params.put("reservedInputTokens", reservedInput);
-        prepared(ctx, common, QbAi.KIND_COVER, job.reserved(reservedInput), params, size,
-            AiLimits.estimate(size, AiCoverJob.maxTokens(style), 0), List.of());
-    }
-
-    /** Text a sponsor wrote for the AI: line breaks allowed, no other control, format or private use character. */
-    static boolean plain(String text) {
-        return text.codePoints().noneMatch(cp -> (Character.isISOControl(cp) && cp != '\n' && cp != '\r'
-            && cp != '\t') || Character.getType(cp) == Character.FORMAT
-            || Character.getType(cp) == Character.PRIVATE_USE);
-    }
-
-    private static String blankToNull(String text) {
-        return text == null || text.isBlank() ? null : text.strip();
     }
 
     /**
@@ -1063,72 +948,21 @@ public final class AiProcesses {
     }
 
     /**
-     * A cover job's result: the designs drawn and the files the platform stored for them ({@code cover-1..n}). Kept for
-     * the sponsor's choice ({@code READY}, the pictures referred to from the job so that the sweep keeps them), or none
-     * drawn ({@code FAILED}, {@link AiCodes#NO_CANDIDATES}).
+     * A cover job's result (Q98a: AI covers were withdrawn): a job of before the withdrawal that the platform still
+     * completed is charged and closed as failed, its pictures referred to by nothing (the sweep takes them).
      */
     private static void completeCover(ProcessContext ctx, ExternalJobCompletion completion, EntityInstance job,
         ClaudeApi.Usage usage, String month) {
-        AiCoverJob.Result result = completion.result(AiCoverJob.Result.class);
-        BigDecimal cost = AiCost.of(job.get("model"), result.servedModel(), usage, settings(ctx).price());
+        BigDecimal cost = AiCost.of(job.get("model"), (String) job.get("model"), usage, settings(ctx).price());
         Map<String, Object> values = finished(usage, cost, completion.attempts(), completion.finishedTime());
-        boolean failed = false;
         if (QbAi.QUEUED.equals(job.get("status"))) {
-            values.put("servedModel", result.servedModel());
-            List<Map<String, Object>> covers = new ArrayList<>();
-            int invalid = result.invalid();
-            if (result.illustration()) {
-                // Q96: one picture, its title checked again as stored (review L3, as for the designs).
-                UUID file = completion.files().get(AiCoverJob.fileKey(1));
-                AiCoverJob.Overlay overlay = result.overlay();
-                String text = overlay == null ? null : overlay.text();
-                String placement = overlay == null ? null : overlay.placement();
-                if (file != null && (text == null || CoverDesigns.text(text))
-                    && (placement == null || CoverRenderer.PLACEMENTS.contains(placement))) {
-                    values.put(QbAi.COVER_FIELDS.getFirst(), file);
-                    Map<String, Object> cover = new LinkedHashMap<>();
-                    cover.put("no", 1);
-                    cover.put("style", AiCoverJob.ILLUSTRATION);
-                    cover.put("text", text);
-                    cover.put("placement", placement);
-                    cover.put("fileId", file.toString());
-                    covers.add(cover);
-                } else {
-                    invalid++;
-                }
-            }
-            for (int i = 0; i < result.designs().size(); i++) {
-                UUID file = completion.files().get(AiCoverJob.fileKey(i + 1));
-                CoverDesigns.Design design = result.designs().get(i);
-                // Checked again as stored: the handler's check is not the last word (review L3).
-                if (file == null || covers.size() >= CoverDesigns.COVERS || design == null
-                    || CoverDesigns.palette(design.palette()) == null || !CoverDesigns.layout(design.layout())
-                    || !CoverDesigns.motif(design.motif()) || !CoverDesigns.text(design.text())) {
-                    invalid++;
-                    continue;
-                }
-                values.put(QbAi.COVER_FIELDS.get(covers.size()), file);
-                covers.add(CoverDesigns.stored(covers.size() + 1, design, file.toString()));
-            }
-            values.put("invalidCount", BigDecimal.valueOf(invalid));
-            values.put("candidateCount", BigDecimal.valueOf(covers.size()));
-            if (covers.isEmpty()) {
-                failed = true;
-                values.put("status", QbAi.FAILED);
-                values.put("failureCode", AiCodes.NO_CANDIDATES);
-                values.put("failureMessage", "None of the " + invalid + " cover designs could be drawn");
-            } else {
-                Map<String, Object> document = new LinkedHashMap<>();
-                document.put("schema", 2);
-                document.put("style", result.illustration() ? AiCoverJob.ILLUSTRATION : AiCoverJob.GRAPHIC);
-                document.put("covers", covers);
-                values.put("status", QbAi.READY);
-                values.put("candidates", JSON.writeValueAsString(document));
-                values.put("expiresAt", completion.finishedTime().plus(Duration.ofDays(settings(ctx).expireDays())));
-            }
+            values.put("status", QbAi.FAILED);
+            values.put("failureCode", AiCodes.COVER_WITHDRAWN);
+            values.put("failureMessage", "AI covers were withdrawn");
+            clearCovers(values, job);
         }
         ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
-        addUsage(ctx, completion.requestedBy(), month, usage, cost, failed);
+        addUsage(ctx, completion.requestedBy(), month, usage, cost, true);
         ctx.put(OUTPUT, new JobOutput(String.valueOf(job.id()), (String) values.getOrDefault("status",
             job.get("status"))));
     }
@@ -1635,86 +1469,6 @@ public final class AiProcesses {
             }));
     }
 
-    // ---- a cover chosen ---------------------------------------------------------------------------------------------
-
-    /**
-     * {@value #COVER_ACCEPT}: under {@code qb.quiz:<quiz>} then {@code qb.ai:<sponsor>}, the chosen candidate of the
-     * sponsor's ready cover job becomes the quiz's cover through the quiz's own editing (the next revision, unversioned
-     * changes, the file the quiz owner's upload), and the quiz {@code aiGenerated}; the job is closed and its pictures
-     * no longer referred to, so the ones not chosen go with the file sweep.
-     */
-    public static ProcessDefinition<CoverAcceptInput, EditOutput, ProcessContext> coverAccept() {
-        return ProcessDefinition.define(COVER_ACCEPT, 1, CoverAcceptInput.class, EditOutput.class,
-            ProcessContext.class, pb -> pb
-                .description("Makes the AI cover the sponsor chose the quiz's cover.")
-                .permissions(QbPermissions.AI_USE, QbPermissions.CONTENT_WRITE)
-                .requiresVerifiedEmail()
-                .steps(CallerChecks::refuseBanned)
-                .contextFactory((start, input) -> {
-                    ProcessContext ctx = new ProcessContext(start);
-                    ctx.put(INPUT, input);
-                    ctx.put(QuizEditing.QUIZ_ID, input.quizId());
-                    return ctx;
-                })
-                .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
-                .steps(QuizEditing::lockAndLoad)
-                .step("Lock the sponsor's AI requests", HoldLock.<ProcessContext>exclusive(
-                    ctx -> QbAi.lockName(ctx.request().actorId())))
-                .step("Load the job", loadJob(ctx -> ctx.get(INPUT, CoverAcceptInput.class).aiJobId()))
-                .steps(b -> QuizEditing.loadFiles(b, ctx -> {
-                    EntityInstance job = first(ctx, JOB);
-                    List<UUID> files = new ArrayList<>();
-                    if (job != null) {
-                        QbAi.COVER_FIELDS.forEach(field -> {
-                            if (job.get(field) != null) {
-                                files.add(QuizEditing.uuid(job.get(field)));
-                            }
-                        });
-                    }
-                    return files;
-                }))
-                .compute("Use the cover", (metadata, ctx) -> acceptCover(ctx)));
-    }
-
-    static void acceptCover(ProcessContext ctx) {
-        CoverAcceptInput input = ctx.get(INPUT, CoverAcceptInput.class);
-        EntityInstance quiz = QuizEditing.quiz(ctx);
-        EntityInstance job = own(ctx);
-        if (!input.quizId().toString().equals(String.valueOf((Object) job.get("quizId")))) {
-            throw new EntityNotFoundException("AI job not found");
-        }
-        requireKind(job, QbAi.KIND_COVER);
-        if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
-            return;
-        }
-        requireReady(ctx, job);
-        int no = input.candidateNo();
-        Object chosen = no <= QbAi.COVER_FIELDS.size() ? job.get(QbAi.COVER_FIELDS.get(no - 1)) : null;
-        if (chosen == null) {
-            throw new BusinessRuleViolationException(List.of(new Violation("candidateNo", AiCodes.CANDIDATE_UNKNOWN,
-                "Candidate " + no + " is not one of the job's", Map.of("candidateNo", no))));
-        }
-        UUID file = QuizEditing.uuid(chosen);
-        // The platform stored the pictures as the requester's uploads (decision D50): the owner's, as for any cover.
-        QuizEditing.requireOwnFile(ctx, quiz.get("ownerId"), "candidateNo", file, quiz.get("cover"));
-        if (ctx.hasViolations()) {
-            return;
-        }
-        Map<String, Object> heading = new LinkedHashMap<>();
-        heading.put("cover", file);
-        heading.put("aiGenerated", true);
-        QuizEditing.touch(ctx, quiz, heading, null, List.of());
-
-        Map<String, Object> jobValues = new LinkedHashMap<>();
-        jobValues.put("status", QbAi.ACCEPTED);
-        jobValues.put("candidates", null);
-        jobValues.put("acceptedCount", BigDecimal.ONE);
-        jobValues.put("closedAt", ctx.opTime());
-        clearCovers(jobValues, job);
-        ctx.changes().update(QbAi.JOB, job.id(), job.version(), jobValues);
-    }
-
-    /** A closed cover job refers to its pictures no more: the sweep takes the ones not chosen. */
     // ---- translations (Q73d-1) ---------------------------------------------------------------------------------
 
     /**

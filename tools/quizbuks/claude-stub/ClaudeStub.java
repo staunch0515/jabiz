@@ -26,9 +26,7 @@ import java.util.regex.Pattern;
  *       English otherwise, with a made-up usage (about a token per four characters of the request);</li>
  *   <li>a translation request ("Target language: ...", Q73d-1) gets "译文 n" for each numbered text, and a
  *       comparison ("Number of pairs: n", Q73d-2) finds every pair to mean the same;</li>
- *   <li>a request for a cover ("Number of covers: 1", Q8b) gets a design of the catalogue, and one for an
- *       illustration ("Style: illustration", Q96) a small fixed SVG scene, which the server draws; PDF materials
- *       (document blocks) are accepted and not read;</li>
+ *   <li>PDF materials (document blocks) are accepted and not read;</li>
  *   <li>{@code POST /v1/messages/count_tokens} (Q8b: requests with PDFs are counted before they are sent) answers
  *       {@code input_tokens}: a token per four characters of the request without its files (and without the output
  *       limit, user id and fallback, which the count does not take), and 1,500 a document; the paid call of the same
@@ -85,27 +83,6 @@ public final class ClaudeStub {
             String model = modelMatch.find() ? modelMatch.group(1) : "claude-opus-5-5";
             if (body.contains("[refuse]")) {
                 send(exchange, 200, message(model, "refusal", null, in, 0));
-                return;
-            }
-            if (body.contains("Number of covers: ")) {
-                // Q8b: a design of the catalogue (one since Q96); the server draws it.
-                String text = japanese(body) ? "資料のクイズ" : "Quiz cover";
-                String covers = "{\"covers\":["
-                    + "{\"palette\":\"ocean\",\"layout\":\"center\",\"motif\":\"circles\",\"text\":\"" + text + " 1\"}]}";
-                send(exchange, 200, message(model, "end_turn", covers, in, 150));
-                return;
-            }
-            if (body.contains("Style: illustration")) {
-                // Q96: a small fixed scene as SVG; the server reads it and puts the title on it.
-                String text = japanese(body) ? "資料のクイズ" : "Quiz cover";
-                String svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 630'>"
-                    + "<defs><linearGradient id='sky' x1='0' y1='0' x2='0' y2='1'>"
-                    + "<stop offset='0' stop-color='#1e3a8a'/><stop offset='1' stop-color='#60a5fa'/></linearGradient>"
-                    + "</defs><rect width='1200' height='630' fill='url(#sky)'/>"
-                    + "<circle cx='950' cy='150' r='80' fill='#fde68a'/>"
-                    + "<path d='M0 470 Q300 380 600 470 T1200 470 V630 H0 Z' fill='#166534'/></svg>";
-                String answer = "{\"svg\":\"" + svg + "\",\"text\":\"" + text + "\",\"placement\":\"bottom\"}";
-                send(exchange, 200, message(model, "end_turn", answer, in, 900));
                 return;
             }
             if (body.contains("Number of pairs: ")) {

@@ -110,9 +110,6 @@ jabiz:
       # candidates writes up to 20 questions.
       "[QB_AI_QUESTIONS_REQUEST]": { per-user: 5, period: 1m }
       "[QB_AI_ACCEPT]": { per-user: 30, period: 1m }
-      # Q8b: covers are asked for as questions are, and a sponsor picks one of three.
-      "[QB_AI_COVER_REQUEST]": { per-user: 5, period: 1m }
-      "[QB_AI_COVER_ACCEPT]": { per-user: 30, period: 1m }
       # Q73d-1: translations are asked for as questions are; accepting writes reviewed segments.
       "[QB_AI_TRANSLATE_REQUEST]": { per-user: 5, period: 1m }
       "[QB_AI_TRANSLATION_ACCEPT]": { per-user: 30, period: 1m }

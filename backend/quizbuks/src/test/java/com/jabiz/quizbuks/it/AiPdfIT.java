@@ -299,8 +299,7 @@ class AiPdfIT extends AiItSupport {
                 List<String> forCovers = quizWithArticle(token, "Covers " + UUID.randomUUID(), "B.");
                 List<Map.Entry<String, Map<String, Object>>> asks = List.of(
                     Map.entry(AiProcesses.REQUEST, requestInput(forQuestions.get(0), List.of(forQuestions.get(1)), 1)),
-                    Map.entry(AiProcesses.COVER_REQUEST, body("quizId", forCovers.get(0), "language", "en",
-                        "aiNoticeVersionNo", noticeVersion())));
+                    Map.entry(AiProcesses.REQUEST, requestInput(forCovers.get(0), List.of(forCovers.get(1)), 1)));
                 CountDownLatch go = new CountDownLatch(1);
                 List<CompletableFuture<long[]>> calls = new ArrayList<>();
                 List<Map<String, Object>> answers = java.util.Collections.synchronizedList(new ArrayList<>());

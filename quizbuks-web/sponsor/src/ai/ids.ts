@@ -8,9 +8,6 @@
 export const AI_PROCESS = {
   request: 'QB_AI_QUESTIONS_REQUEST',
   accept: 'QB_AI_ACCEPT',
-  /** Candidate covers (Q8b, M-25), and the one chosen. */
-  coverRequest: 'QB_AI_COVER_REQUEST',
-  coverAccept: 'QB_AI_COVER_ACCEPT',
   /** Candidate translations of the quiz's text (Q73d-1), and the reviewed ones written. */
   translateRequest: 'QB_AI_TRANSLATE_REQUEST',
   translationAccept: 'QB_AI_TRANSLATION_ACCEPT',
@@ -44,18 +41,13 @@ export const AI_LIMITS = {
   /** A PDF material's largest size and all PDFs' pages as the server sends them by default (`quizbuks.ai.pdf.*`). */
   maxPdfMb: 10,
   maxPdfPages: 100,
-  /** Candidate covers of one request (`CoverDesigns.COVERS`): one since Q96, asked again for another. */
-  covers: 1,
-  /** A cover's requirements and text at most (`AiCoverJob.MAX_REQUIREMENTS`, `CoverDesigns.MAX_TEXT`), in characters. */
-  coverRequirements: 500,
-  coverText: 40,
   /** How often a running job is looked at, and for how long at most. */
   pollMs: 5_000,
   pollForMs: 5 * 60_000,
 } as const
 
 /** The kinds of AI jobs (`QbAi.KIND_*`): the template is read for one at a time. */
-export const AI_KINDS = { questions: 'QUESTIONS', cover: 'COVER', translation: 'TRANSLATION',
+export const AI_KINDS = { questions: 'QUESTIONS', translation: 'TRANSLATION',
   publicationTexts: 'PUBLICATION_TEXTS' } as const
 
 export const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD'] as const

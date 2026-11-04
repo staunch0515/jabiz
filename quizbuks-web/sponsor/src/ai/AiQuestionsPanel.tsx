@@ -434,7 +434,7 @@ function Review({ job }: { job: AiJob }) {
 /** The text of a failed job, in the console's language. */
 export function failureText(t: (key: string) => string, code: string | null): string {
   const known = ['QB_AI_REFUSED', 'QB_AI_TRUNCATED', 'QB_AI_NO_CANDIDATES', 'QB_AI_INPUT_TOO_LARGE',
-    'QB_AI_PDF_TOO_LONG', 'QB_AI_PDF_UNREADABLE', 'QB_AI_COVER_FONT']
+    'QB_AI_PDF_TOO_LONG', 'QB_AI_PDF_UNREADABLE']
   return code && known.includes(code) ? t(`ai.failure.${code}`) : t('ai.failure.generic')
 }
 

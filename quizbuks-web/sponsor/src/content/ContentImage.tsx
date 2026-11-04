@@ -27,7 +27,7 @@ export function ContentImage({ fileId, width }: { fileId: string; width: number 
 
 /**
  * A small picture (a cover in a list): nothing while loading or when it cannot be read. Decorative unless given an
- * `alt` (an AI cover to choose from, Q8b).
+ * `alt`.
  */
 export function Thumbnail({ fileId, width, className, alt }: { fileId: string; width: number; className?: string;
   alt?: string }) {

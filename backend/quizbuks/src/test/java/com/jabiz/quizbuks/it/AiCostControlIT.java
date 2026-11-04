@@ -212,8 +212,8 @@ class AiCostControlIT extends AiItSupport {
         Map<String, Object> retrying = request(token, questions.get(0), List.of(questions.get(1)), 1);
         runJobs();
         assertThat(attempts(retrying)).isEqualTo(1);
-        // And a cover job, queued: both job types are held by the same switch.
-        Map<String, Object> queued = requestCovers(token, covers.get(0));
+        // And another question job, queued: both are held by the same switch.
+        Map<String, Object> queued = request(token, covers.get(0), List.of(covers.get(1)), 1);
         param(QbParams.AI_ENABLED, "false");
         try {
             int calls = CLAUDE.requests(MESSAGES).size() + CLAUDE.requests(COUNT_TOKENS).size();

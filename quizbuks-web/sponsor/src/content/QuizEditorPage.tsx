@@ -31,7 +31,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleCheck, Copy, MoreHorizontal, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AiCoverPanel } from '../ai/AiCoverPanel'
 import { AiQuestionsPanel } from '../ai/AiQuestionsPanel'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
@@ -338,7 +337,6 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
           </TabsList>
           <TabsContent value="quiz" className="flex flex-col gap-6 pt-4">
             <HeadingForm key={generation} quiz={quiz} />
-            <AiCoverPanel quiz={quiz} />
           </TabsContent>
           <TabsContent value="questions" className="flex flex-col gap-4 pt-4">
             {/* AI does not write a survey's questions (Q12, D-Q12-9). */}

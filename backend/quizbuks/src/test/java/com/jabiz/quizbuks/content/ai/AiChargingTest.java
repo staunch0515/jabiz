@@ -50,7 +50,7 @@ class AiChargingTest {
     @Test
     void aCoverAttemptIsChargedItsReservationAndTheCoversOutput() {
         long reserved = AiLimits.reservedInput(900, 0);
-        EntityInstance job = job(QbAi.KIND_COVER, ClaudeService.OPUS, 900, params(CoverDesigns.COVERS, reserved));
+        EntityInstance job = job(QbAi.KIND_COVER, ClaudeService.OPUS, 900, params(1, reserved));
         ClaudeApi.Usage each = AiProcesses.unrecordedAttempt(job);
         assertThat(each).isEqualTo(new ClaudeApi.Usage(reserved, AiCoverJob.MAX_TOKENS));
         assertThat(each.outputTokens()).isEqualTo(8_000);
@@ -119,13 +119,9 @@ class AiChargingTest {
     @Test
     void theFramingCoversTheSystemPromptsAndSchemasWithAMargin() {
         long margin = 200;
-        for (String kind : new String[] {"questions", "covers"}) {
-            String system = "questions".equals(kind) ? AiPrompt.SYSTEM : AiCoverPrompt.SYSTEM;
-            Map<String, Object> schema = "questions".equals(kind) ? AiPrompt.schema() : AiCoverPrompt.schema();
-            long bytes = system.getBytes(StandardCharsets.UTF_8).length
-                + JSON.writeValueAsString(schema).getBytes(StandardCharsets.UTF_8).length;
-            assertThat(AiLimits.FRAMING_TOKENS).as(kind + ": " + bytes + " bytes of system prompt and schema")
-                .isGreaterThanOrEqualTo((bytes + 2) / 3 + margin);
-        }
+        long bytes = AiPrompt.SYSTEM.getBytes(StandardCharsets.UTF_8).length
+            + JSON.writeValueAsString(AiPrompt.schema()).getBytes(StandardCharsets.UTF_8).length;
+        assertThat(AiLimits.FRAMING_TOKENS).as("questions: " + bytes + " bytes of system prompt and schema")
+            .isGreaterThanOrEqualTo((bytes + 2) / 3 + margin);
     }
 }

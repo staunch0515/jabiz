@@ -388,7 +388,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **告警**：`jabiz.job.run{job="qb.analytics", result="PARTIAL"}` 连续出现（某一项一直失败：看任务项的错误，常见为读取超时或约束）；最近一次运行早于 30 分钟（商家页面的"最近更新"随之变旧）。运行时间见 `jabiz.process{process="QB_ANALYTICS_ITEM"}`，热门发布积压时变长。
 - 日志中的 `Analytics: the counters of publication … went down` 表示计数被别的方式改动（计数只增不减），该发布本次不写；`… recounted … finalized anyway` 表示结束一天后整体重算与计数仍不一致，按重算的值定稿：两者都应调查。
 
-### 7.8 AI 生成题目与封面（Q8a、Q8b、Q96）
+### 7.8 AI 生成题目（Q8a、Q8b；封面 Q98a 撤销）
 
 - **开关与限额**（后台 `/qb/ai`，受控参数）：`qb.ai.enabled`（缺省 false）、`qb.ai.model`、`qb.ai.effort`、`qb.ai.sponsor.daily-jobs`（20）、`qb.ai.sponsor.monthly-tokens`（200 万）、`qb.ai.global.monthly-tokens`（5 000 万）；普通参数 `qb.ai.candidates.expire-days`（7）与只用于估算的价格 `qb.ai.price.*`。限额在 `qb.ai:<商家>` → `qb.ai:*` 锁内按已记录的用量与未结束作业的预估检查（全体上限也加上所有商家未结束作业的预估）；一个作业的预估是 3 次尝试各自完整的输入与所要的全部输出（`max_tokens` 随题数：4 000 + 600 / 题，至多 16 000；effort `high` 时一次至多 10 题）。
 - **作业** `qb.ai.questions`：每次尝试至多 5 分钟（请求本身至多 `QB_AI_REQUEST_TIMEOUT`，缺省也是上限 2 分钟）、3 次尝试（429、408、5xx、529、超时、断线与回退忙时的拒答重试，退避 10 秒起、至多 2 分钟；其他拒答、截断、其他 4xx 立即失败）、全实例并发 `QB_AI_MAX_CONCURRENCY`（缺省 4）。**这个并发是每种作业各自的**：题目 `qb.ai.questions` 与封面 `qb.ai.cover` 各至多这么多，所以同时打到提供方的调用至多是两者之和（缺省 4 + 4 = 8）；按提供方的速率限制与堆（见下面"PDF 资料"）取值时按和计。提供方不按幂等键去重：重试可能重复计费，用量按每次尝试记录，也计入限额；**没有得到回答的尝试**（超时、断线、回答过大）按预估计入（带 PDF 的请求按提供方数出的输入，其他按文字的估计，加所要的全部输出），因为提供方可能已为没人读到的回答计费。
@@ -419,12 +419,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
   **已知的偏低**：有回退模型的请求（只有不带文档的文字请求，Haiku 除外）没有得到回答时只计一次输入，而提供方的回退会把输入再运行一次、可能计两次；这一缺口是接受的，由提供方的支出上限兜底。
   提供方仍可能对重试重复计费，**提供方控制台上的支出上限仍是最后的防线**（上线前设好，§1.3）。
 - **告警**：`jabiz.external_job` 中 `qb.ai.questions` 与 `qb.ai.cover` 的失败率；某商家或全体本月用量接近上限（`qb.admin.ai-usage`）。
-- **封面（Q8b；Q96）**：作业 `qb.ai.cover`（与题目同样的尝试、重试、并发配置与限额，`/qb/ai` 的"种类"列区分）。每次请求**一张**，商家可写要求（≤ 500 字）与封面文字（≤ 40 字），不满意就再请求一张（同一模版未使用的上一张随新请求关闭）。两种风格：
-  - **插画**（缺省，Q96）：Claude 写 SVG（effort `low`、`max_tokens` 12 000，单次请求在平台 2 分钟的时限内），服务器以禁止 DTD 的解析器读入、只画白名单内的元素（`CoverSvg`：没有脚本、外部资源、嵌入图片与文字），标题由服务器以字体叠加在半透明底带上。SVG 不合格算"回答不是所要的文档"，按重试规则重试（计费）、3 次后 `QB_AI_BAD_RESPONSE`。
-  - **图形**（Q8b）：Claude 从固定的图库（8 种配色、4 种版式、7 种图形）选一个设计，文字为商家给的或 Claude 写的。
-
-  两者都由服务器以 Java2D 画成 1200 × 630 的 PNG，经平台的文件输出（D50）按 `qb.content.image` 策略以商家为上传者登记（按内容判定类型、重新编码）。
-  中日文字体取 `JABIZ_REPORTS_PDF_FONTS`（镜像已设）：缺少时要显示含中日文的文字的封面在调用提供方之前即以 `QB_AI_COVER_FONT` 失败（不计费）。候选图在作业 `READY` 期间由作业的 `cover1` 引用、不被清扫；商家使用（`QB_AI_COVER_ACCEPT`，经模版编辑写入 `cover`、`aiGenerated`）、丢弃、再请求或过期后，未用的图不再被引用，由平台的 `FILE_SWEEP` 在 `jabiz.files.orphan-after`（24 小时）后删除。
+- **封面**：AI 生成封面已撤销（Q98a，`plans/Q98-covers.md`）。作业类型 `qb.ai.cover` 仍登记，只为让撤销前排队的作业结束：处理器不调用 Claude，以 `QB_AI_COVER_WITHDRAWN` 失败（不计费），之后的版本删去。
   **作业完成迟到的风险**：画好的图在作业结束时已登记为文件，到 QuizBuks 的完成流程（订阅作业结束事件）把它们写进作业的三列之前没有任何引用。事件投递停住（实例长时间停机、投递故障）超过 `orphan-after` 时，清扫可能先删掉这些图，之后的完成流程记下的是已删除的文件：作业显示为就绪，但图片显示不出、选定被拒绝（商家丢弃后重新请求即可，用量照常计入）。恢复投递后不要手动重放早于 `orphan-after` 的封面完成；长时间停机后先确认事件已投递，再看 `/qb/ai` 中这段时间结束的封面作业。
 - **PDF 资料（Q8b）**：所选的 PDF 资料作为文件本身发送（平台的文件输入，D50：登记时检查商家能读该文件）：每个至多 `QB_AI_PDF_MAX_BYTES`（缺省 10 MiB，上限 20 MiB），一次请求的全部 PDF 合计至多 20 MiB，按至多 `QB_AI_PDF_MAX_PAGES` 页（缺省 100）预留。
   页数上限必须放得进模型的上下文窗口（三个可选模型都是 100 万 Token）：页数 × 5 000 加上最大的文字输入与输出不得超过它（约 179 页），也不得超过提供方每次请求的 600 页；否则启动检查 `AiPdfLimitsCheck`（类别 `QUIZBUKS`）拒绝启动。
