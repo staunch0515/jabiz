@@ -1,7 +1,7 @@
 /**
  * The sign-in and account building blocks (decision D43; docs/design/12-frontend.md section 12): whole pages and parts
  * of pages for signing in (with a password or a mailed link), signing up, the pages of mailed links, resetting and
- * changing a password, two-step verification and step-up, identity providers and linked provider accounts, the session
+ * changing a password, two-step verification and step-up, passkeys, identity providers and linked provider accounts, the session
  * list, the mail preferences, deleting one's own account, the unsubscribe page and the banners of a signed-in user.
  * They act for the frontend's sign-in entry (`@jabiz/client`), depend on no router (navigation goes through
  * `onNavigate` / `hrefOf` and callbacks) and speak the namespace `auth` in every platform language.
@@ -52,6 +52,8 @@ export type { PushPreferencesProps } from './PushPreferences'
 export { offerMailLanguage } from './offerMailLanguage'
 export { MailUnsubscribe } from './MailUnsubscribe'
 export type { MailUnsubscribeProps, MailUnsubscribeState } from './MailUnsubscribe'
+export { Passkeys, PasskeyConfirmPanel, passkeyDeviceName, useEntryPasskeys } from './Passkeys'
+export type { PasskeysProps } from './Passkeys'
 export { LinkedIdentities } from './LinkedIdentities'
 export type { LinkedIdentitiesProps } from './LinkedIdentities'
 export { AccountDeletion, NoticeChecklist } from './AccountDeletion'

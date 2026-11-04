@@ -9,7 +9,9 @@ import {
   LinkedIdentities,
   MailPreferences,
   MfaSettings,
+  Passkeys,
   SessionList,
+  useEntryPasskeys,
   type OidcProvider,
 } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
@@ -28,6 +30,8 @@ export const ACCOUNT_SECURITY_PATH = '/account/security'
 export interface AccountContext {
   providers: readonly OidcProvider[]
   linked: IdentityLinked | null
+  /** Whether the administration's entry takes passkeys (decision D71). */
+  passkeys: boolean
 }
 
 /**
@@ -49,6 +53,13 @@ export interface AccountSection {
 // eslint-disable-next-line react-refresh/only-export-components
 export const ACCOUNT_SECTIONS: AccountSection[] = [
   { name: 'mfa', title: (t) => t('mfa.title'), Content: () => <MfaSettings className="max-w-2xl" /> },
+  {
+    // Only where the administration's entry takes passkeys (decision D71).
+    name: 'passkeys',
+    title: (t) => t('passkeys.title', { ns: AUTH_NAMESPACE }),
+    Content: ({ passkeys }) => <Passkeys className="max-w-3xl" offered={passkeys} />,
+    shown: ({ passkeys }) => passkeys,
+  },
   {
     name: 'password',
     title: (t) => t('password.changeTitle', { ns: AUTH_NAMESPACE }),
@@ -78,7 +89,7 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
 
 /**
  * The signed-in user's own security (docs/design/10-security.md): two-step verification (section 9), the password
- * (section 15.8, decision D43 item 3), the sessions (section 15.9), the linked provider accounts (section 12, where
+ * (section 15.8, decision D43 item 3), the passkeys (section 15.16, where the entry takes them), the sessions (section 15.9), the linked provider accounts (section 12, where
  * providers are offered) and their mail (docs/design/18-numbering-approvals-tasks.md section 5.6, decision D49), each
  * a section of {@link ACCOUNT_SECTIONS}.
  */
@@ -91,7 +102,9 @@ export default function AccountSecurityPage() {
     queryFn: () => unwrap(api.GET('/api/auth/oidc/providers')),
     staleTime: Infinity,
   })
+  const passkeys = useEntryPasskeys()
   const context: AccountContext = {
+    passkeys,
     providers: Array.isArray(providers.data) ? providers.data : [],
     linked: (location.state as { linked?: IdentityLinked } | null)?.linked ?? null,
   }

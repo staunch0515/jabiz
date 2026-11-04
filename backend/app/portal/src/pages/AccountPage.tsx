@@ -5,6 +5,7 @@ import {
   ChangePasswordForm,
   LinkedIdentities,
   MailPreferences,
+  Passkeys,
   MfaSettings,
   SessionList,
 } from '@jabiz/ui'
@@ -47,6 +48,10 @@ export function AccountPage() {
       <div className="flex flex-col gap-4">
         <h2 className="text-lg font-medium">{tAuth('password.changeTitle')}</h2>
         <ChangePasswordForm />
+      </div>
+      <div className="flex flex-col gap-4">
+        <h2 className="text-lg font-medium">{tAuth('passkeys.title')}</h2>
+        <Passkeys />
       </div>
       <div className="flex flex-col gap-4">
         <h2 className="text-lg font-medium">{t('account.mfa')}</h2>
