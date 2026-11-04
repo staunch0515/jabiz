@@ -5015,3 +5015,15 @@ D17 下匿名不能写任何东西（15 §10）。
 **不做**：只凭通行密钥开户；验证厂商证明（attestation）；Capacitor 的 Android 原生外壳（TWA 即 Chrome，照常可用）。
 
 **17zf 状态**：17zf-a ✅ 已合并（#441）；17zf-b 📝 待评审（分支 `1.3/phase-17zf-passkeys-b`）。
+
+### 17zg 只改文档或前端内容的拉取请求不跑后端检查（需求 2026-11-04，QuizBuks Q95）
+
+**缘由**：需求方 2026-11-04：只改招商网站的 PR 也要等四五十分钟的 `build-application`。
+
+| # | 内容 |
+|---|---|
+| 17zg-1 | `tools/ci-backend-scope.sh`：读改动的路径，全部在 `docs/**` 下或匹配 `.jabiz-ci-no-backend`（写法同 `.jabiz-app-paths`）时输出 `false`；空列表与其他一律 `true` |
+| 17zg-2 | `ci.yml`：`scope` 作业输出 `backend`（拉取请求按合并提交的两个父提交比较；推送与手动运行总是 `true`），`build` 与 `build-application` 以它为条件；测试 `tools/test/ci-backend-scope.test.sh` 在 `app-paths` 作业中运行 |
+| 17zg-3 | 文档：17 §2、根 `CLAUDE.md` §8 |
+
+**17zg 状态**：📝 待评审（分支 `1.3/phase-17zg-ci-scope`）。

@@ -49,6 +49,9 @@ tools/culture/**
 .github/workflows/culture.yml
 ```
 
+- **只改文档或前端内容的 PR 不跑后端检查**（17zg）：CI 的 `scope` 作业以 `tools/ci-backend-scope.sh` 判断拉取请求改动的路径；全部在 `docs/**` 下，
+  或匹配根目录可选文件 `.jabiz-ci-no-backend` 中的模式（写法同 `.jabiz-app-paths`），就跳过 `build` / `build-application`（以及依赖 `build` 的 `e2e`、`compose`）。
+  推送与手动运行总是检查。应用分支自己写 `.jabiz-ci-no-backend` 并把它列入 `.jabiz-app-paths`；只列后端检查确实不读的路径（如 SPA 的 `src/**`，不列 `package.json`：`spaCheck` 读它）。
 - 平台提供 `tools/check-app-paths.sh`：在应用分支上计算 `git diff --name-only --no-renames origin/<线>/platform...HEAD`（自共同祖先以来应用分支的改动，
   改名按删除 + 新增计），任何不匹配 `.jabiz-app-paths` 的路径都报错。合并平台分支带来的改动不计入（它们在共同祖先之后同时出现在两边）。
   - 基准：参数，否则 `$APP_PATHS_BASE`，否则由 `.jabiz-platform-line` 得到 `origin/<线>/platform`；没有该文件的旧分支用 `origin/platform`。
