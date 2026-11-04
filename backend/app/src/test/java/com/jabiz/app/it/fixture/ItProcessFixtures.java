@@ -58,7 +58,12 @@ public final class ItProcessFixtures {
 
     public record ReadsInput(String id, String owner) {}
 
-    public record ReadsOutput(String loadedTitle, int sameOwner, int softNames, long savedVersion) {}
+    /**
+     * @param skippedNames   the rows of a template step whose condition did not hold: none
+     * @param versionUnsaved the ticket's version after a save step whose condition did not hold: still the first
+     */
+    public record ReadsOutput(String loadedTitle, int sameOwner, int softNames, long savedVersion,
+        int skippedNames, long versionUnsaved) {}
 
     public record PriceInput(String sku, long amount, Instant scheduleAt, long scheduledAmount) {}
 
@@ -307,7 +312,9 @@ public final class ItProcessFixtures {
                 ctx.get("ticket", EntityInstance.class).get("title"),
                 ctx.get("sameOwner", List.class).size(),
                 ctx.get("softNames", List.class).size(),
-                ctx.get("reloaded", EntityInstance.class).version()))
+                ctx.get("reloaded", EntityInstance.class).version(),
+                ctx.get("skippedNames", List.class).size(),
+                ctx.get("unsaved", EntityInstance.class).version()))
             .step("Load", LoadEntity.by(ItFixtures.TICKET_DATASET, "id", "ticket"))
             .step("Query", QueryEntities.of(ItFixtures.TICKET_DATASET,
                 ctx -> EntityQuery.builder()
@@ -315,10 +322,16 @@ public final class ItProcessFixtures {
                     .limit(5).build(),
                 "sameOwner"))
             .step("Template", RunTemplate.of("it.soft_names", ctx -> Map.of(), "softNames"))
+            // Only when the input says so (it never does here): the step then sends nothing and leaves an empty list.
+            .step("Template when asked", RunTemplate.when(ctx -> "run".equals(ctx.get("in", ReadsInput.class).id()),
+                "it.soft_names", ctx -> Map.of(), "skippedNames"))
             .compute("Rename", (metadata, ctx) -> {
                 EntityInstance loaded = ctx.get("ticket", EntityInstance.class);
                 ctx.changes().update("ItTicket", loaded.id(), loaded.version(), Map.of("title", "renamed"));
             })
+            // Only when the input says so (it never does here): nothing is committed yet, the reload sees version 1.
+            .step("Save when asked", SaveChanges.when(ctx -> "save".equals(ctx.get("in", ReadsInput.class).id())))
+            .step("Reload before saving", LoadEntity.by(ItFixtures.TICKET_DATASET, "id", "unsaved"))
             .step("Save", SaveChanges.now())
             .step("Reload", LoadEntity.by(ItFixtures.TICKET_DATASET, "id", "reloaded")));
 
