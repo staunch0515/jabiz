@@ -265,6 +265,7 @@ class ProcessEngineIT extends PostgresIntegrationTest {
         assertThat(out.sameOwner()).isEqualTo(2);
         assertThat(out.softNames()).isPositive();
         assertThat(out.skippedNames()).as("a template step whose condition does not hold reads nothing").isZero();
+        assertThat(out.versionUnsaved()).as("a save step whose condition does not hold commits nothing").isEqualTo(1L);
         assertThat(out.savedVersion()).isEqualTo(2L);
         assertThat(query("SELECT f_title FROM it_ticket WHERE f_id = ?", id).getFirst())
             .containsEntry("f_title", "renamed");

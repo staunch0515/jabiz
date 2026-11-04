@@ -38,6 +38,7 @@
 | `RunTemplate.of(templateId, ctx -> 参数, targetKey)` | `List<Map<列名, 值>>`（不检查模板权限，范围照常施加【D11】）；全部行，不按数据视图的 `maxQueryBatchSize`（那只限浏览的一页）截断，超过 `jabiz.process.max-read-rows`（缺省 100,000）即 422 `PROCESS_READ_TOO_LARGE`，不取一部分【D32】 |
 | `RunTemplate.when(条件, templateId, ctx -> 参数, targetKey)` | 同上，但条件（在到达该步时按上下文判断）不成立时不执行、不发语句，结果键为空列表：给只有部分输入才需要的读取（如语句数有预算的热路径）用 |
 | `SaveChanges.now()` | 已提交的状态在 `ctx.changes().saved()`；已有违规时拒绝提交 |
+| `SaveChanges.when(条件)` | 同上，但条件（在到达该步时判断）不成立时什么也不做、变更照常随流程提交：给只有部分输入才需要的提前提交（如子流程要读刚插入的行作来源）用 |
 | `CallProcess.of(name, version, ctx -> 输入, outputKey)` / `CallProcess.latest(...)` / `CallProcess.when(条件, name, version, …)` | 子流程输出（`when` 的条件不成立时不调用）【D14】 |
 | `CallProcess.forEach(name, version, ctx -> 输入列表, outputKey)` | 对列表中每个输入依次调用一次（列表为空时不调用），输出为同序的列表（阶段 13e） |
 | `LoadParams.of(ctx -> 业务时间, targetKey, key…)` | `ParamValues`：各业务参数在该时间点生效的值（04 §9；缺失 → 422 `PARAM_NOT_FOUND`） |
