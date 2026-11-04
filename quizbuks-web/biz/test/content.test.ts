@@ -122,13 +122,15 @@ describe('the rendered pages', () => {
     expect(menu).toContain('href="/biz/zh/pricing/" lang="zh-Hans" hreflang="zh-Hans" data-lang="zh">中文</a>')
   })
 
-  it('name sponsors, not merchants, and offer neither plans nor commissions (Q95)', () => {
+  it('name sponsors, not merchants, and offer neither plans, commissions nor what the first launch does not have (Q95)', () => {
     for (const language of LANGUAGES) {
       for (const page of PAGES) {
         const html = renderPage({ language, page, content: contentOf(language), base: '/biz/', tryQuizzes, assets, siteUrl })
         expect(html).not.toMatch(/商户|加盟店|[Mm]erchant/)
         expect(html).not.toContain('/merchants/')
         expect(html).not.toMatch(/20%|5%|¥9,800|¥49,800/)
+        // Only what the first launch has (Q94): no Kudos, no features announced for later.
+        expect(html).not.toMatch(/学分|Kudos|クドス|按天数|for a number of days|下一场|next challenge/)
       }
     }
   })
