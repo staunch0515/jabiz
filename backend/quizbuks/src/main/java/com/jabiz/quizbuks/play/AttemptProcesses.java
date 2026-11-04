@@ -361,7 +361,10 @@ public final class AttemptProcesses {
                 .steps(b -> Invitations.loadForTaker(b,
                     ctx -> starting(ctx) && PlaySteps.invited(first(ctx, CARD_BEFORE)) ? ctx.get(PUB_KEY) : null))
                 .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle, pick))
-                // Q88b: the fee's posting, with the attempt (a start without a fee posts nothing).
+                // Q88b: the fee's posting, with the attempt (a start without a fee posts nothing). The posting's
+                // source is the attempt, which the ledger finds through its dataset: saved first, only then.
+                .step("Save the attempt for its fee's posting", com.jabiz.runtime.process.steps.SaveChanges
+                    .<ProcessContext>when(ctx -> !ctx.hasViolations() && ctx.contains(FEE_POSTING)))
                 .step("Post the entry fee", CallProcess.<ProcessContext>when(
                     ctx -> !ctx.hasViolations() && ctx.contains(FEE_POSTING), LedgerProcesses.POST, 1,
                     ctx -> ctx.get(FEE_POSTING), FEE_POSTED)));

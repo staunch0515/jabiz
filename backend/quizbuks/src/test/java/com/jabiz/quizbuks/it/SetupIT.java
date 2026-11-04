@@ -248,6 +248,7 @@ class SetupIT extends QbItSupport {
         expected.put("1130", "ASSET");
         expected.put("4120", "REVENUE");
         expected.put("2150", "LIABILITY");
+        expected.put("2170", "LIABILITY");
         assertThat(accounts).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
@@ -338,6 +339,8 @@ class SetupIT extends QbItSupport {
             QbParams.FEE_DEFAULT_BILLING_MODE, "PREPAID", QbParams.FEE_OVERDUE_BLOCK, "true"));
         // Q88a: the sponsors' own certifications, off until the administrators turn them on (D-Q88-7).
         expected.put(QbParams.SPONSOR_ROUNDS_ENABLED, "false");
+        // Q88b: entry fees, off until the administrators turn them on (D-Q88-14).
+        expected.put(QbParams.ENTRY_FEE_ENABLED, "false");
         // Q48e-2: the operators' five plans (fixed fee, platform's share) and their withdrawals.
         expected.putAll(Map.of(QbParams.operatorPlanFee("1"), "0", QbParams.operatorPlanShare("1"), "0.5000",
             QbParams.operatorPlanFee("2"), "20000", QbParams.operatorPlanShare("2"), "0.4000",

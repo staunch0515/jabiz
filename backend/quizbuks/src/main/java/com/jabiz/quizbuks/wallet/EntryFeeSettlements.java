@@ -10,6 +10,7 @@ import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.RunTemplate;
+import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.NotBlank;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -82,6 +83,8 @@ public final class EntryFeeSettlements {
                 ctx.put(POSTING, posting(ctx.opTime(), input(ctx).sponsorId(), String.valueOf(walletId),
                     input(ctx).date(), amount));
             })
+            // The posting's source is the cash wallet row, inserted here for a sponsor without one: saved first.
+            .step("Save the cash account", SaveChanges.<ProcessContext>when(ctx -> ctx.contains(POSTING)))
             .step("Post the settlement", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POSTING),
                 LedgerProcesses.POST, 1, ctx -> ctx.get(POSTING), POSTED)));
     }
