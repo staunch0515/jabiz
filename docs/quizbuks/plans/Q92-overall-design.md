@@ -158,3 +158,98 @@
 2. **平台知识结构图的模板与副本**：运营商能改的范围（条件、有效期、挑战、证书、增删节点与连线；不能改功能目录、不能门控核心功能、授予只能从功能目录选）；副本**沿用模板的节点编号**、自己加的另起编号；模板升级不自动覆盖、运营商逐项采用；答题者的平台图不分运营商；运营商的图在运营商内部四眼生效；发起方只答所属运营商的官方账号出的挑战。
 3. **平台运营商与 Shopify 运营商的结算**：收款方是平台自己，付款记为"内部结算"。
 4. **运营商能否限制自己的发起方只与本运营商的发起方交易**：建议默认可以跨运营商，给运营商一个开关。
+
+## 附录 A 对系统其他地方的修改清单（盘点，2026-11-04）
+
+盘点自代码、模板、迁移、三个前端、后台扩展与测试（只读）。路径简写：J = `backend/quizbuks/src/main/java/com/jabiz/quizbuks`，S = `…/resources/queries/qb`，M = `…/resources/db/migration`，AX = `backend/quizbuks/admin-extension/src`。
+各项在 Q92a（运营商化）与 Q93（通用积木）的细化计划中落实；这里只列"哪里要改、改成什么"。
+
+### A.0 盘点中发现的现状（影响排期）
+
+1. **运营商结算已经包含平台费**：`OperatorSettlements.settle` 的基础 = 奖励抽成（4110）+ Q87 平台费（`qb.system.operator-fees`），同一个分成比例。改为"工具与资源费"时，平台费部分可直接沿用。
+2. **Q47c-2（受众规则真正收费）没有做**：价目表与报价有了，费用种类只有 `MONTHLY`、`MANUAL`，没有 `AUDIENCE`。
+3. **Q88b（付学分答题）没有做**：没有科目 2170、没有 `entryFee`。
+4. **Q89d 中运营商与总部的部分没有做**：异常只有采购单的双方能记，`TAKEN_DOWN` 状态没有流程设置，后台扩展没有权益页面。
+5. **直营发起方从不结算**：`QbFeeCharge.operatorId` 为空、没有归属记录，结算任务只遍历运营商。
+6. **Shopify 店完全在运营商体系之外**：没有审核（`ChannelPublishing` 直接上线）、不走平台费（经 Shopify 的 App 定价 `QbsBilling` 收费）、不结算、运营商看不到。
+7. **官方账号是手工标的**：总部以 `QB_OFFICIAL_PUBLISHER_SET` 把一个已通过的发起方标为官方；每个所有者的数量不受约束（可以多个或没有）。
+8. 有**三个不同的 `"direct"` 常量**（`QbProspects`、`QbCertifications`、`QbAudiencePricing`）与前端的三个副本；`QbOperators.DIRECT="DIRECT"` 是收款方式，与此无关。
+
+### A.1 组织：去掉"直营即总部"（Q92a）
+
+| 范围 | 现在 | 改成 |
+|---|---|---|
+| 运营商记录 | 直营没有记录（Q48 D-Q48-1；`M/V37`） | 建"平台运营商"与"Shopify 运营商"两条普通记录（`QB_SETUP` 建出） |
+| 发起方归属 | `qb_sponsor_operator` 没有行即直营；`SponsorProcesses.operatorOf()` 返回空；`assignByLanguage` 找不到运营商就留在直营；`QB_SPONSOR_OPERATOR_ASSIGN` 的 `operatorId=null` 表示"回到总部" | **归属必填**：入驻即归属（按语言找不到运营商时归平台运营商）；改派只在运营商之间（平台功能）；`null` 不再合法 |
+| 获客认领 | `ProspectProcesses` 只有所有者不是 `direct` 时才归属 | 认领一律归属到获客的运营商 |
+| 直营发起方 | 官方账号手工标（`QB_OFFICIAL_PUBLISHER_SET`，`qb_official_publisher.owner` 可为 `direct`，无唯一约束） | `QB_OPERATOR_CREATE` 自动建出发起方用户、已通过的入驻、不可改派的归属与官方记录；每个运营商**恰好一个**（唯一约束）；去掉或限制 `QB_OFFICIAL_PUBLISHER_SET` |
+| 平台挑战与平台之树 | `S/app/understanding.sql` 取任何所有者最新的轮；参数 `qb.tree.platform-handle` 指向总部官方账号 | 随 Q90 改为按运营商（发起方只答所属运营商的挑战，§11-2） |
+| 审核的去向 | 发起方没有运营商即进总部的队列：入驻（`SponsorProcesses` l.282）、发布（`PublicationEditing.loadSponsorOperator`）、主页（`SponsorPageProcesses` l.304）、数字奖品争议（`DigitalPrizeProcesses` l.197）、举报（`ReportProcesses` l.156"Ask headquarters"）、逾期账单待办（`FeeProcesses` l.773） | 一律进所属运营商的队列；平台只抽查与应急 |
+| 范围 | `OperatorScopes`、`OperatorChecks.ownSponsor/sponsorScope`、`OperatorScope`（`EntryScopeResolver`）对没有运营商的放行或不限定 | 不再有"没有运营商"的分支 |
+| "平台优先"的列 | `qb_publication.takedown_operator_id`、`QbUserBan.operatorId`、发起方商品下架的运营商、`OperatorCodes.HQ_TAKEDOWN` / `HQ_BAN`：为空表示总部做的 | 保留，含义改为"**平台的应急操作**" |
+| 发布卡片与费用 | `QbPublicationCard.operatorId`、`QbFeeCharge.operatorId` 为空即总部 | 总有值（平台运营商、Shopify 运营商或其他） |
+| 后台模板 | `S/admin/sponsors.sql`、`sponsor-stats.sql`、`reports.sql`、`sponsor-pages.sql`、`sponsor-products.sql`、`sponsor-certifications.sql` 的 LEFT JOIN 与"没有即总部"；`operator-reviews.sql` | 去掉直营分支；运营商一侧的模板不用改，只要两条新记录存在 |
+| 计费方式 | `QB_OPERATOR_BILLING_SET`：运营商设自己的发起方、总部设任何发起方 | 运营商设自己的；平台只在应急时改 |
+| 文档 | `operations.md` l.462–474、498、507–513、541、558；`02-design.md` l.78、101、401；Q48 D-Q48-1、5、6、9 | 改写 |
+
+### A.2 总部后台只留监控层；日常经营搬到运营商后台（Q92a）
+
+**搬到运营商（平台运营商的成员用运营商后台做）**：入驻审核（`SponsorReviewPage`）、发布审核（`ReviewsPage`）、主页审核与下架、商品下架与恢复、举报处理（`QB_REPORT_RESOLVE` → 运营商的 `QB_OPERATOR_REPORT_RESOLVE`）、现金奖励争议（`qb.cash.resolve`，**现在只有总部**，待定 A.7-1）、兑换作废与数字奖品争议、每个发起方的奖励方式（`qb.admin.reward-methods`，现在只有总部）、获客（所有者 `direct`）、价目表（`direct` 的那张）、发起方的计费方式、认证的轮次（Q90 后改为挑战发布）、赞助权益的处理、对话（纠纷）。
+
+**留在平台**：运营商管理（建立、成员、方案四眼、改派）、抽查（`OperatorReviewsPage`、`QB_REVIEW_SPOT_CHECK`）、全部财务页面（总览、转账、充值、银行、手工记账、平台费、提现、对账、月报、投资者指标、分录、结算、运营商提现）、全局规则（法律文本、参数与受控变更、受众规则目录、AI 总开关、平台公告）、答题者账号层面（用户与答题记录、推荐、封禁 `qb.admin.users.ban`）、应急（平台暂停发布、下架、封号）。
+
+**角色**：`QbRoles` 中 `QB_ADMIN_CONTENT` 的日常经营权限移给 `QB_OPERATOR`；总部做日常经营的人成为平台运营商的成员。后台扩展的菜单（`AX/index.tsx` l.170–262）"总部内容"一组按上面拆分。
+
+### A.3 Shopify（Q92a）
+
+- 建 Shopify 运营商；Shopify 店的归属：新建以 `QbsShop`（`publisherKind`+`publisherId`）为键的归属，或把 `qb_sponsor_operator` 扩展到发布方种类。
+- 渠道发布（`ChannelPublishing`）的卡片带上运营商；Shopify 运营商可下架店的活动（审核是否需要，待定 A.7-4）。
+- 收费：店现在经 Shopify 的 App 定价付费（`QbsBilling`、`docs/quizbuks/shopify/S3-billing.md`），不走平台费。按 §4.6 进入结算时，要把这笔收入记为工具与资源费（"怎么方便怎么来"，待定 A.7-4）。
+- 注意命名：Shopify 模块里的 "operator" 指店的员工，与运营商无关。
+- `OperatorScopes`、数据视图只限 `SPONSOR`（`AnalyticsConfig` l.156、`InvitationConfig` l.83）、举报拒绝非发起方的发布（`ReportProcesses` l.180）、封禁与抹除只限 `SPONSOR`：逐处决定是否扩展到店。
+
+### A.4 收费：交易不收费、工具与资源收费、服务收费（Q93）
+
+| 项 | 现在 | 改成 |
+|---|---|---|
+| 奖励抽成 | 受控参数 `qb.creator-fee-rate`（缺省 0）；`RewardSplit` 计算；`AttemptFinishing`（l.312、l.511）与 `PendingSettlement` 读取；`QbWallets.rewardPosting` 贷 4110（带发布维度）；存于 `QbAttempt.fee` | 读取改为费用规则（种类 REWARD，缺省 0，与运营商分成可配置）；`RewardSplit`、`rewardPosting` 不变（为 0 时本来就不写 4110 行）；`AttemptStatementBudgetIT` 的语句数不变 |
+| 学分买卖 | `KudosExchanges`（`QB_KUDOS_BUY/SELL`，2160 ↔ 2110 一比一，**本来就没有费用**） | 加费用规则的挂点（缺省 0） |
+| 提现（Stripe 转账、银行） | `TransferRules.fee`（固定 `qb.transfer.fee` + 比例 `qb.transfer.fee-rate`）、`BankWithdrawals`（只有固定 `qb.withdrawal.bank.fee`）；贷 4110、不带发布维度，所以本来就不进运营商结算 | 费用规则（种类 WITHDRAWAL，收入归平台独得）；现行费率不变 |
+| 付学分答题（Q88b，未做） | 计划 D-Q88-13 写"以后作为费用种类收平台分成" | 做的时候挂费用规则（缺省 0） |
+| 平台月费（Q87） | `QbFeeCharge` 种类 `MONTHLY` / `MANUAL`；借 1130 / 贷 4120 + 2150（税）；冻结运营商与计费方式 | 是工具与资源费的一种；冻结的运营商总有值 |
+| 受众规则（Q47c） | 价目表与报价有了（`AudienceBilling`、`qb_audience_price_list` / `qb_audience_price`，**日价**，所有者含 `direct`，回落参数 `qb.audience.price.fallback`）；**没有收费** | 并入通用价目表（§4.5：**月价 ÷ 30**，`daily_price` 改为月价）；`rule_key` 变成可售项；所有者改为运营商编号；删掉回落参数；收费按使用权（发布期间）经平台费，退未用天数在使用权一层 |
+| AI | 只有额度（`AiLimits`：每日作业数、每月 token），价格参数"只供管理员估算"；**不向发起方收费** | 变成可售项或使用权，经平台费收费（细化时定） |
+| 费用种类字典 | `urn:jabiz:dict:quizbuks:fee-kind` 只有两种；`QbFeeCharge.sourceKey`（100 字） | 开放种类；`sourceKey` 指向使用权或交易 |
+| 报表与界面 | `S/admin/monthly.sql`（`a4110`，收入 = 4110 合计）、`investor-metrics.sql`（`commission`）、`attempt-rewards.sql`、`taker-kudos.sql`、App 的 `S/app/kudos.sql`、`ledger.sql`、`wallet.sql`（抽成估算）；`AX/finance-messages.ts`、`AX/InvestorMetricsPage.tsx`、App `wallet/messages.ts`（"扣除抽成"） | 抽成为 0 时照常可用；文案去掉"抽成"的说法，收入按费用种类分列 |
+| 科目与分录 | `QbLedger`：4110"平台服务收入（抽成）"同时用于转账费与结算回收的获客费、固定费；`qb.journal.account.*` | 保留科目；名称与分录映射按新的费用种类核对 |
+| 文档 | `02-design.md` §4.1（l.205、227、243）、§4.3；`operations.md` l.201、233、476（"结算前须把抽成调到 0 以上"）、525、538 | 改写 |
+
+### A.5 运营商结算（Q92a）
+
+- 公式（`OperatorSettlements.settle`）：现在 = （4110 抽成 + 平台费）×（1 − 平台分成），再减获客费与固定费，不足结转。改为 = **归运营商分成的各项费用合计** × 运营商的分成比例（§4.6）；`REVENUE_TEMPLATE`（`S/system/operator-revenue.sql`）退出基础，`S/system/operator-fees.sql` 推广为"按费用规则归运营商的费用"。
+- 方案（`OperatorPlans`、`qb.operator.plan.{1..5}.fee|share`，`share` 是**平台的**比例）：平台运营商与 Shopify 运营商为"固定费 0、平台 50%"；固定费是否保留给其他运营商（待定 A.7-2）。
+- 结算单（版式 `qb.operator_settlement`，事实 revenue、platformFees、fixedFee、prospectingCost……）、实体列 `revenue`、`fixedFee`、`platform_fees`（`M/V39`、`M/V68`）、界面 `AX/SettlementsPage.tsx`、`settlement-messages.ts`（"其发起方发布的抽成"）随之改。
+- 付款一步加"内部结算"（平台运营商、Shopify 运营商，§11-3）。
+- 获客费用的扣除（`qb.prospect.operator-monthly-cap-usd`、`qb.prospect.usd-jpy`）：是否保留（待定 A.7-3）。
+
+### A.6 赞助权益（Q89）→ 通用交易（Q93）
+
+- 采购单（时态 `qb_benefit_purchase_version`，状态 `PurchaseStatus`）、分配（`qb_benefit_allocation`）、异常（`qb_benefit_incident`）、对话改为通用交易：买方、卖方、**冻结的双方运营商**、对话链接。
+- 范围：`OperatorScopes`（l.57–72）已经是可售项按提供方、其余按出资方，即"东西归卖方的运营商、买卖归买方的运营商"，与 §4.3 一致。
+- 要补：买方运营商的暂停、恢复与异常处理（现在 `IncidentProcesses` 只许双方，`BenefitRules.sideOf`）；卖方运营商下架可售项的流程（`TAKEN_DOWN` 现在没有流程设置）；卖方运营商的只读页与通知；后台扩展的权益页面。Q89 计划 D-Q89-12"双方的运营商"改为"买方的运营商"。
+- 费用规则 = 0；钱在双方之间线下付，平台不经手。
+
+### A.7 盘点中出现的新问题（待需求方定）
+
+1. **现金奖励的争议**（`qb.cash.resolve`，现在只有总部能处理）：争议是答题者与发起方之间的，按 §2 交给发起方所属的运营商；但它牵涉"钱是否付了"，是否算资金事务留在平台？建议交给运营商（钱在线下付，平台不经手）。
+2. **其他运营商的固定费**：方案 2–5 有月固定费。"没有固定费、50% 分成"只对平台运营商与 Shopify 运营商，还是全部运营商都取消固定费？
+3. **获客费用**：运营商用 AI 获客的费用现在从结算中扣除。它是运营商使用的工具，按 §3 应收费；保留"从结算中扣"的做法，还是改为运营商的工具费？
+4. **Shopify 店**：活动是否要 Shopify 运营商审核（现在直接上线）；Shopify 的 App 定价收入记为工具与资源费、进入 Shopify 运营商的结算，可以吗？
+
+### A.8 测试与场景
+
+- **明确写着直营或总部行为的**：`OperatorIT`、`OperatorIsolationIT`、`OperatorLanguagesIT`、`OperatorScopesIT`、`OperatorSettlementIT` 与 `OperatorSettlementsTest`、`ProspectIT` 与 `ProspectAnswersTest`、`AudiencePricingIT` 与 `AudienceBillingTest`、`CertificationIT`、`SponsorCertificationIT`、`UnderstandingIT`、`TreeIT`、`ReportIT`、`SponsorPageIT`、`SponsorProductIT`、`FeeIT`、`ShopifyIT`、`ShopifyPlanIT`、`SetupIT`、`SetupRemovalsIT`、`ProcessAccessIT`、`QbRolesTest`、`PublicationApprovalsTest`、`PublicationReviewSettingsIT`。
+- **收费相关**：`SettlementIT`（抽成 0.1 记 4110）、`RewardRulesTest`、`AttemptStatementBudgetIT`（两种）、`QuotaBudgetIT`、`KudosByMethodIT`、`TakerWalletSyncIT`、`RewardMethodsIT`、转账与提现的八个 IT、`TopUpFeeIT`、`CashAccountIT`、`KudosExchangesTest`、`FeeRulesTest`、`ReconcileIT`、`AdminFinanceIT`、`InvestorMetricsIT`、`JournalExportIT`、`BenefitIT` 等五个、`AiLimitsTest`、`AiCostControlIT`；`core` 的 `ControlledParamsTest`。
+- **隐含依赖（量大）**：大多数 IT 入驻的发起方留在直营、由 `QB_ADMIN_CONTENT` 审核（`AccountItSupport`、`PayoutItSupport`、`SponsorOnboardingIT`、`AdminReviewAccessIT`、`PublicationIT` 等）。运营商化后，测试夹具要先建平台运营商及其审核成员。
+- **场景快照**：`setup.yml`（参数清单含回落参数、`qb.tree.platform-handle`、`qb.creator-fee-rate`）、`accounts.yml`、`publishing.yml`、`topup.yml`、`payout.yml` 与各 `*.snapshot.json`。
+- **前端**：`AX/audiencePricing.test.tsx`、`certifications.test.tsx`（"总部（直营）"）、`operator.test.tsx`、获客的测试、`journal.test.tsx`；App 的 `understanding.test.tsx`；发起方后台的 `publishing.test.tsx`；e2e：`cash-account`、`payout`、`audience-pricing`、`reward-methods`、`play`。
