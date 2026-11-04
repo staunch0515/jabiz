@@ -325,6 +325,10 @@ jabiz:
   web:
     root-redirect: ${JABIZ_WEB_ROOT_REDIRECT:/biz/}
     redirects:
+      # Q95: the business site's merchants' page became the sponsors' page.
+      - { from: /biz/merchants, to: /biz/sponsors }
+      - { from: /biz/zh/merchants, to: /biz/zh/sponsors }
+      - { from: /biz/ja/merchants, to: /biz/ja/sponsors }
       - { from: /p, to: /taker/p }
       - { from: /play, to: /taker/play }
       - { from: /result, to: /taker/result }

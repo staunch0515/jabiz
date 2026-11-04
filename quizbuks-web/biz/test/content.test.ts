@@ -73,8 +73,10 @@ describe('the rendered pages', () => {
     expect(home).not.toContain('icon-192.png" alt=""')
     // The four steps and the hero carry a drawing each; every drawing is hidden from assistive technology.
     expect(home.match(/<svg class="art"/g)).toHaveLength(5)
-    expect(home).not.toMatch(/<svg class="(art|hero-art|coin)"(?![^>]*aria-hidden="true")/)
-    for (const page of ['merchants', 'takers', 'surveys'] as const) {
+    // The knowledge map beside its band (Q95).
+    expect(home.match(/<svg class="band-art"/g)).toHaveLength(1)
+    expect(home).not.toMatch(/<svg class="(art|band-art|hero-art|coin)"(?![^>]*aria-hidden="true")/)
+    for (const page of ['maps', 'sponsors', 'takers', 'surveys'] as const) {
       const html = renderPage({ language: 'ja', page, content: contentOf('ja'), base: '/biz/', tryQuizzes, assets, siteUrl })
       expect(html.match(/<svg class="hero-art"/g)).toHaveLength(1)
     }
@@ -103,7 +105,7 @@ describe('the rendered pages', () => {
       assets, siteUrl })
     expect(pricing).toContain('href="/biz/pricing/" lang="en" hreflang="en" data-lang="en"')
     expect(pricing).toContain('href="/biz/ja/pricing/" lang="ja" hreflang="ja" data-lang="ja"')
-    // A plan's "talk to us" goes to the contact page of the same language under the base, not a hard-coded path.
+    // The fees page's "talk to us" goes to the contact page of the same language under the base, not a hard-coded path.
     expect(pricing).toContain('href="/biz/zh/contact/">联系我们</a>')
     expect(pricing).not.toContain('href="/biz/contact/"')
   })
@@ -118,6 +120,19 @@ describe('the rendered pages', () => {
     expect(menu).toContain('href="/biz/ja/pricing/" lang="ja" aria-current="true">日本語</a>')
     expect(menu).toContain('href="/biz/pricing/" lang="en" hreflang="en" data-lang="en">English</a>')
     expect(menu).toContain('href="/biz/zh/pricing/" lang="zh-Hans" hreflang="zh-Hans" data-lang="zh">中文</a>')
+  })
+
+  it('name sponsors, not merchants, and offer neither plans, commissions nor what the first launch does not have (Q95)', () => {
+    for (const language of LANGUAGES) {
+      for (const page of PAGES) {
+        const html = renderPage({ language, page, content: contentOf(language), base: '/biz/', tryQuizzes, assets, siteUrl })
+        expect(html).not.toMatch(/商户|加盟店|[Mm]erchant/)
+        expect(html).not.toContain('/merchants/')
+        expect(html).not.toMatch(/20%|5%|¥9,800|¥49,800/)
+        // Only what the first launch has (Q94): no Kudos, no features announced for later.
+        expect(html).not.toMatch(/学分|Kudos|クドス|按天数|for a number of days|下一场|next challenge/)
+      }
+    }
   })
 
   it('show the try-it quiz as a button and a QR code when given, a placeholder otherwise', () => {

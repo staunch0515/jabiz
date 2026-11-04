@@ -8,7 +8,7 @@ import { expect, expectAccessible, setAppearance, test } from './support'
  * appearances. The server's part (a page per directory, platform 16zf-b) is what makes /biz/zh/ answer.
  */
 
-const PAGES = ['', 'merchants/', 'takers/', 'surveys/', 'pricing/', 'contact/']
+const PAGES = ['', 'maps/', 'sponsors/', 'takers/', 'surveys/', 'pricing/', 'contact/']
 const LANGUAGES: Record<string, string> = { '': 'en', 'zh/': 'zh-Hans', 'ja/': 'ja' }
 
 test('every page of every language is served with its own text and alternates', async ({ request }) => {
@@ -26,6 +26,12 @@ test('every page of every language is served with its own text and alternates', 
   // Without a trailing slash, and a directory that is no page falls back to the English home.
   expect(await (await request.get('/biz/zh/pricing')).text()).toContain('<html lang="zh-Hans"')
   expect(await (await request.get('/biz/zh/nothing-here')).text()).toContain('<html lang="en"')
+  // Q95: the merchants' page moved to sponsors/; the old addresses of all three languages still lead there.
+  for (const prefix of ['', 'zh/', 'ja/']) {
+    const moved = await request.get(`/biz/${prefix}merchants/`, { maxRedirects: 0 })
+    expect(moved.status()).toBe(301)
+    expect(moved.headers()['location']).toContain(`/biz/${prefix}sponsors/`)
+  }
   const sitemap = await request.get('/biz/sitemap.xml')
   expect(sitemap.status()).toBe(200)
   expect(await sitemap.text()).toContain('<loc>https://quizbuks.com/biz/ja/pricing/</loc>')
@@ -73,7 +79,7 @@ test('an English browser stays on the English pages', async ({ browser }) => {
   await context.close()
 })
 
-test('the taker button opens a phone-sized window on a desktop, the merchant button a new tab', async ({
+test('the taker button opens a phone-sized window on a desktop, the sponsor button a new tab', async ({
   browser,
 }) => {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1366, height: 800 } })
@@ -94,14 +100,14 @@ test('the taker button opens a phone-sized window on a desktop, the merchant but
 
   const [tab] = await Promise.all([
     context.waitForEvent('page'),
-    page.getByRole('link', { name: 'Register your business' }).first().click(),
+    page.getByRole('link', { name: 'Become a sponsor' }).first().click(),
   ])
   await tab.waitForLoadState()
   expect(new URL(tab.url()).pathname).toBe('/sponsor/signup')
   await context.close()
 })
 
-test('the header signs a taker in through the phone-sized window and a merchant in a new tab (Q34)', async ({
+test('the header signs a taker in through the phone-sized window and a sponsor in a new tab (Q34)', async ({
   browser,
 }) => {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1366, height: 800 } })
@@ -118,7 +124,7 @@ test('the header signs a taker in through the phone-sized window and a merchant 
   await phone.close()
   const [tab] = await Promise.all([
     context.waitForEvent('page'),
-    signIn.getByRole('link', { name: 'Merchant sign-in' }).click(),
+    signIn.getByRole('link', { name: 'Sponsor sign-in' }).click(),
   ])
   await tab.waitForLoadState()
   expect(new URL(tab.url()).pathname).toBe('/sponsor/login')
@@ -140,7 +146,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await setAppearance(page, appearance)
     for (const width of [390, 1366]) {
       await page.setViewportSize({ width, height: 900 })
-      for (const path of ['/biz/', '/biz/ja/pricing/', '/biz/zh/merchants/', '/biz/contact/']) {
+      for (const path of ['/biz/', '/biz/ja/pricing/', '/biz/zh/sponsors/', '/biz/ja/maps/', '/biz/contact/']) {
         await page.goto(path)
         await expect(page.locator('h1')).toBeVisible()
         if (width < 1180) {
