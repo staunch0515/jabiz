@@ -6,7 +6,7 @@ export const en = {
   navLabel: 'Site',
   languageLabel: 'Language',
   signIn: { label: 'Sign in', taker: 'Taker sign-in', sponsor: 'Sponsor sign-in' },
-  nav: { home: 'Home', maps: 'Knowledge maps', sponsors: 'For sponsors', takers: 'For takers', surveys: 'Surveys',
+  nav: { home: 'Home', maps: 'Knowledge maps', sponsors: 'Sponsors', takers: 'Takers', surveys: 'Surveys',
     pricing: 'Fees', contact: 'Contact' },
   cta: { taker: 'Start answering', sponsor: 'Become a sponsor', takerLong: 'Start answering — it’s free',
     sponsorLong: 'Become a sponsor' },

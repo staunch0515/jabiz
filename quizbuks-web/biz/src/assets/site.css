@@ -53,11 +53,11 @@ p { margin: 0 0 1rem; }
 /* header */
 .top { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 4rem; position: relative; }
-.brand { display: flex; align-items: center; gap: .6rem; font-weight: 800; font-size: 1.2rem; color: var(--fg); text-decoration: none; }
+.brand { display: flex; align-items: center; gap: .6rem; font-weight: 800; font-size: 1.2rem; color: var(--fg); text-decoration: none; white-space: nowrap; flex: none; }
 .brand .coin { width: 2rem; height: 2rem; flex: none; }
 .foot .brand .coin { width: 1.75rem; height: 1.75rem; }
-.menu { display: flex; align-items: center; gap: 1.25rem; }
-.menu .links { display: flex; gap: 1.1rem; }
+.menu { display: flex; align-items: center; gap: 1rem; }
+.menu .links { display: flex; gap: .9rem; }
 .menu .links a { color: var(--fg); font-weight: 500; font-size: .95rem; padding: .35rem 0; border-bottom: 2px solid transparent; white-space: nowrap; }
 .menu .links a[aria-current="page"] { border-bottom-color: var(--accent); color: var(--accent); }
 .menu .links a:hover { text-decoration: none; color: var(--accent); }
@@ -80,8 +80,13 @@ p { margin: 0 0 1rem; }
 .bar .button { white-space: nowrap; padding: .55rem .95rem; font-size: .9rem; }
 .menu-toggle { display: none; background: none; border: 1px solid var(--line); border-radius: 10px; width: 2.6rem; height: 2.6rem; padding: .6rem; flex-direction: column; justify-content: space-between; cursor: pointer; }
 .menu-toggle span { display: block; height: 2px; background: var(--fg); border-radius: 2px; }
-@media (max-width: 1440px) { .bar .button.ghost { display: none; } .menu { gap: 1rem; } .menu .links { gap: .9rem; } }
-@media (max-width: 1180px) {
+/* The header is wider than the page's text (Q95): seven links, the languages, both sign-ins and the sponsor's sign-up
+   fit in one row from about 1,250px (English); below 1,350px they move into the menu, which leaves room for wider fonts.
+   The taker's sign-up stays out of the bar (the hero and the menu offer it): with it English had 14px to spare.
+   e2e measures the header (biz.spec.ts, "the header fits"). */
+.top .wrap { max-width: 90rem; }
+.bar .button.ghost { display: none; }
+@media (max-width: 1350px) {
   .menu-toggle { display: flex; }
   .bar .button.ghost { display: inline-flex; }
   .menu { display: none; position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 1rem; background: var(--bg); border-bottom: 1px solid var(--line); padding: 1rem 1.25rem 1.25rem; box-shadow: var(--shadow); }

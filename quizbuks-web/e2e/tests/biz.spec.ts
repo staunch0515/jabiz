@@ -39,6 +39,9 @@ test('every page of every language is served with its own text and alternates', 
 
 /** Picks a language in the header's drop-down (Q41): the links show once it is open. */
 async function chooseLanguage(page: Page, name: string) {
+  // Below 1,351px the languages are in the menu, as a visitor finds them.
+  const menu = page.locator('[data-menu-toggle]')
+  if (await menu.isVisible()) await menu.click()
   await page.getByTestId('lang-toggle').click()
   await page.locator('[data-lang-menu]').getByRole('link', { name }).click()
 }
@@ -129,6 +132,35 @@ test('the header signs a taker in through the phone-sized window and a sponsor i
   await tab.waitForLoadState()
   expect(new URL(tab.url()).pathname).toBe('/sponsor/login')
   await context.close()
+})
+
+// Q95: seven links pushed the Japanese wordmark into a column. Every language keeps the header in one row where the
+// menu is shown inline (above 1,350px), the wordmark on one line at every width, and no page scrolls sideways.
+test('the header fits in every language, the wordmark on one line', async ({ browser }) => {
+  for (const [prefix, locale] of [['', 'en-US'], ['zh/', 'zh-CN'], ['ja/', 'ja-JP']] as const) {
+    const context = await browser.newContext({ locale })
+    const page = await context.newPage()
+    for (const width of [390, 1024, 1351, 1366, 1440, 1600, 1920]) {
+      await page.setViewportSize({ width, height: 800 })
+      await page.goto(`/biz/${prefix}pricing/`)
+      const header = await page.evaluate(() => {
+        const bar = document.querySelector('.bar')!.getBoundingClientRect()
+        const menu = document.querySelector<HTMLElement>('.menu')!
+        return {
+          wordmark: document.querySelector('.bar .brand')!.getBoundingClientRect().height,
+          inline: getComputedStyle(menu).display !== 'none',
+          fits: menu.getBoundingClientRect().right <= bar.right + 0.5 && menu.scrollWidth <= menu.clientWidth + 0.5,
+          sideways: document.documentElement.scrollWidth > window.innerWidth,
+        }
+      })
+      const where = `/biz/${prefix} at ${width}px`
+      expect(header.wordmark, where).toBeLessThan(40)
+      expect(header.sideways, where).toBe(false)
+      expect(header.inline, where).toBe(width > 1350)
+      if (header.inline) expect(header.fits, where).toBe(true)
+    }
+    await context.close()
+  }
 })
 
 test('on a phone the taker button navigates in place', async ({ browser }) => {
