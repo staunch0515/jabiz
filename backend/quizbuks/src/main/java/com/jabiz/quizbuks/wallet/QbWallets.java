@@ -157,8 +157,11 @@ public final class QbWallets {
         change(ctx, wallet, kind, ownerId, balanceDelta, pendingCountDelta, pendingAmountDelta, BigDecimal.ZERO);
     }
 
-    /** As the other {@code change}, and also changes what open disputes hold by {@code heldDelta}. */
-    public static void change(com.jabiz.process.ProcessContext ctx, EntityInstance wallet, String kind,
+    /**
+     * As the other {@code change}, and also changes what open disputes hold by {@code heldDelta}; gives the row's id
+     * (the one inserted for an owner without one), for a posting whose source the row is (Q88b).
+     */
+    public static Object change(com.jabiz.process.ProcessContext ctx, EntityInstance wallet, String kind,
         Object ownerId, BigDecimal balanceDelta, long pendingCountDelta, BigDecimal pendingAmountDelta,
         BigDecimal heldDelta) {
         Map<String, Object> values = new LinkedHashMap<>();
@@ -170,10 +173,10 @@ public final class QbWallets {
             values.put("ownerId", String.valueOf(ownerId));
             values.put("kind", kind);
             values.put("pendingOut", BigDecimal.ZERO);
-            ctx.changes().insert(WALLET, values);
-        } else {
-            ctx.changes().update(WALLET, wallet.id(), wallet.version(), values);
+            return ctx.changes().insert(WALLET, values);
         }
+        ctx.changes().update(WALLET, wallet.id(), wallet.version(), values);
+        return wallet.id();
     }
 
     /**

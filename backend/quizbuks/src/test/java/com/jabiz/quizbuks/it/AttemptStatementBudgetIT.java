@@ -108,6 +108,15 @@ class AttemptStatementBudgetIT extends PlayItSupport {
     static final Budget PAUSE_TOTAL = new Budget(10, 12);
     /** Under the publication's lock (the start lock included). */
     static final Budget PAUSE_LOCKED = new Budget(7, 9);
+    /**
+     * Q88b: {@code QB_ATTEMPT_START} of a quiz charging an entry fee: an ordinary start's statements (the sponsor's
+     * wallet read included) and, before the start lock, the caller's wallet lock, its wallet row with the hold period
+     * (one statement) and the transferable balance (one); after the start, the save of the attempt (the fee's posting
+     * names it as its source) and {@code LEDGER_POST} (its account lock, one read, the entries). Held: an ordinary
+     * start's 11 and six more; per commit, 22. "Under the lock" counts from the first lock, the wallet's: [10 / 15].
+     */
+    static final Budget FEE_TOTAL = new Budget(17, 22);
+    static final Budget FEE_LOCKED = new Budget(10, 15);
 
     @Autowired
     WriteBatching batching;
@@ -246,6 +255,46 @@ class AttemptStatementBudgetIT extends PlayItSupport {
         report("QB_ATTEMPT_START (sponsor's round)", start);
         assertBudget("QB_ATTEMPT_START (sponsor's round)", start, budget(START_TOTAL) + 2, budget(START_LOCKED));
         assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(round));
+    }
+
+    /**
+     * Q88b (D-Q88-12): a start of a quiz charging an entry fee takes the caller's wallet lock before the start lock,
+     * and reads under it the wallet row with the hold period (one statement) and the transferable balance (the
+     * transfers' template); it saves the attempt for the fee's posting and posts it ({@code LEDGER_POST}). An ordinary
+     * start reads, takes and writes none of it (the tests above, unchanged).
+     */
+    @Test
+    void aStartWithAnEntryFee() {
+        warmUp();
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", com.jabiz.quizbuks.setup.QbParams.ENTRY_FEE_ENABLED, "value", "true"),
+            "reason", "Q88b"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+        // No hold period: the reward just won pays the fee at once (the rule itself is EntryFeeIT's).
+        Map<String, Object> hold = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", com.jabiz.quizbuks.setup.QbParams.TRANSFER_HOLD_DAYS, "value", "0"),
+            "reason", "Q88b"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", hold.get("changeId")));
+        String sponsor = newSponsor("s-budget-fee");
+        credit(sponsor, 100_000);
+        String rewarding = livePublication(sponsor, "Budget fee rewarding", Map.of("regions", List.of("GLOBAL")));
+        String charging = livePublication(sponsor, "Budget fee", Map.of("regions", List.of("GLOBAL"), "entryFee", 10,
+            "maxWinners", 100_000, "budgetCap", 1_000_000));
+        String warm = newTaker("t-budget-fee-warm-" + UUID.randomUUID(), null);
+        play(warm, rewarding, true, true);
+        deliverEvents();
+        play(warm, charging, true, true);
+        String userId = newTaker("t-budget-fee-" + UUID.randomUUID(), null);
+        play(userId, rewarding, true, true);
+        deliverEvents();
+
+        SqlStatementLog.clear();
+        keyed("QB_ATTEMPT_START", taker(userId), body("publicationId", charging));
+        List<List<String>> start = SqlStatementLog.transactions();
+        report("QB_ATTEMPT_START (entry fee)", start);
+        assertBudget("QB_ATTEMPT_START (entry fee)", start, budget(FEE_TOTAL), budget(FEE_LOCKED));
+        assertThat(SqlStatementLog.locks()).containsExactly(QbWallets.lockName(QbWallets.TAKER, userId),
+            PublicationMoves.startLockName(charging));
     }
 
     /**

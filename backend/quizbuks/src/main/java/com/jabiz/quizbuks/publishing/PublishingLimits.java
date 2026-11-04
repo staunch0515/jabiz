@@ -13,6 +13,8 @@ public final class PublishingLimits {
 
     /** Reward tiers of one publication. */
     public static final int MAX_TIERS = 20;
+    /** Q88b (D-Q88-9): the highest entry fee a quiz may charge, in Kudos (JPY). */
+    public static final BigDecimal MAX_ENTRY_FEE = BigDecimal.valueOf(10_000);
     /** Longest time a publication runs, from its start to its end. */
     public static final Duration MAX_RUNNING = Duration.ofDays(366);
     /**

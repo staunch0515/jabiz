@@ -248,7 +248,7 @@ public final class TransferRules {
         return part.signum() > 0 ? part : BigDecimal.ZERO;
     }
 
-    static boolean wholeAndNotNegative(BigDecimal value) {
+    public static boolean wholeAndNotNegative(BigDecimal value) {
         return RefundMath.wholeAndNotNegative(value);
     }
 

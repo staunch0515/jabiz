@@ -61,13 +61,15 @@ public final class PlayCodes {
     public static final String LANGUAGE = "QB_ATTEMPT_LANGUAGE";
     /** Q75 (D-Q75-4): the video to watch was not watched (by the App's report) before starting. */
     public static final String WATCH_REQUIRED = "QB_ATTEMPT_WATCH_REQUIRED";
+    /** Q88b (D-Q88-10): the taker's transferable Kudos do not cover the publication's entry fee. */
+    public static final String ENTRY_FEE_SHORT = "QB_ENTRY_FEE_SHORT";
     /** Q76: the taker has not yet passed (or answered) a publication this one requires. */
     public static final String PREREQUISITE_NOT_MET = "QB_PREREQUISITE_NOT_MET";
 
     public static final List<String> ALL = List.of(TOO_FAST, NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
         ALREADY_TAKEN, VERSION_CHANGED, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
         FEE_RATE_INVALID, REWARD_PENDING, REWARD_CASH, REWARD_REDEEM, REWARD_DIGITAL,
-        REWARD_DIGITAL_DUE, LANGUAGE, WATCH_REQUIRED, PREREQUISITE_NOT_MET);
+        REWARD_DIGITAL_DUE, LANGUAGE, WATCH_REQUIRED, PREREQUISITE_NOT_MET, ENTRY_FEE_SHORT);
 
     private PlayCodes() {}
 }

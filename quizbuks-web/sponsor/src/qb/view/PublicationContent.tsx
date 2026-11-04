@@ -1,7 +1,6 @@
 import { formatDateTime } from '@jabiz/client'
 import { MarkdownView, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@jabiz/ui'
-import { Award, BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Store, Target, Timer, TrendingUp, Trophy,
-  type LucideIcon } from 'lucide-react'
+import { Award, BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Store, Target, Ticket, Timer, TrendingUp, Trophy, type LucideIcon } from 'lucide-react'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { certificationName } from '../certifications'
@@ -238,6 +237,9 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
         <Fact icon={Trophy} label={survey ? t('detail.surveyReward') : prize ? t('detail.prizeValue') : t('detail.maxReward')}
           value={draft ? '–' : formatKudos(p.maxReward)} />
         {gives && <Fact icon={Award} label={t('detail.gives')} testId="detail-certification" value={gives} />}
+        {/* Q88b: what starting costs, paid once from the transferable Kudos and not refunded. */}
+        {p.entryFee ? <Fact icon={Ticket} label={t('detail.entryFee')} testId="detail-entry-fee"
+          value={formatKudos(p.entryFee)} /> : null}
         <Fact icon={MethodIcon} label={t('detail.method')} testId="detail-method-fact"
           value={draft ? '–' : <span data-testid="detail-method" data-method={p.rewardMethod}>{t(`methods.${p.rewardMethod}Short`)}</span>} />
         <Fact icon={CalendarClock} label={t('detail.endAt')}

@@ -50,16 +50,19 @@ const BADGES: Record<EntryStatus, 'success' | 'secondary' | 'outline' | 'warning
 function Entry({ row }: { row: LedgerRow }) {
   const { t } = useTranslation(APP)
   const title = row.type === 'REWARD' ? row.name ?? row.quizTitle ?? t('wallet.ledger.reward')
-    : t('wallet.ledger.transfer')
-  // A transfer leaves the wallet; a failed or reversed one came back (the template's rows say so by status).
-  const out = row.type === 'TRANSFER'
+    : row.type === 'ENTRY_FEE' ? row.name ?? row.quizTitle ?? t('wallet.ledger.entryFee')
+      : t('wallet.ledger.transfer')
+  // A transfer leaves the wallet, and so does an entry fee (Q88b); a failed or reversed transfer came back (the
+  // template's rows say so by status).
+  const out = row.type === 'TRANSFER' || row.type === 'ENTRY_FEE'
   return (
     <li className="flex flex-col gap-1 rounded-lg border p-3" data-testid="ledger-row" data-type={row.type}
       data-status={row.status}>
       <div className="flex items-start gap-2">
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-muted-foreground text-xs">
-            {row.type === 'REWARD' ? t('wallet.ledger.reward') : t('wallet.ledger.transfers')}
+            {row.type === 'REWARD' ? t('wallet.ledger.reward')
+              : row.type === 'ENTRY_FEE' ? t('wallet.ledger.entryFee') : t('wallet.ledger.transfers')}
           </span>
           <span className="truncate font-medium">{title}</span>
         </span>

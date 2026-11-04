@@ -56,6 +56,7 @@ results:
   timeLimitSec:   { from: QbPublicationCard.timeLimitSec }
   questionCount:  { from: QbPublicationCard.questionCount }
   pickCount:      { from: QbPublicationCard.pickCount }
+  entryFee:       { from: QbPublicationCard.entryFee }
   fullScore:      { from: QbPublicationCard.fullScore }
   myAttemptId:    { from: QbAttempt.attemptId }
   myStatus:       { from: QbAttempt.status }
@@ -116,6 +117,7 @@ SELECT
     c.{{QbPublicationCard.timeLimitSec}}   AS timeLimitSec,
     c.{{QbPublicationCard.questionCount}}  AS questionCount,
     c.{{QbPublicationCard.pickCount}}      AS pickCount,
+    c.{{QbPublicationCard.entryFee}}       AS entryFee,
     c.{{QbPublicationCard.fullScore}}      AS fullScore,
     -- Q64: the caller's own attempt (the view holds theirs only, one a publication), for the card's start to say
     -- whether it starts, resumes or shows the result.

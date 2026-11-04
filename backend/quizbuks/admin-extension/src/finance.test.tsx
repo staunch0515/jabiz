@@ -73,7 +73,8 @@ beforeEach(() => {
   server.permissions = new Set(FINANCE)
   server.templates = new Map<string, Row[] | Error>([
     [TEMPLATE.financeSummary, [{ sponsorBalance: 9000, sponsorHeld: 0, sponsorPendingCount: 2, sponsorPendingAmount: 200,
-      takerBalance: 1500, takerPendingOut: 0, transfersInReview: 3, transfersInDoubt: 1, heldTakers: 2 }]],
+      takerBalance: 1500, takerPendingOut: 0, transfersInReview: 3, transfersInDoubt: 1, heldTakers: 2,
+      entryFeesUnsettled: 120 }]],
     [TEMPLATE.reconSummary, [{ lastRunId: RUN, lastRunAt: '2026-10-15T18:37:00Z', lastRunStatus: 'DIFF',
       lastRunItems: 4, openTasks: 5 }]],
     [TEMPLATE.accountBalances, [{ accountCode: '2110', accountName: 'Sponsor prepayments', balance: -9000 },
@@ -184,8 +185,10 @@ describe('FinanceOverviewPage', () => {
     expect(calledWith(TEMPLATE.financeSummary)[0][1].params.staleBefore).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     const accounts = await screen.findAllByTestId('finance-account')
     expect(accounts.map((row) => row.dataset.code)).toEqual(['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120',
-      '2160', '1130', '4120', '2150'])
+      '2160', '1130', '4120', '2150', '2170'])
     expect(accounts[3]).toHaveTextContent('1110 Stripe balance')
+    // Q88b: the entry fees paid and not yet settled.
+    expect(screen.getByTestId('finance-entry-fees')).toHaveTextContent('120')
   })
 
   it('does not ask for the ledger, the reconciliation or the tasks without the permissions to read them', async () => {

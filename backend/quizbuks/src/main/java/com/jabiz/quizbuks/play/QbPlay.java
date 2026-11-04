@@ -83,6 +83,9 @@ public final class QbPlay {
         eb.field("tierId", f -> f.physicalColumn("tier_id").processOnly().asText(36));
         eb.field("reward", f -> f.physicalColumn("reward").processOnly().asMonetary("JPY", 0));
         eb.field("fee", f -> f.physicalColumn("fee").processOnly().asMonetary("JPY", 0));
+        // Q88b (D-Q88-9): the entry fee the taker paid at the start (0: none), written with the attempt.
+        eb.field("entryFee", f -> f.physicalColumn("entry_fee").immutable(true).processOnly().required(true)
+            .asMonetary("JPY", 0));
         eb.field("rewardStatus", f -> f.physicalColumn("reward_status").processOnly()
             .asCode(REWARD_STATUS_DICTIONARY, RewardStatus.ALL.toArray(String[]::new)));
         eb.field("rewardPaidAt", f -> f.physicalColumn("reward_paid_at").processOnly()

@@ -39,6 +39,8 @@ export interface FinanceSummary {
   transfersInReview: number
   transfersInDoubt: number
   heldTakers: number
+  /** Q88b: the entry fees paid and not yet settled into the sponsors' cash accounts (2170). */
+  entryFeesUnsettled: string
 }
 
 export async function readFinanceSummary(): Promise<FinanceSummary> {
@@ -54,6 +56,7 @@ export async function readFinanceSummary(): Promise<FinanceSummary> {
     transfersInReview: num(row.transfersInReview),
     transfersInDoubt: num(row.transfersInDoubt),
     heldTakers: num(row.heldTakers),
+    entryFeesUnsettled: amount(row.entryFeesUnsettled),
   }
 }
 
@@ -366,6 +369,8 @@ export const MONTHLY_COLUMNS: Record<string, string> = {
   '1130': 'feesReceivable',
   '4120': 'feeRevenue',
   '2150': 'taxPayable',
+  /** Q88b: the entry fees unsettled. */
+  '2170': 'entryFeesUnsettled',
 }
 
 export async function readMonthly(period: Period): Promise<MonthlyRow[]> {

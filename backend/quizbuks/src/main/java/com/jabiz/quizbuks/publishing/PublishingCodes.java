@@ -48,6 +48,10 @@ public final class PublishingCodes {
     public static final String SWITCH_PICK = "QB_PUBLICATION_SWITCH_PICK";
     /** Q81 (D-Q81-1): the pick is 1..n-1 of the version's n questions; all of them is left empty. */
     public static final String PICK_RANGE = "QB_PUBLICATION_PICK_RANGE";
+    /** Q88b: the entry fee (D-Q88-9, D-Q88-14): its range, a survey or a channel's publication cannot charge one, the switch is off. */
+    public static final String ENTRY_FEE_RANGE = "QB_ENTRY_FEE_RANGE";
+    public static final String ENTRY_FEE_NOT_ALLOWED = "QB_ENTRY_FEE_NOT_ALLOWED";
+    public static final String ENTRY_FEE_OFF = "QB_ENTRY_FEE_OFF";
     /** Q81 (D-Q81-2): a pick needs every question of the version to score the same. */
     public static final String PICK_UNEQUAL_POINTS = "QB_PUBLICATION_PICK_UNEQUAL_POINTS";
     /** Q81 (D-Q81-2): a survey is answered whole. */
@@ -160,7 +164,8 @@ public final class PublishingCodes {
         REFERRAL_POOL_SHORT, LANGUAGES_INVALID, LANGUAGE_NOT_IN_VERSION, TEXT_MISSING, TEXT_STALE, TEXT_TOO_LONG,
         SWITCH_LANGUAGES,
         PREREQUISITE_TOO_MANY, PREREQUISITE_REPEATED, PREREQUISITE_SELF, PREREQUISITE_NOT_OWN, PREREQUISITE_DRAFT,
-        PREREQUISITE_CYCLE, PREREQUISITE_TOO_DEEP, PREREQUISITE_ONE_OF, PREREQUISITE_CERTIFICATION, SWITCH_PICK, PICK_RANGE, PICK_UNEQUAL_POINTS, PICK_SURVEY);
+        PREREQUISITE_CYCLE, PREREQUISITE_TOO_DEEP, PREREQUISITE_ONE_OF, PREREQUISITE_CERTIFICATION, SWITCH_PICK, PICK_RANGE, PICK_UNEQUAL_POINTS, PICK_SURVEY,
+        ENTRY_FEE_RANGE, ENTRY_FEE_NOT_ALLOWED, ENTRY_FEE_OFF);
 
     private PublishingCodes() {}
 }

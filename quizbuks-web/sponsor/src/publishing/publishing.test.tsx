@@ -56,6 +56,8 @@ interface Server {
   methods?: string
   /** The highest reward one attempt may win (`qb.sponsor.reward-methods`); none for no cap. */
   maxReward?: number
+  /** Q88b: whether entry fees are offered (the switch, `qb.sponsor.reward-methods`). */
+  entryFees?: boolean
   cashRewards?: Record<string, unknown>[]
   /** The digital prizes (Q33), and a publication's code pool: its counts and its codes. */
   digitalPrizes?: Record<string, unknown>[]
@@ -129,7 +131,8 @@ function server(options: Server = {}) {
         return rows(options.conditions ?? [])
       case '/api/queries/qb.sponsor.reward-methods':
         return json(200, { items: [{ methods: options.methods ?? 'PLATFORM', own: Boolean(options.methods),
-          maxRewardPerAttempt: options.maxReward ?? null }], offset: 0, limit: 1 })
+          maxRewardPerAttempt: options.maxReward ?? null, entryFeeEnabled: options.entryFees ?? false }], offset: 0,
+          limit: 1 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:reward-method':
         return json(200, [{ code: 'PLATFORM', label: 'Kudos paid by QuizBuks' },
           { code: 'SPONSOR_CASH', label: 'Cash from the sponsor' },
@@ -413,7 +416,7 @@ describe('the publication wizard', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/publications/p9'))
     expect(window.location.search).toBe('?step=1')
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: null, versionId: null, name: 'Tea week',
-      cover: null, regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, pickCount: null, budgetCap: null,
+      cover: null, regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, pickCount: null, entryFee: 0, budgetCap: null,
       maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null }])
   })
 
@@ -568,7 +571,7 @@ describe('the publication wizard', () => {
     expect(document.activeElement).toBe(screen.getByTestId('publication-step-title'))
     expect(processCalls('QB_PUBLICATION_SAVE').at(-1)).toEqual({ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
       cover: null, regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
-      passScore: 2, pickCount: null, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
+      passScore: 2, pickCount: null, entryFee: 0, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
       tiers: [{ tierId: 't9', fromScore: 0, toScore: 2, reward: 100 }] })
     // The conditions were not touched: not sent.
     expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toEqual([])
@@ -590,6 +593,31 @@ describe('the publication wizard', () => {
     await userEvent.click(await screen.findByTestId('publication-next'))
     const summary = await screen.findByTestId('publication-summary')
     expect(within(summary).getByTestId('summary-pick')).toHaveTextContent('3 of 4 at random')
+  })
+
+  it('offers the entry fee only while it is offered, sends it and shows it in the summary (Q88b)', async () => {
+    server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    const { unmount } = render(<App />)
+    await screen.findByTestId('publication-pick-count')
+    expect(screen.queryByTestId('publication-entry-fee')).not.toBeInTheDocument()
+    unmount()
+    vi.restoreAllMocks()
+
+    const { processCalls } = server({ entryFees: true,
+      processes: { QB_PUBLICATION_SAVE: [saved(4), saved(5)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const fee = await screen.findByTestId('publication-entry-fee')
+    expect(fee).toHaveAccessibleDescription(/not refunded/)
+    await userEvent.type(fee, '30')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ entryFee: 30 })
+    await userEvent.click(await screen.findByTestId('publication-next'))
+    const summary = await screen.findByTestId('publication-summary')
+    expect(within(summary).getByTestId('summary-entry-fee')).toHaveTextContent('30 Kudos')
+    await expectAccessible()
   })
 
   it('asks a survey for its one reward and sends the pass mark and tiers it stands for (Q12)', async () => {

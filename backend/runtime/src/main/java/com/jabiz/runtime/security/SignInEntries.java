@@ -126,10 +126,11 @@ public class SignInEntries implements PlatformCheck {
      *                             in or from a mailed link (section 17.5; decision D62)
      * @param reservedRoles        roles of entries with an entry scope (decision D64), which {@value #ALL_ROLES} does not
      *                             include here: their holders work in their scope only
+     * @param passkeys             whether users sign in here with their passkeys (decision D71)
      */
     public record Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
         boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken,
-        boolean accountDeletion, Set<String> reservedRoles) {
+        boolean accountDeletion, Set<String> reservedRoles, boolean passkeys) {
 
         public Entry {
             acceptedRoles = Set.copyOf(acceptedRoles);
@@ -137,6 +138,14 @@ public class SignInEntries implements PlatformCheck {
             Objects.requireNonNull(session, "session must not be null");
             externalToken = externalToken == null || externalToken.isBlank() ? null : externalToken.trim();
             reservedRoles = reservedRoles == null ? Set.of() : Set.copyOf(reservedRoles);
+        }
+
+        /** An entry without passkeys (decision D71). */
+        public Entry(String name, Set<String> acceptedRoles, boolean selfRegistration, Set<String> registrationRoles,
+            boolean requireVerifiedEmail, String appPath, Session session, boolean emailLink, String externalToken,
+            boolean accountDeletion, Set<String> reservedRoles) {
+            this(name, acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session,
+                emailLink, externalToken, accountDeletion, reservedRoles, false);
         }
 
         /** An entry whose {@value #ALL_ROLES} includes every role. */
@@ -150,7 +159,7 @@ public class SignInEntries implements PlatformCheck {
         /** This entry, its {@value #ALL_ROLES} without {@code roles}. */
         Entry reserving(Set<String> roles) {
             return new Entry(name, acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath,
-                session, emailLink, externalToken, accountDeletion, roles);
+                session, emailLink, externalToken, accountDeletion, roles, passkeys);
         }
 
         /** An entry where nobody asks for the deletion of their account. */
@@ -194,11 +203,18 @@ public class SignInEntries implements PlatformCheck {
     /** An entry as configured; every item optional. */
     public record Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
         Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink, String externalToken,
-        Boolean accountDeletion) {
+        Boolean accountDeletion, Boolean passkeys) {
 
         /** Binding takes this one (a second constructor would leave the binder without a choice). */
         @ConstructorBinding
         public Config {
+        }
+
+        public Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
+            Boolean requireVerifiedEmail, String appPath, SessionConfig session, Boolean emailLink,
+            String externalToken, Boolean accountDeletion) {
+            this(acceptedRoles, selfRegistration, registrationRoles, requireVerifiedEmail, appPath, session, emailLink,
+                externalToken, accountDeletion, null);
         }
 
         public Config(List<String> acceptedRoles, Boolean selfRegistration, List<String> registrationRoles,
@@ -536,7 +552,7 @@ public class SignInEntries implements PlatformCheck {
     }
 
     private Entry entry(String name, Config config) {
-        Config c = config == null ? new Config(null, null, null, null, null, null, null, null, null) : config;
+        Config c = config == null ? new Config(null, null, null, null, null, null, null, null, null, null) : config;
         SessionConfig s = c.session() == null ? new SessionConfig(null, null, null) : c.session();
         Session session = new Session(s.refreshTokenTtl() == null ? defaults.refreshTokenTtl() : s.refreshTokenTtl(),
             s.idleTimeout() == null ? defaults.idleTimeout() : s.idleTimeout(),
@@ -544,7 +560,7 @@ public class SignInEntries implements PlatformCheck {
         return new Entry(name, trimmed(c.acceptedRoles()), Boolean.TRUE.equals(c.selfRegistration()),
             trimmed(c.registrationRoles()), Boolean.TRUE.equals(c.requireVerifiedEmail()),
             c.appPath() == null ? "/" : c.appPath().trim(), session, Boolean.TRUE.equals(c.emailLink()),
-            c.externalToken(), Boolean.TRUE.equals(c.accountDeletion()));
+            c.externalToken(), Boolean.TRUE.equals(c.accountDeletion()), Set.of(), Boolean.TRUE.equals(c.passkeys()));
     }
 
     private static Set<String> trimmed(List<String> values) {

@@ -179,6 +179,8 @@ export interface SummaryValues {
   passScore: number | null
   /** Q81: the questions drawn per taker (null: all of them), and the version's count when known. */
   pickCount?: number | null
+  /** Q88b: the entry fee (0 or missing: none). */
+  entryFee?: number | null
   questionCount?: number | null
   fullScore: number | null
   budgetCap: string | null
@@ -278,6 +280,8 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
       value: <span data-testid="summary-pick">{values.questionCount
         ? t('publishing.summary.pickCountOf', { k: values.pickCount, n: values.questionCount })
         : t('publishing.summary.pickCountOnly', { k: values.pickCount })}</span> }] : []),
+    ...(values.entryFee ? [{ key: 'entryFee', label: t('publishing.field.entryFee'),
+      value: <span data-testid="summary-entry-fee">{formatKudos(values.entryFee)}</span> }] : []),
     { key: 'fullScore', label: t('publishing.summary.fullScore'), value: values.fullScore ?? notSet },
     { key: 'budgetCap', label: t('publishing.field.budgetCap'),
       value: values.budgetCap === null ? noLimit : formatKudos(values.budgetCap) },

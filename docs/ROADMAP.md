@@ -4994,3 +4994,24 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17l-5 | 文档：决策 D68、12 §4、17 §3.2、指南 `app-spa.md` 6a、根 `CLAUDE.md` |
 
 **17l 状态**：📝 待评审（分支 `1.3/phase-17l-native-apps`）。
+
+### 17zf 通行密钥（Passkey / WebAuthn）：快捷登录与二次验证（需求 2026-11-03，确认 2026-11-03，决策 D71）
+
+**缘由**：需求方 2026-11-03：中国大陆等地打不开 Google，短信与微信登录要资质；账号的底座只能是邮箱（D54 邮件链接、密码、TOTP）。通行密钥免资质、零成本、防钓鱼，
+适合作**已有账号的快捷登录与二次验证**；微信等内置浏览器与无谷歌服务的安卓机支持不全，所以只作附加凭据。需求方确认：通行密钥登录算作两个因素、后台也可以用、
+没有密码的用户先经邮件确认再绑定。17zf-a 后端，17zf-b 前端与示范。
+
+| # | 内容 | PR |
+|---|---|---|
+| 17zf-1 | 配置 `jabiz.security.passkeys.*`（`rp-id`、`rp-name`、`origins`、`challenge-ttl`、`max-per-user`）与入口的 `passkeys`；启动检查 `SECURITY`（入口开启而未配置、来源不是 https（`localhost` 除外）、RP ID 不是来源的主机或其上级域名） | 17zf-a |
+| 17zf-2 | 迁移 `V57__passkeys.sql`：`sec_user_passkey`（普通表，只经流程写入）、`sec_passkey_challenge`（一次性，用完即删，开始新的一轮时删去过期的）；实体 `SecUserPasskey`（公钥敏感）；`PasskeyVerifier`（webauthn4j，attestation 不验证，ES256 / RS256 / EdDSA，要求用户验证） | 17zf-a |
+| 17zf-3 | 登录：`POST /api/auth/passkey/options`、`POST /api/auth/passkey`，流程 `SPONSOR_PASSKEY_SIGN_IN`（因素 `PASSKEY`，算作两个因素：访问令牌带 `mfa_at`）；限流 `PASSKEY`；无效的断言不写登录记录、不计失败 | 17zf-a |
+| 17zf-4 | 第二步与 step-up：`MFA_REQUIRED` 的挑战下以通行密钥完成（`/api/auth/challenge/passkey/**`），`MFA_ENROLLMENT_REQUIRED` 下可绑定通行密钥代替 TOTP；`/api/auth/step-up/passkey/**`；有通行密钥即算"已设置二次验证" | 17zf-a |
+| 17zf-5 | 本人管理：`/api/auth/account/passkeys/**`（列出、绑定须近期二次验证或当前密码或邮件确认、改名、删除），流程 `SEC_PASSKEY_REGISTER` / `_RENAME` / `_REMOVE`、邮件 `jabiz.auth.passkey-confirm`（确认链接）与 `jabiz.auth.passkey-added`（已添加的通知）；管理员 `SEC_PASSKEY_REMOVE_ADMIN`（`security.user.mfa-reset`，管理级二次验证）；`ACCOUNT_ERASE` 删除通行密钥 | 17zf-a |
+| 17zf-6 | 测试：`PasskeyPropertiesTest`、`PasskeyVerifierTest`、`PasskeyIT`（测试夹具 `TestAuthenticator` 经真实接口）、`ErasureIT`、OpenAPI 快照 | 17zf-a |
+| 17zf-7 | 文档：决策 D71、10 §15.16、根 `CLAUDE.md` | 17zf-a |
+| 17zf-8 | `@jabiz/client`（`passkeySupport`、`signInWithPasskey`、`registerPasskey` 等）、`@jabiz/ui`（`SignInForm` 的 `passkey`、积木 `Passkeys`、第二步与 step-up 的通行密钥）、通用后台账户页、`MailLinkPage` 的 `passkey-confirm`、`jabiz.web.native-apps[i].ios.webcredentials`、示范门户、e2e（Chromium 虚拟认证器） | 17zf-b |
+
+**不做**：只凭通行密钥开户；验证厂商证明（attestation）；Capacitor 的 Android 原生外壳（TWA 即 Chrome，照常可用）。
+
+**17zf 状态**：17zf-a 🚧 进行中（分支 `1.3/phase-17zf-passkeys`）。
