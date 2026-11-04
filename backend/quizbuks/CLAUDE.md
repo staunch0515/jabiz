@@ -434,6 +434,7 @@
   推送 `1.3/quizbuks-release`（只由 `1.3/quizbuks` 合并进来）部署 **production**（`APP_NAME=quizbuks`、基础域名 `vars.QUIZBUKS_BASE_DOMAIN`、库 `quizbuks`）；`.github/workflows/quizbuks-deploy.yml` 构建镜像 `ghcr.io/<仓库>-quizbuks`（不再测试：合并前 PR 已检查，`quizbuks.yml` 与平台的 `ci.yml` 只对 PR 运行）、按分支（GitHub Environment `production` / `staging`）渲染站点并以服务器的 `deploy-app.sh <APP_NAME> <SHA>` 部署。
   服务器用的只有 `deploy/quizbuks/server/compose.yaml`（项目名与容器名只取 `.env` 的 `${APP_NAME}`，不写死；无端口、无数据库、外部网络 `proxy` 与 `db`）、模板 `site.caddy.tpl`（`__DOMAIN__`、`__APP_NAME__`、`__APP_DIR__`）与维护页 `maintenance.html`（维护模式只以服务器上的锁文件开关，DEPLOY.md）；环境的差异只在服务器上各自的 `.env` 中，应用配置中不写按环境的域名或密钥；`compose.dev.yaml` 只在本机。客户端地址照旧只经 `JABIZ_TRUSTED_PROXIES`（Caddy 在 `proxy` 网络中的地址，不是整个网段：网络上还有其他应用），不用 `server.forward-headers-strategy`。健康检查不含邮件服务器（`management.health.mail.enabled: false`）。
 - 本机试用：`tools/quizbuks/local-demo.sh start --seed`（构建、启动、首次设置与演示数据，只用于本机；`deploy/quizbuks/README.md` "本机演示"）。改了设置流程、入口或演示所用的流程输入时同步改它（CI `local-demo`）。
+- **使用中的问题**：使用者遇到的每个问题（现象、原因、使用者的解决办法、状态）先记进 `docs/quizbuks/troubleshooting.md`（编号 `T<n>`），给使用者看的写成三语的帮助页文案（FAQ 的 `audience` / `category`），由内容管理员发布为 FAQ（App 与商家后台的 `/help`）；修复后改状态、不删条目。修复问题或改变行为时同步改相应条目。
 - **生产运维**：`docs/quizbuks/operations.md`（密钥清单、备份与恢复演练、首次启动、切换正式模式、监控、容量、常见故障）与上线检查清单 `docs/quizbuks/launch-checklist.md`；
   新增环境变量、启动检查、任务或告警时同步改 `operations.md` 的对应表格。
 - **Stripe 测试模式全流程**：`tools/quizbuks/stripe-test-mode/run.sh`（手册 `docs/quizbuks/stripe-test-mode.md`）用真实测试密钥驱动并核对整条资金流程；只接受 `sk_test_`、缺省只驱动本机、`production-hosts` 中的主机永远拒绝，从不打印密钥。

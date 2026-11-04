@@ -321,6 +321,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 ## 7. 常见故障
 
+使用者（答题者、商家、店员、运营商）遇到的问题与给他们的解决办法记在 `docs/quizbuks/troubleshooting.md`（同时作为帮助页 FAQ 的底稿）；本节只写运维的故障。
+
 ### 7.1 Webhook 签名失败
 
 - **现象**：`jabiz.inbound.receive{result="REJECTED", reason="no_match"}`；Stripe 后台该端点的投递 400；充值停在"处理中"、收款账户停在"待开通"。
