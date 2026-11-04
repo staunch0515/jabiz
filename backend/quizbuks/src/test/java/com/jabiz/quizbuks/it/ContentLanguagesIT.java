@@ -197,7 +197,7 @@ class ContentLanguagesIT extends ContentItSupport {
         assertThat(codes(refused("QB_TRANSLATION_SAVE", sponsorA(), body("quizId", quiz.quizId(), "language", "zh",
             "entries", List.of(
                 body("key", ContentLanguages.stem(other.questionId()), "text", "别的"),
-                body("key", "quiz.cover", "text", "x"),
+                body("key", "quiz.banner", "text", "x"),
                 body("key", ContentLanguages.TITLE, "image", other.materialId()),
                 body("key", ContentLanguages.questionImage(quiz.questionId()), "text", "x"),
                 body("key", ContentLanguages.optionText(quiz.optionIds().get(0)), "text", "x".repeat(301)))), 422)))

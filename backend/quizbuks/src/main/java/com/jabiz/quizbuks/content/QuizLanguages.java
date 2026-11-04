@@ -68,6 +68,7 @@ public final class QuizLanguages {
         sources.put(ContentLanguages.TITLE, base.title());
         keys.put(ContentLanguages.INTRO, QuizSnapshot.INTRO_KEY);
         sources.put(ContentLanguages.INTRO, base.intro());
+        keys.put(ContentLanguages.COVER, QuizSnapshot.COVER_KEY);
         Map<String, List<EntityInstance>> optionsOf = QuizEditing.groups(options, "questionId");
         List<EntityInstance> orderedQuestions = QuizEditing.ordered(questions);
         for (int q = 0; q < orderedQuestions.size(); q++) {
@@ -107,7 +108,7 @@ public final class QuizLanguages {
             List<String> stale = new ArrayList<>();
             keys.forEach((key, snapshotKey) -> {
                 EntityInstance row = rows.get(key);
-                boolean image = key.endsWith(".image");
+                boolean image = key.endsWith(".image") || ContentLanguages.COVER.equals(key);
                 if (image) {
                     UUID file = row == null ? null : QuizEditing.uuid(row.get("image"));
                     if (file != null) {

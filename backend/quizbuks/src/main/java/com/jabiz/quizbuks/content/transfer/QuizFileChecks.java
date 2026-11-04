@@ -185,7 +185,8 @@ public final class QuizFileChecks {
             });
             t.images().keySet().forEach(key -> {
                 if (!hasImageSlot(file, key)) {
-                    problems.add(value(at + ".images." + key, "an image of a question or option the quiz has"));
+                    problems.add(value(at + ".images." + key, "the cover, or an image of a question or option the quiz "
+                        + "has"));
                 }
             });
             java.util.Set<Integer> seen = new java.util.HashSet<>();
@@ -245,6 +246,10 @@ public final class QuizFileChecks {
     }
 
     private static boolean hasImageSlot(QuizFile file, String key) {
+        // Q98b: the language's own cover.
+        if (com.jabiz.quizbuks.content.QuizSnapshot.COVER_KEY.equals(key)) {
+            return true;
+        }
         java.util.regex.Matcher m = TEXT_KEY.matcher(key);
         if (!m.matches() || !"image".equals(m.group(3))) {
             return false;

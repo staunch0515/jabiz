@@ -152,6 +152,12 @@ function Settings({ publication, tiers, quiz, finance }: {
         ? <span data-testid="publication-cover"><FilePreview fileId={publication.cover} field={IMAGE} width={240} /></span>
         : t('publication.coverOfQuiz'),
     }]),
+    // Q98b: and its own covers per language, part of what is approved too.
+    ...(finance ? [] : Object.entries(publication.covers).map(([language, file]) => ({
+      key: `cover-${language}`,
+      label: t('publication.coverIn', { language: t(`preview.languages.${language}`, { defaultValue: language }) }),
+      value: <span data-testid={`publication-cover-${language}`}><FilePreview fileId={file} field={IMAGE} width={240} /></span>,
+    }))),
     { key: 'audience', label: t('publication.audience'),
       value: <span data-testid="publication-audience">{audience(publication.audience)}</span> },
     // Q25: an invited publication's list stands in for its regions.

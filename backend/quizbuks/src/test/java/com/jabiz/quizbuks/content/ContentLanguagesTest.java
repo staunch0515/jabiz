@@ -34,7 +34,9 @@ class ContentLanguagesTest {
             .isEqualTo(ContentLimits.OPTION_LENGTH);
         assertThat(ContentLanguages.parse("question:" + ID + ".text")).isEmpty();
         assertThat(ContentLanguages.parse("option:" + ID + ".stem")).isEmpty();
-        assertThat(ContentLanguages.parse("quiz.cover")).isEmpty();
+        assertThat(ContentLanguages.parse("quiz.banner")).isEmpty();
+        // Q98b: the cover is an image of its own in a language.
+        assertThat(ContentLanguages.parse("quiz.cover")).hasValueSatisfying(e -> assertThat(e.text()).isFalse());
         assertThat(ContentLanguages.parse(null)).isEmpty();
         assertThat(ContentLanguages.optionImage(ID).length()).isLessThanOrEqualTo(ContentLanguages.KEY_LENGTH);
     }

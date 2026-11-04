@@ -7,6 +7,7 @@ import { AI_QUERY } from '../ai/AiQuestionsPanel'
 import { TranslateDialog, useAiPublicationTextsJob } from '../ai/AiTranslatePanel'
 import { acceptAiPublicationTexts, requestAiPublicationTexts, type AiJob } from '../ai/api'
 import type { VersionRow } from '../content/api'
+import { FileField } from '../content/editing'
 import { sourceHash } from '../content/languages'
 import { SPONSOR } from '../messages'
 import type { ContentLanguage } from '../qb/api'
@@ -204,6 +205,15 @@ export function LanguagesFields({ id, form, set, version, method, locked, proble
               </div>
             )
           })}
+          {/* Q98b: this language's own cover; none shows the publication's or the quiz's. */}
+          <div className="flex flex-col gap-1">
+            <FileField kind="image" label={t('publishing.languages.cover', { language: tQb(`languages.${language}`) })}
+              uploadLabel={form.covers?.[language] ? t('publishing.field.replaceCover') : t('publishing.field.uploadCover')}
+              value={form.covers?.[language] ?? null} disabled={locked}
+              error={problemOf(`covers.${language}`)} testId={`publication-cover-${language}`}
+              onChange={(cover) => set('covers', { ...form.covers, [language]: cover })} />
+            <p className="text-muted-foreground text-xs">{t('publishing.languages.coverHint')}</p>
+          </div>
         </fieldset>
       ))}
       {asking && publicationId && form.quizId && (

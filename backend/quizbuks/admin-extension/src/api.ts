@@ -204,6 +204,8 @@ export interface Publication {
   name: string
   /** Q64: the publication's own cover (reviewed with it); none shows the version's cover. */
   cover: string | null
+  /** Q98b: its own cover in languages it offers besides its base (reviewed with it). */
+  covers: Record<string, string>
   regions: string[]
   /** Q25: everybody in the regions (PUBLIC) or the invitation list only (INVITED). */
   audience: string
@@ -289,6 +291,9 @@ export async function readPublication(publicationId: string): Promise<Publicatio
     versionLabel: str(row.versionLabel),
     name: String(row.name ?? ''),
     cover: str(row.cover),
+    covers: Object.fromEntries((['ja', 'zh', 'en'] as const)
+      .map((language) => [language, str(row[`cover${language[0].toUpperCase()}${language[1]}`])] as const)
+      .filter((entry): entry is readonly ['ja' | 'zh' | 'en', string] => entry[1] !== null)),
     regions: (str(row.regions) ?? '').split(',').map((r) => r.trim()).filter(Boolean),
     audience: str(row.audience) ?? 'PUBLIC',
     startAt: str(row.startAt),

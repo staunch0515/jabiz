@@ -66,6 +66,25 @@ class QuizSnapshotLanguagesTest {
     }
 
     @Test
+    void aLanguageWithACoverOfItsOwnShowsIt() {
+        // Q98b: the language's own cover among its images; without one, the base's.
+        QuizSnapshot base = Drafts.complete();
+        QuizSnapshot.Language zh = new QuizSnapshot.Language(Map.of("title", "首都"),
+            Map.of(QuizSnapshot.COVER_KEY, ZH_PICTURE), List.of());
+        QuizSnapshot snapshot = new QuizSnapshot(base.title(), base.intro(), base.cover(), base.timeLimitSec(),
+            base.aiGenerated(), base.materials(), base.questions(), base.survey(), Map.of("zh", zh));
+        assertThat(QuizSnapshots.in(snapshot, "zh").cover()).isEqualTo(ZH_PICTURE);
+        assertThat(QuizSnapshots.in(snapshot, "ja").cover()).isEqualTo(base.cover());
+        assertThat(QuizSnapshots.in(translated(), "zh").cover()).isEqualTo(base.cover());
+        // Its file is the version's (kept from the sweep), and it survives the round trip.
+        assertThat(QuizSnapshots.files(snapshot)).containsKey(ZH_PICTURE);
+        assertThat(QuizSnapshots.fromJson(QuizSnapshots.toJson(snapshot))).isEqualTo(snapshot);
+        // The draft's key of it.
+        assertThat(ContentLanguages.parse(ContentLanguages.COVER)).hasValueSatisfying(element ->
+            assertThat(element.text()).isFalse());
+    }
+
+    @Test
     void aLanguageWithoutAMaterialOfItsOwnShowsTheBasesMaterial() {
         QuizSnapshot base = Drafts.complete();
         QuizSnapshot snapshot = new QuizSnapshot(base.title(), base.intro(), base.cover(), base.timeLimitSec(), false,

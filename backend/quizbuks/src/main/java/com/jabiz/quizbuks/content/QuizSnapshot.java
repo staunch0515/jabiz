@@ -44,7 +44,8 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
     /**
      * The quiz in one of its other languages (Q73a, docs/quizbuks/plans/Q73-content-languages.md §2.3): the text
      * of every element by its key in the snapshot ({@code title}, {@code intro}, {@code q3.stem},
-     * {@code q3.o2.text}), the images the language has of its own ({@code q3.image}, {@code q3.o2.image}), and the
+     * {@code q3.o2.text}), the images the language has of its own ({@code cover}, Q98b; {@code q3.image},
+     * {@code q3.o2.image}), and the
      * materials it has of its own, each numbered as the base material it stands for. Whatever it lacks is the base's.
      */
     public record Language(Map<String, String> texts, Map<String, UUID> images, List<Material> materials) {
@@ -74,6 +75,8 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
 
     public static final String TITLE_KEY = "title";
     public static final String INTRO_KEY = "intro";
+    /** Q98b: the key of a language's own cover among its {@link Language#images}. */
+    public static final String COVER_KEY = "cover";
 
     /** A scored quiz. */
     public QuizSnapshot(String title, String intro, UUID cover, Integer timeLimitSec, boolean aiGenerated,

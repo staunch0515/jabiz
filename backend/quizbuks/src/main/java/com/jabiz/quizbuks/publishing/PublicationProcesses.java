@@ -97,6 +97,8 @@ public final class PublicationProcesses {
      *                          needs no regions
      * @param cover             the publication's own cover (Q64), a file of the policy {@code qb.content.image}
      *                          uploaded by the sponsor; none shows the version's cover
+     * @param covers            Q98b: its own cover in languages it offers besides its base, by language (the whole
+     *                          set, as the save writes the whole draft); none shows the cover chosen otherwise
      */
     public record SaveInput(UUID publicationId, UUID versionId, @NotNull String name, List<@NotNull String> regions,
         Instant startAt, Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap,
@@ -110,7 +112,22 @@ public final class PublicationProcesses {
         @Size(max = 3) Map<@NotNull @Size(max = 2) String, @Size(max = 4) Map<@NotNull @Size(max = 30) String,
             @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH + 1) String>> translations,
         @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed, Integer pickCount,
-        @Size(max = 36) String benefitPurchaseId, BigDecimal entryFee) {
+        @Size(max = 36) String benefitPurchaseId, BigDecimal entryFee,
+        @Size(max = 3) Map<@NotNull @Size(max = 2) String, UUID> covers) {
+
+        /** As before Q98b: no covers per language. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription, String audience,
+            String digitalDelivery, String digitalDescription, Integer digitalSendDays, String digitalContent,
+            UUID cover, ReferralInput referral, List<String> languages,
+            Map<String, Map<String, String>> translations, List<String> confirmed, Integer pickCount,
+            String benefitPurchaseId, BigDecimal entryFee) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
+                confirmed, pickCount, benefitPurchaseId, entryFee, null);
+        }
 
         /** As before Q88b: no entry fee. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
@@ -270,10 +287,17 @@ public final class PublicationProcesses {
             .steps(PublicationRounds::load)
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
-            // Q64: who uploaded the cover given, which must be the sponsor's own file.
+            // Q64: who uploaded the covers given (Q98b: in each language too), which must be the sponsor's own files.
             .steps(b -> QuizEditing.loadFiles(b, ctx -> {
-                UUID cover = ctx.get(INPUT, SaveInput.class).cover();
-                return cover == null ? List.of() : List.of(cover);
+                SaveInput input = ctx.get(INPUT, SaveInput.class);
+                List<UUID> files = new ArrayList<>();
+                if (input.cover() != null) {
+                    files.add(input.cover());
+                }
+                if (input.covers() != null) {
+                    input.covers().values().stream().filter(java.util.Objects::nonNull).forEach(files::add);
+                }
+                return files;
             }))
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
                 UUID given = ctx.get(INPUT, SaveInput.class).versionId();
@@ -343,12 +367,26 @@ public final class PublicationProcesses {
         QuizEditing.requireOwnFile(ctx, publication == null ? ctx.request().actorId()
             : publication.get("publisherId"), "cover", input.cover(), publication == null ? null
             : publication.get("cover"));
+        // Q98b: a cover per language, for the languages offered besides the version's base, each the sponsor's file.
+        String coverBase = version == null ? null : String.valueOf((Object) version.get("language"));
+        List<String> coverLanguages = input.languages() == null ? List.of() : input.languages();
+        PublicationCovers.refusals(input.covers(), coverLanguages, coverBase).forEach(ctx::reject);
+        Map<String, UUID> covers = input.covers() == null ? Map.of() : input.covers();
+        covers.forEach((language, file) -> {
+            String field = PublicationCovers.FIELDS.get(language);
+            if (field != null && file != null) {
+                QuizEditing.requireOwnFile(ctx, publication == null ? ctx.request().actorId()
+                    : publication.get("publisherId"), "covers." + language, file, publication == null ? null
+                    : publication.get(field));
+            }
+        });
         if (ctx.hasViolations()) {
             return;
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name());
         values.put("cover", input.cover());
+        PublicationCovers.FIELDS.forEach((language, field) -> values.put(field, covers.get(language)));
         values.put("regions", regions);
         values.put("audience", audience);
         values.put("rewardMethod", method);
@@ -720,7 +758,8 @@ public final class PublicationProcesses {
         values.put("name", input.name() == null || input.name().isBlank() ? copyName(messages, ctx,
             source.get("name")) : input.name());
         // Q64: the cover too, the copier's own file as the source's was (both are the caller's publications).
-        for (String field : List.of("cover", "regions", "startAt", "endAt", "timeLimitSec", "passScore", "budgetCap",
+        for (String field : List.of("cover", "coverJa", "coverZh", "coverEn", "regions", "startAt", "endAt",
+            "timeLimitSec", "passScore", "budgetCap",
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
             "sealedDigitalContent", "referral", "languages", "translations", "pickCount",
             // Q89b-1: the purchase, as the source saw it; the copy's submission checks it again.

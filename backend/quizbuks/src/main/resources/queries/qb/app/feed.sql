@@ -89,7 +89,9 @@ SELECT
              c.{{QbPublicationCard.name}}) AS name,
     coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'quizTitle',
              c.{{QbPublicationCard.quizTitle}}) AS quizTitle,
-    c.{{QbPublicationCard.cover}}          AS cover,
+    -- Q98b: the cover of the language shown, else the card's.
+    coalesce(CASE dl.lang WHEN 'ja' THEN c.{{QbPublicationCard.coverJa}} WHEN 'zh' THEN c.{{QbPublicationCard.coverZh}}
+        WHEN 'en' THEN c.{{QbPublicationCard.coverEn}} END, c.{{QbPublicationCard.cover}}) AS cover,
     c.{{QbPublicationCard.video}}          AS video,
     -- Q75: whether that video must be watched before starting, and how long it is.
     c.{{QbPublicationCard.watchRequired}}  AS watchRequired,

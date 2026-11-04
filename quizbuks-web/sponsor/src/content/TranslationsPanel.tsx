@@ -34,6 +34,7 @@ import { FileField, formProblem, ProblemList, useEditing } from './editing'
 import {
   hashesOf,
   materialComplete,
+  COVER_KEY,
   optionImageKey,
   pending,
   questionImageKey,
@@ -301,7 +302,10 @@ function TextsForm({ draft, language, texts, hashes, ai }: {
   )
 }
 
-/** A question's or an option's image in one language: the base's unless the language has its own. */
+/**
+ * The quiz's cover (Q98b), a question's or an option's image in one language: the base's unless the language has its
+ * own.
+ */
 function ImagesSection({ draft, language }: { draft: Draft; language: ContentLanguage }) {
   const { t } = useTranslation(SPONSOR)
   const editing = useEditing()
@@ -316,13 +320,15 @@ function ImagesSection({ draft, language }: { draft: Draft; language: ContentLan
     },
     onError: editing.failed,
   })
-  const images = draft.questions.flatMap((q, i) => [
+  // Q98b: the cover first, also where the base has none (the language may have its own).
+  const cover: { key: string; base: string | null; what: string } = { key: COVER_KEY, base: draft.quiz.cover,
+    what: t('translations.cover') }
+  const images: { key: string; base: string | null; what: string }[] = [cover, ...draft.questions.flatMap((q, i) => [
     ...(q.image ? [{ key: questionImageKey(q.questionId), base: q.image,
       what: t('translations.questionImage', { n: i + 1 }) }] : []),
     ...q.options.flatMap((o, j) => o.image ? [{ key: optionImageKey(o.optionId), base: o.image,
       what: t('translations.optionImage', { n: i + 1, m: j + 1 }) }] : []),
-  ])
-  if (images.length === 0) return null
+  ])]
   return (
     <section className="flex flex-col gap-3" aria-labelledby={`${id}-title`} data-testid="translation-images">
       <h3 id={`${id}-title`} className="text-base font-semibold">{t('translations.images')}</h3>
@@ -333,7 +339,8 @@ function ImagesSection({ draft, language }: { draft: Draft; language: ContentLan
             data-testid="translation-image" data-key={image.key}>
             <div className="flex flex-col gap-1">
               <span className="text-sm font-medium">{image.what}</span>
-              <ContentImage fileId={image.base} width={120} />
+              {image.base ? <ContentImage fileId={image.base} width={120} />
+                : <span className="text-muted-foreground text-xs">{t('translations.noBaseCover')}</span>}
             </div>
             <FileField kind="image" label={t('translations.ownImage')}
               uploadLabel={saved.get(image.key)?.image ? t('translations.replaceImage') : t('translations.uploadImage')}

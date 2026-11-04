@@ -10,6 +10,8 @@ import { contentFieldOf, type Draft, type LanguageStatus, type Material, type Tr
 
 export const TITLE_KEY = 'quiz.title'
 export const INTRO_KEY = 'quiz.intro'
+/** Q98b: the quiz's cover in a language of its own (`ContentLanguages.COVER`). */
+export const COVER_KEY = 'quiz.cover'
 export const stemKey = (questionId: string) => `question:${questionId}.stem`
 export const questionImageKey = (questionId: string) => `question:${questionId}.image`
 export const optionTextKey = (optionId: string) => `option:${optionId}.text`

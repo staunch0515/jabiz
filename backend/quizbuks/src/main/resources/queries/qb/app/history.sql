@@ -57,7 +57,9 @@ SELECT
         c.{{QbPublicationCard.name}})      AS name,
     coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> m.{{QbAttempt.language}} ->> 'quizTitle',
         c.{{QbPublicationCard.quizTitle}}) AS quizTitle,
-    c.{{QbPublicationCard.cover}}          AS cover,
+    -- Q98b: the cover of the language shown, else the card's.
+    coalesce(CASE m.{{QbAttempt.language}} WHEN 'ja' THEN c.{{QbPublicationCard.coverJa}} WHEN 'zh' THEN c.{{QbPublicationCard.coverZh}}
+        WHEN 'en' THEN c.{{QbPublicationCard.coverEn}} END, c.{{QbPublicationCard.cover}}) AS cover,
     c.{{QbPublicationCard.kind}}           AS kind,
     m.{{QbAttempt.status}}                 AS status,
     CAST(CASE

@@ -2,7 +2,7 @@ import type { Material, PublicationView, Tier } from '../qb/play'
 import { videoPlayer } from '../qb/video'
 import type { Sponsor } from '../qb/api'
 import { choiceOf, type Draft, type Selection, type Snapshot } from '../content/api'
-import { optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from '../content/languages'
+import { COVER_KEY, optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from '../content/languages'
 import type { ContentLanguage } from '../qb/api'
 import type { Publication, Tier as SponsorTier } from '../publishing/api'
 
@@ -170,6 +170,8 @@ export function snapshotIn(snapshot: Snapshot, language: ContentLanguage): Snaps
     translations: undefined,
     title: text('title', snapshot.title) ?? snapshot.title,
     intro: text('intro', snapshot.intro),
+    // Q98b: the language's own cover.
+    cover: image('cover', snapshot.cover),
     materials: snapshot.materials.map((m) => {
       const own = t.materials.find((o) => o.no === m.no)
       return own ? { ...own, no: m.no, kind: m.kind, watchToAnswer: m.watchToAnswer } : m
@@ -193,7 +195,7 @@ export function draftIn(draft: Draft, language: ContentLanguage): Draft {
   return {
     ...draft,
     quiz: { ...draft.quiz, title: text('quiz.title', draft.quiz.title) ?? draft.quiz.title,
-      intro: text('quiz.intro', draft.quiz.intro) },
+      intro: text('quiz.intro', draft.quiz.intro), cover: image(COVER_KEY, draft.quiz.cover) },
     materials: draft.materials.map((m) => {
       const own = variantOf(draft, m, language)
       return own ? { ...own, watchToAnswer: m.watchToAnswer } : m

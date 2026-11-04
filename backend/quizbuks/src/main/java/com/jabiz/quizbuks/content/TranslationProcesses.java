@@ -286,13 +286,14 @@ public final class TranslationProcesses {
 
     /**
      * Every element of the draft that can be translated, by its key, with its base text (an image's is null): the
-     * quiz's title and introduction, and each question's and option's text and image.
+     * quiz's title, introduction and cover (Q98b), and each question's and option's text and image.
      */
     public static Map<String, String> sources(EntityInstance quiz, List<EntityInstance> questions,
         List<EntityInstance> options) {
         Map<String, String> sources = new LinkedHashMap<>();
         sources.put(ContentLanguages.TITLE, quiz.get("title"));
         sources.put(ContentLanguages.INTRO, quiz.get("intro"));
+        sources.put(ContentLanguages.COVER, null);
         for (EntityInstance question : questions) {
             sources.put(ContentLanguages.stem(question.id()), question.get("stem"));
             sources.put(ContentLanguages.questionImage(question.id()), null);

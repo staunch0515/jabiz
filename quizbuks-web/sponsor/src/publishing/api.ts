@@ -71,6 +71,8 @@ export interface Publication {
   name: string
   /** Q64: the publication's own cover; none shows the quiz version's. */
   cover: string | null
+  /** Q98b: its own cover in languages it offers besides its base (`coverJa`, `coverZh`, `coverEn`). */
+  covers: Partial<Record<ContentLanguage, string>>
   quizId: string | null
   versionId: string | null
   versionLabel: string | null
@@ -184,6 +186,8 @@ export interface SaveInput {
   name: string
   /** Q64: the publication's own cover (a `qb.content.image` file); null shows the version's. Sent with each save. */
   cover: string | null
+  /** Q98b: its own cover in languages it offers besides its base, the whole set. */
+  covers?: Partial<Record<ContentLanguage, string>>
   regions: string[]
   startAt: string | null
   endAt: string | null
@@ -340,11 +344,22 @@ export const methodOf = (value: unknown): RewardMethod =>
 /** The regions of their written form (`GLOBAL,JP`). */
 export const regionsOf = (value: unknown): string[] => (value == null || value === '' ? [] : String(value).split(','))
 
+/** Q98b: the publication's own covers per language, as its fields hold them. */
+export function coversOf(row: Row): Partial<Record<ContentLanguage, string>> {
+  const covers: Partial<Record<ContentLanguage, string>> = {}
+  for (const [language, field] of [['ja', 'coverJa'], ['zh', 'coverZh'], ['en', 'coverEn']] as const) {
+    const file = str(row[field])
+    if (file) covers[language] = file
+  }
+  return covers
+}
+
 export function toPublication(row: Row): Publication {
   return {
     publicationId: String(row.publicationId),
     name: String(row.name ?? ''),
     cover: str(row.cover),
+    covers: coversOf(row),
     quizId: str(row.quizId),
     versionId: str(row.versionId),
     versionLabel: str(row.versionLabel),
@@ -888,6 +903,8 @@ export interface TierDraft {
 export interface PublicationForm {
   name: string
   cover: string | null
+  /** Q98b: the covers per language as chosen (a language not offered any more is not sent). */
+  covers: Partial<Record<ContentLanguage, string | null>>
   quizId: string | null
   versionId: string | null
   regions: string[]
@@ -946,6 +963,7 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
   return {
     name: p?.name ?? '',
     cover: p?.cover ?? null,
+    covers: p?.covers ?? {},
     quizId: p?.quizId ?? null,
     versionId: p?.versionId ?? null,
     regions: p?.regions ?? [],
@@ -1077,6 +1095,9 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
             .filter(([, text]) => text && text.trim() !== '').map(([field, text]) => [field, text!.trim()]))])),
         // Q73c: translations still right for a changed base text.
         ...(form.confirmed && form.confirmed.length > 0 ? { confirmed: form.confirmed } : {}),
+        // Q98b: the covers of the languages offered (the base's is cover; the server refuses one for it).
+        covers: Object.fromEntries(form.languages.filter((language) => form.covers?.[language])
+          .map((language) => [language, form.covers[language]!])),
       } : {}),
     },
   }

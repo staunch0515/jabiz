@@ -292,6 +292,8 @@ public final class PublicationVersions {
             values.put("questionCount", version.get("questionCount"));
             // Q64: a publication's own cover stays; only one taken from the version follows the switch.
             values.put("cover", PublicationEditing.cardCover(publication, snapshot));
+            // Q98b: and each language's, from the new version where the publication has none of its own.
+            values.putAll(PublicationCovers.card(publication::get, snapshot, (String) values.get("cover")));
             // Q19, Q63, Q75: the new version's video, whether it must be watched and how long it is, as going on.
             PublicationEditing.cardVideo(snapshot.materials()).writeTo(values);
             ctx.changes().update(QbPublications.CARD, card.id(), card.version(), values);

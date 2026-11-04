@@ -26,11 +26,12 @@ public final class ContentLanguages {
     public static final int MAX_LANGUAGES = 3;
 
     /**
-     * The most translation rows a quiz has: in each other language its title, introduction, and each question's text
+     * The most translation rows a quiz has: in each other language its title, introduction, cover (Q98b), and each
+     * question's text
      * and image and each option's text and image.
      */
     public static final int MAX_TRANSLATION_ROWS = (MAX_LANGUAGES - 1)
-        * (2 + ContentLimits.MAX_QUESTIONS * (2 + 2 * ContentLimits.MAX_OPTIONS));
+        * (3 + ContentLimits.MAX_QUESTIONS * (2 + 2 * ContentLimits.MAX_OPTIONS));
 
     /** The length of a column listing languages ({@code ja,zh,en}). */
     public static final int LIST_LENGTH = 20;
@@ -44,16 +45,21 @@ public final class ContentLanguages {
 
     public static final String TITLE = "quiz.title";
     public static final String INTRO = "quiz.intro";
+    /** Q98b: the quiz's cover in a language of its own (an image; without one, the base's). */
+    public static final String COVER = "quiz.cover";
 
-    /** What a key names: the quiz's title or introduction, or a question's or an option's text or own image. */
-    public enum Part { TITLE, INTRO, STEM, QUESTION_IMAGE, OPTION_TEXT, OPTION_IMAGE }
+    /**
+     * What a key names: the quiz's title, introduction or own cover (Q98b), or a question's or an option's text or own
+     * image.
+     */
+    public enum Part { TITLE, INTRO, COVER, STEM, QUESTION_IMAGE, OPTION_TEXT, OPTION_IMAGE }
 
     /** A parsed key: its part and, for a question's or an option's, the item's key. */
     public record Element(Part part, UUID item) {
 
         /** Whether the element is text (else a language's own image). */
         public boolean text() {
-            return part != Part.QUESTION_IMAGE && part != Part.OPTION_IMAGE;
+            return part != Part.QUESTION_IMAGE && part != Part.OPTION_IMAGE && part != Part.COVER;
         }
 
         /** The most characters its text may have: the base field's. */
@@ -63,7 +69,7 @@ public final class ContentLanguages {
                 case INTRO -> ContentLimits.INTRO_LENGTH;
                 case STEM -> ContentLimits.STEM_LENGTH;
                 case OPTION_TEXT -> ContentLimits.OPTION_LENGTH;
-                case QUESTION_IMAGE, OPTION_IMAGE -> 0;
+                case COVER, QUESTION_IMAGE, OPTION_IMAGE -> 0;
             };
         }
     }
@@ -104,6 +110,9 @@ public final class ContentLanguages {
         }
         if (INTRO.equals(key)) {
             return Optional.of(new Element(Part.INTRO, null));
+        }
+        if (COVER.equals(key)) {
+            return Optional.of(new Element(Part.COVER, null));
         }
         Matcher m = key == null ? null : ITEM.matcher(key);
         if (m == null || !m.matches()) {

@@ -158,6 +158,23 @@ class QuizFileTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void aLanguagesOwnCoverIsTakenAsItsImages() {
+        // Q98b: "cover" among a language's images, a file of the quiz file like the others.
+        Map<String, Object> document = translated();
+        Map<String, Object> zh = (Map<String, Object>) ((Map<String, Object>) document.get("translations")).get("zh");
+        Map<String, Object> images = new LinkedHashMap<>((Map<String, Object>) zh.getOrDefault("images", Map.of()));
+        images.put("cover", "f4");
+        zh.put("images", images);
+        QuizFile file = QuizFileFormat.read(document).file();
+        assertThat(QuizFileChecks.check(file)).isEmpty();
+        assertThat(QuizFileChecks.uses(file)).extracting(QuizFileChecks.Use::at).contains("translations.zh.images.cover");
+        UUID f4 = UUID.randomUUID();
+        assertThat(QuizTransferProcesses.snapshot(file, Map.of("f4", f4)).translations().get("zh").images())
+            .containsEntry("cover", f4);
+    }
+
+    @Test
     void anOlderVersionGoesThroughEachLaterUpgrade() {
         // As if version 3 were current: a version 1 file whose title was "name" in version 1 and the article
         // "text" until version 2.

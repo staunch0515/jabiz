@@ -17,7 +17,7 @@
 实施（2026-11-05）：上述删除；`AiCancelIT`、`AiPdfIT`、`AiCostControlIT` 中原来用封面请求的地方改为出题请求（同样检验限额与开关）；删除 `AiCoverIT`、`AiCoversTest`、`CoverSvgTest`；
 商家后台删除 `AiCoverPanel` 与相关接口、文案、测试；e2e `ai-cover.spec.ts` 改为只测 PDF 出题的 `ai-pdf.spec.ts`；本地 Claude 桩不再回答封面请求。
 
-## Q98b 封面按语言提供（计划）
+## Q98b 封面按语言提供
 
 ### 1. 决定
 
@@ -49,3 +49,13 @@
 
 - 卡片与发布各加三列，模板读取多一个 `CASE`：语句数不变（同一条语句），`AttemptStatementBudgetIT` 不受影响（答题路径不读卡片的封面）。
 - 公开文件的白名单漏掉一处，封面在公开页上即无法显示：IT 覆盖每个公开模板。
+
+### 5. 实施记录（2026-11-05）
+
+- 模版：`ContentLanguages.COVER`（`quiz.cover`，`Part.COVER`，图片）；`TranslationProcesses.sources`、`QuizLanguages`（快照键 `cover`）、`QuizSnapshots.in`（按语言替换封面）、`QuizProcesses`（复制与导入时把快照键换回草稿键）、`QuizFileChecks`（导入文件接受 `images.cover`）。版本文件照旧经 `QuizSnapshots.files` 登记各语言的图片。
+- 发布：`QbPublication.coverJa/coverZh/coverEn`（文件）、`QbPublicationCard.coverJa/coverZh/coverEn`（文本），迁移 `V75__quizbuks_covers_per_language.sql`；`PublicationCovers`（字段、校验 `QB_PUBLICATION_COVER_LANGUAGE`、卡片的选择）；`QB_PUBLICATION_SAVE` 的 `covers`（检查是商家自己的文件）、复制、审批内容（有才写 `covers`，以前的审批哈希不变）、上架与版本切换写卡片。
+- 模板：`qb.app.feed`、`qb.app.publication` 按显示语言、`qb.app.history` 按答题语言取卡片该语言的封面，没有即 `cover`。商家后台的发布列表与 App 的商家主页仍显示基准封面。
+- 页面：商家后台"语言"页的图片列表第一项是该语言的封面（基准没有封面时注明）；发布向导中每种其他语言多一个封面上传框；预览按语言显示；后台审核页按语言列出发布自己的封面；导出文件带上 `images.cover`。
+- 测试：`CoverLanguagesIT`（3：版本的按语言封面在首页与详情页按语言显示；发布自己的封面优先的各种组合与复制；不提供的语言、基准语言、别人的文件被拒）、`QuizSnapshotLanguagesTest`、`QuizFileTest`、`ContentLanguagesTest` / `ContentLanguagesIT`（原先把 `quiz.cover` 当作不存在的键的例子改为 `quiz.banner`）；`PublicationCoverIT`、`PublicationLanguagesIT`、`PublicationIT`、`AttemptStatementBudgetIT`、场景回放照旧通过，`platformCheck` 0 个错误。
+  商家后台 Vitest（语言页的封面项、发布向导按语言的封面随保存发送，680 个全过）、后台扩展的检查（229 个全过）。e2e 未在本机运行。
+

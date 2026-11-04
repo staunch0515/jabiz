@@ -615,6 +615,8 @@ final class PublicationEditing {
         card.put("quizTitle", version.get("title"));
         card.put("questionCount", version.get("questionCount"));
         card.put("cover", cardCover(publication, snapshot));
+        // Q98b: and each language's where it is another.
+        card.putAll(PublicationCovers.card(publication::get, snapshot, (String) card.get("cover")));
         card.put("tiers", CardTiers.toJson(ordered(list(ctx, TIERS)).stream().map(row -> new CardTiers.Tier(
             String.valueOf(row.id()), integer(row.get("fromScore")), integer(row.get("toScore")),
             money(row.get("reward")))).toList()));
@@ -777,6 +779,11 @@ final class PublicationEditing {
         // offers its version's base only: its content, and so its approvals, are as before).
         if (publication.get("languages") != null) {
             content.put("languages", publication.get("languages"));
+        }
+        // Q98b: and its own covers per language, when it has any (so the approvals of the others stand).
+        Map<String, String> covers = PublicationCovers.own(publication::get);
+        if (!covers.isEmpty()) {
+            content.put("covers", covers);
         }
         String texts = PublicationLanguages.cardJson(publication.get("translations"));
         if (texts != null) {

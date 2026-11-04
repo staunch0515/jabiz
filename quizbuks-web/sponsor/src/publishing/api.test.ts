@@ -16,6 +16,7 @@ const FORM: PublicationForm = {
   benefitPurchaseId: '',
   name: '  Spring quiz ',
   cover: null,
+  covers: {},
   quizId: 'q1',
   versionId: 'v1',
   regions: ['ASIA', 'GLOBAL', 'JP'],

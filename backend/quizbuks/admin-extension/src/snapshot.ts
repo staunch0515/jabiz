@@ -146,6 +146,8 @@ export function snapshotIn(snapshot: Snapshot, language: string): Snapshot {
     translations: {},
     title: t.texts.title ?? snapshot.title,
     intro: t.texts.intro ?? snapshot.intro,
+    // Q98b: the language's own cover.
+    cover: t.images.cover ?? snapshot.cover,
     materials: snapshot.materials.map((m) => t.materials.find((o) => o.no === m.no) ?? m),
     questions: snapshot.questions.map((q) => ({
       ...q,

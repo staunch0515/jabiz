@@ -1,7 +1,7 @@
 import { ApiError, fetchFileContent, runProcess, uploadFile } from '@jabiz/client'
 import type { ContentLanguage } from '../qb/api'
 import { readDraft, type Draft, type Material } from './api'
-import { optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from './languages'
+import { COVER_KEY, optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from './languages'
 import { CONTENT_FILE_POLICY, CONTENT_PROCESS } from './ids'
 
 /**
@@ -153,6 +153,8 @@ export async function exportDraft(draft: Draft, onProgress?: Progress,
       }
       text('quiz.title', 'title')
       text('quiz.intro', 'intro')
+      // Q98b: the language's own cover.
+      image(COVER_KEY, 'cover')
       draft.questions.forEach((q, i) => {
         text(stemKey(q.questionId), `q${i + 1}.stem`)
         image(questionImageKey(q.questionId), `q${i + 1}.image`)

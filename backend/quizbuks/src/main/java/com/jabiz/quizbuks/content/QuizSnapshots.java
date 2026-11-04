@@ -218,7 +218,8 @@ public final class QuizSnapshots {
                 q.selection()));
         }
         return new QuizSnapshot(t.texts().getOrDefault(QuizSnapshot.TITLE_KEY, snapshot.title()),
-            t.texts().getOrDefault(QuizSnapshot.INTRO_KEY, snapshot.intro()), snapshot.cover(),
+            t.texts().getOrDefault(QuizSnapshot.INTRO_KEY, snapshot.intro()),
+            t.images().getOrDefault(QuizSnapshot.COVER_KEY, snapshot.cover()),
             snapshot.timeLimitSec(), snapshot.aiGenerated(), materials, questions, snapshot.survey());
     }
 

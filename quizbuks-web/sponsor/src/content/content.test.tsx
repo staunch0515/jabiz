@@ -479,6 +479,8 @@ describe('the quiz\'s other languages (Q73a)', () => {
     expect(rows.find((row) => row.dataset.key === 'option:o1.text')).toHaveAttribute('data-state', 'missing')
     // The materials: the base's shown in its place.
     expect(within(panel).getByTestId('translation-material')).toHaveAttribute('data-own', 'no')
+    // Q98b: the cover can be the language's own, first among the images.
+    expect(within(panel).getAllByTestId('translation-image')[0]).toHaveAttribute('data-key', 'quiz.cover')
     await expectAccessible()
 
     const title = rows.find((row) => row.dataset.key === 'quiz.title')!

@@ -440,6 +440,21 @@ describe('the publication wizard', () => {
       translations: { zh: { name: '咖啡周' } } })
   })
 
+  it('keeps a cover of its own for each other language offered, and sends it with the save (Q98b)', async () => {
+    const { processCalls } = server({ versions: [{ ...VERSIONS[0], language: 'en', languages: 'en,zh' }],
+      publication: { ...DRAFT, languages: 'en,zh', translations: JSON.stringify({ zh: { name: { text: '咖啡周' } } }),
+        coverZh: 'f-zh' },
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const texts = await screen.findByTestId('publication-texts-zh')
+    expect(within(texts).getByTestId('publication-cover-zh')).toBeInTheDocument()
+    expect(texts).toHaveTextContent('Cover in 中文')
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ languages: ['en', 'zh'], covers: { zh: 'f-zh' } })
+  })
+
   it('shows the AI\'s suggestions of the publication\'s texts, each used as confirmed (Q73d-2)', async () => {
     const { processCalls } = server({ versions: [{ ...VERSIONS[0], language: 'en', languages: 'en,zh' }],
       publication: { ...DRAFT, languages: 'en,zh' },

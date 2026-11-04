@@ -590,6 +590,9 @@ public final class QuizProcesses {
         if (QuizSnapshot.INTRO_KEY.equals(key)) {
             return ContentLanguages.INTRO;
         }
+        if (QuizSnapshot.COVER_KEY.equals(key)) {
+            return ContentLanguages.COVER;
+        }
         java.util.regex.Matcher m = SNAPSHOT_KEY.matcher(key);
         if (!m.matches()) {
             return null;
