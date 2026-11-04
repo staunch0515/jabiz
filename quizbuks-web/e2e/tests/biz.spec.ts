@@ -39,6 +39,9 @@ test('every page of every language is served with its own text and alternates', 
 
 /** Picks a language in the header's drop-down (Q41): the links show once it is open. */
 async function chooseLanguage(page: Page, name: string) {
+  // Below 1,351px the languages are in the menu, as a visitor finds them.
+  const menu = page.locator('[data-menu-toggle]')
+  if (await menu.isVisible()) await menu.click()
   await page.getByTestId('lang-toggle').click()
   await page.locator('[data-lang-menu]').getByRole('link', { name }).click()
 }
@@ -137,7 +140,7 @@ test('the header fits in every language, the wordmark on one line', async ({ bro
   for (const [prefix, locale] of [['', 'en-US'], ['zh/', 'zh-CN'], ['ja/', 'ja-JP']] as const) {
     const context = await browser.newContext({ locale })
     const page = await context.newPage()
-    for (const width of [390, 1024, 1351, 1366, 1440, 1561, 1920]) {
+    for (const width of [390, 1024, 1351, 1366, 1440, 1600, 1920]) {
       await page.setViewportSize({ width, height: 800 })
       await page.goto(`/biz/${prefix}pricing/`)
       const header = await page.evaluate(() => {
