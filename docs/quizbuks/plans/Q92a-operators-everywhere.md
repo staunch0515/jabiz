@@ -1,7 +1,7 @@
-# Q92a 全面运营商化：平台运营商、Shopify 运营商、直营发起方、去掉"直营即总部"（细化计划，2026-11-04；待需求方确认）
+# Q92a 全面运营商化：平台运营商、Shopify 运营商、直营发起方、去掉"直营即总部"（细化计划，2026-11-04；需求方已确认 §11，待开发）
 
 依据：`Q92-overall-design.md` §2、§10（决定 1–20）、附录 A 的 A.1、A.2、A.3、A.5。本计划只做**组织与结算**；收费的通用化（费用规则、可售项、交易、使用权、通用价目表）在 Q93，知识结构图在 Q90。
-平台在测试，**重置数据库**，迁移不搬旧数据。工作分支 `1.3/quizbuks-92a-…`（按 §9 分三个 PR）。**确认 §11 后开发。**
+平台在测试，**重置数据库**，迁移不搬旧数据。工作分支 `1.3/quizbuks-92a-…`（按 §9 分三个 PR）。需求方 2026-11-04 确认 §11（见 §11 的答复）；额度重置后开始开发。
 
 ## 1. 目标（验收标准）
 
@@ -23,7 +23,7 @@
 
 | 属性 | 含义 | 平台运营商 | Shopify 运营商 | 其他 |
 |---|---|---|---|---|
-| `default_for_new` | 入驻时按语言找不到运营商，就归它；至多一个运营商为真 | 是 | 否 | 否 |
+| `default_for_new` | **自然产生的发起方**（自己注册入驻、不经运营商获客的）都归它；至多一个运营商为真 | 是 | 否 | 否 |
 | `internal_settlement` | 结算的应付不付出去，记为内部结算 | 是 | 是 | 否 |
 
 另有：`publisher_kinds`（它接收的发布方种类：`SPONSOR` / `SHOPIFY_SHOP`）。Shopify 运营商只接收店，其他只接收发起方。
@@ -38,7 +38,8 @@
 ### 2.3 归属
 
 - `qb_sponsor_operator` 扩展为**发布方的归属**：加 `publisher_kind`（`SPONSOR` / `SHOPIFY_SHOP`），唯一键改为 `(publisher_kind, publisher_id)`。
-- 入驻（`SponsorProcesses`）：按语言找运营商（`assignByLanguage`），找不到即 `default_for_new` 的运营商；**一定写一行归属**。Shopify 店建立（`ShopProcesses`）即归 Shopify 运营商。
+- 入驻（`SponsorProcesses`）：**自然产生的发起方一律归平台运营商**（`default_for_new`），**不再按语言自动分给运营商**（`assignByLanguage` 与 Q59c 的运营商语言分配拿掉；运营商的语言只作展示与获客用）；**一定写一行归属**。
+- 运营商的发起方来自：获客认领（归获客的运营商）与平台改派。Shopify 店建立（`ShopProcesses`）即归 Shopify 运营商。
 - 改派（`QB_SPONSOR_OPERATOR_ASSIGN`）：只在接收该发布方种类的运营商之间；`operatorId` 必填；直营发起方不能改派（422 `QB_DIRECT_SPONSOR_FIXED`）。
 - 获客认领（`ProspectProcesses`）：一律归属到获客的运营商。
 
@@ -110,7 +111,7 @@
 ## 7. 测试
 
 - **夹具**：`AccountItSupport` 等先建平台运营商（`QB_SETUP` 已建）并加一位审核成员（`QB_OPERATOR`）；入驻的发起方自动归属平台运营商；审核改由该成员。
-- **改写**：`OperatorIT`（回到总部 → 改派只在运营商之间、直营发起方不能改派）、`OperatorIsolationIT`、`OperatorLanguagesIT`（找不到语言 → 平台运营商）、`OperatorScopesIT`、`OperatorSettlementIT` 与 `OperatorSettlementsTest`（基础、内部结算、方案 1）、`ProspectIT`、`AudiencePricingIT` 与 `AudienceBillingTest`（没有回落参数）、`CertificationIT`、`SponsorCertificationIT`、`UnderstandingIT`、`ReportIT`、`SponsorPageIT`、`SponsorProductIT`、`FeeIT`、`ShopifyIT`、`ShopifyPlanIT`、`SetupIT`、`SetupRemovalsIT`、`ProcessAccessIT`、`QbRolesTest`、`PublicationApprovalsTest`、`PublicationReviewSettingsIT`、`CashRewardIT`（没有平台处理）。
+- **改写**：`OperatorIT`（回到总部 → 改派只在运营商之间、直营发起方不能改派）、`OperatorIsolationIT`、`OperatorLanguagesIT`（不再按语言分配：自然产生的发起方一律归平台运营商）、`OperatorScopesIT`、`OperatorSettlementIT` 与 `OperatorSettlementsTest`（基础、内部结算、方案 1）、`ProspectIT`、`AudiencePricingIT` 与 `AudienceBillingTest`（没有回落参数）、`CertificationIT`、`SponsorCertificationIT`、`UnderstandingIT`、`ReportIT`、`SponsorPageIT`、`SponsorProductIT`、`FeeIT`、`ShopifyIT`、`ShopifyPlanIT`、`SetupIT`、`SetupRemovalsIT`、`ProcessAccessIT`、`QbRolesTest`、`PublicationApprovalsTest`、`PublicationReviewSettingsIT`、`CashRewardIT`（没有平台处理）。
 - **新增**：`OperatorsEverywhereIT`——入驻一定有归属；建运营商即有直营发起方（负责人以发起方身份提交，另一位成员审核，负责人自己不能审）；Shopify 店归 Shopify 运营商、活动进审核、应用费进结算；平台运营商与 Shopify 运营商内部结算；代码中没有 `direct`（ArchUnit 式的源码检查或启动检查：所有发布卡片与平台费有运营商）。
 - 场景快照：`setup.yml`（参数少回落、多两个运营商）、`accounts.yml`、`publishing.yml` 等随之更新。
 - 前端：`AX/audiencePricing.test.tsx`、`certifications.test.tsx`、`operator.test.tsx`、获客的测试、菜单的测试；e2e：入驻与审核改由运营商成员（`tools/quizbuks/e2e.sh` 的准备步骤加平台运营商成员）。
@@ -135,7 +136,11 @@
 4. **Shopify 渠道发布原本没有审核**：加审核后，店的活动不再立即上线；店的前端与说明要跟着改（`quizbuks-web/shopify`）。
 5. **Q90、Q93 同时在设计**：本期只做组织与结算，不碰收费积木与知识结构图；官方账号表留给 Q90 T1a 删除。
 
-## 11. 待需求方确认
+## 11. 待需求方确认（2026-11-04 已答复）
+
+答复：1 选 **A**（负责人自己的账号兼任直营发起方）；2 **自然产生的发起方都归平台运营商**（不按语言分配，见 §2.3）；3 Shopify 运营商的负责人与成员由平台的人兼任；4 分三个 PR、依次合并。
+
+原问题：
 
 1. **直营发起方的账号**：§2.2 的 A（负责人自己的账号兼任直营发起方，"另一个人审核"由平台自动保证；换负责人暂不移交）还是 B（独立账号，系统无法保证是另一个人审核）？
 2. 入驻时**按语言找不到运营商**归平台运营商（`default_for_new`）：可以吗？
