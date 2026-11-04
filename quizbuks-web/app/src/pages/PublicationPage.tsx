@@ -49,6 +49,7 @@ function EntryFeeStart({ fee, disabled, busy, describedBy, onStart }: { fee: num
   describedBy: string; onStart: () => void }) {
   const { t } = useTranslation(APP)
   const wallet = useQuery({ queryKey: [...WALLET_QUERY, 'entry-fee'], queryFn: readWallet })
+  // Unread (an error): the start is still offered, without the figures; the server checks the fee (QB_ENTRY_FEE_SHORT).
   const usable = wallet.data ? transferable(wallet.data) : null
   if (usable !== null && usable < fee) {
     return (
@@ -67,7 +68,7 @@ function EntryFeeStart({ fee, disabled, busy, describedBy, onStart }: { fee: num
         : t('detail.entryFeeConfirmText', { fee: formatKudos(fee), available: formatKudos(usable) })}
       confirmLabel={t('detail.entryFeePay', { fee: formatKudos(fee) })} onConfirm={onStart}
       trigger={
-        <Button size="lg" className="w-full" disabled={disabled || usable === null} aria-busy={busy || undefined}
+        <Button size="lg" className="w-full" disabled={disabled || wallet.isPending} aria-busy={busy || undefined}
           aria-describedby={describedBy} data-testid="detail-start" data-entry-fee={fee}>
           <Play aria-hidden />
           {t('detail.startWithFee', { fee: formatKudos(fee) })}

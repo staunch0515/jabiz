@@ -845,7 +845,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           : Number(form.timeLimitSec),
         passScore: form.passScore.trim() === '' ? null : Number(form.passScore),
         pickCount: pick !== null && Number.isInteger(pick) ? pick : null,
-        entryFee: form.entryFee.trim() === '' ? 0 : Number(form.entryFee),
+        entryFee: survey || form.entryFee.trim() === '' ? 0 : Number(form.entryFee),
         questionCount: version?.questionCount ?? null,
         fullScore,
         budgetCap: form.budgetCap.trim() === '' ? null : form.budgetCap,

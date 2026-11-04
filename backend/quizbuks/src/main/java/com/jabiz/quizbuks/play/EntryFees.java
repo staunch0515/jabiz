@@ -6,6 +6,7 @@ import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.wallet.QbLedger;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.quizbuks.wallet.TransferRules;
+import com.jabiz.quizbuks.wallet.TransferStatus;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.ledger.LedgerProcesses;
 import java.math.BigDecimal;
@@ -41,34 +42,48 @@ public final class EntryFees {
 
     /**
      * The hold period the transferable balance is computed with, from the parameter's row as the dataset gives it
-     * ({@code qb.transfer.hold-days}); a missing or unusable value reads as 0 days, so that nothing is held back by
-     * time: the fee is then a question of the balance alone (the transfers refuse in that case; a start is not a
-     * transfer).
+     * ({@code qb.transfer.hold-days}). Empty when it is missing or unusable: the start then refuses the fee, as the
+     * transfers refuse to send (nothing can be told free of the hold).
      */
-    public static BigDecimal holdDays(List<EntityInstance> paramRows) {
+    public static Optional<BigDecimal> holdDays(List<EntityInstance> paramRows) {
         for (EntityInstance row : paramRows) {
             Object value = row.get("value");
             try {
                 BigDecimal days = value == null ? null : new BigDecimal(value.toString().strip());
                 if (TransferRules.wholeAndNotNegative(days)) {
-                    return days;
+                    return Optional.of(days);
                 }
             } catch (NumberFormatException ignored) {
-                // Unusable: 0 days.
+                // Unusable: refused.
             }
         }
-        return BigDecimal.ZERO;
+        return Optional.empty();
+    }
+
+    /**
+     * What the taker's transfers in review set aside (nothing is posted until they are approved, and the approval
+     * sends them only if the transferable balance still covers them): a fee cannot spend it.
+     */
+    public static BigDecimal inReview(List<EntityInstance> transfers) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (EntityInstance transfer : transfers) {
+            if (TransferStatus.REVIEW.equals(transfer.get("status"))) {
+                total = total.add(PlaySteps.money(transfer.get("amount")));
+            }
+        }
+        return total;
     }
 
     /**
      * Why the taker cannot pay {@code fee} now (D-Q88-10): their transferable Kudos (the 2120 balance less what the
-     * transfers hold back) must cover it, and so must the wallet's cached balance (the cache follows the ledger by
-     * events and is reduced at the version read under the lock; {@code qb_wallet.balance >= 0} backs it). Empty when
-     * they can.
+     * transfers hold back and less what a transfer in review sets aside) must cover it, and so must the wallet's
+     * cached balance (the cache follows the ledger by events and is reduced at the version read under the lock;
+     * {@code qb_wallet.balance >= 0} backs it). Empty when they can.
      */
-    public static Optional<Violation> shortfall(BigDecimal available, BigDecimal held, EntityInstance wallet,
-        BigDecimal fee) {
-        BigDecimal transferable = nonNull(available).subtract(nonNull(held)).max(BigDecimal.ZERO);
+    public static Optional<Violation> shortfall(BigDecimal available, BigDecimal held, BigDecimal inReview,
+        EntityInstance wallet, BigDecimal fee) {
+        BigDecimal transferable = nonNull(available).subtract(nonNull(held)).subtract(nonNull(inReview))
+            .max(BigDecimal.ZERO);
         BigDecimal cached = QbWallets.balance(wallet);
         BigDecimal usable = transferable.min(cached);
         if (usable.compareTo(fee) >= 0) {

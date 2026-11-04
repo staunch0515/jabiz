@@ -7,3 +7,5 @@
 ALTER TABLE qb_publication_version ADD COLUMN entry_fee numeric(7, 0) NOT NULL DEFAULT 0;
 ALTER TABLE qb_publication_card ADD COLUMN entry_fee numeric(7, 0) NOT NULL DEFAULT 0;
 ALTER TABLE qb_attempt ADD COLUMN entry_fee numeric(7, 0) NOT NULL DEFAULT 0;
+-- The sponsor's publications list totals each one's fees (template qb.sponsor.publications): only paying attempts.
+CREATE INDEX qb_attempt_entry_fee_idx ON qb_attempt (publication_id) INCLUDE (entry_fee) WHERE entry_fee > 0;

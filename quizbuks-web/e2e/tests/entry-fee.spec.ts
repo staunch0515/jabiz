@@ -2,7 +2,7 @@ import type { APIRequestContext } from '@playwright/test'
 import { completeQuiz, query } from './content'
 import { decideReview, publicationOf } from './publishing'
 import { fundedSponsor, taker } from './play'
-import { expect, expectAccessible, prepareQuizbuks, run, setControlledParam, signIn, test, unique } from './support'
+import { expect, expectAccessible, prepareQuizbuks, run, setControlledParam, signIn, signOut, test, unique } from './support'
 
 /**
  * A quiz's entry fee (docs/quizbuks/plans/Q88-sponsor-certifications-entry-fee.md, Q88b): the sponsor sets it in the
@@ -75,6 +75,7 @@ test('a quiz charges an entry fee from transferable Kudos, settled into the spon
   const result = await run(request, earner.token, 'QB_ATTEMPT_SUBMIT', { attemptId: won.attemptId,
     publicationId: rewarding, answers: [] })
   expect(result.rewardStatus).toBe('PAID')
+  await signOut(page)
   await signIn(page, '/taker/', earner.email)
   await expect(page).not.toHaveURL(/\/login/)
   await page.goto(`/taker/p/${charging}`)
@@ -100,7 +101,8 @@ test('a quiz charges an entry fee from transferable Kudos, settled into the spon
   await page.goto('/sponsor/wallet')
   await expect.poll(async () => {
     await page.reload()
-    return (await page.getByTestId('wallet-cash-balance').textContent())?.trim()
+    // The amount's formatting keeps the number and the unit together with a no-break space.
+    return (await page.getByTestId('wallet-cash-balance').textContent())?.replace(/\s+/g, ' ').trim()
   }, { message: 'the fee is settled into the cash account', timeout: 120_000, intervals: [5_000] }).toBe('30 Kudos')
   await expect(page.getByTestId('wallet-entry-fees')).toHaveCount(0)
   await page.goto(`/sponsor/publications/${charging}`)

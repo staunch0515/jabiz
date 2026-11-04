@@ -116,8 +116,18 @@ class EntryFeeIT extends PlayItSupport {
         assertThat(codes(refused("QB_ATTEMPT_START", taker(earner), body("publicationId", publicationId), 422)))
             .containsExactly(PlayCodes.ENTRY_FEE_SHORT);
 
-        // After the hold period it pays: 2120 to 2170, the cache in step, the attempt records it.
+        // After the hold period the reward is free, but a transfer in review sets 80 of it aside (nothing posted
+        // until it is approved, which sends only what is still transferable): 20 left, the fee is refused.
         advance(Duration.ofDays(8));
+        String review = UUID.randomUUID().toString();
+        execute("INSERT INTO qb_transfer (transfer_id, user_id, external_account_id, amount, fee, net, status, "
+            + "created_at, version) VALUES (?, ?, 'acct_test', 80, 0, 80, 'REVIEW', ?, 1)", review, earner,
+            java.sql.Timestamp.from(clock.instant()));
+        assertThat(String.valueOf(violations(refused("QB_ATTEMPT_START", taker(earner),
+            body("publicationId", publicationId), 422)).getFirst().get("message"))).contains("20 can be spent");
+        execute("DELETE FROM qb_transfer WHERE transfer_id = ?", review);
+
+        // Without it, it pays: 2120 to 2170, the cache in step, the attempt records it.
         Map<String, Object> started = run("QB_ATTEMPT_START", taker(earner), body("publicationId", publicationId));
         String attemptId = (String) started.get("attemptId");
         assertThat(attempt(attemptId).get("entry_fee")).isEqualTo(new BigDecimal("30"));
@@ -136,6 +146,13 @@ class EntryFeeIT extends PlayItSupport {
             assertThat(row).containsEntry("type", "ENTRY_FEE").containsEntry("status", "COMPLETED");
             assertThat(amount(row, "amount")).isEqualByComparingTo("30");
         });
+        // By method: the fee is used, like a transfer, not earned less (earned less used is the balance).
+        assertThat(items("qb.app.kudos", taker(earner), Map.of()).stream()
+            .filter(row -> "PLATFORM".equals(row.get("method"))).findFirst().orElseThrow()).satisfies(row -> {
+                assertThat(amount(row, "earned")).isEqualByComparingTo("100");
+                assertThat(amount(row, "settled")).isEqualByComparingTo("30");
+                assertThat(amount(row, "balance")).isEqualByComparingTo("70");
+            });
         // The sponsor sees it waiting to be settled, and on the publication.
         assertThat(amount(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst(), "entryFeesUnsettled"))
             .isEqualByComparingTo("30");

@@ -1088,15 +1088,16 @@ export const surveyReward = (form: PublicationForm): string => form.tiers.at(-1)
 /**
  * The form of a survey's publication (Q12, D-Q12-4): its pass mark is the full score (every question answered, a
  * point each) and its tiers are nothing below it and the one reward at it. The tiers keep their keys, so the next save
- * sends them as the same tiers; the server checks the shape.
+ * sends them as the same tiers; the server checks the shape. A survey charges no entry fee (Q88b, D-Q88-9): one typed
+ * before the version turned out a survey is dropped, as the field is not shown.
  */
 export function asSurvey(form: PublicationForm, fullScore: number, reward: string): PublicationForm {
   const tier = (i: number, from: number, to: number, value: string): TierDraft => ({ key: form.tiers[i]?.key ?? tierKey(),
     tierId: form.tiers[i]?.tierId ?? null, fromScore: String(from), toScore: String(to), reward: value })
   // Before the reward is typed (the first step saves a draft) there are no tiers yet: a blank one would be refused as
   // typed wrong on a step that does not show it. The check before submitting asks for the tiers.
-  if (reward.trim() === '') return { ...form, passScore: String(fullScore), tiers: [] }
-  return { ...form, passScore: String(fullScore),
+  if (reward.trim() === '') return { ...form, passScore: String(fullScore), entryFee: '', tiers: [] }
+  return { ...form, passScore: String(fullScore), entryFee: '',
     tiers: [tier(0, 0, Math.max(fullScore - 1, 0), '0'), tier(1, fullScore, fullScore, reward)] }
 }
 

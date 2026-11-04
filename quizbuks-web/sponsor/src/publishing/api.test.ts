@@ -186,4 +186,12 @@ describe('a survey\'s form (Q12)', () => {
     expect(shaped.tiers.map((tier) => [tier.fromScore, tier.toScore, tier.reward])).toEqual([
       ['0', '4', '0'], ['5', '5', '30']])
   })
+
+  it('drops an entry fee typed before the version turned out a survey (Q88b): it charges none', () => {
+    for (const reward of ['', '30']) {
+      const shaped = asSurvey({ ...FORM, entryFee: '500', tiers: [] }, 5, reward)
+      expect(shaped.entryFee).toBe('')
+      expect(inputOf(shaped, null, null).input?.entryFee).toBe(0)
+    }
+  })
 })

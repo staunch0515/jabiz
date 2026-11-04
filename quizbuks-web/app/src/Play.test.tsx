@@ -1355,6 +1355,17 @@ describe('answering', () => {
     await waitFor(() => expect(posted('QB_ATTEMPT_START')).toEqual([{ publicationId: PUB }]))
   })
 
+  it('still offers a start with an entry fee when the wallet cannot be read: the server checks it (Q88b)', async () => {
+    const page = () => json(200, { items: [publication({ entryFee: 30 })], offset: 0, limit: 1 })
+    server({ publicationPage: page, extra: (path: string) => path === '/api/queries/qb.app.wallet'
+      ? json(500, { title: 'Internal Server Error', status: 500 }) : undefined })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const start = await screen.findByTestId('detail-start')
+    await waitFor(() => expect(start).toBeEnabled(), { timeout: 10_000 })
+    expect(screen.queryByTestId('detail-entry-fee-short')).not.toBeInTheDocument()
+  }, 20_000)
+
   it('starts, saves answers and moves, submits after asking, and shows the result with the texts', async () => {
     const { posted } = server()
     window.history.replaceState(null, '', `/p/${PUB}`)

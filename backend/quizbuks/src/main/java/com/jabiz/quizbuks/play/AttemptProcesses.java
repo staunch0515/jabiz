@@ -21,8 +21,10 @@ import com.jabiz.quizbuks.publishing.PublicationRules;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.quizbuks.wallet.QbPayouts;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.quizbuks.wallet.TakerWallets;
+import com.jabiz.quizbuks.wallet.TransferStatus;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.ledger.LedgerProcesses;
@@ -148,6 +150,9 @@ public final class AttemptProcesses {
      */
     static final String FEE_WALLET = "play.feeWallet";
     static final String FEE_PARAM = "play.feeParam";
+    static final String FEE_REVIEW = "play.feeReview";
+    /** The fee the check found covered: the start charges it, and only it. */
+    static final String FEE_CHECKED = "play.feeChecked";
     static final String TRANSFERABLE = "play.transferable";
     static final String FEE_POSTING = "play.feePosting";
     static final String FEE_POSTED = "play.feePosted";
@@ -318,23 +323,33 @@ public final class AttemptProcesses {
                 // Q88b (D-Q88-10, D-Q88-12): a publication charging an entry fee takes the caller's wallet lock
                 // before the publication's start lock (nobody takes them the other way round: completions take the
                 // publication's and the sponsor's wallet's, syncs and transfers the taker's alone) and reads under it
-                // the wallet row with the hold period's parameter (one statement) and the transferable balance (the
-                // transfers' template); not enough is refused before the start lock. An ordinary publication takes no
+                // the wallet row with the hold period's parameter and a transfer in review (one statement) and the
+                // transferable balance (the transfers' template); not enough is refused before the start lock.
+                // A transfer in review is not posted: what it sets aside is not the fee's (its approval re-checks).
+                // Unfinished transfers are one per taker (a partial unique index), so one row at most. An ordinary publication takes no
                 // lock and sends nothing here: its queries are empty and the template's condition does not hold.
                 .step("Lock the taker's wallet for the entry fee", HoldLock.<ProcessContext>exclusive(
                     ctx -> charging(ctx) ? QbWallets.lockName(QbWallets.TAKER, ctx.request().actorId()) : null))
-                .step("Read the taker's wallet and the hold period", QueryEntities.<ProcessContext>all(
+                .step("Read the taker's wallet, the hold period and a transfer in review",
+                    QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(
                         QbWallets.TAKER, charging(ctx) ? ctx.request().actorId() : null), FEE_WALLET),
                     QueryEntities.query(QbWallets.PARAMS_NOW, ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("paramKey", charging(ctx)
-                            ? List.of(QbParams.TRANSFER_HOLD_DAYS) : List.of())).limit(1).build(), FEE_PARAM)))
+                            ? List.of(QbParams.TRANSFER_HOLD_DAYS) : List.of())).limit(1).build(), FEE_PARAM),
+                    QueryEntities.query(QbPayouts.defaultDataset(QbPayouts.TRANSFER), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("userId", charging(ctx)
+                                ? List.of(String.valueOf(ctx.request().actorId())) : List.of()),
+                            new QueryPredicate.In("status", List.of(TransferStatus.REVIEW))))).limit(1).build(),
+                        FEE_REVIEW)))
                 .step("Read the taker's transferable balance", RunTemplate.<ProcessContext>when(
                     AttemptProcesses::charging, TakerWallets.TRANSFERABLE_TEMPLATE, ctx -> {
                         Map<String, Object> params = new LinkedHashMap<>();
                         params.put("userId", String.valueOf(ctx.request().actorId()));
                         params.put("at", ctx.opTime());
-                        params.put("holdDays", EntryFees.holdDays(PlaySteps.list(ctx, FEE_PARAM)));
+                        params.put("holdDays", EntryFees.holdDays(PlaySteps.list(ctx, FEE_PARAM))
+                            .orElse(BigDecimal.ZERO));
                         return params;
                     }, TRANSFERABLE))
                 .compute("Refuse an entry fee not covered", (metadata, ctx) -> refuseUnpaidFee(ctx))
@@ -383,8 +398,13 @@ public final class AttemptProcesses {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(TRANSFERABLE);
         Map<String, Object> row = rows == null || rows.isEmpty() ? Map.of() : rows.getFirst();
-        EntryFees.shortfall(PlaySteps.moneyOrNull(row.get("available")), PlaySteps.moneyOrNull(row.get("held")),
-            first(ctx, FEE_WALLET), EntryFees.fee(first(ctx, CARD_BEFORE))).ifPresent(ctx::reject);
+        // An unusable hold period refuses (nothing is known to be free of it): nothing counts as available.
+        BigDecimal available = EntryFees.holdDays(PlaySteps.list(ctx, FEE_PARAM)).isPresent()
+            ? PlaySteps.moneyOrNull(row.get("available")) : BigDecimal.ZERO;
+        BigDecimal fee = EntryFees.fee(first(ctx, CARD_BEFORE));
+        EntryFees.shortfall(available, PlaySteps.moneyOrNull(row.get("held")),
+            EntryFees.inReview(PlaySteps.list(ctx, FEE_REVIEW)), first(ctx, FEE_WALLET), fee)
+            .ifPresentOrElse(ctx::reject, () -> ctx.put(FEE_CHECKED, fee));
     }
 
     static EntityQuery mine(Object publicationId) {
@@ -552,7 +572,7 @@ public final class AttemptProcesses {
         // Q75 (D-Q75-9): the App's report of the playback, in the same insert (the budget stays).
         values.putAll(WatchRules.values(card, playback(ctx)));
         // Q88b: the entry fee paid at this start (0 for a card charging none, and for a channel's taker).
-        BigDecimal entryFee = ctx.contains(FEE_WALLET) ? EntryFees.fee(card) : BigDecimal.ZERO;
+        BigDecimal entryFee = ctx.contains(FEE_CHECKED) ? (BigDecimal) ctx.get(FEE_CHECKED) : BigDecimal.ZERO;
         values.put("entryFee", entryFee);
         Object attemptId = ctx.changes().insert(QbPlay.ATTEMPT, values);
         if (entryFee.signum() > 0) {

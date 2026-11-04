@@ -86,10 +86,10 @@ LEFT JOIN {{QbPublicationCounter}} c ON c.{{QbPublicationCounter.publicationId}}
 LEFT JOIN {{QbPublicationStartCounter}} s
     ON s.{{QbPublicationStartCounter.publicationId}} = p.{{QbPublication.publicationId}}
 LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = p.{{QbPublication.publisherId}} AND w.{{QbWallet.kind}} = 'SPONSOR'
--- Q88b: the entry fees its takers paid (what the attempts record), a total only.
-LEFT JOIN (
-    SELECT m.{{QbAttempt.publicationId}} AS ef_publication, sum(m.{{QbAttempt.entryFee}}) AS ef_total
+-- Q88b: the entry fees its takers paid (what the attempts record), a total only: per publication listed (the paying
+-- attempts' partial index), not all of them.
+LEFT JOIN LATERAL (
+    SELECT sum(m.{{QbAttempt.entryFee}}) AS ef_total
     FROM {{QbAttempt}} m
-    WHERE m.{{QbAttempt.entryFee}} > 0
-    GROUP BY m.{{QbAttempt.publicationId}}) ef ON ef.ef_publication = p.{{QbPublication.publicationId}}
+    WHERE m.{{QbAttempt.publicationId}} = p.{{QbPublication.publicationId}} AND m.{{QbAttempt.entryFee}} > 0) ef ON true
 WHERE (CAST(:q AS text) IS NULL OR strpos(lower(p.{{QbPublication.name}}), lower(CAST(:q AS text))) > 0)

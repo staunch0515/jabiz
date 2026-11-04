@@ -561,7 +561,7 @@ AI 为运营商（或总部，`direct`）找商家、调研、写体验问卷与
 
 ### 7.20 报名费（Q88b）
 
-商户可以给测验设报名费（`plans/Q88-sponsor-certifications-entry-fee.md` §11）：答题者开始时从**可转出的学分**中付（近期与争议中的奖励不能用），一人一次、不退；钱先记在 2170 报名费待入账，每日由任务入账到商户的现金账户。缺省 = 现状：不开放。
+商户可以给测验设报名费（`plans/Q88-sponsor-certifications-entry-fee.md` §11）：答题者开始时从**可转出的学分**中付（近期与争议中的奖励、审核中的转账所占的不能用；`qb.transfer.hold-days` 不合格时一律不收），一人一次、不退；钱先记在 2170 报名费待入账，每日由任务入账到商户的现金账户。缺省 = 现状：不开放。
 
 - **开关是受控参数** `qb.play.entry-fee.enabled`（缺省 `false`，`QB_SETUP` 提出，另一位管理员发布）。它只管**能不能设**：关着时保存带报名费的草稿被拒（`QB_ENTRY_FEE_OFF`），已上架的照收（要停就由运营商下架或商户结束）。问卷不能设（`QB_ENTRY_FEE_NOT_ALLOWED`），店面的发布没有报名费。
 - **部署后**：运行一次 `QB_SETUP`（开出科目 2170、提出参数 `qb.play.entry-fee.enabled` 与科目映射 `qb.journal.account.2170`）并发布提案；**上线前给 2170 配好会计科目代码**（`JournalMappingCheck` 否则告警，分录导出拒绝未映射的科目）。
