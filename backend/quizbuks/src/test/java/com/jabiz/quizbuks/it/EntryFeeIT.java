@@ -168,6 +168,14 @@ class EntryFeeIT extends PlayItSupport {
         assertThat(jobRunner.run(reconcileJob, at)).isEqualTo(JobRunner.Outcome.SUCCEEDED);
         assertThat(query("SELECT r.status FROM qb_recon_run_version r WHERE r.scheduled_time = ?",
             java.sql.Timestamp.from(at)).getFirst()).containsEntry("status", "OK");
+        // The monthly report classes both postings (D-Q88-15): two fees paid, one day's settled.
+        java.time.Instant month = java.time.Instant.parse("2000-01-01T00:00:00Z");
+        List<Map<String, Object>> monthly = items("qb.admin.monthly", admin(), Map.of("params", Map.of("from",
+            month.toString(), "to", clock.instant().plus(Duration.ofDays(1)).toString())));
+        assertThat(monthly).filteredOn(row -> "ENTRY_FEE".equals(row.get("category"))).singleElement()
+            .satisfies(row -> assertThat(((Number) row.get("transactionCount")).longValue()).isGreaterThanOrEqualTo(2));
+        assertThat(monthly).filteredOn(row -> "ENTRY_FEE_SETTLED".equals(row.get("category"))).singleElement()
+            .satisfies(row -> assertThat(((Number) row.get("transactionCount")).longValue()).isGreaterThanOrEqualTo(1));
         assertBooksBalance();
     }
 

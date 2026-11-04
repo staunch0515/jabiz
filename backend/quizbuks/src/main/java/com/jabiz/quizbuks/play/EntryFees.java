@@ -74,9 +74,10 @@ public final class EntryFees {
         if (usable.compareTo(fee) >= 0) {
             return Optional.empty();
         }
-        return Optional.of(new Violation("publicationId", PlayCodes.ENTRY_FEE_SHORT, "The entry fee of " + fee
-            + " is not covered by the transferable Kudos (" + usable + ")", Map.of("fee", fee, "available", usable,
-            "short", fee.subtract(usable))));
+        BigDecimal missing = fee.subtract(usable);
+        return Optional.of(new Violation("publicationId", PlayCodes.ENTRY_FEE_SHORT, "The entry fee of " + plain(fee)
+            + " is not covered by the transferable Kudos (" + plain(usable) + ")", Map.of("fee", plain(fee),
+            "available", plain(usable), "short", plain(missing))));
     }
 
     /**
@@ -92,6 +93,11 @@ public final class EntryFees {
             new LedgerProcesses.Line(QbLedger.ENTRY_FEES_UNSETTLED, Direction.CREDIT, fee, null,
                 Map.of(QbLedger.PARTY, sponsorId, QbWallets.PUBLICATION, publicationId)));
         return new LedgerProcesses.PostInput(bookingTime, DESCRIPTION, attemptId, lines, QbPlay.ATTEMPT, attemptId);
+    }
+
+    /** An amount in Kudos as the texts show it (the ledger's carry four decimals, always 0 in JPY). */
+    private static String plain(BigDecimal value) {
+        return value.setScale(0, java.math.RoundingMode.DOWN).toPlainString();
     }
 
     private static BigDecimal nonNull(BigDecimal value) {
