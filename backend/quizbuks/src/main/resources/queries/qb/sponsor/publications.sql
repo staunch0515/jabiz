@@ -1,8 +1,9 @@
 /*---
 id: qb.sponsor.publications
 description: The sponsor's own publications (M-34) with their quiz, state, regions and counts; searched by name
-entities: [QbPublication, QbQuizVersion, QbPublicationCounter, QbPublicationStartCounter, QbWallet]
+entities: [QbPublication, QbQuizVersion, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbAttempt]
 datasets:
+  QbAttempt: urn:jabiz:dataset:default:QbAttempt
   QbPublication: urn:jabiz:dataset:sponsor:QbPublication
   QbQuizVersion: urn:jabiz:dataset:default:QbQuizVersion
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -26,6 +27,7 @@ results:
   winners:       { from: QbPublicationCounter.winners }
   maxWinners:    { from: QbPublication.maxWinners }
   spent:         { from: QbPublicationCounter.spent }
+  entryFees:     { kind: { type: monetary, currency: JPY, scale: 0 } }
   fundsShort:        { kind: { type: bool } }
   pendingCount:      { from: QbWallet.pendingCount }
   pendingAmount:     { from: QbWallet.pendingAmount }
@@ -65,6 +67,7 @@ SELECT
     coalesce(c.{{QbPublicationCounter.winners}}, 0) AS winners,
     p.{{QbPublication.maxWinners}}          AS maxWinners,
     coalesce(c.{{QbPublicationCounter.spent}}, 0)   AS spent,
+    coalesce(ef.ef_total, 0)                        AS entryFees,
     (p.{{QbPublication.status}} = 'FUNDS_SHORT'
      OR (p.{{QbPublication.status}} = 'LIVE' AND (coalesce(w.{{QbWallet.pendingCount}}, 0) > 0
          OR coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) < p.{{QbPublication.maxReward}}))) AS fundsShort,
@@ -83,4 +86,10 @@ LEFT JOIN {{QbPublicationCounter}} c ON c.{{QbPublicationCounter.publicationId}}
 LEFT JOIN {{QbPublicationStartCounter}} s
     ON s.{{QbPublicationStartCounter.publicationId}} = p.{{QbPublication.publicationId}}
 LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = p.{{QbPublication.publisherId}} AND w.{{QbWallet.kind}} = 'SPONSOR'
+-- Q88b: the entry fees its takers paid (what the attempts record), a total only.
+LEFT JOIN (
+    SELECT m.{{QbAttempt.publicationId}} AS ef_publication, sum(m.{{QbAttempt.entryFee}}) AS ef_total
+    FROM {{QbAttempt}} m
+    WHERE m.{{QbAttempt.entryFee}} > 0
+    GROUP BY m.{{QbAttempt.publicationId}}) ef ON ef.ef_publication = p.{{QbPublication.publicationId}}
 WHERE (CAST(:q AS text) IS NULL OR strpos(lower(p.{{QbPublication.name}}), lower(CAST(:q AS text))) > 0)

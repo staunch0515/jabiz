@@ -29,6 +29,7 @@ results:
   feesReceivable:   { kind: { type: monetary, currency: JPY, scale: 0 } }
   feeRevenue:       { kind: { type: monetary, currency: JPY, scale: 0 } }
   taxPayable:       { kind: { type: monetary, currency: JPY, scale: 0 } }
+  entryFeesUnsettled: { kind: { type: monetary, currency: JPY, scale: 0 } }
 list:
   filters: [category]
   sorts:   [seq]
@@ -93,7 +94,8 @@ per_tx AS (
            coalesce(sum(net) FILTER (WHERE code = '2160'), 0) AS a2160,
            coalesce(sum(net) FILTER (WHERE code = '1130'), 0) AS a1130,
            coalesce(sum(net) FILTER (WHERE code = '4120'), 0) AS a4120,
-           coalesce(sum(net) FILTER (WHERE code = '2150'), 0) AS a2150
+           coalesce(sum(net) FILTER (WHERE code = '2150'), 0) AS a2150,
+           coalesce(sum(net) FILTER (WHERE code = '2170'), 0) AS a2170
     FROM moves
     GROUP BY tx_key, src, ref_kind, reversal
 ),
@@ -159,6 +161,12 @@ kinds AS (
                     AND p.a2160 > 0 AND p.a1130 < 0 THEN 'FEE_PAID'
                WHEN p.src IN ('QbFeeCharge', 'QbFeeInvoice') AND p.reversal
                     AND p.accts IN ('1130,4120', '1130,2150,4120', '1130,2160') THEN 'FEE_VOIDED'
+               -- Q88b: an entry fee paid at a start (the taker's 2120 to 2170 for the sponsor), and a day's fees
+               -- settled into the sponsor's cash account (2170 to 2160; the source is the cash wallet row).
+               WHEN p.src = 'QbAttempt' AND NOT p.reversal AND p.accts = '2120,2170'
+                    AND p.a2120 > 0 AND p.a2170 < 0 THEN 'ENTRY_FEE'
+               WHEN p.src = 'QbWallet' AND NOT p.reversal AND p.accts = '2160,2170'
+                    AND p.a2170 > 0 AND p.a2160 < 0 THEN 'ENTRY_FEE_SETTLED'
                ELSE 'OTHER'
            END AS kind
     FROM per_tx p
@@ -181,13 +189,15 @@ SELECT
     coalesce(sum(k.a2160), 0)   AS sponsorCash,
     coalesce(sum(k.a1130), 0)   AS feesReceivable,
     coalesce(sum(k.a4120), 0)   AS feeRevenue,
-    coalesce(sum(k.a2150), 0)   AS taxPayable
+    coalesce(sum(k.a2150), 0)   AS taxPayable,
+    coalesce(sum(k.a2170), 0)   AS entryFeesUnsettled
 FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'), (5, 'REFUND'), (6, 'DISPUTE'),
              (7, 'STRIPE_FEE'), (8, 'REWARD'), (9, 'TRANSFER_SENT'), (10, 'TRANSFER_SETTLED'), (11, 'WITHDRAWAL_PAID'),
              (12, 'TRANSFER_FAILED'), (13, 'TRANSFER_REVERSED'), (14, 'PAYOUT'), (15, 'PAYOUT_FAILED'),
              (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'REFERRAL_REWARD'), (19, 'CASH_TOPUP'),
              (20, 'CASH_BANK_TOPUP'), (21, 'CASH_REFUND'), (22, 'CASH_DISPUTE'), (23, 'KUDOS_BOUGHT'),
-             (24, 'KUDOS_SOLD'), (25, 'FEE_CHARGED'), (26, 'FEE_PAID'), (27, 'FEE_VOIDED'), (28, 'OTHER'))
+             (24, 'KUDOS_SOLD'), (25, 'FEE_CHARGED'), (26, 'FEE_PAID'), (27, 'FEE_VOIDED'), (28, 'ENTRY_FEE'),
+             (29, 'ENTRY_FEE_SETTLED'), (30, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

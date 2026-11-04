@@ -20,12 +20,17 @@ import com.jabiz.quizbuks.publishing.PublicationMoves;
 import com.jabiz.quizbuks.publishing.PublicationRules;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.QbWallets;
+import com.jabiz.quizbuks.wallet.TakerWallets;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.ledger.LedgerProcesses;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.RunTemplate;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -137,6 +142,15 @@ public final class AttemptProcesses {
     static final String VIEWS = "play.views";
     static final String ATTEMPT = "play.attempt";
     static final String NEW = "play.new";
+    /**
+     * Q88b: a publication charging an entry fee reads, under the taker's wallet lock, their wallet row, the hold
+     * period's parameter and their transferable balance; the posting of the fee, once the attempt is written.
+     */
+    static final String FEE_WALLET = "play.feeWallet";
+    static final String FEE_PARAM = "play.feeParam";
+    static final String TRANSFERABLE = "play.transferable";
+    static final String FEE_POSTING = "play.feePosting";
+    static final String FEE_POSTED = "play.feePosted";
 
     // ---- view ------------------------------------------------------------------------------------------------------
 
@@ -301,6 +315,29 @@ public final class AttemptProcesses {
                         PrerequisiteRows.refuse(ctx, "publicationId");
                     }
                 })
+                // Q88b (D-Q88-10, D-Q88-12): a publication charging an entry fee takes the caller's wallet lock
+                // before the publication's start lock (nobody takes them the other way round: completions take the
+                // publication's and the sponsor's wallet's, syncs and transfers the taker's alone) and reads under it
+                // the wallet row with the hold period's parameter (one statement) and the transferable balance (the
+                // transfers' template); not enough is refused before the start lock. An ordinary publication takes no
+                // lock and sends nothing here: its queries are empty and the template's condition does not hold.
+                .step("Lock the taker's wallet for the entry fee", HoldLock.<ProcessContext>exclusive(
+                    ctx -> charging(ctx) ? QbWallets.lockName(QbWallets.TAKER, ctx.request().actorId()) : null))
+                .step("Read the taker's wallet and the hold period", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(
+                        QbWallets.TAKER, charging(ctx) ? ctx.request().actorId() : null), FEE_WALLET),
+                    QueryEntities.query(QbWallets.PARAMS_NOW, ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("paramKey", charging(ctx)
+                            ? List.of(QbParams.TRANSFER_HOLD_DAYS) : List.of())).limit(1).build(), FEE_PARAM)))
+                .step("Read the taker's transferable balance", RunTemplate.<ProcessContext>when(
+                    AttemptProcesses::charging, TakerWallets.TRANSFERABLE_TEMPLATE, ctx -> {
+                        Map<String, Object> params = new LinkedHashMap<>();
+                        params.put("userId", String.valueOf(ctx.request().actorId()));
+                        params.put("at", ctx.opTime());
+                        params.put("holdDays", EntryFees.holdDays(PlaySteps.list(ctx, FEE_PARAM)));
+                        return params;
+                    }, TRANSFERABLE))
+                .compute("Refuse an entry fee not covered", (metadata, ctx) -> refuseUnpaidFee(ctx))
                 // Without the wallet's lock (D-Q5-5): a soft check, so before the publication's lock too (Q10a: one
                 // read less while it is held); a reward the sponsor cannot pay at the end is pending.
                 .step("Read the sponsor's wallet", QueryEntities.<ProcessContext>of(
@@ -323,7 +360,28 @@ public final class AttemptProcesses {
                 // (the start writes it), by their account or their verified address.
                 .steps(b -> Invitations.loadForTaker(b,
                     ctx -> starting(ctx) && PlaySteps.invited(first(ctx, CARD_BEFORE)) ? ctx.get(PUB_KEY) : null))
-                .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle, pick)));
+                .compute("Start the attempt", (metadata, ctx) -> start(ctx, shuffle, pick))
+                // Q88b: the fee's posting, with the attempt (a start without a fee posts nothing).
+                .step("Post the entry fee", CallProcess.<ProcessContext>when(
+                    ctx -> !ctx.hasViolations() && ctx.contains(FEE_POSTING), LedgerProcesses.POST, 1,
+                    ctx -> ctx.get(FEE_POSTING), FEE_POSTED)));
+    }
+
+    /** Q88b: whether this start charges an entry fee (a new attempt of a card that charges one). */
+    static boolean charging(ProcessContext ctx) {
+        return starting(ctx) && EntryFees.charges(first(ctx, CARD_BEFORE));
+    }
+
+    /** Q88b (D-Q88-10): under the taker's wallet lock, before the publication's: the fee must be covered. */
+    static void refuseUnpaidFee(ProcessContext ctx) {
+        if (!charging(ctx)) {
+            return;
+        }
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) ctx.get(TRANSFERABLE);
+        Map<String, Object> row = rows == null || rows.isEmpty() ? Map.of() : rows.getFirst();
+        EntryFees.shortfall(PlaySteps.moneyOrNull(row.get("available")), PlaySteps.moneyOrNull(row.get("held")),
+            first(ctx, FEE_WALLET), EntryFees.fee(first(ctx, CARD_BEFORE))).ifPresent(ctx::reject);
     }
 
     static EntityQuery mine(Object publicationId) {
@@ -490,7 +548,18 @@ public final class AttemptProcesses {
         values.put("questionSet", QuestionPick.toJson(questionSet));
         // Q75 (D-Q75-9): the App's report of the playback, in the same insert (the budget stays).
         values.putAll(WatchRules.values(card, playback(ctx)));
+        // Q88b: the entry fee paid at this start (0 for a card charging none, and for a channel's taker).
+        BigDecimal entryFee = ctx.contains(FEE_WALLET) ? EntryFees.fee(card) : BigDecimal.ZERO;
+        values.put("entryFee", entryFee);
         Object attemptId = ctx.changes().insert(QbPlay.ATTEMPT, values);
+        if (entryFee.signum() > 0) {
+            // The wallet row read under its lock, reduced at that version (D-Q88-12); the cache follows the ledger
+            // otherwise by events, which this keeps in step. The posting goes with the attempt (the step after).
+            EntityInstance feeWallet = first(ctx, FEE_WALLET);
+            QbWallets.change(ctx, feeWallet, QbWallets.TAKER, userId, entryFee.negate(), 0, BigDecimal.ZERO);
+            ctx.put(FEE_POSTING, EntryFees.posting(ctx.opTime(), String.valueOf(attemptId), userId,
+                String.valueOf((Object) card.get("publisherId")), String.valueOf(publicationId), entryFee));
+        }
         BigDecimal maxReward = PlaySteps.money(card.get("maxReward"));
         // Only the starts' side (Q10a4): the completions' side is the publication's lock's.
         Map<String, Object> counts = new LinkedHashMap<>();

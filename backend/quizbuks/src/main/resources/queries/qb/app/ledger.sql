@@ -1,6 +1,6 @@
 /*---
 id: qb.app.ledger
-description: The taker's transactions (U-51, U-52), newest first - rewards paid and pending, and transfers to their Stripe account
+description: The taker's transactions (U-51, U-52), newest first - rewards paid and pending, transfers to their Stripe account, and (Q88b) entry fees paid
 entities: [QbAttempt, QbPublicationCard, QbTransfer]
 datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
@@ -63,3 +63,21 @@ SELECT
     CAST(NULL AS varchar(100))                      AS quizTitle
 FROM {{QbTransfer}} t
 WHERE CAST(:q AS text) IS NULL
+UNION ALL
+-- Q88b: an entry fee paid at the start of an attempt (COMPLETED at once: nothing is refunded, D-Q88-13); the amount is
+-- what left the balance.
+SELECT
+    CAST('fee:' || m.{{QbAttempt.attemptId}} AS varchar(64)) AS entryId,
+    CAST('ENTRY_FEE' AS varchar(20))              AS type,
+    CAST('COMPLETED' AS varchar(20))              AS status,
+    m.{{QbAttempt.entryFee}}                      AS amount,
+    m.{{QbAttempt.startedAt}}                     AS occurredAt,
+    m.{{QbAttempt.publicationId}}                 AS publicationId,
+    c.{{QbPublicationCard.name}}                  AS name,
+    c.{{QbPublicationCard.quizTitle}}             AS quizTitle
+FROM {{QbAttempt}} m
+JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = m.{{QbAttempt.publicationId}}
+WHERE m.{{QbAttempt.entryFee}} > 0
+  AND (CAST(:q AS text) IS NULL
+       OR strpos(lower(c.{{QbPublicationCard.name}}), lower(CAST(:q AS text))) > 0
+       OR strpos(lower(c.{{QbPublicationCard.quizTitle}}), lower(CAST(:q AS text))) > 0)
