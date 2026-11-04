@@ -1,5 +1,8 @@
-import { api, entryInfo, isProblem, lastUserName, sitePath, unwrap, useOptionalAuth, type AuthState, type SignInStep } from '@jabiz/client'
-import { CircleCheck, Info, LockKeyhole, Mail, TriangleAlert, User } from 'lucide-react'
+import {
+  PasskeyCancelledError, api, enrolPasskey, entryInfo, isProblem, lastUserName, passkeyAutofill, passkeySupport, sitePath,
+  unwrap, useOptionalAuth, type AuthState, type SignInStep,
+} from '@jabiz/client'
+import { CircleCheck, Fingerprint, Info, LockKeyhole, Mail, TriangleAlert, User } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -13,13 +16,27 @@ import { AUTH_NAMESPACE } from './messages'
 import { MfaCodeStep } from './MfaCodeStep'
 import { MfaEnrollment } from './MfaEnrollment'
 import { OidcButtons, type OidcProvider } from './OidcButtons'
+import { passkeyDeviceName } from './Passkeys'
 import { refusal } from './problems'
 
 const missing = () => Promise.reject(new Error('SignInForm needs an AuthProvider around it, or the auth property'))
-const NO_AUTH: Pick<AuthState, 'signIn' | 'verify'> = { signIn: missing, verify: missing }
+/** What the form signs in with: a password and a code; with passkeys too where given (decision D71). */
+type SignInAuth = Pick<AuthState, 'signIn' | 'verify'> & Partial<Pick<AuthState, 'signInWithPasskey' | 'verifyWithPasskey'>>
+const NO_AUTH: SignInAuth = { signIn: missing, verify: missing }
+
+/**
+ * The pending suggestion of passkeys in the name field (conditional mediation), stopped before any other sign-in: a
+ * browser runs one passkey request at a time. One per page, as there is one sign-in form.
+ */
+let pendingAutofill: AbortController | null = null
+
+function stopAutofill() {
+  pendingAutofill?.abort()
+  pendingAutofill = null
+}
 
 type Step =
-  | { kind: 'password'; notice?: 'enrolled' }
+  | { kind: 'password'; notice?: 'enrolled' | 'enrolledPasskey' }
   | { kind: 'code'; challenge: string }
   | { kind: 'enroll'; challenge: string }
 
@@ -54,10 +71,16 @@ export interface SignInFormProps extends AuthNavigation {
    * (phase 17m). Either way the server takes a user name or an address.
    */
   userNameLabel?: 'userName' | 'email'
+  /**
+   * Offers passkeys (decision D71): a button above the password, the browser's suggestions in the name field, the
+   * second step and the enrolment a role requires with a passkey instead of a code. Shown only when the frontend's
+   * entry takes passkeys (`passkeys`) and the browser can; inside another app's browser, a note to open the browser.
+   */
+  passkey?: boolean
   /** Starts signing in through a provider; `startProviderSignIn` of `@jabiz/client` by default. */
   startProvider?: (providerId: string, returnTo: string) => Promise<void>
   /** Signing in and the second step; the session's (`useAuth`) by default. */
-  auth?: Pick<AuthState, 'signIn' | 'verify'>
+  auth?: SignInAuth
   /** Offers the appearance as well as the language (default true). */
   appearance?: boolean
   /** Small print under the form on every step (the admin shows the build it runs). */
@@ -90,8 +113,10 @@ export function SignInForm(props: SignInFormProps) {
   const form = useForm<{ userName: string; password: string }>({
     defaultValues: { userName: props.initialUserName ?? (notice === 'idle' ? lastUserName() : undefined) ?? '', password: '' },
   })
-  const { selfRegistration, emailLink } = useEntryOffers(!!props.signUpPath, !!props.emailLink)
+  const { selfRegistration, emailLink, passkeys } = useEntryOffers(!!props.signUpPath, !!props.emailLink, !!props.passkey)
   const byEmail = props.userNameLabel === 'email'
+  const support = passkeys ? passkeySupport() : 'unsupported'
+  const withPasskey = passkeys && support === 'available' && !!auth.signInWithPasskey
 
   const signedIn = () => (props.onSignedIn ? props.onSignedIn(returnTo) : navigateTo({ onNavigate, hrefOf }, returnTo))
   const failed = (e: unknown) => {
@@ -101,6 +126,36 @@ export function SignInForm(props: SignInFormProps) {
     else setError(refusal(e, t('common.error')))
   }
   const frame = { brand, appearance, footer }
+
+  const passkeySignIn = async (options?: { autofill?: boolean; signal?: AbortSignal }) => {
+    if (!auth.signInWithPasskey) return
+    setError(null)
+    try {
+      await auth.signInWithPasskey(options)
+      signedIn()
+    } catch (e) {
+      // Closed the dialog, or the suggestions were stopped: nothing to say.
+      if (!(e instanceof PasskeyCancelledError)) failed(e)
+    }
+  }
+
+  useEffect(() => {
+    if (!withPasskey || step.kind !== 'password') return undefined
+    let live = true
+    void passkeyAutofill().then((available) => {
+      if (!live || !available) return
+      stopAutofill()
+      const controller = new AbortController()
+      pendingAutofill = controller
+      void passkeySignIn({ autofill: true, signal: controller.signal })
+    })
+    return () => {
+      live = false
+      stopAutofill()
+    }
+    // Started once per password step; the sign-in's callbacks are this render's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [withPasskey, step.kind])
 
   if (step.kind === 'enroll') {
     const challenge = step.challenge
@@ -121,6 +176,21 @@ export function SignInForm(props: SignInFormProps) {
           }
           onDone={() => setStep({ kind: 'password', notice: 'enrolled' })}
         />
+        {withPasskey && (
+          <Button variant="outline" data-testid="enroll-passkey" onClick={async () => {
+            setError(null)
+            try {
+              await enrolPasskey(challenge, passkeyDeviceName())
+              setStep({ kind: 'password', notice: 'enrolledPasskey' })
+            } catch (e) {
+              if (!(e instanceof PasskeyCancelledError)) failed(e)
+            }
+          }}>
+            <Fingerprint aria-hidden />
+            {t('login.enrollPasskey')}
+          </Button>
+        )}
+        {error && <AuthError message={error} testId="login-error" />}
         <Button variant="link" onClick={() => setStep({ kind: 'password' })}>
           {t('login.back')}
         </Button>
@@ -148,6 +218,22 @@ export function SignInForm(props: SignInFormProps) {
             }
           }}
         />
+        {withPasskey && auth.verifyWithPasskey && (
+          <Button variant="outline" data-testid="verify-passkey" onClick={async () => {
+            setError(null)
+            try {
+              await auth.verifyWithPasskey!(challenge)
+              signedIn()
+            } catch (e) {
+              if (e instanceof PasskeyCancelledError) return
+              if (isProblem(e, 'MFA_NOT_ENROLLED')) setError(t('login.passkeyNoneForStep'))
+              else failed(e)
+            }
+          }}>
+            <Fingerprint aria-hidden />
+            {t('login.usePasskey')}
+          </Button>
+        )}
       </AuthFrame>
     )
   }
@@ -162,10 +248,12 @@ export function SignInForm(props: SignInFormProps) {
           <AlertDescription className="text-current">{t('login.idleLocked')}</AlertDescription>
         </Alert>
       )}
-      {step.notice === 'enrolled' && (
+      {step.notice && (
         <Alert data-testid="mfa-enrolled">
           <CircleCheck aria-hidden className="text-success" />
-          <AlertDescription className="text-foreground">{t('login.enrolled')}</AlertDescription>
+          <AlertDescription className="text-foreground">
+            {t(step.notice === 'enrolledPasskey' ? 'login.enrolledPasskey' : 'login.enrolled')}
+          </AlertDescription>
         </Alert>
       )}
       {error && <AuthError message={error} testId="login-error" />}
@@ -191,11 +279,24 @@ export function SignInForm(props: SignInFormProps) {
           </div>
         </>
       )}
+      {withPasskey && (
+        <Button size="lg" variant="outline" className="w-full" data-testid="login-passkey" onClick={() => {
+          stopAutofill()
+          void passkeySignIn()
+        }}>
+          <Fingerprint aria-hidden />
+          {t('login.passkey')}
+        </Button>
+      )}
+      {passkeys && support === 'in-app-browser' && (
+        <p className="text-muted-foreground text-sm" data-testid="login-passkey-in-app">{t('login.passkeyInApp')}</p>
+      )}
       <form
         noValidate
         className="flex flex-col gap-4"
         aria-label={emailLink ? t('login.byPassword') : undefined}
         onSubmit={form.handleSubmit(async ({ userName: name, password }) => {
+          stopAutofill()
           setError(null)
           setUnverified(false)
           try {
@@ -215,7 +316,7 @@ export function SignInForm(props: SignInFormProps) {
         <AuthField
           icon={byEmail ? Mail : User}
           placeholder={t(byEmail ? 'account.email' : 'login.userName')}
-          autoComplete="username"
+          autoComplete={withPasskey ? 'username webauthn' : 'username'}
           inputMode={byEmail ? 'email' : undefined}
           data-testid="login-user-name"
           error={errors.userName?.message}
@@ -256,21 +357,31 @@ export function SignInForm(props: SignInFormProps) {
   )
 }
 
-/** What the frontend's entry offers of signing up and signing in by mail (asked only when the page would show it). */
-function useEntryOffers(signUp: boolean, emailLink: boolean): { selfRegistration: boolean; emailLink: boolean } {
-  const wanted = signUp || emailLink
-  const [offered, setOffered] = useState({ selfRegistration: false, emailLink: false })
+/**
+ * What the frontend's entry offers of signing up, signing in by mail and with passkeys (asked only when the page would
+ * show it).
+ */
+function useEntryOffers(signUp: boolean, emailLink: boolean, passkeys: boolean):
+  { selfRegistration: boolean; emailLink: boolean; passkeys: boolean } {
+  const wanted = signUp || emailLink || passkeys
+  const [offered, setOffered] = useState({ selfRegistration: false, emailLink: false, passkeys: false })
   useEffect(() => {
     if (!wanted) return undefined
     let live = true
     entryInfo()
       .then((info) => {
-        if (live) setOffered({ selfRegistration: !!info.selfRegistration, emailLink: !!info.emailLink })
+        if (live) {
+          setOffered({ selfRegistration: !!info.selfRegistration, emailLink: !!info.emailLink, passkeys: !!info.passkeys })
+        }
       })
       .catch(() => undefined)
     return () => {
       live = false
     }
   }, [wanted])
-  return { selfRegistration: signUp && offered.selfRegistration, emailLink: emailLink && offered.emailLink }
+  return {
+    selfRegistration: signUp && offered.selfRegistration,
+    emailLink: emailLink && offered.emailLink,
+    passkeys: passkeys && offered.passkeys,
+  }
 }

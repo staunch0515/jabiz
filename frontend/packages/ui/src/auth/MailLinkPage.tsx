@@ -19,6 +19,7 @@ import {
 import { AccountDeletionConfirm, AccountDeletionRequest } from './AccountDeletionLink'
 import { EmailLinkPanel } from './EmailLink'
 import { AUTH_NAMESPACE } from './messages'
+import { PasskeyConfirmPanel } from './Passkeys'
 import { PasswordResetRequest } from './PasswordResetRequest'
 import { failure, invalidLink, passwordProblems, passwordRequired } from './problems'
 
@@ -49,8 +50,8 @@ export interface MailLinkPageBase extends AuthNavigation {
 
 export interface MailLinkPageProps extends MailLinkPageBase {
   /**
-   * Which page of a link this is: `verify-email`, `join`, `password-reset`, `email-link`, `account-deletion` or
-   * `invitation`; the last segment of the address when absent (links are `{entryUrl}auth/<page>?entry=…&token=…`, decision D43 item 4).
+   * Which page of a link this is: `verify-email`, `join`, `password-reset`, `email-link`, `account-deletion`,
+   * `invitation` or `passkey-confirm`; the last segment of the address when absent (links are `{entryUrl}auth/<page>?entry=…&token=…`, decision D43 item 4).
    */
   page?: string
   /** The query of the address, when a router keeps its own location; the address bar's when absent. */
@@ -61,7 +62,8 @@ export interface MailLinkPageProps extends MailLinkPageBase {
  * The pages mailed links lead to (docs/design/10-security.md section 15.7; decisions D36 and D43): verifying an
  * address, joining an entry with an existing account, choosing a new password (or, without a token, asking for
  * the link), signing in with a mailed link, confirming an account's deletion (or, without a token, asking for the
- * link; decision D62) and accepting an administrator's invitation (decision D63). The token is taken out of the address bar at once and the page sends no referrer while open;
+ * link; decision D62), accepting an administrator's invitation (decision D63) and adding a passkey after confirming
+ * by mail (decision D71). The token is taken out of the address bar at once and the page sends no referrer while open;
  * nothing is sent before the person clicks, so that a mail scanner opening the link changes nothing.
  */
 export function MailLinkPage({ page, search, ...base }: MailLinkPageProps) {
@@ -79,6 +81,7 @@ export function MailLinkPage({ page, search, ...base }: MailLinkPageProps) {
       : <PasswordResetRequest {...base} entry={link.entry} />
   }
   if (which === 'invitation') return <InvitationPanel {...base} link={link} />
+  if (which === 'passkey-confirm') return <PasskeyConfirmPanel {...base} link={link} />
   if (which === 'account-deletion') {
     return link.token
       ? <AccountDeletionConfirm {...base} link={link} />

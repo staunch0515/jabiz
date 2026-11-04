@@ -28,8 +28,13 @@ jobs:
     outputs:
       application: ${{ steps.scope.outputs.application }}
       tasks: ${{ steps.scope.outputs.tasks }}
+      backend: ${{ steps.backend.outputs.backend }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # A pull request is checked out as its merge commit: its first parent is the base, so two commits are enough
+          # to list what the pull request changes.
+          fetch-depth: 2
       # The application's modules as backend/settings.gradle.kts includes them: every direct subdirectory of backend/
       # with a build script that is not one of the platform's.
       - id: scope
@@ -46,10 +51,22 @@ jobs:
           echo "application=true" >> "$GITHUB_OUTPUT"
           echo "tasks=${tasks# }" >> "$GITHUB_OUTPUT"
           echo "application modules:${tasks:- none}"
+      # Whether the backend's check (build, build-application) runs (ROADMAP 17zg): always on pushes and manual runs;
+      # a pull request skips it only when every path it changes is a document or listed in .jabiz-ci-no-backend
+      # (tools/ci-backend-scope.sh). The jobs that need build (e2e, compose) are skipped with it.
+      - id: backend
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ] && git rev-parse -q --verify HEAD^2 >/dev/null; then
+            backend="$(git diff --name-only HEAD^1 HEAD | tools/ci-backend-scope.sh)"
+          else
+            backend=true
+          fi
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "backend check: $backend"
 
   build:
     needs: scope
-    if: needs.scope.outputs.application != 'true'
+    if: needs.scope.outputs.application != 'true' && needs.scope.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -82,7 +99,7 @@ jobs:
   # spaCheck<name>), which compiles the platform's modules without testing them again.
   build-application:
     needs: scope
-    if: needs.scope.outputs.application == 'true' && needs.scope.outputs.tasks != ''
+    if: needs.scope.outputs.application == 'true' && needs.scope.outputs.tasks != '' && needs.scope.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -167,6 +184,7 @@ jobs:
         with:
           fetch-depth: 0
       - run: tools/test/check-app-paths.test.sh
+      - run: tools/test/ci-backend-scope.test.sh
       # The wiki's publishing scripts (docs/guide/wiki.md), tested on every branch like the script above.
       - run: node --test tools/wiki/*.test.mjs && tools/test/wiki-publish.test.sh
       - name: Application paths and version line

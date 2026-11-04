@@ -33,7 +33,7 @@ const HOME = '/orders'
 let pendingStep: SignInStep | undefined
 
 const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link',
-  '/auth/account-deletion', '/auth/invitation'])
+  '/auth/account-deletion', '/auth/invitation', '/auth/passkey-confirm'])
 
 /**
  * The unsubscribe page of the portal's notifications (decision D52): `jabiz.mail.unsubscribe-paths.portal` is
@@ -156,7 +156,7 @@ function Routes() {
         pendingStep = undefined
         navigate(to, { replace: true })
       }} passwordResetPath="/password-reset"
-      signUpPath="/signup" emailLink userNameLabel="email" />)
+      signUpPath="/signup" emailLink passkey userNameLabel="email" />)
   }
   if (!signedIn) return <Redirect to="/login" />
   if (path === '/' || path === '') return <Redirect to={HOME} />

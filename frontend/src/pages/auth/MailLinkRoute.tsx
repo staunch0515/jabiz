@@ -9,7 +9,9 @@ import { extension } from '../../extension'
  * note 13): @jabiz/ui's MailLinkPage (decision D43) on the admin's router. It takes links of every entry, so links
  * mailed before the entries' own pages existed keep working; once done it leads to the entry's frontend.
  */
-export function MailLinkRoute({ page }: { page: 'verify-email' | 'join' | 'password-reset' | 'invitation' }) {
+export function MailLinkRoute({ page }: {
+  page: 'verify-email' | 'join' | 'password-reset' | 'invitation' | 'passkey-confirm'
+}) {
   const navigation = useRouterNavigation()
   const location = useLocation()
   return (

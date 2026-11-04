@@ -42,6 +42,23 @@ class NativeAppAssociationsTest {
     }
 
     @Test
+    void withPasskeysTheIosAppsUseTheDomainsPasskeys() {
+        List<NativeApp> apps = List.of(new NativeApp("/taker", List.of("ABCDE12345.com.example.app"), null),
+            new NativeApp("/sponsor", List.of("ABCDE12345.com.example.app", "ABCDE12345.com.example.biz"), null));
+        NativeAppAssociations files = new NativeAppAssociations(properties(apps),
+            tools.jackson.databind.json.JsonMapper.builder().build(), new com.jabiz.runtime.security.PasskeyProperties(
+                "example.com", null, List.of("https://example.com"), null, null));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> apple = (Map<String, Object>) files.apple().orElseThrow();
+        assertThat(apple).containsKey("applinks").containsEntry("webcredentials", Map.of("apps",
+            List.of("ABCDE12345.com.example.app", "ABCDE12345.com.example.biz")));
+        // Passkeys not configured: no webcredentials.
+        assertThat(new NativeAppAssociations(properties(apps), tools.jackson.databind.json.JsonMapper.builder().build(),
+            com.jabiz.runtime.security.PasskeyProperties.none()).apple().orElseThrow())
+            .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP).doesNotContainKey("webcredentials");
+    }
+
+    @Test
     void androidAppsHandleTheSitesLinksOnceEach() {
         AndroidApp app = new AndroidApp("com.example.app", List.of(FINGERPRINT.toLowerCase()));
         NativeAppAssociations files = files(List.of(

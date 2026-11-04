@@ -13,6 +13,8 @@ const listIdentities = vi.fn()
 const getMailPreferences = vi.fn()
 const getMailLanguage = vi.fn()
 const setMailPreference = vi.fn()
+const entryInfo = vi.fn()
+const listPasskeys = vi.fn()
 
 // The building blocks call the server through @jabiz/client.
 vi.mock('@jabiz/client', async (importOriginal) => ({
@@ -24,6 +26,8 @@ vi.mock('@jabiz/client', async (importOriginal) => ({
   getMailPreferences: () => getMailPreferences(),
   getMailLanguage: () => getMailLanguage(),
   setMailPreference: (template: string, subscribed: boolean) => setMailPreference(template, subscribed),
+  entryInfo: () => entryInfo(),
+  listPasskeys: () => listPasskeys(),
 }))
 
 /** Answers the MFA status and the providers offered at the administration's entry. */
@@ -44,6 +48,8 @@ function show() {
 describe('AccountSecurityPage', () => {
   beforeEach(async () => {
     get.mockReset()
+    entryInfo.mockReset().mockResolvedValue({ name: 'admin', passkeys: false })
+    listPasskeys.mockReset().mockResolvedValue([])
     listSessions.mockReset().mockResolvedValue({ sessions: [], truncated: false, effectiveWithinSeconds: 900 })
     listIdentities.mockReset().mockResolvedValue([])
     getMailPreferences.mockReset().mockResolvedValue([
@@ -60,10 +66,12 @@ describe('AccountSecurityPage', () => {
     expect(await screen.findByTestId('account-section-identities')).toBeTruthy()
     expect(screen.getByRole('heading', { level: 1, name: 'Security' })).toBeTruthy()
     const sections = screen.getAllByRole('region')
+    // Passkeys only where the entry takes them (not here).
     expect(sections.map((s) => s.getAttribute('data-testid'))).toEqual(
-      ACCOUNT_SECTIONS.map((s) => `account-section-${s.name}`),
+      ACCOUNT_SECTIONS.filter((s) => s.name !== 'passkeys').map((s) => `account-section-${s.name}`),
     )
-    expect(ACCOUNT_SECTIONS.map((s) => s.name)).toEqual(['mfa', 'password', 'sessions', 'identities', 'mail'])
+    expect(ACCOUNT_SECTIONS.map((s) => s.name)).toEqual(['mfa', 'passkeys', 'password', 'sessions', 'identities',
+      'mail'])
     expect(screen.getByRole('region', { name: 'Two-step verification' })).toBe(sections[0])
 
     const mfa = within(screen.getByTestId('account-section-mfa'))
@@ -73,6 +81,17 @@ describe('AccountSecurityPage', () => {
     const identities = within(screen.getByTestId('account-section-identities'))
     expect(screen.getByRole('region', { name: 'Sign-in with other accounts' })).toBe(sections[3])
     expect(await identities.findByTestId('link-google')).toHaveTextContent('Link Google')
+    await expectAccessible()
+  })
+
+  it('has a section for passkeys where the administration takes them (decision D71)', async () => {
+    answers({ enrolled: true, recoveryCodesLeft: 4 })
+    entryInfo.mockResolvedValue({ name: 'admin', passkeys: true })
+    listPasskeys.mockResolvedValue([{ id: 'p1', name: 'Mac', createdAt: '2026-11-01T08:00:00Z', backedUp: false }])
+    show()
+    const section = await screen.findByRole('region', { name: 'Passkeys' })
+    expect(await within(section).findByTestId('passkey')).toHaveTextContent('Mac')
+    expect(screen.getAllByRole('region')[1]).toBe(section)
     await expectAccessible()
   })
 
