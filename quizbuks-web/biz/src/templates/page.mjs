@@ -4,8 +4,8 @@
 
 import { BRAND, brandMark } from '../brand.mjs'
 
-const PAGE_PATH = { home: '', merchants: 'merchants/', takers: 'takers/', surveys: 'surveys/', pricing: 'pricing/',
-  contact: 'contact/' }
+const PAGE_PATH = { home: '', maps: 'maps/', sponsors: 'sponsors/', takers: 'takers/', surveys: 'surveys/',
+  pricing: 'pricing/', contact: 'contact/' }
 const LANGUAGE_NAMES = { en: 'English', zh: '中文', ja: '日本語' }
 const LOCALES = { en: 'en', zh: 'zh-Hans', ja: 'ja' }
 
@@ -47,6 +47,8 @@ const ART = {
   prize: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/><rect x="40" y="100" width="160" height="44" rx="8" fill="var(--card)" stroke="var(--line)" stroke-width="2"/><path d="M36 100h168l-10-22H46z" fill="var(--leaf-deep)"/><path d="M46 78h148l-6 14H52z" fill="var(--leaf)"/><rect x="92" y="56" width="56" height="44" rx="6" fill="var(--coin)"/><rect x="92" y="56" width="56" height="12" rx="4" fill="var(--coin-deep)"/><rect x="116" y="56" width="8" height="44" fill="var(--ink)" opacity=".7"/><path d="M120 56c-10-14-24-10-18 0 4 6 12 4 18 0zm0 0c10-14 24-10 18 0-4 6-12 4-18 0z" fill="var(--leaf)" stroke="var(--leaf-deep)" stroke-width="1.5"/><rect x="150" y="110" width="36" height="24" rx="4" fill="var(--bg)" stroke="var(--line)" stroke-width="2"/>${[154, 160, 165, 171, 176, 181].map((x, i) => `<rect x="${x}" y="114" width="${i % 2 ? 2 : 3}" height="16" fill="var(--ink)"/>`).join('')}`,
   share: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/><rect x="84" y="24" width="72" height="124" rx="12" fill="var(--card)" stroke="var(--line)" stroke-width="2"/><rect x="102" y="32" width="36" height="4" rx="2" fill="var(--line)"/><rect x="98" y="52" width="44" height="44" rx="4" fill="var(--bg)" stroke="var(--line)" stroke-width="2"/><rect x="104" y="58" width="12" height="12" rx="2" fill="var(--ink)"/><rect x="124" y="58" width="12" height="12" rx="2" fill="var(--ink)"/><rect x="104" y="78" width="12" height="12" rx="2" fill="var(--ink)"/><path d="M124 78h5v5h-5zM131 78h5v5h-5zM124 85h5v5h-5zM131 85h5v5h-5z" fill="var(--leaf-deep)"/><rect x="98" y="106" width="44" height="12" rx="6" fill="var(--leaf)"/><path d="M40 60c20-10 40-6 52 18M200 60c-20-10-40-6-52 18" fill="none" stroke="var(--leaf-deep)" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 8"/><circle cx="40" cy="60" r="7" fill="var(--coin)"/><circle cx="200" cy="60" r="7" fill="var(--coin)"/>`,
   plan: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/><rect x="70" y="26" width="100" height="120" rx="10" fill="var(--leaf-deep)"/><rect x="82" y="42" width="76" height="92" rx="5" fill="var(--card)"/><rect x="100" y="16" width="40" height="18" rx="6" fill="var(--coin)"/><path d="M94 66h52M94 84h52M94 102h32" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" opacity=".35"/><circle cx="152" cy="118" r="18" fill="var(--leaf)"/><path d="M143 118l6 6 12-13" stroke="var(--paper)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`,
+  // A knowledge structure map (Q90, Q95): lit nodes, the ones open now and the ones still locked, joined by their conditions.
+  map: `<ellipse cx="120" cy="156" rx="100" ry="12" fill="var(--sky)"/><path d="M40 120L80 72M40 120L90 128M80 72L130 48M80 72L140 100M90 128L140 100M140 100L196 72M130 48L196 72" fill="none" stroke="var(--line)" stroke-width="3" stroke-linecap="round"/><path d="M40 120L80 72M40 120L90 128M80 72L140 100M90 128L140 100" fill="none" stroke="var(--leaf-deep)" stroke-width="3" stroke-linecap="round"/><circle cx="40" cy="120" r="14" fill="var(--leaf)" stroke="var(--leaf-deep)" stroke-width="2.5"/><circle cx="80" cy="72" r="14" fill="var(--leaf)" stroke="var(--leaf-deep)" stroke-width="2.5"/><circle cx="90" cy="128" r="14" fill="var(--leaf)" stroke="var(--leaf-deep)" stroke-width="2.5"/><circle cx="140" cy="100" r="16" fill="var(--coin)" stroke="var(--coin-deep)" stroke-width="2.5"/><circle cx="140" cy="100" r="5" fill="var(--paper)"/><circle cx="130" cy="48" r="13" fill="var(--card)" stroke="var(--line)" stroke-width="2.5" stroke-dasharray="4 4"/><circle cx="196" cy="72" r="18" fill="var(--card)" stroke="var(--line)" stroke-width="2.5" stroke-dasharray="4 4"/><rect x="186" y="66" width="20" height="14" rx="3" fill="none" stroke="var(--muted)" stroke-width="2"/><path d="M190 66v-4a6 6 0 0112 0v4" fill="none" stroke="var(--muted)" stroke-width="2"/><path d="M34 120l4 4 8-9M74 72l4 4 8-9M84 128l4 4 8-9" fill="none" stroke="var(--paper)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`,
   growth: `<ellipse cx="120" cy="152" rx="92" ry="14" fill="var(--sky)"/><rect x="52" y="100" width="30" height="46" rx="5" fill="var(--leaf-deep)"/><rect x="94" y="74" width="30" height="72" rx="5" fill="var(--leaf)"/><rect x="136" y="48" width="30" height="98" rx="5" fill="var(--coin)"/><circle cx="151" cy="30" r="14" fill="var(--coin-deep)"/><path d="M151 30V10" stroke="var(--leaf-deep)" stroke-width="3" stroke-linecap="round"/><path d="M151 22c-12-1-19-9-20-21 12 0 19 7 20 21z" fill="var(--leaf)"/><path d="M151 16c12-1 19-9 20-21-12 0-19 7-20 21z" fill="var(--leaf-deep)"/><path d="M46 146h130" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" opacity=".3"/>`,
 }
 
@@ -108,7 +110,8 @@ function footer({ language, content, base }) {
       <p class="muted">${esc(f.tagline)}</p>
     </div>
     <div><h3>${esc(f.product)}</h3><ul class="plain">
-      <li><a href="${pagePath(language, 'merchants', base)}">${esc(content.nav.merchants)}</a></li>
+      <li><a href="${pagePath(language, 'maps', base)}">${esc(content.nav.maps)}</a></li>
+      <li><a href="${pagePath(language, 'sponsors', base)}">${esc(content.nav.sponsors)}</a></li>
       <li><a href="${pagePath(language, 'takers', base)}">${esc(content.nav.takers)}</a></li>
       <li><a href="${pagePath(language, 'surveys', base)}">${esc(content.nav.surveys)}</a></li>
       <li><a href="${pagePath(language, 'pricing', base)}">${esc(content.nav.pricing)}</a></li></ul></div>
@@ -206,6 +209,16 @@ function home(ctx) {
     </div>
   </div>
 </section>
+<section class="wrap section split" aria-labelledby="maps">
+  <div>
+    <p class="eyebrow">${esc(h.maps.eyebrow)}</p>
+    <h2 id="maps">${esc(h.maps.title)}</h2>
+    <p class="lead">${esc(h.maps.text)}</p>
+    ${list(h.maps.bullets)}
+    <a class="button primary" href="${pagePath(ctx.language, 'maps', ctx.base)}">${esc(h.maps.more)} ${icon('arrow', 'icon small')}</a>
+  </div>
+  <div class="map-art">${art('map', 'band-art')}</div>
+</section>
 <section class="wrap section" aria-labelledby="value">
   <h2 id="value" class="center">${esc(h.value.title)}</h2>
   <p class="lead center">${esc(h.value.text)}</p>
@@ -223,10 +236,10 @@ function home(ctx) {
     </div>
     <div class="panel">
       ${icon('target', 'icon accent')}
-      <h3>${esc(h.audiences.merchants.title)}</h3>
-      <p>${esc(h.audiences.merchants.text)}</p>
-      ${list(h.audiences.merchants.bullets)}
-      <a class="button ghost" href="${pagePath(ctx.language, 'merchants', ctx.base)}">${esc(h.audiences.merchants.more)} ${icon('arrow', 'icon small')}</a>
+      <h3>${esc(h.audiences.sponsors.title)}</h3>
+      <p>${esc(h.audiences.sponsors.text)}</p>
+      ${list(h.audiences.sponsors.bullets)}
+      <a class="button ghost" href="${pagePath(ctx.language, 'sponsors', ctx.base)}">${esc(h.audiences.sponsors.more)} ${icon('arrow', 'icon small')}</a>
     </div>
   </div>
 </section>
@@ -260,7 +273,7 @@ ${tryIt(ctx)}
 </section>`
 }
 
-const PAGE_ART = { merchants: 'growth', takers: 'quiz', surveys: 'plan' }
+const PAGE_ART = { maps: 'map', sponsors: 'growth', takers: 'quiz', surveys: 'plan' }
 
 function featurePage(ctx, key) {
   const p = ctx.content[key]
@@ -285,6 +298,7 @@ ${p.sections.map((s, i) => `<section class="wrap section${i % 2 ? ' alt' : ''}" 
 </section>`
 }
 
+/** Fees (Q95): free now, and the three principles that stay (Q92: trades are never charged). */
 function pricing(ctx) {
   const p = ctx.content.pricing
   return `<section class="hero compact">
@@ -294,30 +308,23 @@ function pricing(ctx) {
     <p class="lead">${esc(p.lead)}</p>
   </div>
 </section>
-<section class="wrap section" aria-labelledby="plans">
-  <h2 id="plans" class="visually-hidden">${esc(p.plansTitle)}</h2>
-  <p class="muted small center">${esc(p.currencyNote)}</p>
-  <div class="plans">${p.plans.map((plan) => `<div class="plan${plan.highlight ? ' highlight' : ''}">
-    ${plan.badge ? `<span class="chip">${esc(plan.badge)}</span>` : ''}
-    <h3>${esc(plan.name)}</h3>
-    <p class="price"><span class="amount">${esc(plan.price)}</span>${plan.unit ? `<span class="unit">${esc(plan.unit)}</span>` : ''}</p>
-    <p class="muted">${esc(plan.note)}</p>
-    ${list(plan.features)}
-    <a class="button ${plan.highlight ? 'primary' : 'ghost'}" href="${plan.page ? pagePath(ctx.language, plan.page, ctx.base) : esc(plan.href)}"${plan.signup ? ` data-signup="${plan.signup}"` : ''}${plan.signup === 'sponsor' ? ' target="_blank" rel="noopener"' : ''}>${esc(plan.cta)}</a>
-  </div>`).join('')}</div>
+<section class="wrap section" aria-labelledby="free-now">
+  <div class="panel wide">
+    <h2 id="free-now">${esc(p.now.title)}</h2>
+    ${list(p.now.items)}
+    <a class="button primary" href="/sponsor/signup" data-signup="sponsor" target="_blank" rel="noopener">${esc(ctx.content.cta.sponsorLong)}</a>
+  </div>
 </section>
-<section class="wrap section" aria-labelledby="usage">
-  <h2 id="usage">${esc(p.usage.title)}</h2>
-  <p class="lead">${esc(p.usage.text)}</p>
-  <div class="table-wrap"><table class="fees">
-    <thead><tr><th scope="col">${esc(p.usage.columns.item)}</th><th scope="col">${esc(p.usage.columns.price)}</th><th scope="col">${esc(p.usage.columns.note)}</th></tr></thead>
-    <tbody>${p.usage.rows.map((r) => `<tr><th scope="row">${esc(r.item)}</th><td class="num">${esc(r.price)}</td><td>${esc(r.note)}</td></tr>`).join('')}</tbody>
-  </table></div>
+<section class="wrap section" aria-labelledby="principles">
+  <h2 id="principles" class="center">${esc(p.principles.title)}</h2>
+  <p class="lead center">${esc(p.principles.text)}</p>
+  ${cards(p.principles.cards)}
   <p class="muted small">${esc(p.disclaimer)}</p>
 </section>
 <section class="wrap section" aria-labelledby="pricing-faq">
   <h2 id="pricing-faq" class="center">${esc(p.faq.title)}</h2>
   <div class="faq">${p.faq.items.map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('')}</div>
+  <p class="center"><a class="button ghost" href="${pagePath(ctx.language, 'contact', ctx.base)}">${esc(p.contactCta)}</a></p>
 </section>`
 }
 
@@ -334,14 +341,15 @@ function contact(ctx) {
   <h2 id="ways" class="visually-hidden">${esc(c.waysTitle)}</h2>
   <div class="grid3">
     <div class="card">${icon('mail', 'icon accent')}<h3>${esc(c.email.title)}</h3><p>${esc(c.email.text)}</p><a class="button primary" href="mailto:${esc(c.email.address)}">${esc(c.email.address)}</a></div>
-    <div class="card">${icon('users', 'icon accent')}<h3>${esc(c.merchants.title)}</h3><p>${esc(c.merchants.text)}</p><a class="button ghost" href="/sponsor/signup" data-signup="sponsor" target="_blank" rel="noopener">${esc(c.merchants.cta)}</a></div>
+    <div class="card">${icon('users', 'icon accent')}<h3>${esc(c.sponsors.title)}</h3><p>${esc(c.sponsors.text)}</p><a class="button ghost" href="/sponsor/signup" data-signup="sponsor" target="_blank" rel="noopener">${esc(c.sponsors.cta)}</a></div>
     <div class="card">${icon('phone', 'icon accent')}<h3>${esc(c.takers.title)}</h3><p>${esc(c.takers.text)}</p><a class="button ghost" href="/taker/help">${esc(c.takers.cta)}</a></div>
   </div>
   <p class="muted small">${esc(c.note)}</p>
 </section>`
 }
 
-const BODIES = { home, merchants: (ctx) => featurePage(ctx, 'merchants'), takers: (ctx) => featurePage(ctx, 'takers'),
+const BODIES = { home, maps: (ctx) => featurePage(ctx, 'maps'), sponsors: (ctx) => featurePage(ctx, 'sponsors'),
+  takers: (ctx) => featurePage(ctx, 'takers'),
   surveys: (ctx) => featurePage(ctx, 'surveys'), pricing, contact }
 
 export function renderPage(ctx) {

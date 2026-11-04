@@ -27,6 +27,8 @@
 - [ ] **iOS App（Q49c）**：TestFlight 版装在 iPhone 上：打开即 App 的首页、没有安装提示；邮件中的验证与邮件登录链接打开 App；`/sponsor/` 与 `/biz/` 的链接在 Safari 打开；问卷中嵌入的视频能播放；Q49c-2 之后 Google、Facebook、LINE 与 Apple 登录回到 App、推送能收到（`plans/Q49c-ios.md` §3）
 - [ ] **Android App（Q49b）**：封闭测试版装在一台 Android 手机上：打开后没有浏览器地址栏（`assetlinks.json` 验证通过）；首页、结果页、账户页都没有安装提示；验证与邮件登录的邮件链接在 App 中打开，`/sponsor/` 与 `/biz/` 的链接在浏览器打开；Google、Facebook、LINE 登录回到 App；返回键与断网时的表现可以接受（`plans/Q49b-android.md` §4）
 
+- [ ] **Google AdSense（Q95，首次上线即开）**：隐私政策（含 AdSense 与第三方 Cookie）的新版本已经 `QB_LEGAL_PUBLISH` 发布；AdSense 账户已审核通过、站点 `quizbuks.com` 已登记；欧洲经济区、英国、瑞士访客的同意（Google 认证的同意管理平台）已在 AdSense 中设好；正式系统上三处（`/biz/`、`/taker/`、`/sponsor/`）都能看到广告，后台与登录页没有
+
 ## 性能
 
 - [ ] 在**上线所用的硬件**上重测（压测程序在另一台主机，读者按预期读取量限速；`./gradlew :quizbuks:loadTest`，`operations.md` §6）：预期峰值低于饱和点并有约 1.3 倍余量，应用与数据库 CPU < 60–70 %，结果写进 `perf/`

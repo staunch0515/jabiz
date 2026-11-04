@@ -215,3 +215,7 @@ table.fees .num { white-space: nowrap; font-variant-numeric: tabular-nums; font-
 .plain a:hover { color: var(--accent); }
 .fine { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line); font-size: .85rem; }
 @media (prefers-reduced-motion: reduce) { .button { transition: none; } html { scroll-behavior: auto; } }
+
+/* Q95: the knowledge structure map beside its text on the home page. */
+.map-art { display: flex; justify-content: center; }
+.band-art { width: 100%; max-width: 28rem; height: auto; }

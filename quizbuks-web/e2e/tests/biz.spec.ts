@@ -8,7 +8,7 @@ import { expect, expectAccessible, setAppearance, test } from './support'
  * appearances. The server's part (a page per directory, platform 16zf-b) is what makes /biz/zh/ answer.
  */
 
-const PAGES = ['', 'merchants/', 'takers/', 'surveys/', 'pricing/', 'contact/']
+const PAGES = ['', 'maps/', 'sponsors/', 'takers/', 'surveys/', 'pricing/', 'contact/']
 const LANGUAGES: Record<string, string> = { '': 'en', 'zh/': 'zh-Hans', 'ja/': 'ja' }
 
 test('every page of every language is served with its own text and alternates', async ({ request }) => {
@@ -26,6 +26,12 @@ test('every page of every language is served with its own text and alternates', 
   // Without a trailing slash, and a directory that is no page falls back to the English home.
   expect(await (await request.get('/biz/zh/pricing')).text()).toContain('<html lang="zh-Hans"')
   expect(await (await request.get('/biz/zh/nothing-here')).text()).toContain('<html lang="en"')
+  // Q95: the merchants' page moved to sponsors/; the old addresses of all three languages still lead there.
+  for (const prefix of ['', 'zh/', 'ja/']) {
+    const moved = await request.get(`/biz/${prefix}merchants/`, { maxRedirects: 0 })
+    expect(moved.status()).toBe(301)
+    expect(moved.headers()['location']).toContain(`/biz/${prefix}sponsors/`)
+  }
   const sitemap = await request.get('/biz/sitemap.xml')
   expect(sitemap.status()).toBe(200)
   expect(await sitemap.text()).toContain('<loc>https://quizbuks.com/biz/ja/pricing/</loc>')
@@ -140,7 +146,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await setAppearance(page, appearance)
     for (const width of [390, 1366]) {
       await page.setViewportSize({ width, height: 900 })
-      for (const path of ['/biz/', '/biz/ja/pricing/', '/biz/zh/merchants/', '/biz/contact/']) {
+      for (const path of ['/biz/', '/biz/ja/pricing/', '/biz/zh/sponsors/', '/biz/ja/maps/', '/biz/contact/']) {
         await page.goto(path)
         await expect(page.locator('h1')).toBeVisible()
         if (width < 1180) {

@@ -4,7 +4,7 @@ import { zh } from './zh.mjs'
 import { ja } from './ja.mjs'
 
 export const LANGUAGES = ['en', 'zh', 'ja']
-export const PAGES = ['home', 'merchants', 'takers', 'surveys', 'pricing', 'contact']
+export const PAGES = ['home', 'maps', 'sponsors', 'takers', 'surveys', 'pricing', 'contact']
 
 const CONTENT = { en, zh, ja }
 
