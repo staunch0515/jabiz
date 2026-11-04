@@ -20,6 +20,7 @@ import java.awt.font.TextLayout;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.Rectangle2D;
+import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -53,7 +54,7 @@ public class CoverRenderer {
     public static final int HEIGHT = 630;
     static final int MAX_LINES = 3;
     private static final int LARGEST = 92;
-    private static final int SMALLEST = 36;
+    static final int SMALLEST = 36;
 
     private static final Logger log = LoggerFactory.getLogger(CoverRenderer.class);
 
@@ -153,13 +154,7 @@ public class CoverRenderer {
         } finally {
             g.dispose();
         }
-        ByteArrayOutputStream out = new ByteArrayOutputStream(256 * 1024);
-        try {
-            ImageIO.write(image, "png", out);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return out.toByteArray();
+        return png(image);
     }
 
     // ---- the motif -------------------------------------------------------------------------------------------------
@@ -251,19 +246,9 @@ public class CoverRenderer {
             case "corner" -> WIDTH * 2 / 3;
             default -> WIDTH - 220;
         };
-        FontRenderContext frc = g.getFontRenderContext();
-        List<TextLayout> lines = null;
-        int size = LARGEST;
-        for (; size >= SMALLEST; size -= 4) {
-            lines = wrap(design.text(), size, maxWidth, frc);
-            if (lines != null) {
-                break;
-            }
-        }
-        if (lines == null) {
-            size = SMALLEST;
-            lines = force(design.text(), size, maxWidth, frc);
-        }
+        Fit fit = fit(design.text(), LARGEST, maxWidth, g.getFontRenderContext());
+        List<TextLayout> lines = fit.lines();
+        int size = fit.size();
         double lineHeight = size * 1.25;
         double block = lineHeight * lines.size();
         double top = switch (layout) {
@@ -297,6 +282,106 @@ public class CoverRenderer {
             g.setColor(text);
             line.draw(g, (float) x, baseline);
         }
+    }
+
+    /** The text's lines and their size. */
+    private record Fit(List<TextLayout> lines, int size) {}
+
+    /**
+     * The text at the largest size from {@code largest} down to {@value #SMALLEST} at which it wraps into at most
+     * {@value #MAX_LINES} lines of {@code maxWidth}; at the smallest size cut by width alone when no size fits.
+     */
+    private Fit fit(String text, int largest, int maxWidth, FontRenderContext frc) {
+        for (int size = largest; size >= SMALLEST; size -= 4) {
+            List<TextLayout> lines = wrap(text, size, maxWidth, frc);
+            if (lines != null) {
+                return new Fit(lines, size);
+            }
+        }
+        return new Fit(force(text, SMALLEST, maxWidth, frc), SMALLEST);
+    }
+
+    // ---- illustrations (Q96) ---------------------------------------------------------------------------------------
+
+    /** Where the title goes on an illustration: a band across the top or the bottom, or a panel in the middle. */
+    public static final List<String> PLACEMENTS = List.of("top", "bottom", "center");
+    private static final int OVERLAY_LARGEST = 80;
+
+    /**
+     * An illustration as a PNG (docs/quizbuks/plans/Q96-ai-cover-illustration.md, D-Q96-4): the drawing over white,
+     * scaled to cover the picture, and, when {@code text} is given, the text in white on a dark translucent band at
+     * {@code placement} (one of {@link #PLACEMENTS}; another is the bottom).
+     *
+     * @throws IllegalArgumentException when the text is not drawable
+     */
+    public byte[] renderIllustration(CoverSvg.Drawing drawing, String text, String placement) {
+        boolean titled = text != null && !text.isBlank();
+        if (titled && !drawable(text)) {
+            throw new IllegalArgumentException("Not a drawable cover text");
+        }
+        BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = image.createGraphics();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+            g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+            g.setColor(Color.WHITE);
+            g.fillRect(0, 0, WIDTH, HEIGHT);
+            drawing.paint(g, WIDTH, HEIGHT);
+            if (titled) {
+                overlay(g, text.strip(), PLACEMENTS.contains(placement) ? placement : "bottom");
+            }
+        } finally {
+            g.dispose();
+        }
+        return png(image);
+    }
+
+    private void overlay(Graphics2D g, String text, String placement) {
+        Fit fit = fit(text, OVERLAY_LARGEST, WIDTH - 200, g.getFontRenderContext());
+        double lineHeight = fit.size() * 1.25;
+        double block = lineHeight * fit.lines().size();
+        double band = block + 90;
+        double top = switch (placement) {
+            case "top" -> 0;
+            case "center" -> (HEIGHT - band) / 2;
+            default -> HEIGHT - band;
+        };
+        // Dark enough behind white text on any picture; fading out towards the picture at the top and bottom.
+        if ("center".equals(placement)) {
+            g.setColor(new Color(0, 0, 0, 150));
+            g.fill(new RoundRectangle2D.Double(60, top, WIDTH - 120, band, 36, 36));
+        } else {
+            boolean atTop = "top".equals(placement);
+            double fade = 50;
+            g.setPaint(new GradientPaint(0, (float) (atTop ? band : top - fade), new Color(0, 0, 0, 0), 0,
+                (float) (atTop ? band + fade : top), new Color(0, 0, 0, 160)));
+            g.fill(new Rectangle2D.Double(0, atTop ? band : top - fade, WIDTH, fade));
+            g.setColor(new Color(0, 0, 0, 160));
+            g.fill(new Rectangle2D.Double(0, top, WIDTH, band));
+        }
+        double first = top + (band - block) / 2;
+        for (int i = 0; i < fit.lines().size(); i++) {
+            TextLayout line = fit.lines().get(i);
+            float x = (float) ((WIDTH - line.getAdvance()) / 2);
+            float baseline = (float) (first + lineHeight * i + fit.size());
+            g.setColor(new Color(0, 0, 0, 120));
+            line.draw(g, x + 3, baseline + 3);
+            g.setColor(Color.WHITE);
+            line.draw(g, x, baseline);
+        }
+    }
+
+    private static byte[] png(BufferedImage image) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream(256 * 1024);
+        try {
+            ImageIO.write(image, "png", out);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return out.toByteArray();
     }
 
     /** The text in at most {@value #MAX_LINES} lines of at most {@code maxWidth}; null when it does not fit. */

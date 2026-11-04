@@ -258,10 +258,10 @@ class AiCancelIT extends AiItSupport {
         Map<String, Object> queued = requestCovers(token, quiz.get(0));
         assertThat(jobExecutor.runPending().block()).isEqualTo(1);
         String externalJobId = String.valueOf(queued.get("externalJobId"));
-        // The platform stored the three pictures the attempt drew.
+        // The platform stored the picture the attempt drew.
         List<Object> pictures = query("SELECT file_id FROM sys_external_job_file WHERE job_id = ?"
             + " AND direction = 'OUTPUT'", externalJobId).stream().map(row -> row.get("file_id")).toList();
-        assertThat(pictures).hasSize(3);
+        assertThat(pictures).hasSize(1);
 
         assertThat(run(AiProcesses.CANCEL, token, body("aiJobId", queued.get("aiJobId"))))
             .containsEntry("status", QbAi.CANCELLED);

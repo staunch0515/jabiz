@@ -134,13 +134,25 @@ public final class AiProcesses {
         @Positive Integer aiNoticeVersionNo) implements Requested {}
 
     /**
-     * Candidate covers of a quiz (Q8b): drawn from its title and introduction.
+     * A candidate cover of a quiz (Q8b; Q96): drawn from its title and introduction and the sponsor's requirements.
+     * Asked again, the quiz's cover not used yet is closed (D-Q96-3).
      *
-     * @param language          the covers' text's: {@code en}, {@code zh} or {@code ja}
+     * @param language          the cover's text's: {@code en}, {@code zh} or {@code ja}
      * @param aiNoticeVersionNo the version of the AI notice the page showed, when the sponsor accepts it now
+     * @param style             {@code ILLUSTRATION} (none given) or {@code GRAPHIC}
+     * @param requirements      what the picture should show or look like
+     * @param titleOverlay      whether an illustration shows a title (none given: yes)
+     * @param titleText         the text the cover shows (none: Claude words the quiz's title)
      */
     public record CoverRequestInput(@NotNull UUID quizId, @NotNull @Pattern(regexp = "en|zh|ja") String language,
-        @Positive Integer aiNoticeVersionNo) implements Requested {}
+        @Positive Integer aiNoticeVersionNo, @Pattern(regexp = "ILLUSTRATION|GRAPHIC") String style,
+        @Size(max = AiCoverJob.MAX_REQUIREMENTS) String requirements, Boolean titleOverlay,
+        @Size(max = 200) String titleText) implements Requested {
+
+        public CoverRequestInput(UUID quizId, String language, Integer aiNoticeVersionNo) {
+            this(quizId, language, aiNoticeVersionNo, null, null, null, null);
+        }
+    }
 
     /**
      * Candidate translations of a quiz's text (Q73d-1) into one of its other languages.
@@ -235,6 +247,8 @@ public final class AiProcesses {
     static final String MATERIAL_ROWS = "materialRows";
     static final String QUESTION_ROWS = "questionRows";
     static final String GLOBAL_OPEN = "globalOpen";
+    /** Q96: the quiz's ready cover jobs of the caller, closed when a new cover is asked for. */
+    static final String READY_COVERS = "readyCovers";
     static final String FIRST_READ = "firstRead";
     static final String ESTIMATE = "estimate";
     static final String KIND = "kind";
@@ -335,6 +349,15 @@ public final class AiProcesses {
             }
             pb.compute("Prepare the request", (metadata, ctx) -> prepare.accept(ctx));
             limited(pb, zone);
+            if (AiCoverJob.TYPE.equals(jobType)) {
+                // Q96 (D-Q96-3): asking again closes the quiz's cover not used yet, under the same lock.
+                pb.step("Load the quiz's cover not used yet", QueryEntities.<ProcessContext>of(
+                    QbAi.defaultDataset(QbAi.JOB), ctx -> EntityQuery.builder().where(and(
+                        new QueryPredicate.Eq("sponsorId", ctx.request().actorId()),
+                        new QueryPredicate.Eq("quizId", ctx.get(QuizEditing.QUIZ_ID)),
+                        new QueryPredicate.Eq("kind", QbAi.KIND_COVER),
+                        new QueryPredicate.Eq("status", QbAi.READY))).limit(100).build(), READY_COVERS));
+            }
             StartExternalJob.Spec<ProcessContext> start = StartExternalJob.<ProcessContext>of(jobType,
                     ctx -> ctx.get(JOB_INPUT))
                 .reference(ctx -> loads == Loads.PUBLICATION ? "publication:" + ctx.get(PUBLICATION_ID)
@@ -345,6 +368,18 @@ public final class AiProcesses {
             }
             pb.step("Start the job", start)
                 .compute("Record the job", (metadata, ctx) -> record(ctx, zone));
+            if (AiCoverJob.TYPE.equals(jobType)) {
+                pb.compute("Close the cover not used", (metadata, ctx) -> {
+                    for (EntityInstance job : rows(ctx, READY_COVERS)) {
+                        Map<String, Object> values = new LinkedHashMap<>();
+                        values.put("status", QbAi.DISCARDED);
+                        values.put("candidates", null);
+                        values.put("closedAt", ctx.opTime());
+                        clearCovers(values, job);
+                        ctx.changes().update(QbAi.JOB, job.id(), job.version(), values);
+                    }
+                });
+            }
         });
     }
 
@@ -580,9 +615,27 @@ public final class AiProcesses {
         Common common = common(ctx);
         EntityInstance quiz = QuizEditing.quiz(ctx);
         AiSettings settings = common.settings();
-        AiCoverJob.Input job = new AiCoverJob.Input(settings.model(), settings.effort(), input.language(),
-            quiz.get("title"), quiz.get("intro"), userKeys.of(ctx.request().actorId()));
-        int size = Math.max(bytes(AiCoverPrompt.user(job, JSON)), bytes(JSON.writeValueAsString(job)));
+        String style = input.style() == null ? AiCoverJob.ILLUSTRATION : input.style();
+        String requirements = blankToNull(input.requirements());
+        String titleText = blankToNull(input.titleText());
+        if (requirements != null && !plain(requirements)) {
+            common.problems().add(new Violation("requirements", AiCodes.COVER_TEXT, "The requirements hold "
+                + "control or invisible characters"));
+        }
+        if (titleText != null && !CoverDesigns.text(titleText.replaceAll("\\s+", " "))) {
+            common.problems().add(new Violation("titleText", AiCodes.COVER_TEXT, "The cover text is at most "
+                + CoverDesigns.MAX_TEXT + " plain characters", Map.of("max", CoverDesigns.MAX_TEXT)));
+        }
+        boolean overlay = !Boolean.FALSE.equals(input.titleOverlay());
+        AiCoverJob.Input job = new AiCoverJob.Input(settings.model(), AiCoverJob.ILLUSTRATION.equals(style)
+            ? AiCoverJob.ILLUSTRATION_EFFORT : settings.effort(), input.language(), quiz.get("title"),
+            quiz.get("intro"), userKeys.of(ctx.request().actorId()), null, style, requirements, overlay,
+            titleText == null ? null : titleText.replaceAll("\\s+", " "));
+        String user = AiCoverJob.ILLUSTRATION.equals(style) ? AiCoverPrompt.illustrationUser(job, JSON)
+            : AiCoverPrompt.user(job, JSON);
+        String system = AiCoverJob.ILLUSTRATION.equals(style) ? AiCoverPrompt.ILLUSTRATION_SYSTEM
+            : AiCoverPrompt.SYSTEM;
+        int size = Math.max(bytes(system) + bytes(user), bytes(JSON.writeValueAsString(job)));
         if (size > ClaudeApi.MAX_INPUT_BYTES) {
             common.problems().add(new Violation(null, AiCodes.INPUT_TOO_LARGE, "The request is " + size
                 + " bytes, more than " + ClaudeApi.MAX_INPUT_BYTES, Map.of("size", size, "max",
@@ -591,11 +644,25 @@ public final class AiProcesses {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("count", CoverDesigns.COVERS);
         params.put("language", input.language());
+        params.put("style", style);
+        params.put("titleOverlay", overlay);
+        params.put("requirements", requirements);
+        params.put("titleText", job.titleText());
         long reservedInput = AiLimits.reservedInput(size, 0);
         params.put("reservedInputTokens", reservedInput);
-        prepared(ctx, common, QbAi.KIND_COVER, new AiCoverJob.Input(job.model(), job.effort(), job.language(),
-            job.title(), job.intro(), job.userKey(), reservedInput), params, size,
-            AiLimits.estimate(size, AiCoverJob.MAX_TOKENS, 0), List.of());
+        prepared(ctx, common, QbAi.KIND_COVER, job.reserved(reservedInput), params, size,
+            AiLimits.estimate(size, AiCoverJob.maxTokens(style), 0), List.of());
+    }
+
+    /** Text a sponsor wrote for the AI: line breaks allowed, no other control, format or private use character. */
+    static boolean plain(String text) {
+        return text.codePoints().noneMatch(cp -> (Character.isISOControl(cp) && cp != '\n' && cp != '\r'
+            && cp != '\t') || Character.getType(cp) == Character.FORMAT
+            || Character.getType(cp) == Character.PRIVATE_USE);
+    }
+
+    private static String blankToNull(String text) {
+        return text == null || text.isBlank() ? null : text.strip();
     }
 
     /**
@@ -1010,6 +1077,26 @@ public final class AiProcesses {
             values.put("servedModel", result.servedModel());
             List<Map<String, Object>> covers = new ArrayList<>();
             int invalid = result.invalid();
+            if (result.illustration()) {
+                // Q96: one picture, its title checked again as stored (review L3, as for the designs).
+                UUID file = completion.files().get(AiCoverJob.fileKey(1));
+                AiCoverJob.Overlay overlay = result.overlay();
+                String text = overlay == null ? null : overlay.text();
+                String placement = overlay == null ? null : overlay.placement();
+                if (file != null && (text == null || CoverDesigns.text(text))
+                    && (placement == null || CoverRenderer.PLACEMENTS.contains(placement))) {
+                    values.put(QbAi.COVER_FIELDS.getFirst(), file);
+                    Map<String, Object> cover = new LinkedHashMap<>();
+                    cover.put("no", 1);
+                    cover.put("style", AiCoverJob.ILLUSTRATION);
+                    cover.put("text", text);
+                    cover.put("placement", placement);
+                    cover.put("fileId", file.toString());
+                    covers.add(cover);
+                } else {
+                    invalid++;
+                }
+            }
             for (int i = 0; i < result.designs().size(); i++) {
                 UUID file = completion.files().get(AiCoverJob.fileKey(i + 1));
                 CoverDesigns.Design design = result.designs().get(i);
@@ -1032,7 +1119,8 @@ public final class AiProcesses {
                 values.put("failureMessage", "None of the " + invalid + " cover designs could be drawn");
             } else {
                 Map<String, Object> document = new LinkedHashMap<>();
-                document.put("schema", 1);
+                document.put("schema", 2);
+                document.put("style", result.illustration() ? AiCoverJob.ILLUSTRATION : AiCoverJob.GRAPHIC);
                 document.put("covers", covers);
                 values.put("status", QbAi.READY);
                 values.put("candidates", JSON.writeValueAsString(document));
@@ -1172,7 +1260,8 @@ public final class AiProcesses {
     /**
      * One unrecorded attempt of the job, from its stored parameters: the input it reserved for an attempt
      * ({@code reservedInputTokens}: the text's estimate, and the pages of a request with PDF documents) and all the
-     * output it asked for ({@link ClaudeApi#maxTokens} of its count; {@link AiCoverJob#MAX_TOKENS} for covers),
+     * output it asked for ({@link ClaudeApi#maxTokens} of its count; {@link AiCoverJob#maxTokens} of its style for
+     * covers),
      * at the requested model's long-prompt rate when the input is above that line, as a recorded call would be.
      */
     static ClaudeApi.Usage unrecordedAttempt(EntityInstance job) {
@@ -1187,7 +1276,8 @@ public final class AiProcesses {
                 : AiTranslateJob.BATCH_MAX_TOKENS;
             return ClaudeCalls.priced(job.get("model"), ClaudeApi.unrecorded(input * batches, perCall * batches));
         }
-        int maxTokens = QbAi.KIND_COVER.equals(job.get("kind")) ? AiCoverJob.MAX_TOKENS
+        int maxTokens = QbAi.KIND_COVER.equals(job.get("kind"))
+            ? AiCoverJob.maxTokens(String.valueOf(params.getOrDefault("style", AiCoverJob.GRAPHIC)))
             : ClaudeApi.maxTokens(((Number) params.getOrDefault("count", AiQuestionsJob.MAX_COUNT)).intValue());
         return ClaudeCalls.priced(job.get("model"), ClaudeApi.unrecorded(input, maxTokens));
     }

@@ -35,4 +35,25 @@ class ClaudeCoverDesigner implements CoverDesigner {
         }
         return new Designed(answer.servedModel(), answer.fellBack(), designs);
     }
+
+    /**
+     * An illustration (Q96, D-Q96-6): asked with little thinking ({@link AiCoverJob#ILLUSTRATION_EFFORT}) so that the
+     * SVG arrives within the request's time; an answer that is not the document is tried again.
+     */
+    @Override
+    public Illustrated illustrate(AiCoverJob.Input input, ExternalJobContext ctx) {
+        ClaudeApi.Request request = new ClaudeApi.Request(input.model(), AiCoverJob.ILLUSTRATION_EFFORT,
+            AiCoverJob.ILLUSTRATION_MAX_TOKENS, AiCoverPrompt.ILLUSTRATION_SYSTEM,
+            AiCoverPrompt.illustrationUser(input, json), input.userKey(), AiCoverPrompt.illustrationSchema(),
+            List.of());
+        ClaudeCalls.Reserved reserved = new ClaudeCalls.Reserved(AiCoverJob.TYPE, input.reservedInputTokens(),
+            input.reservedInputTokens() == null ? Long.MAX_VALUE
+                : input.reservedInputTokens() + AiCoverJob.ILLUSTRATION_MAX_TOKENS);
+        ClaudeApi.Answer answer = ClaudeCalls.ask(ctx, json, request, requestTimeout, reserved);
+        String[] parts = AiCoverPrompt.illustration(answer.text(), json);
+        if (parts == null) {
+            throw ClaudeErrors.badResponse("is not the illustration's document");
+        }
+        return new Illustrated(answer.servedModel(), answer.fellBack(), parts[0], parts[1], parts[2]);
+    }
 }

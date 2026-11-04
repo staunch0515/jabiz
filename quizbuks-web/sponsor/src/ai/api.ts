@@ -29,17 +29,27 @@ export interface AiCandidate {
   options: AiOption[]
 }
 
+/** The two kinds of AI covers (Q96): an illustration Claude draws as SVG, or a design of the fixed catalogue (Q8b). */
+export type AiCoverStyle = 'ILLUSTRATION' | 'GRAPHIC'
+
 /**
- * A candidate cover (Q8b) as the server keeps it: the design Claude chose from the fixed catalogue and the picture the
- * server drew of it (a file of the sponsor's, `qb.content.image`).
+ * A candidate cover as the server keeps it (Q8b; one since Q96): the picture the server drew (a file of the sponsor's,
+ * `qb.content.image`) and the text on it (none on an illustration without a title).
  */
 export interface AiCover {
   no: number
-  palette: string
-  layout: string
-  motif: string
-  text: string
+  style: AiCoverStyle
+  text: string | null
   fileId: string
+}
+
+/** What a cover was asked with (the job's parameters), to ask again from it (Q96). */
+export interface AiCoverParams {
+  style: AiCoverStyle
+  requirements: string
+  titleOverlay: boolean
+  titleText: string
+  language: AiLanguage | null
 }
 
 /**
@@ -60,8 +70,9 @@ export interface AiJob {
   status: AiJobStatus
   count: number | null
   candidates: AiCandidate[]
-  /** A cover job's candidates (none for questions). */
+  /** A cover job's candidate (none for the other kinds) and what it was asked with. */
   covers: AiCover[]
+  coverParams: AiCoverParams | null
   /** Q73d-1: a translation job's language and candidates (none for the other kinds). */
   language: string | null
   /** Q73d-2: a publication texts job's publication. */
@@ -104,7 +115,10 @@ export function parseCandidates(text: unknown): AiCandidate[] {
   }
 }
 
-/** The stored candidate covers (`{schema: 1, covers: [...]}`); none when there are none or they cannot be read. */
+/**
+ * The stored candidate covers (`{schema: 1|2, style?, covers: [...]}`); none when there are none or they cannot be
+ * read. A cover of before Q96 is a catalogue design.
+ */
 export function parseCovers(text: unknown): AiCover[] {
   if (typeof text !== 'string' || !text) return []
   try {
@@ -113,15 +127,25 @@ export function parseCovers(text: unknown): AiCover[] {
     return document.covers
       .map((c: Row, index): AiCover => ({
         no: num(c.no) || index + 1,
-        palette: String(c.palette ?? ''),
-        layout: String(c.layout ?? ''),
-        motif: String(c.motif ?? ''),
-        text: String(c.text ?? ''),
+        style: c.style === 'ILLUSTRATION' ? 'ILLUSTRATION' : 'GRAPHIC',
+        text: typeof c.text === 'string' && c.text ? c.text : null,
         fileId: String(c.fileId ?? ''),
       }))
       .filter((c) => c.fileId !== '')
   } catch {
     return []
+  }
+}
+
+/** A cover job's parameters as asked (Q96); a job of before Q96 was a catalogue design without requirements. */
+export function parseCoverParams(params: Row): AiCoverParams {
+  const language = str(params.language)
+  return {
+    style: params.style === 'ILLUSTRATION' ? 'ILLUSTRATION' : 'GRAPHIC',
+    requirements: str(params.requirements) ?? '',
+    titleOverlay: params.titleOverlay !== false,
+    titleText: str(params.titleText) ?? '',
+    language: language === 'en' || language === 'zh' || language === 'ja' ? language : null,
   }
 }
 
@@ -157,6 +181,7 @@ export function toAiJob(row: Row): AiJob {
     count: num(params.count) || null,
     candidates: kind === AI_KINDS.questions ? parseCandidates(row.candidates) : [],
     covers: kind === AI_KINDS.cover ? parseCovers(row.candidates) : [],
+    coverParams: kind === AI_KINDS.cover ? parseCoverParams(params) : null,
     language: kind === AI_KINDS.translation || kind === AI_KINDS.publicationTexts ? str(params.language) : null,
     publicationId: str(params.publicationId),
     translations: kind === AI_KINDS.translation || kind === AI_KINDS.publicationTexts
@@ -247,11 +272,21 @@ export interface AiRequestOutput {
 export const requestAiQuestions = (input: AiRequestInput) =>
   runProcess<AiRequestOutput>(AI_PROCESS.request, { ...input })
 
-/** `AiProcesses.CoverRequestInput` (Q8b): covers from the quiz's title and introduction. */
+/**
+ * `AiProcesses.CoverRequestInput` (Q8b; Q96): a cover from the quiz's title and introduction and the sponsor's
+ * requirements. Asking again closes the quiz's cover not used yet.
+ */
 export interface AiCoverRequestInput {
   quizId: string
   language: AiLanguage
   aiNoticeVersionNo?: number | null
+  style: AiCoverStyle
+  /** What the picture should show or look like; empty is none. */
+  requirements?: string | null
+  /** Whether an illustration shows a title. */
+  titleOverlay?: boolean
+  /** The text the cover shows; empty: the AI words the quiz's title. */
+  titleText?: string | null
 }
 
 export const requestAiCovers = (input: AiCoverRequestInput) =>

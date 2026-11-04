@@ -8,7 +8,7 @@ import java.util.function.Predicate;
 
 /**
  * The fixed catalogue AI covers are designed from (docs/quizbuks/plans/Q8-ai.md, Q8b, A-4 option A): Claude does not
- * draw. It picks, for each of {@value #COVERS} covers, one palette, one layout and one motif of this catalogue and
+ * draw. It picks, for each of {@value #COVERS} cover(s), one palette, one layout and one motif of this catalogue and
  * writes the cover's text (at most {@value #MAX_TEXT} characters); the server draws the picture
  * ({@link CoverRenderer}). Nothing photographic or copied, every cover in the same style, one provider only.
  *
@@ -18,8 +18,8 @@ import java.util.function.Predicate;
  */
 public final class CoverDesigns {
 
-    /** Covers asked for and kept at most. */
-    public static final int COVERS = 3;
+    /** Covers asked for and kept at most: one since Q96 (the sponsor asks again for another). */
+    public static final int COVERS = 1;
     /** The longest cover text, in characters (code points). */
     public static final int MAX_TEXT = 40;
 
@@ -139,6 +139,7 @@ public final class CoverDesigns {
     static Map<String, Object> stored(int no, Design design, String fileId) {
         Map<String, Object> cover = new LinkedHashMap<>();
         cover.put("no", no);
+        cover.put("style", AiCoverJob.GRAPHIC);
         cover.put("palette", design.palette());
         cover.put("layout", design.layout());
         cover.put("motif", design.motif());

@@ -5,9 +5,10 @@ import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique, s
 
 /**
  * AI covers and PDF materials (docs/quizbuks/plans/Q8-ai.md, Q8b; M-25, M-26) with the provider answered by the local
- * stub: an approved sponsor asks for covers on the quiz page (the AI notice on first use), chooses one of the three
- * pictures the server drew, and it becomes the quiz's cover; then asks for questions from the quiz's article and its
- * PDF, which is sent as the file itself. Every step passes axe, light and dark.
+ * stub: an approved sponsor asks for a cover on the quiz page (the AI notice on first use), asks again with
+ * requirements (Q96: one cover at a time, the new one replacing the one not used), uses it, and it becomes the quiz's
+ * cover; then asks for questions from the quiz's article and its PDF, which is sent as the file itself. Every step
+ * passes axe, light and dark.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
@@ -45,15 +46,18 @@ for (const appearance of ['light', 'dark'] as const) {
 
     const choice = page.getByTestId('ai-cover-choice')
     await expect(choice).toBeVisible({ timeout: 60_000 })
-    const candidates = choice.getByTestId('ai-cover-candidate')
-    await expect(candidates).toHaveCount(3)
-    await expect(candidates.nth(0).getByRole('img')).toBeVisible()
-    await expect(choice.getByTestId('ai-cover-apply')).toBeDisabled()
-    await expectAccessible(page, at('sponsor AI cover choice'))
-    // A click on the picture picks it, as its radio does.
-    await candidates.nth(2).getByTestId('ai-cover-picture').click()
-    await expect(candidates.nth(2).getByTestId('ai-cover-pick')).toBeChecked()
-    await candidates.nth(1).getByTestId('ai-cover-pick').click()
+    await expect(choice.getByTestId('ai-cover-candidate')).toHaveCount(1)
+    await expect(choice.getByTestId('ai-cover-candidate').getByRole('img')).toBeVisible()
+    await expectAccessible(page, at('sponsor AI cover preview'))
+    // Asked again with requirements: the dialog starts from the cover's own, and the new one replaces it.
+    await choice.getByTestId('ai-cover-again').click()
+    const again = page.getByTestId('ai-cover-dialog')
+    await expect(again.getByTestId('ai-cover-replacing')).toBeVisible()
+    await again.getByTestId('ai-cover-requirements').fill('A calm river at dawn, blue tones')
+    await expectAccessible(page, at('sponsor AI cover dialog, asked again'))
+    await again.getByTestId('ai-cover-submit').click()
+    await expect(again).toBeHidden()
+    await expect(choice.getByTestId('ai-cover-asked')).toContainText('A calm river at dawn', { timeout: 60_000 })
     await choice.getByTestId('ai-cover-apply').click()
     await expect(choice).toBeHidden()
     // The chosen picture is the quiz's cover now, shown by the heading; the quiz is AI generated (M-20).

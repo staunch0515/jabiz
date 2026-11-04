@@ -109,6 +109,9 @@ abstract class AiItSupport extends LegalItSupport {
         if (user.contains("Number of covers:")) {
             return answer(body.get("model").asString(), "end_turn", covers("Cover"), 300, 200);
         }
+        if (user.contains("Style: illustration")) {
+            return answer(body.get("model").asString(), "end_turn", illustration("Cover", "bottom"), 300, 200);
+        }
         if (user.contains("Number of pairs:")) {
             return answer(body.get("model").asString(), "end_turn", verdicts(user), 400, 300);
         }
@@ -159,12 +162,26 @@ abstract class AiItSupport extends LegalItSupport {
         return documents;
     }
 
-    /** Three cover designs as the answer's text, their texts {@code <prefix> 1..3}. */
+    /** A cover design (one since Q96) as the answer's text, its text {@code <prefix> 1}. */
     static String covers(String prefix) {
         return JSON.writeValueAsString(Map.of("covers", List.of(
-            Map.of("palette", "ocean", "layout", "center", "motif", "circles", "text", prefix + " 1"),
-            Map.of("palette", "sunset", "layout", "band", "motif", "waves", "text", prefix + " 2"),
-            Map.of("palette", "citrus", "layout", "corner", "motif", "rays", "text", prefix + " 3"))));
+            Map.of("palette", "ocean", "layout", "center", "motif", "circles", "text", prefix + " 1"))));
+    }
+
+    /** A small SVG scene (Q96). */
+    static final String SCENE = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 630\">"
+        + "<defs><linearGradient id=\"sky\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#1e3a8a\"/>"
+        + "<stop offset=\"1\" stop-color=\"#60a5fa\"/></linearGradient></defs>"
+        + "<rect width=\"1200\" height=\"630\" fill=\"url(#sky)\"/><circle cx=\"950\" cy=\"150\" r=\"80\" fill=\"#fde68a\"/>"
+        + "<path d=\"M0 470 Q300 380 600 470 T1200 470 V630 H0 Z\" fill=\"#166534\"/></svg>";
+
+    /** An illustration as the answer's text: {@link #SCENE}, its title {@code text} at {@code placement}. */
+    static String illustration(String text, String placement) {
+        return illustration(SCENE, text, placement);
+    }
+
+    static String illustration(String svg, String text, String placement) {
+        return JSON.writeValueAsString(Map.of("svg", svg, "text", text, "placement", placement));
     }
 
     /** Q73d-2: a verdict on each pair: not the same where the translation holds "[wrong]". */
@@ -321,7 +338,7 @@ abstract class AiItSupport extends LegalItSupport {
         return run(AiProcesses.REQUEST, token, requestInput(quizId, materialIds, count));
     }
 
-    /** Asks for covers of the quiz, in English, the notice accepted (Q8b). */
+    /** Asks for a cover of the quiz (an illustration since Q96), in English, the notice accepted (Q8b). */
     Map<String, Object> requestCovers(String token, String quizId) {
         return run(AiProcesses.COVER_REQUEST, token, body("quizId", quizId, "language", "en", "aiNoticeVersionNo",
             noticeVersion()));

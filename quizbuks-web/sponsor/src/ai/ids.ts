@@ -44,8 +44,11 @@ export const AI_LIMITS = {
   /** A PDF material's largest size and all PDFs' pages as the server sends them by default (`quizbuks.ai.pdf.*`). */
   maxPdfMb: 10,
   maxPdfPages: 100,
-  /** Candidate covers of one request (`CoverDesigns.COVERS`). */
-  covers: 3,
+  /** Candidate covers of one request (`CoverDesigns.COVERS`): one since Q96, asked again for another. */
+  covers: 1,
+  /** A cover's requirements and text at most (`AiCoverJob.MAX_REQUIREMENTS`, `CoverDesigns.MAX_TEXT`), in characters. */
+  coverRequirements: 500,
+  coverText: 40,
   /** How often a running job is looked at, and for how long at most. */
   pollMs: 5_000,
   pollForMs: 5 * 60_000,

@@ -9,6 +9,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Checkbox,
   ConfirmDialog,
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Input,
   Label,
   notify,
   RadioGroup,
@@ -26,9 +28,10 @@ import {
   SelectTrigger,
   SelectValue,
   Spinner,
+  Textarea,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ImageIcon } from 'lucide-react'
+import { ImageIcon, RefreshCw } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Quiz } from '../content/api'
@@ -53,6 +56,8 @@ import {
   readLatestAiJob,
   requestAiCovers,
   stillPolling,
+  type AiCoverParams,
+  type AiCoverStyle,
   type AiJob,
   type AiLanguage,
 } from './api'
@@ -61,22 +66,43 @@ import './messages'
 
 export const aiCoverJobQuery = (quizId: string) => [...AI_QUERY, 'cover', quizId] as const
 
-/** "Covers with AI": the language of the covers' text and, on first use, the AI notice. */
-function CoverDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+const STYLES: readonly AiCoverStyle[] = ['ILLUSTRATION', 'GRAPHIC']
+
+/**
+ * "Cover with AI" (Q96): the style, what the picture should show, whether and which title it shows, the language of
+ * that text and, on first use, the AI notice. Asked again from a cover, the dialog starts from what that one was asked
+ * with; the cover not used yet is replaced (the server closes it with the new request).
+ */
+function CoverDialog({ open, onOpenChange, initial, replacing }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  initial: AiCoverParams | null
+  replacing: boolean
+}) {
   const { t, i18n } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
   const editing = useEditing()
   const id = useId()
-  const [language, setLanguage] = useState<AiLanguage>(() => consoleLanguage(i18n.language))
+  const [style, setStyle] = useState<AiCoverStyle>(initial?.style ?? 'ILLUSTRATION')
+  const [requirements, setRequirements] = useState(initial?.requirements ?? '')
+  const [titleOverlay, setTitleOverlay] = useState(initial?.titleOverlay ?? true)
+  const [titleText, setTitleText] = useState(initial?.titleText ?? '')
+  const [language, setLanguage] = useState<AiLanguage>(() => initial?.language ?? consoleLanguage(i18n.language))
   const [agreed, setAgreed] = useState(false)
   const [local, setLocal] = useState<string | null>(null)
   const notice = useAiNotice(open)
+  // An illustration may show no text; a catalogue design always shows its text.
+  const showsText = style === 'GRAPHIC' || titleOverlay
 
   const request = useMutation({
     mutationFn: () => requestAiCovers({
       quizId: editing.quizId,
       language,
       aiNoticeVersionNo: notice.data?.mustAccept ? notice.data.versionNo : null,
+      style,
+      requirements: requirements.trim() || null,
+      titleOverlay: style === 'ILLUSTRATION' ? titleOverlay : true,
+      titleText: showsText ? titleText.trim() || null : null,
     }),
     onSuccess: async () => {
       onOpenChange(false)
@@ -108,20 +134,64 @@ function CoverDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
         <form noValidate onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
             <DialogTitle>{t('ai.cover.dialogTitle')}</DialogTitle>
-            <DialogDescription>{t('ai.cover.dialogDescription', { n: AI_LIMITS.covers })}</DialogDescription>
+            <DialogDescription>{t('ai.cover.dialogDescription')}</DialogDescription>
           </DialogHeader>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 text-sm font-medium">{t('ai.cover.style')}</legend>
+            <RadioGroup value={style} onValueChange={(value) => setStyle(value as AiCoverStyle)}
+              className="grid gap-2 sm:grid-cols-2" data-testid="ai-cover-style">
+              {STYLES.map((s) => (
+                <div key={s} className="flex items-start gap-2 rounded-md border p-3">
+                  <RadioGroupItem id={`${id}-style-${s}`} value={s} data-testid={`ai-cover-style-${s}`} />
+                  <Label htmlFor={`${id}-style-${s}`} className="flex flex-col items-start gap-1 leading-snug">
+                    <span>{t(`ai.cover.styles.${s}`)}</span>
+                    <span className="text-muted-foreground text-xs font-normal">{t(`ai.cover.styleHints.${s}`)}</span>
+                  </Label>
+                </div>
+              ))}
+            </RadioGroup>
+          </fieldset>
           <div className="flex flex-col gap-2">
-            <Label id={`${id}-language`}>{t('ai.cover.language')}</Label>
-            <Select value={language} onValueChange={(value) => setLanguage(value as AiLanguage)}>
-              <SelectTrigger aria-labelledby={`${id}-language`} className="w-48" data-testid="ai-cover-language">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AI_LANGUAGES.map((l) => <SelectItem key={l} value={l}>{t(`ai.dialog.languages.${l}`)}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label htmlFor={`${id}-requirements`}>{t('ai.cover.requirements')}</Label>
+            <Textarea id={`${id}-requirements`} value={requirements} rows={4}
+              maxLength={AI_LIMITS.coverRequirements} aria-describedby={`${id}-requirements-hint`}
+              placeholder={t('ai.cover.requirementsPlaceholder')} data-testid="ai-cover-requirements"
+              onChange={(event) => setRequirements(event.target.value)} />
+            <p id={`${id}-requirements-hint`} className="text-muted-foreground flex justify-between gap-2 text-xs">
+              <span>{t('ai.cover.requirementsHint')}</span>
+              <span>{t('ai.cover.count', { n: [...requirements].length, max: AI_LIMITS.coverRequirements })}</span>
+            </p>
           </div>
+          {style === 'ILLUSTRATION' && (
+            <div className="flex items-center gap-2">
+              <Checkbox id={`${id}-overlay`} checked={titleOverlay} data-testid="ai-cover-overlay"
+                onCheckedChange={(checked) => setTitleOverlay(checked === true)} />
+              <Label htmlFor={`${id}-overlay`}>{t('ai.cover.titleOverlay')}</Label>
+            </div>
+          )}
+          {showsText && (
+            <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${id}-text`}>{t('ai.cover.titleText')}</Label>
+                <Input id={`${id}-text`} value={titleText} maxLength={AI_LIMITS.coverText}
+                  placeholder={t('ai.cover.titleTextPlaceholder')} data-testid="ai-cover-text"
+                  onChange={(event) => setTitleText(event.target.value)} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label id={`${id}-language`}>{t('ai.cover.language')}</Label>
+                <Select value={language} onValueChange={(value) => setLanguage(value as AiLanguage)}>
+                  <SelectTrigger aria-labelledby={`${id}-language`} className="w-40" data-testid="ai-cover-language">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AI_LANGUAGES.map((l) => <SelectItem key={l} value={l}>{t(`ai.dialog.languages.${l}`)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
           <p className="text-muted-foreground text-sm" data-testid="ai-cover-sent">{t('ai.cover.sent')}</p>
+          {replacing && <p className="text-sm" data-testid="ai-cover-replacing">{t('ai.cover.replacing')}</p>}
           <AiNoticeSection notice={notice} agreed={agreed} onAgreed={setAgreed} />
           {local && <p role="alert" className="text-destructive text-sm" data-testid="ai-cover-local-problem">{local}</p>}
           <ProblemList problems={formProblem(request.error, [])} testId="ai-cover-request-error" />
@@ -142,18 +212,18 @@ function CoverDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
 }
 
 /**
- * The candidate covers of a ready job: the pictures the server drew of the AI's designs, one chosen with a radio
- * button and applied as the quiz's cover; or all discarded.
+ * The cover of a ready job (Q96: one): the picture the server drew, used as the quiz's cover, asked again with other
+ * requirements, or discarded.
  */
-function Choice({ job, onApplied }: { job: AiJob; onApplied?: () => void }) {
+function Preview({ job, onApplied, onAgain }: { job: AiJob; onApplied?: () => void; onAgain: () => void }) {
   const { t } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
   const editing = useEditing()
   const id = useId()
-  const [chosen, setChosen] = useState<string>('')
+  const cover = job.covers[0]
 
   const apply = useMutation({
-    mutationFn: () => acceptAiCover(job.aiJobId, editing.quizId, Number(chosen), editing.revision()),
+    mutationFn: () => acceptAiCover(job.aiJobId, editing.quizId, cover.no, editing.revision()),
     onSuccess: async (output) => {
       notify.success(t('ai.cover.applied'))
       await editing.edited(output)
@@ -169,44 +239,42 @@ function Choice({ job, onApplied }: { job: AiJob; onApplied?: () => void }) {
     notify.error(error instanceof ApiError ? error.message : String(error))
   })
 
+  if (!cover) return null
   return (
     <section className="flex flex-col gap-4" aria-labelledby={`${id}-title`} data-testid="ai-cover-choice">
       <div className="flex flex-col gap-1">
-        <h3 id={`${id}-title`} className="font-medium">{t('ai.cover.chooseTitle')}</h3>
-        <p className="text-muted-foreground text-sm">{t('ai.cover.chooseIntro')}</p>
+        <h3 id={`${id}-title`} className="font-medium">{t('ai.cover.previewTitle')}</h3>
+        <p className="text-muted-foreground text-sm">{t('ai.cover.previewIntro')}</p>
         {job.expiresAt && <p className="text-muted-foreground text-xs" data-testid="ai-cover-expires">
           {t('ai.review.expires', { time: formatDateTime(job.expiresAt) })}</p>}
       </div>
-      <RadioGroup value={chosen} onValueChange={setChosen} aria-labelledby={`${id}-title`}
-        className="grid gap-3 sm:grid-cols-3">
-        {job.covers.map((cover) => (
-          <div key={cover.no} className="flex flex-col gap-2 rounded-md border p-2" data-testid="ai-cover-candidate">
-            {/* The picture is a label of its radio: a click on it picks it, as a click on the text does. */}
-            <label htmlFor={`${id}-${cover.no}`} className="cursor-pointer" data-testid="ai-cover-picture">
-              <Thumbnail fileId={cover.fileId} width={640} className="aspect-[40/21] w-full rounded-sm"
-                alt={t('ai.cover.picture', { n: cover.no, text: cover.text })} />
-            </label>
-            <div className="flex items-start gap-2">
-              <RadioGroupItem id={`${id}-${cover.no}`} value={String(cover.no)} data-testid="ai-cover-pick" />
-              <Label htmlFor={`${id}-${cover.no}`} className="flex flex-col items-start gap-0.5 leading-snug">
-                <span>{t('ai.cover.candidate', { n: cover.no })}</span>
-                {/* The design's text, as plain text: the picture shows it too. */}
-                <span className="text-muted-foreground text-xs font-normal">{cover.text}</span>
-              </Label>
-            </div>
-          </div>
-        ))}
-      </RadioGroup>
+      <div data-testid="ai-cover-candidate" data-style={cover.style}>
+        <Thumbnail fileId={cover.fileId} width={1200} className="aspect-[40/21] w-full rounded-md border"
+          alt={cover.text ? t('ai.cover.picture', { text: cover.text }) : t('ai.cover.pictureUntitled')} />
+      </div>
+      {cover.text && (
+        // The text on the picture, as plain text.
+        <p className="text-sm" data-testid="ai-cover-shown-text">{t('ai.cover.shownText', { text: cover.text })}</p>
+      )}
+      {job.coverParams?.requirements && (
+        <p className="text-muted-foreground text-sm" data-testid="ai-cover-asked">
+          {t('ai.cover.asked', { requirements: job.coverParams.requirements })}</p>
+      )}
       <ProblemList problems={formProblem(apply.error, [])} testId="ai-cover-apply-error" />
       <div className="flex flex-wrap gap-2">
-        <Button disabled={!chosen || apply.isPending || editing.stale} aria-busy={apply.isPending || undefined}
+        <Button disabled={apply.isPending || editing.stale} aria-busy={apply.isPending || undefined}
           data-testid="ai-cover-apply" onClick={() => apply.mutate()}>
-          {chosen ? t('ai.cover.apply') : t('ai.cover.applyNone')}
+          {t('ai.cover.apply')}
+        </Button>
+        <Button variant="outline" disabled={apply.isPending || editing.stale} data-testid="ai-cover-again"
+          onClick={onAgain}>
+          <RefreshCw aria-hidden />
+          {t('ai.cover.again')}
         </Button>
         <ConfirmDialog destructive title={t('ai.cover.discardTitle')} description={t('ai.cover.discardText')}
-          confirmLabel={t('ai.review.discard')} cancelLabel={t('common.cancel')} onConfirm={discard}
-          trigger={<Button variant="outline" disabled={apply.isPending} data-testid="ai-cover-discard">
-            {t('ai.review.discard')}</Button>} />
+          confirmLabel={t('ai.cover.discard')} cancelLabel={t('common.cancel')} onConfirm={discard}
+          trigger={<Button variant="ghost" disabled={apply.isPending} data-testid="ai-cover-discard">
+            {t('ai.cover.discard')}</Button>} />
       </div>
     </section>
   )
@@ -218,10 +286,10 @@ function coverFailure(t: (key: string) => string, code: string | null): string {
 }
 
 /**
- * The quiz page's AI covers (Q8b, M-25): asking for {@link AI_LIMITS.covers} candidates drawn from the quiz's title and
- * introduction, the job while it runs (every five seconds for at most five minutes, not after the page is left), the
- * pictures to choose from, or why it failed. The chosen cover is written as a quiz edit; `onApplied` lets the heading
- * show it.
+ * The quiz page's AI covers (Q8b, M-25; Q96): asking for a cover (an illustration or a catalogue design, with the
+ * sponsor's requirements), the job while it runs (every five seconds for at most five minutes, not after the page is
+ * left), the picture to use or to ask again from, or why it failed. The cover used is written as a quiz edit;
+ * `onApplied` lets the heading show it.
  */
 export function AiCoverPanel({ quiz, onApplied }: { quiz: Quiz; onApplied?: () => void }) {
   const { t } = useTranslation(SPONSOR)
@@ -291,9 +359,12 @@ export function AiCoverPanel({ quiz, onApplied }: { quiz: Quiz; onApplied?: () =
         {latest?.status === 'EXPIRED' && (
           <p className="text-muted-foreground text-sm" data-testid="ai-cover-expired">{t('ai.cover.expired')}</p>
         )}
-        {latest?.status === 'READY' && <Choice key={latest.aiJobId} job={latest} onApplied={onApplied} />}
+        {latest?.status === 'READY' && (
+          <Preview key={latest.aiJobId} job={latest} onApplied={onApplied} onAgain={() => setAsking(true)} />
+        )}
       </CardContent>
-      {asking && <CoverDialog open onOpenChange={setAsking} />}
+      {asking && <CoverDialog open onOpenChange={setAsking} initial={latest?.coverParams ?? null}
+        replacing={latest?.status === 'READY'} />}
     </Card>
   )
 }
