@@ -67,8 +67,12 @@ public class AuthMailTemplates {
     public static final String PASSKEY_ADDED = "jabiz.auth.passkey-added";
     /** The token purpose of {@value #PASSKEY_CONFIRM}. */
     public static final String PASSKEY = "jabiz.passkey";
-    /** The parameter naming the passkey of {@value #PASSKEY_ADDED} (the name its user gave it). */
-    public static final String PASSKEY_NAME = "passkey";
+    /**
+     * The parameter naming the passkey of {@value #PASSKEY_ADDED} (the name its user gave it). Not {@code passkey}: a
+     * mail parameter may not share its name with a secret anywhere (MailChecks), and an application may well call a
+     * secret of its own a pass key (a redemption pass's, say), which lowercases to that.
+     */
+    public static final String PASSKEY_NAME = "passkeyName";
 
     /** Tells a user that a passkey was added (no token; the entry and the passkey's name its parameters). */
     public static final MailTemplate PASSKEY_ADDED_MAIL = MailTemplate.define(PASSKEY_ADDED,
