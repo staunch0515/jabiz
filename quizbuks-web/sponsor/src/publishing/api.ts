@@ -81,6 +81,8 @@ export interface Publication {
   passScore: number | null
   /** Q81: how many of the version's questions each taker is given, drawn at the start; null asks all of them. */
   pickCount: number | null
+  /** Q88b: the entry fee in Kudos a taker pays at the start (0: none). */
+  entryFee: number
   budgetCap: string | null
   maxWinners: number | null
   /** How the reward reaches the taker (Q22); a prize at the sponsor's place is described. */
@@ -152,6 +154,8 @@ export interface PublicationRow {
   winners: number
   maxWinners: number | null
   spent: string
+  /** Q88b: the entry fees its takers paid. */
+  entryFees: string
   budgetCap: string | null
   maxSpend: string | null
   /** Live but the sponsor's wallet cannot pay the highest reward (or rewards are pending), or underfunded. */
@@ -187,6 +191,8 @@ export interface SaveInput {
   passScore: number | null
   /** Q81: the questions drawn per taker; null asks all of them. */
   pickCount: number | null
+  /** Q88b: the entry fee (0: none); the server refuses one while the switch is off. */
+  entryFee: number
   budgetCap: number | null
   maxWinners: number | null
   /** The whole list in its order. */
@@ -348,6 +354,7 @@ export function toPublication(row: Row): Publication {
     timeLimitSec: numOrNull(row.timeLimitSec),
     passScore: numOrNull(row.passScore),
     pickCount: numOrNull(row.pickCount),
+    entryFee: numOrNull(row.entryFee) ?? 0,
     budgetCap: str(row.budgetCap),
     maxWinners: numOrNull(row.maxWinners),
     rewardMethod: methodOf(row.rewardMethod),
@@ -462,6 +469,7 @@ export async function searchPublications({ q, status, sorts, offset, limit }: Pu
       winners: num(row.winners),
       maxWinners: numOrNull(row.maxWinners),
       spent: String(row.spent ?? '0'),
+      entryFees: String(row.entryFees ?? '0'),
       budgetCap: str(row.budgetCap),
       maxSpend: str(row.maxSpend),
       fundsShort: bool(row.fundsShort),
@@ -497,6 +505,8 @@ export interface RewardSettings {
   own: boolean
   /** The highest reward one attempt may win, in Kudos; null for no cap. */
   maxRewardPerAttempt: number | null
+  /** Q88b: whether a quiz may charge an entry fee now (the switch); the server refuses one otherwise. */
+  entryFeeEnabled: boolean
 }
 
 /**
@@ -513,7 +523,15 @@ export async function readRewardSettings(): Promise<RewardSettings> {
     methods: REWARD_METHODS.filter((method) => named.includes(method)),
     own: row.own === true || row.own === 'true',
     maxRewardPerAttempt: max != null && Number.isFinite(max) && max > 0 ? max : null,
+    entryFeeEnabled: row.entryFeeEnabled === true || row.entryFeeEnabled === 'true',
   }
+}
+
+/** Q88b: the entry fees a publication's takers paid, from the list's row of it. */
+export async function readEntryFeesCollected(publicationId: string): Promise<string> {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.publications, {
+    filters: [{ field: 'publicationId', op: 'eq', value: publicationId }], limit: 1 })
+  return String(page.items[0]?.entryFees ?? '0')
 }
 
 /** The query key of {@link readRewardSettings}: the wizard and the console's frame share one read. */
@@ -879,6 +897,8 @@ export interface PublicationForm {
   passScore: string
   /** Q81: the questions drawn per taker; empty asks all of them. */
   pickCount: string
+  /** Q88b: the entry fee as typed; empty is none. */
+  entryFee: string
   budgetCap: string
   maxWinners: string
   tiers: TierDraft[]
@@ -934,6 +954,7 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     timeLimitSec: text(p?.timeLimitSec),
     passScore: text(p?.passScore),
     pickCount: text(p?.pickCount),
+    entryFee: p?.entryFee ? String(p.entryFee) : '',
     budgetCap: text(p?.budgetCap),
     maxWinners: text(p?.maxWinners),
     rewardMethod: p?.rewardMethod ?? 'PLATFORM',
@@ -987,6 +1008,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
   const timeLimitSec = read('timeLimitSec', form.timeLimitSec)
   const passScore = read('passScore', form.passScore)
   const pickCount = read('pickCount', form.pickCount)
+  const entryFee = read('entryFee', form.entryFee) ?? 0
   const budgetCap = read('budgetCap', form.budgetCap)
   const maxWinners = read('maxWinners', form.maxWinners)
   const digital = form.rewardMethod === 'DIGITAL_PRIZE'
@@ -1025,6 +1047,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       timeLimitSec,
       passScore,
       pickCount,
+      entryFee,
       budgetCap,
       maxWinners,
       tiers,
@@ -1065,15 +1088,16 @@ export const surveyReward = (form: PublicationForm): string => form.tiers.at(-1)
 /**
  * The form of a survey's publication (Q12, D-Q12-4): its pass mark is the full score (every question answered, a
  * point each) and its tiers are nothing below it and the one reward at it. The tiers keep their keys, so the next save
- * sends them as the same tiers; the server checks the shape.
+ * sends them as the same tiers; the server checks the shape. A survey charges no entry fee (Q88b, D-Q88-9): one typed
+ * before the version turned out a survey is dropped, as the field is not shown.
  */
 export function asSurvey(form: PublicationForm, fullScore: number, reward: string): PublicationForm {
   const tier = (i: number, from: number, to: number, value: string): TierDraft => ({ key: form.tiers[i]?.key ?? tierKey(),
     tierId: form.tiers[i]?.tierId ?? null, fromScore: String(from), toScore: String(to), reward: value })
   // Before the reward is typed (the first step saves a draft) there are no tiers yet: a blank one would be refused as
   // typed wrong on a step that does not show it. The check before submitting asks for the tiers.
-  if (reward.trim() === '') return { ...form, passScore: String(fullScore), tiers: [] }
-  return { ...form, passScore: String(fullScore),
+  if (reward.trim() === '') return { ...form, passScore: String(fullScore), entryFee: '', tiers: [] }
+  return { ...form, passScore: String(fullScore), entryFee: '',
     tiers: [tier(0, 0, Math.max(fullScore - 1, 0), '0'), tier(1, fullScore, fullScore, reward)] }
 }
 
@@ -1091,7 +1115,7 @@ export function nextTier(tiers: readonly TierDraft[], fullScore: number | null):
 
 /** The fields of the publication the pages name (`entity.QbPublication.<field>` on the server). */
 export const PUBLICATION_FIELDS = ['name', 'versionId', 'regions', 'startAt', 'endAt', 'timeLimitSec', 'passScore',
-  'pickCount', 'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'digitalDelivery', 'digitalDescription',
+  'pickCount', 'entryFee', 'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'digitalDelivery', 'digitalDescription',
   'digitalSendDays', 'digitalContent', 'audience', 'referral', 'benefitPurchaseId'] as const
 export type PublicationField = (typeof PUBLICATION_FIELDS)[number]
 

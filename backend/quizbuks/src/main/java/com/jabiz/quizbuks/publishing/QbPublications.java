@@ -107,6 +107,9 @@ public final class QbPublications {
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").asNumeric(9, 0)
             .apply(Rules.range(PublishingCodes.MAX_WINNERS_RANGE, BigDecimal.ONE,
                 decimal(PublishingLimits.MAX_WINNERS))));
+        // Q88b (D-Q88-9): the entry fee in Kudos a taker pays at the start (0: none); frozen with the policy.
+        eb.field("entryFee", f -> f.physicalColumn("entry_fee").required(true).asMonetary("JPY", 0)
+            .apply(Rules.range(PublishingCodes.ENTRY_FEE_RANGE, BigDecimal.ZERO, PublishingLimits.MAX_ENTRY_FEE)));
         // Q22: how the reward reaches the taker (RewardMethod), and for a prize collected at the sponsor's place what
         // it is and where; both frozen with the policy.
         eb.field("rewardMethod", f -> f.physicalColumn("reward_method").required(true)
@@ -390,6 +393,8 @@ public final class QbPublications {
             .asNumeric(4, 0));
         // Q81: how many of them each taker is given (none: all); the feed and the page say "k of n".
         eb.field("pickCount", f -> f.physicalColumn("pick_count").immutable(true).asNumeric(4, 0));
+        // Q88b: the entry fee the start charges (0: none).
+        eb.field("entryFee", f -> f.physicalColumn("entry_fee").immutable(true).required(true).asMonetary("JPY", 0));
         eb.field("budgetCap", f -> f.physicalColumn("budget_cap").immutable(true).asMonetary("JPY", 0));
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").immutable(true).asNumeric(9, 0));
         // CardTiers' JSON: the tiers are frozen at submission too.

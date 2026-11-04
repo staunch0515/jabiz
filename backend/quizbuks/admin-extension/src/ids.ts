@@ -287,7 +287,9 @@ export type ReportId = (typeof REPORTS)[number]
 /** The ledger's accounts (backend `QbLedger`), in the order the overview shows them. */
 export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120',
   // Q87: the sponsors' cash accounts, the fees receivable, the fee revenue and the tax on it.
-  '2160', '1130', '4120', '2150'] as const
+  '2160', '1130', '4120', '2150',
+  // Q88b: the entry fees unsettled (until the daily job moves them to the sponsors' cash accounts).
+  '2170'] as const
 
 /** A transfer still sending this long after it was created is in doubt (the backend's `STALE_AFTER`). */
 export const STALE_AFTER_MS = 60 * 60 * 1000

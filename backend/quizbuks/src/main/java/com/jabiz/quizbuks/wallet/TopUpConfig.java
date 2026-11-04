@@ -234,7 +234,9 @@ class TopUpConfig {
             .item(ReconChecks.TOTAL_2160, "en", "Total of sponsor cash accounts", "zh", "商家现金账户合计",
                 "ja", "スポンサーの現金口座合計")
             .item(ReconChecks.FEES_RECEIVABLE, "en", "Platform fees receivable", "zh", "应收平台费",
-                "ja", "未収プラットフォーム料金"));
+                "ja", "未収プラットフォーム料金")
+            .item(ReconChecks.ENTRY_FEES_UNSETTLED, "en", "Entry fees unsettled", "zh", "报名费待入账",
+                "ja", "未精算の参加費"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */

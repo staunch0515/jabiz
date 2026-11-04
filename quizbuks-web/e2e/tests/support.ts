@@ -298,6 +298,15 @@ export async function signIn(page: Page, base: string, email: string) {
   await form.locator('button[type="submit"]').click()
 }
 
+/** Clears the browser's sessions, so that the next {@link signIn} on the same entry shows its form again. */
+export async function signOut(page: Page) {
+  await page.context().clearCookies()
+  await page.evaluate(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+  })
+}
+
 /**
  * No WCAG 2.2 A/AA violations on the page as it is now, once its animations have settled (soft: every page of a test
  * is checked): the platform's check (`@jabiz/ui/testing/playwright`, ROADMAP 16v-1), asserted with this run's

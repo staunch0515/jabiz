@@ -135,6 +135,8 @@ export default function FinanceOverviewPage() {
                 amount: money(s.sponsorPendingAmount) }) },
             { key: 'takerBalance', label: t('finance.overview.takerBalance'), value: money(s.takerBalance) },
             { key: 'takerOut', label: t('finance.overview.takerPendingOut'), value: money(s.takerPendingOut) },
+            { key: 'entryFees', label: t('finance.overview.entryFeesUnsettled'),
+              value: <span data-testid="finance-entry-fees">{money(s.entryFeesUnsettled)}</span> },
           ]} />
         </Section>
       </>

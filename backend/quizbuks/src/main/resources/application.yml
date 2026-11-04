@@ -460,6 +460,10 @@ quizbuks:
   # also needs quizbuks.e2e.enabled, and none may run more than once a minute (TransferScheduleCheck).
   analytics:
     run-cron: ${QB_ANALYTICS_RUN_CRON:0 */10 * * * *}
+  # The daily settlement of the entry fees into the sponsors' cash accounts (Q88b, D-Q88-11): 18:07 UTC, 03:07 in
+  # Tokyo; a six-field cron in UTC. The end-to-end tests run it every minute.
+  entry-fee:
+    settle-cron: ${QB_ENTRY_FEE_SETTLE_CRON:0 7 18 * * *}
   # The end-to-end tests' switch (Q9e2 review M1): only their deployment sets it; refused next to live mode.
   e2e:
     enabled: ${QB_E2E_ENABLED:false}

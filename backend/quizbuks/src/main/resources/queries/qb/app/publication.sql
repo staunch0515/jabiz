@@ -48,6 +48,7 @@ results:
   timeLimitSec:   { from: QbPublicationCard.timeLimitSec }
   questionCount:  { from: QbPublicationCard.questionCount }
   pickCount:      { from: QbPublicationCard.pickCount }
+  entryFee:       { from: QbPublicationCard.entryFee }
   fullScore:      { from: QbPublicationCard.fullScore }
   passScore:      { from: QbPublicationCard.passScore }
   maxReward:      { from: QbPublicationCard.maxReward }
@@ -115,6 +116,7 @@ SELECT
     d.timeLimitSec AS timeLimitSec,
     d.questionCount AS questionCount,
     d.pickCount AS pickCount,
+    d.entryFee AS entryFee,
     d.fullScore AS fullScore,
     d.passScore AS passScore,
     d.maxReward AS maxReward,
@@ -188,6 +190,7 @@ SELECT
     c.{{QbPublicationCard.timeLimitSec}}   AS timeLimitSec,
     c.{{QbPublicationCard.questionCount}}  AS questionCount,
     c.{{QbPublicationCard.pickCount}}      AS pickCount,
+    c.{{QbPublicationCard.entryFee}}       AS entryFee,
     c.{{QbPublicationCard.fullScore}}      AS fullScore,
     c.{{QbPublicationCard.passScore}}      AS passScore,
     c.{{QbPublicationCard.maxReward}}      AS maxReward,

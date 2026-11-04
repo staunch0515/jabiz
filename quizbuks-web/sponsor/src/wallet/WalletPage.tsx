@@ -287,7 +287,7 @@ function CashAccount({ wallet }: { wallet: SponsorWallet }) {
   const { t } = useTranslation(SPONSOR)
   const settings = useQuery({ queryKey: [...WALLET_QUERY, 'cash-settings'], queryFn: readCashSettings })
   if (!settings.data) return null
-  const shown = settings.data.targets.includes('CASH') || wallet.cashBalance > 0
+  const shown = settings.data.targets.includes('CASH') || wallet.cashBalance > 0 || wallet.entryFeesUnsettled > 0
   if (!shown) return null
   return (
     <section aria-labelledby="wallet-cash" className="flex flex-col gap-3" data-testid="wallet-cash">
@@ -298,6 +298,11 @@ function CashAccount({ wallet }: { wallet: SponsorWallet }) {
           value: <span data-testid="wallet-cash-balance">{formatKudos(wallet.cashBalance)}</span> },
         ...(wallet.cashHeld > 0
           ? [{ key: 'cashHeld', label: t('wallet.cash.held'), value: formatKudos(wallet.cashHeld) }] : []),
+        // Q88b (D-Q88-11): the entry fees paid for your quizzes, settled into the cash account each day.
+        ...(wallet.entryFeesUnsettled > 0
+          ? [{ key: 'entryFees', label: t('wallet.cash.entryFees'),
+            value: <span data-testid="wallet-entry-fees">{t('wallet.cash.entryFeesValue',
+              { amount: formatKudos(wallet.entryFeesUnsettled) })}</span> }] : []),
       ]} />
       <div className="grid gap-4 sm:grid-cols-2">
         {settings.data.buyEnabled && (

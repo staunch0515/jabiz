@@ -43,6 +43,8 @@ interface Server {
   cash?: Record<string, unknown>
   /** Q87a: the cash account's figures of `qb.sponsor.wallet`. */
   cashBalance?: string
+  /** Q88b: the entry fees waiting for the daily settlement. */
+  entryFees?: string
   exchange?: { status: number; body: unknown }
 }
 
@@ -74,7 +76,7 @@ function server(options: Server = {}) {
       case '/api/queries/qb.sponsor.wallet':
         return json(200, { items: [{ balance: '5000', held: '1000', pendingCount: 2, pendingAmount: '700',
           toppedUp: '6000', takenBack: '0', topUpCount: 2, spent: '1000', cashBalance: options.cashBalance ?? '0',
-          cashHeld: '0' }], offset: 0, limit: 1 })
+          cashHeld: '0', entryFeesUnsettled: options.entryFees ?? '0' }], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.fee-invoices':
         return json(200, { items: [], offset: 0, limit: 10, total: 0 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:fee-invoice-status':
@@ -317,6 +319,14 @@ describe('the cash account (Q87a)', () => {
     await userEvent.click(screen.getByTestId('topup-submit'))
     await waitFor(() => expect(processCalls().find((c) => c.path.includes('QB_TOPUP_START'))?.body)
       .toEqual({ amount: 2000, target: 'CASH' }))
+  })
+
+  it('shows the entry fees waiting for the daily settlement (Q88b)', async () => {
+    server({ cashBalance: '500', entryFees: '90', cash: { targets: 'CASH', defaultTarget: 'CASH', buyEnabled: true,
+      sellEnabled: false } })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    expect(await screen.findByTestId('wallet-entry-fees')).toHaveTextContent('90 Kudos (settled daily)')
   })
 
   it('shows the server\'s refusal of an exchange', async () => {

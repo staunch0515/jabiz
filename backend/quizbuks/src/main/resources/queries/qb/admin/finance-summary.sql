@@ -3,7 +3,7 @@ id: qb.admin.finance-summary
 description: >-
   What finance has to look at today (Q9c): the wallets' totals and the transfers waiting for review, in doubt or held;
   one row (the reconciliation and the money tasks are qb.admin.recon-summary's, qb.reconcile)
-entities: [QbWallet, QbTransfer]
+entities: [QbWallet, QbTransfer, LedgerEntry, LedgerAccount]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbTransfer: urn:jabiz:dataset:default:QbTransfer
@@ -19,6 +19,7 @@ results:
   transfersInReview:    { kind: { type: numeric, precision: 12, scale: 0 } }
   transfersInDoubt:     { kind: { type: numeric, precision: 12, scale: 0 } }
   heldTakers:           { kind: { type: numeric, precision: 12, scale: 0 } }
+  entryFeesUnsettled:   { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.admin.finance.read]
 ---*/
 -- One statement, one snapshot. The wallets are the caches (the ledger is the truth, reconciled daily). In doubt: CHECK,
@@ -33,7 +34,8 @@ SELECT
     w.taker_out              AS takerPendingOut,
     x.in_review              AS transfersInReview,
     x.in_doubt               AS transfersInDoubt,
-    x.held                   AS heldTakers
+    x.held                   AS heldTakers,
+    ef.ef_total              AS entryFeesUnsettled
 FROM (
     SELECT coalesce(sum(v.{{QbWallet.balance}}) FILTER (WHERE v.{{QbWallet.kind}} = 'SPONSOR'), 0) AS sponsor_balance,
            coalesce(sum(v.{{QbWallet.held}}) FILTER (WHERE v.{{QbWallet.kind}} = 'SPONSOR'), 0) AS sponsor_frozen,
@@ -52,3 +54,10 @@ CROSS JOIN (
            count(DISTINCT t.{{QbTransfer.userId}}) FILTER (WHERE t.{{QbTransfer.releasedAt}} IS NULL
                AND (t.{{QbTransfer.status}} = 'REJECTED' OR t.{{QbTransfer.reversedAmount}} > 0)) AS held
     FROM {{QbTransfer}} t) x
+-- Q88b: the entry fees paid and not yet settled into the sponsors' cash accounts (2170 in all, credit less debit).
+CROSS JOIN (
+    SELECT coalesce(sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
+               ELSE -e.{{LedgerEntry.amount}} END), 0) AS ef_total
+    FROM {{LedgerEntry}} e
+    JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
+    WHERE a.{{LedgerAccount.accountCode}} = '2170') ef

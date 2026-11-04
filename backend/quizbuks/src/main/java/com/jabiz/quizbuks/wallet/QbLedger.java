@@ -30,6 +30,11 @@ public final class QbLedger {
     public static final String FEES_RECEIVABLE = "1130";
     public static final String PLATFORM_FEE_REVENUE = "4120";
     public static final String TAX_PAYABLE = "2150";
+    /**
+     * Q88b (D-Q88-11): the entry fees takers paid at the start of their attempts, owed to the sponsors until the daily
+     * job settles them into their cash accounts (2160). Its lines carry the sponsor as the party and the publication.
+     */
+    public static final String ENTRY_FEES_UNSETTLED = "2170";
 
     /** The name of the dimension that carries the party (a user's id) on the wallet accounts. */
     public static final String PARTY = "party";
@@ -52,7 +57,8 @@ public final class QbLedger {
         new Account(SPONSOR_CASH, "Sponsor cash accounts", "LIABILITY"),
         new Account(FEES_RECEIVABLE, "Platform fees receivable", "ASSET"),
         new Account(PLATFORM_FEE_REVENUE, "Platform fee revenue", "REVENUE"),
-        new Account(TAX_PAYABLE, "Consumption tax payable", "LIABILITY"));
+        new Account(TAX_PAYABLE, "Consumption tax payable", "LIABILITY"),
+        new Account(ENTRY_FEES_UNSETTLED, "Entry fees unsettled", "LIABILITY"));
 
     private QbLedger() {}
 }

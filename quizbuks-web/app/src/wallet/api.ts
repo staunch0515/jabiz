@@ -31,7 +31,7 @@ export interface TakerWallet {
 /** What may be transferred: what the taker has less what is held back. */
 export const transferable = (wallet: TakerWallet): number => Math.max(0, wallet.available - (wallet.held ?? 0))
 
-export type EntryType = 'REWARD' | 'TRANSFER'
+export type EntryType = 'REWARD' | 'TRANSFER' | 'ENTRY_FEE'
 export type EntryStatus = 'COMPLETED' | 'PROCESSING' | 'FAILED' | 'REVERSED'
 
 /** A row of `qb.app.ledger` (U-51, U-52). */

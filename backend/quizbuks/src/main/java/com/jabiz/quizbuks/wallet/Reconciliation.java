@@ -52,6 +52,8 @@ public final class Reconciliation {
     public static final String TRANSFERS_TEMPLATE = "qb.system.recon-transfers";
     /** Q87b: the fees receivable (1130 by sponsor) against the invoices and charges still owed. */
     static final String RECEIVABLE_TEMPLATE = "qb.system.recon-fee-receivable";
+    /** Q88b: 2170 by sponsor is never negative. */
+    static final String ENTRY_FEES_TEMPLATE = "qb.system.recon-entry-fees";
 
     public record ReconcileInput(@NotNull Instant scheduledTime) {}
 
@@ -112,6 +114,7 @@ public final class Reconciliation {
     static final String TAKERS = "takers";
     static final String TRANSFERS = "transfers";
     static final String RECEIVABLE = "receivable";
+    static final String ENTRY_FEES = "entryFees";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
     static final String RESYNC = "resync";
@@ -154,6 +157,8 @@ public final class Reconciliation {
                 // Q87b: the fees receivable (1130 by sponsor) against the invoices and uninvoiced charges.
                 .step("Compare the fees receivable", RunTemplate.<ProcessContext>of(RECEIVABLE_TEMPLATE,
                     ctx -> Map.of(), RECEIVABLE))
+                .step("Check the entry fees unsettled", RunTemplate.<ProcessContext>of(ENTRY_FEES_TEMPLATE,
+                    ctx -> Map.of(), ENTRY_FEES))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",
@@ -198,6 +203,7 @@ public final class Reconciliation {
         found.addAll(ReconChecks.coded(rows(ctx, TOPUPS)));
         found.addAll(ReconChecks.coded(rows(ctx, TRANSFERS)));
         found.addAll(ReconChecks.coded(rows(ctx, RECEIVABLE)));
+        found.addAll(ReconChecks.coded(rows(ctx, ENTRY_FEES)));
         java.util.Set<String> foundBefore = new java.util.HashSet<>();
         TopUpCrediting.list(ctx, PREVIOUS_TAKERS).forEach(item -> foundBefore.add(item.get("partyId")));
         ReconChecks.TakerItems takers = ReconChecks.takers(rows(ctx, TAKERS), foundBefore);

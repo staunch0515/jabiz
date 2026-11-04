@@ -24,7 +24,17 @@ public final class PublicationReadiness {
     public record Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
         Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
         String redeemDescription, String audience, String digitalDelivery, String digitalDescription,
-        boolean hasDigitalContent, ReferralPolicy referral, Integer pickCount) {
+        boolean hasDigitalContent, ReferralPolicy referral, Integer pickCount, BigDecimal entryFee) {
+
+        /** As before Q88b: no entry fee. */
+        public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
+            Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
+            String redeemDescription, String audience, String digitalDelivery, String digitalDescription,
+            boolean hasDigitalContent, ReferralPolicy referral, Integer pickCount) {
+            this(versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners,
+                rewardMethod, redeemDescription, audience, digitalDelivery, digitalDescription, hasDigitalContent,
+                referral, pickCount, null);
+        }
 
         /** As before Q81: every question of the version is asked. */
         public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
@@ -33,7 +43,12 @@ public final class PublicationReadiness {
             boolean hasDigitalContent, ReferralPolicy referral) {
             this(versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners,
                 rewardMethod, redeemDescription, audience, digitalDelivery, digitalDescription, hasDigitalContent,
-                referral, null);
+                referral, null, null);
+        }
+
+        /** Q88b: whether the publication charges an entry fee. */
+        public boolean chargesEntryFee() {
+            return entryFee != null && entryFee.signum() > 0;
         }
 
         /** As before Q70: no referrals. */
@@ -120,6 +135,11 @@ public final class PublicationReadiness {
         // leaves the version's.
         Integer fullScore = version == null ? null : fullScore(version, draft.pickCount());
         problems.addAll(pickProblems(draft.pickCount(), version));
+        // Q88b (D-Q88-9): only a quiz charges an entry fee (a survey pays people to answer).
+        if (draft.chargesEntryFee() && version != null && version.survey()) {
+            problems.add(new Violation("entryFee", PublishingCodes.ENTRY_FEE_NOT_ALLOWED, "A survey charges no "
+                + "entry fee", Map.of()));
+        }
         if (draft.versionId() == null || version == null) {
             problems.add(new Violation("versionId", PublishingCodes.NO_VERSION, "Choose a version of a quiz",
                 Map.of()));

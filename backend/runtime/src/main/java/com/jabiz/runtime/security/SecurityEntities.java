@@ -55,6 +55,8 @@ public class SecurityEntities {
     public static final String FACTOR_EMAIL_LINK = "EMAIL_LINK";
     /** A token another platform signed for the person (decision D59). */
     public static final String FACTOR_EXTERNAL_TOKEN = "EXTERNAL_TOKEN";
+    /** A passkey (decision D71): two factors in one. */
+    public static final String FACTOR_PASSKEY = "PASSKEY";
 
     public static final String LOGIN_OUTCOME_DICTIONARY = "urn:jabiz:dict:platform:login-outcome";
 

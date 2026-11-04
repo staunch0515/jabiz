@@ -25,9 +25,10 @@ permissions: [qb.me]
 -- One row per reward method (docs/quizbuks/plans/Q58-kudos-by-method.md), always all four. Earned, settled and lapsed
 -- count what happened in the period (from and to, each optional: absent, all of time); the balance is what is still
 -- owed now, whatever the period. Nothing is booked for this: each method's own records say it.
--- PLATFORM is the wallet (account 2120 of the caller): earned its credits less its debits that are not transfers (a
--- reward reversed is not earned), settled what transfers took (their debits less the money that came back from them),
--- the balance the account's. Rewards waiting for their sponsor are not in the wallet yet (pendingCount/Amount, the
+-- PLATFORM is the wallet (account 2120 of the caller): earned its credits less its debits that are not used (a reward
+-- reversed is not earned), settled what was used: what transfers took (their debits less the money that came back from
+-- them) and (Q88b) the entry fees paid (a debit whose source is the attempt, never reversed); the balance the
+-- account's. Rewards waiting for their sponsor are not in the wallet yet (pendingCount/Amount, the
 -- reward before the commission). The wallet holds what the taker received: the reward less the commission.
 -- SPONSOR_CASH, OFFLINE_REDEEM and DIGITAL_PRIZE are their records' amounts (the Kudos they are worth; no commission),
 -- earned when owed (dueAt) unless voided; settled once the taker confirmed the cash (or an administrator resolved it
@@ -46,7 +47,10 @@ wallet AS (
         SELECT
             CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
                  ELSE -e.{{LedgerEntry.amount}} END AS signed,
-            t.{{LedgerTransaction.sourceEntity}} IS NOT DISTINCT FROM 'QbTransfer' AS transfer,
+            t.{{LedgerTransaction.sourceEntity}} IS NOT DISTINCT FROM 'QbTransfer'
+                OR (t.{{LedgerTransaction.sourceEntity}} IS NOT DISTINCT FROM 'QbAttempt'
+                    AND e.{{LedgerEntry.direction}} = 'DEBIT'
+                    AND t.{{LedgerTransaction.reversesTransactionId}} IS NULL) AS transfer,
             (p.p_from IS NULL OR t.{{LedgerTransaction.bookingTime}} >= p.p_from)
                 AND (p.p_to IS NULL OR t.{{LedgerTransaction.bookingTime}} < p.p_to) AS in_period
         FROM {{LedgerEntry}} e

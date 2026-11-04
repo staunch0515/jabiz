@@ -27,6 +27,7 @@ results:
   billingMode:   { kind: { type: text, maxLength: 10 } }
   creditLimit:   { kind: { type: monetary, currency: JPY, scale: 0 } }
   uninvoicedTotal: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  entryFeesUnsettled: { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
@@ -48,8 +49,17 @@ SELECT
     coalesce(f.f_overdue, 0)        AS overdueCount,
     CAST(coalesce(sp.sp_mode, d.d_mode, 'PREPAID') AS varchar(10)) AS billingMode,
     coalesce(sp.sp_limit, 0)        AS creditLimit,
-    coalesce(u.u_total, 0)          AS uninvoicedTotal
+    coalesce(u.u_total, 0)          AS uninvoicedTotal,
+    coalesce(ef.ef_total, 0)        AS entryFeesUnsettled
 FROM (SELECT 1 AS one) base
+-- Q88b: the entry fees takers paid for the sponsor's quizzes, not yet moved to the cash account by the daily job
+-- (2170 for the sponsor, credit less debit; the sponsor's ledger view holds their lines).
+CROSS JOIN (
+    SELECT sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
+               ELSE -e.{{LedgerEntry.amount}} END) AS ef_total
+    FROM {{LedgerEntry}} e
+    JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
+    WHERE a.{{LedgerAccount.accountCode}} = '2170') ef
 LEFT JOIN (
     SELECT x.{{QbWallet.balance}} AS w_balance, x.{{QbWallet.held}} AS w_held,
            x.{{QbWallet.pendingCount}} AS w_pending_count,
