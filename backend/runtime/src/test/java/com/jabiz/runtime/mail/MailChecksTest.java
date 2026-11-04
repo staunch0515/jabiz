@@ -92,6 +92,21 @@ class MailChecksTest {
                 + "field; a mail carries no secret but its one-time tokens");
     }
 
+    /**
+     * The platform's own templates take no parameter an application's secret is likely to be called: QuizBuks keeps a
+     * redemption pass's key as {@code passKey}, which lowercases to what the passkey mail's parameter once was.
+     */
+    @Test
+    void thePlatformsParametersAvoidCommonSecretNames() {
+        StaticListableBeanFactory beans = new StaticListableBeanFactory();
+        beans.addBean("added", com.jabiz.runtime.security.AuthMailTemplates.PASSKEY_ADDED_MAIL);
+        MailChecks checks = new MailChecks(false, "", "", beans.getBeanProvider(JavaMailSender.class),
+            beans.getBeanProvider(MailTemplate.class), catalog(Locale.ENGLISH),
+            name -> java.util.Set.of("passkey", "token", "secret").contains(name.toLowerCase(Locale.ROOT)));
+        assertThat(checks.check()).extracting(CheckProblem::message)
+            .noneMatch(message -> message.contains("is named like a secret"));
+    }
+
     @Test
     void applicationsStayOutOfThePlatformsNamespace() {
         MailTemplate named = MailTemplate.define("jabiz.shop.news", t -> t.category(MailCategory.TRANSACTIONAL));
