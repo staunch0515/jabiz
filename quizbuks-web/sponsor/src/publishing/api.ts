@@ -809,9 +809,26 @@ function toSaveOutput(output: Row): SaveOutput {
 export const savePublication = async (input: SaveInput): Promise<SaveOutput> =>
   toSaveOutput(await runProcess<Row>(PUBLISHING_PROCESS.save, { ...input }))
 
-/** A new draft with a publication's policy and tiers; `name` is the server's "… (copy)" when not given. */
-export const copyPublication = async (publicationId: string, name?: string | null): Promise<SaveOutput> =>
-  toSaveOutput(await runProcess<Row>(PUBLISHING_PROCESS.copy, { publicationId, name: name?.trim() || null }))
+/** What a copy may change (Q102): another version (of any of the sponsor's quizzes) and other times. */
+export interface CopyChanges {
+  versionId?: string | null
+  startAt?: string | null
+  endAt?: string | null
+}
+
+/**
+ * A new draft with a publication's policy and tiers; `name` is the server's "… (copy)" when not given, and the
+ * version and times are the source's unless `changes` gives others. The tiers are copied as they are: a version with
+ * another full score needs them rescaled (`settings.rescaleForm`) and saved again.
+ */
+export const copyPublication = async (publicationId: string, name?: string | null, changes: CopyChanges = {}):
+  Promise<SaveOutput> => toSaveOutput(await runProcess<Row>(PUBLISHING_PROCESS.copy, {
+  publicationId,
+  name: name?.trim() || null,
+  versionId: changes.versionId ?? null,
+  startAt: changes.startAt ?? null,
+  endAt: changes.endAt ?? null,
+}))
 
 export const deletePublication = (publicationId: string, baseRevision: number) =>
   runProcess<PublicationOutput>(PUBLISHING_PROCESS.delete, { publicationId, baseRevision })

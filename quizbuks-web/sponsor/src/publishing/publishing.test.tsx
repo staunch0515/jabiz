@@ -1712,3 +1712,103 @@ describe('the mail server (Q29)', () => {
     expect(window.location.pathname).toBe('/profile/mail-server')
   })
 })
+
+describe('copying a publication and moving its settings (Q102)', () => {
+  const LIVE = { ...DRAFT, status: 'LIVE', revision: 6, passScore: 2, fullScore: 2 }
+  const TIERS = [{ tierId: 't1', publicationId: 'p1', fromScore: 0, toScore: 1, reward: '0' },
+    { tierId: 't2', publicationId: 'p1', fromScore: 2, toScore: 2, reward: '50' }]
+
+  it('copies onto the same version from the next hour for as many days, and opens the last step', async () => {
+    const { processCalls } = server({ publication: LIVE, tiers: TIERS,
+      processes: { QB_PUBLICATION_COPY: [saved(1)] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('publication-copy'))
+    const dialog = await screen.findByTestId('publication-copy-dialog')
+    await waitFor(() => expect(within(dialog).getByTestId('transfer-version')).toHaveTextContent('v1.0'))
+    expect(within(dialog).getByTestId('transfer-days')).toHaveValue('7')
+    await expectAccessible(dialog)
+    await userEvent.type(within(dialog).getByTestId('transfer-name'), 'Coffee week 2')
+    await userEvent.click(within(dialog).getByTestId('publication-copy-confirm'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_COPY')).toHaveLength(1))
+    const call = processCalls('QB_PUBLICATION_COPY')[0] as Record<string, string | null>
+    expect(call).toMatchObject({ publicationId: 'p1', name: 'Coffee week 2', versionId: null })
+    expect(Date.parse(call.endAt!) - Date.parse(call.startAt!)).toBe(7 * 86_400_000)
+    expect(Date.parse(call.startAt!)).toBeGreaterThan(Date.now())
+    // Same full score: nothing saved again.
+    expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([])
+    await waitFor(() => expect(window.location.search).toBe('?step=3'))
+  })
+
+  it('rescales the pass mark and tiers when the copy\'s version has another full score', async () => {
+    const versions = [{ ...VERSIONS[0], versionId: 'v2', versionNo: 2, label: 'v2.0', fullScore: 4 }, VERSIONS[0]]
+    const { processCalls } = server({ publication: LIVE, tiers: TIERS, versions,
+      processes: { QB_PUBLICATION_COPY: [saved(1, { fullScore: 4 })], QB_PUBLICATION_SAVE: [saved(2, { fullScore: 4 })] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('publication-copy'))
+    const dialog = await screen.findByTestId('publication-copy-dialog')
+    await userEvent.click(within(dialog).getByTestId('transfer-version'))
+    await userEvent.click(await screen.findByRole('option', { name: /v2\.0/ }))
+    await userEvent.click(within(dialog).getByTestId('publication-copy-confirm'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_COPY')[0]).toMatchObject({ versionId: 'v2' })
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ publicationId: 'p1', baseRevision: 1, passScore: 4,
+      tiers: [{ fromScore: 0, toScore: 3, reward: 0 }, { fromScore: 4, toScore: 4, reward: 50 }] })
+  })
+
+  it('exports the settings into a file and imports one into a new draft on the version chosen', async () => {
+    const files: Blob[] = []
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      files.push(blob as Blob)
+      return 'blob:settings'
+    })
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const { processCalls } = server({ publication: { ...LIVE, budgetCap: '1000' }, tiers: TIERS,
+      conditions: [{ criterionKey: 'gender', valueCode: 'FEMALE' }],
+      processes: { QB_PUBLICATION_SAVE: [saved(1)], QB_PUBLICATION_AUDIENCE_SAVE: [{ status: 200,
+        body: { output: { publicationId: 'p1', status: 'DRAFT', revision: 2 } } }] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('publication-export'))
+    await waitFor(() => expect(files).toHaveLength(1))
+    const text = await files[0].text()
+    expect(JSON.parse(text)).toMatchObject({ format: 'quizbuks.publication-settings', name: 'Coffee week',
+      budgetCap: 1000, conditions: [{ key: 'gender', options: ['FEMALE'] }] })
+    expect(text).not.toContain('versionId')
+    cleanup()
+
+    window.history.replaceState(null, '', '/publications')
+    render(<App />)
+    await screen.findByTestId('publication-list')
+    await userEvent.upload(screen.getByTestId('publication-import-file'),
+      new File([text], 'Coffee-week.publication.json', { type: 'application/json' }))
+    const dialog = await screen.findByTestId('publication-import-dialog')
+    expect(within(dialog).getByTestId('publication-import-summary')).toHaveTextContent('Coffee week')
+    expect(within(dialog).getByTestId('publication-import-confirm')).toBeDisabled()
+    await userEvent.click(within(dialog).getByTestId('transfer-quiz'))
+    await userEvent.click(await screen.findByRole('option', { name: /Coffee basics/ }))
+    await waitFor(() => expect(within(dialog).getByTestId('transfer-version')).toHaveTextContent('v1.0'))
+    await expectAccessible(dialog)
+    await userEvent.click(within(dialog).getByTestId('publication-import-confirm'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ publicationId: null, versionId: 'v1',
+      name: 'Coffee week', passScore: 2, budgetCap: 1000, regions: ['GLOBAL'] })
+    expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')[0]).toMatchObject({ publicationId: 'p1', baseRevision: 1,
+      criteria: [{ key: 'gender', options: ['FEMALE'] }] })
+    await waitFor(() => expect(window.location.pathname).toBe('/publications/p1'))
+  })
+
+  it('says a file that is not settings is not', async () => {
+    server()
+    window.history.replaceState(null, '', '/publications')
+    render(<App />)
+    await screen.findByTestId('publication-list')
+    await userEvent.upload(screen.getByTestId('publication-import-file'),
+      new File(['{"format":"quizbuks.quiz"}'], 'quiz.json', { type: 'application/json' }))
+    expect(await screen.findByTestId('publication-import-refused'))
+      .toHaveTextContent('This is not a publication settings file.')
+    expect(screen.queryByTestId('publication-import-confirm')).toBeNull()
+  })
+})

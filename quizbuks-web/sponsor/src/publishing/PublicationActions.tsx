@@ -1,38 +1,24 @@
-import {
-  Button,
-  ConfirmDialog,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  Input,
-  Label,
-  notify,
-} from '@jabiz/ui'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Button, ConfirmDialog, notify } from '@jabiz/ui'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Link2, Pause, Play, QrCode, Trash2, Undo2 } from 'lucide-react'
-import { useId, useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ProblemList } from '../content/editing'
 import { SPONSOR } from '../messages'
-import { fieldProblem, generalProblem, problemText } from '../qb/problems'
+import { problemText } from '../qb/problems'
 import { navigate } from '../qb/router'
 import {
   actionsOf,
-  copyPublication,
   deletePublication,
   isStale,
   pausePublication,
-  PUBLISHING_LIMITS,
   resumePublication,
   withdrawPublication,
   type Publication,
 } from './api'
-import { publicationPath, PUBLICATIONS_PATH, PUBLICATIONS_QUERY, shareLink } from './paths'
+import { PUBLICATIONS_PATH, PUBLICATIONS_QUERY, shareLink } from './paths'
 import { readVersion } from '../content/api'
 import { PublicationQrDialog } from './PublicationQrDialog'
+import { CopyDialog, ExportSettingsButton } from './PublicationTransfer'
 
 /**
  * The language of the publication's quiz (Q59b), which its links carry: its version's. Null while it is read, or
@@ -54,65 +40,6 @@ async function copyShareLink(publicationId: string, language: string | null,
   } catch {
     notify.info(t('publishing.actions.shareFailed', { link }))
   }
-}
-
-/** A copy of a publication as a new draft (M-36), under a name of the sponsor's choice or the server's. */
-function CopyDialog({ publication, open, onOpenChange }: {
-  publication: Publication
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const { t } = useTranslation(SPONSOR)
-  const queryClient = useQueryClient()
-  const id = useId()
-  const [name, setName] = useState('')
-  const copy = useMutation({
-    mutationFn: () => copyPublication(publication.publicationId, name),
-    onSuccess: async (output) => {
-      onOpenChange(false)
-      notify.success(t('publishing.actions.copied'))
-      await queryClient.invalidateQueries({ queryKey: PUBLICATIONS_QUERY })
-      navigate(publicationPath(output.publicationId))
-    },
-  })
-  const problem = fieldProblem(copy.error, 'name')
-  const general = generalProblem(copy.error, ['name'])
-  return (
-    <Dialog open={open} onOpenChange={(next) => {
-      if (!copy.isPending) onOpenChange(next)
-    }}>
-      <DialogContent data-testid="publication-copy-dialog">
-        <form noValidate className="flex flex-col gap-4" onSubmit={(event: FormEvent) => {
-          event.preventDefault()
-          copy.mutate()
-        }}>
-          <DialogHeader>
-            <DialogTitle>{t('publishing.actions.copyTitle')}</DialogTitle>
-            <DialogDescription>{t('publishing.actions.copyText')}</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`${id}-name`}>{t('publishing.actions.copyName')}</Label>
-            <Input id={`${id}-name`} value={name} maxLength={PUBLISHING_LIMITS.name} autoComplete="off"
-              aria-invalid={problem ? true : undefined}
-              aria-describedby={[`${id}-hint`, problem ? `${id}-error` : undefined].filter(Boolean).join(' ')}
-              data-testid="publication-copy-name" onChange={(event) => setName(event.target.value)} />
-            <p id={`${id}-hint`} className="text-muted-foreground text-sm">{t('publishing.actions.copyNameHint')}</p>
-            {problem && <p id={`${id}-error`} className="text-destructive text-sm">{problem}</p>}
-          </div>
-          {general && <ProblemList problems={[general]} />}
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={copy.isPending} onClick={() => onOpenChange(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" disabled={copy.isPending} aria-busy={copy.isPending || undefined}
-              data-testid="publication-copy-confirm">
-              {t('publishing.actions.copy')}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
 }
 
 /**
@@ -208,6 +135,7 @@ export function PublicationActions({ publication, revision, disabled, onStale }:
           {t('publishing.actions.copy')}
         </Button>
       )}
+      <ExportSettingsButton publicationId={id} />
       {can.delete && (
         <ConfirmDialog destructive title={t('publishing.actions.deleteTitle')}
           description={t('publishing.actions.deleteText')} confirmLabel={t('publishing.actions.delete')}

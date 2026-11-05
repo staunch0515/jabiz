@@ -64,6 +64,7 @@ const IDENTIFIERS = [
   /\.quizbuks\.json/g,
   /'quizbuks-profile'/g,
   /\.quizbuks-profile\.json/g,
+  /'quizbuks\.publication-settings'/g,
   /fromQuizbuks/g,
 ]
 
