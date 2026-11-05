@@ -16,6 +16,7 @@
 | T6 | 在中国扫不出兑换奖品的轮换码 | 答题者、店员 | 已修复（2026-11-04） |
 | T7 | 导入 Quiz 文件失败，只说"出错了，请重试" | 商家 | 已修复（2026-11-04） |
 | T8 | 部署失败：`application not healthy after 3m0s`，回滚也失败 | 内部（运维） | 服务器磁盘满，待清理 |
+| T9 | 管理后台找不到 AI 获客的平台开关（`qb.prospect.*`），设了"每天获客"也不执行 | 内部（管理员） | 有办法，待改进（现在不做） |
 
 ---
 
@@ -152,6 +153,22 @@
 - **原因**：Spring 的磁盘检查在可用空间低于 10 MB 时把健康状态判为不健康。容器的文件系统就是服务器的磁盘，每次部署都拉一个新镜像，旧镜像不会自动删除，磁盘会慢慢被占满。磁盘满时上传文件、数据库写入也会失败，所以这个检查应当保留。
 - **处理**：在服务器上查看占用（`df -h /`、`docker system df`），删除不用的旧镜像（只删没有容器在用的），再重新部署（Actions → QuizBuks deploy → Run workflow，分支 `1.3/quizbuks`，`image-tag` 留空）。同一台服务器上的数据库也在这块盘上的话，先确认它还能写入。
 - **预防（待决定）**：部署成功后自动只保留本应用最近几个镜像；监控中加磁盘告警（`operations.md` §5 已有数据库磁盘 > 80 % 的告警，应用服务器还没有）。
+
+## T9 管理后台找不到 AI 获客的平台开关，设好了也不执行（内部）
+
+- **状态**：2026-11-05 staging 出现；需求方已按下面的办法设好。界面的两项改进记为待做，**现在不做**（需求方 2026-11-05）。
+- **现象**：「AI 获客 → 设置」里发件人、邮件服务器、搜索方向、"每天获客"都设好了，却一直没有搜索；去"数据 → SysControlChange"找开关，列表每行都只写"First value of the QuizBuks parameter, proposed by QB_SETUP"，看不出是哪个参数。
+- **原因**：
+  - 获客另有三个平台的受控参数 `qb.prospect.enabled`（缺省 `false`）、`qb.prospect.model`、`qb.prospect.effort`，`enabled` 不是 `true` 时搜索与研究的作业都不运行（逐项流程 `QB_PROSPECT_FIND_START` 输出 `switched-off`）；受控参数只经四眼的受控变更修改。
+  - 「AI 获客 → 设置」页不显示也不能提出这三个参数（AI 出题的 `/qb/ai` 页有"提出开启 / 关闭"，获客页没有）；平台的 `SysControlChange` 列表不显示参数名。
+  - 另外：搜索每天只在 UTC 23:17（日本 08:17）运行一次，错过的时刻不补跑；"自动批准的评分"留空时草稿全部等人工批准。
+- **处理**：
+  1. 看现值：后台"数据 → SysParam"（`urn:jabiz:dataset:platform:SysParam`），按 `paramKey` 筛 `qb.prospect`。
+  2. 提出：后台流程 `CONTROL_CHANGE_PROPOSE`（`/admin/processes/CONTROL_CHANGE_PROPOSE/1`），`targetEntity` = `SysParam`，`values` = `{"paramKey": "qb.prospect.enabled", "value": "true"}`，填理由；要换模型或强度时同样各提一次。
+  3. 发布：另一位持有 `control.publish` 的管理员（不是提出人）在"数据 → SysControlChange"中把 status 筛为 `PROPOSED`，对该行执行 `CONTROL_CHANGE_PUBLISH`。
+- **待做（现在不做）**：
+  1. **应用（`1.3/quizbuks`，约半天）**：「AI 获客 → 设置」（后台扩展 `ProspectSettingsPage.tsx`）照 `/qb/ai`（`AiPage.tsx` 的 `proposeSwitch`）加"平台开关"：显示三个参数的现行值与待发布的提案，持有 `control.propose` 的人可提出开启 / 关闭与模型、强度（理由必填），发布仍由另一位管理员；附 `prospect.test.tsx` 的用例与 axe。
+  2. **平台（`1.3/platform`）**：通用后台的 `SysControlChange` 列表显示目标（参数的 `paramKey`），并可按它筛选。
 
 ## 已归档
 
