@@ -49,8 +49,11 @@ public record ProfilePackage(List<String> languages, Basics basics, Page page, L
 
     public record Page(String handle, Map<String, String> headline, String website, Image cover) {}
 
-    /** @param productId the product's id when exported; one of the sponsor's own is changed, any other is new */
-    public record Product(String productId, Map<String, String> name, Map<String, String> description,
+    /**
+     * @param productId the product's id when exported (same environment)
+     * @param code      the sponsor's own code of the product (Q100e); the product is found by it first
+     */
+    public record Product(String productId, String code, Map<String, String> name, Map<String, String> description,
         BigDecimal price, String currency, String shopUrl, boolean listed, Image image) {}
 
     /** The settings of a mail server, never its password. */
@@ -292,7 +295,13 @@ public record ProfilePackage(List<String> languages, Basics basics, Page page, L
                 }
                 Object productId = map.get("productId");
                 Object listed = map.get("listed");
-                products.add(new Product(productId instanceof String s && !s.isBlank() ? s : null,
+                String code = text(map.get("code"), path + ".code", false);
+                if (code != null && !QbSponsorProducts.CODE_PATTERN.matcher(code).matches()) {
+                    problems.add(new Violation(path + ".code", SponsorPageCodes.PRODUCT_CODE_FORMAT, "A product code "
+                        + "is letters, digits and . _ -", Map.of("code", code, "path", path + ".code")));
+                    code = null;
+                }
+                products.add(new Product(productId instanceof String s && !s.isBlank() ? s : null, code,
                     texts(map.get("name"), path + ".name", true), texts(map.get("description"),
                     path + ".description", false), price, text(map.get("currency"), path + ".currency", true),
                     text(map.get("shopUrl"), path + ".shopUrl", true), !Boolean.FALSE.equals(listed),

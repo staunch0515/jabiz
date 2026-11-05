@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog,
+import { Alert, AlertDescription, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Dialog,
   DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, notify } from '@jabiz/ui'
 import { useQueryClient } from '@tanstack/react-query'
 import { Download, Upload } from 'lucide-react'
@@ -36,6 +36,9 @@ export function ProfileTransferCard() {
   const [exporting, setExporting] = useState(false)
   const [state, setState] = useState<ImportState | null>(null)
   const [password, setPassword] = useState('')
+  // D-Q100-13: the sponsor confirms that deleted products leave the quizzes they are shown on.
+  const [leaving, setLeaving] = useState(false)
+  const leavingId = useId()
 
   const exportNow = async () => {
     setExporting(true)
@@ -56,6 +59,7 @@ export function ProfileTransferCard() {
 
   const chosen = async (file: File) => {
     setPassword('')
+    setLeaving(false)
     setState({ kind: 'checking' })
     let document: Record<string, unknown>
     try {
@@ -90,6 +94,7 @@ export function ProfileTransferCard() {
   const busy = state?.kind === 'checking' || state?.kind === 'importing'
   const plan = state?.kind === 'checked' ? state.plan : null
   const needsPassword = plan?.mailServer === 'PASSWORD'
+  const linked = plan?.linked ?? []
   return (
     <Card data-testid="profile-transfer">
       <CardHeader>
@@ -144,6 +149,24 @@ export function ProfileTransferCard() {
                   </p>
                 ))}
               </div>
+              {linked.length > 0 && (
+                <Alert variant="destructive" data-testid="profile-import-linked">
+                  <AlertDescription className="flex flex-col gap-2">
+                    <span>{t('profile.transfer.linked')}</span>
+                    <ul className="list-disc pl-5">
+                      {linked.map((item) => (
+                        <li key={item.product}>{t('profile.transfer.linkedItem', { product: item.product,
+                          quizzes: item.quizzes.join('、') })}</li>
+                      ))}
+                    </ul>
+                    <span className="flex items-center gap-2">
+                      <Checkbox id={leavingId} checked={leaving} data-testid="profile-import-leaving"
+                        onCheckedChange={(checked) => setLeaving(checked === true)} />
+                      <Label htmlFor={leavingId}>{t('profile.transfer.linkedConfirm')}</Label>
+                    </span>
+                  </AlertDescription>
+                </Alert>
+              )}
               {plan.links.length > 0 && (
                 <Alert data-testid="profile-import-links">
                   <AlertDescription className="flex flex-col gap-1">
@@ -183,7 +206,8 @@ export function ProfileTransferCard() {
               {t('profile.transfer.cancel')}
             </Button>
             {state?.kind === 'checked' && (
-              <Button data-testid="profile-import-confirm" disabled={needsPassword && !password}
+              <Button data-testid="profile-import-confirm"
+                disabled={(needsPassword && !password) || (linked.length > 0 && !leaving)}
                 onClick={() => void start(state.document, state.plan)}>
                 {t('profile.transfer.confirm')}
               </Button>

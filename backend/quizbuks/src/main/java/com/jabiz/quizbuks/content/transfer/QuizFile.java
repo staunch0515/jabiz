@@ -17,9 +17,46 @@ import java.util.Objects;
  */
 public record QuizFile(String kind, String title, String intro, String cover, Integer timeLimitSec,
     List<Material> materials, List<Question> questions, Map<String, FileEntry> files, String language,
-    Map<String, Language> translations) {
+    Map<String, Language> translations, Products products) {
+
+    /** A quiz without products (before version 3). */
+    public QuizFile(String kind, String title, String intro, String cover, Integer timeLimitSec,
+        List<Material> materials, List<Question> questions, Map<String, FileEntry> files, String language,
+        Map<String, Language> translations) {
+        this(kind, title, intro, cover, timeLimitSec, materials, questions, files, language, translations,
+            Products.NONE);
+    }
+
+    /**
+     * The sponsor's products the quiz shows (version 3, Q100e, D-Q100-14): those of the whole quiz in their order, and
+     * one for some questions by their number in the file (from 1). Each is named by the sponsor's own code when it
+     * has one, else by its id in the system it came from; an import finds the importer's own product by either.
+     */
+    public record Products(List<ProductRef> quiz, List<QuestionProduct> questions) {
+        public static final Products NONE = new Products(List.of(), List.of());
+
+        public Products {
+            quiz = List.copyOf(quiz);
+            questions = List.copyOf(questions);
+        }
+
+        public boolean isEmpty() {
+            return quiz.isEmpty() && questions.isEmpty();
+        }
+    }
+
+    /** A product by its code or, without one, its id. */
+    public record ProductRef(String code, String productId) {
+        @Override
+        public String toString() {
+            return code != null ? code : productId;
+        }
+    }
+
+    public record QuestionProduct(int no, ProductRef product) {}
 
     public QuizFile {
+        products = products == null ? Products.NONE : products;
         materials = List.copyOf(Objects.requireNonNull(materials, "materials must not be null"));
         questions = List.copyOf(Objects.requireNonNull(questions, "questions must not be null"));
         files = Map.copyOf(Objects.requireNonNull(files, "files must not be null"));

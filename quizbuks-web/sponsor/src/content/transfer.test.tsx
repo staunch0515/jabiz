@@ -110,6 +110,13 @@ function server(options: Server = {}) {
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterialImage/query':
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query':
         return rows([])
+      // Q100e: the quiz's products, by code where the product has one.
+      case '/api/datasets/urn:jabiz:dataset:me:QbQuizProduct/query':
+        return rows([{ quizId: 'q1', questionNo: 0, productId: 'pr1', seq: 0 },
+          { quizId: 'q1', questionNo: 1, productId: 'pr2', seq: 0 }])
+      case '/api/datasets/urn:jabiz:dataset:me:QbSponsorProduct/query':
+        return rows([{ productId: 'pr1', code: 'TEA-1', name: 'Tea', status: 'LISTED' },
+          { productId: 'pr2', code: null, name: 'Cup', status: 'LISTED' }])
       case '/api/files/file-cover/content':
         return new Response(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'image/png' } })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:quiz-status':
@@ -140,7 +147,9 @@ describe('the quiz file helpers', () => {
     const progress: number[][] = []
     const document = await exportDraft(DRAFT, (done, total) => progress.push([done, total]), read)
     expect(document.format).toBe(QUIZ_FILE_FORMAT)
-    expect(document.formatVersion).toBe(2)
+    expect(document.formatVersion).toBe(3)
+    // No products asked for, none written.
+    expect(document.products).toBeUndefined()
     expect(document.quiz).toEqual({ kind: 'QUIZ', title: 'Coffee basics', intro: 'About coffee.',
       timeLimitSec: 300, cover: 'f1', language: 'en' })
     expect(document.translations).toBeUndefined()
@@ -274,8 +283,9 @@ describe('the quiz list', () => {
     await waitFor(() => expect(click).toHaveBeenCalled())
     // The list's cover thumbnail makes an object URL too: the download is the JSON one.
     const document = JSON.parse(await created.find((blob) => blob.type === 'application/json')!.text())
-    expect(document).toMatchObject({ format: QUIZ_FILE_FORMAT, formatVersion: 2, quiz: { title: 'Coffee basics',
+    expect(document).toMatchObject({ format: QUIZ_FILE_FORMAT, formatVersion: 3, quiz: { title: 'Coffee basics',
       cover: 'f1' }, questions: [{ stem: 'First?', points: 2 }] })
+    expect(document.products).toEqual({ quiz: [{ code: 'TEA-1' }], questions: [{ no: 1, product: { productId: 'pr2' } }] })
     expect(document.files.f1).toMatchObject({ type: 'image/png', size: 3, data: btoa('\x01\x02\x03') })
   })
 

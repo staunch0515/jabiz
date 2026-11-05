@@ -23,17 +23,20 @@ public final class QuizFileFormat {
     public static final String FORMAT = "quizbuks.quiz";
     /**
      * The version the export writes and {@link #readCurrent} reads. Version 2 (Q73a) adds the base language
-     * ({@code quiz.language}) and the other languages ({@code translations}), both optional.
+     * ({@code quiz.language}) and the other languages ({@code translations}), both optional; version 3 (Q100e) the
+     * sponsor's products the quiz shows ({@code products}), optional.
      */
-    public static final int CURRENT = 2;
+    public static final int CURRENT = 3;
     /** The oldest version still read. */
     public static final int OLDEST = 1;
 
     /**
      * The upgrade from each version to the next, by the version it starts from. Version 1 to 2 changes nothing: a
-     * file of version 1 is a quiz of its base language only, without saying which.
+     * file of version 1 is a quiz of its base language only, without saying which; nor 2 to 3: a file of version 2
+     * shows no products.
      */
-    static final Map<Integer, UnaryOperator<Map<String, Object>>> UPGRADES = Map.of(1, document -> document);
+    static final Map<Integer, UnaryOperator<Map<String, Object>>> UPGRADES = Map.of(1, document -> document,
+        2, document -> document);
 
     /** Whether a file can be imported, and why not. */
     public enum Status { SUPPORTED, NOT_A_QUIZ_FILE, TOO_NEW, TOO_OLD, INVALID }
@@ -164,7 +167,41 @@ public final class QuizFileFormat {
         }
         return new QuizFile(kind, text(quiz.get("title"), "quiz.title"), text(quiz.get("intro"), "quiz.intro"),
             text(quiz.get("cover"), "quiz.cover"), whole(quiz.get("timeLimitSec"), "quiz.timeLimitSec"), materials,
-            questions, files, text(quiz.get("language"), "quiz.language"), translations);
+            questions, files, text(quiz.get("language"), "quiz.language"), translations,
+            products(document.get("products")));
+    }
+
+    private static QuizFile.Products products(Object value) {
+        if (value == null) {
+            return QuizFile.Products.NONE;
+        }
+        Map<String, ?> products = map(value, "products");
+        List<QuizFile.ProductRef> quiz = new ArrayList<>();
+        int i = 0;
+        for (Map<String, ?> ref : maps(products.get("quiz"), "products.quiz")) {
+            quiz.add(productRef(ref, "products.quiz[" + i++ + "]"));
+        }
+        List<QuizFile.QuestionProduct> questions = new ArrayList<>();
+        i = 0;
+        for (Map<String, ?> link : maps(products.get("questions"), "products.questions")) {
+            String at = "products.questions[" + i++ + "]";
+            Integer no = whole(link.get("no"), at + ".no");
+            if (no == null) {
+                throw new IllegalArgumentException(at + ".no must be a whole number");
+            }
+            questions.add(new QuizFile.QuestionProduct(no, productRef(map(link.get("product"), at + ".product"),
+                at + ".product")));
+        }
+        return new QuizFile.Products(quiz, questions);
+    }
+
+    private static QuizFile.ProductRef productRef(Map<String, ?> ref, String at) {
+        String code = text(ref.get("code"), at + ".code");
+        String productId = text(ref.get("productId"), at + ".productId");
+        if (code == null && productId == null) {
+            throw new IllegalArgumentException(at + " names a product by its code or its productId");
+        }
+        return new QuizFile.ProductRef(code, productId);
     }
 
     private static QuizFile.Material material(Map<String, ?> material, String at) {

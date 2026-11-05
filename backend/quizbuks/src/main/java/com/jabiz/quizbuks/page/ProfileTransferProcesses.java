@@ -7,6 +7,7 @@ import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.identity.SponsorProcesses;
@@ -73,6 +74,8 @@ public final class ProfileTransferProcesses {
     private static final String PRODUCTS = "products";
     private static final String SERVERS = "servers";
     private static final String PLAN = "plan";
+    private static final String LINKS = "links";
+    private static final String QUIZZES = "quizzes";
 
     /** @param document the package's JSON; its files' {@code data} may be left out (they are never read) */
     public record CheckInput(@NotNull Map<String, Object> document) {}
@@ -89,7 +92,10 @@ public final class ProfileTransferProcesses {
      * name), and the files to upload.
      */
     public record Plan(String basics, String page, List<String> added, List<String> changed, List<String> deleted,
-        String mailServer, List<FileNeed> files, List<Link> links) {}
+        String mailServer, List<FileNeed> files, List<Link> links, List<LinkedProduct> linked) {}
+
+    /** A product the import deletes that quizzes show (D-Q100-13): it leaves them; the sponsor confirms it first. */
+    public record LinkedProduct(String product, List<String> quizzes) {}
 
     public record CheckOutput(Plan plan) {}
 
@@ -177,6 +183,14 @@ public final class ProfileTransferProcesses {
                 ctx -> ofUser(ctx, QbSponsorProducts.MAX_PRODUCTS + 1), PRODUCTS),
             QueryEntities.query(QbMailServers.DEFAULT_DATASET,
                 ctx -> QbMailServers.bySponsor(ctx.request().actorId()), SERVERS)));
+        // D-Q100-13: where the products the import would delete are shown, and those quizzes' titles.
+        pb.step("Load where the products are shown", QueryEntities.<ProcessContext>of(QbSponsorProducts.LINK_DATASET,
+            ctx -> EntityQuery.builder().where(new QueryPredicate.In("productId", list(ctx, PRODUCTS).stream()
+                .map(row -> (Object) String.valueOf(row.id())).toList())).limit(Integer.MAX_VALUE).build(), LINKS));
+        pb.step("Load those quizzes", QueryEntities.<ProcessContext>of(QbContent.defaultDataset(QbContent.QUIZ),
+            ctx -> EntityQuery.builder().where(new QueryPredicate.In("quizId", list(ctx, LINKS).stream()
+                .map(row -> (Object) UUID.fromString(String.valueOf((Object) row.get("quizId")))).distinct().toList()))
+                .limit(Integer.MAX_VALUE).build(), QUIZZES));
         pb.compute("Plan the import", (metadata, ctx) -> {
             if (!ctx.contains(PACKAGE)) {
                 return;
@@ -208,7 +222,7 @@ public final class ProfileTransferProcesses {
     private static Plan doing(ProcessContext ctx) {
         Plan plan = ctx.contains(PLAN) ? ctx.get(PLAN, Plan.class) : null;
         return plan == null || ctx.hasViolations() ? new Plan(NONE, NONE, List.of(), List.of(), List.of(), NONE,
-            List.of(), List.of()) : plan;
+            List.of(), List.of(), List.of()) : plan;
     }
 
     private static Plan planOf(ProcessContext ctx, String password) {
@@ -223,27 +237,41 @@ public final class ProfileTransferProcesses {
             : !SponsorStatus.APPROVED.equals(review) ? NOT_APPROVED
             : page != null && QbSponsorPages.PENDING.equals(page.get("status")) ? PENDING : SAVE;
 
-        // Products: one of the sponsor's own by its id is changed; the rest are new; the sponsor's others go.
-        Map<String, EntityInstance> own = new LinkedHashMap<>();
-        list(ctx, PRODUCTS).forEach(row -> own.put(String.valueOf(row.id()), row));
+        // Products (D-Q100-13): one of the sponsor's own found by its code, else by its id, is changed; the rest are
+        // new; the sponsor's others go.
+        List<EntityInstance> matches = matches(ctx);
         Set<String> kept = new HashSet<>();
         List<String> added = new ArrayList<>();
         List<String> changed = new ArrayList<>();
         for (int i = 0; i < profile.products().size(); i++) {
-            ProfilePackage.Product product = profile.products().get(i);
-            String name = product.name().get(profile.base());
-            if (product.productId() != null && own.containsKey(product.productId())) {
-                if (!kept.add(product.productId())) {
-                    ctx.reject(new Violation("products[" + i + "].productId", PRODUCT_TWICE, "The product "
-                        + product.productId() + " is in the package twice", Map.of("index", i)));
+            String name = profile.products().get(i).name().get(profile.base());
+            EntityInstance match = matches.get(i);
+            if (match != null) {
+                if (!kept.add(String.valueOf(match.id()))) {
+                    ctx.reject(new Violation("products[" + i + "]", PRODUCT_TWICE, "The product "
+                        + match.get("name") + " is in the package twice", Map.of("index", i)));
                 }
                 changed.add(name);
             } else {
                 added.add(name);
             }
         }
-        List<String> deleted = own.entrySet().stream().filter(e -> !kept.contains(e.getKey()))
-            .map(e -> String.valueOf((Object) e.getValue().get("name"))).toList();
+        List<EntityInstance> gone = list(ctx, PRODUCTS).stream().filter(row -> !kept.contains(String.valueOf(row.id())))
+            .toList();
+        List<String> deleted = gone.stream().map(row -> String.valueOf((Object) row.get("name"))).toList();
+        Map<String, String> titles = new LinkedHashMap<>();
+        list(ctx, QUIZZES).stream().filter(quiz -> !Boolean.TRUE.equals(quiz.get("removed")))
+            .forEach(quiz -> titles.put(String.valueOf(quiz.id()), String.valueOf((Object) quiz.get("title"))));
+        List<LinkedProduct> linked = new ArrayList<>();
+        for (EntityInstance row : gone) {
+            List<String> quizzes = list(ctx, LINKS).stream()
+                .filter(link -> String.valueOf(row.id()).equals(String.valueOf((Object) link.get("productId"))))
+                .map(link -> titles.get(String.valueOf((Object) link.get("quizId")))).filter(Objects::nonNull).distinct()
+                .toList();
+            if (!quizzes.isEmpty()) {
+                linked.add(new LinkedProduct(String.valueOf((Object) row.get("name")), quizzes));
+            }
+        }
 
         String mail = NONE;
         if (profile.mailServer() != null) {
@@ -265,7 +293,25 @@ public final class ProfileTransferProcesses {
             }
         });
         return new Plan(basics, pageAction, List.copyOf(added), List.copyOf(changed), deleted, mail,
-            List.copyOf(files), List.copyOf(links));
+            List.copyOf(files), List.copyOf(links), List.copyOf(linked));
+    }
+
+    /** The sponsor's own product each of the package's stands for: by its code, else by its id; null for a new one. */
+    private static List<EntityInstance> matches(ProcessContext ctx) {
+        Map<String, EntityInstance> byId = new LinkedHashMap<>();
+        Map<String, EntityInstance> byCode = new LinkedHashMap<>();
+        for (EntityInstance row : list(ctx, PRODUCTS)) {
+            byId.put(String.valueOf(row.id()), row);
+            if (row.get("code") != null) {
+                byCode.put(String.valueOf((Object) row.get("code")), row);
+            }
+        }
+        List<EntityInstance> matches = new ArrayList<>();
+        for (ProfilePackage.Product product : pkg(ctx).products()) {
+            matches.add(product.code() != null ? byCode.get(product.code())
+                : product.productId() == null ? null : byId.get(product.productId()));
+        }
+        return matches;
     }
 
     /** Whether the image of {@code path} is saved by this import (a part left alone uploads nothing). */
@@ -357,9 +403,9 @@ public final class ProfileTransferProcesses {
             return List.of();
         }
         Set<String> kept = new HashSet<>();
-        pkg(ctx).products().forEach(product -> {
-            if (product.productId() != null) {
-                kept.add(product.productId());
+        matches(ctx).forEach(match -> {
+            if (match != null) {
+                kept.add(String.valueOf(match.id()));
             }
         });
         return list(ctx, PRODUCTS).stream().map(row -> String.valueOf(row.id())).filter(id -> !kept.contains(id))
@@ -371,21 +417,20 @@ public final class ProfileTransferProcesses {
             return List.of();
         }
         ProfilePackage profile = pkg(ctx);
-        Map<String, EntityInstance> own = new LinkedHashMap<>();
-        list(ctx, PRODUCTS).forEach(row -> own.put(String.valueOf(row.id()), row));
+        List<EntityInstance> matches = matches(ctx);
         List<Object> inputs = new ArrayList<>();
         for (int i = 0; i < profile.products().size(); i++) {
             ProfilePackage.Product product = profile.products().get(i);
-            EntityInstance stored = product.productId() == null ? null : own.get(product.productId());
+            EntityInstance stored = matches.get(i);
             Map<String, Map<String, String>> translations = new LinkedHashMap<>();
             List<String> confirmed = new ArrayList<>();
             translate(translations, product.name(), "name", profile.base(), confirmed);
             translate(translations, product.description(), "description", profile.base(), confirmed);
-            inputs.add(new SponsorProductProcesses.SaveInput(stored == null ? null : product.productId(),
+            inputs.add(new SponsorProductProcesses.SaveInput(stored == null ? null : String.valueOf(stored.id()),
                 product.name().get(profile.base()), product.description().get(profile.base()),
                 imageAt(ctx, "products[" + i + "].image", product.image(), stored == null ? null : stored.get("image")),
                 product.price(), product.currency(), product.shopUrl(), product.listed(), i + 1,
-                stored == null ? null : number(stored.get("revision")), translations, confirmed));
+                stored == null ? null : number(stored.get("revision")), translations, confirmed, product.code()));
         }
         return inputs;
     }

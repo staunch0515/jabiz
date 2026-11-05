@@ -208,6 +208,14 @@ export function ImportQuizButton() {
                 {state.check.readers.length > 1 && ` ${t('quizzes.transfer.upgraded', {
                   readers: state.check.readers.join(' → ') })}`}
               </p>
+              {(state.check.products ?? 0) > 0 && (
+                <p data-testid="quiz-import-products">{t('quizzes.transfer.products', { count: state.check.products })}</p>
+              )}
+              {(state.check.missingProducts?.length ?? 0) > 0 && (
+                <p className="text-muted-foreground" data-testid="quiz-import-missing-products">
+                  {t('quizzes.transfer.missingProducts', { products: state.check.missingProducts!.join('、') })}
+                </p>
+              )}
               {state.check.files.length > 20 && <p className="text-muted-foreground">{t('quizzes.transfer.slow')}</p>}
             </div>
           )}

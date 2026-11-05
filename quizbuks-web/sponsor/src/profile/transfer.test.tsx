@@ -27,7 +27,7 @@ const PAGE: MySponsorPage = {
   translationHashes: {},
 }
 const PRODUCT: MyProduct = {
-  productId: 'pr1', name: '緑茶', description: null, image: 'file-logo', price: '1200', currency: 'JPY',
+  productId: 'pr1', code: 'TEA-1', name: '緑茶', description: null, image: 'file-logo', price: '1200', currency: 'JPY',
   shopUrl: 'https://acme.example/green', status: 'UNLISTED', seq: 1, takedownReason: null, revision: 1,
   translations: { en: { name: 'Green tea' } }, translationHashes: {},
 }
@@ -45,7 +45,7 @@ describe('the profile package', () => {
       avatar: 'f1' })
     expect(document.page).toEqual({ handle: 'acme-tea', headline: { ja: 'おいしいお茶', en: 'Good tea' },
       website: 'https://acme.example', cover: 'f2' })
-    expect(document.products[0]).toMatchObject({ productId: 'pr1', name: { ja: '緑茶', en: 'Green tea' },
+    expect(document.products[0]).toMatchObject({ productId: 'pr1', code: 'TEA-1', name: { ja: '緑茶', en: 'Green tea' },
       listed: false, image: 'f1' })
     expect(document.mailServer).toEqual({ host: 'smtp.acme.example', port: 465, tls: 'SMTPS', username: 'shop',
       fromAddress: 'shop@acme.example', fromName: 'Acme' })
@@ -67,6 +67,7 @@ const PLAN: ImportPlan = {
   basics: 'SAVE', page: 'PENDING', added: ['ほうじ茶'], changed: ['緑茶'], deleted: ['紅茶'], mailServer: 'PASSWORD',
   files: [{ path: 'basics.avatar', key: 'f1', policy: 'qb.sponsor-avatar', type: 'image/png', size: 3 }],
   links: [{ path: 'page.cover', url: 'https://img.example/cover.jpg' }],
+  linked: [{ product: '紅茶', quizzes: ['Tea quiz'] }],
 }
 
 function server(importAnswer: { status: number; body: unknown } = { status: 200, body: { output: { plan: PLAN } } }) {
@@ -130,9 +131,13 @@ describe('importing a profile package', () => {
     expect(check.document.files.f1.data).toBeUndefined()
     await expectAccessible()
 
+    // D-Q100-13: a deleted product's quizzes are named, and the sponsor confirms they leave them.
+    expect(within(dialog).getByTestId('profile-import-linked')).toHaveTextContent('紅茶 (shown on Tea quiz)')
     const confirm = within(dialog).getByTestId('profile-import-confirm')
     expect(confirm).toBeDisabled()
     await userEvent.type(within(dialog).getByTestId('profile-import-password'), 'secret')
+    expect(confirm).toBeDisabled()
+    await userEvent.click(within(dialog).getByTestId('profile-import-leaving'))
     await userEvent.click(confirm)
     await waitFor(() => expect(screen.queryByTestId('profile-import-dialog')).toBeNull())
     expect(uploads).toEqual(['qb.sponsor-avatar'])
@@ -147,6 +152,7 @@ describe('importing a profile package', () => {
     await userEvent.upload(screen.getByTestId('profile-import-file'), FILE)
     const dialog = await screen.findByTestId('profile-import-dialog')
     await userEvent.type(await within(dialog).findByTestId('profile-import-password'), 'secret')
+    await userEvent.click(within(dialog).getByTestId('profile-import-leaving'))
     await userEvent.click(within(dialog).getByTestId('profile-import-confirm'))
     expect(await within(dialog).findByTestId('profile-import-problems')).toHaveTextContent(
       'products[0].image: Not your file')

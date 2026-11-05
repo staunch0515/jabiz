@@ -42,6 +42,7 @@ import { fieldProblem, generalProblem } from '../qb/problems'
 import {
   deleteProduct,
   MAX_PRODUCTS,
+  PRODUCT_CODE_LENGTH,
   PRODUCT_CURRENCIES,
   PRODUCT_DESCRIPTION_LENGTH,
   PRODUCT_NAME_LENGTH,
@@ -55,7 +56,7 @@ import {
 export const PRODUCTS_PATH = profilePath('products')
 export const PRODUCTS_QUERY = ['qb', 'my-products'] as const
 
-const FIELDS = ['name', 'description', 'image', 'price', 'currency', 'shopUrl', 'baseRevision'] as const
+const FIELDS = ['name', 'description', 'image', 'price', 'currency', 'shopUrl', 'code', 'baseRevision'] as const
 const IMAGE_TYPES = 'image/jpeg,image/png'
 const IMAGE_BYTES = 5 * 1024 * 1024
 
@@ -69,6 +70,7 @@ function inputOf(product: MyProduct | null): ProductInput {
     price: product?.price ?? '',
     currency: product?.currency ?? 'JPY',
     shopUrl: product?.shopUrl ?? '',
+    code: product?.code ?? null,
     listed: product ? product.status === 'LISTED' : true,
     seq: product?.seq ?? null,
     baseRevision: product?.revision ?? null,
@@ -147,6 +149,11 @@ export function ProductsPage() {
                       </Badge>
                     </div>
                     <span className="text-sm tabular-nums">{formatPrice(product.price, product.currency, i18n.language)}</span>
+                    {product.code && (
+                      <span className="text-muted-foreground text-sm" data-testid="product-code-shown">
+                        {t('products.code')}: {product.code}
+                      </span>
+                    )}
                     <span className="text-muted-foreground text-sm break-all">{product.shopUrl}</span>
                     {product.status === 'TAKEN_DOWN' && product.takedownReason && (
                       <span className="text-destructive text-sm" data-testid="product-takedown">
@@ -218,6 +225,7 @@ function ProductDialog({ product, seq, onClose, onSaved }: {
   const save = useMutation({
     mutationFn: () => saveProduct({ ...form, name: form.name.trim(), price: form.price.trim(),
       shopUrl: form.shopUrl.trim(), description: form.description?.trim() ? form.description.trim() : null,
+      code: form.code?.trim() ? form.code.trim() : null,
       // The page's languages' translations given, others (of languages the page no longer offers) kept as stored.
       translations: { ...product?.translations, ...Object.fromEntries(others.map((l) => [l, translations[l] ?? {}])) },
       confirmed }),
@@ -316,6 +324,15 @@ function ProductDialog({ product, seq, onClose, onSaved }: {
           </div>
           <p id={`${id}-price-hint`} className="text-muted-foreground -mt-2 text-sm">{t('products.priceHint')}</p>
           {errorOf('price')}
+          {/* Q100e (D-Q100-12): the sponsor's own code, optional; packages and quiz files find the product by it. */}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`${id}-code`}>{t('products.code')}</Label>
+            <Input id={`${id}-code`} value={form.code ?? ''} maxLength={PRODUCT_CODE_LENGTH} autoComplete="off"
+              className="max-w-60" aria-invalid={invalid('code')} aria-describedby={describedBy('code', `${id}-code-hint`)}
+              data-testid="product-code" onChange={(event) => set('code', event.target.value)} />
+            <p id={`${id}-code-hint`} className="text-muted-foreground text-sm">{t('products.codeHint')}</p>
+            {errorOf('code')}
+          </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${id}-shop`}>{t('products.shopUrl')}</Label>
             <Input id={`${id}-shop`} type="url" inputMode="url" value={form.shopUrl} required maxLength={SHOP_URL_LENGTH}

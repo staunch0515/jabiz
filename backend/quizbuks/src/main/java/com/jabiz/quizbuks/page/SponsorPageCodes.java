@@ -22,6 +22,10 @@ public final class SponsorPageCodes {
     public static final String PRODUCT_NAME_BLANK = "QB_PRODUCT_NAME_BLANK";
     /** A sponsor has at most {@value QbSponsorProducts#MAX_PRODUCTS} products. */
     public static final String PRODUCT_LIMIT = "QB_PRODUCT_LIMIT";
+    /** Q100e: a product's code is letters, digits and {@code . _ -}. */
+    public static final String PRODUCT_CODE_FORMAT = "QB_PRODUCT_CODE_FORMAT";
+    /** Q100e: another of the sponsor's products has the code. */
+    public static final String PRODUCT_CODE_TAKEN = "QB_PRODUCT_CODE_TAKEN";
     /** The price has more decimals than its currency (none for the yen, two for the others), or is negative. */
     public static final String PRODUCT_PRICE = "QB_PRODUCT_PRICE";
     public static final String PRODUCT_CHANGED = "QB_PRODUCT_CHANGED";
@@ -32,7 +36,7 @@ public final class SponsorPageCodes {
 
     public static final List<String> ALL = List.of(HANDLE_FORMAT, HANDLE_TAKEN, HEADLINE_BLANK, WEBSITE_FORMAT,
         CHANGED, SPONSOR_NOT_APPROVED, STATE, REVIEW_REQUIRED, PRODUCT_NAME_BLANK, PRODUCT_LIMIT, PRODUCT_PRICE,
-        PRODUCT_CHANGED, PRODUCT_STATE, QUIZ_PRODUCTS);
+        PRODUCT_CHANGED, PRODUCT_STATE, QUIZ_PRODUCTS, PRODUCT_CODE_FORMAT, PRODUCT_CODE_TAKEN);
 
     private SponsorPageCodes() {
     }

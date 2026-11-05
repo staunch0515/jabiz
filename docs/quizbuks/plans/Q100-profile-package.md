@@ -25,6 +25,14 @@
 | D-Q100-11 | **三种语言**：文字字段（简介、标语、商品名称与说明）在包里写成 `{ "ja": …, "zh": …, "en": … }`，第一种语言是基准（入驻资料的语言、主页的 `language`），其余写进各自的译文（`TextTranslations`，所译原文的哈希按包里的基准文字在导入时算出，因此导入后不算过时）；主页提供的语言（`page.languages`）中其他语言的标语必填，同手填规则。B 的生成器每个文字字段有三种语言的输入；C 起草基准语言，并由 Claude 译出所选的其他语言（标明是机器翻译，商户在确认页校对） |
 | D-Q100-9 | 另给一套提示词模板（同 `quiz-file-prompts.md`），让商户用其他 AI 生成资料包 |
 
+### 1.1 商品编号与 Quiz 的商品（需求方 2026-11-05 追加，Q100e）
+
+| # | 决定 |
+|---|---|
+| D-Q100-12 | **商品编号** `code`：商户自己定的、可选的编号（如 `TEA-001`；字母、数字与 `. _ -`，1–40 字，`QB_PRODUCT_CODE_FORMAT`），同一商户内不重复（`QB_PRODUCT_CODE_TAKEN`，数据库部分唯一索引兜底）。商品页可编辑，资料包导出、导入都带着它；不进公开数据视图。系统内的编号 `productId` 照旧，Quiz 与商品的关联照旧存 `productId` |
+| D-Q100-13 | **资料包导入时认商品**：包里的商品有编号就按编号找本商户的商品，没有编号才按 `productId`（同一环境导出的）找；都找不到的新增，本商户其余的商品删除（整体替换照旧）。**删除前提醒**：计划列出将被删除且关联着 Quiz 的商品与那些 Quiz 的名字，商家后台要商户勾选"知道这些商品会从这些 Quiz 上撤下"后才能导入 |
+| D-Q100-14 | **Quiz 文件带商品**（格式版本 3）：`products.quiz`（整份 Quiz 的商品，按顺序）与 `products.questions`（`{no, product}`，题号即文件中的题序），每个商品写成 `{"code": …}`（有编号时）或 `{"productId": …}`。导入时按编号、再按 `productId` 找导入者自己的商品，找到的以子流程 `QB_QUIZ_PRODUCTS_SET` 关联到新草稿；找不到的不关联，检查时列出（不阻止导入）。版本 2 的文件照旧读（没有商品） |
+
 ## 2. 分步
 
 | 步 | 内容 | 分支 |
@@ -63,4 +71,16 @@
 - `ProfilePackageTest`（6）：完整的包、显式的 `null`、每种问题与路径、不是资料包或别的版本、商品超过上限、文件只能是图片。
 - `ProfileImportIT`（3）：已通过的商户导入全部（计划、三张图片的策略、没有密码什么也不写、译文不过时、再导入时商品整体替换且保留编号与没写的图片、同一邮件服务器沿用密码）；导入从不改变审核（还没申请：只填申请表、什么也不写；主页审核中：不动主页与审核请求，商品照常）；坏的包与别人的文件什么也不写、同一商品两次。
 - 商家后台 Vitest（`profile/transfer.test.tsx`，5）：导出（每张图片一次、各语言的文字、没有密码、文件名）、申请表的暂存、导入对话框（计划、链接、axe、要密码才能确认、上传后带图片编号与密码导入）、拒绝的原因、不是 JSON 的文件。e2e 未在本机运行。
+
+## 6. 实施记录（Q100e，2026-11-05）
+
+- 商品编号：迁移 `V76__quizbuks_product_codes.sql`（列 `code`、部分唯一索引 `(user_id, code) WHERE code IS NOT NULL`）；`QbSponsorProducts.code` / `CODE_PATTERN`；`QB_PRODUCT_SAVE` 的输入加 `code`（旧的构造照旧），格式与重复分别是 `QB_PRODUCT_CODE_FORMAT` / `QB_PRODUCT_CODE_TAKEN`；商家后台的商品对话框与列表显示它。
+- 资料包：商品带 `code`；认商品先按编号、再按 `productId`（`ProfileTransferProcesses.matches`）；计划多出 `linked`（将删除且关联着 Quiz 的商品与那些 Quiz 的标题，已移除的 Quiz 不算），商家后台要勾选确认才能导入。
+- Quiz 文件版本 3：`QuizFile.Products`（`products.quiz` / `products.questions`，`{code}` 或 `{productId}`），`QuizFileChecks` 查个数与题号；导入检查给出 `products`（会关联的个数）与 `missingProducts`，导入在新草稿保存之后以子流程 `QB_QUIZ_PRODUCTS_SET` 关联找到的商品。商家后台的导出写出 Quiz 的商品（有编号写编号），导入对话框列出找不到的商品。`quiz-file-prompts.md` 改为版本 3 并加了商品的写法。
+
+### 测试
+
+- `ProductCodeIT`（3）：编号可选、同一商户内不重复、格式、别的商户可以同号；资料包按编号认出商品、保留它在 Quiz 上的关联、计划列出将被删除的商品所在的 Quiz、导入后那个商品从 Quiz 上撤下；Quiz 文件按编号与 `productId` 关联导入者自己的商品、找不到的列出、别的商户导入同一文件什么也不关联。
+- `QuizFileTest`（版本 3 的读法、商品的个数与题号检查、只有名称的商品是坏文件、没有商品的文件）、`QuizTransferIT`（读法链 `1 → 2 → 3`）、`ProfileImportIT`、`SponsorProductIT` 照旧通过。
+- 商家后台 Vitest：资料包导出带编号、删除提醒与确认勾选；Quiz 导出写出商品（有编号写编号，没有写 `productId`）。e2e 的 `transfer.spec.ts` 期望版本 3（未在本机运行）。
 

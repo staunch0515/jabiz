@@ -3,14 +3,22 @@ package com.jabiz.quizbuks.content.transfer;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.StepSpec;
+import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ContentCodes;
 import com.jabiz.quizbuks.content.QuizEditing;
 import com.jabiz.quizbuks.content.QuizProcesses;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
+import com.jabiz.quizbuks.page.QbSponsorProducts;
+import com.jabiz.quizbuks.page.SponsorProductProcesses;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.file.FileEntities;
+import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.ArrayList;
@@ -54,7 +62,8 @@ public final class QuizTransferProcesses {
      * @param languages     the file's other languages (Q73a)
      */
     public record CheckOutput(int formatVersion, int currentVersion, List<Integer> readers, String kind,
-        String title, int questions, int materials, List<FileNeed> files, String language, List<String> languages) {}
+        String title, int questions, int materials, List<FileNeed> files, String language, List<String> languages,
+        int products, List<String> missingProducts) {}
 
     /** @param files the key of each file the quiz uses (its key in the file) as uploaded by the caller */
     public record ImportInput(@NotNull Map<String, Object> document, Map<String, UUID> files) {}
@@ -76,6 +85,7 @@ public final class QuizTransferProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, CheckOutput.class))
+                .step("Load the caller's products", loadProducts())
                 .compute("Read the file", (metadata, ctx) -> {
                     QuizFile file = read(ctx, ctx.get(INPUT, CheckInput.class).document());
                     if (file == null) {
@@ -87,9 +97,10 @@ public final class QuizTransferProcesses {
                         QuizFile.FileEntry entry = file.files().get(key);
                         needs.add(new FileNeed(key, field.policy(), entry.name(), entry.type(), entry.size()));
                     });
+                    ProductLinks links = links(ctx, file);
                     ctx.put(OUTPUT, new CheckOutput(reading.version(), QuizFileFormat.CURRENT, reading.readers(),
                         file.kind(), file.title(), file.questions().size(), file.materials().size(), needs,
-                        file.language(), List.copyOf(file.translations().keySet())));
+                        file.language(), List.copyOf(file.translations().keySet()), links.count(), links.missing()));
                 }));
     }
 
@@ -106,11 +117,84 @@ public final class QuizTransferProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, ImportOutput.class))
+                .step("Load the caller's products", loadProducts())
                 .steps(b -> QuizEditing.loadFiles(b, ctx -> {
                     Map<String, UUID> files = ctx.get(INPUT, ImportInput.class).files();
                     return files == null ? List.of() : List.copyOf(files.values());
                 }))
-                .compute("Import the quiz", (metadata, ctx) -> imported(ctx)));
+                .compute("Import the quiz", (metadata, ctx) -> imported(ctx))
+                // Q100e: the products the file names that the caller has, as the products page sets them (the new
+                // draft saved first: the sub-process reads it).
+                .step("Save the draft", SaveChanges.<ProcessContext>when(ctx -> !ctx.hasViolations()
+                    && ctx.contains(LINKS) && ctx.get(LINKS, ProductLinks.class).count() > 0))
+                .step("Show the products", CallProcess.<ProcessContext>when(
+                    ctx -> !ctx.hasViolations() && ctx.contains(LINKS) && ctx.get(LINKS, ProductLinks.class).count() > 0,
+                    SponsorProductProcesses.QUIZ_PRODUCTS_SET, 1, ctx -> ctx.get(LINKS, ProductLinks.class)
+                        .input(ctx.get(OUTPUT, ImportOutput.class).quizId()), null)));
+    }
+
+    private static final String PRODUCTS = "products";
+    private static final String LINKS = "productLinks";
+
+    /** The caller's own products, for finding those the file names. */
+    private static StepSpec<QueryEntities.Metadata<ProcessContext>, ProcessContext> loadProducts() {
+        return QueryEntities.of(QbSponsorProducts.DEFAULT_DATASET, ctx -> EntityQuery.builder()
+            .where(new QueryPredicate.In("userId", List.of(ctx.request().actorId())))
+            .limit(QbSponsorProducts.MAX_PRODUCTS + 1).build(), PRODUCTS);
+    }
+
+    /**
+     * The file's products found among the caller's own (D-Q100-14): by code, else by id; those not found are only
+     * listed (the import goes on without them).
+     */
+    record ProductLinks(List<UUID> quiz, List<SponsorProductProcesses.QuestionProduct> questions,
+        List<String> missing) {
+        int count() {
+            return quiz.size() + questions.size();
+        }
+
+        SponsorProductProcesses.QuizProductsInput input(UUID quizId) {
+            return new SponsorProductProcesses.QuizProductsInput(quizId, quiz, questions);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ProductLinks links(ProcessContext ctx, QuizFile file) {
+        List<EntityInstance> own = ctx.contains(PRODUCTS) ? (List<EntityInstance>) ctx.get(PRODUCTS) : List.of();
+        Map<String, UUID> byCode = new LinkedHashMap<>();
+        Map<String, UUID> byId = new LinkedHashMap<>();
+        for (EntityInstance row : own) {
+            UUID id = UUID.fromString(String.valueOf(row.id()));
+            byId.put(id.toString(), id);
+            if (row.get("code") != null) {
+                byCode.put(String.valueOf((Object) row.get("code")), id);
+            }
+        }
+        List<String> missing = new ArrayList<>();
+        java.util.function.Function<QuizFile.ProductRef, UUID> find = ref -> {
+            UUID id = ref.code() != null ? byCode.get(ref.code()) : byId.get(ref.productId());
+            if (id == null && !missing.contains(ref.toString())) {
+                missing.add(ref.toString());
+            }
+            return id;
+        };
+        List<UUID> quiz = new ArrayList<>();
+        for (QuizFile.ProductRef ref : file.products().quiz()) {
+            UUID id = find.apply(ref);
+            if (id != null && !quiz.contains(id)) {
+                quiz.add(id);
+            }
+        }
+        List<SponsorProductProcesses.QuestionProduct> questions = new ArrayList<>();
+        for (QuizFile.QuestionProduct link : file.products().questions()) {
+            UUID id = find.apply(link.product());
+            if (id != null) {
+                questions.add(new SponsorProductProcesses.QuestionProduct(link.no(), id));
+            }
+        }
+        ProductLinks links = new ProductLinks(List.copyOf(quiz), List.copyOf(questions), List.copyOf(missing));
+        ctx.put(LINKS, links);
+        return links;
     }
 
     /** The file, read and checked; null (with the problems rejected) when it cannot be imported. */
@@ -165,6 +249,7 @@ public final class QuizTransferProcesses {
         file.translations().forEach((language, t) -> hashes.put(language, t.hashes()));
         Object quizId = QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null,
             file.language(), hashes);
+        links(ctx, file);
         QuizFileFormat.Reading reading = ctx.get(READING, QuizFileFormat.Reading.class);
         ctx.put(OUTPUT, new ImportOutput(QuizEditing.uuid(quizId), reading.version(), reading.readers()));
     }

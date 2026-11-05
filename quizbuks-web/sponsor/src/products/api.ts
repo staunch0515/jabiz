@@ -13,6 +13,8 @@ export const MAX_QUIZ_PRODUCTS = 3
 export const PRODUCT_NAME_LENGTH = 100
 export const PRODUCT_DESCRIPTION_LENGTH = 500
 export const SHOP_URL_LENGTH = 300
+/** Q100e: the sponsor's own code of a product (`QbSponsorProducts.CODE_LENGTH`). */
+export const PRODUCT_CODE_LENGTH = 40
 
 /** One of the sponsor's own products. */
 export interface MyProduct {
@@ -23,6 +25,8 @@ export interface MyProduct {
   price: string
   currency: string
   shopUrl: string
+  /** Q100e: the sponsor's own code, if any. */
+  code: string | null
   status: ProductStatus
   seq: number
   takedownReason: string | null
@@ -41,6 +45,8 @@ export interface ProductInput {
   price: string
   currency: string
   shopUrl: string
+  /** Q100e: the sponsor's own code; none to have none. */
+  code: string | null
   listed: boolean
   seq: number | null
   baseRevision: number | null
@@ -80,6 +86,7 @@ export async function readMyProducts(): Promise<MyProduct[]> {
     price: String(row.price ?? '0'),
     currency: String(row.currency ?? 'JPY'),
     shopUrl: String(row.shopUrl ?? ''),
+    code: text(row.code),
     status: row.status as ProductStatus,
     seq: Number(row.seq) || 0,
     takedownReason: text(row.takedownReason),

@@ -41,7 +41,7 @@ export interface ProfilePackageDocument {
   basics?: { contactName: string; company: string; intro: Texts; avatar: PackageImage }
   page?: { handle: string; headline: Texts; website: string | null; cover: PackageImage }
   products: {
-    productId: string; name: Texts; description: Texts; price: string; currency: string; shopUrl: string
+    productId: string; code?: string; name: Texts; description: Texts; price: string; currency: string; shopUrl: string
     listed: boolean; image: PackageImage
   }[]
   mailServer?: { host: string; port: number; tls: string; username: string; fromAddress: string
@@ -115,7 +115,8 @@ export async function exportProfile(sources: ProfileSources, now: Date = new Dat
     const description = textsOf(base, product.description, product.translations, 'description')
     note(name)
     note(description)
-    document.products.push({ productId: product.productId, name, description, price: product.price,
+    document.products.push({ productId: product.productId, ...(product.code ? { code: product.code } : {}), name,
+      description, price: product.price,
       currency: product.currency, shopUrl: product.shopUrl, listed: product.status !== 'UNLISTED',
       image: await image(product.image) })
   }
@@ -149,6 +150,8 @@ export interface ImportPlan {
   mailServer: PartAction
   files: FileNeed[]
   links: { path: string; url: string }[]
+  /** D-Q100-13: products the import deletes that quizzes show, with those quizzes' titles. */
+  linked: { product: string; quizzes: string[] }[]
 }
 
 /** What the server would do with the package; a refusal (its problems) throws. */

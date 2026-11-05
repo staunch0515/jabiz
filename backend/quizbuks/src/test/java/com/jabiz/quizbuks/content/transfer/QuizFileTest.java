@@ -22,7 +22,7 @@ class QuizFileTest {
     static Map<String, Object> document() {
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("format", "quizbuks.quiz");
-        document.put("formatVersion", 2);
+        document.put("formatVersion", 3);
         document.put("quiz", map("kind", "QUIZ", "title", "Capitals", "intro", "Two **easy** ones.",
             "timeLimitSec", 300, "cover", "f1"));
         document.put("materials", List.of(
@@ -52,8 +52,8 @@ class QuizFileTest {
     void aCurrentFileIsReadByItsOwnVersion() {
         QuizFileFormat.Reading reading = QuizFileFormat.read(document());
         assertThat(reading.status()).isEqualTo(QuizFileFormat.Status.SUPPORTED);
-        assertThat(reading.version()).isEqualTo(2);
-        assertThat(reading.readers()).containsExactly(2);
+        assertThat(reading.version()).isEqualTo(3);
+        assertThat(reading.readers()).containsExactly(3);
         QuizFile file = reading.file();
         assertThat(file.title()).isEqualTo("Capitals");
         assertThat(file.cover()).isEqualTo("f1");
@@ -70,7 +70,7 @@ class QuizFileTest {
     @Test
     void aFileOfAnotherVersionOrFormatIsRefusedWithItsReason() {
         Map<String, Object> newer = document();
-        newer.put("formatVersion", 3);
+        newer.put("formatVersion", 4);
         assertThat(QuizFileFormat.read(newer).status()).isEqualTo(QuizFileFormat.Status.TOO_NEW);
         Map<String, Object> older = document();
         older.put("formatVersion", 0);
@@ -95,7 +95,7 @@ class QuizFileTest {
         v1.put("formatVersion", 1);
         QuizFileFormat.Reading reading = QuizFileFormat.read(v1);
         assertThat(reading.status()).isEqualTo(QuizFileFormat.Status.SUPPORTED);
-        assertThat(reading.readers()).containsExactly(1, 2);
+        assertThat(reading.readers()).containsExactly(1, 2, 3);
         assertThat(reading.file().language()).isNull();
         assertThat(reading.file().translations()).isEmpty();
     }
@@ -313,5 +313,33 @@ class QuizFileTest {
         assertThat(snapshot.questions().get(1).options()).extracting(QuizSnapshot.Option::no, QuizSnapshot.Option::image)
             .containsExactly(org.assertj.core.groups.Tuple.tuple(1, null), org.assertj.core.groups.Tuple.tuple(2, osaka));
         assertThat(snapshot.fullScore()).isEqualTo(5);
+    }
+
+    /** Q100e (D-Q100-14): the products the quiz shows, each by its code or its id. */
+    @Test
+    void theProductsAreReadByCodeOrIdAndChecked() {
+        Map<String, Object> document = document();
+        document.put("products", map("quiz", List.of(map("code", "TEA-1"), map("productId", "p-9")),
+            "questions", List.of(map("no", 2, "product", map("code", "TEA-2")))));
+        QuizFile file = QuizFileFormat.read(document).file();
+        assertThat(file.products().quiz()).extracting(QuizFile.ProductRef::toString).containsExactly("TEA-1", "p-9");
+        assertThat(file.products().questions()).singleElement()
+            .satisfies(link -> assertThat(link.no()).isEqualTo(2));
+        assertThat(QuizFileChecks.check(file)).isEmpty();
+
+        // A question the file does not have, the same question twice, too many for the quiz.
+        document.put("products", map("quiz", List.of(map("code", "A"), map("code", "B"), map("code", "C"),
+            map("code", "D")), "questions", List.of(map("no", 3, "product", map("code", "A")),
+            map("no", 1, "product", map("code", "A")), map("no", 1, "product", map("code", "B")))));
+        assertThat(QuizFileChecks.check(QuizFileFormat.read(document).file()))
+            .extracting(com.jabiz.entity.Violation::field)
+            .containsExactlyInAnyOrder("products.quiz", "products.questions[0].no", "products.questions[2].no");
+
+        // A product named by neither is a malformed file.
+        document.put("products", map("quiz", List.of(map("name", "Tea"))));
+        assertThat(QuizFileFormat.read(document).status()).isEqualTo(QuizFileFormat.Status.INVALID);
+
+        // A file without products shows none.
+        assertThat(QuizFileFormat.read(document()).file().products().isEmpty()).isTrue();
     }
 }

@@ -1,5 +1,6 @@
 import { ApiError, fetchFileContent, runProcess, uploadFile } from '@jabiz/client'
 import type { ContentLanguage } from '../qb/api'
+import { readMyProducts, readMyQuizLinks, type MyProduct, type QuizLink } from '../products/api'
 import { readDraft, type Draft, type Material } from './api'
 import { COVER_KEY, optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from './languages'
 import { CONTENT_FILE_POLICY, CONTENT_PROCESS } from './ids'
@@ -14,9 +15,9 @@ import { CONTENT_FILE_POLICY, CONTENT_PROCESS } from './ids'
 export const QUIZ_FILE_FORMAT = 'quizbuks.quiz'
 /**
  * The version this console writes (`QuizFileFormat.CURRENT`); the server says which versions it reads. Version 2
- * (Q73a) adds the base language and the other languages.
+ * (Q73a) adds the base language and the other languages; version 3 (Q100e) the sponsor's products the quiz shows.
  */
-export const QUIZ_FILE_VERSION = 2
+export const QUIZ_FILE_VERSION = 3
 /** Above this size the export asks before going on (base64 adds about a third to the files). */
 export const LARGE_EXPORT_BYTES = 100 * 1024 * 1024
 
@@ -64,7 +65,18 @@ export interface QuizFileDocument {
   files: Record<string, QuizFileEntry>
   /** Present only when the quiz has other languages. */
   translations?: Partial<Record<ContentLanguage, QuizFileLanguage>>
+  /**
+   * Q100e (D-Q100-14): the products the quiz shows, each by the sponsor's own code (else its id); present only when
+   * it shows any. Question numbers are the file's (from 1).
+   */
+  products?: { quiz: ProductRef[]; questions: { no: number; product: ProductRef }[] }
 }
+
+/** A product named by its code or, without one, its id. */
+export type ProductRef = { code: string } | { productId: string }
+
+/** The quiz's product links (`qb.sponsor` links of `QbQuizProduct`, question 0 = the whole quiz) and the products. */
+export interface QuizProducts { links: QuizLink[]; products: MyProduct[] }
 
 /** Progress of an export or import: files done out of all. */
 export type Progress = (done: number, total: number) => void
@@ -106,7 +118,8 @@ export function blobOf(data: string, type: string): Blob {
 
 /** The draft as a quiz file, its files keyed `f1`, `f2` … in the order they are first used. */
 export async function exportDraft(draft: Draft, onProgress?: Progress,
-  read: (fileId: string) => Promise<Blob> = (id) => fetchFileContent(id)): Promise<QuizFileDocument> {
+  read: (fileId: string) => Promise<Blob> = (id) => fetchFileContent(id),
+  products?: QuizProducts): Promise<QuizFileDocument> {
   const keys = new Map<string, { key: string; kind: 'image' | 'pdf' | 'audio' }>()
   const key = (fileId: string | null, kind: 'image' | 'pdf' | 'audio'): string | null => {
     if (!fileId) return null
@@ -170,6 +183,20 @@ export async function exportDraft(draft: Draft, onProgress?: Progress,
       document.translations[language] = out
     }
   }
+  // Q100e: the products the quiz shows, by code where the product has one.
+  if (products && products.links.length > 0) {
+    const byId = new Map(products.products.map((p) => [p.productId, p]))
+    const ref = (productId: string): ProductRef => {
+      const code = byId.get(productId)?.code
+      return code ? { code } : { productId }
+    }
+    const ordered = [...products.links].sort((a, b) => a.seq - b.seq)
+    document.products = {
+      quiz: ordered.filter((l) => l.questionNo === 0).map((l) => ref(l.productId)),
+      questions: ordered.filter((l) => l.questionNo > 0 && l.questionNo <= draft.questions.length)
+        .map((l) => ({ no: l.questionNo, product: ref(l.productId) })),
+    }
+  }
   let done = 0
   onProgress?.(0, keys.size)
   for (const [fileId, { key: fileKey, kind }] of keys) {
@@ -184,7 +211,9 @@ export async function exportDraft(draft: Draft, onProgress?: Progress,
 /** Reads a quiz's draft and exports it; null when the quiz is not the sponsor's. */
 export async function exportQuiz(quizId: string, onProgress?: Progress): Promise<QuizFileDocument | null> {
   const draft = await readDraft(quizId)
-  return draft ? exportDraft(draft, onProgress) : null
+  if (!draft) return null
+  const [links, products] = await Promise.all([readMyQuizLinks(quizId), readMyProducts()])
+  return exportDraft(draft, onProgress, undefined, { links, products })
 }
 
 /** A file name for the export: the title's letters and digits, then `.quizbuks.json`. */
@@ -255,6 +284,9 @@ export interface ImportCheck {
   /** Q73a: the base language the file names (none in a version 1 file), and its other languages. */
   language: ContentLanguage | null
   languages: ContentLanguage[]
+  /** Q100e: the links to the importer's own products the import makes, and the products the file names not found. */
+  products?: number
+  missingProducts?: string[]
 }
 
 /** A file read as JSON; throws `SyntaxError` for anything else. */

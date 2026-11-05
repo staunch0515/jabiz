@@ -39,6 +39,10 @@ public final class QbSponsorProducts {
     public static final List<String> STATUSES = List.of(LISTED, UNLISTED, TAKEN_DOWN);
 
     public static final int MAX_PRODUCTS = 50;
+    /** Q100e: a product's own code: letters, digits and {@code . _ -}, starting with a letter or digit. */
+    public static final int CODE_LENGTH = 40;
+    public static final java.util.regex.Pattern CODE_PATTERN =
+        java.util.regex.Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,39}");
     /** Products shown with a whole quiz; a question shows one. */
     public static final int MAX_QUIZ_PRODUCTS = 3;
     public static final int NAME_LENGTH = 100;
@@ -62,6 +66,8 @@ public final class QbSponsorProducts {
         eb.field("name", f -> f.physicalColumn("name").required(true).asText(NAME_LENGTH)
             .apply(Rules.notBlank(SponsorPageCodes.PRODUCT_NAME_BLANK)));
         eb.field("description", f -> f.physicalColumn("description").asText(DESCRIPTION_LENGTH, true));
+        // Q100e: the sponsor's own code of the product (optional, once per sponsor: a partial unique index).
+        eb.field("code", f -> f.physicalColumn("code").asText(CODE_LENGTH));
         eb.field("image", f -> f.physicalColumn("image").kind(FileKind.of(QbSponsorPages.IMAGE_POLICY)));
         // Q73c: the name and description in the page's other languages ({language: {field: {text, hash}}}); optional.
         eb.field("translations", f -> f.physicalColumn("translations").asText(null, true));

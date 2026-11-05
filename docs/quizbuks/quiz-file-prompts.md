@@ -35,12 +35,13 @@
 - 其他语言：ja, en（0–2 种，从 ja / zh / en 中选，不含基准语言；不要就写"无"）
 - 资料：1 篇文章（ARTICLE，0–10 篇；可另加链接 LINK 或视频 VIDEO_LINK，写明地址）
 - 图片：不要图片 / 列出图片建议（二选一）
+- 关联的商品（可选，写商户在商品页填的商品编号；不要就写"无"）：整份 Quiz：TEA-001, TEA-002；第 3 题：TEA-003
 
 【格式规则】（必须全部遵守）
 1. 只输出一个 ```json 代码块，内容是合法 JSON（双引号、无注释、无末尾逗号、无省略号）。
    图片选"列出图片建议"时，代码块之后再给一张表：位置（如"封面""第 3 题""第 3 题选项 2"）、画面描述、建议尺寸。
 2. 顶层固定为：
-   {"format": "quizbuks.quiz", "formatVersion": 2, "quiz": {...}, "materials": [...], "questions": [...], "files": {}}
+   {"format": "quizbuks.quiz", "formatVersion": 3, "quiz": {...}, "materials": [...], "questions": [...], "files": {}}
    有其他语言时另加 "translations"（见第 7 条）。
 3. quiz：
    - "kind"：参数中的种类；"title"：标题，必填，≤ 100 字；"intro"：简介，≤ 5000 字，可用 Markdown，可为 null；
@@ -65,10 +66,13 @@
    - "title"；有简介时 "intro"；
    - 第 n 题题干 "q<n>.stem"，第 n 题第 m 个选项 "q<n>.o<m>.text"（n、m 从 1 起，按数组顺序）。
    每段译文的长度上限同原文。不写 "hashes"、"images"；资料的译文不写（资料在其他语言中显示基准语言的原文）。
-8. 内容要求：事实准确，答案唯一且能由参考资料或公认知识确认；不出现个人信息、联系方式、广告链接；
+8. 关联的商品（参数为"无"时不写 "products"）：
+   "products": {"quiz": [{"code": "TEA-001"}], "questions": [{"no": 3, "product": {"code": "TEA-003"}}]}
+   "quiz" 至多 3 个，按参数的顺序；"questions" 每题至多 1 个，"no" 是题目在 "questions" 中的顺序（从 1 起）。只用参数给出的编号，不要编造。
+9. 内容要求：事实准确，答案唯一且能由参考资料或公认知识确认；不出现个人信息、联系方式、广告链接；
    不确定的题目宁可不出，也不要编造。
 
-请先在心里核对第 1–8 条，再输出。
+请先在心里核对第 1–9 条，再输出。
 ````
 
 ## 3. 输出示例
@@ -80,7 +84,7 @@ AI 的输出应当像这样（示例为 3 题；`QuizFilePromptsTest` 检查它�
 ```json
 {
   "format": "quizbuks.quiz",
-  "formatVersion": 2,
+  "formatVersion": 3,
   "quiz": {
     "kind": "QUIZ",
     "title": "办公室消防安全小测验",
@@ -192,7 +196,7 @@ AI 的输出应当像这样（示例为 3 题；`QuizFilePromptsTest` 检查它�
 ```json
 {
   "format": "quizbuks.quiz",
-  "formatVersion": 2,
+  "formatVersion": 3,
   "quiz": {
     "kind": "SURVEY",
     "title": "Coffee habits",
@@ -270,4 +274,5 @@ AI 的输出应当像这样（示例为 3 题；`QuizFilePromptsTest` 检查它�
 | 语言 | 基准为 `ja` / `zh` / `en` 之一；其他语言至多 2 种，不能与基准相同；有其他语言时必须写基准语言 |
 | 译文 | 键 `title`、`intro`、`q<n>.stem`、`q<n>.o<m>.text`（从 1 起）；只能译基准中有的文字；要保存版本，每种语言须译全 |
 | 文件 | 封面、题目、选项、资料图片：JPEG / PNG ≤ 10 MB；PDF ≤ 20 MB；音频 MP3 / M4A / OGG ≤ 50 MB；`size` 必须是真实字节数，`data` 必须是完整的 Base64 |
+| 商品（版本 3，Q100e） | `products.quiz` 至多 3 个，`products.questions` 每题至多 1 个（`no` 从 1 起）；每个写 `{"code": 商品编号}`（或同一系统导出的 `{"productId": …}`）；导入时按编号找导入者自己的商品，找不到的不关联（导入照常，检查时列出） |
 | 字数 | 按字符计（一个汉字算 1） |

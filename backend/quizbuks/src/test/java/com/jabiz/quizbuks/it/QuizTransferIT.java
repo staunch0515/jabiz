@@ -66,8 +66,8 @@ class QuizTransferIT extends ContentItSupport {
     @Test
     void theCheckSaysWhatTheFileMakesAndWhichFilesToUpload() {
         Map<String, Object> checked = run("QB_QUIZ_IMPORT_CHECK", sponsorA(), body("document", document("Checked")));
-        assertThat(checked).containsEntry("formatVersion", 1).containsEntry("currentVersion", 2)
-            .containsEntry("readers", List.of(1, 2)).containsEntry("kind", "QUIZ").containsEntry("title", "Checked")
+        assertThat(checked).containsEntry("formatVersion", 1).containsEntry("currentVersion", 3)
+            .containsEntry("readers", List.of(1, 2, 3)).containsEntry("kind", "QUIZ").containsEntry("title", "Checked")
             .containsEntry("questions", 2).containsEntry("materials", 2);
         assertThat((List<?>) checked.get("files")).extracting(f -> ((Map<?, ?>) f).get("key") + " "
             + ((Map<?, ?>) f).get("policy")).containsExactly("c " + QbContent.IMAGE_POLICY,
@@ -99,7 +99,7 @@ class QuizTransferIT extends ContentItSupport {
         Map<String, Object> out = run("QB_QUIZ_IMPORT", sponsorA(), body("document", document("Imported"), "files",
             map("c", cover, "m", map, "p", paper)));
         String quizId = (String) out.get("quizId");
-        assertThat(out).containsEntry("formatVersion", 1).containsEntry("readers", List.of(1, 2));
+        assertThat(out).containsEntry("formatVersion", 1).containsEntry("readers", List.of(1, 2, 3));
 
         assertThat(query("SELECT owner_id, title, cover::text AS cover, status, question_count, material_count, "
             + "cloned_from, ai_generated FROM qb_quiz_version WHERE quiz_id = ?::uuid", quizId)).singleElement()
@@ -144,7 +144,7 @@ class QuizTransferIT extends ContentItSupport {
     @Test
     void aFileWithOtherLanguagesImportsThemAsTheyWere() {
         Map<String, Object> checked = run("QB_QUIZ_IMPORT_CHECK", sponsorA(), body("document", translated("Both")));
-        assertThat(checked).containsEntry("formatVersion", 2).containsEntry("readers", List.of(2))
+        assertThat(checked).containsEntry("formatVersion", 2).containsEntry("readers", List.of(2, 3))
             .containsEntry("language", "ja").containsEntry("languages", List.of("zh"));
         assertThat((List<?>) checked.get("files")).extracting(f -> (Object) String.valueOf(((Map<?, ?>) f).get("key"))).contains("zm", "zp");
 

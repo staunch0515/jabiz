@@ -130,6 +130,7 @@ public final class QuizFileChecks {
             question(problems, "questions[" + q + "]", file.questions().get(q), survey);
         }
         translations(problems, file);
+        products(problems, file);
         for (Use use : uses(file)) {
             QuizFile.FileEntry entry = file.files().get(use.key());
             if (entry == null) {
@@ -354,6 +355,21 @@ public final class QuizFileChecks {
         if (count > max) {
             problems.add(new Violation(at, ContentCodes.QUIZ_FILE_TOO_MANY, count + " " + at + ", at most " + max,
                 Map.of("field", at, "count", count, "max", max)));
+        }
+    }
+
+    /** Q100e: at most the products a quiz shows, and one for each question of the file. */
+    private static void products(List<Violation> problems, QuizFile file) {
+        int max = com.jabiz.quizbuks.page.QbSponsorProducts.MAX_QUIZ_PRODUCTS;
+        if (file.products().quiz().size() > max) {
+            problems.add(value("products.quiz", "at most " + max + " products"));
+        }
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int i = 0; i < file.products().questions().size(); i++) {
+            int no = file.products().questions().get(i).no();
+            if (no < 1 || no > file.questions().size() || !seen.add(no)) {
+                problems.add(value("products.questions[" + i + "].no", "a question of the file, once"));
+            }
         }
     }
 

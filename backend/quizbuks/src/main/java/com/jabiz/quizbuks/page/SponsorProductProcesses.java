@@ -75,7 +75,15 @@ public final class SponsorProductProcesses {
      */
     public record SaveInput(String productId, @NotBlank String name, String description, UUID image,
         @NotNull BigDecimal price, @NotBlank String currency, @NotBlank String shopUrl, boolean listed, Integer seq,
-        Long baseRevision, Map<String, Map<String, String>> translations, List<String> confirmed) {
+        Long baseRevision, Map<String, Map<String, String>> translations, List<String> confirmed, String code) {
+
+        /** A product without its own code (before Q100e). */
+        public SaveInput(String productId, String name, String description, UUID image, BigDecimal price,
+            String currency, String shopUrl, boolean listed, Integer seq, Long baseRevision,
+            Map<String, Map<String, String>> translations, List<String> confirmed) {
+            this(productId, name, description, image, price, currency, shopUrl, listed, seq, baseRevision,
+                translations, confirmed, null);
+        }
 
         /** A product in its page's own language only (before Q73c). */
         public SaveInput(String productId, String name, String description, UUID image, BigDecimal price,
@@ -163,6 +171,19 @@ public final class SponsorProductProcesses {
                 + " does not fit " + input.currency(), Map.of("decimals",
                     QbSponsorProducts.scaleOf(input.currency()))));
         }
+        // Q100e: the sponsor's own code, once among their products.
+        String code = blankToNull(input.code());
+        if (code != null && !QbSponsorProducts.CODE_PATTERN.matcher(code).matches()) {
+            ctx.reject(new Violation("code", SponsorPageCodes.PRODUCT_CODE_FORMAT, "A product code is letters, "
+                + "digits and . _ -", Map.of("code", code)));
+        } else if (code != null) {
+            EntityInstance self = product;
+            boolean taken = products.stream().anyMatch(row -> row != self && code.equals(row.get("code")));
+            if (taken) {
+                ctx.reject(new Violation("code", SponsorPageCodes.PRODUCT_CODE_TAKEN, "Another of your products has "
+                    + "the code " + code, Map.of("code", code)));
+            }
+        }
         Object stored = product == null ? null : product.get("image");
         if (input.image() != null && !same(stored, input.image())) {
             EntityInstance file = first(ctx, FILES);
@@ -190,6 +211,7 @@ public final class SponsorProductProcesses {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name().strip());
         values.put("description", blankToNull(input.description()));
+        values.put("code", code);
         values.put("translations", PublicationLanguages.toJson(translations));
         values.put("image", input.image());
         values.put("price", price.setScale(QbSponsorProducts.scaleOf(input.currency())));

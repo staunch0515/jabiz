@@ -114,10 +114,13 @@ describe("the sponsor's products (Q60b)", () => {
     await userEvent.type(within(dialog).getByTestId('product-name'), 'Baguette')
     await userEvent.type(within(dialog).getByTestId('product-price'), '350')
     await userEvent.type(within(dialog).getByTestId('product-shop'), 'https://shop.example/baguette')
+    // Q100e: the sponsor's own code, trimmed.
+    await userEvent.type(within(dialog).getByTestId('product-code'), ' BREAD-1 ')
     await userEvent.click(within(dialog).getByTestId('product-save'))
     await waitFor(() => expect(calls('QB_PRODUCT_SAVE')).toHaveLength(1))
     expect(calls('QB_PRODUCT_SAVE')[0]).toMatchObject({ productId: null, name: 'Baguette', price: '350',
-      currency: 'JPY', shopUrl: 'https://shop.example/baguette', listed: true, seq: 2, baseRevision: null })
+      currency: 'JPY', shopUrl: 'https://shop.example/baguette', listed: true, seq: 2, baseRevision: null,
+      code: 'BREAD-1' })
   })
 
   it("shows the server's refusal of a price at the field", async () => {
