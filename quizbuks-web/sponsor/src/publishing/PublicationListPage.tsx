@@ -73,16 +73,17 @@ function PublicationCard({ publication: p, methodLabel, regionsText }: { publica
         {p.status === 'DRAFT' && (p.rejectReason || p.rejectCode) && (
           <Badge variant="destructive" className="w-fit" data-testid="publication-sent-back">{t('publishing.list.sentBack')}</Badge>
         )}
-        <dl className="text-muted-foreground mt-auto grid grid-cols-3 gap-2 border-t pt-2 text-xs">
+        <dl className="text-muted-foreground mt-auto grid grid-cols-2 gap-2 border-t pt-2 text-xs">
           <div><dt>{t('publishing.list.takers')}</dt><dd className="text-foreground font-medium">{p.starts.toLocaleString()}</dd></div>
           <div><dt>{t('publishing.list.winners')}</dt><dd className="text-foreground font-medium">{p.maxWinners === null
             ? p.winners.toLocaleString()
             : t('publishing.list.winnersOf', { winners: p.winners.toLocaleString(), max: p.maxWinners.toLocaleString() })}</dd></div>
-          <div><dt>{t('publishing.list.spent')}</dt><dd className="text-foreground font-medium">{cap === null ? formatKudos(p.spent)
+          {/* The Kudos of the budget are the longest figure: a row of their own in a narrow card. */}
+          <div className="col-span-2"><dt>{t('publishing.list.spent')}</dt><dd className="text-foreground font-medium">{cap === null ? formatKudos(p.spent)
             : t('publishing.list.spentOf', { spent: formatKudos(p.spent), max: formatKudos(cap) })}</dd></div>
           {/* Q88b: what its takers paid to enter, shown once there is any. */}
           {Number(p.entryFees) > 0 && (
-            <div><dt>{t('publishing.list.entryFees')}</dt>
+            <div className="col-span-2"><dt>{t('publishing.list.entryFees')}</dt>
               <dd className="text-foreground font-medium" data-testid="publication-entry-fees">{formatKudos(p.entryFees)}</dd></div>
           )}
         </dl>

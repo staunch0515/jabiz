@@ -42,11 +42,11 @@ export function ViewSwitch({ value, onChange, testId }: { value: ListView; onCha
   )
 }
 
-/** The grid of cards: two columns on a narrow screen up to four on a wide one. */
+/** The grid of cards: one column on a phone, then more as the screen widens, six on a wide one. */
 export function CardGrid({ label, children, className, testId }: { label: string; children: ReactNode;
   className?: string; testId?: string }) {
   return (
-    <ul aria-label={label} className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4', className)}
+    <ul aria-label={label} className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6', className)}
       data-testid={testId}>
       {children}
     </ul>
