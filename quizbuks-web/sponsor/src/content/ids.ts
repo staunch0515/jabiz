@@ -11,6 +11,8 @@ export const CONTENT_PROCESS = {
   quizClone: 'QB_QUIZ_CLONE',
   quizPublishVersion: 'QB_QUIZ_PUBLISH_VERSION',
   quizImportCheck: 'QB_QUIZ_IMPORT_CHECK',
+  /** Q99b: the full address a short video link (b23.tv) leads to. */
+  videoLinkResolve: 'QB_VIDEO_LINK_RESOLVE',
   quizImport: 'QB_QUIZ_IMPORT',
   questionSave: 'QB_QUESTION_SAVE',
   questionDelete: 'QB_QUESTION_DELETE',

@@ -564,6 +564,21 @@ export const readMaterialKinds = (): Promise<DictionaryItem[]> => readDictionary
 
 export const saveQuiz = (input: QuizInput) => runProcess<EditOutput>(CONTENT_PROCESS.quizSave, { ...input })
 
+/** Q99b: a short link to one video (Bilibili's b23.tv), which only its own server turns into the video's address. */
+export function isShortVideoLink(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim())
+    return ['b23.tv', 'www.b23.tv'].includes(parsed.hostname.toLowerCase())
+      && /^\/[0-9A-Za-z]{4,16}\/?$/.test(parsed.pathname)
+  } catch {
+    return false
+  }
+}
+
+/** Q99b: the full address of the video a short link leads to (`QB_VIDEO_LINK_RESOLVE`); a refusal throws. */
+export const resolveVideoLink = async (url: string): Promise<string> =>
+  (await runProcess<{ url: string }>(CONTENT_PROCESS.videoLinkResolve, { url: url.trim() })).url
+
 export const deleteQuiz = (quizId: string, baseRevision: number) =>
   runProcess<EditOutput>(CONTENT_PROCESS.quizDelete, { quizId, baseRevision })
 
