@@ -50,3 +50,4 @@ Q99 的 D-Q99-4 把其他网站的视频做成"首页不播放、只在开始页
 - App 与商家后台（`qb/` 两份相同）：`qb/video.ts` 的 `autoplaying` 给每个网站各自的静音自动播放参数；`VideoPlayer` 不再只让 YouTube、Vimeo 自动播放；`FeedCard` 所有有视频的卡片都在首页中间播放（YouTube、Vimeo 经共用播放器，其他网站用卡片自己的播放器）；开始页其他网站的播放器同样自动播放。
 - 商家后台：资料对话框的短链接查找与"能不能播"的说明（`content/api.ts` 的 `isShortVideoLink`、`resolveVideoLink`）。
 - 测试：`ShortVideoLinksTest`、`VideoLinkResolveIT`（b23.tv 的桩：单个视频、空间、找不到、不是短链接、答题者不能用）；App 的 `video.test.ts`（每个网站的自动播放参数）、`Play.test.tsx`（哔哩哔哩在首页卡片与开始页播放）；商家后台 `content.test.tsx`（短链接换成完整地址、失败的说明、不能播的地址的说明、axe）。后端在本机因 Maven Central 限流（429）未能编译，以 PR 的 CI 为准。
+- **手机上哔哩哔哩空白**（2026-11-05 staging，iPhone，首页与开始页都是）：哔哩哔哩的 `player.bilibili.com/player.html` 在手机上跳到它的移动播放器 `www.bilibili.com/blackboard/…`，而内容安全策略的 `frame-src` 只许 `player.bilibili.com`，跳转被拦、框里空白（需求方在手机上直接打开播放器地址核实了跳转）。`/taker` 与 `/sponsor` 的 `frame-src` 加 `https://www.bilibili.com` 与 `https://m.bilibili.com`（`QuizbuksAppIT` 同改）。新增网站时也要在手机上试一次：播放器可能按设备跳到别的主机。troubleshooting T11。
