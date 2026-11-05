@@ -17,6 +17,7 @@
 | T7 | 导入 Quiz 文件失败，只说"出错了，请重试" | 商家 | 已修复（2026-11-04） |
 | T8 | 部署失败：`application not healthy after 3m0s`，回滚也失败 | 内部（运维） | 服务器磁盘满，待清理 |
 | T9 | 管理后台找不到 AI 获客的平台开关（`qb.prospect.*`），设了"每天获客"也不执行 | 内部（管理员） | 有办法，待改进（现在不做） |
+| T10 | 公开主页的"链接名"填了官网地址，提示"须为 3 至 30 个小写字母、数字或连字符" | 发起方 | 有办法；Q104 生成的资料包会自动填对 |
 
 ---
 
@@ -169,6 +170,20 @@
 - **待做（现在不做）**：
   1. **应用（`1.3/quizbuks`，约半天）**：「AI 获客 → 设置」（后台扩展 `ProspectSettingsPage.tsx`）照 `/qb/ai`（`AiPage.tsx` 的 `proposeSwitch`）加"平台开关"：显示三个参数的现行值与待发布的提案，持有 `control.propose` 的人可提出开启 / 关闭与模型、强度（理由必填），发布仍由另一位管理员；附 `prospect.test.tsx` 的用例与 axe。
   2. **平台（`1.3/platform`）**：通用后台的 `SysControlChange` 列表显示目标（参数的 `paramKey`），并可按它筛选。
+
+## T10 公开主页的"链接名"填了官网地址，提示格式不对
+
+- **状态**：2026-11-05 staging 出现（填了 `https://www.aini-helmet.com/`）。不是故障，是两个栏目容易混淆。Q104（从官网生成）会把官网地址放进"网站"、由域名得出链接名，从根本上避开；在链接名中粘贴网址时给出提示的小改进待定。
+- **现象**：主页编辑的"链接名"填了官网的网址，下面提示"链接名须为 3 至 30 个小写字母、数字或连字符，不能以连字符开头或结尾"。
+- **原因**："链接名"是主页在本平台**里面**的短名字（主页地址为 `/taker/s/<链接名>`），不是自己的网站；自己网站的地址填在同一页下面的"网站"一栏。
+- **处理**：链接名填 `aini-helmet` 这样的短名字（可以取域名中的那一段），"网站"填 `https://www.aini-helmet.com/`。
+- **帮助页文案**（对象：发起方；分类：公开主页）：
+  - 中文 · 问：链接名填网址为什么不行？
+    答："链接名"是你的主页在本平台上的地址名，只能用 3 至 30 个小写字母、数字或连字符，例如 `aini-helmet`，主页地址就是 `…/taker/s/aini-helmet`。你自己的网站地址请填在同一页的"网站"一栏，主页上会显示它的链接。
+  - 日本語 · 問：リンク名に URL を入れるとエラーになります。
+    答：「リンク名」は本サービス上のページの名前で、英小文字・数字・ハイフンの 3〜30 文字です（例：`aini-helmet`、ページは `…/taker/s/aini-helmet`）。自社サイトの URL は同じページの「ウェブサイト」欄に入れてください。ページにリンクが表示されます。
+  - English · Q: Why can't I put my website's address as the link name?
+    A: The link name is your page's name on this service: 3 to 30 lowercase letters, digits or hyphens, for example `aini-helmet` (your page is then `…/taker/s/aini-helmet`). Put your own website's address in the "Website" field on the same page; your page links to it.
 
 ## 已归档
 
