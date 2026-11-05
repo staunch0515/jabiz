@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createDecoder, NATIVE_MISSES_BEFORE_SCRIPT } from './decoder'
+import { createDecoder, NATIVE_MISSES_BEFORE_SCRIPT, region } from './decoder'
 
 const jsQR = vi.hoisted(() => vi.fn())
 vi.mock('jsqr', () => ({ default: jsQR }))
@@ -29,18 +29,30 @@ describe('createDecoder (Q52)', () => {
     expect(jsQR).not.toHaveBeenCalled()
   })
 
-  it('decodes by script where the browser cannot, on a picture scaled down to 640 wide, both ways round', async () => {
-    const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) =>
-      ({ data: new Uint8ClampedArray(width * height * 4), width, height }))
-    const drawImage = vi.fn()
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
-      { drawImage, getImageData } as unknown as CanvasRenderingContext2D)
-    jsQR.mockReturnValueOnce(null).mockReturnValueOnce({ data: 'https://quizbuks.com/taker/p/pub-1' })
-    const decoder = await createDecoder()
-    expect(await decoder.decode(video())).toBeNull()
-    expect(await decoder.decode(video())).toBe('https://quizbuks.com/taker/p/pub-1')
-    expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 640, 360)
-    expect(jsQR).toHaveBeenCalledWith(expect.any(Uint8ClampedArray), 640, 360, { inversionAttempts: 'attemptBoth' })
+  it('decodes by script where the browser cannot: the middle at full size, then the whole picture, both ways round',
+    async () => {
+      const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) =>
+        ({ data: new Uint8ClampedArray(width * height * 4), width, height }))
+      const drawImage = vi.fn()
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+        { drawImage, getImageData } as unknown as CanvasRenderingContext2D)
+      jsQR.mockReturnValueOnce(null).mockReturnValueOnce({ data: 'https://quizbuks.com/taker/p/pub-1' })
+      const decoder = await createDecoder()
+      expect(await decoder.decode(video())).toBeNull()
+      expect(await decoder.decode(video())).toBe('https://quizbuks.com/taker/p/pub-1')
+      // The middle 576 × 576 of the 1280 × 720 picture, not scaled down; then the whole of it at 800 wide.
+      expect(drawImage).toHaveBeenNthCalledWith(1, expect.anything(), 352, 72, 576, 576, 0, 0, 576, 576)
+      expect(drawImage).toHaveBeenNthCalledWith(2, expect.anything(), 0, 0, 1280, 720, 0, 0, 800, 450)
+      expect(jsQR).toHaveBeenNthCalledWith(1, expect.any(Uint8ClampedArray), 576, 576, { inversionAttempts: 'attemptBoth' })
+      expect(jsQR).toHaveBeenNthCalledWith(2, expect.any(Uint8ClampedArray), 800, 450, { inversionAttempts: 'attemptBoth' })
+    })
+
+  it('reads the middle of a large picture scaled to the edge, and a small picture as it is', () => {
+    expect(region(1920, 1080, true)).toEqual({ sx: 528, sy: 108, sw: 864, sh: 864, dw: 800, dh: 800 })
+    expect(region(1080, 1920, true)).toEqual({ sx: 108, sy: 528, sw: 864, sh: 864, dw: 800, dh: 800 })
+    expect(region(640, 480, true)).toEqual({ sx: 128, sy: 48, sw: 384, sh: 384, dw: 384, dh: 384 })
+    expect(region(640, 480, false)).toEqual({ sx: 0, sy: 0, sw: 640, sh: 480, dw: 640, dh: 480 })
+    expect(region(1080, 1920, false)).toEqual({ sx: 0, sy: 0, sw: 1080, sh: 1920, dw: 450, dh: 800 })
   })
 
   it('decodes by script when the browser\'s detector reads no QR codes', async () => {

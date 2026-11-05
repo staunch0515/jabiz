@@ -6,9 +6,12 @@ import QRCode from 'qrcode'
  * signs in and answers.
  */
 
-/** The code as an SVG image URL for `<img>` (the CSP allows `data:` images). */
+/**
+ * The code as an SVG image URL for `<img>` (the CSP allows `data:` images), with the standard's quiet zone of four
+ * modules: on a screen the page's edge and a dark appearance come right up to the image (Q52b).
+ */
 export async function qrImageUrl(link: string): Promise<string> {
-  const svg = await QRCode.toString(link, { type: 'svg', margin: 2, errorCorrectionLevel: 'M' })
+  const svg = await QRCode.toString(link, { type: 'svg', margin: 4, errorCorrectionLevel: 'M' })
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
