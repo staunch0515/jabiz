@@ -32,6 +32,7 @@ import { Period, StatusBadge, useDebounced, useRegionsText, useStatusLabel, useR
 import { CardGrid, Pager, useListView, ViewSwitch } from '../ListView'
 import { CoverPlaceholder } from '../qb/Illustrations'
 import { Thumbnail } from '../content/ContentImage'
+import { ImportSettingsButton } from './PublicationTransfer'
 
 const PAGE_SIZE = 20
 const ALL = 'all'
@@ -228,10 +229,13 @@ export function PublicationListPage() {
     <section className="flex flex-col gap-4" data-testid="publication-list">
       <PageHeader title={t('publishing.list.title')} description={t('publishing.list.intro')}
         actions={
-          <Button onClick={() => navigate(publicationPath(NEW_PUBLICATION))} data-testid="new-publication">
-            <Plus aria-hidden />
-            {t('publishing.list.new')}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <ImportSettingsButton />
+            <Button onClick={() => navigate(publicationPath(NEW_PUBLICATION))} data-testid="new-publication">
+              <Plus aria-hidden />
+              {t('publishing.list.new')}
+            </Button>
+          </div>
         } />
       <form role="search" className="flex flex-wrap items-end gap-4" onSubmit={(event) => event.preventDefault()}>
         <div className="flex w-full max-w-sm flex-col gap-2">
