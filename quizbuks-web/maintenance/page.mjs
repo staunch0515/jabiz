@@ -59,12 +59,28 @@ body {
 header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem clamp(1rem, 4vw, 3rem); }
 .brand { display: flex; align-items: center; gap: .6rem; font-weight: 750; font-size: 1.25rem; letter-spacing: -.01em; }
 .brand svg { width: 2.25rem; height: 2.25rem; flex: none; }
-.langs { display: flex; gap: .25rem; }
-.langs button {
-  font: inherit; font-size: .85rem; color: var(--muted); background: transparent; border: 1px solid transparent;
-  border-radius: 999px; padding: .2rem .7rem; cursor: pointer;
+.brand { min-width: 0; }
+/* The language switch, folded into one button with the current language (a narrow phone has no room for three). */
+.langs { position: relative; flex: none; }
+html:not([data-lang]) .langs { display: none; }
+.langs summary {
+  list-style: none; display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; cursor: pointer;
+  font-size: .85rem; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+  padding: .3rem .75rem;
 }
-.langs button[aria-pressed="true"] { color: var(--fg); border-color: var(--line); background: var(--card); }
+.langs summary::-webkit-details-marker { display: none; }
+.langs summary svg { width: 1rem; height: 1rem; flex: none; }
+.langs[open] summary .chevron { transform: rotate(180deg); }
+.langs .menu {
+  position: absolute; right: 0; top: calc(100% + .4rem); z-index: 10; display: flex; flex-direction: column; gap: .1rem;
+  min-width: 8.5rem; padding: .3rem; background: var(--card); border: 1px solid var(--line); border-radius: .75rem;
+  box-shadow: 0 10px 30px rgb(0 0 0 / .18);
+}
+.langs .menu button {
+  font: inherit; font-size: .9rem; text-align: left; white-space: nowrap; color: var(--muted); background: transparent;
+  border: 0; border-radius: .5rem; padding: .45rem .75rem; cursor: pointer;
+}
+.langs .menu button[aria-pressed="true"] { color: var(--fg); font-weight: 650; background: var(--accent-soft); }
 main {
   flex: 1; display: grid; align-items: center; gap: clamp(1.5rem, 5vw, 4rem); width: min(72rem, 100%);
   margin: 0 auto; padding: clamp(1rem, 4vw, 3rem); grid-template-columns: minmax(0, 1fr);
@@ -86,7 +102,7 @@ h1 { font-size: clamp(2rem, 5vw, 3.25rem); line-height: 1.15; letter-spacing: -.
   font: inherit; font-weight: 650; color: var(--accent-fg); background: var(--accent); border: 0; border-radius: 999px;
   padding: .7rem 1.4rem; cursor: pointer;
 }
-.status button:focus-visible, .langs button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.status button:focus-visible, .langs button:focus-visible, .langs summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 1rem; }
 .gear { transform-box: fill-box; transform-origin: center; }
 .g1 { animation: spin 8s linear infinite; }
@@ -104,7 +120,7 @@ function chooser(names) {
     [language, MESSAGES[language].title.replace('{name}', names[language])]))
   const tags = Object.fromEntries(LANGUAGES.map((language) => [language, MESSAGES[language].lang]))
   return `(function () {
-  var LANGS = ${JSON.stringify(LANGUAGES)}, ZONES = ${JSON.stringify(ZONES)}, TITLES = ${JSON.stringify(titles)}, TAGS = ${JSON.stringify(tags)};
+  var LANGS = ${JSON.stringify(LANGUAGES)}, NAMES = ${JSON.stringify(LANGUAGE_NAMES)}, ZONES = ${JSON.stringify(ZONES)}, TITLES = ${JSON.stringify(titles)}, TAGS = ${JSON.stringify(tags)};
   function known(l) { return l && LANGS.indexOf(l) >= 0 ? l : null; }
   function pick() {
     var l = null;
@@ -127,6 +143,8 @@ function chooser(names) {
     document.title = TITLES[l];
     var buttons = document.querySelectorAll('[data-set-lang]');
     for (var i = 0; i < buttons.length; i++) buttons[i].setAttribute('aria-pressed', String(buttons[i].getAttribute('data-set-lang') === l));
+    var current = document.querySelector('[data-lang-current]');
+    if (current) { current.textContent = NAMES[l]; current.setAttribute('lang', TAGS[l]); }
   };
   window.__qbSetLanguage(pick());
 })();`
@@ -166,8 +184,15 @@ function retrier() {
   var buttons = document.querySelectorAll('[data-check]');
   for (var i = 0; i < buttons.length; i++) buttons[i].addEventListener('click', check);
   var langs = document.querySelectorAll('[data-set-lang]');
+  var menu = document.querySelector('.langs');
   for (var j = 0; j < langs.length; j++) langs[j].addEventListener('click', function (e) {
     window.__qbSetLanguage(e.currentTarget.getAttribute('data-set-lang'));
+    if (menu) { menu.open = false; menu.querySelector('summary').focus(); }
+  });
+  // The menu closes on a click elsewhere and on Escape, as a menu does.
+  document.addEventListener('click', function (e) { if (menu && menu.open && !menu.contains(e.target)) menu.open = false; });
+  document.addEventListener('keydown', function (e) {
+    if (menu && menu.open && e.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); }
   });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
   tick();
@@ -216,7 +241,7 @@ ${CSS}</style>
 <header>
   <div class="brand">${mark.trim()}${LANGUAGES.map((language) =>
     `<span data-l="${language}" lang="${MESSAGES[language].lang}">${esc(brand.names[language])}</span>`).join('')}</div>
-  <nav class="langs" aria-label="${labels}">${switcher}</nav>
+  <details class="langs"><summary aria-label="${labels}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg><span data-lang-current></span><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></summary><nav class="menu" aria-label="${labels}">${switcher}</nav></details>
 </header>
 <main>
 ${ART}
