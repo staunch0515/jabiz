@@ -15,6 +15,7 @@
 | T5 | 首页卡片上的哔哩哔哩等网站的视频不自动播放 | 答题者、商家 | 设计如此（Q99） |
 | T6 | 在中国扫不出兑换奖品的轮换码 | 答题者、店员 | 已修复（2026-11-04） |
 | T7 | 导入 Quiz 文件失败，只说"出错了，请重试" | 商家 | 已修复（2026-11-04） |
+| T8 | 部署失败：`application not healthy after 3m0s`，回滚也失败 | 内部（运维） | 服务器磁盘满，待清理 |
 
 ---
 
@@ -142,6 +143,15 @@
   A: The import page lists, for each problem, the step, the file or item, and the reason (for example broken image data or a file too large). Fix the file as it says and import it again. To have another AI write the file, ask support for our prompt templates. If it is still unclear, send the file and a screenshot to support.
 
 ---
+
+## T8 部署失败：健康检查一直 503，回滚也失败（内部）
+
+- **状态**：2026-11-05 staging 出现；原因是服务器磁盘满，不是代码问题。
+- **现象**：`deploy-app.sh` 报 `application not healthy after 3m0s`，自动回滚到上一个版本也一样失败；容器日志反复出现
+  `DiskSpaceHealthIndicator … Free disk space at path '/app/.' below threshold. Available: 0 bytes`，`/actuator/health` 一直 503。应用本身已经启动（定时任务照常 `SUCCEEDED`）。
+- **原因**：Spring 的磁盘检查在可用空间低于 10 MB 时把健康状态判为不健康。容器的文件系统就是服务器的磁盘，每次部署都拉一个新镜像，旧镜像不会自动删除，磁盘会慢慢被占满。磁盘满时上传文件、数据库写入也会失败，所以这个检查应当保留。
+- **处理**：在服务器上查看占用（`df -h /`、`docker system df`），删除不用的旧镜像（只删没有容器在用的），再重新部署（Actions → QuizBuks deploy → Run workflow，分支 `1.3/quizbuks`，`image-tag` 留空）。同一台服务器上的数据库也在这块盘上的话，先确认它还能写入。
+- **预防（待决定）**：部署成功后自动只保留本应用最近几个镜像；监控中加磁盘告警（`operations.md` §5 已有数据库磁盘 > 80 % 的告警，应用服务器还没有）。
 
 ## 已归档
 
