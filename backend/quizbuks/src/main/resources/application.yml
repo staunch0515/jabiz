@@ -54,6 +54,8 @@ jabiz:
       "[QB_BANK_ACCOUNT_SAVE]": { per-user: 10, period: 1h }
       # Q29: saving the mail server opens an SMTP connection to the host typed (a test mail): not a probe to loop.
       "[QB_MAIL_SERVER_SET]": { per-user: 10, period: 1h }
+      # Q99b: each short video link asks b23.tv once; far above a person pasting links, not a way to use us as a proxy.
+      "[QB_VIDEO_LINK_RESOLVE]": { per-user: 60, period: 1h }
       # Q33: loading codes seals up to a thousand of them; not a loop.
       "[QB_DIGITAL_CODES_LOAD]": { per-user: 30, period: 1h }
       # Q47: the audience count is rounded and floored, but narrowing conditions one at a time over many calls is how a

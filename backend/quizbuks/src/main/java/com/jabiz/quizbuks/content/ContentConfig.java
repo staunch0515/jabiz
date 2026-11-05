@@ -295,6 +295,18 @@ public class ContentConfig {
         return QuizTransferProcesses.importQuiz();
     }
 
+    /** Q99b: b23.tv, asked where a short link to a Bilibili video leads. */
+    @Bean
+    com.jabiz.external.ExternalService videoShortLinksService() {
+        return com.jabiz.quizbuks.content.video.ShortVideoLinks.DEFINITION;
+    }
+
+    @Bean
+    ProcessDefinition<com.jabiz.quizbuks.content.video.VideoLinkProcesses.ResolveInput,
+        com.jabiz.quizbuks.content.video.VideoLinkProcesses.ResolveOutput, ProcessContext> qbVideoLinkResolve() {
+        return com.jabiz.quizbuks.content.video.VideoLinkProcesses.resolve();
+    }
+
     @Bean
     ProcessDefinition<QuestionProcesses.QuestionInput, EditOutput, ProcessContext> qbQuestionSave() {
         return QuestionProcesses.save();

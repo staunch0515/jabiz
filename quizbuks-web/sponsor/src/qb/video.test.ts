@@ -71,10 +71,16 @@ describe('videoPlayer', () => {
     expect(trackable(videoPlayer(url))).toBe(expected)
   })
 
-  it('starts by itself only a player that says where it is (Q99)', () => {
+  it('starts every site\'s player muted the same way, where the site takes the parameters (Q99b)', () => {
     expect(autoplaying('https://player.vimeo.com/video/76979871')).toBe('https://player.vimeo.com/video/76979871?autoplay=1&muted=1&playsinline=1')
-    const bilibili = 'https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&autoplay=0'
-    expect(autoplaying(bilibili)).toBe(bilibili)
+    expect(autoplaying('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'))
+      .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&playsinline=1')
+    expect(autoplaying('https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&autoplay=0'))
+      .toBe('https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&autoplay=1&muted=1')
+    expect(autoplaying('https://www.dailymotion.com/embed/video/x8abcd1')).toBe('https://www.dailymotion.com/embed/video/x8abcd1?autoplay=1&mute=1')
+    expect(autoplaying('https://embed.nicovideo.jp/watch/sm9')).toBe('https://embed.nicovideo.jp/watch/sm9?autoplay=1&mute=1')
+    // Youku's and Tencent Video's players take none: they show their own play button.
+    expect(autoplaying('https://player.youku.com/embed/XNTk4MjQzMzQ0OA==')).toBe('https://player.youku.com/embed/XNTk4MjQzMzQ0OA==')
     expect(trackable(null)).toBe(false)
   })
 

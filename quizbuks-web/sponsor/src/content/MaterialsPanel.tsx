@@ -28,7 +28,7 @@ import { SPONSOR } from '../messages'
 import type { ContentLanguage } from '../qb/api'
 import { QB } from '../qb/messages'
 import { ShownAt } from './ShownAt'
-import { fieldProblem } from '../qb/problems'
+import { fieldProblem, problemText } from '../qb/problems'
 import {
   contentFieldOf,
   deleteMaterial,
@@ -56,6 +56,7 @@ import { ContentImage } from './ContentImage'
 import { formatDuration, parseDuration } from './duration'
 import { VideoDurationProbe } from './VideoDurationProbe'
 import { trackable, videoPlayer } from '../qb/video'
+import { isShortVideoLink, resolveVideoLink } from './api'
 import { DOCUMENT_FIELD, LIMITS } from './limits'
 import { useMoveFocus } from './moving'
 
@@ -119,6 +120,16 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
   // Q99: a video the App plays whose player cannot say how much was watched.
   const shownPlayer = videoPlayer(url)
   const untrackable = shownPlayer !== null && !trackable(shownPlayer)
+  // Q99b: a short link (b23.tv) is turned into the video's full address as soon as it is typed or pasted.
+  const resolving = useMutation({
+    mutationFn: resolveVideoLink,
+    onSuccess: (full, short) => setUrl((current) => (current.trim() === short.trim() ? full : current)),
+  })
+  const changeUrl = (value: string) => {
+    setUrl(value)
+    resolving.reset()
+    if (kind === 'VIDEO_LINK' && isShortVideoLink(value)) resolving.mutate(value)
+  }
   // Q75: the video's duration as typed (m:ss or seconds); read from the player's preview until the sponsor types.
   const [duration, setDuration] = useState(material?.durationSec != null ? formatDuration(material.durationSec) : '')
   const [durationTyped, setDurationTyped] = useState(material?.durationSec != null)
@@ -250,10 +261,20 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
               <Input id={`${id}-url`} type="url" inputMode="url" value={url} maxLength={LIMITS.url} autoComplete="off"
                 aria-invalid={problem('url') ? true : undefined}
                 aria-describedby={[`${id}-url-hint`, problem('url') ? `${id}-url-error` : ''].join(' ').trim()}
-                data-testid="material-url" onChange={(event) => setUrl(event.target.value)} />
+                data-testid="material-url" onChange={(event) => changeUrl(event.target.value)} />
               <p id={`${id}-url-hint`} className="text-muted-foreground text-sm">
                 {kind === 'VIDEO_LINK' ? t('materials.videoUrlHint') : t('materials.urlHint')}
               </p>
+              {/* Q99b: whether the App plays the address, said as it is typed. */}
+              {kind === 'VIDEO_LINK' && url.trim() !== '' && (
+                <p role="status" data-testid="material-url-status" className={resolving.isError
+                  || (!shownPlayer && !resolving.isPending) ? 'text-destructive text-sm' : 'text-muted-foreground text-sm'}>
+                  {resolving.isPending ? t('materials.shortResolving')
+                    : resolving.isError ? (problemText(resolving.error) || t('materials.shortFailed'))
+                      : shownPlayer ? (resolving.isSuccess ? t('materials.shortResolved') : t('materials.videoPlays'))
+                        : t('materials.videoNotPlayable')}
+                </p>
+              )}
               {problem('url') && <p id={`${id}-url-error`} className="text-destructive text-sm">{problem('url')}</p>}
               {kind === 'VIDEO_LINK' && !variant && (
                 <div className="flex flex-col gap-1">

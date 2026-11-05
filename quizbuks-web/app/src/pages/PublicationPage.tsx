@@ -323,8 +323,8 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
           ? <VideoSlot id={`page:${p.publicationId}`} player={player} title={title} mode="page"
             publicationId={p.publicationId}
             className="bg-muted relative aspect-video w-full sm:border" />
-          // Q99: another site's player is the page's own and waits for the viewer's tap.
-          : <VideoPlayer player={player} title={title} className="bg-muted aspect-video w-full overflow-hidden sm:border" />
+          // Q99b: another site's player is the page's own (the app cannot hand it the sound) and starts the same way.
+          : <VideoPlayer player={player} title={title} autoplay className="bg-muted aspect-video w-full overflow-hidden sm:border" />
         )} />
       <ProductCards products={quizProducts(products.data)}
         title={tView('products.title')} testId="publication-products" onOpen={countProductClick} />

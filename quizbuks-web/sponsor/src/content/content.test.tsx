@@ -396,7 +396,7 @@ describe('the quiz editor', () => {
     await userEvent.click(await screen.findByTestId('material-add'))
     const dialog = await screen.findByTestId('material-dialog')
     await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
-    expect(within(dialog).getByTestId('material-url')).toHaveAccessibleDescription(/Bilibili, Niconico, Dailymotion/)
+    expect(within(dialog).getByTestId('material-url')).toHaveAccessibleDescription(/Bilibili \(b23\.tv short links too\), Niconico, Dailymotion/)
     await userEvent.type(within(dialog).getByTestId('material-url'), 'https://www.bilibili.com/video/BV1GJ411x7h7')
     const watch = within(dialog).getByRole('checkbox', { name: 'Watching this video is enough to answer' })
     expect(watch).toBeDisabled()
@@ -406,6 +406,37 @@ describe('the quiz editor', () => {
     await userEvent.type(within(dialog).getByTestId('material-url'), 'https://vimeo.com/76979871')
     expect(watch).toBeEnabled()
     expect(within(dialog).queryByTestId('material-watch-unavailable')).toBeNull()
+    await expectAccessible()
+  })
+
+  it('turns a b23.tv short link into the video\'s address, and says when an address does not play (Q99b)', async () => {
+    const { processCalls } = server({ processes: { QB_VIDEO_LINK_RESOLVE: [
+      { status: 200, body: { output: { url: 'https://www.bilibili.com/video/BV1GJ411x7h7' } } },
+      { status: 422, body: { detail: 'Refused', violations: [{ field: 'url', ruleCode: 'QB_VIDEO_LINK_NOT_RESOLVED',
+        message: 'The short link could not be turned into the address of one Bilibili video.' }] } }] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-materials'))
+    await userEvent.click(await screen.findByTestId('material-add'))
+    const dialog = await screen.findByTestId('material-dialog')
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
+    const url = within(dialog).getByTestId('material-url')
+    // An address the App does not play is said to be only a link.
+    await userEvent.type(url, 'https://video.example/1')
+    expect(within(dialog).getByTestId('material-url-status')).toHaveTextContent('cannot play this address')
+    // A short link is asked for once pasted, and replaced by the video's address.
+    await userEvent.clear(url)
+    await userEvent.click(url)
+    await userEvent.paste('https://b23.tv/bMyOKXv')
+    await waitFor(() => expect(url).toHaveValue('https://www.bilibili.com/video/BV1GJ411x7h7'))
+    expect(processCalls('QB_VIDEO_LINK_RESOLVE')).toEqual([{ url: 'https://b23.tv/bMyOKXv' }])
+    expect(within(dialog).getByTestId('material-url-status')).toHaveTextContent('turned into the video\'s full address')
+    // One that leads nowhere says why.
+    await userEvent.clear(url)
+    await userEvent.click(url)
+    await userEvent.paste('https://b23.tv/gone123')
+    await waitFor(() => expect(within(dialog).getByTestId('material-url-status'))
+      .toHaveTextContent('could not be turned into the address of one Bilibili video'))
+    expect(url).toHaveValue('https://b23.tv/gone123')
     await expectAccessible()
   })
 

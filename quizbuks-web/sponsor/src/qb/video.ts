@@ -2,8 +2,9 @@
  * The video players the App shows (Q19, Q99; docs/quizbuks/plans/Q19-embedded-video.md, Q99-more-video-sites.md), as
  * the backend's `content.VideoEmbeds` reads links: one video of YouTube (its no-cookie player), Vimeo, Bilibili,
  * Niconico, Dailymotion, Youku or Tencent Video as its site's player. The App's content security policy frames these
- * players only (`frame-src`); any other link stays a link. Only YouTube's and Vimeo's players say where they are
- * (`trackable`): only they start muted by themselves, take the sound from a tap and can be the video to watch (Q75).
+ * players only (`frame-src`); any other link stays a link. Every site's video plays the same way, on the home and the
+ * start page (Q99b); only YouTube's and Vimeo's players say where they are (`trackable`), so only they can be the video
+ * to watch before answering (Q75) and take the sound from the app's tap (the others' sound is their own button).
  */
 export const YOUTUBE_PLAYER = 'https://www.youtube-nocookie.com/embed/'
 export const VIMEO_PLAYER = 'https://player.vimeo.com/video/'
@@ -108,14 +109,16 @@ export function videoPlayer(url: string | null | undefined): string | null {
 
 /**
  * The player started muted at once (Q63: the home's card in the middle of the screen, the start page): browsers let
- * a page start only a silent video by itself; the viewer turns the sound on in the player. Only YouTube's and Vimeo's
- * (`trackable`): the others are given as they are and wait for the viewer's tap (Q99).
+ * a page start only a silent video by itself; the viewer turns the sound on in the player. Every site the same way
+ * (Q99b), each with its own parameters; a site without them (Youku, Tencent Video) shows its play button instead.
  */
 export function autoplaying(player: string): string {
-  if (!trackable(player)) return player
-  const params = player.startsWith(VIMEO_PLAYER) ? 'autoplay=1&muted=1&playsinline=1'
-    : 'autoplay=1&mute=1&playsinline=1'
-  return `${player}?${params}`
+  if (player.startsWith(VIMEO_PLAYER)) return `${player}?autoplay=1&muted=1&playsinline=1`
+  if (player.startsWith(YOUTUBE_PLAYER)) return `${player}?autoplay=1&mute=1&playsinline=1`
+  if (player.startsWith(BILIBILI_PLAYER)) return `${player.replace(BILIBILI_SUFFIX, '')}&autoplay=1&muted=1`
+  if (player.startsWith(DAILYMOTION_PLAYER)) return `${player}?autoplay=1&mute=1`
+  if (player.startsWith(NICONICO_PLAYER)) return `${player}?autoplay=1&mute=1`
+  return player
 }
 
 /** Whether the viewer asked for less motion: then no video starts by itself (Q63). */
