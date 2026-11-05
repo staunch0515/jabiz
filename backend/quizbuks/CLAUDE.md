@@ -160,6 +160,7 @@
   **候选从不自动发送**：研究只写草稿（`DRAFTED`），人经 `QB_PROSPECT_APPROVE`（改过的邮件与问卷照 Claude 的同样核对：纯文本、无链接，5 题 4 选 1）批准，逐项任务 `qb.prospect-send` 在工作时间内、每日上限之内经 `SendMail.via("prospect:<所有者>")` 从所有者验证过的服务器发出（`QB_PROSPECT_MAIL_SERVER_SET`，与商户邮件服务器同表），绝不经平台的服务器；邮件带发件人名称、住所与联系方式（《特定電子メール法》）与平台的地址退订链接。
   **不发名单**（地址或域名，全平台生效）在找、研究与发送前都查；退订、拒收声明与"屏蔽"的丢弃都记进去。锁序 `qb.prospect-owner:<所有者>` → `qb.prospect:<候选>` →（只有用量）`qb.prospect-usage:<所有者>`；体验问卷不是发布，只经公开模板 `qb.public.prospect-trial`（只给已发出的，按随机键 `trialKey`，不叫 token）在 `/sponsor/try/<键>` 显示。
   Q48d：注册归属只经 `QB_PROSPECT_CLAIM`（商家后台记住 `?src=` 的键、申请之后调用一次；只为没有归属、邮件发出后才通过审核的商户写 `QbSponsorOperator`），跟进只经 `qb.prospect-follow-up`（7 天后一次，与首封共用检查与每日上限），自动发送只按所有者的 `autoApproveScore`；运营商的月度上限另受受控参数 `qb.prospect.operator-monthly-cap-usd` 约束，结算按 `qb.prospect.usd-jpy` 扣除当月费用（被扣回的计入 4110，扣不完的结转）。
+- **需求中的具体数字不写死**（需求方 2026-11-05）：讨论中定下的金额、比例、天数、倍数、汇率、名额等一律是业务参数（钱与免审的列入 `QbParams.CONTROLLED`，四眼修改），代码只有规则；缺省值写在 `QbParams`，由 `QB_SETUP` 提出。
 - **业务参数的存在**由启动检查 `setup.SetupParamsCheck` 保证（Q26）：新增参数只加进 `QbParams.ALL`（受控的还加进 `CONTROLLED`），部署后执行 `QB_SETUP`；缺少即启动警告，不在流程里自己给缺省值。
 - **投资人指标**（`queries/qb/admin/investor-metrics.sql`、`investor-sponsors.sql`，`docs/quizbuks/plans/Q27-investor-metrics.md`）：只是两个带 `report: period` 的财务模板（UTC 月，各数字按发生时间归月，读时态实体的当前版本）与后台扩展的页面 `InvestorMetricsPage`（导出 / 签发 / 存档复用 `ReportsPage` 的 `ReportActions` / `Issued`）；不存数字、不建表、不建任务。新加一列先改模板与 `InvestorMetricsIT`，再改页面与三语消息。
 - **奖励的支付方式**（`publishing.RewardMethod`、`reward`，`docs/quizbuks/plans/Q22-reward-methods.md`）：`PLATFORM`（平台经账本付）、`SPONSOR_CASH`（商家付现金）、
