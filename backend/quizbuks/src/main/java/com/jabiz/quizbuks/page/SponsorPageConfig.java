@@ -124,6 +124,18 @@ public class SponsorPageConfig {
     }
 
     @Bean
+    ProcessDefinition<ProfileTransferProcesses.CheckInput, ProfileTransferProcesses.CheckOutput, ProcessContext>
+        qbProfileImportCheck() {
+        return ProfileTransferProcesses.check();
+    }
+
+    @Bean
+    ProcessDefinition<ProfileTransferProcesses.ImportInput, ProfileTransferProcesses.ImportOutput, ProcessContext>
+        qbProfileImport() {
+        return ProfileTransferProcesses.importPackage();
+    }
+
+    @Bean
     ProcessDefinition<SponsorPageProcesses.SaveInput, PageOutput, ProcessContext> qbSponsorPageSave() {
         return SponsorPageProcesses.save();
     }

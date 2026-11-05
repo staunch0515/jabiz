@@ -23,6 +23,7 @@ import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { neutralName } from '../content/api'
 import { parseStoredTranslations, TextTranslationsFields, type TextsByLanguage } from '../content/TextTranslationsFields'
+import { takeApplyDraft } from './transfer'
 import { SPONSOR } from '../messages'
 import { ShownAt } from '../content/ShownAt'
 import { applyAsSponsor, CONTENT_LANGUAGES, saveSponsorProfile, type ContentLanguage, type Sponsor,
@@ -130,14 +131,18 @@ function OnboardingForm({ sponsor }: { sponsor: Sponsor | null }) {
   const queryClient = useQueryClient()
   const id = useId()
   const approved = sponsor?.reviewStatus === 'APPROVED'
-  const [displayName, setDisplayName] = useState(() => sponsor?.contactName || signedUpAs || '')
-  const [company, setCompany] = useState(() => sponsor?.company ?? '')
-  const [intro, setIntro] = useState(() => sponsor?.intro ?? '')
+  // Q100 (D-Q100-3): the basics of an imported profile package fill the application, which the sponsor sends.
+  const [draft] = useState(() => (sponsor?.reviewStatus === 'APPROVED' || sponsor?.reviewStatus === 'PENDING' ? null
+    : takeApplyDraft()))
+  const [displayName, setDisplayName] = useState(() => draft?.contactName || sponsor?.contactName || signedUpAs || '')
+  const [company, setCompany] = useState(() => draft?.company || sponsor?.company || '')
+  const [intro, setIntro] = useState(() => draft?.intro || sponsor?.intro || '')
   // Q73c: the introduction in other languages (optional), those chosen, and those confirmed after a change of it.
   const storedIntro = parseStoredTranslations(sponsor?.introTranslations)
   const [introLanguages, setIntroLanguages] = useState<ContentLanguage[]>(
-    () => Object.keys(storedIntro.texts) as ContentLanguage[])
-  const [introTranslations, setIntroTranslations] = useState<TextsByLanguage>(() => storedIntro.texts)
+    () => Object.keys(draft?.introTranslations ?? storedIntro.texts) as ContentLanguage[])
+  const [introTranslations, setIntroTranslations] = useState<TextsByLanguage>(
+    () => draft?.introTranslations ?? storedIntro.texts)
   const [introConfirmed, setIntroConfirmed] = useState<string[]>([])
   const translatedIntro = introLanguages.length > 0 || Object.keys(storedIntro.texts).length > 0
   const [avatar, setAvatar] = useState<string | null>(() => sponsor?.avatar ?? null)

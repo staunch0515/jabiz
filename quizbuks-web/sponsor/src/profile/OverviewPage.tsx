@@ -25,6 +25,7 @@ import { useMySponsor } from './api'
 import { checklist, progress, type ChecklistKey } from './checklist'
 import { profilePath, type ProfileSection } from './paths'
 import { PreviewCard } from './PreviewCard'
+import { ProfileTransferCard } from './ProfileTransfer'
 
 const SECTION_OF: Record<ChecklistKey, ProfileSection> = {
   basics: 'basics', page: 'page', products: 'products', staff: 'staff', mailServer: 'mail-server',
@@ -131,6 +132,8 @@ export function OverviewPage() {
             </ol>
           </CardContent>
         </Card>
+
+        <ProfileTransferCard />
 
         <Card data-testid="profile-methods">
           <CardHeader>

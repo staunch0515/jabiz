@@ -62,6 +62,8 @@ const IDENTIFIERS = [
   /'QuizBuksApp\/ios'/g,
   /'quizbuks\.quiz'/g,
   /\.quizbuks\.json/g,
+  /'quizbuks-profile'/g,
+  /\.quizbuks-profile\.json/g,
   /fromQuizbuks/g,
 ]
 

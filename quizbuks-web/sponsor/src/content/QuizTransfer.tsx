@@ -109,7 +109,7 @@ function problemsOf(error: unknown, t: TFunction): string[] {
 }
 
 /** Why a call failed: the server's own words where it gave them, else what its status or the browser's error means. */
-function reasonsOf(error: unknown, t: TFunction): string[] {
+export function reasonsOf(error: unknown, t: TFunction): string[] {
   if (error instanceof CorruptFileData) return [t('quizzes.transfer.reason.corrupt', { key: error.key })]
   if (error instanceof ApiError) {
     if (error.violations.length > 0) {

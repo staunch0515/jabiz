@@ -49,3 +49,18 @@
 - 单元：资料包的检查（每种问题一例、整体替换的差异、三种语言的译文与必填）、导出与再导入得到相同的内容（邮件服务器除密码外相同）。
 - IT：导入写草稿、不改变审核状态；入驻前只写基本信息；商品整体替换；别人的文件、被占用的地址名、超过上限都被拒；邮件服务器导出不含密码、导入沿用或要求密码并发测试邮件；导入的译文不算过时。
 - 前端：导出、导入的确认页（新增 / 修改 / 删除、问题列表）、axe；e2e：导出 → 导入同一个文件。
+
+## 5. 实施记录（Q100a，2026-11-05）
+
+- 后端（包 `page`）：`ProfilePackage`（纯 Java，读格式、一次报出全部问题与路径：`QB_PROFILE_PACKAGE_FORMAT` / `_FIELD` / `_FILE`；文字可写成按语言的对象或基准语言的字符串；图片是 `files` 的键、`{"url": "https://…"}`、`null`（去掉）或不写（保留现有的，`Image.KEEP`）；资料包里写了邮件服务器的密码即拒绝）。
+  `ProfileTransferProcesses`：`QB_PROFILE_IMPORT_CHECK`（只读，给出计划：各部分的动作、商品的新增 / 修改 / 删除、要上传的图片、链接图片）与 `QB_PROFILE_IMPORT`（同一计划，以子流程 `QB_SPONSOR_PAGE_SAVE` → `QB_SPONSOR_PROFILE_SAVE` → `QB_PRODUCT_DELETE`（逐个）→ `QB_PRODUCT_SAVE`（逐个，顺序即包里的顺序）→ `QB_MAIL_SERVER_SET` 在一个事务中写入；主页最先，因为它先取地址名的锁再取账户锁，与手填相同）。
+  译文按包里的基准文字算哈希（`confirmed`），导入后不算过时。上传的图片按位置（`basics.avatar`、`page.cover`、`products[i].image`）给出；缺少即 `QB_PROFILE_IMPORT_FILE_MISSING`；需要密码而没给即 `QB_PROFILE_IMPORT_MAIL_PASSWORD`；同一商品出现两次即 `QB_PROFILE_IMPORT_PRODUCT_TWICE`。
+- 商家后台：商户中心"概况"页的"商户资料包"卡片（`profile/ProfileTransfer.tsx`、`profile/transfer.ts`、`profile/ids.ts`）：导出（图片内嵌，邮件服务器不含密码，文件名 `<地址名>-<日期>.quizbuks-profile.json`）与导入（服务器的计划、需要时输入邮件服务器的密码、上传图片、导入；拒绝时逐条列出服务器的原因）。入驻还没提交或被驳回时，导入后转到"基本信息"，申请表已填好包里的内容（本标签页的 `sessionStorage`，取一次即删），由商户同意条款后自己提交。
+- 未做（之后的步）：链接图片的下载（Q100b，平台）、招商站的生成器（Q100c）、从官网生成（Q100d）、给其他 AI 的提示词模板（随 Q100c 一起写，格式以本节为准）。
+
+### 测试
+
+- `ProfilePackageTest`（6）：完整的包、显式的 `null`、每种问题与路径、不是资料包或别的版本、商品超过上限、文件只能是图片。
+- `ProfileImportIT`（3）：已通过的商户导入全部（计划、三张图片的策略、没有密码什么也不写、译文不过时、再导入时商品整体替换且保留编号与没写的图片、同一邮件服务器沿用密码）；导入从不改变审核（还没申请：只填申请表、什么也不写；主页审核中：不动主页与审核请求，商品照常）；坏的包与别人的文件什么也不写、同一商品两次。
+- 商家后台 Vitest（`profile/transfer.test.tsx`，5）：导出（每张图片一次、各语言的文字、没有密码、文件名）、申请表的暂存、导入对话框（计划、链接、axe、要密码才能确认、上传后带图片编号与密码导入）、拒绝的原因、不是 JSON 的文件。e2e 未在本机运行。
+
