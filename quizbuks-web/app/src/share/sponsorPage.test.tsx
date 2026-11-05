@@ -78,6 +78,11 @@ describe("a sponsor's page (Q60a)", () => {
     window.history.replaceState(null, '', '/s/acme-bakery')
     render(<App />)
     const choice = await screen.findByTestId('sponsor-page-languages')
+    // The cover comes first and meets the top bar; the language choice is under it.
+    const frame = screen.getByTestId('sponsor-page-cover-frame')
+    expect(screen.getByTestId('sponsor-page').querySelector('[data-testid]')).toBe(frame)
+    expect(frame).toHaveClass('-mt-4')
+    expect(frame.compareDocumentPosition(choice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(choice).getByTestId('sponsor-page-language-en')).toHaveAttribute('aria-pressed', 'true')
     await userEvent.click(within(choice).getByTestId('sponsor-page-language-zh'))
     await waitFor(() => expect(screen.getByTestId('sponsor-page-headline')).toHaveTextContent('新鲜面包'))

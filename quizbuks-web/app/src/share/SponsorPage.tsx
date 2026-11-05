@@ -134,25 +134,27 @@ export function SponsorPage({ handle }: { handle: string }) {
   const shownIn = p.displayLanguage ?? p.language
   return (
     <article className="flex flex-col gap-6" aria-labelledby="sponsor-page-title" data-testid="sponsor-page">
-      {offered.length > 1 && (
-        <div className="flex flex-wrap items-center justify-end gap-1" role="group"
-          aria-label={t('sponsorPage.language')} data-testid="sponsor-page-languages">
-          {offered.map((language) => (
-            <Button key={language} type="button" size="sm" lang={language}
-              variant={language === shownIn ? 'secondary' : 'ghost'} aria-pressed={language === shownIn}
-              data-testid={`sponsor-page-language-${language}`} onClick={() => setChosen(language)}>
-              {tQb(`languages.${language}`)}
-            </Button>
-          ))}
-        </div>
-      )}
       <header className="flex flex-col gap-3">
-        <div className="relative -mx-4 aspect-video overflow-hidden sm:mx-0 sm:border">
+        {/* The cover meets the top bar: the page's top padding (main's py-4) is taken back. */}
+        <div className="relative -mx-4 -mt-4 aspect-video overflow-hidden sm:mx-0 sm:border sm:border-t-0"
+          data-testid="sponsor-page-cover-frame">
           {p.cover
             ? <FileImage fileId={p.cover} variant="w640" alt="" className="absolute inset-0 size-full object-cover"
               data-testid="sponsor-page-cover" />
             : <CoverPlaceholder seed={p.handle} className="absolute inset-0 size-full" />}
         </div>
+        {offered.length > 1 && (
+          <div className="flex flex-wrap items-center justify-end gap-1" role="group"
+            aria-label={t('sponsorPage.language')} data-testid="sponsor-page-languages">
+            {offered.map((language) => (
+              <Button key={language} type="button" size="sm" lang={language}
+                variant={language === shownIn ? 'secondary' : 'ghost'} aria-pressed={language === shownIn}
+                data-testid={`sponsor-page-language-${language}`} onClick={() => setChosen(language)}>
+                {tQb(`languages.${language}`)}
+              </Button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-3">
           {p.logo && <FileImage fileId={p.logo} variant="w256" alt="" className="size-14 shrink-0 rounded-full border object-cover"
             data-testid="sponsor-page-logo" />}
