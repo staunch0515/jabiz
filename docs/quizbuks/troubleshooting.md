@@ -186,6 +186,13 @@
   - English · Q: Why can't I put my website's address as the link name?
     A: The link name is your page's name on this service: 3 to 30 lowercase letters, digits or hyphens, for example `aini-helmet` (your page is then `…/taker/s/aini-helmet`). Put your own website's address in the "Website" field on the same page; your page links to it.
 
+## T11 手机上哔哩哔哩的视频是空白（首页与开始页）
+
+- **状态**：2026-11-05 staging 出现（iPhone）；同日修复：App 与商家后台的内容安全策略允许哔哩哔哩自己的主机 `www.bilibili.com`、`m.bilibili.com`（Q99 §5）。
+- **现象**：电脑上的商家后台预览能播放，手机 App 的首页卡片与开始答题页的哔哩哔哩视频只有一块空白。
+- **原因**：哔哩哔哩的嵌入播放器在手机上会跳到 `www.bilibili.com/blackboard/…` 的移动播放器，而页面只允许 `player.bilibili.com` 嵌入，跳转被浏览器拦下。
+- **使用者的解决办法**：无需操作；更新后重新打开 App 即可。若仍空白，在手机上直接打开视频页面的地址确认视频本身可以公开播放。
+
 ## 已归档
 
 （暂无）
