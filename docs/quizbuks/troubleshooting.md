@@ -12,7 +12,7 @@
 | T2 | 在微信或 QQ 里打开页面，通行密钥（指纹、刷脸登录）用不了 | 全部 | 设计如此 |
 | T3 | 在测试环境添加的通行密钥，到正式站点不能用 | 内部 | 设计如此 |
 | T4 | 视频资料的"看完这个视频即可答题"勾不上 | 商家 | 设计如此（Q99） |
-| T5 | 首页卡片上的哔哩哔哩等网站的视频不自动播放 | 答题者、商家 | 设计如此（Q99） |
+| T5 | 首页卡片上的优酷、腾讯视频不自动播放；其他网站的视频没有声音 | 答题者、商家 | 设计如此（Q99b） |
 | T6 | 在中国扫不出兑换奖品的轮换码 | 答题者、店员 | 已修复（2026-11-04） |
 | T7 | 导入 Quiz 文件失败，只说"出错了，请重试" | 商家 | 已修复（2026-11-04） |
 | T8 | 部署失败：`application not healthy after 3m0s`，回滚也失败 | 内部（运维） | 服务器磁盘满，待清理 |
@@ -91,22 +91,23 @@
 
 ---
 
-## T5 首页卡片上的其他网站的视频不自动播放
+## T5 首页卡片上的优酷、腾讯视频不自动播放；其他网站的视频没有声音
 
 - **对象**：答题者、商家。FAQ：`ALL` / `OTHER`
-- **状态**：设计如此（Q99，D-Q99-4）
-- **现象**：YouTube、Vimeo 的视频在首页卡片中间时会静音自动播放；哔哩哔哩等网站的视频只显示封面和播放标记。
-- **原因**：自动播放、点开后接着带声音播放，都要靠播放器的接口，只有 YouTube 和 Vimeo 提供。
-- **使用者的解决办法**：点开卡片，在详情页按视频自己的播放按钮。
+- **状态**：设计如此（Q99b，D-Q99b-1，2026-11-05 起；Q99 时其他网站的视频在首页都不播放，已改）
+- **现象**：首页中间的卡片与开始页上，各网站的视频都静音自动播放；只有优酷、腾讯视频的播放器不接受自动播放的设置，显示它自己的播放按钮。
+  YouTube、Vimeo 点一下卡片就开声音；哔哩哔哩、niconico、Dailymotion 等要按播放器自己的声音按钮。
+- **原因**：浏览器只允许静音的视频自动播放；点一下开声音要靠播放器的接口，只有 YouTube 和 Vimeo 提供。优酷、腾讯视频的嵌入播放器不支持静音自动播放的参数。
+- **使用者的解决办法**：优酷、腾讯视频在卡片上点一下播放按钮即在首页播放；没有声音时按播放器上的声音按钮。
 
 **帮助页文案**
 
-- 中文 · 问：为什么有的视频在首页不会自动播放？
-  答：哔哩哔哩、niconico、Dailymotion、优酷、腾讯视频的视频不会自动播放。请点开 Quiz，在详情页按视频的播放按钮观看。
-- 日本語 · 問：ホームで自動再生されない動画があるのはなぜですか。
-  答：ニコニコ動画、bilibili、Dailymotion、Youku、Tencent Video の動画は自動再生されません。クイズを開き、詳細ページで動画の再生ボタンを押してください。
-- English · Q: Why do some videos not play by themselves on the home page?
-  A: Videos from Bilibili, Niconico, Dailymotion, Youku and Tencent Video do not start by themselves. Open the quiz and press the video's play button on its page.
+- 中文 · 问：为什么有的视频没有声音，或者不自动播放？
+  答：视频都是静音开始播放的，请按播放器上的声音按钮打开声音（YouTube、Vimeo 的视频点一下即有声音）。优酷、腾讯视频的视频不会自动播放，请点一下视频上的播放按钮。
+- 日本語 · 問：音が出ない動画や、自動再生されない動画があるのはなぜですか。
+  答：動画はミュートで再生が始まります。プレーヤーの音量ボタンで音を出してください（YouTube と Vimeo の動画はタップすると音が出ます）。Youku と Tencent Video の動画は自動再生されないので、動画の再生ボタンを押してください。
+- English · Q: Why does a video play without sound, or not start by itself?
+  A: Videos start muted: turn the sound on with the player's own button (YouTube and Vimeo videos get their sound with a tap). Videos from Youku and Tencent Video do not start by themselves: press the play button on the video.
 
 ---
 
