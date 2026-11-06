@@ -204,6 +204,55 @@ Cloudflare 的浏览器检查（Browser Integrity Check）与 Bot Fight Mode 把
 - 服务器上的脚本（如发布提案）不必经 Cloudflare：直接用容器的地址
   `http://$(docker inspect <APP_NAME>-app -f '{{(index .NetworkSettings.Networks "proxy").IPAddress}}'):8080`。
 
+### 3b. 文件的对象存储：Cloudflare R2 的桶与密钥（2026-11-06 决定，平台功能上线后启用）
+
+上传的文件（头像、题目图片、资料、封面）将存进对象存储，几台服务器共用，换服务器、升级系统都不用搬文件。
+平台的 S3 兼容存储（`FileStore` 的新实现）**还在计划中**：在它合并之前，下面的桶可以先建好，但应用照旧用本机目录（`JABIZ_FILES_LOCAL_ROOT`），
+不要在 `.env` 中写下面的 `JABIZ_FILES_S3_*`。变量名以平台阶段合并时的说明为准，届时同步本节与 `docs/quizbuks/operations.md` 的密钥清单。
+
+**每个环境一个桶，各用各的密钥**（staging 的密钥泄露也碰不到正式数据）：
+
+| 环境 | 桶名 | 密钥放在 |
+|---|---|---|
+| staging | `quizbuks-staging` | staging 服务器的 `/opt/apps/quizbuks-staging/.env` |
+| production | `quizbuks-production` | production 服务器的 `/opt/apps/quizbuks/.env` |
+
+1. **建桶**（Cloudflare 控制台 → R2 Object Storage → Create bucket，两个环境各一次）：
+   - Bucket name：上表的桶名（只能小写字母、数字与连字符）。
+   - Location：选 **Provide a location hint → Asia-Pacific (APAC)**（读写文件的是日本的服务器；海外用户的速度靠 CDN，与桶的位置无关）。
+   - Jurisdiction：保持缺省（不选 EU）；Default storage class：**Standard**。
+   - 建好后在桶的 Settings 中确认：**Public access 关闭**（不开 `r2.dev` 的公开地址、不绑自定义域名）；CORS 不设置（浏览器不直接访问桶，文件一律经应用发出，权限检查与读取记录照旧）。
+   - 不设"对象生命周期"删除规则：文件的删除由平台按引用与清扫决定（`FILE_SWEEP`、`FILE_DELETE`），自动过期会删掉仍在使用的文件。
+2. **建密钥**（R2 → Manage R2 API Tokens → Create API token，两个环境各一个）：
+   - Token name：`quizbuks-staging-app` / `quizbuks-production-app`。
+   - Permissions：**Object Read & Write**（不要选 Admin）。
+   - Specify bucket(s)：**Apply to specific buckets only**，只选对应的那一个桶。
+   - TTL：Forever（轮换时新建一个、换进 `.env` 并重启后，再删掉旧的）。
+   - 创建后页面**只显示一次** Access Key ID 与 Secret Access Key：立即存进密码管理器；同一页上的 S3 地址
+     `https://<账户 ID>.r2.cloudflarestorage.com` 也记下。不要发到聊天、邮件或问题记录里。
+3. **写进服务器的 `.env`**（平台功能合并之后，名称以届时的说明为准；当前的预定名称）：
+
+   ```sh
+   # 文件的对象存储（Cloudflare R2，DEPLOY.md 3b）
+   JABIZ_FILES_STORE=s3
+   JABIZ_FILES_S3_ENDPOINT=https://<账户 ID>.r2.cloudflarestorage.com
+   JABIZ_FILES_S3_REGION=auto
+   JABIZ_FILES_S3_BUCKET=quizbuks-staging
+   JABIZ_FILES_S3_ACCESS_KEY_ID=<Access Key ID>
+   JABIZ_FILES_S3_SECRET_ACCESS_KEY=<Secret Access Key>
+   ```
+
+4. **把已有的文件搬进桶**（每个环境一次，用平台随功能提供的迁移工具；按 `sys_file` 记下的 SHA-256 逐个核对）：开维护模式 → 迁移与核对 →
+   改 `.env` → 重新部署 → 关维护模式。本机目录中的旧文件保留到确认无误（建议一个月）再删。
+
+**要知道的**：
+
+- 换服务器、升级系统时桶不动，新服务器配置同样的桶名与密钥即可；**数据库照旧要迁移**（每个文件在 `sys_file` 中有一行，两者一起才有用）。
+- 从备份把数据库恢复到较早的时刻时：此后被删除的文件在桶中已经没有（打开为 404，它们本来就是要删的）；此后新上传的文件成为没有记录的孤儿，由清扫任务删除。恢复演练按此核对。
+- 不把 production 桶中的文件复制到 staging（其中有用户头像等个人信息）。
+- 以后若换存储商（如阿里云 OSS），用同一个迁移工具搬一次；只要还在 R2 就不用动。
+- 费用：R2 每月有免费额度（存储、读写次数），**下载流量不收费**；准确价格以 Cloudflare 的价格页为准。
+
 ### 4. 第一次部署
 
 **production 的第一次部署之前，先把 quizbuks.com 从 staging 移交出来**：上线前 quizbuks.com 暂时与 staging 共用（见"Google AdSense"中的"上线前 quizbuks.com 与 staging 共用"），
