@@ -272,6 +272,7 @@ const en = {
     rerunSubmit: 'Re-run',
     rerunStarted: '{{job}} is running again for {{time}}.',
     rerunDone: 'Re-run of {{job}} for {{time}}: {{outcome}}',
+    rerunStillRunning: 'The re-run of {{job}} for {{time}} has not finished yet; check its runs later.',
   },
   retention: {
     title: 'Retention and archive',
@@ -716,6 +717,7 @@ const zh: Texts = {
     rerunSubmit: '补跑',
     rerunStarted: '已开始补跑 {{job}}（计划时刻 {{time}}）。',
     rerunDone: '{{job}} 计划时刻 {{time}} 的补跑：{{outcome}}',
+    rerunStillRunning: '{{job}} 计划时刻 {{time}} 的补跑尚未结束，请稍后在运行记录中查看。',
   },
   retention: {
     title: '保留与归档',
@@ -1157,6 +1159,7 @@ const ja: Texts = {
     rerunSubmit: '再実行',
     rerunStarted: '{{job}} の予定時刻 {{time}} を再実行しています。',
     rerunDone: '{{job}} の予定時刻 {{time}} の再実行：{{outcome}}',
+    rerunStillRunning: '{{job}} の予定時刻 {{time}} の再実行はまだ終わっていません。後で実行履歴を確認してください。',
   },
   retention: {
     title: '保存とアーカイブ',

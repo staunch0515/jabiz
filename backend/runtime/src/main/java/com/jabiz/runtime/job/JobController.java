@@ -3,6 +3,7 @@ package com.jabiz.runtime.job;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.query.BoundValue;
+import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.storage.Rows;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -46,6 +48,10 @@ class JobController {
     /** Items whose last failure is older are left out: they no longer fail (or are no longer selected). */
     static final Duration FAILING_SINCE = Duration.ofDays(7);
     static final int MAX_SHOWN_ERROR = 200;
+    private static final String RUN_COLUMNS = """
+        SELECT scheduled_time, instance_id, outcome, process_seq_id, error, started_time, finished_time,
+               items_selected, items_succeeded, items_replayed, items_busy, items_failed, items_deferred,
+               items_more, requested_by, request_seq_id""";
 
     /**
      * A declared job.
@@ -127,6 +133,27 @@ class JobController {
                 .body(accepted));
     }
 
+    /**
+     * The run a request by hand started ({@code JOB_RUN_REQUEST}'s operation), once it is over; empty while it runs
+     * (or if it never started). Found whatever its scheduled time, unlike the latest runs of the list.
+     */
+    @GetMapping("/{job}/runs")
+    Mono<List<JobRunView>> requestedJobRuns(@PathVariable String job, @RequestParam long requestSeqId) {
+        return RequestContexts.current().flatMap(request -> {
+            if (!request.hasPermission(JobPermissions.READ)) {
+                return Mono.error(new PermissionDeniedException(JobPermissions.READ,
+                    "Reading jobs needs permission " + JobPermissions.READ));
+            }
+            JobDefinition<?> definition = jobs.find(job).orElse(null);
+            if (definition == null) {
+                return Mono.error(new EntityNotFoundException("Job " + job + " not found"));
+            }
+            return runs(definition, "job_name = :name AND request_seq_id = :request",
+                Map.of("name", BoundValue.of(job), "request", BoundValue.of(requestSeqId),
+                    "limit", BoundValue.of(1L))).collectList();
+        });
+    }
+
     /** The names of the jobs whose cluster lock is held now (by infrastructure time, as ShedLock compares it). */
     private Mono<Set<String>> lockedJobs() {
         return storages.getEngine(poolRef).select(
@@ -136,15 +163,11 @@ class JobController {
             .collect(Collectors.toSet());
     }
 
-    private Mono<JobView> describe(JobDefinition<?> job, boolean running) {
+    /** Runs of the job matching {@code where} (a fixed condition with bound values), newest scheduled time first. */
+    private Flux<JobRunView> runs(JobDefinition<?> job, String where, Map<String, BoundValue> params) {
         boolean perItem = job.kind() == JobDefinition.Kind.PER_ITEM;
-        return storages.getEngine(poolRef).select("""
-                SELECT scheduled_time, instance_id, outcome, process_seq_id, error, started_time, finished_time,
-                       items_selected, items_succeeded, items_replayed, items_busy, items_failed, items_deferred,
-                       items_more, requested_by, request_seq_id
-                FROM sys_job_run WHERE job_name = :name
-                ORDER BY scheduled_time DESC, finished_time DESC LIMIT :limit""",
-                Map.of("name", BoundValue.of(job.name()), "limit", BoundValue.of((long) RECENT_RUNS)))
+        return storages.getEngine(poolRef).select(RUN_COLUMNS + " FROM sys_job_run WHERE " + where
+                + " ORDER BY scheduled_time DESC, finished_time DESC LIMIT :limit", params)
             .map(row -> new JobRunView(Rows.instant(row.get("scheduled_time")), Rows.string(row.get("instance_id")),
                 Rows.string(row.get("outcome")), Rows.longValue(row.get("process_seq_id")),
                 Rows.string(row.get("error")), Rows.instant(row.get("started_time")),
@@ -153,7 +176,13 @@ class JobController {
                     Rows.intValue(row.get("items_succeeded")), Rows.intValue(row.get("items_replayed")),
                     Rows.intValue(row.get("items_busy")), Rows.intValue(row.get("items_failed")),
                     Rows.intValue(row.get("items_deferred")), (Boolean) row.get("items_more")) : null,
-                Rows.string(row.get("requested_by")), Rows.longValue(row.get("request_seq_id"))))
+                Rows.string(row.get("requested_by")), Rows.longValue(row.get("request_seq_id"))));
+    }
+
+    private Mono<JobView> describe(JobDefinition<?> job, boolean running) {
+        boolean perItem = job.kind() == JobDefinition.Kind.PER_ITEM;
+        return runs(job, "job_name = :name",
+                Map.of("name", BoundValue.of(job.name()), "limit", BoundValue.of((long) RECENT_RUNS)))
             .collectList()
             .zipWith(failingItems(job))
             .map(found -> {

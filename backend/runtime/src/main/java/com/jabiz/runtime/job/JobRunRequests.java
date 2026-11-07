@@ -3,15 +3,18 @@ package com.jabiz.runtime.job;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.PermissionDeniedException;
 import com.jabiz.runtime.context.RequestContexts;
+import com.jabiz.runtime.operation.OperationRecorder;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.process.ProcessInputs;
 import com.jabiz.runtime.process.ProcessResult;
 import com.jabiz.runtime.security.MfaPolicy;
 import com.jabiz.runtime.sod.SodGuard;
+import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import net.javacrumbs.shedlock.core.SimpleLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.ExecutorService;
@@ -55,13 +59,21 @@ public class JobRunRequests {
     private final ProcessDefinition<JobRunProcesses.RunRequestInput, JobRunProcesses.RunRequestOutput,
         ProcessContext> process;
     private final Duration shutdownGrace;
+    private final OperationRecorder operations;
+    private final StorageAdapterRegistry storages;
+    private final String poolRef;
+    private final Clock clock;
+    private final Duration maxAge;
     private final ExecutorService runs = Executors.newThreadPerTaskExecutor(
         Thread.ofVirtual().name("jabiz-job-manual-", 0).factory());
 
     public JobRunRequests(JobRegistry jobs, JobRunner runner, ProcessExecutor executor, ProcessInputs inputs,
         MfaPolicy mfa, SodGuard sod,
         ProcessDefinition<JobRunProcesses.RunRequestInput, JobRunProcesses.RunRequestOutput, ProcessContext> process,
-        @Value("${jabiz.jobs.scheduler.shutdown-grace:30s}") Duration shutdownGrace) {
+        @Value("${jabiz.jobs.scheduler.shutdown-grace:30s}") Duration shutdownGrace,
+        OperationRecorder operations, StorageAdapterRegistry storages,
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, Clock clock,
+        @Value("${jabiz.jobs.manual-run.max-age:P90D}") Duration maxAge) {
         this.jobs = jobs;
         this.runner = runner;
         this.executor = executor;
@@ -70,6 +82,11 @@ public class JobRunRequests {
         this.sod = sod;
         this.process = process;
         this.shutdownGrace = shutdownGrace;
+        this.operations = operations;
+        this.storages = storages;
+        this.poolRef = poolRef;
+        this.clock = clock;
+        this.maxAge = maxAge;
     }
 
     /**
@@ -93,16 +110,21 @@ public class JobRunRequests {
             if (job == null) {
                 return Mono.error(new EntityNotFoundException("Job " + jobName + " not found"));
             }
+            ExecutionOptions options = new ExecutionOptions(idempotencyKey).atEntryOf(process);
             Mono<SimpleLock> locked = Mono.fromCallable(() -> runner.tryLock(job)
                     .orElseThrow(() -> new JobBusyException(job.name())))
                 .subscribeOn(Schedulers.boundedElastic());
-            return sod.check(request, process.permissions()).then(locked)
-                .flatMap(lock -> {
+            Mono<JobRunAccepted> fresh = Mono.defer(() -> {
+                // The time is checked before the lock is taken too (the process checks it again): a request that
+                // cannot run never holds the lock while the scheduler fires.
+                JobRunProcesses.problem(job, scheduledTime, clock.instant(), maxAge).ifPresent(problem -> {
+                    throw new BusinessRuleViolationException(problem);
+                });
+                return locked.flatMap(lock -> {
                     // Released here unless the run took it over (or a request replayed): on an error, and when the
                     // caller went away before the run started.
                     AtomicBoolean handedOver = new AtomicBoolean();
-                    return executor.run(process, input,
-                            new ExecutionOptions(idempotencyKey).atEntryOf(process))
+                    return executor.run(process, input, options)
                         .flatMap(result -> {
                             handedOver.set(true);
                             return start(job, scheduledTime, request.actorId(), result, lock);
@@ -115,6 +137,19 @@ public class JobRunRequests {
                             }
                         });
                 });
+            });
+            // A request made before with the same key replays without the lock, even while its own run holds it
+            // (or answers 409 IDEMPOTENCY_KEY_REUSED for another process); it never starts a run again.
+            Mono<Boolean> madeBefore = idempotencyKey == null ? Mono.just(false)
+                : operations.findByIdempotencyKey(storages.getEngine(poolRef), request.actorId(), idempotencyKey)
+                    .hasElement();
+            return sod.check(request, process.permissions()).then(madeBefore)
+                .flatMap(before -> before ? executor.run(process, input, options).map(result -> {
+                    if (!result.replayed()) {
+                        throw new IllegalStateException("A request made before did not replay");
+                    }
+                    return new JobRunAccepted(result.processSeqId(), job.name(), scheduledTime, true);
+                }) : fresh);
         });
     }
 

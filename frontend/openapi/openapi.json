@@ -7055,6 +7055,41 @@
       }
     },
     "/api/jobs/{job}/runs" : {
+      "get" : {
+        "operationId" : "requestedJobRuns",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "job",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "requestSeqId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/JobRunView"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "job-controller" ]
+      },
       "post" : {
         "operationId" : "requestJobRun",
         "parameters" : [ {

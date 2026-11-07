@@ -61,7 +61,7 @@ public class JobRunProcesses {
     public static Optional<Violation> problem(JobDefinition<?> job, Instant scheduledTime, Instant now,
         Duration maxAge) {
         Map<String, Object> params = Map.of("job", job.name(), "scheduledTime", scheduledTime.toString());
-        if (!scheduledTime.equals(JobScheduler.nextTime(job, scheduledTime.minusMillis(1)))) {
+        if (!isOccurrence(job, scheduledTime)) {
             return Optional.of(new Violation("scheduledTime", PlatformErrorCodes.JOB_RUN_NOT_SCHEDULED,
                 "Job " + job.name() + " is not scheduled at " + scheduledTime, params));
         }
@@ -77,9 +77,15 @@ public class JobRunProcesses {
         return Optional.empty();
     }
 
+    /** Whether the job's schedule names {@code time} (as it is now: its cron and zone may have changed since a run). */
+    static boolean isOccurrence(JobDefinition<?> job, Instant time) {
+        return time.equals(JobScheduler.nextTime(job, time.minusMillis(1)));
+    }
+
     /**
      * The scheduled times the jobs API offers to run again, newest first: the latest {@value #OFFERED_TIMES} of the
-     * schedule and those of {@code runTimes}, all at or before {@code now} and no older than {@code maxAge}.
+     * schedule and those of {@code runTimes} it still names, all at or before {@code now} and no older than
+     * {@code maxAge}.
      */
     static List<Instant> offeredTimes(JobDefinition<?> job, Instant now, Duration maxAge,
         Collection<Instant> runTimes) {
@@ -104,7 +110,8 @@ public class JobRunProcesses {
             stretch = wider.compareTo(maxAge) < 0 ? wider : maxAge;
         }
         TreeSet<Instant> times = new TreeSet<>(latest);
-        runTimes.stream().filter(time -> !time.isAfter(now) && !time.isBefore(oldest)).forEach(times::add);
+        runTimes.stream().filter(time -> !time.isAfter(now) && !time.isBefore(oldest) && isOccurrence(job, time))
+            .forEach(times::add);
         return List.copyOf(times.descendingSet());
     }
 

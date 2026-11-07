@@ -1739,7 +1739,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["requestedJobRuns"];
         put?: never;
         post: operations["requestJobRun"];
         delete?: never;
@@ -6298,6 +6298,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobView"][];
+                };
+            };
+        };
+    };
+    requestedJobRuns: {
+        parameters: {
+            query: {
+                requestSeqId: number;
+            };
+            header?: never;
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRunView"][];
                 };
             };
         };

@@ -5171,12 +5171,12 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 | # | 内容 |
 |---|---|
 | 17zs-1 | 接口 `POST /api/jobs/{job}/runs`（正文 `{scheduledTime, reason}`，可带 `Idempotency-Key`）答复 202 `JobRunAccepted {requestSeqId, job, scheduledTime, replayed}`；平台流程 `JOB_RUN_REQUEST`（版本 1，`entryOnly()`，权限 `job.run`，`requiresMfa(ADMINISTRATION)`，原因必填至多 2 000 字符）：时刻须是该任务 cron（调度所用的同一 `CronExpression` 与时区）的真实时刻（422 `JOB_RUN_NOT_SCHEDULED`）、不晚于当前时钟（422 `JOB_RUN_NOT_DUE`）、不早于 `jabiz.jobs.manual-run.max-age`（缺省 `P90D`，422 `JOB_RUN_TOO_OLD`）；未知任务 404；错误码三语（`JobRunProcesses`、`JobRunRequests`、`JobPermissions`） |
-| 17zs-2 | 执行：入口按流程接口的顺序检查权限、输入、二次验证、职责分离，再取该任务的 ShedLock 集群锁（被持有即 409 `JOB_BUSY`，`JobBusyException`），然后运行 `JOB_RUN_REQUEST`；提交后在虚拟线程上以 `JobRunner.executeRequested` 在该锁下运行、结束即释放（`tryLock` 不保留 `lock-at-least-for`）；锁之后的失败与客户端断开释放锁；同一 `Idempotency-Key` 的重放不再开始运行。幂等键与计划运行相同：已提交的单流程任务 `REPLAYED`，逐项任务已成功的项 `REPLAYED`、其余照常执行，补跑不按退避滤掉；每项仍以系统身份运行 |
+| 17zs-2 | 执行：入口按流程接口的顺序检查权限、输入、二次验证、职责分离，再取该任务的 ShedLock 集群锁（被持有即 409 `JOB_BUSY`，`JobBusyException`），然后运行 `JOB_RUN_REQUEST`；提交后在虚拟线程上以 `JobRunner.executeRequested` 在该锁下运行、结束即释放（`tryLock` 不保留 `lock-at-least-for`）；时刻在取锁之前先检查；锁之后的失败与客户端断开释放锁；同一调用者与 `Idempotency-Key` 已有的请求不取锁即重放，不再开始运行。幂等键与计划运行相同：已提交的单流程任务 `REPLAYED`，逐项任务已成功的项 `REPLAYED`、其余照常执行，补跑不按退避滤掉；每项仍以系统身份运行 |
 | 17zs-3 | 迁移 `V63__job_manual_runs.sql`：`sys_job_run` 只加列 `requested_by`、`request_seq_id`（指向 `op_process`），计划运行为空（D58） |
 | 17zs-4 | `GET /api/jobs` 改为有类型的答复（`JobView` / `JobRunView` / `ItemCountsView` / `FailingItemView`，原有字段不变）：运行加 `requestedBy`、`requestSeqId`，任务加 `running`（锁被持有）与 `rerunTimes`（最近 20 个计划时刻与最近运行的时刻，限于最长期限） |
 | 17zs-5 | `job.run` 加入受保护权限的缺省清单（`ProtectedPermissions.DEFAULT`，D48）：授予须另一位管理员审批 |
-| 17zs-6 | 通用管理系统的"定时任务"页 `/jobs`（菜单需 `job.read`）：任务、种类、计划与下次时刻、最近运行（结果、项数、发起人）、运行记录与连续失败的项（侧栏）；持有 `job.run` 时"补跑"对话框（从 `rerunTimes` 选时刻，先选最近一次未全部成功的，填写原因），运行中轮询，结束后提示结果；错误照常提示（二次验证由客户端加强验证）；三语，`@jabiz/ui` 组件 |
-| 17zs-7 | 测试：`JobRunRequestIT`（6 例：逐项任务只重跑未成功的项且不受退避限制、单流程任务重放与补跑错过的时刻、同一请求键不再运行、422 三种、404 / 400 / 403 / `MFA_REQUIRED` / 401、409 `JOB_BUSY`、操作记录与原因、`requested_by`、不对只追加表 UPDATE / DELETE）、`ProtectedGrantIT`（`job.run` 待审批后生效）、`JobRunProcessesTest`（2 例：可补跑的时刻与提供的时刻）、`JobsPage.test.tsx`（5 例，含 axe 亮暗）；OpenAPI 快照与生成的类型；设计 11 §4.2、10 §5 与 §16.1、决策 D77、根 `CLAUDE.md`、`docs/guide/platform-features.md` |
+| 17zs-6 | 通用管理系统的"定时任务"页 `/jobs`（菜单需 `job.read`）：任务、种类、计划与下次时刻、最近运行（结果、项数、发起人）、运行记录与连续失败的项（侧栏）；持有 `job.run` 时"补跑"对话框（从 `rerunTimes` 选时刻，先选最近一次未全部成功的，填写原因），按请求轮询（`GET /api/jobs/{job}/runs?requestSeqId=`），结束后提示结果，超过 5 分钟停止并提示稍后查看；错误照常提示（二次验证由客户端加强验证）；三语，`@jabiz/ui` 组件 |
+| 17zs-7 | 测试：`JobRunRequestIT`（7 例：按请求找到较早时刻的补跑、逐项任务只重跑未成功的项且不受退避限制、单流程任务重放与补跑错过的时刻、同一请求键不再运行、422 三种、404 / 400 / 403 / `MFA_REQUIRED` / 401、409 `JOB_BUSY`、操作记录与原因、`requested_by`、不对只追加表 UPDATE / DELETE）、`ProtectedGrantIT`（`job.run` 待审批后生效）、`JobRunProcessesTest`（2 例：可补跑的时刻与提供的时刻）、`JobsPage.test.tsx`（6 例，含等待超时，含 axe 亮暗）；OpenAPI 快照与生成的类型；设计 11 §4.2、10 §5 与 §16.1、决策 D77、根 `CLAUDE.md`、`docs/guide/platform-features.md` |
 
 **验收**：管理员选一个过去的计划时刻并填写原因即可补跑，已成功的部分不重复，只运行未成功的部分；不是计划时刻、未到、过旧、任务忙、无权限或无近期二次验证一律拒绝且不运行；
 请求是带原因的操作，执行记录写明请求人；授予 `job.run` 须另一位管理员审批；页面三语、亮暗通过 axe。

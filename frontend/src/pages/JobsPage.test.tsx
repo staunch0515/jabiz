@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../i18n'
-import JobsPage from './JobsPage'
+import JobsPage, { PENDING_TIMEOUT_MS } from './JobsPage'
 
 const get = vi.fn()
 const post = vi.fn()
@@ -87,7 +87,9 @@ describe('JobsPage', () => {
   it('re-runs the scheduled time that left something undone, with the reason, and says how it ended', async () => {
     const success = vi.spyOn(notify, 'success')
     let answered = false
-    get.mockImplementation(async () => (answered ? [{ ...JOB, recentRuns: [RERUN, OK_RUN, PARTIAL_RUN] }] : [JOB]))
+    // The run is found by its request (its scheduled time may be older than the latest runs listed).
+    get.mockImplementation(async (path: string) => (path === '/api/jobs/{job}/runs' ? (answered ? [RERUN] : [])
+      : [JOB]))
     post.mockImplementation(async () => {
       answered = true
       return { requestSeqId: 42, job: JOB.name, scheduledTime: PARTIAL_RUN.scheduledTime, replayed: false }
@@ -113,6 +115,30 @@ describe('JobsPage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     // Once the run naming the request shows, the page says how it ended.
     await waitFor(() => expect(success).toHaveBeenCalledWith(expect.stringContaining('Succeeded')), { timeout: 5000 })
+    expect(get).toHaveBeenCalledWith('/api/jobs/{job}/runs', {
+      params: { path: { job: JOB.name }, query: { requestSeqId: 42 } },
+    })
+  })
+
+  it('stops waiting for a re-run that takes too long and says to check later', async () => {
+    const info = vi.spyOn(notify, 'info')
+    let now = 1_000_000
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    get.mockImplementation(async (path: string) => (path === '/api/jobs/{job}/runs' ? [] : [JOB]))
+    post.mockResolvedValue({ requestSeqId: 43, job: JOB.name, scheduledTime: PARTIAL_RUN.scheduledTime,
+      replayed: false })
+    page()
+    await userEvent.click(await screen.findByTestId(`job-rerun-${JOB.name}`))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.type(within(dialog).getByLabelText('Reason'), 'again')
+    await userEvent.click(within(dialog).getByTestId('job-rerun-submit'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect((screen.getByTestId(`job-rerun-${JOB.name}`) as HTMLButtonElement).disabled).toBe(true)
+    now += PENDING_TIMEOUT_MS + 1
+    await waitFor(() => expect(info).toHaveBeenCalledWith(expect.stringContaining('has not finished yet')),
+      { timeout: 5000 })
+    await waitFor(() => expect((screen.getByTestId(`job-rerun-${JOB.name}`) as HTMLButtonElement).disabled)
+      .toBe(false))
   })
 
   it('shows why the server refused a re-run', async () => {

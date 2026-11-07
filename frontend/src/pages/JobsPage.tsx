@@ -42,12 +42,16 @@ const OUTCOME_VARIANTS: Record<string, 'success' | 'secondary' | 'destructive' |
 const MAX_REASON = 2000
 /** How often the list is asked for again while a run is under way or awaited. */
 const POLL_MS = 2000
+/** How long a re-run is awaited before the page stops asking and says it may still be running. */
+export const PENDING_TIMEOUT_MS = 5 * 60_000
 
 /** A re-run asked for, awaited until a run naming its request shows. */
 interface Pending {
   job: string
   scheduledTime: string
   requestSeqId: number
+  /** When it was asked for (Date.now()). */
+  since: number
 }
 
 const fail = (e: unknown) => notify.error(e instanceof ApiError ? e.display : String(e))
@@ -105,28 +109,41 @@ export default function JobsPage() {
     queryKey: ['jobs'],
     queryFn: async () => {
       const list = await unwrap(api.GET('/api/jobs'))
-      settle(list)
+      await settle()
       return list
     },
     refetchInterval: (query) =>
       pending.length > 0 || (query.state.data ?? []).some((job) => job.running) ? POLL_MS : false,
   })
 
-  /** A re-run is over once a run names its request: says how it ended. */
-  function settle(list: Job[]) {
-    const runOf = (p: Pending) => list.find((job) => job.name === p.job)?.recentRuns
-      ?.find((run) => run.requestSeqId === p.requestSeqId)
-    const done = pendingRef.current.filter((p) => runOf(p))
-    if (done.length === 0) return
-    for (const p of done) {
-      const run = runOf(p)
-      const text = t('jobs.rerunDone', {
-        job: p.job, time: formatDateTime(p.scheduledTime), outcome: t(`jobs.outcomes.${run?.outcome}`),
-      })
-      if (UNDONE.has(run?.outcome ?? '')) notify.error(text)
-      else notify.success(text)
+  /**
+   * A re-run is over once the run naming its request shows (asked for by the request, whatever its scheduled time):
+   * says how it ended. One awaited too long is no longer asked for, with a neutral note.
+   */
+  async function settle() {
+    const settled: Pending[] = []
+    for (const p of pendingRef.current) {
+      let run: JobRun | undefined
+      try {
+        run = (await unwrap(api.GET('/api/jobs/{job}/runs', {
+          params: { path: { job: p.job }, query: { requestSeqId: p.requestSeqId } },
+        })))[0]
+      } catch {
+        // Asked again at the next poll.
+      }
+      const time = formatDateTime(p.scheduledTime)
+      if (run) {
+        const text = t('jobs.rerunDone', { job: p.job, time, outcome: t(`jobs.outcomes.${run.outcome}`) })
+        if (UNDONE.has(run.outcome ?? '')) notify.error(text)
+        else notify.success(text)
+        settled.push(p)
+      } else if (Date.now() - p.since > PENDING_TIMEOUT_MS) {
+        notify.info(t('jobs.rerunStillRunning', { job: p.job, time }))
+        settled.push(p)
+      }
     }
-    pendingRef.current = pendingRef.current.filter((p) => !done.includes(p))
+    if (settled.length === 0) return
+    pendingRef.current = pendingRef.current.filter((p) => !settled.includes(p))
     setPending(pendingRef.current)
   }
 
@@ -355,7 +372,8 @@ function RerunDialog({ job, open, onClose, onStarted }: {
       }))
       notify.success(t('jobs.rerunStarted', { job: job.name, time: formatDateTime(time) }))
       if (!accepted.replayed) {
-        onStarted({ job: job.name ?? '', scheduledTime: time, requestSeqId: accepted.requestSeqId ?? 0 })
+        onStarted({ job: job.name ?? '', scheduledTime: time, requestSeqId: accepted.requestSeqId ?? 0,
+          since: Date.now() })
       }
       onClose()
     } catch (e) {

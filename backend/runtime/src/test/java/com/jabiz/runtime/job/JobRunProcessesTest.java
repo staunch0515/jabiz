@@ -64,6 +64,10 @@ class JobRunProcessesTest {
         // A run's time older than the max age is not offered.
         assertThat(offered.getLast()).isEqualTo(Instant.parse("2026-02-10T08:00:00Z"));
 
+        // A run's time the schedule no longer names (its cron changed) is not offered: it would be refused.
+        assertThat(JobRunProcesses.offeredTimes(everyMinute, NOW, MAX_AGE,
+            List.of(Instant.parse("2026-02-10T08:00:30Z")))).doesNotContain(Instant.parse("2026-02-10T08:00:30Z"));
+
         // A schedule of a few times a year: the search widens up to the max age.
         JobDefinition<In> monthly = job("0 0 0 1 * *", ZoneOffset.UTC);
         assertThat(JobRunProcesses.offeredTimes(monthly, NOW, MAX_AGE, List.of())).containsExactly(

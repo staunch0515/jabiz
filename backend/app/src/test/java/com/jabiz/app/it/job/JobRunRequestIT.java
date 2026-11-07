@@ -166,10 +166,46 @@ class JobRunRequestIT extends PostgresIntegrationTest {
             .expectBody(MAP).returnResult().getResponseBody();
         long seq = ((Number) first.get("requestSeqId")).longValue();
         awaitRun(seq);
-        Map<String, Object> again = requestWithKey(job.name(), time, key).expectStatus().isAccepted()
-            .expectBody(MAP).returnResult().getResponseBody();
-        assertThat(again).containsEntry("replayed", true).containsEntry("requestSeqId", first.get("requestSeqId"));
+        // Asked again while a run holds the lock (as its own run would): replayed, not 409.
+        SimpleLock held = runner.tryLock(job).orElseThrow();
+        try {
+            Map<String, Object> again = requestWithKey(job.name(), time, key).expectStatus().isAccepted()
+                .expectBody(MAP).returnResult().getResponseBody();
+            assertThat(again).containsEntry("replayed", true)
+                .containsEntry("requestSeqId", first.get("requestSeqId"));
+        } finally {
+            held.unlock();
+        }
         assertThat(query("SELECT * FROM sys_job_run WHERE request_seq_id = ?", seq)).hasSize(1);
+    }
+
+    @Test
+    void aRerunOfAnOlderTimeIsFoundByItsRequestThoughNotAmongTheLatestRuns() {
+        JobDefinition<?> job = job(ItJobItemFixtures.BEAN_JOB);
+        for (int minutes = 1; minutes <= 10; minutes++) {
+            runner.execute(job, START.minus(Duration.ofMinutes(minutes)));
+        }
+        Instant older = START.minus(Duration.ofMinutes(15));
+        assertThat(listed(job.name()).get("rerunTimes")).asInstanceOf(InstanceOfAssertFactories.LIST)
+            .contains(older.toString());
+        long seq = accepted(job.name(), older);
+        awaitRun(seq);
+
+        assertThat(listed(job.name()).get("recentRuns")).asInstanceOf(InstanceOfAssertFactories.LIST)
+            .noneSatisfy(run -> assertThat(run).asInstanceOf(InstanceOfAssertFactories.MAP)
+                .containsEntry("requestSeqId", (int) seq));
+        List<Map<String, Object>> found = client.get()
+            .uri("/api/jobs/{job}/runs?requestSeqId={seq}", job.name(), seq)
+            .header(HttpHeaders.AUTHORIZATION, admin()).exchange()
+            .expectStatus().isOk().expectBody(LIST).returnResult().getResponseBody();
+        assertThat(found).singleElement().satisfies(run -> assertThat(run)
+            .containsEntry("requestSeqId", (int) seq).containsEntry("scheduledTime", older.toString())
+            .containsEntry("requestedBy", ADMIN));
+        client.get().uri("/api/jobs/{job}/runs?requestSeqId={seq}", job.name(), seq)
+            .header(HttpHeaders.AUTHORIZATION, TestTokens.bearer(tokens, "it-runner", "job.run")).exchange()
+            .expectStatus().isForbidden();
+        client.get().uri("/api/jobs/{job}/runs?requestSeqId={seq}", "it.no-such-job", seq)
+            .header(HttpHeaders.AUTHORIZATION, admin()).exchange().expectStatus().isNotFound();
     }
 
     // ================= refusals =================
@@ -217,6 +253,9 @@ class JobRunRequestIT extends PostgresIntegrationTest {
         try {
             assertThat(listed(job.name())).containsEntry("running", true);
             assertThat(refusal(request(job.name(), time, "why", admin()), 409)).isEqualTo("JOB_BUSY");
+            // A time that cannot run is refused before the lock is asked for.
+            assertThat(refusal(request(job.name(), START.minus(Duration.ofMinutes(30)), "why", admin()), 422))
+                .isEqualTo("JOB_RUN_NOT_SCHEDULED");
         } finally {
             held.unlock();
         }
