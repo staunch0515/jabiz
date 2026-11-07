@@ -415,7 +415,7 @@ jobs:
         working-directory: quizbuks-web/e2e
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: quizbuks-web/e2e
-      - run: pnpm e2e tests/entry-fee.spec.ts --repeat-each=10 --shard=${{ matrix.shard }}/2
+      - run: pnpm e2e tests/entry-fee.spec.ts --repeat-each=20 --shard=${{ matrix.shard }}/2
         working-directory: quizbuks-web/e2e
       - if: failure()
         uses: actions/upload-artifact@v6
