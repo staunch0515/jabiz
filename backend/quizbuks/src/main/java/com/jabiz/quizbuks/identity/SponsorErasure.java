@@ -94,6 +94,11 @@ public class SponsorErasure {
                     ErasedEntity.delete(QbRewards.STAFF, "sponsorId"),
                     // Q89c: the passes for the sponsor's counter.
                     ErasedEntity.delete(QbRewards.PASS, "handlerId"),
+                    // F-C1: the asset library and where its assets were copied to (what was copied goes or stays
+                    // with the quizzes and publications it is in).
+                    ErasedEntity.delete(com.jabiz.quizbuks.asset.QbAssets.USE, "sponsorId"),
+                    ErasedEntity.delete(com.jabiz.quizbuks.asset.QbAssets.ASSET, "sponsorId", "name", "description",
+                        "translations", "tags", "image", "pdf", "audio", "url", "body", "prizeDescription"),
                     ErasedEntity.delete(QbSponsorProducts.QUIZ_LINK, "ownerId"),
                     ErasedEntity.delete(QbSponsorProducts.PRODUCT, "userId", "name", "description", "image",
                         "shopUrl", "translations"),
