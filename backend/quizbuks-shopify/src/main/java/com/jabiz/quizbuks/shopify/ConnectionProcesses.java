@@ -196,6 +196,7 @@ public final class ConnectionProcesses {
             values.put("obtainedAt", ctx.opTime());
             if (stored == null) {
                 values.put("shopId", String.valueOf(shop.id()));
+                values.put("shopDomain", shop.get("shopDomain"));
                 ctx.changes().insert(QbsShops.TOKEN, values);
             } else {
                 ctx.changes().update(QbsShops.TOKEN, stored.id(), stored.version(), values);

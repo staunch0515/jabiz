@@ -23,8 +23,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * QuizBuks's sealed fields (docs/quizbuks/plans/impl/F-F14-sealed-fields.md, platform decision D78): this context
  * runs with a new seal key and the tests' key as the retired one. A mail server password and a Shopify discount code
- * sealed under the retired key, each for the context its process seals it for, are stored again under the current
- * key by the job {@code jabiz.key-rotation} and still open; nothing is left over.
+ * sealed under the retired key, each for the context its process seals it for, are stored again under the current key
+ * by the job {@code jabiz.key-rotation} and still open; nothing is left over. A shop's tokens are not declared yet
+ * (ShopifySealedFields): they stay under the retired key and still open with the address their row keeps.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "jabiz.security.seal.key=bmV4dC1zZWFsLWtleS1vZi10aGUtcXVpemJ1a3Mta2V5LXJvdGF0aW9uLTAwMDAw",
@@ -72,6 +73,18 @@ class SealedFieldsRotationIT extends QbItSupport {
         return id;
     }
 
+    /** Test set-up only: a shop and its tokens as {@code QBS_SHOP_CONNECT} would have stored them, retired key. */
+    private String shopWithTokens(String domain) {
+        String shopId = UUID.randomUUID().toString();
+        execute("INSERT INTO qbs_shop (shop_id, shop_domain, status, installed_at, connection, version)"
+            + " VALUES (?, ?, 'ACTIVE', now(), 'CONNECTED', 1)", shopId, domain);
+        execute("INSERT INTO qbs_shop_token (shop_id, shop_domain, sealed_access_token, access_expires_at,"
+            + " sealed_refresh_token, refresh_expires_at, obtained_at, version)"
+            + " VALUES (?, ?, ?, now() + interval '1 hour', ?, now() + interval '30 days', now(), 1)", shopId, domain,
+            sealedUnderTheRetiredKey("shpat_access", domain), sealedUnderTheRetiredKey("shprt_refresh", domain));
+        return shopId;
+    }
+
     private String column(String sql, Object key) {
         return (String) query(sql, key).getFirst().values().iterator().next();
     }
@@ -89,6 +102,9 @@ class SealedFieldsRotationIT extends QbItSupport {
         String domain = "k" + UUID.randomUUID().toString().substring(0, 8).toLowerCase(Locale.ROOT)
             + ".myshopify.com";
         String code = discountCode(domain, "QB-SAVE-10-XYZ");
+        String shop = shopWithTokens(domain);
+        String accessOf = "SELECT sealed_access_token FROM qbs_shop_token WHERE shop_id = ?";
+        String refreshOf = "SELECT sealed_refresh_token FROM qbs_shop_token WHERE shop_id = ?";
         String passwordOf = "SELECT sealed_password FROM qb_sponsor_mail_server WHERE sponsor_id = ?";
         String codeOf = "SELECT sealed_code FROM qbs_discount_code WHERE code_id = ?";
         assertThat(SealedSecrets.keyIdOf(column(passwordOf, sponsor))).isEqualTo(OLD_SEALER.keyId());
@@ -103,6 +119,11 @@ class SealedFieldsRotationIT extends QbItSupport {
         assertThat(sealer.open(column(passwordOf, prospect), prospect)).isEqualTo("the owner's password");
         assertThat(SealedSecrets.keyIdOf(column(codeOf, code))).isEqualTo(sealer.keyId());
         assertThat(sealer.open(column(codeOf, code), domain)).isEqualTo("QB-SAVE-10-XYZ");
+        for (String sql : new String[] {accessOf, refreshOf}) {
+            assertThat(SealedSecrets.keyIdOf(column(sql, shop))).as("not declared yet").isEqualTo(OLD_SEALER.keyId());
+        }
+        assertThat(sealer.open(column(accessOf, shop), domain)).isEqualTo("shpat_access");
+        assertThat(sealer.open(column(refreshOf, shop), domain)).isEqualTo("shprt_refresh");
         // Through the write path: the ordinary tables' versions moved on.
         assertThat(query("SELECT version FROM qbs_discount_code WHERE code_id = ?", code).getFirst().get("version"))
             .isEqualTo(2L);

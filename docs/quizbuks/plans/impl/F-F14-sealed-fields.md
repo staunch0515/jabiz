@@ -8,8 +8,8 @@
 | # | 实体（表） | 字段 | 密封时的上下文 | 声明 |
 |---|---|---|---|---|
 | 1 | `QbSponsorMailServer`（`qb_sponsor_mail_server`） | `sealedPassword` | `MailServerProcesses.set`：`SPONSOR_ID`（发起方编号或 `prospect:<所有者>`），同一个值存为 `sponsorId` | `SealedField.of(…, "sealedPassword", "sponsorId")`，`mailserver.MailServerSealedFields` |
-| 6 | `QbsShopToken`（`qbs_shop_token`） | `sealedAccessToken` | `ConnectionProcesses.shopDomain`：**店铺**行（`QbsShop`）的 `shopDomain` | **未声明**：令牌行只有 `shopId`，没有 `shopDomain`；上下文要从另一张表读出，`SealedField` 只能由本行算出（无 I/O）。见"待决定" |
-| 7 | `QbsShopToken` | `sealedRefreshToken` | 同上 | **未声明**，同上 |
+| 6 | `QbsShopToken`（`qbs_shop_token`） | `sealedAccessToken` | `ConnectionProcesses.shopDomain`：**店铺**行（`QbsShop`）的 `shopDomain` | 令牌行原来只有 `shopId`；V81 加列 `shop_domain`（字段 `shopDomain`，不可变、可为空），`QBS_SHOP_CONNECT` 插入时写入。**声明暂缓**：见"平台的缺口" |
+| 7 | `QbsShopToken` | `sealedRefreshToken` | 同上 | 同上 |
 | 8 | `QbsDiscountCode`（`qbs_discount_code`） | `sealedCode` | `DiscountPool.CallShopify`：`domain(ctx)`，同一个值存为 `shopDomain` | `SealedField.of(…, "sealedCode", "shopDomain")`，`shopify.ShopifySealedFields`；字段由 `immutable` 改为可改（仍 `sensitive`，仍只由流程写：数据视图 `processOnlyWrites`） |
 
 四处都有数据视图、都是 `sensitive`。`sensitive` 与 `processOnly` 不能同时声明（平台元模型拒绝），所以 #8 只去掉 `immutable`。
@@ -26,9 +26,25 @@
   运行任务 `jabiz.key-rotation`：三个值都改在当前密钥下、仍能以声明的上下文解开，经普通写入路径（版本 +1）；再运行一次不再改动。启动检查 `KEYS` 只有"轮换进行中"的警告。
 - `:quizbuks:test`、`:quizbuks-shopify:test`、`:quizbuks:platformCheck`。
 
-## 待决定
+## Shopify 令牌的地址（V81，协调会话 2026-11-07 的决定）
 
-- #6、#7（Shopify 的访问与刷新令牌）：要能轮换，可以 ① 给 `qbs_shop_token` 加列 `shop_domain`（迁移按 `qbs_shop` 回填，`ConnectionProcesses.keep` 插入时写入），再以 `shopDomain` 声明；
-  或 ② 不声明，轮换时这些令牌解不开，`ConnectionProcesses.access` 已把解不开当作"需要重新连接"（`RECONNECT`），店员下次打开内嵌页时重新交换令牌（`QBS_SHOP_CONNECT`）。由需求方 / 协调会话决定。
+- 迁移 `V81__quizbuks_shopify_token_domain.sql`（`backend/quizbuks-shopify/src/main/resources/db/migration`，与引擎共用版本序列；V80 已被另一个工作分支 `quizbuks-fs11-foreign-video` 占用）
+  **只加列**，可为空，不在迁移中以 SQL 回填（实体的行只经平台的写入路径写，审计照旧）。之后的 `QBS_SHOP_CONNECT` 插入令牌行时写入店铺地址（更新令牌时不改，字段不可变）。
+- 之前保存的令牌行地址为空。平台的重新加密以空的上下文打不开它们：`SealedSecrets` 拒绝空的上下文（`IllegalArgumentException`），
+  `StoreUnderCurrentKey` 把它计为 `unreadable`、记日志、原样留在旧密钥下；撤下旧密钥后它们解不开，`ConnectionProcesses.access` 把解不开当作"需要重新连接"。
+  Shopify 不在首次上线中，这样的行只在测试库里：**更换 `JABIZ_SEAL_KEY` 之前先重置测试库，或重新连接店铺**（写在 `launch-checklist.md`"测试环境"）。
+
+## 平台的缺口（声明 #6、#7 暂缓）
+
+声明了令牌的两个字段后，`SealedFieldsRotationIT` 中的轮换任务整批失败：`Optimistic lock conflict on QbsShopToken …: expected version [1], stored version [2]`。
+平台的 `StoreUnderCurrentKey` 对每个声明的字段各发一个 `update`，都带读到的同一个版本；同一行有两个密封字段时第二个更新冲突，整批回滚（其他实体的值也不重新加密）。
+在应用分支上不能改平台；声明照旧写好但先不启用（`ShopifySealedFields` 的注释），等平台把同一行的几个字段合成一次更新（并加一个两个字段在同一行的测试）后启用两行声明，
+并把 `SealedFieldsRotationIT` 中令牌的断言改为"已在当前密钥下、仍能打开"。
+
+## 测试（补充）
+
+- `SealedFieldsRotationIT`：另写入一个店铺及其令牌（带地址），轮换后令牌仍在旧密钥下（未声明）。
+- `ShopifyIT`：连接后令牌行的 `shop_domain` 是店铺地址，访问令牌以它解开即 Shopify 给的令牌。
+- 令牌的数据视图 `maxWriteBatchSize` 改为 10000（与邮件服务器同理，供以后的声明）。
 
 删除的功能：无。
