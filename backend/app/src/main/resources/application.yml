@@ -111,6 +111,20 @@ jabiz:
     # Notifications for every entry keep the application's page, jabiz.mail.unsubscribe-path (/mail/unsubscribe).
     unsubscribe-paths:
       portal: mail/unsubscribe
+    # The default mail layout by language (decision D72; 17zh-b): every mail of the application is sent on it, the
+    # display name above and the footer under the mail. Administrators replace it through a controlled change another
+    # administrator publishes; MAIL_LAYOUT_RESET returns to these values. The footer is on every mail, the
+    # administration's too, so it links no entry's frontend here; it may use {baseUrl} and {entryUrl.<entry>}. A logo (logo-url, logo-alt) must be the application's own ({baseUrl}/... or a path).
+    layout:
+      en:
+        display-name: Jabiz demo
+        footer: "Jabiz demo application · [Help]({baseUrl}/)"
+      ja:
+        display-name: Jabiz デモ
+        footer: "Jabiz デモアプリケーション · [ヘルプ]({baseUrl}/)"
+      zh:
+        display-name: Jabiz 示范
+        footer: "Jabiz 示范应用 · [帮助]({baseUrl}/)"
   files:
     # Where uploaded files are kept (docs/design/14-files.md section 6). No default: startup fails without it, since the
     # application declares file policies. A directory of this host (a volume in containers); single instance only.

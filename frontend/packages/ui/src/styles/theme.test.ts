@@ -80,9 +80,19 @@ describe('theme tokens (WCAG 2.2 AA, docs/design/12-frontend.md section 11)', ()
   it('are defined in both appearances, as #rrggbb where they are colours', () => {
     const light = tokens(':root')
     const dark = tokens('.dark')
-    const colours = Object.keys(light).filter((k) => k !== 'radius')
+    const colours = Object.keys(light).filter((k) => k !== 'radius' && !LAYOUT.includes(k))
     expect(colours.filter((k) => !(k in dark))).toEqual([])
     expect(colours.filter((k) => k !== 'overlay' && !/^#[0-9a-f]{6}$/.test(light[k]))).toEqual([])
+  })
+})
+
+/** The layout tokens (phase 17zj): lengths, the same in both appearances. */
+const LAYOUT = ['content-max', 'content-form-max', 'bottom-bar-height']
+
+describe('layout tokens', () => {
+  it('are lengths in rem: the content widths and the bottom menu', () => {
+    const light = tokens(':root')
+    expect(LAYOUT.map((k) => [k, /^\d+(\.\d+)?rem$/.test(light[k] ?? '')])).toEqual(LAYOUT.map((k) => [k, true]))
   })
 })
 

@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test'
+import { expectAccessible, setAppearance } from '@jabiz/ui/testing/playwright'
 import { PORTAL, placeOrderFor, portalCustomer, signInToPortal } from './portal-support'
 import { signIn, test } from './support'
 
@@ -21,15 +22,15 @@ test('a customer signs in to the portal, orders, and stays signed in across relo
 
   // Ordering needs a verified address (PORTAL_ORDER_PLACE): the portal says so and offers the link again.
   await expect(page.getByTestId('verify-email-banner')).toContainText(`${customer.userName}@example.com`)
-  await page.getByRole('link', { name: '下单' }).click()
+  await page.getByRole('navigation', { name: '门户' }).getByRole('link', { name: '下单' }).click()
   await page.getByTestId('order-product').selectOption(`${customer.warehouseCode}/${customer.sku}`)
   await page.getByTestId('order-quantity').fill('3')
-  await page.getByTestId('order-submit').click()
+  await page.getByTestId('form-page-save').click()
   await expect(page.getByTestId('order-error')).toContainText('请先验证邮箱')
 
   // My orders: the customer's own, through the server's scope.
   const orderNo = await placeOrderFor(request, customer, 3)
-  await page.getByRole('link', { name: '我的订单' }).click()
+  await page.getByRole('navigation', { name: '门户' }).getByRole('link', { name: '我的订单' }).click()
   await expect(page.getByTestId('order-row')).toHaveCount(1)
   await expect(page.getByTestId('order-row')).toContainText(orderNo)
   await expect(page.getByTestId('order-row')).toContainText('900')
@@ -85,3 +86,32 @@ test('the portal accepts its own customers only, and its mailed links open at it
   await page.goto(`${PORTAL}auth/password-reset?entry=portal`)
   await expect(page.getByTestId('password-reset')).toBeVisible()
 })
+
+/**
+ * The application frame on a phone (ROADMAP phase 17zj): at 360 px the page does not scroll sideways, the bottom menu
+ * and the floating button do not cover each other, and the frame passes axe in both appearances.
+ */
+for (const appearance of ['light', 'dark'] as const) {
+  test(`the portal's frame on a phone (${appearance})`, async ({ page, request }) => {
+    const customer = await portalCustomer(request)
+    await setAppearance(page, appearance)
+    await page.setViewportSize({ width: 360, height: 740 })
+    await signInToPortal(page, customer)
+    await expect(page.getByTestId('orders-empty')).toBeVisible()
+
+    const bar = page.getByRole('navigation', { name: '快捷菜单' })
+    await expect(bar).toBeVisible()
+    await expect(bar.getByRole('link', { name: '我的订单' })).toHaveAttribute('aria-current', 'page')
+    const fab = page.getByTestId('page-fab')
+    await expect(fab).toBeVisible()
+    const [barBox, fabBox] = [await bar.boundingBox(), await fab.boundingBox()]
+    expect(fabBox!.y + fabBox!.height).toBeLessThanOrEqual(barBox!.y)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360)
+    await expectAccessible(page, `portal orders on a phone (${appearance})`, { expect })
+
+    await bar.getByRole('link', { name: '账户' }).click()
+    await expect(page.getByRole('complementary', { name: '您的账户' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360)
+    await expectAccessible(page, `portal account on a phone (${appearance})`, { expect })
+  })
+}

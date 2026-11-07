@@ -323,11 +323,15 @@ class DocumentSendIT extends PostgresIntegrationTest {
         for (int i = 0; i < parts.getCount(); i++) {
             Part part = parts.getBodyPart(i);
             if (!Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition())) {
-                Object content = part.getContent();
-                text.append(content instanceof Multipart nested ? nested.getBodyPart(0).getContent() : content);
+                text.append(firstText(part.getContent()));
             }
         }
         return text.toString();
+    }
+
+    /** The first part of nested multiparts: the plain text (the HTML alternative of the mail layout follows it). */
+    private static Object firstText(Object content) throws Exception {
+        return content instanceof Multipart nested ? firstText(nested.getBodyPart(0).getContent()) : content;
     }
 
     private static String sha256(byte[] bytes) throws Exception {
