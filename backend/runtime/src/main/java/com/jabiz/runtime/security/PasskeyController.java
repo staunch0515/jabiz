@@ -79,10 +79,10 @@ class PasskeyController {
         }
     }
 
-    record ChallengeRequest(String challenge) {
+    record PasskeyChallengeRequest(String challenge) {
         @Override
         public String toString() {
-            return "ChallengeRequest[***]";
+            return "PasskeyChallengeRequest[***]";
         }
     }
 
@@ -223,7 +223,7 @@ class PasskeyController {
 
     /** The options of the second step after a password: one of the challenge's user's passkeys answers. */
     @PostMapping(CHALLENGE + "/options")
-    Mono<PasskeyOptions> secondStepOptions(@RequestBody(required = false) ChallengeRequest request) {
+    Mono<PasskeyOptions> secondStepOptions(@RequestBody(required = false) PasskeyChallengeRequest request) {
         return Mono.defer(() -> {
             JwtService.Challenge challenge = challenge(request == null ? null : request.challenge(),
                 JwtService.Purpose.VERIFY);
@@ -269,7 +269,7 @@ class PasskeyController {
      * who has none: a passkey instead of TOTP (decision D71 item 3).
      */
     @PostMapping(CHALLENGE + "/register/options")
-    Mono<PasskeyOptions> enrolOptions(@RequestBody(required = false) ChallengeRequest request) {
+    Mono<PasskeyOptions> enrolOptions(@RequestBody(required = false) PasskeyChallengeRequest request) {
         return Mono.defer(() -> {
             JwtService.Challenge challenge = challenge(request == null ? null : request.challenge(),
                 JwtService.Purpose.ENROLL);

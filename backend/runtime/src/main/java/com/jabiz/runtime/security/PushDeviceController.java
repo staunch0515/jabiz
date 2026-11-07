@@ -62,10 +62,10 @@ class PushDeviceController {
     /** @param current whether it was registered in the session in use */
     record DeviceView(String id, String kind, String entry, Instant createdAt, boolean current) {}
 
-    record RegisterRequest(String kind, String endpoint, String p256dh, String auth) {
+    record PushRegisterRequest(String kind, String endpoint, String p256dh, String auth) {
         @Override
         public String toString() {
-            return "RegisterRequest[kind=" + kind + ", ***]";
+            return "PushRegisterRequest[kind=" + kind + ", ***]";
         }
     }
 
@@ -78,7 +78,7 @@ class PushDeviceController {
 
     record PreferenceRequest(String template, Boolean subscribed) {}
 
-    record Registered(String deviceId) {}
+    record PushRegistered(String deviceId) {}
 
     private final ProcessExecutor processes;
     private final RefreshTokenStore refreshTokens;
@@ -157,7 +157,7 @@ class PushDeviceController {
      * {@code SESSION_UNKNOWN}).
      */
     @PostMapping(BASE + "/devices")
-    Mono<Registered> register(@RequestBody(required = false) RegisterRequest request) {
+    Mono<PushRegistered> register(@RequestBody(required = false) PushRegisterRequest request) {
         return RequestContexts.current().flatMap(context -> CurrentSession.open(refreshTokens, context)
             .flatMap(session -> {
                 UUID user = requireUser(context);
@@ -175,7 +175,7 @@ class PushDeviceController {
                         entryOf(context), current.toString(), request.kind(),
                         apple ? deviceToken(request.endpoint()) : request.endpoint(),
                         apple ? null : request.p256dh(), apple ? null : request.auth()))
-                    .map(output -> new Registered(output.deviceId()));
+                    .map(output -> new PushRegistered(output.deviceId()));
             }));
     }
 
@@ -212,7 +212,7 @@ class PushDeviceController {
      * A browser's Web Push subscription (an allowed push service, a subscription's keys), or the iOS shell's APNs
      * device token (hexadecimal, while APNs is set up; no keys).
      */
-    private boolean usable(RegisterRequest request) {
+    private boolean usable(PushRegisterRequest request) {
         if (PushEntities.APNS.equals(request.kind())) {
             return properties.apns().configured() && ApnsSender.DEVICE_TOKEN.matcher(deviceToken(request.endpoint()))
                 .matches() && request.p256dh() == null && request.auth() == null;
@@ -234,7 +234,7 @@ class PushDeviceController {
     }
 
     /** A Web Push subscription's keys: a P-256 point and a 16-byte secret. */
-    private static boolean subscription(RegisterRequest request) {
+    private static boolean subscription(PushRegisterRequest request) {
         try {
             WebPushCrypto.publicKey(WebPushCrypto.base64url(request.p256dh()));
             return request.auth() != null && WebPushCrypto.base64url(request.auth()).length == 16;

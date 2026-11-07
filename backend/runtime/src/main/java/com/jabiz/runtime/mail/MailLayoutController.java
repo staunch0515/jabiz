@@ -62,13 +62,13 @@ class MailLayoutController {
         List<LanguageLayout> languages) {}
 
     /** @param layout a draft; absent: the layout in effect */
-    record PreviewRequest(String locale, MailLayout layout) {}
+    record LayoutPreviewRequest(String locale, MailLayout layout) {}
 
     /**
      * @param versionNo the version of the stored layout previewed; null for a draft or the default
      * @param problems  the draft's problems by the rules (the preview renders it all the same, on what passes)
      */
-    record PreviewResponse(String subject, String text, String html, Integer versionNo, List<Violation> problems) {}
+    record LayoutPreviewResponse(String subject, String text, String html, Integer versionNo, List<Violation> problems) {}
 
     private final MailLayouts layouts;
     private final MailTexts texts;
@@ -111,7 +111,7 @@ class MailLayoutController {
     }
 
     @PostMapping("/preview")
-    Mono<PreviewResponse> preview(@RequestBody PreviewRequest body) {
+    Mono<LayoutPreviewResponse> preview(@RequestBody LayoutPreviewRequest body) {
         return RequestContexts.current().flatMap(request -> {
             Permissions.require(request, MailPermissions.TEXT_READ, "Previewing the mail layout");
             Locale locale = body.locale() == null ? null : Locale.of(body.locale().strip());
@@ -128,7 +128,7 @@ class MailLayoutController {
                 MailRenderer.Rendered mail = layouts.wrap(texts.render(sample, text.subject(), text.body(),
                     texts.sampleValues(sample)), chosen);
                 List<Violation> problems = body.layout() == null ? List.of() : layouts.problems(chosen);
-                return new PreviewResponse(mail.subject(), mail.text(), mail.html(), found.getT1().versionNo(),
+                return new LayoutPreviewResponse(mail.subject(), mail.text(), mail.html(), found.getT1().versionNo(),
                     problems);
             });
         });
