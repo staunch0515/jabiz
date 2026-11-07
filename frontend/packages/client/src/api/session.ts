@@ -292,17 +292,22 @@ export const session = {
     if ((copy || null) !== local) write(store(), key, copy || null)
     return copy || null
   },
+  /**
+   * Keeps new tokens: the refresh token is written first, and only then is the access token taken up and the session's
+   * listeners told (decision D73). A page reloaded right after a refresh then sends the new token, not the one just
+   * rotated; should it still send the old one (the answer was lost), the server's reuse grace gives it a sibling.
+   */
   store(access: string, refresh: string) {
-    accessToken = access
     write(store(), refreshKey(), refresh)
     if (persistence === 'device') void share(refreshKey(), refresh)
+    accessToken = access
     notify()
   },
   /** As {@link session.store}, once the shared copy is written: before the refresh lock is released. */
   async storeShared(access: string, refresh: string): Promise<void> {
-    accessToken = access
     write(store(), refreshKey(), refresh)
     if (persistence === 'device') await share(refreshKey(), refresh)
+    accessToken = access
     notify()
   },
   /** A new access token for the same session (after a step-up, docs/design/10-security.md section 10). */
