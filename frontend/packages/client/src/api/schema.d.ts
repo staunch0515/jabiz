@@ -13,7 +13,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["preview_2"];
+        post: operations["preview_3"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1108,6 +1108,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/client/region": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["region"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/{resourceId}/commit": {
         parameters: {
             query?: never;
@@ -1597,7 +1613,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["preview_1"];
+        post: operations["preview_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1707,9 +1723,41 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        get: operations["list_6"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mail/layouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get: operations["list_5"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mail/layouts/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preview_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2225,6 +2273,11 @@ export interface components {
             hash?: string;
             items?: components["schemas"]["AuditRecordEntry"][];
         };
+        ClientRegion: {
+            country?: string;
+            known?: boolean;
+            mainlandChina?: boolean;
+        };
         CodeRequest: {
             code?: string;
         };
@@ -2419,6 +2472,14 @@ export interface components {
             recomputable?: boolean;
             verdict?: string;
         };
+        DraftRule: {
+            condition?: unknown;
+            enabled?: boolean;
+            levels?: unknown;
+            /** Format: int32 */
+            priority?: number;
+            ruleCode?: string;
+        };
         EmailLinkConfirm: {
             token?: string;
         };
@@ -2537,6 +2598,11 @@ export interface components {
             to?: unknown;
             value?: unknown;
             values?: unknown[];
+        };
+        Finding: {
+            levels?: string[];
+            required?: boolean;
+            ruleCode?: string;
         };
         IdentityView: {
             email?: string;
@@ -2853,6 +2919,17 @@ export interface components {
         LabelsRequest: {
             ids?: unknown[];
         };
+        LanguageLayout: {
+            defaultHash?: string;
+            defaultLayout?: components["schemas"]["MailLayout"];
+            layout?: components["schemas"]["MailLayout"];
+            locale?: string;
+            problems?: components["schemas"]["Violation"][];
+            /** @enum {string} */
+            state?: "DEFAULT" | "CUSTOM" | "DEFAULT_UPDATED" | "INVALID";
+            /** Format: int32 */
+            versionNo?: number;
+        };
         LanguageTexts: {
             body?: string;
             defaultBody?: string;
@@ -2861,10 +2938,30 @@ export interface components {
             locale?: string;
             problems?: components["schemas"]["Violation"][];
             /** @enum {string} */
-            state?: "DEFAULT" | "CUSTOM" | "DEFAULT_UPDATED" | "INVALID";
+            state?: "DEFAULT" | "CUSTOM" | "DEFAULT_UPDATED" | "INVALID" | "UNAPPROVED";
             subject?: string;
             /** Format: int32 */
             versionNo?: number;
+        };
+        LayoutPreviewRequest: {
+            layout?: components["schemas"]["MailLayout"];
+            locale?: string;
+        };
+        LayoutPreviewResponse: {
+            html?: string;
+            problems?: components["schemas"]["Violation"][];
+            subject?: string;
+            text?: string;
+            /** Format: int32 */
+            versionNo?: number;
+        };
+        LayoutsResponse: {
+            allowedLinkHosts?: string[];
+            languages?: components["schemas"]["LanguageLayout"][];
+            /** Format: int32 */
+            maxFooterLength?: number;
+            /** Format: int32 */
+            maxLineLength?: number;
         };
         LinkResult: {
             provider?: string;
@@ -2888,8 +2985,29 @@ export interface components {
             languages?: string[];
             locale?: string;
         };
+        MailLayout: {
+            displayName?: string;
+            empty?: boolean;
+            footer?: string;
+            logoAlt?: string;
+            logoUrl?: string;
+        };
         MailPreferences: {
             templates?: components["schemas"]["TemplatePreference"][];
+        };
+        MailTextPreviewRequest: {
+            body?: string;
+            locale?: string;
+            subject?: string;
+            template?: string;
+        };
+        MailTextPreviewResponse: {
+            html?: string;
+            problems?: components["schemas"]["Violation"][];
+            subject?: string;
+            text?: string;
+            /** Format: int32 */
+            versionNo?: number;
         };
         MappingOutput: {
             importId?: string;
@@ -2956,6 +3074,9 @@ export interface components {
         PartEvent: {
             last?: boolean;
         };
+        PasskeyChallengeRequest: {
+            challenge?: string;
+        };
         PasskeyOptions: {
             publicKey?: {
                 [key: string]: unknown;
@@ -2990,19 +3111,25 @@ export interface components {
             subscribed?: boolean;
             template?: string;
         };
+        PreviewChange: {
+            after?: components["schemas"]["Finding"];
+            before?: components["schemas"]["Finding"];
+            entityId?: string;
+            /** Format: date-time */
+            evaluatedTime?: string;
+        };
         PreviewRequest: {
-            body?: string;
-            locale?: string;
+            draft?: components["schemas"]["DraftRule"];
+            /** Format: int32 */
+            limit?: number;
+            ruleId?: string;
             subject?: string;
-            template?: string;
         };
         PreviewResponse: {
-            html?: string;
-            problems?: components["schemas"]["Violation"][];
-            subject?: string;
-            text?: string;
+            changed?: components["schemas"]["PreviewChange"][];
             /** Format: int32 */
-            versionNo?: number;
+            evaluated?: number;
+            truncated?: boolean;
         };
         ProcessEntry: {
             actsOn?: components["schemas"]["ActsOnEntry"];
@@ -3023,6 +3150,15 @@ export interface components {
             id?: string;
             kind?: string;
             label?: string;
+        };
+        PushRegisterRequest: {
+            auth?: string;
+            endpoint?: string;
+            kind?: string;
+            p256dh?: string;
+        };
+        PushRegistered: {
+            deviceId?: string;
         };
         PushSettings: {
             apns?: boolean;
@@ -3426,7 +3562,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    preview_2: {
+    preview_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -4007,7 +4143,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["RegisterRequest"];
+                "application/json": components["schemas"]["PushRegisterRequest"];
             };
         };
         responses: {
@@ -4017,7 +4153,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Registered"];
+                    "application/json": components["schemas"]["PushRegistered"];
                 };
             };
         };
@@ -4273,7 +4409,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["ChallengeRequest"];
+                "application/json": components["schemas"]["PasskeyChallengeRequest"];
             };
         };
         responses: {
@@ -4321,7 +4457,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["ChallengeRequest"];
+                "application/json": components["schemas"]["PasskeyChallengeRequest"];
             };
         };
         responses: {
@@ -5073,6 +5209,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    region: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientRegion"];
+                };
             };
         };
     };
@@ -5887,7 +6043,7 @@ export interface operations {
             };
         };
     };
-    preview_1: {
+    preview_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -6045,7 +6201,7 @@ export interface operations {
             };
         };
     };
-    list_5: {
+    list_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -6063,6 +6219,50 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+        };
+    };
+    list_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LayoutsResponse"];
+                };
+            };
+        };
+    };
+    preview_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LayoutPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LayoutPreviewResponse"];
                 };
             };
         };
@@ -6096,7 +6296,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PreviewRequest"];
+                "application/json": components["schemas"]["MailTextPreviewRequest"];
             };
         };
         responses: {
@@ -6106,7 +6306,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PreviewResponse"];
+                    "application/json": components["schemas"]["MailTextPreviewResponse"];
                 };
             };
         };

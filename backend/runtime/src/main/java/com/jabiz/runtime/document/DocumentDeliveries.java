@@ -39,7 +39,8 @@ public class DocumentDeliveries {
 
     /** What sending one delivery needs: the message as recorded and the document's kept PDF. */
     record Outgoing(UUID deliveryId, String address, String subject, String body, byte[] pdf, String pdfHash,
-        String documentNo, String layoutId, UUID runId, int attempts, boolean sent) {}
+        String documentNo, String layoutId, UUID runId, int attempts, boolean sent, String language,
+        Integer mailLayoutVersionNo) {}
 
     private final StorageAdapterRegistry storages;
     private final String poolRef;
@@ -55,7 +56,7 @@ public class DocumentDeliveries {
     }
 
     Mono<Void> insert(UUID deliveryId, UUID runId, String address, String subject, String body, String requestedBy,
-        Instant created, long processSeqId, Integer textVersionNo) {
+        Instant created, long processSeqId, Integer textVersionNo, Integer mailLayoutVersionNo) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("delivery_id", deliveryId);
         row.put("run_id", runId);
@@ -67,6 +68,7 @@ public class DocumentDeliveries {
         row.put("process_seq_id", processSeqId);
         row.put("version", 1L);
         row.put("text_version_no", textVersionNo);
+        row.put("layout_version_no", mailLayoutVersionNo);
         return engine().insert(DELIVERIES, row);
     }
 
@@ -105,7 +107,7 @@ public class DocumentDeliveries {
     /** One delivery with the document's PDF, for sending it. */
     Mono<Outgoing> outgoing(UUID deliveryId) {
         return engine().select("SELECT d.delivery_id, d.address, d.subject, d.body, r.pdf, r.pdf_hash, r.document_no,"
-                + " r.layout_id, r.run_id,"
+                + " r.layout_id, r.run_id, r.language, d.layout_version_no,"
                 + " (SELECT count(*) FROM " + ATTEMPTS + " a WHERE a.delivery_id = d.delivery_id) AS attempts,"
                 + " EXISTS (SELECT 1 FROM " + ATTEMPTS + " a WHERE a.delivery_id = d.delivery_id"
                 + " AND a.outcome = 'SENT') AS sent"
@@ -116,7 +118,8 @@ public class DocumentDeliveries {
                 (String) row.get("subject"), (String) row.get("body"), bytes(row.get("pdf")),
                 ((String) row.get("pdf_hash")).trim(), (String) row.get("document_no"), (String) row.get("layout_id"),
                 (UUID) row.get("run_id"), ((Number) row.get("attempts")).intValue(),
-                Boolean.TRUE.equals(row.get("sent"))));
+                Boolean.TRUE.equals(row.get("sent")), (String) row.get("language"),
+                row.get("layout_version_no") == null ? null : ((Number) row.get("layout_version_no")).intValue()));
     }
 
     private static byte[] bytes(Object value) {

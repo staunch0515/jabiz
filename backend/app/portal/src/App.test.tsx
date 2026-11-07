@@ -103,6 +103,67 @@ describe('the portal', () => {
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
   })
+
+  it('signs in and up on one page of the entry template: the column about the portal, two tabs (17zk)', async () => {
+    server()
+    window.history.replaceState(null, '', '/login')
+    const { unmount } = render(<App />)
+    expect(await screen.findByText('Order from us and follow your orders, any time.')).toBeInTheDocument()
+    const tabs = await screen.findByRole('navigation', { name: 'Sign in or sign up' })
+    await userEvent.click(within(tabs).getByRole('link', { name: 'Sign up' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/signup'))
+    expect(await screen.findByTestId('sign-up')).toBeInTheDocument()
+    // The sign-up page says what signing up accepts (gap 9).
+    expect(screen.getByTestId('sign-up-note')).toHaveTextContent('terms of sale')
+    expect(within(screen.getByRole('navigation', { name: 'Sign in or sign up' })).getByRole('link', { name: 'Sign in' }))
+      .toHaveAttribute('href', '/login')
+    unmount()
+  })
+
+  it('hands the second step after an identity provider to the sign-in page in memory, storage blocked or not (17zk)',
+    async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+        const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
+        const url = new URL(request.url, window.location.origin)
+        if (url.pathname === '/api/auth/oidc/callback') return json(200, { status: 'MFA_REQUIRED', challenge: 'ch' })
+        if (url.pathname === '/api/auth/entries/portal') {
+          return json(200, { name: 'portal', selfRegistration: true, appPath: '/portal/', sessionPersistence: 'device' })
+        }
+        return json(200, [])
+      })
+      // A browser that keeps nothing in this tab's storage: the hand-off still works, as before.
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('blocked')
+      })
+      window.history.replaceState(null, '', '/login/oidc?state=s1&code=c1')
+      render(<App />)
+      await waitFor(() => expect(window.location.pathname).toBe('/login'))
+      expect(await screen.findByRole('textbox', { name: 'Code' })).toBeInTheDocument()
+      setItem.mockRestore()
+    })
+
+  it('leads a signed-in customer from signing up and asking for a new password to the orders (gap 9)', async () => {
+    session.store('access', 'refresh')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
+      const url = new URL(request.url, window.location.origin)
+      if (url.pathname === '/api/auth/me') {
+        return json(200, { userId: 'c1', displayName: 'Cara', email: 'cara@example.com', roles: ['CUSTOMER'],
+          permissions: ['portal.use'], emailVerified: true, idleTimeoutSeconds: 1800 })
+      }
+      if (url.pathname === '/api/queries/commerce.portal_orders') return json(200, { items: [], offset: 0, limit: 50 })
+      if (url.pathname === '/api/auth/entries/portal') {
+        return json(200, { name: 'portal', selfRegistration: true, appPath: '/portal/', sessionPersistence: 'device' })
+      }
+      return json(200, [])
+    })
+    for (const path of ['/signup', '/password-reset']) {
+      window.history.replaceState(null, '', path)
+      const { unmount } = render(<App />)
+      await waitFor(() => expect(window.location.pathname).toBe('/orders'))
+      unmount()
+    }
+  })
 })
 
 describe('the orders (17zc)', () => {
@@ -146,6 +207,42 @@ describe('the orders (17zc)', () => {
     expect(cards[0].querySelector('[data-slot="data-table-card-title"]')).toHaveTextContent('SO-1')
     expect(cards[0]).toHaveTextContent('SHIPPED')
     window.localStorage.clear()
+  })
+
+  it('searches and picks a status in the list template, with placing an order beside the title', async () => {
+    signedIn(ORDERS)
+    window.history.replaceState(null, '', '/orders')
+    render(<App />)
+    const table = await screen.findByTestId('orders-table')
+    expect(screen.getByRole('heading', { level: 1, name: 'My orders' }).nextElementSibling)
+      .toHaveAccessibleName('Place an order')
+    await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Status' })).getByRole('radio', { name: 'OPEN' }))
+    expect(within(table).getAllByTestId('order-row')).toHaveLength(1)
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Order number' }), 'SO-9')
+    expect(within(table).queryAllByTestId('order-row')).toHaveLength(0)
+    window.localStorage.clear()
+  })
+
+  it('on a phone: the bottom menu, the floating button, and the account beside its settings', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 })
+    try {
+      signedIn(ORDERS)
+      window.history.replaceState(null, '', '/orders')
+      render(<App />)
+      await screen.findByTestId('orders-table')
+      const bar = screen.getByRole('navigation', { name: 'Quick menu' })
+      expect(within(bar).getByRole('link', { name: 'My orders' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByTestId('page-fab')).toHaveAccessibleName('Place an order')
+      await userEvent.click(within(bar).getByRole('link', { name: 'Account' }))
+      expect(window.location.pathname).toBe('/account')
+      const summary = await screen.findByRole('complementary', { name: 'Your account' })
+      expect(summary).toHaveTextContent('cara@example.com')
+      expect(within(summary).getByTestId('account-email-state')).toHaveTextContent('Verified')
+      // The new page's title has the focus (the shell moves it when the route changes).
+      await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Account' })).toHaveFocus())
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
+    }
   })
 })
 

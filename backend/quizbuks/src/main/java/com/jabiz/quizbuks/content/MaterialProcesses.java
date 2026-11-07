@@ -4,6 +4,8 @@ import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.asset.AssetUses;
+import com.jabiz.quizbuks.asset.QbAssets;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.runtime.EntityInstance;
 import jakarta.validation.Valid;
@@ -53,12 +55,24 @@ public final class MaterialProcesses {
      * and changed with the same. It follows the base's place and the base's {@code watchToAnswer}.
      * {@code durationSec} (Q75, VIDEO_LINK of the base language only): how long the video is, 1 second to 2 hours;
      * the video to watch needs it before a version is saved (D-Q75-5), so that the start can check the watching.
+     * {@code assetId} (F-C1b): the asset of the sponsor's library the console copied the material's content from,
+     * recorded as where the asset is used; none leaves the record of an existing material as it is. Only for a
+     * material of the base language, of the asset's kind (an image group for an image).
      */
     public record MaterialInput(@NotNull UUID quizId, UUID materialId,
         @NotNull @Pattern(regexp = "ARTICLE|LINK|VIDEO_LINK|PDF|IMAGES|AUDIO") String kind, String title,
         String description, String body, String url, UUID pdf, UUID audio,
         @Size(max = ContentLimits.MAX_IMAGES) List<@Valid @NotNull ImageInput> images, Long baseRevision,
-        Boolean watchToAnswer, UUID variantOf, @Pattern(regexp = "ja|zh|en") String language, Integer durationSec) {
+        Boolean watchToAnswer, UUID variantOf, @Pattern(regexp = "ja|zh|en") String language, Integer durationSec,
+        UUID assetId) {
+
+        /** A material as before F-C1b: not from the asset library. */
+        public MaterialInput(UUID quizId, UUID materialId, String kind, String title, String description, String body,
+            String url, UUID pdf, UUID audio, List<ImageInput> images, Long baseRevision, Boolean watchToAnswer,
+            UUID variantOf, String language, Integer durationSec) {
+            this(quizId, materialId, kind, title, description, body, url, pdf, audio, images, baseRevision,
+                watchToAnswer, variantOf, language, durationSec, null);
+        }
 
         /** A material as before Q75: without a duration. */
         public MaterialInput(UUID quizId, UUID materialId, String kind, String title, String description, String body,
@@ -112,6 +126,21 @@ public final class MaterialProcesses {
                     }
                     return files;
                 }))
+                // F-C1b: the asset the material was copied from, after the quiz's lock.
+                .steps(b -> AssetUses.load(b, ctx -> java.util.Collections.singletonList(
+                    ctx.get(INPUT, MaterialInput.class).assetId()), ctx -> {
+                    MaterialInput input = ctx.get(INPUT, MaterialInput.class);
+                    return input.assetId() == null || input.materialId() == null
+                        || QuizEditing.find(list(ctx, MATERIALS), input.materialId()) == null ? List.of()
+                        : List.of(new AssetUses.Place(QbAssets.MATERIAL, input.materialId()));
+                }))
+                .compute("Check the asset picked", (metadata, ctx) -> {
+                    MaterialInput input = ctx.get(INPUT, MaterialInput.class);
+                    // A material of another language follows its base: no place for an asset.
+                    boolean variant = input.variantOf() != null || input.language() != null;
+                    AssetUses.check(ctx, List.of(new AssetUses.Pick("assetId", QbAssets.MATERIAL,
+                        variant ? null : input.kind(), input.assetId())));
+                })
                 .compute("Save the material", (metadata, ctx) -> save(ctx)));
     }
 
@@ -294,6 +323,9 @@ public final class MaterialProcesses {
             }
         }
 
+        // F-C1b: checked before (a material of another language gives its variantOf, so is refused there).
+        AssetUses.record(ctx, QbAssets.MATERIAL, materialId, input.assetId());
+
         List<UUID> imageIds = new ArrayList<>();
         if (images == null) {
             QuizEditing.ordered(existing).forEach(image -> imageIds.add(uuid(image.id())));
@@ -349,6 +381,13 @@ public final class MaterialProcesses {
                                 new com.jabiz.query.QueryPredicate.In("materialId", ids))))
                             .limit(Integer.MAX_VALUE).build();
                     }, IMAGES))
+                // F-C1b: where it was filled from the asset library goes with it.
+                .steps(b -> AssetUses.load(b, ctx -> List.of(), ctx -> {
+                    UUID id = ctx.get(INPUT, MaterialRef.class).materialId();
+                    return list(ctx, MATERIALS).stream()
+                        .filter(m -> QuizEditing.same(m.id(), id) || QuizEditing.same(m.get("variantOf"), id))
+                        .map(m -> new AssetUses.Place(QbAssets.MATERIAL, m.id())).toList();
+                }))
                 .compute("Delete the material", (metadata, ctx) -> {
                     MaterialRef input = ctx.get(INPUT, MaterialRef.class);
                     EntityInstance quiz = quiz(ctx);
@@ -369,6 +408,10 @@ public final class MaterialProcesses {
                         .forEach(image -> ctx.changes().delete(QbContent.MATERIAL_IMAGE, image.id(),
                             image.version()));
                     ctx.changes().delete(QbContent.MATERIAL, material.id(), material.version());
+                    AssetUses.forget(ctx, QbAssets.MATERIAL, materials.stream()
+                        .filter(m -> QuizEditing.same(m.id(), material.id())
+                            || QuizEditing.same(m.get("variantOf"), material.id()))
+                        .map(EntityInstance::id).toList());
                     boolean ofBase = material.get("variantOf") == null;
                     QuizEditing.touch(ctx, quiz, ofBase ? Map.of("materialCount",
                         decimal(QuizLanguages.bases(materials).size() - 1)) : Map.of(), uuid(material.id()),

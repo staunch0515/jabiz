@@ -1,5 +1,5 @@
 import { sitePath } from '@jabiz/client'
-import { useSyncExternalStore } from 'react'
+import { useSyncExternalStore, type ComponentProps } from 'react'
 
 /**
  * A router of a handful of pages, enough for the portal: the platform's sign-in blocks need none (decision D43,
@@ -51,3 +51,23 @@ export function useLocation(): { path: string; search: string } {
 
 /** The navigation of the sign-in blocks of `@jabiz/ui`. */
 export const navigation = { onNavigate: (path: string) => navigate(path), hrefOf }
+
+/**
+ * A link to a page of the portal for the platform's frame and page templates (their `renderLink`): a plain <a href>
+ * that navigates in the page, and leaves a modified click (a new tab) to the browser.
+ */
+export function portalLink(path: string, props: { onClick?: () => void } & ComponentProps<'a'>) {
+  const { onClick, ...rest } = props
+  return (
+    <a
+      href={hrefOf(path)}
+      {...rest}
+      onClick={(event) => {
+        onClick?.()
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+        event.preventDefault()
+        navigate(path)
+      }}
+    />
+  )
+}

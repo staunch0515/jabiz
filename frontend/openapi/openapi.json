@@ -180,6 +180,20 @@
         },
         "type" : "object"
       },
+      "ClientRegion" : {
+        "properties" : {
+          "country" : {
+            "type" : "string"
+          },
+          "known" : {
+            "type" : "boolean"
+          },
+          "mainlandChina" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "CodeRequest" : {
         "properties" : {
           "code" : {
@@ -717,6 +731,23 @@
         },
         "type" : "object"
       },
+      "DraftRule" : {
+        "properties" : {
+          "condition" : { },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "levels" : { },
+          "priority" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "ruleCode" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "EmailLinkConfirm" : {
         "properties" : {
           "token" : {
@@ -1009,6 +1040,23 @@
           "values" : {
             "items" : { },
             "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "Finding" : {
+        "properties" : {
+          "levels" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "required" : {
+            "type" : "boolean"
+          },
+          "ruleCode" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -1823,6 +1871,37 @@
         },
         "type" : "object"
       },
+      "LanguageLayout" : {
+        "properties" : {
+          "defaultHash" : {
+            "type" : "string"
+          },
+          "defaultLayout" : {
+            "$ref" : "#/components/schemas/MailLayout"
+          },
+          "layout" : {
+            "$ref" : "#/components/schemas/MailLayout"
+          },
+          "locale" : {
+            "type" : "string"
+          },
+          "problems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Violation"
+            },
+            "type" : "array"
+          },
+          "state" : {
+            "enum" : [ "DEFAULT", "CUSTOM", "DEFAULT_UPDATED", "INVALID" ],
+            "type" : "string"
+          },
+          "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "LanguageTexts" : {
         "properties" : {
           "body" : {
@@ -1847,13 +1926,73 @@
             "type" : "array"
           },
           "state" : {
-            "enum" : [ "DEFAULT", "CUSTOM", "DEFAULT_UPDATED", "INVALID" ],
+            "enum" : [ "DEFAULT", "CUSTOM", "DEFAULT_UPDATED", "INVALID", "UNAPPROVED" ],
             "type" : "string"
           },
           "subject" : {
             "type" : "string"
           },
           "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "LayoutPreviewRequest" : {
+        "properties" : {
+          "layout" : {
+            "$ref" : "#/components/schemas/MailLayout"
+          },
+          "locale" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "LayoutPreviewResponse" : {
+        "properties" : {
+          "html" : {
+            "type" : "string"
+          },
+          "problems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Violation"
+            },
+            "type" : "array"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "LayoutsResponse" : {
+        "properties" : {
+          "allowedLinkHosts" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "languages" : {
+            "items" : {
+              "$ref" : "#/components/schemas/LanguageLayout"
+            },
+            "type" : "array"
+          },
+          "maxFooterLength" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "maxLineLength" : {
             "format" : "int32",
             "type" : "integer"
           }
@@ -1920,6 +2059,26 @@
         },
         "type" : "object"
       },
+      "MailLayout" : {
+        "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "empty" : {
+            "type" : "boolean"
+          },
+          "footer" : {
+            "type" : "string"
+          },
+          "logoAlt" : {
+            "type" : "string"
+          },
+          "logoUrl" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "MailPreferences" : {
         "properties" : {
           "templates" : {
@@ -1927,6 +2086,47 @@
               "$ref" : "#/components/schemas/TemplatePreference"
             },
             "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "MailTextPreviewRequest" : {
+        "properties" : {
+          "body" : {
+            "type" : "string"
+          },
+          "locale" : {
+            "type" : "string"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "template" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "MailTextPreviewResponse" : {
+        "properties" : {
+          "html" : {
+            "type" : "string"
+          },
+          "problems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Violation"
+            },
+            "type" : "array"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
           }
         },
         "type" : "object"
@@ -2111,6 +2311,14 @@
         },
         "type" : "object"
       },
+      "PasskeyChallengeRequest" : {
+        "properties" : {
+          "challenge" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "PasskeyOptions" : {
         "properties" : {
           "publicKey" : {
@@ -2197,18 +2405,37 @@
         },
         "type" : "object"
       },
-      "PreviewRequest" : {
+      "PreviewChange" : {
         "properties" : {
-          "body" : {
+          "after" : {
+            "$ref" : "#/components/schemas/Finding"
+          },
+          "before" : {
+            "$ref" : "#/components/schemas/Finding"
+          },
+          "entityId" : {
             "type" : "string"
           },
-          "locale" : {
+          "evaluatedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PreviewRequest" : {
+        "properties" : {
+          "draft" : {
+            "$ref" : "#/components/schemas/DraftRule"
+          },
+          "limit" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "ruleId" : {
             "type" : "string"
           },
           "subject" : {
-            "type" : "string"
-          },
-          "template" : {
             "type" : "string"
           }
         },
@@ -2216,24 +2443,18 @@
       },
       "PreviewResponse" : {
         "properties" : {
-          "html" : {
-            "type" : "string"
-          },
-          "problems" : {
+          "changed" : {
             "items" : {
-              "$ref" : "#/components/schemas/Violation"
+              "$ref" : "#/components/schemas/PreviewChange"
             },
             "type" : "array"
           },
-          "subject" : {
-            "type" : "string"
-          },
-          "text" : {
-            "type" : "string"
-          },
-          "versionNo" : {
+          "evaluated" : {
             "format" : "int32",
             "type" : "integer"
+          },
+          "truncated" : {
+            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -2284,6 +2505,31 @@
             "type" : "string"
           },
           "label" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PushRegisterRequest" : {
+        "properties" : {
+          "auth" : {
+            "type" : "string"
+          },
+          "endpoint" : {
+            "type" : "string"
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "p256dh" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PushRegistered" : {
+        "properties" : {
+          "deviceId" : {
             "type" : "string"
           }
         },
@@ -3363,7 +3609,7 @@
   "paths" : {
     "/api/approvals/preview" : {
       "post" : {
-        "operationId" : "preview_2",
+        "operationId" : "preview_3",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -4096,7 +4342,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/RegisterRequest"
+                "$ref" : "#/components/schemas/PushRegisterRequest"
               }
             }
           }
@@ -4106,7 +4352,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/Registered"
+                  "$ref" : "#/components/schemas/PushRegistered"
                 }
               }
             },
@@ -4364,7 +4610,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/ChallengeRequest"
+                "$ref" : "#/components/schemas/PasskeyChallengeRequest"
               }
             }
           }
@@ -4418,7 +4664,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/ChallengeRequest"
+                "$ref" : "#/components/schemas/PasskeyChallengeRequest"
               }
             }
           }
@@ -5203,6 +5449,24 @@
           }
         },
         "tags" : [ "sign-up-controller" ]
+      }
+    },
+    "/api/client/region" : {
+      "get" : {
+        "operationId" : "region",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClientRegion"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "client-region-controller" ]
       }
     },
     "/api/datasets/{resourceId}/commit" : {
@@ -6400,7 +6664,7 @@
     },
     "/api/imports/{importId}/preview" : {
       "post" : {
-        "operationId" : "preview_1",
+        "operationId" : "preview_2",
         "parameters" : [ {
           "in" : "path",
           "name" : "importId",
@@ -6607,7 +6871,7 @@
     },
     "/api/jobs" : {
       "get" : {
-        "operationId" : "list_5",
+        "operationId" : "list_6",
         "responses" : {
           "200" : {
             "content" : {
@@ -6625,6 +6889,52 @@
           }
         },
         "tags" : [ "job-controller" ]
+      }
+    },
+    "/api/mail/layouts" : {
+      "get" : {
+        "operationId" : "list_5",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LayoutsResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mail-layout-controller" ]
+      }
+    },
+    "/api/mail/layouts/preview" : {
+      "post" : {
+        "operationId" : "preview_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/LayoutPreviewRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LayoutPreviewResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mail-layout-controller" ]
       }
     },
     "/api/mail/texts" : {
@@ -6652,7 +6962,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/PreviewRequest"
+                "$ref" : "#/components/schemas/MailTextPreviewRequest"
               }
             }
           },
@@ -6663,7 +6973,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/PreviewResponse"
+                  "$ref" : "#/components/schemas/MailTextPreviewResponse"
                 }
               }
             },

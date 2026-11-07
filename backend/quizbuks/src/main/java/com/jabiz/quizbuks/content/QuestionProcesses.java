@@ -4,6 +4,8 @@ import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.asset.AssetUses;
+import com.jabiz.quizbuks.asset.QbAssets;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.runtime.EntityInstance;
 import jakarta.validation.Valid;
@@ -38,8 +40,18 @@ public final class QuestionProcesses {
     public static final String DELETE = "QB_QUESTION_DELETE";
     public static final String REORDER = "QB_QUESTION_REORDER";
 
-    /** An option: an existing one by {@code optionId}, a new one without. Its place is its place in the list. */
-    public record OptionInput(UUID optionId, String text, UUID image, Boolean correct) {}
+    /**
+     * An option: an existing one by {@code optionId}, a new one without. Its place is its place in the list.
+     * {@code imageAssetId} (F-C1b): the image asset of the sponsor's library its image was copied from; none leaves
+     * the record of an existing option as it is.
+     */
+    public record OptionInput(UUID optionId, String text, UUID image, Boolean correct, UUID imageAssetId) {
+
+        /** An option as before F-C1b: its image not from the asset library. */
+        public OptionInput(UUID optionId, String text, UUID image, Boolean correct) {
+            this(optionId, text, image, correct, null);
+        }
+    }
 
     /**
      * One question with its options; a new one (no {@code questionId}) goes to the end. The sponsor console saves a
@@ -49,10 +61,19 @@ public final class QuestionProcesses {
      * @param points    1 when not given; a survey's question is always 1 (Q12, D-Q12-3)
      * @param selection a survey's question only: {@code SINGLE} or {@code MULTIPLE} (may be missing in a draft);
      *                  a survey's options are never correct, whatever {@code correct} says
+     * @param imageAssetId F-C1b: the image asset of the sponsor's library the question's image was copied from;
+     *                  none leaves the record of an existing question as it is
      */
     public record QuestionInput(@NotNull UUID quizId, UUID questionId, String stem, UUID image, Integer points,
         @Size(max = ContentLimits.MAX_OPTIONS) List<@Valid @NotNull OptionInput> options, Long baseRevision,
-        String selection) {}
+        String selection, UUID imageAssetId) {
+
+        /** A question as before F-C1b: its image not from the asset library. */
+        public QuestionInput(UUID quizId, UUID questionId, String stem, UUID image, Integer points,
+            List<OptionInput> options, Long baseRevision, String selection) {
+            this(quizId, questionId, stem, image, points, options, baseRevision, selection, null);
+        }
+    }
 
     public record QuestionRef(@NotNull UUID quizId, @NotNull UUID questionId, Long baseRevision) {}
 
@@ -85,6 +106,9 @@ public final class QuestionProcesses {
                     }
                     return files;
                 }))
+                // F-C1b: the image assets the images were copied from, after the quiz's lock.
+                .steps(b -> AssetUses.load(b, QuestionProcesses::assetsPicked, QuestionProcesses::placesTouched))
+                .compute("Check the assets picked", (metadata, ctx) -> AssetUses.check(ctx, picks(ctx)))
                 .compute("Save the question", (metadata, ctx) -> save(ctx)));
     }
 
@@ -165,6 +189,7 @@ public final class QuestionProcesses {
             });
             TranslationProcesses.deleteTranslationsOf(ctx, gone);
         }
+        AssetUses.record(ctx, QbAssets.QUESTION_IMAGE, questionId, input.imageAssetId());
         List<UUID> optionIds = new ArrayList<>();
         if (options == null) {
             QuizEditing.ordered(existing).forEach(option -> optionIds.add(uuid(option.id())));
@@ -182,6 +207,12 @@ public final class QuestionProcesses {
             changed |= QuizEditing.saveParts(ctx, QbContent.OPTION, existing,
                 options.stream().map(OptionInput::optionId).toList(), rows,
                 Map.of("questionId", questionId, "quizId", quiz.id(), "ownerId", owner), optionIds);
+            // F-C1b: the options taken out take the records of their images with them; the keys are in the input's
+            // order.
+            AssetUses.forget(ctx, QbAssets.OPTION_IMAGE, removedOptions(options, existing));
+            for (int i = 0; i < options.size(); i++) {
+                AssetUses.record(ctx, QbAssets.OPTION_IMAGE, optionIds.get(i), options.get(i).imageAssetId());
+            }
         }
 
         if (!changed) {
@@ -211,6 +242,17 @@ public final class QuestionProcesses {
                     ctx -> ctx.get(INPUT, QuestionRef.class).questionId(), OPTIONS))
                 .steps(b -> TranslationProcesses.loadTranslationsOf(b,
                     ctx -> keysOf(ctx.get(INPUT, QuestionRef.class).questionId(), ctx)))
+                // F-C1b: where its images were filled from the asset library goes with it.
+                .steps(b -> AssetUses.load(b, ctx -> List.of(), ctx -> {
+                    UUID id = ctx.get(INPUT, QuestionRef.class).questionId();
+                    if (QuizEditing.find(list(ctx, QUESTIONS), id) == null) {
+                        return List.of();
+                    }
+                    List<AssetUses.Place> places = new ArrayList<>();
+                    places.add(new AssetUses.Place(QbAssets.QUESTION_IMAGE, id));
+                    list(ctx, OPTIONS).forEach(o -> places.add(new AssetUses.Place(QbAssets.OPTION_IMAGE, o.id())));
+                    return places;
+                }))
                 .compute("Delete the question", (metadata, ctx) -> {
                     QuestionRef input = ctx.get(INPUT, QuestionRef.class);
                     EntityInstance quiz = quiz(ctx);
@@ -230,6 +272,9 @@ public final class QuestionProcesses {
                     list(ctx, OPTIONS).forEach(option -> ctx.changes().delete(QbContent.OPTION, option.id(),
                         option.version()));
                     ctx.changes().delete(QbContent.QUESTION, question.id(), question.version());
+                    AssetUses.forget(ctx, QbAssets.QUESTION_IMAGE, List.of(question.id()));
+                    AssetUses.forget(ctx, QbAssets.OPTION_IMAGE, list(ctx, OPTIONS).stream().map(EntityInstance::id)
+                        .toList());
                     QuizEditing.touch(ctx, quiz, Map.of("questionCount", decimal(questions.size() - 1)),
                         uuid(question.id()), List.of());
                 }));
@@ -251,6 +296,54 @@ public final class QuestionProcesses {
                     QuizEditing.reorder(ctx, QbContent.QUESTION, list(ctx, QUESTIONS), input.questionIds(),
                         "questionIds", input.baseRevision());
                 }));
+    }
+
+    /** F-C1b: the image assets the input picks. */
+    private static List<UUID> assetsPicked(ProcessContext ctx) {
+        return picks(ctx).stream().map(AssetUses.Pick::assetId).filter(java.util.Objects::nonNull).toList();
+    }
+
+    private static List<AssetUses.Pick> picks(ProcessContext ctx) {
+        QuestionInput input = ctx.get(INPUT, QuestionInput.class);
+        List<AssetUses.Pick> picks = new ArrayList<>();
+        picks.add(new AssetUses.Pick("imageAssetId", QbAssets.QUESTION_IMAGE, null, input.imageAssetId()));
+        if (input.options() != null) {
+            for (int i = 0; i < input.options().size(); i++) {
+                picks.add(new AssetUses.Pick("options[" + i + "].imageAssetId", QbAssets.OPTION_IMAGE, null,
+                    input.options().get(i).imageAssetId()));
+            }
+        }
+        return picks;
+    }
+
+    /**
+     * F-C1b: the existing places whose records the save may change: the question and the options given an asset, and
+     * the options taken out. Only of a question of this quiz (the options are loaded only for one).
+     */
+    private static List<AssetUses.Place> placesTouched(ProcessContext ctx) {
+        QuestionInput input = ctx.get(INPUT, QuestionInput.class);
+        if (input.questionId() == null || QuizEditing.find(list(ctx, QUESTIONS), input.questionId()) == null) {
+            return List.of();
+        }
+        List<AssetUses.Place> places = new ArrayList<>();
+        if (input.imageAssetId() != null) {
+            places.add(new AssetUses.Place(QbAssets.QUESTION_IMAGE, input.questionId()));
+        }
+        if (input.options() != null) {
+            input.options().stream().filter(o -> o.optionId() != null && o.imageAssetId() != null)
+                .forEach(o -> places.add(new AssetUses.Place(QbAssets.OPTION_IMAGE, o.optionId())));
+            removedOptions(input.options(), list(ctx, OPTIONS))
+                .forEach(id -> places.add(new AssetUses.Place(QbAssets.OPTION_IMAGE, id)));
+        }
+        return places;
+    }
+
+    /** The keys of the existing options the list leaves out. */
+    private static List<Object> removedOptions(List<OptionInput> options, List<EntityInstance> existing) {
+        java.util.Set<String> kept = new java.util.HashSet<>();
+        options.forEach(option -> kept.add(String.valueOf(option.optionId())));
+        return existing.stream().filter(option -> !kept.contains(QuizEditing.key(option.id())))
+            .map(EntityInstance::id).toList();
     }
 
     /** The translation keys of the question and of its options as loaded (none without a question). */

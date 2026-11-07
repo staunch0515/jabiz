@@ -64,7 +64,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   邮件只经待办的通知、单据的发送（`DOCUMENT_SEND`，22 §5）与事务邮件（流程步骤 `SendMail`，模板为 `MailTemplate` Bean 与消息 `mail.<名>.subject|body`，
   验证与重置链接用发送时才生成的一次性令牌：模板 `.token(用途, 有效期)`、流程中以 `MailTokens.consume` 使用，18 §5.6、决策 D35）；
   `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。邮件文字（含待办通知与单据邮件）的在线修改只经平台的 `MailText` 流程（`MAIL_TEXT_SAVE` / `MAIL_TEXT_RESET` / `MAIL_TEXT_TEST_SEND`，带令牌、登录链接或 `t.protectedText()` 的经受控变更 `MailText` 由另一位管理员发布），
-  规则只在 `MailTextRules`，示例值以 `t.sample(…)` 声明，不自建文字的存储或编辑页（18 §5.6、决策 D72）。要经应用自己登记的服务器发出的邮件用 `SendMail.via(ctx -> 键)`，服务器由应用的一个 `MailSenderSource` Bean 给出（18 §5.6、决策 D56），
+  规则只在 `MailTextRules`，示例值以 `t.sample(…)` 声明，不自建文字的存储或编辑页（18 §5.6、决策 D72）。所有邮件共用的信纸（页眉、页脚）的缺省值只在 `jabiz.mail.layout.<语言>.*`，
+  修改只经受控变更 `MailLayout`（另一位管理员发布）与 `MAIL_LAYOUT_RESET`，规则只在 `MailLayoutRules`（标志只用本站的图片），不自写邮件的 HTML 外框或页脚（17zh-b）。要经应用自己登记的服务器发出的邮件用 `SendMail.via(ctx -> 键)`，服务器由应用的一个 `MailSenderSource` Bean 给出（18 §5.6、决策 D56），
   其密码只以 `SealedSecrets` 密封保存（步骤 `SealSecret`，密钥 `JABIZ_SEAL_KEY`），失败绝不改经平台的服务器。可退订的模板（`NOTIFICATION`）以 `.entries(入口…)` 声明给哪些登录入口的用户（缺省全部，偏好只列令牌入口的；只寄给不是账号的地址的通知另加 `.addressesOnly()`，不在任何人的偏好中，17r），
   显示名写在消息 `mail.<名>.name`；收件偏好与邮件语言只经平台接口与积木 `MailPreferences`，切换界面语言只询问、不静默改邮件语言（`offerMailLanguage`，18 §5.6、决策 D49）。
   应用的前端要有自己的退订页时，挂载积木 `MailUnsubscribe` 并配置 `jabiz.mail.unsubscribe-paths.<入口>`（相对该入口 `app-path`；声明了该入口的通知链接到它，D52 第 3 条），
@@ -85,6 +86,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **安全**（见 10 与决策 D12）：`/api/**` 默认要求认证（Bearer 访问令牌）；新的入口必须按元数据声明的权限码检查（`Permissions`），
   未声明即拒绝。例外只有公开只读接口 `/api/public/**`（见下条）、入站 Webhook `/api/inbound/**`（必须验签，D37）与登录、注册等认证接口。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
   登录类接口限流（地址 + 名字、地址、IPv6 站点、实例）、口令哈希有并发上限（`jabiz.security.sign-in.rate-limit.*`、`jabiz.security.password-hashing.*`，10 §4.1–§4.2、决策 D47），由平台在入口处做，不另写；客户端地址只经 `jabiz.security.trusted-proxies`，不用 `server.forward-headers-strategy`。
+  按客户端地址的国家只经 `ClientCountry`（本地地址库 `jabiz.geoip.database`，流程中用步骤 `LoadClientCountry.into(键)`，页面用 `GET /api/client/region` / `clientRegion()`；
+  结果不保存、不进 `input_summary` 与观测标签，10 §18、决策 D74），不自己读转发头或调用外部的地理位置服务。
   会话（刷新令牌族）的列出与吊销只经平台接口与流程（本人 `/api/auth/account/sessions/**`，管理员 `SEC_USER_SESSIONS_REVOKE`，10 §15.9），不自写会话表或吊销逻辑。
   被换下的刷新令牌在宽限内再次出现（页面在续期中刷新、复制标签页）由平台补发一次（`jabiz.security.refresh.reuse-grace`，缺省 30 秒，10 §3、决策 D73），客户端不自己重试或绕过。
 - **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
@@ -99,7 +102,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   （`/api/auth/passkey`、`/api/auth/challenge/passkey/**`、`/api/auth/step-up/passkey`、`/api/auth/account/passkeys/**`；前端 `SignInForm` 的 `passkey`、积木 `Passkeys`、`MailLinkPage` 的 `passkey-confirm`）；用户验证的通行密钥算作两个因素（10 §15.16、决策 D71），不自写 WebAuthn 校验或挑战存储。
 - **应用前端与 PWA**（见 17 §4.1、指南 `docs/guide/app-spa.md` 与决策 D43）：需要登录的应用前端放在应用目录中（自己的 lockfile，经 `link:` 用 `@jabiz/client` / `@jabiz/ui`，
   版本与平台一致：`app:check`），以 `jabizApp { spa(路径, 目录, entry = 入口, pwa = Pwa.ON) }` 构建、用预设 `@jabiz/client/vite`；页面用 `@jabiz/ui` 的登录与账户积木，
-  会话按入口（`configureClient({ entry })`）；暂时由测试系统的应用回答的公开地址不显示测试系统的横条时，只经 `configureClient({ environment })` 按地址改写（17ze），不改服务器的 `jabiz.web.environment`、不自己隐藏横条。入口的 `app-path` 是该前端的根：邮件链接只用 `{entryUrl}` / `{entryUrl.<入口>}`，OIDC 回调为提供方的 `redirect-uris.<入口>`。
+  会话按入口（`configureClient({ entry })`）；入口页（登录、注册、第二步、找回密码、回调与邮件链接页）一律用入口页模板 `EntryLayout`（`EntryLayoutProvider` 给出品牌、左栏、提示、页脚链接与 `otherEntry`；
+  登录方式的顺序用 `SignInForm` 的 `order`，登录与注册同页用 `tabs`；12 §14），不自写外框，模板只管排列、不删现有行为；暂时由测试系统的应用回答的公开地址不显示测试系统的横条时，只经 `configureClient({ environment })` 按地址改写（17ze），不改服务器的 `jabiz.web.environment`、不自己隐藏横条。入口的 `app-path` 是该前端的根：邮件链接只用 `{entryUrl}` / `{entryUrl.<入口>}`，OIDC 回调为提供方的 `redirect-uris.<入口>`。
   Service Worker 只用平台的（只缓存外壳、不缓存接口、更新经用户同意，撤下用 `Pwa.REMOVE`），不引入 Workbox；不开 CORS、不用 Cookie。
   在商店 App 的原生外壳中：提供方的页面经 `configureClient({ openAuthorization })` 交给系统浏览器、回调照旧是入口的 `login/oidc`，外壳以 `nativeShell` 声明（安装提示不出现），
   关联文件只经 `jabiz.web.native-apps`（平台提供 `/.well-known/apple-app-site-association` 与 `assetlinks.json`，决策 D68），不自写登录回调、scheme 或反向代理的规则。
@@ -121,6 +125,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **入口的范围**（见 10 §13.4 与决策 D64）：同一入口的不同会话只看到、只处理"自己那一份"（运营商只看到自己的商户）时，以 `EntryScopeResolver` Bean 给入口一个范围名并在登录与刷新时算出值，
   数据视图以 `scope(s -> s.withinEntryScope(名, 字段[, EntryScopeVia.of(对照实体, 键, 范围字段)]))` 声明，审批与待办以 `ApprovalCase.scope` / `TaskSpec.scope` 记范围（缺省为创建的会话的），
   流程中核对对象用步骤 `RequireScope.of(名, ctx -> 值)`；不在模板参数或前端传运营商编号，不自己过滤。未声明的数据视图不受范围约束，须逐个声明并测试。
+  对象改由另一个范围值负责时，其未结的审批请求与待办只经子流程 `APPROVAL_SCOPE_MOVE` 移到新值（应用的改派流程以 `CallProcess.of` 调用，调用者另需 `approval.scope.move`，18 §3.8、决策 D76），应用不自己写范围字段。
 - **数据期限**（见 10 §13.2 与决策 D28 第 8 条）：只能看某一期间数据的人以带 `dataFrom` / `dataTo` 的角色分配表达；受期限约束的数据视图明确声明
   `scope(s -> s.withinDataPeriod("时间字段"))`（或经引用：`withinDataPeriod("引用字段", "被引用的不可变时间字段")`）。没有期限即不受限制，未声明的数据视图不受期限影响。
 - **访问审查**（见 10 §13.3 与决策 D28 第 9 条）：访问权限报表是模板 `jabiz.security.access_review`，以 `REPORT_ISSUE` 按期末签发；签核只经 `ACCESS_REVIEW_SIGN_OFF`。

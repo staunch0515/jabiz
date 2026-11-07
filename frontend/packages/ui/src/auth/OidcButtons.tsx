@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '../components/ui/button'
 import { Separator } from '../components/ui/separator'
+import { useIsWide, useRetryWait } from './entry'
 import { AUTH_NAMESPACE } from './messages'
 
 export type OidcProvider = components['schemas']['ProviderEntry']
@@ -40,9 +41,12 @@ export interface OidcButtonsProps {
   onError?: (error: unknown) => void
   /**
    * `buttons` (the default): a full-width button per provider, its mark beside its label. `icons`: a row of round
-   * buttons under "Other ways to sign in", each named by its provider's label (decision D61 item 5).
+   * buttons under "Other ways to sign in", each named by its provider's label (decision D61 item 5). `responsive`
+   * (phase 17zk): icons on a phone, full-width buttons on a wide screen.
    */
-  layout?: 'buttons' | 'icons'
+  layout?: 'buttons' | 'icons' | 'responsive'
+  /** Leaves out the separator over the buttons: they open the page (phase 17zk). */
+  bare?: boolean
   /**
    * What the buttons are offered for: signing in (the default) or signing up, which only changes the words over them
    * (a provider's first sign-in opens the account where the entry allows it; decision D39).
@@ -111,32 +115,43 @@ export function ProviderMark({ kind, className = 'size-4' }: { kind?: string | n
  * "or" separator; nothing when none is offered. A provider of a known kind (`google`) shows its mark beside its label;
  * Apple's button says Apple's own title in the page's language.
  */
-export function OidcButtons({ returnTo, providers, start = startProviderSignIn, onError, layout = 'buttons',
-  purpose = 'signIn' }: OidcButtonsProps) {
+export function OidcButtons({ returnTo, providers, start = startProviderSignIn, onError, layout: asked = 'buttons',
+  purpose = 'signIn', bare = false }: OidcButtonsProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const offered = useOidcProviders(providers)
+  const wide = useIsWide()
+  // Too many starts (429 with Retry-After, gap 5): the buttons wait as long as the server asks.
+  const { seconds: wait, hold } = useRetryWait()
+  const layout = asked === 'responsive' ? (wide ? 'buttons' : 'icons') : asked
   if (offered.length === 0) return null
   // Apple allows only its own titles on its button (decision D67), whatever the provider's label says.
   const label = (provider: OidcProvider) => provider.kind === 'apple'
     ? t(purpose === 'signUp' ? 'signUp.withApple' : 'login.withApple') : provider.label
   const go = (provider: OidcProvider) => {
     onError?.(null)
-    start(provider.id!, sitePath(returnTo)).catch((e: unknown) => onError?.(e))
+    start(provider.id!, sitePath(returnTo)).catch((e: unknown) => {
+      hold(e)
+      onError?.(e)
+    })
   }
   if (layout === 'icons') {
     return (
-      <div className="flex flex-col gap-3" data-testid="oidc-icons">
-        <div className="text-muted-foreground flex items-center gap-3 text-sm">
-          <Separator className="flex-1" />
-          {t(purpose === 'signUp' ? 'signUp.otherWays' : 'login.otherWays')}
-          <Separator className="flex-1" />
-        </div>
+      <div className="flex flex-col gap-3" data-testid="oidc-icons" role={bare ? 'group' : undefined}
+        aria-label={bare ? t(purpose === 'signUp' ? 'signUp.otherWays' : 'login.otherWays') : undefined}>
+        {!bare && (
+          <div className="text-muted-foreground flex items-center gap-3 text-sm">
+            <Separator className="flex-1" />
+            {t(purpose === 'signUp' ? 'signUp.otherWays' : 'login.otherWays')}
+            <Separator className="flex-1" />
+          </div>
+        )}
+        {wait > 0 && <p className="text-muted-foreground text-center text-sm" data-testid="oidc-wait">{t('common.retryIn', { seconds: wait })}</p>}
         <ul className="flex flex-wrap items-center justify-center gap-4">
           {offered.map((provider) => (
             <li key={provider.id}>
               <Button variant="outline" size="icon" className="size-11 rounded-full" aria-label={label(provider)}
                 title={label(provider)} data-testid={`oidc-${provider.id}`} data-kind={provider.kind ?? 'generic'}
-                onClick={() => go(provider)}>
+                disabled={wait > 0} onClick={() => go(provider)}>
                 {ProviderMark({ kind: provider.kind, className: 'size-6' }) ?? <KeyRound aria-hidden className="size-5" />}
               </Button>
             </li>
@@ -147,12 +162,17 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
   }
   return (
     <>
-      <div className="text-muted-foreground flex items-center gap-3 text-sm">
-        <Separator className="flex-1" />
-        {t(purpose === 'signUp' ? 'signUp.orWith' : 'login.orWith')}
-        <Separator className="flex-1" />
-      </div>
-      <div className="flex flex-col gap-2">
+      {!bare && (
+        <div className="text-muted-foreground flex items-center gap-3 text-sm">
+          <Separator className="flex-1" />
+          {t(purpose === 'signUp' ? 'signUp.orWith' : 'login.orWith')}
+          <Separator className="flex-1" />
+        </div>
+      )}
+      {wait > 0 && <p className="text-muted-foreground text-center text-sm" data-testid="oidc-wait">{t('common.retryIn', { seconds: wait })}</p>}
+      {/* Without the separator that names them, the buttons are a named group, as the icons are. */}
+      <div className="flex flex-col gap-2" data-testid="oidc-buttons" role={bare ? 'group' : undefined}
+        aria-label={bare ? t(purpose === 'signUp' ? 'signUp.otherWays' : 'login.otherWays') : undefined}>
         {offered.map((provider) => (
           <Button
             key={provider.id}
@@ -160,6 +180,7 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
             className="w-full"
             data-testid={`oidc-${provider.id}`}
             data-kind={provider.kind ?? 'generic'}
+            disabled={wait > 0}
             onClick={() => go(provider)}
           >
             <ProviderMark kind={provider.kind} />

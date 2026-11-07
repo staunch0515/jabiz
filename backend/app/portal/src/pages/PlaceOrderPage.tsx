@@ -1,8 +1,9 @@
 import { formatAmount, isProblem, runProcess, runQuery, useAuth } from '@jabiz/client'
-import { Alert, AlertDescription, Button, Input, Label, MarkdownView, PageState, VerifyEmailBanner } from '@jabiz/ui'
+import { Alert, AlertDescription, FormPage, Input, Label, MarkdownView, PageState, VerifyEmailBanner } from '@jabiz/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useId, useState, type FormEvent } from 'react'
+import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AREAS } from '../areas'
 import { PORTAL } from '../messages'
 
 interface ProductRow {
@@ -14,7 +15,9 @@ interface ProductRow {
 
 /**
  * Orders for the customer's own account (`PORTAL_ORDER_PLACE`): the server picks the customer from the session and
- * requires a verified address; until then the page says so and offers the link again.
+ * requires a verified address; until then the page says so and offers the link again. On the platform's form
+ * template (phase 17zj): one column, and a bar at the bottom that places the order or discards the choice, and says
+ * whether something is chosen and not yet ordered.
  */
 export function PlaceOrderPage() {
   const { t } = useTranslation(PORTAL)
@@ -32,8 +35,9 @@ export function PlaceOrderPage() {
     queryFn: () => runQuery<ProductRow>('commerce.portal_products', { limit: 200 }),
   })
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  const dirty = choice !== '' || quantity !== '1'
+
+  async function submit() {
     const product = products.data?.items.find((p) => `${p.warehouseCode}/${p.sku}` === choice)
     const amount = Number(quantity)
     if (!product || !Number.isInteger(amount) || amount < 1) return
@@ -46,6 +50,8 @@ export function PlaceOrderPage() {
         lines: [{ sku: product.sku, quantity: amount }],
       })
       setPlaced(output.orderNo)
+      setChoice('')
+      setQuantity('1')
       await queryClient.invalidateQueries({ queryKey: ['portal', 'orders'] })
     } catch (e) {
       if (isProblem(e, 'EMAIL_NOT_VERIFIED')) setError(t('order.verifyFirst'))
@@ -57,10 +63,19 @@ export function PlaceOrderPage() {
   }
 
   return (
-    <section className="flex max-w-md flex-col gap-4" aria-labelledby="order-title">
-      <h1 id="order-title" className="text-xl font-semibold">
-        {t('order.title')}
-      </h1>
+    <FormPage
+      title={t('order.title')}
+      icon={AREAS.order.icon}
+      dirty={dirty}
+      saving={busy}
+      canSave={choice !== ''}
+      saveLabel={t('order.submit')}
+      onSave={() => void submit()}
+      onDiscard={() => {
+        setChoice('')
+        setQuantity('1')
+      }}
+    >
       {!emailVerified && <VerifyEmailBanner />}
       {products.isPending && <PageState kind="loading" />}
       {products.isError && <PageState kind="error" description={t('failed')} />}
@@ -76,7 +91,7 @@ export function PlaceOrderPage() {
         </Alert>
       )}
       {products.data && products.data.items.length > 0 && (
-        <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} noValidate>
+        <>
           <div className="flex flex-col gap-2">
             <Label htmlFor={productId}>{t('order.product')}</Label>
             <select
@@ -108,13 +123,10 @@ export function PlaceOrderPage() {
               data-testid="order-quantity"
             />
           </div>
-          <Button type="submit" disabled={busy || !choice} aria-busy={busy || undefined} data-testid="order-submit">
-            {t('order.submit')}
-          </Button>
-        </form>
+        </>
       )}
       {/* The notes are Markdown in the portal's texts; MarkdownView drops any raw HTML (decision D20). */}
       <MarkdownView text={t('order.howTo')} />
-    </section>
+    </FormPage>
   )
 }

@@ -63,6 +63,9 @@ public final class OperatorScopes {
         fields.put(QbSponsorPages.PAGE, "userId");
         fields.put(QbSponsorProducts.PRODUCT, "userId");
         fields.put(QbSponsorProducts.QUIZ_LINK, "ownerId");
+        // F-C1: a sponsor's asset library and where its assets were copied to.
+        fields.put(com.jabiz.quizbuks.asset.QbAssets.ASSET, "sponsorId");
+        fields.put(com.jabiz.quizbuks.asset.QbAssets.USE, "sponsorId");
         // Q89: a benefit by its provider; the conversations and purchases by the sponsor that buys (the provider's
         // operator reads its side through its own datasets, Q89d).
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.OFFER, "providerId");

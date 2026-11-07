@@ -113,6 +113,11 @@ public class MailTemplates {
         return baseUrl + (path.endsWith("/") ? path : path + "/");
     }
 
+    /** Whether {@code entry} names a configured, usable sign-in entry, exactly. */
+    public boolean entryExists(String entry) {
+        return entry != null && entries.find(entry).filter(found -> found.name().equals(entry)).isPresent();
+    }
+
     /** The unsubscribe link carrying {@code token}: the page of the application that posts it to the API. */
     public String unsubscribeUrl(String token) {
         return baseUrl + unsubscribePath + "?token=" + token;

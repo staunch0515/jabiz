@@ -2,9 +2,12 @@
  * Texts of the user interface. Business texts (entity and field labels, rule messages, dictionary labels, menu
  * labels) come from the server in the language of the request; only the platform's own chrome is here.
  */
+import { mailEn, mailJa, mailZh } from './mail'
+
 const en = {
   app: { title: 'jabiz', language: 'Language', logout: 'Sign out', loading: 'Loading…', error: 'Something went wrong', security: 'Security', dataPeriod: 'Data {{from}} – {{to}}', dataPeriodHint: 'Your roles limit you to the data of this period.', build: 'Build {{commit}}' },
-  nav: { datasets: 'Data', processes: 'Processes', home: 'Home', tasks: 'Tasks', reports: 'Reports', imports: 'Imports', audit: 'Audit', integrity: 'Integrity', retention: 'Retention', accessReview: 'Access review', sessions: 'Sessions', documents: 'Documents' },
+  nav: { datasets: 'Data', processes: 'Processes', home: 'Home', tasks: 'Tasks', reports: 'Reports', imports: 'Imports', audit: 'Audit', integrity: 'Integrity', retention: 'Retention', accessReview: 'Access review', sessions: 'Sessions', documents: 'Documents', mailTexts: 'Mail templates', mailLayout: 'Mail layout' },
+  mail: mailEn,
   imports: {
     title: 'Imports',
     empty: 'No imports.',
@@ -262,7 +265,8 @@ const en = {
   },
   tasks: { title: 'My tasks', empty: 'Nothing to do.', due: 'Due {{time}}', open: '{{count}} open tasks',
     resolve: 'Resolve', resolveTitle: 'Resolve the task', resolveHint: 'For work no process will close: say what you found or did.',
-    done: 'Done', cancelled: 'Not needed', note: 'Note', resolved: 'The task is closed.', cancel: 'Cancel' },
+    done: 'Done', cancelled: 'Not needed', note: 'Note', resolved: 'The task is closed.', cancel: 'Cancel',
+    search: 'Search tasks', kind: 'Kind', all: 'All', approvals: 'Approvals', others: 'Other tasks' },
   approval: {
     approve: 'Approve',
     reject: 'Reject',
@@ -403,7 +407,8 @@ type Texts = typeof en
 const zh: Texts = {
   languages: { zh: '中文', ja: '日本語', en: 'English' },
   app: { title: 'jabiz', language: '语言', logout: '退出登录', loading: '加载中…', error: '出错了', security: '安全设置', dataPeriod: '数据期限 {{from}} – {{to}}', dataPeriodHint: '你的角色只允许查看这个期限内的数据。', build: '构建 {{commit}}' },
-  nav: { datasets: '数据', processes: '流程', home: '首页', tasks: '待办', reports: '报表', imports: '导入', audit: '审计', integrity: '防篡改', retention: '保留与归档', accessReview: '访问审查', sessions: '会话', documents: '单据' },
+  nav: { datasets: '数据', processes: '流程', home: '首页', tasks: '待办', reports: '报表', imports: '导入', audit: '审计', integrity: '防篡改', retention: '保留与归档', accessReview: '访问审查', sessions: '会话', documents: '单据', mailTexts: '邮件模版', mailLayout: '邮件信纸' },
+  mail: mailZh,
   imports: {
     title: '导入',
     empty: '没有可用的导入。',
@@ -661,7 +666,8 @@ const zh: Texts = {
   },
   tasks: { title: '我的待办', empty: '没有待办事项。', due: '截止 {{time}}', open: '{{count}} 项待办',
     resolve: '处理', resolveTitle: '处理待办', resolveHint: '用于不会由流程关闭的工作：写下你查到或做了什么。',
-    done: '已完成', cancelled: '不需要', note: '说明', resolved: '待办已关闭。', cancel: '取消' },
+    done: '已完成', cancelled: '不需要', note: '说明', resolved: '待办已关闭。', cancel: '取消',
+    search: '搜索待办', kind: '类别', all: '全部', approvals: '审批', others: '其他待办' },
   approval: {
     approve: '批准',
     reject: '驳回',
@@ -799,7 +805,8 @@ const zh: Texts = {
 const ja: Texts = {
   languages: { zh: '中文', ja: '日本語', en: 'English' },
   app: { title: 'jabiz', language: '言語', logout: 'ログアウト', loading: '読み込み中…', error: 'エラーが発生しました', security: 'セキュリティ', dataPeriod: 'データ期間 {{from}} – {{to}}', dataPeriodHint: 'ロールにより、この期間のデータのみ閲覧できます。', build: 'ビルド {{commit}}' },
-  nav: { datasets: 'データ', processes: 'プロセス', home: 'ホーム', tasks: 'タスク', reports: 'レポート', imports: 'インポート', audit: '監査', integrity: '改ざん検知', retention: '保存とアーカイブ', accessReview: 'アクセスレビュー', sessions: 'セッション', documents: '帳票' },
+  nav: { datasets: 'データ', processes: 'プロセス', home: 'ホーム', tasks: 'タスク', reports: 'レポート', imports: 'インポート', audit: '監査', integrity: '改ざん検知', retention: '保存とアーカイブ', accessReview: 'アクセスレビュー', sessions: 'セッション', documents: '帳票', mailTexts: 'メールテンプレート', mailLayout: 'メールレイアウト' },
+  mail: mailJa,
   imports: {
     title: 'インポート',
     empty: '利用できるインポートはありません。',
@@ -1057,7 +1064,8 @@ const ja: Texts = {
   },
   tasks: { title: '自分のタスク', empty: 'タスクはありません。', due: '期限 {{time}}', open: '未完了のタスク {{count}} 件',
     resolve: '処理', resolveTitle: 'タスクを処理', resolveHint: 'プロセスが閉じない作業用です。確認したことや行ったことを記入してください。',
-    done: '完了', cancelled: '不要', note: 'メモ', resolved: 'タスクを閉じました。', cancel: 'キャンセル' },
+    done: '完了', cancelled: '不要', note: 'メモ', resolved: 'タスクを閉じました。', cancel: 'キャンセル',
+    search: 'タスクを検索', kind: '種類', all: 'すべて', approvals: '承認', others: 'その他のタスク' },
   approval: {
     approve: '承認',
     reject: '却下',

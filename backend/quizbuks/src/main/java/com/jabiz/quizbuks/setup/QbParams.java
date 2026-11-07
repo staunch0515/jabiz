@@ -214,6 +214,11 @@ public final class QbParams {
      * off refuses a fee, what is live keeps charging).
      */
     public static final String ENTRY_FEE_ENABLED = "qb.play.entry-fee.enabled";
+    /** F-C1: the most assets one sponsor keeps in their library (not controlled: no money, no review). */
+    public static final String ASSETS_MAX_COUNT = "qb.assets.max-count";
+    /** F-C1: the most tags one asset has, and the most characters of one tag. */
+    public static final String ASSETS_MAX_TAGS = "qb.assets.max-tags";
+    public static final String ASSETS_TAG_LENGTH = "qb.assets.tag-length";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -510,7 +515,14 @@ public final class QbParams {
             "Whether sponsors define certifications of their own and make their publications rounds of them (Q88)"),
         // Q88b: entry fees (controlled, last). Off keeps what the platform did before; what is live keeps charging.
         new Param(ENTRY_FEE_ENABLED, BOOL, false,
-            "Whether sponsors may charge an entry fee in Kudos for answering a quiz (Q88)"));
+            "Whether sponsors may charge an entry fee in Kudos for answering a quiz (Q88)"),
+        // F-C1: the sponsors' asset library (ordinary; last, so that the setup's earlier keys stay as they were).
+        new Param(ASSETS_MAX_COUNT, Map.of("type", "numeric", "precision", 6, "scale", 0), "1000",
+            "The most assets one sponsor keeps in their library"),
+        new Param(ASSETS_MAX_TAGS, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
+            "The most tags one asset of the library has"),
+        new Param(ASSETS_TAG_LENGTH, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
+            "The most characters of one tag of the asset library"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {
@@ -526,6 +538,18 @@ public final class QbParams {
     /** A count parameter (Q70), read as {@link #days} reads days. */
     public static int count(ParamValues params, String key) {
         return days(params, key);
+    }
+
+    /**
+     * A limit a parameter gives (F-C1), read as {@link #days} reads days but without its ceiling of ten years: whole
+     * numbers, never negative.
+     */
+    public static int limit(ParamValues params, String key) {
+        BigDecimal value = params.get(key, BigDecimal.class);
+        if (value == null) {
+            value = new BigDecimal(defaultOf(key));
+        }
+        return (int) Math.clamp(value.setScale(0, RoundingMode.DOWN).longValue(), 0, Integer.MAX_VALUE);
     }
 
     public static int days(ParamValues params, String key) {
