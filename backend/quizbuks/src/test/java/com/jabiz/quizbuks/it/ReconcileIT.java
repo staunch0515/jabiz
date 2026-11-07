@@ -30,6 +30,14 @@ class ReconcileIT extends TopUpItSupport {
     @Qualifier("qbReconcileJob")
     JobDefinition<?> reconcileJob;
 
+    @Autowired
+    io.micrometer.core.instrument.MeterRegistry meters;
+
+    /** The gauge of the alert qb-reconcile-diff (ReconcileGauge). */
+    double gauge() {
+        return meters.get(com.jabiz.quizbuks.wallet.ReconcileGauge.NAME).gauge().value();
+    }
+
     JobRunner.Outcome reconcile(Instant at) {
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
         return jobs.run(reconcileJob, at);
@@ -71,6 +79,7 @@ class ReconcileIT extends TopUpItSupport {
         assertThat(ok).containsEntry("status", "OK");
         assertThat(((Number) ok.get("item_count")).intValue()).isZero();
         assertThat(tasksAbout("recon:")).isEmpty();
+        assertThat(gauge()).isZero();
 
         // The same scheduled time again: nothing more.
         assertThat(reconcile(first)).isIn(JobRunner.Outcome.SUCCEEDED, JobRunner.Outcome.REPLAYED);
@@ -90,6 +99,7 @@ class ReconcileIT extends TopUpItSupport {
             reconcile(second);
             Map<String, Object> diff = run(second);
             assertThat(diff).containsEntry("status", "DIFF");
+            assertThat(gauge()).isEqualTo(4.0);
             assertThat((String) diff.get("summary")).contains("\"SPONSOR_WALLET\":1", "\"TOTAL_2110\":1",
                 "\"SPONSOR_PENDING_COUNT\":1", "\"TOPUP_REFUNDS\":1", "\"LEDGER_ZERO\":0");
             List<Map<String, Object>> found = items(diff.get("run_id"));

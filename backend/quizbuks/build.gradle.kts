@@ -58,6 +58,8 @@ dependencies {
     implementation(project(":quizbuks-shopify"))
     // The channel contract (S2): the inputs and outputs of the processes QuizBuks for Shopify calls.
     implementation(project(":quizbuks-channel"))
+    // The reconciliation's gauge (ReconcileGauge) for its alert (deploy/quizbuks/alerting/quizbuks-alerts.yaml).
+    implementation("io.micrometer:micrometer-core")
     testImplementation(testFixtures(project(":runtime")))
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.0")
     testImplementation("net.jqwik:jqwik:1.9.3")

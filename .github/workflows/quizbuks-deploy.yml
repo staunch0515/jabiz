@@ -218,8 +218,8 @@ jobs:
             "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/deploy-check/"
           ssh "$SERVER_USER@$SERVER_HOST" "sh /opt/apps/$APP_NAME/deploy-check/check-env.sh /opt/apps/$APP_NAME/.env \
             /opt/apps/$APP_NAME/deploy-check/required-env"
-      # Only the compose file, the site, the maintenance page and the store apps' statements; the server's .env and the
-      # maintenance lock file are never touched. A commit from before the maintenance page (a rollback) leaves the page
+      # Only the compose file, the site, the maintenance page, the alert rules and the store apps' statements; the
+      # server's .env and the maintenance lock file are never touched. A commit from before the maintenance page (a rollback) leaves the page
       # on the server as it is. The page is written again for the brand (the committed one is QuizBuks's; Q55b).
       - name: Upload deploy files
         run: |
@@ -231,6 +231,23 @@ jobs:
           scp site.caddy "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/site.caddy"
           if [ -f deploy/quizbuks/server/maintenance.html ]; then
             scp deploy/quizbuks/server/maintenance.html "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/maintenance/maintenance.html"
+          fi
+          # The alert rules the environment's LGTM container mounts (compose profile "observability"; DEPLOY.md,
+          # "监控与告警"): the platform's rules and render.sh and QuizBuks's rules, side by side in ./alerting. The
+          # container renders them when it starts, so a running one is restarted when they changed. A commit from
+          # before them (a rollback) leaves the server's as they are.
+          if [ -f deploy/quizbuks/alerting/quizbuks-alerts.yaml ]; then
+            ssh "$SERVER_USER@$SERVER_HOST" "rm -rf /opt/apps/$APP_NAME/alerting.new && mkdir -p /opt/apps/$APP_NAME/alerting.new"
+            scp docker/grafana/alerting/jabiz-alerts.yaml docker/grafana/alerting/render.sh \
+              deploy/quizbuks/alerting/quizbuks-alerts.yaml "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/alerting.new/"
+            ssh "$SERVER_USER@$SERVER_HOST" "set -e
+              cd /opt/apps/$APP_NAME
+              if diff -r alerting alerting.new >/dev/null 2>&1; then
+                rm -rf alerting.new
+              else
+                rm -rf alerting && mv alerting.new alerting
+                if docker ps --format '{{.Names}}' | grep -qx '$APP_NAME-lgtm'; then docker restart '$APP_NAME-lgtm'; fi
+              fi"
           fi
           if [ -f assetlinks.json ]; then
             ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/well-known"

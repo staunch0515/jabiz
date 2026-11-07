@@ -40,11 +40,53 @@ services:
     volumes:
       - files:/var/lib/jabiz/files
       - secrets:/var/lib/jabiz/secrets
-      # F-S11: the IP address database (operations.md §7.22), put here by the operator every month; the .env names it
+      # F-S11: the IP address database (operations.md §7.24), put here by the operator every month; the .env names it
       # (JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz).
       - geoip:/var/lib/jabiz/geoip
-    networks: [proxy, db]
+    # telemetry: the environment's own LGTM below (profile "observability"), at http://lgtm:4318 for the OTLP settings
+    # of the .env (docs/quizbuks/operations.md section 1.5).
+    networks: [proxy, db, telemetry]
     # The shared server keeps every application's logs: bounded here, whatever the daemon's defaults.
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+  # Metrics, traces and logs of this environment, and its alerts (platform 13 section 7; docs/quizbuks/operations.md
+  # section 5): Grafana, Prometheus, Tempo, Loki and an OpenTelemetry collector in one container, as the platform's
+  # docker-compose.yml, started only when the .env sets COMPOSE_PROFILES=observability. The alert rules are the
+  # platform's and QuizBuks's (the deploy workflow uploads them to ./alerting), rendered with the settings below when
+  # the container starts (render.sh): a setting with anything but letters, digits and @._+,;- stops it. Grafana is
+  # reached through an SSH tunnel to 127.0.0.1:${QB_GRAFANA_PORT} (staging and production each their own port), never
+  # published; it mails the alerts itself, so it needs its own SMTP settings (GF_SMTP_*).
+  lgtm:
+    image: grafana/otel-lgtm:0.34.0
+    profiles: [observability]
+    container_name: ${APP_NAME:?APP_NAME is required}-lgtm
+    restart: unless-stopped
+    ports: ["127.0.0.1:${QB_GRAFANA_PORT:-3000}:3000"]
+    volumes:
+      - ./alerting:/otel-lgtm/jabiz/alerting:ro
+      - lgtm:/data
+    command: ["bash", "/otel-lgtm/jabiz/alerting/render.sh"]
+    environment:
+      JABIZ_ALERT_EMAIL: ${JABIZ_ALERT_EMAIL:-oncall@example.com}
+      # The application's spring.application.name: the metrics' job label.
+      JABIZ_ALERT_SERVICE: ${JABIZ_ALERT_SERVICE:-quizbuks}
+      JABIZ_ALERT_DISK_PERCENT: ${JABIZ_ALERT_DISK_PERCENT:-80}
+      JABIZ_ALERT_REFRESH_GRANTED_MIN: ${JABIZ_ALERT_REFRESH_GRANTED_MIN:-10}
+      JABIZ_ALERT_REFRESH_GRANTED_RATIO: ${JABIZ_ALERT_REFRESH_GRANTED_RATIO:-0.02}
+      JABIZ_ALERT_REFRESH_REVOKED_MAX: ${JABIZ_ALERT_REFRESH_REVOKED_MAX:-20}
+      # QuizBuks: 1 while AI is off on purpose (no alert); 0 once qb.ai.enabled is meant to be true.
+      JABIZ_ALERT_QB_AI_HELD_MAX: ${JABIZ_ALERT_QB_AI_HELD_MAX:-1}
+      GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
+      GF_SMTP_HOST: ${GF_SMTP_HOST:-}
+      GF_SMTP_USER: ${GF_SMTP_USER:-}
+      GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-alerts@example.com}
+    mem_limit: 2g
+    networks: [telemetry]
     logging:
       driver: json-file
       options:
@@ -59,9 +101,13 @@ volumes:
   secrets:
   # F-S11: the IP address database (not backed up: downloaded again).
   geoip:
+  # The LGTM container's data (metrics, logs, traces, Grafana's state), <APP_NAME>_lgtm.
+  lgtm:
 
 networks:
   proxy:
     external: true
   db:
     external: true
+  # This environment's own (<APP_NAME>_telemetry): the application and its LGTM. Not internal: Grafana mails the alerts.
+  telemetry:
