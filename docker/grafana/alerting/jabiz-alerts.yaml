@@ -414,6 +414,33 @@ groups:
         annotations:
           summary: 'The address database in use has no ranges: every address is unknown (D74).'
           runbook: docs/design/13-observability-ops.md section 7 (geoip)
+      - uid: jabiz-keys-undeclared-sealed
+        title: Values under a retired seal key in undeclared fields
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'max(jabiz_keys_undeclared_sealed{job="$JABIZ_ALERT_SERVICE"}) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: security }
+        annotations:
+          summary: 'Values sealed under a retired seal key remain in fields not declared as sealed: the job jabiz.key-rotation does not reach them; do not remove the retired key (D78 item 8).'
+          runbook: docs/guide/key-rotation.md (undeclared sealed fields)
       - uid: jabiz-disk-usage
         title: Disk usage above the threshold
         condition: C

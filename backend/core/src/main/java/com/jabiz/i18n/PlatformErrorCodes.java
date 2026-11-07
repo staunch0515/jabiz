@@ -321,6 +321,11 @@ public final class PlatformErrorCodes {
     /** The request is not waiting for an approval: unknown, approved already or expired (decision D78). */
     public static final String MFA_REENROLLMENT_NOT_PENDING = "MFA_REENROLLMENT_NOT_PENDING";
     /**
+     * Values under a retired seal key remain in fields not declared as sealed, which the re-keying does not reach: the
+     * retired key cannot be removed (decision D78 item 8).
+     */
+    public static final String KEY_ROTATION_UNDECLARED_SEALED = "KEY_ROTATION_UNDECLARED_SEALED";
+    /**
      * 422: a signed-in user asked to verify an address someone else changed while someone else may know a way into the
      * account (D48, review M-b): the one asking may not be the user.
      */
@@ -490,7 +495,7 @@ public final class PlatformErrorCodes {
         PUSH_DISABLED, PUSH_SUBSCRIPTION_INVALID, PUSH_PARAM_SECRET,
         RETENTION_ACTIVE, LEGAL_HOLD, LEGAL_HOLD_NOT_ACTIVE,
         TASK_NOT_OPEN, TASK_CLOSED_BY_ITS_PROCESS, APPROVAL_NOT_PENDING, APPROVAL_OTHER_SCOPE, APPROVAL_SCOPE_MISMATCH, APPROVAL_OWN_REQUEST, APPROVAL_ALREADY_DECIDED, APPROVAL_LIMIT_EXCEEDED,
-        MFA_REENROLLMENT_OPEN, MFA_REENROLLMENT_NOT_PENDING, CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
+        MFA_REENROLLMENT_OPEN, MFA_REENROLLMENT_NOT_PENDING, KEY_ROTATION_UNDECLARED_SEALED, CONTROL_CHANGE_INVALID, CONTROL_CHANGE_NOT_PROPOSED, CONTROL_SAME_PERSON, CONTROL_TARGET_CHANGED, SOD_CONFLICT,
         PROTECTED_CHANGE_REQUIRES_APPROVAL, BOOTSTRAP_ADMIN_RETIRED, APPROVAL_TARGET_USER, PROTECTED_CHANGE_NOT_PENDING,
         EMAIL_SET_BY_ANOTHER, INVITATION_NOT_NEEDED, INVITATION_ADDRESS_CHANGED, INVITATION_USER_DISABLED,
         MFA_CODE_INVALID, MFA_NOT_ENROLLED, MFA_ALREADY_ENROLLED,

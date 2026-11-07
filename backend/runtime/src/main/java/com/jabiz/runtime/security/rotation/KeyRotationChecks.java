@@ -2,8 +2,11 @@ package com.jabiz.runtime.security.rotation;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
+import com.jabiz.context.RequestContext;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
+import com.jabiz.runtime.check.PlatformCheckRunner;
+import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.security.JwtService;
@@ -12,11 +15,14 @@ import com.jabiz.security.MfaSecretCipher;
 import com.jabiz.security.SealedField;
 import com.jabiz.security.SealedFields;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
@@ -24,6 +30,11 @@ import java.util.Set;
  * Startup check {@code KEYS} (decision D78): every declared sealed field exists, is a sensitive text field of an entity
  * that can be updated (not write-once, not an immutable field) and has a dataset, and is declared once; a key in rotation (a retired JWT, MFA
  * or seal key configured) is a warning until it is removed. Retired integrity keys stay for good and are not reported.
+ *
+ * <p>While a retired seal key is configured, values under it in fields not declared as sealed ({@link RetiredSealScan})
+ * are reported per field (D78 item 8): an error in {@code platformCheck}, so that a deployment and CI stop, but only a
+ * warning when the application starts, so that a restart in the middle of a rotation does not take it down (the
+ * gauge it sets is alerted on).
  */
 @Component
 public class KeyRotationChecks implements PlatformCheck {
@@ -36,15 +47,25 @@ public class KeyRotationChecks implements PlatformCheck {
     private final JwtService jwt;
     private final MfaSecretCipher mfa;
     private final SecretSealer sealer;
+    private final RetiredSealScan scan;
+    /** Whether this is {@code platformCheck} (not a startup), where undeclared sealed values are errors. */
+    private final boolean strict;
+
+    static final Duration SCAN_TIMEOUT = Duration.ofMinutes(5);
+    /** Below this many changes per commit, a sealed field's dataset is reported: re-keying it would crawl. */
+    static final int SMALL_WRITE_LIMIT = 10;
 
     public KeyRotationChecks(ObjectProvider<SealedFields> declared, EntityDefinitionRegistry entities,
-        DatasetRegistry datasets, JwtService jwt, MfaSecretCipher mfa, SecretSealer sealer) {
+        DatasetRegistry datasets, JwtService jwt, MfaSecretCipher mfa, SecretSealer sealer, RetiredSealScan scan,
+        Environment environment) {
         this.declared = declared;
         this.entities = entities;
         this.datasets = datasets;
         this.jwt = jwt;
         this.mfa = mfa;
         this.sealer = sealer;
+        this.scan = scan;
+        this.strict = !environment.getProperty(PlatformCheckRunner.ON_STARTUP_PROPERTY, Boolean.class, true);
     }
 
     @Override
@@ -62,8 +83,22 @@ public class KeyRotationChecks implements PlatformCheck {
         if (!sealer.previousKeyIds().isEmpty()) {
             problems.add(rotating("jabiz.security.seal.previous-keys", "retired seal key(s) " + sealer.previousKeyIds()
                 + ": remove them once the job jabiz.key-rotation finds nothing left"));
+            problems.addAll(undeclared(scan.undeclared()
+                .contextWrite(view -> RequestContexts.put(view, RequestContext.system(Locale.ROOT, "check-keys")))
+                .block(SCAN_TIMEOUT), strict));
         }
         return problems;
+    }
+
+    /** One problem per undeclared field holding values under a retired seal key; errors when {@code strict}. */
+    public static List<CheckProblem> undeclared(List<RetiredSealScan.Finding> findings, boolean strict) {
+        return findings.stream().map(found -> {
+            String message = found.values() + " value(s) sealed under a retired key, but the field is not declared "
+                + "as sealed (SealedFields): the job jabiz.key-rotation does not store them again, and they no longer "
+                + "open once the retired key is removed. Declare it, then let the job run";
+            return strict ? CheckProblem.error(CATEGORY, found.location(), message)
+                : CheckProblem.warning(CATEGORY, found.location(), message);
+        }).toList();
     }
 
     /** The problems of these sealed field declarations (each once, as the application's beans list them). */
@@ -104,6 +139,13 @@ public class KeyRotationChecks implements PlatformCheck {
         }
         if (datasets.findForEntity(field.entity()).isEmpty()) {
             return Optional.of(CheckProblem.error(CATEGORY, location, "the entity has no dataset to re-key through"));
+        }
+        int writeLimit = datasets.findForEntity(field.entity()).orElseThrow().policy().maxWriteBatchSize();
+        if (writeLimit < SMALL_WRITE_LIMIT) {
+            // A run re-keys no more values of the entity than its dataset takes in one commit (17zz4).
+            return Optional.of(CheckProblem.warning(CATEGORY, location, "the entity's dataset takes " + writeLimit
+                + " change(s) per commit (maxWriteBatchSize): the job jabiz.key-rotation stores at most that many of its"
+                + " values per run, so a rotation can take long"));
         }
         if (!definition.get().sensitive()) {
             return Optional.of(CheckProblem.warning(CATEGORY, location, "a sealed field should be sensitive "
