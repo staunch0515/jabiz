@@ -260,7 +260,7 @@ const zh: typeof en = {
     address: 'IP 地址',
     device: '设备',
     empty: '还没有登录记录。',
-    entries: { app: 'App', sponsor: `${BRAND.names.zh}发起方`, admin: `${BRAND.names.en} 平台管理系统`, operator: '运营商管理系统' },
+    entries: { app: 'App', sponsor: `${BRAND.names.zh}发起方`, admin: `${BRAND.names.zh}平台管理系统`, operator: '运营商管理系统' },
     unknownDevice: '未知设备',
   },
   prerequisite: { PASSED: '通过', ANSWERED: '作答', passed: '已通过', answered: '已作答' },
