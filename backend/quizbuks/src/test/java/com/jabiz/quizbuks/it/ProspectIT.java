@@ -22,6 +22,8 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
@@ -34,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * AI prospecting (docs/quizbuks/plans/Q48-operators.md, Q48c): a day's search finds businesses, each is researched,
@@ -449,6 +452,19 @@ class ProspectIT extends AiItSupport {
         runJob(sendJob);
         assertThat(query("SELECT count(*) AS n FROM qb_prospect WHERE owner = ? AND status = 'SENT'", owner)
             .getFirst().get("n")).isEqualTo(2L);
+    }
+
+    @Test
+    void headquartersReadsThePlatformSwitchAndAnOperatorDoesNot() {
+        // F-F8 (T9): the settings page shows the three controlled parameters every owner's prospecting is held by.
+        String person = verifiedUser(unique("q48c-switch"));
+        assertThat(items("qb.admin.prospect-switch", hq(person), Map.of()))
+            .extracting(r -> r.get("paramKey"), r -> r.get("value"), r -> r.get("paramExists"))
+            .containsExactly(tuple(QbParams.PROSPECT_ENABLED, "true", true),
+                tuple(QbParams.PROSPECT_MODEL, "claude-opus-5-5", true), tuple(QbParams.PROSPECT_EFFORT, "medium", true));
+        String operator = newOperator(unique("Switch")).get(1);
+        client.post().uri("/api/queries/qb.admin.prospect-switch").contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, operator).bodyValue(Map.of()).exchange().expectStatus().isForbidden();
     }
 
     @Test

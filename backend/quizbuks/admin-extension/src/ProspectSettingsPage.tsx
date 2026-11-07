@@ -45,6 +45,7 @@ import {
   type Usage,
 } from './prospect-api'
 import { useProspectScope } from './prospect-scope'
+import { ProspectSwitch } from './ProspectSwitch'
 
 const problemOf = (e: unknown) => (e instanceof ApiError ? e.display : String(e))
 const right = { className: 'text-right tabular-nums' }
@@ -382,7 +383,8 @@ function UsageTable({ usage }: { usage: Usage[] }) {
 
 /**
  * The owner's prospecting settings (Q48c): the switch, the caps and the sender, the mail server, the directions of
- * search and what it cost by month. Headquarters looking at an operator's (`?owner=`) only reads them.
+ * search and what it cost by month. Headquarters looking at an operator's (`?owner=`) only reads them; headquarters
+ * also sees the platform switch every owner's prospecting is held by (F-F8, {@link ProspectSwitch}).
  */
 export default function ProspectSettingsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
@@ -401,6 +403,7 @@ export default function ProspectSettingsPage() {
       </Button>
       <PageHeader title={t('prospect.settings.title')} description={t('prospect.settings.description')}
         className="pb-0" />
+      {scope.admin && <ProspectSwitch prospectsDaily={setting.data?.enabled === true} />}
       {setting.isError
         ? <LoadFailed error={setting.error} onRetry={() => void setting.refetch()} />
         : setting.isPending
