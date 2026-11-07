@@ -30,7 +30,8 @@ import java.util.Optional;
  *   <li>{@code GET /api/mail/texts}: every template with what its texts may use and must keep, whether changes need
  *       approval, and per language the default, the stored override and its state;</li>
  *   <li>{@code POST /api/mail/texts/preview} ({@code MAIL_TEXT_PREVIEW}): a draft (or, without one, the texts in
- *       effect) checked by the rules and rendered with the template's sample values and tokens that open nothing.
+ *       effect) checked by the rules and rendered with the template's sample values and tokens that open nothing,
+ *       on the mail layout in effect.
  *       The HTML is the mail's own, which a page shows in a sandboxed frame without scripts.</li>
  * </ul>
  */
@@ -47,7 +48,12 @@ class MailTextController {
         /** The override is sent, but the default changed since it was written. */
         DEFAULT_UPDATED,
         /** The override no longer passes the rules: the default is sent. */
-        INVALID
+        INVALID,
+        /**
+         * The override was saved without approval, which its template needs now (it came to have a token, a sign-in
+         * link or {@code protectedText()}): the default is sent until a change is approved.
+         */
+        UNAPPROVED
     }
 
     /**
@@ -81,11 +87,13 @@ class MailTextController {
 
     private final MailTemplates templates;
     private final MailTexts texts;
+    private final MailLayouts layouts;
     private final MessageCatalog messages;
 
-    MailTextController(MailTemplates templates, MailTexts texts, MessageCatalog messages) {
+    MailTextController(MailTemplates templates, MailTexts texts, MailLayouts layouts, MessageCatalog messages) {
         this.templates = templates;
         this.texts = texts;
+        this.layouts = layouts;
         this.messages = messages;
     }
 
@@ -133,6 +141,7 @@ class MailTextController {
         }
         List<Violation> problems = texts.problems(template, stored.subject(), stored.body());
         State state = !problems.isEmpty() ? State.INVALID
+            : MailTexts.unapproved(template, stored) ? State.UNAPPROVED
             : hash.equals(stored.defaultHash()) ? State.CUSTOM : State.DEFAULT_UPDATED;
         return new LanguageTexts(locale.getLanguage(), defaultSubject, defaultBody, hash, state, stored.versionNo(),
             stored.subject(), stored.body(), problems);
@@ -155,9 +164,10 @@ class MailTextController {
             Mono<MailTexts.Text> text = body.subject() != null
                 ? Mono.just(new MailTexts.Text(body.subject(), body.body(), null, false))
                 : texts.effective(template, locale);
-            return text.map(chosen -> {
-                MailRenderer.Rendered mail = texts.render(template, chosen.subject(), chosen.body(),
-                    texts.sampleValues(template));
+            return Mono.zip(text, layouts.effective(locale)).map(found -> {
+                MailTexts.Text chosen = found.getT1();
+                MailRenderer.Rendered mail = layouts.wrap(texts.render(template, chosen.subject(), chosen.body(),
+                    texts.sampleValues(template)), found.getT2().layout());
                 List<Violation> problems = body.subject() == null ? List.of()
                     : texts.problems(template, chosen.subject(), chosen.body());
                 return new PreviewResponse(mail.subject(), mail.text(), mail.html(), chosen.versionNo(), problems);

@@ -85,8 +85,11 @@ public class MailEntities {
             .asTemporal(TemporalRole.SYSTEM_RECORDED));
         // The version of the MailText the mail was rendered with; none for the default (decision D72 item 4).
         eb.field("textVersionNo", f -> f.physicalColumn("text_version_no").immutable(true).asNumeric(9, 0));
+        // The version of the MailLayout it was put on; none for the default (decision D72 item 4).
+        eb.field("layoutVersionNo", f -> f.physicalColumn("layout_version_no").immutable(true).asNumeric(9, 0));
         eb.listView("default", lv -> lv
-            .columns("messageId", "attemptNo", "outcome", "detail", "textVersionNo", "attemptedTime")
+            .columns("messageId", "attemptNo", "outcome", "detail", "textVersionNo", "layoutVersionNo",
+                "attemptedTime")
             .filters("messageId", "outcome", "attemptedTime")
             .sorts("attemptedTime", "attemptNo")
             .defaultSort("attemptedTime", false));
