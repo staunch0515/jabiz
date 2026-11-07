@@ -50,8 +50,10 @@ public class TaskEntities {
         // Why a person closed it (TASK_RESOLVE); null when its process closed it.
         eb.field("closeNote", f -> f.physicalColumn("close_note").asText(TaskResolution.NOTE_LENGTH));
         // The entry scope the task belongs to (decision D64): only its sessions, and those without one, see it.
-        eb.field("scopeName", f -> f.physicalColumn("scope_name").immutable(true).asText(64));
-        eb.field("scopeValue", f -> f.physicalColumn("scope_value").immutable(true).asText(128));
+        // Not immutable: APPROVAL_SCOPE_MOVE moves an open task to another value (decision D76); every other change
+        // of either field is refused by the approval package's scope guard.
+        eb.field("scopeName", f -> f.physicalColumn("scope_name").asText(64));
+        eb.field("scopeValue", f -> f.physicalColumn("scope_value").asText(128));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("taskType", "titleKey", "assigneeUserId", "assigneePermission", "status", "dueTime",
