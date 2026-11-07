@@ -21,7 +21,7 @@ const en = {
   ...productsEn,
   ...statsEn,
   ...trialEn,
-  brand: `${BRAND.names.en} Sponsor`,
+  brand: `${BRAND.names.en} for Sponsors`,
   lists: { view: 'View', cards: 'Cards', table: 'Table', pages: 'Pages', previous: 'Previous page', next: 'Next page', page: 'Page {{page}} of {{pages}}' },
   shownAt: {
     prefix: 'Takers see this:',
@@ -55,7 +55,7 @@ const en = {
     questionImage: 'Picture for the question',
     optionImage: 'Picture of option {{letter}}',
   },
-  nav: { label: 'Sponsor console', dashboard: 'Dashboard', quizzes: 'Quizzes', onboarding: 'Sponsor profile', account: 'Account',
+  nav: { label: `${BRAND.names.en} for Sponsors`, dashboard: 'Dashboard', quizzes: 'Quizzes', onboarding: 'Sponsor profile', account: 'Account',
     help: 'Help', groups: { overview: 'Overview', content: 'Content', rewards: 'Rewards', money: 'Money', settings: 'Settings' } },
   public: {
     signIn: 'Sign in',
@@ -217,7 +217,7 @@ const zh: typeof en = {
   ...productsZh,
   ...statsZh,
   ...trialZh,
-  brand: `${BRAND.names.zh}发起方后台`,
+  brand: `${BRAND.names.zh}发起方`,
   lists: { view: '显示方式', cards: '卡片', table: '表格', pages: '分页', previous: '上一页', next: '下一页', page: '第 {{page}} / {{pages}} 页' },
   shownAt: {
     prefix: '学者在这里看到：',
@@ -251,7 +251,7 @@ const zh: typeof en = {
     questionImage: '题目图片',
     optionImage: '选项 {{letter}} 的图片',
   },
-  nav: { label: '发起方后台', dashboard: '概览', quizzes: 'Quiz', onboarding: '发起方资料', account: '账户', help: '帮助',
+  nav: { label: `${BRAND.names.zh}发起方`, dashboard: '概览', quizzes: 'Quiz', onboarding: '发起方资料', account: '账户', help: '帮助',
     groups: { overview: '概览', content: '内容', rewards: '奖励', money: '资金', settings: '设置' } },
   public: {
     signIn: '登录',
@@ -413,7 +413,7 @@ const ja: typeof en = {
   ...productsJa,
   ...statsJa,
   ...trialJa,
-  brand: `${BRAND.names.ja}主催者`,
+  brand: `${BRAND.names.ja} 主催者`,
   lists: { view: '表示', cards: 'カード', table: '表', pages: 'ページ', previous: '前のページ', next: '次のページ', page: '{{page}} / {{pages}} ページ' },
   shownAt: {
     prefix: 'テイカーに表示される場所：',
@@ -447,7 +447,7 @@ const ja: typeof en = {
     questionImage: '問題の画像',
     optionImage: '選択肢 {{letter}} の画像',
   },
-  nav: { label: '主催者管理画面', dashboard: 'ダッシュボード', quizzes: 'クイズ', onboarding: '主催者情報', account: 'アカウント',
+  nav: { label: `${BRAND.names.ja} 主催者`, dashboard: 'ダッシュボード', quizzes: 'クイズ', onboarding: '主催者情報', account: 'アカウント',
     help: 'ヘルプ', groups: { overview: '概要', content: 'コンテンツ', rewards: '報酬', money: '資金', settings: '設定' } },
   public: {
     signIn: 'ログイン',

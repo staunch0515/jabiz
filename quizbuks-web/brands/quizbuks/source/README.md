@@ -5,4 +5,4 @@
 - `icon-store.svg`：铺满、无圆角（iOS 的 `AppIcon`、商店上架）。
 - `build.py` 生成这三份与 `../mark.svg`（页面上的标志，颜色用 token `--qb-leaf` / `--qb-ink`）；改图形或颜色先改它。
 - 由 SVG 渲染各尺寸的 PNG 时直接按目标尺寸渲染（不缩放现有的 PNG）；尺寸见 `quizbuks-mobile/android/README.md` 与 iOS 的 `Assets.xcassets`。
-  改了 `mark.svg` 或 `public/` 的图标之后运行 `node quizbuks-web/brands/admin.mjs`（后台扩展的标志与标签页图标）。
+  改了 `mark.svg` 或 `public/` 的图标之后运行 `node quizbuks-web/brands/admin.mjs`（平台管理系统扩展的标志与标签页图标）。

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { SPONSOR } from './messages'
 import { bundle, emptyTexts, keyPaths, LANGUAGES } from './qb/messageKeys'
 
-describe('the Sponsor console texts', () => {
+describe('the Sponsor app texts', () => {
   it('have the same keys in every language, none of them empty', () => {
     const english = keyPaths(bundle(SPONSOR, 'en'))
     expect(english.length).toBeGreaterThan(10)
