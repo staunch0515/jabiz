@@ -12,18 +12,20 @@ import {
   SelectTrigger,
   SelectValue,
   type ColumnDef,
+  type Filter,
 } from '@jabiz/admin'
 import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { usePaged, useLabels, when, QUEUE } from './hooks'
 import { DICTIONARY, PATH, SPONSOR_PAGE_STATUSES } from './ids'
 import { readPendingSponsorPages, readSponsorPages, type SponsorPageRow } from './page-api'
+import { operatorColumn, useOperatorFilter } from './operator-filter'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const ALL = 'ALL'
 /** The columns sorted on the server, by the template's `list.sorts` field. */
 const SORTS = { company: 'company', handle: 'handle', editedAt: 'editedAt', submittedAt: 'submittedAt' } as const
 
-function useColumns(waiting: boolean) {
+function useColumns(waiting: boolean, across = false) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const statusLabel = useLabels(DICTIONARY.sponsorPageStatus)
   const languageLabel = useLabels(DICTIONARY.contentLanguage)
@@ -39,6 +41,7 @@ function useColumns(waiting: boolean) {
         )
       },
     },
+    ...(across ? [operatorColumn<SponsorPageRow>(t('pickers.operatorColumn'))] : []),
     { id: 'handle', header: t('sponsorPages.columns.handle'), cell: ({ row }) => row.original.handle },
     { id: 'headline', header: t('sponsorPages.columns.headline'), cell: ({ row }) => row.original.headline },
     { id: 'language', header: t('sponsorPages.columns.language'),
@@ -50,14 +53,18 @@ function useColumns(waiting: boolean) {
     waiting
       ? { id: 'submittedAt', header: t('sponsorPages.columns.submittedAt'), cell: ({ row }) => when(row.original.submittedAt) }
       : { id: 'editedAt', header: t('sponsorPages.columns.editedAt'), cell: ({ row }) => when(row.original.editedAt) },
-  ], [t, statusLabel, languageLabel, waiting])
+  ], [t, statusLabel, languageLabel, waiting, across])
 }
 
-/** The review queue's tab of sponsors' pages (Q60a-3): those waiting, the longest waiting first. */
-export function SponsorPageQueue() {
+/**
+ * The review queue's tab of sponsors' pages (Q60a-3): those waiting, the longest waiting first; the platform's, across
+ * operators, by the operator chosen (F-S1b).
+ */
+export function SponsorPageQueue({ filters = [], across = false }: { filters?: Filter[]; across?: boolean }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const { query, table, sortable } = usePaged(QUEUE.sponsorPages, readPendingSponsorPages, true, SORTS)
-  const columns = useColumns(true)
+  const { query, table, sortable } = usePaged([...QUEUE.sponsorPages, filters],
+    (offset, limit, sorts) => readPendingSponsorPages(offset, limit, sorts, filters), true, SORTS)
+  const columns = useColumns(true, across)
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
     <DataTable label={t('sponsorPages.reviewsTable')} columns={sortable(columns)} {...table}
@@ -76,12 +83,14 @@ export default function SponsorPagesPage() {
   const statusLabel = useLabels(DICTIONARY.sponsorPageStatus)
   const [status, setStatus] = useState<string>(ALL)
   const chosen = status === ALL ? null : status
-  const { query, table, sortable } = usePaged(['qb-ext', 'sponsor-pages', status],
-    (offset, limit, sorts) => readSponsorPages(offset, limit, sorts, chosen), true, SORTS)
-  const columns = useColumns(false)
+  const operators = useOperatorFilter()
+  const { query, table, sortable } = usePaged(['qb-ext', 'sponsor-pages', status, operators.filters],
+    (offset, limit, sorts) => readSponsorPages(offset, limit, sorts, chosen, operators.filters), true, SORTS)
+  const columns = useColumns(false, operators.across)
   return (
     <div className="flex flex-col gap-4" data-testid="qb-sponsor-pages">
       <PageHeader title={t('sponsorPages.list.title')} description={t('sponsorPages.list.description')} className="pb-0" />
+      {operators.bar}
       <div className="flex items-center gap-2">
         <Label htmlFor="sponsor-pages-status">{t('sponsorPages.list.status')}</Label>
         <Select value={status} onValueChange={setStatus}>

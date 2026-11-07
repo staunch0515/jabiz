@@ -28,6 +28,7 @@ import {
 import { StatusFilter } from './finance-components'
 import { EmptyState, LoadFailed, PublisherLink, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { operatorColumn, useOperatorFilter } from './operator-filter'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { DIGITAL_RESOLUTIONS, readDigitalPrizes, resolveDigitalPrize, type DigitalPrize, type DigitalResolution }
@@ -147,10 +148,13 @@ export default function DigitalPrizesPage() {
     { kind: 'amount', name: 'amount', label: t('reward.digital.value') },
     { kind: 'time', name: 'dueAt', label: t('reward.digital.dueAt') },
   ], 'digital-filters')
-  const { query, table, sortable } = usePaged([...KEY, filterStatus, q, more.filters],
-    (offset, limit, sorts) => readDigitalPrizes(filterStatus, q, offset, limit, sorts, more.filters), true, SORTS)
+  const operators = useOperatorFilter()
+  const filters = [...more.filters, ...operators.filters]
+  const { query, table, sortable } = usePaged([...KEY, filterStatus, q, filters],
+    (offset, limit, sorts) => readDigitalPrizes(filterStatus, q, offset, limit, sorts, filters), true, SORTS)
   const columns = useMemo<ColumnDef<DigitalPrize, unknown>[]>(() => [
     { id: 'dueAt', header: t('reward.digital.dueAt'), cell: ({ row }) => when(row.original.dueAt) },
+    ...(operators.across ? [operatorColumn<DigitalPrize>(t('pickers.operatorColumn'))] : []),
     { id: 'sponsor', header: t('reward.digital.sponsor'),
       cell: ({ row }) => (
         <PublisherLink kind={row.original.publisherKind} id={row.original.publisherId}
@@ -217,7 +221,7 @@ export default function DigitalPrizesPage() {
           </span>
         )
       } },
-  ], [t, status, delivery, can])
+  ], [t, status, delivery, can, operators.across])
 
   return (
     <div className="flex flex-col gap-4" data-testid="digital-prizes">
@@ -243,6 +247,7 @@ export default function DigitalPrizesPage() {
           }}>{t('reward.digital.all')}</Button>
         )}
       </div>
+      {operators.bar}
       {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />

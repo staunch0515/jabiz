@@ -29,7 +29,6 @@ import { LoadFailed, Section } from './components'
 import { when } from './hooks'
 import { PATH } from './ids'
 import {
-  DIRECT,
   PROSPECTS_KEY,
   readDirections,
   readFunnel,
@@ -44,7 +43,7 @@ import {
   type ProspectSetting,
   type Usage,
 } from './prospect-api'
-import { useProspectScope } from './prospect-scope'
+import { chosen, useProspectScope } from './prospect-scope'
 import { ProspectSwitch } from './ProspectSwitch'
 
 const problemOf = (e: unknown) => (e instanceof ApiError ? e.display : String(e))
@@ -383,18 +382,20 @@ function UsageTable({ usage }: { usage: Usage[] }) {
 
 /**
  * The owner's prospecting settings (Q48c): the switch, the caps and the sender, the mail server, the directions of
- * search and what it cost by month. Headquarters looking at an operator's (`?owner=`) only reads them; headquarters
- * also sees the platform switch every owner's prospecting is held by (F-F8, {@link ProspectSwitch}).
+ * search and what it cost by month. The platform looking at an operator's (`?owner=`) only reads them, and sees the
+ * platform switch every operator's prospecting is held by (F-F8, {@link ProspectSwitch}).
  */
 export default function ProspectSettingsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const scope = useProspectScope()
-  const setting = useQuery({ queryKey: [...PROSPECTS_KEY, scope, 'setting'], queryFn: () => readSetting(scope) })
+  const enabled = chosen(scope)
+  const setting = useQuery({ queryKey: [...PROSPECTS_KEY, scope, 'setting'], queryFn: () => readSetting(scope), enabled })
   const directions = useQuery({ queryKey: [...PROSPECTS_KEY, scope, 'directions'],
-    queryFn: () => readDirections(scope) })
-  const usage = useQuery({ queryKey: [...PROSPECTS_KEY, scope, 'usage'], queryFn: () => readUsage(scope) })
-  const funnel = useQuery({ queryKey: [...PROSPECTS_KEY, scope, 'funnel'], queryFn: () => readFunnel(scope) })
-  const writable = !scope.admin || scope.owner === DIRECT
+    queryFn: () => readDirections(scope), enabled })
+  const usage = useQuery({ queryKey: [...PROSPECTS_KEY, scope, 'usage'], queryFn: () => readUsage(scope), enabled })
+  const funnel = useQuery({ queryKey: [...PROSPECTS_KEY, scope, 'funnel'], queryFn: () => readFunnel(scope), enabled })
+  // F-S1b: the platform reads an operator's settings only; the operators run their prospecting.
+  const writable = !scope.admin
   const back = PATH.prospects + (scope.admin ? `?owner=${encodeURIComponent(scope.owner)}` : '')
   return (
     <div className="flex flex-col gap-4" data-testid="prospect-settings-page">
@@ -404,6 +405,8 @@ export default function ProspectSettingsPage() {
       <PageHeader title={t('prospect.settings.title')} description={t('prospect.settings.description')}
         className="pb-0" />
       {scope.admin && <ProspectSwitch prospectsDaily={setting.data?.enabled === true} />}
+      {!enabled ? <p className="text-muted-foreground" data-testid="prospect-settings-choose">
+        {t('prospect.chooseOperator')}</p> : <>
       {setting.isError
         ? <LoadFailed error={setting.error} onRetry={() => void setting.refetch()} />
         : setting.isPending
@@ -424,6 +427,7 @@ export default function ProspectSettingsPage() {
       {usage.isError
         ? <LoadFailed error={usage.error} onRetry={() => void usage.refetch()} />
         : <UsageTable usage={usage.data ?? []} />}
+      </>}
     </div>
   )
 }

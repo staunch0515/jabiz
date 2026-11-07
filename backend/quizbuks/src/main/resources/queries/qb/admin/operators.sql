@@ -19,10 +19,13 @@ results:
   note:         { from: QbOperator.note }
   createdAt:    { from: QbOperator.createdAt }
   revision:     { from: QbOperator.revision }
+  # F-S1: the operator the sponsors no operator found take (one at most), and its own sponsor (its first lead).
+  defaultForNew:   { from: QbOperator.defaultForNew }
+  directSponsorId: { from: QbOperator.directSponsorId }
   members:      { kind: { type: numeric, precision: 9, scale: 0 } }
   sponsors:     { kind: { type: numeric, precision: 9, scale: 0 } }
 list:
-  filters: [status, language, createdAt]
+  filters: [status, language, createdAt, name, defaultForNew]
   sorts:   [name, createdAt, status]
   defaultSort: { field: createdAt, asc: false }
   key: [operatorId]
@@ -39,6 +42,8 @@ SELECT
     o.{{QbOperator.note}}         AS note,
     o.{{QbOperator.createdAt}}    AS createdAt,
     o.{{QbOperator.revision}}     AS revision,
+    o.{{QbOperator.defaultForNew}}   AS defaultForNew,
+    o.{{QbOperator.directSponsorId}} AS directSponsorId,
     (SELECT count(*) FROM {{QbOperatorMember}} m WHERE m.{{QbOperatorMember.operatorId}} = o.{{QbOperator.operatorId}}
         AND m.{{QbOperatorMember.removedAt}} IS NULL) AS members,
     (SELECT count(*) FROM {{QbSponsorOperator}} a

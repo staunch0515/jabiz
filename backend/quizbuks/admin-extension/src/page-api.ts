@@ -28,6 +28,9 @@ export interface SponsorPageRow {
   /** Q73c: the languages offered (the main one first; none: `language` only) and the headline in each other one. */
   languages: string[]
   translations: Record<string, Record<string, string>>
+  /** F-S1b: the Sponsor's operator now (the platform's lists). */
+  operatorId?: string | null
+  operatorName?: string | null
 }
 
 type Row = Record<string, unknown>
@@ -55,20 +58,22 @@ function rowOf(row: Row): SponsorPageRow {
     reviewRequired: row.reviewRequired === true || row.reviewRequired === 'true',
     editedAt: str(row.editedAt),
     company: str(row.company),
+    operatorId: str(row.operatorId),
+    operatorName: str(row.operatorName),
   }
 }
 
 /** One page of the sponsors' pages, of one status when given. */
 export async function readSponsorPages(offset: number, limit: number, sorts?: SortSpec[],
-  status?: string | null): Promise<Page<SponsorPageRow>> {
-  const filters: Filter[] = status ? [{ field: 'status', op: 'eq', value: status }] : []
+  status?: string | null, more?: Filter[]): Promise<Page<SponsorPageRow>> {
+  const filters: Filter[] = [...status ? [{ field: 'status', op: 'eq', value: status }] : [], ...more ?? []]
   const answer = await runQuery<Row>(TEMPLATE.sponsorPages, { filters, sorts, offset, limit, count: true })
   return { items: answer.items.map(rowOf), total: answer.total }
 }
 
 /** The review queue: the pages waiting for a review, the longest waiting first. */
-export const readPendingSponsorPages = (offset: number, limit: number, sorts?: SortSpec[]) =>
-  readSponsorPages(offset, limit, sorts ?? [{ field: 'submittedAt', asc: true }], SPONSOR_PAGE_PENDING)
+export const readPendingSponsorPages = (offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]) =>
+  readSponsorPages(offset, limit, sorts ?? [{ field: 'submittedAt', asc: true }], SPONSOR_PAGE_PENDING, more)
 
 /** One sponsor's page; null when there is none (or it is not the caller's operator's sponsor's). */
 export async function readSponsorPage(userId: string): Promise<SponsorPageRow | null> {

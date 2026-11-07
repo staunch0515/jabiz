@@ -22,6 +22,7 @@ import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { QUEUE, usePaged, useLabels, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION, REPORT_PROCESS } from './ids'
 import { readReportedPublications, readReports, type ReportedPublication } from './report-api'
+import { operatorColumn, useOperatorFilter } from './operator-filter'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const OPEN = 'OPEN'
@@ -99,8 +100,9 @@ export default function AbuseReportsPage() {
   const [show, setShow] = useState<string>(OPEN)
   const [opened, setOpened] = useState<ReportedPublication | null>(null)
   const open = show === OPEN ? true : show === CLOSED ? false : null
-  const { query, table, sortable } = usePaged([...QUEUE.abuseReports, show],
-    (offset, limit, sorts) => readReportedPublications(offset, limit, sorts, open), true, SORTS)
+  const operators = useOperatorFilter()
+  const { query, table, sortable } = usePaged([...QUEUE.abuseReports, show, operators.filters],
+    (offset, limit, sorts) => readReportedPublications(offset, limit, sorts, open, operators.filters), true, SORTS)
   const columns = useMemo<ColumnDef<ReportedPublication, unknown>[]>(() => {
     const link = (process: string, outcome: string, publicationId: string) =>
       `${paths.process(process, REPORT_PROCESS.version)}?${new URLSearchParams({ publicationId, outcome })}`
@@ -116,6 +118,7 @@ export default function AbuseReportsPage() {
       // The sponsor's company; a sponsor without one (not onboarded, or erased) by their account's name.
       { id: 'sponsor', header: t('abuseReports.columns.sponsor'),
         cell: ({ row }) => row.original.company ?? <UserName id={row.original.publisherId} /> },
+      ...(operators.across ? [operatorColumn<ReportedPublication>(t('pickers.operatorColumn'))] : []),
       { id: 'open', header: t('abuseReports.columns.open'), meta: { className: 'tabular-nums' },
         cell: ({ row }) => t('abuseReports.count', { open: row.original.openCount, total: row.original.totalCount }) },
       {
@@ -155,10 +158,11 @@ export default function AbuseReportsPage() {
         },
       },
     ]
-  }, [t, reason, resolve])
+  }, [t, reason, resolve, operators.across])
   return (
     <div className="flex flex-col gap-4" data-testid="qb-abuse-reports">
       <PageHeader title={t('abuseReports.title')} description={t('abuseReports.description')} className="pb-0" />
+      {operators.bar}
       <div className="flex items-center gap-2">
         <Label htmlFor="reports-show">{t('abuseReports.filter')}</Label>
         <Select value={show} onValueChange={(value) => { setShow(value); setOpened(null) }}>

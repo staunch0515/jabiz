@@ -1,4 +1,4 @@
-import { api, runQuery, unwrap } from '@jabiz/admin'
+import { api, runQuery, unwrap, type Filter } from '@jabiz/admin'
 import type { Page, SortSpec } from './api'
 import { DATASET, TEMPLATE } from './ids'
 
@@ -23,6 +23,9 @@ export interface ReportedPublication {
   message: number
   other: number
   lastReportedAt: string | null
+  /** F-S1b: the Sponsor's operator now (the platform's lists). */
+  operatorId?: string | null
+  operatorName?: string | null
 }
 
 /** One report, as the reviewers read it (the reporter stays an id). */
@@ -63,11 +66,13 @@ const num = (value: unknown): number => (value == null ? 0 : Number(value))
 
 /** One page of the reported publications: with open reports (or none open) when asked. */
 export async function readReportedPublications(offset: number, limit: number, sorts?: SortSpec[],
-  open?: boolean | null): Promise<Page<ReportedPublication>> {
-  const answer = await runQuery<Row>(TEMPLATE.abuseReports, { params: open == null ? {} : { open }, sorts,
+  open?: boolean | null, more?: Filter[]): Promise<Page<ReportedPublication>> {
+  const answer = await runQuery<Row>(TEMPLATE.abuseReports, { params: open == null ? {} : { open }, filters: more, sorts,
     offset, limit, count: true })
   return {
     items: answer.items.map((row) => ({
+      operatorId: str(row.operatorId),
+      operatorName: str(row.operatorName),
       publicationId: String(row.publicationId ?? ''),
       name: str(row.name),
       publisherId: String(row.publisherId ?? ''),

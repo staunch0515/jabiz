@@ -74,6 +74,9 @@ export interface PublicationRow {
   pendingVersionLabel: string | null
   pendingRequestId: string | null
   waitingSince: string | null
+  /** F-S1b: the Sponsor's operator now (the platform's lists). */
+  operatorId?: string | null
+  operatorName?: string | null
 }
 
 export function toPublicationRow(row: Row): PublicationRow {
@@ -97,6 +100,8 @@ export function toPublicationRow(row: Row): PublicationRow {
     pendingVersionLabel: str(row.pendingVersionLabel),
     pendingRequestId: str(row.pendingRequestId),
     waitingSince: str(row.waitingSince),
+    operatorId: str(row.operatorId),
+    operatorName: str(row.operatorName),
   }
 }
 
@@ -104,9 +109,10 @@ export function toPublicationRow(row: Row): PublicationRow {
  * A page of the publications waiting for review, the longest waiting first, with their count: those submitted and
  * those running that asked to switch their version (Q51).
  */
-export const readPendingPublications = (offset: number, limit: number, sorts?: SortSpec[]) =>
+export const readPendingPublications = (offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]) =>
   page(TEMPLATE.publications, toPublicationRow, {
     params: { inReview: true },
+    filters: more,
     sorts: sorts ?? [{ field: 'waitingSince', asc: true }],
     offset,
     limit,
@@ -148,10 +154,13 @@ export interface SponsorRow {
   reviewStatus: string
   submittedAt: string | null
   approvalRequestId: string | null
+  /** F-S1b: the Sponsor's operator now (the platform's lists). */
+  operatorId?: string | null
+  operatorName?: string | null
 }
 
 /** A page of the sponsor applications waiting for review, the longest waiting first, with their count. */
-export const readPendingSponsors = (offset: number, limit: number, sorts?: SortSpec[]) =>
+export const readPendingSponsors = (offset: number, limit: number, sorts?: SortSpec[], more?: Filter[]) =>
   page(TEMPLATE.sponsors, (row): SponsorRow => ({
     onboardingId: String(row.onboardingId),
     userId: String(row.userId ?? ''),
@@ -161,8 +170,10 @@ export const readPendingSponsors = (offset: number, limit: number, sorts?: SortS
     reviewStatus: String(row.reviewStatus ?? ''),
     submittedAt: str(row.submittedAt),
     approvalRequestId: str(row.approvalRequestId),
+    operatorId: str(row.operatorId),
+    operatorName: str(row.operatorName),
   }), {
-    filters: [{ field: 'reviewStatus', op: 'eq', value: 'PENDING' }],
+    filters: [{ field: 'reviewStatus', op: 'eq', value: 'PENDING' }, ...more ?? []],
     sorts: sorts ?? [{ field: 'submittedAt', asc: true }],
     offset,
     limit,
