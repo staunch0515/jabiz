@@ -8,7 +8,7 @@
 | # | 实体（表） | 字段 | 密封时的上下文 | 声明 |
 |---|---|---|---|---|
 | 1 | `QbSponsorMailServer`（`qb_sponsor_mail_server`） | `sealedPassword` | `MailServerProcesses.set`：`SPONSOR_ID`（发起方编号或 `prospect:<所有者>`），同一个值存为 `sponsorId` | `SealedField.of(…, "sealedPassword", "sponsorId")`，`mailserver.MailServerSealedFields` |
-| 6 | `QbsShopToken`（`qbs_shop_token`） | `sealedAccessToken` | `ConnectionProcesses.shopDomain`：**店铺**行（`QbsShop`）的 `shopDomain` | 令牌行原来只有 `shopId`；V81 加列 `shop_domain`（字段 `shopDomain`，不可变、可为空），`QBS_SHOP_CONNECT` 插入时写入。**声明暂缓**：见"平台的缺口" |
+| 6 | `QbsShopToken`（`qbs_shop_token`） | `sealedAccessToken` | `ConnectionProcesses.shopDomain`：**店铺**行（`QbsShop`）的 `shopDomain` | 令牌行原来只有 `shopId`；V82 加列 `shop_domain`（字段 `shopDomain`，不可变、可为空），`QBS_SHOP_CONNECT` 插入时写入。**声明暂缓**：见"平台的缺口" |
 | 7 | `QbsShopToken` | `sealedRefreshToken` | 同上 | 同上 |
 | 8 | `QbsDiscountCode`（`qbs_discount_code`） | `sealedCode` | `DiscountPool.CallShopify`：`domain(ctx)`，同一个值存为 `shopDomain` | `SealedField.of(…, "sealedCode", "shopDomain")`，`shopify.ShopifySealedFields`；字段由 `immutable` 改为可改（仍 `sensitive`，仍只由流程写：数据视图 `processOnlyWrites`） |
 
@@ -26,9 +26,9 @@
   运行任务 `jabiz.key-rotation`：三个值都改在当前密钥下、仍能以声明的上下文解开，经普通写入路径（版本 +1）；再运行一次不再改动。启动检查 `KEYS` 只有"轮换进行中"的警告。
 - `:quizbuks:test`、`:quizbuks-shopify:test`、`:quizbuks:platformCheck`。
 
-## Shopify 令牌的地址（V81，协调会话 2026-11-07 的决定）
+## Shopify 令牌的地址（V82，协调会话 2026-11-07 的决定）
 
-- 迁移 `V81__quizbuks_shopify_token_domain.sql`（`backend/quizbuks-shopify/src/main/resources/db/migration`，与引擎共用版本序列；V80 已被另一个工作分支 `quizbuks-fs11-foreign-video` 占用）
+- 迁移 `V82__quizbuks_shopify_token_domain.sql`（`backend/quizbuks-shopify/src/main/resources/db/migration`，与引擎共用版本序列；总控定的合并顺序：#505 V80、S2 的 #516 V81、本 PR V82）
   **只加列**，可为空，不在迁移中以 SQL 回填（实体的行只经平台的写入路径写，审计照旧）。之后的 `QBS_SHOP_CONNECT` 插入令牌行时写入店铺地址（更新令牌时不改，字段不可变）。
 - 之前保存的令牌行地址为空。平台的重新加密以空的上下文打不开它们：`SealedSecrets` 拒绝空的上下文（`IllegalArgumentException`），
   `StoreUnderCurrentKey` 把它计为 `unreadable`、记日志、原样留在旧密钥下；撤下旧密钥后它们解不开，`ConnectionProcesses.access` 把解不开当作"需要重新连接"。

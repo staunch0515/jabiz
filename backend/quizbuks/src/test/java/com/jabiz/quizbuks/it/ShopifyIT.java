@@ -111,7 +111,7 @@ class ShopifyIT extends ShopifyItSupport {
         assertThat(String.valueOf(stored.get("sealed_access_token"))).doesNotContain(access).doesNotContain("shpat_");
         assertThat(String.valueOf(stored.get("sealed_refresh_token"))).doesNotContain("shprt_");
         assertThat(stored.get("access_expires_at")).isNotNull();
-        // The row keeps the address the tokens are sealed for (F-F14, V81: the context of a key rotation).
+        // The row keeps the address the tokens are sealed for (F-F14, V82: the context of a key rotation).
         assertThat(stored).containsEntry("shop_domain", shop);
         assertThat(sealer.open(String.valueOf(stored.get("sealed_access_token")), shop)).isEqualTo(access);
         assertThat(shopRows(shop).getFirst()).containsEntry("connection", "CONNECTED")

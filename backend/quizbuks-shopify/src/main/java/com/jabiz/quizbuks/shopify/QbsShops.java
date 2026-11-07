@@ -129,7 +129,7 @@ public final class QbsShops {
         eb.primaryKey("shopId");
         eb.field("shopId", f -> f.physicalColumn("shop_id").immutable(true).required(true).asText(ID_LENGTH));
         // The shop's address, the context both tokens are sealed for (ShopifySealedFields, platform D78); empty on
-        // rows written before V81.
+        // rows written before V82.
         eb.field("shopDomain", f -> f.physicalColumn("shop_domain").immutable(true)
             .asText(Shopify.SHOP_DOMAIN_LENGTH));
         eb.field("sealedAccessToken", f -> f.physicalColumn("sealed_access_token").required(true).sensitive()
