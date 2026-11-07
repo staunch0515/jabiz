@@ -44,4 +44,35 @@ class SealedSecretsTest {
         assertThatThrownBy(() -> sealer.seal(new byte[1], " ", IV)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> sealer.seal(new byte[1], "c", new byte[4])).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void valuesUnderARetiredKeyStillOpenAndNewOnesUseTheCurrentKey() {
+        byte[] oldKey = "an-old-key-of-these-tests-0000000001".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] newKey = "a-new-key-of-these-tests-00000000002".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        SealedSecrets before = new SealedSecrets(oldKey);
+        String stored = before.seal("secret".getBytes(java.nio.charset.StandardCharsets.UTF_8), "context-1",
+            new byte[SealedSecrets.IV_BYTES]);
+        SealedSecrets rotating = new SealedSecrets(newKey, java.util.List.of(oldKey));
+        // Decision D78: the retired key still opens what it stored; the current key stores.
+        assertThat(new String(rotating.open(stored, "context-1"), java.nio.charset.StandardCharsets.UTF_8))
+            .isEqualTo("secret");
+        String renewed = rotating.seal("secret".getBytes(java.nio.charset.StandardCharsets.UTF_8), "context-1",
+            new byte[SealedSecrets.IV_BYTES]);
+        assertThat(SealedSecrets.keyIdOf(renewed)).isEqualTo(rotating.keyId());
+        assertThat(SealedSecrets.keyIdOf(stored)).isEqualTo(before.keyId()).isEqualTo(rotating.previousKeyIds().getFirst());
+        assertThat(stored).startsWith(SealedSecrets.storedPrefix(before.keyId()));
+        assertThat(SealedSecrets.keyIdOf("not stored")).isNull();
+        assertThat(SealedSecrets.keyIdOf(null)).isNull();
+        // The retired key opens nothing new, and once it is removed the old value no longer opens.
+        assertThatThrownBy(() -> before.open(renewed, "context-1"))
+            .isInstanceOf(SealedSecrets.UnreadableSecretException.class);
+        assertThatThrownBy(() -> new SealedSecrets(newKey).open(stored, "context-1"))
+            .isInstanceOf(SealedSecrets.UnreadableSecretException.class);
+        // The context still binds under a retired key.
+        assertThatThrownBy(() -> rotating.open(stored, "context-2"))
+            .isInstanceOf(SealedSecrets.UnreadableSecretException.class);
+        assertThatThrownBy(() -> new SealedSecrets(newKey, java.util.List.of(newKey))).hasMessageContaining("current key");
+        assertThatThrownBy(() -> new SealedSecrets(newKey, java.util.List.of(new byte[8])))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
 }

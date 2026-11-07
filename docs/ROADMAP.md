@@ -5232,3 +5232,34 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 密钥轮换的演练在 C（D78）合并后加入同一脚本。
 
 **17zv 状态**：📝 待评审（分支 `1.3/phase-17zv-restore-verify`）。
+
+### 17zw 密钥轮换（D78，2026-11-07，QuizBuks 首次上线的上线准备 C）
+
+**缘由**：四把密钥都只接受一把，换 MFA、SEAL 密钥就会丢失（解不开）数据，换 JWT 密钥全员登出、旧邮件的退订链接失效，换封存密钥旧块报 `OTHER_KEY`。
+需求方决定上线前就要能轮换（正式使用后不能出事时手忙脚乱）。
+
+| # | 内容 |
+|---|---|
+| 17zw-1 | 旧密钥并存：`JABIZ_JWT_SECRET_PREVIOUS`、`JABIZ_MFA_KEY_PREVIOUS`、`JABIZ_SEAL_KEY_PREVIOUS`、`JABIZ_INTEGRITY_KEY_PREVIOUS`（`PreviousKeys`）；`JwtService` 依次验签；`MfaSecretCipher`、`SealedSecrets` 按存储值的密钥标识选密钥（`keyIdOf`、`storedPrefix`）；`IntegrityKeys` 与 `SealChain.check` 按块的 `key_id` 选密钥，抹除的证据同样 |
+| 17zw-2 | 重新加密：`KEY_ROTATION_REKEY`（`internal()`）与任务 `jabiz.key-rotation`（每 10 分钟，可补跑）：按前缀找出旧密钥下的 TOTP 密钥与声明的密封值，经普通写入路径以当前密钥重新存储，解不开的原样保留并计数 |
+| 17zw-3 | 应用的声明 `SealedFields` / `SealedField`（core）；平台声明 `SecIdentityToken.sealedToken`；启动检查 `KEYS`（声明有误为错误，轮换进行中为警告）；示范应用补上 `JABIZ_SEAL_KEY` 的映射 |
+| 17zw-4 | 恢复核对加 `sealed-secrets` 与 `jabiz.ops.verify-restore.rekey`；`restore-drill.sh` 的 `DRILL_ROTATE=true`（新密钥 + 旧密钥重新加密到底，再以新密钥单独核对）；手册 `docs/guide/key-rotation.md`（定期轮换、泄露时、应用要做的事）；D78；13 §8、CLAUDE.md |
+| 17zw-5 | 测试：`SealedSecretsTest` / `MfaSecretCipherTest`（旧密钥下的值能解开、新值用当前密钥、撤下后解不开、上下文仍绑定）、`SealChainTest`（旧密钥签的块以它校验，不让未签的块通过；密钥环）、`JwtServiceTest`（旧密钥签的访问令牌与退订链接在保留期间有效）、`KeyRotationIT`（旧密钥下的二次验证照常登录；重新加密 1 个 TOTP 密钥与 1 个密封值、上下文不符的 1 个原样保留；之后照常登录、再次运行什么也不剩；经写入路径产生新版本）、`RestoreVerificationIT`（`sealed-secrets`）。真实演练见 PR |
+
+**验收**：四把密钥都能在不停机、不丢数据的情况下更换；重新加密完成后撤下 MFA、SEAL 的旧密钥，一切照常；演练脚本在恢复出的副本上演练过一次轮换。
+
+**17zw 状态**：📝 待评审（分支 `1.3/phase-17zw-key-rotation`）。
+
+### 17zx 平台运维要点与上线前的设置检查（2026-11-07，QuizBuks 首次上线的上线准备 D/E）
+
+**缘由**：今天加入的功能（D72–D78）各有设置、指标与处理办法，散在设计文档中；上线清单"安全"一节的各项（测试开关、密钥、代理、环境横条）全靠人眼核对。
+
+| # | 内容 |
+|---|---|
+| 17zx-1 | `docs/guide/platform-operations.md`：上线前检查、告警与试发、恢复演练、密钥轮换的入口，以及刷新补发、地址库、链接图片、手动补跑、限流、受控变更的值、邮件文字与信纸、恢复核对、密钥轮换各自的设置、观测与处理 |
+| 17zx-2 | `tools/ops/env-check.sh`：只读检查正式环境的设置文件（密钥齐全、互不相同、不是测试密钥；不含 dev；首个管理员的变量已删；二次验证没关；可信代理与环境标志；告警的收件人与 SMTP），只打印变量名；应用以规则文件加自己的检查 |
+| 17zx-3 | 测试：`tools/test/env-check.test.sh`（CI，12 项：正确的设置通过；同一密钥用两次、测试密钥、过短、dev、首个管理员、关掉二次验证、测试横条、占位的收件人各被拒；轮换中只是警告；应用规则；任何输出中都没有值） |
+
+**验收**：运维只看一页就知道平台各功能怎么设、看什么、出了事怎么办；上线前一条命令核对设置，不泄露值。
+
+**17zx 状态**：📝 待评审（分支 `1.3/phase-17zx-ops-guide`）。

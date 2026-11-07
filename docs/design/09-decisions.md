@@ -2738,3 +2738,38 @@ QuizBuks 首次上线时，运维需要在修好数据或外部服务恢复后�
 **剩余风险**：选取在补跑时按当时的数据进行：此后才到期的项会以该时刻的键处理，而已不再被选中的失败项不会处理（每项流程本来就须"先取锁、再读取、已不到期即什么也不做"，D42）。
 补跑占用集群锁期间到点的计划运行 `LOCKED`（逐项任务下次运行自然接上，单流程任务的该时刻可再补跑）。实例在补跑中停机：进行中的项照常结束，未开始的项不再开始，请求已记录而运行可能没有记录（可再补跑）。
 锁取得后、运行开始前客户端断开时释放锁；进程在这之间崩溃则锁至多保留 `lockAtMostFor`。
+
+## D78 密钥轮换：旧密钥并存、重新加密、封存块按密钥标识校验
+
+**背景**：`JABIZ_JWT_SECRET`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY`、`JABIZ_INTEGRITY_KEY` 都只接受一把密钥（D12、D28、D56、D27）。换任何一把都会立刻：
+全员重新登录、邮件中的退订链接失效（JWT）；全部 TOTP 解不开（MFA）；应用密封保存的密码与令牌解不开（SEAL）；已有的封存块报告为 `OTHER_KEY`（INTEGRITY）。
+需求方要求正式使用后少维护、出事时不手忙脚乱：密钥必须**事先就能轮换**，并有演练过的手册。本条扩展上述决策，不取代它们。
+
+**决定**
+1. **旧密钥并存**：每把密钥另有 `*_PREVIOUS`（Base64，逗号分隔，同样只取自环境变量）：`JABIZ_JWT_SECRET_PREVIOUS`（`jabiz.security.jwt.previous-secrets`）、
+   `JABIZ_MFA_KEY_PREVIOUS`（`jabiz.security.mfa.previous-keys`）、`JABIZ_SEAL_KEY_PREVIOUS`（`jabiz.security.seal.previous-keys`）、
+   `JABIZ_INTEGRITY_KEY_PREVIOUS`（`jabiz.integrity.previous-keys`）。新的值、令牌、封存块只用当前密钥；旧密钥只用于读：
+   JWT 依次以当前与旧密钥验签；MFA 与 SEAL 按存储值中的密钥标识选用密钥（存储形式本来就带标识）；封存链与抹除的证据按块（证据）记下的 `key_id` 选用密钥。
+   旧密钥与当前密钥相同、格式不对或过短即启动失败。
+2. **重新加密**：平台流程 `KEY_ROTATION_REKEY`（`internal()`）与任务 `jabiz.key-rotation`（缺省每 10 分钟，`jabiz.key-rotation.cron`，可按 D77 手动补跑）：
+   配置了旧的 MFA 或 SEAL 密钥时，每次至多 `jabiz.key-rotation.batch-size`（缺省 500）行，按存储形式的前缀找出旧密钥下的值，解开后以当前密钥重新存储，
+   经普通写入路径提交（时态实体写新版本，审计中照旧遮蔽）；解不开的（上下文与声明不符、被改动）原样保留并计数、记日志。没有旧密钥时什么也不读。
+3. **应用的密封字段要声明**：`SealedFields` Bean（core，同步，无 I/O）列出 `SealedField.of(实体, 字段, 上下文字段 | 行 -> 上下文)`，上下文与 `SealSecret` 当初所用的
+   完全相同。平台自己的（Apple 的令牌，`SecIdentityToken.sealedToken`）同样声明。启动检查 `KEYS`：实体、字段不存在，实体是 write-once（D29，不能重写），
+   没有数据视图，重复声明即错误；字段不是 `sensitive` 为警告。没有声明的密封字段不会被重新加密，旧密钥撤下后就再也解不开。
+4. **撤下旧密钥**：任务找不到剩余（输出 `more=false`、计数为 0）后，从环境中删去 `JABIZ_MFA_KEY_PREVIOUS` / `JABIZ_SEAL_KEY_PREVIOUS`；
+   `JABIZ_JWT_SECRET_PREVIOUS` 保留到它签的令牌与邮件链接都可以过期（访问令牌 15 分钟、挑战令牌更短；退订链接见手册）；
+   **`JABIZ_INTEGRITY_KEY_PREVIOUS` 永久保留**：封存块从不重签，旧块要一直能校验。配置着 JWT、MFA、SEAL 的旧密钥时启动检查 `KEYS` 给出"轮换进行中"的警告。
+5. **核对与演练**：恢复核对（13 §8）另有 `sealed-secrets`（声明的密封值都能以配置的密钥解开）；`jabiz.ops.verify-restore.rekey=true` 时先把重新加密跑到底。
+   `tools/ops/restore-drill.sh` 以 `DRILL_ROTATE=true` 在恢复出的副本上演练轮换：新密钥 + 生产密钥作旧密钥并重新加密到底，再以新密钥单独核对。
+   手册：`docs/guide/key-rotation.md`。
+
+**理由**：存储形式本来就带密钥标识，按标识选密钥不必猜，也不会用错密钥解出垃圾；重新加密走普通写入路径，审计、版本、并发控制照旧，不另开写入口；
+密封字段由应用声明（与 `PersonalDataEraser` 同一模式），平台才知道去哪里找、用什么上下文；封存块不重签，链的意义（谁也不能事后重算）不受影响。
+
+**放弃的方案**：①换密钥时停机批量重写：停机时长随数据量增长，且一步出错就全部解不开；②重签封存块：等于允许重算整条链，失去封存的意义；
+③平台扫描所有文本列猜哪些是密封值：上下文猜不出来，解不开就无从重写。
+
+**剩余风险**：只追加的历史版本（如 `sec_user_mfa_version` 的旧版本、时态实体中密封字段的旧版本）仍是旧密钥加密的密文，平台不改写它们。
+只是密钥泄露而库没有泄露时，撤下旧密钥即可；**密钥与库一同泄露**时，旧版本仍可用旧密钥解开，处理是换掉被保护的秘密本身（全员重新绑定二次验证，
+应用的密码与令牌重新录入或授权），见手册"泄露时"一节。改写历史密文（维护连接上的覆盖，类似 D62 的清除）的取舍待需求方决定。
