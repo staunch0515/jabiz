@@ -206,6 +206,12 @@ class ProcessRateLimitsTest {
         assertThatCode(() -> limits.checkFetch(actor("erin"), "sixth.example.org"))
             .isInstanceOf(RateLimitedException.class);
 
+        // A redirect's hop is charged to its host only.
+        limits.checkFetchHost("redirected.example.com");
+        limits.checkFetchHost("redirected.example.com");
+        assertThatCode(() -> limits.checkFetchHost("redirected.example.com"))
+            .isInstanceOf(RateLimitedException.class);
+
         // Without configuration, the platform's default applies.
         ProcessRateLimits defaults = new ProcessRateLimits(new ProcessRateLimitProperties(Map.of()), addresses,
             new PlatformObservations(registry), now::get);

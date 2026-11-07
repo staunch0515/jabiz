@@ -16,15 +16,23 @@ import java.util.Set;
  * @param deadline       the whole download, every hop and the name lookups included (default 60 s; at most 5 min,
  *                       and at least the read timeout); the process's transaction stays open meanwhile
  * @param allowedPorts   ports a link may name (default 443 only); other ports refuse the link
+ * @param maxConcurrent  downloads at once on the instance (default 16; 1 to 1024): beyond it 503
+ *                       {@code PROCESS_BUSY} (an external job's handler waits, up to its deadline). With the policies'
+ *                       limits it bounds the memory and sockets downloads take: at most this many times the largest
+ *                       policy limit
+ * @param maxConcurrentPerUser downloads at once per person (default 2; 1 to {@code maxConcurrent}): beyond it 429
+ *                       {@code RATE_LIMITED}, so one person drip-fed by slow servers cannot take every slot
  */
 @ConfigurationProperties("jabiz.files.fetch")
 public record RemoteFetchProperties(Integer maxRedirects, Duration connectTimeout, Duration readTimeout,
-    Duration deadline, List<Integer> allowedPorts) {
+    Duration deadline, List<Integer> allowedPorts, Integer maxConcurrent,
+    Integer maxConcurrentPerUser) {
 
     public static final int MAX_REDIRECTS = 10;
     public static final Duration MAX_CONNECT_TIMEOUT = Duration.ofSeconds(30);
     public static final Duration MAX_READ_TIMEOUT = Duration.ofMinutes(2);
     public static final Duration MAX_DEADLINE = Duration.ofMinutes(5);
+    public static final int MAX_CONCURRENT = 1024;
 
     public RemoteFetchProperties {
         maxRedirects = maxRedirects == null ? 3 : maxRedirects;
@@ -32,6 +40,8 @@ public record RemoteFetchProperties(Integer maxRedirects, Duration connectTimeou
         readTimeout = readTimeout == null ? Duration.ofSeconds(20) : readTimeout;
         deadline = deadline == null ? Duration.ofSeconds(60) : deadline;
         allowedPorts = allowedPorts == null || allowedPorts.isEmpty() ? List.of(443) : List.copyOf(allowedPorts);
+        maxConcurrent = maxConcurrent == null ? 16 : maxConcurrent;
+        maxConcurrentPerUser = maxConcurrentPerUser == null ? 2 : maxConcurrentPerUser;
     }
 
     public Set<Integer> ports() {

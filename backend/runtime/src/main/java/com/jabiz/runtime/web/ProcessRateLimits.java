@@ -38,9 +38,9 @@ import java.util.function.LongSupplier;
  * most 10 an hour per person each; downloads of images from links ({@code FILE_FETCH}, decision D75) at most 30 a
  * minute per person, 60 a minute per host of the link and 300 a minute on the instance.
  *
- * <p>{@code FILE_FETCH} is a sub-process: it counts its own calls ({@link #checkFetch}), per actor, per host of the
- * link and per instance, whatever process calls it, so that nobody makes the server download from one host faster
- * than the limit allows.
+ * <p>{@code FILE_FETCH} is no process but the downloads of images from links ({@code POST /api/files/fetch} and the
+ * external jobs' downloads): they are counted by {@link #checkFetch}, per actor, per host of the link and per instance,
+ * so that nobody makes the server download from one host faster than the limit allows.
  */
 @Component
 public class ProcessRateLimits {
@@ -54,7 +54,10 @@ public class ProcessRateLimits {
         "MAIL_LAYOUT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)),
         "FILE_FETCH", new ProcessRateLimitProperties.Limit(30, null, 300, Duration.ofMinutes(1), null, null, 60));
 
-    /** The process counting its own calls, by actor, host and instance ({@link #checkFetch}; decision D75). */
+    /**
+     * Not a process: the key of downloads of images from links ({@code POST /api/files/fetch} and external jobs'
+     * {@code remoteImages()}), counted by actor, host and instance ({@link #checkFetch}; decision D75).
+     */
     public static final String FILE_FETCH = "FILE_FETCH";
 
     /** Keys kept per bucket; the least recently used are forgotten first. */
@@ -165,6 +168,11 @@ public class ProcessRateLimits {
      * (or the platform's default) declares; {@link RateLimitedException} (429) beyond one of them.
      */
     public void checkFetch(RequestContext request, String host) {
+        checkFetch(request.actorId(), host);
+    }
+
+    /** As {@link #checkFetch(RequestContext, String)}, for {@code actorId} (an external job's requester). */
+    public void checkFetch(String actorId, String host) {
         Buckets limits = buckets.get(FILE_FETCH);
         if (limits == null) {
             return;
@@ -172,7 +180,7 @@ public class ProcessRateLimits {
         List<Counted> counted = new ArrayList<>(3);
         if (limits.perUser() != null) {
             counted.add(new Counted(limits.perUser(), Scope.USER,
-                "user:" + Objects.requireNonNullElse(request.actorId(), "anonymous")));
+                "user:" + Objects.requireNonNullElse(actorId, "anonymous")));
         }
         if (limits.perHost() != null) {
             counted.add(new Counted(limits.perHost(), Scope.HOST, "host:" + host));
@@ -181,6 +189,18 @@ public class ProcessRateLimits {
             counted.add(new Counted(limits.perInstance(), Scope.INSTANCE, "instance"));
         }
         take(FILE_FETCH, counted);
+    }
+
+    /**
+     * Counts one more hop of a download to {@code host} (a redirect, decision D75): the per-host bucket only, so that
+     * a redirect cannot reach a host past its limit.
+     */
+    public void checkFetchHost(String host) {
+        Buckets limits = buckets.get(FILE_FETCH);
+        if (limits == null || limits.perHost() == null) {
+            return;
+        }
+        take(FILE_FETCH, List.of(new Counted(limits.perHost(), Scope.HOST, "host:" + host)));
     }
 
     private void take(String process, List<Counted> counted) {

@@ -50,7 +50,7 @@ class RemoteImageFetcherTest {
                 address -> address.equals(LOOPBACK) || PublicAddresses.isPublic(address),
                 SslContextBuilder.forClient().trustManager(HttpsStubServer.certificate()).build());
             return new RemoteImageFetcher(network, new RemoteFetchProperties(3, Duration.ofSeconds(2),
-                Duration.ofSeconds(1), Duration.ofSeconds(3), List.of(443, STUB.port())));
+                Duration.ofSeconds(1), Duration.ofSeconds(3), List.of(443, STUB.port()), null, null));
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
@@ -103,6 +103,13 @@ class RemoteImageFetcherTest {
             .containsEntry("reason", "TLS");
         assertThat(((RemoteImageFetcher.Refusal) RemoteImageFetcher.refusalOf(
             io.netty.handler.timeout.ReadTimeoutException.INSTANCE)).code()).isEqualTo("FILE_FETCH_TIMEOUT");
+        // Wrapped network errors too: their messages (host and port) never come out.
+        Throwable wrapped = RemoteImageFetcher.refusalOf(new IllegalStateException("x", new RuntimeException(
+            new java.net.ConnectException("Connection refused: secret.example/10.0.0.1:443"))));
+        assertThat(wrapped).isInstanceOf(RemoteImageFetcher.Refusal.class);
+        assertThat(wrapped.getMessage()).doesNotContain("secret.example");
+        assertThat(((RemoteImageFetcher.Refusal) RemoteImageFetcher.refusalOf(new RuntimeException(
+            new io.netty.channel.ChannelException("boom")))).params()).containsEntry("reason", "UNREACHABLE");
         IllegalStateException bug = new IllegalStateException("bug");
         assertThat(RemoteImageFetcher.refusalOf(bug)).isSameAs(bug);
     }

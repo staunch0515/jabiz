@@ -12,7 +12,7 @@ import java.util.List;
  * Startup check of {@code jabiz.files.fetch.*} (category {@value FileChecks#CATEGORY}, decision D75), every problem at
  * once: redirects 0 to {@value RemoteFetchProperties#MAX_REDIRECTS}; the connect timeout positive and at most 30 s; the
  * read timeout positive and at most 2 min; the deadline at least the read timeout and at most 5 min; ports 1 to 65535.
- * A port other than 443 is a warning: links to unusual ports of public hosts are seldom images.
+ * concurrent downloads 1 to {@value RemoteFetchProperties#MAX_CONCURRENT}, per person 1 to that. A port other than 443 is a warning: links to unusual ports of public hosts are seldom images.
  */
 @Component
 public class RemoteFetchChecks implements PlatformCheck {
@@ -40,6 +40,16 @@ public class RemoteFetchChecks implements PlatformCheck {
             || deadline.compareTo(RemoteFetchProperties.MAX_DEADLINE) > 0) {
             problems.add(error(".deadline", "must be at least the read timeout (" + properties.readTimeout()
                 + ") and at most " + RemoteFetchProperties.MAX_DEADLINE + ", not " + deadline));
+        }
+        int concurrent = properties.maxConcurrent();
+        if (concurrent < 1 || concurrent > RemoteFetchProperties.MAX_CONCURRENT) {
+            problems.add(error(".max-concurrent", "must be 1 to " + RemoteFetchProperties.MAX_CONCURRENT + ", not "
+                + concurrent));
+        }
+        int perUser = properties.maxConcurrentPerUser();
+        if (perUser < 1 || perUser > Math.max(1, concurrent)) {
+            problems.add(error(".max-concurrent-per-user", "must be 1 to max-concurrent (" + concurrent + "), not "
+                + perUser));
         }
         for (Integer port : properties.allowedPorts()) {
             if (port == null || port < 1 || port > 65535) {

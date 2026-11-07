@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -129,14 +130,23 @@ public class RemoteImageFetcher {
      * bytes written. Errors are {@link Refusal}s or {@link RemoteImageLink.Refused}.
      */
     Mono<Long> fetch(RemoteImageLink link, long maxBytes, Path target) {
-        return hop(link, 0, maxBytes, target)
+        return fetch(link, maxBytes, target, host -> { });
+    }
+
+    /**
+     * As above; {@code beforeRedirect} is told each redirect's host before it is resolved (the per-host rate limit:
+     * a redirect is charged like the link's first hop, decision D75) and may refuse it by throwing.
+     */
+    Mono<Long> fetch(RemoteImageLink link, long maxBytes, Path target, Consumer<String> beforeRedirect) {
+        return hop(link, 0, maxBytes, target, beforeRedirect)
             .timeout(properties.deadline(), Mono.error(() -> timeout("The download took longer than "
                 + properties.deadline())))
             .onErrorMap(error -> !(error instanceof Refusal) && !(error instanceof RemoteImageLink.Refused),
                 RemoteImageFetcher::refusalOf);
     }
 
-    private Mono<Long> hop(RemoteImageLink link, int redirects, long maxBytes, Path target) {
+    private Mono<Long> hop(RemoteImageLink link, int redirects, long maxBytes, Path target,
+        Consumer<String> beforeRedirect) {
         return resolve(link)
             .flatMap(address -> exchange(link, address, maxBytes, target))
             .flatMap(hop -> {
@@ -149,7 +159,8 @@ public class RemoteImageFetcher {
                         Map.of("max", properties.maxRedirects())));
                 }
                 RemoteImageLink next = link.redirect(hop.location(), properties.ports());
-                return hop(next, redirects + 1, maxBytes, target);
+                beforeRedirect.accept(next.host());
+                return hop(next, redirects + 1, maxBytes, target, beforeRedirect);
             });
     }
 
@@ -261,9 +272,14 @@ public class RemoteImageFetcher {
                 return failed("UNRESOLVED", "The link's host was not found");
             }
         }
-        if (error instanceof IOException || error instanceof io.netty.channel.ChannelException
-            || error instanceof io.netty.handler.codec.DecoderException) {
-            return failed("UNREACHABLE", "The server could not be reached or answered unusably");
+        // Network errors are refusals of their own, whatever wraps them: their messages may name the host and port.
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof IOException || cause instanceof io.netty.channel.ChannelException
+                || cause instanceof io.netty.handler.codec.DecoderException
+                || cause.getClass().getName().startsWith("io.netty.")
+                || cause.getClass().getName().startsWith("reactor.netty.")) {
+                return failed("UNREACHABLE", "The server could not be reached or answered unusably");
+            }
         }
         return error;
     }

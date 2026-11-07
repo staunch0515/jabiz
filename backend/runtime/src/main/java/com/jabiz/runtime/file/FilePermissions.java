@@ -20,12 +20,6 @@ public final class FilePermissions {
      * never runs on its own.
      */
     public static final String GENERATED_ARCHIVE = "file.generated.archive";
-    /**
-     * Declared by {@code FILE_FETCH} (decision D75); granted to no role. The process is {@code subProcessOnly()}:
-     * business processes download an image from a link with the step {@code FetchRemoteImage}, and the requester must
-     * hold the upload permission of the file policy, as for an upload.
-     */
-    public static final String FETCH = "file.fetch";
 
     private FilePermissions() {}
 }

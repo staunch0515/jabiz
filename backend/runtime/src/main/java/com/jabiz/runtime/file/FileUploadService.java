@@ -295,7 +295,7 @@ public class FileUploadService {
             input.originalName(), jobId);
     }
 
-    private Mono<FileProcesses.FileInfo> registerProcess(FileProcesses.RegisterInput input) {
+    Mono<FileProcesses.FileInfo> registerProcess(FileProcesses.RegisterInput input) {
         // The upload API (and the external job executor, for the files of a job) is FILE_REGISTER's entry point: it
         // runs as the uploader, or the job's requester (decisions D41, D50).
         return executor.run(FileProcesses.REGISTER_PROCESS, input,

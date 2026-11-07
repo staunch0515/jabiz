@@ -32,7 +32,7 @@ import java.util.TreeSet;
  *       {@code max-waiting} positive;</li>
  *   <li>a rate limit names a registered process of the process catalog (not {@code internal()},
  *       {@code entryOnly()} or {@code subProcessOnly()}: those never come through the process API), with positive
- *       values and at least one bucket; {@code FILE_FETCH}, a sub-process counting its own calls, takes per-user,
+ *       values and at least one bucket; {@code FILE_FETCH}, the downloads from links (no process), takes per-user,
  *       per-host and per-instance only, and per-host is for it alone (decision D75).</li>
  * </ul>
  */
@@ -136,14 +136,14 @@ public class ProcessAdmissionChecks implements PlatformCheck {
             ProcessRateLimitProperties.Limit limit = entry.getValue();
             var found = registry.findLatest(entry.getKey());
             boolean fetch = ProcessRateLimits.FILE_FETCH.equals(entry.getKey());
-            if (found.isEmpty()) {
-                problems.add(error(location, "names no registered process"));
-            } else if (fetch) {
-                // A sub-process counting its own calls (decision D75): per user, host and instance only.
+            if (fetch) {
+                // Not a process: the downloads from links (decision D75), per user, host and instance only.
                 if (limit.perAddress() != null || limit.perTenant() != null || limit.perVisitor() != null) {
                     problems.add(error(location, ProcessRateLimits.FILE_FETCH + " counts per-user, per-host and"
                         + " per-instance only (decision D75)"));
                 }
+            } else if (found.isEmpty()) {
+                problems.add(error(location, "names no registered process"));
             } else if (limit.perHost() != null) {
                 problems.add(error(location, "per-host counts the downloads of " + ProcessRateLimits.FILE_FETCH
                     + " only (decision D75)"));
