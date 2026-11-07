@@ -10,7 +10,8 @@ import { CERTIFICATION_PROCESS, CERTIFICATION_TEMPLATE } from './ids'
  * end-to-end test `sponsor-certification.spec.ts` runs these against the server.
  */
 
-export const CERTIFICATIONS_PATH = '/certifications'
+/** F-C1c: the certifications are a tab of the asset library (`/certifications` leads there, `MOVED_PATHS`). */
+export { CERTIFICATIONS_TAB_PATH as CERTIFICATIONS_PATH } from '../profile/paths'
 export const CERTIFICATIONS_QUERY = ['qb', 'sponsor-certifications'] as const
 export const roundQuery = (publicationId: string | null) => ['qb', 'publication-round', publicationId] as const
 

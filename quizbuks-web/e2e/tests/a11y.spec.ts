@@ -151,8 +151,11 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByTestId('profile-nav-page').click()
     await expect(page.getByTestId('sponsor-page-form')).toBeVisible()
     await expectAccessible(page, at('sponsor page editor'))
-    // Q60b-2: the sponsor's products.
-    await page.getByTestId('profile-nav-products').click()
+    // Q60b-2: the sponsor's products, a tab of the asset library since F-C1c.
+    await page.getByRole('link', { name: 'Asset library' }).click()
+    await expect(page.getByTestId('assets-page')).toBeVisible()
+    await expectAccessible(page, at('sponsor asset library'))
+    await page.getByTestId('assets-tab-products').click()
     await expect(page.getByTestId('product-add')).toBeVisible()
     await expectAccessible(page, at('sponsor products'))
     await page.getByRole('link', { name: 'Account' }).click()

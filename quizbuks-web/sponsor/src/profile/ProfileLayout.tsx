@@ -1,5 +1,5 @@
 import { PageHeader } from '@jabiz/ui'
-import { LayoutGrid, Mail, ShoppingBag, Store, UserRound, UsersRound, type LucideIcon } from 'lucide-react'
+import { LayoutGrid, Mail, Store, UserRound, UsersRound, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
@@ -10,7 +10,6 @@ const ICONS: Record<ProfileSection, LucideIcon> = {
   overview: LayoutGrid,
   basics: UserRound,
   page: Store,
-  products: ShoppingBag,
   staff: UsersRound,
   'mail-server': Mail,
 }

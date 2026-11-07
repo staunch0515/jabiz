@@ -33,14 +33,17 @@ import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formProblem, ProblemList } from '../content/editing'
 import { quizPath } from '../content/paths'
+import { CertificationsPage } from '../certifications/CertificationsPage'
 import { EmptyState } from '../EmptyState'
 import { SPONSOR } from '../messages'
+import { ProductsPage } from '../products/ProductsPage'
 import { publicationPath } from '../publishing/paths'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
 import { Link, navigate } from '../qb/router'
 import {
   ASSET_TABS,
+  isAssetTab,
   ASSETS_PATH,
   ASSETS_QUERY,
   assetUsesQuery,
@@ -85,7 +88,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
   const id = useId()
   const queryClient = useQueryClient()
   const kindLabel = useAssetKindLabel()
-  const assets = useQuery({ queryKey: ASSETS_QUERY, queryFn: readMyAssets })
+  const assets = useQuery({ queryKey: ASSETS_QUERY, queryFn: readMyAssets, enabled: isAssetTab(tab) })
   const [search, setSearch] = useState('')
   const [kind, setKind] = useState<string>(ALL)
   const [tag, setTag] = useState<string>(ALL)
@@ -150,7 +153,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
   return (
     <section className="flex flex-col gap-4" data-testid="assets-page">
       <PageHeader title={t('assets.title')} description={t('assets.intro')}
-        actions={<span className="flex flex-wrap gap-2">
+        actions={isAssetTab(tab) && <span className="flex flex-wrap gap-2">
           <Button variant="outline" data-testid="asset-collect" onClick={() => setCollecting(true)}>
             <FolderInput aria-hidden />{t('assets.collect')}
           </Button>
@@ -164,7 +167,9 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
             <TabsTrigger key={value} value={value} data-testid={`assets-tab-${value}`}>{t(`assets.tabs.${value}`)}</TabsTrigger>
           ))}
         </TabsList>
-        <TabsContent value={tab} className="flex flex-col gap-4">
+        {tab === 'products' && <TabsContent value={tab}><ProductsPage /></TabsContent>}
+        {tab === 'certifications' && <TabsContent value={tab}><CertificationsPage embedded /></TabsContent>}
+        {isAssetTab(tab) && <TabsContent value={tab} className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3" role="search" aria-label={t('assets.search')}>
             <div className="flex flex-col gap-1">
               <Label htmlFor={`${id}-search`}>{t('assets.search')}</Label>
@@ -213,7 +218,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
                 rowProps={(row) => ({ 'data-testid': 'asset-row', 'data-id': row.assetId, 'data-kind': row.kind })} />
             </>
           )}
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
       {editing && (
         <AssetDialog key={editing === 'new' ? 'new' : editing.assetId} asset={editing === 'new' ? null : editing}

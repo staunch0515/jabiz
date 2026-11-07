@@ -23,12 +23,14 @@ import { Link } from '../qb/router'
 import { UnderstandingCards } from '../qb/UnderstandingCards'
 import { useMySponsor } from './api'
 import { checklist, progress, type ChecklistKey } from './checklist'
-import { profilePath, type ProfileSection } from './paths'
+import { PRODUCTS_TAB_PATH, profilePath } from './paths'
 import { PreviewCard } from './PreviewCard'
 import { ProfileTransferCard } from './ProfileTransfer'
 
-const SECTION_OF: Record<ChecklistKey, ProfileSection> = {
-  basics: 'basics', page: 'page', products: 'products', staff: 'staff', mailServer: 'mail-server',
+/** Where each item of the checklist is set up; the products are in the asset library since F-C1c. */
+const PATH_OF: Record<ChecklistKey, string> = {
+  basics: profilePath('basics'), page: profilePath('page'), products: PRODUCTS_TAB_PATH, staff: profilePath('staff'),
+  mailServer: profilePath('mail-server'),
 }
 
 /**
@@ -123,7 +125,7 @@ export function OverviewPage() {
                     <span className="text-muted-foreground text-sm">{t(`profile.checklist.${item.key}Hint`)}</span>
                   </span>
                   <Button asChild variant={item.done ? 'ghost' : 'outline'} size="sm">
-                    <Link to={profilePath(SECTION_OF[item.key])}>
+                    <Link to={PATH_OF[item.key]}>
                       {item.done ? t('profile.checklist.open') : t('profile.checklist.go')}
                     </Link>
                   </Button>
