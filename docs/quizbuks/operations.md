@@ -304,6 +304,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 站内信与公告（Q7c） | `jabiz.job.item{job="qb.broadcast-dispatch"|"qb.broadcast-expire"|"qb.broadcast-stats"|"qb.payout-reminder"|"qb.conversation-expire", result}`；`jabiz.query.template{template="qb.app.inbox-unread"}` 的耗时（徽标，每个在线用户每 5 分钟一次；目标 < 5 ms，`docs/quizbuks/perf/Q7c-inbox.md`）；`jabiz.outbox.delivery{result="FAILED"}`（消费者 `qb.msg-*`） | 定时发送的项连续失败（公告迟迟不出）；消费者失败持续 15 分钟 |
 | 平台费（Q87b，§7.18） | `jabiz.job.item{job="qb.fee-monthly"|"qb.fee-invoice"|"qb.fee-overdue", result}`；核对项 `FEES_RECEIVABLE` | 任一项 `FAILED`；核对 `DIFF` 持续两天 |
 | 发起方分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
+| 资源占用的计量（F-C2，§7.22） | `jabiz.job.run{job="qb.usage-snapshot", result}`；`jabiz.job.item{job="qb.usage-snapshot", result}`；`qb_usage_day` 的最新日期 | 运行 `FAILED` 或 `PARTIAL`（某些发起方当天缺快照）；快照时刻（缺省东京时间 03:17）之后 2 小时仍没有当天的成功运行；只读查询 `SELECT max(snapshot_day) FROM qb_usage_day` 早于部署时区的今天（当天缺少快照） |
 | 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
@@ -598,6 +599,31 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
   5. 告诉发起方：已复制到 Quiz 与发布中的内容不受资源删除的影响；丢了的资源可以用"从我的内容收集"从已有的内容重新收进来，或重新"存入资源库"。平台不替发起方恢复（没有恢复流程，也不直接改表）。
 - **"用的是旧的内容"不是故障**：资源改过以后，之前复制的地方仍是旧内容（选了就复制，已提交的发布更不能变）；要用新内容就在那一处重新"从库里选"并保存。
 - **文件**：资源的图片、PDF、音频按种类分三列引用平台的文件（不复制文件），被资源或任何使用处引用的文件不会被平台的孤儿文件清扫删掉；资源删除后，没有其他引用的文件由清扫照常删除。
+
+### 7.22 资源占用的计量（F-C2）
+
+每天记下每个发起方占用的存储与内容（`docs/quizbuks/plans/impl/F-C2.md`），显示在发起方的资源库顶部与平台管理系统 / 运营商管理系统的"资源用量"页（`/admin/qb/usage`、`/operator/qb/usage`，模板 `qb.admin.usage`，可导出 CSV / Excel）。**首次上线只计量、显示和提示，不拒绝上传、不收费。** 给发起方的帮助文案在 `docs/quizbuks/help/storage-usage.md`。
+
+- **计量项**只在代码 `usage.UsageMeters` 一处列出：`storage.bytes`（上传的原文件字节，不含缩略图等变体）、`storage.files`、`assets.count`、`assets.text-bytes`、`content.quizzes`、`content.versions`、`content.materials`、`ai.tokens`（当月该发起方 AI 作业的输入 + 输出 token，来自 `QbAiUsage`；AI 问题解答不在其中）。文件按上传者（平台文件的 `uploadedBy`）归属，一个文件一行，不论被几处引用只算一次；外部视频链接只计个数。快照模板 `qb.system.usage-measure` 与这张清单不一致时启动失败（`UsageMetersCheck`）。
+- **任务** `qb.usage-snapshot`：每天一次，时刻是部署配置 `quizbuks.usage.snapshot-time`（环境变量 `QB_USAGE_SNAPSHOT_TIME`，`HH:mm`，缺省 `03:17`），按 `jabiz.fiscal-year-zone`（东京）的时刻，不是写死的 UTC；改了要重启，格式不对启动失败（需求方 2026-11-07）。逐项任务，每个发起方（有入驻记录、账号未删除）一项 `QB_USAGE_SNAPSHOT_ITEM`（`internal()`，不取业务锁，一个事务），写普通表 `QbUsageDay`：每个发起方每天一行，全部计量项在 `meters` 列的 JSON 对象中（`{"storage.bytes": …, …}`，审计因此每人每天一条），日期是计划时刻在部署时区的日期。同一天再跑一次只覆盖当天的那一行（数值没变不写），不会重复。只读查询某一项：`SELECT snapshot_day, CAST(meters AS jsonb) ->> 'storage.bytes' FROM qb_usage_day WHERE sponsor_id = …`。答题、发布、上传的路径一条语句也不加。
+- **参数**：
+
+  | 参数 | 缺省 | 作用 | 调整的影响 |
+  |---|---|---|---|
+  | `qb.usage.storage.free-bytes` | 524288000（500 MB） | 免费额度，**受控参数**（四眼：`CONTROL_CHANGE_PROPOSE` 后由另一位管理员发布），只用于提示 | 之后的快照按新额度判断"超过"；调低可能让很多发起方同时收到一条站内信。没有已发布的值时不提示、不发信（页面显示已用而不显示额度） |
+  | `qb.usage.retention-days` | 800 | 快照的保留天数（普通参数，`PARAM_SET`） | 之后的每次快照删掉该发起方更早的行；调短会删掉月度统计要用的旧行 |
+
+- **超过免费额度**：只提示。快照项发现 `storage.bytes` 从额度以下（或没有前一次快照）变成超过时发事件 `qb.usage.free-exceeded`，消费者 `qb.msg-usage-over` 以 `QB_MESSAGE_FROM_EVENT` 写一条站内信（种类 `USAGE_OVER_FREE`，链到资源库）；同一次越过只一条（`sourceKey` = `usage-over-free:<发起方>|<日期>`，重跑与重投都不重复），降到额度以下后再超过另发一条；消费者重读最新快照，已不超过即不发。
+- **部署后**：运行一次 `QB_SETUP`（提出两个参数，其中免费额度是受控的，由另一位管理员发布提案）；迁移 `V79`（合并前重编号）建表 `qb_usage_day`；需要时设 `QB_USAGE_SNAPSHOT_TIME`。没有新科目、新权限给角色（`qb.usage.system` 不授予任何角色）。
+- **告警**：见 §5 的"资源占用的计量"一行：任务 `FAILED` / `PARTIAL`、当天在快照时刻后 2 小时内没有成功的运行、`qb_usage_day` 最新日期早于今天。失败项的错误在 `GET /api/jobs`（`job.read`）的"连续失败中的项"中。
+- **补跑**：快照记的是运行那一刻的占用，**只能补跑当天**（过去的某一天无法事后补出当时的数字；月度统计按有快照的天数平均，"天数"一列看得出缺了哪几天）。
+  1. 先看 `GET /api/jobs` 中 `qb.usage-snapshot` 最近的运行与失败的项，排除原因（多为数据库超时或约束；修好再跑）。
+  2. 在平台管理系统的「定时任务」页补跑（平台 17zs，决策 D77；需要 `job.run` 与近期二次验证，写原因）：任务 `qb.usage-snapshot`，计划时刻选**当天**的那一次（部署时区的 `QB_USAGE_SNAPSHOT_TIME`）。已成功的项照旧（重放），失败或没跑到的项照常测量。**不要选过去某天的时刻**：快照记的是运行那一刻的占用，选过去的时刻会把今天的数字记到那一天。当天的行被覆盖，不会重复；越过额度的站内信不会重复。
+  3. 开发与测试中直接以 `JobRunner.run(qbUsageSnapshotJob, 当天的某一时刻)` 重跑当天（`UsageSnapshotIT` 照此）。同一计划时刻再跑一次只会重放（`REPLAYED`），要用当天另一个时刻。
+  4. 单个发起方的项失败时，平台在之后的运行中按退避重试；重试记的是重试那一天的快照，失败的那一天仍然缺（照第 2 步当天补跑）。
+- **自动收尾**：超过保留期的行由每天的快照删除（每项删本人的旧行）；删除账号时随 `SponsorErasure` 删除。没有需要手工清理的表。
+- **谁看得到**：发起方本人（资源库顶部，`qb.sponsor.usage`；每个资源的大小与使用处 `qb.sponsor.asset-stats`）；持有 `qb.admin.publication.read` 的管理员（客服、内容与财务管理员）看全部发起方；运营商的成员只看辖下的发起方（`OperatorScopes`）。发起方详情页的"资源库"一栏有"用量"链接，打开该发起方的用量。
+- **收费不在首次上线**：月度的平均与峰值（`qb.admin.usage`）是以后收费的依据；上传上限、变体字节、下载流量都不在本条。
 
 ### 7.15 通行密钥（Q97）
 

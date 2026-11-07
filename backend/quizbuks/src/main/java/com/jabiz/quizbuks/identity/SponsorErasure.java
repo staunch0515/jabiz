@@ -99,6 +99,8 @@ public class SponsorErasure {
                     ErasedEntity.delete(com.jabiz.quizbuks.asset.QbAssets.USE, "sponsorId"),
                     ErasedEntity.delete(com.jabiz.quizbuks.asset.QbAssets.ASSET, "sponsorId", "name", "description",
                         "translations", "tags", "image", "pdf", "audio", "url", "body", "prizeDescription"),
+                    // F-C2: the daily usage snapshots (numbers only).
+                    ErasedEntity.delete(com.jabiz.quizbuks.usage.QbUsage.DAY, "sponsorId"),
                     ErasedEntity.delete(QbSponsorProducts.QUIZ_LINK, "ownerId"),
                     ErasedEntity.delete(QbSponsorProducts.PRODUCT, "userId", "name", "description", "image",
                         "shopUrl", "translations"),

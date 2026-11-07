@@ -28,7 +28,7 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive } from 'lucide-react'
 import BankTopUpPage from './BankTopUpPage'
 import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
@@ -63,6 +63,7 @@ import SponsorReviewPage from './SponsorReviewPage'
 import SponsorPagesPage from './SponsorPagesPage'
 import SponsorPageReviewPage from './SponsorPageReviewPage'
 import SponsorProductsPage from './SponsorProductsPage'
+import UsagePage from './UsagePage'
 import AbuseReportsPage from './AbuseReportsPage'
 import ConversationPage from './ConversationPage'
 import CashRewardsPage from './CashRewardsPage'
@@ -107,6 +108,8 @@ export default defineExtension({
     { path: '/qb/sponsor-pages/:userId', element: <SponsorPageReviewPage /> },
     // Q60b-3: sponsors' products.
     { path: PATH.sponsorProducts, element: <SponsorProductsPage /> },
+    // F-C2: the sponsors' usage by month (headquarters every sponsor, an operator its own).
+    { path: PATH.usage, element: <UsagePage /> },
     // Q49a: takers' reports of quizzes, for headquarters and the operators (their own sponsors').
     { path: PATH.abuseReports, element: <AbuseReportsPage /> },
     { path: '/qb/conversations/:conversationId', element: <ConversationPage /> },
@@ -214,6 +217,9 @@ export default defineExtension({
         { key: 'qb-sponsor-pages', label: 'menu.sponsorPages', path: PATH.sponsorPages, icon: Globe,
           permission: PERMISSION.publicationRead },
         { key: 'qb-sponsor-products', label: 'menu.sponsorProducts', path: PATH.sponsorProducts, icon: ShoppingBag,
+          permission: PERMISSION.publicationRead },
+        // F-C2: one entry for both management systems (support, finance and the operators' members read it).
+        { key: 'qb-usage', label: 'menu.usage', path: PATH.usage, icon: HardDrive,
           permission: PERMISSION.publicationRead },
         // Q49a: takers' reports of quizzes.
         { key: 'qb-abuse-reports', label: 'menu.abuseReports', path: PATH.abuseReports, icon: Flag,

@@ -11,6 +11,7 @@ import { bundle, emptyTexts, keyPaths, LANGUAGES } from '../qb/messageKeys'
 import type { Asset } from './api'
 import { LibraryActions } from './LibraryActions'
 import { assetsMessages } from './messages'
+import { formatBytes, sizeOf, usedPercent } from './usage'
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -38,7 +39,8 @@ const TARGETS = [['QUIZ_COVER', 'Quiz cover'], ['QUIZ_INTRO', 'Quiz introduction
 
 /** The server as the asset pages see it, for an approved sponsor. Records what was posted. */
 export function assetServer(options: { assets?: Record<string, unknown>[]; uses?: Record<string, unknown>[];
-  candidates?: Record<string, unknown>[]; answers?: Record<string, (body: Record<string, unknown>) => Response> } = {}) {
+  candidates?: Record<string, unknown>[]; answers?: Record<string, (body: Record<string, unknown>) => Response>;
+  usage?: Record<string, unknown>; stats?: Record<string, unknown>[] } = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
@@ -69,6 +71,12 @@ export function assetServer(options: { assets?: Record<string, unknown>[]; uses?
         return json(200, { items: [], offset: 0, limit: 20 })
       case '/api/queries/qb.sponsor.asset-uses':
         return json(200, { items: options.uses ?? [], offset: 0, limit: 200 })
+      // F-C2: no snapshot yet, and no sizes, unless the test gives them.
+      case '/api/queries/qb.sponsor.usage':
+        return json(200, { items: [options.usage ?? { day: null, storageBytes: null, storageFiles: null,
+          assetsCount: null, freeBytes: 524288000, overFree: false }], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.asset-stats':
+        return json(200, { items: body?.offset ? [] : options.stats ?? [], offset: 0, limit: 500 })
       case '/api/queries/qb.sponsor.asset-candidates':
         return json(200, { items: options.candidates ?? [], offset: 0, limit: 200 })
       case '/api/processes/QB_ASSET_SAVE/latest':
@@ -324,5 +332,90 @@ describe('choosing from the library and saving to it (F-C1)', () => {
     assetServer()
     renderActions({ store: null })
     expect(screen.getByTestId('cover-library-store')).toBeDisabled()
+  })
+})
+
+const USAGE_LOGO = { assetId: 'a1', sponsorId: 's1', kind: 'IMAGE', name: 'Shop logo', description: null, language: 'en',
+  tags: null, translations: null, image: 'f1', pdf: null, audio: null, url: null, durationSec: null, body: null,
+  usage: null, prizeMethod: null, prizeDescription: null, digitalDelivery: null, digitalSendDays: null, revision: 1,
+  editedAt: '2026-11-01T10:00:00Z' }
+const USAGE_VIDEO = { ...USAGE_LOGO, assetId: 'a2', kind: 'VIDEO_LINK', name: 'Shop tour', image: null,
+  url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', durationSec: 90 }
+const USAGE_POSTER = { ...USAGE_LOGO, assetId: 'a3', name: 'Poster', image: 'f3' }
+
+const MB = 1024 * 1024
+const USAGE_STATS = [
+  { assetId: 'a1', fileBytes: 2 * MB, textBytes: 9, uses: 2 },
+  { assetId: 'a2', fileBytes: 0, textBytes: 9, uses: 0 },
+  { assetId: 'a3', fileBytes: 30 * MB, textBytes: 6, uses: 0 },
+]
+
+describe('the usage on the asset library (F-C2)', () => {
+  it('formats bytes and the share of the free amount', () => {
+    expect(formatBytes(0)).toBe('0 B')
+    expect(formatBytes(300)).toBe('300 B')
+    expect(formatBytes(1536)).toBe('1.5 KB')
+    expect(formatBytes(500 * MB)).toBe('500.0 MB')
+    expect(formatBytes(3 * 1024 * MB)).toBe('3.0 GB')
+    expect(formatBytes(null)).toBe('0 B')
+    expect(usedPercent({ storageBytes: 250 * MB, freeBytes: 500 * MB })).toBe(50)
+    expect(usedPercent({ storageBytes: 900 * MB, freeBytes: 500 * MB })).toBe(100)
+    expect(usedPercent({ storageBytes: 1, freeBytes: null })).toBeNull()
+    expect(sizeOf({ fileBytes: 10, textBytes: 5, uses: 0 })).toBe(15)
+    expect(sizeOf(undefined)).toBe(0)
+  })
+
+  it('shows used against free, the files and the assets as of the latest snapshot, without variants', async () => {
+    assetServer({ assets: [USAGE_LOGO, USAGE_VIDEO], usage: { day: '2026-11-06', storageBytes: 120 * MB, storageFiles: 12,
+      assetsCount: 34, freeBytes: 500 * MB, overFree: false } })
+    openLibrary()
+    expect(await screen.findByTestId('usage-used')).toHaveTextContent('Used 120.0 MB of 500.0 MB free')
+    expect(screen.getByTestId('usage-files')).toHaveTextContent('Files: 12')
+    expect(screen.getByTestId('usage-assets')).toHaveTextContent('Assets: 34')
+    expect(screen.getByTestId('usage-meter')).toHaveAttribute('aria-valuenow', '24')
+    const card = screen.getByTestId('usage-card')
+    expect(card).toHaveTextContent('without thumbnails or other variants')
+    expect(card).toHaveTextContent('Nothing is charged for storage in the first launch.')
+    expect(screen.queryByTestId('usage-over')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByTestId('asset-row')).toHaveLength(2))
+    await expectAccessible()
+  })
+
+  it('says when there is no snapshot yet', async () => {
+    assetServer({ assets: [] })
+    openLibrary()
+    expect(await screen.findByTestId('usage-card')).toHaveTextContent('Your usage shows here from tomorrow')
+    expect(screen.queryByTestId('usage-used')).not.toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it('above the free amount shows a banner that leads to the unused assets', async () => {
+    assetServer({ assets: [USAGE_LOGO, USAGE_VIDEO, USAGE_POSTER], stats: USAGE_STATS, usage: { day: '2026-11-06', storageBytes: 600 * MB,
+      storageFiles: 40, assetsCount: 3, freeBytes: 500 * MB, overFree: true } })
+    openLibrary('?tab=products')
+    const banner = await screen.findByTestId('usage-over')
+    expect(banner).toHaveTextContent('You are above the free storage')
+    expect(banner).toHaveTextContent('Your files use 600.0 MB, above the free 500.0 MB. Uploads keep working')
+    await expectAccessible()
+    await userEvent.click(within(banner).getByTestId('usage-show-unused'))
+    await waitFor(() => expect(window.location.search).toBe('?tab=all'))
+    await waitFor(() => expect(shownNames()).toEqual(['Shop tour', 'Poster']))
+    expect(screen.getByTestId('assets-unused')).toHaveAttribute('data-state', 'checked')
+  })
+
+  it('sorts the library by size and filters the unused assets', async () => {
+    assetServer({ assets: [USAGE_LOGO, USAGE_VIDEO, USAGE_POSTER], stats: USAGE_STATS })
+    openLibrary()
+    await waitFor(() => expect(screen.getAllByTestId('asset-size')).toHaveLength(3))
+    expect(screen.getAllByTestId('asset-size').map((cell) => cell.textContent)).toEqual(['2.0 MB', '9 B', '30.0 MB'])
+    // Largest first, then smallest first.
+    await userEvent.click(screen.getByRole('button', { name: /Size/ }))
+    await waitFor(() => expect(shownNames()).toEqual(['Poster', 'Shop logo', 'Shop tour']))
+    await userEvent.click(screen.getByRole('button', { name: /Size/ }))
+    await waitFor(() => expect(shownNames()).toEqual(['Shop tour', 'Shop logo', 'Poster']))
+    // Only those copied nowhere.
+    await userEvent.click(screen.getByTestId('assets-unused'))
+    await waitFor(() => expect(shownNames()).toEqual(['Shop tour', 'Poster']))
+    await expectAccessible()
   })
 })

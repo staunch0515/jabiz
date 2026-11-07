@@ -54,6 +54,10 @@ test('a Sponsor saves a cover to the library, chooses it for another quiz and se
     await page.getByTestId('asset-description').fill('The square one')
     await page.getByTestId('asset-save').click()
     await expect(page.getByTestId('asset-dialog')).toHaveCount(0)
+    // The success notices (chosen, saved) sit at the bottom right, where the row is now that the usage card is above
+    // the list; a pointer resting on them keeps them open. Move away and let them close before clicking.
+    await page.mouse.move(0, 0)
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 15_000 })
     await row.getByTestId('asset-uses').click()
     const use = page.getByTestId('asset-use')
     await expect(use).toHaveCount(1)
