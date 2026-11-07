@@ -39,7 +39,8 @@ class OperatorsEverywhereIT extends PlayItSupport {
     JobDefinition<OperatorHealth.RunInput> checkJob;
 
     private String hq() {
-        return TestTokens.bearer(tokens, "fs1-hq", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
+        return TestTokens.bearer(tokens, "fs1-hq", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ,
+            "approval.scope.move");
     }
 
     private Map<String, Object> assignment(String userId) {
@@ -218,20 +219,36 @@ class OperatorsEverywhereIT extends PlayItSupport {
     }
 
     @Test
-    void aSponsorWaitingForAReviewIsMovedOnceItIsDecidedAndHearsOfTheMove() {
+    void aSponsorWaitingForAReviewIsMovedWithItAndHearsOfTheMove() {
         String sponsor = newSponsor(unique("s-fs1-wait"));
         credit(sponsor, 10_000);
         NewOperator kyushu = newOperatorWithLead(hq(), unique("Kyushu"), null);
         String requestId = pendingReview(sponsor, "FS1 waiting");
-        assertThat(codes(refused(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId",
-            kyushu.operatorId(), "reason", "Move"), 422))).containsExactly(OperatorCodes.REVIEW_PENDING);
+        String before = platformOperator();
+        assertThat(query("SELECT scope_value FROM sys_approval_request_version WHERE request_id = ?::uuid ORDER BY "
+            + "version_no DESC LIMIT 1", requestId).getFirst()).containsEntry("scope_value", before);
 
-        decide(requestId, "APPROVE", null);
+        // Moving needs the platform's right to move approvals besides the process's own.
+        refused(OperatorProcesses.ASSIGN, TestTokens.bearer(tokens, "fs1-no-move", QbPermissions.OPERATORS_WRITE,
+            QbPermissions.OPERATORS_READ), body("userId", sponsor, "operatorId", kyushu.operatorId(), "reason",
+            "Move"), 403);
+        assertThat(assignment(sponsor)).containsEntry("operator_id", before);
+
+        // D76: the review and its task go with the sponsor; the new operator decides it.
         assertThat(run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", kyushu.operatorId(),
             "reason", "Move"))).containsEntry("changed", true);
         assertThat(assignment(sponsor)).containsEntry("operator_id", kyushu.operatorId())
             .containsEntry("assigned_by", "fs1-hq");
+        assertThat(query("SELECT scope_value FROM sys_approval_request_version WHERE request_id = ?::uuid ORDER BY "
+            + "version_no DESC LIMIT 1", requestId).getFirst()).containsEntry("scope_value", kyushu.operatorId());
+        assertThat(query("SELECT DISTINCT ON (task_id) scope_value, status FROM sys_task_version WHERE subject_id = "
+            + "? ORDER BY task_id, version_no DESC", requestId)).isNotEmpty().allSatisfy(task ->
+            assertThat(task).containsEntry("scope_value", kyushu.operatorId()));
+        run("APPROVAL_DECIDE", memberSession(kyushu.leadId(), kyushu.operatorId()), body("requestId", requestId,
+            "decision", "APPROVE"));
         deliverEvents();
+        assertThat(query("SELECT status FROM sys_approval_request_version WHERE request_id = ?::uuid ORDER BY "
+            + "version_no DESC LIMIT 1", requestId).getFirst()).containsEntry("status", "APPROVED");
         assertThat(InboxItSupport.messagesOf(sponsor)).filteredOn(m -> "OPERATOR_CHANGED".equals(m.get("kind")))
             .singleElement().satisfies(m -> assertThat(String.valueOf(m.get("body"))).contains("ops@"));
     }

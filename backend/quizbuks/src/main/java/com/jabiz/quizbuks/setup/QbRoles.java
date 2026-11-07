@@ -143,8 +143,9 @@ public final class QbRoles {
         // made for that alone (not approval.decide, which QbSodRules#SECURITY keeps from them). approval.read lets
         // them check the facts of the request; it is on no side of a separation of duties.
         "security.protected-change.decide", "approval.read",
-        // Q48a: operators, their members and which sponsors they run.
-        QbPermissions.OPERATORS_WRITE);
+        // Q48a: operators, their members and which sponsors they run. F-S1: a moved sponsor's open reviews go with
+        // them (the platform's APPROVAL_SCOPE_MOVE, decision D76; not a protected permission).
+        QbPermissions.OPERATORS_WRITE, "approval.scope.move");
 
     /**
      * Publishing controlled changes (money parameters, review switches; platform decision D40) belongs to the finance
