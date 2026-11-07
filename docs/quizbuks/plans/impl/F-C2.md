@@ -3,34 +3,23 @@
 规格：`docs/quizbuks/first-launch-spec.md` F-C2（来源 Q110a §8，`Q94-review` §A23、§B、§D A4-23）。依赖 F-C1（资源库，F-C1a–d）。
 首次上线**只计量、显示和提示，不拒绝上传、不收费**；不做存储收费、上传上限、变体字节、下载流量（规格"不做"）。
 
-## 0. 开工前要答复的问题
+## 0. 需求方的决定（2026-11-07）
 
-### 问题 1（阻塞）：快照时刻 `qb.usage.snapshot-time` 不能作为业务参数驱动定时任务
+### 快照时刻是部署配置（做法 A）
 
-规格把快照时刻列为业务参数（`qb.usage.snapshot-time`，缺省 03:17，按 `jabiz.fiscal-year-zone`），`Q94-review` §B 也要求"Q110 快照时刻"改为参数、不照抄"按 UTC 写死日本时间"的 cron。
+规格原把快照时刻列为业务参数 `qb.usage.snapshot-time`。平台的任务（`core/src/main/java/com/jabiz/job/JobDefinition.java`）的 cron 与时区在 Bean 建立时给定：**按时区排程平台已经支持**（`forEach` 的 `ZoneId`），**按业务参数排程不支持**（调度器从不读业务参数）。
+需求方 2026-11-07 选定做法 A：快照时刻是**部署配置** `quizbuks.usage.snapshot-time`（环境变量 `QB_USAGE_SNAPSHOT_TIME`，缺省 `03:17`，启动时校验为 `HH:mm`），任务以 `cron = 0 <分> <时> * * *`、`zone = jabiz.fiscal-year-zone` 建立（不写死 UTC）；改了要重启。规格 F-C2 的"参数"一行随本 PR 改写。
+没有采用的：B（先在平台上加"时刻取自业务参数"）、C（每小时跑、项流程读参数决定做不做：绕开平台）。
 
-平台现状（`core/src/main/java/com/jabiz/job/JobDefinition.java`）：
+### 已确认的四个选择（需求方 2026-11-07）
 
-- 任务的 cron 与时区在 Bean 建立时给定，之后不变。**按时区排程平台已经支持**（`JobDefinition.forEach(名, cron, ZoneId, …)` 的第三个参数），QuizBuks 现有任务只是都写了 `ZoneOffset.UTC`。
-- **按业务参数排程平台不支持**：业务参数有生效时间、经 `LoadParams` 在流程中按业务时间读出，调度器从不读它；改参数不会改变任务的时刻。
-
-可选的做法：
-
-| 做法 | 内容 | 与规格的差别 |
-|---|---|---|
-| **A（建议）** | 快照时刻改为**部署配置** `quizbuks.usage.snapshot-time`（环境变量 `QB_USAGE_SNAPSHOT_TIME`，缺省 `03:17`，启动时校验为 `HH:mm`），任务以 `cron = 0 <分> <时> * * *`、`zone = jabiz.fiscal-year-zone` 建立（不写死 UTC）。与现有各任务的 `quizbuks.*.run-cron` 同类，改了要重启。 | 不是 `qb.*` 业务参数（不进 `QbParams`、`QB_SETUP` 不提出、不能在线改） |
-| B | 先在 `1.3/platform` 上给任务加"时刻取自业务参数"的能力（调度器读参数、参数变化后重排），合入后再做本条 | 规格写着"无平台改动"；平台多一个阶段 |
-| C（不做） | 任务每小时跑一次，项流程读参数、未到时刻即什么也不做 | 是绕开平台的做法，已被指示不要用 |
-
-**请需求方选 A 或 B。** 选 A 时规格 F-C2 的"参数"一行同时改为"快照时刻是部署配置"（本 PR 同时改规格）；本计划以下按 A 写，选 B 只改 §4 的 Bean 一处。
-
-### 不阻塞、按下面的写法做（需求方不同意再改）
-
-1. **资源库顶部显示的是最近一次快照**（附快照日期"截至 …"），不是实时数：计量不在请求路径上（规格），页面只读快照表。今天新上传的文件次日才计入。
+1. **资源库顶部显示的是最近一次快照**（附快照日期"截至 …"），不是实时数：计量不在请求路径上，页面只读快照表。今天新上传的文件次日才计入。
 2. **`ai.tokens` 的每日值是当月累计**：该发起方在快照日所在月份（部署时区）`QbAiUsage` 的输入 + 输出 token（不含 `sponsorId = *` 的全体行）。AI 问题解答（F-C10）按规格记在它自己的 `QbHelpUsage`，从不进 `QbAiUsage`，因此天然不含；月度的"峰值"即该月最后一次快照的累计。
-3. **`storage.*` 计发起方上传的全部文件**：平台 `sys_file` 中 `uploadedBy` = 发起方的每一行（任何策略：资源、资料、题目、封面、头像、主页图片……），字节为原文件的 `sizeBytes`。一行就是一个文件，所以"同一文件被几处引用只算一次、按上传者归属"由此成立；尚未被平台清扫的孤儿文件也计入（它们确实占着空间，清扫后次日不再计）。
-4. **"第一次越过"的站内信**：照 CLAUDE.md"站内信"一条（个人消息只由事件的消费者写），快照项发现越过时发事件，由 `QB_MESSAGE_FROM_EVENT` 写消息（见 §5）。
-5. **读权限**：平台管理系统的用量页与模板用 `qb.admin.publication.read`（与资源库一栏相同：客服、内容与财务管理员、运营商成员）。
+3. **`storage.*` 计发起方上传的全部文件**：平台 `sys_file` 中 `uploadedBy` = 发起方的每一行（任何策略），字节为原文件的 `sizeBytes`。一行就是一个文件，所以"同一文件被几处引用只算一次、按上传者归属"由此成立；尚未被平台清扫的孤儿文件也计入。
+4. **读权限**：平台管理系统的用量页与模板用 `qb.admin.publication.read`（与资源库一栏相同：客服、内容与财务管理员、运营商成员）。
+
+另：第一次越过免费额度的站内信照 CLAUDE.md"站内信"一条（个人消息只由事件的消费者写），快照项发现越过时发事件，由 `QB_MESSAGE_FROM_EVENT` 写消息（见 §5）。
+`sys_file (uploaded_by)` 的索引由平台阶段 17zq 补上（不等它，见 §11）。
 
 ## 1. 计量项 `usage.UsageMeters`（唯一列出的地方）
 
@@ -81,7 +70,7 @@
 
 ## 4. 任务与流程
 
-- **任务 `qb.usage-snapshot`**：`JobDefinition.forEach`，每个发起方一项（`qb.system.usage-sponsors`，`maxItems` = `MAX_MAX_ITEMS`），cron 与时区见问题 1（做法 A：`quizbuks.usage.snapshot-time`，`jabiz.fiscal-year-zone`）。快照的日子 = 计划时刻在部署时区的日期（补跑以 `JobRunner.run(job, 计划时刻)` 指定哪一天）。
+- **任务 `qb.usage-snapshot`**：`JobDefinition.forEach`，每个发起方一项（`qb.system.usage-sponsors`，`maxItems` = `MAX_MAX_ITEMS`），cron 由部署配置 `quizbuks.usage.snapshot-time` 得出、时区为 `jabiz.fiscal-year-zone`（§0）。快照的日子 = 计划时刻在部署时区的日期（补跑以 `JobRunner.run(job, 计划时刻)` 指定哪一天）。
 - **项流程 `QB_USAGE_SNAPSHOT_ITEM`**：`internal()`，权限 `qb.usage.system`（不授予任何角色）。**不取业务锁**，只读不写别人的表：
   1. `LoadParams` 读 `qb.usage.storage.free-bytes`、`qb.usage.retention-days`（以计划时刻读）；
   2. 一条 `RunTemplate`（`qb.system.usage-measure`）读出全部计量项；一条 `QueryEntities.all` 读该发起方当天已有的行、以及前一次快照（当天以前最近一天）的 `storage.bytes`；
@@ -146,6 +135,6 @@
 ## 11. 风险
 
 - 计量模板连接的表多（文件、资源、内容、版本、AI 用量），每个发起方一次读出；发起方很多时任务时间随之变长（`maxItems` 10000，每项一个事务）。以 `UsageSnapshotIT` 逐项断言数值。
-- `sys_file` 是平台表，只有 `uploaded_time` 的索引，**没有 `uploaded_by` 的索引**：每个发起方一项时，每项都整表扫一次 `sys_file`（发起方数 × 文件数）。首次上线的规模（数百发起方、数万文件）每天一次可以接受；规模变大时需要平台在 `sys_file (uploaded_by)` 上加索引（平台改动，规格写着"无平台改动"，所以不在本条；应用的迁移不改平台表）。
+- `sys_file` 是平台表，只有 `uploaded_time` 的索引，**没有 `uploaded_by` 的索引**：每个发起方一项时，每项都整表扫一次 `sys_file`（发起方数 × 文件数）。首次上线的规模（数百发起方、数万文件）每天一次可以接受；规模变大时需要 `sys_file (uploaded_by)` 的索引：由平台阶段 17zq 补上（不在本条；应用的迁移不改平台表）。
 - 快照的数字比实际晚最多一天；页面写明"截至"。
 - 删除的功能：无。
