@@ -180,6 +180,20 @@
         },
         "type" : "object"
       },
+      "ClientRegion" : {
+        "properties" : {
+          "country" : {
+            "type" : "string"
+          },
+          "known" : {
+            "type" : "boolean"
+          },
+          "mainlandChina" : {
+            "type" : "boolean"
+          }
+        },
+        "type" : "object"
+      },
       "CodeRequest" : {
         "properties" : {
           "code" : {
@@ -5279,6 +5293,24 @@
           }
         },
         "tags" : [ "sign-up-controller" ]
+      }
+    },
+    "/api/client/region" : {
+      "get" : {
+        "operationId" : "region",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClientRegion"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "client-region-controller" ]
       }
     },
     "/api/datasets/{resourceId}/commit" : {

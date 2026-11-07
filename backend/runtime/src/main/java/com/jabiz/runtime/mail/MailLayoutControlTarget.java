@@ -29,8 +29,9 @@ import java.util.UUID;
  * {@code values.locale}, {@code values.displayName}, {@code values.logoUrl}, {@code values.logoAlt} and
  * {@code values.footer}; it is checked by the {@code MailLayoutRules} when proposed and again when published, and
  * records the version it was proposed against: when the layout has changed since (a reset, another change published),
- * the publication is refused ({@code CONTROL_TARGET_CHANGED}). Proposing and publishing need {@code mail.text.write},
- * a verified address and a recent second factor.
+ * the publication is refused ({@code CONTROL_TARGET_CHANGED}). Proposing and publishing need {@code mail.text.write}
+ * and a verified address; proposing checks a recent second factor here, publishing has it from
+ * {@code CONTROL_CHANGE_PUBLISH} itself.
  *
  * <p>Going back to the default is not a controlled change: {@code MAIL_LAYOUT_RESET} does it at once, as the default
  * is configuration, reviewed with the deployment.

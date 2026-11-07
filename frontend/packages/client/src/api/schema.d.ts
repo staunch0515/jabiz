@@ -1108,6 +1108,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/client/region": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["region"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/datasets/{resourceId}/commit": {
         parameters: {
             query?: never;
@@ -2256,6 +2272,11 @@ export interface components {
         Changes: {
             hash?: string;
             items?: components["schemas"]["AuditRecordEntry"][];
+        };
+        ClientRegion: {
+            country?: string;
+            known?: boolean;
+            mainlandChina?: boolean;
         };
         CodeRequest: {
             code?: string;
@@ -5131,6 +5152,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    region: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientRegion"];
+                };
             };
         };
     };

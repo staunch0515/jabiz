@@ -1323,3 +1323,18 @@ class CustomerPersonalData implements PersonalDataEraser {
 - **前端**：`@jabiz/ui` 的 `AccountDeletion`（账户页：状态、提示、确认身份、申请与撤回）、`AccountDeletionRequest`（不装 App 的网页：填邮箱）与
   `MailLinkPage` 的 `account-deletion` 页（用链接，必要时先确认提示）；示范门户挂在账户页与 `/portal/auth/account-deletion`。
 
+
+## 18. 按客户端地址的国家【决策 D74，阶段 17zl】
+
+- **地址库**：`jabiz.geoip.database`（本机文件路径，CSV `first,last,country`，可为 `.gz`），`jabiz.geoip.required`（应用必须有时设为 `true`）、`jabiz.geoip.max-age`（缺省 `P45D`）。
+  `ClientCountries` 在启动时读入内存，文件修改后一分钟内在工作线程中重新读入；读不懂的新文件不替换旧的。启动检查 `GEOIP` 见 D74 第 5 条。
+- **地址**：照旧是 `ClientAddresses` 在可信代理（`jabiz.security.trusted-proxies`）之后解析出的客户端地址；不可信的连接写的 `X-Forwarded-For` 不起作用。只认地址字面量，从不解析主机名。
+- **流程中**：`.step("从哪里来", LoadClientCountry.into("country"))`，再在计算步骤中 `ctx.get("country", ClientCountry.class)`（`mainlandChina()`、`is("JP")`、`known()`）。
+  流程接口（`/api/processes/**`）把地址放进 Reactor 上下文（`ClientAddressContext`），不进 `RequestContext`、输入与记录；事件、定时任务、应用代理的流程得到未知。0 条新语句。
+- **接口** `GET /api/client/region`：匿名可用，`no-store`；回答 `country`（或空）、`mainlandChina`、`known`。地址本身不回显。
+- **测试**：`IpCountryDatabaseTest`（IPv4 与 IPv6、边界、映射的 IPv4、内网、名字、`.gz`、读不懂的文件）、`ClientCountriesTest`（未配置、必须有、读不了、过旧、更新后重新读入）、
+  `ClientCountryTest`、`ClientCountryIT`（可信代理之后、IPv6、香港不是大陆、不可信的连接写的头不起作用、未知、`no-store`、流程中读到国家、不发语句、`input_summary` 中没有地址）；
+  测试地址库 `app/src/test/resources/geoip/test-countries.csv` 以文档用的地址段（RFC 5737、RFC 3849）给出国家。
+- **运维**：地址库由部署放到服务器上并按月更新（例如 DB-IP 的 "IP to Country Lite" CSV：`https://db-ip.com/db/download/ip-to-country-lite`，CC BY 4.0，
+  须在网站上署名"IP Geolocation by DB-IP"）；替换文件即可（原子替换：先写临时文件再改名），一分钟内生效，日志写"Address database …: N ranges"。
+  过旧时启动检查告警；读不懂时保留旧库并记 WARN。应用的运维文档写明下载、更新的步骤与署名的位置。
