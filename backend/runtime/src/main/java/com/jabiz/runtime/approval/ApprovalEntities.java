@@ -139,7 +139,7 @@ public class ApprovalEntities {
         eb.field("targetId", f -> f.physicalColumn("target_id").immutable(true).asText(36));
         eb.field("changeAction", f -> f.physicalColumn("change_action").immutable(true).required(true)
             .asCode(CHANGE_ACTIONS, ControlChanges.UPSERT, ControlChanges.DELETE));
-        eb.field("changeValues", f -> f.physicalColumn("change_values").immutable(true).asText(30_000, true));
+        eb.field("changeValues", f -> f.physicalColumn("change_values").immutable(true).asText(null, true));
         // What the change is about as people name it (a parameter's key, a rule's code; phase 17zn).
         eb.field("targetKey", f -> f.physicalColumn("target_key").immutable(true).asText(200));
         eb.field("effectiveTime", f -> f.physicalColumn("effective_time").immutable(true)

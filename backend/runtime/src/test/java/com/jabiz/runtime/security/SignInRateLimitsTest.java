@@ -164,4 +164,52 @@ class SignInRateLimitsTest {
         assertThatThrownBy(() -> wrong.count(SignInRateLimits.Kind.PASSWORD, "192.0.2.1", "ann"))
             .isInstanceOf(RateLimitedException.class);
     }
+
+    /**
+     * Many requests at once (17zt): one name from one address takes exactly its burst, and the requests refused for
+     * the name take nothing from the address, whose remaining tokens another name then gets in full.
+     */
+    @Test
+    void requestsAtOnceTakeAllTheirBucketsOrNone() throws Exception {
+        int requests = 4_000;
+        int nameBurst = 1_000;
+        for (int round = 0; round < 5; round++) {
+            String address = "192.0.2." + (100 + round);
+            SignInRateLimits limits = limits(true, new SignInRateLimits.Settings(1, nameBurst, 1, requests, 1, 1,
+                1_000_000, Duration.ofHours(1)));
+            java.util.concurrent.atomic.AtomicInteger granted = new java.util.concurrent.atomic.AtomicInteger();
+            java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.ExecutorService threads = java.util.concurrent.Executors.newFixedThreadPool(16);
+            try {
+                for (int i = 0; i < requests; i++) {
+                    threads.submit(() -> {
+                        start.await();
+                        try {
+                            limits.count(SignInRateLimits.Kind.PASSWORD, address, "ann");
+                            granted.incrementAndGet();
+                        } catch (RateLimitedException e) {
+                            // refused for the name
+                        }
+                        return null;
+                    });
+                }
+                start.countDown();
+            } finally {
+                threads.shutdown();
+                assertThat(threads.awaitTermination(30, TimeUnit.SECONDS)).isTrue();
+            }
+            assertThat(granted.get()).isEqualTo(nameBurst);
+            // The address had a burst of one per request: what the refused ones did not take is still there.
+            int more = 0;
+            for (int i = 0; i < requests; i++) {
+                try {
+                    limits.count(SignInRateLimits.Kind.PASSWORD, address, "user" + i);
+                    more++;
+                } catch (RateLimitedException e) {
+                    break;
+                }
+            }
+            assertThat(more).as("round %d", round).isEqualTo(requests - nameBurst);
+        }
+    }
 }

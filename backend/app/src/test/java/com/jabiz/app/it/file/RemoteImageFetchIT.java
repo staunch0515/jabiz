@@ -17,6 +17,7 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.file.RemoteFetchNetwork;
 import com.jabiz.runtime.file.RemoteImageFetcher;
+import com.jabiz.runtime.dictionary.DictionaryChangeListener;
 import com.jabiz.runtime.event.OutboxDeliverer;
 import com.jabiz.runtime.external.ExternalJobExecutor;
 import com.jabiz.runtime.process.steps.StartExternalJob;
@@ -76,6 +77,9 @@ class RemoteImageFetchIT extends FileItSupport {
 
     static final String POLICY = "it.fetch";
     static final int MAX_BYTES = 64 * 1024;
+
+    /** Connections taken from the pool while nothing runs: the dictionary change listener's LISTEN connection. */
+    static final int LISTENER_CONNECTIONS = 1;
 
     /** Answers of the test resolver, by host, one per resolution; then {@code fetch.test} names give the stub. */
     static final Map<String, Deque<List<InetAddress>>> DNS = new ConcurrentHashMap<>();
@@ -542,8 +546,10 @@ class RemoteImageFetchIT extends FileItSupport {
         List<String> slow = List.of("/" + unique(), "/" + unique(), "/" + unique());
         slow.forEach(path -> STUB.script(path, Answer.of(200, new byte[8]).dripping(Duration.ofMillis(250))));
         String alice = bearer("it-alice", "it.fetch.upload");
-        // Whatever the application holds anyway (a listener's connection, say), the downloads add nothing.
-        int before = acquiredConnections();
+        // The one connection the application holds for as long as it runs: the dictionary change listener's
+        // LISTEN connection (docs/design/02-metamodel.md section 5). Without the listener the pool has none taken.
+        assertThat(context.getBean(DictionaryChangeListener.class).isRunning()).isTrue();
+        assertThat(acquiredConnections()).isEqualTo(LISTENER_CONNECTIONS);
         java.util.concurrent.ExecutorService threads = java.util.concurrent.Executors.newFixedThreadPool(3);
         try {
             List<java.util.concurrent.Future<Integer>> running = List.of(
@@ -554,7 +560,7 @@ class RemoteImageFetchIT extends FileItSupport {
                 .until(() -> slow.stream().allMatch(path -> !STUB.received(path).isEmpty()));
 
             // Nothing of the database is held while the bytes come in.
-            assertThat(acquiredConnections()).isEqualTo(before);
+            assertThat(acquiredConnections()).isEqualTo(LISTENER_CONNECTIONS);
 
             String other = "/" + unique();
             STUB.script(other, Answer.of(200, FileSamples.jpeg(4, 4)));

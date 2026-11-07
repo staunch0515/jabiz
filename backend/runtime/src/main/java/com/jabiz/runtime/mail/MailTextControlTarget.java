@@ -3,6 +3,7 @@ package com.jabiz.runtime.mail;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.mail.MailTemplate;
+import com.jabiz.mail.MailTextRules;
 import com.jabiz.process.ChangeSet;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.runtime.approval.ControlChanges;
@@ -51,6 +52,21 @@ class MailTextControlTarget implements ControlTarget {
         this.templates = templates;
         this.texts = texts;
         this.mfa = mfa;
+    }
+
+    /**
+     * A subject and body within the configured limits as the JSON a change records: six characters for each (a
+     * control character is written as a six-character escape; nothing grows more), and room for the template,
+     * language, version and keys. So whatever MAIL_TEXT_SAVE accepts can be proposed (decision D72).
+     */
+    @Override
+    public int maxValuesLength() {
+        return maxValuesLength(texts.limits());
+    }
+
+    static int maxValuesLength(MailTextRules.Limits limits) {
+        long longest = 6L * (limits.maxSubjectLength() + limits.maxBodyLength()) + 1_000;
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(DEFAULT_MAX_VALUES_LENGTH, longest));
     }
 
     @Override
