@@ -147,11 +147,18 @@ public class ControlChanges {
         if (proposal == null || ctx.hasViolations()) {
             return;
         }
+        String values = proposal.values() == null ? null : ApprovalJson.write(proposal.values());
+        int limit = target.get().maxValuesLength();
+        if (values != null && values.codePointCount(0, values.length()) > limit) {
+            ctx.reject(new Violation("values", PlatformErrorCodes.TOO_LONG, "The values of the change are longer than "
+                + limit + " characters as recorded", Map.of("limit", limit)));
+            return;
+        }
         Map<String, Object> change = new LinkedHashMap<>();
         change.put("targetEntity", input.targetEntity());
         change.put("targetId", proposal.targetId());
         change.put("changeAction", Boolean.TRUE.equals(input.delete()) ? DELETE : UPSERT);
-        change.put("changeValues", proposal.values() == null ? null : ApprovalJson.write(proposal.values()));
+        change.put("changeValues", values);
         change.put("targetKey", proposal.key());
         change.put("effectiveTime", input.effectiveTime());
         change.put("reason", input.reason().strip());
