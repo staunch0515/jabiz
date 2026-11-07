@@ -26,6 +26,7 @@ import {
   TabsList,
   TabsTrigger,
   type ColumnDef,
+  type SortingState,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FolderInput, Plus } from 'lucide-react'
@@ -66,6 +67,8 @@ import {
 import { AssetDialog } from './AssetDialog'
 import { ASSET_LIMITS } from './ids'
 import './messages'
+import { UsageCard } from './UsageCard'
+import { ASSET_STATS_QUERY, formatBytes, readAssetStats, sizeOf, USAGE_QUERY } from './usage'
 
 const ALL = '*'
 
@@ -81,6 +84,10 @@ export function tabOf(search: string): AssetTab {
  * (the library is bounded by `qb.assets.max-count`; tags are stored as JSON text, which the server cannot filter).
  * Each asset is edited, deleted (after confirming) or looked up where it was copied to ("older content" marked);
  * "Collect" takes what the sponsor's quizzes and publications already have.
+ *
+ * F-C2: the usage card on top (the latest daily snapshot against the free amount, a banner above it), each asset's
+ * size (its file as uploaded and its texts, `qb.sponsor.asset-stats`) to sort by, and "only the unused assets" (copied
+ * nowhere) to clean up with.
  */
 export function AssetsPage({ tab }: { tab: AssetTab }) {
   const { t } = useTranslation(SPONSOR)
@@ -92,10 +99,14 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
   const [search, setSearch] = useState('')
   const [kind, setKind] = useState<string>(ALL)
   const [tag, setTag] = useState<string>(ALL)
+  const [unusedOnly, setUnusedOnly] = useState(false)
+  const [sorting, setSorting] = useState<SortingState>([])
+  const stats = useQuery({ queryKey: ASSET_STATS_QUERY, queryFn: readAssetStats, enabled: isAssetTab(tab) })
   const [editing, setEditing] = useState<Asset | 'new' | null>(null)
   const [usesOf, setUsesOf] = useState<Asset | null>(null)
   const [collecting, setCollecting] = useState(false)
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ASSETS_QUERY })
+  const refresh = () => Promise.all([ASSETS_QUERY, ASSET_STATS_QUERY, USAGE_QUERY]
+    .map((queryKey) => queryClient.invalidateQueries({ queryKey }))).then(() => undefined)
   const remove = useMutation({
     mutationFn: (asset: Asset) => deleteAsset(asset.assetId, asset.revision),
     onSuccess: async () => {
@@ -114,8 +125,18 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
   const tags = [...new Set(inTab.flatMap((asset) => asset.tags))].sort((a, b) => a.localeCompare(b))
   const shownKind = kind !== ALL && kinds.includes(kind as AssetKind) ? kind : ALL
   const shownTag = tag !== ALL && tags.includes(tag) ? tag : ALL
-  const rows = inTab.filter((asset) => (shownKind === ALL || asset.kind === shownKind)
-    && (shownTag === ALL || asset.tags.includes(shownTag)) && matches(asset, search))
+  const statsOf = stats.data
+  const filtered = inTab.filter((asset) => (shownKind === ALL || asset.kind === shownKind)
+    && (shownTag === ALL || asset.tags.includes(shownTag)) && matches(asset, search)
+    && (!unusedOnly || (statsOf?.get(asset.assetId)?.uses ?? 0) === 0))
+  // Sorted here: the page holds the whole library (at most qb.assets.max-count).
+  const bySize = sorting.find((sort) => sort.id === 'size')
+  const rows = bySize ? [...filtered].sort((a, b) => (sizeOf(statsOf?.get(a.assetId)) - sizeOf(statsOf?.get(b.assetId)))
+    * (bySize.desc ? -1 : 1)) : filtered
+  const showUnused = () => {
+    setUnusedOnly(true)
+    if (!isAssetTab(tab)) navigate(`${ASSETS_PATH}?tab=all`, { replace: true })
+  }
 
   const columns = useMemo<ColumnDef<Asset, unknown>[]>(() => [
     { id: 'name', header: t('assets.columns.name'), enableSorting: false, meta: { card: 'title' },
@@ -130,6 +151,10 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
       ) },
     { id: 'edited', header: t('assets.columns.edited'), enableSorting: false,
       cell: ({ row }) => (row.original.editedAt ? formatDateTime(row.original.editedAt) : '') },
+    { id: 'size', header: t('assets.columns.size'), enableSorting: true, sortDescFirst: true,
+      accessorFn: (asset) => sizeOf(statsOf?.get(asset.assetId)),
+      cell: ({ row }) => (statsOf ? <span data-testid="asset-size">{formatBytes(sizeOf(statsOf.get(row.original.assetId)))}</span>
+        : '') },
     { id: 'actions', header: t('assets.columns.actions'), enableSorting: false, meta: { card: 'actions' },
       cell: ({ row }) => (
         <span className="flex flex-wrap gap-2">
@@ -148,7 +173,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
               aria-label={t('assets.deleteNamed', { name: row.original.name })}>{t('assets.delete')}</Button>} />
         </span>
       ) },
-  ], [t, removeAsset, removing])
+  ], [t, removeAsset, removing, statsOf])
 
   return (
     <section className="flex flex-col gap-4" data-testid="assets-page">
@@ -161,6 +186,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
             <Plus aria-hidden />{t('assets.add')}
           </Button>
         </span>} />
+      <UsageCard onShowUnused={showUnused} />
       <Tabs value={tab} onValueChange={(value) => navigate(`${ASSETS_PATH}?tab=${value}`, { replace: true })}>
         <TabsList aria-label={t('assets.tabs.label')}>
           {ASSET_TABS.map((value) => (
@@ -189,6 +215,11 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
                 </Select>
               </div>
             )}
+            <div className="flex items-center gap-2 self-center pt-5">
+              <Checkbox id={`${id}-unused`} checked={unusedOnly} data-testid="assets-unused"
+                onCheckedChange={(checked) => setUnusedOnly(checked === true)} />
+              <Label htmlFor={`${id}-unused`}>{t('assets.unusedFilter')}</Label>
+            </div>
             {tags.length > 0 && (
               <div className="flex flex-col gap-1">
                 <Label htmlFor={`${id}-tag`}>{t('assets.tagFilter')}</Label>
@@ -211,7 +242,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
                 {t('assets.count', { count: assets.data.length })}
               </p>
               <DataTable label={t('assets.title')} columns={columns} data={rows} storageKey="qb.sponsor.assets"
-                getRowId={(row) => row.assetId}
+                getRowId={(row) => row.assetId} sorting={sorting} onSortingChange={setSorting}
                 empty={<EmptyState testId={assets.data.length === 0 ? 'assets-empty' : 'assets-none'}>
                   {assets.data.length === 0 ? t('assets.empty') : t('assets.emptyFiltered')}
                 </EmptyState>}

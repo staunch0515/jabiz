@@ -24,6 +24,7 @@ import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
 import { CASH_REWARDS_PATH } from '../publishing/CashRewardsPage'
 import { REDEEM_PATH } from '../publishing/RedeemPage'
+import { ASSETS_PATH } from '../assets/api'
 import { useRegionLabel } from '../publishing/shared'
 import { Link } from '../qb/router'
 import { CONVERSATIONS_TAB } from '../conversations/api'
@@ -249,9 +250,10 @@ function AnnouncementItem({ item }: { item: Announcement }) {
           {item.markdown ? <MarkdownView text={body.text} lang={body.lang} />
             : <p className="whitespace-pre-line text-sm" lang={body.lang}>{body.text}</p>}
           {item.action && (
-            <Link to={item.action === 'CASH' ? CASH_REWARDS_PATH : REDEEM_PATH}
+            <Link to={item.action === 'CASH' ? CASH_REWARDS_PATH : item.action === 'ASSETS' ? ASSETS_PATH : REDEEM_PATH}
               className="text-primary w-fit text-sm underline underline-offset-4" data-testid="announcement-action">
-              {t(item.action === 'CASH' ? 'notices.inbox.openCash' : 'notices.inbox.openRedeem')}
+              {t(item.action === 'CASH' ? 'notices.inbox.openCash'
+                : item.action === 'ASSETS' ? 'notices.inbox.openAssets' : 'notices.inbox.openRedeem')}
             </Link>
           )}
           {item.expiresAt && (
