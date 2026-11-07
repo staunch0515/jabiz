@@ -161,6 +161,9 @@ frontend/                   pnpm 工作区（pnpm-workspace.yaml：packages/*）
 | `/security/sessions` | 会话（10 §15.9，`security.user.session.read`）：按用户名搜索用户（`SecUser` 默认视图的查询，需要 `security.user.read`），列出其在全部入口的有效会话（设备、入口、地址、最近使用、登录与到期时间）；持有 `security.user.session.revoke` 时可结束单个或全部会话，须填写原因，二次验证由 step-up 处理。用户列表上另有生成的行操作"结束会话"（`SEC_USER_SESSIONS_REVOKE`） |
 | `/integrity` | 防篡改封存（21 §2.4，`integrity.read`）：最新块（`DescriptionList`，哈希带复制按钮，供系统外留存；密钥不同时提示）、立即校验（`integrity.verify`，即流程 `INTEGRITY_VERIFY`，之后刷新记录并打开其详情）、校验记录（`DataTable`）及其问题（详情在 `Sheet` 中，标题含 `#` 编号） |
 | `/retention` | 保留与归档（21 §3–§4）：保留期报告（`retention.read`）、法律保全入口（生成的列表与 `LEGAL_HOLD_PLACE` / `RELEASE` 表单）、开放格式导出（`data.export`，react-hook-form：以 `Combobox` 逐个加入数据视图（至少一个）、时点 `DateTimePicker`、是否附报表 PDF（`Checkbox`，及签发日的起止），下载 ZIP） |
+| `/mail/texts` | 邮件模版（18 §5.6，决策 D72，17zh-c；`mail.text.read`，菜单"邮件模版"）：`GET /api/mail/texts` 的每个模版一行（`DataTable`，窄屏为卡片）：显示名、类别、修改是否须审批，各语言状态的 `Badge`（缺省 / 已定制 / 待审批 / 已失效（按缺省发出）/ 未经审批（按缺省发出）/ 缺省已更新；"待审批"即有该（模版，语言）的提出中的受控变更，`targetKey` 为 `<模版> [<语言>]`，需 `approval.read`） |
+| `/mail/texts/edit?template=&locale=` | 模版编辑器：按语言的 `Tabs`（各语言的草稿在页内保留，标"已修改"）；标题与正文、可用占位符（点一下插入到光标处）与必须保留的项（缺了标红并写"缺少"，只是提示，以服务端规则为准）、只能放在本站链接中的项；预览（`POST /api/mail/texts/preview`，停止输入 400 毫秒后，HTML 在 `sandbox=""` 的 `iframe` 的 `srcdoc` 中，另有纯文本与问题列表）；有 `mail.text.write` 时："发一封测试信给我"（`MAIL_TEXT_TEST_SEND`，草稿）、"恢复默认"（`ConfirmDialog`，`MAIL_TEXT_RESET`）、普通模版"保存"（`MAIL_TEXT_SAVE` 带 `baseVersionNo`；409 时说明有人改过并给"重新读取"；400 的 `violations` 显示在各字段下）、须审批的模版"提出修改"（`CONTROL_CHANGE_PROPOSE`，目标 `MailText`，原因必填，二次验证由 step-up 处理，另需 `control.propose`）；待审批的变更（提出人以 `UserName` 显示、原因、与当前生效内容的逐行对比、链到受控变更列表 `SysControlChange` 由另一位发布、本人可撤回）；历史（`MailText` 时态数据视图的版本：时间、修改人、类型与方式；打开一版与当前生效内容逐行对比，"以此版为草稿"） |
+| `/mail/layout[?locale=]` | 邮件信纸（D72 第 6 条）：按语言的显示名、标志地址与替代文字、页脚（Markdown）；示例邮件的预览（`POST /api/mail/layouts/preview`，同样防抖、沙箱）、测试发送（`MAIL_LAYOUT_TEST_SEND`）、恢复默认（`ConfirmDialog`，`MAIL_LAYOUT_RESET`）；**只能"提出修改"**（受控变更 `MailLayout`），待审批的变更与历史、对比同模版编辑器 |
 | `/login/oidc` | 身份提供方的回调（10 §12）：不需要已登录；显示身份提供方或服务端的拒绝 |
 | `/auth/verify-email?entry=&token=` | 验证邮件的链接（10 §15.7）：不需要已登录；点击后才先问 `check`、再提交（可预占的账号要当前密码或新密码），成功后"继续"到入口的 `app-path`；链接无效时可输入邮箱重发（对任何邮箱同样回答），其他失败可重试 |
 | `/auth/join?entry=&token=` | "你已有账号"邮件的链接（10 §15.7）：点击"继续"才提交（邮件扫描器打开链接不改变任何东西）；账号的邮箱从未验证时要求设置新密码 |
@@ -293,7 +296,7 @@ jabizApp {
 | 对比度 | `@jabiz/ui` 的 `theme.css` 的语义 token：文字 token 在其所用的背景上 ≥ 4.5:1，输入框边框与焦点环 ≥ 3:1，亮、暗两种外观都如此（主色 `#0958d9` / `#69a7ff`、错误色 `#cf1322` / `#ff7875`、成功色 `#237804` / `#95de64`、警告色 `#874d00` / `#ffc53d`）；`theme.test.ts` 逐对检查。暗色控件的背景是半透明的输入色（输入框、文本框、选择框、标签输入为 `dark:bg-input/20`，选择框悬停 `/30`）：占位文字（暗色 `--muted-foreground` `#a8a8b0`，16v-1 由 `#a1a1aa` 调亮）在它混合到 background、card、popover 之上的颜色上，静止与悬停都 ≥ 4.5:1，`theme.test.ts` 按组件源码中的透明度计算（原来的 `#a1a1aa` 与 `/30`、`/50` 不通过） |
 | 卡片列表（17zc） | `DataTable` 的卡片模式是以 `aria-label` 命名的 `<ul>`，每张卡一个 `<li>`；标签与值是 `<dl>`；展开按钮带名称与 `aria-expanded`；"表格 / 卡片"的切换是 `role="radiogroup"`（图标加文字，窄屏只读给屏幕阅读器）；排序下拉的每项说出列名与方向；`a11y.spec.ts` 以手机视口检查一个列表的卡片 |
 | 名称与属性 | 有展开行的表格（审计、单据）用 `DataTable` 的 `renderExpanded`：展开按钮带"展开行 / 收起行"的名称与 `aria-expanded`；选择用 `Combobox`（`role="combobox"`，以 `<Label htmlFor>` 或 `aria-label` 命名，`aria-required` / `aria-invalid` 在触发按钮上）。e2e 按角色、名称或 `data-*` 找元素（`e2e/support.ts` 的 `dialog`、`dataRows`、`option`、`confirm`），按钮名称写精确的文字 |
-| 扩展与应用 | 扩展的页面用 `@jabiz/ui`（经 `@jabiz/admin`），主题 token、外观与全局的 preflight 自动适用；扩展的测试经 `@jabiz/admin/testing` 用同一个 `expectAccessible`（16w-1，§9；不另做 Playwright 的版本）。检查的辅助函数由 `@jabiz/ui` 导出（16v-1）：组件与页面测试用 `@jabiz/ui/testing` 的 `expectAccessible(root?)`（Vitest，亮暗两种外观，jsdom 不算样式所以不查颜色对比度），e2e 用 `@jabiz/ui/testing/playwright` 的 `expectAccessible(page, 名称, { expect })`（含颜色对比度，等动画结束后检查；`expect` 是调用方自己的，辅助函数不加载 `@playwright/test`）、`accessibilityViolations(page)`、`animationsSettled(page)` 与 `setAppearance(page, 外观)`；规则集（`WCAG_TAGS`）与上表相同，平台自己的测试也用它们；`@jabiz/client/vite` 的预设在 Vitest 中让 `vitest`、`vitest-axe` 都是 SPA 自己的副本 |
+| 扩展与应用 | 扩展的页面用 `@jabiz/ui`（经 `@jabiz/admin`），主题 token、外观与全局的 preflight 自动适用；扩展的测试经 `@jabiz/admin/testing` 用同一个 `expectAccessible`（16w-1，§9；不另做 Playwright 的版本）。检查的辅助函数由 `@jabiz/ui` 导出（16v-1）：组件与页面测试用 `@jabiz/ui/testing` 的 `expectAccessible(root?)`（Vitest，亮暗两种外观，jsdom 不算样式所以不查颜色对比度；不进入 `iframe` 的内容（axe 在 jsdom 中够不到框架，框架里显示的如邮件预览也不属于页面），框架元素本身（标题）照查，17zh-c），e2e 用 `@jabiz/ui/testing/playwright` 的 `expectAccessible(page, 名称, { expect })`（含颜色对比度，等动画结束后检查；`expect` 是调用方自己的，辅助函数不加载 `@playwright/test`）、`accessibilityViolations(page)`、`animationsSettled(page)` 与 `setAppearance(page, 外观)`；规则集（`WCAG_TAGS`）与上表相同，平台自己的测试也用它们；`@jabiz/client/vite` 的预设在 Vitest 中让 `vitest`、`vitest-axe` 都是 SPA 自己的副本 |
 
 新增或修改页面时：在 `a11y.spec.ts` 中加上该页面；颜色用主题 token，不写死色值。
 
@@ -312,7 +315,7 @@ jabizApp {
   `body` 的背景与文字取 token，原生控件与滚动条随 `.dark` 变暗；应用自有 SPA 经同一 `theme.css` 也是全局 preflight。后台外壳的内容区是 `text-sm`（14px，
   与 antd 时期相同；登录、邮件链接页、门户与应用 SPA 仍是浏览器缺省的 16px）。渲染出的 Markdown（`.markdown-view`）的标题、列表、链接、代码与引用
   由 `@jabiz/ui` 的 `markdown.css`（层 `components`，只用 token）给出样式，不用 `@tailwindcss/typography`。侧栏收起时整体移出屏幕并设为 `inert`
-  （不收成图标条：服务端菜单没有图标、分组在图标条中无法展开）；窄屏上侧栏是抽屉，点链接后关闭。
+  （缺省不收成图标条：服务端菜单没有图标；条目都有图标的应用可选 `collapsible="icon"`，§13）；窄屏上侧栏是抽屉，点链接后关闭。
 - **迁移的历史**（15a–15d）：迁移期间 antd 页面与新组件共存，preflight 只作用于 `.jabiz-ui`（`UI_SCOPE`）之内，antd 的样式在 CSS 层 `antd` 中，
   antd 页面所在的内容区固定为亮色。15d 删除 antd、ProComponents、icons 与 React 19 补丁，preflight 改为全局，去掉层 `antd`、亮色固定与路由标记；
   `UI_SCOPE` 仍导出（D22 的约定），只是一个没有样式的类名，不再需要。
@@ -375,3 +378,82 @@ jabizApp {
   主屏幕上的 App 与 Safari 的存储分开，须再登录一次）与 Android 浏览器的菜单（`situation="menu"`、`browser`，17m）；内置浏览器的提示以警示样式显示（那里别的都做不了）；用户关掉后 30 天内不再出现、关掉 3 次后不再出现（`snoozeDays`、`maxDismissals`，记在本浏览器的
   `localStorage`，按 SPA 前缀分开，存储不可用时下次照常出现）；`dismissible={false}` 用于作为安装入口的页面（账户页）：没有关闭按钮，已安装时说明已安装。
   何时显示由应用决定（不要放在首次访问或登录页：多半被直接关掉）。
+
+## 13. 应用框架与页面模板（阶段 17zj，QuizBuks 首次上线 P3）
+
+`@jabiz/ui` 的可选能力，供应用自有 SPA 与通用后台使用；不设置即与以前完全相同（通用后台的整体布局不变）。依据 QuizBuks Q108 §3、§4、§6.1 第 5 条。
+
+- **外壳 `AppShell`**：`collapsible="icon"` 时侧栏在宽屏上收成图标窄条（条目须有图标，名称为提示；带子项的分组在窄条中点击先展开侧栏），收起状态照旧记在本机
+  （`localStorage` 的 `jabiz.sidebar`，不可用时照常工作）；缺省仍是 `offcanvas`（服务端菜单没有图标）。`create` 放在侧栏最上方，通常是 `GlobalCreate`
+  （"＋ 新建"：应用给出条目（只给用户可新建的），链接或回调；没有条目即不显示；窄条中只剩加号）。`bottomBar` 只在窄屏（`< md`）显示，通常是 `BottomBar`；
+  外壳为它在页面底部留出空间，并设 `--bottom-bar-offset` 让浮动按钮与表单页的保存条留在它之上。`routeKey`（路由的路径）改变时焦点移到新页面的标题
+  （`PageHeader` 的 `<h1 tabIndex=-1>`，`data-slot="page-title"`），读屏软件随之读出新页；首次渲染不移动。
+- **底部菜单 `BottomBar`**：应用给出项数（惯例 4 项 +"更多"，或 5 项、正中一项 `raised` 凸起），当前项 `aria-current="page"` 并加粗（不只靠颜色），可带徽标；
+  `more` 给出完整菜单（通常与侧栏同一个 `ShellNav`），在自下而上的抽屉中打开，点其中的链接即关闭。它是有名称的 `navigation`，名称须与侧栏的不同（axe `landmark-unique`）。
+- **页头 `PageHeader`**：新增 `icon`（区域的图标，装饰性，与菜单的图标相同）、`primaryAction`（主操作：宽屏上**紧跟在标题之后**，任何宽度下都在标题旁；
+  窄屏上成为底部菜单之上的浮动按钮 `Fab`，只显示图标、以文字命名）、`tabs`（标题与说明之下，通常是 `PageTabs`）。`actions` 照旧在行的另一端；老写法不变。
+  `PageAction` 是按钮（`onClick`）或链接（`href`，有路由时 `renderLink`）。
+- **页内标签 `PageTabs`**：一个区域里的各页并排；每个标签是一个路由（链接，可直接打开、可加书签），当前项 `aria-current="page"`；放不下时横向滚动；
+  方向键、Home、End 在标签之间移动；可带徽标。以后的新功能加为区域里的标签，而不是新的菜单项（应用的规则）。
+- **内容宽度**：主题 token `--content-max`（85rem，约 1360px：列表与详情）与 `--content-form-max`（60rem，约 960px：表单），居中；`--bottom-bar-height`（4rem）。
+  应用可在自己的样式表中覆盖。`PageContent` 单独提供这种居中限宽。
+- **三种页面模板**：
+  - `ListPage`：页头 → 工具栏（`search`：搜索框（`type="search"`，有名称）；`chips`：状态的小标签（`SegmentedControl` 的单选组）；`toolbar`：其余放在末端）→ 列表
+    （通常是 `DataTable`，其自身的"表格 / 卡片"切换见 §6 与 17zc）。模板只告诉应用选了什么，数据由应用读取。
+  - `DetailPage`：页头 → 内容与"状态与下一步"栏（`aside`，有名称的 `complementary`）；宽屏上该栏固定在右侧（内容滚动时不动），窄屏上排在内容之前
+    （在文档中也排在前面，读屏软件先读到它）。
+  - `FormPage`：页头 → 单栏、限宽的表单（整页是一个 `<form>`，回车即保存）→ 底部固定的条：一句状态（`role="status"`："有未保存的修改" / "没有未保存的修改"）、
+    "放弃"与"保存"（没有修改、正在保存或 `canSave` 为假时等待）。有未保存的修改时关闭、刷新或离开本站都先询问（`beforeunload`，`useUnsavedChanges`）；
+    应用内的路由跳转由应用以其路由的拦截器配合 `dirty` 询问。
+- **约束**：组件只用主题 token；亮暗两种外观都过 axe；标签、底部菜单、浮动按钮、新建菜单都能只用键盘操作；不做动画之外的动态效果（抽屉与菜单的动画随系统的"减少动态效果"）。
+  菜单项照旧由应用按权限给出（界面隐藏，权限只由服务端判断）。
+- **示范**：示范门户（`backend/app/portal`）用了全部：图标窄条的侧栏、"＋ 新建"（下单）、手机上的底部菜单与浮动按钮、`ListPage`（我的订单：搜索订单号、按状态筛选，
+  "下单"在标题旁）、`FormPage`（下单）、`DetailPage`（账户：右侧是账户与邮箱的验证状态）。通用后台的"我的待办"改用 `ListPage`（搜索标题、审批 / 其他待办）。
+- **测试**：`app-frame.test.tsx`（主按钮在标题旁、手机上的浮动按钮、链接形式、老写法不变、标签的键盘操作与徽标、新建菜单、图标窄条与记忆、底部菜单只在手机上、
+  "更多"抽屉、路由改变时的焦点、三种模板），每例 `expectAccessible`（亮暗两种外观）；`theme.test.ts` 的布局 token；门户 `App.test.tsx`（列表模板的搜索与筛选、
+  手机上的底部菜单、浮动按钮、账户的详情模板与焦点）；后台 `TasksPage.test.tsx`。
+
+## 14. 入口页模板（17zk，QuizBuks 首次上线 P4）
+
+登录、注册、第二步（验证码、通行密钥、开启二次验证）、注册后的"请查收邮件"、找回密码、第三方登录的回调页、全部邮件链接页（`MailLinkPage` 的各种、链接登录、删除账号、
+确认通行密钥）与退订页用同一个模板 `EntryLayout`（`@jabiz/ui`）。`AuthFrame` 就是它，原有的属性（`brand`、`title`、`testId`、`appearance`、`footer`、`className`）含义不变。
+**原则：模板只管排列，不删、不简化任何现有行为**；认证流程与接口一处不改（需求方选方案 A，原型的 132 条清单逐条有位置）。
+
+- **槽位**（自上而下）：
+  - **提示区**（与顶栏同在页面的 `banner` 地标中）：测试系统的环境横条总在最上（16zd）；其后是应用给出的 `notices`（`EntryNotice`：`key`、`content`、一行的 `summary`、`active`）。手机上（`< md`）
+    只展开第一条 `active` 的，其余 `active` 的收成一行（`<details>`，点开即看全文）；宽屏全部展开；没有一条 `active` 时不占位置。`useEntryNotices()` 给出平台的两条：离线（服务不答是页面上的对话框，不占位置）
+    与新版本（PWA）。内置浏览器提示等由应用加入。
+  - **顶栏**：左边品牌（`brand`，页面的 `h1`，长名字换行），右边语言选择（多于一种语言时；从原来卡片下方移来，建议⑤）。
+  - **左栏**（`intro`：一句话 `sentence`、要点 `points`、示意图 `illustration`，文字由应用以自己的三语消息给出；建议②）：宽屏（`lg`）在表单左侧；
+    手机上只剩一行（那句话，截断），表单仍在第一屏。没有 `intro` 时卡片单独居中（通用后台照旧）。
+  - **表单卡片**：标题（`h2`）或标签（内容自带标题时 `ownHeading`）；内容；`below`（表单下的说明，如发起方的"已经在答题？"）。`className` 照旧加在 `<main>` 上。
+  - **另一方入口**（`otherEntry`：`text`、`href`、`link`，文字来自应用的消息，不写死"后台"之类；建议①、缺口 7）：只在登录与注册表单下显示（`showOtherEntry`），整页载入。
+  - **页脚**：`links`（帮助、条款、隐私，`EntryLink`；缺口 8）、亮暗切换（`appearance=false` 时不显示：通用后台）、`footer`（构建号，`data-testid="auth-footer"`）。
+- **`EntryLayoutProvider`**：一个前端的入口页共用的设置（品牌、左栏、提示、页脚链接、另一方入口、页脚小字、亮暗）只设一次；平台的积木都从这里取，页面自己的属性优先。
+- **登录与注册同一页**（建议④）：`SignInForm` / `SignUpForm` 的 `tabs`（另给 `signUpPath` / `signInPath`）把"注册账号""已有账号？登录"换成两个标签。
+  标签是各自路径的链接（`aria-current="page"`），旧的 `/signup` 地址照常有效，切换时带上查询参数（`?next=`、`?src=`、`?ref=`）。入口不允许自助注册时（通用后台）没有标签。
+- **登录方式的顺序**（建议③）：`SignInForm` 的 `order`（数组，或按界面语言给出的函数）：`emailLink`（邮件链接的表单）、`emailLinkButton`（同一表单收在按钮后，
+  放进"其他方式"）、`passkey`、`providers`、`password`。没列的方式按以前的顺序（邮件链接、通行密钥、密码、第三方）接在后面：入口提供的方式一个不丢，密码总在。
+  不给即以前的顺序。"或用密码登录"出现在密码之前有通行密钥以外的方式时；第三方排在最前时不加分隔线（成为有名称的组）。
+  `oidcLayout="responsive"`：手机上一排圆图标，宽屏整行按钮。示例：学者中文 `['emailLink','providers','passkey','password']`、日英
+  `['providers','emailLinkButton','passkey','password']`（缺口 1：日英也能用邮件链接）；发起方 `['passkey','providers','password']`；通用后台通行密钥与密码（缺省顺序）。
+- **请求太多（429）**（缺口 5）：`ApiError.retryAfter`（`Retry-After` 只认非负整数秒或 IMF-fixdate，至多 1 小时，其余不算，`@jabiz/client`）；`useRetryWait()` 倒计时。登录（密码与通行密钥按钮）、注册、
+  邮件链接、找回密码的按钮在等待期间停用并显示"N 秒后可以再试"（`common.retryIn`）；提示是服务器的原文，答复没有说明时是各表单原来的通用失败文字（不显示 "HTTP 429"），
+  等待结束即与按钮一起撤下；第三方按钮同样停用（`oidc-wait`）。
+- **第二步保留返回地址**（缺口 2）：`OidcCallback` 在转到登录页之前以 `keepSignInStep(步骤, 返回地址)` 把两者记在本标签页（`sessionStorage`，按入口，至多 5 分钟，
+  即服务器 `jabiz.security.mfa.challenge-ttl` 的缺省值）；照旧交给登录页的 `initialStep`（内存中）优先，存储只是刷新后的后备。`SignInForm` 的 `resumeStep`（缺省关，前端自己开启：
+  示范门户开，通用后台不开）在没有 `initialStep`、也不是闲置退出后的页面时接着这一步，登录后去记下的地址；登录成功或返回密码步骤即忘掉（`forgetSignInStep`）；
+  接着的挑战服务器已不接受（401，过期）时丢掉它，回到密码步骤并显示服务器的原文。
+- **回调页**（缺口 4）：`OidcCallback` 在模板中（品牌、语言、环境横条），新增 `brand`、`appearance`；失败照旧是带警告图标的 `PageState`，其标题是卡片唯一的 `h2`；
+  处理中的标题为"登录"，关联账号时为中性的"加载中"。
+- **邮件链接页**：`MAIL_LINK_PAGES` 列出 `MailLinkPage` 的全部页面供前端挂载（缺口 3）；"确认通行密钥"未登录时给出登录链接（`signInPath`，否则入口的前端；缺口 10）。
+- **内置浏览器提示**（缺口 11）：`PwaInstallBanner` 在其他 App 的浏览器中（`in-app`）的关闭另记在 `rememberAs` + `.in-app`，不用掉安装提示的次数；
+  新键还没有记录时从原来合记的记录照搬一次（`keepInstallDismissals`），已永久关掉的提示不再出现。
+- **示范**：通用后台（单栏、无亮暗、构建号、回调页带品牌）；示范门户用 `EntryLayoutProvider`（三语的左栏、`useEntryNotices`）、登录与注册两个标签、注册页的第三方与条款说明、
+  已登录时 `/signup` 与 `/password-reset` 转到订单（缺口 9）、第二步照旧在内存中交给登录页并开启 `resumeStep`。
+- **QuizBuks 的应用**（在自己的分支上）：以 `EntryLayoutProvider` 给出品牌、左栏三语文案与示意图、提示（含内置浏览器提示）、页脚的帮助 / 条款 / 隐私、
+  `otherEntry`（学者 ↔ 发起方）；`SignInForm` 的 `order`、`tabs`、`below`（发起方的说明）、`oidcLayout="responsive"`；`/signup` 路由到注册标签并保留 `?src=` / `?ref=`；
+  需要刷新后接着第二步时开启 `resumeStep`；挂上缺少的邮件链接页（发起方开启删除账号前须挂 `account-deletion`）；发起方的公开框架补上环境横条（缺口 6，与模板无关）。
+- **测试**：`entry.test.tsx`（槽位、手机与宽屏的类、提示的收起、提供者的设置、标签与查询参数、按语言的顺序、方式不丢、429 的倒计时与停用（登录、注册、邮件链接、
+  找回密码、第三方）、第二步的返回地址与刷新、回调页在模板中、确认通行密钥的登录链接、内置浏览器提示分开计数），每例 `expectAccessible`（亮暗）；
+  `problem.test.ts`（`Retry-After`）、`signInStep.test.ts`；原有的 `blocks.test.tsx` 等照旧通过；门户 `App.test.tsx`（模板、标签、条款说明、已登录转走）；后台的回调页与确认通行密钥。

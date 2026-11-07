@@ -23,6 +23,13 @@ import { PasskeyConfirmPanel } from './Passkeys'
 import { PasswordResetRequest } from './PasswordResetRequest'
 import { failure, invalidLink, passwordProblems, passwordRequired } from './problems'
 
+/**
+ * Every page of a mailed link {@link MailLinkPage} shows, as the last segment of `{entryUrl}auth/<page>` (phase 17zk,
+ * gap 3): a frontend routes those its entry mails (or all of them, as the demonstration portal does).
+ */
+export const MAIL_LINK_PAGES = ['verify-email', 'join', 'password-reset', 'email-link', 'account-deletion', 'invitation',
+  'passkey-confirm'] as const
+
 /** A mailed link as the panels use it: its entry and token, and where the entry's frontend is. */
 export interface MailLinkInfo {
   entry: string

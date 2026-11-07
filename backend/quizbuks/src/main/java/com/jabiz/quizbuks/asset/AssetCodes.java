@@ -34,11 +34,13 @@ public final class AssetCodes {
     public static final String CHANGED = "QB_ASSET_CHANGED";
     /** A file newly put into an asset that the sponsor did not upload. */
     public static final String FILE_NOT_OWN = "QB_ASSET_FILE_NOT_OWN";
+    /** F-C1b: an asset picked for a place it does not suit ({@code target}, {@code kind}). */
+    public static final String TARGET_KIND = "QB_ASSET_TARGET_KIND";
 
     public static final List<String> ALL = List.of(KIND_INVALID, KIND_FIXED, NAME_BLANK, TOO_LONG, FIELD_NOT_ALLOWED,
         CONTENT_REQUIRED, URL_FORMAT, VIDEO_SITE, DURATION_RANGE, USAGE_INVALID, PRIZE_METHOD_INVALID,
         DIGITAL_DELIVERY_INVALID, SEND_DAYS_RANGE, LANGUAGE_INVALID, TAG_BLANK, TAG_TWICE, TAG_TOO_LONG, TOO_MANY_TAGS,
-        LIMIT, CHANGED, FILE_NOT_OWN);
+        LIMIT, CHANGED, FILE_NOT_OWN, TARGET_KIND);
 
     private AssetCodes() {}
 }

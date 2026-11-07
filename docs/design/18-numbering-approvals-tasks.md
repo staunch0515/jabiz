@@ -10,6 +10,7 @@
 | 审批 | 按有版本的规则判定是否需要审批；批准绑定内容；准备人不能审批自己；多级与限额 | 14b-2 |
 | 职责分离 | 互斥的权限不能落在同一用户身上；冲突报告 | 14b-2 |
 | 任务与通知 | 待办列表；邮件通知 | 14b-3 |
+| 移交范围 | 未结的审批请求与开放的待办移到入口范围的另一个值（子流程 `APPROVAL_SCOPE_MOVE`，§3.8） | 17zo |
 
 ## 2. 编号（14b-1）
 
@@ -196,6 +197,28 @@
 示范（`app`）：审批对象 `commerce.certification`（事实：供应商、标题语言数、是否有正文；内容：供应商、标题、正文）。`CERTIFICATION_SUBMIT` 调用
 `RequireApproval`；等待审批时手工审核 `CERTIFICATION_APPROVE` 被拒（`CERTIFICATION_AWAITING_APPROVAL`）；订阅审批事件的
 `CERTIFICATION_APPROVAL_RESULT` 在批准（内容未变）后通过、驳回后退回。场景 `scenarios/commerce/certification_approval.yml`。
+
+### 3.8 移到另一个入口范围（17zo，【决策 D76】）
+
+请求与待办记着所属的入口范围（10 §13.4，D64）。对象改由另一个范围值负责（QuizBuks：商户改派给另一个运营商）时，应用在自己的改派流程中调用子流程：
+
+| 流程 | 权限 | 做什么 |
+|---|---|---|
+| `APPROVAL_SCOPE_MOVE`（`subProcessOnly()`） | `approval.scope.move`（由步骤在检查输入之前检查调用者；应用的改派权限之外另需） | `{scopeName, toValue, requests: [{subject, entityId}], taskSourceKeys?, reason}` → `{requestIds, taskIds, skipped: [{subject, entityId, why}]}` |
+
+```java
+.step("Move its approvals", CallProcess.of("APPROVAL_SCOPE_MOVE", 1, ctx -> new ApprovalScopeMove.MoveInput(
+    "operator", newOperatorId, List.of(new ApprovalScopeMove.Case("qb.sponsor", sponsorId)), null, reason), "moved"))
+```
+
+- 案件按（审批对象，单据标识）排序后逐个取案件锁、整体读出其**未结**的请求：待审批的，以及已批准而尚未被取代的（`ApprovalStore.openRequests`；没有即 `skipped` 中的 `NOT_OPEN`）；范围名与 `scopeName` 不同（含没有范围）即 422 `APPROVAL_SCOPE_MISMATCH`，
+  已是 `toValue` 的不写（`ALREADY_THERE`）；其余按读到的版本追加只改 `scopeValue` 的版本（期间被决定即 409）。
+- 该请求的开放待办（来源键 `approval:<请求>`）与 `taskSourceKeys` 所列来源键的开放待办随之移动（范围名不同即同一个 422）；之后层级的待办取请求的新范围。
+  `taskSourceKeys` 不能列审批待办的来源键（422 `INVALID_VALUE`）；一个来源键的开放待办达到 1000 条即失败（与 `TaskWriter.close` 共用同一读取）。语句按案件计，很大的改派分批调用。
+- 有入口范围的会话调用即 422 `OUT_OF_SCOPE`；直接经流程接口调用即 403 `PROCESS_INTERNAL`。
+- 范围字段只经此改变：守卫 `ApprovalScopeGuard` 拒绝其他任何改变范围的写入（422 `IMMUTABLE_FIELD`），且只许未结的请求、开放的待办，状态与范围名不变。
+- 决定与评估保留原范围（当时在哪里做的判断）；已发出的通知不移动、不重新通知。审计记录前后值。
+- 测试：app `ApprovalScopeMoveIT`，runtime `ApprovalScopeGuardTest`。
 
 ## 4. 职责分离（14b-2）
 
@@ -452,7 +475,37 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
 - 写入取命名锁 `jabiz.mail-text:<模版>`，`baseVersionNo` 不是当前版本（没有存过即空）即 409。
 - 发信：`MAIL_SEND` 在投递事务中取（模版，语言）的最新版本（`MailTexts`），`CUSTOM` 且合格即用，否则用消息；不合格的覆盖按缺省发出，WARN 日志与观测
   `jabiz.mail.text.fallback`（标签 `template`）。`sys_mail_attempt.text_version_no` 记下所用版本（空 = 缺省）。业务流程的语句数不变（`StatementBudgetIT`）。
-- 测试发送的消息：`sys_mail_message.rendered_subject|text|html` 有值，投递原样发出，不取令牌、不再渲染。
+- 测试发送的消息：`sys_mail_message.rendered_subject|text|html` 有值，投递原样发出，不取令牌、不再渲染；投递只对 `MAIL_TEXT_TEST_SEND` / `MAIL_LAYOUT_TEST_SEND`
+  记录的消息这样做（查 `op_process.process_name`），其他流程写了 `rendered_*` 的消息记 `FAILED`、从不发出（17zh-b，17zh-a 安全审查 F6b）。
+- 版本是否经审批由写它的流程判定（`CONTROL_CHANGE_PUBLISH` 写的即经审批，`MailTextGuard` 只让受控变更的发布给须审批的模版写覆盖；不另设列，已有的版本照样判定）：模版后来才声明令牌、登录链接或 `t.protectedText()` 时，
+  此前经 `MAIL_TEXT_SAVE` 存的覆盖不再发出（按缺省、告警、观测 `jabiz.mail.text.fallback`），列表状态 `UNAPPROVED`，启动检查告警（17zh-b，F5）。
+
+- 通用后台的页面（17zh-c）："邮件模版"（`/mail/texts`，列表与编辑器：预览、测试发送、恢复默认、保存或提出修改、待审批、历史与对比）与"邮件信纸"（`/mail/layout`，只能提出修改），见 12 §6。
+
+**信纸**（17zh-b，决策 D72）：所有邮件共用、按语言的页眉（显示名、可选的标志与替代文字）与页脚（Markdown）。首期不设颜色（以后再加，连同对比度检查）。
+
+- 缺省值来自应用配置 `jabiz.mail.layout.<语言>.display-name|logo-url|logo-alt|footer`（未配置即空：与没有信纸时相同）；示范 `app` 三种语言都给了。
+  覆盖存于平台实体 `MailLayout`（`sys_mail_layout_version`，时态、只追加；键为语言；`kind` 为 `CUSTOM` / `DEFAULT`，记所据缺省的哈希 `defaultHash`），
+  `MailLayoutGuard` 拒绝受控变更的发布与 `MAIL_LAYOUT_RESET` 以外的一切写入；页脚点名的入口在提出与发布时也须存在。
+- 规则：core 的 `MailLayoutRules`：显示名与替代文字各一行、不超过 200 字（`MAIL_LAYOUT_LINE`）；标志只能是 `{baseUrl}/…` 或以单个 `/` 开头的本站路径
+  （如 `/api/public/files/…`），不含其他占位符、空白与反斜杠（`MAIL_LAYOUT_LOGO`，不做外部图片，也就没有追踪像素），有标志即须有替代文字（`MAIL_LAYOUT_LOGO_ALT`）；
+  页脚不超过 `jabiz.mail.layout.max-footer-length`（2000），只能用 `{baseUrl}` 与 `{entryUrl.<入口>}`（令牌、登录链接、退订链接属于各封邮件，`MAIL_TEXT_UNKNOWN_PLACEHOLDER`），
+  链接、主机、图片与 HTML 照文字的规则（`MAIL_TEXT_*`，同一个 `allowed-link-hosts`）。
+- 渲染：`MailRenderer.wrap`：HTML 为完整的文档、单栏表格（最宽 600px）、只有内联样式，没有外部样式、脚本或标志以外的图片；显示名与替代文字转义，页脚照正文渲染
+  （值不当作 Markdown）。纯文本为"显示名、空行、正文、`-- ` 之后的页脚"。信纸为空即原样。退订链接仍在各封邮件的正文中（D72 第 2 条要求保留），信纸不另加。
+
+| 流程 / 接口 | 作用 | 权限 |
+|---|---|---|
+| 受控变更，`targetEntity: MailLayout`，`values: {locale, displayName, logoUrl, logoAlt, footer}` | 唯一的修改途径：提出与发布都要求近期二次验证，另一位发布，发布时再校验；提出所据的版本已变即 `CONTROL_TARGET_CHANGED`；列表的 `targetKey` 为语言 | `control.propose` / `control.publish`，并须 `mail.text.write` 与已验证的邮箱 |
+| `MAIL_LAYOUT_RESET` `{locale, baseVersionNo}` | 恢复缺省（写 `DEFAULT` 版本），即时生效；取锁 `jabiz.mail-layout:<语言>`，版本不对即 409 | `mail.text.write` |
+| `MAIL_LAYOUT_TEST_SEND` `{locale, displayName?, logoUrl?, logoAlt?, footer?}` | 用示例邮件（待办通知与其示例值）放在草稿或当前信纸上，只寄给操作人自己已验证的邮箱，标题加 `[TEST]`；平台缺省每人每小时 10 次 | `mail.text.write` |
+| `POST /api/mail/layouts/preview` `{locale, layout?}` | 草稿（或当前信纸）的问题与示例邮件的渲染结果；不写任何记录。`POST /api/mail/texts/preview` 也放在当前信纸上 | `mail.text.read` |
+| `GET /api/mail/layouts` | 每种语言：缺省值、覆盖、状态（`DEFAULT` / `CUSTOM` / `DEFAULT_UPDATED` / `INVALID`）、版本；页脚上限与允许的主机 | `mail.text.read` |
+
+- 发信：模版邮件在投递时取当前信纸（`MailLayouts`），`sys_mail_attempt.layout_version_no` 记下版本（空 = 缺省）；待办通知与单据邮件在记录时取当前信纸并记下版本
+  （`sys_notification` / `sys_document_delivery.layout_version_no`），提交后发送时按所记的版本（版本只追加，取得的总是同一份），并发出纯文本与 HTML 两部分。
+  存的信纸不再合格（如允许的主机收窄了）即按缺省发出、WARN 日志与观测 `jabiz.mail.layout.fallback`（标签 `locale`），启动检查告警；
+  缺省值（配置）不合格、页脚的入口不存在，或开启邮件而未配置 `jabiz.mail.base-url` 时用了标志或 `{baseUrl}`，启动检查 `MAIL` 报错；为应用没有的语言配置的信纸告警（不用）。
 
 | 表（`V31__mail.sql`；17zh-a 为 `V60__mail_texts.sql`） | 性质 |
 |---|---|
@@ -463,9 +516,10 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
 | `sys_mail_token_use` | 只追加；主键 `token_hash` |
 | `sec_user_mail_preference_version` | 时态，平台实体 `SecUserMailPreference`，唯一（用户, 模板） |
 | `sys_mail_text_version` | 时态（17zh-a），平台实体 `MailText`，唯一（模版, 语言）；`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 加列 `text_version_no`，`sys_mail_message` 加列 `rendered_*` |
+| `sys_mail_layout_version` | 时态（17zh-b，`V61__mail_layouts.sql`），平台实体 `MailLayout`，唯一（语言）；`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 加列 `layout_version_no`；唯一索引（语言, 版本）与文字的（模版, 语言, 版本）挡住并发的两个首次写入 |
 
 示范：`backend/app` 的 `ORDER_SHIP` 给客户主数据 `Customer`（管理员维护，可选 `userId`）中有账号且有地址的客户发 NOTIFICATION `commerce.order-shipped`（三语）——收件人来自主数据，不来自下单输入；场景
-`commerce/order_shipped_mail`。测试：core `MailTemplateTest`、`MailRendererTest`、`MailTextRulesTest`（17zh-a）；runtime `MailChecksTest`、`MailSenderTimeoutsTest`、`JwtServiceTest`；app `MailIT`、`MailDisabledIT`、`MailPreferencesIT`（16s）、`MailTextIT`（17zh-a）；前端 `MailUnsubscribePage.test`、`mail.test`（client）、`MailPreferences.test`（ui，含 axe）、`AccountSecurityPage.test`。
+`commerce/order_shipped_mail`。测试：core `MailTemplateTest`、`MailRendererTest`、`MailTextRulesTest`（17zh-a）、`MailLayoutRulesTest`（17zh-b）；runtime `MailChecksTest`、`MailSenderTimeoutsTest`、`JwtServiceTest`；app `MailIT`、`MailDisabledIT`、`MailPreferencesIT`（16s）、`MailTextIT`（17zh-a）、`MailLayoutIT`（17zh-b）；前端 `MailUnsubscribePage.test`、`mail.test`（client）、`MailPreferences.test`（ui，含 axe）、`AccountSecurityPage.test`。
 
 ### 5.7 推送通知（17k，决策 D69）
 

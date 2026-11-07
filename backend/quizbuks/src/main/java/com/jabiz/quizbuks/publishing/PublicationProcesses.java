@@ -8,6 +8,8 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.asset.AssetUses;
+import com.jabiz.quizbuks.asset.QbAssets;
 import com.jabiz.quizbuks.content.QuizEditing;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.country.Regions;
@@ -99,6 +101,8 @@ public final class PublicationProcesses {
      *                          uploaded by the sponsor; none shows the version's cover
      * @param covers            Q98b: its own cover in languages it offers besides its base, by language (the whole
      *                          set, as the save writes the whole draft); none shows the cover chosen otherwise
+     * @param assets            F-C1b: the assets of the sponsor's library the console copied parts of the draft from;
+     *                          a part given none keeps its record as it is
      */
     public record SaveInput(UUID publicationId, UUID versionId, @NotNull String name, List<@NotNull String> regions,
         Instant startAt, Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap,
@@ -113,7 +117,21 @@ public final class PublicationProcesses {
             @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH + 1) String>> translations,
         @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed, Integer pickCount,
         @Size(max = 36) String benefitPurchaseId, BigDecimal entryFee,
-        @Size(max = 3) Map<@NotNull @Size(max = 2) String, UUID> covers) {
+        @Size(max = 3) Map<@NotNull @Size(max = 2) String, UUID> covers, PublicationAssets assets) {
+
+        /** As before F-C1b: nothing from the asset library. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription, String audience,
+            String digitalDelivery, String digitalDescription, Integer digitalSendDays, String digitalContent,
+            UUID cover, ReferralInput referral, List<String> languages,
+            Map<String, Map<String, String>> translations, List<String> confirmed, Integer pickCount,
+            String benefitPurchaseId, BigDecimal entryFee, Map<String, UUID> covers) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
+                confirmed, pickCount, benefitPurchaseId, entryFee, covers, null);
+        }
 
         /** As before Q98b: no covers per language. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
@@ -250,6 +268,32 @@ public final class PublicationProcesses {
         }
     }
 
+    /**
+     * F-C1b: the assets of the sponsor's library parts of a draft were copied from, each recorded as where the asset
+     * is used: an image for the cover, a text of the matching use for each description, a prize card for the prize.
+     */
+    public record PublicationAssets(UUID coverAssetId, UUID redeemAssetId, UUID digitalAssetId,
+        UUID referralAssetId, UUID prizeAssetId) {
+
+        List<AssetUses.Pick> picks() {
+            return List.of(
+                new AssetUses.Pick("assets.coverAssetId", QbAssets.PUBLICATION_COVER, null, coverAssetId),
+                new AssetUses.Pick("assets.redeemAssetId", QbAssets.PUBLICATION_REDEEM, null, redeemAssetId),
+                new AssetUses.Pick("assets.digitalAssetId", QbAssets.PUBLICATION_DIGITAL, null, digitalAssetId),
+                new AssetUses.Pick("assets.referralAssetId", QbAssets.PUBLICATION_REFERRAL, null, referralAssetId),
+                new AssetUses.Pick("assets.prizeAssetId", QbAssets.PUBLICATION_PRIZE, null, prizeAssetId));
+        }
+    }
+
+    /** The places of a publication an asset may fill. */
+    static final List<String> ASSET_TARGETS = List.of(QbAssets.PUBLICATION_COVER, QbAssets.PUBLICATION_REDEEM,
+        QbAssets.PUBLICATION_DIGITAL, QbAssets.PUBLICATION_REFERRAL, QbAssets.PUBLICATION_PRIZE);
+
+    private static List<AssetUses.Pick> picks(ProcessContext ctx) {
+        PublicationAssets assets = ctx.get(INPUT, SaveInput.class).assets();
+        return assets == null ? List.of() : assets.picks();
+    }
+
     public record PublicationRef(@NotNull UUID publicationId, Long baseRevision) {}
 
     /**
@@ -316,6 +360,14 @@ public final class PublicationProcesses {
                 }, BENEFIT_PURCHASE))
             .step("Seal the shared prize", SealSecret.<ProcessContext>of(PublicationProcesses::sharedContent,
                 ctx -> String.valueOf((Object) ctx.request().actorId()), SEALED_DIGITAL))
+            // F-C1b: the assets parts of the draft were copied from, after the publication's lock.
+            .steps(b -> AssetUses.load(b, ctx -> picks(ctx).stream().map(AssetUses.Pick::assetId)
+                .filter(Objects::nonNull).toList(), ctx -> {
+                    EntityInstance found = first(ctx, FOUND);
+                    return found == null ? List.of() : picks(ctx).stream().filter(pick -> pick.assetId() != null)
+                        .map(pick -> new AssetUses.Place(pick.targetKind(), found.id())).toList();
+                }))
+            .compute("Check the assets picked", (metadata, ctx) -> AssetUses.check(ctx, picks(ctx)))
             .compute("Save the publication", (metadata, ctx) -> save(ctx, messages)));
     }
 
@@ -486,6 +538,9 @@ public final class PublicationProcesses {
                 changed.put("editedAt", editedAt);
                 ctx.changes().update(QbPublications.PUBLICATION, publication.id(), publication.version(), changed);
             }
+        }
+        for (AssetUses.Pick pick : picks(ctx)) {
+            AssetUses.record(ctx, pick.targetKind(), publicationId, pick.assetId());
         }
         if (Audience.INVITED.equals(audience)) {
             list(ctx, PublicationAudience.CRITERIA).forEach(row ->
@@ -689,6 +744,9 @@ public final class PublicationProcesses {
                 .steps(PublicationAudience::loadCriteria)
                 .steps(PublicationPrerequisites::load)
                 .steps(PublicationRounds::load)
+                // F-C1b: where its parts were filled from the asset library goes with it.
+                .steps(b -> AssetUses.load(b, ctx -> List.of(), ctx -> ASSET_TARGETS.stream()
+                    .map(kind -> new AssetUses.Place(kind, PublicationEditing.publication(ctx).id())).toList()))
                 .compute("Delete the publication", (metadata, ctx) -> {
                     EntityInstance publication = PublicationEditing.publication(ctx);
                     if (!PublicationEditing.draft(ctx, publication) || !PublicationEditing.current(ctx,
@@ -708,6 +766,7 @@ public final class PublicationProcesses {
                     list(ctx, PublicationRounds.ROUND).forEach(row -> ctx.changes().delete(
                         com.jabiz.quizbuks.certification.QbCertifications.ROUND, row.id(), row.version()));
                     ctx.changes().delete(QbPublications.PUBLICATION, publication.id(), publication.version());
+                    ASSET_TARGETS.forEach(kind -> AssetUses.forget(ctx, kind, List.of(publication.id())));
                     ctx.put(OUTPUT, new PublicationOutput(uuid(publication.id()), PublicationStatus.DRAFT,
                         number(publication.get("revision")), null, null));
                 }));

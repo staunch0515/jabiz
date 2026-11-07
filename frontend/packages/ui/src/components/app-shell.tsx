@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Collapsible } from 'radix-ui'
 import { ChevronRightIcon, type LucideIcon } from 'lucide-react'
 
+import { useIsMobile } from '../hooks/use-mobile'
 import { cn } from '../lib/utils'
 import { EnvironmentBanner } from './environment-banner'
 import { Separator } from './ui/separator'
@@ -68,21 +69,64 @@ export interface AppShellProps {
    * Classes of the page's container (its background, for one).
    */
   contentClassName?: string
+  /**
+   * How the sidebar collapses on wide screens (phase 17zj): `offcanvas` (the default) leaves the screen; `icon`
+   * shrinks to a strip of the entries' icons, their names as tooltips (entries need icons). Either way the state is
+   * the user's, kept on this device.
+   */
+  collapsible?: 'offcanvas' | 'icon'
+  /** Under the brand, at the top of the sidebar: usually a {@link GlobalCreate} ("+ New"). */
+  create?: ReactNode
+  /**
+   * The menu at the bottom of narrow screens, usually a {@link BottomBar}; shown there only, with the page and a
+   * floating button kept clear of it.
+   */
+  bottomBar?: ReactNode
+  /**
+   * Changes with the route (the location's path): the focus then moves to the new page's title (the `<h1>` of its
+   * {@link PageHeader}), so that a screen reader announces the page. Nothing moves when it stays the same.
+   */
+  routeKey?: string
 }
 
 /**
  * The frame of a signed-in application (decision D34 item 4): a collapsible sidebar (a sheet on narrow screens,
- * Ctrl/⌘+B toggles it), a header bar and the page.
+ * Ctrl/⌘+B toggles it), a header bar and the page; optionally (phase 17zj) a create button, a sidebar that collapses
+ * to icons, and a bottom menu on narrow screens.
  */
-export function AppShell({ brand, navigation, sidebarFooter, header, children, contentClassName }: AppShellProps) {
+export function AppShell({
+  brand,
+  navigation,
+  sidebarFooter,
+  header,
+  children,
+  contentClassName,
+  collapsible = 'offcanvas',
+  create,
+  bottomBar,
+  routeKey,
+}: AppShellProps) {
+  const mobile = useIsMobile()
+  const content = useRef<HTMLDivElement>(null)
+  const shownRoute = useRef(routeKey)
+  useEffect(() => {
+    if (routeKey === shownRoute.current) return
+    shownRoute.current = routeKey
+    content.current?.querySelector<HTMLElement>('[data-slot="page-title"]')?.focus()
+  }, [routeKey])
+  const withBottomBar = bottomBar !== undefined && mobile
+  const style = withBottomBar ? ({ '--bottom-bar-offset': 'var(--bottom-bar-height)' } as CSSProperties) : undefined
   return (
-    <SidebarProvider>
+    <SidebarProvider style={style}>
       {/*
-        Collapsed, the sidebar leaves the screen (and is inert) rather than shrinking to icons: menu entries from the
-        server have no icon, and groups could not open in an icon strip.
+        By default, collapsed, the sidebar leaves the screen (and is inert) rather than shrinking to icons: menu
+        entries from the server have no icon. An application whose entries all have icons may ask for the strip.
       */}
-      <Sidebar collapsible="offcanvas">
-        <SidebarHeader>{brand}</SidebarHeader>
+      <Sidebar collapsible={collapsible}>
+        <SidebarHeader>
+          {brand}
+          {create}
+        </SidebarHeader>
         <SidebarContent>{navigation}</SidebarContent>
         {sidebarFooter && <SidebarFooter>{sidebarFooter}</SidebarFooter>}
         <SidebarRail />
@@ -100,9 +144,18 @@ export function AppShell({ brand, navigation, sidebarFooter, header, children, c
             {header}
           </header>
         </div>
-        <div data-slot="app-shell-content" className={cn('flex-1 p-4', contentClassName)}>
+        <div
+          ref={content}
+          data-slot="app-shell-content"
+          className={cn(
+            'flex-1 p-4',
+            withBottomBar && 'pb-[calc(var(--bottom-bar-height)+env(safe-area-inset-bottom)+1rem)]',
+            contentClassName,
+          )}
+        >
           {children}
         </div>
+        {withBottomBar && bottomBar}
       </SidebarInset>
     </SidebarProvider>
   )
@@ -176,7 +229,7 @@ interface ItemProps {
 
 function ShellNavItem({ item, isActive, renderLink, nested = false }: ItemProps) {
   const [open, setOpen] = useState(() => contains(item, isActive))
-  const { isMobile, setOpenMobile } = useSidebar()
+  const { isMobile, setOpenMobile, state, setOpen: setSidebarOpen } = useSidebar()
   // On narrow screens the menu is a sheet over the page: following a link closes it.
   const followed = () => {
     if (isMobile) setOpenMobile(false)
@@ -195,7 +248,19 @@ function ShellNavItem({ item, isActive, renderLink, nested = false }: ItemProps)
       <Collapsible.Root open={open} onOpenChange={setOpen} asChild>
         <Item data-testid={`menu-${item.key}`}>
           <Collapsible.Trigger asChild>
-            <SidebarMenuButton isActive={!open && contains(item, isActive)}>
+            <SidebarMenuButton
+              isActive={!open && contains(item, isActive)}
+              tooltip={nested ? undefined : item.label}
+              // In the icon strip the entries of a group cannot show: opening it widens the sidebar first.
+              onClick={(event) => {
+                if (state === 'collapsed' && !isMobile) {
+                  // Not Radix's toggle: the group opens, whatever it was.
+                  event.preventDefault()
+                  setSidebarOpen(true)
+                  setOpen(true)
+                }
+              }}
+            >
               {content}
               <ChevronRightIcon
                 aria-hidden
@@ -226,7 +291,7 @@ function ShellNavItem({ item, isActive, renderLink, nested = false }: ItemProps)
           {link}
         </SidebarMenuSubButton>
       ) : (
-        <SidebarMenuButton asChild isActive={active} aria-current={active ? 'page' : undefined}>
+        <SidebarMenuButton asChild isActive={active} aria-current={active ? 'page' : undefined} tooltip={item.label}>
           {link}
         </SidebarMenuButton>
       )}

@@ -7,6 +7,8 @@ import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.asset.AssetUses;
+import com.jabiz.quizbuks.asset.QbAssets;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.EntityInstance;
@@ -76,9 +78,19 @@ public final class QuizProcesses {
      *                     D-Q12-1); a quiz's kind never changes, so a changed quiz may only name its own
      * @param language     the language the quiz is written in (Q59a), one of the platform's; when not given, a new
      *                     quiz takes the caller's interface language and a changed one keeps its own
+     * @param coverAssetId F-C1b: the image asset of the sponsor's library the cover was copied from; none leaves the
+     *                     record of an existing quiz as it is
+     * @param introAssetId F-C1b: the text asset (for a quiz's introduction) the introduction was copied from; the same
      */
     public record QuizInput(UUID quizId, @NotNull String title, String intro, UUID cover, Integer timeLimitSec,
-        Long baseRevision, String kind, @Pattern(regexp = "ja|zh|en") String language) {
+        Long baseRevision, String kind, @Pattern(regexp = "ja|zh|en") String language, UUID coverAssetId,
+        UUID introAssetId) {
+
+        /** As before F-C1b: nothing from the asset library. */
+        public QuizInput(UUID quizId, String title, String intro, UUID cover, Integer timeLimitSec, Long baseRevision,
+            String kind, String language) {
+            this(quizId, title, intro, cover, timeLimitSec, baseRevision, kind, language, null, null);
+        }
 
         public QuizInput(UUID quizId, String title, String intro, UUID cover, Integer timeLimitSec, Long baseRevision,
             String kind) {
@@ -139,6 +151,29 @@ public final class QuizProcesses {
                     files.add(ctx.get(INPUT, QuizInput.class).cover());
                     return files;
                 }))
+                // F-C1b: the assets the cover and introduction were copied from, after the quiz's lock.
+                .steps(b -> AssetUses.load(b, ctx -> {
+                    QuizInput input = ctx.get(INPUT, QuizInput.class);
+                    return java.util.Arrays.asList(input.coverAssetId(), input.introAssetId());
+                }, ctx -> {
+                    QuizInput input = ctx.get(INPUT, QuizInput.class);
+                    List<AssetUses.Place> places = new ArrayList<>();
+                    if (!list(ctx, FOUND).isEmpty()) {
+                        if (input.coverAssetId() != null) {
+                            places.add(new AssetUses.Place(QbAssets.QUIZ_COVER, input.quizId()));
+                        }
+                        if (input.introAssetId() != null) {
+                            places.add(new AssetUses.Place(QbAssets.QUIZ_INTRO, input.quizId()));
+                        }
+                    }
+                    return places;
+                }))
+                .compute("Check the assets picked", (metadata, ctx) -> {
+                    QuizInput input = ctx.get(INPUT, QuizInput.class);
+                    AssetUses.check(ctx, List.of(
+                        new AssetUses.Pick("coverAssetId", QbAssets.QUIZ_COVER, null, input.coverAssetId()),
+                        new AssetUses.Pick("introAssetId", QbAssets.QUIZ_INTRO, null, input.introAssetId())));
+                })
                 .compute("Save the quiz", (metadata, ctx) -> save(ctx)));
     }
 
@@ -160,6 +195,7 @@ public final class QuizProcesses {
             Map<String, Object> values = newQuiz(ctx, heading, input.kind() == null ? QbContent.KIND_QUIZ
                 : input.kind(), false, null);
             UUID id = uuid(ctx.changes().insert(QbContent.QUIZ, values));
+            recordAssets(ctx, input, id);
             ctx.put(OUTPUT, new EditOutput(id, 1, ctx.opTime(), null, List.of()));
             return;
         }
@@ -185,12 +221,19 @@ public final class QuizProcesses {
         if (ctx.hasViolations()) {
             return;
         }
+        recordAssets(ctx, input, quiz.id());
         Map<String, Object> changed = QuizEditing.differences(quiz, heading);
         if (changed.isEmpty()) {
             QuizEditing.unchanged(ctx, quiz, null, List.of());
         } else {
             QuizEditing.touch(ctx, quiz, changed, null, List.of());
         }
+    }
+
+    /** F-C1b: records where the cover and introduction were copied from, when the input says. */
+    private static void recordAssets(ProcessContext ctx, QuizInput input, Object quizId) {
+        AssetUses.record(ctx, QbAssets.QUIZ_COVER, quizId, input.coverAssetId());
+        AssetUses.record(ctx, QbAssets.QUIZ_INTRO, quizId, input.introAssetId());
     }
 
     /** The values of a new draft of the caller's. */
@@ -244,6 +287,8 @@ public final class QuizProcesses {
                     TranslationProcesses.TRANSLATIONS))
                 // Under the quiz's lock: a submission holds it too (shared), so none slips in meanwhile.
                 .steps(QuizProcesses::loadSubmitted)
+                // F-C1b: where its places were filled from the asset library goes with them.
+                .steps(b -> AssetUses.load(b, ctx -> List.of(), QuizProcesses::places))
                 .compute("Remove the quiz", (metadata, ctx) -> remove(ctx))
                 // The release reads the quiz as removed.
                 .step("Save", SaveChanges.now())
@@ -330,6 +375,7 @@ public final class QuizProcesses {
             rows.sort(java.util.Comparator.comparing(row -> row.get("variantOf") == null));
             rows.forEach(row -> ctx.changes().delete(entity, row.id(), row.version()));
         }
+        places(ctx).forEach(place -> AssetUses.forget(ctx, place.targetKind(), List.of(place.targetId())));
         // The version files are released in chunks, each its own commit within the dataset's write limit.
         Set<UUID> needed = filesStillNeeded(ctx);
         List<UUID> released = list(ctx, VERSION_FILES).stream().filter(file -> !needed.contains(fileOf(file)))
@@ -343,6 +389,18 @@ public final class QuizProcesses {
         values.put("questionCount", BigDecimal.ZERO);
         values.put("materialCount", BigDecimal.ZERO);
         QuizEditing.touch(ctx, quiz, values, null, List.of());
+    }
+
+    /** F-C1b: every place of the quiz an asset may have filled: its own two, its materials, questions and options. */
+    private static List<AssetUses.Place> places(ProcessContext ctx) {
+        List<AssetUses.Place> places = new ArrayList<>();
+        Object quizId = quiz(ctx).id();
+        places.add(new AssetUses.Place(QbAssets.QUIZ_COVER, quizId));
+        places.add(new AssetUses.Place(QbAssets.QUIZ_INTRO, quizId));
+        list(ctx, MATERIALS).forEach(row -> places.add(new AssetUses.Place(QbAssets.MATERIAL, row.id())));
+        list(ctx, QUESTIONS).forEach(row -> places.add(new AssetUses.Place(QbAssets.QUESTION_IMAGE, row.id())));
+        list(ctx, OPTIONS).forEach(row -> places.add(new AssetUses.Place(QbAssets.OPTION_IMAGE, row.id())));
+        return places;
     }
 
     /** The versions the quiz's submitted publications use or used before a switch (Q51), each once. */

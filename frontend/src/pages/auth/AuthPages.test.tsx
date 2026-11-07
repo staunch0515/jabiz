@@ -267,6 +267,8 @@ describe('account pages', () => {
         const { container } = page('/auth/passkey-confirm?entry=admin&token=k1')
         expect(window.location.search).not.toContain('token')
         expect(await screen.findByTestId('passkey-confirm-state')).toHaveTextContent('Sign in on this device first')
+        // With the way to sign in (phase 17zk, gap 10).
+        expect(screen.getByTestId('passkey-confirm-sign-in').getAttribute('href')).toBe('/login')
         expect(posts).toEqual([])
         await expectAccessible(container)
       } finally {

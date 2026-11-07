@@ -5034,10 +5034,10 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zh-3 | 流程 `MAIL_TEXT_SAVE`（普通类即时生效，安全类 422 `MAIL_TEXT_NEEDS_APPROVAL`）、`MAIL_TEXT_RESET`、`MAIL_TEXT_TEST_SEND`（只寄给本人、`[TEST]`、不生成令牌、缺省每人每小时 10 次）；命名锁与 `baseVersionNo`（409）；权限 `mail.text.read` / `mail.text.write`；受控变更目标 `MailText`（`MailTextControlTarget`，提出与发布要求二次验证）；守卫 `MailTextGuard`；`GET /api/mail/texts`、`POST /api/mail/texts/preview`（不写记录） | 17zh-a |
 | 17zh-4 | 发信时取生效的文字（`MailTexts`），失效的覆盖退回缺省并告警（观测 `jabiz.mail.text.fallback`，启动检查 `MAIL` 告警）；待办通知（`jabiz.task-notification`）与单据邮件（`jabiz.document-mail`）经同一处取文字 | 17zh-a |
 | 17zh-5 | 测试：`MailTextRulesTest`、`MailChecksTest`、`MailTextIT`；OpenAPI 快照；文档 D72、18 §5.6、22 §5、根 `CLAUDE.md`；示范 `commerce.order-shipped` 的示例值 | 17zh-a |
-| 17zh-6 | 信纸：`MailLayout`（`sys_mail_layout_version`）、`MailLayoutRules`、`MailRenderer` 套信纸、缺省值 `jabiz.mail.layout.*`、修改经受控变更 `mail-layout`、投递记 `layout_version_no`、示范 `app` 的信纸 | 17zh-b（计划） |
-| 17zh-7 | 通用后台的"邮件模版"与"邮件信纸"页（列表、编辑器、预览、测试发送、恢复默认、历史与对比、提出修改） | 17zh-c（计划） |
+| 17zh-6 | 信纸：core `MailLayout`、`MailLayoutRules`（显示名与替代文字一行、标志只用本站图片、页脚只用 `{baseUrl}` / `{entryUrl.<入口>}` 且照文字的链接规则；错误码 `MAIL_LAYOUT_*`）、`MailRenderer.wrap` / `plain`；迁移 `V61__mail_layouts.sql`（时态实体 `MailLayout`，三张投递表加列 `layout_version_no`，两张表的唯一索引挡住并发的首次写入）；缺省值 `jabiz.mail.layout.<语言>.*`（示范 `app` 三语）；修改只经受控变更 `MailLayout`（`MailLayoutControlTarget`、守卫 `MailLayoutGuard`），`MAIL_LAYOUT_RESET`、`MAIL_LAYOUT_TEST_SEND`（缺省每人每小时 10 次）；`GET /api/mail/layouts`、`POST /api/mail/layouts/preview`；模版邮件、待办通知、单据邮件、预览与测试信都放在信纸上并记版本；启动检查（缺省值不合格即错误，存的不合格告警）；17zh-a 安全审查的跟进 F5（按写入的流程判定是否经审批）与 F6b（只有平台的测试信按已渲染内容发出）；测试 `MailLayoutRulesTest`、`MailRendererTest`、`MailLayoutIT`、`MailTextIT`；文档 D72 第 6、7 条、18 §5.6、根 `CLAUDE.md` | 17zh-b |
+| 17zh-7 | 通用后台的"邮件模版"（`/mail/texts`：每个模版一行，类别、是否须审批、各语言状态含"待审批"，窄屏卡片）与编辑器（`/mail/texts/edit`：按语言的页签、占位符点选插入、必须保留的项缺了标红、防抖预览于无脚本的沙箱 `iframe`、测试发送、恢复默认（页内确认）、普通类保存（`baseVersionNo`，409 提示重新读取，400 的问题按字段显示）、安全类提出修改（受控变更 `MailText`，step-up）、待审批的变更与提出人、链到受控变更列表、本人撤回、历史与逐行对比、以此版为草稿），"邮件信纸"（`/mail/layout`：显示名、标志、页脚，预览、测试发送、恢复默认，只能提出修改，待审批、历史与对比）；菜单按 `mail.text.read`，写入控件按 `mail.text.write`；三语；Vitest 与亮暗 axe（`@jabiz/ui/testing` 的 `expectAccessible` 不再进入框架内部，框架元素本身照查）；文档 12 §6、18 §5.6 | 17zh-c |
 
-**17zh 状态**：17zh-a 📝 待评审（分支 `1.3/phase-17zha-mail-texts`）；17zh-b、17zh-c 计划中。
+**17zh 状态**：17zh-a ✅ 已合并（#470）；17zh-b ✅ 已合并（#473）；17zh-c ✅ 已合并（#476）。
 
 ### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
 
@@ -5074,3 +5074,80 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zn-3 | 测试：`ControlledParamIT`（按 `targetKey` 筛选得到该参数的全部变更）、`ApprovalControlTargetKeyTest`；场景快照 `monthly_close` 随之更新。列表页由元数据生成（`DatasetListPage` 的测试与 axe 照旧覆盖） |
 
 **17zn 状态**：✅ 已合并（#466）。
+
+### 17zl 按客户端地址的国家 `ClientCountry`（2026-11-07，QuizBuks 首次上线 P5；决策 D74）
+
+**缘由**：QuizBuks 含境外视频的发布不给中国大陆的请求看、不让答（Q106、F-S11）；平台没有按地址判断国家的能力。
+
+| # | 内容 |
+|---|---|
+| 17zl-1 | core `ClientCountry`（两位代码或未知、`mainlandChina()`）；runtime `IpCountryDatabase`（CSV 地址段 `first,last,country`、可为 `.gz`、IPv4 / IPv6、二分查找、只认地址字面量）、`ClientCountries`（`jabiz.geoip.database` / `required` / `max-age`，文件更新后在工作线程中重新读入；启动检查 `GEOIP`） |
+| 17zl-2 | 流程接口把客户端地址放进 Reactor 上下文（`ClientAddressContext`）；平台步骤 `LoadClientCountry.into(键)`（0 条语句，结果不保存、不进 `input_summary`） |
+| 17zl-3 | `GET /api/client/region`（匿名、`no-store`、`Vary: *`）；`@jabiz/client` 的 `clientRegion()`；OpenAPI 快照与生成的类型 |
+| 17zl-4 | 测试：`ClientCountryTest`、`IpCountryDatabaseTest`、`ClientCountriesTest`、`ClientCountryIT`（测试地址库以文档地址段给出 CN / JP / HK / US）、`region.test.ts`；设计 10 §18、决策 D74、根 `CLAUDE.md`、`platform-features.md` |
+
+**17zl 状态**：✅ 已合并（#468）。
+
+### 17zj 应用框架组件与三种页面模板（2026-11-07，QuizBuks 首次上线 P3；Q108）
+
+**缘由**：QuizBuks 的发起方后台与学者 App 共用的框架（Q108 §3、§4、§6.1 第 5 条）：菜单越来越多、主按钮在宽屏上离标题太远、页面布局不统一。平台先行（根 `CLAUDE.md` §8）。
+
+| # | 内容 |
+|---|---|
+| 17zj-1 | `AppShell`：`collapsible="icon"`（图标窄条，名称为提示，分组点击先展开）、`create`、`bottomBar`（只在窄屏，`--bottom-bar-offset`）、`routeKey`（路由改变时焦点到标题）；`ShellNav` 的提示 |
+| 17zj-2 | `PageHeader` 的 `icon`、`primaryAction`（标题旁 / 手机上的 `Fab`）、`tabs`；`PageTabs`（链接、`aria-current`、横向滚动、方向键）；`GlobalCreate`；`BottomBar`（项数由应用给出、`raised`、徽标、"更多"抽屉） |
+| 17zj-3 | 主题 token `--content-max`、`--content-form-max`、`--bottom-bar-height`；`PageContent`、`ListPage`、`DetailPage`、`FormPage`（保存条、未保存的提示、`useUnsavedChanges`）；文案 `create.*`、`templates.*` 三语 |
+| 17zj-4 | 示范：门户改用 `AppShell`（图标窄条、新建、底部菜单）与三种模板（订单列表、下单、账户）；通用后台"我的待办"用 `ListPage`；e2e `portal.spec.ts` 按导航定位链接、以 `form-page-save` 下单 |
+| 17zj-5 | 测试：`app-frame.test.tsx`、`theme.test.ts`、门户 `App.test.tsx`、`TasksPage.test.tsx`（均含 axe 亮暗）；设计 12 §13、`app-spa.md` |
+
+**17zj 状态**：✅ 已合并（#467）。
+
+### 17zo 审批请求与待办移到另一个入口范围（2026-11-07，QuizBuks 首次上线 S2 的平台缺口；决策 D76）
+
+**缘由**：审批请求与待办记着所属的入口范围且不可变（D64）。QuizBuks 的商户改派给另一个运营商时，其待审批的请求与开放的待办留在原运营商的范围：新运营商看不到，原运营商仍看得到；应用只能在审核未结时拒绝改派（422 `QB_SPONSOR_REVIEW_PENDING`）。
+
+| # | 内容 |
+|---|---|
+| 17zo-1 | 子流程 `APPROVAL_SCOPE_MOVE`（版本 1，`subProcessOnly()`，`ApprovalScopeMove` / `MoveApprovalScope`）：输入 `{scopeName, toValue, requests: [{subject, entityId}], taskSourceKeys?, reason}`，输出 `{requestIds, taskIds, skipped}`；案件按序取锁、整体读出未结的请求（待审批，或已批准而未被取代），按读到的版本只改 `scopeValue`（并发决定即 409），请求的开放审批待办与所列来源键的开放待办随之移动；范围名不同即 422 `APPROVAL_SCOPE_MISMATCH`（三语）；有范围的会话 422 `OUT_OF_SCOPE`；`taskSourceKeys` 不能列审批待办（422 `INVALID_VALUE`）；先查权限再查输入；一个来源键的开放待办达上限即失败（与 `TaskWriter.close` 共用 `TaskWriter.openTasks`） |
+| 17zo-2 | 权限 `approval.scope.move`（由步骤检查调用者；不是受保护的权限） |
+| 17zo-3 | `SysApprovalRequest` / `SysTask` 的 `scopeName` / `scopeValue` 不再不可变；守卫 `ApprovalScopeGuard`（`TemporalWriteGuard`）只放行带该子流程的许可 `ApprovalScopeGrant`（同一实例、操作、新值，名不变、请求待审批 / 待办开放）的改变，其余 422 `IMMUTABLE_FIELD`；决定与评估不动 |
+| 17zo-4 | 测试：`ApprovalScopeMoveIT`（移动与可见性、下一层级的待办在新范围、已批准的请求随之移动后新范围能取代而原范围不能、审批待办的来源键被拒、无未结与已在新值不移动、范围名不同或没有范围 422、无权限 403（输入无效时同样先 403）、直接调用 `PROCESS_INTERNAL`、有范围的会话 `OUT_OF_SCOPE`、其他流程与数据视图 API 改不了范围、审计记录、两表只追加）、`ApprovalScopeGuardTest`；设计 18 §3.8、10 §13.4、决策 D76、根 `CLAUDE.md` |
+
+**17zo 状态**：✅ 已合并（#475）。
+
+### 17zp 场景回放中把用户的邮箱标为已验证（2026-11-07，QuizBuks 首次上线 S2 F-S1a 的平台需要）
+
+**缘由**：场景回放（07 §3）中 `SEC_USER_CREATE` 建的用户邮箱未验证，验证只能经寄出的链接，回放跟不了；回放只把操作人本身视为已验证。QuizBuks 要求运营商的负责人有已验证的邮箱，10 个场景因此建不出缺省的运营商。
+
+| # | 内容 |
+|---|---|
+| 17zp-1 | 场景步骤 `verifyEmail: 用户编号`（只在 testFixtures 中：`Scenario.VerifyEmail`、`ScenarioRunner`）；用户编号照例写作保存的变量（`"${hana}"`）；值不是文本即解析错误 |
+| 17zp-2 | testFixtures 中不登记、不是 Bean 的流程 `SCENARIO_EMAIL_VERIFY`（`ScenarioEmailVerification`，`internal()`，以系统身份运行）：写入平台验证所写的 `verifiedEmail` 与 `emailVerifiedAt`（注入时钟的操作时刻），经流程变更集与平台写入路径追加用户版本，审计记录照常；用户不存在或没有邮箱即该步骤失败。主代码不变 |
+| 17zp-3 | 测试：`ScenarioParserTest`（有效与无效的写法）；示范场景 `app` 的 `scenarios/security/verify_email.yml`（门户要求已验证的邮箱：验证前登录 `EMAIL_NOT_VERIFIED`，验证后 `SUCCESS`）及其快照；`ScenarioVerifyEmailIT` 断言审计记录（`system`、版本 2、`verifiedEmail` 前后值）；设计 07 §3.1 |
+
+**17zp 状态**：✅ 已合并（#477）。
+
+### 17zk 入口页模板（2026-11-07，QuizBuks 首次上线 P4 / F-F2；需求方选方案 A）
+
+**缘由**：各前端的登录、注册、第二步、找回密码、第三方回调与邮件链接页是宽屏上居中的一张窄卡片，回调页没有品牌与语言，429 没有倒计时，第三方登录后的第二步丢掉返回地址，
+学者端没有"我是发起方"、帮助与条款（QuizBuks F-F2，原型 p4-prototype 的 132 条清单、11 个缺口与建议①–⑥）。需求方选方案 A：统一的入口页模板。
+**规则：不删、不简化任何现有行为**——模板只管排列，认证流程与接口一处不改；清单逐条有位置。
+
+| # | 内容 |
+|---|---|
+| 17zk-1 | `@jabiz/ui` 的 `EntryLayout`（`AuthFrame` 即它，原属性不变）与 `EntryLayoutProvider`：提示区（环境横条在最上；`EntryNotice`，手机上只展开一条，其余收成一行；`useEntryNotices`）、顶栏（品牌 `h1`、右上角语言选择，建议⑤）、宽屏左栏（`intro`：一句话、要点、示意图，手机上一行，建议②）、表单卡片（标题 `h2` 或标签、`below`）、`otherEntry`（建议①、缺口 7）、页脚（`links` 帮助 / 条款 / 隐私（缺口 8）、亮暗、构建号）；`EntryTabs`、`EntryLink`、`useIsWide`；三语文案 `entry.*`、`common.retryIn` |
+| 17zk-2 | `SignInForm`：`order`（按入口与界面语言；`emailLink` / `emailLinkButton` / `passkey` / `providers` / `password`，没列的照以前的顺序接上，一个不丢；缺口 1、建议③）、`tabs` 与 `signInPath`（建议④，查询参数随标签）、`below`、`oidcLayout="responsive"`、`resumeStep`；`SignUpForm` 的 `tabs` / `signUpPath`；`SignUpSent` 带标签 |
+| 17zk-3 | 429（缺口 5）：`ApiError.retryAfter`、`retryAfterSeconds`（`@jabiz/client`）、`useRetryWait`；登录、注册、邮件链接、找回密码的按钮与第三方按钮按 `Retry-After` 停用并倒计时 |
+| 17zk-4 | 第二步的返回地址（缺口 2）：`keepSignInStep` / `pendingSignInStep` / `forgetSignInStep`（本标签页、按入口、至多 5 分钟）；`OidcCallback` 先保存，内存中的交接照旧优先；`SignInForm` 的 `resumeStep`（缺省关、闲置退出后不接）刷新后接着并去记下的地址，过期的挑战丢掉后回到密码 |
+| 17zk-5 | `OidcCallback` 在模板中（`brand`、`appearance`；缺口 4）；`MAIL_LINK_PAGES`（缺口 3）；"确认通行密钥"未登录时的登录链接（缺口 10）；`PwaInstallBanner` 的内置浏览器提示分开计数（`.in-app`，缺口 11）；`MailUnsubscribe` 取提供者的品牌 |
+| 17zk-6 | 示范：通用后台（单栏、无亮暗、构建号，回调页带品牌）；门户用 `EntryLayoutProvider`（三语左栏、`useEntryNotices`）、登录与注册两个标签、注册页的第三方与条款说明、已登录时 `/signup` 与 `/password-reset` 转走（缺口 9）、第二步照旧在内存中交接并开启 `resumeStep` |
+| 17zk-7 | 测试：`entry.test.tsx`（21 例，均含 axe 亮暗）、`problem.test.ts`、`signInStep.test.ts`、门户 `App.test.tsx`（模板与标签、已登录转走）、后台 `OidcCallbackPage.test.tsx`（标题移到卡片）与 `AuthPages.test.tsx`（登录链接）；原有单元测试与平台 e2e 照旧通过；设计 12 §14、10 §15、根 `CLAUDE.md` |
+
+**验收（原型清单 132 条，逐组）**：A 公共外框（27）：品牌、环境横条、语言（移到右上角）、亮暗（页脚，后台照旧无）、构建号、提示区（离线、服务不可用的对话框、新版本、内置浏览器提示）
+与字段、密码、按钮、结果的写法全部保留；B 登录（39）：字段、通行密钥按钮与名字栏的自动提示、内置浏览器的说明、邮件链接、第三方（图标 / 按钮、按入口取、Apple 的标题、品牌色、启动失败）、
+忘记密码、注册（链接或标签）、各种错误、闲置退出、返回地址、会话选项都不变，429 新增倒计时；C 第二步（8）：验证码、通行密钥、开启二次验证与加强验证不变，第三方后的返回地址补上；
+D 回调（7）：处理中、错误、Apple 取消、`OIDC_ACCOUNT_EXISTS`、关联用途不变，进入模板；E 注册（12）：表单、错误、"请查收邮件"、第三方注册、条款说明、试用来源（`?src=` 随标签）、已登录转走不变，门户补上；
+F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架（12）、I 退出（2）：全部不变（G 的页面进入模板，确认通行密钥补上登录链接；H、I 属应用，不在本阶段改动）。
+不能放进模板而被删去的：无。QuizBuks 自己的部分（缺口 6 发起方公开框架的环境横条、学者与发起方的左栏文案与示意图、`otherEntry`、页脚链接、各入口的 `order`）在其应用分支上采用。
+
+**17zk 状态**：📝 待评审（分支 `1.3/phase-17zk-entry-pages`）。

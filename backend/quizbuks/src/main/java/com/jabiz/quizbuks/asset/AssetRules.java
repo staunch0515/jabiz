@@ -69,6 +69,34 @@ public final class AssetRules {
         return QUIZ_INTRO.equals(usage) ? ContentLimits.INTRO_LENGTH : PublishingLimits.REDEEM_DESCRIPTION_LENGTH;
     }
 
+    /**
+     * Whether an asset of {@code kind} (and, for a text, {@code usage}) may fill a place of {@code targetKind}
+     * (F-C1b): an image for the images, a text of the matching use for an introduction or a description, a prize card
+     * for a publication's prize, and for a material the asset kind of the material's kind ({@code materialKind}).
+     */
+    public static boolean suits(String targetKind, String materialKind, String kind, String usage) {
+        if (targetKind == null || kind == null) {
+            return false;
+        }
+        return switch (targetKind) {
+            case QbAssets.MATERIAL -> materialKind != null && kind.equals(
+                "IMAGES".equals(materialKind) ? AssetKind.IMAGE.name() : materialKind)
+                && AssetKind.of(kind).filter(k -> k != AssetKind.TEXT && k != AssetKind.PRIZE).isPresent();
+            case QbAssets.QUESTION_IMAGE, QbAssets.OPTION_IMAGE, QbAssets.QUIZ_COVER, QbAssets.PUBLICATION_COVER ->
+                AssetKind.IMAGE.name().equals(kind);
+            case QbAssets.QUIZ_INTRO -> isText(kind, usage, QUIZ_INTRO);
+            case QbAssets.PUBLICATION_REDEEM -> isText(kind, usage, REDEEM_DESCRIPTION);
+            case QbAssets.PUBLICATION_DIGITAL -> isText(kind, usage, DIGITAL_DESCRIPTION);
+            case QbAssets.PUBLICATION_REFERRAL -> isText(kind, usage, REFERRAL_DESCRIPTION);
+            case QbAssets.PUBLICATION_PRIZE -> AssetKind.PRIZE.name().equals(kind);
+            default -> false;
+        };
+    }
+
+    private static boolean isText(String kind, String usage, String wanted) {
+        return AssetKind.TEXT.name().equals(kind) && wanted.equals(usage);
+    }
+
     /** Every problem of the asset's own fields (not of its translations: {@link #translationProblems}). */
     public static List<Violation> problems(Asset asset, int maxTags, int tagLength) {
         List<Violation> problems = new ArrayList<>();

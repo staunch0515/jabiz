@@ -10,7 +10,9 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.RetryPolicy;
 import com.jabiz.process.StepSpec;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.mail.LoadMailLayout;
 import com.jabiz.runtime.mail.LoadMailText;
+import com.jabiz.runtime.mail.MailLayouts;
 import com.jabiz.runtime.mail.MailTexts;
 import com.jabiz.runtime.mail.PlatformMailTemplates;
 import com.jabiz.runtime.process.steps.LoadEntity;
@@ -57,6 +59,7 @@ public class NotificationProcesses {
     private static final String RECIPIENTS = "recipients";
     private static final String IDS = "ids";
     private static final String TEXT = "text";
+    private static final String LAYOUT = "layout";
     private static final TypeReference<Map<String, String>> PARAMS = new TypeReference<>() {};
     private static final StepSpec<SendNotifications.Metadata, ProcessContext> SEND = SendNotifications.of(IDS);
 
@@ -76,6 +79,7 @@ public class NotificationProcesses {
             .step("Find the recipients", FindRecipients.of(TASK, RECIPIENTS))
             .step("Load the text", LoadMailText.<ProcessContext>of(PlatformMailTemplates.TASK_NOTIFICATION_MAIL,
                 ctx -> messages.defaultLocale(), TEXT))
+            .step("Load the layout", LoadMailLayout.<ProcessContext>of(ctx -> messages.defaultLocale(), LAYOUT))
             .compute("Record the notifications", (metadata, ctx) -> record(ctx, messages, json, baseUrl, texts))
             .afterCommit("Send them", SEND.handlerClass(), SEND.metadata(), RETRY));
     }
@@ -116,6 +120,8 @@ public class NotificationProcesses {
             notification.put("scopeName", task.get("scopeName"));
             notification.put("scopeValue", task.get("scopeValue"));
             notification.put("textVersionNo", text.versionNo());
+            notification.put("layoutVersionNo", ctx.contains(LAYOUT)
+                ? ctx.get(LAYOUT, MailLayouts.Chosen.class).versionNo() : null);
             ids.add(String.valueOf(ctx.changes().insert(TaskEntities.NOTIFICATION, notification)));
         }
         ctx.put(IDS, List.copyOf(ids));

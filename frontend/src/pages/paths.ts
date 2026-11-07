@@ -13,3 +13,11 @@ export const paths = {
   audit: (entityType: string, entityId: string) =>
     `/audit?entityType=${encodeURIComponent(entityType)}&entityId=${encodeURIComponent(entityId)}`,
 }
+
+/** Paths of the mail pages (18 section 5.6). Template names contain dots, as template ids do: they go in the query. */
+export const mailPaths = {
+  texts: '/mail/texts',
+  text: (template: string, locale?: string) =>
+    `/mail/texts/edit?template=${encodeURIComponent(template)}${locale ? `&locale=${encodeURIComponent(locale)}` : ''}`,
+  layout: '/mail/layout',
+}

@@ -9,13 +9,18 @@
 export { AUTH_NAMESPACE, authMessages } from './messages'
 export { AuthFrame, AuthField, AuthSubmit, AuthLink, AuthError, Outcome, ContinueTo, navigateTo } from './frame'
 export type { AuthFrameProps, AuthNavigation } from './frame'
+export { EntryLayout, EntryLayoutProvider, EntryTabs, EntryLink, useEntryLayout, useRetryWait, useIsWide } from './entry'
+export type {
+  EntryLayoutProps, EntryLayoutSettings, EntryIntro, EntryNotice, EntryOtherEntry, EntryTabsProps,
+} from './entry'
 export { PasswordInput } from './PasswordInput'
 export type { PasswordInputProps } from './PasswordInput'
-export { SignInForm } from './SignInForm'
-export type { SignInFormProps } from './SignInForm'
+export { SignInForm, orderOf as signInOrder } from './SignInForm'
+export type { SignInFormProps, SignInMethod } from './SignInForm'
 export { SignUpForm, SignUpSent } from './SignUpForm'
 export type { SignUpFormProps, SignUpSentProps, SignUpSubmitted, SignUpValues } from './SignUpForm'
 export {
+  MAIL_LINK_PAGES,
   MailLinkPage,
   VerifyEmailPanel,
   JoinPanel,
@@ -60,7 +65,7 @@ export { AccountDeletion, NoticeChecklist } from './AccountDeletion'
 export type { AccountDeletionProps } from './AccountDeletion'
 export { AccountDeletionRequest, AccountDeletionConfirm } from './AccountDeletionLink'
 export type { AccountDeletionRequestProps, AccountDeletionConfirmProps } from './AccountDeletionLink'
-export { VerifyEmailBanner, OfflineBanner, PwaUpdatePrompt, ServiceUnavailableNotice } from './banners'
+export { VerifyEmailBanner, OfflineBanner, PwaUpdatePrompt, ServiceUnavailableNotice, useEntryNotices } from './banners'
 export type { VerifyEmailBannerProps, PwaUpdatePromptProps } from './banners'
 export { PwaInstallBanner, PwaInstallGuide } from './install'
 export type { PwaInstallBannerProps, PwaInstallGuideProps } from './install'

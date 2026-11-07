@@ -59,6 +59,10 @@ class MailTextChecks implements PlatformCheck {
                 problems.add(CheckProblem.warning(MailChecks.CATEGORY, location, "version " + text.versionNo()
                     + " no longer passes the rules, so the default is sent: " + String.join("; ", failing)));
             }
+            if (failing.isEmpty() && MailTexts.unapproved(template, text)) {
+                problems.add(CheckProblem.warning(MailChecks.CATEGORY, location, "version " + text.versionNo()
+                    + " was saved without the approval the template needs now, so the default is sent"));
+            }
         });
         return List.copyOf(problems);
     }
