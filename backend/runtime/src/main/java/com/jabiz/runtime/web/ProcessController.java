@@ -64,10 +64,12 @@ class ProcessController {
     private final SodGuard sod;
     private final MfaPolicy mfa;
     private final ProcessRateLimits rateLimits;
+    private final ClientAddresses clientAddresses;
 
     ProcessController(ProcessRegistry registry, ProcessExecutor executor, ProcessInputs inputs,
         Environment environment, SensitiveDataMasker masker, SodGuard sod, MfaPolicy mfa,
-        ProcessRateLimits rateLimits) {
+        ProcessRateLimits rateLimits, ClientAddresses clientAddresses) {
+        this.clientAddresses = clientAddresses;
         this.mfa = mfa;
         this.rateLimits = rateLimits;
         this.masker = masker;
@@ -107,6 +109,8 @@ class ProcessController {
                     ? sod.check(context, definition.permissionsFor(context::hasPermission)) : Mono.<Void>empty())
                 .then(Mono.defer(() -> run(definition, body == null ? Map.of() : body,
                     new ExecutionOptions(idempotencyKey))))
+                // The client's address for LoadClientCountry (decision D74), in the Reactor context only.
+                .contextWrite(com.jabiz.runtime.geo.ClientAddressContext.with(clientAddresses.addressOf(http)))
                 .map(result -> {
                     ResponseEntity.BodyBuilder response = ResponseEntity.ok();
                     if (result.replayed()) {
