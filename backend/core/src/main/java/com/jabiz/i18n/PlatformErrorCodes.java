@@ -167,6 +167,17 @@ public final class PlatformErrorCodes {
      * change another administrator publishes (decision D72 item 3).
      */
     public static final String MAIL_TEXT_NEEDS_APPROVAL = "MAIL_TEXT_NEEDS_APPROVAL";
+    /**
+     * The logo of a mail layout is not the application's own ({@code {baseUrl}/...} or a path), e.g. an image of
+     * another host (decision D72); param {@code url}.
+     */
+    public static final String MAIL_LAYOUT_LOGO = "MAIL_LAYOUT_LOGO";
+    /** The logo of a mail layout has no alternative text (decision D72). */
+    public static final String MAIL_LAYOUT_LOGO_ALT = "MAIL_LAYOUT_LOGO_ALT";
+    /** The display name or logo text of a mail layout is more than one line or too long (D72); param {@code limit}. */
+    public static final String MAIL_LAYOUT_LINE = "MAIL_LAYOUT_LINE";
+    /** The mail layout changes only through a controlled change another administrator publishes (decision D72). */
+    public static final String MAIL_LAYOUT_NEEDS_APPROVAL = "MAIL_LAYOUT_NEEDS_APPROVAL";
     /** A one-time token of a mail is unknown, expired, used, superseded or of another purpose (18 section 5.6). */
     public static final String TOKEN_INVALID = "TOKEN_INVALID";
     /**
@@ -432,7 +443,8 @@ public final class PlatformErrorCodes {
         DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, MAIL_SENDER_MISSING,
         MAIL_TEXT_UNKNOWN_PLACEHOLDER, MAIL_TEXT_REQUIRED_PLACEHOLDER, MAIL_TEXT_SECRET_PLACEMENT,
         MAIL_TEXT_LINK_NOT_ALLOWED, MAIL_TEXT_LINK_HOST, MAIL_TEXT_IMAGE, MAIL_TEXT_HTML, MAIL_TEXT_EMPTY,
-        MAIL_TEXT_SUBJECT_LINE, MAIL_TEXT_TOO_LONG, MAIL_TEXT_NEEDS_APPROVAL, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN,
+        MAIL_TEXT_SUBJECT_LINE, MAIL_TEXT_TOO_LONG, MAIL_TEXT_NEEDS_APPROVAL, MAIL_LAYOUT_LOGO, MAIL_LAYOUT_LOGO_ALT,
+        MAIL_LAYOUT_LINE, MAIL_LAYOUT_NEEDS_APPROVAL, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN,
         OIDC_ACCOUNT_EXISTS, REAUTHENTICATION_REQUIRED, REAUTHENTICATION_UNAVAILABLE, IDENTITY_IN_USE, IDENTITY_PROVIDER_LINKED, IDENTITY_LINK_UNAVAILABLE,
         IDENTITY_LINK_FAILED, LAST_SIGN_IN_METHOD, ACCOUNT_ERASED, ERASURE_PURGE_UNAVAILABLE, ACCOUNT_DELETION_UNAVAILABLE,
         ACCOUNT_DELETION_PROTECTED, ACCOUNT_DELETION_PENDING, ACCOUNT_DELETION_NONE, ACCOUNT_DELETION_NOTICES, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE, MAIL_SIGN_IN_LINK,
