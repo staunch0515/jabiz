@@ -68,6 +68,10 @@ public class PlatformObservations {
      * reuse grace, a sibling was issued) or {@code revoked} (the session ended). Never the user or the session.
      */
     public static final String AUTH_REFRESH_REUSE = "jabiz.auth.refresh.reuse";
+    /** Gauge: ranges of the address database in use (D74; registered only with a configured database). */
+    public static final String GEOIP_RANGES = "jabiz.geoip.ranges";
+    /** Gauge: 1 while the address database is older than {@code jabiz.geoip.max-age} or could not be read (D74). */
+    public static final String GEOIP_STALE = "jabiz.geoip.stale";
     public static final String DOCUMENT_RENDER = "jabiz.document.render";
     public static final String WEBHOOK = "jabiz.webhook.delivery";
     /** A call to a declared external service (decision D38); tagged with the service and its outcome only. */
