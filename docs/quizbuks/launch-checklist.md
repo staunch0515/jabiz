@@ -10,7 +10,7 @@
 - [ ] 收据开具方的名称与地址（`qb.issuer.name`、`qb.issuer.address`）已以受控变更设好
 - [ ] **平台费的账单**（Q87，版式 `qb.fee_invoice`）：是否收月费（`qb.fee.monthly`）、税率（`qb.fee.tax-rate`）与账单上登录番号、税的写法经财务确认；不收费时 `qb.fee.monthly` 保持 `0`（不出任何账单）
 - [ ] **现金账户**（Q87）：充值的目标（`qb.topup.targets` / `qb.topup.default-target`）、现金换学分与换回的开关（`qb.kudos.buy.enabled` / `qb.kudos.sell.enabled`）按需求方的决定设好（缺省：两个目标、缺省直接成学分、能换出、不能换回）；抽成 `qb.creator-fee-rate` 与 `qb.transfer.fee-rate` 按决定设（上线为 `0`）
-- [ ] **隐私政策**（个人信息的取得与利用目的、第三方提供：Stripe、邮件服务商、Google、Facebook 与 LINE 登录；保存期间；海外传输）已发布，App 与商家后台可达；草稿见 `legal/`（填好【】占位后发布）
+- [ ] **隐私政策**（个人信息的取得与利用目的、第三方提供：Stripe、邮件服务商、Google、Facebook 与 LINE 登录；保存期间；海外传输）已发布，App 与发起方页面可达；草稿见 `legal/`（填好【】占位后发布）
 - [ ] **利用条款**（答题人、商家各自的条款；商家入驻时同意的版本）已发布
 - [ ] 特定商取引法的表示（商家充值是有偿的）已发布
 - [ ] 上面四种文本都是需求方或律师提供的**正式文本**（日文为准据文本、英文一并提供），经 `QB_LEGAL_PUBLISH` 发布且已生效：页面上不再出现 `[TEST PLACEHOLDER]`；
@@ -20,7 +20,7 @@
 - [ ] **上线的内容**（Q36，`tools/quizbuks/content/README.md`）：需求方的商户账号（与管理员不同的邮箱）在正式系统自助注册、通过入驻审核并充值；测试系统中整理好的内容包（私有仓库）以 `apply` 写入、管理员审核发布；至少一个长期的公开发布（欢迎问卷），`renew` 的运行日期已记入日程；不从测试系统复制数据库
 - [ ] 保留期：导出文件、汇总凭证与收据的保留（L-4：10 年）已实施或已有书面的替代做法（`backend/quizbuks/CLAUDE.md`"导出文件与收据还没有 `RetentionPolicy`"）
 
-- [ ] **Facebook 与 LINE 登录（Q40，开 `social` 时）**：Facebook 应用已切换为正式模式、LINE 渠道已获准取得邮箱；用真实账号在 App 与商家后台各走一遍：首次登录开户、收到验证邮件、在登录着的浏览器中打开链接后能保存资料或申请入驻、退出后再用同一方式登录（平台 D61 的端点与签名只以存根测试过）
+- [ ] **Facebook 与 LINE 登录（Q40，开 `social` 时）**：Facebook 应用已切换为正式模式、LINE 渠道已获准取得邮箱；用真实账号在 App 与发起方页面各走一遍：首次登录开户、收到验证邮件、在登录着的浏览器中打开链接后能保存资料或申请入驻、退出后再用同一方式登录（平台 D61 的端点与签名只以存根测试过）
 - [ ] **安装到主屏幕（Q38）**：iPhone Safari 与 Android Chrome 各装一次（账户页的入口、答完测验后的提示）；LINE 与微信中打开分享链接看到"在浏览器中打开"；iPhone 桌面 App 中邮件链接（验证、邮件登录）与 Google 登录的表现可以接受（`plans/Q38-install.md` §4）
 - [ ] **国产安卓手机的"添加到桌面"（Q50）**：找两三台（最好有华为、小米与一台 vivo 或 OPPO），各用系统自带的浏览器与 QQ 浏览器或 UC 打开 `/taker/`，按账户页的"查看步骤"添加；确认步骤的文字与手机上的菜单一致（不一致时把实际的写法告诉开发，改平台的文案），没有图标时按提示开启"桌面快捷方式"权限后能添加；微信与 QQ 中打开分享链接，第一屏就看到"点右上角的'···'"的提示
 - [ ] **Apple 登录（平台 17j）**：提交 App Store 审核前，production 的 `SPRING_PROFILES_ACTIVE` 由 `social` 改为 `apple`，设好 Apple 的五个变量（`deploy/quizbuks/README.md`"前端"），以真实的 Services ID 在网页与 App 中各登录一次
@@ -28,7 +28,7 @@
 - [ ] **Android App（Q49b）**：封闭测试版装在一台 Android 手机上：打开后没有浏览器地址栏（`assetlinks.json` 验证通过）；首页、结果页、账户页都没有安装提示；验证与邮件登录的邮件链接在 App 中打开，`/sponsor/` 与 `/biz/` 的链接在浏览器打开；Google、Facebook、LINE 登录回到 App；返回键与断网时的表现可以接受（`plans/Q49b-android.md` §4）
 
 - [ ] **招商网站的"试试看"（Q95）**：平台图第一个节点的挑战（官方账号）三种语言都已发布，链接与二维码已填入 `quizbuks-web/biz/src/content/try-quizzes.json`，首页不再显示"即将推出"
-- [ ] **Google AdSense（Q95，首次上线即开）**：隐私政策（含 AdSense 与第三方 Cookie）的新版本已经 `QB_LEGAL_PUBLISH` 发布；AdSense 账户已审核通过、站点 `quizbuks.com` 已登记；欧洲经济区、英国、瑞士访客的同意（Google 认证的同意管理平台）已在 AdSense 中设好；正式系统上三处（`/biz/`、`/taker/`、`/sponsor/`）都能看到广告，后台与登录页没有
+- [ ] **Google AdSense（Q95，首次上线即开）**：隐私政策（含 AdSense 与第三方 Cookie）的新版本已经 `QB_LEGAL_PUBLISH` 发布；AdSense 账户已审核通过、站点 `quizbuks.com` 已登记；欧洲经济区、英国、瑞士访客的同意（Google 认证的同意管理平台）已在 AdSense 中设好；正式系统上三处（`/biz/`、`/taker/`、`/sponsor/`）都能看到广告，平台管理系统、运营商管理系统与登录页没有
 
 ## 性能
 
@@ -66,7 +66,7 @@
 - [ ] **密钥已从任何演示或测试的值轮换**：`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY`、数据库密码、Stripe 密钥与签名密钥、SMTP、Google、Facebook 与 LINE 的客户端密钥都是为生产新生成的，没有在本机演示、e2e、压测或测试服务器上用过；`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本已保存
 - [ ] `operations.md` §1.4 的测试开关一个都没设；`SPRING_PROFILES_ACTIVE` 不含 `dev`；`JABIZ_SECURITY_MFA_ADMINISTRATION` 未设；`QB_STRIPE_PLACEHOLDERS=false`
 - [ ] 只经 HTTPS 访问（HSTS），`JABIZ_TRUSTED_PROXIES` 已设；数据库与管理端口不对公网开放；指标不在应用端口上暴露
-- [ ] 正式环境的 `.env` 有 `JABIZ_WEB_ENVIRONMENT=production`（平台 16zd）：打开 App、商家后台与管理后台的登录页，顶部**没有**"测试环境"的横条、标题没有 `[TEST]`；
+- [ ] 正式环境的 `.env` 有 `JABIZ_WEB_ENVIRONMENT=production`（平台 16zd）：打开 App、发起方页面与平台管理系统的登录页，顶部**没有**"测试环境"的横条、标题没有 `[TEST]`；
   staging 打开同样的页面**有**横条（两边各看一次，确认标志指向正确的环境）
 - [x] 正式域名已写进 `tools/quizbuks/stripe-test-mode/production-hosts`（`quizbuks.com`、`www.quizbuks.com`；正式域名变了要同步改）
 

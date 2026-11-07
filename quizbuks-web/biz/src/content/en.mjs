@@ -53,7 +53,7 @@ export const en = {
         title: 'Sponsors',
         text: 'Write a quiz about what you sell, set a prize, share a link or QR code, and draw your knowledge map. Then see who really understood you.',
         bullets: ['Quizzes or surveys, live in minutes', 'In-store and digital prizes, free for now', 'Challenges bound to the nodes of your map', 'Daily and per-question statistics, CSV export'],
-        more: 'See the Sponsor console',
+        more: 'See the Sponsor app',
       },
     },
     how: {
@@ -62,7 +62,7 @@ export const en = {
         { title: 'Publish', text: 'Sign up as a Sponsor, write a quiz or survey, set the prize and how many win; to grow people who know you, bind it to a node of your knowledge map.' },
         { title: 'Share', text: 'One link and one QR code: on the counter, in the window, on a flyer, or as a one-tap invitation to your customer list.' },
         { title: 'Answer', text: 'Customers answer on their phones, nothing to install. Passing takes real attention; the result shows at once and the node lights up.' },
-        { title: 'Prizes and insight', text: 'Winners collect in your shop or receive a digital prize in the app. Every attempt, the pass rate and each question are in your console.' },
+        { title: 'Prizes and insight', text: 'Winners collect in your shop or receive a digital prize in the app. Every attempt, the pass rate and each question are in the Sponsor app.' },
       ],
     },
     surveys: {
@@ -151,14 +151,14 @@ export const en = {
           { title: 'Check', text: 'The prize is checked to be yours and not yet collected.' },
           { title: 'Collected', text: 'Marked as redeemed and counted in your statistics.' },
         ] },
-      { title: 'Know what each question taught', text: 'Your console shows attempts, pass rate, winners and collected prizes by day, and how many people lit each node of your map. Export CSV or XLSX at any time.',
+      { title: 'Know what each question taught', text: 'The Sponsor app shows attempts, pass rate, winners and collected prizes by day, and how many people lit each node of your map. Export CSV or XLSX at any time.',
         cards: [
           { icon: 'chart', title: 'By day and quiz', text: 'Attempts, completions, pass rate, prizes won and collected.' },
           { icon: 'target', title: 'By node', text: 'How many took each node’s challenges, and how many lit it.' },
           { icon: 'shield', title: 'Your data, your rules', text: `Your exports are yours. ${BRAND.names.en} keeps Takers’ personal data under its privacy policy.` },
         ] },
     ],
-    closing: { title: 'Open your Sponsor console', text: 'Signing up takes a minute; review usually takes a few days. Free for now.' },
+    closing: { title: `Open ${BRAND.names.en} for Sponsors`, text: 'Signing up takes a minute; review usually takes a few days. Free for now.' },
   },
   takers: {
     eyebrow: 'For Takers',
@@ -198,7 +198,7 @@ export const en = {
         ] },
       { title: 'Reach the right people', text: 'Publish to everyone around, to a region, or only to your customer list. Invitees get a one-tap link; nobody else can answer. Cap the number of answers.',
         bullets: ['Invitation-only surveys for your customer list', 'Regional targeting for public surveys', 'A maximum number of answers', 'Scheduled start and end'] },
-      { title: 'Results as they arrive', text: 'Your console shows completions and prizes by day; export CSV or XLSX. Individual answers are never shown.',
+      { title: 'Results as they arrive', text: 'The Sponsor app shows completions and prizes by day; export CSV or XLSX. Individual answers are never shown.',
         bullets: ['Completions and prizes by day', 'CSV and XLSX export', 'Individual answers never shown or exported'] },
     ],
     closing: { title: 'Run your first survey this week', text: 'Become a Sponsor, write your questions, set the prize. Free for now.' },

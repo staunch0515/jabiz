@@ -12,11 +12,11 @@
 | Q8 多选题 | 有多个正确选项即多选题；全对才得该题分数，无部分得分；选项顺序按答题会话打乱 |
 | Q9 定位 | 浏览器定位（需授权）只用于预填国家 / 城市，用户可改；登录审计只记 IP 与 User-Agent，不做 IP 地理定位 |
 | Q11 规模 | 单个发布峰值 50 次提交 / 秒、同时进行的发布 ≤ 1 000、用户 ≤ 100 万；按此选锁粒度（4.3） |
-| Q12 会话 | "5 分钟无活动"指**答题会话**之外的后台会话：商家与管理员后台闲置 30 分钟锁定，App 闲置不锁（刷新令牌 30 天）；答题会话按时限结束 |
+| Q12 会话 | "5 分钟无活动"指**答题会话**之外的登录会话：商家页面与平台管理系统闲置 30 分钟锁定，App 闲置不锁（刷新令牌 30 天）；答题会话按时限结束 |
 | Q13 会计系统 | 先做通用 CSV 凭证导出；推送 API 以后按选定的系统加 |
 | Q14 商家退款 | 不做（以后加"商家退款"交易与分录） |
 | Q15 数据迁移 | 从零开始，不迁移原型数据 |
-| Q16 语言 | App：英 / 中 / 日；商家后台：中 / 英；Quiz 内容单一语言（商家用什么语言写就是什么语言） |
+| Q16 语言 | App：英 / 中 / 日；发起方页面：中 / 英；Quiz 内容单一语言（商家用什么语言写就是什么语言） |
 | Q18 Stripe（已答） | 当前为 Stripe 测试模式；正式时每个部署（美国、日本）各用本国的 Stripe 账户，配置随部署。转账先实现 Stripe Connect（Express 账户），仍经接口 `PayoutGateway` 调用 |
 | Q19 AI 费用 | 不收费，只记用量（按商家、按月汇总） |
 
@@ -38,7 +38,7 @@ backend/quizbuks/            Gradle 模块（jabiz.boot-app 插件），com.jabi
   src/test/resources/scenarios/qb/**.yml    场景回放
 quizbuks-web/                应用前端（`@jabiz/ui` 与 `@jabiz/client` 经 `link:`，与平台同一工具链，D34、D43；`plans/QP-pages.md`）
   app/                       答题人 PWA（挂在 /，入口 app）：独立的 pnpm 工程，自己的 lockfile
-  sponsor/                   商家后台（挂在 /sponsor/，入口 sponsor）：同上
+  sponsor/                   发起方页面（挂在 /sponsor/，入口 sponsor）：同上
   */src/qb/                  两个 SPA 共用的代码（Kudos 格式化、流程与模板编号、手写的流程类型、共用组件与文案），两份相同（CI 比对）
   e2e/                       Playwright 端到端测试（对打包的 jar；Mailpit 收信、Stripe 桩）
 deploy/quizbuks/             docker-compose 与部署说明
@@ -51,7 +51,7 @@ docs/quizbuks/               本文件等
 |---|---|---|---|---|---|
 | `/` | `quizbuks-web/app`（PWA） | `app` | `QB_TAKER` | 是（`QB_TAKER`，`QB_APP_SELF_REGISTRATION`） | 否：未验证可登录浏览，QuizBuks 的写入一律要求已验证 |
 | `/sponsor/` | `quizbuks-web/sponsor` | `sponsor` | `QB_SPONSOR`（且入驻已通过才能发布） | 是（`QB_SPONSOR`，`QB_SPONSOR_SELF_REGISTRATION`） | 否（Q40 起；经 Facebook、LINE 开的账号在本人会话中验证）：写入一律要求已验证，`VerifiedEmailWritesIT` 守住 |
-| `/admin/` | 平台通用后台 + QuizBuks 扩展页 | `admin` | `ADMIN`（首个管理员）/ `QB_ADMIN_SUPER` / `QB_ADMIN_CONTENT` / `QB_ADMIN_FINANCE`（`QB_ADMIN_ROLES` 可改） | 否 | 否 |
+| `/admin/` | 平台管理系统的通用页面 + QuizBuks 扩展页 | `admin` | `ADMIN`（首个管理员）/ `QB_ADMIN_SUPER` / `QB_ADMIN_CONTENT` / `QB_ADMIN_FINANCE`（`QB_ADMIN_ROLES` 可改） | 否 | 否 |
 
 不用 pnpm 工作区：`pnpm app:check` 读每个 SPA 目录自己的 lockfile，Gradle 只把 SPA 自己的目录与平台的包作为构建输入（`plans/QP-pages.md` 第 1 节）。
 `jabizApp` 以 `spa("/", "../../quizbuks-web/app", entry = "app", pwa = Pwa.ON)`、`spa("/sponsor", "../../quizbuks-web/sponsor", entry = "sponsor")`
@@ -72,8 +72,8 @@ docs/quizbuks/               本文件等
 
 **App 中的商户（Q68，`plans/Q68-sponsor-in-app.md`）**：App 的登录只接受 `QB_TAKER`，令牌里从来没有商户的权限；同时也是商户的人在 App 中只能看本人的商户账号、
 今天的数字、进行中的发布与近 7 天，并暂停 / 恢复本人的发布（不动 Kudos）。这些模板与流程只要求 `qb.sponsor.app`（答题人与商户都持有），隔离靠商户数据视图的范围
-（只有调用者本人的行）：`qb.app.my-sponsor`、`qb.app.sponsor-publications`、与商户后台共用的 `qb.sponsor.dashboard`、`qb.sponsor.analytics.trend`，流程 `QB_PUBLICATION_PAUSE` / `_RESUME`。
-不是商户的答题人什么也读不到（零或无行）；动 Kudos 的一切（充值、发布、现金与兑换的处理）仍只在商户后台。以后要给 App 加商户的操作，同样只能是不动 Kudos、可撤回的。
+（只有调用者本人的行）：`qb.app.my-sponsor`、`qb.app.sponsor-publications`、与发起方页面共用的 `qb.sponsor.dashboard`、`qb.sponsor.analytics.trend`，流程 `QB_PUBLICATION_PAUSE` / `_RESUME`。
+不是商户的答题人什么也读不到（零或无行）；动 Kudos 的一切（充值、发布、现金与兑换的处理）仍只在发起方页面。以后要给 App 加商户的操作，同样只能是不动 Kudos、可撤回的。
 
 | `QB_OPERATOR` | 运营商的成员（Q48a，`plans/Q48-operators.md`，只在入口 `operator` / `/operator/`，要求二次验证）：`qb.operator.use`（本运营商的页面、模板与动作，每个动作再查成员关系）、`qb.review.sponsor`、`qb.review.publication`、`approval.decide`、`task.read`（审核为终审）、`qb.admin.quiz.read`、`qb.admin.publication.read`、`qb.content.file.read`、`qb.sponsor.avatar.read`、`qb.redemption.void`、`qb.digital.resolve`（不动钱的争议）、`qb.country.read`。不持有用户资料、财务、法律文本、参数、角色与运营商管理。持有 `approval.decide`，是受保护的授权：只经平台的角色分配与四眼 |
 
@@ -143,7 +143,7 @@ docs/quizbuks/               本文件等
 | `QbPublicationOwner` | 视图 | `publicationId`、`publisherKind`、`publisherId`（卡片的） | 只读，经限本人的数据视图读取：答题人的模板据此排除本人的发布（不能开始） |
 | `QbSponsorRewardMethods` | T | `settingId`、`userId`（唯一）、`methods`（固定顺序、逗号分隔）、`note`、`setBy`、`setAt` | 管理员按商家允许的奖励支付方式（Q22，`plans/Q22-reward-methods.md`）；没有记录 = 只有 `PLATFORM`。只经 `QB_SPONSOR_REWARD_METHODS_SET` 写入 |
 | `QbCashReward` | T | `attemptId`、`publicationId`、`publisherKind` + `publisherId`、`userId`、`amount`、`code`、`status`（DUE / MARKED_PAID / CONFIRMED / DISPUTED / OVERDUE / VOID）、`payBy`、`confirmBy`、标记 / 确认 / 争议 / 逾期 / 裁定的时刻与说明 | 商家付现金的奖励（Q22）：不经账本；双方确认即完成，逾期不确认的答题人不能开始新答题 |
-| `QbRedemption` | T | `attemptId`、`publicationId`、`publisherKind` + `publisherId`、`userId`、`amount`、`description`、`code`、`status`（DUE / CLAIMED / REDEEMED / EXPIRED / VOID）、`expiresAt`、`claimKind`、`claimedAt`、`confirmBy`、`redeemedAt`、`redeemedBy`、`voidedBy`、`voidNote` | 商家处兑换的奖励（Q22）：登记于结算；答题人扫商家后台的轮换码即时领取，扫打印的固定码产生申请（`CLAIMED`，十分钟内由商家确认）（Q22b） |
+| `QbRedemption` | T | `attemptId`、`publicationId`、`publisherKind` + `publisherId`、`userId`、`amount`、`description`、`code`、`status`（DUE / CLAIMED / REDEEMED / EXPIRED / VOID）、`expiresAt`、`claimKind`、`claimedAt`、`confirmBy`、`redeemedAt`、`redeemedBy`、`voidedBy`、`voidNote` | 商家处兑换的奖励（Q22）：登记于结算；答题人扫发起方页面的轮换码即时领取，扫打印的固定码产生申请（`CLAIMED`，十分钟内由商家确认）（Q22b） |
 | `QbRedeemToken` | P | `sponsorId`、`tokenValue`（敏感）、`kind`（ROTATING / PRINTED）、`issuedAt`、`expiresAt`、`revokedAt` | 商家的领奖码（Q22b）：链接 `/redeem/<key>` 中的秘密；只经 `QB_REDEEM_CODE_ISSUE` 写入，数据视图不返回值 |
 | `QbInvitation` | P | `publicationId`、`publisherKind` + `publisherId`、`email`（发布与地址唯一；小写）、`status`（ADDED / QUEUED / SENT / STARTED / ANSWERED）、`addedAt`、`sentCount`、`lastSentAt`、`userId`（认领的账号）、`attemptId`、`startedAt`、`answeredAt`、`score`、`reward` | 指定邮箱的发布的邀请清单（Q25，`plans/Q25-invitations.md`）：只经 `QB_INVITATION_ADD` / `REMOVE` / `SEND` / 内部 `QB_INVITATION_MAIL`（任务 `qb.invitation-mail` 寄带一次性登录链接的邮件，平台决策 D55）与答题流程写入；未开始的可删除。商家读自己的（`sponsor:`），答题人读自己账号认领的（`me:`，发布页据此显示），管理员读全部 |
 | `QbInvitationQuota` | P | `sponsorId`、`day`（二者唯一；`jabiz.fiscal-year-zone` 的日期）、`sent` | 商家当天排队寄出的邀请数（`quizbuks.invitations.sends-per-day`） |
@@ -179,11 +179,11 @@ docs/quizbuks/               本文件等
 | `QbBroadcastSchedule` | P | `broadcastId`、`dueAt` | 定时发送的到期表（同 `qb_publication_schedule`），逐项任务 `qb.broadcast-dispatch` 读它 |
 | `QbBroadcastReceipt` | P | `userId`、`broadcastId`（两者唯一）、`readAt`、`clickedAt` | 公告的已读与点击（M-61 统计）；个人消息的在消息行上 |
 | `QbInboxState` | P | `userId`、`readAllBefore`（"全部已读"）、`readThrough`（之前的公告都已逐条读过：徽标从它之后数起，评审 H1）、`promoOff`（不收推广） | 一人一行；推广只能退订（Q7-11） |
-| `QbLegalDoc` | T | `kind`（`TERMS_APP` / `TERMS_SPONSOR` / `PRIVACY` / `COMMERCE_NOTICE`，不可变、唯一）、草稿 `title`、`body`、`changeSummary`（多语言 Markdown）；`processOnly`：`latestVersionNo`、`lastPublishedAt` | 法律文本的草稿（Q7b）：内容管理员在通用后台直接编辑；`QB_SETUP` 建立四份明确标注的测试占位草稿，不发布 |
+| `QbLegalDoc` | T | `kind`（`TERMS_APP` / `TERMS_SPONSOR` / `PRIVACY` / `COMMERCE_NOTICE`，不可变、唯一）、草稿 `title`、`body`、`changeSummary`（多语言 Markdown）；`processOnly`：`latestVersionNo`、`lastPublishedAt` | 法律文本的草稿（Q7b）：内容管理员在管理系统的通用页面直接编辑；`QB_SETUP` 建立四份明确标注的测试占位草稿，不发布 |
 | `QbLegalVersion` | W（`writeOnce`） | `kind`、`versionNumber`（与 `kind` 唯一）、`title`、`body`、`changeSummary`、`requiresConsent`、`publishedAt`、`publishedBy`、`effectiveAt`、`contentHash` | 只经 `QB_LEGAL_PUBLISH`（二次验证）写入；当前版本 = `effectiveAt` 已到、未撤回的最大版本号（`messaging.LegalRules`），预定生效不需要任务；公开只读（公开视图不含发布人与哈希） |
 | `QbLegalWithdrawal`（Q7b 评审 M1） | W（`writeOnce`） | `legalVersionId`（唯一）、`kind`、`versionNumber`、`withdrawnAt`、`withdrawnBy`、`reason` | 只经 `QB_LEGAL_WITHDRAW` 写入：撤回尚未生效的预告版本；撤回的版本永不生效、不要求同意，版本号不再使用；公开视图只有种类、版本号与时间 |
 | `QbConsent` | W | `userId`、`kind`、`legalVersionId`、`versionNumber`、`acceptedAt`、`entry`、`source`（`WELCOME` / `ONBOARDING` / `RECONSENT`） | 同意记录；须同意版本 = 已生效版本中须同意的最大版本号（第一版总是），已同意的版本不低于它即可 |
-| `QbFaqEntry` | T | `audience`（APP / SPONSOR / ALL）、`category`、`question`、`answer`（多语言，英语必填）、`seq`、`published` | 帮助中心（Q7b）；内容管理员在通用后台直接编辑，公开视图固定为已发布 |
+| `QbFaqEntry` | T | `audience`（APP / SPONSOR / ALL）、`category`、`question`、`answer`（多语言，英语必填）、`seq`、`published` | 帮助中心（Q7b）；内容管理员在管理系统的通用页面直接编辑，公开视图固定为已发布 |
 
 - **前置条件**（Q76，`plans/Q76-prerequisites.md`）：普通表 `QbPublicationPrerequisite`（发布、前置发布、要求 `PASSED` / `ANSWERED`、发布方那一对），
   一个发布至多 5 条，只能指向本商户已提交过的发布，不能成环（深度 20）；只经 `QB_PUBLICATION_PREREQUISITES_SAVE` 在草稿时整体替换，提交即冻结，复制时随发布复制。
@@ -224,7 +224,7 @@ docs/quizbuks/               本文件等
 | 手工加币获批：系统外收款（Q18b：财务登记、另一位管理员批准；参照 `mn_` + 编号） | `QB_TOPUP_MANUAL_APPROVAL_RESULT` | 1120 银行存款 | 2110 商家预收款（商家） |
 | 手工加币获批：赠送（Q18b，没有收款、没有收据） | `QB_TOPUP_MANUAL_APPROVAL_RESULT` | 5120 推广费用 | 2110 商家预收款（商家） |
 | Stripe 手续费确定（作业读取余额流水） | `QB_TOPUP_FEE_RECORD` | 5110 支付手续费 | 1110 Stripe 余额（为 0 时不过账） |
-| 退款 / 争议败诉（Stripe 后台发生；扣回可用余额以内的部分，余下为差额待办） | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_CLOSED` | 2110 商家预收款（商家） | 1110 Stripe 余额 |
+| 退款 / 争议败诉（ Stripe Dashboard 发生；扣回可用余额以内的部分，余下为差额待办） | `QB_TOPUP_REFUNDED` / `QB_TOPUP_DISPUTE_CLOSED` | 2110 商家预收款（商家） | 1110 Stripe 余额 |
 | 答题奖励结算 | `QB_ATTEMPT_SUBMIT` / `QB_ATTEMPT_EXPIRE` / `QB_PENDING_PAY` | 2110 商家预收款（商家，发布）：奖励 | 2120 应付用户奖励（用户，发布）：奖励 − 抽成；4110（发布）：抽成（当前 0，为 0 时不出该行） |
 | 运营商月结算（Q48b，日本时间的自然月；抽成 × (1 − 平台分成)，取整到日元） | `QB_OPERATOR_SETTLEMENT_RUN`（逐项任务 `qb.operator-settlement`） | 5130 运营商分成 | 2140 应付运营商分成 |
 | 运营商分成付款获批（财务登记、另一位管理员批准） | `QB_OPERATOR_SETTLEMENT_APPROVAL_RESULT` | 2140 应付运营商分成 | 1120 银行存款 |
@@ -278,7 +278,7 @@ docs/quizbuks/               本文件等
   - **改变已上架发布状态的流程持两把锁**（LS-4）：`QB_PUBLICATION_PAUSE`、`RESUME`、`ADVANCE`（逐项任务的每项）、`FUNDED`（`FUNDS_RESTORED` 在一个事务中按编号升序逐个调用）在发布锁之后、读取之前取开始锁（`PublicationEditing.lockStarts`），
     所以暂停等提交之后没有新的开始、之前开始的都已计入。编辑、删除、提交审核、撤回、审批结果（草稿与待审核的发布没有卡片，开始一律 404；审批结果插入卡片与两行计数同一事务）、提交、超时与完成移动不取开始锁。
   - **读计数的地方**：开始的锁内重读是一个 `QueryEntities.all`（本人会话、卡片、开始一侧、完成一侧，一条语句）；提交与超时只读完成一侧（不读开始一侧）；模板 `qb.app.feed`、`qb.app.publication`、`qb.sponsor.publications`、`qb.admin.publications` 在一条 SQL 中 JOIN 两表；
-    通用后台的两个默认数据视图只显示各自的列。
+    平台管理系统通用页面中的两个默认数据视图只显示各自的列。
 - 加锁顺序固定：**（账户锁 `qb.account:<用户>` →）模版锁 `qb.quiz:<模版>`（提交发布时共享）→ 按发布编号升序：[发布锁 `qb.pub:<发布>` → 开始锁 `qb.pub-start:<发布>`] → 平台审批的案件锁 `jabiz.approval:*` → 钱包锁 `qb.wallet:SPONSOR:<商家>`**（Q4，D-Q4-5；Q2 D-Q2-10；Q10a4）。
   开始只持开始锁；状态流程在开始锁之后只可能再取审批锁：`ADVANCE` 撤回过期的审核（`WithdrawApproval.when`，只在审核过期时取；那时发布还在待审核，没有卡片，也没有开始在等），其余不再取锁（`FUNDS_RESTORED` 之后取的是编号更大的发布的一对锁）；
   持审批锁的流程（提交审核、撤回、审批结果）从不再取开始锁；持钱包锁之后只再取同一发布的发布锁（完成移动，本事务已持有，重入不等待），没有流程持钱包锁去等开始锁。
@@ -368,11 +368,11 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `QB_AI_QUESTIONS_REQUEST` / `QB_AI_ACCEPT` / `QB_AI_DISCARD` / `QB_AI_CANCEL` | `qb.ai.use` | Q8a（`plans/Q8-ai.md` D-Q8-4）：请求先查入驻、封禁、AI 说明（新种类 `AI_NOTICE`，请求时同意）、总开关与参数清单，经商家视图读模版与所选资料、构造并度量输入（≤ 60 KiB，超出即拒绝、不截断），再在 `qb.ai:<商家>` 锁内查限额（同时未结束 2 个、每模版 1 个、每日次数、每月 Token 含未结束作业的预估、全局月上限），之后经异步外部作业 `qb.ai.questions` 调用 Claude；接受取 `qb.quiz:<模版>` → `qb.ai:<商家>`，只写每题 `reviewed = true` 的、商家校对后的内容，模版 `aiGenerated`；丢弃只改作业；取消改作业并在同一事务中取消平台的作业（一个平台步骤 `CancelExternalJob` 声明两种作业类型，平台 16v-1、16w-1），排队中的不再调用提供方 |
 | ~~`QB_AI_COVER_REQUEST` / `QB_AI_COVER_ACCEPT`~~（Q98a 撤销） | `qb.ai.use` | Q8b（M-25，`plans/Q8-ai.md` 第 6 节与实施记录）：请求与题目同样的检查、锁与限额（每模版每种类 1 个），只发送标题与简介，作业 `qb.ai.cover` 由 Claude 从固定图库设计 3 个封面、服务器画成 PNG、经平台的文件输出以商家为上传者登记；选定取 `qb.quiz:<模版>` → `qb.ai:<商家>`，经模版编辑把所选图写入 `cover`、`aiGenerated`，作业关闭后未选的图由清扫删除。PDF 资料（Q8b）作为作业的文件输入发送原文件（每个与合计的大小在请求时查；服务器不解析 PDF，作业在付费调用前以提供方免费的 `count_tokens` 数输入，超过按页数上限的预留即失败、不计费），作业输入上限 256 KiB |
 | `QB_AI_JOB_COMPLETED` / `QB_AI_JOB_FAILED` / `QB_AI_EXPIRE` / `QB_AI_JOB_CANCELLED` | `qb.ai.system`（不授予） | `internal()`：`qb.ai:<商家>` → `qb.ai:*` 内累加每次尝试的用量（商家与全体），候选按内容规则再查后 READY；失败记原因；每日任务 `qb.ai-expire` 逐项清除过期的候选；取消的作业（商家的 `QB_AI_CANCEL` 或运维的 `EXTERNAL_JOB_CANCEL`）结束后由两种作业类型的 `onCancelled`（`QB_AI_JOB_CANCELLED`，平台 D52 第 2 条）关闭并按实际用量计入，没有尝试运行过的不计费；三者对每次没有记下用量的尝试（平台的 `unrecordedAttempts`，D52 第 5 条）按预留的输入加 `maxTokens` 计入（平台 16w-1） |
-| `QB_QUIZ_IMPORT_CHECK` / `QB_QUIZ_IMPORT`（Q16） | `qb.content.write`，要求已验证 | Quiz 文件（`quizbuks.quiz`，`formatVersion`，`QuizFileFormat` 逐版升级到当前版本）：检查版本、内容的限制与每个文件的类型和大小，说明需要上传的文件；导入以调用者按内容策略上传的文件在一个事务中写出新草稿（同复制），有问题即不写。导出在商家后台读草稿与文件完成（D-Q16-1，`plans/Q16-quiz-transfer.md`） |
+| `QB_QUIZ_IMPORT_CHECK` / `QB_QUIZ_IMPORT`（Q16） | `qb.content.write`，要求已验证 | Quiz 文件（`quizbuks.quiz`，`formatVersion`，`QuizFileFormat` 逐版升级到当前版本）：检查版本、内容的限制与每个文件的类型和大小，说明需要上传的文件；导入以调用者按内容策略上传的文件在一个事务中写出新草稿（同复制），有问题即不写。导出在发起方页面读草稿与文件完成（D-Q16-1，`plans/Q16-quiz-transfer.md`） |
 | `QB_PUBLICATION_SAVE` / `QB_PUBLICATION_DELETE` / `QB_PUBLICATION_COPY` | `qb.publication.write` | 向导第一、二步保存草稿（可不完整），输出提交时会报告的全部问题与预计最大支出（第三步）；删除只限草稿；复制任意状态的本人发布为新草稿，可换版本或时间（Q4） |
 | `QB_PUBLICATION_SUBMIT` / `QB_PUBLICATION_WITHDRAW` | `qb.publication.write` | 模版锁（共享）→ 发布锁；`PublicationReadiness` 一次报告全部违规（档位、时间、合格分、预算、以快照重查内容、商家已入驻）；`RequireApproval`；撤回待审核的请求 |
 | `QB_PUBLICATION_PAUSE` / `QB_PUBLICATION_RESUME` | `qb.publication.write` | 取发布锁；恢复按时间回到相应状态；管理员暂停的（`pausedBy = ADMIN`）商家不能恢复（422 `QB_PUBLICATION_ADMIN_PAUSED`，Q10b） |
-| `QB_PUBLICATION_ADMIN_PAUSE` / `_RESUME` / `_END` | `qb.admin.content.write`，总是要求二次验证（Q10b，评审 M2） | 管理员下架：必填理由（`adminReason`，商家可见），发布锁 → 开始锁；暂停后只有管理员能恢复，结束的 `endReason = ADMIN`。`actsOn(QbPublication)`：后台的行操作与扩展的发布页给出入口。封禁商家（`QB_USER_BAN`）在同一事务中以子流程逐个暂停其进行中的发布（账户锁 → 按编号升序的发布锁对） |
+| `QB_PUBLICATION_ADMIN_PAUSE` / `_RESUME` / `_END` | `qb.admin.content.write`，总是要求二次验证（Q10b，评审 M2） | 管理员下架：必填理由（`adminReason`，商家可见），发布锁 → 开始锁；暂停后只有管理员能恢复，结束的 `endReason = ADMIN`。`actsOn(QbPublication)`：平台管理系统的行操作与扩展的发布页给出入口。封禁商家（`QB_USER_BAN`）在同一事务中以子流程逐个暂停其进行中的发布（账户锁 → 按编号升序的发布锁对） |
 | `QB_PUBLICATION_APPROVAL_RESULT` | 系统（审批事件；`qb.publication.system`，不授予任何角色） | 只认发布自己的请求（`approvalRequestId`）：批准且内容未变 → 上架；驳回（以存储的请求为准）→ 草稿附理由 |
 | `QB_VIEW` | `qb.play`，要求已验证 | 记第一次浏览（重复忽略）；发布须对本人可见，否则 404 |
 | `QB_ATTEMPT_START` | `qb.play`，要求已验证 | 本人进行中的会话直接继续（不取锁）；否则发布锁内：`LIVE` 且在时间内、地区有交集、不是自己的发布、名额与预算（进行中的会话各预占一个名额与最高奖励）、商家可支付（软检查，余额在取锁前读，Q10a）→ 建会话（`deadline = now + 时限`，选项按会话打乱，**编号为本次显示的位置 1..k**，Q10b）、`starts + 1`、`reserved + maxReward`。返回题目（**不含正确答案**） |
@@ -436,12 +436,12 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 | `QB_LEGAL_PUBLISH`（Q7b） | `qb.admin.content.write`，每次二次验证，已验证邮箱 | 把一种法律文本的草稿发布为下一版本（只写一次）：必须带页面读到的草稿版本 `baseRevision`、日英必填、与最新（未撤回）版本内容相同即拒绝、生效时间不早于现在且不晚于 `qb.legal.max-announce-days`（受控参数，缺省 180 天）、已有未生效的预告即拒绝；与撤回共用命名锁 `qb.legal:<种类>` |
 | `QB_LEGAL_WITHDRAW`（Q7b 评审 M1） | 同上，必填理由 | 撤回尚未生效的预告版本（已生效即 422 `QB_LEGAL_WITHDRAW_IN_EFFECT`，已撤回即 `QB_LEGAL_WITHDRAWN`）；之后可再发布，版本号接着最大的号 |
-| `QB_CONSENT_ACCEPT`（Q7b） | `qb.account.read`，已验证邮箱 | 登录后的重新同意：只接受本入口的种类（App：答题人条款与隐私政策；商家后台：商家条款与隐私政策）与当前版本 |
+| `QB_CONSENT_ACCEPT`（Q7b） | `qb.account.read`，已验证邮箱 | 登录后的重新同意：只接受本入口的种类（App：答题人条款与隐私政策；发起方页面：商家条款与隐私政策）与当前版本 |
 
 | `QB_MESSAGE_FROM_EVENT`（Q7c） | `qb.messaging.system`，`internal()` | 订阅 `qb.reward.settled` / `qb.reward.pending` / `qb.transfer.sent` / `qb.transfer.failed` / `qb.payout.restricted`：重读记录、仍成立才写一条三语消息（`sourceKey` 去重），7 天以前的事件跳过（重放不补发） |
 | `QB_PAYOUT_REMINDER`（Q7c，Q7-16） | `qb.messaging.system`，`internal()` | 逐项任务 `qb.payout-reminder`（每日）：余额达到转账门槛而未开通收款的用户，每 `qb.payout.reminder-days`（30）天至多一条 |
 | `QB_BROADCAST_SAVE` / `_SEND` / `_CANCEL` / `_WITHDRAW`（Q7c） | `qb.broadcast.write`，已验证，查封禁 | 商家通知：账户锁 → 通知锁 `qb.broadcast:<编号>`；保存给出发送会遇到的全部问题；只给本人可接受新答题的发布、纯文本无链接、每个发布至多 `qb.broadcast.sponsor.max-per-publication`（3）条、间隔 `qb.broadcast.sponsor.min-interval-hours`（24）小时；类型是推广（可退订，只给发送前注册的人，Q7-11）；不预审（Q7-10），发送即到达该发布地区内的答题人 |
-| `QB_ADMIN_BROADCAST_SAVE` / `_SEND` / `_CANCEL` / `_WITHDRAW`（Q7c） | `qb.admin.content.write`，已验证；发送 ADMINISTRATION 二次验证，撤回每次二次验证并必填理由 | 平台公告（App 或商家后台；全体、地区或至多 1,000 名指定用户；立即或定时；有效期缺省 `qb.broadcast.expires-days` 天）；撤回可用于任何公告与商家通知 |
+| `QB_ADMIN_BROADCAST_SAVE` / `_SEND` / `_CANCEL` / `_WITHDRAW`（Q7c） | `qb.admin.content.write`，已验证；发送 ADMINISTRATION 二次验证，撤回每次二次验证并必填理由 | 平台公告（App 或发起方页面；全体、地区或至多 1,000 名指定用户；立即或定时；有效期缺省 `qb.broadcast.expires-days` 天）；撤回可用于任何公告与商家通知 |
 | `QB_BROADCAST_DISPATCH`（Q7c） | `qb.messaging.system`，`internal()` | 逐项任务 `qb.broadcast-dispatch`（每分钟）：到期的定时发送；商家已封禁或发布已不在进行中即取消 |
 | `QB_BROADCAST_BAN_WITHDRAW`（Q7c） | `subProcessOnly()` | `QB_USER_BAN` 在同一事务中撤回该商家已发出与已排期的通知（理由 `QB_ACCOUNT_SUSPENDED`） |
 | `QB_MESSAGE_MARK` / `QB_INBOX_READ_ALL` / `QB_INBOX_SETTINGS_SAVE`（Q7c） | `qb.account.read`，已验证 | 已读与点击（只记第一次；只能标本人收件箱中的；读后推进 `readThrough`）、全部已读、推广开关；锁 `qb.inbox:<用户>` |
@@ -467,7 +467,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.wallet.taker-transferable` | 转账流程在用户钱包锁内读：2120 余额与保留中的奖励（最近 `qb.transfer.hold-days` 天入账的，与有未结争议的商家在被争议付款之后入账的，按 2120 贷方行的发布维度经卡片找到商家；只计尚在余额中的部分，模型见 4.4；Q10b，评审 M3、M-b） | `qb.payout.system` |
 | `qb.admin.topups` / `qb.admin.recon-runs` / `qb.admin.recon-items` | 全部充值（不含支付页地址）；核对结果与差异（F-06，Q6a） | `qb.admin.finance.read` / `qb.reconcile` |
 | `qb.app.inbox` / `qb.app.inbox-unread`（Q7c） | 个人消息 ∪ 匹配的公告（`live`、未过期、受众 APP，范围：全体 / 本人国家的地区 / 指定本人；商家通知只在其发布排期中或上架时（暂停与预算不足时隐藏，评审 M1）、给发布地区内的答题人（不给商家本人）；不收页面的时间（评审 L1）；推广只给发送前注册、未退订的人），带已读；未读数至多 99 | `qb.me` |
-| `qb.sponsor.inbox`（Q7c） | 商家后台收件箱：受众 SPONSOR 的公告 | `qb.sponsor.me` |
+| `qb.sponsor.inbox`（Q7c） | 发起方页面收件箱：受众 SPONSOR 的公告 | `qb.sponsor.me` |
 | `qb.sponsor.broadcasts` / `qb.sponsor.broadcast-publications`（Q7c） | 本人的通知与每日快照的统计（到达人数向下取整、不足 10 不显示；阅读不足 5 不显示；到达不足 50 时不显示点击与开始答题，Q7-14、评审 M2）；可选的发布 | `qb.broadcast.write` |
 | `qb.admin.broadcasts`（Q7c） | 全部公告与通知，统计为确切的人数（从不给出是谁） | `qb.admin.content.write` |
 | `qb.system.broadcast-audience` / `qb.system.broadcasts-due` / `qb.system.payout-reminders` / `qb.system.broadcasts-expired` / `qb.system.broadcast-stats`（Q7c） | 发送时的到达人数（同收件箱的条件）；到期的定时发送；该提醒的用户；该关掉的行；统计变化了的通知 | `qb.messaging.system` |
@@ -479,7 +479,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `qb.admin.attempt-rewards` / `qb.admin.publication-funds` | 会话的奖励、抽成与分录（P-01 的资金部分）；发布的商家资金（预算不足、待支付）。Q9a 从上两个模板中分出，资金只给财务 | `qb.admin.finance.read` |
 | `qb.admin.users` / `qb.admin.transfers` | P-01；P-03（Q9c 加筛选 `transferId`、`stale`（`CHECK`，或 `SENDING` 早于参数 `staleBefore`）与 `held`（被驳回或撤回、尚未放行）） | `qb.admin.users.read` / `qb.admin.finance.read` |
 | `qb.admin.monthly`（报表）/ `qb.admin.balances`（报表） | F-08（Q9c，`plans/Q9c-admin-finance.md`）：只读账本、按过账时间，参数 `from`、`to`（月初与下月初，UTC）与可选的 `knownAt`（`timeSlice` 只映射它，平台 19 §2.2）。月报按交易类型（来源单据与所动科目：充值到账、退款、争议扣回、Stripe 手续费、奖励、转账发出 / 成功 / 失败冲正 / 被撤回、打款到银行 / 失败、其他）给出笔数、金额与七个科目各自的借减贷，每类都有一行；余额表给出各科目的期初、借、贷、期末，以及四项账本对自身的核对（2110、2120 + 2130 的每一行都记有户、没有任何户的钱包科目余额为借方、借贷相等）。月报的每一类须来源、冲正、所动科目与方向全都符合，否则为"其他"导出只经平台 `POST /api/queries/{id}/export`，签发只经 `REPORT_ISSUE`（只读时态实体：可重算） | `qb.admin.finance.read` |
-| `qb.admin.investor-metrics`（报表）/ `qb.admin.investor-sponsors`（报表） | Q27（`plans/Q27-investor-metrics.md`）：投资人要的数字，参数 `from`、`to`（UTC 月的边界，至多 36 个月）。前者每个 UTC 月一行：新增 / 活跃 / 留存（三个月前也活跃）商户、上线的发布、新增 / 活跃答题人、答题（开始）、完成与通过（提交）、奖品获得 / 申领 / 领取、邀请寄出 / 应答、充值笔数与金额、已付的 Kudos 奖励与佣金，各按发生时间归月，没有发生的月份为零；后者给出期间内有活动的每个商户。后台页 `/qb/finance/investor-metrics`；导出与签发同月报 | `qb.admin.finance.read` |
+| `qb.admin.investor-metrics`（报表）/ `qb.admin.investor-sponsors`（报表） | Q27（`plans/Q27-investor-metrics.md`）：投资人要的数字，参数 `from`、`to`（UTC 月的边界，至多 36 个月）。前者每个 UTC 月一行：新增 / 活跃 / 留存（三个月前也活跃）商户、上线的发布、新增 / 活跃答题人、答题（开始）、完成与通过（提交）、奖品获得 / 申领 / 领取、邀请寄出 / 应答、充值笔数与金额、已付的 Kudos 奖励与佣金，各按发生时间归月，没有发生的月份为零；后者给出期间内有活动的每个商户。平台管理系统的页面 `/qb/finance/investor-metrics`；导出与签发同月报 | `qb.admin.finance.read` |
 | `qb.admin.finance-summary` / `qb.admin.recon-summary` | 财务总览的一行（Q9c）：钱包合计、待审批 / 待核实的转账、暂停的用户；另一模板为最近一次核对与未处理的资金待办（指派给 `qb.reconcile` 的平台待办） | `qb.admin.finance.read` / `qb.reconcile` + `task.read` |
 | `qb.admin.journal-exports` / `qb.admin.journal-mapping` | 分录导出的列表（期间、凭证号、行数、借贷合计、文件、外部凭证号）；科目映射（每个可过账科目与现行的外部科目代码，参数是否已发布）（Q9d） | `qb.admin.finance.read` |
 | `qb.system.journal-first` / `qb.system.journal-summary` / `qb.system.journal-parts` / `qb.system.journal-detail` | 导出的取数（Q9d，D-Q9d-3）：最早的过账时间（第一期）；本次所取的分录（过账于期末之前、记录于截止时刻之前、且不在以前的导出中：`bookingTime < to AND createdTime <= knownAt AND (bookingTime >= previousTo OR createdTime > previousKnownAt)`）——凭证行由数据库按科目、借贷（2110 加商家）汇总；明细按交易区间分段（每段在平台读取与文件上限的一半之内），逐段按交易、科目、借贷读取 | `qb.journal.export` |
@@ -492,11 +492,11 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 - **公开模板**（Q7b，平台 15、D17；`jabiz.public.enabled` 由 `JABIZ_PUBLIC_ENABLED` 打开，缺省开）：`qb.public.legal`（某种文本在时刻 `at` 的当前版本与下一个预告）、
   `qb.public.legal-version`、`qb.public.legal-history`、`qb.public.faq`（`audience`、`category`、`q` 在任一语言中字面匹配）。只读公开视图：法律文本的已发布版本（全部，含预告）与已发布的 FAQ；草稿没有公开视图。
-  `qb.public.publication`（Q15，发布的分享链接）：进行中（`LIVE`）的发布的概要与商家公司名；公开视图是 `LIVE` 的卡片（白名单，不含地区、预算、奖励档）与已批准商家的公司名。App 入口开启邮件链接登录（平台 D54），分享页只要邮箱（`plans/Q15-share-link.md`）。商家后台为进行中与已排期的发布在浏览器中生成分享链接的二维码与可打印的海报（Q21，`plans/Q21-publication-qr.md`），服务端没有新接口。
+  `qb.public.publication`（Q15，发布的分享链接）：进行中（`LIVE`）的发布的概要与商家公司名；公开视图是 `LIVE` 的卡片（白名单，不含地区、预算、奖励档）与已批准商家的公司名。App 入口开启邮件链接登录（平台 D54），分享页只要邮箱（`plans/Q15-share-link.md`）。发起方页面为进行中与已排期的发布在浏览器中生成分享链接的二维码与可打印的海报（Q21，`plans/Q21-publication-qr.md`），服务端没有新接口。
   已认证：`qb.me.consents`（本人对各文本的状态）、`qb.me.support`（支持邮箱）、`qb.admin.consents`（P-01 的同意记录）。
 - 完成人数：已认证的模板没有缓存，所以近期窗口由任务 `qb.publication-stats` 每 10 分钟按索引 `QbAttempt (publicationId, submittedAt)` 统计到 `qb_publication_stats`（需求 6.1 允许 10 分钟），累计取计数行；分析（Q9e）由任务 `qb.analytics` 每 10 分钟把计数的增量写进按小时的桶，按同一索引从水位线读新完成的会话汇总每题（答题路径不写任何分析数据，D-Q9e-2）。
   **残余（Q9e1 评审 M1 ④，已知、接受）**：概览的人数是任务的快照，但仪表盘的"正在答题"与今日支出是实时的合计，商家只有一个进行中的发布时，两次查看之差就是该发布在这段时间内的变化；Q4 的 `qb.sponsor.publications` 同样实时给出每个发布的计数。两者都只是人数与金额（E-4 不受 k 约束），推不出逐题作答。
-- 导出（M-52）只经平台导出 `POST /api/queries/qb.sponsor.transactions/export?format=…`（与列表同样的参数与排序，超过平台上限即整体拒绝 `REPORT_TOO_LARGE`）；商家后台提供 CSV 与 XLSX。
+- 导出（M-52）只经平台导出 `POST /api/queries/qb.sponsor.transactions/export?format=…`（与列表同样的参数与排序，超过平台上限即整体拒绝 `REPORT_TOO_LARGE`）；发起方页面提供 CSV 与 XLSX。
 
 ## 7. 前端
 
@@ -508,7 +508,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - PWA：`manifest.webmanifest`、图标、Service Worker 只缓存应用外壳与静态资源（不离线缓存数据，不做推送），由平台预设 `jabizSpa({ pwa })` 生成；放过 `/sponsor/`、`/admin/`。
 - 会话保存在设备上（入口 `app`：`persistence: device`、30 天、不按闲置锁定，缺省 Q12）。
 - 测试系统的标志（平台 16zd，2026-10-24）：三个前端的每一页顶部都显示 `@jabiz/ui` 的 `EnvironmentBanner`（警示色通栏："STAGING · 测试环境，不是正式版"，标题前加 `[STAGING]`），
-  正式环境的 `.env` 以 `JABIZ_WEB_ENVIRONMENT=production` 关掉它（`deploy/quizbuks/DEPLOY.md`、`operations.md` §1.1、上线检查清单）。商家后台与管理后台经 `AppShell` / `AuthFrame` 自动得到，
+  正式环境的 `.env` 以 `JABIZ_WEB_ENVIRONMENT=production` 关掉它（`deploy/quizbuks/DEPLOY.md`、`operations.md` §1.1、上线检查清单）。发起方页面与平台管理系统经 `AppShell` / `AuthFrame` 自动得到，
   App 的两个外框（登录后的页头与公开页的页头）自己放置；登录、注册等页面经平台积木自动得到。
 - 宽度 ≤ 430px 设计，底部导航（QP1：首页、账户；QP2 加历史，QP4 加钱包，Q7 加收件箱，Q-8）；卡片紧凑：首页在问候横幅之下以两列封面网格列出，390×844 一屏 ≥ 4 张完整可见（U-10；Q32 之前是单列 6 张，横幅与封面换来可见张数）。
 - 登录、注册、邮件链接（`/auth/…`）、找回密码、Google 登录的回调（`/login/oidc`）、step-up、账户页的改密码、两步验证、会话与外部账号都用平台的积木（G12）；
@@ -529,7 +529,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   "开始"链到当前一轮的发布。参数 `qb.tree.platform-handle` 有值时账户页加入口"平台之树"（总部官方账号的主页树）。发布页的前置可以是"先持有：X"（`data-certification`），链到当前一轮；
   树上的认证前置画成虚线圆角的平台节点（持有 = 已点亮、否则锁定，不计入进度；点它去平台之树，没有 handle 时去当前一轮）。
 
-### 7.2 商家后台（`quizbuks-web/sponsor`）
+### 7.2 发起方页面（`quizbuks-web/sponsor`）
 
 - 同一工具链与 `@jabiz/ui`；`AppShell` 的左侧导航（QP1：概览、商家资料、账户；QP3 加 Quiz 与发布，QP4 加钱包，Q9b 在钱包之后加交易（`/transactions`，可带 `?publication=`），Q9 的分析在概览中）；
   英 / 中 / 日（设计缺省 Q16 是中 / 英，按 Q-4 照常提供三种，平台不支持按 SPA 的语言）；深色模式（`@jabiz/ui` 的外观切换）；图表用平台选定的图表库（G11）。
@@ -537,7 +537,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 内容工坊是最重的页面：题目与选项的编辑、排序、图片、版本列表；发布向导三步。
   题目编辑页（Q78，`plans/Q78-editor-compact.md`）：题目是折叠行（题号、题干首行、分数、单/多选、选项数），一次展开一题，操作（编辑、"移到…"、删除）在行上；上方摘要行（题数、满分、单选 / 多选、没标正确答案的题数）；AI 出题面板空闲时只有一行；页头一次只显示一条告警（stale > 版本被拒 > 译文不完整 > 已保存）；店员在菜单的"设置"组。
 - **商户中心**（Q79，`plans/Q79-sponsor-hub.md`，`sponsor/src/profile/`）：页组 `/profile` 带子导航——概况（审核状态与下一步、完成度清单、主页预览卡与链接 / 二维码、允许的奖励方式）、基本信息（入驻表单）、公开主页（编辑器 + 实时预览）、商品、店员、邮件服务器；表单页在 `lg` 两栏（左表单分卡、右说明与预览），操作条固定在底部。菜单"设置"组只有商户中心、统计、消息、账户、帮助；旧地址（`/onboarding`、`/page`、`/products`、`/staff`、`/mail-server`）前端转向到节；未通过审核的商户从 `/` 落在基本信息。
-- 商户后台的列表（Q80，`plans/Q80-list-cards.md`）：`DataTable` 的列表都给 `meta.card`（标题、副标题、徽章、操作）与 `storageKey`（`qb.sponsor.<列表>`），手机宽度缺省成卡片、桌面表格、用户可切换（平台 17zc）；通告页与主页统计的商品表也是 `DataTable`。模版与发布保留 Q34b 的画廊卡片（不加第二种）；分析的数字对照表与按日表（图表的数据表）保持表格。
+- 发起方页面的列表（Q80，`plans/Q80-list-cards.md`）：`DataTable` 的列表都给 `meta.card`（标题、副标题、徽章、操作）与 `storageKey`（`qb.sponsor.<列表>`），手机宽度缺省成卡片、桌面表格、用户可切换（平台 17zc）；通告页与主页统计的商品表也是 `DataTable`。模版与发布保留 Q34b 的画廊卡片（不加第二种）；分析的数字对照表与按日表（图表的数据表）保持表格。
 - 抽题（Q81，`plans/Q81-question-pick.md`）：发布的设置 `pickCount`（1 ≤ k < n，空 = 全考），只允许同分的题库（满分 = k × 每题分，问卷不抽）；每次开始以服务端密钥的 HMAC 种子从 n 题中取 k 题、保留题序，记在会话 `questionSet`（敏感，不返回），会话的快照只经 `PlaySteps.forAttempt`（先按语言投影、再取子集）；答题人看到的题号是位置 1..k（开始、继续、提交、结果都如此），存储的 `result` 仍记版本题号；题目统计按被抽到的完成数、逐题最小分组发表；版本切换要求新版本能承接 k；卡片带 `pickCount`，App 显示“从 n 题中随机 k 题”；店面不支持。
 - 与答题者的对话（Q82，`sponsor/src/conversations/`）：消息中心的第三个标签“对话”（`/messages?tab=conversations`，`DataTable` 卡片：答题者的资料名为标题、测验为副标题、状态徽章；待回复的在前，可只看待回复的），菜单“消息”的徽标为有未读的对话数（进入、回到前台、每 5 分钟）；对话页 `/messages/conversations/<id>`：消息、回复框、关闭，右栏为该答题者在这个测验上由商户结算的奖励（现金、到店领取、电子奖品，码或末 4 位与状态，链到各自的页）。店员不回复（D-Q82-4）。
 - 科技树（Q85，`sponsor/src/tree/`，`/tree`，菜单"内容"组）：提交过的发布都是节点，每个节点上写客户中已点亮 / 答过未合格 / 可开始的人数（`qb.sponsor.tree`）；点节点，右栏按状态列出上面的人（显示名与交易页的 `userKey`，不多给，D-Q85-5；链到交易页按此人筛选、有对话时链到消息中心），"锁定"的只列本商户的客户；
@@ -545,7 +545,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   认证前置（Q86）画成平台节点：不计人数、点它不出名单。向导"客户匹配"一步的前置区块在本商户的发布之下另有"须持有的认证"一组（目录中对象是答题者的四种），摘要写"X（持有）"；
   概况页在商户条款理解的轮进行中、本人未持有时显示"确认你的理解"卡，"开始"在新标签页打开 App 的发布页（一个账号、两个前端）。
 - 钱包页（Q9d）：已到账的充值行有"收据"：首次以当前界面语言签发（`QB_TOPUP_RECEIPT_ISSUE`），之后下载同一份存档 PDF。
-- 钱包页的现金账户（Q87a / Q87b，`sponsor/src/wallet/`）：三块——现金账户（余额、现金换学分、按开关显示换回；Q87b 加未付账单与逾期提醒、计费方式与信用额）、学分（现页；充值对话框按 `qb.sponsor.cash-settings` 显示目标 KUDOS / CASH，只给一个目标时不显示选择）、账单（Q87b：列表、从现金账户付、下载账单 PDF；后付的商户在月底之前"现在用现金账户付清"尚未开账单的费用）；换出与提交被未付账单拦住时页面写明并链到账单。运营商后台另有"商户的计费方式"页。概览加"现金余额""待付账单"两张卡。
+- 钱包页的现金账户（Q87a / Q87b，`sponsor/src/wallet/`）：三块——现金账户（余额、现金换学分、按开关显示换回；Q87b 加未付账单与逾期提醒、计费方式与信用额）、学分（现页；充值对话框按 `qb.sponsor.cash-settings` 显示目标 KUDOS / CASH，只给一个目标时不显示选择）、账单（Q87b：列表、从现金账户付、下载账单 PDF；后付的商户在月底之前"现在用现金账户付清"尚未开账单的费用）；换出与提交被未付账单拦住时页面写明并链到账单。运营商管理系统另有"商户的计费方式"页。概览加"现金余额""待付账单"两张卡。
 - 分析（Q9e2，`sponsor/src/analytics/`）：概览（`/dashboard`，入驻通过后）显示指标卡（各状态的发布数、正在答题、今日支出、可用余额与待支付、剩余预算、本月 AI 用量（Q8a））、近 7 天的趋势（完成人数折线与支出柱，上下两个小图，不用双 Y 轴）与近 7 天热门发布前 5；
   发布分析页 `/publications/<id>/analytics`（发布页的"分析"）显示概览、漏斗（流失最大的一段以徽标、斜纹与文字标出）、过去 24 小时（按小时）/ 过去 7 天（按天）的趋势与 App 的四个窗口、每题正确率与难度（不足 k 时注明"至少 k 人作答后显示"）与导出（趋势、概览、题目的 CSV 与 Excel）。
   每个图表有名称与合计的文字、下方可展开的数据表；颜色只用 `--chart-1` / `--chart-2`；时刻与日期按任务记下的部署时区显示（不按浏览器）；每 60 秒与回到前台时重读，并注明"每 10 分钟更新，最近更新 …"。
@@ -555,13 +555,13 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   进行中每 5 秒查询、至多 5 分钟、离开即停；候选是可编辑的卡片（纯文本，不渲染 Markdown），勾选"我已校对"的才能加入；丢弃、取消；失败与过期的说明；AI 关闭时排队的作业注明它在等待、恢复后继续、可以取消（平台 16v-2）。仪表盘的 AI 用量卡显示本月 Token、次数与剩余额度。
 - ~~AI 封面~~（Q98a 撤销）与 PDF 资料（Q8b，原 `sponsor/src/ai/AiCoverPanel.tsx` 已删除）：编辑器"模版"页基本信息下的面板：选封面文字的语言（第一次使用时同意 AI 说明）后生成 3 张候选图，以单选选一张"使用此封面"（经模版编辑写入，基本信息随即显示新封面），或全部丢弃；进行中每 5 秒查询、至多 5 分钟。生成题目的对话框中 PDF 资料注明"发送 PDF 文件本身"（不计入文字的大小）。
 
-### 7.3 管理员后台（`/admin/`）
+### 7.3 平台管理系统（`/admin/`）
 
-- 平台通用后台：用户与资料、商家、字典、内容页、业务参数、审批与待办、审计、账本、报表都由元数据生成。
+- 平台管理系统的通用页面：用户与资料、商家、字典、内容页、业务参数、审批与待办、审计、账本、报表都由元数据生成。
 - QuizBuks 扩展页（`backend/quizbuks/admin-extension`，`plans/Q9a-admin-extension.md`）：
   - Q9a：审核（`/qb/reviews`：待审的商家入驻与发布；发布页显示全部设置、档位、商家资金与冻结版本的完整内容（含正确答案、资料、图片），入驻页显示审批绑定的内容与邮箱验证状态；
     决定用平台的 `ApprovalPanel`）与用户汇总（`/qb/users/:userId`，资料 + 答题历史 + 同意记录（Q7b），资金流水只给财务，P-01）。
-  - Q7b：法律文本的草稿与 FAQ 由通用后台编辑（`QbLegalDoc` 的行操作"发布"即 `QB_LEGAL_PUBLISH`）；后台扩展的"规约类"页（`/qb/legal`）预览草稿、带草稿版本发布，并在版本列表中撤回预告版本（`QB_LEGAL_WITHDRAW`，也是 `QbLegalVersion` 的行操作）。
+  - Q7b：法律文本的草稿与 FAQ 由管理系统的通用页面编辑（`QbLegalDoc` 的行操作"发布"即 `QB_LEGAL_PUBLISH`）；管理系统扩展的"规约类"页（`/qb/legal`）预览草稿、带草稿版本发布，并在版本列表中撤回预告版本（`QB_LEGAL_WITHDRAW`，也是 `QbLegalVersion` 的行操作）。
   - Q7c：公告与通知（`/qb/broadcasts`）：全部公告与商家通知及确切统计；编写平台公告（受众、类型、范围、三语标题与 Markdown 正文及预览、定时、有效期），保存即见问题、确认后发送；撤回任何一条（理由、二次验证）。
     "规约类"页发布时可勾选"在收件箱中公告"（`QB_LEGAL_PUBLISH` 的 `announce`）。
   - Q9c：财务（`/qb/finance/**`）：总览、转账与大额审批、充值、核对、月报。
@@ -574,7 +574,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 ### 7.4 "Kudos"
 
-账本与接口中的币种是 JPY；三个前端都把金额显示为 `1,234 Kudos`（格式化函数一处），参考汇率只用于"约合 X USD"。平台通用后台对管理员仍显示 JPY（管理员需要知道真实币种）。
+账本与接口中的币种是 JPY；三个前端都把金额显示为 `1,234 Kudos`（格式化函数一处），参考汇率只用于"约合 X USD"。平台管理系统的通用页面对管理员仍显示 JPY（管理员需要知道真实币种）。
 
 ### 7.5 地址（Q30，`plans/Q30-paths.md`）
 
@@ -583,11 +583,11 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | `/` | 302 到 `/biz/`（`jabiz.web.root-redirect`，平台 16zf-a；查询串保留） |
 | `/biz/<页>/`、`/biz/zh/<页>/`、`/biz/ja/<页>/` | 招商网站（`quizbuks-web/biz`，Q31：6 页 × 3 语言的静态页面，`scripts/build.mjs` 渲染，`hreflang` 互指；没有入口的站点每个目录一页，平台 16zf-b；按浏览器语言转向，记住切换） |
 | `/taker/` | 答题人 PWA（入口 `app`，`app-path: /taker/`；manifest 与 Service Worker 在其下） |
-| `/sponsor/` | 商家后台（入口 `sponsor`） |
-| `/admin/` | 管理后台（入口 `admin`） |
+| `/sponsor/` | 发起方页面（入口 `sponsor`） |
+| `/admin/` | 平台管理系统（入口 `admin`） |
 | `/p`、`/play`、`/result`、`/redeem`、`/auth`、`/mail`、`/login`、`/signup`、`/password-reset`、`/welcome`、`/wallet`、`/history`、`/account`、`/inbox`、`/legal`、`/help`、`/about` 及其下 | App 搬走前的地址：301 到 `/taker/` 下的同一路径（`jabiz.web.redirects`），印出的二维码与寄出的邮件仍可用 |
 
-商家后台生成的 App 链接（分享、二维码、兑奖码）只经 `publishing/paths.ts` 的 `APP_BASE`；登录链接的返回路径是站点路径（`/taker/p/<id>`：App 用 `hrefOf`，邀请邮件由入口的 `app-path` 拼出）。
+发起方页面生成的 App 链接（分享、二维码、兑奖码）只经 `publishing/paths.ts` 的 `APP_BASE`；登录链接的返回路径是站点路径（`/taker/p/<id>`：App 用 `hrefOf`，邀请邮件由入口的 `app-path` 拼出）。
 
 ## 8. 外部系统
 
@@ -610,7 +610,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   前置条件（Q76，`PrerequisiteCheck`，422 `QB_PREREQUISITE_NOT_MET`；Q86 的认证前置同一条规则，不满足同一个错误码）。首页只列出三条都满足的；发布页照样显示并说明缺什么。普通发布一条语句也不加（有前置的开始多一条锁外语句，有认证前置的再多一条读持有）。
 - **管理员下架之后**（Q10b，评审 M-d）："被下架"= 管理员结束的，或管理员暂停（含封禁的暂停）而没有被管理员恢复的，此后因时间或名额结束的也算（`pausedBy = ADMIN` 保留，只有管理员恢复清除它；核查修正）。被下架的发布不能复制（422 `QB_PUBLICATION_TAKEN_DOWN`）；同一 Quiz 以后的任何发布都要人工审核：
   提交时案件的事实 `autoApprove = false`、`takenDown = true`（不论免审核开关），规则仍不要求审核或会沿用以前的批准时拒绝提交（422 `QB_PUBLICATION_REVIEW_REQUIRED`）；
-  后台扩展的审核页以模板 `qb.admin.quiz-takedowns` 显示被下架的发布与理由，读好之前不给出决定面板。封禁的暂停记固定的理由 `QB_ACCOUNT_SUSPENDED`（评审 L3，封禁的理由是内部的），封禁期间管理员不能恢复（评审 L9；恢复先取商家的账户锁，与封禁依次进行）。
+  管理系统扩展的审核页以模板 `qb.admin.quiz-takedowns` 显示被下架的发布与理由，读好之前不给出决定面板。封禁的暂停记固定的理由 `QB_ACCOUNT_SUSPENDED`（评审 L3，封禁的理由是内部的），封禁期间管理员不能恢复（评审 L9；恢复先取商家的账户锁，与封禁依次进行）。
   **残留的绕过**（已知，不在本期处理）：商家以同样内容另建新 Quiz（新的 `quizId`）发布，按普通规则处理（免审核开关打开时直接上架）；
   下架时同一 Quiz 已在进行中或商家自己暂停的其他发布照常进行（管理员需逐个下架）。可选的加强：管理员下架时一并暂停同一 Quiz 的其他进行中的发布（未实施，见计划 §7）。
 - 未激活（邮箱未验证）的用户不能写入任何 QuizBuks 数据：每个写入流程声明 `requiresVerifiedEmail()`（入口检查，403 `EMAIL_NOT_VERIFIED`）；商家入口不接受未验证的登录。
@@ -628,7 +628,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 | 编号 | 能力 | QuizBuks 的用处 | 必须在哪个应用阶段前完成 |
 |---|---|---|---|
-| 阶段 15 | 后台前端改用 shadcn/ui（D34） | 三个前端同一套组件与外观；扩展页 | 商家后台、管理员扩展页 |
+| 阶段 15 | 平台管理系统的前端改用 shadcn/ui（D34） | 三个前端同一套组件与外观；扩展页 | 发起方页面、管理员扩展页 |
 | G1 ★ | 登录入口（入口 → 角色、令牌只含入口角色的权限）、自助注册、邮箱验证、按邮箱登录、登录前应用检查 | 三个入口分开登录、注册、激活、封禁 | 账户阶段 |
 | G2 ★ | OIDC 自动开户（Google、Apple） | U-02 社交注册 | 账户阶段（可晚于邮箱注册） |
 | G3 ★ | 事务邮件（模板、Outbox、重试、偏好） | 激活、欢迎、转账结果 | 账户阶段 |
@@ -637,7 +637,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 | G7 | 异步外部作业（长时间外部调用、结果回写、用量） | AI 生成 | 内容阶段的 AI 部分 |
 | G9 ★ | 入站 Webhook（Stripe 签名、存档、去重、交给流程） | 充值到账、转账结果、收款账户状态 | 钱包阶段 |
 | G11 | 图表库 | 仪表盘、漏斗、趋势 | 分析阶段 |
-| G12 | 应用前端库（认证、令牌刷新、step-up、API 客户端、格式化），以及 SPA 构建对 PWA（manifest、Service Worker 作用域与 CSP）的支持 | App 与商家后台 | 第一个前端阶段 |
+| G12 | 应用前端库（认证、令牌刷新、step-up、API 客户端、格式化），以及 SPA 构建对 PWA（manifest、Service Worker 作用域与 CSP）的支持 | App 与发起方页面 | 第一个前端阶段 |
 | G10 | API Key | M-73（P2） | 以后 |
 
 ★ = 改变已有决策，须先在 `09-decisions.md` 新增决策并确认。分析中的 G6（视频）已取消；G8（账本余额下限）改由应用在钱包锁内判断（4.3），不再需要。
