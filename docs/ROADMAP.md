@@ -5216,3 +5216,32 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：空闲时被借出的连接有明确的持有者且测试断言之；任何经 `MAIL_TEXT_SAVE` 能存的文字都能作为受控变更提出；并发的请求（流程接口与登录类接口）不会让被拒的请求消耗其他桶的令牌，放行数不超过限额。
 
 **17zt 状态**：📝 待评审（分支 `1.3/phase-17zt-pool-and-limits`）。
+
+### 17zv 恢复核对与演练（2026-11-07，QuizBuks 首次上线的上线准备 B）
+
+**缘由**：上线清单要求恢复演练做过一次并记录 RTO 与 RPO；`operations.md` §2.4 的核对全是手工的（登录、二次验证、`INTEGRITY_VERIFY`、抽查文件），
+不同的人做出不同的结果，也查不出"文件卷与库不是同一时刻"或"带去的 MFA 密钥不对"这类只在真正恢复时才发现的问题。备份工具尚未选定，恢复本身由工具完成。
+
+| # | 内容 |
+|---|---|
+| 17zv-1 | 核对模式 `jabiz.ops.verify-restore.enabled`：`RestoreVerificationProperties` 以最高优先级关掉邮件、推送、定时任务、事件投递与外部作业，只在回环地址的空闲端口上服务；`RestoreVerifier` 核对最后的操作与目标时刻（恢复点）、`INTEGRITY_VERIFY`、全部 TOTP 密钥能否以配置的密钥解开、文件存储与 `sys_file` 一致，以及应用声明的模板（返回 0 行即通过）；`RestoreVerificationRunner` 写日志与 JSON 报告后以退出码停止。13 §8 |
+| 17zv-2 | 演练脚本 `tools/ops/restore-drill.sh`：可选地执行并计时备份工具的恢复命令，以镜像或 jar 在核对模式下启动一次，写出演练记录（T、RTO、恢复点、各项结果） |
+| 17zv-3 | 测试：`RestoreVerificationIT`（3 例）、`RestoreVerificationPropertiesTest`（2 例）。对真实的库演练：源应用开二次验证并上传文件，以 `pg_dump` 复制为"恢复"，演练通过；换一把 MFA 密钥则失败。演练中发现并改正：核对自己的 `INTEGRITY_VERIFY` 记下的操作晚于 T，使恢复被判为越过 T（改为最先核对并排除核对自己的操作；修改前新测试失败） |
+
+**验收**：一条命令完成恢复后的全部平台核对并写出带 RTO 与恢复点的记录；带错密钥、文件不全、恢复越过 T 都被报告；核对期间不发邮件、不跑任务、不投递事件。
+密钥轮换的演练在 C（D78）合并后加入同一脚本。
+
+**17zv 状态**：📝 待评审（分支 `1.3/phase-17zv-restore-verify`）。
+
+### 17zy `APPROVAL_SCOPE_MOVE` 的单次上限改为配置（2026-11-07，QuizBuks 首次上线 S2 的改派）
+
+**缘由**：单次上限是包内常量 `MAX_ITEMS = 500`，应用的改派流程分批时只能自己再写一遍 500。
+
+| # | 内容 |
+|---|---|
+| 17zy-1 | 配置 `jabiz.approval.scope-move.max-items`（缺省 500，1–10 000）；公开的 Bean `ApprovalScopeMoveSettings`（`maxItems()`，启动检查 `APPROVAL`）；常量 `ApprovalScopeMove.DEFAULT_MAX_ITEMS`、`MAX_LIMIT`；输入的 `@Size` 声明硬上限，步骤按配置检查，超过即与 `@Size` 同样的 400 违规（字段 `requests` / `taskSourceKeys`），在读取之前。D76 修订、18 §3.8 |
+| 17zy-2 | 测试：`ApprovalScopeMoveSettingsTest`（缺省、范围、越界的启动检查）、`ApprovalScopeMoveLimitIT`（上限 2：3 个案件与 3 个来源键各被 400 拒绝，2 个照常通过）；`ApprovalScopeMoveIT` 照旧通过 |
+
+**验收**：应用引用 `ApprovalScopeMoveSettings.maxItems()` 而不写 500；上限可配置且越界即启动失败。
+
+**17zy 状态**：📝 待评审（分支 `1.3/phase-17zy-scope-move-limit`）。

@@ -1,5 +1,6 @@
 package com.jabiz.runtime.approval;
 
+import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.process.NoMetadata;
@@ -41,11 +42,29 @@ class MoveApprovalScope implements StepHandler<NoMetadata, ProcessContext> {
     private final ApprovalStore store;
     private final TaskWriter tasks;
     private final ProcessInputs inputs;
+    private final ApprovalScopeMoveSettings settings;
 
-    MoveApprovalScope(ApprovalStore store, TaskWriter tasks, ProcessInputs inputs) {
+    MoveApprovalScope(ApprovalStore store, TaskWriter tasks, ProcessInputs inputs,
+        ApprovalScopeMoveSettings settings) {
         this.store = store;
         this.tasks = tasks;
         this.inputs = inputs;
+        this.settings = settings;
+    }
+
+    /** The configured limit, refused as the input's own {@code @Size} would refuse it (400, constraint Size). */
+    private List<Violation> tooMany(ApprovalScopeMove.MoveInput input) {
+        int max = settings.maxItems();
+        List<Violation> violations = new java.util.ArrayList<>();
+        if (input.requests() != null && input.requests().size() > max) {
+            violations.add(new Violation("requests", PlatformErrorCodes.INVALID_VALUE,
+                "requests size must be between 0 and " + max, Map.of("constraint", "Size", "max", max)));
+        }
+        if (input.taskSourceKeys() != null && input.taskSourceKeys().size() > max) {
+            violations.add(new Violation("taskSourceKeys", PlatformErrorCodes.INVALID_VALUE,
+                "taskSourceKeys size must be between 0 and " + max, Map.of("constraint", "Size", "max", max)));
+        }
+        return violations;
     }
 
     @Override
@@ -61,6 +80,10 @@ class MoveApprovalScope implements StepHandler<NoMetadata, ProcessContext> {
             ApprovalScopeMove.MoveInput input = ctx.get(ApprovalScopeMove.INPUT, ApprovalScopeMove.MoveInput.class);
             // A sub-process's input is not checked at an entry: the step checks its constraints itself (400).
             inputs.validate(input);
+            List<Violation> tooMany = tooMany(input);
+            if (!tooMany.isEmpty()) {
+                return Mono.error(new ValidationException(tooMany));
+            }
             // A scoped session writes its own scope's rows only (decision D64): it cannot hand them to another value.
             if (ctx.request().entryScope() != null) {
                 return Mono.error(new BusinessRuleViolationException(new Violation("toValue",
