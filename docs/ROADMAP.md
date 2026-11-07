@@ -5163,3 +5163,20 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 | 17zq-2 | 测试：`FileUploadIT` 断言索引存在（`pg_indexes`）、按上传者的计数与求和正确，关闭顺序扫描时用量查询与"按上传者、按时间倒序"的列表查询的计划都用该索引（后者不排序）；设计 14 §2 |
 
 **17zq 状态**：📝 待评审（分支 `1.3/phase-17zq-file-uploader-index`）。
+
+### 17zr 服务器下载链接中的图片（2026-11-07，QuizBuks 首次上线 P6 / F-C6；决策 D75）
+
+**缘由**：商家导入内容时给出插图的链接，确认页逐张列出能否使用，能用的由服务器取来、成为商家上传的文件。业务代码不能自己联网（D38），`ExternalService` 只通向声明的白名单主机，
+而按用户给出的地址由服务器发请求是 SSRF 的典型入口（本机、内网、云的元数据服务）。
+
+| # | 内容 |
+|---|---|
+| 17zr-1 | core：`PublicAddresses.isPublic(InetAddress)`（纯计算：IPv4 排除 IANA 特殊用途段，IPv6 只承认 2000::/3 并排除 2001::/23、2001:db8::/32、3fff::/20，映射 / 兼容 / 6to4 / NAT64 按所含 IPv4 判断）；`RemoteImageLink`（只有 https、无用户信息、允许的端口、常规写法的主机，国际化域名转 ASCII，`shown()` 去掉查询）；注解 `@MaskedLink`；错误码 `FILE_FETCH_NOT_HTTPS` / `_LINK_INVALID` / `_ADDRESS_NOT_PUBLIC` / `_TOO_MANY_REDIRECTS` / `_TOO_LARGE` / `_NOT_IMAGE` / `_TIMEOUT` / `_FAILED`（`reason`），三语 |
+| 17zr-2 | runtime：子流程 `FILE_FETCH`（`subProcessOnly()`，权限 `file.fetch` 不授予角色）与平台步骤 `FetchRemoteImage.of(策略, ctx -> 链接).into(键)`（`CheckedStep`：策略存在且接受图片）；步骤 `FetchImage` 检查策略的上传权限、链接与限流，`RemoteImageFetcher`（Reactor Netty：每跳解析一次、全部地址须公网、连接已解析的地址并以主机名做 SNI 与证书校验、客户端解析器只接受已检查的地址、手动跟随至多 `max-redirects` 次重定向并逐跳重新检查、固定请求头、不复用不重试不经代理、响应头上限、超时与整体时限、边收边计数），`FileUploadService.storeFetched`（只收图片，其余与上传相同），行在流程事务中以请求人登记 |
+| 17zr-3 | 配置 `jabiz.files.fetch.max-redirects`（3）/ `connect-timeout`（5 s）/ `read-timeout`（20 s）/ `deadline`（60 s）/ `allowed-ports`（443），启动检查 `RemoteFetchChecks`（`FILE`）；测试接缝 `RemoteFetchNetwork`（解析器、地址判定、信任的证书，只由测试配置以 `@Primary` 替换） |
+| 17zr-4 | 限流：`jabiz.process.rate-limits.FILE_FETCH` 新增 `per-host`（只用于它），`ProcessRateLimits.checkFetch` 按人、主机、实例计数，平台缺省 30 / 60 / 300 每分钟；`ProcessAdmissionChecks` 相应检查 |
+| 17zr-5 | 记录与观测：`SensitiveDataMasker` 按 `@MaskedLink` 的名字把 `input_summary` 中的链接写成 `https://主机/路径?…`；观测 `jabiz.file.fetch` 只带 `outcome` |
+| 17zr-6 | 示范：app 的 `PRODUCT_IMAGE_FROM_LINK`（`ProductImageLink`，从链接设置商品图，三语流程名） |
+| 17zr-7 | 测试：core `PublicAddressesTest`、`RemoteImageLinkTest`；runtime `RemoteImageFetcherTest`、`RemoteFetchChecksTest`、`ProcessRateLimitsTest`、`ProcessAdmissionChecksTest`、`SensitiveDataMaskerTest`；app `RemoteImageFetchIT`（测试夹具 `HttpsStubServer`：本机 HTTPS 桩服务，`keytool` 现场生成证书；成功路径与 EXIF/GPS 去除、http 与端口、私网 / 元数据 / 各种写法的地址、重定向到私网 / http / 其他端口 / 过多、DNS 重绑定（第二次解析到私网时未连接私网桩）、证书主机名、非图片、超大（有无长度、分块、到连接关闭）、超时与整体时限、请求头、权限与 `PROCESS_INTERNAL`、按主机限流、观测标签、`input_summary` 遮蔽、示范流程）；设计 14 §12、06 §2.1、10 §15.10、13、决策 D75、根 `CLAUDE.md` |
+
+**17zr 状态**：📝 待评审（分支 `1.3/phase-17zr-remote-image-fetch`）。

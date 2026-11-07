@@ -500,7 +500,7 @@
 | 审批与控制 | `approval.decide`、`approval.read`、`control.propose`、`control.publish`、`sod.read`；受保护的安全变更的审批 `security.protected-change.decide`（D51） |
 | 待办与编号 | `task.read`、`task.notify`（系统）、`numbering.read` |
 | 邮件 | `mail.read`、`mail.send`（系统）；`auth.account`、`auth.mail-preference`（用户本人，不授予角色） |
-| 文件 | `file.read`、`file.write`、`file.delete`、`file.generated.read`、`file.generated.archive`（不授予角色）；各文件策略自己的上传 / 读取权限 |
+| 文件 | `file.read`、`file.write`、`file.delete`、`file.generated.read`、`file.generated.archive` 与 `file.fetch`（不授予角色）；各文件策略自己的上传 / 读取权限 |
 | 报表与单据 | `report.issue`、`report.archive.read`、`document.issue`、`document.archive.read`、`document.send`、`document.send.any` |
 | 合规 | `integrity.seal`、`integrity.verify`、`integrity.read`、`legal.hold.read/.write`、`retention.read`、`data.export` |
 | 入站 Webhook | `inbound.read`（收到的事件与原样正文）；`inbound.write`（只读数据视图声明的写权限，无人写入） |
@@ -515,4 +515,4 @@
 
 ## 附录 C 需求中常涉及的应用级配置
 
-本位币与小数位（`jabiz.ledger.currency` / `scale`）、会计年度末（`jabiz.fiscal-year-end`）、界面语言与区域（`jabizApp`）、报表公司名 / 时区 / 字体 / 导出行数上限（`jabiz.reports.*`）、单据纸张与上限（`jabiz.documents.*`）、导入行数上限（`jabiz.imports.max-rows`）、文件存储目录 / 请求上限 / 孤儿清扫时间 / 上传限流（`jabiz.files.*`）、公开访问开关 / 缓存 / 限流 / 上限（`jabiz.public.*`）、邮件（`jabiz.mail.enabled` / `from` / `base-url` / `unsubscribe-path` / `timeout`、`spring.mail.*`）、令牌有效期 / 闲置 / 锁定 / 密码 / 二次验证 / OIDC（`jabiz.security.*`）、事件投递与任务调度（`jabiz.events.*`、`jabiz.jobs.*`）、Webhook 订阅与主机白名单（`jabiz.webhooks.*`）、入站 Webhook 提供方（`jabiz.inbound-webhooks.providers.*`）、外部服务的地址与主机（`jabiz.external-services.<名>.*`）、外部作业执行器（`jabiz.external-jobs.executor.*`）、流程中读取上限与锁等待（`jabiz.process.max-read-rows` / `lock-timeout`）、封存与校验周期（`jabiz.integrity.*`）、按地址的国家的地址库（`jabiz.geoip.database` / `required` / `max-age`，D74）、密钥环境变量（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、OIDC 客户端密钥、外部服务声明的密钥）。
+本位币与小数位（`jabiz.ledger.currency` / `scale`）、会计年度末（`jabiz.fiscal-year-end`）、界面语言与区域（`jabizApp`）、报表公司名 / 时区 / 字体 / 导出行数上限（`jabiz.reports.*`）、单据纸张与上限（`jabiz.documents.*`）、导入行数上限（`jabiz.imports.max-rows`）、文件存储目录 / 请求上限 / 孤儿清扫时间 / 上传限流（`jabiz.files.*`）、下载链接中的图片的重定向次数 / 超时 / 端口（`jabiz.files.fetch.*`，D75）、公开访问开关 / 缓存 / 限流 / 上限（`jabiz.public.*`）、邮件（`jabiz.mail.enabled` / `from` / `base-url` / `unsubscribe-path` / `timeout`、`spring.mail.*`）、令牌有效期 / 闲置 / 锁定 / 密码 / 二次验证 / OIDC（`jabiz.security.*`）、事件投递与任务调度（`jabiz.events.*`、`jabiz.jobs.*`）、Webhook 订阅与主机白名单（`jabiz.webhooks.*`）、入站 Webhook 提供方（`jabiz.inbound-webhooks.providers.*`）、外部服务的地址与主机（`jabiz.external-services.<名>.*`）、外部作业执行器（`jabiz.external-jobs.executor.*`）、流程中读取上限与锁等待（`jabiz.process.max-read-rows` / `lock-timeout`）、封存与校验周期（`jabiz.integrity.*`）、按地址的国家的地址库（`jabiz.geoip.database` / `required` / `max-age`，D74）、密钥环境变量（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、OIDC 客户端密钥、外部服务声明的密钥）。

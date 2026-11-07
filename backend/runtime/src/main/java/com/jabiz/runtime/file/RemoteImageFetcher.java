@@ -109,6 +109,8 @@ public class RemoteImageFetcher {
         this.network = network;
         this.properties = properties;
         this.client = HttpClient.newConnection()
+            // Never through a proxy (system properties included): the proxy would resolve the name itself.
+            .noProxy()
             .resolver(new ValidatedAddresses(network.addresses()))
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) Math.max(1, properties.connectTimeout().toMillis()))
             .responseTimeout(properties.readTimeout())
@@ -126,7 +128,7 @@ public class RemoteImageFetcher {
      * Downloads what {@code link} gives into {@code target} (replacing it), at most {@code maxBytes}; the number of
      * bytes written. Errors are {@link Refusal}s or {@link RemoteImageLink.Refused}.
      */
-    public Mono<Long> fetch(RemoteImageLink link, long maxBytes, Path target) {
+    Mono<Long> fetch(RemoteImageLink link, long maxBytes, Path target) {
         return hop(link, 0, maxBytes, target)
             .timeout(properties.deadline(), Mono.error(() -> timeout("The download took longer than "
                 + properties.deadline())))

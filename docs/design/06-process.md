@@ -49,6 +49,7 @@
 | `HoldLock.shared(ctx -> 名称[, 最长等待])` / `HoldLock.exclusive(ctx -> 名称[, 最长等待])` | —；取得该名称的锁并持有到事务结束（§4.1）；名称为 null 或空白时不取；`最长等待`（`Duration`，阶段 16k）短于全局时限时以它为准 |
 | `pb.admission(族名, 输入 -> 键)`（不是步骤，流程的声明） | —；根流程在借连接之前按准入键排队，为最外层的热门 `HoldLock` 声明（§4.2，D45）；子流程从不排队 |
 | `PublishEvent.of(eventType, ctx -> 载荷)` / `PublishEvent.when(条件, eventType, …)` | —；在流程事务内写入 Outbox（`OutboxEventPublisher`），提交后由投递器交给订阅的消费者（11 §2）；载荷须为对象，秘密为 null |
+| `FetchRemoteImage.of(文件策略, ctx -> 链接).into(targetKey)` | `FileProcesses.FileInfo`：服务器下载链接中的图片一次，经上传的流水线存为请求人上传的文件（子流程 `FILE_FETCH`；https、公网地址、重定向与大小有界；14 §12、D75）；下载在事务中，放在取锁之前 |
 
 引用（数据视图、模板、被调用的流程）在启动时检查（`CheckedStep`）。业务模块不得实现 `StepHandler`（ArchUnit）。
 

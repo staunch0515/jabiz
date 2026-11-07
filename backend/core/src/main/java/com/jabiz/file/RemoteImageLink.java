@@ -66,6 +66,12 @@ public record RemoteImageLink(String host, int port, String requestTarget, boole
     public RemoteImageLink {
         Objects.requireNonNull(host, "host");
         Objects.requireNonNull(requestTarget, "requestTarget");
+        // Built by parse; anything else must not smuggle a header or a second request line through.
+        if (host.isEmpty() || !host.chars().allMatch(c -> c > 0x20 && c < 0x7f && c != '/' && c != '@')
+            || !requestTarget.startsWith("/") || !requestTarget.chars().allMatch(c -> c > 0x20 && c < 0x7f)
+            || port < 1 || port > 65535) {
+            throw new IllegalArgumentException("Not a checked link");
+        }
     }
 
     /**

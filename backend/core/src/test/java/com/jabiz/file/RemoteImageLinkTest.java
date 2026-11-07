@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -130,6 +131,20 @@ class RemoteImageLinkTest {
                     refused -> assertThat(refused.code()).isEqualTo(RemoteImageLink.LINK_INVALID));
         }
         assertThatThrownBy(() -> link.redirect(null, HTTPS)).isInstanceOf(RemoteImageLink.Refused.class);
+    }
+
+    @Test
+    void onlyCheckedPartsMakeALink() {
+        assertThat(new RemoteImageLink("example.com", 443, "/a?b", false).shown()).isEqualTo("https://example.com/a?…");
+        for (Runnable bad : List.<Runnable>of(
+            () -> new RemoteImageLink("example.com\r\nX: y", 443, "/", false),
+            () -> new RemoteImageLink("", 443, "/", false),
+            () -> new RemoteImageLink("a@example.com", 443, "/", false),
+            () -> new RemoteImageLink("example.com", 443, "a b", false),
+            () -> new RemoteImageLink("example.com", 443, "/a b", false),
+            () -> new RemoteImageLink("example.com", 0, "/", false))) {
+            assertThatThrownBy(bad::run).isInstanceOf(IllegalArgumentException.class);
+        }
     }
 
     @Test

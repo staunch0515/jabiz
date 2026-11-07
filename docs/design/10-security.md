@@ -809,6 +809,8 @@ jabiz:
   被限流的请求不读数据库、不借连接（`ProcessAdmissionIT` 在连接全被占用时确认）。
 - 只作用于流程接口：子流程、定时任务、事件消费者与平台自己的入口（登录、实体接口、上传等）不经它。启动检查（`PROCESS`）：配置的流程须已注册且进目录（不是 `internal()` / `entryOnly()` / `subProcessOnly()`），
   数值为正，至少声明一种桶。每次拒绝记一次观测 `jabiz.process.rate_limited`（瞬时的观测，作计数用；标签只有 `process`、`scope`，13）。
+- 唯一的例外是子流程 `FILE_FETCH`（服务器下载链接中的图片，14 §12、决策 D75）：它自己计数，`per-user`、`per-instance` 与只用于它的 `per-host`（按链接的主机），
+  不论哪个流程调用它；平台缺省每人每分钟 30、每主机 60、每实例 300（配置整体替换缺省）。启动检查拒绝它的 `per-address` 等，也拒绝其他流程上的 `per-host`。
 - 与 `SignUpRateLimits`（§15.7）、`SignInRateLimits`（§4.1）的关系：后两者限的是平台自己的匿名账户接口、本人账户操作与登录类接口（种类写死在代码中），不变；三者共用 `TokenBucketLimiter` 与 `ClientAddresses`。
   限流不是准入：限流挡住单个用户或地址刷请求，准入挡住所有人一起挤一把锁（503 `PROCESS_BUSY`，06 §4.2）。
 

@@ -136,6 +136,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `SaveChanges.now`，再 `CallProcess.of("FILE_DELETE", …)`。文件名不进 `input_summary`；`FileStore` 返回 `Mono`/`Flux`，不对业务开放。
   服务器生成、交给外部的文件（银行付款文件、申报文件）不进 `sys_file`：业务流程以子流程 `CallProcess.of("FILE_ARCHIVE", …)` 原样保存到只追加的 `sys_generated_file`
   （声明读取所需的权限），下载只经 `GET /api/generated-files/{id}`（记入 `sys_reveal_record`）；不自建存档表（14 §10、决策 D31）。
+  按用户给出的链接取图片只经平台步骤 `FetchRemoteImage.of(策略, ctx -> 链接).into(键)`（子流程 `FILE_FETCH`：https、每跳只连公网地址、重定向与大小有界、只收图片并重新编码，记为请求人上传的文件；带链接的输入组件标 `@MaskedLink`；14 §12、决策 D75），业务代码绝不自己按任意地址取内容。
 - **公开访问**（见 15 与决策 D17）：匿名只能 `GET/HEAD /api/public/queries/{id}` 与 `/api/public/files/{id}[/{变体}]`，总开关
   `jabiz.public.enabled` 默认关闭。公开的行与列只在数据视图上声明：`publicRead(p -> p.fields(...))`（固定值范围、非默认视图、不含敏感字段），
   模板渲染时投影到白名单；公开模板头部写 `access: public`（代替 `permissions`），`datasets` 必须指向公开视图。文件是否公开由公开行的白名单文件字段推导，
