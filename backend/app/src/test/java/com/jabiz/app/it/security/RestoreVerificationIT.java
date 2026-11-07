@@ -2,6 +2,9 @@ package com.jabiz.app.it.security;
 
 import com.jabiz.app.commerce.CommerceEntities;
 import com.jabiz.app.commerce.CommerceFiles;
+import com.jabiz.runtime.DatasetEntityManager;
+import com.jabiz.runtime.dataset.DatasetRegistry;
+import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.file.FileKeys;
 import com.jabiz.runtime.file.FileStore;
 import com.jabiz.runtime.ops.RestoreVerifier;
@@ -9,11 +12,14 @@ import com.jabiz.runtime.process.ProcessExecutor;
 import com.jabiz.runtime.query.AdvancedQueryExecutor;
 import com.jabiz.runtime.query.SqlTemplateRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
+import com.jabiz.runtime.security.secret.SecretSealer;
 import com.jabiz.runtime.test.FileSamples;
 import com.jabiz.security.Base32;
 import com.jabiz.security.MfaSecretCipher;
+import com.jabiz.security.SealedFields;
 import com.jabiz.security.Totp;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
@@ -60,6 +66,21 @@ class RestoreVerificationIT extends SecurityItSupport {
     @Autowired
     StorageAdapterRegistry storages;
 
+    @Autowired
+    SecretSealer sealer;
+
+    @Autowired
+    ObjectProvider<SealedFields> sealedFields;
+
+    @Autowired
+    EntityDefinitionRegistry entities;
+
+    @Autowired
+    DatasetRegistry datasets;
+
+    @Autowired
+    DatasetEntityManager entityManager;
+
     private void enrolled(String name) {
         userWith(name, PASSWORD);
         String bearer = bearerOf(signIn(name, PASSWORD));
@@ -93,7 +114,7 @@ class RestoreVerificationIT extends SecurityItSupport {
 
     private RestoreVerifier verifier(MfaSecretCipher mfa, String targetTime) {
         return new RestoreVerifier(processes, mfa, files, templates, queries, storages, "default", "", targetTime,
-            clock);
+            false, sealer, sealedFields, entities, datasets, entityManager, clock);
     }
 
     private static RestoreVerifier.Item item(RestoreVerifier.Report report, String name) {
@@ -108,13 +129,14 @@ class RestoreVerificationIT extends SecurityItSupport {
 
         RestoreVerifier.Report report = verifier.verify().block();
         assertThat(report.items()).extracting(RestoreVerifier.Item::name).containsExactly("last-operation", "integrity",
-            "mfa-secrets", "files", "template it.verify_none", "template it.verify_rows",
+            "mfa-secrets", "sealed-secrets", "files", "template it.verify_none", "template it.verify_rows",
             "template it.no_such_template");
         assertThat(item(report, "integrity").passed()).as(item(report, "integrity").detail()).isTrue();
         assertThat(item(report, "mfa-secrets")).satisfies(i -> {
             assertThat(i.passed()).isTrue();
             assertThat(i.detail()).startsWith("1 second factors, 0 cannot be opened");
         });
+        assertThat(item(report, "sealed-secrets").passed()).as(item(report, "sealed-secrets").detail()).isTrue();
         assertThat(item(report, "files")).satisfies(i -> {
             assertThat(i.passed()).isTrue();
             assertThat(i.detail()).startsWith("1 files, 0 objects missing");
