@@ -96,19 +96,6 @@ class ProspectIT extends AiItSupport {
 
     // ---- helpers -----------------------------------------------------------------------------------------------------
 
-    /** A user whose address is verified: a new version of the platform's user, as the verification writes. */
-    private String verifiedUser(String name) {
-        String userId = createUser(name);
-        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
-            + "current_schema() AND table_name = 'sec_user_version' AND column_name NOT IN ('row_id', 'version_no', "
-            + "'verified_email') ORDER BY ordinal_position").stream().map(row -> (String) row.get("column_name"))
-            .toList();
-        String list = String.join(", ", columns);
-        execute("INSERT INTO sec_user_version (" + list + ", version_no, verified_email) SELECT " + list
-            + ", version_no + 1, email FROM sec_user_version WHERE user_id = ?::uuid ORDER BY version_no DESC LIMIT 1",
-            userId);
-        return userId;
-    }
 
     /** Headquarters' prospecting person: a real user (the test mail of the server goes to their address). */
     private String hq(String userId) {
@@ -121,8 +108,7 @@ class ProspectIT extends AiItSupport {
 
     /** A new operator with one lead; returns {operatorId, the lead's token, the lead}. */
     private List<String> newOperator(String name) {
-        String operatorId = (String) run(OperatorProcesses.SAVE, hqAdmin(), body("name", name, "contactName",
-            "Owner", "contactEmail", "ops@" + name.toLowerCase().replace(' ', '-') + ".example")).get("operatorId");
+        String operatorId = newOperator(hqAdmin(), name);
         String member = verifiedUser(unique("q48c-op"));
         run(OperatorProcesses.MEMBER_ADD, hqAdmin(), body("operatorId", operatorId, "userId", member, "lead", true));
         return List.of(operatorId, tokenOf(member, QbRoles.OPERATOR), member);
@@ -529,12 +515,11 @@ class ProspectIT extends AiItSupport {
         assertThat(to(OWN, "info@funnel-tea.example")).hasSize(2);
 
         // The business signs up by the trial's link: the sponsor is the operator's (D-Q48-9), once.
-        // Q59c: the platform had assigned them by their sign-up language; the trial's operator replaces that.
+        // F-S1: applying on their own put them with the platform operator; the trial's operator replaces that.
         String sponsor = newSponsor(unique("q48d-s"));
-        String byLanguage = newOperator(unique("Lang")).get(0);
-        execute("INSERT INTO qb_sponsor_operator (assignment_id, user_id, operator_id, assigned_at, assigned_by, "
-            + "reason, version) VALUES (gen_random_uuid()::text, ?, ?, now(), ?, 'Sign-up language: ja', 0)", sponsor,
-            byLanguage, com.jabiz.quizbuks.operator.QbOperators.BY_LANGUAGE);
+        assertThat(query("SELECT assigned_by FROM qb_sponsor_operator WHERE user_id = ?", sponsor)).singleElement()
+            .satisfies(r -> assertThat(r).containsEntry("assigned_by",
+                com.jabiz.quizbuks.operator.QbOperators.BY_DEFAULT));
         assertThat(run(ProspectProcesses.CLAIM, sponsorToken(sponsor), body("trialKey", key)))
             .containsEntry("outcome", "claimed").containsEntry("operatorId", owner);
         assertThat(query("SELECT operator_id, assigned_by FROM qb_sponsor_operator WHERE user_id = ?", sponsor))
@@ -548,7 +533,8 @@ class ProspectIT extends AiItSupport {
             .containsEntry("outcome", "taken");
         assertThat(run(ProspectProcesses.CLAIM, sponsorToken(other), body("trialKey", "0".repeat(48))))
             .containsEntry("outcome", "unknown");
-        assertThat(query("SELECT 1 FROM qb_sponsor_operator WHERE user_id = ?", other)).isEmpty();
+        assertThat(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?", other)).singleElement()
+            .satisfies(r -> assertThat(r.get("operator_id")).isNotEqualTo(owner));
 
         // The funnel counts it.
         assertThat(items("qb.operator.prospect-funnel", tokenOf(operator.get(2), QbRoles.OPERATOR), Map.of()))

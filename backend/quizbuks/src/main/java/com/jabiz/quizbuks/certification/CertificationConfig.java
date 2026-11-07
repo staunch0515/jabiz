@@ -64,16 +64,6 @@ public class CertificationConfig {
             .scope(s -> s.fromContext("userId", "actorId", RequestContext::actorId)));
     }
 
-    @Bean
-    EntityDefinition qbOfficialPublisherEntity() {
-        return QbCertifications.OFFICIAL_ENTITY;
-    }
-
-    @Bean
-    DatasetDefinition qbOfficialPublisherDataset() {
-        return defaultDataset(QbCertifications.OFFICIAL);
-    }
-
     // ---- Q88a: the sponsors' own certifications --------------------------------------------------------------------
 
     @Bean
@@ -161,12 +151,6 @@ public class CertificationConfig {
             .item(CertificationHolding.PASSED, "en", "Passed", "zh", "答题合格", "ja", "合格")
             .item(CertificationHolding.GRANTED, "en", "Granted", "zh", "人工授予", "ja", "付与")
             .item(CertificationHolding.REVOKED, "en", "Revoked", "zh", "收回", "ja", "取り消し"));
-    }
-
-    @Bean
-    ProcessDefinition<CertificationProcesses.OfficialInput, CertificationProcesses.OfficialOutput, ProcessContext>
-        qbOfficialPublisherSet() {
-        return CertificationProcesses.officialSet();
     }
 
     @Bean

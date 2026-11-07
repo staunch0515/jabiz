@@ -167,6 +167,29 @@ public class OperatorConfig {
     }
 
     @Bean
+    ProcessDefinition<OperatorHealth.RunInput, OperatorHealth.RunOutput, ProcessContext> qbOperatorCheckRun() {
+        return OperatorHealth.run();
+    }
+
+    /** F-S1: the daily check of the operators' structure. */
+    @Bean
+    com.jabiz.job.JobDefinition<OperatorHealth.RunInput> qbOperatorCheckJob(
+        ProcessDefinition<OperatorHealth.RunInput, OperatorHealth.RunOutput, ProcessContext> qbOperatorCheckRun) {
+        return com.jabiz.job.JobDefinition.cron(OperatorHealth.JOB, OperatorHealth.CRON, java.time.ZoneOffset.UTC,
+            qbOperatorCheckRun, OperatorHealth.RunInput::new);
+    }
+
+    @Bean
+    ProcessDefinition<OperatorHandover.Input, OperatorHandover.Output, ProcessContext> qbOperatorTaskHandover() {
+        return OperatorHandover.handover();
+    }
+
+    @Bean
+    ProcessDefinition<OperatorHandover.Move, OperatorHandover.Output, ProcessContext> qbOperatorTaskMove() {
+        return OperatorHandover.move();
+    }
+
+    @Bean
     ProcessDefinition<OperatorProcesses.SpotCheckInput, OperatorProcesses.SpotCheckOutput, ProcessContext>
         qbReviewSpotCheck() {
         return OperatorProcesses.spotCheck();

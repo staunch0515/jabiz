@@ -193,7 +193,7 @@ final class PublicationEditing {
     /**
      * Loads the caller's operator (Q59c-2), as {@link #loadSponsorProfile} does with the profile: their publication's
      * review belongs to it, as its operator's members are the ones who see and decide it (platform decision D64).
-     * None: headquarters'.
+     * Every sponsor has one (F-S1).
      */
     static <I, O> void loadSponsorOperator(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Load the sponsor's operator", QueryEntities.<ProcessContext>of(
@@ -201,11 +201,16 @@ final class PublicationEditing {
                 .where(new QueryPredicate.Eq("userId", ctx.request().actorId())).limit(1).build(), SPONSOR_OPERATOR));
     }
 
-    /** The case in its sponsor's operator's scope, when the sponsor's operator was loaded and they have one. */
+    /**
+     * The case in its sponsor's operator's scope (F-S1: every sponsor has one; a sponsor without is an inconsistency
+     * the daily check reports, and the review is refused rather than left to whoever has no scope).
+     */
     static ApprovalCase withOperator(ApprovalCase approvalCase, ProcessContext ctx) {
         List<EntityInstance> rows = ctx.contains(SPONSOR_OPERATOR) ? list(ctx, SPONSOR_OPERATOR) : List.of();
-        return rows.isEmpty() ? approvalCase : approvalCase.scope(QbOperators.SCOPE,
-            String.valueOf((Object) rows.getFirst().get("operatorId")));
+        if (rows.isEmpty()) {
+            throw new IllegalStateException("Sponsor " + ctx.request().actorId() + " has no operator");
+        }
+        return approvalCase.scope(QbOperators.SCOPE, String.valueOf((Object) rows.getFirst().get("operatorId")));
     }
 
     /** The caller's reward methods setting (Q22), for {@link #allowedMethods}. */

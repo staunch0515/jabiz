@@ -77,8 +77,6 @@ public final class MessageProcesses {
     public static final String CASH_MARKED_PAID_CONSUMER = "qb.msg-cash-marked-paid";
     public static final String CASH_CONFIRMED_CONSUMER = "qb.msg-cash-confirmed";
     public static final String CASH_DISPUTED_CONSUMER = "qb.msg-cash-disputed";
-    public static final String CASH_RESOLVED_CONSUMER = "qb.msg-cash-resolved";
-    public static final String CASH_RESOLVED_SPONSOR_CONSUMER = "qb.msg-cash-resolved-sponsor";
     public static final String CASH_OVERDUE_CONSUMER = "qb.msg-cash-overdue";
     public static final String REDEEM_DUE_CONSUMER = "qb.msg-redeem-due";
     public static final String REDEEM_CLAIMED_CONSUMER = "qb.msg-redeem-claimed";
@@ -94,6 +92,8 @@ public final class MessageProcesses {
     public static final String DIGITAL_RESOLVED_SPONSOR_CONSUMER = "qb.msg-digital-resolved-sponsor";
     /** Q82: a sponsor's reply in a conversation. */
     public static final String CONVERSATION_REPLY_CONSUMER = "qb.msg-conversation-reply";
+    /** F-S1: a sponsor moved to another operator. */
+    public static final String OPERATOR_CHANGED_CONSUMER = "qb.msg-operator-changed";
 
     /**
      * The taker's push notification of a prize won (platform 17k, decision D69): the moment a taker learns of a prize,
@@ -148,6 +148,7 @@ public final class MessageProcesses {
     static final String PENDING_BEFORE = "pendingBefore";
     static final String PUSH = "push";
     static final String CONVERSATION = "conversation";
+    static final String OPERATOR = "operator";
 
     /** A push: which, to whom, and the page of the app a tap opens. */
     record Push(PushTemplate template, String userId, String link) {}
@@ -203,6 +204,11 @@ public final class MessageProcesses {
                         com.jabiz.quizbuks.conversation.QbConversations.CONVERSATION), ctx -> byId("conversationId",
                         QbInbox.CONVERSATION_REPLY.equals(input(ctx).kind()) ? input(ctx).sourceId() : null),
                         CONVERSATION),
+                    // F-S1: the operator a sponsor was moved to.
+                    QueryEntities.query(com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
+                        com.jabiz.quizbuks.operator.QbOperators.OPERATOR), ctx -> byId("operatorId",
+                        QbInbox.OPERATOR_CHANGED.equals(input(ctx).kind()) ? afterBar(input(ctx).sourceId()) : null),
+                        OPERATOR),
                     // Q33: the digital prize the event names.
                     QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE),
                         ctx -> byId("digitalPrizeId", QbInbox.DIGITAL_KINDS.contains(input(ctx).kind())
@@ -238,7 +244,7 @@ public final class MessageProcesses {
         // Q33: likewise a digital prize can be sent, disputed and decided more than once.
         if (QbInbox.CASH_KINDS.contains(input.kind()) && !QbInbox.CASH_DUE.equals(input.kind())
             || QbInbox.REDEEM_CLAIMED.equals(input.kind()) || QbInbox.REDEEM_DECLINED.equals(input.kind())
-            || QbInbox.DIGITAL_KINDS.contains(input.kind())) {
+            || QbInbox.DIGITAL_KINDS.contains(input.kind()) || QbInbox.OPERATOR_CHANGED.equals(input.kind())) {
             return key + ":" + input.occurredAt().getEpochSecond();
         }
         return key;
@@ -273,7 +279,7 @@ public final class MessageProcesses {
             case QbInbox.TRANSFER_SENT, QbInbox.TRANSFER_FAILED -> transferMessage(ctx, texts, input, params);
             case QbInbox.PAYOUT_ACTION_NEEDED -> payoutMessage(ctx);
             case QbInbox.CASH_DUE, QbInbox.CASH_MARKED_PAID, QbInbox.CASH_CONFIRMED, QbInbox.CASH_DISPUTED,
-                 QbInbox.CASH_RESOLVED, QbInbox.CASH_RESOLVED_SPONSOR, QbInbox.CASH_OVERDUE ->
+                 QbInbox.CASH_OVERDUE ->
                 cashMessage(ctx, input, params, texts);
             case QbInbox.REDEEM_DUE, QbInbox.REDEEM_CLAIMED, QbInbox.REDEEM_REDEEMED, QbInbox.REDEEM_DECLINED,
                  QbInbox.REDEEM_EXPIRED, QbInbox.REDEEM_VOID -> redeemMessage(ctx, texts, input, params);
@@ -283,6 +289,7 @@ public final class MessageProcesses {
             case QbInbox.REFERRAL_CLAIMED, QbInbox.REFERRAL_REWARDED, QbInbox.REFERRAL_EXPIRED,
                  QbInbox.REFERRAL_FUNDS_SHORT -> referralMessage(ctx, input, params, texts);
             case QbInbox.CONVERSATION_REPLY -> conversationMessage(ctx, params);
+            case QbInbox.OPERATOR_CHANGED -> operatorMessage(ctx, input, params);
             default -> null;
         };
         if (draft != null) {
@@ -378,8 +385,7 @@ public final class MessageProcesses {
         params.put("code", MessageTexts.Value.of(cash.get("code")));
         // The state in the reader's language (the dictionary's words), not its code.
         params.put("status", texts.message(QbRewards.STATUS_MESSAGE_PREFIX + cash.get("status")));
-        boolean sponsors = QbInbox.CASH_CONFIRMED.equals(input.kind()) || QbInbox.CASH_DISPUTED.equals(input.kind())
-            || QbInbox.CASH_RESOLVED_SPONSOR.equals(input.kind());
+        boolean sponsors = QbInbox.CASH_CONFIRMED.equals(input.kind()) || QbInbox.CASH_DISPUTED.equals(input.kind());
         return sponsors
             ? new Draft(cash.get("publisherId"), QbInbox.TYPE_SYSTEM, input.kind(), card.id(), QbInbox.ACTION_CASH,
                 String.valueOf(cash.id()))
@@ -562,6 +568,22 @@ public final class MessageProcesses {
             TransferStatus.FAILED.equals(status) ? QbInbox.ACTION_PAYOUT : QbInbox.ACTION_WALLET, null);
     }
 
+    /** F-S1: who looks after the sponsor now, and how to reach them. */
+    private static Draft operatorMessage(ProcessContext ctx, EventInput input, Map<String, MessageTexts.Value> params) {
+        EntityInstance operator = first(ctx, OPERATOR);
+        if (operator == null) {
+            return null;
+        }
+        params.put("operator", MessageTexts.Value.of(operator.get("name")));
+        params.put("email", MessageTexts.Value.of(operator.get("contactEmail")));
+        String sponsor = input.sourceId().substring(0, input.sourceId().indexOf('|'));
+        return new Draft(sponsor, QbInbox.TYPE_SYSTEM, QbInbox.OPERATOR_CHANGED, null, null, null);
+    }
+
+    private static String afterBar(String value) {
+        return value == null || value.indexOf('|') < 0 ? null : value.substring(value.indexOf('|') + 1);
+    }
+
     private static Draft payoutMessage(ProcessContext ctx) {
         EntityInstance account = first(ctx, ACCOUNT);
         if (account == null || !PayoutAccountStatus.RESTRICTED.equals(account.get("status"))) {
@@ -601,6 +623,12 @@ public final class MessageProcesses {
     }
 
     /** Q22: a cash reward's or a redemption's event: the record's id and its publication. */
+    /** F-S1: the sponsor and the operator they were moved to. */
+    static EventInput operatorChangedInput(DomainEvent event) {
+        return new EventInput(QbInbox.OPERATOR_CHANGED, text(event, "userId") + "|" + text(event, "operatorId"), null,
+            event.createdTime());
+    }
+
     static EventInput cashInput(DomainEvent event, String kind) {
         return new EventInput(kind, text(event, "cashRewardId"), text(event, "publicationId"), event.createdTime());
     }

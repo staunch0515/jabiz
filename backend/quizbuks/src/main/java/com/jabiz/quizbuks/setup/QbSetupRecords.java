@@ -63,6 +63,9 @@ public class QbSetupRecords {
         return "sod-rule:" + code;
     }
 
+    /** F-S1: the platform operator (the one {@code defaultForNew}). */
+    static final String PLATFORM_OPERATOR = "operator:platform";
+
     static String legalDraft(String kind) {
         return "legal-draft:" + kind;
     }

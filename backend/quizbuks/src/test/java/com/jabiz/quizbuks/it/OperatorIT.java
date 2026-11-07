@@ -42,23 +42,9 @@ class OperatorIT extends PlayItSupport {
         return tokenOf(userId, QbRoles.OPERATOR);
     }
 
-    /** A user whose address is verified: a new version of the platform's user, as the sign-up's verification writes. */
-    private String verifiedUser(String name) {
-        String userId = createUser(name);
-        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
-            + "current_schema() AND table_name = 'sec_user_version' AND column_name NOT IN ('row_id', 'version_no', "
-            + "'verified_email') ORDER BY ordinal_position").stream().map(row -> (String) row.get("column_name"))
-            .toList();
-        String list = String.join(", ", columns);
-        execute("INSERT INTO sec_user_version (" + list + ", version_no, verified_email) SELECT " + list
-            + ", version_no + 1, email FROM sec_user_version WHERE user_id = ?::uuid ORDER BY version_no DESC LIMIT 1",
-            userId);
-        return userId;
-    }
 
     private String newOperator(String name) {
-        return (String) run(OperatorProcesses.SAVE, hq(), body("name", name, "contactName", "Owner of " + name,
-            "contactEmail", "ops@" + name.toLowerCase() + ".example")).get("operatorId");
+        return newOperator(hq(), name);
     }
 
     private String newMember(String operatorId, String name, boolean lead) {

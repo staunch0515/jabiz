@@ -33,6 +33,67 @@ abstract class AccountItSupport extends PublicationItSupport {
         return prefix + "-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
+    /** A user whose address is verified: a new version of the platform's user, as the sign-up's verification writes. */
+    String verifiedUser(String name) {
+        String userId = createUser(name);
+        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
+            + "current_schema() AND table_name = 'sec_user_version' AND column_name NOT IN ('row_id', 'version_no', "
+            + "'verified_email') ORDER BY ordinal_position").stream().map(row -> (String) row.get("column_name"))
+            .toList();
+        String list = String.join(", ", columns);
+        execute("INSERT INTO sec_user_version (" + list + ", version_no, verified_email) SELECT " + list
+            + ", version_no + 1, email FROM sec_user_version WHERE user_id = ?::uuid ORDER BY version_no DESC LIMIT 1",
+            userId);
+        return userId;
+    }
+
+    /** An operator and its lead (F-S1: the lead's account is the operator's own sponsor). */
+    record NewOperator(String operatorId, String leadId) {}
+
+    /** Creates an operator with a new, verified lead, as headquarters ({@code token} holds qb.operators.write). */
+    NewOperator newOperatorWithLead(String token, String name, String language) {
+        String lead = verifiedUser(unique("lead-" + name.replaceAll("[^A-Za-z0-9]", "").toLowerCase()));
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("name", name);
+        input.put("contactName", "Owner of " + name);
+        input.put("contactEmail", "ops@" + name.replaceAll("[^A-Za-z0-9]", "").toLowerCase() + ".example");
+        input.put("leadUserId", lead);
+        if (language != null) {
+            input.put("language", language);
+        }
+        String operatorId = (String) run(com.jabiz.quizbuks.operator.OperatorProcesses.SAVE, token, input)
+            .get("operatorId");
+        return new NewOperator(operatorId, lead);
+    }
+
+    /** A session at the operators' entry, in the operator's scope, with the role {@code QB_OPERATOR}'s permissions. */
+    String memberSession(String userId, String operatorId) {
+        com.jabiz.runtime.context.Actor actor = new com.jabiz.runtime.context.Actor(userId, null,
+            java.util.Set.of(QbRoles.OPERATOR), java.util.Set.copyOf(QbRoles.of(QbRoles.OPERATOR).permissions()),
+            clock.instant(), null, com.jabiz.quizbuks.operator.QbOperators.ENTRY, true)
+            .inScope(new com.jabiz.context.EntryScope(com.jabiz.quizbuks.operator.QbOperators.SCOPE, operatorId));
+        return "Bearer " + tokens.issue(actor).token();
+    }
+
+    /** A token of headquarters that creates operators. */
+    String operatorsAdmin() {
+        return TestTokens.bearer(tokens, "fs1-operators-admin",
+            com.jabiz.quizbuks.QbPermissions.OPERATORS_WRITE, com.jabiz.quizbuks.QbPermissions.OPERATORS_READ);
+    }
+
+    /**
+     * A new operator whose lead is its own sponsor (F-S1): the official publisher of its certifications. The lead's
+     * {@link #memberSession} runs the operator's acts.
+     */
+    NewOperator officialOperator(String name) {
+        return newOperatorWithLead(operatorsAdmin(), unique(name), null);
+    }
+
+    /** {@link #newOperatorWithLead}'s operator. */
+    String newOperator(String token, String name) {
+        return newOperatorWithLead(token, name, null).operatorId();
+    }
+
     /** A platform user with an address and a password (created by an administrator); returns the user id. */
     String createUser(String name) {
         return createUser(name, true);

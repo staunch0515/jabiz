@@ -39,26 +39,28 @@ public final class QbRoles {
         }
     }
 
+    /**
+     * Headquarters' content administrators (F-S1): monitoring, the global rules and emergencies only. The day-to-day
+     * running of sponsors (reviews, reward methods, disputes, prospecting, certifications) is the operators': the
+     * headquarters staff who do it are members of the platform operator ({@code QB_OPERATOR}).
+     */
     private static final List<String> CONTENT = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_QUIZ_READ, QbPermissions.CONTENT_FILE_READ, QbPermissions.ADMIN_PUBLICATION_READ,
-        QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_CONTENT_WRITE,
-        QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read",
+        // The platform's emergency acts: taking a publication down, pausing it (F-S1: platform first).
+        QbPermissions.ADMIN_CONTENT_WRITE,
+        QbPermissions.SPONSOR_AVATAR_READ, "task.read",
         // Q8a: the AI page (usage and failures; the switch changes only through controlled changes).
         QbPermissions.ADMIN_AI_READ,
         // Platform 16y: closing by hand, with a note, a task no process will close (never an approval's).
         "task.resolve",
         // Q13a: the second person on a bank top-up finance recorded.
         QbPermissions.TOPUP_BANK_APPROVE,
-        // Q22: which reward methods a sponsor may use, and the disputes between sponsors and takers over cash.
-        QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.CASH_RESOLVE, QbPermissions.REDEMPTION_VOID,
-        // Q33: the disputes over digital prizes.
-        QbPermissions.DIGITAL_RESOLVE,
         // Q48a: the operators, and the spot checks of the reviews they decided.
         QbPermissions.OPERATORS_READ, QbPermissions.SPOT_CHECK,
-        // Q48c: headquarters' own AI prospecting, and every owner's prospects.
-        QbPermissions.PROSPECT_USE, QbPermissions.ADMIN_PROSPECT,
-        // Q69: the certifications' rounds, grants and revocations, and the official publishers.
-        QbPermissions.CERTIFICATION_MANAGE, QbPermissions.CERTIFICATION_ADMIN,
+        // Q69: reading every operator's certification rounds and records (F-S1: managing them is the operators').
+        QbPermissions.CERTIFICATION_ADMIN,
+        // Q48c: every owner's prospects (read only: prospecting is the operators').
+        QbPermissions.ADMIN_PROSPECT,
         // Q70: every referral (support: who referred whom, and what came of it).
         QbPermissions.REFERRAL_READ,
         // Q82: every conversation between takers and sponsors (disputes and reports).
@@ -80,6 +82,8 @@ public final class QbRoles {
         QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
         QbPermissions.SPONSOR_AVATAR_READ, "approval.decide", "task.read", QbPermissions.REDEMPTION_VOID,
         QbPermissions.DIGITAL_RESOLVE,
+        // F-S1: which reward methods its sponsors may use (headquarters' before).
+        QbPermissions.ADMIN_REWARD_METHODS,
         // Q48c: the operator's own AI prospecting (its own directions, drafts and blocks).
         QbPermissions.PROSPECT_USE,
         // Q69: the rounds of its official publisher, and grants and revocations, in its own name.

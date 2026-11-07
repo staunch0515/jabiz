@@ -81,8 +81,7 @@ class OperatorSettlementIT extends PlayItSupport {
     void anOperatorsMonthIsSettledPostedAndPaidWithFourEyes() {
         clock.set(NOVEMBER);
         // Q59c: an operator of Chinese-speaking sponsors gets its statements in Chinese.
-        String operatorId = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("Kyushu"), "contactName",
-            "Kei", "contactEmail", "ops@kyushu.example", "language", "zh")).get("operatorId");
+        String operatorId = newOperatorWithLead(hq(), unique("Kyushu"), "zh").operatorId();
         String sponsor = newSponsor(unique("q48b-s"));
         run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", operatorId, "reason",
             "Signed by the operator"));
@@ -224,8 +223,7 @@ class OperatorSettlementIT extends PlayItSupport {
     @Test
     void aPlanChangesFromALaterMonthWithFourEyesAndItsFixedFeeIsDeducted() {
         clock.set(Instant.parse("2027-01-10T01:00:00Z"));
-        String operatorId = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("Tohoku"), "contactName",
-            "Toru", "contactEmail", "ops@tohoku.example")).get("operatorId");
+        String operatorId = newOperator(hq(), unique("Tohoku"));
         // Not this month, which is settled on the plan it began with.
         assertThat(codes(refused(OperatorPlans.SET, hq(), body("operatorId", operatorId, "plan", "3",
             "effectiveMonth", "2027-01", "reason", "Signed"), 422))).containsExactly(OperatorCodes.PLAN_MONTH);
@@ -267,8 +265,7 @@ class OperatorSettlementIT extends PlayItSupport {
         // Headquarters is no operator: it does not use the operators' acts.
         refused(OperatorWithdrawals.BANK_ACCOUNT_SAVE, hq(), bankAccount(), 403);
         run(OperatorWithdrawals.BANK_ACCOUNT_SAVE, operatorSession(lead, operatorId), bankAccount());
-        String other = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("Other"), "contactName", "O",
-            "contactEmail", "ops@other.example")).get("operatorId");
+        String other = newOperator(hq(), unique("Other"));
         String otherLead = member(other, unique("q48e2-other"), true);
         execute("INSERT INTO qb_operator_withdrawal (withdrawal_id, operator_id, amount, status, requested_by, "
             + "requested_at, revision, version) VALUES (gen_random_uuid()::text, ?, 5, 'REQUESTED', 'it', now(), 1, 0)",

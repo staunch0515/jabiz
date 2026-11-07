@@ -5,7 +5,7 @@ entities: [QbProspect]
 datasets:
   QbProspect: urn:jabiz:dataset:default:QbProspect
 params:
-  owner: { like: QbProspect.owner, required: true, description: "The owner: an operator's id, or direct (headquarters)" }
+  owner: { like: QbProspect.owner, required: true, description: "The owner: an operator's id" }
   prospectId: { like: QbProspect.prospectId, description: Only this business (the review page) }
   status:     { like: QbProspect.status, description: Only businesses in this state }
   q:          { kind: { type: text, maxLength: 100 }, description: Only businesses whose domain or name contains this text }
@@ -44,7 +44,7 @@ list:
   key: [prospectId]
 permissions: [qb.admin.prospect]
 ---*/
--- Headquarters reads any owner's (direct is its own). The trial key is not returned.
+-- Headquarters reads any operator's. The trial key is not returned.
 SELECT
     p.{{QbProspect.prospectId}} AS prospectId, p.{{QbProspect.owner}} AS owner,
     p.{{QbProspect.directionId}} AS directionId, p.{{QbProspect.domain}} AS domain,

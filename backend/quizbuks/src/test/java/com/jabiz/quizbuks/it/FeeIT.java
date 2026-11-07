@@ -305,8 +305,7 @@ class FeeIT extends PlayItSupport {
     @Test
     @Order(5)
     void anOperatorSetsTheBillingOfItsOwnSponsorsOnly() {
-        String operator = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("Fee Ops"), "contactName",
-            "Owner", "contactEmail", "ops@fee.example")).get("operatorId");
+        String operator = newOperator(hq(), unique("Fee Ops"));
         String member = createUser(unique("q87-op"));
         List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
             + "current_schema() AND table_name = 'sec_user_version' AND column_name NOT IN ('row_id', 'version_no', "

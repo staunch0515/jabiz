@@ -174,11 +174,14 @@ public final class PublicationRounds {
             ctx.changes().delete(QbCertifications.ROUND, existing.id(), existing.version());
         }
         EntityInstance assignment = PublicationEditing.first(ctx, ASSIGNMENT);
+        if (assignment == null) {
+            throw new IllegalStateException("Sponsor without an operator (F-S1: every sponsor has one)");
+        }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("certification", key);
         values.put("certificationVersion", version);
         values.put("publicationId", String.valueOf(publication.id()));
-        values.put("owner", assignment == null ? QbCertifications.DIRECT : assignment.get("operatorId"));
+        values.put("owner", assignment.get("operatorId"));
         values.put("addedBy", ctx.request().actorId());
         values.put("addedAt", ctx.opTime());
         ctx.changes().insert(QbCertifications.ROUND, values);

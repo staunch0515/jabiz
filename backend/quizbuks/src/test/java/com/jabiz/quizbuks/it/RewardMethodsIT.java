@@ -43,7 +43,7 @@ class RewardMethodsIT extends PlayItSupport {
     JobDefinition<CashRewardProcesses.CashRewardRef> remindJob;
 
     private String methodsAdmin() {
-        return TestTokens.bearer(tokens, "q22-admin", QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.CASH_RESOLVE,
+        return TestTokens.bearer(tokens, "q22-admin", QbPermissions.ADMIN_REWARD_METHODS,
             QbPermissions.ADMIN_USERS_READ, QbPermissions.ADMIN_PUBLICATION_READ);
     }
 
@@ -323,40 +323,48 @@ class RewardMethodsIT extends PlayItSupport {
         assertThat(cashReward(attemptId)).containsEntry("status", "OVERDUE").containsEntry("revision",
             new BigDecimal("3"));
 
-        // Disputing lifts the stop; an administrator gets a task; the sponsor hears.
+        // Disputing lifts the stop; the sponsor hears. F-S1: the platform does not decide cash disputes, so no
+        // administrator gets a task and nothing resolves it but the two sides.
         assertThat(codes(refused(CashRewardProcesses.DISPUTE, token, body("cashRewardId", cashRewardId, "note",
             " "), 400))).isNotEmpty();
         assertThat(run(CashRewardProcesses.DISPUTE, token, body("cashRewardId", cashRewardId, "note",
             "I got 50, not 100"))).containsEntry("status", "DISPUTED");
-        assertThat(permissionTasks(QbPermissions.CASH_RESOLVE, "qb.cash-dispute:" + cashRewardId))
-            .singleElement().satisfies(task -> assertThat(task).containsEntry("task_type", "qb.cash-reward.dispute")
-                .containsEntry("status", "OPEN"));
+        assertThat(query("SELECT count(*) AS n FROM sys_task WHERE source_key = ?", "qb.cash-dispute:" + cashRewardId)
+            .getFirst().get("n")).isEqualTo(0L);
         String otherAttempt = (String) start(token, other).get("attemptId");
         assertThat(otherAttempt).isNotBlank();
         deliverEvents();
         assertThat(InboxItSupport.kindsOf(sponsor)).contains("CASH_DISPUTED");
 
-        // Only an administrator resolves; the sponsor still owes it after "unpaid", and the task is closed.
-        refused(CashRewardProcesses.RESOLVE, sponsorToken(sponsor), body("cashRewardId", cashRewardId,
-            "resolution", "PAID"), 403);
-        assertThat(codes(refused(CashRewardProcesses.RESOLVE, methodsAdmin(), body("cashRewardId", cashRewardId,
-            "resolution", "MAYBE"), 422))).containsExactly(RewardCodes.CASH_RESOLUTION);
-        assertThat(run(CashRewardProcesses.RESOLVE, methodsAdmin(), body("cashRewardId", cashRewardId, "resolution",
-            "UNPAID", "note", "The sponsor agrees"))).containsEntry("status", "DUE");
-        Map<String, Object> reward = cashReward(attemptId);
-        assertThat(reward).containsEntry("resolution", "UNPAID").containsEntry("marked_paid_at", null)
-            .containsEntry("confirm_by", null).containsEntry("overdue_at", null).containsEntry("reminded_at", null);
-        // The sponsor's time to pay starts afresh from the decision.
-        assertThat(at(reward.get("pay_by"))).isEqualTo(clock.instant().plus(Duration.ofDays(14)));
-        assertThat(permissionTasks(QbPermissions.CASH_RESOLVE, "qb.cash-dispute:" + cashRewardId))
-            .singleElement().satisfies(task -> assertThat(task).containsEntry("status", "DONE"));
+        // The sponsor settles it with the taker and marks it paid again: the taker's time to confirm starts afresh.
+        clock.advance(Duration.ofDays(1));
+        assertThat(run(CashRewardProcesses.MARK_PAID, sponsorToken(sponsor), body("cashRewardId", cashRewardId,
+            "note", "The other 50 handed over"))).containsEntry("status", "MARKED_PAID");
+        assertThat(at(cashReward(attemptId).get("confirm_by"))).isEqualTo(clock.instant().plus(Duration.ofDays(7)));
         deliverEvents();
-        assertThat(InboxItSupport.kindsOf(takerId)).contains("CASH_RESOLVED");
-        assertThat(InboxItSupport.kindsOf(sponsor)).contains("CASH_RESOLVED_SPONSOR");
-
-        // Owed again and late: the daily job reminds the sponsor once; marking it paid closes the task.
-        clock.advance(Duration.ofDays(15));
+        assertThat(InboxItSupport.messagesOf(takerId)).filteredOn(m -> "CASH_MARKED_PAID".equals(m.get("kind")))
+            .singleElement().satisfies(m -> assertThat(at(m.get("created_at"))).isEqualTo(clock.instant()));
+        // Disputed again, the taker may still confirm it once it is settled.
         token = taker(takerId);
+        run(CashRewardProcesses.DISPUTE, token, body("cashRewardId", cashRewardId, "note", "Still 50 short"));
+        assertThat(run(CashRewardProcesses.CONFIRM, token, body("cashRewardId", cashRewardId)))
+            .containsEntry("status", "CONFIRMED");
+    }
+
+    /** A cash reward the sponsor has not marked paid in time gets them a task once; marking it paid closes it. */
+    @Test
+    void anUnpaidCashRewardRemindsTheSponsorOnce() {
+        String sponsor = newSponsor("s-q22-remind");
+        allow(sponsor, RewardMethod.PLATFORM, RewardMethod.SPONSOR_CASH);
+        String publicationId = (String) cashOf(sponsor, "Remind quiz").get("publicationId");
+        String takerId = newTaker("t-q22-remind", null);
+        String token = taker(takerId);
+        String attemptId = (String) start(token, publicationId).get("attemptId");
+        clock.advance(Duration.ofSeconds(1));
+        submit(token, attemptId, answers(true, true));
+        String cashRewardId = String.valueOf(cashReward(attemptId).get("cash_reward_id"));
+
+        clock.advance(Duration.ofDays(15));
         assertThat(runJob(remindJob, clock.instant())).isEqualTo(JobRunner.Outcome.SUCCEEDED);
         assertThat(cashReward(attemptId).get("reminded_at")).isNotNull();
         assertThat(openTasksOf(sponsor)).anySatisfy(task -> assertThat(task)
@@ -366,20 +374,6 @@ class RewardMethodsIT extends PlayItSupport {
             .hasSize(1);
         run(CashRewardProcesses.MARK_PAID, sponsorToken(sponsor), body("cashRewardId", cashRewardId));
         assertThat(openTasksOf(sponsor)).noneMatch(task -> "qb.cash-reward.pay".equals(task.get("task_type")));
-        // The second round has its own message (the first "paid" was undone; its own message was never made here, as
-        // this test let its event grow older than the inbox takes), and the decision names the state in words.
-        deliverEvents();
-        assertThat(InboxItSupport.messagesOf(takerId)).filteredOn(m -> "CASH_MARKED_PAID".equals(m.get("kind")))
-            .singleElement().satisfies(m -> assertThat(at(m.get("created_at"))).isEqualTo(clock.instant()));
-        assertThat(InboxItSupport.messagesOf(takerId)).filteredOn(m -> "CASH_RESOLVED".equals(m.get("kind")))
-            .singleElement().satisfies(m -> assertThat(String.valueOf(m.get("body")))
-                .contains("to be paid by the sponsor").doesNotContain("DUE"));
-        // Disputed again and found paid: confirmed by the administrator.
-        run(CashRewardProcesses.DISPUTE, token, body("cashRewardId", cashRewardId, "note", "Still nothing"));
-        assertThat(run(CashRewardProcesses.RESOLVE, methodsAdmin(), body("cashRewardId", cashRewardId, "resolution",
-            "PAID", "note", "The receipt shows it"))).containsEntry("status", "CONFIRMED");
-        assertThat(codes(refused(CashRewardProcesses.RESOLVE, methodsAdmin(), body("cashRewardId", cashRewardId,
-            "resolution", "VOID"), 422))).containsExactly(RewardCodes.CASH_STATE);
     }
 
     @Test

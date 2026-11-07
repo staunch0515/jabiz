@@ -153,11 +153,8 @@ public final class ReportProcesses {
                                 card == null ? "" : String.valueOf((Object) card.get("publisherId")))).limit(1).build();
                         }, SPONSOR_OPERATOR))
                     .compute("Record the report", (metadata, ctx) -> submit(ctx))
-                    // One task: the sponsor's operator's (in its scope) when one looks after them, headquarters'
-                    // otherwise. Headquarters' list shows every report; closing the reports closes the task.
-                    .step("Ask headquarters", CreateTask.<ProcessContext>when(
-                        ctx -> Boolean.TRUE.equals(ctx.get(FIRST_OPEN)) && first(ctx, SPONSOR_OPERATOR) == null,
-                        ctx -> task(ctx, QbPermissions.ADMIN_CONTENT_WRITE).link("/qb/abuse-reports")))
+                    // One task, the sponsor's operator's (in its scope; F-S1: every sponsor has one). Headquarters'
+                    // list shows every report; closing the reports closes the task.
                     .step("Ask the sponsor's operator", CreateTask.<ProcessContext>when(
                         ctx -> Boolean.TRUE.equals(ctx.get(FIRST_OPEN)) && first(ctx, SPONSOR_OPERATOR) != null,
                         ctx -> task(ctx, QbPermissions.OPERATOR_USE).link("/qb/abuse-reports").scope(QbOperators.SCOPE,
