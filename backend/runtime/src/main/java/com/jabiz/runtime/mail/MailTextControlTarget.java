@@ -92,7 +92,9 @@ class MailTextControlTarget implements ControlTarget {
         if (based != null) {
             stored.put(BASED_ON, based.versionNo());
         }
-        return new Proposal(based == null ? null : based.id(), stored);
+        // Shown and filtered by in the list of changes (17zn): which mail and language the change is about.
+        return new Proposal(based == null ? null : based.id(), stored,
+            stored.get(MailTextEntities.TEMPLATE) + " [" + stored.get(MailTextEntities.LOCALE) + "]");
     }
 
     @Override

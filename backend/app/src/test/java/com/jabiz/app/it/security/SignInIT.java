@@ -180,11 +180,15 @@ class SignInIT extends SecurityItSupport {
         assertThat(second.get("refreshToken")).isNotEqualTo(first.get("refreshToken"));
         get("/api/auth/me", bearerOf(second)).expectStatus().isOk();
 
-        // Presenting the used token again ends the whole session, including the token that replaced it.
+        Map<String, Object> third = post("/api/auth/refresh", null, Map.of("refreshToken", second.get("refreshToken")))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+
+        // Presenting a used token again once the token that replaced it was used ends the whole session, including the
+        // newest token (within the reuse grace too: a lost answer cannot explain it; RefreshReuseGraceIT, D73).
         Map<String, Object> reused = post("/api/auth/refresh", null, Map.of("refreshToken", first.get("refreshToken")))
             .expectStatus().isUnauthorized().expectBody(MAP).returnResult().getResponseBody();
         assertThat(ruleCode(reused)).isEqualTo("INVALID_REFRESH_TOKEN");
-        post("/api/auth/refresh", null, Map.of("refreshToken", second.get("refreshToken")))
+        post("/api/auth/refresh", null, Map.of("refreshToken", third.get("refreshToken")))
             .expectStatus().isUnauthorized();
         post("/api/auth/refresh", null, Map.of("refreshToken", "made-up")).expectStatus().isUnauthorized();
         post("/api/auth/refresh", null, Map.of()).expectStatus().isUnauthorized();

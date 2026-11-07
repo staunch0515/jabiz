@@ -182,6 +182,8 @@ class SessionPolicyIT extends SecurityItSupport {
         Map<String, Object> session = signInAt(APP);
         clock.advance(Duration.ofDays(1));
         Map<String, Object> next = refreshed(session, APP);
+        // Past the reuse grace (decision D73): the replay is reuse, and the session ends.
+        clock.advance(Duration.ofSeconds(31));
         refresh(session, APP).expectStatus().isUnauthorized();
         refresh(next, APP).expectStatus().isUnauthorized();
 
