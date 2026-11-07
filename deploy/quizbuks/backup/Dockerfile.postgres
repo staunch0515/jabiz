@@ -1,0 +1,13 @@
+# The server's shared PostgreSQL with pgBackRest (deploy/quizbuks/DEPLOY.md, "备份"): WAL archiving runs
+# archive_command inside the database container, so the backup tool lives in its image. Build on the server:
+#   docker build -t postgres-pgbackrest:16 -f Dockerfile.postgres .
+# and point the shared postgres service at it (compose.postgres.example.yaml). Same major version as before: the data
+# directory is used as it is.
+FROM postgres:16
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends pgbackrest ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && install -d -o postgres -g postgres -m 0750 /var/log/pgbackrest /var/lib/pgbackrest /var/spool/pgbackrest
+
+COPY --chown=postgres:postgres pgbackrest.conf /etc/pgbackrest/pgbackrest.conf

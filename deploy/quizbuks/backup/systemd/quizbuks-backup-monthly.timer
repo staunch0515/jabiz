@@ -1,0 +1,13 @@
+# repo2: checked every day, a full backup only on the last day of the month (UTC).
+[Unit]
+Description=QuizBuks backup timer: monthly
+
+[Timer]
+OnCalendar=*-*-* 23:40:00 UTC
+# A run missed while the server was off happens at the next boot.
+Persistent=true
+RandomizedDelaySec=60
+Unit=quizbuks-backup@monthly.service
+
+[Install]
+WantedBy=timers.target
