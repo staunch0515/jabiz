@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  * {@code APPROVAL_SCOPE_MOVE} (docs/design/18-numbering-approvals-tasks.md section 3.8, decision D76): moves the
- * pending approval requests of the given cases, the open tasks of those requests and other open tasks named by their
+ * open approval requests (pending, or approved and not yet used) of the given cases, the open tasks of those requests and other open tasks named by their
  * source keys to another value of their entry scope - when the thing they are about passes to another operator, the
  * new one sees and decides them, the old one no longer does. Only the scope's value changes; its name, the decisions
  * and the evaluations stay as recorded.
@@ -41,8 +41,8 @@ public class ApprovalScopeMove {
     /**
      * @param scopeName      the entry scope's name; every request and task moved must carry it
      * @param toValue        the scope value they move to
-     * @param requests       the cases whose pending request (and its open tasks) moves
-     * @param taskSourceKeys other open tasks to move, by their source key; optional
+     * @param requests       the cases whose open request (and its open tasks) moves
+     * @param taskSourceKeys other open tasks to move, by their source key; optional, never an approval's task
      * @param reason         why (kept with the operation)
      */
     public record MoveInput(@NotBlank @Size(max = 64) String scopeName, @NotBlank @Size(max = 128) String toValue,
@@ -51,21 +51,21 @@ public class ApprovalScopeMove {
         @NotBlank @Size(max = 500) String reason) {}
 
     /**
-     * A case not moved: {@code NOT_PENDING} (it has no pending request) or {@code ALREADY_THERE} (its request has the
-     * value already; its open tasks are moved all the same).
+     * A case not moved: {@code NOT_OPEN} (it has no pending request, nor an approved one not yet used) or
+     * {@code ALREADY_THERE} (its request has the value already; its open tasks are moved all the same).
      */
     public record Skipped(String subject, String entityId, String why) {}
 
     /** @param requestIds the requests moved; {@code taskIds} the tasks moved */
     public record MoveOutput(List<String> requestIds, List<String> taskIds, List<Skipped> skipped) {}
 
-    static final String NOT_PENDING = "NOT_PENDING";
+    static final String NOT_OPEN = "NOT_OPEN";
     static final String ALREADY_THERE = "ALREADY_THERE";
 
     @Bean
     ProcessDefinition<MoveInput, MoveOutput, ProcessContext> approvalScopeMoveProcess() {
         return ProcessDefinition.define(MOVE, 1, MoveInput.class, MoveOutput.class, ProcessContext.class, pb -> pb
-            .description("Moves pending approval requests and their open tasks to another value of their entry scope.")
+            .description("Moves open approval requests and their open tasks to another value of their entry scope.")
             .permissions(ApprovalPermissions.SCOPE_MOVE)
             .subProcessOnly()
             .contextFactory((start, input) -> {

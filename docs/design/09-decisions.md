@@ -2623,16 +2623,18 @@ QuizBuks 的运营商（范围值）审核自己的商户；商户改由另一�
 **决定**
 1. **子流程 `APPROVAL_SCOPE_MOVE`**（版本 1，`subProcessOnly()`）：应用在自己的改派流程中以 `CallProcess.of("APPROVAL_SCOPE_MOVE", 1, …)` 调用，
    改派流程照常检查自己的权限与范围（`RequireScope`）。输入 `{scopeName, toValue, requests: [{subject, entityId}], taskSourceKeys?, reason}`，
-   原因随输入记入操作记录（`input_summary`）；输出移动了的请求与待办的编号，以及没有移动的案件（`NOT_PENDING`：没有待审批的请求；`ALREADY_THERE`：已是该值）。
-2. **权限 `approval.scope.move`**：子流程不在入口检查权限（D41），所以由步骤检查调用者持有它（403 `PERMISSION_DENIED`）——应用的改派权限之外，移交审批是另一项权利，
+   原因随输入记入操作记录（`input_summary`）；输出移动了的请求与待办的编号，以及没有移动的案件（`NOT_OPEN`：没有未结的请求；`ALREADY_THERE`：已是该值）。
+2. **权限 `approval.scope.move`**：子流程不在入口检查权限（D41），所以由步骤**最先**检查调用者持有它（403 `PERMISSION_DENIED`，在检查输入之前，无权者得不到输入的细节）——应用的改派权限之外，移交审批是另一项权利，
    由应用授予做改派的角色。它不是受保护的权限（不改权限、不审批、不记账：只改谁看得到）。有入口范围的会话调用即 422 `OUT_OF_SCOPE`（它只能写自己范围的行，D64 第 2 条）。
-3. **移动什么**：每个案件取案件锁、整体读出（不受调用者的范围限制，同 `RequireApproval`）其待审批的请求；没有即跳过。请求的范围名与输入不同（含没有范围）即整个移动 422
+3. **移动什么**：案件按（审批对象，单据标识）排序后逐个取案件锁（两个并发的移动不会互相等待成环）、整体读出（不受调用者的范围限制，同 `RequireApproval`）
+   其**未结**的请求——待审批的，以及已批准、尚未被取代的（`ApprovalStore.openRequests`；留在原范围会让新范围不能取代或撤回该案件，422 `APPROVAL_OTHER_SCOPE`，原范围反而能）；没有即跳过。请求的范围名与输入不同（含没有范围）即整个移动 422
    `APPROVAL_SCOPE_MISMATCH`（三语）；范围值已是 `toValue` 的不写。其余追加一个只改 `scopeValue` 的版本，**按读到的版本**（期间有人做了决定即 409，不覆盖）。
    该请求的审批待办（来源键 `approval:<请求>`）中开放的、以及 `taskSourceKeys` 所列来源键的开放待办同样移动，范围名不同即同一个 422。
+   `taskSourceKeys` 不能列审批待办的来源键（422 `INVALID_VALUE`，字段 `taskSourceKeys`）：审批待办只随其请求移动。一个来源键的开放待办达到读取上限（1000）即失败，不移动一部分。
    之后的层级的待办取请求的范围（`ApprovalTasks`），即新的值。
 4. **只此一途**：`SysApprovalRequest` 与 `SysTask` 的 `scopeName` / `scopeValue` 不再声明为不可变（否则通用的写入路径会先拒绝），改由守卫 `ApprovalScopeGuard`
    （`TemporalWriteGuard`，所有写入都经 `VersionAppender`）保护：改变任何一个范围字段的写入，只有带着该子流程为这一实例、这一操作（`processSeqId`）、这个新值生成的许可
-   （包内的 `ApprovalScopeGrant`）才通过，且请求须待审批、待办须开放（前后都是），范围名不变；其余（数据视图 API、通用实体流程、任何流程的其他写入、撤销）一律 422 `IMMUTABLE_FIELD`。
+   （包内的 `ApprovalScopeGrant`）才通过，且请求须未结（待审批或已批准）、待办须开放，状态不变，范围名不变；其余（数据视图 API、通用实体流程、任何流程的其他写入、撤销）一律 422 `IMMUTABLE_FIELD`。
    插入照常打上范围。
 5. **审计与历史**：前后值由 `VersionAppender` 照常记入审计（`sys_audit_record`，操作为该子流程）；两表只追加，旧版本保留原范围值。
    **决定与评估不动**（`sys_approval_decision`、`sys_approval_evaluation` 只追加）：它们记录的是当时在哪个范围做的判断。
@@ -2646,4 +2648,6 @@ QuizBuks 的运营商（范围值）审核自己的商户；商户改由另一�
 
 **剩余风险**：已有的决定与评估留在原范围：原运营商的会话仍看得到自己做过的判断，新运营商看不到之前层级的判断（总部看得到全部）。
 已发出的待办通知（`sys_notification`，只追加）留在原范围，收件人自己的照旧可见；移交不重新通知新范围的人（他们在 `/tasks` 中看到）。
-已批准、已驳回的请求不移动（它们不再需要谁处理）；应用要移交的其他待办须以来源键列出，漏列的留在原范围。
+已驳回、撤回、被取代的请求不移动（它们不再需要谁处理）；应用要移交的其他待办须以来源键列出，漏列的留在原范围。
+不再声明 `scopeName` / `scopeValue` 为不可变后，按这两个字段的筛选不再推入时态表的版本扫描（`QueryCompiler.innerCondition` 只推不可变字段）：会话的范围标记仍在外层查询中约束，
+结果照旧正确，但总部按范围筛选的列表要读更多的版本。语句按案件计（每个案件取锁与读取各一条），很大的改派由调用者分批调用。

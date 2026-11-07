@@ -26,13 +26,17 @@ public final class ItApprovalScopeFixtures {
     public static final String RESCOPE_TASK = "IT_TASK_RESCOPE";
     public static final String PERMISSION = "it.reassign";
 
+    /** As the move's input, without its constraints: the sub-process's step checks them itself. */
+    public record ReassignInput(String scopeName, String toValue, List<ApprovalScopeMove.Case> requests,
+        List<String> taskSourceKeys, String reason) {}
+
     public record RescopeInput(@NotBlank String sourceKey, @NotBlank String scopeValue) {}
 
     public record RescopeOutput(String taskId) {}
 
     /** Passes its input on to {@code APPROVAL_SCOPE_MOVE}; the application's own checks would come first. */
-    public static final ProcessDefinition<ApprovalScopeMove.MoveInput, ApprovalScopeMove.MoveOutput, ProcessContext>
-        REASSIGN_PROCESS = ProcessDefinition.define(REASSIGN, 1, ApprovalScopeMove.MoveInput.class,
+    public static final ProcessDefinition<ReassignInput, ApprovalScopeMove.MoveOutput, ProcessContext>
+        REASSIGN_PROCESS = ProcessDefinition.define(REASSIGN, 1, ReassignInput.class,
         ApprovalScopeMove.MoveOutput.class, ProcessContext.class, pb -> pb
             .permissions(PERMISSION)
             .contextFactory((start, input) -> {
@@ -41,8 +45,11 @@ public final class ItApprovalScopeFixtures {
                 return ctx;
             })
             .outputMapper(ctx -> ctx.get("moved", ApprovalScopeMove.MoveOutput.class))
-            .step("Move the approvals", CallProcess.of(ApprovalScopeMove.MOVE, 1, ctx -> ctx.get("input"),
-                "moved")));
+            .step("Move the approvals", CallProcess.of(ApprovalScopeMove.MOVE, 1, ctx -> {
+                ReassignInput input = ctx.get("input", ReassignInput.class);
+                return new ApprovalScopeMove.MoveInput(input.scopeName(), input.toValue(), input.requests(),
+                    input.taskSourceKeys(), input.reason());
+            }, "moved")));
 
     /** Changes the scope value of the open task of a source key without the move's grant. */
     @SuppressWarnings("unchecked")
@@ -73,7 +80,7 @@ public final class ItApprovalScopeFixtures {
     static class Beans {
 
         @Bean
-        ProcessDefinition<ApprovalScopeMove.MoveInput, ApprovalScopeMove.MoveOutput, ProcessContext> itReassign() {
+        ProcessDefinition<ReassignInput, ApprovalScopeMove.MoveOutput, ProcessContext> itReassign() {
             return REASSIGN_PROCESS;
         }
 

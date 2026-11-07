@@ -150,6 +150,7 @@ class ApprovalScopeMoveIT extends ApprovalItSupport {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void nothingPendingOrThereAlreadyIsNotMoved() {
         String channel = unique("ch");
         rule(channel, 1, List.of(Map.of("permission", "it.approve")));
@@ -160,9 +161,54 @@ class ApprovalScopeMoveIT extends ApprovalItSupport {
             List.of(payment, nothing), null));
         assertThat(moved.get("requestIds")).isEqualTo(List.of());
         assertThat(moved.get("taskIds")).isEqualTo(List.of());
-        assertThat(moved.get("skipped")).isEqualTo(List.of(
+        // In the order of the cases' locks (subject, then id).
+        assertThat((List<Object>) moved.get("skipped")).containsExactlyInAnyOrder(
             Map.of("subject", ItApprovalFixtures.SUBJECT, "entityId", payment, "why", "ALREADY_THERE"),
-            Map.of("subject", ItApprovalFixtures.SUBJECT, "entityId", nothing, "why", "NOT_PENDING")));
+            Map.of("subject", ItApprovalFixtures.SUBJECT, "entityId", nothing, "why", "NOT_OPEN"));
+    }
+
+    /**
+     * An approved request not yet used is open as well: left behind, it would keep the new scope from superseding the
+     * case and let the old one supersede it.
+     */
+    @Test
+    void anApprovedRequestMovesWithItsCase() {
+        String channel = unique("ch");
+        rule(channel, 1, List.of(Map.of("permission", "it.approve")));
+        String payment = unique("P");
+        String requestId = (String) pay(scoped("it-north-clerk", "north", ItApprovalFixtures.PREPARE), payment,
+            channel, 5, "n").get("requestId");
+        decide(approver("it-north-approver", "north"), requestId, "APPROVE", "ok");
+        assertThat(status(requestId)).isEqualTo(ApprovalEntities.APPROVED);
+
+        Map<String, Object> moved = run(ItApprovalScopeFixtures.REASSIGN, mover(), move(SCOPE, "south",
+            List.of(payment), null));
+        assertThat(moved.get("requestIds")).isEqualTo(List.of(requestId));
+        assertThat(status(requestId)).isEqualTo(ApprovalEntities.APPROVED);
+        assertThat(scopeValue("sys_approval_request_version", "request_id::text", requestId)).isEqualTo("south");
+
+        Map<String, Object> changed = new HashMap<>(Map.of("paymentId", payment, "channel", channel, "amount", 7,
+            "memo", "changed"));
+        // The old scope can no longer supersede it; the new one does.
+        assertThat(ruleCode(refused("IT_PAY", scoped("it-north-clerk", "north", ItApprovalFixtures.PREPARE),
+            changed, 422))).isEqualTo("APPROVAL_OTHER_SCOPE");
+        String again = (String) run("IT_PAY", scoped("it-south-clerk", "south", ItApprovalFixtures.PREPARE), changed)
+            .get("requestId");
+        assertThat(status(requestId)).isEqualTo(ApprovalEntities.SUPERSEDED);
+        assertThat(scopeValue("sys_approval_request_version", "request_id::text", again)).isEqualTo("south");
+    }
+
+    @Test
+    void anApprovalTaskIsNotNamedByItsSourceKey() {
+        String channel = unique("ch");
+        rule(channel, 1, List.of(Map.of("permission", "it.approve")));
+        String requestId = (String) pay(scoped("it-north-clerk", "north", ItApprovalFixtures.PREPARE), unique("P"),
+            channel, 5, "n").get("requestId");
+        Map<String, Object> problem = refused(ItApprovalScopeFixtures.REASSIGN, mover(), move(SCOPE, "south",
+            List.of(), List.of("approval:" + requestId)), 422);
+        assertThat(ruleCode(problem)).isEqualTo("INVALID_VALUE");
+        assertThat(violations(problem)).extracting(v -> v.get("field")).containsExactly("taskSourceKeys");
+        assertThat(openTasks("approval:" + requestId)).extracting(t -> t.get("scope_value")).containsExactly("north");
     }
 
     @Test
@@ -199,9 +245,15 @@ class ApprovalScopeMoveIT extends ApprovalItSupport {
             channel, 5, "n").get("requestId");
         Map<String, Object> input = move(SCOPE, "south", List.of(payment), null);
 
-        // The application's permission alone is not enough.
+        // The application's permission alone is not enough - checked before the input, which it learns nothing about.
         assertThat(ruleCode(refused(ItApprovalScopeFixtures.REASSIGN, as("it-hq", ItApprovalScopeFixtures.PERMISSION),
             input, 403))).isEqualTo("PERMISSION_DENIED");
+        Map<String, Object> invalid = move(SCOPE, "south", List.of(payment), null);
+        invalid.put("scopeName", null);
+        invalid.put("reason", null);
+        assertThat(ruleCode(refused(ItApprovalScopeFixtures.REASSIGN, as("it-hq", ItApprovalScopeFixtures.PERMISSION),
+            invalid, 403))).isEqualTo("PERMISSION_DENIED");
+        assertThat(ruleCode(refused(ItApprovalScopeFixtures.REASSIGN, mover(), invalid, 400))).isEqualTo("REQUIRED");
         // Never on its own, whatever the caller holds.
         assertThat(ruleCode(refused(ApprovalScopeMove.MOVE, admin(), input, 403))).isEqualTo("PROCESS_INTERNAL");
         assertThat(ruleCode(refused(ApprovalScopeMove.MOVE, as("it-hq", ApprovalPermissions.SCOPE_MOVE), input,

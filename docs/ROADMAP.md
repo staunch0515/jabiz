@@ -5094,9 +5094,9 @@ D17 下匿名不能写任何东西（15 §10）。
 
 | # | 内容 |
 |---|---|
-| 17zo-1 | 子流程 `APPROVAL_SCOPE_MOVE`（版本 1，`subProcessOnly()`，`ApprovalScopeMove` / `MoveApprovalScope`）：输入 `{scopeName, toValue, requests: [{subject, entityId}], taskSourceKeys?, reason}`，输出 `{requestIds, taskIds, skipped}`；案件锁、整体读出待审批的请求，按读到的版本只改 `scopeValue`（并发决定即 409），请求的开放审批待办与所列来源键的开放待办随之移动；范围名不同即 422 `APPROVAL_SCOPE_MISMATCH`（三语）；有范围的会话 422 `OUT_OF_SCOPE` |
+| 17zo-1 | 子流程 `APPROVAL_SCOPE_MOVE`（版本 1，`subProcessOnly()`，`ApprovalScopeMove` / `MoveApprovalScope`）：输入 `{scopeName, toValue, requests: [{subject, entityId}], taskSourceKeys?, reason}`，输出 `{requestIds, taskIds, skipped}`；案件按序取锁、整体读出未结的请求（待审批，或已批准而未被取代），按读到的版本只改 `scopeValue`（并发决定即 409），请求的开放审批待办与所列来源键的开放待办随之移动；范围名不同即 422 `APPROVAL_SCOPE_MISMATCH`（三语）；有范围的会话 422 `OUT_OF_SCOPE`；`taskSourceKeys` 不能列审批待办（422 `INVALID_VALUE`）；先查权限再查输入；一个来源键的开放待办达上限即失败（与 `TaskWriter.close` 共用 `TaskWriter.openTasks`） |
 | 17zo-2 | 权限 `approval.scope.move`（由步骤检查调用者；不是受保护的权限） |
 | 17zo-3 | `SysApprovalRequest` / `SysTask` 的 `scopeName` / `scopeValue` 不再不可变；守卫 `ApprovalScopeGuard`（`TemporalWriteGuard`）只放行带该子流程的许可 `ApprovalScopeGrant`（同一实例、操作、新值，名不变、请求待审批 / 待办开放）的改变，其余 422 `IMMUTABLE_FIELD`；决定与评估不动 |
-| 17zo-4 | 测试：`ApprovalScopeMoveIT`（移动与可见性、下一层级的待办在新范围、无未结与已在新值不移动、范围名不同或没有范围 422、无权限 403、直接调用 `PROCESS_INTERNAL`、有范围的会话 `OUT_OF_SCOPE`、其他流程与数据视图 API 改不了范围、审计记录、两表只追加）、`ApprovalScopeGuardTest`；设计 18 §3.8、10 §13.4、决策 D76、根 `CLAUDE.md` |
+| 17zo-4 | 测试：`ApprovalScopeMoveIT`（移动与可见性、下一层级的待办在新范围、已批准的请求随之移动后新范围能取代而原范围不能、审批待办的来源键被拒、无未结与已在新值不移动、范围名不同或没有范围 422、无权限 403（输入无效时同样先 403）、直接调用 `PROCESS_INTERNAL`、有范围的会话 `OUT_OF_SCOPE`、其他流程与数据视图 API 改不了范围、审计记录、两表只追加）、`ApprovalScopeGuardTest`；设计 18 §3.8、10 §13.4、决策 D76、根 `CLAUDE.md` |
 
 **17zo 状态**：📝 待评审（分支 `1.3/phase-17zo-approval-scope-move`）。

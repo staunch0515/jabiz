@@ -10,7 +10,7 @@
 | 审批 | 按有版本的规则判定是否需要审批；批准绑定内容；准备人不能审批自己；多级与限额 | 14b-2 |
 | 职责分离 | 互斥的权限不能落在同一用户身上；冲突报告 | 14b-2 |
 | 任务与通知 | 待办列表；邮件通知 | 14b-3 |
-| 移交范围 | 待审批的请求与开放的待办移到入口范围的另一个值（子流程 `APPROVAL_SCOPE_MOVE`，§3.8） | 17zo |
+| 移交范围 | 未结的审批请求与开放的待办移到入口范围的另一个值（子流程 `APPROVAL_SCOPE_MOVE`，§3.8） | 17zo |
 
 ## 2. 编号（14b-1）
 
@@ -204,18 +204,19 @@
 
 | 流程 | 权限 | 做什么 |
 |---|---|---|
-| `APPROVAL_SCOPE_MOVE`（`subProcessOnly()`） | `approval.scope.move`（由步骤检查调用者；应用的改派权限之外另需） | `{scopeName, toValue, requests: [{subject, entityId}], taskSourceKeys?, reason}` → `{requestIds, taskIds, skipped: [{subject, entityId, why}]}` |
+| `APPROVAL_SCOPE_MOVE`（`subProcessOnly()`） | `approval.scope.move`（由步骤在检查输入之前检查调用者；应用的改派权限之外另需） | `{scopeName, toValue, requests: [{subject, entityId}], taskSourceKeys?, reason}` → `{requestIds, taskIds, skipped: [{subject, entityId, why}]}` |
 
 ```java
 .step("Move its approvals", CallProcess.of("APPROVAL_SCOPE_MOVE", 1, ctx -> new ApprovalScopeMove.MoveInput(
     "operator", newOperatorId, List.of(new ApprovalScopeMove.Case("qb.sponsor", sponsorId)), null, reason), "moved"))
 ```
 
-- 每个案件取案件锁、整体读出其**待审批**的请求（没有即 `skipped` 中的 `NOT_PENDING`）；范围名与 `scopeName` 不同（含没有范围）即 422 `APPROVAL_SCOPE_MISMATCH`，
+- 案件按（审批对象，单据标识）排序后逐个取案件锁、整体读出其**未结**的请求：待审批的，以及已批准而尚未被取代的（`ApprovalStore.openRequests`；没有即 `skipped` 中的 `NOT_OPEN`）；范围名与 `scopeName` 不同（含没有范围）即 422 `APPROVAL_SCOPE_MISMATCH`，
   已是 `toValue` 的不写（`ALREADY_THERE`）；其余按读到的版本追加只改 `scopeValue` 的版本（期间被决定即 409）。
 - 该请求的开放待办（来源键 `approval:<请求>`）与 `taskSourceKeys` 所列来源键的开放待办随之移动（范围名不同即同一个 422）；之后层级的待办取请求的新范围。
+  `taskSourceKeys` 不能列审批待办的来源键（422 `INVALID_VALUE`）；一个来源键的开放待办达到 1000 条即失败（与 `TaskWriter.close` 共用同一读取）。语句按案件计，很大的改派分批调用。
 - 有入口范围的会话调用即 422 `OUT_OF_SCOPE`；直接经流程接口调用即 403 `PROCESS_INTERNAL`。
-- 范围字段只经此改变：守卫 `ApprovalScopeGuard` 拒绝其他任何改变范围的写入（422 `IMMUTABLE_FIELD`），且只许待审批的请求、开放的待办、范围名不变。
+- 范围字段只经此改变：守卫 `ApprovalScopeGuard` 拒绝其他任何改变范围的写入（422 `IMMUTABLE_FIELD`），且只许未结的请求、开放的待办，状态与范围名不变。
 - 决定与评估保留原范围（当时在哪里做的判断）；已发出的通知不移动、不重新通知。审计记录前后值。
 - 测试：app `ApprovalScopeMoveIT`，runtime `ApprovalScopeGuardTest`。
 

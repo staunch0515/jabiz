@@ -63,7 +63,15 @@ class ApprovalScopeGuardTest {
     void theMoveWithItsGrantPasses() {
         assertThat(check(ApprovalEntities.REQUEST, request("PENDING", "op", "a"), request("PENDING", "op", "b"), SEQ,
             grant(ApprovalEntities.REQUEST, "op", "b"))).isEmpty();
+        // An approved request not yet used is open too: it moves with its case.
+        assertThat(check(ApprovalEntities.REQUEST, request("APPROVED", "op", "a"), request("APPROVED", "op", "b"), SEQ,
+            grant(ApprovalEntities.REQUEST, "op", "b"))).isEmpty();
         Map<String, Object> task = request("OPEN", "op", "a");
+        Map<String, Object> done = new HashMap<>(task);
+        done.put("status", "DONE");
+        Map<String, Object> doneMoved = new HashMap<>(done);
+        doneMoved.put("scopeValue", "b");
+        assertThat(check(TaskEntities.TASK, done, doneMoved, SEQ, grant(TaskEntities.TASK, "op", "b"))).hasSize(1);
         task.put("taskId", ID);
         Map<String, Object> moved = new HashMap<>(task);
         moved.put("scopeValue", "b");
@@ -102,8 +110,10 @@ class ApprovalScopeGuardTest {
         assertThat(check(ApprovalEntities.REQUEST, request("PENDING", null, null), request("PENDING", "op", "b"), SEQ,
             grant(ApprovalEntities.REQUEST, "op", "b"))).hasSize(1);
         // Decided requests stay where they were decided, and the move does not decide.
-        assertThat(check(ApprovalEntities.REQUEST, request("APPROVED", "op", "a"), request("APPROVED", "op", "b"), SEQ,
-            grant(ApprovalEntities.REQUEST, "op", "b"))).hasSize(1);
+        for (String closed : List.of("REJECTED", "WITHDRAWN", "SUPERSEDED")) {
+            assertThat(check(ApprovalEntities.REQUEST, request(closed, "op", "a"), request(closed, "op", "b"), SEQ,
+                grant(ApprovalEntities.REQUEST, "op", "b"))).hasSize(1);
+        }
         assertThat(check(ApprovalEntities.REQUEST, pending, request("APPROVED", "op", "b"), SEQ,
             grant(ApprovalEntities.REQUEST, "op", "b"))).hasSize(1);
     }

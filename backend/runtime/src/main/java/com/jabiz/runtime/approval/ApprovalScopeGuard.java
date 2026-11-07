@@ -21,7 +21,8 @@ import java.util.Optional;
  * Keeps the entry scope of approval requests and tasks (decision D64) as it was made, but for the move of
  * {@code APPROVAL_SCOPE_MOVE} (decision D76): a write that changes {@code scopeName} or {@code scopeValue} of a stored
  * {@code SysApprovalRequest} or {@code SysTask} passes only with an {@link ApprovalScopeGrant} for that instance, the
- * unchanged name, the new value and the writing operation, and only while the request stays pending or the task open.
+ * unchanged name, the new value and the writing operation, and only while the request is open (pending, or approved
+ * and not yet used) or the task open, and the write leaves its status as it is.
  * The dataset API, the generic entity processes, other writes of any process, cancellations and reverts all end here
  * (422 {@code IMMUTABLE_FIELD}). An insertion sets the scope as made.
  */
@@ -35,11 +36,11 @@ class ApprovalScopeGuard implements TemporalWriteGuard {
     @Override
     public List<Violation> check(EntityDefinition def, Timeline timeline, List<PlannedVersion> versions,
         Operation operation, Object grant) {
-        String open;
+        java.util.Set<String> open;
         if (ApprovalEntities.REQUEST.equals(def.name)) {
-            open = ApprovalEntities.PENDING;
+            open = MoveApprovalScope.OPEN;
         } else if (TaskEntities.TASK.equals(def.name)) {
-            open = TaskEntities.OPEN;
+            open = java.util.Set.of(TaskEntities.OPEN);
         } else {
             return List.of();
         }
@@ -58,11 +59,11 @@ class ApprovalScopeGuard implements TemporalWriteGuard {
                 && granted.allows(def.name, was.get(def.primaryKey), now.get(NAME), now.get(VALUE),
                     operation.processSeqId())
                 && Objects.equals(was.get(NAME), now.get(NAME))
-                && open.equals(was.get(STATUS)) && open.equals(now.get(STATUS));
+                && open.contains(was.get(STATUS)) && Objects.equals(was.get(STATUS), now.get(STATUS));
             if (!allowed) {
                 String field = Objects.equals(was.get(NAME), now.get(NAME)) ? VALUE : NAME;
                 refused.add(new Violation(field, PlatformErrorCodes.IMMUTABLE_FIELD, "The entry scope of "
-                    + def.name + " changes only through APPROVAL_SCOPE_MOVE, while it is " + open,
+                    + def.name + " changes only through APPROVAL_SCOPE_MOVE, while it is open",
                     Map.of("field", field)));
             }
         }
