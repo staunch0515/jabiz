@@ -5280,6 +5280,36 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **17zw 状态**：📝 待评审（分支 `1.3/phase-17zw-key-rotation`）。
 
+### 17zx 平台运维要点与上线前的设置检查（2026-11-07，QuizBuks 首次上线的上线准备 D/E）
+
+**缘由**：今天加入的功能（D72–D78）各有设置、指标与处理办法，散在设计文档中；上线清单"安全"一节的各项（测试开关、密钥、代理、环境横条）全靠人眼核对。
+
+| # | 内容 |
+|---|---|
+| 17zx-1 | `docs/guide/platform-operations.md`：上线前检查、告警与试发、恢复演练、密钥轮换的入口，以及刷新补发、地址库、链接图片、手动补跑、限流、受控变更的值、邮件文字与信纸、恢复核对、密钥轮换各自的设置、观测与处理 |
+| 17zx-2 | `tools/ops/env-check.sh`：只读检查正式环境的设置文件（密钥齐全、互不相同、不是测试密钥；不含 dev；首个管理员的变量已删；二次验证没关；可信代理与环境标志；告警的收件人与 SMTP），只打印变量名；应用以规则文件加自己的检查 |
+| 17zx-3 | 测试：`tools/test/env-check.test.sh`（CI，12 项：正确的设置通过；同一密钥用两次、测试密钥、过短、dev、首个管理员、关掉二次验证、测试横条、占位的收件人各被拒；轮换中只是警告；应用规则；任何输出中都没有值） |
+
+**验收**：运维只看一页就知道平台各功能怎么设、看什么、出了事怎么办；上线前一条命令核对设置，不泄露值。
+
+**17zx 状态**：📝 待评审（分支 `1.3/phase-17zx-ops-guide`）。
+
+### 17zz 准入门：交出许可时恰逢取消，许可丢失（2026-11-07，#500 CI 中 `AdmissionGateStressTest` 的一次失败）
+
+**缘由**：#500 的 CI 中 `AdmissionGateStressTest` 失败一次（结束后仍有 1 个许可未归还），本地 15 次未复现。查明是代码的竞态，不是测试的问题：
+在调度器上交出许可（`sink.success`）的同时调用方取消时，Reactor 的 `MonoCreate` 若在自己的两次检查之间遇到取消（先读到"未取消"，再读到取消已把状态置为终止），
+把值交给 `onNextDropped`（缺省只记调试日志）而不是 `onDiscard`；门依赖的 `doOnDiscard(Permit::release)` 不会执行，取消一侧又因"已交出"而不归还，许可就此丢失。
+上线后的后果：热门锁的一个键（或全门）少一个并发名额，直到重启；多次后该键永远排队超时（503 `PROCESS_BUSY`）。
+
+| # | 内容 |
+|---|---|
+| 17zz-1 | `AdmissionGate`：许可到达订阅者时（`doOnNext`）记为已收到；交出的一侧在 `success` 返回后、取消的一侧在 `onCancel` 中，各在等待者自己的锁下记下自己一侧并查看另一侧，后到的一方见到"已交出、已取消、未收到"即归还（`Permit.release` 幂等，两边都归还也只算一次）。保留 `doOnDiscard`（值暂存在 sink 中、尚无请求时被取消） |
+| 17zz-2 | 测试：`AdmissionHandOverRaceTest`（并发上限 1，持有者归还与等待者取消在屏障后同时发生，2 万轮，每轮断言全部许可归还）；修改前在第 125、581 轮失败，修改后 2 万轮全部通过（重复 4 次）。`AdmissionGateTest`、`AdmissionGatePropertyTest`、`AdmissionGateStressTest`、`ProcessAdmissionIT`、`ProcessAdmissionControlIT`、`CommerceAdmissionIT`、`PasswordHashingLimitIT` 照旧通过 |
+
+**验收**：交出与取消同时发生时许可不丢失（复现测试修改前失败、修改后通过）。
+
+**17zz 状态**：📝 待评审（分支 `1.3/phase-17zz-admission-handover`）。
+
 ### 17zzz 未声明的密封字段：轮换中按密文前缀找出（D78 第 8 条，2026-11-07，总控提出）
 
 **缘由**：重新加密只处理 `SealedFields` 声明的字段；应用经 `SealSecret` 写进、却没有声明的字段，撤下旧 `JABIZ_SEAL_KEY` 后就解不开，而 `KEYS` 只检查已有的声明，不会发现。
