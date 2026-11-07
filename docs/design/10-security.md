@@ -285,6 +285,9 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
   会话未经二次验证、而用户现在持有要求二次验证的角色时，刷新被拒（401 `INVALID_REFRESH_TOKEN`），需要重新登录。
 - `GET /api/auth/me` 增加 `mfaAt` 与 `idleTimeoutSeconds`。
 
+
+**全员重新绑定**（决策 D78 第 6 条）：MFA 密钥与库一同泄露时，一位管理员申请、另一位管理员 24 小时内批准（`SEC_MFA_REENROLL_ALL_REQUEST` / `_APPROVE`），
+任务 `jabiz.key-rotation` 收回批准之前确认的二次验证（`reenrollRequired`）并结束会话，下次登录即 `MFA_ENROLLMENT_REQUIRED`。见 `docs/guide/key-rotation.md`。
 ## 10. 按操作要求二次验证（step-up）【D28 第 4 条】
 
 - 声明：流程 `pb.requiresMfa(MfaRequirement.ALWAYS)`，数据视图 `d.writeRequiresMfa(MfaRequirement.ALWAYS)`；平台的管理操作声明 `ADMINISTRATION`：

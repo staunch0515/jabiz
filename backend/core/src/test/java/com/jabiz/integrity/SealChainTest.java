@@ -119,6 +119,48 @@ class SealChainTest {
             .isInstanceOf(NullPointerException.class);
     }
 
+    @Test
+    void blocksOfARetiredKeyAreVerifiedWithIt() {
+        // Two blocks signed with OTHER, then the key changed to KEY: two more blocks link on.
+        List<SealChain.Stored> blocks = new ArrayList<>(chain(2, OTHER));
+        String prev = blocks.getLast().storedHash();
+        for (int no = 3; no <= 4; no++) {
+            SealBlock block = new SealBlock(no, T.plusSeconds(300L * no), no,
+                MerkleRoot.of(List.of(row("t", "[" + no + "]", 'a'))), SealedColumns.hash(Map.of("t", List.of("a"))),
+                prev, KEY.id());
+            String hash = block.hash(KEY);
+            blocks.add(new SealChain.Stored(block, hash));
+            prev = hash;
+        }
+        // Without the retired key, its blocks cannot be verified; with it, the chain is intact (decision D78).
+        assertThat(SealChain.check(blocks, null, KEY)).extracting(IntegrityProblem::kind)
+            .containsExactly(IntegrityProblem.Kind.OTHER_KEY, IntegrityProblem.Kind.OTHER_KEY);
+        IntegrityKeys keys = new IntegrityKeys(KEY, List.of(OTHER));
+        assertThat(SealChain.check(blocks, null, keys)).isEmpty();
+        // A retired key does not make a block it did not sign pass.
+        SealBlock b1 = blocks.getFirst().block();
+        List<SealChain.Stored> changed = new ArrayList<>(blocks);
+        changed.set(0, new SealChain.Stored(new SealBlock(1, b1.sealedTime(), b1.rowCount(), "f".repeat(64),
+            b1.columnsHash(), b1.prevHash(), b1.keyId()), blocks.getFirst().storedHash()));
+        assertThat(SealChain.check(changed, null, keys)).extracting(IntegrityProblem::kind, IntegrityProblem::sealNo)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple(IntegrityProblem.Kind.CHAIN_BROKEN, 1L));
+    }
+
+    @Test
+    void theKeyRingFindsKeysByIdAndRefusesTheSameKeyTwice() {
+        IntegrityKeys keys = new IntegrityKeys(KEY, List.of(OTHER));
+        assertThat(keys.current()).isEqualTo(KEY);
+        assertThat(keys.byId(OTHER.id())).contains(OTHER);
+        assertThat(keys.byId(KEY.id())).contains(KEY);
+        assertThat(keys.byId("0000000000000000")).isEmpty();
+        assertThat(keys.byId(null)).isEmpty();
+        assertThat(keys.previousIds()).containsExactly(OTHER.id());
+        assertThat(IntegrityKeys.of(KEY).previousIds()).isEmpty();
+        assertThat(keys.toString()).doesNotContain("the-integrity").contains(KEY.id(), OTHER.id());
+        assertThatThrownBy(() -> new IntegrityKeys(KEY, List.of(key("the-integrity-key-of-these-tests-0001"))))
+            .hasMessageContaining("twice");
+    }
+
     private static List<SealChain.Stored> chain(int length, IntegrityKey key) {
         List<SealChain.Stored> blocks = new ArrayList<>();
         String prev = SealBlock.GENESIS;

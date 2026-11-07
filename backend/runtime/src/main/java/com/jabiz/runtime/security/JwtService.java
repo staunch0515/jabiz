@@ -123,11 +123,24 @@ public final class JwtService {
     }
 
     private final MACSigner signer;
-    private final MACVerifier verifier;
+    /** The current secret's verifier first, then those of retired secrets (decision D78). */
+    private final java.util.List<MACVerifier> verifiers;
+    /** The ids of the retired secrets, in the order of {@link #verifiers} after the first. */
+    private final java.util.List<String> previousIds;
+    /** Until when each retired secret (by id) is accepted; none: until it is removed. */
+    private final java.util.Map<String, Instant> retiredUntil = new java.util.concurrent.ConcurrentHashMap<>();
     private final Duration ttl;
     private final Clock clock;
 
     public JwtService(byte[] secret, Duration ttl, Clock clock) {
+        this(secret, java.util.List.of(), ttl, clock);
+    }
+
+    /**
+     * With retired secrets (decision D78): tokens they signed are still accepted until they expire (and the links of
+     * mail sent before the change keep working); new tokens are signed with the current secret only.
+     */
+    public JwtService(byte[] secret, java.util.List<byte[]> previousSecrets, Duration ttl, Clock clock) {
         Objects.requireNonNull(secret, "secret must not be null");
         if (secret.length < MIN_SECRET_BYTES) {
             throw new IllegalArgumentException("The JWT secret must have at least " + MIN_SECRET_BYTES + " bytes");
@@ -137,7 +150,22 @@ public final class JwtService {
         }
         try {
             this.signer = new MACSigner(secret);
-            this.verifier = new MACVerifier(secret);
+            java.util.List<MACVerifier> all = new java.util.ArrayList<>();
+            java.util.List<String> ids = new java.util.ArrayList<>();
+            all.add(new MACVerifier(secret));
+            for (byte[] previous : java.util.List.copyOf(previousSecrets)) {
+                if (previous.length < MIN_SECRET_BYTES) {
+                    throw new IllegalArgumentException("A previous JWT secret must have at least " + MIN_SECRET_BYTES
+                        + " bytes");
+                }
+                if (java.util.Arrays.equals(previous, secret)) {
+                    throw new IllegalArgumentException("A previous JWT secret is the current secret");
+                }
+                all.add(new MACVerifier(previous));
+                ids.add(keyId(previous));
+            }
+            this.verifiers = java.util.List.copyOf(all);
+            this.previousIds = java.util.List.copyOf(ids);
         } catch (JOSEException e) {
             throw new IllegalArgumentException("Unusable JWT secret: " + e.getMessage(), e);
         }
@@ -235,7 +263,8 @@ public final class JwtService {
 
     /**
      * The token of an unsubscribe link: same key, another type, no expiry (a mail may be read months later). It only
-     * ever turns the template off for the user; rotating the signing key invalidates the links of mail sent before.
+     * ever turns the template off for the user; links of mail sent before a key change keep working while the retired
+     * key is configured (decision D78) and stop once it is removed.
      */
     public String issueUnsubscribe(String userId, String template) {
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
@@ -362,11 +391,7 @@ public final class JwtService {
         if (!type.equals(jwt.getHeader().getType())) {
             throw new InvalidTokenException("Wrong token type for a(n) " + what + " token");
         }
-        try {
-            if (!jwt.verify(verifier)) {
-                throw new InvalidTokenException("Invalid token signature");
-            }
-        } catch (JOSEException e) {
+        if (!signedByAny(jwt)) {
             throw new InvalidTokenException("Invalid token signature");
         }
         if (!ISSUER.equals(claims.getIssuer())) {
@@ -391,5 +416,55 @@ public final class JwtService {
 
     private static List<String> strings(List<String> values) {
         return values == null ? List.of() : values.stream().filter(Objects::nonNull).toList();
+    }
+
+    private boolean signedByAny(SignedJWT jwt) {
+        Instant now = clock.instant();
+        for (int i = 0; i < verifiers.size(); i++) {
+            MACVerifier verifier = verifiers.get(i);
+            if (i > 0) {
+                Instant until = retiredUntil.get(previousIds.get(i - 1));
+                if (until != null && now.isAfter(until)) {
+                    continue;
+                }
+            }
+            try {
+                if (jwt.verify(verifier)) {
+                    return true;
+                }
+            } catch (JOSEException e) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** How many retired secrets are still accepted (decision D78). */
+    public int previousSecrets() {
+        return verifiers.size() - 1;
+    }
+
+    /** The ids of the retired secrets (16 hex characters, revealing nothing of a secret). */
+    public java.util.List<String> previousIds() {
+        return previousIds;
+    }
+
+    /** Accepts what the retired secret {@code id} signed only until {@code until} (decision D78). */
+    public void retireUntil(String id, Instant until) {
+        if (!previousIds.contains(id)) {
+            throw new IllegalArgumentException("No retired secret " + id);
+        }
+        retiredUntil.put(id, until);
+    }
+
+    static String keyId(byte[] secret) {
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(secret, "HmacSHA256"));
+            return java.util.HexFormat.of().formatHex(mac.doFinal("jabiz.jwt.key-id"
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8))).substring(0, 16);
+        } catch (java.security.GeneralSecurityException e) {
+            throw new IllegalStateException("HmacSHA256 is not available", e);
+        }
     }
 }
