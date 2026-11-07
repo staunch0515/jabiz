@@ -71,9 +71,7 @@ class SetupIT extends QbItSupport {
         // One record of each item setup made: it never adds the same item again.
         assertThat(before.get("qb_setup_record_version")).isEqualTo((long) QbRoles.all().size() + granted
             + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249 + QbApprovalRules.ALL.size() + QbSodRules.ALL.size()
-            + QbLegal.KINDS.size()
-            // F-S1: the platform operator.
-            + 1);
+            + QbLegal.KINDS.size());
         assertThat(query("SELECT rule_code, left_permissions, right_permissions, enabled FROM sys_sod_rule_version "
             + "ORDER BY rule_code")).satisfiesExactly(
                 rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.CONTROL.code())

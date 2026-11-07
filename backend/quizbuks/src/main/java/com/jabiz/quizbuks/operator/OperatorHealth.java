@@ -30,6 +30,8 @@ public final class OperatorHealth {
     public static final String TASK_TYPE = "qb.operator-health";
     public static final String TASK_TITLE = "task.qb.operator-health";
 
+    /** No active default operator: nobody can sign up as a sponsor until one is created (F-S1). */
+    public static final String NO_DEFAULT_OPERATOR = "NO_DEFAULT_OPERATOR";
     public static final String NO_OPERATOR = "NO_OPERATOR";
     public static final String DIRECT_SPONSOR = "DIRECT_SPONSOR";
     public static final String FEW_REVIEWERS = "FEW_REVIEWERS";

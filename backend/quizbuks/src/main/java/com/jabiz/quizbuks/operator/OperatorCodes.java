@@ -46,6 +46,10 @@ public final class OperatorCodes {
     public static final String REVIEW_PENDING = "QB_SPONSOR_REVIEW_PENDING";
     /** F-S1: no operator takes new sponsors (QB_SETUP has not run). */
     public static final String DEFAULT_MISSING = "QB_OPERATOR_DEFAULT_MISSING";
+    /** The default operator stops being it only when another becomes it (F-S1). */
+    public static final String DEFAULT_KEEP = "QB_OPERATOR_DEFAULT_KEEP";
+    /** The default operator must be active (F-S1). */
+    public static final String DEFAULT_INACTIVE = "QB_OPERATOR_DEFAULT_INACTIVE";
     /** The decision is not one an operator's member made on a review (a sponsor's or a publication's). */
     public static final String NOT_AN_OPERATOR_DECISION = "QB_OPERATOR_NOT_AN_OPERATOR_DECISION";
     /** A problem found by a spot check needs a note saying what it is. */
@@ -93,7 +97,7 @@ public final class OperatorCodes {
 
     public static final List<String> ALL = List.of(NOT_MEMBER, SUSPENDED, NOT_LEAD, FIELD, CODE, CHANGED,
         MEMBER_ELSEWHERE, MEMBER_IS_SPONSOR, MEMBER_UNVERIFIED, MEMBERS_FULL, LEAD_SELF, NOT_A_SPONSOR, HQ_TAKEDOWN,
-        HQ_BAN, LEAD_REQUIRED, DIRECT_SPONSOR_FIXED, KIND_NOT_TAKEN, REVIEW_PENDING, DEFAULT_MISSING,
+        HQ_BAN, LEAD_REQUIRED, DIRECT_SPONSOR_FIXED, KIND_NOT_TAKEN, REVIEW_PENDING, DEFAULT_MISSING, DEFAULT_KEEP, DEFAULT_INACTIVE,
         NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR, MONTH_OPEN, NO_SHARE, SETTLEMENT_STATE,
         SETTLEMENT_NOTHING, SETTLEMENT_NO_REVIEW, NO_RATE, PLAN_MONTH, PLAN_PENDING, PLAN_NO_REVIEW, NO_PLAN,
         BANK_ACCOUNT, WITHDRAWAL_NO_ACCOUNT, WITHDRAWAL_COOLDOWN, WITHDRAWAL_AMOUNT, WITHDRAWAL_OPEN, WITHDRAWAL_STATE,

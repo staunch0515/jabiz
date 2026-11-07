@@ -34,7 +34,7 @@ class OperatorLanguagesIT extends PlayItSupport {
         return newOperatorWithLead(hq(), name, language).operatorId();
     }
 
-    /** The platform operator QB_SETUP made (F-S1). */
+    /** The default operator, created after installing (F-S1). */
     private Map<String, Object> operator(String operatorId) {
         return items("qb.admin.operators", hq(), Map.of("params", Map.of("operatorId", operatorId))).getFirst();
     }

@@ -76,16 +76,19 @@ public final class OperatorProcesses {
      *                     sponsors go (F-S1)
      * @param leadUserId   required when creating one: its lead, whose account becomes the operator's own sponsor
      *                     (F-S1); ignored when changing one (leads change with {@value #MEMBER_ADD})
+     * @param defaultForNew true to make it the default operator, which the sponsors no operator found take (the
+     *                     current default stops being it in the same transaction); false or null leaves it as it is,
+     *                     except that false on the current default is refused (make another the default instead)
      */
     public record SaveInput(String operatorId, @NotBlank @Size(max = QbOperators.NAME_LENGTH) String name,
         @NotBlank @Size(max = QbOperators.CONTACT_NAME_LENGTH) String contactName,
         @NotBlank @Size(max = QbOperators.EMAIL_LENGTH) String contactEmail, String status,
         @Size(max = QbOperators.NOTE_LENGTH) String note, Long baseRevision,
-        @Pattern(regexp = "ja|zh|en") String language, String leadUserId) {
+        @Pattern(regexp = "ja|zh|en") String language, String leadUserId, Boolean defaultForNew) {
 
         public SaveInput(String operatorId, String name, String contactName, String contactEmail, String status,
             String note, Long baseRevision) {
-            this(operatorId, name, contactName, contactEmail, status, note, baseRevision, null, null);
+            this(operatorId, name, contactName, contactEmail, status, note, baseRevision, null, null, null);
         }
     }
 
@@ -125,6 +128,7 @@ public final class OperatorProcesses {
     static final String OPERATOR = "operator";
     static final String MEMBERS = "members";
     static final String LEAD_PLACE = "leadPlace";
+    static final String DEFAULTS = "defaults";
     static final String LEAD_USER = "leadUser";
     static final String LEAD_ASSIGNMENT = "leadAssignment";
     static final String PENDING_REVIEWS = "pendingReviews";
@@ -151,6 +155,9 @@ public final class OperatorProcesses {
             .requiresVerifiedEmail()
             .contextFactory((start, input) -> start(start, input, blankToNull(input.operatorId())))
             .outputMapper(ctx -> ctx.get(OUTPUT, SaveOutput.class))
+            // F-S1: whoever changes which operator is the default takes this first, so two never both are.
+            .step("Lock the default operator", HoldLock.<ProcessContext>exclusive(
+                ctx -> touchesDefault(ctx) ? QbOperators.DEFAULT_LOCK : null))
             .step("Lock the operator", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbOperators.operatorLockName(target(ctx))))
             // F-S1: a new operator's lead, in the order of the operators' acts (membership, then account, then
@@ -172,8 +179,19 @@ public final class OperatorProcesses {
                 QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR),
                     ctx -> byKey("userId", newLead(ctx)), SPONSOR),
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
-                    ctx -> byKey("userId", newLead(ctx)), LEAD_ASSIGNMENT)))
+                    ctx -> byKey("userId", newLead(ctx)), LEAD_ASSIGNMENT),
+                QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Eq("defaultForNew", true)).limit(2).build(), DEFAULTS)))
             .compute("Save", (metadata, ctx) -> save(ctx, ctx.get(INPUT, SaveInput.class))));
+    }
+
+    /**
+     * Whether the save may change which operator is the default: making one the default, or changing an existing
+     * operator (which may be the default, whose status then matters).
+     */
+    static boolean touchesDefault(ProcessContext ctx) {
+        SaveInput input = ctx.get(INPUT, SaveInput.class);
+        return Boolean.TRUE.equals(input.defaultForNew()) || target(ctx) != null;
     }
 
     /** The lead a new operator is created with (F-S1); null when changing one. */
@@ -222,8 +240,27 @@ public final class OperatorProcesses {
                 checkDirectSponsor(ctx, "leadUserId", OperatorChecks.first(ctx, LEAD_ASSIGNMENT));
             }
         }
+        // F-S1: the default operator (the one the sponsors no operator found take): at most one, active, taking
+        // sponsors; it stops being the default only when another becomes it.
+        boolean isDefault = operator != null && Boolean.TRUE.equals(operator.get("defaultForNew"));
+        boolean makeDefault = Boolean.TRUE.equals(input.defaultForNew()) && !isDefault;
+        if (isDefault && Boolean.FALSE.equals(input.defaultForNew())) {
+            ctx.reject(new Violation("defaultForNew", OperatorCodes.DEFAULT_KEEP, "The default operator stays the "
+                + "default until another becomes it", Map.of()));
+        }
+        if ((isDefault || makeDefault) && !QbOperators.ACTIVE.equals(status)) {
+            ctx.reject(new Violation("status", OperatorCodes.DEFAULT_INACTIVE, "The default operator must be active",
+                Map.of()));
+        }
         if (ctx.hasViolations()) {
             return;
+        }
+        if (makeDefault) {
+            // The old default first: the partial unique index allows one row at a time.
+            for (EntityInstance other : OperatorChecks.list(ctx, DEFAULTS)) {
+                ctx.changes().update(QbOperators.OPERATOR, other.id(), other.version(), Map.of("defaultForNew", false,
+                    "revision", BigDecimal.valueOf(AccountEditing.number(other.get("revision")) + 1)));
+            }
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name().strip());
@@ -237,7 +274,7 @@ public final class OperatorProcesses {
         if (operator == null) {
             revision = 1;
             values.put("collection", QbOperators.PLATFORM);
-            values.put("defaultForNew", false);
+            values.put("defaultForNew", makeDefault);
             values.put("publisherKinds", QbOperators.SPONSOR_KIND);
             values.put("directSponsorId", String.valueOf(lead.id()));
             values.put("createdAt", ctx.opTime());
@@ -250,6 +287,9 @@ public final class OperatorProcesses {
         } else {
             revision = AccountEditing.number(operator.get("revision")) + 1;
             values.put("revision", BigDecimal.valueOf(revision));
+            if (makeDefault) {
+                values.put("defaultForNew", true);
+            }
             ctx.changes().update(QbOperators.OPERATOR, operator.id(), operator.version(), values);
             operatorId = String.valueOf(operator.id());
             boolean active = QbOperators.ACTIVE.equals(status);

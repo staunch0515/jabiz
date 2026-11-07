@@ -5,13 +5,11 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.quizbuks.country.CountryCatalog;
 import com.jabiz.quizbuks.country.CountryData;
 import com.jabiz.quizbuks.country.QbCountries;
 import com.jabiz.quizbuks.messaging.LegalDrafts;
 import com.jabiz.quizbuks.messaging.QbLegal;
-import com.jabiz.quizbuks.operator.QbOperators;
 import com.jabiz.quizbuks.wallet.QbLedger;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.approval.ApprovalEntities;
@@ -93,7 +91,6 @@ public final class QbSetupProcesses {
     static final String RULES = "rules";
     static final String SOD_RULES = "sodRules";
     static final String LEGAL_DOCS = "legalDocs";
-    static final String DEFAULT_OPERATORS = "defaultOperators";
     static final String OPEN = "open";
     static final String CREATE = "create";
     static final String PROPOSE = "propose";
@@ -149,11 +146,6 @@ public final class QbSetupProcesses {
                 SOD_RULES))
             .step("Load the drafts of the legal texts", QueryEntities.of(QbLegal.defaultDataset(QbLegal.DOC),
                 ctx -> all(new QueryPredicate.In("kind", new ArrayList<>(QbLegal.KINDS))), LEGAL_DOCS))
-            // F-S1: the operator naturally arriving sponsors belong to (one at most).
-            .step("Lock the operator of new sponsors", HoldLock.exclusive(ctx -> QbOperators.DEFAULT_LOCK))
-            .step("Load the operator of new sponsors", QueryEntities.of(
-                QbOperators.defaultDataset(QbOperators.OPERATOR),
-                ctx -> all(new QueryPredicate.Eq("defaultForNew", true)), DEFAULT_OPERATORS))
             .compute("Add what has never existed", (metadata, ctx) -> setup(ctx, catalog.countries()))
             .step("Open the ledger accounts", CallProcess.forEach(LedgerProcesses.OPEN_ACCOUNT, 1,
                 ctx -> listOf(ctx, OPEN), null))
@@ -196,9 +188,6 @@ public final class QbSetupProcesses {
         list(ctx, RULES).forEach(rule -> found.add(QbSetupRecords.approvalRule(rule.get("ruleCode"))));
         list(ctx, SOD_RULES).forEach(rule -> found.add(QbSetupRecords.sodRule(rule.get("ruleCode"))));
         list(ctx, LEGAL_DOCS).forEach(doc -> found.add(QbSetupRecords.legalDraft(doc.get("kind"))));
-        if (!list(ctx, DEFAULT_OPERATORS).isEmpty()) {
-            found.add(QbSetupRecords.PLATFORM_OPERATOR);
-        }
 
         Recorder recorder = new Recorder(ctx, seen, found);
         List<String> created = new ArrayList<>();
@@ -305,24 +294,6 @@ public final class QbSetupProcesses {
                 draftIds.add(String.valueOf(ctx.changes().insert(QbLegal.DOC, row)));
                 drafts.add(kind);
             }
-        }
-
-        // F-S1: the platform operator, which naturally arriving sponsors belong to. It has no lead yet: its first lead
-        // (QB_OPERATOR_MEMBER_ADD) becomes its own sponsor. An administrator renames it and sets its contact.
-        if (recorder.isNew(QbSetupRecords.PLATFORM_OPERATOR)) {
-            Brand brand = Brand.current();
-            Map<String, Object> operator = new LinkedHashMap<>();
-            operator.put("name", brand.name());
-            operator.put("contactName", brand.name());
-            operator.put("contactEmail", brand.supportEmail());
-            operator.put("collection", QbOperators.PLATFORM);
-            operator.put("status", QbOperators.ACTIVE);
-            operator.put("defaultForNew", true);
-            operator.put("publisherKinds", QbOperators.SPONSOR_KIND);
-            operator.put("createdAt", ctx.opTime());
-            operator.put("createdBy", ctx.request().actorId());
-            operator.put("revision", java.math.BigDecimal.ONE);
-            ctx.changes().insert(QbOperators.OPERATOR, operator);
         }
 
         ctx.put(OPEN, List.copyOf(open));

@@ -1,6 +1,6 @@
 /*---
 id: qb.admin.operator-health
-description: "What is wrong with the operators' structure (F-S1), one row a problem: a sponsor no operator looks after, an active operator without exactly one own sponsor, an active operator with fewer than two members who can review (its own sponsor's publications then have nobody to review them); empty when all is well"
+description: "What is wrong with the operators' structure (F-S1), one row a problem: no default operator (sponsors cannot sign up), a sponsor no operator looks after, an active operator without exactly one own sponsor, an active operator with fewer than two members who can review (its own sponsor's publications then have nobody to review them); empty when all is well"
 entities: [QbSponsor, QbSponsorOperator, QbOperator, QbOperatorMember, SecUserRole, SecRole]
 datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
@@ -21,17 +21,25 @@ permissions: [qb.admin.operators.read]
 ---*/
 -- One statement, one snapshot. The daily job QB_OPERATOR_CHECK_RUN asks headquarters when it returns anything; the
 -- operators' page shows the same rows.
--- NO_OPERATOR: a sponsor (any onboarding) without an assignment; found is 0.
-SELECT CAST('NO_OPERATOR' AS varchar(30)) AS checkCode,
+-- NO_DEFAULT_OPERATOR: no active default operator, so nobody can sign up as a sponsor; found is 0.
+SELECT CAST('NO_DEFAULT_OPERATOR' AS varchar(30)) AS checkCode,
        CAST(NULL AS varchar(36)) AS operatorId,
        CAST(NULL AS varchar(200)) AS operatorName,
-       CAST(s.{{QbSponsor.userId}} AS varchar(128)) AS sponsorId,
+       CAST(NULL AS varchar(128)) AS sponsorId,
        CAST(0 AS numeric) AS found
+WHERE NOT EXISTS (SELECT 1 FROM {{QbOperator}} d
+                  WHERE d.{{QbOperator.defaultForNew}} AND d.{{QbOperator.status}} = 'ACTIVE')
+UNION ALL
+-- NO_OPERATOR: a sponsor (any onboarding) without an assignment; found is 0.
+SELECT CAST('NO_OPERATOR' AS varchar(30)),
+       CAST(NULL AS varchar(36)),
+       CAST(NULL AS varchar(200)),
+       CAST(s.{{QbSponsor.userId}} AS varchar(128)),
+       CAST(0 AS numeric)
 FROM {{QbSponsor}} s
 WHERE NOT EXISTS (SELECT 1 FROM {{QbSponsorOperator}} a WHERE a.{{QbSponsorOperator.userId}} = s.{{QbSponsor.userId}})
 UNION ALL
 -- DIRECT_SPONSOR: an active operator whose own sponsors (fixed assignments) are not exactly one; found is how many.
--- An operator without a lead yet (the platform operator before its first lead) shows here with 0.
 SELECT CAST('DIRECT_SPONSOR' AS varchar(30)),
        CAST(o.{{QbOperator.operatorId}} AS varchar(36)),
        CAST(o.{{QbOperator.name}} AS varchar(200)),

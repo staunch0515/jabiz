@@ -72,14 +72,14 @@ class OperatorsEverywhereIT extends PlayItSupport {
     }
 
     @Test
-    void aSponsorWhoAppliesOnTheirOwnBelongsToThePlatformOperatorAndTheirCardsCarryIt() {
+    void aSponsorWhoAppliesOnTheirOwnBelongsToTheDefaultOperatorAndTheirCardsCarryIt() {
         String sponsor = newSponsor(unique("s-fs1-own"));
         assertThat(assignment(sponsor)).containsEntry("operator_id", platformOperator())
             .containsEntry("assigned_by", QbOperators.BY_DEFAULT).containsEntry("fixed", false);
         credit(sponsor, 10_000);
         String publication = livePublication(sponsor, "FS1 card");
         assertThat(card(publication).get("operator_id")).isEqualTo(platformOperator());
-        // The platform operator is the only one that takes new sponsors.
+        // The default operator is the only one that takes new sponsors.
         assertThat(query("SELECT count(*) AS n FROM qb_operator WHERE default_for_new").getFirst().get("n"))
             .isEqualTo(1L);
     }
@@ -127,22 +127,69 @@ class OperatorsEverywhereIT extends PlayItSupport {
         assertThat(query("SELECT 1 FROM qb_sponsor_operator WHERE user_id = ?", second)).isEmpty();
     }
 
+    private Map<String, Object> operatorRow(String operatorId) {
+        return query("SELECT * FROM qb_operator WHERE operator_id = ?", operatorId).getFirst();
+    }
+
+    private Map<String, Object> change(String operatorId, Map<String, Object> extra) {
+        Map<String, Object> row = operatorRow(operatorId);
+        Map<String, Object> input = new java.util.LinkedHashMap<>();
+        input.put("operatorId", operatorId);
+        input.put("name", row.get("name"));
+        input.put("contactName", row.get("contact_name"));
+        input.put("contactEmail", row.get("contact_email"));
+        input.put("status", row.get("status"));
+        input.put("baseRevision", ((Number) row.get("revision")).longValue());
+        input.putAll(extra);
+        return input;
+    }
+
     @Test
-    void thePlatformOperatorsFirstLeadBecomesItsOwnSponsor() {
-        String platform = platformOperator();
-        Object before = query("SELECT direct_sponsor_id FROM qb_operator WHERE operator_id = ?", platform).getFirst()
-            .get("direct_sponsor_id");
-        String lead = verifiedUser(unique("fs1-platform-lead"));
-        run(OperatorProcesses.MEMBER_ADD, hq(), body("operatorId", platform, "userId", lead, "lead", true));
-        Object after = query("SELECT direct_sponsor_id FROM qb_operator WHERE operator_id = ?", platform).getFirst()
-            .get("direct_sponsor_id");
-        if (before == null) {
-            assertThat(after).isEqualTo(lead);
-            assertThat(assignment(lead)).containsEntry("fixed", true);
-        } else {
-            // An earlier test of the class named the first one.
-            assertThat(after).isEqualTo(before);
+    void theDefaultOperatorHasItsOwnSponsorAndPassesToAnotherOnlyByMakingThatOneTheDefault() {
+        // Created after installing, with its lead: its own sponsor, like every operator's.
+        String first = platformOperator();
+        assertThat(operatorRow(first).get("direct_sponsor_id")).isNotNull();
+
+        // Another becomes the default: the first stops being it in the same transaction; one at most.
+        NewOperator second = newOperatorWithLead(hq(), unique("Second default"), null);
+        run(OperatorProcesses.SAVE, hq(), change(second.operatorId(), Map.of("defaultForNew", true)));
+        assertThat(platformOperator()).isEqualTo(second.operatorId());
+        assertThat(operatorRow(first)).containsEntry("default_for_new", false);
+        assertThat(query("SELECT count(*) AS n FROM qb_operator WHERE default_for_new").getFirst().get("n"))
+            .isEqualTo(1L);
+        String sponsor = newSponsor(unique("s-fs1-second"));
+        assertThat(assignment(sponsor)).containsEntry("operator_id", second.operatorId());
+
+        // The default is not given up, nor suspended, but by making another the default.
+        assertThat(codes(refused(OperatorProcesses.SAVE, hq(), change(second.operatorId(),
+            Map.of("defaultForNew", false)), 422))).containsExactly(OperatorCodes.DEFAULT_KEEP);
+        assertThat(codes(refused(OperatorProcesses.SAVE, hq(), change(second.operatorId(),
+            Map.of("status", QbOperators.SUSPENDED)), 422))).containsExactly(OperatorCodes.DEFAULT_INACTIVE);
+        assertThat(codes(refused(OperatorProcesses.SAVE, hq(), change(newOperator(hq(), unique("Stopped")),
+            Map.of("status", QbOperators.SUSPENDED, "defaultForNew", true)), 422)))
+            .containsExactly(OperatorCodes.DEFAULT_INACTIVE);
+
+        // Back to the first, for the class's other tests.
+        run(OperatorProcesses.SAVE, hq(), change(first, Map.of("defaultForNew", true)));
+        assertThat(platformOperator()).isEqualTo(first);
+    }
+
+    @Test
+    void withoutADefaultOperatorNobodySignsUpAsASponsorAndTheDailyCheckSaysSo() {
+        String first = platformOperator();
+        // An installation before its administrator created the default operator.
+        execute("UPDATE qb_operator SET default_for_new = false WHERE operator_id = ?", first);
+        try {
+            assertThat(codes(refused("QB_SPONSOR_APPLY", sponsor(user(unique("s-fs1-early"))), body("displayName",
+                "Early", "company", "Early Co", "acceptTerms", true), 422)))
+                .containsExactly(OperatorCodes.DEFAULT_MISSING);
+            assertThat(items(OperatorHealth.TEMPLATE, hq(), Map.of())).anySatisfy(row -> assertThat(row)
+                .containsEntry("checkCode", OperatorHealth.NO_DEFAULT_OPERATOR));
+        } finally {
+            execute("UPDATE qb_operator SET default_for_new = true WHERE operator_id = ?", first);
         }
+        assertThat(items(OperatorHealth.TEMPLATE, hq(), Map.of())).noneSatisfy(row -> assertThat(row)
+            .containsEntry("checkCode", OperatorHealth.NO_DEFAULT_OPERATOR));
     }
 
     @Test

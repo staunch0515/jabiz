@@ -99,7 +99,7 @@ abstract class AccountItSupport extends PublicationItSupport {
         return memberSession(member, platformOperator());
     }
 
-    /** The operator QB_SETUP made, that takes the sponsors who sign up by themselves (F-S1). */
+    /** The default operator (F-S1: created after installing), that takes the sponsors who sign up by themselves. */
     String platformOperator() {
         return (String) query("SELECT operator_id FROM qb_operator WHERE default_for_new").getFirst()
             .get("operator_id");
