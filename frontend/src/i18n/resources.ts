@@ -265,7 +265,8 @@ const en = {
   },
   tasks: { title: 'My tasks', empty: 'Nothing to do.', due: 'Due {{time}}', open: '{{count}} open tasks',
     resolve: 'Resolve', resolveTitle: 'Resolve the task', resolveHint: 'For work no process will close: say what you found or did.',
-    done: 'Done', cancelled: 'Not needed', note: 'Note', resolved: 'The task is closed.', cancel: 'Cancel' },
+    done: 'Done', cancelled: 'Not needed', note: 'Note', resolved: 'The task is closed.', cancel: 'Cancel',
+    search: 'Search tasks', kind: 'Kind', all: 'All', approvals: 'Approvals', others: 'Other tasks' },
   approval: {
     approve: 'Approve',
     reject: 'Reject',
@@ -665,7 +666,8 @@ const zh: Texts = {
   },
   tasks: { title: '我的待办', empty: '没有待办事项。', due: '截止 {{time}}', open: '{{count}} 项待办',
     resolve: '处理', resolveTitle: '处理待办', resolveHint: '用于不会由流程关闭的工作：写下你查到或做了什么。',
-    done: '已完成', cancelled: '不需要', note: '说明', resolved: '待办已关闭。', cancel: '取消' },
+    done: '已完成', cancelled: '不需要', note: '说明', resolved: '待办已关闭。', cancel: '取消',
+    search: '搜索待办', kind: '类别', all: '全部', approvals: '审批', others: '其他待办' },
   approval: {
     approve: '批准',
     reject: '驳回',
@@ -1062,7 +1064,8 @@ const ja: Texts = {
   },
   tasks: { title: '自分のタスク', empty: 'タスクはありません。', due: '期限 {{time}}', open: '未完了のタスク {{count}} 件',
     resolve: '処理', resolveTitle: 'タスクを処理', resolveHint: 'プロセスが閉じない作業用です。確認したことや行ったことを記入してください。',
-    done: '完了', cancelled: '不要', note: 'メモ', resolved: 'タスクを閉じました。', cancel: 'キャンセル' },
+    done: '完了', cancelled: '不要', note: 'メモ', resolved: 'タスクを閉じました。', cancel: 'キャンセル',
+    search: 'タスクを検索', kind: '種類', all: 'すべて', approvals: '承認', others: 'その他のタスク' },
   approval: {
     approve: '承認',
     reject: '却下',

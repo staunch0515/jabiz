@@ -315,7 +315,7 @@ jabizApp {
   `body` 的背景与文字取 token，原生控件与滚动条随 `.dark` 变暗；应用自有 SPA 经同一 `theme.css` 也是全局 preflight。后台外壳的内容区是 `text-sm`（14px，
   与 antd 时期相同；登录、邮件链接页、门户与应用 SPA 仍是浏览器缺省的 16px）。渲染出的 Markdown（`.markdown-view`）的标题、列表、链接、代码与引用
   由 `@jabiz/ui` 的 `markdown.css`（层 `components`，只用 token）给出样式，不用 `@tailwindcss/typography`。侧栏收起时整体移出屏幕并设为 `inert`
-  （不收成图标条：服务端菜单没有图标、分组在图标条中无法展开）；窄屏上侧栏是抽屉，点链接后关闭。
+  （缺省不收成图标条：服务端菜单没有图标；条目都有图标的应用可选 `collapsible="icon"`，§13）；窄屏上侧栏是抽屉，点链接后关闭。
 - **迁移的历史**（15a–15d）：迁移期间 antd 页面与新组件共存，preflight 只作用于 `.jabiz-ui`（`UI_SCOPE`）之内，antd 的样式在 CSS 层 `antd` 中，
   antd 页面所在的内容区固定为亮色。15d 删除 antd、ProComponents、icons 与 React 19 补丁，preflight 改为全局，去掉层 `antd`、亮色固定与路由标记；
   `UI_SCOPE` 仍导出（D22 的约定），只是一个没有样式的类名，不再需要。
@@ -378,3 +378,37 @@ jabizApp {
   主屏幕上的 App 与 Safari 的存储分开，须再登录一次）与 Android 浏览器的菜单（`situation="menu"`、`browser`，17m）；内置浏览器的提示以警示样式显示（那里别的都做不了）；用户关掉后 30 天内不再出现、关掉 3 次后不再出现（`snoozeDays`、`maxDismissals`，记在本浏览器的
   `localStorage`，按 SPA 前缀分开，存储不可用时下次照常出现）；`dismissible={false}` 用于作为安装入口的页面（账户页）：没有关闭按钮，已安装时说明已安装。
   何时显示由应用决定（不要放在首次访问或登录页：多半被直接关掉）。
+
+## 13. 应用框架与页面模板（阶段 17zj，QuizBuks 首次上线 P3）
+
+`@jabiz/ui` 的可选能力，供应用自有 SPA 与通用后台使用；不设置即与以前完全相同（通用后台的整体布局不变）。依据 QuizBuks Q108 §3、§4、§6.1 第 5 条。
+
+- **外壳 `AppShell`**：`collapsible="icon"` 时侧栏在宽屏上收成图标窄条（条目须有图标，名称为提示；带子项的分组在窄条中点击先展开侧栏），收起状态照旧记在本机
+  （`localStorage` 的 `jabiz.sidebar`，不可用时照常工作）；缺省仍是 `offcanvas`（服务端菜单没有图标）。`create` 放在侧栏最上方，通常是 `GlobalCreate`
+  （"＋ 新建"：应用给出条目（只给用户可新建的），链接或回调；没有条目即不显示；窄条中只剩加号）。`bottomBar` 只在窄屏（`< md`）显示，通常是 `BottomBar`；
+  外壳为它在页面底部留出空间，并设 `--bottom-bar-offset` 让浮动按钮与表单页的保存条留在它之上。`routeKey`（路由的路径）改变时焦点移到新页面的标题
+  （`PageHeader` 的 `<h1 tabIndex=-1>`，`data-slot="page-title"`），读屏软件随之读出新页；首次渲染不移动。
+- **底部菜单 `BottomBar`**：应用给出项数（惯例 4 项 +"更多"，或 5 项、正中一项 `raised` 凸起），当前项 `aria-current="page"` 并加粗（不只靠颜色），可带徽标；
+  `more` 给出完整菜单（通常与侧栏同一个 `ShellNav`），在自下而上的抽屉中打开，点其中的链接即关闭。它是有名称的 `navigation`，名称须与侧栏的不同（axe `landmark-unique`）。
+- **页头 `PageHeader`**：新增 `icon`（区域的图标，装饰性，与菜单的图标相同）、`primaryAction`（主操作：宽屏上**紧跟在标题之后**，任何宽度下都在标题旁；
+  窄屏上成为底部菜单之上的浮动按钮 `Fab`，只显示图标、以文字命名）、`tabs`（标题与说明之下，通常是 `PageTabs`）。`actions` 照旧在行的另一端；老写法不变。
+  `PageAction` 是按钮（`onClick`）或链接（`href`，有路由时 `renderLink`）。
+- **页内标签 `PageTabs`**：一个区域里的各页并排；每个标签是一个路由（链接，可直接打开、可加书签），当前项 `aria-current="page"`；放不下时横向滚动；
+  方向键、Home、End 在标签之间移动；可带徽标。以后的新功能加为区域里的标签，而不是新的菜单项（应用的规则）。
+- **内容宽度**：主题 token `--content-max`（85rem，约 1360px：列表与详情）与 `--content-form-max`（60rem，约 960px：表单），居中；`--bottom-bar-height`（4rem）。
+  应用可在自己的样式表中覆盖。`PageContent` 单独提供这种居中限宽。
+- **三种页面模板**：
+  - `ListPage`：页头 → 工具栏（`search`：搜索框（`type="search"`，有名称）；`chips`：状态的小标签（`SegmentedControl` 的单选组）；`toolbar`：其余放在末端）→ 列表
+    （通常是 `DataTable`，其自身的"表格 / 卡片"切换见 §6 与 17zc）。模板只告诉应用选了什么，数据由应用读取。
+  - `DetailPage`：页头 → 内容与"状态与下一步"栏（`aside`，有名称的 `complementary`）；宽屏上该栏固定在右侧（内容滚动时不动），窄屏上排在内容之前
+    （在文档中也排在前面，读屏软件先读到它）。
+  - `FormPage`：页头 → 单栏、限宽的表单（整页是一个 `<form>`，回车即保存）→ 底部固定的条：一句状态（`role="status"`："有未保存的修改" / "没有未保存的修改"）、
+    "放弃"与"保存"（没有修改、正在保存或 `canSave` 为假时等待）。有未保存的修改时关闭、刷新或离开本站都先询问（`beforeunload`，`useUnsavedChanges`）；
+    应用内的路由跳转由应用以其路由的拦截器配合 `dirty` 询问。
+- **约束**：组件只用主题 token；亮暗两种外观都过 axe；标签、底部菜单、浮动按钮、新建菜单都能只用键盘操作；不做动画之外的动态效果（抽屉与菜单的动画随系统的"减少动态效果"）。
+  菜单项照旧由应用按权限给出（界面隐藏，权限只由服务端判断）。
+- **示范**：示范门户（`backend/app/portal`）用了全部：图标窄条的侧栏、"＋ 新建"（下单）、手机上的底部菜单与浮动按钮、`ListPage`（我的订单：搜索订单号、按状态筛选，
+  "下单"在标题旁）、`FormPage`（下单）、`DetailPage`（账户：右侧是账户与邮箱的验证状态）。通用后台的"我的待办"改用 `ListPage`（搜索标题、审批 / 其他待办）。
+- **测试**：`app-frame.test.tsx`（主按钮在标题旁、手机上的浮动按钮、链接形式、老写法不变、标签的键盘操作与徽标、新建菜单、图标窄条与记忆、底部菜单只在手机上、
+  "更多"抽屉、路由改变时的焦点、三种模板），每例 `expectAccessible`（亮暗两种外观）；`theme.test.ts` 的布局 token；门户 `App.test.tsx`（列表模板的搜索与筛选、
+  手机上的底部菜单、浮动按钮、账户的详情模板与焦点）；后台 `TasksPage.test.tsx`。
