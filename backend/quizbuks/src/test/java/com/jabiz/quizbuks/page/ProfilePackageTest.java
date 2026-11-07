@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.page;
 
 import com.jabiz.entity.Violation;
+import com.jabiz.quizbuks.setup.QbParams;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -106,14 +107,33 @@ class ProfilePackageTest {
 
     @Test
     void moreProductsThanASponsorMayHaveAreRefused() {
+        // Without a limit given: the declared value of qb.products.max (50).
+        int max = Integer.parseInt(QbParams.defaultOf(QbParams.PRODUCTS_MAX));
+        Map<String, Object> document = withProducts(max + 1);
+        assertThat(ProfilePackage.read(document).problems()).extracting(Violation::ruleCode)
+            .containsExactly(SponsorPageCodes.PRODUCT_LIMIT);
+        assertThat(ProfilePackage.read(withProducts(max)).problems()).isEmpty();
+    }
+
+    /** F-C11: the limit is the one the process read from qb.products.max. */
+    @Test
+    void theProductsLimitIsTheOneGiven() {
+        List<Violation> problems = ProfilePackage.read(withProducts(4), 3).problems();
+        assertThat(problems).extracting(Violation::ruleCode).containsExactly(SponsorPageCodes.PRODUCT_LIMIT);
+        assertThat(problems.getFirst().params()).containsEntry("max", 3);
+        assertThat(problems.getFirst().field()).isEqualTo("products");
+        assertThat(ProfilePackage.read(withProducts(3), 3).problems()).isEmpty();
+        assertThat(ProfilePackage.read(withProducts(60), 100).problems()).isEmpty();
+    }
+
+    private Map<String, Object> withProducts(int count) {
         Map<String, Object> document = document();
         List<Object> products = new java.util.ArrayList<>();
-        for (int i = 0; i <= QbSponsorProducts.MAX_PRODUCTS; i++) {
+        for (int i = 0; i < count; i++) {
             products.add(map("name", "P" + i, "price", 1, "currency", "JPY", "shopUrl", "https://shop.example"));
         }
         document.put("products", products);
-        assertThat(ProfilePackage.read(document).problems()).extracting(Violation::ruleCode)
-            .containsExactly(SponsorPageCodes.PRODUCT_LIMIT);
+        return document;
     }
 
     @Test

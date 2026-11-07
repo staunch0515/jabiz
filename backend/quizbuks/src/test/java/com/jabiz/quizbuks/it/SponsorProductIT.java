@@ -10,6 +10,9 @@ import com.jabiz.quizbuks.page.SponsorPageCodes;
 import com.jabiz.quizbuks.page.SponsorPageProcesses;
 import com.jabiz.quizbuks.page.SponsorProductProcesses;
 import com.jabiz.quizbuks.page.SponsorStatsConfig;
+import com.jabiz.quizbuks.page.ProfilePackage;
+import com.jabiz.quizbuks.page.ProfileTransferProcesses;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.context.Actor;
 import com.jabiz.runtime.publicread.PublicCounters;
@@ -35,6 +38,7 @@ class SponsorProductIT extends PlayItSupport {
 
     private static final String PAGE_PRODUCTS = "qb.public.sponsor-page-products";
     private static final String PUBLICATION_PRODUCTS = "qb.public.publication-products";
+    private static final String PRODUCT_LIMIT = "qb.sponsor.product-limit";
 
     @Autowired
     PublicCounters counters;
@@ -213,12 +217,66 @@ class SponsorProductIT extends PlayItSupport {
 
     @Test
     void aSponsorHasAtMostFiftyProducts() {
+        // F-C11: fifty is the declared value of qb.products.max, which setup created.
+        int max = Integer.parseInt(QbParams.defaultOf(QbParams.PRODUCTS_MAX));
+        assertThat(max).isEqualTo(50);
         String token = sponsorToken(newSponsor(unique("s-q60b-many")));
-        for (int i = 0; i < QbSponsorProducts.MAX_PRODUCTS; i++) {
+        for (int i = 0; i < max; i++) {
             save(token, product("Item " + i, "100", "JPY", false));
         }
         assertThat(codes(refused(SponsorProductProcesses.SAVE, token, product("One more", "100", "JPY", false), 422)))
             .containsExactly(SponsorPageCodes.PRODUCT_LIMIT);
+        assertThat(items(PRODUCT_LIMIT, token, Map.of())).singleElement()
+            .satisfies(row -> assertThat(((Number) row.get("max")).intValue()).isEqualTo(50));
+    }
+
+    /**
+     * F-C11: the limit is the parameter qb.products.max, as read at the time: the save, the profile package's check
+     * and the products page's template all follow a change; a sponsor above a lowered limit still changes and deletes
+     * their products.
+     */
+    @Test
+    void theProductsLimitIsAParameter() {
+        String token = sponsorToken(newSponsor(unique("s-fc11-max")));
+        Map<String, Object> saved = run(SponsorProductProcesses.SAVE, token, product("First", "100", "JPY", false));
+        String first = (String) saved.get("productId");
+        String second = save(token, product("Second", "100", "JPY", false));
+        save(token, product("Third", "100", "JPY", false));
+        run("PARAM_SET", admin(), body("key", QbParams.PRODUCTS_MAX, "value", "2"));
+        try {
+            Map<String, Object> refusal = refused(SponsorProductProcesses.SAVE, token,
+                product("Fourth", "100", "JPY", false), 422);
+            assertThat(codes(refusal)).containsExactly(SponsorPageCodes.PRODUCT_LIMIT);
+            assertThat(String.valueOf(refusal.get("violations"))).contains("2").doesNotContain("50");
+            assertThat(items(PRODUCT_LIMIT, token, Map.of())).singleElement()
+                .satisfies(row -> assertThat(((Number) row.get("max")).intValue()).isEqualTo(2));
+
+            // Above the lowered limit: the existing ones are still changed and deleted (all are read, not two).
+            Map<String, Object> change = product("First again", "150", "JPY", false);
+            change.put("productId", first);
+            change.put("baseRevision", saved.get("revision"));
+            run(SponsorProductProcesses.SAVE, token, change);
+            run(SponsorProductProcesses.DELETE, token, body("productId", second));
+
+            // The profile package's check reads the same limit.
+            List<Map<String, Object>> three = new java.util.ArrayList<>();
+            for (String name : List.of("A", "B", "C")) {
+                three.add(body("name", name, "price", "100", "currency", "JPY", "shopUrl", "https://shop.example/"
+                    + name));
+            }
+            Map<String, Object> document = body("format", ProfilePackage.FORMAT, "schema", ProfilePackage.SCHEMA,
+                "languages", List.of("en"), "products", three);
+            assertThat(codes(refused(ProfileTransferProcesses.CHECK, token, body("document", document), 422)))
+                .containsExactly(SponsorPageCodes.PRODUCT_LIMIT);
+            assertThat(run(ProfileTransferProcesses.CHECK, token, body("document", body("format",
+                ProfilePackage.FORMAT, "schema", ProfilePackage.SCHEMA, "languages", List.of("en"), "products",
+                three.subList(0, 2))))).containsKey("plan");
+        } finally {
+            run("PARAM_SET", admin(), body("key", QbParams.PRODUCTS_MAX, "value", "50"));
+        }
+        save(token, product("Fourth", "100", "JPY", false));
+        assertThat(items(PRODUCT_LIMIT, token, Map.of())).singleElement()
+            .satisfies(row -> assertThat(((Number) row.get("max")).intValue()).isEqualTo(50));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.page;
 
 import com.jabiz.entity.Violation;
+import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessDefinitionBuilder;
@@ -14,8 +15,10 @@ import com.jabiz.quizbuks.identity.SponsorProcesses;
 import com.jabiz.quizbuks.identity.SponsorStatus;
 import com.jabiz.quizbuks.mailserver.MailServerProcesses;
 import com.jabiz.quizbuks.mailserver.QbMailServers;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.security.Sensitive;
 import jakarta.validation.constraints.NotNull;
@@ -76,6 +79,7 @@ public final class ProfileTransferProcesses {
     private static final String PLAN = "plan";
     private static final String LINKS = "links";
     private static final String QUIZZES = "quizzes";
+    private static final String PARAMS = "params";
 
     /** @param document the package's JSON; its files' {@code data} may be left out (they are never read) */
     public record CheckInput(@NotNull Map<String, Object> document) {}
@@ -169,8 +173,12 @@ public final class ProfileTransferProcesses {
     private static <I, O> void plan(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         java.util.function.Function<ProcessContext, Map<String, Object>> document,
         java.util.function.Function<ProcessContext, String> password) {
+        // F-C11: the products' limit, as the products page and QB_PRODUCT_SAVE read it.
+        pb.step("Load the products' limit", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+            QbParams.PRODUCTS_MAX));
         pb.compute("Read the package", (metadata, ctx) -> {
-            ProfilePackage.Read read = ProfilePackage.read(document.apply(ctx));
+            ProfilePackage.Read read = ProfilePackage.read(document.apply(ctx),
+                SponsorProductProcesses.maxProducts(ctx.get(PARAMS, ParamValues.class)));
             read.problems().forEach(ctx::reject);
             if (read.profile() != null) {
                 ctx.put(PACKAGE, read.profile());
@@ -179,8 +187,8 @@ public final class ProfileTransferProcesses {
         pb.step("Load the sponsor's profile", QueryEntities.<ProcessContext>all(
             QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> ofUser(ctx, 1), SPONSORS),
             QueryEntities.query(QbSponsorPages.DEFAULT_DATASET, ctx -> ofUser(ctx, 1), PAGES),
-            QueryEntities.query(QbSponsorProducts.DEFAULT_DATASET,
-                ctx -> ofUser(ctx, QbSponsorProducts.MAX_PRODUCTS + 1), PRODUCTS),
+            // All of them, whatever the limit (a package replaces every one).
+            QueryEntities.query(QbSponsorProducts.DEFAULT_DATASET, ctx -> ofUser(ctx, Integer.MAX_VALUE), PRODUCTS),
             QueryEntities.query(QbMailServers.DEFAULT_DATASET,
                 ctx -> QbMailServers.bySponsor(ctx.request().actorId()), SERVERS)));
         // D-Q100-13: where the products the import would delete are shown, and those quizzes' titles.
