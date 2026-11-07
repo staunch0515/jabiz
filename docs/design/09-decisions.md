@@ -2509,3 +2509,47 @@ Android 的 App 是 TWA（在 Chrome 中运行），iOS 是 Capacitor 外壳。�
 
 **剩余风险**：国产安卓与鸿蒙机型的支持靠实测（平台只保证不支持时不显示）；测试环境与正式环境的通行密钥不通用，换域名即全部作废；
 本环境只能以模拟认证器与 Chromium 的虚拟认证器测试，上线前须在 iPhone、Windows 与一台国产安卓上各实际走一遍。
+
+## D72 邮件文字与信纸的在线定制
+
+**背景**：需求方 2026-11-05（QuizBuks 首次上线，Q107；规格 F-C8、F-C9）：系统发出的**所有**邮件都要能由总部在后台修改文字（按模版与语言的标题、正文），
+所有邮件共用一张信纸（页眉、页脚），不改程序、不重新部署；验证邮箱、找回密码、链接登录这一类与"密码已改"等安全通知改了须另一位管理员批准，普通通知改了即时生效。
+到 D35 为止，文字只是打在 jar 里的消息 `mail.<名>.subject|body`，待办通知（18 §5.4）与单据邮件（22 §5）各自拼纯文本，不经同一处。
+需求方 2026-11-07 授权先定 D72–D75（"你自己先定"）。本条扩展 D35（18 §5.6 的"不做模板样式"改为"样式只有平台的信纸"），不取代其他决策。
+
+**决定**
+1. **代码是缺省，覆盖是数据**：`MailTemplate` Bean 与消息 `mail.<名>.*` 是缺省文字；管理员可按（模版，语言）覆盖标题与正文，存于只追加的时态实体 `MailText`
+   （`sys_mail_text_version`，种类 `CUSTOM` / `DEFAULT`，恢复默认即写一个 `DEFAULT` 版本，记下所据缺省文字的哈希 `defaultHash`）；
+   按语言的信纸（17zh-b）同样存于只追加的 `sys_mail_layout_version`，缺省值来自应用配置 `jabiz.mail.layout.*`。
+   只经平台的流程写入：`MAIL_TEXT_SAVE`、`MAIL_TEXT_RESET`、受控变更（目标 `MailText`，即 `mail-text`），信纸为 `MAIL_LAYOUT_*` 与受控变更 `mail-layout`；
+   写入取命名锁 `jabiz.mail-text:<模版>` 并带读到的版本号 `baseVersionNo`（别人先改了即 409）；写入要求 `mail.text.write` 与已验证的邮箱（读与预览为 `mail.text.read`）。
+   其他途径（数据视图 API、通用实体流程、其他流程）一律由 `VersionAppender` 的守卫拒绝。应用不另写邮件文字的存储或编辑页。
+2. **一套规则**：core 的 `MailTextRules` 同时用于缺省文字（启动检查 `MAIL`）与覆盖（保存、提出、发布、发信），一次报告全部问题（保存为 400 附 `violations`）：
+   占位符只能是模版声明的参数、令牌与内置占位符（`MAIL_TEXT_UNKNOWN_PLACEHOLDER`）；声明的参数与令牌都要用到、通知要有 `{unsubscribeUrl}`（`MAIL_TEXT_REQUIRED_PLACEHOLDER`）；
+   **令牌、登录链接与退订链接只能放在以 `{baseUrl}`、`{entryUrl}`、`{entryUrl.<入口>}` 开头的链接目标中**，不能在正文文字、链接标题或标题中（`MAIL_TEXT_SECRET_PLACEMENT`）；
+   链接只许 `http`、`https`、`mailto` 与相对地址（`MAIL_TEXT_LINK_NOT_ALLOWED`），绝对的网页链接（含正文中写出的地址与 `//` 开头的）只能指向本站（`jabiz.mail.base-url` 的主机）
+   或 `jabiz.mail.texts.allowed-link-hosts`（缺省空）（`MAIL_TEXT_LINK_HOST`）；**正文不能有图片**（防追踪像素，`MAIL_TEXT_IMAGE`），不能有原始 HTML（`MAIL_TEXT_HTML`）；
+   标题、正文不能为空，标题只有一行，长度不超过 `jabiz.mail.texts.max-subject-length`（缺省 300，取代写死的 `MailRenderer.MAX_SUBJECT`）与 `max-body-length`（缺省 20000）。
+   缺省文字违反占位符与令牌位置的规则即启动失败，违反其余规则（图片、HTML、外部主机、长度）只告警（缺省文字是评审过的代码，覆盖则一律拒绝）。
+   渲染照旧是 `MailRenderer`（值不当作 Markdown 或 HTML）；与缺省相同的保存即恢复默认。
+3. **须另一位管理员批准的**：声明了令牌或登录链接的模版（自动判定，新的同类模版自然受保护），以及以 `t.protectedText()` 显式纳入的安全通知
+   （平台的"密码已改""邮箱已改""已添加通行密钥""已关联外部账号""账号将被删除"）。它们的覆盖只经受控变更 `mail-text`：一位提出、**另一位**发布（`CONTROL_SAME_PERSON`），
+   提出与发布都要求近期二次验证，发布时按规则再查一次；审批绑定提出时的标题与正文，提出所据的版本变了（恢复默认、另一次发布）即 `CONTROL_TARGET_CHANGED`，须重新提出。
+   `MAIL_TEXT_SAVE` 对这类模版拒绝（422 `MAIL_TEXT_NEEDS_APPROVAL`）。其余模版保存即生效；**恢复默认一律即时生效**（缺省文字随代码评审过）。
+   **信纸的修改同样须另一位管理员批准**（受控变更 `mail-layout`，17zh-b 实现），恢复默认即时生效。
+4. **发信时取生效的文字，失效即退回缺省**：模版邮件（`MAIL_SEND`）、待办通知（`TASK_NOTIFY`，平台模版 `jabiz.task-notification`）与单据邮件（`DOCUMENT_SEND`，
+   平台模版 `jabiz.document-mail`，版式的 `document.<版式>.mail.*` 是该版式的缺省）都经同一处（`MailTexts`）取文字并渲染。覆盖因代码变化不再合格（参数被删、令牌改名）时
+   按缺省发出，日志告警并记观测 `jabiz.mail.text.fallback`（标签只有模版名），启动检查 `MAIL` 告警（是数据，不阻止启动），从不发出不合格的邮件。
+   投递记录写明所用的文字版本（`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 的 `text_version_no`，空 = 缺省；信纸版本见 17zh-b）。
+5. **预览与测试发送**：模版以 `t.sample(参数, 值)` 声明示例值（没有即显示 `[参数名]`），令牌换成不能用的示例值。预览（`POST /api/mail/texts/preview`）只读、不写任何记录。
+   测试发送（`MAIL_TEXT_TEST_SEND`）把草稿或当前文字按预览渲染好，作为已渲染的消息**只寄给操作人自己账号的邮箱**（不收地址参数），标题加 `[TEST]`，
+   不生成 `sys_mail_token`（投递不再渲染、不抽令牌），类别为事务邮件；按 `jabiz.process.rate-limits` 限流（平台缺省每人每小时 10 次，配置可改）。
+
+**理由**：文字是运营内容，改一个词不该发版；但验证、找回密码这类邮件被改成诱导的内容就是钓鱼，所以四眼加上"令牌只在本站链接中"的硬规则，链接与图片的限制把外发与追踪挡在保存之前。
+缺省留在代码中，覆盖失效时总有一份合格的文字可发。
+
+**放弃的方案**：①在模板中允许 HTML 或图片（追踪像素、钓鱼表单）；②覆盖存在配置文件中（要重新部署，没有历史与审批）；③只按"有无令牌"判定安全类（"密码已改"之类的通知没有令牌，被改成误导的文字同样有害）；
+④测试发送走普通投递（会生成可用的令牌，并可能寄给任意地址）；⑤待办通知与单据邮件保持各自的纯文本（不能定制，也套不上信纸）。
+
+**剩余风险**：覆盖不会随程序升级改动的缺省文字一起变（列表以 `defaultHash` 标出"缺省已更新"，由管理员对照）；受控变更的值字段上限 30000 字符，
+接近正文上限且大量需要转义的正文可能提不上去；本站主机只取 `jabiz.mail.base-url` 的主机，以其他域名提供的入口须列入 `allowed-link-hosts`。
