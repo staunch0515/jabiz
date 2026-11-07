@@ -237,4 +237,24 @@ class JwtServiceTest {
             .isEqualTo(new JwtService.Unsubscribe(null, "Ann@Example.com", "shop.invite"));
         assertThat(service.verifyUnsubscribe(service.issueUnsubscribe("u1", "shop.news")).address()).isNull();
     }
+
+    @Test
+    void tokensOfARetiredSecretAreAcceptedWhileItIsConfigured() {
+        byte[] next = "the-next-jwt-secret-of-these-tests-000002".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String old = service.issue(alice).token();
+        String unsubscribe = service.issueUnsubscribe("alice", "order.shipped");
+        JwtService rotating = new JwtService(next, java.util.List.of(KEY), Duration.ofMinutes(15), clock);
+        // Decision D78: what the retired secret signed still verifies; new tokens are signed with the current one.
+        assertThat(rotating.verify(old)).isEqualTo(service.verify(old));
+        assertThat(rotating.verifyUnsubscribe(unsubscribe).userId()).isEqualTo("alice");
+        assertThat(rotating.previousSecrets()).isEqualTo(1);
+        String renewed = rotating.issue(alice).token();
+        assertThat(new JwtService(next, Duration.ofMinutes(15), clock).verify(renewed).actorId()).isEqualTo("alice");
+        assertThatThrownBy(() -> service.verify(renewed)).isInstanceOf(JwtService.InvalidTokenException.class);
+        // Once removed, the retired secret's tokens are refused.
+        assertThatThrownBy(() -> new JwtService(next, Duration.ofMinutes(15), clock).verify(old))
+            .isInstanceOf(JwtService.InvalidTokenException.class);
+        assertThatThrownBy(() -> new JwtService(next, java.util.List.of(next), Duration.ofMinutes(15), clock))
+            .hasMessageContaining("current secret");
+    }
 }

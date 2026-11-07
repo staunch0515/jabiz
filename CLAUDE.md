@@ -66,7 +66,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。邮件文字（含待办通知与单据邮件）的在线修改只经平台的 `MailText` 流程（`MAIL_TEXT_SAVE` / `MAIL_TEXT_RESET` / `MAIL_TEXT_TEST_SEND`，带令牌、登录链接或 `t.protectedText()` 的经受控变更 `MailText` 由另一位管理员发布），
   规则只在 `MailTextRules`，示例值以 `t.sample(…)` 声明，不自建文字的存储或编辑页（18 §5.6、决策 D72）。所有邮件共用的信纸（页眉、页脚）的缺省值只在 `jabiz.mail.layout.<语言>.*`，
   修改只经受控变更 `MailLayout`（另一位管理员发布）与 `MAIL_LAYOUT_RESET`，规则只在 `MailLayoutRules`（标志只用本站的图片），不自写邮件的 HTML 外框或页脚（17zh-b）。要经应用自己登记的服务器发出的邮件用 `SendMail.via(ctx -> 键)`，服务器由应用的一个 `MailSenderSource` Bean 给出（18 §5.6、决策 D56），
-  其密码只以 `SealedSecrets` 密封保存（步骤 `SealSecret`，密钥 `JABIZ_SEAL_KEY`），失败绝不改经平台的服务器。可退订的模板（`NOTIFICATION`）以 `.entries(入口…)` 声明给哪些登录入口的用户（缺省全部，偏好只列令牌入口的；只寄给不是账号的地址的通知另加 `.addressesOnly()`，不在任何人的偏好中，17r），
+  其密码只以 `SealedSecrets` 密封保存（步骤 `SealSecret`，密钥 `JABIZ_SEAL_KEY`；保存密封值的字段都在 `SealedFields` Bean 中以 `SealedField.of(实体, 字段, 上下文)` 声明，换密钥时平台据此重新加密，决策 D78），失败绝不改经平台的服务器。可退订的模板（`NOTIFICATION`）以 `.entries(入口…)` 声明给哪些登录入口的用户（缺省全部，偏好只列令牌入口的；只寄给不是账号的地址的通知另加 `.addressesOnly()`，不在任何人的偏好中，17r），
   显示名写在消息 `mail.<名>.name`；收件偏好与邮件语言只经平台接口与积木 `MailPreferences`，切换界面语言只询问、不静默改邮件语言（`offerMailLanguage`，18 §5.6、决策 D49）。
   应用的前端要有自己的退订页时，挂载积木 `MailUnsubscribe` 并配置 `jabiz.mail.unsubscribe-paths.<入口>`（相对该入口 `app-path`；声明了该入口的通知链接到它，D52 第 3 条），
   不自写退订页或拼退订链接。
@@ -206,6 +206,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`；删除拦截由平台在删除路径中做（422 `RETENTION_ACTIVE` / `LEGAL_HOLD`），业务代码不自己判断。
   归档导出只经 `POST /api/exports/data`（CSV + `schema.json` + `manifest.json` + 报表 PDF），不另写导出。
   生成的文件与签发的单据的保留期同样以 `RetentionPolicy.of("GeneratedFile" | "DocumentRun")` 声明（只读平台实体，`audit.read`，不含内容与名称，21 §3.1）。
+- **密钥轮换**（见 `docs/guide/key-rotation.md` 与决策 D78）：四把密钥都以 `*_PREVIOUS` 让旧密钥并存（只读），MFA 与 SEAL 下的值由任务 `jabiz.key-rotation` 重新加密，
+  完成后撤下旧密钥；封存密钥的旧密钥永久保留。不自己写重新加密或"换密钥时停机重写"。
 - **恢复演练**（见 13 §8）：恢复出的副本只以核对模式（`jabiz.ops.verify-restore.enabled`，平台关掉一切对外的动作）与 `tools/ops/restore-drill.sh` 核对；
   应用自己的核对写成返回 0 行即通过的模板，列在 `jabiz.ops.verify-restore.templates`，不另写核对代码或手工清单。
 - **语句数**（见 06 §3.1、03 §3.1 与决策 D46）：平台在事务中缓冲写入（插入、按版本的更新、子流程的操作记录、事件、幂等结果），插入随下一条平台查询（取锁等）或在读写其表的语句、有时限的读取、模板、

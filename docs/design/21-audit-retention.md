@@ -123,7 +123,7 @@
 | `MODIFIED` | 行的当前摘要不同于封存时 |
 | `MISSING` | 封存过的行（或整张表）不在了 |
 | `UNPROTECTED` | 有封存行的表不再在普通会话中拒绝修改：只追加触发器（行级 BEFORE UPDATE、DELETE 与语句级 BEFORE TRUNCATE）被关闭、删除或改为只在复制时触发（`ENABLE REPLICA TRIGGER`） |
-| `OTHER_KEY` | 块由另一把密钥签名，无法用当前密钥检查 |
+| `OTHER_KEY` | 块由既不是当前密钥、也不在 `JABIZ_INTEGRITY_KEY_PREVIOUS` 中的密钥签名，无法检查（D78） |
 
 - 另报"尚未封存的行数"（下次封存会取到；持续很多说明封存没有运行）。
 - 结果写入只追加的 `sys_integrity_check`：前 `jabiz.integrity.verify.max-problems`（缺省 1000）个问题全文，全部计数。
@@ -140,7 +140,7 @@
 
 - 密钥：`jabiz.integrity.key`，只来自环境变量 `JABIZ_INTEGRITY_KEY`（Base64，至少 32 字节，如 `openssl rand -base64 48`）；非 dev 环境缺少即启动失败（默认拒绝）；
   dev 环境使用公开的开发密钥（其封存不证明任何东西）。块中保存密钥标识（密钥的 HMAC 的前 16 个十六进制字符），不保存密钥。
-  **密钥要备份**：没有它，已有的块无法校验；换密钥后，旧块报告为 `OTHER_KEY`。
+  **密钥要备份**：没有它，已有的块无法校验。换密钥时把旧密钥放进 `JABIZ_INTEGRITY_KEY_PREVIOUS` 并**永久保留**：块从不重签，旧块按记下的 `key_id` 以旧密钥校验，抹除的证据同样（D78，`docs/guide/key-rotation.md`）。
 - 接口（`integrity.read`）：`GET /api/integrity/head`（最新块：块号、时间、行数、哈希、密钥标识，以及当前密钥标识——留存在系统外作为锚点）、
   `GET /api/integrity/seals`、`GET /api/integrity/checks`、`GET /api/integrity/checks/{checkNo}`（含问题）。
   封存与校验就是上述两个流程，经 `/api/processes/{名}/latest` 运行，不另设接口。

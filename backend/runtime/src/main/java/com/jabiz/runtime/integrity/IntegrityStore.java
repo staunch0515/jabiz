@@ -1,6 +1,7 @@
 package com.jabiz.runtime.integrity;
 
 import com.jabiz.integrity.IntegrityKey;
+import com.jabiz.integrity.IntegrityKeys;
 import com.jabiz.integrity.IntegrityProblem;
 import com.jabiz.integrity.SealBlock;
 import com.jabiz.integrity.SealChain;
@@ -358,10 +359,10 @@ public class IntegrityStore {
     }
 
     /**
-     * The erasures whose purge's signature holds under the key, as text: only their entries account for a changed
+     * The erasures whose purge's signature holds under the key that signed it (current or retired), as text: only their entries account for a changed
      * row. Each purge's entries are read together, one purge at a time.
      */
-    Mono<String[]> authenticErasures(StorageEngine engine, IntegrityKey key) {
+    Mono<String[]> authenticErasures(StorageEngine engine, IntegrityKeys keys) {
         return engine.select("SELECT p.erasure_id, p.row_count, p.signature, p.key_id, x.table_name, x.row_key,"
                 + " x.columns, x.digest_before, x.digest_after FROM sys_erasure_purge p"
                 + " LEFT JOIN sys_erasure_item x ON x.erasure_id = p.erasure_id ORDER BY p.erasure_id", Map.of())
@@ -371,9 +372,11 @@ public class IntegrityStore {
                 UUID erasureId = Rows.uuid(first.get("erasure_id"));
                 List<ErasureEvidence.Item> items = rows.stream().filter(row -> row.get("table_name") != null)
                     .map(IntegrityStore::item).toList();
-                return key.id().equals(Rows.string(first.get("key_id")))
-                    && ErasureEvidence.sign(key, erasureId, Rows.intValue(first.get("row_count")), items)
-                        .equals(Rows.string(first.get("signature")));
+                // Signed with the key current then, which may be a retired one now (decision D78).
+                return keys.byId(Rows.string(first.get("key_id")))
+                    .map(key -> ErasureEvidence.sign(key, erasureId, Rows.intValue(first.get("row_count")), items)
+                        .equals(Rows.string(first.get("signature"))))
+                    .orElse(false);
             })
             .map(rows -> Rows.uuid(rows.getFirst().get("erasure_id")).toString())
             .collectList()

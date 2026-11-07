@@ -1,6 +1,7 @@
 package com.jabiz.runtime.integrity;
 
 import com.jabiz.integrity.IntegrityKey;
+import com.jabiz.integrity.IntegrityKeys;
 import com.jabiz.integrity.IntegrityProblem;
 import com.jabiz.integrity.MerkleRoot;
 import com.jabiz.integrity.SealChain;
@@ -33,12 +34,14 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
 
     private final IntegrityStore store;
     private final IntegrityKey key;
+    private final IntegrityKeys keys;
     private final IntegritySettings settings;
     private final JsonMapper json;
 
-    public VerifySeals(IntegrityStore store, IntegrityKey key, IntegritySettings settings, JsonMapper json) {
+    public VerifySeals(IntegrityStore store, IntegrityKeys keys, IntegritySettings settings, JsonMapper json) {
         this.store = store;
-        this.key = key;
+        this.key = keys.current();
+        this.keys = keys;
         this.settings = settings;
         this.json = json;
     }
@@ -53,13 +56,13 @@ public class VerifySeals implements StepHandler<NoMetadata, ProcessContext> {
         return store.pin(engine)
             .then(previous.map(Optional::of).defaultIfEmpty(Optional.empty()))
             .flatMap(before -> store.blocks(engine, from).collectList().flatMap(blocks -> {
-                SealChain.check(blocks, before.orElse(null), key).forEach(problems::add);
+                SealChain.check(blocks, before.orElse(null), keys).forEach(problems::add);
                 long to = blocks.isEmpty() ? from - 1 : blocks.getLast().block().sealNo();
                 long rows = blocks.stream().mapToLong(stored -> stored.block().rowCount()).sum();
                 Mono<Void> checks = blocks.isEmpty() ? Mono.empty()
                     : sealedRows(engine, blocks, from, to, problems)
                         .then(sealedColumns(engine, blocks, from, to, problems))
-                        .then(store.authenticErasures(engine, key))
+                        .then(store.authenticErasures(engine, keys))
                         .flatMap(authentic -> tables(engine, from, to, authentic, problems));
                 return checks
                     .then(unsealed(engine))
