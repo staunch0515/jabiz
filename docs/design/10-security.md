@@ -174,6 +174,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 | 业务参数（数据视图读 / 写；`PARAM_CREATE` / `PARAM_SET` / `PARAM_SCHEDULE` / `PARAM_CANCEL_SCHEDULED`） | `platform.param.read` / `platform.param.write`；`platform.param.write`（04 §9） |
 | 账本（科目数据视图；交易、分录数据视图；`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`；余额模板） | `ledger.account.read` / `.write`；`ledger.read`（写入只经流程）；`ledger.account.write` / `ledger.post` / `ledger.reverse`；`ledger.read`（11 §1） |
 | 审计视图 `GET /api/audit/operations` / 任务列表 `GET /api/jobs` | `audit.read` / `job.read`（11 §3、§4） |
+| 手动补跑定时任务 `POST /api/jobs/{job}/runs`（`JOB_RUN_REQUEST`，`entryOnly()`） | `job.run`，近期二次验证（`ADMINISTRATION`）；`job.run` 受保护（§16.1，11 §4.2，D77） |
 | 审批（`APPROVAL_DECIDE`；审批规则、限额、请求、判断、评估的数据视图；影响预览 `POST /api/approvals/preview`） | `approval.decide` + 当前层级的权限（受保护的变更改为 `security.protected-change.decide`，§16.1，D51）；`approval.read`（写入只经流程）；`approval.read`（18 §3） |
 | 审批移到另一个入口范围（子流程 `APPROVAL_SCOPE_MOVE`，`subProcessOnly()`） | 应用的改派流程的权限 + `approval.scope.move`（由步骤检查，18 §3.8，D76） |
 | 受控变更 `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_WITHDRAW` / `CONTROL_CHANGE_PUBLISH` | `control.propose` / `control.propose` / `control.publish`，且发布人不是提出人（18 §3.5） |
@@ -1072,6 +1073,7 @@ jabiz:
 | `security.protected-change.decide` | 这道四眼自己的另一双眼：审批本节的受保护变更（D51）；总是受保护 |
 | `ledger.post`、`ledger.reverse` | 写账（冲正即反向过账，11 §1） |
 | `platform.param.write` | 独自修改未受控的业务参数（04 §9） |
+| `job.run` | 手动补跑定时任务：以系统身份执行任务流程写下的一切（11 §4.2，D77） |
 
 不在缺省中的：`security.user.password` / `security.user.mfa-reset` / `security.user.identity.write`（对受保护持有人使用时本身就要审批，对其他人是日常的账号支持）、
 `temporal.revert` / `temporal.backdate`（写入仍经过本节的检查，`processOnlyWrites` 的数据视图不能撤销）、只读权限、`security.user.write`（不改权限；管理员设置的邮箱从不可信，§15.7）。

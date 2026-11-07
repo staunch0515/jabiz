@@ -28,10 +28,12 @@ public final class ProtectedPermissions {
      * The default: who holds them changes rights ({@code security.user-role.write}, {@code security.role.write}),
      * decides the four eyes of everything else ({@code approval.decide}, {@code control.publish}) and of this
      * ({@link #DECIDE}), or writes the books and the business parameters alone ({@code ledger.post},
-     * {@code ledger.reverse}, {@code platform.param.write}).
+     * {@code ledger.reverse}, {@code platform.param.write}), or runs scheduled jobs again by hand ({@code job.run},
+     * decision D77: as the system, whatever the jobs' processes write).
      */
     public static final List<String> DEFAULT = List.of("*", "security.user-role.write", "security.role.write",
-        "approval.decide", DECIDE, "control.publish", "ledger.post", "ledger.reverse", "platform.param.write");
+        "approval.decide", DECIDE, "control.publish", "ledger.post", "ledger.reverse", "platform.param.write",
+        "job.run");
 
     private final Set<String> permissions;
 

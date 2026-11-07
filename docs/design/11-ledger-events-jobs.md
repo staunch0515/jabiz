@@ -297,7 +297,9 @@ Spring Modulith 的事件发布注册表只支持 JPA、JDBC、MongoDB、Neo4j�
   3. 写执行记录 `sys_job_run`（只追加）：计划时刻、实例、结果 `SUCCEEDED` / `REPLAYED` / `FAILED`、`process_seq_id`、错误、起止时间（取自 `Clock`）。
 - 锁的时间用真实时间（基础设施时间，不是业务时间）；计划时刻与流程的 `opTime` 来自注入的 `Clock`。`jabiz_shedlock` 表由 ShedLock 原地更新，属基础设施表，不受 D5 保护。
 - `GET /api/jobs`（权限 `job.read`）：任务、种类（`SINGLE` / `PER_ITEM`）、cron、时区、流程、下一次计划时刻、最近 10 次执行
-  （逐项任务的执行带各结果的项数）；逐项任务另有"连续失败中的项"（项键、连续次数、最近错误（至多 200 字符）、最近失败时刻、下次可重试时刻，至多 50 条）。
+  （逐项任务的执行带各结果的项数；手动补跑的执行带 `requestedBy` 与 `requestSeqId`）；逐项任务另有"连续失败中的项"（项键、连续次数、最近错误（至多 200 字符）、最近失败时刻、下次可重试时刻，至多 50 条）；
+  每个任务另有 `running`（集群锁被持有）与 `rerunTimes`（可手动补跑的时刻，§4.2）。
+- 错过或失败的计划时刻**只经手动补跑**再运行（§4.2，D77），不改 cron、不重启实例。
 - 启动检查（类别 `JOB`）：名称唯一；cron 合法；流程是已注册的 Bean；流程的声明同事件消费者（`internal()`，或普通流程加 `JobDefinition…manualToo()`，D41）；
   逐项任务另见 §4.1（每项流程只能是 `internal()`，没有 `manualToo()`）。
   平台的 `INTEGRITY_SEAL` / `INTEGRITY_VERIFY`、`FILE_PURGE_ORPHANS` 也可手工运行，任务声明 `manualToo()`。
@@ -372,6 +374,24 @@ JobDefinition.forEach("commerce.unpaid-order-expire", "0 10 3 * * *", ZoneId.of(
 - **示范**：`commerce.unpaid-order-expire`（每天 03:10 东京时间，模板 `commerce.job.unpaid-orders`：`PLACED`、未付款、下单早于 `计划时刻 − app.commerce.unpaid-order-ttl`（缺省 14 天））
   的每项流程 `ORDER_EXPIRE {orderId}`：以 `internal()` 只由系统启动（D41：其他执行者 403 `PROCESS_INTERNAL`）、取订单锁 `commerce.order:<id>`、重新读取，仍未付款且已超过期限才以子流程 `ORDER_CANCEL` 取消。`ORDER_RECORD_PAYMENT` 找到订单后取同一把锁并重新读取，
   "刚付款"与"过期取消"不交错。场景 `scenarios/commerce/unpaid_order_expiry.yml`。
+
+### 4.2 手动补跑（17zs，决策 D77）
+
+- **接口**：`POST /api/jobs/{job}/runs`，正文 `{scheduledTime, reason}`，可带 `Idempotency-Key`；答复 202 `{requestSeqId, job, scheduledTime, replayed}`（`Cache-Control: no-store`），
+  运行在单独的线程上进行，结束后出现在 `GET /api/jobs` 的最近运行中（`requestSeqId` 相同）。
+- **检查**（入口按流程接口的顺序）：`job.run`（403）→ 输入（`reason` 必填、至多 2 000 字符，400）→ 近期二次验证（`ADMINISTRATION`，403 `MFA_REQUIRED`）→ 任务存在（404）
+  → 职责分离（`SOD_CONFLICT`）→ 取该任务的 ShedLock 集群锁（被持有即 409 `JOB_BUSY`）→ 流程 `JOB_RUN_REQUEST`（`entryOnly()`）：
+  `scheduledTime` 是该任务 cron（同一 `CronExpression` 与时区）的一个时刻（422 `JOB_RUN_NOT_SCHEDULED`）、不晚于当前时钟（422 `JOB_RUN_NOT_DUE`）、
+  不早于 `jabiz.jobs.manual-run.max-age`（缺省 `P90D`，422 `JOB_RUN_TOO_OLD`）。流程不写实体，只留下操作记录（`input_summary` 含任务、时刻与原因）。
+  锁之后的任何失败都释放锁；同一 `Idempotency-Key` 的重放（`replayed: true`）不再开始运行。
+- **执行**：`JobRunner.executeRequested(job, 时刻, Request(请求人, 请求的操作), 锁)`，在锁下运行，结束即释放（不保留 `lock-at-least-for`）。
+  幂等键与计划运行相同：单流程任务已提交即 `REPLAYED`；逐项任务按当时的数据选取，已成功的项 `REPLAYED`，其余照常执行（**不按退避滤掉**，退避中的项也执行）；
+  每项仍是以系统身份运行的根流程（`internal()`），失败照常记入 `sys_job_item_failure`、成功照常写 `RECOVERED`。
+- **记录**：`sys_job_run` 的 `requested_by`、`request_seq_id`（平台迁移 `V63`，只加列；计划运行为空）。补跑的锁期间到点的计划运行为 `LOCKED`。
+- **权限**：`job.run` 属于受保护权限的缺省清单（10 §16.1，D48）。
+- **页面**：通用管理系统的"定时任务"（`/jobs`，`job.read`）：任务、种类、计划与下次时刻、最近运行（结果、项数、发起人）、连续失败的项；持有 `job.run` 的人点"补跑"，
+  在对话框中从 `rerunTimes` 选择时刻（先选最近一次未全部成功的）并填写原因；运行中轮询列表，结束后提示结果。
+- **测试**：`JobRunProcessesTest`（可补跑的时刻与提供的时刻）、`JobRunRequestIT`（只重跑未成功的项、单流程任务重放、422 / 404 / 403 / `MFA_REQUIRED` / 409、操作与 `requested_by`、只追加）、`ProtectedGrantIT`（`job.run` 待审批）、前端 `JobsPage.test.tsx`。
 
 ## 4a. 异步外部作业【D38 第 3–5 条，阶段 16e-2】
 
