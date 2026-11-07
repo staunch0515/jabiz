@@ -50,7 +50,7 @@ public final class QbReports {
     public static final int DAILY_LIMIT = 10;
 
     /** The type of the reviewers' task, closed by the source key of the publication once its reports are handled. */
-    static final String TASK_TYPE = "qb.report";
+    public static final String TASK_TYPE = "qb.report";
 
     static String taskSource(Object publicationId) {
         return "qb.report:" + publicationId;

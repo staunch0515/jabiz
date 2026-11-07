@@ -329,6 +329,17 @@ steps:
     process: QB_PROFILE_SAVE@latest
     input: { displayName: Mio, countryCode: JP, preferredCurrency: JPY }
 
+  - note: The platform's administrator creates the default operator with its lead, its own sponsor (F-S1).
+    actor: { id: installer, permissions: ["*"], mfa: true }
+    process: SEC_USER_CREATE@latest
+    input: { userName: operator-lead, displayName: Operator lead, email: operator-lead@example.com }
+    save: { operatorLead: $.userId }
+  - verifyEmail: "${operatorLead}"
+  - actor: { id: operators-admin, permissions: [qb.admin.operators.write] }
+    process: QB_OPERATOR_SAVE@latest
+    input: { name: QuizBuks, contactName: QuizBuks, contactEmail: support@quizbuks.example,
+      leadUserId: "${operatorLead}", defaultForNew: true }
+
   - note: Sponsor A is onboarded (Q2); a content administrator approves.
     actor: { id: "${a}", permissions: [qb.sponsor.me] }
     process: QB_SPONSOR_APPLY@latest

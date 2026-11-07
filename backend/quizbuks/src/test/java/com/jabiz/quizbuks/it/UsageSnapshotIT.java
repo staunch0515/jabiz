@@ -271,8 +271,10 @@ class UsageSnapshotIT extends PlayItSupport {
 
     @Test
     void anOperatorReadsItsOwnSponsorsUsageOnlyAndNobodyRunsTheItemByHand() {
-        String north = newOperator(unique("North"));
-        String northSession = operatorSession(member(north, unique("fc2-n")), north);
+        // F-S1: an operator is created with its lead (its own sponsor), who reads for it.
+        NewOperator created = newOperatorWithLead(hq(), unique("North"), null);
+        String north = created.operatorId();
+        String northSession = operatorSession(created.leadId(), north);
         String ann = newSponsor(unique("s-fc2-op-ann"));
         String direct = newSponsor(unique("s-fc2-op-direct"));
         run(OperatorProcesses.ASSIGN, hq(), body("userId", ann, "operatorId", north, "reason", "F-C2"));
@@ -337,24 +339,5 @@ class UsageSnapshotIT extends PlayItSupport {
             Set.copyOf(QbRoles.of(QbRoles.OPERATOR).permissions()), clock.instant(), null, QbOperators.ENTRY, true)
             .inScope(new EntryScope(QbOperators.SCOPE, operatorId));
         return "Bearer " + tokens.issue(actor).token();
-    }
-
-    private String newOperator(String name) {
-        return (String) run(OperatorProcesses.SAVE, hq(), body("name", name, "contactName", "Owner of " + name,
-            "contactEmail", "ops@" + name.toLowerCase() + ".example")).get("operatorId");
-    }
-
-    private String member(String operatorId, String name) {
-        String userId = createUser(name);
-        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
-            + "current_schema() AND table_name = 'sec_user_version' AND column_name NOT IN ('row_id', 'version_no', "
-            + "'verified_email') ORDER BY ordinal_position").stream().map(row -> (String) row.get("column_name"))
-            .toList();
-        String list = String.join(", ", columns);
-        execute("INSERT INTO sec_user_version (" + list + ", version_no, verified_email) SELECT " + list
-            + ", version_no + 1, email FROM sec_user_version WHERE user_id = ?::uuid ORDER BY version_no DESC LIMIT 1",
-            userId);
-        run(OperatorProcesses.MEMBER_ADD, hq(), body("operatorId", operatorId, "userId", userId, "lead", true));
-        return userId;
     }
 }

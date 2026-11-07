@@ -8,6 +8,7 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.AccountEditing;
+import com.jabiz.quizbuks.identity.DirectSponsors;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.identity.SponsorApprovals;
 import com.jabiz.quizbuks.publishing.PublicationApprovals;
@@ -15,6 +16,7 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.approval.ApprovalEntities;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.security.SecurityEntities;
@@ -37,8 +39,10 @@ import java.util.Set;
  * Headquarters' processes for operators (docs/quizbuks/plans/Q48-operators.md, Q48a) and the lead's removal of a
  * member:
  * <ul>
- *   <li>{@value #SAVE}: creates an operator or changes it (with the revision the page read); suspending it keeps its
- *       members out of the entry and their acts ({@code operatorActive} on each member's row, written here);</li>
+ *   <li>{@value #SAVE}: creates an operator with its lead or changes it (with the revision the page read); suspending
+ *       it keeps its members out of the entry and their acts ({@code operatorActive} on each member's row, written
+ *       here). The operator's first lead's account becomes its own sponsor in the same transaction (F-S1,
+ *       {@link DirectSponsors});</li>
  *   <li>{@value #MEMBER_ADD} / {@value #MEMBER_REMOVE}: names a person to an operator's staff (or changes whether
  *       they lead it) and removes them. The member's role {@code QB_OPERATOR} is a protected grant (it decides
  *       approvals), given through the platform's role assignment and its four eyes: membership says which operator
@@ -46,7 +50,9 @@ import java.util.Set;
  *   <li>{@value #MEMBER_DROP}: the operator's lead removes a member of their own operator;</li>
  *   <li>{@value #TEAM}: a member reads their operator and its current members (a template cannot: it reads an
  *       entity through one dataset, and the caller's own membership is a dataset of its own);</li>
- *   <li>{@value #ASSIGN}: moves a sponsor to an operator, or back to headquarters (D-Q48-1), with a reason;</li>
+ *   <li>{@value #ASSIGN}: moves a sponsor to another operator that takes sponsors, with a reason (F-S1: every sponsor
+ *       has an operator; an operator's own sponsor is never moved, and one with a review pending is not moved until
+ *       the platform can move the review with them);</li>
  *   <li>{@value #SPOT_CHECK}: headquarters marks a review decided by an operator's member as checked, or as a problem
  *       with a note (D-Q48-5); headquarters then acts itself, which the operator does not undo.</li>
  * </ul>
@@ -60,24 +66,29 @@ public final class OperatorProcesses {
     public static final String ASSIGN = "QB_SPONSOR_OPERATOR_ASSIGN";
     public static final String SPOT_CHECK = "QB_REVIEW_SPOT_CHECK";
     public static final String TEAM = "QB_OPERATOR_TEAM";
+    /** F-S1: a sponsor was moved to another operator (payload {@code userId}, {@code operatorId}); the inbox tells them. */
+    public static final String OPERATOR_CHANGED_EVENT = "qb.sponsor.operator-changed";
 
     /**
      * @param operatorId   null to create one
      * @param baseRevision the revision the page read (required when changing one)
-     */
-    /**
-     * @param language the language whose new sponsors the operator takes (Q59c); none: by hand only. One active
-     *                 operator a language.
+     * @param language     the operator's language (Q59c), shown and used by prospecting; it does not decide where
+     *                     sponsors go (F-S1)
+     * @param leadUserId   required when creating one: its lead, whose account becomes the operator's own sponsor
+     *                     (F-S1); ignored when changing one (leads change with {@value #MEMBER_ADD})
+     * @param defaultForNew true to make it the default operator, which the sponsors no operator found take (the
+     *                     current default stops being it in the same transaction); false or null leaves it as it is,
+     *                     except that false on the current default is refused (make another the default instead)
      */
     public record SaveInput(String operatorId, @NotBlank @Size(max = QbOperators.NAME_LENGTH) String name,
         @NotBlank @Size(max = QbOperators.CONTACT_NAME_LENGTH) String contactName,
         @NotBlank @Size(max = QbOperators.EMAIL_LENGTH) String contactEmail, String status,
         @Size(max = QbOperators.NOTE_LENGTH) String note, Long baseRevision,
-        @Pattern(regexp = "ja|zh|en") String language) {
+        @Pattern(regexp = "ja|zh|en") String language, String leadUserId, Boolean defaultForNew) {
 
         public SaveInput(String operatorId, String name, String contactName, String contactEmail, String status,
             String note, Long baseRevision) {
-            this(operatorId, name, contactName, contactEmail, status, note, baseRevision, null);
+            this(operatorId, name, contactName, contactEmail, status, note, baseRevision, null, null, null);
         }
     }
 
@@ -90,8 +101,8 @@ public final class OperatorProcesses {
     /** @param changed false when nothing had to change */
     public record MemberOutput(String userId, String operatorId, boolean changed) {}
 
-    /** @param operatorId null to move the sponsor back to headquarters */
-    public record AssignInput(@NotBlank String userId, String operatorId,
+    /** @param operatorId the operator to move the sponsor to (F-S1: there is no going back to headquarters) */
+    public record AssignInput(@NotBlank String userId, @NotBlank String operatorId,
         @NotBlank @Size(max = QbOperators.REASON_LENGTH) String reason) {}
 
     public record AssignOutput(String userId, String operatorId, boolean changed) {}
@@ -116,7 +127,12 @@ public final class OperatorProcesses {
     static final String OUTPUT = "output";
     static final String OPERATOR = "operator";
     static final String MEMBERS = "members";
-    static final String SAME_LANGUAGE = "sameLanguage";
+    static final String LEAD_PLACE = "leadPlace";
+    static final String DEFAULTS = "defaults";
+    static final String LEAD_USER = "leadUser";
+    static final String LEAD_ASSIGNMENT = "leadAssignment";
+    static final String PENDING_REVIEWS = "pendingReviews";
+    static final String FROM = "fromOperatorId";
     static final String TARGET = "target";
     static final String PLACE = "place";
     static final String USERS = "users";
@@ -139,19 +155,55 @@ public final class OperatorProcesses {
             .requiresVerifiedEmail()
             .contextFactory((start, input) -> start(start, input, blankToNull(input.operatorId())))
             .outputMapper(ctx -> ctx.get(OUTPUT, SaveOutput.class))
-            // Q59c: the languages first (every save takes it in the same order), so that two saves never give one
-            // language to two active operators.
-            .step("Lock the languages", HoldLock.<ProcessContext>exclusive(ctx -> QbOperators.LANGUAGES_LOCK))
+            // F-S1: whoever changes which operator is the default takes this first, so two never both are.
+            .step("Lock the default operator", HoldLock.<ProcessContext>exclusive(
+                ctx -> touchesDefault(ctx) ? QbOperators.DEFAULT_LOCK : null))
             .step("Lock the operator", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbOperators.operatorLockName(target(ctx))))
-            .step("Load the operator and its members", QueryEntities.<ProcessContext>all(
+            // F-S1: a new operator's lead, in the order of the operators' acts (membership, then account, then
+            // assignment, as a sponsor's application takes the last two).
+            .step("Lock the lead's membership", HoldLock.<ProcessContext>exclusive(
+                ctx -> QbOperators.memberLockName(newLead(ctx))))
+            .step("Lock the lead's account", HoldLock.<ProcessContext>exclusive(
+                ctx -> newLead(ctx) == null ? null : QbAccounts.lockName(newLead(ctx))))
+            .step("Lock the lead's assignment", HoldLock.<ProcessContext>exclusive(
+                ctx -> QbOperators.assignmentLockName(newLead(ctx))))
+            .step("Load the operator, its members and the lead", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR),
                     ctx -> byKey("operatorId", target(ctx)), OPERATOR),
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.MEMBER),
                     ctx -> currentMembers(target(ctx)), MEMBERS),
-                QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR),
-                    ctx -> activeOfLanguage(ctx.get(INPUT, SaveInput.class).language()), SAME_LANGUAGE)))
+                QueryEntities.query(QbOperators.defaultDataset(QbOperators.MEMBER),
+                    ctx -> OperatorChecks.current(newLead(ctx)), LEAD_PLACE),
+                QueryEntities.query(SecurityEntities.USER_DATASET, ctx -> userQuery(newLead(ctx)), LEAD_USER),
+                QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR),
+                    ctx -> byKey("userId", newLead(ctx)), SPONSOR),
+                QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
+                    ctx -> byKey("userId", newLead(ctx)), LEAD_ASSIGNMENT),
+                QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.Eq("defaultForNew", true)).limit(2).build(), DEFAULTS)))
             .compute("Save", (metadata, ctx) -> save(ctx, ctx.get(INPUT, SaveInput.class))));
+    }
+
+    /**
+     * Whether the save may change which operator is the default: making one the default, or changing an existing
+     * operator (which may be the default, whose status then matters).
+     */
+    static boolean touchesDefault(ProcessContext ctx) {
+        SaveInput input = ctx.get(INPUT, SaveInput.class);
+        return Boolean.TRUE.equals(input.defaultForNew()) || target(ctx) != null;
+    }
+
+    /** The lead a new operator is created with (F-S1); null when changing one. */
+    static String newLead(ProcessContext ctx) {
+        SaveInput input = ctx.get(INPUT, SaveInput.class);
+        return target(ctx) != null || input.leadUserId() == null || input.leadUserId().isBlank() ? null
+            : AccountEditing.canonical(input.leadUserId().strip());
+    }
+
+    private static EntityQuery userQuery(String userId) {
+        return EntityQuery.builder().where(new QueryPredicate.In("userId",
+            userId == null ? List.of() : AccountEditing.uuids(userId))).limit(1).build();
     }
 
     static void save(ProcessContext ctx, SaveInput input) {
@@ -174,13 +226,41 @@ public final class OperatorProcesses {
                 + "read", Map.of("revision", AccountEditing.number(operator.get("revision")))));
         }
         String language = input.language() == null || input.language().isBlank() ? null : input.language();
-        if (language != null && QbOperators.ACTIVE.equals(status) && OperatorChecks.list(ctx, SAME_LANGUAGE).stream()
-            .anyMatch(other -> operator == null || !String.valueOf(other.id()).equals(String.valueOf(operator.id())))) {
-            ctx.reject(new Violation("language", OperatorCodes.LANGUAGE_TAKEN, "Another active operator takes the "
-                + "new sponsors of this language", Map.of("language", language)));
+        EntityInstance lead = null;
+        if (operator == null) {
+            if (newLead(ctx) == null) {
+                ctx.reject(new Violation("leadUserId", OperatorCodes.LEAD_REQUIRED, "A new operator needs its lead",
+                    Map.of()));
+            } else {
+                lead = OperatorChecks.first(ctx, LEAD_USER);
+                if (lead == null) {
+                    throw new EntityNotFoundException(SecurityEntities.USER + " " + newLead(ctx) + " not found");
+                }
+                checkNewMember(ctx, "leadUserId", lead, OperatorChecks.first(ctx, LEAD_PLACE), null, false);
+                checkDirectSponsor(ctx, "leadUserId", OperatorChecks.first(ctx, LEAD_ASSIGNMENT));
+            }
+        }
+        // F-S1: the default operator (the one the sponsors no operator found take): at most one, active, taking
+        // sponsors; it stops being the default only when another becomes it.
+        boolean isDefault = operator != null && Boolean.TRUE.equals(operator.get("defaultForNew"));
+        boolean makeDefault = Boolean.TRUE.equals(input.defaultForNew()) && !isDefault;
+        if (isDefault && Boolean.FALSE.equals(input.defaultForNew())) {
+            ctx.reject(new Violation("defaultForNew", OperatorCodes.DEFAULT_KEEP, "The default operator stays the "
+                + "default until another becomes it", Map.of()));
+        }
+        if ((isDefault || makeDefault) && !QbOperators.ACTIVE.equals(status)) {
+            ctx.reject(new Violation("status", OperatorCodes.DEFAULT_INACTIVE, "The default operator must be active",
+                Map.of()));
         }
         if (ctx.hasViolations()) {
             return;
+        }
+        if (makeDefault) {
+            // The old default first: the partial unique index allows one row at a time.
+            for (EntityInstance other : OperatorChecks.list(ctx, DEFAULTS)) {
+                ctx.changes().update(QbOperators.OPERATOR, other.id(), other.version(), Map.of("defaultForNew", false,
+                    "revision", BigDecimal.valueOf(AccountEditing.number(other.get("revision")) + 1)));
+            }
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("name", input.name().strip());
@@ -194,13 +274,22 @@ public final class OperatorProcesses {
         if (operator == null) {
             revision = 1;
             values.put("collection", QbOperators.PLATFORM);
+            values.put("defaultForNew", makeDefault);
+            values.put("publisherKinds", QbOperators.SPONSOR_KIND);
+            values.put("directSponsorId", String.valueOf(lead.id()));
             values.put("createdAt", ctx.opTime());
             values.put("createdBy", ctx.request().actorId());
             values.put("revision", BigDecimal.ONE);
             operatorId = String.valueOf(ctx.changes().insert(QbOperators.OPERATOR, values));
+            insertMember(ctx, operatorId, lead.id(), true, true);
+            DirectSponsors.write(ctx, operatorId, String.valueOf(lead.id()), lead.get("displayName"),
+                input.name().strip());
         } else {
             revision = AccountEditing.number(operator.get("revision")) + 1;
             values.put("revision", BigDecimal.valueOf(revision));
+            if (makeDefault) {
+                values.put("defaultForNew", true);
+            }
             ctx.changes().update(QbOperators.OPERATOR, operator.id(), operator.version(), values);
             operatorId = String.valueOf(operator.id());
             boolean active = QbOperators.ACTIVE.equals(status);
@@ -266,6 +355,12 @@ public final class OperatorProcesses {
                     ctx -> QbOperators.operatorLockName(target(ctx))))
                 .step("Lock the person's membership", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbOperators.memberLockName(person(ctx))))
+                // F-S1: a lead may become the operator's own sponsor; their account and assignment, as above.
+                .step("Lock the person's account", HoldLock.<ProcessContext>exclusive(
+                    ctx -> ctx.get(INPUT, MemberInput.class).lead() ? QbAccounts.lockName(person(ctx)) : null))
+                .step("Lock the person's assignment", HoldLock.<ProcessContext>exclusive(
+                    ctx -> ctx.get(INPUT, MemberInput.class).lead() ? QbOperators.assignmentLockName(person(ctx))
+                        : null))
                 .step("Load the operator, the person and their place", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR),
                         ctx -> byKey("operatorId", target(ctx)), OPERATOR),
@@ -277,7 +372,9 @@ public final class OperatorProcesses {
                         .where(new QueryPredicate.In("userId", AccountEditing.uuids(person(ctx)))).limit(1).build(),
                         USERS),
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.In("userId", List.of(person(ctx)))).limit(1).build(), SPONSOR)))
+                        .where(new QueryPredicate.In("userId", List.of(person(ctx)))).limit(1).build(), SPONSOR),
+                    QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
+                        ctx -> byKey("userId", person(ctx)), LEAD_ASSIGNMENT)))
                 .compute("Name them", (metadata, ctx) -> add(ctx, ctx.get(INPUT, MemberInput.class))));
     }
 
@@ -297,38 +394,100 @@ public final class OperatorProcesses {
                 + "operator", Map.of()));
             return;
         }
+        // F-S1: an operator is created with its lead, its own sponsor; a lead named to one without (none today)
+        // becomes it.
+        boolean direct = input.lead() && operator.get("directSponsorId") == null;
         if (place != null) {
             boolean changed = input.lead() != Boolean.TRUE.equals(place.get("lead"));
+            if (direct) {
+                checkDirectSponsor(ctx, "userId", OperatorChecks.first(ctx, LEAD_ASSIGNMENT));
+                if (OperatorChecks.first(ctx, SPONSOR) != null) {
+                    ctx.reject(new Violation("userId", OperatorCodes.MEMBER_IS_SPONSOR, "The person runs a sponsor "
+                        + "account", Map.of()));
+                }
+                if (ctx.hasViolations()) {
+                    return;
+                }
+            }
             if (changed) {
                 ctx.changes().update(QbOperators.MEMBER, place.id(), place.version(), Map.of("lead", input.lead()));
             }
-            ctx.put(OUTPUT, new MemberOutput(userId, target(ctx), changed));
+            if (direct) {
+                makeDirect(ctx, operator, user);
+            }
+            ctx.put(OUTPUT, new MemberOutput(userId, target(ctx), changed || direct));
             return;
         }
-        if (OperatorChecks.first(ctx, SPONSOR) != null) {
-            ctx.reject(new Violation("userId", OperatorCodes.MEMBER_IS_SPONSOR, "The person runs a sponsor account",
-                Map.of()));
-        }
-        if (!verified(user)) {
-            ctx.reject(new Violation("userId", OperatorCodes.MEMBER_UNVERIFIED, "The person's e-mail address is not "
-                + "verified", Map.of()));
-        }
-        if (OperatorChecks.list(ctx, MEMBERS).size() >= QbOperators.MAX_MEMBERS) {
-            ctx.reject(new Violation("userId", OperatorCodes.MEMBERS_FULL, "The operator has its most members",
-                Map.of("max", QbOperators.MAX_MEMBERS)));
+        checkNewMember(ctx, "userId", user, null, OperatorChecks.list(ctx, MEMBERS),
+            userId.equals(String.valueOf((Object) operator.get("directSponsorId"))));
+        if (direct) {
+            checkDirectSponsor(ctx, "userId", OperatorChecks.first(ctx, LEAD_ASSIGNMENT));
         }
         if (ctx.hasViolations()) {
             return;
         }
+        insertMember(ctx, target(ctx), user.id(), input.lead(), QbOperators.ACTIVE.equals(operator.get("status")));
+        if (direct) {
+            makeDirect(ctx, operator, user);
+        }
+        ctx.put(OUTPUT, new MemberOutput(userId, target(ctx), true));
+    }
+
+    /**
+     * The checks of a person joining an operator's staff: not another operator's member, no sponsor of their own
+     * (only an operator's own sponsor is both, and it is made with its lead), a verified address, room on the staff.
+     *
+     * @param place   their current membership, which must be none (null: checked by the caller)
+     * @param members the operator's current members (null for a new operator)
+     * @param ownSponsor whether the person is the operator's own sponsor (who may rejoin its staff)
+     */
+    static void checkNewMember(ProcessContext ctx, String field, EntityInstance user, EntityInstance place,
+        List<EntityInstance> members, boolean ownSponsor) {
+        if (place != null) {
+            ctx.reject(new Violation(field, OperatorCodes.MEMBER_ELSEWHERE, "The person is a member of another "
+                + "operator", Map.of()));
+        }
+        if (OperatorChecks.first(ctx, SPONSOR) != null && !ownSponsor) {
+            ctx.reject(new Violation(field, OperatorCodes.MEMBER_IS_SPONSOR, "The person runs a sponsor account",
+                Map.of()));
+        }
+        if (!verified(user)) {
+            ctx.reject(new Violation(field, OperatorCodes.MEMBER_UNVERIFIED, "The person's e-mail address is not "
+                + "verified", Map.of()));
+        }
+        if (members != null && members.size() >= QbOperators.MAX_MEMBERS) {
+            ctx.reject(new Violation(field, OperatorCodes.MEMBERS_FULL, "The operator has its most members",
+                Map.of("max", QbOperators.MAX_MEMBERS)));
+        }
+    }
+
+    /** A person who becomes an operator's own sponsor must not belong to an operator as a sponsor already. */
+    static void checkDirectSponsor(ProcessContext ctx, String field, EntityInstance assignment) {
+        if (assignment != null) {
+            ctx.reject(new Violation(field, OperatorCodes.MEMBER_IS_SPONSOR, "The person is a sponsor of an "
+                + "operator", Map.of()));
+        }
+    }
+
+    private static void insertMember(ProcessContext ctx, String operatorId, Object userId, boolean lead,
+        boolean active) {
         Map<String, Object> values = new LinkedHashMap<>();
-        values.put("operatorId", target(ctx));
-        values.put("userId", user.id());
-        values.put("lead", input.lead());
-        values.put("operatorActive", QbOperators.ACTIVE.equals(operator.get("status")));
+        values.put("operatorId", operatorId);
+        values.put("userId", userId);
+        values.put("lead", lead);
+        values.put("operatorActive", active);
         values.put("addedAt", ctx.opTime());
         values.put("addedBy", ctx.request().actorId());
         ctx.changes().insert(QbOperators.MEMBER, values);
-        ctx.put(OUTPUT, new MemberOutput(userId, target(ctx), true));
+    }
+
+    /** Makes the lead the operator's own sponsor (F-S1) and records it on the operator. */
+    private static void makeDirect(ProcessContext ctx, EntityInstance operator, EntityInstance user) {
+        String userId = String.valueOf(user.id());
+        ctx.changes().update(QbOperators.OPERATOR, operator.id(), operator.version(), Map.of("directSponsorId",
+            userId, "revision", BigDecimal.valueOf(AccountEditing.number(operator.get("revision")) + 1)));
+        DirectSponsors.write(ctx, String.valueOf(operator.id()), userId, user.get("displayName"),
+            String.valueOf((Object) operator.get("name")));
     }
 
     /** Whether the user's current address is the one they verified. */
@@ -430,7 +589,7 @@ public final class OperatorProcesses {
     public static ProcessDefinition<AssignInput, AssignOutput, ProcessContext> assign() {
         return ProcessDefinition.define(ASSIGN, 1, AssignInput.class, AssignOutput.class, ProcessContext.class,
             pb -> pb
-                .description("Moves a sponsor to an operator, or back to headquarters, with a reason.")
+                .description("Moves a sponsor to another operator that takes sponsors, with a reason.")
                 .permissions(QbPermissions.OPERATORS_WRITE)
                 .requiresVerifiedEmail()
                 .actsOn(SecurityEntities.USER, "userId")
@@ -444,9 +603,29 @@ public final class OperatorProcesses {
                     QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR),
                         ctx -> byKey("operatorId", target(ctx)), OPERATOR),
                     QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
-                        ctx -> byKey("userId", person(ctx)), ASSIGNMENT)))
-                .compute("Assign", (metadata, ctx) -> assign(ctx, ctx.get(INPUT, AssignInput.class))));
+                        ctx -> byKey("userId", person(ctx)), ASSIGNMENT),
+                    // The reviews the sponsor is waiting for: their onboarding, publications, version switches and
+                    // page, all prepared by the sponsor.
+                    QueryEntities.query(ApprovalEntities.REQUEST_DATASET, ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("preparerId", List.of(person(ctx))),
+                            new QueryPredicate.In("status", List.of(ApprovalEntities.PENDING)),
+                            new QueryPredicate.In("scopeName", List.of(QbOperators.SCOPE)))))
+                        .limit(MAX_PENDING_LISTED).build(), PENDING_REVIEWS)))
+                .compute("Assign", (metadata, ctx) -> assign(ctx, ctx.get(INPUT, AssignInput.class)))
+                .step("Tell the sponsor", com.jabiz.runtime.process.steps.PublishEvent.<ProcessContext>when(
+                    ctx -> ctx.contains(OUTPUT) && ctx.get(OUTPUT, AssignOutput.class).changed(),
+                    OPERATOR_CHANGED_EVENT, ctx -> Map.of("userId", person(ctx), "operatorId",
+                        ctx.get(OUTPUT, AssignOutput.class).operatorId())))
+                .step("Hand the sponsor's tasks to the new operator", CallProcess.<ProcessContext>when(
+                    ctx -> ctx.contains(OUTPUT) && ctx.get(OUTPUT, AssignOutput.class).changed()
+                        && ctx.contains(FROM),
+                    OperatorHandover.PROCESS, 1, ctx -> new OperatorHandover.Input(person(ctx),
+                        ctx.get(FROM, String.class), ctx.get(OUTPUT, AssignOutput.class).operatorId()), null)));
     }
+
+    /** How many of a sponsor's pending reviews a refused reassignment lists. */
+    static final int MAX_PENDING_LISTED = 20;
 
     static void assign(ProcessContext ctx, AssignInput input) {
         if (OperatorChecks.first(ctx, SPONSOR) == null) {
@@ -455,32 +634,63 @@ public final class OperatorProcesses {
             return;
         }
         String operatorId = target(ctx);
-        if (operatorId != null && OperatorChecks.first(ctx, OPERATOR) == null) {
+        EntityInstance operator = OperatorChecks.first(ctx, OPERATOR);
+        if (operator == null) {
             throw new EntityNotFoundException(QbOperators.OPERATOR + " " + operatorId + " not found");
         }
         EntityInstance assignment = OperatorChecks.first(ctx, ASSIGNMENT);
+        if (assignment != null && Boolean.TRUE.equals(assignment.get("fixed"))) {
+            ctx.reject(new Violation("userId", OperatorCodes.DIRECT_SPONSOR_FIXED, "An operator's own sponsor "
+                + "stays with it", Map.of()));
+            return;
+        }
         String current = assignment == null ? null : String.valueOf((Object) assignment.get("operatorId"));
-        if (java.util.Objects.equals(current, operatorId)) {
+        if (operatorId.equals(current)) {
             ctx.reject(new Violation("operatorId", OperatorCodes.SAME_OPERATOR, "The sponsor is there already",
                 Map.of()));
             return;
         }
-        if (operatorId == null) {
-            ctx.changes().delete(QbOperators.ASSIGNMENT, assignment.id(), assignment.version());
+        if (!takes(operator, QbOperators.SPONSOR_KIND)) {
+            ctx.reject(new Violation("operatorId", OperatorCodes.KIND_NOT_TAKEN, "The operator does not take "
+                + "sponsors", Map.of()));
+        }
+        if (!QbOperators.ACTIVE.equals(operator.get("status"))) {
+            ctx.reject(new Violation("operatorId", OperatorCodes.SUSPENDED, "The operator is suspended", Map.of()));
+        }
+        // The platform keeps a request in the scope it was made in; until it can move one, the sponsor waits for
+        // their reviews to end (docs/quizbuks/plans/impl/F-S1.md §0, answer 2).
+        List<EntityInstance> pending = OperatorChecks.list(ctx, PENDING_REVIEWS);
+        if (!pending.isEmpty()) {
+            ctx.reject(new Violation("userId", OperatorCodes.REVIEW_PENDING, "The sponsor has reviews pending",
+                Map.of("reviews", pending.stream().map(request -> Map.of("subject",
+                    String.valueOf((Object) request.get("subject")), "entityId",
+                    String.valueOf((Object) request.get("entityId")))).toList())));
+        }
+        if (ctx.hasViolations()) {
+            return;
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("operatorId", operatorId);
+        values.put("assignedAt", ctx.opTime());
+        values.put("assignedBy", ctx.request().actorId());
+        values.put("reason", input.reason().strip());
+        if (current != null) {
+            ctx.put(FROM, current);
+        }
+        if (assignment == null) {
+            values.put("userId", person(ctx));
+            values.put("fixed", false);
+            ctx.changes().insert(QbOperators.ASSIGNMENT, values);
         } else {
-            Map<String, Object> values = new LinkedHashMap<>();
-            values.put("operatorId", operatorId);
-            values.put("assignedAt", ctx.opTime());
-            values.put("assignedBy", ctx.request().actorId());
-            values.put("reason", input.reason().strip());
-            if (assignment == null) {
-                values.put("userId", person(ctx));
-                ctx.changes().insert(QbOperators.ASSIGNMENT, values);
-            } else {
-                ctx.changes().update(QbOperators.ASSIGNMENT, assignment.id(), assignment.version(), values);
-            }
+            ctx.changes().update(QbOperators.ASSIGNMENT, assignment.id(), assignment.version(), values);
         }
         ctx.put(OUTPUT, new AssignOutput(person(ctx), operatorId, true));
+    }
+
+    /** Whether an operator takes a kind of publisher ({@code publisherKinds}, comma-separated). */
+    static boolean takes(EntityInstance operator, String kind) {
+        Object kinds = operator.get("publisherKinds");
+        return kinds != null && java.util.Arrays.asList(kinds.toString().split(",")).contains(kind);
     }
 
     // ---- spot checks -------------------------------------------------------------------------------------------------
@@ -593,14 +803,6 @@ public final class OperatorProcesses {
             default -> throw new IllegalStateException("No person in " + input.getClass().getSimpleName());
         };
         return AccountEditing.canonical(userId.strip());
-    }
-
-    /** The active operators of a language (none without one). */
-    static EntityQuery activeOfLanguage(String language) {
-        List<Object> languages = language == null || language.isBlank() ? List.of() : List.of(language);
-        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
-            new QueryPredicate.In("language", languages),
-            new QueryPredicate.In("status", List.of(QbOperators.ACTIVE))))).limit(5).build();
     }
 
     private static EntityQuery byKey(String field, Object value) {

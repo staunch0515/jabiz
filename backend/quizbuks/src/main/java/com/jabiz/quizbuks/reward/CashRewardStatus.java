@@ -5,9 +5,10 @@ import java.util.List;
 /**
  * Where a cash reward stands (docs/quizbuks/plans/Q22-reward-methods.md §2): owed by the sponsor ({@link #DUE}),
  * marked paid by the sponsor and waiting for the taker ({@link #MARKED_PAID}), confirmed by the taker, so complete
- * ({@link #CONFIRMED}); disputed by the taker and waiting for an administrator ({@link #DISPUTED}); neither confirmed
- * nor disputed in time, so the taker starts no new attempt until they do ({@link #OVERDUE}); or voided by an
- * administrator ({@link #VOID}).
+ * ({@link #CONFIRMED}); disputed by the taker and back with the sponsor, who marks it paid again once they settled
+ * it (F-S1: the platform does not decide cash disputes) ({@link #DISPUTED}); neither confirmed nor disputed in time, so
+ * the taker starts no new attempt until they do ({@link #OVERDUE}); or void ({@link #VOID}: kept for the rewards an
+ * administrator voided before F-S1).
  */
 public final class CashRewardStatus {
 
@@ -23,7 +24,7 @@ public final class CashRewardStatus {
     /** The states a taker still has something to do in, or may dispute from. */
     public static final List<String> OPEN = List.of(DUE, MARKED_PAID, OVERDUE, DISPUTED);
 
-    /** An administrator's resolution of a dispute: the sponsor paid, the sponsor still owes, or nothing is owed. */
+    /** An administrator's resolution of a dispute, before F-S1 (the column stays; nothing writes it now). */
     public static final String RESOLUTION_PAID = "PAID";
     public static final String RESOLUTION_UNPAID = "UNPAID";
     public static final String RESOLUTION_VOID = "VOID";

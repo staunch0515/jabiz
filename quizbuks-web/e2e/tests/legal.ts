@@ -14,8 +14,10 @@ export const CONTENT_ROLE = 'QB_E2E_CONTENT'
 // Q77: qb.certification.manage, so that the certificates' test can grant one by hand (the first administrator has
 // no verified address). Q86: qb.certification.admin, so that the agreement quiz's test can mark an official account.
 // Q47c: the audience rules and their prices (audience-pricing.spec).
+// F-S1: qb.admin.operators.write, so that the tests make operators (operators.ts: QuizBuks's writes need a verified address).
 const CONTENT_PERMISSIONS = ['qb.admin.content.write', 'qb.admin.users.read', 'qb.admin.reward-methods',
-  'qb.certification.manage', 'qb.certification.admin', 'qb.audience.rules.write', 'qb.audience.prices.write']
+  'qb.certification.manage', 'qb.certification.admin', 'qb.audience.rules.write', 'qb.audience.prices.write',
+  'qb.admin.operators.write']
 
 const ROLES = 'urn:jabiz:dataset:platform:SecRole'
 const ROLE_PERMISSIONS = 'urn:jabiz:dataset:platform:SecRolePermission'

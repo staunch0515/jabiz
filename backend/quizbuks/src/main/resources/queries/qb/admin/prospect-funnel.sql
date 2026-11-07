@@ -7,7 +7,7 @@ datasets:
   QbProspectDirection: urn:jabiz:dataset:default:QbProspectDirection
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
 params:
-  owner: { like: QbProspect.owner, required: true, description: "The owner: an operator's id, or direct (headquarters)" }
+  owner: { like: QbProspect.owner, required: true, description: "The owner: an operator's id" }
 results:
   directionId: { from: QbProspectDirection.directionId }
   name:        { from: QbProspectDirection.name }

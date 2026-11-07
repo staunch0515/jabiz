@@ -14,7 +14,8 @@ import java.util.List;
  * <ul>
  *   <li>{@value #OPERATOR}: who the operator is, how its money is collected and whether it runs;</li>
  *   <li>{@value #MEMBER}: its staff, one operator at a time per person; a removed member's row stays;</li>
- *   <li>{@value #ASSIGNMENT}: which operator a sponsor belongs to; no row is headquarters ("direct", D-Q48-1);</li>
+ *   <li>{@value #ASSIGNMENT}: which operator a sponsor belongs to; every sponsor has one (F-S1), an operator's own
+ *       sponsor's is fixed;</li>
  *   <li>{@value #SPOT_CHECK}: headquarters' check of a review an operator decided (D-Q48-5).</li>
  * </ul>
  * Lock order: {@code qb.operator:<operator>} → {@code qb.operator-member:<user>} → the account, publication and
@@ -27,10 +28,15 @@ public final class QbOperators {
     public static final String MEMBER = "QbOperatorMember";
     public static final String ASSIGNMENT = "QbSponsorOperator";
     /**
-     * Who made an assignment by the sponsor's language (Q59c): the platform when they applied. A prospecting claim
-     * (Q48d) replaces it; one by headquarters or a claim is never replaced by it.
+     * Who made the assignment of a sponsor who applied on their own (F-S1): the platform, to the operator that takes
+     * new sponsors ({@code defaultForNew}). A prospecting claim (Q48d) replaces it; a reassignment or a claim is never
+     * replaced by it.
      */
-    public static final String BY_LANGUAGE = "auto:language";
+    public static final String BY_DEFAULT = "auto:default";
+    /** Who made the fixed assignment of an operator's own sponsor (F-S1): the operator's creation or its first lead. */
+    public static final String BY_DIRECT = "auto:direct";
+    /** The kind of publisher a sponsor is ({@code PublisherKind.SPONSOR}); the only one operators take for now. */
+    public static final String SPONSOR_KIND = "SPONSOR";
     public static final String SPOT_CHECK = "QbReviewSpotCheck";
 
     /** The operators' sign-in entry ({@code jabiz.security.entries.operator}, {@code /operator/}). */
@@ -72,8 +78,11 @@ public final class QbOperators {
      */
     public static final String SCOPE = "operator";
 
-    /** The lock of the languages of the operators: two active operators never take the same language (Q59c). */
-    public static final String LANGUAGES_LOCK = "qb.operator.languages";
+    /**
+     * Taken exclusively by whoever creates an operator or changes which one takes new sponsors (F-S1): one at most
+     * does ({@code defaultForNew}).
+     */
+    public static final String DEFAULT_LOCK = "qb.operator.default";
 
     /** The caller's own memberships (the operator's templates start from it). */
     public static final String OWN_MEMBERSHIP_DATASET = "urn:jabiz:dataset:operator:QbOperatorMember";
@@ -113,9 +122,15 @@ public final class QbOperators {
         eb.field("status", f -> f.physicalColumn("status").required(true)
             .asCode(STATUS_DICTIONARY, STATUSES.toArray(String[]::new)));
         eb.field("note", f -> f.physicalColumn("note").asText(NOTE_LENGTH, true));
-        // Q59c: the language whose new sponsors it takes (one active operator a language); none: by hand only.
+        // Q59c: the operator's language, shown and used by prospecting; it no longer decides where sponsors go (F-S1).
         eb.field("language", f -> f.physicalColumn("language")
             .asCode(QbContent.LANGUAGE_DICTIONARY, QbContent.LANGUAGES.toArray(String[]::new)));
+        // F-S1: whether naturally arriving sponsors go to it (one operator at most: the default operator).
+        eb.field("defaultForNew", f -> f.physicalColumn("default_for_new").required(true).asBool());
+        // F-S1: the kinds of publisher it takes, comma-separated (SPONSOR only in the first launch).
+        eb.field("publisherKinds", f -> f.physicalColumn("publisher_kinds").required(true).asText(40));
+        // F-S1: its own sponsor, the first lead's account; empty until the operator has a lead.
+        eb.field("directSponsorId", f -> f.physicalColumn("direct_sponsor_id").asText(128));
         eb.field("createdAt", f -> f.physicalColumn("created_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("createdBy", f -> f.physicalColumn("created_by").immutable(true).required(true).asText(128));
@@ -123,8 +138,9 @@ public final class QbOperators {
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.display("name");
         eb.listView("default", lv -> lv
-            .columns("name", "language", "contactName", "contactEmail", "collection", "status", "createdAt")
-            .filters("name", "status", "createdAt")
+            .columns("name", "language", "defaultForNew", "directSponsorId", "contactName", "contactEmail",
+                "collection", "status", "createdAt")
+            .filters("name", "defaultForNew", "status", "createdAt")
             .sorts("name", "createdAt")
             .defaultSort("createdAt", false));
     });
@@ -164,6 +180,8 @@ public final class QbOperators {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("assignedBy", f -> f.physicalColumn("assigned_by").required(true).asText(128));
         eb.field("reason", f -> f.physicalColumn("reason").required(true).asText(REASON_LENGTH));
+        // F-S1: an operator's own sponsor's assignment, never reassigned (QB_DIRECT_SPONSOR_FIXED).
+        eb.field("fixed", f -> f.physicalColumn("fixed").required(true).asBool());
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_sponsor_operator_user", "userId");
         eb.listView("default", lv -> lv

@@ -123,9 +123,42 @@ abstract class PublicationItSupport extends ContentItSupport {
         }
         if (installs() && query("SELECT 1 FROM qb_setup_record_version LIMIT 1").isEmpty()) {
             publishProposals(setup());
+            installDefaultOperator();
             onboard(SPONSOR_A);
             onboard(SPONSOR_B);
         }
+    }
+
+    /**
+     * Creates the default operator, as the platform's administrator does after installing (F-S1: the sponsors who
+     * sign up by themselves are its; its lead, a new verified user, is its own sponsor).
+     */
+    @SuppressWarnings("unchecked")
+    String installDefaultOperator() {
+        String name = "default-lead-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        Map<String, Object> created = client.post().uri("/api/processes/SEC_USER_CREATE/latest")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, admin())
+            .bodyValue(Map.of("userName", name, "displayName", name, "email", name + "@example.com"))
+            .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        String lead = (String) ((Map<String, Object>) created.get("output")).get("userId");
+        // Verified, as the sign-up's verification writes it: a new version with the address verified.
+        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
+            + "current_schema() AND table_name = 'sec_user_version' AND column_name NOT IN ('row_id', 'version_no', "
+            + "'verified_email') ORDER BY ordinal_position").stream().map(row -> (String) row.get("column_name"))
+            .toList();
+        String list = String.join(", ", columns);
+        execute("INSERT INTO sec_user_version (" + list + ", version_no, verified_email) SELECT " + list
+            + ", version_no + 1, email FROM sec_user_version WHERE user_id = ?::uuid ORDER BY version_no DESC LIMIT 1",
+            lead);
+        Map<String, Object> input = new java.util.LinkedHashMap<>();
+        input.put("name", "QuizBuks");
+        input.put("contactName", "QuizBuks");
+        input.put("contactEmail", "support@quizbuks.example");
+        input.put("leadUserId", lead);
+        input.put("defaultForNew", true);
+        return (String) run(com.jabiz.quizbuks.operator.OperatorProcesses.SAVE, TestTokens.bearer(tokens,
+            "operators-admin", QbPermissions.OPERATORS_WRITE), input).get("operatorId");
     }
 
     /** Sets the controlled parameter {@code qb.review.publication.auto}, with four eyes. */

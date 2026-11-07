@@ -34,9 +34,9 @@ import java.util.UUID;
  *   <li>{@code QB_CASH_REWARD_MARK_PAID}: the sponsor says they handed the taker the cash (with a note, such as a
  *       receipt's number); the taker then has {@code qb.reward.cash.confirm-days} to confirm or dispute;</li>
  *   <li>{@code QB_CASH_REWARD_CONFIRM}: the taker confirms they got it: complete;</li>
- *   <li>{@code QB_CASH_REWARD_DISPUTE}: the taker says what is wrong (not paid, less than owed); an administrator
- *       gets a task;</li>
- *   <li>{@code QB_CASH_REWARD_RESOLVE}: the administrator finds it paid (confirmed), unpaid (owed again) or void;</li>
+ *   <li>{@code QB_CASH_REWARD_DISPUTE}: the taker says what is wrong (not paid, less than owed); the sponsor is told.
+ *       The platform does not decide cash disputes (F-S1): the sponsor marks it paid again once they settled it,
+ *       or the taker confirms it;</li>
  *   <li>{@code QB_CASH_REWARD_OVERDUE}, an item of the hourly job {@value #OVERDUE_JOB}: a reward marked paid that the
  *       taker neither confirmed nor disputed in time is overdue, and the taker starts no new attempt until they do
  *       ({@link CashRewardChecks});</li>
@@ -51,7 +51,6 @@ public final class CashRewardProcesses {
     public static final String MARK_PAID = "QB_CASH_REWARD_MARK_PAID";
     public static final String CONFIRM = "QB_CASH_REWARD_CONFIRM";
     public static final String DISPUTE = "QB_CASH_REWARD_DISPUTE";
-    public static final String RESOLVE = "QB_CASH_REWARD_RESOLVE";
     public static final String OVERDUE = "QB_CASH_REWARD_OVERDUE";
     public static final String REMIND = "QB_CASH_REWARD_REMIND";
 
@@ -66,7 +65,6 @@ public final class CashRewardProcesses {
     public static final String MARKED_PAID_EVENT = "qb.cash-reward.marked-paid";
     public static final String CONFIRMED_EVENT = "qb.cash-reward.confirmed";
     public static final String DISPUTED_EVENT = "qb.cash-reward.disputed";
-    public static final String RESOLVED_EVENT = "qb.cash-reward.resolved";
     public static final String OVERDUE_EVENT = "qb.cash-reward.overdue";
 
     public record CashRewardRef(@NotNull UUID cashRewardId) {}
@@ -78,8 +76,6 @@ public final class CashRewardProcesses {
     public record DisputeInput(@NotNull UUID cashRewardId, @NotBlank @Size(max = 500) String note) {}
 
     /** @param resolution {@link CashRewardStatus#RESOLUTIONS}: paid (confirmed), unpaid (owed again) or void */
-    public record ResolveInput(@NotNull UUID cashRewardId, @NotBlank @Size(max = 20) String resolution,
-        @Size(max = 500) String note) {}
 
     public record CashRewardOutput(UUID cashRewardId, String status, long revision) {}
 
@@ -117,7 +113,8 @@ public final class CashRewardProcesses {
                     .permissions(QbPermissions.PUBLICATION_WRITE)
                     .requiresVerifiedEmail()
                     .steps(CallerChecks::refuseBanned)
-                    .actsOn(QbRewards.CASH_REWARD, "cashRewardId", a -> a.whenField("status", CashRewardStatus.DUE))
+                    .actsOn(QbRewards.CASH_REWARD, "cashRewardId", a -> a.whenField("status", CashRewardStatus.DUE,
+                        CashRewardStatus.DISPUTED))
                     .contextFactory((s, input) -> start(s, input, input.cashRewardId()))
                     .outputMapper(ctx -> ctx.get(OUTPUT, CashRewardOutput.class))
                     .step("Load the days to confirm", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
@@ -133,7 +130,8 @@ public final class CashRewardProcesses {
 
     static void markPaid(ProcessContext ctx) {
         EntityInstance reward = reward(ctx);
-        if (!in(ctx, reward, CashRewardStatus.DUE)) {
+        // F-S1: a disputed reward goes back to the taker once the sponsor settled the dispute with them.
+        if (!in(ctx, reward, CashRewardStatus.DUE, CashRewardStatus.DISPUTED)) {
             return;
         }
         MarkPaidInput input = ctx.get(INPUT, MarkPaidInput.class);
@@ -161,7 +159,8 @@ public final class CashRewardProcesses {
                 lockAndLoad(pb, QbRewards.takerDataset(QbRewards.CASH_REWARD));
                 pb.compute("Confirm", (metadata, ctx) -> {
                         EntityInstance reward = reward(ctx);
-                        if (in(ctx, reward, CashRewardStatus.MARKED_PAID, CashRewardStatus.OVERDUE)) {
+                        if (in(ctx, reward, CashRewardStatus.MARKED_PAID, CashRewardStatus.OVERDUE,
+                            CashRewardStatus.DISPUTED)) {
                             Map<String, Object> values = new LinkedHashMap<>();
                             values.put("status", CashRewardStatus.CONFIRMED);
                             values.put("confirmedAt", ctx.opTime());
@@ -176,7 +175,7 @@ public final class CashRewardProcesses {
     public static ProcessDefinition<DisputeInput, CashRewardOutput, ProcessContext> dispute() {
         return ProcessDefinition.define(DISPUTE, 1, DisputeInput.class, CashRewardOutput.class,
             ProcessContext.class, pb -> {
-                pb.description("The taker says the cash reward was not paid as owed; an administrator decides.")
+                pb.description("The taker says the cash reward was not paid as owed; the sponsor is told.")
                     .permissions(QbPermissions.ME)
                     .requiresVerifiedEmail()
                     .steps(CallerChecks::refuseBanned)
@@ -185,13 +184,6 @@ public final class CashRewardProcesses {
                     .outputMapper(ctx -> ctx.get(OUTPUT, CashRewardOutput.class));
                 lockAndLoad(pb, QbRewards.takerDataset(QbRewards.CASH_REWARD));
                 pb.compute("Dispute", (metadata, ctx) -> dispute(ctx))
-                    .step("Ask an administrator to decide", CreateTask.<ProcessContext>when(
-                        CashRewardProcesses::changed, ctx -> TaskSpec.forPermission(QbRewards.DISPUTE_TASK,
-                                QbRewards.DISPUTE_TASK_TITLE, Map.of("code", reward(ctx).get("code"),
-                                    "amount", String.valueOf((Object) reward(ctx).get("amount"))),
-                                QbPermissions.CASH_RESOLVE)
-                            .about(QbRewards.CASH_REWARD, reward(ctx).id())
-                            .source(QbRewards.disputeTaskSource(reward(ctx).id()))))
                     .step("Tell the sponsor", PublishEvent.<ProcessContext>when(CashRewardProcesses::changed,
                         DISPUTED_EVENT, CashRewardProcesses::payload));
             });
@@ -211,72 +203,6 @@ public final class CashRewardProcesses {
         values.put("status", CashRewardStatus.DISPUTED);
         values.put("disputedAt", ctx.opTime());
         values.put("disputeNote", input.note().strip());
-        write(ctx, reward, values);
-    }
-
-    // ---- resolve (administrator) -----------------------------------------------------------------------------------
-
-    public static ProcessDefinition<ResolveInput, CashRewardOutput, ProcessContext> resolve() {
-        return ProcessDefinition.define(RESOLVE, 1, ResolveInput.class, CashRewardOutput.class,
-            ProcessContext.class, pb -> {
-                pb.description("An administrator decides a disputed cash reward: paid, unpaid or void.")
-                    .permissions(QbPermissions.CASH_RESOLVE)
-                    .requiresVerifiedEmail()
-                    .actsOn(QbRewards.CASH_REWARD, "cashRewardId",
-                        a -> a.whenField("status", CashRewardStatus.DISPUTED))
-                    .contextFactory((s, input) -> start(s, input, input.cashRewardId()))
-                    .outputMapper(ctx -> ctx.get(OUTPUT, CashRewardOutput.class));
-                pb.step("Load the days to pay", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                    QbParams.CASH_PAY_DAYS));
-                lockAndLoad(pb, QbRewards.defaultDataset(QbRewards.CASH_REWARD));
-                pb.compute("Resolve", (metadata, ctx) -> resolve(ctx))
-                    .step("Close the dispute's task", CloseTasks.<ProcessContext>done(
-                        ctx -> QbRewards.disputeTaskSource(ctx.get(ID))))
-                    .step("Close the request to pay", CloseTasks.<ProcessContext>done(
-                        ctx -> QbRewards.payTaskSource(ctx.get(ID))))
-                    .step("Tell both sides", PublishEvent.<ProcessContext>when(CashRewardProcesses::changed,
-                        RESOLVED_EVENT, CashRewardProcesses::payload));
-            });
-    }
-
-    static void resolve(ProcessContext ctx) {
-        EntityInstance reward = reward(ctx);
-        ResolveInput input = ctx.get(INPUT, ResolveInput.class);
-        if (!CashRewardStatus.RESOLUTIONS.contains(input.resolution())) {
-            ctx.reject(new Violation("resolution", RewardCodes.CASH_RESOLUTION, "Unknown resolution "
-                + input.resolution(), Map.of("resolution", input.resolution())));
-            return;
-        }
-        // Void is also the way out of a reward nobody disputes but that should not stand (a publication voided, a
-        // taker gone); the other two decide a dispute.
-        boolean voiding = CashRewardStatus.RESOLUTION_VOID.equals(input.resolution());
-        if (voiding ? !in(ctx, reward, CashRewardStatus.DUE, CashRewardStatus.MARKED_PAID, CashRewardStatus.OVERDUE,
-            CashRewardStatus.DISPUTED) : !in(ctx, reward, CashRewardStatus.DISPUTED)) {
-            return;
-        }
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("status", switch (input.resolution()) {
-            case CashRewardStatus.RESOLUTION_PAID -> CashRewardStatus.CONFIRMED;
-            case CashRewardStatus.RESOLUTION_UNPAID -> CashRewardStatus.DUE;
-            default -> CashRewardStatus.VOID;
-        });
-        if (CashRewardStatus.RESOLUTION_PAID.equals(input.resolution())) {
-            values.put("confirmedAt", ctx.opTime());
-        }
-        if (CashRewardStatus.RESOLUTION_UNPAID.equals(input.resolution())) {
-            // Owed again: the sponsor marks it paid once more, their time to pay and the reminder start afresh, and
-            // so does the taker's time to confirm.
-            values.put("markedPaidAt", null);
-            values.put("markedPaidNote", null);
-            values.put("confirmBy", null);
-            values.put("overdueAt", null);
-            values.put("remindedAt", null);
-            values.put("payBy", ctx.opTime().plus(Duration.ofDays(days(ctx, QbParams.CASH_PAY_DAYS))));
-        }
-        values.put("resolvedAt", ctx.opTime());
-        values.put("resolvedBy", ctx.request().actorId());
-        values.put("resolution", input.resolution());
-        values.put("resolveNote", blankToNull(input.note()));
         write(ctx, reward, values);
     }
 

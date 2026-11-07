@@ -231,6 +231,8 @@ public class InboxConfig {
                 "ja", "受取口座の情報が必要")
             .item(QbInbox.PAYOUT_REMINDER, "en", "Open a payout account", "zh", "开通收款账户", "ja",
                 "受取口座の開設")
+            .item(QbInbox.OPERATOR_CHANGED, "en", "Your operator changed", "zh", "你的运营商已变更", "ja",
+                "運営パートナーの変更")
             .item(QbInbox.REFERRAL_CLAIMED, "en", "A friend came", "zh", "朋友来了", "ja", "友だちが来ました")
             .item(QbInbox.REFERRAL_REWARDED, "en", "Referral rewarded", "zh", "推荐成功", "ja", "紹介の成立")
             .item(QbInbox.REFERRAL_EXPIRED, "en", "Referral ended", "zh", "推荐已结束", "ja", "紹介の終了")
@@ -585,21 +587,14 @@ public class InboxConfig {
             qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_DISPUTED));
     }
 
+    /** F-S1: a sponsor moved to another operator hears who looks after them now. */
     @Bean
-    EventSubscription<MessageProcesses.EventInput> qbMessageCashResolvedSubscription(
+    EventSubscription<MessageProcesses.EventInput> qbMessageOperatorChangedSubscription(
         ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
             qbMessageFromEvent) {
-        return EventSubscription.of(MessageProcesses.CASH_RESOLVED_CONSUMER, CashRewardProcesses.RESOLVED_EVENT,
-            qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_RESOLVED));
-    }
-
-    @Bean
-    EventSubscription<MessageProcesses.EventInput> qbMessageCashResolvedSponsorSubscription(
-        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
-            qbMessageFromEvent) {
-        return EventSubscription.of(MessageProcesses.CASH_RESOLVED_SPONSOR_CONSUMER,
-            CashRewardProcesses.RESOLVED_EVENT, qbMessageFromEvent,
-            event -> MessageProcesses.cashInput(event, QbInbox.CASH_RESOLVED_SPONSOR));
+        return EventSubscription.of(MessageProcesses.OPERATOR_CHANGED_CONSUMER,
+            com.jabiz.quizbuks.operator.OperatorProcesses.OPERATOR_CHANGED_EVENT, qbMessageFromEvent,
+            MessageProcesses::operatorChangedInput);
     }
 
     @Bean

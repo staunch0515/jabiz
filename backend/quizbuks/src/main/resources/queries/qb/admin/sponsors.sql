@@ -47,6 +47,6 @@ FROM {{QbSponsor}} s
 LEFT JOIN {{SecUser}} u ON CAST(u.{{SecUser.userId}} AS text) = s.{{QbSponsor.userId}}
 -- Q22: the reward methods an administrator allowed; PLATFORM alone without a setting.
 LEFT JOIN {{QbSponsorRewardMethods}} rm ON rm.{{QbSponsorRewardMethods.userId}} = s.{{QbSponsor.userId}}
--- Q48a: the sponsor's operator; none is headquarters ("direct").
+-- Q48a, F-S1: the sponsor's operator (every sponsor has one).
 LEFT JOIN {{QbSponsorOperator}} a ON a.{{QbSponsorOperator.userId}} = s.{{QbSponsor.userId}}
 LEFT JOIN {{QbOperator}} o ON o.{{QbOperator.operatorId}} = a.{{QbSponsorOperator.operatorId}}

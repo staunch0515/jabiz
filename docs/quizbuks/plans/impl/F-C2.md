@@ -39,7 +39,7 @@
 - `UsageMeters.ALL`（有序、不可变）给出代码、单位与"存储类"标记；字典 `urn:jabiz:dict:quizbuks:usage-meter` 由它生成（三语名字在消息 `dict.…`）。
 - 快照模板的 SQL 按计量项各出一行（见 §3）；`UsageMetersTest` 与启动检查 `UsageMetersCheck`（类别 `QUIZBUKS`，错误）核对模板的结果中出现的计量项与 `UsageMeters.ALL` 完全一致——新加一项必须同时改两处，否则启动失败。
 
-## 2. 数据（迁移 `V78__quizbuks_usage.sql`，合并前按 `1.3/quizbuks` 的最大号 + 1 重编）
+## 2. 数据（迁移 `V79__quizbuks_usage.sql`（V78 已由 F-S1a 占用），合并前按 `1.3/quizbuks` 的最大号 + 1 重编）
 
 **`QbUsageDay`**（普通表 `qb_usage_day`，主键 `usage_day_id` UUIDv7）：
 

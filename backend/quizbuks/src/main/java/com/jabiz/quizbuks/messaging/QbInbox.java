@@ -74,8 +74,6 @@ public final class QbInbox {
     public static final String CASH_MARKED_PAID = "CASH_MARKED_PAID";
     public static final String CASH_CONFIRMED = "CASH_CONFIRMED";
     public static final String CASH_DISPUTED = "CASH_DISPUTED";
-    public static final String CASH_RESOLVED = "CASH_RESOLVED";
-    public static final String CASH_RESOLVED_SPONSOR = "CASH_RESOLVED_SPONSOR";
     public static final String CASH_OVERDUE = "CASH_OVERDUE";
     public static final String REDEEM_DUE = "REDEEM_DUE";
     /** Q22b: a claim from the sponsor's printed code (to the sponsor); the prize's fate (to the taker). */
@@ -85,7 +83,7 @@ public final class QbInbox {
     public static final String REDEEM_EXPIRED = "REDEEM_EXPIRED";
     public static final String REDEEM_VOID = "REDEEM_VOID";
     public static final List<String> CASH_KINDS = List.of(CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED, CASH_DISPUTED,
-        CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE);
+        CASH_OVERDUE);
     public static final List<String> REDEEM_KINDS = List.of(REDEEM_DUE, REDEEM_CLAIMED, REDEEM_REDEEMED,
         REDEEM_DECLINED, REDEEM_EXPIRED, REDEEM_VOID);
     /** Q33: a digital prize delivered or owed (to the taker); confirmed or disputed (to the sponsor); decided. */
@@ -112,10 +110,12 @@ public final class QbInbox {
     public static final String CONVERSATION_REPLY = "CONVERSATION_REPLY";
     /** F-C2: the sponsor's storage went above the free amount (to the sponsor; once per crossing). */
     public static final String USAGE_OVER_FREE = "USAGE_OVER_FREE";
-    public static final List<String> MESSAGE_KINDS = List.of(USAGE_OVER_FREE, CONVERSATION_REPLY, REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
+    /** F-S1: the sponsor was moved to another operator (to the sponsor; the source is "<sponsor>|<operator>"). */
+    public static final String OPERATOR_CHANGED = "OPERATOR_CHANGED";
+    public static final List<String> MESSAGE_KINDS = List.of(USAGE_OVER_FREE, OPERATOR_CHANGED, CONVERSATION_REPLY, REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
         REFERRAL_FUNDS_SHORT, REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
         TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER, CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED,
-        CASH_DISPUTED, CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE, REDEEM_DUE, REDEEM_CLAIMED,
+        CASH_DISPUTED, CASH_OVERDUE, REDEEM_DUE, REDEEM_CLAIMED,
         REDEEM_REDEEMED, REDEEM_DECLINED, REDEEM_EXPIRED, REDEEM_VOID, DIGITAL_DELIVERED, DIGITAL_DUE,
         DIGITAL_CONFIRMED, DIGITAL_DISPUTED, DIGITAL_RESOLVED, DIGITAL_RESOLVED_SPONSOR, DIGITAL_OVERDUE);
 

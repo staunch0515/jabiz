@@ -195,6 +195,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    然后建**两位超级管理员**（`QB_ADMIN_SUPER`，各自一人一号、各自二次验证）：首个管理员建第一位（此后首个管理员退役，不能再做受保护的变更，403 `BOOTSTRAP_ADMIN_RETIRED`），
    **第一位超级管理员建第二位**（仍在建立期，当即生效）。第二位出现后建立期结束（平台 16u，D51），此后的受保护变更（见本节末"受保护的授权"）由一位超级管理员申请、另一位审批。
    `QB_SETUP` 必须在第二位超级管理员出现**之前**执行过（第 3 步）：超级管理员的角色由它得到审批受保护变更的 `security.protected-change.decide`，这项权限本身受保护，建立期结束后再给需要审批，而那时无人能批。
+   **默认运营商**（F-S1）：提案发布后，内容管理员（已验证邮箱，持 `qb.admin.operators.write`）在 答题拼好价平台管理系统中以 `QB_OPERATOR_SAVE` 建第一个运营商并设为默认（`defaultForNew: true`），同时指定负责人（已验证邮箱的账号，同一事务成为它的直营发起方）。没有默认运营商时发起方入驻一律被拒（`QB_OPERATOR_DEFAULT_MISSING`），每日核对 `qb.operator-check` 给平台一个待办（`NO_DEFAULT_OPERATOR`）。以后把另一个运营商设为默认即取代原来的（至多一个；默认的运营商不能停用，也不能直接取消默认）。
 6. 由超级管理员提出、财务管理员发布（`CONTROL_CHANGE_PROPOSE` → `CONTROL_CHANGE_PUBLISH`，目标 `SysParam`）：
    - **收据开具方** `qb.issuer.name`、`qb.issuer.address`、`qb.issuer.registration-no`（登记号与税的措辞须财务、法务确认，上线检查清单）；未设名称时发起方开不出收据；
    - **科目映射** `qb.journal.account.1110 … 5110`（会计系统中的科目代码；平台管理系统"QuizBuks 财务 → 分录导出 → 科目映射"只读显示，修改走受控变更）；没映射的科目使分录导出被拒；
@@ -613,7 +614,7 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
   | `qb.usage.retention-days` | 800 | 快照的保留天数（普通参数，`PARAM_SET`） | 之后的每次快照删掉该发起方更早的行；调短会删掉月度统计要用的旧行 |
 
 - **超过免费额度**：只提示。快照项发现 `storage.bytes` 从额度以下（或没有前一次快照）变成超过时发事件 `qb.usage.free-exceeded`，消费者 `qb.msg-usage-over` 以 `QB_MESSAGE_FROM_EVENT` 写一条站内信（种类 `USAGE_OVER_FREE`，链到资源库）；同一次越过只一条（`sourceKey` = `usage-over-free:<发起方>|<日期>`，重跑与重投都不重复），降到额度以下后再超过另发一条；消费者重读最新快照，已不超过即不发。
-- **部署后**：运行一次 `QB_SETUP`（提出两个参数，其中免费额度是受控的，由另一位管理员发布提案）；迁移 `V78`（合并前重编号）建表 `qb_usage_day`；需要时设 `QB_USAGE_SNAPSHOT_TIME`。没有新科目、新权限给角色（`qb.usage.system` 不授予任何角色）。
+- **部署后**：运行一次 `QB_SETUP`（提出两个参数，其中免费额度是受控的，由另一位管理员发布提案）；迁移 `V79`（合并前重编号）建表 `qb_usage_day`；需要时设 `QB_USAGE_SNAPSHOT_TIME`。没有新科目、新权限给角色（`qb.usage.system` 不授予任何角色）。
 - **告警**：见 §5 的"资源占用的计量"一行：任务 `FAILED` / `PARTIAL`、当天在快照时刻后 2 小时内没有成功的运行、`qb_usage_day` 最新日期早于今天。失败项的错误在 `GET /api/jobs`（`job.read`）的"连续失败中的项"中。
 - **补跑**：快照记的是运行那一刻的占用，**只能补跑当天**（过去的某一天无法事后补出当时的数字；月度统计按有快照的天数平均，"天数"一列看得出缺了哪几天）。
   1. 先看 `GET /api/jobs` 中 `qb.usage-snapshot` 最近的运行与失败的项，排除原因（多为数据库超时或约束；修好再跑）。

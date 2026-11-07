@@ -38,11 +38,12 @@ class UnderstandingIT extends PlayItSupport {
 
     /** An official account's live round of the certification; returns the publication. */
     private String round(String certification) {
-        String official = newSponsor(unique("s-q86-official"));
+        NewOperator operator = officialOperator("Q86");
+        String official = operator.leadId();
         credit(official, 100_000);
-        run(CertificationProcesses.OFFICIAL_SET, hq(), body("userId", official, "active", true));
         String publication = livePublication(official, "Q86 round " + certification, Map.of("regions", List.of("GLOBAL")));
-        run(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", publication, "certification", certification));
+        run(CertificationProcesses.ROUND_ADD, memberSession(official, operator.operatorId()), body("publicationId",
+            publication, "certification", certification));
         return publication;
     }
 

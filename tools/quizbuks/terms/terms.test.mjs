@@ -53,8 +53,10 @@ const SCANNED = [
  */
 export const RETIRED_NAMES = [
   { word: /(?<!Shopify ?)后台/g, use: '发起方页面 / 运营商管理系统 / 平台管理系统' },
-  { word: /(?<!Shopify ?)管理画面/g, use: '主催者ページ / 運営会社管理システム / <ブランド> 管理システム' },
+  { word: /(?<!Shopify ?)管理画面/g, use: '主催者ページ / 運営パートナー管理システム / <ブランド> 管理システム' },
   { word: /コンソール/g, use: '主催者ページ' },
+  // 2026-11-07: the operators are 運営パートナー in Japanese; their system's earlier name is retired.
+  { word: /運営会社管理システム/g, use: '運営パートナー管理システム' },
   { word: /\bsponsors?(?:'|’)?s? console\b/gi, use: 'the Sponsor app / <brand> for Sponsors', textsOnly: true },
   { word: /\b(?:your|the) console\b/gi, use: 'the Sponsor app', textsOnly: true },
   { word: /\bAdministration\b/g, use: '<brand> Management System', textsOnly: true },

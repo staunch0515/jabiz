@@ -336,6 +336,11 @@
 - "资源不见了"的排查步骤：先在发起方详情的"资源库"一栏看；再按审计（`GET /api/audit/records?entityType=QbAsset&entityId=…`，或 `processName=QB_ASSET_DELETE` 与 `actorId`）看是谁、何时删的；使用处的记录（`QbAssetUse`）随资源的删除、使用处的删除一起删掉；删除账号时两张表随之清除；副本不受资源的删除影响；
 - 客服能看到什么、不能做什么（只读，运营商只看辖下的，不能代为修改、恢复或收集；恢复只能由发起方重新存入）。
 
+### 决定（需求方 2026-11-07）
+
+- 客服**不加** `audit.read`：排查"资源不见了"时查审计记录这一步，请持有 `audit.read` 的管理员查（`operations.md` §7.21 照此写）。
+- 帮助文稿放 `docs/quizbuks/help/`，FAQ 分类用 `PUBLISHING`（总控定）。
+
 ### e2e（`quizbuks-web/e2e/tests/assets.spec.ts`，照 Q110 §7）
 
 在 F-C1c 的一条之外新增：

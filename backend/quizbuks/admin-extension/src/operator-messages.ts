@@ -374,7 +374,7 @@ export const operatorMessages = {
     },
     list: {
       title: '運営パートナー',
-      description: '運営会社管理システム /operator/ で主催者を担当する代理店です。審査は最終決定で、本部が抜き取り確認します。',
+      description: '運営パートナー管理システム /operator/ で主催者を担当する代理店です。審査は最終決定で、本部が抜き取り確認します。',
       new: '運営パートナーを追加',
       newTitle: '運営パートナーを追加',
       newHint: '次にそのページが開きます。そこでメンバーを追加し、主催者を割り当てます。',

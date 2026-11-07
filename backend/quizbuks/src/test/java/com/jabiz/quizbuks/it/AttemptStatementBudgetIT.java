@@ -194,16 +194,13 @@ class AttemptStatementBudgetIT extends PlayItSupport {
         credit(sponsor, 100_000);
         String gated = liveRequiring(sponsor, "Budget gated", Map.of("regions", List.of("GLOBAL"),
             "maxWinners", 100_000, "budgetCap", 1_000_000), List.of(body("certification", "REFERRER", "requirement", "PASSED")));
-        String hq = com.jabiz.runtime.test.TestTokens.bearer(tokens, "budget-hq",
-            com.jabiz.quizbuks.QbPermissions.CERTIFICATION_ADMIN, com.jabiz.quizbuks.QbPermissions.CERTIFICATION_MANAGE);
-        String official = newSponsor("s-budget-official");
+        NewOperator operator = officialOperator("Budget");
+        String official = operator.leadId();
         credit(official, 100_000);
-        run(com.jabiz.quizbuks.certification.CertificationProcesses.OFFICIAL_SET, hq, body("userId", official,
-            "active", true));
         String round = livePublication(official, "Budget round", Map.of("regions", List.of("GLOBAL"), "maxWinners",
             100_000, "budgetCap", 1_000_000));
-        run(com.jabiz.quizbuks.certification.CertificationProcesses.ROUND_ADD, hq, body("publicationId", round,
-            "certification", "REFERRER"));
+        run(com.jabiz.quizbuks.certification.CertificationProcesses.ROUND_ADD, memberSession(official,
+            operator.operatorId()), body("publicationId", round, "certification", "REFERRER"));
         String warm = newTaker("t-budget-cert-warm-" + UUID.randomUUID(), null);
         play(warm, round, true, true);
         keyed("QB_ATTEMPT_START", taker(warm), body("publicationId", gated));

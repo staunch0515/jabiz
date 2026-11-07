@@ -1,5 +1,5 @@
-import { expect, expectAccessible, PASSWORD, prepareQuizbuks, run, signIn, test, tokenOf, unique } from './support'
-import { contentAdmin } from './legal'
+import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { operatorWithLead } from './operators'
 import { taker } from './play'
 
 /*
@@ -19,8 +19,8 @@ test('a holder issues a certificate, anybody verifies it and sees it on the publ
   const me = await taker(request, name)
   const userId = String((await (await request.get('/api/auth/me', {
     headers: { Authorization: `Bearer ${me.token}` } })).json()).userId)
-  // Granting needs a verified address, which the first administrator has not: the tests' content administrator.
-  const granter = await tokenOf(request, await contentAdmin(request), PASSWORD, 'admin')
+  // F-S1: certifications are an operator's: one of the tests' own grants it.
+  const granter = (await operatorWithLead(request, 'Gra')).operatorToken
   await run(request, granter, 'QB_CERTIFICATION_GRANT', { userId, certification: 'SPONSOR_APPLY',
     reason: 'End-to-end test' })
 
