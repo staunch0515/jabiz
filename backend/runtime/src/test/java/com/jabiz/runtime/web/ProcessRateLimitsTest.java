@@ -222,4 +222,50 @@ class ProcessRateLimitsTest {
         assertThatCode(() -> defaults.checkFetch(actor("someone"), "busy.example.com"))
             .isInstanceOf(RateLimitedException.class);
     }
+
+    /**
+     * Many requests at once (17zt): the instance grants exactly its limit, and a request refused takes nothing of its
+     * actor's bucket, so the actor's next request is refused by the instance (in 3.6 seconds here), not by its own
+     * bucket (in an hour).
+     */
+    @Test
+    void requestsAtOnceTakeAllTheirBucketsOrNone() throws Exception {
+        int users = 4_000;
+        int instance = 1_000;
+        for (int round = 0; round < 5; round++) {
+            ProcessRateLimits limits = limits(new ProcessRateLimitProperties.Limit(1, null, instance,
+                Duration.ofHours(1)));
+            MockServerHttpRequest request = from("203.0.113.1");
+            java.util.concurrent.atomic.AtomicInteger granted = new java.util.concurrent.atomic.AtomicInteger();
+            List<String> refused = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+            java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.ExecutorService threads = java.util.concurrent.Executors.newFixedThreadPool(16);
+            try {
+                for (int i = 0; i < users; i++) {
+                    String user = "user-" + i;
+                    threads.submit(() -> {
+                        start.await();
+                        try {
+                            limits.check(LIMITED, actor(user), request);
+                            granted.incrementAndGet();
+                        } catch (RateLimitedException e) {
+                            refused.add(user);
+                        }
+                        return null;
+                    });
+                }
+                start.countDown();
+            } finally {
+                threads.shutdown();
+                assertThat(threads.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            }
+            assertThat(granted.get()).isEqualTo(instance);
+            assertThat(refused).hasSize(users - instance);
+            for (String user : refused) {
+                RateLimitedException again = catchThrowableOfType(RateLimitedException.class,
+                    () -> limits.check(LIMITED, actor(user), request));
+                assertThat(again.retryAfterSeconds()).as("%s, round %d", user, round).isEqualTo(4);
+            }
+        }
+    }
 }
