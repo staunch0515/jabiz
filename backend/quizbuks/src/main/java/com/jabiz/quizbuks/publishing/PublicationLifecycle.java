@@ -155,6 +155,7 @@ public final class PublicationLifecycle {
                 .steps(PublicationEditing::loadTiers)
                 .steps(b -> PublicationEditing.loadVersion(b,
                     ctx -> PublicationEditing.publication(ctx).get("versionId"), true))
+                .steps(PublicationEditing::loadVideoSites)
                 // Q33: a digital prize from a pool promises each winner a code: the pool is counted (no statement
                 // for the other publications).
                 .step("Load the pool", QueryEntities.<ProcessContext>of(
@@ -504,6 +505,7 @@ public final class PublicationLifecycle {
                     EntityInstance found = first(ctx, FOUND);
                     return found == null ? null : found.get("versionId");
                 }, false))
+                .steps(PublicationEditing::loadVideoSites)
                 .steps(b -> PublicationVersions.loadPending(b, FOUND))
                 .steps(PublicationEditing::loadSchedule)
                 .steps(b -> PublicationEditing.loadSponsorProfile(b, ctx -> first(ctx, FOUND)))

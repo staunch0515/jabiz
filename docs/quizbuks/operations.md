@@ -21,6 +21,7 @@
 | `SPRING_R2DBC_URL` / `_USERNAME`、`SPRING_FLYWAY_URL` / `_USER`、`DB_PASSWORD`（或 `SPRING_R2DBC_PASSWORD` / `SPRING_FLYWAY_PASSWORD`） | 是 | 数据库 | 换密码：先在库中加新密码可用的窗口（`ALTER ROLE`），改环境变量、滚动重启 | 连不上库，启动失败 |
 | `JABIZ_ERASURE_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD` | 开启账号删除时（平台 17i：账号删除的申请入口 `account-deletion`）；否则可不设 | `deploy/quizbuks/server/create-maintenance-login.sh <库名>` 的输出（`DEPLOY.md`"1a"）：**R2DBC** URL（`r2dbc:postgresql://…`，与 `SPRING_R2DBC_URL` 相同，**不是** Flyway 的 JDBC URL）与一个单独的维护登录（属于角色 `jabiz_maintenance`；应用自己的登录绝不能属于它） | 再运行一次脚本即给同一登录换新密码，改 `.env` 后重新部署 | 不设：抹除账号照常完成，个人信息的清除 422 `ERASURE_PURGE_UNAVAILABLE`，有入口开启账号删除时启动失败。写成 JDBC 格式：启动失败，检查报一行 `ERASURE \| jabiz.erasure.datasource.url`（平台 17q 之前是一大段堆栈，部署回滚） |
 | `QB_APP_ACCOUNT_DELETION` / `QB_SPONSOR_ACCOUNT_DELETION` | 学者的设为 `true` 是上架 App Store 与 Google Play 的前提（Q71）；发起方的可选（Q72） | 设为 `true` 即开启该入口的账号删除：App 与发起方页面的账户页出现"删除账号"，学者另有不装 App 的申请页 `/taker/delete-account` | — | 缺省 `false`：没有删除入口。开启而没有上一行的维护连接：启动失败 |
+| `JABIZ_GEOIP_DATABASE` | 正式模式必需（F-S11） | IP 地址库文件的路径（DB-IP "IP to Country Lite" 的 CSV，可为 `.gz`；服务器上放在卷 `geoip`，`/var/lib/jabiz/geoip/…`，§7.22） | 每月换文件（同一路径覆盖即可，平台一分钟内读入新文件，无需重启；新文件读不懂即继续用旧的） | 正式模式下启动失败（`QUIZBUKS \| jabiz.geoip.database`），其他模式警告：所有地址查不到、按 `qb.region.unknown-ip-country`（缺省中国大陆）处理，含境外视频的发布谁也不能答。设了而读不了：启动失败（`GEOIP`）。文件旧于 `JABIZ_GEOIP_MAX_AGE`（缺省 45 天）：启动检查与每日检查告警 |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后必需 | 代理的地址或网段 | 代理变化时 | 登录记录的 IP 都是代理的；入站 Webhook 按地址的限流把 Stripe 全部投递算成一个客户端（每分钟 120 次） |
 | `JABIZ_REPORTS_PDF_FONTS` | 镜像已设 | 镜像中的 IPA Gothic、Droid Sans Fallback | — | 镜像外运行时收据与月报的中日文为 `?`；设了读不到的文件即启动失败 |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 建议 `ecs` | — | — | 文本日志 |
@@ -306,6 +307,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 发起方分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
 | 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
+| 境外视频（F-S11，§7.22） | `jabiz.job.run{job="qb.region-check"|"qb.region-refusals"}`；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}`；待办 `qb.region-check`（权限 `qb.admin.region.read`）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频） |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
 
 日志：结构化 JSON（`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`）；`quizbuks: WARNING`、`Platform check failed`、`Inbound webhook request of … rejected` 作为日志告警。日志与追踪中不应出现密钥、令牌与原始卡信息（平台已遮蔽；发现即视为缺陷）。
@@ -608,6 +610,38 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
 - 用户丢了设备：本人在另一台设备上删除；管理员可代为删除（平台的 `SEC_PASSKEY_REMOVE_ADMIN`，要求二次验证），不能代为绑定。
 - 通行密钥登录算两个因素：要求二次验证的管理员与运营商可以只用它登录。封禁与运营商成员关系的检查照旧。
 - 商店 App（iOS / Android 外壳）暂未开启：外壳中的网页暂时不能用通行密钥（需要 `apple-app-site-association` 的 `webcredentials` 与 `assetlinks.json` 的登录凭据授权，另立阶段）。
+
+### 7.22 含境外视频的发布与中国大陆（F-S11）
+
+含有中国大陆无法播放的视频（YouTube 等）的发布，不能从中国大陆的 IP 地址作答（`docs/quizbuks/plans/impl/F-S11.md`）。判断在开始答题时由服务端做（422 `QB_PUBLICATION_REGION_VIDEO`），
+首页、发起方主页与分享页只是按页面问到的地区隐藏或说明。地区只按请求的 IP 地址（平台 D74 的 `ClientCountry`，可信代理 `JABIZ_TRUSTED_PROXIES` 之后的地址），与资料中的国家无关；地区定向、人数估算与受众规则费仍按资料中的国家（A3-19）。
+给用户的帮助文案在 `docs/quizbuks/help/mainland-china.md`（由内容管理员发布为 FAQ）。
+
+- **IP 地址库**（DB-IP "IP to Country Lite"，CSV，许可 CC BY 4.0）：
+  1. 下载：https://db-ip.com/db/download/ip-to-country-lite 的 CSV（`dbip-country-lite-YYYY-MM.csv.gz`，每月初更新）。不需要账号。下载后核对文件不是空的（`zcat … | wc -l`，约 60 万行）。
+  2. 放到服务器的卷 `geoip`（`server/compose.yaml` 挂在 `/var/lib/jabiz/geoip`）：复制成临时名，再改名为固定的 `dbip-country-lite.csv.gz`（改名是原子的，平台不会读到一半的文件）：
+     `docker cp dbip-country-lite-2026-12.csv.gz <APP_NAME>-app:/var/lib/jabiz/geoip/.next.csv.gz && docker exec <APP_NAME>-app mv /var/lib/jabiz/geoip/.next.csv.gz /var/lib/jabiz/geoip/dbip-country-lite.csv.gz`
+  3. 第一次：在环境的 `.env` 中设 `JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz`，重新部署。之后每月只做第 2 步：平台一分钟内读入新文件（日志 `Address database …: N ranges`），无需重启。
+  4. 核对：用中国大陆与日本的网络（或可信代理之后的测试请求）打开 `/api/client/region`，`country` 分别为 `CN`、`JP`。
+  5. **署名**（CC BY 4.0 的要求）：隐私政策写明了使用 DB-IP 的数据（第二条第3项，`docs/quizbuks/legal/`）；不要删去那一句。改用别的地址库（如 MaxMind 的 CSV 转换）时同步改隐私政策与本节。
+  - 过旧（`JABIZ_GEOIP_MAX_AGE`，缺省 45 天）或缺失：启动检查（`GEOIP`；正式模式下没有配置为 `QUIZBUKS` 错误）与每日任务 `qb.region-check`（每天 19:23 UTC）给 `qb.admin.region.read` 一个待办（每天一个，链到 `/admin/qb/region`）。处理：照第 1–2 步更新，待办在下一次检查后不再出现，旧的待办手工关闭（`task.resolve`）。
+  - 测试系统（staging）可以不放地址库：所有地址查不到，按参数处理（缺省中国大陆，含境外视频的发布在那里不能答）。要在 staging 试答，放地址库，或把 `qb.region.unknown-ip-country` 设为别的国家（见下）。
+- **参数**：
+
+  | 参数 | 缺省 | 受控 | 作用 |
+  |---|---|---|---|
+  | `qb.video.mainland-accessible-sites` | `bilibili,youku,tencent` | 是（提出与发布两人） | 中国大陆可以播放的视频网站（`youtube`、`vimeo`、`bilibili`、`niconico`、`dailymotion`、`youku`、`tencent`）。不在其中的网站与认不出的网站都算"境外"。只影响以后上线与切换版本的发布（卡片在那时冻结）；已上线的卡片不变 |
+  | `qb.region.unknown-ip-country` | `CN` | 否（不授予任何角色，由首个管理员以 `PARAM_SET` 改） | 地址库查不到的地址（内网、没有地址库）按哪个国家处理；空 = 不按任何国家（放行）。e2e 设为 `JP` |
+
+  部署 F-S11 后运行一次 `QB_SETUP` 并由另一位管理员发布它提出的 `qb.video.mainland-accessible-sites`；发布之前按缺省值。
+- **例外**（A3-15）：平台管理系统的"中国大陆"页（`/admin/qb/region`，`qb.admin.region.read`；新增、改到期日、撤销要 `qb.admin.region.write`，都是内容管理员的权限）。按发布或按发起方（其全部发布，含以后的），**必须写原因**，到期日可选（UTC 的日期，当天有效，过了自动失效，不需要任务）。撤销后不能再改，要恢复就新增一个。
+  每次新增、修改、撤销都经平台审计（`/admin/audit`，`entityType=QbRegionException`）。例外只放开本规则，不改变地区定向等其他条件。
+- **被拒次数**：答题被本规则拒绝时只计数（不记是谁、不记地址），在内存中按 UTC 日累计，任务 `qb.region-refusals` 每小时写入 `QbRegionRefusalDay`；"中国大陆"页显示最近 30 天。实例停止时最近一小时内未写出的次数会丢（这只是统计）。
+- **"在中国大陆不能答"的排查**：
+  1. 问用户所在的网络：VPN、公司网络、漫游的手机线路都可能被判为别的地区（地址库按看到的地址判断，需求方接受）。
+  2. 平台管理系统的发布详情：卡片的"含中国大陆无法播放的视频"为是（或空：上线于 F-S11 之前且回填没有找到版本；按"是"处理）。看资料中的视频链接是哪个网站。
+  3. 是否有生效的例外（"中国大陆"页，"生效中"）。
+  4. 用户说不在中国大陆却被拒：请他打开 `/api/client/region` 看 `country`；是 `CN` 即地址库的判断（可等下月更新，或经例外放开该发布）；`known` 为 `false` 即地址查不到，按参数处理（检查 `JABIZ_TRUSTED_PROXIES` 是否包括反向代理：不包括时所有人都是代理的内网地址）。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

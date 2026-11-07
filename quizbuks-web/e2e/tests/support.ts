@@ -180,6 +180,9 @@ export async function setControlledParam(request: APIRequestContext, paramKey: s
   await run(request, await publisherToken(request, admin), 'CONTROL_CHANGE_PUBLISH', { changeId: change.changeId })
 }
 
+/** F-S11: the country an address the address database does not know counts as (backend `QbParams`). */
+export const REGION_UNKNOWN_IP_COUNTRY = 'qb.region.unknown-ip-country'
+
 let prepared = false
 
 /**
@@ -191,6 +194,10 @@ export async function prepareQuizbuks(request: APIRequestContext) {
   if (prepared) return
   const admin = await adminToken(request)
   await run(request, admin, 'QB_SETUP', {})
+  // F-S11: the browser is on this machine, an address the platform does not know: it counts as the parameter says (mainland
+  // China by default), which would keep every publication with a YouTube video from being answered. The tests' runs
+  // count such an address as Japan; foreign-video.spec sets mainland China for its own checks and back.
+  await run(request, admin, 'PARAM_SET', { key: REGION_UNKNOWN_IP_COUNTRY, value: 'JP' })
   // Page by page until none is left: QB_SETUP proposes more than one page (Q87 took it past 100), and a published
   // change leaves the filter, so each read starts again from the first page.
   let publisher: string | undefined

@@ -1,8 +1,9 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral, QbPublicationPrerequisite, QbSponsorCertification]
+entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral, QbPublicationPrerequisite, QbSponsorCertification]
 datasets:
+  QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
@@ -27,6 +28,7 @@ params:
   publicationId: { like: QbPublicationCard.publicationId, required: true, description: The publication }
   at:            { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the page is for (the client's now) }
   country:       { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code)" }
+  mainlandChina: { kind: { type: bool }, description: "F-S11: whether the caller's address is in mainland China, as GET /api/client/region said; publications with a foreign video and no exception are then not for them" }
   languages:     { kind: { type: text, maxLength: 20 }, description: "Q73b: the languages to show it in, in the taker's order (a link's first); the first one it offers is shown, else its main one; an attempt shows its own" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
@@ -72,6 +74,7 @@ results:
   last30d:        { from: QbPublicationStats.last30d }
   statsAt:        { from: QbStatsRun.refreshedAt }
   canStart:       { kind: { type: bool } }
+  regionBlocked:  { kind: { type: bool } }
   matched:        { kind: { type: bool } }
   prerequisitesMet: { kind: { type: bool } }
   prerequisites:  { kind: { type: text } }
@@ -139,7 +142,9 @@ SELECT
     d.last7d AS last7d,
     d.last30d AS last30d,
     d.statsAt AS statsAt,
-    (d.shown AND d.startable AND d.matched AND d.prerequisitesMet AND d.heldUntil IS NULL AND d.myAttemptId IS NULL) AS canStart,
+    (d.shown AND d.startable AND d.matched AND d.prerequisitesMet AND d.heldUntil IS NULL AND d.myAttemptId IS NULL
+     AND NOT d.regionBlocked) AS canStart,
+    d.regionBlocked AS regionBlocked,
     d.matched AS matched,
     d.prerequisitesMet AS prerequisitesMet,
     d.prerequisites AS prerequisites,
@@ -380,7 +385,19 @@ SELECT
     mr.{{QbReferral.expiresAt}}            AS myReferralExpiresAt,
     m.{{QbAttempt.attemptId}}              AS myAttemptId,
     m.{{QbAttempt.status}}                 AS myStatus,
-    m.{{QbAttempt.deadline}}               AS myDeadline
+    m.{{QbAttempt.deadline}}               AS myDeadline,
+    -- F-S11: from mainland China (the page passes what the platform's clientRegion() said; the start checks the address
+    -- itself), a publication whose card has a foreign video, or none recorded yet, is not for the caller unless an exception
+    -- of headquarters is in force (the public dataset holds those not revoked; region.RegionRules is the one definition).
+    (CAST(:mainlandChina AS boolean) IS TRUE AND coalesce(c.{{QbPublicationCard.foreignVideo}}, true)
+         AND NOT EXISTS (
+             SELECT 1 FROM {{QbRegionException}} rx
+             WHERE (rx.{{QbRegionException.expiresOn}} IS NULL
+                    OR rx.{{QbRegionException.expiresOn}} >= CAST(CAST(:at AS timestamptz) AT TIME ZONE 'UTC' AS date))
+               AND ((rx.{{QbRegionException.kind}} = 'PUBLICATION'
+                     AND rx.{{QbRegionException.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text))
+                    OR (rx.{{QbRegionException.kind}} = 'SPONSOR'
+                        AND rx.{{QbRegionException.sponsorId}} = c.{{QbPublicationCard.publisherId}})))) AS regionBlocked
 FROM {{QbPublicationCard}} c
 JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
 JOIN {{QbPublicationStartCounter}} s

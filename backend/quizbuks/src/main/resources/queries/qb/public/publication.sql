@@ -6,13 +6,16 @@ description: >-
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
-entities: [QbPublicationCard, QbSponsor, QbSponsorPage]
+entities: [QbRegionException, QbPublicationCard, QbSponsor, QbSponsorPage]
 datasets:
+  QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:public:QbPublicationCard
   QbSponsor: urn:jabiz:dataset:public:QbSponsor
   QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
 params:
   publicationId: { like: QbPublicationCard.publicationId, required: true, description: The publication }
+  mainlandChina: { kind: { type: bool }, description: "F-S11: whether the visitor's address is in mainland China, as GET /api/client/region said" }
+  at: { kind: { type: temporal, role: EVENT_TIME }, description: "F-S11: the visitor's now (rounded to the minute), for the exceptions' last day" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
   name:           { from: QbPublicationCard.name }
@@ -34,6 +37,7 @@ results:
   videoDurationSec: { from: QbPublicationCard.videoDurationSec }
   sponsorCompany: { from: QbSponsor.company }
   sponsorHandle:  { from: QbSponsorPage.handle }
+  regionBlocked:  { kind: { type: bool } }
 list:
   key: [publicationId]
 ---*/
@@ -63,7 +67,20 @@ SELECT
     c.{{QbPublicationCard.videoDurationSec}} AS videoDurationSec,
     sp.{{QbSponsor.company}}              AS sponsorCompany,
     -- Q60a: the sponsor's published page, which the sponsor's name links to.
-    pg.{{QbSponsorPage.handle}}           AS sponsorHandle
+    pg.{{QbSponsorPage.handle}}           AS sponsorHandle,
+    -- F-S11: the visitor's page passes whether its address is in mainland China (GET /api/client/region): the result
+    -- depends on the parameters only, never on the address, so the shared cache serves it like any other. A publication with
+    -- a foreign video, or none recorded yet, is not for mainland China unless an exception of headquarters is in force on
+    -- the day of :at (without :at, only one with no last day counts). The start checks the address itself.
+    (CAST(:mainlandChina AS boolean) IS TRUE AND coalesce(c.{{QbPublicationCard.foreignVideo}}, true)
+         AND NOT EXISTS (
+             SELECT 1 FROM {{QbRegionException}} rx
+             WHERE (rx.{{QbRegionException.expiresOn}} IS NULL
+                    OR rx.{{QbRegionException.expiresOn}} >= CAST(CAST(:at AS timestamptz) AT TIME ZONE 'UTC' AS date))
+               AND ((rx.{{QbRegionException.kind}} = 'PUBLICATION'
+                     AND rx.{{QbRegionException.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text))
+                    OR (rx.{{QbRegionException.kind}} = 'SPONSOR'
+                        AND rx.{{QbRegionException.sponsorId}} = c.{{QbPublicationCard.publisherId}})))) AS regionBlocked
 FROM {{QbPublicationCard}} c
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
 LEFT JOIN {{QbSponsorPage}} pg ON pg.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}

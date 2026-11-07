@@ -301,6 +301,9 @@ class SetupIT extends QbItSupport {
         // F-C1: the asset library's limits (ordinary parameters).
         expected.putAll(Map.of(QbParams.ASSETS_MAX_COUNT, "1000", QbParams.ASSETS_MAX_TAGS, "10",
             QbParams.ASSETS_TAG_LENGTH, "30"));
+        // F-S11: unknown addresses count as mainland China; the sites mainland China plays (controlled).
+        expected.put(QbParams.REGION_UNKNOWN_IP_COUNTRY, "CN");
+        expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // Q13a: bank top-ups' range, and the receiving account empty until finance sets it with four eyes.
         expected.put(QbParams.TOPUP_BANK_MIN, "1000");
         // Q86: the understanding quizzes are offered; no platform tree until an official account is named.

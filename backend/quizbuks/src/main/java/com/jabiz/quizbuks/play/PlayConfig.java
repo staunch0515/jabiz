@@ -151,8 +151,9 @@ public class PlayConfig {
 
     @Bean
     ProcessDefinition<AttemptProcesses.PublicationRef, AttemptProcesses.StartOutput, ProcessContext>
-        qbAttemptStart(com.jabiz.integrity.IntegrityKey integrityKey) {
-        return AttemptProcesses.start(OptionShuffle.of(integrityKey), QuestionPick.of(integrityKey));
+        qbAttemptStart(com.jabiz.integrity.IntegrityKey integrityKey,
+        com.jabiz.quizbuks.region.RegionRefusals refusals) {
+        return AttemptProcesses.start(OptionShuffle.of(integrityKey), QuestionPick.of(integrityKey), refusals);
     }
 
     @Bean

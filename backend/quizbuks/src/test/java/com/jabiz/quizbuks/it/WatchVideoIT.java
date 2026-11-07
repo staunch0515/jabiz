@@ -28,6 +28,17 @@ class WatchVideoIT extends PlayItSupport {
     private static final String WATCH = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
     private static final String PLAYER = "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ";
 
+    /**
+     * F-S11: these requests come from no address (unknown to the address database), which counts as mainland China by
+     * default and would refuse every start of a YouTube video; here unknown counts as Japan (ForeignVideoIT tests the
+     * rule).
+     */
+    @org.junit.jupiter.api.BeforeEach
+    void fromJapan() {
+        run("PARAM_SET", admin(), body("key", com.jabiz.quizbuks.setup.QbParams.REGION_UNKNOWN_IP_COUNTRY,
+            "value", "JP"));
+    }
+
     @AfterEach
     void onlyInserted() {
         assertNothingUpdated();

@@ -48,7 +48,7 @@ When you sign in or sign up with Google, Apple, Facebook or LINE, we receive fro
 - Only if you turn on push notifications on a device: the address its push service gives for it and the keys that encrypt the notifications for it, kept with that device's session; deleted when you turn them off, sign out on that device or delete your account
 - Records of operations in the Service: when, by whom and which operation. Secret values such as passwords are not recorded.
 
-We do not collect your location (GPS or similar) or estimate it from your IP address. We use no third-party behavioural analytics. The website, the Takers' app in a browser and the Sponsor app show ads served by Google (Google AdSense; see sections 5 and 7); the store apps show none.
+We do not collect your location (GPS or similar). To decide what content can be shown (quizzes with a video that cannot be played in mainland China are not offered to visits from mainland China), we determine your region by your IP address: our own server looks up the country or region in a local IP address database; the result is used for that one request only, is not stored, and your IP address is not sent to anyone. The IP address database uses data from DB-IP (https://db-ip.com), licensed under CC BY 4.0. We use no third-party behavioural analytics. The website, the Takers' app in a browser and the Sponsor app show ads served by Google (Google AdSense; see sections 5 and 7); the store apps show none.
 When you scan a code in a shop with the app's "Scan", the camera's picture is used on your device only to read the code, and is neither stored nor sent (the service only opens its own page the code links to).
 
 ### 2.4 Information businesses publish

@@ -40,6 +40,9 @@ services:
     volumes:
       - files:/var/lib/jabiz/files
       - secrets:/var/lib/jabiz/secrets
+      # F-S11: the IP address database (operations.md §7.22), put here by the operator every month; the .env names it
+      # (JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz).
+      - geoip:/var/lib/jabiz/geoip
     networks: [proxy, db]
     # The shared server keeps every application's logs: bounded here, whatever the daemon's defaults.
     logging:
@@ -54,6 +57,8 @@ volumes:
   # The image's secrets folder: no platform key or administrator password is generated on a server (the start is
   # refused instead); the platform's entrypoint keeps only the demo application's placeholder key here.
   secrets:
+  # F-S11: the IP address database (not backed up: downloaded again).
+  geoip:
 
 networks:
   proxy:
