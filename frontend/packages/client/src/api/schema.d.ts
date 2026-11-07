@@ -1428,6 +1428,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/files/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["fetch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/files/{fileId}": {
         parameters: {
             query?: never;
@@ -2586,6 +2602,9 @@ export interface components {
             lastFailureTime?: string;
             /** Format: date-time */
             retryAt?: string;
+        };
+        FetchRequest: {
+            url?: string;
         };
         FileInfo: {
             contentType?: string;
@@ -5821,6 +5840,32 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["PartEvent"][];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileInfo"];
+                };
+            };
+        };
+    };
+    fetch: {
+        parameters: {
+            query: {
+                policy: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FetchRequest"];
             };
         };
         responses: {

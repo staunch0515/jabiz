@@ -5164,6 +5164,24 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **17zq 状态**：📝 待评审（分支 `1.3/phase-17zq-file-uploader-index`）。
 
+### 17zr 服务器下载链接中的图片（2026-11-07，QuizBuks 首次上线 P6 / F-C6；决策 D75）
+
+**缘由**：商家导入内容时给出插图的链接，确认页逐张列出能否使用，能用的由服务器取来、成为商家上传的文件；批量生成内容的外部作业也要按链接取图。业务代码不能自己联网（D38），
+`ExternalService` 只通向声明的白名单主机，而按用户给出的地址由服务器发请求是 SSRF 的典型入口（本机、内网、云的元数据服务）。评审否决了在业务流程事务中下载的第一版（占连接池与锁）。
+
+| # | 内容 |
+|---|---|
+| 17zr-1 | core：`PublicAddresses.isPublic(InetAddress)`（纯计算：IPv4 排除 IANA 特殊用途段，IPv6 只承认 2000::/3 并排除 2001::/23、2001:db8::/32、3fff::/20，映射 / 兼容 / 6to4 / NAT64 按所含 IPv4 判断）；`RemoteImageLink`（只有 https、无用户信息、允许的端口、常规写法的主机，国际化域名转 ASCII，`shown()` 去掉查询）；`RemoteImages`（作业处理器的同步下载接口与 `Refused`）；注解 `@MaskedLink`；错误码 `FILE_FETCH_NOT_HTTPS` / `_LINK_INVALID` / `_ADDRESS_NOT_PUBLIC` / `_TOO_MANY_REDIRECTS` / `_TOO_LARGE` / `_NOT_IMAGE` / `_TIMEOUT` / `_FAILED`（`reason`），三语 |
+| 17zr-2 | runtime：`POST /api/files/fetch?policy=…`（`FileController`，正文 `{url}`，201 `FileInfo`）与 `RemoteImageService`：上传权限、策略接受图片、链接、限流、每人与本实例的同时下载名额，在事务之外下载（`RemoteImageFetcher`：每跳解析一次、全部地址须公网、连接已解析的地址并以主机名做 SNI 与证书校验、客户端解析器只接受已检查的地址、手动跟随至多 `max-redirects` 次重定向并逐跳重新检查与计入其主机的限流、固定请求头、不复用不重试不经代理、响应头上限、超时与整体时限、边收边计数、被包装的网络错误也只给 `reason`），再经 `FileUploadService.storeFetched`（只收图片）与上传的同一登记 `FILE_REGISTER` |
+| 17zr-3 | 外部作业：`ExternalJobContext.remoteImages().fetch(url, maxBytes)`（执行器的虚拟线程上阻塞、不占连接，按请求人限流，等名额至时限；在非阻塞线程上即拒绝），处理器以输出文件返回，D50 的流水线登记 |
+| 17zr-4 | 配置 `jabiz.files.fetch.max-redirects`（3）/ `connect-timeout`（5 s）/ `read-timeout`（20 s）/ `deadline`（60 s）/ `allowed-ports`（443）/ `max-concurrent`（16，超过 503 `PROCESS_BUSY`）/ `max-concurrent-per-user`（2，超过 429），启动检查 `RemoteFetchChecks`（`FILE`）；测试接缝 `RemoteFetchNetwork`（只由测试配置以 `@Primary` 替换） |
+| 17zr-5 | 限流：`jabiz.process.rate-limits.FILE_FETCH`（限流键，不是流程）新增 `per-host`（只用于它），`ProcessRateLimits.checkFetch` / `checkFetchHost` 按人、主机（每一跳）、实例计数，平台缺省 30 / 60 / 300 每分钟；`ProcessAdmissionChecks` 相应检查 |
+| 17zr-6 | 记录与观测：链接不进 `FILE_REGISTER` 的记录；`SensitiveDataMasker` 按 `@MaskedLink` 的名字把流程输入中的链接写成 `https://主机/路径?…`；观测 `jabiz.file.fetch` 只带 `outcome` |
+| 17zr-7 | 前端：OpenAPI 快照与生成的类型；`@jabiz/client` 的 `fetchFileFromLink(policy, url)`（与 `uploadFile` 同处）及其测试。示范：没有专门的示范流程，`RemoteImageFetchIT` 以商品图（取得文件再经数据视图写进 `imageFileId`）与测试中的外部作业示范两个入口 |
+| 17zr-8 | 测试：core `PublicAddressesTest`、`RemoteImageLinkTest`；runtime `RemoteImageFetcherTest`、`RemoteFetchChecksTest`、`ProcessRateLimitsTest`、`ProcessAdmissionChecksTest`、`SensitiveDataMaskerTest`；app `RemoteImageFetchIT`（测试夹具 `HttpsStubServer`：本机 HTTPS 桩服务，`keytool` 现场生成证书；成功路径与 EXIF/GPS 去除、http 与端口、私网 / 元数据 / 各种写法的地址、重定向到私网 / http / 其他端口 / 过多、重定向计入其主机的限流、DNS 重绑定（第二次解析到私网时未连接私网桩）、证书主机名、非图片、超大（有无长度、分块、到连接关闭）、超时与整体时限、请求头、权限、按主机限流、每人 429 与本实例 503、下载期间连接池没有多借连接、观测标签、记录中没有链接、外部作业的下载与登记、示范的商品图）；前端 `files.test.ts`；设计 14 §12、06 §2.3、10 §15.10、13、决策 D75、根 `CLAUDE.md` |
+
+**17zr 状态**：✅ 已合并（#490）。
+
 ### 17zs 管理员手动补跑定时任务（2026-11-07，QuizBuks 首次上线；决策 D77）
 
 **缘由**：定时任务只在 cron 的时刻运行（D14）：停机期间错过的时刻不补跑，单流程任务失败的时刻就此错过，逐项任务失败的项要等下一次运行（D42）。QuizBuks 首次上线时运维要在修好数据或外部服务恢复后让某个过去的计划时刻再跑一次，只能改 cron 或重启。

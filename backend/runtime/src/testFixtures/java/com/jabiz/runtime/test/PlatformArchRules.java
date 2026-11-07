@@ -135,6 +135,22 @@ public final class PlatformArchRules {
             .because("external services are used through com.jabiz.external.ExternalServices only (decision D38)");
     }
 
+    /**
+     * Business code does not use the platform's downloader of link images directly ({@code RemoteImageService},
+     * {@code RemoteImageFetcher}): links are fetched only through {@code POST /api/files/fetch} or an external job's
+     * {@code remoteImages()}, so a download never runs inside a business transaction, is always checked against the
+     * requester's upload permission and counted for the right person (decision D75).
+     *
+     * @param businessPackages the application's packages, ArchUnit style ({@code com.example.app..})
+     */
+    public static ArchRule noRemoteImageInternals(String... businessPackages) {
+        return noClasses().that().resideInAnyPackage(businessPackages)
+            .should().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.file.RemoteImageService")
+            .orShould().dependOnClassesThat().haveFullyQualifiedName("com.jabiz.runtime.file.RemoteImageFetcher")
+            .because("links are fetched only through POST /api/files/fetch or an external job's remoteImages() "
+                + "(decision D75)");
+    }
+
     /** Database access: JDBC, R2DBC, Spring's data access, and the platform's storage, queries and entity manager. */
     static final List<String> DATABASE_PACKAGES = List.of("java.sql..", "javax.sql..", "io.r2dbc..",
         "org.springframework.r2dbc..", "org.springframework.jdbc..", "org.springframework.data..",

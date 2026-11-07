@@ -41,19 +41,27 @@ public record ProcessRateLimitProperties(Map<String, Limit> rateLimits) {
      * @param perVisitor  per visitor key within the tenant (the query parameter the proxy names, decision D60): app
      *                    proxy processes only; the key is the visitor's own and proves nothing, so it only spreads the
      *                    tenant's allowance
+     * @param perHost     per host of the link fetched (decision D75): {@code FILE_FETCH} only, which counts its own
+     *                    calls ({@link ProcessRateLimits#checkFetch})
      */
     public record Limit(Integer perUser, Integer perAddress, Integer perInstance, Duration period, Integer perTenant,
-        Integer perVisitor) {
+        Integer perVisitor, Integer perHost) {
 
-        // Bound through this constructor: the record has another one, so the binder must be told.
+        // Bound through this constructor: the record has others, so the binder must be told.
         @ConstructorBinding
         public Limit {
             period = period == null ? DEFAULT_PERIOD : period;
         }
 
+        /** A limit of the process API or an app proxy. */
+        public Limit(Integer perUser, Integer perAddress, Integer perInstance, Duration period, Integer perTenant,
+            Integer perVisitor) {
+            this(perUser, perAddress, perInstance, period, perTenant, perVisitor, null);
+        }
+
         /** A limit of the process API: per actor, address and instance. */
         public Limit(Integer perUser, Integer perAddress, Integer perInstance, Duration period) {
-            this(perUser, perAddress, perInstance, period, null, null);
+            this(perUser, perAddress, perInstance, period, null, null, null);
         }
     }
 }
