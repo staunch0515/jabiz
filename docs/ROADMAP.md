@@ -5027,3 +5027,13 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zg-3 | 文档：17 §2、根 `CLAUDE.md` §8 |
 
 **17zg 状态**：📝 待评审（分支 `1.3/phase-17zg-ci-scope`）。
+
+### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
+
+**缘由**：`ubuntu-latest` 已是 Ubuntu 26.04，Playwright 1.56 在其上装不了 Chromium（"does not support chromium on ubuntu26.04-x64"），平台的 `e2e` 作业在跑测试之前即失败。
+
+| # | 内容 |
+|---|---|
+| 17zm | `ci.yml` 的 `e2e` 作业 `runs-on: ubuntu-24.04`（只有它装 Playwright）；升级到支持 26.04 的 Playwright 后改回 `ubuntu-latest` |
+
+**17zm 状态**：📝 待评审（分支 `1.3/phase-17zm-ci-ubuntu-24`）。
