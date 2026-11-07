@@ -51,6 +51,19 @@ describe('TasksPage', () => {
     await expectAccessible()
   })
 
+  it('searches the titles and picks approvals or the other tasks (the list template, phase 17zj)', async () => {
+    answer.value = { isLoading: false, data: { total: 2, tasks: TASKS } }
+    show()
+    await userEvent.click(screen.getByRole('radio', { name: 'Other tasks' }))
+    expect(screen.queryByTestId('task-t1')).toBeNull()
+    expect(screen.getByTestId('task-t2')).toBeTruthy()
+    await userEvent.click(screen.getByRole('radio', { name: 'All' }))
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search tasks' }), 'journal')
+    expect(screen.getByTestId('task-t1')).toBeTruthy()
+    expect(screen.queryByTestId('task-t2')).toBeNull()
+    await expectAccessible()
+  })
+
   it('says when there is nothing to do', () => {
     answer.value = { isLoading: false, data: { total: 0, tasks: [] } }
     show()

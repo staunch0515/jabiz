@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { OidcButtons, type OidcProvider } from './OidcButtons'
 import { AUTH_LINK_CLASS, AuthError, AuthField, AuthFrame, AuthLink, AuthSubmit, Outcome, type AuthNavigation } from './frame'
 import { NewPasswordFields, ResendVerification, type NewPassword } from './MailLinkPage'
+import { EntryTabs, useRetryWait } from './entry'
 import { AUTH_NAMESPACE } from './messages'
 import { failure, passwordProblems } from './problems'
 
@@ -28,6 +29,13 @@ export interface SignUpFormProps extends AuthNavigation {
   /** The sign-in page, as a path of this frontend; no link when absent. */
   signInPath?: string
   /**
+   * Signing in and signing up as two tabs of one page (phase 17zk, suggestion ④), in place of the link to signing in:
+   * needs `signInPath`. This page's own path (`signUpPath`) may be given; the address bar's otherwise.
+   */
+  tabs?: boolean
+  /** This page's path, for its tab. */
+  signUpPath?: string
+  /**
    * The application's own fields between the password and the button (say, consent to its terms), registered on the
    * form: a field whose rule fails stops the sign-up. They are not sent; `onSubmitted` receives them.
    */
@@ -43,7 +51,7 @@ export interface SignUpFormProps extends AuthNavigation {
   oidc?: {
     /** Where to go once signed in (kept across the round trip; only paths of this site). */
     returnTo: string
-    layout?: 'buttons' | 'icons'
+    layout?: 'buttons' | 'icons' | 'responsive'
     /** The providers when the caller has them; loaded otherwise. */
     providers?: readonly OidcProvider[]
     /** Starts the round trip; `startProviderSignIn` of `@jabiz/client` by default. */
@@ -59,7 +67,7 @@ export interface SignUpFormProps extends AuthNavigation {
  * refused, so the form then always says to look in the mailbox ({@link SignUpSent}); the mail says what happened.
  */
 export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, submit = registerAccount, oidc, note, onNavigate,
-  hrefOf }: SignUpFormProps) {
+  hrefOf, tabs: withTabs, signUpPath }: SignUpFormProps) {
   const { t, i18n } = useTranslation(AUTH_NAMESPACE)
   const languageId = useId()
   const [sent, setSent] = useState<string | null>(null)
@@ -76,15 +84,19 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
   })
   const locale = useWatch({ control: form.control, name: 'locale' })
   const navigation = { onNavigate, hrefOf }
+  const { seconds: wait, hold, message: waitMessage } = useRetryWait(t('account.failed'))
+  const tabs = withTabs && signInPath
+    ? <EntryTabs current="signUp" signInPath={signInPath} signUpPath={signUpPath} {...navigation} /> : undefined
 
   if (sent !== null) {
-    return <SignUpSent brand={brand} appearance={appearance} email={sent} signInPath={signInPath} {...navigation} />
+    return <SignUpSent brand={brand} appearance={appearance} email={sent} signInPath={signInPath} tabs={tabs} {...navigation} />
   }
 
   const errors = form.formState.errors
   return (
-    <AuthFrame brand={brand} appearance={appearance} title={t('signUp.title')} testId="sign-up">
-      {error && <AuthError message={error} testId="sign-up-error" />}
+    <AuthFrame brand={brand} appearance={appearance} title={t('signUp.title')} testId="sign-up" tabs={tabs}
+      showOtherEntry>
+      {(error ?? waitMessage) && <AuthError message={(error ?? waitMessage)!} testId="sign-up-error" />}
       <form
         noValidate
         className="flex flex-col gap-4"
@@ -105,6 +117,8 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
             setSent(email)
           } catch (e) {
             if (passwordProblems(e).length > 0) setFieldError(passwordProblems(e).join(' '))
+            // Too many requests: said while the button waits as long as the server asks, gone after (gap 5).
+            else if (hold(e)) setError(null)
             else setError(failure(e, t('account.failed')))
           }
         })}
@@ -142,16 +156,16 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
           </div>
         )}
         {extra?.(form)}
-        <AuthSubmit busy={form.formState.isSubmitting}>{t('signUp.submit')}</AuthSubmit>
+        <AuthSubmit busy={form.formState.isSubmitting} wait={wait}>{t('signUp.submit')}</AuthSubmit>
       </form>
-      {signInPath && (
+      {signInPath && !tabs && (
         <AuthLink to={signInPath} {...navigation} className={AUTH_LINK_CLASS} data-testid="sign-in-link">
           {t('signUp.haveAccount')}
         </AuthLink>
       )}
       {oidc && (
         <OidcButtons returnTo={oidc.returnTo} providers={oidc.providers} start={oidc.start} layout={oidc.layout}
-          purpose="signUp" onError={(e) => setError(e === null ? null : t('common.error'))} />
+          purpose="signUp" onError={(e) => setError(e === null || hold(e) ? null : t('common.error'))} />
       )}
       {note && <div className="text-muted-foreground text-center text-sm" data-testid="sign-up-note">{note}</div>}
     </AuthFrame>
@@ -165,17 +179,19 @@ export interface SignUpSentProps extends AuthNavigation {
   email: string
   /** The sign-in page, as a path of this frontend; no link when absent. */
   signInPath?: string
+  /** The tabs of signing in and signing up, when the sign-up page has them (phase 17zk). */
+  tabs?: ReactNode
 }
 
 /**
  * After signing up (202): look in the mailbox. A new mail can be asked for (answered alike for every address), behind
  * "didn't get the mail?": offered at once, it was sent by people waiting for the first, whose link it used to void.
  */
-export function SignUpSent({ brand, appearance, email, signInPath, onNavigate, hrefOf }: SignUpSentProps) {
+export function SignUpSent({ brand, appearance, email, signInPath, onNavigate, hrefOf, tabs }: SignUpSentProps) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const [resending, setResending] = useState(false)
   return (
-    <AuthFrame brand={brand} appearance={appearance} title={t('signUp.title')} testId="sign-up-sent">
+    <AuthFrame brand={brand} appearance={appearance} title={t('signUp.title')} testId="sign-up-sent" tabs={tabs}>
       <Outcome ok testId="sign-up-state">
         {t('signUp.sent', { email })}
       </Outcome>

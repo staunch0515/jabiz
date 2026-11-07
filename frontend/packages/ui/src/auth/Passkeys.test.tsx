@@ -260,8 +260,8 @@ describe('Passkeys', () => {
     const { unmount } = render(<Passkeys />)
     expect(await screen.findByTestId('passkeys-unavailable')).toHaveTextContent('This browser cannot use passkeys.')
     expect(screen.queryByTestId('passkey-add')).toBeNull()
-    // Still listed: they can be removed from here.
-    expect(screen.getByTestId('passkey')).toBeInTheDocument()
+    // Still listed: they can be removed from here (the list may load after the notice).
+    expect(await screen.findByTestId('passkey')).toBeInTheDocument()
     unmount()
     const { container } = render(<Passkeys offered={false} />)
     expect(container).toBeEmptyDOMElement()

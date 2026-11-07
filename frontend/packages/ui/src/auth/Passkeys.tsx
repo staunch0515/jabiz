@@ -25,7 +25,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { cn } from '../lib/utils'
-import { AuthError, AuthFrame, ContinueTo, Outcome } from './frame'
+import { AuthError, AuthFrame, AuthLink, ContinueTo, Outcome } from './frame'
 import type { MailLinkInfo, MailLinkPageBase } from './MailLinkPage'
 import { AUTH_NAMESPACE } from './messages'
 import { PasswordInput } from './PasswordInput'
@@ -365,7 +365,8 @@ type ConfirmState = 'ready' | 'done' | 'invalid' | 'failed'
  * user's signed-in session on this device, a click adds a passkey of this device with the mail's token (the system's
  * dialog needs the click). Signed out, it says to sign in first; the link stays good until used.
  */
-export function PasskeyConfirmPanel({ link, brand, appearance }: MailLinkPageBase & { link: MailLinkInfo }) {
+export function PasskeyConfirmPanel({ link, brand, appearance, signInPath, onNavigate, hrefOf }:
+  MailLinkPageBase & { link: MailLinkInfo }) {
   const { t } = useTranslation(AUTH_NAMESPACE)
   const auth = useOptionalAuth()
   const support = passkeySupport()
@@ -409,7 +410,14 @@ export function PasskeyConfirmPanel({ link, brand, appearance }: MailLinkPageBas
       )}
       {state === 'ready' && support === 'available' && auth && !auth.ready && <Spinner />}
       {state === 'ready' && support === 'available' && (!auth || auth.ready) && !auth?.signedIn && (
-        <Outcome ok={false} testId="passkey-confirm-state">
+        <Outcome ok={false} testId="passkey-confirm-state" next={signInPath ? (
+          // The way to sign in (gap 10): this frontend's sign-in page, else the entry's frontend.
+          <Button asChild size="lg" className="w-full">
+            <AuthLink to={signInPath} onNavigate={onNavigate} hrefOf={hrefOf} data-testid="passkey-confirm-sign-in">
+              {t('account.signIn')}
+            </AuthLink>
+          </Button>
+        ) : <ContinueTo path={link.appPath} label={t('account.signIn')} />}>
           <span data-state="signed-out">{t('passkeys.signInFirst')}</span>
         </Outcome>
       )}

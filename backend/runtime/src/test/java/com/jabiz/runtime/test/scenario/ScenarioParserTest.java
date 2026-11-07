@@ -210,6 +210,32 @@ class ScenarioParserTest {
     }
 
     @Test
+    void readsVerifyEmailSteps() {
+        Scenario scenario = Scenario.parse("""
+            name: Verified
+            clock: 2026-01-31T09:00:00Z
+            actor: { id: admin, permissions: ["*"] }
+            steps:
+              - process: SEC_USER_CREATE@latest
+                input: { userName: hana, email: hana@example.com }
+                save: { hana: $.userId }
+              - note: as if Hana had followed the mailed link
+                verifyEmail: "${hana}"
+            """, "scenarios/verified.yml");
+        assertThat(scenario.steps().get(1)).isEqualTo(new Scenario.VerifyEmail(2, "${hana}"));
+
+        String header = "name: X\nclock: 2026-01-01T00:00:00Z\nactor: { id: a }\nsteps:\n";
+        assertThatThrownBy(() -> Scenario.parse(header + "  - verifyEmail: { user: x }\n", "x.yml"))
+            .hasMessageContaining("x.yml").hasMessageContaining("step 1.verifyEmail must be the user's id");
+        assertThatThrownBy(() -> Scenario.parse(header + "  - verifyEmail: [x]\n", "x.yml"))
+            .hasMessageContaining("step 1.verifyEmail must be the user's id");
+        assertThatThrownBy(() -> Scenario.parse(header + "  - verifyEmail:\n", "x.yml"))
+            .hasMessageContaining("step 1.verifyEmail must be the user's id");
+        assertThatThrownBy(() -> Scenario.parse(header + "  - verifyEmail: \"${hana}\"\n    advanceClock: P1D\n",
+            "x.yml")).hasMessageContaining("exactly one").hasMessageContaining("verifyEmail");
+    }
+
+    @Test
     void unknownKeysAndMalformedStepsAreErrors() {
         String header = "name: X\nclock: 2026-01-01T00:00:00Z\nactor: { id: a }\n";
         assertThatThrownBy(() -> Scenario.parse(header + "steps:\n  - expect: { query: q, rowz: 1 }\n", "x.yml"))

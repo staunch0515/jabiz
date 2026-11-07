@@ -56,8 +56,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * mail off, or a notification the recipient turned off, the attempt is {@code SKIPPED}. Otherwise the template's
  * one-time tokens are drawn and their SHA-256 stored, the mail is rendered in the message's language with the texts in
  * effect ({@link MailTexts}: an administrator's override, else the default; decision D72) and handed to the
- * {@link NotificationSender}, and the attempt is {@code SENT}, with the version of the text it was rendered with. A
- * test mail of the texts was rendered when it was queued and is sent as it is, without tokens.
+ * {@link NotificationSender}, on the mail layout in effect ({@link MailLayouts}), and the attempt is {@code SENT}, with
+ * the versions of the text and layout it was rendered with. A test mail of the texts or layout was rendered when it
+ * was queued and is sent as it is, without tokens; no other message is (its process is checked).
  *
  * <p>Around the send, every write has a transaction of its own ({@code inNewTransaction}): the tokens are committed
  * before the mail leaves, and {@code SENT} right after the server took it. Whatever fails later (the delivery's
@@ -92,10 +93,17 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
     /** What a message is to the delivery. */
     private record Pending(String messageId, MailTemplate template, String templateName, UUID userId, String address,
         Locale locale, Map<String, Object> params, int attempt, boolean done, boolean unsubscribed, String senderKey,
-        MailRenderer.Rendered rendered) {}
+        MailRenderer.Rendered rendered, String processName) {}
+
+    /** The versions of the text and layout a mail was rendered with; null for the defaults. */
+    private static final class Versions {
+        private final AtomicReference<Integer> text = new AtomicReference<>();
+        private final AtomicReference<Integer> layout = new AtomicReference<>();
+    }
 
     private final MailTemplates templates;
     private final MailTexts texts;
+    private final MailLayouts layouts;
     private final NotificationSender sender;
     private final JwtService tokens;
     private final StorageAdapterRegistry storages;
@@ -109,7 +117,8 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
     private final SecretSealer sealer;
     private final SecureRandom random = new SecureRandom();
 
-    DeliverMail(MailTemplates templates, MailTexts texts, NotificationSender sender, JwtService tokens,
+    DeliverMail(MailTemplates templates, MailTexts texts, MailLayouts layouts, NotificationSender sender,
+        JwtService tokens,
         StorageAdapterRegistry storages, EntityIdGenerator ids, JsonMapper json, Clock clock,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, ObjectProvider<MailSenderSource> sources,
         EntityDefinitionRegistry entities, MailSenders senders, SecretSealer sealer) {
@@ -119,6 +128,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         this.sealer = sealer;
         this.templates = templates;
         this.texts = texts;
+        this.layouts = layouts;
         this.sender = sender;
         this.tokens = tokens;
         this.storages = storages;
@@ -143,13 +153,13 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                 if (pending.unsubscribed()) {
                     return skip(ctx, metadata, pending, "UNSUBSCRIBED");
                 }
-                // The version of the text the mail is rendered with, once known (decision D72 item 4).
-                AtomicReference<Integer> version = new AtomicReference<>();
-                return send(pending, version)
-                    .onErrorResume(error -> recordFailure(pending, error, version.get()).then(Mono.error(error)))
+                // The versions of the text and layout the mail is rendered with, once known (decision D72 item 4).
+                Versions versions = new Versions();
+                return send(pending, versions)
+                    .onErrorResume(error -> recordFailure(pending, error, versions).then(Mono.error(error)))
                     // The server has the mail: recorded at once and for good, whatever happens to the delivery.
                     .then(Mono.defer(() -> engine().inNewTransaction(attempt(pending, MailEntities.SENT, null,
-                        version.get()))))
+                        versions))))
                     .doOnSuccess(sent -> ctx.put(metadata.outcomeKey(), MailEntities.SENT));
             });
         });
@@ -159,6 +169,8 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         return engine().select("""
                 SELECT m.template, m.user_id, m.address, m.locale, m.params, m.sender_key,
                        m.rendered_subject, m.rendered_text, m.rendered_html,
+                       (SELECT p.process_name FROM op_process p WHERE p.process_seq_id = m.process_seq_id)
+                           AS process_name,
                        (SELECT count(*) FROM sys_mail_attempt a WHERE a.message_id = m.message_id) AS attempts,
                        EXISTS (SELECT 1 FROM sys_mail_attempt a WHERE a.message_id = m.message_id
                                AND a.outcome IN ('SENT', 'SKIPPED')) AS done,
@@ -182,12 +194,12 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                     json.readValue(Rows.string(row.get("params")), PARAMS),
                     Math.toIntExact(Rows.longValue(row.get("attempts"))) + 1,
                     Boolean.TRUE.equals(row.get("done")), Boolean.TRUE.equals(row.get("unsubscribed")),
-                    Rows.string(row.get("sender_key")), rendered);
+                    Rows.string(row.get("sender_key")), rendered, Rows.string(row.get("process_name")));
             });
     }
 
     private Mono<Void> skip(ProcessContext ctx, Metadata metadata, Pending pending, String reason) {
-        return attempt(pending, MailEntities.SKIPPED, reason, null)
+        return attempt(pending, MailEntities.SKIPPED, reason, new Versions())
             .doOnSuccess(skipped -> ctx.put(metadata.outcomeKey(), MailEntities.SKIPPED));
     }
 
@@ -195,10 +207,16 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
      * Draws the tokens, commits their hashes, renders with the texts in effect and sends; a message rendered when it
      * was queued (a test mail of the texts, decision D72) is sent as it is, without tokens.
      *
-     * @param version receives the version of the text used (null: the default)
+     * @param versions receive the versions of the text and layout used (null: the defaults)
      */
-    private Mono<Void> send(Pending pending, AtomicReference<Integer> version) {
+    private Mono<Void> send(Pending pending, Versions versions) {
         if (pending.rendered() != null) {
+            // Only the platform's test mail is rendered when queued (17zh-a review, F6b): any other message with
+            // rendered parts is refused, so that no process can send HTML of its own through the platform.
+            if (!QueueTestMail.PROCESSES.contains(pending.processName())) {
+                return Mono.error(new IllegalStateException("Mail message " + pending.messageId() + " was rendered "
+                    + "by " + pending.processName() + "; only a test mail of the mail texts is sent as rendered"));
+            }
             MailRenderer.Rendered mail = pending.rendered();
             MailMessage message = new MailMessage(pending.address(), mail.subject(), mail.text(), mail.html(),
                 List.of());
@@ -216,8 +234,10 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         Mono<byte[]> drawn = purposes.isEmpty() ? Mono.just(new byte[0])
             : SingleUseSecrets.randomBytes(random, TOKEN_BYTES * purposes.size());
         Mono<MailTexts.Text> effective = texts.effective(template, pending.locale())
-            .doOnNext(text -> version.set(text.versionNo()));
-        return effective.zipWith(drawn).flatMap(found -> {
+            .doOnNext(text -> versions.text.set(text.versionNo()));
+        Mono<MailLayouts.Chosen> layout = layouts.effective(pending.locale())
+            .doOnNext(chosen -> versions.layout.set(chosen.versionNo()));
+        return Mono.zip(effective, drawn, layout).flatMap(found -> {
             MailTexts.Text text = found.getT1();
             byte[] bytes = found.getT2();
             Instant issued = now();
@@ -246,7 +266,8 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                     template.tokens().get(purpose)));
             }
             Arrays.fill(bytes, (byte) 0);
-            MailRenderer.Rendered mail = texts.render(template, text.subject(), text.body(), values);
+            MailRenderer.Rendered mail = layouts.wrap(texts.render(template, text.subject(), text.body(), values),
+                found.getT3().layout());
             MailMessage message = new MailMessage(pending.address(), mail.subject(), mail.text(), mail.html(),
                 List.of());
             Mono<Boolean> delivery = pending.senderKey() == null ? Mono.fromCallable(() -> {
@@ -318,8 +339,8 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         return engine().insert("sys_mail_token", row);
     }
 
-    /** The attempt, timed when it is written (after the send, for {@code SENT}), with the text's version used. */
-    private Mono<Void> attempt(Pending pending, String outcome, String detail, Integer textVersionNo) {
+    /** The attempt, timed when it is written (after the send, for {@code SENT}), with the versions used. */
+    private Mono<Void> attempt(Pending pending, String outcome, String detail, Versions versions) {
         return Mono.defer(() -> {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("message_id", pending.messageId());
@@ -328,19 +349,20 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
             row.put("outcome", outcome);
             row.put("detail", detail);
             row.put("attempted_time", now());
-            row.put("text_version_no", textVersionNo);
+            row.put("text_version_no", versions.text.get());
+            row.put("layout_version_no", versions.layout.get());
             return engine().insert("sys_mail_attempt", row);
         });
     }
 
     /** In a transaction of its own: the delivery's rolls back. */
-    private Mono<Void> recordFailure(Pending pending, Throwable error, Integer textVersionNo) {
+    private Mono<Void> recordFailure(Pending pending, Throwable error, Versions versions) {
         log.warn("Mail message {} could not be sent (attempt {}): {}", pending.messageId(), pending.attempt(),
             error.toString());
         String text = error.getClass().getName() + (error.getMessage() == null ? "" : ": " + error.getMessage());
         StorageEngine engine = engine();
         return engine.inNewTransaction(attempt(pending, MailEntities.FAILED,
-                text.length() > MAX_DETAIL ? text.substring(0, MAX_DETAIL) : text, textVersionNo))
+                text.length() > MAX_DETAIL ? text.substring(0, MAX_DETAIL) : text, versions))
             // A concurrent delivery recorded this attempt number already: one row is enough.
             .onErrorResume(UniqueKeyViolationException.class, duplicate -> Mono.empty());
     }

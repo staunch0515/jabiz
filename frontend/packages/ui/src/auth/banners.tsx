@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog'
 import { cn } from '../lib/utils'
+import type { EntryNotice } from './entry'
 import { AUTH_NAMESPACE } from './messages'
 
 export interface VerifyEmailBannerProps {
@@ -172,4 +173,21 @@ export function PwaUpdatePrompt({ className, ...given }: PwaUpdatePromptProps) {
       </AlertDescription>
     </Alert>
   )
+}
+
+/**
+ * The platform's notices of an entry page (phase 17zk), for `EntryLayoutProvider`'s `notices`: offline or the service
+ * not answering (a dialog over the page), and — for a PWA — a new version; each active only while it shows something, each with its one line
+ * for a phone. The application adds its own (say, "open this in your browser" inside another app's browser).
+ */
+export function useEntryNotices({ update = true }: { update?: boolean } = {}): EntryNotice[] {
+  const { t } = useTranslation(AUTH_NAMESPACE)
+  const online = useOnline()
+  const waiting = useServiceWorkerUpdate()
+  // The service not answering is a dialog over the page (it takes no place among the notices): only offline counts.
+  const notices: EntryNotice[] = [
+    { key: 'offline', content: <OfflineBanner />, summary: t('entry.offlineSummary'), active: !online },
+  ]
+  if (update) notices.push({ key: 'update', content: <PwaUpdatePrompt />, summary: t('banner.update'), active: !!waiting })
+  return notices
 }

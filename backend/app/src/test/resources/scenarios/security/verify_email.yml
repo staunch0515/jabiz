@@ -1,0 +1,39 @@
+# A verified address in replay (ROADMAP phase 17zp; docs/design/07-quality.md section 3.1). A user created by an
+# administrator has an unverified address, and only the mailed link verifies it, which a replay cannot follow. The
+# replay-only step verifyEmail writes what following the link writes (the address as verifiedEmail, the time as
+# emailVerifiedAt), through the platform's write path. The customer portal requires a verified address (decision D36
+# item 3): Hana's sign-in there is refused before and succeeds after.
+name: Verifying a user's address in replay
+clock: 2026-05-01T00:00:00Z
+actor: { id: shop-admin, permissions: ["*"], mfa: true }
+steps:
+  - note: The portal accepts the CUSTOMER role; roles are data.
+    process: ADD_ENTITY@latest
+    input: { entityType: SecRole, attributes: { roleCode: CUSTOMER, labels: { en: Customer }, enabled: true } }
+    save: { customerRole: $.id }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: hana, displayName: Hana, email: hana@example.com, password: correct horse battery }
+    save: { hana: $.userId }
+  - process: ADD_ENTITY@latest
+    input: { entityType: SecUserRole, attributes: { userId: "${hana}", roleId: "${customerRole}" } }
+
+  - note: Her address is not verified yet, so the portal refuses her.
+    process: SPONSOR_SIGN_IN@latest
+    input: { userName: hana, password: correct horse battery, source: { entry: portal } }
+    expectOutput: { outcome: EMAIL_NOT_VERIFIED }
+
+  - advanceClock: PT1H
+  - note: As if Hana had followed the mailed verification link.
+    verifyEmail: "${hana}"
+  - expect:
+      entity: SecUser
+      id: "${hana}"
+      fields: { verifiedEmail: hana@example.com, emailVerifiedAt: 2026-05-01T01:00:00Z, version: 2 }
+
+  - note: Now the portal lets her in.
+    process: SPONSOR_SIGN_IN@latest
+    input: { userName: hana, password: correct horse battery, source: { entry: portal } }
+    expectOutput: { outcome: SUCCESS, entry: portal, emailVerified: true, roles: [CUSTOMER] }
+snapshot:
+  entities: [SecUser, SecUserRole]
+  asOf: end

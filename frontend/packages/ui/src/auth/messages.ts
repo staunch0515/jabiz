@@ -15,6 +15,18 @@ const en = {
     // The name of the button that shows a password field's text (phase 17p); it avoids the word "password", so that
     // locating the field by its name ("Password") does not also find the button.
     showTyped: 'Show typed characters',
+    // The held button after "too many requests" (429 with Retry-After, phase 17zk).
+    retryIn: 'Try again in {{seconds}} s',
+  },
+  entry: {
+    about: 'About this application',
+    links: 'Help and legal',
+    tabs: 'Sign in or sign up',
+    signInTab: 'Sign in',
+    signUpTab: 'Sign up',
+    goThere: 'Go there',
+    emailLink: 'Sign in with a link by mail (no password)',
+    offlineSummary: 'You are offline.',
   },
   login: {
     forgotPassword: 'Forgot your password?',
@@ -366,7 +378,20 @@ const en = {
 type Messages = typeof en
 
 const zh: Messages = {
-  common: { language: '语言', error: '出错了', loading: '加载中…', security: '安全设置', showTyped: '显示输入的字符' },
+  common: {
+    language: '语言', error: '出错了', loading: '加载中…', security: '安全设置', showTyped: '显示输入的字符',
+    retryIn: '{{seconds}} 秒后可以再试',
+  },
+  entry: {
+    about: '关于本应用',
+    links: '帮助与条款',
+    tabs: '登录或注册',
+    signInTab: '登录',
+    signUpTab: '注册',
+    goThere: '去那边',
+    emailLink: '用邮件链接登录（不用密码）',
+    offlineSummary: '您已离线。',
+  },
   login: {
     forgotPassword: '忘记密码？',
     signUp: '注册账号',
@@ -715,7 +740,20 @@ const zh: Messages = {
 }
 
 const ja: Messages = {
-  common: { language: '言語', error: 'エラーが発生しました', loading: '読み込み中…', security: 'セキュリティ', showTyped: '入力した文字を表示' },
+  common: {
+    language: '言語', error: 'エラーが発生しました', loading: '読み込み中…', security: 'セキュリティ', showTyped: '入力した文字を表示',
+    retryIn: '{{seconds}} 秒後に再試行できます',
+  },
+  entry: {
+    about: 'このアプリについて',
+    links: 'ヘルプと規約',
+    tabs: 'ログインまたは新規登録',
+    signInTab: 'ログイン',
+    signUpTab: '新規登録',
+    goThere: 'こちらへ',
+    emailLink: 'メールのリンクでログイン（パスワード不要）',
+    offlineSummary: 'オフラインです。',
+  },
   login: {
     forgotPassword: 'パスワードをお忘れですか？',
     signUp: 'アカウントを作成',

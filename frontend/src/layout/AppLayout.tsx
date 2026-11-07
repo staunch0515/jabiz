@@ -29,6 +29,8 @@ import {
   Languages,
   ListChecks,
   LogOut,
+  Mail,
+  PanelTop,
   MonitorSmartphone,
   ScrollText,
   ShieldCheck,
@@ -129,6 +131,13 @@ export default function AppLayout() {
     // Retention, legal holds and the export (docs/design/21-audit-retention.md sections 3 and 4).
     ...(['retention.read', 'legal.hold.read', 'legal.hold.write', 'data.export'].some((p) => can(p))
       ? [{ key: 'retention', label: t('nav.retention'), path: '/retention', icon: Archive }]
+      : []),
+    // The texts of the mail the system sends and the layout they share (18 section 5.6; decision D72).
+    ...(can('mail.text.read')
+      ? [
+          { key: 'mail-texts', label: t('nav.mailTexts'), path: '/mail/texts', icon: Mail },
+          { key: 'mail-layout', label: t('nav.mailLayout'), path: '/mail/layout', icon: PanelTop },
+        ]
       : []),
     { key: 'data', label: t('nav.datasets'), path: '/data', icon: Database },
     { key: 'processes', label: t('nav.processes'), path: '/processes', icon: Workflow },
