@@ -24,8 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * QuizBuks's sealed fields (docs/quizbuks/plans/impl/F-F14-sealed-fields.md, platform decision D78): this context
  * runs with a new seal key and the tests' key as the retired one. A mail server password and a Shopify discount code
  * sealed under the retired key, each for the context its process seals it for, are stored again under the current key
- * by the job {@code jabiz.key-rotation} and still open; nothing is left over. A shop's tokens are not declared yet
- * (ShopifySealedFields): they stay under the retired key and still open with the address their row keeps.
+ * by the job {@code jabiz.key-rotation} and still open; nothing is left over. So are a shop's access and refresh
+ * tokens, two sealed fields on one row (platform 17zz4 writes them in one update), for the address their row keeps.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
     "jabiz.security.seal.key=bmV4dC1zZWFsLWtleS1vZi10aGUtcXVpemJ1a3Mta2V5LXJvdGF0aW9uLTAwMDAw",
@@ -120,12 +120,15 @@ class SealedFieldsRotationIT extends QbItSupport {
         assertThat(SealedSecrets.keyIdOf(column(codeOf, code))).isEqualTo(sealer.keyId());
         assertThat(sealer.open(column(codeOf, code), domain)).isEqualTo("QB-SAVE-10-XYZ");
         for (String sql : new String[] {accessOf, refreshOf}) {
-            assertThat(SealedSecrets.keyIdOf(column(sql, shop))).as("not declared yet").isEqualTo(OLD_SEALER.keyId());
+            assertThat(SealedSecrets.keyIdOf(column(sql, shop))).isEqualTo(sealer.keyId());
         }
         assertThat(sealer.open(column(accessOf, shop), domain)).isEqualTo("shpat_access");
         assertThat(sealer.open(column(refreshOf, shop), domain)).isEqualTo("shprt_refresh");
         // Through the write path: the ordinary tables' versions moved on.
         assertThat(query("SELECT version FROM qbs_discount_code WHERE code_id = ?", code).getFirst().get("version"))
+            .isEqualTo(2L);
+        // Both tokens in one update: one version step for the row.
+        assertThat(query("SELECT version FROM qbs_shop_token WHERE shop_id = ?", shop).getFirst().get("version"))
             .isEqualTo(2L);
 
         // Nothing is left under the retired key: a later run finds nothing.

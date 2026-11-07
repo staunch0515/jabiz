@@ -8,8 +8,8 @@
 | # | 实体（表） | 字段 | 密封时的上下文 | 声明 |
 |---|---|---|---|---|
 | 1 | `QbSponsorMailServer`（`qb_sponsor_mail_server`） | `sealedPassword` | `MailServerProcesses.set`：`SPONSOR_ID`（发起方编号或 `prospect:<所有者>`），同一个值存为 `sponsorId` | `SealedField.of(…, "sealedPassword", "sponsorId")`，`mailserver.MailServerSealedFields` |
-| 6 | `QbsShopToken`（`qbs_shop_token`） | `sealedAccessToken` | `ConnectionProcesses.shopDomain`：**店铺**行（`QbsShop`）的 `shopDomain` | 令牌行原来只有 `shopId`；V82 加列 `shop_domain`（字段 `shopDomain`，不可变、可为空），`QBS_SHOP_CONNECT` 插入时写入。**声明暂缓**：见"平台的缺口" |
-| 7 | `QbsShopToken` | `sealedRefreshToken` | 同上 | 同上 |
+| 6 | `QbsShopToken`（`qbs_shop_token`） | `sealedAccessToken` | `ConnectionProcesses.shopDomain`：**店铺**行（`QbsShop`）的 `shopDomain` | 令牌行原来只有 `shopId`；V82 加列 `shop_domain`（字段 `shopDomain`，不可变、可为空），`QBS_SHOP_CONNECT` 插入时写入；`SealedField.of(QbsShops.TOKEN, "sealedAccessToken", "shopDomain")`（平台 17zz4 合入后声明，见下） |
+| 7 | `QbsShopToken` | `sealedRefreshToken` | 同上 | 同上（`"sealedRefreshToken"`） |
 | 8 | `QbsDiscountCode`（`qbs_discount_code`） | `sealedCode` | `DiscountPool.CallShopify`：`domain(ctx)`，同一个值存为 `shopDomain` | `SealedField.of(…, "sealedCode", "shopDomain")`，`shopify.ShopifySealedFields`；字段由 `immutable` 改为可改（仍 `sensitive`，仍只由流程写：数据视图 `processOnlyWrites`） |
 
 四处都有数据视图、都是 `sensitive`。`sensitive` 与 `processOnly` 不能同时声明（平台元模型拒绝），所以 #8 只去掉 `immutable`。
@@ -34,17 +34,16 @@
   `StoreUnderCurrentKey` 把它计为 `unreadable`、记日志、原样留在旧密钥下；撤下旧密钥后它们解不开，`ConnectionProcesses.access` 把解不开当作"需要重新连接"。
   Shopify 不在首次上线中，这样的行只在测试库里：**更换 `JABIZ_SEAL_KEY` 之前先重置测试库，或重新连接店铺**（写在 `launch-checklist.md`"测试环境"）。
 
-## 平台的缺口（声明 #6、#7 暂缓）
+## 平台的缺口（已由平台 17zz4 修复）
 
-声明了令牌的两个字段后，`SealedFieldsRotationIT` 中的轮换任务整批失败：`Optimistic lock conflict on QbsShopToken …: expected version [1], stored version [2]`。
-平台的 `StoreUnderCurrentKey` 对每个声明的字段各发一个 `update`，都带读到的同一个版本；同一行有两个密封字段时第二个更新冲突，整批回滚（其他实体的值也不重新加密）。
-在应用分支上不能改平台；声明照旧写好但先不启用（`ShopifySealedFields` 的注释），等平台把同一行的几个字段合成一次更新（并加一个两个字段在同一行的测试）后启用两行声明，
-并把 `SealedFieldsRotationIT` 中令牌的断言改为"已在当前密钥下、仍能打开"。
+最初声明令牌的两个字段后，轮换任务整批失败：`Optimistic lock conflict on QbsShopToken …: expected version [1], stored version [2]`——
+平台的 `StoreUnderCurrentKey` 对每个字段各发一个按同一版本的 `update`，同一行有两个密封字段时第二个冲突。报告总控转 S1，
+平台 17zz4（同步 #518）改为同一行的几个字段一次更新；合入后两行声明启用，`SealedFieldsRotationIT` 断言令牌已在当前密钥下、仍能打开，且令牌行只多一个版本。
 
 ## 测试（补充）
 
-- `SealedFieldsRotationIT`：另写入一个店铺及其令牌（带地址），轮换后令牌仍在旧密钥下（未声明）。
+- `SealedFieldsRotationIT`：另写入一个店铺及其令牌（带地址），轮换后两个令牌都在当前密钥下、以地址能打开，令牌行版本 +1（一次更新）。
 - `ShopifyIT`：连接后令牌行的 `shop_domain` 是店铺地址，访问令牌以它解开即 Shopify 给的令牌。
-- 令牌的数据视图 `maxWriteBatchSize` 改为 10000（与邮件服务器同理，供以后的声明）。
+- 令牌的数据视图 `maxWriteBatchSize` 改为 10000（与邮件服务器同理）。
 
 删除的功能：无。
