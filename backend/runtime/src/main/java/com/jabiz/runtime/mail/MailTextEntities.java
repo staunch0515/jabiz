@@ -27,8 +27,6 @@ public class MailTextEntities {
     public static final String SUBJECT = "subject";
     public static final String BODY = "body";
     public static final String DEFAULT_HASH = "defaultHash";
-    /** Whether the version publishes a controlled change another administrator approved. */
-    public static final String APPROVED = "approved";
 
     /** Kinds of a version. */
     public static final String CUSTOM = "CUSTOM";
@@ -48,9 +46,6 @@ public class MailTextEntities {
         eb.field(SUBJECT, f -> f.physicalColumn("subject").asText(null, false));
         eb.field(BODY, f -> f.physicalColumn("body").asText(null, true));
         eb.field(DEFAULT_HASH, f -> f.physicalColumn("default_hash").required(true).asText(64));
-        // A template that came to need approval after its text was saved sends the default until a change of it is
-        // approved (the delivery checks it; MailTextGuard lets only an approved publication set it).
-        eb.field(APPROVED, f -> f.physicalColumn("approved").required(true).asBool());
         eb.unique("uk_sys_mail_text", TEMPLATE, LOCALE);
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

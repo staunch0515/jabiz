@@ -31,6 +31,8 @@ ALTER TABLE sys_mail_attempt ADD COLUMN layout_version_no integer;
 ALTER TABLE sys_notification ADD COLUMN layout_version_no integer;
 ALTER TABLE sys_document_delivery ADD COLUMN layout_version_no integer;
 
--- Whether a version of a mail text was published by another administrator's approval (a controlled change): a text
--- whose template has come to need approval since it was saved is no longer sent without it (17zh-a review, F5).
-ALTER TABLE sys_mail_text_version ADD COLUMN approved boolean NOT NULL DEFAULT false;
+-- One instance per language, and per template and language: the unique keys of MailLayout and MailText are checked by
+-- the platform before it writes, and these indexes refuse a second instance two concurrent first writes would create
+-- (only one can be version 1).
+CREATE UNIQUE INDEX sys_mail_layout_version_one_idx ON sys_mail_layout_version (locale, version_no);
+CREATE UNIQUE INDEX sys_mail_text_version_one_idx ON sys_mail_text_version (template, locale, version_no);

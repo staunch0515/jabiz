@@ -142,6 +142,9 @@ class MailLayoutControlTarget implements ControlTarget {
             string(given, MailLayoutEntities.LOGO_URL), string(given, MailLayoutEntities.LOGO_ALT),
             string(given, MailLayoutEntities.FOOTER));
         layouts.problems(layout).forEach(ctx::reject);
+        layouts.unknownEntries(layout).forEach(entry -> ctx.reject(new Violation(MailLayoutEntities.FOOTER,
+            PlatformErrorCodes.MAIL_TEXT_UNKNOWN_PLACEHOLDER, "The footer names the sign-in entry " + entry
+            + ", which is not configured", Map.of("placeholder", "entryUrl." + entry))));
         if (layout.equals(layouts.defaults(Locale.of(language)))) {
             ctx.reject(invalid("the layout is the default; MAIL_LAYOUT_RESET returns to it"));
         }

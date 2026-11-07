@@ -217,6 +217,11 @@ class MailLayoutIT extends SecurityItSupport {
             "https://tracker.example.net/p.gif", "[x](https://evil.example) [s]({unsubscribeUrl})"), 422)))
             .containsExactlyInAnyOrder("MAIL_LAYOUT_LOGO", "MAIL_TEXT_LINK_HOST", "MAIL_TEXT_UNKNOWN_PLACEHOLDER");
 
+        // A footer naming an entry that is not configured would link wrongly on every mail.
+        assertThat(violations(run("CONTROL_CHANGE_PROPOSE", proposer(), proposal("ja", "Shop", "",
+            "[x]({entryUrl.nowhere}x)"), 422))).extracting(violation -> violation.get("params"))
+            .anySatisfy(params -> assertThat(params.toString()).contains("entryUrl.nowhere"));
+
         String changeId = (String) output(run("CONTROL_CHANGE_PROPOSE", proposer(), proposal("ja", "ショップ",
             "{baseUrl}/brand/logo.png", "株式会社ショップ · [ヘルプ]({baseUrl}/help)"), 200)).get("changeId");
         assertThat(query("SELECT target_key FROM sys_control_change_version WHERE change_id::text = ? LIMIT 1",

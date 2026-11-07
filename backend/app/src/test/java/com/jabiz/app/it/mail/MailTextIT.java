@@ -369,13 +369,15 @@ class MailTextIT extends SecurityItSupport {
     @Test
     void anOverrideSavedBeforeItsTemplateNeededApprovalIsNotSent() {
         // As if the text had been saved by MAIL_TEXT_SAVE when the template had no token yet (17zh-a review, F5):
-        // a version not marked approved, of a template that needs approval now.
+        // a version written by a process other than a controlled change's publication, of a template that needs
+        // approval now.
         execute("INSERT INTO entity_registry (entity_id, entity_type, created_seq_id)"
             + " SELECT '0193f000-0000-7000-8000-00000000f501', 'MailText', max(process_seq_id) FROM op_process");
         execute("INSERT INTO sys_mail_text_version (mail_text_id, version_no, effect_start_time, created_time,"
-            + " process_seq_id, template, locale, text_kind, subject, body, default_hash, approved)"
+            + " process_seq_id, template, locale, text_kind, subject, body, default_hash)"
             + " SELECT '0193f000-0000-7000-8000-00000000f501', 1, now(), now(), max(process_seq_id), 'it.reset', 'zh',"
-            + " 'CUSTOM', 'Unapproved', '[Go]({baseUrl}/r?t={reset})', 'x', false FROM op_process");
+            + " 'CUSTOM', 'Unapproved', '[Go]({baseUrl}/r?t={reset})', 'x' FROM op_process"
+            + " WHERE process_name <> 'CONTROL_CHANGE_PUBLISH'");
         Recorder.FALLBACKS.clear();
         String address = address("unapproved");
         send("reset", user(address, "zh"), "x");
@@ -388,10 +390,6 @@ class MailTextIT extends SecurityItSupport {
             .flatMap(check -> check.check().stream())
             .filter(problem -> problem.location().equals("mail text it.reset [zh]")))
             .singleElement().satisfies(problem -> assertThat(problem.message()).contains("without the approval"));
-        // Only an approved publication marks a version approved: the processes' grant for a save does not.
-        save("it.offers", "zh", "N {item}", "N {item} [s]({unsubscribeUrl})", null, 200);
-        assertThat(query("SELECT approved FROM sys_mail_text_version WHERE template = 'it.offers' AND locale = 'zh'"))
-            .extracting(row -> row.get("approved")).containsExactly(false);
     }
 
     @Test

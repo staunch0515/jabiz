@@ -1,5 +1,6 @@
 package com.jabiz.runtime.document;
 
+import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.mail.MailRenderer;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
@@ -35,8 +36,11 @@ class SendDocuments implements StepHandler<NoMetadata, ProcessContext> {
     private final NotificationSender sender;
     private final Clock clock;
     private final MailLayouts layouts;
+    private final MessageCatalog messages;
 
-    SendDocuments(DocumentDeliveries deliveries, NotificationSender sender, Clock clock, MailLayouts layouts) {
+    SendDocuments(DocumentDeliveries deliveries, NotificationSender sender, Clock clock, MailLayouts layouts,
+        MessageCatalog messages) {
+        this.messages = messages;
         this.deliveries = deliveries;
         this.sender = sender;
         this.clock = clock;
@@ -66,8 +70,10 @@ class SendDocuments implements StepHandler<NoMetadata, ProcessContext> {
                     return Mono.just(true);
                 }
                 int attempt = out.attempts() + 1;
-                // On the layout recorded with the delivery (decision D72 item 4): the version, or the default.
-                return layouts.recorded(Locale.forLanguageTag(out.language()), out.mailLayoutVersionNo())
+                // On the layout recorded with the delivery (decision D72 item 4): the version, or the default, of the
+                // language it was recorded in (the document's, or the application's nearest to it).
+                Locale language = messages.supported(Locale.forLanguageTag(out.language()));
+                return layouts.recorded(language, out.mailLayoutVersionNo())
                     .map(chosen -> layouts.wrap(MailRenderer.plain(out.subject(), out.body()), chosen.layout()))
                     .flatMap(mail -> Mono.fromCallable(() -> {
                         if (!Documents.sha256(out.pdf()).equals(out.pdfHash())) {

@@ -69,8 +69,10 @@ class SendNotifications<C extends ProcessContext> implements StepHandler<SendNot
         return Mono.defer(() -> {
             List<String> ids = ctx.contains(metadata.idsKey()) ? (List<String>) ctx.get(metadata.idsKey()) : List.of();
             StorageEngine engine = storages.getEngine(poolRef);
+            // The notifications of one task share the layout version recorded with them: looked up once.
+            Map<Integer, Mono<MailLayouts.Chosen>> chosen = new java.util.concurrent.ConcurrentHashMap<>();
             return Flux.fromIterable(ids)
-                .concatMap(id -> send(engine, id))
+                .concatMap(id -> send(engine, id, chosen))
                 .filter(sent -> !sent)
                 .count()
                 .flatMap(failed -> failed == 0 ? Mono.<Void>empty()
@@ -79,7 +81,7 @@ class SendNotifications<C extends ProcessContext> implements StepHandler<SendNot
     }
 
     /** Sends one notification unless an earlier attempt did; whether it is sent now. */
-    private Mono<Boolean> send(StorageEngine engine, String id) {
+    private Mono<Boolean> send(StorageEngine engine, String id, Map<Integer, Mono<MailLayouts.Chosen>> chosen) {
         return engine.select("SELECT n.address, n.subject, n.body, n.layout_version_no,"
                     + " (SELECT count(*) FROM sys_notification_attempt a WHERE a.notification_id = n.notification_id)"
                     + " AS attempts,"
@@ -95,10 +97,11 @@ class SendNotifications<C extends ProcessContext> implements StepHandler<SendNot
                 Object layoutVersion = row.get("layout_version_no");
                 // On the layout recorded with the notification (decision D72 item 4), in the language it was
                 // rendered in; an empty error text is a message the server accepted.
-                return layouts.recorded(messages.defaultLocale(),
-                        layoutVersion == null ? null : ((Number) layoutVersion).intValue())
-                    .map(chosen -> layouts.wrap(MailRenderer.plain((String) row.get("subject"),
-                        (String) row.get("body")), chosen.layout()))
+                Integer version = layoutVersion == null ? null : ((Number) layoutVersion).intValue();
+                return chosen.computeIfAbsent(version == null ? -1 : version,
+                        key -> layouts.recorded(messages.defaultLocale(), version).cache())
+                    .map(layout -> layouts.wrap(MailRenderer.plain((String) row.get("subject"),
+                        (String) row.get("body")), layout.layout()))
                     .flatMap(mail -> Mono.fromCallable(() -> {
                         sender.send(new MailMessage((String) row.get("address"), mail.subject(), mail.text(),
                             mail.html(), List.of()));

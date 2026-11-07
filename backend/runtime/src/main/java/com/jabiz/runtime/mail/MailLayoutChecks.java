@@ -7,7 +7,6 @@ import com.jabiz.mail.MailPlaceholders;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
-import com.jabiz.runtime.security.SignInEntries;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.Environment;
@@ -23,9 +22,10 @@ import java.util.TreeMap;
 /**
  * Startup checks of category {@value MailChecks#CATEGORY} for the mail layout (decision D72; 17zh-b):
  * <ul>
- *   <li>an error for a default layout ({@code jabiz.mail.layout.<language>.*}) that fails the {@link MailLayoutRules}
- *       or whose footer names an entry ({@code {entryUrl.<entry>}}) that is not configured: configuration, so the
- *       application must not start with it;</li>
+ *   <li>an error for a default layout ({@code jabiz.mail.layout.<language>.*}) that fails the {@link MailLayoutRules},
+ *       whose footer names an entry ({@code {entryUrl.<entry>}}) that is not configured, or that has a logo or uses
+ *       {@code {baseUrl}} while mail is on without {@code jabiz.mail.base-url}: configuration, so the application must not start with
+ *       it;</li>
  *   <li>a warning for a default layout of a language the application does not have (a misspelt key, or a language
  *       the application left out with {@code languages(…)}): it is not used;</li>
  *   <li>a warning for a stored layout that no longer passes the rules (the allowed hosts were narrowed since): mail
@@ -40,14 +40,11 @@ class MailLayoutChecks implements PlatformCheck {
 
     private final MailLayouts layouts;
     private final MessageCatalog messages;
-    private final SignInEntries entries;
     private final Environment environment;
 
-    MailLayoutChecks(MailLayouts layouts, MessageCatalog messages, SignInEntries entries,
-        Environment environment) {
+    MailLayoutChecks(MailLayouts layouts, MessageCatalog messages, Environment environment) {
         this.layouts = layouts;
         this.messages = messages;
-        this.entries = entries;
         this.environment = environment;
     }
 
@@ -59,11 +56,14 @@ class MailLayoutChecks implements PlatformCheck {
             String location = MailLayouts.PREFIX + locale.getLanguage();
             MailLayoutRules.describe(layouts.problems(defaults)).forEach(problem -> problems.add(
                 CheckProblem.error(MailChecks.CATEGORY, location, "the default mail layout " + problem)));
-            MailPlaceholders.of(defaults.footer()).stream().filter(MailTemplate::namedEntryUrl)
-                .map(MailTemplate::entryOf).filter(entry -> entries.find(entry)
-                    .filter(found -> found.name().equals(entry)).isEmpty())
-                .forEach(entry -> problems.add(CheckProblem.error(MailChecks.CATEGORY, location + ".footer",
-                    "names the sign-in entry " + entry + ", which is not configured (jabiz.security.entries)")));
+            layouts.unknownEntries(defaults).forEach(entry -> problems.add(CheckProblem.error(MailChecks.CATEGORY,
+                location + ".footer", "names the sign-in entry " + entry + ", which is not configured "
+                + "(jabiz.security.entries)")));
+            if (layouts.missingBaseUrl() && (!defaults.logoUrl().isBlank()
+                || MailPlaceholders.of(defaults.footer()).contains(MailTemplate.BASE_URL))) {
+                problems.add(CheckProblem.error(MailChecks.CATEGORY, location, "the default mail layout has a logo or "
+                    + "uses {baseUrl}, which need jabiz.mail.base-url: mail clients cannot load a relative address"));
+            }
         }
         for (String language : configuredLanguages()) {
             if (messages.supportedLocales().stream().noneMatch(locale -> locale.getLanguage().equals(language))) {

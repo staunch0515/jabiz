@@ -454,14 +454,14 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
   `jabiz.mail.text.fallback`（标签 `template`）。`sys_mail_attempt.text_version_no` 记下所用版本（空 = 缺省）。业务流程的语句数不变（`StatementBudgetIT`）。
 - 测试发送的消息：`sys_mail_message.rendered_subject|text|html` 有值，投递原样发出，不取令牌、不再渲染；投递只对 `MAIL_TEXT_TEST_SEND` / `MAIL_LAYOUT_TEST_SEND`
   记录的消息这样做（查 `op_process.process_name`），其他流程写了 `rendered_*` 的消息记 `FAILED`、从不发出（17zh-b，17zh-a 安全审查 F6b）。
-- 每个版本记 `approved`（只有受控变更的发布写 `true`，`MailTextGuard` 拒绝其他写入设它）：模版后来才声明令牌、登录链接或 `t.protectedText()` 时，
+- 版本是否经审批由写它的流程判定（`CONTROL_CHANGE_PUBLISH` 写的即经审批，`MailTextGuard` 只让受控变更的发布给须审批的模版写覆盖；不另设列，已有的版本照样判定）：模版后来才声明令牌、登录链接或 `t.protectedText()` 时，
   此前经 `MAIL_TEXT_SAVE` 存的覆盖不再发出（按缺省、告警、观测 `jabiz.mail.text.fallback`），列表状态 `UNAPPROVED`，启动检查告警（17zh-b，F5）。
 
 **信纸**（17zh-b，决策 D72）：所有邮件共用、按语言的页眉（显示名、可选的标志与替代文字）与页脚（Markdown）。首期不设颜色（以后再加，连同对比度检查）。
 
 - 缺省值来自应用配置 `jabiz.mail.layout.<语言>.display-name|logo-url|logo-alt|footer`（未配置即空：与没有信纸时相同）；示范 `app` 三种语言都给了。
   覆盖存于平台实体 `MailLayout`（`sys_mail_layout_version`，时态、只追加；键为语言；`kind` 为 `CUSTOM` / `DEFAULT`，记所据缺省的哈希 `defaultHash`），
-  `MailLayoutGuard` 拒绝受控变更的发布与 `MAIL_LAYOUT_RESET` 以外的一切写入。
+  `MailLayoutGuard` 拒绝受控变更的发布与 `MAIL_LAYOUT_RESET` 以外的一切写入；页脚点名的入口在提出与发布时也须存在。
 - 规则：core 的 `MailLayoutRules`：显示名与替代文字各一行、不超过 200 字（`MAIL_LAYOUT_LINE`）；标志只能是 `{baseUrl}/…` 或以单个 `/` 开头的本站路径
   （如 `/api/public/files/…`），不含其他占位符、空白与反斜杠（`MAIL_LAYOUT_LOGO`，不做外部图片，也就没有追踪像素），有标志即须有替代文字（`MAIL_LAYOUT_LOGO_ALT`）；
   页脚不超过 `jabiz.mail.layout.max-footer-length`（2000），只能用 `{baseUrl}` 与 `{entryUrl.<入口>}`（令牌、登录链接、退订链接属于各封邮件，`MAIL_TEXT_UNKNOWN_PLACEHOLDER`），
@@ -480,7 +480,7 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
 - 发信：模版邮件在投递时取当前信纸（`MailLayouts`），`sys_mail_attempt.layout_version_no` 记下版本（空 = 缺省）；待办通知与单据邮件在记录时取当前信纸并记下版本
   （`sys_notification` / `sys_document_delivery.layout_version_no`），提交后发送时按所记的版本（版本只追加，取得的总是同一份），并发出纯文本与 HTML 两部分。
   存的信纸不再合格（如允许的主机收窄了）即按缺省发出、WARN 日志与观测 `jabiz.mail.layout.fallback`（标签 `locale`），启动检查告警；
-  缺省值（配置）不合格或页脚的入口不存在，启动检查 `MAIL` 报错；为应用没有的语言配置的信纸告警（不用）。
+  缺省值（配置）不合格、页脚的入口不存在，或开启邮件而未配置 `jabiz.mail.base-url` 时用了标志或 `{baseUrl}`，启动检查 `MAIL` 报错；为应用没有的语言配置的信纸告警（不用）。
 
 | 表（`V31__mail.sql`；17zh-a 为 `V60__mail_texts.sql`） | 性质 |
 |---|---|
@@ -490,8 +490,8 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
 | `sys_mail_token` | 只追加；主键 `token_hash`（SHA-256），`issue_seq` 定先后 |
 | `sys_mail_token_use` | 只追加；主键 `token_hash` |
 | `sec_user_mail_preference_version` | 时态，平台实体 `SecUserMailPreference`，唯一（用户, 模板） |
-| `sys_mail_text_version` | 时态（17zh-a），平台实体 `MailText`，唯一（模版, 语言）；`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 加列 `text_version_no`，`sys_mail_message` 加列 `rendered_*`；17zh-b 加列 `approved` |
-| `sys_mail_layout_version` | 时态（17zh-b，`V61__mail_layouts.sql`），平台实体 `MailLayout`，唯一（语言）；`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 加列 `layout_version_no` |
+| `sys_mail_text_version` | 时态（17zh-a），平台实体 `MailText`，唯一（模版, 语言）；`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 加列 `text_version_no`，`sys_mail_message` 加列 `rendered_*` |
+| `sys_mail_layout_version` | 时态（17zh-b，`V61__mail_layouts.sql`），平台实体 `MailLayout`，唯一（语言）；`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 加列 `layout_version_no`；唯一索引（语言, 版本）与文字的（模版, 语言, 版本）挡住并发的两个首次写入 |
 
 示范：`backend/app` 的 `ORDER_SHIP` 给客户主数据 `Customer`（管理员维护，可选 `userId`）中有账号且有地址的客户发 NOTIFICATION `commerce.order-shipped`（三语）——收件人来自主数据，不来自下单输入；场景
 `commerce/order_shipped_mail`。测试：core `MailTemplateTest`、`MailRendererTest`、`MailTextRulesTest`（17zh-a）、`MailLayoutRulesTest`（17zh-b）；runtime `MailChecksTest`、`MailSenderTimeoutsTest`、`JwtServiceTest`；app `MailIT`、`MailDisabledIT`、`MailPreferencesIT`（16s）、`MailTextIT`（17zh-a）、`MailLayoutIT`（17zh-b）；前端 `MailUnsubscribePage.test`、`mail.test`（client）、`MailPreferences.test`（ui，含 axe）、`AccountSecurityPage.test`。

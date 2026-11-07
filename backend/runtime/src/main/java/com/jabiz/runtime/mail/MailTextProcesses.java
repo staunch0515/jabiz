@@ -136,7 +136,6 @@ public class MailTextProcesses {
                 row.put(MailTextEntities.SUBJECT, input.subject());
                 row.put(MailTextEntities.BODY, input.body());
                 row.put(MailTextEntities.DEFAULT_HASH, texts.defaultHash(template, locale));
-                row.put(MailTextEntities.APPROVED, false);
                 ctx.put(OUTPUT, write(ctx, template, locale, current, row, MailTextEntities.CUSTOM));
             }));
     }
@@ -251,7 +250,6 @@ public class MailTextProcesses {
         row.put(MailTextEntities.SUBJECT, null);
         row.put(MailTextEntities.BODY, null);
         row.put(MailTextEntities.DEFAULT_HASH, texts.defaultHash(template, locale));
-        row.put(MailTextEntities.APPROVED, false);
         return write(ctx, template, locale, current, row, MailTextEntities.DEFAULT);
     }
 

@@ -193,6 +193,21 @@ public class MailLayouts {
         return MailRenderer.wrap(mail, layout, values);
     }
 
+    /** The entries a layout's footer names ({@code {entryUrl.<entry>}}) that are not configured sign-in entries. */
+    public List<String> unknownEntries(MailLayout layout) {
+        return MailPlaceholders.of(layout.footer()).stream().filter(MailTemplate::namedEntryUrl)
+            .map(MailTemplate::entryOf).filter(entry -> !templates.entryExists(entry)).distinct().toList();
+    }
+
+    /**
+     * Whether mail is sent without {@code jabiz.mail.base-url}, which a logo and {@code {baseUrl}} need: with mail off
+     * nothing is sent, as the other mail checks have it.
+     */
+    public boolean missingBaseUrl() {
+        String base = templates.baseUrl();
+        return templates.enabled() && (base == null || base.isBlank());
+    }
+
     /** The hash of a language's default layout. */
     public String defaultHash(Locale locale) {
         return defaults(locale).hash();

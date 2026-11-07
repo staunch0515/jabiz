@@ -48,12 +48,6 @@ class MailTextGuard implements TemporalWriteGuard {
             && MailTextEntities.CUSTOM.equals(versions.getFirst().state().get(MailTextEntities.KIND));
         boolean needsApproval = templates.find(String.valueOf(template))
             .map(MailTemplate::textChangeNeedsApproval).orElse(true);
-        boolean markedApproved = !versions.isEmpty()
-            && Boolean.TRUE.equals(versions.getFirst().state().get(MailTextEntities.APPROVED));
-        if (markedApproved && !granted.approved()) {
-            return List.of(refused(template, "Only the publication of an approved controlled change marks a mail text"
-                + " approved"));
-        }
         if (custom && needsApproval && !granted.approved()) {
             return List.of(refused(template, "The texts of mail " + template + " change only through a controlled "
                 + "change another administrator publishes"));
