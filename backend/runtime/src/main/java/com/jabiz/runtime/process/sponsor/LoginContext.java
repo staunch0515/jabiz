@@ -197,6 +197,12 @@ public class LoginContext extends ProcessContext {
         return list(KEY_MFA).stream().filter(mfa -> Boolean.TRUE.equals(mfa.get("confirmed"))).findFirst();
     }
 
+    /** Whether the user's second factor was taken back by an approved re-enrolment of everyone (decision D78). */
+    public boolean reenrollmentRequired() {
+        return list(KEY_MFA).stream().anyMatch(mfa -> !Boolean.TRUE.equals(mfa.get("confirmed"))
+            && Boolean.TRUE.equals(mfa.get("reenrollRequired")));
+    }
+
     /** The entry's name as the session will carry it. */
     private String entryName() {
         return entry != null ? entry.name() : source.entryOrDefault();

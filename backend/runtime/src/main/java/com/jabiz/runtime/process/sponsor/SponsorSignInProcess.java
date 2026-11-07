@@ -117,7 +117,7 @@ public final class SponsorSignInProcess {
     /**
      * Whether the sign-in needs a second factor next (docs/design/10-security.md section 9): a user who has set one
      * up (TOTP, or a passkey where the entry takes passkeys) does, unless the attempt passed one already (an identity provider's, section 12); a user without one whose
-     * role requires one sets it up first.
+     * role requires one, or whose second factor an approved re-enrolment of everyone took back (D78), sets it up first.
      */
     static <I, O, C extends LoginContext> void secondFactorSteps(ProcessDefinitionBuilder<I, O, C> pb) {
         // Passkeys count where the entry takes them (decision D71 item 3): elsewhere the second step could not use them.
@@ -135,7 +135,9 @@ public final class SponsorSignInProcess {
                 }
                 if (ctx.confirmedMfa().isPresent() || !ctx.list(LoginContext.KEY_PASSKEYS).isEmpty()) {
                     ctx.setOutcome(LoginOutcome.MFA_REQUIRED);
-                } else if (ctx.access().mfaRequired()) {
+                } else if (ctx.access().mfaRequired() || ctx.reenrollmentRequired()) {
+                    // A role that requires one, or a second factor an approved re-enrolment of everyone took back
+                    // (decision D78): set up a new one first.
                     ctx.setOutcome(LoginOutcome.MFA_ENROLLMENT_REQUIRED);
                 }
             });

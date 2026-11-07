@@ -5,7 +5,7 @@
 
 | 密钥 | 保护什么 | 旧密钥变量 | 旧密钥保留多久 |
 |---|---|---|---|
-| `JABIZ_JWT_SECRET` | 访问令牌、挑战令牌、邮件中的退订链接 | `JABIZ_JWT_SECRET_PREVIOUS` | 定期轮换：90 天（退订链接不过期，保留期间旧邮件的退订仍有效）；泄露：立即撤下 |
+| `JABIZ_JWT_SECRET` | 访问令牌、挑战令牌、邮件中的退订链接 | `JABIZ_JWT_SECRET_PREVIOUS` | 定期轮换：`jabiz.security.jwt.previous-retention`（缺省 365 天，自平台首次见到它起；过期后自动不再接受，日志提示删去）；泄露：立即撤下 |
 | `JABIZ_MFA_KEY` | 用户的 TOTP 密钥（`sec_user_mfa_version.secret`） | `JABIZ_MFA_KEY_PREVIOUS` | 到任务 `jabiz.key-rotation` 找不到剩余为止 |
 | `JABIZ_SEAL_KEY` | 应用密封保存的密码与令牌（`SealedFields` 声明的字段） | `JABIZ_SEAL_KEY_PREVIOUS` | 同上 |
 | `JABIZ_INTEGRITY_KEY` | 只追加表的封存链、抹除的证据 | `JABIZ_INTEGRITY_KEY_PREVIOUS` | **永久**：旧的封存块从不重签 |
@@ -22,7 +22,7 @@
 3. 等任务 `jabiz.key-rotation`（每 10 分钟）把 MFA 与 SEAL 下的值重新加密完：管理系统"定时任务"页看它最近几次运行，输出 `mfaSecrets`、`sealedValues` 为 0、
    `more=false` 即完成；急的话在该页补跑（D77）。`unreadable` 大于 0 表示有值的上下文与声明不符（应用的 `SealedFields` 写错了，或数据被改过），
    这些值撤下旧密钥后就解不开了：先查明再继续。
-4. 完成后从环境中删去 `JABIZ_MFA_KEY_PREVIOUS`、`JABIZ_SEAL_KEY_PREVIOUS`，再滚动重启；`JABIZ_JWT_SECRET_PREVIOUS` 按上表保留期删去；
+4. 完成后从环境中删去 `JABIZ_MFA_KEY_PREVIOUS`、`JABIZ_SEAL_KEY_PREVIOUS`，再滚动重启；`JABIZ_JWT_SECRET_PREVIOUS` 在保留期过后删去（过期后平台已不再接受）；
    `JABIZ_INTEGRITY_KEY_PREVIOUS` 不删。
 5. 运行一次 `INTEGRITY_VERIFY`（或等每天的任务），确认封存链完整。
 
@@ -33,7 +33,9 @@
 - **只有密钥泄露**（例如环境变量出现在日志或截图里，数据库没有泄露）：按上节立即轮换；JWT 不保留旧密钥（撤下即让所有会话重新登录），
   MFA、SEAL 在重新加密完成后立即撤下。
 - **密钥与数据库副本一同泄露**：只追加的历史版本中仍有旧密钥加密的密文，换密钥保护不了它们。要换掉被保护的秘密本身：
-  - `JABIZ_MFA_KEY`：所有人重新绑定二次验证（旧的 TOTP 密钥作废）。
+  - `JABIZ_MFA_KEY`：所有人重新绑定二次验证（旧的 TOTP 密钥作废）：一位管理员执行 `SEC_MFA_REENROLL_ALL_REQUEST`（写明原因），
+    另一位管理员在 24 小时内执行 `SEC_MFA_REENROLL_ALL_APPROVE`；任务 `jabiz.key-rotation`（10 分钟内，或在"定时任务"页补跑）收回批准之前设定的全部二次验证、
+    结束这些用户的会话，他们下次登录时设定新的。通行密钥照常可用。
   - `JABIZ_SEAL_KEY`：应用保存的密码、令牌全部重设或重新授权（发起方的邮件服务器密码、第三方的访问令牌等），使旧密文解出的东西没有用处。
   - `JABIZ_JWT_SECRET`：立即撤下（没有存储的数据）。
   - `JABIZ_INTEGRITY_KEY`：持有者可以对以后的数据伪造封存。换密钥；旧块保留旧密钥用于校验，泄露之后才封存的块要重点核对。

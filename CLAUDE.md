@@ -207,7 +207,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   归档导出只经 `POST /api/exports/data`（CSV + `schema.json` + `manifest.json` + 报表 PDF），不另写导出。
   生成的文件与签发的单据的保留期同样以 `RetentionPolicy.of("GeneratedFile" | "DocumentRun")` 声明（只读平台实体，`audit.read`，不含内容与名称，21 §3.1）。
 - **密钥轮换**（见 `docs/guide/key-rotation.md` 与决策 D78）：四把密钥都以 `*_PREVIOUS` 让旧密钥并存（只读），MFA 与 SEAL 下的值由任务 `jabiz.key-rotation` 重新加密，
-  完成后撤下旧密钥；封存密钥的旧密钥永久保留。不自己写重新加密或"换密钥时停机重写"。
+  完成后撤下旧密钥；封存密钥的旧密钥永久保留；旧 JWT 密钥过了 `jabiz.security.jwt.previous-retention` 即不再接受。密钥与库一同泄露时，全员重新绑定二次验证只经
+  `SEC_MFA_REENROLL_ALL_REQUEST` / `_APPROVE`（另一位管理员批准）。不自己写重新加密或"换密钥时停机重写"。
 - **恢复演练**（见 13 §8）：恢复出的副本只以核对模式（`jabiz.ops.verify-restore.enabled`，平台关掉一切对外的动作）与 `tools/ops/restore-drill.sh` 核对；
   应用自己的核对写成返回 0 行即通过的模板，列在 `jabiz.ops.verify-restore.templates`，不另写核对代码或手工清单。
 - **语句数**（见 06 §3.1、03 §3.1 与决策 D46）：平台在事务中缓冲写入（插入、按版本的更新、子流程的操作记录、事件、幂等结果），插入随下一条平台查询（取锁等）或在读写其表的语句、有时限的读取、模板、

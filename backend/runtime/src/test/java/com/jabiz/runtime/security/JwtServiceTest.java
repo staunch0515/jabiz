@@ -257,4 +257,19 @@ class JwtServiceTest {
         assertThatThrownBy(() -> new JwtService(next, java.util.List.of(next), Duration.ofMinutes(15), clock))
             .hasMessageContaining("current secret");
     }
+
+    @Test
+    void aRetiredSecretIsRefusedPastItsRetention() {
+        byte[] next = "the-next-jwt-secret-of-these-tests-000002".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String old = service.issue(alice).token();
+        JwtService rotating = new JwtService(next, java.util.List.of(KEY), Duration.ofMinutes(15), clock);
+        assertThat(rotating.previousIds()).singleElement().satisfies(id -> assertThat(id).hasSize(16));
+        rotating.retireUntil(rotating.previousIds().getFirst(), clock.instant().plusSeconds(60));
+        assertThat(rotating.verify(old).actorId()).isEqualTo("alice");
+        clock.advance(Duration.ofSeconds(61));
+        // Past the retention (and still within the token's own lifetime): refused.
+        assertThatThrownBy(() -> rotating.verify(old)).isInstanceOf(JwtService.InvalidTokenException.class);
+        assertThatThrownBy(() -> rotating.retireUntil("0000000000000000", clock.instant()))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
 }
