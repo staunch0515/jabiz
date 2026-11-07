@@ -12,10 +12,10 @@
 
 | 变量 | 必需 | 来源 | 轮换 | 缺少时 |
 |---|---|---|---|---|
-| `JABIZ_JWT_SECRET` | 是 | 生成，只放密钥库 | 随时可换：已签发的访问令牌（15 分钟）失效、所有人重新登录（刷新令牌不受影响，平台 10 §15.9）。泄露时立即换 | 启动失败 |
-| `JABIZ_INTEGRITY_KEY` | 是 | 生成；**另存离线副本**（与数据库备份分开保管） | 不能随便换：已有的封存要用原密钥核验（平台 21 §2）。只在泄露时按平台的密钥轮换步骤换，并保留旧密钥 | 启动失败；丢失 = 已有封存无法核验 |
-| `JABIZ_MFA_KEY` | 是 | 生成；**另存离线副本** | 不能随便换：已绑定的 TOTP 密钥以它加密，换了全部用户要重新绑定（`SEC_MFA_RESET`） | 启动失败；丢失 = 所有人的二次验证失效 |
-| `JABIZ_SEAL_KEY` | 是（Q29） | 生成；**另存离线副本** | 不能随便换：发起方邮件服务器的密码以它密封（平台 D56），换了或丢了全部发起方要在「邮件服务器」页重新输入密码（在此之前邀请投递失败、平台自己的邮件不受影响） | 启动失败（应用声明了 `MailSenderSource`） |
+| `JABIZ_JWT_SECRET` | 是 | 生成，只放密钥库 | 可以轮换，不必重新登录（平台 D78，`docs/guide/key-rotation.md`）：旧值放进 `JABIZ_JWT_SECRET_PREVIOUS`（逗号分隔），新值设为当前值，滚动重启；旧值在保留期（`jabiz.security.jwt.previous-retention`，缺省 365 天，覆盖旧邮件中的退订链接）之后删去。泄露时立即换且不保留旧值（所有人重新登录） | 启动失败 |
+| `JABIZ_INTEGRITY_KEY` | 是 | 生成；**另存离线副本**（与数据库备份分开保管） | 可以轮换（D78）：旧值放进 `JABIZ_INTEGRITY_KEY_PREVIOUS`，**永久保留**（封存块从不重签，旧块要一直能核验）；新的封存块用新密钥。每次轮换后更新离线副本（新旧密钥都在） | 启动失败；丢失 = 已有封存无法核验 |
+| `JABIZ_MFA_KEY` | 是 | 生成；**另存离线副本** | 可以轮换（D78）：旧值放进 `JABIZ_MFA_KEY_PREVIOUS`，任务 `jabiz.key-rotation`（每 10 分钟）把 TOTP 密钥重新加密完（输出 `mfaSecrets` 为 0、`more=false`）后删去旧值并重启；用户不必重新绑定。密钥与库一同泄露时全员重新绑定（`SEC_MFA_REENROLL_ALL_REQUEST` / `_APPROVE`，见手册"泄露时"）。每次轮换后更新离线副本 | 启动失败；丢失 = 所有人的二次验证失效 |
+| `JABIZ_SEAL_KEY` | 是（Q29） | 生成；**另存离线副本** | 可以轮换（D78）：旧值放进 `JABIZ_SEAL_KEY_PREVIOUS`，任务 `jabiz.key-rotation` 把 `SealedFields` 声明的密封值（发起方邮件服务器的密码、Shopify 折扣码等，F-F14）重新加密完（`sealedValues` 为 0、`more=false`、`unreadable` 为 0）后删去旧值并重启；没有声明的密封值在撤下旧值后解不开。**丢失**（没有旧值可用）时全部发起方要在「邮件服务器」页重新输入密码（在此之前邀请投递失败、平台自己的邮件不受影响）。每次轮换后更新离线副本 | 启动失败（应用声明了 `MailSenderSource`） |
 | `JABIZ_BOOTSTRAP_ADMIN_USER` / `_PASSWORD` | 只首次启动 | 运维 | 首个管理员建好后从环境中**删去**（它只在库中没有用户时起作用） | 没有用户时无人能登录 |
 | `JABIZ_FILES_LOCAL_ROOT` | 是 | 镜像已设 `/var/lib/jabiz/files`（卷） | — | 启动失败；卷丢失 = 上传的图片、PDF 丢失（备份见 §2.3） |
 | `SPRING_R2DBC_URL` / `_USERNAME`、`SPRING_FLYWAY_URL` / `_USER`、`DB_PASSWORD`（或 `SPRING_R2DBC_PASSWORD` / `SPRING_FLYWAY_PASSWORD`） | 是 | 数据库 | 换密码：先在库中加新密码可用的窗口（`ALTER ROLE`），改环境变量、滚动重启 | 连不上库，启动失败 |
@@ -132,6 +132,10 @@
 | `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT` | 追踪（如 `http://otel-collector:4318/v1/traces`） |
 | `MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED=true`、`MANAGEMENT_OTLP_METRICS_EXPORT_URL` | 指标（`…/v1/metrics`） |
 | `MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT` | 日志 |
+| `COMPOSE_PROFILES=observability` | 启动本环境的 LGTM（`deploy/quizbuks/server/compose.yaml` 的 `lgtm`）；上面三项即 `http://lgtm:4318/v1/traces`、`…/v1/metrics`、`…/v1/logs` |
+| `JABIZ_ALERT_EMAIL`、`GF_SMTP_ENABLED=true`、`GF_SMTP_HOST`、`GF_SMTP_USER`、`GF_SMTP_PASSWORD`、`GF_SMTP_FROM_ADDRESS` | 告警的收件人（值班的人，几个以 `;` 分隔）与 Grafana 发信用的 SMTP（§5） |
+| `JABIZ_ALERT_*` 的阈值 | 缺省见 compose（平台 13 §7）；QuizBuks 的 `JABIZ_ALERT_QB_AI_HELD_MAX`（§5"AI 作业暂停"） |
+| `QB_GRAFANA_PORT` | Grafana 在服务器 `127.0.0.1` 上的端口（缺省 3000；staging 与 production 在同一台服务器上时各用一个），经 SSH 隧道访问 |
 
 遥测缺省不外发、只经 OTLP 推送；**不开放**匿名的指标端点（应用端口上的 `/actuator/metrics` 不要暴露，平台 13）。
 
@@ -157,23 +161,49 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 ### 2.3 备份与时间点恢复
 
+**配置与操作见 `deploy/quizbuks/DEPLOY.md`"备份"（pgBackRest + Cloudflare R2，WAL 归档；上传文件 restic；死人开关）。** 下面只是要求：
+
 - **连续归档 + 定期基础备份**：WAL 归档（`archive_mode on`，用 pgBackRest、WAL-G，或托管服务的时间点恢复），基础备份每天一次，保留至少 14 天的时间点恢复窗口；另按会计要求保留月末的全量备份（凭证与分录是 10 年，L-4）。
 - **一起备份的**：上传文件卷（`/var/lib/jabiz/files`：与库同一时刻的快照或每日同步）、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本（**不与备份放在一起**：拿到备份的人不应同时拿到密钥）。生成的文件（导出 CSV、收据 PDF）在库中（`sys_generated_file`、`sys_document_run`），随库备份。
 - 备份加密、异地（另一区域或账户）、只追加或带对象锁，防误删与勒索。
 - 监控：最近一次成功的基础备份与 WAL 归档的延迟（§5）。
+- **采用的做法**（需求方 2026-11-07 决定）：pgBackRest + Cloudflare R2（两个仓库：14 天时间点恢复、月末全量 10 年，都由 pgBackRest 加密），上传文件以 restic 每小时备份到同一个桶；
+  失败发邮件给值班，另可接死人开关服务。设置、首次启用、回退与恢复演练的步骤见 `deploy/quizbuks/DEPLOY.md`"备份的做法"。
 
 ### 2.4 恢复演练（每季度，上线前一次）
 
-在**隔离的环境**中做（不能连 Stripe 正式环境、不能发邮件，否则恢复出的实例会转账、发信）：
+在**隔离的环境**中做（不能连 Stripe 正式环境、不能发邮件，否则恢复出的实例会转账、发信）。第 2、3 步由平台的脚本 `tools/ops/restore-drill.sh` 完成（平台 13 §8：
+应用以核对模式启动一次，邮件、推送、定时任务、事件投递与外部作业一律关闭，只监听本机回环地址，核对完即停止，并写出演练记录）。
 
-1. 选一个时刻 T（如昨天 12:00 UTC），把备份恢复到新的 PostgreSQL 实例（时间点恢复到 T），记录用时（RTO）与 T 到最后一条 WAL 的差（RPO）。
-2. 以同一版本的镜像启动应用，指向恢复的库，并且：`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY` 用生产的值（从离线副本取）；`QB_STRIPE_LIVEMODE=false`、`STRIPE_API_KEY=sk_test_restore_drill`、两个签名密钥随机生成；
-   `JABIZ_MAIL_ENABLED=false`；关掉定时任务、事件投递与外部作业：`JABIZ_JOBS_SCHEDULER_ENABLED=false`、`JABIZ_EVENTS_DELIVERY_ENABLED=false`、`JABIZ_EXTERNALJOBS_EXECUTOR_ENABLED=false`；网络上禁止对外连接。
-   （正式数据在测试模式下启动不被拒绝；反过来"正式模式 + 测试数据"才被拒。）
-3. 核对：启动检查通过（没有 `Platform check failed`）；管理员能登录并通过二次验证（`JABIZ_MFA_KEY` 正确）；运行 `INTEGRITY_VERIFY`（封存链完整，`JABIZ_INTEGRITY_KEY` 正确）；
-   报表 `qb.admin.balances`（T 所在月）借贷平衡、各方钱包不透支，2110 合计与 `qb.admin.wallets` 的发起方余额合计相等；抽查几张收据 PDF 与上传的图片能打开（文件卷与库一致）。
-4. 与生产在 T 时的数字比较（T 之前已完成的每日核对 `qb.admin.recon-runs`、月报）。
-5. 记录在演练记录中（日期、T、RTO、RPO、问题），删除隔离环境。
+1. 选一个时刻 T（如昨天 12:00 UTC），按 `deploy/quizbuks/DEPLOY.md`"备份"中的"C. 恢复演练"把备份恢复到新的 PostgreSQL 实例（时间点恢复到 T），文件卷恢复到同一时刻；记录用时。
+   恢复命令可以交给脚本计时（`DRILL_RESTORE_COMMAND`，即 DEPLOY.md"C. 恢复演练"中的 pgBackRest 恢复命令）。
+2. 准备副本的设置文件 `DRILL_ENV_FILE`：指向恢复的库（`SPRING_R2DBC_*`、`SPRING_FLYWAY_*`）与恢复的文件目录（`JABIZ_FILES_LOCAL_ROOT`）；
+   `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY` 用生产的值（从离线副本取）；让副本远离线上服务：`QB_STRIPE_LIVEMODE=false`、
+   `STRIPE_API_KEY=sk_test_restore_drill`、两个签名密钥随机生成、`JABIZ_MAIL_ENABLED=false`（正式数据在测试模式下启动不被拒绝；反过来"正式模式 + 测试数据"才被拒）。
+   `DRILL_DOCKER_ARGS` 给出只通向恢复的库的内部网络（网络上禁止对外连接）。
+3. 以生产同版本的镜像运行脚本；**上线前的那一次加 `DRILL_ROTATE=true`**（在同一副本上演练密钥轮换：新密钥 + 生产密钥作旧密钥并重新加密到底，再以新密钥单独核对；D78，`docs/guide/key-rotation.md`）：
+
+   ```sh
+   DRILL_TARGET_TIME=2026-11-06T12:00:00Z DRILL_ENV_FILE=drill.env \
+   DRILL_IMAGE=ghcr.io/staunch0515/jabiz-quizbuks:<生产的提交> DRILL_DOCKER_ARGS="--network drill-internal" \
+   DRILL_TEMPLATES=qb.admin.verify-unbalanced-periods,qb.admin.verify-overdrawn-wallets,qb.system.recon-totals \
+   DRILL_ROTATE=true tools/ops/restore-drill.sh
+   ```
+
+   平台的核对：启动检查通过、最后的操作不晚于 T（恢复点）、`INTEGRITY_VERIFY`（`JABIZ_INTEGRITY_KEY` 正确）、每个二次验证能解开（`JABIZ_MFA_KEY` 正确）、
+   声明的密封值能解开（`JABIZ_SEAL_KEY` 正确，F-F14）、每个登记的文件都在（文件卷与库一致）。QuizBuks 自己的核对是 `DRILL_TEMPLATES` 中的模板，**只在有问题时返回行**：
+
+   | 模板 | 返回的行 |
+   |---|---|
+   | `qb.admin.verify-unbalanced-periods` | 借贷不相等的月份（按记账时间，UTC） |
+   | `qb.admin.verify-overdrawn-wallets` | 账本中余额为负的钱包（2110、2120、2130、2160 按对象） |
+   | `qb.system.recon-totals` | 2110 合计与发起方钱包余额合计之差（`TOTAL_2110`）、2160 与现金账户（`TOTAL_2160`）、账本合计不为 0（`LEDGER_ZERO`）；与每日核对的同一模板 |
+
+   脚本的退出码为 0 即全部通过；它写出的 Markdown（`restore-drill-<日期>.md`：T、恢复与核对的用时即 RTO、恢复点即 RPO、每项核对的结果）就是演练记录。
+4. 与生产在 T 时的数字比较（T 之前已完成的每日核对 `qb.admin.recon-runs`、T 所在月的 `qb.admin.balances`）：生产上以 `knownAt` = T 运行月报；
+   副本上以第 2 步的设置另加 `JABIZ_JOBS_SCHEDULER_ENABLED=false`、`JABIZ_EVENTS_DELIVERY_ENABLED=false`、`JABIZ_EXTERNALJOBS_EXECUTOR_ENABLED=false` 以普通模式启动（同样隔离）运行同一报表
+   （演练过轮换的副本用新密钥）。差异记入演练记录的"Problems and follow-ups"。
+5. 演练记录存档（日期、T、RTO、RPO、问题），删除隔离环境。
 
 ## 3. 首次启动
 
@@ -284,34 +314,41 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 ## 5. 监控与告警
 
-按 §1.5 开启 OTLP（追踪、指标、日志）到你的观测后端（如 Grafana LGTM）。平台的观测名与标签见平台设计 13（标签只有名字与结果，没有主键与操作人）。
-指标在 OTLP 中的名字随后端而定（计时器通常带 `_seconds` / `_milliseconds` 后缀与 `_count`、`_sum`、`_bucket`）。建议的告警：
+按 §1.5 开启 OTLP（追踪、指标、日志），推到本环境自己的 LGTM（`deploy/quizbuks/server/compose.yaml` 的 `lgtm`，`.env` 设 `COMPOSE_PROFILES=observability`，`DEPLOY.md`"监控与告警"）。
+平台的观测名与标签见平台设计 13（标签只有名字与结果，没有主键与操作人）；指标名在 Prometheus 中：计时器 `<名>_milliseconds_count`（点换成下划线），仪表不带后缀。
 
-| 关注点 | 指标 / 来源 | 建议告警 |
+告警规则都是文件，不在 Grafana 界面上手工建，全部经平台的联系点 `jabiz-oncall`（收件人 `JABIZ_ALERT_EMAIL`，Grafana 的 SMTP `GF_SMTP_*`）送到值班的人：
+
+- **平台的规则**：`docker/grafana/alerting/jabiz-alerts.yaml`（文件夹 `jabiz`；规则、阈值的设置与处理见平台 13 §7）。其中已有刷新令牌重用宽限的两条（F-F6，D73）、地址库的两条（P5，D74）与应用测量的磁盘用量（F-F13）。
+- **QuizBuks 的规则**：`deploy/quizbuks/alerting/quizbuks-alerts.yaml`（文件夹 `quizbuks`，只有规则组，没有联系点与路由：一个组织只有一棵路由树，另写一份会盖掉平台的）。
+  部署时与平台的文件一起上传到服务器的 `alerting/`，容器启动时由平台的 `render.sh` 填入 `$JABIZ_ALERT_*`（测试：`tools/quizbuks/test/alerts.test.sh`）。
+- **试发**：平台的 `tools/ops/alert-fire-test.sh`（只对 staging）：`rules`（规则载入且求值无误；脚本只看文件夹 `jabiz`，QuizBuks 的规则在 Grafana 的"Alerting → Alert rules"文件夹 `quizbuks` 中看健康状态）、
+  `notify`（经 `jabiz-oncall` 发一封测试告警）、`fire`（平台规则的假数据）、`disk <目录>`（把文件系统填到阈值以上）。
+
+| 关注点 | 告警（uid） | 说明 |
 |---|---|---|
-| 健康 | `/actuator/health`（只在内网探测） | 连续 3 次失败 |
-| 答题过载（准入） | `jabiz.process.admission{family="qb.pub"|"qb.pub-start", result}`；仪表 `jabiz.process.admission.waiting` / `.active` | `result` 为 `QUEUE_FULL` 或 `WAIT_TIMEOUT` 的比率 5 分钟内 > 1 %；`waiting` 持续 > 25（队列 50 的一半）；`active` 持续等于 `max-active` |
-| 提交被拒（已知的上线风险，§7.6） | `jabiz.process{process="QB_ATTEMPT_SUBMIT", status="503"}` 与 `QB_ATTEMPT_EXPIRE` 的数量 | 提交的 503 比率 > 1 %；超时结束的会话数突然上升 |
-| 每次运行的语句数 | `jabiz.process.statements{process}`（分布） | 新版本后 `QB_ATTEMPT_START` / `QB_ATTEMPT_SUBMIT` 的平均超过语句预算（`AttemptStatementBudgetIT`：开始共 10、付奖的提交共 13，指标不含 `COMMIT`，即 9 与 12；写缓冲的应急开关关时为 11 与 19）的 1.2 倍——锁内语句变多会直接降低热门发布的容量 |
-| 流程错误 | `jabiz.process{outcome="error", status!="503"}` | 任何流程 5 分钟内 > 0（错误不是业务拒绝）。`outcome="error"` 包括全部 5xx（`PlatformObservations`），其中 503 是过载而不是缺陷，这里除去：排队未获准入（`PROCESS_BUSY`）由"答题过载""提交被拒"两行告警；查询超时（`QUERY_TIMEOUT`）另以 `jabiz.process{status="503"}` 的比率告警（如 5 分钟内 > 1 %） |
-| 核对差异 | 每日核对 `qb.reconcile`：`jabiz.job.run{job="qb.reconcile"}` 的结果；差异本身在 `qb.admin.recon-runs`（`DIFF`）与待办（权限 `qb.reconcile`） | 任务 `FAILED`；核对状态 `DIFF`（用只读账号查询 `qb_recon_run_version` 最新一行的状态，或平台管理系统待办的数量）；连续 26 小时没有新的核对 |
-| 转账失败 | `jabiz.external.job{job_type="qb.stripe.transfer"|"qb.stripe.transfer-check", outcome}`；`jabiz.job.item{job="qb.transfer-run"|"qb.transfer-stale", result}` | `outcome` 为 `FAILED` / `DISCARDED` > 0；`qb.transfer-stale` 的项连续失败；处于 `CHECK` 的转账超过 2 小时（平台管理系统财务页"转账"按状态筛选） |
-| Webhook 被拒 | `jabiz.inbound.receive{provider="stripe"|"stripe-connect", result, reason}`；`jabiz.inbound.rate_limited` | `REJECTED`（`no_match` 签名不符、`too_old`、`malformed` 等）5 分钟内 > 0；`FAILED` > 0；限流 > 0。 Stripe Dashboard 的端点"失败的投递"同时会发邮件 |
-| 事件消费 | `jabiz.outbox.delivery{result="FAILED"}` | > 0 持续 15 分钟 |
-| 分录导出被拒 | `jabiz.process{process="QB_JOURNAL_EXPORT", outcome="rejected"}` | 每月导出日 > 0（看错误码，§7.3） |
-| 外部调用 | `jabiz.external.call{service="stripe", outcome}` | `5xx`、`timeout`、`refused` 比率 > 5 % |
-| AI 作业暂停（§7.8） | 量规 `jabiz.external.job.held{job_type="qb.ai.questions"|"qb.ai.cover"}`（`qb.ai.enabled` 不是 `true` 时为 1） | 不是有意关闭时（变更记录中没有关闭）为 1 超过 5 分钟：参数被删或读不出来，作业都在等待 |
-| 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
-| 站内信与公告（Q7c） | `jabiz.job.item{job="qb.broadcast-dispatch"|"qb.broadcast-expire"|"qb.broadcast-stats"|"qb.payout-reminder"|"qb.conversation-expire", result}`；`jabiz.query.template{template="qb.app.inbox-unread"}` 的耗时（徽标，每个在线用户每 5 分钟一次；目标 < 5 ms，`docs/quizbuks/perf/Q7c-inbox.md`）；`jabiz.outbox.delivery{result="FAILED"}`（消费者 `qb.msg-*`） | 定时发送的项连续失败（公告迟迟不出）；消费者失败持续 15 分钟 |
-| 平台费（Q87b，§7.18） | `jabiz.job.item{job="qb.fee-monthly"|"qb.fee-invoice"|"qb.fee-overdue", result}`；核对项 `FEES_RECEIVABLE` | 任一项 `FAILED`；核对 `DIFF` 持续两天 |
-| 发起方分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
-| 资源占用的计量（F-C2，§7.22） | `jabiz.job.run{job="qb.usage-snapshot", result}`；`jabiz.job.item{job="qb.usage-snapshot", result}`；`qb_usage_day` 的最新日期 | 运行 `FAILED` 或 `PARTIAL`（某些发起方当天缺快照）；快照时刻（缺省东京时间 03:17）之后 2 小时仍没有当天的成功运行；只读查询 `SELECT max(snapshot_day) FROM qb_usage_day` 早于部署时区的今天（当天缺少快照） |
-| 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
-| 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
-| 境外视频（F-S11，§7.24） | `jabiz.job.run{job="qb.region-check"|"qb.region-refusals"}`；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}`；待办 `qb.region-check`（权限 `qb.admin.region.read`）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频） |
-| 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
+| 健康 | 平台 `jabiz-metrics-absent`、`jabiz-platform-check-failed` | 主机另可探测 `/actuator/health`（只在内网） |
+| 答题过载（准入） | 平台 `jabiz-admission-overload` | 仪表 `jabiz.process.admission.waiting` / `.active` 只在仪表盘上看：`waiting` 持续 > 25（队列 50 的一半）、`active` 持续等于 `max-active` 时考虑扩容 |
+| 提交被拒（已知的上线风险，§7.6） | QuizBuks `qb-attempt-submit-busy`（`QB_ATTEMPT_SUBMIT` 的 503 比率 5 分钟 > 1 %） | 超时结束的会话数（`QB_ATTEMPT_EXPIRE`）在仪表盘上看 |
+| 每次运行的语句数 | 没有告警，发布新版本后看仪表盘 | `jabiz.process.statements{process}`：`QB_ATTEMPT_START` / `QB_ATTEMPT_SUBMIT` 的平均超过语句预算（`AttemptStatementBudgetIT`：开始共 10、付奖的提交共 13，指标不含 `COMMIT`，即 9 与 12；写缓冲的应急开关关时为 11 与 19）的 1.2 倍即查原因——锁内语句变多会直接降低热门发布的容量 |
+| 流程错误 | 平台 `jabiz-process-errors` | 503 以外的错误；查询超时（`QUERY_TIMEOUT`）的 503 在仪表盘上看 |
+| 核对差异（§7.2） | QuizBuks `qb-reconcile-diff`（仪表 `qb.reconcile.differences`，本实例最近一次核对的差异数）、`qb-reconcile-missing`（26 小时没有成功的核对）；平台 `jabiz-job-failed` | 差异本身在 `qb.admin.recon-runs` 与待办（权限 `qb.reconcile`）；仪表在重启后为 0，直到下一次核对 |
+| 转账失败（§7.4） | QuizBuks `qb-transfer-failed`（`qb.stripe.transfer` / `transfer-check` 的作业 `FAILED` / `DISCARDED`）；平台 `jabiz-job-item-failed`（`qb.transfer-run`、`qb.transfer-stale` 的项） | 处于 `CHECK` 超过 2 小时的转账：平台管理系统财务页"转账"按状态筛选（没有指标） |
+| Stripe（§7.1） | QuizBuks `qb-stripe-webhooks`（`stripe` / `stripe-connect` 的 Webhook 被拒或失败）、`qb-stripe-calls`（调用失败 > 5 %）；平台 `jabiz-inbound-rejected`、`jabiz-external-call-errors` | 资金相关，QuizBuks 的两条为 `page`；Stripe Dashboard 的端点"失败的投递"同时会发邮件 |
+| 事件消费 | 平台 `jabiz-outbox-failed` | |
+| 分录导出被拒（§7.3） | QuizBuks `qb-journal-export-rejected` | 看错误码 |
+| AI 作业暂停（§7.8） | QuizBuks `qb-ai-paused`（仪表 `jabiz.external.job.held{job_type=~"qb.ai.*"}`） | 缺省 `JABIZ_ALERT_QB_AI_HELD_MAX=1`：AI 有意关闭时不告警；开启 `qb.ai.enabled` 后在 `.env` 设为 `0` 并重启 LGTM，此后暂停超过 5 分钟即告警 |
+| 任务 | 平台 `jabiz-job-failed`（`FAILED` / `PARTIAL`）、`jabiz-job-locked` | 包括 `qb.analytics`、`qb.usage-snapshot`、`qb.fee-*`、`qb.broadcast-*` 等每个任务 |
+| 站内信、平台费、邮件补发 | 平台 `jabiz-job-item-failed`、`jabiz-outbox-failed` | 平台费的核对项 `FEES_RECEIVABLE` 属于 `qb-reconcile-diff`；`sys_mail_message` 中 `FAILED` 增多看发件服务商；徽标模板 `qb.app.inbox-unread` 的耗时（目标 < 5 ms，`perf/Q7c-inbox.md`）在仪表盘上看 |
+| 发起方分析（§7.7）、资源占用的计量（§7.22） | 平台 `jabiz-job-failed` | 30 分钟内没有成功的分析、当天缺少计量快照（`SELECT max(snapshot_day) FROM qb_usage_day` 早于今天）：仪表盘与只读查询 |
+| 安全 | 平台 `jabiz-refresh-reuse-granted`、`jabiz-refresh-reuse-revoked`（F-F6） | |
+| 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
+| 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
+| 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，F-F13） | 工作目录与上传文件的卷 |
+| 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
+| 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
 
-日志：结构化 JSON（`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`）；`quizbuks: WARNING`、`Platform check failed`、`Inbound webhook request of … rejected` 作为日志告警。日志与追踪中不应出现密钥、令牌与原始卡信息（平台已遮蔽；发现即视为缺陷）。
+日志：结构化 JSON（`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`）；`Platform check failed` 是平台的规则 `jabiz-platform-check-failed`（Loki）；`quizbuks: WARNING`、`Inbound webhook request of … rejected` 在 Loki 中查看（Webhook 被拒另有指标上的告警）。日志与追踪中不应出现密钥、令牌与原始卡信息（平台已遮蔽；发现即视为缺陷）。
 
 ## 6. 容量
 
@@ -656,7 +693,9 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
   3. 第一次：在环境的 `.env` 中设 `JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz`，重新部署。之后每月只做第 2 步：平台一分钟内读入新文件（日志 `Address database …: N ranges`），无需重启。
   4. 核对：用中国大陆与日本的网络（或可信代理之后的测试请求）打开 `/api/client/region`，`country` 分别为 `CN`、`JP`。
   5. **署名**（CC BY 4.0 的要求）：隐私政策写明了使用 DB-IP 的数据（第二条第3项，`docs/quizbuks/legal/`）；不要删去那一句。改用别的地址库（如 MaxMind 的 CSV 转换）时同步改隐私政策与本节。
-  - 过旧（`JABIZ_GEOIP_MAX_AGE`，缺省 45 天）或缺失：启动检查（`GEOIP`；正式模式下没有配置为 `QUIZBUKS` 错误）与每日任务 `qb.region-check`（每天 19:23 UTC）给 `qb.admin.region.read` 一个待办（每天一个，链到 `/admin/qb/region`）。处理：照第 1–2 步更新，待办在下一次检查后不再出现，旧的待办手工关闭（`task.resolve`）。
+  6. **隐私政策的新版本须重新同意**（需求方 2026-11-07）：加入"按 IP 判断所在地区"与 DB-IP 署名的隐私政策新版本，在"QuizBuks → 规约类"（`/qb/legal`，§3 第 9 步）发布时**勾选"须重新同意"**（是实质性变更，不按措辞修订处理）；三语一起换好再发布，可以填以后的生效时间作预告（建议在部署 F-S11 之前或同时生效）。
+     发布时同时勾选"在收件箱中公告"（隐私政策 → App 与发起方页面）。发布后核对：用一个已同意旧版的测试账号登录 App 与发起方页面，应要求同意新版。
+  - 过旧（`JABIZ_GEOIP_MAX_AGE`，缺省 45 天）或缺失：启动检查（`GEOIP`；正式模式下没有配置为 `QUIZBUKS` 错误）与每日任务 `qb.region-check`（每天 19:23 UTC）给 `qb.admin.region.monitor`（总部的内容管理员，运营商没有）一个待办（每天一个，链到 `/admin/qb/region`）。处理：照第 1–2 步更新，待办在下一次检查后不再出现，旧的待办手工关闭（`task.resolve`）。
   - 测试系统（staging）可以不放地址库：所有地址查不到，按参数处理（缺省中国大陆，含境外视频的发布在那里不能答）。要在 staging 试答，放地址库，或把 `qb.region.unknown-ip-country` 设为别的国家（见下）。
 - **参数**：
 
@@ -666,13 +705,14 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
   | `qb.region.unknown-ip-country` | `CN` | 否（不授予任何角色，由首个管理员以 `PARAM_SET` 改） | 地址库查不到的地址（内网、没有地址库）按哪个国家处理；空 = 不按任何国家（放行）。e2e 设为 `JP` |
 
   部署 F-S11 后运行一次 `QB_SETUP` 并由另一位管理员发布它提出的 `qb.video.mainland-accessible-sites`；发布之前按缺省值。
-- **例外**（A3-15）：平台管理系统的"中国大陆"页（`/admin/qb/region`，`qb.admin.region.read`；新增、改到期日、撤销要 `qb.admin.region.write`，都是内容管理员的权限）。按发布或按发起方（其全部发布，含以后的），**必须写原因**，到期日可选（UTC 的日期，当天有效，过了自动失效，不需要任务）。撤销后不能再改，要恢复就新增一个。
-  每次新增、修改、撤销都经平台审计（`/admin/audit`，`entityType=QbRegionException`）。例外只放开本规则，不改变地区定向等其他条件。
-- **被拒次数**：答题被本规则拒绝时只计数（不记是谁、不记地址），在内存中按 UTC 日累计，任务 `qb.region-refusals` 每小时写入 `QbRegionRefusalDay`；"中国大陆"页显示最近 30 天。实例停止时最近一小时内未写出的次数会丢（这只是统计）。
+- **例外**（A3-15）："中国大陆"页（平台管理系统 `/admin/qb/region`，运营商管理系统 `/operator/qb/region`；读 `qb.admin.region.read`，新增、改到期日、撤销要 `qb.admin.region.write`）。按发布或按发起方（其全部发布，含以后的），**必须写原因**，到期日可选（UTC 的日期，当天有效，过了自动失效，不需要任务）。撤销后不能再改，要恢复就新增一个。
+  **谁来设**（需求方 2026-11-07）：总部的内容管理员可以为所有发起方设、看到全部；运营商（角色 `QB_OPERATOR`）只为自己的发起方设、只看到自己发起方的（入口范围；按发布的例外按该发布的发起方归属，记在 `ownerId`）。别的运营商的发起方或发布：新增、修改、撤销一律 404（与不存在相同）。平台管理系统的列表带"运营商"一栏，可按运营商筛选（F-S1b）。发起方改派到别的运营商后，它的例外随之归新运营商。
+  每次新增、修改、撤销都经平台审计（`/admin/audit`，`entityType=QbRegionException`；记下是谁做的，运营商的成员同样）。例外只放开本规则，不改变地区定向等其他条件。
+- **被拒次数**：答题被本规则拒绝时只计数（不记是谁、不记地址），在内存中按 UTC 日累计，任务 `qb.region-refusals` 每小时写入 `QbRegionRefusalDay`；平台管理系统的"中国大陆"页显示最近 30 天。这是全平台的合计（不分发起方），只给总部看（`qb.admin.region.monitor`），运营商管理系统的同一页没有这一栏。实例停止时最近一小时内未写出的次数会丢（这只是统计）。
 - **"在中国大陆不能答"的排查**：
   1. 问用户所在的网络：VPN、公司网络、漫游的手机线路都可能被判为别的地区（地址库按看到的地址判断，需求方接受）。
   2. 平台管理系统的发布详情：卡片的"含中国大陆无法播放的视频"为是（或空：上线于 F-S11 之前且回填没有找到版本；按"是"处理）。看资料中的视频链接是哪个网站。
-  3. 是否有生效的例外（"中国大陆"页，"生效中"）。
+  3. 是否有生效的例外（"中国大陆"页，"生效中"；运营商只看到自己发起方的）。
   4. 用户说不在中国大陆却被拒：请他打开 `/api/client/region` 看 `country`；是 `CN` 即地址库的判断（可等下月更新，或经例外放开该发布）；`known` 为 `false` 即地址查不到，按参数处理（检查 `JABIZ_TRUSTED_PROXIES` 是否包括反向代理：不包括时所有人都是代理的内网地址）。
 
 ### 7.25 竖屏短视频与竖屏模式（F-S10）

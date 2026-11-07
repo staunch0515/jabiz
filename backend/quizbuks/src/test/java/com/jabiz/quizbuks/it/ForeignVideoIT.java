@@ -89,7 +89,7 @@ class ForeignVideoIT extends PlayItSupport {
     /** Headquarters' content administrator as far as this rule goes. */
     private String regionAdmin() {
         return TestTokens.bearer(tokens, "region-admin", QbPermissions.ADMIN_REGION_READ,
-            QbPermissions.ADMIN_REGION_WRITE);
+            QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR);
     }
 
     /** A complete quiz of the sponsor's with a video material of {@code url} (none when null), saved as a version. */
@@ -281,6 +281,87 @@ class ForeignVideoIT extends PlayItSupport {
                 .containsEntry("reason", "Licence extended"));
         assertThat(query("SELECT action FROM sys_audit_record WHERE entity_type = 'QbRegionException' "
             + "AND entity_id IN (?, ?)", exceptionId, sponsorException)).hasSize(4);
+    }
+
+    /**
+     * The requester, 2026-11-07: an operator sets the exceptions of its own sponsors (a publication's through its
+     * sponsor), sees only theirs, and neither another operator's nor the platform-wide refusal counts; headquarters
+     * sets and sees every sponsor's.
+     */
+    @Test
+    void anOperatorSetsAndSeesItsOwnSponsorsExceptionsOnly() {
+        autoApprove(true);
+        String hq = operatorsAdmin();
+        NewOperator north = newOperatorWithLead(hq, unique("FS11 North"), null);
+        NewOperator south = newOperatorWithLead(hq, unique("FS11 South"), null);
+        String mine = newSponsor(unique("s-fs11-op-mine"));
+        String theirs = newSponsor(unique("s-fs11-op-theirs"));
+        credit(mine, 10_000);
+        credit(theirs, 10_000);
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq, body("userId", mine, "operatorId",
+            north.operatorId(), "reason", "F-S11"));
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq, body("userId", theirs, "operatorId",
+            south.operatorId(), "reason", "F-S11"));
+        String minePublication = videoPublication(mine, "FS11 operator mine", YOUTUBE);
+        String theirPublication = videoPublication(theirs, "FS11 operator theirs", YOUTUBE);
+        String northSession = memberSession(north.leadId(), north.operatorId());
+        String southSession = memberSession(south.leadId(), south.operatorId());
+
+        // Its own sponsor's publication: added, and mainland China answers it.
+        String forPublication = (String) run("QB_REGION_EXCEPTION_ADD", northSession, body("kind", "PUBLICATION",
+            "publicationId", minePublication, "reason", "Licensed in China")).get("exceptionId");
+        address = MAINLAND;
+        assertThat(start(taker(newTaker("t-fs11-op-1", "JP")), minePublication)).containsEntry("resumed", false);
+        address = JAPAN;
+        String forSponsor = (String) run("QB_REGION_EXCEPTION_ADD", northSession, body("kind", "SPONSOR",
+            "sponsorId", mine, "reason", "Partner")).get("exceptionId");
+        assertThat(query("SELECT owner_id FROM qb_region_exception WHERE exception_id IN (?, ?)", forPublication,
+            forSponsor)).extracting(row -> row.get("owner_id")).containsOnly(mine);
+
+        // Another operator's sponsor, or its publication: not found, as if they did not exist.
+        refused("QB_REGION_EXCEPTION_ADD", northSession, body("kind", "PUBLICATION", "publicationId",
+            theirPublication, "reason", "Not mine"), 404);
+        refused("QB_REGION_EXCEPTION_ADD", northSession, body("kind", "SPONSOR", "sponsorId", theirs,
+            "reason", "Not mine"), 404);
+        // A wrong input is told as such, before anything is read.
+        assertThat(codes(refused("QB_REGION_EXCEPTION_ADD", northSession, body("kind", "SPONSOR",
+            "reason", "Nobody"), 422))).containsExactly(RegionCodes.EXCEPTION_TARGET);
+        // Headquarters' exception of the other sponsor: South sees and changes it, North does not.
+        String hqException = (String) run("QB_REGION_EXCEPTION_ADD", regionAdmin(), body("kind", "SPONSOR",
+            "sponsorId", theirs, "reason", "Headquarters' decision")).get("exceptionId");
+        refused("QB_REGION_EXCEPTION_EXPIRY_SET", northSession, body("exceptionId", hqException, "reason", "Mine?"),
+            404);
+        refused("QB_REGION_EXCEPTION_REVOKE", northSession, body("exceptionId", hqException, "reason", "Mine?"), 404);
+        refused("QB_REGION_EXCEPTION_REVOKE", southSession, body("exceptionId", forSponsor, "reason", "Mine?"), 404);
+        run("QB_REGION_EXCEPTION_EXPIRY_SET", southSession, body("exceptionId", hqException, "expiresOn",
+            LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC).plusDays(30).toString(), "reason", "A month"));
+        run("QB_REGION_EXCEPTION_REVOKE", northSession, body("exceptionId", forPublication, "reason",
+            "The sponsor's exception covers it"));
+
+        // Each sees its own sponsors' only; headquarters every one.
+        Map<String, Object> request = body("params", body("at", clock.instant().toString()), "limit", 200);
+        assertThat(items("qb.admin.region-exceptions", northSession, request)).extracting(row -> row.get("exceptionId"))
+            .contains(forPublication, forSponsor).doesNotContain(hqException);
+        assertThat(items("qb.admin.region-exceptions", southSession, request)).extracting(row -> row.get("exceptionId"))
+            .contains(hqException).doesNotContain(forPublication, forSponsor);
+        assertThat(items("qb.admin.region-exceptions", regionAdmin(), request))
+            .extracting(row -> row.get("exceptionId")).contains(forPublication, forSponsor, hqException);
+        assertThat(items("qb.admin.region-exceptions", northSession, request))
+            .filteredOn(row -> forPublication.equals(row.get("exceptionId"))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("ownerId", mine).containsEntry("revoked", true));
+        // F-S1b: the platform filters by the sponsor's operator now.
+        assertThat(items("qb.admin.region-exceptions", regionAdmin(), body("params", body("at",
+            clock.instant().toString()), "filters", List.of(body("field", "operatorId", "op", "eq", "value",
+            south.operatorId())), "limit", 200))).extracting(row -> row.get("exceptionId"))
+            .contains(hqException).doesNotContain(forPublication, forSponsor);
+        assertThat(rows(com.jabiz.quizbuks.region.QbRegion.defaultDataset("QbRegionException"), northSession))
+            .extracting(row -> row.get("ownerId")).containsOnly(mine);
+        // The refusal counts are platform-wide: headquarters' only.
+        client.post().uri("/api/queries/qb.admin.region-refusals").header(HttpHeaders.AUTHORIZATION, northSession)
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).bodyValue(body("params", body()))
+            .exchange().expectStatus().isForbidden();
+        assertThat(query("SELECT action FROM sys_audit_record WHERE entity_type = 'QbRegionException' "
+            + "AND entity_id IN (?, ?, ?)", forPublication, forSponsor, hqException)).hasSize(5);
     }
 
     @Test

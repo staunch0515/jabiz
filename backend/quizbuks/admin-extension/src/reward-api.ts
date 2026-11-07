@@ -16,8 +16,6 @@ export const REWARD_METHODS: readonly RewardMethod[] = ['PLATFORM', 'SPONSOR_CAS
 export type CashStatus = 'DUE' | 'MARKED_PAID' | 'CONFIRMED' | 'DISPUTED' | 'OVERDUE' | 'VOID'
 export const CASH_STATUSES: readonly CashStatus[] = ['DUE', 'MARKED_PAID', 'CONFIRMED', 'DISPUTED', 'OVERDUE', 'VOID']
 
-export type CashResolution = 'PAID' | 'UNPAID' | 'VOID'
-export const CASH_RESOLUTIONS: readonly CashResolution[] = ['PAID', 'UNPAID', 'VOID']
 
 type Row = Record<string, unknown>
 const str = (value: unknown): string | null => (value == null ? null : String(value))
@@ -93,6 +91,9 @@ export interface CashReward {
   resolvedAt: string | null
   resolution: string | null
   resolveNote: string | null
+  /** F-S1b: the Sponsor's operator now. */
+  operatorId: string | null
+  operatorName: string | null
 }
 
 function cashReward(row: Row): CashReward {
@@ -122,6 +123,8 @@ function cashReward(row: Row): CashReward {
     resolvedAt: str(row.resolvedAt),
     resolution: str(row.resolution),
     resolveNote: str(row.resolveNote),
+    operatorId: str(row.operatorId),
+    operatorName: str(row.operatorName),
   }
 }
 
@@ -137,10 +140,6 @@ export async function readCashRewards(status: string | null, q: string, offset: 
   })
   return { items: page.items.map(cashReward), total: page.total }
 }
-
-export const resolveCashReward = (cashRewardId: string, resolution: CashResolution, note: string) =>
-  runProcess<{ cashRewardId: string; status: CashStatus; revision: number }>(PROCESS.cashResolve,
-    { cashRewardId, resolution, note: note.trim() || null })
 
 // ---- prizes collected at the sponsor's place (Q22b) ------------------------------------------------------------------
 
@@ -171,6 +170,9 @@ export interface Redemption {
   redeemedBy: string | null
   voidedBy: string | null
   voidNote: string | null
+  /** F-S1b: the Sponsor's operator now. */
+  operatorId: string | null
+  operatorName: string | null
 }
 
 function redemption(row: Row): Redemption {
@@ -198,6 +200,8 @@ function redemption(row: Row): Redemption {
     redeemedBy: str(row.redeemedBy),
     voidedBy: str(row.voidedBy),
     voidNote: str(row.voidNote),
+    operatorId: str(row.operatorId),
+    operatorName: str(row.operatorName),
   }
 }
 
@@ -258,6 +262,9 @@ export interface DigitalPrize {
   resolvedAt: string | null
   resolution: string | null
   resolveNote: string | null
+  /** F-S1b: the Sponsor's operator now. */
+  operatorId: string | null
+  operatorName: string | null
 }
 
 function digitalPrize(row: Row): DigitalPrize {
@@ -289,6 +296,8 @@ function digitalPrize(row: Row): DigitalPrize {
     resolvedAt: str(row.resolvedAt),
     resolution: str(row.resolution),
     resolveNote: str(row.resolveNote),
+    operatorId: str(row.operatorId),
+    operatorName: str(row.operatorName),
   }
 }
 

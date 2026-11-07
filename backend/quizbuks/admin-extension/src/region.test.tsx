@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
@@ -16,6 +16,7 @@ type Row = Record<string, unknown>
 
 /** The server as the page sees it through `@jabiz/admin`. */
 const server = vi.hoisted(() => ({
+  entry: 'admin',
   permissions: new Set<string>(),
   runQuery: vi.fn(),
   get: vi.fn(),
@@ -29,14 +30,15 @@ vi.mock('@jabiz/admin', async (original) => {
     api: { GET: server.get, POST: server.post },
     unwrap: async (call: Promise<unknown>) => call,
     runQuery: server.runQuery,
-    useAuth: () => ({ can: (p: string) => server.permissions.has(p) }),
+    useAuth: () => ({ entry: server.entry, can: (p: string) => server.permissions.has(p) }),
   }
 })
 
 const PUB = '0192f0a0-0000-7000-8000-00000000e001'
 
 const exception = (change: Row = {}): Row => ({ exceptionId: 'x1', kind: 'PUBLICATION', publicationId: PUB,
-  publicationName: 'Capitals week', foreignVideo: true, sponsorId: null, reason: 'Mirrored in <b>China</b>',
+  publicationName: 'Capitals week', foreignVideo: true, sponsorId: null, ownerId: 'sponsor-1',
+  company: 'Capitals Ltd', operatorId: 'op-kanto', operatorName: 'Kanto Partners', reason: 'Mirrored in <b>China</b>',
   expiresOn: '2026-12-31', revoked: false, revokeReason: null, inForce: true, createdAt: '2026-11-01T00:00:00Z',
   createdBy: 'admin-1', changedAt: '2026-11-01T00:00:00Z', changedBy: 'admin-1', ...change })
 
@@ -45,13 +47,16 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
-  server.permissions = new Set([PERMISSION.regionRead, PERMISSION.regionWrite])
+  server.entry = 'admin'
+  server.permissions = new Set([PERMISSION.regionRead, PERMISSION.regionWrite, PERMISSION.regionMonitor])
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { params?: Row; count?: boolean } = {}) => {
     let items: Row[] = []
     if (id === TEMPLATE.regionExceptions) {
       items = [exception(), exception({ exceptionId: 'x2', kind: 'SPONSOR', publicationId: null, publicationName: null,
         foreignVideo: null, sponsorId: 'sponsor-1', expiresOn: null, revoked: true, revokeReason: 'Licence ended',
         inForce: false })].filter((row) => options.params?.inForce == null || row.inForce === options.params.inForce)
+    } else if (id === TEMPLATE.operators) {
+      items = [{ operatorId: 'op-kanto', name: 'Kanto Partners', contactEmail: 'ops@kanto.example' }]
     } else if (id === TEMPLATE.regionRefusals) {
       items = [{ day: '2026-11-07', refused: '3' }]
     }
@@ -61,11 +66,11 @@ beforeEach(() => {
   server.post.mockReset().mockImplementation(async () => { throw new ApiError(404, { detail: 'Not found' }) })
 })
 
-function renderPage() {
+function renderPage(at = '/qb/region') {
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <AppearanceProvider>
-        <MemoryRouter initialEntries={['/qb/region']}>
+        <MemoryRouter initialEntries={[at]}>
           <Routes>
             <Route path="/qb/region" element={<RegionPage />} />
             <Route path="*" element={<p data-testid="elsewhere">elsewhere</p>} />
@@ -90,6 +95,7 @@ describe('foreign videos and mainland China (F-S11)', () => {
     const rows = await screen.findAllByTestId('region-row')
     expect(rows).toHaveLength(1)
     expect(rows[0]).toHaveTextContent('Capitals week')
+    expect(within(rows[0]).getByTestId('region-company')).toHaveTextContent('Capitals Ltd')
     // The reason as plain text.
     expect(rows[0]).toHaveTextContent('Mirrored in <b>China</b>')
     expect(rows[0]).toHaveTextContent('2026-12-31')
@@ -117,6 +123,7 @@ describe('foreign videos and mainland China (F-S11)', () => {
     expect(rows).toHaveLength(2)
     const revoked = rows.find((row) => row.getAttribute('data-id') === 'x2')!
     expect(revoked).toHaveTextContent('All of a Sponsor')
+    expect(revoked).toHaveTextContent('Capitals Ltd')
     expect(revoked).toHaveTextContent('Until revoked')
     expect(revoked).toHaveTextContent('Revoked: Licence ended')
     expect(within(revoked).queryByTestId('region-revoke')).toBeNull()
@@ -128,5 +135,33 @@ describe('foreign videos and mainland China (F-S11)', () => {
     const rows = await screen.findAllByTestId('region-row')
     expect(within(rows[0]).queryByTestId('region-revoke')).toBeNull()
     expect(screen.queryByTestId('region-add')).toBeNull()
+  })
+
+  it('shows an operator its exceptions to set but not the platform-wide refused starts', async () => {
+    // The requester, 2026-11-07: an operator holds read and write (the server limits them to its own Sponsors), not
+    // qb.admin.region.monitor.
+    server.entry = 'operator'
+    server.permissions = new Set([PERMISSION.regionRead, PERMISSION.regionWrite])
+    const { container } = renderPage('/qb/region?operator=op-other')
+    const rows = await screen.findAllByTestId('region-row')
+    expect(within(rows[0]).getByTestId('region-revoke')).toBeInTheDocument()
+    expect(screen.getByTestId('region-add')).toBeInTheDocument()
+    expect(screen.queryByTestId('region-refusals')).toBeNull()
+    // F-S1b: no operator to choose or show; the address's operator is not passed on.
+    expect(screen.queryByTestId('region-operator-filter')).toBeNull()
+    expect(within(rows[0]).queryByText('Kanto Partners')).toBeNull()
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.regionExceptions, expect.objectContaining({ filters: [] }))
+    expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.regionRefusals, expect.anything())
+    await expectAccessible(container)
+  })
+
+  it('lets the platform filter by operator on the server, with the Sponsor\'s operator in each row', async () => {
+    server.permissions = new Set([PERMISSION.regionRead, PERMISSION.operatorsRead])
+    renderPage('/qb/region?operator=op-kanto')
+    const rows = await screen.findAllByTestId('region-row')
+    expect(rows[0]).toHaveTextContent('Kanto Partners')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.regionExceptions, expect.objectContaining({
+      filters: [{ field: 'operatorId', op: 'eq', value: 'op-kanto' }] }))
+    await waitFor(() => expect(screen.getByTestId('region-operator-filter')).toHaveTextContent('Kanto Partners'))
   })
 })

@@ -72,8 +72,9 @@ public final class QbRoles {
         QbPermissions.AUDIENCE_RULES_WRITE,
         // Q89: every sponsored benefit, conversation between sponsors and purchase order (disputes).
         QbPermissions.BENEFIT_READ,
-        // F-S11: the exceptions to the rule on foreign videos and mainland China, and its figures.
-        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE);
+        // F-S11: the exceptions to the rule on foreign videos and mainland China (every sponsor's), its figures and
+        // the daily check of the address database.
+        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR);
 
     /**
      * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's
@@ -96,7 +97,10 @@ public final class QbRoles {
         // Q82: its sponsors' conversations with takers (disputes and reports).
         QbPermissions.CONVERSATION_READ,
         // Q87: how its sponsors pay the platform's fees (prepaid, or postpaid within a credit limit).
-        QbPermissions.FEE_BILLING);
+        QbPermissions.FEE_BILLING,
+        // F-S11 (the requester, 2026-11-07): the exceptions to the rule on foreign videos for its own sponsors (the
+        // entry scope limits them); not the platform-wide refusal counts or the address database (ADMIN_REGION_MONITOR).
+        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,

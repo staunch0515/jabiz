@@ -7,6 +7,7 @@ import { initReactI18next } from 'react-i18next'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
+import { expectAccessible } from '@jabiz/admin/testing'
 import { COVER, PDF, PICTURE, SNAPSHOT_JSON } from './fixtures'
 import { textIn } from './hooks'
 import { DATASET, TEMPLATE, PROCESS } from './ids'
@@ -186,6 +187,7 @@ describe('ReviewsPage', () => {
     expect(link).toHaveAttribute('href', `/qb/reviews/publications/${PUBLICATION_ID}`)
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.publications, {
       params: { inReview: true },
+      filters: [],
       sorts: [{ field: 'waitingSince', asc: true }],
       offset: 0,
       limit: 20,
@@ -224,6 +226,22 @@ describe('ReviewsPage', () => {
     expect(await screen.findByTestId('queue-publication-link')).toBeInTheDocument()
     expect(screen.queryByTestId('tab-sponsors')).not.toBeInTheDocument()
     expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.sponsors, expect.anything())
+  })
+
+  it('shows the platform every operator\'s queues, read only, by the operator chosen (F-S1b)', async () => {
+    server.permissions = new Set(['qb.admin.publication.read', 'qb.admin.users.read', 'qb.admin.operators.read'])
+    server.templates.set(TEMPLATE.publications, [{ ...publication('PENDING_REVIEW'), operatorId: 'op-kanto',
+      operatorName: 'Kanto Partners' }])
+    server.templates.set(TEMPLATE.operators, [{ operatorId: 'op-kanto', name: 'Kanto Partners' }])
+    const { container } = renderAt('/qb/reviews?operator=op-kanto', '/qb/reviews', <ReviewsPage />)
+    const row = await screen.findByTestId('queue-publication')
+    expect(within(row).getByTestId('row-operator')).toHaveTextContent('Kanto Partners')
+    expect(screen.getByTestId('tab-sponsors')).toBeInTheDocument()
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.publications, expect.objectContaining({
+      filters: [{ field: 'operatorId', op: 'eq', value: 'op-kanto' }] }))
+    expect(screen.getByText(/Read only: each operator decides its own Sponsors/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('reviews-operator')).toHaveTextContent('Kanto Partners'))
+    await expectAccessible(container)
   })
 })
 
@@ -611,7 +629,8 @@ describe('SponsorReviewPage', () => {
   it('offers no decision without the permission to review Sponsors', async () => {
     server.permissions = new Set(['qb.admin.users.read'])
     renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
-    expect(await screen.findByText('Deciding needs the permission to review Sponsors.')).toBeInTheDocument()
+    // F-S1: the Sponsor's operator decides it; the platform reads it.
+    expect(await screen.findByText(/The Sponsor’s operator decides this application/)).toBeInTheDocument()
     expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
     // Q22: the methods are shown to everyone, changed only with the permission; without a setting of their own the
     // parameter's default (Q28).

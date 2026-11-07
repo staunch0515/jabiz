@@ -175,6 +175,10 @@ jobs:
       - run: tools/quizbuks/test/create-maintenance-login.test.sh
       # The local e2e run's script (tools/quizbuks/e2e.sh), offline: its environment is app.env's, as the e2e job reads it.
       - run: tools/quizbuks/test/e2e.test.sh
+      # QuizBuks's alert rules beside the platform's (deploy/quizbuks/alerting), rendered by the platform's render.sh.
+      - run: tools/quizbuks/test/alerts.test.sh
+      # QuizBuks's rules for the platform's settings check (deploy/quizbuks/server/env-check.rules).
+      - run: tools/quizbuks/test/env-check-rules.test.sh
       - run: $COMPOSE config --quiet
       - name: No .env
         run: test ! -e deploy/quizbuks/.env

@@ -4,11 +4,13 @@ description: >-
   Takers' reports (Q49a), one row per reported publication: its name, state and sponsor, how many reports are open and
   in all, by reason, and the latest; the reviewers' list to dismiss or act on. An operator's session sees its own
   sponsors' only
-entities: [QbReport, QbPublication, QbSponsor]
+entities: [QbReport, QbPublication, QbSponsor, QbSponsorOperator, QbOperator]
 datasets:
   QbReport: urn:jabiz:dataset:default:QbReport
   QbPublication: urn:jabiz:dataset:default:QbPublication
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
+  QbSponsorOperator: urn:jabiz:dataset:default:QbSponsorOperator
+  QbOperator: urn:jabiz:dataset:default:QbOperator
 params:
   open: { kind: { type: bool }, description: "Only publications with open reports (true) or with none open (false)" }
 results:
@@ -27,12 +29,15 @@ results:
   message:         { kind: { type: numeric, precision: 9, scale: 0 } }
   other:           { kind: { type: numeric, precision: 9, scale: 0 } }
   lastReportedAt:  { from: QbReport.createdAt }
+  # F-S1b: the sponsor's operator now (every sponsor has one), for the platform's filter by operator.
+  operatorId:   { from: QbSponsorOperator.operatorId }
+  operatorName: { from: QbOperator.name }
 list:
-  filters: [status, company, name]
+  filters: [status, company, name, operatorId]
   sorts:   [lastReportedAt, openCount, totalCount, name]
   defaultSort: { field: lastReportedAt, asc: false }
   key: [publicationId]
-permissions: [qb.review.publication]
+permissions: [qb.admin.publication.read]
 ---*/
 -- Every dataset is limited to the operator's sponsors for an operator's session (Q59c-2). Closing the reports is
 -- QB_REPORT_RESOLVE (headquarters) or QB_OPERATOR_REPORT_RESOLVE; pausing or ending the quiz the existing processes.
@@ -51,7 +56,9 @@ SELECT
     r.spam                   AS spam,
     r.message                AS message,
     r.other                  AS other,
-    r.last_reported_at       AS lastReportedAt
+    r.last_reported_at       AS lastReportedAt,
+    qso.{{QbSponsorOperator.operatorId}} AS operatorId,
+    qop.{{QbOperator.name}}               AS operatorName
 FROM (
     SELECT
         x.{{QbReport.publicationId}} AS publication_id,
@@ -71,4 +78,6 @@ FROM (
 ) r
 LEFT JOIN {{QbPublication}} p ON p.{{QbPublication.publicationId}} = r.publication_id
 LEFT JOIN {{QbSponsor}} s ON r.publisher_kind = 'SPONSOR' AND s.{{QbSponsor.userId}} = r.publisher_id
+LEFT JOIN {{QbSponsorOperator}} qso ON r.publisher_kind = 'SPONSOR' AND qso.{{QbSponsorOperator.userId}} = r.publisher_id
+LEFT JOIN {{QbOperator}} qop ON qop.{{QbOperator.operatorId}} = qso.{{QbSponsorOperator.operatorId}}
 WHERE (CAST(:open AS boolean) IS NULL OR (r.open_count > 0) = CAST(:open AS boolean))

@@ -187,7 +187,9 @@ public final class Reconciliation {
                         payload.put("scheduledTime", ctx.get(INPUT, ReconcileInput.class).scheduledTime().toString());
                         payload.put("differences", result(ctx).differences());
                         return payload;
-                    })));
+                    }))
+                .afterCommit("Show the differences on the gauge", ReconcileGauge.class,
+                    com.jabiz.process.NoMetadata.INSTANCE));
     }
 
     @SuppressWarnings("unchecked")

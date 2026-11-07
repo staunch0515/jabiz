@@ -24,6 +24,7 @@ type Row = Record<string, unknown>
 /** The server as the operator pages see it through `@jabiz/admin`. */
 const server = vi.hoisted(() => ({
   permissions: new Set<string>(),
+  entry: 'admin',
   operators: [] as Record<string, unknown>[],
   members: [] as Record<string, unknown>[],
   reviews: [] as Record<string, unknown>[],
@@ -43,7 +44,7 @@ vi.mock('@jabiz/admin', async (original) => {
     unwrap: async (call: Promise<unknown>) => call,
     runQuery: server.runQuery,
     runProcess: server.runProcess,
-    useAuth: () => ({ can: (p: string) => server.permissions.has(p) }),
+    useAuth: () => ({ entry: server.entry, can: (p: string) => server.permissions.has(p) }),
     UserName: ({ id }: { id: string | null }) => <span data-testid="user-name">{id}</span>,
     ApprovalPanel: ({ requestId }: { requestId: string }) => (
       <div data-testid="approval-panel" data-request={requestId}>decide</div>
@@ -72,6 +73,7 @@ beforeAll(async () => {
 beforeEach(() => {
   server.permissions = new Set([PERMISSION.operatorsRead, PERMISSION.operatorsWrite, PERMISSION.spotCheck,
     PERMISSION.usersRead])
+  server.entry = 'admin'
   server.operators = [operator()]
   server.members = [
     { memberId: 'm1', userId: LEAD, displayName: 'Lena Lead', email: 'lena@kansai.example', lead: true,
@@ -85,6 +87,7 @@ beforeEach(() => {
   server.sponsors = [sponsor(), sponsor({ onboardingId: 'o2', userId: 'other', company: 'Beta', mine: false,
     operatorId: null, operatorName: null, banned: true, bannedByOperator: false })]
   server.team = { operatorId: OPERATOR, name: 'Kansai Partners', status: 'ACTIVE', collection: 'PLATFORM', lead: true,
+    ownSponsor: true,
     members: [
       { userId: LEAD, displayName: 'Lena Lead', email: 'lena@kansai.example', lead: true, addedAt: null, self: true },
       { userId: MEMBER, displayName: 'Mo Member', email: 'mo@kansai.example', lead: false, addedAt: null, self: false },
@@ -97,7 +100,9 @@ beforeEach(() => {
             : id === TEMPLATE.operatorBilling ? server.billing
               : id === TEMPLATE.operatorOverview ? [{ mySponsors: 1, sponsors: 9, sponsorsInReview: 2,
                 publicationsInReview: 3, livePublications: 4, myLivePublications: 1, myCompletions: 120 }]
-                : id === TEMPLATE.sponsors ? [{ userId: SPONSOR, company: 'Acme', reviewStatus: 'APPROVED' }] : []
+                : id === TEMPLATE.sponsors ? [{ userId: SPONSOR, company: 'Acme', reviewStatus: 'APPROVED' }]
+                  : id === TEMPLATE.users ? [{ userId: LEAD, userName: 'lena', email: 'lena@kansai.example',
+                    emailVerified: true, displayName: 'Lena Lead' }] : []
     return { items, offset: 0, limit: 20, ...(options.count ? { total: items.length } : {}) }
   })
   server.runProcess.mockReset().mockImplementation(async (name: string) =>
@@ -141,9 +146,42 @@ describe('headquarters', () => {
     expect(within(dialog).getByTestId('operator-language')).toHaveTextContent('None')
     await user.click(within(dialog).getByTestId('operator-language'))
     await user.click(await screen.findByRole('option', { name: 'zh' }))
+    // F-S1: its lead, chosen by name, is required; there is a default operator already, so it may become it.
+    expect(within(dialog).getByTestId('operator-create')).toBeDisabled()
+    await user.click(within(dialog).getByTestId('operator-lead'))
+    await user.type(await screen.findByPlaceholderText('Name, address or company'), 'lena')
+    await user.click(await screen.findByRole('option', { name: /Lena Lead/ }))
+    expect(within(dialog).getByTestId('operator-default-new')).toBeInTheDocument()
     await user.click(within(dialog).getByTestId('operator-create'))
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(OPERATOR_PROCESS.save, {
-      name: 'Kyushu', contactName: 'Kei', contactEmail: 'ops@kyushu.example', language: 'zh', note: null }))
+      name: 'Kyushu', contactName: 'Kei', contactEmail: 'ops@kyushu.example', language: 'zh', note: null,
+      leadUserId: LEAD, defaultForNew: false }))
+  })
+
+  it('makes the first operator the default one, and marks the default in the list (F-S1)', async () => {
+    server.operators = []
+    renderAt('/qb/operators', '/qb/operators', <OperatorsPage />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByTestId('operator-new'))
+    const dialog = await screen.findByTestId('operator-new-dialog')
+    expect(await within(dialog).findByTestId('operator-first-default')).toBeInTheDocument()
+    expect(within(dialog).queryByTestId('operator-default-new')).not.toBeInTheDocument()
+  })
+
+  it('shows the default operator, and makes another one the default after confirming (F-S1)', async () => {
+    server.operators = [operator({ defaultForNew: true })]
+    const { unmount } = renderAt('/qb/operators', '/qb/operators', <OperatorsPage />)
+    expect(await screen.findByTestId('operator-row-default')).toBeInTheDocument()
+    unmount()
+    server.operators = [operator({ defaultForNew: false })]
+    renderAt(`/qb/operators/${OPERATOR}`, '/qb/operators/:operatorId', <OperatorPage />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByTestId('operator-make-default'))
+    const confirm = await screen.findByRole('alertdialog')
+    expect(server.runProcess).not.toHaveBeenCalledWith(OPERATOR_PROCESS.save, expect.anything())
+    await user.click(within(confirm).getByRole('button', { name: 'Make it the default operator' }))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(OPERATOR_PROCESS.save, expect.objectContaining({
+      operatorId: OPERATOR, baseRevision: 3, defaultForNew: true })))
   })
 
   it('does not offer creating one without the permission', async () => {
@@ -179,11 +217,15 @@ describe('headquarters', () => {
       operatorId: OPERATOR, baseRevision: 3, status: 'ACTIVE' })))
     expect(await screen.findByTestId('operator-sponsor-row')).toHaveTextContent('Acme')
     expect(screen.getByTestId('assign-here')).toBeDisabled()
-    await user.type(screen.getByTestId('assign-user'), SPONSOR)
+    // F-S1: there is no "back to headquarters"; a Sponsor moves here from another operator, chosen by name.
+    expect(screen.queryByTestId('assign-back')).not.toBeInTheDocument()
+    await user.click(screen.getByTestId('assign-user'))
+    await user.type(screen.getByPlaceholderText('Name, address or company'), 'lena')
+    await user.click(await screen.findByRole('option', { name: /Lena Lead/ }))
     await user.type(screen.getByTestId('assign-reason'), 'Signed with both')
-    await user.click(screen.getByTestId('assign-back'))
+    await user.click(screen.getByTestId('assign-here'))
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(OPERATOR_PROCESS.assign,
-      { userId: SPONSOR, operatorId: null, reason: 'Signed with both' }))
+      { userId: LEAD, operatorId: OPERATOR, reason: 'Signed with both' }))
   })
 
   it('spot-checks a review: a problem needs a note', async () => {
@@ -207,6 +249,7 @@ describe('headquarters', () => {
 
 describe('the operator', () => {
   beforeEach(() => {
+    server.entry = 'operator'
     server.permissions = new Set([PERMISSION.operatorUse, PERMISSION.reviewSponsor, PERMISSION.reviewPublication,
       PERMISSION.feeBilling])
   })
@@ -215,6 +258,8 @@ describe('the operator', () => {
     const { container } = renderAt('/qb/operator', '/qb/operator', <OperatorHomePage />)
     expect(await screen.findByTestId('figure-myCompletions')).toHaveTextContent('120')
     const rows = await screen.findAllByTestId('team-row')
+    // F-S1: the lead's account is the operator's own Sponsor, who joins /sponsor/ to publish.
+    expect(screen.getByTestId('operator-own-sponsor')).toHaveTextContent('/sponsor/')
     expect(within(rows[0]).queryByTestId('member-drop')).not.toBeInTheDocument()
     await expectAccessible(container)
     const user = userEvent.setup()
@@ -234,9 +279,9 @@ describe('the operator', () => {
   it('bans a Sponsor with a reason, and lifts only its own bans', async () => {
     const { container } = renderAt('/qb/operator/sponsors', '/qb/operator/sponsors', <OperatorSponsorsPage />)
     const rows = await screen.findAllByTestId('sponsor-row')
-    // Headquarters' ban: no lift offered.
+    // The platform's ban: no lift offered.
     expect(within(rows[1]).queryByTestId('sponsor-unban')).not.toBeInTheDocument()
-    expect(within(rows[1]).getByText('By headquarters')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('By the platform')).toBeInTheDocument()
     expect(within(rows[0]).getByTestId('sponsor-link')).toHaveAttribute('href', `/qb/reviews/sponsors/${SPONSOR}`)
     await expectAccessible(container)
     const user = userEvent.setup()

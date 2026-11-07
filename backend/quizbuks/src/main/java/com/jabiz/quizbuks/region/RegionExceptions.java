@@ -3,12 +3,15 @@ package com.jabiz.quizbuks.region;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.QbAccounts;
+import com.jabiz.quizbuks.operator.OperatorChecks;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.HoldLock;
@@ -25,9 +28,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Headquarters' exceptions to the rule on foreign videos (F-S11, A3-15; docs/quizbuks/plans/impl/F-S11.md): mainland
- * China may answer one publication, or every publication of one sponsor, although its videos are foreign. Each needs a
- * reason and may have a last day (UTC, inclusive; past it the exception simply no longer counts, nothing has to run).
+ * The exceptions to the rule on foreign videos (F-S11, A3-15; docs/quizbuks/plans/impl/F-S11.md): mainland China may
+ * answer one publication, or every publication of one sponsor, although its videos are foreign. Each needs a reason and
+ * may have a last day (UTC, inclusive; past it the exception simply no longer counts, nothing has to run). Headquarters
+ * sets them for any sponsor; an operator for its own sponsors only (the requester, 2026-11-07): its entry scope limits
+ * what it reads, and each process checks the sponsor ({@code OperatorChecks.ownSponsor}: another's is not found).
  * <ul>
  *   <li>{@value #ADD}: a new exception;</li>
  *   <li>{@value #EXPIRY_SET}: another last day (or none), with the reason for it;</li>
@@ -71,38 +76,39 @@ public final class RegionExceptions {
     }
 
     public static ProcessDefinition<AddInput, ExceptionOutput, ProcessContext> add() {
-        return ProcessDefinition.define(ADD, 1, AddInput.class, ExceptionOutput.class, ProcessContext.class, pb -> pb
-            .description("Lets mainland China answer a publication, or every publication of a sponsor, although its "
-                + "videos are foreign.")
-            .permissions(QbPermissions.ADMIN_REGION_WRITE)
-            .requiresVerifiedEmail()
-            .contextFactory((start, input) -> {
-                ProcessContext ctx = new ProcessContext(start);
-                ctx.put(INPUT, input);
-                return ctx;
-            })
-            .outputMapper(ctx -> ctx.get(OUTPUT, ExceptionOutput.class))
-            .step("Find the publication or the sponsor", QueryEntities.<ProcessContext>all(
-                QueryEntities.query(QbPublications.defaultDataset(QbPublications.PUBLICATION),
-                    ctx -> byKey("publicationId", target(ctx, QbRegion.PUBLICATION)), TARGET + ".publication"),
-                QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR),
-                    ctx -> byKey("userId", target(ctx, QbRegion.SPONSOR)), TARGET + ".sponsor")))
-            .compute("Add the exception", (metadata, ctx) -> add(ctx, ctx.get(INPUT, AddInput.class))));
+        return ProcessDefinition.define(ADD, 1, AddInput.class, ExceptionOutput.class, ProcessContext.class, pb -> {
+            pb.description("Lets mainland China answer a publication, or every publication of a sponsor, although its "
+                    + "videos are foreign; an operator for its own sponsors, headquarters for any.")
+                .permissions(QbPermissions.ADMIN_REGION_WRITE)
+                .requiresVerifiedEmail()
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(INPUT, input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.get(OUTPUT, ExceptionOutput.class))
+                // Before anything is read: an operator's wrong input is told as such, not as another's sponsor.
+                .compute("Check the target", (metadata, ctx) -> checkTarget(ctx.get(INPUT, AddInput.class)));
+            // Q48e-1: an operator's member is checked within the act; headquarters passes.
+            OperatorChecks.memberWhenScoped(pb);
+            pb.step("Find the publication or the sponsor", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbPublications.defaultDataset(QbPublications.PUBLICATION),
+                        ctx -> byKey("publicationId", target(ctx, QbRegion.PUBLICATION)), TARGET + ".publication"),
+                    QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR),
+                        ctx -> byKey("userId", target(ctx, QbRegion.SPONSOR)), TARGET + ".sponsor")));
+            // The requester, 2026-11-07: an operator only for a sponsor it looks after (another's, or none: 404).
+            OperatorChecks.ownSponsor(pb, RegionExceptions::owner);
+            pb.compute("Add the exception", (metadata, ctx) -> add(ctx, ctx.get(INPUT, AddInput.class)));
+        });
     }
 
     public static ProcessDefinition<ExpiryInput, ExceptionOutput, ProcessContext> expirySet() {
         return ProcessDefinition.define(EXPIRY_SET, 1, ExpiryInput.class, ExceptionOutput.class, ProcessContext.class,
-            pb -> pb
-                .description("Gives an exception for foreign videos another last day, or none.")
-                .permissions(QbPermissions.ADMIN_REGION_WRITE)
-                .requiresVerifiedEmail()
+            pb -> changing(pb
+                .description("Gives an exception for foreign videos another last day, or none; an operator for its own "
+                    + "sponsors, headquarters for any.")
                 .actsOn(QbRegion.EXCEPTION, "exceptionId", a -> a.whenField("revoked", "false"))
-                .contextFactory((start, input) -> start(start, input, input.exceptionId()))
-                .outputMapper(ctx -> ctx.get(OUTPUT, ExceptionOutput.class))
-                .step("Lock the exception", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(FOUND + ".id"))))
-                .step("Load the exception", QueryEntities.<ProcessContext>of(
-                    QbRegion.defaultDataset(QbRegion.EXCEPTION), ctx -> byKey("exceptionId", ctx.get(FOUND + ".id")),
-                    FOUND))
+                .contextFactory((start, input) -> start(start, input, input.exceptionId())))
                 .compute("Set the last day", (metadata, ctx) -> {
                     ExpiryInput input = ctx.get(INPUT, ExpiryInput.class);
                     EntityInstance exception = loaded(ctx);
@@ -119,17 +125,11 @@ public final class RegionExceptions {
 
     public static ProcessDefinition<RevokeInput, ExceptionOutput, ProcessContext> revoke() {
         return ProcessDefinition.define(REVOKE, 1, RevokeInput.class, ExceptionOutput.class, ProcessContext.class,
-            pb -> pb
-                .description("Ends an exception for foreign videos now.")
-                .permissions(QbPermissions.ADMIN_REGION_WRITE)
-                .requiresVerifiedEmail()
+            pb -> changing(pb
+                .description("Ends an exception for foreign videos now; an operator for its own sponsors, headquarters "
+                    + "for any.")
                 .actsOn(QbRegion.EXCEPTION, "exceptionId", a -> a.whenField("revoked", "false"))
-                .contextFactory((start, input) -> start(start, input, input.exceptionId()))
-                .outputMapper(ctx -> ctx.get(OUTPUT, ExceptionOutput.class))
-                .step("Lock the exception", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(FOUND + ".id"))))
-                .step("Load the exception", QueryEntities.<ProcessContext>of(
-                    QbRegion.defaultDataset(QbRegion.EXCEPTION), ctx -> byKey("exceptionId", ctx.get(FOUND + ".id")),
-                    FOUND))
+                .contextFactory((start, input) -> start(start, input, input.exceptionId())))
                 .compute("Revoke it", (metadata, ctx) -> {
                     RevokeInput input = ctx.get(INPUT, RevokeInput.class);
                     EntityInstance exception = loaded(ctx);
@@ -142,6 +142,54 @@ public final class RegionExceptions {
                     ctx.changes().update(QbRegion.EXCEPTION, exception.id(), exception.version(), values);
                     ctx.put(OUTPUT, output(exception, (LocalDate) exception.get("expiresOn"), true));
                 }));
+    }
+
+    /**
+     * The steps before a change of an exception: the permission, the caller's membership when an operator's (Q48e-1;
+     * its lock first, Q48 lock order), the exception's lock, the exception (an operator's session sees only its own
+     * sponsors': another's is not found) and, explicitly, its sponsor's operator (the requester, 2026-11-07).
+     */
+    private static <I> ProcessDefinitionBuilder<I, ExceptionOutput, ProcessContext> changing(
+        ProcessDefinitionBuilder<I, ExceptionOutput, ProcessContext> pb) {
+        pb.permissions(QbPermissions.ADMIN_REGION_WRITE)
+            .requiresVerifiedEmail()
+            .outputMapper(ctx -> ctx.get(OUTPUT, ExceptionOutput.class));
+        OperatorChecks.memberWhenScoped(pb);
+        pb.step("Lock the exception", HoldLock.<ProcessContext>exclusive(ctx -> lockName(ctx.get(FOUND + ".id"))))
+            .step("Load the exception", QueryEntities.<ProcessContext>of(
+                QbRegion.defaultDataset(QbRegion.EXCEPTION), ctx -> byKey("exceptionId", ctx.get(FOUND + ".id")),
+                FOUND));
+        OperatorChecks.ownSponsor(pb, ctx -> {
+            EntityInstance exception = first(ctx, FOUND);
+            return exception == null ? null : exception.get("ownerId");
+        });
+        return pb;
+    }
+
+    /**
+     * The sponsor an exception being added belongs to: the sponsor named, or the publisher of the publication named;
+     * none when the target was not found.
+     */
+    static Object owner(ProcessContext ctx) {
+        AddInput input = ctx.get(INPUT, AddInput.class);
+        EntityInstance found = first(ctx, TARGET + (QbRegion.PUBLICATION.equals(input.kind()) ? ".publication"
+            : ".sponsor"));
+        if (found == null) {
+            return null;
+        }
+        return QbRegion.PUBLICATION.equals(input.kind()) ? found.get("publisherId") : found.get("userId");
+    }
+
+    /** One target, of the kind's: refused (422) before anything is read. */
+    static void checkTarget(AddInput input) {
+        boolean forPublication = QbRegion.PUBLICATION.equals(input.kind());
+        String publicationId = blankToNull(input.publicationId());
+        String sponsorId = blankToNull(input.sponsorId());
+        if (forPublication ? publicationId == null || sponsorId != null : sponsorId == null || publicationId != null) {
+            throw new BusinessRuleViolationException(new Violation(forPublication ? "publicationId" : "sponsorId",
+                RegionCodes.EXCEPTION_TARGET, "An exception names one publication or one sponsor",
+                Map.of("kind", input.kind())));
+        }
     }
 
     /** The lock of one exception's changes. */
@@ -161,15 +209,12 @@ public final class RegionExceptions {
         String publicationId = blankToNull(input.publicationId());
         String sponsorId = blankToNull(input.sponsorId());
         boolean forPublication = QbRegion.PUBLICATION.equals(kind);
-        if (forPublication ? publicationId == null || sponsorId != null : sponsorId == null || publicationId != null) {
-            ctx.reject(new Violation(forPublication ? "publicationId" : "sponsorId", RegionCodes.EXCEPTION_TARGET,
-                "An exception names one publication or one sponsor", Map.of("kind", kind)));
-            return;
-        }
+        checkTarget(input);
         if (!expiryOk(ctx, input.expiresOn())) {
             return;
         }
-        if (first(ctx, TARGET + (forPublication ? ".publication" : ".sponsor")) == null) {
+        Object owner = owner(ctx);
+        if (owner == null) {
             ctx.reject(new Violation(forPublication ? "publicationId" : "sponsorId",
                 RegionCodes.EXCEPTION_UNKNOWN_TARGET, "No such publication or sponsor", Map.of()));
             return;
@@ -178,6 +223,7 @@ public final class RegionExceptions {
         values.put("kind", kind);
         values.put("publicationId", publicationId);
         values.put("sponsorId", sponsorId);
+        values.put("ownerId", String.valueOf(owner));
         values.put("reason", input.reason().strip());
         values.put("expiresOn", input.expiresOn());
         values.put("revoked", false);

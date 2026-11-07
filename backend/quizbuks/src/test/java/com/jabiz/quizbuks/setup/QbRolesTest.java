@@ -38,8 +38,11 @@ class QbRolesTest {
                 // Q82: its sponsors' conversations with takers (the entry scope limits them), never writing in them.
                 QbPermissions.CONVERSATION_READ,
                 // Q87: its sponsors' billing mode (prepaid or postpaid), not the fees themselves.
-                QbPermissions.FEE_BILLING)
-            .doesNotContain(QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
+                QbPermissions.FEE_BILLING,
+                // F-S11 (the requester, 2026-11-07): the exceptions for foreign videos of its own sponsors (the entry
+                // scope limits them), not the platform-wide refusal counts or the address database's check.
+                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE)
+            .doesNotContain(QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
                 QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN,
@@ -55,7 +58,9 @@ class QbRolesTest {
         // the platform operator); headquarters keeps reading, spot checks, the global rules and the emergency acts.
         assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
             .contains(QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.SPOT_CHECK, QbPermissions.OPERATORS_READ,
-                QbPermissions.ADMIN_PROSPECT, QbPermissions.AUDIENCE_RULES_WRITE)
+                QbPermissions.ADMIN_PROSPECT, QbPermissions.AUDIENCE_RULES_WRITE,
+                // F-S11: every sponsor's exceptions for foreign videos, the refusal counts and the address database.
+                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR)
             .doesNotContain(QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 QbPermissions.PROSPECT_USE, QbPermissions.CERTIFICATION_MANAGE)

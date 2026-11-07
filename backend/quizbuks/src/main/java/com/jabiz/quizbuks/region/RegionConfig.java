@@ -1,18 +1,21 @@
 package com.jabiz.quizbuks.region;
 
 import com.jabiz.dataset.DatasetDefinition;
+import com.jabiz.dataset.DatasetScope;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.job.JobDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.operator.OperatorScopes;
 import com.jabiz.runtime.geo.ClientCountries;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.ZoneOffset;
+import java.util.function.Consumer;
 
 /** The rule on foreign videos and mainland China (F-S11): its entities, datasets, processes and jobs. */
 @Configuration
@@ -24,14 +27,19 @@ public class RegionConfig {
         this.poolRef = poolRef;
     }
 
-    /** Headquarters reads them ({@code qb.admin.region.read}); nobody writes but the processes. */
-    private DatasetDefinition defaultDataset(String entity) {
-        return DatasetDefinition.define(QbRegion.defaultDataset(entity), d -> d
-            .targetEntityType(entity)
-            .asDefault()
-            .permissions(QbPermissions.ADMIN_REGION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites())
-            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    /** Read with {@code permission}; nobody writes but the processes. */
+    private DatasetDefinition defaultDataset(String entity, String permission,
+        Consumer<DatasetScope.Builder> scope) {
+        return DatasetDefinition.define(QbRegion.defaultDataset(entity), d -> {
+            d.targetEntityType(entity)
+                .asDefault()
+                .permissions(permission, QbPermissions.SPONSOR_VIEW_WRITE)
+                .policy(p -> p.processOnlyWrites())
+                .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef));
+            if (scope != null) {
+                d.scope(scope);
+            }
+        });
     }
 
     @Bean
@@ -46,12 +54,16 @@ public class RegionConfig {
 
     @Bean
     DatasetDefinition qbRegionExceptionDataset() {
-        return defaultDataset(QbRegion.EXCEPTION);
+        // The requester, 2026-11-07: headquarters reads every exception, an operator its own sponsors' (by the sponsor
+        // whose publications it covers, through the sponsor's operator now).
+        return defaultDataset(QbRegion.EXCEPTION, QbPermissions.ADMIN_REGION_READ,
+            OperatorScopes.of(QbRegion.EXCEPTION));
     }
 
     @Bean
     DatasetDefinition qbRegionRefusalDayDataset() {
-        return defaultDataset(QbRegion.REFUSAL_DAY);
+        // Platform-wide counts with no sponsor: headquarters' only, so no operator's scope to declare.
+        return defaultDataset(QbRegion.REFUSAL_DAY, QbPermissions.ADMIN_REGION_MONITOR, null);
     }
 
     /**

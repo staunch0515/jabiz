@@ -8,7 +8,6 @@ import {
   ApiError,
   Badge,
   Button,
-  Checkbox,
   ConfirmDialog,
   DataTable,
   EXTENSION_NAMESPACE,
@@ -31,21 +30,20 @@ import {
   CERTIFICATIONS_KEY,
   closeRound,
   isUuid,
-  OFFICIAL_KEY,
-  readOfficialPublishers,
   readOverview,
+  readOverviewOf,
   readSponsorCertifications,
   recordByHand,
-  setOfficialPublisher,
   SPONSOR_CERTIFICATION_SORTS,
   type HandRecord,
-  type OfficialPublisher,
   type Round,
   type SponsorCertificationRow,
 } from './certification-api'
 import { EmptyState, LoadFailed, Section } from './components'
 import { usePaged, when } from './hooks'
-import { CERTIFICATION_DIRECT, CERTIFICATIONS, PATH, PERMISSION } from './ids'
+import { CERTIFICATIONS, PATH, PERMISSION } from './ids'
+import { operatorColumn, useAcrossOperators, useOperatorFilter } from './operator-filter'
+import { OperatorPicker } from './pickers'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
@@ -73,12 +71,15 @@ function SponsorCertifications() {
   const { t, i18n } = useTranslation(EXTENSION_NAMESPACE)
   const [q, setQ] = useState('')
   const [typed, setTyped] = useState('')
-  const { query, table, sortable } = usePaged(['qb-ext', 'sponsor-certifications', q],
-    (offset, limit, sorts) => readSponsorCertifications(q, offset, limit, sorts), true, SPONSOR_CERTIFICATION_SORTS)
+  const operators = useOperatorFilter('sponsor-certifications-operator')
+  const { query, table, sortable } = usePaged(['qb-ext', 'sponsor-certifications', q, operators.filters],
+    (offset, limit, sorts) => readSponsorCertifications(q, offset, limit, sorts, operators.filters), true,
+    SPONSOR_CERTIFICATION_SORTS)
   const columns = useMemo<ColumnDef<SponsorCertificationRow, unknown>[]>(() => [
     { id: 'company', header: t('certification.sponsor'),
       cell: ({ row }) => <Link to={PATH.user(row.original.sponsorId)} className={linkClass}
         data-testid="sponsor-certification-sponsor">{row.original.company ?? row.original.sponsorId}</Link> },
+    ...(operators.across ? [operatorColumn<SponsorCertificationRow>(t('pickers.operatorColumn'))] : []),
     { id: 'name', header: t('certification.certification'),
       cell: ({ row }) => <span data-testid="sponsor-certification-name">{sponsorName(row.original, i18n.language)}</span> },
     { id: 'validityDays', header: t('certification.validity'), meta: right,
@@ -94,10 +95,11 @@ function SponsorCertifications() {
     { id: 'holders', header: t('certification.holders'), meta: right, cell: ({ row }) => row.original.holders },
     { id: 'createdAt', header: t('certification.createdAt'),
       cell: ({ row }) => when(row.original.createdAt) },
-  ], [t, i18n.language])
+  ], [t, i18n.language, operators.across])
   return (
     <Section title={t('certification.sponsors')} testId="sponsor-certifications-section">
       <p className="text-muted-foreground text-sm">{t('certification.sponsorsHint')}</p>
+      {operators.bar}
       <form className="flex flex-wrap items-end gap-2" onSubmit={(event: FormEvent) => { event.preventDefault(); setQ(typed.trim()) }}>
         <div className="flex flex-col gap-1">
           <Label htmlFor="sponsor-certifications-q">{t('certification.search')}</Label>
@@ -128,17 +130,6 @@ function CertificationSelect({ id, value, onChange, testId }: { id: string; valu
       </SelectContent>
     </Select>
   )
-}
-
-/** Who owns a round or an official publisher: headquarters' own, or an operator (linked for headquarters). */
-function Owner({ owner }: { owner: string | null }) {
-  const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const { can } = useAuth()
-  if (!owner) return null
-  if (owner === CERTIFICATION_DIRECT) return <>{t('certification.direct')}</>
-  return can(PERMISSION.operatorsRead)
-    ? <Link to={PATH.operator(owner)} className={linkClass}><code className="font-mono">{owner}</code></Link>
-    : <code className="font-mono">{owner}</code>
 }
 
 /** Closes a round after asking; a closed round counts only the passes before it. */
@@ -274,88 +265,22 @@ function ByHand() {
   )
 }
 
-/** Headquarters' official publishers (`qb.certification.admin`): the list and a form to set one. */
-function OfficialPublishers() {
-  const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const id = useId()
-  const queryClient = useQueryClient()
-  const { query, table } = usePaged([...OFFICIAL_KEY], (offset, limit) => readOfficialPublishers(offset, limit))
-  const [userId, setUserId] = useState('')
-  const [operatorId, setOperatorId] = useState('')
-  const [active, setActive] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
-  const columns = useMemo<ColumnDef<OfficialPublisher, unknown>[]>(() => [
-    { id: 'userId', header: t('certification.sponsorAccount'), cell: ({ row }) => <UserName id={row.original.userId} /> },
-    { id: 'owner', header: t('certification.ownerColumn'), cell: ({ row }) => <Owner owner={row.original.owner} /> },
-    { id: 'active', header: t('certification.active'),
-      cell: ({ row }) => (row.original.active ? t('common.yes') : t('common.no')) },
-    { id: 'setBy', header: t('certification.setBy'),
-      cell: ({ row }) => (row.original.setBy ? <UserName id={row.original.setBy} /> : '') },
-    { id: 'setAt', header: t('certification.setAt'), cell: ({ row }) => when(row.original.setAt) },
-  ], [t])
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (busy || !userId.trim()) return
-    setBusy(true)
-    setProblem(null)
-    try {
-      await setOfficialPublisher({ userId: userId.trim(), operatorId: operatorId.trim() || null, active })
-      notify.success(t('certification.officialSaved'))
-      await queryClient.invalidateQueries({ queryKey: OFFICIAL_KEY })
-    } catch (e) {
-      setProblem(problemOf(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Section title={t('certification.official')} testId="official-section">
-      <p className="text-muted-foreground text-sm">{t('certification.officialHint')}</p>
-      {query.isError
-        ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
-        : (
-          <DataTable label={t('certification.official')} columns={columns} {...table}
-            getRowId={(row) => `${row.owner}:${row.userId}`}
-            empty={<EmptyState art="people" title={t('certification.officialNone')} />}
-            rowProps={(row) => ({ 'data-testid': 'official-row', 'data-id': row.userId })} />
-        )}
-      <form noValidate onSubmit={(event) => void submit(event)} className="flex flex-wrap items-end gap-4"
-        data-testid="official-form">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`${id}-user`}>{t('certification.sponsorAccount')}</Label>
-          <Input id={`${id}-user`} value={userId} maxLength={128} className="w-80" data-testid="official-user"
-            onChange={(event) => setUserId(event.target.value)} />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`${id}-operator`}>{t('certification.operatorId')}</Label>
-          <Input id={`${id}-operator`} value={operatorId} maxLength={128} className="w-80"
-            data-testid="official-operator" onChange={(event) => setOperatorId(event.target.value)} />
-        </div>
-        <div className="flex items-center gap-2 pb-2">
-          <Checkbox id={`${id}-active`} checked={active} data-testid="official-active"
-            onCheckedChange={(checked) => setActive(checked === true)} />
-          <Label htmlFor={`${id}-active`}>{t('certification.active')}</Label>
-        </div>
-        <Button type="submit" disabled={busy || !userId.trim()} aria-busy={busy || undefined}
-          data-testid="official-save">{t('certification.officialSave')}</Button>
-      </form>
-      {problem && <Alert variant="destructive" data-testid="official-problem"><AlertDescription>{problem}</AlertDescription></Alert>}
-    </Section>
-  )
-}
-
 /**
- * Certifications (docs/quizbuks/plans/Q69-certifications.md), for headquarters and the operators alike: the caller's
- * rounds with how many passes each recorded, adding and closing them, grants and revocations by hand with their
- * reasons (what headquarters spot-checks), and, for headquarters, the official publishers. Who holds what is the
- * server's: the page shows the overview's counts.
+ * Certifications (docs/quizbuks/plans/Q69-certifications.md): an operator's rounds with how many passes each recorded,
+ * adding and closing them, grants and revocations by hand with their reasons (what the platform spot-checks). F-S1b:
+ * the platform reads an operator's, chosen by name, and runs none of it; the official publisher is each operator's own
+ * Sponsor. Who holds what is the server's: the page shows the overview's counts.
  */
 export default function CertificationsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const name = useCertificationName()
-  const overview = useQuery({ queryKey: CERTIFICATIONS_KEY, queryFn: readOverview })
+  // F-S1b: the platform reads an operator's (chosen), an operator's member its own.
+  const across = useAcrossOperators() && can(PERMISSION.certificationAdmin)
+  const [operatorId, setOperatorId] = useState<string | null>(null)
+  const overview = useQuery({ queryKey: [...CERTIFICATIONS_KEY, across ? operatorId : 'own'],
+    queryFn: () => (across ? readOverviewOf(operatorId as string) : readOverview()), enabled: !across || !!operatorId })
+  const pickerId = useId()
   const linkPublications = can(PERMISSION.publicationRead)
   const roundColumns = useMemo<ColumnDef<Round, unknown>[]>(() => [
     { id: 'publication', header: t('certification.publication'), cell: ({ row }) => {
@@ -369,9 +294,9 @@ export default function CertificationsPage() {
     { id: 'addedAt', header: t('certification.addedAt'), cell: ({ row }) => when(row.original.addedAt) },
     { id: 'closedAt', header: t('certification.closedAt'), cell: ({ row }) => (row.original.closedAt
       ? <span data-testid="round-closed">{when(row.original.closedAt)}</span>
-      : <CloseRound round={row.original} />) },
+      : across ? '—' : <CloseRound round={row.original} />) },
     { id: 'holders', header: t('certification.holders'), meta: right, cell: ({ row }) => row.original.holders },
-  ], [t, name, linkPublications])
+  ], [t, name, linkPublications, across])
   const recordColumns = useMemo<ColumnDef<HandRecord, unknown>[]>(() => [
     { id: 'userId', header: t('certification.person'), cell: ({ row }) => <UserName id={row.original.userId} /> },
     { id: 'certification', header: t('certification.certification'), cell: ({ row }) => name(row.original.certification) },
@@ -391,12 +316,15 @@ export default function CertificationsPage() {
   return (
     <div className="flex flex-col gap-4" data-testid="certifications-page">
       <PageHeader title={t('certification.title')} description={t('certification.description')} className="pb-0" />
-      {data && (
-        <p className="text-sm" data-testid="certifications-owner">
-          {t('certification.owner', { owner: data.owner === CERTIFICATION_DIRECT ? t('certification.direct') : data.owner })}
-        </p>
+      {across && (
+        <div className="flex w-72 flex-col gap-1">
+          <Label htmlFor={pickerId}>{t('pickers.byOperator')}</Label>
+          <OperatorPicker id={pickerId} value={operatorId} onChange={setOperatorId}
+            data-testid="certifications-operator" />
+          <p className="text-muted-foreground text-sm">{t('certification.pickOperator')}</p>
+        </div>
       )}
-      {overview.isError
+      {across && !operatorId ? null : overview.isError
         ? <LoadFailed error={overview.error} onRetry={() => void overview.refetch()} />
         : (
           <>
@@ -406,10 +334,10 @@ export default function CertificationsPage() {
                 loading={overview.isPending} getRowId={(row) => row.roundId}
                 empty={<EmptyState art="inbox" title={t('certification.roundsNone')} />}
                 rowProps={(row) => ({ 'data-testid': 'round-row', 'data-id': row.roundId })} />
-              <AddRound />
+              {!across && <AddRound />}
             </Section>
             <Section title={t('certification.byHand')} testId="by-hand-section">
-              <ByHand />
+              {!across && <ByHand />}
               <h3 className="text-sm font-semibold">{t('certification.records')}</h3>
               <DataTable label={t('certification.records')} columns={recordColumns} data={data?.byHand ?? []}
                 loading={overview.isPending} getRowId={(row) => row.recordId}
@@ -420,7 +348,6 @@ export default function CertificationsPage() {
           </>
         )}
       <SponsorCertifications />
-      {can(PERMISSION.certificationAdmin) && <OfficialPublishers />}
     </div>
   )
 }

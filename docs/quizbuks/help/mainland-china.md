@@ -28,16 +28,16 @@ Your region is judged by the network you are using (your IP address), not by the
 
 Quiz 的资料里有在中国大陆无法播放的视频（YouTube、Vimeo、niconico、Dailymotion，或认不出来的视频网站）时，中国大陆的学者看不到、也不能作答这个发布。中国大陆可以播放的是哔哩哔哩、优酷、腾讯视频；Quiz 其他语言的资料里的视频同样算。
 发布的受众包括中国大陆（地区选了"全球""亚洲"或"中国"，或者是邀请制）时，向导的受众一步、提交前的检查和发布页会提示"中国大陆看不到"。这只是提示，仍然可以提交，其他地区照常作答。
-想让中国大陆的学者也能作答，把视频换成哔哩哔哩、优酷或腾讯视频的视频，保存新版本后切换发布的版本即可。确有需要的，可以联系平台说明理由。
+想让中国大陆的学者也能作答，把视频换成哔哩哔哩、优酷或腾讯视频的视频，保存新版本后切换发布的版本即可。确有需要的，可以联系负责你的运营商或平台说明理由，由他们设置例外（可以设到期日）。
 
 ### 日本語 · 「中国本土では表示されません」とはどういう意味ですか？
 
 クイズの資料に中国本土で再生できない動画（YouTube、Vimeo、niconico、Dailymotion、または判別できない動画サイト）が含まれていると、中国本土のテイカーはその公開を見ることも回答することもできません。中国本土で再生できるのは bilibili、Youku、Tencent Video です。クイズのほかの言語の資料に含まれる動画も同じ扱いです。
 公開の対象に中国本土が含まれる場合（地域で「グローバル」「アジア」「中国」を選んだ場合、または招待制の場合）、公開の作成画面の対象のステップ、申請前の確認、公開のページに「中国本土では表示されません」と表示されます。お知らせだけで、そのまま申請でき、ほかの地域では通常どおり回答できます。
-中国本土のテイカーにも回答してもらいたいときは、動画を bilibili、Youku、Tencent Video のものに替えて新しいバージョンを保存し、公開のバージョンを切り替えてください。特別な事情があるときは、理由を添えてプラットフォームにご相談ください。
+中国本土のテイカーにも回答してもらいたいときは、動画を bilibili、Youku、Tencent Video のものに替えて新しいバージョンを保存し、公開のバージョンを切り替えてください。特別な事情があるときは、理由を添えて担当の運営パートナーまたはプラットフォームにご相談ください。例外を設定できます（最終日を決めることもできます）。
 
 ### English · What does "mainland China cannot see this" mean?
 
 When a quiz's materials include a video that cannot be played in mainland China (YouTube, Vimeo, niconico, Dailymotion, or a video site that is not recognised), Takers in mainland China can neither see nor answer the publication. Mainland China plays Bilibili, Youku and Tencent Video; videos in the quiz's other languages count too.
 When a publication reaches mainland China (the regions include Global, Asia or China, or it is by invitation), the audience step of the wizard, the check before submitting and the publication's page say so. It is only a notice: you can still submit, and Takers elsewhere answer as usual.
-To let Takers in mainland China answer, use a video of Bilibili, Youku or Tencent Video instead, save a new version and switch the publication to it. If there is a special reason, contact the platform and explain it.
+To let Takers in mainland China answer, use a video of Bilibili, Youku or Tencent Video instead, save a new version and switch the publication to it. If there is a special reason, contact your operator or the platform and explain it: they can make an exception (perhaps until a given day).

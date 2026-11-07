@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router'
@@ -6,7 +6,9 @@ import {
   Alert,
   AlertDescription,
   ApiError,
+  Badge,
   Button,
+  Checkbox,
   DataTable,
   Dialog,
   DialogContent,
@@ -15,6 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
   EXTENSION_NAMESPACE,
+  Input,
+  Label,
   PageHeader,
   useAuth,
   type ColumnDef,
@@ -24,6 +28,7 @@ import { useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { OperatorFields } from './operator-components'
+import { UserPicker } from './pickers'
 import { OPERATORS_KEY, readOperators, saveOperator, type Operator, type OperatorLanguage } from './operator-api'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
@@ -38,10 +43,18 @@ function NewDialog({ onClose }: { onClose: () => void }) {
   const id = useId()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { can } = useAuth()
   const [values, setValues] = useState({ name: '', language: '', contactName: '', contactEmail: '', note: '' })
+  const [lead, setLead] = useState<string | null>(null)
+  const [makeDefault, setMakeDefault] = useState(false)
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
-  const complete = !!values.name.trim() && !!values.contactName.trim() && !!values.contactEmail.trim()
+  // F-S1: the first operator is the default one (the sponsors who apply on their own go to it).
+  const anyDefault = useQuery({ queryKey: [...OPERATORS_KEY, 'default'],
+    queryFn: () => readOperators(0, 1, undefined, [{ field: 'defaultForNew', op: 'eq', value: true }]) })
+  const first = anyDefault.data != null && anyDefault.data.items.length === 0
+  const leadId = lead?.trim() ?? ''
+  const complete = !!values.name.trim() && !!values.contactName.trim() && !!values.contactEmail.trim() && !!leadId
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (busy || !complete) return
@@ -50,7 +63,7 @@ function NewDialog({ onClose }: { onClose: () => void }) {
     try {
       const saved = await saveOperator({ name: values.name.trim(), contactName: values.contactName.trim(),
         contactEmail: values.contactEmail.trim(), language: (values.language || null) as OperatorLanguage | null,
-        note: values.note.trim() || null })
+        note: values.note.trim() || null, leadUserId: leadId, defaultForNew: first || makeDefault })
       void queryClient.invalidateQueries({ queryKey: OPERATORS_KEY })
       navigate(PATH.operator(saved.operatorId))
     } catch (e) {
@@ -69,6 +82,25 @@ function NewDialog({ onClose }: { onClose: () => void }) {
           </DialogHeader>
           <OperatorFields id={id} {...values}
             onChange={(field, value) => setValues((current) => ({ ...current, [field]: value }))} />
+          <div className="flex flex-col gap-2">
+            <Label htmlFor={`${id}-lead`}>{t('operator.fields.lead')}</Label>
+            {can(PERMISSION.usersRead)
+              ? <UserPicker id={`${id}-lead`} value={lead} onChange={setLead} required
+                aria-describedby={`${id}-lead-hint`} data-testid="operator-lead" />
+              : <Input id={`${id}-lead`} value={lead ?? ''} required maxLength={128} autoComplete="off"
+                aria-describedby={`${id}-lead-hint`} data-testid="operator-lead"
+                onChange={(event) => setLead(event.target.value)} />}
+            <p id={`${id}-lead-hint`} className="text-muted-foreground text-sm">{t('operator.fields.leadHint')}</p>
+          </div>
+          {first
+            ? <p className="text-sm" data-testid="operator-first-default">{t('operator.list.firstDefault')}</p>
+            : (
+              <div className="flex items-center gap-2">
+                <Checkbox id={`${id}-default`} checked={makeDefault} data-testid="operator-default-new"
+                  onCheckedChange={(checked) => setMakeDefault(checked === true)} />
+                <Label htmlFor={`${id}-default`} className="font-normal">{t('operator.list.makeDefault')}</Label>
+              </div>
+            )}
           {problem && <Alert variant="destructive" data-testid="operator-problem"><AlertDescription>{problem}</AlertDescription></Alert>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>{t('operator.cancel')}</Button>
@@ -93,6 +125,8 @@ export default function OperatorsPage() {
   const languages = useLabels(DICTIONARY.contentLanguage)
   const [creating, setCreating] = useState(false)
   const more = useMoreFilters([
+    // F-S1b: there may be many operators.
+    { kind: 'like', name: 'name', label: t('operator.fields.name') },
     { kind: 'dictionary', name: 'status', label: t('operator.fields.status'), dictionary: DICTIONARY.operatorStatus },
     { kind: 'time', name: 'createdAt', label: t('operator.list.createdAt') },
   ], 'operators-filters')
@@ -103,9 +137,14 @@ export default function OperatorsPage() {
       id: 'name',
       header: t('operator.fields.name'),
       cell: ({ row }) => (
-        <Link to={PATH.operator(row.original.operatorId)} className={linkClass} data-testid="operator-row-link">
-          {row.original.name}
-        </Link>
+        <span className="flex flex-wrap items-center gap-2">
+          <Link to={PATH.operator(row.original.operatorId)} className={linkClass} data-testid="operator-row-link">
+            {row.original.name}
+          </Link>
+          {row.original.defaultForNew && (
+            <Badge variant="secondary" data-testid="operator-row-default">{t('operator.detail.default')}</Badge>
+          )}
+        </span>
       ),
     },
     { id: 'language', header: t('operator.fields.language'),

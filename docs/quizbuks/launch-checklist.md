@@ -65,6 +65,11 @@
 - [ ] **至少两位超级管理员**（`QB_ADMIN_SUPER`，平台 16u，D51）在职、各自二次验证，按 `operations.md` §3 第 4–5 步的顺序建立（`QB_SETUP` 与职责分离规则的发布在第二位之前）；建立期已结束（`sec_protected_grants_armed` 有一行），试过一次由一位申请、另一位审批的角色分配；`JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED` 未设
 - [ ] **密钥已从任何演示或测试的值轮换**：`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY`、数据库密码、Stripe 密钥与签名密钥、SMTP、Google、Facebook 与 LINE 的客户端密钥都是为生产新生成的，没有在本机演示、e2e、压测或测试服务器上用过；`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本已保存
 - [ ] `operations.md` §1.4 的测试开关一个都没设；`SPRING_PROFILES_ACTIVE` 不含 `dev`；`JABIZ_SECURITY_MFA_ADMINISTRATION` 未设；`QB_STRIPE_PLACEHOLDERS=false`
+- [ ] **设置检查**：在服务器上对正式环境的 `.env` 运行平台的检查与 QuizBuks 的规则，`0 error(s)`（只读，只输出变量名，不输出值）：
+      `tools/ops/env-check.sh /opt/apps/quizbuks/.env deploy/quizbuks/server/env-check.rules`。平台检查密钥（设了、够长、互不相同、不是仓库中的测试值）、
+      没有 `dev`、首个管理员的变量已删、管理的二次验证没有关、`JABIZ_TRUSTED_PROXIES`、`JABIZ_WEB_ENVIRONMENT=production`、告警收件人与 Grafana 的 SMTP；
+      QuizBuks 的规则检查 §1.4 的测试开关、本地 `.env` 的占位开关、QuizBuks 测试用的封存密钥、监控已开启（`COMPOSE_PROFILES=observability`、指标与日志的 OTLP）。
+      警告（如"轮换进行中"）逐条看过
 - [ ] 只经 HTTPS 访问（HSTS），`JABIZ_TRUSTED_PROXIES` 已设；数据库与管理端口不对公网开放；指标不在应用端口上暴露
 - [ ] 正式环境的 `.env` 有 `JABIZ_WEB_ENVIRONMENT=production`（平台 16zd）：打开 App、发起方页面与平台管理系统的登录页，顶部**没有**"测试环境"的横条、标题没有 `[TEST]`；
   staging 打开同样的页面**有**横条（两边各看一次，确认标志指向正确的环境）
@@ -72,10 +77,13 @@
 
 ## 运维
 
-- [ ] **备份已测试**：WAL 归档与每日基础备份在运行，恢复演练（`operations.md` §2.4）做过一次并记录了 RTO 与 RPO；文件卷有备份
-- [ ] **监控与告警已上线**（`operations.md` §5）：OTLP 已接入，健康、准入与提交 503、核对差异、转账失败、Webhook 被拒、分录导出被拒、备份与磁盘的告警都已配置并试发过一次；告警送达值班的人
+- [ ] **备份已测试**：WAL 归档与每日基础备份在运行，恢复演练（`operations.md` §2.4，`tools/ops/restore-drill.sh`，**加 `DRILL_ROTATE=true`**）做过一次，结果 `PASSED`；
+      演练记录即脚本写出的 Markdown（RTO、RPO、每项核对，含 QuizBuks 的三个模板与密钥轮换），附在本项；文件卷有备份
+- [ ] **监控与告警已上线**（`operations.md` §5）：本环境的 LGTM 在运行（`COMPOSE_PROFILES=observability`），OTLP 已接入；平台的规则（`docker/grafana/alerting/jabiz-alerts.yaml`）与 QuizBuks 的规则（`deploy/quizbuks/alerting/quizbuks-alerts.yaml`）都已载入；
+      在 staging 上以 `tools/ops/alert-fire-test.sh` 试过：`rules`（全部求值无误；QuizBuks 的文件夹 `quizbuks` 在 Grafana 中看）、`notify`（值班的人收到了测试告警）、`fire`、
+      `disk <上传文件的目录>`（F-F13 的验收"把磁盘填到阈值"：磁盘告警进入 pending 后脚本删去临时文件）；数据库主机的 WAL 归档、备份与磁盘告警由托管方或主机监控配置并试过
 - [ ] 首次启动（`operations.md` §3）完成：`QB_SETUP` 的提案已发布，科目映射已设（含 Q87 的 `qb.journal.account.2160 / 1130 / 4120 / 2150`），审批规则已发布（含 `qb.fee-request.review`）
-- [ ] **IP 地址库**（F-S11，`DEPLOY.md`"3c"、`operations.md` §7.24）：DB-IP Lite 的 CSV 已放进卷 `geoip`、`.env` 设了 `JABIZ_GEOIP_DATABASE`（正式模式下不设即启动失败），每月更新排进值班表；从中国大陆与日本的网络核对过 `/api/client/region`；`qb.video.mainland-accessible-sites` 已发布；隐私政策含"按 IP 判断所在地区"与 DB-IP 署名的版本已发布
+- [ ] **IP 地址库**（F-S11，`DEPLOY.md`"3c"、`operations.md` §7.24）：DB-IP Lite 的 CSV 已放进卷 `geoip`、`.env` 设了 `JABIZ_GEOIP_DATABASE`（正式模式下不设即启动失败），每月更新排进值班表；从中国大陆与日本的网络核对过 `/api/client/region`；`qb.video.mainland-accessible-sites` 已发布；隐私政策含"按 IP 判断所在地区"与 DB-IP 署名的版本已**勾选"须重新同意"**发布（需求方 2026-11-07，§7.24 第 6 步），已同意旧版的测试账号登录时被要求同意新版
 - [ ] **短视频**（F-S10，`operations.md` §7.25）：`QB_SETUP` 已建 `qb.feed.shorts.positions` / `.per-shelf`；帮助"短视频"（`docs/quizbuks/help/shorts.md`）已由内容管理员发布为学者与发起方的 FAQ
 - [ ] 值班与联系方式：Stripe 支持、邮件服务商、数据库托管方
 - [ ] 本清单与 `operations.md` 中的步骤由将要值班的人读过
