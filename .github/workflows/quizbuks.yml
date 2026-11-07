@@ -270,8 +270,8 @@ jobs:
           curl -sI 'localhost:8080/?ref=card' | tr -d '\r' | grep -qi '^location: /biz/?ref=card$'
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/p/some-id)" = 301
           curl -sI localhost:8080/p/some-id | tr -d '\r' | grep -qi '^location: /taker/p/some-id$'
-          curl -sf localhost:8080/sponsor/ | grep -q '<title>QuizBuks Sponsor</title>'
-          curl -sf localhost:8080/sponsor/wallet | grep -q '<title>QuizBuks Sponsor</title>'
+          curl -sf localhost:8080/sponsor/ | grep -q '<title>QuizBuks for Sponsors</title>'
+          curl -sf localhost:8080/sponsor/wallet | grep -q '<title>QuizBuks for Sponsors</title>'
           curl -sf localhost:8080/admin/ | grep -q 'id="root"'
           curl -sf localhost:8080/admin/datasets | grep -q 'id="root"'
           # The app is a PWA: its manifest and the site's only Service Worker.
