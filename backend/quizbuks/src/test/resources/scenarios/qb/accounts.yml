@@ -368,8 +368,10 @@ steps:
   - deliverEvents: true
   - expect:
       query: qb.admin.sponsors
-      rows: 1
-      values: [{ company: Acme, contactName: Sara, email: sara@example.com, reviewStatus: REJECTED,
+      # F-S1: the default operator's own sponsor (its lead) first.
+      rows: 2
+      values: [{ company: QuizBuks, contactName: Operator lead, reviewStatus: APPROVED },
+        { company: Acme, contactName: Sara, email: sara@example.com, reviewStatus: REJECTED,
         rejectReason: Tell us more about your company. }]
 
   - note: The sponsor changes it and applies again (their task is done); approved this time.

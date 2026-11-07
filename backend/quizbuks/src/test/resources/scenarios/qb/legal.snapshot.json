@@ -43,7 +43,7 @@
       "versionNo" : 4,
       "effectStartTime" : "2026-10-01T01:00:00Z",
       "createdTime" : "2026-10-01T01:00:00Z",
-      "processSeqId" : "#op:8"
+      "processSeqId" : "#op:9"
     }, {
       "docId" : "#uuid:3",
       "kind" : "PRIVACY",
@@ -65,7 +65,7 @@
       "versionNo" : 5,
       "effectStartTime" : "2026-12-02T00:00:00Z",
       "createdTime" : "2026-12-02T00:00:00Z",
-      "processSeqId" : "#op:12"
+      "processSeqId" : "#op:13"
     }, {
       "docId" : "#uuid:4",
       "kind" : "COMMERCE_NOTICE",
@@ -224,7 +224,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T01:00:00Z",
       "createdTime" : "2026-10-01T01:00:00Z",
-      "processSeqId" : "#op:8"
+      "processSeqId" : "#op:9"
     }, {
       "legalVersionId" : "#uuid:11",
       "kind" : "PRIVACY",
@@ -250,7 +250,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-09T00:00:00Z",
       "createdTime" : "2026-10-09T00:00:00Z",
-      "processSeqId" : "#op:10"
+      "processSeqId" : "#op:11"
     }, {
       "legalVersionId" : "#uuid:12",
       "kind" : "PRIVACY",
@@ -276,7 +276,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-12-02T00:00:00Z",
       "createdTime" : "2026-12-02T00:00:00Z",
-      "processSeqId" : "#op:12"
+      "processSeqId" : "#op:13"
     } ],
     "QbLegalWithdrawal" : [ {
       "withdrawalId" : "#uuid:13",
@@ -289,7 +289,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-09T00:00:00Z",
       "createdTime" : "2026-10-09T00:00:00Z",
-      "processSeqId" : "#op:11"
+      "processSeqId" : "#op:12"
     } ],
     "QbConsent" : [ {
       "consentId" : "#uuid:14",
@@ -329,7 +329,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:6"
+      "processSeqId" : "#op:7"
     }, {
       "consentId" : "#uuid:19",
       "userId" : "#uuid:18",
@@ -342,7 +342,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:6"
+      "processSeqId" : "#op:7"
     }, {
       "consentId" : "#uuid:20",
       "userId" : "#uuid:18",
@@ -355,20 +355,20 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-09T00:00:00Z",
       "createdTime" : "2026-10-09T00:00:00Z",
-      "processSeqId" : "#op:9"
+      "processSeqId" : "#op:10"
     } ],
     "QbSponsor" : [ {
       "onboardingId" : "#uuid:21",
-      "userId" : "#uuid:18",
-      "contactName" : "Alice",
-      "company" : "Capitals Inc",
+      "userId" : "#uuid:22",
+      "contactName" : "Operator lead",
+      "company" : "QuizBuks",
       "intro" : null,
       "introTranslations" : null,
       "avatar" : null,
       "reviewStatus" : "APPROVED",
-      "termsAcceptedAt" : "2026-10-01T00:00:00Z",
-      "termsVersionNo" : "1",
-      "approvalRequestId" : "#uuid:22",
+      "termsAcceptedAt" : null,
+      "termsVersionNo" : null,
+      "approvalRequestId" : null,
       "submittedAt" : "2026-10-01T00:00:00Z",
       "approvedAt" : "2026-10-01T00:00:00Z",
       "rejectReason" : null,
@@ -383,16 +383,42 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:7"
+      "processSeqId" : "#op:6"
+    }, {
+      "onboardingId" : "#uuid:23",
+      "userId" : "#uuid:18",
+      "contactName" : "Alice",
+      "company" : "Capitals Inc",
+      "intro" : null,
+      "introTranslations" : null,
+      "avatar" : null,
+      "reviewStatus" : "APPROVED",
+      "termsAcceptedAt" : "2026-10-01T00:00:00Z",
+      "termsVersionNo" : "1",
+      "approvalRequestId" : "#uuid:24",
+      "submittedAt" : "2026-10-01T00:00:00Z",
+      "approvedAt" : "2026-10-01T00:00:00Z",
+      "rejectReason" : null,
+      "rejectedAt" : null,
+      "revision" : "2",
+      "editedAt" : "2026-10-01T00:00:00Z",
+      "billingMode" : null,
+      "creditLimit" : null,
+      "billingReason" : null,
+      "billingSetBy" : null,
+      "billingSetAt" : null,
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:8"
     } ],
     "QbTopUp" : [ {
-      "topUpId" : "#uuid:23",
+      "topUpId" : "#uuid:25",
       "sponsorId" : "#uuid:18",
       "amount" : "1000",
       "method" : "STRIPE",
       "target" : "KUDOS",
       "status" : "OPENING",
-      "target" : "KUDOS",
       "createdAt" : "2026-10-01T01:00:00Z",
       "checkoutSessionId" : null,
       "checkoutUrl" : null,
@@ -437,13 +463,12 @@
       "sponsorVisible" : true,
       "version" : 1
     }, {
-      "topUpId" : "#uuid:24",
+      "topUpId" : "#uuid:26",
       "sponsorId" : "#uuid:18",
       "amount" : "1000",
       "method" : "STRIPE",
       "target" : "KUDOS",
       "status" : "OPENING",
-      "target" : "KUDOS",
       "createdAt" : "2026-10-09T00:00:00Z",
       "checkoutSessionId" : null,
       "checkoutUrl" : null,

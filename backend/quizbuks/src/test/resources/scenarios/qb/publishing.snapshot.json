@@ -63,7 +63,7 @@
       "versionNo" : 10,
       "effectStartTime" : "2026-10-10T00:00:00Z",
       "createdTime" : "2026-10-10T00:00:00Z",
-      "processSeqId" : "#op:7"
+      "processSeqId" : "#op:8"
     }, {
       "publicationId" : "#uuid:5",
       "publisherKind" : "SPONSOR",
@@ -125,7 +125,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-10T01:00:00Z",
       "createdTime" : "2026-10-10T01:00:00Z",
-      "processSeqId" : "#op:8"
+      "processSeqId" : "#op:9"
     } ],
     "QbRewardTier" : [ {
       "tierId" : "#uuid:6",
@@ -139,7 +139,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T01:00:00Z",
       "createdTime" : "2026-10-01T01:00:00Z",
-      "processSeqId" : "#op:3"
+      "processSeqId" : "#op:4"
     }, {
       "tierId" : "#uuid:7",
       "publicationId" : "#uuid:1",
@@ -152,7 +152,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T01:00:00Z",
       "createdTime" : "2026-10-01T01:00:00Z",
-      "processSeqId" : "#op:3"
+      "processSeqId" : "#op:4"
     }, {
       "tierId" : "#uuid:8",
       "publicationId" : "#uuid:1",
@@ -165,7 +165,7 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T04:00:00Z",
       "createdTime" : "2026-10-01T04:00:00Z",
-      "processSeqId" : "#op:5"
+      "processSeqId" : "#op:6"
     }, {
       "tierId" : "#uuid:9",
       "publicationId" : "#uuid:5",
@@ -178,7 +178,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-10T01:00:00Z",
       "createdTime" : "2026-10-10T01:00:00Z",
-      "processSeqId" : "#op:8"
+      "processSeqId" : "#op:9"
     }, {
       "tierId" : "#uuid:10",
       "publicationId" : "#uuid:5",
@@ -191,7 +191,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-10T01:00:00Z",
       "createdTime" : "2026-10-10T01:00:00Z",
-      "processSeqId" : "#op:8"
+      "processSeqId" : "#op:9"
     }, {
       "tierId" : "#uuid:11",
       "publicationId" : "#uuid:5",
@@ -204,7 +204,7 @@
       "versionNo" : 1,
       "effectStartTime" : "2026-10-10T01:00:00Z",
       "createdTime" : "2026-10-10T01:00:00Z",
-      "processSeqId" : "#op:8"
+      "processSeqId" : "#op:9"
     } ],
     "QbPublicationCounter" : [ {
       "publicationId" : "#uuid:1",
@@ -246,7 +246,7 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:1"
+      "processSeqId" : "#op:2"
     }, {
       "requestId" : "#uuid:16",
       "subject" : "qb.publication",
@@ -265,7 +265,7 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T03:00:00Z",
       "createdTime" : "2026-10-01T03:00:00Z",
-      "processSeqId" : "#op:4"
+      "processSeqId" : "#op:5"
     }, {
       "requestId" : "#uuid:4",
       "subject" : "qb.publication",
@@ -284,9 +284,36 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T05:00:00Z",
       "createdTime" : "2026-10-01T05:00:00Z",
-      "processSeqId" : "#op:6"
+      "processSeqId" : "#op:7"
     } ],
     "QbSponsor" : [ {
+      "onboardingId" : "#uuid:18",
+      "userId" : "#uuid:19",
+      "contactName" : "Operator lead",
+      "company" : "QuizBuks",
+      "intro" : null,
+      "introTranslations" : null,
+      "avatar" : null,
+      "reviewStatus" : "APPROVED",
+      "termsAcceptedAt" : null,
+      "termsVersionNo" : null,
+      "approvalRequestId" : null,
+      "submittedAt" : "2026-10-01T00:00:00Z",
+      "approvedAt" : "2026-10-01T00:00:00Z",
+      "rejectReason" : null,
+      "rejectedAt" : null,
+      "revision" : "2",
+      "editedAt" : "2026-10-01T00:00:00Z",
+      "billingMode" : null,
+      "creditLimit" : null,
+      "billingReason" : null,
+      "billingSetBy" : null,
+      "billingSetAt" : null,
+      "versionNo" : 2,
+      "effectStartTime" : "2026-10-01T00:00:00Z",
+      "createdTime" : "2026-10-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    }, {
       "onboardingId" : "#uuid:13",
       "userId" : "sponsor-a",
       "contactName" : "Alice",
@@ -312,7 +339,7 @@
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
-      "processSeqId" : "#op:2"
+      "processSeqId" : "#op:3"
     } ]
   }
 }
