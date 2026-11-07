@@ -21,7 +21,7 @@ steps:
         qb.referral.per-referrer-total, qb.conversation.daily-cap, qb.conversation.close-days,
         qb.ai.candidates.expire-days,
         qb.ai.price.input-per-mtok-usd, qb.ai.price.output-per-mtok-usd, qb.tree.platform-handle,
-        qb.fee.due-days]
+        qb.fee.due-days, qb.assets.max-count, qb.assets.max-tags, qb.assets.tag-length]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,
