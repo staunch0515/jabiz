@@ -147,6 +147,42 @@ describe('the orders (17zc)', () => {
     expect(cards[0]).toHaveTextContent('SHIPPED')
     window.localStorage.clear()
   })
+
+  it('searches and picks a status in the list template, with placing an order beside the title', async () => {
+    signedIn(ORDERS)
+    window.history.replaceState(null, '', '/orders')
+    render(<App />)
+    const table = await screen.findByTestId('orders-table')
+    expect(screen.getByRole('heading', { level: 1, name: 'My orders' }).nextElementSibling)
+      .toHaveAccessibleName('Place an order')
+    await userEvent.click(within(screen.getByRole('radiogroup', { name: 'Status' })).getByRole('radio', { name: 'OPEN' }))
+    expect(within(table).getAllByTestId('order-row')).toHaveLength(1)
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Order number' }), 'SO-9')
+    expect(within(table).queryAllByTestId('order-row')).toHaveLength(0)
+    window.localStorage.clear()
+  })
+
+  it('on a phone: the bottom menu, the floating button, and the account beside its settings', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 360 })
+    try {
+      signedIn(ORDERS)
+      window.history.replaceState(null, '', '/orders')
+      render(<App />)
+      await screen.findByTestId('orders-table')
+      const bar = screen.getByRole('navigation', { name: 'Quick menu' })
+      expect(within(bar).getByRole('link', { name: 'My orders' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByTestId('page-fab')).toHaveAccessibleName('Place an order')
+      await userEvent.click(within(bar).getByRole('link', { name: 'Account' }))
+      expect(window.location.pathname).toBe('/account')
+      const summary = await screen.findByRole('complementary', { name: 'Your account' })
+      expect(summary).toHaveTextContent('cara@example.com')
+      expect(within(summary).getByTestId('account-email-state')).toHaveTextContent('Verified')
+      // The new page's title has the focus (the shell moves it when the route changes).
+      await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Account' })).toHaveFocus())
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
+    }
+  })
 })
 
 describe('linking a provider account (phase 16f)', () => {
