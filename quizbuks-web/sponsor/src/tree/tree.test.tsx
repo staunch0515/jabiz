@@ -91,7 +91,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('the sponsor\'s tree (Q85)', () => {
+describe('the Sponsor\'s tree (Q85)', () => {
   it('has every text in every language, and reads its addresses', () => {
     const english = keyPaths(treeMessages.en)
     for (const lng of LANGUAGES) {
@@ -127,7 +127,7 @@ describe('the sponsor\'s tree (Q85)', () => {
     expect(within(people[0]).getByTestId('tree-person-transactions'))
       .toHaveAttribute('href', `/transactions?publication=${ADVANCED}&user=${KEY}`)
     expect(within(people[0]).getByTestId('tree-person-conversation')).toBeInTheDocument()
-    expect(people[1]).toHaveTextContent('A taker')
+    expect(people[1]).toHaveTextContent('A Taker')
     expect(within(people[1]).queryByTestId('tree-person-conversation')).toBeNull()
     expect(asked.filter((a) => a.path === '/api/queries/qb.sponsor.tree-people').at(-1)!.params)
       .toMatchObject({ publicationId: ADVANCED, state: 'UNLOCKED' })

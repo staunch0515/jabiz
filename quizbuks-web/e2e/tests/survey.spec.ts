@@ -52,7 +52,7 @@ async function seedSurvey(request: APIRequestContext, token: string, quizId: str
 for (const appearance of ['light', 'dark'] as const) {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
 
-  test(`a sponsor makes a survey and a taker completes it for the reward (${appearance})`, async ({
+  test(`a Sponsor makes a survey and a Taker completes it for the reward (${appearance})`, async ({
     page,
     request,
   }) => {

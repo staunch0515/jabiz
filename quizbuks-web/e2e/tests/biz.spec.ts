@@ -82,7 +82,7 @@ test('an English browser stays on the English pages', async ({ browser }) => {
   await context.close()
 })
 
-test('the taker button opens a phone-sized window on a desktop, the sponsor button a new tab', async ({
+test('the Taker button opens a phone-sized window on a desktop, the Sponsor button a new tab', async ({
   browser,
 }) => {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1366, height: 800 } })
@@ -103,14 +103,14 @@ test('the taker button opens a phone-sized window on a desktop, the sponsor butt
 
   const [tab] = await Promise.all([
     context.waitForEvent('page'),
-    page.getByRole('link', { name: 'Become a sponsor' }).first().click(),
+    page.getByRole('link', { name: 'Become a Sponsor' }).first().click(),
   ])
   await tab.waitForLoadState()
   expect(new URL(tab.url()).pathname).toBe('/sponsor/signup')
   await context.close()
 })
 
-test('the header signs a taker in through the phone-sized window and a sponsor in a new tab (Q34)', async ({
+test('the header signs a Taker in through the phone-sized window and a Sponsor in a new tab (Q34)', async ({
   browser,
 }) => {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1366, height: 800 } })
@@ -163,7 +163,7 @@ test('the header fits in every language, the wordmark on one line', async ({ bro
   }
 })
 
-test('on a phone the taker button navigates in place', async ({ browser }) => {
+test('on a phone the Taker button navigates in place', async ({ browser }) => {
   const context = await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 }, hasTouch: true,
     isMobile: true })
   const page = await context.newPage()

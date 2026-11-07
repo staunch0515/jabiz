@@ -75,7 +75,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('the sponsor’s own certifications (Q88a)', () => {
+describe('the Sponsor’s own certifications (Q88a)', () => {
   it('have every text in every language', () => {
     const english = keyPaths(certificationsMessages.en)
     for (const lng of LANGUAGES) {

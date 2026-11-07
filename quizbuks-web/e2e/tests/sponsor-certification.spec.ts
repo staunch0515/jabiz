@@ -29,7 +29,7 @@ async function choose(page: import('@playwright/test').Page, text: string) {
   await saved
 }
 
-test('a sponsor defines a certification, a quiz paying nothing gives it, a taker earns it (Q88a)', async ({ page,
+test('a Sponsor defines a certification, a quiz paying nothing gives it, a Taker earns it (Q88a)', async ({ page,
   request }) => {
   test.setTimeout(300_000)
   // The switch is off by default (D-Q88-7); the tests turn it on once (controlled, four eyes).
@@ -119,7 +119,7 @@ test('a sponsor defines a certification, a quiz paying nothing gives it, a taker
   await expect(page.getByTestId('verify-state')).toHaveText('Valid')
   await expect(page.getByTestId('verify-certification')).toHaveText(name)
   await expect(page.getByTestId('verify-issuer')).toHaveText(mine.sponsorName!)
-  await expectAccessible(page, 'verify page of a sponsor certification')
+  await expectAccessible(page, 'verify page of a Sponsor certification')
 
   // The sponsor's list counts the holder.
   await signOut(page)

@@ -9,8 +9,8 @@ export const settlementMessages = {
   en: {
     title: 'Operator settlements',
     ownTitle: 'Settlements',
-    description: 'Each operator’s month (Japan’s): the commission of its sponsors’ publications less the platform’s share of its plan and the plan’s fixed fee, credited to the operator’s account. Older settlements are paid one by one: finance records the bank payment; another administrator approves it before it is posted.',
-    ownDescription: 'Your share of each month’s commission on your sponsors’ publications, credited to your account.',
+    description: 'Each operator’s month (Japan’s): the commission of its Sponsors’ publications less the platform’s share of its plan and the plan’s fixed fee, credited to the operator’s account. Older settlements are paid one by one: finance records the bank payment; another administrator approves it before it is posted.',
+    ownDescription: 'Your share of each month’s commission on your Sponsors’ publications, credited to your account.',
     status: 'State',
     all: 'All states',
     operator: 'Operator',
@@ -38,8 +38,8 @@ export const settlementMessages = {
   zh: {
     title: '运营商结算',
     ownTitle: '结算',
-    description: '每个运营商的月度结算（日本时间）：其商户发布的抽成扣除其方案的平台分成与固定费，记入运营商的账户。以前的结算逐张付款：财务登记银行付款，另一位管理员批准后才过账。',
-    ownDescription: '每月您负责的商户发布的抽成中您的分成，记入您的账户。',
+    description: '每个运营商的月度结算（日本时间）：其发起方发布的抽成扣除其方案的平台分成与固定费，记入运营商的账户。以前的结算逐张付款：财务登记银行付款，另一位管理员批准后才过账。',
+    ownDescription: '每月您负责的发起方发布的抽成中您的分成，记入您的账户。',
     status: '状态',
     all: '全部状态',
     operator: '运营商',
@@ -67,8 +67,8 @@ export const settlementMessages = {
   ja: {
     title: '運営パートナーの精算',
     ownTitle: '精算',
-    description: '運営パートナーごとの月次（日本時間）：担当スポンサーの発行の手数料から、プランのプラットフォームの取り分と固定費を除いた額で、運営パートナーのアカウントに計上されます。以前の精算は1件ずつ支払います：財務が銀行での支払いを登録し、別の管理者が承認してから計上されます。',
-    ownDescription: '毎月の担当スポンサーの発行の手数料のうち貴社の取り分で、貴社のアカウントに計上されます。',
+    description: '運営パートナーごとの月次（日本時間）：担当主催者の発行の手数料から、プランのプラットフォームの取り分と固定費を除いた額で、運営パートナーのアカウントに計上されます。以前の精算は1件ずつ支払います：財務が銀行での支払いを登録し、別の管理者が承認してから計上されます。',
+    ownDescription: '毎月の担当主催者の発行の手数料のうち貴社の取り分で、貴社のアカウントに計上されます。',
     status: '状態',
     all: 'すべての状態',
     operator: '運営パートナー',

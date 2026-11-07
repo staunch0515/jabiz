@@ -1,7 +1,10 @@
 package com.jabiz.runtime.mail;
 
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.entity.Violation;
+import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.mail.MailPlaceholders;
+import com.jabiz.mail.MailTextRules;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.mail.MailSenderSource;
 import com.jabiz.mail.MailTemplate;
@@ -40,8 +43,11 @@ import java.util.function.Predicate;
  *       ({@code jabiz.mail.from}) must be configured, and an address of the application ({@code jabiz.mail.base-url})
  *       when a template has links to it (every notification has its unsubscribe link), rather than mail failing one
  *       by one;</li>
- *   <li>every mail template has a unique name, a subject and a body in every language of the application, and uses
- *       exactly the placeholders it declares ({@link MailPlaceholders});</li>
+ *   <li>every mail template has a unique name, a subject and a body in every language of the application, and its
+ *       texts pass the {@link MailTextRules} that the texts administrators write pass as well (decision D72): an error
+ *       for placeholders (undeclared, unused, the unsubscribe link missing) and for tokens outside links to the
+ *       application, a warning for the rest (raw HTML, images, links elsewhere, lengths), which a default may have but
+ *       an override may not;</li>
  *   <li>no parameter is named like a secret or a masked field: parameters are stored and sent as they are, and a mail
  *       carries no secret but its one-time tokens;</li>
  *   <li>every entry a text names in {@code {entryUrl.<entry>}} is a usable sign-in entry (decision D43 item 4), and
@@ -79,6 +85,13 @@ public class MailChecks implements PlatformCheck {
     private final boolean sealKeyConfigured;
     private final boolean trustAllForTests;
     private final boolean development;
+    /** The rules' limits: the configured ones once the application's {@link MailTexts} are known. */
+    private MailTextRules.Limits limits = MailTextRules.Limits.DEFAULT;
+
+    /** Problems of default texts that make the startup fail: the rest are warnings (see the class comment). */
+    static final Set<String> FATAL = Set.of(PlatformErrorCodes.MAIL_TEXT_UNKNOWN_PLACEHOLDER,
+        PlatformErrorCodes.MAIL_TEXT_REQUIRED_PLACEHOLDER, PlatformErrorCodes.MAIL_TEXT_SECRET_PLACEMENT,
+        PlatformErrorCodes.MAIL_TEXT_EMPTY);
 
     /** The checks as before decision D52, without the entries' unsubscribe pages. */
     public MailChecks(boolean enabled, String from, String baseUrl, ObjectProvider<JavaMailSender> mail,
@@ -100,7 +113,7 @@ public class MailChecks implements PlatformCheck {
         @Value("${jabiz.security.email-link.max-ttl:P30D}") Duration maxSignInLink,
         ObjectProvider<MailSenderSource> sources, ObjectProvider<EntityDefinitionRegistry> entityRegistry,
         SecretSealer sealer, @Value("${jabiz.mail.senders.trust-all-for-tests:false}") boolean trustAllForTests,
-        Environment environment) {
+        Environment environment, MailTexts texts) {
         this(enabled, from, baseUrl, mail, templates, messages, masker::hidesByName,
             name -> entries.find(name).filter(entry -> entry.name().equals(name)).isPresent(),
             settings.unsubscribePaths(),
@@ -112,6 +125,7 @@ public class MailChecks implements PlatformCheck {
                 EntityDefinitionRegistry registry = entityRegistry.getIfAvailable();
                 return registry == null ? Optional.empty() : registry.find(name);
             }, sealer.configured(), trustAllForTests, environment.acceptsProfiles(Profiles.of("dev")));
+        this.limits = texts.limits();
     }
 
     /** @param hidden whether values under a name are hidden (secrets, masked fields) */
@@ -199,7 +213,8 @@ public class MailChecks implements PlatformCheck {
             }
             // The platform's namespace: a token of purpose jabiz.reset drawn by any other template would be taken by
             // the platform's processes (docs/design/10-security.md section 15.7).
-            if (!com.jabiz.runtime.security.AuthMailTemplates.NAMES.contains(template.name())) {
+            if (!com.jabiz.runtime.security.AuthMailTemplates.NAMES.contains(template.name())
+                && !PlatformMailTemplates.NAMES.contains(template.name())) {
                 if (template.name().startsWith(MailTemplate.PLATFORM_PREFIX)) {
                     problems.add(CheckProblem.error(CATEGORY, location, "is named in the platform's namespace "
                         + MailTemplate.PLATFORM_PREFIX + ", which applications do not use"));
@@ -248,8 +263,12 @@ public class MailChecks implements PlatformCheck {
                         + " [" + locale + "]"));
                 }
                 if (subject.isPresent() && body.isPresent()) {
-                    for (String problem : MailPlaceholders.problems(template, subject.get(), body.get())) {
-                        problems.add(CheckProblem.error(CATEGORY, location, "[" + locale + "] " + problem));
+                    for (Violation problem : MailTextRules.check(template, subject.get(), body.get(), limits)) {
+                        String description = "[" + locale + "] " + problem.message();
+                        problems.add(FATAL.contains(problem.ruleCode())
+                            ? CheckProblem.error(CATEGORY, location, description)
+                            : CheckProblem.warning(CATEGORY, location, description
+                                + " (allowed in the default, refused in an override)"));
                     }
                     Set<String> used = MailPlaceholders.of(subject.get() + "\n" + body.get());
                     used.stream().filter(MailTemplate::namedEntryUrl).map(MailTemplate::entryOf)

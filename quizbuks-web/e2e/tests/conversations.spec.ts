@@ -41,7 +41,7 @@ async function liveQuiz(request: APIRequestContext, sponsorToken: string, takerT
   return { publicationId, name }
 }
 
-test('a taker writes to the sponsor from a result, the sponsor answers, the taker reads it', async ({ browser,
+test('a Taker writes to the Sponsor from a result, the Sponsor answers, the Taker reads it', async ({ browser,
   baseURL, request }) => {
   test.setTimeout(240_000)
   const company = unique('Talk Co ')
@@ -64,7 +64,7 @@ test('a taker writes to the sponsor from a result, the sponsor answers, the take
   await contact.click()
   const dialog = app.getByTestId('contact-sponsor-dialog')
   await expect(dialog).toContainText(company)
-  await expectAccessible(app, 'app contact the sponsor')
+  await expectAccessible(app, 'app contact the Sponsor')
   // Plain text: an address is refused with the server's reason.
   await dialog.getByTestId('contact-sponsor-body').fill('Write to me at kai@example.com')
   await dialog.getByTestId('contact-sponsor-send').click()

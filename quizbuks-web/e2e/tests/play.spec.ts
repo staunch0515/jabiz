@@ -88,7 +88,7 @@ async function choose(page: Page, text: string) {
 for (const appearance of ['light', 'dark'] as const) {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
 
-  test(`a taker answers, continues after a reload, submits and waits for a pending reward (${appearance})`, async ({
+  test(`a Taker answers, continues after a reload, submits and waits for a pending reward (${appearance})`, async ({
     page,
     request,
   }) => {

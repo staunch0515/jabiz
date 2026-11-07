@@ -29,7 +29,7 @@ async function saveDialog(page: Page, dialog: string, button: string) {
   await expect(page.getByTestId(dialog)).toBeHidden()
 }
 
-test('a sponsor makes a quiz with questions, images and materials, and saves versions', async ({ page, request }) => {
+test('a Sponsor makes a quiz with questions, images and materials, and saves versions', async ({ page, request }) => {
   const { email, token } = await sponsor(request)
   const title = unique('Coffee ')
   await signIn(page, '/sponsor/', email)
@@ -155,7 +155,7 @@ test('a sponsor makes a quiz with questions, images and materials, and saves ver
   expect(versions.map((v) => v.label)).toEqual(['v1.1', 'v1.0'])
 })
 
-test('a sponsor copies a version into a new quiz and deletes the copy', async ({ page, request }) => {
+test('a Sponsor copies a version into a new quiz and deletes the copy', async ({ page, request }) => {
   const { email, token } = await sponsor(request)
   const title = unique('Tea ')
   const quiz = await run(request, token, 'QB_QUIZ_SAVE', { title })

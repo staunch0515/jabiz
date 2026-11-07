@@ -32,7 +32,7 @@ async function goLive(request: APIRequestContext, token: string, publicationId: 
     { message: 'the publication is live', timeout: 60_000 }).toBe('LIVE')
 }
 
-test('a quiz charges an entry fee from transferable Kudos, settled into the sponsor\'s cash (Q88b)', async ({ page,
+test('a quiz charges an entry fee from transferable Kudos, settled into the Sponsor\'s cash (Q88b)', async ({ page,
   request }) => {
   test.setTimeout(300_000)
   // Off by default (D-Q88-14); rewards are not held back, so one just won can pay (a test cannot wait 7 days).

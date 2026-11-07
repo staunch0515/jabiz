@@ -131,7 +131,7 @@ describe('sponsored benefits (Q89a)', () => {
     expect(newPurchasePath('o1')).toBe('/benefits/purchases/new?offer=o1')
   })
 
-  it('show the catalog to a certified sponsor, who asks the provider', async () => {
+  it('show the catalog to a certified Sponsor, who asks the provider', async () => {
     const { calls } = server()
     window.history.replaceState(null, '', '/benefits')
     render(<App />)
@@ -150,7 +150,7 @@ describe('sponsored benefits (Q89a)', () => {
       { offerId: 'o1', body: 'How much for 100?' }]))
   })
 
-  it('say the catalog is for certified sponsors when it shows nothing', async () => {
+  it('say the catalog is for certified Sponsors when it shows nothing', async () => {
     server({ held: false })
     window.history.replaceState(null, '', '/benefits')
     render(<App />)

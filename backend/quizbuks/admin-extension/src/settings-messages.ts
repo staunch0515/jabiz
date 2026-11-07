@@ -11,7 +11,7 @@ export const settingsMenu = {
 export const settingsMessages = {
   en: {
     title: 'Bank top-up settings',
-    description: 'The account sponsors transfer to and the limits of a bank top-up. They change with four eyes: one administrator proposes them, another publishes them.',
+    description: 'The account Sponsors transfer to and the limits of a bank top-up. They change with four eyes: one administrator proposes them, another publishes them.',
     current: 'In force',
     notSet: 'Not set',
     ready: 'Sponsors can top up by bank transfer.',
@@ -43,11 +43,11 @@ export const settingsMessages = {
   },
   zh: {
     title: '银行转账充值设置',
-    description: '商家转账的收款账户与银行转账充值的金额范围。修改须两人完成：一位管理员提出，另一位发布。',
+    description: '发起方转账的收款账户与银行转账充值的金额范围。修改须两人完成：一位管理员提出，另一位发布。',
     current: '现行值',
     notSet: '未设置',
-    ready: '商家可以使用银行转账充值。',
-    notReady: '商家暂不能使用银行转账充值：每一项都须设置。',
+    ready: '发起方可以使用银行转账充值。',
+    notReady: '发起方暂不能使用银行转账充值：每一项都须设置。',
     keys: {
       bank: '银行（含代码）',
       branch: '支店（含代码）',
@@ -75,11 +75,11 @@ export const settingsMessages = {
   },
   ja: {
     title: '銀行振込チャージの設定',
-    description: 'スポンサーが振り込む受取口座と、銀行振込チャージの金額の範囲です。変更は 2 人で行います。1 人の管理者が提案し、別の管理者が公開します。',
+    description: '主催者が振り込む受取口座と、銀行振込チャージの金額の範囲です。変更は 2 人で行います。1 人の管理者が提案し、別の管理者が公開します。',
     current: '現在の値',
     notSet: '未設定',
-    ready: 'スポンサーは銀行振込でチャージできます。',
-    notReady: 'スポンサーはまだ銀行振込でチャージできません。すべての項目を設定してください。',
+    ready: '主催者は銀行振込でチャージできます。',
+    notReady: '主催者はまだ銀行振込でチャージできません。すべての項目を設定してください。',
     keys: {
       bank: '銀行（コード付き）',
       branch: '支店（コード付き）',

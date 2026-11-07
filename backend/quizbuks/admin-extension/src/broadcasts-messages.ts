@@ -10,10 +10,10 @@ export const broadcastsMenu = {
 export const broadcastsMessages = {
   en: {
     title: 'Announcements and notices',
-    description: `Write ${BRAND_NAMES.en}'s announcements to the app's users or the sponsors, send them now or at a time, `
-      + 'and withdraw any announcement or sponsor\'s notice. Statistics count people: who read is never shown.',
+    description: `Write ${BRAND_NAMES.en}'s announcements to the app's users or the Sponsors, send them now or at a time, `
+      + 'and withdraw any announcement or Sponsor\'s notice. Statistics count people: who read is never shown.',
     new: 'New announcement',
-    filters: { sender: 'Sender', status: 'Status', all: 'All', search: 'Search titles and sponsors' },
+    filters: { sender: 'Sender', status: 'Status', all: 'All', search: 'Search titles and Sponsors' },
     columns: {
       title: 'Title',
       sender: 'Sender',
@@ -33,7 +33,7 @@ export const broadcastsMessages = {
     publication: 'Publication: {{name}}',
     targets: 'Named users: {{count}}',
     withdrawnBy: 'Withdrawn: {{reason}}',
-    suspended: 'the sponsor was banned',
+    suspended: 'the Sponsor was banned',
     by: { SENDER: 'by its sender', ADMIN: 'by an administrator', SYSTEM: 'by the system' },
     cancelled: 'Not sent: {{reason}}',
     editor: {
@@ -74,7 +74,7 @@ export const broadcastsMessages = {
       discard: 'Discard',
       withdraw: 'Withdraw',
       withdrawTitle: 'Withdraw it from every inbox?',
-      withdrawText: 'A sponsor reads the reason with their notice.',
+      withdrawText: 'A Sponsor reads the reason with their notice.',
       reason: 'Reason',
       done: 'Done.',
       confirm: 'Confirm',
@@ -82,9 +82,9 @@ export const broadcastsMessages = {
   },
   zh: {
     title: '公告与通知',
-    description: `撰写${BRAND_NAMES.zh}给 App 用户或商家的公告，立即或定时发送，并撤回任何公告或商家通知。统计只计人数，从不显示是谁阅读。`,
+    description: `撰写${BRAND_NAMES.zh}给 App 用户或发起方的公告，立即或定时发送，并撤回任何公告或发起方通知。统计只计人数，从不显示是谁阅读。`,
     new: '新建公告',
-    filters: { sender: '发送方', status: '状态', all: '全部', search: '搜索标题与商家' },
+    filters: { sender: '发送方', status: '状态', all: '全部', search: '搜索标题与发起方' },
     columns: {
       title: '标题',
       sender: '发送方',
@@ -104,7 +104,7 @@ export const broadcastsMessages = {
     publication: '发布：{{name}}',
     targets: '指定用户：{{count}}',
     withdrawnBy: '已撤回：{{reason}}',
-    suspended: '商家已被封禁',
+    suspended: '发起方已被封禁',
     by: { SENDER: '由发送方', ADMIN: '由管理员', SYSTEM: '由系统' },
     cancelled: '未发送：{{reason}}',
     editor: {
@@ -144,7 +144,7 @@ export const broadcastsMessages = {
       discard: '放弃',
       withdraw: '撤回',
       withdrawTitle: '从所有收件箱中撤回？',
-      withdrawText: '商家会在其通知中看到理由。',
+      withdrawText: '发起方会在其通知中看到理由。',
       reason: '理由',
       done: '已完成。',
       confirm: '确认',
@@ -152,9 +152,9 @@ export const broadcastsMessages = {
   },
   ja: {
     title: 'お知らせと通知',
-    description: `アプリのユーザーやスポンサーへの${BRAND_NAMES.ja}のお知らせを作成し、今すぐまたは日時を指定して送信します。お知らせやスポンサーの通知はいつでも取り下げられます。統計は人数のみで、誰が読んだかは表示しません。`,
+    description: `アプリのユーザーや主催者への${BRAND_NAMES.ja}のお知らせを作成し、今すぐまたは日時を指定して送信します。お知らせや主催者の通知はいつでも取り下げられます。統計は人数のみで、誰が読んだかは表示しません。`,
     new: 'お知らせを作成',
-    filters: { sender: '送信元', status: '状態', all: 'すべて', search: '件名とスポンサーを検索' },
+    filters: { sender: '送信元', status: '状態', all: 'すべて', search: '件名と主催者を検索' },
     columns: {
       title: '件名',
       sender: '送信元',
@@ -174,7 +174,7 @@ export const broadcastsMessages = {
     publication: '公開：{{name}}',
     targets: '指定ユーザー：{{count}} 人',
     withdrawnBy: '取り下げ：{{reason}}',
-    suspended: 'スポンサーが利用停止されました',
+    suspended: '主催者が利用停止されました',
     by: { SENDER: '送信元による', ADMIN: '管理者による', SYSTEM: 'システムによる' },
     cancelled: '未送信：{{reason}}',
     editor: {
@@ -214,7 +214,7 @@ export const broadcastsMessages = {
       discard: '破棄',
       withdraw: '取り下げ',
       withdrawTitle: 'すべての受信箱から取り下げますか？',
-      withdrawText: 'スポンサーは通知とともに理由を読みます。',
+      withdrawText: '主催者は通知とともに理由を読みます。',
       reason: '理由',
       done: '完了しました。',
       confirm: '確認',

@@ -154,7 +154,7 @@ describe('ManualCreditsPage', () => {
     expect(screen.queryByTestId('manual-new')).not.toBeInTheDocument()
   })
 
-  it('takes a sponsor\'s id when the list is capped, and says when no sponsor can be credited', async () => {
+  it('takes a Sponsor\'s id when the list is capped, and says when no Sponsor can be credited', async () => {
     server.sponsors = Array.from({ length: 200 }, (_, i) => ({ userId: `0192f0a0-0000-7000-8000-${String(i)
       .padStart(12, '0')}`, company: `Company ${i}`, contactName: null, reviewStatus: 'APPROVED' }))
     renderAt('/qb/finance/manual-credits', '/qb/finance/manual-credits', <ManualCreditsPage />)

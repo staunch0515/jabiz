@@ -159,8 +159,9 @@ DocumentLayout orderConfirmation() {
   （收件人之间互不可见），附件为存档的 PDF 原样字节（文件名同下载），发送前以存档的哈希核对——被改动的副本不会发出，该次尝试记为失败。
 - 每次尝试写入 `sys_document_delivery_attempt`（`SENT` / `FAILED` 与错误），已发送的不再发送，有失败即按重试策略（5 次，1 秒起加倍）重试整个步骤——
   与待办通知（18 §5.4）同一发送器 `NotificationSender`（新增带附件的 `send(MailMessage)`，`SmtpNotificationSender` 以 MIME 多部分发送）。
-- 主题与正文：消息 `document.<版式>.mail.subject` / `.body`，没有时用平台的 `document.mail.subject` / `.body`；参数 `{title}`、`{number}`、`{company}`；
-  语言为单据的语言。主题中的换行一律换成空格。
+- 主题与正文：平台的邮件模版 `jabiz.document-mail`（17zh-a，决策 D72）：管理员的覆盖（适用于所有版式），没有时用消息 `document.<版式>.mail.subject` / `.body`，
+  再没有时用模版的 `mail.jabiz.document-mail.subject` / `.body`（原 `document.mail.*`）；参数 `{title}`、`{number}`、`{company}`；正文为 Markdown，以纯文本发出；
+  语言为单据的语言。主题为一行（`MailRenderer`）。`sys_document_delivery.text_version_no` 记下所用覆盖的版本。
 - 业务流程以子流程调用（`CallProcess.of("DOCUMENT_SEND", 1, …)`），例如签发后立即发送；与 `DOCUMENT_ISSUE` 同一事务，邮件在提交后发出。
 
 > 计划中投递记在 `sys_notification`（D30 第 6 条的原文）；实施时细化为单据自己的两张表：`Notification` 是受审计的平台实体、主键为文本、只指向待办，

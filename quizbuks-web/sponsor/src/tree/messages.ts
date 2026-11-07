@@ -22,7 +22,7 @@ const en = {
     node: { pick: 'Pick a node to see who is on it.', counts: '{{lit}} lit · {{answered}} answered without passing · {{inProgress}} in progress · {{unlocked}} could start · {{locked}} locked out',
       status: 'Status', open: 'Open now', closed: 'Not open', publication: 'Open the publication' },
     people: { none: 'Nobody here.', more: 'More', when: 'Finished {{when}}', transactions: 'Transactions',
-      conversation: 'Conversation', light: 'Their tree', someone: 'A taker' },
+      conversation: 'Conversation', light: 'Their tree', someone: 'A Taker' },
     onTree: 'See on the tree',
   },
 }
@@ -44,7 +44,7 @@ const zh = {
     node: { pick: '点一个节点看上面的人。', counts: '已点亮 {{lit}} · 答过未合格 {{answered}} · 进行中 {{inProgress}} · 可开始 {{unlocked}} · 锁定 {{locked}}',
       status: '状态', open: '进行中', closed: '未开放', publication: '打开发布' },
     people: { none: '没有人。', more: '更多', when: '完成于 {{when}}', transactions: '交易',
-      conversation: '对话', light: '他的树', someone: '答题者' },
+      conversation: '对话', light: '他的树', someone: '学者' },
     onTree: '在树上查看',
   },
 }
@@ -66,7 +66,7 @@ const ja = {
     node: { pick: 'ノードを選ぶとその上の人が表示されます。', counts: '達成 {{lit}} · 不合格で回答 {{answered}} · 進行中 {{inProgress}} · 挑戦できる {{unlocked}} · ロック中 {{locked}}',
       status: '状態', open: '受付中', closed: '受付外', publication: '公開を開く' },
     people: { none: '誰もいません。', more: 'さらに', when: '{{when}} に完了', transactions: '取引',
-      conversation: '会話', light: 'この人のツリー', someone: '回答者' },
+      conversation: '会話', light: 'この人のツリー', someone: 'テイカー' },
     onTree: 'ツリーで見る',
   },
 }

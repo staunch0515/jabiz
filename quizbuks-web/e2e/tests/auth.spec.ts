@@ -25,7 +25,7 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a taker registers, verifies at the app\'s own page, completes the profile and stays signed in', async ({
+test('a Taker registers, verifies at the app\'s own page, completes the profile and stays signed in', async ({
   page,
   context,
 }) => {
@@ -71,7 +71,7 @@ test('a taker registers, verifies at the app\'s own page, completes the profile 
   await expect(again.getByTestId('login-error')).toBeVisible()
 })
 
-test('a taker who has not verified the address yet browses the app and is told to verify', async ({ page }) => {
+test('a Taker who has not verified the address yet browses the app and is told to verify', async ({ page }) => {
   const email = address('unverified')
   await signUp(page, '/taker/', email, 'Yui')
   await signIn(page, '/taker/', email)
@@ -83,7 +83,7 @@ test('a taker who has not verified the address yet browses the app and is told t
   await expect(page.getByTestId('profile-save')).toBeDisabled()
 })
 
-test('a taker who forgot the password gets a link to the app\'s own page and signs in with a new one', async ({
+test('a Taker who forgot the password gets a link to the app\'s own page and signs in with a new one', async ({
   page,
 }) => {
   const email = address('forgot')
@@ -112,7 +112,7 @@ test('a taker who forgot the password gets a link to the app\'s own page and sig
   await expect(page).toHaveURL(/\/welcome$/)
 })
 
-test('a sponsor registers, verifies at the console\'s own page, applies and is approved', async ({ page, request }) => {
+test('a Sponsor registers, verifies at the console\'s own page, applies and is approved', async ({ page, request }) => {
   const email = address('sponsor')
   await signUp(page, '/sponsor/', email, 'Sara')
   // The console signs the sponsor in unverified (Q40) and says to verify; applying waits for it.
@@ -170,7 +170,7 @@ test('a sponsor registers, verifies at the console\'s own page, applies and is a
   await expect(page.getByTestId('dashboard-status')).toHaveAttribute('data-status', 'APPROVED')
 })
 
-test('the administration does not accept a taker', async ({ request }) => {
+test('the administration does not accept a Taker', async ({ request }) => {
   const email = await verifiedUser(request, 'app', 'Tom')
   const app = await request.post('/api/auth/login', { data: { userName: email, password: PASSWORD, entry: 'app' } })
   expect(app.status()).toBe(200)

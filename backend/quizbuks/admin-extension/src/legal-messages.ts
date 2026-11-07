@@ -55,7 +55,7 @@ export const legalMessages = {
     editDrafts: '编辑草稿',
     kinds: {
       TERMS_APP: '用户条款（App）',
-      TERMS_SPONSOR: '商家条款',
+      TERMS_SPONSOR: '发起方条款',
       PRIVACY: '隐私政策',
       COMMERCE_NOTICE: '特定商取引法标示',
       AI_NOTICE: 'AI 使用说明',
@@ -97,7 +97,7 @@ export const legalMessages = {
     editDrafts: '下書きを編集',
     kinds: {
       TERMS_APP: '利用規約（アプリ）',
-      TERMS_SPONSOR: 'スポンサー利用規約',
+      TERMS_SPONSOR: '主催者利用規約',
       PRIVACY: 'プライバシーポリシー',
       COMMERCE_NOTICE: '特定商取引法に基づく表記',
       AI_NOTICE: 'AI 利用に関する説明',

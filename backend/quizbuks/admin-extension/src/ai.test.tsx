@@ -92,11 +92,11 @@ describe('AiPage', () => {
     const settings = screen.getByTestId('ai-settings')
     expect(within(settings).getAllByTestId('ai-setting').map((row) => row.dataset.key)).toEqual(['qb.ai.enabled',
       'qb.ai.model', 'qb.ai.sponsor.monthly-tokens'])
-    expect(settings).toHaveTextContent('Tokens per sponsor and month')
+    expect(settings).toHaveTextContent('Tokens per Sponsor and month')
     expect(settings).toHaveTextContent('Not published yet')
     const usage = await screen.findByTestId('ai-usage')
     const rows = within(usage).getAllByTestId('ai-usage-row')
-    expect(rows[0]).toHaveTextContent('All sponsors')
+    expect(rows[0]).toHaveTextContent('All Sponsors')
     expect(rows[1]).toHaveTextContent('Acme')
     expect(rows[1]).toHaveTextContent('25.0% (1)')
     expect(rows[1]).toHaveTextContent('0.60')

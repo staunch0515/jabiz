@@ -4,7 +4,7 @@ import { levelsOf } from './levels'
 const pub = (publicationId: string, ...required: string[]) => ({ publicationId,
   prerequisites: JSON.stringify(required.map((id) => ({ requiredPublicationId: id, requirement: 'PASSED' }))) })
 
-describe('the levels of a sponsor\'s page (Q76)', () => {
+describe('the levels of a Sponsor\'s page (Q76)', () => {
   it('puts what requires nothing first and what requires others above them, keeping the order within a level', () => {
     const levels = levelsOf([pub('c', 'b'), pub('a'), pub('b', 'a'), pub('d'), pub('e', 'a', 'c')])
     expect(levels.map((l) => [l.level, l.items.map((i) => i.publicationId)])).toEqual([

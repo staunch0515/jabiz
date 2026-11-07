@@ -53,7 +53,7 @@ public final class LegalDrafts {
         return switch (kind) {
             case QbLegal.TERMS_APP -> draft("Terms of use", "利用規約", "用户条款",
                 "Scope", "適用範囲", "适用范围");
-            case QbLegal.TERMS_SPONSOR -> draft("Sponsor terms", "スポンサー利用規約", "商家条款",
+            case QbLegal.TERMS_SPONSOR -> draft("Sponsor terms", "主催者利用規約", "发起方条款",
                 "Scope", "適用範囲", "适用范围");
             case QbLegal.PRIVACY -> draft("Privacy policy", "プライバシーポリシー", "隐私政策",
                 "Information we collect", "取得する情報", "我们收集的信息");

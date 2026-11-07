@@ -315,7 +315,7 @@ describe('a visitor', () => {
   })
 })
 
-describe('a signed-in taker', () => {
+describe('a signed-in Taker', () => {
   beforeEach(() => session.store('access', 'refresh'))
 
   it('completes the profile first, starting from the sign-up name and the browser\'s country', async () => {
@@ -540,7 +540,7 @@ describe('a signed-in taker', () => {
     await expectAccessible()
   })
 
-  it('shows the quizzes of the app\'s language until the taker switches others on (Q59a)', async () => {
+  it('shows the quizzes of the app\'s language until the Taker switches others on (Q59a)', async () => {
     const profile = { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 1 }
     const { posted } = server({ profile })
     render(<App />)

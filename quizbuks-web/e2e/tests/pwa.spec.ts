@@ -50,7 +50,7 @@ test('the app has a manifest and the only Service Worker of the site', async ({ 
   expect(await biz.text()).toContain('QuizBuks')
 })
 
-test('the app\'s worker leaves the sponsor console, the administration and the API to the network', async ({
+test('the app\'s worker leaves the Sponsor console, the administration and the API to the network', async ({
   page,
   context,
 }) => {

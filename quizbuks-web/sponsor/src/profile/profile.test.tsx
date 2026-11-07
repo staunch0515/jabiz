@@ -64,7 +64,7 @@ function server(options: Server = {}) {
           maxRewardPerAttempt: 500 }], offset: 0, limit: 1 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:reward-method':
         return json(200, [{ code: 'PLATFORM', label: 'Kudos paid by QuizBuks' },
-          { code: 'OFFLINE_REDEEM', label: "Prize at the sponsor's place" }])
+          { code: 'OFFLINE_REDEEM', label: "Prize at the Sponsor's place" }])
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
       case '/api/queries/qb.app.understanding':
@@ -86,7 +86,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('the sponsor hub (Q79)', () => {
+describe('the Sponsor hub (Q79)', () => {
   it('shows the status, the checklist, the page card with its link and the reward methods', async () => {
     server({ products: [PRODUCT], mailServer: { host: 'smtp.example.com', port: 587, tls: 'STARTTLS',
       username: 'u', fromAddress: 'mail@acme.example', fromName: null, verifiedAt: '2026-10-20T00:00:00Z',
@@ -132,7 +132,7 @@ describe('the sponsor hub (Q79)', () => {
     expect(dialog).toHaveTextContent('/taker/s/acme-bakery')
   })
 
-  it('leads a new sponsor to the basics, and from the old addresses to the sections', async () => {
+  it('leads a new Sponsor to the basics, and from the old addresses to the sections', async () => {
     server({ sponsor: null, page: null })
     window.history.replaceState(null, '', '/')
     render(<App />)
@@ -186,7 +186,7 @@ describe('the sponsor hub (Q79)', () => {
     }
   })
 
-  it('tells an approved sponsor without a page to publish it next', async () => {
+  it('tells an approved Sponsor without a page to publish it next', async () => {
     server({ page: { ...PUBLISHED, status: 'DRAFT', publishedAt: null } })
     window.history.replaceState(null, '', '/profile')
     render(<App />)

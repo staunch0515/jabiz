@@ -52,7 +52,7 @@ test('a paid reward is a message in the inbox; the badge counts it until it is r
   await expect(page.getByTestId('nav-inbox-badge')).toBeHidden()
 })
 
-test('a sponsor\'s notice reaches its takers and counts readers without naming them; QuizBuks withdraws it',
+test('a Sponsor\'s notice reaches its Takers and counts readers without naming them; QuizBuks withdraws it',
   async ({ page, browser, request }) => {
     test.setTimeout(180_000)
     const sponsor = await fundedSponsor(request, 1000)

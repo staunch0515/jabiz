@@ -356,7 +356,7 @@ describe('ReportsPage', () => {
     expect(within(monthly).getAllByTestId('issued-run').map((run) => run.dataset.hash)).toEqual(['a'.repeat(64)])
 
     const balances = screen.getByTestId('report-balances')
-    const check = await within(balances).findByText('Every sponsor wallet line (2110) names its sponsor')
+    const check = await within(balances).findByText('Every Sponsor wallet line (2110) names its Sponsor')
     expect(check.closest('tr')).toHaveAttribute('data-matches', 'true')
   })
 
@@ -381,7 +381,7 @@ describe('ReportsPage', () => {
 })
 
 describe('InvestorMetricsPage', () => {
-  it('shows the months of the period in the address with a total, the merchants, and exports through the platform',
+  it('shows the months of the period in the address with a total, the Sponsors, and exports through the platform',
     async () => {
       renderAt('/qb/finance/investor-metrics?from=2026-09&to=2026-10', '/qb/finance/investor-metrics',
         <InvestorMetricsPage />)

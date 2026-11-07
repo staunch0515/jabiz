@@ -239,7 +239,7 @@ describe('a visitor', () => {
   })
 })
 
-describe('a signed-in taker', () => {
+describe('a signed-in Taker', () => {
   beforeEach(() => session.store('access', 'refresh'))
 
   it('accepts the texts in effect with the welcome step', async () => {

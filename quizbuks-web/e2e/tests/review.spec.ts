@@ -13,7 +13,7 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a sponsor and a publication are reviewed in the administration', async ({ page, context, request }) => {
+test('a Sponsor and a publication are reviewed in the administration', async ({ page, context, request }) => {
   test.setTimeout(180_000)
   // A sponsor applies; the application waits for review.
   const made = await sponsor(request, 'Vera')
