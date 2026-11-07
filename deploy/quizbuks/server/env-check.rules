@@ -1,0 +1,38 @@
+# QuizBuks's rules for the platform's settings check, run on production's .env before going live
+# (docs/quizbuks/launch-checklist.md, "安全"):
+#   tools/ops/env-check.sh /opt/apps/quizbuks/.env deploy/quizbuks/server/env-check.rules
+# The platform's own rules come first (keys set, long enough, distinct and not the repository's test keys; no dev
+# profile; the bootstrap administrator removed; the administration's second factor on; trusted proxies;
+# JABIZ_WEB_ENVIRONMENT=production; the alert address and Grafana's SMTP). Syntax: set / absent / equals /
+# not-equals / warn-absent NAME [VALUE], one per line.
+
+# The test switches of operations.md section 1.4. Most are refused at startup in live mode; checked here before that.
+absent QB_TRANSFER_RUN_CRON
+absent QB_RECONCILE_RUN_CRON
+absent QB_ANALYTICS_RUN_CRON
+absent QB_E2E_ENABLED
+absent QUIZBUKS_WALLET_DEVCREDIT_ENABLED
+absent QB_STRIPE_CHECKOUT_URL_PREFIX
+absent QB_STRIPE_CONNECT_URL_PREFIX
+absent QB_STRIPE_API_URL
+absent QB_STRIPE_API_HOSTS
+absent QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA
+absent QB_ANTHROPIC_API_URL
+absent QB_ANTHROPIC_API_HOSTS
+absent JABIZ_MAIL_SENDERS_TRUST_ALL_FOR_TESTS
+absent JABIZ_SECURITY_SIGN_UP_RATE_LIMIT_PER_ADDRESS
+absent JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED
+absent QB_AI_HALTED
+# The server's compose sets these two to false over the .env; a .env that says true is a copied local one.
+not-equals QB_STRIPE_PLACEHOLDERS true
+not-equals QB_LOCAL_SECRETS true
+# QuizBuks's tests' seal key (backend/quizbuks/src/test/resources/config/application.properties); the platform
+# checks its own test keys.
+not-equals JABIZ_SEAL_KEY dGVzdC1vbmx5LXNlYWwta2V5LW9mLXRoZS1xdWl6YnVrcy10ZXN0cy0wMDAwMDAw
+
+# Monitoring and alerts (operations.md sections 1.5 and 5): the environment's LGTM runs, and the application pushes
+# its metrics and logs to it (the platform's rules read both).
+equals COMPOSE_PROFILES observability
+equals MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED true
+set MANAGEMENT_OTLP_METRICS_EXPORT_URL
+set MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT
