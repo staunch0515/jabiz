@@ -237,8 +237,11 @@ class ProspectIT extends AiItSupport {
 
     @Test
     void aBusinessIsFoundResearchedApprovedAndWrittenToThroughTheOwnersServer() {
-        String person = verifiedUser(unique("q48c-hq"));
-        String token = hq(person);
+        // F-S1: headquarters does not prospect; an operator's member does (the platform operator's, say).
+        List<String> operator = newOperator(unique("Q48c Tea"));
+        String owner = operator.get(0);
+        String person = operator.get(2);
+        String token = operator.get(1);
         String directionId = ready(token, 5, "50");
 
         // The day's search: the direction's brief goes to Claude inside its tag, with the search tool.
@@ -249,7 +252,7 @@ class ProspectIT extends AiItSupport {
         assertThat(search.get("tools").get(0).get("type").asString()).startsWith("web_search_");
         assertThat(search.get("tools").get(0).get("user_location").get("country").asString()).isEqualTo("JP");
         assertThat(search.get("messages").get(0).get("content").asString()).contains("Independent tea shops");
-        assertThat(query("SELECT domain, status FROM qb_prospect WHERE owner = 'direct' ORDER BY domain"))
+        assertThat(query("SELECT domain, status FROM qb_prospect WHERE owner = ? ORDER BY domain", owner))
             .extracting(r -> r.get("domain") + ":" + r.get("status"))
             .containsExactly("greenleaf.example:FOUND", "teahouse.example:FOUND");
         assertThat(query("SELECT last_search_at FROM qb_prospect_direction WHERE direction_id = ?", directionId)
@@ -281,7 +284,7 @@ class ProspectIT extends AiItSupport {
         });
 
         // The month's cost: every call's tokens and the four plus two searches at ten dollars a thousand.
-        Map<String, Object> usage = query("SELECT * FROM qb_prospect_usage WHERE owner = 'direct'").getFirst();
+        Map<String, Object> usage = query("SELECT * FROM qb_prospect_usage WHERE owner = ?", owner).getFirst();
         assertThat(((Number) usage.get("searches")).longValue()).isEqualTo(6);
         assertThat(((Number) usage.get("jobs")).longValue()).isEqualTo(3);
         assertThat(((Number) usage.get("input_tokens")).longValue()).isEqualTo(38_000);
@@ -324,7 +327,7 @@ class ProspectIT extends AiItSupport {
         assertThat(to(MAIL, "info@greenleaf.example")).isEmpty();
         assertThat(prospect("greenleaf.example")).containsEntry("status", QbProspects.SENT);
         assertThat(query("SELECT sender_key FROM sys_mail_message WHERE address = ?", "info@greenleaf.example"))
-            .singleElement().satisfies(r -> assertThat(r).containsEntry("sender_key", "prospect:direct"));
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("sender_key", "prospect:" + owner));
 
         // The trial page reads the quiz that went out by its key, anonymously; another key finds nothing.
         Map<String, Object> page = publicQuery("qb.public.prospect-trial", "p.key=" + key).expectStatus().isOk()
@@ -336,7 +339,7 @@ class ProspectIT extends AiItSupport {
         assertThat((List<?>) none.get("items")).isEmpty();
 
         // Headquarters' page shows the prospects, without the key.
-        assertThat(items("qb.admin.prospects", hq(person), Map.of("params", Map.of("owner", "direct"))))
+        assertThat(items("qb.admin.prospects", hq(unique("q48c-reader")), Map.of("params", Map.of("owner", owner))))
             .hasSize(2).allSatisfy(row -> assertThat(row).doesNotContainKey("trialKey"));
     }
 

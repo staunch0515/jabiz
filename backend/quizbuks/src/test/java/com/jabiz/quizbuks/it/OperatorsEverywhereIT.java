@@ -42,11 +42,6 @@ class OperatorsEverywhereIT extends PlayItSupport {
         return TestTokens.bearer(tokens, "fs1-hq", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
     }
 
-    private String platformOperator() {
-        return String.valueOf(query("SELECT operator_id FROM qb_operator WHERE default_for_new").getFirst()
-            .get("operator_id"));
-    }
-
     private Map<String, Object> assignment(String userId) {
         return query("SELECT operator_id, assigned_by, fixed FROM qb_sponsor_operator WHERE user_id = ?", userId)
             .getFirst();

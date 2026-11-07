@@ -215,6 +215,9 @@
       "name" : "Tea week",
       "quizTitle" : "Tea habits",
       "cover" : null,
+      "coverJa" : null,
+      "coverZh" : null,
+      "coverEn" : null,
       "video" : null,
       "watchRequired" : false,
       "videoDurationSec" : null,
@@ -243,7 +246,7 @@
       "languages" : "en",
       "translations" : null,
       "wentOnAt" : "2026-10-01T01:00:00Z",
-      "operatorId" : null,
+      "operatorId" : "#uuid:19",
       "endedAt" : null,
       "version" : 1
     } ],
@@ -257,7 +260,7 @@
       "version" : 3
     } ],
     "QbWallet" : [ {
-      "walletId" : "#uuid:19",
+      "walletId" : "#uuid:20",
       "ownerId" : "#uuid:2",
       "kind" : "SPONSOR",
       "balance" : "270",
@@ -268,7 +271,7 @@
       "version" : 2
     } ],
     "LedgerTransaction" : [ {
-      "transactionId" : "#uuid:20",
+      "transactionId" : "#uuid:21",
       "bookingTime" : "2026-10-01T01:00:00Z",
       "description" : "Development credit",
       "reference" : null,
@@ -293,9 +296,9 @@
       "processSeqId" : "#op:5"
     } ],
     "LedgerEntry" : [ {
-      "entryId" : "#uuid:21",
-      "transactionId" : "#uuid:20",
-      "accountId" : "#uuid:22",
+      "entryId" : "#uuid:22",
+      "transactionId" : "#uuid:21",
+      "accountId" : "#uuid:23",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "300.0000",
@@ -312,9 +315,9 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:4"
     }, {
-      "entryId" : "#uuid:23",
-      "transactionId" : "#uuid:20",
-      "accountId" : "#uuid:24",
+      "entryId" : "#uuid:24",
+      "transactionId" : "#uuid:21",
+      "accountId" : "#uuid:25",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "300.0000",
@@ -331,9 +334,9 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:4"
     }, {
-      "entryId" : "#uuid:25",
+      "entryId" : "#uuid:26",
       "transactionId" : "#uuid:15",
-      "accountId" : "#uuid:24",
+      "accountId" : "#uuid:25",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "30.0000",
@@ -350,9 +353,9 @@
       "createdTime" : "2026-10-01T01:06:00Z",
       "processSeqId" : "#op:5"
     }, {
-      "entryId" : "#uuid:26",
+      "entryId" : "#uuid:27",
       "transactionId" : "#uuid:15",
-      "accountId" : "#uuid:27",
+      "accountId" : "#uuid:28",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "30.0000",

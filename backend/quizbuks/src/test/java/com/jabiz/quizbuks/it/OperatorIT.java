@@ -74,13 +74,15 @@ class OperatorIT extends PlayItSupport {
         assertThat(items("qb.admin.operators", hq(), Map.of("params", Map.of("operatorId", operatorId))))
             .singleElement().satisfies(row -> assertThat(row).containsEntry("status", QbOperators.ACTIVE)
                 .containsEntry("collection", QbOperators.PLATFORM).satisfies(r -> assertThat(count(r, "members"))
-                    .isZero()));
+                    .isEqualTo(1)));  // F-S1: an operator is created with its lead
 
         // A change needs the revision the page read; the address must be one.
         assertThat(codes(refused(OperatorProcesses.SAVE, hq(), body("operatorId", operatorId, "name", "Kansai",
             "contactName", "Owner", "contactEmail", "ops@kansai.example"), 422))).containsExactly(OperatorCodes.CHANGED);
         assertThat(codes(refused(OperatorProcesses.SAVE, hq(), body("name", "X", "contactName", "Y",
-            "contactEmail", "not an address"), 422))).containsExactly(OperatorCodes.FIELD);
+            "contactEmail", "not an address"), 422)))
+            // F-S1: and a new operator needs its lead.
+            .containsExactlyInAnyOrder(OperatorCodes.FIELD, OperatorCodes.LEAD_REQUIRED);
         // Only headquarters: an operator's member does not create operators.
         String lead = newMember(operatorId, unique("q48-lead"), true);
         refused(OperatorProcesses.SAVE, member(lead), body("name", "Mine", "contactName", "Me",
@@ -101,11 +103,12 @@ class OperatorIT extends PlayItSupport {
         String kai = newMember(operatorId, unique("q48-kai"), false);
         Map<String, Object> team = run(OperatorProcesses.TEAM, member(kai), body());
         assertThat(team).containsEntry("operatorId", operatorId).containsEntry("lead", false);
-        assertThat((List<?>) team.get("members")).hasSize(2);
+        // F-S1: kai, the lead named above and the lead the operator was created with.
+        assertThat((List<?>) team.get("members")).hasSize(3);
         assertThat(run(OperatorProcesses.MEMBER_ADD, hq(), body("operatorId", operatorId, "userId", kai,
             "lead", false))).containsEntry("changed", false);
         assertThat(items("qb.admin.operator-members", hq(), Map.of("params", Map.of("operatorId", operatorId))))
-            .hasSize(2).allSatisfy(row -> assertThat(row).containsEntry("hasRole", false));
+            .hasSize(3).allSatisfy(row -> assertThat(row).containsEntry("hasRole", false));
         // A non-member reads no team.
         assertThat(codes(refused(OperatorProcesses.TEAM, member(verifiedUser(unique("q48-nobody"))), body(), 422)))
             .containsExactly(OperatorCodes.NOT_MEMBER);
@@ -234,10 +237,10 @@ class OperatorIT extends PlayItSupport {
         String reviewer = member(reviewerId);
         String sponsor = newSponsor(unique("s-q48-assign"));
 
-        // Headquarters' until assigned; the operator sees it as not theirs.
+        // F-S1: the platform operator's until assigned; the operator sees it as not theirs.
         assertThat(items("qb.operator.sponsors", reviewer, Map.of("params", Map.of("userId", sponsor))))
             .singleElement().satisfies(row -> assertThat(row).containsEntry("mine", false)
-                .containsEntry("operatorId", null));
+                .containsEntry("operatorId", platformOperator()));
         run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", operatorId,
             "reason", "Signed with Kanto"));
         assertThat(items("qb.operator.sponsors", reviewer, Map.of("params", Map.of("userId", sponsor))))
@@ -247,37 +250,48 @@ class OperatorIT extends PlayItSupport {
         assertThat(codes(refused(OperatorProcesses.ASSIGN, hq(), body("userId", newTaker(unique("t-q48-assign"), "JP"),
             "operatorId", operatorId, "reason", "No"), 422))).containsExactly(OperatorCodes.NOT_A_SPONSOR);
         assertThat(items("qb.operator.overview", reviewer, Map.of())).singleElement()
-            .satisfies(row -> assertThat(count(row, "mySponsors")).isEqualTo(1));
-        // Back to headquarters.
-        run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "reason", "Contract ended"));
-        assertThat(query("SELECT 1 FROM qb_sponsor_operator WHERE user_id = ?", sponsor)).isEmpty();
+            // F-S1: the moved sponsor and the operator's own sponsor (its lead).
+            .satisfies(row -> assertThat(count(row, "mySponsors")).isEqualTo(2));
+        // F-S1: there is no going back to headquarters; back to the platform operator instead.
+        refused(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "reason", "Contract ended"), 400);
+        run(OperatorProcesses.ASSIGN, hq(), body("userId", sponsor, "operatorId", platformOperator(), "reason",
+            "Contract ended"));
+        assertThat(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?", sponsor)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("operator_id", platformOperator()));
 
         // A member reviews a sponsor's application: final, and on headquarters' list of the operators' reviews.
+        // F-S1: one who signs up by themselves is the platform operator's, so its member reviews it.
+        String platform = platformOperator();
+        String platformReviewerId = verifiedUser(unique("q48-platform"));
+        run(OperatorProcesses.MEMBER_ADD, hq(), body("operatorId", platform, "userId", platformReviewerId, "lead",
+            false));
+        String platformReviewer = memberSession(platformReviewerId, platform);
         String applicant = user(unique("s-q48-applicant"));
         Map<String, Object> applied = apply(sponsor(applicant), "Applicant Co");
         assertThat(applied).containsEntry("reviewStatus", "PENDING");
-        run("APPROVAL_DECIDE", reviewer, body("requestId", applied.get("approvalRequestId"), "decision", "APPROVE"));
+        run("APPROVAL_DECIDE", platformReviewer, body("requestId", applied.get("approvalRequestId"), "decision",
+            "APPROVE"));
         deliverEvents();
         assertThat(latest("qb_sponsor_version", "onboarding_id", "user_id = '" + applicant + "'")).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("review_status", "APPROVED"));
         List<Map<String, Object>> reviews = items("qb.admin.operator-reviews", hq(),
-            Map.of("params", Map.of("operatorId", operatorId, "unchecked", true)));
+            Map.of("params", Map.of("operatorId", platform, "unchecked", true)));
         assertThat(reviews).singleElement().satisfies(row -> assertThat(row).containsEntry("subject", "qb.sponsor")
             .containsEntry("decision", "APPROVE").containsEntry("title", "Applicant Co")
-            .containsEntry("sponsorId", applicant).containsEntry("approverId", reviewerId));
+            .containsEntry("sponsorId", applicant).containsEntry("approverId", platformReviewerId));
         String decisionId = (String) reviews.getFirst().get("decisionId");
 
         // A problem needs a note; checked, it leaves the unchecked list.
         assertThat(codes(refused(OperatorProcesses.SPOT_CHECK, hq(), body("decisionId", decisionId,
             "result", QbOperators.CHECK_PROBLEM), 422))).containsExactly(OperatorCodes.SPOT_CHECK_NOTE);
         assertThat(run(OperatorProcesses.SPOT_CHECK, hq(), body("decisionId", decisionId, "result",
-            QbOperators.CHECK_PROBLEM, "note", "Company not verified"))).containsEntry("operatorId", operatorId);
+            QbOperators.CHECK_PROBLEM, "note", "Company not verified"))).containsEntry("operatorId", platform);
         assertThat(items("qb.admin.operator-reviews", hq(),
-            Map.of("params", Map.of("operatorId", operatorId, "unchecked", true)))).isEmpty();
+            Map.of("params", Map.of("operatorId", platform, "unchecked", true)))).isEmpty();
         run(OperatorProcesses.SPOT_CHECK, hq(), body("decisionId", decisionId, "result", QbOperators.CHECK_OK));
         assertThat(query("SELECT result FROM qb_review_spot_check WHERE decision_id = ?", decisionId))
             .singleElement().satisfies(row -> assertThat(row).containsEntry("result", QbOperators.CHECK_OK));
-        // Headquarters' own decisions are not the operators'.
+        // A decision by someone who is no operator's member (an unscoped session) is not the operators'.
         String hqApplicant = user(unique("s-q48-hq-applicant"));
         Map<String, Object> hqApplied = apply(sponsor(hqApplicant), "HQ Co");
         run("APPROVAL_DECIDE", sponsorReviewer(), body("requestId", hqApplied.get("approvalRequestId"),
@@ -287,6 +301,6 @@ class OperatorIT extends PlayItSupport {
         assertThat(codes(refused(OperatorProcesses.SPOT_CHECK, hq(), body("decisionId", hqDecision,
             "result", QbOperators.CHECK_OK), 422))).containsExactly(OperatorCodes.NOT_AN_OPERATOR_DECISION);
         // Members do not spot-check.
-        refused(OperatorProcesses.SPOT_CHECK, reviewer, body("decisionId", decisionId, "result", "OK"), 403);
+        refused(OperatorProcesses.SPOT_CHECK, platformReviewer, body("decisionId", decisionId, "result", "OK"), 403);
     }
 }

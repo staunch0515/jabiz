@@ -329,7 +329,7 @@ class RewardMethodsIT extends PlayItSupport {
             " "), 400))).isNotEmpty();
         assertThat(run(CashRewardProcesses.DISPUTE, token, body("cashRewardId", cashRewardId, "note",
             "I got 50, not 100"))).containsEntry("status", "DISPUTED");
-        assertThat(query("SELECT count(*) AS n FROM sys_task WHERE source_key = ?", "qb.cash-dispute:" + cashRewardId)
+        assertThat(query("SELECT count(*) AS n FROM sys_task_version WHERE source_key = ?", "qb.cash-dispute:" + cashRewardId)
             .getFirst().get("n")).isEqualTo(0L);
         String otherAttempt = (String) start(token, other).get("attemptId");
         assertThat(otherAttempt).isNotBlank();

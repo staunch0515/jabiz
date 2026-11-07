@@ -91,6 +91,20 @@ abstract class AccountItSupport extends PublicationItSupport {
 
     private NewOperator certificationOperator;
 
+    /** A session of a new member (not a lead) of the platform operator (F-S1: who runs the self-signed-up sponsors). */
+    String platformOperatorMember() {
+        String member = verifiedUser(unique("platform-member"));
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.MEMBER_ADD, operatorsAdmin(), body("operatorId",
+            platformOperator(), "userId", member, "lead", false));
+        return memberSession(member, platformOperator());
+    }
+
+    /** The operator QB_SETUP made, that takes the sponsors who sign up by themselves (F-S1). */
+    String platformOperator() {
+        return (String) query("SELECT operator_id FROM qb_operator WHERE default_for_new").getFirst()
+            .get("operator_id");
+    }
+
     /**
      * A session that grants and revokes certifications by hand (F-S1: an operator's member, not headquarters): the
      * lead of an operator made for the test.

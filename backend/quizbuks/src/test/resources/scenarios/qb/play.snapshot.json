@@ -102,6 +102,9 @@
       "name" : "Capitals week",
       "quizTitle" : "World capitals",
       "cover" : null,
+      "coverJa" : null,
+      "coverZh" : null,
+      "coverEn" : null,
       "video" : null,
       "watchRequired" : false,
       "videoDurationSec" : null,
@@ -130,7 +133,7 @@
       "languages" : "en",
       "translations" : null,
       "wentOnAt" : "2026-10-01T01:00:00Z",
-      "operatorId" : null,
+      "operatorId" : "#uuid:14",
       "endedAt" : null,
       "version" : 3
     } ],
@@ -159,14 +162,14 @@
       "version" : 1
     } ],
     "QbPublicationView" : [ {
-      "viewId" : "#uuid:14",
+      "viewId" : "#uuid:15",
       "userId" : "#uuid:2",
       "publicationId" : "#uuid:3",
       "firstViewedAt" : "2026-10-01T01:05:00Z",
       "version" : 1
     } ],
     "QbWallet" : [ {
-      "walletId" : "#uuid:15",
+      "walletId" : "#uuid:16",
       "ownerId" : "#uuid:4",
       "kind" : "SPONSOR",
       "balance" : "100",
@@ -176,7 +179,7 @@
       "held" : "0",
       "version" : 5
     }, {
-      "walletId" : "#uuid:16",
+      "walletId" : "#uuid:17",
       "ownerId" : "#uuid:2",
       "kind" : "TAKER",
       "balance" : "100",
@@ -186,7 +189,7 @@
       "held" : "0",
       "version" : 1
     }, {
-      "walletId" : "#uuid:17",
+      "walletId" : "#uuid:18",
       "ownerId" : "#uuid:9",
       "kind" : "TAKER",
       "balance" : "100",
@@ -197,7 +200,7 @@
       "version" : 1
     } ],
     "LedgerTransaction" : [ {
-      "transactionId" : "#uuid:18",
+      "transactionId" : "#uuid:19",
       "bookingTime" : "2026-10-01T01:00:00Z",
       "description" : "Development credit",
       "reference" : null,
@@ -221,7 +224,7 @@
       "createdTime" : "2026-10-01T01:07:00Z",
       "processSeqId" : "#op:2"
     }, {
-      "transactionId" : "#uuid:19",
+      "transactionId" : "#uuid:20",
       "bookingTime" : "2026-10-01T02:08:00Z",
       "description" : "Development credit",
       "reference" : null,
@@ -246,9 +249,9 @@
       "processSeqId" : "#op:4"
     } ],
     "LedgerEntry" : [ {
-      "entryId" : "#uuid:20",
-      "transactionId" : "#uuid:18",
-      "accountId" : "#uuid:21",
+      "entryId" : "#uuid:21",
+      "transactionId" : "#uuid:19",
+      "accountId" : "#uuid:22",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "100.0000",
@@ -265,9 +268,9 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "entryId" : "#uuid:22",
-      "transactionId" : "#uuid:18",
-      "accountId" : "#uuid:23",
+      "entryId" : "#uuid:23",
+      "transactionId" : "#uuid:19",
+      "accountId" : "#uuid:24",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "100.0000",
@@ -284,9 +287,9 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "entryId" : "#uuid:24",
+      "entryId" : "#uuid:25",
       "transactionId" : "#uuid:7",
-      "accountId" : "#uuid:23",
+      "accountId" : "#uuid:24",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "100.0000",
@@ -303,9 +306,9 @@
       "createdTime" : "2026-10-01T01:07:00Z",
       "processSeqId" : "#op:2"
     }, {
-      "entryId" : "#uuid:25",
+      "entryId" : "#uuid:26",
       "transactionId" : "#uuid:7",
-      "accountId" : "#uuid:26",
+      "accountId" : "#uuid:27",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "100.0000",
@@ -322,9 +325,9 @@
       "createdTime" : "2026-10-01T01:07:00Z",
       "processSeqId" : "#op:2"
     }, {
-      "entryId" : "#uuid:27",
-      "transactionId" : "#uuid:19",
-      "accountId" : "#uuid:21",
+      "entryId" : "#uuid:28",
+      "transactionId" : "#uuid:20",
+      "accountId" : "#uuid:22",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "200.0000",
@@ -341,9 +344,9 @@
       "createdTime" : "2026-10-01T02:08:00Z",
       "processSeqId" : "#op:3"
     }, {
-      "entryId" : "#uuid:28",
-      "transactionId" : "#uuid:19",
-      "accountId" : "#uuid:23",
+      "entryId" : "#uuid:29",
+      "transactionId" : "#uuid:20",
+      "accountId" : "#uuid:24",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "200.0000",
@@ -360,9 +363,9 @@
       "createdTime" : "2026-10-01T02:08:00Z",
       "processSeqId" : "#op:3"
     }, {
-      "entryId" : "#uuid:29",
+      "entryId" : "#uuid:30",
       "transactionId" : "#uuid:10",
-      "accountId" : "#uuid:23",
+      "accountId" : "#uuid:24",
       "lineNo" : "1",
       "direction" : "DEBIT",
       "amount" : "100.0000",
@@ -379,9 +382,9 @@
       "createdTime" : "2026-10-01T02:08:00Z",
       "processSeqId" : "#op:4"
     }, {
-      "entryId" : "#uuid:30",
+      "entryId" : "#uuid:31",
       "transactionId" : "#uuid:10",
-      "accountId" : "#uuid:26",
+      "accountId" : "#uuid:27",
       "lineNo" : "2",
       "direction" : "CREDIT",
       "amount" : "100.0000",

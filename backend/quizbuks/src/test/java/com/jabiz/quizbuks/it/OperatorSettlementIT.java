@@ -94,7 +94,8 @@ class OperatorSettlementIT extends PlayItSupport {
         String publication = livePublication(sponsor, "Operator's");
         String directPublication = livePublication(direct, "Direct");
         assertThat(card(publication)).containsEntry("operator_id", operatorId);
-        assertThat(card(directPublication).get("operator_id")).isNull();
+        // F-S1: a sponsor who signed up by themselves is the platform operator's.
+        assertThat(card(directPublication)).containsEntry("operator_id", platformOperator());
 
         // Commission: 20 of the full marks' 100 and 2 of the 10; the direct sponsor's 20 is headquarters'.
         play(newTaker(unique("q48b-t1"), "JP"), publication, true, true);

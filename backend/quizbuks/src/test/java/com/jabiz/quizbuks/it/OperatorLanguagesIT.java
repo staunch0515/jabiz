@@ -35,11 +35,6 @@ class OperatorLanguagesIT extends PlayItSupport {
     }
 
     /** The platform operator QB_SETUP made (F-S1). */
-    private String platformOperator() {
-        return String.valueOf(query("SELECT operator_id FROM qb_operator WHERE default_for_new").getFirst()
-            .get("operator_id"));
-    }
-
     private Map<String, Object> operator(String operatorId) {
         return items("qb.admin.operators", hq(), Map.of("params", Map.of("operatorId", operatorId))).getFirst();
     }
