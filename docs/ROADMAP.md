@@ -5128,10 +5128,10 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zk-3 | 429（缺口 5）：`ApiError.retryAfter`、`retryAfterSeconds`（`@jabiz/client`）、`useRetryWait`；登录、注册、邮件链接、找回密码的按钮与第三方按钮按 `Retry-After` 停用并倒计时 |
 | 17zk-4 | 第二步的返回地址（缺口 2）：`keepSignInStep` / `pendingSignInStep` / `forgetSignInStep`（本标签页、按入口）；`OidcCallback` 先保存，`SignInForm` 自动接着并去记下的地址，刷新不丢 |
 | 17zk-5 | `OidcCallback` 在模板中（`brand`、`appearance`；缺口 4）；`MAIL_LINK_PAGES`（缺口 3）；"确认通行密钥"未登录时的登录链接（缺口 10）；`PwaInstallBanner` 的内置浏览器提示分开计数（`.in-app`，缺口 11）；`MailUnsubscribe` 取提供者的品牌 |
-| 17zk-6 | 示范：通用管理系统（单栏、无亮暗、构建号，回调页带品牌）；门户用 `EntryLayoutProvider`（三语左栏、`useEntryNotices`）、登录与注册两个标签、注册页的第三方与条款说明、已登录时 `/signup` 与 `/password-reset` 转走（缺口 9）、第二步只靠保存的步骤 |
-| 17zk-7 | 测试：`entry.test.tsx`（21 例，均含 axe 亮暗）、`problem.test.ts`、`signInStep.test.ts`、门户 `App.test.tsx`（模板与标签、已登录转走）、管理系统 `OidcCallbackPage.test.tsx`（标题移到卡片）与 `AuthPages.test.tsx`（登录链接）；原有单元测试与平台 e2e 照旧通过；设计 12 §14、10 §15、根 `CLAUDE.md` |
+| 17zk-6 | 示范：通用后台（单栏、无亮暗、构建号，回调页带品牌）；门户用 `EntryLayoutProvider`（三语左栏、`useEntryNotices`）、登录与注册两个标签、注册页的第三方与条款说明、已登录时 `/signup` 与 `/password-reset` 转走（缺口 9）、第二步只靠保存的步骤 |
+| 17zk-7 | 测试：`entry.test.tsx`（21 例，均含 axe 亮暗）、`problem.test.ts`、`signInStep.test.ts`、门户 `App.test.tsx`（模板与标签、已登录转走）、后台 `OidcCallbackPage.test.tsx`（标题移到卡片）与 `AuthPages.test.tsx`（登录链接）；原有单元测试与平台 e2e 照旧通过；设计 12 §14、10 §15、根 `CLAUDE.md` |
 
-**验收（原型清单 132 条，逐组）**：A 公共外框（27）：品牌、环境横条、语言（移到右上角）、亮暗（页脚，管理系统照旧无）、构建号、提示区（离线、服务不可用的对话框、新版本、内置浏览器提示）
+**验收（原型清单 132 条，逐组）**：A 公共外框（27）：品牌、环境横条、语言（移到右上角）、亮暗（页脚，后台照旧无）、构建号、提示区（离线、服务不可用的对话框、新版本、内置浏览器提示）
 与字段、密码、按钮、结果的写法全部保留；B 登录（39）：字段、通行密钥按钮与名字栏的自动提示、内置浏览器的说明、邮件链接、第三方（图标 / 按钮、按入口取、Apple 的标题、品牌色、启动失败）、
 忘记密码、注册（链接或标签）、各种错误、闲置退出、返回地址、会话选项都不变，429 新增倒计时；C 第二步（8）：验证码、通行密钥、开启二次验证与加强验证不变，第三方后的返回地址补上；
 D 回调（7）：处理中、错误、Apple 取消、`OIDC_ACCOUNT_EXISTS`、关联用途不变，进入模板；E 注册（12）：表单、错误、"请查收邮件"、第三方注册、条款说明、试用来源（`?src=` 随标签）、已登录转走不变，门户补上；
