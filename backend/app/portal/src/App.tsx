@@ -1,4 +1,4 @@
-import { AuthProvider, useAuth } from '@jabiz/client'
+import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
   AppearanceProvider,
   AppShell,
@@ -37,6 +37,12 @@ import { navigate, navigation, portalLink, useLocation } from './router'
 
 /** Where a signed-in customer starts. */
 const HOME = '/orders'
+
+/**
+ * The second step of a sign-in through an identity provider, handed from the callback to the sign-in page in memory;
+ * the sign-in page also resumes it from this tab's storage after a reload (phase 17zk, `resumeStep`).
+ */
+let pendingStep: SignInStep | undefined
 
 /** Every page of a mailed link, each at `/auth/<page>`. */
 const MAIL_PAGES = new Set(MAIL_LINK_PAGES.map((page) => `/auth/${page}`))
@@ -158,8 +164,11 @@ function Routes() {
             rememberLinked(linked)
             navigate(to || ACCOUNT_PATH, { replace: true })
           }}
-          // The step and the page to return to are kept in this tab: the sign-in page continues with them (gap 2).
-          onSecondStep={() => navigate('/login', { replace: true })}
+          // Handed over in memory; kept in this tab's storage too, for a reload of the sign-in page (gap 2).
+          onSecondStep={(step) => {
+            pendingStep = step
+            navigate('/login', { replace: true })
+          }}
           onBack={() => navigate('/login', { replace: true })} />
       </EntryPages>
     )
@@ -182,8 +191,11 @@ function Routes() {
   if (path === '/login') {
     return (
       <EntryPages>
-        <SignInForm {...navigation} brand={brand} returnTo={HOME}
-          onSignedIn={(to) => navigate(to, { replace: true })} passwordResetPath="/password-reset"
+        <SignInForm {...navigation} brand={brand} returnTo={HOME} initialStep={pendingStep} resumeStep
+          onSignedIn={(to) => {
+            pendingStep = undefined
+            navigate(to, { replace: true })
+          }} passwordResetPath="/password-reset"
           signInPath="/login" signUpPath="/signup" tabs emailLink passkey userNameLabel="email" />
       </EntryPages>
     )

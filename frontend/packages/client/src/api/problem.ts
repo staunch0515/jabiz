@@ -53,11 +53,28 @@ export async function toApiError(response: Response, body?: unknown): Promise<Ap
   return new ApiError(response.status, problem, retryAfterSeconds(response.headers.get('Retry-After')))
 }
 
-/** `Retry-After` in seconds: a number of seconds or an HTTP date; undefined when absent or unreadable. */
+/** The longest wait taken from `Retry-After`: a longer one is cut to this (a form never waits for hours). */
+const MAX_RETRY_AFTER = 3600
+
+/** An IMF-fixdate, the HTTP-date form servers send: `Sun, 06 Nov 1994 08:49:37 GMT`. */
+const IMF_FIXDATE = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/
+
+/**
+ * `Retry-After` in seconds: non-negative whole seconds or an IMF-fixdate, at most an hour; undefined when absent or
+ * anything else.
+ */
 export function retryAfterSeconds(header: string | null, now: number = Date.now()): number | undefined {
   const value = header?.trim()
   if (!value) return undefined
-  if (/^\d+$/.test(value)) return Number(value)
-  const at = Date.parse(value)
-  return Number.isNaN(at) ? undefined : Math.max(0, Math.ceil((at - now) / 1000))
+  let seconds: number
+  if (/^\d{1,10}$/.test(value)) {
+    seconds = Number(value)
+  } else if (IMF_FIXDATE.test(value)) {
+    const at = Date.parse(value)
+    if (Number.isNaN(at)) return undefined
+    seconds = Math.max(0, Math.ceil((at - now) / 1000))
+  } else {
+    return undefined
+  }
+  return Math.min(seconds, MAX_RETRY_AFTER)
 }

@@ -1,5 +1,5 @@
 import {
-  installOfferAllowed, readInstallDismissals, rememberInstallDismissed, useInstallPrompt, type InstallBrowser,
+  installOfferAllowed, keepInstallDismissals, readInstallDismissals, rememberInstallDismissed, useInstallPrompt, type InstallBrowser,
   type InstallPrompt,
 } from '@jabiz/client'
 import { Download, Ellipsis, ExternalLink, Menu, Settings, Share, Smartphone, SquarePlus, X } from 'lucide-react'
@@ -50,9 +50,19 @@ export function PwaInstallBanner({
   const { situation, browser, install } = prompt ?? detected
   // "Open this in your browser" is a warning, not an offer: its closes are counted apart (phase 17zk, gap 11), so that
   // closing it inside another app's browser does not use up the offer to install once in the browser.
-  const key = (rememberAs ?? DEFAULT_KEY()) + (situation === 'in-app' ? '.in-app' : '')
-  const [closed, setClosed] = useState(() => dismissible
-    && !installOfferAllowed(readInstallDismissals(key), now(), { days: snoozeDays, max: maxDismissals }))
+  const base = rememberAs ?? DEFAULT_KEY()
+  const key = base + (situation === 'in-app' ? '.in-app' : '')
+  const [closed, setClosed] = useState(() => {
+    let dismissals = readInstallDismissals(key)
+    // Before the closes were counted apart they were all under the shared key: carried over once, so that a note
+    // closed for good stays closed (the offer keeps its own record as it was).
+    const before = situation === 'in-app' && !dismissals ? readInstallDismissals(base) : null
+    if (before) {
+      keepInstallDismissals(key, before)
+      dismissals = before
+    }
+    return dismissible && !installOfferAllowed(dismissals, now(), { days: snoozeDays, max: maxDismissals })
+  })
   const [guide, setGuide] = useState(false)
 
   if (situation === 'none' || (situation === 'installed' && dismissible) || closed) return null

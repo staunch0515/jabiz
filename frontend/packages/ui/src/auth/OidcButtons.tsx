@@ -170,7 +170,9 @@ export function OidcButtons({ returnTo, providers, start = startProviderSignIn, 
         </div>
       )}
       {wait > 0 && <p className="text-muted-foreground text-center text-sm" data-testid="oidc-wait">{t('common.retryIn', { seconds: wait })}</p>}
-      <div className="flex flex-col gap-2" data-testid="oidc-buttons">
+      {/* Without the separator that names them, the buttons are a named group, as the icons are. */}
+      <div className="flex flex-col gap-2" data-testid="oidc-buttons" role={bare ? 'group' : undefined}
+        aria-label={bare ? t(purpose === 'signUp' ? 'signUp.otherWays' : 'login.otherWays') : undefined}>
         {offered.map((provider) => (
           <Button
             key={provider.id}

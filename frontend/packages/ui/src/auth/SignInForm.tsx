@@ -1,5 +1,5 @@
 import {
-  PasskeyCancelledError, api, enrolPasskey, entryInfo, forgetSignInStep, isProblem, lastUserName, passkeyAutofill,
+  ApiError, PasskeyCancelledError, api, enrolPasskey, entryInfo, forgetSignInStep, isProblem, lastUserName, passkeyAutofill,
   passkeySupport, pendingSignInStep, sitePath, unwrap, useOptionalAuth, type AuthState, type SignInStep,
 } from '@jabiz/client'
 import { CircleCheck, Fingerprint, Info, LockKeyhole, Mail, TriangleAlert, User } from 'lucide-react'
@@ -86,7 +86,9 @@ export interface SignInFormProps extends AuthNavigation {
   below?: ReactNode
   /**
    * Continues the second step kept in this tab by the identity provider's return (`keepSignInStep`, phase 17zk gap
-   * 2), with the page to return to it kept, also after a reload; default true. `initialStep` wins.
+   * 2), with the page to return to it kept, also after a reload; off by default (a frontend opts in). `initialStep`
+   * wins, and nothing is resumed on the page after an idle lock. A kept challenge the server no longer takes
+   * (expired) is dropped: the form starts over at the password with the server's message.
    */
   resumeStep?: boolean
   /**
@@ -127,7 +129,8 @@ export interface SignInFormProps extends AuthNavigation {
 export function SignInForm(props: SignInFormProps) {
   const { brand, initialStep, notice, appearance, footer, onNavigate, hrefOf } = props
   // The second step an identity provider's return kept in this tab, with its page to return to (gap 2).
-  const [pending] = useState(() => (initialStep || props.resumeStep === false ? null : pendingSignInStep()))
+  const [pending] = useState(() => (initialStep || !props.resumeStep || notice === 'idle' || props.initialUserName
+    ? null : pendingSignInStep()))
   // Only a path of this site: the page to return to may come from an address anyone can write.
   const returnTo = sitePath(pending?.returnTo ?? props.returnTo)
   const { t, i18n } = useTranslation(AUTH_NAMESPACE)
@@ -143,7 +146,9 @@ export function SignInForm(props: SignInFormProps) {
   })
   const [mailOpen, setMailOpen] = useState(false)
   // Too many attempts (429 with Retry-After, gap 5): the buttons wait as long as the server asks.
-  const { seconds: wait, hold } = useRetryWait()
+  const { seconds: wait, hold, message: waitMessage } = useRetryWait(t('common.error'))
+  // A refusal, else what the server said with "too many requests" while the wait lasts (it goes with the wait).
+  const shownError = error ?? waitMessage
   const form = useForm<{ userName: string; password: string }>({
     defaultValues: { userName: props.initialUserName ?? (notice === 'idle' ? lastUserName() : undefined) ?? '', password: '' },
   })
@@ -165,12 +170,23 @@ export function SignInForm(props: SignInFormProps) {
   }
   const failed = (e: unknown) => {
     setUnverified(false)
-    hold(e)
+    if (hold(e)) {
+      setError(null)
+      return
+    }
     if (isProblem(e, 'EMAIL_NOT_VERIFIED')) setUnverified(true)
     else if (isProblem(e, 'SIGN_IN_REFUSED')) setError(t('login.refused'))
     else setError(refusal(e, t('common.error')))
   }
   const frame = { brand, appearance, footer }
+  /**
+   * A failure of the second step: a resumed challenge the server no longer takes (401, expired) is dropped and the
+   * form starts over at the password, saying why.
+   */
+  const stepFailed = (e: unknown, challenge: string) => {
+    if (challenge === pending?.step.challenge && e instanceof ApiError && e.status === 401) toPassword()
+    failed(e)
+  }
 
   const passkeySignIn = async (options?: { autofill?: boolean; signal?: AbortSignal }) => {
     if (!auth.signInWithPasskey) return
@@ -228,14 +244,14 @@ export function SignInForm(props: SignInFormProps) {
               await enrolPasskey(challenge, passkeyDeviceName())
               toPassword('enrolledPasskey')
             } catch (e) {
-              if (!(e instanceof PasskeyCancelledError)) failed(e)
+              if (!(e instanceof PasskeyCancelledError)) stepFailed(e, challenge)
             }
           }}>
             <Fingerprint aria-hidden />
             {t('login.enrollPasskey')}
           </Button>
         )}
-        {error && <AuthError message={error} testId="login-error" />}
+        {shownError && <AuthError message={shownError} testId="login-error" />}
         <Button variant="link" onClick={() => toPassword()}>
           {t('login.back')}
         </Button>
@@ -248,7 +264,7 @@ export function SignInForm(props: SignInFormProps) {
     return (
       <AuthFrame {...frame} title={t('login.codeTitle')}>
         <MfaCodeStep
-          error={error}
+          error={shownError}
           onBack={() => {
             setError(null)
             toPassword()
@@ -259,7 +275,7 @@ export function SignInForm(props: SignInFormProps) {
               await auth.verify(challenge, code)
               signedIn()
             } catch (e) {
-              failed(e)
+              stepFailed(e, challenge)
             }
           }}
         />
@@ -272,7 +288,7 @@ export function SignInForm(props: SignInFormProps) {
             } catch (e) {
               if (e instanceof PasskeyCancelledError) return
               if (isProblem(e, 'MFA_NOT_ENROLLED')) setError(t('login.passkeyNoneForStep'))
-              else failed(e)
+              else stepFailed(e, challenge)
             }
           }}>
             <Fingerprint aria-hidden />
@@ -434,7 +450,7 @@ export function SignInForm(props: SignInFormProps) {
           </AlertDescription>
         </Alert>
       )}
-      {error && <AuthError message={error} testId="login-error" />}
+      {shownError && <AuthError message={shownError} testId="login-error" />}
       {unverified && (
         <>
           <Alert variant="warning" data-testid="login-email-not-verified">

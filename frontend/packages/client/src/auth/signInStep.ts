@@ -15,8 +15,11 @@ export interface PendingSignInStep {
 }
 
 const stepKey = () => `jabiz.session.${session.entry()}.pendingStep`
-/** Longer than the server keeps a challenge (`jabiz.security.mfa.challenge-ttl`): a stale one is never offered. */
-const KEPT_MS = 15 * 60_000
+/**
+ * As long as the server keeps a challenge by default (`jabiz.security.mfa.challenge-ttl`, 5 minutes): an older one is
+ * not offered. A server with a shorter time refuses the challenge, and the sign-in page then starts over.
+ */
+const KEPT_MS = 5 * 60_000
 
 /** Keeps the second step and the page to return to for the sign-in page of this tab. */
 export function keepSignInStep(step: SignInStep, returnTo: string, now: number = Date.now()): void {

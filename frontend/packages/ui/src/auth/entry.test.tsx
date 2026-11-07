@@ -1,5 +1,6 @@
 import {
-  ApiError, configureClient, i18n, keepSignInStep, pendingSignInStep, readInstallDismissals, session,
+  ApiError, configureClient, forgetEnvironment, i18n, keepInstallDismissals, keepSignInStep, pendingSignInStep,
+  readInstallDismissals, session, setEnvironment,
 } from '@jabiz/client'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -160,6 +161,32 @@ describe('EntryLayout', () => {
     await expectAccessible()
   })
 
+  it('keeps the classes on <main>, lets a long name wrap, and puts the banner and notices in the banner landmark',
+    async () => {
+      setEnvironment('staging')
+      try {
+        render(<EntryLayout brand="A very long application name that does not fit on one line" title="T" className="pt-20"
+          notices={[{ key: 'n', content: <p>A notice</p> }]}><p>a</p></EntryLayout>)
+        expect(screen.getByRole('main')).toHaveClass('pt-20')
+        expect(document.querySelector('[data-slot="entry-brand"]')!.className).not.toContain('truncate')
+        const banner = screen.getByRole('banner')
+        expect(within(banner).getByTestId('environment-banner')).toBeInTheDocument()
+        expect(within(banner).getByText('A notice')).toBeInTheDocument()
+        await expectAccessible()
+      } finally {
+        forgetEnvironment()
+      }
+    })
+
+  it('leaves no strip for notices while none shows anything', () => {
+    const { container, rerender } = render(<EntryLayout title="T" notices={[{ key: 'off', content: null, active: false }]}>
+      <p>a</p></EntryLayout>)
+    const area = () => container.querySelector('[data-slot="entry-notices"] > div')!
+    expect(area().className).not.toContain('pt-3')
+    rerender(<EntryLayout title="T" notices={[{ key: 'on', content: <p>Now</p> }]}><p>a</p></EntryLayout>)
+    expect(area().className).toContain('pt-3')
+  })
+
   it('names a page without a brand by its title', () => {
     render(<EntryLayout title="Unsubscribe"><p>a</p></EntryLayout>)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Unsubscribe')
@@ -299,6 +326,13 @@ describe('SignInForm in the template', () => {
     expect(screen.queryByTestId('oidc-icons')).toBeNull()
   })
 
+  it('names the full-width buttons as a group when they come first, without a separator', async () => {
+    render(<OidcButtons returnTo="/" providers={[{ id: 'google', label: 'Google', kind: 'google' }]} bare />)
+    expect(screen.getByRole('group', { name: 'Other ways to sign in' })).toBe(screen.getByTestId('oidc-buttons'))
+    expect(screen.queryByText('or sign in with')).toBeNull()
+    await expectAccessible()
+  })
+
   it('holds the button and counts down after too many attempts (429 with Retry-After, gap 5)', async () => {
     server()
     signIn.mockRejectedValue(new ApiError(429, { status: 429, violations: [{ field: null, ruleCode: 'RATE_LIMITED',
@@ -311,6 +345,8 @@ describe('SignInForm in the template', () => {
     expect(held).toBeDisabled()
     await expectAccessible()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled(), { timeout: 4000 })
+    // The text of the wait goes with it.
+    expect(screen.queryByTestId('login-error')).toBeNull()
   })
 
   it('continues the second step kept by the provider’s return, with its page to return to, after a reload (gap 2)',
@@ -318,10 +354,11 @@ describe('SignInForm in the template', () => {
       server()
       keepSignInStep({ status: 'MFA_REQUIRED', challenge: 'ch-oidc' }, '/p/42?ref=abc')
       // A reload renders the page anew: the step is still kept in this tab.
-      render(<SignInForm brand="Quizbuks" returnTo="/" auth={{ signIn, verify }} providers={[]} />).unmount()
+      render(<SignInForm brand="Quizbuks" returnTo="/" auth={{ signIn, verify }} providers={[]} resumeStep />).unmount()
       verify.mockResolvedValue(undefined)
       const onSignedIn = vi.fn()
-      render(<SignInForm brand="Quizbuks" returnTo="/" auth={{ signIn, verify }} providers={[]} onSignedIn={onSignedIn} />)
+      render(<SignInForm brand="Quizbuks" returnTo="/" auth={{ signIn, verify }} providers={[]} onSignedIn={onSignedIn}
+        resumeStep />)
       const code = await screen.findByRole('textbox', { name: 'Code' })
       await expectAccessible()
       await user().type(code, '123456{Enter}')
@@ -333,10 +370,53 @@ describe('SignInForm in the template', () => {
   it('forgets the kept step when the person goes back to the password', async () => {
     server()
     keepSignInStep({ status: 'MFA_REQUIRED', challenge: 'ch' }, '/p/1')
-    render(<SignInForm brand="Quizbuks" returnTo="/" auth={{ signIn, verify }} providers={[]} />)
+    render(<SignInForm brand="Quizbuks" returnTo="/" auth={{ signIn, verify }} providers={[]} resumeStep />)
     await user().click(await screen.findByRole('button', { name: 'Back to sign in' }))
     expect(screen.getByTestId('login-user-name')).toBeInTheDocument()
     expect(pendingSignInStep()).toBeNull()
+  })
+
+  it('resumes only where the frontend opts in, and never after an idle lock', async () => {
+    server()
+    keepSignInStep({ status: 'MFA_REQUIRED', challenge: 'ch' }, '/p/1')
+    // Not opted in (the admin, an application that did not): the password, as before.
+    const plain = render(<SignInForm brand="Admin" returnTo="/" auth={{ signIn, verify }} providers={[]} />)
+    expect(screen.getByTestId('login-user-name')).toBeInTheDocument()
+    plain.unmount()
+    const idle = render(<SignInForm brand="Admin" returnTo="/" auth={{ signIn, verify }} providers={[]} resumeStep
+      notice="idle" />)
+    expect(screen.getByTestId('idle-locked')).toBeInTheDocument()
+    expect(screen.getByTestId('login-user-name')).toBeInTheDocument()
+    idle.unmount()
+    render(<SignInForm brand="Admin" returnTo="/" auth={{ signIn, verify }} providers={[]} resumeStep
+      initialUserName="amy" />)
+    expect(screen.getByTestId('login-user-name')).toHaveValue('amy')
+    // Still kept for a page that does resume it.
+    expect(pendingSignInStep()).not.toBeNull()
+  })
+
+  it('drops a resumed challenge the server no longer takes and starts over at the password', async () => {
+    server()
+    keepSignInStep({ status: 'MFA_REQUIRED', challenge: 'expired' }, '/p/1')
+    verify.mockRejectedValue(new ApiError(401, { violations: [{ field: null, ruleCode: 'LOGIN_FAILED',
+      message: 'Sign-in failed.' }] }))
+    render(<SignInForm brand="Quizbuks" returnTo="/" auth={{ signIn, verify }} providers={[]} resumeStep />)
+    await user().type(await screen.findByRole('textbox', { name: 'Code' }), '123456{Enter}')
+    expect(await screen.findByTestId('login-user-name')).toBeInTheDocument()
+    expect(screen.getByTestId('login-error')).toHaveTextContent('Sign-in failed.')
+    expect(pendingSignInStep()).toBeNull()
+    await expectAccessible()
+  })
+
+  it('says the general failure, never "HTTP 429", when too many requests come without words', async () => {
+    server()
+    signIn.mockRejectedValue(new ApiError(429, {}, 30))
+    render(<SignInForm brand="Portal" returnTo="/" auth={{ signIn, verify }} providers={[]} />)
+    await user().type(screen.getByRole('textbox', { name: 'User name' }), 'amy')
+    await user().type(screen.getByLabelText('Password'), 'secret{Enter}')
+    expect(await screen.findByTestId('login-error')).toHaveTextContent('Something went wrong')
+    expect(screen.queryByText(/HTTP 429/)).toBeNull()
+    expect(screen.getByRole('button', { name: /Try again in (30|29) s/ })).toBeDisabled()
   })
 })
 
@@ -357,6 +437,34 @@ describe('the other blocks in the template', () => {
     expect(await screen.findByTestId('sign-up-error')).toHaveTextContent('Try again in 2 seconds.')
     expect(screen.getByRole('button', { name: /Try again in [12] s/ })).toBeDisabled()
     await expectAccessible()
+  })
+
+  it('signing up says the general failure when too many requests come without words', async () => {
+    server({ '/api/auth/register': () => new Response(null, { status: 429, headers: { 'Retry-After': '30' } }) })
+    render(<SignUpForm brand="Portal" />)
+    await user().type(screen.getByRole('textbox', { name: 'E-mail address' }), 'ann@example.com')
+    await user().type(screen.getByLabelText('New password'), 'correct horse')
+    await user().type(screen.getByLabelText('Repeat the new password'), 'correct horse')
+    await user().click(screen.getByRole('button', { name: 'Create the account' }))
+    expect(await screen.findByTestId('sign-up-error')).toHaveTextContent('Something went wrong. Please try again later.')
+    expect(screen.queryByText(/HTTP 429/)).toBeNull()
+  })
+
+  it('the mailed link drops the text of the wait when it ends', async () => {
+    server({ '/api/auth/email-link': () => tooMany(1) })
+    render(<EmailLinkForm />)
+    await user().type(screen.getByTestId('email-link-email'), 'ann@example.com{Enter}')
+    expect(await screen.findByText('Try again in 1 seconds.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Try again in 1 seconds.')).toBeNull(), { timeout: 4000 })
+    expect(screen.getByRole('button', { name: 'Send me a link' })).toBeEnabled()
+  })
+
+  it('the password reset says the general failure, never "HTTP 429"', async () => {
+    server({ '/api/auth/password-reset/request': () => new Response(null, { status: 429, headers: { 'Retry-After': '9' } }) })
+    render(<PasswordResetRequest brand="Portal" signInPath="/login" />)
+    await user().type(screen.getByRole('textbox', { name: 'E-mail address' }), 'ann@example.com{Enter}')
+    expect(await screen.findByText('Something went wrong. Please try again later.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Try again in [89] s/ })).toBeDisabled()
   })
 
   it('the mailed link and the password reset wait after 429 too', async () => {
@@ -407,8 +515,19 @@ describe('the other blocks in the template', () => {
       onBack={vi.fn()} onSecondStep={vi.fn()} pendingPurpose={() => 'SIGN_IN'} />)
     expect(screen.getByTestId('oidc-error')).toHaveTextContent('access_denied')
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Signing in through the identity provider did not work.')
+    // The warning as before (PageState), its title the card's only heading.
+    expect(document.querySelector('[data-slot="page-state"]')).toHaveAttribute('data-state', 'warning')
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Back to sign in' })).toBeInTheDocument()
     await expectAccessible()
+  })
+
+  it('the return of linking an account says it is loading, not "Sign in"', () => {
+    render(<OidcCallback brand="Quizbuks" search="?state=s&code=c" fallbackPath="/" onSignedIn={vi.fn()} onBack={vi.fn()}
+      onSecondStep={vi.fn()} pendingPurpose={() => 'LINK'} takeBinder={() => 'b'} takeReturnPath={() => '/account'}
+      finishLink={() => new Promise(() => {})} />)
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Loading…')
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).toBeNull()
   })
 
   it('the passkey confirmation offers to sign in when signed out (gap 10)', async () => {
@@ -442,5 +561,15 @@ describe('the other blocks in the template', () => {
     // Once in the browser, the offer to install is still there.
     render(<PwaInstallBanner appName="Quizbuks" rememberAs="qb" prompt={{ situation: 'prompt', browser: 'other', install: noop }} />)
     expect(screen.getByTestId('pwa-install')).toHaveAttribute('data-situation', 'prompt')
+  })
+
+  it('carries the closes counted together before over to the note, so a note closed for good stays closed', () => {
+    const noop = async () => 'unavailable' as const
+    keepInstallDismissals('old', { at: 1000, count: 3 })
+    render(<PwaInstallBanner appName="Quizbuks" rememberAs="old" now={() => 2000}
+      prompt={{ situation: 'in-app', browser: 'wechat', install: noop }} />)
+    expect(screen.queryByTestId('pwa-install')).toBeNull()
+    expect(readInstallDismissals('old.in-app')).toEqual({ at: 1000, count: 3 })
+    expect(readInstallDismissals('old')).toEqual({ at: 1000, count: 3 })
   })
 })

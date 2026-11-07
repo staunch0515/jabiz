@@ -96,6 +96,7 @@ export interface EntryLayoutProps extends EntryLayoutSettings {
   children: ReactNode
   /** The test id of the form's card. */
   testId?: string
+  /** Classes of the page's `<main>`, as `AuthFrame`'s were. */
   className?: string
   /** In place of the title at the top of the card: the tabs of signing in and signing up ({@link EntryTabs}). */
   tabs?: ReactNode
@@ -103,6 +104,8 @@ export interface EntryLayoutProps extends EntryLayoutSettings {
   below?: ReactNode
   /** Shows the way to the other side (`otherEntry`) under the card: on the sign-in and sign-up forms. */
   showOtherEntry?: boolean
+  /** The content brings its own heading (`h2`, say a `PageState`): the card shows no title of its own. */
+  ownHeading?: boolean
 }
 
 /**
@@ -123,53 +126,59 @@ export function EntryLayout(props: EntryLayoutProps) {
   const otherEntry = props.otherEntry ?? shared.otherEntry
   const footer = props.footer ?? shared.footer
   const offerAppearance = useHasAppearance() && (props.appearance ?? shared.appearance ?? true)
-  const { title, children, testId, className, tabs, below, showOtherEntry } = props
+  const { title, children, testId, className, tabs, below, showOtherEntry, ownHeading } = props
   const phone = useIsMobile()
   const expanded = phone ? notices.find((n) => n.active !== false)?.key : undefined
+  const anyActive = notices.some((n) => n.active !== false)
 
   return (
     <div
       data-slot="entry-layout"
       data-layout={intro ? 'columns' : 'single'}
-      className={cn('bg-background text-foreground flex min-h-screen flex-col', className)}
+      className="bg-background text-foreground flex min-h-screen flex-col"
     >
-      <div data-slot="entry-notices" className="flex flex-col">
-        {/* A test system says so above everything (phase 16zd). */}
-        <EnvironmentBanner />
-        {notices.length > 0 && (
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 pt-3 empty:hidden">
-            {notices.map((notice) => phone && notice.summary && notice.active !== false && notice.key !== expanded ? (
-              <details key={notice.key} data-slot="entry-notice" data-collapsed="" className="text-sm">
-                <summary className="text-muted-foreground cursor-pointer truncate py-1">{notice.summary}</summary>
-                {notice.content}
-              </details>
-            ) : (
-              <div key={notice.key} data-slot="entry-notice" className="empty:hidden">{notice.content}</div>
-            ))}
-          </div>
-        )}
-      </div>
-      <header data-slot="entry-top" className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
-        <h1 data-slot="entry-brand" className="min-w-0 truncate text-xl font-semibold tracking-tight">{brand}</h1>
-        {languages.length > 1 && (
-          <Select value={i18n.language} onValueChange={(lang) => void changeLanguage(lang as Language)}>
-            <SelectTrigger size="sm" aria-label={t('common.language')} data-testid="entry-language" className="shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {languages.map((lang) => (
-                <SelectItem key={lang} value={lang} lang={lang}>
-                  {LANGUAGE_NAMES[lang]}
-                </SelectItem>
+      {/* The notices belong to the page's banner landmark, above its top bar. */}
+      <header data-slot="entry-header" className="flex flex-col">
+        <div data-slot="entry-notices" className="flex flex-col">
+          {/* A test system says so above everything (phase 16zd). */}
+          <EnvironmentBanner />
+          {notices.length > 0 && (
+            // No strip of its own while no notice shows anything.
+            <div className={cn('mx-auto flex w-full max-w-6xl flex-col gap-2 px-4', anyActive && 'pt-3')}>
+              {notices.map((notice) => phone && notice.summary && notice.active !== false && notice.key !== expanded ? (
+                <details key={notice.key} data-slot="entry-notice" data-collapsed="" className="text-sm">
+                  <summary className="text-muted-foreground cursor-pointer truncate py-1">{notice.summary}</summary>
+                  {notice.content}
+                </details>
+              ) : (
+                <div key={notice.key} data-slot="entry-notice" className="empty:hidden">{notice.content}</div>
               ))}
-            </SelectContent>
-          </Select>
-        )}
+            </div>
+          )}
+        </div>
+        <div data-slot="entry-top" className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3">
+          {/* A long name wraps, as the card's heading did. */}
+          <h1 data-slot="entry-brand" className="min-w-0 text-xl font-semibold tracking-tight break-words">{brand}</h1>
+          {languages.length > 1 && (
+            <Select value={i18n.language} onValueChange={(lang) => void changeLanguage(lang as Language)}>
+              <SelectTrigger size="sm" aria-label={t('common.language')} data-testid="entry-language" className="shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {languages.map((lang) => (
+                  <SelectItem key={lang} value={lang} lang={lang}>
+                    {LANGUAGE_NAMES[lang]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </header>
       <main
         data-slot="entry-main"
         className={cn('mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 pb-8',
-          intro ? 'lg:grid lg:grid-cols-2 lg:items-center lg:gap-16 lg:py-8' : 'items-center pt-4 sm:pt-12')}
+          intro ? 'lg:grid lg:grid-cols-2 lg:items-center lg:gap-16 lg:py-8' : 'items-center pt-4 sm:pt-12', className)}
       >
         {intro && (
           <section data-slot="entry-intro" aria-label={t('entry.about')} className="flex min-w-0 flex-col gap-6">
@@ -195,12 +204,16 @@ export function EntryLayout(props: EntryLayoutProps) {
         )}
         <div data-slot="entry-form" className="flex w-full flex-col items-center gap-4">
           <Card className="w-full max-w-sm" data-testid={testId}>
-            <CardHeader className="text-center">
-              <CardTitle className={tabs ? 'sr-only' : undefined}>
-                <h2 data-slot="entry-title" className="text-xl font-semibold tracking-tight">{title}</h2>
-              </CardTitle>
-              {tabs}
-            </CardHeader>
+            {(!ownHeading || tabs) && (
+              <CardHeader className="text-center">
+                {!ownHeading && (
+                  <CardTitle className={tabs ? 'sr-only' : undefined}>
+                    <h2 data-slot="entry-title" className="text-xl font-semibold tracking-tight">{title}</h2>
+                  </CardTitle>
+                )}
+                {tabs}
+              </CardHeader>
+            )}
             <CardContent className="flex flex-col gap-4">
               {children}
               {below && <div data-slot="entry-below" className="text-muted-foreground text-sm">{below}</div>}
@@ -287,17 +300,27 @@ export function EntryTabs({ current, signInPath, signUpPath, onNavigate, hrefOf 
 
 /**
  * Seconds still to wait after the server said "too many requests" (429 RATE_LIMITED with `Retry-After`; gap 5),
- * counting down every second; `hold` starts it from a failure (true when the failure asked to wait).
+ * counting down every second. `hold` starts it from a failure (true when the failure asked to wait) and keeps what to
+ * say meanwhile: the server's words, or `fallback` when the answer explained nothing (never "HTTP 429"). The text goes
+ * when the wait is over, with the button's hold.
  */
-export function useRetryWait(): { seconds: number; hold: (error: unknown) => boolean } {
+export function useRetryWait(fallback?: string): {
+  seconds: number
+  hold: (error: unknown) => boolean
+  message: string | null
+} {
   const [until, setUntil] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  const [message, setMessage] = useState<string | null>(null)
   useEffect(() => {
     if (until === null) return undefined
     const timer = window.setInterval(() => {
       const current = Date.now()
       setNow(current)
-      if (current >= until) setUntil(null)
+      if (current >= until) {
+        setUntil(null)
+        setMessage(null)
+      }
     }, 1000)
     return () => window.clearInterval(timer)
   }, [until])
@@ -306,9 +329,16 @@ export function useRetryWait(): { seconds: number; hold: (error: unknown) => boo
     const start = Date.now()
     setNow(start)
     setUntil(start + error.retryAfter * 1000)
+    setMessage(explained(error) ? error.display : fallback ?? null)
     return true
   }
-  return { seconds: until === null ? 0 : Math.max(0, Math.ceil((until - now) / 1000)), hold }
+  return { seconds: until === null ? 0 : Math.max(0, Math.ceil((until - now) / 1000)), hold, message }
+}
+
+/** Whether a failure says something of its own (violations, or a detail or title), not just its status. */
+function explained(error: ApiError): boolean {
+  const said = (value: unknown) => typeof value === 'string' && value.trim() !== ''
+  return error.violations.length > 0 || said(error.problem.detail) || said(error.problem.title)
 }
 
 function subscribeWide(onChange: () => void) {

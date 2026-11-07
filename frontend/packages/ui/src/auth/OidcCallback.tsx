@@ -133,19 +133,28 @@ export function OidcCallback({
 
   const failedTitle = t(purpose === 'LINK' ? 'login.linkFailed' : 'login.providerFailed')
   const busy = cancelled || !error
+  // While busy, linking an account is no sign-in: a neutral title.
+  const busyTitle = purpose === 'LINK' ? t('common.loading') : t('login.title')
   return (
-    <AuthFrame brand={brand} appearance={appearance} title={busy ? t('login.title') : failedTitle}
-      testId="oidc-callback">
+    <AuthFrame brand={brand} appearance={appearance} title={busy ? busyTitle : failedTitle} testId="oidc-callback"
+      ownHeading={!busy}>
       {busy ? (
         <PageState kind="loading" title={t('common.loading')} />
       ) : (
-        <>
-          <Alert variant="destructive" data-testid="oidc-error">
-            <TriangleAlert aria-hidden />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-          <Button onClick={onBack}>{t('login.back')}</Button>
-        </>
+        // The failure as before: the warning, its title (the card's heading), the reason and the way back.
+        <PageState
+          kind="warning"
+          titleAs="h2"
+          title={failedTitle}
+          className="p-0"
+          description={
+            <Alert variant="destructive" data-testid="oidc-error" className="text-left">
+              <TriangleAlert aria-hidden />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          }
+          action={<Button onClick={onBack}>{t('login.back')}</Button>}
+        />
       )}
     </AuthFrame>
   )

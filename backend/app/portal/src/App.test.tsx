@@ -120,6 +120,28 @@ describe('the portal', () => {
     unmount()
   })
 
+  it('hands the second step after an identity provider to the sign-in page in memory, storage blocked or not (17zk)',
+    async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+        const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
+        const url = new URL(request.url, window.location.origin)
+        if (url.pathname === '/api/auth/oidc/callback') return json(200, { status: 'MFA_REQUIRED', challenge: 'ch' })
+        if (url.pathname === '/api/auth/entries/portal') {
+          return json(200, { name: 'portal', selfRegistration: true, appPath: '/portal/', sessionPersistence: 'device' })
+        }
+        return json(200, [])
+      })
+      // A browser that keeps nothing in this tab's storage: the hand-off still works, as before.
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('blocked')
+      })
+      window.history.replaceState(null, '', '/login/oidc?state=s1&code=c1')
+      render(<App />)
+      await waitFor(() => expect(window.location.pathname).toBe('/login'))
+      expect(await screen.findByRole('textbox', { name: 'Code' })).toBeInTheDocument()
+      setItem.mockRestore()
+    })
+
   it('leads a signed-in customer from signing up and asking for a new password to the orders (gap 9)', async () => {
     session.store('access', 'refresh')
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {

@@ -47,7 +47,7 @@ export function EmailLinkForm({ entry, to, initialEmail = '', submitLabel, onSen
   const [sent, setSent] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const form = useForm<{ email: string }>({ defaultValues: { email: initialEmail } })
-  const { seconds: wait, hold } = useRetryWait()
+  const { seconds: wait, hold, message: waitMessage } = useRetryWait(t('account.failed'))
   if (sent !== null) {
     return (
       <div className="flex flex-col gap-4" data-testid="email-link-form">
@@ -73,8 +73,8 @@ export function EmailLinkForm({ entry, to, initialEmail = '', submitLabel, onSen
           setSent(email.trim())
           onSent?.(email.trim())
         } catch (e) {
-          // Too many requests: the server's words, and the button waits as long as it asks (gap 5).
-          setError(hold(e) ? refusal(e, t('account.failed')) : failure(e, t('account.failed')))
+          // Too many requests: said while the button waits as long as the server asks, gone after (gap 5).
+          setError(hold(e) ? null : failure(e, t('account.failed')))
         }
       })}
     >
@@ -85,7 +85,7 @@ export function EmailLinkForm({ entry, to, initialEmail = '', submitLabel, onSen
         placeholder={t('account.email')}
         autoComplete="email"
         data-testid="email-link-email"
-        error={form.formState.errors.email?.message ?? error ?? undefined}
+        error={form.formState.errors.email?.message ?? error ?? waitMessage ?? undefined}
         {...form.register('email', { validate: (v) => v.trim() !== '' || t('account.emailRequired') })}
       />
       <AuthSubmit busy={form.formState.isSubmitting} wait={wait}>{submitLabel ?? t('emailLink.send')}</AuthSubmit>

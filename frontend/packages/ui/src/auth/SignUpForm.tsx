@@ -11,7 +11,7 @@ import { AUTH_LINK_CLASS, AuthError, AuthField, AuthFrame, AuthLink, AuthSubmit,
 import { NewPasswordFields, ResendVerification, type NewPassword } from './MailLinkPage'
 import { EntryTabs, useRetryWait } from './entry'
 import { AUTH_NAMESPACE } from './messages'
-import { failure, passwordProblems, refusal } from './problems'
+import { failure, passwordProblems } from './problems'
 
 /** The values of the sign-up form; an application's own fields (`extra`) add theirs. */
 export type SignUpValues = NewPassword & { email: string; displayName: string; locale: string } & Record<string, unknown>
@@ -84,7 +84,7 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
   })
   const locale = useWatch({ control: form.control, name: 'locale' })
   const navigation = { onNavigate, hrefOf }
-  const { seconds: wait, hold } = useRetryWait()
+  const { seconds: wait, hold, message: waitMessage } = useRetryWait(t('account.failed'))
   const tabs = withTabs && signInPath
     ? <EntryTabs current="signUp" signInPath={signInPath} signUpPath={signUpPath} {...navigation} /> : undefined
 
@@ -96,7 +96,7 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
   return (
     <AuthFrame brand={brand} appearance={appearance} title={t('signUp.title')} testId="sign-up" tabs={tabs}
       showOtherEntry>
-      {error && <AuthError message={error} testId="sign-up-error" />}
+      {(error ?? waitMessage) && <AuthError message={(error ?? waitMessage)!} testId="sign-up-error" />}
       <form
         noValidate
         className="flex flex-col gap-4"
@@ -117,8 +117,8 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
             setSent(email)
           } catch (e) {
             if (passwordProblems(e).length > 0) setFieldError(passwordProblems(e).join(' '))
-            // Too many requests: the server's words, and the button waits as long as it asks (gap 5).
-            else if (hold(e)) setError(refusal(e, t('account.failed')))
+            // Too many requests: said while the button waits as long as the server asks, gone after (gap 5).
+            else if (hold(e)) setError(null)
             else setError(failure(e, t('account.failed')))
           }
         })}
@@ -165,7 +165,7 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
       )}
       {oidc && (
         <OidcButtons returnTo={oidc.returnTo} providers={oidc.providers} start={oidc.start} layout={oidc.layout}
-          purpose="signUp" onError={(e) => setError(e === null ? null : t('common.error'))} />
+          purpose="signUp" onError={(e) => setError(e === null || hold(e) ? null : t('common.error'))} />
       )}
       {note && <div className="text-muted-foreground text-center text-sm" data-testid="sign-up-note">{note}</div>}
     </AuthFrame>

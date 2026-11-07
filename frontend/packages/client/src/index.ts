@@ -146,7 +146,7 @@ export { registerServiceWorker, useServiceWorkerUpdate, onServiceWorkerUpdate } 
 export type { PwaMode, ServiceWorkerOptions } from './pwa/register'
 export {
   captureInstallPrompt, inAppBrowser, installBrowser, installOfferAllowed, installSituation, isIos, readInstallDismissals,
-  rememberInstallDismissed, useInstallPrompt,
+  rememberInstallDismissed, keepInstallDismissals, useInstallPrompt,
 } from './pwa/install'
 export type {
   InstallBrowser, InstallDismissals, InstallEnvironment, InstallOutcome, InstallPrompt, InstallSituation,

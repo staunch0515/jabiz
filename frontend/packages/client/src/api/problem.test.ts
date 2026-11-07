@@ -45,6 +45,15 @@ describe('retryAfterSeconds', () => {
     expect(retryAfterSeconds('30', now)).toBe(30)
     expect(retryAfterSeconds(' 0 ', now)).toBe(0)
     expect(retryAfterSeconds('Sat, 07 Nov 2026 10:01:00 GMT', now)).toBe(60)
+    // At most an hour, however far away it says.
+    expect(retryAfterSeconds('7200', now)).toBe(3600)
+    expect(retryAfterSeconds('Sun, 08 Nov 2026 10:00:00 GMT', now)).toBe(3600)
+    // Junk is no wait at all: not a date Date.parse would guess, not a number too long, not a sign or a fraction.
+    expect(retryAfterSeconds('Retry 2030', now)).toBeUndefined()
+    expect(retryAfterSeconds('99999999999999999999', now)).toBeUndefined()
+    expect(retryAfterSeconds('-5', now)).toBeUndefined()
+    expect(retryAfterSeconds('1.5', now)).toBeUndefined()
+    expect(retryAfterSeconds('2026-11-07T10:01:00Z', now)).toBeUndefined()
     expect(retryAfterSeconds('Sat, 07 Nov 2026 09:00:00 GMT', now)).toBe(0)
     expect(retryAfterSeconds('soon', now)).toBeUndefined()
     expect(retryAfterSeconds(null, now)).toBeUndefined()

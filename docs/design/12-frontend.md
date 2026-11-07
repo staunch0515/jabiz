@@ -417,13 +417,13 @@ jabizApp {
 **原则：模板只管排列，不删、不简化任何现有行为**；认证流程与接口一处不改（需求方选方案 A，原型的 132 条清单逐条有位置）。
 
 - **槽位**（自上而下）：
-  - **提示区**：测试系统的环境横条总在最上（16zd）；其后是应用给出的 `notices`（`EntryNotice`：`key`、`content`、一行的 `summary`、`active`）。手机上（`< md`）
-    只展开第一条 `active` 的，其余收成一行（`<details>`，点开即看全文）；宽屏全部展开。`useEntryNotices()` 给出平台的两条：离线（服务不答是页面上的对话框，不占位置）
+  - **提示区**（与顶栏同在页面的 `banner` 地标中）：测试系统的环境横条总在最上（16zd）；其后是应用给出的 `notices`（`EntryNotice`：`key`、`content`、一行的 `summary`、`active`）。手机上（`< md`）
+    只展开第一条 `active` 的，其余 `active` 的收成一行（`<details>`，点开即看全文）；宽屏全部展开；没有一条 `active` 时不占位置。`useEntryNotices()` 给出平台的两条：离线（服务不答是页面上的对话框，不占位置）
     与新版本（PWA）。内置浏览器提示等由应用加入。
-  - **顶栏**：左边品牌（`brand`，页面的 `h1`），右边语言选择（多于一种语言时；从原来卡片下方移来，建议⑤）。
+  - **顶栏**：左边品牌（`brand`，页面的 `h1`，长名字换行），右边语言选择（多于一种语言时；从原来卡片下方移来，建议⑤）。
   - **左栏**（`intro`：一句话 `sentence`、要点 `points`、示意图 `illustration`，文字由应用以自己的三语消息给出；建议②）：宽屏（`lg`）在表单左侧；
     手机上只剩一行（那句话，截断），表单仍在第一屏。没有 `intro` 时卡片单独居中（通用后台照旧）。
-  - **表单卡片**：标题（`h2`）或标签；内容；`below`（表单下的说明，如发起方的"已经在答题？"）。
+  - **表单卡片**：标题（`h2`）或标签（内容自带标题时 `ownHeading`）；内容；`below`（表单下的说明，如发起方的"已经在答题？"）。`className` 照旧加在 `<main>` 上。
   - **另一方入口**（`otherEntry`：`text`、`href`、`link`，文字来自应用的消息，不写死"后台"之类；建议①、缺口 7）：只在登录与注册表单下显示（`showOtherEntry`），整页载入。
   - **页脚**：`links`（帮助、条款、隐私，`EntryLink`；缺口 8）、亮暗切换（`appearance=false` 时不显示：通用后台）、`footer`（构建号，`data-testid="auth-footer"`）。
 - **`EntryLayoutProvider`**：一个前端的入口页共用的设置（品牌、左栏、提示、页脚链接、另一方入口、页脚小字、亮暗）只设一次；平台的积木都从这里取，页面自己的属性优先。
@@ -434,18 +434,23 @@ jabizApp {
   不给即以前的顺序。"或用密码登录"出现在密码之前有通行密钥以外的方式时；第三方排在最前时不加分隔线（成为有名称的组）。
   `oidcLayout="responsive"`：手机上一排圆图标，宽屏整行按钮。示例：学者中文 `['emailLink','providers','passkey','password']`、日英
   `['providers','emailLinkButton','passkey','password']`（缺口 1：日英也能用邮件链接）；发起方 `['passkey','providers','password']`；通用后台通行密钥与密码（缺省顺序）。
-- **请求太多（429）**（缺口 5）：`ApiError.retryAfter`（`Retry-After` 的秒数或日期，`@jabiz/client`）；`useRetryWait()` 倒计时。登录（密码与通行密钥按钮）、注册、
-  邮件链接、找回密码的按钮在等待期间停用并显示"N 秒后可以再试"（`common.retryIn`），提示仍是服务器的原文；第三方按钮同样停用（`oidc-wait`）。
-- **第二步保留返回地址**（缺口 2）：`OidcCallback` 在转到登录页之前以 `keepSignInStep(步骤, 返回地址)` 把两者记在本标签页（`sessionStorage`，按入口，15 分钟内有效）；
-  `SignInForm` 没有 `initialStep` 时自动接着这一步（`resumeStep`，缺省开），登录后去记下的地址，刷新也不丢；登录成功或返回密码步骤即忘掉（`forgetSignInStep`）。
-- **回调页**（缺口 4）：`OidcCallback` 在模板中（品牌、语言、环境横条），新增 `brand`、`appearance`；失败的标题是卡片的 `h2`。
+- **请求太多（429）**（缺口 5）：`ApiError.retryAfter`（`Retry-After` 只认非负整数秒或 IMF-fixdate，至多 1 小时，其余不算，`@jabiz/client`）；`useRetryWait()` 倒计时。登录（密码与通行密钥按钮）、注册、
+  邮件链接、找回密码的按钮在等待期间停用并显示"N 秒后可以再试"（`common.retryIn`）；提示是服务器的原文，答复没有说明时是各表单原来的通用失败文字（不显示 "HTTP 429"），
+  等待结束即与按钮一起撤下；第三方按钮同样停用（`oidc-wait`）。
+- **第二步保留返回地址**（缺口 2）：`OidcCallback` 在转到登录页之前以 `keepSignInStep(步骤, 返回地址)` 把两者记在本标签页（`sessionStorage`，按入口，至多 5 分钟，
+  即服务器 `jabiz.security.mfa.challenge-ttl` 的缺省值）；照旧交给登录页的 `initialStep`（内存中）优先，存储只是刷新后的后备。`SignInForm` 的 `resumeStep`（缺省关，前端自己开启：
+  示范门户开，通用后台不开）在没有 `initialStep`、也不是闲置退出后的页面时接着这一步，登录后去记下的地址；登录成功或返回密码步骤即忘掉（`forgetSignInStep`）；
+  接着的挑战服务器已不接受（401，过期）时丢掉它，回到密码步骤并显示服务器的原文。
+- **回调页**（缺口 4）：`OidcCallback` 在模板中（品牌、语言、环境横条），新增 `brand`、`appearance`；失败照旧是带警告图标的 `PageState`，其标题是卡片唯一的 `h2`；
+  处理中的标题为"登录"，关联账号时为中性的"加载中"。
 - **邮件链接页**：`MAIL_LINK_PAGES` 列出 `MailLinkPage` 的全部页面供前端挂载（缺口 3）；"确认通行密钥"未登录时给出登录链接（`signInPath`，否则入口的前端；缺口 10）。
-- **内置浏览器提示**（缺口 11）：`PwaInstallBanner` 在其他 App 的浏览器中（`in-app`）的关闭另记在 `rememberAs` + `.in-app`，不用掉安装提示的次数。
+- **内置浏览器提示**（缺口 11）：`PwaInstallBanner` 在其他 App 的浏览器中（`in-app`）的关闭另记在 `rememberAs` + `.in-app`，不用掉安装提示的次数；
+  新键还没有记录时从原来合记的记录照搬一次（`keepInstallDismissals`），已永久关掉的提示不再出现。
 - **示范**：通用后台（单栏、无亮暗、构建号、回调页带品牌）；示范门户用 `EntryLayoutProvider`（三语的左栏、`useEntryNotices`）、登录与注册两个标签、注册页的第三方与条款说明、
-  已登录时 `/signup` 与 `/password-reset` 转到订单（缺口 9）、第二步只靠保存的步骤。
+  已登录时 `/signup` 与 `/password-reset` 转到订单（缺口 9）、第二步照旧在内存中交给登录页并开启 `resumeStep`。
 - **QuizBuks 的应用**（在自己的分支上）：以 `EntryLayoutProvider` 给出品牌、左栏三语文案与示意图、提示（含内置浏览器提示）、页脚的帮助 / 条款 / 隐私、
   `otherEntry`（学者 ↔ 发起方）；`SignInForm` 的 `order`、`tabs`、`below`（发起方的说明）、`oidcLayout="responsive"`；`/signup` 路由到注册标签并保留 `?src=` / `?ref=`；
-  回调页去掉自己保存步骤的代码；挂上缺少的邮件链接页（发起方开启删除账号前须挂 `account-deletion`）；发起方的公开框架补上环境横条（缺口 6，与模板无关）。
+  需要刷新后接着第二步时开启 `resumeStep`；挂上缺少的邮件链接页（发起方开启删除账号前须挂 `account-deletion`）；发起方的公开框架补上环境横条（缺口 6，与模板无关）。
 - **测试**：`entry.test.tsx`（槽位、手机与宽屏的类、提示的收起、提供者的设置、标签与查询参数、按语言的顺序、方式不丢、429 的倒计时与停用（登录、注册、邮件链接、
   找回密码、第三方）、第二步的返回地址与刷新、回调页在模板中、确认通行密钥的登录链接、内置浏览器提示分开计数），每例 `expectAccessible`（亮暗）；
   `problem.test.ts`（`Retry-After`）、`signInStep.test.ts`；原有的 `blocks.test.tsx` 等照旧通过；门户 `App.test.tsx`（模板、标签、条款说明、已登录转走）；后台的回调页与确认通行密钥。

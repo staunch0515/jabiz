@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { AUTH_LINK_CLASS, AuthField, AuthFrame, AuthLink, AuthSubmit, Outcome, type AuthNavigation } from './frame'
 import { useRetryWait } from './entry'
 import { AUTH_NAMESPACE } from './messages'
-import { failure, refusal } from './problems'
+import { failure } from './problems'
 
 export interface PasswordResetRequestProps extends AuthNavigation {
   /** The application's name, the page's heading. */
@@ -28,7 +28,7 @@ export function PasswordResetRequest({ brand, appearance, entry, signInPath, onN
   const [error, setError] = useState<string | null>(null)
   const form = useForm<{ email: string }>({ defaultValues: { email: '' } })
   const appPath = useAppPath(entry, !signInPath)
-  const { seconds: wait, hold } = useRetryWait()
+  const { seconds: wait, hold, message: waitMessage } = useRetryWait(t('account.failed'))
   return (
     <AuthFrame brand={brand} appearance={appearance} title={t('account.resetTitle')} testId="password-reset">
       {done ? (
@@ -45,8 +45,8 @@ export function PasswordResetRequest({ brand, appearance, entry, signInPath, onN
               await requestPasswordReset(email, entry)
               setDone(true)
             } catch (e) {
-              // Too many requests: the server's words, and the button waits as long as it asks (gap 5).
-              setError(hold(e) ? refusal(e, t('account.failed')) : failure(e, t('account.failed')))
+              // Too many requests: said while the button waits as long as the server asks, gone after (gap 5).
+              setError(hold(e) ? null : failure(e, t('account.failed')))
             }
           })}
         >
@@ -56,7 +56,7 @@ export function PasswordResetRequest({ brand, appearance, entry, signInPath, onN
             type="email"
             placeholder={t('account.email')}
             autoComplete="email"
-            error={form.formState.errors.email?.message ?? error ?? undefined}
+            error={form.formState.errors.email?.message ?? error ?? waitMessage ?? undefined}
             {...form.register('email', { validate: (v) => v.trim() !== '' || t('account.emailRequired') })}
           />
           <AuthSubmit busy={form.formState.isSubmitting} wait={wait}>{t('account.sendLink')}</AuthSubmit>
