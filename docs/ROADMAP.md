@@ -5360,7 +5360,8 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 | # | 内容 |
 |---|---|
 | 17zz4-1 | `FindRetiredValues.writeLimit(实体)` = `min(batch-size, maxWriteBatchSize)`；每次运行按实体记剩余额度（`TakeBackSecondFactors` 与重新加密共用 `SecUserMfa` 的额度），装满即 `more=true`。`KEYS`：声明的密封字段所在数据视图的上限小于 10 时警告 |
-| 17zz4-2 | 测试：`KeyRotationBatchIT`（101 个旧密钥下的仓库名：修改前整次运行失败；修改后第一次存 100 个、`more=true`，第二次存最后 1 个，第三次报告可以撤下；上限为 2 的数据视图得到警告，100 的不报）。`KeyRotationIT`、`KeyRotationUndeclaredIT`、`MfaReenrollmentIT`、`RestoreVerificationIT` 照旧通过 |
+| 17zz4-1b | 一行一条更新（S3 报告）：`StoreUnderCurrentKey` 把同一行的各个密封字段合成一条按版本的更新；此前每个字段各一条、都用读到的版本，同一行两个密封字段时第二条 409（"expected version [1], stored version [2]"），整批回滚，恢复演练的 `DRILL_ROTATE` 同样失败。收回二次验证与重新加密同一行时只写收回那一条（原已如此） |
+| 17zz4-2 | 测试：`KeyRotationBatchIT`（另加一例：测试迁移 `V1017__it_sealed_pair.sql`，一行两个密封字段，修改前 409，修改后一次运行两者都重新密封、行版本只加 1）（101 个旧密钥下的仓库名：修改前整次运行失败；修改后第一次存 100 个、`more=true`，第二次存最后 1 个，第三次报告可以撤下；上限为 2 的数据视图得到警告，100 的不报）。`KeyRotationIT`、`KeyRotationUndeclaredIT`、`MfaReenrollmentIT`、`RestoreVerificationIT` 照旧通过 |
 
 **验收**：数据视图的提交上限小于任务批量时，轮换照常分几次完成（复现测试修改前失败、修改后通过）。
 

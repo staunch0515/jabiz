@@ -42,12 +42,36 @@ class KeyRotationBatchIT extends SecurityItSupport {
         new SealedSecrets(Base64.getDecoder().decode(KeyRotationIT.OLD_SEAL));
 
     static final String SMALL = "ItSmallBatchCard";
+    static final String PAIR = "ItSealedPair";
 
     @TestConfiguration
     static class Sealed extends com.jabiz.entity.BaseEntityDefinitions {
         @Bean
         SealedFields itSealedFields() {
-            return () -> List.of(SealedField.of(CommerceEntities.WAREHOUSE, "warehouseName", "warehouseCode"));
+            return () -> List.of(SealedField.of(CommerceEntities.WAREHOUSE, "warehouseName", "warehouseCode"),
+                SealedField.of(PAIR, "sealedAccess", "pairId"), SealedField.of(PAIR, "sealedRefresh", "pairId"));
+        }
+
+        /** Two sealed values in one row of an ordinary table (test table it_sealed_pair). */
+        @Bean
+        com.jabiz.entity.EntityDefinition itSealedPair() {
+            return com.jabiz.entity.EntityDefinition.define(PAIR, eb -> {
+                eb.physicalTable("it_sealed_pair");
+                eb.primaryKey("pairId");
+                eb.field("pairId", f -> f.physicalColumn("pair_id").immutable(true).required(true).asText(36));
+                eb.field("sealedAccess", f -> f.physicalColumn("sealed_access").required(true).asText(4000).sensitive());
+                eb.field("sealedRefresh", f -> f.physicalColumn("sealed_refresh").required(true).asText(4000)
+                    .sensitive());
+                eb.field("rowVersion", rowVersion("f_version"));
+            });
+        }
+
+        @Bean
+        com.jabiz.dataset.DatasetDefinition itSealedPairs(
+            @org.springframework.beans.factory.annotation.Value("${jabiz.storage.default-pool-ref:default}") String pool) {
+            return com.jabiz.dataset.DatasetDefinition.define("urn:jabiz:dataset:default:" + PAIR, d -> d
+                .targetEntityType(PAIR).asDefault().permissions("it.pair.read", "it.pair.write")
+                .storage(s -> s.connectionPoolRef(pool)));
         }
 
         /** An entity whose dataset takes 2 changes per commit (test table it_product_card). */
@@ -74,6 +98,33 @@ class KeyRotationBatchIT extends SecurityItSupport {
 
     @Autowired
     com.jabiz.runtime.security.rotation.KeyRotationChecks checks;
+
+    private static String sealed(String secret, String context) {
+        byte[] iv = new byte[SealedSecrets.IV_BYTES];
+        RANDOM.nextBytes(iv);
+        return OLD_SEALER.seal(secret.getBytes(StandardCharsets.UTF_8), context, iv);
+    }
+
+    /**
+     * Two declared sealed fields in one row are stored again in one update of the row (ROADMAP 17zz4). Before, each
+     * field was its own update with the version both had read: the second failed (409, "expected version [1], stored
+     * version [2]") and the whole run was rolled back, so nothing was ever stored again.
+     */
+    @Test
+    void twoSealedValuesOfOneRowAreStoredAgainTogether() {
+        String id = UUID.randomUUID().toString();
+        // Test set-up only: the row as a process would have written it under the retired key.
+        execute("INSERT INTO it_sealed_pair (pair_id, sealed_access, sealed_refresh) VALUES (?, ?, ?)", id,
+            sealed("access token", id), sealed("refresh token", id));
+
+        KeyRotationProcesses.RekeyOutput out = rekey();
+        assertThat(out.sealedValues()).isGreaterThanOrEqualTo(2);
+        Map<String, Object> row = query("SELECT sealed_access, sealed_refresh, f_version FROM it_sealed_pair"
+            + " WHERE pair_id = ?", id).getFirst();
+        assertThat(sealer.open(String.valueOf(row.get("sealed_access")), id)).isEqualTo("access token");
+        assertThat(sealer.open(String.valueOf(row.get("sealed_refresh")), id)).isEqualTo("refresh token");
+        assertThat(((Number) row.get("f_version")).longValue()).as("one update of the row").isEqualTo(2);
+    }
 
     @Test
     void aSealedFieldWhoseDatasetTakesFewChangesPerCommitIsReported() {
