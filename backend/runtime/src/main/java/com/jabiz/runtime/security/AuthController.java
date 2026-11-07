@@ -1,5 +1,6 @@
 package com.jabiz.runtime.security;
 
+import io.micrometer.common.KeyValues;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.runtime.AuthenticationFailedException;
@@ -221,6 +222,11 @@ class AuthController {
                             return renewal.granted().map(Mono::just)
                                 .orElseGet(() -> Mono.error(invalidRefresh("The user can no longer sign in")));
                         }))
+                .doOnError(RefreshTokenStore.InvalidRefreshTokenException.class, e -> {
+                    if (e.reused()) {
+                        observations.event(PlatformObservations.AUTH_REFRESH_REUSE, KeyValues.of("result", "revoked"));
+                    }
+                })
                 .onErrorMap(RefreshTokenStore.InvalidRefreshTokenException.class, e -> invalidRefresh(e.getMessage()))
                 // A guard refused: nothing was consumed (the transaction rolled back); the session ends on its own.
                 .onErrorResume(RefusedAtRefresh.class, refused -> {
@@ -231,6 +237,12 @@ class AuthController {
                         .then(Mono.error(invalidRefresh("Refused by a sign-in guard")));
                 })
                 .map(rotated -> {
+                    if (rotated.regranted()) {
+                        // Not a theft by itself: a client that lost its refresh's answer (decision D73).
+                        log.info("Refresh token of user {} presented again within the reuse grace; issued a sibling",
+                            rotated.grant().userId());
+                        observations.event(PlatformObservations.AUTH_REFRESH_REUSE, KeyValues.of("result", "granted"));
+                    }
                     Actor actor = rotated.value().inSession(rotated.next().familyId());
                     return response(tokens.issue(actor), actor, rotated.next());
                 });

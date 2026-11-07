@@ -65,3 +65,22 @@ test('a user signs out their other session, which can no longer be renewed', asy
     await elsewhere.close()
   }
 })
+
+/**
+ * The reuse grace of refresh tokens (decision D73; ROADMAP phase 17zi): a refresh whose answer the page never stored
+ * (it was reloaded meanwhile) leaves the page with a token the server has just rotated. Reloaded within the grace, the
+ * page sends it again and gets a sibling of its successor instead of losing the session.
+ */
+test('a page reloaded after a refresh whose answer it lost stays signed in', async ({ page }) => {
+  await signIn(page)
+  const stored = await refreshTokenOf(page)
+  // A refresh whose answer is lost: the server rotates the token, the page keeps the old one.
+  expect(await refreshStatus(page, stored)).toBe(200)
+  expect(await refreshTokenOf(page)).toBe(stored)
+
+  await page.reload()
+  await expect(page).toHaveURL(/\/data/)
+  await expect(page.getByPlaceholder('密码')).toHaveCount(0)
+  // The page renewed with the old token once more, and keeps the sibling it was given.
+  await expect.poll(() => refreshTokenOf(page)).not.toBe(stored)
+})
