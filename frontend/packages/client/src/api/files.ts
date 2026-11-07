@@ -20,6 +20,21 @@ export async function uploadFile(policy: string, file: Blob, fileName: string): 
   return (await response.json()) as UploadedFile
 }
 
+/**
+ * Has the server download the image a link gives, once, and store it as the caller's upload under a policy
+ * (docs/design/14-files.md section 12, decision D75): https links to public hosts only. Answers like an upload; throws
+ * an ApiError with the reason (FILE_FETCH_*, RATE_LIMITED, PROCESS_BUSY) when it is refused.
+ */
+export async function fetchFileFromLink(policy: string, url: string): Promise<UploadedFile> {
+  const response = await sessionFetch(`/api/files/fetch?policy=${encodeURIComponent(policy)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
+  if (!response.ok) throw await toApiError(response)
+  return (await response.json()) as UploadedFile
+}
+
 /** The content of a file (or of one of its variants) as a blob. */
 export async function fetchFileContent(fileId: string, variant?: string): Promise<Blob> {
   const path = `/api/files/${encodeURIComponent(fileId)}/content${variant ? `/${encodeURIComponent(variant)}` : ''}`

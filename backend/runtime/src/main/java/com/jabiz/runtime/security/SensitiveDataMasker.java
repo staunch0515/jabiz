@@ -8,6 +8,8 @@ import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
+import com.jabiz.file.RemoteImageLink;
+import com.jabiz.security.MaskedLink;
 import com.jabiz.security.Sensitive;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -57,6 +59,8 @@ public class SensitiveDataMasker {
      */
     private final Map<String, com.jabiz.entity.MaskStyle> maskedNames;
     private final List<String> fragments;
+    /** Names of {@code @MaskedLink} components: links recorded without their query (decision D75). */
+    private final Set<String> linkNames;
 
     public SensitiveDataMasker(JsonMapper json, EntityDefinitionRegistry entities,
         Collection<ProcessDefinition<?, ?, ?>> processes, Collection<String> fragments) {
@@ -64,13 +68,15 @@ public class SensitiveDataMasker {
         this.entities = Objects.requireNonNull(entities, "entities must not be null");
         Set<String> found = new HashSet<>();
         Set<String> returned = new HashSet<>();
+        Set<String> links = new HashSet<>();
         for (EntityDefinition def : entities.all()) {
             def.sensitiveFields().forEach(name -> found.add(name.toLowerCase(Locale.ROOT)));
         }
         for (ProcessDefinition<?, ?, ?> process : processes) {
-            collectSensitive(process.inputType(), found, returned, 0);
-            collectSensitive(process.outputType(), found, returned, 0);
+            collectSensitive(process.inputType(), found, returned, links, 0);
+            collectSensitive(process.outputType(), found, returned, links, 0);
         }
+        this.linkNames = Set.copyOf(links);
         // A name both kept from the answer somewhere and returned elsewhere is kept from the answer: the stricter wins.
         returned.removeAll(found);
         this.names = Set.copyOf(found);
@@ -125,8 +131,9 @@ public class SensitiveDataMasker {
             return null;
         }
         value = externalJobSummary(value);
-        String text = json.writeValueAsString(mask(json.valueToTree(value), json.getNodeFactory().stringNode(MASK),
-            name -> isRecordedSecret(name) || maskedNames.containsKey(name.toLowerCase(Locale.ROOT))));
+        String text = json.writeValueAsString(maskLinks(mask(json.valueToTree(value),
+            json.getNodeFactory().stringNode(MASK),
+            name -> isRecordedSecret(name) || maskedNames.containsKey(name.toLowerCase(Locale.ROOT)))));
         if (text.length() <= MAX_SUMMARY_LENGTH) {
             return text;
         }
@@ -295,22 +302,48 @@ public class SensitiveDataMasker {
         return node;
     }
 
-    private static void collectSensitive(Type type, Set<String> found, Set<String> returned, int depth) {
+    /** Text values under {@code @MaskedLink} names, at any depth, without their query and user information. */
+    private JsonNode maskLinks(JsonNode node) {
+        if (linkNames.isEmpty()) {
+            return node;
+        }
+        if (node instanceof ObjectNode object) {
+            List<String> keys = new ArrayList<>();
+            object.properties().forEach(entry -> keys.add(entry.getKey()));
+            for (String key : keys) {
+                JsonNode child = object.get(key);
+                if (child.isString() && linkNames.contains(key.toLowerCase(Locale.ROOT))) {
+                    object.put(key, RemoteImageLink.shown(child.asString()));
+                } else {
+                    maskLinks(child);
+                }
+            }
+        } else if (node instanceof ArrayNode array) {
+            array.forEach(this::maskLinks);
+        }
+        return node;
+    }
+
+    private static void collectSensitive(Type type, Set<String> found, Set<String> returned, Set<String> links,
+        int depth) {
         if (depth > MAX_TYPE_DEPTH) {
             return;
         }
         if (type instanceof ParameterizedType parameterized) {
             for (Type argument : parameterized.getActualTypeArguments()) {
-                collectSensitive(argument, found, returned, depth + 1);
+                collectSensitive(argument, found, returned, links, depth + 1);
             }
-            collectSensitive(parameterized.getRawType(), found, returned, depth + 1);
+            collectSensitive(parameterized.getRawType(), found, returned, links, depth + 1);
         } else if (type instanceof Class<?> cls && cls.isRecord()) {
             for (RecordComponent component : cls.getRecordComponents()) {
                 Sensitive sensitive = component.getAnnotation(Sensitive.class);
                 if (sensitive != null) {
                     (sensitive.returned() ? returned : found).add(component.getName().toLowerCase(Locale.ROOT));
                 }
-                collectSensitive(component.getGenericType(), found, returned, depth + 1);
+                if (component.isAnnotationPresent(MaskedLink.class)) {
+                    links.add(component.getName().toLowerCase(Locale.ROOT));
+                }
+                collectSensitive(component.getGenericType(), found, returned, links, depth + 1);
             }
         }
     }

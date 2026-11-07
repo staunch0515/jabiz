@@ -950,6 +950,14 @@
         },
         "type" : "object"
       },
+      "FetchRequest" : {
+        "properties" : {
+          "url" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "FileInfo" : {
         "properties" : {
           "contentType" : {
@@ -6220,6 +6228,42 @@
                   "$ref" : "#/components/schemas/PartEvent"
                 },
                 "type" : "array"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FileInfo"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
+    "/api/files/fetch" : {
+      "post" : {
+        "operationId" : "fetch",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "policy",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/FetchRequest"
               }
             }
           },
