@@ -5037,7 +5037,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zh-6 | 信纸：`MailLayout`（`sys_mail_layout_version`）、`MailLayoutRules`、`MailRenderer` 套信纸、缺省值 `jabiz.mail.layout.*`、修改经受控变更 `mail-layout`、投递记 `layout_version_no`、示范 `app` 的信纸 | 17zh-b（计划） |
 | 17zh-7 | 通用后台的"邮件模版"与"邮件信纸"页（列表、编辑器、预览、测试发送、恢复默认、历史与对比、提出修改） | 17zh-c（计划） |
 
-**17zh 状态**：17zh-a 📝 待评审（分支 `1.3/phase-17zha-mail-texts`）；17zh-b、17zh-c 计划中。
+**17zh 状态**：17zh-a ✅ 已合并（#470）；17zh-b、17zh-c 计划中。
 
 ### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
 
@@ -5074,3 +5074,16 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zn-3 | 测试：`ControlledParamIT`（按 `targetKey` 筛选得到该参数的全部变更）、`ApprovalControlTargetKeyTest`；场景快照 `monthly_close` 随之更新。列表页由元数据生成（`DatasetListPage` 的测试与 axe 照旧覆盖） |
 
 **17zn 状态**：✅ 已合并（#466）。
+
+### 17zl 按客户端地址的国家 `ClientCountry`（2026-11-07，QuizBuks 首次上线 P5；决策 D74）
+
+**缘由**：QuizBuks 含境外视频的发布不给中国大陆的请求看、不让答（Q106、F-S11）；平台没有按地址判断国家的能力。
+
+| # | 内容 |
+|---|---|
+| 17zl-1 | core `ClientCountry`（两位代码或未知、`mainlandChina()`）；runtime `IpCountryDatabase`（CSV 地址段 `first,last,country`、可为 `.gz`、IPv4 / IPv6、二分查找、只认地址字面量）、`ClientCountries`（`jabiz.geoip.database` / `required` / `max-age`，文件更新后在工作线程中重新读入；启动检查 `GEOIP`） |
+| 17zl-2 | 流程接口把客户端地址放进 Reactor 上下文（`ClientAddressContext`）；平台步骤 `LoadClientCountry.into(键)`（0 条语句，结果不保存、不进 `input_summary`） |
+| 17zl-3 | `GET /api/client/region`（匿名、`no-store`、`Vary: *`）；`@jabiz/client` 的 `clientRegion()`；OpenAPI 快照与生成的类型 |
+| 17zl-4 | 测试：`ClientCountryTest`、`IpCountryDatabaseTest`、`ClientCountriesTest`、`ClientCountryIT`（测试地址库以文档地址段给出 CN / JP / HK / US）、`region.test.ts`；设计 10 §18、决策 D74、根 `CLAUDE.md`、`platform-features.md` |
+
+**17zl 状态**：📝 待评审（分支 `1.3/phase-17zl-client-country`）。
