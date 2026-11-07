@@ -49,6 +49,17 @@ public interface ControlTarget {
         }
     }
 
+    /** {@link #maxValuesLength()} unless a target's values can be longer. */
+    int DEFAULT_MAX_VALUES_LENGTH = 30_000;
+
+    /**
+     * The longest values a proposal of this target records, in characters of their JSON (decision D72): long enough
+     * for everything the target's own rules accept, escaping included.
+     */
+    default int maxValuesLength() {
+        return DEFAULT_MAX_VALUES_LENGTH;
+    }
+
     /** The entities this target changes. */
     Set<String> entities();
 

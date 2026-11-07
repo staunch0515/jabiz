@@ -104,6 +104,8 @@ public class SignInRateLimits implements PlatformCheck {
     private final Map<Kind, TokenBucketLimiter> byAddress = new EnumMap<>(Kind.class);
     private final Map<Kind, TokenBucketLimiter> byNetwork = new EnumMap<>(Kind.class);
     private final Map<Kind, TokenBucketLimiter> byInstance = new EnumMap<>(Kind.class);
+    /** One lock per kind, held while a request looks at and takes from its buckets. */
+    private final Map<Kind, Object> locks = new EnumMap<>(Kind.class);
 
     @Autowired
     public SignInRateLimits(@Value("${" + PREFIX + ".enabled:true}") boolean enabled,
@@ -131,6 +133,7 @@ public class SignInRateLimits implements PlatformCheck {
         Duration period = settings.period() == null || settings.period().isNegative() || settings.period().isZero()
             ? Duration.ofMinutes(1) : settings.period();
         for (Kind kind : Kind.values()) {
+            locks.put(kind, new Object());
             byName.put(kind, limiter(settings.userBurst(), settings.perUserAddress(), period, nanoTime));
             byAddress.put(kind, limiter(settings.burst(), settings.perAddress(), period, nanoTime));
             byNetwork.put(kind, limiter(settings.networkBurst(), settings.perNetwork(), period, nanoTime));
@@ -177,18 +180,21 @@ public class SignInRateLimits implements PlatformCheck {
             keys.add(address + " " + name);
         }
         long retryAfter = 0;
-        for (int i = 0; i < limiters.size(); i++) {
-            TokenBucketLimiter.Decision decision = limiters.get(i).peek(keys.get(i));
-            if (!decision.allowed()) {
-                retryAfter = Math.max(retryAfter, decision.retryAfterSeconds());
-            }
-        }
-        if (retryAfter == 0) {
+        // The buckets of a kind are only used here, under its lock: no concurrent request takes a token between the
+        // look and the take, so a refused request takes nothing from the other buckets (17zt).
+        synchronized (locks.get(kind)) {
             for (int i = 0; i < limiters.size(); i++) {
-                TokenBucketLimiter.Decision decision = limiters.get(i).tryAcquire(keys.get(i));
+                TokenBucketLimiter.Decision decision = limiters.get(i).peek(keys.get(i));
                 if (!decision.allowed()) {
-                    // Taken by a request in between: refused all the same.
                     retryAfter = Math.max(retryAfter, decision.retryAfterSeconds());
+                }
+            }
+            if (retryAfter == 0) {
+                for (int i = 0; i < limiters.size(); i++) {
+                    TokenBucketLimiter.Decision decision = limiters.get(i).tryAcquire(keys.get(i));
+                    if (!decision.allowed()) {
+                        throw new IllegalStateException("A sign-in bucket refused after it was looked at");
+                    }
                 }
             }
         }
