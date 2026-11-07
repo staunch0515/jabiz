@@ -1905,6 +1905,41 @@
         },
         "type" : "object"
       },
+      "LayoutPreviewRequest" : {
+        "properties" : {
+          "layout" : {
+            "$ref" : "#/components/schemas/MailLayout"
+          },
+          "locale" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "LayoutPreviewResponse" : {
+        "properties" : {
+          "html" : {
+            "type" : "string"
+          },
+          "problems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Violation"
+            },
+            "type" : "array"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "LayoutsResponse" : {
         "properties" : {
           "allowedLinkHosts" : {
@@ -6760,7 +6795,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/PreviewRequest"
+                "$ref" : "#/components/schemas/LayoutPreviewRequest"
               }
             }
           },
@@ -6771,7 +6806,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/PreviewResponse"
+                  "$ref" : "#/components/schemas/LayoutPreviewResponse"
                 }
               }
             },

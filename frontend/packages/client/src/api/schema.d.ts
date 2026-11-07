@@ -2930,6 +2930,18 @@ export interface components {
             /** Format: int32 */
             versionNo?: number;
         };
+        LayoutPreviewRequest: {
+            layout?: components["schemas"]["MailLayout"];
+            locale?: string;
+        };
+        LayoutPreviewResponse: {
+            html?: string;
+            problems?: components["schemas"]["Violation"][];
+            subject?: string;
+            text?: string;
+            /** Format: int32 */
+            versionNo?: number;
+        };
         LayoutsResponse: {
             allowedLinkHosts?: string[];
             languages?: components["schemas"]["LanguageLayout"][];
@@ -6195,7 +6207,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PreviewRequest"];
+                "application/json": components["schemas"]["LayoutPreviewRequest"];
             };
         };
         responses: {
@@ -6205,7 +6217,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PreviewResponse"];
+                    "application/json": components["schemas"]["LayoutPreviewResponse"];
                 };
             };
         };

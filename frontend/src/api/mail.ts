@@ -56,13 +56,8 @@ export function previewMailText(template: string, locale: string, subject: strin
   return unwrap(api.POST('/api/mail/texts/preview', { body: { template, locale, subject, body } }))
 }
 
-/**
- * The layout's preview takes `{locale, layout}`. Its request record has the same simple name as the texts' preview
- * request, so the OpenAPI document shows only one of the two under that name: the body is typed here.
- */
 export function previewMailLayout(locale: string, layout: MailLayoutValues): Promise<MailPreview> {
-  const body = { locale, layout } as unknown as components['schemas']['PreviewRequest']
-  return unwrap(api.POST('/api/mail/layouts/preview', { body }))
+  return unwrap(api.POST('/api/mail/layouts/preview', { body: { locale, layout } }))
 }
 
 /** A proposed controlled change, as the list of changes keeps it. */
