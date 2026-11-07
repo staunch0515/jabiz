@@ -8,6 +8,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -39,19 +42,54 @@ public final class SealedSecrets {
 
     private final SecretKeySpec key;
     private final String keyId;
+    /** Retired keys by id (decision D78): values stored under them still open, none is stored under them. */
+    private final Map<String, SecretKeySpec> previous;
 
     public SealedSecrets(byte[] keyMaterial) {
+        this(keyMaterial, List.of());
+    }
+
+    /**
+     * With retired keys (decision D78): values stored under one of them still open until they are stored again under
+     * the current key ({@code jabiz.key-rotation}); new values always use the current key.
+     */
+    public SealedSecrets(byte[] keyMaterial, List<byte[]> previousKeys) {
         Objects.requireNonNull(keyMaterial, "keyMaterial must not be null");
         if (keyMaterial.length < MIN_KEY_BYTES) {
             throw new IllegalArgumentException("The seal key must have at least " + MIN_KEY_BYTES + " bytes");
         }
         this.key = new SecretKeySpec(hmac(keyMaterial, "jabiz.seal.aes"), "AES");
         this.keyId = HexFormat.of().formatHex(hmac(keyMaterial, "jabiz.seal.key-id")).substring(0, 16);
+        Map<String, SecretKeySpec> retired = new LinkedHashMap<>();
+        for (byte[] material : List.copyOf(previousKeys)) {
+            SealedSecrets old = new SealedSecrets(material);
+            if (old.keyId.equals(keyId)) {
+                throw new IllegalArgumentException("A previous key is the current key");
+            }
+            retired.put(old.keyId, old.key);
+        }
+        this.previous = Map.copyOf(retired);
     }
 
     /** Identifies the key without revealing it. */
     public String keyId() {
         return keyId;
+    }
+
+    /** The ids of the retired keys values may still be stored under. */
+    public List<String> previousKeyIds() {
+        return List.copyOf(previous.keySet());
+    }
+
+    /** The id of the key a stored value was stored under; null for anything this class did not store. */
+    public static String keyIdOf(String stored) {
+        String[] parts = stored == null ? new String[0] : stored.split(":", -1);
+        return parts.length == 4 && VERSION.equals(parts[0]) ? parts[1] : null;
+    }
+
+    /** How every value stored under the key {@code keyId} begins (to find them with {@code LIKE}). */
+    public static String storedPrefix(String keyId) {
+        return VERSION + ":" + keyId + ":";
     }
 
     /** Whether a value is one this class stored (under any key). */
@@ -92,7 +130,8 @@ public final class SealedSecrets {
         if (parts.length != 4 || !VERSION.equals(parts[0])) {
             throw new UnreadableSecretException("Not a sealed secret");
         }
-        if (!keyId.equals(parts[1])) {
+        SecretKeySpec opening = keyId.equals(parts[1]) ? key : previous.get(parts[1]);
+        if (opening == null) {
             throw new UnreadableSecretException("The secret was sealed under another key");
         }
         try {
@@ -103,7 +142,7 @@ public final class SealedSecrets {
                 throw new UnreadableSecretException("Not a sealed secret");
             }
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, iv));
+            cipher.init(Cipher.DECRYPT_MODE, opening, new GCMParameterSpec(TAG_BITS, iv));
             cipher.updateAAD(context.getBytes(StandardCharsets.UTF_8));
             return cipher.doFinal(sealed);
         } catch (IllegalArgumentException e) {
