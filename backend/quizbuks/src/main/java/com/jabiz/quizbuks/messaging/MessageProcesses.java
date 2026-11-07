@@ -94,6 +94,8 @@ public final class MessageProcesses {
     public static final String DIGITAL_RESOLVED_SPONSOR_CONSUMER = "qb.msg-digital-resolved-sponsor";
     /** Q82: a sponsor's reply in a conversation. */
     public static final String CONVERSATION_REPLY_CONSUMER = "qb.msg-conversation-reply";
+    /** F-C2: a sponsor's storage went above the free amount. */
+    public static final String USAGE_OVER_CONSUMER = "qb.msg-usage-over";
 
     /**
      * The taker's push notification of a prize won (platform 17k, decision D69): the moment a taker learns of a prize,
@@ -148,6 +150,8 @@ public final class MessageProcesses {
     static final String PENDING_BEFORE = "pendingBefore";
     static final String PUSH = "push";
     static final String CONVERSATION = "conversation";
+    static final String USAGE = "usage";
+    static final String FREE = "free";
 
     /** A push: which, to whom, and the page of the app a tap opens. */
     record Push(PushTemplate template, String userId, String link) {}
@@ -206,7 +210,14 @@ public final class MessageProcesses {
                     // Q33: the digital prize the event names.
                     QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE),
                         ctx -> byId("digitalPrizeId", QbInbox.DIGITAL_KINDS.contains(input(ctx).kind())
-                            ? uuid(input(ctx).sourceId()) : null), DIGITAL)))
+                            ? uuid(input(ctx).sourceId()) : null), DIGITAL),
+                    // F-C2: the sponsor's latest storage and the free amount now (the crossing still holds?).
+                    QueryEntities.query(com.jabiz.quizbuks.usage.QbUsage.DEFAULT_DATASET, ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(byId("sponsorId", usageSponsor(ctx)).predicate(),
+                            new QueryPredicate.Eq("meter", com.jabiz.quizbuks.usage.UsageMeters.STORAGE_BYTES))))
+                        .orderBy("day", false).limit(1).build(), USAGE),
+                    QueryEntities.query(QbWallets.PARAMS_NOW, ctx -> byId("paramKey", usageSponsor(ctx) == null
+                        ? null : QbParams.USAGE_FREE_BYTES), FREE)))
                 .compute("Make the message", (metadata, ctx) -> fromEvent(ctx, texts))
                 .step("Push a prize won", SendPush.<ProcessContext>when(ctx -> ctx.contains(PUSH)
                         && ctx.get(PUSH, Push.class).template() == PRIZE_WON, PRIZE_WON,
@@ -283,6 +294,7 @@ public final class MessageProcesses {
             case QbInbox.REFERRAL_CLAIMED, QbInbox.REFERRAL_REWARDED, QbInbox.REFERRAL_EXPIRED,
                  QbInbox.REFERRAL_FUNDS_SHORT -> referralMessage(ctx, input, params, texts);
             case QbInbox.CONVERSATION_REPLY -> conversationMessage(ctx, params);
+            case QbInbox.USAGE_OVER_FREE -> usageMessage(ctx, input, params);
             default -> null;
         };
         if (draft != null) {
@@ -560,6 +572,47 @@ public final class MessageProcesses {
         }
         return new Draft(transfer.get("userId"), QbInbox.TYPE_SYSTEM, input.kind(), null,
             TransferStatus.FAILED.equals(status) ? QbInbox.ACTION_PAYOUT : QbInbox.ACTION_WALLET, null);
+    }
+
+    /** F-C2: the sponsor of a crossing's event (its source is "&lt;sponsor&gt;|&lt;day&gt;"); null for other kinds. */
+    private static String usageSponsor(ProcessContext ctx) {
+        EventInput input = input(ctx);
+        if (!QbInbox.USAGE_OVER_FREE.equals(input.kind()) || input.sourceId().indexOf('|') < 1) {
+            return null;
+        }
+        return input.sourceId().substring(0, input.sourceId().indexOf('|'));
+    }
+
+    /**
+     * F-C2: the sponsor's storage went above the free amount (the snapshot's event, once per crossing by its source
+     * key). Only while it is still above it: the latest snapshot against the free amount now; the figures in MB.
+     */
+    private static Draft usageMessage(ProcessContext ctx, EventInput input, Map<String, MessageTexts.Value> params) {
+        String sponsor = usageSponsor(ctx);
+        EntityInstance latest = first(ctx, USAGE);
+        EntityInstance free = first(ctx, FREE);
+        if (sponsor == null || latest == null || free == null) {
+            return null;
+        }
+        BigDecimal freeBytes;
+        try {
+            freeBytes = new BigDecimal(String.valueOf((Object) free.get("value")).strip());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        BigDecimal used = decimal(latest.get("value"));
+        if (!com.jabiz.quizbuks.usage.UsageRules.over(used, freeBytes)) {
+            return null;
+        }
+        params.put("used", MessageTexts.Value.of(com.jabiz.quizbuks.usage.UsageRules.megabytes(used)));
+        params.put("free", MessageTexts.Value.of(com.jabiz.quizbuks.usage.UsageRules.megabytes(freeBytes)));
+        return new Draft(sponsor, QbInbox.TYPE_SYSTEM, input.kind(), null, QbInbox.ACTION_ASSETS, null);
+    }
+
+    /** F-C2: a crossing's event: the sponsor and the day, as one source. */
+    static EventInput usageInput(DomainEvent event) {
+        return new EventInput(QbInbox.USAGE_OVER_FREE, text(event, "sponsorId") + "|" + text(event, "day"), null,
+            event.createdTime());
     }
 
     private static Draft payoutMessage(ProcessContext ctx) {

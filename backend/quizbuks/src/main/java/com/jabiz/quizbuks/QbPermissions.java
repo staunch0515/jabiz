@@ -234,6 +234,11 @@ public final class QbPermissions {
      * datasets. Granted to no role.
      */
     public static final String STATS_SYSTEM = "qb.stats.system";
+    /**
+     * F-C2: the usage snapshot's item process ({@code QB_USAGE_SNAPSHOT_ITEM}, {@code internal()}) and its templates.
+     * Granted to no role.
+     */
+    public static final String USAGE_SYSTEM = "qb.usage.system";
 
     /**
      * The messaging templates only processes run (Q7b: {@code qb.system.consent-state}, the server's check of consent

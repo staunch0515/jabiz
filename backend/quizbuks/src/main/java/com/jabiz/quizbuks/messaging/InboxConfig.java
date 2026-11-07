@@ -236,7 +236,9 @@ public class InboxConfig {
             .item(QbInbox.REFERRAL_EXPIRED, "en", "Referral ended", "zh", "推荐已结束", "ja", "紹介の終了")
             .item(QbInbox.REFERRAL_FUNDS_SHORT, "en", "Referral reward waiting for funds", "zh",
                 "推荐奖励待充值", "ja", "紹介報酬の残高不足")
-            .item(QbInbox.CONVERSATION_REPLY, "en", "Sponsor replied", "zh", "发起方回复", "ja", "主催者からの返信"));
+            .item(QbInbox.CONVERSATION_REPLY, "en", "Sponsor replied", "zh", "发起方回复", "ja", "主催者からの返信")
+            .item(QbInbox.USAGE_OVER_FREE, "en", "Storage above the free amount", "zh", "存储超过免费额度",
+                "ja", "ストレージが無料枠を超えました"));
     }
 
     @Bean
@@ -462,6 +464,15 @@ public class InboxConfig {
         return EventSubscription.of(MessageProcesses.CONVERSATION_REPLY_CONSUMER,
             com.jabiz.quizbuks.conversation.QbConversations.MESSAGE_EVENT, qbMessageFromEvent,
             MessageProcesses::conversationInput);
+    }
+
+    /** F-C2: a sponsor's storage went above the free amount: one message per crossing. */
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageUsageOverSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.USAGE_OVER_CONSUMER,
+            com.jabiz.quizbuks.usage.QbUsage.FREE_EXCEEDED_EVENT, qbMessageFromEvent, MessageProcesses::usageInput);
     }
 
     @Bean

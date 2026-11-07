@@ -481,6 +481,10 @@ quizbuks:
   # Tokyo; a six-field cron in UTC. The end-to-end tests run it every minute.
   entry-fee:
     settle-cron: ${QB_ENTRY_FEE_SETTLE_CRON:0 7 18 * * *}
+  # The daily usage snapshot (F-C2): the time of day in jabiz.fiscal-year-zone (HH:mm, not a time of Japan written in
+  # UTC); a deployment setting, read at start (the requester, 2026-11-07). An invalid time fails the start.
+  usage:
+    snapshot-time: ${QB_USAGE_SNAPSHOT_TIME:03:17}
   # The end-to-end tests' switch (Q9e2 review M1): only their deployment sets it; refused next to live mode.
   e2e:
     enabled: ${QB_E2E_ENABLED:false}

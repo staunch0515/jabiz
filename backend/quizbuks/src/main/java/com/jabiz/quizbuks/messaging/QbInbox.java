@@ -110,7 +110,9 @@ public final class QbInbox {
         REFERRAL_FUNDS_SHORT);
     /** Q82: the sponsor answered the taker's conversation (to the taker; at most one an hour per conversation). */
     public static final String CONVERSATION_REPLY = "CONVERSATION_REPLY";
-    public static final List<String> MESSAGE_KINDS = List.of(CONVERSATION_REPLY, REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
+    /** F-C2: the sponsor's storage went above the free amount (to the sponsor; once per crossing). */
+    public static final String USAGE_OVER_FREE = "USAGE_OVER_FREE";
+    public static final List<String> MESSAGE_KINDS = List.of(USAGE_OVER_FREE, CONVERSATION_REPLY, REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
         REFERRAL_FUNDS_SHORT, REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
         TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER, CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED,
         CASH_DISPUTED, CASH_RESOLVED, CASH_RESOLVED_SPONSOR, CASH_OVERDUE, REDEEM_DUE, REDEEM_CLAIMED,
@@ -131,8 +133,10 @@ public final class QbInbox {
     public static final String ACTION_REFERRALS = "REFERRALS";
     /** Q82: the App's conversation (its id is the conversation's). */
     public static final String ACTION_CONVERSATION = "CONVERSATION";
+    /** F-C2: the sponsor console's asset library (where the usage is shown and the unused assets are found). */
+    public static final String ACTION_ASSETS = "ASSETS";
     public static final List<String> ACTIONS = List.of(ACTION_RESULT, ACTION_WALLET, ACTION_PAYOUT, ACTION_CASH,
-        ACTION_REDEEM, ACTION_DIGITAL, ACTION_REFERRALS, ACTION_CONVERSATION);
+        ACTION_REDEEM, ACTION_DIGITAL, ACTION_REFERRALS, ACTION_CONVERSATION, ACTION_ASSETS);
 
     // ---- broadcasts ------------------------------------------------------------------------------------------------
 
