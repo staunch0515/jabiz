@@ -152,14 +152,7 @@ public class ProcessRateLimits {
             counted.add(new Counted(limits.perVisitor(), Scope.VISITOR,
                 "visitor:" + tenant + "/" + Objects.requireNonNullElse(visitor, "none")));
         }
-        // Every bucket first: a request one of them refuses takes nothing from the others.
-        for (Counted bucket : counted) {
-            refuseUnless(bucket.limiter().peek(bucket.key()), process, bucket.scope());
-        }
-        // Then the tokens; a bucket emptied meanwhile by a concurrent request still refuses.
-        for (Counted bucket : counted) {
-            refuseUnless(bucket.limiter().tryAcquire(bucket.key()), process, bucket.scope());
-        }
+        take(process, limits, counted);
     }
 
     /**
@@ -188,7 +181,7 @@ public class ProcessRateLimits {
         if (limits.perInstance() != null) {
             counted.add(new Counted(limits.perInstance(), Scope.INSTANCE, "instance"));
         }
-        take(FILE_FETCH, counted);
+        take(FILE_FETCH, limits, counted);
     }
 
     /**
@@ -200,26 +193,47 @@ public class ProcessRateLimits {
         if (limits == null || limits.perHost() == null) {
             return;
         }
-        take(FILE_FETCH, List.of(new Counted(limits.perHost(), Scope.HOST, "host:" + host)));
+        take(FILE_FETCH, limits, List.of(new Counted(limits.perHost(), Scope.HOST, "host:" + host)));
     }
 
-    private void take(String process, List<Counted> counted) {
-        for (Counted bucket : counted) {
-            refuseUnless(bucket.limiter().peek(bucket.key()), process, bucket.scope());
+    /**
+     * Takes a token of every bucket of {@code counted}, or of none: a request one of them refuses takes nothing from
+     * the others. The buckets of a process are only used here, under its lock, so no concurrent request takes a token
+     * between the look and the take (17zt). The work under the lock is a few map lookups.
+     */
+    private void take(String process, Buckets limits, List<Counted> counted) {
+        TokenBucketLimiter.Decision refused = null;
+        Scope scope = null;
+        synchronized (limits) {
+            for (Counted bucket : counted) {
+                TokenBucketLimiter.Decision decision = bucket.limiter().peek(bucket.key());
+                if (!decision.allowed()) {
+                    refused = decision;
+                    scope = bucket.scope();
+                    break;
+                }
+            }
+            if (refused == null) {
+                for (Counted bucket : counted) {
+                    TokenBucketLimiter.Decision taken = bucket.limiter().tryAcquire(bucket.key());
+                    if (!taken.allowed()) {
+                        throw new IllegalStateException("A bucket of " + process + " refused after it was looked at");
+                    }
+                }
+            }
         }
-        for (Counted bucket : counted) {
-            refuseUnless(bucket.limiter().tryAcquire(bucket.key()), process, bucket.scope());
+        if (refused != null) {
+            refuse(refused, process, scope);
         }
     }
 
     private record Counted(TokenBucketLimiter limiter, Scope scope, String key) {}
 
-    private void refuseUnless(TokenBucketLimiter.Decision decision, String process, Scope scope) {
-        if (!decision.allowed()) {
-            observations.event(PlatformObservations.PROCESS_RATE_LIMITED,
-                KeyValues.of("process", process, "scope", scope.name().toLowerCase(Locale.ROOT)));
-            throw new RateLimitedException("Too many requests to run " + process + "; try again in "
-                + decision.retryAfterSeconds() + " seconds", decision.retryAfterSeconds());
-        }
+    /** Outside the lock: the observation is not the buckets' business. */
+    private void refuse(TokenBucketLimiter.Decision decision, String process, Scope scope) {
+        observations.event(PlatformObservations.PROCESS_RATE_LIMITED,
+            KeyValues.of("process", process, "scope", scope.name().toLowerCase(Locale.ROOT)));
+        throw new RateLimitedException("Too many requests to run " + process + "; try again in "
+            + decision.retryAfterSeconds() + " seconds", decision.retryAfterSeconds());
     }
 }
