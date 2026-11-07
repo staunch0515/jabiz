@@ -2,11 +2,12 @@
 
 依据：`docs/quizbuks/first-launch-spec.md` F-S1（以它为准）；存档 `Q92a-operators-everywhere.md` §1–§5、§7、§8 只作参考。会话 S2，分支 `1.3/quizbuks-FS1-operators-everywhere`。
 
-## 0. 需求方 2026-11-07 的三条答复（已写回规格 F-S1）
+## 0. 需求方 2026-11-07 的四条答复（已写回规格 F-S1）
 
 1. **平台运营商的直营发起方**：`QB_SETUP` 建平台运营商时没有负责人；任何运营商**第一位负责人**被指定时（建运营商的 `QB_OPERATOR_SAVE` 必填负责人，或 `QB_OPERATOR_MEMBER_ADD` 以 `lead=true` 加入而该运营商还没有直营发起方），同一事务把他的账号设为直营发起方。还没有直营发起方的运营商由每日核对告警。
 2. **改派时的审批请求**：平台的审批请求的范围不可变，没有"移到另一个范围"的能力 → **平台缺口，交给 S1**（平台步骤：把待审的审批请求与其待办移到另一个入口范围）。在它合入之前，改派遇到该发起方有待审的审批（入驻、发布、版本切换、主页）即 422 `QB_SPONSOR_REVIEW_PENDING`（列出待审的对象），其余照常改派。
 3. **直营发起方的角色**：`QB_OPERATOR_SAVE` / `MEMBER_ADD` 只写入驻（已通过）、归属（不可改派）与运营商的 `directSponsorId`；**发起方角色由负责人本人经平台的加入入口**（`POST /api/auth/account/entries/sponsor/join`）取得，应用的流程不授予角色。运营商后台提示负责人加入发起方入口。
+4. **现金争议**：平台不处理；学者提出争议只通知发起方；双方解决后由发起方再次标记已支付（`DISPUTED` → `MARKED_PAID`，确认期限重新起算），或由学者直接确认。
 
 ## 1. 分 PR
 
@@ -53,6 +54,7 @@
 
 ### 3.5 现金争议
 - 删除 `qb.cash.resolve`（`QbPermissions.CASH_RESOLVE`）、`CashRewardProcesses` 的平台处理流程与消费者 `CASH_RESOLVED*`、对应的站内信种类与消息。
+- 状态转移加 `DISPUTED` → `MARKED_PAID`（发起方解决后再次标记，确认期限重新起算；答复 4）。
 
 ### 3.6 角色（`QbRoles`）
 - `QB_ADMIN_CONTENT` 去掉 `REVIEW_SPONSOR`、`REVIEW_PUBLICATION`、`ADMIN_REWARD_METHODS`、`CASH_RESOLVE`、`REDEMPTION_VOID`、`DIGITAL_RESOLVE`、`PROSPECT_USE`、`CERTIFICATION_MANAGE`、`approval.decide`；保留只读、抽查、全局规则（受众规则目录、AI 总开关）与应急（`ADMIN_CONTENT_WRITE` 的平台下架、`CERTIFICATION_ADMIN`）。
