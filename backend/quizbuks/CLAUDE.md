@@ -379,6 +379,7 @@
 - **AI 出题页**（Q8a，`sponsor/src/ai/`，名字在 `ids.ts`、手写类型与调用在 `api.ts`）：编辑器题目页上方的面板与对话框、候选校对、仪表盘的用量卡（`AiUsageMetric`，在 Q9e2 的卡片位）；Q8b 的封面面板（`AiCoverPanel`，模版页基本信息之下，作业模板按 `kind` 读）选定后经 `editing.edited` 记下新的 revision，`HeadingForm` 随读到的 `cover` 更新（其他未保存的改动保留）。候选只以纯文本显示（输入框与文本框，不经 `MarkdownView`）；进行中每 5 秒查询、至多 5 分钟（按服务端时钟），离开即停；对话框只在合计不超过上限时可提交，判断仍在服务端。
 - **认证与账户只用平台的积木**（`@jabiz/ui` 的 `SignInForm`、`SignUpForm`、`MailLinkPage`、`OidcCallback`、`StepUpProvider`、`ChangePasswordForm`、`MfaSettings`、`SessionList`、
   `LinkedIdentities`、横幅），QuizBuks 不写认证代码。邮件链接页在各自的 `auth/verify-email|join|password-reset`。路由是 `qb/router.tsx` 的小路由。
+  **入口页**（平台 17zk，P4）：两个 SPA 的登录、注册、第二步、找回密码、第三方回调、全部邮件链接页（`MAIL_LINK_PAGES`）与退订都包在各自 `App.tsx` 的 `EntryPages`（`EntryLayoutProvider`：品牌、三语左栏 `entry.*`、提示、页脚 `EntryLegalLinks`、学者 ↔ 发起方）中；登录方式的顺序只在 `SignInForm` 的 `order`（学者 `signin.ts` 的 `signInOrder` 按语言），新提示加进 `notices`，不在模板外另放；发起方的名称只取消息 `brand`，用户看得到的文字不写“后台”“管理画面”“console”。
 - **金额只经 `qb/kudos.ts` 的 `formatKudos`**（`1,234 Kudos` / `1,234 学分` / `1,234 クドス`，随界面语言；单位单独出现时用 `kudosName()`），不写 JPY 或其他币种名。服务端的 `QB_*` 文案已按请求的语言翻译，页面直接显示（`qb/problems.ts`）。
 - **文案**：SPA 自己的在 `src/messages.ts`（命名空间 `app` / `sponsor`），共用的在 `qb/messages.ts`（`qb`），三语齐全，测试检查键一致且非空。
 - **界面**只用 `@jabiz/ui` 的组件与主题 token（不写颜色值）；亮、暗两种外观都过 axe（e2e `a11y.spec.ts`）。检查只用平台导出的辅助函数（Vitest `@jabiz/ui/testing` 的 `expectAccessible()`，e2e `@jabiz/ui/testing/playwright`，经 `e2e/tests/support.ts`），不另写；
