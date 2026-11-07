@@ -178,6 +178,7 @@ public class MfaProcesses {
         attributes.put("confirmedTime", null);
         attributes.put("confirmedStep", null);
         attributes.put("recoveryCodes", null);
+        attributes.put("reenrollRequired", false);
         return attributes;
     }
 

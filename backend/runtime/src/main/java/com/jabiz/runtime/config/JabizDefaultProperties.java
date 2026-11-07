@@ -35,6 +35,10 @@ public class JabizDefaultProperties implements EnvironmentPostProcessor {
             Map.entry("management.metrics.distribution.percentiles-histogram.jabiz", "true"),
             Map.entry("management.metrics.distribution.percentiles-histogram.http.server.requests", "true"),
             Map.entry("management.observations.r2dbc.include-parameter-values", "false"),
+            // Free and total space (disk.free / disk.total, tag path) of the working directory's file system (in a
+            // container: the host's image and log storage) and of the uploaded files' directory, for the disk alert
+            // (docker/grafana/alerting, docs/design/13-observability-ops.md section 7).
+            Map.entry("management.metrics.system.diskspace.paths", ".,${jabiz.files.local.root:.}"),
             // The driver caches every distinct statement text it prepared, without bound by default (-1); the held
             // writes of a transaction (16p-2) make texts vary with the number of rows and parts, so the cache of each
             // connection is bounded (jabiz.storage.prepared-statement-cache-queries; 0 turns it off).
