@@ -4,12 +4,15 @@ import com.jabiz.document.DocumentRecipients;
 import com.jabiz.entity.ValidationException;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.MessageCatalog;
-import com.jabiz.i18n.MessageTemplate;
+import com.jabiz.mail.MailRenderer;
+import com.jabiz.mail.MailTemplate;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.mail.MailTexts;
+import com.jabiz.runtime.mail.PlatformMailTemplates;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.process.entity.EntityIdGenerator;
 import com.jabiz.runtime.security.Permissions;
@@ -31,7 +34,10 @@ import java.util.UUID;
  * The first step of {@code DOCUMENT_SEND} (docs/design/22-documents.md section 5): checks the send and records one
  * delivery per address in the process's transaction; {@link SendDocuments} sends them after the commit. Mail must be
  * on, the caller must be able to see the document, and every address must be a plain address - one the document's
- * data names, or any address with {@code document.send.any}.
+ * data names, or any address with {@code document.send.any}. The subject and body are the mail template
+ * {@code jabiz.document-mail} in the document's language, read where every mail's texts are (decision D72): an
+ * override administrators wrote, else the layout's messages {@code document.<layout>.mail.subject|body}, else the
+ * template's; each delivery records the version of the override it was written with.
  */
 @Component
 class RecordDeliveries implements StepHandler<NoMetadata, ProcessContext> {
@@ -43,16 +49,19 @@ class RecordDeliveries implements StepHandler<NoMetadata, ProcessContext> {
     private final DocumentAccess access;
     private final DocumentDeliveries deliveries;
     private final MessageCatalog messages;
+    private final MailTexts texts;
     private final EntityIdGenerator ids;
     private final boolean mailEnabled;
     private final boolean development;
 
     RecordDeliveries(DocumentRuns runs, DocumentAccess access, DocumentDeliveries deliveries, MessageCatalog messages,
-        EntityIdGenerator ids, @Value("${jabiz.mail.enabled:false}") boolean mailEnabled, Environment environment) {
+        MailTexts texts, EntityIdGenerator ids, @Value("${jabiz.mail.enabled:false}") boolean mailEnabled,
+        Environment environment) {
         this.runs = runs;
         this.access = access;
         this.deliveries = deliveries;
         this.messages = messages;
+        this.texts = texts;
         this.ids = ids;
         this.mailEnabled = mailEnabled;
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
@@ -110,23 +119,27 @@ class RecordDeliveries implements StepHandler<NoMetadata, ProcessContext> {
                 PlatformErrorCodes.DOCUMENT_RECIPIENT_NOT_ALLOWED, "The document's data does not name "
                 + outside.getFirst(), Map.of("address", outside.getFirst()))));
         }
-        Locale language = Locale.forLanguageTag(run.language());
-        Map<String, Object> params = new LinkedHashMap<>();
+        Locale language = messages.supported(Locale.forLanguageTag(run.language()));
+        Map<String, String> params = new LinkedHashMap<>();
         params.put("title", run.title());
         params.put("number", run.documentNo() == null ? "" : run.documentNo());
-        params.put("company", run.content().company());
-        // A subject is one line: whatever the data holds, nothing but the subject reaches that header.
-        String subject = cut(text(run.layoutId(), "subject", language, params).replaceAll("[\\r\\n]+", " ").trim(),
-            MAX_SUBJECT);
-        String body = cut(text(run.layoutId(), "body", language, params), MAX_BODY);
+        params.put("company", run.content().company() == null ? "" : run.content().company());
+        MailTemplate template = PlatformMailTemplates.DOCUMENT_MAIL_TEMPLATE;
+        MailTexts.Text defaults = new MailTexts.Text(text(template, run.layoutId(), "subject", language),
+            text(template, run.layoutId(), "body", language), null, false);
         List<String> recorded = new ArrayList<>();
-        return Flux.fromIterable(addresses)
-            .concatMap(address -> {
+        return texts.effective(template, language, defaults).flatMapMany(chosen -> {
+            MailRenderer.Rendered mail = texts.render(template, chosen.subject(), chosen.body(), params);
+            // The renderer makes the subject one line: whatever the data holds, nothing but it reaches that header.
+            String subject = cut(mail.subject(), MAX_SUBJECT);
+            String body = cut(mail.text().strip(), MAX_BODY);
+            return Flux.fromIterable(addresses).concatMap(address -> {
                 UUID deliveryId = UUID.fromString(String.valueOf(ids.next(null)));
                 recorded.add(deliveryId.toString());
                 return deliveries.insert(deliveryId, run.runId(), address, subject, body, ctx.request().actorId(),
-                    ctx.opTime(), ctx.processSeqId());
-            })
+                    ctx.opTime(), ctx.processSeqId(), chosen.versionNo());
+            });
+        })
             .then(Mono.fromRunnable(() -> {
                 ctx.put(DocumentProcesses.DELIVERIES, List.copyOf(recorded));
                 ctx.put(DocumentProcesses.OUTPUT, new DocumentProcesses.SendOutput(List.copyOf(recorded),
@@ -134,12 +147,11 @@ class RecordDeliveries implements StepHandler<NoMetadata, ProcessContext> {
             }));
     }
 
-    /** {@code document.<layout>.mail.<part>}, else the platform's {@code document.mail.<part>}. */
-    private String text(String layoutId, String part, Locale language, Map<String, Object> params) {
-        String template = messages.find("document." + layoutId + ".mail." + part, language)
-            .or(() -> messages.find("document.mail." + part, language))
+    /** The default text: {@code document.<layout>.mail.<part>}, else the template's {@code mail.<name>.<part>}. */
+    private String text(MailTemplate template, String layoutId, String part, Locale language) {
+        return messages.find("document." + layoutId + ".mail." + part, language)
+            .or(() -> messages.find("mail." + template.name() + "." + part, language))
             .orElse("{title} {number}");
-        return MessageTemplate.format(template, params);
     }
 
     private static String cut(String text, int max) {

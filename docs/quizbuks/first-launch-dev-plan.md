@@ -80,7 +80,7 @@ S1 在每个平台 PR 合入 `1.3/platform` 后，立即开 `1.3/platform` → `
 
 ### P4 入口页模板（17zk，2–3 天；先原型）
 - **先做原型**给需求方看（与 Q108 的原型同一种做法），确认后实现。
-- `SignInForm` / `SignUpForm` 合为一页、以标签切换；大屏两栏（左边品牌与一句话，由应用给出）、手机上下；快捷方式（通行密钥、Google、Apple、邮件链接）在前、密码在后；"我是另一方"的入口链接；`MailLinkPage` 各页用同一模板。
+- `SignInForm` / `SignUpForm` 合为一页、以标签切换；大屏两栏（左边品牌与一句话，由应用给出）、手机上下；快捷方式（通行密钥、Google、Facebook、LINE、邮件链接；Apple 只在 profile `apple` 打开时出现，首次上线不显示）在前、密码在后；"我是另一方"的入口链接；`MailLinkPage` 各页用同一模板。
 - 不改认证流程与接口（只改界面）。
 - **测试**：现有认证积木的测试全部通过；新布局的 Vitest 与 axe；平台 e2e 的登录用例。
 
@@ -91,7 +91,7 @@ S1 在每个平台 PR 合入 `1.3/platform` 后，立即开 `1.3/platform` → `
 - **测试**：见 Q107 §10 与规格 F-C8、F-C9 的验收；`StatementBudgetIT` 不变。
 
 ### P5 按 IP 的国家 `ClientCountry`（17zl，决策 D74，2–3 天）
-- 地址库：本地文件（`jabiz.geoip.database`，许可与更新方式按调查结果选定，见 `docs/quizbuks/external-ai-tasks.md` E2）；IPv4 与 IPv6；查不到返回"未知"。
+- 地址库：本地文件（`jabiz.geoip.database`），DB-IP 的 IP to Country Lite（CSV，CC BY 4.0，每月更新；需求方 2026-11-07 确认）；IPv4 与 IPv6；查不到返回"未知"。
 - `ClientCountry`：由 `ClientAddresses` 的地址查国家；流程中以平台步骤在锁外取得（0 条新语句）；结果不保存、不进 `input_summary`、不进观测标签。
 - 不缓存的接口 `GET /api/client/region`（只说是否中国大陆，或给出国家代码；`Cache-Control: no-store`）。
 - 启动检查：地址库缺失或超过一定天数未更新即告警（非 dev 缺失即报错）。

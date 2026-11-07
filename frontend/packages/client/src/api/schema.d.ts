@@ -13,7 +13,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["preview_1"];
+        post: operations["preview_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1597,7 +1597,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["preview"];
+        post: operations["preview_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1707,9 +1707,41 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        get: operations["list_5"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mail/texts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get: operations["list_4"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mail/texts/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2387,14 +2419,6 @@ export interface components {
             recomputable?: boolean;
             verdict?: string;
         };
-        DraftRule: {
-            condition?: unknown;
-            enabled?: boolean;
-            levels?: unknown;
-            /** Format: int32 */
-            priority?: number;
-            ruleCode?: string;
-        };
         EmailLinkConfirm: {
             token?: string;
         };
@@ -2829,6 +2853,19 @@ export interface components {
         LabelsRequest: {
             ids?: unknown[];
         };
+        LanguageTexts: {
+            body?: string;
+            defaultBody?: string;
+            defaultHash?: string;
+            defaultSubject?: string;
+            locale?: string;
+            problems?: components["schemas"]["Violation"][];
+            /** @enum {string} */
+            state?: "DEFAULT" | "CUSTOM" | "DEFAULT_UPDATED" | "INVALID";
+            subject?: string;
+            /** Format: int32 */
+            versionNo?: number;
+        };
         LinkResult: {
             provider?: string;
             status?: string;
@@ -2954,17 +2991,18 @@ export interface components {
             template?: string;
         };
         PreviewRequest: {
-            draft?: components["schemas"]["DraftRule"];
-            /** Format: int32 */
-            limit?: number;
-            ruleId?: string;
+            body?: string;
+            locale?: string;
             subject?: string;
+            template?: string;
         };
         PreviewResponse: {
-            changed?: components["schemas"]["Change"][];
+            html?: string;
+            problems?: components["schemas"]["Violation"][];
+            subject?: string;
+            text?: string;
             /** Format: int32 */
-            evaluated?: number;
-            truncated?: boolean;
+            versionNo?: number;
         };
         ProcessEntry: {
             actsOn?: components["schemas"]["ActsOnEntry"];
@@ -3292,6 +3330,24 @@ export interface components {
             subscribed?: boolean;
             template?: string;
         };
+        TemplateTexts: {
+            category?: string;
+            languages?: components["schemas"]["LanguageTexts"][];
+            name?: string;
+            needsApproval?: boolean;
+            placeholders?: string[];
+            required?: string[];
+            secrets?: string[];
+            template?: string;
+        };
+        TextsResponse: {
+            allowedLinkHosts?: string[];
+            /** Format: int32 */
+            maxBodyLength?: number;
+            /** Format: int32 */
+            maxSubjectLength?: number;
+            templates?: components["schemas"]["TemplateTexts"][];
+        };
         TimeSliceEntry: {
             asOf?: string;
             knownAt?: string;
@@ -3349,6 +3405,14 @@ export interface components {
             password?: string;
             token?: string;
         };
+        Violation: {
+            field?: string;
+            message?: string;
+            params?: {
+                [key: string]: unknown;
+            };
+            ruleCode?: string;
+        };
         WhenEntry: {
             field?: string;
             values?: string[];
@@ -3362,7 +3426,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    preview_1: {
+    preview_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -5823,7 +5887,7 @@ export interface operations {
             };
         };
     };
-    preview: {
+    preview_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -5981,7 +6045,7 @@ export interface operations {
             };
         };
     };
-    list_4: {
+    list_5: {
         parameters: {
             query?: never;
             header?: never;
@@ -5999,6 +6063,50 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+        };
+    };
+    list_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TextsResponse"];
+                };
+            };
+        };
+    };
+    preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewResponse"];
                 };
             };
         };
