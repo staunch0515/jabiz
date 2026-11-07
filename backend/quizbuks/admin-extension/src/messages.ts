@@ -20,6 +20,7 @@ import { audiencePricingMenu, audiencePricingMessages } from './audience-pricing
 import { certificationMenu, certificationMessages } from './certification-messages'
 import { referralMenu, referralMessages } from './referral-messages'
 import { feeMenu, feeMessages } from './fee-messages'
+import { assetMessages } from './asset-messages'
 import { BRAND_NAMES } from './brand'
 
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
@@ -30,6 +31,7 @@ export const messages = {
       ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en, ...accountMenu.en, ...pageMenu.en, ...productMenu.en, ...abuseReportMenu.en,
       ...certificationMenu.en, ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en },
     fee: feeMessages.en,
+    assets: assetMessages.en,
     certification: certificationMessages.en,
     audiencePricing: audiencePricingMessages.en,
     referral: referralMessages.en,
@@ -328,6 +330,7 @@ export const messages = {
       ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh, ...accountMenu.zh, ...pageMenu.zh, ...productMenu.zh, ...abuseReportMenu.zh,
       ...certificationMenu.zh, ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh },
     fee: feeMessages.zh,
+    assets: assetMessages.zh,
     certification: certificationMessages.zh,
     audiencePricing: audiencePricingMessages.zh,
     referral: referralMessages.zh,
@@ -626,6 +629,7 @@ export const messages = {
       ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja, ...accountMenu.ja, ...pageMenu.ja, ...productMenu.ja, ...abuseReportMenu.ja,
       ...certificationMenu.ja, ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja },
     fee: feeMessages.ja,
+    assets: assetMessages.ja,
     certification: certificationMessages.ja,
     audiencePricing: audiencePricingMessages.ja,
     referral: referralMessages.ja,

@@ -25,7 +25,7 @@ export const STOP_WORDS = [
 
 /**
  * Where people's texts are: the three front ends' messages and pages, the server's messages and the display texts in
- * its code (roles, dictionaries), the business site, the legal drafts and the store listings. Tests are left out:
+ * its code (roles, dictionaries), the business site, the legal drafts, the store listings and the help texts. Tests are left out:
  * they assert the texts, and a test of a refused word must name it.
  */
 const SCANNED = [
@@ -40,6 +40,8 @@ const SCANNED = [
   { dir: 'backend/quizbuks/src/main/java', ext: ['.java'], cjkOnly: true },
   { dir: 'docs/quizbuks/legal', ext: ['.md'] },
   { dir: 'docs/quizbuks/store', ext: ['.md'] },
+  // The help centre's texts kept in the repository (F-C1d), published by the content administrators.
+  { dir: 'docs/quizbuks/help', ext: ['.md'] },
 ]
 
 /**
