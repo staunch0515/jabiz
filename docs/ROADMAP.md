@@ -5261,3 +5261,19 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：应用引用 `ApprovalScopeMoveSettings.maxItems()` 而不写 500；上限可配置且越界即启动失败。
 
 **17zy 状态**：📝 待评审（分支 `1.3/phase-17zy-scope-move-limit`）。
+
+### 17zz 准入门：交出许可时恰逢取消，许可丢失（2026-11-07，#500 CI 中 `AdmissionGateStressTest` 的一次失败）
+
+**缘由**：#500 的 CI 中 `AdmissionGateStressTest` 失败一次（结束后仍有 1 个许可未归还），本地 15 次未复现。查明是代码的竞态，不是测试的问题：
+在调度器上交出许可（`sink.success`）的同时调用方取消时，Reactor 的 `MonoCreate` 若在自己的两次检查之间遇到取消（先读到"未取消"，再读到取消已把状态置为终止），
+把值交给 `onNextDropped`（缺省只记调试日志）而不是 `onDiscard`；门依赖的 `doOnDiscard(Permit::release)` 不会执行，取消一侧又因"已交出"而不归还，许可就此丢失。
+上线后的后果：热门锁的一个键（或全门）少一个并发名额，直到重启；多次后该键永远排队超时（503 `PROCESS_BUSY`）。
+
+| # | 内容 |
+|---|---|
+| 17zz-1 | `AdmissionGate`：许可到达订阅者时（`doOnNext`）记为已收到；交出的一侧在 `success` 返回后、取消的一侧在 `onCancel` 中，各在等待者自己的锁下记下自己一侧并查看另一侧，后到的一方见到"已交出、已取消、未收到"即归还（`Permit.release` 幂等，两边都归还也只算一次）。保留 `doOnDiscard`（值暂存在 sink 中、尚无请求时被取消） |
+| 17zz-2 | 测试：`AdmissionHandOverRaceTest`（并发上限 1，持有者归还与等待者取消在屏障后同时发生，2 万轮，每轮断言全部许可归还）；修改前在第 125、581 轮失败，修改后 2 万轮全部通过（重复 4 次）。`AdmissionGateTest`、`AdmissionGatePropertyTest`、`AdmissionGateStressTest`、`ProcessAdmissionIT`、`ProcessAdmissionControlIT`、`CommerceAdmissionIT`、`PasswordHashingLimitIT` 照旧通过 |
+
+**验收**：交出与取消同时发生时许可不丢失（复现测试修改前失败、修改后通过）。
+
+**17zz 状态**：📝 待评审（分支 `1.3/phase-17zz-admission-handover`）。
