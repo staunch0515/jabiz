@@ -161,6 +161,13 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
     public record CompleteExternalJob(int number, String jobType, String reference, Object result,
         Map<String, Object> usage, String status, String errorCode, String errorMessage) implements Step {}
 
+    /**
+     * Marks the current e-mail address of a user that an earlier step created as verified, as following the mailed
+     * verification link would (docs/design/07-quality.md section 3.1): replay only, since a replay cannot follow the
+     * link. {@code user} is the user's id, normally a saved variable ({@code "${hana}"}).
+     */
+    public record VerifyEmail(int number, String user) implements Step {}
+
     /** Checks a SQL template's rows, an entity or a parameter value; see {@link Expectation}. */
     public record Expect(int number, Expectation expectation) implements Step {}
 
@@ -275,8 +282,8 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
         }
         if (keys.size() != 1) {
             throw new IllegalArgumentException(where + " must have exactly one of process, import, advanceClock, setClock, "
-                + "runJob, deliverEvents, inbound, runExternalJobs, completeExternalJob, expect, expectError (besides "
-                + "note); found " + keys.keySet());
+                + "runJob, deliverEvents, inbound, runExternalJobs, completeExternalJob, verifyEmail, expect, "
+                + "expectError (besides note); found " + keys.keySet());
         }
         String kind = keys.keySet().iterator().next();
         Object body = keys.get(kind);
@@ -299,6 +306,13 @@ public record Scenario(String name, String source, Instant clock, Actor actor, L
             }
             case "completeExternalJob" -> completeExternalJob(number, map(body, where + ".completeExternalJob"),
                 where + ".completeExternalJob");
+            case "verifyEmail" -> {
+                if (body instanceof Map<?, ?> || body instanceof List<?> || body == null
+                    || body.toString().isBlank()) {
+                    throw new IllegalArgumentException(where + ".verifyEmail must be the user's id (\"${user}\")");
+                }
+                yield new VerifyEmail(number, body.toString());
+            }
             case "expect" -> new Expect(number, expectation(map(body, where + ".expect"), where + ".expect"));
             case "expectError" -> expectError(number, map(body, where + ".expectError"), where + ".expectError");
             default -> throw new IllegalArgumentException(where + ": unknown step '" + kind + "'");

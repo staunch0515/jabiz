@@ -261,6 +261,7 @@ public final class ScenarioRunner {
                         + (reference == null ? "" : " with reference " + reference), null);
                 }
             }
+            case Scenario.VerifyEmail v -> verifyEmail(scenario, v, variables);
             case Scenario.Expect e -> expect(scenario, step, e.expectation(), variables);
             case Scenario.ExpectError e -> expectError(scenario, e, variables);
         }
@@ -292,6 +293,29 @@ public final class ScenarioRunner {
         }
         if (!outcome.equals(step.outcome())) {
             throw failure(scenario, step, "inbound request was " + outcome + ", not " + step.outcome(), null);
+        }
+    }
+
+    /**
+     * Marks the user's current address verified as the mailed link would ({@link ScenarioEmailVerification}): a
+     * process of its own, run as the system, whose change set writes a new version of the user through the platform's
+     * write path, audit record included.
+     */
+    private void verifyEmail(Scenario scenario, Scenario.VerifyEmail step, Map<String, Object> variables) {
+        String user = String.valueOf(ScenarioValues.resolve(step.user(), variables));
+        try {
+            java.util.UUID.fromString(user);
+        } catch (IllegalArgumentException e) {
+            throw failure(scenario, step, "verifyEmail needs a user id, not " + user, null);
+        }
+        Scenario.Actor system = new Scenario.Actor(RequestContext.SYSTEM_ACTOR, null, java.util.Set.of(),
+            java.util.Set.of());
+        try {
+            as(system, executor.run(ScenarioEmailVerification.DEFINITION,
+                new ScenarioEmailVerification.Input(user), ExecutionOptions.NONE));
+        } catch (Throwable e) {
+            throw failure(scenario, step, "could not verify the address of user " + user + ": "
+                + ProblemStatuses.status(e) + " " + describe(ProblemStatuses.violations(e)) + ": " + e.getMessage(), e);
         }
     }
 
