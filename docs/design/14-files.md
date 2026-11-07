@@ -48,6 +48,7 @@ GET /api/public/files/{id}[/{variant}]  ──► 匿名，仅当被公开数据
 - 默认数据视图 `urn:jabiz:dataset:platform:SysFile`：`processOnlyWrites()`，权限 `file.read` / `file.write`；
   只经文件服务与文件流程写入。后台可列出、查看文件元数据。
 - 删除即真正删除（行与对象），见 §6、§7。
+- 索引：`(uploaded_time)` 供清扫（§6）按时间分页；`(uploaded_by, uploaded_time)` 供按上传者的查询（应用统计每人的用量、默认列表按上传者筛选并按时间排序），不读全表（17zq）。
 
 ## 3. 文件策略（`FilePolicy`，core 中的声明）
 
