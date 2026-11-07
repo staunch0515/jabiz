@@ -29,8 +29,13 @@ public class ApprovalScopeMove {
 
     public static final String MOVE = "APPROVAL_SCOPE_MOVE";
 
-    /** Most cases or source keys one call moves. */
-    static final int MAX_ITEMS = 500;
+    /** Most cases or source keys one call moves by default ({@link ApprovalScopeMoveSettings#maxItems()}). */
+    public static final int DEFAULT_MAX_ITEMS = 500;
+    /**
+     * The highest {@code jabiz.approval.scope-move.max-items} accepted, and the bound the input's constraints
+     * declare; the configured limit itself is checked by the step with the same violation ({@code Size}).
+     */
+    public static final int MAX_LIMIT = 10_000;
 
     static final String INPUT = "input";
     static final String OUTPUT = "output";
@@ -41,13 +46,15 @@ public class ApprovalScopeMove {
     /**
      * @param scopeName      the entry scope's name; every request and task moved must carry it
      * @param toValue        the scope value they move to
-     * @param requests       the cases whose open request (and its open tasks) moves
-     * @param taskSourceKeys other open tasks to move, by their source key; optional, never an approval's task
+     * @param requests       the cases whose open request (and its open tasks) moves; at most
+     *                       {@link ApprovalScopeMoveSettings#maxItems()}
+     * @param taskSourceKeys other open tasks to move, by their source key; optional, never an approval's task; at
+     *                       most {@link ApprovalScopeMoveSettings#maxItems()}
      * @param reason         why (kept with the operation)
      */
     public record MoveInput(@NotBlank @Size(max = 64) String scopeName, @NotBlank @Size(max = 128) String toValue,
-        @NotNull @Size(max = MAX_ITEMS) List<@NotNull @Valid Case> requests,
-        @Size(max = MAX_ITEMS) List<@NotBlank @Size(max = 200) String> taskSourceKeys,
+        @NotNull @Size(max = MAX_LIMIT) List<@NotNull @Valid Case> requests,
+        @Size(max = MAX_LIMIT) List<@NotBlank @Size(max = 200) String> taskSourceKeys,
         @NotBlank @Size(max = 500) String reason) {}
 
     /**

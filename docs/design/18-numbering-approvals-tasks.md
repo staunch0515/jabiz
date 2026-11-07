@@ -215,10 +215,12 @@
   已是 `toValue` 的不写（`ALREADY_THERE`）；其余按读到的版本追加只改 `scopeValue` 的版本（期间被决定即 409）。
 - 该请求的开放待办（来源键 `approval:<请求>`）与 `taskSourceKeys` 所列来源键的开放待办随之移动（范围名不同即同一个 422）；之后层级的待办取请求的新范围。
   `taskSourceKeys` 不能列审批待办的来源键（422 `INVALID_VALUE`）；一个来源键的开放待办达到 1000 条即失败（与 `TaskWriter.close` 共用同一读取）。语句按案件计，很大的改派分批调用。
+- 一次至多 `jabiz.approval.scope-move.max-items`（缺省 500，1–10 000，启动检查 `APPROVAL`）个案件，来源键另计同一上限；超过即 400，与输入自身的 `@Size` 同样的违规
+  （字段 `requests` / `taskSourceKeys`，`INVALID_VALUE`，约束 `Size`），在读取任何东西之前。应用经 Bean `ApprovalScopeMoveSettings.maxItems()` 读取上限并据此分批调用，不自己写这个数（17zy）。
 - 有入口范围的会话调用即 422 `OUT_OF_SCOPE`；直接经流程接口调用即 403 `PROCESS_INTERNAL`。
 - 范围字段只经此改变：守卫 `ApprovalScopeGuard` 拒绝其他任何改变范围的写入（422 `IMMUTABLE_FIELD`），且只许未结的请求、开放的待办，状态与范围名不变。
 - 决定与评估保留原范围（当时在哪里做的判断）；已发出的通知不移动、不重新通知。审计记录前后值。
-- 测试：app `ApprovalScopeMoveIT`，runtime `ApprovalScopeGuardTest`。
+- 测试：app `ApprovalScopeMoveIT`、`ApprovalScopeMoveLimitIT`，runtime `ApprovalScopeGuardTest`、`ApprovalScopeMoveSettingsTest`。
 
 ## 4. 职责分离（14b-2）
 
