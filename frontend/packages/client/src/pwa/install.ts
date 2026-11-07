@@ -222,6 +222,18 @@ export function readInstallDismissals(key: string): InstallDismissals | null {
   }
 }
 
+/**
+ * Keeps `dismissals` under `key` as they are (moving remembered closes to a new key, phase 17zk); nothing without
+ * storage.
+ */
+export function keepInstallDismissals(key: string, dismissals: InstallDismissals): void {
+  try {
+    window.localStorage.setItem(storageKey(key), JSON.stringify({ at: dismissals.at, count: dismissals.count }))
+  } catch {
+    // Blocked storage: the closes are not carried over, as none are remembered.
+  }
+}
+
 /** Remembers one more close under `key`; returns what is remembered now. */
 export function rememberInstallDismissed(key: string, now: number): InstallDismissals {
   const next = { at: now, count: (readInstallDismissals(key)?.count ?? 0) + 1 }

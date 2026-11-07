@@ -1,6 +1,7 @@
 import {
   finishIdentityLink,
   isProblem,
+  keepSignInStep,
   takeBinder as takeStoredBinder,
   pendingPurpose as storedPurpose,
   takeReturnPath as takeStoredReturnPath,
@@ -11,20 +12,32 @@ import {
   type SignInStep,
 } from '@jabiz/client'
 import { TriangleAlert } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PageState } from '../components/page-state'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
+import { AuthFrame } from './frame'
 import { AUTH_NAMESPACE } from './messages'
 import { refusal } from './problems'
 
 export interface OidcCallbackProps {
   /** Where to go after the round trip when the start did not say: the frontend's home. */
   fallbackPath: string
+  /**
+   * The application's name, the page's heading: the page is an entry page like the others (phase 17zk, gap 4); the
+   * {@link EntryLayoutProvider}'s when absent.
+   */
+  brand?: ReactNode
+  /** Offers the appearance as well as the language (default true). */
+  appearance?: boolean
   /** Signed in: goes to the page the sign-in started from. */
   onSignedIn(path: string): void
-  /** A second factor (or its enrolment) comes next: the sign-in page continues with `step`, then goes to `path`. */
+  /**
+   * A second factor (or its enrolment) comes next: the sign-in page continues with `step`, then goes to `path`. Both
+   * are kept in this tab first (`keepSignInStep`), so a sign-in page given neither continues by itself, after a reload
+   * too (phase 17zk, gap 2).
+   */
   onSecondStep(step: SignInStep, path: string): void
   /** Back to the sign-in page after a failure. */
   onBack(): void
@@ -59,6 +72,8 @@ const missing = () => Promise.reject(new Error('OidcCallback needs an AuthProvid
  */
 export function OidcCallback({
   fallbackPath,
+  brand,
+  appearance,
   onSignedIn,
   onSecondStep,
   onBack,
@@ -104,23 +119,34 @@ export function OidcCallback({
     signInWithProvider(state, code, binder)
       .then((next) => {
         const returnTo = takeReturnPath(fallbackPath)
-        if (next.status === 'SIGNED_IN') onSignedIn(returnTo)
-        else onSecondStep(next, returnTo)
+        if (next.status === 'SIGNED_IN') {
+          onSignedIn(returnTo)
+        } else {
+          keepSignInStep(next, returnTo)
+          onSecondStep(next, returnTo)
+        }
       })
       .catch((e: unknown) => setFailure(isProblem(e, 'OIDC_ACCOUNT_EXISTS', 403) ? t('login.accountExists')
         : refusal(e, t('common.error'))))
   }, [state, code, purpose, signInWithProvider, finishLink, takeBinder, takeReturnPath, fallbackPath, onSignedIn,
     onLinked, onSecondStep, t])
 
+  const failedTitle = t(purpose === 'LINK' ? 'login.linkFailed' : 'login.providerFailed')
+  const busy = cancelled || !error
+  // While busy, linking an account is no sign-in: a neutral title.
+  const busyTitle = purpose === 'LINK' ? t('common.loading') : t('login.title')
   return (
-    <main className="bg-background text-foreground flex min-h-screen items-start justify-center px-4 pt-20">
-      {cancelled || !error ? (
+    <AuthFrame brand={brand} appearance={appearance} title={busy ? busyTitle : failedTitle} testId="oidc-callback"
+      ownHeading={!busy}>
+      {busy ? (
         <PageState kind="loading" title={t('common.loading')} />
       ) : (
+        // The failure as before: the warning, its title (the card's heading), the reason and the way back.
         <PageState
           kind="warning"
-          titleAs="h1"
-          title={t(purpose === 'LINK' ? 'login.linkFailed' : 'login.providerFailed')}
+          titleAs="h2"
+          title={failedTitle}
+          className="p-0"
           description={
             <Alert variant="destructive" data-testid="oidc-error" className="text-left">
               <TriangleAlert aria-hidden />
@@ -130,6 +156,6 @@ export function OidcCallback({
           action={<Button onClick={onBack}>{t('login.back')}</Button>}
         />
       )}
-    </main>
+    </AuthFrame>
   )
 }

@@ -5,7 +5,14 @@ export const PORTAL = 'portal'
 
 const en = {
   brand: 'Customer portal',
-  nav: { label: 'Portal', orders: 'My orders', order: 'Place an order', account: 'Account', signOut: 'Sign out' },
+  nav: {
+    label: 'Portal',
+    quick: 'Quick menu',
+    orders: 'My orders',
+    order: 'Place an order',
+    account: 'Account',
+    signOut: 'Sign out',
+  },
   orders: {
     title: 'My orders',
     empty: 'You have no orders yet.',
@@ -14,6 +21,8 @@ const en = {
     orderedTime: 'Placed',
     totalAmount: 'Total',
     lineCount: 'Lines',
+    search: 'Order number',
+    all: 'All',
   },
   order: {
     title: 'Place an order',
@@ -33,14 +42,30 @@ const en = {
       '3. Follow it under *My orders*.',
     ].join('\n'),
   },
-  account: { title: 'Account', mfa: 'Two-step verification', deletion: 'Delete your account' },
+  account: {
+    title: 'Account',
+    mfa: 'Two-step verification',
+    deletion: 'Delete your account',
+    summary: 'Your account',
+    email: 'E-mail',
+    verified: 'Verified',
+    unverified: 'Not verified yet',
+  },
+  // The column about the portal on its sign-in pages (phase 17zk): one sentence and three points.
+  entry: {
+    sentence: 'Order from us and follow your orders, any time.',
+    point1: 'See what is in stock and order in a few taps',
+    point2: 'Follow each order until it ships',
+    point3: 'Sign in with a passkey or a link by mail',
+    terms: 'By creating an account you accept our terms of sale and privacy notice.',
+  },
   notFound: 'This page does not exist.',
   failed: 'Something went wrong. Please try again.',
 }
 
 const zh: typeof en = {
   brand: '客户门户',
-  nav: { label: '门户', orders: '我的订单', order: '下单', account: '账户', signOut: '退出登录' },
+  nav: { label: '门户', quick: '快捷菜单', orders: '我的订单', order: '下单', account: '账户', signOut: '退出登录' },
   orders: {
     title: '我的订单',
     empty: '您还没有订单。',
@@ -49,6 +74,8 @@ const zh: typeof en = {
     orderedTime: '下单时间',
     totalAmount: '金额',
     lineCount: '行数',
+    search: '订单号',
+    all: '全部',
   },
   order: {
     title: '下单',
@@ -68,14 +95,36 @@ const zh: typeof en = {
       '3. 在*我的订单*中查看进度。',
     ].join('\n'),
   },
-  account: { title: '账户', mfa: '两步验证', deletion: '删除账号' },
+  account: {
+    title: '账户',
+    mfa: '两步验证',
+    deletion: '删除账号',
+    summary: '您的账户',
+    email: '邮箱',
+    verified: '已验证',
+    unverified: '尚未验证',
+  },
+  entry: {
+    sentence: '随时向我们下单，跟踪您的订单。',
+    point1: '查看现货，几步就能下单',
+    point2: '每张订单直到发货都看得到',
+    point3: '用通行密钥或邮件链接登录',
+    terms: '创建账号即表示您同意我们的销售条款与隐私声明。',
+  },
   notFound: '页面不存在。',
   failed: '出错了，请重试。',
 }
 
 const ja: typeof en = {
   brand: '顧客ポータル',
-  nav: { label: 'ポータル', orders: '注文履歴', order: '注文する', account: 'アカウント', signOut: 'ログアウト' },
+  nav: {
+    label: 'ポータル',
+    quick: 'クイックメニュー',
+    orders: '注文履歴',
+    order: '注文する',
+    account: 'アカウント',
+    signOut: 'ログアウト',
+  },
   orders: {
     title: '注文履歴',
     empty: 'まだ注文がありません。',
@@ -84,6 +133,8 @@ const ja: typeof en = {
     orderedTime: '注文日時',
     totalAmount: '合計',
     lineCount: '明細数',
+    search: '注文番号',
+    all: 'すべて',
   },
   order: {
     title: '注文する',
@@ -103,7 +154,22 @@ const ja: typeof en = {
       '3. *注文履歴*で状況を確認できます。',
     ].join('\n'),
   },
-  account: { title: 'アカウント', mfa: '2 段階認証', deletion: 'アカウントの削除' },
+  account: {
+    title: 'アカウント',
+    mfa: '2 段階認証',
+    deletion: 'アカウントの削除',
+    summary: 'あなたのアカウント',
+    email: 'メールアドレス',
+    verified: '確認済み',
+    unverified: '未確認',
+  },
+  entry: {
+    sentence: 'いつでもご注文いただけ、注文の状況を確認できます。',
+    point1: '在庫を見て、数回のタップで注文',
+    point2: '発送まで注文ごとに確認',
+    point3: 'パスキーやメールのリンクでログイン',
+    terms: 'アカウントを作成すると、販売条件とプライバシーに関する方針に同意したことになります。',
+  },
   notFound: 'このページは存在しません。',
   failed: 'エラーが発生しました。もう一度お試しください。',
 }

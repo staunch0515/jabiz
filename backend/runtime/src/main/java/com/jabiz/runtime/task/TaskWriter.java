@@ -5,11 +5,13 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.runtime.DatasetEntityManager;
+import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.dataset.DatasetRegistry;
 import com.jabiz.runtime.process.steps.EventPublisher;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -77,12 +79,7 @@ public class TaskWriter {
         if (!TaskEntities.DONE.equals(status) && !TaskEntities.CANCELLED.equals(status)) {
             return Mono.error(new IllegalArgumentException("A task is closed as DONE or CANCELLED, not " + status));
         }
-        DatasetDefinition dataset = datasets.findById(TaskEntities.TASK_DATASET).orElseThrow();
-        EntityQuery query = EntityQuery.builder().where(new QueryPredicate.And(List.of(
-            new QueryPredicate.Eq("sourceKey", sourceKey),
-            new QueryPredicate.Eq("status", TaskEntities.OPEN)))).limit(TaskEntities.MAX_ROWS).build();
-        // Every open task of the key, whatever the caller's entry scope (decision D64): the process ends them all.
-        return RequestContexts.withoutEntryScope(entities.queryAll(dataset, TaskEntities.SYS_TASK, query))
+        return openTasks(sourceKey)
             .doOnNext(task -> {
                 Map<String, Object> closed = new LinkedHashMap<>();
                 closed.put("status", status);
@@ -90,6 +87,27 @@ public class TaskWriter {
                 ctx.changes().update(TaskEntities.TASK, task.id(), task.version(), closed);
             })
             .then();
+    }
+
+    /**
+     * Every open task of {@code sourceKey}, whatever the caller's entry scope (decision D64): the processes that close
+     * or move them ({@code APPROVAL_SCOPE_MOVE}, decision D76) act on them all. Fails rather than act on part of them
+     * when the key has {@code TaskEntities.MAX_ROWS} or more.
+     */
+    public Flux<EntityInstance> openTasks(String sourceKey) {
+        DatasetDefinition dataset = datasets.findById(TaskEntities.TASK_DATASET).orElseThrow();
+        EntityQuery query = EntityQuery.builder().where(new QueryPredicate.And(List.of(
+            new QueryPredicate.Eq("sourceKey", sourceKey),
+            new QueryPredicate.Eq("status", TaskEntities.OPEN)))).limit(TaskEntities.MAX_ROWS).build();
+        return RequestContexts.withoutEntryScope(entities.queryAll(dataset, TaskEntities.SYS_TASK, query))
+            .collectList()
+            .flatMapMany(tasks -> {
+                if (tasks.size() >= TaskEntities.MAX_ROWS) {
+                    return Flux.error(new IllegalStateException("Source key " + sourceKey + " has "
+                        + TaskEntities.MAX_ROWS + " or more open tasks"));
+                }
+                return Flux.fromIterable(tasks);
+            });
     }
 
     boolean publishes() {

@@ -85,6 +85,12 @@ snapshot:
   同一任务在一个场景中连续运行不会 `LOCKED`，场景的 `properties` 仍可覆盖，阶段 16k）；
   `deliverEvents: true`（把到期的 Outbox 事件投递给消费者，直到没有到期的事件）（阶段 9，11 §2.3、§4）；`inbound: {provider, body, at?, outcome?, headers?}`（入站 Webhook：`body` 为映射时按 JSON 发送、为文本时原样发送，以提供方配置的第一个密钥在 `at`（缺省为当前时钟）签名后交给与接口相同的 `InboundReceiver`，`headers` 是签名之外一并发送的请求头（值可引用保存的变量；只签正文的方案的事件号、类型与元数据头即由此给出，11 §2.5.1），结果须为 `outcome`：缺省 `ACCEPTED`，或 `DUPLICATE` / `IGNORED` / `REJECTED`；消费者在之后的 `deliverEvents` 中运行，11 §2.5）；`runExternalJobs: true`（执行到期的异步外部作业的处理器，直到没有到期的作业；重试等退避，需要推进时钟，11 §4a）；`completeExternalJob: {jobType, reference?, result, usage?, status?, errorCode?, errorMessage?}`（不调用处理器，以同一记录路径为该类型（与引用）最早的未结束作业写入一次尝试的结果：`status` 缺省 `SUCCEEDED` 带 `result`，`FAILED` 为不可重试的失败；使应用的场景不依赖外部服务（Q17）；完成或失败流程在之后的 `deliverEvents` 中运行；两者都服从类型的 `enabledBy`：暂停的类型 `runExternalJobs` 不领取，`completeExternalJob` 是该步骤的失败并说明原因，D52 第 4 条）；`expect` 三种：`{query, params, asOf, knownAt, rows, values}`（SQL 模板按可选的时点运行，19 §2.1；行数与逐行子集匹配）、`{entity, id, asOf, fields}`、`{param, asOf, value}`；
   `expectError: {process, input, status, ruleCode, field}`；
+  `verifyEmail: 用户编号`（只在回放中存在，阶段 17zp）：把先前步骤建立的用户（如 `SEC_USER_CREATE` 建的，其邮箱未验证）的当前邮箱标为已验证，
+  如同本人打开了寄出的验证链接（回放跟不了链接）；用户编号照例写作保存的变量（`save: {hana: $.userId}` 后 `verifyEmail: "${hana}"`）。
+  它以 testFixtures 中不登记、不是 Bean 的流程 `SCENARIO_EMAIL_VERIFY`（以系统身份运行）在流程的变更集中写入平台验证所写的两个字段
+  （`verifiedEmail` = 当前邮箱，`emailVerifiedAt` = 注入时钟的操作时刻），经平台的写入路径为用户追加一个版本，审计记录照常写入（`sys_audit_record`，操作人 `system`）；
+  用户不存在或没有邮箱即是该步骤的失败。用于"另一个用户的邮箱须已验证"的应用规则（如负责人须有已验证的邮箱）；回放的操作人本身仍一律视为已验证（10 §15）。
+  主代码中没有为它而设的入口（示范：`app` 的 `scenarios/security/verify_email.yml`，门户要求已验证的邮箱，验证前登录被拒、验证后成功；审计由 `ScenarioVerifyEmailIT` 断言）；
   `import: 导入 id`（20，阶段 14e-2）带 `file: {name, content}`（按导入的文件策略存入，内容为 UTF-8 文本）、`mapping`、`params`、`commit`（缺省预览）、
   `notes`、`expect`（与导入报告按含义比较，被拒的提交也是报告）、`save`、`actor`；导入入口的权限照常检查。未知键即报错（拼错的期望不会静默通过）。
 - 变量：`save: {名: $.a.b[0]}` 从输出（遮蔽后的 JSON）中取值，`$` 为整个输出；`${名}` 整串引用保留类型，嵌在字符串中时插值；未定义即报错。
