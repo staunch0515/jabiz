@@ -1,5 +1,5 @@
 import {
-  adminToken,
+  
   address,
   expect,
   linkIn,
@@ -15,6 +15,7 @@ import {
   verifiedUser,
   verifyByMail,
 } from './support'
+import { reviewerFor } from './operators'
 
 /**
  * Accounts across the QuizBuks front ends (docs/quizbuks/plans/QP-pages.md section 3, QP1): registering at each entry,
@@ -148,10 +149,11 @@ test('a Sponsor registers, verifies at the console\'s own page, applies and is a
   const stored = await page.evaluate(() => Object.keys(window.localStorage))
   expect(stored).not.toContain('jabiz.session.sponsor.refresh')
 
-  // An administrator approves the application; the console shows it and the mail links to the console.
+  // A member of the Sponsor's operator approves the application (F-S1); the Sponsor app shows it and the mail links
+  // to it.
   const sponsorToken = await tokenOf(request, email, PASSWORD, 'sponsor')
   const [own] = await rows(request, sponsorToken, 'urn:jabiz:dataset:sponsor:QbSponsor', [])
-  await run(request, await adminToken(request), 'APPROVAL_DECIDE', {
+  await run(request, await reviewerFor(request, sponsorToken), 'APPROVAL_DECIDE', {
     requestId: own.attributes.approvalRequestId, decision: 'APPROVE' })
   await expect.poll(async () => {
     await page.reload()

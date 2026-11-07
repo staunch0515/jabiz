@@ -1,6 +1,6 @@
 import type { APIRequestContext } from '@playwright/test'
 import {
-  adminToken,
+  
   expect,
   expectAccessible,
   prepareQuizbuks,
@@ -11,6 +11,7 @@ import {
   unique,
 } from './support'
 import { fundedSponsor, searchHome, taker, untilLive } from './play'
+import { reviewerFor } from './operators'
 
 /**
  * Surveys (docs/quizbuks/plans/Q12-survey.md): a sponsor makes one in the console (a quiz of the kind "survey"), its
@@ -43,7 +44,7 @@ async function seedSurvey(request: APIRequestContext, token: string, quizId: str
   const publicationId = saved.publicationId as string
   const submitted = await run(request, token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    await run(request, await reviewerFor(request, token), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
       decision: 'APPROVE' })
   }
   return { publicationId, name }

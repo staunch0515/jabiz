@@ -1,7 +1,7 @@
 import type { APIRequestContext } from '@playwright/test'
 import {
   address,
-  adminToken,
+  
   expect,
   expectAccessible,
   linkIn,
@@ -15,6 +15,7 @@ import {
 } from './support'
 import { fundedSponsor, taker } from './play'
 import { publicationOf } from './publishing'
+import { reviewerFor } from './operators'
 
 /**
  * Invitation-only publications (docs/quizbuks/plans/Q25-invitations.md): the sponsor publishes for a list of
@@ -50,7 +51,7 @@ async function invitedPublication(request: APIRequestContext) {
   expect(server.verified, `the Sponsor's mail server: ${server.error}`).toBe(true)
   const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    await run(request, await reviewerFor(request, sponsor.token), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
       decision: 'APPROVE' })
   }
   await expect.poll(async () => (await publicationOf(request, sponsor.token, publicationId)).status,
