@@ -298,6 +298,9 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.PAYOUT_REMINDER_DAYS, "30");
         // Q7c review M2: below this reach a sponsor sees no clicks or conversions.
         expected.put(QbParams.BROADCAST_STATS_MIN_AUDIENCE, "50");
+        // F-C1: the asset library's limits (ordinary parameters).
+        expected.putAll(Map.of(QbParams.ASSETS_MAX_COUNT, "1000", QbParams.ASSETS_MAX_TAGS, "10",
+            QbParams.ASSETS_TAG_LENGTH, "30"));
         // Q13a: bank top-ups' range, and the receiving account empty until finance sets it with four eyes.
         expected.put(QbParams.TOPUP_BANK_MIN, "1000");
         // Q86: the understanding quizzes are offered; no platform tree until an official account is named.
