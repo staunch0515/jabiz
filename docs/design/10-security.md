@@ -139,7 +139,7 @@
 - 刷新与 OIDC 回调在验证之前不知道是谁，只按地址（与站点、实例）计，所以地址的缺省比较宽（突发 100）。
 - 地址来自 `ClientAddresses`（转发头只在来自可信代理时采用，§15.5）；IPv6 按 /64（一个用户通常有整个 /64），另按 /48 计一个更宽的站点桶，轮换一个站点内的 /64 不能成倍增加预算。
   带作用域的链路本地地址（`fe80::1%eth0`）去掉作用域后同样按 /64。没有地址的请求（只在测试与配错的代理之后）共用键 `unknown`。
-- 一次请求从计它的每个桶各取一个令牌；任何一个拒绝时都不取（429 `RATE_LIMITED` + `Retry-After`，取拒绝的桶中最长的）。不写登录记录、不计入账号的失败次数，对存在与不存在的账号、对的与错的口令一样。
+- 一次请求从计它的每个桶各取一个令牌；任何一个拒绝时都不取（429 `RATE_LIMITED` + `Retry-After`，取拒绝的桶中最长的）；查与取在该种请求的一把锁下一起完成，并发的请求不会在两者之间取走令牌（17zt）。不写登录记录、不计入账号的失败次数，对存在与不存在的账号、对的与错的口令一样。
 - 每个桶至多 100 000 个键（最近最少使用的先忘掉）。**表满时新出现的键（包括被挤掉后再来的）只有 1 个令牌，没有突发**：用大量键把自己的键挤掉换不来新的突发。
 - `.enabled=false` 关闭（例如前面的网关已经限流）。数值不为正是启动错误（`SECURITY`）。进程内、按实例计数（同 §15.6 的已知限制）；拒绝记观测 `jabiz.auth.rate_limited`（标签只有 `kind`，13）。
 - 与按账号的锁定并存，锁定的规则不变（`SignInRateLimitIT` 确认）。
@@ -174,6 +174,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 | 业务参数（数据视图读 / 写；`PARAM_CREATE` / `PARAM_SET` / `PARAM_SCHEDULE` / `PARAM_CANCEL_SCHEDULED`） | `platform.param.read` / `platform.param.write`；`platform.param.write`（04 §9） |
 | 账本（科目数据视图；交易、分录数据视图；`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`；余额模板） | `ledger.account.read` / `.write`；`ledger.read`（写入只经流程）；`ledger.account.write` / `ledger.post` / `ledger.reverse`；`ledger.read`（11 §1） |
 | 审计视图 `GET /api/audit/operations` / 任务列表 `GET /api/jobs` | `audit.read` / `job.read`（11 §3、§4） |
+| 手动补跑定时任务 `POST /api/jobs/{job}/runs`（`JOB_RUN_REQUEST`，`entryOnly()`） | `job.run`，近期二次验证（`ADMINISTRATION`）；`job.run` 受保护（§16.1，11 §4.2，D77） |
 | 审批（`APPROVAL_DECIDE`；审批规则、限额、请求、判断、评估的数据视图；影响预览 `POST /api/approvals/preview`） | `approval.decide` + 当前层级的权限（受保护的变更改为 `security.protected-change.decide`，§16.1，D51）；`approval.read`（写入只经流程）；`approval.read`（18 §3） |
 | 审批移到另一个入口范围（子流程 `APPROVAL_SCOPE_MOVE`，`subProcessOnly()`） | 应用的改派流程的权限 + `approval.scope.move`（由步骤检查，18 §3.8，D76） |
 | 受控变更 `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_WITHDRAW` / `CONTROL_CHANGE_PUBLISH` | `control.propose` / `control.propose` / `control.publish`，且发布人不是提出人（18 §3.5） |
@@ -804,11 +805,13 @@ jabiz:
 
 - 三种桶，各自可选：`per-user`（按操作人）、`per-address`（按 `ClientAddresses` 的客户端地址，转发头只在来自可信代理时采用，§15.5）、`per-instance`（该流程在本实例的总量）；`period` 缺省 1 分钟。
   桶是 `TokenBucketLimiter`（进程内、每桶至多 100 000 个键、单调时钟），超限 429 `RATE_LIMITED` + `Retry-After`，按实例计数（同 15 §6 与 §15.6 的已知限制）。
-- 先查请求涉及的全部桶，都有令牌才各取一个：一个桶拒绝时不消耗其他桶。幂等键的重放同样计数：区分重放要读数据库，而被限流的请求不访问数据库。
+- 先查请求涉及的全部桶，都有令牌才各取一个：一个桶拒绝时不消耗其他桶。查与取在该流程（或限流键）的一把锁下一起完成，并发的请求不会在两者之间取走令牌（17zt）。幂等键的重放同样计数：区分重放要读数据库，而被限流的请求不访问数据库。
 - 顺序：认证 → 权限 → **限流**（`ProcessRateLimits`）→ 二次验证 → 已验证邮箱 → 职责分离 → 幂等重放 → 准入（06 §4.2）→ 事务。没有权限的请求本来就 403，不消耗他人的桶；
   被限流的请求不读数据库、不借连接（`ProcessAdmissionIT` 在连接全被占用时确认）。
 - 只作用于流程接口：子流程、定时任务、事件消费者与平台自己的入口（登录、实体接口、上传等）不经它。启动检查（`PROCESS`）：配置的流程须已注册且进目录（不是 `internal()` / `entryOnly()` / `subProcessOnly()`），
   数值为正，至少声明一种桶。每次拒绝记一次观测 `jabiz.process.rate_limited`（瞬时的观测，作计数用；标签只有 `process`、`scope`，13）。
+- 唯一的例外是限流键 `FILE_FETCH`（服务器下载链接中的图片：`POST /api/files/fetch` 与外部作业的 `remoteImages()`，14 §12、决策 D75；不是流程）：`per-user`（作业按其请求人）、`per-instance`
+  与只用于它的 `per-host`（按链接的主机，每一跳都计入）；平台缺省每人每分钟 30、每主机 60、每实例 300（配置整体替换缺省）。启动检查拒绝它的 `per-address` 等，也拒绝其他流程上的 `per-host`。
 - 与 `SignUpRateLimits`（§15.7）、`SignInRateLimits`（§4.1）的关系：后两者限的是平台自己的匿名账户接口、本人账户操作与登录类接口（种类写死在代码中），不变；三者共用 `TokenBucketLimiter` 与 `ClientAddresses`。
   限流不是准入：限流挡住单个用户或地址刷请求，准入挡住所有人一起挤一把锁（503 `PROCESS_BUSY`，06 §4.2）。
 
@@ -1072,6 +1075,7 @@ jabiz:
 | `security.protected-change.decide` | 这道四眼自己的另一双眼：审批本节的受保护变更（D51）；总是受保护 |
 | `ledger.post`、`ledger.reverse` | 写账（冲正即反向过账，11 §1） |
 | `platform.param.write` | 独自修改未受控的业务参数（04 §9） |
+| `job.run` | 手动补跑定时任务：以系统身份执行任务流程写下的一切（11 §4.2，D77） |
 
 不在缺省中的：`security.user.password` / `security.user.mfa-reset` / `security.user.identity.write`（对受保护持有人使用时本身就要审批，对其他人是日常的账号支持）、
 `temporal.revert` / `temporal.backdate`（写入仍经过本节的检查，`processOnlyWrites` 的数据视图不能撤销）、只读权限、`security.user.write`（不改权限；管理员设置的邮箱从不可信，§15.7）。

@@ -24,6 +24,7 @@ import net.javacrumbs.shedlock.core.DefaultLockingTaskExecutor;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.core.LockingTaskExecutor;
+import net.javacrumbs.shedlock.core.SimpleLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -42,6 +43,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -64,6 +66,10 @@ import java.util.concurrent.ConcurrentHashMap;
  *       {@code sys_job_item_failure} and backed off); an item not started is {@code DEFERRED}. No item's result
  *       affects another's. After {@code maxRunTime}, or once the application stops, no new item starts.</li>
  * </ul>
+ *
+ * <p>An administrator's re-run of a past scheduled time (decision D77) takes the same lock ({@link #tryLock}) and runs
+ * with the same keys ({@link #executeRequested}): what committed at that time replays, only what did not runs again,
+ * and items in backoff are not left out (the administrator asks for them now). Its record names the requester.
  *
  * <p><strong>Blocks</strong> until the run is over, as ShedLock's R2DBC provider does: call it from a scheduler or
  * test thread, never from a non-blocking one.
@@ -120,6 +126,19 @@ public class JobRunner {
     /** @param items the counts of a per-item job's run; null for a single-process job or when locked */
     public record JobRun(Outcome outcome, ItemCounts items) {}
 
+    /**
+     * Who asked for a run by hand (decision D77).
+     *
+     * @param requestedBy  the user who asked
+     * @param requestSeqId the operation of the request ({@code JOB_RUN_REQUEST})
+     */
+    public record Request(String requestedBy, long requestSeqId) {
+        public Request {
+            Objects.requireNonNull(requestedBy, "requestedBy must not be null");
+        }
+    }
+
+    private final LockProvider lockProvider;
     private final LockingTaskExecutor locks;
     private final ProcessExecutor executor;
     private final StorageAdapterRegistry storages;
@@ -157,7 +176,8 @@ public class JobRunner {
         }
         this.maxInBackoff = maxInBackoff;
         this.observations = Objects.requireNonNull(observations, "observations must not be null");
-        this.locks = new DefaultLockingTaskExecutor(Objects.requireNonNull(lockProvider, "lockProvider"));
+        this.lockProvider = Objects.requireNonNull(lockProvider, "lockProvider");
+        this.locks = new DefaultLockingTaskExecutor(lockProvider);
         this.executor = Objects.requireNonNull(executor, "executor must not be null");
         this.storages = Objects.requireNonNull(storages, "storages must not be null");
         this.ids = Objects.requireNonNull(ids, "ids must not be null");
@@ -186,6 +206,39 @@ public class JobRunner {
     }
 
     /**
+     * Takes the job's cluster lock for a run by hand, as a scheduled run would, kept no longer than the run (nothing
+     * else of that run could start late on another instance); empty when a run holds it. Blocks.
+     */
+    public Optional<SimpleLock> tryLock(JobDefinition<?> job) {
+        return lockProvider.lock(new LockConfiguration(ClockProvider.now(), job.name(), job.lockAtMostFor(),
+            Duration.ZERO));
+    }
+
+    /**
+     * Runs a past scheduled time again for {@code request} under {@code lock}, taken with {@link #tryLock}, and
+     * releases the lock; blocks until done. The idempotency keys are those of the scheduled run: a single-process job
+     * that committed replays, items that committed replay, the others run (items in backoff too).
+     */
+    public <I> JobRun executeRequested(JobDefinition<I> job, Instant scheduledTime, Request request,
+        SimpleLock lock) {
+        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(lock, "lock must not be null");
+        try {
+            return observations.blocking(PlatformObservations.JOB, "job " + job.name(),
+                KeyValues.of("job", job.name()), () -> job.kind() == JobDefinition.Kind.PER_ITEM
+                    ? runItems(job, scheduledTime, request) : runSingle(job, scheduledTime, request),
+                run -> run.outcome().name());
+        } finally {
+            try {
+                lock.unlock();
+            } catch (RuntimeException e) {
+                // The lock then expires after lockAtMostFor.
+                log.error("Could not release the lock of job {}", job.name(), e);
+            }
+        }
+    }
+
+    /**
      * Stops starting items (the application is stopping): items running end or roll back as they would, those not
      * started yet count as deferred. Single-process runs are not affected.
      */
@@ -200,8 +253,8 @@ public class JobRunner {
             lockAtLeastFor.compareTo(job.lockAtMostFor()) < 0 ? lockAtLeastFor : job.lockAtMostFor());
         try {
             LockingTaskExecutor.TaskResult<JobRun> result = locks.executeWithLock(
-                () -> job.kind() == JobDefinition.Kind.PER_ITEM ? runItems(job, scheduledTime)
-                    : runSingle(job, scheduledTime), lock);
+                () -> job.kind() == JobDefinition.Kind.PER_ITEM ? runItems(job, scheduledTime, null)
+                    : runSingle(job, scheduledTime, null), lock);
             if (!result.wasExecuted()) {
                 log.debug("Job {} at {}: another instance holds the lock", job.name(), scheduledTime);
                 return new JobRun(Outcome.LOCKED, null);
@@ -214,7 +267,7 @@ public class JobRunner {
         }
     }
 
-    private <I> JobRun runSingle(JobDefinition<I> job, Instant scheduledTime) {
+    private <I> JobRun runSingle(JobDefinition<I> job, Instant scheduledTime, Request request) {
         Instant started = now();
         RequestContext system = RequestContext.system(Locale.ENGLISH,
             "job-" + job.name() + "-" + scheduledTime.toEpochMilli());
@@ -235,7 +288,7 @@ public class JobRunner {
             outcome = Outcome.FAILED;
             error = describe(e);
         }
-        record(newId(), job, scheduledTime, outcome, processSeqId, error, started, null);
+        record(newId(), job, scheduledTime, outcome, processSeqId, error, started, null, request);
         return new JobRun(outcome, null);
     }
 
@@ -253,7 +306,7 @@ public class JobRunner {
     /** The items of a run: those to execute in order, those in backoff, and whether more were left out. */
     private record Selection(List<Item> work, int inBackoff, boolean more) {}
 
-    private <I> JobRun runItems(JobDefinition<I> job, Instant scheduledTime) {
+    private <I> JobRun runItems(JobDefinition<I> job, Instant scheduledTime, Request request) {
         Instant started = now();
         // How long the run may start items is infrastructure time, like the lock it must stay within.
         long deadline = System.nanoTime() + job.maxRunTime().toNanos();
@@ -262,7 +315,7 @@ public class JobRunner {
         ItemCounts counts;
         String error = null;
         try {
-            Selection selection = select(job, scheduledTime);
+            Selection selection = select(job, scheduledTime, request != null);
             Map<ItemOutcome, Integer> tally = new EnumMap<>(ItemOutcome.class);
             if (selection.inBackoff() > 0) {
                 tally.put(ItemOutcome.DEFERRED, selection.inBackoff());
@@ -280,16 +333,16 @@ public class JobRunner {
             counts = ItemCounts.NONE;
             error = describe(e);
         }
-        record(runId, job, scheduledTime, outcome, null, error, started, counts);
+        record(runId, job, scheduledTime, outcome, null, error, started, counts, request);
         return new JobRun(outcome, counts);
     }
 
     /**
      * Runs the selection template as the system in a read-only transaction, in its default order, asking for the
      * items in backoff besides {@code maxItems} (so that failing items cannot starve the others) and one more (to know
-     * whether there are more).
+     * whether there are more). A run by hand ({@code byHand}) leaves no item out for its backoff.
      */
-    private Selection select(JobDefinition<?> job, Instant scheduledTime) {
+    private Selection select(JobDefinition<?> job, Instant scheduledTime, boolean byHand) {
         if (templates == null || queries == null) {
             throw new IllegalStateException("This runner cannot select the items of job " + job.name());
         }
@@ -301,7 +354,7 @@ public class JobRunner {
                 + items.keyColumn()));
         StorageEngine engine = engine();
         Instant now = clock.instant();
-        Map<String, JobItemFailures.Failing> backoff = Objects.requireNonNull(
+        Map<String, JobItemFailures.Failing> backoff = byHand ? Map.of() : Objects.requireNonNull(
             JobItemFailures.inBackoff(engine, job, now, maxInBackoff).block());
         Map<String, Object> params = items.parameters().apply(scheduledTime);
         int limit = job.maxItems() + backoff.size() + 1;
@@ -339,7 +392,7 @@ public class JobRunner {
         int others = 0;
         for (Item candidate : candidates) {
             JobItemFailures.Failing failures = candidate.key() == null ? null : failing.get(candidate.key());
-            if (failures != null && failures.retryAt(job.itemRetry()).isAfter(now)) {
+            if (!byHand && failures != null && failures.retryAt(job.itemRetry()).isAfter(now)) {
                 inBackoff++;
                 continue;
             }
@@ -465,7 +518,7 @@ public class JobRunner {
     // ================= Records =================
 
     private void record(UUID runId, JobDefinition<?> job, Instant scheduledTime, Outcome outcome, Long processSeqId,
-        String error, Instant started, ItemCounts items) {
+        String error, Instant started, ItemCounts items, Request request) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("run_id", runId);
         row.put("job_name", job.name());
@@ -476,6 +529,10 @@ public class JobRunner {
         row.put("error", error);
         row.put("started_time", started);
         row.put("finished_time", now());
+        if (request != null) {
+            row.put("requested_by", request.requestedBy());
+            row.put("request_seq_id", request.requestSeqId());
+        }
         if (items != null) {
             row.put("items_selected", items.selected());
             row.put("items_succeeded", items.succeeded());

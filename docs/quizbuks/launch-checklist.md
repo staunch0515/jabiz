@@ -75,7 +75,7 @@
 - [ ] **备份已测试**：WAL 归档与每日基础备份在运行，恢复演练（`operations.md` §2.4）做过一次并记录了 RTO 与 RPO；文件卷有备份
 - [ ] **监控与告警已上线**（`operations.md` §5）：OTLP 已接入，健康、准入与提交 503、核对差异、转账失败、Webhook 被拒、分录导出被拒、备份与磁盘的告警都已配置并试发过一次；告警送达值班的人
 - [ ] 首次启动（`operations.md` §3）完成：`QB_SETUP` 的提案已发布，科目映射已设（含 Q87 的 `qb.journal.account.2160 / 1130 / 4120 / 2150`），审批规则已发布（含 `qb.fee-request.review`）
-- [ ] **IP 地址库**（F-S11，`operations.md` §7.22）：DB-IP Lite 的 CSV 已放进卷 `geoip`、`.env` 设了 `JABIZ_GEOIP_DATABASE`（正式模式下不设即启动失败），每月更新排进值班表；从中国大陆与日本的网络核对过 `/api/client/region`；`qb.video.mainland-accessible-sites` 已发布；隐私政策含"按 IP 判断所在地区"与 DB-IP 署名的版本已发布
+- [ ] **IP 地址库**（F-S11，`DEPLOY.md`"3c"、`operations.md` §7.24）：DB-IP Lite 的 CSV 已放进卷 `geoip`、`.env` 设了 `JABIZ_GEOIP_DATABASE`（正式模式下不设即启动失败），每月更新排进值班表；从中国大陆与日本的网络核对过 `/api/client/region`；`qb.video.mainland-accessible-sites` 已发布；隐私政策含"按 IP 判断所在地区"与 DB-IP 署名的版本已发布
 - [ ] 值班与联系方式：Stripe 支持、邮件服务商、数据库托管方
 - [ ] 本清单与 `operations.md` 中的步骤由将要值班的人读过
 

@@ -104,3 +104,13 @@
 14. 获客页的总部 `DIRECT` 可写（`ProspectPage`、`ProspectSettingsPage`、`prospect-scope.ts`、`prospect-api.ts`）｜总部在平台管理系统中自己获客｜总部只读、按运营商筛选，获客在运营商管理系统。
 15. 菜单 `AX/index.tsx` 的"总部内容"：审核、发起方主页与商品、举报、兑换、数字奖品、奖励方式、获客移到运营商管理系统（搬移）。
 16. e2e 的入驻与发布审核改由运营商成员决定。
+
+## 7. F-S1c 改派时移动待审的审批（平台 17zo，决策 D76）
+
+答复 2 的过渡限制（有待审审批即 422 `QB_SPONSOR_REVIEW_PENDING`）在平台的 `APPROVAL_SCOPE_MOVE` 合入后去掉。
+
+- `QB_SPONSOR_OPERATOR_ASSIGN`：在原有的一条 `QueryEntities.all` 中读该发起方作为准备人、范围名 `operator`、`PENDING` 的审批请求（至多 500 + 1）；改派之后以 `CallProcess.when` 运行 `APPROVAL_SCOPE_MOVE`（请求按（主题，对象）去重，待办随请求移动，原因即改派的理由）。已批准的请求不移动：其结果由与运营商无关的审批事件应用，过去批准的又很多。超过 500 个即 422 `QB_SPONSOR_REVIEW_PENDING`（文案改为"一次移动不了这么多"）。
+- 权限：平台要求调用者另持有 `approval.scope.move`（不是受保护的权限）；`QbRoles` 把它加给持有 `qb.admin.operators.write` 的超级管理员。已有安装执行一次 `QB_SETUP` 补上。
+- 举报与数字奖品争议的待办照旧经 `OperatorHandover`。获客认领（`QB_PROSPECT_CLAIM`，由发起方本人运行）的"有待审审批即不改派"不变：放宽它要把 `approval.scope.move` 给发起方角色，需要另行决定。
+- 测试：`OperatorsEverywhereIT.aSponsorWaitingForAReviewIsMovedWithItAndHearsOfTheMove`（缺 `approval.scope.move` 即 403、改派后请求与待办的范围值是新运营商、新运营商的成员能决定）；`QbRolesTest`。
+

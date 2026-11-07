@@ -125,6 +125,7 @@ LoadEntity(order) → LoadEntity(stock) → ComputeStep(扣减库存、计算金
 - **取消作业**：业务流程以平台步骤 `CancelExternalJob.of(作业类型, ctx -> 作业号)[.ifOpen()]` 取消自己类型、由操作人开始的作业（流程自己的权限；其他类型、别人的与不存在同一个 404；
   `.requestedBy(…)` 指明所有人，`.anyRequester()` 须显式；与流程同一事务），类型的 `onCancelled` 流程在作业结束后收到 `ExternalJobCancellation`（D52 第 2 条，11 §4a）。
   一个操作可能结束几种作业时用一个步骤 `CancelExternalJob.of(List.of(类型甲, 类型乙), ctx -> 作业号)`（16w-1），不为每种类型各写子流程。
+- **按链接取图片**（D75，14 §12）：不是流程步骤，下载从不在业务事务中进行：页面经 `POST /api/files/fetch`，外部作业的处理器经 `ExternalJobContext.remoteImages()`（同样的 SSRF 规则与限流），再照输出文件登记。
 - **暂停作业类型**：要以业务开关停下某类外部调用（如 AI 生成），作业类型声明 `.enabledBy("参数键")`（布尔业务参数，列入 `ControlledParams` 以四眼修改），
   不在处理器或流程中自己判断开关：执行器只在参数此刻为 `true` 时领取，暂停时作业等待而不用掉尝试，`StartExternalJob` 照常登记，执行中的尝试照常结束（D52 第 4 条，11 §4a）。
   阻塞步骤的同步调用没有这样的开关：需要时流程以 `LoadParams` 读参数并 `ctx.reject(...)`。

@@ -21,7 +21,7 @@
 | `SPRING_R2DBC_URL` / `_USERNAME`、`SPRING_FLYWAY_URL` / `_USER`、`DB_PASSWORD`（或 `SPRING_R2DBC_PASSWORD` / `SPRING_FLYWAY_PASSWORD`） | 是 | 数据库 | 换密码：先在库中加新密码可用的窗口（`ALTER ROLE`），改环境变量、滚动重启 | 连不上库，启动失败 |
 | `JABIZ_ERASURE_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD` | 开启账号删除时（平台 17i：账号删除的申请入口 `account-deletion`）；否则可不设 | `deploy/quizbuks/server/create-maintenance-login.sh <库名>` 的输出（`DEPLOY.md`"1a"）：**R2DBC** URL（`r2dbc:postgresql://…`，与 `SPRING_R2DBC_URL` 相同，**不是** Flyway 的 JDBC URL）与一个单独的维护登录（属于角色 `jabiz_maintenance`；应用自己的登录绝不能属于它） | 再运行一次脚本即给同一登录换新密码，改 `.env` 后重新部署 | 不设：抹除账号照常完成，个人信息的清除 422 `ERASURE_PURGE_UNAVAILABLE`，有入口开启账号删除时启动失败。写成 JDBC 格式：启动失败，检查报一行 `ERASURE \| jabiz.erasure.datasource.url`（平台 17q 之前是一大段堆栈，部署回滚） |
 | `QB_APP_ACCOUNT_DELETION` / `QB_SPONSOR_ACCOUNT_DELETION` | 学者的设为 `true` 是上架 App Store 与 Google Play 的前提（Q71）；发起方的可选（Q72） | 设为 `true` 即开启该入口的账号删除：App 与发起方页面的账户页出现"删除账号"，学者另有不装 App 的申请页 `/taker/delete-account` | — | 缺省 `false`：没有删除入口。开启而没有上一行的维护连接：启动失败 |
-| `JABIZ_GEOIP_DATABASE` | 正式模式必需（F-S11） | IP 地址库文件的路径（DB-IP "IP to Country Lite" 的 CSV，可为 `.gz`；服务器上放在卷 `geoip`，`/var/lib/jabiz/geoip/…`，§7.22） | 每月换文件（同一路径覆盖即可，平台一分钟内读入新文件，无需重启；新文件读不懂即继续用旧的） | 正式模式下启动失败（`QUIZBUKS \| jabiz.geoip.database`），其他模式警告：所有地址查不到、按 `qb.region.unknown-ip-country`（缺省中国大陆）处理，含境外视频的发布谁也不能答。设了而读不了：启动失败（`GEOIP`）。文件旧于 `JABIZ_GEOIP_MAX_AGE`（缺省 45 天）：启动检查与每日检查告警 |
+| `JABIZ_GEOIP_DATABASE` | 正式模式必需（F-S11） | IP 地址库文件的路径（DB-IP "IP to Country Lite" 的 CSV，可为 `.gz`；服务器上放在卷 `geoip`，`/var/lib/jabiz/geoip/…`，§7.24） | 每月换文件（同一路径覆盖即可，平台一分钟内读入新文件，无需重启；新文件读不懂即继续用旧的） | 正式模式下启动失败（`QUIZBUKS \| jabiz.geoip.database`），其他模式警告：所有地址查不到、按 `qb.region.unknown-ip-country`（缺省中国大陆）处理，含境外视频的发布谁也不能答。设了而读不了：启动失败（`GEOIP`）。文件旧于 `JABIZ_GEOIP_MAX_AGE`（缺省 45 天）：启动检查与每日检查告警 |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后必需 | 代理的地址或网段 | 代理变化时 | 登录记录的 IP 都是代理的；入站 Webhook 按地址的限流把 Stripe 全部投递算成一个客户端（每分钟 120 次） |
 | `JABIZ_REPORTS_PDF_FONTS` | 镜像已设 | 镜像中的 IPA Gothic、Droid Sans Fallback | — | 镜像外运行时收据与月报的中日文为 `?`；设了读不到的文件即启动失败 |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 建议 `ecs` | — | — | 文本日志 |
@@ -307,7 +307,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 发起方分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
 | 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
-| 境外视频（F-S11，§7.22） | `jabiz.job.run{job="qb.region-check"|"qb.region-refusals"}`；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}`；待办 `qb.region-check`（权限 `qb.admin.region.read`）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频） |
+| 境外视频（F-S11，§7.24） | `jabiz.job.run{job="qb.region-check"|"qb.region-refusals"}`；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}`；待办 `qb.region-check`（权限 `qb.admin.region.read`）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频） |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
 
 日志：结构化 JSON（`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`）；`quizbuks: WARNING`、`Platform check failed`、`Inbound webhook request of … rejected` 作为日志告警。日志与追踪中不应出现密钥、令牌与原始卡信息（平台已遮蔽；发现即视为缺陷）。
@@ -611,7 +611,7 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
 - 通行密钥登录算两个因素：要求二次验证的管理员与运营商可以只用它登录。封禁与运营商成员关系的检查照旧。
 - 商店 App（iOS / Android 外壳）暂未开启：外壳中的网页暂时不能用通行密钥（需要 `apple-app-site-association` 的 `webcredentials` 与 `assetlinks.json` 的登录凭据授权，另立阶段）。
 
-### 7.22 含境外视频的发布与中国大陆（F-S11）
+### 7.24 含境外视频的发布与中国大陆（F-S11）
 
 含有中国大陆无法播放的视频（YouTube 等）的发布，不能从中国大陆的 IP 地址作答（`docs/quizbuks/plans/impl/F-S11.md`）。判断在开始答题时由服务端做（422 `QB_PUBLICATION_REGION_VIDEO`），
 首页、发起方主页与分享页只是按页面问到的地区隐藏或说明。地区只按请求的 IP 地址（平台 D74 的 `ClientCountry`，可信代理 `JABIZ_TRUSTED_PROXIES` 之后的地址），与资料中的国家无关；地区定向、人数估算与受众规则费仍按资料中的国家（A3-19）。

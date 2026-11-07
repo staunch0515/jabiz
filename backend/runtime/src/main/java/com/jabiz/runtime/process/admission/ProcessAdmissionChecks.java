@@ -8,6 +8,7 @@ import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.process.ProcessChecks;
 import com.jabiz.runtime.process.ProcessRegistry;
 import com.jabiz.runtime.web.ProcessRateLimitProperties;
+import com.jabiz.runtime.web.ProcessRateLimits;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -31,7 +32,8 @@ import java.util.TreeSet;
  *       {@code max-waiting} positive;</li>
  *   <li>a rate limit names a registered process of the process catalog (not {@code internal()},
  *       {@code entryOnly()} or {@code subProcessOnly()}: those never come through the process API), with positive
- *       values and at least one bucket.</li>
+ *       values and at least one bucket; {@code FILE_FETCH}, the downloads from links (no process), takes per-user,
+ *       per-host and per-instance only, and per-host is for it alone (decision D75).</li>
  * </ul>
  */
 @Component
@@ -133,8 +135,18 @@ public class ProcessAdmissionChecks implements PlatformCheck {
             String location = "jabiz.process.rate-limits." + entry.getKey();
             ProcessRateLimitProperties.Limit limit = entry.getValue();
             var found = registry.findLatest(entry.getKey());
-            if (found.isEmpty()) {
+            boolean fetch = ProcessRateLimits.FILE_FETCH.equals(entry.getKey());
+            if (fetch) {
+                // Not a process: the downloads from links (decision D75), per user, host and instance only.
+                if (limit.perAddress() != null || limit.perTenant() != null || limit.perVisitor() != null) {
+                    problems.add(error(location, ProcessRateLimits.FILE_FETCH + " counts per-user, per-host and"
+                        + " per-instance only (decision D75)"));
+                }
+            } else if (found.isEmpty()) {
                 problems.add(error(location, "names no registered process"));
+            } else if (limit.perHost() != null) {
+                problems.add(error(location, "per-host counts the downloads of " + ProcessRateLimits.FILE_FETCH
+                    + " only (decision D75)"));
             } else if (!found.get().listed() && found.get().access() != ProcessAccess.APP_PROXY) {
                 problems.add(error(location, entry.getKey() + " is " + found.get().access() + " (decision D41): "
                     + "it never comes through the process API or an app proxy, which is all a rate limit counts"));
@@ -148,15 +160,16 @@ public class ProcessAdmissionChecks implements PlatformCheck {
                     + " and per-visitor (decision D60)"));
             }
             if (limit.perUser() == null && limit.perAddress() == null && limit.perInstance() == null
-                && limit.perTenant() == null && limit.perVisitor() == null) {
-                problems.add(error(location, "declares none of per-user, per-address, per-instance, per-tenant and"
-                    + " per-visitor"));
+                && limit.perTenant() == null && limit.perVisitor() == null && limit.perHost() == null) {
+                problems.add(error(location, "declares none of per-user, per-address, per-instance, per-tenant,"
+                    + " per-visitor and per-host"));
             }
             positive(location + ".per-user", limit.perUser(), problems);
             positive(location + ".per-address", limit.perAddress(), problems);
             positive(location + ".per-instance", limit.perInstance(), problems);
             positive(location + ".per-tenant", limit.perTenant(), problems);
             positive(location + ".per-visitor", limit.perVisitor(), problems);
+            positive(location + ".per-host", limit.perHost(), problems);
             if (limit.period().isNegative() || limit.period().isZero()) {
                 problems.add(error(location + ".period", "must be positive, not " + limit.period()));
             }

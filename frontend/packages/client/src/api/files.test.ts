@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchFileContent, fileNameOf, formatBytes, previewVariant, uploadFile } from './files'
+import { fetchFileContent, fetchFileFromLink, fileNameOf, formatBytes, previewVariant, uploadFile } from './files'
 import { ApiError } from './problem'
 import { session } from './session'
 
@@ -37,6 +37,30 @@ describe('file API', () => {
     expect(error).toBeInstanceOf(ApiError)
     expect((error as ApiError).violations.map((v) => v.ruleCode)).toEqual(['FILE_TYPE_NOT_ALLOWED'])
     expect((error as ApiError).display).toBe('Not accepted.')
+  })
+
+  it('asks the server to fetch an image from a link and reports its refusal', async () => {
+    session.store('access-1', 'refresh-1')
+    const fetch = vi.fn(async (path: string, init: RequestInit) => {
+      expect(init.method).toBe('POST')
+      expect(path).toBe('/api/files/fetch?policy=commerce.image')
+      expect(new Headers(init.headers).get('Authorization')).toBe('Bearer access-1')
+      expect(new Headers(init.headers).get('Content-Type')).toBe('application/json')
+      expect(JSON.parse(init.body as string)).toEqual({ url: 'https://images.example.com/a.jpg' })
+      return Response.json({ fileId: 'f-2', policy: 'commerce.image', contentType: 'image/jpeg', sizeBytes: 9, variants: [] }, { status: 201 })
+    })
+    vi.stubGlobal('fetch', fetch)
+    expect((await fetchFileFromLink('commerce.image', 'https://images.example.com/a.jpg')).fileId).toBe('f-2')
+
+    vi.stubGlobal('fetch', async () =>
+      Response.json(
+        { detail: 'refused', violations: [{ field: 'url', ruleCode: 'FILE_FETCH_ADDRESS_NOT_PUBLIC', message: 'Not public.' }] },
+        { status: 422 },
+      ),
+    )
+    const error = await fetchFileFromLink('commerce.image', 'https://10.0.0.1/a.jpg').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).violations.map((v) => v.ruleCode)).toEqual(['FILE_FETCH_ADDRESS_NOT_PUBLIC'])
   })
 
   it('reads contents and variants', async () => {

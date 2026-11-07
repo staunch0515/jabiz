@@ -300,6 +300,21 @@ class ProtectedGrantIT extends SecurityItSupport {
         assertThat(assignments(user, role)).hasSize(1);
     }
 
+    /** Running jobs again by hand runs their processes as the system (decision D77): protected by default. */
+    @Test
+    void aRoleGivingJobRunWaitsForAnotherAdministrator() {
+        String user = bareUser("operator");
+        String role = createRole(unique("RERUN"), "job.run", "job.read");
+        Map<String, Object> asked = assignRole(user, role);
+        assertThat(asked).containsEntry("status", "PENDING").containsEntry("approval", "PENDING");
+        assertThat(assignments(user, role)).isEmpty();
+        assertThat(change(asked.get("changeId"))).containsEntry("gained", "job.run");
+
+        approve(asked, adminTwo);
+        assertThat(assignments(user, role)).hasSize(1);
+        assertThat(change(asked.get("changeId"))).containsEntry("status", "APPLIED");
+    }
+
     @Test
     void anAdministratorHoldingEverythingTheChangeGivesMayApprove() {
         String user = bareUser("clerk");
