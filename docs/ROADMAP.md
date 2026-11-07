@@ -5310,6 +5310,19 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **17zz 状态**：📝 待评审（分支 `1.3/phase-17zz-admission-handover`）。
 
+### 17zz2 公开计数器：以引用为主键的普通表，键按 uuid 绑定（2026-11-07，S3 报告）
+
+**缘由**：计数器的键是普通表的主键、而该主键是对只追加实体的引用时（QuizBuks 的 `QbPublicationCard.publicationId`，列 `uuid`），`QueryCompiler` 对主键只按本实体规整（普通表的标识是文本），键以文本绑定到 `uuid` 列：`POST /api/public/counters/…` 答 500（`operator does not exist: uuid = character varying`）。
+
+| # | 内容 |
+|---|---|
+| 17zz2-1 | `QueryCompiler.coerce`：主键同时是引用时，再按被引用实体规整（只追加实体即 `UUID`），与其他引用字段一致；非法的值照旧是 `INVALID_VALUE`（计数器把它当作不可见的键）。同样修正了数据视图按这类主键筛选、读取时的绑定 |
+| 17zz2-2 | 测试：`PublicCounterReferenceKeyIT`（测试迁移 `V1016__it_product_card.sql`：以商品编号为主键的普通表与公开视图、计数器；修改前 500，修改后两次浏览计 2、不存在的键不计）；`TemporalQueryCompilerTest` 新例（按 `UUID` 绑定、非法值拒绝、不认识被引用实体时照旧）。`PublicCounterIT`、`PublicAccessIT`、`DatasetEntityManagerIT`、`EntryScopeIT` 与 core 全部照旧通过 |
+
+**验收**：以引用为主键的普通表上的计数器正常计数（复现测试修改前失败、修改后通过）。
+
+**17zz2 状态**：📝 待评审（分支 `1.3/phase-17zz2-counter-uuid-key`）。
+
 ### 17zz3 备份工具的平台部分：pgBackRest 恢复演练与只检查规则的设置文件（2026-11-07，QuizBuks 备份）
 
 **缘由**：需求方定了 pgBackRest + Cloudflare R2 的备份（应用分支 `deploy/quizbuks/backup`）。平台的演练脚本只接受手写的恢复命令；在测试环境演练时发现，恢复出的副本继承了 `archive_mode=on`，会把自己的 WAL 推进生产的仓库（演练中只因数据目录不同而失败；容器中目录相同，就会推进去）。备份的设置文件不是应用的设置，`env-check` 却总套平台的规则。

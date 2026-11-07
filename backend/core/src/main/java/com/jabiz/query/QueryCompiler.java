@@ -776,7 +776,13 @@ public class QueryCompiler {
         try {
             Object coerced = FieldValueCoercer.coerce(fd, value, false);
             if (fd.name().equals(def.primaryKey)) {
-                return def.normalizeId(coerced);
+                Object id = def.normalizeId(coerced);
+                // A primary key that is a reference (an ordinary table identified by an append-only entity's id)
+                // holds the target's ids: a uuid column, bound as one (ROADMAP 17zz2).
+                if (fd.kind() instanceof SemanticKind.Reference ref) {
+                    return entities.apply(ref.targetEntity()).map(target -> target.normalizeId(id)).orElse(id);
+                }
+                return id;
             }
             if (fd.kind() instanceof SemanticKind.Reference ref) {
                 return entities.apply(ref.targetEntity()).map(target -> target.normalizeId(coerced)).orElse(coerced);
