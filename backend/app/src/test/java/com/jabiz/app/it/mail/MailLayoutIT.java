@@ -73,7 +73,7 @@ class MailLayoutIT extends SecurityItSupport {
         }
     }
 
-    private static final String NEWS = "it.news";
+    private static final String NEWS = "news";
 
     @Autowired
     OutboxDeliverer deliverer;
@@ -202,6 +202,7 @@ class MailLayoutIT extends SecurityItSupport {
 
     @Test
     void aLayoutOfItsOwnOnlyThroughAControlledChangeAnotherPersonPublishes() {
+        SqlStatementLog.clear();
         // The controlled change's own permissions are not enough, nor is an unverified address or no second factor.
         post("/api/processes/CONTROL_CHANGE_PROPOSE/latest", TestTokens.bearer(jwt, "it-layout-outsider",
             ApprovalPermissions.CONTROL_PROPOSE), proposal("ja", "Shop", "", "")).expectStatus().isForbidden();
@@ -249,13 +250,24 @@ class MailLayoutIT extends SecurityItSupport {
         assertThat(layoutVersions(back.to())).containsExactly((Object) null);
 
         // No other way writes a layout: the dataset API is refused.
+        long stored = count("sys_mail_layout_version");
         post("/api/datasets/" + MailLayoutEntities.DATASET + "/commit", admin(), Map.of("changes", List.of(Map.of(
             "action", "INSERT", "attributes", Map.of("locale", "en", "kind", "CUSTOM", "displayName", "x",
                 "defaultHash", "x"))))).expectStatus().value(status -> assertThat(status).isBetween(400, 499));
-        assertThat(query("SELECT count(*) AS n FROM sys_mail_layout_version WHERE locale = 'en'").getFirst()
-            .get("n")).isEqualTo(0L);
+        assertThat(count("sys_mail_layout_version")).isEqualTo(stored);
         // Nor does the reset write a layout of its own for a language that has none.
         assertThat(output(reset("zh", null, 200))).containsEntry("kind", "DEFAULT").containsEntry("versionNo", null);
+
+        // The layouts are only appended.
+        assertThat(SqlStatementLog.STATEMENTS).isNotEmpty().noneMatch(sql -> sql.matches(
+            "(?is).*(UPDATE|DELETE FROM)\\s+sys_mail_layout_version\\b.*"));
+        assertThat(query("SELECT version_no, layout_kind FROM sys_mail_layout_version WHERE locale = 'ja'"
+            + " ORDER BY version_no")).extracting(row -> row.get("version_no") + ":" + row.get("layout_kind"))
+            .containsExactly("1:CUSTOM", "2:DEFAULT");
+        assertThatThrownBy(() -> execute("UPDATE sys_mail_layout_version SET display_name = 'x' WHERE locale = 'ja'"))
+            .hasMessageContaining("append-only");
+        assertThatThrownBy(() -> execute("DELETE FROM sys_mail_layout_version WHERE locale = 'ja'"))
+            .hasMessageContaining("append-only");
     }
 
     @Test
@@ -291,9 +303,9 @@ class MailLayoutIT extends SecurityItSupport {
         MailMessage document = awaitSentTo(contact).getFirst();
         assertThat(document.attachments()).hasSize(1);
         assertThat(query("SELECT layout_version_no FROM sys_document_delivery WHERE run_id = ?::uuid",
-            sent.get("runId"))).extracting(row -> row.get("layout_version_no")).hasSize(1).first()
-            .satisfies(version -> assertThat(document.htmlBody()).contains(version == null ? "Jabiz" : "Example Shop"));
-        assertThat(document.htmlBody()).startsWith("<!DOCTYPE html>");
+            sent.get("runId"))).extracting(row -> row.get("layout_version_no")).containsExactly(1);
+        assertThat(document.htmlBody()).startsWith("<!DOCTYPE html>").contains("Example Shop");
+        assertThat(document.body()).startsWith("Example Shop\n\n").contains("\n-- \nExample Shop Ltd");
     }
 
     private static List<MailMessage> awaitSentTo(String address) throws InterruptedException {
@@ -392,24 +404,6 @@ class MailLayoutIT extends SecurityItSupport {
         assertThat(beans.getBeansOfType(PlatformCheck.class).values().stream()
             .flatMap(check -> check.check().stream())
             .filter(problem -> problem.location().startsWith("jabiz.mail.layout"))).isEmpty();
-    }
-
-    @Test
-    void theLayoutsAreOnlyAppended() {
-        SqlStatementLog.clear();
-        publish("ja", "追加テスト", "");
-        reset("ja", currentVersion("ja"), 200);
-        assertThat(SqlStatementLog.STATEMENTS).isNotEmpty().noneMatch(sql -> sql.matches(
-            "(?is).*(UPDATE|DELETE FROM)\\s+sys_mail_layout_version\\b.*"));
-        assertThatThrownBy(() -> execute("UPDATE sys_mail_layout_version SET display_name = 'x' WHERE locale = 'ja'"))
-            .hasMessageContaining("append-only");
-        assertThatThrownBy(() -> execute("DELETE FROM sys_mail_layout_version WHERE locale = 'ja'"))
-            .hasMessageContaining("append-only");
-    }
-
-    private static Integer currentVersion(String locale) {
-        return ((Number) query("SELECT max(version_no) AS v FROM sys_mail_layout_version WHERE locale = ?", locale)
-            .getFirst().get("v")).intValue();
     }
 
     private static long count(String table) {

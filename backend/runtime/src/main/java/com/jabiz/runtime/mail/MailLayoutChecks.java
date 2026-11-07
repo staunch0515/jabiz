@@ -8,6 +8,9 @@ import com.jabiz.mail.MailTemplate;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
 import com.jabiz.runtime.security.SignInEntries;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.EnumerablePropertySource;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -23,7 +26,8 @@ import java.util.TreeMap;
  *   <li>an error for a default layout ({@code jabiz.mail.layout.<language>.*}) that fails the {@link MailLayoutRules}
  *       or whose footer names an entry ({@code {entryUrl.<entry>}}) that is not configured: configuration, so the
  *       application must not start with it;</li>
- *   <li>an error for a default layout of a language the application does not have (a misspelt key);</li>
+ *   <li>a warning for a default layout of a language the application does not have (a misspelt key, or a language
+ *       the application left out with {@code languages(…)}): it is not used;</li>
  *   <li>a warning for a stored layout that no longer passes the rules (the allowed hosts were narrowed since): mail
  *       is sent on the default, so the application starts. Stored layouts are data, read blocking on the startup
  *       thread as the other data checks do.</li>
@@ -37,10 +41,10 @@ class MailLayoutChecks implements PlatformCheck {
     private final MailLayouts layouts;
     private final MessageCatalog messages;
     private final SignInEntries entries;
-    private final org.springframework.core.env.Environment environment;
+    private final Environment environment;
 
     MailLayoutChecks(MailLayouts layouts, MessageCatalog messages, SignInEntries entries,
-        org.springframework.core.env.Environment environment) {
+        Environment environment) {
         this.layouts = layouts;
         this.messages = messages;
         this.entries = entries;
@@ -63,8 +67,8 @@ class MailLayoutChecks implements PlatformCheck {
         }
         for (String language : configuredLanguages()) {
             if (messages.supportedLocales().stream().noneMatch(locale -> locale.getLanguage().equals(language))) {
-                problems.add(CheckProblem.error(MailChecks.CATEGORY, MailLayouts.PREFIX + language,
-                    "is a mail layout for a language the application does not have"));
+                problems.add(CheckProblem.warning(MailChecks.CATEGORY, MailLayouts.PREFIX + language,
+                    "is a mail layout for a language the application does not have; it is not used"));
             }
         }
         Map<String, MailLayouts.Stored> stored = layouts.allStored().block(TIMEOUT);
@@ -90,9 +94,9 @@ class MailLayoutChecks implements PlatformCheck {
     /** The languages {@code jabiz.mail.layout.<language>.*} is configured for. */
     private List<String> configuredLanguages() {
         List<String> found = new ArrayList<>();
-        if (environment instanceof org.springframework.core.env.ConfigurableEnvironment configurable) {
+        if (environment instanceof ConfigurableEnvironment configurable) {
             configurable.getPropertySources().forEach(source -> {
-                if (source instanceof org.springframework.core.env.EnumerablePropertySource<?> enumerable) {
+                if (source instanceof EnumerablePropertySource<?> enumerable) {
                     for (String name : enumerable.getPropertyNames()) {
                         if (name.startsWith(MailLayouts.PREFIX)) {
                             String rest = name.substring(MailLayouts.PREFIX.length());

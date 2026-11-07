@@ -13,7 +13,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["preview_2"];
+        post: operations["preview_3"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1597,7 +1597,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["preview_1"];
+        post: operations["preview_2"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1707,9 +1707,41 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        get: operations["list_6"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mail/layouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get: operations["list_5"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mail/layouts/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preview_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2853,6 +2885,17 @@ export interface components {
         LabelsRequest: {
             ids?: unknown[];
         };
+        LanguageLayout: {
+            defaultHash?: string;
+            defaultLayout?: components["schemas"]["MailLayout"];
+            layout?: components["schemas"]["MailLayout"];
+            locale?: string;
+            problems?: components["schemas"]["Violation"][];
+            /** @enum {string} */
+            state?: "DEFAULT" | "CUSTOM" | "DEFAULT_UPDATED" | "INVALID";
+            /** Format: int32 */
+            versionNo?: number;
+        };
         LanguageTexts: {
             body?: string;
             defaultBody?: string;
@@ -2861,10 +2904,18 @@ export interface components {
             locale?: string;
             problems?: components["schemas"]["Violation"][];
             /** @enum {string} */
-            state?: "DEFAULT" | "CUSTOM" | "DEFAULT_UPDATED" | "INVALID";
+            state?: "DEFAULT" | "CUSTOM" | "DEFAULT_UPDATED" | "INVALID" | "UNAPPROVED";
             subject?: string;
             /** Format: int32 */
             versionNo?: number;
+        };
+        LayoutsResponse: {
+            allowedLinkHosts?: string[];
+            languages?: components["schemas"]["LanguageLayout"][];
+            /** Format: int32 */
+            maxFooterLength?: number;
+            /** Format: int32 */
+            maxLineLength?: number;
         };
         LinkResult: {
             provider?: string;
@@ -2887,6 +2938,13 @@ export interface components {
             effective?: string;
             languages?: string[];
             locale?: string;
+        };
+        MailLayout: {
+            displayName?: string;
+            empty?: boolean;
+            footer?: string;
+            logoAlt?: string;
+            logoUrl?: string;
         };
         MailPreferences: {
             templates?: components["schemas"]["TemplatePreference"][];
@@ -3426,7 +3484,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    preview_2: {
+    preview_3: {
         parameters: {
             query?: never;
             header?: never;
@@ -5887,7 +5945,7 @@ export interface operations {
             };
         };
     };
-    preview_1: {
+    preview_2: {
         parameters: {
             query?: never;
             header?: never;
@@ -6045,7 +6103,7 @@ export interface operations {
             };
         };
     };
-    list_5: {
+    list_6: {
         parameters: {
             query?: never;
             header?: never;
@@ -6063,6 +6121,50 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+        };
+    };
+    list_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LayoutsResponse"];
+                };
+            };
+        };
+    };
+    preview_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewResponse"];
                 };
             };
         };

@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -42,7 +43,7 @@ class QueueTestMail implements StepHandler<NoMetadata, ProcessContext> {
     /** Context key of a draft layout to send on ({@link MailLayout}); absent: the layout in effect. */
     static final String DRAFT_LAYOUT = "testDraftLayout";
     /** The processes whose messages are rendered when queued; the delivery sends no other such message as it is. */
-    static final java.util.Set<String> PROCESSES = java.util.Set.of(MailTextProcesses.TEST_SEND,
+    static final Set<String> PROCESSES = Set.of(MailTextProcesses.TEST_SEND,
         MailLayoutProcesses.TEST_SEND);
 
     private final MailTexts texts;

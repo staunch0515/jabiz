@@ -87,7 +87,8 @@ class MailLayoutControlTarget implements ControlTarget {
         if (based != null) {
             stored.put(BASED_ON, based.versionNo());
         }
-        return new Proposal(based == null ? null : based.id(), stored);
+        // Shown and filtered by in the list of changes (17zn): the language whose layout changes.
+        return new Proposal(based == null ? null : based.id(), stored, (String) stored.get(MailLayoutEntities.LOCALE));
     }
 
     @Override

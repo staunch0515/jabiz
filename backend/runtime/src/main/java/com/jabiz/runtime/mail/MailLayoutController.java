@@ -5,6 +5,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.mail.MailLayout;
+import com.jabiz.mail.MailLayoutRules;
 import com.jabiz.mail.MailRenderer;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.runtime.context.RequestContexts;
@@ -89,7 +90,7 @@ class MailLayoutController {
                     languages.add(language(locale, stored.get(locale.getLanguage())));
                 }
                 return new LayoutsResponse(layouts.limits().maxFooterLength(),
-                    com.jabiz.mail.MailLayoutRules.MAX_LINE,
+                    MailLayoutRules.MAX_LINE,
                     layouts.limits().links().allowedLinkHosts().stream().sorted().toList(), List.copyOf(languages));
             });
         });
