@@ -84,7 +84,7 @@
 | `QB_STRIPE_PLACEHOLDERS` | 服务器上 `false` | compose 缺省 `true`（只在测试模式填占位） | — | 用本仓库 compose 而没设 `false` 时，测试模式缺的密钥被填成占位（告警）而不是启动失败 |
 | `QB_STRIPE_ALLOW_LIVE_WITH_TEST_DATA` | **不设** | — | — | 缺省 `false`：库中有测试数据时正式模式启动失败（§4） |
 | `ANTHROPIC_API_KEY` | 是（Q8a；Q8b 的封面与 PDF 资料同一把） | Anthropic Console → API Keys：为本部署新建的密钥（建议单独的工作区，在 Console 设工作区的月支出上限作为最后一道防线） | Console 新建密钥、改环境变量、重启，再删除旧密钥。泄露时立即删除，并先以受控变更关闭 `qb.ai.enabled` | 启动失败（EXTERNAL）；没有密钥时设占位，AI 保持关闭 |
-| `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | 是（S1，QuizBuks for Shopify） | Shopify Partner → 应用 → 客户端凭据（Client ID / Client secret）；staging 与正式各用自己的应用 | 在 Partner Dashboard轮换密钥：新密钥生效后会话令牌与 webhook 都以它签名，先改环境变量并重启（平台的提供方与入站 webhook 都只认一把，S1 不支持两把并存，轮换时有短暂的拒绝） | 启动失败（SECURITY / INBOUND）；还没有 Shopify 应用时设占位（Shopify 从不以它签名，所以不会有店铺登录或 webhook） |
+| `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | 是（S1，QuizBuks for Shopify） | Shopify Partner → 应用 → 客户端凭据（Client ID / Client secret）；staging 与正式各用自己的应用 | 在 Partner Dashboard 轮换密钥：新密钥生效后会话令牌与 webhook 都以它签名，先改环境变量并重启（平台的提供方与入站 webhook 都只认一把，S1 不支持两把并存，轮换时有短暂的拒绝） | 启动失败（SECURITY / INBOUND）；还没有 Shopify 应用时设占位（Shopify 从不以它签名，所以不会有店铺登录或 webhook） |
 
 ### 1.3a 银行转账充值（Q13a，`plans/Q13-bank-transfer.md`）
 
@@ -276,7 +276,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - [ ] `QB_SPONSOR_LINK`、`QB_APP_LINK`、`JABIZ_MAIL_BASE_URL` 都是正式的 `https` 地址；正式域名写进 `tools/quizbuks/stripe-test-mode/production-hosts`
 - [ ] `./gradlew :quizbuks:platformCheck` 以正式的设置（不含密钥值的同形假值）跑一遍；启动日志中没有 `Platform check failed`
 - [ ] 首次启动（§3）完成：两位管理员都有二次验证，提案已发布，开具方与科目映射已设
-- [ ] 小额实测：一位内部发起方用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe Dashboard全额退款，确认扣回；次日核对为 `OK`
+- [ ] 小额实测：一位内部发起方用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe Dashboard 全额退款，确认扣回；次日核对为 `OK`
 - [ ] 资金调度：充值在 Stripe 上几天后才变为可用余额，转账从可用余额转出；定好打开转账前的余额与打款计划
 - [ ] 法务意见允许后，才提出并发布 `qb.transfer.enabled=true`；第一次每日转账（01:07 UTC）后核对每一笔
 
@@ -294,7 +294,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 流程错误 | `jabiz.process{outcome="error", status!="503"}` | 任何流程 5 分钟内 > 0（错误不是业务拒绝）。`outcome="error"` 包括全部 5xx（`PlatformObservations`），其中 503 是过载而不是缺陷，这里除去：排队未获准入（`PROCESS_BUSY`）由"答题过载""提交被拒"两行告警；查询超时（`QUERY_TIMEOUT`）另以 `jabiz.process{status="503"}` 的比率告警（如 5 分钟内 > 1 %） |
 | 核对差异 | 每日核对 `qb.reconcile`：`jabiz.job.run{job="qb.reconcile"}` 的结果；差异本身在 `qb.admin.recon-runs`（`DIFF`）与待办（权限 `qb.reconcile`） | 任务 `FAILED`；核对状态 `DIFF`（用只读账号查询 `qb_recon_run_version` 最新一行的状态，或平台管理系统待办的数量）；连续 26 小时没有新的核对 |
 | 转账失败 | `jabiz.external.job{job_type="qb.stripe.transfer"|"qb.stripe.transfer-check", outcome}`；`jabiz.job.item{job="qb.transfer-run"|"qb.transfer-stale", result}` | `outcome` 为 `FAILED` / `DISCARDED` > 0；`qb.transfer-stale` 的项连续失败；处于 `CHECK` 的转账超过 2 小时（平台管理系统财务页"转账"按状态筛选） |
-| Webhook 被拒 | `jabiz.inbound.receive{provider="stripe"|"stripe-connect", result, reason}`；`jabiz.inbound.rate_limited` | `REJECTED`（`no_match` 签名不符、`too_old`、`malformed` 等）5 分钟内 > 0；`FAILED` > 0；限流 > 0。Stripe Dashboard的端点"失败的投递"同时会发邮件 |
+| Webhook 被拒 | `jabiz.inbound.receive{provider="stripe"|"stripe-connect", result, reason}`；`jabiz.inbound.rate_limited` | `REJECTED`（`no_match` 签名不符、`too_old`、`malformed` 等）5 分钟内 > 0；`FAILED` > 0；限流 > 0。 Stripe Dashboard 的端点"失败的投递"同时会发邮件 |
 | 事件消费 | `jabiz.outbox.delivery{result="FAILED"}` | > 0 持续 15 分钟 |
 | 分录导出被拒 | `jabiz.process{process="QB_JOURNAL_EXPORT", outcome="rejected"}` | 每月导出日 > 0（看错误码，§7.3） |
 | 外部调用 | `jabiz.external.call{service="stripe", outcome}` | `5xx`、`timeout`、`refused` 比率 > 5 % |
@@ -325,9 +325,9 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 ### 7.1 Webhook 签名失败
 
-- **现象**：`jabiz.inbound.receive{result="REJECTED", reason="no_match"}`；Stripe Dashboard该端点的投递 400；充值停在"处理中"、收款账户停在"待开通"。
+- **现象**：`jabiz.inbound.receive{result="REJECTED", reason="no_match"}`； Stripe Dashboard 该端点的投递 400；充值停在"处理中"、收款账户停在"待开通"。
 - **原因**：签名密钥与端点不符（换了端点或滚动了密钥而没改环境；账户端点与 Connect 端点的密钥配反）；`too_old`：服务器时钟偏差或代理延迟太久。
-- **处理**：在 Stripe Dashboard 复制该端点的签名密钥，与环境中的比较（只比较末尾几位）；滚动期间按 §1.3 同时配新旧两个；修正后在 Stripe Dashboard对失败的事件"重新发送"（Stripe 自动重试最多 3 天）。
+- **处理**：在 Stripe Dashboard 复制该端点的签名密钥，与环境中的比较（只比较末尾几位）；滚动期间按 §1.3 同时配新旧两个；修正后在 Stripe Dashboard 对失败的事件"重新发送"（Stripe 自动重试最多 3 天）。
   已过期而未到账的充值由每小时的 `qb.topup-stale` 在支付页过期一小时后向 Stripe 核实入账，不需要手工入账。检查 NTP。
 
 ### 7.2 核对差异
@@ -356,15 +356,15 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 - **现象**：转账停在 `SENDING` 或 `CHECK`；待办"转账结果不明"；`jabiz.external.job{job_type="qb.stripe.transfer"}` 失败。
 - **机制**：结果不明（超时、429、5xx、租约丢失）时进入 `CHECK`、**不冲回**，每小时的 `qb.transfer-stale` 按 `transfer_group = qb-<转账号>` 向 Stripe 查询定论（只有晚于发送结束至少 10 分钟的"没有"才冲正）。
-- **处理**：等下一次 `qb.transfer-stale`（每小时 47 分）；在 Stripe Dashboard按转账组 `qb-<转账号>` 搜索确认；看 `GET /api/external-jobs/{作业号}`（`external-job.read`；没有列表接口）中该作业的状态、尝试次数与最后的错误码。作业号以只读账号按转账号查：`SELECT job_id, job_type, created_time FROM sys_external_job WHERE reference = '<转账号>' ORDER BY job_seq`（发送 `qb.stripe.transfer` 与核实 `qb.stripe.transfer-check` 各有作业）。
-  **不要**在 Stripe Dashboard手工再转一笔或在库中改状态：重复转账只能事后追回。用户因 3 次失败或被撤回而暂停时，财务确认原因后 `QB_TRANSFER_HOLD_RELEASE` 放行。
+- **处理**：等下一次 `qb.transfer-stale`（每小时 47 分）；在 Stripe Dashboard 按转账组 `qb-<转账号>` 搜索确认；看 `GET /api/external-jobs/{作业号}`（`external-job.read`；没有列表接口）中该作业的状态、尝试次数与最后的错误码。作业号以只读账号按转账号查：`SELECT job_id, job_type, created_time FROM sys_external_job WHERE reference = '<转账号>' ORDER BY job_seq`（发送 `qb.stripe.transfer` 与核实 `qb.stripe.transfer-check` 各有作业）。
+  **不要**在 Stripe Dashboard 手工再转一笔或在库中改状态：重复转账只能事后追回。用户因 3 次失败或被撤回而暂停时，财务确认原因后 `QB_TRANSFER_HOLD_RELEASE` 放行。
 - 余额不足（`balance_insufficient`）不是卡住：该笔立即冲正，次日以新转账重试；持续出现说明资金调度不够（§4 最后两条）。
 
 ### 7.5 退款与争议的差额
 
 - **现象**：待办 `REFUND_SHORTFALL` / 争议差额，充值的 `refundShortfall` / `disputeShortfall` 不为 0。
 - **机制**：退款与败诉的争议只能从发起方可用余额扣回（Kudos 已作为奖励付出的部分扣不回），余下记为差额、开待办；**记下后不再自动扣回**。
-- **处理**：财务线下向发起方追收（或核销），在待办中写明处理结果并关闭。退款只能在 Stripe Dashboard发起（QuizBuks 不提供退款流程），发起前先看发起方的可用余额以预估差额。
+- **处理**：财务线下向发起方追收（或核销），在待办中写明处理结果并关闭。退款只能在 Stripe Dashboard 发起（QuizBuks 不提供退款流程），发起前先看发起方的可用余额以预估差额。
   待办 `UNKNOWN_PAYMENT`（退款晚于充值确认且充值当时未入账）须在充值入账后人工对照（README"充值与核对"）。
 
 ### 7.6 提交时过载（503）——已知的上线风险

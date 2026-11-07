@@ -18,6 +18,22 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 | 赠送的平台费额度 | 赠送额度 | 付与クレジット | Granted credit | |
 | AI 的额度 | AI 额度 | AI クレジット | AI credit | |
 
+## 各部分的名字（F-F5b，需求方 2026-11-07）
+
+人读到的文字中不用"后台"（日文不用"管理画面""コンソール"，英文不用 "console" / "Administration" / "back office"）指产品的任何部分。
+
+| 部分 | | 中文 | 日文 | 英文 | 停用 |
+|---|---|---|---|---|---|
+| 发起方一侧（`/sponsor/`） | 作名称（标题、按钮"打开…"） | 答题拼好价发起方 | クイズdeおトク 主催者 | QuizBuks for Sponsors | 发起方后台、商家后台；主催者管理画面、主催者コンソール；Sponsor console |
+| | 在句子中 | 发起方页面 | 主催者ページ | the Sponsor app | |
+| 运营商一侧（`/operator/`） | | 运营商管理系统 | 運営会社管理システム | Operator Management System | 运营商后台；自社の管理画面；back office |
+| 平台管理（`/admin/`） | | 答题拼好价平台管理系统 | クイズdeおトク 管理システム | QuizBuks Management System | 管理后台；管理画面；Administration |
+
+- 名称中的产品名不写死（Q61）：SPA 用 `BRAND.names.<语言>`（如 `${BRAND.names.zh}发起方`、`${BRAND.names.en} for Sponsors`），服务端消息用 `@QB_BRAND_NAME@`，招商网站用 `src/brand.mjs`。中文用中文名"答题拼好价"，不用 QuizBuks。
+- 文档中可省去品牌名，写"平台管理系统"。
+- 其他公司产品自己的叫法照旧："Shopify 后台""Shopify 管理画面"、Google Play Console、Anthropic Console、 Stripe Dashboard 。
+- 用词测试 `terms.test.mjs` 的 `RETIRED_NAMES` 检查这些叫法。
+
 ## 写法
 
 - **英文**：两个称呼当作专有的称呼，首字母大写，写成不随称呼变形的样子："the Sponsor"、"a Taker"、"Sponsors' pages"。动词 sponsor（赞助）照常小写。
@@ -29,4 +45,4 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 
 - QuizBuks for Shopify（`backend/quizbuks-shopify`、`quizbuks-web/shopify*`、`storefront`）：不在首次上线；那里的"商户"指 Shopify 店铺，不是发起方。
 - 发起方自定义称呼（Q91 §0-11 起的付费产品）。
-- 已经由 `QB_SETUP` 建好的角色名（`QbSetupRecord` 只补从未有过的项）：已有安装中的角色名由管理员在后台改一次（正式系统从空开始，不受影响）。
+- 已经由 `QB_SETUP` 建好的角色名（`QbSetupRecord` 只补从未有过的项）：已有安装中的角色名由管理员在平台管理系统中改一次（正式系统从空开始，不受影响）。
