@@ -91,7 +91,7 @@
 - **保留期**：每天的项删掉本人超过 `qb.usage.retention-days` 的行（见 §4）。
 - **删除账号**：`SponsorErasure` 登记 `ErasedEntity.delete(QbUsageDay, "sponsorId")`。
 - **告警**（平台任务的指标，不另写代码）：`jabiz.job.run{job="qb.usage-snapshot", result="FAILED"|"PARTIAL"}`、`jabiz.job.item{job="qb.usage-snapshot", result="FAILED"}`；"当天缺少快照"= 计划时刻后 2 小时内没有成功的运行（`jabiz.job.run` 没有新值），另附只读 SQL（`qb_usage_day` 最大的 `day` 早于今天）。写进 `operations.md` §5 的表与新的 §7.22。
-- **补跑**（`operations.md` §7.22）：快照记的是运行那一刻的占用，只能补跑**当天**（过去的一天补不出当时的数字；月度统计按有快照的天数平均）。测试与开发中以 `JobRunner.run(job, 当天的另一时刻)` 重跑（同一计划时刻只会重放）；生产环境没有手工运行任务的接口，按 §7.22 把 `QB_USAGE_SNAPSHOT_TIME` 临时设到几分钟以后并重启。同一天的行被覆盖、不会重复；越过的消息按 `sourceKey` 不重复。失败的项由平台在之后的运行中重试（记的是那一天）。
+- **补跑**（`operations.md` §7.22）：快照记的是运行那一刻的占用，只能补跑**当天**（过去的一天补不出当时的数字；月度统计按有快照的天数平均）。测试与开发中以 `JobRunner.run(job, 当天的另一时刻)` 重跑（同一计划时刻只会重放）；生产环境在平台管理系统的「定时任务」页补跑当天的计划时刻（平台 17zs，§7.22）；不能选过去某天的时刻（会把今天的占用记到那一天）。同一天的行被覆盖、不会重复；越过的消息按 `sourceKey` 不重复。失败的项由平台在之后的运行中重试（记的是那一天）。
 
 ## 7. 发起方页面（`quizbuks-web/sponsor/src/assets/`）
 
@@ -137,5 +137,5 @@
 - `sys_file` 按上传者读：平台阶段 17zq 加了索引 `sys_file_uploaded_by_idx (uploaded_by, uploaded_time)`（平台迁移 `V62`，已合入 `1.3/quizbuks`），快照模板的 `uploadedBy = :sponsorId` 用它，每项只读本人的文件，不再整表扫描。
 - 快照的数字比实际晚最多一天；页面写明"截至"。
 - 快照经平台的写入路径，每次写入都进只追加的审计（`sys_audit_record`，D27，不能关）：**每个发起方每天 1 条**（当天的一行；同一天重跑且数值有变时另记一条更新，数值没变不写），1000 个发起方约每天 1000 条。
-- 生产环境暂时没有手工运行任务的接口：补跑当天只能临时改快照时刻并重启（`operations.md` §7.22）。平台将提供重跑逐项任务的管理接口（S1，需求方 2026-11-07），届时改写补跑步骤。
+- 补跑只能补当天：在平台管理系统的「定时任务」页选当天的计划时刻（平台 17zs，`operations.md` §7.22）；过去某天补不出当时的占用。
 - 删除的功能：无。
