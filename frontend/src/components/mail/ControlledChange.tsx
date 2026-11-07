@@ -58,6 +58,7 @@ export function PendingChanges({ changes, fields, current, onWithdrawn }: Pendin
                   <DiffView
                     key={field.name}
                     label={field.label}
+                    sides="proposal"
                     older={current[field.name]}
                     newer={change.values[field.name] == null ? '' : String(change.values[field.name])}
                   />

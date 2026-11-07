@@ -90,6 +90,8 @@ export const mailEn = {
     open: 'Open the controlled changes',
     withdraw: 'Withdraw',
     withdrawn: 'The proposal is withdrawn.',
+    added: 'only in the proposal',
+    removed: 'only in the text in effect',
   },
   history: {
     title: 'History',
@@ -234,6 +236,8 @@ export const mailZh: MailTexts = {
     open: '打开受控变更',
     withdraw: '撤回',
     withdrawn: '已撤回提出的修改。',
+    added: '仅在提出的修改中',
+    removed: '仅在现行文字中',
   },
   history: {
     title: '历史',
@@ -376,6 +380,8 @@ export const mailJa: MailTexts = {
     open: '統制変更を開く',
     withdraw: '取り下げ',
     withdrawn: '提案を取り下げました。',
+    added: '提案のみ',
+    removed: '現行の文面のみ',
   },
   history: {
     title: '履歴',

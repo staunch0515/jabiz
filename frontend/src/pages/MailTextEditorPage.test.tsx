@@ -265,4 +265,44 @@ describe('MailTextEditorPage', () => {
     expect(screen.queryByTestId('mail-version-use')).toBeNull()
     expect(screen.getByTestId('mail-insert-orderNo')).toBeDisabled()
   })
+  it('proposes an unapproved text as it is, without an edit', async () => {
+    runProcess.mockResolvedValue({ changeId: 'c-11', status: 'PROPOSED' })
+    show('jabiz.password-reset', 'ja')
+    const submit = await screen.findByTestId('mail-propose-submit')
+    expect(submit).toBeEnabled()
+    const user = userEvent.setup()
+    await user.type(screen.getByTestId('mail-propose-reason'), 'approve the stored text')
+    await user.click(submit)
+    await waitFor(() => expect(runProcess).toHaveBeenCalledWith('CONTROL_CHANGE_PROPOSE', {
+      targetEntity: 'MailText',
+      values: { template: 'jabiz.password-reset', locale: 'ja', subject: '再設定', body: '[こちら]({entryUrl}reset?token={resetToken})' },
+      reason: 'approve the stored text',
+    }))
+  })
+
+  it('saves a text whose default changed unchanged, to confirm it against the new default', async () => {
+    texts = {
+      ...MAIL_TEXTS,
+      templates: (MAIL_TEXTS.templates ?? []).map((template) => template.template !== 'commerce.order-shipped' ? template : {
+        ...template,
+        languages: (template.languages ?? []).map((language) => language.locale !== 'ja' ? language : { ...language, state: 'DEFAULT_UPDATED' as const }),
+      }),
+    }
+    runProcess.mockResolvedValue({ kind: 'CUSTOM', versionNo: 9 })
+    show('commerce.order-shipped', 'ja')
+    const save = await screen.findByTestId('mail-save')
+    expect(save).toBeEnabled()
+    await userEvent.setup().click(save)
+    await waitFor(() => expect(runProcess).toHaveBeenCalledWith('MAIL_TEXT_SAVE', expect.objectContaining({ template: 'commerce.order-shipped', locale: 'ja' })))
+  })
+
+  it('names the sides of a pending change for screen readers as the text in effect and the proposal', async () => {
+    pending = [{ id: 'c-9', attributes: { targetKey: 'jabiz.password-reset [en]', proposedBy: 'u-bob', reason: 'Friendlier tone',
+      status: 'PROPOSED', changeValues: JSON.stringify({ template: 'jabiz.password-reset', locale: 'en', subject: 'Reset it', body: '[Reset]({entryUrl}reset?token={resetToken})' }) } }]
+    show('jabiz.password-reset', 'en')
+    const change = await screen.findByTestId('mail-pending-change')
+    expect(change).toHaveTextContent('only in the proposal: Reset it')
+    expect(change).toHaveTextContent('only in the text in effect: Reset your password')
+    expect(change).not.toHaveTextContent('only now')
+  })
 })

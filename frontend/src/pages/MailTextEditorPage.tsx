@@ -111,6 +111,10 @@ function LanguageEditor({ template, language, draft, onDraft, onReload, maxSubje
   const protectedTemplate = !!template.needsApproval
   const initial = initialDraft(language)
   const dirty = draft.subject !== initial.subject || draft.body !== initial.body
+  // A stored text the page asks to confirm again can be saved (or proposed) unchanged: re-saving a text whose default
+  // changed records that it was checked against the new default; an unapproved text is proposed as it is.
+  const mayResave = !dirty && language.state === 'DEFAULT_UPDATED' && !protectedTemplate
+  const mayProposeUnchanged = !dirty && (language.state === 'UNAPPROVED' || language.state === 'DEFAULT_UPDATED')
   const missing = missingRequired(template.required ?? [], draft)
   const current = inEffect(language)
 
@@ -329,7 +333,7 @@ function LanguageEditor({ template, language, draft, onDraft, onReload, maxSubje
             {mayWrite && (
               <div className="flex flex-wrap gap-2">
                 {!protectedTemplate && (
-                  <Button onClick={() => void save()} disabled={!dirty || busy !== null} data-testid="mail-save">
+                  <Button onClick={() => void save()} disabled={(!dirty && !mayResave) || busy !== null} data-testid="mail-save">
                     {busy === 'save' && <Spinner className="text-current" />}
                     {t('mail.editor.save')}
                   </Button>
@@ -357,7 +361,7 @@ function LanguageEditor({ template, language, draft, onDraft, onReload, maxSubje
                 <AlertDescription className="text-foreground">{t('mail.editor.protected')}</AlertDescription>
               </Alert>
             )}
-            {protectedTemplate && mayPropose && <ProposeForm onPropose={propose} disabled={!dirty} />}
+            {protectedTemplate && mayPropose && <ProposeForm onPropose={propose} disabled={!dirty && !mayProposeUnchanged} />}
             {protectedTemplate && mayWrite && !mayPropose && (
               <p className="text-muted-foreground text-sm">{t('mail.propose.noPermission')}</p>
             )}

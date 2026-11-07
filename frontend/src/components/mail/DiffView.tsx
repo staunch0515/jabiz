@@ -7,6 +7,8 @@ export interface DiffViewProps {
   label: string
   older: string | null | undefined
   newer: string | null | undefined
+  /** What the two sides are, for screen readers: two versions in the history, or the text in effect and a proposal. */
+  sides?: 'history' | 'proposal'
   'data-testid'?: string
 }
 
@@ -14,7 +16,7 @@ export interface DiffViewProps {
  * The lines of one field compared between two versions: removed lines marked "−", added ones "+", each also named
  * for screen readers (not only by colour).
  */
-export default function DiffView({ label, older, newer, 'data-testid': testId }: DiffViewProps) {
+export default function DiffView({ label, older, newer, sides = 'history', 'data-testid': testId }: DiffViewProps) {
   const { t } = useTranslation()
   const lines = lineDiff(older, newer)
   return (
@@ -37,7 +39,7 @@ export default function DiffView({ label, older, newer, 'data-testid': testId }:
               <span aria-hidden className="w-3 shrink-0 select-none">
                 {line.kind === 'added' ? '+' : line.kind === 'removed' ? '−' : ' '}
               </span>
-              {line.kind !== 'same' && <span className="sr-only">{t(`mail.history.${line.kind}`)}: </span>}
+              {line.kind !== 'same' && <span className="sr-only">{t(sides === 'proposal' ? `mail.pending.${line.kind}` : `mail.history.${line.kind}`)}: </span>}
               <span className={cn(line.kind === 'removed' && 'line-through')}>{line.text || ' '}</span>
             </li>
           ))}
