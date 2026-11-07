@@ -80,7 +80,7 @@ services:
     environment:
       # Where alerts go, and the thresholds that are deployment settings (set them in .env). Mail needs Grafana's own
       # SMTP settings (GF_SMTP_ENABLED, GF_SMTP_HOST, GF_SMTP_USER, GF_SMTP_PASSWORD, GF_SMTP_FROM_ADDRESS).
-      JABIZ_ALERT_EMAIL: ${JABIZ_ALERT_EMAIL:-oncall@localhost}
+      JABIZ_ALERT_EMAIL: ${JABIZ_ALERT_EMAIL:-oncall@example.com}
       JABIZ_ALERT_SERVICE: ${JABIZ_ALERT_SERVICE:-jabiz}
       JABIZ_ALERT_DISK_PERCENT: ${JABIZ_ALERT_DISK_PERCENT:-80}
       JABIZ_ALERT_REFRESH_GRANTED_MIN: ${JABIZ_ALERT_REFRESH_GRANTED_MIN:-10}
@@ -90,7 +90,7 @@ services:
       GF_SMTP_HOST: ${GF_SMTP_HOST:-}
       GF_SMTP_USER: ${GF_SMTP_USER:-}
       GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD:-}
-      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-alerts@localhost}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-alerts@example.com}
 
   pgadmin:
     image: dpage/pgadmin4

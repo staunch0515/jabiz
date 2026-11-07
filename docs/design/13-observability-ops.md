@@ -113,7 +113,7 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 
 | 变量 | 作用 | 缺省 |
 |---|---|---|
-| `JABIZ_ALERT_EMAIL` | 告警的收件人（值班的人；几个地址以 `;` 分隔）。另需 Grafana 的 SMTP：`GF_SMTP_ENABLED`、`GF_SMTP_HOST`、`GF_SMTP_USER`、`GF_SMTP_PASSWORD`、`GF_SMTP_FROM_ADDRESS` | `oncall@localhost` |
+| `JABIZ_ALERT_EMAIL` | 告警的收件人（值班的人；几个地址以 `;` 分隔）。另需 Grafana 的 SMTP：`GF_SMTP_ENABLED`、`GF_SMTP_HOST`、`GF_SMTP_USER`、`GF_SMTP_PASSWORD`、`GF_SMTP_FROM_ADDRESS` | `oncall@example.com`（Grafana 要求带域名的地址） |
 | `JABIZ_ALERT_SERVICE` | 应用的 `spring.application.name`（指标的 `job` 标签） | `jabiz` |
 | `JABIZ_ALERT_DISK_PERCENT` | 磁盘用量的阈值（%） | 80 |
 | `JABIZ_ALERT_REFRESH_GRANTED_MIN` / `_RATIO` | 一小时内补发多于这么多次、且占刷新请求的比例高于这个值时告警（D73） | 10 / 0.02 |
