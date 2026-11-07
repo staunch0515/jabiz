@@ -106,6 +106,8 @@ beforeEach(() => {
     [DATASET.sponsor, [SPONSOR]],
     [DATASET.ban, []],
     [DATASET.sponsorMethods, []],
+    // F-C1d: the Sponsor's page also shows their asset library (assets.test.tsx).
+    [DATASET.asset, []],
   ])
   server.templates = new Map<string, Row[] | Error>([
     [TEMPLATE.publications, [{ ...publication(), quizTitle: 'World capitals' }]],
