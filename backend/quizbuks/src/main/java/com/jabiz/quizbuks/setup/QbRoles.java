@@ -49,6 +49,9 @@ public final class QbRoles {
         // The platform's emergency acts: taking a publication down, pausing it (F-S1: platform first).
         QbPermissions.ADMIN_CONTENT_WRITE,
         QbPermissions.SPONSOR_AVATAR_READ, "task.read",
+        // The second person on finance's records (bank top-ups, credits by hand, fees by hand: the rules' approvers
+        // hold TOPUP_BANK_APPROVE below). Reviews are not theirs: those rules want REVIEW_*, which only operators hold.
+        "approval.decide",
         // Q8a: the AI page (usage and failures; the switch changes only through controlled changes).
         QbPermissions.ADMIN_AI_READ,
         // Platform 16y: closing by hand, with a note, a task no process will close (never an approval's).

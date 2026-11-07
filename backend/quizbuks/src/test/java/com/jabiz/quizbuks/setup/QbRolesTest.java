@@ -56,7 +56,7 @@ class QbRolesTest {
         assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
             .contains(QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.SPOT_CHECK, QbPermissions.OPERATORS_READ,
                 QbPermissions.ADMIN_PROSPECT, QbPermissions.AUDIENCE_RULES_WRITE)
-            .doesNotContain(QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION, "approval.decide",
+            .doesNotContain(QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 QbPermissions.PROSPECT_USE, QbPermissions.CERTIFICATION_MANAGE)
             .doesNotHaveDuplicates();
@@ -204,8 +204,11 @@ class QbRolesTest {
         // F-S1: the reviews are the operators' (headquarters' reviewers are members of the platform operator).
         assertThat(QbRoles.of(QbRoles.OPERATOR).permissions())
             .contains(QbPermissions.REVIEW_PUBLICATION, "approval.decide", "task.read");
-        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains("task.read")
-            .doesNotContain(QbPermissions.REVIEW_PUBLICATION, "approval.decide");
+        // Content administrators still decide finance's four-eyes cases (their rules want TOPUP_BANK_APPROVE),
+        // never a review (those rules want REVIEW_*).
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains("task.read", "approval.decide",
+                QbPermissions.TOPUP_BANK_APPROVE)
+            .doesNotContain(QbPermissions.REVIEW_PUBLICATION, QbPermissions.REVIEW_SPONSOR);
         assertThat(QbRoles.of(QbRoles.TAKER).permissions()).doesNotContain(QbPermissions.ADMIN_PUBLICATION_READ);
         // Only the platform runs the system's publication processes (the job, the approval events).
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
@@ -228,7 +231,7 @@ class QbRolesTest {
         // F-S1: the onboarding reviews are the operators'; headquarters reads the users and bans them.
         assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.ADMIN_USERS_READ,
             QbPermissions.SPONSOR_AVATAR_READ).doesNotContain(QbPermissions.ADMIN_USERS_BAN,
-            QbPermissions.REVIEW_SPONSOR, "approval.decide");
+            QbPermissions.REVIEW_SPONSOR);
         assertThat(QbRoles.of(QbRoles.OPERATOR).permissions()).contains(QbPermissions.REVIEW_SPONSOR,
             "approval.decide");
         assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).contains(QbPermissions.ADMIN_USERS_BAN);

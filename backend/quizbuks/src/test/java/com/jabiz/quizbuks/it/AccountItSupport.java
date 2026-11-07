@@ -89,6 +89,20 @@ abstract class AccountItSupport extends PublicationItSupport {
         return newOperatorWithLead(operatorsAdmin(), unique(name), null);
     }
 
+    private NewOperator certificationOperator;
+
+    /**
+     * A session that grants and revokes certifications by hand (F-S1: an operator's member, not headquarters): the
+     * lead of an operator made for the test.
+     */
+    String certificationGranter() {
+        if (certificationOperator == null) {
+            certificationOperator = officialOperator("Certifications");
+        }
+        // A new session each time: tests move the clock past a session's life.
+        return memberSession(certificationOperator.leadId(), certificationOperator.operatorId());
+    }
+
     /** {@link #newOperatorWithLead}'s operator. */
     String newOperator(String token, String name) {
         return newOperatorWithLead(token, name, null).operatorId();

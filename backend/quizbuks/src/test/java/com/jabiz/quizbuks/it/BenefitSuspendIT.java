@@ -51,7 +51,7 @@ class BenefitSuspendIT extends PlayItSupport {
     }
 
     private void grant(String userId, String certification) {
-        run(CertificationProcesses.GRANT, hq(), body("userId", userId, "certification", certification, "reason",
+        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", certification, "reason",
             "Q89d test"));
     }
 

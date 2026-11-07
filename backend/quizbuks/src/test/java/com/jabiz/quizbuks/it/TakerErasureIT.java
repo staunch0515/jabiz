@@ -103,8 +103,7 @@ class TakerErasureIT extends PayoutItSupport {
         String handle = "cat-" + UUID.randomUUID().toString().substring(0, 8);
         run("QB_PROFILE_SAVE", taker(cat), body("displayName", name, "countryCode", "JP", "preferredCurrency",
             "JPY"));
-        run(CertificationProcesses.GRANT, TestTokens.bearer(tokens, "q77-hq", QbPermissions.CERTIFICATION_ADMIN,
-            QbPermissions.CERTIFICATION_MANAGE), body("userId", cat, "certification", "SPONSOR_APPLY", "reason",
+        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", cat, "certification", "SPONSOR_APPLY", "reason",
             "Met at the fair"));
         String key = (String) run(CertificateProcesses.ISSUE, taker(cat), body("certification", "SPONSOR_APPLY",
             "language", "en")).get("verifyKey");
