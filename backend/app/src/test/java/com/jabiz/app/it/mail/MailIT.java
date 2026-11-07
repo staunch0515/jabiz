@@ -583,9 +583,7 @@ class MailIT extends SecurityItSupport {
         send("news", user(address, "en"), "figs");
         deliver();
         String html = part(to(address).getFirst(), "text/html");
-        // The demo layout's footer links the portal; the unsubscribe link does not lead there.
-        assertThat(html).contains("href=\"https://app.example.com/mail/unsubscribe?token=")
-            .doesNotContain("/portal/mail/unsubscribe");
+        assertThat(html).contains("href=\"https://app.example.com/mail/unsubscribe?token=").doesNotContain("/portal/");
     }
 
     /** Links mailed before the entry had its page lead to the application's page, which still unsubscribes. */

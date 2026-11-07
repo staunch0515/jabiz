@@ -195,7 +195,7 @@ class MailLayoutIT extends SecurityItSupport {
         MailMessage mail = sendNews("zh");
         // The demo application's default layout (jabiz.mail.layout.zh.*).
         assertThat(mail.htmlBody()).startsWith("<!DOCTYPE html>").contains("Jabiz 示范",
-            "href=\"https://app.example.com/portal/\"", "max-width:600px").doesNotContain("<script", "<style");
+            "href=\"https://app.example.com/\"", "max-width:600px").doesNotContain("<script", "<style");
         assertThat(mail.body()).startsWith("Jabiz 示范\n\n").contains("\n-- \nJabiz 示范应用");
         assertThat(layoutVersions(mail.to())).containsExactly((Object) null);
     }
