@@ -104,23 +104,29 @@ public class FileProcesses {
                 return ctx;
             })
             .outputMapper(ctx -> ctx.get(OUTPUT, FileInfo.class))
-            .compute("Record the file", (metadata, ctx) -> {
-                RegisterInput input = ctx.get("input", RegisterInput.class);
-                Map<String, Object> file = new LinkedHashMap<>();
-                file.put(FileEntities.FILE_ID, input.fileId());
-                file.put(FileEntities.POLICY, input.policy());
-                file.put(FileEntities.CONTENT_TYPE, input.contentType());
-                file.put(FileEntities.SIZE_BYTES, input.sizeBytes());
-                file.put(FileEntities.SHA256, input.sha256());
-                file.put(FileEntities.WIDTH, input.width());
-                file.put(FileEntities.HEIGHT, input.height());
-                file.put(FileEntities.VARIANTS, input.variants().isEmpty() ? null : String.join(",", input.variants()));
-                file.put(FileEntities.ORIGINAL_NAME, input.originalName());
-                file.put(FileEntities.UPLOADED_BY, ctx.request().actorId());
-                ctx.changes().insert(FileEntities.ENTITY, file);
-                ctx.put(OUTPUT, new FileInfo(input.fileId(), input.policy(), input.contentType(), input.sizeBytes(),
-                    input.width(), input.height(), input.variants()));
-            }));
+            .compute("Record the file", (metadata, ctx) ->
+                ctx.put(OUTPUT, record(ctx, ctx.get("input", RegisterInput.class)))));
+    }
+
+    /**
+     * Registers the insertion of a stored file's row in {@code ctx}, uploaded by the process's actor: what
+     * {@code FILE_REGISTER} does, and {@code FILE_FETCH} for an image downloaded from a link (decision D75).
+     */
+    static FileInfo record(ProcessContext ctx, RegisterInput input) {
+        Map<String, Object> file = new LinkedHashMap<>();
+        file.put(FileEntities.FILE_ID, input.fileId());
+        file.put(FileEntities.POLICY, input.policy());
+        file.put(FileEntities.CONTENT_TYPE, input.contentType());
+        file.put(FileEntities.SIZE_BYTES, input.sizeBytes());
+        file.put(FileEntities.SHA256, input.sha256());
+        file.put(FileEntities.WIDTH, input.width());
+        file.put(FileEntities.HEIGHT, input.height());
+        file.put(FileEntities.VARIANTS, input.variants().isEmpty() ? null : String.join(",", input.variants()));
+        file.put(FileEntities.ORIGINAL_NAME, input.originalName());
+        file.put(FileEntities.UPLOADED_BY, ctx.request().actorId());
+        ctx.changes().insert(FileEntities.ENTITY, file);
+        return new FileInfo(input.fileId(), input.policy(), input.contentType(), input.sizeBytes(), input.width(),
+            input.height(), input.variants());
     }
 
     static ProcessDefinition<DeleteInput, DeleteOutput, ProcessContext> delete() {

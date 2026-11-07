@@ -560,6 +560,12 @@ public class ExternalJobExecutor implements SmartLifecycle {
         ExternalJobType<?, ?> type = claimed.type();
         Mono<Outcome> attempt = Mono.defer(() -> {
             JobContext ctx = new JobContext(claimed, services);
+            com.jabiz.runtime.file.RemoteImageService images =
+                beans.getBeanProvider(com.jabiz.runtime.file.RemoteImageService.class).getIfAvailable();
+            if (images != null) {
+                // The requester's rate limits; a handler waits for a free download slot until its deadline (D75).
+                ctx.remoteImages(images.forJob(claimed.requestedBy(), ctx::deadline));
+            }
             long started = System.nanoTime();
             // The job's input files are copied for the attempt and deleted once it is over, whatever its end
             // (decision D50 item 2); its output files are stored before it is recorded (item 3).
@@ -877,6 +883,7 @@ public class ExternalJobExecutor implements SmartLifecycle {
         private final Map<String, Long> usage = new LinkedHashMap<>();
         private volatile List<ExternalJobFile> files = List.of();
         private volatile Instant deadline;
+        private volatile com.jabiz.file.RemoteImages remoteImages;
 
         JobContext(Claimed claimed, ExternalServices services) {
             this.claimed = claimed;
@@ -891,6 +898,18 @@ public class ExternalJobExecutor implements SmartLifecycle {
         @Override
         public List<ExternalJobFile> files() {
             return files;
+        }
+
+        void remoteImages(com.jabiz.file.RemoteImages images) {
+            this.remoteImages = images;
+        }
+
+        @Override
+        public com.jabiz.file.RemoteImages remoteImages() {
+            if (remoteImages == null) {
+                throw new UnsupportedOperationException("Downloading images from links is not available here");
+            }
+            return remoteImages;
         }
 
         @Override

@@ -246,6 +246,8 @@ class ExternalJobFilesTest {
             public void recordUsage(String metric, long quantity) {
             }
         };
+        // Downloads from links are the platform executor's (decision D75).
+        assertThatThrownBy(plain::remoteImages).isInstanceOf(UnsupportedOperationException.class);
         assertThat(plain.files()).isEmpty();
         assertThatThrownBy(() -> plain.file(UUID.randomUUID())).isInstanceOf(IllegalArgumentException.class);
         ExternalJobFile broken = new ExternalJobFile() {

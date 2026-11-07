@@ -174,6 +174,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 | 业务参数（数据视图读 / 写；`PARAM_CREATE` / `PARAM_SET` / `PARAM_SCHEDULE` / `PARAM_CANCEL_SCHEDULED`） | `platform.param.read` / `platform.param.write`；`platform.param.write`（04 §9） |
 | 账本（科目数据视图；交易、分录数据视图；`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`；余额模板） | `ledger.account.read` / `.write`；`ledger.read`（写入只经流程）；`ledger.account.write` / `ledger.post` / `ledger.reverse`；`ledger.read`（11 §1） |
 | 审计视图 `GET /api/audit/operations` / 任务列表 `GET /api/jobs` | `audit.read` / `job.read`（11 §3、§4） |
+| 手动补跑定时任务 `POST /api/jobs/{job}/runs`（`JOB_RUN_REQUEST`，`entryOnly()`） | `job.run`，近期二次验证（`ADMINISTRATION`）；`job.run` 受保护（§16.1，11 §4.2，D77） |
 | 审批（`APPROVAL_DECIDE`；审批规则、限额、请求、判断、评估的数据视图；影响预览 `POST /api/approvals/preview`） | `approval.decide` + 当前层级的权限（受保护的变更改为 `security.protected-change.decide`，§16.1，D51）；`approval.read`（写入只经流程）；`approval.read`（18 §3） |
 | 审批移到另一个入口范围（子流程 `APPROVAL_SCOPE_MOVE`，`subProcessOnly()`） | 应用的改派流程的权限 + `approval.scope.move`（由步骤检查，18 §3.8，D76） |
 | 受控变更 `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_WITHDRAW` / `CONTROL_CHANGE_PUBLISH` | `control.propose` / `control.propose` / `control.publish`，且发布人不是提出人（18 §3.5） |
@@ -809,6 +810,8 @@ jabiz:
   被限流的请求不读数据库、不借连接（`ProcessAdmissionIT` 在连接全被占用时确认）。
 - 只作用于流程接口：子流程、定时任务、事件消费者与平台自己的入口（登录、实体接口、上传等）不经它。启动检查（`PROCESS`）：配置的流程须已注册且进目录（不是 `internal()` / `entryOnly()` / `subProcessOnly()`），
   数值为正，至少声明一种桶。每次拒绝记一次观测 `jabiz.process.rate_limited`（瞬时的观测，作计数用；标签只有 `process`、`scope`，13）。
+- 唯一的例外是限流键 `FILE_FETCH`（服务器下载链接中的图片：`POST /api/files/fetch` 与外部作业的 `remoteImages()`，14 §12、决策 D75；不是流程）：`per-user`（作业按其请求人）、`per-instance`
+  与只用于它的 `per-host`（按链接的主机，每一跳都计入）；平台缺省每人每分钟 30、每主机 60、每实例 300（配置整体替换缺省）。启动检查拒绝它的 `per-address` 等，也拒绝其他流程上的 `per-host`。
 - 与 `SignUpRateLimits`（§15.7）、`SignInRateLimits`（§4.1）的关系：后两者限的是平台自己的匿名账户接口、本人账户操作与登录类接口（种类写死在代码中），不变；三者共用 `TokenBucketLimiter` 与 `ClientAddresses`。
   限流不是准入：限流挡住单个用户或地址刷请求，准入挡住所有人一起挤一把锁（503 `PROCESS_BUSY`，06 §4.2）。
 
@@ -1072,6 +1075,7 @@ jabiz:
 | `security.protected-change.decide` | 这道四眼自己的另一双眼：审批本节的受保护变更（D51）；总是受保护 |
 | `ledger.post`、`ledger.reverse` | 写账（冲正即反向过账，11 §1） |
 | `platform.param.write` | 独自修改未受控的业务参数（04 §9） |
+| `job.run` | 手动补跑定时任务：以系统身份执行任务流程写下的一切（11 §4.2，D77） |
 
 不在缺省中的：`security.user.password` / `security.user.mfa-reset` / `security.user.identity.write`（对受保护持有人使用时本身就要审批，对其他人是日常的账号支持）、
 `temporal.revert` / `temporal.backdate`（写入仍经过本节的检查，`processOnlyWrites` 的数据视图不能撤销）、只读权限、`security.user.write`（不改权限；管理员设置的邮箱从不可信，§15.7）。

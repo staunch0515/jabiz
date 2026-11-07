@@ -392,6 +392,26 @@ public final class PlatformErrorCodes {
     public static final String FILE_POLICY_MISMATCH = "FILE_POLICY_MISMATCH";
     /** 422. */
     public static final String FILE_IN_USE = "FILE_IN_USE";
+    // Images downloaded from links (decision D75, 14-files.md section 12): 422, one code per reason a link fails
+    /** The link is not https (also a redirect to one that is not). */
+    public static final String FILE_FETCH_NOT_HTTPS = "FILE_FETCH_NOT_HTTPS";
+    /** The link is malformed, carries credentials, or names an unusual host or a port not followed. */
+    public static final String FILE_FETCH_LINK_INVALID = "FILE_FETCH_LINK_INVALID";
+    /** A host of the link or of a redirect resolves to an address that is not public. */
+    public static final String FILE_FETCH_ADDRESS_NOT_PUBLIC = "FILE_FETCH_ADDRESS_NOT_PUBLIC";
+    /** More redirects than {@code jabiz.files.fetch.max-redirects}; param {@code max}. */
+    public static final String FILE_FETCH_TOO_MANY_REDIRECTS = "FILE_FETCH_TOO_MANY_REDIRECTS";
+    /** More bytes than the file policy allows; param {@code max}. */
+    public static final String FILE_FETCH_TOO_LARGE = "FILE_FETCH_TOO_LARGE";
+    /** What arrived is not an image type the policy accepts; param {@code allowed}. */
+    public static final String FILE_FETCH_NOT_IMAGE = "FILE_FETCH_NOT_IMAGE";
+    /** Connecting, waiting for data or the whole download took too long. */
+    public static final String FILE_FETCH_TIMEOUT = "FILE_FETCH_TIMEOUT";
+    /**
+     * The download failed otherwise; param {@code reason}: {@code UNRESOLVED}, {@code UNREACHABLE}, {@code TLS},
+     * {@code STATUS} or {@code EMPTY}.
+     */
+    public static final String FILE_FETCH_FAILED = "FILE_FETCH_FAILED";
     /** 422: a role assignment's data period ends before it starts (docs/design/10-security.md section 13.2). */
     public static final String DATA_PERIOD_ORDER = "DATA_PERIOD_ORDER";
     /** 422: an access review of a period that has not ended, or ends before it starts (10 section 13.3). */
@@ -404,6 +424,21 @@ public final class PlatformErrorCodes {
      * logged.
      */
     public static final String INBOUND_REJECTED = "INBOUND_REJECTED";
+
+    /**
+     * 422: a run by hand of a time the job's schedule never names (decision D77); params {@code job},
+     * {@code scheduledTime}.
+     */
+    public static final String JOB_RUN_NOT_SCHEDULED = "JOB_RUN_NOT_SCHEDULED";
+    /** 422: a run by hand of a scheduled time still to come (decision D77); params {@code job}, {@code scheduledTime}. */
+    public static final String JOB_RUN_NOT_DUE = "JOB_RUN_NOT_DUE";
+    /**
+     * 422: a run by hand of a scheduled time older than {@code jabiz.jobs.manual-run.max-age} (decision D77); params
+     * {@code job}, {@code scheduledTime}, {@code maxAgeDays}.
+     */
+    public static final String JOB_RUN_TOO_OLD = "JOB_RUN_TOO_OLD";
+    /** 409: a run of the job holds its cluster lock, so it cannot be run by hand now (decision D77); param {@code job}. */
+    public static final String JOB_BUSY = "JOB_BUSY";
 
     // Too many requests (429)
     public static final String RATE_LIMITED = "RATE_LIMITED";
@@ -460,7 +495,10 @@ public final class PlatformErrorCodes {
         UNAUTHENTICATED, LOGIN_FAILED, INVALID_REFRESH_TOKEN, APP_PROXY_REFUSED,
         SCOPE_UNAVAILABLE, PERMISSION_DENIED, MFA_REQUIRED, EMAIL_NOT_VERIFIED, PROCESS_INTERNAL, SIGN_IN_REFUSED, SIGN_UP_DISABLED, SIGN_UP_REFUSED,
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
-        INBOUND_REJECTED, RATE_LIMITED, PROCESS_BUSY, AUTH_BUSY);
+        FILE_FETCH_NOT_HTTPS, FILE_FETCH_LINK_INVALID, FILE_FETCH_ADDRESS_NOT_PUBLIC, FILE_FETCH_TOO_MANY_REDIRECTS,
+        FILE_FETCH_TOO_LARGE, FILE_FETCH_NOT_IMAGE, FILE_FETCH_TIMEOUT, FILE_FETCH_FAILED,
+        INBOUND_REJECTED, JOB_RUN_NOT_SCHEDULED, JOB_RUN_NOT_DUE, JOB_RUN_TOO_OLD, JOB_BUSY,
+        RATE_LIMITED, PROCESS_BUSY, AUTH_BUSY);
 
     private PlatformErrorCodes() {}
 }

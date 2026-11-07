@@ -18,6 +18,7 @@ import ImportCatalogPage from './pages/ImportCatalogPage'
 import ImportPage from './pages/ImportPage'
 import ImportRunsPage from './pages/ImportRunsPage'
 import IntegrityPage from './pages/IntegrityPage'
+import JobsPage from './pages/JobsPage'
 import LoginPage from './pages/LoginPage'
 import MailLayoutPage from './pages/MailLayoutPage'
 import MailTextEditorPage from './pages/MailTextEditorPage'
@@ -95,6 +96,8 @@ export const appRoutes: RouteObject[] = [
           { path: '/access-review', element: <AccessReviewPage /> },
           { path: '/security/sessions', element: <SessionsPage /> },
           { path: '/integrity', element: <IntegrityPage /> },
+          // The scheduled jobs and their re-runs by hand (docs/design/11-ledger-events-jobs.md section 4; decision D77).
+          { path: '/jobs', element: <JobsPage /> },
           { path: '/retention', element: <RetentionPage /> },
           // The mail texts and the mail layout (docs/design/18-numbering-approvals-tasks.md section 5.6; decision D72).
           { path: '/mail/texts', element: <MailTextsPage /> },
