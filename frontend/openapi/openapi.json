@@ -731,23 +731,6 @@
         },
         "type" : "object"
       },
-      "DraftRule" : {
-        "properties" : {
-          "condition" : { },
-          "enabled" : {
-            "type" : "boolean"
-          },
-          "levels" : { },
-          "priority" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "ruleCode" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
       "EmailLinkConfirm" : {
         "properties" : {
           "token" : {
@@ -1854,6 +1837,43 @@
         },
         "type" : "object"
       },
+      "LanguageTexts" : {
+        "properties" : {
+          "body" : {
+            "type" : "string"
+          },
+          "defaultBody" : {
+            "type" : "string"
+          },
+          "defaultHash" : {
+            "type" : "string"
+          },
+          "defaultSubject" : {
+            "type" : "string"
+          },
+          "locale" : {
+            "type" : "string"
+          },
+          "problems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Violation"
+            },
+            "type" : "array"
+          },
+          "state" : {
+            "enum" : [ "DEFAULT", "CUSTOM", "DEFAULT_UPDATED", "INVALID" ],
+            "type" : "string"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "LinkResult" : {
         "properties" : {
           "provider" : {
@@ -2193,17 +2213,16 @@
       },
       "PreviewRequest" : {
         "properties" : {
-          "draft" : {
-            "$ref" : "#/components/schemas/DraftRule"
+          "body" : {
+            "type" : "string"
           },
-          "limit" : {
-            "format" : "int32",
-            "type" : "integer"
-          },
-          "ruleId" : {
+          "locale" : {
             "type" : "string"
           },
           "subject" : {
+            "type" : "string"
+          },
+          "template" : {
             "type" : "string"
           }
         },
@@ -2211,18 +2230,24 @@
       },
       "PreviewResponse" : {
         "properties" : {
-          "changed" : {
+          "html" : {
+            "type" : "string"
+          },
+          "problems" : {
             "items" : {
-              "$ref" : "#/components/schemas/Change"
+              "$ref" : "#/components/schemas/Violation"
             },
             "type" : "array"
           },
-          "evaluated" : {
+          "subject" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "versionNo" : {
             "format" : "int32",
             "type" : "integer"
-          },
-          "truncated" : {
-            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -3095,6 +3120,72 @@
         },
         "type" : "object"
       },
+      "TemplateTexts" : {
+        "properties" : {
+          "category" : {
+            "type" : "string"
+          },
+          "languages" : {
+            "items" : {
+              "$ref" : "#/components/schemas/LanguageTexts"
+            },
+            "type" : "array"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "needsApproval" : {
+            "type" : "boolean"
+          },
+          "placeholders" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "required" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "secrets" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "template" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "TextsResponse" : {
+        "properties" : {
+          "allowedLinkHosts" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "maxBodyLength" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "maxSubjectLength" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "templates" : {
+            "items" : {
+              "$ref" : "#/components/schemas/TemplateTexts"
+            },
+            "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
       "TimeSliceEntry" : {
         "properties" : {
           "asOf" : {
@@ -3244,6 +3335,24 @@
         },
         "type" : "object"
       },
+      "Violation" : {
+        "properties" : {
+          "field" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "params" : {
+            "additionalProperties" : { },
+            "type" : "object"
+          },
+          "ruleCode" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "WhenEntry" : {
         "properties" : {
           "field" : {
@@ -3268,7 +3377,7 @@
   "paths" : {
     "/api/approvals/preview" : {
       "post" : {
-        "operationId" : "preview_1",
+        "operationId" : "preview_2",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -6323,7 +6432,7 @@
     },
     "/api/imports/{importId}/preview" : {
       "post" : {
-        "operationId" : "preview",
+        "operationId" : "preview_1",
         "parameters" : [ {
           "in" : "path",
           "name" : "importId",
@@ -6530,7 +6639,7 @@
     },
     "/api/jobs" : {
       "get" : {
-        "operationId" : "list_4",
+        "operationId" : "list_5",
         "responses" : {
           "200" : {
             "content" : {
@@ -6548,6 +6657,52 @@
           }
         },
         "tags" : [ "job-controller" ]
+      }
+    },
+    "/api/mail/texts" : {
+      "get" : {
+        "operationId" : "list_4",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TextsResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mail-text-controller" ]
+      }
+    },
+    "/api/mail/texts/preview" : {
+      "post" : {
+        "operationId" : "preview",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PreviewRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PreviewResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mail-text-controller" ]
       }
     },
     "/api/meta/datasets" : {

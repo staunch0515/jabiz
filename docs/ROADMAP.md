@@ -5022,6 +5022,23 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17zg 状态**：✅ 已合并（#451）。
 
+### 17zh 邮件文字与信纸的在线定制（需求 2026-11-05，QuizBuks 首次上线 P2 / Q107、规格 F-C8 与 F-C9；决策 D72）
+
+**缘由**：需求方 2026-11-05：系统发出的所有邮件都要能在后台修改文字（按模版与语言）并共用一张信纸，不改程序、不重新部署；验证邮箱、找回密码、链接登录与安全通知改了须另一位管理员批准，
+普通通知改了即时生效。三个拉取请求：a 文字与规则，b 信纸，c 通用后台的页面。
+
+| # | 内容 | PR |
+|---|---|---|
+| 17zh-1 | core `MailTextRules`（一次报告全部问题，错误码 `MAIL_TEXT_*` 三语）：声明过的占位符、必须保留的参数 / 令牌 / 退订链接、令牌与登录链接与退订链接只在以 `{baseUrl}` / `{entryUrl…}` 开头的链接目标中、链接只许 http(s) / mailto / 相对且绝对链接只到本站或 `jabiz.mail.texts.allowed-link-hosts`、无图片、无原始 HTML、标题一行、长度按 `jabiz.mail.texts.max-subject-length`（300，取代 `MailRenderer.MAX_SUBJECT`）与 `max-body-length`（20000）；启动检查对缺省文字用同一套规则；`MailTemplate.sample(…)`、`.protectedText()` | 17zh-a |
+| 17zh-2 | 迁移 `V60__mail_texts.sql`：时态实体 `MailText`（`sys_mail_text_version`），`sys_mail_attempt` / `sys_notification` / `sys_document_delivery` 加列 `text_version_no`，`sys_mail_message` 加列 `rendered_*`（测试信） | 17zh-a |
+| 17zh-3 | 流程 `MAIL_TEXT_SAVE`（普通类即时生效，安全类 422 `MAIL_TEXT_NEEDS_APPROVAL`）、`MAIL_TEXT_RESET`、`MAIL_TEXT_TEST_SEND`（只寄给本人、`[TEST]`、不生成令牌、缺省每人每小时 10 次）；命名锁与 `baseVersionNo`（409）；权限 `mail.text.read` / `mail.text.write`；受控变更目标 `MailText`（`MailTextControlTarget`，提出与发布要求二次验证）；守卫 `MailTextGuard`；`GET /api/mail/texts`、`POST /api/mail/texts/preview`（不写记录） | 17zh-a |
+| 17zh-4 | 发信时取生效的文字（`MailTexts`），失效的覆盖退回缺省并告警（观测 `jabiz.mail.text.fallback`，启动检查 `MAIL` 告警）；待办通知（`jabiz.task-notification`）与单据邮件（`jabiz.document-mail`）经同一处取文字 | 17zh-a |
+| 17zh-5 | 测试：`MailTextRulesTest`、`MailChecksTest`、`MailTextIT`；OpenAPI 快照；文档 D72、18 §5.6、22 §5、根 `CLAUDE.md`；示范 `commerce.order-shipped` 的示例值 | 17zh-a |
+| 17zh-6 | 信纸：`MailLayout`（`sys_mail_layout_version`）、`MailLayoutRules`、`MailRenderer` 套信纸、缺省值 `jabiz.mail.layout.*`、修改经受控变更 `mail-layout`、投递记 `layout_version_no`、示范 `app` 的信纸 | 17zh-b（计划） |
+| 17zh-7 | 通用后台的"邮件模版"与"邮件信纸"页（列表、编辑器、预览、测试发送、恢复默认、历史与对比、提出修改） | 17zh-c（计划） |
+
+**17zh 状态**：17zh-a ✅ 已合并（#470）；17zh-b、17zh-c 计划中。
+
 ### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
 
 **缘由**：`ubuntu-latest` 已是 Ubuntu 26.04，Playwright 1.56 在其上装不了 Chromium（"does not support chromium on ubuntu26.04-x64"），平台的 `e2e` 作业在跑测试之前即失败。
