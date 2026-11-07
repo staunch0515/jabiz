@@ -5027,3 +5027,15 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zg-3 | 文档：17 §2、根 `CLAUDE.md` §8 |
 
 **17zg 状态**：📝 待评审（分支 `1.3/phase-17zg-ci-scope`）。
+
+### 17zn 受控变更的列表显示并可按参数名筛选（2026-11-07，QuizBuks 首次上线 P7）
+
+**缘由**：受控参数的四眼发布（D40）中，通用后台 `SysControlChange` 的列表只显示对象的实体，看不出是哪一个参数；参数名只在 `changeValues` 的 JSON 中，不能筛选。
+
+| # | 内容 |
+|---|---|
+| 17zn-1 | 迁移 V59：`sys_control_change_version.target_key`（只加列，带索引）；字段 `targetKey`（不可变），列表视图的列、筛选与排序 |
+| 17zn-2 | `ControlTarget.Proposal` 增加 `key`：参数为 `paramKey`，审批规则与职责分离规则为 `ruleCode`，限额为 `subject`；`CONTROL_CHANGE_PROPOSE` 记入。之前的变更没有（表只追加，仍在 `changeValues` 中） |
+| 17zn-3 | 测试：`ControlledParamIT`（按 `targetKey` 筛选得到该参数的全部变更）、`ApprovalControlTargetKeyTest`；场景快照 `monthly_close` 随之更新。列表页由元数据生成（`DatasetListPage` 的测试与 axe 照旧覆盖） |
+
+**17zn 状态**：📝 待评审（分支 `1.3/phase-17zn-control-change-key`）。
