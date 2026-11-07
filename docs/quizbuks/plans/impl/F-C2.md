@@ -64,7 +64,7 @@
 | `qb.system.usage-measure` | `qb.usage.system` | 一个发起方此刻的全部计量项：一条语句，每个计量项一行（`meter`、`value`）；参数 `sponsorId`、`at`（快照的时点，`ai.tokens` 的月份由它与时区得出） |
 | `qb.sponsor.usage` | `qb.content.write` | 发起方的用量卡：最近一次快照的日期与各计量项、免费额度（`qb.usage.storage.free-bytes` 的当前值）、是否超过 |
 | `qb.sponsor.asset-stats` | `qb.content.write` | 资源库列表用：每个本人资源的文件字节（经 `me:QbAsset` 连接 `SysFile`，只有本人资源引用的文件）与使用处个数（`me:QbAssetUse`）；"按大小排序""未使用的资源"据此在页面上做 |
-| `qb.admin.usage` | `qb.admin.publication.read` | 平台管理系统 / 运营商管理系统的用量页：按发起方 × 月 × 计量项给出天数、平均、峰值、月末值；筛选发起方、月份（`from`/`to`）与计量项；经默认数据视图，运营商只见辖下（`OperatorScopes`）；带 `report: {period}`，经平台导出（CSV / XLSX / PDF） |
+| `qb.admin.usage` | `qb.admin.publication.read` | 平台管理系统 / 运营商管理系统的用量页：按发起方 × 月 × 计量项给出天数、平均、峰值、月末值；筛选发起方、月份（`from`/`to`）与计量项；经默认数据视图，运营商只见辖下（`OperatorScopes`）；经平台的导出接口导出全部行（`POST /api/queries/qb.admin.usage/export`，页面给 CSV 与 Excel）。不声明 `report`（不进财务的报表页、不签发） |
 
 月度的平均占用与峰值（规格"由模板算出，供以后收费用"）就是 `qb.admin.usage` 的列：平均 = 当月有快照的日子的平均，峰值 = 最大值，同时给出有快照的天数（缺天时看得出来）。
 
@@ -76,7 +76,7 @@
   2. 一条 `RunTemplate`（`qb.system.usage-measure`）读出全部计量项；一条 `QueryEntities.all` 读该发起方当天已有的行、以及前一次快照（当天以前最近一天）的 `storage.bytes`；
   3. 计算（纯 Java `UsageRules`）：当天已有的行更新数值与 `recordedAt`，没有的插入（"当天已有的行即覆盖"）；超过保留期（`day < 快照日 − retention-days`）的本人行删除；
   4. 越过免费额度（前一次 ≤ 额度或没有前一次，今天 > 额度）时 `PublishEvent` `qb.usage.free-exceeded`（发起方、日子）。
-- **参数**（`QbParams.ALL`；`QB_SETUP` 提出）：`qb.usage.storage.free-bytes`（缺省 524288000 = 500 MB，**加入 `CONTROLLED`**，只用于提示）、`qb.usage.retention-days`（缺省 800）。读不出或不合格时：免费额度视为"未设"（不提示、不发信，页面显示"未设定"），保留期用缺省值并记告警日志——不在流程里自己给缺省值以外的值（CLAUDE.md 第 4 节：缺少即 `SetupParamsCheck` 启动警告）。
+- **参数**（`QbParams.ALL`；`QB_SETUP` 提出；项流程以 `LoadParams.optional` 读，受控的免费额度发布之前照常记快照、只是不提示）：`qb.usage.storage.free-bytes`（缺省 524288000 = 500 MB，**加入 `CONTROLLED`**，只用于提示）、`qb.usage.retention-days`（缺省 800）。读不出或不合格时：免费额度视为"未设"（不提示、不发信，页面只显示已用），保留期用声明的缺省值——不在流程里自己给缺省值以外的值（CLAUDE.md 第 4 节：缺少即 `SetupParamsCheck` 启动警告）。
 - **权限** `qb.usage.system` 加进 `QbPermissions`，不授予任何角色（与 `qb.stats.system` 同类）。
 
 ## 5. 站内信（第一次越过免费额度）
@@ -92,7 +92,7 @@
 - **保留期**：每天的项删掉本人超过 `qb.usage.retention-days` 的行（见 §4）。
 - **删除账号**：`SponsorErasure` 登记 `ErasedEntity.delete(QbUsageDay, "sponsorId")`。
 - **告警**（平台任务的指标，不另写代码）：`jabiz.job.run{job="qb.usage-snapshot", result="FAILED"|"PARTIAL"}`、`jabiz.job.item{job="qb.usage-snapshot", result="FAILED"}`；"当天缺少快照"= 计划时刻后 2 小时内没有成功的运行（`jabiz.job.run` 没有新值），另附只读 SQL（`qb_usage_day` 最大的 `day` 早于今天）。写进 `operations.md` §5 的表与新的 §7.22。
-- **补跑**（`operations.md` §7.22）：以 `JobRunner.run(job, 那天的计划时刻)` 重跑某一天（同一天的行被覆盖、不会重复；越过的消息按 `sourceKey` 不重复），或等下一次运行；失败的项由平台按退避重试。
+- **补跑**（`operations.md` §7.22）：快照记的是运行那一刻的占用，只能补跑**当天**（过去的一天补不出当时的数字；月度统计按有快照的天数平均）。测试与开发中以 `JobRunner.run(job, 当天的另一时刻)` 重跑（同一计划时刻只会重放）；生产环境没有手工运行任务的接口，按 §7.22 把 `QB_USAGE_SNAPSHOT_TIME` 临时设到几分钟以后并重启。同一天的行被覆盖、不会重复；越过的消息按 `sourceKey` 不重复。失败的项由平台在之后的运行中重试（记的是那一天）。
 
 ## 7. 发起方页面（`quizbuks-web/sponsor/src/assets/`）
 
@@ -100,14 +100,14 @@
 - **超过额度的横幅**：卡片上方的 `Alert`（只提示，上传照常），链到"未使用的资源"筛选。
 - **列表**：读 `qb.sponsor.asset-stats` 给每个资源加"大小"（文件字节 + 文字字节；视频与网页链接为 0），`DataTable` 可按大小排序；筛选多一项"未使用的资源"（使用处个数为 0）。
 - 文案 `assets.usage.*` 三语；ids 加两个模板。
-- **测试**（`usage.test.tsx`）：卡片的数字与格式、没有快照、超过额度显示横幅、按大小排序、未使用筛选；`expectAccessible`（亮、暗）。原有 `assets.test.tsx` 照旧通过。
+- **测试**（`assets.test.tsx` 新的一组，与资源库共用同一个模拟服务器）：卡片的数字与格式、没有快照、超过额度显示横幅并转到未使用的资源、按大小排序、未使用筛选；`expectAccessible`（亮、暗）。原有用例照旧通过。站内信的"打开资源库"链接在 `notices.test.tsx`。
 
 ## 8. 平台管理系统扩展（`backend/quizbuks/admin-extension`）
 
 - 新页 `UsagePage`（`/qb/usage`，菜单"用量"，持有 `qb.admin.publication.read` 时显示），只经 `@jabiz/admin`：
-  月份范围（缺省本月）、发起方（`?sponsor=`）、计量项筛选；表格列：发起方（`UserName` 显示名字）、月份、计量项（字典名）、有快照的天数、平均、峰值、月末值；字节类按 MB 显示；导出（平台的导出按钮，CSV / XLSX）。运营商管理系统同一页，只见辖下发起方（服务端范围）。
+  月份范围（缺省本月）、发起方（`?sponsor=`）、计量项筛选；表格列：发起方（公司名，没有时以 `UserName` 显示名字）、月份、计量项（字典名）、有快照的天数、平均、峰值、月末值；字节类按 MB 显示；导出（平台的导出按钮，CSV / XLSX）。运营商管理系统同一页，只见辖下发起方（服务端范围）。
 - 发起方详情页的"资源库"一栏加一行链接"用量"到 `?sponsor=<用户>`。
-- 测试：列出、筛选、导出调用、没有权限不显示不请求、axe 亮暗；`ext:check`。
+- 测试（`usage.test.tsx`）：列出（字节按 MB）、改月份与计量项、起止颠倒时提示且不能导出、导出调用、一个发起方与回到全部、空状态、发起方详情的"用量"链接、axe 亮暗；`ext:check`。菜单项按 `qb.admin.publication.read` 显示（运营商的成员也持有，所以两个管理系统共用一项）。
 
 ## 9. 帮助与运维文档
 
