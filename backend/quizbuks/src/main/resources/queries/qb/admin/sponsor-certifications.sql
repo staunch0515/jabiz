@@ -1,12 +1,14 @@
 /*---
 id: qb.admin.sponsor-certifications
 description: The sponsors' own certifications (Q88a) as headquarters and the operators see them - whose, how many rounds and holders; an operator sees its sponsors' only
-entities: [QbSponsorCertification, QbSponsor, QbCertificationRound, QbAttempt]
+entities: [QbSponsorCertification, QbSponsor, QbCertificationRound, QbAttempt, QbSponsorOperator, QbOperator]
 datasets:
   QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
+  QbSponsorOperator: urn:jabiz:dataset:default:QbSponsorOperator
+  QbOperator: urn:jabiz:dataset:default:QbOperator
 params:
   at: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "Now (the client's), which the holdings are counted at" }
   q:  { kind: { type: text, maxLength: 100 }, description: Only certifications of sponsors whose company name contains this text }
@@ -23,11 +25,15 @@ results:
   updatedAt:            { from: QbSponsorCertification.updatedAt }
   rounds:               { kind: { type: numeric, precision: 9, scale: 0 } }
   holders:              { kind: { type: numeric, precision: 9, scale: 0 } }
+  # F-S1b: the sponsor's operator now (every sponsor has one), for the platform's filter by operator.
+  operatorId:   { from: QbSponsorOperator.operatorId }
+  operatorName: { from: QbOperator.name }
 list:
+  filters: [operatorId]
   key: [certificationId]
   sorts: [createdAt, updatedAt, company]
   defaultSort: { field: createdAt, asc: false }
-permissions: [qb.certification.manage]
+permissions: [qb.admin.publication.read]
 ---*/
 -- Read only (D-Q88-8): an operator closes a sponsor's round with QB_CERTIFICATION_ROUND_CLOSE as its own. The
 -- operators' scope narrows the rows to their sponsors' (OperatorScopes, by sponsorId). Holders as
@@ -53,7 +59,11 @@ SELECT
        AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
        AND (r.{{QbCertificationRound.closedAt}} IS NULL OR a.{{QbAttempt.submittedAt}} < r.{{QbCertificationRound.closedAt}})
        AND a.{{QbAttempt.submittedAt}} + make_interval(days => CAST(c.{{QbSponsorCertification.validityDays}} AS integer))
-           > CAST(:at AS timestamptz)) AS holders
+           > CAST(:at AS timestamptz)) AS holders,
+    qso.{{QbSponsorOperator.operatorId}} AS operatorId,
+    qop.{{QbOperator.name}}               AS operatorName
 FROM {{QbSponsorCertification}} c
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbSponsorCertification.sponsorId}}
+LEFT JOIN {{QbSponsorOperator}} qso ON qso.{{QbSponsorOperator.userId}} = c.{{QbSponsorCertification.sponsorId}}
+LEFT JOIN {{QbOperator}} qop ON qop.{{QbOperator.operatorId}} = qso.{{QbSponsorOperator.operatorId}}
 WHERE CAST(:q AS text) IS NULL OR strpos(lower(coalesce(sp.{{QbSponsor.company}}, '')), lower(CAST(:q AS text))) > 0

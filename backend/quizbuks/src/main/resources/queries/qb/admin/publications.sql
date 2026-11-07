@@ -1,12 +1,14 @@
 /*---
 id: qb.admin.publications
 description: Every sponsor's publications with their quiz, state, review and counts, for review and support
-entities: [QbPublication, QbQuizVersion, QbPublicationCounter, QbPublicationStartCounter]
+entities: [QbPublication, QbQuizVersion, QbPublicationCounter, QbPublicationStartCounter, QbSponsorOperator, QbOperator]
 datasets:
   QbPublication: urn:jabiz:dataset:default:QbPublication
   QbQuizVersion: urn:jabiz:dataset:default:QbQuizVersion
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
+  QbSponsorOperator: urn:jabiz:dataset:default:QbSponsorOperator
+  QbOperator: urn:jabiz:dataset:default:QbOperator
 params:
   q: { kind: { type: text, maxLength: 100 }, description: Only publications whose name contains this text }
   inReview: { kind: { type: bool }, description: "Only those waiting for a review, of the publication or of a switch of its version (Q51)" }
@@ -41,8 +43,11 @@ results:
   pendingRequestId:    { from: QbPublication.pendingRequestId }
   pendingSince:        { from: QbPublication.pendingSince }
   waitingSince:        { from: QbPublication.submittedAt }
+  # F-S1b: the sponsor's operator now (every sponsor has one), for the platform's filter by operator.
+  operatorId:   { from: QbSponsorOperator.operatorId }
+  operatorName: { from: QbOperator.name }
 list:
-  filters: [publicationId, publisherKind, publisherId, quizId, status, startAt, submittedAt]
+  filters: [publicationId, publisherKind, publisherId, quizId, status, startAt, submittedAt, operatorId]
   sorts:   [editedAt, submittedAt, pendingSince, waitingSince, startAt, name, status]
   defaultSort: { field: editedAt, asc: false }
   key: [publicationId]
@@ -82,12 +87,16 @@ SELECT
     p.{{QbPublication.pendingRequestId}}    AS pendingRequestId,
     p.{{QbPublication.pendingSince}}        AS pendingSince,
     -- Since when it waits for a review (Q51): a switch's request, else the submission.
-    coalesce(p.{{QbPublication.pendingSince}}, p.{{QbPublication.submittedAt}}) AS waitingSince
+    coalesce(p.{{QbPublication.pendingSince}}, p.{{QbPublication.submittedAt}}) AS waitingSince,
+    qso.{{QbSponsorOperator.operatorId}} AS operatorId,
+    qop.{{QbOperator.name}}               AS operatorName
 FROM {{QbPublication}} p
 LEFT JOIN {{QbQuizVersion}} v ON v.{{QbQuizVersion.versionId}} = p.{{QbPublication.versionId}}
 LEFT JOIN {{QbPublicationCounter}} c ON c.{{QbPublicationCounter.publicationId}} = p.{{QbPublication.publicationId}}
 LEFT JOIN {{QbPublicationStartCounter}} s
     ON s.{{QbPublicationStartCounter.publicationId}} = p.{{QbPublication.publicationId}}
+LEFT JOIN {{QbSponsorOperator}} qso ON qso.{{QbSponsorOperator.userId}} = p.{{QbPublication.publisherId}}
+LEFT JOIN {{QbOperator}} qop ON qop.{{QbOperator.operatorId}} = qso.{{QbSponsorOperator.operatorId}}
 WHERE (CAST(:q AS text) IS NULL OR strpos(lower(p.{{QbPublication.name}}), lower(CAST(:q AS text))) > 0)
   AND (CAST(:inReview AS boolean) IS NOT TRUE OR p.{{QbPublication.status}} = 'PENDING_REVIEW'
        OR p.{{QbPublication.pendingRequestId}} IS NOT NULL)

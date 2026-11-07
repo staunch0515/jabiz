@@ -188,4 +188,11 @@ public class CertificationConfig {
         qbCertificationOverview() {
         return CertificationProcesses.overview();
     }
+
+    /** F-S1b: an operator's overview, for the platform (read only). */
+    @Bean
+    ProcessDefinition<CertificationProcesses.OverviewOfInput, CertificationProcesses.Overview, ProcessContext>
+        qbCertificationOverviewOf() {
+        return CertificationProcesses.overviewOf();
+    }
 }

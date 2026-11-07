@@ -120,9 +120,13 @@ public final class OperatorProcesses {
     public record TeamMember(String userId, String displayName, String email, boolean lead, Instant addedAt,
         boolean self) {}
 
-    /** @param lead whether the caller leads the operator (the page offers removing members then) */
+    /**
+     * @param lead       whether the caller leads the operator (the page offers removing members then)
+     * @param ownSponsor whether the caller's account is the operator's own sponsor (F-S1: its first lead's), who
+     *                   joins the sponsors' entry to publish as one
+     */
     public record TeamOutput(String operatorId, String name, String status, String collection, boolean lead,
-        List<TeamMember> members) {}
+        List<TeamMember> members, boolean ownSponsor) {}
 
     static final String INPUT = "input";
     static final String OUTPUT = "output";
@@ -336,7 +340,9 @@ public final class OperatorProcesses {
                         java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())));
                     ctx.put(OUTPUT, new TeamOutput(String.valueOf(operator.id()), operator.get("name"),
                         operator.get("status"), operator.get("collection"),
-                        Boolean.TRUE.equals(ctx.get(OperatorChecks.LEAD)), List.copyOf(members)));
+                        Boolean.TRUE.equals(ctx.get(OperatorChecks.LEAD)), List.copyOf(members),
+                        // F-S1: the caller's account is the operator's own sponsor (its first lead's).
+                        java.util.Objects.equals(operator.get("directSponsorId"), ctx.request().actorId())));
                 });
         });
     }

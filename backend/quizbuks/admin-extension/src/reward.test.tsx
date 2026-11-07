@@ -19,6 +19,7 @@ type Row = Record<string, unknown>
 /** The server as the cash rewards, prizes and digital prizes pages see it through `@jabiz/admin`. */
 const server = vi.hoisted(() => ({
   permissions: new Set<string>(),
+  entry: 'admin',
   rows: [] as Record<string, unknown>[],
   runQuery: vi.fn(),
   runProcess: vi.fn(),
@@ -33,7 +34,7 @@ vi.mock('@jabiz/admin', async (original) => {
     unwrap: async (call: Promise<unknown>) => call,
     runQuery: server.runQuery,
     runProcess: server.runProcess,
-    useAuth: () => ({ can: (p: string) => server.permissions.has(p) }),
+    useAuth: () => ({ entry: server.entry, can: (p: string) => server.permissions.has(p) }),
     UserName: ({ id }: { id: string | null }) => <span data-testid="user-name">{id}</span>,
   }
 })
@@ -54,9 +55,14 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
-  server.permissions = new Set(['qb.admin.publication.read', 'qb.cash.resolve'])
+  server.permissions = new Set(['qb.admin.publication.read'])
+  server.entry = 'admin'
   server.rows = [reward()]
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { count?: boolean } = {}) => {
+    if (id === TEMPLATE.operators) {
+      return { items: [{ operatorId: 'op-kanto', name: 'Kanto Partners', contactEmail: 'ops@kanto.example' }],
+        offset: 0, limit: 20 }
+    }
     if (id !== TEMPLATE.cashRewards && id !== TEMPLATE.redemptions && id !== TEMPLATE.digitalPrizes) {
       return { items: [], offset: 0, limit: 20 }
     }
@@ -89,33 +95,40 @@ function renderAt(path: string, route: string, element: ReactNode) {
 }
 
 describe('CashRewardsPage', () => {
-  it('lists the cash rewards with both sides and the Taker\'s note, and decides a disputed one', async () => {
+  it('lists the cash rewards with both sides and the Taker\'s note, and decides none of them (F-S1)', async () => {
+    server.rows = [reward({ operatorId: 'op-kanto', operatorName: 'Kanto Partners' })]
     const { container } = renderAt('/qb/cash-rewards', '/qb/cash-rewards', <CashRewardsPage />)
     const row = await screen.findByTestId('cash-row')
     expect(row).toHaveTextContent('C-ABCD1234')
     expect(row).toHaveTextContent('Acme')
     expect(row).toHaveTextContent('Mei')
+    // The platform reads every operator's, with the Sponsor's operator.
+    expect(within(row).getByTestId('row-operator')).toHaveTextContent('Kanto Partners')
     expect(within(row).getByTestId('cash-row-dispute')).toHaveTextContent('Taker: I got 50, not 100')
     await waitFor(() => expect(within(row).getByTestId('cash-row-status')).toHaveTextContent('Disputed'))
     await expectAccessible(container)
-    await userEvent.click(within(row).getByTestId('cash-row-resolve'))
-    const dialog = await screen.findByTestId('cash-resolve-dialog')
-    expect(dialog).toHaveTextContent('I got 50, not 100')
-    await userEvent.click(within(dialog).getByTestId('cash-resolution-UNPAID'))
-    await userEvent.type(within(dialog).getByTestId('cash-resolve-note'), 'The Sponsor agrees')
-    await userEvent.click(within(dialog).getByTestId('cash-resolve-send'))
-    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.cashResolve,
-      { cashRewardId: 'c1', resolution: 'UNPAID', note: 'The Sponsor agrees' }))
-    await waitFor(() => expect(screen.queryByTestId('cash-resolve-dialog')).toBeNull())
+    // The Sponsor marks it paid again, or the Taker confirms it: nobody here decides it.
+    expect(within(row).queryByTestId('cash-row-resolve')).toBeNull()
+    expect(screen.queryByRole('button', { name: /decide/i })).toBeNull()
   })
 
-  it('offers no decision without the permission, and filters by state on the server', async () => {
-    server.permissions = new Set(['qb.admin.publication.read'])
-    renderAt('/qb/cash-rewards?status=DUE', '/qb/cash-rewards', <CashRewardsPage />)
+  it('filters by state and by operator on the server', async () => {
+    server.permissions = new Set(['qb.admin.publication.read', 'qb.admin.operators.read'])
+    renderAt('/qb/cash-rewards?status=DUE&operator=op-kanto', '/qb/cash-rewards', <CashRewardsPage />)
     await screen.findByTestId('cash-row')
-    expect(screen.queryByTestId('cash-row-resolve')).toBeNull()
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.cashRewards, expect.objectContaining({
-      filters: [{ field: 'status', op: 'eq', value: 'DUE' }] }))
+      filters: [{ field: 'status', op: 'eq', value: 'DUE' }, { field: 'operatorId', op: 'eq', value: 'op-kanto' }] }))
+    await waitFor(() => expect(screen.getByTestId('operator-filter')).toHaveTextContent('Kanto Partners'))
+  })
+
+  it('shows an operator its own Sponsors\' without an operator to choose', async () => {
+    server.entry = 'operator'
+    server.permissions = new Set(['qb.admin.publication.read', 'qb.operator.use'])
+    renderAt('/qb/cash-rewards?operator=op-other', '/qb/cash-rewards', <CashRewardsPage />)
+    const row = await screen.findByTestId('cash-row')
+    expect(within(row).queryByTestId('row-operator')).toBeNull()
+    expect(screen.queryByTestId('operator-filter')).toBeNull()
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.cashRewards, expect.objectContaining({ filters: [] }))
   })
 })
 

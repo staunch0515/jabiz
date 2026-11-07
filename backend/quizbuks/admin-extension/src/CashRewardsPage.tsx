@@ -1,37 +1,23 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { useId, useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import {
-  Alert,
-  AlertDescription,
   Button,
   DataTable,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   EXTENSION_NAMESPACE,
   Input,
   Label,
-  notify,
   PageHeader,
-  RadioGroup,
-  RadioGroupItem,
-  Textarea,
   UserName,
-  useAuth,
   type ColumnDef,
 } from '@jabiz/admin'
 import { StatusFilter } from './finance-components'
 import { EmptyState, LoadFailed, PublisherLink, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
-import { DICTIONARY, PATH, PERMISSION } from './ids'
-import { CASH_RESOLUTIONS, readCashRewards, resolveCashReward, type CashResolution, type CashReward }
-  from './reward-api'
+import { DICTIONARY, PATH } from './ids'
+import { readCashRewards, type CashReward } from './reward-api'
+import { operatorColumn, useOperatorFilter } from './operator-filter'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { dueAt: 'dueAt', amount: 'amount', status: 'status' } as const
@@ -40,86 +26,18 @@ const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const right = { className: 'text-right tabular-nums' }
 const KEY = ['qb-ext', 'cash-rewards'] as const
 
-/** An administrator decides a disputed cash reward (`QB_CASH_REWARD_RESOLVE`): paid, unpaid or void, with a note. */
-function ResolveDialog({ reward, onClose }: { reward: CashReward; onClose: () => void }) {
-  const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const id = useId()
-  const queryClient = useQueryClient()
-  const [resolution, setResolution] = useState<CashResolution>('PAID')
-  const [note, setNote] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (busy) return
-    setBusy(true)
-    setProblem(null)
-    try {
-      await resolveCashReward(reward.cashRewardId, resolution, note)
-      notify.success(t('reward.cash.resolved', { code: reward.code }))
-      await queryClient.invalidateQueries({ queryKey: KEY })
-      onClose()
-    } catch (error) {
-      setProblem(error instanceof Error ? error.message : String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
-      <DialogContent data-testid="cash-resolve-dialog">
-        <form noValidate className="flex flex-col gap-4" onSubmit={submit}>
-          <DialogHeader>
-            <DialogTitle>{t('reward.cash.resolveTitle', { code: reward.code })}</DialogTitle>
-            <DialogDescription>
-              {t('reward.cash.resolveText', { amount: money(reward.amount), sponsor: reward.sponsorCompany ?? '?',
-                taker: reward.takerName ?? '?', note: reward.disputeNote ?? '' })}
-            </DialogDescription>
-          </DialogHeader>
-          <fieldset className="flex flex-col gap-2">
-            <legend className="text-sm font-medium">{t('reward.cash.resolution')}</legend>
-            <RadioGroup value={resolution} onValueChange={(value) => setResolution(value as CashResolution)}
-              data-testid="cash-resolution">
-              {CASH_RESOLUTIONS.map((value) => (
-                <div key={value} className="flex items-center gap-2">
-                  <RadioGroupItem id={`${id}-${value}`} value={value} data-testid={`cash-resolution-${value}`} />
-                  <Label htmlFor={`${id}-${value}`} className="font-normal">{t(`reward.cash.resolutions.${value}`)}</Label>
-                </div>
-              ))}
-            </RadioGroup>
-          </fieldset>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`${id}-note`}>{t('reward.cash.note')}</Label>
-            <Textarea id={`${id}-note`} value={note} maxLength={500} aria-describedby={`${id}-note-hint`}
-              data-testid="cash-resolve-note" onChange={(event) => setNote(event.target.value)} />
-            <p id={`${id}-note-hint`} className="text-muted-foreground text-sm">{t('reward.cash.noteHint')}</p>
-          </div>
-          {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>{t('manual.dialog.cancel')}</Button>
-            <Button type="submit" disabled={busy} aria-busy={busy || undefined} data-testid="cash-resolve-send">
-              {t('reward.cash.send')}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 /**
  * Every cash reward (docs/quizbuks/plans/Q22-reward-methods.md §2), newest first, by state and text: who owes whom
- * how much and where it stands; a disputed one is decided here by whoever may.
+ * how much and where it stands. Nobody here decides a dispute (F-S1): the Sponsor marks it paid again, or the Taker
+ * confirms it.
  */
 export default function CashRewardsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const { can } = useAuth()
   const status = useLabels(DICTIONARY.cashStatus)
   const [search, setSearch] = useSearchParams()
   const filterStatus = search.get('status')
   const [text, setText] = useState(search.get('q') ?? '')
   const q = search.get('q') ?? ''
-  const [resolving, setResolving] = useState<CashReward | null>(null)
   const set = (change: Record<string, string | null>) => {
     const next = new URLSearchParams(search)
     for (const [key, value] of Object.entries(change)) {
@@ -132,8 +50,10 @@ export default function CashRewardsPage() {
     { kind: 'amount', name: 'amount', label: t('reward.cash.amount') },
     { kind: 'time', name: 'dueAt', label: t('reward.cash.dueAt') },
   ], 'cash-filters')
-  const { query, table, sortable } = usePaged([...KEY, filterStatus, q, more.filters],
-    (offset, limit, sorts) => readCashRewards(filterStatus, q, offset, limit, sorts, more.filters), true, SORTS)
+  const operators = useOperatorFilter()
+  const filters = [...more.filters, ...operators.filters]
+  const { query, table, sortable } = usePaged([...KEY, filterStatus, q, filters],
+    (offset, limit, sorts) => readCashRewards(filterStatus, q, offset, limit, sorts, filters), true, SORTS)
   const columns = useMemo<ColumnDef<CashReward, unknown>[]>(() => [
     { id: 'dueAt', header: t('reward.cash.dueAt'), cell: ({ row }) => when(row.original.dueAt) },
     { id: 'code', header: t('reward.cash.code'),
@@ -143,6 +63,7 @@ export default function CashRewardsPage() {
         <PublisherLink kind={row.original.publisherKind} id={row.original.publisherId}
           label={row.original.sponsorCompany} />
       ) },
+    ...(operators.across ? [operatorColumn<CashReward>(t('pickers.operatorColumn'))] : []),
     { id: 'taker', header: t('reward.cash.taker'),
       cell: ({ row }) => (
         <Link to={PATH.user(row.original.userId)} className={linkClass}>
@@ -176,21 +97,13 @@ export default function CashRewardsPage() {
           )}
         </span>
       ) },
-    { id: 'actions', header: () => <span className="sr-only">{t('reward.cash.resolve')}</span>,
-      cell: ({ row }) => row.original.status === 'DISPUTED' && can(PERMISSION.cashResolve) ? (
-        <span className="flex justify-end">
-          <Button size="sm" onClick={() => setResolving(row.original)} data-testid="cash-row-resolve">
-            {t('reward.cash.resolve')}
-            <span className="sr-only">: {row.original.code}</span>
-          </Button>
-        </span>
-      ) : null },
-  ], [t, status, can])
+  ], [t, status, operators.across])
 
   return (
     <div className="flex flex-col gap-4" data-testid="cash-rewards">
       <PageHeader title={t('reward.cash.title')} description={t('reward.cash.description')} className="pb-0" />
       <div className="flex flex-wrap items-end gap-4" role="group" aria-label={t('finance.filter.label')}>
+        {operators.bar}
         <StatusFilter dictionary={DICTIONARY.cashStatus} value={filterStatus} testId="cash-status"
           onChange={(value) => set({ status: value })} />
         <form role="search" className="flex items-end gap-2" onSubmit={(event) => {
@@ -219,7 +132,6 @@ export default function CashRewardsPage() {
             empty={<EmptyState art="money" title={t('reward.cash.none')} />}
             rowProps={(row) => ({ 'data-testid': 'cash-row', 'data-id': row.cashRewardId, 'data-status': row.status })} />
         )}
-      {resolving && <ResolveDialog reward={resolving} onClose={() => setResolving(null)} />}
     </div>
   )
 }

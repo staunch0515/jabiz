@@ -114,3 +114,24 @@
 - 举报与数字奖品争议的待办照旧经 `OperatorHandover`。获客认领（`QB_PROSPECT_CLAIM`，由发起方本人运行）的"有待审审批即不改派"不变：放宽它要把 `approval.scope.move` 给发起方角色，需要另行决定。
 - 测试：`OperatorsEverywhereIT.aSponsorWaitingForAReviewIsMovedWithItAndHearsOfTheMove`（缺 `approval.scope.move` 即 403、改派后请求与待办的范围值是新运营商、新运营商的成员能决定）；`QbRolesTest`。
 
+
+## 8. F-S1b 运营商管理系统与平台管理系统的拆分
+
+两个入口用同一个管理系统扩展（`/admin/` 只接受平台的角色，`/operator/` 只接受 `QB_OPERATOR`），菜单项按权限显示，所以"拆分"就是：运营商的一切日常经营在 `qb.operator.use` 一组；平台一组只留监控、全局规则、应急与**跨运营商的只读查询**（答复 5）。F-S1b 再分两个 PR：
+
+### F-S1b1 菜单、只读查询与删除（本 PR）
+1. **菜单**（`index.tsx`）：
+   - "运营商管理系统"一组（`qb.operator.use`）：首页、发起方、审核（发布、入驻、主页）、发起方主页、商品、举报、兑换、数字奖品、现金奖励、获客、认证、计费、结算、账户、价目。
+   - 平台一组：Quiz、发布、用户、答题记录、法律文本、公告、AI、运营商、抽查、推荐、受众规则；跨运营商的只读查询："审核查询""发起方主页""商品""举报""兑换""数字奖品""现金奖励""获客""认证"——同一页面，按会话显示：运营商的会话可操作（权限决定按钮），平台的会话只读，多一个**运营商筛选**。平台一组的菜单项用运营商不持有的权限（`qb.admin.users.read` 等），`*` 两组都看到。
+2. **按运营商筛选**：模板 `qb.admin.publications`、`qb.admin.sponsors`（待审入驻）、`qb.admin.sponsor-pages`、`qb.admin.sponsor-products`、`qb.admin.reports`、`qb.admin.redemptions`、`qb.admin.digital-prizes`、`qb.admin.cash-rewards`、`qb.admin.sponsor-certifications` 加参数 `operatorId` 与列 `operatorId` / `operatorName`（经 `QbSponsorOperator`）；获客照旧按所有者（`owner` = 运营商编号）。运营商的会话本来只读到自己的（范围），参数对它无意义、页面不显示筛选。
+3. **很多运营商**：新组件 `OperatorPicker`（`Combobox` 远程搜索 `qb.admin.operators` 的 `q`，分页取 20 个）用于筛选、改派与获客的所有者；`OperatorsPage` 分页与搜索（模板加 `q`）。
+4. **审核查询**（平台）：`ReviewsPage` 对不持有 `qb.review.*` 的平台会话显示只读的三个队列（发布、入驻、主页，带运营商列与筛选）；打开的审核页不显示决定面板（`ApprovalPanel` 只给持有审核权限的会话；内容管理员的 `approval.decide` 是财务四眼用的）。
+5. **删除**（§6 第 12–14 条，需求方已确认）：`CashRewardsPage` 的裁决按钮与对话框、`resolveCashReward`、`PROCESS.cashResolve`、`PERMISSION.cashResolve`；`CertificationsPage` 的官方出题方一节、`officialSet`、`DATASET.officialPublisher`、`CERTIFICATION_DIRECT` 与"总部（直营）"；获客的 `DIRECT`（`prospect-api.ts`、`prospect-scope.ts`；平台的会话只读，所有者用 `OperatorPicker` 选，默认空 = 请先选择）；`OperatorPage` 的"改回总部"（后端已不接受不带运营商的改派）。
+6. **文字**：新写与改动的文字不用"后台""总部"（运营商管理系统 / 平台管理系统 / 平台；日文 運営パートナー，英文 Operator Management System / the platform），扩展中现存的"总部"一并改为"平台"（`tools/quizbuks/terms`）。
+7. **测试**：Vitest 各页（运营商会话可操作、平台会话只读且有筛选、删除的按钮不在）、`OperatorPicker`、axe；后端模板参数的 IT（运营商筛选、运营商会话的范围不变）。
+
+### F-S1b2 首页、"你的运营商"、文档与 e2e（下一 PR）
+- 扩展的 `home`：平台会话落到"平台首页"（每日核对 `qb.admin.operator-health` 的问题：没有默认运营商时置顶"请先建默认运营商"并链到运营商页；各运营商的审核量与积压），运营商会话落到运营商首页。
+- 发起方页面（`quizbuks-web/sponsor`）显示"你的运营商"（名称与联系方式；模板 `qb.sponsor.operator`）；帮助说明。
+- `operations.md`：运营商、直营发起方、改派（含审批移动）、获客、现金奖励各节；已有安装收回 `QB_ADMIN_CONTENT` 去掉的授权。
+- e2e：入驻与发布审核改由运营商成员完成（`operators.ts` 的 `operatorWithLead` 与成员登录 `/operator/`）。
