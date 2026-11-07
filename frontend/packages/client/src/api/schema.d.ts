@@ -1732,6 +1732,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{job}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["requestJobRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mail/layouts": {
         parameters: {
             query?: never;
@@ -2561,6 +2577,16 @@ export interface components {
             entry?: string;
             token?: string;
         };
+        FailingItemView: {
+            /** Format: int32 */
+            failures?: number;
+            itemKey?: string;
+            lastError?: string;
+            /** Format: date-time */
+            lastFailureTime?: string;
+            /** Format: date-time */
+            retryAt?: string;
+        };
         FileInfo: {
             contentType?: string;
             /** Format: uuid */
@@ -2883,6 +2909,61 @@ export interface components {
         InvitationConfirm: {
             password?: string;
             token?: string;
+        };
+        ItemCountsView: {
+            /** Format: int32 */
+            busy?: number;
+            /** Format: int32 */
+            deferred?: number;
+            /** Format: int32 */
+            failed?: number;
+            more?: boolean;
+            /** Format: int32 */
+            replayed?: number;
+            /** Format: int32 */
+            selected?: number;
+            /** Format: int32 */
+            succeeded?: number;
+        };
+        JobRunAccepted: {
+            job?: string;
+            replayed?: boolean;
+            /** Format: int64 */
+            requestSeqId?: number;
+            /** Format: date-time */
+            scheduledTime?: string;
+        };
+        JobRunView: {
+            error?: string;
+            /** Format: date-time */
+            finishedTime?: string;
+            instanceId?: string;
+            items?: components["schemas"]["ItemCountsView"];
+            outcome?: string;
+            /** Format: int64 */
+            processSeqId?: number;
+            /** Format: int64 */
+            requestSeqId?: number;
+            requestedBy?: string;
+            /** Format: date-time */
+            scheduledTime?: string;
+            /** Format: date-time */
+            startedTime?: string;
+        };
+        JobView: {
+            cron?: string;
+            failingItems?: components["schemas"]["FailingItemView"][];
+            kind?: string;
+            name?: string;
+            /** Format: date-time */
+            nextTime?: string;
+            processName?: string;
+            /** Format: int32 */
+            processVersion?: number;
+            recentRuns?: components["schemas"]["JobRunView"][];
+            rerunTimes?: string[];
+            running?: boolean;
+            zone?: string;
         };
         JoinRequest: {
             password?: string;
@@ -6216,9 +6297,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["JobView"][];
+                };
+            };
+        };
+    };
+    requestJobRun: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                job: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRunAccepted"];
                 };
             };
         };
