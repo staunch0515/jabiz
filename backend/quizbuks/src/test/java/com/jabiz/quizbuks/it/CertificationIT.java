@@ -91,11 +91,12 @@ class CertificationIT extends PlayItSupport {
 
     @Test
     void passingAnOfficialRoundHoldsTheCertificationForAYear() {
-        String official = newSponsor("q69-official");
+        NewOperator operator = officialOperator("Q69");
+        String official = operator.leadId();
         credit(official, 10_000);
-        run(CertificationProcesses.OFFICIAL_SET, hq(), body("userId", official, "active", true));
         String round = livePublication(official, "Q69 sponsor rules");
-        Map<String, Object> added = run(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", round,
+        Map<String, Object> added = run(CertificationProcesses.ROUND_ADD, memberSession(official,
+            operator.operatorId()), body("publicationId", round,
             "certification", CERT));
         assertThat(added).containsEntry("certification", CERT).containsEntry("certificationVersion", 1);
 
@@ -131,29 +132,32 @@ class CertificationIT extends PlayItSupport {
 
     @Test
     void onlyAnOfficialPublishersPublicationIsARoundAndAClosedRoundCountsOnlyEarlierPasses() {
+        // F-S1: the official publisher is the operator's own sponsor; the platform operator's other sponsors are not.
+        NewOperator operator = officialOperator("Q69 closing");
+        String official = operator.leadId();
+        String session = memberSession(official, operator.operatorId());
         String plain = newSponsor("q69-plain");
         credit(plain, 10_000);
+        run(OperatorProcesses.ASSIGN, hq(), body("userId", plain, "operatorId", operator.operatorId(), "reason",
+            "Q69"));
         String notOfficial = livePublication(plain, "Q69 not official");
-        assertThat(codes(refused(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", notOfficial,
+        assertThat(codes(refused(CertificationProcesses.ROUND_ADD, session, body("publicationId", notOfficial,
             "certification", CERT), 422))).containsExactly(CertificationCodes.NOT_OFFICIAL);
-        // A taker is no official publisher's sponsor; an unknown taker cannot be marked.
-        String taker = newTaker("q69-not-sponsor", "JP");
-        assertThat(codes(refused(CertificationProcesses.OFFICIAL_SET, hq(), body("userId", taker, "active", true),
-            422))).containsExactly(CertificationCodes.NOT_APPROVED_SPONSOR);
+        // Headquarters runs no rounds (F-S1: certifications are the operators').
+        refused(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", notOfficial, "certification", CERT),
+            422);
 
-        String official = newSponsor("q69-official-2");
         credit(official, 10_000);
-        run(CertificationProcesses.OFFICIAL_SET, hq(), body("userId", official, "active", true));
         String round = livePublication(official, "Q69 closing");
-        String roundId = (String) run(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", round,
+        String roundId = (String) run(CertificationProcesses.ROUND_ADD, session, body("publicationId", round,
             "certification", CERT)).get("roundId");
-        assertThat(codes(refused(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", round,
+        assertThat(codes(refused(CertificationProcesses.ROUND_ADD, session, body("publicationId", round,
             "certification", CERT), 422))).containsExactly(CertificationCodes.ALREADY_A_ROUND);
 
         String early = newTaker("q69-early", "JP");
         play(early, round, true, true);
         clock.advance(Duration.ofMinutes(1));
-        run(CertificationProcesses.ROUND_CLOSE, hq(), body("roundId", roundId));
+        run(CertificationProcesses.ROUND_CLOSE, session, body("roundId", roundId));
         String late = newTaker("q69-late", "JP");
         play(late, round, true, true);
         assertThat(claim(early).get("heldUntil")).isNotNull();
@@ -165,19 +169,22 @@ class CertificationIT extends PlayItSupport {
 
     @Test
     void grantsAndRevocationsByHandNeedAReasonAndARevocationOutweighsEarlierPasses() {
+        NewOperator operator = officialOperator("Q69 hand");
+        String session = memberSession(operator.leadId(), operator.operatorId());
         String person = newTaker("q69-hand", "JP");
-        refused(CertificationProcesses.GRANT, hq(), body("userId", person, "certification", CERT, "reason", ""), 400);
-        run(CertificationProcesses.GRANT, hq(), body("userId", person, "certification", CERT, "reason",
+        refused(CertificationProcesses.GRANT, session, body("userId", person, "certification", CERT, "reason", ""), 400);
+        run(CertificationProcesses.GRANT, session, body("userId", person, "certification", CERT, "reason",
             "Met at the fair"));
         assertThat(claim(person).get("heldUntil")).isNotNull();
         clock.advance(Duration.ofMinutes(1));
-        run(CertificationProcesses.REVOKE, hq(), body("userId", person, "certification", CERT, "reason", "Mistake"));
+        run(CertificationProcesses.REVOKE, session, body("userId", person, "certification", CERT, "reason",
+            "Mistake"));
         assertThat(claim(person)).containsEntry("heldUntil", null);
         // Takers cannot grant themselves anything.
         refused(CertificationProcesses.GRANT, taker(person), body("userId", person, "certification", CERT,
             "reason", "Me"), 403);
-        Map<String, Object> overview = run(CertificationProcesses.OVERVIEW, hq(), body());
-        assertThat(overview).containsEntry("owner", "direct");
+        Map<String, Object> overview = run(CertificationProcesses.OVERVIEW, session, body());
+        assertThat(overview).containsEntry("owner", operator.operatorId());
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> byHand = (List<Map<String, Object>>) overview.get("byHand");
         assertThat(byHand).filteredOn(row -> person.equals(row.get("userId")))
@@ -193,14 +200,15 @@ class CertificationIT extends PlayItSupport {
      */
     @Test
     void whoHoldsTheCertificationStartsNoneOfItsRoundsUntilItEnds() {
-        String official = newSponsor("q70a-official");
+        NewOperator operator = officialOperator("Q70a");
+        String official = operator.leadId();
+        String session = memberSession(official, operator.operatorId());
         credit(official, 10_000);
-        run(CertificationProcesses.OFFICIAL_SET, hq(), body("userId", official, "active", true));
         String october = livePublication(official, "Q70a October round");
         String november = livePublication(official, "Q70a November round");
         String ordinary = livePublication(official, "Q70a ordinary");
-        run(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", october, "certification", CERT));
-        run(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", november, "certification", CERT));
+        run(CertificationProcesses.ROUND_ADD, session, body("publicationId", october, "certification", CERT));
+        run(CertificationProcesses.ROUND_ADD, session, body("publicationId", november, "certification", CERT));
 
         String holder = newTaker("q70a-holder", "JP");
         String other = newTaker("q70a-other", "JP");
@@ -224,7 +232,7 @@ class CertificationIT extends PlayItSupport {
 
         // Revoked: they may answer a round again.
         clock.advance(Duration.ofMinutes(1));
-        run(CertificationProcesses.REVOKE, hq(), body("userId", holder, "certification", CERT, "reason",
+        run(CertificationProcesses.REVOKE, session, body("userId", holder, "certification", CERT, "reason",
             "Answers shared"));
         assertThat(feedIds(holder)).contains(november);
         assertThat(detail(holder, november)).containsEntry("canStart", true).containsEntry("heldUntil", null);
@@ -244,30 +252,22 @@ class CertificationIT extends PlayItSupport {
 
     @Test
     void anOperatorRunsItsOwnOfficialPublishersRoundsAndSeesOnlyItsOwn() {
-        String north = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("North"), "contactName", "N",
-            "contactEmail", "ops@north.example")).get("operatorId");
-        String south = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("South"), "contactName", "S",
-            "contactEmail", "ops@south.example")).get("operatorId");
+        NewOperator northOperator = newOperatorWithLead(hq(), unique("North"), null);
+        String north = northOperator.operatorId();
+        String south = newOperator(hq(), unique("South"));
         String northSession = operatorSession(member(north, unique("q69-n")), north);
         String southSession = operatorSession(member(south, unique("q69-s")), south);
-        String northOfficial = newSponsor("q69-north-official");
+        // F-S1: an operator's official publisher is its own sponsor (its lead's account).
+        String northOfficial = northOperator.leadId();
         credit(northOfficial, 10_000);
-        // An operator's official publisher is one of its sponsors (its scope covers the publications).
-        run(OperatorProcesses.ASSIGN, hq(), body("userId", northOfficial, "operatorId", north, "reason", "Q69"));
-        run(CertificationProcesses.OFFICIAL_SET, hq(), body("userId", northOfficial, "operatorId", north,
-            "active", true));
         String round = livePublication(northOfficial, "Q69 north");
         // Another operator's sponsor's publication is not found (the operators' scope); headquarters may not use it.
         refused(CertificationProcesses.ROUND_ADD, southSession, body("publicationId", round, "certification", CERT),
             404);
-        assertThat(codes(refused(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", round,
-            "certification", CERT), 422))).containsExactly(CertificationCodes.NOT_OFFICIAL);
+        refused(CertificationProcesses.ROUND_ADD, hq(), body("publicationId", round, "certification", CERT), 422);
         String roundId = (String) run(CertificationProcesses.ROUND_ADD, northSession, body("publicationId", round,
             "certification", CERT)).get("roundId");
         refused(CertificationProcesses.ROUND_CLOSE, southSession, body("roundId", roundId), 404);
-        // Operators do not mark official publishers.
-        refused(CertificationProcesses.OFFICIAL_SET, northSession, body("userId", northOfficial, "active", false),
-            403);
 
         String taker = newTaker("q69-north-taker", "JP");
         play(taker, round, true, true);

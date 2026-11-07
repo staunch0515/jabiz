@@ -34,6 +34,7 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
     @Test
     void reviewIsRefusedUntilConfiguredAndSkippedOnlyByTheSwitch() {
         Map<String, Object> installed = setup();
+        installDefaultOperator();
         @SuppressWarnings("unchecked")
         List<Object> proposals = (List<Object>) installed.get("proposals");
         assertThat(installed.get("rulesProposed")).isEqualTo(List.of(PublicationApprovals.RULE,

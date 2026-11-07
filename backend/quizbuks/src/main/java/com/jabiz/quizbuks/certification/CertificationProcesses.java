@@ -34,18 +34,16 @@ import java.util.stream.Collectors;
 /**
  * The certifications' processes (Q69, docs/quizbuks/plans/Q69-certifications.md):
  * <ul>
- *   <li>headquarters marks the official publishers ({@value #OFFICIAL_SET});</li>
- *   <li>an operator, or headquarters for the direct sponsors, makes a publication of its official publisher a round
- *       of a certification and closes it ({@value #ROUND_ADD}, {@value #ROUND_CLOSE});</li>
- *   <li>an operator or headquarters grants or revokes a certification by hand, with a reason ({@value #GRANT},
- *       {@value #REVOKE}; headquarters spot-checks);</li>
+ *   <li>an operator makes a publication of its own sponsor (F-S1: the official publisher is the operator's direct
+ *       sponsor) a round of a certification and closes it ({@value #ROUND_ADD}, {@value #ROUND_CLOSE});</li>
+ *   <li>an operator grants or revokes a certification by hand, with a reason ({@value #GRANT}, {@value #REVOKE};
+ *       headquarters spot-checks);</li>
  *   <li>a taker records their passes and learns what they hold ({@value #CLAIM}).</li>
  * </ul>
  * None of them touches the answering path: a pass is read from the finished attempt when it is needed.
  */
 public final class CertificationProcesses {
 
-    public static final String OFFICIAL_SET = "QB_OFFICIAL_PUBLISHER_SET";
     public static final String ROUND_ADD = "QB_CERTIFICATION_ROUND_ADD";
     public static final String ROUND_CLOSE = "QB_CERTIFICATION_ROUND_CLOSE";
     public static final String GRANT = "QB_CERTIFICATION_GRANT";
@@ -56,10 +54,7 @@ public final class CertificationProcesses {
     /** Most rounds and records one person's certification reads; more is an error rather than a silent cut. */
     static final int MAX_ROWS = 500;
 
-    public record OfficialInput(@NotBlank @Size(max = 128) String userId, @Size(max = 128) String operatorId,
-        boolean active) {}
 
-    public record OfficialOutput(String userId, String owner, boolean active) {}
 
     public record RoundInput(@NotNull UUID publicationId, @NotBlank @Size(max = 40) String certification) {}
 
@@ -98,71 +93,14 @@ public final class CertificationProcesses {
     static final String OUTPUT = "output";
     static final String SPONSOR = "sponsor";
     static final String OPERATOR = "operator";
-    static final String OFFICIAL = "official";
+    static final String OWN_OPERATOR = "ownOperator";
     static final String CARD = "card";
     static final String ROUNDS = "rounds";
     static final String ROUND = "round";
     static final String RECORDS = "records";
     static final String ATTEMPTS = "attempts";
 
-    // ---- headquarters: the official publishers ----------------------------------------------------------------------
-
-    public static ProcessDefinition<OfficialInput, OfficialOutput, ProcessContext> officialSet() {
-        return ProcessDefinition.define(OFFICIAL_SET, 1, OfficialInput.class, OfficialOutput.class,
-            ProcessContext.class, pb -> pb
-                .description("Headquarters marks an approved sponsor account as the official publisher of an operator "
-                    + "(or of headquarters): its publications may be certification rounds.")
-                .permissions(QbPermissions.CERTIFICATION_ADMIN)
-                .requiresVerifiedEmail()
-                .steps(CallerChecks::refuseBanned)
-                .contextFactory((start, input) -> {
-                    ProcessContext ctx = new ProcessContext(start);
-                    ctx.put(INPUT, input);
-                    return ctx;
-                })
-                .outputMapper(ctx -> ctx.get(OUTPUT, OfficialOutput.class))
-                .step("Lock the account", HoldLock.<ProcessContext>exclusive(
-                    ctx -> QbCertifications.lockName(input(ctx, OfficialInput.class).userId())))
-                .step("Load the sponsor", QueryEntities.<ProcessContext>of(QbAccounts.defaultDataset(QbAccounts.SPONSOR),
-                    ctx -> eq("userId", input(ctx, OfficialInput.class).userId(), 1), SPONSOR))
-                .step("Load the operator", QueryEntities.<ProcessContext>of(
-                    QbOperators.defaultDataset(QbOperators.OPERATOR),
-                    ctx -> eq("operatorId", operatorOf(input(ctx, OfficialInput.class)), 1), OPERATOR))
-                .step("Load the official row", QueryEntities.<ProcessContext>of(
-                    QbCertifications.defaultDataset(QbCertifications.OFFICIAL),
-                    ctx -> eq("userId", input(ctx, OfficialInput.class).userId(), 1), OFFICIAL))
-                .compute("Mark them", (metadata, ctx) -> {
-                    OfficialInput input = input(ctx, OfficialInput.class);
-                    EntityInstance sponsor = first(ctx, SPONSOR);
-                    if (sponsor == null || !SponsorStatus.APPROVED.equals(sponsor.get("reviewStatus"))) {
-                        ctx.reject(new Violation("userId", CertificationCodes.NOT_APPROVED_SPONSOR,
-                            "Only an approved sponsor can be an official publisher", Map.of()));
-                        return;
-                    }
-                    String owner = input.operatorId() == null || input.operatorId().isBlank() ? QbCertifications.DIRECT
-                        : input.operatorId().strip();
-                    if (!QbCertifications.DIRECT.equals(owner) && first(ctx, OPERATOR) == null) {
-                        ctx.reject(new Violation("operatorId", CertificationCodes.NO_SUCH_OPERATOR,
-                            "No such operator", Map.of()));
-                        return;
-                    }
-                    Map<String, Object> values = new LinkedHashMap<>();
-                    values.put("owner", owner);
-                    values.put("active", input.active());
-                    values.put("setBy", ctx.request().actorId());
-                    values.put("setAt", ctx.opTime());
-                    EntityInstance existing = first(ctx, OFFICIAL);
-                    if (existing == null) {
-                        values.put("userId", input.userId());
-                        ctx.changes().insert(QbCertifications.OFFICIAL, values);
-                    } else {
-                        ctx.changes().update(QbCertifications.OFFICIAL, existing.id(), existing.version(), values);
-                    }
-                    ctx.put(OUTPUT, new OfficialOutput(input.userId(), owner, input.active()));
-                }));
-    }
-
-    // ---- an operator or headquarters: the rounds ---------------------------------------------------------------------
+    // ---- an operator: the rounds ---------------------------------------------------------------------
 
     public static ProcessDefinition<RoundInput, RoundOutput, ProcessContext> roundAdd() {
         return ProcessDefinition.define(ROUND_ADD, 1, RoundInput.class, RoundOutput.class, ProcessContext.class, pb -> {
@@ -177,14 +115,13 @@ public final class CertificationProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, RoundOutput.class));
-            OperatorChecks.memberWhenScoped(pb);
+            OperatorChecks.member(pb);
             pb.step("Load the publication's card", QueryEntities.<ProcessContext>of(
                     QbPublications.defaultDataset(QbPublications.CARD),
                     ctx -> eq("publicationId", input(ctx, RoundInput.class).publicationId(), 1), CARD))
-                .step("Load the official publishers", QueryEntities.<ProcessContext>of(
-                    QbCertifications.defaultDataset(QbCertifications.OFFICIAL),
-                    ctx -> EntityQuery.builder().where(new QueryPredicate.Eq("active", true)).limit(MAX_ROWS).build(),
-                    OFFICIAL))
+                .step("Load the caller's operator", QueryEntities.<ProcessContext>of(
+                    QbOperators.defaultDataset(QbOperators.OPERATOR), ctx -> eq("operatorId", owner(ctx), 1),
+                    OWN_OPERATOR))
                 .step("Load the round", QueryEntities.<ProcessContext>of(
                     QbCertifications.defaultDataset(QbCertifications.ROUND),
                     ctx -> eq("publicationId", input(ctx, RoundInput.class).publicationId().toString(), 1), ROUND))
@@ -197,8 +134,9 @@ public final class CertificationProcesses {
                         throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + input.publicationId());
                     }
                     Object publisher = card.get(PublisherKind.ID_FIELD);
-                    boolean official = list(ctx, OFFICIAL).stream().anyMatch(o -> o.get("userId").equals(publisher)
-                        && owner.equals(o.get("owner")));
+                    EntityInstance operator = first(ctx, OWN_OPERATOR);
+                    boolean official = operator != null && publisher != null
+                        && String.valueOf(publisher).equals(String.valueOf((Object) operator.get("directSponsorId")));
                     if (!official) {
                         ctx.reject(new Violation("publicationId", CertificationCodes.NOT_OFFICIAL,
                             "Only a publication of the caller's official publisher can be a round", Map.of()));
@@ -236,7 +174,7 @@ public final class CertificationProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, RoundOutput.class));
-            OperatorChecks.memberWhenScoped(pb);
+            OperatorChecks.member(pb);
             pb.step("Load the round", QueryEntities.<ProcessContext>of(
                     QbCertifications.defaultDataset(QbCertifications.ROUND),
                     ctx -> eq("roundId", input(ctx, RoundRef.class).roundId().toString(), 1), ROUND))
@@ -284,7 +222,7 @@ public final class CertificationProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, GrantOutput.class));
-            OperatorChecks.memberWhenScoped(pb);
+            OperatorChecks.member(pb);
             pb.step("Lock the person's certifications", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbCertifications.lockName(input(ctx, GrantInput.class).userId().strip())))
                 .compute("Record it", (metadata, ctx) -> {
@@ -370,7 +308,7 @@ public final class CertificationProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, Overview.class));
-            OperatorChecks.memberWhenScoped(pb);
+            OperatorChecks.member(pb);
             pb.step("Load the rounds", QueryEntities.<ProcessContext>of(
                     QbCertifications.defaultDataset(QbCertifications.ROUND),
                     ctx -> eq("owner", owner(ctx), MAX_ROWS), ROUNDS))
@@ -420,10 +358,9 @@ public final class CertificationProcesses {
 
     // ---- helpers -----------------------------------------------------------------------------------------------------
 
-    /** The caller's operator, or headquarters' owner when the caller acts for headquarters. */
+    /** The caller's operator ({@link OperatorChecks#member} passed: certifications are an operator's, F-S1). */
     static String owner(ProcessContext ctx) {
-        String operator = OperatorChecks.operatorId(ctx);
-        return operator == null ? QbCertifications.DIRECT : operator;
+        return OperatorChecks.operatorId(ctx);
     }
 
     static Certification certification(String key) {
@@ -506,10 +443,6 @@ public final class CertificationProcesses {
     private static EntityQuery eq(String field, Object value, int limit) {
         return EntityQuery.builder().where(new QueryPredicate.Eq(field, value == null ? "" : value)).limit(limit)
             .build();
-    }
-
-    private static String operatorOf(OfficialInput input) {
-        return input.operatorId() == null || input.operatorId().isBlank() ? "" : input.operatorId().strip();
     }
 
     static <T> T input(ProcessContext ctx, Class<T> type) {

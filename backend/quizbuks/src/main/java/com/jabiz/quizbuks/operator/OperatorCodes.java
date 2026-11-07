@@ -36,8 +36,20 @@ public final class OperatorCodes {
     public static final String HQ_TAKEDOWN = "QB_OPERATOR_HQ_TAKEDOWN";
     /** Headquarters banned the user, or another operator did: the operator does not lift the ban. */
     public static final String HQ_BAN = "QB_OPERATOR_HQ_BAN";
-    /** Another active operator takes the new sponsors of this language already (Q59c): one a language. */
-    public static final String LANGUAGE_TAKEN = "QB_OPERATOR_LANGUAGE_TAKEN";
+    /** F-S1: a new operator is created with its lead. */
+    public static final String LEAD_REQUIRED = "QB_OPERATOR_LEAD_REQUIRED";
+    /** F-S1: an operator's own sponsor is never reassigned. */
+    public static final String DIRECT_SPONSOR_FIXED = "QB_DIRECT_SPONSOR_FIXED";
+    /** F-S1: the operator does not take this kind of publisher. */
+    public static final String KIND_NOT_TAKEN = "QB_OPERATOR_KIND_NOT_TAKEN";
+    /** F-S1: a sponsor with reviews pending is not moved until the platform can move the reviews with them. */
+    public static final String REVIEW_PENDING = "QB_SPONSOR_REVIEW_PENDING";
+    /** F-S1: no default operator takes new sponsors yet (the platform's administrator creates it after installing). */
+    public static final String DEFAULT_MISSING = "QB_OPERATOR_DEFAULT_MISSING";
+    /** The default operator stops being it only when another becomes it (F-S1). */
+    public static final String DEFAULT_KEEP = "QB_OPERATOR_DEFAULT_KEEP";
+    /** The default operator must be active (F-S1). */
+    public static final String DEFAULT_INACTIVE = "QB_OPERATOR_DEFAULT_INACTIVE";
     /** The decision is not one an operator's member made on a review (a sponsor's or a publication's). */
     public static final String NOT_AN_OPERATOR_DECISION = "QB_OPERATOR_NOT_AN_OPERATOR_DECISION";
     /** A problem found by a spot check needs a note saying what it is. */
@@ -85,7 +97,9 @@ public final class OperatorCodes {
 
     public static final List<String> ALL = List.of(NOT_MEMBER, SUSPENDED, NOT_LEAD, FIELD, CODE, CHANGED,
         MEMBER_ELSEWHERE, MEMBER_IS_SPONSOR, MEMBER_UNVERIFIED, MEMBERS_FULL, LEAD_SELF, NOT_A_SPONSOR, HQ_TAKEDOWN,
-        HQ_BAN, NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR, MONTH_OPEN, NO_SHARE, SETTLEMENT_STATE,
+        HQ_BAN, LEAD_REQUIRED, DIRECT_SPONSOR_FIXED, KIND_NOT_TAKEN, REVIEW_PENDING, DEFAULT_MISSING, DEFAULT_KEEP,
+        DEFAULT_INACTIVE,
+        NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR, MONTH_OPEN, NO_SHARE, SETTLEMENT_STATE,
         SETTLEMENT_NOTHING, SETTLEMENT_NO_REVIEW, NO_RATE, PLAN_MONTH, PLAN_PENDING, PLAN_NO_REVIEW, NO_PLAN,
         BANK_ACCOUNT, WITHDRAWAL_NO_ACCOUNT, WITHDRAWAL_COOLDOWN, WITHDRAWAL_AMOUNT, WITHDRAWAL_OPEN, WITHDRAWAL_STATE,
         WITHDRAWAL_NO_REVIEW);

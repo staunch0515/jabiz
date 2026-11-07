@@ -34,7 +34,7 @@ class CertificateIT extends LegalItSupport {
     }
 
     private void grant(String userId) {
-        run(CertificationProcesses.GRANT, hq(), body("userId", userId, "certification", CERT, "reason",
+        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", CERT, "reason",
             "Met at the fair"));
     }
 
@@ -140,7 +140,7 @@ class CertificateIT extends LegalItSupport {
         assertThat(publicItems("qb.public.certificate", "p.key=" + "0".repeat(32))).isEmpty();
 
         clock.advance(Duration.ofDays(1));
-        run(CertificationProcesses.REVOKE, hq(), body("userId", cid, "certification", CERT, "reason", "Mistake"));
+        run(CertificationProcesses.REVOKE, certificationGranter(), body("userId", cid, "certification", CERT, "reason", "Mistake"));
         assertThat(publicItems("qb.public.certificate", "p.key=" + key)).singleElement()
             .satisfies(row -> assertThat(row.get("revokedAt")).isNotNull());
         // Not held any more: the list shows nothing, the issue refuses.
@@ -186,7 +186,7 @@ class CertificateIT extends LegalItSupport {
         assertThat(publicItems("qb.public.taker-page", "p.handle=dee-q77")).isEmpty();
         assertThat(publicItems("qb.public.taker-page", "p.handle=dee-renamed")).hasSize(1);
         clock.advance(Duration.ofDays(1));
-        run(CertificationProcesses.REVOKE, hq(), body("userId", dee, "certification", CERT, "reason", "Mistake"));
+        run(CertificationProcesses.REVOKE, certificationGranter(), body("userId", dee, "certification", CERT, "reason", "Mistake"));
         assertThat(publicItems("qb.public.taker-page", "p.handle=dee-renamed")).isEmpty();
         saveSettings(dee, null, false);
         assertThat(publicItems("qb.public.taker-page", "p.handle=dee-renamed")).isEmpty();

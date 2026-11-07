@@ -11,7 +11,7 @@ import java.util.Locale;
 
 /**
  * AI prospecting (docs/quizbuks/plans/Q48-operators.md, Q48c): an owner (an operator, or headquarters as
- * {@value #DIRECT}) finds businesses on the web along its directions, Claude researches each and drafts a trial quiz
+ * the operator) finds businesses on the web along its directions, Claude researches each and drafts a trial quiz
  * and a mail, a person approves it, and it goes out within the day's cap through the owner's own mail server. Five
  * ordinary tables, written by the processes only ({@link ProspectProcesses}):
  * <ul>
@@ -33,8 +33,6 @@ public final class QbProspects {
     public static final String BLOCK = "QbProspectBlock";
     public static final String USAGE = "QbProspectUsage";
 
-    /** Headquarters as an owner: it prospects too, as the direct "operator" (no operator row, D-Q48-1). */
-    public static final String DIRECT = "direct";
     /** The trial quizzes that went out, read by the public trial page. */
     public static final String PUBLIC_TRIALS = "urn:jabiz:dataset:public:QbProspect";
 

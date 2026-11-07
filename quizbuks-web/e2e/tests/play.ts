@@ -22,7 +22,11 @@ export async function fundedSponsor(request: APIRequestContext) {
   }
   await expect.poll(async () => (await rows(request, token, SPONSOR_DATASET, []))[0]?.attributes.reviewStatus,
     { timeout: 30_000 }).toBe('APPROVED')
+  return { email, token, balance: await fund(request, token) }
+}
 
+/** Tops up an approved sponsor's wallet at the Stripe stub's checkout; returns the balance. */
+export async function fund(request: APIRequestContext, token: string) {
   const topUp = await run(request, token, 'QB_TOPUP_START', { amount: 1000 })
   let checkoutUrl: string | undefined
   await expect.poll(async () => {
@@ -38,7 +42,7 @@ export async function fundedSponsor(request: APIRequestContext) {
     balance = Number((await rows(request, token, SPONSOR_WALLETS, []))[0]?.attributes.balance ?? 0)
     return balance
   }, { message: 'the top-up is credited', timeout: 30_000 }).toBeGreaterThan(0)
-  return { email, token, balance }
+  return balance
 }
 
 /** A verified taker in Japan; returns the address and an access token at the app's entry. */

@@ -97,7 +97,7 @@ public final class OperatorChecks {
     /**
      * Q59c-2 (platform decision D64): the sponsor a process acts on ({@code sponsorUserId}, read after the object was
      * loaded) must be the caller's operator's when an operator's member runs it; any other is not found (404).
-     * Headquarters, and the processes of other entries, pass. A sponsor's publications, rewards and prizes are theirs.
+     * Headquarters (the platform's monitoring and emergency acts), and the processes of other entries, pass. A sponsor's publications, rewards and prizes are theirs.
      */
     public static <I, O> void ownSponsor(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, Object> sponsorUserId) {
@@ -115,12 +115,14 @@ public final class OperatorChecks {
 
     /**
      * The entry scope of the sponsor {@link #ownSponsor} loaded the operator of: their operator's, for the tasks made
-     * about them (Q59c-2); null for a sponsor of headquarters'.
+     * about them (Q59c-2). Every sponsor has one (F-S1).
      */
     public static com.jabiz.context.EntryScope sponsorScope(ProcessContext ctx) {
         EntityInstance assignment = first(ctx, SPONSOR_ASSIGNMENT);
-        return assignment == null ? null
-            : new com.jabiz.context.EntryScope(QbOperators.SCOPE, String.valueOf((Object) assignment.get("operatorId")));
+        if (assignment == null) {
+            throw new IllegalStateException("The sponsor has no operator");
+        }
+        return new com.jabiz.context.EntryScope(QbOperators.SCOPE, String.valueOf((Object) assignment.get("operatorId")));
     }
 
     static List<EntityInstance> list(ProcessContext ctx, String key) {

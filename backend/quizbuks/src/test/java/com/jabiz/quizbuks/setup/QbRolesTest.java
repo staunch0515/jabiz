@@ -31,8 +31,10 @@ class QbRolesTest {
         assertThat(QbRoles.of(QbRoles.OPERATOR).permissions())
             .contains(QbPermissions.OPERATOR_USE, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 "approval.decide", QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
-                // Q69: its own certification rounds, grants and revocations (headquarters marks the official ones).
+                // Q69: its own certification rounds, grants and revocations (its own sponsor publishes them).
                 QbPermissions.CERTIFICATION_MANAGE,
+                // F-S1: which reward methods its sponsors may use.
+                QbPermissions.ADMIN_REWARD_METHODS,
                 // Q82: its sponsors' conversations with takers (the entry scope limits them), never writing in them.
                 QbPermissions.CONVERSATION_READ,
                 // Q87: its sponsors' billing mode (prepaid or postpaid), not the fees themselves.
@@ -40,11 +42,27 @@ class QbRolesTest {
             .doesNotContain(QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
                 QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
-                QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN, QbPermissions.CASH_RESOLVE,
+                QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN,
                 QbPermissions.TOPUP_BANK_APPROVE, QbPermissions.OPERATORS_READ, QbPermissions.OPERATORS_WRITE,
                 QbPermissions.SPOT_CHECK, "control.propose", "control.publish", "platform.param.read",
                 "security.user-role.write", "ledger.read")
             .doesNotHaveDuplicates();
+    }
+
+    @Test
+    void headquartersMonitorsAndActsInEmergenciesButRunsNoSponsors() {
+        // F-S1: the day-to-day running of sponsors is the operators' (headquarters' staff who do it are members of
+        // the platform operator); headquarters keeps reading, spot checks, the global rules and the emergency acts.
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
+            .contains(QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.SPOT_CHECK, QbPermissions.OPERATORS_READ,
+                QbPermissions.ADMIN_PROSPECT, QbPermissions.AUDIENCE_RULES_WRITE)
+            .doesNotContain(QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
+                QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
+                QbPermissions.PROSPECT_USE, QbPermissions.CERTIFICATION_MANAGE)
+            .doesNotHaveDuplicates();
+        // Nobody resolves cash disputes (the platform does not decide them).
+        assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions()).doesNotContain(
+            "qb.cash.resolve"));
     }
 
     @Test
@@ -175,7 +193,7 @@ class QbRolesTest {
     }
 
     @Test
-    void publicationsAreWrittenBySponsorsReviewedByContentAdministratorsAndReadByAdministrators() {
+    void publicationsAreWrittenBySponsorsReviewedByOperatorsAndReadByAdministrators() {
         // Q4 (docs/quizbuks/plans/Q4-publishing.md, requirement 1).
         assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).contains(QbPermissions.PUBLICATION_WRITE)
             .doesNotContain(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.REVIEW_PUBLICATION);
@@ -183,8 +201,14 @@ class QbRolesTest {
             assertThat(QbRoles.of(admin).permissions()).as(admin).contains(QbPermissions.ADMIN_PUBLICATION_READ)
                 .doesNotContain(QbPermissions.PUBLICATION_WRITE);
         }
-        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
+        // F-S1: the reviews are the operators' (headquarters' reviewers are members of the platform operator).
+        assertThat(QbRoles.of(QbRoles.OPERATOR).permissions())
             .contains(QbPermissions.REVIEW_PUBLICATION, "approval.decide", "task.read");
+        // Content administrators still decide finance's four-eyes cases (their rules want TOPUP_BANK_APPROVE),
+        // never a review (those rules want REVIEW_*).
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains("task.read", "approval.decide",
+                QbPermissions.TOPUP_BANK_APPROVE)
+            .doesNotContain(QbPermissions.REVIEW_PUBLICATION, QbPermissions.REVIEW_SPONSOR);
         assertThat(QbRoles.of(QbRoles.TAKER).permissions()).doesNotContain(QbPermissions.ADMIN_PUBLICATION_READ);
         // Only the platform runs the system's publication processes (the job, the approval events).
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
@@ -204,11 +228,13 @@ class QbRolesTest {
             .doesNotContain(QbPermissions.SPONSOR_ME);
         assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).contains(QbPermissions.SPONSOR_ME)
             .doesNotContain(QbPermissions.ME);
-        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.REVIEW_SPONSOR,
-            QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_AVATAR_READ, "approval.decide")
-            .doesNotContain(QbPermissions.ADMIN_USERS_BAN);
-        assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).contains(QbPermissions.ADMIN_USERS_BAN,
+        // F-S1: the onboarding reviews are the operators'; headquarters reads the users and bans them.
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.ADMIN_USERS_READ,
+            QbPermissions.SPONSOR_AVATAR_READ).doesNotContain(QbPermissions.ADMIN_USERS_BAN,
             QbPermissions.REVIEW_SPONSOR);
+        assertThat(QbRoles.of(QbRoles.OPERATOR).permissions()).contains(QbPermissions.REVIEW_SPONSOR,
+            "approval.decide");
+        assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).contains(QbPermissions.ADMIN_USERS_BAN);
         // Only the platform applies an onboarding review (the approval events).
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions())
             .doesNotContain(QbPermissions.SPONSOR_SYSTEM, QbPermissions.CONTENT_SYSTEM));

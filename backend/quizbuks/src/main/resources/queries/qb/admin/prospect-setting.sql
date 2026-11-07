@@ -6,7 +6,7 @@ datasets:
   QbProspectSetting: urn:jabiz:dataset:default:QbProspectSetting
   QbSponsorMailServer: urn:jabiz:dataset:default:QbSponsorMailServer
 params:
-  owner: { like: QbProspectSetting.owner, required: true, description: "The owner: an operator's id, or direct (headquarters)" }
+  owner: { like: QbProspectSetting.owner, required: true, description: "The owner: an operator's id" }
 results:
   owner:          { from: QbProspectSetting.owner }
   enabled:        { from: QbProspectSetting.enabled }

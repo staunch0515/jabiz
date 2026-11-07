@@ -330,8 +330,7 @@ class SponsorProductIT extends PlayItSupport {
     }
 
     private String newOperator(String name) {
-        return (String) run(OperatorProcesses.SAVE, hq(), body("name", name, "contactName", "Owner of " + name,
-            "contactEmail", "ops@" + name.toLowerCase() + ".example")).get("operatorId");
+        return newOperator(hq(), name);
     }
 
     private String member(String operatorId, String name) {

@@ -38,7 +38,7 @@ class ReferralIT extends PlayItSupport {
     /** A taker who holds the referrer certification (granted by hand, as an operator may). */
     private String referrer(String name) {
         String userId = newTaker(name, "JP");
-        run(CertificationProcesses.GRANT, hq(), body("userId", userId, "certification", Certifications.REFERRER.key(),
+        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", Certifications.REFERRER.key(),
             "reason", "Q70 test"));
         return userId;
     }

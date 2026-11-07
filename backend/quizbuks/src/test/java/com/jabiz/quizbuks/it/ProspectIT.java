@@ -99,19 +99,6 @@ class ProspectIT extends AiItSupport {
 
     // ---- helpers -----------------------------------------------------------------------------------------------------
 
-    /** A user whose address is verified: a new version of the platform's user, as the verification writes. */
-    private String verifiedUser(String name) {
-        String userId = createUser(name);
-        List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
-            + "current_schema() AND table_name = 'sec_user_version' AND column_name NOT IN ('row_id', 'version_no', "
-            + "'verified_email') ORDER BY ordinal_position").stream().map(row -> (String) row.get("column_name"))
-            .toList();
-        String list = String.join(", ", columns);
-        execute("INSERT INTO sec_user_version (" + list + ", version_no, verified_email) SELECT " + list
-            + ", version_no + 1, email FROM sec_user_version WHERE user_id = ?::uuid ORDER BY version_no DESC LIMIT 1",
-            userId);
-        return userId;
-    }
 
     /** Headquarters' prospecting person: a real user (the test mail of the server goes to their address). */
     private String hq(String userId) {
@@ -124,8 +111,7 @@ class ProspectIT extends AiItSupport {
 
     /** A new operator with one lead; returns {operatorId, the lead's token, the lead}. */
     private List<String> newOperator(String name) {
-        String operatorId = (String) run(OperatorProcesses.SAVE, hqAdmin(), body("name", name, "contactName",
-            "Owner", "contactEmail", "ops@" + name.toLowerCase().replace(' ', '-') + ".example")).get("operatorId");
+        String operatorId = newOperator(hqAdmin(), name);
         String member = verifiedUser(unique("q48c-op"));
         run(OperatorProcesses.MEMBER_ADD, hqAdmin(), body("operatorId", operatorId, "userId", member, "lead", true));
         return List.of(operatorId, tokenOf(member, QbRoles.OPERATOR), member);
@@ -254,8 +240,11 @@ class ProspectIT extends AiItSupport {
 
     @Test
     void aBusinessIsFoundResearchedApprovedAndWrittenToThroughTheOwnersServer() {
-        String person = verifiedUser(unique("q48c-hq"));
-        String token = hq(person);
+        // F-S1: headquarters does not prospect; an operator's member does (the platform operator's, say).
+        List<String> operator = newOperator(unique("Q48c Tea"));
+        String owner = operator.get(0);
+        String person = operator.get(2);
+        String token = operator.get(1);
         String directionId = ready(token, 5, "50");
 
         // The day's search: the direction's brief goes to Claude inside its tag, with the search tool.
@@ -266,7 +255,7 @@ class ProspectIT extends AiItSupport {
         assertThat(search.get("tools").get(0).get("type").asString()).startsWith("web_search_");
         assertThat(search.get("tools").get(0).get("user_location").get("country").asString()).isEqualTo("JP");
         assertThat(search.get("messages").get(0).get("content").asString()).contains("Independent tea shops");
-        assertThat(query("SELECT domain, status FROM qb_prospect WHERE owner = 'direct' ORDER BY domain"))
+        assertThat(query("SELECT domain, status FROM qb_prospect WHERE owner = ? ORDER BY domain", owner))
             .extracting(r -> r.get("domain") + ":" + r.get("status"))
             .containsExactly("greenleaf.example:FOUND", "teahouse.example:FOUND");
         assertThat(query("SELECT last_search_at FROM qb_prospect_direction WHERE direction_id = ?", directionId)
@@ -298,7 +287,7 @@ class ProspectIT extends AiItSupport {
         });
 
         // The month's cost: every call's tokens and the four plus two searches at ten dollars a thousand.
-        Map<String, Object> usage = query("SELECT * FROM qb_prospect_usage WHERE owner = 'direct'").getFirst();
+        Map<String, Object> usage = query("SELECT * FROM qb_prospect_usage WHERE owner = ?", owner).getFirst();
         assertThat(((Number) usage.get("searches")).longValue()).isEqualTo(6);
         assertThat(((Number) usage.get("jobs")).longValue()).isEqualTo(3);
         assertThat(((Number) usage.get("input_tokens")).longValue()).isEqualTo(38_000);
@@ -341,7 +330,7 @@ class ProspectIT extends AiItSupport {
         assertThat(to(MAIL, "info@greenleaf.example")).isEmpty();
         assertThat(prospect("greenleaf.example")).containsEntry("status", QbProspects.SENT);
         assertThat(query("SELECT sender_key FROM sys_mail_message WHERE address = ?", "info@greenleaf.example"))
-            .singleElement().satisfies(r -> assertThat(r).containsEntry("sender_key", "prospect:direct"));
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("sender_key", "prospect:" + owner));
 
         // The trial page reads the quiz that went out by its key, anonymously; another key finds nothing.
         Map<String, Object> page = publicQuery("qb.public.prospect-trial", "p.key=" + key).expectStatus().isOk()
@@ -353,7 +342,7 @@ class ProspectIT extends AiItSupport {
         assertThat((List<?>) none.get("items")).isEmpty();
 
         // Headquarters' page shows the prospects, without the key.
-        assertThat(items("qb.admin.prospects", hq(person), Map.of("params", Map.of("owner", "direct"))))
+        assertThat(items("qb.admin.prospects", hq(unique("q48c-reader")), Map.of("params", Map.of("owner", owner))))
             .hasSize(2).allSatisfy(row -> assertThat(row).doesNotContainKey("trialKey"));
     }
 
@@ -545,12 +534,11 @@ class ProspectIT extends AiItSupport {
         assertThat(to(OWN, "info@funnel-tea.example")).hasSize(2);
 
         // The business signs up by the trial's link: the sponsor is the operator's (D-Q48-9), once.
-        // Q59c: the platform had assigned them by their sign-up language; the trial's operator replaces that.
+        // F-S1: applying on their own put them with the platform operator; the trial's operator replaces that.
         String sponsor = newSponsor(unique("q48d-s"));
-        String byLanguage = newOperator(unique("Lang")).get(0);
-        execute("INSERT INTO qb_sponsor_operator (assignment_id, user_id, operator_id, assigned_at, assigned_by, "
-            + "reason, version) VALUES (gen_random_uuid()::text, ?, ?, now(), ?, 'Sign-up language: ja', 0)", sponsor,
-            byLanguage, com.jabiz.quizbuks.operator.QbOperators.BY_LANGUAGE);
+        assertThat(query("SELECT assigned_by FROM qb_sponsor_operator WHERE user_id = ?", sponsor)).singleElement()
+            .satisfies(r -> assertThat(r).containsEntry("assigned_by",
+                com.jabiz.quizbuks.operator.QbOperators.BY_DEFAULT));
         assertThat(run(ProspectProcesses.CLAIM, sponsorToken(sponsor), body("trialKey", key)))
             .containsEntry("outcome", "claimed").containsEntry("operatorId", owner);
         assertThat(query("SELECT operator_id, assigned_by FROM qb_sponsor_operator WHERE user_id = ?", sponsor))
@@ -564,7 +552,8 @@ class ProspectIT extends AiItSupport {
             .containsEntry("outcome", "taken");
         assertThat(run(ProspectProcesses.CLAIM, sponsorToken(other), body("trialKey", "0".repeat(48))))
             .containsEntry("outcome", "unknown");
-        assertThat(query("SELECT 1 FROM qb_sponsor_operator WHERE user_id = ?", other)).isEmpty();
+        assertThat(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?", other)).singleElement()
+            .satisfies(r -> assertThat(r.get("operator_id")).isNotEqualTo(owner));
 
         // The funnel counts it.
         assertThat(items("qb.operator.prospect-funnel", tokenOf(operator.get(2), QbRoles.OPERATOR), Map.of()))
