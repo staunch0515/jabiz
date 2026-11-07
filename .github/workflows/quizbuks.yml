@@ -87,7 +87,7 @@ jobs:
           (cd app && QB_BRAND=sample VITE_JABIZ_ENTRY=app VITE_JABIZ_PWA=on pnpm exec vite build --outDir ../.brand-check/app --emptyOutDir)
           (cd sponsor && QB_BRAND=sample VITE_JABIZ_ENTRY=sponsor pnpm exec vite build --outDir ../.brand-check/sponsor --emptyOutDir)
           grep -q '<title>Sample Quiz</title>' .brand-check/app/index.html
-          grep -q '<title>Sample Quiz Sponsor</title>' .brand-check/sponsor/index.html
+          grep -q '<title>Sample Quiz for Sponsors</title>' .brand-check/sponsor/index.html
           grep -q '"name": "Sample Quiz"' .brand-check/app/manifest.webmanifest
           cmp -s brands/sample/public/icon-192.png .brand-check/sponsor/icon-192.png
           if grep -rho '.\{0,20\}QuizBuks.\{0,20\}' .brand-check | grep -v 'QuizBuksApp/ios'; then
