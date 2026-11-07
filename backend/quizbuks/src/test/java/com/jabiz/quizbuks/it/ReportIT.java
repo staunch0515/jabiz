@@ -29,7 +29,7 @@ class ReportIT extends PlayItSupport {
 
     private String reportReviewer() {
         return TestTokens.bearer(tokens, "q49a-content", QbPermissions.ADMIN_CONTENT_WRITE,
-            QbPermissions.REVIEW_PUBLICATION);
+            QbPermissions.REVIEW_PUBLICATION, QbPermissions.ADMIN_PUBLICATION_READ);
     }
 
     private String hq() {

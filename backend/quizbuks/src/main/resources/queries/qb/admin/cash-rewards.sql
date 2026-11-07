@@ -1,12 +1,14 @@
 /*---
 id: qb.admin.cash-rewards
 description: "Every cash reward (Q22) with its sponsor and taker, newest first; disputes and late sponsors are found here"
-entities: [QbCashReward, QbPublicationCard, QbSponsor, QbProfile]
+entities: [QbCashReward, QbPublicationCard, QbSponsor, QbProfile, QbSponsorOperator, QbOperator]
 datasets:
   QbCashReward: urn:jabiz:dataset:default:QbCashReward
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbProfile: urn:jabiz:dataset:default:QbProfile
+  QbSponsorOperator: urn:jabiz:dataset:default:QbSponsorOperator
+  QbOperator: urn:jabiz:dataset:default:QbOperator
 params:
   q: { kind: { type: text, maxLength: 100 }, description: "Only rewards whose code, the sponsor's company or the taker's name contains this text" }
 results:
@@ -36,8 +38,11 @@ results:
   resolvedAt:      { from: QbCashReward.resolvedAt }
   resolution:      { from: QbCashReward.resolution }
   resolveNote:     { from: QbCashReward.resolveNote }
+  # F-S1b: the sponsor's operator now (every sponsor has one), for the platform's filter by operator.
+  operatorId:   { from: QbSponsorOperator.operatorId }
+  operatorName: { from: QbOperator.name }
 list:
-  filters: [status, publisherKind, publisherId, userId, publicationId, dueAt, payBy, amount]
+  filters: [status, publisherKind, publisherId, userId, publicationId, dueAt, payBy, amount, operatorId]
   sorts:   [dueAt, payBy, amount, status, disputedAt]
   defaultSort: { field: dueAt, asc: false }
   key: [cashRewardId]
@@ -70,11 +75,15 @@ SELECT
     r.{{QbCashReward.overdueAt}}      AS overdueAt,
     r.{{QbCashReward.resolvedAt}}     AS resolvedAt,
     r.{{QbCashReward.resolution}}     AS resolution,
-    r.{{QbCashReward.resolveNote}}    AS resolveNote
+    r.{{QbCashReward.resolveNote}}    AS resolveNote,
+    qso.{{QbSponsorOperator.operatorId}} AS operatorId,
+    qop.{{QbOperator.name}}               AS operatorName
 FROM {{QbCashReward}} r
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = r.{{QbCashReward.publicationId}}
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = r.{{QbCashReward.publisherId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = r.{{QbCashReward.userId}}
+LEFT JOIN {{QbSponsorOperator}} qso ON qso.{{QbSponsorOperator.userId}} = r.{{QbCashReward.publisherId}}
+LEFT JOIN {{QbOperator}} qop ON qop.{{QbOperator.operatorId}} = qso.{{QbSponsorOperator.operatorId}}
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(r.{{QbCashReward.code}}), lower(CAST(:q AS text))) > 0
        OR strpos(lower(coalesce(sp.{{QbSponsor.company}}, '')), lower(CAST(:q AS text))) > 0
