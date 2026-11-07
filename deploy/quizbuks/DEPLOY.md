@@ -598,3 +598,123 @@ quizbuks.com, www.quizbuks.com {
 
 production 的数据库 `quizbuks` 按服务器的方案备份；另外备份数据卷 `quizbuks_files`（上传的文件不在数据库中），并离线保存 `JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY`。
 staging 是否备份按需要决定（`quizbuks_staging`、`quizbuks-staging_files`）。恢复演练见 `docs/quizbuks/operations.md` §2。
+
+### 备份的做法：pgBackRest + Cloudflare R2（需求方 2026-11-07 决定）
+
+- **数据库**：pgBackRest 对整个共用 PostgreSQL 集群做 WAL 归档（RPO 约 1 分钟）和定期基础备份，存进 R2 的专用桶 `quizbuks-backup`，备份离开服务器之前由 pgBackRest 加密。
+  集群中的每个库（`quizbuks`、`quizbuks_staging` 与同一实例上的其他库）都在里面。
+  - `pgbackrest-pitr/`（repo1）：周日全量、其余每天差异，保证至少 14 天的时间点恢复；
+  - `pgbackrest-monthly/`（repo2）：每月最后一天的全量，保留 120 个（10 年，凭证与分录，L-4）。
+- **上传文件**：restic 每小时备份 production 的卷 `quizbuks_files`，存进同一个桶的 `restic-files/`，保留 48 个每小时、14 个每天、120 个每月的快照（staging 的文件不备份）。
+- **谁会知道出了问题**（需求方 2026-11-07 选定）：**主渠道是外部的死人开关服务**（healthchecks.io 之类，`BACKUP_PING_URL_*`）：每次运行开始、成功、失败都去 ping，
+  失败或"该来的 ping 没来"（任务没跑、整台服务器停了）由那个服务通知值班。**邮件是后备**：每个任务失败都另发邮件给值班（`BACKUP_MAIL_*`）。生产中两者都必须设置（`backup.env.rules`）。
+  每小时的检查任务另外核对：最近的基础备份不超过 26 小时，WAL 归档没有失败。
+- 文件都在 `deploy/quizbuks/backup/`：`Dockerfile.postgres`（带 pgBackRest 的 PostgreSQL 镜像）、`pgbackrest.conf`、`compose.postgres.example.yaml`（共用 postgres 要改的几行）、
+  `backup.env.example` 与 `backup.env.rules`（设置与检查规则）、`backup.sh`（各个任务）、`systemd/`（定时器）。
+- 以后文件改存进 R2（本文 3b）时，restic 这一部分改为桶对桶的复制，届时另行说明。
+
+#### A. 在 Cloudflare 上（需求方做，一次）
+
+1. **建桶**：Cloudflare 控制台 → R2 Object Storage → Create bucket。
+   - Bucket name：`quizbuks-backup`（只放备份，不与文件的桶 `quizbuks-production` 合用）。
+   - Location：Automatic；Default storage class：Standard。
+   - 建好后，在桶的 Settings 中确认 **Public access 是关闭的**（不设 r2.dev 地址，不绑定自定义域名）。
+   - 不设"对象生命周期"删除规则，也不设桶锁（Bucket lock）。保留与过期由 pgBackRest 和 restic 自己做：它们要改写自己的目录文件，锁住会让备份失败。
+2. **建只给备份用的密钥**：R2 → Manage R2 API Tokens → Create API token。
+   - Token name：`quizbuks-backup`。
+   - Permissions：**Object Read & Write**（不要选 Admin）。
+   - Specify bucket(s)：**Apply to specific buckets only**，只选 `quizbuks-backup`。
+   - TTL：Forever（轮换时新建一个，换进 `backup.env`，确认下一次备份成功后再删旧的）。
+   - 创建后页面**只显示一次** Access Key ID 与 Secret Access Key：立即存进密码管理器。同一页上的 S3 地址 `https://<账户 ID>.r2.cloudflarestorage.com` 也记下。
+     不要发到聊天、邮件或问题记录里。
+   - 这个密钥与应用存文件用的密钥（3b）**分开**：应用的密钥泄露时，拿不到备份；反之亦然。
+3. **死人开关**（必做；以 healthchecks.io 为例，同类服务做法相同）：
+   - **开账号**：https://healthchecks.io → Sign Up，用值班共用的邮箱注册（免费方案够用：20 个检查）。登录后在 Settings 中开启两步验证。
+   - **建项目**：Projects → Create a project，名称 `QuizBuks backups`。
+   - **建 4 个检查**（Add Check，每个填 Name、Schedule 选 Simple，Period 与 Grace 如下）：
+
+     | Name | Period | Grace | 对应的任务 |
+     |---|---|---|---|
+     | `quizbuks-backup-pitr` | 1 day | 2 hours | 每天 03:10 UTC 的基础备份 |
+     | `quizbuks-backup-monthly` | 1 day | 1 hour | 每天 23:40 UTC 的月末检查（非月末也会 ping 成功） |
+     | `quizbuks-backup-files` | 1 hour | 30 minutes | 每小时的文件备份 |
+     | `quizbuks-backup-check` | 1 hour | 30 minutes | 每小时的核对 |
+
+   - **通知方式**：Integrations 中添加值班的邮箱（必要时再加短信、Telegram、Slack 等）；在每个检查的 Notification methods 中勾选。
+   - **记下 ping 地址**：每个检查页面上的 `https://hc-ping.com/<一串 UUID>`。它就是这个检查的钥匙（谁有它谁就能报"成功"），按密钥对待：
+     存进密码管理器，只写进服务器的 `backup.env`（下面 B.2），不要发到聊天或问题记录里。
+   - 第一次 ping 到来之前，检查的状态是 New（不报警）；B.6 第一次备份后应变为 Up。
+
+#### B. 在服务器上（值班的人照做）
+
+1. **放文件**：`/opt/infra/backup/` 下放 `deploy/quizbuks/backup/` 中的 `Dockerfile.postgres`、`pgbackrest.conf`、`backup.sh`；
+   `systemd/` 中的 5 个文件复制到 `/etc/systemd/system/`。
+2. **写设置**：复制 `backup.env.example` 为 `/opt/infra/backup/backup.env`，`chmod 600`，只有 root 可读。
+   - 填入：R2 地址（不带 `https://`，用于 `PGBACKREST_REPO*_S3_ENDPOINT`；`RESTIC_REPOSITORY` 中带 `https://`）、桶名、上面的 Access Key ID 与 Secret（两处都填同一个）；
+   - 三个口令各生成一个：`openssl rand -base64 48`，分别填进 `PGBACKREST_REPO1_CIPHER_PASS`、`PGBACKREST_REPO2_CIPHER_PASS`、`RESTIC_PASSWORD`；
+   - **三个口令另存离线副本**（密码管理器 + 纸面或离线介质），与 `JABIZ_*` 密钥分开保管：没有口令，备份就打不开。
+   - 死人开关：A.3 的 4 个 ping 地址填进 `BACKUP_PING_URL_PITR` / `_MONTHLY` / `_FILES` / `_CHECK`（必填）。
+   - 邮件（后备）：`BACKUP_MAIL_SMTP_URL`（如 `smtps://smtp.example.com:465`）、`BACKUP_MAIL_USER` / `_PASSWORD`、`_FROM`、`_TO`（值班的邮箱）（必填）。
+   - 检查：`tools/ops/env-check.sh --app-only /opt/infra/backup/backup.env deploy/quizbuks/backup/backup.env.rules`，没有 ERROR 才继续。
+3. **做镜像**：`cd /opt/infra/backup && docker build -t postgres-pgbackrest:16 -f Dockerfile.postgres .`
+4. **改共用 postgres 的 compose**（`/opt/infra` 中，先备份原文件）：照 `compose.postgres.example.yaml` 改 4 处——`image` 改为 `postgres-pgbackrest:16`；加
+   `env_file: /opt/infra/backup/backup.env`；`command` 加 `wal_level=replica`、`archive_mode=on`、`archive_command=pgbackrest --stanza=main archive-push %p`、
+   `archive_timeout=60`；加两个卷（`pgbackrest-spool`、`pgbackrest-log`）。服务名、数据卷、网络与密码都不动。
+   确认数据目录：`docker exec postgres psql -U postgres -Atc 'show data_directory'` 应为 `/var/lib/postgresql/data`（`pgbackrest.conf` 的 `pg1-path`）；不同时两处改成一样再做镜像。
+5. **重启一次**（几十秒，期间两个环境的应用都连不上库，会自己重连）：`docker compose up -d postgres`，确认
+   `docker exec postgres psql -U postgres -Atc 'show archive_mode'` 输出 `on`。
+6. **建仓库并做第一次备份**：
+   ```sh
+   /opt/infra/backup/backup.sh stanza                 # 在两个仓库建 stanza，并确认 WAL 能归档
+   FORCE_FULL=true /opt/infra/backup/backup.sh pitr   # 第一次全量
+   FORCE=true /opt/infra/backup/backup.sh monthly     # repo2 的第一个全量
+   /opt/infra/backup/backup.sh files                  # 文件的第一次快照（建 restic 仓库）
+   /opt/infra/backup/backup.sh check                  # 应输出 "newest backup in repo1 is 0 h old" 与 restic "no errors were found"
+   docker exec -u postgres postgres pgbackrest info   # 两个仓库各有备份
+   ```
+7. **开定时器**：`systemctl daemon-reload && systemctl enable --now quizbuks-backup-{pitr,monthly,files,check}.timer`，
+   `systemctl list-timers 'quizbuks-backup*'` 能看到下一次运行。healthchecks.io 上 4 个检查在各自第一次运行后变为 Up。
+8. **试一次通知**：在 `backup.env` 的副本中把 `PGBACKREST_REPO1_CIPHER_PASS` 改错，`BACKUP_ENV=<副本> /opt/infra/backup/backup.sh pitr`：
+   应失败，healthchecks.io 上 `quizbuks-backup-pitr` 变为 Down 并通知值班，同时收到后备的邮件。随后正常跑一次 `/opt/infra/backup/backup.sh pitr`，检查回到 Up。
+   **最后删掉副本。**
+9. **一周内做一次恢复演练**（下面 C），记入演练记录。
+
+**回退**（不再用 pgBackRest 时）：compose 中的 `image` 改回原来的、去掉 `env_file` 与那 4 个 `-c` 参数（或改 `archive_mode=off`），`docker compose up -d postgres`，
+`systemctl disable --now quizbuks-backup-*.timer`。桶中已有的备份保留，按保留期由人删除；在回退期间要另有备份方案（如每天 `pg_dump`）。
+
+#### C. 恢复演练（每季度；上线前一次）
+
+在隔离的环境中做，规则照 `docs/quizbuks/operations.md` §2.4（不能连正式的 Stripe、不能发邮件）。平台的脚本 `tools/ops/restore-drill.sh` 负责恢复、计时与核对：
+
+```sh
+# 1) 恢复到 T：新的空卷，副本绝不归档（脚本总是加 --archive-mode=off）
+docker volume create drill-pgdata
+DRILL_TARGET_TIME=2026-12-01T12:00:00Z DRILL_RESTORE_ONLY=true \
+DRILL_PGBACKREST="docker run --rm -u postgres --env-file /opt/infra/backup/backup.env \
+  -v drill-pgdata:/var/lib/postgresql/data postgres-pgbackrest:16 pgbackrest" \
+DRILL_PGBACKREST_PG_PATH=/var/lib/postgresql/data tools/ops/restore-drill.sh
+
+# 2) 启动恢复出的库：在只通向它的内部网络上；也要有 backup.env（取回 WAL 要用加密口令）
+docker network create --internal drill-net
+docker run -d --name drill-db --network drill-net --env-file /opt/infra/backup/backup.env \
+  -v drill-pgdata:/var/lib/postgresql/data postgres-pgbackrest:16
+docker exec drill-db psql -U postgres -Atc 'show archive_mode'   # 必须是 off
+
+# 3) 文件：恢复到 T 之前最近的快照
+docker volume create drill-files
+docker run --rm --env-file /opt/infra/backup/backup.env -v drill-files:/restore restic/restic:0.17.3 \
+  restore latest --host quizbuks-files --target /restore
+
+# 4) 以核对模式启动应用并写演练记录（operations.md §2.4 的设置；DRILL_ENV_FILE 指向 drill-db 与 drill-files）
+DRILL_TARGET_TIME=2026-12-01T12:00:00Z DRILL_IMAGE=ghcr.io/staunch0515/jabiz-quizbuks:<生产的版本> \
+DRILL_ENV_FILE=drill.env DRILL_DOCKER_ARGS="--network drill-net -v drill-files:/var/lib/jabiz/files" tools/ops/restore-drill.sh
+
+# 5) 收拾
+docker rm -f drill-db && docker volume rm drill-pgdata drill-files && docker network rm drill-net
+```
+
+要知道的：
+
+- 恢复出的库是**整个集群**（staging 等其他库也在里面），只用其中的 `quizbuks`。
+- 从 repo2（月末全量）恢复用 `DRILL_PGBACKREST_REPO=2`，T 取该月末之后不久的时刻。
+- 2026-11-07 在测试环境以 S3 替身演练：全量 171 MB 用 34 秒，恢复并启动到可用约 16 秒（数据量小）；生产的数字以首次演练为准。
