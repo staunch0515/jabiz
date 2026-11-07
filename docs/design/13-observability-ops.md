@@ -150,6 +150,7 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 
 测试：`tools/test/alert-render.test.sh`（CI）检查填入、遗漏与非法的值、应用自己的文件。规则的指标名与标签、
 联系点的投递、各条规则的触发与 `disk` 的填充都对真实的 LGTM 容器与应用核对过（17zu 的 PR）。
+
 ## 8. 恢复核对与演练（阶段 17zv）
 
 备份与时间点恢复由备份工具或数据库托管方完成（pgBackRest、WAL-G、托管服务）；平台负责**核对恢复出的副本**，并提供计时与记录的演练脚本。
