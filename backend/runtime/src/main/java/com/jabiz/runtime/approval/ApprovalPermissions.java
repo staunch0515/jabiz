@@ -11,6 +11,12 @@ public final class ApprovalPermissions {
     public static final String CONTROL_PROPOSE = "control.propose";
     /** Publish another person's proposed change ({@code CONTROL_CHANGE_PUBLISH}). */
     public static final String CONTROL_PUBLISH = "control.publish";
+    /**
+     * Move pending approval requests and their open tasks to another value of their entry scope
+     * ({@code APPROVAL_SCOPE_MOVE}, decision D76). The process is {@code subProcessOnly()}: an application's own
+     * reassignment process calls it, and its caller needs this permission as well as the application's own.
+     */
+    public static final String SCOPE_MOVE = "approval.scope.move";
     /** Read SoD rules and the conflict report. */
     public static final String SOD_READ = "sod.read";
 
