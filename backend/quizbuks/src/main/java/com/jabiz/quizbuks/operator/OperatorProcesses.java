@@ -16,6 +16,7 @@ import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.approval.ApprovalEntities;
+import com.jabiz.runtime.approval.ApprovalScopeMove;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -51,8 +52,8 @@ import java.util.Set;
  *   <li>{@value #TEAM}: a member reads their operator and its current members (a template cannot: it reads an
  *       entity through one dataset, and the caller's own membership is a dataset of its own);</li>
  *   <li>{@value #ASSIGN}: moves a sponsor to another operator that takes sponsors, with a reason (F-S1: every sponsor
- *       has an operator; an operator's own sponsor is never moved, and one with a review pending is not moved until
- *       the platform can move the review with them);</li>
+ *       has an operator; an operator's own sponsor is never moved; their open reviews and tasks move with them,
+ *       the reviews through the platform's {@code APPROVAL_SCOPE_MOVE}, decision D76);</li>
  *   <li>{@value #SPOT_CHECK}: headquarters marks a review decided by an operator's member as checked, or as a problem
  *       with a note (D-Q48-5); headquarters then acts itself, which the operator does not undo.</li>
  * </ul>
@@ -604,15 +605,25 @@ public final class OperatorProcesses {
                         ctx -> byKey("operatorId", target(ctx)), OPERATOR),
                     QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT),
                         ctx -> byKey("userId", person(ctx)), ASSIGNMENT),
-                    // The reviews the sponsor is waiting for: their onboarding, publications, version switches and
-                    // page, all prepared by the sponsor.
+                    // The reviews the sponsor is waiting for (their onboarding, publications, version switches and
+                    // page, all prepared by the sponsor): they move with the sponsor (platform decision D76). Only
+                    // pending ones: an approved request's result is applied by the operator-independent approval
+                    // events, and approved ones of the past are many.
                     QueryEntities.query(ApprovalEntities.REQUEST_DATASET, ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.In("preparerId", List.of(person(ctx))),
                             new QueryPredicate.In("status", List.of(ApprovalEntities.PENDING)),
                             new QueryPredicate.In("scopeName", List.of(QbOperators.SCOPE)))))
-                        .limit(MAX_PENDING_LISTED).build(), PENDING_REVIEWS)))
+                        .limit(MAX_REVIEWS_MOVED + 1).build(), PENDING_REVIEWS)))
                 .compute("Assign", (metadata, ctx) -> assign(ctx, ctx.get(INPUT, AssignInput.class)))
+                // D76: the sponsor's pending reviews and their tasks go to the new operator; the caller needs
+                // approval.scope.move besides this process's.
+                .step("Move the sponsor's reviews", CallProcess.<ProcessContext>when(
+                    ctx -> ctx.contains(OUTPUT) && ctx.get(OUTPUT, AssignOutput.class).changed()
+                        && !reviewCases(ctx).isEmpty(),
+                    ApprovalScopeMove.MOVE, 1, ctx -> new ApprovalScopeMove.MoveInput(QbOperators.SCOPE,
+                        ctx.get(OUTPUT, AssignOutput.class).operatorId(), reviewCases(ctx), null,
+                        ctx.get(INPUT, AssignInput.class).reason().strip()), null))
                 .step("Tell the sponsor", com.jabiz.runtime.process.steps.PublishEvent.<ProcessContext>when(
                     ctx -> ctx.contains(OUTPUT) && ctx.get(OUTPUT, AssignOutput.class).changed(),
                     OPERATOR_CHANGED_EVENT, ctx -> Map.of("userId", person(ctx), "operatorId",
@@ -624,8 +635,16 @@ public final class OperatorProcesses {
                         ctx.get(FROM, String.class), ctx.get(OUTPUT, AssignOutput.class).operatorId()), null)));
     }
 
-    /** How many of a sponsor's pending reviews a refused reassignment lists. */
-    static final int MAX_PENDING_LISTED = 20;
+    /** The most open reviews of a sponsor one reassignment moves (the platform's move takes up to 500). */
+    static final int MAX_REVIEWS_MOVED = 500;
+
+    /** The cases of the sponsor's open reviews, each once. */
+    static List<ApprovalScopeMove.Case> reviewCases(ProcessContext ctx) {
+        return OperatorChecks.list(ctx, PENDING_REVIEWS).stream()
+            .map(request -> new ApprovalScopeMove.Case(String.valueOf((Object) request.get("subject")),
+                String.valueOf((Object) request.get("entityId"))))
+            .distinct().toList();
+    }
 
     static void assign(ProcessContext ctx, AssignInput input) {
         if (OperatorChecks.first(ctx, SPONSOR) == null) {
@@ -657,14 +676,10 @@ public final class OperatorProcesses {
         if (!QbOperators.ACTIVE.equals(operator.get("status"))) {
             ctx.reject(new Violation("operatorId", OperatorCodes.SUSPENDED, "The operator is suspended", Map.of()));
         }
-        // The platform keeps a request in the scope it was made in; until it can move one, the sponsor waits for
-        // their reviews to end (docs/quizbuks/plans/impl/F-S1.md §0, answer 2).
-        List<EntityInstance> pending = OperatorChecks.list(ctx, PENDING_REVIEWS);
-        if (!pending.isEmpty()) {
-            ctx.reject(new Violation("userId", OperatorCodes.REVIEW_PENDING, "The sponsor has reviews pending",
-                Map.of("reviews", pending.stream().map(request -> Map.of("subject",
-                    String.valueOf((Object) request.get("subject")), "entityId",
-                    String.valueOf((Object) request.get("entityId")))).toList())));
+        // More open reviews than one move takes: none is expected (a sponsor has a few at a time).
+        if (OperatorChecks.list(ctx, PENDING_REVIEWS).size() > MAX_REVIEWS_MOVED) {
+            ctx.reject(new Violation("userId", OperatorCodes.REVIEW_PENDING, "The sponsor has more open reviews "
+                + "than one move takes", Map.of("max", MAX_REVIEWS_MOVED)));
         }
         if (ctx.hasViolations()) {
             return;
