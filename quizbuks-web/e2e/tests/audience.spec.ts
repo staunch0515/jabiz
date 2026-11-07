@@ -39,7 +39,7 @@ test('a Sponsor aims a quiz at a profile; a Taker who matches it can start it', 
   await expectAccessible(page, 'sponsor customer matching')
   await page.getByTestId('audience-count-button').click()
   // Rounded, never a small exact number: other runs may have added takers who like pets.
-  await expect(page.getByTestId('audience-count-result')).toHaveText(/Fewer than 20 takers|About \d[\d,]* takers/,
+  await expect(page.getByTestId('audience-count-result')).toHaveText(/Fewer than 20 Takers|About \d[\d,]* Takers/,
     { timeout: 30_000 })
   await page.getByTestId('publication-next').click()
   await expect(page.getByTestId('summary-conditions')).toHaveText('Interests: Pets')
