@@ -32,7 +32,7 @@ async function startTopUp(page: Page, amount: string, check?: () => Promise<void
 for (const appearance of ['light', 'dark'] as const) {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
 
-  test(`a sponsor tops up through Stripe's checkout and sees it paid (${appearance})`, async ({ page, request }) => {
+  test(`a Sponsor tops up through Stripe's checkout and sees it paid (${appearance})`, async ({ page, request }) => {
     test.setTimeout(120_000)
     await setAppearance(page, appearance)
     const sponsor = await approvedSponsor(request)

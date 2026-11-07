@@ -612,9 +612,9 @@ export interface InvestorMonth {
   commission: string
 }
 
-/** A row of `qb.admin.investor-sponsors` (Q27): one merchant's figures over the period. */
+/** A row of `qb.admin.investor-sponsors` (Q27): one sponsor's figures over the period. */
 export interface InvestorSponsor {
-  /** The merchant's key: a sponsor's user id (S0: the publisher's id). */
+  /** The sponsor's key: a sponsor's user id (S0: the publisher's id). */
   publisherId: string
   company: string
   takers: number

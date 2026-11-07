@@ -83,7 +83,7 @@ test('finance exports the next month and downloads its voucher', async ({ page, 
     .toHaveAttribute('data-code', codeOf('2110'))
 })
 
-test('a sponsor downloads the receipt of a paid top-up', async ({ page, request }) => {
+test('a Sponsor downloads the receipt of a paid top-up', async ({ page, request }) => {
   test.setTimeout(120_000)
   await issuerSet(request)
   const sponsor = await fundedSponsor(request, 1200)

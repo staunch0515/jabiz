@@ -419,7 +419,7 @@ describe('a publication\'s analytics', () => {
     expect(await screen.findByTestId('export-error')).toHaveTextContent('Too many rows.')
   })
 
-  it('does not exist for another sponsor\'s publication, and asks for nothing else of it', async () => {
+  it('does not exist for another Sponsor\'s publication, and asks for nothing else of it', async () => {
     const { trend, totals, questions } = server({ overview: [] })
     window.history.replaceState(null, '', `/publications/${P1}/analytics`)
     render(<App />)

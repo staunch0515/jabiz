@@ -6,7 +6,7 @@ describe('certification names', () => {
   const tQb = ((key: string, options?: { defaultValue?: string }) =>
     key === 'certification.names.REFERRER' ? 'May refer friends' : options?.defaultValue ?? key) as never
 
-  it('tell a sponsor’s key from the catalog’s', () => {
+  it('tell a Sponsor’s key from the catalog’s', () => {
     expect(isSponsorCertification('sp:0192f0a0-0000-7000-8000-00000000a001')).toBe(true)
     expect(isSponsorCertification('REFERRER')).toBe(false)
     expect(isSponsorCertification(null)).toBe(false)
@@ -20,7 +20,7 @@ describe('certification names', () => {
     expect(certificationNamesOf('{}')).toBeNull()
   })
 
-  it('name the catalog’s by the texts and a sponsor’s by its row, falling back by language', () => {
+  it('name the catalog’s by the texts and a Sponsor’s by its row, falling back by language', () => {
     expect(certificationName('REFERRER', null, 'ja', tQb)).toBe('May refer friends')
     const names = { en: 'Keyboard expert', ja: 'キーボード達人' }
     expect(certificationName('sp:1', names, 'ja', tQb)).toBe('キーボード達人')

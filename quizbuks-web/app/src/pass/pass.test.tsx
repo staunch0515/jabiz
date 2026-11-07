@@ -81,7 +81,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('the taker\'s pass (Q89c)', () => {
+describe('the Taker\'s pass (Q89c)', () => {
   it('has every text in every language, and its links and digits', () => {
     const english = keyPaths(passMessages.en)
     for (const lng of LANGUAGES) {

@@ -157,7 +157,7 @@ describe('conversations (Q82)', () => {
     expect(await screen.findByTestId('conversation-error')).toHaveTextContent('plain text')
   })
 
-  it('blocks the sponsor, then unblocks them from the list', async () => {
+  it('blocks the Sponsor, then unblocks them from the list', async () => {
     const { processCalls } = server()
     window.history.replaceState(null, '', conversationPath(ID))
     render(<App />)
@@ -175,7 +175,7 @@ describe('conversations (Q82)', () => {
     await waitFor(() => expect(processCalls('QB_CONVERSATION_UNBLOCK')).toEqual([{ blockId: 'b1' }]))
   })
 
-  it('contacts the sponsor from a result, then offers the conversation', async () => {
+  it('contacts the Sponsor from a result, then offers the conversation', async () => {
     const { processCalls } = server({ conversations: [] })
     render(<QueryClientProvider client={new QueryClient()}>
       <ContactSponsor publicationId={PUBLICATION} company="Acme Tea" />

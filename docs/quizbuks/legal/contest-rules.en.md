@@ -9,7 +9,7 @@ These rules apply to every quiz with a reward or prize on QuizBuks (the "Service
 
 ## 2. Apple and Google
 
-**Apple Inc. and Google LLC are not sponsors of any campaign and are not involved in any campaign in any way.** The App Store and Google Play only distribute the Service's app; questions about a campaign go to us or to its Sponsor.
+**Apple Inc. and Google LLC are not Sponsors of any campaign and are not involved in any campaign in any way.** The App Store and Google Play only distribute the Service's app; questions about a campaign go to us or to its Sponsor.
 
 ## 3. Who may take part
 
@@ -41,7 +41,7 @@ A reward or prize not received by its deadline may no longer be received.
 
 ## 7. Disqualification
 
-If answers were obtained by cheating, through several accounts, with automated tools, by sharing answers or by any other unfair means, we or the Sponsor may disqualify the taker and cancel their rewards and prizes.
+If answers were obtained by cheating, through several accounts, with automated tools, by sharing answers or by any other unfair means, we or the Sponsor may disqualify the Taker and cancel their rewards and prizes.
 
 ## 8. Changing or ending a campaign
 
@@ -53,7 +53,7 @@ Takers' personal information is handled under the privacy policy. A Sponsor is g
 
 ## 10. Taxes
 
-Any tax on a reward or prize is the taker's to declare and pay.
+Any tax on a reward or prize is the Taker's to declare and pay.
 
 ## 11. Contact
 

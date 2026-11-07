@@ -90,7 +90,7 @@ function renderAt(path: string, route: string, element: ReactNode) {
   )
 }
 
-describe("sponsors' products (Q60b-3)", () => {
+describe("Sponsors' products (Q60b-3)", () => {
   it('have every text in every language, and show prices in their currency', () => {
     const keys = (value: object, prefix = ''): string[] => Object.entries(value).flatMap(([key, child]) =>
       typeof child === 'object' && child !== null ? keys(child, `${prefix}${key}.`) : [`${prefix}${key}`])
@@ -101,7 +101,7 @@ describe("sponsors' products (Q60b-3)", () => {
     expect(formatShopPrice('1200', 'JPY', 'en')).toMatch(/1,200/)
   })
 
-  it("are listed with their sponsor, price, state and headquarters' takedown or restore", async () => {
+  it("are listed with their Sponsor, price, state and headquarters' takedown or restore", async () => {
     const { container } = renderAt('/qb/sponsor-products', '/qb/sponsor-products', <SponsorProductsPage />)
     const rows = await screen.findAllByTestId('sponsor-product-row')
     expect(rows.map((row) => row.dataset.status)).toEqual(['LISTED', 'TAKEN_DOWN'])
@@ -138,7 +138,7 @@ describe("sponsors' products (Q60b-3)", () => {
     expect(within(readOnly[0]).queryByTestId('sponsor-product-takedown')).toBeNull()
   })
 
-  it("are shown with the sponsor's page, for that sponsor only", async () => {
+  it("are shown with the Sponsor's page, for that Sponsor only", async () => {
     renderAt(`/qb/sponsor-pages/${ANN}`, '/qb/sponsor-pages/:userId', <SponsorPageReviewPage />)
     const section = await screen.findByTestId('sponsor-page-products')
     expect(await within(section).findAllByTestId('sponsor-product-row')).toHaveLength(2)
@@ -147,7 +147,7 @@ describe("sponsors' products (Q60b-3)", () => {
       params: { userId: ANN } }))
   })
 
-  it("show the sponsor's visits of the last 30 days with their page (Q60c-2)", async () => {
+  it("show the Sponsor's visits of the last 30 days with their page (Q60c-2)", async () => {
     renderAt(`/qb/sponsor-pages/${ANN}`, '/qb/sponsor-pages/:userId', <SponsorPageReviewPage />)
     const visits = await screen.findByTestId('sponsor-page-visits')
     expect(await within(visits).findByText('1,200')).toBeInTheDocument()

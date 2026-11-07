@@ -131,7 +131,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('the quiz list', () => {
-  it('lists the sponsor\'s quizzes, searches by title and starts a new draft', async () => {
+  it('lists the Sponsor\'s quizzes, searches by title and starts a new draft', async () => {
     const { posted, processCalls } = server({ processes: { QB_QUIZ_SAVE: [edit(1, { quizId: 'q9' })] } })
     window.history.replaceState(null, '', '/quizzes')
     render(<App />)
@@ -150,7 +150,7 @@ describe('the quiz list', () => {
       timeLimitSec: null, kind: 'QUIZ', language: 'en' }])
   })
 
-  it('shows an illustrated empty state when the sponsor has no quiz yet (Q32)', async () => {
+  it('shows an illustrated empty state when the Sponsor has no quiz yet (Q32)', async () => {
     server({ noQuizzes: true })
     window.history.replaceState(null, '', '/quizzes')
     render(<App />)
@@ -159,7 +159,7 @@ describe('the quiz list', () => {
     expect(empty.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('writes a new quiz in the language the sponsor picks (Q59a)', async () => {
+  it('writes a new quiz in the language the Sponsor picks (Q59a)', async () => {
     const { processCalls } = server({ processes: { QB_QUIZ_SAVE: [edit(1, { quizId: 'q9' })] } })
     window.history.replaceState(null, '', '/quizzes')
     render(<App />)
@@ -175,7 +175,7 @@ describe('the quiz list', () => {
       timeLimitSec: null, kind: 'QUIZ', language: 'ja' }])
   })
 
-  it('makes a survey when the sponsor chooses one (Q12)', async () => {
+  it('makes a survey when the Sponsor chooses one (Q12)', async () => {
     const { processCalls } = server({ processes: { QB_QUIZ_SAVE: [edit(1, { quizId: 'q9' })] } })
     window.history.replaceState(null, '', '/quizzes')
     render(<App />)
@@ -494,7 +494,7 @@ describe('the quiz editor', () => {
     expect(screen.queryByTestId('version-problems')).toBeNull()
   })
 
-  it('says so when the quiz is not the sponsor\'s', async () => {
+  it('says so when the quiz is not the Sponsor\'s', async () => {
     server({ quiz: null })
     render(<App />)
     expect(await screen.findByText('This quiz does not exist or is no longer yours.')).toBeInTheDocument()

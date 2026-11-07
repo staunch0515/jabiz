@@ -117,15 +117,15 @@ public class ConversationConfig {
     @Bean
     StaticDictionary qbConversationSideDictionary() {
         return StaticDictionary.define(QbConversations.SIDE_DICTIONARY, d -> d
-            .item(QbConversations.TAKER, "en", "Taker", "zh", "答题者", "ja", "回答者")
-            .item(QbConversations.SPONSOR, "en", "Sponsor", "zh", "商户", "ja", "スポンサー"));
+            .item(QbConversations.TAKER, "en", "Taker", "zh", "学者", "ja", "テイカー")
+            .item(QbConversations.SPONSOR, "en", "Sponsor", "zh", "发起方", "ja", "主催者"));
     }
 
     @Bean
     StaticDictionary qbConversationCloserDictionary() {
         return StaticDictionary.define(QbConversations.CLOSER_DICTIONARY, d -> d
-            .item(QbConversations.TAKER, "en", "Taker", "zh", "答题者", "ja", "回答者")
-            .item(QbConversations.SPONSOR, "en", "Sponsor", "zh", "商户", "ja", "スポンサー")
+            .item(QbConversations.TAKER, "en", "Taker", "zh", "学者", "ja", "テイカー")
+            .item(QbConversations.SPONSOR, "en", "Sponsor", "zh", "发起方", "ja", "主催者")
             .item(QbConversations.SYSTEM, "en", "No messages for a long time", "zh", "长时间无消息",
                 "ja", "長期間メッセージなし"));
     }

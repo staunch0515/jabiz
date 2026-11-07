@@ -26,7 +26,7 @@ async function downloadedCsv(page: Page, testId: string): Promise<string[]> {
   return text.replace(/^﻿/, '').split(/\r\n/).filter((line) => line !== '')
 }
 
-test('a sponsor reads, filters and exports their transactions', async ({ page, request }) => {
+test('a Sponsor reads, filters and exports their transactions', async ({ page, request }) => {
   test.setTimeout(240_000)
   // Another sponsor's top-up of a distinct amount, which must never show.
   await fundedSponsor(request, 1500)
@@ -100,7 +100,7 @@ test('a sponsor reads, filters and exports their transactions', async ({ page, r
  * taker three of them, numbered 1..3, and scores them over a full score of 3; answering by the numbers shown pays the
  * top tier.
  */
-test('a publication drawing three of five questions gives a taker three and pays full marks (Q81)',
+test('a publication drawing three of five questions gives a Taker three and pays full marks (Q81)',
   async ({ request }) => {
     const sponsor = await fundedSponsor(request, 1000)
     const quiz = await completeQuiz(request, sponsor.token, { questions: 5 })

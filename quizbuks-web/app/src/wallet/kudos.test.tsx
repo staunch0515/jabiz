@@ -104,7 +104,7 @@ describe('the wallet\'s Kudos by method (Q58)', () => {
     expect(within(kudos).getByTestId('kudos-total-settled')).toHaveTextContent('1,200')
     expect(within(kudos).getByTestId('kudos-total-balance')).toHaveTextContent('650')
     expect(within(kudos).getByTestId('kudos-total-lapsed')).toHaveTextContent('100')
-    expect(within(kudos).getByTestId('kudos-SPONSOR_CASH')).toHaveTextContent('Cash from the sponsor')
+    expect(within(kudos).getByTestId('kudos-SPONSOR_CASH')).toHaveTextContent('Cash from the Sponsor')
     expect(within(kudos).getByTestId('kudos-SPONSOR_CASH-settled')).toHaveTextContent('200')
     expect(within(kudos).getByTestId('kudos-SPONSOR_CASH')).toHaveTextContent('Received')
     // All of time first; this month asks for its bounds.
@@ -117,7 +117,7 @@ describe('the wallet\'s Kudos by method (Q58)', () => {
     await userEvent.click(within(kudos).getByTestId('kudos-SPONSOR_CASH'))
     expect(window.location.pathname).toBe('/wallet/kudos/SPONSOR_CASH')
     const page = await screen.findByTestId('kudos-method')
-    expect(within(page).getByRole('heading', { level: 1 })).toHaveTextContent('Cash from the sponsor')
+    expect(within(page).getByRole('heading', { level: 1 })).toHaveTextContent('Cash from the Sponsor')
     expect(await within(page).findByTestId('kudos-reward')).toHaveTextContent('Cash quiz')
     expect(within(page).getByTestId('history-cash')).toHaveAttribute('data-status', 'CONFIRMED')
     // Only this method's rewards, and the period chosen stays.

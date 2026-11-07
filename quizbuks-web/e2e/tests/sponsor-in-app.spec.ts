@@ -25,7 +25,7 @@ test.beforeAll(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a sponsor reads their publication in the app and pauses and resumes it', async ({ page, request }) => {
+test('a Sponsor reads their publication in the app and pauses and resumes it', async ({ page, request }) => {
   const sponsor = await fundedSponsor(request)
   const quiz = await completeQuiz(request, sponsor.token, { title: unique('In-app quiz ') })
   const name = unique('In the app ')
@@ -53,7 +53,7 @@ test('a sponsor reads their publication in the app and pauses and resumes it', a
   const row = page.getByTestId('my-sponsor-publication').filter({ hasText: name })
   await expect(row).toHaveAttribute('data-status', 'LIVE')
   await expect(row.getByTestId('my-sponsor-counts')).toContainText('Answered: 0')
-  await expectAccessible(page, 'app sponsor page')
+  await expectAccessible(page, 'app Sponsor page')
 
   await row.getByTestId('my-sponsor-pause').click()
   await page.getByRole('alertdialog').getByRole('button', { name: 'Pause' }).click()

@@ -15,7 +15,7 @@ const MY_PAYOUT_ACCOUNT = 'urn:jabiz:dataset:taker:QbPayoutAccount'
 for (const appearance of ['light', 'dark'] as const) {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
 
-  test(`a taker sees the reward in the wallet and sets up payouts with Stripe (${appearance})`, async ({
+  test(`a Taker sees the reward in the wallet and sets up payouts with Stripe (${appearance})`, async ({
     page,
     request,
   }) => {

@@ -17,7 +17,7 @@ async function choose(page: import('@playwright/test').Page, text: string) {
   await saved
 }
 
-test('a sponsor requires one quiz before another; a taker passes the first and unlocks the second', async ({ page,
+test('a Sponsor requires one quiz before another; a Taker passes the first and unlocks the second', async ({ page,
   request }) => {
   test.setTimeout(300_000)
   const sponsor = await fundedSponsor(request)

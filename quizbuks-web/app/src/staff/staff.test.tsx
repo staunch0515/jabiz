@@ -115,7 +115,7 @@ describe('the staff texts', () => {
 })
 
 describe('the account page (Q39)', () => {
-  it('shows the taker\'s ID to copy, and no staff section for a taker on no staff', async () => {
+  it('shows the Taker\'s ID to copy, and no staff section for a Taker on no staff', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     server()
@@ -127,7 +127,7 @@ describe('the account page (Q39)', () => {
     expect(screen.queryByTestId('account-staff')).toBeNull()
   })
 
-  it('shows whose staff the taker is on, leads to the counter and lets them leave', async () => {
+  it('shows whose staff the Taker is on, leads to the counter and lets them leave', async () => {
     const { processCalls } = server({ staffOf: PLACE,
       processes: { QB_STAFF_LEAVE: { status: 200, body: { output: { userId: USER, changed: true } } } } })
     window.history.replaceState(null, '', '/account/id')
@@ -144,7 +144,7 @@ describe('the account page (Q39)', () => {
 })
 
 describe('the counter (Q39)', () => {
-  it('shows the sponsor\'s code in the staff member\'s name, the claims to answer and the day\'s prizes', async () => {
+  it('shows the Sponsor\'s code in the staff member\'s name, the claims to answer and the day\'s prizes', async () => {
     const { processCalls } = server({ staffOf: PLACE, counter: [prize({}),
       prize({ redemptionId: 'r2', code: 'C-00000002', takerName: 'Aki', status: 'REDEEMED',
         redeemedAt: new Date().toISOString() })],
@@ -171,8 +171,8 @@ describe('the counter (Q39)', () => {
   })
 
   it('says so when the staff member is removed while the counter is open', async () => {
-    const removed = { status: 422, body: { title: 'Rejected', status: 422, detail: 'You are not on a sponsor\'s staff.',
-      violations: [{ field: null, ruleCode: 'QB_NOT_STAFF', message: 'You are not on a sponsor\'s staff.' }] } }
+    const removed = { status: 422, body: { title: 'Rejected', status: 422, detail: 'You are not on a Sponsor\'s staff.',
+      violations: [{ field: null, ruleCode: 'QB_NOT_STAFF', message: 'You are not on a Sponsor\'s staff.' }] } }
     const { setStaffOf } = server({ staffOf: PLACE, counter: [prize({})],
       processes: { QB_STAFF_REDEEM_CODE_ISSUE: ISSUED, QB_STAFF_REDEMPTION_CONFIRM: removed } })
     window.history.replaceState(null, '', '/staff')
@@ -181,14 +181,14 @@ describe('the counter (Q39)', () => {
     setStaffOf(null)
     await userEvent.click(within(claim).getByTestId('staff-claim-confirm'))
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 }))
-      .toHaveTextContent('You are not on a sponsor\'s staff'))
+      .toHaveTextContent('You are not on a Sponsor\'s staff'))
   })
 
-  it('tells a taker on no staff so, and asks for no code', async () => {
+  it('tells a Taker on no staff so, and asks for no code', async () => {
     const { processCalls } = server()
     window.history.replaceState(null, '', '/staff')
     render(<App />)
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('You are not on a sponsor\'s staff')
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('You are not on a Sponsor\'s staff')
     expect(processCalls('QB_STAFF_REDEEM_CODE_ISSUE')).toEqual([])
   })
 })
@@ -217,10 +217,10 @@ describe('what the staff member handed over (Q74)', () => {
     await expectAccessible()
   })
 
-  it('says so to a taker on no staff', async () => {
+  it('says so to a Taker on no staff', async () => {
     server()
     window.history.replaceState(null, '', '/staff/handled')
     render(<App />)
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('You are not on a sponsor\'s staff')
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('You are not on a Sponsor\'s staff')
   })
 })

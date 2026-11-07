@@ -121,7 +121,7 @@ describe('the wallet helpers', () => {
     expect(freshLink(old, { ...old, onboardingUrl: null })).toBeNull()
   })
 
-  it('knows how Stripe sent the taker back', () => {
+  it('knows how Stripe sent the Taker back', () => {
     expect(onboardingReturn('?onboarding=done')).toBe('done')
     expect(onboardingReturn('?onboarding=refresh')).toBe('refresh')
     expect(onboardingReturn('?onboarding=x')).toBeNull()
