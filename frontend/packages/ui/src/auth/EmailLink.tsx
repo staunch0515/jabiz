@@ -20,6 +20,7 @@ import { AuthField, AuthFrame, AuthSubmit, navigateTo, Outcome } from './frame'
 import type { MailLinkInfo, MailLinkPageBase } from './MailLinkPage'
 import { MfaCodeStep } from './MfaCodeStep'
 import { MfaEnrollment } from './MfaEnrollment'
+import { useRetryWait } from './entry'
 import { AUTH_NAMESPACE } from './messages'
 import { failure, invalidLink, refusal } from './problems'
 
@@ -46,6 +47,7 @@ export function EmailLinkForm({ entry, to, initialEmail = '', submitLabel, onSen
   const [sent, setSent] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const form = useForm<{ email: string }>({ defaultValues: { email: initialEmail } })
+  const { seconds: wait, hold } = useRetryWait()
   if (sent !== null) {
     return (
       <div className="flex flex-col gap-4" data-testid="email-link-form">
@@ -71,7 +73,8 @@ export function EmailLinkForm({ entry, to, initialEmail = '', submitLabel, onSen
           setSent(email.trim())
           onSent?.(email.trim())
         } catch (e) {
-          setError(failure(e, t('account.failed')))
+          // Too many requests: the server's words, and the button waits as long as it asks (gap 5).
+          setError(hold(e) ? refusal(e, t('account.failed')) : failure(e, t('account.failed')))
         }
       })}
     >
@@ -85,7 +88,7 @@ export function EmailLinkForm({ entry, to, initialEmail = '', submitLabel, onSen
         error={form.formState.errors.email?.message ?? error ?? undefined}
         {...form.register('email', { validate: (v) => v.trim() !== '' || t('account.emailRequired') })}
       />
-      <AuthSubmit busy={form.formState.isSubmitting}>{submitLabel ?? t('emailLink.send')}</AuthSubmit>
+      <AuthSubmit busy={form.formState.isSubmitting} wait={wait}>{submitLabel ?? t('emailLink.send')}</AuthSubmit>
     </form>
   )
 }

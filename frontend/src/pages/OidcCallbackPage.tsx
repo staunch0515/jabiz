@@ -1,12 +1,13 @@
 import { useAuth, takeBinder, takeReturnPath } from '@jabiz/client'
 import { OidcCallback } from '@jabiz/ui'
 import { useLocation, useNavigate } from 'react-router'
+import { BrandTitle } from '../extension/BrandTitle'
 import { extension } from '../extension'
 import { homePath } from '../extension/registry'
 
 /**
  * Where an identity provider sends the user back (docs/design/10-security.md section 12): @jabiz/ui's OidcCallback
- * (decision D43) on the admin's router; a second step continues on the sign-in page, and a link of a provider account
+ * (decision D43) on the admin's router, inside the entry pages' template (phase 17zk); a second step continues on the sign-in page, and a link of a provider account
  * goes back to the page it started from (the security page), which says what was linked.
  */
 export default function OidcCallbackPage() {
@@ -15,6 +16,8 @@ export default function OidcCallbackPage() {
   const location = useLocation()
   return (
     <OidcCallback
+      brand={<BrandTitle brand={extension.brand} />}
+      appearance={false}
       search={location.search}
       fallbackPath={homePath(extension)}
       auth={{ signInWithProvider }}

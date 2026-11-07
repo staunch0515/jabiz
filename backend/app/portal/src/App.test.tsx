@@ -103,6 +103,45 @@ describe('the portal', () => {
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
   })
+
+  it('signs in and up on one page of the entry template: the column about the portal, two tabs (17zk)', async () => {
+    server()
+    window.history.replaceState(null, '', '/login')
+    const { unmount } = render(<App />)
+    expect(await screen.findByText('Order from us and follow your orders, any time.')).toBeInTheDocument()
+    const tabs = await screen.findByRole('navigation', { name: 'Sign in or sign up' })
+    await userEvent.click(within(tabs).getByRole('link', { name: 'Sign up' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/signup'))
+    expect(await screen.findByTestId('sign-up')).toBeInTheDocument()
+    // The sign-up page says what signing up accepts (gap 9).
+    expect(screen.getByTestId('sign-up-note')).toHaveTextContent('terms of sale')
+    expect(within(screen.getByRole('navigation', { name: 'Sign in or sign up' })).getByRole('link', { name: 'Sign in' }))
+      .toHaveAttribute('href', '/login')
+    unmount()
+  })
+
+  it('leads a signed-in customer from signing up and asking for a new password to the orders (gap 9)', async () => {
+    session.store('access', 'refresh')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
+      const url = new URL(request.url, window.location.origin)
+      if (url.pathname === '/api/auth/me') {
+        return json(200, { userId: 'c1', displayName: 'Cara', email: 'cara@example.com', roles: ['CUSTOMER'],
+          permissions: ['portal.use'], emailVerified: true, idleTimeoutSeconds: 1800 })
+      }
+      if (url.pathname === '/api/queries/commerce.portal_orders') return json(200, { items: [], offset: 0, limit: 50 })
+      if (url.pathname === '/api/auth/entries/portal') {
+        return json(200, { name: 'portal', selfRegistration: true, appPath: '/portal/', sessionPersistence: 'device' })
+      }
+      return json(200, [])
+    })
+    for (const path of ['/signup', '/password-reset']) {
+      window.history.replaceState(null, '', path)
+      const { unmount } = render(<App />)
+      await waitFor(() => expect(window.location.pathname).toBe('/orders'))
+      unmount()
+    }
+  })
 })
 
 describe('the orders (17zc)', () => {

@@ -17,7 +17,8 @@ export interface PwaInstallBannerProps {
   appName: string
   /**
    * The offer can be closed (default): it then stays away `snoozeDays` and for good after `maxDismissals` closes,
-   * remembered in this browser under `rememberAs`. A page that is the place to install (the account page) passes false:
+   * remembered in this browser under `rememberAs` (the closes of the note inside another app's browser apart, under
+   * `rememberAs` + `.in-app`; phase 17zk). A page that is the place to install (the account page) passes false:
    * no close button, nothing remembered.
    */
   dismissible?: boolean
@@ -47,7 +48,9 @@ export function PwaInstallBanner({
   const { t } = useTranslation(AUTH_NAMESPACE)
   const detected = useInstallPrompt()
   const { situation, browser, install } = prompt ?? detected
-  const key = rememberAs ?? DEFAULT_KEY()
+  // "Open this in your browser" is a warning, not an offer: its closes are counted apart (phase 17zk, gap 11), so that
+  // closing it inside another app's browser does not use up the offer to install once in the browser.
+  const key = (rememberAs ?? DEFAULT_KEY()) + (situation === 'in-app' ? '.in-app' : '')
   const [closed, setClosed] = useState(() => dismissible
     && !installOfferAllowed(readInstallDismissals(key), now(), { days: snoozeDays, max: maxDismissals }))
   const [guide, setGuide] = useState(false)

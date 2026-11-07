@@ -5101,3 +5101,28 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zj-5 | 测试：`app-frame.test.tsx`、`theme.test.ts`、门户 `App.test.tsx`、`TasksPage.test.tsx`（均含 axe 亮暗）；设计 12 §13、`app-spa.md` |
 
 **17zj 状态**：📝 待评审（分支 `1.3/phase-17zj-app-framework`）。
+
+### 17zk 入口页模板（2026-11-07，QuizBuks 首次上线 P4 / F-F2；需求方选方案 A）
+
+**缘由**：各前端的登录、注册、第二步、找回密码、第三方回调与邮件链接页是宽屏上居中的一张窄卡片，回调页没有品牌与语言，429 没有倒计时，第三方登录后的第二步丢掉返回地址，
+学者端没有"我是发起方"、帮助与条款（QuizBuks F-F2，原型 p4-prototype 的 132 条清单、11 个缺口与建议①–⑥）。需求方选方案 A：统一的入口页模板。
+**规则：不删、不简化任何现有行为**——模板只管排列，认证流程与接口一处不改；清单逐条有位置。
+
+| # | 内容 |
+|---|---|
+| 17zk-1 | `@jabiz/ui` 的 `EntryLayout`（`AuthFrame` 即它，原属性不变）与 `EntryLayoutProvider`：提示区（环境横条在最上；`EntryNotice`，手机上只展开一条，其余收成一行；`useEntryNotices`）、顶栏（品牌 `h1`、右上角语言选择，建议⑤）、宽屏左栏（`intro`：一句话、要点、示意图，手机上一行，建议②）、表单卡片（标题 `h2` 或标签、`below`）、`otherEntry`（建议①、缺口 7）、页脚（`links` 帮助 / 条款 / 隐私（缺口 8）、亮暗、构建号）；`EntryTabs`、`EntryLink`、`useIsWide`；三语文案 `entry.*`、`common.retryIn` |
+| 17zk-2 | `SignInForm`：`order`（按入口与界面语言；`emailLink` / `emailLinkButton` / `passkey` / `providers` / `password`，没列的照以前的顺序接上，一个不丢；缺口 1、建议③）、`tabs` 与 `signInPath`（建议④，查询参数随标签）、`below`、`oidcLayout="responsive"`、`resumeStep`；`SignUpForm` 的 `tabs` / `signUpPath`；`SignUpSent` 带标签 |
+| 17zk-3 | 429（缺口 5）：`ApiError.retryAfter`、`retryAfterSeconds`（`@jabiz/client`）、`useRetryWait`；登录、注册、邮件链接、找回密码的按钮与第三方按钮按 `Retry-After` 停用并倒计时 |
+| 17zk-4 | 第二步的返回地址（缺口 2）：`keepSignInStep` / `pendingSignInStep` / `forgetSignInStep`（本标签页、按入口）；`OidcCallback` 先保存，`SignInForm` 自动接着并去记下的地址，刷新不丢 |
+| 17zk-5 | `OidcCallback` 在模板中（`brand`、`appearance`；缺口 4）；`MAIL_LINK_PAGES`（缺口 3）；"确认通行密钥"未登录时的登录链接（缺口 10）；`PwaInstallBanner` 的内置浏览器提示分开计数（`.in-app`，缺口 11）；`MailUnsubscribe` 取提供者的品牌 |
+| 17zk-6 | 示范：通用后台（单栏、无亮暗、构建号，回调页带品牌）；门户用 `EntryLayoutProvider`（三语左栏、`useEntryNotices`）、登录与注册两个标签、注册页的第三方与条款说明、已登录时 `/signup` 与 `/password-reset` 转走（缺口 9）、第二步只靠保存的步骤 |
+| 17zk-7 | 测试：`entry.test.tsx`（21 例，均含 axe 亮暗）、`problem.test.ts`、`signInStep.test.ts`、门户 `App.test.tsx`（模板与标签、已登录转走）、后台 `OidcCallbackPage.test.tsx`（标题移到卡片）与 `AuthPages.test.tsx`（登录链接）；原有单元测试与平台 e2e 照旧通过；设计 12 §14、10 §15、根 `CLAUDE.md` |
+
+**验收（原型清单 132 条，逐组）**：A 公共外框（27）：品牌、环境横条、语言（移到右上角）、亮暗（页脚，后台照旧无）、构建号、提示区（离线、服务不可用的对话框、新版本、内置浏览器提示）
+与字段、密码、按钮、结果的写法全部保留；B 登录（39）：字段、通行密钥按钮与名字栏的自动提示、内置浏览器的说明、邮件链接、第三方（图标 / 按钮、按入口取、Apple 的标题、品牌色、启动失败）、
+忘记密码、注册（链接或标签）、各种错误、闲置退出、返回地址、会话选项都不变，429 新增倒计时；C 第二步（8）：验证码、通行密钥、开启二次验证与加强验证不变，第三方后的返回地址补上；
+D 回调（7）：处理中、错误、Apple 取消、`OIDC_ACCOUNT_EXISTS`、关联用途不变，进入模板；E 注册（12）：表单、错误、"请查收邮件"、第三方注册、条款说明、试用来源（`?src=` 随标签）、已登录转走不变，门户补上；
+F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架（12）、I 退出（2）：全部不变（G 的页面进入模板，确认通行密钥补上登录链接；H、I 属应用，不在本阶段改动）。
+不能放进模板而被删去的：无。QuizBuks 自己的部分（缺口 6 发起方公开框架的环境横条、学者与发起方的左栏文案与示意图、`otherEntry`、页脚链接、各入口的 `order`）在其应用分支上采用。
+
+**17zk 状态**：📝 待评审（分支 `1.3/phase-17zk-entry-pages`）。

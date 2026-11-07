@@ -4,8 +4,9 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { AUTH_LINK_CLASS, AuthField, AuthFrame, AuthLink, AuthSubmit, Outcome, type AuthNavigation } from './frame'
+import { useRetryWait } from './entry'
 import { AUTH_NAMESPACE } from './messages'
-import { failure } from './problems'
+import { failure, refusal } from './problems'
 
 export interface PasswordResetRequestProps extends AuthNavigation {
   /** The application's name, the page's heading. */
@@ -27,6 +28,7 @@ export function PasswordResetRequest({ brand, appearance, entry, signInPath, onN
   const [error, setError] = useState<string | null>(null)
   const form = useForm<{ email: string }>({ defaultValues: { email: '' } })
   const appPath = useAppPath(entry, !signInPath)
+  const { seconds: wait, hold } = useRetryWait()
   return (
     <AuthFrame brand={brand} appearance={appearance} title={t('account.resetTitle')} testId="password-reset">
       {done ? (
@@ -43,7 +45,8 @@ export function PasswordResetRequest({ brand, appearance, entry, signInPath, onN
               await requestPasswordReset(email, entry)
               setDone(true)
             } catch (e) {
-              setError(failure(e, t('account.failed')))
+              // Too many requests: the server's words, and the button waits as long as it asks (gap 5).
+              setError(hold(e) ? refusal(e, t('account.failed')) : failure(e, t('account.failed')))
             }
           })}
         >
@@ -56,7 +59,7 @@ export function PasswordResetRequest({ brand, appearance, entry, signInPath, onN
             error={form.formState.errors.email?.message ?? error ?? undefined}
             {...form.register('email', { validate: (v) => v.trim() !== '' || t('account.emailRequired') })}
           />
-          <AuthSubmit busy={form.formState.isSubmitting}>{t('account.sendLink')}</AuthSubmit>
+          <AuthSubmit busy={form.formState.isSubmitting} wait={wait}>{t('account.sendLink')}</AuthSubmit>
         </form>
       )}
       {signInPath ? (
