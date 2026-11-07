@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.certification;
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -50,6 +52,8 @@ public final class CertificationProcesses {
     public static final String REVOKE = "QB_CERTIFICATION_REVOKE";
     public static final String CLAIM = "QB_CERTIFICATION_CLAIM";
     public static final String OVERVIEW = "QB_CERTIFICATION_OVERVIEW";
+    /** F-S1b: the platform reads an operator's overview, read only (its certifications are the operators' to run). */
+    public static final String OVERVIEW_OF = "QB_CERTIFICATION_OVERVIEW_OF";
 
     /** Most rounds and records one person's certification reads; more is an error rather than a silent cut. */
     static final int MAX_ROWS = 500;
@@ -77,6 +81,9 @@ public final class CertificationProcesses {
     public record ClaimOutput(String certification, Instant heldUntil, String roundPublicationId) {}
 
     public record OverviewInput() {}
+
+    /** Whose overview the platform reads: an operator's id. */
+    public record OverviewOfInput(@NotBlank @Size(max = 36) String operatorId) {}
 
     /** One round as the overview shows it; {@code holders}: the passes recorded on it. */
     public record RoundRow(String roundId, String publicationId, String publicationName, String certification,
@@ -309,12 +316,35 @@ public final class CertificationProcesses {
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, Overview.class));
             OperatorChecks.member(pb);
+            overviewSteps(pb, CertificationProcesses::owner);
+        });
+    }
+
+    public static ProcessDefinition<OverviewOfInput, Overview, ProcessContext> overviewOf() {
+        return ProcessDefinition.define(OVERVIEW_OF, 1, OverviewOfInput.class, Overview.class, ProcessContext.class,
+            pb -> {
+                pb.description("An operator's certification rounds and records by hand, as its own overview shows "
+                        + "them, for the platform (read only).")
+                    .permissions(QbPermissions.CERTIFICATION_ADMIN)
+                    .contextFactory((start, input) -> {
+                        ProcessContext ctx = new ProcessContext(start);
+                        ctx.put(INPUT, input);
+                        return ctx;
+                    })
+                    .outputMapper(ctx -> ctx.get(OUTPUT, Overview.class));
+                overviewSteps(pb, ctx -> ctx.get(INPUT, OverviewOfInput.class).operatorId().strip());
+            });
+    }
+
+    /** The overview of {@code owner}'s rounds and records by hand. */
+    private static <I> void overviewSteps(ProcessDefinitionBuilder<I, Overview, ProcessContext> pb,
+        Function<ProcessContext, String> owner) {
             pb.step("Load the rounds", QueryEntities.<ProcessContext>of(
                     QbCertifications.defaultDataset(QbCertifications.ROUND),
-                    ctx -> eq("owner", owner(ctx), MAX_ROWS), ROUNDS))
+                    ctx -> eq("owner", owner.apply(ctx), MAX_ROWS), ROUNDS))
                 .step("Load the records", QueryEntities.<ProcessContext>of(
                     QbCertifications.defaultDataset(QbCertifications.RECORD),
-                    ctx -> eq("owner", owner(ctx), MAX_ROWS), RECORDS))
+                    ctx -> eq("owner", owner.apply(ctx), MAX_ROWS), RECORDS))
                 .step("Load the rounds' cards", QueryEntities.<ProcessContext>of(
                     QbPublications.defaultDataset(QbPublications.CARD), ctx -> {
                         List<Object> ids = list(ctx, ROUNDS).stream()
@@ -343,9 +373,8 @@ public final class CertificationProcesses {
                             r.get("kind"), r.get("reason"), r.get("actor"), r.get("owner"), instant(r.get("at")),
                             instant(r.get("validUntil"))))
                         .toList();
-                    ctx.put(OUTPUT, new Overview(owner(ctx), rounds, byHand));
+                    ctx.put(OUTPUT, new Overview(owner.apply(ctx), rounds, byHand));
                 });
-        });
     }
 
     /** The people whose passes were recorded on a round. */

@@ -3,11 +3,13 @@ id: qb.admin.sponsor-products
 description: >-
   Sponsors' products (Q60b) with the sponsor's company and their page's link name, by status, sponsor or name: the list
   to take products down from and put them back; an operator's session sees its own sponsors' only
-entities: [QbSponsorProduct, QbSponsor, QbSponsorPage]
+entities: [QbSponsorProduct, QbSponsor, QbSponsorPage, QbSponsorOperator, QbOperator]
 datasets:
   QbSponsorProduct: urn:jabiz:dataset:default:QbSponsorProduct
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbSponsorPage: urn:jabiz:dataset:default:QbSponsorPage
+  QbSponsorOperator: urn:jabiz:dataset:default:QbSponsorOperator
+  QbOperator: urn:jabiz:dataset:default:QbOperator
 params:
   userId: { like: QbSponsorProduct.userId, description: One sponsor's products }
 results:
@@ -28,8 +30,11 @@ results:
   company:            { from: QbSponsor.company }
   handle:             { from: QbSponsorPage.handle }
   pageStatus:         { from: QbSponsorPage.status }
+  # F-S1b: the sponsor's operator now (every sponsor has one), for the platform's filter by operator.
+  operatorId:   { from: QbSponsorOperator.operatorId }
+  operatorName: { from: QbOperator.name }
 list:
-  filters: [status, name, company, currency]
+  filters: [status, name, company, currency, operatorId]
   sorts:   [editedAt, name, company, seq]
   defaultSort: { field: editedAt, asc: false }
   key: [productId]
@@ -54,8 +59,12 @@ SELECT
     pr.{{QbSponsorProduct.editedAt}}           AS editedAt,
     s.{{QbSponsor.company}}                    AS company,
     p.{{QbSponsorPage.handle}}                 AS handle,
-    p.{{QbSponsorPage.status}}                 AS pageStatus
+    p.{{QbSponsorPage.status}}                 AS pageStatus,
+    qso.{{QbSponsorOperator.operatorId}} AS operatorId,
+    qop.{{QbOperator.name}}               AS operatorName
 FROM {{QbSponsorProduct}} pr
 LEFT JOIN {{QbSponsor}} s ON s.{{QbSponsor.userId}} = pr.{{QbSponsorProduct.userId}}
 LEFT JOIN {{QbSponsorPage}} p ON p.{{QbSponsorPage.userId}} = pr.{{QbSponsorProduct.userId}}
+LEFT JOIN {{QbSponsorOperator}} qso ON qso.{{QbSponsorOperator.userId}} = pr.{{QbSponsorProduct.userId}}
+LEFT JOIN {{QbOperator}} qop ON qop.{{QbOperator.operatorId}} = qso.{{QbSponsorOperator.operatorId}}
 WHERE (CAST(:userId AS text) IS NULL OR pr.{{QbSponsorProduct.userId}} = CAST(:userId AS text))

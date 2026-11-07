@@ -10,6 +10,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  ConfirmDialog,
   DataTable,
   EXTENSION_NAMESPACE,
   Input,
@@ -38,7 +39,8 @@ import {
   type OperatorPlanChange,
 } from './account-api'
 import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
-import { useLabels, when } from './hooks'
+import { useLabels, usePaged, when } from './hooks'
+import { UserPicker } from './pickers'
 import { DICTIONARY, PATH, PERMISSION, TEMPLATE } from './ids'
 import { OperatorFields } from './operator-components'
 import {
@@ -94,9 +96,42 @@ function Details({ operator }: { operator: Operator }) {
       setBusy(false)
     }
   }
+  const makeDefault = async () => {
+    try {
+      await saveOperator({ operatorId: operator.operatorId, name: operator.name, contactName: operator.contactName,
+        contactEmail: operator.contactEmail, language: operator.language, status: operator.status,
+        note: operator.note, baseRevision: operator.revision, defaultForNew: true })
+      notify.success(t('operator.detail.defaultMade'))
+    } catch (e) {
+      notify.error(problemOf(e))
+      throw e
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: OPERATORS_KEY })
+    }
+  }
+  // F-S1: the default operator takes the sponsors no operator found; there is one at most, and it changes only by
+  // making another the default.
+  const defaultPart = operator.defaultForNew ? (
+    <p className="text-sm" data-testid="operator-default">
+      <Badge variant="secondary" className="mr-2">{t('operator.detail.default')}</Badge>
+      {t('operator.detail.defaultHint')}
+    </p>
+  ) : writable && operator.status === 'ACTIVE' ? (
+    <div className="flex flex-col gap-2">
+      <p className="text-muted-foreground text-sm">{t('operator.detail.notDefaultHint')}</p>
+      <div>
+        <ConfirmDialog title={t('operator.detail.makeDefaultTitle')}
+          description={t('operator.detail.makeDefaultText', { name: operator.name })}
+          confirmLabel={t('operator.detail.makeDefault')} onConfirm={makeDefault}
+          trigger={<Button variant="outline" size="sm" data-testid="operator-make-default">
+            {t('operator.detail.makeDefault')}</Button>} />
+      </div>
+    </div>
+  ) : null
   if (!writable) {
     return (
       <Section title={t('operator.detail.details')} testId="operator-details">
+        {defaultPart}
         <p>{operator.contactName} · {operator.contactEmail}</p>
         {operator.language && <p className="text-sm">{t('operator.fields.language')}: {languages(operator.language)}</p>}
         {operator.note && <p className="text-muted-foreground text-sm">{operator.note}</p>}
@@ -105,6 +140,7 @@ function Details({ operator }: { operator: Operator }) {
   }
   return (
     <Section title={t('operator.detail.details')} testId="operator-details">
+      {defaultPart}
       <form noValidate className="flex max-w-xl flex-col gap-4" onSubmit={(event) => void submit(event)}>
         <OperatorFields id={id} {...values}
           onChange={(field, value) => setValues((current) => ({ ...current, [field]: value }))} />
@@ -248,39 +284,37 @@ interface AssignedSponsor {
 }
 
 /**
- * The operator's sponsors (`qb.admin.sponsors` by operator) and moving one here, or back to headquarters, by their
- * user id with a reason (`QB_SPONSOR_OPERATOR_ASSIGN`; the audit keeps the history).
+ * The operator's sponsors (`qb.admin.sponsors` by operator, page by page) and moving one here from another operator,
+ * chosen by name, with a reason (`QB_SPONSOR_OPERATOR_ASSIGN`; their open reviews and tasks move with them, the audit
+ * keeps the history). F-S1: there is no going back to "no operator", and the operator's own sponsor is never moved.
  */
-function Sponsors({ operatorId }: { operatorId: string }) {
+function Sponsors({ operatorId, directSponsorId }: { operatorId: string; directSponsorId: string | null }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const id = useId()
   const queryClient = useQueryClient()
   const review = useLabels(DICTIONARY.sponsorReviewStatus)
-  const key = [...OPERATORS_KEY, operatorId, 'sponsors']
   const readable = can(PERMISSION.usersRead)
-  const sponsors = useQuery({
-    queryKey: key,
-    enabled: readable,
-    queryFn: async (): Promise<AssignedSponsor[]> => {
+  const { query: sponsors, table } = usePaged([...OPERATORS_KEY, operatorId, 'sponsors'],
+    async (offset, limit) => {
       const page = await runQuery<Record<string, unknown>>(TEMPLATE.sponsors, {
-        filters: [{ field: 'operatorId', op: 'eq', value: operatorId }], limit: 100 })
-      return page.items.map((row) => ({ userId: String(row.userId), company: row.company == null ? null
-        : String(row.company), reviewStatus: String(row.reviewStatus ?? '') }))
-    },
-  })
-  const [userId, setUserId] = useState('')
+        filters: [{ field: 'operatorId', op: 'eq', value: operatorId }], offset, limit, count: true })
+      return { total: page.total, items: page.items.map((row): AssignedSponsor => ({ userId: String(row.userId),
+        company: row.company == null ? null : String(row.company), reviewStatus: String(row.reviewStatus ?? '') })) }
+    }, readable)
+  const [userId, setUserId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
-  const move = async (toHere: boolean, sponsorId: string) => {
-    if (busy || !sponsorId || !reason.trim()) return
+  const chosen = userId?.trim() ?? ''
+  const move = async () => {
+    if (busy || !chosen || !reason.trim()) return
     setBusy(true)
     setProblem(null)
     try {
-      await assignSponsor(sponsorId, toHere ? operatorId : null, reason.trim())
-      notify.success(t(toHere ? 'operator.sponsors.assigned' : 'operator.sponsors.returned'))
-      setUserId('')
+      await assignSponsor(chosen, operatorId, reason.trim())
+      notify.success(t('operator.sponsors.assigned'))
+      setUserId(null)
       setReason('')
       await queryClient.invalidateQueries({ queryKey: OPERATORS_KEY })
     } catch (e) {
@@ -294,33 +328,40 @@ function Sponsors({ operatorId }: { operatorId: string }) {
       id: 'company',
       header: t('operator.sponsors.company'),
       cell: ({ row }) => (
-        <Link to={PATH.user(row.original.userId)} className={linkClass}>
-          {row.original.company ?? <UserName id={row.original.userId} />}
-        </Link>
+        <span className="flex flex-wrap items-center gap-2">
+          <Link to={PATH.user(row.original.userId)} className={linkClass}>
+            {row.original.company ?? <UserName id={row.original.userId} />}
+          </Link>
+          {row.original.userId === directSponsorId && (
+            <Badge variant="secondary" data-testid="operator-sponsor-direct">{t('operator.sponsors.direct')}</Badge>
+          )}
+        </span>
       ),
     },
     { id: 'review', header: t('operator.sponsors.review'), cell: ({ row }) => review(row.original.reviewStatus) },
-  ], [t, review])
+  ], [t, review, directSponsorId])
   return (
     <Section title={t('operator.sponsors.title')} testId="operator-sponsors">
       <p className="text-muted-foreground text-sm">{t('operator.sponsors.hint')}</p>
       {readable && (sponsors.isError
         ? <LoadFailed error={sponsors.error} onRetry={() => void sponsors.refetch()} />
         : (
-          <DataTable label={t('operator.sponsors.title')} columns={columns} data={sponsors.data ?? []}
-            loading={sponsors.isPending} getRowId={(row) => row.userId} empty={<EmptyState art="people" title={t('operator.sponsors.none')} />}
+          <DataTable label={t('operator.sponsors.title')} columns={columns} {...table} getRowId={(row) => row.userId}
+            empty={<EmptyState art="people" title={t('operator.sponsors.none')} />}
             rowProps={(row) => ({ 'data-testid': 'operator-sponsor-row', 'data-id': row.userId })} />
         ))}
       {can(PERMISSION.operatorsWrite) && (
         <form noValidate className="flex flex-col gap-4" onSubmit={(event) => {
           event.preventDefault()
-          void move(true, userId.trim())
+          void move()
         }}>
           <div className="flex flex-wrap items-end gap-4">
-            <div className="flex flex-col gap-2">
+            <div className="flex w-80 flex-col gap-2">
               <Label htmlFor={`${id}-sponsor`}>{t('operator.sponsors.userId')}</Label>
-              <Input id={`${id}-sponsor`} value={userId} maxLength={128} autoComplete="off" className="w-80"
-                data-testid="assign-user" onChange={(event) => setUserId(event.target.value)} />
+              {readable
+                ? <UserPicker id={`${id}-sponsor`} value={userId} onChange={setUserId} data-testid="assign-user" />
+                : <Input id={`${id}-sponsor`} value={userId ?? ''} maxLength={128} autoComplete="off"
+                  data-testid="assign-user" onChange={(event) => setUserId(event.target.value)} />}
             </div>
             <div className="flex grow flex-col gap-2">
               <Label htmlFor={`${id}-reason`}>{t('operator.sponsors.reason')}</Label>
@@ -331,12 +372,8 @@ function Sponsors({ operatorId }: { operatorId: string }) {
           </div>
           <p id={`${id}-reason-hint`} className="text-muted-foreground text-sm">{t('operator.sponsors.reasonHint')}</p>
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={busy || !userId.trim() || !reason.trim()} aria-busy={busy || undefined}
+            <Button type="submit" disabled={busy || !chosen || !reason.trim()} aria-busy={busy || undefined}
               data-testid="assign-here">{t('operator.sponsors.assign')}</Button>
-            <Button type="button" variant="outline" disabled={busy || !userId.trim() || !reason.trim()}
-              data-testid="assign-back" onClick={() => void move(false, userId.trim())}>
-              {t('operator.sponsors.returnToHq')}
-            </Button>
           </div>
         </form>
       )}
@@ -480,7 +517,7 @@ export default function OperatorPage() {
       <Details key={o.revision} operator={o} />
       <Plan operatorId={o.operatorId} />
       <Members operatorId={o.operatorId} />
-      <Sponsors operatorId={o.operatorId} />
+      <Sponsors operatorId={o.operatorId} directSponsorId={o.directSponsorId} />
     </div>
   )
 }

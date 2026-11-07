@@ -278,5 +278,15 @@ class CertificationIT extends PlayItSupport {
         assertThat(northRounds).singleElement().satisfies(row -> assertThat(row).containsEntry("roundId", roundId)
             .containsEntry("publicationName", "Q69 north").containsEntry("holders", 1));
         assertThat((List<?>) run(CertificationProcesses.OVERVIEW, southSession, body()).get("rounds")).isEmpty();
+
+        // F-S1b: the platform reads any operator's overview, and runs nothing of it.
+        String platform = TestTokens.bearer(tokens, "q69-content", QbPermissions.CERTIFICATION_ADMIN);
+        Map<String, Object> theirs = run(CertificationProcesses.OVERVIEW_OF, platform, body("operatorId", north));
+        assertThat(theirs).containsEntry("owner", north);
+        assertThat((List<?>) theirs.get("rounds")).hasSize(1);
+        assertThat((List<?>) run(CertificationProcesses.OVERVIEW_OF, platform, body("operatorId", south))
+            .get("rounds")).isEmpty();
+        refused(CertificationProcesses.OVERVIEW_OF, northSession, body("operatorId", north), 403);
+        refused(CertificationProcesses.ROUND_CLOSE, platform, body("roundId", roundId), 403);
     }
 }

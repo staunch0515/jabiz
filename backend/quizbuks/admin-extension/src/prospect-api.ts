@@ -6,8 +6,8 @@ import type { SortSpec } from './api'
 /*
  * AI prospecting (backend `prospect`, docs/quizbuks/plans/Q48-operators.md, Q48c): what its pages read and run, typed
  * by hand after the templates and processes. An operator's member reads the `qb.operator.prospect*` templates (its own
- * operator's); headquarters reads the `qb.admin.prospect*` ones for an owner (`direct` is its own). The server decides
- * whose prospecting a process acts on: the caller's operator, else headquarters'.
+ * operator's); the platform reads the `qb.admin.prospect*` ones for an operator, and runs none (F-S1b). The server
+ * decides whose prospecting a process acts on: the caller's operator.
  */
 
 type Row = Record<string, unknown>
@@ -20,14 +20,11 @@ const num = (value: unknown): number => {
 const bool = (value: unknown): boolean | null => (value === true || value === 'true' ? true
   : value === false || value === 'false' ? false : null)
 
-/** Headquarters' own prospecting (backend `QbProspects.DIRECT`). */
-export const DIRECT = 'direct'
-
 /** The states of a business found (backend `QbProspects`). */
 export const PROSPECT_STATUSES = ['DRAFTED', 'APPROVED', 'SENT', 'FOUND', 'RESEARCHING', 'LOW_SCORE', 'SKIPPED',
   'FAILED', 'DISCARDED'] as const
 
-/** Which templates a page reads: the operator's own, or headquarters' for an owner. */
+/** Which templates a page reads: the operator's own, or the platform's for an operator. */
 export interface Scope {
   admin: boolean
   owner: string

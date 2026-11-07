@@ -21,6 +21,7 @@ import { certificationMenu, certificationMessages } from './certification-messag
 import { referralMenu, referralMessages } from './referral-messages'
 import { feeMenu, feeMessages } from './fee-messages'
 import { assetMessages } from './asset-messages'
+import { pickersMessages } from './pickers-messages'
 import { usageMenu, usageMessages } from './usage-messages'
 import { BRAND_NAMES } from './brand'
 
@@ -33,6 +34,7 @@ export const messages = {
       ...certificationMenu.en, ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en, ...usageMenu.en },
     fee: feeMessages.en,
     assets: assetMessages.en,
+    pickers: pickersMessages.en,
     usage: usageMessages.en,
     certification: certificationMessages.en,
     audiencePricing: audiencePricingMessages.en,
@@ -74,6 +76,7 @@ export const messages = {
     reviews: {
       title: 'Reviews',
       description: 'Sponsor applications and submitted publications waiting for a decision, the longest waiting first.',
+      acrossDescription: 'What waits for every operator’s review, the longest waiting first, by operator if you choose one. Read only: each operator decides its own Sponsors’ in the Operator Management System.',
       publications: 'Publications ({{n}})',
       sponsors: 'Sponsor applications ({{n}})',
       publicationsTable: 'Publications waiting for review',
@@ -143,7 +146,7 @@ export const messages = {
       notPending: 'Not waiting for review: {{status}}.',
       switch: 'The Sponsor asks to switch this running publication from version {{from}} to {{to}} (since {{time}}). The content below is version {{to}}; everything else stays as approved. Until a decision Takers see version {{from}}.',
       rejectReason: 'Reason given when sent back',
-      notAllowed: 'Deciding needs the permission to review publications.',
+      notAllowed: 'The Sponsor’s operator decides this review in the Operator Management System; here it is read only.',
       needsContent: 'The decision is offered once the settings, the tiers and the quiz content above are all shown.',
       languagesTitle: 'Languages',
       languagesHint: 'The publication is offered in these languages, the main one first. Read the quiz (switch its language above) and the texts below in each, then tick it.',
@@ -236,7 +239,7 @@ export const messages = {
       rejectReason: 'Reason given when sent back',
       summary: 'User summary',
       notPending: 'Not waiting for review: {{status}}.',
-      notAllowed: 'Deciding needs the permission to review Sponsors.',
+      notAllowed: 'The Sponsor’s operator decides this application in the Operator Management System; here it is read only.',
     },
     users: {
       title: 'Users',
@@ -333,6 +336,7 @@ export const messages = {
       ...certificationMenu.zh, ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh, ...usageMenu.zh },
     fee: feeMessages.zh,
     assets: assetMessages.zh,
+    pickers: pickersMessages.zh,
     usage: usageMessages.zh,
     certification: certificationMessages.zh,
     audiencePricing: audiencePricingMessages.zh,
@@ -374,6 +378,7 @@ export const messages = {
     reviews: {
       title: '审核',
       description: '等待决定的发起方入驻申请与已提交的发布，等待最久的在前。',
+      acrossDescription: '全部运营商等待审核的内容，等待最久的在前，可按运营商筛选。只读：各运营商在运营商管理系统中审核自己的发起方。',
       publications: '发布（{{n}}）',
       sponsors: '发起方入驻（{{n}}）',
       publicationsTable: '等待审核的发布',
@@ -443,7 +448,7 @@ export const messages = {
       notPending: '不在等待审核：{{status}}。',
       switch: '赞助商申请把这个进行中的发布从第 {{from}} 版切换到第 {{to}} 版（自 {{time}}）。下面的内容是第 {{to}} 版；其他设置保持已批准的内容。决定之前学者看到的是第 {{from}} 版。',
       rejectReason: '驳回的理由',
-      notAllowed: '决定需要审核发布的权限。',
+      notAllowed: '此审核由发起方所属的运营商在运营商管理系统中决定；这里只读。',
       needsContent: '上面的设置、档位与 Quiz 内容都显示出来之后才能决定。',
       languagesTitle: '语言',
       languagesHint: '此发布以下列语言提供，首选语言在前。请按每种语言阅读 Quiz（在上方切换语言）与下面的文字，再勾选。',
@@ -536,7 +541,7 @@ export const messages = {
       rejectReason: '驳回的理由',
       summary: '用户汇总',
       notPending: '不在等待审核：{{status}}。',
-      notAllowed: '决定需要审核发起方的权限。',
+      notAllowed: '此入驻申请由发起方所属的运营商在运营商管理系统中决定；这里只读。',
     },
     users: {
       title: '用户',
@@ -633,6 +638,7 @@ export const messages = {
       ...certificationMenu.ja, ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja, ...usageMenu.ja },
     fee: feeMessages.ja,
     assets: assetMessages.ja,
+    pickers: pickersMessages.ja,
     usage: usageMessages.ja,
     certification: certificationMessages.ja,
     audiencePricing: audiencePricingMessages.ja,
@@ -674,6 +680,7 @@ export const messages = {
     reviews: {
       title: '審査',
       description: '判断を待っている主催者の申請と提出された公開。待ち時間の長いものが先です。',
+      acrossDescription: 'すべての運営パートナーの審査待ち。待ち時間の長いものが先で、運営パートナーで絞り込めます。閲覧のみです。審査は各運営パートナーが運営パートナー管理システムで行います。',
       publications: '公開（{{n}}）',
       sponsors: '主催者申請（{{n}}）',
       publicationsTable: '審査待ちの公開',
@@ -743,7 +750,7 @@ export const messages = {
       notPending: '審査待ちではありません：{{status}}。',
       switch: '主催者は掲載中のこの公開をバージョン {{from}} から {{to}} に切り替えるよう申請しています（{{time}} から）。下の内容はバージョン {{to}} で、その他は承認済みのままです。決定まではテイカーにバージョン {{from}} が表示されます。',
       rejectReason: '差し戻しの理由',
-      notAllowed: '判断には公開を審査する権限が必要です。',
+      notAllowed: 'この審査は主催者の担当の運営パートナーが運営パートナー管理システムで判断します。ここでは閲覧のみです。',
       needsContent: '上の設定、報酬の段階、Quiz の内容がすべて表示されてから判断できます。',
       languagesTitle: '言語',
       languagesHint: 'この公開は次の言語で提供されます（先頭がメインの言語）。言語ごとに Quiz（上で言語を切り替え）と下の文言を読んでからチェックしてください。',
@@ -836,7 +843,7 @@ export const messages = {
       rejectReason: '差し戻しの理由',
       summary: 'ユーザーの概要',
       notPending: '審査待ちではありません：{{status}}。',
-      notAllowed: '判断には主催者を審査する権限が必要です。',
+      notAllowed: 'この申請は主催者の担当の運営パートナーが運営パートナー管理システムで判断します。ここでは閲覧のみです。',
     },
     users: {
       title: 'ユーザー',

@@ -85,7 +85,8 @@ beforeEach(() => {
       : id === TEMPLATE.operatorProspectSetting || id === TEMPLATE.adminProspectSetting ? [server.setting]
         : id === TEMPLATE.operatorProspectDirections || id === TEMPLATE.adminProspectDirections ? server.directions
           : id === TEMPLATE.adminProspectSwitch ? server.switchRows
-            : []
+            : id === TEMPLATE.operators ? [{ operatorId: 'op-1', name: 'Kanto Partners', contactEmail: 'ops@kanto.example' }]
+              : []
     return { items, offset: 0, limit: 20, ...(options.count ? { total: items.length } : {}) }
   })
   server.runProcess.mockReset().mockImplementation(async (name: string) =>
@@ -124,13 +125,21 @@ describe('the businesses found', () => {
     await expectAccessible(container)
   })
 
-  it('reads headquarters’ own, or an owner’s, through the administration’s template', async () => {
-    server.permissions = new Set([PERMISSION.prospectUse, PERMISSION.adminProspect])
+  it('reads an operator’s, chosen by name, through the platform’s template (F-S1b)', async () => {
+    server.permissions = new Set([PERMISSION.adminProspect, PERMISSION.operatorsRead])
     renderAt('/qb/prospects?owner=op-1', '/qb/prospects', <ProspectsPage />)
     await screen.findByTestId('prospect-row')
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.adminProspects, expect.objectContaining({
       params: { owner: 'op-1', status: 'DRAFTED', q: undefined } }))
-    expect(screen.getByTestId('prospects-owner')).toHaveValue('op-1')
+    await waitFor(() => expect(screen.getByTestId('prospects-owner')).toHaveTextContent('Kanto Partners'))
+  })
+
+  it('asks the platform to choose an operator first: it has no prospecting of its own (F-S1)', async () => {
+    server.permissions = new Set([PERMISSION.adminProspect, PERMISSION.operatorsRead])
+    renderAt('/qb/prospects', '/qb/prospects', <ProspectsPage />)
+    expect(await screen.findByText('Choose an operator to read its prospecting.')).toBeInTheDocument()
+    expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.adminProspects, expect.anything())
+    expect(screen.queryByTestId('prospect-settings-link')).not.toBeInTheDocument()
   })
 })
 
@@ -216,7 +225,8 @@ describe('the platform switch (F-F8, T9)', () => {
       reason: 'Deeper research' } }, { id: 'c2', attributes: { changeId: 'c2', status: 'PROPOSED',
       targetEntity: 'SysParam', changeValues: JSON.stringify({ paramKey: 'qb.topup.bank.min', value: '1000' }),
       proposedBy: 'u-2', reason: 'Another' } }]
-    const { container } = renderAt('/qb/prospects/settings', '/qb/prospects/settings', <ProspectSettingsPage />)
+    const { container } = renderAt('/qb/prospects/settings?owner=op-1', '/qb/prospects/settings',
+      <ProspectSettingsPage />)
     const values = await screen.findByTestId('switch-values')
     expect(within(values).getByText('Off')).toBeInTheDocument()
     expect(within(values).getByText('claude-opus-5-5')).toBeInTheDocument()

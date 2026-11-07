@@ -43,7 +43,7 @@ class SponsorCertificationIT extends LegalItSupport {
 
     private String hq() {
         return TestTokens.bearer(tokens, "q88-hq", QbPermissions.CERTIFICATION_ADMIN,
-            QbPermissions.CERTIFICATION_MANAGE);
+            QbPermissions.CERTIFICATION_MANAGE, QbPermissions.ADMIN_PUBLICATION_READ);
     }
 
     private Map<String, Object> define(String sponsorId, String name) {
