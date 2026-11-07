@@ -12,7 +12,7 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('the sponsor sees who lit which node; the taker sees where they stand (Q85)', async ({ page, request }) => {
+test('the Sponsor sees who lit which node; the Taker sees where they stand (Q85)', async ({ page, request }) => {
   test.setTimeout(300_000)
   const sponsor = await fundedSponsor(request)
   const quiz = await run(request, sponsor.token, 'QB_QUIZ_SAVE', { title: 'Coffee', intro: null, timeLimitSec: 300 })

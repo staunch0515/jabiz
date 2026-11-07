@@ -26,7 +26,7 @@ interface Me {
 }
 
 const terms = (versionNo: number, mustAccept: boolean) => ({ kind: 'TERMS_SPONSOR', versionId: `v${versionNo}`,
-  versionNo, title: { en: 'Sponsor terms', ja: 'スポンサー利用規約' }, changeSummary: { en: 'Fees are clearer.' },
+  versionNo, title: { en: 'Sponsor terms', ja: '主催者利用規約' }, changeSummary: { en: 'Fees are clearer.' },
   requiresConsent: true, effectiveAt: '2026-10-01T00:00:00Z', toAccept: versionNo, accepted: mustAccept ? 1 : versionNo,
   mustAccept })
 const privacy = { kind: 'PRIVACY', versionId: 'p1', versionNo: 1, title: { en: 'Privacy policy' }, changeSummary: null,
@@ -237,7 +237,7 @@ describe('a visitor', () => {
   })
 })
 
-describe('a signed-in sponsor', () => {
+describe('a signed-in Sponsor', () => {
   beforeEach(() => session.store('access', 'refresh'))
 
   it('signed in with an unverified address is told so above the onboarding (Q40)', async () => {
@@ -264,7 +264,7 @@ describe('a signed-in sponsor', () => {
       acceptTerms: true, termsVersionNo: null, privacyVersionNo: null, trialKey: null } })
   })
 
-  it('sends the trial that brought the sponsor with the application, for its operator to review (Q48e-1)', async () => {
+  it('sends the trial that brought the Sponsor with the application, for its operator to review (Q48e-1)', async () => {
     const key = 'ab'.repeat(24)
     window.localStorage.setItem('qb.trial-src', key)
     const { posted } = server({ sponsor: null, applied: { status: 200, body: { output: { userId: 'u2',
@@ -395,7 +395,7 @@ describe('a signed-in sponsor', () => {
     expect(screen.queryByTestId('onboarding-terms')).toBeNull()
   })
 
-  it('hides the wallet and its top-ups from a sponsor who may not pay in Kudos (Q28)', async () => {
+  it('hides the wallet and its top-ups from a Sponsor who may not pay in Kudos (Q28)', async () => {
     server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null, reviewStatus: 'APPROVED',
       approvedAt: '2026-10-14T00:00:00Z', revision: 3 }, rewardMethods: 'OFFLINE_REDEEM' })
     window.history.replaceState(null, '', '/wallet')
@@ -466,7 +466,7 @@ describe('a signed-in sponsor', () => {
     expect(posted.filter((p) => p.path === '/api/auth/account/locale')).toEqual([])
   })
 
-  it('sends mail in the new interface language once the sponsor accepts', async () => {
+  it('sends mail in the new interface language once the Sponsor accepts', async () => {
     const { posted } = server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null,
       reviewStatus: 'APPROVED', revision: 3 } })
     window.history.replaceState(null, '', '/account')

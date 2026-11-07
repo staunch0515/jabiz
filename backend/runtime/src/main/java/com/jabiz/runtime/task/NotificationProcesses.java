@@ -3,11 +3,16 @@ package com.jabiz.runtime.task;
 import com.jabiz.event.DomainEvent;
 import com.jabiz.event.EventSubscription;
 import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.mail.MailRenderer;
+import com.jabiz.mail.MailTemplate;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.RetryPolicy;
 import com.jabiz.process.StepSpec;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.mail.LoadMailText;
+import com.jabiz.runtime.mail.MailTexts;
+import com.jabiz.runtime.mail.PlatformMailTemplates;
 import com.jabiz.runtime.process.steps.LoadEntity;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,8 +34,10 @@ import java.util.UUID;
  * E-mail about new tasks (docs/design/18-numbering-approvals-tasks.md section 5.4). With {@code jabiz.mail.enabled}
  * (off by default) the consumer {@value #CONSUMER} runs {@code TASK_NOTIFY} once for every {@code jabiz.task.created}
  * event: it records one {@code Notification} per recipient with an address, in its transaction, and sends them after
- * the commit ({@link SendNotifications}), retried by {@link #RETRY} with every attempt recorded. The text is the task's
- * title in the platform's default language and a link to the task.
+ * the commit ({@link SendNotifications}), retried by {@link #RETRY} with every attempt recorded. The text is the mail
+ * template {@code jabiz.task-notification} in the platform's default language (the task's title and the address of
+ * the task), read where every mail's texts are, so administrators can change it (decision D72); the notification
+ * records the version of the text it was written with.
  */
 @Configuration
 public class NotificationProcesses {
@@ -49,11 +56,12 @@ public class NotificationProcesses {
     private static final String TASK = "task";
     private static final String RECIPIENTS = "recipients";
     private static final String IDS = "ids";
+    private static final String TEXT = "text";
     private static final TypeReference<Map<String, String>> PARAMS = new TypeReference<>() {};
     private static final StepSpec<SendNotifications.Metadata, ProcessContext> SEND = SendNotifications.of(IDS);
 
     static ProcessDefinition<NotifyInput, NotifyOutput, ProcessContext> notify(MessageCatalog messages, JsonMapper json,
-        String baseUrl) {
+        String baseUrl, MailTexts texts) {
         return ProcessDefinition.define(NOTIFY, 1, NotifyInput.class, NotifyOutput.class, ProcessContext.class, pb -> pb
             .description("Notifies the assignees of a new task by e-mail.")
             .permissions(TaskPermissions.NOTIFY)
@@ -66,12 +74,15 @@ public class NotificationProcesses {
             .outputMapper(ctx -> new NotifyOutput(ctx.contains(IDS) ? ((List<?>) ctx.get(IDS)).size() : 0))
             .step("Load the task", LoadEntity.by(TaskEntities.TASK_DATASET, TASK_ID, TASK))
             .step("Find the recipients", FindRecipients.of(TASK, RECIPIENTS))
-            .compute("Record the notifications", (metadata, ctx) -> record(ctx, messages, json, baseUrl))
+            .step("Load the text", LoadMailText.<ProcessContext>of(PlatformMailTemplates.TASK_NOTIFICATION_MAIL,
+                ctx -> messages.defaultLocale(), TEXT))
+            .compute("Record the notifications", (metadata, ctx) -> record(ctx, messages, json, baseUrl, texts))
             .afterCommit("Send them", SEND.handlerClass(), SEND.metadata(), RETRY));
     }
 
     @SuppressWarnings("unchecked")
-    private static void record(ProcessContext ctx, MessageCatalog messages, JsonMapper json, String baseUrl) {
+    private static void record(ProcessContext ctx, MessageCatalog messages, JsonMapper json, String baseUrl,
+        MailTexts texts) {
         EntityInstance task = ctx.get(TASK, EntityInstance.class);
         if (!TaskEntities.OPEN.equals(task.get("status"))) {
             return;
@@ -79,9 +90,17 @@ public class NotificationProcesses {
         String key = task.get("titleKey");
         Map<String, String> params = json.readValue(task.<String>get("titleParams"), PARAMS);
         String title = TaskTitles.title(task.get("taskType"), key, params, messages, messages.defaultLocale());
-        String subject = title.length() > 300 ? title.substring(0, 300) : title;
         String link = task.get("link");
-        String body = link == null ? title : title + "\n\n" + baseUrl + link;
+        MailTexts.Text text = ctx.get(TEXT, MailTexts.Text.class);
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("title", title);
+        values.put("taskUrl", link == null ? "" : baseUrl + link);
+        values.put(MailTemplate.BASE_URL, baseUrl);
+        MailRenderer.Rendered mail = texts.render(PlatformMailTemplates.TASK_NOTIFICATION_MAIL, text.subject(),
+            text.body(), values);
+        // As stored: the subject column holds 300 characters, the body 4000.
+        String subject = mail.subject().length() > 300 ? mail.subject().substring(0, 300) : mail.subject();
+        String body = mail.text().strip();
         List<String> ids = new ArrayList<>();
         for (FindRecipients.Recipient recipient : (List<FindRecipients.Recipient>) ctx.get(RECIPIENTS)) {
             Map<String, Object> notification = new LinkedHashMap<>();
@@ -96,6 +115,7 @@ public class NotificationProcesses {
             // The task's entry scope (decision D64): the message is a copy of the task, seen as the task is.
             notification.put("scopeName", task.get("scopeName"));
             notification.put("scopeValue", task.get("scopeValue"));
+            notification.put("textVersionNo", text.versionNo());
             ids.add(String.valueOf(ctx.changes().insert(TaskEntities.NOTIFICATION, notification)));
         }
         ctx.put(IDS, List.copyOf(ids));
@@ -103,8 +123,8 @@ public class NotificationProcesses {
 
     @Bean
     ProcessDefinition<NotifyInput, NotifyOutput, ProcessContext> taskNotifyProcess(MessageCatalog messages,
-        JsonMapper json, @Value("${jabiz.mail.base-url:}") String baseUrl) {
-        return notify(messages, json, baseUrl);
+        JsonMapper json, @Value("${jabiz.mail.base-url:}") String baseUrl, MailTexts texts) {
+        return notify(messages, json, baseUrl, texts);
     }
 
     @Bean

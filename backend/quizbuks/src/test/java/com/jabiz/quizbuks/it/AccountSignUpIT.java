@@ -236,7 +236,7 @@ class AccountSignUpIT extends AccountItSupport {
             "decision", "APPROVE"));
         deliverEvents();
         MimeMessage approved = received(email).getLast();
-        assertThat(subject(approved)).isEqualTo("Your sponsor account is approved");
+        assertThat(subject(approved)).isEqualTo("Your Sponsor account is approved");
         assertThat(text(approved)).contains("Acme").contains("https://quizbuks.example.com/sponsor/");
 
         // Banned: the console refuses them (the guard, after the password and the verified address).

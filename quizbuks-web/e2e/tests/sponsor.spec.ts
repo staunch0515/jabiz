@@ -42,7 +42,7 @@ async function submit(page: Page) {
   await expect(page.getByTestId('publication-view')).toHaveAttribute('data-status', 'PENDING_REVIEW')
 }
 
-test('a sponsor publishes a quiz version through review and runs the publication', async ({ page, request }) => {
+test('a Sponsor publishes a quiz version through review and runs the publication', async ({ page, request }) => {
   const { email, token } = await approvedSponsor(request, 'Penny')
   const quiz = await completeQuiz(request, token, { title: unique('Publish me '), questions: 2 })
   const name = unique('Spring run ')

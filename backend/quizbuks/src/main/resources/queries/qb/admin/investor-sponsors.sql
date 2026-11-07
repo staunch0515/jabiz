@@ -1,7 +1,7 @@
 /*---
 id: qb.admin.investor-sponsors
 description: >-
-  The merchants behind a month's figures (Q27): each merchant with attempts, prizes or invitations in the period,
+  The sponsors behind a month's figures (Q27): each sponsor with attempts, prizes or invitations in the period,
   with their numbers; the most attempted first
 entities: [QbSponsor, QbAttempt, QbRedemption, QbInvitation]
 datasets:
@@ -33,9 +33,9 @@ report:
   landscape: true
 ---*/
 -- By the same times as qb.admin.investor-metrics: attempts by their start, completions and passes by their
--- submission, prizes by their creation and collection, invitations by their last send and their answer. A merchant
+-- submission, prizes by their creation and collection, invitations by their last send and their answer. A sponsor
 -- appears when any of these fell in the period; the company name is the sponsor record's current one (the id when
--- there is none). The merchant's id is the last column, for the key only: the admin page does not show it.
+-- there is none). The sponsor's id is the last column, for the key only: the admin page does not show it.
 WITH per AS (
     SELECT a.{{QbAttempt.publisherId}} AS s,
            count(DISTINCT a.{{QbAttempt.userId}}) FILTER (WHERE a.{{QbAttempt.startedAt}} >= :from
@@ -46,7 +46,7 @@ WITH per AS (
            count(*) FILTER (WHERE a.{{QbAttempt.passed}} = true AND a.{{QbAttempt.submittedAt}} >= :from
                AND a.{{QbAttempt.submittedAt}} < :to) AS passes
     FROM {{QbAttempt}} a
-    -- S0: the sponsors' system's merchants; a shop (S1) is reported by its own module.
+    -- S0: the sponsors' system's sponsors; a shop (S1) is reported by its own module.
     WHERE a.{{QbAttempt.publisherKind}} = 'SPONSOR'
     GROUP BY a.{{QbAttempt.publisherId}}
 ),

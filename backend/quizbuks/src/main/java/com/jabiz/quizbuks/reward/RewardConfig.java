@@ -133,7 +133,7 @@ public class RewardConfig {
             .item(com.jabiz.quizbuks.publishing.DigitalDelivery.SHARED, "en", "One shared code or link for everyone",
                 "zh", "共用：所有获奖者同一个码或链接", "ja", "全員共通のコードまたはリンク")
             .item(com.jabiz.quizbuks.publishing.DigitalDelivery.SPONSOR_SENT, "en", "Sent by the sponsor to each winner",
-                "zh", "商家逐个发送", "ja", "スポンサーが個別に送付"));
+                "zh", "发起方逐个发送", "ja", "主催者が個別に送付"));
     }
 
     @Bean
@@ -146,7 +146,7 @@ public class RewardConfig {
     @Bean
     StaticDictionary qbDigitalPrizeStatusDictionary() {
         return StaticDictionary.define(QbDigitalPrizes.STATUS_DICTIONARY, d -> d
-            .item(DigitalPrizeStatus.DUE, "en", "To be sent by the sponsor", "zh", "待商家发送", "ja", "スポンサーの送付待ち")
+            .item(DigitalPrizeStatus.DUE, "en", "To be sent by the sponsor", "zh", "待发起方发送", "ja", "主催者の送付待ち")
             .item(DigitalPrizeStatus.DELIVERED, "en", "Delivered", "zh", "已发放", "ja", "送付済み")
             .item(DigitalPrizeStatus.CONFIRMED, "en", "Confirmed", "zh", "已确认", "ja", "確認済み")
             .item(DigitalPrizeStatus.DISPUTED, "en", "Disputed", "zh", "有争议", "ja", "異議あり")
@@ -354,8 +354,8 @@ public class RewardConfig {
     @Bean
     StaticDictionary qbCashRewardStatusDictionary() {
         return StaticDictionary.define(QbRewards.CASH_STATUS_DICTIONARY, d -> d
-            .item(CashRewardStatus.DUE, "en", "To be paid by the sponsor", "zh", "待商家支付", "ja", "スポンサーの支払い待ち")
-            .item(CashRewardStatus.MARKED_PAID, "en", "Paid, awaiting your confirmation", "zh", "商家已支付，待确认",
+            .item(CashRewardStatus.DUE, "en", "To be paid by the sponsor", "zh", "待发起方支付", "ja", "主催者の支払い待ち")
+            .item(CashRewardStatus.MARKED_PAID, "en", "Paid, awaiting your confirmation", "zh", "发起方已支付，待确认",
                 "ja", "支払い済み、確認待ち")
             .item(CashRewardStatus.CONFIRMED, "en", "Confirmed", "zh", "已确认", "ja", "確認済み")
             .item(CashRewardStatus.DISPUTED, "en", "Disputed", "zh", "有争议", "ja", "異議あり")
@@ -376,8 +376,8 @@ public class RewardConfig {
     StaticDictionary qbRedemptionStatusDictionary() {
         return StaticDictionary.define(QbRewards.REDEMPTION_STATUS_DICTIONARY, d -> d
             .item(RedemptionStatus.DUE, "en", "To be collected", "zh", "待领取", "ja", "引き換え待ち")
-            .item(RedemptionStatus.CLAIMED, "en", "Claimed, awaiting the sponsor", "zh", "已扫码，待商家确认",
-                "ja", "スキャン済み、スポンサーの確認待ち")
+            .item(RedemptionStatus.CLAIMED, "en", "Claimed, awaiting the sponsor", "zh", "已扫码，待发起方确认",
+                "ja", "スキャン済み、主催者の確認待ち")
             .item(RedemptionStatus.REDEEMED, "en", "Collected", "zh", "已领取", "ja", "引き換え済み")
             .item(RedemptionStatus.EXPIRED, "en", "Expired", "zh", "已过期", "ja", "期限切れ")
             .item(RedemptionStatus.VOID, "en", "Void", "zh", "已作废", "ja", "無効"));
@@ -386,10 +386,10 @@ public class RewardConfig {
     @Bean
     StaticDictionary qbRedeemKindDictionary() {
         return StaticDictionary.define(QbRewards.REDEEM_KIND_DICTIONARY, d -> d
-            .item(RedemptionStatus.KIND_ROTATING, "en", "Code on the console's screen", "zh", "商家后台屏幕上的码",
+            .item(RedemptionStatus.KIND_ROTATING, "en", "Code on the console's screen", "zh", "发起方后台屏幕上的码",
                 "ja", "コンソール画面のコード")
             .item(RedemptionStatus.KIND_PRINTED, "en", "Printed code", "zh", "打印的固定码", "ja", "印刷したコード")
-            .item(RedemptionStatus.KIND_PASS, "en", "Taker's pass", "zh", "答题者的通行码", "ja", "回答者のパス"));
+            .item(RedemptionStatus.KIND_PASS, "en", "Taker's pass", "zh", "学者的通行码", "ja", "テイカーのパス"));
     }
 
     @Bean

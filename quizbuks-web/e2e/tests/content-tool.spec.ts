@@ -30,7 +30,7 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('the content tool exports a sponsor\'s content and applies it to another account, once', async ({ request }) => {
+test('the content tool exports a Sponsor\'s content and applies it to another account, once', async ({ request }) => {
   test.setTimeout(300_000)
   const first = await fundedSponsor(request)
   const quiz = await completeQuiz(request, first.token, { title: unique('Pack quiz ') })
@@ -81,7 +81,7 @@ test('the content tool exports a sponsor\'s content and applies it to another ac
     '--pack', pack)).toMatch(/answered [12]/)
 })
 
-test('the example pack (a year-long welcome survey) applies to a funded sponsor', async ({ request }) => {
+test('the example pack (a year-long welcome survey) applies to a funded Sponsor', async ({ request }) => {
   test.setTimeout(180_000)
   const example = fileURLToPath(new URL('../../../tools/quizbuks/content/example', import.meta.url))
   const sponsor = await fundedSponsor(request)

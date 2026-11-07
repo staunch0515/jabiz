@@ -121,7 +121,7 @@ describe('BroadcastsPage', () => {
     expect(within(notice).queryByTestId('broadcast-edit')).not.toBeInTheDocument()
     expect(within(notice).getByTestId('broadcast-withdraw-form')).toBeInTheDocument()
     const banned = await rowOf('banned')
-    expect(within(banned).getByTestId('broadcast-withdrawn')).toHaveTextContent('the sponsor was banned')
+    expect(within(banned).getByTestId('broadcast-withdrawn')).toHaveTextContent('the Sponsor was banned')
     expect(within(banned).getByTestId('broadcast-withdrawn')).toHaveTextContent('by the system')
     // Review M3: the text is there to read, as written, never a link.
     expect(within(banned).getByTestId('broadcast-body'))

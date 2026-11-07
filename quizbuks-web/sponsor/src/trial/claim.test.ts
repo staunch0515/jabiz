@@ -13,7 +13,7 @@ beforeEach(() => {
 
 afterEach(() => window.localStorage.clear())
 
-describe('the trial a sponsor came by', () => {
+describe('the trial a Sponsor came by', () => {
   it('keeps only a trial key of the sign-up address', () => {
     rememberSource('?src=not-a-key')
     expect(window.localStorage.getItem('qb.trial-src')).toBeNull()
@@ -21,7 +21,7 @@ describe('the trial a sponsor came by', () => {
     expect(window.localStorage.getItem('qb.trial-src')).toBe(KEY)
   })
 
-  it('names it once the sponsor applied, and forgets it once the server answered', async () => {
+  it('names it once the Sponsor applied, and forgets it once the server answered', async () => {
     rememberSource(`?src=${KEY}`)
     vi.mocked(runProcess).mockResolvedValue({ outcome: 'claimed', operatorId: 'op-1' })
     await claimSource()

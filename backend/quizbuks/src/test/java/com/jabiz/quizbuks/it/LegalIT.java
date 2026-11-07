@@ -67,7 +67,7 @@ class LegalIT extends LegalItSupport {
                 org.assertj.core.groups.Tuple.tuple(LegalCodes.TRANSLATION_MISSING, "body",
                     "The body needs a ja text before it is published."));
 
-        editDraft(kind, "Sponsor terms", "スポンサー利用規約", "Text", "本文", null, null);
+        editDraft(kind, "Sponsor terms", "主催者利用規約", "Text", "本文", null, null);
         Map<String, Object> first = publish(kind, null, false);
         // The first version always asks for consent, whatever the publisher said.
         assertThat(first).containsEntry("kind", kind).containsEntry("versionNo", 1)
@@ -76,16 +76,16 @@ class LegalIT extends LegalItSupport {
             .satisfies(draft -> assertThat(((Number) draft.get("latest_version_no")).intValue()).isEqualTo(1));
         assertThat(query("SELECT published_by, title->>'ja' AS ja, change_summary FROM qb_legal_version_version "
             + "WHERE kind = ?", kind)).singleElement().satisfies(row -> assertThat(row)
-                .containsEntry("published_by", "legal-admin").containsEntry("ja", "スポンサー利用規約")
+                .containsEntry("published_by", "legal-admin").containsEntry("ja", "主催者利用規約")
                 .containsEntry("change_summary", null));
 
         // The same text again is no new version; a later one needs its summary of changes in both languages.
         assertThat(codes(refused("QB_LEGAL_PUBLISH", legalAdmin(), publishInput(kind, null, true), 422)))
             .containsExactly(LegalCodes.TRANSLATION_MISSING, LegalCodes.TRANSLATION_MISSING, LegalCodes.UNCHANGED);
-        editDraft(kind, "Sponsor terms", "スポンサー利用規約", "Text 2", "本文 2", "What changed", null);
+        editDraft(kind, "Sponsor terms", "主催者利用規約", "Text 2", "本文 2", "What changed", null);
         assertThat(codes(refused("QB_LEGAL_PUBLISH", legalAdmin(), publishInput(kind, null, true), 422)))
             .containsExactly(LegalCodes.TRANSLATION_MISSING);
-        editDraft(kind, "Sponsor terms", "スポンサー利用規約", "Text 2", "本文 2", "What changed", "変更点");
+        editDraft(kind, "Sponsor terms", "主催者利用規約", "Text 2", "本文 2", "What changed", "変更点");
         assertThat(publish(kind, null, false)).containsEntry("versionNo", 2).containsEntry("requiresConsent", false);
     }
 

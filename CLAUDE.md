@@ -63,7 +63,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **待办与通知**（见 18 §5）：需要人去做的事用步骤 `CreateTask`（指派给用户或权限，带来源键）登记、`CloseTasks` 关闭；不另建待办表。
   邮件只经待办的通知、单据的发送（`DOCUMENT_SEND`，22 §5）与事务邮件（流程步骤 `SendMail`，模板为 `MailTemplate` Bean 与消息 `mail.<名>.subject|body`，
   验证与重置链接用发送时才生成的一次性令牌：模板 `.token(用途, 有效期)`、流程中以 `MailTokens.consume` 使用，18 §5.6、决策 D35）；
-  `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。要经应用自己登记的服务器发出的邮件用 `SendMail.via(ctx -> 键)`，服务器由应用的一个 `MailSenderSource` Bean 给出（18 §5.6、决策 D56），
+  `jabiz.mail.enabled` 缺省关闭；不在流程中直接发邮件。邮件文字（含待办通知与单据邮件）的在线修改只经平台的 `MailText` 流程（`MAIL_TEXT_SAVE` / `MAIL_TEXT_RESET` / `MAIL_TEXT_TEST_SEND`，带令牌、登录链接或 `t.protectedText()` 的经受控变更 `MailText` 由另一位管理员发布），
+  规则只在 `MailTextRules`，示例值以 `t.sample(…)` 声明，不自建文字的存储或编辑页（18 §5.6、决策 D72）。要经应用自己登记的服务器发出的邮件用 `SendMail.via(ctx -> 键)`，服务器由应用的一个 `MailSenderSource` Bean 给出（18 §5.6、决策 D56），
   其密码只以 `SealedSecrets` 密封保存（步骤 `SealSecret`，密钥 `JABIZ_SEAL_KEY`），失败绝不改经平台的服务器。可退订的模板（`NOTIFICATION`）以 `.entries(入口…)` 声明给哪些登录入口的用户（缺省全部，偏好只列令牌入口的；只寄给不是账号的地址的通知另加 `.addressesOnly()`，不在任何人的偏好中，17r），
   显示名写在消息 `mail.<名>.name`；收件偏好与邮件语言只经平台接口与积木 `MailPreferences`，切换界面语言只询问、不静默改邮件语言（`offerMailLanguage`，18 §5.6、决策 D49）。
   应用的前端要有自己的退订页时，挂载积木 `MailUnsubscribe` 并配置 `jabiz.mail.unsubscribe-paths.<入口>`（相对该入口 `app-path`；声明了该入口的通知链接到它，D52 第 3 条），
@@ -85,6 +86,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   未声明即拒绝。例外只有公开只读接口 `/api/public/**`（见下条）、入站 Webhook `/api/inbound/**`（必须验签，D37）与登录、注册等认证接口。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
   登录类接口限流（地址 + 名字、地址、IPv6 站点、实例）、口令哈希有并发上限（`jabiz.security.sign-in.rate-limit.*`、`jabiz.security.password-hashing.*`，10 §4.1–§4.2、决策 D47），由平台在入口处做，不另写；客户端地址只经 `jabiz.security.trusted-proxies`，不用 `server.forward-headers-strategy`。
   会话（刷新令牌族）的列出与吊销只经平台接口与流程（本人 `/api/auth/account/sessions/**`，管理员 `SEC_USER_SESSIONS_REVOKE`，10 §15.9），不自写会话表或吊销逻辑。
+  被换下的刷新令牌在宽限内再次出现（页面在续期中刷新、复制标签页）由平台补发一次（`jabiz.security.refresh.reuse-grace`，缺省 30 秒，10 §3、决策 D73），客户端不自己重试或绕过。
 - **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
   自助注册、邮箱验证、找回密码、本人改密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等、`SEC_ACCOUNT_PASSWORD_CHANGE`），不另写；
   管理员建的账号由本人经邀请设定密码（`SEC_USER_INVITE` 或建号时 `invite`，只寄到建号时填写、未验证的邮箱，前端 `MailLinkPage` 的 `invitation` 页，10 §15.14、决策 D63），不给管理员设的密码；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。

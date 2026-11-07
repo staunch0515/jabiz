@@ -31,7 +31,7 @@ async function liveQuiz(request: import('@playwright/test').APIRequestContext, t
   return { quizId, publicationId: await livePublication(request, token, quizId, name, 1) }
 }
 
-test('a taker answers the contest rules quiz from the home; a sponsor requires the certification (Q86)', async ({ page,
+test('a Taker answers the contest rules quiz from the home; a Sponsor requires the certification (Q86)', async ({ page,
   request }) => {
   test.setTimeout(300_000)
   // An operator: its own sponsor (its lead's account, F-S1) publishes a live round of the certification. Every

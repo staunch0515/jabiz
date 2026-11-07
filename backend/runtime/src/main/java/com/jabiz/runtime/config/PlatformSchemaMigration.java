@@ -41,7 +41,7 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         "sys_dict_item_version", "op_process", "op_process_item", "op_process_result", "entity_registry",
         "op_process_after_commit", "sec_user_version", "sec_role_version", "sec_role_permission_version",
         "sec_user_role_version", "sec_menu_version", "sec_login_record_version", "sec_refresh_token",
-        "sec_refresh_token_use", "sec_refresh_family_revocation", "sys_param_version", "ledger_account_version",
+        "sec_refresh_token_use", "sec_refresh_family_revocation", "sec_refresh_token_regrant", "sys_param_version", "ledger_account_version",
         "ledger_transaction_version", "ledger_entry_version", "sys_outbox_event", "sys_event_consumption",
         "sys_outbox_attempt", "jabiz_shedlock", "sys_job_run", "sys_file", "sys_number_counter",
         "sys_number_assignment", "sys_approval_rule_version", "sys_approval_limit_version", "sys_sod_rule_version",
@@ -59,7 +59,7 @@ public final class PlatformSchemaMigration implements FlywayMigrationStrategy {
         "sys_external_job_usage", "sys_external_job_cancel", "sys_external_job_outcome", "sys_external_job_file",
         "sys_mail_address_optout", "sec_external_token_use", "sys_erasure", "sys_erasure_purge", "sys_erasure_item",
         "sys_account_deletion", "sys_account_deletion_end", "sys_public_counter_day", "sec_user_passkey",
-        "sec_passkey_challenge");
+        "sec_passkey_challenge", "sys_mail_text_version");
 
     @Override
     public void migrate(Flyway application) {

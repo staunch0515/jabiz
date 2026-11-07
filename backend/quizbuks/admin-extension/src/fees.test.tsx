@@ -142,7 +142,7 @@ describe('FeesPage', () => {
 
   it('records a fee by hand for another administrator, and shows the server\'s refusal', async () => {
     server.runProcess.mockRejectedValue(new ApiError(422, { detail: 'refused', violations: [
-      { field: null, ruleCode: 'QB_FEE_SPONSOR', message: 'The sponsor is not approved.' }] }))
+      { field: null, ruleCode: 'QB_FEE_SPONSOR', message: 'The Sponsor is not approved.' }] }))
     renderAt('/qb/finance/fees', '/qb/finance/fees', <FeesPage />)
     const user = userEvent.setup()
     await user.click(await screen.findByTestId('fee-new-manual'))

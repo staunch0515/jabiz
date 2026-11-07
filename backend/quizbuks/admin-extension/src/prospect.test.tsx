@@ -22,16 +22,19 @@ const server = vi.hoisted(() => ({
   prospects: [] as Record<string, unknown>[],
   setting: {} as Record<string, unknown>,
   directions: [] as Record<string, unknown>[],
+  switchRows: [] as Record<string, unknown>[],
+  changes: [] as Record<string, unknown>[],
   runQuery: vi.fn(),
   runProcess: vi.fn(),
   get: vi.fn(),
+  post: vi.fn(),
 }))
 
 vi.mock('@jabiz/admin', async (original) => {
   const actual = await original<typeof import('@jabiz/admin')>()
   return {
     ...actual,
-    api: { GET: server.get },
+    api: { GET: server.get, POST: server.post },
     unwrap: async (call: Promise<unknown>) => call,
     runQuery: server.runQuery,
     runProcess: server.runProcess,
@@ -70,11 +73,19 @@ beforeEach(() => {
     fromAddress: 'ops@kansai.example', fromName: 'Kansai', verifiedAt: '2026-11-01T01:00:00Z', lastError: null }
   server.directions = [{ directionId: 'd1', name: 'Tea shops', brief: 'Independent tea shops', country: 'JP',
     language: 'ja', active: true, perSearch: 5, lastSearchAt: null, revision: 1, found: 3, sent: 1 }]
+  server.switchRows = [
+    { paramKey: 'qb.prospect.enabled', value: 'false', paramExists: true },
+    { paramKey: 'qb.prospect.model', value: 'claude-opus-5-5', paramExists: true },
+    { paramKey: 'qb.prospect.effort', value: 'medium', paramExists: true },
+  ]
+  server.changes = []
+  server.post.mockReset().mockImplementation(async () => ({ items: server.changes }))
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { count?: boolean } = {}) => {
     const items = id === TEMPLATE.operatorProspects || id === TEMPLATE.adminProspects ? server.prospects
       : id === TEMPLATE.operatorProspectSetting || id === TEMPLATE.adminProspectSetting ? [server.setting]
         : id === TEMPLATE.operatorProspectDirections || id === TEMPLATE.adminProspectDirections ? server.directions
-          : []
+          : id === TEMPLATE.adminProspectSwitch ? server.switchRows
+            : []
     return { items, offset: 0, limit: 20, ...(options.count ? { total: items.length } : {}) }
   })
   server.runProcess.mockReset().mockImplementation(async (name: string) =>
@@ -189,5 +200,82 @@ describe('the settings', () => {
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROSPECT_PROCESS.directionSave,
       expect.objectContaining({ name: 'Sake breweries', brief: 'Small breweries with a shop', perSearch: 5,
         active: true })))
+  })
+})
+
+describe('the platform switch (F-F8, T9)', () => {
+  const headquarters = () => {
+    server.permissions = new Set([PERMISSION.prospectUse, PERMISSION.adminProspect, PERMISSION.controlPropose,
+      PERMISSION.approvalRead])
+  }
+
+  it('shows the three in force, the open proposals and when the search runs, and warns while it is off', async () => {
+    headquarters()
+    server.changes = [{ id: 'c1', attributes: { changeId: 'c1', status: 'PROPOSED', targetEntity: 'SysParam',
+      changeValues: JSON.stringify({ paramKey: 'qb.prospect.effort', value: 'high' }), proposedBy: 'u-2',
+      reason: 'Deeper research' } }, { id: 'c2', attributes: { changeId: 'c2', status: 'PROPOSED',
+      targetEntity: 'SysParam', changeValues: JSON.stringify({ paramKey: 'qb.topup.bank.min', value: '1000' }),
+      proposedBy: 'u-2', reason: 'Another' } }]
+    const { container } = renderAt('/qb/prospects/settings', '/qb/prospects/settings', <ProspectSettingsPage />)
+    const values = await screen.findByTestId('switch-values')
+    expect(within(values).getByText('Off')).toBeInTheDocument()
+    expect(within(values).getByText('claude-opus-5-5')).toBeInTheDocument()
+    // The owner prospects every day (the setting) while the platform switch is off.
+    expect(await screen.findByTestId('switch-off-warning')).toBeInTheDocument()
+    const proposals = await screen.findAllByTestId('switch-proposal')
+    expect(proposals).toHaveLength(1)
+    expect(proposals[0]).toHaveTextContent('Deeper research')
+    expect(screen.getByTestId('switch-run-time')).toHaveTextContent('UTC')
+    expect(screen.getByTestId('switch-run-time')).toHaveTextContent(/23:17|11:17\sPM/)
+    expect(server.post).toHaveBeenCalledWith('/api/datasets/{resourceId}/query', expect.objectContaining({
+      params: { path: { resourceId: 'urn:jabiz:dataset:platform:SysControlChange' } } }))
+    await expectAccessible(container)
+  })
+
+  it('proposes only what changed, with the reason, and asks for one first', async () => {
+    headquarters()
+    renderAt('/qb/prospects/settings', '/qb/prospects/settings', <ProspectSettingsPage />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByTestId('switch-enabled'))
+    await user.click(screen.getByTestId('switch-propose'))
+    expect(await screen.findByText('Give a reason.')).toBeInTheDocument()
+    expect(server.runProcess).not.toHaveBeenCalled()
+    await user.type(screen.getByTestId('switch-reason'), ' Start prospecting ')
+    await user.click(screen.getByTestId('switch-propose'))
+    expect(await screen.findByTestId('switch-proposed')).toHaveTextContent('Proposed')
+    expect(server.runProcess).toHaveBeenCalledTimes(1)
+    expect(server.runProcess).toHaveBeenCalledWith('CONTROL_CHANGE_PROPOSE', { targetEntity: 'SysParam',
+      values: { paramKey: 'qb.prospect.enabled', value: 'true' }, reason: 'Start prospecting' })
+  })
+
+  it('proposes the setup\'s values of the ones never published', async () => {
+    headquarters()
+    server.switchRows = [{ paramKey: 'qb.prospect.enabled', value: null, paramExists: false }]
+    renderAt('/qb/prospects/settings', '/qb/prospects/settings', <ProspectSettingsPage />)
+    const user = userEvent.setup()
+    expect((await screen.findAllByText('Not published yet')).length).toBe(3)
+    await user.type(screen.getByTestId('switch-reason'), 'First values')
+    await user.click(screen.getByTestId('switch-propose'))
+    await screen.findByTestId('switch-proposed')
+    expect(server.runProcess.mock.calls.map((call) => (call[1] as { values: Row }).values)).toEqual([
+      { paramKey: 'qb.prospect.enabled', value: 'false' }, { paramKey: 'qb.prospect.model', value: 'claude-opus-5-5' },
+      { paramKey: 'qb.prospect.effort', value: 'medium' }])
+  })
+
+  it('shows the values without a form to whoever cannot propose, and no proposals without approval.read', async () => {
+    server.permissions = new Set([PERMISSION.prospectUse, PERMISSION.adminProspect])
+    server.setting = { ...server.setting, enabled: false }
+    renderAt('/qb/prospects/settings', '/qb/prospects/settings', <ProspectSettingsPage />)
+    expect(await screen.findByTestId('switch-no-propose')).toBeInTheDocument()
+    expect(screen.queryByTestId('switch-form')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('switch-off-warning')).not.toBeInTheDocument()
+    expect(server.post).not.toHaveBeenCalled()
+  })
+
+  it('is not shown to an operator\'s member', async () => {
+    renderAt('/qb/prospects/settings', '/qb/prospects/settings', <ProspectSettingsPage />)
+    await screen.findByTestId('server-state')
+    expect(screen.queryByTestId('prospect-switch')).not.toBeInTheDocument()
+    expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.adminProspectSwitch, expect.anything())
   })
 })

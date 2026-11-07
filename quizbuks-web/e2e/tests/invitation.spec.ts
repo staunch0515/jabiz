@@ -47,7 +47,7 @@ async function invitedPublication(request: APIRequestContext) {
   const server = await run(request, sponsor.token, 'QB_MAIL_SERVER_SET', { host: 'localhost',
     port: MERCHANT_MAIL.smtpPort, tls: 'STARTTLS', username: 'sora', password: 'sora-mail-password-1',
     fromAddress: 'sora@example.com', fromName: 'Sora Co' })
-  expect(server.verified, `the sponsor's mail server: ${server.error}`).toBe(true)
+  expect(server.verified, `the Sponsor's mail server: ${server.error}`).toBe(true)
   const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
     await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,

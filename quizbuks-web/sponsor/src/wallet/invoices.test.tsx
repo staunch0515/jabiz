@@ -115,7 +115,7 @@ describe("the platform's invoices", () => {
     await expectAccessible(screen.getByTestId('wallet'))
   })
 
-  it('warns of an overdue invoice and shows the credit of a monthly-billed sponsor', async () => {
+  it('warns of an overdue invoice and shows the credit of a monthly-billed Sponsor', async () => {
     server({ wallet: { ...WALLET, overdueCount: 1, billingMode: 'POSTPAID', creditLimit: '20000' },
       invoices: [{ ...INVOICE, status: 'OVERDUE', billingMode: 'POSTPAID' }] })
     window.history.replaceState(null, '', '/wallet')

@@ -88,7 +88,7 @@ function renderAt(path: string, route: string, element: ReactNode) {
   )
 }
 
-describe("sponsors' pages (Q60a-3)", () => {
+describe("Sponsors' pages (Q60a-3)", () => {
   it('have every text in every language', () => {
     const keys = (value: object, prefix = ''): string[] => Object.entries(value).flatMap(([key, child]) =>
       typeof child === 'object' && child !== null ? keys(child, `${prefix}${key}.`) : [`${prefix}${key}`])
@@ -106,7 +106,7 @@ describe("sponsors' pages (Q60a-3)", () => {
       filters: [{ field: 'status', op: 'eq', value: 'PENDING' }] }))
   })
 
-  it("are not offered in the queue to a sponsor reviewer who cannot read the publications' list", async () => {
+  it("are not offered in the queue to a Sponsor reviewer who cannot read the publications' list", async () => {
     server.permissions = new Set([PERMISSION.reviewSponsor])
     renderAt('/qb/reviews?tab=pages', '/qb/reviews', <ReviewsPage />)
     expect(await screen.findByTestId('tab-sponsors')).toBeInTheDocument()
@@ -166,13 +166,13 @@ describe("sponsors' pages (Q60a-3)", () => {
     server.pages = [page({ status: 'TAKEN_DOWN', approvalRequestId: null, takenDownAt: '2026-10-30T03:00:00Z',
       takedownReason: 'QB_ACCOUNT_SUSPENDED', reviewRequired: true, website: 'https://example.com/"x' })]
     const { unmount } = renderAt(`/qb/sponsor-pages/${SPONSOR}`, '/qb/sponsor-pages/:userId', <SponsorPageReviewPage />)
-    expect(await screen.findByText('Account suspended (the sponsor was banned)')).toBeInTheDocument()
+    expect(await screen.findByText('Account suspended (the Sponsor was banned)')).toBeInTheDocument()
     expect(screen.getByText('Taken down: it goes back only after a review.')).toBeInTheDocument()
     // A website not made a link is still shown as written.
     expect(screen.getByTestId('sponsor-page-website-text')).toHaveTextContent('https://example.com/"x')
     unmount()
     server.pages = []
     renderAt('/qb/sponsor-pages/other', '/qb/sponsor-pages/:userId', <SponsorPageReviewPage />)
-    expect(await screen.findByText(/There is no such sponsor page/)).toBeInTheDocument()
+    expect(await screen.findByText(/There is no such Sponsor page/)).toBeInTheDocument()
   })
 })

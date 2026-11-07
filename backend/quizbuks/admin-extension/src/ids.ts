@@ -104,7 +104,7 @@ export const TEMPLATE = {
   feeCharges: 'qb.admin.fee-charges',
   feeInvoices: 'qb.admin.fee-invoices',
   feeRequests: 'qb.admin.fee-requests',
-  /** The investors' figures (Q27): a row per UTC month of a period, and the merchants behind them (finance). */
+  /** The investors' figures (Q27): a row per UTC month of a period, and the sponsors behind them (finance). */
   investorMetrics: 'qb.admin.investor-metrics',
   investorSponsors: 'qb.admin.investor-sponsors',
   /** The platform's account balances (`ledger.read`). */
@@ -149,6 +149,8 @@ export const TEMPLATE = {
   /** Q48d: the funnel by direction. */
   operatorProspectFunnel: 'qb.operator.prospect-funnel',
   adminProspectFunnel: 'qb.admin.prospect-funnel',
+  /** F-F8 (T9): the platform switch of prospecting in force (`qb.admin.prospect`). */
+  adminProspectSwitch: 'qb.admin.prospect-switch',
   /** Q48b: the operators' monthly settlements, every operator's (finance) and the caller operator's own. */
   operatorSettlements: 'qb.admin.operator-settlements',
   ownSettlements: 'qb.operator.settlements',
@@ -397,6 +399,8 @@ export const PERMISSION = {
   generatedFileRead: 'file.generated.read',
   controlPropose: 'control.propose',
   controlPublish: 'control.publish',
+  /** Reading the controlled changes (`SysControlChange`) and the approvals. */
+  approvalRead: 'approval.read',
   /** Taking publications down (Q10b). */
   contentWrite: 'qb.admin.content.write',
   /** The AI page (Q8a). */

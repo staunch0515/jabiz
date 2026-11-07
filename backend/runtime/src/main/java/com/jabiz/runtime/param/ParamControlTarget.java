@@ -104,7 +104,7 @@ public class ParamControlTarget implements ControlTarget {
         }
         Loaded based = (Loaded) loaded;
         Map<String, Object> stored = check(request, based, ctx);
-        return ctx.hasViolations() ? null : new Proposal(idOf(based), stored);
+        return ctx.hasViolations() ? null : new Proposal(idOf(based), stored, key(stored));
     }
 
     @Override

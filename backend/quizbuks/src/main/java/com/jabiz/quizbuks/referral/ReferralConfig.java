@@ -110,7 +110,7 @@ public class ReferralConfig {
     StaticDictionary qbRefereeRuleDictionary() {
         return StaticDictionary.define(RefereeRules.DICTIONARY, d -> d
             .item(RefereeRules.NOT_REGULAR, "en", "Not a regular (never passed one of my quizzes)", "zh",
-                "不是熟客（没有在本商户答题合格过）", "ja", "常連でない（当店のクイズに合格したことがない）")
+                "不是熟客（没有在本发起方答题合格过）", "ja", "常連でない（当店のクイズに合格したことがない）")
             .item(RefereeRules.NEW_TO_PLATFORM, "en", "New to the platform (joined within 7 days)", "zh",
                 "本平台新注册（7 天内注册）", "ja", "新規登録（7日以内に登録）")
             .item(RefereeRules.MATCHES_AUDIENCE, "en", "Matches the quiz's customer conditions", "zh",

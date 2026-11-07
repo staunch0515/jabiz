@@ -361,7 +361,7 @@ steps:
       id: "${termsSponsor}"
       version: 2
       attributes:
-        body: { en: "[TEST PLACEHOLDER] Sponsor terms, version 2.", ja: "[TEST PLACEHOLDER] スポンサー利用規約 第 2 版。" }
+        body: { en: "[TEST PLACEHOLDER] Sponsor terms, version 2.", ja: "[TEST PLACEHOLDER] 主催者利用規約 第 2 版。" }
         changeSummary: { en: Fees are explained., ja: 手数料を説明しました。 }
   - actor: { id: legal-admin, permissions: [qb.admin.content.write], mfa: true }
     process: QB_LEGAL_PUBLISH@latest

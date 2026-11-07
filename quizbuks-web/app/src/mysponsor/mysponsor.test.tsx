@@ -101,18 +101,18 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('a sponsor in the app (Q68)', () => {
-  it('offers the sponsor page in the header to a sponsor only, with a dot when funds are short', async () => {
+describe('a Sponsor in the app (Q68)', () => {
+  it('offers the Sponsor page in the header to a Sponsor only, with a dot when funds are short', async () => {
     server({ figures: { ...FIGURES, fundsShort: 1 } })
     window.history.replaceState(null, '', '/inbox')
     render(<App />)
     const entry = await screen.findByTestId('header-my-sponsor')
     expect(entry).toHaveAttribute('href', '/my-sponsor')
     expect(await screen.findByTestId('header-my-sponsor-dot')).toBeInTheDocument()
-    expect(entry).toHaveAccessibleName('My sponsor account: Needs your attention')
+    expect(entry).toHaveAccessibleName('My Sponsor account: Needs your attention')
   })
 
-  it('shows nothing of the kind to a taker who is no sponsor', async () => {
+  it('shows nothing of the kind to a Taker who is no Sponsor', async () => {
     server({ account: null })
     window.history.replaceState(null, '', '/inbox')
     render(<App />)
@@ -124,7 +124,7 @@ describe('a sponsor in the app (Q68)', () => {
     server()
     window.history.replaceState(null, '', '/my-sponsor')
     render(<App />)
-    expect(await screen.findByRole('heading', { level: 1, name: 'My sponsor account' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'My Sponsor account' })).toBeInTheDocument()
     expect(screen.getByTestId('my-sponsor-company')).toHaveTextContent('Capitals Inc')
     expect(screen.getByTestId('my-sponsor-status')).toHaveTextContent('Approved')
     expect(await screen.findByTestId('my-sponsor-answering')).toHaveTextContent('3')
@@ -157,7 +157,7 @@ describe('a sponsor in the app (Q68)', () => {
     await waitFor(() => expect(api.processCalls('QB_PUBLICATION_RESUME')).toEqual([{ publicationId: 'pub-1' }]))
   })
 
-  it('tells a sponsor in review to finish onboarding on a computer', async () => {
+  it('tells a Sponsor in review to finish onboarding on a computer', async () => {
     server({ account: { ...ACCOUNT, reviewStatus: 'PENDING' } })
     window.history.replaceState(null, '', '/my-sponsor')
     render(<App />)
@@ -165,7 +165,7 @@ describe('a sponsor in the app (Q68)', () => {
     expect(screen.queryByTestId('my-sponsor-figures')).toBeNull()
   })
 
-  it('leads a sponsor\'s own message to the sponsor page and says the console handles it', async () => {
+  it('leads a Sponsor\'s own message to the Sponsor page and says the console handles it', async () => {
     server({ inbox: [{ itemKind: 'MESSAGE', itemId: 'm1', type: 'REWARD', category: 'SPONSOR', kind: 'CASH_CONFIRMED',
       sender: null, sponsorName: null, title: { en: 'A cash reward was confirmed' }, body: { en: 'Mei confirmed it.' },
       markdown: false, publicationId: 'pub-1', action: 'CASH', actionId: 'c1', at: '2026-10-31T01:00:00Z',
@@ -173,11 +173,11 @@ describe('a sponsor in the app (Q68)', () => {
     window.history.replaceState(null, '', '/inbox/message/m1')
     render(<App />)
     expect(await screen.findByTestId('inbox-item-console'))
-      .toHaveTextContent('handled in the sponsor console on a computer')
-    expect(screen.getByTestId('inbox-item-go')).toHaveTextContent('Open My sponsor account')
+      .toHaveTextContent('handled in the Sponsor console on a computer')
+    expect(screen.getByTestId('inbox-item-go')).toHaveTextContent('Open My Sponsor account')
   })
 
-  it('gives a sponsor the sponsor\'s category in the inbox', async () => {
+  it('gives a Sponsor the Sponsor\'s category in the inbox', async () => {
     server()
     window.history.replaceState(null, '', '/inbox')
     render(<App />)
@@ -185,7 +185,7 @@ describe('a sponsor in the app (Q68)', () => {
     expect(await screen.findByRole('option', { name: 'Sponsor' })).toBeInTheDocument()
   })
 
-  it('offers a taker who is no sponsor the certification quiz, then the application once they hold it (Q69)',
+  it('offers a Taker who is no Sponsor the certification quiz, then the application once they hold it (Q69)',
     async () => {
     server({ account: null })
     window.history.replaceState(null, '', '/account')
@@ -196,7 +196,7 @@ describe('a sponsor in the app (Q68)', () => {
     await expectAccessible()
   })
 
-  it('applies with the certification: the sponsor sign-in is added and the console is linked (Q69)', async () => {
+  it('applies with the certification: the Sponsor sign-in is added and the console is linked (Q69)', async () => {
     const api = server({ account: null, claim: { certification: 'SPONSOR_APPLY',
       heldUntil: '2027-10-31T00:00:00Z', roundPublicationId: null } })
     window.history.replaceState(null, '', '/account')
@@ -206,7 +206,7 @@ describe('a sponsor in the app (Q68)', () => {
     expect(api.joined()).toBe(1)
   })
 
-  it('shows nothing of it to a sponsor', async () => {
+  it('shows nothing of it to a Sponsor', async () => {
     server()
     window.history.replaceState(null, '', '/account')
     render(<App />)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { formatDuration, parseDuration } from './duration'
 
-describe('the duration the sponsor types (Q75)', () => {
+describe('the duration the Sponsor types (Q75)', () => {
   it('reads minutes:seconds, hours:minutes:seconds and plain seconds within two hours', () => {
     expect(parseDuration('2:30')).toBe(150)
     expect(parseDuration(' 0:05 ')).toBe(5)

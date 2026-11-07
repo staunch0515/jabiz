@@ -33,8 +33,8 @@ const STORES = {
  * rewards start, the listing and these words change together.
  */
 const FORBIDDEN = {
-  ja: [/スポンサー/, /チャージ/, /管理画面/, /稼/, /儲/, /No\.?\s*1/i, /お金|現金|振込|換金|出金/],
-  zh: [/充值/, /商家后台/, /赚钱/, /第一/, /最好/, /现金|提现|转账|兑现/],
+  ja: [/スポンサー/, /主催者(?!・提供者ではなく)/, /チャージ/, /管理画面/, /稼/, /儲/, /No\.?\s*1/i, /お金|現金|振込|換金|出金/],
+  zh: [/充值/, /发起方后台/, /赚钱/, /第一/, /最好/, /现金|提现|转账|兑现/],
   en: [/top[- ]?up/i, /sponsor console/i, /make money/i, /\bbest\b/i, /#1/, /cash|bank|withdraw|payout|transfer/i],
 }
 /** The store is not the sponsor of the rewards (Google's contests policy, App Store Review Guideline 5.3.3). */
@@ -67,7 +67,7 @@ for (const [store, spec] of Object.entries(STORES)) {
       assert.ok(found[0].body.startsWith('QuizBuks'), found[0].body)
     })
 
-    test(`${store} ${language}: only the takers' app, and ${spec.owner} is not the sponsor of its rewards`, () => {
+    test(`${store} ${language}: only the Takers' app, and ${spec.owner} is not the sponsor of its rewards`, () => {
       const text = sections(store, language).map((s) => s.body).join('\n')
       for (const word of FORBIDDEN[language]) assert.doesNotMatch(text, word)
       assert.match(text, NOT_SPONSOR[language](spec.owner))

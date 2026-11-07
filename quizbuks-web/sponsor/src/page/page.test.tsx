@@ -94,7 +94,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q65b)", () => {
+describe("the Sponsor's page editor (Q60a), a section of the Sponsor profile (Q65b)", () => {
   it('has every text in every language', () => {
     const english = keyPaths(pageEn)
     for (const [lng, texts] of [['zh', pageZh], ['ja', pageJa]] as const) expect(keyPaths(texts), lng).toEqual(english)
@@ -104,7 +104,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
     }
   })
 
-  it('is a section of the sponsor hub, reached from the one menu entry; the old address leads to it (Q79)', async () => {
+  it('is a section of the Sponsor hub, reached from the one menu entry; the old address leads to it (Q79)', async () => {
     server(DRAFT)
     // The old address of "My page" leads to the hub's shop page.
     window.history.replaceState(null, '', OLD_PAGE_PATH)
@@ -210,6 +210,38 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
     expect(screen.getByTestId('sponsor-page-unpublish')).toBeInTheDocument()
     await expectAccessible()
   })
+
+  it('says a pasted address is not a link name and applies the suggested name and website in one click (F-F9)',
+    async () => {
+      const { calls } = server(null)
+      window.history.replaceState(null, '', PAGE_PATH)
+      render(<App />)
+      const handle = await screen.findByTestId('sponsor-page-handle')
+      // Pasted whole, not cut at the name's 30 characters.
+      await userEvent.click(handle)
+      await userEvent.paste('https://www.aini-helmet-official.com/shop')
+      expect(handle).toHaveValue('https://www.aini-helmet-official.com/shop')
+      expect(screen.getByTestId('sponsor-page-handle-address')).toHaveTextContent('looks like a website')
+      await expectAccessible()
+      await userEvent.click(screen.getByTestId('sponsor-page-handle-suggest'))
+      expect(handle).toHaveValue('aini-helmet-official')
+      expect(screen.getByTestId('sponsor-page-website')).toHaveValue('https://www.aini-helmet-official.com/shop')
+      expect(screen.queryByTestId('sponsor-page-handle-address')).toBeNull()
+      // Nothing is saved before the person saves.
+      expect(calls('QB_SPONSOR_PAGE_SAVE')).toEqual([])
+
+      // A website already filled in is kept; a domain not in Latin letters suggests no name.
+      await userEvent.clear(handle)
+      await userEvent.type(handle, 'aini-helmet.co.jp')
+      expect(screen.getByTestId('sponsor-page-handle-suggest')).toHaveTextContent('Use “aini-helmet”')
+      await userEvent.click(screen.getByTestId('sponsor-page-handle-suggest'))
+      expect(handle).toHaveValue('aini-helmet')
+      expect(screen.getByTestId('sponsor-page-website')).toHaveValue('https://www.aini-helmet-official.com/shop')
+      await userEvent.clear(handle)
+      await userEvent.type(handle, '爱你头盔.com')
+      expect(screen.getByTestId('sponsor-page-handle-address')).toBeInTheDocument()
+      expect(screen.queryByTestId('sponsor-page-handle-suggest')).toBeNull()
+    })
 
   it('asks to save before publishing changes', async () => {
     server(DRAFT)

@@ -138,7 +138,7 @@ describe('the inbox helpers', () => {
 })
 
 describe('the languages (Q59b)', () => {
-  it('ask for the sponsors\' notices of the languages the taker sees, in the list and its count', async () => {
+  it('ask for the Sponsors\' notices of the languages the Taker sees, in the list and its count', async () => {
     const { queryBodies } = server({ contentLanguages: 'zh,ja' })
     window.history.replaceState(null, '', '/inbox')
     render(<App />)
@@ -290,7 +290,7 @@ describe('an item', () => {
     expect(processCalls('QB_MESSAGE_MARK').at(-1)?.body).toEqual({ kind: 'MESSAGE', id: 'm1', action: 'CLICK' })
   })
 
-  it('shows a sponsor\'s notice as plain text and records the click before the quiz', async () => {
+  it('shows a Sponsor\'s notice as plain text and records the click before the quiz', async () => {
     const { processCalls } = server()
     window.history.replaceState(null, '', '/inbox/broadcast/b1')
     const user = userEvent.setup()

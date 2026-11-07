@@ -45,7 +45,7 @@ describe('the top-up helpers', () => {
     expect(parseKudos('12345678901234')).toBeNull()
   })
 
-  it('knows how Stripe sent the sponsor back', () => {
+  it('knows how Stripe sent the Sponsor back', () => {
     expect(checkoutReturn('?checkout=paid')).toBe('paid')
     expect(checkoutReturn('?checkout=cancelled')).toBe('cancelled')
     expect(checkoutReturn('?checkout=other')).toBeNull()

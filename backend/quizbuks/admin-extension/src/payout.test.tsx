@@ -124,7 +124,7 @@ describe('PayoutPanel', () => {
 })
 
 describe('AttemptsPage', () => {
-  it('lists the attempts with the taker\'s Kudos for finance', async () => {
+  it('lists the attempts with the Taker\'s Kudos for finance', async () => {
     renderAt('/qb/attempts', '/qb/attempts', <AttemptsPage />)
     const row = await screen.findByTestId('attempt-row')
     expect(row).toHaveTextContent('Capitals')

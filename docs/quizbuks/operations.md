@@ -15,22 +15,22 @@
 | `JABIZ_JWT_SECRET` | 是 | 生成，只放密钥库 | 随时可换：已签发的访问令牌（15 分钟）失效、所有人重新登录（刷新令牌不受影响，平台 10 §15.9）。泄露时立即换 | 启动失败 |
 | `JABIZ_INTEGRITY_KEY` | 是 | 生成；**另存离线副本**（与数据库备份分开保管） | 不能随便换：已有的封存要用原密钥核验（平台 21 §2）。只在泄露时按平台的密钥轮换步骤换，并保留旧密钥 | 启动失败；丢失 = 已有封存无法核验 |
 | `JABIZ_MFA_KEY` | 是 | 生成；**另存离线副本** | 不能随便换：已绑定的 TOTP 密钥以它加密，换了全部用户要重新绑定（`SEC_MFA_RESET`） | 启动失败；丢失 = 所有人的二次验证失效 |
-| `JABIZ_SEAL_KEY` | 是（Q29） | 生成；**另存离线副本** | 不能随便换：商家邮件服务器的密码以它密封（平台 D56），换了或丢了全部商家要在「邮件服务器」页重新输入密码（在此之前邀请投递失败、平台自己的邮件不受影响） | 启动失败（应用声明了 `MailSenderSource`） |
+| `JABIZ_SEAL_KEY` | 是（Q29） | 生成；**另存离线副本** | 不能随便换：发起方邮件服务器的密码以它密封（平台 D56），换了或丢了全部发起方要在「邮件服务器」页重新输入密码（在此之前邀请投递失败、平台自己的邮件不受影响） | 启动失败（应用声明了 `MailSenderSource`） |
 | `JABIZ_BOOTSTRAP_ADMIN_USER` / `_PASSWORD` | 只首次启动 | 运维 | 首个管理员建好后从环境中**删去**（它只在库中没有用户时起作用） | 没有用户时无人能登录 |
 | `JABIZ_FILES_LOCAL_ROOT` | 是 | 镜像已设 `/var/lib/jabiz/files`（卷） | — | 启动失败；卷丢失 = 上传的图片、PDF 丢失（备份见 §2.3） |
 | `SPRING_R2DBC_URL` / `_USERNAME`、`SPRING_FLYWAY_URL` / `_USER`、`DB_PASSWORD`（或 `SPRING_R2DBC_PASSWORD` / `SPRING_FLYWAY_PASSWORD`） | 是 | 数据库 | 换密码：先在库中加新密码可用的窗口（`ALTER ROLE`），改环境变量、滚动重启 | 连不上库，启动失败 |
 | `JABIZ_ERASURE_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD` | 开启账号删除时（平台 17i：账号删除的申请入口 `account-deletion`）；否则可不设 | `deploy/quizbuks/server/create-maintenance-login.sh <库名>` 的输出（`DEPLOY.md`"1a"）：**R2DBC** URL（`r2dbc:postgresql://…`，与 `SPRING_R2DBC_URL` 相同，**不是** Flyway 的 JDBC URL）与一个单独的维护登录（属于角色 `jabiz_maintenance`；应用自己的登录绝不能属于它） | 再运行一次脚本即给同一登录换新密码，改 `.env` 后重新部署 | 不设：抹除账号照常完成，个人信息的清除 422 `ERASURE_PURGE_UNAVAILABLE`，有入口开启账号删除时启动失败。写成 JDBC 格式：启动失败，检查报一行 `ERASURE \| jabiz.erasure.datasource.url`（平台 17q 之前是一大段堆栈，部署回滚） |
-| `QB_APP_ACCOUNT_DELETION` / `QB_SPONSOR_ACCOUNT_DELETION` | 答题者的设为 `true` 是上架 App Store 与 Google Play 的前提（Q71）；商家的可选（Q72） | 设为 `true` 即开启该入口的账号删除：App 与商家后台的账户页出现"删除账号"，答题者另有不装 App 的申请页 `/taker/delete-account` | — | 缺省 `false`：没有删除入口。开启而没有上一行的维护连接：启动失败 |
+| `QB_APP_ACCOUNT_DELETION` / `QB_SPONSOR_ACCOUNT_DELETION` | 学者的设为 `true` 是上架 App Store 与 Google Play 的前提（Q71）；发起方的可选（Q72） | 设为 `true` 即开启该入口的账号删除：App 与发起方后台的账户页出现"删除账号"，学者另有不装 App 的申请页 `/taker/delete-account` | — | 缺省 `false`：没有删除入口。开启而没有上一行的维护连接：启动失败 |
 | `JABIZ_TRUSTED_PROXIES` | 在代理之后必需 | 代理的地址或网段 | 代理变化时 | 登录记录的 IP 都是代理的；入站 Webhook 按地址的限流把 Stripe 全部投递算成一个客户端（每分钟 120 次） |
 | `JABIZ_REPORTS_PDF_FONTS` | 镜像已设 | 镜像中的 IPA Gothic、Droid Sans Fallback | — | 镜像外运行时收据与月报的中日文为 `?`；设了读不到的文件即启动失败 |
 | `LOGGING_STRUCTURED_FORMAT_CONSOLE` | 建议 `ecs` | — | — | 文本日志 |
 | `JABIZ_STORAGE_WRITE_BATCHING_ENABLED` | **不设** | — | — | 缺省 `true`：平台在事务中缓冲写入（决策 D46，16p-2）。应急开关：只在怀疑写缓冲有缺陷时设 `false` 并重启，行为与保证不变，热门发布的容量约降 30 %（`perf/Q10a-load-test.md` §11） |
-| `QB_ADMIN_ROLES` | 否 | 缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE` | — | 用缺省。**永远不要**加 `*`、`QB_TAKER`、`QB_SPONSOR`（自己注册的人会进入管理后台）。启动检查只在相应入口开放注册时拒绝（`SignInEntries`）：`*` 在 App 或商家任一入口开放注册时、`QB_TAKER` 在 App 开放注册时（`QB_APP_SELF_REGISTRATION`）、`QB_SPONSOR` 在商家开放注册时（`QB_SPONSOR_SELF_REGISTRATION`）启动失败；关掉注册后不再拦，但仍不要这样配置。也不得含测试的 `QB_E2E_*`（正式模式下启动失败） |
+| `QB_ADMIN_ROLES` | 否 | 缺省 `ADMIN,QB_ADMIN_SUPER,QB_ADMIN_CONTENT,QB_ADMIN_FINANCE` | — | 用缺省。**永远不要**加 `*`、`QB_TAKER`、`QB_SPONSOR`（自己注册的人会进入管理后台）。启动检查只在相应入口开放注册时拒绝（`SignInEntries`）：`*` 在 App 或发起方任一入口开放注册时、`QB_TAKER` 在 App 开放注册时（`QB_APP_SELF_REGISTRATION`）、`QB_SPONSOR` 在发起方开放注册时（`QB_SPONSOR_SELF_REGISTRATION`）启动失败；关掉注册后不再拦，但仍不要这样配置。也不得含测试的 `QB_E2E_*`（正式模式下启动失败） |
 | `QB_APP_SELF_REGISTRATION` / `QB_SPONSOR_SELF_REGISTRATION` | 否 | 缺省 `true` | — | — |
 | `QB_APP_EMAIL_LINK` | 否 | 缺省 `true` | — | App 以邮件中的链接登录（Q15 的分享链接，平台 D54）；关掉后分享页仍显示，但只能用密码登录 |
-| `JABIZ_PUBLIC_ENABLED` | 否 | 缺省 `true`（Q7b） | — | 设 `false` 时 `/api/public/**` 一律 404：帮助中心与条款、隐私政策页（App 与商家后台，也给未登录的人看）都打不开。只有四个公开模板 `qb.public.*`（已发布的法律文本版本与已发布的 FAQ），没有公开的文件；按客户端地址限流（平台缺省每分钟 300 次），结果缓存 5 分钟 |
+| `JABIZ_PUBLIC_ENABLED` | 否 | 缺省 `true`（Q7b） | — | 设 `false` 时 `/api/public/**` 一律 404：帮助中心与条款、隐私政策页（App 与发起方后台，也给未登录的人看）都打不开。只有四个公开模板 `qb.public.*`（已发布的法律文本版本与已发布的 FAQ），没有公开的文件；按客户端地址限流（平台缺省每分钟 300 次），结果缓存 5 分钟 |
 
-- `JABIZ_WEB_ENVIRONMENT`（平台 16zd）：页面上的系统标志。只有正式环境设 `production`；其他值（`staging`、`local`，不设即 `test`）让 App、商家后台与管理后台的
+- `JABIZ_WEB_ENVIRONMENT`（平台 16zd）：页面上的系统标志。只有正式环境设 `production`；其他值（`staging`、`local`，不设即 `test`）让 App、发起方后台与管理后台的
   **每一页**（含登录页）顶部显示警示色横条 "<环境名> · 测试环境，不是正式版"、标题前加 `[<环境名>]`。设置来自各环境的 `.env`（`deploy/quizbuks/DEPLOY.md`），
   deploy workflow 部署前检查 production 有这一行、staging 没有写 production。
 
@@ -40,15 +40,15 @@
 |---|---|---|---|---|
 | `JABIZ_MAIL_ENABLED` | 是（`true`） | — | — | 邮件只记为 `SKIPPED`：注册的人永远不能验证邮箱、找回密码不可用（启动告警） |
 | `JABIZ_MAIL_FROM` | 是 | 发件域（配好 SPF / DKIM / DMARC） | — | 邮件发不出 |
-| `JABIZ_MAIL_BASE_URL` | 是 | 主机根地址 `https://<主机>`（不带 `/admin`） | 换域名时 | 邮件中的链接错误；也是商家后台地址的缺省来源 |
+| `JABIZ_MAIL_BASE_URL` | 是 | 主机根地址 `https://<主机>`（不带 `/admin`） | 换域名时 | 邮件中的链接错误；也是发起方后台地址的缺省来源 |
 | `SPRING_MAIL_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` | 是 | 邮件服务商（SMTP） | 按服务商；改环境变量、重启 | 投递失败 |
-| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与商家后台的 Google 登录，`social` 开启 Google、Facebook 与 LINE（Q40），`apple` 开启这三家与 Apple（平台 17j），只开一个。**绝不能含 `dev`**（`dev` 的签名密钥与操作人请求头是公开的） | — | 无 Google 登录 |
+| `SPRING_PROFILES_ACTIVE` | 否 | `google` 开启 App 与发起方后台的 Google 登录，`social` 开启 Google、Facebook 与 LINE（Q40），`apple` 开启这三家与 Apple（平台 17j），只开一个。**绝不能含 `dev`**（`dev` 的签名密钥与操作人请求头是公开的） | — | 无 Google 登录 |
 | `JABIZ_OIDC_GOOGLE_CLIENT_ID` / `_CLIENT_SECRET` | 开 Google 时 | Google Cloud 控制台 | 在控制台建新密钥、改环境变量、重启、删旧密钥 | Google 登录启动失败 |
 | `JABIZ_OIDC_FACEBOOK_CLIENT_ID` / `_CLIENT_SECRET` | 开 `social` 时 | Meta for Developers | 在控制台重置应用密钥、改环境变量、重启（重置即旧密钥失效，换的那一刻 Facebook 登录失败） | 启动失败 |
 | `JABIZ_OIDC_LINE_CLIENT_ID` / `_CLIENT_SECRET` | 开 `social` 时 | LINE Developers | 在控制台签发新 Channel secret、改环境变量、重启（旧的立即失效；它也是 ID 令牌的签名密钥） | 启动失败（不足 32 字节同样） |
 | `JABIZ_OIDC_APPLE_CLIENT_ID` / `_TEAM_ID` / `_KEY_ID` / `_PRIVATE_KEY` | 开 `apple` 时 | Apple Developer（Services ID；Keys 中勾选 Sign in with Apple 的密钥，`.p8` 只能下载一次） | 建一把新密钥、改 `_KEY_ID` 与 `_PRIVATE_KEY`、重启，确认 Apple 登录可用后撤销旧密钥（客户端密钥由平台每小时以它签出，换的那一刻不中断） | 部署前的检查停止部署；格式不对即启动失败 |
 | `QB_OIDC_APPLE_FORM_POST` | 开 `apple` 时 | `https://<主机>/api/auth/oidc/apple/form-post`（与 Services ID 的 Return URL 完全相同） | 换域名时（Apple 中同时改） | Apple 拒绝回传 |
-| `JABIZ_PUSH_PUBLIC_KEY` / `_PRIVATE_KEY` / `_SUBJECT` | 开 `push` 时（平台 17k） | 生成一次（README"推送通知"）；私钥**另存离线副本** | 不要换：换了密钥对，答题者在各设备上要重新开启推送（旧订阅随之失效） | 部署前的检查停止部署；两把不是一对即启动失败 |
+| `JABIZ_PUSH_PUBLIC_KEY` / `_PRIVATE_KEY` / `_SUBJECT` | 开 `push` 时（平台 17k） | 生成一次（README"推送通知"）；私钥**另存离线副本** | 不要换：换了密钥对，学者在各设备上要重新开启推送（旧订阅随之失效） | 部署前的检查停止部署；两把不是一对即启动失败 |
 | `JABIZ_APNS_TEAM_ID` / `_KEY_ID` / `_PRIVATE_KEY` | 开 `apns` 时（平台 17k-b） | Apple Developer 的 Keys（勾选 APNs 的密钥，`.p8` 只能下载一次） | 建一把新密钥、改 `_KEY_ID` 与 `_PRIVATE_KEY`、重启，确认 iPhone 收到推送后撤销旧密钥（设备令牌不受影响） | 部署前的检查停止部署；格式不对即启动失败；Apple 拒绝令牌时只记警告、推送稍后重试 |
 | `QB_OIDC_REDIRECT_APP` | 开 Google 时 | `https://<主机>/taker/login/oidc`（与控制台登记的完全相同；Q30 之前没有 `/taker`） | 换域名时 | Google 拒绝回调 |
 | `QB_OIDC_REDIRECT_SPONSOR` | 开 Google 时 | `https://<主机>/sponsor/login/oidc`（Q37；与控制台登记的完全相同） | 换域名时 | Google 拒绝回调；缺少即不能启动 |
@@ -59,13 +59,13 @@
 
 | 收件人 | 邮件（模板） | 可退订 |
 |---|---|---|
-| 答题人 | 转账已发出 `qb.transfer.sent`、转账失败 `qb.transfer.failed`（只在转账仍是该状态时发）、收款账户需补资料 `qb.payout.action-needed`（每人 24 小时内至多一封） | 否 |
-| 商家 | 充值到账 `qb.topup.paid`、发布通过 / 驳回 / 被下架 `qb.publication.approved` / `.rejected` / `.taken-down` | 否 |
-| 商家 | 发布预算不足 `qb.publication.funds-short`（每个商家 24 小时内至多一封，列出当时全部预算不足的发布；窗口内的再次不足记为待发，由每小时 11 分的任务 `qb.mail-funds-short-due` 在窗口过后仍不足时补发）、发布已结束 `qb.publication.ended`（下架后或商家被封禁时不发） | 是（邮件中的链接，或商家后台"账户 → 邮件"） |
+| 学者 | 转账已发出 `qb.transfer.sent`、转账失败 `qb.transfer.failed`（只在转账仍是该状态时发）、收款账户需补资料 `qb.payout.action-needed`（每人 24 小时内至多一封） | 否 |
+| 发起方 | 充值到账 `qb.topup.paid`、发布通过 / 驳回 / 被下架 `qb.publication.approved` / `.rejected` / `.taken-down` | 否 |
+| 发起方 | 发布预算不足 `qb.publication.funds-short`（每个发起方 24 小时内至多一封，列出当时全部预算不足的发布；窗口内的再次不足记为待发，由每小时 11 分的任务 `qb.mail-funds-short-due` 在窗口过后仍不足时补发）、发布已结束 `qb.publication.ended`（下架后或发起方被封禁时不发） | 是（邮件中的链接，或发起方后台"账户 → 邮件"） |
 
 邮件中的时刻按日本时间、标为 `JST`（取自 `jabiz.fiscal-year-zone`）。`JABIZ_MAIL_ENABLED` 未开时这些邮件同样只记为 `SKIPPED`（`sys_mail_message` / `sys_mail_attempt`），不会补发。事件太晚才被消费（投递积压、或新消费者收到历史事件）时不发信：通知（可退订的两种）超过 3 天、事务邮件（转账、收款账户、充值、发布的审核结果与下架）超过 14 天（`NotificationMails.MAX_AGE` / `TRANSACTIONAL_MAX_AGE`）。补发任务的时间可以 `quizbuks.mail.funds-short-due-cron`（Spring 的六段 cron，缺省 `0 11 * * * *`，UTC）改；它只读待发的行（`qb_mail_notice` 的部分索引）。
 
-**退订链接**：可退订邮件中的退订链接由平台生成，指向邮件所属入口自己的前端（平台 D52 第 3 条，`jabiz.mail.unsubscribe-paths`）：商家的两种通知（`.entries("sponsor")`）指向 `/sponsor/mail/unsubscribe`，欢迎邮件（`.entries("app")`）指向 `/mail/unsubscribe`，两个 SPA 都挂载平台的退订页（无需登录：链接中的令牌即凭证）。答题人与商家因此不需要打开 `/admin/`；后台的旧页 `/admin/mail/unsubscribe` 保留，此前发出的链接照常有效（`/admin/` 是否对外开放只取决于管理员从哪里登录）。
+**退订链接**：可退订邮件中的退订链接由平台生成，指向邮件所属入口自己的前端（平台 D52 第 3 条，`jabiz.mail.unsubscribe-paths`）：发起方的两种通知（`.entries("sponsor")`）指向 `/sponsor/mail/unsubscribe`，欢迎邮件（`.entries("app")`）指向 `/mail/unsubscribe`，两个 SPA 都挂载平台的退订页（无需登录：链接中的令牌即凭证）。学者与发起方因此不需要打开 `/admin/`；后台的旧页 `/admin/mail/unsubscribe` 保留，此前发出的链接照常有效（`/admin/` 是否对外开放只取决于管理员从哪里登录）。
 
 ### 1.3 Stripe 与资金（`deploy/quizbuks/README.md`"充值与核对""收款账户与自动转账"）
 
@@ -91,8 +91,8 @@
 不需要环境变量。开启的步骤（都在后台，四眼）：
 
 1. 新版本部署后运行一次 `QB_SETUP`：给角色加上 `qb.topup.bank.record` / `qb.topup.bank.approve`，并提出审批规则 `qb.topup-bank.review` 与新的受控参数；**另一位管理员发布这些提议**（审批规则生效之前，财务登记一律被拒 `QB_TOPUP_BANK_NO_REVIEW`）。
-2. 以受控变更设收款账户：`qb.bank.receiving.bank`、`.branch`（名称带代码）、`.account-type`、`.account-number`、`.account-holder`（片假名），以及 `qb.topup.bank.min` / `max`。五项都设了之前，商家的银行转账充值一律被拒（`QB_TOPUP_BANK_UNAVAILABLE`）。
-3. 日常：商家报告汇款后财务会收到待办；在后台"银行转账充值"中对照银行流水登记实收、到账日与流水号；另一位管理员（内容或财务）在同一页审批后才入账。登记人不能审批自己的登记。驳回会回到登记前的状态，可重新登记。
+2. 以受控变更设收款账户：`qb.bank.receiving.bank`、`.branch`（名称带代码）、`.account-type`、`.account-number`、`.account-holder`（片假名），以及 `qb.topup.bank.min` / `max`。五项都设了之前，发起方的银行转账充值一律被拒（`QB_TOPUP_BANK_UNAVAILABLE`）。
+3. 日常：发起方报告汇款后财务会收到待办；在后台"银行转账充值"中对照银行流水登记实收、到账日与流水号；另一位管理员（内容或财务）在同一页审批后才入账。登记人不能审批自己的登记。驳回会回到登记前的状态，可重新登记。
 4. 30 天没有到账的申请由每日任务（19:23 UTC）置为过期；之后才到的钱仍可在"已过期"的申请上登记。
 
 ### 1.3b 自动转账的开启与"立即转账"（Q14）
@@ -106,8 +106,8 @@
 不需要环境变量。开启：部署后运行 `QB_SETUP`（财务角色加 `qb.payout.bank.reveal` / `qb.withdrawal.pay`，并提出 `qb.withdrawal.bank.enabled` / `.fee` / `.cooldown-hours`），另一位管理员发布；
 再以受控变更设 `qb.withdrawal.bank.enabled = true` 与手续费。转账审核规则 `qb.transfer.review` 须生效（每笔银行提现都要审核）。
 
-日常：答题人申请后，持有 `qb.payout.review` 的财务（不是本人）在转账审核中批准；批准后有"请打款"待办。在后台"银行提现"中点"显示账号"（每次记录），
-在网银中打款，再点"已打款"填流水日与流水号；被银行退回时点"退回"填原因，Kudos 回到答题人余额。**不要**在库中改状态。
+日常：学者申请后，持有 `qb.payout.review` 的财务（不是本人）在转账审核中批准；批准后有"请打款"待办。在后台"银行提现"中点"显示账号"（每次记录），
+在网银中打款，再点"已打款"填流水日与流水号；被银行退回时点"退回"填原因，Kudos 回到学者余额。**不要**在库中改状态。
 
 ### 1.4 只给测试的开关（生产不设）
 
@@ -116,13 +116,13 @@
 | 开关 | 用途 | 由谁拒绝 |
 |---|---|---|
 | `QB_TRANSFER_RUN_CRON`、`QB_RECONCILE_RUN_CRON` | e2e 与 Stripe 测试模式：每分钟转账、每分钟核对 | `TransferScheduleCheck` |
-| `QB_ANALYTICS_RUN_CRON` | e2e：每分钟运行商家分析（Q9e2）。**隐私控制**：概览是任务的快照，频率决定能把一个答题人的作答定位到多细；缺省（每 10 分钟）以外的值**任何环境**都要同时设 `QB_E2E_ENABLED=true`，否则启动失败；**比每分钟更频繁的值一律拒绝**（评审 M1） | `TransferScheduleCheck` |
+| `QB_ANALYTICS_RUN_CRON` | e2e：每分钟运行发起方分析（Q9e2）。**隐私控制**：概览是任务的快照，频率决定能把一个学者的作答定位到多细；缺省（每 10 分钟）以外的值**任何环境**都要同时设 `QB_E2E_ENABLED=true`，否则启动失败；**比每分钟更频繁的值一律拒绝**（评审 M1） | `TransferScheduleCheck` |
 | `QB_E2E_ENABLED`（`quizbuks.e2e.enabled`） | e2e 的开关（Q9e2 评审 M1）：允许改分析任务的时间；正式模式或正式密钥下设了即启动失败 | `TransferScheduleCheck` |
 | `QB_ADMIN_ROLES` 中的 `QB_E2E_*` | e2e 的无二次验证的测试角色 | `TransferScheduleCheck` |
-| 开发入账 `quizbuks.wallet.dev-credit.enabled`（`dev` 配置开启） | 不付款给商家钱包入账 | `StripeModeCheck` |
+| 开发入账 `quizbuks.wallet.dev-credit.enabled`（`dev` 配置开启） | 不付款给发起方钱包入账 | `StripeModeCheck` |
 | `QB_STRIPE_CHECKOUT_URL_PREFIX` / `QB_STRIPE_CONNECT_URL_PREFIX` 不是 Stripe 的地址 | 指向本地桩 | `StripeSettings` / `PayoutSettings`（启动检查） |
 
-不会被拒、但生产**绝不能**设的：`JABIZ_MAIL_SENDERS_TRUST_ALL_FOR_TESTS=true`（e2e：接受本机上任何端口与证书的商家邮件服务器；非 dev 启动告警，Q29）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`、`JABIZ_SECURITY_SIGN_UP_RATE_LIMIT_PER_ADDRESS`（e2e 放宽的注册限流）、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS` / `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST`（e2e 放宽的登录限流）、`QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS`（指向桩）、`SPRING_PROFILES_ACTIVE` 含 `dev`、`QB_STM_PUBLISHER` / `QB_DEMO_PUBLISHER` 等演示与测试的角色。上线检查清单逐项核对。
+不会被拒、但生产**绝不能**设的：`JABIZ_MAIL_SENDERS_TRUST_ALL_FOR_TESTS=true`（e2e：接受本机上任何端口与证书的发起方邮件服务器；非 dev 启动告警，Q29）、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`、`JABIZ_SECURITY_SIGN_UP_RATE_LIMIT_PER_ADDRESS`（e2e 放宽的注册限流）、`JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_PER_USER_ADDRESS` / `JABIZ_SECURITY_SIGN_IN_RATE_LIMIT_USER_BURST`（e2e 放宽的登录限流）、`QB_STRIPE_API_URL` / `QB_STRIPE_API_HOSTS`（指向桩）、`SPRING_PROFILES_ACTIVE` 含 `dev`、`QB_STM_PUBLISHER` / `QB_DEMO_PUBLISHER` 等演示与测试的角色。上线检查清单逐项核对。
 
 ### 1.5 可观测性
 
@@ -170,7 +170,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    `JABIZ_MAIL_ENABLED=false`；关掉后台工作：`JABIZ_JOBS_SCHEDULER_ENABLED=false`、`JABIZ_EVENTS_DELIVERY_ENABLED=false`、`JABIZ_EXTERNALJOBS_EXECUTOR_ENABLED=false`；网络上禁止对外连接。
    （正式数据在测试模式下启动不被拒绝；反过来"正式模式 + 测试数据"才被拒。）
 3. 核对：启动检查通过（没有 `Platform check failed`）；管理员能登录并通过二次验证（`JABIZ_MFA_KEY` 正确）；运行 `INTEGRITY_VERIFY`（封存链完整，`JABIZ_INTEGRITY_KEY` 正确）；
-   报表 `qb.admin.balances`（T 所在月）借贷平衡、各方钱包不透支，2110 合计与 `qb.admin.wallets` 的商家余额合计相等；抽查几张收据 PDF 与上传的图片能打开（文件卷与库一致）。
+   报表 `qb.admin.balances`（T 所在月）借贷平衡、各方钱包不透支，2110 合计与 `qb.admin.wallets` 的发起方余额合计相等；抽查几张收据 PDF 与上传的图片能打开（文件卷与库一致）。
 4. 与生产在 T 时的数字比较（T 之前已完成的每日核对 `qb.admin.recon-runs`、月报）。
 5. 记录在演练记录中（日期、T、RTO、RPO、问题），删除隔离环境。
 
@@ -187,7 +187,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    建立期结束后，平台不把受保护的权限给一个由别人设过密码的账号（批准后生效时 `TARGET_CREDENTIALS_NOT_OWN`，本人之后自己改过也不算；平台 10 §16.2），以后给这些角色增加受保护的权限也会因此失败。
    邀请要求邮件已开启（`JABIZ_MAIL_ENABLED=true`，否则 422 `MAIL_DISABLED`），只寄到建号时填写、之后没改过的邮箱：邮箱填错时重新建号。
    已用临时密码建好、尚未经邮件设定密码的管理员账号，同样对其执行"发送邀请"（替换已有密码另需 `security.user.password`，首个管理员持有）。
-5. 财务管理员在后台**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的），**包括两条职责分离规则**。发布之前商家入驻与提交发布一律被拒。
+5. 财务管理员在后台**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的），**包括两条职责分离规则**。发布之前发起方入驻与提交发布一律被拒。
    操作：后台"数据 → SysControlChange"列出提案，在状态为待发布（`PROPOSED`）的一行执行行操作 `CONTROL_CHANGE_PUBLISH`。财务角色以 `approval.read` 读这个视图；
    这项权限在 2026-10-29 才加入财务角色，此前建好的系统要由超级管理员再执行一次 `QB_SETUP` 补上（不是受保护的权限，当即生效），财务管理员重新登录后才看得到。
    职责分离规则须在建立期结束（下一步）之前发布：之后任命内容或财务管理员要由一位超级管理员审批，而超级管理员不持有、也不能持有 `approval.decide` 与 `control.publish`，
@@ -197,38 +197,38 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    `QB_SETUP` 必须在第二位超级管理员出现**之前**执行过（第 3 步）：超级管理员的角色由它得到审批受保护变更的 `security.protected-change.decide`，这项权限本身受保护，建立期结束后再给需要审批，而那时无人能批。
    **默认运营商**（F-S1）：提案发布后，内容管理员（已验证邮箱，持 `qb.operators.write`）在 答题拼好价平台管理系统中以 `QB_OPERATOR_SAVE` 建第一个运营商并设为默认（`defaultForNew: true`），同时指定负责人（已验证邮箱的账号，同一事务成为它的直营发起方）。没有默认运营商时发起方入驻一律被拒（`QB_OPERATOR_DEFAULT_MISSING`），每日核对 `qb.operator-check` 给平台一个待办（`NO_DEFAULT_OPERATOR`）。以后把另一个运营商设为默认即取代原来的（至多一个；默认的运营商不能停用，也不能直接取消默认）。
 6. 由超级管理员提出、财务管理员发布（`CONTROL_CHANGE_PROPOSE` → `CONTROL_CHANGE_PUBLISH`，目标 `SysParam`）：
-   - **收据开具方** `qb.issuer.name`、`qb.issuer.address`、`qb.issuer.registration-no`（登记号与税的措辞须财务、法务确认，上线检查清单）；未设名称时商家开不出收据；
+   - **收据开具方** `qb.issuer.name`、`qb.issuer.address`、`qb.issuer.registration-no`（登记号与税的措辞须财务、法务确认，上线检查清单）；未设名称时发起方开不出收据；
    - **科目映射** `qb.journal.account.1110 … 5110`（会计系统中的科目代码；后台"QuizBuks 财务 → 分录导出 → 科目映射"只读显示，修改走受控变更）；没映射的科目使分录导出被拒；
    - 金额参数按业务确认：`qb.creator-fee-rate`、`qb.transfer.threshold`、`qb.transfer.review-above`、`qb.transfer.fee`、`qb.topup.min` / `max`；
    - `qb.transfer.enabled` **保持 false**，直到取得法务意见（§4）；
-   - **奖励的缺省**（Q28）：`qb.reward.default-methods`（没有单独设定的商家可用的支付方式，逗号分隔；声明值 `PLATFORM`，推广期发布 `OFFLINE_REDEEM`，见下文"阶段一的设置"）与 `qb.reward.max-per-attempt`（每次答题可得的最高奖励，Kudos；`0` 不限；景品表示法的上限由法务给出）；
+   - **奖励的缺省**（Q28）：`qb.reward.default-methods`（没有单独设定的发起方可用的支付方式，逗号分隔；声明值 `PLATFORM`，推广期发布 `OFFLINE_REDEEM`，见下文"阶段一的设置"）与 `qb.reward.max-per-attempt`（每次答题可得的最高奖励，Kudos；`0` 不限；景品表示法的上限由法务给出）；
    - 法律文本的最长预告期 `qb.legal.max-announce-days`（缺省 180 天；未发布时同样按 180 天）。
    - `qb.ai.enabled` 由 `QB_SETUP` 提出 `false`，**照样发布**（AI 在上线检查清单的条件满足后才开启）。发布之前参数不存在：启动检查 `EXTERNAL` 对 `job qb.ai.questions` 与 `job qb.ai.cover` 各报一条**警告**
      `enabledBy: parameter qb.ai.enabled has no value in effect now; the type is paused …`，执行器第一次轮询时也记一条 WARN。这在新安装上是预期的（参数缺失与 `false` 一样：请求被拒、没有作业），
      发布 `false` 之后不再出现；已发布之后仍出现即参数被删或读不出来，应调查（§5"AI 作业暂停"）。
 7. 在测试模式下做一次 Stripe 测试模式全流程（`stripe-test-mode.md`），并按 §2.4 做一次恢复演练。
 8. 每次部署新版本后：再执行一次 `QB_SETUP`，发布它的新提案（README 各阶段的"部署后"）。忘了的话，启动日志与 `platformCheck` 对每个没有生效值的业务参数各报一条警告 `QUIZBUKS | parameter <键>`（从未执行过设置的数据库只报一条 `QB_SETUP has not run yet`）；读这些参数的流程在那之前一律失败（`PARAM_NOT_FOUND`）。
-9. **条款、隐私政策与帮助**（Q7b）：`QB_SETUP` 为四种法律文本（答题人条款、商家条款、隐私政策、特定商取引法表记）各建一份**明确标注 `[TEST PLACEHOLDER]` 的草稿**，什么也不发布。
+9. **条款、隐私政策与帮助**（Q7b）：`QB_SETUP` 为四种法律文本（学者条款、发起方条款、隐私政策、特定商取引法表记）各建一份**明确标注 `[TEST PLACEHOLDER]` 的草稿**，什么也不发布。
    正式文本由需求方或律师提供（日文为准据文本，英文须一并提供；中文可缺，页面显示英文并注明）。内容管理员在后台的"法律文本（草稿）"中把草稿换成正式文本（标题、正文，第二版起还有"改定的概要"，日英必填），
    再在后台扩展的"QuizBuks → 规约类"页（`/qb/legal`）预览草稿并"发布"（`QB_LEGAL_PUBLISH`，每次要求二次验证，留审计；发布的是页面读到的草稿版本，期间被改即拒绝）：生效时间留空即立即生效，或填以后的时间作预告（至多 `qb.legal.max-announce-days` 天；预告期间不能再发布同一种文本）；
    预告有误时在同一页的版本列表中填理由"撤回"（`QB_LEGAL_WITHDRAW`，只能在生效前；撤回的版本永不生效、不要求同意，版本号不再使用，公开的历史中标为"已撤回"）；
-   实质性变更勾选"须重新同意"，措辞修订不勾。已发布的版本不可修改，改错只能发布新版本。正式模式下缺少已生效的答题人条款、商家条款或隐私政策时**启动告警**（`LiveModeDataCheck`）。
+   实质性变更勾选"须重新同意"，措辞修订不勾。已发布的版本不可修改，改错只能发布新版本。正式模式下缺少已生效的学者条款、发起方条款或隐私政策时**启动告警**（`LiveModeDataCheck`）。
    帮助中心的问答在后台"帮助中心问答"中维护（英语必填、`seq` 排序、"公开中"才出现在页面）。支持邮箱 `qb.support.email`（普通参数，空即不显示"仍需帮助"的联系方式）在后台参数中设；Q41 起 `QB_SETUP` 新建它时为 `quizbuks@gmail.com`，已建过的（空）不会被改，要在后台参数中改一次。
-   发布条款时可勾选"在收件箱中公告"：一分钟内（任务 `qb.broadcast-dispatch`）给相关的人发一条系统公告（答题人条款 → App，隐私政策 → App 与商家后台，其余 → 商家后台），有效 30 天。
-10. **站内信与公告**（Q7c）：个人消息（奖励、转账、收款账户）由事件的消费者写入，不需设置；公告在后台扩展的"QuizBuks → 公告与通知"（`/qb/broadcasts`）编写与发送（发送要求二次验证，撤回每次二次验证并填理由，商家可见）。
-   普通参数（`QB_SETUP` 建立，可在后台参数中直接改）：商家每个发布的通知上限 `qb.broadcast.sponsor.max-per-publication`（3）、两条之间的最短间隔 `qb.broadcast.sponsor.min-interval-hours`（24）、
-   公告的缺省有效期 `qb.broadcast.expires-days`（30）、收款提醒的间隔 `qb.payout.reminder-days`（30）。商家通知不预审（Q7-10）：内容有问题时由内容管理员撤回；封禁商家即撤回其全部通知。
+   发布条款时可勾选"在收件箱中公告"：一分钟内（任务 `qb.broadcast-dispatch`）给相关的人发一条系统公告（学者条款 → App，隐私政策 → App 与发起方后台，其余 → 发起方后台），有效 30 天。
+10. **站内信与公告**（Q7c）：个人消息（奖励、转账、收款账户）由事件的消费者写入，不需设置；公告在后台扩展的"QuizBuks → 公告与通知"（`/qb/broadcasts`）编写与发送（发送要求二次验证，撤回每次二次验证并填理由，发起方可见）。
+   普通参数（`QB_SETUP` 建立，可在后台参数中直接改）：发起方每个发布的通知上限 `qb.broadcast.sponsor.max-per-publication`（3）、两条之间的最短间隔 `qb.broadcast.sponsor.min-interval-hours`（24）、
+   公告的缺省有效期 `qb.broadcast.expires-days`（30）、收款提醒的间隔 `qb.payout.reminder-days`（30）。发起方通知不预审（Q7-10）：内容有问题时由内容管理员撤回；封禁发起方即撤回其全部通知。
    任务：`qb.broadcast-dispatch`（每分钟，定时发送；`quizbuks.messaging.dispatch-cron`）、`qb.broadcast-expire`（每分钟第 30 秒，把过期的与发布已结束的通知移出收件箱；`quizbuks.messaging.expire-cron`；停了它，过期的公告与已结束发布的通知会留在收件箱中直到它恢复，读取也随之变慢；恢复后一次补做）、
-   `qb.broadcast-stats`（每日 04:47 UTC，商家通知统计的快照；`quizbuks.messaging.stats-cron`）、`qb.payout-reminder`（每日 03:17 UTC；`quizbuks.messaging.payout-reminder-cron`）。
-   商家看到的统计的下限 `qb.broadcast.stats.min-audience`（50，普通参数）：到达不足它时不显示点击与开始答题（评审 M2）。
-   限流（`application.yml` 的 `jabiz.process.rate-limits`）：已读与点击每人每分钟 120 次、全部已读与推广开关各 30 次、商家保存通知 60 次、发送每小时 10 次。
-   对话（Q82，`plans/Q82-conversations.md`）：任务 `qb.conversation-expire`（每日 03:41 UTC，关闭 `qb.conversation.close-days`（90，普通参数）天无消息的对话；`quizbuks.conversations.expire-cron`；停了它只是安静的对话不自动关闭，恢复后一次补做）；每侧每对话每日条数 `qb.conversation.daily-cap`（20，普通参数）；限流：发送每人每小时 30 次、开启 10 次。商户的回复经消费者 `qb.msg-conversation-reply` 写站内信并推送。对话内容的纠纷由内容管理员（与运营商，限其商户）在后台扩展的举报页经“查看对话”只读查看。
+   `qb.broadcast-stats`（每日 04:47 UTC，发起方通知统计的快照；`quizbuks.messaging.stats-cron`）、`qb.payout-reminder`（每日 03:17 UTC；`quizbuks.messaging.payout-reminder-cron`）。
+   发起方看到的统计的下限 `qb.broadcast.stats.min-audience`（50，普通参数）：到达不足它时不显示点击与开始答题（评审 M2）。
+   限流（`application.yml` 的 `jabiz.process.rate-limits`）：已读与点击每人每分钟 120 次、全部已读与推广开关各 30 次、发起方保存通知 60 次、发送每小时 10 次。
+   对话（Q82，`plans/Q82-conversations.md`）：任务 `qb.conversation-expire`（每日 03:41 UTC，关闭 `qb.conversation.close-days`（90，普通参数）天无消息的对话；`quizbuks.conversations.expire-cron`；停了它只是安静的对话不自动关闭，恢复后一次补做）；每侧每对话每日条数 `qb.conversation.daily-cap`（20，普通参数）；限流：发送每人每小时 30 次、开启 10 次。发起方的回复经消费者 `qb.msg-conversation-reply` 写站内信并推送。对话内容的纠纷由内容管理员（与运营商，限其发起方）在后台扩展的举报页经“查看对话”只读查看。
 
-**阶段一（推广期）的设置（Q28，`plans/Q28-phase1-defaults.md`）**：推广期只有线下奖品、商家免费、不经手资金（招商网站 §7.11 的承诺）。由超级管理员提出、财务管理员发布（都是受控参数，四眼），按顺序：
+**阶段一（推广期）的设置（Q28，`plans/Q28-phase1-defaults.md`）**：推广期只有线下奖品、发起方免费、不经手资金（招商网站 §7.11 的承诺）。由超级管理员提出、财务管理员发布（都是受控参数，四眼），按顺序：
 
-- [ ] `qb.reward.default-methods` = `OFFLINE_REDEEM`：没有单独设定的商家只能以线下奖品作奖励；商家后台随之不显示钱包与充值。要让某个商家付 Kudos 或现金，在后台"商家审核"页单独允许（`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员）。
+- [ ] `qb.reward.default-methods` = `OFFLINE_REDEEM`：没有单独设定的发起方只能以线下奖品作奖励；发起方后台随之不显示钱包与充值。要让某个发起方付 Kudos 或现金，在后台"发起方审核"页单独允许（`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员）。
 - [ ] `qb.reward.max-per-attempt` = 法务给出的上限（Kudos 等值）。按答对与否给奖是景品表示法的"懸賞"而不是"総付"：与购买或到店挂钩的一般懸賞，单个景品至多交易额的 20 倍（交易额不足 5,000 日元）或 10 万日元（5,000 日元以上），总额不超过预计销售额的 2%；不要求购买的开放式懸賞没有上限（填 `0`）。线下兑换是否算与购买挂钩由法务认定。高于它的奖励档在保存时报 `QB_REWARD_ABOVE_MAX`、提交被拒。
-- [ ] `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = **`false`**：商家的入驻在推广期不逐个人工审核（线下奖品不经手资金；封禁照常可用），**发布一律在发布前审核**（需求方 2026-10-28，商店 App 的上架要求，`plans/Q49d-store.md` D-Q49d-7）。
+- [ ] `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = **`false`**：发起方的入驻在推广期不逐个人工审核（线下奖品不经手资金；封禁照常可用），**发布一律在发布前审核**（需求方 2026-10-28，商店 App 的上架要求，`plans/Q49d-store.md` D-Q49d-7）。
   审核员拒绝以酒类、烟草或毒品为题材或奖品的问卷（商店的内容分级按"没有受管制物质"申报，`docs/quizbuks/store/play-content-rating.md`）。
 - [ ] `qb.transfer.enabled` 保持 `false`、`qb.ai.enabled` 按上线检查清单。
 - [ ] 开始收费（招商网站价格页的"计划中"项）前：把 `qb.reward.default-methods` 改为所售套餐的方式，发布 `qb.creator-fee-rate`，并在网站去掉"计划中"。
@@ -260,12 +260,12 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 | 检查 | 规则 |
 |---|---|
-| `StripeModeCheck` | `QB_STRIPE_LIVEMODE=true` 须正式密钥（`sk_live_` / `rk_live_`），测试模式须测试密钥；开发入账（`dev`）不能与正式模式或正式密钥同时开启；支付页与开通页的地址前缀在正式模式只能是 Stripe 自己的；Stripe 设置本身（API 版本格式、Checkout 有效期、结算币种）有效；缺商家后台或 App 地址只告警（充值、开通被拒） |
+| `StripeModeCheck` | `QB_STRIPE_LIVEMODE=true` 须正式密钥（`sk_live_` / `rk_live_`），测试模式须测试密钥；开发入账（`dev`）不能与正式模式或正式密钥同时开启；支付页与开通页的地址前缀在正式模式只能是 Stripe 自己的；Stripe 设置本身（API 版本格式、Checkout 有效期、结算币种）有效；缺发起方后台或 App 地址只告警（充值、开通被拒） |
 | `TransferScheduleCheck` | 正式模式或正式密钥下，每日转账与每日核对必须是缺省的每日时间（不能设 `QB_TRANSFER_RUN_CRON`、`QB_RECONCILE_RUN_CRON`），后台入口不能接受 `QB_E2E_*` 角色 |
-| `LiveModeDataCheck`（`quizbuks.stripe.allow-live-with-test-data`） | 正式模式下库中有测试模式的充值（`livemode=false` 或 `cs_test_` 会话），或 2110（商家钱包合计）不为 0，即失败：测试的 Kudos 不能在正式环境中付出真实奖励 |
+| `LiveModeDataCheck`（`quizbuks.stripe.allow-live-with-test-data`） | 正式模式下库中有测试模式的充值（`livemode=false` 或 `cs_test_` 会话），或 2110（发起方钱包合计）不为 0，即失败：测试的 Kudos 不能在正式环境中付出真实奖励 |
 | 入站 Webhook | 两个签名密钥都必须有 |
 | `AiPdfLimitsCheck`（Q8b） | `QB_AI_PDF_MAX_PAGES` × 5 000 加上最大的文字输入与输出须放得进模型的上下文窗口（100 万 Token：至多约 179 页），且不超过提供方每次请求的 600 页（§7.8；不论模式都查） |
-| `LiveModeDataCheck`（Q7b，告警） | 正式模式下没有已生效的答题人条款、商家条款或隐私政策即告警（不能报错：要先启动才能发布）；上线前必须消除 |
+| `LiveModeDataCheck`（Q7b，告警） | 正式模式下没有已生效的学者条款、发起方条款或隐私政策即告警（不能报错：要先启动才能发布）；上线前必须消除 |
 
 **检查清单**（按顺序）：
 
@@ -277,7 +277,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - [ ] `QB_SPONSOR_LINK`、`QB_APP_LINK`、`JABIZ_MAIL_BASE_URL` 都是正式的 `https` 地址；正式域名写进 `tools/quizbuks/stripe-test-mode/production-hosts`
 - [ ] `./gradlew :quizbuks:platformCheck` 以正式的设置（不含密钥值的同形假值）跑一遍；启动日志中没有 `Platform check failed`
 - [ ] 首次启动（§3）完成：两位管理员都有二次验证，提案已发布，开具方与科目映射已设
-- [ ] 小额实测：一位内部商家用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe 后台全额退款，确认扣回；次日核对为 `OK`
+- [ ] 小额实测：一位内部发起方用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe 后台全额退款，确认扣回；次日核对为 `OK`
 - [ ] 资金调度：充值在 Stripe 上几天后才变为可用余额，转账从可用余额转出；定好打开转账前的余额与打款计划
 - [ ] 法务意见允许后，才提出并发布 `qb.transfer.enabled=true`；第一次每日转账（01:07 UTC）后核对每一笔
 
@@ -303,7 +303,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 任务 | `jabiz.job.run{result="FAILED"|"LOCKED"}` | 任一每日任务 `FAILED`；`LOCKED` 持续（另一实例卡住） |
 | 站内信与公告（Q7c） | `jabiz.job.item{job="qb.broadcast-dispatch"|"qb.broadcast-expire"|"qb.broadcast-stats"|"qb.payout-reminder"|"qb.conversation-expire", result}`；`jabiz.query.template{template="qb.app.inbox-unread"}` 的耗时（徽标，每个在线用户每 5 分钟一次；目标 < 5 ms，`docs/quizbuks/perf/Q7c-inbox.md`）；`jabiz.outbox.delivery{result="FAILED"}`（消费者 `qb.msg-*`） | 定时发送的项连续失败（公告迟迟不出）；消费者失败持续 15 分钟 |
 | 平台费（Q87b，§7.18） | `jabiz.job.item{job="qb.fee-monthly"|"qb.fee-invoice"|"qb.fee-overdue", result}`；核对项 `FEES_RECEIVABLE` | 任一项 `FAILED`；核对 `DIFF` 持续两天 |
-| 商家分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
+| 发起方分析（Q9e，§7.7） | `jabiz.job.run{job="qb.analytics"}`；`jabiz.process{process="QB_ANALYTICS_ITEM"}` 的时间 | `PARTIAL` 连续 3 次（同一项一直失败）；30 分钟内没有成功的运行；运行时间持续超过 2 分钟（积压） |
 | 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
@@ -322,7 +322,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 ## 7. 常见故障
 
-使用者（答题者、商家、店员、运营商）遇到的问题与给他们的解决办法记在 `docs/quizbuks/troubleshooting.md`（同时作为帮助页 FAQ 的底稿）；本节只写运维的故障。
+使用者（学者、发起方、店员、运营商）遇到的问题与给他们的解决办法记在 `docs/quizbuks/troubleshooting.md`（同时作为帮助页 FAQ 的底稿）；本节只写运维的故障。
 
 ### 7.1 Webhook 签名失败
 
@@ -364,8 +364,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 ### 7.5 退款与争议的差额
 
 - **现象**：待办 `REFUND_SHORTFALL` / 争议差额，充值的 `refundShortfall` / `disputeShortfall` 不为 0。
-- **机制**：退款与败诉的争议只能从商家可用余额扣回（Kudos 已作为奖励付出的部分扣不回），余下记为差额、开待办；**记下后不再自动扣回**。
-- **处理**：财务线下向商家追收（或核销），在待办中写明处理结果并关闭。退款只能在 Stripe 后台发起（QuizBuks 不提供退款流程），发起前先看商家的可用余额以预估差额。
+- **机制**：退款与败诉的争议只能从发起方可用余额扣回（Kudos 已作为奖励付出的部分扣不回），余下记为差额、开待办；**记下后不再自动扣回**。
+- **处理**：财务线下向发起方追收（或核销），在待办中写明处理结果并关闭。退款只能在 Stripe 后台发起（QuizBuks 不提供退款流程），发起前先看发起方的可用余额以预估差额。
   待办 `UNKNOWN_PAYMENT`（退款晚于充值确认且充值当时未入账）须在充值入账后人工对照（README"充值与核对"）。
 
 ### 7.6 提交时过载（503）——已知的上线风险
@@ -379,29 +379,29 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
   4. 事后：用户投诉 `EXPIRED` 时按会话的已保存答案与结果解释；评估开始一侧的背压（报告 §10.3 的可选缓解）与报告 §11.4 的其他选项。
 - **上线前**：在目标硬件上确认预期峰值低于饱和点（§6）。
 
-### 7.7 商家分析的数据（Q9e）
+### 7.7 发起方分析的数据（Q9e）
 
 - **任务** `qb.analytics`（每 10 分钟，:00、:10 …；逐项任务，每项一个事务的 `QB_ANALYTICS_ITEM`）：读进行中、暂停、预算不足、1 天内结束与结束后尚未定稿的发布，按发布编号分块（每块一项），把计数的增量写进按小时的桶，从水位线读已完成的会话（滞后 5 分钟）；结束 30 分钟后每个发布一项整体重算并定稿；最后一项写运行记录并删除 400 天前的小时桶（每次至多 2 000 行）。不取业务锁，不影响答题。
   **一项失败不影响其他项**：其他项照常提交，运行记为 `PARTIAL`，失败的项由平台退避后在以后的运行中重试（平台的任务项记录中有错误），其间该块的发布的数字停在上次。
-  商家页面上的"每 10 分钟更新，最近更新 hh:mm"就是这个任务最近一次运行的时刻（`qb_stats_run` 中 `job = 'qb.analytics'` 的行，`zone` 是它按哪个时区分日：`jabiz.fiscal-year-zone`，日本部署 `Asia/Tokyo`）。
+  发起方页面上的"每 10 分钟更新，最近更新 hh:mm"就是这个任务最近一次运行的时刻（`qb_stats_run` 中 `job = 'qb.analytics'` 的行，`zone` 是它按哪个时区分日：`jabiz.fiscal-year-zone`，日本部署 `Asia/Tokyo`）。
 - **参数** `qb.stats.min-group`（普通参数，缺省 5，任何值都至少按 3）：分组小于它时每题正确率、平均用时与超时人数不显示，且这些数字只在新增至少这么多个完成后才变化。调大立即生效（模板按现值隐藏）；调小只在下次新增够数时显示新值。
 - **配置**（`application.yml` 的 `quizbuks.analytics.*`，通常不改）：`chunk-size`（每块的发布数，缺省 100，至多 200）、`max-attempts-per-chunk`（每块每次至多读的已完成会话，缺省 50 000，至多 200 000；热门发布每 10 分钟约 3 万个，`perf/Q9e-analytics.md`）、`max-recount`（结束后整体重算的发布至多有多少个完成，缺省 1 000 000，使重算在读取时限 2 分钟之内；更大的发布在逐块读完之后不重算即定稿）。
   部署时区 `jabiz.fiscal-year-zone` 只能是 `UTC` 或地区名（如 `Asia/Tokyo`）：`+09:00`、`GMT+9`、`Etc/GMT-9` 这类偏移写法在 PostgreSQL 中方向相反，启动检查拒绝（类别 `QUIZBUKS`）。
 - **停机与补跑**：任务停了之后的第一次运行把期间的增量全部记在停机前最后一次运行的那一小时，并标 `gap`（趋势注明），累计数字始终正确；积压的会话按块上限分几次读完。不需要手工补跑；同一计划时刻重复运行不会重复计数。
-- **告警**：`jabiz.job.run{job="qb.analytics", result="PARTIAL"}` 连续出现（某一项一直失败：看任务项的错误，常见为读取超时或约束）；最近一次运行早于 30 分钟（商家页面的"最近更新"随之变旧）。运行时间见 `jabiz.process{process="QB_ANALYTICS_ITEM"}`，热门发布积压时变长。
+- **告警**：`jabiz.job.run{job="qb.analytics", result="PARTIAL"}` 连续出现（某一项一直失败：看任务项的错误，常见为读取超时或约束）；最近一次运行早于 30 分钟（发起方页面的"最近更新"随之变旧）。运行时间见 `jabiz.process{process="QB_ANALYTICS_ITEM"}`，热门发布积压时变长。
 - 日志中的 `Analytics: the counters of publication … went down` 表示计数被别的方式改动（计数只增不减），该发布本次不写；`… recounted … finalized anyway` 表示结束一天后整体重算与计数仍不一致，按重算的值定稿：两者都应调查。
 
 ### 7.8 AI 生成题目（Q8a、Q8b；封面 Q98a 撤销）
 
-- **开关与限额**（后台 `/qb/ai`，受控参数）：`qb.ai.enabled`（缺省 false）、`qb.ai.model`、`qb.ai.effort`、`qb.ai.sponsor.daily-jobs`（20）、`qb.ai.sponsor.monthly-tokens`（200 万）、`qb.ai.global.monthly-tokens`（5 000 万）；普通参数 `qb.ai.candidates.expire-days`（7）与只用于估算的价格 `qb.ai.price.*`。限额在 `qb.ai:<商家>` → `qb.ai:*` 锁内按已记录的用量与未结束作业的预估检查（全体上限也加上所有商家未结束作业的预估）；一个作业的预估是 3 次尝试各自完整的输入与所要的全部输出（`max_tokens` 随题数：4 000 + 600 / 题，至多 16 000；effort `high` 时一次至多 10 题）。
+- **开关与限额**（后台 `/qb/ai`，受控参数）：`qb.ai.enabled`（缺省 false）、`qb.ai.model`、`qb.ai.effort`、`qb.ai.sponsor.daily-jobs`（20）、`qb.ai.sponsor.monthly-tokens`（200 万）、`qb.ai.global.monthly-tokens`（5 000 万）；普通参数 `qb.ai.candidates.expire-days`（7）与只用于估算的价格 `qb.ai.price.*`。限额在 `qb.ai:<发起方>` → `qb.ai:*` 锁内按已记录的用量与未结束作业的预估检查（全体上限也加上所有发起方未结束作业的预估）；一个作业的预估是 3 次尝试各自完整的输入与所要的全部输出（`max_tokens` 随题数：4 000 + 600 / 题，至多 16 000；effort `high` 时一次至多 10 题）。
 - **作业** `qb.ai.questions`：每次尝试至多 5 分钟（请求本身至多 `QB_AI_REQUEST_TIMEOUT`，缺省也是上限 2 分钟）、3 次尝试（429、408、5xx、529、超时、断线与回退忙时的拒答重试，退避 10 秒起、至多 2 分钟；其他拒答、截断、其他 4xx 立即失败）、全实例并发 `QB_AI_MAX_CONCURRENCY`（缺省 4）。**这个并发是每种作业各自的**：题目 `qb.ai.questions` 与封面 `qb.ai.cover` 各至多这么多，所以同时打到提供方的调用至多是两者之和（缺省 4 + 4 = 8）；按提供方的速率限制与堆（见下面"PDF 资料"）取值时按和计。提供方不按幂等键去重：重试可能重复计费，用量按每次尝试记录，也计入限额；**没有得到回答的尝试**（超时、断线、回答过大）按预估计入（带 PDF 的请求按提供方数出的输入，其他按文字的估计，加所要的全部输出），因为提供方可能已为没人读到的回答计费。
   **用量与预留**：带 PDF 的请求不带提供方的回退（`fallbacks`；复审 M-a：回退会在另一个模型上把输入再算一次，计费就会超过计数），所以每次付费的 PDF 调用正好是计过数的请求，**每次计过数的调用的输入不超过预留**；带 PDF 的请求被拒答时由下一次尝试重试（再计一次数）。
   只有文字的请求不计数、只按文字估计，并照常带回退：它的实际输入可能超过预留（回退时约为两倍）。某次尝试的实际用量超过请求为它预留的会记一条告警日志 `AI usage of one attempt above its reservation (job type …)`（只有作业种类，不含编号，D16）：偶尔出现可以接受，经常出现时调高预估或月上限。
   **价格**：`costUsd` 按每次调用计价。较大的两个模型不论提示多长都是同一价格；最小的模型在一次调用的输入超过 10 万 Token 时整个调用按较高的长提示价格计（`AiCost`），所以按每次尝试分别计入，不按作业平均。
 - **任务** `qb.ai-expire`（每日 18:43 UTC）：把过期未校对的候选从作业中移除（之后不能再加入；提供方的原始回答仍在平台只追加的 `sys_external_job` 结果中），逐项一个事务。
-- **提供方故障**：后台 `/qb/ai` 的"最近的请求"按失败原因看（`QB_AI_RATE_LIMITED`、`QB_AI_PROVIDER_UNAVAILABLE`、`QB_AI_AUTH`：密钥错或被删，`EXTERNAL_CALL_FAILED`：没有回答）；长时间故障时以受控变更关闭开关（商家页面显示"暂时不可用"，手动编辑不受影响；排队与重试中的作业随之暂停、不再用掉尝试次数，见下面第 2 步）。不自动切换到其他提供方。
+- **提供方故障**：后台 `/qb/ai` 的"最近的请求"按失败原因看（`QB_AI_RATE_LIMITED`、`QB_AI_PROVIDER_UNAVAILABLE`、`QB_AI_AUTH`：密钥错或被删，`EXTERNAL_CALL_FAILED`：没有回答）；长时间故障时以受控变更关闭开关（发起方页面显示"暂时不可用"，手动编辑不受影响；排队与重试中的作业随之暂停、不再用掉尝试次数，见下面第 2 步）。不自动切换到其他提供方。
 - **事故时的紧急停止**（花费异常、密钥泄露），按快慢：
-  1. **最快：在 Anthropic Console 吊销（删除）密钥**。立即生效、不需要部署或第二个人；之后每次尝试得到 401，作业以 `QB_AI_AUTH` 立即失败、不再重试（排队与重试中的作业都一样），商家看到"暂时不可用"。恢复时新建密钥、改 `ANTHROPIC_API_KEY`、重启。
+  1. **最快：在 Anthropic Console 吊销（删除）密钥**。立即生效、不需要部署或第二个人；之后每次尝试得到 401，作业以 `QB_AI_AUTH` 立即失败、不再重试（排队与重试中的作业都一样），发起方看到"暂时不可用"。恢复时新建密钥、改 `ANTHROPIC_API_KEY`、重启。
   2. **以四眼关闭开关 `qb.ai.enabled`**：受控参数，**需要两位管理员**（一位在 `/qb/ai` 提出、另一位发布），所以不是一个人能立刻做到的。发布之后：新的请求一律 `QB_AI_UNAVAILABLE`；
      两种作业类型声明了 `enabledBy("qb.ai.enabled")`（平台 16v-2，D52 第 4 条），**每个实例在约一个轮询间隔（`poll-interval`，缺省 1 秒）之内**不再领取 `qb.ai.questions` 与 `qb.ai.cover` 的作业：
      排队的与等待重试的作业**原地等待**，不调用提供方、不用掉尝试次数、不失败；**正在运行的尝试照常进行到结束**（处理器看不到开关），其用量照常计入。参数读过之后才关闭时，那一次轮询仍可能多领取一轮。
@@ -409,28 +409,28 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
   **没有 Console 权限、也找不到第二位管理员时**（只有基础设施的权限）：把 `ANTHROPIC_API_KEY` 改为占位值（如 `revoked-placeholder`）并重启全部实例。之后每次尝试得到 401，作业以 `QB_AI_AUTH` 立即失败、不再重试（排队与重试中的也一样，与第 1 步相同；正在运行的尝试照常结束），
   新的请求仍会被接受并随即失败。能联系上 Console 的负责人或第二位管理员后，按第 1、2 步处理，再换回真实密钥并重启。
   **不要**为此设 `JABIZ_EXTERNALJOBS_EXECUTOR_ENABLED=false`（`jabiz.external-jobs.executor.enabled`）：它停掉本实例的**全部**外部作业，包括 Stripe 的转账与核对（`qb.stripe.*`），资金流程随之停住。
-  **暂停期间的作业**（第 2 步之后）：仍是未结束的作业，所以**照常计入商家同时未结束的上限**（每商家 2 个、每模版每种类 1 个）与月 Token 的预留；商家在编辑器中看到它仍在排队（`QUEUED`，面板注明 AI 暂停、请求会等待、可以取消），可以自己取消（不计费）。
-  重新打开（同样四眼）后的下一次轮询即恢复，积压的作业按并发上限与退避逐步执行；长时间暂停后，不再需要的作业由商家或第 3 步取消。日志在每个实例上只在变化时记一条 `External job type qb.ai.… is paused: parameter qb.ai.enabled …`（INFO）与恢复时的一条；量规 `jabiz.external.job.held{job_type}` 暂停时为 1。
+  **暂停期间的作业**（第 2 步之后）：仍是未结束的作业，所以**照常计入发起方同时未结束的上限**（每发起方 2 个、每模版每种类 1 个）与月 Token 的预留；发起方在编辑器中看到它仍在排队（`QUEUED`，面板注明 AI 暂停、请求会等待、可以取消），可以自己取消（不计费）。
+  重新打开（同样四眼）后的下一次轮询即恢复，积压的作业按并发上限与退避逐步执行；长时间暂停后，不再需要的作业由发起方或第 3 步取消。日志在每个实例上只在变化时记一条 `External job type qb.ai.… is paused: parameter qb.ai.enabled …`（INFO）与恢复时的一条；量规 `jabiz.external.job.held{job_type}` 暂停时为 1。
   此前的本实例开关 `QB_AI_HALTED`（需要重启、让排队与重试中的作业以 `QB_AI_HALTED` 永久失败）已删去：第 2 步做到了它的事而不需要重启、也不让作业失败。
 - **拒答**：请求带服务端回退（`fallbacks: "default"`，Haiku 无），回退后仍拒答即 `QB_AI_REFUSED`；`/qb/ai` 的"实际回答"列显示回退所用的模型。
-- **取消怎样计费**（平台 16v-1 之后）：商家取消（`QB_AI_CANCEL`）与运维停止（上面第 3 条）都取消平台的作业：排队中的不再调用提供方；正在运行的尝试照常进行到结束，回答被丢弃。作业结束后 `QB_AI_JOB_CANCELLED` 只运行一次，按平台记下的**实际用量**（全部尝试，含被取消的那次：处理器在每次调用后记下的输入、输出、回退模型与长提示的部分，没有得到回答的调用按预估）计入作业与月用量，美元估算同失败的作业（`AiCost`，不知道回答的模型时回退部分按回退模型的价格）；**没有任何尝试运行过的作业不计费**（不计入用量行）。
-  此前的做法：商家取消只改本地状态，平台的作业照常运行到完成（排队中的也会调用一次提供方），由完成或失败流程按实际用量计入；运维停止由 `QB_AI_JOB_STOPPED`（订阅 `jabiz.external-job.finished`）按**完整预估**计入。两者都已删去，同一作业只经取消结局计费一次。取消的作业计入用量行的作业数，但**不计为失败**（`failedJobs` 与后台 `/qb/ai` 的失败率只算失败的作业）。
+- **取消怎样计费**（平台 16v-1 之后）：发起方取消（`QB_AI_CANCEL`）与运维停止（上面第 3 条）都取消平台的作业：排队中的不再调用提供方；正在运行的尝试照常进行到结束，回答被丢弃。作业结束后 `QB_AI_JOB_CANCELLED` 只运行一次，按平台记下的**实际用量**（全部尝试，含被取消的那次：处理器在每次调用后记下的输入、输出、回退模型与长提示的部分，没有得到回答的调用按预估）计入作业与月用量，美元估算同失败的作业（`AiCost`，不知道回答的模型时回退部分按回退模型的价格）；**没有任何尝试运行过的作业不计费**（不计入用量行）。
+  此前的做法：发起方取消只改本地状态，平台的作业照常运行到完成（排队中的也会调用一次提供方），由完成或失败流程按实际用量计入；运维停止由 `QB_AI_JOB_STOPPED`（订阅 `jabiz.external-job.finished`）按**完整预估**计入。两者都已删去，同一作业只经取消结局计费一次。取消的作业计入用量行的作业数，但**不计为失败**（`failedJobs` 与后台 `/qb/ai` 的失败率只算失败的作业）。
   **没有记下用量的尝试**（平台 16w-1 之后，D52 第 5 条）：处理器在每次调用之后（没有回答的调用在放弃时按预估）就记下用量；实例在尝试中途崩溃或卡住、租约过期（或超时）而什么也没记下的尝试，平台在完成、失败与取消的结局中报告其**个数**，
   `QB_AI_JOB_COMPLETED`、`QB_AI_JOB_FAILED` 与 `QB_AI_JOB_CANCELLED` 对每一次都按没有回答的调用同一依据计入：作业为一次尝试预留的输入（作业参数 `reservedInputTokens`：文字的估计，带 PDF 的再加页数上限）加所要的全部输出（题目 `maxTokens(题数)`，封面按风格 `AiCoverJob.maxTokens`：图形 8 000、插画 12 000），美元按 `AiCost`（长提示的规则同记下的调用）。
   因此不再有计为零的尝试。迟到的实例（租约过期后才回来）的用量由平台记到那次尝试上；结局流程运行之前回来的，那次尝试不再算"没有记下"，按它实际报告的用量计入而不是按估计；之后回来的只出现在平台的用量报表（`jabiz.external_job_usage`）中，QuizBuks 不再改动已计的用量（按估计计入的那次可能偏高或偏低）。
   **有意偏高**：实例在到达提供方之前就死掉的尝试（计数 `count_tokens`、读文件或画图时）同样按完整的估计计入；带 PDF 的作业即页数上限（`QB_AI_PDF_MAX_PAGES` × 5 000，缺省约 50 万 Token）。平台只报告个数、不知道尝试走到了哪一步，所以按估计宁高勿低（D52 第 5 条）。
   **已知的偏低**：有回退模型的请求（只有不带文档的文字请求，Haiku 除外）没有得到回答时只计一次输入，而提供方的回退会把输入再运行一次、可能计两次；这一缺口是接受的，由提供方的支出上限兜底。
   提供方仍可能对重试重复计费，**提供方控制台上的支出上限仍是最后的防线**（上线前设好，§1.3）。
-- **告警**：`jabiz.external_job` 中 `qb.ai.questions` 与 `qb.ai.cover` 的失败率；某商家或全体本月用量接近上限（`qb.admin.ai-usage`）。
+- **告警**：`jabiz.external_job` 中 `qb.ai.questions` 与 `qb.ai.cover` 的失败率；某发起方或全体本月用量接近上限（`qb.admin.ai-usage`）。
 - **封面**：AI 生成封面已撤销（Q98a，`plans/Q98-covers.md`）。作业类型 `qb.ai.cover` 仍登记，只为让撤销前排队的作业结束：处理器不调用 Claude，以 `QB_AI_COVER_WITHDRAWN` 失败（不计费），之后的版本删去。
-  **作业完成迟到的风险**：画好的图在作业结束时已登记为文件，到 QuizBuks 的完成流程（订阅作业结束事件）把它们写进作业的三列之前没有任何引用。事件投递停住（实例长时间停机、投递故障）超过 `orphan-after` 时，清扫可能先删掉这些图，之后的完成流程记下的是已删除的文件：作业显示为就绪，但图片显示不出、选定被拒绝（商家丢弃后重新请求即可，用量照常计入）。恢复投递后不要手动重放早于 `orphan-after` 的封面完成；长时间停机后先确认事件已投递，再看 `/qb/ai` 中这段时间结束的封面作业。
-- **PDF 资料（Q8b）**：所选的 PDF 资料作为文件本身发送（平台的文件输入，D50：登记时检查商家能读该文件）：每个至多 `QB_AI_PDF_MAX_BYTES`（缺省 10 MiB，上限 20 MiB），一次请求的全部 PDF 合计至多 20 MiB，按至多 `QB_AI_PDF_MAX_PAGES` 页（缺省 100）预留。
+  **作业完成迟到的风险**：画好的图在作业结束时已登记为文件，到 QuizBuks 的完成流程（订阅作业结束事件）把它们写进作业的三列之前没有任何引用。事件投递停住（实例长时间停机、投递故障）超过 `orphan-after` 时，清扫可能先删掉这些图，之后的完成流程记下的是已删除的文件：作业显示为就绪，但图片显示不出、选定被拒绝（发起方丢弃后重新请求即可，用量照常计入）。恢复投递后不要手动重放早于 `orphan-after` 的封面完成；长时间停机后先确认事件已投递，再看 `/qb/ai` 中这段时间结束的封面作业。
+- **PDF 资料（Q8b）**：所选的 PDF 资料作为文件本身发送（平台的文件输入，D50：登记时检查发起方能读该文件）：每个至多 `QB_AI_PDF_MAX_BYTES`（缺省 10 MiB，上限 20 MiB），一次请求的全部 PDF 合计至多 20 MiB，按至多 `QB_AI_PDF_MAX_PAGES` 页（缺省 100）预留。
   页数上限必须放得进模型的上下文窗口（三个可选模型都是 100 万 Token）：页数 × 5 000 加上最大的文字输入与输出不得超过它（约 179 页），也不得超过提供方每次请求的 600 页；否则启动检查 `AiPdfLimitsCheck`（类别 `QUIZBUKS`）拒绝启动。
-  **服务器不解析 PDF**（Q8b 评审 H1、H2）：商家的文件可以构造成在解析器的内存中无限展开（对象流炸弹，使 JVM 内存耗尽），也可以在页树中谎报页数，所以本地数页既不安全也不可信。作业在付费调用之前，以完全相同的请求调用提供方免费的 `POST /v1/messages/count_tokens`（同一外部服务 `anthropic`、同样的请求头；计数有自己的速率限制），以**提供方数出的输入 Token** 为准：
+  **服务器不解析 PDF**（Q8b 评审 H1、H2）：发起方的文件可以构造成在解析器的内存中无限展开（对象流炸弹，使 JVM 内存耗尽），也可以在页树中谎报页数，所以本地数页既不安全也不可信。作业在付费调用之前，以完全相同的请求调用提供方免费的 `POST /v1/messages/count_tokens`（同一外部服务 `anthropic`、同样的请求头；计数有自己的速率限制），以**提供方数出的输入 Token** 为准：
   超过请求为一次尝试预留的输入即 `QB_AI_PDF_TOO_LONG`（永久、不发送、不计费）；提供方以 400 说请求过长（超过上下文窗口或每次请求的 PDF 页数）同样是 `QB_AI_PDF_TOO_LONG`；提供方说某个 PDF 读不了（无效、有密码、加密、损坏）即 `QB_AI_PDF_UNREADABLE`（都永久，400 不计费）。
   这些文字 API 文档没有给出，按常见的说法宽松匹配（`ClaudeErrors`）；其他 400，尤其是以字段路径开头的校验错误（如 `messages.0.content.0.document…`），一律是 `QB_AI_REQUEST_INVALID`：那是我们自己的请求有错，运维应当看到并调查。
-  计数本身断线、超时、429 或 5xx 照常重试、不计费，但**会用掉作业 3 次尝试中的一次**（复审 L-d）：计数接连失败的作业可能在发送之前就用完尝试而失败（不计费，商家可重新请求）。之后的付费调用没有回答时按这个数计入。本地只查字节上限（存储的文件大小）。
-  请求时还不知道页数，所以**按上限预留**：每页按 5 000 Token（文字与页面图像），3 次尝试，即缺省一个带 PDF 的请求预留约 150 万 Token，直到作业结束才按实际用量计；计数超过预留的作业在发送前即失败，带 PDF 的调用又不带回退，所以带 PDF 的调用计入的输入不超过预留。取消的 PDF 作业按实际用量计入（排队中被取消的不计费，预留随之释放）。商家的月上限（缺省 200 万）因此只容得下一个进行中的 PDF 请求；常用 PDF 时提高 `qb.ai.sponsor.monthly-tokens` 或降低 `QB_AI_PDF_MAX_PAGES`（预留随之按比例减少）。
+  计数本身断线、超时、429 或 5xx 照常重试、不计费，但**会用掉作业 3 次尝试中的一次**（复审 L-d）：计数接连失败的作业可能在发送之前就用完尝试而失败（不计费，发起方可重新请求）。之后的付费调用没有回答时按这个数计入。本地只查字节上限（存储的文件大小）。
+  请求时还不知道页数，所以**按上限预留**：每页按 5 000 Token（文字与页面图像），3 次尝试，即缺省一个带 PDF 的请求预留约 150 万 Token，直到作业结束才按实际用量计；计数超过预留的作业在发送前即失败，带 PDF 的调用又不带回退，所以带 PDF 的调用计入的输入不超过预留。取消的 PDF 作业按实际用量计入（排队中被取消的不计费，预留随之释放）。发起方的月上限（缺省 200 万）因此只容得下一个进行中的 PDF 请求；常用 PDF 时提高 `qb.ai.sponsor.monthly-tokens` 或降低 `QB_AI_PDF_MAX_PAGES`（预留随之按比例减少）。
   作业输入上限 256 KiB（文字资料；Q8a 为 60 KiB），作业输入照旧永久存于平台的 `sys_external_job`，PDF 只记文件编号与摘要（内容随 `sys_file` 删除而删除）。
   **堆**：一次带 PDF 的尝试在内存中同时持有文件的字节、Base64 一份（只编码一次，计数与调用共用）、请求体的字节与平台发送时的副本，约为该请求 PDF 合计的 5–6 倍，即 20 MiB 的上限下每个运行中的题目作业约 120 MiB（封面作业不带 PDF）。JVM 堆至少按"基础 512 MiB + 120 MiB × `QB_AI_MAX_CONCURRENCY`"给出（缺省并发 4 时约 1 GiB 以上）；容器内存紧张时降低 `QB_AI_MAX_CONCURRENCY` 或 `QB_AI_PDF_MAX_BYTES`。
 
@@ -441,7 +441,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **证书、域名更换**：同时改 `JABIZ_MAIL_BASE_URL`、`QB_SPONSOR_LINK`、`QB_APP_LINK`、`QB_OIDC_REDIRECT_APP` 与 `QB_OIDC_REDIRECT_SPONSOR`（与 Google 控制台）与两个 Stripe 端点的地址。
 ### 7.10 投资人指标（Q27）
 
-后台「QuizBuks 财务 → 投资人指标」（`/admin/qb/finance/investor-metrics`，`qb.admin.finance.read`）按 UTC 月给出商户、答题人、答题、奖品、邀请与资金的数字，起止月在地址中（缺省最近六个月，至多 36 个月；直接调用模板时超过 36 个月的部分不出现）。给投资人的数字每月初**签发**一次（页面上的「签发」，`REPORT_ISSUE`，带内容哈希存档），之后发出去的都取存档的那一份；临时查看用导出（CSV / XLSX / PDF）即可。数字按发生时间归月（商户按审核通过、答题按开始、完成按提交、奖品按获得与领取、充值与奖励按支付），与 `qb.admin.monthly`（按过账时间）的资金列可能差几笔月边上的记录，口径见 `plans/Q27-investor-metrics.md`。
+后台「QuizBuks 财务 → 投资人指标」（`/admin/qb/finance/investor-metrics`，`qb.admin.finance.read`）按 UTC 月给出发起方、学者、答题、奖品、邀请与资金的数字，起止月在地址中（缺省最近六个月，至多 36 个月；直接调用模板时超过 36 个月的部分不出现）。给投资人的数字每月初**签发**一次（页面上的「签发」，`REPORT_ISSUE`，带内容哈希存档），之后发出去的都取存档的那一份；临时查看用导出（CSV / XLSX / PDF）即可。数字按发生时间归月（发起方按审核通过、答题按开始、完成按提交、奖品按获得与领取、充值与奖励按支付），与 `qb.admin.monthly`（按过账时间）的资金列可能差几笔月边上的记录，口径见 `plans/Q27-investor-metrics.md`。
 
 ### 7.11 招商网站（Q31）
 
@@ -449,19 +449,19 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 首页的"试答"区在 `src/content/try-quizzes.json` 里填每种语言的分享链接（`https://quizbuks.com/taker/p/<发布>`）与二维码图片（放到 `public/`，填相对路径），为空即显示"即将推出"。
 价格页的数字是推广期估价，标"计划中"的套餐与费用尚未开售、尚未计费，改动前先在 `docs/quizbuks/plans/Q31-biz-site.md` 记下新值。链接只接受 `https://`、二维码只接受 `public/` 下的 PNG/SVG，否则构建失败。页面的 `canonical`、`hreflang` 与 `sitemap.xml` 用完整地址，源自构建时的 `SITE_URL`（缺省 `https://quizbuks.com`，换域名时在构建环境设置）。裸域名 302 到 `/biz/`；中文与日文在 `/biz/zh/…`、`/biz/ja/…`，从站外首次访问按浏览器语言转向（`localStorage` 记住切换；站内点击的语言从不被改）。
 
-### 7.12 商家的邮件服务器（Q29）
+### 7.12 发起方的邮件服务器（Q29）
 
-邀请邮件只经商家在后台「邮件服务器」页验证过的 SMTP 服务器、以商家的名义发出（平台决策 D56）；平台自己的邮件（验证、重置、欢迎、给商家的通知）仍经 `SPRING_MAIL_*`。
-保存即经该服务器给商家自己的地址发测试邮件：寄出即"已验证"，否则页面显示服务器或连接的回答（`qb_sponsor_mail_server.last_error`），邀请在验证之前被拒（422 `QB_INVITATION_NO_MAIL_SERVER`）。
+邀请邮件只经发起方在后台「邮件服务器」页验证过的 SMTP 服务器、以发起方的名义发出（平台决策 D56）；平台自己的邮件（验证、重置、欢迎、给发起方的通知）仍经 `SPRING_MAIL_*`。
+保存即经该服务器给发起方自己的地址发测试邮件：寄出即"已验证"，否则页面显示服务器或连接的回答（`qb_sponsor_mail_server.last_error`），邀请在验证之前被拒（422 `QB_INVITATION_NO_MAIL_SERVER`）。
 平台拒绝的设置（主机不是公开域名、端口不在 25 / 465 / 587 / 2525、没有 TLS）在保存时按字段报错，不会保存。
 
-- **商家说邀请没寄到**：先看页面是否"已验证"；验证过的服务器在投递时拒收，是平台邮件尝试的 `FAILED`（`sys_mail_attempt.detail` 是服务器的回答，`sys_mail_message.sender_key` 是商家的用户编号），Outbox 照常重试，绝不改经平台的服务器；邀请行此时已是 `SENT`。让商家重新保存（再发一封测试邮件）或检查服务商的限制（发信配额、SPF / DKIM）。
-- **`JABIZ_SEAL_KEY` 换了或丢了**：已存的密码打不开，投递记 `FAILED`（"cannot be opened"）；每个商家重新输入密码并保存即可（页面照常），不需要运维介入。
-- **商家的服务器很慢**：投递事务等到平台的超时（`jabiz.mail.timeout`）；一次失败只让该轮投递停在它那里，下一轮继续其他邮件。
+- **发起方说邀请没寄到**：先看页面是否"已验证"；验证过的服务器在投递时拒收，是平台邮件尝试的 `FAILED`（`sys_mail_attempt.detail` 是服务器的回答，`sys_mail_message.sender_key` 是发起方的用户编号），Outbox 照常重试，绝不改经平台的服务器；邀请行此时已是 `SENT`。让发起方重新保存（再发一封测试邮件）或检查服务商的限制（发信配额、SPF / DKIM）。
+- **`JABIZ_SEAL_KEY` 换了或丢了**：已存的密码打不开，投递记 `FAILED`（"cannot be opened"）；每个发起方重新输入密码并保存即可（页面照常），不需要运维介入。
+- **发起方的服务器很慢**：投递事务等到平台的超时（`jabiz.mail.timeout`）；一次失败只让该轮投递停在它那里，下一轮继续其他邮件。
 
 ### 7.13 运营商（Q48a）
 
-运营商（代理商）在自己的后台 `/operator/` 管理商户，审核即终审，总部抽查（`plans/Q48-operators.md`）。签下一个运营商：
+运营商（代理商）在自己的后台 `/operator/` 管理发起方，审核即终审，总部抽查（`plans/Q48-operators.md`）。签下一个运营商：
 
 1. 超级管理员在 `/admin/` 的「运营商」新建它（名称、联系人、邮箱）；
 2. 在「用户」中为它的每位成员建账户（成员本人经邮件找回设置密码，管理员知道的密码不能接受受保护的授权），确认邮箱已验证；
@@ -470,58 +470,58 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 5. 成员登录 `/operator/`，第一次即要求绑定二次验证（角色要求）。
 
 - **成员离职**：负责人在运营商首页移除，或总部在运营商页面移除；下一次动作与下一次刷新会话即被拒。角色另在「用户与角色」中收回。
-- **合同结束**：把运营商设为"已停用"，全部成员立即不能登录或操作；其商户在改派之前仍归它（改派：运营商页面输入商户的用户编号与原因）。
-- **商户归属**：现有商户留在直营，新运营商只招新（需求方 2026-10-29）；个别商户经双方同意由总部逐个改派，原因必填，历史在审计中。新商户第一次申请时：经运营商开拓链接来的归该运营商（审核也由它做，Q48e-1），否则归其语言的运营商（Q59c），都没有即直营。
-- **运营商看到什么**（Q59c-2、Q48e）：只有自己商户的内容、发布、奖励与审核；兑换与电子奖品的列表含答题者的显示名（处理兑换与争议需要）；商户改派后，新运营商看得到它以前的发布，但已上线发布的收入仍归上线时的运营商；内容与头像的文件、国家与参数是公共的参考数据。
+- **合同结束**：把运营商设为"已停用"，全部成员立即不能登录或操作；其发起方在改派之前仍归它（改派：运营商页面输入发起方的用户编号与原因）。
+- **发起方归属**：现有发起方留在直营，新运营商只招新（需求方 2026-10-29）；个别发起方经双方同意由总部逐个改派，原因必填，历史在审计中。新发起方第一次申请时：经运营商开拓链接来的归该运营商（审核也由它做，Q48e-1），否则归其语言的运营商（Q59c），都没有即直营。
+- **运营商看到什么**（Q59c-2、Q48e）：只有自己发起方的内容、发布、奖励与审核；兑换与电子奖品的列表含学者的显示名（处理兑换与争议需要）；发起方改派后，新运营商看得到它以前的发布，但已上线发布的收入仍归上线时的运营商；内容与头像的文件、国家与参数是公共的参考数据。
 - **抽查**：「运营商审核记录」缺省只列未抽查的决定；有问题时记下说明，再由总部自己下架或封禁（运营商不能恢复总部的下架、不能解除总部的封禁）。
 - **方案**（Q48e-2）：五种方案（每月固定费、平台分成；受控参数 `qb.operator.plan.<1..5>.fee|share`，`QB_SETUP` 提出 0/50%、20,000/40%、40,000/30%、60,000/20%、100,000/10%）。新运营商为方案 1；总部在运营商页面提出从以后某月起的方案，另一位管理员（`qb.topup.bank.approve`）在待办中批准后生效。
-- **月结算**（Q48b、Q48e-2）：每月 2 日 01:13（日本时间）任务 `qb.operator-settlement` 为每个运营商结算上个月：其商户发布的抽成 ×（1 − 当月方案的平台分成），减去当月方案的固定费（停用的运营商不收）与获客费用，记入运营商的账户（不够扣的结转到下月），并可签发结算单。前提：`qb.creator-fee-rate` 大于 0、分录导出的 `qb.journal.account.2140` / `5130` 已设。
+- **月结算**（Q48b、Q48e-2）：每月 2 日 01:13（日本时间）任务 `qb.operator-settlement` 为每个运营商结算上个月：其发起方发布的抽成 ×（1 − 当月方案的平台分成），减去当月方案的固定费（停用的运营商不收）与获客费用，记入运营商的账户（不够扣的结转到下月），并可签发结算单。前提：`qb.creator-fee-rate` 大于 0、分录导出的 `qb.journal.account.2140` / `5130` 已设。
 - **提现**（Q48e-2）：钱都在平台。运营商负责人在运营商后台「账户」设银行账户（改后 `qb.operator.withdrawal.cooldown-hours` 小时内不能提现）、申请提现（至少 `qb.operator.withdrawal.min`，至多余额，同时一笔）；财务在「运营商提现」银行付款后点"登记付款"，另一位管理员在待办中批准后才过账（2140 / 1120），驳回即回到"已申请"；财务也可驳回申请并写理由。手续费由平台承担。Q48e-2 之前签发的结算单照旧逐张付款。
 
 ### 7.14 AI 获客（Q48c）
 
-AI 为运营商（或总部，`direct`）找商家、调研、写体验问卷与邮件，人批准后从所有者自己的邮件服务器发出（`plans/Q48-operators.md` §3、§7 Q48c）。开始之前：
+AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷与邮件，人批准后从所有者自己的邮件服务器发出（`plans/Q48-operators.md` §3、§7 Q48c）。开始之前：
 
-1. 两位管理员以受控变更设好 `qb.prospect.model`（如 `claude-sonnet-5-5`）、`qb.prospect.effort`，最后 `qb.prospect.enabled = true`（缺一个即两种作业都不被领取，`EXTERNAL` 启动警告）；`ANTHROPIC_API_KEY` 与 AI 出题共用；
+1. 总部的超级管理员在后台「AI 获客 → 设置」的**平台开关**一栏（F-F8）勾选"运行 AI 获客"、选好模型（如 `claude-sonnet-5-5`）与强度、填理由后"提出"（只为改动了的参数各提一个受控变更），另一位持有 `control.publish` 的管理员在"受控变更"中发布（缺一个即两种作业都不被领取，`EXTERNAL` 启动警告）。该栏同时显示三个参数的现值、待发布的提案和搜索的运行时刻；所有者勾了"每天获客"而开关是关的时显示警告。`ANTHROPIC_API_KEY` 与 AI 出题共用；
 2. 所有者在后台「AI 获客 → 设置」填发件人名称、住所与联系邮箱（法律要求的表示），登记并验证邮件服务器（建议独立的发件子域名与 Google Workspace / Zoho 等的 SMTP，不与平台的发件域混用），添加搜索方向，打开"每天获客"。
 
-- **任务**：`qb.prospect-find`（每天 23:17 UTC，日本 08:17）每个启用的方向搜索一次；`qb.prospect-research`（每小时 :23）调研找到的商家，每天至多每日邮件数的两倍；`qb.prospect-send`（每 10 分钟）只在日本时间 9–18 点发出已批准的，每天至多每日邮件数。都是逐项一个事务。
-- **跟进**（Q48d）：`qb.prospect-follow-up`（每小时 :37）为 7 天前发出、没有带来商户的邮件发一次跟进，计入每日上限。
+- **任务**：`qb.prospect-find`（每天 23:17 UTC，日本 08:17）每个启用的方向搜索一次（错过的时刻不补跑，设置页按读者的时区显示这个时刻）；`qb.prospect-research`（每小时 :23）调研找到的发起方，每天至多每日邮件数的两倍；`qb.prospect-send`（每 10 分钟）只在日本时间 9–18 点发出已批准的，每天至多每日邮件数。都是逐项一个事务。
+- **跟进**（Q48d）：`qb.prospect-follow-up`（每小时 :37）为 7 天前发出、没有带来发起方的邮件发一次跟进，计入每日上限。
 - **运营商的费用**（Q48d）：运营商每月的获客费用另受受控参数 `qb.prospect.operator-monthly-cap-usd`（美元，缺省 100）约束；月结算按 `qb.prospect.usd-jpy`（缺省 150）把当月费用折成日元从分成中扣除，扣不完的结转下月。汇率按需以四眼更新。
 - **配置**：`quizbuks.prospect.max-concurrency`（每种作业的全实例并发，缺省 4）。
 - **费用**：每次搜索 0.01 美元加 tokens（按所选模型的标价）；后台「设置」页按月显示。达到所有者的每月上限后不再开新的找与研究，已批准的邮件照常发出。
-- **事故**：Console 吊销密钥 → 四眼关闭 `qb.prospect.enabled`（排队的作业等待，不用掉尝试）→ 必要时平台的 `EXTERNAL_JOB_CANCEL` 逐个取消（类型 `qb.prospect.find` / `qb.prospect.research`）。投诉或要求停止时：后台「AI 获客」丢弃并勾选"屏蔽"，或 `QB_PROSPECT_BLOCK_ADD`（地址或整个域名，全平台不再发送）。
+- **事故**：Console 吊销密钥 → 在同一栏取消勾选并提出、另一位管理员发布（四眼关闭 `qb.prospect.enabled`）（排队的作业等待，不用掉尝试）→ 必要时平台的 `EXTERNAL_JOB_CANCEL` 逐个取消（类型 `qb.prospect.find` / `qb.prospect.research`）。投诉或要求停止时：后台「AI 获客」丢弃并勾选"屏蔽"，或 `QB_PROSPECT_BLOCK_ADD`（地址或整个域名，全平台不再发送）。
 
 ### 7.15 按规则计费（Q47c）
 
 客户匹配的规则是平台的产品，运营商自定价格（`plans/Q47c-audience-billing.md`）。Q47c-1 只给出价目与报价，**不扣款**（扣款与退回在 Q87 之后的 Q47c-2）。
 
-- **规则目录**：内容管理员（`qb.audience.rules.write`）在后台「受众规则」决定每种规则是否开放给商户、是否计费、排序；没改过的规则即开放、计费。关闭的规则商户不能再选，已提交的发布照旧。新增一种规则要开发。
+- **规则目录**：内容管理员（`qb.audience.rules.write`）在后台「受众规则」决定每种规则是否开放给发起方、是否计费、排序；没改过的规则即开放、计费。关闭的规则发起方不能再选，已提交的发布照旧。新增一种规则要开发。
 - **价目表**：每个所有者（直营 `direct` 与每个运营商）一张：每种规则的日价与每次最低使用费，理由必填，历史在审计中。直营与任何运营商的由财务（`qb.audience.prices.write`）在后台改，运营商的负责人在 `/operator/` 改自己的。没有价目表的直营即免费；运营商没有价目表时按受控参数 `qb.audience.price.fallback`（`DIRECT` 用直营的价，`FREE` 免费）。
 - **费用** = max（最低使用费，Σ 所用计费规则的日价 × 天数），天数为发布期间按 24 小时向上取整；没用计费规则的不收。
-- **开关**（受控参数，四眼）：`qb.audience.billing.enabled`（缺省关：报价为 0）、`qb.audience.price.fallback`、`qb.audience.fee.refund-unused-days`（Q47c-2 才起作用）。打开之前先设好价目表；**Q47c-2 上线之前不要打开**（打开后商户看到费用，但提交时还不扣款）。部署后执行一次 `QB_SETUP` 提出这三个参数，由另一位管理员发布。
+- **开关**（受控参数，四眼）：`qb.audience.billing.enabled`（缺省关：报价为 0）、`qb.audience.price.fallback`、`qb.audience.fee.refund-unused-days`（Q47c-2 才起作用）。打开之前先设好价目表；**Q47c-2 上线之前不要打开**（打开后发起方看到费用，但提交时还不扣款）。部署后执行一次 `QB_SETUP` 提出这三个参数，由另一位管理员发布。
 
 ### 7.16 协议答题（Q86）
 
-协议理解是三种普通的认证（`TERMS_APP_UNDERSTOOD` 条款 + 隐私、`CONTEST_RULES_UNDERSTOOD` 有奖活动规则、`TERMS_SPONSOR_UNDERSTOOD` 商户条款，`plans/Q86-agreement-quiz-tree.md`）：
+协议理解是三种普通的认证（`TERMS_APP_UNDERSTOOD` 条款 + 隐私、`CONTEST_RULES_UNDERSTOOD` 有奖活动规则、`TERMS_SPONSOR_UNDERSTOOD` 发起方条款，`plans/Q86-agreement-quiz-tree.md`）：
 同意照旧，答题自愿；题目与轮次照 Q69 / Q70 的办法由官方账号出。出一轮：
 
-1. 总部经营一个普通的商户账号（入驻、审核通过、充值换学分：它的奖励由它自己的学分出），持 `qb.certification.admin` 的管理员以 `QB_OFFICIAL_PUBLISHER_SET` 把它标为官方账号（后台扩展「认证」页）。
+1. 总部经营一个普通的发起方账号（入驻、审核通过、充值换学分：它的奖励由它自己的学分出），持 `qb.certification.admin` 的管理员以 `QB_OFFICIAL_PUBLISHER_SET` 把它标为官方账号（后台扩展「认证」页）。
 2. 以该账号出题（题库 ≥ 15 题、每人抽 5 题 `pickCount`、同分、合格线 = 满分、每题写解析；三语以日文为准，AI 初稿由内容管理员校对）并发布一个公开的发布（至少一档奖励 > 0）。
 3. 持 `qb.certification.manage` 的管理员以 `QB_CERTIFICATION_ROUND_ADD` 把该发布登记为该认证的一轮；每月关闭旧轮（`QB_CERTIFICATION_ROUND_CLOSE`）、换题再登记新轮。
 4. 法律文本发布了**须重新同意**的新版时，由开发升 `Certifications` 中该认证的版本（启动检查 `CERTIFICATION_LEGAL` 在版本落后时警告，不是错误：先发文本再出题是正常顺序），再出新一轮；措辞修订不升。
 
 - **开关**：受控参数 `qb.understanding.enabled`（缺省 `true`，四眼）关闭即两个前端都不再显示"确认你的理解"卡；已持有的认证、证书与前置照旧。
-- **平台之树**：官方账号用向导的前置把自己的发布连起来；普通参数 `qb.tree.platform-handle`（`PARAM_SET`，缺省空）填上总部官方账号已发布的主页 handle，App 的账户页即出现"平台之树"入口，商户树上的认证节点链到它。
-- **商户的前置**：商户可以在向导"客户匹配"一步要求答题者先持有四种认证之一（条款理解、规则理解、推荐资格、商户申请资格）；没有进行中的轮时前置仍成立（持有的人照常），新人在首页看不到该发布。
+- **平台之树**：官方账号用向导的前置把自己的发布连起来；普通参数 `qb.tree.platform-handle`（`PARAM_SET`，缺省空）填上总部官方账号已发布的主页 handle，App 的账户页即出现"平台之树"入口，发起方树上的认证节点链到它。
+- **发起方的前置**：发起方可以在向导"客户匹配"一步要求学者先持有四种认证之一（条款理解、规则理解、推荐资格、发起方申请资格）；没有进行中的轮时前置仍成立（持有的人照常），新人在首页看不到该发布。
 ### 7.17 现金账户（Q87a）
 
-商户除学分钱包外有现金账户（科目 2160），平台上的钱，需要时一比一换成学分（`plans/Q87-fee-account.md`）。部署后执行一次 `QB_SETUP`（开立 2160、提出新参数），由另一位管理员发布。
+发起方除学分钱包外有现金账户（科目 2160），平台上的钱，需要时一比一换成学分（`plans/Q87-fee-account.md`）。部署后执行一次 `QB_SETUP`（开立 2160、提出新参数），由另一位管理员发布。
 
 | 受控参数 | 首个值 | 含义 |
 |---|---|---|
-| `qb.topup.targets` | `KUDOS,CASH` | 充值可以进入的地方；只给一个时商户不用选 |
-| `qb.topup.default-target` | `KUDOS` | 商户不选时的去向（须在上一项之内） |
+| `qb.topup.targets` | `KUDOS,CASH` | 充值可以进入的地方；只给一个时发起方不用选 |
+| `qb.topup.default-target` | `KUDOS` | 发起方不选时的去向（须在上一项之内） |
 | `qb.kudos.buy.enabled` | 开 | 现金换学分 |
 | `qb.kudos.sell.enabled` | 关 | 学分换回现金（不越过待支付的奖励） |
 | `qb.transfer.fee-rate` | 0 | 转账按比例的手续费，与固定的 `qb.transfer.fee` 相加，向下取整 |
@@ -529,52 +529,52 @@ AI 为运营商（或总部，`direct`）找商家、调研、写体验问卷与
 
 - 发布之前一切同 Q87 之前（只进学分钱包、不能兑换）。
 - 进现金账户的卡充值被退款或争议败诉时从现金账户扣回；每日核对多两项（`CASH_ACCOUNT`、`TOTAL_2160`）。
-- 月报多一列"2160 商户现金账户"与六类（现金充值、银行转账进现金、现金退款、现金争议、现金换学分、学分换回现金）。
+- 月报多一列"2160 发起方现金账户"与六类（现金充值、银行转账进现金、现金退款、现金争议、现金换学分、学分换回现金）。
 
 ### 7.18 平台费（Q87b）
 
-平台费记在商户的现金账户上（§7.17）：**学分只有三个来源**（充值直接成为学分、现金换学分、手工加币），费用从现金账户付。缺省 = 现状：不收月费、预付。
+平台费记在发起方的现金账户上（§7.17）：**学分只有三个来源**（充值直接成为学分、现金换学分、手工加币），费用从现金账户付。缺省 = 现状：不收月费、预付。
 
-- **开关都是受控参数**（`QB_SETUP` 提出缺省值，另一位管理员发布；之后改任何一个都是四眼）：`qb.fee.monthly`（每商户每月的平台费，`0` = 不收，也不出账单）、`qb.fee.tax-rate`（消费税率，`0.10`）、
+- **开关都是受控参数**（`QB_SETUP` 提出缺省值，另一位管理员发布；之后改任何一个都是四眼）：`qb.fee.monthly`（每发起方每月的平台费，`0` = 不收，也不出账单）、`qb.fee.tax-rate`（消费税率，`0.10`）、
   `qb.fee.default-billing-mode`（`PREPAID`）、`qb.fee.overdue.block-submit`（有未付账单时拦提交与换学分，`true`）；普通参数 `qb.fee.due-days`（账单到期天数，`30`）。
   开关未发布时同 Q87 之前（不拦、不记费），与 §7.17 的读法一样。抽成 `qb.creator-fee-rate` 两处都保留（结算、提现）：需求方决定上线时设为 `0`（受控变更），什么时候收、收多少都只改参数。
 - **部署后**：运行一次 `QB_SETUP`（新科目 1130 / 4120 / 2150、新权限 `qb.fee.manage` / `qb.fee.billing`、四个受控参数与审批规则 `qb.fee-request.review` 的提案），发布提案；科目映射多三项 `qb.journal.account.1130 / 4120 / 2150`（不设即下个月的分录导出被拒 `QB_JOURNAL_ACCOUNT_UNMAPPED`）；
-  账单 PDF 的开具方沿用收据的 `qb.issuer.*`（没设名称时商户下载账单被拒 `QB_FEE_PARAMS`）。
-- **预付 / 后付**：缺省全平台预付；运营商（或总部财务）在「运营商 → 商户」给单个商户设后付与信用额（理由必填，`QB_OPERATOR_BILLING_SET`，审计中可查）。预付的商户记费时立即从现金扣、不够即一张 `OPEN` 账单；后付的商户每月 2 日 01:17（日本时间）出上月的账单。
-  **有未付账单的商户不能换学分、不能提交新发布**（预付：任何未付；后付：未付合计超过信用额；开关 `qb.fee.overdue.block-submit`），其他一切照常；不自动停用。
-  后付的商户可以在月底之前**提前付清**尚未开账单的费用（钱包页的"现在用现金账户付清"，`QB_FEE_PAY_EARLY`）：每笔费用各开一张已付的账单，月初的账单只合成剩下的。运营商在「运营商 → 商户的计费方式」看到每个商户的计费方式、未付、逾期与尚未开账单的金额，并在那里改。
-- **任务**：`qb.fee-monthly`（每月 2 日 01:07 日本时间，记当月月费）、`qb.fee-invoice`（每月 2 日 01:17，后付的账单）、`qb.fee-overdue`（每日 02:37，过期的账单 → `OVERDUE`，提醒邮件 7 天一封至多三封，待办给 `qb.fee.manage` 与商户的运营商）。都是逐项任务、每项一个事务，可补跑（已记过的月份不再记）。
-- **手工记费与作废**：后台「QuizBuks 财务 → 平台费」：财务（`qb.fee.manage`）登记手工记费（商户、金额、理由）或作废账单（理由），另一位持有 `qb.topup.bank.approve` 的管理员在待办中批准；作废 = 冲正该账单的分录，已付的退回商户的现金账户。更正一律这样做，不改记录。
+  账单 PDF 的开具方沿用收据的 `qb.issuer.*`（没设名称时发起方下载账单被拒 `QB_FEE_PARAMS`）。
+- **预付 / 后付**：缺省全平台预付；运营商（或总部财务）在「运营商 → 发起方」给单个发起方设后付与信用额（理由必填，`QB_OPERATOR_BILLING_SET`，审计中可查）。预付的发起方记费时立即从现金扣、不够即一张 `OPEN` 账单；后付的发起方每月 2 日 01:17（日本时间）出上月的账单。
+  **有未付账单的发起方不能换学分、不能提交新发布**（预付：任何未付；后付：未付合计超过信用额；开关 `qb.fee.overdue.block-submit`），其他一切照常；不自动停用。
+  后付的发起方可以在月底之前**提前付清**尚未开账单的费用（钱包页的"现在用现金账户付清"，`QB_FEE_PAY_EARLY`）：每笔费用各开一张已付的账单，月初的账单只合成剩下的。运营商在「运营商 → 发起方的计费方式」看到每个发起方的计费方式、未付、逾期与尚未开账单的金额，并在那里改。
+- **任务**：`qb.fee-monthly`（每月 2 日 01:07 日本时间，记当月月费）、`qb.fee-invoice`（每月 2 日 01:17，后付的账单）、`qb.fee-overdue`（每日 02:37，过期的账单 → `OVERDUE`，提醒邮件 7 天一封至多三封，待办给 `qb.fee.manage` 与发起方的运营商）。都是逐项任务、每项一个事务，可补跑（已记过的月份不再记）。
+- **手工记费与作废**：后台「QuizBuks 财务 → 平台费」：财务（`qb.fee.manage`）登记手工记费（发起方、金额、理由）或作废账单（理由），另一位持有 `qb.topup.bank.approve` 的管理员在待办中批准；作废 = 冲正该账单的分录，已付的退回发起方的现金账户。更正一律这样做，不改记录。
 - **核对**（每日 `qb.reconcile`）多一项 `FEES_RECEIVABLE`（1130 ≠ 未付账单 + 尚未开账单的后付记费）；处理同 §7.2。
 - **月报** `qb.admin.monthly` 多三类：`FEE_CHARGED`、`FEE_PAID`、`FEE_VOIDED`，多三列 1130 / 4120 / 2150；运营商的结算单多一行"平台费"（并入分成的基数）。
 - **收据与邮件**：进现金账户的充值，收据的"计入"一行与邮件（`qb.topup.paid-cash`）写明进了现金账户，不说存入学分。
-- **告警**：`jabiz.job.item{job="qb.fee-monthly"|"qb.fee-invoice"|"qb.fee-overdue", result="FAILED"}`；`qb.fee.invoice-overdue` 的待办堆积（商户长期不付）。
+- **告警**：`jabiz.job.item{job="qb.fee-monthly"|"qb.fee-invoice"|"qb.fee-overdue", result="FAILED"}`；`qb.fee.invoice-overdue` 的待办堆积（发起方长期不付）。
 
-### 7.19 商户自己的认证（Q88a）
+### 7.19 发起方自己的认证（Q88a）
 
-商户可以定义自己的认证（`plans/Q88-sponsor-certifications-entry-fee.md`）：自己的发布合格即授予，答题者持有到有效期为止，证书上的签发方是商户；商户的其他发布可以要求先持有它（Q86 的前置）。缺省 = 现状：不开放。
+发起方可以定义自己的认证（`plans/Q88-sponsor-certifications-entry-fee.md`）：自己的发布合格即授予，学者持有到有效期为止，证书上的签发方是发起方；发起方的其他发布可以要求先持有它（Q86 的前置）。缺省 = 现状：不开放。
 
-- **开关是受控参数** `qb.certification.sponsor-rounds.enabled`（缺省 `false`，`QB_SETUP` 提出，另一位管理员发布；之后改它是四眼）。关着时商户建立、修改认证与把发布登记为轮都被拒（`QB_SPONSOR_CERTIFICATIONS_OFF`）；已有的持有、前置、树上的节点与证书照常（关掉不会让树掉节点）。答题路径不读它。
+- **开关是受控参数** `qb.certification.sponsor-rounds.enabled`（缺省 `false`，`QB_SETUP` 提出，另一位管理员发布；之后改它是四眼）。关着时发起方建立、修改认证与把发布登记为轮都被拒（`QB_SPONSOR_CERTIFICATIONS_OFF`）；已有的持有、前置、树上的节点与证书照常（关掉不会让树掉节点）。答题路径不读它。
 - **部署后**：运行一次 `QB_SETUP`（新参数的提案）并发布提案；没有新科目、新权限、新任务。
-- **怎么用**：商户后台「内容 → 认证」定义（名字至少一种语言、有效期 30–3650 天）；发布向导「时间与奖励」一步选"合格授予的认证"（只能在草稿时设，提交后只能在发布页"关闭这一轮"）；这样的发布各档位都可以是 0 学分（没有登记认证时 0 奖励照旧不能提交）。"客户匹配"一步的前置可选自己的认证。
-- **运营商与总部**：后台「认证」页多一节"商户自己的认证"（只读，运营商只看辖下的）；商户的轮属于商户的运营商（直营即总部），关闭用现有的"关闭轮次"。没有人工授予与收回商户认证。
-- **升版与停用**：商户在"修改"里勾"规则变了"即版本加一，按旧版本持有的从此不算，**进行中的轮随之关闭**（轮的版本不可改，之后的合格会算在旧版本上；新版本的测验在草稿上重新登记）；"停用"关闭它进行中的轮，之后不能再登记轮或作前置，已持有的自然到期。
-- **投诉**：商户以认证误导答题者（冒充官方认证等）时，运营商关闭其轮（`QB_CERTIFICATION_ROUND_CLOSE`）或下架发布；证书与公开页写明"由 <商户> 颁发"，平台的认证不带颁发方。
+- **怎么用**：发起方后台「内容 → 认证」定义（名字至少一种语言、有效期 30–3650 天）；发布向导「时间与奖励」一步选"合格授予的认证"（只能在草稿时设，提交后只能在发布页"关闭这一轮"）；这样的发布各档位都可以是 0 学分（没有登记认证时 0 奖励照旧不能提交）。"客户匹配"一步的前置可选自己的认证。
+- **运营商与总部**：后台「认证」页多一节"发起方自己的认证"（只读，运营商只看辖下的）；发起方的轮属于发起方的运营商（直营即总部），关闭用现有的"关闭轮次"。没有人工授予与收回发起方认证。
+- **升版与停用**：发起方在"修改"里勾"规则变了"即版本加一，按旧版本持有的从此不算，**进行中的轮随之关闭**（轮的版本不可改，之后的合格会算在旧版本上；新版本的测验在草稿上重新登记）；"停用"关闭它进行中的轮，之后不能再登记轮或作前置，已持有的自然到期。
+- **投诉**：发起方以认证误导学者（冒充官方认证等）时，运营商关闭其轮（`QB_CERTIFICATION_ROUND_CLOSE`）或下架发布；证书与公开页写明"由 <发起方> 颁发"，平台的认证不带颁发方。
 
 ### 7.20 报名费（Q88b）
 
-商户可以给测验设报名费（`plans/Q88-sponsor-certifications-entry-fee.md` §11）：答题者开始时从**可转出的学分**中付（近期与争议中的奖励、审核中的转账所占的不能用；`qb.transfer.hold-days` 不合格时一律不收），一人一次、不退；钱先记在 2170 报名费待入账，每日由任务入账到商户的现金账户。缺省 = 现状：不开放。
+发起方可以给测验设报名费（`plans/Q88-sponsor-certifications-entry-fee.md` §11）：学者开始时从**可转出的学分**中付（近期与争议中的奖励、审核中的转账所占的不能用；`qb.transfer.hold-days` 不合格时一律不收），一人一次、不退；钱先记在 2170 报名费待入账，每日由任务入账到发起方的现金账户。缺省 = 现状：不开放。
 
-- **开关是受控参数** `qb.play.entry-fee.enabled`（缺省 `false`，`QB_SETUP` 提出，另一位管理员发布）。它只管**能不能设**：关着时保存带报名费的草稿被拒（`QB_ENTRY_FEE_OFF`），已上架的照收（要停就由运营商下架或商户结束）。问卷不能设（`QB_ENTRY_FEE_NOT_ALLOWED`），店面的发布没有报名费。
+- **开关是受控参数** `qb.play.entry-fee.enabled`（缺省 `false`，`QB_SETUP` 提出，另一位管理员发布）。它只管**能不能设**：关着时保存带报名费的草稿被拒（`QB_ENTRY_FEE_OFF`），已上架的照收（要停就由运营商下架或发起方结束）。问卷不能设（`QB_ENTRY_FEE_NOT_ALLOWED`），店面的发布没有报名费。
 - **部署后**：运行一次 `QB_SETUP`（开出科目 2170、提出参数 `qb.play.entry-fee.enabled` 与科目映射 `qb.journal.account.2170`）并发布提案；**上线前给 2170 配好会计科目代码**（`JournalMappingCheck` 否则告警，分录导出拒绝未映射的科目）。
-- **任务** `qb.entry-fee-settle`：每天 18:07 UTC（03:07 日本），每个 2170 有余额的商户一个事务（商户钱包锁内 2170 → 2160 并更新现金缓存）；`quizbuks.entry-fee.settle-cron`（`QB_ENTRY_FEE_SETTLE_CRON`）只给 e2e 改。失败的商户下次照常入账（按余额，不按日期）。
-- **核对**：每日核对多一项 `ENTRY_FEES_UNSETTLED`（2170 按商户不为负）；2120 = 答题者缓存、2160 = 现金缓存照旧。月报多两类 `ENTRY_FEE`（付报名费）与 `ENTRY_FEE_SETTLED`（入账）；财务总览的"钱包"一节多"报名费待入账（2170）"。
+- **任务** `qb.entry-fee-settle`：每天 18:07 UTC（03:07 日本），每个 2170 有余额的发起方一个事务（发起方钱包锁内 2170 → 2160 并更新现金缓存）；`quizbuks.entry-fee.settle-cron`（`QB_ENTRY_FEE_SETTLE_CRON`）只给 e2e 改。失败的发起方下次照常入账（按余额，不按日期）。
+- **核对**：每日核对多一项 `ENTRY_FEES_UNSETTLED`（2170 按发起方不为负）；2120 = 学者缓存、2160 = 现金缓存照旧。月报多两类 `ENTRY_FEE`（付报名费）与 `ENTRY_FEE_SETTLED`（入账）；财务总览的"钱包"一节多"报名费待入账（2170）"。
 - **答题路径**：只有收报名费的开始多取用户的钱包锁（在开始锁之前）、多读钱包行与可转出额、多一笔分录；普通的开始一条语句也不多（`AttemptStatementBudgetIT`）。
-- **争议**：报名费不退（超时、放弃、下架都不退）；答题者投诉时由运营商以手工加币处理。报名费不是平台收入，不进月结算与运营商分成。
+- **争议**：报名费不退（超时、放弃、下架都不退）；学者投诉时由运营商以手工加币处理。报名费不是平台收入，不进月结算与运营商分成。
 
 ### 7.15 通行密钥（Q97）
 
-指纹、面容登录（平台 D71）在 App、商家后台、管理后台与运营商后台开启（`QB_PASSKEYS`，缺省开；`docs/quizbuks/plans/Q97-passkeys.md`）。
+指纹、面容登录（平台 D71）在 App、发起方后台、管理后台与运营商后台开启（`QB_PASSKEYS`，缺省开；`docs/quizbuks/plans/Q97-passkeys.md`）。
 
 - **依赖方**是部署自己的主机（取 `JABIZ_MAIL_BASE_URL`，或 `QB_PASSKEY_RP_ID` / `QB_PASSKEY_ORIGINS`）。**换域名或改依赖方会使全部已绑定的通行密钥失效**：用户只能改用密码或邮件登录后重新绑定。换之前先发公告。
 - 用户在"账户 → 登录与安全"中添加、改名、删除；没有密码的用户（邮件链接、Google / Facebook / LINE 登录）先经确认邮件（`auth/passkey-confirm`），所以需要邮件已开启。

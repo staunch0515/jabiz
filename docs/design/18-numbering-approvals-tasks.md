@@ -318,7 +318,9 @@ e2e `tasks.spec`。
 
 **渲染**（core `MailRenderer`，commonmark-java）：先解析 Markdown，再把值放进解析结果（文本、代码、链接目标与标题）——值从不被当作 Markdown 或 HTML。
 HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原值；链接只允许 `http`、`https`、`mailto` 或相对地址（包括由值拼出的地址，其他一律去掉）；
-链接目标中的参数做百分号编码，`{baseUrl}`、`{entryUrl}`、`{entryUrl.<入口>}`、`{unsubscribeUrl}` 与令牌原样代入；标题为纯文本、去换行、截断 300。不做模板样式，只用 commonmark 的基本元素。
+链接目标中的参数做百分号编码，`{baseUrl}`、`{entryUrl}`、`{entryUrl.<入口>}`、`{unsubscribeUrl}` 与令牌原样代入；标题为纯文本、去换行、截断到
+`jabiz.mail.texts.max-subject-length`（缺省 300，17zh-a）。只用 commonmark 的基本元素；样式只有平台的信纸（17zh-b，决策 D72）。
+文字取自管理员的覆盖或缺省的消息，见下文"文字的在线定制"。
 
 **发送**：步骤 `SendMail.of(模板, 收件人, Map<参数名, 取值函数>)` / `SendMail.when(条件, …)`（平台 I/O 步骤）。
 
@@ -331,6 +333,7 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
   `@Sensitive` 的值在 `SendMail` 中以 422 `MAIL_PARAM_SECRET` 拒绝；参数的 JSON 超过 16 KiB（`SendMail.MAX_PARAMS`）以 422 `MAIL_PARAMS_TOO_LARGE` 拒绝，不截断。
 - 在流程事务内经变更集写 `MailMessage`（`sys_mail_message`，经审计），并发布 `jabiz.mail.queued`（`{messageId}`）。流程回滚即无消息、不发信。
 - 启动检查（`CheckedStep`）：模板是已声明的 Bean、参数名与声明一致。
+- 示例值（17zh-a，D72 第 5 条）：`t.sample(参数, 值)` 给预览与测试发送用（没有即显示 `[参数名]`），从不用真实数据；示范 `commerce.order-shipped` 声明了两个。
 
 **投递**：平台消费者 `jabiz.mail`（始终注册）对每个 `jabiz.mail.queued` 以系统身份运行 `MAIL_SEND`（权限 `mail.send`，内部流程）：
 
@@ -417,13 +420,41 @@ HTML 部分转义全部文本与正文中的原始 HTML，纯文本部分为原�
 - 示范：`backend/app` 的测试夹具 `ItMailFixtures`（实体 `ItMailServer`、流程 `IT_MAIL_SERVER_SET` 用 `SealSecret`、模板 `it.via` 经 `SendMail.via`），`MailIT` 以第二个本地服务器（SMTPS、要登录）验证：
   邮件只到应用的服务器、以其名义；密码错、键不存在、未验证、只有明文的服务器都是 `FAILED` 而平台的服务器收不到；服务器改正后 Outbox 的重试经它发出。
 
-**启动检查 `MAIL`**（`com.jabiz.runtime.mail.MailChecks`，含 §5.4 的检查）：模板名唯一；每种语言都有标题与正文（NOTIFICATION 缺显示名 `mail.<名>.name` 为告警，16s）；模板声明的入口须为可用入口（16s）；占位符与声明一致（未声明的占位符、未使用的参数或令牌、
-NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`）；`{entryUrl.<入口>}` 的入口不是可用的登录入口；开启邮件时需 `jabiz.mail.from`、
+**启动检查 `MAIL`**（`com.jabiz.runtime.mail.MailChecks`，含 §5.4 的检查）：模板名唯一；每种语言都有标题与正文（NOTIFICATION 缺显示名 `mail.<名>.name` 为告警，16s）；模板声明的入口须为可用入口（16s）；
+缺省文字过 core 的 `MailTextRules`（与覆盖同一套规则，17zh-a）：占位符与声明一致（未声明的占位符、未使用的参数或令牌、
+NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`）与令牌不在本站链接中为错误，图片、原始 HTML、外部主机、超长为告警；
+`MailTextChecks` 对已失效的覆盖（模版或语言已不存在、不再合格）告警；`{entryUrl.<入口>}` 的入口不是可用的登录入口；开启邮件时需 `jabiz.mail.from`、
 邮件服务器，以及有模板链接到应用（`{baseUrl}`、`{entryUrl…}`、NOTIFICATION）时的 `jabiz.mail.base-url`。
 
-**不变**：`TASK_NOTIFY` 与单据发送（22 §5）仍是 `AFTER_COMMIT` 的进程内重试、纯文本，以后另议。
+**待办通知与单据邮件**（17zh-a）：`TASK_NOTIFY` 与单据发送（22 §5）仍是 `AFTER_COMMIT` 的进程内重试、纯文本，但文字经同一处取得与渲染：
+平台模版 `jabiz.task-notification`（参数 `title`、`taskUrl`，平台缺省语言）与 `jabiz.document-mail`（参数 `title`、`number`、`company`；版式的 `document.<版式>.mail.*` 是该版式的缺省，
+覆盖适用于所有版式），因此可以定制；`sys_notification` 与 `sys_document_delivery` 记下所用文字的版本。
 
-| 表（`V31__mail.sql`） | 性质 |
+**文字的在线定制**（17zh-a，决策 D72）：
+
+- 平台实体 `MailText`（`sys_mail_text_version`，时态、只追加；键为模版 + 语言；`kind` 为 `CUSTOM` 或 `DEFAULT`，`subject`、`body`、所据缺省文字的哈希 `defaultHash`）。
+  只经下列流程写入（`VersionAppender` 的守卫 `MailTextGuard` 拒绝其他一切写入），审计照常；权限 `mail.text.read` / `mail.text.write`，写入要求已验证的邮箱。
+- 规则：core 的 `MailTextRules`（一次报告全部问题，400 附 `violations`；错误码 `MAIL_TEXT_*`）：声明过的占位符、必须保留的参数与令牌与退订链接、
+  令牌与登录链接与退订链接只在以 `{baseUrl}` / `{entryUrl…}` 开头的链接目标中（不在文字、链接标题、标题中）、链接只许 http(s) / mailto / 相对、
+  绝对网页链接只到本站（`jabiz.mail.base-url` 的主机）或 `jabiz.mail.texts.allowed-link-hosts`、正文无图片、无原始 HTML、不空、标题一行、
+  长度不超过 `jabiz.mail.texts.max-subject-length`（300）与 `max-body-length`（20000）。
+- 安全类：声明了令牌或登录链接的模版，与声明 `t.protectedText()` 的（平台的密码已改、邮箱已改、已添加通行密钥、已关联外部账号、账号将被删除）。
+
+| 流程 / 接口 | 作用 | 权限 |
+|---|---|---|
+| `MAIL_TEXT_SAVE` `{template, locale, subject, body, baseVersionNo}` | 普通类：校验后写入新版本，即时生效（与缺省相同即恢复默认）；安全类 422 `MAIL_TEXT_NEEDS_APPROVAL` | `mail.text.write` |
+| `MAIL_TEXT_RESET` `{template, locale, baseVersionNo}` | 写 `DEFAULT` 版本，两类都即时生效 | `mail.text.write` |
+| 受控变更，`targetEntity: MailText`，`values: {template, locale, subject, body}` | 安全类的修改：提出与发布都要求近期二次验证，另一位发布，发布时再校验；提出所据的版本已变即 `CONTROL_TARGET_CHANGED` | `control.propose` / `control.publish` |
+| `MAIL_TEXT_TEST_SEND` `{template, locale, subject?, body?}` | 草稿或当前文字以示例值渲染，作为已渲染的消息只寄给操作人自己账号的邮箱，标题加 `[TEST]`，不生成令牌；平台缺省限流每人每小时 10 次（`jabiz.process.rate-limits` 可改） | `mail.text.write` |
+| `POST /api/mail/texts/preview` | 预览（即计划中的 `MAIL_TEXT_PREVIEW`）：校验问题与渲染出的标题、纯文本、HTML；不是流程，不写任何记录 | `mail.text.read` |
+| `GET /api/mail/texts` | 每个模版：可用与必须保留的占位符、是否须审批；每种语言：缺省文字、覆盖、状态（`DEFAULT` / `CUSTOM` / `DEFAULT_UPDATED` / `INVALID`） | `mail.text.read` |
+
+- 写入取命名锁 `jabiz.mail-text:<模版>`，`baseVersionNo` 不是当前版本（没有存过即空）即 409。
+- 发信：`MAIL_SEND` 在投递事务中取（模版，语言）的最新版本（`MailTexts`），`CUSTOM` 且合格即用，否则用消息；不合格的覆盖按缺省发出，WARN 日志与观测
+  `jabiz.mail.text.fallback`（标签 `template`）。`sys_mail_attempt.text_version_no` 记下所用版本（空 = 缺省）。业务流程的语句数不变（`StatementBudgetIT`）。
+- 测试发送的消息：`sys_mail_message.rendered_subject|text|html` 有值，投递原样发出，不取令牌、不再渲染。
+
+| 表（`V31__mail.sql`；17zh-a 为 `V60__mail_texts.sql`） | 性质 |
 |---|---|
 | `sec_user_version.locale` | 新列 |
 | `sys_mail_message` | 只追加；平台实体 `MailMessage` |
@@ -431,9 +462,10 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
 | `sys_mail_token` | 只追加；主键 `token_hash`（SHA-256），`issue_seq` 定先后 |
 | `sys_mail_token_use` | 只追加；主键 `token_hash` |
 | `sec_user_mail_preference_version` | 时态，平台实体 `SecUserMailPreference`，唯一（用户, 模板） |
+| `sys_mail_text_version` | 时态（17zh-a），平台实体 `MailText`，唯一（模版, 语言）；`sys_mail_attempt`、`sys_notification`、`sys_document_delivery` 加列 `text_version_no`，`sys_mail_message` 加列 `rendered_*` |
 
 示范：`backend/app` 的 `ORDER_SHIP` 给客户主数据 `Customer`（管理员维护，可选 `userId`）中有账号且有地址的客户发 NOTIFICATION `commerce.order-shipped`（三语）——收件人来自主数据，不来自下单输入；场景
-`commerce/order_shipped_mail`。测试：core `MailTemplateTest`、`MailRendererTest`；runtime `MailChecksTest`、`MailSenderTimeoutsTest`、`JwtServiceTest`；app `MailIT`、`MailDisabledIT`、`MailPreferencesIT`（16s）；前端 `MailUnsubscribePage.test`、`mail.test`（client）、`MailPreferences.test`（ui，含 axe）、`AccountSecurityPage.test`。
+`commerce/order_shipped_mail`。测试：core `MailTemplateTest`、`MailRendererTest`、`MailTextRulesTest`（17zh-a）；runtime `MailChecksTest`、`MailSenderTimeoutsTest`、`JwtServiceTest`；app `MailIT`、`MailDisabledIT`、`MailPreferencesIT`（16s）、`MailTextIT`（17zh-a）；前端 `MailUnsubscribePage.test`、`mail.test`（client）、`MailPreferences.test`（ui，含 axe）、`AccountSecurityPage.test`。
 
 ### 5.7 推送通知（17k，决策 D69）
 
