@@ -35,7 +35,12 @@ import java.util.function.LongSupplier;
  *
  * <p>Some platform processes have a limit unless configuration names one for them ({@link #PLATFORM_DEFAULTS}): a
  * test mail of the mail texts or layout ({@code MAIL_TEXT_TEST_SEND}, {@code MAIL_LAYOUT_TEST_SEND}, decision D72) at
- * most 10 an hour per person each.
+ * most 10 an hour per person each; downloads of images from links ({@code FILE_FETCH}, decision D75) at most 30 a
+ * minute per person, 60 a minute per host of the link and 300 a minute on the instance.
+ *
+ * <p>{@code FILE_FETCH} is a sub-process: it counts its own calls ({@link #checkFetch}), per actor, per host of the
+ * link and per instance, whatever process calls it, so that nobody makes the server download from one host faster
+ * than the limit allows.
  */
 @Component
 public class ProcessRateLimits {
@@ -46,16 +51,20 @@ public class ProcessRateLimits {
      */
     public static final Map<String, ProcessRateLimitProperties.Limit> PLATFORM_DEFAULTS = Map.of(
         "MAIL_TEXT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)),
-        "MAIL_LAYOUT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)));
+        "MAIL_LAYOUT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)),
+        "FILE_FETCH", new ProcessRateLimitProperties.Limit(30, null, 300, Duration.ofMinutes(1), null, null, 60));
+
+    /** The process counting its own calls, by actor, host and instance ({@link #checkFetch}; decision D75). */
+    public static final String FILE_FETCH = "FILE_FETCH";
 
     /** Keys kept per bucket; the least recently used are forgotten first. */
     static final int MAX_KEYS = 100_000;
 
     /** What a bucket counts by, the tag {@code scope} of {@value PlatformObservations#PROCESS_RATE_LIMITED}. */
-    public enum Scope { USER, ADDRESS, INSTANCE, TENANT, VISITOR }
+    public enum Scope { USER, ADDRESS, INSTANCE, TENANT, VISITOR, HOST }
 
     private record Buckets(TokenBucketLimiter perUser, TokenBucketLimiter perAddress, TokenBucketLimiter perInstance,
-        TokenBucketLimiter perTenant, TokenBucketLimiter perVisitor) {}
+        TokenBucketLimiter perTenant, TokenBucketLimiter perVisitor, TokenBucketLimiter perHost) {}
 
     private final Map<String, Buckets> buckets = new HashMap<>();
     private final ClientAddresses addresses;
@@ -82,7 +91,8 @@ public class ProcessRateLimits {
             }
             buckets.put(process, new Buckets(bucket(limit.perUser(), period, nanoTime),
                 bucket(limit.perAddress(), period, nanoTime), bucket(limit.perInstance(), period, nanoTime),
-                bucket(limit.perTenant(), period, nanoTime), bucket(limit.perVisitor(), period, nanoTime)));
+                bucket(limit.perTenant(), period, nanoTime), bucket(limit.perVisitor(), period, nanoTime),
+                bucket(limit.perHost(), period, nanoTime)));
         });
     }
 
@@ -144,6 +154,39 @@ public class ProcessRateLimits {
             refuseUnless(bucket.limiter().peek(bucket.key()), process, bucket.scope());
         }
         // Then the tokens; a bucket emptied meanwhile by a concurrent request still refuses.
+        for (Counted bucket : counted) {
+            refuseUnless(bucket.limiter().tryAcquire(bucket.key()), process, bucket.scope());
+        }
+    }
+
+    /**
+     * Counts a download of {@code request}'s actor from {@code host} ({@code FILE_FETCH}, decision D75): per actor,
+     * per host (lower case, as the link names it) and per instance, as {@code jabiz.process.rate-limits.FILE_FETCH}
+     * (or the platform's default) declares; {@link RateLimitedException} (429) beyond one of them.
+     */
+    public void checkFetch(RequestContext request, String host) {
+        Buckets limits = buckets.get(FILE_FETCH);
+        if (limits == null) {
+            return;
+        }
+        List<Counted> counted = new ArrayList<>(3);
+        if (limits.perUser() != null) {
+            counted.add(new Counted(limits.perUser(), Scope.USER,
+                "user:" + Objects.requireNonNullElse(request.actorId(), "anonymous")));
+        }
+        if (limits.perHost() != null) {
+            counted.add(new Counted(limits.perHost(), Scope.HOST, "host:" + host));
+        }
+        if (limits.perInstance() != null) {
+            counted.add(new Counted(limits.perInstance(), Scope.INSTANCE, "instance"));
+        }
+        take(FILE_FETCH, counted);
+    }
+
+    private void take(String process, List<Counted> counted) {
+        for (Counted bucket : counted) {
+            refuseUnless(bucket.limiter().peek(bucket.key()), process, bucket.scope());
+        }
         for (Counted bucket : counted) {
             refuseUnless(bucket.limiter().tryAcquire(bucket.key()), process, bucket.scope());
         }

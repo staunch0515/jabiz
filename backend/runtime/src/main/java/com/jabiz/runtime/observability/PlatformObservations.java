@@ -48,6 +48,8 @@ public class PlatformObservations {
     public static final String FILE_UPLOAD = "jabiz.file.upload";
     public static final String FILE_SERVE = "jabiz.file.serve";
     public static final String FILE_SWEEP = "jabiz.file.sweep";
+    /** An image downloaded from a link (decision D75); tagged with the outcome only (the error code, or fetched). */
+    public static final String FILE_FETCH = "jabiz.file.fetch";
     public static final String PUBLIC_QUERY = "jabiz.public.query";
     public static final String IMPORT = "jabiz.import.run";
     public static final String DATA_EXPORT = "jabiz.data.export";

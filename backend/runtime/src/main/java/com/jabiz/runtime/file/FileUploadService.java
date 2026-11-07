@@ -9,6 +9,7 @@ import com.jabiz.file.MediaTypeDetector;
 import com.jabiz.file.MediaTypes;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.resource.ResourceNotFoundException;
+import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.PayloadTooLargeException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.context.RequestContexts;
@@ -50,6 +51,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -167,6 +169,26 @@ public class FileUploadService {
         });
     }
 
+    /**
+     * Stores an image downloaded from a link (decision D75) through the rest of the upload pipeline: the type
+     * recognised from the content must be an image type {@code policy} allows (otherwise 422
+     * {@code FILE_FETCH_NOT_IMAGE}, even where the policy allows PDF or sound), the image is decoded and re-encoded
+     * without its metadata, its variants made, the objects stored. {@code register} records the file (the fetching
+     * process inserts the row in its own transaction); if it fails, the stored objects are deleted. The caller owns
+     * {@code downloaded} and its work directory ({@link #workDirectory}).
+     *
+     * @param name the file's name for downloads (a neutral one: the link is not kept)
+     */
+    Mono<Stored> storeFetched(FilePolicy policy, Path downloaded, long size, String name,
+        Function<FileProcesses.RegisterInput, Mono<FileProcesses.FileInfo>> register) {
+        return detect(downloaded).flatMap(detected -> {
+            if (detected.isEmpty() || !detected.get().isImage() || !policy.allows(detected.get())) {
+                return Mono.error(notImage(policy));
+            }
+            return storeWith(policy, new Received(downloaded, size, name), register);
+        });
+    }
+
     private void throttle(RequestContext request) {
         TokenBucketLimiter.Decision decision = limiter.tryAcquire(request.actorId());
         if (!decision.allowed()) {
@@ -211,6 +233,11 @@ public class FileUploadService {
     }
 
     private Mono<Stored> storeFile(FilePolicy policy, Received received, String jobId) {
+        return storeWith(policy, received, input -> registerProcess(withJob(input, jobId)));
+    }
+
+    private Mono<Stored> storeWith(FilePolicy policy, Received received,
+        Function<FileProcesses.RegisterInput, Mono<FileProcesses.FileInfo>> register) {
         return detect(received.path()).flatMap(detected -> {
             if (detected.isEmpty() || !policy.allows(detected.get())) {
                 return Mono.error(notAllowed(policy));
@@ -223,7 +250,8 @@ public class FileUploadService {
             return prepare(policy, type, received.path())
                 .flatMap(prepared -> digestAndSize(prepared.original()).flatMap(digest ->
                     write(fileId, prepared)
-                        .then(register(policy, fileId, prepared, digest, received.originalName(), jobId))
+                        .then(Mono.defer(() -> register.apply(registerInput(policy, fileId, prepared, digest,
+                            received.originalName()))))
                         .map(info -> new Stored(info, digest.sha256()))
                         .onErrorResume(error -> store.deleteAll(FileKeys.prefix(fileId))
                             .onErrorResume(cleanup -> Mono.empty())
@@ -254,11 +282,20 @@ public class FileUploadService {
             .then();
     }
 
-    private Mono<FileProcesses.FileInfo> register(FilePolicy policy, UUID fileId, Prepared prepared,
-        Digest digest, String originalName, String jobId) {
-        FileProcesses.RegisterInput input = new FileProcesses.RegisterInput(fileId, policy.name(),
-            prepared.type().contentType(), digest.size(), digest.sha256(), prepared.width(), prepared.height(),
-            new ArrayList<>(prepared.variants().keySet()), originalName, jobId);
+    private static FileProcesses.RegisterInput registerInput(FilePolicy policy, UUID fileId, Prepared prepared,
+        Digest digest, String originalName) {
+        return new FileProcesses.RegisterInput(fileId, policy.name(), prepared.type().contentType(), digest.size(),
+            digest.sha256(), prepared.width(), prepared.height(), new ArrayList<>(prepared.variants().keySet()),
+            originalName, null);
+    }
+
+    private static FileProcesses.RegisterInput withJob(FileProcesses.RegisterInput input, String jobId) {
+        return jobId == null ? input : new FileProcesses.RegisterInput(input.fileId(), input.policy(),
+            input.contentType(), input.sizeBytes(), input.sha256(), input.width(), input.height(), input.variants(),
+            input.originalName(), jobId);
+    }
+
+    private Mono<FileProcesses.FileInfo> registerProcess(FileProcesses.RegisterInput input) {
         // The upload API (and the external job executor, for the files of a job) is FILE_REGISTER's entry point: it
         // runs as the uploader, or the job's requester (decisions D41, D50).
         return executor.run(FileProcesses.REGISTER_PROCESS, input,
@@ -293,7 +330,7 @@ public class FileUploadService {
         }
     }
 
-    private static Path workDirectory(Path upload) {
+    static Path workDirectory(Path upload) {
         return upload.resolveSibling(upload.getFileName() + ".work");
     }
 
@@ -301,6 +338,14 @@ public class FileUploadService {
         String allowed = policy.allowed().stream().map(Enum::name).collect(Collectors.joining(", "));
         return new ValidationException(List.of(new Violation(PART, PlatformErrorCodes.FILE_TYPE_NOT_ALLOWED,
             "Policy " + policy.name() + " accepts " + allowed, Map.of("allowed", allowed))));
+    }
+
+    private static BusinessRuleViolationException notImage(FilePolicy policy) {
+        String allowed = policy.allowed().stream().filter(MediaTypes::isImage).map(Enum::name)
+            .collect(Collectors.joining(", "));
+        return new BusinessRuleViolationException(new Violation(PART, PlatformErrorCodes.FILE_FETCH_NOT_IMAGE,
+            "What the link gives is not an image policy " + policy.name() + " accepts (" + allowed + ")",
+            Map.of("allowed", allowed)));
     }
 
     static ValidationException invalid(String message) {

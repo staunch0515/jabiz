@@ -182,4 +182,38 @@ class ProcessRateLimitsTest {
         }
         assertThat(noPeriod.limits("LIMITED")).isFalse();
     }
+
+    @Test
+    void downloadsFromLinksCountPerActorHostAndInstanceWithAPlatformDefault() {
+        ProcessRateLimits limits = new ProcessRateLimits(new ProcessRateLimitProperties(Map.of(
+            ProcessRateLimits.FILE_FETCH, new ProcessRateLimitProperties.Limit(3, null, 5, Duration.ofMinutes(1),
+                null, null, 2))), addresses, new PlatformObservations(registry), now::get);
+        limits.checkFetch(actor("alice"), "images.example.com");
+        limits.checkFetch(actor("bob"), "images.example.com");
+        RateLimitedException perHost = catchThrowableOfType(RateLimitedException.class,
+            () -> limits.checkFetch(actor("carol"), "images.example.com"));
+        assertThat(perHost.retryAfterSeconds()).isEqualTo(30);
+        TestObservationRegistryAssert.assertThat(registry)
+            .hasObservationWithNameEqualTo(PlatformObservations.PROCESS_RATE_LIMITED)
+            .that().hasLowCardinalityKeyValue("process", "FILE_FETCH").hasLowCardinalityKeyValue("scope", "host");
+        limits.checkFetch(actor("alice"), "cdn.example.net");
+        limits.checkFetch(actor("alice"), "other.example.org");
+        // Alice's third download went to another host; her fourth is over her own limit.
+        assertThatCode(() -> limits.checkFetch(actor("alice"), "fourth.example.org"))
+            .isInstanceOf(RateLimitedException.class);
+        // Five on the instance in all (the refused ones took nothing).
+        limits.checkFetch(actor("dave"), "fifth.example.org");
+        assertThatCode(() -> limits.checkFetch(actor("erin"), "sixth.example.org"))
+            .isInstanceOf(RateLimitedException.class);
+
+        // Without configuration, the platform's default applies.
+        ProcessRateLimits defaults = new ProcessRateLimits(new ProcessRateLimitProperties(Map.of()), addresses,
+            new PlatformObservations(registry), now::get);
+        assertThat(defaults.limits(ProcessRateLimits.FILE_FETCH)).isTrue();
+        for (int i = 0; i < 60; i++) {
+            defaults.checkFetch(actor("user" + i), "busy.example.com");
+        }
+        assertThatCode(() -> defaults.checkFetch(actor("someone"), "busy.example.com"))
+            .isInstanceOf(RateLimitedException.class);
+    }
 }

@@ -223,6 +223,13 @@ class CommerceConfig {
         return ProductRenaming.RENAME_PROCESS;
     }
 
+    /** A product's photo from a link, downloaded once by the server (decision D75). */
+    @Bean
+    ProcessDefinition<ProductImageLink.ImageLinkInput, ProductImageLink.ImageLinkOutput, ProcessContext>
+        productImageFromLinkProcess() {
+        return ProductImageLink.PROCESS;
+    }
+
     /** Marketing copy written by the demo AI service as an external job (decision D38). */
     @Bean
     ExternalJobType<ProductCopy.ProductCopyInput, ProductCopy.ProductCopyResult> productCopyJob() {
