@@ -5088,6 +5088,20 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17zl 状态**：✅ 已合并（#468）。
 
+### 17zj 应用框架组件与三种页面模板（2026-11-07，QuizBuks 首次上线 P3；Q108）
+
+**缘由**：QuizBuks 的发起方后台与学者 App 共用的框架（Q108 §3、§4、§6.1 第 5 条）：菜单越来越多、主按钮在宽屏上离标题太远、页面布局不统一。平台先行（根 `CLAUDE.md` §8）。
+
+| # | 内容 |
+|---|---|
+| 17zj-1 | `AppShell`：`collapsible="icon"`（图标窄条，名称为提示，分组点击先展开）、`create`、`bottomBar`（只在窄屏，`--bottom-bar-offset`）、`routeKey`（路由改变时焦点到标题）；`ShellNav` 的提示 |
+| 17zj-2 | `PageHeader` 的 `icon`、`primaryAction`（标题旁 / 手机上的 `Fab`）、`tabs`；`PageTabs`（链接、`aria-current`、横向滚动、方向键）；`GlobalCreate`；`BottomBar`（项数由应用给出、`raised`、徽标、"更多"抽屉） |
+| 17zj-3 | 主题 token `--content-max`、`--content-form-max`、`--bottom-bar-height`；`PageContent`、`ListPage`、`DetailPage`、`FormPage`（保存条、未保存的提示、`useUnsavedChanges`）；文案 `create.*`、`templates.*` 三语 |
+| 17zj-4 | 示范：门户改用 `AppShell`（图标窄条、新建、底部菜单）与三种模板（订单列表、下单、账户）；通用后台"我的待办"用 `ListPage`；e2e `portal.spec.ts` 按导航定位链接、以 `form-page-save` 下单 |
+| 17zj-5 | 测试：`app-frame.test.tsx`、`theme.test.ts`、门户 `App.test.tsx`、`TasksPage.test.tsx`（均含 axe 亮暗）；设计 12 §13、`app-spa.md` |
+
+**17zj 状态**：✅ 已合并（#467）。
+
 ### 17zo 审批请求与待办移到另一个入口范围（2026-11-07，QuizBuks 首次上线 S2 的平台缺口；决策 D76）
 
 **缘由**：审批请求与待办记着所属的入口范围且不可变（D64）。QuizBuks 的商户改派给另一个运营商时，其待审批的请求与开放的待办留在原运营商的范围：新运营商看不到，原运营商仍看得到；应用只能在审核未结时拒绝改派（422 `QB_SPONSOR_REVIEW_PENDING`）。

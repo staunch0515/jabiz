@@ -92,6 +92,23 @@ export type { DecimalInputProps, MoneyInputProps } from './components/decimal-in
 export { PageHeader } from './components/page-header'
 export type { PageHeaderProps } from './components/page-header'
 export { AppShell, ShellNav } from './components/app-shell'
+// The application frame and page templates (phase 17zj).
+export { PageTabs } from './components/page-tabs'
+export type { PageTab, PageTabLinkProps, PageTabsProps } from './components/page-tabs'
+export { Fab } from './components/page-action'
+export type { FabProps, PageAction, PageActionLinkProps } from './components/page-action'
+export { GlobalCreate } from './components/global-create'
+export type { CreateItem, CreateLinkProps, GlobalCreateProps } from './components/global-create'
+export { BottomBar } from './components/bottom-bar'
+export type { BottomBarItem, BottomBarLinkProps, BottomBarProps } from './components/bottom-bar'
+export { DetailPage, FormPage, ListPage, PageContent, useUnsavedChanges } from './components/page-templates'
+export type {
+  DetailPageProps,
+  FormPageProps,
+  ListChips,
+  ListPageProps,
+  ListSearch,
+} from './components/page-templates'
 export { Combobox } from './components/combobox'
 export type { ComboboxOption, ComboboxProps } from './components/combobox'
 export { FilterBar, filledFilters } from './components/filter-bar'
