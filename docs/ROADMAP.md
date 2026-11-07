@@ -5322,3 +5322,47 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：以引用为主键的普通表上的计数器正常计数（复现测试修改前失败、修改后通过）。
 
 **17zz2 状态**：📝 待评审（分支 `1.3/phase-17zz2-counter-uuid-key`）。
+
+### 17zzz 未声明的密封字段：轮换中按密文前缀找出（D78 第 8 条，2026-11-07，总控提出）
+
+**缘由**：重新加密只处理 `SealedFields` 声明的字段；应用经 `SealSecret` 写进、却没有声明的字段，撤下旧 `JABIZ_SEAL_KEY` 后就解不开，而 `KEYS` 只检查已有的声明，不会发现。
+
+| # | 内容 |
+|---|---|
+| 17zzz-1 | `RetiredSealScan`：配置着旧密封密钥时，对每个有数据视图的实体一条语句（经存储引擎，参数绑定，表名列名取自元数据），按 `count(*) FILTER (WHERE 列 LIKE ANY(:旧密钥前缀))` 统计每个文本字段（列确实是文本类型：`MetaModelConsistencyChecker.textColumns`，按表缓存；声明的字段除外）；不受数据视图范围限制，时态实体只看各实例当前的版本；只返回计数。仪表 `jabiz.keys.undeclared-sealed` |
+| 17zzz-2 | 启动检查 `KEYS`：每个这样的字段一条——`platformCheck` 中为错误，应用启动时为警告（轮换中途重启不停服）；告警 `jabiz-keys-undeclared-sealed`（`severity: page`，13 §7） |
+| 17zzz-3 | 任务 `jabiz.key-rotation`：新的最后一步 `CheckUndeclaredSealed`。本次没有可重新加密或收回的东西而仍有这样的值时运行失败（422 `KEY_ROTATION_UNDECLARED_SEALED`，三种语言），有工作时照常提交；输出新增 `undeclaredSealed` 与 `retiredKeysRemovable`（旧 MFA 与密封密钥下什么都不剩时为真，日志写明可以撤下）。恢复演练的 `key-rotation` 项同样以此为不通过 |
+| 17zzz-4 | 文档：D78 第 8 条（第 4 条改为"任务报告可以撤下之后"）、`docs/guide/key-rotation.md`、13 §7 与仪表表、CLAUDE.md |
+| 17zzz-5 | 测试：`KeyRotationUndeclaredIT`（未声明的仓库名中有一个旧密钥密文、另一个以 `s1:` 开头的普通文本不算：扫描找到 1 个、仪表为 1、`KEYS` 启动时为警告而严格时为错误、任务失败并给出错误码；值换掉后任务报告可以撤下、仪表为 0；一开始什么都没有时也报告可以撤下）；`KeyRotationIT` 补断言（打不开的值仍在时不报告可以撤下） |
+
+**验收**：未声明字段里有旧密钥下的密封值时，`platformCheck` 报错、启动时警告并告警、任务不报告可以撤下（没有其他工作时失败）；清零后任务报告可以撤下。
+
+**17zzz 状态**：📝 待评审（分支 `1.3/phase-17zzz-undeclared-sealed`）。
+
+### 17zz3 备份工具的平台部分：pgBackRest 恢复演练与只检查规则的设置文件（2026-11-07，QuizBuks 备份）
+
+**缘由**：需求方定了 pgBackRest + Cloudflare R2 的备份（应用分支 `deploy/quizbuks/backup`）。平台的演练脚本只接受手写的恢复命令；在测试环境演练时发现，恢复出的副本继承了 `archive_mode=on`，会把自己的 WAL 推进生产的仓库（演练中只因数据目录不同而失败；容器中目录相同，就会推进去）。备份的设置文件不是应用的设置，`env-check` 却总套平台的规则。
+
+| # | 内容 |
+|---|---|
+| 17zz3-1 | `tools/ops/restore-drill.sh`：`DRILL_PGBACKREST`（运行方式）、`DRILL_PGBACKREST_PG_PATH`（新的空数据目录）、`_STANZA`（缺省 `main`）、`_REPO`（缺省 1），脚本组成 `restore --type=time --target=T --target-action=promote --archive-mode=off` 并计时；手写的 pgBackRest 恢复命令缺 `--archive-mode=off` 即拒绝；`DRILL_RESTORE_ONLY=true` 只恢复并写记录。13 §8 |
+| 17zz3-2 | `tools/ops/env-check.sh --app-only <文件> <规则>`：只按规则文件检查；新规则 `warn-unset`、`min-length`、`different`。`docs/guide/platform-operations.md` §1 |
+| 17zz3-3 | 测试：`tools/test/restore-drill.test.sh`（以替身记下参数：时间目标、提升、不归档、仓库与 stanza；拒绝的设置），`tools/test/env-check.test.sh` 新例；CI 的 `app-paths` 作业运行前者。以真实的 pgBackRest 2.50 对 S3 替身（moto）演练：全量、差异、两个仓库的 WAL、恢复到 T（数据正确，副本不归档），`restore-drill.sh` 的只恢复模式实测 |
+
+**验收**：演练脚本以 pgBackRest 恢复到 T 且副本绝不归档；备份的设置文件可以只按应用的规则检查。
+
+**17zz3 状态**：📝 待评审（分支 `1.3/phase-17zz3-backup-tools`）。
+
+### 17zz4 密钥轮换任务按数据视图的提交上限分批（D78 第 9 条，2026-11-07，S3 报告）
+
+**缘由**：任务一次最多处理 `jabiz.key-rotation.batch-size`（缺省 500）个值，而同一实体的改动一起提交，超过其数据视图的 `maxWriteBatchSize`（缺省 100）即整次运行失败（`BATCH_TOO_LARGE`："Batch size [101] exceeds dataset limit [100]"），轮换永远完不成；启动检查没有发现。
+
+| # | 内容 |
+|---|---|
+| 17zz4-1 | `FindRetiredValues.writeLimit(实体)` = `min(batch-size, maxWriteBatchSize)`；每次运行按实体记剩余额度（`TakeBackSecondFactors` 与重新加密共用 `SecUserMfa` 的额度），装满即 `more=true`。`KEYS`：声明的密封字段所在数据视图的上限小于 10 时警告 |
+| 17zz4-1b | 一行一条更新（S3 报告）：`StoreUnderCurrentKey` 把同一行的各个密封字段合成一条按版本的更新；此前每个字段各一条、都用读到的版本，同一行两个密封字段时第二条 409（"expected version [1], stored version [2]"），整批回滚，恢复演练的 `DRILL_ROTATE` 同样失败。收回二次验证与重新加密同一行时只写收回那一条（原已如此） |
+| 17zz4-2 | 测试：`KeyRotationBatchIT`（另加一例：测试迁移 `V1017__it_sealed_pair.sql`，一行两个密封字段，修改前 409，修改后一次运行两者都重新密封、行版本只加 1）（101 个旧密钥下的仓库名：修改前整次运行失败；修改后第一次存 100 个、`more=true`，第二次存最后 1 个，第三次报告可以撤下；上限为 2 的数据视图得到警告，100 的不报）。`KeyRotationIT`、`KeyRotationUndeclaredIT`、`MfaReenrollmentIT`、`RestoreVerificationIT` 照旧通过 |
+
+**验收**：数据视图的提交上限小于任务批量时，轮换照常分几次完成（复现测试修改前失败、修改后通过）。
+
+**17zz4 状态**：📝 待评审（分支 `1.3/phase-17zz4-rekey-batch`，在 #509 之上）。

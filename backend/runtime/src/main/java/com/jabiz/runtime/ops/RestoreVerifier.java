@@ -182,6 +182,7 @@ public class RestoreVerifier {
      */
     private Mono<Item> keyRotation() {
         int[] totals = new int[3];
+        List<List<String>> undeclared = new ArrayList<>(List.of(List.of()));
         return Flux.range(0, MAX_REKEY_RUNS)
             .concatMap(run -> processes.run(KeyRotationProcesses.REKEY, new KeyRotationProcesses.RekeyInput(null),
                 ExecutionOptions.NONE), 1)
@@ -190,11 +191,15 @@ public class RestoreVerifier {
                 totals[0] += out.mfaSecrets();
                 totals[1] += out.sealedValues();
                 totals[2] = out.unreadable();
+                undeclared.set(0, out.undeclaredSealed());
                 return out.more();
             })
             .takeUntil(more -> !more)
-            .then(Mono.fromSupplier(() -> new Item("key-rotation", totals[2] == 0, totals[0] + " TOTP secrets and "
-                + totals[1] + " sealed values stored under the current keys, " + totals[2] + " do not open")))
+            // Values left in undeclared fields (D78 item 8) fail the drill as they fail the job.
+            .then(Mono.fromSupplier(() -> new Item("key-rotation", totals[2] == 0 && undeclared.getFirst().isEmpty(),
+                totals[0] + " TOTP secrets and " + totals[1] + " sealed values stored under the current keys, "
+                    + totals[2] + " do not open" + (undeclared.getFirst().isEmpty() ? ""
+                    : "; under a retired key in undeclared fields: " + undeclared.getFirst()))))
             .onErrorResume(e -> Mono.just(new Item("key-rotation", false, "KEY_ROTATION_REKEY failed: "
                 + e.getMessage())));
     }

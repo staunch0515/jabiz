@@ -22,7 +22,10 @@
 3. 等任务 `jabiz.key-rotation`（每 10 分钟）把 MFA 与 SEAL 下的值重新加密完：管理系统"定时任务"页看它最近几次运行，输出 `mfaSecrets`、`sealedValues` 为 0、
    `more=false` 即完成；急的话在该页补跑（D77）。`unreadable` 大于 0 表示有值的上下文与声明不符（应用的 `SealedFields` 写错了，或数据被改过），
    这些值撤下旧密钥后就解不开了：先查明再继续。
-4. 完成后从环境中删去 `JABIZ_MFA_KEY_PREVIOUS`、`JABIZ_SEAL_KEY_PREVIOUS`，再滚动重启；`JABIZ_JWT_SECRET_PREVIOUS` 在保留期过后删去（过期后平台已不再接受）；
+   任务每次还会找"未声明为密封字段、却有旧密钥下的密封值"的字段（D78 第 8 条）：有的话输出 `undeclaredSealed` 列出它们，没有别的可做时运行失败
+   （`KEY_ROTATION_UNDECLARED_SEALED`），告警 `jabiz-keys-undeclared-sealed` 通知值班，启动检查 `KEYS` 也逐个列出（启动时是警告，`platformCheck` 中是错误）。
+   这时不要撤旧密钥：让应用声明这些字段（下文"应用要做的事"），部署后任务会把它们也重新加密。
+4. **只在任务报告可以撤下之后**（最近一次运行的输出 `retiredKeysRemovable=true`，日志"they can be removed"）从环境中删去 `JABIZ_MFA_KEY_PREVIOUS`、`JABIZ_SEAL_KEY_PREVIOUS`，再滚动重启；`JABIZ_JWT_SECRET_PREVIOUS` 在保留期过后删去（过期后平台已不再接受）；
    `JABIZ_INTEGRITY_KEY_PREVIOUS` 不删。
 5. 运行一次 `INTEGRITY_VERIFY`（或等每天的任务），确认封存链完整。
 
@@ -44,6 +47,7 @@
 ## 应用要做的事
 
 - 用 `SealSecret` 保存的每个字段都在一个 `SealedFields` Bean 中声明，上下文与密封时完全一致（`SealedField.of(实体, 字段, "上下文字段")`，
-  或 `SealedField.of(实体, 字段, row -> …)`）。不声明的字段不会被重新加密，旧密钥撤下后就解不开了。
+  或 `SealedField.of(实体, 字段, row -> …)`）。不声明的字段不会被重新加密，旧密钥撤下后就解不开了；
+  轮换中平台会找出这样的字段（按密文开头的 `s1:<密钥标识>:` 扫描文本字段，D78 第 8 条），`platformCheck` 报错、任务不报告可以撤下，但最好一开始就声明。
 - 密封字段不要放在 write-once 实体中，字段也不能是 `immutable`（启动检查 `KEYS` 报错：重写不了）；字段应当是 `sensitive`、`processOnly`。
 - 应用自己的核对（恢复演练中的模板）照常；轮换演练不需要应用另写代码。
