@@ -29,7 +29,7 @@ import {
 import { LoadFailed, Section, StatusBadge } from './components'
 import { useLabels, when } from './hooks'
 import { DICTIONARY, PATH } from './ids'
-import { approve, discard, DIRECT, PROSPECTS_KEY, readProspect, type Prospect, type Trial } from './prospect-api'
+import { approve, discard, PROSPECTS_KEY, readProspect, type Prospect, type Trial } from './prospect-api'
 import { useProspectScope } from './prospect-scope'
 
 const problemOf = (e: unknown) => (e instanceof ApiError ? e.display : String(e))
@@ -274,7 +274,8 @@ export default function ProspectPage() {
   if (prospect.isPending) return <PageState kind="loading" />
   const p = prospect.data
   if (!p) return <div className="flex flex-col gap-4">{header}<p>{t('prospect.detail.notFound')}</p></div>
-  const own = !scope.admin || scope.owner === DIRECT
+  // F-S1b: the platform reads an operator's drafts only.
+  const own = !scope.admin
   return (
     <div className="flex flex-col gap-4" data-testid="prospect-page">
       {header}

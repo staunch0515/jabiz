@@ -16,6 +16,7 @@ import {
 import { EmptyState, LoadFailed, PublisherLink, StatusBadge } from './components'
 import { StatusFilter } from './finance-components'
 import { useLabels, usePaged, when } from './hooks'
+import { operatorColumn, useOperatorFilter } from './operator-filter'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { publicationFilterOf, readPublications, type PublicationListRow } from './overview-api'
@@ -63,8 +64,10 @@ export default function PublicationsPage() {
     { kind: 'time', name: 'startAt', label: t('publications.startAt') },
     { kind: 'time', name: 'submittedAt', label: t('publications.submittedAt') },
   ], 'publications-filters')
-  const { query, table, sortable } = usePaged(['qb-ext', 'publications', filter, more.filters],
-    (offset, limit, sorts) => readPublications(filter, offset, limit, sorts, more.filters), true, SORTS)
+  const operators = useOperatorFilter()
+  const filters = [...more.filters, ...operators.filters]
+  const { query, table, sortable } = usePaged(['qb-ext', 'publications', filter, filters],
+    (offset, limit, sorts) => readPublications(filter, offset, limit, sorts, filters), true, SORTS)
   const here = `${PATH.publications}${search.size > 0 ? `?${search}` : ''}`
 
   const columns = useMemo<ColumnDef<PublicationListRow, unknown>[]>(() => [
@@ -89,6 +92,7 @@ export default function PublicationsPage() {
           : label
       },
     },
+    ...(operators.across ? [operatorColumn<PublicationListRow>(t('pickers.operatorColumn'))] : []),
     {
       id: 'sponsor',
       header: t('publications.sponsor'),
@@ -132,7 +136,7 @@ export default function PublicationsPage() {
       )),
     },
     { id: 'editedAt', header: t('publications.editedAt'), cell: ({ row }) => when(row.original.editedAt) },
-  ], [t, statusLabel, quizzes, here])
+  ], [t, statusLabel, quizzes, here, operators.across])
 
   return (
     <div className="flex flex-col gap-4" data-testid="qb-publications">
@@ -172,6 +176,7 @@ export default function PublicationsPage() {
           </Button>
         )}
       </div>
+      {operators.bar}
       {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />

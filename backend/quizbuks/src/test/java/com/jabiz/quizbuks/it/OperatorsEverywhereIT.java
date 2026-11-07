@@ -97,6 +97,9 @@ class OperatorsEverywhereIT extends PlayItSupport {
             .satisfies(row -> assertThat(row).containsEntry("review_status", "APPROVED"));
         assertThat(query("SELECT lead FROM qb_operator_member WHERE user_id = ?::uuid", lead)).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("lead", true));
+        // F-S1b: the Operator Management System tells the lead their account is the operator's own sponsor.
+        assertThat(run(OperatorProcesses.TEAM, memberSession(lead, operator.operatorId()), body()))
+            .containsEntry("ownSponsor", true);
 
         // The lead gets the sponsor role by joining the sponsor entry themself (the platform's join).
         client.post().uri("/api/auth/account/entries/sponsor/join")
@@ -251,6 +254,50 @@ class OperatorsEverywhereIT extends PlayItSupport {
             + "version_no DESC LIMIT 1", requestId).getFirst()).containsEntry("status", "APPROVED");
         assertThat(InboxItSupport.messagesOf(sponsor)).filteredOn(m -> "OPERATOR_CHANGED".equals(m.get("kind")))
             .singleElement().satisfies(m -> assertThat(String.valueOf(m.get("body"))).contains("ops@"));
+    }
+
+    /** F-S1b: the templates the platform reads across operators, and the parameters each needs. */
+    private static final Map<String, Map<String, Object>> BY_OPERATOR = Map.of(
+        "qb.admin.publications", Map.of(), "qb.admin.sponsor-pages", Map.of(), "qb.admin.sponsor-products", Map.of(),
+        "qb.admin.reports", Map.of(), "qb.admin.redemptions", Map.of(), "qb.admin.digital-prizes", Map.of(),
+        "qb.admin.cash-rewards", Map.of(), "qb.admin.sponsor-certifications", Map.of("at", "2026-10-01T00:00:00Z"));
+
+    @Test
+    void thePlatformReadsEveryOperatorsRowsByOperatorAndAnOperatorStillOnlyItsOwn() {
+        String name = unique("Kyushu");
+        NewOperator kyushu = newOperatorWithLead(hq(), name, null);
+        String moved = newSponsor(unique("s-fs1b-moved"));
+        String stays = newSponsor(unique("s-fs1b-stays"));
+        credit(moved, 10_000);
+        credit(stays, 10_000);
+        String theirs = livePublication(moved, "FS1b Kyushu's");
+        String ours = livePublication(stays, "FS1b the platform's");
+        run(OperatorProcesses.ASSIGN, hq(), body("userId", moved, "operatorId", kyushu.operatorId(), "reason", "Move"));
+        String platform = TestTokens.bearer(tokens, "fs1b-content", QbPermissions.ADMIN_PUBLICATION_READ);
+        String member = memberSession(kyushu.leadId(), kyushu.operatorId());
+        Map<String, Object> byKyushu = Map.of("field", "operatorId", "op", "eq", "value", kyushu.operatorId());
+
+        // The platform's reader: every operator's, and one operator's by the filter, named.
+        List<Map<String, Object>> all = items("qb.admin.publications", platform, Map.of("limit", 500));
+        assertThat(all).extracting(row -> String.valueOf(row.get("publicationId"))).contains(theirs, ours);
+        assertThat(items("qb.admin.publications", platform, Map.of("filters", List.of(byKyushu), "limit", 500)))
+            .allSatisfy(row -> assertThat(row).containsEntry("operatorId", kyushu.operatorId())
+                .containsEntry("operatorName", name))
+            .extracting(row -> String.valueOf(row.get("publicationId"))).contains(theirs).doesNotContain(ours);
+        // An operator's session reads its own sponsors' only, whatever it asks for.
+        assertThat(items("qb.admin.publications", member, Map.of("limit", 500)))
+            .allSatisfy(row -> assertThat(row).containsEntry("operatorId", kyushu.operatorId()))
+            .extracting(row -> String.valueOf(row.get("publicationId"))).contains(theirs).doesNotContain(ours);
+        assertThat(items("qb.admin.publications", member, Map.of("filters", List.of(Map.of("field", "operatorId",
+            "op", "eq", "value", platformOperator())), "limit", 500))).isEmpty();
+
+        // Every one of the platform's cross-operator lists takes the filter, for both kinds of session.
+        BY_OPERATOR.forEach((id, params) -> {
+            for (String token : List.of(platform, member)) {
+                assertThat(items(id, token, Map.of("params", params, "filters", List.of(byKyushu))))
+                    .as(id).allSatisfy(row -> assertThat(row).containsEntry("operatorId", kyushu.operatorId()));
+            }
+        });
     }
 
     @Test

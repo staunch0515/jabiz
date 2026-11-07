@@ -31,8 +31,6 @@ export const DATASET = {
   broadcastTarget: 'urn:jabiz:dataset:default:QbBroadcastTarget',
   /** Transfers: a bank withdrawal's account number is revealed from here (`qb.payout.bank.reveal`; Q13b). */
   transfer: 'urn:jabiz:dataset:default:QbTransfer',
-  /** The official publishers whose publications may be certification rounds (Q69; `qb.certification.admin`). */
-  officialPublisher: 'urn:jabiz:dataset:default:QbOfficialPublisher',
   /**
    * F-C1: a Sponsor's asset library and where each asset was copied to, read only (`qb.admin.publication.read`; an
    * operator's session: its own Sponsors').
@@ -265,8 +263,6 @@ export const PROCESS = {
   legalWithdraw: 'QB_LEGAL_WITHDRAW',
   /** Sets the reward methods a sponsor may publish with (Q22; `qb.admin.reward-methods`). */
   rewardMethodsSet: 'QB_SPONSOR_REWARD_METHODS_SET',
-  /** Decides a disputed cash reward (Q22; `qb.cash.resolve`). */
-  cashResolve: 'QB_CASH_REWARD_RESOLVE',
   /** An administrator voids a prize not yet collected (Q22b). */
   redemptionVoid: 'QB_REDEMPTION_VOID',
   /** Decides a disputed digital prize, or voids one still open (Q33; `qb.digital.resolve`). */
@@ -385,16 +381,14 @@ export const CERTIFICATION_PROCESS = {
   roundClose: 'QB_CERTIFICATION_ROUND_CLOSE',
   grant: 'QB_CERTIFICATION_GRANT',
   revoke: 'QB_CERTIFICATION_REVOKE',
-  officialSet: 'QB_OFFICIAL_PUBLISHER_SET',
+  /** F-S1b: an operator's overview, for the platform (read only; `qb.certification.admin`). */
+  overviewOf: 'QB_CERTIFICATION_OVERVIEW_OF',
 } as const
 
 /** The certifications' keys (backend `certification.Certifications`); their names are `certification.names.<key>`. */
 export const CERTIFICATIONS = ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD',
   'TERMS_SPONSOR_UNDERSTOOD', 'BENEFIT_PROVIDER', 'BENEFIT_SPONSOR'] as const
 export type Certification = (typeof CERTIFICATIONS)[number]
-
-/** The owner of headquarters' own rounds and official publishers (`QbCertifications.DIRECT`). */
-export const CERTIFICATION_DIRECT = 'direct'
 
 /** Permissions (`QbPermissions`): they only decide what the pages offer; the server checks every call. */
 export const PERMISSION = {
@@ -433,9 +427,8 @@ export const PERMISSION = {
   bankApprove: 'qb.topup.bank.approve',
   /** Manual credits (Q18b): finance records them; the bank top-ups' approvers approve them. */
   manualRecord: 'qb.topup.manual.record',
-  /** Q22: which reward methods a sponsor may use, and deciding disputed cash rewards. */
+  /** Q22: which reward methods a sponsor may use (F-S1: the operators'). */
   rewardMethods: 'qb.admin.reward-methods',
-  cashResolve: 'qb.cash.resolve',
   redemptionVoid: 'qb.redemption.void',
   /** Q33: deciding disputed digital prizes and voiding open ones. */
   digitalResolve: 'qb.digital.resolve',

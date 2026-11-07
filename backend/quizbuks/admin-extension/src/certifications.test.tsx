@@ -8,13 +8,13 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jabiz/admin'
 import { expectAccessible } from '@jabiz/admin/testing'
 import CertificationsPage from './CertificationsPage'
-import { CERTIFICATION_PROCESS, DATASET, PATH, PERMISSION, TEMPLATE } from './ids'
+import { CERTIFICATION_PROCESS, PATH, PERMISSION, TEMPLATE } from './ids'
 import { messages } from './messages'
 
 const server = vi.hoisted(() => ({
   permissions: new Set<string>(),
+  entry: 'operator',
   overview: {} as Record<string, unknown>,
-  official: [] as Record<string, unknown>[],
   runProcess: vi.fn(),
   runQuery: vi.fn(),
   get: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock('@jabiz/admin', async (original) => {
     unwrap: async (call: Promise<unknown>) => call,
     runProcess: server.runProcess,
     runQuery: server.runQuery,
-    useAuth: () => ({ can: (p: string) => server.permissions.has(p) }),
+    useAuth: () => ({ entry: server.entry, can: (p: string) => server.permissions.has(p) }),
     UserName: ({ id }: { id: string | null }) => <span data-testid="user-name">{id}</span>,
   }
 })
@@ -39,9 +39,10 @@ const NEW_PUBLICATION = '0192f0a0-0000-7000-8000-00000000a002'
 const TAKER = '0192f0a0-0000-7000-8000-00000000b001'
 const ADMIN = '0192f0a0-0000-7000-8000-00000000c001'
 const SPONSOR = '0192f0a0-0000-7000-8000-00000000d001'
+const OPERATOR = '0192f0a0-0000-7000-8000-00000000e001'
 
 const overview = () => ({
-  owner: 'direct',
+  owner: OPERATOR,
   rounds: [
     { roundId: 'r1', publicationId: PUBLICATION, publicationName: 'Sponsor basics', certification: 'SPONSOR_APPLY',
       certificationVersion: 1, addedAt: '2026-10-01T01:00:00Z', closedAt: null, holders: 12 },
@@ -50,9 +51,9 @@ const overview = () => ({
   ],
   byHand: [
     { recordId: 'h1', userId: TAKER, certification: 'SPONSOR_APPLY', kind: 'GRANTED', reason: 'Met in person',
-      actor: ADMIN, owner: 'direct', at: '2026-10-10T01:00:00Z', validUntil: '2027-10-10T01:00:00Z' },
+      actor: ADMIN, owner: OPERATOR, at: '2026-10-10T01:00:00Z', validUntil: '2027-10-10T01:00:00Z' },
     { recordId: 'h2', userId: TAKER, certification: 'SPONSOR_APPLY', kind: 'REVOKED', reason: 'Shared answers',
-      actor: ADMIN, owner: 'direct', at: '2026-10-20T01:00:00Z', validUntil: null },
+      actor: ADMIN, owner: OPERATOR, at: '2026-10-20T01:00:00Z', validUntil: null },
   ],
 })
 
@@ -62,25 +63,25 @@ beforeAll(async () => {
 
 beforeEach(() => {
   server.permissions = new Set([PERMISSION.certificationManage])
+  server.entry = 'operator'
   server.overview = overview()
-  server.official = [{ userId: SPONSOR, owner: 'direct', active: true, setBy: ADMIN, setAt: '2026-09-01T01:00:00Z' }]
   server.runProcess.mockReset().mockImplementation(async (name: string) => {
-    if (name === CERTIFICATION_PROCESS.overview) return server.overview
+    if (name === CERTIFICATION_PROCESS.overview || name === CERTIFICATION_PROCESS.overviewOf) return server.overview
     return { roundId: 'r2', publicationId: NEW_PUBLICATION, certification: 'SPONSOR_APPLY', certificationVersion: 1,
       closedAt: null, recordId: 'h3', kind: 'GRANTED', validUntil: null }
   })
   server.get.mockReset().mockRejectedValue(new ApiError(404, { detail: 'Not found' }))
   // Q88a: the sponsors' own certifications (the template; narrowed by the company name typed).
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { params?: { q?: string } }) => {
+    if (id === TEMPLATE.operators) {
+      return { items: [{ operatorId: OPERATOR, name: 'Kanto Partners', contactEmail: 'ops@kanto.example' }], total: 1 }
+    }
     if (id !== TEMPLATE.sponsorCertifications) throw new ApiError(403, { detail: 'Forbidden' })
     const rows = [{ certificationId: 'sc1', key: 'sp:sc1', sponsorId: SPONSOR, company: 'Keys Co', name: '{"en":"Keyboard expert","ja":"キーボード達人"}',
       validityDays: 365, certificationVersion: 2, status: 'ACTIVE', createdAt: '2026-11-01T01:00:00Z', rounds: 3, holders: 7 }]
     return { items: options.params?.q && !'Keys Co'.includes(options.params.q) ? [] : rows, total: 1 }
   })
-  server.post.mockReset().mockImplementation(async (_path: string, options: { params: { path: { resourceId: string } } }) => {
-    if (options.params.path.resourceId !== DATASET.officialPublisher) throw new ApiError(403, { detail: 'Forbidden' })
-    return { items: server.official.map((attributes) => ({ attributes })) }
-  })
+  server.post.mockReset().mockRejectedValue(new ApiError(403, { detail: 'Forbidden' }))
 })
 
 function renderPage() {
@@ -127,7 +128,6 @@ describe('the certifications page', () => {
     expect(rows[1]).toHaveTextContent(NEW_PUBLICATION)
     // Without reading publications, the name is no link.
     expect(screen.queryByTestId('round-publication-link')).not.toBeInTheDocument()
-    expect(screen.getByTestId('certifications-owner')).toHaveTextContent('Headquarters (direct)')
     const records = screen.getAllByTestId('record-row')
     expect(records[0]).toHaveAttribute('data-kind', 'GRANTED')
     expect(records[0]).toHaveTextContent('Met in person')
@@ -214,26 +214,32 @@ describe('the certifications page', () => {
       { userId: TAKER, certification: 'SPONSOR_APPLY', reason: 'Shared answers' }))
   })
 
-  it('hides the official publishers without qb.certification.admin', async () => {
+  it('has no official publishers to set: an operator\'s own Sponsor is its official publisher (F-S1)', async () => {
     renderPage()
     await screen.findAllByTestId('round-row')
     expect(screen.queryByTestId('official-section')).not.toBeInTheDocument()
     expect(server.post).not.toHaveBeenCalled()
   })
 
-  it('lists and sets the official publishers for headquarters', async () => {
-    server.permissions.add(PERMISSION.certificationAdmin)
+  it('lets the platform read an operator\'s rounds and records, chosen by name, and run none of it (F-S1b)', async () => {
+    server.entry = 'admin'
+    server.permissions = new Set([PERMISSION.certificationAdmin, PERMISSION.operatorsRead,
+      PERMISSION.publicationRead])
     const { container } = renderPage()
-    const section = await screen.findByTestId('official-section')
-    const row = await within(section).findByTestId('official-row')
-    expect(row).toHaveTextContent(SPONSOR)
-    expect(row).toHaveTextContent('Headquarters (direct)')
-    await expectAccessible(container)
+    const picker = await screen.findByTestId('certifications-operator')
+    // Nothing is read before an operator is chosen.
+    expect(screen.queryByTestId('rounds-section')).not.toBeInTheDocument()
+    expect(server.runProcess).not.toHaveBeenCalled()
     const user = userEvent.setup()
-    await user.type(within(section).getByTestId('official-user'), SPONSOR)
-    await user.click(within(section).getByTestId('official-active'))
-    await user.click(within(section).getByTestId('official-save'))
-    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(CERTIFICATION_PROCESS.officialSet,
-      { userId: SPONSOR, operatorId: null, active: false }))
+    await user.click(picker)
+    await user.click(await screen.findByRole('option', { name: /Kanto Partners/ }))
+    const rows = await screen.findAllByTestId('round-row')
+    expect(server.runProcess).toHaveBeenCalledWith(CERTIFICATION_PROCESS.overviewOf, { operatorId: OPERATOR })
+    expect(server.runProcess).not.toHaveBeenCalledWith(CERTIFICATION_PROCESS.overview, expect.anything())
+    expect(within(rows[0]).queryByTestId('round-close')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('round-add-form')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('by-hand-form')).not.toBeInTheDocument()
+    expect(screen.getAllByTestId('record-row')).toHaveLength(2)
+    await expectAccessible(container)
   })
 })

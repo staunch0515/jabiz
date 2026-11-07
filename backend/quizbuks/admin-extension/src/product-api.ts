@@ -19,6 +19,9 @@ export interface SponsorProductRow {
   editedAt: string | null
   company: string | null
   handle: string | null
+  /** F-S1b: the Sponsor's operator now (the platform's lists). */
+  operatorId?: string | null
+  operatorName?: string | null
 }
 
 type Row = Record<string, unknown>
@@ -41,13 +44,15 @@ function rowOf(row: Row): SponsorProductRow {
     editedAt: str(row.editedAt),
     company: str(row.company),
     handle: str(row.handle),
+    operatorId: str(row.operatorId),
+    operatorName: str(row.operatorName),
   }
 }
 
 /** One page of the sponsors' products, of one status and one sponsor when given. */
 export async function readSponsorProducts(offset: number, limit: number, sorts?: SortSpec[],
-  status?: string | null, userId?: string | null): Promise<Page<SponsorProductRow>> {
-  const filters: Filter[] = status ? [{ field: 'status', op: 'eq', value: status }] : []
+  status?: string | null, userId?: string | null, more?: Filter[]): Promise<Page<SponsorProductRow>> {
+  const filters: Filter[] = [...status ? [{ field: 'status', op: 'eq', value: status }] : [], ...more ?? []]
   const answer = await runQuery<Row>(TEMPLATE.sponsorProducts, { params: userId ? { userId } : {}, filters, sorts,
     offset, limit, count: true })
   return { items: answer.items.map(rowOf), total: answer.total }

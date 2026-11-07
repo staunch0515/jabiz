@@ -173,7 +173,8 @@ export default defineExtension({
     { path: PATH.operatorAudiencePrices, element: <OperatorAudiencePricesPage /> },
   ],
   menu: [
-    // Q48a: the operator's own pages, first in its back office (only its members hold qb.operator.use).
+    // F-S1b: the operator's own pages (only its members hold qb.operator.use): what an operator runs for its sponsors
+    // besides the shared lists below.
     {
       key: 'quizbuks-operator',
       label: 'menu.operatorGroup',
@@ -182,19 +183,14 @@ export default defineExtension({
           permission: PERMISSION.operatorUse },
         { key: 'qb-operator-sponsors', label: 'menu.operatorSponsors', path: PATH.operatorSponsors, icon: Users,
           permission: PERMISSION.operatorUse },
-        // Q87b: how the operator's sponsors pay the platform's fees.
-        { key: 'qb-operator-billing', label: 'menu.operatorBilling', path: PATH.operatorBilling, icon: Receipt,
-          permission: PERMISSION.operatorUse },
-        // Q60a-3: the pages of the operator's sponsors.
-        { key: 'qb-operator-sponsor-pages', label: 'menu.sponsorPages', path: PATH.sponsorPages, icon: Globe,
-          permission: PERMISSION.operatorUse },
-        { key: 'qb-operator-sponsor-products', label: 'menu.sponsorProducts', path: PATH.sponsorProducts,
-          icon: ShoppingBag, permission: PERMISSION.operatorUse },
-        // Q49a: reports of the operator's sponsors' quizzes.
-        { key: 'qb-operator-abuse-reports', label: 'menu.abuseReports', path: PATH.abuseReports, icon: Flag,
-          permission: PERMISSION.operatorUse },
         // Q48c: the operator's own prospecting.
         { key: 'qb-operator-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
+          permission: PERMISSION.prospectUse },
+        // Q69: the rounds of the operator's own sponsor, and grants and revocations by hand.
+        { key: 'qb-operator-certifications', label: 'menu.certifications', path: PATH.certifications, icon: BadgeCheck,
+          permission: PERMISSION.certificationManage },
+        // Q87b: how the operator's sponsors pay the platform's fees.
+        { key: 'qb-operator-billing', label: 'menu.operatorBilling', path: PATH.operatorBilling, icon: Receipt,
           permission: PERMISSION.operatorUse },
         // Q48b: the operator's own settlements.
         { key: 'qb-operator-settlements', label: 'menu.operatorSettlements', path: PATH.operatorSettlements,
@@ -207,66 +203,70 @@ export default defineExtension({
           icon: Tags, permission: PERMISSION.operatorUse },
       ],
     },
+    // F-S1b: the sponsors' day-to-day, shared by both: an operator's session reads and runs its own sponsors' (the
+    // server's scope); the platform's reads every operator's, filtered by operator, and runs only its emergencies.
     {
       key: 'quizbuks',
       label: 'menu.group',
       children: [
-        {
-          key: 'qb-reviews',
-          label: 'menu.reviews',
-          path: PATH.reviews,
-          icon: ClipboardCheck,
-          permission: PERMISSION.reviewPublication,
-        },
+        { key: 'qb-reviews', label: 'menu.reviews', path: PATH.reviews, icon: ClipboardCheck,
+          permission: PERMISSION.publicationRead },
         // Q17: every quiz and every publication, whatever became of them (the review queue shows only the waiting).
         { key: 'qb-quizzes', label: 'menu.quizzes', path: PATH.quizzes, icon: FileQuestion,
           permission: PERMISSION.quizRead },
         { key: 'qb-publications', label: 'menu.publications', path: PATH.publications, icon: Rocket,
           permission: PERMISSION.publicationRead },
-        // Q60a-3: every sponsor's page (headquarters; an operator has its own entry above).
+        // Q60a-3, Q60b-3: sponsors' pages and products.
         { key: 'qb-sponsor-pages', label: 'menu.sponsorPages', path: PATH.sponsorPages, icon: Globe,
-          permission: PERMISSION.contentWrite },
+          permission: PERMISSION.publicationRead },
         { key: 'qb-sponsor-products', label: 'menu.sponsorProducts', path: PATH.sponsorProducts, icon: ShoppingBag,
-          permission: PERMISSION.contentWrite },
+          permission: PERMISSION.publicationRead },
         // F-C2: one entry for both management systems (support, finance and the operators' members read it).
         { key: 'qb-usage', label: 'menu.usage', path: PATH.usage, icon: HardDrive,
           permission: PERMISSION.publicationRead },
-        // Q49a: takers' reports of quizzes (headquarters; an operator has its own entry above).
+        // Q49a: takers' reports of quizzes.
         { key: 'qb-abuse-reports', label: 'menu.abuseReports', path: PATH.abuseReports, icon: Flag,
-          permission: PERMISSION.contentWrite },
-        // F-S11: the exceptions to the rule on foreign videos and mainland China (headquarters only).
-        { key: 'qb-region', label: 'menu.region', path: PATH.region, icon: Globe, permission: PERMISSION.regionRead },
-        { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
-        // Q22: the cash rewards sponsors pay takers themselves, with the disputes to decide.
+          permission: PERMISSION.publicationRead },
+        // Q22: the cash rewards sponsors pay takers themselves (F-S1: nobody here decides their disputes).
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
           permission: PERMISSION.publicationRead },
         // Q22b: the prizes takers collect at a sponsor's place.
         { key: 'qb-redemptions', label: 'menu.redemptions', path: PATH.redemptions, icon: Gift,
           permission: PERMISSION.publicationRead },
-        // Q33: codes, vouchers and links sponsors give winners, with the disputes to decide.
+        // Q33: codes, vouchers and links sponsors give winners, with the disputes the operators decide.
         { key: 'qb-digital-prizes', label: 'menu.digitalPrizes', path: PATH.digitalPrizes, icon: Ticket,
           permission: PERMISSION.publicationRead },
+      ],
+    },
+    // F-S1b: the platform's monitoring, global rules and emergencies, and its read-only views across operators.
+    {
+      key: 'quizbuks-platform',
+      label: 'menu.platformGroup',
+      children: [
+        { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
+        // F-S11: the exceptions to the rule on foreign videos and mainland China (headquarters only).
+        { key: 'qb-region', label: 'menu.region', path: PATH.region, icon: Globe, permission: PERMISSION.regionRead },
         { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
           permission: PERMISSION.usersRead },
-        { key: 'qb-legal', label: 'menu.legal', path: PATH.legal, icon: ScrollText,
-          permission: PERMISSION.contentWrite },
-        { key: 'qb-broadcasts', label: 'menu.broadcasts', path: PATH.broadcasts, icon: Megaphone,
-          permission: PERMISSION.contentWrite },
-        { key: 'qb-ai', label: 'menu.ai', path: PATH.ai, icon: Sparkles, permission: PERMISSION.aiRead },
         // Q48a: the operators, and the spot checks of the reviews they decided.
         { key: 'qb-operators', label: 'menu.operators', path: PATH.operators, icon: Handshake,
           permission: PERMISSION.operatorsRead },
         { key: 'qb-operator-reviews', label: 'menu.operatorReviews', path: PATH.operatorReviews, icon: ClipboardCheck,
           permission: PERMISSION.spotCheck },
-        // Q48c: headquarters' own prospecting, and every owner's.
+        // Q48c, F-S1b: every operator's prospecting, read only.
         { key: 'qb-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
           permission: PERMISSION.adminProspect },
-        // Q69: one entry for both back offices (headquarters' content administrators and the operators hold it).
+        // Q69, F-S1b: every operator's certification rounds and records by hand, read only.
         { key: 'qb-certifications', label: 'menu.certifications', path: PATH.certifications, icon: BadgeCheck,
-          permission: PERMISSION.certificationManage },
+          permission: PERMISSION.certificationAdmin },
         // Q70: every referral (content and finance administrators).
         { key: 'qb-referrals', label: 'menu.referrals', path: PATH.referrals, icon: UserRoundPlus,
           permission: PERMISSION.referralsRead },
+        { key: 'qb-legal', label: 'menu.legal', path: PATH.legal, icon: ScrollText,
+          permission: PERMISSION.contentWrite },
+        { key: 'qb-broadcasts', label: 'menu.broadcasts', path: PATH.broadcasts, icon: Megaphone,
+          permission: PERMISSION.contentWrite },
+        { key: 'qb-ai', label: 'menu.ai', path: PATH.ai, icon: Sparkles, permission: PERMISSION.aiRead },
         // Q47c: the audience rules (content administrators) and every owner's prices (finance).
         { key: 'qb-audience-rules', label: 'menu.audienceRules', path: PATH.audienceRules, icon: SlidersHorizontal,
           permission: PERMISSION.audienceRulesWrite },

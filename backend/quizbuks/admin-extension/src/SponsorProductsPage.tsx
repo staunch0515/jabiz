@@ -14,12 +14,14 @@ import {
   paths,
   useAuth,
   type ColumnDef,
+  type Filter,
 } from '@jabiz/admin'
 import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { httpsUrl } from './links'
 import { QUEUE, usePaged, useLabels, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION, SPONSOR_PRODUCT_PROCESS, SPONSOR_PRODUCT_STATUSES } from './ids'
 import { formatShopPrice, readSponsorProducts, type SponsorProductRow } from './product-api'
+import { operatorColumn, useOperatorFilter } from './operator-filter'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const ALL = 'ALL'
@@ -48,12 +50,13 @@ function useProcesses() {
  * a new tab; a shown or hidden one is taken down, and one taken down put back, through the platform's process page
  * with the product filled in, where the reason is given with a second factor.
  */
-export function SponsorProductsTable({ userId, status = null }: { userId?: string; status?: string | null }) {
+export function SponsorProductsTable({ userId, status = null, filters = [], across = false }: { userId?: string;
+  status?: string | null; filters?: Filter[]; across?: boolean }) {
   const { t, i18n } = useTranslation(EXTENSION_NAMESPACE)
   const statusLabel = useLabels(DICTIONARY.sponsorProductStatus)
   const processes = useProcesses()
-  const { query, table, sortable } = usePaged([...QUEUE.sponsorProducts, userId ?? null, status],
-    (offset, limit, sorts) => readSponsorProducts(offset, limit, sorts, status, userId), true, SORTS)
+  const { query, table, sortable } = usePaged([...QUEUE.sponsorProducts, userId ?? null, status, filters],
+    (offset, limit, sorts) => readSponsorProducts(offset, limit, sorts, status, userId, filters), true, SORTS)
   const columns = useMemo<ColumnDef<SponsorProductRow, unknown>[]>(() => {
     const link = (name: string, productId: string) =>
       `${paths.process(name, SPONSOR_PRODUCT_PROCESS.version)}?${new URLSearchParams({ productId })}`
@@ -81,6 +84,7 @@ export function SponsorProductsTable({ userId, status = null }: { userId?: strin
           </Link>
         ),
       }]),
+      ...(across && !userId ? [operatorColumn<SponsorProductRow>(t('pickers.operatorColumn'))] : []),
       { id: 'price', header: t('sponsorProducts.columns.price'), meta: { className: 'text-right tabular-nums' },
         cell: ({ row }) => formatShopPrice(row.original.price, row.original.currency, i18n.language) },
       {
@@ -113,7 +117,7 @@ export function SponsorProductsTable({ userId, status = null }: { userId?: strin
             data-testid="sponsor-product-takedown">{t('sponsorProducts.takedown')}</Link>),
       }] : []),
     ]
-  }, [t, i18n.language, statusLabel, processes, userId])
+  }, [t, i18n.language, statusLabel, processes, userId, across])
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
     <DataTable label={userId ? t('sponsorProducts.sponsorTable') : t('sponsorProducts.table')}
@@ -130,9 +134,11 @@ export default function SponsorProductsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const statusLabel = useLabels(DICTIONARY.sponsorProductStatus)
   const [status, setStatus] = useState<string>(ALL)
+  const operators = useOperatorFilter()
   return (
     <div className="flex flex-col gap-4" data-testid="qb-sponsor-products">
       <PageHeader title={t('sponsorProducts.title')} description={t('sponsorProducts.description')} className="pb-0" />
+      {operators.bar}
       <div className="flex items-center gap-2">
         <Label htmlFor="sponsor-products-status">{t('sponsorProducts.status')}</Label>
         <Select value={status} onValueChange={setStatus}>
@@ -145,7 +151,8 @@ export default function SponsorProductsPage() {
           </SelectContent>
         </Select>
       </div>
-      <SponsorProductsTable status={status === ALL ? null : status} />
+      <SponsorProductsTable status={status === ALL ? null : status} filters={operators.filters}
+        across={operators.across} />
     </div>
   )
 }
