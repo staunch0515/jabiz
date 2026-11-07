@@ -67,6 +67,20 @@ describe('refreshSession', () => {
     expect(session.accessToken()).toBeNull()
   })
 
+  it('stores the new refresh token before anything sees the new access token', async () => {
+    const { session, client } = await openTab('portal')
+    session.store('a0', 'r1')
+    vi.stubGlobal('fetch', rotatingServer('r1').fetch)
+    const seen: (string | null)[] = []
+    // A listener that acts on the new session at once (a reload, a navigation) finds the new token already stored.
+    session.subscribe(() => {
+      seen.push(window.sessionStorage.getItem('jabiz.session.portal.refresh'))
+    })
+    expect(await client.refreshSession()).toBe(true)
+    expect(session.accessToken()).toBe('a1')
+    expect(seen).toEqual(['r2'])
+  })
+
   it('lets two tabs of a session kept on the device refresh at once without using a token twice', async () => {
     const locks = fakeLocks()
     withLocks(locks)
