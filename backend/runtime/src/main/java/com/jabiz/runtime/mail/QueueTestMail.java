@@ -87,7 +87,10 @@ class QueueTestMail implements StepHandler<NoMetadata, ProcessContext> {
         });
     }
 
-    /** The operator's own address; 422 {@code MAIL_NO_ADDRESS} for an operator without one, or who is no user. */
+    /**
+     * The operator's own verified address; 422 {@code MAIL_NO_ADDRESS} for an operator without one, whose current
+     * address is not the verified one (changed since the access token was issued), or who is no user.
+     */
     private Mono<String> address(ProcessContext ctx) {
         String actor = ctx.request().actorId();
         UUID user;
@@ -96,10 +99,13 @@ class QueueTestMail implements StepHandler<NoMetadata, ProcessContext> {
         } catch (IllegalArgumentException e) {
             return Mono.error(noAddress(actor));
         }
-        return storages.getEngine(poolRef).select("SELECT email, is_deleted FROM sec_user_version"
+        return storages.getEngine(poolRef).select("SELECT email, verified_email, email_verified_at, is_deleted"
+                + " FROM sec_user_version"
                 + " WHERE user_id = :user ORDER BY version_no DESC LIMIT 1", Map.of("user", BoundValue.of(user)))
             .next()
-            .filter(row -> !Boolean.TRUE.equals(row.get("is_deleted")))
+            .filter(row -> !Boolean.TRUE.equals(row.get("is_deleted")) && row.get("email_verified_at") != null
+                && row.get("email") != null
+                && String.valueOf(row.get("email")).equalsIgnoreCase(String.valueOf(row.get("verified_email"))))
             .map(row -> Rows.string(row.get("email")))
             .filter(email -> email != null && !email.isBlank())
             .switchIfEmpty(Mono.error(() -> noAddress(actor)));

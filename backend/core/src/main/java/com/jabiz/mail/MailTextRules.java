@@ -65,8 +65,11 @@ public final class MailTextRules {
     private static final Parser PARSER = Parser.builder().build();
     private static final Pattern SCHEME = Pattern.compile("^([A-Za-z][A-Za-z0-9+.-]*):");
     private static final Set<String> WEB = Set.of("http", "https");
-    /** An address written out in text, which mail clients turn into a link of their own. */
-    private static final Pattern BARE_URL = Pattern.compile("(?i)\\bhttps?://[^\\s<>()\\[\\]\"']+");
+    /**
+     * An address written out in text, which mail clients turn into a link of their own: also inside a word
+     * ({@code Loginhttps://…}) and without a scheme ({@code www.…}), as linkifiers find them.
+     */
+    private static final Pattern BARE_URL = Pattern.compile("(?i)(?:https?:|www\\.)[^\\s<>()\\[\\]\"']+");
 
     /**
      * The configured limits.
@@ -197,15 +200,24 @@ public final class MailTextRules {
         }
     }
 
-    /** Whether a link target leads to the application itself by one of the platform's own placeholders. */
+    /**
+     * Whether a link target leads to the application itself by one of the platform's own placeholders. The base
+     * address has no trailing slash, so after {@code {baseUrl}} only a path, query or fragment may follow: anything
+     * else would extend its host ({@code {baseUrl}.evil.example}) or make it a user name ({@code {baseUrl}@evil}).
+     * The entry addresses end with a slash, so whatever follows them is a path.
+     */
     static boolean siteLink(String destination) {
         Matcher placeholder = MailPlaceholders.PLACEHOLDER.matcher(destination);
         if (!placeholder.lookingAt()) {
             return false;
         }
         String name = placeholder.group(1);
-        return MailTemplate.BASE_URL.equals(name) || MailTemplate.ENTRY_URL.equals(name)
-            || MailTemplate.UNSUBSCRIBE_URL.equals(name) || MailTemplate.namedEntryUrl(name);
+        if (MailTemplate.BASE_URL.equals(name)) {
+            String rest = destination.substring(placeholder.end());
+            return rest.isEmpty() || "/?#".indexOf(rest.charAt(0)) >= 0 && !rest.startsWith("//");
+        }
+        return MailTemplate.ENTRY_URL.equals(name) || MailTemplate.UNSUBSCRIBE_URL.equals(name)
+            || MailTemplate.namedEntryUrl(name);
     }
 
     private static Violation secretPlacement(String field, String name, String where) {
@@ -251,7 +263,8 @@ public final class MailTextRules {
             // Mail clients link addresses written out in the text: they follow the same rule as links.
             Matcher bare = BARE_URL.matcher(literal);
             while (written && bare.find()) {
-                checkTarget(bare.group());
+                String found = bare.group();
+                checkTarget(found.regionMatches(true, 0, "www.", 0, 4) ? "https://" + found : found);
             }
         }
 
@@ -278,22 +291,34 @@ public final class MailTextRules {
                     + " is not http, https, mailto or relative", Map.of("url", url)));
                 return;
             }
+            // Browsers read a backslash as a slash in web addresses; a link has no need of one.
+            if (url.indexOf('\\') >= 0) {
+                add("link:" + url, violation(BODY, PlatformErrorCodes.MAIL_TEXT_LINK_NOT_ALLOWED, "The link " + url
+                    + " contains a backslash", Map.of("url", url)));
+                return;
+            }
+            // A target that begins with a placeholder and is no link to the site: the value decides where it leads
+            // ({baseUrl}@evil.example, a parameter holding an address).
+            if (url.startsWith("{")) {
+                add("host:" + url, violation(BODY, PlatformErrorCodes.MAIL_TEXT_LINK_HOST, "The link " + url
+                    + " does not lead to this application: after {" + MailTemplate.BASE_URL
+                    + "} only a path, query or fragment may follow", Map.of("host", url)));
+                return;
+            }
             Matcher scheme = SCHEME.matcher(url);
-            String rest;
+            String authority;
             if (scheme.find()) {
                 if (!WEB.contains(scheme.group(1).toLowerCase(Locale.ROOT))) {
                     return;
                 }
-                rest = url.substring(scheme.end());
-                if (!rest.startsWith("//")) {
-                    return;
-                }
-            } else if (url.startsWith("//") || url.startsWith("\\\\") || url.startsWith("/\\")) {
-                rest = url;
+                // http:host and https:/host lead to the host as http://host does (WHATWG URL parsing).
+                authority = url.substring(scheme.end()).replaceFirst("^/*", "");
+            } else if (url.startsWith("//")) {
+                authority = url.substring(2);
             } else {
                 return;
             }
-            String host = host(rest.substring(2));
+            String host = host(authority);
             if (host == null || !limits.allows(host)) {
                 String shown = host == null ? url : host;
                 add("host:" + shown, violation(BODY, PlatformErrorCodes.MAIL_TEXT_LINK_HOST, "The link " + url

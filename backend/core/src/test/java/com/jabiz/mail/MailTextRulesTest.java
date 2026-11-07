@@ -122,6 +122,42 @@ class MailTextRulesTest {
     }
 
     @Test
+    void noPlaceholderOrSchemeTrickLeadsASecretOrALinkOffTheSite() {
+        // The base address has no trailing slash: what follows {baseUrl} must not extend or replace its host.
+        for (String target : new String[] {"{baseUrl}@evil.example/r?t={reset}", "{baseUrl}.evil.example/r?t={reset}",
+            "{baseUrl}:x@evil.example/r?t={reset}", "<{baseUrl}@evil.example/r?t={reset}>", "{baseUrl}//evil.example?t={reset}"}) {
+            assertThat(codes(RESET, "Reset", "Hello {userName}, [reset](" + target + ") {entry}")).as(target)
+                .contains(PlatformErrorCodes.MAIL_TEXT_SECRET_PLACEMENT);
+        }
+        assertThat(codes(RESET, "Reset", "Hello {userName} {entry}\n\n[reset][r]\n\n[r]: {baseUrl}@evil.example/?t={reset}\n"))
+            .contains(PlatformErrorCodes.MAIL_TEXT_SECRET_PLACEMENT);
+        // A path, query or fragment after it is the site.
+        assertThat(codes(RESET, "Reset", "Hello {userName}, [reset]({baseUrl}/auth/reset?entry={entry}&t={reset})"))
+            .isEmpty();
+        assertThat(codes(NEWS, "News {item}", NEWS_BODY + " [x]({baseUrl}@evil.example/?u={unsubscribeUrl})"))
+            .contains(PlatformErrorCodes.MAIL_TEXT_SECRET_PLACEMENT, PlatformErrorCodes.MAIL_TEXT_LINK_HOST);
+        assertThat(codes(NEWS, "News {item}", NEWS_BODY + " [x]({baseUrl}@evil.example/phish)"))
+            .containsExactly(PlatformErrorCodes.MAIL_TEXT_LINK_HOST);
+        // Web links without // (or with backslashes) lead to a host as browsers read them.
+        assertThat(codes(NEWS, "News {item}", NEWS_BODY + " [x](http:evil.example/login)"))
+            .containsExactly(PlatformErrorCodes.MAIL_TEXT_LINK_HOST);
+        assertThat(codes(NEWS, "News {item}", NEWS_BODY + " [x](https:/evil.example)"))
+            .containsExactly(PlatformErrorCodes.MAIL_TEXT_LINK_HOST);
+        assertThat(codes(NEWS, "News {item}", NEWS_BODY + " [x](https:\\\\evil.example/login)"))
+            .containsExactly(PlatformErrorCodes.MAIL_TEXT_LINK_NOT_ALLOWED);
+        assertThat(codes(NEWS, "News {item}", NEWS_BODY + " [x](https:/\\evil.example)"))
+            .containsExactly(PlatformErrorCodes.MAIL_TEXT_LINK_NOT_ALLOWED);
+        // Addresses inside a word, and www. hosts, are linked by mail clients: checked too.
+        assertThat(codes(NEWS, "News {item}", NEWS_BODY + " Loginhttps://evil.example/login"))
+            .containsExactly(PlatformErrorCodes.MAIL_TEXT_LINK_HOST);
+        assertThat(codes(NEWS, "News {item}", NEWS_BODY + " See www.evil.example today"))
+            .containsExactly(PlatformErrorCodes.MAIL_TEXT_LINK_HOST);
+        // www. names a host of its own: not the allowed help.example.org.
+        assertThat(codes(NEWS, "News {item}", NEWS_BODY + " See www.help.example.org today"))
+            .containsExactly(PlatformErrorCodes.MAIL_TEXT_LINK_HOST);
+    }
+
+    @Test
     void noImagesAndNoHtml() {
         assertThat(codes(NEWS, "News {item}", NEWS_BODY + " ![pixel](https://app.example.com/p.gif)"))
             .containsExactly(PlatformErrorCodes.MAIL_TEXT_IMAGE);

@@ -77,6 +77,7 @@ class MailTextControlTarget implements ControlTarget {
 
     @Override
     public Proposal propose(Request request, Object loaded, ProcessContext ctx) {
+        requireWriter(ctx, "Proposing a change of a mail text");
         mfa.require(ctx.request(), MfaRequirement.ADMINISTRATION, "Proposing a change of a mail text");
         if (request.targetId() != null || request.delete() || request.effectiveTime() != null) {
             ctx.reject(invalid("a mail text is named by values.template and values.locale; it is neither deleted "
@@ -96,6 +97,7 @@ class MailTextControlTarget implements ControlTarget {
 
     @Override
     public Object publish(Request request, Object loaded, ProcessContext ctx, ChangeSet.Target writes) {
+        requireWriter(ctx, "Publishing a change of a mail text");
         MailTexts.Stored based = (MailTexts.Stored) loaded;
         Object recordedBase = request.values().get(BASED_ON);
         Integer basedOn = recordedBase instanceof Number number ? number.intValue() : null;
@@ -175,5 +177,14 @@ class MailTextControlTarget implements ControlTarget {
 
     private static Violation invalid(String detail) {
         return ControlChanges.invalid("values", detail);
+    }
+
+    /**
+     * Who proposes or publishes a mail text holds what writing one needs (decision D72 item 1): the controlled
+     * change's own permissions are not enough, and the address must be verified, as for MAIL_TEXT_SAVE.
+     */
+    private static void requireWriter(ProcessContext ctx, String what) {
+        com.jabiz.runtime.security.Permissions.require(ctx.request(), MailPermissions.TEXT_WRITE, what);
+        com.jabiz.runtime.security.VerifiedEmailPolicy.require(ctx.request(), true, what);
     }
 }

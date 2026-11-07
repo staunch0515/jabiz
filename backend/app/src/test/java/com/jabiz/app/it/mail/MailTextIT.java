@@ -270,8 +270,17 @@ class MailTextIT extends SecurityItSupport {
             "[Reset]({entryUrl}auth/password-reset?entry={entry})", null, 422))).isEqualTo("MAIL_TEXT_NEEDS_APPROVAL");
 
         String proposer = TestTokens.bearer(jwt, "it-text-proposer", ApprovalPermissions.CONTROL_PROPOSE,
-            ApprovalPermissions.CONTROL_PUBLISH);
-        String publisher = TestTokens.bearer(jwt, "it-text-publisher", ApprovalPermissions.CONTROL_PUBLISH);
+            ApprovalPermissions.CONTROL_PUBLISH, MailPermissions.TEXT_WRITE);
+        String publisher = TestTokens.bearer(jwt, "it-text-publisher", ApprovalPermissions.CONTROL_PUBLISH,
+            MailPermissions.TEXT_WRITE);
+        // The controlled change's own permissions are not enough: proposing and publishing a mail text need what
+        // writing one needs, a verified address too (decision D72 item 1).
+        post("/api/processes/CONTROL_CHANGE_PROPOSE/latest", TestTokens.bearer(jwt, "it-text-outsider",
+            ApprovalPermissions.CONTROL_PROPOSE), proposal("it.verify", "Confirm {userName}", verifyBody))
+            .expectStatus().isForbidden();
+        post("/api/processes/CONTROL_CHANGE_PROPOSE/latest", TestTokens.unverified(jwt, "it-text-unverified",
+            ApprovalPermissions.CONTROL_PROPOSE, MailPermissions.TEXT_WRITE), proposal("it.verify",
+            "Confirm {userName}", verifyBody)).expectStatus().value(status -> assertThat(status).isBetween(400, 499));
         // Proposing needs a recent second factor, as publishing does.
         post("/api/processes/CONTROL_CHANGE_PROPOSE/latest", TestTokens.withoutMfa(jwt, "it-text-proposer",
             ApprovalPermissions.CONTROL_PROPOSE), proposal("it.verify", "Confirm {userName}", verifyBody))
@@ -287,6 +296,8 @@ class MailTextIT extends SecurityItSupport {
             "Confirm {userName}", verifyBody), 200)).get("changeId");
         assertThat(ruleCode(run("CONTROL_CHANGE_PUBLISH", proposer, Map.of("changeId", changeId), 422)))
             .isEqualTo("CONTROL_SAME_PERSON");
+        post("/api/processes/CONTROL_CHANGE_PUBLISH/latest", TestTokens.bearer(jwt, "it-text-other-publisher",
+            ApprovalPermissions.CONTROL_PUBLISH), Map.of("changeId", changeId)).expectStatus().isForbidden();
         assertThat(query("SELECT count(*) AS n FROM sys_mail_text_version WHERE template = 'it.verify'")
             .getFirst().get("n")).isEqualTo(0L);
         assertThat(output(run("CONTROL_CHANGE_PUBLISH", publisher, Map.of("changeId", changeId), 200)))
@@ -354,8 +365,14 @@ class MailTextIT extends SecurityItSupport {
 
     @Test
     void theTestMailGoesToItsOperatorOnlyWithoutATokenAndIsLimited() {
+        // An operator whose address is not verified has none to send to (the token's claim is not enough).
+        String unproven = user(address("unproven"), "en");
+        assertThat(ruleCode(run("MAIL_TEXT_TEST_SEND", TestTokens.bearer(jwt, unproven, MailPermissions.TEXT_WRITE),
+            Map.of("template", "it.news", "locale", "en"), 422))).isEqualTo("MAIL_NO_ADDRESS");
+
         String address = address("operator");
         String operator = user(address, "en");
+        post("/api/processes/IT_EMAIL_VERIFY/latest", admin(), Map.of("userId", operator)).expectStatus().isOk();
         String token = TestTokens.bearer(jwt, operator, MailPermissions.TEXT_WRITE);
         Map<String, Object> draft = new HashMap<>(Map.of("template", "it.verify", "locale", "en",
             "subject", "Check {userName}", "body", "[Go]({baseUrl}/verify?token={verify}) {userName}",
