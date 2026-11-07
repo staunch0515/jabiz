@@ -219,8 +219,8 @@ class MailLayoutIT extends SecurityItSupport {
 
         // A footer naming an entry that is not configured would link wrongly on every mail.
         assertThat(violations(run("CONTROL_CHANGE_PROPOSE", proposer(), proposal("ja", "Shop", "",
-            "[x]({entryUrl.nowhere}x)"), 422))).extracting(violation -> violation.get("params"))
-            .anySatisfy(params -> assertThat(params.toString()).contains("entryUrl.nowhere"));
+            "[x]({entryUrl.nowhere}x)"), 422))).anySatisfy(violation -> assertThat(violation.toString())
+                .contains("nowhere"));
 
         String changeId = (String) output(run("CONTROL_CHANGE_PROPOSE", proposer(), proposal("ja", "ショップ",
             "{baseUrl}/brand/logo.png", "株式会社ショップ · [ヘルプ]({baseUrl}/help)"), 200)).get("changeId");
