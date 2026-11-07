@@ -49,6 +49,8 @@ public class ApprovalEntities {
      * rather than imported, so that this package does not depend on the parameter package, which depends on it.
      */
     static final String PARAM_TARGET = "SysParam";
+    /** The texts of mail whose changes need approval ({@code MailText}, decision D72), named here likewise. */
+    static final String MAIL_TEXT_TARGET = "MailText";
 
     /** Status of a request. SUPERSEDED: the content changed, a new request was made. */
     public static final String PENDING = "PENDING";
@@ -130,7 +132,7 @@ public class ApprovalEntities {
         eb.field("changeId", f -> f.physicalColumn("change_id").immutable(true).required(true).generated(true)
             .asSemanticIdentity("urn:jabiz:entity:platform:control-change"));
         eb.field("targetEntity", f -> f.physicalColumn("target_entity").immutable(true).required(true)
-            .asCode(CONTROL_TARGETS_DICTIONARY, RULE, LIMIT, SOD_RULE, PARAM_TARGET));
+            .asCode(CONTROL_TARGETS_DICTIONARY, RULE, LIMIT, SOD_RULE, PARAM_TARGET, MAIL_TEXT_TARGET));
         eb.field("targetId", f -> f.physicalColumn("target_id").immutable(true).asText(36));
         eb.field("changeAction", f -> f.physicalColumn("change_action").immutable(true).required(true)
             .asCode(CHANGE_ACTIONS, ControlChanges.UPSERT, ControlChanges.DELETE));

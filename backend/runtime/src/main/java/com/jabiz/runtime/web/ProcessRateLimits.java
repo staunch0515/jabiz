@@ -32,9 +32,19 @@ import java.util.function.LongSupplier;
  * <p>Kept in memory, per instance, as the other limits (docs/design/15-public-access.md section 6); the buckets are the
  * same {@link TokenBucketLimiter} as those of the account endpoints ({@code SignUpRateLimits}). Not admission: a limit
  * stops one caller asking too much, the admission queue stops everyone crowding one lock.
+ *
+ * <p>Some platform processes have a limit unless configuration names one for them ({@link #PLATFORM_DEFAULTS}): a
+ * test mail of the mail texts ({@code MAIL_TEXT_TEST_SEND}, decision D72) at most 10 an hour per person.
  */
 @Component
 public class ProcessRateLimits {
+
+    /**
+     * The limits of platform processes when {@code jabiz.process.rate-limits} names none for them; configuration
+     * replaces them as a whole.
+     */
+    public static final Map<String, ProcessRateLimitProperties.Limit> PLATFORM_DEFAULTS = Map.of(
+        "MAIL_TEXT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)));
 
     /** Keys kept per bucket; the least recently used are forgotten first. */
     static final int MAX_KEYS = 100_000;
@@ -60,7 +70,9 @@ public class ProcessRateLimits {
         PlatformObservations observations, LongSupplier nanoTime) {
         this.addresses = addresses;
         this.observations = Objects.requireNonNull(observations, "observations");
-        properties.rateLimits().forEach((process, limit) -> {
+        Map<String, ProcessRateLimitProperties.Limit> limits = new HashMap<>(PLATFORM_DEFAULTS);
+        limits.putAll(properties.rateLimits());
+        limits.forEach((process, limit) -> {
             Duration period = limit.period();
             // A value out of range is the startup check's to report (ProcessAdmissionChecks); it limits nothing.
             if (period == null || period.isNegative() || period.isZero()) {

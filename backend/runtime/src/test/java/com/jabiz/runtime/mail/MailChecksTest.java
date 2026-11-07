@@ -84,6 +84,20 @@ class MailChecksTest {
     }
 
     @Test
+    void theDefaultTextsPassTheRulesOfTheTextsAdministratorsWrite() {
+        MailTemplate leaky = MailTemplate.define("t.leaky", t -> t.category(MailCategory.TRANSACTIONAL)
+            .token("verify", Duration.ofHours(1)));
+        List<CheckProblem> problems = checks(false, "", "", null, catalog(Locale.ENGLISH), leaky).check();
+
+        // A token in the subject fails the startup (decision D72 item 2); an image is only a warning in a default.
+        assertThat(problems).extracting(CheckProblem::severity, CheckProblem::message).containsExactly(
+            org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR, "[en] {verify} stands in the subject; it "
+                + "may only stand in a link target starting with {baseUrl} or {entryUrl…}"),
+            org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.WARNING, "[en] The body contains an image "
+                + "(allowed in the default, refused in an override)"));
+    }
+
+    @Test
     void refusesParametersNamedLikeSecrets() {
         MailTemplate secret = MailTemplate.define("t.ok", t -> t.category(MailCategory.TRANSACTIONAL)
             .param("userName", "newPassword").token("verify", Duration.ofHours(1)));

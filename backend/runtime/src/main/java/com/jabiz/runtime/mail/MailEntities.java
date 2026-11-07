@@ -58,6 +58,10 @@ public class MailEntities {
         // The sender the mail leaves through (decision D56): a key of the application's MailSenderSource; none for
         // the platform's server.
         eb.field("senderKey", f -> f.physicalColumn("sender_key").immutable(true).asText(100));
+        // A test mail of the texts (decision D72) is rendered when queued, with sample values: sent as it is.
+        eb.field("renderedSubject", f -> f.physicalColumn("rendered_subject").immutable(true).asText(null, false));
+        eb.field("renderedText", f -> f.physicalColumn("rendered_text").immutable(true).asText(null, true));
+        eb.field("renderedHtml", f -> f.physicalColumn("rendered_html").immutable(true).asText(null, true));
         eb.field("version", f -> f.physicalColumn("version").immutable(true).asVersion());
         eb.listView("default", lv -> lv
             .columns("template", "category", "address", "locale", "senderKey", "createdTime")
@@ -79,8 +83,10 @@ public class MailEntities {
         eb.field("detail", f -> f.physicalColumn("detail").immutable(true).asText(2000, true));
         eb.field("attemptedTime", f -> f.physicalColumn("attempted_time").immutable(true).required(true)
             .asTemporal(TemporalRole.SYSTEM_RECORDED));
+        // The version of the MailText the mail was rendered with; none for the default (decision D72 item 4).
+        eb.field("textVersionNo", f -> f.physicalColumn("text_version_no").immutable(true).asNumeric(9, 0));
         eb.listView("default", lv -> lv
-            .columns("messageId", "attemptNo", "outcome", "detail", "attemptedTime")
+            .columns("messageId", "attemptNo", "outcome", "detail", "textVersionNo", "attemptedTime")
             .filters("messageId", "outcome", "attemptedTime")
             .sorts("attemptedTime", "attemptNo")
             .defaultSort("attemptedTime", false));
