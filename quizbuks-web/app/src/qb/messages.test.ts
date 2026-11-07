@@ -32,7 +32,7 @@ describe('the shared QuizBuks texts', () => {
     expect(entry('admin', 'zh')).toBe(`${BRAND.names.en} 平台管理系统`) // the requester's name: QuizBuks 平台管理系统
     expect(entry('admin', 'ja')).toBe(`${BRAND.names.ja} 管理システム`)
     expect(entry('admin', 'en')).toBe(`${BRAND.names.en} Management System`)
-    expect(entry('operator', 'ja')).toBe('運営会社管理システム')
+    expect(entry('operator', 'ja')).toBe('運営パートナー管理システム')
     for (const lng of LANGUAGES) {
       for (const name of ['app', 'sponsor', 'admin', 'operator']) expect(entry(name, lng)).not.toMatch(/后台|管理画面|console/i)
     }

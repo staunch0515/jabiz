@@ -414,7 +414,7 @@ const ja: typeof en = {
     device: 'デバイス',
     empty: 'ログイン記録はまだありません。',
     entries: { app: 'アプリ', sponsor: `${BRAND.names.ja} 主催者`, admin: `${BRAND.names.ja} 管理システム`,
-      operator: '運営会社管理システム' },
+      operator: '運営パートナー管理システム' },
     unknownDevice: '不明なデバイス',
   },
   prerequisite: { PASSED: '合格する', ANSWERED: '回答する', passed: '合格済み', answered: '回答済み' },
