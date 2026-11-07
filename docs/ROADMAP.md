@@ -5217,6 +5217,22 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **17zt 状态**：📝 待评审（分支 `1.3/phase-17zt-pool-and-limits`）。
 
+### 17zu 告警规则与试发（2026-11-07，QuizBuks 首次上线的上线准备 A）
+
+**缘由**：首次上线清单要求监控与告警已配置并试发，其中平台的新告警：刷新补发次数异常（D73）、磁盘用量、地址库缺失或过旧（D74）。
+此前只有仪表盘，没有任何告警规则；地址库只在启动时检查，运行中变旧看不到；磁盘没有指标。
+
+| # | 内容 |
+|---|---|
+| 17zu-1 | 地址库的仪表 `jabiz.geoip.ranges` / `jabiz.geoip.stale`（与启动检查 `GEOIP` 同一判断，运行中也更新；没有配置地址库不登记）；磁盘指标 `disk.free` / `disk.total` 的缺省测量范围加上上传文件的目录（`JabizDefaultProperties`）。13 §2 随之更新 |
+| 17zu-2 | `docker/grafana/alerting/jabiz-alerts.yaml`：16 条平台规则（健康、启动检查、流程错误、准入、事件、任务、入站、外部调用与作业、刷新补发与吊销、地址库、磁盘）、联系点 `jabiz-oncall`（邮件）与路由；部署相关的值为占位符，由 `render.sh` 在容器启动时以环境变量填入（Grafana 不展开规则查询中的变量），缺失或含非法字符即启动失败。`docker-compose.yml` 的 `lgtm` 给出缺省值；13 §7 |
+| 17zu-3 | 试发 `tools/ops/alert-fire-test.sh`：`rules`（全部求值无误）、`notify`（经联系点投递，未送达即失败）、`fire`（推送满足各条规则的假数据并等到 pending/firing）、`disk <目录>`（真的把文件系统填到阈值以上，告警后删除） |
+| 17zu-4 | 测试：`ClientCountriesTest.gaugesShowTheRangesAndWhetherTheDatabaseIsStale`、`ObservabilityIT.diskSpaceIsMeasuredForTheWorkingDirectoryAndTheUploadedFiles`、`tools/test/alert-render.test.sh`（CI，9 项）。对真实的 `grafana/otel-lgtm:0.34.0` 与打包的应用核对：指标名与标签一致；16 条规则全部求值无误；`fire` 使可伪造的 15 条全部进入 pending/firing；`notify` 的邮件送到本地的 SMTP 接收器；`disk` 把 200 MB 的文件系统填到 96 % 后告警、删除临时文件。核对中发现并改正：`min(...) == 0` 的值本身是 0，阈值表达式永不成立（改为 `count(... == 0)`） |
+
+**验收**：上线清单中平台的告警都有规则与处理说明；每条规则都可以在测试环境试发（`jabiz-metrics-absent` 以停掉应用试）；值的修改只在部署配置中。
+
+**17zu 状态**：📝 待评审（分支 `1.3/phase-17zu-alerts`）。
+
 ### 17zv 恢复核对与演练（2026-11-07，QuizBuks 首次上线的上线准备 B）
 
 **缘由**：上线清单要求恢复演练做过一次并记录 RTO 与 RPO；`operations.md` §2.4 的核对全是手工的（登录、二次验证、`INTEGRITY_VERIFY`、抽查文件），
@@ -5245,3 +5261,21 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：应用引用 `ApprovalScopeMoveSettings.maxItems()` 而不写 500；上限可配置且越界即启动失败。
 
 **17zy 状态**：📝 待评审（分支 `1.3/phase-17zy-scope-move-limit`）。
+
+### 17zw 密钥轮换（D78，2026-11-07，QuizBuks 首次上线的上线准备 C）
+
+**缘由**：四把密钥都只接受一把，换 MFA、SEAL 密钥就会丢失（解不开）数据，换 JWT 密钥全员登出、旧邮件的退订链接失效，换封存密钥旧块报 `OTHER_KEY`。
+需求方决定上线前就要能轮换（正式使用后不能出事时手忙脚乱）。
+
+| # | 内容 |
+|---|---|
+| 17zw-1 | 旧密钥并存：`JABIZ_JWT_SECRET_PREVIOUS`、`JABIZ_MFA_KEY_PREVIOUS`、`JABIZ_SEAL_KEY_PREVIOUS`、`JABIZ_INTEGRITY_KEY_PREVIOUS`（`PreviousKeys`）；`JwtService` 依次验签；`MfaSecretCipher`、`SealedSecrets` 按存储值的密钥标识选密钥（`keyIdOf`、`storedPrefix`）；`IntegrityKeys` 与 `SealChain.check` 按块的 `key_id` 选密钥，抹除的证据同样 |
+| 17zw-2 | 重新加密：`KEY_ROTATION_REKEY`（`internal()`）与任务 `jabiz.key-rotation`（每 10 分钟，可补跑）：按前缀找出旧密钥下的 TOTP 密钥与声明的密封值，经普通写入路径以当前密钥重新存储，解不开的原样保留并计数 |
+| 17zw-3 | 应用的声明 `SealedFields` / `SealedField`（core）；平台声明 `SecIdentityToken.sealedToken`；启动检查 `KEYS`（声明有误为错误，轮换进行中为警告）；示范应用补上 `JABIZ_SEAL_KEY` 的映射 |
+| 17zw-4 | 恢复核对加 `sealed-secrets` 与 `jabiz.ops.verify-restore.rekey`；`restore-drill.sh` 的 `DRILL_ROTATE=true`（新密钥 + 旧密钥重新加密到底，再以新密钥单独核对）；手册 `docs/guide/key-rotation.md`（定期轮换、泄露时、应用要做的事）；D78；13 §8、CLAUDE.md |
+| 17zw-6 | 全员重新绑定二次验证（需求方选定的 A）：`SEC_MFA_REENROLL_ALL_REQUEST` / `_APPROVE`（另一位管理员，24 小时内），任务收回批准之前确认的二次验证（`reenroll_required`）并结束会话，各登录途径共用的第二步要求重新设定；旧 JWT 密钥保留期 `jabiz.security.jwt.previous-retention`（缺省 365 天，`sec_key_first_seen`）；迁移 `V65`；B（改写历史密文）记入 D78 的"不做" |
+| 17zw-5 | 测试：`SealedSecretsTest` / `MfaSecretCipherTest`（旧密钥下的值能解开、新值用当前密钥、撤下后解不开、上下文仍绑定）、`SealChainTest`（旧密钥签的块以它校验，不让未签的块通过；密钥环）、`JwtServiceTest`（旧密钥签的访问令牌与退订链接在保留期间有效）、`KeyRotationIT`（旧密钥下的二次验证照常登录；重新加密 1 个 TOTP 密钥与 1 个密封值、上下文不符的 1 个原样保留；之后照常登录、再次运行什么也不剩；经写入路径产生新版本）、`RestoreVerificationIT`（`sealed-secrets`）、`MfaReenrollmentIT`（申请人不能批准、只批准一次、过期；收回后会话结束、旧代码不能登录、登录要求重新设定、新设定的不再收回）、`JwtServiceTest`（过了保留期即拒绝）。真实演练见 PR |
+
+**验收**：四把密钥都能在不停机、不丢数据的情况下更换；重新加密完成后撤下 MFA、SEAL 的旧密钥，一切照常；演练脚本在恢复出的副本上演练过一次轮换。
+
+**17zw 状态**：📝 待评审（分支 `1.3/phase-17zw-key-rotation`）。

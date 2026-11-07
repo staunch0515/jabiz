@@ -97,7 +97,9 @@ public class MfaEnrollStep implements ComputeStep<MfaEnrollStep.Phase, ProcessCo
             "confirmedTime", ctx.opTime(),
             // The confirming code must not work again at the next sign-in.
             "confirmedStep", step.getAsLong(),
-            "recoveryCodes", MfaCodes.join(codes.stream().map(RecoveryCodes::hash).toList())));
+            "recoveryCodes", MfaCodes.join(codes.stream().map(RecoveryCodes::hash).toList()),
+            // A re-enrolment asked of everyone (decision D78) is done with this one.
+            "reenrollRequired", false));
         ctx.put(MfaProcesses.RESULT, new MfaProcesses.RecoveryCodeList(codes));
     }
 }

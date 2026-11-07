@@ -73,6 +73,24 @@ services:
     volumes:
       - ./docker/grafana/jabiz-dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/jabiz-dashboards.yaml:ro
       - ./docker/grafana/jabiz-platform.json:/otel-lgtm/jabiz-platform.json:ro
+      # Alert rules, the on-call contact point and its route (docs/design/13-observability-ops.md section 7).
+      # They are rendered with the settings below when the container starts (render.sh).
+      - ./docker/grafana/alerting:/otel-lgtm/jabiz/alerting:ro
+    command: ["bash", "/otel-lgtm/jabiz/alerting/render.sh"]
+    environment:
+      # Where alerts go, and the thresholds that are deployment settings (set them in .env). Mail needs Grafana's own
+      # SMTP settings (GF_SMTP_ENABLED, GF_SMTP_HOST, GF_SMTP_USER, GF_SMTP_PASSWORD, GF_SMTP_FROM_ADDRESS).
+      JABIZ_ALERT_EMAIL: ${JABIZ_ALERT_EMAIL:-oncall@example.com}
+      JABIZ_ALERT_SERVICE: ${JABIZ_ALERT_SERVICE:-jabiz}
+      JABIZ_ALERT_DISK_PERCENT: ${JABIZ_ALERT_DISK_PERCENT:-80}
+      JABIZ_ALERT_REFRESH_GRANTED_MIN: ${JABIZ_ALERT_REFRESH_GRANTED_MIN:-10}
+      JABIZ_ALERT_REFRESH_GRANTED_RATIO: ${JABIZ_ALERT_REFRESH_GRANTED_RATIO:-0.02}
+      JABIZ_ALERT_REFRESH_REVOKED_MAX: ${JABIZ_ALERT_REFRESH_REVOKED_MAX:-20}
+      GF_SMTP_ENABLED: ${GF_SMTP_ENABLED:-false}
+      GF_SMTP_HOST: ${GF_SMTP_HOST:-}
+      GF_SMTP_USER: ${GF_SMTP_USER:-}
+      GF_SMTP_PASSWORD: ${GF_SMTP_PASSWORD:-}
+      GF_SMTP_FROM_ADDRESS: ${GF_SMTP_FROM_ADDRESS:-alerts@example.com}
 
   pgadmin:
     image: dpage/pgadmin4

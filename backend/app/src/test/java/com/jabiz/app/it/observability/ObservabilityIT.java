@@ -229,4 +229,13 @@ class ObservabilityIT extends PostgresIntegrationTest {
             .doesNotContain(String.valueOf(((Map<?, ?>) placed.get("output")).get("orderId")),
                 "commerce.order:" + ((Map<?, ?>) placed.get("output")).get("orderId"));
     }
+
+    @Test
+    void diskSpaceIsMeasuredForTheWorkingDirectoryAndTheUploadedFiles() {
+        // The disk alert (docker/grafana/alerting) reads disk.free / disk.total of both file systems.
+        assertThat(meters.find("disk.free").gauges()).extracting(g -> g.getId().getTag("path"))
+            .contains(filesRoot().toFile().getAbsolutePath(), new java.io.File(".").getAbsolutePath());
+        assertThat(meters.find("disk.total").tag("path", filesRoot().toFile().getAbsolutePath()).gauge().value())
+            .isPositive();
+    }
 }

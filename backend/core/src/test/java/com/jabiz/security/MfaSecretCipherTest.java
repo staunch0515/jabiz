@@ -56,4 +56,35 @@ class MfaSecretCipherTest {
         assertThatThrownBy(() -> cipher.encrypt(SECRET, "u", new byte[4])).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> cipher.encrypt(SECRET, " ", IV)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void valuesUnderARetiredKeyStillOpenAndNewOnesUseTheCurrentKey() {
+        byte[] oldKey = "an-old-key-of-these-tests-0000000001".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] newKey = "a-new-key-of-these-tests-00000000002".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        MfaSecretCipher before = new MfaSecretCipher(oldKey);
+        String stored = before.encrypt("secret".getBytes(java.nio.charset.StandardCharsets.UTF_8), "user-1",
+            new byte[MfaSecretCipher.IV_BYTES]);
+        MfaSecretCipher rotating = new MfaSecretCipher(newKey, java.util.List.of(oldKey));
+        // Decision D78: the retired key still opens what it stored; the current key stores.
+        assertThat(new String(rotating.decrypt(stored, "user-1"), java.nio.charset.StandardCharsets.UTF_8))
+            .isEqualTo("secret");
+        String renewed = rotating.encrypt("secret".getBytes(java.nio.charset.StandardCharsets.UTF_8), "user-1",
+            new byte[MfaSecretCipher.IV_BYTES]);
+        assertThat(MfaSecretCipher.keyIdOf(renewed)).isEqualTo(rotating.keyId());
+        assertThat(MfaSecretCipher.keyIdOf(stored)).isEqualTo(before.keyId()).isEqualTo(rotating.previousKeyIds().getFirst());
+        assertThat(stored).startsWith(MfaSecretCipher.storedPrefix(before.keyId()));
+        assertThat(MfaSecretCipher.keyIdOf("not stored")).isNull();
+        assertThat(MfaSecretCipher.keyIdOf(null)).isNull();
+        // The retired key opens nothing new, and once it is removed the old value no longer opens.
+        assertThatThrownBy(() -> before.decrypt(renewed, "user-1"))
+            .isInstanceOf(MfaSecretCipher.UnreadableSecretException.class);
+        assertThatThrownBy(() -> new MfaSecretCipher(newKey).decrypt(stored, "user-1"))
+            .isInstanceOf(MfaSecretCipher.UnreadableSecretException.class);
+        // The context still binds under a retired key.
+        assertThatThrownBy(() -> rotating.decrypt(stored, "user-2"))
+            .isInstanceOf(MfaSecretCipher.UnreadableSecretException.class);
+        assertThatThrownBy(() -> new MfaSecretCipher(newKey, java.util.List.of(newKey))).hasMessageContaining("current key");
+        assertThatThrownBy(() -> new MfaSecretCipher(newKey, java.util.List.of(new byte[8])))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
 }
