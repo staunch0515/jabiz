@@ -129,4 +129,23 @@ class TemporalQueryCompilerTest {
         assertThat(compiler.compile(notes, note, byPrice, Map.of()).bindParams().get("p0").value())
             .isEqualTo(id.toString());
     }
+
+    /** An ordinary table identified by a reference to a temporal entity: its key is bound as a uuid too (17zz2). */
+    @Test
+    void aPrimaryKeyThatIsAReferenceToATemporalEntityIsBoundAsItsUuid() {
+        EntityDefinition card = EntityDefinition.define("PriceCard", eb -> {
+            eb.physicalTable("price_card");
+            eb.primaryKey("priceId");
+            eb.field("priceId", f -> f.physicalColumn("price_id").asReference("Price"));
+            eb.field("title", f -> f.physicalColumn("title").asText(100));
+        });
+        QueryCompiler knowing = new QueryCompiler(name -> "Price".equals(name) ? Optional.of(PRICE) : Optional.empty());
+        UUID id = UUID.randomUUID();
+
+        assertThat(knowing.fieldValue(card, card.fields.get("priceId"), id.toString())).isEqualTo(id);
+        assertThatThrownBy(() -> knowing.fieldValue(card, card.fields.get("priceId"), "not-a-uuid"))
+            .isInstanceOf(ValidationException.class);
+        // Without the target, the key stays as given (nothing says what the column holds).
+        assertThat(compiler.fieldValue(card, card.fields.get("priceId"), id.toString())).isEqualTo(id.toString());
+    }
 }

@@ -83,6 +83,8 @@ public final class AdmissionGate {
         private final long admitted;
         private final long sequence;
         private final AtomicBoolean released = new AtomicBoolean();
+        /** Set when the permit reaches its subscriber ({@code onNext}); a permit handed over but never received goes back. */
+        private volatile boolean delivered;
 
         private Permit(Key key, long admitted, long sequence) {
             this.key = key;
@@ -107,6 +109,10 @@ public final class AdmissionGate {
 
         String family() {
             return key.family;
+        }
+
+        private void delivered() {
+            delivered = true;
         }
     }
 
@@ -163,6 +169,9 @@ public final class AdmissionGate {
         Stage stage;
         Permit permit;
         volatile Disposable timer;
+        /** Under the waiter's own lock: the hand-over has returned, and the subscriber has cancelled. */
+        boolean handOverReturned;
+        boolean cancelled;
 
         Waiter(Key key, MonoSink<Permit> sink, Stage stage) {
             this.key = key;
@@ -226,7 +235,9 @@ public final class AdmissionGate {
                 }
             }
         })
-            // A permit handed over just as its subscriber went away is not lost.
+            // Marks a permit received; one handed over but not received goes back (see handOver and cancelled).
+            .doOnNext(Permit::delivered)
+            // A permit stored in the sink, waiting for demand, when the subscriber goes away.
             .doOnDiscard(Permit.class, Permit::release);
     }
 
@@ -371,8 +382,28 @@ public final class AdmissionGate {
         // Admitted but not yet handed over: the permit is nobody's, so it goes back.
         if (admitted && waiter.handedOver.compareAndSet(false, true)) {
             waiter.permit.release();
+        } else if (admitted && cancelledAfterHandOver(waiter, true)) {
+            waiter.permit.release();
         }
         handOver(handOver);
+    }
+
+    /**
+     * Whether a permit handed over to a waiter whose subscriber has cancelled never reached it. The sink does not
+     * discard a value that meets a cancellation between its own checks: it drops it ({@code onNextDropped}), so neither
+     * the discard hook nor the subscriber would give the permit back. The hand-over (once {@code success} has returned)
+     * and the cancellation each record their side and look at the other's; whichever comes second sees both, and
+     * {@link Permit#release()} is idempotent if both do (17zz).
+     */
+    private static boolean cancelledAfterHandOver(Waiter waiter, boolean fromCancel) {
+        synchronized (waiter) {
+            if (fromCancel) {
+                waiter.cancelled = true;
+            } else {
+                waiter.handOverReturned = true;
+            }
+            return waiter.cancelled && waiter.handOverReturned && !waiter.permit.delivered;
+        }
     }
 
     private void timedOut(Waiter waiter) {
@@ -412,8 +443,10 @@ public final class AdmissionGate {
             try {
                 scheduler.get().schedule(() -> {
                     if (waiter.handedOver.compareAndSet(false, true)) {
-                        // Discarded, and so released, if the subscriber has just gone away.
                         waiter.sink.success(waiter.permit);
+                        if (cancelledAfterHandOver(waiter, false)) {
+                            waiter.permit.release();
+                        }
                     }
                 });
             } catch (RejectedExecutionException shuttingDown) {
