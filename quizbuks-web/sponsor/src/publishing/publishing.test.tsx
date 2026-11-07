@@ -1881,6 +1881,30 @@ describe('the asset library in the wizard (F-C1)', () => {
       assets: { redeemAssetId: 'a-redeem', prizeAssetId: null } })
   })
 
+  it('fills the referral prize’s description from a text of its use', async () => {
+    const referral = asset({ assetId: 'a-referral', kind: 'TEXT', name: 'Friend gift', body: 'A cookie for you',
+      usage: 'REFERRAL_DESCRIPTION' })
+    const { processCalls } = server({ assets: [...ASSETS, referral], methods: 'PLATFORM,OFFLINE_REDEEM',
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const section = await screen.findByTestId('publication-referral')
+    await userEvent.click(within(section).getByTestId('publication-referral-on'))
+    await userEvent.type(within(section).getByTestId('publication-referral-quota'), '5')
+    await userEvent.click(within(section).getByTestId('publication-referral-method-OFFLINE_REDEEM'))
+    await userEvent.click(within(section).getByTestId('publication-referral-library-pick'))
+    const items = await screen.findAllByTestId('asset-picker-item')
+    expect(items.map((item) => item.dataset.id)).toEqual(['a-referral'])
+    await userEvent.click(items[0])
+    await waitFor(() => expect(within(section).getByTestId('publication-referral-description'))
+      .toHaveValue('A cookie for you'))
+    await expectAccessible()
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ referral: { description: 'A cookie for you' },
+      assets: { referralAssetId: 'a-referral' } })
+  })
+
   it('sends no assets when nothing was chosen', async () => {
     const { processCalls } = server({ assets: ASSETS, processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
     window.history.replaceState(null, '', '/publications/p1')

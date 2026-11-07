@@ -183,8 +183,12 @@ export interface QuestionInput {
   stem: string | null
   image: string | null
   points: number
-  options: { optionId?: string | null; text: string | null; image: string | null; correct: boolean }[]
+  /** F-C1b: each option's image asset it is still a copy of, if any. */
+  options: { optionId?: string | null; text: string | null; image: string | null; correct: boolean;
+    imageAssetId?: string }[]
   baseRevision?: number | null
+  /** F-C1b: the image asset the question's image is still a copy of. */
+  imageAssetId?: string
   /** A survey's question only: the server takes a point each and no correct option. */
   selection?: Selection | null
 }

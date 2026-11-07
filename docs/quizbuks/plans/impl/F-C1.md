@@ -262,7 +262,11 @@
 | 发布向导：到店兑换说明、电子奖品说明 | `PUBLICATION_REDEEM` / `_DIGITAL` | 文字（对应用途） | `assets.redeemAssetId` / `digitalAssetId` |
 | 发布向导：奖品（领取方式一组字段） | `PUBLICATION_PRIZE` | 奖品卡片 | `assets.prizeAssetId`；复制方式、说明、交付方式与发送天数；方式不在本发起方允许的方式中时不可选（列表中标出） |
 
-题目与选项的图片、推荐说明本部分不接（题目对话框的选项是动态列表，要另做按选项的标记），列为余下的工作；"存入资源库"只放在上表中有"从库里选"的地方。
+| 题目对话框：题目的图片 | `QUESTION_IMAGE` | 图片 | `QB_QUESTION_SAVE.imageAssetId` |
+| 题目对话框：每个选项的图片 | `OPTION_IMAGE` | 图片 | `options[i].imageAssetId`；标记按选项在对话框中的键（已有选项为其编号，新选项为页面生成的键，排序后跟着选项走），新选项的编号由保存得到 |
+| 发布向导：推荐奖励的说明 | `PUBLICATION_REFERRAL` | 文字（推荐说明） | `assets.referralAssetId`（只在推荐开启且方式需要说明时） |
+
+规格要求"用在哪里"覆盖全部有"从库里选"的地方，上表即全部；"存入资源库"放在同样这些地方。几处并排时按钮以所在的地方命名（"从库里选：选项 2 的图片"）。
 
 ### 文案
 

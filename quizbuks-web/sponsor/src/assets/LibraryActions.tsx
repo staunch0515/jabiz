@@ -126,7 +126,7 @@ export interface StoredContent {
  * the place count as that asset's copy, so that its next save records where the asset is used.
  */
 export function LibraryActions({ target, materialKind, materialKinds, refused, onPick, store, onStored, disabled,
-  testId }: {
+  testId, name }: {
   target: UseTarget
   materialKind?: MaterialKind | null
   materialKinds?: readonly MaterialKind[]
@@ -137,6 +137,8 @@ export function LibraryActions({ target, materialKind, materialKinds, refused, o
   onStored?: (assetId: string, stored: StoredContent) => void
   disabled?: boolean
   testId: string
+  /** What the place is ("Option 2 image"), for the buttons' names where several places are side by side. */
+  name?: string
 }) {
   const { t } = useTranslation(SPONSOR)
   const [picking, setPicking] = useState(false)
@@ -144,12 +146,14 @@ export function LibraryActions({ target, materialKind, materialKinds, refused, o
   return (
     <div className="flex flex-wrap gap-2" data-testid={testId}>
       <Button type="button" variant="outline" size="sm" disabled={disabled} data-testid={`${testId}-pick`}
+        aria-label={name ? t('assets.picker.openFor', { name }) : undefined}
         onClick={() => setPicking(true)}>
         <Library aria-hidden />
         {t('assets.picker.open')}
       </Button>
       {store !== undefined && (
         <Button type="button" variant="ghost" size="sm" disabled={disabled || !store} data-testid={`${testId}-store`}
+          aria-label={name ? t('assets.store.openFor', { name }) : undefined}
           onClick={() => setStoring(true)}>
           <Archive aria-hidden />
           {t('assets.store.open')}

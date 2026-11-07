@@ -305,6 +305,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const redeemCopy = useAssetCopy<string>()
   const digitalCopy = useAssetCopy<string>()
   const prizeCopy = useAssetCopy<ReturnType<typeof prizeShape>>()
+  const referralCopy = useAssetCopy<string>()
   const baseLanguage = form.languages[0] ?? contentLanguageOf(i18n.language)
   const pickPrize = (asset: Asset) => {
     const prize = prizeOf(asset)
@@ -373,7 +374,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     onMutate: () => setSubmitError(null),
     onSuccess: async ({ saved }, { input, keys, then, criteria, prerequisites: wanted, round }) => {
       // The copies are recorded; a later save names no asset unless one is chosen again.
-      if (input.assets) [coverCopy, redeemCopy, digitalCopy, prizeCopy].forEach((copy) => copy.saved())
+      if (input.assets) [coverCopy, redeemCopy, digitalCopy, prizeCopy, referralCopy].forEach((copy) => copy.saved())
       const audienceOfSave = input.audience
       setRevision(saved.revision)
       if (criteria !== null) {
@@ -454,6 +455,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       redeemAssetId: shaped.rewardMethod === 'OFFLINE_REDEEM' ? redeemCopy.idFor(shaped.redeemDescription) : null,
       digitalAssetId: shaped.rewardMethod === 'DIGITAL_PRIZE' ? digitalCopy.idFor(shaped.digitalDescription) : null,
       prizeAssetId: prizeCopy.idFor(prizeShape(shaped)),
+      referralAssetId: shaped.referralEnabled && (shaped.referralMethod === 'OFFLINE_REDEEM'
+        || shaped.referralMethod === 'DIGITAL_PRIZE') ? referralCopy.idFor(shaped.referralDescription) : null,
     }
     // Only a save with a copy says so: the others send what they always did.
     const input = Object.values(assets).some((assetId) => assetId !== null) ? { ...built.input, assets } : built.input
@@ -702,7 +705,16 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         </div>
       )}
       {/* Q70: "referrals welcome": the sponsor's offer to referrers, frozen with the rest at submission. */}
-      <ReferralFields id={id} form={form} set={set} locked={locked} problemOf={problemOf} methods={methodChoices} />
+      <ReferralFields id={id} form={form} set={set} locked={locked} problemOf={problemOf} methods={methodChoices}
+        library={<LibraryActions target="PUBLICATION_REFERRAL" disabled={locked} testId="publication-referral-library"
+          onPick={(asset) => {
+            set('referralDescription', asset.body ?? '')
+            referralCopy.chose(asset.assetId, asset.body ?? '')
+          }}
+          store={form.referralDescription.trim() ? { kind: 'TEXT', name: form.name.trim()
+            || t('publishing.referral.description'), language: baseLanguage,
+          content: { body: form.referralDescription, usage: 'REFERRAL_DESCRIPTION' } } : null}
+          onStored={(assetId) => referralCopy.chose(assetId, form.referralDescription)} />} />
       {/* Q73b: the languages offered and the publication's texts in them. */}
       <LanguagesFields id={id} form={form} set={set} version={version} method={rewardMethod} locked={locked}
         problemOf={problemOf} publicationId={publicationId} />

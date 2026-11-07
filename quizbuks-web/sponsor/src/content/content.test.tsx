@@ -692,6 +692,72 @@ describe('the asset library in the quiz editor (F-C1)', () => {
     expect(processCalls('QB_QUIZ_SAVE')[0]).toMatchObject({ introAssetId: 'a-new' })
   })
 
+  it('copies option images by keyboard, each named with its own option, and drops a question image changed after',
+    async () => {
+      const photo = asset({ assetId: 'a-photo', kind: 'IMAGE', name: 'Bean photo', image: 'f-photo' })
+      const { processCalls } = server({ assets: [...ASSETS, photo],
+        processes: { QB_QUESTION_SAVE: [edit(8, { itemId: 'k3' })] } })
+      render(<App />)
+      await userEvent.click(await screen.findByTestId('tab-questions'))
+      await userEvent.click(await screen.findByTestId('question-add'))
+      const dialog = await screen.findByTestId('question-dialog')
+      await userEvent.type(within(dialog).getByTestId('question-stem'), 'Which is a bean?')
+      // The question's image from the library, then removed: no longer the asset's copy.
+      await userEvent.click(within(dialog).getByTestId('question-image-library-pick'))
+      const images = await screen.findAllByTestId('asset-picker-item')
+      expect(images.map((item) => item.dataset.id)).toEqual(['a-cover', 'a-photo'])
+      await userEvent.click(images[0])
+      await userEvent.click(await within(dialog).findByTestId('question-image-remove'))
+      // Option 2's image with the keyboard: its own button (named by the option), the arrows, Enter.
+      const pick = within(dialog).getByRole('button', { name: 'Choose from the library: Image of option 2' })
+      pick.focus()
+      await userEvent.keyboard('{Enter}')
+      const picker = await screen.findByTestId('asset-picker')
+      await expectAccessible()
+      await userEvent.keyboard('{ArrowDown}{Enter}')
+      await waitFor(() => expect(screen.queryByTestId('asset-picker')).toBeNull())
+      expect(within(within(dialog).getAllByTestId('option')[1]).getByTestId('option-image-current'))
+        .toBeInTheDocument()
+      expect(picker).not.toBeInTheDocument()
+      // A new option first: option 2 keeps its copy by its key, now in third place.
+      await userEvent.click(within(dialog).getByTestId('option-add'))
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Move option 3 up' }))
+      await userEvent.click(within(dialog).getByTestId('question-save'))
+      await waitFor(() => expect(processCalls('QB_QUESTION_SAVE')).toHaveLength(1))
+      const sent = processCalls('QB_QUESTION_SAVE')[0]
+      expect(sent).not.toHaveProperty('imageAssetId')
+      expect(sent.image).toBeNull()
+      expect(sent.options).toEqual([
+        { optionId: null, text: null, image: null, correct: false },
+        { optionId: null, text: null, image: null, correct: false },
+        { optionId: null, text: null, image: 'f-photo', correct: false, imageAssetId: 'a-photo' },
+      ])
+    })
+
+  it('saves an option’s image to the library and names it with the save', async () => {
+    const { processCalls } = server({ assets: ASSETS, processes: {
+      QB_ASSET_SAVE: [{ status: 200, body: { output: { assetId: 'a-new', revision: 1 } } }],
+      QB_QUESTION_SAVE: [edit(8, { itemId: 'k3' })] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await userEvent.click(await screen.findByTestId('question-add'))
+    const dialog = await screen.findByTestId('question-dialog')
+    await userEvent.click(within(dialog).getAllByTestId('option-image-library-pick')[0])
+    await userEvent.click((await screen.findAllByTestId('asset-picker-item'))[0])
+    await waitFor(() => expect(screen.queryByTestId('asset-picker')).toBeNull())
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save to the library: Image of option 1' }))
+    const store = await screen.findByTestId('asset-store-dialog')
+    await expectAccessible()
+    await userEvent.click(within(store).getByTestId('asset-store-save'))
+    await waitFor(() => expect(processCalls('QB_ASSET_SAVE')).toMatchObject([{ kind: 'IMAGE', image: 'f-cover',
+      name: 'Image of option 1', language: 'zh' }]))
+    await waitFor(() => expect(screen.queryByTestId('asset-store-dialog')).toBeNull())
+    await userEvent.click(within(dialog).getByTestId('question-save'))
+    await waitFor(() => expect(processCalls('QB_QUESTION_SAVE')).toHaveLength(1))
+    expect((processCalls('QB_QUESTION_SAVE')[0].options as Record<string, unknown>[])[0])
+      .toMatchObject({ image: 'f-cover', imageAssetId: 'a-new' })
+  })
+
   it('makes a new material from an asset, of the asset’s kind, naming it', async () => {
     const { processCalls } = server({ assets: ASSETS, processes: { QB_MATERIAL_SAVE: [edit(8, { itemId: 'm2' })] } })
     render(<App />)

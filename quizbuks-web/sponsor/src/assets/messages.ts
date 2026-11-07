@@ -104,6 +104,7 @@ const en = {
     },
     picker: {
       open: 'Choose from the library',
+      openFor: 'Choose from the library: {{name}}',
       title: 'Choose from the library',
       hint: 'Only the assets that fit here are listed. The content is copied in; the asset stays in the library.',
       search: 'Search the library',
@@ -113,6 +114,7 @@ const en = {
     },
     store: {
       open: 'Save to the library',
+      openFor: 'Save to the library: {{name}}',
       title: 'Save to the library',
       hint: 'A new asset with what is here now. Changing either later leaves the other as it is.',
       name: 'Name in the library',
@@ -220,6 +222,7 @@ const zh: typeof en = {
     },
     picker: {
       open: '从库里选',
+      openFor: '从库里选：{{name}}',
       title: '从库里选',
       hint: '只列出适合这里的资源。选中的内容复制过来，资源仍留在库中。',
       search: '在库中搜索',
@@ -229,6 +232,7 @@ const zh: typeof en = {
     },
     store: {
       open: '存入资源库',
+      openFor: '存入资源库：{{name}}',
       title: '存入资源库',
       hint: '以这里现在的内容新建一个资源。之后改哪一边，另一边都不变。',
       name: '在库中的名称',
@@ -336,6 +340,7 @@ const ja: typeof en = {
     },
     picker: {
       open: 'ライブラリから選ぶ',
+      openFor: 'ライブラリから選ぶ：{{name}}',
       title: 'ライブラリから選ぶ',
       hint: 'ここに合うリソースだけを表示します。内容はコピーされ、リソースはライブラリに残ります。',
       search: 'ライブラリを検索',
@@ -345,6 +350,7 @@ const ja: typeof en = {
     },
     store: {
       open: 'ライブラリに保存',
+      openFor: 'ライブラリに保存：{{name}}',
       title: 'ライブラリに保存',
       hint: 'ここにある今の内容で新しいリソースを作ります。あとでどちらを変えても、もう一方は変わりません。',
       name: 'ライブラリでの名前',
