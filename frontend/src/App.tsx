@@ -19,6 +19,9 @@ import ImportPage from './pages/ImportPage'
 import ImportRunsPage from './pages/ImportRunsPage'
 import IntegrityPage from './pages/IntegrityPage'
 import LoginPage from './pages/LoginPage'
+import MailLayoutPage from './pages/MailLayoutPage'
+import MailTextEditorPage from './pages/MailTextEditorPage'
+import MailTextsPage from './pages/MailTextsPage'
 import MailUnsubscribePage from './pages/MailUnsubscribePage'
 import OidcCallbackPage from './pages/OidcCallbackPage'
 import ProcessCatalogPage from './pages/ProcessCatalogPage'
@@ -93,6 +96,10 @@ export const appRoutes: RouteObject[] = [
           { path: '/security/sessions', element: <SessionsPage /> },
           { path: '/integrity', element: <IntegrityPage /> },
           { path: '/retention', element: <RetentionPage /> },
+          // The mail texts and the mail layout (docs/design/18-numbering-approvals-tasks.md section 5.6; decision D72).
+          { path: '/mail/texts', element: <MailTextsPage /> },
+          { path: '/mail/texts/edit', element: <MailTextEditorPage /> },
+          { path: '/mail/layout', element: <MailLayoutPage /> },
           { path: '/account/security', element: <AccountSecurityPage /> },
           // The application's own pages (decision D22), checked at startup not to take a platform path.
           ...(extension.routes ?? []),

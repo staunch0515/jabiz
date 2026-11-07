@@ -102,6 +102,21 @@ describe('AppLayout (the shell, decision D34)', () => {
     expect(within(nav).queryByRole('link', { name: 'Audit' })).toBeNull()
     expect(within(nav).getByRole('link', { name: 'Data' })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: 'Processes' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'Mail templates' })).toHaveAttribute('href', '/mail/texts')
+    expect(within(nav).getByRole('link', { name: 'Mail layout' })).toHaveAttribute('href', '/mail/layout')
+  })
+
+  it('lists the mail pages only for those who may read the mail texts', () => {
+    const can = auth.can
+    auth.can = (p: string) => p !== 'mail.text.read'
+    try {
+      renderLayout()
+      const nav = screen.getByRole('navigation', { name: 'Navigation' })
+      expect(within(nav).queryByRole('link', { name: 'Mail templates' })).toBeNull()
+      expect(within(nav).queryByRole('link', { name: 'Mail layout' })).toBeNull()
+    } finally {
+      auth.can = can
+    }
   })
 
   it('counts the open tasks in the header and the menu', () => {

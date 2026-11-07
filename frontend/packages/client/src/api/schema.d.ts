@@ -2472,6 +2472,14 @@ export interface components {
             recomputable?: boolean;
             verdict?: string;
         };
+        DraftRule: {
+            condition?: unknown;
+            enabled?: boolean;
+            levels?: unknown;
+            /** Format: int32 */
+            priority?: number;
+            ruleCode?: string;
+        };
         EmailLinkConfirm: {
             token?: string;
         };
@@ -2590,6 +2598,11 @@ export interface components {
             to?: unknown;
             value?: unknown;
             values?: unknown[];
+        };
+        Finding: {
+            levels?: string[];
+            required?: boolean;
+            ruleCode?: string;
         };
         IdentityView: {
             email?: string;
@@ -2930,6 +2943,18 @@ export interface components {
             /** Format: int32 */
             versionNo?: number;
         };
+        LayoutPreviewRequest: {
+            layout?: components["schemas"]["MailLayout"];
+            locale?: string;
+        };
+        LayoutPreviewResponse: {
+            html?: string;
+            problems?: components["schemas"]["Violation"][];
+            subject?: string;
+            text?: string;
+            /** Format: int32 */
+            versionNo?: number;
+        };
         LayoutsResponse: {
             allowedLinkHosts?: string[];
             languages?: components["schemas"]["LanguageLayout"][];
@@ -2969,6 +2994,20 @@ export interface components {
         };
         MailPreferences: {
             templates?: components["schemas"]["TemplatePreference"][];
+        };
+        MailTextPreviewRequest: {
+            body?: string;
+            locale?: string;
+            subject?: string;
+            template?: string;
+        };
+        MailTextPreviewResponse: {
+            html?: string;
+            problems?: components["schemas"]["Violation"][];
+            subject?: string;
+            text?: string;
+            /** Format: int32 */
+            versionNo?: number;
         };
         MappingOutput: {
             importId?: string;
@@ -3035,6 +3074,9 @@ export interface components {
         PartEvent: {
             last?: boolean;
         };
+        PasskeyChallengeRequest: {
+            challenge?: string;
+        };
         PasskeyOptions: {
             publicKey?: {
                 [key: string]: unknown;
@@ -3069,19 +3111,25 @@ export interface components {
             subscribed?: boolean;
             template?: string;
         };
+        PreviewChange: {
+            after?: components["schemas"]["Finding"];
+            before?: components["schemas"]["Finding"];
+            entityId?: string;
+            /** Format: date-time */
+            evaluatedTime?: string;
+        };
         PreviewRequest: {
-            body?: string;
-            locale?: string;
+            draft?: components["schemas"]["DraftRule"];
+            /** Format: int32 */
+            limit?: number;
+            ruleId?: string;
             subject?: string;
-            template?: string;
         };
         PreviewResponse: {
-            html?: string;
-            problems?: components["schemas"]["Violation"][];
-            subject?: string;
-            text?: string;
+            changed?: components["schemas"]["PreviewChange"][];
             /** Format: int32 */
-            versionNo?: number;
+            evaluated?: number;
+            truncated?: boolean;
         };
         ProcessEntry: {
             actsOn?: components["schemas"]["ActsOnEntry"];
@@ -3102,6 +3150,15 @@ export interface components {
             id?: string;
             kind?: string;
             label?: string;
+        };
+        PushRegisterRequest: {
+            auth?: string;
+            endpoint?: string;
+            kind?: string;
+            p256dh?: string;
+        };
+        PushRegistered: {
+            deviceId?: string;
         };
         PushSettings: {
             apns?: boolean;
@@ -4086,7 +4143,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["RegisterRequest"];
+                "application/json": components["schemas"]["PushRegisterRequest"];
             };
         };
         responses: {
@@ -4096,7 +4153,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Registered"];
+                    "application/json": components["schemas"]["PushRegistered"];
                 };
             };
         };
@@ -4352,7 +4409,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["ChallengeRequest"];
+                "application/json": components["schemas"]["PasskeyChallengeRequest"];
             };
         };
         responses: {
@@ -4400,7 +4457,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["ChallengeRequest"];
+                "application/json": components["schemas"]["PasskeyChallengeRequest"];
             };
         };
         responses: {
@@ -6195,7 +6252,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PreviewRequest"];
+                "application/json": components["schemas"]["LayoutPreviewRequest"];
             };
         };
         responses: {
@@ -6205,7 +6262,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PreviewResponse"];
+                    "application/json": components["schemas"]["LayoutPreviewResponse"];
                 };
             };
         };
@@ -6239,7 +6296,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PreviewRequest"];
+                "application/json": components["schemas"]["MailTextPreviewRequest"];
             };
         };
         responses: {
@@ -6249,7 +6306,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PreviewResponse"];
+                    "application/json": components["schemas"]["MailTextPreviewResponse"];
                 };
             };
         };

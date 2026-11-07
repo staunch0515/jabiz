@@ -731,6 +731,23 @@
         },
         "type" : "object"
       },
+      "DraftRule" : {
+        "properties" : {
+          "condition" : { },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "levels" : { },
+          "priority" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "ruleCode" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "EmailLinkConfirm" : {
         "properties" : {
           "token" : {
@@ -1023,6 +1040,23 @@
           "values" : {
             "items" : { },
             "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "Finding" : {
+        "properties" : {
+          "levels" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "required" : {
+            "type" : "boolean"
+          },
+          "ruleCode" : {
+            "type" : "string"
           }
         },
         "type" : "object"
@@ -1905,6 +1939,41 @@
         },
         "type" : "object"
       },
+      "LayoutPreviewRequest" : {
+        "properties" : {
+          "layout" : {
+            "$ref" : "#/components/schemas/MailLayout"
+          },
+          "locale" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "LayoutPreviewResponse" : {
+        "properties" : {
+          "html" : {
+            "type" : "string"
+          },
+          "problems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Violation"
+            },
+            "type" : "array"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "LayoutsResponse" : {
         "properties" : {
           "allowedLinkHosts" : {
@@ -2017,6 +2086,47 @@
               "$ref" : "#/components/schemas/TemplatePreference"
             },
             "type" : "array"
+          }
+        },
+        "type" : "object"
+      },
+      "MailTextPreviewRequest" : {
+        "properties" : {
+          "body" : {
+            "type" : "string"
+          },
+          "locale" : {
+            "type" : "string"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "template" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "MailTextPreviewResponse" : {
+        "properties" : {
+          "html" : {
+            "type" : "string"
+          },
+          "problems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Violation"
+            },
+            "type" : "array"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
           }
         },
         "type" : "object"
@@ -2201,6 +2311,14 @@
         },
         "type" : "object"
       },
+      "PasskeyChallengeRequest" : {
+        "properties" : {
+          "challenge" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "PasskeyOptions" : {
         "properties" : {
           "publicKey" : {
@@ -2287,18 +2405,37 @@
         },
         "type" : "object"
       },
-      "PreviewRequest" : {
+      "PreviewChange" : {
         "properties" : {
-          "body" : {
+          "after" : {
+            "$ref" : "#/components/schemas/Finding"
+          },
+          "before" : {
+            "$ref" : "#/components/schemas/Finding"
+          },
+          "entityId" : {
             "type" : "string"
           },
-          "locale" : {
+          "evaluatedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PreviewRequest" : {
+        "properties" : {
+          "draft" : {
+            "$ref" : "#/components/schemas/DraftRule"
+          },
+          "limit" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "ruleId" : {
             "type" : "string"
           },
           "subject" : {
-            "type" : "string"
-          },
-          "template" : {
             "type" : "string"
           }
         },
@@ -2306,24 +2443,18 @@
       },
       "PreviewResponse" : {
         "properties" : {
-          "html" : {
-            "type" : "string"
-          },
-          "problems" : {
+          "changed" : {
             "items" : {
-              "$ref" : "#/components/schemas/Violation"
+              "$ref" : "#/components/schemas/PreviewChange"
             },
             "type" : "array"
           },
-          "subject" : {
-            "type" : "string"
-          },
-          "text" : {
-            "type" : "string"
-          },
-          "versionNo" : {
+          "evaluated" : {
             "format" : "int32",
             "type" : "integer"
+          },
+          "truncated" : {
+            "type" : "boolean"
           }
         },
         "type" : "object"
@@ -2374,6 +2505,31 @@
             "type" : "string"
           },
           "label" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PushRegisterRequest" : {
+        "properties" : {
+          "auth" : {
+            "type" : "string"
+          },
+          "endpoint" : {
+            "type" : "string"
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "p256dh" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "PushRegistered" : {
+        "properties" : {
+          "deviceId" : {
             "type" : "string"
           }
         },
@@ -4186,7 +4342,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/RegisterRequest"
+                "$ref" : "#/components/schemas/PushRegisterRequest"
               }
             }
           }
@@ -4196,7 +4352,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/Registered"
+                  "$ref" : "#/components/schemas/PushRegistered"
                 }
               }
             },
@@ -4454,7 +4610,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/ChallengeRequest"
+                "$ref" : "#/components/schemas/PasskeyChallengeRequest"
               }
             }
           }
@@ -4508,7 +4664,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/ChallengeRequest"
+                "$ref" : "#/components/schemas/PasskeyChallengeRequest"
               }
             }
           }
@@ -6760,7 +6916,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/PreviewRequest"
+                "$ref" : "#/components/schemas/LayoutPreviewRequest"
               }
             }
           },
@@ -6771,7 +6927,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/PreviewResponse"
+                  "$ref" : "#/components/schemas/LayoutPreviewResponse"
                 }
               }
             },
@@ -6806,7 +6962,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/PreviewRequest"
+                "$ref" : "#/components/schemas/MailTextPreviewRequest"
               }
             }
           },
@@ -6817,7 +6973,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/PreviewResponse"
+                  "$ref" : "#/components/schemas/MailTextPreviewResponse"
                 }
               }
             },
