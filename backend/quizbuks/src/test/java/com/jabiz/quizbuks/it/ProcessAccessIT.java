@@ -150,7 +150,11 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_OPERATOR_SETTLEMENT_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         // Q48e-2: a plan change and a withdrawal, put in effect once approved.
         Map.entry("QB_OPERATOR_PLAN_APPROVAL_RESULT", ProcessAccess.INTERNAL),
-        Map.entry("QB_OPERATOR_WITHDRAWAL_APPROVAL_RESULT", ProcessAccess.INTERNAL));
+        Map.entry("QB_OPERATOR_WITHDRAWAL_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        // F-S1: the daily check of the operators, and the hand-over of a moved sponsor's tasks.
+        Map.entry("QB_OPERATOR_CHECK_RUN", ProcessAccess.INTERNAL),
+        Map.entry("QB_OPERATOR_TASK_HANDOVER", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_OPERATOR_TASK_MOVE", ProcessAccess.SUB_PROCESS_ONLY));
 
     @Autowired
     ProcessRegistry registry;
