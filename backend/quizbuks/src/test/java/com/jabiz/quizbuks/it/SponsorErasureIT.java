@@ -52,6 +52,12 @@ class SponsorErasureIT extends PlayItSupport {
                 + "used_at, version) VALUES (?, ?, ?, 'QUIZ_INTRO', ?, 1, now(), 1)", UUID.randomUUID().toString(),
                 asset, owner, UUID.randomUUID().toString());
         }
+        // F-C2: a day of usage snapshots; Bob's stay.
+        for (String owner : java.util.List.of(ann, bob)) {
+            execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meter, value, recorded_at, "
+                + "version) VALUES (?, ?, DATE '2026-03-01', 'storage.bytes', 1234, now(), 1)",
+                UUID.randomUUID().toString(), owner);
+        }
         String publication = livePublication(ann, "Ann's quiz");
         String bobsPublication = livePublication(bob, "Bob's quiz");
         // A day of counts of their page (platform 17z-6: owned by the account, so they go with it); Bob's stay.
@@ -70,6 +76,8 @@ class SponsorErasureIT extends PlayItSupport {
         assertThat(query("SELECT 1 FROM qb_asset_use WHERE sponsor_id = ?", ann)).isEmpty();
         assertThat(query("SELECT 1 FROM qb_asset WHERE sponsor_id = ?", bob)).hasSize(1);
         assertThat(query("SELECT 1 FROM qb_asset_use WHERE sponsor_id = ?", bob)).hasSize(1);
+        assertThat(query("SELECT 1 FROM qb_usage_day WHERE sponsor_id = ?", ann)).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_usage_day WHERE sponsor_id = ?", bob)).hasSize(1);
         // The publication is kept as a record, ended because the account was deleted; another sponsor's runs on.
         assertThat(latest(publication)).containsEntry("status", "ENDED")
             .containsEntry("admin_reason", PublicationAdmin.ACCOUNT_DELETED);
