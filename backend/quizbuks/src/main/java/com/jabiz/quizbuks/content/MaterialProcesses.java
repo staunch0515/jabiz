@@ -130,7 +130,8 @@ public final class MaterialProcesses {
                 .steps(b -> AssetUses.load(b, ctx -> java.util.Collections.singletonList(
                     ctx.get(INPUT, MaterialInput.class).assetId()), ctx -> {
                     MaterialInput input = ctx.get(INPUT, MaterialInput.class);
-                    return input.assetId() == null || input.materialId() == null ? List.of()
+                    return input.assetId() == null || input.materialId() == null
+                        || QuizEditing.find(list(ctx, MATERIALS), input.materialId()) == null ? List.of()
                         : List.of(new AssetUses.Place(QbAssets.MATERIAL, input.materialId()));
                 }))
                 .compute("Check the asset picked", (metadata, ctx) -> {
