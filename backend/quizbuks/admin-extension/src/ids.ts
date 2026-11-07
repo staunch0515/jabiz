@@ -43,6 +43,8 @@ export const DATASET = {
 
 /** SQL templates (`queries/qb/admin`). */
 export const TEMPLATE = {
+  /** F-C2: the sponsors' usage by month and meter (headquarters every sponsor, an operator its own). */
+  usage: 'qb.admin.usage',
   /** Q88a: the sponsors' own certifications (headquarters every one, an operator its sponsors'). */
   sponsorCertifications: 'qb.admin.sponsor-certifications',
   /** Q73e-1: a publication by the language its attempts are answered in. */
@@ -314,6 +316,8 @@ export const TRANSFER_REVIEW = 'REVIEW'
 
 /** Dictionaries, labelled by the server in the request's language. */
 export const DICTIONARY = {
+  /** F-C2: the usage meters (`usage.UsageMeters`). */
+  usageMeter: 'urn:jabiz:dict:quizbuks:usage-meter',
   /** F-C1: an asset's kind, what a text asset is for, and the places an asset is copied to. */
   assetKind: 'urn:jabiz:dict:quizbuks:asset-kind',
   assetTextUsage: 'urn:jabiz:dict:quizbuks:asset-text-usage',
@@ -524,6 +528,8 @@ export const SPONSOR_PENDING = 'PENDING'
 /** The extension's own pages (not platform paths, `PLATFORM_PATHS`). */
 export const PATH = {
   reviews: '/qb/reviews',
+  /** F-C2: the sponsors' usage by month (`?sponsor=` for one). */
+  usage: '/qb/usage',
   publication: (publicationId: string) => `/qb/reviews/publications/${encodeURIComponent(publicationId)}`,
   sponsor: (userId: string) => `/qb/reviews/sponsors/${encodeURIComponent(userId)}`,
   /** Sponsors' pages (Q60a-3): every one, and one page's content, review and takedown. */
@@ -637,3 +643,9 @@ export const AUDIENCE_PRICING = {
   pricesTemplate: 'qb.admin.audience-prices',
   operatorPricesTemplate: 'qb.operator.audience-prices',
 } as const
+
+/**
+ * F-C2: whether a usage meter counts bytes (shown in MB). The meters are listed on the server only
+ * (`usage.UsageMeters`, the dictionary `usage-meter`); those of bytes are named `….bytes` / `…-bytes` there.
+ */
+export const isByteMeter = (meter: string) => /[.-]bytes$/.test(meter)
