@@ -126,6 +126,9 @@ function TeamSection({ team }: { team: Team }) {
   return (
     <Section title={t('operator.home.team')} testId="operator-team">
       <p className="text-muted-foreground text-sm">{t(team.lead ? 'operator.home.teamLeadHint' : 'operator.home.teamHint')}</p>
+      {team.ownSponsor && (
+        <p className="text-sm" data-testid="operator-own-sponsor">{t('operator.home.ownSponsor')}</p>
+      )}
       <DataTable label={t('operator.home.team')} columns={columns} data={team.members} getRowId={(row) => row.userId}
         empty={<EmptyState art="people" title={t('operator.members.none')} />}
         rowProps={(row) => ({ 'data-testid': 'team-row', 'data-id': row.userId })} />

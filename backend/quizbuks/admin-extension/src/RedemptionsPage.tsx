@@ -26,6 +26,7 @@ import {
 import { StatusFilter } from './finance-components'
 import { EmptyState, LoadFailed, PublisherLink, StatusBadge } from './components'
 import { money, useLabels, usePaged, when } from './hooks'
+import { operatorColumn, useOperatorFilter } from './operator-filter'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { readRedemptions, voidRedemption, type Redemption } from './reward-api'
@@ -116,12 +117,15 @@ export default function RedemptionsPage() {
     { kind: 'amount', name: 'amount', label: t('reward.redeem.value') },
     { kind: 'time', name: 'dueAt', label: t('reward.redeem.dueAt') },
   ], 'redeem-filters')
-  const { query, table, sortable } = usePaged([...KEY, filterStatus, q, more.filters],
-    (offset, limit, sorts) => readRedemptions(filterStatus, q, offset, limit, sorts, more.filters), true, SORTS)
+  const operators = useOperatorFilter()
+  const filters = [...more.filters, ...operators.filters]
+  const { query, table, sortable } = usePaged([...KEY, filterStatus, q, filters],
+    (offset, limit, sorts) => readRedemptions(filterStatus, q, offset, limit, sorts, filters), true, SORTS)
   const columns = useMemo<ColumnDef<Redemption, unknown>[]>(() => [
     { id: 'dueAt', header: t('reward.redeem.dueAt'), cell: ({ row }) => when(row.original.dueAt) },
     { id: 'code', header: t('reward.redeem.code'),
       cell: ({ row }) => <code className="font-mono" data-testid="redeem-row-code">{row.original.code}</code> },
+    ...(operators.across ? [operatorColumn<Redemption>(t('pickers.operatorColumn'))] : []),
     { id: 'sponsor', header: t('reward.redeem.sponsor'),
       cell: ({ row }) => (
         <PublisherLink kind={row.original.publisherKind} id={row.original.publisherId}
@@ -173,7 +177,7 @@ export default function RedemptionsPage() {
             </Button>
           </span>
         ) : null },
-  ], [t, status, can])
+  ], [t, status, can, operators.across])
 
   return (
     <div className="flex flex-col gap-4" data-testid="redemptions">
@@ -199,6 +203,7 @@ export default function RedemptionsPage() {
           }}>{t('reward.redeem.all')}</Button>
         )}
       </div>
+      {operators.bar}
       {more.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />

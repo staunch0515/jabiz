@@ -20,7 +20,8 @@ import { useLabels, usePaged, when } from './hooks'
 import { useMoreFilters } from './moreFilters'
 import { DICTIONARY, PATH } from './ids'
 import { PROSPECT_STATUSES, PROSPECTS_KEY, readProspects, type Prospect } from './prospect-api'
-import { useProspectScope } from './prospect-scope'
+import { chosen, useProspectScope } from './prospect-scope'
+import { OperatorPicker } from './pickers'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { score: 'score', foundAt: 'foundAt', sentAt: 'sentAt' } as const
@@ -31,7 +32,8 @@ const ALL = 'ALL'
 
 /**
  * The businesses AI prospecting found (Q48c), the drafts waiting for a person first: by state and search, each opens
- * on its page, where its draft is read, edited and approved or discarded. Headquarters picks whose (`?owner=`).
+ * on its page, where its draft is read, edited and approved or discarded. The platform picks whose (`?owner=`) and
+ * only reads them (F-S1b).
  */
 export default function ProspectsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
@@ -42,7 +44,6 @@ export default function ProspectsPage() {
   const status = search.get('status') ?? 'DRAFTED'
   const q = search.get('q') ?? ''
   const [typed, setTyped] = useState(q)
-  const [owner, setOwner] = useState(scope.owner)
   const set = (change: Record<string, string | null>) => {
     const next = new URLSearchParams(search)
     for (const [key, value] of Object.entries(change)) {
@@ -56,7 +57,8 @@ export default function ProspectsPage() {
     { kind: 'time', name: 'sentAt', label: t('prospect.list.sentAt') },
   ], 'prospects-filters')
   const { query, table, sortable } = usePaged([...PROSPECTS_KEY, scope, status, q, more.filters],
-    (offset, limit, sorts) => readProspects(scope, status === ALL ? null : status, q, offset, limit, sorts, more.filters), true, SORTS)
+    (offset, limit, sorts) => readProspects(scope, status === ALL ? null : status, q, offset, limit, sorts, more.filters),
+    chosen(scope), SORTS)
   const ownerQuery = scope.admin ? `?owner=${encodeURIComponent(scope.owner)}` : ''
   const columns = useMemo<ColumnDef<Prospect, unknown>[]>(() => [
     {
@@ -81,17 +83,17 @@ export default function ProspectsPage() {
   return (
     <div className="flex flex-col gap-4" data-testid="prospects-page">
       <PageHeader title={t('prospect.list.title')} description={t('prospect.list.description')} className="pb-0"
-        actions={<Button asChild variant="outline"><Link to={PATH.prospectSettings + ownerQuery}
+        actions={chosen(scope) && <Button asChild variant="outline"><Link to={PATH.prospectSettings + ownerQuery}
           data-testid="prospect-settings-link">{t('prospect.list.settings')}</Link></Button>} />
       <form className="flex flex-wrap items-end gap-4" role="search" onSubmit={(event) => {
         event.preventDefault()
-        set({ q: typed.trim() || null, owner: scope.admin ? owner.trim() || null : null })
+        set({ q: typed.trim() || null })
       }}>
         {scope.admin && (
-          <div className="flex flex-col gap-2">
+          <div className="flex w-80 flex-col gap-2">
             <Label htmlFor={`${id}-owner`}>{t('prospect.owner')}</Label>
-            <Input id={`${id}-owner`} value={owner} maxLength={36} className="w-80" data-testid="prospects-owner"
-              aria-describedby={`${id}-owner-hint`} onChange={(event) => setOwner(event.target.value)} />
+            <OperatorPicker id={`${id}-owner`} value={scope.owner || null} aria-describedby={`${id}-owner-hint`}
+              data-testid="prospects-owner" onChange={(value) => set({ owner: value })} />
             <p id={`${id}-owner-hint`} className="text-muted-foreground max-w-80 text-sm">{t('prospect.ownerHint')}</p>
           </div>
         )}
@@ -115,7 +117,7 @@ export default function ProspectsPage() {
         <Button type="submit" variant="outline">{t('prospect.list.find')}</Button>
       </form>
       {more.bar}
-      {query.isError
+      {!chosen(scope) ? <EmptyState art="search" title={t('prospect.chooseOperator')} /> : query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : (
           <DataTable label={t('prospect.list.title')} columns={sortable(columns)} {...table}

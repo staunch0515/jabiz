@@ -11,8 +11,9 @@ export const prospectMenu = {
 export const prospectMessages = {
   en: {
     cancel: 'Cancel',
-    owner: 'Owner',
-    ownerHint: 'direct is headquarters’ own prospecting; an operator’s ID shows that operator’s.',
+    owner: 'Operator',
+    ownerHint: 'Whose prospecting to read. The platform reads it only; each operator runs its own in the Operator Management System.',
+    chooseOperator: 'Choose an operator to read its prospecting.',
     show: 'Show',
     list: {
       title: 'Prospecting',
@@ -154,8 +155,9 @@ export const prospectMessages = {
   },
   zh: {
     cancel: '取消',
-    owner: '所属',
-    ownerHint: 'direct 为总部自己的获客；填写运营商编号即查看该运营商的。',
+    owner: '运营商',
+    ownerHint: '查看哪个运营商的获客。平台只读；获客由各运营商在运营商管理系统中进行。',
+    chooseOperator: '选择一个运营商，查看其获客。',
     show: '查看',
     list: {
       title: 'AI 获客',
@@ -297,8 +299,9 @@ export const prospectMessages = {
   },
   ja: {
     cancel: 'キャンセル',
-    owner: '所属',
-    ownerHint: 'direct は本部自身の営業開拓です。運営パートナーの ID を入れるとそのパートナーのものを表示します。',
+    owner: '運営パートナー',
+    ownerHint: 'どの運営パートナーの営業開拓を表示するか。プラットフォームは閲覧のみで、営業開拓は各運営パートナーが運営パートナー管理システムで行います。',
+    chooseOperator: '運営パートナーを選ぶと、その営業開拓を表示します。',
     show: '表示',
     list: {
       title: 'AI 営業開拓',

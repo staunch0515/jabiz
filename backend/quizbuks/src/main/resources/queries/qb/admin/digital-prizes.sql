@@ -1,12 +1,14 @@
 /*---
 id: qb.admin.digital-prizes
 description: "Every digital prize (Q33) with its sponsor and taker, newest first; disputes are decided from here"
-entities: [QbDigitalPrize, QbPublicationCard, QbSponsor, QbProfile]
+entities: [QbDigitalPrize, QbPublicationCard, QbSponsor, QbProfile, QbSponsorOperator, QbOperator]
 datasets:
   QbDigitalPrize: urn:jabiz:dataset:default:QbDigitalPrize
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbProfile: urn:jabiz:dataset:default:QbProfile
+  QbSponsorOperator: urn:jabiz:dataset:default:QbSponsorOperator
+  QbOperator: urn:jabiz:dataset:default:QbOperator
 params:
   q: { kind: { type: text, maxLength: 100 }, description: "Only prizes whose sponsor's company, the taker's name or the publication contains this text" }
 results:
@@ -37,8 +39,11 @@ results:
   resolvedAt:      { from: QbDigitalPrize.resolvedAt }
   resolution:      { from: QbDigitalPrize.resolution }
   resolveNote:     { from: QbDigitalPrize.resolveNote }
+  # F-S1b: the sponsor's operator now (every sponsor has one), for the platform's filter by operator.
+  operatorId:   { from: QbSponsorOperator.operatorId }
+  operatorName: { from: QbOperator.name }
 list:
-  filters: [status, delivery, publisherKind, publisherId, userId, publicationId, dueAt, amount]
+  filters: [status, delivery, publisherKind, publisherId, userId, publicationId, dueAt, amount, operatorId]
   sorts:   [dueAt, deliveredAt, amount, status]
   defaultSort: { field: dueAt, asc: false }
   key: [digitalPrizeId]
@@ -72,11 +77,15 @@ SELECT
     g.{{QbDigitalPrize.disputeNote}}    AS disputeNote,
     g.{{QbDigitalPrize.resolvedAt}}     AS resolvedAt,
     g.{{QbDigitalPrize.resolution}}     AS resolution,
-    g.{{QbDigitalPrize.resolveNote}}    AS resolveNote
+    g.{{QbDigitalPrize.resolveNote}}    AS resolveNote,
+    qso.{{QbSponsorOperator.operatorId}} AS operatorId,
+    qop.{{QbOperator.name}}               AS operatorName
 FROM {{QbDigitalPrize}} g
 LEFT JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = g.{{QbDigitalPrize.publicationId}}
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = g.{{QbDigitalPrize.publisherId}}
 LEFT JOIN {{QbProfile}} p ON p.{{QbProfile.userId}} = g.{{QbDigitalPrize.userId}}
+LEFT JOIN {{QbSponsorOperator}} qso ON qso.{{QbSponsorOperator.userId}} = g.{{QbDigitalPrize.publisherId}}
+LEFT JOIN {{QbOperator}} qop ON qop.{{QbOperator.operatorId}} = qso.{{QbSponsorOperator.operatorId}}
 WHERE (CAST(:q AS text) IS NULL
        OR strpos(lower(coalesce(sp.{{QbSponsor.company}}, '')), lower(CAST(:q AS text))) > 0
        OR strpos(lower(coalesce(p.{{QbProfile.displayName}}, '')), lower(CAST(:q AS text))) > 0
