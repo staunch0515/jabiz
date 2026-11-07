@@ -5142,6 +5142,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zk-5 | `OidcCallback` 在模板中（`brand`、`appearance`；缺口 4）；`MAIL_LINK_PAGES`（缺口 3）；"确认通行密钥"未登录时的登录链接（缺口 10）；`PwaInstallBanner` 的内置浏览器提示分开计数（`.in-app`，缺口 11）；`MailUnsubscribe` 取提供者的品牌 |
 | 17zk-6 | 示范：通用后台（单栏、无亮暗、构建号，回调页带品牌）；门户用 `EntryLayoutProvider`（三语左栏、`useEntryNotices`）、登录与注册两个标签、注册页的第三方与条款说明、已登录时 `/signup` 与 `/password-reset` 转走（缺口 9）、第二步照旧在内存中交接并开启 `resumeStep` |
 | 17zk-7 | 测试：`entry.test.tsx`（21 例，均含 axe 亮暗）、`problem.test.ts`、`signInStep.test.ts`、门户 `App.test.tsx`（模板与标签、已登录转走）、后台 `OidcCallbackPage.test.tsx`（标题移到卡片）与 `AuthPages.test.tsx`（登录链接）；原有单元测试与平台 e2e 照旧通过；设计 12 §14、10 §15、根 `CLAUDE.md` |
+| 17zk-8 | 修正（17zk-b，QuizBuks 接入时的评审发现）：注册页的标签与登录页一样只在入口接受自助注册时显示，否则照旧显示"已有账号？登录"的链接（`SignUpForm` 以 `useEntryOffers` 读入口信息）；`entry.test.tsx` 加一例 |
 
 **验收（原型清单 132 条，逐组）**：A 公共外框（27）：品牌、环境横条、语言（移到右上角）、亮暗（页脚，后台照旧无）、构建号、提示区（离线、服务不可用的对话框、新版本、内置浏览器提示）
 与字段、密码、按钮、结果的写法全部保留；B 登录（39）：字段、通行密钥按钮与名字栏的自动提示、内置浏览器的说明、邮件链接、第三方（图标 / 按钮、按入口取、Apple 的标题、品牌色、启动失败）、
@@ -5150,4 +5151,15 @@ D 回调（7）：处理中、错误、Apple 取消、`OIDC_ACCOUNT_EXISTS`、�
 F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架（12）、I 退出（2）：全部不变（G 的页面进入模板，确认通行密钥补上登录链接；H、I 属应用，不在本阶段改动）。
 不能放进模板而被删去的：无。QuizBuks 自己的部分（缺口 6 发起方公开框架的环境横条、学者与发起方的左栏文案与示意图、`otherEntry`、页脚链接、各入口的 `order`）在其应用分支上采用。
 
-**17zk 状态**：📝 待评审（分支 `1.3/phase-17zk-entry-pages`）。
+**17zk 状态**：17zk ✅ 已合并（#478）；17zk-b 📝 待评审（分支 `1.3/phase-17zkb-signup-tabs`）。
+
+### 17zq sys_file 按上传者的索引（2026-11-07，QuizBuks 首次上线 S3 F-C2 的平台需要）
+
+**缘由**：QuizBuks 按上传者统计存储用量（F-C2：`SELECT count(*), sum(size_bytes) FROM sys_file WHERE uploaded_by = …`），`sys_file` 却只有主键与清扫用的 `(uploaded_time)` 索引，按上传者的查询（包括 `SysFile` 默认列表按 `uploadedBy` 筛选）在数据多时读全表。
+
+| # | 内容 |
+|---|---|
+| 17zq-1 | 迁移 `V62__sys_file_uploader_index.sql`：`sys_file_uploaded_by_idx (uploaded_by, uploaded_time)`。同一索引满足按上传者的计数与求和、按上传者筛选并按时间排序（任一方向）或取时间范围；清扫按 `(uploaded_time, file_id)` 分页、不带上传者，照旧用原索引；平台没有其他按上传者的查询，不另建索引 |
+| 17zq-2 | 测试：`FileUploadIT` 断言索引存在（`pg_indexes`）、按上传者的计数与求和正确，关闭顺序扫描时用量查询与"按上传者、按时间倒序"的列表查询的计划都用该索引（后者不排序）；设计 14 §2 |
+
+**17zq 状态**：📝 待评审（分支 `1.3/phase-17zq-file-uploader-index`）。

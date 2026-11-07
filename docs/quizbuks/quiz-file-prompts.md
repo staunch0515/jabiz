@@ -1,6 +1,6 @@
 # 用其他 AI 工具生成 Quiz 文件：提示词模版
 
-商家后台「Quiz → 导入」读的是 `.quizbuks.json` 文件（格式见 `plans/Q16-quiz-transfer.md`，多语言见 `plans/Q73-content-languages.md`）。
+发起方页面「Quiz → 导入」读的是 `.quizbuks.json` 文件（格式见 `plans/Q16-quiz-transfer.md`，多语言见 `plans/Q73-content-languages.md`）。
 本文给出可以直接交给 ChatGPT、Gemini、Claude 等工具的提示词，生成能被导入的文件。规则取自服务器的检查
 （`content/transfer/QuizFileFormat.java`、`QuizFileChecks.java`、`ContentLimits.java`、`QuizCompleteness.java`）；
 本文中的两个 JSON 示例由测试 `QuizFilePromptsTest` 按服务器的同一套检查读取，规则变了测试即失败，请同时改本文。
@@ -9,7 +9,7 @@
 
 1. 复制第 2 节的提示词，只改最前面【参数】中的值。
 2. 交给 AI 工具。它只应回答一个 JSON 代码块（参数选了"列出图片建议"时，代码块之后另有一张图片建议表）。
-3. 把代码块的内容保存为 `<名字>.quizbuks.json`（UTF-8），在商家后台「Quiz → 导入」中选择它。
+3. 把代码块的内容保存为 `<名字>.quizbuks.json`（UTF-8），在发起方页面「Quiz → 导入」中选择它。
 4. 导入后成为草稿。在编辑器中检查题目与正确答案，需要图片的在编辑器中上传，再"保存版本"。
 5. 导入时报错：把错误信息（如 `questions[3].options: …`）连同第 4 节的修正提示词交回 AI。
 

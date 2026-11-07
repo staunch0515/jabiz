@@ -110,7 +110,7 @@ describe("the Sponsor's page editor (Q60a), a section of the Sponsor profile (Q6
     window.history.replaceState(null, '', OLD_PAGE_PATH)
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe(PAGE_PATH))
-    const nav = screen.getByRole('navigation', { name: 'Sponsor console' })
+    const nav = screen.getByRole('navigation', { name: 'QuizBuks for Sponsors' })
     expect(within(nav).getByRole('link', { name: 'Sponsor profile' })).toHaveAttribute('href', HUB_PATH)
     expect(within(nav).queryByRole('link', { name: 'My page' })).toBeNull()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sponsor profile')

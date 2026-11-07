@@ -12,6 +12,10 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -67,6 +71,41 @@ class FileUploadIT extends FileItSupport {
             + "WHERE file_id = ?", fileId).getFirst();
         assertThat(((Number) row.get("size_bytes")).longValue()).isEqualTo(stored(prefix + "/original").length);
         assertThat(row).containsEntry("original_name", "IMG_0001.jpg").containsEntry("uploaded_by", "it-photographer");
+    }
+
+    /**
+     * Storage used per uploader (ROADMAP 17zq): the uploader's rows come from the index on (uploaded_by,
+     * uploaded_time), not from a scan of the whole table (sequential scans off, as a large table would choose).
+     */
+    @Test
+    void filesOfOneUploaderAreFoundThroughTheirIndex() throws SQLException {
+        String documents = bearer("it-quota", "commerce.document.upload");
+        byte[] pdf = FileSamples.pdf();
+        uploaded(CommerceFiles.DOCUMENT, pdf, "a.pdf", "application/pdf", documents);
+        uploaded(CommerceFiles.DOCUMENT, pdf, "b.pdf", "application/pdf", documents);
+        assertThat(query("SELECT indexdef FROM pg_indexes WHERE schemaname = current_schema() AND indexname = ?",
+            "sys_file_uploaded_by_idx")).singleElement().satisfies(row -> assertThat((String) row.get("indexdef"))
+                .contains("(uploaded_by, uploaded_time)"));
+        String usage = "SELECT count(*) AS files, sum(size_bytes) AS bytes FROM sys_file WHERE uploaded_by = ";
+        Map<String, Object> used = query(usage + "?", "it-quota").getFirst();
+        assertThat(((Number) used.get("files")).longValue()).isEqualTo(2);
+        assertThat(((Number) used.get("bytes")).longValue()).isEqualTo(2L * pdf.length);
+        try (Connection connection = DB.connect(schema()); Statement statement = connection.createStatement()) {
+            statement.execute("SET enable_seqscan = off");
+            assertThat(plan(statement, usage + "'it-quota'")).contains("sys_file_uploaded_by_idx");
+            assertThat(plan(statement, "SELECT file_id FROM sys_file WHERE uploaded_by = 'it-quota'"
+                + " ORDER BY uploaded_time DESC LIMIT 20")).contains("sys_file_uploaded_by_idx").doesNotContain("Sort");
+        }
+    }
+
+    private static String plan(Statement statement, String sql) throws SQLException {
+        StringBuilder plan = new StringBuilder();
+        try (ResultSet rows = statement.executeQuery("EXPLAIN " + sql)) {
+            while (rows.next()) {
+                plan.append(rows.getString(1)).append('\n');
+            }
+        }
+        return plan.toString();
     }
 
     @Test

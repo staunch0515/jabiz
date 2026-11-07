@@ -28,7 +28,7 @@ export const operatorMessages = {
     },
     list: {
       title: 'Operators',
-      description: 'The agents who run Sponsors in their own back office at /operator/. Their reviews are final; headquarters spot-checks them.',
+      description: 'The agents who run Sponsors in the Operator Management System at /operator/. Their reviews are final; headquarters spot-checks them.',
       new: 'New operator',
       newTitle: 'New operator',
       newHint: 'Its page opens next: name its members there and move Sponsors to it.',
@@ -201,7 +201,7 @@ export const operatorMessages = {
     },
     list: {
       title: '运营商',
-      description: '在自己的后台 /operator/ 管理发起方的代理商。其审核即为终审，总部做抽查。',
+      description: '在运营商管理系统 /operator/ 中管理发起方的代理商。其审核即为终审，总部做抽查。',
       new: '新建运营商',
       newTitle: '新建运营商',
       newHint: '接着会打开运营商页面：在那里添加成员、改派发起方。',
@@ -374,7 +374,7 @@ export const operatorMessages = {
     },
     list: {
       title: '運営パートナー',
-      description: '自社の管理画面 /operator/ で主催者を担当する代理店です。審査は最終決定で、本部が抜き取り確認します。',
+      description: '運営会社管理システム /operator/ で主催者を担当する代理店です。審査は最終決定で、本部が抜き取り確認します。',
       new: '運営パートナーを追加',
       newTitle: '運営パートナーを追加',
       newHint: '次にそのページが開きます。そこでメンバーを追加し、主催者を割り当てます。',

@@ -421,12 +421,21 @@ describe('SignInForm in the template', () => {
 })
 
 describe('the other blocks in the template', () => {
+  it('signing up: no tabs where the entry has no self-registration, the sign-in link instead', async () => {
+    freshEntry({ selfRegistration: false })
+    server()
+    render(<SignUpForm brand="Sponsor" signInPath="/login" signUpPath="/signup" tabs />)
+    await waitFor(() => expect(fetch).toHaveBeenCalled())
+    expect(screen.queryByRole('navigation', { name: 'Sign in or sign up' })).toBeNull()
+    expect(screen.getByTestId('sign-in-link')).toHaveAttribute('href', '/login')
+  })
+
   it('signing up: tabs back to signing in with the query (?src=), and the wait after 429', async () => {
     freshEntry({ selfRegistration: true })
     server({ '/api/auth/register': () => tooMany(2) })
     window.history.replaceState(null, '', '/signup?src=trial-1')
     render(<SignUpForm brand="Sponsor" signInPath="/login" signUpPath="/signup" tabs />)
-    const tabs = screen.getByRole('navigation', { name: 'Sign in or sign up' })
+    const tabs = await screen.findByRole('navigation', { name: 'Sign in or sign up' })
     expect(within(tabs).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login?src=trial-1')
     expect(within(tabs).getByRole('link', { name: 'Sign up' })).toHaveAttribute('aria-current', 'page')
     expect(screen.queryByText('Already have an account? Sign in')).toBeNull()

@@ -3,6 +3,8 @@
 #   python3 tools/quizbuks/terms/rename.py .
 # then review the diff (English capitalisation is by rule), revert anything under db/, and run terms.test.mjs.
 # Not part of the build; kept so new texts can be passed through it the same way.
+# F-F5b (no 后台 / 管理画面 / console) is not here: whether a text needs the name or the in-sentence form of a part
+# (docs/quizbuks/glossary.md) depends on the sentence, so those were edited by hand; terms.test.mjs checks them.
 import os, re, sys
 
 ROOT = sys.argv[1]
