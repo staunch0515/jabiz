@@ -27,6 +27,7 @@ import { readSponsorAsOperator } from './operator-api'
 import { readRewardDefaults, readSponsorMethods, REWARD_METHODS, setSponsorMethods, type RewardMethod } from './reward-api'
 import { AVATAR_VARIANTS, DICTIONARY, isUserId, PATH, PERMISSION, SPONSOR_PENDING } from './ids'
 import { AfterDecision, LoadFailed, Section, StatusBadge } from './components'
+import { SponsorAssets } from './SponsorAssets'
 import { QUEUE, useAfterDecision, useLabels, when } from './hooks'
 
 const AVATAR = { image: true, variants: AVATAR_VARIANTS }
@@ -119,7 +120,8 @@ function RewardMethods({ userId }: { userId: string }) {
  * A sponsor's application as the reviewer decides it (P-09): the contact name, company, introduction and picture the
  * approval is bound to, when the terms were accepted, and the account's address and whether it is verified. The
  * decision is the platform's `ApprovalPanel`, offered while the application waits; afterwards the page reads again
- * until the state follows it.
+ * until the state follows it. Below, the reward methods (Q22) and, for readers of publications, the Sponsor's asset
+ * library (F-C1d), read only.
  */
 export default function SponsorReviewPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
@@ -229,6 +231,8 @@ export default function SponsorReviewPage() {
       </Section>
       <Section title={t('publication.decision')} testId="sponsor-decision">{decision}</Section>
       <RewardMethods userId={userId} />
+      {/* F-C1d: the Sponsor's asset library, read only, for support (an operator's: its own Sponsors'). */}
+      {can(PERMISSION.publicationRead) && <SponsorAssets userId={userId} />}
     </div>
   )
 }
