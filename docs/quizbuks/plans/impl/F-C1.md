@@ -288,3 +288,59 @@
 - 发布向导很大（`PublicationWizard.tsx`），接入只加按钮与一个 `assets` 输入，不改原有字段的保存方式；`publishing.test.tsx` 照旧通过。
 - 页面上筛选全部资源：1000 个以内可行；以后上限调大时改为服务端筛选（标签需要另建表或 jsonb 列）。
 - `suits.ts` 是后端规则的抄本，两处一起改（同 `video.ts` 的做法）。
+
+## F-C1d 的设计
+
+规格 F-C1 的"运营闭合"中还没有做的部分：平台管理系统（クイズdeおトク 管理システム / QuizBuks Management System）与运营商管理系统的只读"资源库"一栏、帮助与 FAQ 的文案、`operations.md` 的处理步骤，以及 Q110 §7 的 e2e。后端不改（数据视图、权限与运营商范围都是 F-C1a 的）。
+
+### 平台管理系统扩展：发起方详情的"资源库"一栏
+
+- **位置**：发起方详情页（`SponsorReviewPage`，`/qb/reviews/sponsors/<用户>`）。总部与运营商从发起方的链接（`PATH.sponsor`）都到这一页；用户概况页（`UserSummaryPage`）只有总部能看，不放这里。
+- **谁看得到**：持有 `qb.admin.publication.read`（客服、内容与财务管理员、运营商成员；即 F-C1a 默认数据视图的读权限）时显示并读取，否则不显示也不请求。运营商只读得到自己辖下的发起方（服务端的 `OperatorScopes`），页面不另做判断：读不到即显示读取失败或空。
+- **读取**（`asset-api.ts`，手写类型，同其他 `*-api.ts`）：
+  - 资源：默认数据视图 `urn:jabiz:dataset:default:QbAsset`，筛选 `sponsorId` = 该发起方（可再按 `kind` 筛），按页读（每页 20，`usePaged`），可按名称、修改时间排序（实体列表视图声明的排序）。`tags` 是 JSON 文本，在这里解析（解析不了即当作没有标签）。
+  - 用在几处：对当前页的资源，以一次 `QbAssetUse` 查询（`assetId` `in` 本页的编号，至多 100 行）数出每个资源的使用处；读满 100 行时个数只是下限，显示为"100+"一类的写法（`N+`）。
+  - "用在哪里"对话框：点某个资源时才按页读它的 `QbAssetUse`（`assetId` = 该资源）：使用处的种类（字典 `asset-use-target`）、使用处的编号、复制时的修订号、复制时间；复制时的修订号小于资源当前的即标出"用的是旧的内容"（与发起方页面的 `stale` 同一规则）。使用处是 Quiz 封面或简介时链到 Quiz 详情（有 `qb.admin.quiz.read` 时），是发布的各处时链到发布页；资料、题目、选项只显示编号（数据视图上没有它们所属的 Quiz，不为此多读）。
+- **列**：名称（下面一行是说明）、种类（文字带用途）、标签、修订号、修改时间、用在几处与"用在哪里"按钮。没有任何写入的操作（规格：客服只读）。
+- **文案**：`asset-messages.ts`，三语，合进扩展的消息 `assets.*`；用词照 `glossary.md`，不写"后台"。种类、用途与使用处的名字取服务端字典，未答复前显示代码。
+- **测试**（`assets.test.tsx`，Vitest + Testing Library）：
+  - 列出某发起方的资源（筛选、标签、修订号、个数与"N+"）；
+  - 按种类筛选；"用在哪里"标出旧内容，Quiz 的使用处链到 Quiz；
+  - 没有 `qb.admin.publication.read` 时不显示、不请求；
+  - 页面上没有任何写入的按钮；
+  - 空状态与读取失败；
+  - `expectAccessible`（`@jabiz/admin/testing`，亮、暗）。
+  - 原有的 `pages.test.tsx`、`operator.test.tsx` 照旧通过。
+  - 检查：`JABIZ_ADMIN_EXTENSION=../backend/quizbuks/admin-extension pnpm ext:check`。
+
+### 帮助与 FAQ
+
+- 帮助中心的 FAQ 存在数据库（`QbFaqEntry`），由内容管理员在平台管理系统的"FAQ"中发布；仓库中只保存文案。Q109 的使用手册（F-C10）还没有做，手册的文件还不存在。
+- 本 PR 新建 `docs/quizbuks/help/asset-library.md`：给发起方的帮助页一篇（三语：是什么、选了就复制、"用的是旧的内容"、收集、删除不影响副本、商品与认证搬到这里、上限）与 FAQ 一条（三语，对象 `SPONSOR`、分类 `PUBLISHING`）。由内容管理员发布为 FAQ；F-C10 建手册时把帮助页一篇原样放进发起方的手册。
+- 用词测试 `tools/quizbuks/terms/terms.test.mjs` 的扫描范围加上 `docs/quizbuks/help/`（帮助文案也是人读的文字）。
+
+### `operations.md`
+
+新增 §7.21"发起方的资源库（F-C1）"：
+
+- 参数 `qb.assets.max-count` / `max-tags` / `tag-length`（不受控，`QB_SETUP` 提出缺省值，改了即对之后的保存生效；调低不删已有的资源，只是不能再新建或保存超出的）；
+- 部署后要做的事（`QB_SETUP` 提出三个参数；没有新任务、新科目、新权限）；
+- "资源不见了"的排查步骤：先在发起方详情的"资源库"一栏看；再按审计（`GET /api/audit/records?entityType=QbAsset&entityId=…`，或 `processName=QB_ASSET_DELETE` 与 `actorId`）看是谁、何时删的；使用处的记录（`QbAssetUse`）随资源的删除、使用处的删除一起删掉；删除账号时两张表随之清除；副本不受资源的删除影响；
+- 客服能看到什么、不能做什么（只读，运营商只看辖下的，不能代为修改、恢复或收集；恢复只能由发起方重新存入）。
+
+### e2e（`quizbuks-web/e2e/tests/assets.spec.ts`，照 Q110 §7）
+
+在 F-C1c 的一条之外新增：
+
+- 从已有内容收集：同一张图片用在两处，收集时只列一次；收集后再打开，已收进的不再列出；
+- 题目编辑器中从库里选图片并保存；"存入资源库"一段文字（Quiz 简介）；
+- 资源改过以后，"用在哪里"标出旧内容，使用处本身的内容不变；
+- 平台管理系统中发起方详情的"资源库"一栏：列出资源与使用处的个数、只读（没有写入的按钮），axe。
+
+e2e 需要打包的应用与 Docker，本会话不能运行；只做类型检查（`npx tsc --noEmit -p .`），由需求方或 CI 运行。
+
+### 风险
+
+- 使用处的个数按本页一次查询数出，使用处很多时只是下限（显示"N+"）；要准确就得每个资源一次计数，不值得（客服再点"用在哪里"即可看全部）。
+- 资料、题目、选项的使用处只有编号，客服要找到所属的 Quiz 需另查（Quiz 详情页）；不为此加平台管理系统的模板。
+- 帮助文案在仓库中、发布在数据库中，两者靠内容管理员同步（与 troubleshooting 的做法相同）。
