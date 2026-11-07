@@ -87,6 +87,10 @@ class QbRolesTest {
         // permission made for it and reading the facts of the request; no other role decides them.
         assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).contains("security.protected-change.decide",
             "approval.read");
+        // F-S1c: who moves Sponsors between operators also moves their pending reviews (platform D76), and nobody
+        // else: an operator's scoped session could not anyway.
+        assertThat(QbRoles.all()).filteredOn(role -> role.permissions().contains("approval.scope.move"))
+            .extracting(QbRoles.Role::code).containsExactly(QbRoles.ADMIN_SUPER);
         assertThat(QbRoles.all()).filteredOn(role -> role.permissions().contains("security.protected-change.decide"))
             .extracting(QbRoles.Role::code).containsExactly(QbRoles.ADMIN_SUPER);
         // Neither new permission is on a side of a separation of duties: the super administrator breaks no rule.
