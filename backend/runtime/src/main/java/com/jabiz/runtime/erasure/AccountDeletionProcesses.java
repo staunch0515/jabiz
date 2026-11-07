@@ -659,7 +659,7 @@ public class AccountDeletionProcesses {
 
     /** Tells the user a deletion was requested, and the day it happens: no token. */
     public static final MailTemplate REQUESTED_MAIL = MailTemplate.define(REQUESTED_TEMPLATE,
-        t -> t.category(MailCategory.TRANSACTIONAL).param(DUE_DATE));
+        t -> t.category(MailCategory.TRANSACTIONAL).param(DUE_DATE).protectedText());
 
     @Bean
     MailTemplate authAccountDeletionMail(
