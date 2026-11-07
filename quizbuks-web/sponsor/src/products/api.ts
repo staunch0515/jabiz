@@ -1,5 +1,5 @@
 import { parseStoredTranslations, type TextsByLanguage } from '../content/TextTranslationsFields'
-import { api, runProcess, unwrap } from '@jabiz/client'
+import { api, runProcess, runQuery, unwrap } from '@jabiz/client'
 import { PRODUCT } from './ids'
 
 /* The sponsor's products as the console edits them (Q60b): types after `SponsorProductProcesses`'s records, and its calls. */
@@ -8,7 +8,6 @@ export type ProductStatus = 'LISTED' | 'UNLISTED' | 'TAKEN_DOWN'
 
 /** The currencies a price may be in (the server's `qb.currency` dictionary). */
 export const PRODUCT_CURRENCIES = ['JPY', 'USD', 'EUR', 'GBP', 'CNY', 'INR'] as const
-export const MAX_PRODUCTS = 50
 export const MAX_QUIZ_PRODUCTS = 3
 export const PRODUCT_NAME_LENGTH = 100
 export const PRODUCT_DESCRIPTION_LENGTH = 500
@@ -65,12 +64,34 @@ export interface QuizLink {
 type Row = Record<string, unknown>
 const text = (value: unknown) => (value == null || value === '' ? null : String(value))
 
+const PAGE_SIZE = 200
+
+/**
+ * All the caller's rows of a dataset, a page at a time (F-C11: the products' limit is a parameter and may be above one
+ * page; a list cut short would also make an exported profile package delete the rest when imported again).
+ */
 async function ownRows(dataset: string, filters: { field: string; op: string; value: unknown }[] = []): Promise<Row[]> {
-  const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
-    params: { path: { resourceId: dataset } },
-    body: { limit: 200, filters },
-  }))
-  return (page.items ?? []).map((item) => (item.attributes ?? {}) as Row)
+  const rows: Row[] = []
+  for (;;) {
+    const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
+      params: { path: { resourceId: dataset } },
+      body: { limit: PAGE_SIZE, offset: rows.length, filters },
+    }))
+    const items = page.items ?? []
+    rows.push(...items.map((item) => (item.attributes ?? {}) as Row))
+    const total = typeof page.total === 'number' ? page.total : null
+    if (items.length === 0 || (total != null ? rows.length >= total : items.length < PAGE_SIZE)) return rows
+  }
+}
+
+/**
+ * The most products the caller may have (`qb.products.max`, F-C11), read from the server as the save reads it; null
+ * when the parameter is not set, and then the page sets no limit of its own (the save decides).
+ */
+export async function readProductLimit(): Promise<number | null> {
+  const row = (await runQuery<Row>(PRODUCT.limitTemplate, { limit: 1 })).items[0]
+  const max = row?.max
+  return max == null || max === '' || !Number.isFinite(Number(max)) ? null : Number(max)
 }
 
 /** The caller's products, in their order. */
