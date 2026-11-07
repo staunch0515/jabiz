@@ -21,6 +21,7 @@ const en = {
   ...productsEn,
   ...statsEn,
   ...trialEn,
+  // The Sponsor app's name (requester 2026-11-07): never "console" or the like where people read it.
   brand: `${BRAND.names.en} for Sponsors`,
   lists: { view: 'View', cards: 'Cards', table: 'Table', pages: 'Pages', previous: 'Previous page', next: 'Next page', page: 'Page {{page}} of {{pages}}' },
   shownAt: {
@@ -61,6 +62,15 @@ const en = {
     signIn: 'Sign in',
     signUpTerms: 'You accept these when you apply as a sponsor:',
     takerAccount: `Already answering quizzes on ${BRAND.names.en}? Sign up here with the same email address and open the link we mail you: your account becomes a Sponsor's too, and you then sign in here as in the app, with your password or Google.`,
+  },
+  /** The entry pages' column about the Sponsor app (phase 17zk; P4), and the way to the Takers' app. */
+  entry: {
+    sentence: 'Get to know your customers with quizzes',
+    point1: 'A quiz in minutes',
+    point2: 'See who got it right and who came',
+    point3: 'In-store and digital rewards in one place',
+    toTaker: 'Answering quizzes as a Taker?',
+    toTakerLink: `Open ${BRAND.names.en}`,
   },
   deletion: { title: 'Delete the account', hint: 'Your page, products and profile are removed. Your quizzes and publications end and stay only as records; payments and receipts are kept as the law requires.' },
   mail: { hint: 'Mail about your top-ups, the reviews of your publications and publications an administrator stops is always sent. You can choose here which other mail you get.' },
@@ -258,6 +268,14 @@ const zh: typeof en = {
     signUpTerms: '申请入驻时，您将同意以下文本：',
     takerAccount: `已经在${BRAND.names.zh}答题？请在这里用同一个邮箱注册，并打开我们寄出的邮件中的链接：您的账号随即也成为发起方账号，之后可以像在 App 中一样用密码或 Google 登录这里。`,
   },
+  entry: {
+    sentence: '用 Quiz 认识你的客户',
+    point1: '几分钟出一套 Quiz',
+    point2: '看谁答对了、来了没有',
+    point3: '到店兑换与电子奖品一站完成',
+    toTaker: '我是学者，来答题的',
+    toTakerLink: `打开${BRAND.names.zh}`,
+  },
   deletion: { title: '删除账户', hint: '您的主页、商品与资料会被删除。Quiz 与发布结束，只作为记录保留；付款与收据按法律要求保存。' },
   mail: { hint: '关于充值、发布的审核结果以及被管理员停止的发布的邮件总会发送。其他邮件可以在这里选择是否接收。' },
   dashboard: {
@@ -453,6 +471,14 @@ const ja: typeof en = {
     signIn: 'ログイン',
     signUpTerms: '主催者申請の際に、以下へ同意していただきます：',
     takerAccount: `${BRAND.names.ja}でクイズに回答している方は、同じメールアドレスでこちらから登録し、お送りするメールのリンクを開いてください。アカウントが主催者としても使えるようになり、アプリと同じくパスワードまたは Google でログインできます。`,
+  },
+  entry: {
+    sentence: 'クイズでお客様を知る',
+    point1: '数分でクイズを作成',
+    point2: '誰が正解し、誰が来店したかが分かる',
+    point3: '店頭での引き換えも電子特典もここで',
+    toTaker: 'クイズに答えるテイカーの方',
+    toTakerLink: `${BRAND.names.ja}を開く`,
   },
   deletion: { title: 'アカウントの削除', hint: 'マイページ、商品、プロフィールは削除されます。クイズと公開は終了し、記録としてのみ残ります。支払いと領収書は法律に従って保存されます。' },
   mail: { hint: 'チャージ、公開の審査結果、管理者による公開の停止に関するメールは必ずお送りします。その他のメールはここで受け取るかどうかを選べます。' },

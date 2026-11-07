@@ -19,3 +19,22 @@ export function LegalLinks({ kinds, className }: { kinds: readonly LegalKind[]; 
     </nav>
   )
 }
+
+/**
+ * The same links as plain anchors for the entry pages' footer (phase 17zk, gap 8): the template's `links` slot is a
+ * navigation of its own already. They open the public pages of this front end (readable without signing in).
+ */
+export function EntryLegalLinks({ kinds }: { kinds: readonly LegalKind[] }) {
+  const { t } = useTranslation(QB)
+  const linkClass = 'hover:text-foreground underline-offset-4 hover:underline'
+  return (
+    <>
+      <Link to="/help" className={linkClass} data-testid="entry-link-help">{t('help.title')}</Link>
+      {kinds.map((kind) => (
+        <Link key={kind} to={legalPath(kind)} className={linkClass} data-testid={`entry-link-${kind}`}>
+          {t(`legal.kinds.${kind}`)}
+        </Link>
+      ))}
+    </>
+  )
+}
