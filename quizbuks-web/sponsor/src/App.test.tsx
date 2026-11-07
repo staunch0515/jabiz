@@ -1,4 +1,4 @@
-import { changeLanguage, configureClient, forgetEnvironment, session } from '@jabiz/client'
+import { changeLanguage, configureClient, forgetEnvironment, forgetSignInStep, keepSignInStep, session } from '@jabiz/client'
 import { expectAccessible } from '@jabiz/ui/testing'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -269,9 +269,8 @@ describe('the entry pages (platform 17zk; P4)', () => {
         .toHaveTextContent('Get to know your customers with quizzes')
       expect(document.querySelectorAll('[data-slot="entry-intro-points"] li')).toHaveLength(3)
       expect(document.querySelector('[data-slot="entry-intro-illustration"] svg')).toHaveAttribute('aria-hidden', 'true')
-      // Q37: the hint for takers stays, now under the form inside its card.
-      const below = document.querySelector('[data-slot="entry-below"]')!
-      expect(below).toContainElement(screen.getByTestId('signin-taker-account'))
+      // Q37: the hint for takers stays, in the page's footer (on every step of signing in).
+      expect(screen.getByTestId('auth-footer')).toContainElement(screen.getByTestId('signin-taker-account'))
       const other = screen.getByTestId('entry-other')
       expect(other).toHaveTextContent('Answering quizzes as a Taker?')
       expect(within(other).getByRole('link', { name: 'Open QuizBuks' })).toHaveAttribute('href', '/taker/login')
@@ -354,6 +353,34 @@ describe('the entry pages (platform 17zk; P4)', () => {
     render(<App />)
     expect(await screen.findByTestId('faq-entry')).toBeInTheDocument()
     expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+  })
+
+  it('keep the hint for takers on the second step too, as before 17zk (Q37)', async () => {
+    server()
+    // A second step a provider's return left in this tab (resumeStep): the sign-in page opens at the code.
+    keepSignInStep({ status: 'MFA_REQUIRED', challenge: 'c1' }, '/')
+    try {
+      window.history.replaceState(null, '', '/login')
+      render(<App />)
+      await waitFor(() => expect(document.querySelector('input[autocomplete="one-time-code"]')).not.toBeNull())
+      expect(screen.queryByTestId('login-user-name')).toBeNull()
+      expect(screen.getByTestId('signin-taker-account')).toHaveTextContent('Sign up here with the same email address')
+    } finally {
+      forgetSignInStep()
+    }
+  })
+
+  it('name the browser tab after the Sponsor app in the page\'s language', async () => {
+    // (A test system's banner puts its name in front: "[TEST] ".)
+    server()
+    window.history.replaceState(null, '', '/login')
+    render(<App />)
+    await screen.findByTestId('login-user-name')
+    await waitFor(() => expect(document.title).toMatch(/^(\[[A-Z]+\] )?QuizBuks for Sponsors$/))
+    await act(() => changeLanguage('zh'))
+    await waitFor(() => expect(document.title).toMatch(/^(\[[A-Z]+\] )?答题拼好价发起方$/))
+    await act(() => changeLanguage('ja'))
+    await waitFor(() => expect(document.title).toMatch(/^(\[[A-Z]+\] )?クイズdeおトク 主催者$/))
   })
 
   it('name the Sponsor app as the requester decided, in every language, never as a back office', async () => {

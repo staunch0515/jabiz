@@ -34,7 +34,7 @@ import { Award, CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSq
   MessageCircle,
   ClipboardList,
 } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { analyticsIdOf } from './analytics/api'
 import { PublicationAnalyticsPage } from './analytics/PublicationAnalyticsPage'
@@ -389,7 +389,11 @@ function EntryPages({ children }: { children: ReactNode }) {
 
 /** The Sponsor app's pages by path: the sign-in pages for everyone, the rest for a signed-in sponsor only. */
 function Routes() {
-  const { t } = useTranslation(SPONSOR)
+  const { t, i18n } = useTranslation(SPONSOR)
+  // The tab says the Sponsor app's name in the page's language (index.html has the English one until then).
+  useEffect(() => {
+    document.title = t('brand')
+  }, [t, i18n.language])
   const { ready, signedIn } = useAuth()
   const { path, search } = useLocation()
   const brand = <Wordmark name={t('brand')} />
@@ -441,7 +445,12 @@ function Routes() {
     if (signedIn) return <Redirect to="/" />
     const notice = lockedIdle ? 'idle' : undefined
     const pending = pendingStep
+    // A taker's account (with a password or Google alone) has no sponsor role yet: the Sponsor app refuses it until
+    // the account joins by signing up with its address (Q37). Said on every step of signing in, as before 17zk: the
+    // template's footer of this page (a form's `below` is the password step's only).
     return frame(
+      <EntryLayoutProvider footer={<span className="text-sm" data-testid="signin-taker-account">
+        {t('public.takerAccount')}</span>}>
       <SignInForm {...navigation} brand={brand} returnTo={pending?.to ?? '/'} initialStep={pending?.step}
         notice={notice} resumeStep
         onSignedIn={(to) => {
@@ -450,10 +459,8 @@ function Routes() {
           navigate(to, { replace: true })
         }} passwordResetPath="/password-reset" signInPath="/login" signUpPath="/signup" tabs
         // Suggestion ③: passkeys first, then the providers (icons on a phone), the password last.
-        order={['passkey', 'providers', 'password']} oidcLayout="responsive" userNameLabel="email" passkey
-        // A taker's account (with a password or Google alone) has no sponsor role yet: the Sponsor app refuses it
-        // until the account joins by signing up with its address (Q37). Under the form, in its card.
-        below={<p data-testid="signin-taker-account">{t('public.takerAccount')}</p>} />,
+        order={['passkey', 'providers', 'password']} oidcLayout="responsive" userNameLabel="email" passkey />
+      </EntryLayoutProvider>,
     )
   }
   if (!signedIn) return <Redirect to="/login" />

@@ -464,6 +464,52 @@ describe('the entry pages (platform 17zk; P4)', () => {
   })
 })
 
+describe('the in-app browser\'s note among the entry pages\' notices (17zk; P4 review)', () => {
+  const WECHAT = 'Mozilla/5.0 (Linux; Android 14; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 '
+    + 'Chrome/116.0.0.0 Mobile Safari/537.36 MicroMessenger/8.0.49.2600 WeChat/arm64'
+  beforeEach(() => {
+    window.localStorage.setItem('qb.intro.seen', '1')
+    atWidth(390)
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(WECHAT)
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    window.history.replaceState(null, '', '/login')
+  })
+  const offlineExpanded = () => {
+    const offline = screen.getByTestId('offline-banner')
+    expect(offline.closest('details')).toBeNull()
+    expect(document.querySelector('[data-slot="entry-notice"][data-collapsed]')).toBeNull()
+  }
+
+  it('gives the expanded place on a phone to offline once the note was closed before', async () => {
+    window.localStorage.setItem('jabiz.pwa.install.taker.in-app', JSON.stringify({ at: Date.now(), count: 1 }))
+    server()
+    render(<App />)
+    await screen.findByTestId('login-user-name')
+    expect(screen.queryByTestId('pwa-install')).toBeNull()
+    offlineExpanded()
+  })
+
+  it('counts a close remembered under the shared key before 17zk as closed too', async () => {
+    window.localStorage.setItem('jabiz.pwa.install.taker', JSON.stringify({ at: Date.now(), count: 3 }))
+    server()
+    render(<App />)
+    await screen.findByTestId('login-user-name')
+    expect(screen.queryByTestId('pwa-install')).toBeNull()
+    offlineExpanded()
+  })
+
+  it('gives up the expanded place when closed on the page', async () => {
+    server()
+    render(<App />)
+    await screen.findByTestId('pwa-install')
+    expect(document.querySelector('[data-slot="entry-notice"][data-collapsed]')).not.toBeNull()
+    await userEvent.click(screen.getByTestId('pwa-install-dismiss'))
+    await waitFor(() => expect(screen.queryByTestId('pwa-install')).toBeNull())
+    await waitFor(offlineExpanded)
+    await expectAccessible()
+  })
+})
+
 describe('a signed-in Taker', () => {
   beforeEach(() => session.store('access', 'refresh'))
 

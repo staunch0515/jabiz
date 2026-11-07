@@ -1,6 +1,6 @@
-import { useInstallPrompt } from '@jabiz/client'
+import { installOfferAllowed, readInstallDismissals, useInstallPrompt, type InstallSituation } from '@jabiz/client'
 import { PwaInstallBanner } from '@jabiz/ui'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { nativeShell } from './shell'
 import { BRAND } from './qb/brand'
 
@@ -92,4 +92,25 @@ export function InAppBrowserNotice() {
   const { situation } = useInstallPrompt()
   if (situation !== 'in-app' || nativeShell()) return null
   return <PwaInstallBanner appName={APP_NAME} rememberAs={KEY} />
+}
+
+/**
+ * Whether the note inside another app's browser shows now (Q50): in such a browser, not in a store app, and not closed
+ * within the banner's limits (30 days, for good after three). Its closes are its own record (`taker.in-app`, platform
+ * 17zk gap 11), or until it has one, the shared record the banner carries over from before.
+ */
+export function inAppNoticeOpen(situation: InstallSituation, now: number = Date.now()): boolean {
+  if (situation !== 'in-app' || nativeShell()) return false
+  return installOfferAllowed(readInstallDismissals(`${KEY}.in-app`) ?? readInstallDismissals(KEY), now)
+}
+
+/**
+ * The in-app note for the entry pages' notices: whether it shows (an `active` notice takes the one expanded place on
+ * a phone, so a closed note must give it up) and `recheck`, to call after a click inside it (the banner keeps its
+ * closes in storage, which tells nobody).
+ */
+export function useInAppNotice(): { open: boolean; recheck: () => void } {
+  const { situation } = useInstallPrompt()
+  const [, setChecks] = useState(0)
+  return { open: inAppNoticeOpen(situation), recheck: () => setChecks((n) => n + 1) }
 }

@@ -1,4 +1,4 @@
-import { AuthProvider, useAuth, useInstallPrompt, type SignInStep } from '@jabiz/client'
+import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
   APPEARANCES,
   AppearanceProvider,
@@ -84,7 +84,7 @@ import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
 import { pendingRedeem, redeemPath, rememberRedeem } from './redeemReturn'
 import { signInOrder } from './signin'
-import { InAppBrowserNotice } from './install'
+import { InAppBrowserNotice, useInAppNotice } from './install'
 import { readMyProfile } from './qb/api'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { HelpPage } from './qb/HelpPage'
@@ -113,7 +113,6 @@ import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
 import { ONE_LINE_BANNER } from './banner'
 import { MaintenanceRedirect } from './maintenance'
-import { nativeShell } from './shell'
 
 /** Where a signed-in taker starts. */
 const HOME = '/'
@@ -516,11 +515,13 @@ function isPublic(path: string): boolean {
 function EntryPages({ children }: { children: ReactNode }) {
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
-  const { situation } = useInstallPrompt()
+  const inApp = useInAppNotice()
   const notices = [
-    // Q50: from the first visit, inside WeChat, QQ, LINE and the like; never in a store app.
-    { key: 'in-app', content: <InAppBrowserNotice />, summary: tApp('entry.inAppSummary'),
-      active: situation === 'in-app' && !nativeShell() },
+    // Q50: from the first visit, inside WeChat, QQ, LINE and the like; never in a store app. Closed, it gives the
+    // expanded place on a phone to the next notice (the click that closes it is noticed here).
+    { key: 'in-app', summary: tApp('entry.inAppSummary'), active: inApp.open,
+      content: inApp.open ? <div onClickCapture={() => window.setTimeout(inApp.recheck)}><InAppBrowserNotice /></div>
+        : null },
     ...useEntryNotices(),
   ]
   return (
