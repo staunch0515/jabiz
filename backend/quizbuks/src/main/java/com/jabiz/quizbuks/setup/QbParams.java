@@ -219,6 +219,8 @@ public final class QbParams {
     /** F-C1: the most tags one asset has, and the most characters of one tag. */
     public static final String ASSETS_MAX_TAGS = "qb.assets.max-tags";
     public static final String ASSETS_TAG_LENGTH = "qb.assets.tag-length";
+    /** F-C11: the most products one sponsor has (not controlled: no money, no review); the profile package's too. */
+    public static final String PRODUCTS_MAX = "qb.products.max";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -522,7 +524,10 @@ public final class QbParams {
         new Param(ASSETS_MAX_TAGS, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
             "The most tags one asset of the library has"),
         new Param(ASSETS_TAG_LENGTH, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
-            "The most characters of one tag of the asset library"));
+            "The most characters of one tag of the asset library"),
+        // F-C11: the products' limit (ordinary; last, so that the setup's earlier keys stay as they were).
+        new Param(PRODUCTS_MAX, Map.of("type", "numeric", "precision", 6, "scale", 0), "50",
+            "The most products one sponsor has, on the products page and in a profile package"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

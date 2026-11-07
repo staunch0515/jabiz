@@ -49,6 +49,7 @@ class MessagesTest {
             .containsAll(com.jabiz.quizbuks.asset.AssetCodes.ALL)
             .contains("process.QB_ASSET_SAVE", "process.QB_ASSET_DELETE", "process.QB_ASSET_COLLECT",
                 "param.qb.assets.max-count", "param.qb.assets.max-tags", "param.qb.assets.tag-length",
+                "param.qb.products.max", "query.qb.sponsor.product-limit", "query.qb.sponsor.product-limit.max",
                 "query.qb.sponsor.asset-candidates", "entity.QbAsset", "entity.QbAssetUse")
             .containsAll(com.jabiz.quizbuks.page.ProfilePackage.CODES)
             .containsAll(com.jabiz.quizbuks.page.ProfileTransferProcesses.CODES)
