@@ -1,0 +1,13 @@
+# Every hour: WAL reaches both repositories, the newest backup is younger than 26 h, restic's repository is sound.
+[Unit]
+Description=QuizBuks backup timer: check
+
+[Timer]
+OnCalendar=*-*-* *:45:00 UTC
+# A run missed while the server was off happens at the next boot.
+Persistent=true
+RandomizedDelaySec=60
+Unit=quizbuks-backup@check.service
+
+[Install]
+WantedBy=timers.target
