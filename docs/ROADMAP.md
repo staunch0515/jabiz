@@ -5037,7 +5037,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zh-6 | 信纸：core `MailLayout`、`MailLayoutRules`（显示名与替代文字一行、标志只用本站图片、页脚只用 `{baseUrl}` / `{entryUrl.<入口>}` 且照文字的链接规则；错误码 `MAIL_LAYOUT_*`）、`MailRenderer.wrap` / `plain`；迁移 `V61__mail_layouts.sql`（时态实体 `MailLayout`，三张投递表加列 `layout_version_no`，`sys_mail_text_version` 加列 `approved`）；缺省值 `jabiz.mail.layout.<语言>.*`（示范 `app` 三语）；修改只经受控变更 `MailLayout`（`MailLayoutControlTarget`、守卫 `MailLayoutGuard`），`MAIL_LAYOUT_RESET`、`MAIL_LAYOUT_TEST_SEND`（缺省每人每小时 10 次）；`GET /api/mail/layouts`、`POST /api/mail/layouts/preview`；模版邮件、待办通知、单据邮件、预览与测试信都放在信纸上并记版本；启动检查（缺省值不合格即错误，存的不合格告警）；17zh-a 安全审查的跟进 F5（`approved`）与 F6b（只有平台的测试信按已渲染内容发出）；测试 `MailLayoutRulesTest`、`MailRendererTest`、`MailLayoutIT`、`MailTextIT`；文档 D72 第 6、7 条、18 §5.6、根 `CLAUDE.md` | 17zh-b |
 | 17zh-7 | 通用后台的"邮件模版"与"邮件信纸"页（列表、编辑器、预览、测试发送、恢复默认、历史与对比、提出修改） | 17zh-c（计划） |
 
-**17zh 状态**：17zh-a 📝 待评审（分支 `1.3/phase-17zha-mail-texts`）；17zh-b 📝 待评审（分支 `1.3/phase-17zhb-mail-layout`）；17zh-c 计划中。
+**17zh 状态**：17zh-a ✅ 已合并（#470）；17zh-b 📝 待评审（分支 `1.3/phase-17zhb-mail-layout`）；17zh-c 计划中。
 
 ### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
 
