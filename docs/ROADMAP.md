@@ -5113,4 +5113,16 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zo-3 | `SysApprovalRequest` / `SysTask` 的 `scopeName` / `scopeValue` 不再不可变；守卫 `ApprovalScopeGuard`（`TemporalWriteGuard`）只放行带该子流程的许可 `ApprovalScopeGrant`（同一实例、操作、新值，名不变、请求待审批 / 待办开放）的改变，其余 422 `IMMUTABLE_FIELD`；决定与评估不动 |
 | 17zo-4 | 测试：`ApprovalScopeMoveIT`（移动与可见性、下一层级的待办在新范围、已批准的请求随之移动后新范围能取代而原范围不能、审批待办的来源键被拒、无未结与已在新值不移动、范围名不同或没有范围 422、无权限 403（输入无效时同样先 403）、直接调用 `PROCESS_INTERNAL`、有范围的会话 `OUT_OF_SCOPE`、其他流程与数据视图 API 改不了范围、审计记录、两表只追加）、`ApprovalScopeGuardTest`；设计 18 §3.8、10 §13.4、决策 D76、根 `CLAUDE.md` |
 
-**17zo 状态**：📝 待评审（分支 `1.3/phase-17zo-approval-scope-move`）。
+**17zo 状态**：✅ 已合并（#475）。
+
+### 17zp 场景回放中把用户的邮箱标为已验证（2026-11-07，QuizBuks 首次上线 S2 F-S1a 的平台需要）
+
+**缘由**：场景回放（07 §3）中 `SEC_USER_CREATE` 建的用户邮箱未验证，验证只能经寄出的链接，回放跟不了；回放只把操作人本身视为已验证。QuizBuks 要求运营商的负责人有已验证的邮箱，10 个场景因此建不出缺省的运营商。
+
+| # | 内容 |
+|---|---|
+| 17zp-1 | 场景步骤 `verifyEmail: 用户编号`（只在 testFixtures 中：`Scenario.VerifyEmail`、`ScenarioRunner`）；用户编号照例写作保存的变量（`"${hana}"`）；值不是文本即解析错误 |
+| 17zp-2 | testFixtures 中不登记、不是 Bean 的流程 `SCENARIO_EMAIL_VERIFY`（`ScenarioEmailVerification`，`internal()`，以系统身份运行）：写入平台验证所写的 `verifiedEmail` 与 `emailVerifiedAt`（注入时钟的操作时刻），经流程变更集与平台写入路径追加用户版本，审计记录照常；用户不存在或没有邮箱即该步骤失败。主代码不变 |
+| 17zp-3 | 测试：`ScenarioParserTest`（有效与无效的写法）；示范场景 `app` 的 `scenarios/security/verify_email.yml`（门户要求已验证的邮箱：验证前登录 `EMAIL_NOT_VERIFIED`，验证后 `SUCCESS`）及其快照；`ScenarioVerifyEmailIT` 断言审计记录（`system`、版本 2、`verifiedEmail` 前后值）；设计 07 §3.1 |
+
+**17zp 状态**：📝 待评审（分支 `1.3/phase-17zp-scenario-verify-email`）。
