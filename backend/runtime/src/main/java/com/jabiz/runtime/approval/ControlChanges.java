@@ -152,6 +152,7 @@ public class ControlChanges {
         change.put("targetId", proposal.targetId());
         change.put("changeAction", Boolean.TRUE.equals(input.delete()) ? DELETE : UPSERT);
         change.put("changeValues", proposal.values() == null ? null : ApprovalJson.write(proposal.values()));
+        change.put("targetKey", proposal.key());
         change.put("effectiveTime", input.effectiveTime());
         change.put("reason", input.reason().strip());
         change.put("status", ApprovalEntities.PROPOSED);

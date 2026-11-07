@@ -87,6 +87,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   按客户端地址的国家只经 `ClientCountry`（本地地址库 `jabiz.geoip.database`，流程中用步骤 `LoadClientCountry.into(键)`，页面用 `GET /api/client/region` / `clientRegion()`；
   结果不保存、不进 `input_summary` 与观测标签，10 §18、决策 D74），不自己读转发头或调用外部的地理位置服务。
   会话（刷新令牌族）的列出与吊销只经平台接口与流程（本人 `/api/auth/account/sessions/**`，管理员 `SEC_USER_SESSIONS_REVOKE`，10 §15.9），不自写会话表或吊销逻辑。
+  被换下的刷新令牌在宽限内再次出现（页面在续期中刷新、复制标签页）由平台补发一次（`jabiz.security.refresh.reuse-grace`，缺省 30 秒，10 §3、决策 D73），客户端不自己重试或绕过。
 - **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
   自助注册、邮箱验证、找回密码、本人改密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等、`SEC_ACCOUNT_PASSWORD_CHANGE`），不另写；
   管理员建的账号由本人经邀请设定密码（`SEC_USER_INVITE` 或建号时 `invite`，只寄到建号时填写、未验证的邮箱，前端 `MailLinkPage` 的 `invitation` 页，10 §15.14、决策 D63），不给管理员设的密码；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。

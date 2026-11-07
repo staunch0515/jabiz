@@ -39,6 +39,9 @@
 - **刷新即轮换**：`POST /api/auth/refresh {refreshToken}` 在**一个事务**中消费该令牌（插入 `sec_refresh_token_use`，主键保证只能用一次）、
   重新读取用户（存在、启用、未锁定、至少一个生效角色）与权限、签发同族的下一个刷新令牌；用户检查不通过时什么也不消费。之后签发新的访问令牌。
   同一刷新令牌第二次出现 = 被盗用或重放 → 吊销整个令牌族（`sec_refresh_family_revocation`，原因 `REUSE`），返回 401 `INVALID_REFRESH_TOKEN`。
+  **重用宽限**（决策 D73，阶段 17zi）：被换下的令牌在其使用后的 `jabiz.security.refresh.reuse-grace`（缺省 30 秒，0–120 秒，启动检查）以内再次出现、
+  它换出的后继（`parent_hash` 指向它的令牌）还没有用过、它还没有补发过、且是同一入口时，同一事务中补发一个同族的新令牌（`sec_refresh_token_regrant`
+  以主键保证至多一次），不吊销；页面在续期中被刷新、复制标签页因此不被登出。其余情形照旧吊销。指标 `jabiz.auth.refresh.reuse`（`result` = `granted` / `revoked`）。
 - `POST /api/auth/logout {refreshToken}` 吊销该令牌所在的族（原因 `LOGOUT`），204；未知令牌同样 204。
 - 改密码（`SEC_USER_SET_PASSWORD`）在同一事务中吊销该用户的全部令牌族（原因 `PASSWORD`）：旧密码建立的会话不能再刷新。
   本人改密码（§15.8）吊销本人的其他令牌族（原因 `PASSWORD_CHANGE`），请求中给出的、本人当前入口的有效刷新令牌所在的族保留。

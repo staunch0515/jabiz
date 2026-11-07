@@ -165,7 +165,9 @@ public class SecurityConfig {
 
     @Bean
     RefreshTokenStore refreshTokenStore(StorageAdapterRegistry storages, Clock clock, JwtService tokens,
-        SignInEntries entries, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        SignInEntries entries, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+        @Value("${" + RefreshReuseGraceCheck.PROPERTY + ":" + RefreshReuseGraceCheck.DEFAULT + "}")
+        java.time.Duration reuseGrace) {
         // Each entry's sessions live as long as it says (jabiz.security.entries.<name>.session.*, the global settings
         // otherwise; decision D43 item 2). A session idle for longer than its access token plus the idle timeout
         // cannot be refreshed (section 11), unless the entry's idle timeout is 0.
@@ -173,7 +175,8 @@ public class SecurityConfig {
             SignInEntries.Session session = entries.session(entry);
             return new RefreshTokenStore.Policy(session.refreshTokenTtl(),
                 session.idleEnds() ? tokens.ttl().plus(session.idleTimeout()) : null);
-        }, clock);
+            // A consumed token back within the grace gets one sibling of its successor (decision D73).
+        }, clock, reuseGrace);
     }
 
     @Bean
