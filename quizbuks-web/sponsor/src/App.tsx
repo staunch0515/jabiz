@@ -29,10 +29,13 @@ import { Award, CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSq
   Package,
   MessageCircle,
   ClipboardList,
+  Library,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { analyticsIdOf } from './analytics/api'
+import { ASSETS_PATH } from './assets/api'
+import { AssetsPage, tabOf } from './assets/AssetsPage'
 import { PublicationAnalyticsPage } from './analytics/PublicationAnalyticsPage'
 import { QuizEditorPage } from './content/QuizEditorPage'
 import { QuizListPage } from './content/QuizListPage'
@@ -192,6 +195,8 @@ function SignedIn({ path }: { path: string }) {
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
   else if (path === PUBLICATIONS_PATH) page = <PublicationListPage />
   else if (path === TREE_PATH) page = <TreePage key={search} />
+  // F-C1: the asset library (in the content group until the new frame's "library" area, F-F3).
+  else if (path === ASSETS_PATH) page = <AssetsPage tab={tabOf(search)} />
   // Q88a: the sponsor's own certifications.
   else if (path === CERTIFICATIONS_PATH) page = <CertificationsPage />
   else if (path === CASH_REWARDS_PATH) page = <CashRewardsPage />
@@ -247,6 +252,8 @@ function SignedIn({ path }: { path: string }) {
       { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
       // Q85: the publications as a tree, with the customers on it.
       { key: 'tree', label: t('tree.nav'), path: TREE_PATH, icon: Network },
+      // F-C1: the asset library (moves to the new frame's "library" area in F-F3).
+      { key: 'assets', label: t('assets.nav'), path: ASSETS_PATH, icon: Library },
       // Q88a: the sponsor's own certifications, which their quizzes give and require.
       { key: 'certifications', label: t('certifications.nav'), path: CERTIFICATIONS_PATH, icon: Award },
     ] },
