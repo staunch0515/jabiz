@@ -206,3 +206,72 @@
 - "不给即不动"：发起方之后手工改了这一处（换了封面），记录仍说它来自资源；前端只在这一处仍是资源的副本时带上编号，"用在哪里"只是提示。要准确就得每次保存都读一次记录，不值得。
 - 删除使用处的流程多了一个锁与一次读取；内容保存在不选资源时语句数不变（锁名为空、空的 `IN` 不发语句）。
 - 共享锁在流程自己的锁之后：若以后有流程先取 `qb.assets` 再取内容的锁，就会互等；`CLAUDE.md` 的"资源库"一条写明顺序。
+
+## F-C1c 的设计
+
+发起方页面（`quizbuks-web/sponsor`）的资源库。分两部分：**第一部分**（本节）是资源库页、编辑、收集、"用在哪里"、"从库里选"与"存入资源库"；
+**第二部分**是商品与认证迁入资源库（"商品""认证"两个标签、旧地址转向），等需求方确认迁移方式后再做，本部分不碰 `src/products`、`src/certifications`、`src/profile` 的行为。
+
+### 位置与地址
+
+- 菜单"内容"组加"资源库"（需求方 2026-11-07：P3 合入之前放在这里，F-F3 迁到"资源库"区域），地址 `/assets`。
+- 页内标签：全部 / 素材（图片、PDF、音频、视频链接、网页链接、文章）/ 文字 / 奖品；当前标签写在地址中（`?tab=`），刷新与后退保持。
+- 功能目录 `src/assets/`：名字在 `ids.ts`（流程、模板、数据视图、字典），手写类型与调用在 `api.ts`，文案在 `messages.ts`（命名空间 `sponsor` 的 `assets`，三语，同 `certifications/messages.ts` 的做法）；
+  只有发起方页面用到，不进 `qb/`。
+
+### 读取
+
+- 资源：`me:QbAsset`（`POST /api/datasets/{id}/query`，每页 200，按 `offset` 读完；上限 `qb.assets.max-count` 缺省 1000）。`tags` 与 `translations` 是 JSON 文本，在 `api.ts` 中解析。
+- 搜索（名称、说明、标签）、种类、标签的筛选都在页面上对已读到的行做：标签存为 JSON 文本，服务端筛不了；行数有上限。
+- 用在哪里：模板 `qb.sponsor.asset-uses`（筛选 `assetId`），打开某个资源的"用在哪里"时才读；`stale` 的行标出"用的是旧的内容"，Quiz 的链到编辑器、发布的链到发布页。
+
+### 页面与组件
+
+| 组件 | 内容 |
+|---|---|
+| `AssetsPage` | 页头（新建、收集）、标签、搜索框、种类与标签的筛选、`DataTable`（`meta.card`：名称 `title`、种类与用途 `subtitle`、标签 `badge`、操作 `actions`；`storageKey="qb.sponsor.assets"`；行的 testid 经 `rowProps`）、空状态（`EmptyState`） |
+| `AssetDialog` | 新建与修改：先选种类（修改时不可改），按种类只显示自己的内容字段（同 `AssetKind.contentFields`）；名称、说明、基准语言、标签；译文用现有的 `TextTranslationsFields`（另外两种语言，同商品，Q73c）；文件经 `FileField`（`qb.content.image|pdf|audio`，中性文件名）；带 `baseRevision`；服务端的问题一次列出、能对上字段的放在字段下（`tags[i]` 放在标签下，`translations.*` 放在译文框下），其余列在表单末尾 |
+| `AssetUses` | 一个资源的"用在哪里"对话框 |
+| `CollectDialog` | 读 `qb.sponsor.asset-candidates`（每页 200，至多 `MAX_COLLECT` = 200 项一次），勾选（全选），运行 `QB_ASSET_COLLECT`，显示新建与跳过的个数；候选的名称为空时以使用处的种类作名称（服务端要求名称） |
+| `AssetPicker` | "从库里选"对话框：只列适合这一处的资源（`suits.ts`，照抄 `AssetRules.suits`，同一组用例），可搜索；方向键在列表中移动、回车选定（`@jabiz/ui` 的 `Command`） |
+| `SaveToLibrary` | "存入资源库"按钮：以这一处现在的内容建一个资源（`QB_ASSET_SAVE`），名称取这一处的标题或种类名，可在弹出的小对话框中改名 |
+
+### "选了就复制"与资源编号（F-C1b 的约定）
+
+- 选定后把资源的内容复制进表单（文件引用同一个编号），同时记下"这一处来自资源 X"及复制进来的值（`copy.ts` 的 `AssetCopy`）。
+- 下一次保存时，只有这一处的值仍与复制进来的相同才带上资源编号；改过即不带（"不给即不动"，记录仍在，`F-C1b` 风险一节已写明）。保存成功后忘掉这个标记：再保存不再带编号，否则会把记录的 `assetRevision` 刷成当前的，掩盖"旧内容"。
+- 复制的是基准语言的内容；译文不复制（使用处有自己的译文流程，Q73）。
+
+### 接上"从库里选"与"存入资源库"的地方
+
+| 地方 | 使用处 | 资源 | 输入 |
+|---|---|---|---|
+| Quiz 编辑器的基本信息：封面 | `QUIZ_COVER` | 图片 | `QB_QUIZ_SAVE.coverAssetId` |
+| 同上：简介 | `QUIZ_INTRO` | 文字（Quiz 简介） | `introAssetId` |
+| 新建资料（对话框）| `MATERIAL` | 与资料种类对应的素材 | `QB_MATERIAL_SAVE.assetId`；选定后资料的种类随资源 |
+| 发布向导第一步：封面 | `PUBLICATION_COVER` | 图片 | `QB_PUBLICATION_SAVE.assets.coverAssetId` |
+| 发布向导：到店兑换说明、电子奖品说明 | `PUBLICATION_REDEEM` / `_DIGITAL` | 文字（对应用途） | `assets.redeemAssetId` / `digitalAssetId` |
+| 发布向导：奖品（领取方式一组字段） | `PUBLICATION_PRIZE` | 奖品卡片 | `assets.prizeAssetId`；复制方式、说明、交付方式与发送天数；方式不在本发起方允许的方式中时不可选（列表中标出） |
+
+题目与选项的图片、推荐说明本部分不接（题目对话框的选项是动态列表，要另做按选项的标记），列为余下的工作；"存入资源库"只放在上表中有"从库里选"的地方。
+
+### 文案
+
+`assets.*` 三语（zh/ja/en），用词照 `glossary.md`；不写"后台"。种类、用途、使用处的名字取服务端字典（`asset-kind`、`asset-text-usage`、`asset-use-target`），未答复前显示代码。
+
+### 测试（Vitest + Testing Library，`src/assets/assets.test.tsx`、`suits.test.ts`、`copy.test.ts`）
+
+- 文案三语键一致且非空。
+- `suits` 与后端 `AssetRulesTest` 的每一行一致；`AssetCopy` 只在值未改时给出编号。
+- 资源库页：按标签、搜索、种类与标签筛选；空状态；删除先确认并带 `baseRevision`；"用在哪里"标出旧内容；`expectAccessible`（亮、暗）。
+- 编辑：每种只发自己的字段；修改带 `baseRevision`；服务端的多个问题同时显示在各自字段下；标签的增删。
+- 收集：全选、发送所选、显示新建与跳过的个数。
+- 选择对话框：只列适合的种类；键盘（方向键、回车）选定；`expectAccessible`。
+- 接入处：Quiz 封面与简介、新资料、发布封面与奖品：选定后保存带编号，改过后不带；"存入资源库"发出 `QB_ASSET_SAVE`。
+- e2e（`quizbuks-web/e2e/tests/assets.spec.ts`）：存入一张图片、在新 Quiz 中从库里选、改资源后"用在哪里"标出旧内容；需要打包的应用，本部分不运行。
+
+### 风险
+
+- 发布向导很大（`PublicationWizard.tsx`），接入只加按钮与一个 `assets` 输入，不改原有字段的保存方式；`publishing.test.tsx` 照旧通过。
+- 页面上筛选全部资源：1000 个以内可行；以后上限调大时改为服务端筛选（标签需要另建表或 jsonb 列）。
+- `suits.ts` 是后端规则的抄本，两处一起改（同 `video.ts` 的做法）。
