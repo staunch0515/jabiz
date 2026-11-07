@@ -5322,3 +5322,19 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：以引用为主键的普通表上的计数器正常计数（复现测试修改前失败、修改后通过）。
 
 **17zz2 状态**：📝 待评审（分支 `1.3/phase-17zz2-counter-uuid-key`）。
+
+### 17zzz 未声明的密封字段：轮换中按密文前缀找出（D78 第 8 条，2026-11-07，总控提出）
+
+**缘由**：重新加密只处理 `SealedFields` 声明的字段；应用经 `SealSecret` 写进、却没有声明的字段，撤下旧 `JABIZ_SEAL_KEY` 后就解不开，而 `KEYS` 只检查已有的声明，不会发现。
+
+| # | 内容 |
+|---|---|
+| 17zzz-1 | `RetiredSealScan`：配置着旧密封密钥时，对每个有数据视图的实体一条语句（经存储引擎，参数绑定，表名列名取自元数据），按 `count(*) FILTER (WHERE 列 LIKE ANY(:旧密钥前缀))` 统计每个文本字段（列确实是文本类型：`MetaModelConsistencyChecker.textColumns`，按表缓存；声明的字段除外）；不受数据视图范围限制，时态实体只看各实例当前的版本；只返回计数。仪表 `jabiz.keys.undeclared-sealed` |
+| 17zzz-2 | 启动检查 `KEYS`：每个这样的字段一条——`platformCheck` 中为错误，应用启动时为警告（轮换中途重启不停服）；告警 `jabiz-keys-undeclared-sealed`（`severity: page`，13 §7） |
+| 17zzz-3 | 任务 `jabiz.key-rotation`：新的最后一步 `CheckUndeclaredSealed`。本次没有可重新加密或收回的东西而仍有这样的值时运行失败（422 `KEY_ROTATION_UNDECLARED_SEALED`，三种语言），有工作时照常提交；输出新增 `undeclaredSealed` 与 `retiredKeysRemovable`（旧 MFA 与密封密钥下什么都不剩时为真，日志写明可以撤下）。恢复演练的 `key-rotation` 项同样以此为不通过 |
+| 17zzz-4 | 文档：D78 第 8 条（第 4 条改为"任务报告可以撤下之后"）、`docs/guide/key-rotation.md`、13 §7 与仪表表、CLAUDE.md |
+| 17zzz-5 | 测试：`KeyRotationUndeclaredIT`（未声明的仓库名中有一个旧密钥密文、另一个以 `s1:` 开头的普通文本不算：扫描找到 1 个、仪表为 1、`KEYS` 启动时为警告而严格时为错误、任务失败并给出错误码；值换掉后任务报告可以撤下、仪表为 0；一开始什么都没有时也报告可以撤下）；`KeyRotationIT` 补断言（打不开的值仍在时不报告可以撤下） |
+
+**验收**：未声明字段里有旧密钥下的密封值时，`platformCheck` 报错、启动时警告并告警、任务不报告可以撤下（没有其他工作时失败）；清零后任务报告可以撤下。
+
+**17zzz 状态**：📝 待评审（分支 `1.3/phase-17zzz-undeclared-sealed`）。
