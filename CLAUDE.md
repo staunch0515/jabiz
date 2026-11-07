@@ -123,6 +123,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **入口的范围**（见 10 §13.4 与决策 D64）：同一入口的不同会话只看到、只处理"自己那一份"（运营商只看到自己的商户）时，以 `EntryScopeResolver` Bean 给入口一个范围名并在登录与刷新时算出值，
   数据视图以 `scope(s -> s.withinEntryScope(名, 字段[, EntryScopeVia.of(对照实体, 键, 范围字段)]))` 声明，审批与待办以 `ApprovalCase.scope` / `TaskSpec.scope` 记范围（缺省为创建的会话的），
   流程中核对对象用步骤 `RequireScope.of(名, ctx -> 值)`；不在模板参数或前端传运营商编号，不自己过滤。未声明的数据视图不受范围约束，须逐个声明并测试。
+  对象改由另一个范围值负责时，其待审批的请求与待办只经子流程 `APPROVAL_SCOPE_MOVE` 移到新值（应用的改派流程以 `CallProcess.of` 调用，调用者另需 `approval.scope.move`，18 §3.8、决策 D76），应用不自己写范围字段。
 - **数据期限**（见 10 §13.2 与决策 D28 第 8 条）：只能看某一期间数据的人以带 `dataFrom` / `dataTo` 的角色分配表达；受期限约束的数据视图明确声明
   `scope(s -> s.withinDataPeriod("时间字段"))`（或经引用：`withinDataPeriod("引用字段", "被引用的不可变时间字段")`）。没有期限即不受限制，未声明的数据视图不受期限影响。
 - **访问审查**（见 10 §13.3 与决策 D28 第 9 条）：访问权限报表是模板 `jabiz.security.access_review`，以 `REPORT_ISSUE` 按期末签发；签核只经 `ACCESS_REVIEW_SIGN_OFF`。

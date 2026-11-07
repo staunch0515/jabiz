@@ -175,8 +175,10 @@ public class ApprovalEntities {
         // How people know the document, for the approvers' tasks; requests made before it was kept have none.
         eb.field("reference", f -> f.physicalColumn("reference").immutable(true).asText(100));
         // The entry scope the request belongs to (decision D64): only its sessions, and those without one, see it.
-        eb.field("scopeName", f -> f.physicalColumn("scope_name").immutable(true).asText(64));
-        eb.field("scopeValue", f -> f.physicalColumn("scope_value").immutable(true).asText(128));
+        // Not immutable: APPROVAL_SCOPE_MOVE moves a pending request to another value (decision D76); every other
+        // change of either field is refused by ApprovalScopeGuard.
+        eb.field("scopeName", f -> f.physicalColumn("scope_name").asText(64));
+        eb.field("scopeValue", f -> f.physicalColumn("scope_value").asText(128));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("subject", "entityId", "reference", "status", "currentLevel", "preparerId", "effectStartTime")

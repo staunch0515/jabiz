@@ -175,6 +175,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 | 账本（科目数据视图；交易、分录数据视图；`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`；余额模板） | `ledger.account.read` / `.write`；`ledger.read`（写入只经流程）；`ledger.account.write` / `ledger.post` / `ledger.reverse`；`ledger.read`（11 §1） |
 | 审计视图 `GET /api/audit/operations` / 任务列表 `GET /api/jobs` | `audit.read` / `job.read`（11 §3、§4） |
 | 审批（`APPROVAL_DECIDE`；审批规则、限额、请求、判断、评估的数据视图；影响预览 `POST /api/approvals/preview`） | `approval.decide` + 当前层级的权限（受保护的变更改为 `security.protected-change.decide`，§16.1，D51）；`approval.read`（写入只经流程）；`approval.read`（18 §3） |
+| 审批移到另一个入口范围（子流程 `APPROVAL_SCOPE_MOVE`，`subProcessOnly()`） | 应用的改派流程的权限 + `approval.scope.move`（由步骤检查，18 §3.8，D76） |
 | 受控变更 `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_WITHDRAW` / `CONTROL_CHANGE_PUBLISH` | `control.propose` / `control.propose` / `control.publish`，且发布人不是提出人（18 §3.5） |
 | 职责分离规则的数据视图、冲突报告 `GET /api/sod/conflicts` | `sod.read`（18 §4） |
 | 我的待办 `GET /api/tasks/mine` / 待办与通知的数据视图 / `TASK_NOTIFY` | 只要求已认证（只列本人与本人所持权限的待办）/ `task.read`（写入只经流程）/ `task.notify`（由系统身份的事件消费者运行）（18 §5） |
@@ -505,6 +506,7 @@ eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
   审批请求、决定、评估与待办的数据视图以标记约束，`/api/tasks/mine` 与规则预览同样；决定（`APPROVAL_DECIDE`）、撤回与待办的处理对范围外的即 404。
   有范围的待办只通知看得到它的人（经没有范围的入口持有权限，或经该范围的入口、解析出的值相同）；通知记待办的范围，同样以标记约束（收件人自己的除外）。指派给本人的待办在任何会话都看得到。
   平台自己读一个审批对象的未结请求、按来源键关闭待办时不受调用者的范围限制（一个对象只有一个未结请求）；有范围的会话遇到别的范围的未结请求即 422 `APPROVAL_OTHER_SCOPE`。
+  对象改由另一个范围值负责时，待审批的请求与其开放的待办只经子流程 `APPROVAL_SCOPE_MOVE` 移到新值（权限 `approval.scope.move`，18 §3.8，D76），决定与评估保留原范围。
 - **流程**：`RequireScope.of(名, ctx -> 值)` 核对流程所处理的对象在调用者的范围内（404）；没有范围的调用者通过。
 - **观测**：范围值是业务数据，不进观测标签与日志的结构化字段（D16）。
 
