@@ -425,6 +425,21 @@ public final class PlatformErrorCodes {
      */
     public static final String INBOUND_REJECTED = "INBOUND_REJECTED";
 
+    /**
+     * 422: a run by hand of a time the job's schedule never names (decision D77); params {@code job},
+     * {@code scheduledTime}.
+     */
+    public static final String JOB_RUN_NOT_SCHEDULED = "JOB_RUN_NOT_SCHEDULED";
+    /** 422: a run by hand of a scheduled time still to come (decision D77); params {@code job}, {@code scheduledTime}. */
+    public static final String JOB_RUN_NOT_DUE = "JOB_RUN_NOT_DUE";
+    /**
+     * 422: a run by hand of a scheduled time older than {@code jabiz.jobs.manual-run.max-age} (decision D77); params
+     * {@code job}, {@code scheduledTime}, {@code maxAgeDays}.
+     */
+    public static final String JOB_RUN_TOO_OLD = "JOB_RUN_TOO_OLD";
+    /** 409: a run of the job holds its cluster lock, so it cannot be run by hand now (decision D77); param {@code job}. */
+    public static final String JOB_BUSY = "JOB_BUSY";
+
     // Too many requests (429)
     public static final String RATE_LIMITED = "RATE_LIMITED";
 
@@ -482,7 +497,8 @@ public final class PlatformErrorCodes {
         FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, FILE_INVALID, FILE_NOT_FOUND, FILE_POLICY_MISMATCH, FILE_IN_USE,
         FILE_FETCH_NOT_HTTPS, FILE_FETCH_LINK_INVALID, FILE_FETCH_ADDRESS_NOT_PUBLIC, FILE_FETCH_TOO_MANY_REDIRECTS,
         FILE_FETCH_TOO_LARGE, FILE_FETCH_NOT_IMAGE, FILE_FETCH_TIMEOUT, FILE_FETCH_FAILED,
-        INBOUND_REJECTED, RATE_LIMITED, PROCESS_BUSY, AUTH_BUSY);
+        INBOUND_REJECTED, JOB_RUN_NOT_SCHEDULED, JOB_RUN_NOT_DUE, JOB_RUN_TOO_OLD, JOB_BUSY,
+        RATE_LIMITED, PROCESS_BUSY, AUTH_BUSY);
 
     private PlatformErrorCodes() {}
 }

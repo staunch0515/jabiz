@@ -19,6 +19,7 @@ import com.jabiz.runtime.ProcessBusyException;
 import com.jabiz.runtime.RateLimitedException;
 import com.jabiz.runtime.imports.ImportConflictException;
 import com.jabiz.runtime.inbound.InboundRejectedException;
+import com.jabiz.runtime.job.JobBusyException;
 import com.jabiz.runtime.process.ProcessInternalException;
 import com.jabiz.runtime.security.EmailNotVerifiedException;
 import com.jabiz.runtime.security.MfaRequiredException;
@@ -103,6 +104,8 @@ public final class ProblemStatuses {
                 PlatformErrorCodes.IDEMPOTENCY_KEY_REUSED, e.getMessage()));
             case AuthenticationFailedException e -> List.of(new Violation(null, e.code(), e.getMessage()));
             case ImportConflictException e -> List.of(new Violation(null, e.code(), e.getMessage(), e.params()));
+            case JobBusyException e -> List.of(new Violation(null, PlatformErrorCodes.JOB_BUSY, e.getMessage(),
+                Map.of("job", e.job())));
             case PayloadTooLargeException e -> e.violations();
             case InboundRejectedException e -> e.violations();
             case RateLimitedException e -> e.violations();
