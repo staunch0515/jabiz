@@ -40,9 +40,13 @@ import java.util.regex.Pattern;
  *                 page its link leads to
  * @param addressesOnly a notification to plain addresses only (an application's prospecting), never among a user's
  *                 mail preferences
+ * @param samples  example values of parameters, shown by the preview and the test send of the texts (decision D72);
+ *                 a parameter without one is shown as {@code [name]}
+ * @param protectedText whether changing the texts needs a second administrator although the mail carries no token
+ *                 (security notices such as "your password was changed"; decision D72 item 3)
  */
 public record MailTemplate(String name, MailCategory category, List<String> params, Map<String, Duration> tokens,
-    Set<String> entries, boolean addressesOnly) {
+    Set<String> entries, boolean addressesOnly, Map<String, String> samples, boolean protectedText) {
 
     /** Names of templates: as event names. */
     public static final Pattern NAME = Pattern.compile("[A-Za-z0-9._:-]{1,100}");
@@ -87,6 +91,7 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         Objects.requireNonNull(category, "Mail template " + name + " needs a category");
         params = List.copyOf(params);
         tokens = Collections.unmodifiableMap(new LinkedHashMap<>(tokens));
+        samples = Collections.unmodifiableMap(new LinkedHashMap<>(samples == null ? Map.of() : samples));
         entries = Collections.unmodifiableSet(new LinkedHashSet<>(entries == null ? Set.of() : entries));
         for (String entry : entries) {
             if (entry == null || !ENTRY_NAME.matcher(entry).matches()) {
@@ -117,6 +122,16 @@ public record MailTemplate(String name, MailCategory category, List<String> para
             throw new IllegalArgumentException("Mail template " + name + " is for addresses only, which only a "
                 + "notification can be: other mail is among nobody's preferences anyway");
         }
+        for (Map.Entry<String, String> sample : samples.entrySet()) {
+            if (!params.contains(sample.getKey())) {
+                throw new IllegalArgumentException("Mail template " + name + " gives a sample of " + sample.getKey()
+                    + ", which is not one of its parameters");
+            }
+            if (sample.getValue() == null) {
+                throw new IllegalArgumentException("Mail template " + name + " gives no sample value of "
+                    + sample.getKey());
+            }
+        }
         if (tokens.containsKey(SIGN_IN_TOKEN) && !(params.contains(ENTRY_PARAM) && params.contains(RETURN_PARAM))) {
             throw new IllegalArgumentException("Mail template " + name + " carries a sign-in link, which needs the "
                 + "parameters " + ENTRY_PARAM + " and " + RETURN_PARAM + " (declare it with signInLink)");
@@ -142,6 +157,40 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         this(name, category, params, tokens, entries, false);
     }
 
+    /** A template without samples whose texts change without approval unless it carries tokens (before D72). */
+    public MailTemplate(String name, MailCategory category, List<String> params, Map<String, Duration> tokens,
+        Set<String> entries, boolean addressesOnly) {
+        this(name, category, params, tokens, entries, addressesOnly, Map.of(), false);
+    }
+
+    /**
+     * Whether a change of its texts needs another administrator to publish it (decision D72 item 3): the mail carries
+     * a one-time token or a sign-in link, or it is declared {@link Builder#protectedText()}. Determined from the
+     * declaration, so that every new template of the kind is protected without anyone remembering to.
+     */
+    public boolean textChangeNeedsApproval() {
+        return protectedText || !tokens.isEmpty();
+    }
+
+    /**
+     * The placeholders whose values open something for the recipient: the one-time tokens (the sign-in link's among
+     * them) and, for a notification, the unsubscribe link. They may stand only in link targets that lead to the
+     * application itself, never in text or the subject (decision D72 item 2), so that a text cannot show them for
+     * copying or send them elsewhere.
+     */
+    public Set<String> secretPlaceholders() {
+        Set<String> names = new LinkedHashSet<>(tokens.keySet());
+        if (unsubscribable()) {
+            names.add(UNSUBSCRIBE_URL);
+        }
+        return Collections.unmodifiableSet(names);
+    }
+
+    /** The example value of a parameter for previews ({@link Builder#sample}); {@code [name]} without one. */
+    public String sampleOf(String param) {
+        return samples.getOrDefault(param, "[" + param + "]");
+    }
+
     /** Whether a user's mail preferences may list it: a notification for users, not one to plain addresses only. */
     public boolean listedAmongPreferences() {
         return unsubscribable() && !addressesOnly;
@@ -162,7 +211,7 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         Builder builder = new Builder();
         Objects.requireNonNull(spec, "spec must not be null").accept(builder);
         return new MailTemplate(name, builder.category, builder.params, builder.tokens, builder.entries,
-            builder.addressesOnly);
+            builder.addressesOnly, builder.samples, builder.protectedText);
     }
 
     /** Message code of the subject. */
@@ -246,9 +295,32 @@ public record MailTemplate(String name, MailCategory category, List<String> para
         private final List<String> params = new ArrayList<>();
         private final Map<String, Duration> tokens = new LinkedHashMap<>();
         private final Set<String> entries = new LinkedHashSet<>();
+        private final Map<String, String> samples = new LinkedHashMap<>();
         private boolean addressesOnly;
+        private boolean protectedText;
 
         private Builder() {}
+
+        /**
+         * An example value of the parameter {@code param}, which the preview and the test send of the texts show
+         * instead of real data (decision D72): {@code .sample("orderNo", "SO-2026-0001")}. Never real personal data.
+         */
+        public Builder sample(String param, String value) {
+            if (samples.putIfAbsent(param, value) != null) {
+                throw new IllegalArgumentException("Sample of " + param + " given twice");
+            }
+            return this;
+        }
+
+        /**
+         * Changes of the texts need a second administrator (decision D72 item 3), as for mail with a token: for
+         * security notices without one ("your password was changed", "a passkey was added"), which a misleading text
+         * would make useless.
+         */
+        public Builder protectedText() {
+            protectedText = true;
+            return this;
+        }
 
         /**
          * A notification sent only to plain addresses that are nobody's account, such as an application's prospecting

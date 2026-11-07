@@ -135,7 +135,7 @@ class MailTemplateTest {
         assertThat(template.placeholders()).contains("jabiz.reset");
         assertThat(MailPlaceholders.of("[x]({baseUrl}/r?token={jabiz.reset})")).containsExactly("baseUrl",
             "jabiz.reset");
-        assertThat(MailPlaceholders.problems(template, "s", "{baseUrl}?t={jabiz.reset}")).isEmpty();
+        assertThat(problems(template, "s", "[x]({baseUrl}?t={jabiz.reset})")).isEmpty();
         assertThat(MailRenderer.render("s", "[x]({baseUrl}/r?token={jabiz.reset})", java.util.Map.of("baseUrl",
             "https://a.example", "jabiz.reset", "tok"), template.urlSafePlaceholders()).text())
             .contains("https://a.example/r?token=tok");
@@ -154,10 +154,10 @@ class MailTemplateTest {
         // {entryUrl} needs the parameter naming the entry; {entryUrl.<entry>} names it itself.
         assertThat(withEntry.placeholders()).containsExactly("entry", "baseUrl", "entryUrl");
         assertThat(without.placeholders()).doesNotContain("entryUrl");
-        assertThat(MailPlaceholders.problems(withEntry, "s", "[x]({entryUrl}a?e={entry})")).isEmpty();
-        assertThat(MailPlaceholders.problems(without, "s", "[x]({entryUrl}a)")).singleElement().asString()
+        assertThat(problems(withEntry, "s", "[x]({entryUrl}a?e={entry})")).isEmpty();
+        assertThat(problems(without, "s", "[x]({entryUrl}a)")).singleElement().asString()
             .contains("needs the parameter entry");
-        assertThat(MailPlaceholders.problems(without, "s", "[x]({entryUrl.portal}a) [y]({entryUrl.my-app-2}b)"))
+        assertThat(problems(without, "s", "[x]({entryUrl.portal}a) [y]({entryUrl.my-app-2}b)"))
             .isEmpty();
         assertThat(MailPlaceholders.of("{entryUrl.my-app}")).containsExactly("entryUrl.my-app");
         assertThat(MailTemplate.namedEntryUrl("entryUrl.portal")).isTrue();
@@ -203,5 +203,34 @@ class MailTemplateTest {
         assertThatThrownBy(() -> MailTemplate.define("shop.bare", t -> t.category(MailCategory.TRANSACTIONAL)
             .token(MailTemplate.SIGN_IN_TOKEN, Duration.ofDays(1))))
             .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("signInLink");
+    }
+
+    @Test
+    void samplesAndProtectedTexts() {
+        MailTemplate shipped = MailTemplate.define("shop.shipped", t -> t.category(MailCategory.NOTIFICATION)
+            .param("orderNo", "total").sample("orderNo", "SO-1"));
+        assertThat(shipped.sampleOf("orderNo")).isEqualTo("SO-1");
+        assertThat(shipped.sampleOf("total")).isEqualTo("[total]");
+        assertThat(shipped.textChangeNeedsApproval()).isFalse();
+        assertThat(shipped.secretPlaceholders()).containsExactly("unsubscribeUrl");
+        // A token or a declared protected text: changes need a second administrator (decision D72 item 3).
+        MailTemplate reset = MailTemplate.define("shop.reset", t -> t.category(MailCategory.TRANSACTIONAL)
+            .token("reset", Duration.ofHours(1)));
+        assertThat(reset.textChangeNeedsApproval()).isTrue();
+        assertThat(reset.secretPlaceholders()).containsExactly("reset");
+        MailTemplate notice = MailTemplate.define("shop.changed", t -> t.category(MailCategory.TRANSACTIONAL)
+            .protectedText());
+        assertThat(notice.textChangeNeedsApproval()).isTrue();
+        assertThat(notice.secretPlaceholders()).isEmpty();
+        assertThatThrownBy(() -> MailTemplate.define("shop.x", t -> t.category(MailCategory.TRANSACTIONAL)
+            .sample("nope", "1"))).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("nope");
+        assertThatThrownBy(() -> MailTemplate.define("shop.x", t -> t.category(MailCategory.TRANSACTIONAL)
+            .param("a").sample("a", "1").sample("a", "2"))).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /** The problems as their messages (MailTextRulesTest has the rules; these are the placeholders'). */
+    private static List<String> problems(MailTemplate template, String subject, String body) {
+        return MailTextRules.check(template, subject, body, MailTextRules.Limits.DEFAULT).stream()
+            .map(com.jabiz.entity.Violation::message).toList();
     }
 }
