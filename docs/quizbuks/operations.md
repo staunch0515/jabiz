@@ -604,7 +604,7 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
 每天记下每个发起方占用的存储与内容（`docs/quizbuks/plans/impl/F-C2.md`），显示在发起方的资源库顶部与平台管理系统 / 运营商管理系统的"资源用量"页（`/admin/qb/usage`、`/operator/qb/usage`，模板 `qb.admin.usage`，可导出 CSV / Excel）。**首次上线只计量、显示和提示，不拒绝上传、不收费。** 给发起方的帮助文案在 `docs/quizbuks/help/storage-usage.md`。
 
 - **计量项**只在代码 `usage.UsageMeters` 一处列出：`storage.bytes`（上传的原文件字节，不含缩略图等变体）、`storage.files`、`assets.count`、`assets.text-bytes`、`content.quizzes`、`content.versions`、`content.materials`、`ai.tokens`（当月该发起方 AI 作业的输入 + 输出 token，来自 `QbAiUsage`；AI 问题解答不在其中）。文件按上传者（平台文件的 `uploadedBy`）归属，一个文件一行，不论被几处引用只算一次；外部视频链接只计个数。快照模板 `qb.system.usage-measure` 与这张清单不一致时启动失败（`UsageMetersCheck`）。
-- **任务** `qb.usage-snapshot`：每天一次，时刻是部署配置 `quizbuks.usage.snapshot-time`（环境变量 `QB_USAGE_SNAPSHOT_TIME`，`HH:mm`，缺省 `03:17`），按 `jabiz.fiscal-year-zone`（东京）的时刻，不是写死的 UTC；改了要重启，格式不对启动失败（需求方 2026-11-07）。逐项任务，每个发起方（有入驻记录、账号未删除）一项 `QB_USAGE_SNAPSHOT_ITEM`（`internal()`，不取业务锁，一个事务），写普通表 `QbUsageDay`（发起方 × 日期 × 计量项），日期是计划时刻在部署时区的日期。同一天再跑一次只覆盖当天的行，不会重复。答题、发布、上传的路径一条语句也不加。
+- **任务** `qb.usage-snapshot`：每天一次，时刻是部署配置 `quizbuks.usage.snapshot-time`（环境变量 `QB_USAGE_SNAPSHOT_TIME`，`HH:mm`，缺省 `03:17`），按 `jabiz.fiscal-year-zone`（东京）的时刻，不是写死的 UTC；改了要重启，格式不对启动失败（需求方 2026-11-07）。逐项任务，每个发起方（有入驻记录、账号未删除）一项 `QB_USAGE_SNAPSHOT_ITEM`（`internal()`，不取业务锁，一个事务），写普通表 `QbUsageDay`：每个发起方每天一行，全部计量项在 `meters` 列的 JSON 对象中（`{"storage.bytes": …, …}`，审计因此每人每天一条），日期是计划时刻在部署时区的日期。同一天再跑一次只覆盖当天的那一行（数值没变不写），不会重复。只读查询某一项：`SELECT snapshot_day, CAST(meters AS jsonb) ->> 'storage.bytes' FROM qb_usage_day WHERE sponsor_id = …`。答题、发布、上传的路径一条语句也不加。
 - **参数**：
 
   | 参数 | 缺省 | 作用 | 调整的影响 |
@@ -617,7 +617,7 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
 - **告警**：见 §5 的"资源占用的计量"一行：任务 `FAILED` / `PARTIAL`、当天在快照时刻后 2 小时内没有成功的运行、`qb_usage_day` 最新日期早于今天。失败项的错误在 `GET /api/jobs`（`job.read`）的"连续失败中的项"中。
 - **补跑**：快照记的是运行那一刻的占用，**只能补跑当天**（过去的某一天无法事后补出当时的数字；月度统计按有快照的天数平均，"天数"一列看得出缺了哪几天）。
   1. 先看 `GET /api/jobs` 中 `qb.usage-snapshot` 最近的运行与失败的项，排除原因（多为数据库超时或约束；修好再跑）。
-  2. 生产环境没有手工运行任务的接口（`GET /api/jobs` 只读，逐项任务的项流程是 `internal()`）：把 `QB_USAGE_SNAPSHOT_TIME` 设为部署时区几分钟以后的时刻并重启应用，等这次运行成功（`jabiz.job.run{job="qb.usage-snapshot", result="SUCCEEDED"}`），再改回原值并重启。当天的行被覆盖，不会重复；越过额度的站内信不会重复。
+  2. 生产环境暂时没有手工运行任务的接口（平台将提供重跑逐项任务的管理接口，S1，届时改写本步）（`GET /api/jobs` 只读，逐项任务的项流程是 `internal()`）：把 `QB_USAGE_SNAPSHOT_TIME` 设为部署时区几分钟以后的时刻并重启应用，等这次运行成功（`jabiz.job.run{job="qb.usage-snapshot", result="SUCCEEDED"}`），再改回原值并重启。当天的行被覆盖，不会重复；越过额度的站内信不会重复。
   3. 开发与测试中直接以 `JobRunner.run(qbUsageSnapshotJob, 当天的某一时刻)` 重跑当天（`UsageSnapshotIT` 照此）。同一计划时刻再跑一次只会重放（`REPLAYED`），要用当天另一个时刻。
   4. 单个发起方的项失败时，平台在之后的运行中按退避重试；重试记的是重试那一天的快照，失败的那一天仍然缺（照第 2 步当天补跑）。
 - **自动收尾**：超过保留期的行由每天的快照删除（每项删本人的旧行）；删除账号时随 `SponsorErasure` 删除。没有需要手工清理的表。

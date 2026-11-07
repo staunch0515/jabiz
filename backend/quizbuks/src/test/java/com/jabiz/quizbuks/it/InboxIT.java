@@ -149,8 +149,8 @@ class InboxIT extends InboxItSupport {
     void aSponsorAboveTheFreeStorageHearsOnceWhileItIsSo() {
         String sponsor = newSponsor(unique("s-inbox-usage"));
         // 600 MB, above the declared 500 MB.
-        execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meter, value, recorded_at, version)"
-            + " VALUES (?, ?, DATE '2026-03-02', 'storage.bytes', 629145600, now(), 1)",
+        execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meters, recorded_at, version)"
+            + " VALUES (?, ?, DATE '2026-03-02', '{\"storage.bytes\":629145600}', now(), 1)",
             java.util.UUID.randomUUID().toString(), sponsor);
         Map<String, Object> crossing = body("kind", "USAGE_OVER_FREE", "sourceId", sponsor + "|2026-03-02",
             "occurredAt", clock.instant().toString());
@@ -170,8 +170,8 @@ class InboxIT extends InboxItSupport {
         assertThat(((MessageProcesses.MessageOutput) systemRun(MessageProcesses.FROM_EVENT, crossing)).messageId())
             .isNull();
         // Below the free amount by the time the event is handled: nothing.
-        execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meter, value, recorded_at, version)"
-            + " VALUES (?, ?, DATE '2026-03-03', 'storage.bytes', 1, now(), 1)",
+        execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meters, recorded_at, version)"
+            + " VALUES (?, ?, DATE '2026-03-03', '{\"storage.bytes\":1}', now(), 1)",
             java.util.UUID.randomUUID().toString(), sponsor);
         assertThat(((MessageProcesses.MessageOutput) systemRun(MessageProcesses.FROM_EVENT, body("kind",
             "USAGE_OVER_FREE", "sourceId", sponsor + "|2026-03-04", "occurredAt", clock.instant().toString())))

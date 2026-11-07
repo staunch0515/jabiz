@@ -213,8 +213,7 @@ public final class MessageProcesses {
                             ? uuid(input(ctx).sourceId()) : null), DIGITAL),
                     // F-C2: the sponsor's latest storage and the free amount now (the crossing still holds?).
                     QueryEntities.query(com.jabiz.quizbuks.usage.QbUsage.DEFAULT_DATASET, ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.And(List.of(byId("sponsorId", usageSponsor(ctx)).predicate(),
-                            new QueryPredicate.Eq("meter", com.jabiz.quizbuks.usage.UsageMeters.STORAGE_BYTES))))
+                        .where(byId("sponsorId", usageSponsor(ctx)).predicate())
                         .orderBy("day", false).limit(1).build(), USAGE),
                     QueryEntities.query(QbWallets.PARAMS_NOW, ctx -> byId("paramKey", usageSponsor(ctx) == null
                         ? null : QbParams.USAGE_FREE_BYTES), FREE)))
@@ -600,8 +599,9 @@ public final class MessageProcesses {
         } catch (NumberFormatException e) {
             return null;
         }
-        BigDecimal used = decimal(latest.get("value"));
-        if (!com.jabiz.quizbuks.usage.UsageRules.over(used, freeBytes)) {
+        BigDecimal used = com.jabiz.quizbuks.usage.UsageRules.meters(latest.get("meters"))
+            .get(com.jabiz.quizbuks.usage.UsageMeters.STORAGE_BYTES);
+        if (used == null || !com.jabiz.quizbuks.usage.UsageRules.over(used, freeBytes)) {
             return null;
         }
         params.put("used", MessageTexts.Value.of(com.jabiz.quizbuks.usage.UsageRules.megabytes(used)));

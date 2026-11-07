@@ -47,12 +47,11 @@
 |---|---|
 | `sponsorId` | 不可变，发起方的用户编号 |
 | `day` | 不可变，`date`（`f.asDate()`）：快照所属的日子（部署时区） |
-| `meter` | 不可变，`UsageMeters` 的代码，字典 `usage-meter` |
-| `value` | `numeric(19,0)` |
-| `recordedAt` | 最近一次写入的时刻（重跑同一天时更新） |
+| `meters` | 当天的全部计量项：JSON 对象 `{计量项: 数值}`，键恰好是 `UsageMeters` 的代码（`UsageRules.json` / `meters`），文本列加 `CHECK (meters IS JSON OBJECT)`；不按计量项分列，`UsageMeters` 仍是唯一的清单，加计量项不用迁移 |
+| `recordedAt` | 最近一次写入的时刻（重跑同一天、数值有变时更新） |
 | `version` | |
 
-- `UNIQUE (sponsor_id, day, meter)`（同时支撑"按发起方读一段日子"）；另建 `(day)` 索引给保留期删除与"当天是否缺少快照"的查询。
+- **每个发起方每天一行**（需求方 2026-11-07：审计不能关，D27，只能少写行；原先每个计量项一行，审计每人每天 8 条，现在 1 条）。`UNIQUE (sponsor_id, day)`（同时支撑"按发起方读一段日子"）；另建 `(day)` 索引给保留期删除与"当天是否缺少快照"的查询。
 - 只经 `QB_USAGE_SNAPSHOT_ITEM`（与账号删除）写入：默认数据视图 `processOnlyWrites`，读权限 `qb.admin.publication.read`，登记 `OperatorScopes`（`sponsorId`）；`me:` 视图只读、限本人（`SPONSOR_ME`）。
 - 普通表（可删除）：保留期删除与删除账号都要真删。
 
@@ -62,9 +61,9 @@
 |---|---|---|
 | `qb.system.usage-sponsors` | `qb.usage.system` | 任务的项：每个发起方（有 `QbSponsor` 记录、账号未删除）一行 `sponsorId` |
 | `qb.system.usage-measure` | `qb.usage.system` | 一个发起方此刻的全部计量项：一条语句，每个计量项一行（`meter`、`value`）；参数 `sponsorId`、`at`（快照的时点，`ai.tokens` 的月份由它与时区得出） |
-| `qb.sponsor.usage` | `qb.content.write` | 发起方的用量卡：最近一次快照的日期与各计量项、免费额度（`qb.usage.storage.free-bytes` 的当前值）、是否超过 |
+| `qb.sponsor.usage` | `qb.content.write` | 发起方的用量卡：最近一次快照（最新一行）的日期与其中的已用存储、文件数、资源数、免费额度（`qb.usage.storage.free-bytes` 的当前值）、是否超过 |
 | `qb.sponsor.asset-stats` | `qb.content.write` | 资源库列表用：每个本人资源的文件字节（经 `me:QbAsset` 连接 `SysFile`，只有本人资源引用的文件）与使用处个数（`me:QbAssetUse`）；"按大小排序""未使用的资源"据此在页面上做 |
-| `qb.admin.usage` | `qb.admin.publication.read` | 平台管理系统 / 运营商管理系统的用量页：按发起方 × 月 × 计量项给出天数、平均、峰值、月末值；筛选发起方、月份（`from`/`to`）与计量项；经默认数据视图，运营商只见辖下（`OperatorScopes`）；经平台的导出接口导出全部行（`POST /api/queries/qb.admin.usage/export`，页面给 CSV 与 Excel）。不声明 `report`（不进财务的报表页、不签发） |
+| `qb.admin.usage` | `qb.admin.publication.read` | 平台管理系统 / 运营商管理系统的用量页：把每天一行的 JSON 展开（`jsonb_each_text`），按发起方 × 月 × 计量项给出天数、平均、峰值、月末值；筛选发起方、月份（`from`/`to`）与计量项；经默认数据视图，运营商只见辖下（`OperatorScopes`）；经平台的导出接口导出全部行（`POST /api/queries/qb.admin.usage/export`，页面给 CSV 与 Excel）。不声明 `report`（不进财务的报表页、不签发） |
 
 月度的平均占用与峰值（规格"由模板算出，供以后收费用"）就是 `qb.admin.usage` 的列：平均 = 当月有快照的日子的平均，峰值 = 最大值，同时给出有快照的天数（缺天时看得出来）。
 
@@ -73,8 +72,8 @@
 - **任务 `qb.usage-snapshot`**：`JobDefinition.forEach`，每个发起方一项（`qb.system.usage-sponsors`，`maxItems` = `MAX_MAX_ITEMS`），cron 由部署配置 `quizbuks.usage.snapshot-time` 得出、时区为 `jabiz.fiscal-year-zone`（§0）。快照的日子 = 计划时刻在部署时区的日期（补跑以 `JobRunner.run(job, 计划时刻)` 指定哪一天）。
 - **项流程 `QB_USAGE_SNAPSHOT_ITEM`**：`internal()`，权限 `qb.usage.system`（不授予任何角色）。**不取业务锁**，只读不写别人的表：
   1. `LoadParams` 读 `qb.usage.storage.free-bytes`、`qb.usage.retention-days`（以计划时刻读）；
-  2. 一条 `RunTemplate`（`qb.system.usage-measure`）读出全部计量项；一条 `QueryEntities.all` 读该发起方当天已有的行、以及前一次快照（当天以前最近一天）的 `storage.bytes`；
-  3. 计算（纯 Java `UsageRules`）：当天已有的行更新数值与 `recordedAt`，没有的插入（"当天已有的行即覆盖"）；超过保留期（`day < 快照日 − retention-days`）的本人行删除；
+  2. 一条 `RunTemplate`（`qb.system.usage-measure`，仍是每个计量项一行的结果，由 `UsageMetersCheck` 核对）读出全部计量项；一条 `QueryEntities.all` 读该发起方当天的行、前一次快照（当天以前最近一天）的行（取其 `storage.bytes`）与超过保留期的行；
+  3. 计算（纯 Java `UsageRules`）：把全部计量项写成当天的一行，已有即覆盖（数值都没变就不写，审计也就不多一条），没有即插入；模板缺了某个计量项即项失败（不写半行）；超过保留期（`day < 快照日 − retention-days`）的本人行删除；
   4. 越过免费额度（前一次 ≤ 额度或没有前一次，今天 > 额度）时 `PublishEvent` `qb.usage.free-exceeded`（发起方、日子）。
 - **参数**（`QbParams.ALL`；`QB_SETUP` 提出；项流程以 `LoadParams.optional` 读，受控的免费额度发布之前照常记快照、只是不提示）：`qb.usage.storage.free-bytes`（缺省 524288000 = 500 MB，**加入 `CONTROLLED`**，只用于提示）、`qb.usage.retention-days`（缺省 800）。读不出或不合格时：免费额度视为"未设"（不提示、不发信，页面只显示已用），保留期用声明的缺省值——不在流程里自己给缺省值以外的值（CLAUDE.md 第 4 节：缺少即 `SetupParamsCheck` 启动警告）。
 - **权限** `qb.usage.system` 加进 `QbPermissions`，不授予任何角色（与 `qb.stats.system` 同类）。
@@ -137,6 +136,6 @@
 - 计量模板连接的表多（文件、资源、内容、版本、AI 用量），每个发起方一次读出；发起方很多时任务时间随之变长（`maxItems` 10000，每项一个事务）。以 `UsageSnapshotIT` 逐项断言数值。
 - `sys_file` 按上传者读：平台阶段 17zq 加了索引 `sys_file_uploaded_by_idx (uploaded_by, uploaded_time)`（平台迁移 `V62`，已合入 `1.3/quizbuks`），快照模板的 `uploadedBy = :sponsorId` 用它，每项只读本人的文件，不再整表扫描。
 - 快照的数字比实际晚最多一天；页面写明"截至"。
-- 快照经平台的写入路径，每行都进只追加的审计（`sys_audit_record`）：每个发起方每天 8 行新插入（数值变了的重跑另记更新），1000 个发起方约每天 8000 条审计记录。首次上线的规模可以接受；发起方多了以后如要减少，可只在数值变化时写（平台没有"不记审计"的写入，不在本条）。
-- 生产环境没有手工运行任务的接口：补跑当天只能临时改快照时刻并重启（`operations.md` §7.22）。要更方便就需要平台提供运行逐项任务的管理接口（平台改动，另议）。
+- 快照经平台的写入路径，每次写入都进只追加的审计（`sys_audit_record`，D27，不能关）：**每个发起方每天 1 条**（当天的一行；同一天重跑且数值有变时另记一条更新，数值没变不写），1000 个发起方约每天 1000 条。
+- 生产环境暂时没有手工运行任务的接口：补跑当天只能临时改快照时刻并重启（`operations.md` §7.22）。平台将提供重跑逐项任务的管理接口（S1，需求方 2026-11-07），届时改写补跑步骤。
 - 删除的功能：无。

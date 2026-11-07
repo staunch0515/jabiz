@@ -54,8 +54,8 @@ class SponsorErasureIT extends PlayItSupport {
         }
         // F-C2: a day of usage snapshots; Bob's stay.
         for (String owner : java.util.List.of(ann, bob)) {
-            execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meter, value, recorded_at, "
-                + "version) VALUES (?, ?, DATE '2026-03-01', 'storage.bytes', 1234, now(), 1)",
+            execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meters, recorded_at, version) "
+                + "VALUES (?, ?, DATE '2026-03-01', '{\"storage.bytes\":1234}', now(), 1)",
                 UUID.randomUUID().toString(), owner);
         }
         String publication = livePublication(ann, "Ann's quiz");

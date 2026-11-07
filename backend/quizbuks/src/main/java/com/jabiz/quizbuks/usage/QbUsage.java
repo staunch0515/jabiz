@@ -6,7 +6,7 @@ import com.jabiz.quizbuks.identity.AccountLimits;
 
 /**
  * The metering of what the sponsors occupy (F-C2, docs/quizbuks/plans/impl/F-C2.md): the daily snapshot
- * {@code QbUsageDay} (sponsor × day × meter), an ordinary table written by {@link UsageSnapshot} only, and the names
+ * {@code QbUsageDay} (one row per sponsor and day, every meter in it), an ordinary table written by {@link UsageSnapshot} only, and the names
  * of the job, templates and event around it. Only metered, shown and noticed: nothing here refuses an upload.
  */
 public final class QbUsage {
@@ -38,6 +38,9 @@ public final class QbUsage {
     public static final String SNAPSHOT_TIME_SETTING = "quizbuks.usage.snapshot-time";
     public static final String SNAPSHOT_TIME_DEFAULT = "03:17";
 
+    /** The longest {@code meters} JSON: every meter with a 19-digit value (ample room for meters to come). */
+    public static final int METERS_LENGTH = 4_000;
+
     public static final EntityDefinition DAY_ENTITY = EntityDefinition.define(DAY, eb -> {
         eb.physicalTable("qb_usage_day");
         eb.primaryKey("usageDayId");
@@ -47,18 +50,18 @@ public final class QbUsage {
             .asText(AccountLimits.USER_ID_LENGTH));
         // The day of jabiz.fiscal-year-zone the snapshot is of (the job's scheduled time there).
         eb.field("day", f -> f.physicalColumn("snapshot_day").immutable(true).required(true).asDate());
-        eb.field("meter", f -> f.physicalColumn("meter").immutable(true).required(true)
-            .asCode(METER_DICTIONARY, UsageMeters.codes().toArray(String[]::new)));
-        eb.field("value", f -> f.physicalColumn("value").required(true).asNumeric(19, 0));
-        // When the day's row was last written: a run again of the same day overwrites the value.
+        // Every meter of the day: a JSON object {meter: value} with exactly the keys of UsageMeters (UsageRules.json);
+        // one row a day, so one audit record a day (D27).
+        eb.field("meters", f -> f.physicalColumn("meters").required(true).asText(METERS_LENGTH));
+        // When the day's row was last written: a run again of the same day overwrites the values.
         eb.field("recordedAt", f -> f.physicalColumn("recorded_at").required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
-        eb.unique("uk_qb_usage_day", "sponsorId", "day", "meter");
+        eb.unique("uk_qb_usage_day", "sponsorId", "day");
         eb.listView("default", lv -> lv
-            .columns("sponsorId", "day", "meter", "value", "recordedAt")
-            .filters("sponsorId", "day", "meter")
-            .sorts("day", "value")
+            .columns("sponsorId", "day", "meters", "recordedAt")
+            .filters("sponsorId", "day")
+            .sorts("day")
             .defaultSort("day", false));
     });
 

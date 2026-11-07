@@ -27,8 +27,8 @@ import java.util.Map;
 
 /**
  * One item of the daily job {@value QbUsage#JOB} (F-C2): one sponsor's snapshot of a day. Reads every meter with one
- * template ({@value QbUsage#MEASURE_TEMPLATE}), writes them to the day (a run again of the same day overwrites the
- * rows), deletes the sponsor's rows past {@code qb.usage.retention-days}, and announces
+ * template ({@value QbUsage#MEASURE_TEMPLATE}), writes them to the day's one row (a run again of the same day overwrites
+ * it), deletes the sponsor's rows past {@code qb.usage.retention-days}, and announces
  * {@value QbUsage#FREE_EXCEEDED_EVENT} when the storage just went above {@code qb.usage.storage.free-bytes} (the
  * inbox's consumer makes the one message of that crossing). {@code internal()}; takes no business lock and writes no
  * other table: nothing a sponsor does waits for it, and nothing it does is refused because of it.
@@ -37,8 +37,8 @@ public final class UsageSnapshot {
 
     public static final String ITEM = "QB_USAGE_SNAPSHOT_ITEM";
 
-    /** The most old rows one run deletes (eight meters a day: a sponsor's rows of three years and more). */
-    static final int MAX_OLD_ROWS = 10_000;
+    /** The most old rows one run deletes (one row a day: a sponsor's rows of almost three years). */
+    static final int MAX_OLD_ROWS = 1_000;
 
     /**
      * @param sponsorId the sponsor (an item of {@value QbUsage#SPONSORS_TEMPLATE})
@@ -48,11 +48,11 @@ public final class UsageSnapshot {
     public record ItemInput(@NotBlank @Size(max = 128) String sponsorId, @NotNull LocalDate day, @NotNull Instant at) {}
 
     /**
-     * @param written the meters inserted or changed
+     * @param written whether the day's row was inserted or changed
      * @param deleted the old rows deleted
      * @param crossed whether the storage just went above the free amount
      */
-    public record ItemOutput(int written, int deleted, boolean crossed) {}
+    public record ItemOutput(boolean written, int deleted, boolean crossed) {}
 
     static final String INPUT = "input";
     static final String PARAMS = "params";
@@ -82,8 +82,8 @@ public final class UsageSnapshot {
             })
             .outputMapper(ctx -> {
                 UsageRules.Plan plan = ctx.contains(PLAN) ? ctx.get(PLAN, UsageRules.Plan.class) : null;
-                return plan == null ? new ItemOutput(0, 0, false) : new ItemOutput(plan.inserts().size()
-                    + plan.updates().size(), plan.deletes().size(), plan.crossed());
+                return plan == null ? new ItemOutput(false, 0, false)
+                    : new ItemOutput(plan.write(), plan.deletes().size(), plan.crossed());
             })
             // Optional: before the setup (and before the free amount's controlled change is published) a snapshot is
             // still taken, only without a notice.
@@ -95,10 +95,9 @@ public final class UsageSnapshot {
                 QueryEntities.query(QbUsage.DEFAULT_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", input(ctx).sponsorId()),
                         new QueryPredicate.Eq("day", input(ctx).day()))))
-                    .limit(UsageMeters.ALL.size() + 1).build(), TODAY),
+                    .limit(1).build(), TODAY),
                 QueryEntities.query(QbUsage.DEFAULT_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("sponsorId", input(ctx).sponsorId()),
-                        new QueryPredicate.Eq("meter", UsageMeters.STORAGE_BYTES),
                         new QueryPredicate.Lt("day", input(ctx).day()))))
                     .orderBy("day", false).limit(1).build(), PREVIOUS),
                 QueryEntities.query(QbUsage.DEFAULT_DATASET, ctx -> EntityQuery.builder()
@@ -125,29 +124,26 @@ public final class UsageSnapshot {
                 measured.put(String.valueOf(meter), value == null ? BigDecimal.ZERO : decimal(value));
             }
         }
-        Map<String, UsageRules.Row> today = new LinkedHashMap<>();
-        for (EntityInstance row : instances(ctx, TODAY)) {
-            today.put(String.valueOf((Object) row.get("meter")), new UsageRules.Row(row.id(), row.version(),
-                decimal(row.get("value"))));
-        }
+        EntityInstance row = instances(ctx, TODAY).stream().findFirst().orElse(null);
+        UsageRules.Row today = row == null ? null
+            : new UsageRules.Row(row.id(), row.version(), UsageRules.meters(row.get("meters")));
         List<EntityInstance> previous = instances(ctx, PREVIOUS);
-        BigDecimal previousStorage = previous.isEmpty() ? null : decimal(previous.getFirst().get("value"));
+        BigDecimal previousStorage = previous.isEmpty() ? null
+            : UsageRules.meters(previous.getFirst().get("meters")).get(UsageMeters.STORAGE_BYTES);
         List<UsageRules.Delete> old = instances(ctx, OLD).stream()
-            .map(row -> new UsageRules.Delete(row.id(), row.version())).toList();
+            .map(r -> new UsageRules.Delete(r.id(), r.version())).toList();
         UsageRules.Plan plan = UsageRules.plan(measured, today, previousStorage, freeBytes(ctx), old);
         ctx.put(PLAN, plan);
-        plan.inserts().forEach((meter, value) -> {
+        if (plan.write() && today == null) {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("sponsorId", input.sponsorId());
             values.put("day", input.day());
-            values.put("meter", meter);
-            values.put("value", value);
+            values.put("meters", UsageRules.json(plan.meters()));
             values.put("recordedAt", ctx.opTime());
             ctx.changes().insert(QbUsage.DAY, values);
-        });
-        for (UsageRules.Update update : plan.updates()) {
-            ctx.changes().update(QbUsage.DAY, update.id(), update.version(), Map.of("value", update.value(),
-                "recordedAt", ctx.opTime()));
+        } else if (plan.write()) {
+            ctx.changes().update(QbUsage.DAY, today.id(), today.version(), Map.of("meters",
+                UsageRules.json(plan.meters()), "recordedAt", ctx.opTime()));
         }
         for (UsageRules.Delete delete : plan.deletes()) {
             ctx.changes().delete(QbUsage.DAY, delete.id(), delete.version());

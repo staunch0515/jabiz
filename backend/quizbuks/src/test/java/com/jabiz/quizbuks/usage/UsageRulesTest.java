@@ -33,35 +33,45 @@ class UsageRulesTest {
     }
 
     @Test
-    void aNewDayInsertsEveryMeterAndARunAgainChangesOnlyWhatChanged() {
-        UsageRules.Plan first = UsageRules.plan(measured(10), Map.of(), null, FREE, List.of());
-        assertThat(first.inserts().keySet()).containsExactlyInAnyOrderElementsOf(UsageMeters.codes());
-        assertThat(first.updates()).isEmpty();
+    void aNewDayWritesOneRowOfEveryMeterAndARunAgainOnlyWhenAValueChanged() {
+        UsageRules.Plan first = UsageRules.plan(measured(10), null, null, FREE, List.of());
+        assertThat(first.write()).isTrue();
+        assertThat(first.meters().keySet()).containsExactlyElementsOf(UsageMeters.codes());
         assertThat(first.crossed()).isFalse();
 
-        Map<String, UsageRules.Row> today = new LinkedHashMap<>();
-        first.inserts().forEach((meter, value) -> today.put(meter, new UsageRules.Row("id-" + meter, 1L, value)));
-        UsageRules.Plan same = UsageRules.plan(measured(10), today, null, FREE, List.of());
-        assertThat(same.inserts()).isEmpty();
-        assertThat(same.updates()).isEmpty();
-
+        UsageRules.Row today = new UsageRules.Row("id", 1L, first.meters());
+        assertThat(UsageRules.plan(measured(10), today, null, FREE, List.of()).write()).isFalse();
         UsageRules.Plan changed = UsageRules.plan(measured(20), today, null, FREE, List.of());
-        assertThat(changed.inserts()).isEmpty();
-        assertThat(changed.updates()).singleElement()
-            .isEqualTo(new UsageRules.Update("id-" + UsageMeters.STORAGE_BYTES, 1L, n(20)));
+        assertThat(changed.write()).isTrue();
+        assertThat(changed.meters()).containsEntry(UsageMeters.STORAGE_BYTES, n(20));
+        // A stored row with another set of keys (a meter added since) is rewritten with exactly the listed ones.
+        UsageRules.Row older = new UsageRules.Row("id", 1L, Map.of(UsageMeters.STORAGE_BYTES, n(20)));
+        assertThat(UsageRules.plan(measured(20), older, null, FREE, List.of()).write()).isTrue();
     }
 
     @Test
-    void aMeterTheMeasureLacksIsLeftAsItWas() {
+    void aMeasureLackingAMeterFailsTheItem() {
         Map<String, BigDecimal> some = Map.of(UsageMeters.STORAGE_FILES, n(3));
-        UsageRules.Plan plan = UsageRules.plan(some, Map.of(), null, FREE, List.of());
-        assertThat(plan.inserts()).containsOnlyKeys(UsageMeters.STORAGE_FILES);
+        assertThatThrownBy(() -> UsageRules.plan(some, null, null, FREE, List.of()))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining(UsageMeters.STORAGE_BYTES);
+    }
+
+    @Test
+    void theStoredFormIsAJsonObjectOfTheMeters() {
+        Map<String, BigDecimal> meters = measured(524_288_000);
+        String json = UsageRules.json(meters);
+        assertThat(json).startsWith("{\"storage.bytes\":524288000,\"storage.files\":1,");
+        assertThat(UsageRules.meters(json)).isEqualTo(meters);
+        assertThat(UsageRules.meters("{\"storage.bytes\":\"x\",\"future.meter\":5}"))
+            .containsExactly(Map.entry("future.meter", n(5)));
+        assertThat(UsageRules.meters("not json")).isEmpty();
+        assertThat(UsageRules.meters(null)).isEmpty();
     }
 
     @Test
     void theOldRowsAreDeleted() {
         List<UsageRules.Delete> old = List.of(new UsageRules.Delete("a", 1L), new UsageRules.Delete("b", 2L));
-        assertThat(UsageRules.plan(measured(1), Map.of(), null, FREE, old).deletes()).isEqualTo(old);
+        assertThat(UsageRules.plan(measured(1), null, null, FREE, old).deletes()).isEqualTo(old);
         LocalDate day = LocalDate.of(2026, 11, 7);
         assertThat(UsageRules.firstKept(day, 800)).isEqualTo(day.minusDays(799));
         assertThat(UsageRules.firstKept(day, 1)).isEqualTo(day);
@@ -81,7 +91,7 @@ class UsageRulesTest {
         assertThat(UsageRules.crossed(n(999), n(1001), FREE)).isTrue();
         // No free amount set: nothing is noticed.
         assertThat(UsageRules.crossed(null, n(1_000_000), null)).isFalse();
-        assertThat(UsageRules.plan(measured(1001), Map.of(), n(10), FREE, List.of()).crossed()).isTrue();
+        assertThat(UsageRules.plan(measured(1001), null, n(10), FREE, List.of()).crossed()).isTrue();
         assertThat(UsageRules.over(n(1001), FREE)).isTrue();
         assertThat(UsageRules.over(n(1000), FREE)).isFalse();
         assertThat(UsageRules.over(n(1001), null)).isFalse();

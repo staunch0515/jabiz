@@ -1,21 +1,22 @@
 package com.jabiz.quizbuks.usage;
 
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The rules of the daily snapshot (F-C2), pure: which rows a run writes, which it deletes past the retention, whether
+ * The rules of the daily snapshot (F-C2), pure: what a run writes to the day's one row and its stored form, which it deletes past the retention, whether
  * the sponsor's storage just went above the free amount, and the job's time of day.
  */
 public final class UsageRules {
@@ -23,65 +24,94 @@ public final class UsageRules {
     /** The time of day of the snapshot: {@code HH:mm}, 24 hours. */
     private static final Pattern TIME = Pattern.compile("([01][0-9]|2[0-3]):([0-5][0-9])");
 
-    /** A row of the day already written: its id, version and value. */
-    public record Row(Object id, Long version, BigDecimal value) {
+    /** The day's row already written: its id, version and meters. */
+    public record Row(Object id, Long version, Map<String, BigDecimal> meters) {
         public Row {
-            Objects.requireNonNull(value, "value must not be null");
+            meters = Map.copyOf(meters);
         }
     }
 
-    /** An existing row to set to a new value. */
-    public record Update(Object id, Long version, BigDecimal value) {}
-
-    /** An existing row past the retention, to delete. */
+    /** A row past the retention, to delete. */
     public record Delete(Object id, Long version) {}
 
     /**
      * What one run writes for one sponsor and day.
      *
-     * @param inserts the meters the day has no row of yet, with their values
-     * @param updates the day's rows whose value changed
+     * @param meters  every meter of the day, in the order of {@link UsageMeters#ALL}
+     * @param write   whether the day's row is to be inserted (no row yet) or updated (its values changed)
      * @param deletes the sponsor's rows older than the retention
      * @param crossed whether the storage went above the free amount with this run
      */
-    public record Plan(Map<String, BigDecimal> inserts, List<Update> updates, List<Delete> deletes, boolean crossed) {
+    public record Plan(Map<String, BigDecimal> meters, boolean write, List<Delete> deletes, boolean crossed) {
         public Plan {
-            inserts = Map.copyOf(inserts);
-            updates = List.copyOf(updates);
+            meters = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(meters));
             deletes = List.copyOf(deletes);
         }
     }
 
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final TypeReference<LinkedHashMap<String, Object>> OBJECT = new TypeReference<>() {};
+
     private UsageRules() {}
 
     /**
-     * Plans a run: every meter measured is written to the day, a row there already is overwritten (only when its value
-     * changed), a meter missing from the measure is left as it was.
+     * Plans a run: the day's one row holds every meter measured; a row there already is overwritten only when a value
+     * changed.
      *
-     * @param measured        the meters now, by code
-     * @param today           the day's rows already written, by meter
+     * @param measured        the meters now, by code: every meter of {@link UsageMeters#ALL}
+     * @param today           the day's row already written, or null
      * @param previousStorage {@code storage.bytes} of the latest day before this one, or null when there is none
      * @param freeBytes       the free amount, or null when it is not set (then nothing is noticed)
      * @param old             the sponsor's rows past the retention
+     * @throws IllegalStateException when the measure lacks a meter (the template and the list differ: the start
+     *                               would have failed; the item fails and is retried)
      */
-    public static Plan plan(Map<String, BigDecimal> measured, Map<String, Row> today, BigDecimal previousStorage,
+    public static Plan plan(Map<String, BigDecimal> measured, Row today, BigDecimal previousStorage,
         BigDecimal freeBytes, List<Delete> old) {
-        Map<String, BigDecimal> inserts = new LinkedHashMap<>();
-        List<Update> updates = new ArrayList<>();
+        Map<String, BigDecimal> meters = new LinkedHashMap<>();
         for (String meter : UsageMeters.codes()) {
             BigDecimal value = measured.get(meter);
             if (value == null) {
-                continue;
+                throw new IllegalStateException("The usage measure gave no value of the meter " + meter);
             }
-            Row row = today.get(meter);
-            if (row == null) {
-                inserts.put(meter, value);
-            } else if (row.value().compareTo(value) != 0) {
-                updates.add(new Update(row.id(), row.version(), value));
-            }
+            meters.put(meter, value);
         }
-        return new Plan(inserts, updates, old,
-            crossed(previousStorage, measured.get(UsageMeters.STORAGE_BYTES), freeBytes));
+        boolean write = today == null || !same(today.meters(), meters);
+        return new Plan(meters, write, old, crossed(previousStorage, meters.get(UsageMeters.STORAGE_BYTES), freeBytes));
+    }
+
+    private static boolean same(Map<String, BigDecimal> a, Map<String, BigDecimal> b) {
+        if (!a.keySet().equals(b.keySet())) {
+            return false;
+        }
+        return a.entrySet().stream().allMatch(e -> e.getValue().compareTo(b.get(e.getKey())) == 0);
+    }
+
+    /** The stored form of a day's meters: a JSON object {meter: value}, whole numbers, in the given order. */
+    public static String json(Map<String, BigDecimal> meters) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        meters.forEach((meter, value) -> out.put(meter, value.toBigInteger()));
+        return JSON.writeValueAsString(out);
+    }
+
+    /** A stored day's meters (unknown keys kept, values not numbers left out); empty for nothing or bad JSON. */
+    public static Map<String, BigDecimal> meters(Object stored) {
+        Map<String, BigDecimal> out = new LinkedHashMap<>();
+        if (stored == null || String.valueOf(stored).isBlank()) {
+            return out;
+        }
+        Map<String, Object> parsed;
+        try {
+            parsed = JSON.readValue(String.valueOf(stored), OBJECT);
+        } catch (RuntimeException e) {
+            return out;
+        }
+        parsed.forEach((meter, value) -> {
+            if (value instanceof Number number) {
+                out.put(meter, new BigDecimal(number.toString()));
+            }
+        });
+        return out;
     }
 
     /**

@@ -51,7 +51,7 @@ public class UsageConfig {
         return QbUsage.DAY_ENTITY;
     }
 
-    /** A run writes a sponsor's meters of the day and deletes their rows past the retention. */
+    /** A run writes a sponsor's row of the day and deletes their rows past the retention. */
     @Bean
     DatasetDefinition qbUsageDayDataset() {
         return DatasetDefinition.define(QbUsage.DEFAULT_DATASET, d -> d
@@ -60,8 +60,7 @@ public class UsageConfig {
             .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             // Q59c-2: an operator's session sees its own sponsors' usage only (platform decision D64).
             .scope(OperatorScopes.of(QbUsage.DAY))
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(UsageSnapshot.MAX_OLD_ROWS
-                + UsageMeters.ALL.size()))
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(UsageSnapshot.MAX_OLD_ROWS + 1))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 

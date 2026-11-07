@@ -11,6 +11,7 @@ import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.quizbuks.usage.QbUsage;
 import com.jabiz.quizbuks.usage.UsageMeters;
+import com.jabiz.quizbuks.usage.UsageRules;
 import com.jabiz.quizbuks.usage.UsageSnapshot;
 import com.jabiz.runtime.context.Actor;
 import com.jabiz.runtime.job.JobRunner;
@@ -60,14 +61,25 @@ class UsageSnapshotIT extends PlayItSupport {
         return run;
     }
 
-    /** A sponsor's values of a day, by meter (from the table). */
+    /** A sponsor's values of a day, by meter (from the day's one row; empty when there is none). */
     private static Map<String, Long> usage(String sponsorId, LocalDate day) {
+        List<Map<String, Object>> rows = query("SELECT meters FROM qb_usage_day WHERE sponsor_id = ? "
+            + "AND snapshot_day = ?", sponsorId, day);
+        assertThat(rows).as("one row per sponsor and day").hasSizeLessThanOrEqualTo(1);
         Map<String, Long> values = new LinkedHashMap<>();
-        for (Map<String, Object> row : query("SELECT meter, value FROM qb_usage_day WHERE sponsor_id = ? "
-            + "AND snapshot_day = ? ORDER BY meter", sponsorId, day)) {
-            values.put((String) row.get("meter"), ((BigDecimal) row.get("value")).longValue());
+        if (!rows.isEmpty()) {
+            UsageRules.meters(rows.getFirst().get("meters")).forEach((meter, value) -> values.put(meter,
+                value.longValue()));
         }
         return values;
+    }
+
+    /** A day's row with the given meters, written as the job would (for the tests of reading it). */
+    private static void dayRow(String sponsorId, LocalDate day, Map<String, Long> meters) {
+        Map<String, BigDecimal> values = new LinkedHashMap<>();
+        meters.forEach((meter, value) -> values.put(meter, BigDecimal.valueOf(value)));
+        execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meters, recorded_at, version) "
+            + "VALUES (?, ?, ?, ?, now(), 1)", UUID.randomUUID().toString(), sponsorId, day, UsageRules.json(values));
     }
 
     private String uploadImage(String token) {
@@ -148,36 +160,40 @@ class UsageSnapshotIT extends PlayItSupport {
     }
 
     @Test
-    void aRunAgainOfTheSameDayOverwritesItsRows() {
+    void aRunAgainOfTheSameDayOverwritesItsRow() {
         String carl = newSponsor(unique("s-fc2-carl"));
         String token = sponsorToken(carl);
         String first = uploadImage(token);
         LocalDate day = LocalDate.of(2026, 2, 3);
         snapshot(at(day, 0));
-        List<Map<String, Object>> rows = query("SELECT usage_day_id, meter, value, recorded_at FROM qb_usage_day "
-            + "WHERE sponsor_id = ? AND snapshot_day = ? ORDER BY meter", carl, day);
-        assertThat(rows).hasSize(UsageMeters.ALL.size());
+        List<Map<String, Object>> rows = query("SELECT usage_day_id, recorded_at FROM qb_usage_day "
+            + "WHERE sponsor_id = ? AND snapshot_day = ?", carl, day);
+        assertThat(rows).hasSize(1);
 
         String second = uploadImage(token);
         clock.advance(java.time.Duration.ofMinutes(5));
-        // Later the same day (by hand, say): the same rows, the new values.
+        // Later the same day (by hand, say): the same row, the new values.
         snapshot(at(day, 30));
-        List<Map<String, Object>> again = query("SELECT usage_day_id, meter, value, recorded_at FROM qb_usage_day "
-            + "WHERE sponsor_id = ? AND snapshot_day = ? ORDER BY meter", carl, day);
-        assertThat(again).extracting(row -> row.get("usage_day_id"))
-            .containsExactlyElementsOf(rows.stream().map(row -> row.get("usage_day_id")).toList());
+        List<Map<String, Object>> again = query("SELECT usage_day_id, recorded_at FROM qb_usage_day "
+            + "WHERE sponsor_id = ? AND snapshot_day = ?", carl, day);
+        assertThat(again).singleElement().satisfies(row -> {
+            assertThat(row.get("usage_day_id")).isEqualTo(rows.getFirst().get("usage_day_id"));
+            assertThat(row.get("recorded_at")).isNotEqualTo(rows.getFirst().get("recorded_at"));
+        });
         assertThat(usage(carl, day)).containsEntry(UsageMeters.STORAGE_BYTES, size(first) + size(second))
             .containsEntry(UsageMeters.STORAGE_FILES, 2L);
-        // Only the changed rows were written again.
-        assertThat(again).filteredOn(row -> UsageMeters.STORAGE_FILES.equals(row.get("meter"))).singleElement()
-            .satisfies(row -> assertThat(row.get("recorded_at")).isNotEqualTo(rows.stream()
-                .filter(r -> UsageMeters.STORAGE_FILES.equals(r.get("meter"))).findFirst().orElseThrow()
-                .get("recorded_at")));
+        // One audit record of the row per write (D27): the insert and the one update.
+        assertThat(query("SELECT 1 FROM sys_audit_record WHERE entity_type = 'QbUsageDay' AND entity_id = ?",
+            rows.getFirst().get("usage_day_id"))).hasSize(2);
 
         // The same scheduled time once more is replayed by the platform: nothing changes, nothing doubles.
         JobRunner.JobRun replay = snapshot(at(day, 30));
         assertThat(replay.items().succeeded()).isZero();
-        assertThat(query("SELECT 1 FROM qb_usage_day WHERE sponsor_id = ?", carl)).hasSize(UsageMeters.ALL.size());
+        // Nothing changed since: a run at another time of the day writes nothing.
+        clock.advance(java.time.Duration.ofMinutes(5));
+        snapshot(at(day, 40));
+        assertThat(query("SELECT recorded_at FROM qb_usage_day WHERE sponsor_id = ?", carl)).singleElement()
+            .satisfies(row -> assertThat(row.get("recorded_at")).isEqualTo(again.getFirst().get("recorded_at")));
     }
 
     @Test
@@ -239,8 +255,7 @@ class UsageSnapshotIT extends PlayItSupport {
         String fred = newSponsor(unique("s-fc2-fred"));
         LocalDate day = LocalDate.of(2026, 3, 1);
         for (LocalDate old : List.of(day.minusDays(3), day.minusDays(2), day.minusDays(1))) {
-            execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meter, value, recorded_at, "
-                + "version) VALUES (?, ?, ?, 'storage.files', 0, now(), 1)", UUID.randomUUID().toString(), fred, old);
+            dayRow(fred, old, Map.of(UsageMeters.STORAGE_FILES, 0L));
         }
         run("PARAM_SET", admin(), body("key", QbParams.USAGE_RETENTION_DAYS, "value", "2"));
         try {
@@ -270,7 +285,9 @@ class UsageSnapshotIT extends PlayItSupport {
         assertThat(operatorRows).extracting(row -> row.get("sponsorId")).contains(ann).doesNotContain(direct);
         List<Map<String, Object>> hqRows = items(QbUsage.ADMIN_TEMPLATE, hq(), request);
         assertThat(hqRows).extracting(row -> row.get("sponsorId")).contains(ann, direct);
-        assertThat(hqRows).filteredOn(row -> ann.equals(row.get("sponsorId"))).hasSize(UsageMeters.ALL.size())
+        assertThat(hqRows).filteredOn(row -> ann.equals(row.get("sponsorId"))).extracting(row -> row.get("meter"))
+            .containsExactlyInAnyOrderElementsOf(UsageMeters.codes());
+        assertThat(hqRows).filteredOn(row -> ann.equals(row.get("sponsorId")))
             .allSatisfy(row -> assertThat(row).containsEntry("month", "2026-03").containsEntry("days", 1));
         // The default dataset likewise; the sponsor reads only their own (me:), not the administrators'.
         assertThat(rows(QbUsage.DEFAULT_DATASET, northSession)).extracting(row -> row.get("sponsorId"))
@@ -289,14 +306,23 @@ class UsageSnapshotIT extends PlayItSupport {
         String gina = newSponsor(unique("s-fc2-gina"));
         long[] values = {100, 300, 200};
         for (int i = 0; i < values.length; i++) {
-            execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meter, value, recorded_at, "
-                + "version) VALUES (?, ?, ?, 'storage.bytes', ?, now(), 1)", UUID.randomUUID().toString(), gina,
-                LocalDate.of(2026, 4, 1 + i), values[i]);
+            dayRow(gina, LocalDate.of(2026, 4, 1 + i), Map.of(UsageMeters.STORAGE_BYTES, values[i],
+                UsageMeters.STORAGE_FILES, i + 1L));
         }
         List<Map<String, Object>> rows = items(QbUsage.ADMIN_TEMPLATE, hq(), Map.of("params", Map.of("from",
             "2026-04-01", "to", "2026-04-30", "sponsorId", gina, "meter", "storage.bytes"), "limit", 10));
         assertThat(rows).singleElement().satisfies(row -> assertThat(row).containsEntry("days", 3)
             .containsEntry("average", 200).containsEntry("peak", 300).containsEntry("latest", 200));
+        // Every meter of the rows when none is chosen; exported as the page shows it.
+        assertThat(items(QbUsage.ADMIN_TEMPLATE, hq(), Map.of("params", Map.of("from", "2026-04-01", "to",
+            "2026-04-30", "sponsorId", gina), "limit", 10))).extracting(row -> row.get("meter"))
+            .containsExactlyInAnyOrder("storage.bytes", "storage.files");
+        String csv = client.post().uri("/api/queries/" + QbUsage.ADMIN_TEMPLATE + "/export?format=csv")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, hq())
+            .bodyValue(Map.of("params", Map.of("from", "2026-04-01", "to", "2026-04-30", "sponsorId", gina)))
+            .exchange().expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody();
+        assertThat(csv).contains("2026-04").contains("storage.bytes");
     }
 
     // ---- operators (as AssetIT) -------------------------------------------------------------------------------------

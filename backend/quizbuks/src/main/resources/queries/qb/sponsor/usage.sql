@@ -17,29 +17,30 @@ results:
   overFree:     { kind: { type: bool } }
 permissions: [qb.content.write]
 ---*/
--- Always one row. The figures are the snapshot's (the job's, once a day: what was uploaded today shows tomorrow);
--- the free amount is the parameter's value in effect now (null when not set or not a whole number: no notice then).
--- "Above" is UsageRules.over: storage > free amount.
+-- Always one row. The figures are the snapshot's (the job's, once a day: what was uploaded today shows tomorrow), read
+-- from the day's row of meters (a JSON object, usage.UsageMeters' keys); the free amount is the parameter's value in
+-- effect now (null when not set or not a whole number: no notice then). "Above" is UsageRules.over: storage > free.
 WITH latest AS (
-    SELECT max(d.{{QbUsageDay.day}}) AS v_day FROM {{QbUsageDay}} d),
-figures AS (
-    SELECT
-        max(CASE WHEN d.{{QbUsageDay.meter}} = 'storage.bytes' THEN d.{{QbUsageDay.value}} END) AS v_bytes,
-        max(CASE WHEN d.{{QbUsageDay.meter}} = 'storage.files' THEN d.{{QbUsageDay.value}} END) AS v_files,
-        max(CASE WHEN d.{{QbUsageDay.meter}} = 'assets.count' THEN d.{{QbUsageDay.value}} END) AS v_assets
+    SELECT d.{{QbUsageDay.day}} AS v_day, CAST(d.{{QbUsageDay.meters}} AS jsonb) AS v_meters
     FROM {{QbUsageDay}} d
-    JOIN latest l ON d.{{QbUsageDay.day}} = l.v_day),
+    ORDER BY d.{{QbUsageDay.day}} DESC
+    LIMIT 1),
+one AS (
+    SELECT
+        (SELECT v_day FROM latest) AS v_day,
+        (SELECT CAST(v_meters ->> 'storage.bytes' AS numeric) FROM latest) AS v_bytes,
+        (SELECT CAST(v_meters ->> 'storage.files' AS numeric) FROM latest) AS v_files,
+        (SELECT CAST(v_meters ->> 'assets.count' AS numeric) FROM latest) AS v_assets),
 free AS (
     SELECT (SELECT CAST(max(p.{{SysParam.value}}) AS numeric) FROM {{SysParam}} p
             WHERE p.{{SysParam.paramKey}} = 'qb.usage.storage.free-bytes'
               AND p.{{SysParam.value}} ~ '^[0-9]{1,15}$') AS v_free)
 SELECT
-    l.v_day AS day,
-    CAST(f.v_bytes AS numeric(19, 0)) AS storageBytes,
-    CAST(f.v_files AS numeric(19, 0)) AS storageFiles,
-    CAST(f.v_assets AS numeric(19, 0)) AS assetsCount,
+    o.v_day AS day,
+    CAST(o.v_bytes AS numeric(19, 0)) AS storageBytes,
+    CAST(o.v_files AS numeric(19, 0)) AS storageFiles,
+    CAST(o.v_assets AS numeric(19, 0)) AS assetsCount,
     CAST(r.v_free AS numeric(19, 0)) AS freeBytes,
-    coalesce(f.v_bytes > r.v_free, false) AS overFree
-FROM latest l
-CROSS JOIN figures f
+    coalesce(o.v_bytes > r.v_free, false) AS overFree
+FROM one o
 CROSS JOIN free r
