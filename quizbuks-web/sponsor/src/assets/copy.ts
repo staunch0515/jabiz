@@ -37,3 +37,8 @@ export function useAssetCopy<T>() {
     saved: () => setCopy(null),
   }
 }
+
+/** The asset ids that are given, for a save's input (none given: none sent, so nothing about uses changes). */
+export function withAssets<K extends string>(ids: Record<K, string | null>): Partial<Record<K, string>> {
+  return Object.fromEntries(Object.entries(ids).filter(([, value]) => value !== null)) as Partial<Record<K, string>>
+}

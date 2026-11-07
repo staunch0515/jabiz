@@ -44,6 +44,8 @@ interface Server {
   variants?: Record<string, unknown>[]
   /** Q73d-1: the quiz's latest AI translation job, if any. */
   aiTranslation?: Record<string, unknown> | null
+  /** F-C1: the sponsor's asset library. */
+  assets?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor with one quiz. Records what was posted. */
@@ -91,6 +93,8 @@ function server(options: Server = {}) {
         return rows(options.translations ?? [])
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterialImage/query':
         return rows([])
+      case '/api/datasets/urn:jabiz:dataset:me:QbAsset/query':
+        return rows(options.assets ?? [])
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:quiz-status':
         return json(200, [{ code: 'DRAFT', label: 'Draft' }, { code: 'VERSIONED', label: 'Versioned' }])
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:material-kind':
@@ -624,5 +628,86 @@ describe('the quiz\'s other languages (Q73a)', () => {
     server({ quiz: { ...QUIZ, translationLanguages: 'en' } })
     render(<App />)
     expect(await screen.findByTestId('heading-language')).toBeDisabled()
+  })
+})
+
+describe('the asset library in the quiz editor (F-C1)', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/quizzes/q1'))
+  const asset = (more: Record<string, unknown>) => ({ sponsorId: 'u2', description: null, language: 'zh', tags: null,
+    translations: null, image: null, pdf: null, audio: null, url: null, durationSec: null, body: null, usage: null,
+    prizeMethod: null, prizeDescription: null, digitalDelivery: null, digitalSendDays: null, revision: 2,
+    editedAt: '2026-11-01T00:00:00Z', ...more })
+  const ASSETS = [
+    asset({ assetId: 'a-cover', kind: 'IMAGE', name: 'Autumn cover', image: 'f-cover' }),
+    asset({ assetId: 'a-intro', kind: 'TEXT', name: 'Welcome text', body: 'Welcome!', usage: 'QUIZ_INTRO' }),
+    asset({ assetId: 'a-redeem', kind: 'TEXT', name: 'At the counter', body: 'Show it', usage: 'REDEEM_DESCRIPTION' }),
+    asset({ assetId: 'a-link', kind: 'LINK', name: 'Our blog', description: 'Beans explained',
+      url: 'https://example.com/blog' }),
+  ]
+
+  it('copies a cover and an introduction from the library and names them with the next save only', async () => {
+    const { processCalls } = server({ assets: ASSETS, processes: { QB_QUIZ_SAVE: [edit(8), edit(9), edit(10)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('heading-cover-library-pick'))
+    const picker = await screen.findByTestId('asset-picker')
+    // Only images suit a cover.
+    expect((await within(picker).findAllByTestId('asset-picker-item')).map((item) => item.dataset.id))
+      .toEqual(['a-cover'])
+    await expectAccessible()
+    await userEvent.click(within(picker).getByTestId('asset-picker-item'))
+    expect(await screen.findByTestId('heading-cover-current')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('heading-intro-library-pick'))
+    const intros = await screen.findAllByTestId('asset-picker-item')
+    expect(intros.map((item) => item.dataset.id)).toEqual(['a-intro'])
+    await userEvent.click(intros[0])
+    await waitFor(() => expect(screen.getByTestId('heading-intro')).toHaveValue('Welcome!'))
+    // The introduction changed after copying: it is no longer the asset's copy.
+    await userEvent.type(screen.getByTestId('heading-intro'), ' Enjoy.')
+    await userEvent.click(screen.getByTestId('heading-save'))
+    await waitFor(() => expect(processCalls('QB_QUIZ_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_QUIZ_SAVE')[0]).toMatchObject({ cover: 'f-cover', coverAssetId: 'a-cover',
+      intro: 'Welcome! Enjoy.' })
+    expect(processCalls('QB_QUIZ_SAVE')[0]).not.toHaveProperty('introAssetId')
+    // Saved again: the copy was recorded once; the record is not renewed (it would hide "older content").
+    await userEvent.click(screen.getByTestId('heading-save'))
+    await waitFor(() => expect(processCalls('QB_QUIZ_SAVE')).toHaveLength(2))
+    expect(processCalls('QB_QUIZ_SAVE')[1]).not.toHaveProperty('coverAssetId')
+  })
+
+  it('saves the introduction to the library, which then counts as its copy', async () => {
+    const { processCalls } = server({ assets: ASSETS, processes: {
+      QB_ASSET_SAVE: [{ status: 200, body: { output: { assetId: 'a-new', revision: 1 } } }],
+      QB_QUIZ_SAVE: [edit(8)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('heading-intro-library-store'))
+    const dialog = await screen.findByTestId('asset-store-dialog')
+    expect(within(dialog).getByTestId('asset-store-name')).toHaveValue('Coffee basics')
+    await userEvent.click(within(dialog).getByTestId('asset-store-save'))
+    await waitFor(() => expect(processCalls('QB_ASSET_SAVE')).toEqual([{ assetId: null, kind: 'TEXT',
+      name: 'Coffee basics', description: null, language: 'zh', tags: [], confirmed: [], baseRevision: null,
+      body: 'About **coffee**.', usage: 'QUIZ_INTRO' }]))
+    await waitFor(() => expect(screen.queryByTestId('asset-store-dialog')).not.toBeInTheDocument())
+    await userEvent.click(screen.getByTestId('heading-save'))
+    await waitFor(() => expect(processCalls('QB_QUIZ_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_QUIZ_SAVE')[0]).toMatchObject({ introAssetId: 'a-new' })
+  })
+
+  it('makes a new material from an asset, of the asset’s kind, naming it', async () => {
+    const { processCalls } = server({ assets: ASSETS, processes: { QB_MATERIAL_SAVE: [edit(8, { itemId: 'm2' })] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-materials'))
+    await userEvent.click(await screen.findByTestId('material-add'))
+    const dialog = await screen.findByTestId('material-dialog')
+    await userEvent.click(within(dialog).getByTestId('material-library-pick'))
+    const items = await screen.findAllByTestId('asset-picker-item')
+    // Media of every material kind; no texts for an introduction or a description.
+    expect(items.map((item) => item.dataset.id)).toEqual(['a-cover', 'a-link'])
+    await userEvent.click(items[1])
+    await waitFor(() => expect(within(dialog).getByTestId('material-url')).toHaveValue('https://example.com/blog'))
+    expect(within(dialog).getByTestId('material-title')).toHaveValue('Our blog')
+    await userEvent.click(within(dialog).getByTestId('material-save'))
+    await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_MATERIAL_SAVE')[0]).toMatchObject({ kind: 'LINK', title: 'Our blog',
+      description: 'Beans explained', url: 'https://example.com/blog', assetId: 'a-link', baseRevision: 7 })
   })
 })

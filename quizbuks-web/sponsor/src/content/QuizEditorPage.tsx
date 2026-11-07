@@ -344,7 +344,7 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
             <QuestionsPanel questions={questions} survey={quiz.kind === 'SURVEY'} />
           </TabsContent>
           <TabsContent value="materials" className="pt-4">
-            <MaterialsPanel materials={materials} />
+            <MaterialsPanel materials={materials} language={quiz.language} />
           </TabsContent>
           <TabsContent value="languages" className="pt-4">
             <TranslationsPanel draft={draft.data} generation={generation} />
