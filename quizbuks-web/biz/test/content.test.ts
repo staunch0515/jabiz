@@ -126,7 +126,8 @@ describe('the rendered pages', () => {
     for (const language of LANGUAGES) {
       for (const page of PAGES) {
         const html = renderPage({ language, page, content: contentOf(language), base: '/biz/', tryQuizzes, assets, siteUrl })
-        expect(html).not.toMatch(/商户|主催者|[Mm]erchant/)
+        // F-F5: the side that publishes is 发起方 / 主催者 / Sponsor; the retired words stay out.
+        expect(html).not.toMatch(/商户|商家|スポンサー|加盟店|[Mm]erchant/)
         expect(html).not.toContain('/merchants/')
         expect(html).not.toMatch(/20%|5%|¥9,800|¥49,800/)
         // Only what the first launch has (Q94): no Kudos, no features announced for later.

@@ -114,6 +114,14 @@ jobs:
           pnpm typecheck
           pnpm test
           pnpm build
+      # The business site (/biz/): every page in every language, its words and structure; it was built and served
+      # but its tests did not run in CI.
+      - name: Business site
+        working-directory: quizbuks-web/biz
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
       # S4a: QuizBuks for Shopify's public pages (/shopify-app/): every page in every language, the privacy policy's
       # required parts, no script or inline style.
       - name: Shopify public pages (S4a)
