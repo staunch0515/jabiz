@@ -40,6 +40,7 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.file.fetch` | 服务器下载链接中的图片（`POST /api/files/fetch` 的下载与存储、外部作业的 `remoteImages()`，14 §12、D75） | `outcome`（`fetched` 或错误码；不含主机与链接） |
 | `jabiz.process.admission` | 根流程在热门命名锁之前的排队（06 §4.2，D45；`ProcessAdmission`，嵌在 `jabiz.process` 之内，计时即排队的时间） | `family` `process` `result`（`ADMITTED` / `QUEUE_FULL` / `WAIT_TIMEOUT` / `CANCELLED`），没有 `outcome` 与 `status`；不放准入键、主键、操作人 |
 | `jabiz.process.admission.waiting` / `.active`（仪表，不是观测） | 当前在队列中等待的、已取得许可的根流程数，按族合计 | `family` |
+| `jabiz.geoip.ranges` / `jabiz.geoip.stale`（仪表，不是观测） | 地址库（`ClientCountries`，10 §18、D74）：使用中的库的范围数（读不出为 0），文件比 `jabiz.geoip.max-age` 旧或启动时读不出为 1；与启动检查 `GEOIP` 同一判断，但运行中变旧也看得到。没有配置地址库不登记 | 无 |
 | `jabiz.process.rate_limited` | 流程接口的限流拒绝（10 §15.10；只计数，不记操作人与客户端地址） | `process` `scope`（`user` / `address` / `instance`） |
 | `jabiz.auth.rate_limited` | 登录类接口按地址限流的拒绝（10 §4.1，D47；只计数，不记客户端地址） | `kind`（`password` / `oidc_callback` / `second_factor` / `refresh`） |
 | `jabiz.auth.hashing.busy` | 口令哈希的并发上限拒绝了一次请求（10 §4.2，D47；只计数） | 无 |
@@ -50,7 +51,9 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 计数用的 `jabiz.process.rate_limited`、`jabiz.public.rate_limited`、`jabiz.inbound.rate_limited`、`jabiz.auth.rate_limited`、`jabiz.auth.hashing.busy`（只有表中的标签），以及不是观测的 `jabiz.external.usage`、`jabiz.external.job.held` 与准入的两个仪表。
 同一观测名的标签键集合固定（指标后端的要求）。映射沿用 `ProblemStatuses`，与 API 响应一致。
 
-Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）、R2DBC 语句（加入 `r2dbc-proxy` 后）、R2DBC 连接池、JVM 指标。
+Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）、R2DBC 语句（加入 `r2dbc-proxy` 后）、R2DBC 连接池、JVM 指标，
+以及磁盘的剩余与总量（`disk.free` / `disk.total`，标签 `path`）：平台缺省测量工作目录与上传文件的目录（`jabiz.files.local.root`）所在的文件系统
+（`management.metrics.system.diskspace.paths`，`JabizDefaultProperties`；容器中工作目录所在的即宿主的镜像与日志存储），供 §7 的磁盘告警。
 `jabiz.*` 与 `http.server.requests` 发布直方图桶（`JabizDefaultProperties`），由后端计算 p95 等分位。
 
 一次下单的链路（本地实测）：`http post /api/processes/{name}/{version}` → `process ORDER_PLACE` →
@@ -98,3 +101,53 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 - `ObservabilityIT`（app）：下单成功与被拒绝（422）各产生 `jabiz.process` 观测及对应计时器；数据视图查询与提交嵌套在流程之内；
   子流程 `LEDGER_POST` 嵌套在 `ORDER_SHIP` 之内；模板有观测；全部 `jabiz.*` 标签中不出现主键、订单号、操作人。
 - 端到端（手工，见阶段 11 PR）：compose 启动 → 登录 → 下单 → Grafana 中可见指标、链路与日志。
+
+## 7. 告警（阶段 17zu）
+
+告警规则与接收人是平台提供的文件，以 Grafana 的预置（provisioning）载入 LGTM 容器，不在界面上手工建：
+
+- `docker/grafana/alerting/jabiz-alerts.yaml`：文件夹 `jabiz`、组 `jabiz-platform` 的规则，联系点 `jabiz-oncall`（邮件）与路由。
+  应用的规则写在同一目录（或挂载到它旁边）的另一个文件中，用自己的组与文件夹，格式相同。
+- 部署相关的值写成占位符 `$JABIZ_ALERT_*`，容器启动时由 `docker/grafana/alerting/render.sh` 以容器的环境变量填入（Grafana 不展开规则查询中的
+  环境变量）；未设置或含字母、数字与 `@._+,;-` 以外字符的值使容器启动失败，而不是载入一条永不触发的规则。`docker-compose.yml` 给出缺省值：
+
+| 变量 | 作用 | 缺省 |
+|---|---|---|
+| `JABIZ_ALERT_EMAIL` | 告警的收件人（值班的人；几个地址以 `;` 分隔）。另需 Grafana 的 SMTP：`GF_SMTP_ENABLED`、`GF_SMTP_HOST`、`GF_SMTP_USER`、`GF_SMTP_PASSWORD`、`GF_SMTP_FROM_ADDRESS` | `oncall@localhost` |
+| `JABIZ_ALERT_SERVICE` | 应用的 `spring.application.name`（指标的 `job` 标签） | `jabiz` |
+| `JABIZ_ALERT_DISK_PERCENT` | 磁盘用量的阈值（%） | 80 |
+| `JABIZ_ALERT_REFRESH_GRANTED_MIN` / `_RATIO` | 一小时内补发多于这么多次、且占刷新请求的比例高于这个值时告警（D73） | 10 / 0.02 |
+| `JABIZ_ALERT_REFRESH_REVOKED_MAX` | 一小时内因重用而吊销的会话多于这么多时告警 | 20 |
+
+平台的规则（每条的 `labels.area` 指向下表的一行，`severity` 为 `page`（立即处理）或 `warning`）：
+
+| uid | 条件 | 持续 | 处理 |
+|---|---|---|---|
+| `jabiz-metrics-absent` | 5 分钟没有收到应用的任何指标 | — | 应用停了或连不上收集器：看容器状态与日志 |
+| `jabiz-platform-check-failed` | 日志中出现 `Platform check failed` | — | 实例拒绝启动：日志列出 `类别 \| 定位 \| 描述` |
+| `jabiz-process-errors` | 流程以 503 以外的错误结束（`outcome="error"`） | — | 按 `process` 看链路与日志（不是业务拒绝） |
+| `jabiz-admission-overload` | 热门锁的队列满或排队超时（`QUEUE_FULL` / `WAIT_TIMEOUT`） | 5 分钟 | 06 §4.2：调用者收到 503 `PROCESS_BUSY` |
+| `jabiz-outbox-failed` | 事件的消费者失败 | 15 分钟 | 事件等待并重试；按 `consumer` 看错误 |
+| `jabiz-job-failed` / `jabiz-job-item-failed` | 定时任务 `FAILED` / `PARTIAL`，或逐项任务的项失败 | — | 修好原因后在任务页面重跑（D77） |
+| `jabiz-job-locked` | 任务两小时都发现锁被占用 | 2 小时 | 另一实例可能卡住 |
+| `jabiz-inbound-rejected` | 入站 Webhook 被拒（签名、过旧、过大）或失败 | — | 11 §2.5：按 `provider` 与 `reason` |
+| `jabiz-external-call-errors` | 外部服务的调用 5 % 以上失败 | 15 分钟 | 看服务方的状态；有副作用的调用照旧带幂等键 |
+| `jabiz-external-job-failed` | 外部作业的尝试最终失败 | — | 11 §4a |
+| `jabiz-refresh-reuse-granted` | 被换下的刷新令牌在宽限内再出现异常频繁（D73） | — | 客户端缺陷（不先保存新令牌）或令牌被盗：看最近的版本与登录记录 |
+| `jabiz-refresh-reuse-revoked` | 因重用而结束的会话异常多 | — | 同上；可能有人在重放令牌 |
+| `jabiz-geoip-stale` / `jabiz-geoip-empty` | 地址库比 `jabiz.geoip.max-age` 旧或读不出 / 没有范围（D74） | 1 小时 / 15 分钟 | 下载新的库替换文件（运行中自动重读，不必重启） |
+| `jabiz-disk-usage` | 应用测量的某个文件系统用量高于阈值 | 10 分钟 | 清理旧镜像与日志、扩容；上传文件的目录满了上传会失败 |
+
+数据库主机（WAL 归档、备份、数据库所在磁盘）不由应用测量，由数据库的托管方或主机监控告警。
+
+**试发**：`tools/ops/alert-fire-test.sh`（只对测试环境；`GRAFANA_USER` / `GRAFANA_PASSWORD` 必填）：
+
+- `rules`：全部规则已载入且求值没有错误；
+- `notify`：经联系点 `jabiz-oncall` 发一封测试告警，Grafana 未送达即失败（再确认值班的人收到了）；
+- `fire [uid…]`：以应用的服务名推送满足各条规则的假数据（实例与名称为 `alert-test`），等到每条都进入 pending 或 firing；
+  `jabiz-metrics-absent` 无法伪造，停掉应用 5 分钟来试；按一小时计算的规则在一小时内自行恢复；
+- `disk <目录>`：在该目录所在的文件系统上放一个临时文件，使用量到阈值以上 1 %，等到磁盘告警进入 pending 后删除。规则已在 pending 或 firing 时拒绝执行。
+
+测试：`tools/test/alert-render.test.sh`（CI）检查填入、遗漏与非法的值、应用自己的文件。规则的指标名与标签、
+联系点的投递、各条规则的触发与 `disk` 的填充都对真实的 LGTM 容器与应用核对过（17zu 的 PR）。
+

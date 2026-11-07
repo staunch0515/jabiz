@@ -5216,3 +5216,19 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：空闲时被借出的连接有明确的持有者且测试断言之；任何经 `MAIL_TEXT_SAVE` 能存的文字都能作为受控变更提出；并发的请求（流程接口与登录类接口）不会让被拒的请求消耗其他桶的令牌，放行数不超过限额。
 
 **17zt 状态**：📝 待评审（分支 `1.3/phase-17zt-pool-and-limits`）。
+
+### 17zu 告警规则与试发（2026-11-07，QuizBuks 首次上线的上线准备 A）
+
+**缘由**：首次上线清单要求监控与告警已配置并试发，其中平台的新告警：刷新补发次数异常（D73）、磁盘用量、地址库缺失或过旧（D74）。
+此前只有仪表盘，没有任何告警规则；地址库只在启动时检查，运行中变旧看不到；磁盘没有指标。
+
+| # | 内容 |
+|---|---|
+| 17zu-1 | 地址库的仪表 `jabiz.geoip.ranges` / `jabiz.geoip.stale`（与启动检查 `GEOIP` 同一判断，运行中也更新；没有配置地址库不登记）；磁盘指标 `disk.free` / `disk.total` 的缺省测量范围加上上传文件的目录（`JabizDefaultProperties`）。13 §2 随之更新 |
+| 17zu-2 | `docker/grafana/alerting/jabiz-alerts.yaml`：16 条平台规则（健康、启动检查、流程错误、准入、事件、任务、入站、外部调用与作业、刷新补发与吊销、地址库、磁盘）、联系点 `jabiz-oncall`（邮件）与路由；部署相关的值为占位符，由 `render.sh` 在容器启动时以环境变量填入（Grafana 不展开规则查询中的变量），缺失或含非法字符即启动失败。`docker-compose.yml` 的 `lgtm` 给出缺省值；13 §7 |
+| 17zu-3 | 试发 `tools/ops/alert-fire-test.sh`：`rules`（全部求值无误）、`notify`（经联系点投递，未送达即失败）、`fire`（推送满足各条规则的假数据并等到 pending/firing）、`disk <目录>`（真的把文件系统填到阈值以上，告警后删除） |
+| 17zu-4 | 测试：`ClientCountriesTest.gaugesShowTheRangesAndWhetherTheDatabaseIsStale`、`ObservabilityIT.diskSpaceIsMeasuredForTheWorkingDirectoryAndTheUploadedFiles`、`tools/test/alert-render.test.sh`（CI，9 项）。对真实的 `grafana/otel-lgtm:0.34.0` 与打包的应用核对：指标名与标签一致；16 条规则全部求值无误；`fire` 使可伪造的 15 条全部进入 pending/firing；`notify` 的邮件送到本地的 SMTP 接收器；`disk` 把 200 MB 的文件系统填到 96 % 后告警、删除临时文件。核对中发现并改正：`min(...) == 0` 的值本身是 0，阈值表达式永不成立（改为 `count(... == 0)`） |
+
+**验收**：上线清单中平台的告警都有规则与处理说明；每条规则都可以在测试环境试发（`jabiz-metrics-absent` 以停掉应用试）；值的修改只在部署配置中。
+
+**17zu 状态**：📝 待评审（分支 `1.3/phase-17zu-alerts`）。
