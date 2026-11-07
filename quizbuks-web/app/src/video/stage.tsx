@@ -18,7 +18,12 @@ import { recordPlayback, UNKNOWN_AFTER_MS, type PlaybackEvent } from './playback
  * once its sound is on (D-Q75-3). A playing player not heard from within a wait is given up on (D-Q75-6).
  */
 
-type Mode = 'card' | 'page'
+/**
+ * Where the player shows: a home's card, the start page, or (F-S10) a screen of the full-screen vertical mode, which
+ * lies over the home: the player is laid above it, and its watching counts as the start page's does (Q75, B of the
+ * 2026-11-06 review).
+ */
+type Mode = 'card' | 'page' | 'short'
 
 interface Slot {
   key: string
@@ -55,9 +60,12 @@ let heard = false
 let playerPlaying = false
 let unknownTimer: ReturnType<typeof setTimeout> | null = null
 
-/** Q75 (D-Q75-3): the playback counts on the start page, or on a card once its sound is on. */
+/**
+ * Q75 (D-Q75-3): the playback counts on the start page and (F-S10) in the vertical mode, or on a card once its sound
+ * is on.
+ */
 function counting(): boolean {
-  return !!state.slot && (state.slot.mode === 'page' || state.soundOn)
+  return !!state.slot && (state.slot.mode !== 'card' || state.soundOn)
 }
 
 /** Hands a playback event to the shown publication's record, while it counts. */
@@ -272,6 +280,11 @@ export function useStage(): StageState {
   return useSyncExternalStore(subscribe, () => state, () => state)
 }
 
+/** The stage's player now (Q65), and whether its sound is on: the vertical mode carries the sound to the next video. */
+export function stagePlayer(): { player: string | null; soundOn: boolean } {
+  return { player: state.player, soundOn: state.soundOn || state.soundAsked }
+}
+
 /**
  * The place a video shows: an empty 16:9 box the stage lays the player over while `active`. On a card (`mode`
  * `card`) the player cannot be touched: a tap anywhere on it is `onOpen`. On the start page (`page`) the player's
@@ -334,7 +347,9 @@ export function VideoStage() {
   return createPortal(
     <div data-testid="video-stage" data-mode={slot?.mode}
       style={{ position: 'absolute', top: rect?.top ?? 0, left: rect?.left ?? 0, width: rect?.width ?? 0,
-        height: rect?.height ?? 0, visibility: visible ? 'visible' : 'hidden', zIndex: 5 }}>
+        height: rect?.height ?? 0, visibility: visible ? 'visible' : 'hidden',
+        // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
+        zIndex: slot?.mode === 'short' ? 55 : 5 }}>
       <iframe
         key={stage.player}
         ref={(element) => {

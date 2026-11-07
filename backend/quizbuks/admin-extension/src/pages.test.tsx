@@ -374,6 +374,26 @@ describe('PublicationReviewPage', () => {
     expect(await screen.findByTestId('publication-mainland')).toHaveTextContent('mainland China')
   })
 
+  const versionWithVideo = (url: string) => ({ versionId: VERSION_ID, label: 'v1', title: 'World capitals',
+    contentHash: 'a'.repeat(64), versionedAt: '2026-10-14T00:00:00Z', content: JSON.stringify({
+      ...JSON.parse(SNAPSHOT_JSON), materials: [{ no: 1, kind: 'VIDEO_LINK', title: 'Film', description: null, body: null,
+        url, pdf: null, audio: null, images: [] }] }) })
+
+  it('says the publication is vertical when its video is a Shorts link (F-S10)', async () => {
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('LIVE'))
+    server.entities.set(`${DATASET.version}/${VERSION_ID}`, versionWithVideo('https://www.youtube.com/shorts/dQw4w9WgXcQ'))
+    renderPublication()
+    expect(await screen.findByTestId('publication-vertical')).toHaveTextContent('Vertical video')
+  })
+
+  it('says nothing of a horizontal video (F-S10)', async () => {
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('LIVE'))
+    server.entities.set(`${DATASET.version}/${VERSION_ID}`, versionWithVideo('https://www.youtube.com/watch?v=dQw4w9WgXcQ'))
+    renderPublication()
+    expect(await screen.findByTestId('version-preview')).toBeInTheDocument()
+    expect(screen.queryByTestId('publication-vertical')).not.toBeInTheDocument()
+  })
+
   it('reviews a running publication\'s switch with the version it asks for (Q51)', async () => {
     const next = '0192f0a0-0000-7000-8000-0000000000e2'
     server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication('LIVE'),

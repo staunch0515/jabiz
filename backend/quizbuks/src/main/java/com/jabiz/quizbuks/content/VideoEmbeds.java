@@ -98,6 +98,21 @@ public final class VideoEmbeds {
         return player != null && (player.startsWith(YOUTUBE_PLAYER) || player.startsWith(VIMEO_PLAYER));
     }
 
+    /**
+     * Whether a video link is a YouTube Shorts link ({@code youtube.com/shorts/<id>}, F-S10): such a video is vertical
+     * whatever the material says. Read as {@link #player} reads links; the App's {@code qb/video.ts} ({@code isShorts})
+     * has the same cases.
+     */
+    public static boolean shorts(String url) {
+        if (player(url).isEmpty()) {
+            return false;
+        }
+        URI uri = URI.create(url.trim());
+        String[] path = (uri.getRawPath() == null ? "" : uri.getRawPath()).split("/", -1);
+        return YOUTUBE_HOSTS.contains(uri.getHost().toLowerCase(Locale.ROOT)) && path.length == 3
+            && path[1].equals("shorts");
+    }
+
     /** The player of a video link whose player says where it is ({@link #trackable}); empty for any other. */
     public static Optional<String> trackablePlayer(String url) {
         return player(url).filter(VideoEmbeds::trackable);

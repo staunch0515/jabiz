@@ -479,6 +479,30 @@ describe('the quiz editor', () => {
     expect(processCalls('QB_MATERIAL_SAVE')[0]).toMatchObject({ kind: 'VIDEO_LINK', watchToAnswer: true, durationSec: 185 })
   })
 
+  it('marks a vertical video, and says a Shorts link is one anyway (F-S10)', async () => {
+    const { processCalls } = server({ processes: { QB_MATERIAL_SAVE: [edit(8, { itemId: 'm2' })] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-materials'))
+    await userEvent.click(await screen.findByTestId('material-add'))
+    const dialog = await screen.findByTestId('material-dialog')
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
+    await userEvent.type(within(dialog).getByTestId('material-title'), 'Upright')
+    const url = within(dialog).getByTestId('material-url')
+    await userEvent.type(url, 'https://www.youtube.com/shorts/dQw4w9WgXcQ')
+    const box = within(dialog).getByRole('checkbox', { name: 'Vertical video' })
+    expect(box).toBeChecked()
+    expect(box).toBeDisabled()
+    expect(within(dialog).getByTestId('material-vertical-hint')).toHaveTextContent('YouTube Shorts link')
+    await userEvent.clear(url)
+    await userEvent.type(url, 'https://www.bilibili.com/video/BV1GJ411x7h7')
+    expect(box).not.toBeChecked()
+    await userEvent.click(box)
+    await expectAccessible()
+    await userEvent.click(within(dialog).getByTestId('material-save'))
+    await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_MATERIAL_SAVE')[0]).toMatchObject({ kind: 'VIDEO_LINK', vertical: true })
+  })
+
   it('lists every reason a version was refused', async () => {
     const changed = { status: 422, body: { detail: 'Refused', violations: [{ field: 'baseRevision',
       ruleCode: 'QB_QUIZ_CHANGED', message: 'The quiz was changed meanwhile.' }] } }

@@ -376,6 +376,20 @@ const en = {
     invalid: 'The code on the Sponsor\'s screen renews every minute, and a replaced poster code stops working. Ask the Sponsor to show you the current one.',
     home: 'Back to the quizzes',
   },
+  // F-S10: the home's shelves of vertical short videos and the full-screen vertical mode.
+  shorts: {
+    title: 'Shorts',
+    open: 'Watch {{name}} in full screen',
+    close: 'Back to the home',
+    previous: 'Previous video',
+    next: 'Next video',
+    position: '{{n}} of {{total}}',
+    slide: 'short video',
+    play: 'Play',
+    answer: 'Answer',
+    soundOn: 'Turn the sound on',
+    tapForSound: 'Tap the player to turn its sound on.',
+  },
   feed: {
     listTitle: 'Quizzes you can answer',
     answeredHidden: 'Quizzes you have answered are not shown here.',
@@ -999,6 +1013,20 @@ const zh: typeof en = {
     invalid: '发起方屏幕上的码每分钟更新，更换过的海报码也会失效。请让发起方出示当前的码。',
     home: '返回 Quiz 列表',
   },
+  // F-S10: 首页的短视频一排与全屏的竖屏模式。
+  shorts: {
+    title: '短视频',
+    open: '全屏观看{{name}}',
+    close: '返回首页',
+    previous: '上一个视频',
+    next: '下一个视频',
+    position: '第 {{n}} 个，共 {{total}} 个',
+    slide: '短视频',
+    play: '播放',
+    answer: '去答题',
+    soundOn: '开声音',
+    tapForSound: '点一下播放器即可开声音。',
+  },
   feed: {
     listTitle: '可以参加的 Quiz',
     answeredHidden: '已答过的 Quiz 不在这里显示。',
@@ -1621,6 +1649,20 @@ const ja: typeof en = {
     invalidTitle: 'このコードは使えなくなりました',
     invalid: '主催者画面のコードは毎分更新され、差し替えられたポスターのコードは無効になります。現在のコードを見せてもらってください。',
     home: 'クイズ一覧に戻る',
+  },
+  // F-S10: ホームのショート動画の列と全画面の縦型モード。
+  shorts: {
+    title: 'ショート動画',
+    open: '{{name}}を全画面で見る',
+    close: 'ホームに戻る',
+    previous: '前の動画',
+    next: '次の動画',
+    position: '{{total}} 本中 {{n}} 本目',
+    slide: 'ショート動画',
+    play: '再生',
+    answer: '回答する',
+    soundOn: '音声をオンにする',
+    tapForSound: 'プレーヤーをタップすると音声がオンになります。',
   },
   feed: {
     listTitle: '回答できるクイズ',

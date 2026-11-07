@@ -324,6 +324,13 @@ public final class QbParams {
      * value ({@code ForeignVideos.DEFAULT_SITES}) until its proposal is published.
      */
     public static final String VIDEO_MAINLAND_SITES = "qb.video.mainland-accessible-sites";
+    /**
+     * F-S10: after which cards of the App's home a shelf of vertical short videos is shown (comma-separated places, the
+     * first card being 1), and how many publications each shelf shows; not controlled. The App reads them through the
+     * home's template ({@code qb.app.feed}).
+     */
+    public static final String FEED_SHORTS_POSITIONS = "qb.feed.shorts.positions";
+    public static final String FEED_SHORTS_PER_SHELF = "qb.feed.shorts.per-shelf";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -557,7 +564,13 @@ public final class QbParams {
         new Param(VIDEO_MAINLAND_SITES, Map.of("type", "text", "maxLength", 200),
             com.jabiz.quizbuks.content.ForeignVideos.DEFAULT_SITES,
             "Video sites mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, "
-                + "youku, tencent); a video of any other site is foreign and not answerable from mainland China"));
+                + "youku, tencent); a video of any other site is foreign and not answerable from mainland China"),
+        // F-S10: the home's shelves of vertical short videos (ordinary; last, so that the setup's earlier keys stay).
+        new Param(FEED_SHORTS_POSITIONS, Map.of("type", "text", "maxLength", 200), "3,12",
+            "After which cards of the App's home a shelf of vertical short videos is shown, comma-separated (the first "
+                + "card is 1); empty: no shelf"),
+        new Param(FEED_SHORTS_PER_SHELF, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
+            "How many vertical short videos one shelf of the App's home shows"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

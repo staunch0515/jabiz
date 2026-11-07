@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoplaying, foreignVideo, mainlandSites, trackable, trustedPlayer, videoPlayer, videoSite } from './video'
+import { autoplaying, foreignVideo, isShorts, mainlandSites, trackable, trustedPlayer, verticalVideo, videoPlayer, videoSite } from './video'
 
 /** The cases of the backend's `VideoEmbedsTest` (Q19): the App reads links as the server does. */
 describe('videoPlayer', () => {
@@ -145,5 +145,32 @@ describe('videoSite and foreignVideo', () => {
     expect(foreignVideo(['https://v.qq.com/x/page/x0029zdtwz6.html'], new Set(['bilibili']))).toBe(true)
     expect(foreignVideo(['https://youtu.be/dQw4w9WgXcQ'], new Set(['youtube']))).toBe(false)
     expect(foreignVideo([], mainland)).toBe(false)
+  })
+})
+
+/** F-S10: the cases of the backend's `VideoEmbedsTest.aShortsLinkIsVertical`. */
+describe('isShorts and verticalVideo', () => {
+  it.each([
+    ['https://www.youtube.com/shorts/dQw4w9WgXcQ', true],
+    ['https://m.youtube.com/shorts/dQw4w9WgXcQ?feature=share', true],
+    ['  https://youtube.com/shorts/dQw4w9WgXcQ  ', true],
+    ['https://www.youtube.com/watch?v=dQw4w9WgXcQ', false],
+    ['https://youtu.be/dQw4w9WgXcQ', false],
+    ['https://www.youtube.com/embed/dQw4w9WgXcQ', false],
+    ['https://www.youtube.com/shorts/short', false],
+    ['https://www.youtube.com/shorts/dQw4w9WgXcQ/', false],
+    ['https://evil.example/shorts/dQw4w9WgXcQ', false],
+    ['https://vimeo.com/76979871', false],
+    ['https://www.bilibili.com/video/BV1GJ411x7h7', false],
+    ['', false],
+  ])('says whether %j is a Shorts link: %s', (url, shorts) => {
+    expect(isShorts(url)).toBe(shorts)
+  })
+
+  it('takes the sponsor\'s mark for any other video', () => {
+    expect(isShorts(null)).toBe(false)
+    expect(verticalVideo('https://www.bilibili.com/video/BV1GJ411x7h7', true)).toBe(true)
+    expect(verticalVideo('https://www.bilibili.com/video/BV1GJ411x7h7', false)).toBe(false)
+    expect(verticalVideo('https://www.youtube.com/shorts/dQw4w9WgXcQ', null)).toBe(true)
   })
 })

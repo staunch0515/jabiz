@@ -393,6 +393,9 @@ public final class QbPublications {
         // from a mainland address is refused unless headquarters allowed it. None (a card before its backfill) counts
         // as foreign.
         eb.field("foreignVideo", f -> f.physicalColumn("foreign_video").asBool());
+        // F-S10: whether that video is vertical (a YouTube Shorts link, or marked so on its material); the App's home
+        // shows such publications in its shelf of shorts and their full-screen vertical mode.
+        eb.field("videoVertical", f -> f.physicalColumn("video_vertical").required(true).asBool());
         eb.field("versionId", f -> f.physicalColumn("version_id").required(true)
             .asReference(QbContent.VERSION));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").immutable(true).required(true)

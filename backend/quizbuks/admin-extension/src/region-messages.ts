@@ -36,6 +36,7 @@ export const regionMessages = {
     refused: 'Refused',
     noRefusals: 'No start was refused in the last 30 days.',
     reviewNotice: 'The quiz has a video that cannot be played in mainland China (such as YouTube), and the publication reaches mainland China: Takers there will not see or answer it unless headquarters makes an exception.',
+    verticalNotice: 'Vertical video: the video of this publication is a YouTube Shorts link or marked as vertical by the sponsor, so the app also shows it in the shelf of short videos on its home and in its full-screen vertical mode.',
   },
   zh: {
     title: '境外视频与中国大陆',
@@ -63,6 +64,7 @@ export const regionMessages = {
     refused: '被拒次数',
     noRefusals: '最近 30 天没有被拒的开始。',
     reviewNotice: '这个测验含有在中国大陆无法播放的视频（如 YouTube），而发布面向中国大陆：除非总部设了例外，中国大陆的学者看不到、也不能作答。',
+    verticalNotice: '竖屏：发布的视频是 YouTube 的 Shorts 链接，或发起方勾选了竖屏，App 也会把它放进首页的短视频一排与全屏的竖屏模式。',
   },
   ja: {
     title: '海外の動画と中国本土',
@@ -90,5 +92,6 @@ export const regionMessages = {
     refused: '拒否された回数',
     noRefusals: '最近 30 日間に拒否された開始はありません。',
     reviewNotice: 'このクイズには中国本土で再生できない動画（YouTube など）が含まれ、公開の対象に中国本土が含まれます。本部が例外を設けない限り、中国本土のテイカーはこの公開を見ることも回答することもできません。',
+    verticalNotice: '縦型：この公開の動画は YouTube ショートのリンクか、主催者が縦型に指定したものです。アプリのホームのショート動画の列と全画面の縦型モードにも表示されます。',
   },
 }
