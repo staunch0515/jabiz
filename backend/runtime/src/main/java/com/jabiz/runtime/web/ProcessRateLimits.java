@@ -35,7 +35,12 @@ import java.util.function.LongSupplier;
  *
  * <p>Some platform processes have a limit unless configuration names one for them ({@link #PLATFORM_DEFAULTS}): a
  * test mail of the mail texts or layout ({@code MAIL_TEXT_TEST_SEND}, {@code MAIL_LAYOUT_TEST_SEND}, decision D72) at
- * most 10 an hour per person each.
+ * most 10 an hour per person each; downloads of images from links ({@code FILE_FETCH}, decision D75) at most 30 a
+ * minute per person, 60 a minute per host of the link and 300 a minute on the instance.
+ *
+ * <p>{@code FILE_FETCH} is no process but the downloads of images from links ({@code POST /api/files/fetch} and the
+ * external jobs' downloads): they are counted by {@link #checkFetch}, per actor, per host of the link and per instance,
+ * so that nobody makes the server download from one host faster than the limit allows.
  */
 @Component
 public class ProcessRateLimits {
@@ -46,16 +51,23 @@ public class ProcessRateLimits {
      */
     public static final Map<String, ProcessRateLimitProperties.Limit> PLATFORM_DEFAULTS = Map.of(
         "MAIL_TEXT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)),
-        "MAIL_LAYOUT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)));
+        "MAIL_LAYOUT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)),
+        "FILE_FETCH", new ProcessRateLimitProperties.Limit(30, null, 300, Duration.ofMinutes(1), null, null, 60));
+
+    /**
+     * Not a process: the key of downloads of images from links ({@code POST /api/files/fetch} and external jobs'
+     * {@code remoteImages()}), counted by actor, host and instance ({@link #checkFetch}; decision D75).
+     */
+    public static final String FILE_FETCH = "FILE_FETCH";
 
     /** Keys kept per bucket; the least recently used are forgotten first. */
     static final int MAX_KEYS = 100_000;
 
     /** What a bucket counts by, the tag {@code scope} of {@value PlatformObservations#PROCESS_RATE_LIMITED}. */
-    public enum Scope { USER, ADDRESS, INSTANCE, TENANT, VISITOR }
+    public enum Scope { USER, ADDRESS, INSTANCE, TENANT, VISITOR, HOST }
 
     private record Buckets(TokenBucketLimiter perUser, TokenBucketLimiter perAddress, TokenBucketLimiter perInstance,
-        TokenBucketLimiter perTenant, TokenBucketLimiter perVisitor) {}
+        TokenBucketLimiter perTenant, TokenBucketLimiter perVisitor, TokenBucketLimiter perHost) {}
 
     private final Map<String, Buckets> buckets = new HashMap<>();
     private final ClientAddresses addresses;
@@ -82,7 +94,8 @@ public class ProcessRateLimits {
             }
             buckets.put(process, new Buckets(bucket(limit.perUser(), period, nanoTime),
                 bucket(limit.perAddress(), period, nanoTime), bucket(limit.perInstance(), period, nanoTime),
-                bucket(limit.perTenant(), period, nanoTime), bucket(limit.perVisitor(), period, nanoTime)));
+                bucket(limit.perTenant(), period, nanoTime), bucket(limit.perVisitor(), period, nanoTime),
+                bucket(limit.perHost(), period, nanoTime)));
         });
     }
 
@@ -139,24 +152,88 @@ public class ProcessRateLimits {
             counted.add(new Counted(limits.perVisitor(), Scope.VISITOR,
                 "visitor:" + tenant + "/" + Objects.requireNonNullElse(visitor, "none")));
         }
-        // Every bucket first: a request one of them refuses takes nothing from the others.
-        for (Counted bucket : counted) {
-            refuseUnless(bucket.limiter().peek(bucket.key()), process, bucket.scope());
+        take(process, limits, counted);
+    }
+
+    /**
+     * Counts a download of {@code request}'s actor from {@code host} ({@code FILE_FETCH}, decision D75): per actor,
+     * per host (lower case, as the link names it) and per instance, as {@code jabiz.process.rate-limits.FILE_FETCH}
+     * (or the platform's default) declares; {@link RateLimitedException} (429) beyond one of them.
+     */
+    public void checkFetch(RequestContext request, String host) {
+        checkFetch(request.actorId(), host);
+    }
+
+    /** As {@link #checkFetch(RequestContext, String)}, for {@code actorId} (an external job's requester). */
+    public void checkFetch(String actorId, String host) {
+        Buckets limits = buckets.get(FILE_FETCH);
+        if (limits == null) {
+            return;
         }
-        // Then the tokens; a bucket emptied meanwhile by a concurrent request still refuses.
-        for (Counted bucket : counted) {
-            refuseUnless(bucket.limiter().tryAcquire(bucket.key()), process, bucket.scope());
+        List<Counted> counted = new ArrayList<>(3);
+        if (limits.perUser() != null) {
+            counted.add(new Counted(limits.perUser(), Scope.USER,
+                "user:" + Objects.requireNonNullElse(actorId, "anonymous")));
+        }
+        if (limits.perHost() != null) {
+            counted.add(new Counted(limits.perHost(), Scope.HOST, "host:" + host));
+        }
+        if (limits.perInstance() != null) {
+            counted.add(new Counted(limits.perInstance(), Scope.INSTANCE, "instance"));
+        }
+        take(FILE_FETCH, limits, counted);
+    }
+
+    /**
+     * Counts one more hop of a download to {@code host} (a redirect, decision D75): the per-host bucket only, so that
+     * a redirect cannot reach a host past its limit.
+     */
+    public void checkFetchHost(String host) {
+        Buckets limits = buckets.get(FILE_FETCH);
+        if (limits == null || limits.perHost() == null) {
+            return;
+        }
+        take(FILE_FETCH, limits, List.of(new Counted(limits.perHost(), Scope.HOST, "host:" + host)));
+    }
+
+    /**
+     * Takes a token of every bucket of {@code counted}, or of none: a request one of them refuses takes nothing from
+     * the others. The buckets of a process are only used here, under its lock, so no concurrent request takes a token
+     * between the look and the take (17zt). The work under the lock is a few map lookups.
+     */
+    private void take(String process, Buckets limits, List<Counted> counted) {
+        TokenBucketLimiter.Decision refused = null;
+        Scope scope = null;
+        synchronized (limits) {
+            for (Counted bucket : counted) {
+                TokenBucketLimiter.Decision decision = bucket.limiter().peek(bucket.key());
+                if (!decision.allowed()) {
+                    refused = decision;
+                    scope = bucket.scope();
+                    break;
+                }
+            }
+            if (refused == null) {
+                for (Counted bucket : counted) {
+                    TokenBucketLimiter.Decision taken = bucket.limiter().tryAcquire(bucket.key());
+                    if (!taken.allowed()) {
+                        throw new IllegalStateException("A bucket of " + process + " refused after it was looked at");
+                    }
+                }
+            }
+        }
+        if (refused != null) {
+            refuse(refused, process, scope);
         }
     }
 
     private record Counted(TokenBucketLimiter limiter, Scope scope, String key) {}
 
-    private void refuseUnless(TokenBucketLimiter.Decision decision, String process, Scope scope) {
-        if (!decision.allowed()) {
-            observations.event(PlatformObservations.PROCESS_RATE_LIMITED,
-                KeyValues.of("process", process, "scope", scope.name().toLowerCase(Locale.ROOT)));
-            throw new RateLimitedException("Too many requests to run " + process + "; try again in "
-                + decision.retryAfterSeconds() + " seconds", decision.retryAfterSeconds());
-        }
+    /** Outside the lock: the observation is not the buckets' business. */
+    private void refuse(TokenBucketLimiter.Decision decision, String process, Scope scope) {
+        observations.event(PlatformObservations.PROCESS_RATE_LIMITED,
+            KeyValues.of("process", process, "scope", scope.name().toLowerCase(Locale.ROOT)));
+        throw new RateLimitedException("Too many requests to run " + process + "; try again in "
+            + decision.retryAfterSeconds() + " seconds", decision.retryAfterSeconds());
     }
 }

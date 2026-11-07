@@ -19,6 +19,7 @@ import com.jabiz.runtime.security.JwtService;
 import com.jabiz.runtime.task.MailMessage;
 import com.jabiz.runtime.task.NotificationSender;
 import com.jabiz.runtime.test.TestTokens;
+import com.jabiz.mail.MailTextRules;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -327,6 +328,35 @@ class MailTextIT extends SecurityItSupport {
             .value(status -> assertThat(status).isBetween(400, 499));
         assertThat(query("SELECT count(*) AS n FROM sys_mail_text_version WHERE template = 'it.reset'"
             + " AND locale = 'en'").getFirst().get("n")).isEqualTo(0L);
+    }
+
+    /**
+     * The longest texts MAIL_TEXT_SAVE accepts, of the characters that grow most in the JSON a change records
+     * (control characters, written as six-character escapes), can be proposed all the same (D72).
+     */
+    @Test
+    void theLongestTextsTheRulesAcceptCanBeProposed() {
+        String subject = filled("Confirm {userName} ", MailTextRules.DEFAULT_MAX_SUBJECT);
+        String body = filled("Dear {userName},\n\n[Confirm now]({baseUrl}/verify?token={verify})\n\n",
+            MailTextRules.DEFAULT_MAX_BODY);
+        String proposer = TestTokens.bearer(jwt, "it-text-long-proposer", ApprovalPermissions.CONTROL_PROPOSE,
+            MailPermissions.TEXT_WRITE);
+        String changeId = (String) output(run("CONTROL_CHANGE_PROPOSE", proposer, proposal("it.verify", subject,
+            body), 200)).get("changeId");
+        assertThat(query("SELECT length(change_values) AS n FROM sys_control_change_version WHERE change_id::text = ?"
+            + " LIMIT 1", changeId).getFirst().get("n")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.INTEGER)
+            .isGreaterThan(6 * MailTextRules.DEFAULT_MAX_BODY);
+        // One character more is the rules' refusal, not the record's.
+        assertThat(codes(run("CONTROL_CHANGE_PROPOSE", proposer, proposal("it.verify", subject, body + "\u0001"),
+            422))).containsExactly("MAIL_TEXT_TOO_LONG");
+        // The same body saves for an ordinary template.
+        assertThat(output(save("it.via", "en", filled("About {item} ", MailTextRules.DEFAULT_MAX_SUBJECT),
+            filled("About **{item}**.\n\n", MailTextRules.DEFAULT_MAX_BODY), null, 200))).containsEntry("kind", "CUSTOM");
+    }
+
+    /** {@code start} followed by control characters, {@code length} characters in all. */
+    private static String filled(String start, int length) {
+        return start + "\u0001".repeat(length - start.codePointCount(0, start.length()));
     }
 
     private static Map<String, Object> proposal(String template, String subject, String body) {

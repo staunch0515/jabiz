@@ -167,6 +167,25 @@ class ArchitectureTest {
         PlatformArchRules.noDirectNetworkAccess(BUSINESS).check(CLASSES);
     }
 
+    /** Business code fetches link images only through the platform's ways in, never the downloader itself (D75). */
+    @Test
+    void businessCodeDoesNotUseTheImageDownloader() {
+        PlatformArchRules.noRemoteImageInternals(BUSINESS).check(CLASSES);
+    }
+
+    /** The rule is not vacuous: a class holding the downloader fails it. */
+    @Test
+    void theDownloaderRuleCatchesItsUse() {
+        assertThat(PlatformArchRules.noRemoteImageInternals("com.jabiz.app..")
+            .evaluate(new ClassFileImporter().importClasses(DownloaderUser.class)).hasViolation()).isTrue();
+    }
+
+    /** A stand-in for business code that injects the downloader. */
+    static final class DownloaderUser {
+        @SuppressWarnings("unused")
+        private com.jabiz.runtime.file.RemoteImageService service;
+    }
+
     /** The rule is not vacuous: each way around the external services fails it. */
     @Test
     void theNetworkRuleCatchesEveryDirectClient() {

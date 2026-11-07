@@ -5163,3 +5163,56 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 | 17zq-2 | 测试：`FileUploadIT` 断言索引存在（`pg_indexes`）、按上传者的计数与求和正确，关闭顺序扫描时用量查询与"按上传者、按时间倒序"的列表查询的计划都用该索引（后者不排序）；设计 14 §2 |
 
 **17zq 状态**：📝 待评审（分支 `1.3/phase-17zq-file-uploader-index`）。
+
+### 17zr 服务器下载链接中的图片（2026-11-07，QuizBuks 首次上线 P6 / F-C6；决策 D75）
+
+**缘由**：商家导入内容时给出插图的链接，确认页逐张列出能否使用，能用的由服务器取来、成为商家上传的文件；批量生成内容的外部作业也要按链接取图。业务代码不能自己联网（D38），
+`ExternalService` 只通向声明的白名单主机，而按用户给出的地址由服务器发请求是 SSRF 的典型入口（本机、内网、云的元数据服务）。评审否决了在业务流程事务中下载的第一版（占连接池与锁）。
+
+| # | 内容 |
+|---|---|
+| 17zr-1 | core：`PublicAddresses.isPublic(InetAddress)`（纯计算：IPv4 排除 IANA 特殊用途段，IPv6 只承认 2000::/3 并排除 2001::/23、2001:db8::/32、3fff::/20，映射 / 兼容 / 6to4 / NAT64 按所含 IPv4 判断）；`RemoteImageLink`（只有 https、无用户信息、允许的端口、常规写法的主机，国际化域名转 ASCII，`shown()` 去掉查询）；`RemoteImages`（作业处理器的同步下载接口与 `Refused`）；注解 `@MaskedLink`；错误码 `FILE_FETCH_NOT_HTTPS` / `_LINK_INVALID` / `_ADDRESS_NOT_PUBLIC` / `_TOO_MANY_REDIRECTS` / `_TOO_LARGE` / `_NOT_IMAGE` / `_TIMEOUT` / `_FAILED`（`reason`），三语 |
+| 17zr-2 | runtime：`POST /api/files/fetch?policy=…`（`FileController`，正文 `{url}`，201 `FileInfo`）与 `RemoteImageService`：上传权限、策略接受图片、链接、限流、每人与本实例的同时下载名额，在事务之外下载（`RemoteImageFetcher`：每跳解析一次、全部地址须公网、连接已解析的地址并以主机名做 SNI 与证书校验、客户端解析器只接受已检查的地址、手动跟随至多 `max-redirects` 次重定向并逐跳重新检查与计入其主机的限流、固定请求头、不复用不重试不经代理、响应头上限、超时与整体时限、边收边计数、被包装的网络错误也只给 `reason`），再经 `FileUploadService.storeFetched`（只收图片）与上传的同一登记 `FILE_REGISTER` |
+| 17zr-3 | 外部作业：`ExternalJobContext.remoteImages().fetch(url, maxBytes)`（执行器的虚拟线程上阻塞、不占连接，按请求人限流，等名额至时限；在非阻塞线程上即拒绝），处理器以输出文件返回，D50 的流水线登记 |
+| 17zr-4 | 配置 `jabiz.files.fetch.max-redirects`（3）/ `connect-timeout`（5 s）/ `read-timeout`（20 s）/ `deadline`（60 s）/ `allowed-ports`（443）/ `max-concurrent`（16，超过 503 `PROCESS_BUSY`）/ `max-concurrent-per-user`（2，超过 429），启动检查 `RemoteFetchChecks`（`FILE`）；测试接缝 `RemoteFetchNetwork`（只由测试配置以 `@Primary` 替换） |
+| 17zr-5 | 限流：`jabiz.process.rate-limits.FILE_FETCH`（限流键，不是流程）新增 `per-host`（只用于它），`ProcessRateLimits.checkFetch` / `checkFetchHost` 按人、主机（每一跳）、实例计数，平台缺省 30 / 60 / 300 每分钟；`ProcessAdmissionChecks` 相应检查 |
+| 17zr-6 | 记录与观测：链接不进 `FILE_REGISTER` 的记录；`SensitiveDataMasker` 按 `@MaskedLink` 的名字把流程输入中的链接写成 `https://主机/路径?…`；观测 `jabiz.file.fetch` 只带 `outcome` |
+| 17zr-7 | 前端：OpenAPI 快照与生成的类型；`@jabiz/client` 的 `fetchFileFromLink(policy, url)`（与 `uploadFile` 同处）及其测试。示范：没有专门的示范流程，`RemoteImageFetchIT` 以商品图（取得文件再经数据视图写进 `imageFileId`）与测试中的外部作业示范两个入口 |
+| 17zr-8 | 测试：core `PublicAddressesTest`、`RemoteImageLinkTest`；runtime `RemoteImageFetcherTest`、`RemoteFetchChecksTest`、`ProcessRateLimitsTest`、`ProcessAdmissionChecksTest`、`SensitiveDataMaskerTest`；app `RemoteImageFetchIT`（测试夹具 `HttpsStubServer`：本机 HTTPS 桩服务，`keytool` 现场生成证书；成功路径与 EXIF/GPS 去除、http 与端口、私网 / 元数据 / 各种写法的地址、重定向到私网 / http / 其他端口 / 过多、重定向计入其主机的限流、DNS 重绑定（第二次解析到私网时未连接私网桩）、证书主机名、非图片、超大（有无长度、分块、到连接关闭）、超时与整体时限、请求头、权限、按主机限流、每人 429 与本实例 503、下载期间连接池没有多借连接、观测标签、记录中没有链接、外部作业的下载与登记、示范的商品图）；前端 `files.test.ts`；设计 14 §12、06 §2.3、10 §15.10、13、决策 D75、根 `CLAUDE.md` |
+
+**17zr 状态**：✅ 已合并（#490）。
+
+### 17zs 管理员手动补跑定时任务（2026-11-07，QuizBuks 首次上线；决策 D77）
+
+**缘由**：定时任务只在 cron 的时刻运行（D14）：停机期间错过的时刻不补跑，单流程任务失败的时刻就此错过，逐项任务失败的项要等下一次运行（D42）。QuizBuks 首次上线时运维要在修好数据或外部服务恢复后让某个过去的计划时刻再跑一次，只能改 cron 或重启。
+
+| # | 内容 |
+|---|---|
+| 17zs-1 | 接口 `POST /api/jobs/{job}/runs`（正文 `{scheduledTime, reason}`，可带 `Idempotency-Key`）答复 202 `JobRunAccepted {requestSeqId, job, scheduledTime, replayed}`；平台流程 `JOB_RUN_REQUEST`（版本 1，`entryOnly()`，权限 `job.run`，`requiresMfa(ADMINISTRATION)`，原因必填至多 2 000 字符）：时刻须是该任务 cron（调度所用的同一 `CronExpression` 与时区）的真实时刻（422 `JOB_RUN_NOT_SCHEDULED`）、不晚于当前时钟（422 `JOB_RUN_NOT_DUE`）、不早于 `jabiz.jobs.manual-run.max-age`（缺省 `P90D`，422 `JOB_RUN_TOO_OLD`）；未知任务 404；错误码三语（`JobRunProcesses`、`JobRunRequests`、`JobPermissions`） |
+| 17zs-2 | 执行：入口按流程接口的顺序检查权限、输入、二次验证、职责分离，再取该任务的 ShedLock 集群锁（被持有即 409 `JOB_BUSY`，`JobBusyException`），然后运行 `JOB_RUN_REQUEST`；提交后在虚拟线程上以 `JobRunner.executeRequested` 在该锁下运行、结束即释放（`tryLock` 不保留 `lock-at-least-for`）；时刻在取锁之前先检查；锁之后的失败与客户端断开释放锁；同一调用者与 `Idempotency-Key` 已有的请求不取锁即重放，不再开始运行。幂等键与计划运行相同：已提交的单流程任务 `REPLAYED`，逐项任务已成功的项 `REPLAYED`、其余照常执行，补跑不按退避滤掉；每项仍以系统身份运行 |
+| 17zs-3 | 迁移 `V63__job_manual_runs.sql`：`sys_job_run` 只加列 `requested_by`、`request_seq_id`（指向 `op_process`），计划运行为空（D58） |
+| 17zs-4 | `GET /api/jobs` 改为有类型的答复（`JobView` / `JobRunView` / `ItemCountsView` / `FailingItemView`，原有字段不变）：运行加 `requestedBy`、`requestSeqId`，任务加 `running`（锁被持有）与 `rerunTimes`（最近 20 个计划时刻与最近运行的时刻，限于最长期限） |
+| 17zs-5 | `job.run` 加入受保护权限的缺省清单（`ProtectedPermissions.DEFAULT`，D48）：授予须另一位管理员审批 |
+| 17zs-6 | 通用管理系统的"定时任务"页 `/jobs`（菜单需 `job.read`）：任务、种类、计划与下次时刻、最近运行（结果、项数、发起人）、运行记录与连续失败的项（侧栏）；持有 `job.run` 时"补跑"对话框（从 `rerunTimes` 选时刻，先选最近一次未全部成功的，填写原因），按请求轮询（`GET /api/jobs/{job}/runs?requestSeqId=`），结束后提示结果，超过 5 分钟停止并提示稍后查看；错误照常提示（二次验证由客户端加强验证）；三语，`@jabiz/ui` 组件 |
+| 17zs-7 | 测试：`JobRunRequestIT`（7 例：按请求找到较早时刻的补跑、逐项任务只重跑未成功的项且不受退避限制、单流程任务重放与补跑错过的时刻、同一请求键不再运行、422 三种、404 / 400 / 403 / `MFA_REQUIRED` / 401、409 `JOB_BUSY`、操作记录与原因、`requested_by`、不对只追加表 UPDATE / DELETE）、`ProtectedGrantIT`（`job.run` 待审批后生效）、`JobRunProcessesTest`（2 例：可补跑的时刻与提供的时刻）、`JobsPage.test.tsx`（6 例，含等待超时，含 axe 亮暗）；OpenAPI 快照与生成的类型；设计 11 §4.2、10 §5 与 §16.1、决策 D77、根 `CLAUDE.md`、`docs/guide/platform-features.md` |
+
+**验收**：管理员选一个过去的计划时刻并填写原因即可补跑，已成功的部分不重复，只运行未成功的部分；不是计划时刻、未到、过旧、任务忙、无权限或无近期二次验证一律拒绝且不运行；
+请求是带原因的操作，执行记录写明请求人；授予 `job.run` 须另一位管理员审批；页面三语、亮暗通过 axe。
+
+**17zs 状态**：📝 待评审（分支 `1.3/phase-17zs-manual-job-runs`）。
+
+### 17zt 平台小修：连接、受控变更的值上限、限流的原子性（2026-11-07，QuizBuks 首次上线）
+
+**缘由**：17zr 的 `RemoteImageFetchIT` 在任何下载开始前就看到连接池中有一个连接被借出，测试只好与基线比较；D72 的剩余风险写着接近正文上限、大量需要转义的邮件正文可能提不上受控变更；
+`ProcessRateLimits` 先看全部桶再逐个取令牌，两步之间没有原子性。
+
+| # | 内容 |
+|---|---|
+| 17zt-1 | 查明被借出的连接：是 `DictionaryChangeListener` 为 `LISTEN jabiz_dict_changed` 一直占用的连接（02 §5，设计如此），不是泄漏：`pg_stat_activity` 中该会话最后的语句即 `LISTEN`，关掉监听（`jabiz.dictionary.listen.enabled=false`）后借出数为 0。`RemoteImageFetchIT` 改为断言恰好这一个（监听在运行、借出数 = 1），下载期间不变 |
+| 17zt-2 | 受控变更的值：上限的标题（300）与正文（20 000）全用控制字符时，写成 JSON（每个转义为 6 个字符）约 12 万字符，原先 400 `TOO_LONG`（列 `varchar(30000)`）。迁移 `V64__control_change_values_text.sql` 把 `change_values` 改为 `text`（文本改长度不改变封存的摘要，D58；不重写行），字段不限长；各目标以 `ControlTarget.maxValuesLength()` 给出值的上限（缺省 30 000，超过即 422 `TOO_LONG`），`MailText` 取配置的标题与正文上限之和的 6 倍另加 1 000：凡 `MAIL_TEXT_SAVE` 接受的文字都能提出。D72 的剩余风险与 18 §3.5、§5.6 随之更新 |
+| 17zt-3 | 限流的原子性：一个请求的全部桶（按人、地址、实例、租户、访客、主机）在该流程（或 `FILE_FETCH`）的一把锁下先看后取，全取或全不取；`Retry-After` 仍取第一个拒绝的桶，观测在锁外记录。此前并发时被拒的请求会已取走前面桶的令牌（单个桶本身不会超限）。10 §15 随之更新。登录类接口的 `SignInRateLimits`（D47）有同样的空隙（被拒的登录耗掉其他桶的令牌，使正当用户多被拒绝）：改为每种请求一把锁下先看后取，`Retry-After` 仍取拒绝的桶中最长的，口令哈希的并发上限不变；10 §4.1 随之更新 |
+| 17zt-4 | 测试：`RemoteImageFetchIT`（断言已知的唯一持有者）；`MailTextIT.theLongestTextsTheRulesAcceptCanBeProposed`（上限的控制字符标题与正文可以提出，记下的值超过 12 万字符；多一个字符是规则的 `MAIL_TEXT_TOO_LONG`；同样长度的文字经 `MAIL_TEXT_SAVE` 存入；修改前 400 `TOO_LONG`）、`MailTextControlTargetTest`（2 例：缺省与放大的上限都容得下最坏的 JSON；其他字符转义后不超过 6 个）；`ProcessRateLimitsTest.requestsAtOnceTakeAllTheirBucketsOrNone`（4 000 个操作人、16 个线程、每人 1、每实例 1 000：恰好放行 1 000，被拒者再请求时由实例而不是本人的桶拒绝；修改前 4 次运行 4 次失败）；`SignInRateLimitsTest.requestsAtOnceTakeAllTheirBucketsOrNone`（同一地址与名字 4 000 个并发的登录、名字的突发 1 000、地址的突发 4 000：恰好放行 1 000，地址余下的 3 000 个令牌另一名字全部可用；修改前 4 次运行 4 次失败） |
+
+**验收**：空闲时被借出的连接有明确的持有者且测试断言之；任何经 `MAIL_TEXT_SAVE` 能存的文字都能作为受控变更提出；并发的请求（流程接口与登录类接口）不会让被拒的请求消耗其他桶的令牌，放行数不超过限额。
+
+**17zt 状态**：📝 待评审（分支 `1.3/phase-17zt-pool-and-limits`）。
