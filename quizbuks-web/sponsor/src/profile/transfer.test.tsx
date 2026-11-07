@@ -7,6 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import '../messages'
 import type { MySponsorPage } from '../page/api'
 import type { MyProduct } from '../products/api'
+import { PRODUCT_LIMIT_QUERY, PRODUCTS_QUERY } from '../products/ProductsPage'
 import type { Sponsor } from '../qb/api'
 import { ProfileTransferCard } from './ProfileTransfer'
 import { exportProfile, keepApplyDraft, packageFileName, takeApplyDraft, type ImportPlan } from './transfer'
@@ -98,8 +99,7 @@ function server(importAnswer: { status: number; body: unknown } = { status: 200,
   return { posted, uploads }
 }
 
-function renderCard() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderCard(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(<QueryClientProvider client={client}><ProfileTransferCard /></QueryClientProvider>)
 }
 
@@ -118,7 +118,11 @@ afterEach(() => vi.restoreAllMocks())
 describe('importing a profile package', () => {
   it('shows the server\'s plan, asks for the mail password, uploads the images, then imports', async () => {
     const { posted, uploads } = server()
-    renderCard()
+    // F-C11 (the products moved to the asset library's tab, F-C1c): what the tab shows is read again after an import.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(PRODUCTS_QUERY, [])
+    client.setQueryData(PRODUCT_LIMIT_QUERY, 50)
+    renderCard(client)
     await userEvent.upload(screen.getByTestId('profile-import-file'), FILE)
     const dialog = await screen.findByTestId('profile-import-dialog')
     await within(dialog).findByTestId('profile-import-plan')
@@ -143,6 +147,8 @@ describe('importing a profile package', () => {
     expect(uploads).toEqual(['qb.sponsor-avatar'])
     const imported = posted.find((p) => p.path.endsWith('QB_PROFILE_IMPORT/latest'))!.body as Record<string, unknown>
     expect(imported).toMatchObject({ files: { 'basics.avatar': 'up-1' }, mailPassword: 'secret' })
+    expect(client.getQueryState(PRODUCTS_QUERY)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(PRODUCT_LIMIT_QUERY)?.isInvalidated).toBe(true)
   })
 
   it('lists the server\'s reasons when the import is refused', async () => {

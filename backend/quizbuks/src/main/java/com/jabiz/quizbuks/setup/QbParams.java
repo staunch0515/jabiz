@@ -226,6 +226,8 @@ public final class QbParams {
     public static final String USAGE_FREE_BYTES = "qb.usage.storage.free-bytes";
     /** F-C2: how many days the daily usage snapshots are kept (not controlled). */
     public static final String USAGE_RETENTION_DAYS = "qb.usage.retention-days";
+    /** F-C11: the most products one sponsor has (not controlled: no money, no review); the profile package's too. */
+    public static final String PRODUCTS_MAX = "qb.products.max";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -550,6 +552,9 @@ public final class QbParams {
             "The storage a sponsor uses free of charge, in bytes (only noticed in the first launch, never refused)"),
         new Param(USAGE_RETENTION_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0), "800",
             "How many days the daily usage snapshots are kept"),
+        // F-C11: the products' limit (ordinary; last after F-C2, so that the setup's earlier keys stay as they were).
+        new Param(PRODUCTS_MAX, Map.of("type", "numeric", "precision", 6, "scale", 0), "50",
+            "The most products one sponsor has, on the products page and in a profile package"),
         // F-S11: foreign videos and mainland China (the controlled one last, in the order of CONTROLLED).
         new Param(REGION_UNKNOWN_IP_COUNTRY, Map.of("type", "text", "maxLength", 2), "CN",
             "The country a request whose address the address database does not know counts as for foreign videos "

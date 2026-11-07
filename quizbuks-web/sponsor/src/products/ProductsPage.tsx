@@ -27,6 +27,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Plus } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { neutralName } from '../content/api'
 import { TextTranslationsFields, type TextsByLanguage } from '../content/TextTranslationsFields'
@@ -41,12 +42,12 @@ import { formatPrice } from '../qb/products'
 import { fieldProblem, generalProblem } from '../qb/problems'
 import {
   deleteProduct,
-  MAX_PRODUCTS,
   PRODUCT_CODE_LENGTH,
   PRODUCT_CURRENCIES,
   PRODUCT_DESCRIPTION_LENGTH,
   PRODUCT_NAME_LENGTH,
   readMyProducts,
+  readProductLimit,
   saveProduct,
   SHOP_URL_LENGTH,
   type MyProduct,
@@ -56,10 +57,17 @@ import {
 /** F-C1c: the products are a tab of the asset library. */
 export const PRODUCTS_PATH = PRODUCTS_TAB_PATH
 export const PRODUCTS_QUERY = ['qb', 'my-products'] as const
+/** F-C11: the products' limit (`qb.products.max`), read from the server. */
+export const PRODUCT_LIMIT_QUERY = ['qb', 'product-limit'] as const
 
 const FIELDS = ['name', 'description', 'image', 'price', 'currency', 'shopUrl', 'code', 'baseRevision'] as const
 const IMAGE_TYPES = 'image/jpeg,image/png'
 const IMAGE_BYTES = 5 * 1024 * 1024
+
+/** The page's introduction, with the limit when the server gave one. */
+function introOf(t: TFunction, max: number | null): string {
+  return max == null ? t('products.introAny') : t('products.intro', { max })
+}
 
 /** What a product's form starts from: the product, or a new one in the reader's likely currency. */
 function inputOf(product: MyProduct | null): ProductInput {
@@ -88,6 +96,10 @@ export function ProductsPage() {
   const { t: tQb } = useTranslation(QB)
   const queryClient = useQueryClient()
   const products = useQuery({ queryKey: PRODUCTS_QUERY, queryFn: readMyProducts })
+  // F-C11: the limit as the save reads it; unknown (not set, or not read), the page sets none and the save decides.
+  const limit = useQuery({ queryKey: PRODUCT_LIMIT_QUERY, queryFn: readProductLimit })
+  const max = limit.data ?? null
+  const full = max != null && (products.data ?? []).length >= max
   const [editing, setEditing] = useState<MyProduct | 'new' | null>(null)
   const refresh = () => queryClient.invalidateQueries({ queryKey: PRODUCTS_QUERY })
   const remove = useMutation({
@@ -115,18 +127,18 @@ export function ProductsPage() {
     <section className="flex max-w-3xl flex-col gap-6" aria-labelledby="products-title" data-testid="products">
       <div className="flex flex-col gap-2">
         <h2 id="products-title" className="text-xl font-semibold">{t('products.title')}</h2>
-        <p className="text-muted-foreground text-sm">{t('products.intro', { max: MAX_PRODUCTS })}</p>
+        <p className="text-muted-foreground text-sm" data-testid="products-intro">{introOf(t, max)}</p>
       </div>
       {products.isPending && <PageState kind="loading" />}
       {products.isError && <PageState kind="error" description={tQb('failed')} />}
       {products.isSuccess && (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={list.length >= MAX_PRODUCTS} data-testid="product-add" onClick={() => setEditing('new')}>
+            <Button disabled={full} data-testid="product-add" onClick={() => setEditing('new')}>
               <Plus aria-hidden />{t('products.add')}
             </Button>
-            {list.length >= MAX_PRODUCTS && (
-              <span className="text-muted-foreground text-sm">{t('products.full', { max: MAX_PRODUCTS })}</span>
+            {full && (
+              <span className="text-muted-foreground text-sm" data-testid="products-full">{t('products.full', { max })}</span>
             )}
           </div>
           {(remove.error || move.error) && (
@@ -194,7 +206,7 @@ export function ProductsPage() {
       )}
       {editing && (
         <ProductDialog key={editing === 'new' ? 'new' : editing.productId}
-          product={editing === 'new' ? null : editing} seq={Math.max(-1, ...list.map((p) => p.seq)) + 1}
+          product={editing === 'new' ? null : editing} seq={Math.max(-1, ...list.map((p) => p.seq)) + 1} max={max}
           onClose={() => setEditing(null)} onSaved={async () => {
             setEditing(null)
             notify.success(t('products.saved'))
@@ -205,10 +217,12 @@ export function ProductsPage() {
   )
 }
 
-function ProductDialog({ product, seq, onClose, onSaved }: {
+function ProductDialog({ product, seq, max, onClose, onSaved }: {
   product: MyProduct | null
   /** A new product's place: last. */
   seq: number
+  /** The products' limit from the server; null when unknown. */
+  max: number | null
   onClose: () => void
   onSaved: () => void
 }) {
@@ -249,7 +263,7 @@ function ProductDialog({ product, seq, onClose, onSaved }: {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" data-testid="product-dialog">
         <DialogHeader>
           <DialogTitle>{product ? t('products.dialogEdit') : t('products.dialogNew')}</DialogTitle>
-          <DialogDescription>{t('products.intro', { max: MAX_PRODUCTS })}</DialogDescription>
+          <DialogDescription>{introOf(t, max)}</DialogDescription>
         </DialogHeader>
         <form id={`${id}-form`} noValidate onSubmit={submit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">

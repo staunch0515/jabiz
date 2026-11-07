@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.page;
 
 import com.jabiz.entity.Violation;
+import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessDefinitionBuilder;
@@ -16,12 +17,14 @@ import com.jabiz.quizbuks.identity.AccountCodes;
 import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.operator.OperatorChecks;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.file.FileEntities;
 import com.jabiz.runtime.file.FileProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import com.jabiz.runtime.publicread.FileAccess;
@@ -45,8 +48,8 @@ import java.util.UUID;
 /**
  * A sponsor's products and the quizzes that show them (docs/quizbuks/plans/Q60-sponsor-page.md, Q60b):
  * <ul>
- *   <li>{@value #SAVE} / {@value #DELETE}: the sponsor writes their products (at most
- *       {@value QbSponsorProducts#MAX_PRODUCTS}); a change shows at once, no review (the page's first publication was
+ *   <li>{@value #SAVE} / {@value #DELETE}: the sponsor writes their products (at most the parameter
+ *       {@value QbParams#PRODUCTS_MAX}, F-C11); a change shows at once, no review (the page's first publication was
  *       reviewed); a product taken down stays hidden whatever the sponsor saves;</li>
  *   <li>{@value #QUIZ_PRODUCTS_SET}: the products a quiz shows (at most {@value QbSponsorProducts#MAX_QUIZ_PRODUCTS})
  *       and one a question shows, by its number; not part of the quiz's versions, so it applies at once;</li>
@@ -123,6 +126,7 @@ public final class SponsorProductProcesses {
     static final String LINKS = "links";
     static final String RELEASED = "released";
     static final String OFFLINE = "offlineImage";
+    static final String PARAMS = "params";
 
     // ---- save and delete -------------------------------------------------------------------------------------------
 
@@ -143,6 +147,8 @@ public final class SponsorProductProcesses {
                     return EntityQuery.builder().where(new QueryPredicate.In(FileEntities.FILE_ID,
                         image == null ? List.of() : List.of(image))).limit(1).build();
                 }, FILES)));
+            pb.step("Load the products' limit", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+                QbParams.PRODUCTS_MAX));
             pb.compute("Write the product", (metadata, ctx) -> saved(ctx));
             pb.step("Save", SaveChanges.now());
             pb.step("Release the replaced image", CallProcess.<ProcessContext>when(
@@ -160,9 +166,10 @@ public final class SponsorProductProcesses {
             product = products.stream().filter(row -> same(row.id(), input.productId())).findFirst()
                 .orElseThrow(() -> new EntityNotFoundException(QbSponsorProducts.PRODUCT + " " + input.productId()));
             AccountEditing.current(ctx, product, input.baseRevision(), SponsorPageCodes.PRODUCT_CHANGED);
-        } else if (products.size() >= QbSponsorProducts.MAX_PRODUCTS) {
-            ctx.reject(new Violation(null, SponsorPageCodes.PRODUCT_LIMIT, "A sponsor has at most "
-                + QbSponsorProducts.MAX_PRODUCTS + " products", Map.of("max", QbSponsorProducts.MAX_PRODUCTS)));
+        } else if (products.size() >= maxProducts(ctx.get(PARAMS, ParamValues.class))) {
+            int max = maxProducts(ctx.get(PARAMS, ParamValues.class));
+            ctx.reject(new Violation(null, SponsorPageCodes.PRODUCT_LIMIT, "A sponsor has at most " + max
+                + " products", Map.of("max", max)));
         }
         BigDecimal price = input.price();
         if (price.signum() < 0 || price.stripTrailingZeros().scale() > QbSponsorProducts.scaleOf(input.currency())
@@ -510,9 +517,21 @@ public final class SponsorProductProcesses {
             ctx -> ctx.contains(OFFLINE) ? List.of(ctx.get(OFFLINE, UUID.class)) : List.of()));
     }
 
+    /**
+     * The most products a sponsor has (F-C11): the parameter {@value QbParams#PRODUCTS_MAX} as read at the time, its
+     * declared value before setup.
+     */
+    public static int maxProducts(ParamValues params) {
+        return QbParams.limit(params, QbParams.PRODUCTS_MAX);
+    }
+
+    /**
+     * All the sponsor's products: not cut at the limit, which bounds only new ones (a sponsor above a lowered limit
+     * still changes and deletes each of theirs).
+     */
     private static EntityQuery ofUser(String userId) {
         return EntityQuery.builder().where(new QueryPredicate.In("userId", userId == null ? List.of()
-            : List.of(userId))).limit(QbSponsorProducts.MAX_PRODUCTS + 1).build();
+            : List.of(userId))).limit(Integer.MAX_VALUE).build();
     }
 
     /** The product of the id, the caller's own only when {@code userId} is given. */
