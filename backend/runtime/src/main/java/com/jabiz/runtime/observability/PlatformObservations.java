@@ -61,6 +61,11 @@ public class PlatformObservations {
     public static final String PUBLIC_COUNTER_FLUSH = "jabiz.public.counter.flush";
     /** A sign-in guard refused a session at a refresh, which ended it (decision D36 item 6). */
     public static final String AUTH_REFRESH_REFUSED = "jabiz.auth.refresh.refused";
+    /**
+     * A consumed refresh token was presented again (decision D73): tag {@code result} is {@code granted} (within the
+     * reuse grace, a sibling was issued) or {@code revoked} (the session ended). Never the user or the session.
+     */
+    public static final String AUTH_REFRESH_REUSE = "jabiz.auth.refresh.reuse";
     public static final String DOCUMENT_RENDER = "jabiz.document.render";
     public static final String WEBHOOK = "jabiz.webhook.delivery";
     /** A call to a declared external service (decision D38); tagged with the service and its outcome only. */

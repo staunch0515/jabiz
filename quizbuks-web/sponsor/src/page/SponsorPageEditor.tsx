@@ -47,6 +47,7 @@ import {
   type MySponsorPage,
   type SponsorPageInput,
 } from './api'
+import { addressInHandle } from './handle'
 import { SPONSOR_PAGE } from './ids'
 import { useMySponsor } from '../profile/api'
 import { profilePath } from '../profile/paths'
@@ -218,6 +219,14 @@ function PageForm({ page, done, setDone }: {
   // Q73c: the languages' and translations' problems show at their fields.
   const general = generalProblem(error, [...FIELDS, 'languages', ...others.map((l) => `translations.${l}.headline`)])
   const link = sponsorPageLink(form.handle.trim().toLowerCase() || 'your-name')
+  // F-F9 (T10): an address typed as the link name; the person applies the name it suggests with one click.
+  const address = addressInHandle(form.handle)
+  const moves = !!address && !form.website?.trim()
+  const applyAddress = () => {
+    if (!address) return
+    setForm((current) => ({ ...current, handle: address.handle ?? '',
+      website: current.website?.trim() ? current.website : address.website }))
+  }
   const canSubmit = !!page && (status === 'DRAFT' || status === 'REJECTED' || status === 'TAKEN_DOWN')
   const canUnpublish = status === 'PUBLISHED' || status === 'PENDING'
 
@@ -304,13 +313,37 @@ function PageForm({ page, done, setDone }: {
         <CardContent className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor={`${id}-handle`}>{t('page.handle')}</Label>
-          <Input id={`${id}-handle`} value={form.handle} required maxLength={HANDLE_LENGTH} autoCapitalize="none"
-            spellCheck={false} aria-invalid={invalid('handle')}
-            aria-describedby={describedBy('handle', `${id}-handle-hint`)} data-testid="sponsor-page-handle"
+          {/* A pasted address is kept whole (not cut at the name's length) so that F-F9 can read its domain. */}
+          <Input id={`${id}-handle`} value={form.handle} required maxLength={address ? WEBSITE_LENGTH : HANDLE_LENGTH}
+            autoCapitalize="none" spellCheck={false} aria-invalid={invalid('handle')}
+            aria-describedby={describedBy('handle', address ? `${id}-handle-address` : `${id}-handle-hint`)}
+            data-testid="sponsor-page-handle"
+            onPaste={(event) => {
+              // The browser would cut a pasted address at the name's length before the editor sees it.
+              const pasted = event.clipboardData.getData('text')
+              if (addressInHandle(pasted)) {
+                event.preventDefault()
+                set('handle', pasted.trim())
+              }
+            }}
             onChange={(event) => set('handle', event.target.value)} />
-          <p id={`${id}-handle-hint`} className="text-muted-foreground text-sm break-all">
-            {t('page.handleHint', { link })}
-          </p>
+          {address ? (
+            <div id={`${id}-handle-address`} className="flex flex-col items-start gap-2" data-testid="sponsor-page-handle-address">
+              <p className="text-sm">{t('page.handleIsAddress')}</p>
+              {(address.handle || moves) && (
+                <Button type="button" size="sm" variant="outline" onClick={applyAddress}
+                  data-testid="sponsor-page-handle-suggest">
+                  {address.handle
+                    ? t(moves ? 'page.handleSuggestMove' : 'page.handleSuggest', { handle: address.handle })
+                    : t('page.handleMove')}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <p id={`${id}-handle-hint`} className="text-muted-foreground text-sm break-all">
+              {t('page.handleHint', { link })}
+            </p>
+          )}
           {errorOf('handle')}
         </div>
         <div className="flex flex-col gap-2">
