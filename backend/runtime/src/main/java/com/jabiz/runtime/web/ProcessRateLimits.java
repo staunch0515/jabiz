@@ -34,7 +34,8 @@ import java.util.function.LongSupplier;
  * stops one caller asking too much, the admission queue stops everyone crowding one lock.
  *
  * <p>Some platform processes have a limit unless configuration names one for them ({@link #PLATFORM_DEFAULTS}): a
- * test mail of the mail texts ({@code MAIL_TEXT_TEST_SEND}, decision D72) at most 10 an hour per person.
+ * test mail of the mail texts or layout ({@code MAIL_TEXT_TEST_SEND}, {@code MAIL_LAYOUT_TEST_SEND}, decision D72) at
+ * most 10 an hour per person each.
  */
 @Component
 public class ProcessRateLimits {
@@ -44,7 +45,8 @@ public class ProcessRateLimits {
      * replaces them as a whole.
      */
     public static final Map<String, ProcessRateLimitProperties.Limit> PLATFORM_DEFAULTS = Map.of(
-        "MAIL_TEXT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)));
+        "MAIL_TEXT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)),
+        "MAIL_LAYOUT_TEST_SEND", new ProcessRateLimitProperties.Limit(10, null, null, Duration.ofHours(1)));
 
     /** Keys kept per bucket; the least recently used are forgotten first. */
     static final int MAX_KEYS = 100_000;

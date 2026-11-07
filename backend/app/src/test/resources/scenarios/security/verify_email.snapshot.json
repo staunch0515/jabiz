@@ -1,0 +1,34 @@
+{
+  "scenario" : "Verifying a user's address in replay",
+  "asOf" : "2026-05-01T01:00:00Z",
+  "entities" : {
+    "SecUser" : [ {
+      "userId" : "#uuid:1",
+      "userName" : "hana",
+      "displayName" : "Hana",
+      "tenantId" : null,
+      "enabled" : true,
+      "email" : "hana@example.com",
+      "locale" : null,
+      "verifiedEmail" : "hana@example.com",
+      "registeredEmail" : null,
+      "emailVerifiedAt" : "2026-05-01T01:00:00Z",
+      "erasedAt" : null,
+      "versionNo" : 2,
+      "effectStartTime" : "2026-05-01T01:00:00Z",
+      "createdTime" : "2026-05-01T01:00:00Z",
+      "processSeqId" : "#op:2"
+    } ],
+    "SecUserRole" : [ {
+      "userRoleId" : "#uuid:2",
+      "userId" : "#uuid:1",
+      "roleId" : "#uuid:3",
+      "dataFrom" : null,
+      "dataTo" : null,
+      "versionNo" : 1,
+      "effectStartTime" : "2026-05-01T00:00:00Z",
+      "createdTime" : "2026-05-01T00:00:00Z",
+      "processSeqId" : "#op:1"
+    } ]
+  }
+}

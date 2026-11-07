@@ -25,6 +25,14 @@
 
 :root {
   --radius: 0.625rem;
+  /*
+   * How wide a page's content grows at most (phase 17zj): lists and details, and forms (one column). Centred, so
+   * that on a wide screen a page's main button stays near its title. An application may override them.
+   */
+  --content-max: 85rem;
+  --content-form-max: 60rem;
+  /* The height of the bottom menu on narrow screens; the floating button and the page's end keep clear of it. */
+  --bottom-bar-height: 4rem;
   --background: #ffffff;
   --foreground: #0a0a0a;
   --card: #ffffff;

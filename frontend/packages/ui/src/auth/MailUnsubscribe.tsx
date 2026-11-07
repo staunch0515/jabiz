@@ -10,7 +10,7 @@ import { AUTH_NAMESPACE } from './messages'
 export type MailUnsubscribeState = 'working' | 'done' | 'invalid' | 'failed'
 
 export interface MailUnsubscribeProps {
-  /** The application's name, the page's heading; the page's title when absent. */
+  /** The application's name, the page's heading; the {@link EntryLayoutProvider}'s, else the page's title, when absent. */
   brand?: ReactNode
   /** Offers the appearance as well as the language (default true). */
   appearance?: boolean
@@ -54,7 +54,7 @@ export function MailUnsubscribe({ brand, appearance, search }: MailUnsubscribePr
 
   const ok = state === 'done'
   return (
-    <AuthFrame brand={brand ?? t('unsubscribe.title')} appearance={appearance} title={t('unsubscribe.title')}
+    <AuthFrame brand={brand} appearance={appearance} title={t('unsubscribe.title')}
       testId="mail-unsubscribe">
       <div aria-live="polite" aria-atomic="true" data-testid="unsubscribe-state" data-state={state}>
         {state === 'working' ? (

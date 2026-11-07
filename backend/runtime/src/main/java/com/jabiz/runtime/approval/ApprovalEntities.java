@@ -51,6 +51,8 @@ public class ApprovalEntities {
     static final String PARAM_TARGET = "SysParam";
     /** The texts of mail whose changes need approval ({@code MailText}, decision D72), named here likewise. */
     static final String MAIL_TEXT_TARGET = "MailText";
+    /** The mail layout ({@code MailLayout}, decision D72), whose changes always need approval, named here likewise. */
+    static final String MAIL_LAYOUT_TARGET = "MailLayout";
 
     /** Status of a request. SUPERSEDED: the content changed, a new request was made. */
     public static final String PENDING = "PENDING";
@@ -132,7 +134,8 @@ public class ApprovalEntities {
         eb.field("changeId", f -> f.physicalColumn("change_id").immutable(true).required(true).generated(true)
             .asSemanticIdentity("urn:jabiz:entity:platform:control-change"));
         eb.field("targetEntity", f -> f.physicalColumn("target_entity").immutable(true).required(true)
-            .asCode(CONTROL_TARGETS_DICTIONARY, RULE, LIMIT, SOD_RULE, PARAM_TARGET, MAIL_TEXT_TARGET));
+            .asCode(CONTROL_TARGETS_DICTIONARY, RULE, LIMIT, SOD_RULE, PARAM_TARGET, MAIL_TEXT_TARGET,
+                MAIL_LAYOUT_TARGET));
         eb.field("targetId", f -> f.physicalColumn("target_id").immutable(true).asText(36));
         eb.field("changeAction", f -> f.physicalColumn("change_action").immutable(true).required(true)
             .asCode(CHANGE_ACTIONS, ControlChanges.UPSERT, ControlChanges.DELETE));
@@ -175,8 +178,10 @@ public class ApprovalEntities {
         // How people know the document, for the approvers' tasks; requests made before it was kept have none.
         eb.field("reference", f -> f.physicalColumn("reference").immutable(true).asText(100));
         // The entry scope the request belongs to (decision D64): only its sessions, and those without one, see it.
-        eb.field("scopeName", f -> f.physicalColumn("scope_name").immutable(true).asText(64));
-        eb.field("scopeValue", f -> f.physicalColumn("scope_value").immutable(true).asText(128));
+        // Not immutable: APPROVAL_SCOPE_MOVE moves a pending request to another value (decision D76); every other
+        // change of either field is refused by ApprovalScopeGuard.
+        eb.field("scopeName", f -> f.physicalColumn("scope_name").asText(64));
+        eb.field("scopeValue", f -> f.physicalColumn("scope_value").asText(128));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("subject", "entityId", "reference", "status", "currentLevel", "preparerId", "effectStartTime")

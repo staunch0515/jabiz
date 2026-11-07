@@ -175,6 +175,7 @@ BCrypt 有意很慢（每次数十到数百毫秒 CPU）。登录洪峰时若不
 | 账本（科目数据视图；交易、分录数据视图；`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`；余额模板） | `ledger.account.read` / `.write`；`ledger.read`（写入只经流程）；`ledger.account.write` / `ledger.post` / `ledger.reverse`；`ledger.read`（11 §1） |
 | 审计视图 `GET /api/audit/operations` / 任务列表 `GET /api/jobs` | `audit.read` / `job.read`（11 §3、§4） |
 | 审批（`APPROVAL_DECIDE`；审批规则、限额、请求、判断、评估的数据视图；影响预览 `POST /api/approvals/preview`） | `approval.decide` + 当前层级的权限（受保护的变更改为 `security.protected-change.decide`，§16.1，D51）；`approval.read`（写入只经流程）；`approval.read`（18 §3） |
+| 审批移到另一个入口范围（子流程 `APPROVAL_SCOPE_MOVE`，`subProcessOnly()`） | 应用的改派流程的权限 + `approval.scope.move`（由步骤检查，18 §3.8，D76） |
 | 受控变更 `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_WITHDRAW` / `CONTROL_CHANGE_PUBLISH` | `control.propose` / `control.propose` / `control.publish`，且发布人不是提出人（18 §3.5） |
 | 职责分离规则的数据视图、冲突报告 `GET /api/sod/conflicts` | `sod.read`（18 §4） |
 | 我的待办 `GET /api/tasks/mine` / 待办与通知的数据视图 / `TASK_NOTIFY` | 只要求已认证（只列本人与本人所持权限的待办）/ `task.read`（写入只经流程）/ `task.notify`（由系统身份的事件消费者运行）（18 §5） |
@@ -505,6 +506,7 @@ eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
   审批请求、决定、评估与待办的数据视图以标记约束，`/api/tasks/mine` 与规则预览同样；决定（`APPROVAL_DECIDE`）、撤回与待办的处理对范围外的即 404。
   有范围的待办只通知看得到它的人（经没有范围的入口持有权限，或经该范围的入口、解析出的值相同）；通知记待办的范围，同样以标记约束（收件人自己的除外）。指派给本人的待办在任何会话都看得到。
   平台自己读一个审批对象的未结请求、按来源键关闭待办时不受调用者的范围限制（一个对象只有一个未结请求）；有范围的会话遇到别的范围的未结请求即 422 `APPROVAL_OTHER_SCOPE`。
+  对象改由另一个范围值负责时，未结的审批请求与其开放的待办只经子流程 `APPROVAL_SCOPE_MOVE` 移到新值（权限 `approval.scope.move`，18 §3.8，D76），决定与评估保留原范围。
 - **流程**：`RequireScope.of(名, ctx -> 值)` 核对流程所处理的对象在调用者的范围内（404）；没有范围的调用者通过。
 - **观测**：范围值是业务数据，不进观测标签与日志的结构化字段（D16）。
 
@@ -537,6 +539,8 @@ eb.field("bankAccount", f -> f.physicalColumn("bank_account").asText(34)
 
 一个平台上可以有几个前端（后台、应用的 App、商家后台），各自只接受部分角色；签发的令牌只含该入口所接受角色的权限，令牌泄露不会越出它所属的前端。
 自助注册、验证邮件与找回密码（D36 第 2、3、5 条，阶段 16b-2）见 §15.7。
+各前端的入口页（登录、注册、第二步、找回密码、第三方登录的回调、邮件链接页与退订页）都用 `@jabiz/ui` 的入口页模板 `EntryLayout`（12 §14，阶段 17zk）：
+模板只管排列（品牌、语言、左栏、提示、另一方入口、页脚链接），认证流程与接口不变；429 按 `Retry-After` 倒计时，第三方登录后的第二步在本标签页保留返回地址。
 
 ### 15.1 入口配置
 
@@ -1323,3 +1327,18 @@ class CustomerPersonalData implements PersonalDataEraser {
 - **前端**：`@jabiz/ui` 的 `AccountDeletion`（账户页：状态、提示、确认身份、申请与撤回）、`AccountDeletionRequest`（不装 App 的网页：填邮箱）与
   `MailLinkPage` 的 `account-deletion` 页（用链接，必要时先确认提示）；示范门户挂在账户页与 `/portal/auth/account-deletion`。
 
+
+## 18. 按客户端地址的国家【决策 D74，阶段 17zl】
+
+- **地址库**：`jabiz.geoip.database`（本机文件路径，CSV `first,last,country`，可为 `.gz`），`jabiz.geoip.required`（应用必须有时设为 `true`）、`jabiz.geoip.max-age`（缺省 `P45D`）。
+  `ClientCountries` 在启动时读入内存，文件修改后一分钟内在工作线程中重新读入；读不懂的新文件不替换旧的。启动检查 `GEOIP` 见 D74 第 5 条。
+- **地址**：照旧是 `ClientAddresses` 在可信代理（`jabiz.security.trusted-proxies`）之后解析出的客户端地址；不可信的连接写的 `X-Forwarded-For` 不起作用。只认地址字面量，从不解析主机名。
+- **流程中**：`.step("从哪里来", LoadClientCountry.into("country"))`，再在计算步骤中 `ctx.get("country", ClientCountry.class)`（`mainlandChina()`、`is("JP")`、`known()`）。
+  流程接口（`/api/processes/**`）把地址放进 Reactor 上下文（`ClientAddressContext`），不进 `RequestContext`、输入与记录；事件、定时任务、应用代理的流程得到未知。0 条新语句。
+- **接口** `GET /api/client/region`：匿名可用，`no-store`；回答 `country`（或空）、`mainlandChina`、`known`。地址本身不回显。
+- **测试**：`IpCountryDatabaseTest`（IPv4 与 IPv6、边界、映射的 IPv4、内网、名字、`.gz`、读不懂的文件）、`ClientCountriesTest`（未配置、必须有、读不了、过旧、更新后重新读入）、
+  `ClientCountryTest`、`ClientCountryIT`（可信代理之后、IPv6、香港不是大陆、不可信的连接写的头不起作用、未知、`no-store`、流程中读到国家、不发语句、`input_summary` 中没有地址）；
+  测试地址库 `app/src/test/resources/geoip/test-countries.csv` 以文档用的地址段（RFC 5737、RFC 3849）给出国家。
+- **运维**：地址库由部署放到服务器上并按月更新（例如 DB-IP 的 "IP to Country Lite" CSV：`https://db-ip.com/db/download/ip-to-country-lite`，CC BY 4.0，
+  须在网站上署名"IP Geolocation by DB-IP"）；替换文件即可（原子替换：先写临时文件再改名），一分钟内生效，日志写"Address database …: N ranges"。
+  过旧时启动检查告警；读不懂时保留旧库并记 WARN。应用的运维文档写明下载、更新的步骤与署名的位置。

@@ -139,10 +139,21 @@ public final class MailTextRules {
                 problems.add(secretPlacement(SUBJECT, name, "the subject"));
             }
         }
-        Body parsed = new Body(secrets, limits);
-        PARSER.parse(b).accept(parsed);
-        problems.addAll(parsed.problems.values());
+        problems.addAll(markdown(BODY, b, secrets, limits));
         return List.copyOf(problems);
+    }
+
+    /**
+     * The problems of a Markdown text other than a template's body (the footer of the mail layout,
+     * {@link MailLayoutRules}) by the rules of items 4 to 6: secrets only in site links, allowed links and hosts, no
+     * images, no raw HTML. Placeholders are not checked here.
+     *
+     * @param field the field of the violations
+     */
+    static List<Violation> markdown(String field, String markdown, Set<String> secrets, Limits limits) {
+        Body parsed = new Body(field, secrets, limits);
+        PARSER.parse(markdown == null ? "" : markdown).accept(parsed);
+        return List.copyOf(parsed.problems.values());
     }
 
     /** The problems as one line each, for the startup check and logs. */
@@ -233,11 +244,13 @@ public final class MailTextRules {
     /** Walks the parsed body; one problem per kind and detail. */
     private static final class Body extends AbstractVisitor {
 
+        private final String field;
         private final Set<String> secrets;
         private final Limits limits;
         private final Map<String, Violation> problems = new LinkedHashMap<>();
 
-        Body(Set<String> secrets, Limits limits) {
+        Body(String field, Set<String> secrets, Limits limits) {
+            this.field = field;
             this.secrets = secrets;
             this.limits = limits;
         }
@@ -257,7 +270,7 @@ public final class MailTextRules {
             }
             for (String name : MailPlaceholders.of(literal)) {
                 if (secrets.contains(name)) {
-                    add("secret:" + name, secretPlacement(BODY, name, where));
+                    add("secret:" + name, secretPlacement(field, name, where));
                 }
             }
             // Mail clients link addresses written out in the text: they follow the same rule as links.
@@ -274,7 +287,7 @@ public final class MailTextRules {
             if (!site) {
                 for (String name : MailPlaceholders.of(target)) {
                     if (secrets.contains(name)) {
-                        add("secret:" + name, secretPlacement(BODY, name, "the link target " + target));
+                        add("secret:" + name, secretPlacement(field, name, "the link target " + target));
                     }
                 }
                 checkTarget(target);
@@ -287,20 +300,20 @@ public final class MailTextRules {
             target.codePoints().filter(c -> c > 0x20 && c != 0x7f).forEach(visible::appendCodePoint);
             String url = visible.toString();
             if (!target.isEmpty() && MailRenderer.safeUrl(target).isEmpty()) {
-                add("link:" + url, violation(BODY, PlatformErrorCodes.MAIL_TEXT_LINK_NOT_ALLOWED, "The link " + url
+                add("link:" + url, violation(field, PlatformErrorCodes.MAIL_TEXT_LINK_NOT_ALLOWED, "The link " + url
                     + " is not http, https, mailto or relative", Map.of("url", url)));
                 return;
             }
             // Browsers read a backslash as a slash in web addresses; a link has no need of one.
             if (url.indexOf('\\') >= 0) {
-                add("link:" + url, violation(BODY, PlatformErrorCodes.MAIL_TEXT_LINK_NOT_ALLOWED, "The link " + url
+                add("link:" + url, violation(field, PlatformErrorCodes.MAIL_TEXT_LINK_NOT_ALLOWED, "The link " + url
                     + " contains a backslash", Map.of("url", url)));
                 return;
             }
             // A target that begins with a placeholder and is no link to the site: the value decides where it leads
             // ({baseUrl}@evil.example, a parameter holding an address).
             if (url.startsWith("{")) {
-                add("host:" + url, violation(BODY, PlatformErrorCodes.MAIL_TEXT_LINK_HOST, "The link " + url
+                add("host:" + url, violation(field, PlatformErrorCodes.MAIL_TEXT_LINK_HOST, "The link " + url
                     + " does not lead to this application: after {" + MailTemplate.BASE_URL
                     + "} only a path, query or fragment may follow", Map.of("host", url)));
                 return;
@@ -321,7 +334,7 @@ public final class MailTextRules {
             String host = host(authority);
             if (host == null || !limits.allows(host)) {
                 String shown = host == null ? url : host;
-                add("host:" + shown, violation(BODY, PlatformErrorCodes.MAIL_TEXT_LINK_HOST, "The link " + url
+                add("host:" + shown, violation(field, PlatformErrorCodes.MAIL_TEXT_LINK_HOST, "The link " + url
                     + " leads to " + shown + ", which is neither this application nor an allowed host"
                     + " (jabiz.mail.texts.allowed-link-hosts)", Map.of("host", shown)));
             }
@@ -372,20 +385,20 @@ public final class MailTextRules {
 
         @Override
         public void visit(HtmlInline html) {
-            add("html", violation(BODY, PlatformErrorCodes.MAIL_TEXT_HTML, "The body contains raw HTML ("
+            add("html", violation(field, PlatformErrorCodes.MAIL_TEXT_HTML, "The body contains raw HTML ("
                 + html.getLiteral() + ")", Map.of()));
             text(html.getLiteral(), "the text");
         }
 
         @Override
         public void visit(HtmlBlock html) {
-            add("html", violation(BODY, PlatformErrorCodes.MAIL_TEXT_HTML, "The body contains raw HTML", Map.of()));
+            add("html", violation(field, PlatformErrorCodes.MAIL_TEXT_HTML, "The body contains raw HTML", Map.of()));
             text(html.getLiteral(), "the text");
         }
 
         @Override
         public void visit(Image image) {
-            add("image", violation(BODY, PlatformErrorCodes.MAIL_TEXT_IMAGE, "The body contains an image",
+            add("image", violation(field, PlatformErrorCodes.MAIL_TEXT_IMAGE, "The body contains an image",
                 Map.of()));
             text(image.getDestination(), "an image", false);
             text(image.getTitle(), "an image");

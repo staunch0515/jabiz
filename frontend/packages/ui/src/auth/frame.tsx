@@ -1,18 +1,12 @@
-import { changeLanguage, languages, LANGUAGE_NAMES, type Language } from '@jabiz/client'
 import type { LucideIcon } from 'lucide-react'
 import { CircleCheck, TriangleAlert } from 'lucide-react'
 import { useId, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useHasAppearance } from '../components/appearance'
-import { EnvironmentBanner } from '../components/environment-banner'
 import { Spinner } from '../components/spinner'
-import { ThemeToggle } from '../components/theme-toggle'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
-import { cn } from '../lib/utils'
+import { EntryLayout, type EntryLayoutProps } from './entry'
 import { AUTH_NAMESPACE } from './messages'
 import { PasswordInput } from './PasswordInput'
 
@@ -52,62 +46,17 @@ export function AuthLink({
   return <a {...anchor} href={hrefOf ? hrefOf(to) : to} onClick={follow} />
 }
 
-export interface AuthFrameProps {
-  /** The application's name, the page's heading (h1). */
-  brand: ReactNode
-  /** What the page is for, under the name. */
-  title: string
-  children: ReactNode
-  testId?: string
-  /** Offers the appearance (light, dark, system) when an AppearanceProvider is around; default true. */
-  appearance?: boolean
-  className?: string
-  /** Under the card and the choices, in small print: the build the page is from, say. */
-  footer?: ReactNode
-}
+/** The props of {@link AuthFrame}: those of the entry pages' template (phase 17zk). */
+export type AuthFrameProps = EntryLayoutProps
 
 /**
- * The frame of the pages before a session (signing in, signing up, the pages of mailed links): the application's
- * name, the page's title and the choice of language (when the application has several) and appearance.
+ * The frame of the pages before a session (signing in, signing up, the pages of mailed links): since phase 17zk the
+ * entry pages' template {@link EntryLayout} — the application's name, the page's title, the choice of language (when
+ * the application has several) at the top right and of appearance in the footer, and what an
+ * {@link EntryLayoutProvider} around it adds. The props of before keep their meaning.
  */
-export function AuthFrame({ brand, title, children, testId, appearance = true, className, footer }: AuthFrameProps) {
-  const { t, i18n } = useTranslation(AUTH_NAMESPACE)
-  const offerAppearance = useHasAppearance() && appearance
-  return (
-    <main className={cn('bg-background text-foreground flex min-h-screen flex-col items-center px-4 pt-20', className)}>
-      {/* A test system says so above the card (phase 16zd); the card keeps its place below. */}
-      <EnvironmentBanner className="-mt-20 mb-16" />
-      <Card className="w-full max-w-sm" data-testid={testId}>
-        <CardHeader className="text-center">
-          <CardTitle>
-            <h1 className="text-2xl font-semibold tracking-tight">{brand}</h1>
-          </CardTitle>
-          <CardDescription>{title}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">{children}</CardContent>
-      </Card>
-      {(languages.length > 1 || offerAppearance) && (
-        <div className="mt-4 flex items-center gap-2">
-          {languages.length > 1 && (
-            <Select value={i18n.language} onValueChange={(lang) => void changeLanguage(lang as Language)}>
-              <SelectTrigger size="sm" aria-label={t('common.language')}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {languages.map((lang) => (
-                  <SelectItem key={lang} value={lang} lang={lang}>
-                    {LANGUAGE_NAMES[lang]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {offerAppearance && <ThemeToggle />}
-        </div>
-      )}
-      {footer && <p className="text-muted-foreground mt-4 text-xs" data-testid="auth-footer">{footer}</p>}
-    </main>
-  )
+export function AuthFrame(props: AuthFrameProps) {
+  return <EntryLayout {...props} />
 }
 
 /**
@@ -143,12 +92,18 @@ export function AuthField({
   )
 }
 
-/** The submit button of these forms, busy while the form is sent. */
-export function AuthSubmit({ busy, children }: { busy: boolean; children: ReactNode }) {
+/**
+ * The submit button of these forms, busy while the form is sent; while the server asks to wait (`wait` seconds after
+ * 429 RATE_LIMITED, phase 17zk) it is held and says how long.
+ */
+export function AuthSubmit({ busy, children, wait = 0 }: { busy: boolean; children: ReactNode; wait?: number }) {
+  const { t } = useTranslation(AUTH_NAMESPACE)
+  const waiting = wait > 0
   return (
-    <Button type="submit" size="lg" className="w-full" disabled={busy} aria-busy={busy || undefined}>
+    <Button type="submit" size="lg" className="w-full" disabled={busy || waiting} aria-busy={busy || undefined}
+      data-waiting={waiting ? wait : undefined}>
       {busy && <Spinner className="text-current" />}
-      {children}
+      {waiting ? t('common.retryIn', { seconds: wait }) : children}
     </Button>
   )
 }

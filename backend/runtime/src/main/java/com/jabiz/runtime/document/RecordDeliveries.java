@@ -11,6 +11,7 @@ import com.jabiz.process.NoMetadata;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.mail.MailLayouts;
 import com.jabiz.runtime.mail.MailTexts;
 import com.jabiz.runtime.mail.PlatformMailTemplates;
 import com.jabiz.runtime.process.StepHandler;
@@ -50,18 +51,20 @@ class RecordDeliveries implements StepHandler<NoMetadata, ProcessContext> {
     private final DocumentDeliveries deliveries;
     private final MessageCatalog messages;
     private final MailTexts texts;
+    private final MailLayouts layouts;
     private final EntityIdGenerator ids;
     private final boolean mailEnabled;
     private final boolean development;
 
     RecordDeliveries(DocumentRuns runs, DocumentAccess access, DocumentDeliveries deliveries, MessageCatalog messages,
-        MailTexts texts, EntityIdGenerator ids, @Value("${jabiz.mail.enabled:false}") boolean mailEnabled,
-        Environment environment) {
+        MailTexts texts, MailLayouts layouts, EntityIdGenerator ids,
+        @Value("${jabiz.mail.enabled:false}") boolean mailEnabled, Environment environment) {
         this.runs = runs;
         this.access = access;
         this.deliveries = deliveries;
         this.messages = messages;
         this.texts = texts;
+        this.layouts = layouts;
         this.ids = ids;
         this.mailEnabled = mailEnabled;
         this.development = environment.acceptsProfiles(Profiles.of("dev"));
@@ -128,18 +131,22 @@ class RecordDeliveries implements StepHandler<NoMetadata, ProcessContext> {
         MailTexts.Text defaults = new MailTexts.Text(text(template, run.layoutId(), "subject", language),
             text(template, run.layoutId(), "body", language), null, false);
         List<String> recorded = new ArrayList<>();
-        return texts.effective(template, language, defaults).flatMapMany(chosen -> {
-            MailRenderer.Rendered mail = texts.render(template, chosen.subject(), chosen.body(), params);
-            // The renderer makes the subject one line: whatever the data holds, nothing but it reaches that header.
-            String subject = cut(mail.subject(), MAX_SUBJECT);
-            String body = cut(mail.text().strip(), MAX_BODY);
-            return Flux.fromIterable(addresses).concatMap(address -> {
-                UUID deliveryId = UUID.fromString(String.valueOf(ids.next(null)));
-                recorded.add(deliveryId.toString());
-                return deliveries.insert(deliveryId, run.runId(), address, subject, body, ctx.request().actorId(),
-                    ctx.opTime(), ctx.processSeqId(), chosen.versionNo());
-            });
-        })
+        return Mono.zip(texts.effective(template, language, defaults), layouts.effective(language))
+            .flatMapMany(found -> {
+                MailTexts.Text chosen = found.getT1();
+                // The layout's version is recorded now and the mail put on it when sent (decision D72 item 4).
+                Integer layoutVersion = found.getT2().versionNo();
+                MailRenderer.Rendered mail = texts.render(template, chosen.subject(), chosen.body(), params);
+                // The renderer makes the subject one line: whatever the data holds, nothing but it reaches that header.
+                String subject = cut(mail.subject(), MAX_SUBJECT);
+                String body = cut(mail.text().strip(), MAX_BODY);
+                return Flux.fromIterable(addresses).concatMap(address -> {
+                    UUID deliveryId = UUID.fromString(String.valueOf(ids.next(null)));
+                    recorded.add(deliveryId.toString());
+                    return deliveries.insert(deliveryId, run.runId(), address, subject, body, ctx.request().actorId(),
+                        ctx.opTime(), ctx.processSeqId(), chosen.versionNo(), layoutVersion);
+                });
+            })
             .then(Mono.fromRunnable(() -> {
                 ctx.put(DocumentProcesses.DELIVERIES, List.copyOf(recorded));
                 ctx.put(DocumentProcesses.OUTPUT, new DocumentProcesses.SendOutput(List.copyOf(recorded),
