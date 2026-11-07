@@ -129,3 +129,80 @@
 
 - 候选模板连接的表多，第一次写容易漏列；以 `AssetIT` 中造好的各种内容逐项断言。
 - 规格要求"选了就复制"，F-C1a 只有资源本身，复制与引用在 F-C1b；在 F-C1b 合入之前，资源库只是目录。
+
+## F-C1b 的设计
+
+"选了就复制"：前端把资源的内容复制进使用处，照常经现有的保存流程保存，同时说明"这一处来自资源 X"。服务器只核对与登记：
+资源是本人的、种类适合这一处，然后在同一事务中写 `QbAssetUse`。存下的内容与手填的完全相同（只多一行使用记录）。
+
+### 输入（都可不给；不给即不动这一处已有的使用记录）
+
+| 流程 | 新的输入 | 使用处（`targetKind`） | `targetId` |
+|---|---|---|---|
+| `QB_MATERIAL_SAVE` | `MaterialInput.assetId` | `MATERIAL` | 资料编号（新资料为保存时得到的） |
+| `QB_QUESTION_SAVE` | `QuestionInput.imageAssetId`；`OptionInput.imageAssetId` | `QUESTION_IMAGE`；`OPTION_IMAGE` | 题目编号；选项编号（新选项为保存时得到的） |
+| `QB_QUIZ_SAVE` | `QuizInput.coverAssetId`、`introAssetId` | `QUIZ_COVER`、`QUIZ_INTRO` | Quiz 编号（新 Quiz 为保存时得到的） |
+| `QB_PUBLICATION_SAVE` | `SaveInput.assets`（`PublicationAssets`：`coverAssetId`、`redeemAssetId`、`digitalAssetId`、`referralAssetId`、`prizeAssetId`） | `PUBLICATION_COVER`、`PUBLICATION_REDEEM`、`PUBLICATION_DIGITAL`、`PUBLICATION_REFERRAL`、`PUBLICATION_PRIZE` | 发布编号（新草稿为保存时得到的） |
+
+各记录原有的规范构造器保留为"F-C1b 之前"的构造器（不带资源编号），现有的调用不变。
+
+### 种类是否适合（`AssetRules.suits`，纯 Java；不适合即 422 `QB_ASSET_TARGET_KIND`，字段为该输入）
+
+| 使用处 | 资源的种类 |
+|---|---|
+| `MATERIAL` | 与资料的种类对应：`IMAGES`↔`IMAGE`、`PDF`、`AUDIO`、`VIDEO_LINK`、`LINK`、`ARTICLE`；只限基准语言的资料（其他语言的资料随基准，不是"从库里选"的地方，候选模板也只列基准的） |
+| `QUESTION_IMAGE`、`OPTION_IMAGE`、`QUIZ_COVER`、`PUBLICATION_COVER` | `IMAGE` |
+| `QUIZ_INTRO` | `TEXT`，用途 `QUIZ_INTRO` |
+| `PUBLICATION_REDEEM` / `_DIGITAL` / `_REFERRAL` | `TEXT`，用途 `REDEEM_DESCRIPTION` / `DIGITAL_DESCRIPTION` / `REFERRAL_DESCRIPTION` |
+| `PUBLICATION_PRIZE` | `PRIZE` |
+
+只核对种类与用途，不核对复制进来的内容是否与资源相同（使用处与资源之后各管各的）。
+
+### 共用的 `asset.AssetUses`
+
+- `load(pb, 资源编号, 使用处)`：先在流程自己的锁之后取 `HoldLock.shared(QbAssets.lockName(操作人))`，再以一条 `QueryEntities.all` 读出所给资源（`assetId` 在所给之中且 `sponsorId` = 操作人）与所给使用处已有的使用记录（`targetKind` 与 `targetId` 都在所给之中，用到唯一约束的索引）。
+- 不选资源、也不删使用处时，锁名为空（`HoldLock` 不取锁）、两条查询都是空的 `IN`（平台不发语句）：现有的保存一条语句也不多。
+- `check(ctx, 所选)`：资源不是本人的或不存在即 404（同 `AssetProcesses`，不说是否存在）；种类不适合即 `ctx.reject` 累积。放在流程的主计算之前单独一步，主计算见到违规即不写。
+- `record(ctx, 种类, 编号, 资源)`：在主计算得到使用处的编号以后登记：删掉这一处原有的记录（若有），插入新的（`assetRevision` = 资源当前的 `revision`，`usedAt` = 操作时间）。`assetId`、`targetKind`、`targetId` 不可变，所以"再选一次"是删旧插新，不是更新。内容没变（`unchanged`）时也登记。
+- `forget(ctx, 种类, 编号…)`：删掉这些使用处的记录。
+
+### 锁的顺序
+
+流程自己的锁（`qb.quiz:<quizId>` 或 `qb.pub:<publicationId>`）→ `qb.assets:<发起方>`（共享）。资源的三个流程只独占地取 `qb.assets:<发起方>`、从不取内容或发布的锁，所以不会互等。
+资源的读取在共享锁之内：同时进行的 `QB_ASSET_SAVE` 先完成或后开始，读到的 `revision` 就是提交时的；同时进行的 `QB_ASSET_DELETE` 不会在我们写入以后又留下一个指向已删资源的记录（它独占锁，删的是它读到的全部使用）。
+同一发起方的几次内容保存共享这把锁，互不等待。
+
+### 删除使用处
+
+- `QB_MATERIAL_DELETE`：删掉该资料（与它的其他语言版本）的 `MATERIAL` 记录。
+- `QB_QUESTION_DELETE`：删掉题目的 `QUESTION_IMAGE` 与其选项的 `OPTION_IMAGE`。
+- `QB_QUESTION_SAVE` 给出选项列表而去掉了某些选项：删掉这些选项的 `OPTION_IMAGE`。
+- `QB_QUIZ_DELETE`（移除 Quiz，删掉它的资料、题目与选项）：删掉该 Quiz 全部使用处的记录（封面、简介、资料、题目、选项）。
+- `QB_PUBLICATION_DELETE`（删除草稿）：删掉该发布的 `PUBLICATION_*` 记录。
+- 这些流程总要取共享锁并读一次（事先不知道有没有记录）；删除不是热门路径。
+- `QB_ASSET_DELETE` 照旧删掉资源的全部使用记录；复制、提交、版本切换不带使用记录（复制出的草稿的内容来自原发布，不是来自资源库），已提交的发布不再保存，记录随之不变，"旧内容"照常提示。
+
+### 模板 `qb.sponsor.asset-uses`
+
+- 权限 `qb.content.write`，数据视图都是本人的（`me:QbAssetUse`、`me:QbAsset`、`sponsor:` 的 Quiz、资料、题目、选项与发布）。
+- 列：`useId`、`assetId`、`assetName`、`assetKind`、`targetKind`、`targetId`、`quizId`、`publicationId`、`targetName`（Quiz 的标题、资料的标题或 Quiz 的标题、发布的名称；已移除的 Quiz 为空）、`assetRevision`、`currentRevision`、`stale`（资源当前的 `revision` > 记录的 `assetRevision`："用的是旧的内容"）、`usedAt`。
+- 筛选 `assetId`、`targetKind`、`stale`。三语的标题与列名。
+
+### 测试
+
+- `AssetRulesTest`：`suits` 的每一行（适合与不适合，资料的每种）。
+- `AssetUseIT`：
+  - 四个流程各带资源编号保存：写下记录，`assetRevision` 是资源当前的；新建的使用处（新资料、新选项、新 Quiz、新草稿）取保存得到的编号；
+  - 别人的资源 404，种类或用途不适合 422 `QB_ASSET_TARGET_KIND`（一次列出），都不写任何东西；
+  - 再选一次替换记录（同一处只有一行）；不给资源编号不动已有的记录；
+  - 资源改过（`QB_ASSET_SAVE`）以后，模板标出 `stale`，已提交的发布的内容不变；
+  - 删除资料、题目、选项、Quiz、草稿都删掉相应的记录；删除资源删掉它的记录；
+  - 平台清扫（`FILE_PURGE_ORPHANS`）不删只被资源引用的文件；
+  - 带资源编号保存与手填保存存下相同的内容（只多一行记录）。
+- 照旧通过：`MessagesTest`、`BrandTest`、`AssetIT`、四个流程现有的 IT、`ScenarioTest`、`AttemptStatementBudgetIT`（答题路径不变）、`OperatorScopesIT`、`SponsorErasureIT`、`:quizbuks:platformCheck`。
+
+### 风险
+
+- "不给即不动"：发起方之后手工改了这一处（换了封面），记录仍说它来自资源；前端只在这一处仍是资源的副本时带上编号，后台"用在哪里"只是提示。要准确就得每次保存都读一次记录，不值得。
+- 删除使用处的流程多了一个锁与一次读取；内容保存在不选资源时语句数不变（锁名为空、空的 `IN` 不发语句）。
+- 共享锁在流程自己的锁之后：若以后有流程先取 `qb.assets` 再取内容的锁，就会互等；`CLAUDE.md` 的"资源库"一条写明顺序。
