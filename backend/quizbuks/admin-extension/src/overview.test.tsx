@@ -146,7 +146,7 @@ const lastCall = (template: string) =>
   server.runQuery.mock.calls.filter(([id]) => id === template).at(-1)?.[1] as Row
 
 describe('QuizzesPage', () => {
-  it('lists every sponsor\'s quizzes, without the removed ones unless asked, linking to each', async () => {
+  it('lists every Sponsor\'s quizzes, without the removed ones unless asked, linking to each', async () => {
     renderAt('/qb/quizzes', '/qb/quizzes', <QuizzesPage />)
     const links = await screen.findAllByTestId('quiz-link')
     expect(links[0]).toHaveTextContent('World capitals')
@@ -163,7 +163,7 @@ describe('QuizzesPage', () => {
     expect(screen.getAllByTestId('quiz-removed')).toHaveLength(1)
   })
 
-  it('searches by title and narrows to the sponsor the address names', async () => {
+  it('searches by title and narrows to the Sponsor the address names', async () => {
     renderAt(`/qb/quizzes?sponsor=${SPONSOR}`, '/qb/quizzes', <QuizzesPage />)
     await screen.findAllByTestId('quiz-link')
     expect(lastCall(TEMPLATE.quizzes)).toMatchObject({ filters: [{ field: 'ownerId', op: 'eq', value: SPONSOR },
@@ -250,7 +250,7 @@ describe('PublicationsPage', () => {
       .toHaveAttribute('href', `/qb/quizzes/${QUIZ}`)
   })
 
-  it('narrows by the state, sponsor and quiz the address names', async () => {
+  it('narrows by the state, Sponsor and quiz the address names', async () => {
     renderAt(`/qb/publications?status=ENDED&sponsor=${SPONSOR}&quiz=${QUIZ}`, '/qb/publications',
       <PublicationsPage />)
     await screen.findAllByTestId('publication-row')

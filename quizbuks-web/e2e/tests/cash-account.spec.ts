@@ -10,7 +10,7 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a sponsor tops up the cash account and turns part of it into Kudos', async ({ page, request }) => {
+test('a Sponsor tops up the cash account and turns part of it into Kudos', async ({ page, request }) => {
   test.setTimeout(120_000)
   const sponsor = await approvedSponsor(request)
   await signIn(page, '/sponsor/', sponsor.email)

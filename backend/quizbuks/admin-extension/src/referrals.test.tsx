@@ -79,7 +79,7 @@ describe('the referrals page (Q70)', () => {
     const list = await screen.findAllByTestId('referral-row')
     expect(list.map((row) => row.dataset.status)).toEqual(['REWARDED', 'REFERRED'])
     expect(within(list[0]).getAllByTestId('user-name').map((e) => e.textContent)).toContain(LI)
-    expect(list[1]).toHaveTextContent("Waiting for the sponsor's wallet")
+    expect(list[1]).toHaveTextContent("Waiting for the Sponsor's wallet")
     await expectAccessible()
     await userEvent.click(within(list[0]).getByTestId('referral-only-referrer'))
     await waitFor(() => expect(server.runQuery).toHaveBeenLastCalledWith(TEMPLATE.referrals,

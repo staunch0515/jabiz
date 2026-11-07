@@ -55,7 +55,7 @@ public class DocumentDeliveries {
     }
 
     Mono<Void> insert(UUID deliveryId, UUID runId, String address, String subject, String body, String requestedBy,
-        Instant created, long processSeqId) {
+        Instant created, long processSeqId, Integer textVersionNo) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("delivery_id", deliveryId);
         row.put("run_id", runId);
@@ -66,6 +66,7 @@ public class DocumentDeliveries {
         row.put("created_time", created);
         row.put("process_seq_id", processSeqId);
         row.put("version", 1L);
+        row.put("text_version_no", textVersionNo);
         return engine().insert(DELIVERIES, row);
     }
 

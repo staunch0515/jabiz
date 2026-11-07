@@ -162,7 +162,7 @@ describe('the wallet', () => {
     expect(screen.getByRole('link', { name: 'Wallet' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('says the range of a top-up and what a new sponsor may still top up (Q10b)', async () => {
+  it('says the range of a top-up and what a new Sponsor may still top up (Q10b)', async () => {
     server({ limit: { min: '1000', max: '1000000', limited: true, maxTotal: '100000', remaining: '40000',
       until: '2026-11-12T01:01:00Z' } })
     window.history.replaceState(null, '', '/wallet')
@@ -175,7 +175,7 @@ describe('the wallet', () => {
     expect(screen.getByTestId('topup-new-sponsor')).toHaveTextContent('Remaining: 40,000 Kudos.')
   })
 
-  it('says nothing of a new sponsor\'s limit once it no longer applies', async () => {
+  it('says nothing of a new Sponsor\'s limit once it no longer applies', async () => {
     server({ limit: { min: '1000', max: '1000000', limited: false, maxTotal: null, remaining: null, until: null } })
     window.history.replaceState(null, '', '/wallet')
     const user = userEvent.setup()
@@ -362,7 +362,7 @@ describe('the terms', () => {
 })
 
 describe('the receipts', () => {
-  it('offers the receipt of a paid top-up only, issued in the sponsor\'s language and downloaded as kept', async () => {
+  it('offers the receipt of a paid top-up only, issued in the Sponsor\'s language and downloaded as kept', async () => {
     const { processCalls } = server()
     URL.createObjectURL = vi.fn(() => 'blob:receipt')
     URL.revokeObjectURL = vi.fn()
@@ -500,7 +500,7 @@ describe('a top-up\'s page', () => {
     expect(screen.queryByTestId('topup-pay')).not.toBeInTheDocument()
   })
 
-  it('does not show another sponsor\'s top-up', async () => {
+  it('does not show another Sponsor\'s top-up', async () => {
     server({ topUps: [null] })
     window.history.replaceState(null, '', '/wallet/topups/t1')
     render(<App />)

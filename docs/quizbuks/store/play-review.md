@@ -4,12 +4,12 @@
 
 选"部分或全部功能受限"，添加一组说明：
 
-- **名称**：答题者账号
-- **用户名 / 密码**：需求方在 production 注册的审核专用答题者账号（邮箱已验证、资料已填）。**只填在 Console 中，不进仓库，不发给开发者。**
+- **名称**：学者账号
+- **用户名 / 密码**：需求方在 production 注册的审核专用学者账号（邮箱已验证、资料已填）。**只填在 Console 中，不进仓库，不发给开发者。**
 - **其他信息**（照下面粘贴，按需改语言）：
 
 ```
-QuizBuks is the takers' app: sign in with the account above, answer a quiz from the Home tab and see the result,
+QuizBuks is the Takers' app: sign in with the account above, answer a quiz from the Home tab and see the result,
 the prize won and the past quizzes in History. At least one quiz is always live for this account.
 Sponsors publish quizzes on a separate website; nothing can be bought in the app.
 ```
@@ -25,7 +25,7 @@ Sponsors publish quizzes on a separate website; nothing can be bought in the app
 
 ## 3. 用户生成内容（UGC 政策）
 
-问卷是商家（企业用户）写的，发布前一律经过审核（推广期同样，`operations.md`"阶段一"）；答题者不能发布任何内容。Google 的 UGC 政策要求有举报入口：Q49a 在发布页加"举报"。合入后核对它在 App 中可达（`Q49-mobile-apps.md` §1）。
+问卷是发起方（企业用户）写的，发布前一律经过审核（推广期同样，`operations.md`"阶段一"）；学者不能发布任何内容。Google 的 UGC 政策要求有举报入口：Q49a 在发布页加"举报"。合入后核对它在 App 中可达（`Q49-mobile-apps.md` §1）。
 
 ## 4. 发布前的核对
 

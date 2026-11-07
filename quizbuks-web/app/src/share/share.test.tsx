@@ -172,7 +172,7 @@ describe('the share link before signing in', () => {
   })
 })
 
-describe('a new taker from a share link', () => {
+describe('a new Taker from a share link', () => {
   beforeEach(() => session.store('access', 'refresh'))
 
   it('gives only the country and goes on to the publication', async () => {
@@ -193,7 +193,7 @@ describe('a new taker from a share link', () => {
 })
 
 describe('the share helpers', () => {
-  it('keep a publication page only, and name a taker after their address', () => {
+  it('keep a publication page only, and name a Taker after their address', () => {
     rememberShareNext('/p/abc')
     expect(shareNext()).toBe('/p/abc')
     rememberShareNext('/wallet')
@@ -206,7 +206,7 @@ describe('the share helpers', () => {
   })
 })
 
-describe('a sponsor\'s redeem code scanned before signing in (Q22b)', () => {
+describe('a Sponsor\'s redeem code scanned before signing in (Q22b)', () => {
   it('asks to sign in and back, and keeps the code on the device for a sign-in that ends in another tab', async () => {
     server({})
     window.history.replaceState(null, '', '/redeem/rot-key-9')

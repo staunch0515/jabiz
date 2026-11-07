@@ -35,7 +35,7 @@ async function downloadedCsv(page: Page, testId: string): Promise<string[]> {
   return text.replace(/^﻿/, '').split(/\r\n/).filter((line) => line !== '')
 }
 
-test('a sponsor reads the dashboard and a publication\'s analytics, and exports its trend', async ({ page, request }) => {
+test('a Sponsor reads the dashboard and a publication\'s analytics, and exports its trend', async ({ page, request }) => {
   test.setTimeout(300_000)
   const other = await fundedSponsor(request, 1000)
   const sponsor = await fundedSponsor(request, 1000)

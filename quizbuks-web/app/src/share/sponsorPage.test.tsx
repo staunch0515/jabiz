@@ -70,7 +70,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe("a sponsor's page (Q60a)", () => {
+describe("a Sponsor's page (Q60a)", () => {
   it('shows a page of several languages in the one chosen on it (Q73c)', async () => {
     const { asked } = server({ pageIn: (languages) => languages.startsWith('zh')
       ? { ...PAGE, headline: '新鲜面包', languages: 'en,zh', displayLanguage: 'zh' }
@@ -160,7 +160,7 @@ describe("a sponsor's page (Q60a)", () => {
     expect(await screen.findByText('This page is not available')).toBeInTheDocument()
   })
 
-  it("links the sponsor of a share link's page to their page", async () => {
+  it("links the Sponsor of a share link's page to their page", async () => {
     server({ shared: { publicationId: 'pub1', name: 'Bread quiz', quizTitle: 'Bread', kind: 'QUIZ',
       startAt: '2026-01-01T00:00:00Z', endAt: '2099-01-01T00:00:00Z', timeLimitSec: 300, questionCount: 5,
       fullScore: 5, passScore: 3, maxReward: '500', sponsorCompany: 'Acme', sponsorHandle: 'acme-bakery' } })

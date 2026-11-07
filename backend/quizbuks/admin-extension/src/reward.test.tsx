@@ -64,11 +64,11 @@ beforeEach(() => {
   })
   server.runProcess.mockReset().mockResolvedValue({ cashRewardId: 'c1', status: 'CONFIRMED', revision: 4 })
   server.get.mockReset().mockImplementation(async (path: string) => {
-    if (path === '/api/dictionaries/{urn}') return [{ code: 'DUE', label: 'To be paid by the sponsor' },
+    if (path === '/api/dictionaries/{urn}') return [{ code: 'DUE', label: 'To be paid by the Sponsor' },
       { code: 'DISPUTED', label: 'Disputed' }, { code: 'CONFIRMED', label: 'Confirmed' },
-      { code: 'CLAIMED', label: 'Claimed, awaiting the sponsor' }, { code: 'REDEEMED', label: 'Collected' },
+      { code: 'CLAIMED', label: 'Claimed, awaiting the Sponsor' }, { code: 'REDEEMED', label: 'Collected' },
       { code: 'DELIVERED', label: 'Delivered' }, { code: 'OVERDUE', label: 'Sponsor late' },
-      { code: 'POOL', label: 'From the pool' }, { code: 'SPONSOR_SENT', label: 'Sent by the sponsor' }]
+      { code: 'POOL', label: 'From the pool' }, { code: 'SPONSOR_SENT', label: 'Sent by the Sponsor' }]
     throw new ApiError(404, { detail: 'Not found' })
   })
 })
@@ -89,7 +89,7 @@ function renderAt(path: string, route: string, element: ReactNode) {
 }
 
 describe('CashRewardsPage', () => {
-  it('lists the cash rewards with both sides and the taker\'s note, and decides a disputed one', async () => {
+  it('lists the cash rewards with both sides and the Taker\'s note, and decides a disputed one', async () => {
     const { container } = renderAt('/qb/cash-rewards', '/qb/cash-rewards', <CashRewardsPage />)
     const row = await screen.findByTestId('cash-row')
     expect(row).toHaveTextContent('C-ABCD1234')
@@ -102,10 +102,10 @@ describe('CashRewardsPage', () => {
     const dialog = await screen.findByTestId('cash-resolve-dialog')
     expect(dialog).toHaveTextContent('I got 50, not 100')
     await userEvent.click(within(dialog).getByTestId('cash-resolution-UNPAID'))
-    await userEvent.type(within(dialog).getByTestId('cash-resolve-note'), 'The sponsor agrees')
+    await userEvent.type(within(dialog).getByTestId('cash-resolve-note'), 'The Sponsor agrees')
     await userEvent.click(within(dialog).getByTestId('cash-resolve-send'))
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.cashResolve,
-      { cashRewardId: 'c1', resolution: 'UNPAID', note: 'The sponsor agrees' }))
+      { cashRewardId: 'c1', resolution: 'UNPAID', note: 'The Sponsor agrees' }))
     await waitFor(() => expect(screen.queryByTestId('cash-resolve-dialog')).toBeNull())
   })
 
@@ -139,7 +139,7 @@ describe('RedemptionsPage (Q22b)', () => {
     expect(rows[0]).toHaveTextContent('C-ABCD1234')
     expect(rows[0]).toHaveTextContent('Acme')
     expect(rows[0]).toHaveTextContent('A coffee at our counter')
-    await waitFor(() => expect(within(rows[0]).getByTestId('redeem-row-status')).toHaveTextContent('Claimed, awaiting the sponsor'))
+    await waitFor(() => expect(within(rows[0]).getByTestId('redeem-row-status')).toHaveTextContent('Claimed, awaiting the Sponsor'))
     expect(within(rows[1]).queryByTestId('redeem-row-void')).toBeNull()
     await expectAccessible(container)
     await userEvent.click(within(rows[0]).getByTestId('redeem-row-void'))
@@ -177,7 +177,7 @@ describe('DigitalPrizesPage (Q33)', () => {
     server.runProcess.mockReset().mockResolvedValue({ digitalPrizeId: 'd1', status: 'DUE', revision: 3 })
   })
 
-  it('lists the prizes with both sides, the hint and the taker\'s note, and decides a disputed one', async () => {
+  it('lists the prizes with both sides, the hint and the Taker\'s note, and decides a disputed one', async () => {
     server.rows = [digital(), digital({ digitalPrizeId: 'd2', status: 'DUE', delivery: 'SPONSOR_SENT', hint: null,
       deliveredAt: null, deliveredBy: null, openedAt: null, confirmBy: null, disputedAt: null, disputeNote: null,
       sendBy: '2026-10-27T01:00:00Z' })]

@@ -48,7 +48,7 @@ class PublisherKindTest {
 
     @Test
     void everyCopyOfAPublicationsOwnerCarriesThePair() {
-        // The rule of D-S0-2: the engine's records; the merchant account's own keep their sponsorId.
+        // The rule of D-S0-2: the engine's records; the Sponsor account's own keep their sponsorId.
         for (EntityDefinition entity : List.of(QbPublications.PUBLICATION_ENTITY, QbPublications.TIER_ENTITY,
             QbPublications.CARD_ENTITY, QbPublications.OWNER_ENTITY)) {
             assertThat(entity.findField(PublisherKind.KIND_FIELD)).as(entity.name).isPresent();

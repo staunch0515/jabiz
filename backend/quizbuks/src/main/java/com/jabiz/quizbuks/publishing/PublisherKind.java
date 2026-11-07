@@ -8,7 +8,7 @@ import java.util.List;
  * Who published a publication (docs/quizbuks/shopify/S0-publisher.md, D-S0-1): a pair of fields on every record that
  * is a copy of a publication's owner. {@code publisherKind} says which merchant system the owner belongs to and
  * {@code publisherId} is the owner's key in that system: for {@link #SPONSOR} a sponsor's user id, as the records
- * carried before S0; for {@link #SHOPIFY_SHOP} the shop record's key (S1). A merchant's own records (top-ups,
+ * carried before S0; for {@link #SHOPIFY_SHOP} the shop record's key (S1). A Sponsor's own records (top-ups,
  * receipts, mail server, AI jobs) keep their {@code sponsorId}: they belong to the sponsors' system alone.
  */
 public final class PublisherKind {

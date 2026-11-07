@@ -79,7 +79,7 @@ function server(options: Server = {}) {
           at: '2026-10-16T00:00:00Z', expiresAt: null, readAt: null, unread: true },
         // Q22b: the sponsor's own message, plain text, leading to the redeem page.
         { itemKind: 'MESSAGE', itemId: 'm1', type: 'SYSTEM', kind: 'REDEEM_CLAIMED',
-          title: { en: 'A taker scanned your printed code' }, body: { en: 'Someone **claims** the prize.' },
+          title: { en: 'A Taker scanned your printed code' }, body: { en: 'Someone **claims** the prize.' },
           markdown: false, action: 'REDEEM', actionId: 'r1', at: '2026-10-15T00:00:00Z', expiresAt: null,
           readAt: null, unread: true }], offset: 0, limit: 100 })
       case '/api/queries/qb.me.consents':
@@ -230,7 +230,7 @@ describe('the message centre', () => {
     expect(await screen.findByTestId('notice-send')).toHaveTextContent('Schedule')
   })
 
-  it('shows QuizBuks\'s announcements to sponsors, read when opened', async () => {
+  it('shows QuizBuks\'s announcements to Sponsors, read when opened', async () => {
     const { calls } = server()
     window.history.replaceState(null, '', '/messages')
     const user = userEvent.setup()

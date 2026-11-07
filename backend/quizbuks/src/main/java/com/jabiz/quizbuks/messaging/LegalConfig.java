@@ -152,7 +152,7 @@ public class LegalConfig {
     StaticDictionary qbLegalKindDictionary() {
         return StaticDictionary.define(QbLegal.KIND_DICTIONARY, d -> d
             .item(QbLegal.TERMS_APP, "en", "Terms of use (app)", "zh", "用户条款（App）", "ja", "利用規約（アプリ）")
-            .item(QbLegal.TERMS_SPONSOR, "en", "Sponsor terms", "zh", "商家条款", "ja", "スポンサー利用規約")
+            .item(QbLegal.TERMS_SPONSOR, "en", "Sponsor terms", "zh", "发起方条款", "ja", "主催者利用規約")
             .item(QbLegal.PRIVACY, "en", "Privacy policy", "zh", "隐私政策", "ja", "プライバシーポリシー")
             .item(QbLegal.COMMERCE_NOTICE, "en", "Specified Commercial Transactions Act notice",
                 "zh", "特定商取引法标示", "ja", "特定商取引法に基づく表記")
@@ -177,7 +177,7 @@ public class LegalConfig {
     StaticDictionary qbFaqAudienceDictionary() {
         return StaticDictionary.define(QbLegal.FAQ_AUDIENCE_DICTIONARY, d -> d
             .item(QbLegal.AUDIENCE_APP, "en", "App", "zh", "App", "ja", "アプリ")
-            .item(QbLegal.AUDIENCE_SPONSOR, "en", "Sponsor console", "zh", "商家后台", "ja", "スポンサー管理画面")
+            .item(QbLegal.AUDIENCE_SPONSOR, "en", "Sponsor console", "zh", "发起方后台", "ja", "主催者管理画面")
             .item(QbLegal.AUDIENCE_ALL, "en", "Both", "zh", "两者", "ja", "両方"));
     }
 
@@ -185,7 +185,7 @@ public class LegalConfig {
     StaticDictionary qbConsentSourceDictionary() {
         return StaticDictionary.define(QbLegal.CONSENT_SOURCE_DICTIONARY, d -> d
             .item(QbLegal.SOURCE_WELCOME, "en", "Registration", "zh", "注册", "ja", "登録時")
-            .item(QbLegal.SOURCE_ONBOARDING, "en", "Sponsor application", "zh", "商家入驻", "ja", "スポンサー申請")
+            .item(QbLegal.SOURCE_ONBOARDING, "en", "Sponsor application", "zh", "发起方入驻", "ja", "主催者申請")
             .item(QbLegal.SOURCE_RECONSENT, "en", "After a change", "zh", "变更后重新同意", "ja", "改定後の再同意")
             .item(QbLegal.SOURCE_AI, "en", "AI request", "zh", "使用 AI 时", "ja", "AI の利用時"));
     }

@@ -171,7 +171,7 @@ describe('headquarters', () => {
       { userId: MEMBER }))
   })
 
-  it('saves the operator with the revision it read, and moves sponsors with a reason', async () => {
+  it('saves the operator with the revision it read, and moves Sponsors with a reason', async () => {
     renderAt(`/qb/operators/${OPERATOR}`, '/qb/operators/:operatorId', <OperatorPage />)
     const user = userEvent.setup()
     await user.click(await screen.findByTestId('operator-save'))
@@ -231,7 +231,7 @@ describe('the operator', () => {
     expect(screen.queryByTestId('member-drop')).not.toBeInTheDocument()
   })
 
-  it('bans a sponsor with a reason, and lifts only its own bans', async () => {
+  it('bans a Sponsor with a reason, and lifts only its own bans', async () => {
     const { container } = renderAt('/qb/operator/sponsors', '/qb/operator/sponsors', <OperatorSponsorsPage />)
     const rows = await screen.findAllByTestId('sponsor-row')
     // Headquarters' ban: no lift offered.
@@ -249,7 +249,7 @@ describe('the operator', () => {
       { userId: SPONSOR, reason: 'Fake prizes' }))
   })
 
-  it('sets how its own sponsor is billed, with a reason (Q87)', async () => {
+  it('sets how its own Sponsor is billed, with a reason (Q87)', async () => {
     server.get.mockImplementation(async (path: string) => {
       if (path === '/api/dictionaries/{urn}') return [{ code: 'PREPAID', label: 'Prepaid' },
         { code: 'POSTPAID', label: 'Postpaid' }, { code: 'APPROVED', label: 'Approved' }]
@@ -279,7 +279,7 @@ describe('the operator', () => {
     await waitFor(() => expect(screen.queryByTestId('billing-dialog')).not.toBeInTheDocument())
   })
 
-  it('lists how its sponsors are billed and sets one with a reason (Q87b)', async () => {
+  it('lists how its Sponsors are billed and sets one with a reason (Q87b)', async () => {
     server.get.mockImplementation(async (path: string) => {
       if (path === '/api/dictionaries/{urn}') return [{ code: 'PREPAID', label: 'Prepaid' },
         { code: 'POSTPAID', label: 'Postpaid' }]

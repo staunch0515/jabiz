@@ -54,6 +54,7 @@ class ControlledParamIT extends SecurityItSupport {
     private static final String RACE = "it.controlled.race";
     private static final String RELAYED = "it.controlled.relayed";
     private static final String SMUGGLED = "it.controlled.smuggled";
+    private static final String KEYED = "it.controlled.keyed";
 
     private static final Map<String, Object> RATE = Map.of("type", "numeric", "precision", 5, "scale", 4);
     private static final RequestContext READER = new RequestContext("it-reader", null, Locale.ENGLISH, "it-param",
@@ -65,7 +66,7 @@ class ControlledParamIT extends SecurityItSupport {
         @Bean
         ControlledParams itControlledParams() {
             return ControlledParams.of(DIRECT, NOW, SCHEDULED, SAME, INVALID, LIFT, LATE, NEVER_CREATED, CANCEL,
-                DESCRIBED, RACE, RELAYED, SMUGGLED);
+                DESCRIBED, RACE, RELAYED, SMUGGLED, KEYED);
         }
 
         record RelayInput(String changeId) {}
@@ -135,6 +136,30 @@ class ControlledParamIT extends SecurityItSupport {
         assertThat(value(DIRECT, later)).isEqualByComparingTo("0.3");
         assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?", NEVER_CREATED)
             .getFirst().get("n")).isEqualTo(0L);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void theListOfChangesShowsAndFiltersByTheParametersKey() {
+        create(KEYED, "0.1");
+        Map<String, Object> proposed = propose(Map.of("paramKey", KEYED, "value", new BigDecimal("0.2")), null, false);
+        propose(Map.of("paramKey", KEYED, "value", new BigDecimal("0.3")), null, false);
+
+        String path = "/api/datasets/" + com.jabiz.runtime.approval.ApprovalEntities.CONTROL_CHANGE_DATASET + "/query";
+        Map<String, Object> page = post(path, bearer(ApprovalPermissions.READ), Map.of("filters", List.of(
+                Map.of("field", "targetKey", "op", "eq", "value", KEYED))))
+            .expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        List<Object> items = (List<Object>) page.get("items");
+        // The creation and the two proposals.
+        assertThat(items).hasSize(3).allSatisfy(item -> assertThat(item).asString().contains("targetKey=" + KEYED));
+        assertThat(items).anySatisfy(item -> assertThat(item).asString().contains(
+            String.valueOf(proposed.get("changeId"))));
+        // A column of the list (and a filter), as the generated list page reads it from the list view.
+        assertThat(query("SELECT target_key FROM sys_control_change_version WHERE change_id = ?::uuid",
+            proposed.get("changeId"))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("target_key", KEYED));
+        assertThat(com.jabiz.runtime.approval.ApprovalEntities.CONTROL.listView("default").orElseThrow().columns())
+            .contains("targetKey");
     }
 
     @Test

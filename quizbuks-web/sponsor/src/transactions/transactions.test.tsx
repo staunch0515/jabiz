@@ -93,7 +93,7 @@ async function choose(user: ReturnType<typeof userEvent.setup>, field: string, o
 }
 
 describe('the transactions page', () => {
-  it('shows the totals and the rows in Kudos, the takers by their names', async () => {
+  it('shows the totals and the rows in Kudos, the Takers by their names', async () => {
     const { list, summary } = server()
     window.history.replaceState(null, '', '/transactions')
     render(<App />)

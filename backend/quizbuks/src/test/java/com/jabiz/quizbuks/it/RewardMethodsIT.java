@@ -373,7 +373,7 @@ class RewardMethodsIT extends PlayItSupport {
             .singleElement().satisfies(m -> assertThat(at(m.get("created_at"))).isEqualTo(clock.instant()));
         assertThat(InboxItSupport.messagesOf(takerId)).filteredOn(m -> "CASH_RESOLVED".equals(m.get("kind")))
             .singleElement().satisfies(m -> assertThat(String.valueOf(m.get("body")))
-                .contains("to be paid by the sponsor").doesNotContain("DUE"));
+                .contains("to be paid by the Sponsor").doesNotContain("DUE"));
         // Disputed again and found paid: confirmed by the administrator.
         run(CashRewardProcesses.DISPUTE, token, body("cashRewardId", cashRewardId, "note", "Still nothing"));
         assertThat(run(CashRewardProcesses.RESOLVE, methodsAdmin(), body("cashRewardId", cashRewardId, "resolution",

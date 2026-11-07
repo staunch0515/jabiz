@@ -28,12 +28,10 @@ import java.util.regex.Pattern;
  * parsed themselves, so a value cannot add a link, emphasis or markup. The HTML part escapes values (as all text) and
  * any raw HTML of the body; the plain-text part has them as they are. Link targets are limited to {@code http},
  * {@code https} and {@code mailto} (or relative), and parameters in them are percent-encoded, so a value cannot turn
- * a link into {@code javascript:}. The subject is plain text on one line, at most {@value #MAX_SUBJECT} characters.
+ * a link into {@code javascript:}. The subject is plain text on one line, cut to the configured longest subject
+ * ({@code jabiz.mail.texts.max-subject-length}, {@value MailTextRules#DEFAULT_MAX_SUBJECT} characters by default).
  */
 public final class MailRenderer {
-
-    /** Longest subject (as the notifications of tasks). */
-    public static final int MAX_SUBJECT = 300;
 
     private static final Pattern SCHEME = Pattern.compile("^([A-Za-z][A-Za-z0-9+.-]*):");
     private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https", "mailto");
@@ -75,22 +73,31 @@ public final class MailRenderer {
      *                {@link MailTemplate#urlSafePlaceholders()}); the others are percent-encoded there
      */
     public static Rendered render(String subject, String body, Map<String, String> values, Set<String> urlSafe) {
+        return render(subject, body, values, urlSafe, MailTextRules.DEFAULT_MAX_SUBJECT);
+    }
+
+    /**
+     * As {@link #render(String, String, Map, Set)}, the subject cut to {@code maxSubject} characters (code points)
+     * once its values are filled in.
+     */
+    public static Rendered render(String subject, String body, Map<String, String> values, Set<String> urlSafe,
+        int maxSubject) {
         Objects.requireNonNull(values, "values must not be null");
         Objects.requireNonNull(urlSafe, "urlSafe must not be null");
         Node document = PARSER.parse(Objects.requireNonNull(body, "body must not be null"));
         document.accept(new Filler(values, urlSafe));
         String html = HTML.render(document);
         String text = TEXT.render(document);
-        return new Rendered(subject(subject, values), text, html);
+        return new Rendered(subject(subject, values, maxSubject), text, html);
     }
 
-    /** The subject with its values, on one line and cut to {@value #MAX_SUBJECT} characters (code points). */
-    static String subject(String subject, Map<String, String> values) {
+    /** The subject with its values, on one line and cut to {@code max} characters (code points). */
+    static String subject(String subject, Map<String, String> values, int max) {
         String filled = fill(Objects.requireNonNull(subject, "subject must not be null"), values, false, Set.of())
             .replaceAll("[\\r\\n\\t]+", " ").strip();
         // On characters, not UTF-16 units: a cut must not halve a surrogate pair (an emoji).
-        return filled.codePointCount(0, filled.length()) > MAX_SUBJECT
-            ? filled.substring(0, filled.offsetByCodePoints(0, MAX_SUBJECT)) : filled;
+        return filled.codePointCount(0, filled.length()) > max
+            ? filled.substring(0, filled.offsetByCodePoints(0, max)) : filled;
     }
 
     /** Fills the placeholders of a text; in a link target, values not known to be URL-safe are percent-encoded. */

@@ -20,7 +20,7 @@ export async function approvedSponsor(request: APIRequestContext, name = 'Pia') 
       decision: 'APPROVE' })
   }
   await expect.poll(async () => (await rows(request, made.token, SPONSOR_DATASET, []))[0]?.attributes.reviewStatus,
-    { message: 'the sponsor is approved', timeout: 30_000 }).toBe('APPROVED')
+    { message: 'the Sponsor is approved', timeout: 30_000 }).toBe('APPROVED')
   return made
 }
 

@@ -64,7 +64,7 @@ function started(over: Partial<StartOutput> = {}): StartOutput {
 }
 
 const SUBMITTED = { attemptId: ATTEMPT, status: 'SUBMITTED', score: 2, fullScore: 5, passScore: 3, passed: false,
-  reward: 0, rewardStatus: 'PENDING', message: 'The sponsor is topping up.', questions: [
+  reward: 0, rewardStatus: 'PENDING', message: 'The Sponsor is topping up.', questions: [
     { no: 1, selected: [1], correct: [1], points: 2, earned: 2 },
     { no: 2, selected: [2], correct: [1], points: 3, earned: 0 },
   ] }
@@ -245,7 +245,7 @@ afterEach(() => {
 })
 
 describe('the feed', () => {
-  it('lists the quizzes the taker can answer, for their country, in Kudos', async () => {
+  it('lists the quizzes the Taker can answer, for their country, in Kudos', async () => {
     const { calls } = server()
     render(<App />)
     const card = await screen.findByTestId('feed-card')
@@ -258,7 +258,7 @@ describe('the feed', () => {
     expect(screen.getByTestId('nav-history')).toBeInTheDocument()
   })
 
-  it('shows a cover grid with a placeholder pattern, the reward badge, the sponsor and the completions (Q32)', async () => {
+  it('shows a cover grid with a placeholder pattern, the reward badge, the Sponsor and the completions (Q32)', async () => {
     window.sessionStorage.clear()
     server({ feed: [CARD, { ...CARD, publicationId: 'pub-2', name: 'Rivers', cover: 'file-1', sponsorAvatar: null }] })
     render(<App />)
@@ -381,7 +381,7 @@ describe('the ways a reward is paid (Q22)', () => {
     window.localStorage.removeItem('qb.feed.method')
   })
 
-  it('lists the cash rewards waiting for the taker on the home, leading to each result', async () => {
+  it('lists the cash rewards waiting for the Taker on the home, leading to each result', async () => {
     server({ cashRewards: [{ cashRewardId: 'c1', attemptId: ATTEMPT, code: 'C-ABCD1234', publicationId: PUB,
       publicationName: 'Capitals week', sponsorCompany: 'Capitals Inc', amount: 100, status: 'MARKED_PAID',
       dueAt: '2026-10-20T00:00:00Z', markedPaidAt: '2026-10-20T01:00:00Z', confirmBy: '2026-10-27T01:00:00Z' }] })
@@ -423,7 +423,7 @@ describe('the ways a reward is paid (Q22)', () => {
     await waitFor(() => expect(posted('QB_CASH_REWARD_CONFIRM')).toEqual([{ cashRewardId: 'c1' }]))
   })
 
-  it('offers the sponsor\'s page on the result, whether passed or not (Q64)', async () => {
+  it('offers the Sponsor\'s page on the result, whether passed or not (Q64)', async () => {
     server({ result: () => json(200, { output: finished({ score: 0, passed: false, reward: 0, rewardStatus: 'NONE' }) }),
       publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals' })], offset: 0, limit: 1 }) })
     window.history.replaceState(null, '', `/result/${ATTEMPT}`)
@@ -438,7 +438,7 @@ describe('the ways a reward is paid (Q22)', () => {
     expect(screen.queryByTestId('result-next-step')).toBeNull()
   })
 
-  it('leads from the result to the sponsor\'s tree when their quizzes lead to one another (Q85)', async () => {
+  it('leads from the result to the Sponsor\'s tree when their quizzes lead to one another (Q85)', async () => {
     server({ publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals' })], offset: 0, limit: 1 }),
       extra: (path) => path === '/api/queries/qb.app.sponsor-tree'
         ? json(200, { items: [
@@ -470,13 +470,13 @@ describe('the ways a reward is paid (Q22)', () => {
   })
 })
 
-describe('collecting a prize by the sponsor\'s code (Q22b)', () => {
+describe('collecting a prize by the Sponsor\'s code (Q22b)', () => {
   const prizeRow = { redemptionId: 'r1', attemptId: ATTEMPT, code: 'C-ABCD1234', publicationId: PUB,
     publicationName: 'Capitals week', sponsorCompany: 'Capitals Inc', amount: 100, description: 'A coffee at our counter',
     status: 'DUE', dueAt: '2026-10-20T00:00:00Z', expiresAt: '2026-11-20T00:00:00Z', claimedAt: null, confirmBy: null,
     redeemedAt: null }
 
-  it('shows the prizes to collect at the sponsor whose code was scanned, and collects one at once', async () => {
+  it('shows the prizes to collect at the Sponsor whose code was scanned, and collects one at once', async () => {
     const { posted } = server({ redemptions: [prizeRow] })
     window.history.replaceState(null, '', '/redeem/rot-key-1')
     render(<App />)
@@ -496,7 +496,7 @@ describe('collecting a prize by the sponsor\'s code (Q22b)', () => {
     expect(posted('QB_REDEEM_TOKEN_CHECK')).toEqual([{ scannedKey: 'rot-key-1' }])
   })
 
-  it('waits for the sponsor after a printed code\'s claim, and says when a code no longer works', async () => {
+  it('waits for the Sponsor after a printed code\'s claim, and says when a code no longer works', async () => {
     server({ redemptions: [prizeRow],
       redeemCheck: () => json(200, { output: { sponsorCompany: 'Capitals Inc', kind: 'PRINTED', prizes: [{
         redemptionId: 'r1', attemptId: ATTEMPT, code: 'C-ABCD1234', amount: 100, description: 'A coffee at our counter',
@@ -504,11 +504,11 @@ describe('collecting a prize by the sponsor\'s code (Q22b)', () => {
       redeemClaim: () => json(200, { output: { redemptionId: 'r1', status: 'CLAIMED', revision: 2 } }) })
     window.history.replaceState(null, '', '/redeem/print-key-1')
     render(<App />)
-    expect(await screen.findByTestId('redeem-page')).toHaveTextContent('The sponsor confirms it on their screen')
+    expect(await screen.findByTestId('redeem-page')).toHaveTextContent('The Sponsor confirms it on their screen')
     await userEvent.click(screen.getByTestId('redeem-collect'))
     const done = await screen.findByTestId('redeem-done')
     expect(done).toHaveAttribute('data-status', 'CLAIMED')
-    expect(done).toHaveTextContent('Waiting for the sponsor')
+    expect(done).toHaveTextContent('Waiting for the Sponsor')
     cleanup()
     server({ redeemCheck: () => json(422, { title: 'Unprocessable', status: 422, violations: [{ ruleCode: 'QB_REDEEM_TOKEN_INVALID' }] }) })
     window.history.replaceState(null, '', '/redeem/old-key')
@@ -565,7 +565,7 @@ describe('collecting a prize by the sponsor\'s code (Q22b)', () => {
     expect(window.location.pathname).toBe('/')
   })
 
-  it('lists the prizes waiting on the home, and shows a claim waiting for the sponsor on the result', async () => {
+  it('lists the prizes waiting on the home, and shows a claim waiting for the Sponsor on the result', async () => {
     server({ redemptions: [{ ...prizeRow, status: 'CLAIMED', confirmBy: '2026-10-20T01:10:00Z' }],
       result: () => json(200, { output: finished({ score: 5, passed: true, reward: 100, rewardStatus: 'REDEEM',
         rewardMethod: 'OFFLINE_REDEEM', cash: null, redeem: { redemptionId: 'r1', status: 'CLAIMED', code: 'C-ABCD1234',
@@ -646,7 +646,7 @@ describe('a digital prize (Q33)', () => {
     expect(within(reward).getByTestId('digital-content')).toHaveTextContent('SPRING-2026')
   })
 
-  it('says when the sponsor sends a due prize, offers only a report, and sends its note', async () => {
+  it('says when the Sponsor sends a due prize, offers only a report, and sends its note', async () => {
     const { posted } = server({ result: result({ status: 'DUE', delivery: 'SPONSOR_SENT', hint: null, deliveredAt: null,
       sendBy: '2026-10-23T01:00:00Z', confirmBy: null }) })
     window.history.replaceState(null, '', `/result/${ATTEMPT}`)
@@ -899,8 +899,8 @@ describe('the pages of the bottom bar (Q67)', () => {
   })
 })
 
-describe('a card\'s progress and its sponsor (Q64, Q66)', () => {
-  it("says the taker's progress in the line of facts, and links the sponsor's published page from the name and picture",
+describe('a card\'s progress and its Sponsor (Q64, Q66)', () => {
+  it("says the Taker's progress in the line of facts, and links the Sponsor's published page from the name and picture",
     async () => {
     const future = new Date(Date.now() + 600_000).toISOString()
     const past = new Date(Date.now() - 600_000).toISOString()
@@ -926,7 +926,7 @@ describe('a card\'s progress and its sponsor (Q64, Q66)', () => {
     await expectAccessible()
   })
 
-  it('goes back from the start page with the header\'s arrow, and offers the sponsor\'s page there', async () => {
+  it('goes back from the start page with the header\'s arrow, and offers the Sponsor\'s page there', async () => {
     server({ publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals' })], offset: 0,
       limit: 1 }) })
     render(<App />)
@@ -941,7 +941,7 @@ describe('a card\'s progress and its sponsor (Q64, Q66)', () => {
     expect(screen.queryByTestId('header-back')).toBeNull()
   })
 
-  it('goes home from a start page opened first, and shows no sponsor page while there is none', async () => {
+  it('goes home from a start page opened first, and shows no Sponsor page while there is none', async () => {
     server()
     window.history.replaceState(null, '', `/p/${PUB}`)
     render(<App />)
@@ -1068,7 +1068,7 @@ describe('a publication\'s page', () => {
     }
   })
 
-  it('says how many of the questions each taker is given when the publication draws some (Q81)', async () => {
+  it('says how many of the questions each Taker is given when the publication draws some (Q81)', async () => {
     server({ publicationPage: () => json(200, { items: [publication({ pickCount: 1, materials: '[]' })],
       offset: 0, limit: 1 }) })
     window.history.replaceState(null, '', `/p/${PUB}`)
@@ -1164,7 +1164,7 @@ describe('a publication\'s page', () => {
 })
 
 describe('certification rounds (Q70a)', () => {
-  it('says until when the taker holds the certification instead of offering its round', async () => {
+  it('says until when the Taker holds the certification instead of offering its round', async () => {
     const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,
       heldUntil: '2027-10-31T00:00:00Z' })], offset: 0, limit: 1 }) })
     window.history.replaceState(null, '', `/p/${PUB}`)
@@ -1310,7 +1310,7 @@ describe('customer matching (Q47)', () => {
     expect(posted('QB_ATTEMPT_START')).toEqual([])
   })
 
-  it('shows what the taker told and saves the whole of it, a criterion left empty cleared', async () => {
+  it('shows what the Taker told and saves the whole of it, a criterion left empty cleared', async () => {
     const { posted } = server({ attributes: [
       { criterionKey: 'interest', valueCode: 'PETS' }, { criterionKey: 'gender', valueCode: 'FEMALE' },
       { criterionKey: 'occupation', valueCode: 'STUDENT' }] })
@@ -1434,7 +1434,7 @@ describe('answering', () => {
     expect(screen.getByTestId('result-passed')).toHaveTextContent('Not passed')
     const reward = screen.getByTestId('result-reward')
     expect(reward).toHaveAttribute('data-status', 'PENDING')
-    expect(reward).toHaveTextContent('The sponsor is topping up.')
+    expect(reward).toHaveTextContent('The Sponsor is topping up.')
     const questions = screen.getAllByTestId('result-question')
     expect(questions[0]).toHaveAttribute('data-correct', 'true')
     expect(within(questions[0]).getByTestId('result-mine')).toHaveTextContent('B. Paris')
@@ -1771,7 +1771,7 @@ describe('a result read later', () => {
     window.history.replaceState(null, '', `/result/${ATTEMPT}`)
     render(<App />)
     expect(await screen.findByTestId('result-score')).toHaveTextContent('2 / 5')
-    expect(screen.getByTestId('result-reward')).toHaveTextContent('The sponsor is topping up.')
+    expect(screen.getByTestId('result-reward')).toHaveTextContent('The Sponsor is topping up.')
     expect(within(screen.getAllByTestId('result-question')[0]).getByTestId('result-mine')).toHaveTextContent('B. Paris')
   })
 
@@ -1821,7 +1821,7 @@ describe('the history', () => {
       cashStatus: 'MARKED_PAID', cashCode: 'C-ABCD1234' })] })
     window.history.replaceState(null, '', '/history')
     render(<App />)
-    expect(await screen.findByTestId('history-cash')).toHaveTextContent('The sponsor paid 100 Kudos: confirm it')
+    expect(await screen.findByTestId('history-cash')).toHaveTextContent('The Sponsor paid 100 Kudos: confirm it')
   })
 
   it('continues an attempt in progress where it was left', async () => {
@@ -1895,7 +1895,7 @@ describe('single and multiple choice in a scored quiz', () => {
     })
 })
 
-describe("the sponsor's products (Q60b)", () => {
+describe("the Sponsor's products (Q60b)", () => {
   const products = [
     { questionNo: 0, seq: 0, productId: 'p1', name: 'Rye loaf', description: null, image: null, price: '1200',
       currency: 'JPY', shopUrl: 'https://shop.example/rye' },

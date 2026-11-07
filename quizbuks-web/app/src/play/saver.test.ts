@@ -16,7 +16,7 @@ describe('saving an attempt\'s progress', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
-  it('saves answers a moment after the taker stops changing them, once, with the latest choice', async () => {
+  it('saves answers a moment after the Taker stops changing them, once, with the latest choice', async () => {
     const save = vi.fn(async (input: SaveInput) => output(input))
     const saver = new AnswerSaver({ attemptId: 'a1', save, delayMs: 800 })
     saver.answer(1, [2])

@@ -94,7 +94,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q65b)", () => {
+describe("the Sponsor's page editor (Q60a), a section of the Sponsor profile (Q65b)", () => {
   it('has every text in every language', () => {
     const english = keyPaths(pageEn)
     for (const [lng, texts] of [['zh', pageZh], ['ja', pageJa]] as const) expect(keyPaths(texts), lng).toEqual(english)
@@ -104,7 +104,7 @@ describe("the sponsor's page editor (Q60a), a section of the sponsor profile (Q6
     }
   })
 
-  it('is a section of the sponsor hub, reached from the one menu entry; the old address leads to it (Q79)', async () => {
+  it('is a section of the Sponsor hub, reached from the one menu entry; the old address leads to it (Q79)', async () => {
     server(DRAFT)
     // The old address of "My page" leads to the hub's shop page.
     window.history.replaceState(null, '', OLD_PAGE_PATH)

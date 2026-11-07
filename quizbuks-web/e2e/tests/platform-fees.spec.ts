@@ -13,7 +13,7 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a sponsor sees how the platform bills them; finance and the operator open their fee pages', async ({ page, request }) => {
+test('a Sponsor sees how the platform bills them; finance and the operator open their fee pages', async ({ page, request }) => {
   test.setTimeout(120_000)
   const sponsor = await approvedSponsor(request)
   await signIn(page, '/sponsor/', sponsor.email)
@@ -40,5 +40,5 @@ test('a sponsor sees how the platform bills them; finance and the operator open 
   // The operator's billing page lists the sponsors of the caller's operator: none for the administrator.
   await page.goto('/admin/qb/operator/billing')
   await expect(page.getByTestId('operator-billing-page')).toBeVisible()
-  await expectAccessible(page, 'operator sponsors billing')
+  await expectAccessible(page, 'operator Sponsors billing')
 })

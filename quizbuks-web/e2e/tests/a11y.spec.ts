@@ -110,7 +110,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('app account security 1280px'))
   })
 
-  test(`the sponsor console's pages pass axe (${appearance})`, async ({ page, request }) => {
+  test(`the Sponsor console's pages pass axe (${appearance})`, async ({ page, request }) => {
     await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     await page.goto('/sponsor/login')
@@ -163,7 +163,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor account 390px'))
   })
 
-  test(`the sponsor console's quiz pages pass axe (${appearance})`, async ({ page, request }) => {
+  test(`the Sponsor console's quiz pages pass axe (${appearance})`, async ({ page, request }) => {
     await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     const { email, token } = await sponsor(request, 'Cleo')
@@ -217,7 +217,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor quiz editor 390px'))
   })
 
-  test(`the sponsor console's publishing pages pass axe (${appearance})`, async ({ page, request }) => {
+  test(`the Sponsor console's publishing pages pass axe (${appearance})`, async ({ page, request }) => {
     await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
     const { email, token } = await approvedSponsor(request, 'Ada')
@@ -298,7 +298,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor live publication 390px'))
   })
 
-  test(`the sponsor console's analytics pages pass axe (${appearance})`, async ({ page, request }) => {
+  test(`the Sponsor console's analytics pages pass axe (${appearance})`, async ({ page, request }) => {
     test.setTimeout(150_000)
     await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })
@@ -365,7 +365,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('admin review queue'))
     await page.getByTestId('tab-sponsors').click()
     await expect(page.getByTestId('queue-sponsor').first()).toBeVisible()
-    await expectAccessible(page, at('admin sponsor queue'))
+    await expectAccessible(page, at('admin Sponsor queue'))
     await page.goto(`/admin/qb/reviews/publications/${publicationId}`)
     await expect(page.getByTestId('preview-question')).toHaveCount(2)
     await expect(page.getByTestId('version-preview').getByRole('img').first()).toBeVisible()
@@ -373,7 +373,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('admin publication review'))
     await page.goto(`/admin/qb/reviews/sponsors/${userId}`)
     await expect(page.getByTestId('approval-approve')).toBeVisible()
-    await expectAccessible(page, at('admin sponsor review'))
+    await expectAccessible(page, at('admin Sponsor review'))
     await page.goto('/admin/qb/users')
     await expect(page.getByTestId('user-row').first()).toBeVisible()
     await expectAccessible(page, at('admin users'))
@@ -460,7 +460,7 @@ for (const appearance of ['light', 'dark'] as const) {
 for (const appearance of ['light', 'dark'] as const) {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
 
-  test(`the sponsor console's transactions page passes axe (${appearance})`, async ({ page, request }) => {
+  test(`the Sponsor console's transactions page passes axe (${appearance})`, async ({ page, request }) => {
     test.setTimeout(180_000)
     await setAppearance(page, appearance)
     await page.setViewportSize({ width: 1280, height: 900 })

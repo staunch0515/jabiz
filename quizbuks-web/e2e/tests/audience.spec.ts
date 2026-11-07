@@ -11,7 +11,7 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a sponsor aims a quiz at a profile; a taker who matches it can start it', async ({ page, request }) => {
+test('a Sponsor aims a quiz at a profile; a Taker who matches it can start it', async ({ page, request }) => {
   test.setTimeout(240_000)
   const sponsor = await fundedSponsor(request)
   const quiz = await run(request, sponsor.token, 'QB_QUIZ_SAVE', { title: 'Pet care basics', intro: null,
@@ -39,7 +39,7 @@ test('a sponsor aims a quiz at a profile; a taker who matches it can start it', 
   await expectAccessible(page, 'sponsor customer matching')
   await page.getByTestId('audience-count-button').click()
   // Rounded, never a small exact number: other runs may have added takers who like pets.
-  await expect(page.getByTestId('audience-count-result')).toHaveText(/Fewer than 20 takers|About \d[\d,]* takers/,
+  await expect(page.getByTestId('audience-count-result')).toHaveText(/Fewer than 20 Takers|About \d[\d,]* Takers/,
     { timeout: 30_000 })
   await page.getByTestId('publication-next').click()
   await expect(page.getByTestId('summary-conditions')).toHaveText('Interests: Pets')

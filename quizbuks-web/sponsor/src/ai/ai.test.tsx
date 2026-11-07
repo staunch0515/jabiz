@@ -216,7 +216,7 @@ describe('the AI questions panel', () => {
     expect(stillPolling(toAiJob(job('READY')))).toBe(false)
   })
 
-  it('adds only the reviewed candidates, as the sponsor left them', async () => {
+  it('adds only the reviewed candidates, as the Sponsor left them', async () => {
     const calls = server({ jobs: [[job('READY', { candidates: CANDIDATES, candidateCount: 2, invalidCount: 1,
       expiresAt: '2026-10-25T00:00:00Z' })]] })
     const edit = editing()

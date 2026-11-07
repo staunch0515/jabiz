@@ -499,7 +499,7 @@ describe('PublicationReviewPage, what the decision waits for', () => {
     expect(server.get.mock.calls.filter(([, o]) => o?.params?.path?.resourceId === DATASET.version)).toHaveLength(1)
   })
 
-  it('shows the sponsor\'s funds to finance only', async () => {
+  it('shows the Sponsor\'s funds to finance only', async () => {
     renderPublication()
     await screen.findByTestId('version-preview')
     expect(screen.queryByTestId('publication-funds')).not.toBeInTheDocument()
@@ -567,10 +567,10 @@ describe('SponsorReviewPage', () => {
     expect(screen.getByTestId('approval-panel')).toHaveAttribute('data-request', 'sponsor-request')
   })
 
-  it('offers no decision without the permission to review sponsors', async () => {
+  it('offers no decision without the permission to review Sponsors', async () => {
     server.permissions = new Set(['qb.admin.users.read'])
     renderAt(`/qb/reviews/sponsors/${SPONSOR_ID}`, '/qb/reviews/sponsors/:userId', <SponsorReviewPage />)
-    expect(await screen.findByText('Deciding needs the permission to review sponsors.')).toBeInTheDocument()
+    expect(await screen.findByText('Deciding needs the permission to review Sponsors.')).toBeInTheDocument()
     expect(screen.queryByTestId('approval-panel')).not.toBeInTheDocument()
     // Q22: the methods are shown to everyone, changed only with the permission; without a setting of their own the
     // parameter's default (Q28).
@@ -649,7 +649,7 @@ describe('UserSummaryPage', () => {
     const certificates = await screen.findByTestId('user-certificates')
     expect(await within(certificates).findByTestId('certificate-number'))
       .toHaveTextContent('0123456789abcdef0123456789abcdef')
-    expect(certificates).toHaveTextContent('May apply to become a sponsor')
+    expect(certificates).toHaveTextContent('May apply to become a Sponsor')
     expect(certificates).toHaveTextContent('Mei')
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.certificates,
       { params: { userId: SPONSOR_ID }, offset: 0, limit: 20 })
@@ -666,7 +666,7 @@ describe('UserSummaryPage', () => {
 })
 
 describe('the users list (Q53c-2)', () => {
-  it('colours the sponsor status and a ban, and shows an empty list with a drawing', async () => {
+  it('colours the Sponsor status and a ban, and shows an empty list with a drawing', async () => {
     server.templates.set(TEMPLATE.users, [{ ...USER, banned: true }])
     const { unmount } = renderAt('/qb/users', '/qb/users', <UsersPage />)
     const banned = await screen.findByTestId('user-banned')

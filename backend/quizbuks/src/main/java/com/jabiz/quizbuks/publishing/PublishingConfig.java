@@ -68,7 +68,7 @@ public class PublishingConfig {
     @Bean
     StaticDictionary qbPublisherKindDictionary() {
         return StaticDictionary.define(PublisherKind.DICTIONARY, d -> d
-            .item(PublisherKind.SPONSOR, "en", "Sponsor", "zh", "商家", "ja", "スポンサー")
+            .item(PublisherKind.SPONSOR, "en", "Sponsor", "zh", "发起方", "ja", "主催者")
             .item(PublisherKind.SHOPIFY_SHOP, "en", "Shopify shop", "zh", "Shopify 店铺", "ja", "Shopify ストア"));
     }
 
@@ -337,10 +337,10 @@ public class PublishingConfig {
         return StaticDictionary.define(RewardMethod.DICTIONARY, d -> d
             .item(RewardMethod.PLATFORM, "en", "Kudos paid by QuizBuks", "zh", "平台支付 Kudos",
                 "ja", "QuizBuks が Kudos を支払う")
-            .item(RewardMethod.SPONSOR_CASH, "en", "Cash from the sponsor", "zh", "商家直接付现金",
-                "ja", "スポンサーが現金で支払う")
-            .item(RewardMethod.OFFLINE_REDEEM, "en", "Prize at the sponsor's place", "zh", "商家线下兑付",
-                "ja", "スポンサーの店舗で引き換え")
+            .item(RewardMethod.SPONSOR_CASH, "en", "Cash from the sponsor", "zh", "发起方直接付现金",
+                "ja", "主催者が現金で支払う")
+            .item(RewardMethod.OFFLINE_REDEEM, "en", "Prize at the sponsor's place", "zh", "发起方线下兑付",
+                "ja", "主催者の店舗で引き換え")
             .item(RewardMethod.DIGITAL_PRIZE, "en", "Digital prize (a code or link)", "zh", "电子奖品（兑换码或链接）",
                 "ja", "デジタル景品（コードまたはリンク）")
             .item(RewardMethod.CHANNEL, "en", "Given by the channel (a shop's discount code)", "zh",

@@ -20,20 +20,20 @@ App Store Connect →（本 App）→ App 信息 → 年龄分级。所有内容
 
 | 问题 | 答 | 理由 |
 |---|---|---|
-| 暴力、恐怖、成人内容、粗俗或低俗幽默、医疗信息 | 无 | 问卷由商家撰写，发布前一律审核（`operations.md`"阶段一"） |
+| 暴力、恐怖、成人内容、粗俗或低俗幽默、医疗信息 | 无 | 问卷由发起方撰写，发布前一律审核（`operations.md`"阶段一"） |
 | 酒精、烟草或药物的使用或提及 | 无 | 不允许这类问卷（D-Q49d-7） |
 | 赌博、模拟赌博 | 无 | 答题不付费，奖励按分数给出，不是抽签或押注 |
 | 竞赛（若表单问到） | 有 | 按分数给奖品的问卷（规则见 Q49a 的规则页） |
 | 不受限制的网页访问 | 否 | 外壳只停在 `/taker/`，其他地址交给 Safari（Q49c） |
-| 用户生成内容 | 是 | 商家撰写的问卷；答题者之间不能交流 |
-| 消息与聊天 | 否 | 收件箱只有运营方与商家的通知，不能回复 |
+| 用户生成内容 | 是 | 发起方撰写的问卷；学者之间不能交流 |
+| 消息与聊天 | 否 | 收件箱只有运营方与发起方的通知，不能回复 |
 | 广告 | 否 | |
 
 按内容算出的级别多半是 4+ 或 9+。**目标是 18 岁以上**（D-Q49d-1）：在年龄分级页选"覆盖为更高的年龄分级"并选 **18+**，与 Google Play 的目标年龄一致。
 
 ## 3. App 审核信息（每个版本）
 
-- **登录信息**：审核专用的答题者账号（需求方在 production 注册，邮箱已验证、资料已填）。**只填在 App Store Connect 中，不进仓库。** 审核期间至少有一份这个账号还没答过的问卷（`play-review.md` §1）。
+- **登录信息**：审核专用的学者账号（需求方在 production 注册，邮箱已验证、资料已填）。**只填在 App Store Connect 中，不进仓库。** 审核期间至少有一份这个账号还没答过的问卷（`play-review.md` §1）。
 - **备注**（照下面粘贴；Q49c-2 之后按实际补全）：
 
 ```
@@ -42,10 +42,10 @@ Sign in with the account above, answer a quiz from Home, see the result and the 
 
 Native features: Universal Links open the app from our emails; sign-in with Google, Facebook, LINE and Apple runs in
 the system browser (ASWebAuthenticationSession); push notifications announce new quizzes and prizes. Only the
-takers' pages open inside the app; every other page opens in Safari.
+Takers' pages open inside the app; every other page opens in Safari.
 
 Shops publish quizzes on a separate website. Nothing can be bought in the app. Every quiz is reviewed before it is
-published; users can report a quiz from its page. Apple is not a sponsor of the prizes; the official rules are
+published; users can report a quiz from its page. Apple is not a Sponsor of the prizes; the official rules are
 linked from every quiz. Accounts can be deleted from Account → Delete account.
 ```
 
@@ -58,7 +58,7 @@ linked from every quiz. Accounts can be deleted from Account → Delete account.
 | 价格 | 免费 | |
 | 销售范围 | 全部国家或地区，**去掉中国大陆** | 需求方 2026-10-28（D-Q49c-5） |
 | 出口合规 | 只用标准加密（HTTPS），已在 Info.plist 中声明 `ITSAppUsesNonExemptEncryption = false`，上传时不再询问 | Q49c-1 |
-| 内容版权 | 不含第三方内容的权利问题：问卷由商家提供并按商家条款负责 | 商家条款 |
+| 内容版权 | 不含第三方内容的权利问题：问卷由发起方提供并按发起方条款负责 | 发起方条款 |
 | 类别 | 主要：购物；次要：可不选 | D-Q49d-3 |
 | 主要语言 | 日文；本地化：简体中文、英文 | |
 | 截图 | 6.9 英寸 iPhone（1320 × 2868），每种语言 6 张：workflow `QuizBuks store` 的产物 `<语言>/iphone/` | |

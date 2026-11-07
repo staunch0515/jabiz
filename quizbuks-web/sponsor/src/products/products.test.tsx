@@ -79,7 +79,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe("the sponsor's products (Q60b)", () => {
+describe("the Sponsor's products (Q60b)", () => {
   it('have every text in every language, and format prices with their currency’s decimals', () => {
     const english = keyPaths(productsEn)
     for (const [lng, texts] of [['zh', productsZh], ['ja', productsJa]] as const) {

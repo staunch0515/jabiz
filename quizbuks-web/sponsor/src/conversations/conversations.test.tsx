@@ -85,7 +85,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('the takers\' conversations (Q82)', () => {
+describe('the Takers\' conversations (Q82)', () => {
   it('have every text in every language, and read their paths', () => {
     const english = keyPaths(conversationsMessages.en)
     for (const lng of LANGUAGES) {
@@ -109,7 +109,7 @@ describe('the takers\' conversations (Q82)', () => {
     await expectAccessible()
   })
 
-  it('show a conversation with the taker\'s rewards, mark it read and send a reply', async () => {
+  it('show a conversation with the Taker\'s rewards, mark it read and send a reply', async () => {
     const { calls } = server()
     window.history.replaceState(null, '', conversationPath(ID))
     render(<App />)

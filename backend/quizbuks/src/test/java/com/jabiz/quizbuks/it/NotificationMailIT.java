@@ -213,7 +213,7 @@ class NotificationMailIT extends PayoutItSupport {
 
     /** The subjects of the publication mail delivered to an address (not the onboarding's), oldest first. */
     private static List<MimeMessage> publicationMail(String address) {
-        return received(address).stream().filter(message -> !subject(message).contains("sponsor account")).toList();
+        return received(address).stream().filter(message -> !subject(message).contains("Sponsor account")).toList();
     }
 
     private static long statusEvents(String publicationId) {

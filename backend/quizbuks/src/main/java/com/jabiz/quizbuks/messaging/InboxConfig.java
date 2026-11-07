@@ -236,7 +236,7 @@ public class InboxConfig {
             .item(QbInbox.REFERRAL_EXPIRED, "en", "Referral ended", "zh", "推荐已结束", "ja", "紹介の終了")
             .item(QbInbox.REFERRAL_FUNDS_SHORT, "en", "Referral reward waiting for funds", "zh",
                 "推荐奖励待充值", "ja", "紹介報酬の残高不足")
-            .item(QbInbox.CONVERSATION_REPLY, "en", "Sponsor replied", "zh", "商户回复", "ja", "スポンサーからの返信"));
+            .item(QbInbox.CONVERSATION_REPLY, "en", "Sponsor replied", "zh", "发起方回复", "ja", "主催者からの返信"));
     }
 
     @Bean
@@ -261,7 +261,7 @@ public class InboxConfig {
     StaticDictionary qbBroadcastAudienceDictionary() {
         return StaticDictionary.define(QbInbox.AUDIENCE_DICTIONARY, d -> d
             .item(QbInbox.AUDIENCE_APP, "en", "App", "zh", "App", "ja", "アプリ")
-            .item(QbInbox.AUDIENCE_SPONSOR, "en", "Sponsor console", "zh", "商家后台", "ja", "スポンサー管理画面"));
+            .item(QbInbox.AUDIENCE_SPONSOR, "en", "Sponsor console", "zh", "发起方后台", "ja", "主催者管理画面"));
     }
 
     @Bean
@@ -276,7 +276,7 @@ public class InboxConfig {
     StaticDictionary qbBroadcastSenderDictionary() {
         return StaticDictionary.define(QbInbox.SENDER_DICTIONARY, d -> d
             .item(QbInbox.SENDER_PLATFORM, "en", "QuizBuks", "zh", "QuizBuks", "ja", "QuizBuks")
-            .item(QbInbox.SENDER_SPONSOR, "en", "Sponsor", "zh", "商家", "ja", "スポンサー"));
+            .item(QbInbox.SENDER_SPONSOR, "en", "Sponsor", "zh", "发起方", "ja", "主催者"));
     }
 
     // ---- processes -------------------------------------------------------------------------------------------------

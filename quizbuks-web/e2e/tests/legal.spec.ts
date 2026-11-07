@@ -67,7 +67,7 @@ test('anybody reads the help centre and the texts in effect, never a question no
   expect((await request.get('/api/public/queries/qb.admin.consents')).status()).toBe(404)
 })
 
-test('a new taker accepts the terms in effect on the welcome step', async ({ page, request }) => {
+test('a new Taker accepts the terms in effect on the welcome step', async ({ page, request }) => {
   const email = await verifiedUser(request, 'app', 'Nao')
   await signIn(page, '/taker/', email)
   await expect(page).toHaveURL(/\/welcome$/)
@@ -80,7 +80,7 @@ test('a new taker accepts the terms in effect on the welcome step', async ({ pag
     .toEqual([false, false])
 })
 
-test('after a change of substance a taker accepts again on signing in; a rewording asks nothing', async ({ page,
+test('after a change of substance a Taker accepts again on signing in; a rewording asks nothing', async ({ page,
   request }) => {
   const email = await verifiedUser(request, 'app', 'Rio')
   const taker = await tokenOf(request, email, PASSWORD, 'app')

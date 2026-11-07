@@ -210,29 +210,29 @@ class TopUpConfig {
     @Bean
     StaticDictionary qbReconCheckDictionary() {
         return StaticDictionary.define(Reconciliation.CHECK_DICTIONARY, d -> d
-            .item(ReconChecks.SPONSOR_WALLET, "en", "Sponsor wallet", "zh", "商家钱包", "ja", "スポンサーウォレット")
+            .item(ReconChecks.SPONSOR_WALLET, "en", "Sponsor wallet", "zh", "发起方钱包", "ja", "主催者ウォレット")
             .item(ReconChecks.SPONSOR_PENDING_COUNT, "en", "Pending rewards (count)", "zh", "待支付笔数",
                 "ja", "支払待ち件数")
             .item(ReconChecks.SPONSOR_PENDING_AMOUNT, "en", "Pending rewards (amount)", "zh", "待支付金额",
                 "ja", "支払待ち金額")
-            .item(ReconChecks.TOTAL_2110, "en", "Total of sponsor wallets", "zh", "商家钱包合计",
-                "ja", "スポンサーウォレット合計")
+            .item(ReconChecks.TOTAL_2110, "en", "Total of sponsor wallets", "zh", "发起方钱包合计",
+                "ja", "主催者ウォレット合計")
             .item(ReconChecks.LEDGER_ZERO, "en", "Ledger balance", "zh", "账本平衡", "ja", "元帳の貸借")
             .item(ReconChecks.TOPUP_LEDGER, "en", "Top-up posting", "zh", "充值分录", "ja", "チャージの仕訳")
             .item(ReconChecks.TOPUP_ARRIVALS, "en", "Top-up postings (count)", "zh", "充值分录笔数",
                 "ja", "チャージの仕訳件数")
             .item(ReconChecks.TOPUP_REFUNDS, "en", "Top-up refunds", "zh", "充值退款", "ja", "チャージの返金")
             .item(ReconChecks.TOPUP_FEE, "en", "Top-up fee", "zh", "充值手续费", "ja", "チャージの手数料")
-            .item(ReconChecks.TAKER_WALLET, "en", "Taker wallet", "zh", "用户钱包", "ja", "回答者ウォレット")
+            .item(ReconChecks.TAKER_WALLET, "en", "Taker wallet", "zh", "用户钱包", "ja", "テイカーウォレット")
             .item(ReconChecks.TAKER_IN_TRANSFER, "en", "Taker wallet (in transfer)", "zh", "用户钱包（转账中）",
-                "ja", "回答者ウォレット（送金中）")
+                "ja", "テイカーウォレット（送金中）")
             .item(ReconChecks.TAKER_WALLET_LAG, "en", "Taker wallet behind (note)", "zh", "用户钱包落后（提示）",
-                "ja", "回答者ウォレットの遅れ（注記）")
+                "ja", "テイカーウォレットの遅れ（注記）")
             .item(ReconChecks.TRANSFER_LEDGER, "en", "Transfer posting", "zh", "转账分录", "ja", "送金の仕訳")
             .item(ReconChecks.TRANSFER_IN_TRANSIT, "en", "Transfer in transit", "zh", "转账在途", "ja", "送金の未達")
-            .item(ReconChecks.CASH_ACCOUNT, "en", "Sponsor cash account", "zh", "商家现金账户", "ja", "スポンサーの現金口座")
-            .item(ReconChecks.TOTAL_2160, "en", "Total of sponsor cash accounts", "zh", "商家现金账户合计",
-                "ja", "スポンサーの現金口座合計")
+            .item(ReconChecks.CASH_ACCOUNT, "en", "Sponsor cash account", "zh", "发起方现金账户", "ja", "主催者の現金口座")
+            .item(ReconChecks.TOTAL_2160, "en", "Total of sponsor cash accounts", "zh", "发起方现金账户合计",
+                "ja", "主催者の現金口座合計")
             .item(ReconChecks.FEES_RECEIVABLE, "en", "Platform fees receivable", "zh", "应收平台费",
                 "ja", "未収プラットフォーム料金")
             .item(ReconChecks.ENTRY_FEES_UNSETTLED, "en", "Entry fees unsettled", "zh", "报名费待入账",
