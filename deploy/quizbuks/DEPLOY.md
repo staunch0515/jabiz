@@ -571,8 +571,9 @@ staging 是否备份按需要决定（`quizbuks_staging`、`quizbuks-staging_fil
   - `pgbackrest-pitr/`（repo1）：周日全量、其余每天差异，保证至少 14 天的时间点恢复；
   - `pgbackrest-monthly/`（repo2）：每月最后一天的全量，保留 120 个（10 年，凭证与分录，L-4）。
 - **上传文件**：restic 每小时备份 production 的卷 `quizbuks_files`，存进同一个桶的 `restic-files/`，保留 48 个每小时、14 个每天、120 个每月的快照（staging 的文件不备份）。
-- **谁会知道出了问题**：每个任务失败，都发邮件给值班（`BACKUP_MAIL_*`）。若设置了死人开关服务（healthchecks.io 之类，`BACKUP_PING_URL_*`），每次运行还会去 ping：
-  成功、失败与"该来的 ping 没来"（包括整台服务器停了）都由那个服务通知。每小时的检查任务另外核对：最近的基础备份不超过 26 小时，WAL 归档没有失败。
+- **谁会知道出了问题**（需求方 2026-11-07 选定）：**主渠道是外部的死人开关服务**（healthchecks.io 之类，`BACKUP_PING_URL_*`）：每次运行开始、成功、失败都去 ping，
+  失败或"该来的 ping 没来"（任务没跑、整台服务器停了）由那个服务通知值班。**邮件是后备**：每个任务失败都另发邮件给值班（`BACKUP_MAIL_*`）。生产中两者都必须设置（`backup.env.rules`）。
+  每小时的检查任务另外核对：最近的基础备份不超过 26 小时，WAL 归档没有失败。
 - 文件都在 `deploy/quizbuks/backup/`：`Dockerfile.postgres`（带 pgBackRest 的 PostgreSQL 镜像）、`pgbackrest.conf`、`compose.postgres.example.yaml`（共用 postgres 要改的几行）、
   `backup.env.example` 与 `backup.env.rules`（设置与检查规则）、`backup.sh`（各个任务）、`systemd/`（定时器）。
 - 以后文件改存进 R2（本文 3b）时，restic 这一部分改为桶对桶的复制，届时另行说明。
@@ -592,8 +593,22 @@ staging 是否备份按需要决定（`quizbuks_staging`、`quizbuks-staging_fil
    - 创建后页面**只显示一次** Access Key ID 与 Secret Access Key：立即存进密码管理器。同一页上的 S3 地址 `https://<账户 ID>.r2.cloudflarestorage.com` 也记下。
      不要发到聊天、邮件或问题记录里。
    - 这个密钥与应用存文件用的密钥（3b）**分开**：应用的密钥泄露时，拿不到备份；反之亦然。
-3. （可选）**死人开关**：在 healthchecks.io（或同类服务）建 4 个检查：`quizbuks-backup-pitr`（周期 1 天、宽限 2 小时）、`-monthly`（周期 1 天）、
-   `-files`（周期 1 小时、宽限 30 分钟）、`-check`（周期 1 小时），通知方式填值班的邮箱或手机。记下每个检查的 ping 地址。
+3. **死人开关**（必做；以 healthchecks.io 为例，同类服务做法相同）：
+   - **开账号**：https://healthchecks.io → Sign Up，用值班共用的邮箱注册（免费方案够用：20 个检查）。登录后在 Settings 中开启两步验证。
+   - **建项目**：Projects → Create a project，名称 `QuizBuks backups`。
+   - **建 4 个检查**（Add Check，每个填 Name、Schedule 选 Simple，Period 与 Grace 如下）：
+
+     | Name | Period | Grace | 对应的任务 |
+     |---|---|---|---|
+     | `quizbuks-backup-pitr` | 1 day | 2 hours | 每天 03:10 UTC 的基础备份 |
+     | `quizbuks-backup-monthly` | 1 day | 1 hour | 每天 23:40 UTC 的月末检查（非月末也会 ping 成功） |
+     | `quizbuks-backup-files` | 1 hour | 30 minutes | 每小时的文件备份 |
+     | `quizbuks-backup-check` | 1 hour | 30 minutes | 每小时的核对 |
+
+   - **通知方式**：Integrations 中添加值班的邮箱（必要时再加短信、Telegram、Slack 等）；在每个检查的 Notification methods 中勾选。
+   - **记下 ping 地址**：每个检查页面上的 `https://hc-ping.com/<一串 UUID>`。它就是这个检查的钥匙（谁有它谁就能报"成功"），按密钥对待：
+     存进密码管理器，只写进服务器的 `backup.env`（下面 B.2），不要发到聊天或问题记录里。
+   - 第一次 ping 到来之前，检查的状态是 New（不报警）；B.6 第一次备份后应变为 Up。
 
 #### B. 在服务器上（值班的人照做）
 
@@ -603,7 +618,8 @@ staging 是否备份按需要决定（`quizbuks_staging`、`quizbuks-staging_fil
    - 填入：R2 地址（不带 `https://`，用于 `PGBACKREST_REPO*_S3_ENDPOINT`；`RESTIC_REPOSITORY` 中带 `https://`）、桶名、上面的 Access Key ID 与 Secret（两处都填同一个）；
    - 三个口令各生成一个：`openssl rand -base64 48`，分别填进 `PGBACKREST_REPO1_CIPHER_PASS`、`PGBACKREST_REPO2_CIPHER_PASS`、`RESTIC_PASSWORD`；
    - **三个口令另存离线副本**（密码管理器 + 纸面或离线介质），与 `JABIZ_*` 密钥分开保管：没有口令，备份就打不开。
-   - 邮件：`BACKUP_MAIL_SMTP_URL`（如 `smtps://smtp.example.com:465`）、`BACKUP_MAIL_USER` / `_PASSWORD`、`_FROM`、`_TO`（值班的邮箱）；有死人开关时填 `BACKUP_PING_URL_*`。
+   - 死人开关：A.3 的 4 个 ping 地址填进 `BACKUP_PING_URL_PITR` / `_MONTHLY` / `_FILES` / `_CHECK`（必填）。
+   - 邮件（后备）：`BACKUP_MAIL_SMTP_URL`（如 `smtps://smtp.example.com:465`）、`BACKUP_MAIL_USER` / `_PASSWORD`、`_FROM`、`_TO`（值班的邮箱）（必填）。
    - 检查：`tools/ops/env-check.sh --app-only /opt/infra/backup/backup.env deploy/quizbuks/backup/backup.env.rules`，没有 ERROR 才继续。
 3. **做镜像**：`cd /opt/infra/backup && docker build -t postgres-pgbackrest:16 -f Dockerfile.postgres .`
 4. **改共用 postgres 的 compose**（`/opt/infra` 中，先备份原文件）：照 `compose.postgres.example.yaml` 改 4 处——`image` 改为 `postgres-pgbackrest:16`；加
@@ -622,9 +638,10 @@ staging 是否备份按需要决定（`quizbuks_staging`、`quizbuks-staging_fil
    docker exec -u postgres postgres pgbackrest info   # 两个仓库各有备份
    ```
 7. **开定时器**：`systemctl daemon-reload && systemctl enable --now quizbuks-backup-{pitr,monthly,files,check}.timer`，
-   `systemctl list-timers 'quizbuks-backup*'` 能看到下一次运行。
-8. **试一次通知**：在 `backup.env` 的副本中把 `PGBACKREST_REPO1_CIPHER_PASS` 改错，`BACKUP_ENV=<副本> /opt/infra/backup/backup.sh pitr`，应失败、收到邮件（与死人开关的失败通知）。
-   **随后删掉副本。**
+   `systemctl list-timers 'quizbuks-backup*'` 能看到下一次运行。healthchecks.io 上 4 个检查在各自第一次运行后变为 Up。
+8. **试一次通知**：在 `backup.env` 的副本中把 `PGBACKREST_REPO1_CIPHER_PASS` 改错，`BACKUP_ENV=<副本> /opt/infra/backup/backup.sh pitr`：
+   应失败，healthchecks.io 上 `quizbuks-backup-pitr` 变为 Down 并通知值班，同时收到后备的邮件。随后正常跑一次 `/opt/infra/backup/backup.sh pitr`，检查回到 Up。
+   **最后删掉副本。**
 9. **一周内做一次恢复演练**（下面 C），记入演练记录。
 
 **回退**（不再用 pgBackRest 时）：compose 中的 `image` 改回原来的、去掉 `env_file` 与那 4 个 `-c` 参数（或改 `archive_mode=off`），`docker compose up -d postgres`，

@@ -10,7 +10,8 @@
 #   backup.sh stanza     once, before the first backup: create the stanza in both repositories
 #
 # Settings come from BACKUP_ENV (default /opt/infra/backup/backup.env). A failure exits non-zero, pings <url>/fail
-# when BACKUP_PING_URL_<JOB> is set and mails BACKUP_MAIL_TO; success pings <url>. Secrets are never printed.
+# (BACKUP_PING_URL_<JOB>, the dead man's switch: required in production, see backup.env.rules) and mails
+# BACKUP_MAIL_TO (the fallback); success pings <url>. Secrets, ping URLs included, are never printed.
 #
 # For a rehearsal without docker: PGBACKREST="sudo -u postgres -E pgbackrest" PSQL="sudo -u postgres psql"
 # RESTIC="restic" FILES_PATH=<dir> backup.sh <job>
