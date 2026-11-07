@@ -93,12 +93,30 @@ class ApprovalControlTarget implements ControlTarget {
                 ctx.reject(ControlChanges.invalid("targetId", "a deletion names the instance to delete"));
                 return null;
             }
-            return new Proposal(request.targetId(), null);
+            return new Proposal(request.targetId(), null, key(Map.of(), (EntityInstance) loaded));
         }
         Map<String, Object> values = normalize(request.entity(), request.values());
         check(request.entity(), values, (EntityInstance) loaded).forEach(problem ->
             ctx.reject(ControlChanges.invalid("values", problem)));
-        return ctx.hasViolations() ? null : new Proposal(request.targetId(), values);
+        return ctx.hasViolations() ? null
+            : new Proposal(request.targetId(), values, key(values, (EntityInstance) loaded));
+    }
+
+    /**
+     * What people call the rule or limit a change is about: a rule's code, else the subject a limit is for; from the
+     * change's values, else from the instance it changes. Null when neither has one.
+     */
+    static String key(Map<String, Object> values, EntityInstance loaded) {
+        for (String field : new String[] {"ruleCode", "subject"}) {
+            Object value = values.get(field);
+            if (value == null && loaded != null) {
+                value = loaded.getOrDefault(field, null);
+            }
+            if (value != null && !String.valueOf(value).isBlank()) {
+                return String.valueOf(value);
+            }
+        }
+        return null;
     }
 
     @Override

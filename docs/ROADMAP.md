@@ -824,7 +824,6 @@ finance F1c 的压测（约 200 万个分录版本，`1.1/finance` 的 `docs/fin
 - [x] 现有全部检查照常通过（唯一性、引用、撤销、账本、示范与场景）。
 - [ ] finance 合并后在压测数据上：50 行过账 p95 ≤ 1 秒，一个月的科目查询 ≤ 2 秒（在 `1.1/finance` 上验收）。
 
-
 **要求（14i-b）**
 1. `frontend/tsconfig.extension.json` 解析 `react-router` 的类型（它只在 `exports` 中声明，按包目录的映射读不到）；应用扩展的 `tsconfig.json` 不再重复 `paths`。示范扩展用 `react-router` 的 `Link`。
 2. 登录后没有要返回的页面时落在扩展的 `home`（与根路径一致），而不是固定的 `/data`。
@@ -2482,7 +2481,6 @@ runtime `InboundEventExtractorTest`（6）、`InboundWebhookChecksTest`（4）�
 **将另行提议（平台全局，需用户决定，本阶段不实现）**：`internal()` 的流程默认拒绝系统身份以外的调用者。目前 `internal()` 只使流程不进目录，权限仍照常检查，
 因此每个内部流程（如 `INBOUND_RECEIVE`、`WEBHOOK_DELIVER`、示范的 `ORDER_RECORD_PAYMENT`）都要在自己的步骤中拒绝其他调用者。
 
-
 ### 16e 外部服务声明与异步外部作业（4.5–6 天，分 16e-1 / 16e-2 两个 PR）
 
 决策 D38。比阶段表的 3–4 天多 1.5–2 天：领取、租约、取消的并发正确性，用量记录，以及完成流程的回调都需要单独测试。
@@ -3045,7 +3043,6 @@ SELECT jabiz_protect_append_only('sys_job_item_failure');
   `accessProblems`，对逐项任务要求 `ProcessAccess.INTERNAL`（普通流程同样是错误，不是告警）；`ExecutionOptions` 同时有 `entry`（`atEntryOf`）与 `lockWait`；
   `ProcessExecutor` 先 `requireStartable`，再在事务中设置 `lock_timeout`。测试夹具的 `CallProcess.forEach` 对照流程 `IT_JOB_BATCH` 改为 `internal()`（16l 的调用检查要求），
   测试迁移改为 `V1011__it_job_items.sql`（16l 占 V1010）。
-
 
 ### 16h 账本维度接受身份与引用字段（0.5 天）
 
@@ -4575,7 +4572,6 @@ SPA 的 CSP 固定为 `frame-ancestors 'none'`，外部服务只按精确主机�
 **测试**：`ExternalTokenProvidersTest`（占位符密钥经环境绑定后被拒、目的地须为源）；`ExternalTokenIT`（最后时刻前核对、之后登记的重放被拒且只留一条记录；
 各种拒绝的 403 说明相同；服务器故障为 5xx；守卫的拒绝仍是 403 `SIGN_IN_REFUSED`）。先写的测试在修正前全部失败。
 
-
 ### 17f 单页应用公开路由的服务器端标题与预览信息、按公开模板生成 sitemap（2026-10-27 记录，**待开发**，未确认）
 
 **缘由**：需求方 2026-10-27 要做 QuizBuks 的公开问卷页面（`docs/quizbuks/plans/Q44-public-quiz-pages.md`，在 `1.3/quizbuks`）：
@@ -4677,7 +4673,6 @@ Wiki 只有一份；平台与应用各发布自己的一节，只发布最新的
 `Reauthentication` 与关联外部账号共用）与撤回，凭邮件链接申请（只寄往已验证的地址），管理员安排与撤回，冷静期与逐项定时任务 `jabiz.account-deletion`，
 提示的确认，受保护权限的持有人被拒，没有维护连接时启动失败；清除与退订只按已验证的地址（安全复查的遗留项）。未做：申请邮件中的撤回链接（本人登录后撤回）、
 Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `AccountDeletionIT` 覆盖）。
-
 
 ### 17n CI 不重复检查已检查过的代码（已确认 2026-10-28）
 
@@ -4979,7 +4974,6 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17j 状态**：✅ 完成（17j-a #401，17j-b #402）。
 
-
 ### 17l 原生 App 的接入（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D68）
 
 **缘由**：答题者 App 以原生外壳上架（Q49b TWA、Q49c Capacitor）。Google 拒绝在嵌入的网页视图中登录，第三方登录要在系统浏览器中进行再回到 App；邮件中的链接要直接打开 App，
@@ -5028,6 +5022,23 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17zg 状态**：✅ 已合并（#451）。
 
+### 17zh 邮件文字与信纸的在线定制（需求 2026-11-05，QuizBuks 首次上线 P2 / Q107、规格 F-C8 与 F-C9；决策 D72）
+
+**缘由**：需求方 2026-11-05：系统发出的所有邮件都要能在后台修改文字（按模版与语言）并共用一张信纸，不改程序、不重新部署；验证邮箱、找回密码、链接登录与安全通知改了须另一位管理员批准，
+普通通知改了即时生效。三个拉取请求：a 文字与规则，b 信纸，c 通用后台的页面。
+
+| # | 内容 | PR |
+|---|---|---|
+| 17zh-1 | core `MailTextRules`（一次报告全部问题，错误码 `MAIL_TEXT_*` 三语）：声明过的占位符、必须保留的参数 / 令牌 / 退订链接、令牌与登录链接与退订链接只在以 `{baseUrl}` / `{entryUrl…}` 开头的链接目标中、链接只许 http(s) / mailto / 相对且绝对链接只到本站或 `jabiz.mail.texts.allowed-link-hosts`、无图片、无原始 HTML、标题一行、长度按 `jabiz.mail.texts.max-subject-length`（300，取代 `MailRenderer.MAX_SUBJECT`）与 `max-body-length`（20000）；启动检查对缺省文字用同一套规则；`MailTemplate.sample(…)`、`.protectedText()` | 17zh-a |
+| 17zh-2 | 迁移 `V60__mail_texts.sql`：时态实体 `MailText`（`sys_mail_text_version`），`sys_mail_attempt` / `sys_notification` / `sys_document_delivery` 加列 `text_version_no`，`sys_mail_message` 加列 `rendered_*`（测试信） | 17zh-a |
+| 17zh-3 | 流程 `MAIL_TEXT_SAVE`（普通类即时生效，安全类 422 `MAIL_TEXT_NEEDS_APPROVAL`）、`MAIL_TEXT_RESET`、`MAIL_TEXT_TEST_SEND`（只寄给本人、`[TEST]`、不生成令牌、缺省每人每小时 10 次）；命名锁与 `baseVersionNo`（409）；权限 `mail.text.read` / `mail.text.write`；受控变更目标 `MailText`（`MailTextControlTarget`，提出与发布要求二次验证）；守卫 `MailTextGuard`；`GET /api/mail/texts`、`POST /api/mail/texts/preview`（不写记录） | 17zh-a |
+| 17zh-4 | 发信时取生效的文字（`MailTexts`），失效的覆盖退回缺省并告警（观测 `jabiz.mail.text.fallback`，启动检查 `MAIL` 告警）；待办通知（`jabiz.task-notification`）与单据邮件（`jabiz.document-mail`）经同一处取文字 | 17zh-a |
+| 17zh-5 | 测试：`MailTextRulesTest`、`MailChecksTest`、`MailTextIT`；OpenAPI 快照；文档 D72、18 §5.6、22 §5、根 `CLAUDE.md`；示范 `commerce.order-shipped` 的示例值 | 17zh-a |
+| 17zh-6 | 信纸：`MailLayout`（`sys_mail_layout_version`）、`MailLayoutRules`、`MailRenderer` 套信纸、缺省值 `jabiz.mail.layout.*`、修改经受控变更 `mail-layout`、投递记 `layout_version_no`、示范 `app` 的信纸 | 17zh-b（计划） |
+| 17zh-7 | 通用后台的"邮件模版"与"邮件信纸"页（列表、编辑器、预览、测试发送、恢复默认、历史与对比、提出修改） | 17zh-c（计划） |
+
+**17zh 状态**：17zh-a 📝 待评审（分支 `1.3/phase-17zha-mail-texts`）；17zh-b、17zh-c 计划中。
+
 ### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
 
 **缘由**：`ubuntu-latest` 已是 Ubuntu 26.04，Playwright 1.56 在其上装不了 Chromium（"does not support chromium on ubuntu26.04-x64"），平台的 `e2e` 作业在跑测试之前即失败。
@@ -5050,4 +5061,16 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zi-4 | `@jabiz/client`：`session.store` / `storeShared` 先写入刷新令牌，再交出访问令牌并通知 |
 | 17zi-5 | 测试：`RefreshReuseGraceIT`（宽限内补发、第二次吊销、后继已用、超时、不同入口、复制标签页两边续期、同时刷新、无宽限、只插入）、`RefreshReuseGraceCheckTest`、`SignInIT`（重用检查改为后继已用之后）、`refresh.test.ts`（先存后用）、e2e `sessions.spec.ts`（丢失答复后刷新页面仍在登录中）；设计 10 §3、决策 D73、根 `CLAUDE.md` |
 
-**17zi 状态**：📝 待评审（分支 `1.3/phase-17zi-refresh-reuse-grace`）。
+**17zi 状态**：✅ 已合并（#463）。
+
+### 17zn 受控变更的列表显示并可按参数名筛选（2026-11-07，QuizBuks 首次上线 P7）
+
+**缘由**：受控参数的四眼发布（D40）中，通用后台 `SysControlChange` 的列表只显示对象的实体，看不出是哪一个参数；参数名只在 `changeValues` 的 JSON 中，不能筛选。
+
+| # | 内容 |
+|---|---|
+| 17zn-1 | 迁移 V59：`sys_control_change_version.target_key`（只加列，带索引）；字段 `targetKey`（不可变），列表视图的列、筛选与排序 |
+| 17zn-2 | `ControlTarget.Proposal` 增加 `key`：参数为 `paramKey`，审批规则与职责分离规则为 `ruleCode`，限额为 `subject`；`CONTROL_CHANGE_PROPOSE` 记入。之前的变更没有（表只追加，仍在 `changeValues` 中） |
+| 17zn-3 | 测试：`ControlledParamIT`（按 `targetKey` 筛选得到该参数的全部变更）、`ApprovalControlTargetKeyTest`；场景快照 `monthly_close` 随之更新。列表页由元数据生成（`DatasetListPage` 的测试与 axe 照旧覆盖） |
+
+**17zn 状态**：✅ 已合并（#466）。

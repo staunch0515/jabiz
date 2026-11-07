@@ -15,5 +15,13 @@ public final class MailPermissions {
      */
     public static final String PREFERENCE = "auth.mail-preference";
 
+    /** Read the mail texts, their defaults and previews (decision D72). */
+    public static final String TEXT_READ = "mail.text.read";
+    /**
+     * Change the mail texts ({@code MAIL_TEXT_SAVE}, {@code MAIL_TEXT_RESET}) and send oneself a test mail; the texts
+     * of mail with a token, sign-in link or protected text change only through a controlled change (decision D72).
+     */
+    public static final String TEXT_WRITE = "mail.text.write";
+
     private MailPermissions() {}
 }
