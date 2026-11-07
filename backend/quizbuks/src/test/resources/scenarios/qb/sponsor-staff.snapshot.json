@@ -69,7 +69,7 @@
         "zh" : "你赢得了奖品"
       },
       "body" : {
-        "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the sponsor's place by 2026-10-31: A coffee at our counter",
+        "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the Sponsor's place by 2026-10-31: A coffee at our counter",
         "ja" : "「Coffee week」の賞品（300 クドス相当）を 2026-10-31 までに主催者の店舗で受け取ってください：A coffee at our counter",
         "zh" : "请在 2026-10-31 前到发起方处领取\"Coffee week\"的奖品（价值 300 学分）：A coffee at our counter"
       },
@@ -115,7 +115,7 @@
         "zh" : "你赢得了奖品"
       },
       "body" : {
-        "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the sponsor's place by 2026-10-31: A coffee at our counter",
+        "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the Sponsor's place by 2026-10-31: A coffee at our counter",
         "ja" : "「Coffee week」の賞品（300 クドス相当）を 2026-10-31 までに主催者の店舗で受け取ってください：A coffee at our counter",
         "zh" : "请在 2026-10-31 前到发起方处领取\"Coffee week\"的奖品（价值 300 学分）：A coffee at our counter"
       },
@@ -133,7 +133,7 @@
       "type" : "SYSTEM",
       "kind" : "REDEEM_CLAIMED",
       "title" : {
-        "en" : "A taker scanned your printed code",
+        "en" : "A Taker scanned your printed code",
         "ja" : "テイカーが印刷したコードをスキャンしました",
         "zh" : "有学者扫了你的固定码"
       },

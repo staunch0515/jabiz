@@ -14,6 +14,9 @@
       "name" : "Shared link week",
       "quizTitle" : "World capitals",
       "cover" : null,
+      "coverJa" : null,
+      "coverZh" : null,
+      "coverEn" : null,
       "video" : null,
       "watchRequired" : false,
       "videoDurationSec" : null,
@@ -57,6 +60,9 @@
       "name" : "Code pool week",
       "quizTitle" : "World capitals",
       "cover" : null,
+      "coverJa" : null,
+      "coverZh" : null,
+      "coverEn" : null,
       "video" : null,
       "watchRequired" : false,
       "videoDurationSec" : null,
@@ -341,7 +347,7 @@
         "zh" : "电子奖品已确认"
       },
       "body" : {
-        "en" : "The taker confirmed the prize of 500 Kudos for \"Shared link week\" works. This prize is complete.",
+        "en" : "The Taker confirmed the prize of 500 Kudos for \"Shared link week\" works. This prize is complete.",
         "ja" : "テイカーが「Shared link week」の賞品（500 クドス）が使えたと確認しました。この賞品は完了です。",
         "zh" : "学者确认\"Shared link week\"的奖品（500 学分）可用。这份奖品已完成。"
       },
@@ -410,7 +416,7 @@
         "zh" : "电子奖品有异议"
       },
       "body" : {
-        "en" : "The taker reports a problem with the prize of 1,000 Kudos for \"Code pool week\". An administrator will decide; you can read the note in your digital prizes.",
+        "en" : "The Taker reports a problem with the prize of 1,000 Kudos for \"Code pool week\". An administrator will decide; you can read the note in your digital prizes.",
         "ja" : "テイカーが「Code pool week」の賞品（1,000 クドス）の問題を報告しました。管理者が裁定します。メモはデジタル賞品の一覧で読めます。",
         "zh" : "学者报告\"Code pool week\"的奖品（1,000 学分）有问题。管理员会裁定；说明见你的电子奖品。"
       },

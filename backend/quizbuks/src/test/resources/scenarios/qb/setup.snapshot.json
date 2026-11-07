@@ -6,7 +6,7 @@
       "roleId" : "#uuid:1",
       "roleCode" : "QB_TAKER",
       "labels" : {
-        "en" : "Quiz taker",
+        "en" : "Taker",
         "ja" : "テイカー",
         "zh" : "学者"
       },

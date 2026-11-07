@@ -359,7 +359,7 @@ class DigitalPrizeIT extends PlayItSupport {
         assertThat(InboxItSupport.kindsOf(first)).contains("DIGITAL_RESOLVED");
         assertThat(InboxItSupport.messagesOf(first)).filteredOn(m -> "DIGITAL_RESOLVED".equals(m.get("kind")))
             .singleElement().satisfies(m -> assertThat(String.valueOf(m.get("body")))
-                .contains("to be sent by the sponsor").doesNotContain("DUE"));
+                .contains("to be sent by the Sponsor").doesNotContain("DUE"));
         assertThat(InboxItSupport.kindsOf(sponsor)).contains("DIGITAL_RESOLVED_SPONSOR");
         assertThat(rows("qb.app.history", firstToken, Map.of("at", clock.instant().toString()))).anySatisfy(row ->
             assertThat(row).containsEntry("attemptId", firstAttempt).containsEntry("digitalStatus", "DUE"));
