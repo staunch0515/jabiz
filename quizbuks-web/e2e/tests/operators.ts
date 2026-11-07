@@ -34,10 +34,14 @@ export async function operatorWithLead(request: APIRequestContext, name = 'Ope')
   const hq = await tokenOf(request, await contentAdmin(request), PASSWORD, 'admin')
   const saved = await run(request, hq, 'QB_OPERATOR_SAVE', { name: unique(`${name} operator `), contactName: name,
     contactEmail: email, leadUserId: userId })
+  // The sponsor session first: once the lead holds QB_OPERATOR (a role that asks for a second factor), signing in at
+  // the sponsor entry asks for it too and gives no access token.
+  const sponsorToken = await tokenOf(request, email, PASSWORD, 'sponsor')
+  expect(sponsorToken, 'a session at the sponsor entry').toBeTruthy()
   const roleId = (await rows(request, admin, ROLES, [{ field: 'roleCode', op: 'eq', value: 'QB_OPERATOR' }], 1))[0].id
   await insert(request, admin, USER_ROLES, { userId, roleId })
   return { operatorId: String(saved.operatorId), userId, email, operatorToken: await operatorSignIn(request, email),
-    sponsorToken: await tokenOf(request, email, PASSWORD, 'sponsor') }
+    sponsorToken }
 }
 
 const OPERATORS = 'urn:jabiz:dataset:default:QbOperator'
