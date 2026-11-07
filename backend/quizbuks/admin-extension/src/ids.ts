@@ -33,6 +33,12 @@ export const DATASET = {
   transfer: 'urn:jabiz:dataset:default:QbTransfer',
   /** The official publishers whose publications may be certification rounds (Q69; `qb.certification.admin`). */
   officialPublisher: 'urn:jabiz:dataset:default:QbOfficialPublisher',
+  /**
+   * F-C1: a Sponsor's asset library and where each asset was copied to, read only (`qb.admin.publication.read`; an
+   * operator's session: its own Sponsors').
+   */
+  asset: 'urn:jabiz:dataset:default:QbAsset',
+  assetUse: 'urn:jabiz:dataset:default:QbAssetUse',
 } as const
 
 /** SQL templates (`queries/qb/admin`). */
@@ -308,6 +314,10 @@ export const TRANSFER_REVIEW = 'REVIEW'
 
 /** Dictionaries, labelled by the server in the request's language. */
 export const DICTIONARY = {
+  /** F-C1: an asset's kind, what a text asset is for, and the places an asset is copied to. */
+  assetKind: 'urn:jabiz:dict:quizbuks:asset-kind',
+  assetTextUsage: 'urn:jabiz:dict:quizbuks:asset-text-usage',
+  assetUseTarget: 'urn:jabiz:dict:quizbuks:asset-use-target',
   sponsorPageStatus: 'urn:jabiz:dict:quizbuks:sponsor-page-status',
   sponsorProductStatus: 'urn:jabiz:dict:quizbuks:sponsor-product-status',
   reportReason: 'urn:jabiz:dict:quizbuks:report-reason',
