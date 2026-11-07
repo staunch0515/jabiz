@@ -70,8 +70,6 @@ export interface FeedCard {
   videoDurationSec?: number | null
   /** F-S10: that video is vertical (a YouTube Shorts link, or marked so): the home's shelf of shorts shows it. */
   videoVertical?: boolean
-  /** F-S10: the card's version, the key of the vertical mode's count of openings. */
-  versionId?: string | null
   kind: QuizKind
   /** The language the quiz is written in (Q59a); a preview's card has none. */
   language?: string | null
@@ -152,7 +150,6 @@ export function feedCard(row: Record<string, unknown>): FeedCard {
     watchRequired: row.watchRequired === true || row.watchRequired === 'true',
     videoDurationSec: row.videoDurationSec == null ? null : numberOf(row.videoDurationSec),
     videoVertical: row.videoVertical === true || row.videoVertical === 'true',
-    versionId: textOrNull(row.versionId),
     kind: kindOf(row.kind),
     language: textOrNull(row.language),
     maxReward: row.maxReward,

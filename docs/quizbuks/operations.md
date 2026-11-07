@@ -728,7 +728,7 @@ App 首页在参数给出的位置插入一排竖屏小卡（"短视频"），�
   | `qb.feed.shorts.per-shelf` | `10` | 每排的个数（1–50） | 全屏模式可以滑过全部读到的短视频（至多 50 个） |
 
 - **数据**：短视频由首页模板 `qb.app.feed` 加参数 `shorts=true` 读取，条件与首页相同（地区、客户匹配、前置条件、语言、搜索与筛选、F-S11 的中国大陆、以后 F-S8 的屏蔽）；没有竖屏发布时不显示这一排。答题路径一条语句也不加。
-- **打开数**：每次打开竖屏模式计入平台的公开计数器 `qb.shorts-open`（按打开时那张卡的版本 `versionId`，每个访客每个版本每天一次，日期按 `jabiz.fiscal-year-zone`），写入 `sys_public_counter_day`。只读查询：`SELECT day, sum(hits) FROM sys_public_counter_day WHERE counter_name = 'qb.shorts-open' GROUP BY day ORDER BY day DESC`。版本对应的发布是指向它的卡片（`qb_publication_card.version_id`）；按版本而不是按发布计，是因为平台的公开计数器把卡片的主键（引用作主键）当文本绑定到 uuid 列（平台待修，修好后改按发布）。发起方经 `me:PublicCounterDay` 只看到自己发布的数字；显示页面随 F-S13（推送与曝光的计数）一起做。
+- **打开数**：每次打开竖屏模式计入平台的公开计数器 `qb.shorts-open`（按打开时的发布 `publicationId`，每个访客每个发布每天一次，日期按 `jabiz.fiscal-year-zone`），写入 `sys_public_counter_day`。只读查询：`SELECT day, sum(hits) FROM sys_public_counter_day WHERE counter_name = 'qb.shorts-open' GROUP BY day ORDER BY day DESC`。发起方经 `me:PublicCounterDay` 只看到自己发布的数字；显示页面随 F-S13（推送与曝光的计数）一起做。
 - **"短视频不出现"的排查**：
   1. 发布卡片的"竖屏视频"是否为是（平台管理系统的发布卡片；审核页的"竖屏"提示）。不是：卡片视频不是 Shorts 链接也没有勾选，或者"看完即可答题"的视频是另一个横屏视频。
   2. 学者在首页能否看到这张卡（短视频与首页同样的条件）；看不到就按首页的排查（地区、客户匹配、中国大陆 §7.24 等）。

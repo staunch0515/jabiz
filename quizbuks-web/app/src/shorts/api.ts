@@ -39,9 +39,9 @@ export async function readShorts(request: Omit<FeedRequest, 'shorts' | 'offset' 
 export const SHORTS_OPENS = 'qb.shorts-open'
 
 /**
- * Counts an opening of the vertical mode on a card, by its version (the backend's `ShortsStats` says why); nothing
- * shown or awaited (once a visitor a day).
+ * Counts an opening of the vertical mode on a card, by its publication; nothing shown or awaited (once a visitor a
+ * day).
  */
 export function countShortsOpen(card: FeedCard) {
-  if (card.versionId) countPublic(SHORTS_OPENS, card.versionId)
+  countPublic(SHORTS_OPENS, card.publicationId)
 }

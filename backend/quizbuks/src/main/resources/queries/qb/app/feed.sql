@@ -40,7 +40,6 @@ results:
   watchRequired:  { from: QbPublicationCard.watchRequired }
   videoDurationSec: { from: QbPublicationCard.videoDurationSec }
   videoVertical:  { from: QbPublicationCard.videoVertical }
-  versionId:      { from: QbPublicationCard.versionId }
   shortsPositions: { kind: { type: text, maxLength: 200 } }
   shortsPerShelf: { kind: { type: text, maxLength: 20 } }
   kind:           { from: QbPublicationCard.kind }
@@ -108,8 +107,6 @@ SELECT
     -- (the uncontrolled parameters qb.feed.shorts.positions and .per-shelf; none before the setup made them: the App
     -- then takes the setup's values).
     c.{{QbPublicationCard.videoVertical}}  AS videoVertical,
-    -- F-S10: the key of the vertical mode's count of openings (play.ShortsStats).
-    c.{{QbPublicationCard.versionId}}      AS versionId,
     CAST(shp.positions AS varchar(200))    AS shortsPositions,
     CAST(shp.perShelf AS varchar(20))      AS shortsPerShelf,
     c.{{QbPublicationCard.kind}}           AS kind,

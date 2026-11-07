@@ -163,24 +163,20 @@ class ShortsIT extends PlayItSupport {
             .satisfies(row -> assertThat(row).containsEntry("shortsPositions", "5"));
     }
 
-    /** The openings of the vertical mode are counted by the version opened on, once a visitor and day. */
+    /** The openings of the vertical mode are counted by the publication opened on, once a visitor and day. */
     @Test
     void theOpeningsOfTheVerticalModeAreCounted() {
         autoApprove(true);
         String sponsor = newSponsor("s-fs10-count");
         credit(sponsor, 10_000);
         String shorts = videoPublication(sponsor, "FS10 count", SHORTS, false);
-        String version = String.valueOf(card(shorts).get("version_id"));
-        assertThat(feed(taker(newTaker("t-fs10-count", "JP")), null, Map.of("shorts", true)))
-            .filteredOn(row -> shorts.equals(row.get("publicationId"))).singleElement()
-            .satisfies(row -> assertThat(row).containsEntry("versionId", version));
         for (String browser : List.of("A", "A", "B")) {
-            client.post().uri("/api/public/counters/" + ShortsStats.SHORTS_OPENS + "/" + version)
+            client.post().uri("/api/public/counters/" + ShortsStats.SHORTS_OPENS + "/" + shorts)
                 .header("User-Agent", browser).exchange().expectStatus().isNoContent();
         }
         counters.flush().block();
         assertThat(query("SELECT hits FROM sys_public_counter_day WHERE counter_name = ? AND counter_key = ?",
-            ShortsStats.SHORTS_OPENS, version)).singleElement()
+            ShortsStats.SHORTS_OPENS, shorts)).singleElement()
             .satisfies(row -> assertThat(((Number) row.get("hits")).longValue()).isEqualTo(2));
     }
 

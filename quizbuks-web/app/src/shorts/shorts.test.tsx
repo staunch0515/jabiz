@@ -32,7 +32,7 @@ function card(id: string, more: Record<string, unknown> = {}) {
 
 const FEED = Array.from({ length: 5 }, (_, i) => card(`p${i + 1}`))
 const SHORTS = [
-  card('s1', { video: YOUTUBE, videoVertical: true, versionId: 'v-s1', shortsPositions: '2,12', shortsPerShelf: '2' }),
+  card('s1', { video: YOUTUBE, videoVertical: true, shortsPositions: '2,12', shortsPerShelf: '2' }),
   card('s2', { video: BILIBILI, videoVertical: true, shortsPositions: '2,12', shortsPerShelf: '2' }),
   card('s3', { video: YOUTUBE.replace('dQw4w9WgXcQ', 'aaaaaaaaaaa'), videoVertical: true, shortsPositions: '2,12',
     shortsPerShelf: '2' }),
@@ -184,7 +184,7 @@ describe('the full-screen vertical mode (F-S10)', () => {
     expect(screen.getByTestId('video-stage')).toHaveAttribute('data-mode', 'short')
     expect(within(current()).getByTestId('video-slot')).toHaveAttribute('data-mode', 'short')
     await waitFor(() => expect(calls.some((c) => c.method === 'POST'
-      && c.path === '/api/public/counters/qb.shorts-open/v-s1')).toBe(true))
+      && c.path === '/api/public/counters/qb.shorts-open/s1')).toBe(true))
     // The home does not scroll beneath it.
     expect(document.body.style.overflow).toBe('hidden')
     await expectAccessible(viewer)
