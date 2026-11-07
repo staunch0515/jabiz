@@ -55,7 +55,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
 - **审批与职责分离**（见 18 §3–§4 与决策 D23）：需要审批的单据声明 `ApprovalSubject` Bean，流程中用 `RequireApproval` 取得结论（批准绑定内容哈希），
   以订阅 `jabiz.approval.approved` / `rejected` 继续；不自己写审批状态机或"准备人不能审批"之类的检查。审批对象的显示名写在消息 `approval.subject.<名>`，`ApprovalCase.reference(…)` 给出人认得的单据标识（待办标题用它，18 §5.2）。审批规则、限额、职责分离规则与受控的业务参数（`ControlledParams` Bean，04 §9.1、决策 D40）只经
   `CONTROL_CHANGE_PROPOSE` / `CONTROL_CHANGE_PUBLISH`（四眼）修改。
-  授予受保护的权限（`jabiz.security.protected-grants.permissions`，缺省含 `*`、改权限、审批、记账与改参数的权限）、对其持有人重设密码 / 二次验证 / 关联外部账号，
+  授予受保护的权限（`jabiz.security.protected-grants.permissions`，缺省含 `*`、改权限、审批、记账、改参数与补跑定时任务（`job.run`）的权限）、对其持有人重设密码 / 二次验证 / 关联外部账号，
   须另一位管理员审批（10 §16、决策 D48）：只经 `SEC_USER_ROLE_ASSIGN`、`SEC_ROLE_PERMISSION_ADD`、`SEC_USER_IDENTITY_LINK`、`SEC_USER_SET_PASSWORD`、`SEC_MFA_RESET`、`SEC_USER_EMAIL_SET`（持有人的邮箱），
   平台在 `VersionAppender` 中拒绝其他途径；不在业务流程中自己授予这类权限；建立期（首个管理员之外不足两位 `*` 管理员）内当即生效，之后首个管理员永久退出受保护的操作。
   审批人须持有变更给出的全部受保护权限；获得者的凭据须是本人的（所有权链：管理员知道过的密码及由它改出的都不算，管理员建的账号先由本人经邮件找回密码）。
@@ -153,6 +153,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   需要跨实例规则保护的数据用视图策略 `processOnlyWrites()`。账本的科目层级、分析维度（`LedgerDimension` Bean）、行备注、来源单据与外币分录见 11 §1.4–§1.8 与决策 D24，
   子账单据过账时带上来源（`sourceEntity` / `sourceId`）。事件用 `PublishEvent`（流程事务内写 Outbox）或实体的 `eb.publishChanges()`；
   消费者（`EventSubscription`）与定时任务（`JobDefinition`）都只调用流程，不写 `@Scheduled` 方法。
+  错过或失败的计划时刻只经 `JOB_RUN_REQUEST`（`POST /api/jobs/{job}/runs`，`job.run`，带原因，复用该时刻的幂等键，11 §4.2、决策 D77）手动补跑，不改 cron、不重启实例。
   需要逐项提交的批量任务用 `JobDefinition.forEach`（每项一个事务、每项流程为 `internal()`），不用 `CallProcess.forEach` 做批量（11 §4.1、决策 D42）。
   送给其他系统的事件用 webhook（11 §2.4 与决策 D33）：订阅只写在 `jabiz.webhooks.subscriptions`（密钥以占位符取自环境变量，主机须在 `allowed-hosts` 中；有订阅的事件不放遮蔽字段的值），
   由平台签名投递并重试。接收外部回调只经入站 Webhook（`/api/inbound/{提供方}`，验签、存档、去重后以事件交给流程，D37；只签正文的发送方用方案 `body-hmac-sha256`，
