@@ -1,5 +1,7 @@
 # Q107 邮件模版的定制：文字与统一信纸（总部管理全平台）
 
+> **已归档（2026-11-07）**：首次上线的内容以 [`docs/quizbuks/first-launch-spec.md`](../first-launch-spec.md) 为准，本文只作存档（查当初的讨论用）；两者不一致时以规格为准。
+
 **状态**：需求，需求方 2026-11-05 提出并确认，**列入首次上线**（`Q94-first-launch.md` §3 第 10 项）。本文件是执行计划（CLAUDE.md 第 7 节）。
 平台部分是新的平台阶段 **17zh**、新的平台决策 **D72**（§7 的草稿），按根 CLAUDE.md 第 8 节**先在 `1.3/platform` 上做**（带平台自己的测试与示范 `app`，不提 QuizBuks），合入后再合并到 `1.3/quizbuks`。
 D72 写进 `docs/design/09-decisions.md` 并经需求方确认后才写代码（根 CLAUDE.md 开头）。
