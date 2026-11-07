@@ -274,4 +274,53 @@ class AssetRulesTest {
         assertThat(AssetKind.of("TEXT")).contains(AssetKind.TEXT);
         assertThat(AssetKind.of(null)).isEmpty();
     }
+
+    @Test
+    void whichAssetSuitsWhichPlace() {
+        // A material takes the asset of its own kind: an image group an image.
+        Map<String, String> materials = Map.of("IMAGES", "IMAGE", "PDF", "PDF", "AUDIO", "AUDIO", "VIDEO_LINK",
+            "VIDEO_LINK", "LINK", "LINK", "ARTICLE", "ARTICLE");
+        materials.forEach((material, asset) -> {
+            for (String kind : AssetKind.codes()) {
+                assertThat(AssetRules.suits(QbAssets.MATERIAL, material, kind, null)).as(material + " <- " + kind)
+                    .isEqualTo(kind.equals(asset));
+            }
+        });
+        // A material of another language (no kind given) or of a kind unknown takes none.
+        assertThat(AssetRules.suits(QbAssets.MATERIAL, null, "IMAGE", null)).isFalse();
+        assertThat(AssetRules.suits(QbAssets.MATERIAL, "TEXT", "TEXT", AssetRules.QUIZ_INTRO)).isFalse();
+        assertThat(AssetRules.suits(QbAssets.MATERIAL, "PRIZE", "PRIZE", null)).isFalse();
+        // The images take images only.
+        for (String place : List.of(QbAssets.QUESTION_IMAGE, QbAssets.OPTION_IMAGE, QbAssets.QUIZ_COVER,
+            QbAssets.PUBLICATION_COVER)) {
+            for (String kind : AssetKind.codes()) {
+                assertThat(AssetRules.suits(place, null, kind, null)).as(place + " <- " + kind)
+                    .isEqualTo("IMAGE".equals(kind));
+            }
+        }
+        // The texts take a text of their own use.
+        Map<String, String> texts = Map.of(QbAssets.QUIZ_INTRO, AssetRules.QUIZ_INTRO,
+            QbAssets.PUBLICATION_REDEEM, AssetRules.REDEEM_DESCRIPTION,
+            QbAssets.PUBLICATION_DIGITAL, AssetRules.DIGITAL_DESCRIPTION,
+            QbAssets.PUBLICATION_REFERRAL, AssetRules.REFERRAL_DESCRIPTION);
+        texts.forEach((place, usage) -> {
+            for (String other : AssetRules.USAGES) {
+                assertThat(AssetRules.suits(place, null, "TEXT", other)).as(place + " <- " + other)
+                    .isEqualTo(other.equals(usage));
+            }
+            assertThat(AssetRules.suits(place, null, "TEXT", null)).isFalse();
+            assertThat(AssetRules.suits(place, null, "ARTICLE", null)).isFalse();
+        });
+        // The prize takes a prize card.
+        for (String kind : AssetKind.codes()) {
+            assertThat(AssetRules.suits(QbAssets.PUBLICATION_PRIZE, null, kind, null)).isEqualTo("PRIZE".equals(kind));
+        }
+        assertThat(AssetRules.suits("ELSEWHERE", null, "IMAGE", null)).isFalse();
+        assertThat(AssetRules.suits(null, null, "IMAGE", null)).isFalse();
+        assertThat(AssetRules.suits(QbAssets.QUIZ_COVER, null, null, null)).isFalse();
+        // Every place takes something.
+        assertThat(QbAssets.TARGETS).allSatisfy(place -> assertThat(AssetKind.codes().stream().anyMatch(kind ->
+            AssetRules.suits(place, QbAssets.MATERIAL.equals(place) ? "IMAGES" : null, kind,
+                "TEXT".equals(kind) ? texts.get(place) : null))).as(place).isTrue());
+    }
 }
