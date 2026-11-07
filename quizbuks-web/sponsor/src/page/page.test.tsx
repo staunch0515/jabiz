@@ -211,6 +211,38 @@ describe("the Sponsor's page editor (Q60a), a section of the Sponsor profile (Q6
     await expectAccessible()
   })
 
+  it('says a pasted address is not a link name and applies the suggested name and website in one click (F-F9)',
+    async () => {
+      const { calls } = server(null)
+      window.history.replaceState(null, '', PAGE_PATH)
+      render(<App />)
+      const handle = await screen.findByTestId('sponsor-page-handle')
+      // Pasted whole, not cut at the name's 30 characters.
+      await userEvent.click(handle)
+      await userEvent.paste('https://www.aini-helmet-official.com/shop')
+      expect(handle).toHaveValue('https://www.aini-helmet-official.com/shop')
+      expect(screen.getByTestId('sponsor-page-handle-address')).toHaveTextContent('looks like a website')
+      await expectAccessible()
+      await userEvent.click(screen.getByTestId('sponsor-page-handle-suggest'))
+      expect(handle).toHaveValue('aini-helmet-official')
+      expect(screen.getByTestId('sponsor-page-website')).toHaveValue('https://www.aini-helmet-official.com/shop')
+      expect(screen.queryByTestId('sponsor-page-handle-address')).toBeNull()
+      // Nothing is saved before the person saves.
+      expect(calls('QB_SPONSOR_PAGE_SAVE')).toEqual([])
+
+      // A website already filled in is kept; a domain not in Latin letters suggests no name.
+      await userEvent.clear(handle)
+      await userEvent.type(handle, 'aini-helmet.co.jp')
+      expect(screen.getByTestId('sponsor-page-handle-suggest')).toHaveTextContent('Use “aini-helmet”')
+      await userEvent.click(screen.getByTestId('sponsor-page-handle-suggest'))
+      expect(handle).toHaveValue('aini-helmet')
+      expect(screen.getByTestId('sponsor-page-website')).toHaveValue('https://www.aini-helmet-official.com/shop')
+      await userEvent.clear(handle)
+      await userEvent.type(handle, '爱你头盔.com')
+      expect(screen.getByTestId('sponsor-page-handle-address')).toBeInTheDocument()
+      expect(screen.queryByTestId('sponsor-page-handle-suggest')).toBeNull()
+    })
+
   it('asks to save before publishing changes', async () => {
     server(DRAFT)
     window.history.replaceState(null, '', PAGE_PATH)
