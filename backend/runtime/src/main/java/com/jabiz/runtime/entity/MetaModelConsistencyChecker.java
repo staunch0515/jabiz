@@ -527,7 +527,22 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
     }
 
     private Mono<Set<String>> fetchColumns(String qualifiedTable) {
+        return fetchColumns(qualifiedTable, false);
+    }
+
+    /**
+     * The columns of a table that hold text ({@code text}, {@code varchar}, {@code char}), lower case: what a
+     * {@code LIKE} may compare (the key rotation's scan for sealed values, decision D78 item 8). A field of a text kind
+     * may sit on another column type (a user id kept as {@code uuid}). Outside every transaction, as the rest of this
+     * class; the schema does not change while the application runs, so callers may keep the answer.
+     */
+    public Mono<Set<String>> textColumns(String qualifiedTable) {
+        return fetchColumns(qualifiedTable, true);
+    }
+
+    private Mono<Set<String>> fetchColumns(String qualifiedTable, boolean textOnly) {
         int dot = qualifiedTable.indexOf('.');
+        String text = textOnly ? " and data_type in ('text', 'character varying', 'character')" : "";
         DatabaseClient.GenericExecuteSpec spec;
         if (dot < 0) {
             spec = db.sql("""
@@ -535,7 +550,7 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                     from information_schema.columns
                     where table_schema = current_schema()
                       and table_name = :tableName
-                    """)
+                    """ + text)
                 .bind("tableName", qualifiedTable.toLowerCase(Locale.ROOT));
         } else {
             spec = db.sql("""
@@ -543,7 +558,7 @@ public class MetaModelConsistencyChecker implements PlatformCheck {
                     from information_schema.columns
                     where table_schema = :schemaName
                       and table_name = :tableName
-                    """)
+                    """ + text)
                 .bind("schemaName", qualifiedTable.substring(0, dot).toLowerCase(Locale.ROOT))
                 .bind("tableName", qualifiedTable.substring(dot + 1).toLowerCase(Locale.ROOT));
         }

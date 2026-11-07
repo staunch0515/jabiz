@@ -61,6 +61,26 @@ class FindRetiredValues implements StepHandler<NoMetadata, ProcessContext> {
         return batchSize;
     }
 
+    /**
+     * At most this many values of the entity are written in one run: the job's batch, and no more than the entity's
+     * dataset takes in one commit (its {@code maxWriteBatchSize}, 100 unless declared otherwise), since a run's changes
+     * of an entity are committed together (ROADMAP 17zz4).
+     */
+    int writeLimit(String entityType) {
+        return datasets.findForEntity(entityType)
+            .map(dataset -> Math.max(1, Math.min(batchSize, dataset.policy().maxWriteBatchSize())))
+            .orElse(batchSize);
+    }
+
+    /** This run's writes left by entity type, shared by the steps (created on first use). */
+    @SuppressWarnings("unchecked")
+    static java.util.Map<String, Integer> budget(ProcessContext ctx) {
+        if (!ctx.contains(KeyRotationProcesses.WRITE_BUDGET)) {
+            ctx.put(KeyRotationProcesses.WRITE_BUDGET, new java.util.HashMap<String, Integer>());
+        }
+        return (java.util.Map<String, Integer>) ctx.get(KeyRotationProcesses.WRITE_BUDGET, java.util.Map.class);
+    }
+
     /** What may hold values under a retired key; nothing without retired keys. */
     List<RetiredValue.Target> targets() {
         List<RetiredValue.Target> targets = new ArrayList<>();
@@ -85,9 +105,25 @@ class FindRetiredValues implements StepHandler<NoMetadata, ProcessContext> {
     @Override
     public Mono<Void> execute(NoMetadata metadata, ProcessContext ctx) {
         AtomicInteger left = new AtomicInteger(batchSize);
+        java.util.Map<String, Integer> budget = budget(ctx);
         return Flux.fromIterable(targets())
-            .concatMap(target -> Flux.defer(() -> left.get() <= 0 ? Flux.empty() : rows(target, left.get()))
-                .doOnNext(found -> left.decrementAndGet()))
+            .concatMap(target -> Flux.defer(() -> {
+                int entityLeft = budget.computeIfAbsent(target.entity(), this::writeLimit);
+                int limit = Math.min(left.get(), entityLeft);
+                if (limit <= 0) {
+                    // Nothing more may be written this run: the next run looks at this target.
+                    ctx.put(KeyRotationProcesses.MORE, true);
+                    return Flux.empty();
+                }
+                return rows(target, limit).collectList().flatMapMany(rows -> {
+                    left.addAndGet(-rows.size());
+                    budget.put(target.entity(), entityLeft - rows.size());
+                    if (rows.size() >= limit) {
+                        ctx.put(KeyRotationProcesses.MORE, true);
+                    }
+                    return Flux.fromIterable(rows);
+                });
+            }))
             .collectList()
             .doOnNext(found -> ctx.put(KeyRotationProcesses.FOUND, List.copyOf(found)))
             .then();
