@@ -14,6 +14,17 @@ export const SCAN_PATH = '/scan'
 /** How often the picture is read: often enough to feel instant, rarely enough to spare an old phone's battery. */
 export const SCAN_INTERVAL_MS = 200
 
+/**
+ * The back camera at a high resolution (Q52b): asked for nothing more, browsers give 640 × 480, where a code on a
+ * screen at arm's length is too small for the script decoder that iPhones and Android phones without Google Play
+ * services (most phones sold in China) use. `ideal`, so a camera that cannot is still used at what it can.
+ */
+export const CAMERA: MediaTrackConstraints = {
+  facingMode: { ideal: 'environment' },
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+}
+
 type Problem = 'denied' | 'noCamera' | 'unavailable' | 'failed'
 
 /** What a refused `getUserMedia` means for the person. */
@@ -55,7 +66,7 @@ export function ScanPage() {
         return
       }
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+        stream = await navigator.mediaDevices.getUserMedia({ video: CAMERA, audio: false })
       } catch (error) {
         if (!stopped) setProblem(problemOf(error))
         return

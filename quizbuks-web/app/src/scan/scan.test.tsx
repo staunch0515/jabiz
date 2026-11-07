@@ -7,6 +7,7 @@ import App from '../App'
 import { APP } from '../messages'
 import { bundle, emptyTexts, keyPaths, LANGUAGES } from '../qb/messageKeys'
 import { createDecoder } from './decoder'
+import { CAMERA } from './ScanPage'
 import { scanMessages } from './messages'
 import { scanTarget, targetPath } from './target'
 
@@ -122,7 +123,8 @@ describe('the scanner (Q52)', () => {
     expect(window.location.pathname).toBe('/scan')
     expect(await screen.findByTestId('scan-page')).toBeInTheDocument()
     // The back camera, no sound.
-    expect(getUserMedia).toHaveBeenCalledWith({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+    expect(getUserMedia).toHaveBeenCalledWith({ video: CAMERA, audio: false })
+    expect(CAMERA).toMatchObject({ width: { ideal: 1920 }, height: { ideal: 1080 } })
     // A code of another site is said to be none of QuizBuks's, and the camera keeps looking.
     expect(await screen.findByText(/This is not a QuizBuks code/)).toBeInTheDocument()
     await expectAccessible()

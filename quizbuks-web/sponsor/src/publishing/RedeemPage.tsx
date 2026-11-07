@@ -105,12 +105,12 @@ function RotatingCode() {
       <p className="text-muted-foreground text-center text-sm">{t('publishing.redeem.rotatingText')}</p>
       {image.data && link ? (
         // The image carries its own light background: it stays scannable in the dark appearance.
-        <img src={image.data} alt={t('publishing.redeem.alt')} width={280} height={280} className="rounded-md"
+        <img src={image.data} alt={t('publishing.redeem.alt')} width={320} height={320} className="rounded-md"
           data-testid="redeem-rotating-image" />
       ) : image.isError ? (
         <p role="alert" className="text-destructive text-sm">{t('publishing.qr.failed')}</p>
       ) : (
-        <div className="bg-muted size-[280px] animate-pulse rounded-md" aria-hidden />
+        <div className="bg-muted size-[320px] animate-pulse rounded-md" aria-hidden />
       )}
       {link && (
         <p className="text-muted-foreground text-center text-xs break-all" data-testid="redeem-rotating-link">{link}</p>

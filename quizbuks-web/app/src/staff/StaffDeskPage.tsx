@@ -36,9 +36,12 @@ function startOfToday(): string {
   return day.toISOString()
 }
 
-/** The code as an SVG image URL for `<img>` (the CSP allows `data:` images); drawn here, nothing asked of a server. */
+/**
+ * The code as an SVG image URL for `<img>` (the CSP allows `data:` images); drawn here, nothing asked of a server. With
+ * the standard's quiet zone of four modules: the screen's dark edge comes right up to the image (Q52b).
+ */
 async function qrImageUrl(link: string): Promise<string> {
-  const svg = await QRCode.toString(link, { type: 'svg', margin: 2, errorCorrectionLevel: 'M' })
+  const svg = await QRCode.toString(link, { type: 'svg', margin: 4, errorCorrectionLevel: 'M' })
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
@@ -71,12 +74,12 @@ function RotatingCode() {
       <h2 id="staff-code-title" className="text-lg font-semibold">{t('staff.codeTitle')}</h2>
       {image.data && link ? (
         // The image carries its own light background: it stays scannable in the dark appearance.
-        <img src={image.data} alt={t('staff.codeAlt')} width={260} height={260} className="rounded-md"
+        <img src={image.data} alt={t('staff.codeAlt')} width={300} height={300} className="rounded-md"
           data-testid="staff-code-image" />
       ) : image.isError ? (
         <p role="alert" className="text-destructive text-sm">{t('staff.qrFailed')}</p>
       ) : (
-        <div className="bg-muted size-[260px] animate-pulse rounded-md" aria-hidden />
+        <div className="bg-muted size-[300px] animate-pulse rounded-md" aria-hidden />
       )}
       {link && <p className="text-muted-foreground text-center text-xs break-all" data-testid="staff-code-link">{link}</p>}
       <p className="text-muted-foreground text-xs">
