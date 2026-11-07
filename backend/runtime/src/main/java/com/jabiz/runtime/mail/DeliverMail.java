@@ -54,8 +54,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * Sends one recorded message: the only step of {@code MAIL_SEND} (docs/design/18-numbering-approvals-tasks.md
  * section 5.6; decision D35). A message with a {@code SENT} or {@code SKIPPED} attempt is done and left alone. With
  * mail off, or a notification the recipient turned off, the attempt is {@code SKIPPED}. Otherwise the template's
- * one-time tokens are drawn and their SHA-256 stored, the mail is rendered in the message's language and handed to the
- * {@link NotificationSender}, and the attempt is {@code SENT}.
+ * one-time tokens are drawn and their SHA-256 stored, the mail is rendered in the message's language with the texts in
+ * effect ({@link MailTexts}: an administrator's override, else the default; decision D72) and handed to the
+ * {@link NotificationSender}, and the attempt is {@code SENT}, with the version of the text it was rendered with. A
+ * test mail of the texts was rendered when it was queued and is sent as it is, without tokens.
  *
  * <p>Around the send, every write has a transaction of its own ({@code inNewTransaction}): the tokens are committed
  * before the mail leaves, and {@code SENT} right after the server took it. Whatever fails later (the delivery's
