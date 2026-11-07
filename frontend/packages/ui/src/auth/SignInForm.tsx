@@ -486,7 +486,7 @@ export function orderOf(given: readonly SignInMethod[] | undefined): SignInMetho
  * What the frontend's entry offers of signing up, signing in by mail and with passkeys (asked only when the page would
  * show it).
  */
-function useEntryOffers(signUp: boolean, emailLink: boolean, passkeys: boolean):
+export function useEntryOffers(signUp: boolean, emailLink: boolean, passkeys: boolean):
   { selfRegistration: boolean; emailLink: boolean; passkeys: boolean } {
   const wanted = signUp || emailLink || passkeys
   const [offered, setOffered] = useState({ selfRegistration: false, emailLink: false, passkeys: false })

@@ -5142,6 +5142,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zk-5 | `OidcCallback` 在模板中（`brand`、`appearance`；缺口 4）；`MAIL_LINK_PAGES`（缺口 3）；"确认通行密钥"未登录时的登录链接（缺口 10）；`PwaInstallBanner` 的内置浏览器提示分开计数（`.in-app`，缺口 11）；`MailUnsubscribe` 取提供者的品牌 |
 | 17zk-6 | 示范：通用后台（单栏、无亮暗、构建号，回调页带品牌）；门户用 `EntryLayoutProvider`（三语左栏、`useEntryNotices`）、登录与注册两个标签、注册页的第三方与条款说明、已登录时 `/signup` 与 `/password-reset` 转走（缺口 9）、第二步照旧在内存中交接并开启 `resumeStep` |
 | 17zk-7 | 测试：`entry.test.tsx`（21 例，均含 axe 亮暗）、`problem.test.ts`、`signInStep.test.ts`、门户 `App.test.tsx`（模板与标签、已登录转走）、后台 `OidcCallbackPage.test.tsx`（标题移到卡片）与 `AuthPages.test.tsx`（登录链接）；原有单元测试与平台 e2e 照旧通过；设计 12 §14、10 §15、根 `CLAUDE.md` |
+| 17zk-8 | 修正（17zk-b，QuizBuks 接入时的评审发现）：注册页的标签与登录页一样只在入口接受自助注册时显示，否则照旧显示"已有账号？登录"的链接（`SignUpForm` 以 `useEntryOffers` 读入口信息）；`entry.test.tsx` 加一例 |
 
 **验收（原型清单 132 条，逐组）**：A 公共外框（27）：品牌、环境横条、语言（移到右上角）、亮暗（页脚，后台照旧无）、构建号、提示区（离线、服务不可用的对话框、新版本、内置浏览器提示）
 与字段、密码、按钮、结果的写法全部保留；B 登录（39）：字段、通行密钥按钮与名字栏的自动提示、内置浏览器的说明、邮件链接、第三方（图标 / 按钮、按入口取、Apple 的标题、品牌色、启动失败）、
@@ -5150,4 +5151,4 @@ D 回调（7）：处理中、错误、Apple 取消、`OIDC_ACCOUNT_EXISTS`、�
 F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架（12）、I 退出（2）：全部不变（G 的页面进入模板，确认通行密钥补上登录链接；H、I 属应用，不在本阶段改动）。
 不能放进模板而被删去的：无。QuizBuks 自己的部分（缺口 6 发起方公开框架的环境横条、学者与发起方的左栏文案与示意图、`otherEntry`、页脚链接、各入口的 `order`）在其应用分支上采用。
 
-**17zk 状态**：📝 待评审（分支 `1.3/phase-17zk-entry-pages`）。
+**17zk 状态**：17zk ✅ 已合并（#478）；17zk-b 📝 待评审（分支 `1.3/phase-17zkb-signup-tabs`）。
