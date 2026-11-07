@@ -65,7 +65,8 @@ public class MailTexts {
      *
      * @param kind {@value MailTextEntities#CUSTOM} or {@value MailTextEntities#DEFAULT}
      */
-    public record Stored(String id, int versionNo, String kind, String subject, String body, String defaultHash) {
+    public record Stored(String id, int versionNo, String kind, String subject, String body, String defaultHash,
+        boolean approved) {
 
         public boolean custom() {
             return MailTextEntities.CUSTOM.equals(kind);
@@ -140,7 +141,7 @@ public class MailTexts {
     public Mono<Stored> stored(String template, Locale locale) {
         // One instance per template and language (unique); its versions are never scheduled.
         return storages.getEngine(poolRef).select("""
-                SELECT mail_text_id, version_no, is_deleted, text_kind, subject, body, default_hash
+                SELECT mail_text_id, version_no, is_deleted, text_kind, subject, body, default_hash, approved
                 FROM sys_mail_text_version WHERE template = :template AND locale = :locale
                 ORDER BY version_no DESC LIMIT 1""",
                 Map.of("template", BoundValue.of(template), "locale", BoundValue.of(locale.getLanguage())))
@@ -148,21 +149,22 @@ public class MailTexts {
             .filter(row -> !Boolean.TRUE.equals(row.get("is_deleted")))
             .map(row -> new Stored(Rows.string(row.get("mail_text_id")),
                 Math.toIntExact(Rows.longValue(row.get("version_no"))), Rows.string(row.get("text_kind")),
-                Rows.string(row.get("subject")), Rows.string(row.get("body")), Rows.string(row.get("default_hash"))));
+                Rows.string(row.get("subject")), Rows.string(row.get("body")), Rows.string(row.get("default_hash")),
+                Boolean.TRUE.equals(row.get("approved"))));
     }
 
     /** The latest stored version of every template and language, by {@link #key}. */
     public Mono<Map<String, Stored>> allStored() {
         return storages.getEngine(poolRef).select("""
                 SELECT DISTINCT ON (template, locale) template, locale, mail_text_id, version_no, is_deleted,
-                       text_kind, subject, body, default_hash
+                       text_kind, subject, body, default_hash, approved
                 FROM sys_mail_text_version ORDER BY template, locale, version_no DESC""", Map.of())
             .filter(row -> !Boolean.TRUE.equals(row.get("is_deleted")))
             .collectMap(row -> key(Rows.string(row.get("template")), Rows.string(row.get("locale"))),
                 row -> new Stored(Rows.string(row.get("mail_text_id")),
                     Math.toIntExact(Rows.longValue(row.get("version_no"))), Rows.string(row.get("text_kind")),
                     Rows.string(row.get("subject")), Rows.string(row.get("body")),
-                    Rows.string(row.get("default_hash"))));
+                    Rows.string(row.get("default_hash")), Boolean.TRUE.equals(row.get("approved"))));
     }
 
     /** The key of a template and language in {@link #allStored()}. */
@@ -197,14 +199,27 @@ public class MailTexts {
             return defaults;
         }
         List<Violation> problems = problems(template, stored.subject(), stored.body());
-        if (problems.isEmpty()) {
+        if (problems.isEmpty() && !unapproved(template, stored)) {
             return new Text(stored.subject(), stored.body(), stored.versionNo(), false);
         }
-        log.warn("The text of mail {} [{}], version {}, no longer passes the rules ({}); sending the default",
-            template.name(), locale.getLanguage(), stored.versionNo(), String.join("; ",
-                MailTextRules.describe(problems)));
+        if (problems.isEmpty()) {
+            log.warn("The text of mail {} [{}], version {}, was saved without approval, which the template needs now;"
+                + " sending the default", template.name(), locale.getLanguage(), stored.versionNo());
+        } else {
+            log.warn("The text of mail {} [{}], version {}, no longer passes the rules ({}); sending the default",
+                template.name(), locale.getLanguage(), stored.versionNo(), String.join("; ",
+                    MailTextRules.describe(problems)));
+        }
         observations.event(FALLBACK, KeyValues.of("template", template.name()));
         return new Text(defaults.subject(), defaults.body(), defaults.versionNo(), true);
+    }
+
+    /**
+     * Whether an override lacks the approval its template needs now: saved without one before the template declared a
+     * token, a sign-in link or {@code protectedText()} (17zh-a review, F5). Such an override is not sent.
+     */
+    public static boolean unapproved(MailTemplate template, Stored stored) {
+        return stored.custom() && template.textChangeNeedsApproval() && !stored.approved();
     }
 
     /**

@@ -83,7 +83,7 @@ public class MailTextProcesses {
     static final String LOCALE = "locale";
     static final String OUTPUT = "output";
     private static final String CURRENT = "current";
-    private static final StepSpec<NoMetadata, ProcessContext> QUEUE_TEST = StepSpec.of(QueueTestMail.class,
+    static final StepSpec<NoMetadata, ProcessContext> QUEUE_TEST = StepSpec.of(QueueTestMail.class,
         NoMetadata.INSTANCE);
 
     /** The name of the lock every write of a template's texts holds. */
@@ -136,6 +136,7 @@ public class MailTextProcesses {
                 row.put(MailTextEntities.SUBJECT, input.subject());
                 row.put(MailTextEntities.BODY, input.body());
                 row.put(MailTextEntities.DEFAULT_HASH, texts.defaultHash(template, locale));
+                row.put(MailTextEntities.APPROVED, false);
                 ctx.put(OUTPUT, write(ctx, template, locale, current, row, MailTextEntities.CUSTOM));
             }));
     }
@@ -191,13 +192,15 @@ public class MailTextProcesses {
                         if (!problems.isEmpty()) {
                             throw new ValidationException(problems);
                         }
+                        ctx.put(QueueTestMail.DRAFT_TEXT, new MailTexts.Text(input.subject(), input.body(), null,
+                            false));
                     }
                 })
                 .step("Queue the test mail", QUEUE_TEST));
     }
 
     /** The template and language of the input, put into the context; 400 when either is unknown. */
-    private static MailTemplate resolve(ProcessContext ctx, MailTemplates templates, MailTexts texts, String name,
+    static MailTemplate resolve(ProcessContext ctx, MailTemplates templates, MailTexts texts, String name,
         String language) {
         Optional<MailTemplate> template = templates.find(name);
         Locale locale = language == null ? null : Locale.of(language.strip());
@@ -248,6 +251,7 @@ public class MailTextProcesses {
         row.put(MailTextEntities.SUBJECT, null);
         row.put(MailTextEntities.BODY, null);
         row.put(MailTextEntities.DEFAULT_HASH, texts.defaultHash(template, locale));
+        row.put(MailTextEntities.APPROVED, false);
         return write(ctx, template, locale, current, row, MailTextEntities.DEFAULT);
     }
 

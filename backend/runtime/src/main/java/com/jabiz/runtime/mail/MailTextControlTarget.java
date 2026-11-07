@@ -120,6 +120,7 @@ class MailTextControlTarget implements ControlTarget {
         row.put(MailTextEntities.SUBJECT, stored.get(MailTextEntities.SUBJECT));
         row.put(MailTextEntities.BODY, stored.get(MailTextEntities.BODY));
         row.put(MailTextEntities.DEFAULT_HASH, texts.defaultHash(declared, locale));
+        row.put(MailTextEntities.APPROVED, true);
         ChangeSet.Target granted = writes.granted(new MailTextWriteGrant(template, locale.getLanguage(),
             ctx.processSeqId(), true));
         if (based == null) {

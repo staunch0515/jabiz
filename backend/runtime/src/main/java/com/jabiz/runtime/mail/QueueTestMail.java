@@ -3,6 +3,7 @@ package com.jabiz.runtime.mail;
 import com.jabiz.entity.Violation;
 import com.jabiz.i18n.PlatformErrorCodes;
 import com.jabiz.mail.MailCategory;
+import com.jabiz.mail.MailLayout;
 import com.jabiz.mail.MailRenderer;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.process.NoMetadata;
@@ -25,24 +26,35 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * The step of {@code MAIL_TEXT_TEST_SEND} (decision D72): renders the draft, or the texts in effect, with the
- * template's sample values and tokens that open nothing ({@link MailTexts#SAMPLE_TOKEN}: no hash of it is stored, so
+ * The step of {@code MAIL_TEXT_TEST_SEND} and {@code MAIL_LAYOUT_TEST_SEND} (decision D72): renders the draft, or the
+ * texts in effect, on the draft layout, or the layout in effect, with the template's sample values and tokens that open nothing ({@link MailTexts#SAMPLE_TOKEN}: no hash of it is stored, so
  * no {@code sys_mail_token} row exists for it), and queues the result as a transactional message to the operator's own
  * address, the subject marked {@value MailTextProcesses#TEST_PREFIX}. The delivery sends a rendered message as it is
- * ({@code DeliverMail}): it draws no tokens and is in nobody's preferences. The address is the operator's account's,
+ * ({@code DeliverMail}), but only when one of these processes recorded it ({@link #PROCESSES}): it draws no tokens
+ * and is in nobody's preferences. The address is the operator's account's,
  * never one the request names; the process requires it verified.
  */
 @Component
 class QueueTestMail implements StepHandler<NoMetadata, ProcessContext> {
 
+    /** Context key of a draft text to send ({@link MailTexts.Text}); absent: the texts in effect. */
+    static final String DRAFT_TEXT = "testDraftText";
+    /** Context key of a draft layout to send on ({@link MailLayout}); absent: the layout in effect. */
+    static final String DRAFT_LAYOUT = "testDraftLayout";
+    /** The processes whose messages are rendered when queued; the delivery sends no other such message as it is. */
+    static final java.util.Set<String> PROCESSES = java.util.Set.of(MailTextProcesses.TEST_SEND,
+        MailLayoutProcesses.TEST_SEND);
+
     private final MailTexts texts;
+    private final MailLayouts layouts;
     private final ObjectProvider<EventPublisher> publisher;
     private final StorageAdapterRegistry storages;
     private final String poolRef;
 
-    QueueTestMail(MailTexts texts, ObjectProvider<EventPublisher> publisher, StorageAdapterRegistry storages,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+    QueueTestMail(MailTexts texts, MailLayouts layouts, ObjectProvider<EventPublisher> publisher,
+        StorageAdapterRegistry storages, @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
         this.texts = texts;
+        this.layouts = layouts;
         this.publisher = publisher;
         this.storages = storages;
         this.poolRef = poolRef;
@@ -51,18 +63,18 @@ class QueueTestMail implements StepHandler<NoMetadata, ProcessContext> {
     @Override
     public Mono<Void> execute(NoMetadata metadata, ProcessContext ctx) {
         return Mono.defer(() -> {
-            MailTextProcesses.TestSendInput input = ctx.get(MailTextProcesses.INPUT,
-                MailTextProcesses.TestSendInput.class);
             MailTemplate template = ctx.get(MailTextProcesses.TEMPLATE, MailTemplate.class);
             Locale locale = ctx.get(MailTextProcesses.LOCALE, Locale.class);
-            Mono<MailTexts.Text> text = input.subject() != null
-                ? Mono.just(new MailTexts.Text(input.subject(), input.body(), null, false))
-                : texts.effective(template, locale);
-            return address(ctx).zipWith(text).flatMap(found -> {
+            Mono<MailTexts.Text> text = ctx.contains(DRAFT_TEXT)
+                ? Mono.just(ctx.get(DRAFT_TEXT, MailTexts.Text.class)) : texts.effective(template, locale);
+            Mono<MailLayout> layout = ctx.contains(DRAFT_LAYOUT)
+                ? Mono.just(ctx.get(DRAFT_LAYOUT, MailLayout.class))
+                : layouts.effective(locale).map(MailLayouts.Chosen::layout);
+            return Mono.zip(address(ctx), text, layout).flatMap(found -> {
                 String address = found.getT1();
                 MailTexts.Text chosen = found.getT2();
-                MailRenderer.Rendered mail = texts.render(template, chosen.subject(), chosen.body(),
-                    texts.sampleValues(template));
+                MailRenderer.Rendered mail = layouts.wrap(texts.render(template, chosen.subject(), chosen.body(),
+                    texts.sampleValues(template)), found.getT3());
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("template", template.name());
                 // Transactional whatever the template is: the test reaches its operator, who asked for it.
