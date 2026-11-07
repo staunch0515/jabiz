@@ -6,7 +6,7 @@
 
 1. **平台运营商的直营发起方**：`QB_SETUP` 建平台运营商时没有负责人；任何运营商**第一位负责人**被指定时（建运营商的 `QB_OPERATOR_SAVE` 必填负责人，或 `QB_OPERATOR_MEMBER_ADD` 以 `lead=true` 加入而该运营商还没有直营发起方），同一事务把他的账号设为直营发起方。还没有直营发起方的运营商由每日核对告警。
 2. **改派时的审批请求**：平台的审批请求的范围不可变，没有"移到另一个范围"的能力 → **平台缺口，交给 S1**（平台步骤：把待审的审批请求与其待办移到另一个入口范围）。在它合入之前，改派遇到该发起方有待审的审批（入驻、发布、版本切换、主页）即 422 `QB_SPONSOR_REVIEW_PENDING`（列出待审的对象），其余照常改派。
-3. **直营发起方的角色**：`QB_OPERATOR_SAVE` / `MEMBER_ADD` 只写入驻（已通过）、归属（不可改派）与运营商的 `directSponsorId`；**发起方角色由负责人本人经平台的加入入口**（`POST /api/auth/account/entries/sponsor/join`）取得，应用的流程不授予角色。运营商后台提示负责人加入发起方入口。
+3. **直营发起方的角色**：`QB_OPERATOR_SAVE` / `MEMBER_ADD` 只写入驻（已通过）、归属（不可改派）与运营商的 `directSponsorId`；**发起方角色由负责人本人经平台的加入入口**（`POST /api/auth/account/entries/sponsor/join`）取得，应用的流程不授予角色。运营商管理系统提示负责人加入发起方入口。
 4. **现金争议**：平台不处理；学者提出争议只通知发起方；双方解决后由发起方再次标记已支付（`DISPUTED` → `MARKED_PAID`，确认期限重新起算），或由学者直接确认。
 5. **删除清单全部确认与补充要求**（2026-11-07）：§6 的清单全部确认。补充：
    - 无法明确找到运营商的发起方一律归默认运营商（平台运营商，`auto:default`）。
@@ -23,7 +23,7 @@
 | PR | 内容 |
 |---|---|
 | **F-S1a 后端** | 迁移、运营商的新属性、平台运营商、直营发起方、归属必填、改派、审核与待办的范围、去掉 `direct`（获客、认证）与官方账号、现金争议、角色、每日核对、站内信；后端测试、夹具、场景快照、消息 |
-| **F-S1b 后台与文档** | 后台扩展的菜单拆分（`AX/index.tsx`）、总部页面收缩、运营商后台补齐（奖励方式、兑换与数字奖品争议、发起方主页与商品、举报、获客）、监控页的告警与审核积压、发起方后台"你的运营商"、帮助与 `operations.md`；前端测试、axe、e2e 改由运营商成员审核 |
+| **F-S1b 管理系统与文档** | 后台扩展的菜单拆分（`AX/index.tsx`）、总部页面收缩、运营商管理系统补齐（奖励方式、兑换与数字奖品争议、发起方主页与商品、举报、获客）、监控页的告警与审核积压、发起方页面"你的运营商"、帮助与 `operations.md`；前端测试、axe、e2e 改由运营商成员审核 |
 
 ## 2. 数据（迁移 `V77__quizbuks_operators_everywhere.sql`，合并前按 `1.3/quizbuks` 的最大号 + 1 重新编号）
 
@@ -46,7 +46,7 @@
 - `ASSIGN`：`operatorId` 必填；直营发起方 422 `QB_DIRECT_SPONSOR_FIXED`；目标运营商必须接收 `SPONSOR`（`publisherKinds`）且在运行；有待审审批即 422 `QB_SPONSOR_REVIEW_PENDING`（答复 2）；非审批的待办（数字奖品争议、举报、费用逾期）关闭旧的、以新范围重建；改派后站内信通知发起方（新的 `QbInbox` 种类 `OPERATOR_CHANGED`）。
 - `OperatorChecks.sponsorScope`、`ownSponsor`：没有归属即 404（不再当作总部）。
 - `QB_SETUP`（`QbSetupProcesses`）：建平台运营商（`defaultForNew = true`，名称按 `app.name`，联系信息取 `quizbuks.operators.platform.*` 配置），只建从未存在过的（`QbSetupRecord`）。
-- 每日核对：逐日任务 `qb.operator-check` / 流程 `QB_OPERATOR_CHECK_RUN`（`internal()`）以模板 `qb.system.operator-health` 查三项：没有归属的发起方、直营发起方不是恰好一个的运营商、能审核的成员（未移除、持 `QB_OPERATOR` 角色）不足两位的运营商；有问题即以 `CreateTask` 给 `qb.admin.operators.read`（来源键按日），总部后台经 `qb.admin.operator-health` 显示告警。
+- 每日核对：逐日任务 `qb.operator-check` / 流程 `QB_OPERATOR_CHECK_RUN`（`internal()`）以模板 `qb.system.operator-health` 查三项：没有归属的发起方、直营发起方不是恰好一个的运营商、能审核的成员（未移除、持 `QB_OPERATOR` 角色）不足两位的运营商；有问题即以 `CreateTask` 给 `qb.admin.operators.read`（来源键按日），平台管理系统经 `qb.admin.operator-health` 显示告警。
 
 ### 3.2 入驻与获客
 - `SponsorProcesses.apply`：去掉 `assignByLanguage`；首次入驻一定写归属：获客的试用键 → 获客的运营商，否则 → `defaultForNew` 的运营商；没有这样的运营商即 422 `QB_OPERATOR_DEFAULT_MISSING`（安装未完成）。
@@ -101,6 +101,6 @@
 **后台扩展（F-S1b，F-S1a 未动）**
 12. `CashRewardsPage` 的裁决按钮与对话框、`resolveCashReward`、`ids.ts` 的 `cashResolve`（按钮现已因无权限不显示）。
 13. `CertificationsPage` 的官方出题方设置、`officialSet`、`CERTIFICATION_DIRECT` 与"总部"显示（现在调用会 404）。
-14. 获客页的总部 `DIRECT` 可写（`ProspectPage`、`ProspectSettingsPage`、`prospect-scope.ts`、`prospect-api.ts`）｜总部在后台自己获客｜总部只读、按运营商筛选，获客在运营商后台。
-15. 菜单 `AX/index.tsx` 的"总部内容"：审核、发起方主页与商品、举报、兑换、数字奖品、奖励方式、获客移到运营商后台（搬移）。
+14. 获客页的总部 `DIRECT` 可写（`ProspectPage`、`ProspectSettingsPage`、`prospect-scope.ts`、`prospect-api.ts`）｜总部在平台管理系统中自己获客｜总部只读、按运营商筛选，获客在运营商管理系统。
+15. 菜单 `AX/index.tsx` 的"总部内容"：审核、发起方主页与商品、举报、兑换、数字奖品、奖励方式、获客移到运营商管理系统（搬移）。
 16. e2e 的入驻与发布审核改由运营商成员决定。
