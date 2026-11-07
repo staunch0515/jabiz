@@ -692,7 +692,7 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
      `docker cp dbip-country-lite-2026-12.csv.gz <APP_NAME>-app:/var/lib/jabiz/geoip/.next.csv.gz && docker exec <APP_NAME>-app mv /var/lib/jabiz/geoip/.next.csv.gz /var/lib/jabiz/geoip/dbip-country-lite.csv.gz`
   3. 第一次：在环境的 `.env` 中设 `JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz`，重新部署。之后每月只做第 2 步：平台一分钟内读入新文件（日志 `Address database …: N ranges`），无需重启。
   4. 核对：用中国大陆与日本的网络（或可信代理之后的测试请求）打开 `/api/client/region`，`country` 分别为 `CN`、`JP`。
-  5. **署名**（CC BY 4.0 的要求）：隐私政策写明了使用 DB-IP 的数据（第二条第3项，`docs/quizbuks/legal/`）；不要删去那一句。改用别的地址库（如 MaxMind 的 CSV 转换）时同步改隐私政策与本节。
+  5. **署名**（CC BY 4.0 的要求）：隐私政策写明了使用 DB-IP 的数据（第二条第3项，`docs/quizbuks/legal/`），App 的"关于本 App"（`/about`）"第三方数据"一节也列出并链接 db-ip.com；不要删去这两处。改用别的地址库（如 MaxMind 的 CSV 转换）时同步改隐私政策与本节。
   6. **隐私政策的新版本须重新同意**（需求方 2026-11-07）：加入"按 IP 判断所在地区"与 DB-IP 署名的隐私政策新版本，在"QuizBuks → 规约类"（`/qb/legal`，§3 第 9 步）发布时**勾选"须重新同意"**（是实质性变更，不按措辞修订处理）；三语一起换好再发布，可以填以后的生效时间作预告（建议在部署 F-S11 之前或同时生效）。
      发布时同时勾选"在收件箱中公告"（隐私政策 → App 与发起方页面）。发布后核对：用一个已同意旧版的测试账号登录 App 与发起方页面，应要求同意新版。
   - 过旧（`JABIZ_GEOIP_MAX_AGE`，缺省 45 天）或缺失：启动检查（`GEOIP`；正式模式下没有配置为 `QUIZBUKS` 错误）与每日任务 `qb.region-check`（每天 19:23 UTC）给 `qb.admin.region.monitor`（总部的内容管理员，运营商没有）一个待办（每天一个，链到 `/admin/qb/region`）。处理：照第 1–2 步更新，待办在下一次检查后不再出现，旧的待办手工关闭（`task.resolve`）。

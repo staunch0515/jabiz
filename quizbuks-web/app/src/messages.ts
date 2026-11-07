@@ -28,6 +28,8 @@ const en = {
     intro: 'Answer quizzes from Sponsors and earn Kudos.',
     version: 'Version',
     built: 'Updated',
+    thirdParty: 'Third-party data',
+    dbIp: 'The region of an IP address is determined with data from DB-IP, licensed under CC BY 4.0:',
   },
   account: {
     info: 'Help and information',
@@ -651,6 +653,8 @@ const zh: typeof en = {
     intro: '回答发起方的 Quiz，赚取学分。',
     version: '版本',
     built: '更新日期',
+    thirdParty: '第三方数据',
+    dbIp: 'IP 地址的地区判断使用 DB-IP 的数据，CC BY 4.0：',
   },
   account: {
     info: '帮助与信息',
@@ -1274,6 +1278,8 @@ const ja: typeof en = {
     intro: '主催者のクイズに答えてクドスを獲得しましょう。',
     version: 'バージョン',
     built: '更新日',
+    thirdParty: '第三者のデータ',
+    dbIp: 'IP アドレスによる地域の判定には DB-IP のデータ（CC BY 4.0）を使用しています：',
   },
   account: {
     info: 'ヘルプと情報',
