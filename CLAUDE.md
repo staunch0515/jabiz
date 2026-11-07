@@ -85,6 +85,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   未声明即拒绝。例外只有公开只读接口 `/api/public/**`（见下条）、入站 Webhook `/api/inbound/**`（必须验签，D37）与登录、注册等认证接口。密码只用 BCrypt，且在 `BlockingStep` 中计算。访问令牌签名密钥只来自环境变量 `JABIZ_JWT_SECRET`。
   登录类接口限流（地址 + 名字、地址、IPv6 站点、实例）、口令哈希有并发上限（`jabiz.security.sign-in.rate-limit.*`、`jabiz.security.password-hashing.*`，10 §4.1–§4.2、决策 D47），由平台在入口处做，不另写；客户端地址只经 `jabiz.security.trusted-proxies`，不用 `server.forward-headers-strategy`。
   会话（刷新令牌族）的列出与吊销只经平台接口与流程（本人 `/api/auth/account/sessions/**`，管理员 `SEC_USER_SESSIONS_REVOKE`，10 §15.9），不自写会话表或吊销逻辑。
+  被换下的刷新令牌在宽限内再次出现（页面在续期中刷新、复制标签页）由平台补发一次（`jabiz.security.refresh.reuse-grace`，缺省 30 秒，10 §3、决策 D73），客户端不自己重试或绕过。
 - **登录入口与自助注册**（见 10 与决策 D36）：前端各自的登录入口（`jabiz.security.entries`）决定接受的角色，令牌只含该入口角色的权限；
   自助注册、邮箱验证、找回密码、本人改密码只经平台接口与流程（`SPONSOR_SIGN_UP` 等、`SEC_ACCOUNT_PASSWORD_CHANGE`），不另写；
   管理员建的账号由本人经邀请设定密码（`SEC_USER_INVITE` 或建号时 `invite`，只寄到建号时填写、未验证的邮箱，前端 `MailLinkPage` 的 `invitation` 页，10 §15.14、决策 D63），不给管理员设的密码；需要已验证邮箱的操作声明 `requiresVerifiedEmail()`；封禁等应用规则写成 `SignInGuard`。

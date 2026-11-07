@@ -5027,3 +5027,17 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zg-3 | 文档：17 §2、根 `CLAUDE.md` §8 |
 
 **17zg 状态**：📝 待评审（分支 `1.3/phase-17zg-ci-scope`）。
+
+### 17zi 刷新令牌的重用宽限（2026-11-07，QuizBuks 首次上线 P1；决策 D73）
+
+**缘由**：页面在续期的答复到达前被刷新、复制标签页、答复丢在途中，客户端会再次送出刚被轮换的刷新令牌，按 D12 第 1 条整个会话被吊销，用户被登出（QuizBuks T13，e2e 偶发失败）。
+
+| # | 内容 |
+|---|---|
+| 17zi-1 | 迁移 V58：`sec_refresh_token.parent_hash`（换出它的令牌，部分索引）、只追加表 `sec_refresh_token_regrant`（主键为被换下的令牌的哈希，至多一次） |
+| 17zi-2 | `RefreshTokenStore`：读令牌时一并读出使用时刻；已用过的令牌在宽限内、同一入口、后继未用、未补发过时在同一事务中补发同族的兄弟令牌，否则照旧吊销；使用表主键冲突（两个请求同时首次使用）重试一次；`Rotated.regranted`、`InvalidRefreshTokenException.reused()` |
+| 17zi-3 | 配置 `jabiz.security.refresh.reuse-grace`（缺省 30 秒）与启动检查 `RefreshReuseGraceCheck`（0–120 秒，`SECURITY`）；指标 `jabiz.auth.refresh.reuse`（`result` = `granted` / `revoked`），补发 INFO、吊销 WARN |
+| 17zi-4 | `@jabiz/client`：`session.store` / `storeShared` 先写入刷新令牌，再交出访问令牌并通知 |
+| 17zi-5 | 测试：`RefreshReuseGraceIT`（宽限内补发、第二次吊销、后继已用、超时、不同入口、复制标签页两边续期、同时刷新、无宽限、只插入）、`RefreshReuseGraceCheckTest`、`SignInIT`（重用检查改为后继已用之后）、`refresh.test.ts`（先存后用）、e2e `sessions.spec.ts`（丢失答复后刷新页面仍在登录中）；设计 10 §3、决策 D73、根 `CLAUDE.md` |
+
+**17zi 状态**：📝 待评审（分支 `1.3/phase-17zi-refresh-reuse-grace`）。
