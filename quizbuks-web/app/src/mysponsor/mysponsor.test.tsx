@@ -173,7 +173,7 @@ describe('a Sponsor in the app (Q68)', () => {
     window.history.replaceState(null, '', '/inbox/message/m1')
     render(<App />)
     expect(await screen.findByTestId('inbox-item-console'))
-      .toHaveTextContent('handled in the Sponsor console on a computer')
+      .toHaveTextContent('handled in the Sponsor app on a computer')
     expect(screen.getByTestId('inbox-item-go')).toHaveTextContent('Open My Sponsor account')
   })
 
