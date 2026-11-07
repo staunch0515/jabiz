@@ -12,8 +12,8 @@ export const assetMessages = {
     none: 'No assets.',
     columns: { name: 'Name', kind: 'Kind', tags: 'Tags', revision: 'Revision', editedAt: 'Changed', uses: 'Used in' },
     kindWithUsage: '{{kind}} · {{usage}}',
-    usesCount: '{{count}} places',
-    usesAtLeast: '{{count}}+ places',
+    usesCount: 'Places: {{count}}',
+    usesAtLeast: 'Places: {{count}}+',
     usesOpen: 'Where used',
     usesOpenNamed: 'Where {{name}} is used',
     uses: {

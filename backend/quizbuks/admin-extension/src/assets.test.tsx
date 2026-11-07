@@ -161,8 +161,8 @@ describe('SponsorAssets', () => {
     expect(within(rows[0]).getByTestId('sponsor-asset-tags')).toHaveTextContent('brandcover')
     expect(rows[0]).toHaveTextContent('3')
     expect(await within(rows[1]).findByText('Text · Quiz introduction')).toBeInTheDocument()
-    await waitFor(() => expect(within(rows[0]).getByTestId('sponsor-asset-use-count')).toHaveTextContent('3 places'))
-    expect(within(rows[1]).getByTestId('sponsor-asset-use-count')).toHaveTextContent('1 places')
+    await waitFor(() => expect(within(rows[0]).getByTestId('sponsor-asset-use-count')).toHaveTextContent('Places: 3'))
+    expect(within(rows[1]).getByTestId('sponsor-asset-use-count')).toHaveTextContent('Places: 1')
     // One read of the uses for the page's assets.
     expect(asked(DATASET.assetUse)).toEqual([{ offset: 0, limit: PAGE_LIMIT,
       filters: [{ field: 'assetId', op: 'in', values: [COVER, INTRO] }] }])
@@ -181,7 +181,7 @@ describe('SponsorAssets', () => {
     server.datasets.set(DATASET.assetUse, many)
     renderSection()
     const [row] = await screen.findAllByTestId('sponsor-asset-row')
-    await waitFor(() => expect(within(row).getByTestId('sponsor-asset-use-count')).toHaveTextContent(`${PAGE_LIMIT}+ places`))
+    await waitFor(() => expect(within(row).getByTestId('sponsor-asset-use-count')).toHaveTextContent(`Places: ${PAGE_LIMIT}+`))
   })
 
   it('filters by kind on the server', async () => {
