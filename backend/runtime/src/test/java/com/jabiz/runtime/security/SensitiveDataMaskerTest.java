@@ -30,6 +30,9 @@ class SensitiveDataMaskerTest {
 
     record OpenInput(String prizeId) {}
 
+    /** A link to download (decision D75): recorded without its query. */
+    record LinkInput(@com.jabiz.security.MaskedLink String photoLink, List<Map<String, Object>> more) {}
+
     static final EntityDefinition ACCOUNT = EntityDefinition.define("Account", eb -> {
         eb.physicalTable("t_account");
         eb.primaryKey("accountId");
@@ -44,6 +47,9 @@ class SensitiveDataMaskerTest {
     static final ProcessDefinition<OpenInput, Opened, ProcessContext> OPEN = ProcessDefinition.single(
         "OPEN", 1, OpenInput.class, Opened.class, (input, ctx) -> new Opened("u", "c"));
 
+    static final ProcessDefinition<LinkInput, OpenInput, ProcessContext> LINK = ProcessDefinition.single(
+        "LINK", 1, LinkInput.class, OpenInput.class, (input, ctx) -> new OpenInput("x"));
+
     private final JsonMapper json = JsonMapper.builder().build();
     private final SensitiveDataMasker masker = masker();
 
@@ -51,7 +57,21 @@ class SensitiveDataMaskerTest {
         StaticListableBeanFactory beans = new StaticListableBeanFactory();
         beans.addBean("account", ACCOUNT);
         return new SensitiveDataMasker(json, new EntityDefinitionRegistry(beans.getBeanProvider(EntityDefinition.class)),
-            List.of(PROCESS, OPEN), List.of("password", "token"));
+            List.of(PROCESS, OPEN, LINK), List.of("password", "token"));
+    }
+
+    @Test
+    void linksAreRecordedWithoutTheirQueryWhereverTheirNameAppears() {
+        String summary = masker.summary(new LinkInput("https://u:p@cdn.example.com/a/b.png?sig=S3CR3T#x",
+            List.of(Map.of("photoLink", "https://x.example/c.jpg?t=T0KEN", "other", "https://x.example/?q=kept"),
+                Map.of("photoLink", "not a link"))));
+        assertThat(summary).doesNotContain("S3CR3T").doesNotContain("T0KEN").doesNotContain("u:p")
+            .contains("\"photoLink\":\"https://cdn.example.com/a/b.png?…\"")
+            .contains("\"photoLink\":\"https://x.example/c.jpg?…\"")
+            .contains("\"photoLink\":\"***\"")
+            // Other names are not links to the masker.
+            .contains("https://x.example/?q=kept");
+        assertThat(masker.isSensitive("photoLink")).isFalse();
     }
 
     @Test

@@ -47,6 +47,7 @@ export type { ClientOptions } from './configure'
 export type { paths, components, operations } from './api/schema'
 export {
   uploadFile,
+  fetchFileFromLink,
   fetchFileContent,
   fetchFileDownload,
   fileNameOf,
