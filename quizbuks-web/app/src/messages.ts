@@ -13,6 +13,16 @@ const en = {
     signIn: 'Sign in',
     signUpTerms: 'You accept these after signing up, when you complete your profile:',
   },
+  /** The entry pages' column about the app (phase 17zk; P4), the way to the Sponsor app and the in-app note's line. */
+  entry: {
+    sentence: 'Answer, learn, get rewarded',
+    point1: 'Scan a code and start answering',
+    point2: 'Right answers win rewards you collect in store',
+    point3: 'Your certificates and Kudos in one place',
+    toSponsor: 'Publishing quizzes as a Sponsor?',
+    toSponsorLink: 'Go to the Sponsor app',
+    inAppSummary: 'Open this page in your browser',
+  },
   about: {
     title: 'About {{name}}',
     intro: 'Answer quizzes from Sponsors and earn Kudos.',
@@ -623,6 +633,15 @@ const zh: typeof en = {
     signIn: '登录',
     signUpTerms: '注册后完善资料时，您将同意以下文本：',
   },
+  entry: {
+    sentence: '答题、学习、拿奖励',
+    point1: '扫一扫就能开始答题',
+    point2: '答对了，奖品到店就能领',
+    point3: '证书与学分都在这里',
+    toSponsor: '我是发起方，要发布 Quiz',
+    toSponsorLink: '去发起方页面',
+    inAppSummary: '请在浏览器中打开本页',
+  },
   about: {
     title: '关于 {{name}}',
     intro: '回答发起方的 Quiz，赚取学分。',
@@ -1232,6 +1251,15 @@ const ja: typeof en = {
     back: 'アプリに戻る',
     signIn: 'ログイン',
     signUpTerms: '登録後、プロフィールの入力時に以下へ同意していただきます：',
+  },
+  entry: {
+    sentence: '答えて、学んで、特典をもらう',
+    point1: 'スキャンしてすぐに回答',
+    point2: '正解すると店頭で特典を受け取れる',
+    point3: '証明書とクドスはここにまとめて',
+    toSponsor: 'クイズを出す主催者の方',
+    toSponsorLink: '主催者ページへ',
+    inAppSummary: 'このページをブラウザで開いてください',
   },
   about: {
     title: '{{name}} について',
