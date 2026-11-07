@@ -824,7 +824,6 @@ finance F1c 的压测（约 200 万个分录版本，`1.1/finance` 的 `docs/fin
 - [x] 现有全部检查照常通过（唯一性、引用、撤销、账本、示范与场景）。
 - [ ] finance 合并后在压测数据上：50 行过账 p95 ≤ 1 秒，一个月的科目查询 ≤ 2 秒（在 `1.1/finance` 上验收）。
 
-
 **要求（14i-b）**
 1. `frontend/tsconfig.extension.json` 解析 `react-router` 的类型（它只在 `exports` 中声明，按包目录的映射读不到）；应用扩展的 `tsconfig.json` 不再重复 `paths`。示范扩展用 `react-router` 的 `Link`。
 2. 登录后没有要返回的页面时落在扩展的 `home`（与根路径一致），而不是固定的 `/data`。
@@ -2482,7 +2481,6 @@ runtime `InboundEventExtractorTest`（6）、`InboundWebhookChecksTest`（4）�
 **将另行提议（平台全局，需用户决定，本阶段不实现）**：`internal()` 的流程默认拒绝系统身份以外的调用者。目前 `internal()` 只使流程不进目录，权限仍照常检查，
 因此每个内部流程（如 `INBOUND_RECEIVE`、`WEBHOOK_DELIVER`、示范的 `ORDER_RECORD_PAYMENT`）都要在自己的步骤中拒绝其他调用者。
 
-
 ### 16e 外部服务声明与异步外部作业（4.5–6 天，分 16e-1 / 16e-2 两个 PR）
 
 决策 D38。比阶段表的 3–4 天多 1.5–2 天：领取、租约、取消的并发正确性，用量记录，以及完成流程的回调都需要单独测试。
@@ -3045,7 +3043,6 @@ SELECT jabiz_protect_append_only('sys_job_item_failure');
   `accessProblems`，对逐项任务要求 `ProcessAccess.INTERNAL`（普通流程同样是错误，不是告警）；`ExecutionOptions` 同时有 `entry`（`atEntryOf`）与 `lockWait`；
   `ProcessExecutor` 先 `requireStartable`，再在事务中设置 `lock_timeout`。测试夹具的 `CallProcess.forEach` 对照流程 `IT_JOB_BATCH` 改为 `internal()`（16l 的调用检查要求），
   测试迁移改为 `V1011__it_job_items.sql`（16l 占 V1010）。
-
 
 ### 16h 账本维度接受身份与引用字段（0.5 天）
 
@@ -4575,7 +4572,6 @@ SPA 的 CSP 固定为 `frame-ancestors 'none'`，外部服务只按精确主机�
 **测试**：`ExternalTokenProvidersTest`（占位符密钥经环境绑定后被拒、目的地须为源）；`ExternalTokenIT`（最后时刻前核对、之后登记的重放被拒且只留一条记录；
 各种拒绝的 403 说明相同；服务器故障为 5xx；守卫的拒绝仍是 403 `SIGN_IN_REFUSED`）。先写的测试在修正前全部失败。
 
-
 ### 17f 单页应用公开路由的服务器端标题与预览信息、按公开模板生成 sitemap（2026-10-27 记录，**待开发**，未确认）
 
 **缘由**：需求方 2026-10-27 要做 QuizBuks 的公开问卷页面（`docs/quizbuks/plans/Q44-public-quiz-pages.md`，在 `1.3/quizbuks`）：
@@ -4677,7 +4673,6 @@ Wiki 只有一份；平台与应用各发布自己的一节，只发布最新的
 `Reauthentication` 与关联外部账号共用）与撤回，凭邮件链接申请（只寄往已验证的地址），管理员安排与撤回，冷静期与逐项定时任务 `jabiz.account-deletion`，
 提示的确认，受保护权限的持有人被拒，没有维护连接时启动失败；清除与退订只按已验证的地址（安全复查的遗留项）。未做：申请邮件中的撤回链接（本人登录后撤回）、
 Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `AccountDeletionIT` 覆盖）。
-
 
 ### 17n CI 不重复检查已检查过的代码（已确认 2026-10-28）
 
@@ -4979,7 +4974,6 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17j 状态**：✅ 完成（17j-a #401，17j-b #402）。
 
-
 ### 17l 原生 App 的接入（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D68）
 
 **缘由**：答题者 App 以原生外壳上架（Q49b TWA、Q49c Capacitor）。Google 拒绝在嵌入的网页视图中登录，第三方登录要在系统浏览器中进行再回到 App；邮件中的链接要直接打开 App，
@@ -5050,4 +5044,16 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zi-4 | `@jabiz/client`：`session.store` / `storeShared` 先写入刷新令牌，再交出访问令牌并通知 |
 | 17zi-5 | 测试：`RefreshReuseGraceIT`（宽限内补发、第二次吊销、后继已用、超时、不同入口、复制标签页两边续期、同时刷新、无宽限、只插入）、`RefreshReuseGraceCheckTest`、`SignInIT`（重用检查改为后继已用之后）、`refresh.test.ts`（先存后用）、e2e `sessions.spec.ts`（丢失答复后刷新页面仍在登录中）；设计 10 §3、决策 D73、根 `CLAUDE.md` |
 
-**17zi 状态**：📝 待评审（分支 `1.3/phase-17zi-refresh-reuse-grace`）。
+**17zi 状态**：✅ 已合并（#463）。
+
+### 17zn 受控变更的列表显示并可按参数名筛选（2026-11-07，QuizBuks 首次上线 P7）
+
+**缘由**：受控参数的四眼发布（D40）中，通用后台 `SysControlChange` 的列表只显示对象的实体，看不出是哪一个参数；参数名只在 `changeValues` 的 JSON 中，不能筛选。
+
+| # | 内容 |
+|---|---|
+| 17zn-1 | 迁移 V59：`sys_control_change_version.target_key`（只加列，带索引）；字段 `targetKey`（不可变），列表视图的列、筛选与排序 |
+| 17zn-2 | `ControlTarget.Proposal` 增加 `key`：参数为 `paramKey`，审批规则与职责分离规则为 `ruleCode`，限额为 `subject`；`CONTROL_CHANGE_PROPOSE` 记入。之前的变更没有（表只追加，仍在 `changeValues` 中） |
+| 17zn-3 | 测试：`ControlledParamIT`（按 `targetKey` 筛选得到该参数的全部变更）、`ApprovalControlTargetKeyTest`；场景快照 `monthly_close` 随之更新。列表页由元数据生成（`DatasetListPage` 的测试与 axe 照旧覆盖） |
+
+**17zn 状态**：📝 待评审（分支 `1.3/phase-17zn-control-change-key`）。
