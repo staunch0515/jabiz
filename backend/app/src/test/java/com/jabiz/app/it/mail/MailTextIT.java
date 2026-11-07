@@ -300,6 +300,9 @@ class MailTextIT extends SecurityItSupport {
             ApprovalPermissions.CONTROL_PUBLISH), Map.of("changeId", changeId)).expectStatus().isForbidden();
         assertThat(query("SELECT count(*) AS n FROM sys_mail_text_version WHERE template = 'it.verify'")
             .getFirst().get("n")).isEqualTo(0L);
+        // The list of changes names the mail and language (17zn).
+        assertThat(query("SELECT target_key FROM sys_control_change_version WHERE change_id::text = ? LIMIT 1",
+            changeId).getFirst().get("target_key")).isEqualTo("it.verify [en]");
         assertThat(output(run("CONTROL_CHANGE_PUBLISH", publisher, Map.of("changeId", changeId), 200)))
             .containsEntry("status", "PUBLISHED");
 

@@ -32,8 +32,10 @@ import java.util.function.Supplier;
  * Refresh tokens (decision D12): random, opaque, single use. The database keeps their SHA-256 only, so a leaked
  * table does not leak usable tokens. Every refresh consumes a token and issues the next one of the same family (the
  * family is one sign-in); presenting a consumed token again means it was stolen or replayed, and revokes the whole
- * family. All three tables are append-only. How long a token lives and whether its session ends when idle is the
- * policy of the sign-in entry of its family (decision D43 item 2).
+ * family, unless it comes back within the reuse grace (decision D73): a client that lost the answer to its refresh
+ * (the page was reloaded meanwhile, a duplicated tab) then gets one sibling of the token its refresh issued. All the
+ * tables are append-only. How long a token lives and whether its session ends when idle is the policy of the sign-in
+ * entry of its family (decision D43 item 2).
  */
 public class RefreshTokenStore {
 
@@ -83,10 +85,25 @@ public class RefreshTokenStore {
 
     /** The token is unknown, expired, consumed or of a revoked family. */
     public static final class InvalidRefreshTokenException extends RuntimeException {
+        private final boolean reused;
+
         InvalidRefreshTokenException(String message) {
+            this(message, false);
+        }
+
+        InvalidRefreshTokenException(String message, boolean reused) {
             super(message);
+            this.reused = reused;
+        }
+
+        /** Whether the token had been consumed already, so that its session was revoked. */
+        public boolean reused() {
+            return reused;
         }
     }
+
+    /** The longest reuse grace the startup check accepts (decision D73). */
+    public static final Duration MAX_REUSE_GRACE = Duration.ofSeconds(120);
 
     static final String REASON_LOGOUT = "LOGOUT";
     static final String REASON_REUSE = "REUSE";
@@ -141,6 +158,7 @@ public class RefreshTokenStore {
     private final Supplier<StorageEngine> engine;
     private final Function<String, Policy> policies;
     private final Clock clock;
+    private final Duration reuseGrace;
     private final SecureRandom random = new SecureRandom();
 
     /** The same lifetime and idle window for every entry. */
@@ -155,9 +173,24 @@ public class RefreshTokenStore {
      *                 the policy of that entry applies to it
      */
     public RefreshTokenStore(Supplier<StorageEngine> engine, Function<String, Policy> policies, Clock clock) {
+        this(engine, policies, clock, Duration.ZERO);
+    }
+
+    /**
+     * As above, with the reuse grace (decision D73; zero or negative: none): how long after a token was consumed it may
+     * come back once for a sibling of its successor. Its bounds are the startup check's ({@link #MAX_REUSE_GRACE}).
+     */
+    public RefreshTokenStore(Supplier<StorageEngine> engine, Function<String, Policy> policies, Clock clock,
+        Duration reuseGrace) {
         this.engine = Objects.requireNonNull(engine, "engine must not be null");
         this.policies = Objects.requireNonNull(policies, "policies must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.reuseGrace = reuseGrace == null || reuseGrace.isNegative() ? Duration.ZERO : reuseGrace;
+    }
+
+    /** The reuse grace (decision D73); zero when there is none. */
+    public Duration reuseGrace() {
+        return reuseGrace;
     }
 
     private static Function<String, Policy> constant(Policy policy) {
@@ -194,12 +227,17 @@ public class RefreshTokenStore {
         return randomBytes(16).flatMap(bytes -> {
             ByteBuffer buffer = ByteBuffer.wrap(bytes);
             return issue(new Grant(userId, new UUID(buffer.getLong(), buffer.getLong()), mfaAt, identityId, entry),
-                source);
+                source, null);
         });
     }
 
-    /** A consumed token, what the check made of it, and the next token of its family. */
-    public record Rotated<T>(Grant grant, T value, Issued next) {}
+    /**
+     * A consumed token, what the check made of it, and the next token of its family.
+     *
+     * @param regranted whether the token had been consumed already and came back within the reuse grace, so that
+     *                  {@code next} is a sibling of the token its first use issued (decision D73)
+     */
+    public record Rotated<T>(Grant grant, T value, Issued next, boolean regranted) {}
 
     /**
      * Consumes a token and issues the next one of its family, in one transaction: each token can be used once. The
@@ -224,27 +262,36 @@ public class RefreshTokenStore {
     public <T> Mono<Rotated<T>> rotate(String token, String entry, SignInSource source,
         Function<Grant, Mono<T>> check) {
         String expected = entry == null || entry.isBlank() ? RequestContext.DEFAULT_ENTRY : entry;
-        return inTransaction(token, hash -> use(hash, expected).flatMap(grant -> check.apply(grant)
-            .flatMap(value -> issue(grant, source).map(next -> new Rotated<>(grant, value, next)))));
+        return inTransaction(token, hash -> use(hash, expected).flatMap(used -> check.apply(used.grant())
+            .flatMap(value -> issue(used.grant(), source, hash)
+                .map(next -> new Rotated<>(used.grant(), value, next, used.regranted())))));
     }
 
     /**
-     * Runs work that consumes the token in a transaction. A second use of a token breaks the primary key of its use;
-     * that aborts the transaction, and the family is revoked afterwards, on its own.
+     * Runs work that consumes the token in a transaction. A second use of a token breaks the primary key of its use (or
+     * of its regrant); that aborts the transaction, and the family is revoked afterwards, on its own. With a reuse
+     * grace, a broken key is first tried once more: two uses at the same moment (two tabs refreshing together) are
+     * then a use and a reuse within the grace, and the second gets its sibling; a second regrant fails again.
      */
     private <T> Mono<T> inTransaction(String token, Function<String, Mono<T>> work) {
         return Mono.defer(() -> {
             String hash = hash(token);
-            return engine.get().inTransaction(work.apply(hash))
+            Mono<T> attempt = Mono.defer(() -> engine.get().inTransaction(work.apply(hash)));
+            Mono<T> tried = reuseGrace.isZero() ? attempt
+                : attempt.onErrorResume(UniqueKeyViolationException.class, concurrent -> attempt);
+            return tried
                 .onErrorResume(e -> e instanceof UniqueKeyViolationException || e instanceof Reused, reused -> find(hash)
                     .flatMap(found -> {
                         log.warn("Refresh token of user {} presented twice; revoking its session",
                             found.grant().userId());
                         return revokeSession(found.grant().familyId(), REASON_REUSE);
                     })
-                    .then(Mono.error(new InvalidRefreshTokenException("Refresh token used twice"))));
+                    .then(Mono.error(new InvalidRefreshTokenException("Refresh token used twice", true))));
         });
     }
+
+    /** The grant a token stands for, and whether it is a regrant within the reuse grace (decision D73). */
+    private record Used(Grant grant, boolean regranted) {}
 
     /** A consumed token presented again; the family is revoked once the transaction has rolled back. */
     private static final class Reused extends RuntimeException {
@@ -253,36 +300,70 @@ public class RefreshTokenStore {
         }
     }
 
-    private Mono<Grant> use(String hash, String entry) {
+    private Mono<Used> use(String hash, String entry) {
         Instant now = now();
         return find(hash).flatMap(found -> {
             // A revoked session stays a plain 401: it has ended already, there is nothing left to revoke.
             if (found.revoked()) {
-                return Mono.<Grant>error(new InvalidRefreshTokenException("Refresh token of a revoked session"));
+                return Mono.<Used>error(new InvalidRefreshTokenException("Refresh token of a revoked session"));
             }
             // Replayed: whenever it comes back (also after its expiry or idle window) and whatever entry it names, the
-            // session ends (decision D12 item 1).
+            // session ends (decision D12 item 1), unless it is a regrant within the reuse grace (decision D73).
             if (found.used()) {
-                return Mono.<Grant>error(new Reused());
+                return regrant(hash, found, entry, now);
             }
             if (!now.isBefore(found.expiresAt())) {
-                return Mono.<Grant>error(new InvalidRefreshTokenException("Expired refresh token"));
+                return Mono.<Used>error(new InvalidRefreshTokenException("Expired refresh token"));
             }
             // Idle: the access token issued with this one expired longer than the idle timeout ago. Not consumed. The
             // family's entry says how long that is, if idleness ends its sessions at all (decision D43 item 2).
             Duration idleWindow = policy(found.grant().entry()).idleWindow();
             if (idleWindow != null && !now.isBefore(found.issuedAt().plus(idleWindow))) {
-                return Mono.<Grant>error(new InvalidRefreshTokenException("Session idle for too long"));
+                return Mono.<Used>error(new InvalidRefreshTokenException("Session idle for too long"));
             }
             // Another front end's live session: not this client's to renew. Not consumed, not revoked.
             if (!entry.equals(found.grant().entry())) {
-                return Mono.<Grant>error(new InvalidRefreshTokenException("Refresh token of another sign-in entry"));
+                return Mono.<Used>error(new InvalidRefreshTokenException("Refresh token of another sign-in entry"));
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("token_hash", hash);
             row.put("used_at", now);
-            return engine.get().insert("sec_refresh_token_use", row).thenReturn(found.grant());
+            return engine.get().insert("sec_refresh_token_use", row).thenReturn(new Used(found.grant(), false));
         }).switchIfEmpty(Mono.error(() -> new InvalidRefreshTokenException("Unknown refresh token")));
+    }
+
+    /**
+     * A consumed token presented again (decision D73): within the reuse grace of its use, at its own entry, while the
+     * token its use issued has not been used, and only once, the family gets a sibling of that token (the caller
+     * issues it, with this token as its parent). Anything else is reuse, and the family is revoked. Only this path
+     * reads the successor: an ordinary refresh runs no extra statement.
+     */
+    private Mono<Used> regrant(String hash, Found found, String entry, Instant now) {
+        if (reuseGrace.isZero() || !entry.equals(found.grant().entry())
+            || now.isAfter(found.usedAt().plus(reuseGrace))) {
+            return Mono.error(new Reused());
+        }
+        return engine.get().select("""
+                SELECT EXISTS (SELECT 1 FROM sec_refresh_token c WHERE c.parent_hash = :hash) AS issued,
+                    EXISTS (SELECT 1 FROM sec_refresh_token c JOIN sec_refresh_token_use u
+                        ON u.token_hash = c.token_hash WHERE c.parent_hash = :hash) AS successor_used,
+                    EXISTS (SELECT 1 FROM sec_refresh_token_regrant g WHERE g.token_hash = :hash) AS regranted""",
+                Map.of("hash", BoundValue.of(hash)))
+            .next()
+            .flatMap(row -> {
+                // No successor on record (consumed before parents were recorded): nothing to be a sibling of.
+                if (!Boolean.TRUE.equals(row.get("issued")) || Boolean.TRUE.equals(row.get("successor_used"))
+                    || Boolean.TRUE.equals(row.get("regranted"))) {
+                    return Mono.<Used>error(new Reused());
+                }
+                Map<String, Object> regrant = new LinkedHashMap<>();
+                regrant.put("token_hash", hash);
+                regrant.put("family_id", found.grant().familyId());
+                regrant.put("regranted_at", now);
+                // The primary key allows one regrant per token, also against a concurrent one.
+                return engine.get().insert("sec_refresh_token_regrant", regrant)
+                    .thenReturn(new Used(found.grant(), true));
+            });
     }
 
     /**
@@ -438,9 +519,9 @@ public class RefreshTokenStore {
 
     /**
      * The next token of the grant's family, carrying its user, second factor, account link and entry, and where it
-     * was issued to.
+     * was issued to; {@code parentHash} is the token whose use issued it (null at a sign-in).
      */
-    private Mono<Issued> issue(Grant grant, SignInSource source) {
+    private Mono<Issued> issue(Grant grant, SignInSource source, String parentHash) {
         return randomBytes(TOKEN_BYTES).flatMap(bytes -> {
             String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
             Instant now = now();
@@ -456,6 +537,7 @@ public class RefreshTokenStore {
             row.put("entry", grant.entry());
             row.put("client_ip", source == null ? null : source.clientIp());
             row.put("user_agent", source == null ? null : source.userAgent());
+            row.put("parent_hash", parentHash);
             return engine.get().insert("sec_refresh_token", row)
                 .thenReturn(new Issued(token, grant.familyId(), expires));
         });
@@ -488,15 +570,19 @@ public class RefreshTokenStore {
         });
     }
 
-    /** @param used whether the token was consumed already (presenting it again is reuse) */
-    private record Found(Grant grant, Instant issuedAt, Instant expiresAt, boolean revoked, boolean used) {}
+    /** @param usedAt when the token was consumed, or null (presenting a consumed token again is reuse) */
+    private record Found(Grant grant, Instant issuedAt, Instant expiresAt, boolean revoked, Instant usedAt) {
+        boolean used() {
+            return usedAt != null;
+        }
+    }
 
     private Mono<Found> find(String hash) {
         return engine.get().select("""
                 SELECT t.user_id, t.family_id, t.issued_at, t.expires_at, t.mfa_at, t.identity_id, t.entry,
-                    r.family_id IS NOT NULL AS revoked,
-                    EXISTS (SELECT 1 FROM sec_refresh_token_use u WHERE u.token_hash = t.token_hash) AS used
+                    r.family_id IS NOT NULL AS revoked, u.used_at
                 FROM sec_refresh_token t LEFT JOIN sec_refresh_family_revocation r ON r.family_id = t.family_id
+                    LEFT JOIN sec_refresh_token_use u ON u.token_hash = t.token_hash
                 WHERE t.token_hash = :hash""", Map.of("hash", BoundValue.of(hash)))
             .next()
             .map(row -> new Found(new Grant(Rows.uuid(row.get("user_id")), Rows.uuid(row.get("family_id")),
@@ -504,7 +590,8 @@ public class RefreshTokenStore {
                     row.get("identity_id") == null ? null : Rows.uuid(row.get("identity_id")),
                     row.get("entry") == null ? null : String.valueOf(row.get("entry"))),
                 Rows.instant(row.get("issued_at")), Rows.instant(row.get("expires_at")),
-                Boolean.TRUE.equals(row.get("revoked")), Boolean.TRUE.equals(row.get("used"))));
+                Boolean.TRUE.equals(row.get("revoked")),
+                row.get("used_at") == null ? null : Rows.instant(row.get("used_at"))));
     }
 
     private Mono<byte[]> randomBytes(int length) {

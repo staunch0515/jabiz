@@ -140,6 +140,8 @@ public class ApprovalEntities {
         eb.field("changeAction", f -> f.physicalColumn("change_action").immutable(true).required(true)
             .asCode(CHANGE_ACTIONS, ControlChanges.UPSERT, ControlChanges.DELETE));
         eb.field("changeValues", f -> f.physicalColumn("change_values").immutable(true).asText(30_000, true));
+        // What the change is about as people name it (a parameter's key, a rule's code; phase 17zn).
+        eb.field("targetKey", f -> f.physicalColumn("target_key").immutable(true).asText(200));
         eb.field("effectiveTime", f -> f.physicalColumn("effective_time").immutable(true)
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true).asText(500));
@@ -149,10 +151,10 @@ public class ApprovalEntities {
         eb.field("publishedBy", f -> f.physicalColumn("published_by").asText(100));
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
-            .columns("targetEntity", "changeAction", "status", "reason", "proposedBy", "publishedBy",
+            .columns("targetEntity", "targetKey", "changeAction", "status", "reason", "proposedBy", "publishedBy",
                 "effectiveTime")
-            .filters("targetEntity", "status", "proposedBy", "publishedBy", "effectiveTime")
-            .sorts("effectiveTime", "status", "targetEntity")
+            .filters("targetEntity", "targetKey", "status", "proposedBy", "publishedBy", "effectiveTime")
+            .sorts("effectiveTime", "status", "targetEntity", "targetKey")
             .defaultSort("effectiveTime", false));
     });
 
