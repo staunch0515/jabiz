@@ -3,6 +3,9 @@ import {
   AppearanceProvider,
   AppShell,
   Button,
+  EntryLayoutProvider,
+  EnvironmentBanner,
+  MAIL_LINK_PAGES,
   MailLinkPage,
   MailUnsubscribe,
   OfflineBanner,
@@ -16,6 +19,7 @@ import {
   ThemeToggle,
   Toaster,
   VerifyEmailBanner,
+  useEntryNotices,
   type ShellMenuGroup,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
@@ -48,7 +52,7 @@ import { DIGITAL_PRIZES_PATH, DigitalPrizesPage } from './publishing/DigitalPriz
 import { REDEEM_PATH, RedeemPage } from './publishing/RedeemPage'
 import { StaffPage } from './publishing/StaffPage'
 import { MailServerPage } from './publishing/MailServerPage'
-import { publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
+import { APP_BASE, publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
 import { PreviewPage } from './preview/PreviewPage'
 import { TreePage } from './tree/TreePage'
 import { TREE_PATH } from './tree/api'
@@ -88,11 +92,11 @@ import {
   PurchasesPage,
 } from './benefits/BenefitsPages'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
-import { Wordmark } from './qb/Illustrations'
+import { GrowthArt, Wordmark } from './qb/Illustrations'
 import { HelpPage } from './qb/HelpPage'
 import { LEGAL } from './qb/ids'
 import { legalKindOf, type LegalKind } from './qb/legal'
-import { LegalLinks } from './qb/LegalLinks'
+import { EntryLegalLinks, LegalLinks } from './qb/LegalLinks'
 import { LegalPage } from './qb/LegalPage'
 import { QB } from './qb/messages'
 import { hrefOf, navigate, navigation, Redirect, useLocation } from './qb/router'
@@ -122,12 +126,20 @@ function publicPage(path: string): ReactNode | null {
   return null
 }
 
-/** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
-let pendingStep: SignInStep | undefined
+/**
+ * The second step of a sign-in through an identity provider, with the page to go to afterwards (gap 2), handed from
+ * the callback to the sign-in page in memory; the sign-in page also resumes it from this tab's storage after a reload
+ * (platform 17zk, `resumeStep`).
+ */
+let pendingStep: { step: SignInStep; to: string } | undefined
 /** Set when the session was locked for idleness, for the sign-in page to say so once. */
 let lockedIdle = false
 
-const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/passkey-confirm'])
+/**
+ * Every page of a mailed link the platform has (`MAIL_LINK_PAGES`, gap 3), each at `/auth/<page>`: the account's
+ * deletion among them, for a deployment that turns it on for sponsors (QB_SPONSOR_ACCOUNT_DELETION).
+ */
+const MAIL_PAGES = new Set(MAIL_LINK_PAGES.map((page) => `/auth/${page}`))
 
 /**
  * The unsubscribe page of the console's notification mail (platform decision D52 item 3):
@@ -326,6 +338,8 @@ function PublicPage({ page }: { page: ReactNode }) {
   return (
     <div className="flex min-h-full flex-col">
       <header className="bg-background border-b">
+        {/* A test system says so before signing in too (platform 16zd; gap 6), as the app's public pages do. */}
+        <EnvironmentBanner />
         <div className="mx-auto flex max-w-3xl items-center gap-2 px-4 py-2">
           <Wordmark name={t('brand')} compact className="mr-auto" />
           <ThemeToggle />
@@ -347,20 +361,40 @@ function PublicPage({ page }: { page: ReactNode }) {
   )
 }
 
-/** The console's pages by path: the sign-in pages for everyone, the rest for a signed-in sponsor only. */
+/**
+ * The pages before a session in the platform's entry pages' template (phase 17zk; P4, docs/design/12-frontend.md
+ * section 14): the Sponsor app's wordmark, a column about it on a wide screen (one line on a phone), the offline notice
+ * over the page (the Sponsor app is no PWA: no new-version notice; the test system's banner is the template's own),
+ * the help and the texts in the footer, and the way to the Takers' app.
+ */
+function EntryPages({ children }: { children: ReactNode }) {
+  const { t } = useTranslation(SPONSOR)
+  const notices = useEntryNotices({ update: false })
+  return (
+    <EntryLayoutProvider
+      brand={<Wordmark name={t('brand')} />}
+      intro={{
+        sentence: t('entry.sentence'),
+        points: [t('entry.point1'), t('entry.point2'), t('entry.point3')],
+        illustration: <GrowthArt className="h-56 w-full max-w-md" />,
+      }}
+      notices={notices}
+      links={<EntryLegalLinks kinds={LINKED} />}
+      otherEntry={{ text: t('entry.toTaker'), href: `${APP_BASE}login`, link: t('entry.toTakerLink') }}
+    >
+      {children}
+    </EntryLayoutProvider>
+  )
+}
+
+/** The Sponsor app's pages by path: the sign-in pages for everyone, the rest for a signed-in sponsor only. */
 function Routes() {
   const { t } = useTranslation(SPONSOR)
   const { ready, signedIn } = useAuth()
   const { path, search } = useLocation()
-  const brand = <Wordmark name={t('brand')} className="justify-center" />
-  const frame = (content: ReactNode) => (
-    <div className="flex min-h-full flex-col">
-      <div className="mx-auto w-full max-w-md px-4 pt-4 empty:hidden">
-        <OfflineBanner />
-      </div>
-      {content}
-    </div>
-  )
+  const brand = <Wordmark name={t('brand')} />
+  // Every entry page in the template, with the offline notice that was over the card before.
+  const frame = (content: ReactNode) => <EntryPages>{content}</EntryPages>
 
   // The blocks of mailed links read the address themselves, once: the token is removed from it right away.
   if (path === UNSUBSCRIBE_PATH) return frame(<MailUnsubscribe brand={brand} search={search} />)
@@ -370,11 +404,12 @@ function Routes() {
   }
   // No identity provider is offered to sponsors by default (Q-6); a deployment that configures one gets its return.
   if (path === '/login/oidc') {
-    return frame(<OidcCallback fallbackPath="/"
+    return frame(<OidcCallback brand={brand} fallbackPath="/"
       onSignedIn={(to) => navigate(to, { replace: true })}
       onLinked={(to) => navigate(to || ACCOUNT_PATH, { replace: true })}
-      onSecondStep={(step) => {
-        pendingStep = step
+      // Handed over in memory with the page to go to; kept in this tab's storage too, for a reload (gap 2).
+      onSecondStep={(step, to) => {
+        pendingStep = { step, to }
         navigate('/login', { replace: true })
       }}
       onBack={() => navigate('/login', { replace: true })} />)
@@ -394,7 +429,7 @@ function Routes() {
     // Q48d: a sign-up from a prospecting trial keeps its key until the sponsor applies.
     rememberSource(search)
     return frame(<>
-      <SignUpForm {...navigation} brand={brand} signInPath="/login"
+      <SignUpForm {...navigation} brand={brand} signInPath="/login" signUpPath="/signup" tabs
         oidc={{ returnTo: '/', layout: 'icons' }}
         note={<span data-testid="signup-terms">
           {t('public.signUpTerms')}{' '}
@@ -405,21 +440,21 @@ function Routes() {
   if (path === '/login') {
     if (signedIn) return <Redirect to="/" />
     const notice = lockedIdle ? 'idle' : undefined
-    return frame(<>
-      <SignInForm {...navigation} brand={brand} returnTo="/" initialStep={pendingStep} notice={notice}
+    const pending = pendingStep
+    return frame(
+      <SignInForm {...navigation} brand={brand} returnTo={pending?.to ?? '/'} initialStep={pending?.step}
+        notice={notice} resumeStep
         onSignedIn={(to) => {
           pendingStep = undefined
           lockedIdle = false
           navigate(to, { replace: true })
-        }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons" userNameLabel="email"
-        passkey />
-      {/* A taker's account (with a password or Google alone) has no sponsor role yet: the console refuses it until
-          the account joins by signing up with its address (Q37). */}
-      <p className="text-muted-foreground mx-auto w-full max-w-md px-4 pb-6 text-center text-sm"
-        data-testid="signin-taker-account">
-        {t('public.takerAccount')}
-      </p>
-    </>)
+        }} passwordResetPath="/password-reset" signInPath="/login" signUpPath="/signup" tabs
+        // Suggestion ③: passkeys first, then the providers (icons on a phone), the password last.
+        order={['passkey', 'providers', 'password']} oidcLayout="responsive" userNameLabel="email" passkey
+        // A taker's account (with a password or Google alone) has no sponsor role yet: the Sponsor app refuses it
+        // until the account joins by signing up with its address (Q37). Under the form, in its card.
+        below={<p data-testid="signin-taker-account">{t('public.takerAccount')}</p>} />,
+    )
   }
   if (!signedIn) return <Redirect to="/login" />
   return (

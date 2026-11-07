@@ -1,4 +1,4 @@
-import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
+import { AuthProvider, useAuth, useInstallPrompt, type SignInStep } from '@jabiz/client'
 import {
   APPEARANCES,
   AppearanceProvider,
@@ -11,8 +11,10 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  EntryLayoutProvider,
   EnvironmentBanner,
   Input,
+  MAIL_LINK_PAGES,
   MailLinkPage,
   MailUnsubscribe,
   OfflineBanner,
@@ -29,6 +31,7 @@ import {
   VerifyEmailBanner,
   cn,
   useAppearance,
+  useEntryNotices,
   type Appearance,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
@@ -66,10 +69,10 @@ import { RedeemPage } from './pages/RedeemPage'
 import { WelcomePage } from './pages/WelcomePage'
 import { AboutPage } from './pages/AboutPage'
 import { IntroPage, introSeen, rememberSeen } from './pages/IntroPage'
-import { Wordmark } from './qb/Illustrations'
+import { QuizArt, Wordmark } from './qb/Illustrations'
 import { badgeText, inboxItemOf, INBOX_PATH } from './inbox/api'
 import { MY_SPONSOR_PATH, MY_SPONSOR_QUERY, readFigures, useMySponsor } from './mysponsor/api'
-import { MySponsorPage } from './mysponsor/MySponsorPage'
+import { MySponsorPage, SPONSOR_CONSOLE } from './mysponsor/MySponsorPage'
 import { ReferralPage, ReferralsPage } from './referral/ReferralsPage'
 import { ConversationPage, ConversationsPage } from './conversation/ConversationPages'
 import { conversationOf, CONVERSATIONS_PATH } from './conversation/api'
@@ -80,14 +83,14 @@ import { useUnread } from './inbox/useUnread'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
 import { pendingRedeem, redeemPath, rememberRedeem } from './redeemReturn'
-import { mailFirst } from './signin'
+import { signInOrder } from './signin'
 import { InAppBrowserNotice } from './install'
 import { readMyProfile } from './qb/api'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { HelpPage } from './qb/HelpPage'
 import { LEGAL } from './qb/ids'
 import { legalKindOf } from './qb/legal'
-import { LegalLinks } from './qb/LegalLinks'
+import { EntryLegalLinks, LegalLinks } from './qb/LegalLinks'
 import { LegalPage } from './qb/LegalPage'
 import { QB } from './qb/messages'
 import { canGoBack, currentPath, Link, navigate, navigation, Redirect, useLocation } from './qb/router'
@@ -110,6 +113,7 @@ import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
 import { ONE_LINE_BANNER } from './banner'
 import { MaintenanceRedirect } from './maintenance'
+import { nativeShell } from './shell'
 
 /** Where a signed-in taker starts. */
 const HOME = '/'
@@ -118,11 +122,15 @@ const HISTORY = '/history'
 const HELP = '/help'
 const ABOUT = '/about'
 
-/** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
-let pendingStep: SignInStep | undefined
+/**
+ * The second step of a sign-in through an identity provider, with the page to go to afterwards (gap 2), handed from
+ * the callback to the sign-in page in memory; the sign-in page also resumes it from this tab's storage after a reload
+ * (platform 17zk, `resumeStep`).
+ */
+let pendingStep: { step: SignInStep; to: string } | undefined
 
-const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link',
-  '/auth/account-deletion', '/auth/passkey-confirm'])
+/** Every page of a mailed link the platform has (`MAIL_LINK_PAGES`, gap 3), each at `/auth/<page>`. */
+const MAIL_PAGES = new Set(MAIL_LINK_PAGES.map((page) => `/auth/${page}`))
 
 /**
  * Asking for the deletion of an account without the app (Q71; Google Play's account deletion policy): the address
@@ -499,23 +507,49 @@ function isPublic(path: string): boolean {
   return path === HELP || path === ABOUT || legalKindOf(path) !== null
 }
 
+/**
+ * The pages before a session in the platform's entry pages' template (phase 17zk; P4, docs/design/12-frontend.md
+ * section 14): the app's wordmark, a column about the app on a wide screen (one line on a phone), the notices over the
+ * page (the way out of another app's browser first, then offline and a new version; the test system's banner is the
+ * template's own), the help and the texts in the footer, and the way to the Sponsor app.
+ */
+function EntryPages({ children }: { children: ReactNode }) {
+  const { t } = useTranslation(QB)
+  const { t: tApp } = useTranslation(APP)
+  const { situation } = useInstallPrompt()
+  const notices = [
+    // Q50: from the first visit, inside WeChat, QQ, LINE and the like; never in a store app.
+    { key: 'in-app', content: <InAppBrowserNotice />, summary: tApp('entry.inAppSummary'),
+      active: situation === 'in-app' && !nativeShell() },
+    ...useEntryNotices(),
+  ]
+  return (
+    <EntryLayoutProvider
+      brand={<Wordmark name={t('brand')} className="text-primary" />}
+      intro={{
+        sentence: tApp('entry.sentence'),
+        points: [tApp('entry.point1'), tApp('entry.point2'), tApp('entry.point3')],
+        illustration: <QuizArt className="h-56 w-full max-w-md" />,
+      }}
+      notices={notices}
+      links={<EntryLegalLinks kinds={LEGAL.appKinds} />}
+      otherEntry={{ text: tApp('entry.toSponsor'), href: `${SPONSOR_CONSOLE}login`, link: tApp('entry.toSponsorLink') }}
+    >
+      {children}
+    </EntryLayoutProvider>
+  )
+}
+
 /** The app's pages by path: the sign-in pages for everyone, the rest for a signed-in taker only. */
 function Routes() {
   const { t } = useTranslation(QB)
-  const { t: tApp, i18n } = useTranslation(APP)
+  const { t: tApp } = useTranslation(APP)
   const { ready, signedIn } = useAuth()
   const { path, search } = useLocation()
-  const brand = <Wordmark name={t('brand')} className="text-primary justify-center" />
-  const frame = (content: ReactNode) => (
-    <div className="flex min-h-full flex-col">
-      <div className="mx-auto w-full max-w-md px-4 pt-4 empty:hidden">
-        <OfflineBanner />
-        <PwaUpdatePrompt />
-        <InAppBrowserNotice />
-      </div>
-      {content}
-    </div>
-  )
+  const brand = <Wordmark name={t('brand')} className="text-primary" />
+  // Every entry page in the template, with the notices that were over the card before (offline, a new version, the
+  // way out of another app's browser).
+  const frame = (content: ReactNode) => <EntryPages>{content}</EntryPages>
 
   // Whoever reaches a sign-in, sign-up or mailed-link page knows the app: no introduction afterwards (a verified
   // address continues to the root and must land on the sign-in, as before Q32).
@@ -530,14 +564,15 @@ function Routes() {
       signInPath="/login" passwordResetPath="/password-reset" />)
   }
   if (path === '/login/oidc') {
-    return frame(<OidcCallback fallbackPath={HOME}
+    return frame(<OidcCallback brand={brand} fallbackPath={HOME}
       onSignedIn={(to) => navigate(to, { replace: true })}
       onLinked={(to, linked) => {
         rememberLinked(linked)
         navigate(to || ACCOUNT_SECURITY_PATH, { replace: true })
       }}
-      onSecondStep={(step) => {
-        pendingStep = step
+      // Handed over in memory with the page to go to; kept in this tab's storage too, for a reload (gap 2).
+      onSecondStep={(step, to) => {
+        pendingStep = { step, to }
         navigate('/login', { replace: true })
       }}
       onBack={() => navigate('/login', { replace: true })} />)
@@ -579,9 +614,10 @@ function Routes() {
   }
   // The form, then "look in your mailbox" with a new mail on request; the profile follows the first sign-in.
   // The texts are accepted on the welcome step (Q7-3); signing up says where to read them.
+  // Signing up and signing in are two tabs of one page (suggestion ④); each keeps its address and the query.
   if (path === '/signup') {
     return frame(<>
-      <SignUpForm {...navigation} brand={brand} signInPath="/login"
+      <SignUpForm {...navigation} brand={brand} signInPath="/login" signUpPath="/signup" tabs
         oidc={{ returnTo: HOME, layout: 'icons' }}
         note={<span data-testid="signup-terms">
           {tApp('public.signUpTerms')}{' '}
@@ -591,14 +627,18 @@ function Routes() {
   }
   if (path === '/login') {
     if (signedIn) return <Redirect to={afterSignIn} />
-    return frame(<SignInForm {...navigation} brand={brand} returnTo={afterSignIn} initialStep={pendingStep}
+    const pending = pendingStep
+    return frame(<SignInForm {...navigation} brand={brand} returnTo={pending?.to ?? afterSignIn}
+      initialStep={pending?.step} resumeStep
       onSignedIn={(to) => {
         pendingStep = undefined
         // Someone who signed in knows the app: no introduction when the session later expires (Q32).
         rememberSeen()
         navigate(to, { replace: true })
-      }} passwordResetPath="/password-reset" signUpPath="/signup" oidcLayout="icons"
-      emailLink={mailFirst(i18n.language)} userNameLabel="email" passkey />)
+      }} passwordResetPath="/password-reset" signInPath="/login" signUpPath="/signup" tabs
+      // Q50 and gap 1: in Chinese the mailed link first (Google, Facebook and LINE do not open in mainland China); in
+      // Japanese and English the providers first and the mailed link behind a button. Icons on a phone.
+      order={signInOrder} oidcLayout="responsive" emailLink userNameLabel="email" passkey />)
   }
   // A visitor's first time at the root: the introduction (Q32), remembered on the device; then the sign-in.
   if (!signedIn && path === HOME && !introSeen()) return <IntroPage />

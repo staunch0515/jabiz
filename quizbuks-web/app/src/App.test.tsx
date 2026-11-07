@@ -7,6 +7,11 @@ import App from './App'
 import { soundEnabled } from './qb/sound'
 import './messages'
 
+/** The window's width: a phone (390) or a wide screen (1440); jsdom starts at 1024. */
+function atWidth(width: number) {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: width })
+}
+
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
@@ -118,6 +123,7 @@ beforeEach(() => {
   session.clear()
   window.localStorage.clear()
   window.history.replaceState(null, '', '/')
+  atWidth(1024)
   // The browser's hints for the country: Japanese in Japan.
   vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ja-JP', 'en'])
 })
@@ -180,13 +186,16 @@ describe('a visitor', () => {
     expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
   })
 
-  it('signs in and signs up with Google, Facebook and LINE as a row of icons (Q40)', async () => {
+  it('signs in and signs up with Google, Facebook and LINE as a row of icons on a phone (Q40)', async () => {
     window.localStorage.setItem('qb.intro.seen', '1')
+    // A phone: the sign-in's providers are a row of icons there (17zk, responsive), full-width buttons on a wide screen.
+    atWidth(390)
     server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'facebook', kind: 'facebook',
       label: 'Facebook' }, { id: 'line', kind: 'line', label: 'LINE' }])
     render(<App />)
     const row = await screen.findByTestId('oidc-icons')
-    expect(row).toHaveTextContent('Other ways to sign in')
+    // In English they come first (17zk, suggestion ③): a group named "Other ways to sign in".
+    expect(row).toHaveAccessibleName('Other ways to sign in')
     expect(within(row).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
       .toEqual(['Google', 'Facebook', 'LINE'])
     cleanup()
@@ -203,20 +212,23 @@ describe('a visitor', () => {
   it('asks for the address, and in Chinese offers the mailed link first, before Google, Facebook and LINE (Q50)',
     async () => {
       window.localStorage.setItem('qb.intro.seen', '1')
+      atWidth(390)
       server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'line', kind: 'line', label: 'LINE' }])
       const { unmount } = render(<App />)
       await screen.findByTestId('oidc-icons')
       expect(screen.getByTestId('login-user-name')).toHaveAttribute('placeholder', 'E-mail address')
-      // Not in English: the password first, as before.
+      // Not first in English: behind a button among the other ways (17zk gap 1), the form only once it is pressed.
       expect(screen.queryByTestId('email-link-form')).toBeNull()
+      expect(await screen.findByTestId('login-email-link-open')).toBeInTheDocument()
       unmount()
       await changeLanguage('zh')
       render(<App />)
       const mailed = await screen.findByTestId('email-link-form')
       const name = screen.getByTestId('login-user-name')
       const icons = await screen.findByTestId('oidc-icons')
-      expect(mailed.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(name.compareDocumentPosition(icons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      // The mailed link, then the providers (17zk, suggestion ③ by language), then the password.
+      expect(mailed.compareDocumentPosition(icons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(icons.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       expect(name).toHaveAttribute('placeholder', '电子邮箱')
       expect(screen.getByTestId('login-or-password')).toHaveTextContent('或用密码登录')
       // The buttons stay.
@@ -312,6 +324,143 @@ describe('a visitor', () => {
     window.history.replaceState(null, '', '/account')
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
+  })
+})
+
+describe('the entry pages (platform 17zk; P4)', () => {
+  const PROVIDERS = [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'line', kind: 'line', label: 'LINE' }]
+  beforeEach(() => window.localStorage.setItem('qb.intro.seen', '1'))
+
+  it('lay out the sign-in: the brand, the column about the app, the footer\'s links and the way to the Sponsor app',
+    async () => {
+      atWidth(1440)
+      server(undefined, PROVIDERS)
+      window.history.replaceState(null, '', '/login')
+      render(<App />)
+      await screen.findByTestId('login-user-name')
+      const layout = document.querySelector('[data-slot="entry-layout"]')!
+      expect(layout).toHaveAttribute('data-layout', 'columns')
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks')
+      expect(screen.getByRole('heading', { level: 2, name: 'Sign in' })).toBeInTheDocument()
+      expect(document.querySelector('[data-slot="entry-intro-sentence"]')).toHaveTextContent('Answer, learn, get rewarded')
+      expect(document.querySelectorAll('[data-slot="entry-intro-points"] li')).toHaveLength(3)
+      expect(document.querySelector('[data-slot="entry-intro-illustration"] svg')).toHaveAttribute('aria-hidden', 'true')
+      const other = screen.getByTestId('entry-other')
+      expect(other).toHaveTextContent('Publishing quizzes as a Sponsor?')
+      expect(within(other).getByRole('link', { name: 'Go to the Sponsor app' })).toHaveAttribute('href', '/sponsor/login')
+      const links = screen.getByTestId('entry-links')
+      expect(within(links).getByRole('link', { name: 'Help' })).toHaveAttribute('href', '/help')
+      expect(within(links).getAllByRole('link').map((a) => a.getAttribute('href')))
+        .toEqual(['/help', '/legal/terms', '/legal/privacy'])
+      // The test system's banner is the template's, over the page; the language at the top right.
+      expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+      expect(screen.getByTestId('entry-language')).toBeInTheDocument()
+      await expectAccessible()
+    })
+
+  it('order the ways of signing in by language: the mailed link first in Chinese, the providers first otherwise',
+    async () => {
+      atWidth(1440)
+      server(undefined, PROVIDERS)
+      window.history.replaceState(null, '', '/login')
+      const first = (container: HTMLElement) => {
+        const form = container.querySelector('[data-slot="entry-form"] [data-slot="card-content"]')
+          ?? container.querySelector('[data-slot="entry-form"]')!
+        return form.querySelector('[data-testid="oidc-buttons"], [data-testid="oidc-icons"], [data-testid="login-email-link"], [data-testid="login-email-link-open"], form')
+      }
+      for (const language of ['ja', 'en'] as const) {
+        await changeLanguage(language)
+        const { container, unmount } = render(<App />)
+        // Wide: full-width buttons, first and named as a group; the mailed link behind a button after them.
+        const buttons = await screen.findByTestId('oidc-buttons')
+        expect(first(container)).toBe(buttons)
+        const open = await screen.findByTestId('login-email-link-open')
+        expect(buttons.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(open.compareDocumentPosition(screen.getByTestId('login-user-name')) & Node.DOCUMENT_POSITION_FOLLOWING)
+          .toBeTruthy()
+        await userEvent.click(open)
+        expect(await screen.findByTestId('email-link-form')).toBeInTheDocument()
+        unmount()
+      }
+      await changeLanguage('zh')
+      const { container } = render(<App />)
+      await screen.findByTestId('oidc-buttons')
+      expect(first(container)).toBe(screen.getByTestId('login-email-link'))
+      expect(screen.queryByTestId('login-email-link-open')).toBeNull()
+      await expectAccessible()
+    })
+
+  it('make signing in and signing up two tabs that keep the query, and the old sign-up address works', async () => {
+    server()
+    window.history.replaceState(null, '', '/login?next=%2Fp%2Fabc')
+    render(<App />)
+    const signIn = await screen.findByTestId('sign-in-link')
+    const signUp = await screen.findByTestId('sign-up-link')
+    expect(signIn).toHaveAttribute('aria-current', 'page')
+    expect(signUp).toHaveAttribute('href', '/signup?next=%2Fp%2Fabc')
+    await userEvent.click(signUp)
+    await waitFor(() => expect(window.location.pathname).toBe('/signup'))
+    expect(window.location.search).toBe('?next=%2Fp%2Fabc')
+    expect(await screen.findByTestId('sign-up')).toBeInTheDocument()
+    expect(screen.getByTestId('sign-up-link')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('sign-in-link')).toHaveAttribute('href', '/login?next=%2Fp%2Fabc')
+    expect(screen.getByTestId('signup-terms')).toBeInTheDocument()
+    expect(screen.getByTestId('entry-other')).toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it.each(['verify-email', 'join', 'password-reset', 'email-link', 'account-deletion', 'invitation', 'passkey-confirm'])(
+    'route the mailed link\'s page %s in the template', async (page) => {
+      server()
+      window.history.replaceState(null, '', `/auth/${page}?entry=app&token=abc`)
+      render(<App />)
+      await waitFor(() => expect(window.location.search).not.toContain('token'))
+      expect(window.location.pathname).toBe(`/auth/${page}`)
+      expect(document.querySelector('[data-slot="entry-layout"]')).not.toBeNull()
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks')
+      expect(screen.getByTestId('entry-links')).toBeInTheDocument()
+      // The way to the other side is for the sign-in and sign-up forms only.
+      expect(screen.queryByTestId('entry-other')).toBeNull()
+    })
+
+  it('show the identity provider\'s return in the template, with the brand and the banner (gap 4)', async () => {
+    server()
+    window.history.replaceState(null, '', '/login/oidc?error=access_denied&state=s1')
+    render(<App />)
+    expect(await screen.findByTestId('oidc-error')).toHaveTextContent('access_denied')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks')
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1)
+    expect(await screen.findByTestId('environment-banner')).toBeInTheDocument()
+    expect(screen.getByTestId('entry-language')).toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it('name the Sponsor app by its name, in every language, and never as a back office', async () => {
+    server()
+    window.history.replaceState(null, '', '/login')
+    for (const [language, link] of [['zh', '去发起方页面'], ['ja', '主催者ページへ'], ['en', 'Go to the Sponsor app']]) {
+      await changeLanguage(language as 'zh' | 'ja' | 'en')
+      const { unmount } = render(<App />)
+      expect(await screen.findByRole('link', { name: link })).toHaveAttribute('href', '/sponsor/login')
+      expect(document.body.textContent).not.toMatch(/后台|管理画面|console/i)
+      unmount()
+    }
+  })
+
+  it('collapse the in-app browser\'s note to one line on a phone when another notice shows (Q50)', async () => {
+    atWidth(390)
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Linux; Android 14; wv) AppleWebKit/537.36 '
+      + '(KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 MicroMessenger/8.0.49.2600 WeChat/arm64')
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    server()
+    window.history.replaceState(null, '', '/login')
+    render(<App />)
+    const note = await screen.findByTestId('pwa-install')
+    // The first active notice shows in full: the way out of WeChat; offline is one line.
+    expect(note.closest('details')).toBeNull()
+    const collapsed = document.querySelector('[data-slot="entry-notice"][data-collapsed]')!
+    expect(collapsed.querySelector('summary')).toHaveTextContent('offline')
+    await expectAccessible()
   })
 })
 

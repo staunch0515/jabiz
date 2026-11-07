@@ -1,4 +1,5 @@
-import { changeLanguage, configureClient, session } from '@jabiz/client'
+import { changeLanguage, configureClient, forgetEnvironment, session } from '@jabiz/client'
+import { expectAccessible } from '@jabiz/ui/testing'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -38,6 +39,13 @@ const privacy = { kind: 'PRIVACY', versionId: 'p1', versionNo: 1, title: { en: '
  */
 /** Whether the entry takes passkeys (Q97): off unless a test turns it on. */
 let entryPasskeys = false
+/** The test system's name the entry gives (platform 16zd): none unless a test sets one. */
+let entryEnvironment: string | undefined
+
+/** The window's width: a phone (390) or a wide screen (1440); jsdom starts at 1024. */
+function atWidth(width: number) {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: width })
+}
 
 /** What the account's deletion says (Q72): off unless a test turns it on. */
 let deletionStatus: Record<string, unknown> = { available: false, pending: null, notices: [] }
@@ -56,7 +64,7 @@ function server(me?: Me, providers: unknown[] = []) {
     if (request.method === 'POST') posted.push({ path, body })
     switch (path) {
       case '/api/auth/entries/sponsor':
-        return json(200, { ...ENTRY, passkeys: entryPasskeys })
+        return json(200, { ...ENTRY, passkeys: entryPasskeys, environment: entryEnvironment })
       case '/api/auth/account/passkeys':
         return json(200, [])
       case '/api/auth/oidc/providers':
@@ -117,6 +125,10 @@ function server(me?: Me, providers: unknown[] = []) {
 beforeAll(() => configureClient({ entry: 'sponsor' }))
 beforeEach(() => {
   entryPasskeys = false
+  entryEnvironment = undefined
+  // The environment is read once a page load: each test asks its server again.
+  forgetEnvironment()
+  atWidth(1024)
   // The entry is read once a page load (configuring the entry forgets it): each test's server answers it again.
   configureClient({ entry: 'sponsor' })
   session.clear()
@@ -199,12 +211,15 @@ describe('a visitor', () => {
     expect(window.location.pathname).toBe('/auth/passkey-confirm')
   })
 
-  it('signs in and signs up with Google, Facebook and LINE as a row of icons (Q37, Q40)', async () => {
+  it('signs in and signs up with Google, Facebook and LINE as a row of icons on a phone (Q37, Q40)', async () => {
+    // A phone: the sign-in's providers are a row of icons there (17zk, responsive), full-width buttons on a wide screen.
+    atWidth(390)
     server(undefined, [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'facebook', kind: 'facebook',
       label: 'Facebook' }, { id: 'line', kind: 'line', label: 'LINE' }])
     render(<App />)
     const row = await screen.findByTestId('oidc-icons')
-    expect(row).toHaveTextContent('Other ways to sign in')
+    // Without passkeys in this browser they come first (17zk, suggestion ③): a group named "Other ways to sign in".
+    expect(row).toHaveAccessibleName('Other ways to sign in')
     expect(within(row).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
       .toEqual(['Google', 'Facebook', 'LINE'])
     await userEvent.click(screen.getByTestId('sign-up-link'))
@@ -234,6 +249,125 @@ describe('a visitor', () => {
       { path: '/api/auth/mail/unsubscribe', body: { token: 't1' } }])
     expect(window.location.pathname).toBe('/mail/unsubscribe')
     expect(window.location.search).not.toContain('token')
+  })
+})
+
+describe('the entry pages (platform 17zk; P4)', () => {
+  const PROVIDERS = [{ id: 'google', kind: 'google', label: 'Google' }, { id: 'line', kind: 'line', label: 'LINE' }]
+
+  it('lay out the sign-in: the brand, the column, the taker hint under the form, the links and the way to the app',
+    async () => {
+      atWidth(1440)
+      entryEnvironment = 'staging'
+      server(undefined, PROVIDERS)
+      window.history.replaceState(null, '', '/login')
+      render(<App />)
+      await screen.findByTestId('login-user-name')
+      expect(document.querySelector('[data-slot="entry-layout"]')).toHaveAttribute('data-layout', 'columns')
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks for Sponsors')
+      expect(document.querySelector('[data-slot="entry-intro-sentence"]'))
+        .toHaveTextContent('Get to know your customers with quizzes')
+      expect(document.querySelectorAll('[data-slot="entry-intro-points"] li')).toHaveLength(3)
+      expect(document.querySelector('[data-slot="entry-intro-illustration"] svg')).toHaveAttribute('aria-hidden', 'true')
+      // Q37: the hint for takers stays, now under the form inside its card.
+      const below = document.querySelector('[data-slot="entry-below"]')!
+      expect(below).toContainElement(screen.getByTestId('signin-taker-account'))
+      const other = screen.getByTestId('entry-other')
+      expect(other).toHaveTextContent('Answering quizzes as a Taker?')
+      expect(within(other).getByRole('link', { name: 'Open QuizBuks' })).toHaveAttribute('href', '/taker/login')
+      expect(within(screen.getByTestId('entry-links')).getAllByRole('link').map((a) => a.getAttribute('href')))
+        .toEqual(['/help', '/legal/sponsor-terms', '/legal/privacy', '/legal/commerce'])
+      expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+      await expectAccessible()
+    })
+
+  it('put passkeys first, then the providers, then the password', async () => {
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {})
+    Object.defineProperty(navigator, 'credentials', { value: {}, configurable: true })
+    try {
+      atWidth(1440)
+      entryPasskeys = true
+      server(undefined, PROVIDERS)
+      window.history.replaceState(null, '', '/login')
+      render(<App />)
+      const passkey = await screen.findByTestId('login-passkey')
+      const providers = await screen.findByTestId('oidc-buttons')
+      const name = screen.getByTestId('login-user-name')
+      expect(passkey.compareDocumentPosition(providers) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(providers.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      // No mailed link at this entry.
+      expect(screen.queryByTestId('login-email-link-open')).toBeNull()
+      expect(screen.queryByTestId('email-link-form')).toBeNull()
+      await expectAccessible()
+    } finally {
+      vi.unstubAllGlobals()
+      Reflect.deleteProperty(navigator, 'credentials')
+    }
+  })
+
+  it('make signing in and signing up two tabs; the old sign-up address with ?src= still remembers the trial', async () => {
+    server()
+    window.history.replaceState(null, '', '/signup?src=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    render(<App />)
+    expect(await screen.findByTestId('sign-up')).toBeInTheDocument()
+    const signUp = await screen.findByTestId('sign-up-link')
+    expect(signUp).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('sign-in-link')).toHaveAttribute('href', '/login?src=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    expect(window.localStorage.getItem('qb.trial-src')).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    await userEvent.click(screen.getByTestId('sign-in-link'))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+    expect(window.location.search).toBe('?src=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    expect(await screen.findByTestId('sign-in-link')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('sign-up-link')).toHaveAttribute('href', '/signup?src=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    await expectAccessible()
+    window.localStorage.removeItem('qb.trial-src')
+  })
+
+  it.each(['verify-email', 'join', 'password-reset', 'email-link', 'account-deletion', 'invitation', 'passkey-confirm'])(
+    'route the mailed link\'s page %s in the template (gap 3)', async (page) => {
+      server()
+      window.history.replaceState(null, '', `/auth/${page}?entry=sponsor&token=abc`)
+      render(<App />)
+      await waitFor(() => expect(window.location.search).not.toContain('token'))
+      expect(window.location.pathname).toBe(`/auth/${page}`)
+      expect(document.querySelector('[data-slot="entry-layout"]')).not.toBeNull()
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks for Sponsors')
+      expect(screen.queryByTestId('entry-other')).toBeNull()
+    })
+
+  it('show the identity provider\'s return in the template, with the brand (gap 4)', async () => {
+    entryEnvironment = 'staging'
+    server()
+    window.history.replaceState(null, '', '/login/oidc?error=access_denied&state=s1')
+    render(<App />)
+    expect(await screen.findByTestId('oidc-error')).toHaveTextContent('access_denied')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('QuizBuks for Sponsors')
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1)
+    expect(await screen.findByTestId('environment-banner')).toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it('show the test system\'s banner on the public pages too (gap 6)', async () => {
+    entryEnvironment = 'staging'
+    server()
+    window.history.replaceState(null, '', '/help')
+    render(<App />)
+    expect(await screen.findByTestId('faq-entry')).toBeInTheDocument()
+    expect(await screen.findByTestId('environment-banner')).toHaveTextContent('staging')
+  })
+
+  it('name the Sponsor app as the requester decided, in every language, never as a back office', async () => {
+    server()
+    window.history.replaceState(null, '', '/login')
+    for (const [language, name, other] of [['zh', '答题拼好价发起方', '我是学者，来答题的'],
+      ['ja', 'クイズdeおトク 主催者', 'クイズに答えるテイカーの方'], ['en', 'QuizBuks for Sponsors', 'Answering quizzes as a Taker?']]) {
+      await changeLanguage(language as 'zh' | 'ja' | 'en')
+      const { unmount } = render(<App />)
+      expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(name)
+      expect(await screen.findByTestId('entry-other')).toHaveTextContent(other)
+      expect(document.body.textContent).not.toMatch(/后台|管理画面|console/i)
+      unmount()
+    }
   })
 })
 
@@ -374,7 +508,7 @@ describe('a signed-in Sponsor', () => {
     expect(links.indexOf('Digital prizes')).toBe(links.indexOf('Cash rewards') + 1)
     expect(screen.getByRole('link', { name: 'Digital prizes' })).toHaveAttribute('href', '/digital-prizes')
     // Q34b: the menu in five sections by what they are for, with rules between them.
-    const nav = screen.getByRole('navigation', { name: 'Sponsor console' })
+    const nav = screen.getByRole('navigation', { name: 'QuizBuks for Sponsors' })
     expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
       .map((link) => link.textContent))).toEqual([
       // Q79: the sponsor's own pages (profile, products, staff, mail server) are the hub's sections, one entry here.
