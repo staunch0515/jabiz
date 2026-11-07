@@ -5034,10 +5034,10 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zh-3 | 流程 `MAIL_TEXT_SAVE`（普通类即时生效，安全类 422 `MAIL_TEXT_NEEDS_APPROVAL`）、`MAIL_TEXT_RESET`、`MAIL_TEXT_TEST_SEND`（只寄给本人、`[TEST]`、不生成令牌、缺省每人每小时 10 次）；命名锁与 `baseVersionNo`（409）；权限 `mail.text.read` / `mail.text.write`；受控变更目标 `MailText`（`MailTextControlTarget`，提出与发布要求二次验证）；守卫 `MailTextGuard`；`GET /api/mail/texts`、`POST /api/mail/texts/preview`（不写记录） | 17zh-a |
 | 17zh-4 | 发信时取生效的文字（`MailTexts`），失效的覆盖退回缺省并告警（观测 `jabiz.mail.text.fallback`，启动检查 `MAIL` 告警）；待办通知（`jabiz.task-notification`）与单据邮件（`jabiz.document-mail`）经同一处取文字 | 17zh-a |
 | 17zh-5 | 测试：`MailTextRulesTest`、`MailChecksTest`、`MailTextIT`；OpenAPI 快照；文档 D72、18 §5.6、22 §5、根 `CLAUDE.md`；示范 `commerce.order-shipped` 的示例值 | 17zh-a |
-| 17zh-6 | 信纸：`MailLayout`（`sys_mail_layout_version`）、`MailLayoutRules`、`MailRenderer` 套信纸、缺省值 `jabiz.mail.layout.*`、修改经受控变更 `mail-layout`、投递记 `layout_version_no`、示范 `app` 的信纸 | 17zh-b（计划） |
+| 17zh-6 | 信纸：core `MailLayout`、`MailLayoutRules`（显示名与替代文字一行、标志只用本站图片、页脚只用 `{baseUrl}` / `{entryUrl.<入口>}` 且照文字的链接规则；错误码 `MAIL_LAYOUT_*`）、`MailRenderer.wrap` / `plain`；迁移 `V61__mail_layouts.sql`（时态实体 `MailLayout`，三张投递表加列 `layout_version_no`，两张表的唯一索引挡住并发的首次写入）；缺省值 `jabiz.mail.layout.<语言>.*`（示范 `app` 三语）；修改只经受控变更 `MailLayout`（`MailLayoutControlTarget`、守卫 `MailLayoutGuard`），`MAIL_LAYOUT_RESET`、`MAIL_LAYOUT_TEST_SEND`（缺省每人每小时 10 次）；`GET /api/mail/layouts`、`POST /api/mail/layouts/preview`；模版邮件、待办通知、单据邮件、预览与测试信都放在信纸上并记版本；启动检查（缺省值不合格即错误，存的不合格告警）；17zh-a 安全审查的跟进 F5（按写入的流程判定是否经审批）与 F6b（只有平台的测试信按已渲染内容发出）；测试 `MailLayoutRulesTest`、`MailRendererTest`、`MailLayoutIT`、`MailTextIT`；文档 D72 第 6、7 条、18 §5.6、根 `CLAUDE.md` | 17zh-b |
 | 17zh-7 | 通用后台的"邮件模版"与"邮件信纸"页（列表、编辑器、预览、测试发送、恢复默认、历史与对比、提出修改） | 17zh-c（计划） |
 
-**17zh 状态**：17zh-a ✅ 已合并（#470）；17zh-b、17zh-c 计划中。
+**17zh 状态**：17zh-a ✅ 已合并（#470）；17zh-b ✅ 已合并（#473）；17zh-c 计划中。
 
 ### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
 

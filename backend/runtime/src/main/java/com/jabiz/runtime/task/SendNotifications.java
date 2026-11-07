@@ -1,8 +1,11 @@
 package com.jabiz.runtime.task;
 
+import com.jabiz.i18n.MessageCatalog;
+import com.jabiz.mail.MailRenderer;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.StepSpec;
 import com.jabiz.query.BoundValue;
+import com.jabiz.runtime.mail.MailLayouts;
 import com.jabiz.runtime.process.StepHandler;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.runtime.storage.StorageEngine;
@@ -46,9 +49,14 @@ class SendNotifications<C extends ProcessContext> implements StepHandler<SendNot
     private final StorageAdapterRegistry storages;
     private final Clock clock;
     private final String poolRef;
+    private final MailLayouts layouts;
+    private final MessageCatalog messages;
 
     SendNotifications(NotificationSender sender, StorageAdapterRegistry storages, Clock clock,
-        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+        @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, MailLayouts layouts,
+        MessageCatalog messages) {
+        this.layouts = layouts;
+        this.messages = messages;
         this.sender = sender;
         this.storages = storages;
         this.clock = clock;
@@ -61,8 +69,10 @@ class SendNotifications<C extends ProcessContext> implements StepHandler<SendNot
         return Mono.defer(() -> {
             List<String> ids = ctx.contains(metadata.idsKey()) ? (List<String>) ctx.get(metadata.idsKey()) : List.of();
             StorageEngine engine = storages.getEngine(poolRef);
+            // The notifications of one task share the layout version recorded with them: looked up once.
+            Map<Integer, Mono<MailLayouts.Chosen>> chosen = new java.util.concurrent.ConcurrentHashMap<>();
             return Flux.fromIterable(ids)
-                .concatMap(id -> send(engine, id))
+                .concatMap(id -> send(engine, id, chosen))
                 .filter(sent -> !sent)
                 .count()
                 .flatMap(failed -> failed == 0 ? Mono.<Void>empty()
@@ -71,8 +81,8 @@ class SendNotifications<C extends ProcessContext> implements StepHandler<SendNot
     }
 
     /** Sends one notification unless an earlier attempt did; whether it is sent now. */
-    private Mono<Boolean> send(StorageEngine engine, String id) {
-        return engine.select("SELECT n.address, n.subject, n.body,"
+    private Mono<Boolean> send(StorageEngine engine, String id, Map<Integer, Mono<MailLayouts.Chosen>> chosen) {
+        return engine.select("SELECT n.address, n.subject, n.body, n.layout_version_no,"
                     + " (SELECT count(*) FROM sys_notification_attempt a WHERE a.notification_id = n.notification_id)"
                     + " AS attempts,"
                     + " EXISTS (SELECT 1 FROM sys_notification_attempt a WHERE a.notification_id = n.notification_id"
@@ -84,12 +94,20 @@ class SendNotifications<C extends ProcessContext> implements StepHandler<SendNot
                     return Mono.just(true);
                 }
                 int attempt = ((Number) row.get("attempts")).intValue() + 1;
-                // An empty error text is a message the server accepted.
-                return Mono.fromCallable(() -> {
-                        sender.send((String) row.get("address"), (String) row.get("subject"), (String) row.get("body"));
+                Object layoutVersion = row.get("layout_version_no");
+                // On the layout recorded with the notification (decision D72 item 4), in the language it was
+                // rendered in; an empty error text is a message the server accepted.
+                Integer version = layoutVersion == null ? null : ((Number) layoutVersion).intValue();
+                return chosen.computeIfAbsent(version == null ? -1 : version,
+                        key -> layouts.recorded(messages.defaultLocale(), version).cache())
+                    .map(layout -> layouts.wrap(MailRenderer.plain((String) row.get("subject"),
+                        (String) row.get("body")), layout.layout()))
+                    .flatMap(mail -> Mono.fromCallable(() -> {
+                        sender.send(new MailMessage((String) row.get("address"), mail.subject(), mail.text(),
+                            mail.html(), List.of()));
                         return "";
                     })
-                    .subscribeOn(Schedulers.boundedElastic())
+                    .subscribeOn(Schedulers.boundedElastic()))
                     .onErrorResume(error -> {
                         log.warn("Notification {} could not be sent (attempt {}): {}", id, attempt, error.toString());
                         String text = String.valueOf(error);

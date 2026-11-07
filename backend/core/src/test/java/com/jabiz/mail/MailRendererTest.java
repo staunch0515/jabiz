@@ -129,4 +129,63 @@ class MailRendererTest {
         return MailTextRules.check(template, subject, body, MailTextRules.Limits.DEFAULT).stream()
             .map(com.jabiz.entity.Violation::message).toList();
     }
+
+    private static final Map<String, String> SITE = Map.of("baseUrl", "https://app.example.com",
+        "entryUrl.portal", "https://app.example.com/portal/");
+
+    @Test
+    void wrapsAMailInTheLayout() {
+        MailRenderer.Rendered mail = render("Hello **{userName}**", Map.of("userName", "<Ann>"));
+        MailLayout layout = new MailLayout("Shop & Co <b>", "{baseUrl}/logo.png", "Shop \"logo\"",
+            "Shop Ltd · [Account]({entryUrl.portal}account) · [Home]({baseUrl}/)");
+
+        MailRenderer.Rendered wrapped = MailRenderer.wrap(mail, layout, SITE);
+
+        assertThat(wrapped.subject()).isEqualTo(mail.subject());
+        assertThat(wrapped.html()).startsWith("<!DOCTYPE html>")
+            .contains("Shop &amp; Co &lt;b&gt;", "src=\"https://app.example.com/logo.png\"",
+                "alt=\"Shop &quot;logo&quot;\"", "<strong>&lt;Ann&gt;</strong>",
+                "href=\"https://app.example.com/portal/account\"", "href=\"https://app.example.com/\"",
+                "max-width:600px", "<title>Hello &lt;Ann&gt;</title>")
+            .doesNotContain("<script", "<link", "<style", "Shop & Co <b>");
+        assertThat(wrapped.text()).startsWith("Shop & Co <b>\n\nHello <Ann>")
+            .contains("\n-- \nShop Ltd")
+            .doesNotContain("<strong>");
+    }
+
+    @Test
+    void anEmptyLayoutLeavesTheMail() {
+        MailRenderer.Rendered mail = render("Hello", Map.of());
+        assertThat(MailRenderer.wrap(mail, MailLayout.EMPTY, SITE)).isSameAs(mail);
+        MailRenderer.Rendered nameOnly = MailRenderer.wrap(mail, new MailLayout("Shop", "", "", ""), SITE);
+        assertThat(nameOnly.text()).isEqualTo("Shop\n\nHello\n");
+        assertThat(nameOnly.html()).doesNotContain("<img", "border-top");
+    }
+
+    @Test
+    void aLogoOnlyOfTheSiteAndAPathUnderTheBase() {
+        MailRenderer.Rendered mail = render("Hello", Map.of());
+        assertThat(MailRenderer.wrap(mail, new MailLayout("", "/api/public/files/1/logo", "L", ""), SITE).html())
+            .contains("src=\"https://app.example.com/api/public/files/1/logo\"");
+        // A layout that slipped past the rules still shows no foreign image.
+        assertThat(MailRenderer.wrap(mail, new MailLayout("Shop", "https://t.example/p.gif", "L", ""), SITE).html())
+            .doesNotContain("<img", "t.example");
+        assertThat(MailRenderer.logoUrl("{baseUrl}/x.png", Map.of())).isEqualTo("/x.png");
+    }
+
+    @Test
+    void footerValuesAreNotMarkdown() {
+        MailRenderer.Rendered mail = render("Hello", Map.of());
+        MailRenderer.Rendered wrapped = MailRenderer.wrap(mail, new MailLayout("", "", "", "[a]({baseUrl}/x)"),
+            Map.of("baseUrl", "javascript:alert(1)//"));
+        assertThat(wrapped.html()).doesNotContain("javascript:");
+    }
+
+    @Test
+    void plainTextBecomesEscapedParagraphs() {
+        MailRenderer.Rendered mail = MailRenderer.plain("Task", "Line <1>\nLine 2\n\n\nNext & last\n");
+        assertThat(mail.html()).isEqualTo("<p>Line &lt;1&gt;<br>\nLine 2</p>\n<p>Next &amp; last</p>\n");
+        assertThat(mail.text()).isEqualTo("Line <1>\nLine 2\n\n\nNext & last\n");
+        assertThat(MailRenderer.escape("'\"")).isEqualTo("&#39;&quot;");
+    }
 }

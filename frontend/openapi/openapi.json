@@ -1837,6 +1837,37 @@
         },
         "type" : "object"
       },
+      "LanguageLayout" : {
+        "properties" : {
+          "defaultHash" : {
+            "type" : "string"
+          },
+          "defaultLayout" : {
+            "$ref" : "#/components/schemas/MailLayout"
+          },
+          "layout" : {
+            "$ref" : "#/components/schemas/MailLayout"
+          },
+          "locale" : {
+            "type" : "string"
+          },
+          "problems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/Violation"
+            },
+            "type" : "array"
+          },
+          "state" : {
+            "enum" : [ "DEFAULT", "CUSTOM", "DEFAULT_UPDATED", "INVALID" ],
+            "type" : "string"
+          },
+          "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
       "LanguageTexts" : {
         "properties" : {
           "body" : {
@@ -1861,13 +1892,38 @@
             "type" : "array"
           },
           "state" : {
-            "enum" : [ "DEFAULT", "CUSTOM", "DEFAULT_UPDATED", "INVALID" ],
+            "enum" : [ "DEFAULT", "CUSTOM", "DEFAULT_UPDATED", "INVALID", "UNAPPROVED" ],
             "type" : "string"
           },
           "subject" : {
             "type" : "string"
           },
           "versionNo" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "LayoutsResponse" : {
+        "properties" : {
+          "allowedLinkHosts" : {
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "languages" : {
+            "items" : {
+              "$ref" : "#/components/schemas/LanguageLayout"
+            },
+            "type" : "array"
+          },
+          "maxFooterLength" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "maxLineLength" : {
             "format" : "int32",
             "type" : "integer"
           }
@@ -1929,6 +1985,26 @@
             "type" : "array"
           },
           "locale" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "MailLayout" : {
+        "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "empty" : {
+            "type" : "boolean"
+          },
+          "footer" : {
+            "type" : "string"
+          },
+          "logoAlt" : {
+            "type" : "string"
+          },
+          "logoUrl" : {
             "type" : "string"
           }
         },
@@ -3377,7 +3453,7 @@
   "paths" : {
     "/api/approvals/preview" : {
       "post" : {
-        "operationId" : "preview_2",
+        "operationId" : "preview_3",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -6432,7 +6508,7 @@
     },
     "/api/imports/{importId}/preview" : {
       "post" : {
-        "operationId" : "preview_1",
+        "operationId" : "preview_2",
         "parameters" : [ {
           "in" : "path",
           "name" : "importId",
@@ -6639,7 +6715,7 @@
     },
     "/api/jobs" : {
       "get" : {
-        "operationId" : "list_5",
+        "operationId" : "list_6",
         "responses" : {
           "200" : {
             "content" : {
@@ -6657,6 +6733,52 @@
           }
         },
         "tags" : [ "job-controller" ]
+      }
+    },
+    "/api/mail/layouts" : {
+      "get" : {
+        "operationId" : "list_5",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LayoutsResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mail-layout-controller" ]
+      }
+    },
+    "/api/mail/layouts/preview" : {
+      "post" : {
+        "operationId" : "preview_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PreviewRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PreviewResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "mail-layout-controller" ]
       }
     },
     "/api/mail/texts" : {
