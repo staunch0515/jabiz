@@ -271,6 +271,13 @@ public final class QbPermissions {
     public static final String PROSPECT_USE = "qb.prospect.use";
     /** Headquarters' own prospecting, and reading every owner's prospects, usage and blocks. Content administrator. */
     public static final String ADMIN_PROSPECT = "qb.admin.prospect";
+    /**
+     * F-S11: headquarters' exceptions to the rule on foreign videos and mainland China, how many starts it refused, and
+     * the daily check of the address database (read); adding, changing and revoking exceptions (write). Content
+     * administrators; not the operators (a platform-wide rule, A3-15).
+     */
+    public static final String ADMIN_REGION_READ = "qb.admin.region.read";
+    public static final String ADMIN_REGION_WRITE = "qb.admin.region.write";
     /** The prospecting jobs' items and outcomes ({@code internal()}). Granted to no role. */
     public static final String PROSPECT_SYSTEM = "qb.prospect.system";
 

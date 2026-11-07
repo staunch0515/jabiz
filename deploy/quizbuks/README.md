@@ -310,6 +310,7 @@ tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的
 | `QB_BOOTSTRAP_ADMIN_DONE` | 首个管理员建好后 | `true`：首个管理员已存在，不再需要 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` |
 | `QB_DIRECT_EXPOSURE` | 没有反向代理时 | `true`：应用直接对外，不列可信代理（否则正式模式下缺少 `JABIZ_TRUSTED_PROXIES` 即启动失败） |
 | `JABIZ_FILES_LOCAL_ROOT` | 是 | 上传文件目录；镜像中已设为卷 `/var/lib/jabiz/files` |
+| `JABIZ_GEOIP_DATABASE` | 正式模式（F-S11） | IP 地址库（DB-IP "IP to Country Lite" 的 CSV，可为 `.gz`），服务器上放在卷 `geoip`：`/var/lib/jabiz/geoip/dbip-country-lite.csv.gz`，每月更新（`docs/quizbuks/operations.md` §7.24）。正式模式下不设即启动失败；其他模式只警告，所有地址按 `qb.region.unknown-ip-country`（缺省中国大陆）处理 |
 | `SPRING_R2DBC_URL` / `SPRING_R2DBC_USERNAME` / `SPRING_R2DBC_PASSWORD`、`SPRING_FLYWAY_URL` / `SPRING_FLYWAY_USER` / `SPRING_FLYWAY_PASSWORD` | compose 已给 | 数据库连接（请求路径用 R2DBC，迁移用 JDBC） |
 | `JABIZ_ERASURE_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD` | 开启账号删除时 | 清除被删账号个人信息的维护连接（平台 17i）：**R2DBC** URL（同 `SPRING_R2DBC_URL`，不是 JDBC）与属于 `jabiz_maintenance` 的单独登录；服务器上由 `deploy/quizbuks/server/create-maintenance-login.sh` 建立（`DEPLOY.md`"1a"） |
 | `JABIZ_SECURITY_MFA_ADMINISTRATION` | 否 | `false` 时平台管理操作（含 `QB_SETUP`）不要求二次验证；只用于本机演示与 e2e |

@@ -1,8 +1,9 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification]
+entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification]
 datasets:
+  QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
@@ -24,6 +25,7 @@ params:
   q:       { kind: { type: text, maxLength: 100 }, description: Only publications whose name or quiz title contains this text }
   includeAnswered: { kind: { type: bool }, description: "If true, also the publications the caller has answered (Q34); by default those are left out" }
   method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22, Q33): PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM or DIGITAL_PRIZE" }
+  mainlandChina: { kind: { type: bool }, description: "F-S11: whether the caller's address is in mainland China, as GET /api/client/region said; publications with a foreign video and no exception are then not for them" }
   languages: { kind: { type: text, maxLength: 20 }, description: "Only publications offering one of these languages (Q59a, Q73b), comma-separated in the taker's order (ja, zh, en): their switches, or their interface language; each shown in the first of them it offers; all when not given" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
@@ -257,6 +259,18 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
          AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
                               WHERE rv.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
                                 AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) IS NULL
+  -- F-S11: from mainland China (the page passes what the platform's clientRegion() said; the start checks the address
+  -- itself), a publication whose card has a foreign video, or none recorded yet, is not for the caller unless an exception
+  -- of headquarters is in force (the public dataset holds those not revoked; region.RegionRules is the one definition).
+  AND NOT (CAST(:mainlandChina AS boolean) IS TRUE AND coalesce(c.{{QbPublicationCard.foreignVideo}}, true)
+         AND NOT EXISTS (
+             SELECT 1 FROM {{QbRegionException}} rx
+             WHERE (rx.{{QbRegionException.expiresOn}} IS NULL
+                    OR rx.{{QbRegionException.expiresOn}} >= CAST(CAST(:at AS timestamptz) AT TIME ZONE 'UTC' AS date))
+               AND ((rx.{{QbRegionException.kind}} = 'PUBLICATION'
+                     AND rx.{{QbRegionException.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text))
+                    OR (rx.{{QbRegionException.kind}} = 'SPONSOR'
+                        AND rx.{{QbRegionException.sponsorId}} = c.{{QbPublicationCard.publisherId}}))))
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL

@@ -41,6 +41,7 @@ import BroadcastsPage from './BroadcastsPage'
 import { AudiencePricesPage, AudienceRulesPage, OperatorAudiencePricesPage } from './AudiencePricingPages'
 import CertificationsPage from './CertificationsPage'
 import ReferralsPage from './ReferralsPage'
+import RegionPage from './RegionPage'
 import AiPage from './AiPage'
 import AttemptsPage from './AttemptsPage'
 import { BRAND } from './brand'
@@ -113,6 +114,8 @@ export default defineExtension({
     // Q49a: takers' reports of quizzes, for headquarters and the operators (their own sponsors').
     { path: PATH.abuseReports, element: <AbuseReportsPage /> },
     { path: '/qb/conversations/:conversationId', element: <ConversationPage /> },
+    // F-S11: foreign videos and mainland China (headquarters' exceptions, the refused starts).
+    { path: PATH.region, element: <RegionPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -231,6 +234,8 @@ export default defineExtension({
         // Q49a: takers' reports of quizzes (headquarters; an operator has its own entry above).
         { key: 'qb-abuse-reports', label: 'menu.abuseReports', path: PATH.abuseReports, icon: Flag,
           permission: PERMISSION.contentWrite },
+        // F-S11: the exceptions to the rule on foreign videos and mainland China (headquarters only).
+        { key: 'qb-region', label: 'menu.region', path: PATH.region, icon: Globe, permission: PERMISSION.regionRead },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         // Q22: the cash rewards sponsors pay takers themselves, with the disputes to decide.
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,

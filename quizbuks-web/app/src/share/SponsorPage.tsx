@@ -23,6 +23,7 @@ import { readUnderstanding, UNDERSTANDING_QUERY } from '../qb/understanding'
 import { sharePath } from './share'
 import { countPageView, countProductClick } from './counting'
 import { linkLanguageOf } from '../linkLanguage'
+import { useMainlandChina } from '../qb/region'
 
 const SPONSOR_PAGE = /^\/s\/([^/]+)$/
 
@@ -60,8 +61,10 @@ export function SponsorPage({ handle }: { handle: string }) {
     queryFn: () => readPageProducts(handle, languages), enabled: !!page.data, retry: false,
     placeholderData: keepPreviousData })
   const { t: tView } = useTranslation(QBVIEW)
-  const publications = useQuery({ queryKey: ['qb', 'sponsor-page-publications', handle],
-    queryFn: () => readPagePublications(handle), enabled: !!page.data })
+  // F-S11: from mainland China, without what has a video that cannot be played there.
+  const region = useMainlandChina()
+  const publications = useQuery({ queryKey: ['qb', 'sponsor-page-publications', handle, region.mainlandChina],
+    queryFn: () => readPagePublications(handle, region.mainlandChina), enabled: !!page.data && !region.pending })
   // Q85 (D-Q85-6): signed in, the tree as the caller stands on it (their own attempts), the picture by default;
   // the list stays for anybody. `?node=` marks a node (the result page's "what comes next").
   const { signedIn } = useAuth()

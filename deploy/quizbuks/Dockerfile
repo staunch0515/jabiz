@@ -35,8 +35,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 ENV JABIZ_REPORTS_PDF_FONTS=/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf,/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
 RUN useradd --system --uid 10001 --home-dir /app jabiz \
-    && mkdir -p /app /var/lib/jabiz/secrets /var/lib/jabiz/files \
-    && chown jabiz /var/lib/jabiz/secrets /var/lib/jabiz/files && chmod 700 /var/lib/jabiz/secrets /var/lib/jabiz/files
+    && mkdir -p /app /var/lib/jabiz/secrets /var/lib/jabiz/files /var/lib/jabiz/geoip \
+    && chown jabiz /var/lib/jabiz/secrets /var/lib/jabiz/files /var/lib/jabiz/geoip \
+    && chmod 700 /var/lib/jabiz/secrets /var/lib/jabiz/files
 COPY --from=build /src/app.jar /app/app.jar
 # The platform's entrypoint: secrets of a first local start are generated once (docs/design/10-security.md section 7).
 # QuizBuks's own runs first: Stripe placeholders for a plain local compose only (entrypoint.sh beside this file).

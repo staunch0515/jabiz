@@ -6,6 +6,10 @@ import { BRAND } from '../qb/brand'
  */
 export const publishingEn = {
   publishing: {
+    mainland: {
+      hint: 'This quiz has a video that cannot be played in mainland China (such as YouTube): Takers in mainland China cannot see or answer this publication. This is only a notice; you can still submit.',
+      pending: 'The version you asked to switch to has a video that cannot be played in mainland China (such as YouTube): once switched, Takers in mainland China cannot see or answer this publication.',
+    },
     version: {
       uses: 'Takers see version {{label}} of the quiz: its title, introduction, materials and questions. Each attempt keeps the version it started with.',
       newer: 'The quiz now has version {{label}}, which this publication does not show; publish again to use it.',
@@ -609,6 +613,10 @@ export const publishingEn = {
 
 export const publishingZh: typeof publishingEn = {
   publishing: {
+    mainland: {
+      hint: '这个测验含有在中国大陆无法播放的视频（如 YouTube）：中国大陆看不到这个发布，那里的学者不能作答。这只是提示，仍然可以提交。',
+      pending: '申请切换到的版本含有在中国大陆无法播放的视频（如 YouTube）：切换之后，中国大陆看不到这个发布，那里的学者不能作答。',
+    },
     version: {
       uses: '学者看到的是测验第 {{label}} 版：标题、简介、材料与题目。每次作答都保持开始作答时的版本。',
       newer: '测验现在有第 {{label}} 版，本发布不会显示它；要使用新版本请重新发布。',
@@ -1212,6 +1220,10 @@ export const publishingZh: typeof publishingEn = {
 
 export const publishingJa: typeof publishingEn = {
   publishing: {
+    mainland: {
+      hint: 'このクイズには中国本土で再生できない動画（YouTube など）が含まれています。中国本土のテイカーはこの公開を見ることも回答することもできません。お知らせのみで、そのまま申請できます。',
+      pending: '切り替えを申請したバージョンには中国本土で再生できない動画（YouTube など）が含まれています。切り替え後は、中国本土のテイカーはこの公開を見ることも回答することもできません。',
+    },
     version: {
       uses: 'テイカーにはクイズのバージョン {{label}} が表示されます（タイトル、紹介文、資料、問題）。回答は開始したときのバージョンのまま続きます。',
       newer: 'クイズには新しいバージョン {{label}} がありますが、この掲載には表示されません。使うには掲載し直してください。',

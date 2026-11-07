@@ -22,6 +22,7 @@ import { referralMenu, referralMessages } from './referral-messages'
 import { feeMenu, feeMessages } from './fee-messages'
 import { assetMessages } from './asset-messages'
 import { usageMenu, usageMessages } from './usage-messages'
+import { regionMenu, regionMessages } from './region-messages'
 import { BRAND_NAMES } from './brand'
 
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
@@ -30,7 +31,8 @@ export const messages = {
     menu: { group: BRAND_NAMES.en, reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
       ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
       ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en, ...accountMenu.en, ...pageMenu.en, ...productMenu.en, ...abuseReportMenu.en,
-      ...certificationMenu.en, ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en, ...usageMenu.en },
+      ...certificationMenu.en, ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en, ...usageMenu.en, ...regionMenu.en },
+    region: regionMessages.en,
     fee: feeMessages.en,
     assets: assetMessages.en,
     usage: usageMessages.en,
@@ -330,7 +332,8 @@ export const messages = {
     menu: { group: BRAND_NAMES.zh, reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
       ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
       ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh, ...accountMenu.zh, ...pageMenu.zh, ...productMenu.zh, ...abuseReportMenu.zh,
-      ...certificationMenu.zh, ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh, ...usageMenu.zh },
+      ...certificationMenu.zh, ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh, ...usageMenu.zh, ...regionMenu.zh },
+    region: regionMessages.zh,
     fee: feeMessages.zh,
     assets: assetMessages.zh,
     usage: usageMessages.zh,
@@ -630,7 +633,8 @@ export const messages = {
     menu: { group: BRAND_NAMES.ja, reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
       ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
       ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja, ...accountMenu.ja, ...pageMenu.ja, ...productMenu.ja, ...abuseReportMenu.ja,
-      ...certificationMenu.ja, ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja, ...usageMenu.ja },
+      ...certificationMenu.ja, ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja, ...usageMenu.ja, ...regionMenu.ja },
+    region: regionMessages.ja,
     fee: feeMessages.ja,
     assets: assetMessages.ja,
     usage: usageMessages.ja,

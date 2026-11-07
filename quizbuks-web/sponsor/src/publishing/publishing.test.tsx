@@ -307,6 +307,44 @@ describe('the version a publication shows (Q34b)', () => {
   })
 })
 
+describe('mainland China cannot see a quiz with a foreign video (F-S11)', () => {
+  const YOUTUBE = JSON.stringify(['https://www.youtube.com/watch?v=dQw4w9WgXcQ'])
+  const BILIBILI = JSON.stringify(['https://www.bilibili.com/video/BV1GJ411x7h7'])
+
+  it('says so in the audience step and where the publication is checked, and still lets it be submitted', async () => {
+    server({ versions: [{ ...VERSIONS[0], videoLinks: YOUTUBE, mainlandSites: 'bilibili,youku,tencent' }],
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    expect(await screen.findByTestId('publication-mainland-audience')).toHaveTextContent(
+      'Takers in mainland China cannot see or answer this publication')
+    await expectAccessible()
+    await userEvent.click(screen.getByTestId('publication-next'))
+    expect(await screen.findByTestId('publication-mainland-check')).toHaveTextContent('you can still submit')
+    expect(screen.getByTestId('publication-submit')).toBeEnabled()
+  })
+
+  it('says nothing for a video mainland China plays, or for regions that do not reach it', async () => {
+    server({ versions: [{ ...VERSIONS[0], videoLinks: BILIBILI, mainlandSites: null }] })
+    window.history.replaceState(null, '', '/publications/p1?step=2')
+    render(<App />)
+    await screen.findByTestId('publication-regions')
+    expect(screen.queryByTestId('publication-mainland-audience')).toBeNull()
+  })
+
+  it('says so on a publication that runs, and for a switch in review to such a version', async () => {
+    server({ publication: { ...DRAFT, status: 'LIVE', pendingVersionId: 'v2', pendingVersionLabel: 'v2.0' }, versions: [
+      { versionId: 'v2', versionNo: 2, label: 'v2.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
+        versionedAt: '2026-10-20T00:00:00Z', contentHash: 'b', videoLinks: YOUTUBE },
+      { versionId: 'v1', versionNo: 1, label: 'v1.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
+        versionedAt: '2026-10-10T00:00:00Z', contentHash: 'a', videoLinks: BILIBILI }] })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    expect(await screen.findByTestId('publication-mainland-pending')).toHaveTextContent('once switched')
+    expect(screen.queryByTestId('publication-mainland')).toBeNull()
+  })
+})
+
 describe('switching the version of a publication that runs (Q51)', () => {
   const TWO = [
     { versionId: 'v2', versionNo: 2, label: 'v2.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,

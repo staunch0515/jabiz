@@ -71,7 +71,9 @@ public final class QbRoles {
         // Q47c: which kinds of audience rule sponsors may use and which are charged for.
         QbPermissions.AUDIENCE_RULES_WRITE,
         // Q89: every sponsored benefit, conversation between sponsors and purchase order (disputes).
-        QbPermissions.BENEFIT_READ);
+        QbPermissions.BENEFIT_READ,
+        // F-S11: the exceptions to the rule on foreign videos and mainland China, and its figures.
+        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE);
 
     /**
      * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's

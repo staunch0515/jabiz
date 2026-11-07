@@ -127,6 +127,8 @@ export interface FeedRequest {
   includeAnswered?: boolean
   /** Q59a: only publications in these languages; all when absent. */
   languages?: readonly string[]
+  /** F-S11: the browser's address is in mainland China (`useMainlandChina`): publications it cannot answer are left out. */
+  mainlandChina?: boolean
   sort?: FeedSort
   filters?: Filter[]
   offset?: number
@@ -184,7 +186,8 @@ export async function readFeed(request: FeedRequest): Promise<QueryPage<FeedCard
   const page = await runQuery<Record<string, unknown>>(PLAY.feed, {
     params: { at: request.at, country: request.country, q: request.q?.trim() || null,
       method: request.method ?? null, includeAnswered: request.includeAnswered ?? false,
-      languages: request.languages && request.languages.length > 0 ? request.languages.join(',') : null },
+      languages: request.languages && request.languages.length > 0 ? request.languages.join(',') : null,
+      mainlandChina: request.mainlandChina ?? false },
     filters: request.filters,
     sorts: request.sort ? [FEED_SORTS[request.sort]] : undefined,
     offset: request.offset,
@@ -302,6 +305,11 @@ export interface PublicationView {
    */
   matched: boolean
   /**
+   * F-S11: from mainland China (as the page asked), the publication has a video that cannot be played there and no
+   * exception: the page says it is not available in the caller's region instead of showing it; it cannot be started.
+   */
+  regionBlocked: boolean
+  /**
    * Q76: whether the caller has finished (passed, where asked) every publication this one requires, and those
    * publications: in the page's language, whether the caller met each and whether it still accepts attempts.
    */
@@ -391,13 +399,16 @@ export interface PublicationRequest {
   country: string | null
   /** Q73b: the languages to read the page in, the preferred first (the publication's tiers have none). */
   languages?: readonly string[]
+  /** F-S11: the browser's address is in mainland China (`useMainlandChina`). */
+  mainlandChina?: boolean
 }
 
 /** A publication's page; null when the caller cannot see it (not live for them and no attempt of theirs). */
 export async function readPublication(request: PublicationRequest): Promise<PublicationView | null> {
-  const { languages, ...rest } = request
+  const { languages, mainlandChina, ...rest } = request
   const page = await runQuery<Record<string, unknown>>(PLAY.publication, { params: { ...rest,
-    languages: languages && languages.length > 0 ? languages.join(',') : null }, limit: 1 })
+    languages: languages && languages.length > 0 ? languages.join(',') : null, mainlandChina: mainlandChina ?? false },
+  limit: 1 })
   const row = page.items[0]
   if (!row) return null
   return {
@@ -440,6 +451,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     last30d: numberOf(row.last30d),
     statsAt: textOrNull(row.statsAt),
     canStart: row.canStart === true || row.canStart === 'true',
+    regionBlocked: row.regionBlocked === true || row.regionBlocked === 'true',
     matched: row.matched !== false && row.matched !== 'false',
     prerequisitesMet: row.prerequisitesMet !== false && row.prerequisitesMet !== 'false',
     prerequisites: prerequisitesOf(row.prerequisites),

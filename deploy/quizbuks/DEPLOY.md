@@ -161,6 +161,10 @@ ANTHROPIC_API_KEY=<sk-ant-…>
 # QuizBuks for Shopify（S1）：Shopify 应用的 API 密钥与密钥；还没有应用时填占位，密钥至少 32 个字符（openssl rand -hex 32）
 SHOPIFY_API_KEY=<API key 或占位>
 SHOPIFY_API_SECRET=<API secret 或占位>
+
+# IP 地址库（F-S11，含境外视频的发布不让中国大陆的地址答题）：文件放在卷 geoip 中，见下文"3c"。
+# 正式模式（Stripe live）下不设即启动失败；staging 不设只警告，所有地址按中国大陆处理（含境外视频的发布答不了）
+JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz
 ```
 
 **部署前的检查**：workflow 在服务器上改动任何东西之前，按所部署提交的 `deploy/quizbuks/server/required-env` 检查 `.env`
@@ -252,6 +256,14 @@ Cloudflare 的浏览器检查（Browser Integrity Check）与 Bot Fight Mode 把
 - 不把 production 桶中的文件复制到 staging（其中有用户头像等个人信息）。
 - 以后若换存储商（如阿里云 OSS），用同一个迁移工具搬一次；只要还在 R2 就不用动。
 - 费用：R2 每月有免费额度（存储、读写次数），**下载流量不收费**；准确价格以 Cloudflare 的价格页为准。
+
+### 3c. IP 地址库（F-S11，每个环境各做一次，之后每月更新）
+
+1. 从 DB-IP 下载 "IP to Country Lite" 的 CSV（`dbip-country-lite-YYYY-MM.csv.gz`，CC BY 4.0，须署名：隐私政策中已写），不用解压。
+2. 放进本环境的卷 `geoip`：`docker run --rm -v <APP_NAME>_geoip:/g -v "$PWD":/src alpine cp /src/dbip-country-lite-YYYY-MM.csv.gz /g/dbip-country-lite.csv.gz`
+   （卷名以 `docker volume ls` 为准；同一路径覆盖即可，应用一分钟内读入新文件，无需重启，新文件读不懂即继续用旧的）。
+3. `.env` 写 `JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz`，部署后从中国大陆与日本的网络各打开一次 `/api/client/region` 核对。
+4. 每月初换新文件（排进值班表）；文件旧于 45 天时启动检查与每日检查告警（`operations.md` §7.24）。
 
 ### 4. 第一次部署
 

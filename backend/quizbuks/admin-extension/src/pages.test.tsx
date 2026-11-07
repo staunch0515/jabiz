@@ -355,6 +355,25 @@ describe('PublicationReviewPage', () => {
       expect(rows[1]).toHaveTextContent('Fewer than 5')
     })
 
+  it('says mainland China cannot see a publication whose reviewed version has a foreign video (F-S11)', async () => {
+    const next = '0192f0a0-0000-7000-8000-0000000000e3'
+    const withVideo = (url: string) => JSON.stringify({ ...JSON.parse(SNAPSHOT_JSON), materials: [{ no: 1,
+      kind: 'VIDEO_LINK', title: 'Film', description: null, body: null, url, pdf: null, audio: null, images: [] }] })
+    // The publication runs on a Bilibili version (fine) and asks to switch to a YouTube one, for JP and ASIA.
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication('LIVE'),
+      pendingVersionId: next, pendingVersionLabel: 'v2', pendingRequestId: 'switch-request',
+      pendingSince: '2026-10-20T00:00:00Z' })
+    server.entities.set(`${DATASET.version}/${VERSION_ID}`, { versionId: VERSION_ID, label: 'v1', title: 'World capitals',
+      contentHash: 'a'.repeat(64), versionedAt: '2026-10-14T00:00:00Z',
+      content: withVideo('https://www.bilibili.com/video/BV1GJ411x7h7') })
+    server.entities.set(`${DATASET.version}/${next}`, { versionId: next, label: 'v2', title: 'World capitals, revised',
+      contentHash: 'b'.repeat(64), versionedAt: '2026-10-19T00:00:00Z',
+      content: withVideo('https://youtu.be/dQw4w9WgXcQ') })
+    server.templates.set(TEMPLATE.videoSites, [{ sites: 'bilibili,youku,tencent' }])
+    renderPublication()
+    expect(await screen.findByTestId('publication-mainland')).toHaveTextContent('mainland China')
+  })
+
   it('reviews a running publication\'s switch with the version it asks for (Q51)', async () => {
     const next = '0192f0a0-0000-7000-8000-0000000000e2'
     server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication('LIVE'),

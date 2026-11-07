@@ -125,6 +125,7 @@ public final class PublicationVersions {
                     QbParams.REVIEW_PUBLICATION_AUTO))
                 .steps(PublicationEditing::loadTiers)
                 .steps(b -> PublicationEditing.loadVersion(b, ctx -> input(ctx).versionId(), true))
+                .steps(PublicationEditing::loadVideoSites)
                 .compute("Check the switch", (metadata, ctx) -> check(ctx))
                 .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
                     PublicationApprovals.SUBJECT, ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL))
@@ -296,6 +297,8 @@ public final class PublicationVersions {
             values.putAll(PublicationCovers.card(publication::get, snapshot, (String) values.get("cover")));
             // Q19, Q63, Q75: the new version's video, whether it must be watched and how long it is, as going on.
             PublicationEditing.cardVideo(snapshot.materials()).writeTo(values);
+            // F-S11: and whether the new version's videos play in mainland China.
+            values.put("foreignVideo", PublicationEditing.foreignVideo(ctx, snapshot));
             ctx.changes().update(QbPublications.CARD, card.id(), card.version(), values);
         }
         EntityInstance schedule = first(ctx, SCHEDULE);
