@@ -145,7 +145,10 @@ cat >>"$work/required" <<'LIST'
 LIST
 openssl ecparam -name prime256v1 -genkey -noout -out "$work/vapid.pem" 2>/dev/null
 vpub="$(openssl ec -in "$work/vapid.pem" -pubout -outform DER 2>/dev/null | tail -c 65 | base64 | tr '/+' '_-' | tr -d '=\n')"
-vpriv="$(openssl ec -in "$work/vapid.pem" -outform DER 2>/dev/null | tail -c +8 | head -c 32 | base64 | tr '/+' '_-' | tr -d '=\n')"
+# The private key is the 32 bytes after the DER header's 7. Cut from a file: with pipefail, `tail | head -c` fails
+# whenever head stops reading before tail has written everything (SIGPIPE), which made this test flaky in CI.
+openssl ec -in "$work/vapid.pem" -outform DER 2>/dev/null > "$work/vapid.der"
+vpriv="$(dd if="$work/vapid.der" bs=1 skip=7 count=32 2>/dev/null | base64 | tr '/+' '_-' | tr -d '=\n')"
 run $'PLAIN=a\nLONG=12345678\nVAPID_PUBLIC='"$vpub"$'\nVAPID_PRIVATE='"$vpriv"
 expect "a VAPID key pair as the README makes it" 0
 run $'PLAIN=a\nLONG=12345678\nVAPID_PUBLIC='"$vpub"$'==\nVAPID_PRIVATE='"$vpriv"'x'
