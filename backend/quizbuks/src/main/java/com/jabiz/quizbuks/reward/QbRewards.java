@@ -86,18 +86,11 @@ public final class QbRewards {
         return "qb.redeem-token:" + sponsorId;
     }
 
-    /** The source key of the administrators' task about a disputed cash reward. */
-    public static String disputeTaskSource(Object cashRewardId) {
-        return "qb.cash-dispute:" + cashRewardId;
-    }
-
     /** The source key of the sponsor's task to pay a cash reward that is late. */
     public static String payTaskSource(Object cashRewardId) {
         return "qb.cash-pay:" + cashRewardId;
     }
 
-    public static final String DISPUTE_TASK = "qb.cash-reward.dispute";
-    public static final String DISPUTE_TASK_TITLE = "task.qb.cash-reward.dispute";
     public static final String PAY_TASK = "qb.cash-reward.pay";
     public static final String PAY_TASK_TITLE = "task.qb.cash-reward.pay";
 
@@ -176,13 +169,15 @@ public final class QbRewards {
         eb.field("resolveNote", f -> f.physicalColumn("resolve_note").processOnly()
             .asText(PublishingLimits.REJECT_REASON_LENGTH, true));
         eb.field("revision", f -> f.physicalColumn("revision").required(true).processOnly().asNumeric(9, 0));
-        // Confirmed and void are final. A dispute may be found unpaid (back to due) or paid (confirmed).
+        // Confirmed and void are final.
         eb.stateTransitions("status", st -> st
             .initial(DUE)
             .from(DUE).to(MARKED_PAID, DISPUTED, VOID)
             .from(MARKED_PAID).to(CONFIRMED, DISPUTED, OVERDUE, VOID)
             .from(OVERDUE).to(CONFIRMED, DISPUTED, VOID)
-            .from(DISPUTED).to(CONFIRMED, DUE, VOID));
+            // F-S1: the platform does not decide cash disputes; the sponsor marks a disputed reward paid again once
+            // they settled it (DUE and VOID stay for the rewards decided before).
+            .from(DISPUTED).to(MARKED_PAID, CONFIRMED, DUE, VOID));
         eb.unique("uk_qb_cash_reward_attempt", "attemptId");
         eb.display("code");
         eb.temporal(t -> t.allowScheduled(false));

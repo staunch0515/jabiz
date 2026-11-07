@@ -487,12 +487,6 @@ public class RewardConfig {
     }
 
     @Bean
-    ProcessDefinition<CashRewardProcesses.ResolveInput, CashRewardProcesses.CashRewardOutput, ProcessContext>
-        qbCashRewardResolve() {
-        return CashRewardProcesses.resolve();
-    }
-
-    @Bean
     ProcessDefinition<CashRewardProcesses.CashRewardRef, CashRewardProcesses.CashRewardOutput, ProcessContext>
         qbCashRewardOverdue() {
         return CashRewardProcesses.overdue();

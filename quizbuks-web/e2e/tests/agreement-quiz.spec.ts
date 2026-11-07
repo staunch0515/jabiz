@@ -1,7 +1,7 @@
 import { decideReview, livePublication, publicationOf } from './publishing'
-import { contentAdmin } from './legal'
-import { fundedSponsor, taker } from './play'
-import { expect, expectAccessible, PASSWORD, prepareQuizbuks, run, signIn, test, tokenOf, unique } from './support'
+import { operatorWithLead } from './operators'
+import { fund, fundedSponsor, taker } from './play'
+import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 
 /*
  * The agreement quiz (docs/quizbuks/plans/Q86-agreement-quiz-tree.md): headquarters opens a round of "Understood:
@@ -34,15 +34,12 @@ async function liveQuiz(request: import('@playwright/test').APIRequestContext, t
 test('a Taker answers the contest rules quiz from the home; a Sponsor requires the certification (Q86)', async ({ page,
   request }) => {
   test.setTimeout(300_000)
-  // Headquarters: an official account with a live round of the certification. Every question of every round reads
-  // the same, so the card may lead to a round of an earlier run.
-  const official = await fundedSponsor(request)
-  const officialId = String((await (await request.get('/api/auth/me', {
-    headers: { Authorization: `Bearer ${official.token}` } })).json()).userId)
-  const hq = await tokenOf(request, await contentAdmin(request), PASSWORD, 'admin')
-  await run(request, hq, 'QB_OFFICIAL_PUBLISHER_SET', { userId: officialId, active: true })
-  const round = await liveQuiz(request, official.token, unique('Contest rules '))
-  await run(request, hq, 'QB_CERTIFICATION_ROUND_ADD', { publicationId: round.publicationId,
+  // An operator: its own sponsor (its lead's account, F-S1) publishes a live round of the certification. Every
+  // question of every round reads the same, so the card may lead to a round of an earlier run.
+  const operator = await operatorWithLead(request, 'Offi')
+  await fund(request, operator.sponsorToken)
+  const round = await liveQuiz(request, operator.sponsorToken, unique('Contest rules '))
+  await run(request, operator.operatorToken, 'QB_CERTIFICATION_ROUND_ADD', { publicationId: round.publicationId,
     certification: CERTIFICATION })
 
   // A sponsor requires the certification before their own quiz: in the wizard, as a certification of the platform.

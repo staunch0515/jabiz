@@ -67,7 +67,7 @@ import java.util.function.Function;
  * AI prospecting's processes (docs/quizbuks/plans/Q48-operators.md, Q48c).
  *
  * <p>A person's ({@code qb.prospect.use}, the owner decided by {@link #owner}: their operator when they are a current
- * member of one, headquarters ({@value QbProspects#DIRECT}) when they hold {@code qb.admin.prospect}, refused
+ * member of one, no prospecting of headquarters' own (F-S1), refused
  * otherwise): {@value #SETTINGS_SAVE}, {@value #DIRECTION_SAVE}, {@value #APPROVE} (the mail and the trial quiz as the
  * person edited them; checked as Claude's are), {@value #DISCARD} and {@value #BLOCK_ADD}.
  *
@@ -213,9 +213,7 @@ public final class ProspectProcesses {
             }
             return String.valueOf((Object) member.get("operatorId"));
         }
-        if (ctx.request().hasPermission(QbPermissions.ADMIN_PROSPECT)) {
-            return QbProspects.DIRECT;
-        }
+        // F-S1: prospecting is an operator's; headquarters reads every owner's (qb.admin.prospect) but has none.
         throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.NOT_MEMBER,
             "The caller is no operator's member", Map.of()));
     }
@@ -558,7 +556,7 @@ public final class ProspectProcesses {
         values.put("kind", kind);
         values.put("value", value);
         values.put("reason", reason);
-        values.put("owner", ctx.contains(OWNER) ? owner(ctx) : QbProspects.DIRECT);
+        values.put("owner", owner(ctx));
         values.put("note", blank(note) ? null : note.strip());
         values.put("createdAt", ctx.opTime());
         values.put("createdBy", ctx.request().actorId());
@@ -680,9 +678,6 @@ public final class ProspectProcesses {
      */
     static BigDecimal monthlyCap(Object owner, EntityInstance setting, Map<String, String> params) {
         BigDecimal own = decimal(setting.get("monthlyCostCap"));
-        if (QbProspects.DIRECT.equals(owner)) {
-            return own;
-        }
         String cap = params.get(QbParams.PROSPECT_OPERATOR_MONTHLY_CAP);
         return cap == null || cap.isBlank() ? BigDecimal.ZERO : own.min(new BigDecimal(cap));
     }
@@ -1274,6 +1269,7 @@ public final class ProspectProcesses {
 
     static final String ONBOARDING = "onboarding";
     static final String ASSIGNMENT = "assignment";
+    static final String PENDING_REVIEW = "pendingReview";
 
     /**
      * {@value #CLAIM}: the signed-up sponsor names the trial that brought them. The business is marked converted (once,
@@ -1304,7 +1300,13 @@ public final class ProspectProcesses {
                     ONBOARDING),
                 QueryEntities.query(com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
                     com.jabiz.quizbuks.operator.QbOperators.ASSIGNMENT), ctx -> byKey("userId",
-                    ctx.request().actorId()), ASSIGNMENT)))
+                    ctx.request().actorId()), ASSIGNMENT),
+                // F-S1: a review stays in the scope it was made in, so a sponsor waiting for one is not moved.
+                QueryEntities.query(com.jabiz.runtime.approval.ApprovalEntities.REQUEST_DATASET,
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.In("preparerId", List.of(ctx.request().actorId())),
+                        new QueryPredicate.In("status", List.of(com.jabiz.runtime.approval.ApprovalEntities.PENDING)))))
+                        .limit(1).build(), PENDING_REVIEW)))
             .compute("Claim", (metadata, ctx) -> claimed(ctx)));
     }
 
@@ -1330,14 +1332,15 @@ public final class ProspectProcesses {
         EntityInstance onboarding = first(ctx, ONBOARDING);
         Instant approvedAt = onboarding == null ? null : instant(onboarding.get("approvedAt"));
         Instant sentAt = instant(prospect.get("sentAt"));
-        // Q59c: an assignment the platform made by the sign-up language gives way to the operator that prospected
-        // the business; one made by a person stays.
+        // F-S1: the assignment the platform made when the sponsor applied on their own gives way to the operator that
+        // prospected the business; one made by a person, by a claim or a direct sponsor's stays. Not while a review
+        // waits in the old operator's scope (the platform keeps it there).
         EntityInstance assignment = first(ctx, ASSIGNMENT);
-        boolean byLanguage = assignment != null
-            && com.jabiz.quizbuks.operator.QbOperators.BY_LANGUAGE.equals(assignment.get("assignedBy"));
-        boolean assign = !QbProspects.DIRECT.equals(owner) && onboarding != null
+        boolean byDefault = assignment != null
+            && com.jabiz.quizbuks.operator.QbOperators.BY_DEFAULT.equals(assignment.get("assignedBy"));
+        boolean assign = onboarding != null && first(ctx, PENDING_REVIEW) == null
             && (assignment == null
-                || byLanguage && !owner.equals(String.valueOf((Object) assignment.get("operatorId"))))
+                || byDefault && !owner.equals(String.valueOf((Object) assignment.get("operatorId"))))
             && (approvedAt == null || sentAt == null || !approvedAt.isBefore(sentAt));
         if (assign) {
             Map<String, Object> values = new LinkedHashMap<>();
@@ -1347,6 +1350,7 @@ public final class ProspectProcesses {
             values.put("reason", ("AI prospecting: " + prospect.get("domain")));
             if (assignment == null) {
                 values.put("userId", caller);
+                values.put("fixed", false);
                 ctx.changes().insert(com.jabiz.quizbuks.operator.QbOperators.ASSIGNMENT, values);
             } else {
                 ctx.changes().update(com.jabiz.quizbuks.operator.QbOperators.ASSIGNMENT, assignment.id(),

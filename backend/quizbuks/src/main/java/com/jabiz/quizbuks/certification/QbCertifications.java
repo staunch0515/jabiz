@@ -7,16 +7,13 @@ import com.jabiz.entity.TemporalRole;
  * The certifications' records (Q69, docs/quizbuks/plans/Q69-certifications.md): the rounds (which publication counts
  * for which certification), the people's records (passes, grants and revocations, only ever inserted) and the
  * official publishers (the sponsor accounts whose publications may be rounds). Ordinary tables written by the
- * {@code QB_CERTIFICATION_*} and {@code QB_OFFICIAL_PUBLISHER_SET} processes only.
+ * {@code QB_CERTIFICATION_*} processes only.
  */
 public final class QbCertifications {
 
     public static final String ROUND = "QbCertificationRound";
     public static final String RECORD = "QbCertificationRecord";
-    public static final String OFFICIAL = "QbOfficialPublisher";
     public static final String RECORD_KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:certification-record-kind";
-    /** The owner of what headquarters does itself (the direct sponsors' operator, D-Q48-1). */
-    public static final String DIRECT = "direct";
 
     /**
      * The caller's own records (Q70a): only the scope of the App's templates (qb.app.feed, qb.app.publication), which
@@ -95,25 +92,6 @@ public final class QbCertifications {
             .defaultSort("at", false));
     });
 
-    /** A sponsor account an operator (or headquarters) publishes its certification quizzes with (D-Q69-5). */
-    public static final EntityDefinition OFFICIAL_ENTITY = EntityDefinition.define(OFFICIAL, eb -> {
-        eb.physicalTable("qb_official_publisher");
-        eb.primaryKey("officialId");
-        eb.field("officialId", f -> f.physicalColumn("official_id").immutable(true).required(true).generated(true)
-            .asSemanticIdentity("urn:jabiz:entity:quizbuks:official-publisher"));
-        eb.field("userId", f -> f.physicalColumn("user_id").immutable(true).required(true).asText(128));
-        eb.field("owner", f -> f.physicalColumn("owner").required(true).asText(128));
-        eb.field("active", f -> f.physicalColumn("active").required(true).asBool());
-        eb.field("setBy", f -> f.physicalColumn("set_by").required(true).asText(128));
-        eb.field("setAt", f -> f.physicalColumn("set_at").required(true).asTemporal(TemporalRole.EVENT_TIME));
-        eb.field("version", f -> f.physicalColumn("version").asVersion());
-        eb.unique("uk_qb_official_publisher_user", "userId");
-        eb.listView("default", lv -> lv
-            .columns("userId", "owner", "active", "setBy", "setAt")
-            .filters("userId", "owner", "active")
-            .sorts("setAt")
-            .defaultSort("setAt", false));
-    });
 
     private QbCertifications() {}
 }

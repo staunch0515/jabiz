@@ -43,8 +43,7 @@ class OperatorIsolationIT extends PlayItSupport {
     }
 
     private String newOperator(String name) {
-        return (String) run(OperatorProcesses.SAVE, hq(), body("name", name, "contactName", "Owner of " + name,
-            "contactEmail", "ops@" + name.toLowerCase() + ".example")).get("operatorId");
+        return newOperator(hq(), name);
     }
 
     /** A verified user made a member of the operator; returns the user id. */

@@ -22,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Q49a (docs/quizbuks/plans/Q49a-contest-report.md; Apple App Review Guideline 1.2): a taker reports a quiz, once at
- * a time and at most so many a day; its first open report asks headquarters and the sponsor's operator; an operator
- * sees and closes its own sponsors' reports only; closing them closes the tasks.
+ * a time and at most so many a day; its first open report asks the sponsor's operator (F-S1: every sponsor has
+ * one); an operator sees and closes its own sponsors' reports only; closing them closes the tasks.
  */
 class ReportIT extends PlayItSupport {
 
@@ -45,8 +45,7 @@ class ReportIT extends PlayItSupport {
     }
 
     private String newOperator(String name) {
-        return (String) run(OperatorProcesses.SAVE, hq(), body("name", name, "contactName", "Owner of " + name,
-            "contactEmail", "ops@" + name.toLowerCase() + ".example")).get("operatorId");
+        return newOperator(hq(), name);
     }
 
     /** A verified user made a member of the operator; returns the user id. */
@@ -100,9 +99,11 @@ class ReportIT extends PlayItSupport {
             .containsEntry("reporter_id", ann).containsEntry("reason", QbReports.MISLEADING)
             .containsEntry("note", "The prize does not exist").containsEntry("status", QbReports.OPEN)
             .containsEntry("publisher_id", sponsor));
-        // Headquarters is asked; no operator looks after this sponsor.
+        // F-S1: the sponsor's operator is asked (the platform operator: they applied on their own).
         assertThat(openTasks(publication)).singleElement().satisfies(task -> assertThat(task)
-            .containsEntry("assignee_permission", QbPermissions.ADMIN_CONTENT_WRITE));
+            .containsEntry("assignee_permission", QbPermissions.OPERATOR_USE)
+            .containsEntry("scope_value", String.valueOf(query("SELECT operator_id FROM qb_operator"
+                + " WHERE default_for_new").getFirst().get("operator_id"))));
 
         // One open report of theirs at a time; another taker's is another; no second task.
         assertThat(codes(refused(ReportProcesses.SUBMIT, taker(ann), body("publicationId", publication, "reason",

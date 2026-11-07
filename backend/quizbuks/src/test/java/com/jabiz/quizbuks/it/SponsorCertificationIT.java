@@ -200,11 +200,11 @@ class SponsorCertificationIT extends LegalItSupport {
             clock.instant().toString(), "q", company)))).anySatisfy(row -> assertThat(row)
             .containsEntry("certificationId", certificationId).containsEntry("company", company));
 
-        // Closing: the sponsor closes one round, headquarters (the direct sponsors' operator) the other.
+        // Closing: the sponsor closes one round, its operator (F-S1: the platform operator) the other.
         clock.advance(Duration.ofMinutes(1));
         assertThat(run(PublicationRounds.CLOSE, token, body("publicationId", first)).get("closedAt")).isNotNull();
         String secondRoundId = (String) round(sponsor, second).getFirst().get("roundId");
-        assertThat(run(CertificationProcesses.ROUND_CLOSE, hq(), body("roundId", secondRoundId)).get("closedAt"))
+        assertThat(run(CertificationProcesses.ROUND_CLOSE, platformOperatorMember(), body("roundId", secondRoundId)).get("closedAt"))
             .isNotNull();
         assertThat(codes(refused(PublicationRounds.CLOSE, token, body("publicationId", gated), 422)))
             .containsExactly(CertificationCodes.NOT_A_ROUND);

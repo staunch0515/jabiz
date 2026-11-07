@@ -36,6 +36,7 @@ class SponsorReviewSettingsIT extends AccountItSupport {
     @Test
     void onboardingIsRefusedUntilTheReviewIsConfigured() {
         Map<String, Object> installed = setup();
+        installDefaultOperator();
         @SuppressWarnings("unchecked")
         List<Object> proposals = (List<Object>) installed.get("proposals");
         // The separation of duties (Q10b) comes last and is left unpublished: the rules are counted before it.

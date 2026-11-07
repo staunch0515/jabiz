@@ -305,8 +305,7 @@ class FeeIT extends PlayItSupport {
     @Test
     @Order(5)
     void anOperatorSetsTheBillingOfItsOwnSponsorsOnly() {
-        String operator = (String) run(OperatorProcesses.SAVE, hq(), body("name", unique("Fee Ops"), "contactName",
-            "Owner", "contactEmail", "ops@fee.example")).get("operatorId");
+        String operator = newOperator(hq(), unique("Fee Ops"));
         String member = createUser(unique("q87-op"));
         List<String> columns = query("SELECT column_name FROM information_schema.columns WHERE table_schema = "
             + "current_schema() AND table_name = 'sec_user_version' AND column_name NOT IN ('row_id', 'version_no', "
@@ -333,7 +332,12 @@ class FeeIT extends PlayItSupport {
         // The operator sees the billing on its sponsors' page, and its own sponsors only on the billing page.
         assertThat(items("qb.operator.sponsors", session, Map.of("params", Map.of("userId", mine)))).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("billingMode", "POSTPAID").containsEntry("creditLimit", 20000));
-        assertThat(items("qb.operator.sponsor-billing", session, Map.of())).singleElement()
+        // F-S1: the operator's own sponsor (its first lead's account) is one of its sponsors too.
+        List<Map<String, Object>> billing = items("qb.operator.sponsor-billing", session, Map.of());
+        assertThat(billing).extracting(row -> row.get("userId")).containsExactlyInAnyOrder(mine,
+            query("SELECT direct_sponsor_id FROM qb_operator WHERE operator_id = ?", operator).getFirst()
+                .get("direct_sponsor_id"));
+        assertThat(billing).filteredOn(row -> mine.equals(row.get("userId"))).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("userId", mine).containsEntry("billingMode", "POSTPAID")
                 .containsEntry("own", true).containsEntry("creditLimit", 20000).containsEntry("unpaidTotal", 0)
                 .containsEntry("uninvoicedTotal", 0).containsEntry("billingReason", "Trusted")

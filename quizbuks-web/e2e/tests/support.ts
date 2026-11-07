@@ -204,6 +204,8 @@ export async function prepareQuizbuks(request: APIRequestContext) {
   }
   // The terms and the privacy policy in effect, as before going live (Q7b); loaded when needed (it uses these helpers).
   await (await import('./legal')).termsInEffect(request)
+  // F-S1: the default operator, without which nobody signs up as a sponsor.
+  await (await import('./operators')).ensureDefaultOperator(request)
   prepared = true
 }
 

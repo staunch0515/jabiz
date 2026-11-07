@@ -9,9 +9,9 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.content.QuizProcesses;
 import com.jabiz.quizbuks.messaging.ConsentChecks;
 import com.jabiz.quizbuks.messaging.QbLegal;
+import com.jabiz.quizbuks.operator.OperatorCodes;
 import com.jabiz.quizbuks.operator.QbOperators;
 import com.jabiz.quizbuks.prospect.QbProspects;
 import com.jabiz.quizbuks.setup.QbParams;
@@ -85,7 +85,7 @@ public final class SponsorProcesses {
     static final String KEY = "onboardingId";
     static final String OLD_AVATAR = "oldAvatar";
     static final String ASSIGNMENT = "assignment";
-    static final String LANGUAGE_OPERATOR = "languageOperator";
+    static final String DEFAULT_OPERATOR = "defaultOperator";
     static final String TRIAL = "trial";
 
     /**
@@ -190,15 +190,12 @@ public final class SponsorProcesses {
             CallerChecks.refuseBanned(pb);
             AccountEditing.loadOfUser(pb, "Load the onboarding", QbAccounts.SPONSOR, SPONSORS);
             AccountEditing.loadOfUser(pb, "Load the profile", QbAccounts.PROFILE, PROFILES);
-            pb.step("Load the assignment and the operator of the language", QueryEntities.<ProcessContext>all(
+            pb.step("Load the assignment and the operator of new sponsors", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("userId", List.of(AccountEditing.userId(ctx)))).limit(1).build(),
                     ASSIGNMENT),
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR), ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.And(List.of(
-                        new QueryPredicate.In("language", List.of(QuizProcesses.languageOf(ctx))),
-                        new QueryPredicate.In("status", List.of(QbOperators.ACTIVE))))).limit(1).build(),
-                    LANGUAGE_OPERATOR)));
+                    .where(new QueryPredicate.Eq("defaultForNew", true)).limit(1).build(), DEFAULT_OPERATOR)));
             // Q48e-1: the trial that brought the sponsor, read again under its lock (after the assignment's, as the
             // claim takes them), for a first application only.
             pb.step("Find the trial that brought them", QueryEntities.<ProcessContext>of(
@@ -278,10 +275,15 @@ public final class SponsorProcesses {
             input.displayName(), input.company(), blankToNull(input.intro()), input.avatar(), terms, termsVersionNo,
             introTranslations))
             .reference(reference(input.company()));
-        // Q59c-2: the review is the operator's who looks after the sponsor (the one of the language for a first
-        // application, which this process assigns them to); headquarters' for a direct sponsor.
+        // Q59c-2, F-S1: the review is the operator's who looks after the sponsor (for a first application, the one
+        // this process assigns them to). Every sponsor has one.
         String operator = operatorOf(ctx);
-        ctx.put(CASE, operator == null ? review : review.scope(QbOperators.SCOPE, operator));
+        if (operator == null) {
+            ctx.reject(new Violation(null, OperatorCodes.DEFAULT_MISSING, "No operator takes new sponsors",
+                Map.of()));
+            return;
+        }
+        ctx.put(CASE, review.scope(QbOperators.SCOPE, operator));
     }
 
     @SuppressWarnings("unchecked")
@@ -314,7 +316,7 @@ public final class SponsorProcesses {
         String userId = AccountEditing.userId(ctx);
         AccountEditing.writeName(ctx, first(ctx, PROFILES), userId, input.displayName());
         write(ctx, first(ctx, SPONSORS), values, approval.status().name());
-        assignByLanguage(ctx, userId);
+        assignOnFirstApplication(ctx, userId);
     }
 
     /**
@@ -341,38 +343,38 @@ public final class SponsorProcesses {
      */
     static EntityInstance trial(ProcessContext ctx) {
         EntityInstance trial = first(ctx, TRIAL);
-        if (trial == null || !QbProspects.SENT.equals(trial.get("status"))
-            || QbProspects.DIRECT.equals(trial.get("owner"))) {
+        if (trial == null || !QbProspects.SENT.equals(trial.get("status"))) {
             return null;
         }
         Object converted = trial.get("convertedUserId");
         return converted == null || AccountEditing.userId(ctx).equals(String.valueOf(converted)) ? trial : null;
     }
 
-    /** The operator the sponsor is (or this first application makes them) looked after by; null: headquarters. */
+    /**
+     * The operator the sponsor is (or this first application makes them) looked after by (F-S1): their assignment's;
+     * for a first application, the operator that prospected the business (Q48e-1), else the one that takes new
+     * sponsors. Null only when no operator takes new sponsors (the installation is not finished).
+     */
     static String operatorOf(ProcessContext ctx) {
         EntityInstance assignment = first(ctx, ASSIGNMENT);
         if (assignment != null) {
             return String.valueOf((Object) assignment.get("operatorId"));
         }
-        if (first(ctx, SPONSORS) != null) {
-            return null;
-        }
-        // Q48e-1: the operator that prospected the business comes before the one of the language.
         EntityInstance trial = trial(ctx);
         if (trial != null) {
             return String.valueOf((Object) trial.get("owner"));
         }
-        EntityInstance operator = first(ctx, LANGUAGE_OPERATOR);
+        EntityInstance operator = first(ctx, DEFAULT_OPERATOR);
         return operator != null ? String.valueOf(operator.id()) : null;
     }
 
     /**
-     * Q59c: a sponsor's first application goes to the active operator of the language they applied in, unless they
-     * have an operator already; none of the language: headquarters'. A prospecting claim made afterwards replaces it.
+     * F-S1: a sponsor without an operator gets one with their application: the operator that prospected them, else
+     * the one that takes new sponsors (not by language any more). A prospecting claim made afterwards replaces the
+     * latter.
      */
-    static void assignByLanguage(ProcessContext ctx, String userId) {
-        if (first(ctx, SPONSORS) != null || first(ctx, ASSIGNMENT) != null) {
+    static void assignOnFirstApplication(ProcessContext ctx, String userId) {
+        if (first(ctx, ASSIGNMENT) != null) {
             return;
         }
         EntityInstance trial = trial(ctx);
@@ -380,17 +382,14 @@ public final class SponsorProcesses {
             assignToProspecting(ctx, userId, trial);
             return;
         }
-        EntityInstance operator = first(ctx, LANGUAGE_OPERATOR);
-        if (operator == null) {
-            return;
-        }
-        String language = String.valueOf((Object) operator.get("language"));
+        EntityInstance operator = first(ctx, DEFAULT_OPERATOR);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("userId", userId);
         values.put("operatorId", String.valueOf(operator.id()));
         values.put("assignedAt", ctx.opTime());
-        values.put("assignedBy", QbOperators.BY_LANGUAGE);
-        values.put("reason", "Sign-up language: " + language);
+        values.put("assignedBy", QbOperators.BY_DEFAULT);
+        values.put("reason", "Applied on their own");
+        values.put("fixed", false);
         ctx.changes().insert(QbOperators.ASSIGNMENT, values);
     }
 
@@ -405,6 +404,7 @@ public final class SponsorProcesses {
         values.put("assignedAt", ctx.opTime());
         values.put("assignedBy", "prospect:" + trial.id());
         values.put("reason", "AI prospecting: " + trial.get("domain"));
+        values.put("fixed", false);
         ctx.changes().insert(QbOperators.ASSIGNMENT, values);
         if (trial.get("convertedUserId") == null) {
             ctx.changes().update(QbProspects.PROSPECT, trial.id(), trial.version(), Map.of("convertedUserId", userId,
