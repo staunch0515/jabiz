@@ -39,8 +39,15 @@ public interface ControlTarget {
      *
      * @param targetId the instance the change is for; null when it creates one
      * @param values   the values to store with the change; null to store none
+     * @param key      what the change is about as people name it (a parameter's key, a rule's code), shown and
+     *                 filtered by in the list of changes; null for none
      */
-    record Proposal(String targetId, Map<String, Object> values) {}
+    record Proposal(String targetId, Map<String, Object> values, String key) {
+
+        public Proposal(String targetId, Map<String, Object> values) {
+            this(targetId, values, null);
+        }
+    }
 
     /** The entities this target changes. */
     Set<String> entities();

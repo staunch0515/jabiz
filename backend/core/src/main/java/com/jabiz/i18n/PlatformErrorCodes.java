@@ -136,6 +136,37 @@ public final class PlatformErrorCodes {
     public static final String MAIL_NO_ADDRESS = "MAIL_NO_ADDRESS";
     /** A mail sent via a sender of the application's ({@code SendMail.via}) was given no sender key (decision D56). */
     public static final String MAIL_SENDER_MISSING = "MAIL_SENDER_MISSING";
+    /** A mail text uses a placeholder its template does not declare (decision D72); param {@code placeholder}. */
+    public static final String MAIL_TEXT_UNKNOWN_PLACEHOLDER = "MAIL_TEXT_UNKNOWN_PLACEHOLDER";
+    /**
+     * A mail text leaves out a declared parameter or token, or a notification its unsubscribe link (decision D72);
+     * param {@code placeholder}.
+     */
+    public static final String MAIL_TEXT_REQUIRED_PLACEHOLDER = "MAIL_TEXT_REQUIRED_PLACEHOLDER";
+    /**
+     * A token, sign-in or unsubscribe link of a mail text stands elsewhere than in a link target leading to the
+     * application ({@code {baseUrl}}, {@code {entryUrl...}}), e.g. in the text or the subject (decision D72).
+     */
+    public static final String MAIL_TEXT_SECRET_PLACEMENT = "MAIL_TEXT_SECRET_PLACEMENT";
+    /** A link of a mail text is neither http, https, mailto nor relative (decision D72); param {@code url}. */
+    public static final String MAIL_TEXT_LINK_NOT_ALLOWED = "MAIL_TEXT_LINK_NOT_ALLOWED";
+    /** A link of a mail text leads to a host other than the application's or an allowed one (D72); param {@code host}. */
+    public static final String MAIL_TEXT_LINK_HOST = "MAIL_TEXT_LINK_HOST";
+    /** A mail text contains an image (decision D72: no tracking pixels). */
+    public static final String MAIL_TEXT_IMAGE = "MAIL_TEXT_IMAGE";
+    /** A mail text contains raw HTML (decision D72). */
+    public static final String MAIL_TEXT_HTML = "MAIL_TEXT_HTML";
+    /** The subject or body of a mail text is empty (decision D72). */
+    public static final String MAIL_TEXT_EMPTY = "MAIL_TEXT_EMPTY";
+    /** The subject of a mail text has more than one line (decision D72). */
+    public static final String MAIL_TEXT_SUBJECT_LINE = "MAIL_TEXT_SUBJECT_LINE";
+    /** The subject or body of a mail text is longer than configured (decision D72); param {@code limit}. */
+    public static final String MAIL_TEXT_TOO_LONG = "MAIL_TEXT_TOO_LONG";
+    /**
+     * The texts of a mail with a token, sign-in link or declared protected text change only through a controlled
+     * change another administrator publishes (decision D72 item 3).
+     */
+    public static final String MAIL_TEXT_NEEDS_APPROVAL = "MAIL_TEXT_NEEDS_APPROVAL";
     /** A one-time token of a mail is unknown, expired, used, superseded or of another purpose (18 section 5.6). */
     public static final String TOKEN_INVALID = "TOKEN_INVALID";
     /**
@@ -393,7 +424,10 @@ public final class PlatformErrorCodes {
         EXTERNAL_JOB_INPUT_SECRET, EXTERNAL_JOB_INPUT_TOO_LARGE, EXTERNAL_JOB_FINISHED, EXTERNAL_JOB_LIMIT,
         EXTERNAL_JOB_INPUT_FILE, EXTERNAL_JOB_INPUT_FILE_LIMIT,
         REPORT_ALREADY_SUPERSEDED, DOCUMENT_NOT_SINGLE, DOCUMENT_TOO_LARGE,
-        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, MAIL_SENDER_MISSING, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN,
+        DOCUMENT_RECIPIENT_NOT_ALLOWED, DOCUMENT_NO_RECIPIENT, MAIL_DISABLED, MAIL_NO_ADDRESS, MAIL_SENDER_MISSING,
+        MAIL_TEXT_UNKNOWN_PLACEHOLDER, MAIL_TEXT_REQUIRED_PLACEHOLDER, MAIL_TEXT_SECRET_PLACEMENT,
+        MAIL_TEXT_LINK_NOT_ALLOWED, MAIL_TEXT_LINK_HOST, MAIL_TEXT_IMAGE, MAIL_TEXT_HTML, MAIL_TEXT_EMPTY,
+        MAIL_TEXT_SUBJECT_LINE, MAIL_TEXT_TOO_LONG, MAIL_TEXT_NEEDS_APPROVAL, TOKEN_INVALID, PASSWORD_INCORRECT, PASSWORD_NOT_SET, SESSION_NOT_FOUND, SESSION_UNKNOWN,
         OIDC_ACCOUNT_EXISTS, REAUTHENTICATION_REQUIRED, REAUTHENTICATION_UNAVAILABLE, IDENTITY_IN_USE, IDENTITY_PROVIDER_LINKED, IDENTITY_LINK_UNAVAILABLE,
         IDENTITY_LINK_FAILED, LAST_SIGN_IN_METHOD, ACCOUNT_ERASED, ERASURE_PURGE_UNAVAILABLE, ACCOUNT_DELETION_UNAVAILABLE,
         ACCOUNT_DELETION_PROTECTED, ACCOUNT_DELETION_PENDING, ACCOUNT_DELETION_NONE, ACCOUNT_DELETION_NOTICES, MAIL_PARAM_SECRET, MAIL_PARAMS_TOO_LARGE, MAIL_SIGN_IN_LINK,

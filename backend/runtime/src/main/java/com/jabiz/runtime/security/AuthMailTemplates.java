@@ -76,7 +76,7 @@ public class AuthMailTemplates {
 
     /** Tells a user that a passkey was added (no token; the entry and the passkey's name its parameters). */
     public static final MailTemplate PASSKEY_ADDED_MAIL = MailTemplate.define(PASSKEY_ADDED,
-        t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY).param(PASSKEY_NAME));
+        t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY).param(PASSKEY_NAME).protectedText());
 
     /** The confirmation link before a passkey is added, as the processes that send it use it. */
     public record PasskeyConfirmation(MailTemplate mail) {}
@@ -119,7 +119,7 @@ public class AuthMailTemplates {
 
     /** Tells a user that their password was changed (section 15.8): no token, the entry its only parameter. */
     public static final MailTemplate PASSWORD_CHANGED_MAIL = MailTemplate.define(PASSWORD_CHANGED,
-        t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY));
+        t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY).protectedText());
 
     /** The parameter naming the provider of {@value #IDENTITY_LINKED} (its label). */
     public static final String PROVIDER = "provider";
@@ -129,14 +129,14 @@ public class AuthMailTemplates {
      * and the provider's label are its parameters.
      */
     public static final MailTemplate IDENTITY_LINKED_MAIL = MailTemplate.define(IDENTITY_LINKED,
-        t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY).param(PROVIDER));
+        t -> t.category(MailCategory.TRANSACTIONAL).param(ENTRY).param(PROVIDER).protectedText());
 
     /** The parameter naming the new address of {@value #EMAIL_CHANGED}. */
     public static final String ADDRESS = "address";
 
     /** Tells the old address that the account's address was changed (no token; the new address its parameter). */
     public static final MailTemplate EMAIL_CHANGED_MAIL = MailTemplate.define(EMAIL_CHANGED,
-        t -> t.category(MailCategory.TRANSACTIONAL).param(ADDRESS));
+        t -> t.category(MailCategory.TRANSACTIONAL).param(ADDRESS).protectedText());
 
     @Bean
     MailTemplate authEmailChangedMail() {

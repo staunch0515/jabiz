@@ -91,11 +91,11 @@ class MailRendererTest {
             Map.of("userName", "1\n2"), Set.of()).subject();
         assertThat(subject).isEqualTo("Order 1 2 Bcc: x@example.com");
         assertThat(MailRenderer.render("{userName}", "b", Map.of("userName", "x".repeat(400)), Set.of()).subject())
-            .hasSize(MailRenderer.MAX_SUBJECT);
+            .hasSize(MailTextRules.DEFAULT_MAX_SUBJECT);
         // Cut on characters, not UTF-16 units: an emoji across the limit is kept whole, never halved.
-        String emoji = "x".repeat(MailRenderer.MAX_SUBJECT - 1) + "😀" + "tail";
+        String emoji = "x".repeat(MailTextRules.DEFAULT_MAX_SUBJECT - 1) + "😀" + "tail";
         String cut = MailRenderer.render("{userName}", "b", Map.of("userName", emoji), Set.of()).subject();
-        assertThat(cut.codePointCount(0, cut.length())).isEqualTo(MailRenderer.MAX_SUBJECT);
+        assertThat(cut.codePointCount(0, cut.length())).isEqualTo(MailTextRules.DEFAULT_MAX_SUBJECT);
         assertThat(cut).endsWith("😀");
     }
 
@@ -110,17 +110,23 @@ class MailRendererTest {
 
     @Test
     void checksPlaceholdersAgainstTheDeclaration() {
-        assertThat(MailPlaceholders.problems(VERIFY, "Hi {userName}", "{next} [v]({baseUrl}?t={verify})"))
+        assertThat(problems(VERIFY, "Hi {userName}", "{next} [v]({baseUrl}?t={verify})"))
             .isEmpty();
-        assertThat(MailPlaceholders.problems(VERIFY, "Hi {userName} {stray}", "{baseUrl}"))
+        assertThat(problems(VERIFY, "Hi {userName} {stray}", "{baseUrl}"))
             .containsExactly("uses {stray}, which the template does not declare",
                 "does not use the declared {next}", "does not use the declared {verify}");
         MailTemplate news = MailTemplate.define("shop.news", t -> t.category(MailCategory.NOTIFICATION));
-        assertThat(MailPlaceholders.problems(news, "News {unsubscribeUrl}", "Body"))
+        assertThat(problems(news, "News", "Body"))
             .containsExactly("is a notification but its body has no {unsubscribeUrl}");
-        assertThat(MailPlaceholders.problems(VERIFY, "s {unsubscribeUrl}", "{userName}{next}{verify}"))
+        assertThat(problems(VERIFY, "s {unsubscribeUrl}", "{userName}{next} [v]({baseUrl}?t={verify})"))
             .containsExactly("uses {unsubscribeUrl}, which the template does not declare");
         assertThat(MailPlaceholders.of(null)).isEmpty();
         assertThat(List.copyOf(MailPlaceholders.of("{b} {a} {b}"))).containsExactly("b", "a");
+    }
+
+    /** The problems as their messages (MailTextRulesTest has the rules; these are the placeholders'). */
+    private static List<String> problems(MailTemplate template, String subject, String body) {
+        return MailTextRules.check(template, subject, body, MailTextRules.Limits.DEFAULT).stream()
+            .map(com.jabiz.entity.Violation::message).toList();
     }
 }

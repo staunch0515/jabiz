@@ -86,10 +86,12 @@ public final class CommerceProcesses {
      * The shipment notice (docs/design/18-numbering-approvals-tasks.md section 5.6): a notification, which the customer
      * may turn off; texts in the messages {@code mail.commerce.order-shipped.subject} and {@code .body}, its name among
      * the mail preferences {@code .name}. For customers, who sign in at the portal: the administration's users do not
-     * see it among their preferences (decision D49).
+     * see it among their preferences (decision D49). Administrators may change its texts at once (decision D72); the
+     * preview and the test mail show the samples instead of an order's values.
      */
     public static final MailTemplate ORDER_SHIPPED_MAIL = MailTemplate.define("commerce.order-shipped", t -> t
-        .category(MailCategory.NOTIFICATION).param("orderNo", "totalAmount").entries("portal"));
+        .category(MailCategory.NOTIFICATION).param("orderNo", "totalAmount").entries("portal")
+        .sample("orderNo", "SO-2026-0001").sample("totalAmount", "12800"));
     /**
      * The same notice as a push notification to the customer's devices (decision D69), for the portal's users: a tap
      * opens their orders. Nothing while push notifications are off.

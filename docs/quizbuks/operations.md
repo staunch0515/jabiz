@@ -481,15 +481,15 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷与邮件，人批准后从所有者自己的邮件服务器发出（`plans/Q48-operators.md` §3、§7 Q48c）。开始之前：
 
-1. 两位管理员以受控变更设好 `qb.prospect.model`（如 `claude-sonnet-5-5`）、`qb.prospect.effort`，最后 `qb.prospect.enabled = true`（缺一个即两种作业都不被领取，`EXTERNAL` 启动警告）；`ANTHROPIC_API_KEY` 与 AI 出题共用；
+1. 总部的超级管理员在后台「AI 获客 → 设置」的**平台开关**一栏（F-F8）勾选"运行 AI 获客"、选好模型（如 `claude-sonnet-5-5`）与强度、填理由后"提出"（只为改动了的参数各提一个受控变更），另一位持有 `control.publish` 的管理员在"受控变更"中发布（缺一个即两种作业都不被领取，`EXTERNAL` 启动警告）。该栏同时显示三个参数的现值、待发布的提案和搜索的运行时刻；所有者勾了"每天获客"而开关是关的时显示警告。`ANTHROPIC_API_KEY` 与 AI 出题共用；
 2. 所有者在后台「AI 获客 → 设置」填发件人名称、住所与联系邮箱（法律要求的表示），登记并验证邮件服务器（建议独立的发件子域名与 Google Workspace / Zoho 等的 SMTP，不与平台的发件域混用），添加搜索方向，打开"每天获客"。
 
-- **任务**：`qb.prospect-find`（每天 23:17 UTC，日本 08:17）每个启用的方向搜索一次；`qb.prospect-research`（每小时 :23）调研找到的发起方，每天至多每日邮件数的两倍；`qb.prospect-send`（每 10 分钟）只在日本时间 9–18 点发出已批准的，每天至多每日邮件数。都是逐项一个事务。
+- **任务**：`qb.prospect-find`（每天 23:17 UTC，日本 08:17）每个启用的方向搜索一次（错过的时刻不补跑，设置页按读者的时区显示这个时刻）；`qb.prospect-research`（每小时 :23）调研找到的发起方，每天至多每日邮件数的两倍；`qb.prospect-send`（每 10 分钟）只在日本时间 9–18 点发出已批准的，每天至多每日邮件数。都是逐项一个事务。
 - **跟进**（Q48d）：`qb.prospect-follow-up`（每小时 :37）为 7 天前发出、没有带来发起方的邮件发一次跟进，计入每日上限。
 - **运营商的费用**（Q48d）：运营商每月的获客费用另受受控参数 `qb.prospect.operator-monthly-cap-usd`（美元，缺省 100）约束；月结算按 `qb.prospect.usd-jpy`（缺省 150）把当月费用折成日元从分成中扣除，扣不完的结转下月。汇率按需以四眼更新。
 - **配置**：`quizbuks.prospect.max-concurrency`（每种作业的全实例并发，缺省 4）。
 - **费用**：每次搜索 0.01 美元加 tokens（按所选模型的标价）；后台「设置」页按月显示。达到所有者的每月上限后不再开新的找与研究，已批准的邮件照常发出。
-- **事故**：Console 吊销密钥 → 四眼关闭 `qb.prospect.enabled`（排队的作业等待，不用掉尝试）→ 必要时平台的 `EXTERNAL_JOB_CANCEL` 逐个取消（类型 `qb.prospect.find` / `qb.prospect.research`）。投诉或要求停止时：后台「AI 获客」丢弃并勾选"屏蔽"，或 `QB_PROSPECT_BLOCK_ADD`（地址或整个域名，全平台不再发送）。
+- **事故**：Console 吊销密钥 → 在同一栏取消勾选并提出、另一位管理员发布（四眼关闭 `qb.prospect.enabled`）（排队的作业等待，不用掉尝试）→ 必要时平台的 `EXTERNAL_JOB_CANCEL` 逐个取消（类型 `qb.prospect.find` / `qb.prospect.research`）。投诉或要求停止时：后台「AI 获客」丢弃并勾选"屏蔽"，或 `QB_PROSPECT_BLOCK_ADD`（地址或整个域名，全平台不再发送）。
 
 ### 7.15 按规则计费（Q47c）
 
