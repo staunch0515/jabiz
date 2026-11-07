@@ -170,6 +170,10 @@ export interface QuizInput {
   kind?: QuizKind
   /** Q59a: the language; when not given a new quiz takes the console's language and a changed one keeps its own. */
   language?: ContentLanguage
+  /** F-C1b: the image asset the cover is still a copy of; none leaves the record of where assets are used as it is. */
+  coverAssetId?: string | null
+  /** F-C1b: the text asset (a quiz's introduction) the introduction is still a copy of. */
+  introAssetId?: string | null
 }
 
 /** `QuestionProcesses.QuestionInput`; `options` is the whole list in its order. */
@@ -179,8 +183,12 @@ export interface QuestionInput {
   stem: string | null
   image: string | null
   points: number
-  options: { optionId?: string | null; text: string | null; image: string | null; correct: boolean }[]
+  /** F-C1b: each option's image asset it is still a copy of, if any. */
+  options: { optionId?: string | null; text: string | null; image: string | null; correct: boolean;
+    imageAssetId?: string }[]
   baseRevision?: number | null
+  /** F-C1b: the image asset the question's image is still a copy of. */
+  imageAssetId?: string
   /** A survey's question only: the server takes a point each and no correct option. */
   selection?: Selection | null
 }
@@ -205,6 +213,8 @@ export interface MaterialInput {
   /** Q73a: a material of another language, made with both and changed with the same. */
   variantOf?: string | null
   language?: ContentLanguage | null
+  /** F-C1b: the asset of the library the material is still a copy of (a base material only). */
+  assetId?: string | null
 }
 
 /** Q73a: one element's translation as `QB_TRANSLATION_SAVE` takes it; neither text nor image removes it. */

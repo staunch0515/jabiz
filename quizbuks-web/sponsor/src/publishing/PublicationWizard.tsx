@@ -93,6 +93,38 @@ import { LabelledProblems, PublicationSummary, useAudienceLabel, useDebounced, u
 import { TiersEditor } from './TiersEditor'
 import { playSound } from '../qb/sound'
 import { BenefitPurchaseField } from '../benefits/BenefitPurchaseField'
+import { PRIZE_METHODS, type Asset, type PrizeMethod } from '../assets/api'
+import { useAssetCopy } from '../assets/copy'
+import { LibraryActions, type StoredContent } from '../assets/LibraryActions'
+import { contentLanguageOf } from '../qb/api'
+
+/** What of a prize the library copies (F-C1): the method and the fields of that method, compared before naming it. */
+function prizeShape(form: Pick<PublicationForm, 'rewardMethod' | 'redeemDescription' | 'digitalDescription'
+  | 'digitalDelivery' | 'digitalSendDays'>) {
+  switch (form.rewardMethod) {
+    case 'OFFLINE_REDEEM':
+      return { method: form.rewardMethod, text: form.redeemDescription }
+    case 'DIGITAL_PRIZE':
+      return { method: form.rewardMethod, text: form.digitalDescription, delivery: form.digitalDelivery,
+        days: form.digitalDelivery === 'SPONSOR_SENT' ? form.digitalSendDays : '' }
+    default:
+      return { method: form.rewardMethod }
+  }
+}
+
+/** The form's fields a prize card fills. */
+function prizeOf(asset: Asset): Pick<PublicationForm, 'rewardMethod' | 'redeemDescription' | 'digitalDescription'
+  | 'digitalDelivery' | 'digitalSendDays'> | null {
+  const method = asset.prizeMethod
+  if (!method) return null
+  return {
+    rewardMethod: method,
+    redeemDescription: method === 'OFFLINE_REDEEM' ? asset.prizeDescription ?? '' : '',
+    digitalDescription: method === 'DIGITAL_PRIZE' ? asset.prizeDescription ?? '' : '',
+    digitalDelivery: method === 'DIGITAL_PRIZE' ? asset.digitalDelivery : null,
+    digitalSendDays: asset.digitalSendDays != null ? String(asset.digitalSendDays) : '',
+  }
+}
 
 export const STEP_COUNT = 4
 
@@ -268,6 +300,37 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     ? allowed[0] : form.rewardMethod
   const showMethods = methodChoices.length > 1 || !methodChoices.includes(rewardMethod)
 
+  // F-C1: the parts chosen from the asset library (or saved to it) name their asset with the next save while unchanged.
+  const coverCopy = useAssetCopy<string | null>()
+  const redeemCopy = useAssetCopy<string>()
+  const digitalCopy = useAssetCopy<string>()
+  const prizeCopy = useAssetCopy<ReturnType<typeof prizeShape>>()
+  const referralCopy = useAssetCopy<string>()
+  const baseLanguage = form.languages[0] ?? contentLanguageOf(i18n.language)
+  const pickPrize = (asset: Asset) => {
+    const prize = prizeOf(asset)
+    if (!prize) return
+    setForm((f) => {
+      // Fields the card does not fill keep what was typed (another method's).
+      const next = { ...f, rewardMethod: prize.rewardMethod,
+        ...(prize.rewardMethod === 'OFFLINE_REDEEM' ? { redeemDescription: prize.redeemDescription } : {}),
+        ...(prize.rewardMethod === 'DIGITAL_PRIZE' ? { digitalDescription: prize.digitalDescription,
+          digitalDelivery: prize.digitalDelivery, digitalSendDays: prize.digitalSendDays } : {}) }
+      prizeCopy.chose(asset.assetId, prizeShape(next))
+      return next
+    })
+  }
+  const storedPrize: StoredContent | null = (PRIZE_METHODS as readonly string[]).includes(rewardMethod)
+    ? { kind: 'PRIZE', name: form.name.trim() || methodLabel(rewardMethod), language: baseLanguage, content: {
+      prizeMethod: rewardMethod as PrizeMethod,
+      prizeDescription: rewardMethod === 'OFFLINE_REDEEM' ? form.redeemDescription.trim() || null
+        : rewardMethod === 'DIGITAL_PRIZE' ? form.digitalDescription.trim() || null : null,
+      digitalDelivery: rewardMethod === 'DIGITAL_PRIZE' ? form.digitalDelivery : null,
+      digitalSendDays: rewardMethod === 'DIGITAL_PRIZE' && form.digitalDelivery === 'SPONSOR_SENT'
+        && form.digitalSendDays.trim() !== '' ? Number(form.digitalSendDays) : null,
+    } }
+    : null
+
   const set = <K extends keyof PublicationForm>(field: K, value: PublicationForm[K]) => {
     // Q47: a count was of the regions and the audience it was made for.
     if (field === 'regions' || field === 'audience') setCount(null)
@@ -310,6 +373,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     },
     onMutate: () => setSubmitError(null),
     onSuccess: async ({ saved }, { input, keys, then, criteria, prerequisites: wanted, round }) => {
+      // The copies are recorded; a later save names no asset unless one is chosen again.
+      if (input.assets) [coverCopy, redeemCopy, digitalCopy, prizeCopy, referralCopy].forEach((copy) => copy.saved())
       const audienceOfSave = input.audience
       setRevision(saved.revision)
       if (criteria !== null) {
@@ -385,7 +450,17 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       notify.error(t('publishing.audience.incomplete'))
       return
     }
-    save.mutate({ input: built.input, keys: shaped.tiers.map((tier) => tier.key), then,
+    const assets = {
+      coverAssetId: coverCopy.idFor(shaped.cover),
+      redeemAssetId: shaped.rewardMethod === 'OFFLINE_REDEEM' ? redeemCopy.idFor(shaped.redeemDescription) : null,
+      digitalAssetId: shaped.rewardMethod === 'DIGITAL_PRIZE' ? digitalCopy.idFor(shaped.digitalDescription) : null,
+      prizeAssetId: prizeCopy.idFor(prizeShape(shaped)),
+      referralAssetId: shaped.referralEnabled && (shaped.referralMethod === 'OFFLINE_REDEEM'
+        || shaped.referralMethod === 'DIGITAL_PRIZE') ? referralCopy.idFor(shaped.referralDescription) : null,
+    }
+    // Only a save with a copy says so: the others send what they always did.
+    const input = Object.values(assets).some((assetId) => assetId !== null) ? { ...built.input, assets } : built.input
+    save.mutate({ input, keys: shaped.tiers.map((tier) => tier.key), then,
       criteria: editedConditions ?? (shaped.audience === 'INVITED' && conditions.length > 0 ? [] : null),
       prerequisites: editedPrerequisites, round: editedRound })
   }
@@ -439,6 +514,14 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           uploadLabel={form.cover ? t('publishing.field.replaceCover') : t('publishing.field.uploadCover')}
           value={form.cover} onChange={(cover) => set('cover', cover)} error={problemOf('cover')} disabled={locked}
           testId="publication-cover" />
+        <LibraryActions target="PUBLICATION_COVER" disabled={locked} testId="publication-cover-library"
+          onPick={(asset) => {
+            set('cover', asset.image)
+            coverCopy.chose(asset.assetId, asset.image)
+          }}
+          store={form.cover ? { kind: 'IMAGE', name: form.name.trim() || t('publishing.field.cover'),
+            language: baseLanguage, content: { image: form.cover } } : null}
+          onStored={(assetId) => coverCopy.chose(assetId, form.cover)} />
         <p className="text-muted-foreground text-sm" data-testid="publication-cover-hint">{t('publishing.field.coverHint')}</p>
         <ShownAt field="cover" />
       </div>
@@ -516,6 +599,12 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           )}
         </fieldset>
       )}
+      {/* F-C1: a prize card of the library fills the method and its fields at once. */}
+      <LibraryActions target="PUBLICATION_PRIZE" disabled={locked} testId="publication-prize-library"
+        refused={(asset) => (asset.prizeMethod && !methodChoices.includes(asset.prizeMethod)
+          ? t('assets.picker.notAllowed') : null)}
+        onPick={pickPrize} store={storedPrize}
+        onStored={(assetId) => prizeCopy.chose(assetId, prizeShape({ ...form, rewardMethod }))} />
       {(rewardMethod === 'OFFLINE_REDEEM' || rewardMethod === 'DIGITAL_PRIZE') && (
         <BenefitPurchaseField id={`${id}-benefit`} method={rewardMethod} value={form.benefitPurchaseId} disabled={locked}
           problem={problemOf('benefitPurchaseId')} onChange={(value) => set('benefitPurchaseId', value)} />
@@ -530,6 +619,17 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
               onChange={(event) => set('redeemDescription', event.target.value)} />
           )}
         </Field>
+      )}
+      {rewardMethod === 'OFFLINE_REDEEM' && (
+        <LibraryActions target="PUBLICATION_REDEEM" disabled={locked} testId="publication-redeem-library"
+          onPick={(asset) => {
+            set('redeemDescription', asset.body ?? '')
+            redeemCopy.chose(asset.assetId, asset.body ?? '')
+          }}
+          store={form.redeemDescription.trim() ? { kind: 'TEXT', name: form.name.trim()
+            || t('publishing.field.redeemDescription'), language: baseLanguage,
+          content: { body: form.redeemDescription, usage: 'REDEEM_DESCRIPTION' } } : null}
+          onStored={(assetId) => redeemCopy.chose(assetId, form.redeemDescription)} />
       )}
       {rewardMethod === 'DIGITAL_PRIZE' && (
         // Q33: how the prize reaches the winner, and what each way needs. The fields of another way keep what was
@@ -568,6 +668,15 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
                 onChange={(event) => set('digitalDescription', event.target.value)} />
             )}
           </Field>
+          <LibraryActions target="PUBLICATION_DIGITAL" disabled={locked} testId="publication-digital-library"
+            onPick={(asset) => {
+              set('digitalDescription', asset.body ?? '')
+              digitalCopy.chose(asset.assetId, asset.body ?? '')
+            }}
+            store={form.digitalDescription.trim() ? { kind: 'TEXT', name: form.name.trim()
+              || t('publishing.field.digitalDescription'), language: baseLanguage,
+            content: { body: form.digitalDescription, usage: 'DIGITAL_DESCRIPTION' } } : null}
+            onStored={(assetId) => digitalCopy.chose(assetId, form.digitalDescription)} />
           {form.digitalDelivery === 'SHARED' && (
             <Field id={`${id}-digital-content`} label={t('publishing.field.digitalContent')}
               problem={problemOf('digitalContent')} hint={t('publishing.field.digitalContentHint')}>
@@ -596,7 +705,16 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         </div>
       )}
       {/* Q70: "referrals welcome": the sponsor's offer to referrers, frozen with the rest at submission. */}
-      <ReferralFields id={id} form={form} set={set} locked={locked} problemOf={problemOf} methods={methodChoices} />
+      <ReferralFields id={id} form={form} set={set} locked={locked} problemOf={problemOf} methods={methodChoices}
+        library={<LibraryActions target="PUBLICATION_REFERRAL" disabled={locked} testId="publication-referral-library"
+          onPick={(asset) => {
+            set('referralDescription', asset.body ?? '')
+            referralCopy.chose(asset.assetId, asset.body ?? '')
+          }}
+          store={form.referralDescription.trim() ? { kind: 'TEXT', name: form.name.trim()
+            || t('publishing.referral.description'), language: baseLanguage,
+          content: { body: form.referralDescription, usage: 'REFERRAL_DESCRIPTION' } } : null}
+          onStored={(assetId) => referralCopy.chose(assetId, form.referralDescription)} />} />
       {/* Q73b: the languages offered and the publication's texts in them. */}
       <LanguagesFields id={id} form={form} set={set} version={version} method={rewardMethod} locked={locked}
         problemOf={problemOf} publicationId={publicationId} />

@@ -11,6 +11,8 @@ import { FileField, formProblem, MarkdownField, ProblemList, textOrNull, useEdit
 import { LIMITS } from './limits'
 import { QuizLanguageField } from './QuizLanguageField'
 import type { ContentLanguage } from '../qb/api'
+import { useAssetCopy, withAssets } from '../assets/copy'
+import { LibraryActions } from '../assets/LibraryActions'
 
 const FIELDS = ['title', 'intro', 'cover', 'timeLimitSec'] as const
 
@@ -35,6 +37,10 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
   const [language, setLanguage] = useState<ContentLanguage>(quiz.language)
   const [local, setLocal] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  // F-C1: the cover and the introduction chosen from the asset library (or saved to it) name their asset with the
+  // next save while unchanged.
+  const coverCopy = useAssetCopy<string | null>()
+  const introCopy = useAssetCopy<string>()
 
   const save = useMutation({
     mutationFn: () => saveQuiz({
@@ -45,8 +51,12 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
       timeLimitSec: wholeOrNull(timeLimit),
       language,
       baseRevision: editing.revision(),
+      // Only a copy says so: other saves send what they always did.
+      ...withAssets({ coverAssetId: coverCopy.idFor(cover), introAssetId: introCopy.idFor(intro) }),
     }),
     onSuccess: async (output) => {
+      coverCopy.saved()
+      introCopy.saved()
       setDone(true)
       await editing.edited(output)
     },
@@ -85,11 +95,29 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
       <div className="flex flex-col gap-2">
         <MarkdownField label={t('editor.intro')} value={intro} onChange={setIntro} maxLength={LIMITS.intro}
           error={problem('intro')} testId="heading-intro" />
+        <LibraryActions target="QUIZ_INTRO" disabled={editing.stale} testId="heading-intro-library"
+          onPick={(asset) => {
+            setDone(false)
+            setIntro(asset.body ?? '')
+            introCopy.chose(asset.assetId, asset.body ?? '')
+          }}
+          store={intro.trim() ? { kind: 'TEXT', name: title.trim() || t('editor.intro'), language,
+            content: { body: intro, usage: 'QUIZ_INTRO' } } : null}
+          onStored={(assetId) => introCopy.chose(assetId, intro)} />
         <ShownAt field="intro" />
       </div>
       <div className="flex flex-col gap-2">
         <FileField kind="image" label={t('editor.cover')} uploadLabel={cover ? t('editor.replaceCover') : t('editor.uploadCover')}
           value={cover} onChange={setCover} error={problem('cover')} testId="heading-cover" />
+        <LibraryActions target="QUIZ_COVER" disabled={editing.stale} testId="heading-cover-library"
+          onPick={(asset) => {
+            setDone(false)
+            setCover(asset.image)
+            coverCopy.chose(asset.assetId, asset.image)
+          }}
+          store={cover ? { kind: 'IMAGE', name: title.trim() || t('editor.cover'), language, content: { image: cover } }
+            : null}
+          onStored={(assetId) => coverCopy.chose(assetId, cover)} />
         <ShownAt field="cover" />
       </div>
       <div className="flex flex-col gap-2">

@@ -102,6 +102,9 @@ describe('the Sponsor hub (Q79)', () => {
     expect(within(checklist).getByTestId('profile-check-basics')).toHaveAttribute('data-done', 'true')
     expect(within(checklist).getByTestId('profile-check-page')).toHaveAttribute('data-done', 'true')
     expect(within(checklist).getByTestId('profile-check-products')).toHaveAttribute('data-done', 'true')
+    // F-C1c: the listed products are still counted here; their page is the asset library's tab.
+    expect(within(within(checklist).getByTestId('profile-check-products')).getByRole('link'))
+      .toHaveAttribute('href', '/assets?tab=products')
     expect(within(checklist).getByTestId('profile-check-staff')).toHaveAttribute('data-done', 'false')
     expect(within(checklist).getByTestId('profile-check-staff')).toHaveTextContent('optional')
     expect(within(within(checklist).getByTestId('profile-check-staff')).getByRole('link', { name: 'Go' }))
@@ -119,9 +122,10 @@ describe('the Sponsor hub (Q79)', () => {
     await waitFor(() => expect(within(methods).getAllByTestId('profile-method')).toHaveLength(2))
     expect(methods).toHaveTextContent('Kudos paid by QuizBuks')
     expect(methods).toHaveTextContent('500 Kudos')
-    // The sub-navigation: six sections, the overview current.
+    // The sub-navigation: five sections (F-C1c: the products moved to the asset library), the overview current.
     const nav = screen.getByTestId('profile-nav')
-    expect(within(nav).getAllByRole('link')).toHaveLength(6)
+    expect(within(nav).getAllByRole('link')).toHaveLength(5)
+    expect(within(nav).queryByTestId('profile-nav-products')).toBeNull()
     expect(within(nav).getByTestId('profile-nav-overview')).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByTestId('profile-nav-staff')).not.toHaveAttribute('aria-current')
     await expectAccessible()
@@ -150,7 +154,7 @@ describe('the Sponsor hub (Q79)', () => {
     expect(screen.queryByTestId('profile-links')).toBeNull()
   })
 
-  it.each([['/onboarding', '/profile/basics'], ['/page', '/profile/page'], ['/products', '/profile/products'],
+  it.each([['/onboarding', '/profile/basics'], ['/page', '/profile/page'],
     ['/staff', '/profile/staff'], ['/mail-server', '/profile/mail-server']])('leads %s to %s', async (from, to) => {
     server()
     window.history.replaceState(null, '', from)

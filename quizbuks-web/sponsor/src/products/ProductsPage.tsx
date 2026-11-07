@@ -31,7 +31,7 @@ import { useTranslation } from 'react-i18next'
 import { neutralName } from '../content/api'
 import { TextTranslationsFields, type TextsByLanguage } from '../content/TextTranslationsFields'
 import { SPONSOR } from '../messages'
-import { profilePath } from '../profile/paths'
+import { PRODUCTS_TAB_PATH } from '../profile/paths'
 import { FileImage } from '../qb/FileImage'
 import { QB } from '../qb/messages'
 import { readMySponsorPage } from '../page/api'
@@ -53,7 +53,8 @@ import {
   type ProductInput,
 } from './api'
 
-export const PRODUCTS_PATH = profilePath('products')
+/** F-C1c: the products are a tab of the asset library. */
+export const PRODUCTS_PATH = PRODUCTS_TAB_PATH
 export const PRODUCTS_QUERY = ['qb', 'my-products'] as const
 
 const FIELDS = ['name', 'description', 'image', 'price', 'currency', 'shopUrl', 'code', 'baseRevision'] as const

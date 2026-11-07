@@ -59,6 +59,40 @@ import { trackable, videoPlayer } from '../qb/video'
 import { isShortVideoLink, resolveVideoLink } from './api'
 import { DOCUMENT_FIELD, LIMITS } from './limits'
 import { useMoveFocus } from './moving'
+import type { Asset, AssetKind, AssetContent } from '../assets/api'
+import { useAssetCopy } from '../assets/copy'
+import { LibraryActions, type StoredContent } from '../assets/LibraryActions'
+import { materialKindOf } from '../assets/suits'
+
+/** What of a material the library copies (F-C1): its kind, texts and content, compared before naming the asset. */
+function copiedShape(input: Pick<MaterialInput, 'kind' | 'title' | 'description' | 'body' | 'url' | 'pdf' | 'audio'
+  | 'images' | 'durationSec'>) {
+  return { kind: input.kind, title: input.title, description: input.description, body: input.body ?? null,
+    url: input.url ?? null, pdf: input.pdf ?? null, audio: input.audio ?? null,
+    images: (input.images ?? []).map((i) => i.image), durationSec: input.durationSec ?? null }
+}
+
+/** A material's content as an asset of the library ("Save to the library"); none while it has none to keep. */
+function storedOf(input: MaterialInput, language: ContentLanguage): StoredContent | null {
+  const name = input.title ?? ''
+  const of = (kind: AssetKind, content: Partial<AssetContent>): StoredContent | null =>
+    name.trim() === '' ? null : { kind, name, description: input.description, language, content }
+  switch (input.kind) {
+    case 'ARTICLE':
+      return input.body ? of('ARTICLE', { body: input.body }) : null
+    case 'LINK':
+      return input.url ? of('LINK', { url: input.url }) : null
+    case 'VIDEO_LINK':
+      return input.url ? of('VIDEO_LINK', { url: input.url, durationSec: input.durationSec ?? null }) : null
+    case 'PDF':
+      return input.pdf ? of('PDF', { pdf: input.pdf }) : null
+    case 'AUDIO':
+      return input.audio ? of('AUDIO', { audio: input.audio }) : null
+    case 'IMAGES':
+      // One image is an image asset; a set of several is not one asset.
+      return input.images?.length === 1 ? of('IMAGE', { image: input.images[0].image }) : null
+  }
+}
 
 /** The labels of the material kinds, from the server's dictionary (the code until it answered). */
 export function useKindLabel() {
@@ -95,11 +129,13 @@ const FIELDS = ['kind', 'title', 'description', 'body', 'url', 'pdf', 'audio', '
  * video link, a PDF, an image group with captions (the text alternatives) or an audio file. The kind is chosen once;
  * only its content field is sent.
  */
-export function MaterialDialog({ material, number, open, onOpenChange, variant }: {
+export function MaterialDialog({ material, number, open, onOpenChange, variant, language }: {
   material: Material | null
   number: number
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** The quiz's language: an asset saved from the material is in it (F-C1). */
+  language?: ContentLanguage
   /**
    * Q73a: the material of another language standing for `base` (of its kind; the video to watch is the base's
    * choice, so it has no such box).
@@ -144,6 +180,28 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
   const [images, setImages] = useState<ImageDraft[]>(() => (material?.images ?? []).map((i) => ({
     key: i.imageId, imageId: i.imageId, image: i.image, caption: i.caption ?? '' })))
   const imagesRef = useRef<HTMLOListElement>(null)
+  // F-C1: a base material chosen from the asset library names the asset with its save while unchanged.
+  const copy = useAssetCopy<ReturnType<typeof copiedShape>>()
+  const pick = (asset: Asset) => {
+    const next = materialKindOf(asset.kind) ?? kind
+    const image = asset.image ? [{ key: newKey(), imageId: null, image: asset.image, caption: '' }] : []
+    setKind(next)
+    setTitle(asset.name)
+    setDescription(asset.description ?? '')
+    setBody(asset.body ?? '')
+    setUrl(asset.url ?? '')
+    setDuration(asset.durationSec != null ? formatDuration(asset.durationSec) : '')
+    setDurationTyped(asset.durationSec != null)
+    setPdf(asset.pdf)
+    setAudio(asset.audio)
+    if (next === 'IMAGES') setImages(image)
+    const field = contentFieldOf(next)
+    copy.chose(asset.assetId, copiedShape({ kind: next, title: asset.name, description: asset.description,
+      body: field === 'body' ? asset.body : undefined, url: field === 'url' ? asset.url : undefined,
+      pdf: field === 'pdf' ? asset.pdf : undefined, audio: field === 'audio' ? asset.audio : undefined,
+      images: field === 'images' ? image.map((i) => ({ image: i.image, caption: null })) : undefined,
+      durationSec: next === 'VIDEO_LINK' ? asset.durationSec : undefined }))
+  }
 
   const input = (): MaterialInput => {
     const base: MaterialInput = {
@@ -171,8 +229,13 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
   }
 
   const save = useMutation({
-    mutationFn: () => saveMaterial(input()),
+    mutationFn: () => {
+      const typed = input()
+      const assetId = variant ? null : copy.idFor(copiedShape(typed))
+      return saveMaterial(assetId ? { ...typed, assetId } : typed)
+    },
     onSuccess: async (output) => {
+      copy.saved()
       onOpenChange(false)
       notify.success(t('materials.saved', { number }))
       await editing.edited(output)
@@ -228,6 +291,12 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant }
                 <p className="text-muted-foreground text-sm">{t('materials.kindHint')}</p>
               </div>
             )}
+          {!variant && (
+            <LibraryActions target="MATERIAL" testId="material-library" disabled={editing.stale}
+              materialKind={material ? material.kind : null} materialKinds={material ? undefined : MATERIAL_KINDS}
+              onPick={pick} store={storedOf(input(), language ?? 'ja')}
+              onStored={(assetId) => copy.chose(assetId, copiedShape(input()))} />
+          )}
           <div className="flex flex-col gap-2">
             <Label htmlFor={`${id}-title`}>{t('materials.title')}</Label>
             <Input id={`${id}-title`} value={title} maxLength={LIMITS.materialTitle} autoComplete="off"
@@ -450,7 +519,11 @@ export function MaterialContent({ material }: { material: Pick<Material, 'kind' 
 }
 
 /** The reference materials of the quiz in their order (M-23): added, changed, moved and deleted. */
-export function MaterialsPanel({ materials }: { materials: Material[] }) {
+export function MaterialsPanel({ materials, language }: {
+  materials: Material[]
+  /** The quiz's language (an asset saved from a material is in it, F-C1). */
+  language?: ContentLanguage
+}) {
   const { t } = useTranslation(SPONSOR)
   const editing = useEditing()
   const kindLabel = useKindLabel()
@@ -556,7 +629,7 @@ export function MaterialsPanel({ materials }: { materials: Material[] }) {
         )}
       {editingMaterial && (
         <MaterialDialog key={editingMaterial.material?.materialId ?? 'new'} material={editingMaterial.material}
-          number={editingMaterial.number} open onOpenChange={(open) => {
+          number={editingMaterial.number} language={language} open onOpenChange={(open) => {
             if (!open) setEditingMaterial(null)
           }} />
       )}
