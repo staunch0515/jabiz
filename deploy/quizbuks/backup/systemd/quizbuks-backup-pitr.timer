@@ -1,0 +1,13 @@
+# repo1 every day: a full backup on Sundays (UTC), a differential one otherwise.
+[Unit]
+Description=QuizBuks backup timer: pitr
+
+[Timer]
+OnCalendar=*-*-* 03:10:00 UTC
+# A run missed while the server was off happens at the next boot.
+Persistent=true
+RandomizedDelaySec=300
+Unit=quizbuks-backup@pitr.service
+
+[Install]
+WantedBy=timers.target
