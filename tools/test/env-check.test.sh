@@ -64,6 +64,45 @@ RULES="$work/rules" expect 1 "the application's rules" 'QB_STRIPE_PLACEHOLDERS: 
 RULES="$work/rules" expect 0 "the application's rules met" '0 error(s)' 'QB_STRIPE_PLACEHOLDERS=false' \
   'STRIPE_API_KEY=sk_live_x'
 
+# --app-only (ROADMAP 17zz3): a settings file that is not the application's, with the new rule kinds.
+cat >"$work/backup-rules" <<'END'
+set BUCKET
+min-length PASS_A 32
+min-length PASS_B 32
+different PASS_A PASS_B
+warn-unset PING_URL
+END
+pass() { printf 'passphrase-%s-of-the-env-check-tests-00000' "$1"; }
+# app_only <exit> <name> <pattern> <settings...>: only the rules, on these lines alone.
+app_only() {
+  local want=$1 name=$2 pattern=$3 out status
+  shift 3
+  printf '%s\n' "$@" >"$work/backup.env"
+  set +e
+  out=$("$script" --app-only "$work/backup.env" "$work/backup-rules" 2>&1)
+  status=$?
+  set -e
+  if [[ "$status" != "$want" ]] || ! grep -q -- "$pattern" <<<"$out"; then
+    echo "FAIL $name (exit $status, want $want)"; echo "$out" | sed 's/^/     /'; failures=$((failures + 1))
+  elif grep -q "passphrase-" <<<"$out"; then
+    echo "FAIL $name: a value was printed"; failures=$((failures + 1))
+  else
+    echo "ok   $name"
+  fi
+}
+app_only 0 'app-only: no platform rules, a recommendation is a warning' '0 error(s), 1 warning' \
+  BUCKET=b "PASS_A=$(pass a)" "PASS_B=$(pass b)"
+app_only 0 'app-only: all met' '0 error(s), 0 warning' BUCKET=b "PASS_A=$(pass a)" "PASS_B=$(pass b)" PING_URL=x
+app_only 1 'app-only: a short passphrase' 'PASS_A: shorter than 32' BUCKET=b PASS_A=short "PASS_B=$(pass b)"
+app_only 1 'app-only: the same passphrase twice' 'PASS_A: is the same as PASS_B' BUCKET=b "PASS_A=$(pass a)" \
+  "PASS_B=$(pass a)"
+app_only 1 'app-only: a missing passphrase' 'PASS_B: not set' BUCKET=b "PASS_A=$(pass a)"
+set +e
+"$script" --app-only "$work/backup.env" >/dev/null 2>&1
+status=$?
+set -e
+if [[ "$status" == 2 ]]; then echo "ok   app-only needs a rules file"; else echo "FAIL app-only without rules ($status)"; failures=$((failures + 1)); fi
+
 if ((failures > 0)); then
   echo "$failures failed"
   exit 1

@@ -175,7 +175,10 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 
 **演练**：`tools/ops/restore-drill.sh`（环境变量见脚本头部）：
 
-1. 可选 `DRILL_RESTORE_COMMAND`：备份工具恢复到 T 的命令，脚本计时；
+1. 可选 `DRILL_RESTORE_COMMAND`：备份工具恢复到 T 的命令，脚本计时；用 pgBackRest 时改设 `DRILL_PGBACKREST`（运行 pgBackRest 的方式）与 `DRILL_PGBACKREST_PG_PATH`（新的空数据目录），
+   脚本自己组成 `restore --type=time --target=T --target-action=promote --archive-mode=off`（17zz3）：**恢复出的副本绝不归档**——否则它会把自己的 WAL 推进生产的仓库；
+   手写的 pgBackRest 恢复命令缺 `--archive-mode=off` 即拒绝。恢复出的库启动时也要有备份的设置（`archive-get` 要用加密口令）。`DRILL_RESTORE_ONLY=true` 只恢复、写记录后停止，
+   启动副本后再不带恢复设置运行一次以核对；
 2. 以生产同版本的镜像（`DRILL_IMAGE`，`DRILL_DOCKER_ARGS` 给出只通向恢复的库的内部网络）或 jar（`DRILL_JAR`）在核对模式下启动一次，
    设置来自 `DRILL_ENV_FILE`：库、恢复出的文件目录、从离线副本取来的生产 `JABIZ_INTEGRITY_KEY` / `JABIZ_MFA_KEY` / `JABIZ_SEAL_KEY`，以及应用自己让副本远离线上服务的开关（支付的测试模式等）；
 3. `DRILL_ROTATE=true` 时在同一副本上演练密钥轮换（D78，`docs/guide/key-rotation.md`）：再启动两次，先以新密钥、生产密钥作旧密钥并重新加密到底，
