@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Q72 (docs/quizbuks/plans/Q72-sponsor-erasure.md; platform decision D62): erasing a sponsor's account removes their
- * page, products and profile, tombstones their onboarding, and afterwards ends their running publications (kept as
- * records) with the reason that the account was deleted.
+ * page, products, asset library (F-C1) and profile, tombstones their onboarding, and afterwards ends their running
+ * publications (kept as records) with the reason that the account was deleted.
  */
 class SponsorErasureIT extends PlayItSupport {
 
@@ -44,6 +44,14 @@ class SponsorErasureIT extends PlayItSupport {
             "language", "en", "headline", "Ann's bakery"));
         run(SponsorProductProcesses.SAVE, token, body("name", "Rye", "price", "100", "currency", "JPY",
             "shopUrl", "https://shop.example/rye", "listed", true));
+        // F-C1: an asset of the library and where it was copied to; Bob's stay.
+        for (String owner : java.util.List.of(ann, bob)) {
+            String asset = (String) run(com.jabiz.quizbuks.asset.AssetProcesses.SAVE, sponsorToken(owner), body("kind",
+                "ARTICLE", "name", "Notes of " + owner, "language", "en", "body", "Private notes")).get("assetId");
+            execute("INSERT INTO qb_asset_use (use_id, asset_id, sponsor_id, target_kind, target_id, asset_revision, "
+                + "used_at, version) VALUES (?, ?, ?, 'QUIZ_INTRO', ?, 1, now(), 1)", UUID.randomUUID().toString(),
+                asset, owner, UUID.randomUUID().toString());
+        }
         String publication = livePublication(ann, "Ann's quiz");
         String bobsPublication = livePublication(bob, "Bob's quiz");
         // A day of counts of their page (platform 17z-6: owned by the account, so they go with it); Bob's stay.
@@ -58,6 +66,10 @@ class SponsorErasureIT extends PlayItSupport {
 
         assertThat(query("SELECT 1 FROM qb_sponsor_page WHERE user_id = ?", ann)).isEmpty();
         assertThat(query("SELECT 1 FROM qb_sponsor_product WHERE user_id = ?", ann)).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_asset WHERE sponsor_id = ?", ann)).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_asset_use WHERE sponsor_id = ?", ann)).isEmpty();
+        assertThat(query("SELECT 1 FROM qb_asset WHERE sponsor_id = ?", bob)).hasSize(1);
+        assertThat(query("SELECT 1 FROM qb_asset_use WHERE sponsor_id = ?", bob)).hasSize(1);
         // The publication is kept as a record, ended because the account was deleted; another sponsor's runs on.
         assertThat(latest(publication)).containsEntry("status", "ENDED")
             .containsEntry("admin_reason", PublicationAdmin.ACCOUNT_DELETED);

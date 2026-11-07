@@ -46,6 +46,10 @@ class MessagesTest {
             .contains("approval.subject.qb.publication", "qb.publication.copy-name")
             .containsAll(AccountCodes.ALL).containsAll(ReviewCodes.ALL)
             .containsAll(com.jabiz.quizbuks.page.SponsorPageCodes.ALL)
+            .containsAll(com.jabiz.quizbuks.asset.AssetCodes.ALL)
+            .contains("process.QB_ASSET_SAVE", "process.QB_ASSET_DELETE", "process.QB_ASSET_COLLECT",
+                "param.qb.assets.max-count", "param.qb.assets.max-tags", "param.qb.assets.tag-length",
+                "query.qb.sponsor.asset-candidates", "entity.QbAsset", "entity.QbAssetUse")
             .containsAll(com.jabiz.quizbuks.page.ProfilePackage.CODES)
             .containsAll(com.jabiz.quizbuks.page.ProfileTransferProcesses.CODES)
             .contains("process.QB_PROFILE_IMPORT_CHECK", "process.QB_PROFILE_IMPORT")
