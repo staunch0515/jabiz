@@ -5309,3 +5309,17 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：交出与取消同时发生时许可不丢失（复现测试修改前失败、修改后通过）。
 
 **17zz 状态**：📝 待评审（分支 `1.3/phase-17zz-admission-handover`）。
+
+### 17zz3 备份工具的平台部分：pgBackRest 恢复演练与只检查规则的设置文件（2026-11-07，QuizBuks 备份）
+
+**缘由**：需求方定了 pgBackRest + Cloudflare R2 的备份（应用分支 `deploy/quizbuks/backup`）。平台的演练脚本只接受手写的恢复命令；在测试环境演练时发现，恢复出的副本继承了 `archive_mode=on`，会把自己的 WAL 推进生产的仓库（演练中只因数据目录不同而失败；容器中目录相同，就会推进去）。备份的设置文件不是应用的设置，`env-check` 却总套平台的规则。
+
+| # | 内容 |
+|---|---|
+| 17zz3-1 | `tools/ops/restore-drill.sh`：`DRILL_PGBACKREST`（运行方式）、`DRILL_PGBACKREST_PG_PATH`（新的空数据目录）、`_STANZA`（缺省 `main`）、`_REPO`（缺省 1），脚本组成 `restore --type=time --target=T --target-action=promote --archive-mode=off` 并计时；手写的 pgBackRest 恢复命令缺 `--archive-mode=off` 即拒绝；`DRILL_RESTORE_ONLY=true` 只恢复并写记录。13 §8 |
+| 17zz3-2 | `tools/ops/env-check.sh --app-only <文件> <规则>`：只按规则文件检查；新规则 `warn-unset`、`min-length`、`different`。`docs/guide/platform-operations.md` §1 |
+| 17zz3-3 | 测试：`tools/test/restore-drill.test.sh`（以替身记下参数：时间目标、提升、不归档、仓库与 stanza；拒绝的设置），`tools/test/env-check.test.sh` 新例；CI 的 `app-paths` 作业运行前者。以真实的 pgBackRest 2.50 对 S3 替身（moto）演练：全量、差异、两个仓库的 WAL、恢复到 T（数据正确，副本不归档），`restore-drill.sh` 的只恢复模式实测 |
+
+**验收**：演练脚本以 pgBackRest 恢复到 T 且副本绝不归档；备份的设置文件可以只按应用的规则检查。
+
+**17zz3 状态**：📝 待评审（分支 `1.3/phase-17zz3-backup-tools`）。
