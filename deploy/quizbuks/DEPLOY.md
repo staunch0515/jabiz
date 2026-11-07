@@ -199,6 +199,7 @@ Caddy 重建后地址可能改变：改后应用只会把所有请求看成来�
 
 每个环境有自己的 LGTM 容器（`<APP_NAME>-lgtm`，镜像 `grafana/otel-lgtm`，与平台的 `docker-compose.yml` 相同：Grafana、Prometheus、Loki、Tempo 与 OpenTelemetry 收集器），
 在 compose 的 profile `observability` 中：`.env` 写 `COMPOSE_PROFILES=observability` 才启动（compose 从项目目录的 `.env` 读它），没有它的环境照旧只有应用。
+production 与 staging 各跑一个（各限 2g 内存，总控 2026-11-07 定）；共用服务器的内存不够时，staging 的 `.env` 不写这一行（staging 就没有监控与告警，production 不受影响）。
 
 - **规则**：平台的 `docker/grafana/alerting/jabiz-alerts.yaml` 与 `render.sh`、QuizBuks 的 `deploy/quizbuks/alerting/quizbuks-alerts.yaml`，由 workflow 的"Upload deploy files"
   一起上传到服务器的 `/opt/apps/<APP_NAME>/alerting/`（与 compose.yaml 同一目录，compose 以 `./alerting` 只读挂载到 `/otel-lgtm/jabiz/alerting`）；文件变了而容器在运行时，workflow 重启它。
