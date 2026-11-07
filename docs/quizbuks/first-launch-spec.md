@@ -230,7 +230,7 @@
     - "商户""商家" → 中文"发起方"、日文"主催者"、英文"Sponsor"（Q91 §0-1、§0-7，A、B 两类文字都改）。
   - 范围：学者 App（约 100 处）、发起方页面（约 240 处）、管理系统扩展与运营商管理系统（约 280 处）、服务端消息 `messages_*.properties`（中文约 315 处，含邮件、站内信、推送、错误消息、流程、实体与模板列名、单据版式）、招商网站 `biz`（约 35 处）、帮助中心的问答、法律文本草稿 `docs/quizbuks/legal/`（约 90 处）、商店资料 `docs/quizbuks/store/`、`operations.md` 与 troubleshooting 的用户文案、样板指南。
   - 同时固定一份三语词表：发起方、学者、Kudos、Quiz、测验、问卷、发布、知识结构图、平台费账户、赠送额度、AI 额度。
-  - **补充 F-F5b**（需求方 2026-11-07）：人读到的文字中不再用"后台"（日文"管理画面"、英文 "console" / "Administration" 同样不用）。发起方一侧作名称为"答题拼好价发起方 / クイズdeおトク 主催者 / QuizBuks for Sponsors"，句子中为"发起方页面 / 主催者ページ / the Sponsor app"；运营商一侧为"运营商管理系统 / 運営会社管理システム / Operator Management System"；平台管理为"答题拼好价平台管理系统 / クイズdeおトク 管理システム / QuizBuks Management System"。名称中的产品名照品牌档案取该语言的名字（Q61）。词表 `glossary.md`，计划 `plans/impl/F-F5b.md`；用词测试同时检查这些叫法。
+  - **补充 F-F5b**（需求方 2026-11-07）：人读到的文字中不再用"后台"（日文"管理画面"、英文 "console" / "Administration" 同样不用）。发起方一侧作名称为"答题拼好价发起方 / クイズdeおトク 主催者 / QuizBuks for Sponsors"，句子中为"发起方页面 / 主催者ページ / the Sponsor app"；运营商一侧为"运营商管理系统 / 運営パートナー管理システム / Operator Management System"；平台管理为"答题拼好价平台管理系统 / クイズdeおトク 管理システム / QuizBuks Management System"。名称中的产品名照品牌档案取该语言的名字（Q61）。词表 `glossary.md`，计划 `plans/impl/F-F5b.md`；用词测试同时检查这些叫法。
 - **规则**：
   - 只改显示的文字，代码标识（`taker`、`sponsor`、路由、消息键）不改。
   - 三语一起改。英文统一用 "the Sponsor / a Taker" 这类不随称呼变形的写法；日文不加"様"。
