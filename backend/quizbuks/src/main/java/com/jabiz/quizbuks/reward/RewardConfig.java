@@ -386,8 +386,8 @@ public class RewardConfig {
     @Bean
     StaticDictionary qbRedeemKindDictionary() {
         return StaticDictionary.define(QbRewards.REDEEM_KIND_DICTIONARY, d -> d
-            .item(RedemptionStatus.KIND_ROTATING, "en", "Code on the console's screen", "zh", "发起方后台屏幕上的码",
-                "ja", "コンソール画面のコード")
+            .item(RedemptionStatus.KIND_ROTATING, "en", "Code on the Sponsor app's screen", "zh", "发起方屏幕上的码",
+                "ja", "主催者ページに表示されるコード")
             .item(RedemptionStatus.KIND_PRINTED, "en", "Printed code", "zh", "打印的固定码", "ja", "印刷したコード")
             .item(RedemptionStatus.KIND_PASS, "en", "Taker's pass", "zh", "学者的通行码", "ja", "テイカーのパス"));
     }

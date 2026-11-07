@@ -169,8 +169,8 @@ summary() {
 QuizBuks is running (local demo; never expose it):
   App (takers)        http://localhost:$PORT/taker/
   Business site       http://localhost:$PORT/biz/  (the bare address opens it)
-  Sponsor console     http://localhost:$PORT/sponsor/
-  Administration      http://localhost:$PORT/admin/     admin / $JABIZ_BOOTSTRAP_ADMIN_PASSWORD
+  Sponsor app         http://localhost:$PORT/sponsor/
+  Management System   http://localhost:$PORT/admin/     admin / $JABIZ_BOOTSTRAP_ADMIN_PASSWORD
   Mail (Mailpit)      http://localhost:$MAILPIT_PORT/
   Stripe stub         http://localhost:$STUB_PORT/       (checkout and payout onboarding pages)
 EOF
@@ -178,7 +178,7 @@ EOF
     touch "$STATE/seeded"
     cat <<EOF
 Demo accounts (password ${QB_DEMO_PASSWORD:-quizbuks-demo-1}):
-  sponsor@quizbuks.local   sponsor console: approved, 10,000 Kudos, quiz "World capitals" live
+  sponsor@quizbuks.local   Sponsor app: approved, 10,000 Kudos, quiz "World capitals" live
   taker@quizbuks.local     app: play "World capitals" from the home page
 EOF
   fi

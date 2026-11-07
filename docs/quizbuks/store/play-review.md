@@ -29,7 +29,7 @@ Sponsors publish quizzes on a separate website; nothing can be bought in the app
 
 ## 4. 发布前的核对
 
-- [ ] 隐私政策已填好【】占位并在后台发布，`https://quizbuks.com/taker/legal/privacy` 可以打开（`legal/README.md`）
+- [ ] 隐私政策已填好【】占位并在平台管理系统中发布，`https://quizbuks.com/taker/legal/privacy` 可以打开（`legal/README.md`）
 - [ ] 数据安全表按 `play-data-safety.md` 填完
 - [ ] 内容分级与目标受众按 `play-content-rating.md` 填完
 - [ ] 商店信息按 `play-listing.*.md` 填好三种语言，截图与宣传图来自 workflow `QuizBuks store` 的最新产物
