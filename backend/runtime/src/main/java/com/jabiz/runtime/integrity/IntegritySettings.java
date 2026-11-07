@@ -1,6 +1,8 @@
 package com.jabiz.runtime.integrity;
 
 import com.jabiz.integrity.IntegrityKey;
+import com.jabiz.integrity.IntegrityKeys;
+import com.jabiz.runtime.config.PreviousKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +13,7 @@ import org.springframework.core.env.Profiles;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 
 /**
  * Settings of the integrity seals (docs/design/21-audit-retention.md section 2.4) and the key that signs them.
@@ -50,6 +53,23 @@ public record IntegritySettings(int maxRows, int maxProblems, String sealCron, S
         IntegrityKey integrityKey(Environment environment,
             @Value("${jabiz.integrity.key:${JABIZ_INTEGRITY_KEY:}}") String configured) {
             return key(configured, environment.acceptsProfiles(Profiles.of("dev")));
+        }
+
+        /**
+         * The current key and the retired ones that signed older blocks (decision D78, {@code JABIZ_INTEGRITY_KEY_PREVIOUS}:
+         * Base64 keys separated by commas). Blocks are never signed again, so a retired key stays configured for good.
+         */
+        @Bean
+        IntegrityKeys integrityKeys(IntegrityKey current,
+            @Value("${jabiz.integrity.previous-keys:${JABIZ_INTEGRITY_KEY_PREVIOUS:}}") String previous) {
+            List<IntegrityKey> retired = PreviousKeys.parse(previous, "jabiz.integrity.previous-keys",
+                IntegrityKey.MIN_BYTES).stream().map(IntegrityKey::new).toList();
+            try {
+                return new IntegrityKeys(current, retired);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalStateException("jabiz.integrity.previous-keys: " + e.getMessage()
+                    + " (a previous key must not be the current key)");
+            }
         }
 
         /**

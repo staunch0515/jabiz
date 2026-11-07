@@ -221,7 +221,7 @@ public class IdentityTokens {
     }
 
     /** What a token is sealed for: its link, so that a sealed value cannot be moved to another row. */
-    static String context(UUID identityId) {
+    public static String context(UUID identityId) {
         return "identity-token:" + identityId;
     }
 

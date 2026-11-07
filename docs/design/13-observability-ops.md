@@ -163,7 +163,9 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 |---|---|
 | `last-operation` | 最后提交的操作的时间；设置了 `jabiz.ops.verify-restore.target-time`（恢复到的时刻 T）时，晚于 T 即失败（恢复越过了 T），否则给出与 T 的差（恢复点）。核对自己的操作（请求号以 `verify-restore-` 开头，如 `INTEGRITY_VERIFY`）不计，最先核对 |
 | `integrity` | 运行 `INTEGRITY_VERIFY`（21 §2.3）：封存链完整，`JABIZ_INTEGRITY_KEY` 是生产的那一把 |
-| `mfa-secrets` | 每个二次验证的当前版本都能以配置的 `JABIZ_MFA_KEY` 解开（报告密钥的标识，不报告密钥） |
+| `key-rotation` | 只在 `jabiz.ops.verify-restore.rekey=true` 时：把 `KEY_ROTATION_REKEY` 跑到底（D78），报告重新加密与解不开的个数 |
+| `mfa-secrets` | 每个二次验证的当前版本都能以配置的 `JABIZ_MFA_KEY`（及旧密钥）解开（报告密钥的标识，不报告密钥） |
+| `sealed-secrets` | `SealedFields` 声明的每个密封值都能以配置的 `JABIZ_SEAL_KEY`（及旧密钥）解开（D78）；没有密钥时，只要没有密封值也通过 |
 | `files` | `sys_file` 登记的每个文件的原件与变体都在文件存储中，原件大小一致（文件卷与库是同一时刻的） |
 | `template <id>` | 应用的核对：`jabiz.ops.verify-restore.templates` 列出的 SQL 模板（逗号分隔，无参数），返回 0 行即通过，如"借贷不平的期间""透支的钱包"。应用不写 Java |
 
@@ -174,7 +176,9 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 1. 可选 `DRILL_RESTORE_COMMAND`：备份工具恢复到 T 的命令，脚本计时；
 2. 以生产同版本的镜像（`DRILL_IMAGE`，`DRILL_DOCKER_ARGS` 给出只通向恢复的库的内部网络）或 jar（`DRILL_JAR`）在核对模式下启动一次，
    设置来自 `DRILL_ENV_FILE`：库、恢复出的文件目录、从离线副本取来的生产 `JABIZ_INTEGRITY_KEY` / `JABIZ_MFA_KEY` / `JABIZ_SEAL_KEY`，以及应用自己让副本远离线上服务的开关（支付的测试模式等）；
-3. 写出演练记录（Markdown）：T、恢复与核对的用时（RTO）、恢复点、每项核对的结果，留一栏写问题。核对失败时退出码 1。
+3. `DRILL_ROTATE=true` 时在同一副本上演练密钥轮换（D78，`docs/guide/key-rotation.md`）：再启动两次，先以新密钥、生产密钥作旧密钥并重新加密到底，
+   再以新密钥单独核对（封存密钥保留旧的那把：封存块从不重签）；这会写入副本；
+4. 写出演练记录（Markdown）：T、恢复与核对的用时（RTO）、恢复点、每次启动每项核对的结果，留一栏写问题。核对失败时退出码 1。
 
 测试：`RestoreVerificationIT`（完好的副本各项通过；文件缺失、另一把 MFA 密钥、越过 T、不存在的模板与返回行的模板各自失败；核对自己的操作不算越过 T，同一副本可再核对）、
 `RestoreVerificationPropertiesTest`（生产打开的开关被关掉；未开启时不变）。脚本对真实的库演练过：`pg_dump` 的副本通过，换一把 MFA 密钥则 `mfa-secrets` 失败（17zv 的 PR）。
