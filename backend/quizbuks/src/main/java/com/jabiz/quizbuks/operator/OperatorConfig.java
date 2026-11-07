@@ -162,8 +162,9 @@ public class OperatorConfig {
 
     @Bean
     ProcessDefinition<OperatorProcesses.AssignInput, OperatorProcesses.AssignOutput, ProcessContext>
-        qbSponsorOperatorAssign() {
-        return OperatorProcesses.assign();
+        qbSponsorOperatorAssign(com.jabiz.runtime.approval.ApprovalScopeMoveSettings moves) {
+        // The platform's single-call limit of moving approvals (jabiz.approval.scope-move.max-items, F-S1).
+        return OperatorProcesses.assign(moves.maxItems());
     }
 
     @Bean

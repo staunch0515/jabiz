@@ -304,6 +304,8 @@ class SetupIT extends QbItSupport {
         // F-C2: the free storage (controlled, 500 MB) and how long the daily usage snapshots are kept.
         expected.put(QbParams.USAGE_FREE_BYTES, "524288000");
         expected.put(QbParams.USAGE_RETENTION_DAYS, "800");
+        // F-C11: the most products of one sponsor (an ordinary parameter).
+        expected.put(QbParams.PRODUCTS_MAX, "50");
         // F-S11: unknown addresses count as mainland China; the sites mainland China plays (controlled).
         expected.put(QbParams.REGION_UNKNOWN_IP_COUNTRY, "CN");
         // F-S10: the home's shelves of short videos (ordinary parameters).

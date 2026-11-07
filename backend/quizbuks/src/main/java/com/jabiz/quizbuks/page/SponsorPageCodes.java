@@ -20,7 +20,7 @@ public final class SponsorPageCodes {
 
     // Q60b: products.
     public static final String PRODUCT_NAME_BLANK = "QB_PRODUCT_NAME_BLANK";
-    /** A sponsor has at most {@value QbSponsorProducts#MAX_PRODUCTS} products. */
+    /** A sponsor has at most as many products as the parameter {@code qb.products.max} allows (F-C11). */
     public static final String PRODUCT_LIMIT = "QB_PRODUCT_LIMIT";
     /** Q100e: a product's code is letters, digits and {@code . _ -}. */
     public static final String PRODUCT_CODE_FORMAT = "QB_PRODUCT_CODE_FORMAT";

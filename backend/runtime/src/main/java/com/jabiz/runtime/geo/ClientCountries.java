@@ -3,8 +3,12 @@ package com.jabiz.runtime.geo;
 import com.jabiz.context.ClientCountry;
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.check.PlatformCheck;
+import com.jabiz.runtime.observability.PlatformObservations;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -30,6 +34,11 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>Its startup check ({@code GEOIP}): a configured file that cannot be read is an error, as is no file where the
  * application requires one ({@code jabiz.geoip.required}); a file older than {@code jabiz.geoip.max-age} (45 days by
  * default), or one with no ranges, is a warning.
+ *
+ * <p>The same conditions are gauges, so that a database that goes stale or broken while the application runs raises an
+ * alert (decision D74; {@code docker/grafana/alerting}): {@code jabiz.geoip.ranges} (the ranges of the database in use,
+ * 0 when none could be read) and {@code jabiz.geoip.stale} (1 when the file is older than the maximum age or cannot be
+ * read). Neither is registered without a configured database.
  */
 @Component
 public class ClientCountries implements PlatformCheck {
@@ -80,6 +89,39 @@ public class ClientCountries implements PlatformCheck {
     public ClientCountry countryOf(String address) {
         reloadIfChanged();
         return address == null ? ClientCountry.UNKNOWN : loaded.get().database().countryOf(address);
+    }
+
+    /** Registers the gauges of a configured database (none without one). */
+    @Autowired(required = false)
+    void meters(MeterRegistry registry) {
+        if (path == null || registry == null) {
+            return;
+        }
+        Gauge.builder(PlatformObservations.GEOIP_RANGES, this, ClientCountries::ranges)
+            .description("Ranges of the address database in use").register(registry);
+        Gauge.builder(PlatformObservations.GEOIP_STALE, this, c -> c.stale() ? 1 : 0)
+            .description("1 while the address database is older than jabiz.geoip.max-age or cannot be read")
+            .register(registry);
+    }
+
+    /** The ranges of the database in use; also looks whether the file changed, as a lookup does. */
+    int ranges() {
+        reloadIfChanged();
+        return loaded.get().database().size();
+    }
+
+    /** Whether the configured file is older than the maximum age, or it could not be read at startup. */
+    boolean stale() {
+        if (path == null) {
+            return false;
+        }
+        reloadIfChanged();
+        Loaded current = loaded.get();
+        if (current.problem() != null || current.modified() == null) {
+            return true;
+        }
+        // The database in use: a broken update keeps the one read before, and its age.
+        return current.modified().toInstant().plus(maxAge).isBefore(clock.instant());
     }
 
     /** Whether a database is configured. */

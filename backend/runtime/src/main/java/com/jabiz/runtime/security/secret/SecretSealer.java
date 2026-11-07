@@ -66,4 +66,30 @@ public final class SecretSealer {
             Arrays.fill(bytes, (byte) 0);
         }
     }
+
+    /** The id of the current key; null without one. */
+    public String keyId() {
+        return cipher == null ? null : cipher.keyId();
+    }
+
+    /** The ids of the retired keys values may still be stored under (decision D78); none without a key. */
+    public java.util.List<String> previousKeyIds() {
+        return cipher == null ? java.util.List.of() : cipher.previousKeyIds();
+    }
+
+    /**
+     * Stores a value again under the current key (decision D78); blocking (a fresh random IV).
+     *
+     * @throws SealedSecrets.UnreadableSecretException sealed under an unknown key or another context, or altered
+     */
+    public String reseal(String stored, String context) {
+        byte[] bytes = cipher().open(stored, context);
+        try {
+            byte[] iv = new byte[SealedSecrets.IV_BYTES];
+            random.nextBytes(iv);
+            return cipher().seal(bytes, context, iv);
+        } finally {
+            Arrays.fill(bytes, (byte) 0);
+        }
+    }
 }

@@ -8,6 +8,7 @@ import com.jabiz.runtime.context.ActorResolver;
 import com.jabiz.runtime.entity.EntityDefinitionRegistry;
 import com.jabiz.runtime.storage.StorageAdapterRegistry;
 import com.jabiz.security.LoginAttemptPolicy;
+import com.jabiz.runtime.config.PreviousKeys;
 import com.jabiz.security.MfaSecretCipher;
 import com.jabiz.security.SealedSecrets;
 import com.jabiz.runtime.security.secret.SecretSealer;
@@ -126,8 +127,15 @@ public class SecurityConfig {
     @Bean
     JwtService jwtService(Environment environment, Clock clock,
         @Value("${jabiz.security.jwt.secret:}") String secret,
+        @Value("${jabiz.security.jwt.previous-secrets:${JABIZ_JWT_SECRET_PREVIOUS:}}") String previous,
         @Value("${jabiz.security.jwt.access-token-ttl:PT15M}") Duration ttl) {
-        return new JwtService(secret(secret, environment.acceptsProfiles(Profiles.of("dev"))), ttl, clock);
+        try {
+            return new JwtService(secret(secret, environment.acceptsProfiles(Profiles.of("dev"))),
+                PreviousKeys.parse(previous, "jabiz.security.jwt.previous-secrets", JwtService.MIN_SECRET_BYTES), ttl,
+                clock);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("jabiz.security.jwt.previous-secrets: " + e.getMessage());
+        }
     }
 
     /**
@@ -209,9 +217,16 @@ public class SecurityConfig {
      * verify after a restart).
      */
     @Bean
-    MfaSecretCipher mfaSecretCipher(Environment environment, @Value("${jabiz.security.mfa.key:}") String key) {
-        return new MfaSecretCipher(key(key, "jabiz.security.mfa.key", "JABIZ_MFA_KEY",
-            MfaSecretCipher.MIN_KEY_BYTES, environment.acceptsProfiles(Profiles.of("dev"))));
+    MfaSecretCipher mfaSecretCipher(Environment environment, @Value("${jabiz.security.mfa.key:}") String key,
+        @Value("${jabiz.security.mfa.previous-keys:${JABIZ_MFA_KEY_PREVIOUS:}}") String previous) {
+        // Retired keys (decision D78): secrets stored under them still open until jabiz.key-rotation stores them again.
+        try {
+            return new MfaSecretCipher(key(key, "jabiz.security.mfa.key", "JABIZ_MFA_KEY",
+                MfaSecretCipher.MIN_KEY_BYTES, environment.acceptsProfiles(Profiles.of("dev"))),
+                PreviousKeys.parse(previous, "jabiz.security.mfa.previous-keys", MfaSecretCipher.MIN_KEY_BYTES));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("jabiz.security.mfa.previous-keys: " + e.getMessage());
+        }
     }
 
     /**
@@ -220,13 +235,22 @@ public class SecurityConfig {
      * {@code MailSenderSource} without it), except in the dev profile, which makes one up.
      */
     @Bean
-    SecretSealer secretSealer(Environment environment, @Value("${jabiz.security.seal.key:}") String key) {
+    SecretSealer secretSealer(Environment environment, @Value("${jabiz.security.seal.key:}") String key,
+        @Value("${jabiz.security.seal.previous-keys:${JABIZ_SEAL_KEY_PREVIOUS:}}") String previous) {
         boolean development = environment.acceptsProfiles(Profiles.of("dev"));
         if ((key == null || key.isBlank()) && !development) {
+            if (previous != null && !previous.isBlank()) {
+                throw new IllegalStateException("jabiz.security.seal.previous-keys is set without jabiz.security.seal.key");
+            }
             return new SecretSealer(null);
         }
-        return new SecretSealer(new SealedSecrets(key(key, "jabiz.security.seal.key", "JABIZ_SEAL_KEY",
-            SealedSecrets.MIN_KEY_BYTES, development)));
+        try {
+            return new SecretSealer(new SealedSecrets(key(key, "jabiz.security.seal.key", "JABIZ_SEAL_KEY",
+                SealedSecrets.MIN_KEY_BYTES, development),
+                PreviousKeys.parse(previous, "jabiz.security.seal.previous-keys", SealedSecrets.MIN_KEY_BYTES)));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("jabiz.security.seal.previous-keys: " + e.getMessage());
+        }
     }
 
     @Bean

@@ -136,11 +136,11 @@ public final class QuizTransferProcesses {
     private static final String PRODUCTS = "products";
     private static final String LINKS = "productLinks";
 
-    /** The caller's own products, for finding those the file names. */
+    /** All the caller's own products (not cut at the limit, which bounds only new ones), for those the file names. */
     private static StepSpec<QueryEntities.Metadata<ProcessContext>, ProcessContext> loadProducts() {
         return QueryEntities.of(QbSponsorProducts.DEFAULT_DATASET, ctx -> EntityQuery.builder()
             .where(new QueryPredicate.In("userId", List.of(ctx.request().actorId())))
-            .limit(QbSponsorProducts.MAX_PRODUCTS + 1).build(), PRODUCTS);
+            .limit(Integer.MAX_VALUE).build(), PRODUCTS);
     }
 
     /**

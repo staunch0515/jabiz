@@ -38,7 +38,7 @@ public final class QbSponsorProducts {
     public static final String TAKEN_DOWN = "TAKEN_DOWN";
     public static final List<String> STATUSES = List.of(LISTED, UNLISTED, TAKEN_DOWN);
 
-    public static final int MAX_PRODUCTS = 50;
+    /* F-C11: the most products a sponsor has is the parameter qb.products.max (SponsorProductProcesses.maxProducts). */
     /** Q100e: a product's own code: letters, digits and {@code . _ -}, starting with a letter or digit. */
     public static final int CODE_LENGTH = 40;
     public static final java.util.regex.Pattern CODE_PATTERN =
