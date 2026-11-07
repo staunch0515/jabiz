@@ -204,7 +204,9 @@ jobs:
   e2e:
     needs: [build, frontend]
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, where Playwright 1.56 has no Chromium ("does not support chromium on
+    # ubuntu26.04-x64"). Back to ubuntu-latest once Playwright is upgraded to a version that supports it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
       postgres:

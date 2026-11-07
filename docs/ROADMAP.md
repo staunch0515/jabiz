@@ -5028,6 +5028,16 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **17zg 状态**：📝 待评审（分支 `1.3/phase-17zg-ci-scope`）。
 
+### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
+
+**缘由**：`ubuntu-latest` 已是 Ubuntu 26.04，Playwright 1.56 在其上装不了 Chromium（"does not support chromium on ubuntu26.04-x64"），平台的 `e2e` 作业在跑测试之前即失败。
+
+| # | 内容 |
+|---|---|
+| 17zm | `ci.yml` 的 `e2e` 作业 `runs-on: ubuntu-24.04`（只有它装 Playwright）；升级到支持 26.04 的 Playwright 后改回 `ubuntu-latest` |
+
+**17zm 状态**：📝 待评审（分支 `1.3/phase-17zm-ci-ubuntu-24`）。
+
 ### 17zi 刷新令牌的重用宽限（2026-11-07，QuizBuks 首次上线 P1；决策 D73）
 
 **缘由**：页面在续期的答复到达前被刷新、复制标签页、答复丢在途中，客户端会再次送出刚被轮换的刷新令牌，按 D12 第 1 条整个会话被吊销，用户被登出（QuizBuks T13，e2e 偶发失败）。
