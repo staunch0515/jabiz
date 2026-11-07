@@ -44,7 +44,13 @@ class StoreUnderCurrentKey implements BlockingStep<NoMetadata, ProcessContext> {
         int mfaSecrets = 0;
         int sealedValues = 0;
         int unreadable = 0;
+        java.util.Set<?> takenBack = ctx.contains(TakeBackSecondFactors.TAKEN_BACK_IDS)
+            ? ctx.get(TakeBackSecondFactors.TAKEN_BACK_IDS, java.util.Set.class) : java.util.Set.of();
         for (RetiredValue value : found) {
+            if (value.target().kind() == RetiredValue.Kind.MFA && takenBack.contains(String.valueOf(value.row().id()))) {
+                // Taken back in this run: no longer confirmed, a new one replaces it; written once.
+                continue;
+            }
             String stored = value.stored();
             String context = value.context();
             String renewed;
@@ -69,8 +75,9 @@ class StoreUnderCurrentKey implements BlockingStep<NoMetadata, ProcessContext> {
             log.info("Key rotation: {} TOTP secrets and {} sealed values stored under the current key, {} unreadable",
                 mfaSecrets, sealedValues, unreadable);
         }
+        int takenBackCount = takenBack.size();
         ctx.put(KeyRotationProcesses.OUTPUT, new KeyRotationProcesses.RekeyOutput(mfaSecrets, sealedValues,
-            unreadable, found.size() >= finder.batchSize()));
+            unreadable, found.size() >= finder.batchSize() || takenBackCount >= finder.batchSize(), takenBackCount));
     }
 
     private String reencrypt(String stored, String userId) {

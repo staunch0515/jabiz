@@ -42,14 +42,16 @@ public class KeyRotationProcesses {
      * @param mfaSecrets   TOTP secrets stored again under the current key
      * @param sealedValues sealed values stored again under the current key
      * @param unreadable   values under a retired key that did not open (wrong context, altered): left as they are
-     * @param more         whether the batch was full, so that more may be left
+     * @param more         whether a batch was full, so that more may be left
+     * @param secondFactorsTakenBack second factors an approved re-enrolment of everyone took back ({@link MfaReenrollment})
      */
-    public record RekeyOutput(int mfaSecrets, int sealedValues, int unreadable, boolean more) {}
+    public record RekeyOutput(int mfaSecrets, int sealedValues, int unreadable, boolean more,
+        int secondFactorsTakenBack) {}
 
     public static final ProcessDefinition<RekeyInput, RekeyOutput, ProcessContext> REKEY =
         ProcessDefinition.define(NAME, 1, RekeyInput.class, RekeyOutput.class, ProcessContext.class, pb -> pb
             .description("Stores TOTP secrets and sealed values that are still under a retired key again under the "
-                + "current key.")
+                + "current key, and takes back second factors an approved re-enrolment of everyone asks for.")
             .permissions(PERMISSION)
             .internal()
             .contextFactory((start, input) -> {
@@ -58,6 +60,7 @@ public class KeyRotationProcesses {
                 return ctx;
             })
             .outputMapper(ctx -> ctx.get(OUTPUT, RekeyOutput.class))
+            .step("Take back second factors of a re-enrolment", TakeBackSecondFactors.class, NoMetadata.INSTANCE)
             .step("Find values under a retired key", FindRetiredValues.class, NoMetadata.INSTANCE)
             .step("Store them under the current key", StoreUnderCurrentKey.class, NoMetadata.INSTANCE));
 

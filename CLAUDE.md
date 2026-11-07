@@ -184,6 +184,7 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   实体与字段的显示名写在消息资源（`entity.<实体>`、`entity.<实体>.<字段>`，三种语言；应用以 `jabizApp { languages(…) }` 只选部分语言时只写所选的，12 §10）。改动 Web 接口后更新 OpenAPI 快照并 `pnpm gen:api`。
 - **可观测性**（见 13 与决策 D16）：平台新的工作单元用 `PlatformObservations` 包装；观测标签只放名称与结果（流程、视图、模板、任务名），
   绝不放主键、操作人、字段值。遥测默认不外发，只经 OTLP 推送，不开放匿名的指标端点。
+  告警规则只在 `docker/grafana/alerting`（平台的 `jabiz-alerts.yaml`；应用另加自己的文件，部署相关的值写成 `$JABIZ_ALERT_*` 占位符），试发用 `tools/ops/alert-fire-test.sh`（13 §7）。
 - **SQL 模板**：放在 `queries/**/*.sql`（YAML 头 + SQL，见 05）；表、列只写占位符；列表参数写 `= ANY(:name)`；不写外层 `LIMIT`/`ORDER BY`。
 - **报表**（见 19 与决策 D25）：报表就是头部声明了 `report` 的 SQL 模板（标题、列名在消息 `query.<id>`、`query.<id>.<列>`），不另建报表定义；按时点运行用请求的 `asOf` / `knownAt` 或头部 `timeSlice`（参数即时点），不在模板里自己拼"当前版本"；流程中用 `RunTemplate.at`。导出只经 `POST /api/queries/{id}/export?format=csv|xlsx|pdf`（超过 `jabiz.reports.export.max-rows` 即拒绝，不截断）；PDF 的中文、日文字体由 `jabiz.reports.pdf.fonts` 提供。需要原样重现的报表用流程 `REPORT_ISSUE` 签发（存档只追加、带内容哈希），不自己保存报表文件。
 - **导入**（见 20 与决策 D26）：批量导入只经 `ImportDefinition` Bean（文件策略只允许导入类型 `TEXT` / `XLSX` / `XML`，原样保存、只作附件）；
@@ -207,7 +208,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   归档导出只经 `POST /api/exports/data`（CSV + `schema.json` + `manifest.json` + 报表 PDF），不另写导出。
   生成的文件与签发的单据的保留期同样以 `RetentionPolicy.of("GeneratedFile" | "DocumentRun")` 声明（只读平台实体，`audit.read`，不含内容与名称，21 §3.1）。
 - **密钥轮换**（见 `docs/guide/key-rotation.md` 与决策 D78）：四把密钥都以 `*_PREVIOUS` 让旧密钥并存（只读），MFA 与 SEAL 下的值由任务 `jabiz.key-rotation` 重新加密，
-  完成后撤下旧密钥；封存密钥的旧密钥永久保留。不自己写重新加密或"换密钥时停机重写"。
+  完成后撤下旧密钥；封存密钥的旧密钥永久保留；旧 JWT 密钥过了 `jabiz.security.jwt.previous-retention` 即不再接受。密钥与库一同泄露时，全员重新绑定二次验证只经
+  `SEC_MFA_REENROLL_ALL_REQUEST` / `_APPROVE`（另一位管理员批准）。不自己写重新加密或"换密钥时停机重写"。
 - **恢复演练**（见 13 §8）：恢复出的副本只以核对模式（`jabiz.ops.verify-restore.enabled`，平台关掉一切对外的动作）与 `tools/ops/restore-drill.sh` 核对；
   应用自己的核对写成返回 0 行即通过的模板，列在 `jabiz.ops.verify-restore.templates`，不另写核对代码或手工清单。
 - **语句数**（见 06 §3.1、03 §3.1 与决策 D46）：平台在事务中缓冲写入（插入、按版本的更新、子流程的操作记录、事件、幂等结果），插入随下一条平台查询（取锁等）或在读写其表的语句、有时限的读取、模板、

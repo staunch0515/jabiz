@@ -1,0 +1,461 @@
+# Alert rules of the platform (docs/design/13-observability-ops.md section 7), provisioned into the LGTM
+# container's Grafana. Every JABIZ_ALERT_ placeholder (a dollar sign and the name) comes from the container's environment (docker-compose.yml
+# gives the defaults) and is filled in by render.sh when the container starts. Applications add their own rules in a
+# file of their own in this directory (or mounted next to it), in the same form with a group and folder of their own.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: jabiz-platform
+    folder: jabiz
+    interval: 1m
+    rules:
+      - uid: jabiz-metrics-absent
+        title: No metrics from the application
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'absent_over_time(jvm_memory_used_bytes{job="$JABIZ_ALERT_SERVICE"}[5m])'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: health }
+        annotations:
+          summary: 'The application has pushed no metrics for 5 minutes: it is down or cannot reach the collector.'
+          runbook: docs/design/13-observability-ops.md section 7 (health)
+      - uid: jabiz-platform-check-failed
+        title: Platform check failed at startup
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: loki
+            model:
+              refId: A
+              expr: 'sum(count_over_time({service_name="$JABIZ_ALERT_SERVICE"} |= "Platform check failed" [10m]))'
+              instant: true
+              queryType: instant
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: health }
+        annotations:
+          summary: 'An instance refused to start: its log lists the problems (category | location | description).'
+          runbook: docs/design/13-observability-ops.md section 7 (health)
+      - uid: jabiz-process-errors
+        title: Process errors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (process) (increase(jabiz_process_milliseconds_count{job="$JABIZ_ALERT_SERVICE", outcome="error", status!="503"}[5m])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: errors }
+        annotations:
+          summary: 'A process failed with an error that is not a business rejection (5xx other than 503).'
+          runbook: docs/design/13-observability-ops.md section 7 (errors)
+      - uid: jabiz-admission-overload
+        title: Hot lock queue full or timed out
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (family) (increase(jabiz_process_admission_milliseconds_count{job="$JABIZ_ALERT_SERVICE", result=~"QUEUE_FULL|WAIT_TIMEOUT"}[5m])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: admission }
+        annotations:
+          summary: 'Callers of a hot lock got 503 PROCESS_BUSY for 5 minutes (06 section 4.2).'
+          runbook: docs/design/13-observability-ops.md section 7 (admission)
+      - uid: jabiz-outbox-failed
+        title: Event delivery failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (consumer) (increase(jabiz_outbox_delivery_milliseconds_count{job="$JABIZ_ALERT_SERVICE", result="FAILED"}[15m])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: events }
+        annotations:
+          summary: 'An event consumer has failed for 15 minutes; the events wait and are retried.'
+          runbook: docs/design/13-observability-ops.md section 7 (events)
+      - uid: jabiz-job-failed
+        title: Scheduled job failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (job) (increase(jabiz_job_run_milliseconds_count{job="$JABIZ_ALERT_SERVICE", result=~"FAILED|PARTIAL"}[1h])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: jobs }
+        annotations:
+          summary: 'A scheduled job ended FAILED or PARTIAL; it can be run again from the jobs page (D77).'
+          runbook: docs/design/13-observability-ops.md section 7 (jobs)
+      - uid: jabiz-job-locked
+        title: Scheduled job held by another instance
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (job) (increase(jabiz_job_run_milliseconds_count{job="$JABIZ_ALERT_SERVICE", result="LOCKED"}[1h])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 2h
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: jobs }
+        annotations:
+          summary: 'A job has found its lock held for 2 hours: another instance may be stuck.'
+          runbook: docs/design/13-observability-ops.md section 7 (jobs)
+      - uid: jabiz-job-item-failed
+        title: Job items failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (job) (increase(jabiz_job_item_milliseconds_count{job="$JABIZ_ALERT_SERVICE", result="FAILED"}[1h])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: jobs }
+        annotations:
+          summary: 'Items of a per-item job failed (11 section 4.1).'
+          runbook: docs/design/13-observability-ops.md section 7 (jobs)
+      - uid: jabiz-inbound-rejected
+        title: Inbound webhook requests rejected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (provider, reason) (increase(jabiz_inbound_receive_milliseconds_count{job="$JABIZ_ALERT_SERVICE", result=~"REJECTED|FAILED"}[15m])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: inbound }
+        annotations:
+          summary: 'Requests of an inbound provider were rejected (signature, age, size) or failed.'
+          runbook: docs/design/13-observability-ops.md section 7 (inbound)
+      - uid: jabiz-external-call-errors
+        title: External service errors
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (service) (rate(jabiz_external_call_milliseconds_count{job="$JABIZ_ALERT_SERVICE", outcome=~"5xx|timeout|refused|error"}[15m])) / sum by (service) (rate(jabiz_external_call_milliseconds_count{job="$JABIZ_ALERT_SERVICE"}[15m])) > 0.05'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: external }
+        annotations:
+          summary: 'More than 5 % of the calls to an external service failed for 15 minutes.'
+          runbook: docs/design/13-observability-ops.md section 7 (external)
+      - uid: jabiz-external-job-failed
+        title: External job failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (job_type) (increase(jabiz_external_job_milliseconds_count{job="$JABIZ_ALERT_SERVICE", outcome=~"FAILED|error"}[1h])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: external }
+        annotations:
+          summary: 'An external job attempt failed for good (11 section 4a).'
+          runbook: docs/design/13-observability-ops.md section 7 (external)
+      - uid: jabiz-refresh-reuse-granted
+        title: Refresh token re-grants unusually frequent
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: '(sum(increase(jabiz_auth_refresh_reuse_milliseconds_count{job="$JABIZ_ALERT_SERVICE", result="granted"}[1h])) > $JABIZ_ALERT_REFRESH_GRANTED_MIN) / sum(increase(http_server_requests_milliseconds_count{job="$JABIZ_ALERT_SERVICE", uri="/api/auth/refresh"}[1h])) > $JABIZ_ALERT_REFRESH_GRANTED_RATIO'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: security }
+        annotations:
+          summary: 'Replaced refresh tokens came back within the grace (D73) far more often than usual: a client bug, or stolen tokens.'
+          runbook: docs/design/13-observability-ops.md section 7 (security)
+      - uid: jabiz-refresh-reuse-revoked
+        title: Sessions revoked for refresh token reuse
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum(increase(jabiz_auth_refresh_reuse_milliseconds_count{job="$JABIZ_ALERT_SERVICE", result="revoked"}[1h])) > $JABIZ_ALERT_REFRESH_REVOKED_MAX'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: security }
+        annotations:
+          summary: 'Many sessions ended because a replaced refresh token came back after the grace (D73).'
+          runbook: docs/design/13-observability-ops.md section 7 (security)
+      - uid: jabiz-geoip-stale
+        title: Address database missing or stale
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'max(jabiz_geoip_stale{job="$JABIZ_ALERT_SERVICE"}) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 1h
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: geoip }
+        annotations:
+          summary: 'The address database (jabiz.geoip.database) is older than jabiz.geoip.max-age or could not be read (D74).'
+          runbook: docs/design/13-observability-ops.md section 7 (geoip)
+      - uid: jabiz-geoip-empty
+        title: Address database has no ranges
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'count(jabiz_geoip_ranges{job="$JABIZ_ALERT_SERVICE"} == 0)'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: geoip }
+        annotations:
+          summary: 'The address database in use has no ranges: every address is unknown (D74).'
+          runbook: docs/design/13-observability-ops.md section 7 (geoip)
+      - uid: jabiz-disk-usage
+        title: Disk usage above the threshold
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'max by (path) (100 * (1 - disk_free_bytes{job="$JABIZ_ALERT_SERVICE"} / disk_total_bytes{job="$JABIZ_ALERT_SERVICE"})) > $JABIZ_ALERT_DISK_PERCENT'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: disk }
+        annotations:
+          summary: 'A file system of the application (working directory or uploaded files) is fuller than the threshold.'
+          runbook: docs/design/13-observability-ops.md section 7 (disk)
+
+contactPoints:
+  - orgId: 1
+    name: jabiz-oncall
+    receivers:
+      - uid: jabiz-oncall-email
+        type: email
+        settings:
+          addresses: $JABIZ_ALERT_EMAIL
+          singleEmail: true
+
+policies:
+  - orgId: 1
+    receiver: jabiz-oncall
+    group_by: [grafana_folder, alertname]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

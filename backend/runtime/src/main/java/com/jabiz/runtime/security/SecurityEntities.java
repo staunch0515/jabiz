@@ -238,6 +238,8 @@ public class SecurityEntities {
             .processOnly());
         eb.field("confirmedStep", f -> f.physicalColumn("confirmed_step").asNumeric(18, 0).processOnly());
         eb.field("recoveryCodes", f -> f.physicalColumn("recovery_codes").asText(1000).sensitive());
+        // Set by an approved re-enrolment of everyone (decision D78): the sign-in asks for a new second factor.
+        eb.field("reenrollRequired", f -> f.physicalColumn("reenroll_required").required(true).asBool().processOnly());
         eb.unique("uk_sec_user_mfa_user", "userId");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

@@ -5,6 +5,8 @@ import com.jabiz.context.RequestContext;
 import com.jabiz.runtime.context.RequestContexts;
 import com.jabiz.runtime.process.ExecutionOptions;
 import com.jabiz.runtime.process.ProcessExecutor;
+import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.security.rotation.KeyRotationChecks;
 import com.jabiz.runtime.security.rotation.KeyRotationProcesses;
 import com.jabiz.runtime.security.secret.SecretSealer;
 import com.jabiz.security.Base32;
@@ -63,6 +65,30 @@ class KeyRotationIT extends SecurityItSupport {
 
     @Autowired
     SecretSealer sealer;
+
+    @Autowired
+    KeyRotationChecks checks;
+
+    @Test
+    void sealedFieldsMustBeUpdatableSensitiveTextOfAnExistingEntity() {
+        // The demo's declaration (warehouse name: not sensitive) is a warning; a rotation in progress is one too.
+        assertThat(checks.check()).extracting(CheckProblem::severity).containsOnly(CheckProblem.Severity.WARNING);
+        assertThat(checks.declarations(List.of(
+                SealedField.of(CommerceEntities.WAREHOUSE, "warehouseCode", "warehouseCode"),
+                SealedField.of("NoSuchEntity", "x", "y"),
+                SealedField.of(CommerceEntities.WAREHOUSE, "noSuchField", "warehouseCode"),
+                SealedField.of(CommerceEntities.WAREHOUSE, "warehouseName", "warehouseCode"),
+                SealedField.of(CommerceEntities.WAREHOUSE, "warehouseName", "warehouseCode"))))
+            .extracting(CheckProblem::severity, CheckProblem::message)
+            .containsExactly(
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR, "an immutable field cannot be stored "
+                    + "again under a new key: declare it mutable (it stays sensitive and written by processes only)"),
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR, "no such entity"),
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR, "no such field"),
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.WARNING, "a sealed field should be "
+                    + "sensitive (f.sensitive()): read APIs return it otherwise"),
+                org.assertj.core.groups.Tuple.tuple(CheckProblem.Severity.ERROR, "the sealed field is declared twice"));
+    }
 
     private static final MfaSecretCipher OLD_MFA_CIPHER = new MfaSecretCipher(Base64.getDecoder().decode(OLD_MFA));
     private static final SealedSecrets OLD_SEALER = new SealedSecrets(Base64.getDecoder().decode(OLD_SEAL));
