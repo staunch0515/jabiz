@@ -4755,7 +4755,7 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17r-2 | 偏好接口不列出它；`MAIL_PREFERENCE_SET` 在会话中拒绝它（`INVALID_VALUE`，同不是通知的名字）；退订链接照旧按地址退订；`SendMail` 把它寄给用户即流程失败；启动检查不要求它的显示名 |
 | 17r-3 | 设计 18 §5.6 一条、根 `CLAUDE.md` 一句；测试：`MailTemplateTest`、`MailPreferencesIT`（不列出、不能设置）、`MailIT`（按地址退订、寄给用户即失败），测试夹具 `it.prospect` |
 
-**17r 状态**：📝 待评审。
+**17r 状态**：✅ 已合并（#329）。
 
 ### 17s 列表的行操作收进一个菜单（需求 2026-10-30）
 
@@ -4769,7 +4769,7 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17s-3 | 列表上只直接显示"编辑 / 查看"；`DatasetListPage` 把历史、审计、删除交给菜单；`ChildEntityList` 与详情的流程同样在菜单中 |
 | 17s-4 | 测试：`RowActions.test.tsx`（菜单、无项不显示、两种流程）、`DatasetListPage.test.tsx`（菜单的项与顺序、axe、取消后的焦点）、`EntityFormDrawer.test.tsx`；e2e 以 `support.ts` 的 `rowMenu` 打开菜单（`a11y.spec.ts` 另检查打开的菜单）；设计 12 §6 一条 |
 
-**17s 状态**：📝 待评审。
+**17s 状态**：✅ 已合并（#333）。
 
 ### 17t 列表的每行可复制主键（需求 2026-10-30）
 
@@ -4781,7 +4781,7 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17t-2 | `@jabiz/ui` 的 `CopyButton` 增加可选的 `tooltip`（悬停提示，缺省为名称）：提示是主键本身，读屏软件读出的名称仍是"复制 ID"，不念出一长串编号 |
 | 17t-3 | 测试：`display.test.tsx`（提示与名称分开）、`DatasetListPage.test.tsx`（首列、提示、复制、不可排序）、e2e `list.spec.ts`；设计 12 §6 一条 |
 
-**17t 状态**：📝 待评审。
+**17t 状态**：✅ 已合并（随 17s，#333）。
 
 ### 17u 注册卡片中的其他注册方式（需求 2026-10-29）
 
@@ -4794,7 +4794,7 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17u-3 | `SignUpForm` 新增 `note`：卡片底部的小字（如注册所同意的条款） |
 | 17u-4 | 测试：`blocks.test.tsx`（按钮与小字在卡片中、注册的字样、开始、失败、axe；不给即没有）；设计 12 一句 |
 
-**17u 状态**：📝 待评审。
+**17u 状态**：✅ 已合并（#336）。
 
 ### 17v 通用后台用应用的名称与标志（需求 2026-10-29）
 
@@ -4807,7 +4807,7 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17v-3 | `checkedExtension`：给了 `brand` 却没有名称即报告；`@jabiz/admin` 导出 `AdminBrand` |
 | 17v-4 | 测试：`brand.test.ts`（名称按语言、标签与图标）、`registry.test.ts`、`AppLayout.test.tsx`（外框的标志与名称）、`LoginPage.test.tsx`；设计 12 §9、指南 `admin-extension.md` |
 
-**17v 状态**：📝 待评审。
+**17v 状态**：✅ 已合并（#338）。
 
 ### 17w 后台的列表可搜索、可排序（需求 2026-10-29）
 
@@ -4822,7 +4822,7 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 
 未包括：审计（服务端分页）、会话、封存、访问审查、保留与待办页仍无排序，留待后续。
 
-**17w 状态**：📝 待评审。
+**17w 状态**：✅ 已合并（#339）。
 
 ### 17x 服务维护或重启时，页面整页说一次（需求 2026-10-30）
 
@@ -4836,7 +4836,7 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 | 17x-3 | `@jabiz/ui`：`ServiceUnavailableNotice`：不可关闭的警示对话框（"系统维护中"，下次检查的倒计时不是实时区域，"立即重试"），三语；`OfflineBanner` 在线时显示它（应用的 SPA 不用改），通用后台的外壳另放一个 |
 | 17x-4 | 测试：`availability.test.tsx`（判定、间隔的上下限、连接失败、恢复与处理器、`api` 与 `sessionFetch`、`PROCESS_BUSY` 不算、恢复后重新读取）、`banners.test.tsx`（对话框、不可关闭、立即重试、三语、离线时让给离线提示）、e2e `maintenance.spec.ts`（打开的列表遇到维护页：整页一次、axe；恢复后立即重试即关闭、重新读取）；前端测试的公共初始化每个测试后清除该状态；设计 12 一条 |
 
-**17x 状态**：📝 待评审。
+**17x 状态**：✅ 已合并（#353）。
 
 ### 17y 入口的范围：运营商只看到自己的商户（需求 2026-10-30，决策 D64）
 
@@ -4856,7 +4856,7 @@ Playwright 端到端（需维护连接与数据库角色，以 Vitest 与 `Accou
 |---|---|
 | 17y-7 | 经对照约束、只由流程写入（`processOnlyWrites`）的数据视图：对照只约束读取，有范围的会话的流程照常写入（流程经同一范围读到对象并以 `RequireScope` 核对）；QuizBuks 的发布、奖励等缺省数据视图因此可以按运营商约束读取，运营商的下架、作废等流程照常写入。写入路径与时态写入器核对所改版本时都不以对照拒绝。测试：`EntryScopeIT`（测试夹具 `ItEntryScopeFixtures`：普通表与只追加表各一个，插入与修改、`RequireScope` 拒绝别的仓库的、读取受限） |
 
-**17y 状态**：✅ 17y-1 至 17y-6 完成（#359）；17y-7 📝 待评审。
+**17y 状态**：✅ 17y-1 至 17y-6 完成（#359）；17y-7 ✅ 已合并（#360）。
 
 ### 17z 公开计数器：匿名访客的浏览与点击（需求 2026-10-31，决策 D65）
 
@@ -4874,7 +4874,7 @@ D17 下匿名不能写任何东西（15 §10）。
 
 | 17z-6 | 随账号删除：`PublicCounter.ownerIsUser()`（须有 `owner`）；`ACCOUNT_ERASE` 在同一事务中删除这些计数器里所有人是该用户的行，`PublicCounters.forgetOwner` 丢弃内存中未写入的（D65 第 8 条）。测试：`PublicCounterTest`、`PublicCountersTest`、`ErasureIT`（该用户的计数删除，别的所有人与不随账号删除的计数器保留） |
 
-**17z 状态**：✅ 17z-1 至 17z-5 完成（#377、#379）；17z-6 📝 待评审。
+**17z 状态**：✅ 17z-1 至 17z-5 完成（#377、#379）；17z-6 ✅ 已合并（#388）。
 
 ### 17za 注册前的应用检查与登录后加入另一个入口（需求 2026-10-31，决策 D66）
 
@@ -4900,7 +4900,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zb | 同一实体可按不同的用户字段声明几次（启动检查改为同一实体、同一用户字段只一次）；`ACCOUNT_ERASE` 同一行只写一次（有 `delete` 即删除，否则清空各条的字段）；`ERASURE_PURGE` 对一张表一条语句（每列只在声明它的声明找到该行时覆盖），审计与单据按找到该行的声明处理，清除条目的签名顺序与数据库的返回顺序无关。测试：`AccountErasureTest`、`ErasureEvidenceTest`、`ErasureIT`（两个用户字段与两者都找到的行：个人信息与审计都不留，另一声明的字段保留，封存仍可校验；同一用户字段两次是启动错误） |
 | 17zb-2 | 抹除删除的普通表行在清除时已不在表中：按审计记录中声明的用户字段曾是该用户编号（插入、删除或改动该字段的记录）找到，其审计照样遮蔽（17i 起的缺口，测试 QuizBuks Q71 时发现；Q70 商户删除的普通表也受益）。测试：`ErasureIT`（抹除时删除的行，其审计中的个人值不留；没有修复时失败） |
 
-**17zb 状态**：✅ 17zb 完成（#392）；17zb-2 📝 待评审（分支 `1.3/phase-17zb2-erasure-deleted-rows`）。
+**17zb 状态**：✅ 17zb 完成（#392）；17zb-2 ✅ 已合并（#394）。
 
 ### 17zc 列表的卡片模式：手机上的 `DataTable`（需求 2026-11-02，QuizBuks 第三项）
 
@@ -4922,7 +4922,7 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **需要确认**：（1）缺省按宽度自动（窄于 `md` 为卡片），切换按钮在所有宽度都显示；（2）卡片模式的排序用下拉，筛选只经 `FilterBar`；（3）元数据列表的标题取显示字段；（4）编号 17zc，分支 `1.3/phase-17zc-data-table-cards`。合入后 QuizBuks 一侧为 Q80（11 个列表页给标注，1.5 天）。
 
-**17zc 状态**：需求方 2026-11-02 确认；📝 待评审（分支 `1.3/phase-17zc-data-table-cards`）。实施：`data-table.tsx`（`meta.card`、`cards` / `view` / `onViewChange` / `storageKey` / `renderCard`、卡片模式的排序下拉、两种方式共用的 `Pager`，`useIsMobile` 给按宽度的缺省）、文案三语、`DatasetListPage` 与门户 `OrdersPage` 的标注、`data-table.test.tsx` 的卡片测试、`DatasetListPage` 与门户的测试、`a11y.spec.ts` 的手机视口、设计 12 §6 / §11、`app-spa.md`。
+**17zc 状态**：需求方 2026-11-02 确认；✅ 已合并（#418）。实施：`data-table.tsx`（`meta.card`、`cards` / `view` / `onViewChange` / `storageKey` / `renderCard`、卡片模式的排序下拉、两种方式共用的 `Pager`，`useIsMobile` 给按宽度的缺省）、文案三语、`DatasetListPage` 与门户 `OrdersPage` 的标注、`data-table.test.tsx` 的卡片测试、`DatasetListPage` 与门户的测试、`a11y.spec.ts` 的手机视口、设计 12 §6 / §11、`app-spa.md`。
 
 ### 17zd 保留期按字段的值：单据按版式（需求 2026-11-02，QuizBuks Q77；决策 D70）
 
@@ -4932,7 +4932,7 @@ D17 下匿名不能写任何东西（15 §10）。
 |---|---|
 | 17zd | core `RetentionPolicy.only(字段, 值…)`、`covers`；`RetentionPolicies.covering` 按记录的值选用策略，删除拦截（与账号抹除对单据的清除）随之；启动检查：同一实体的几个策略须都以 `only` 覆盖同一字段、值不重叠，字段须已声明且不可变；到期报告每个策略一行并给出范围（OpenAPI 加 `onlyField` / `onlyValues`），通用后台的保留期页显示范围。测试：`RetentionPolicyTest`、`RetentionChecksTest`、`RetentionIT`（`app` 的夹具按版式声明：发票 10 年、通知 1 年、其他版式不保留，删除拦截与到期报告各自计算）、`RetentionPage.test.tsx` |
 
-**17zd 状态**：📝 待评审（分支 `1.3/phase-17zd-retention-scopes`）。
+**17zd 状态**：✅ 已合并（#422）。
 
 ### 17ze 应用按地址改变页面所示的环境（需求 2026-11-02，QuizBuks）
 
@@ -4943,7 +4943,7 @@ D17 下匿名不能写任何东西（15 §10）。
 |---|---|
 | 17ze | `@jabiz/client` 的 `configureClient({ environment })`（类型 `EnvironmentOverride`：服务器的环境与页面的主机 → 要显示的环境或空）：`useEnvironment()` 给出改写后的值，横条、标题前缀、`AppShell` 与 `AuthFrame` 都随之；返回空或抛出即照服务器所说；随时设置或撤去即时生效、不再问服务器。服务器与通用后台不变。示范：门户 `src/environment.ts`（构建变量 `VITE_PORTAL_PUBLIC_HOST`，示范中不设）。测试：`environment.test.tsx`（改写、返回空、抛出、即时生效、`setEnvironment` 也经改写）、`app-shell.test.tsx`、`environment-banner.test.tsx`（标题随之）、门户 `environment.test.ts` |
 
-**17ze 状态**：📝 待评审（分支 `1.3/phase-17ze-environment-override`）。
+**17ze 状态**：✅ 已合并（#425）。
 
 ### 17k 推送通知（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D69）
 
@@ -4961,7 +4961,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17k-8 | 前端：`configureClient({ nativePush })`（iOS 外壳交出设备令牌），`enablePush` / `disablePush` / `pushEnabledHere` / `PushPreferences` 经它工作；OpenAPI 快照与类型；指南 `app-spa.md` 6a | 17k-b |
 | 17k-9 | 测试：测试夹具 `TestApnsService`（本地的 APNs：验证提供方令牌、按令牌回答）、`ApnsSenderTest`、`PushPropertiesTest`、`DeliverPushTest`、`PushIT`（iPhone 的令牌收到 Apple 的提醒、不是令牌的拒绝、410 即删除）、`push.test.ts`、`PushPreferences.test.tsx`；文档 D69 第 6 条、18 §5.7、根 `CLAUDE.md` | 17k-b |
 
-**17k 状态**：17k-a ✅ 已合并（#408）；17k-b 📝 待评审（分支 `1.3/phase-17k-apns`）。
+**17k 状态**：17k-a ✅ 已合并（#408）；17k-b ✅ 已合并（#413）。
 
 ### 17j Sign in with Apple（需求 2026-10-28，QuizBuks Q49；确认 2026-11-01，决策 D67；即推后的 16f-2）
 
@@ -4993,7 +4993,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17l-4 | 测试：`NativeAppAssociationsTest`（两个文件、404、不归 SPA、全部格式问题）、`MultiSpaIT`（经完整的过滤链：公开、JSON、缓存、无页面策略、带过期令牌也 200）、`oidc.test.ts`（外壳打开页面、关联同样、外壳失败即失败）、`install.test.ts`（外壳中视同已安装） |
 | 17l-5 | 文档：决策 D68、12 §4、17 §3.2、指南 `app-spa.md` 6a、根 `CLAUDE.md` |
 
-**17l 状态**：📝 待评审（分支 `1.3/phase-17l-native-apps`）。
+**17l 状态**：✅ 已合并（#405）。
 
 ### 17zf 通行密钥（Passkey / WebAuthn）：快捷登录与二次验证（需求 2026-11-03，确认 2026-11-03，决策 D71）
 
@@ -5014,7 +5014,7 @@ D17 下匿名不能写任何东西（15 §10）。
 
 **不做**：只凭通行密钥开户；验证厂商证明（attestation）；Capacitor 的 Android 原生外壳（TWA 即 Chrome，照常可用）。
 
-**17zf 状态**：17zf-a ✅ 已合并（#441）；17zf-b 📝 待评审（分支 `1.3/phase-17zf-passkeys-b`）。
+**17zf 状态**：17zf-a ✅ 已合并（#441）；17zf-b ✅ 已合并（#448）。
 
 ### 17zg 只改文档或前端内容的拉取请求不跑后端检查（需求 2026-11-04，QuizBuks Q95）
 
@@ -5026,7 +5026,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zg-2 | `ci.yml`：`scope` 作业输出 `backend`（拉取请求按合并提交的两个父提交比较；推送与手动运行总是 `true`），`build` 与 `build-application` 以它为条件；测试 `tools/test/ci-backend-scope.test.sh` 在 `app-paths` 作业中运行 |
 | 17zg-3 | 文档：17 §2、根 `CLAUDE.md` §8 |
 
-**17zg 状态**：📝 待评审（分支 `1.3/phase-17zg-ci-scope`）。
+**17zg 状态**：✅ 已合并（#451）。
 
 ### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
 
@@ -5036,4 +5036,4 @@ D17 下匿名不能写任何东西（15 §10）。
 |---|---|
 | 17zm | `ci.yml` 的 `e2e` 作业 `runs-on: ubuntu-24.04`（只有它装 Playwright）；升级到支持 26.04 的 Playwright 后改回 `ubuntu-latest` |
 
-**17zm 状态**：📝 待评审（分支 `1.3/phase-17zm-ci-ubuntu-24`）。
+**17zm 状态**：✅ 已合并（#460）。
