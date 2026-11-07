@@ -219,6 +219,17 @@ export interface SaveInput {
   languages?: ContentLanguage[] | null
   /** Q73b: the publication's texts in each offered language other than the base, the whole set. */
   translations?: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>> | null
+  /** F-C1b: the assets of the library parts of the draft are still copies of (`PublicationAssets`); none: none changes. */
+  assets?: PublicationAssets
+}
+
+/** `PublicationProcesses.PublicationAssets`: each place's asset, or none. */
+export interface PublicationAssets {
+  coverAssetId?: string | null
+  redeemAssetId?: string | null
+  digitalAssetId?: string | null
+  referralAssetId?: string | null
+  prizeAssetId?: string | null
 }
 
 /** Q73b: the publication's own texts that are translated (`PublicationLanguages.FIELDS`). */

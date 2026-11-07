@@ -45,7 +45,8 @@ test('a Sponsor defines a certification, a quiz paying nothing gives it, a Taker
   // The console: the certification defined on its page.
   await signIn(page, '/sponsor/', sponsor.email)
   await expect(page).not.toHaveURL(/\/login/)
-  await page.goto('/sponsor/certifications')
+  // F-C1c: the certifications are a tab of the asset library.
+  await page.goto('/sponsor/assets?tab=certifications')
   await expect(page.getByTestId('certifications-page')).toBeVisible()
   const name = unique('Keyboard expert ')
   await page.getByTestId('certification-add').click()
@@ -125,7 +126,9 @@ test('a Sponsor defines a certification, a quiz paying nothing gives it, a Taker
   await signOut(page)
   await signIn(page, '/sponsor/', sponsor.email)
   await expect(page).not.toHaveURL(/\/login/)
+  // The old address leads to the asset library's tab (F-C1c).
   await page.goto('/sponsor/certifications')
+  await expect(page).toHaveURL(/\/sponsor\/assets\?tab=certifications$/)
   await expect(row.getByTestId('certification-holders')).toHaveText('1')
 
   // The administration's template lists it (read only; the page is covered by the extension's tests).

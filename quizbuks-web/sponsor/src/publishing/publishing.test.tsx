@@ -78,6 +78,8 @@ interface Server {
   publications?: Record<string, unknown>[]
   /** The sponsor's staff (Q39). */
   staff?: Record<string, unknown>[]
+  /** F-C1: the sponsor's asset library. */
+  assets?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -221,6 +223,9 @@ function server(options: Server = {}) {
         return json(200, { items: options.versions ?? VERSIONS, offset: 0, limit: 100 })
       case '/api/queries/qb.sponsor.ai-jobs':
         return json(200, { items: options.aiTexts ? [options.aiTexts] : [], offset: 0, limit: 1 })
+      case '/api/datasets/urn:jabiz:dataset:me:QbAsset/query':
+        return json(200, { items: (options.assets ?? []).map((attributes, i) => ({ id: String(i), version: 1,
+          attributes })), offset: 0, limit: 200 })
       default:
         return json(404, {})
     }
@@ -1810,5 +1815,102 @@ describe('copying a publication and moving its settings (Q102)', () => {
     expect(await screen.findByTestId('publication-import-refused'))
       .toHaveTextContent('This is not a publication settings file.')
     expect(screen.queryByTestId('publication-import-confirm')).toBeNull()
+  })
+})
+
+describe('the asset library in the wizard (F-C1)', () => {
+  const asset = (more: Record<string, unknown>) => ({ sponsorId: 's1', description: null, language: 'en', tags: null,
+    translations: null, image: null, pdf: null, audio: null, url: null, durationSec: null, body: null, usage: null,
+    prizeMethod: null, prizeDescription: null, digitalDelivery: null, digitalSendDays: null, revision: 2,
+    editedAt: '2026-11-01T00:00:00Z', ...more })
+  const ASSETS = [
+    asset({ assetId: 'a-cover', kind: 'IMAGE', name: 'Autumn cover', image: 'f-cover' }),
+    asset({ assetId: 'a-redeem', kind: 'TEXT', name: 'At the counter', body: 'Show this at the counter',
+      usage: 'REDEEM_DESCRIPTION' }),
+    asset({ assetId: 'a-coffee', kind: 'PRIZE', name: 'Free coffee', prizeMethod: 'OFFLINE_REDEEM',
+      prizeDescription: 'A coffee of your choice' }),
+    asset({ assetId: 'a-card', kind: 'PRIZE', name: 'Gift card', prizeMethod: 'DIGITAL_PRIZE',
+      prizeDescription: 'A card', digitalDelivery: 'POOL' }),
+  ]
+
+  it('copies a cover from the library and names it with the save', async () => {
+    const { processCalls } = server({ assets: ASSETS, processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('publication-cover-library-pick'))
+    const items = await screen.findAllByTestId('asset-picker-item')
+    expect(items.map((item) => item.dataset.id)).toEqual(['a-cover'])
+    await userEvent.click(items[0])
+    expect(await within(screen.getByTestId('publication-cover')).findByTestId('publication-cover-current'))
+      .toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ cover: 'f-cover',
+      assets: { coverAssetId: 'a-cover', redeemAssetId: null, digitalAssetId: null, prizeAssetId: null } })
+  })
+
+  it('fills the prize from a prize card of an allowed method, and its description from a text', async () => {
+    const { processCalls } = server({ assets: ASSETS, methods: 'PLATFORM,SPONSOR_CASH,OFFLINE_REDEEM',
+      processes: { QB_PUBLICATION_SAVE: [saved(4), saved(5)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    await screen.findByTestId('publication-method')
+    await userEvent.click(screen.getByTestId('publication-prize-library-pick'))
+    const picker = await screen.findByTestId('asset-picker')
+    const cards = await within(picker).findAllByTestId('asset-picker-item')
+    expect(cards.map((item) => item.dataset.id)).toEqual(['a-coffee', 'a-card'])
+    // A digital prize is not among this sponsor's methods: listed, not chosen.
+    expect(cards[1]).toHaveAttribute('aria-disabled', 'true')
+    await expectAccessible()
+    await userEvent.click(cards[0])
+    await waitFor(() => expect(screen.getByTestId('publication-redeem')).toHaveValue('A coffee of your choice'))
+    expect(screen.getByTestId('publication-method-OFFLINE_REDEEM')).toHaveAttribute('data-state', 'checked')
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ rewardMethod: 'OFFLINE_REDEEM',
+      redeemDescription: 'A coffee of your choice', assets: { prizeAssetId: 'a-coffee' } })
+    // Now the description alone from a text of its use; the prize card's copy changed, so it is not named.
+    await userEvent.click(screen.getByTestId('publication-redeem-library-pick'))
+    const texts = await screen.findAllByTestId('asset-picker-item')
+    expect(texts.map((item) => item.dataset.id)).toEqual(['a-redeem'])
+    await userEvent.click(texts[0])
+    await waitFor(() => expect(screen.getByTestId('publication-redeem')).toHaveValue('Show this at the counter'))
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(2))
+    expect(processCalls('QB_PUBLICATION_SAVE')[1]).toMatchObject({ redeemDescription: 'Show this at the counter',
+      assets: { redeemAssetId: 'a-redeem', prizeAssetId: null } })
+  })
+
+  it('fills the referral prize’s description from a text of its use', async () => {
+    const referral = asset({ assetId: 'a-referral', kind: 'TEXT', name: 'Friend gift', body: 'A cookie for you',
+      usage: 'REFERRAL_DESCRIPTION' })
+    const { processCalls } = server({ assets: [...ASSETS, referral], methods: 'PLATFORM,OFFLINE_REDEEM',
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    const section = await screen.findByTestId('publication-referral')
+    await userEvent.click(within(section).getByTestId('publication-referral-on'))
+    await userEvent.type(within(section).getByTestId('publication-referral-quota'), '5')
+    await userEvent.click(within(section).getByTestId('publication-referral-method-OFFLINE_REDEEM'))
+    await userEvent.click(within(section).getByTestId('publication-referral-library-pick'))
+    const items = await screen.findAllByTestId('asset-picker-item')
+    expect(items.map((item) => item.dataset.id)).toEqual(['a-referral'])
+    await userEvent.click(items[0])
+    await waitFor(() => expect(within(section).getByTestId('publication-referral-description'))
+      .toHaveValue('A cookie for you'))
+    await expectAccessible()
+    await userEvent.click(screen.getByTestId('publication-save'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ referral: { description: 'A cookie for you' },
+      assets: { referralAssetId: 'a-referral' } })
+  })
+
+  it('sends no assets when nothing was chosen', async () => {
+    const { processCalls } = server({ assets: ASSETS, processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).not.toHaveProperty('assets')
   })
 })
