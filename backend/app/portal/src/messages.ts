@@ -51,6 +51,14 @@ const en = {
     verified: 'Verified',
     unverified: 'Not verified yet',
   },
+  // The column about the portal on its sign-in pages (phase 17zk): one sentence and three points.
+  entry: {
+    sentence: 'Order from us and follow your orders, any time.',
+    point1: 'See what is in stock and order in a few taps',
+    point2: 'Follow each order until it ships',
+    point3: 'Sign in with a passkey or a link by mail',
+    terms: 'By creating an account you accept our terms of sale and privacy notice.',
+  },
   notFound: 'This page does not exist.',
   failed: 'Something went wrong. Please try again.',
 }
@@ -95,6 +103,13 @@ const zh: typeof en = {
     email: '邮箱',
     verified: '已验证',
     unverified: '尚未验证',
+  },
+  entry: {
+    sentence: '随时向我们下单，跟踪您的订单。',
+    point1: '查看现货，几步就能下单',
+    point2: '每张订单直到发货都看得到',
+    point3: '用通行密钥或邮件链接登录',
+    terms: '创建账号即表示您同意我们的销售条款与隐私声明。',
   },
   notFound: '页面不存在。',
   failed: '出错了，请重试。',
@@ -147,6 +162,13 @@ const ja: typeof en = {
     email: 'メールアドレス',
     verified: '確認済み',
     unverified: '未確認',
+  },
+  entry: {
+    sentence: 'いつでもご注文いただけ、注文の状況を確認できます。',
+    point1: '在庫を見て、数回のタップで注文',
+    point2: '発送まで注文ごとに確認',
+    point3: 'パスキーやメールのリンクでログイン',
+    terms: 'アカウントを作成すると、販売条件とプライバシーに関する方針に同意したことになります。',
   },
   notFound: 'このページは存在しません。',
   failed: 'エラーが発生しました。もう一度お試しください。',

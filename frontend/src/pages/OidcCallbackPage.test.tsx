@@ -61,7 +61,9 @@ describe('OidcCallbackPage', () => {
     signInWithProvider.mockRejectedValue(new ApiError(401, { violations: [{ ruleCode: 'LOGIN_FAILED', message: 'No.' }] }))
     page('?state=s1&code=c1')
     await waitFor(() => expect(screen.getByTestId('oidc-error').textContent).toBe('No.'))
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Signing in through the identity provider')
+    // In the entry pages' template (phase 17zk): the brand is the page's heading, the failure the card's title.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('jabiz')
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Signing in through the identity provider')
     await expectAccessible()
   })
 

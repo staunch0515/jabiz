@@ -18,7 +18,7 @@ export {
   ApiError,
 } from './api/client'
 export type { RefreshOptions } from './api/client'
-export { toApiError } from './api/problem'
+export { toApiError, retryAfterSeconds } from './api/problem'
 export {
   isProxyUnavailable,
   noteNetworkFailure,
@@ -66,6 +66,8 @@ export type { AuthState, SignInStep, DataPeriod } from './auth/AuthContext'
 export { useIdleLock } from './auth/useIdleLock'
 export { startProviderSignIn, startIdentityLink, takeBinder, pendingPurpose, takeReturnPath } from './auth/oidc'
 export type { IdentityLinkOptions, OidcPurpose } from './auth/oidc'
+export { keepSignInStep, pendingSignInStep, forgetSignInStep } from './auth/signInStep'
+export type { PendingSignInStep } from './auth/signInStep'
 export {
   entryInfo,
   register,
@@ -144,7 +146,7 @@ export { registerServiceWorker, useServiceWorkerUpdate, onServiceWorkerUpdate } 
 export type { PwaMode, ServiceWorkerOptions } from './pwa/register'
 export {
   captureInstallPrompt, inAppBrowser, installBrowser, installOfferAllowed, installSituation, isIos, readInstallDismissals,
-  rememberInstallDismissed, useInstallPrompt,
+  rememberInstallDismissed, keepInstallDismissals, useInstallPrompt,
 } from './pwa/install'
 export type {
   InstallBrowser, InstallDismissals, InstallEnvironment, InstallOutcome, InstallPrompt, InstallSituation,

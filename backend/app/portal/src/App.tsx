@@ -4,11 +4,14 @@ import {
   AppShell,
   BottomBar,
   Button,
+  EntryLayoutProvider,
   GlobalCreate,
+  MAIL_LINK_PAGES,
   MailLinkPage,
   MailUnsubscribe,
   OfflineBanner,
   OidcCallback,
+  useEntryNotices,
   PageState,
   PasswordResetRequest,
   PwaInstallBanner,
@@ -35,11 +38,14 @@ import { navigate, navigation, portalLink, useLocation } from './router'
 /** Where a signed-in customer starts. */
 const HOME = '/orders'
 
-/** The second step of a sign-in through an identity provider, handed from the callback to the sign-in page. */
+/**
+ * The second step of a sign-in through an identity provider, handed from the callback to the sign-in page in memory;
+ * the sign-in page also resumes it from this tab's storage after a reload (phase 17zk, `resumeStep`).
+ */
 let pendingStep: SignInStep | undefined
 
-const MAIL_PAGES = new Set(['/auth/verify-email', '/auth/join', '/auth/password-reset', '/auth/email-link',
-  '/auth/account-deletion', '/auth/invitation', '/auth/passkey-confirm'])
+/** Every page of a mailed link, each at `/auth/<page>`. */
+const MAIL_PAGES = new Set(MAIL_LINK_PAGES.map((page) => `/auth/${page}`))
 
 /**
  * The unsubscribe page of the portal's notifications (decision D52): `jabiz.mail.unsubscribe-paths.portal` is
@@ -110,6 +116,27 @@ function Shell({ path }: { path: string }) {
   )
 }
 
+/**
+ * The pages before a session in the platform's entry pages' template (phase 17zk): the portal's name, a column about
+ * it on a wide screen (one line on a phone), the offline and new-version notices over the page.
+ */
+function EntryPages({ children }: { children: ReactNode }) {
+  const { t } = useTranslation(PORTAL)
+  const notices = useEntryNotices()
+  return (
+    <EntryLayoutProvider
+      brand={t('brand')}
+      intro={{
+        sentence: t('entry.sentence'),
+        points: [t('entry.point1'), t('entry.point2'), t('entry.point3')],
+      }}
+      notices={notices}
+    >
+      {children}
+    </EntryLayoutProvider>
+  )
+}
+
 /** The portal's pages by path: the sign-in pages for everyone, the rest for a signed-in customer only. */
 function Routes() {
   const { t } = useTranslation(PORTAL)
@@ -118,48 +145,60 @@ function Routes() {
   // and the code are removed from it right away.
   const { path, search } = useLocation()
   const brand = t('brand')
-  const frame = (content: ReactNode) => (
-    <div className="flex min-h-full flex-col">
-      <div className="mx-auto w-full max-w-md px-4 pt-4">
-        <OfflineBanner />
-        <PwaUpdatePrompt />
-      </div>
-      {content}
-    </div>
-  )
 
-  if (path === UNSUBSCRIBE_PATH) return frame(<MailUnsubscribe brand={brand} search={search} />)
+  if (path === UNSUBSCRIBE_PATH) return <EntryPages><MailUnsubscribe brand={brand} search={search} /></EntryPages>
   if (MAIL_PAGES.has(path)) {
-    return frame(<MailLinkPage {...navigation} page={path.slice('/auth/'.length)} brand={brand}
-      signInPath="/login" passwordResetPath="/password-reset" />)
+    return (
+      <EntryPages>
+        <MailLinkPage {...navigation} page={path.slice('/auth/'.length)} brand={brand} signInPath="/login"
+          passwordResetPath="/password-reset" />
+      </EntryPages>
+    )
   }
   if (path === '/login/oidc') {
-    return frame(<OidcCallback fallbackPath={HOME}
-      onSignedIn={(to) => navigate(to, { replace: true })}
-      onLinked={(to, linked) => {
-        rememberLinked(linked)
-        navigate(to || ACCOUNT_PATH, { replace: true })
-      }}
-      onSecondStep={(step) => {
-        pendingStep = step
-        navigate('/login', { replace: true })
-      }}
-      onBack={() => navigate('/login', { replace: true })} />)
+    return (
+      <EntryPages>
+        <OidcCallback brand={brand} fallbackPath={HOME}
+          onSignedIn={(to) => navigate(to, { replace: true })}
+          onLinked={(to, linked) => {
+            rememberLinked(linked)
+            navigate(to || ACCOUNT_PATH, { replace: true })
+          }}
+          // Handed over in memory; kept in this tab's storage too, for a reload of the sign-in page (gap 2).
+          onSecondStep={(step) => {
+            pendingStep = step
+            navigate('/login', { replace: true })
+          }}
+          onBack={() => navigate('/login', { replace: true })} />
+      </EntryPages>
+    )
   }
   if (!ready) return <PageState kind="loading" />
+  // Signed in already: the pages of signing in, signing up and asking for a new password lead home (gap 9).
+  if (signedIn && (path === '/login' || path === '/signup' || path === '/password-reset')) return <Redirect to={HOME} />
   if (path === '/password-reset') {
-    return frame(<PasswordResetRequest {...navigation} brand={brand} signInPath="/login" />)
+    return <EntryPages><PasswordResetRequest {...navigation} brand={brand} signInPath="/login" /></EntryPages>
   }
-  // The form, then "look in your mailbox" with a new mail on request.
-  if (path === '/signup') return frame(<SignUpForm {...navigation} brand={brand} signInPath="/login" />)
+  // Signing up and signing in are two tabs of one page; each keeps its own address (suggestion ④).
+  if (path === '/signup') {
+    return (
+      <EntryPages>
+        <SignUpForm {...navigation} brand={brand} signInPath="/login" signUpPath="/signup" tabs
+          oidc={{ returnTo: HOME }} note={t('entry.terms')} />
+      </EntryPages>
+    )
+  }
   if (path === '/login') {
-    if (signedIn) return <Redirect to={HOME} />
-    return frame(<SignInForm {...navigation} brand={brand} returnTo={HOME} initialStep={pendingStep}
-      onSignedIn={(to) => {
-        pendingStep = undefined
-        navigate(to, { replace: true })
-      }} passwordResetPath="/password-reset"
-      signUpPath="/signup" emailLink passkey userNameLabel="email" />)
+    return (
+      <EntryPages>
+        <SignInForm {...navigation} brand={brand} returnTo={HOME} initialStep={pendingStep} resumeStep
+          onSignedIn={(to) => {
+            pendingStep = undefined
+            navigate(to, { replace: true })
+          }} passwordResetPath="/password-reset"
+          signInPath="/login" signUpPath="/signup" tabs emailLink passkey userNameLabel="email" />
+      </EntryPages>
+    )
   }
   if (!signedIn) return <Redirect to="/login" />
   if (path === '/' || path === '') return <Redirect to={HOME} />
