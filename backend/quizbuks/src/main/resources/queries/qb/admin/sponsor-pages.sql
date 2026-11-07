@@ -4,10 +4,12 @@ description: >-
   Sponsors' pages (Q60a) with the sponsor's company, last edited first: the review queue (status PENDING), the list
   to take pages down from, and one page's content (userId); the logo and the story are the onboarding's avatar and
   introduction, as the page shows them (Q65b); an operator's session sees its own sponsors' only
-entities: [QbSponsorPage, QbSponsor]
+entities: [QbSponsorPage, QbSponsor, QbSponsorOperator, QbOperator]
 datasets:
   QbSponsorPage: urn:jabiz:dataset:default:QbSponsorPage
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
+  QbSponsorOperator: urn:jabiz:dataset:default:QbSponsorOperator
+  QbOperator: urn:jabiz:dataset:default:QbOperator
 params:
   userId: { like: QbSponsorPage.userId, description: One sponsor's page }
 results:
@@ -31,8 +33,11 @@ results:
   reviewRequired:    { from: QbSponsorPage.reviewRequired }
   editedAt:          { from: QbSponsorPage.editedAt }
   company:           { from: QbSponsor.company }
+  # F-S1b: the sponsor's operator now (every sponsor has one), for the platform's filter by operator.
+  operatorId:   { from: QbSponsorOperator.operatorId }
+  operatorName: { from: QbOperator.name }
 list:
-  filters: [status, language, handle, company]
+  filters: [status, language, handle, company, operatorId]
   sorts:   [editedAt, submittedAt, publishedAt, handle, company]
   defaultSort: { field: editedAt, asc: false }
   key: [userId]
@@ -61,7 +66,11 @@ SELECT
     p.{{QbSponsorPage.takedownReason}}    AS takedownReason,
     p.{{QbSponsorPage.reviewRequired}}    AS reviewRequired,
     p.{{QbSponsorPage.editedAt}}          AS editedAt,
-    s.{{QbSponsor.company}}               AS company
+    s.{{QbSponsor.company}}               AS company,
+    qso.{{QbSponsorOperator.operatorId}} AS operatorId,
+    qop.{{QbOperator.name}}               AS operatorName
 FROM {{QbSponsorPage}} p
 LEFT JOIN {{QbSponsor}} s ON s.{{QbSponsor.userId}} = p.{{QbSponsorPage.userId}}
+LEFT JOIN {{QbSponsorOperator}} qso ON qso.{{QbSponsorOperator.userId}} = p.{{QbSponsorPage.userId}}
+LEFT JOIN {{QbOperator}} qop ON qop.{{QbOperator.operatorId}} = qso.{{QbSponsorOperator.operatorId}}
 WHERE (CAST(:userId AS text) IS NULL OR p.{{QbSponsorPage.userId}} = CAST(:userId AS text))
