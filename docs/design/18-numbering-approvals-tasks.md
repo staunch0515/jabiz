@@ -457,6 +457,8 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
 - 版本是否经审批由写它的流程判定（`CONTROL_CHANGE_PUBLISH` 写的即经审批，`MailTextGuard` 只让受控变更的发布给须审批的模版写覆盖；不另设列，已有的版本照样判定）：模版后来才声明令牌、登录链接或 `t.protectedText()` 时，
   此前经 `MAIL_TEXT_SAVE` 存的覆盖不再发出（按缺省、告警、观测 `jabiz.mail.text.fallback`），列表状态 `UNAPPROVED`，启动检查告警（17zh-b，F5）。
 
+- 通用后台的页面（17zh-c）："邮件模版"（`/mail/texts`，列表与编辑器：预览、测试发送、恢复默认、保存或提出修改、待审批、历史与对比）与"邮件信纸"（`/mail/layout`，只能提出修改），见 12 §6。
+
 **信纸**（17zh-b，决策 D72）：所有邮件共用、按语言的页眉（显示名、可选的标志与替代文字）与页脚（Markdown）。首期不设颜色（以后再加，连同对比度检查）。
 
 - 缺省值来自应用配置 `jabiz.mail.layout.<语言>.display-name|logo-url|logo-alt|footer`（未配置即空：与没有信纸时相同）；示范 `app` 三种语言都给了。
