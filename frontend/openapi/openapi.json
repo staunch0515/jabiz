@@ -950,6 +950,37 @@
         },
         "type" : "object"
       },
+      "FailingItemView" : {
+        "properties" : {
+          "failures" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "itemKey" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "lastFailureTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "retryAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "FetchRequest" : {
+        "properties" : {
+          "url" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "FileInfo" : {
         "properties" : {
           "contentType" : {
@@ -1767,6 +1798,147 @@
             "type" : "string"
           },
           "token" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ItemCountsView" : {
+        "properties" : {
+          "busy" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "deferred" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "failed" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "more" : {
+            "type" : "boolean"
+          },
+          "replayed" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "selected" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "succeeded" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "JobRunAccepted" : {
+        "properties" : {
+          "job" : {
+            "type" : "string"
+          },
+          "replayed" : {
+            "type" : "boolean"
+          },
+          "requestSeqId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "scheduledTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "JobRunView" : {
+        "properties" : {
+          "error" : {
+            "type" : "string"
+          },
+          "finishedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "instanceId" : {
+            "type" : "string"
+          },
+          "items" : {
+            "$ref" : "#/components/schemas/ItemCountsView"
+          },
+          "outcome" : {
+            "type" : "string"
+          },
+          "processSeqId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "requestSeqId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "requestedBy" : {
+            "type" : "string"
+          },
+          "scheduledTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "startedTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "JobView" : {
+        "properties" : {
+          "cron" : {
+            "type" : "string"
+          },
+          "failingItems" : {
+            "items" : {
+              "$ref" : "#/components/schemas/FailingItemView"
+            },
+            "type" : "array"
+          },
+          "kind" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "nextTime" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "processName" : {
+            "type" : "string"
+          },
+          "processVersion" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "recentRuns" : {
+            "items" : {
+              "$ref" : "#/components/schemas/JobRunView"
+            },
+            "type" : "array"
+          },
+          "rerunTimes" : {
+            "items" : {
+              "format" : "date-time",
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "running" : {
+            "type" : "boolean"
+          },
+          "zone" : {
             "type" : "string"
           }
         },
@@ -6240,6 +6412,42 @@
         "tags" : [ "file-controller" ]
       }
     },
+    "/api/files/fetch" : {
+      "post" : {
+        "operationId" : "fetch",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "policy",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/FetchRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FileInfo"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "file-controller" ]
+      }
+    },
     "/api/files/{fileId}" : {
       "get" : {
         "operationId" : "metadata",
@@ -6878,10 +7086,87 @@
               "application/json" : {
                 "schema" : {
                   "items" : {
-                    "additionalProperties" : { },
-                    "type" : "object"
+                    "$ref" : "#/components/schemas/JobView"
                   },
                   "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "job-controller" ]
+      }
+    },
+    "/api/jobs/{job}/runs" : {
+      "get" : {
+        "operationId" : "requestedJobRuns",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "job",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "requestSeqId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/JobRunView"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "job-controller" ]
+      },
+      "post" : {
+        "operationId" : "requestJobRun",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "job",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobRunAccepted"
                 }
               }
             },

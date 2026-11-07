@@ -73,16 +73,31 @@ class FileController {
 
     private static final String NO_STORE = "private, no-store";
 
+    /**
+     * What {@code POST /api/files/fetch} is given (decision D75).
+     *
+     * @param url the https link to an image; downloaded once, never stored or logged
+     */
+    record FetchRequest(String url) {
+
+        @Override
+        public String toString() {
+            return "FetchRequest[url=" + com.jabiz.file.RemoteImageLink.shown(url) + "]";
+        }
+    }
+
     private final FileUploadService uploads;
+    private final RemoteImageService remoteImages;
     private final FilePolicyRegistry policies;
     private final FileStore store;
     private final DatasetEntityManager entities;
     private final DatasetRegistry datasets;
     private final PlatformObservations observations;
 
-    FileController(FileUploadService uploads, FilePolicyRegistry policies, FileStore store,
-        DatasetEntityManager entities, DatasetRegistry datasets, PlatformObservations observations) {
+    FileController(FileUploadService uploads, RemoteImageService remoteImages, FilePolicyRegistry policies,
+        FileStore store, DatasetEntityManager entities, DatasetRegistry datasets, PlatformObservations observations) {
         this.uploads = uploads;
+        this.remoteImages = remoteImages;
         this.policies = policies;
         this.store = store;
         this.entities = entities;
@@ -95,6 +110,19 @@ class FileController {
     Mono<ResponseEntity<FileProcesses.FileInfo>> upload(@RequestParam("policy") String policy,
         @RequestBody Flux<PartEvent> parts, ServerHttpRequest request) {
         return uploads.upload(policy, parts, request.getHeaders().getContentLength())
+            .map(info -> ResponseEntity.status(HttpStatus.CREATED).body(info));
+    }
+
+    /**
+     * Downloads the image a link gives, once, and stores it as the caller's upload under {@code policy} (docs/design/
+     * 14-files.md section 12, decision D75): the policy's upload permission, https and public addresses only, the
+     * download outside any transaction, then the upload's pipeline and registration; 201 with the same metadata as an
+     * upload. Refusals are 422 {@code FILE_FETCH_*}, 429 and 503 {@code PROCESS_BUSY}.
+     */
+    @PostMapping(path = "/fetch", consumes = MediaType.APPLICATION_JSON_VALUE)
+    Mono<ResponseEntity<FileProcesses.FileInfo>> fetch(@RequestParam("policy") String policy,
+        @RequestBody FetchRequest body) {
+        return remoteImages.fetch(policy, body == null ? null : body.url())
             .map(info -> ResponseEntity.status(HttpStatus.CREATED).body(info));
     }
 
