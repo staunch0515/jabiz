@@ -45,5 +45,5 @@
 
 - 用 `SealSecret` 保存的每个字段都在一个 `SealedFields` Bean 中声明，上下文与密封时完全一致（`SealedField.of(实体, 字段, "上下文字段")`，
   或 `SealedField.of(实体, 字段, row -> …)`）。不声明的字段不会被重新加密，旧密钥撤下后就解不开了。
-- 密封字段不要放在 write-once 实体中（启动检查 `KEYS` 报错）；字段应当是 `sensitive`。
+- 密封字段不要放在 write-once 实体中，字段也不能是 `immutable`（启动检查 `KEYS` 报错：重写不了）；字段应当是 `sensitive`、`processOnly`。
 - 应用自己的核对（恢复演练中的模板）照常；轮换演练不需要应用另写代码。

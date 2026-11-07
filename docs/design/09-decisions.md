@@ -2756,7 +2756,7 @@ QuizBuks 首次上线时，运维需要在修好数据或外部服务恢复后�
    经普通写入路径提交（时态实体写新版本，审计中照旧遮蔽）；解不开的（上下文与声明不符、被改动）原样保留并计数、记日志。没有旧密钥时什么也不读。
 3. **应用的密封字段要声明**：`SealedFields` Bean（core，同步，无 I/O）列出 `SealedField.of(实体, 字段, 上下文字段 | 行 -> 上下文)`，上下文与 `SealSecret` 当初所用的
    完全相同。平台自己的（Apple 的令牌，`SecIdentityToken.sealedToken`）同样声明。启动检查 `KEYS`：实体、字段不存在，实体是 write-once（D29，不能重写），
-   没有数据视图，重复声明即错误；字段不是 `sensitive` 为警告。没有声明的密封字段不会被重新加密，旧密钥撤下后就再也解不开。
+   没有数据视图，字段不可变（`immutable`，重写不了），重复声明即错误；字段不是 `sensitive` 为警告。没有声明的密封字段不会被重新加密，旧密钥撤下后就再也解不开。
 4. **撤下旧密钥**：任务找不到剩余（输出 `more=false`、计数为 0）后，从环境中删去 `JABIZ_MFA_KEY_PREVIOUS` / `JABIZ_SEAL_KEY_PREVIOUS`；
    `JABIZ_JWT_SECRET_PREVIOUS` 保留到它签的令牌与邮件链接都可以过期（访问令牌 15 分钟、挑战令牌更短；退订链接见手册）；
    **`JABIZ_INTEGRITY_KEY_PREVIOUS` 永久保留**：封存块从不重签，旧块要一直能校验。配置着 JWT、MFA、SEAL 的旧密钥时启动检查 `KEYS` 给出"轮换进行中"的警告。
