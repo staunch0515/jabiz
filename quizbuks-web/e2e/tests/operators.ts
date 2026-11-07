@@ -30,7 +30,7 @@ export async function operatorWithLead(request: APIRequestContext, name = 'Ope')
   const admin = await adminToken(request)
   const userId = String((await rows(request, admin, USERS, [{ field: 'userName', op: 'eq', value: email }], 1))[0].id)
   // QuizBuks's writes ask for a verified address, which the first administrator has not: the tests' content
-  // administrator creates operators (its role holds qb.operators.write).
+  // administrator creates operators (its role holds qb.admin.operators.write).
   const hq = await tokenOf(request, await contentAdmin(request), PASSWORD, 'admin')
   const saved = await run(request, hq, 'QB_OPERATOR_SAVE', { name: unique(`${name} operator `), contactName: name,
     contactEmail: email, leadUserId: userId })

@@ -337,7 +337,7 @@ steps:
     input: { userName: operator-lead, displayName: Operator lead, email: operator-lead@example.com }
     save: { operatorLead: $.userId }
   - verifyEmail: "${operatorLead}"
-  - actor: { id: operators-admin, permissions: [qb.operators.write] }
+  - actor: { id: operators-admin, permissions: [qb.admin.operators.write] }
     process: QB_OPERATOR_SAVE@latest
     input: { name: QuizBuks, contactName: QuizBuks, contactEmail: support@quizbuks.example,
       leadUserId: "${operatorLead}", defaultForNew: true }

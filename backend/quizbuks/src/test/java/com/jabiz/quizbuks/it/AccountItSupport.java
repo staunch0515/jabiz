@@ -50,7 +50,7 @@ abstract class AccountItSupport extends PublicationItSupport {
     /** An operator and its lead (F-S1: the lead's account is the operator's own sponsor). */
     record NewOperator(String operatorId, String leadId) {}
 
-    /** Creates an operator with a new, verified lead, as headquarters ({@code token} holds qb.operators.write). */
+    /** Creates an operator with a new, verified lead ({@code token} holds qb.admin.operators.write). */
     NewOperator newOperatorWithLead(String token, String name, String language) {
         String lead = verifiedUser(unique("lead-" + name.replaceAll("[^A-Za-z0-9]", "").toLowerCase()));
         Map<String, Object> input = new LinkedHashMap<>();

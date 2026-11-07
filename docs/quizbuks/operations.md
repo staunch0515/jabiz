@@ -195,7 +195,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    然后建**两位超级管理员**（`QB_ADMIN_SUPER`，各自一人一号、各自二次验证）：首个管理员建第一位（此后首个管理员退役，不能再做受保护的变更，403 `BOOTSTRAP_ADMIN_RETIRED`），
    **第一位超级管理员建第二位**（仍在建立期，当即生效）。第二位出现后建立期结束（平台 16u，D51），此后的受保护变更（见本节末"受保护的授权"）由一位超级管理员申请、另一位审批。
    `QB_SETUP` 必须在第二位超级管理员出现**之前**执行过（第 3 步）：超级管理员的角色由它得到审批受保护变更的 `security.protected-change.decide`，这项权限本身受保护，建立期结束后再给需要审批，而那时无人能批。
-   **默认运营商**（F-S1）：提案发布后，内容管理员（已验证邮箱，持 `qb.operators.write`）在 答题拼好价平台管理系统中以 `QB_OPERATOR_SAVE` 建第一个运营商并设为默认（`defaultForNew: true`），同时指定负责人（已验证邮箱的账号，同一事务成为它的直营发起方）。没有默认运营商时发起方入驻一律被拒（`QB_OPERATOR_DEFAULT_MISSING`），每日核对 `qb.operator-check` 给平台一个待办（`NO_DEFAULT_OPERATOR`）。以后把另一个运营商设为默认即取代原来的（至多一个；默认的运营商不能停用，也不能直接取消默认）。
+   **默认运营商**（F-S1）：提案发布后，内容管理员（已验证邮箱，持 `qb.admin.operators.write`）在 答题拼好价平台管理系统中以 `QB_OPERATOR_SAVE` 建第一个运营商并设为默认（`defaultForNew: true`），同时指定负责人（已验证邮箱的账号，同一事务成为它的直营发起方）。没有默认运营商时发起方入驻一律被拒（`QB_OPERATOR_DEFAULT_MISSING`），每日核对 `qb.operator-check` 给平台一个待办（`NO_DEFAULT_OPERATOR`）。以后把另一个运营商设为默认即取代原来的（至多一个；默认的运营商不能停用，也不能直接取消默认）。
 6. 由超级管理员提出、财务管理员发布（`CONTROL_CHANGE_PROPOSE` → `CONTROL_CHANGE_PUBLISH`，目标 `SysParam`）：
    - **收据开具方** `qb.issuer.name`、`qb.issuer.address`、`qb.issuer.registration-no`（登记号与税的措辞须财务、法务确认，上线检查清单）；未设名称时发起方开不出收据；
    - **科目映射** `qb.journal.account.1110 … 5110`（会计系统中的科目代码；后台"QuizBuks 财务 → 分录导出 → 科目映射"只读显示，修改走受控变更）；没映射的科目使分录导出被拒；

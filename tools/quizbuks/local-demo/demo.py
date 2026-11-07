@@ -223,7 +223,7 @@ def default_operator(admin):
     if not role_id:
         role_id = insert(admin, ROLES, {"roleCode": OPERATORS_ROLE, "labels": {"en": "Demo operators administrator"},
                                         "enabled": True})["id"]
-        for permission in ("qb.operators.write", "qb.admin.operators.read"):
+        for permission in ("qb.admin.operators.write", "qb.admin.operators.read"):
             insert(admin, ROLE_PERMISSIONS, {"roleId": role_id, "permission": permission})
     verified_user("sponsor", OPERATORS_ADMIN_EMAIL, "Demo operators administrator")
     hq_id = rows(admin, USERS, [{"field": "userName", "op": "eq", "value": OPERATORS_ADMIN_EMAIL}], 1)[0]["id"]
