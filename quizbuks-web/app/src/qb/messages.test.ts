@@ -29,7 +29,7 @@ describe('the shared QuizBuks texts', () => {
     expect(entry('sponsor', 'ja')).toBe(`${BRAND.names.ja} 主催者`)
     expect(entry('sponsor', 'en')).toBe(`${BRAND.names.en} for Sponsors`)
     // The administration in Chinese by the Chinese name, as in Japanese by the Japanese one.
-    expect(entry('admin', 'zh')).toBe(`${BRAND.names.zh} 平台管理系统`)
+    expect(entry('admin', 'zh')).toBe(`${BRAND.names.en} 平台管理系统`) // the requester's name: QuizBuks 平台管理系统
     expect(entry('admin', 'ja')).toBe(`${BRAND.names.ja} 管理システム`)
     expect(entry('admin', 'en')).toBe(`${BRAND.names.en} Management System`)
     expect(entry('operator', 'ja')).toBe('運営会社管理システム')
