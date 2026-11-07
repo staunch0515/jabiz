@@ -2,6 +2,7 @@ package com.jabiz.runtime.geo;
 
 import com.jabiz.runtime.check.CheckProblem;
 import com.jabiz.runtime.test.MutableClock;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -76,5 +77,25 @@ class ClientCountriesTest {
         clock.advance(Duration.ofMinutes(2));
         countries.countryOf("192.0.2.1");
         assertThat(countries.countryOf("192.0.2.1").code()).isEqualTo("JP");
+    }
+
+    @Test
+    void gaugesShowTheRangesAndWhetherTheDatabaseIsStale(@TempDir Path dir) throws IOException {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        new ClientCountries("", false, Duration.ofDays(45), clock).meters(registry);
+        assertThat(registry.find("jabiz.geoip.stale").gauge()).as("no gauges without a database").isNull();
+
+        ClientCountries fresh = new ClientCountries(file(dir, "192.0.2.0,192.0.2.255,CN\n").toString(), false,
+            Duration.ofDays(45), clock);
+        fresh.meters(registry);
+        assertThat(registry.get("jabiz.geoip.ranges").gauge().value()).isEqualTo(1.0);
+        assertThat(registry.get("jabiz.geoip.stale").gauge().value()).isEqualTo(0.0);
+        clock.advance(Duration.ofDays(45));
+        assertThat(registry.get("jabiz.geoip.stale").gauge().value()).as("older than the maximum age").isEqualTo(1.0);
+
+        ClientCountries broken = new ClientCountries(dir.resolve("absent.csv").toString(), false, Duration.ofDays(45),
+            clock);
+        assertThat(broken.stale()).isTrue();
+        assertThat(broken.ranges()).isZero();
     }
 }
