@@ -51,6 +51,10 @@ class MessagesTest {
                 "param.qb.assets.max-count", "param.qb.assets.max-tags", "param.qb.assets.tag-length",
                 "param.qb.products.max", "query.qb.sponsor.product-limit", "query.qb.sponsor.product-limit.max",
                 "query.qb.sponsor.asset-candidates", "entity.QbAsset", "entity.QbAssetUse")
+            // F-C2: the usage metering.
+            .contains("entity.QbUsageDay", "process.QB_USAGE_SNAPSHOT_ITEM", "param.qb.usage.storage.free-bytes",
+                "param.qb.usage.retention-days", "query.qb.sponsor.usage", "query.qb.sponsor.asset-stats",
+                "query.qb.admin.usage", "qb.msg.USAGE_OVER_FREE.title", "qb.msg.USAGE_OVER_FREE.body")
             .containsAll(com.jabiz.quizbuks.page.ProfilePackage.CODES)
             .containsAll(com.jabiz.quizbuks.page.ProfileTransferProcesses.CODES)
             .contains("process.QB_PROFILE_IMPORT_CHECK", "process.QB_PROFILE_IMPORT")
