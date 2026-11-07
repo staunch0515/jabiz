@@ -1,1 +1,2 @@
-org.springframework.boot.EnvironmentPostProcessor=com.jabiz.runtime.config.JabizDefaultProperties
+org.springframework.boot.EnvironmentPostProcessor=com.jabiz.runtime.config.JabizDefaultProperties,\
+  com.jabiz.runtime.ops.RestoreVerificationProperties
