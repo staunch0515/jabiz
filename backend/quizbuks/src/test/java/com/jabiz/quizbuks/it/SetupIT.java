@@ -304,6 +304,8 @@ class SetupIT extends QbItSupport {
         // F-C2: the free storage (controlled, 500 MB) and how long the daily usage snapshots are kept.
         expected.put(QbParams.USAGE_FREE_BYTES, "524288000");
         expected.put(QbParams.USAGE_RETENTION_DAYS, "800");
+        // F-C11: the most products of one sponsor (an ordinary parameter).
+        expected.put(QbParams.PRODUCTS_MAX, "50");
         // Q13a: bank top-ups' range, and the receiving account empty until finance sets it with four eyes.
         expected.put(QbParams.TOPUP_BANK_MIN, "1000");
         // Q86: the understanding quizzes are offered; no platform tree until an official account is named.

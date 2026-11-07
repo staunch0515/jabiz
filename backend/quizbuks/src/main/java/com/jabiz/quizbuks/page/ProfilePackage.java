@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.page;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.quizbuks.content.QbContent;
+import com.jabiz.quizbuks.setup.QbParams;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -92,7 +93,16 @@ public record ProfilePackage(List<String> languages, Basics basics, Page page, L
         return image != null && image != Image.KEEP;
     }
 
+    /** Reads a package against the products' limit's declared value (before setup, and in tests). */
     public static Read read(Map<String, Object> document) {
+        return read(document, Integer.parseInt(QbParams.defaultOf(QbParams.PRODUCTS_MAX)));
+    }
+
+    /**
+     * Reads a package; {@code maxProducts} is the parameter {@value QbParams#PRODUCTS_MAX} as the process read it
+     * (F-C11), the limit the products page has too.
+     */
+    public static Read read(Map<String, Object> document, int maxProducts) {
         List<Violation> problems = new ArrayList<>();
         if (document == null || !FORMAT.equals(document.get("format"))) {
             problems.add(new Violation("format", FORMAT_INVALID, "Not a profile package", Map.of()));
@@ -104,7 +114,7 @@ public record ProfilePackage(List<String> languages, Basics basics, Page page, L
                 + " only", Map.of("schema", String.valueOf(schema))));
             return new Read(null, problems);
         }
-        Reader reader = new Reader(problems);
+        Reader reader = new Reader(problems, maxProducts);
         List<String> languages = reader.languages(document.get("languages"));
         Map<String, FileEntry> files = reader.files(document.get("files"));
         reader.files = files;
@@ -122,8 +132,11 @@ public record ProfilePackage(List<String> languages, Basics basics, Page page, L
         private Map<String, FileEntry> files = Map.of();
         private List<String> languages = List.of();
 
-        Reader(List<Violation> problems) {
+        private final int maxProducts;
+
+        Reader(List<Violation> problems, int maxProducts) {
             this.problems = problems;
+            this.maxProducts = maxProducts;
         }
 
         private void problem(String path, String code, String message) {
@@ -272,9 +285,9 @@ public record ProfilePackage(List<String> languages, Basics basics, Page page, L
                 problem("products", FIELD_INVALID, "The products, in their order");
                 return products;
             }
-            if (list.size() > QbSponsorProducts.MAX_PRODUCTS) {
-                problems.add(new Violation("products", SponsorPageCodes.PRODUCT_LIMIT, "At most "
-                    + QbSponsorProducts.MAX_PRODUCTS + " products", Map.of("max", QbSponsorProducts.MAX_PRODUCTS)));
+            if (list.size() > maxProducts) {
+                problems.add(new Violation("products", SponsorPageCodes.PRODUCT_LIMIT, "At most " + maxProducts
+                    + " products", Map.of("max", maxProducts)));
             }
             for (int i = 0; i < list.size(); i++) {
                 String path = "products[" + i + "]";

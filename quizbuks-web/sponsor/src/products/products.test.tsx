@@ -11,6 +11,7 @@ import { bundle, emptyTexts, keyPaths, LANGUAGES } from '../qb/messageKeys'
 import { formatPrice, priceScale } from '../qb/products'
 import { productsEn, productsJa, productsZh } from './messages'
 import { QuizProductsPanel } from './QuizProductsPanel'
+import { readMyProducts } from './api'
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -26,7 +27,7 @@ const CAKE = { ...RYE, productId: 'p2', name: 'Cake', price: '9.50', currency: '
 
 /** The server as the products pages see it, for an approved sponsor. Records what was posted. */
 function server(options: { products?: Record<string, unknown>[]; links?: Record<string, unknown>[];
-  answers?: Record<string, () => Response> } = {}) {
+  answers?: Record<string, () => Response>; limit?: number | null | 'fail'; paged?: boolean } = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
@@ -46,9 +47,18 @@ function server(options: { products?: Record<string, unknown>[]; links?: Record<
           permissions: ['qb.sponsor.me'], emailVerified: true, idleTimeoutSeconds: 1800 })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsor/query':
         return json(200, { items: [{ id: 's', version: 1, attributes: { reviewStatus: 'APPROVED' } }] })
-      case '/api/datasets/urn:jabiz:dataset:me:QbSponsorProduct/query':
-        return json(200, { items: (options.products ?? [RYE, CAKE]).map((row) => ({ id: row.productId, version: 1,
-          attributes: row })), offset: 0, limit: 200 })
+      case '/api/datasets/urn:jabiz:dataset:me:QbSponsorProduct/query': {
+        const all = (options.products ?? [RYE, CAKE]).map((row) => ({ id: row.productId, version: 1, attributes: row }))
+        if (!options.paged) return json(200, { items: all, offset: 0, limit: 200 })
+        // As the server answers: a page from the offset, and the total.
+        const offset = Number(body?.offset ?? 0)
+        const limit = Number(body?.limit ?? 20)
+        return json(200, { items: all.slice(offset, offset + limit), total: all.length, offset, limit })
+      }
+      // F-C11: the products' limit (qb.products.max).
+      case '/api/queries/qb.sponsor.product-limit':
+        if (options.limit === 'fail') return json(404, {})
+        return json(200, { items: [{ max: options.limit === undefined ? 50 : options.limit }], offset: 0, limit: 1 })
       case '/api/datasets/urn:jabiz:dataset:me:QbQuizProduct/query':
         return json(200, { items: (options.links ?? []).map((row, i) => ({ id: `l${i}`, version: 1, attributes: row })),
           offset: 0, limit: 200 })
@@ -146,6 +156,44 @@ describe("the Sponsor's products (Q60b)", () => {
     await userEvent.click(within(dialog).getByTestId('product-save'))
     expect(await within(dialog).findByText('No decimals in yen.')).toBeInTheDocument()
     expect(within(dialog).getByTestId('product-price')).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  // F-C11: the limit is the parameter qb.products.max, as the server reads it.
+  it('take the limit from the server', async () => {
+    const { calls } = server({ limit: 2 })
+    window.history.replaceState(null, '', '/assets?tab=products')
+    render(<App />)
+    expect(await screen.findByTestId('products-full')).toHaveTextContent('You have 2 products')
+    expect(screen.getByTestId('product-add')).toBeDisabled()
+    expect(screen.getByTestId('products-intro')).toHaveTextContent('Up to 2 products.')
+    await expectAccessible()
+    expect(calls('QB_PRODUCT_SAVE')).toEqual([])
+  })
+
+  it('with a higher limit, add more; unknown, leave it to the save', async () => {
+    server({ limit: 3 })
+    window.history.replaceState(null, '', '/assets?tab=products')
+    const { unmount } = render(<App />)
+    await waitFor(() => expect(screen.getByTestId('products-intro')).toHaveTextContent('Up to 3 products.'))
+    expect(await screen.findByTestId('product-add')).toBeEnabled()
+    expect(screen.queryByTestId('products-full')).toBeNull()
+    unmount()
+    vi.restoreAllMocks()
+
+    server({ limit: 'fail' })
+    render(<App />)
+    expect(await screen.findAllByTestId('product')).toHaveLength(2)
+    await waitFor(() => expect(screen.getByTestId('products-intro')).not.toHaveTextContent(/\d/))
+    expect(screen.getByTestId('product-add')).toBeEnabled()
+    expect(screen.queryByTestId('products-full')).toBeNull()
+  })
+
+  it('are read a page at a time, all of them', async () => {
+    const many = Array.from({ length: 450 }, (_, i) => ({ ...RYE, productId: `p${i}`, name: `Item ${i}`, seq: i }))
+    server({ products: many, paged: true })
+    const products = await readMyProducts()
+    expect(products).toHaveLength(450)
+    expect(products.at(-1)?.productId).toBe('p449')
   })
 
   it('moves one by swapping places with its neighbour, and deletes one on confirmation', async () => {
