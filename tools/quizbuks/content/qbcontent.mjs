@@ -264,7 +264,7 @@ async function applyPack(options, { renew = false } = {}) {
   const client = await signedIn(options)
   const sponsor = await sponsorOf(client)
   if (sponsor?.reviewStatus !== 'APPROVED') {
-    throw new Error('the account is not an approved sponsor yet: sign in to the sponsor console, apply and wait for the review')
+    throw new Error('the account is not an approved sponsor yet: sign in to the Sponsor app, apply and wait for the review')
   }
   const renewDays = renew ? Number(options['renew-days'] ?? 30) : 0
   const now = new Date()
@@ -308,7 +308,7 @@ async function applyPack(options, { renew = false } = {}) {
     } catch (e) {
       // Terms to accept are the person's own act: the tool never accepts them on anybody's behalf.
       if (e.body?.code === 'QB_CONSENT_REQUIRED' || e.body?.code === 'QB_TERMS_OUTDATED') {
-        throw new Error('the sponsor terms changed: sign in to the sponsor console, accept them, then run this again')
+        throw new Error('the sponsor terms changed: sign in to the Sponsor app, accept them, then run this again')
       }
       throw e
     }
