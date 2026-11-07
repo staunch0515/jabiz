@@ -206,6 +206,8 @@ jabiz 是一个**元数据驱动的业务应用平台**：开发者声明实体�
   `LEGAL_HOLD_PLACE` / `LEGAL_HOLD_RELEASE`；删除拦截由平台在删除路径中做（422 `RETENTION_ACTIVE` / `LEGAL_HOLD`），业务代码不自己判断。
   归档导出只经 `POST /api/exports/data`（CSV + `schema.json` + `manifest.json` + 报表 PDF），不另写导出。
   生成的文件与签发的单据的保留期同样以 `RetentionPolicy.of("GeneratedFile" | "DocumentRun")` 声明（只读平台实体，`audit.read`，不含内容与名称，21 §3.1）。
+- **恢复演练**（见 13 §8）：恢复出的副本只以核对模式（`jabiz.ops.verify-restore.enabled`，平台关掉一切对外的动作）与 `tools/ops/restore-drill.sh` 核对；
+  应用自己的核对写成返回 0 行即通过的模板，列在 `jabiz.ops.verify-restore.templates`，不另写核对代码或手工清单。
 - **语句数**（见 06 §3.1、03 §3.1 与决策 D46）：平台在事务中缓冲写入（插入、按版本的更新、子流程的操作记录、事件、幂等结果），插入随下一条平台查询（取锁等）或在读写其表的语句、有时限的读取、模板、
   保存点、阻塞步骤与提交之前写出（读之前写出；应急开关 `jabiz.storage.write-batching.enabled`，缺省开）；引用检查复用本事务的读写，普通实体按本事务读到的版本更新；
   这些都在平台的写入路径中，业务代码不自己合并语句或缓存读到的实例，也不跨事务缓存科目、维度取值等可变数据。事务中的语句只经存储引擎发出（不直接用 `DatabaseClient`，ArchUnit 检查）。平台的标准写入路径（账本过账与冲正、示范的下单与发货、按已知版本更新、
