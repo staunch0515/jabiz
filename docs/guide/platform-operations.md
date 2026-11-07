@@ -40,7 +40,7 @@ GRAFANA_USER=… GRAFANA_PASSWORD=… tools/ops/alert-fire-test.sh disk /var/lib
 | 功能 | 设置（缺省） | 看什么 | 常见情况与处理 |
 |---|---|---|---|
 | 刷新令牌的重用宽限（D73，17zi） | `jabiz.security.refresh.reuse-grace`（30 秒，0–120，0 为关闭） | `jabiz.auth.refresh.reuse{result}`；告警 `jabiz-refresh-reuse-granted` / `-revoked` | 补发异常增多：多半是客户端没有先保存新令牌（看最近发布的前端），其次是令牌被盗；被吊销的会话增多同理。宽限不要调大来"修"登出 |
-| 地址库（D74，17zn） | `jabiz.geoip.database`（文件路径）、`jabiz.geoip.max-age`（45 天）、`jabiz.geoip.required` | 启动检查 `GEOIP`；仪表 `jabiz.geoip.stale` / `ranges`；告警 `jabiz-geoip-stale` / `-empty` | 每月下载新的 DB-IP Lite CSV 替换文件即可，运行中一分钟内自动重读，不必重启；新文件读不出时继续用旧的并记 WARN |
+| 地址库（D74，17zl） | `jabiz.geoip.database`（文件路径）、`jabiz.geoip.max-age`（45 天）、`jabiz.geoip.required` | 启动检查 `GEOIP`；仪表 `jabiz.geoip.stale` / `ranges`；告警 `jabiz-geoip-stale` / `-empty` | 每月下载新的 DB-IP Lite CSV 替换文件即可，运行中一分钟内自动重读，不必重启；新文件读不出时继续用旧的并记 WARN |
 | 服务器下载链接中的图片（D75，17zr） | `jabiz.files.fetch.*`：`max-concurrent`（16）、每人 2 个、`max-redirects`（3）、`connect-timeout`、`allowed-ports` | `jabiz.file.fetch{outcome}`；`jabiz.process.rate_limited` | 503 `PROCESS_BUSY` 多：同时下载已满（调 `max-concurrent` 前先看连接池）；`FILE_FETCH_*` 错误是链接本身的问题（内网地址、非图片、过大），不是故障 |
 | 手动补跑定时任务（D77，17zs） | `jabiz.jobs.manual-run.max-age`（90 天）；权限 `job.run`（受保护，授予须另一位管理员审批） | 管理系统"定时任务"页；`sys_job_run.requested_by` | 修好原因后在该页选时刻补跑；409 `JOB_BUSY` 表示正在运行，等它结束；已经成功的项不会重做 |
 | 限流（10 §15.10，17zt） | `jabiz.process.rate-limits.*`；登录类 `jabiz.security.sign-in.rate-limit.*` | `jabiz.process.rate_limited{process,scope}`、`jabiz.auth.rate_limited{kind}` | 一个请求的全部桶全取或全不取（17zt）；正当用户被拒时看 `scope` 是本人、地址还是实例，再调对应的那一项 |
