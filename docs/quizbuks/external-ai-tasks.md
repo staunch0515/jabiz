@@ -120,10 +120,10 @@ E1–E3 的结论会影响开发的方向，建议先做；其余任何时候都
 
 ## E6 原型与登录页的可用性评审（Gemini）
 
-贴给它：两个原型在电脑与手机上的截图（发起方后台 https://claude.ai/artifact/AS2gQnknL4dxTUFQQqwVru 、答题者 App https://claude.ai/artifact/AuKS7YggSELPbZdfpvvg32 ，各几张），现在的登录页、注册页在手机与电脑上的截图，以及 `docs/quizbuks/plans/Q108-console-layout.md` 全文。
+贴给它：两个原型在电脑与手机上的截图（发起方页面 https://claude.ai/artifact/AS2gQnknL4dxTUFQQqwVru 、答题者 App https://claude.ai/artifact/AuKS7YggSELPbZdfpvvg32 ，各几张），现在的登录页、注册页在手机与电脑上的截图，以及 `docs/quizbuks/plans/Q108-console-layout.md` 全文。
 
 ```
-你是资深的产品设计评审。附件是一个答题与奖励服务的两个界面原型（发起方的管理后台、答题者的手机 App）的截图、现在的登录与注册页的截图，以及设计说明。请评审：
+你是资深的产品设计评审。附件是一个答题与奖励服务的两个界面原型（发起方的平台管理系统、答题者的手机 App）的截图、现在的登录与注册页的截图，以及设计说明。请评审：
 
 1. 导航：8 个区域与页内标签的分法，是否清楚、是否有更好的分法；手机底部菜单的选择。
 2. 每种页面模板（列表、详情、表单）的问题与改进。
@@ -149,7 +149,7 @@ E1–E3 的结论会影响开发的方向，建议先做；其余任何时候都
 
 ## E8 常见问题三语稿（Gemini）
 
-贴给它：`docs/quizbuks/troubleshooting.md` 全文、`backend/quizbuks/src/main/resources/` 中 FAQ 的现有内容（若有，`QbFaqEntry` 的初始数据或后台导出的 FAQ）。
+贴给它：`docs/quizbuks/troubleshooting.md` 全文、`backend/quizbuks/src/main/resources/` 中 FAQ 的现有内容（若有，`QbFaqEntry` 的初始数据或从平台管理系统导出的 FAQ）。
 
 ```
 附件是一个答题与奖励服务的"使用中的问题"记录（T1、T2……）。请把其中对使用者有用的条目，写成帮助页的常见问题（FAQ），中文（简体）、日文、英文三种语言，三种语言的内容一致。
@@ -163,7 +163,7 @@ E1–E3 的结论会影响开发的方向，建议先做；其余任何时候都
 输出：一个 JSON 数组，每个元素 {"source": "T8", "audience": ..., "category": ..., "question": {"zh": ..., "ja": ..., "en": ...}, "answer": {...}}。
 ```
 
-结果交回后，Claude 核对内容与现状一致，再交内容管理员在后台发布。
+结果交回后，Claude 核对内容与现状一致，再交内容管理员在平台管理系统中发布。
 
 ## E9 给 AI 的使用手册初稿（Gemini）
 
