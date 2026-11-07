@@ -81,6 +81,11 @@ function server(options: Server = {}) {
         { itemKind: 'MESSAGE', itemId: 'm1', type: 'SYSTEM', kind: 'REDEEM_CLAIMED',
           title: { en: 'A Taker scanned your printed code' }, body: { en: 'Someone **claims** the prize.' },
           markdown: false, action: 'REDEEM', actionId: 'r1', at: '2026-10-15T00:00:00Z', expiresAt: null,
+          readAt: null, unread: true },
+        // F-C2: the storage went above the free amount: to the asset library.
+        { itemKind: 'MESSAGE', itemId: 'm2', type: 'SYSTEM', kind: 'USAGE_OVER_FREE',
+          title: { en: 'Your storage is above the free amount' }, body: { en: 'Your files use 600.0 MB.' },
+          markdown: false, action: 'ASSETS', actionId: null, at: '2026-10-14T00:00:00Z', expiresAt: null,
           readAt: null, unread: true }], offset: 0, limit: 100 })
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
@@ -250,5 +255,10 @@ describe('the message centre', () => {
     expect(message).toHaveTextContent('Someone **claims** the prize.')
     expect(within(message).getByTestId('announcement-action')).toHaveAttribute('href', '/redeem')
     await waitFor(() => expect(calls('QB_MESSAGE_MARK')).toContainEqual({ kind: 'MESSAGE', id: 'm1', action: 'READ' }))
+    // F-C2: the usage notice leads to the asset library.
+    const usage = items[2]
+    await user.click(within(usage).getByTestId('announcement-open'))
+    expect(within(usage).getByTestId('announcement-action')).toHaveAttribute('href', '/assets')
+    expect(within(usage).getByTestId('announcement-action')).toHaveTextContent('Open the asset library')
   })
 })

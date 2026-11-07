@@ -21,7 +21,8 @@ steps:
         qb.referral.per-referrer-total, qb.conversation.daily-cap, qb.conversation.close-days,
         qb.ai.candidates.expire-days,
         qb.ai.price.input-per-mtok-usd, qb.ai.price.output-per-mtok-usd, qb.tree.platform-handle,
-        qb.fee.due-days, qb.assets.max-count, qb.assets.max-tags, qb.assets.tag-length, qb.region.unknown-ip-country]
+        qb.fee.due-days, qb.assets.max-count, qb.assets.max-tags, qb.assets.tag-length,
+        qb.usage.retention-days, qb.region.unknown-ip-country]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,
@@ -43,7 +44,7 @@ steps:
         qb.audience.price.fallback, qb.audience.fee.refund-unused-days, qb.understanding.enabled,
         qb.topup.targets, qb.topup.default-target, qb.kudos.buy.enabled, qb.kudos.sell.enabled, qb.transfer.fee-rate, qb.fee.monthly, qb.fee.tax-rate,
         qb.fee.default-billing-mode, qb.fee.overdue.block-submit, qb.certification.sponsor-rounds.enabled,
-        qb.play.entry-fee.enabled, qb.video.mainland-accessible-sites]
+        qb.play.entry-fee.enabled, qb.usage.storage.free-bytes, qb.video.mainland-accessible-sites]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review,
         qb.sod.control-changes, qb.sod.security-administration]
@@ -65,7 +66,8 @@ steps:
       p56: "$.proposals[55]", p57: "$.proposals[56]", p58: "$.proposals[57]",
       p59: "$.proposals[58]", p60: "$.proposals[59]", p61: "$.proposals[60]", p62: "$.proposals[61]", p63: "$.proposals[62]", p64: "$.proposals[63]", p65: "$.proposals[64]",
       p66: "$.proposals[65]", p67: "$.proposals[66]", p68: "$.proposals[67]", p69: "$.proposals[68]", p70: "$.proposals[69]", p71: "$.proposals[70]", p72: "$.proposals[71]",
-      p73: "$.proposals[72]", p74: "$.proposals[73]", p75: "$.proposals[74]", p76: "$.proposals[75]", p77: "$.proposals[76]", p78: "$.proposals[77]", p79: "$.proposals[78]", p80: "$.proposals[79]", p81: "$.proposals[80]", p82: "$.proposals[81]", p83: "$.proposals[82]", p84: "$.proposals[83]", p85: "$.proposals[84]", p86: "$.proposals[85]", p87: "$.proposals[86]", p88: "$.proposals[87]", p89: "$.proposals[88]", p90: "$.proposals[89]", p91: "$.proposals[90]" }
+      p73: "$.proposals[72]", p74: "$.proposals[73]", p75: "$.proposals[74]", p76: "$.proposals[75]", p77: "$.proposals[76]", p78: "$.proposals[77]", p79: "$.proposals[78]", p80: "$.proposals[79]", p81: "$.proposals[80]", p82: "$.proposals[81]", p83: "$.proposals[82]", p84: "$.proposals[83]", p85: "$.proposals[84]", p86: "$.proposals[85]", p87: "$.proposals[86]", p88: "$.proposals[87]", p89: "$.proposals[88]", p90: "$.proposals[89]",
+      p91: "$.proposals[90]", p92: "$.proposals[91]" }
   - note: A second administrator publishes the parameters (the journal mapping and issuer empty) and the review rules.
     process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
@@ -340,6 +342,9 @@ steps:
   - process: CONTROL_CHANGE_PUBLISH@latest
     actor: { id: publisher, permissions: [control.publish] }
     input: { changeId: "${p91}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p92}" }
   - expect: { param: qb.creator-fee-rate, value: 0 }
   - expect: { param: qb.transfer.threshold, value: 1000 }
   - expect: { param: qb.transfer.enabled, value: false }

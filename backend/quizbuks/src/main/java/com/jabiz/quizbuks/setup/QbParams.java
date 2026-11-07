@@ -219,6 +219,13 @@ public final class QbParams {
     /** F-C1: the most tags one asset has, and the most characters of one tag. */
     public static final String ASSETS_MAX_TAGS = "qb.assets.max-tags";
     public static final String ASSETS_TAG_LENGTH = "qb.assets.tag-length";
+    /**
+     * F-C2: the storage a sponsor uses free of charge, in bytes (controlled: it is what charging will start from; in
+     * the first launch it only shows on the asset library and sends one notice when crossed, never refuses).
+     */
+    public static final String USAGE_FREE_BYTES = "qb.usage.storage.free-bytes";
+    /** F-C2: how many days the daily usage snapshots are kept (not controlled). */
+    public static final String USAGE_RETENTION_DAYS = "qb.usage.retention-days";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -335,7 +342,7 @@ public final class QbParams {
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         List.of(UNDERSTANDING_ENABLED), CASH_ACCOUNT_PARAMS, FEE_PARAMS, List.of(SPONSOR_ROUNDS_ENABLED),
-        List.of(ENTRY_FEE_ENABLED), List.of(VIDEO_MAINLAND_SITES))
+        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES))
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -538,6 +545,11 @@ public final class QbParams {
             "The most tags one asset of the library has"),
         new Param(ASSETS_TAG_LENGTH, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
             "The most characters of one tag of the asset library"),
+        // F-C2: the usage metering (last). The free amount is controlled; 500 MB (1 MB = 1,048,576 bytes).
+        new Param(USAGE_FREE_BYTES, Map.of("type", "numeric", "precision", 15, "scale", 0), "524288000",
+            "The storage a sponsor uses free of charge, in bytes (only noticed in the first launch, never refused)"),
+        new Param(USAGE_RETENTION_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0), "800",
+            "How many days the daily usage snapshots are kept"),
         // F-S11: foreign videos and mainland China (the controlled one last, in the order of CONTROLLED).
         new Param(REGION_UNKNOWN_IP_COUNTRY, Map.of("type", "text", "maxLength", 2), "CN",
             "The country a request whose address the address database does not know counts as for foreign videos "

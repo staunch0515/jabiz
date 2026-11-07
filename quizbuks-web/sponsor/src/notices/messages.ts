@@ -91,6 +91,7 @@ const en = {
       until: 'Until {{time}}',
       openCash: 'Open the cash rewards',
       openRedeem: 'Open the prizes page',
+      openAssets: 'Open the asset library',
     },
   },
 }
@@ -182,6 +183,7 @@ const zh: Texts = {
       until: '至 {{time}}',
       openCash: '打开现金奖励',
       openRedeem: '打开奖品领取页',
+      openAssets: '打开资源库',
     },
   },
 }
@@ -271,6 +273,7 @@ const ja: Texts = {
       until: '{{time}} まで',
       openCash: '現金報酬を開く',
       openRedeem: '賞品の引き換えページを開く',
+      openAssets: 'リソースライブラリを開く',
     },
   },
 }

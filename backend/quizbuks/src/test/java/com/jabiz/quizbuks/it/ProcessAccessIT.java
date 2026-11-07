@@ -62,6 +62,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_PUBLICATION_STATS_CHUNK", ProcessAccess.INTERNAL),
         // The sponsors' analytics (Q9e): the items of the job (review M3: one transaction each).
         Map.entry("QB_ANALYTICS_ITEM", ProcessAccess.INTERNAL),
+        // F-C2: the daily usage snapshot's item.
+        Map.entry("QB_USAGE_SNAPSHOT_ITEM", ProcessAccess.INTERNAL),
         // Top-ups and reconciliation (Q6a): the results of the jobs that call Stripe, Stripe's events, the items of
         // the stale top-ups' job and the daily reconciliation.
         Map.entry("QB_TOPUP_OPENED", ProcessAccess.INTERNAL),

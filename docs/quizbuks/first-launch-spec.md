@@ -878,9 +878,9 @@
   - **首次上线只计量、显示和提示，不拒绝上传**（A4-23）。取代 §8.3 的"达到上限即 422 `QB_STORAGE_LIMIT`"和 `UsageSnapshotIT` 中拒绝上传的用例。
   - **不补变体的大小**（A4-23）：按原文件计，页面注明"不含缩略图等变体"。取代 §8.2 中平台补记 `variantBytes` 的那一步。
   - 同一个文件按上传者只算一次。
-  - 每日快照由逐项任务 `qb.usage-snapshot` 写入（`JobDefinition.forEach`，每个发起方一项，`internal()`），按模板一次读出，写进普通表 `QbUsageDay`（发起方 × 日期 × 计量项），当天已有的行即覆盖。不取业务锁，不在请求路径上。cron 不照抄"按 UTC 写死日本时间"的写法（§B）。
+  - 每日快照由逐项任务 `qb.usage-snapshot` 写入（`JobDefinition.forEach`，每个发起方一项，`internal()`），按模板一次读出，写进普通表 `QbUsageDay`（每个发起方每天一行，各计量项在其中的 JSON 里，键即 `UsageMeters`；审计因此每人每天一条，需求方 2026-11-07 确认），当天已有的行即覆盖。不取业务锁，不在请求路径上。cron 不照抄"按 UTC 写死日本时间"的写法（§B）。
   - 月度的平均占用与峰值由模板算出，供以后收费用。
-- **参数**：`qb.usage.storage.free-bytes`（缺省 500 MB，受控，只用于提示）、`qb.usage.snapshot-time`（缺省 03:17，按 `jabiz.fiscal-year-zone`）、`qb.usage.retention-days`（缺省 800）。`qb.usage.storage.max-bytes` 不在首次上线（以后与收费一起做）。
+- **参数**：`qb.usage.storage.free-bytes`（缺省 500 MB，受控，只用于提示）、`qb.usage.retention-days`（缺省 800）。快照时刻是部署配置 `quizbuks.usage.snapshot-time`（环境变量 `QB_USAGE_SNAPSHOT_TIME`，缺省 03:17，按 `jabiz.fiscal-year-zone`），部署配置、改后重启（需求方 2026-11-07 确认）。`qb.usage.storage.max-bytes` 不在首次上线（以后与收费一起做）。
 - **运营闭合**：
   - 用户：资源库顶部显示"已用 X / 免费 Y"、文件数、资源数；列表可按大小排序；"未使用的资源"筛选，方便清理。超过免费额度时显示横幅，并在第一次越过时发一条站内信（同一越过只发一次）。
   - 运营商与总部：平台管理系统与运营商管理系统的用量页（模板 `qb.admin.usage`，经 `OperatorScopes` 限定），按发起方与月份列出，可以导出。

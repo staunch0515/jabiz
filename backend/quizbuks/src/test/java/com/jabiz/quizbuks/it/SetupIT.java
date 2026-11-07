@@ -301,6 +301,9 @@ class SetupIT extends QbItSupport {
         // F-C1: the asset library's limits (ordinary parameters).
         expected.putAll(Map.of(QbParams.ASSETS_MAX_COUNT, "1000", QbParams.ASSETS_MAX_TAGS, "10",
             QbParams.ASSETS_TAG_LENGTH, "30"));
+        // F-C2: the free storage (controlled, 500 MB) and how long the daily usage snapshots are kept.
+        expected.put(QbParams.USAGE_FREE_BYTES, "524288000");
+        expected.put(QbParams.USAGE_RETENTION_DAYS, "800");
         // F-S11: unknown addresses count as mainland China; the sites mainland China plays (controlled).
         expected.put(QbParams.REGION_UNKNOWN_IP_COUNTRY, "CN");
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");

@@ -15,6 +15,10 @@ export const ASSET_TEMPLATE = {
   candidates: 'qb.sponsor.asset-candidates',
   /** Where the sponsor's assets were copied to, with whether the asset changed since. */
   uses: 'qb.sponsor.asset-uses',
+  /** F-C2: the latest daily usage snapshot and the free amount (the library's usage card). */
+  usage: 'qb.sponsor.usage',
+  /** F-C2: each asset's size and how many places use it (sorting by size, the unused ones). */
+  stats: 'qb.sponsor.asset-stats',
 } as const
 
 /** The sponsor's own assets (read only; writing is the processes'). */
