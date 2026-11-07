@@ -184,7 +184,9 @@ export function SponsorAssets({ userId }: { userId: string }) {
     },
   ], [t, kindLabel, usageLabel])
   return (
-    <Section title={t('assets.title')} testId="sponsor-assets">
+    <Section title={t('assets.title')} testId="sponsor-assets"
+      actions={<Link to={`${PATH.usage}?${new URLSearchParams({ sponsor: userId })}`} className={linkClass}
+        aria-label={t('usage.sponsorLinkNamed')} data-testid="sponsor-assets-usage">{t('usage.sponsorLink')}</Link>}>
       <p className="text-muted-foreground text-sm">{t('assets.hint')}</p>
       <div className="flex items-center gap-2">
         <Label htmlFor="sponsor-assets-kind">{t('assets.kind')}</Label>

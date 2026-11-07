@@ -427,10 +427,18 @@ export function fileNameOf(disposition: string | null): string | null {
  * `ApiError` when the server refuses (`REPORT_TOO_LARGE` beyond its row limit: never cut short).
  */
 export async function exportReport(id: ReportId, period: Period, format: ExportFormat) {
+  await exportTemplate(id, { ...period }, format)
+}
+
+/**
+ * Exports every row of a template with its parameters through the platform's endpoint, as {@link exportReport} does
+ * for a report (F-C2: the usage by month, too).
+ */
+export async function exportTemplate(id: string, params: Record<string, unknown>, format: ExportFormat) {
   const response = await sessionFetch(`/api/queries/${encodeURIComponent(id)}/export?format=${format}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ params: period }),
+    body: JSON.stringify({ params }),
   })
   if (!response.ok) {
     let problem: Record<string, unknown> | undefined

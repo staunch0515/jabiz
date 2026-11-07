@@ -104,8 +104,8 @@ export interface Announcement {
   title: I18nText
   body: I18nText
   markdown: boolean
-  /** Where a message leads: the cash rewards or the redeem page (Q22); null for an announcement. */
-  action: 'CASH' | 'REDEEM' | null
+  /** Where a message leads: the cash rewards or the redeem page (Q22), the asset library (F-C2); null for an announcement. */
+  action: 'CASH' | 'REDEEM' | 'ASSETS' | null
   at: string
   expiresAt: string | null
   readAt: string | null
@@ -183,7 +183,7 @@ export async function readAnnouncements(): Promise<Announcement[]> {
     title: text(row.title),
     body: text(row.body),
     markdown: row.markdown !== false,
-    action: row.action === 'CASH' || row.action === 'REDEEM' ? row.action : null,
+    action: row.action === 'CASH' || row.action === 'REDEEM' || row.action === 'ASSETS' ? row.action : null,
     at: String(row.at),
     expiresAt: str(row.expiresAt),
     readAt: str(row.readAt),

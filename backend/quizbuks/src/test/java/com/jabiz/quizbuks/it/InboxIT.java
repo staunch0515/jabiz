@@ -141,6 +141,44 @@ class InboxIT extends InboxItSupport {
         assertThat(((MessageProcesses.MessageOutput) fresh).messageId()).isNotNull();
     }
 
+    /**
+     * F-C2: a sponsor whose storage went above the free amount hears it once per crossing, while it is still so, in
+     * their console's inbox, led to the asset library.
+     */
+    @Test
+    void aSponsorAboveTheFreeStorageHearsOnceWhileItIsSo() {
+        String sponsor = newSponsor(unique("s-inbox-usage"));
+        // 600 MB, above the declared 500 MB.
+        execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meters, recorded_at, version)"
+            + " VALUES (?, ?, DATE '2026-03-02', '{\"storage.bytes\":629145600}', now(), 1)",
+            java.util.UUID.randomUUID().toString(), sponsor);
+        Map<String, Object> crossing = body("kind", "USAGE_OVER_FREE", "sourceId", sponsor + "|2026-03-02",
+            "occurredAt", clock.instant().toString());
+        Object made = systemRun(MessageProcesses.FROM_EVENT, crossing);
+        assertThat(((MessageProcesses.MessageOutput) made).messageId()).isNotNull();
+        assertThat(messagesOf(sponsor)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("kind", "USAGE_OVER_FREE").containsEntry("type", "SYSTEM")
+                .containsEntry("action", "ASSETS").containsEntry("publication_id", null);
+            assertThat(String.valueOf(row.get("title"))).contains("Your storage is above the free amount",
+                "你的存储超过了免费额度", "ストレージが無料枠を超えました");
+            assertThat(String.valueOf(row.get("body"))).contains("600.0 MB", "500.0 MB");
+        });
+        assertThat(consoleInbox(console(sponsor))).filteredOn(item -> "MESSAGE".equals(item.get("itemKind")))
+            .singleElement().satisfies(item -> assertThat(item).containsEntry("kind", "USAGE_OVER_FREE")
+                .containsEntry("unread", true));
+        // The same crossing again (a run again of the day, a redelivery) makes no second message.
+        assertThat(((MessageProcesses.MessageOutput) systemRun(MessageProcesses.FROM_EVENT, crossing)).messageId())
+            .isNull();
+        // Below the free amount by the time the event is handled: nothing.
+        execute("INSERT INTO qb_usage_day (usage_day_id, sponsor_id, snapshot_day, meters, recorded_at, version)"
+            + " VALUES (?, ?, DATE '2026-03-03', '{\"storage.bytes\":1}', now(), 1)",
+            java.util.UUID.randomUUID().toString(), sponsor);
+        assertThat(((MessageProcesses.MessageOutput) systemRun(MessageProcesses.FROM_EVENT, body("kind",
+            "USAGE_OVER_FREE", "sourceId", sponsor + "|2026-03-04", "occurredAt", clock.instant().toString())))
+            .messageId()).isNull();
+        assertThat(messagesOf(sponsor)).hasSize(1);
+    }
+
     @Test
     void transfersAndAHeldBackPayoutAccountMakeTheirMessages() {
         param(QbParams.TRANSFER_FEE, "0");
