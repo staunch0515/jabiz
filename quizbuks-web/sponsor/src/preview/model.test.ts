@@ -18,7 +18,7 @@ const DRAFT = {
 } as unknown as Draft
 
 describe('the preview (Q34b)', () => {
-  it('puts the video the taker learns from on the home\'s card, as the server does (Q63)', () => {
+  it('puts the video the Taker learns from on the home\'s card, as the server does (Q63)', () => {
     const at = new Date('2026-10-26T00:00:00Z')
     const video = (url: string, watchToAnswer: boolean) => ({ materialId: url, kind: 'VIDEO_LINK', title: 'V',
       description: null, body: null, url, pdf: null, audio: null, images: [], watchToAnswer })
@@ -46,7 +46,7 @@ describe('the preview (Q34b)', () => {
     expect(preview.questions.map((q) => q.choice)).toEqual(['SINGLE', null])
   })
 
-  it('shows the sponsor only once approved, and a watch-to-answer video as the home card\'s video', () => {
+  it('shows the Sponsor only once approved, and a watch-to-answer video as the home card\'s video', () => {
     const approved = { contactName: 'Sara', company: 'Acme', intro: 'Hi', avatar: null, reviewStatus: 'APPROVED' }
     const pending = { ...approved, reviewStatus: 'PENDING' }
     expect(draftPreview(DRAFT, approved as never).view.sponsorCompany).toBe('Acme')

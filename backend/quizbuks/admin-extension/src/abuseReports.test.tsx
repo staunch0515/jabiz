@@ -108,7 +108,7 @@ function renderPage() {
   )
 }
 
-describe("takers' reports (Q49a)", () => {
+describe("Takers' reports (Q49a)", () => {
   it('have every text in every language', () => {
     const keys = (value: object, prefix = ''): string[] => Object.entries(value).flatMap(([key, child]) =>
       typeof child === 'object' && child !== null ? keys(child, `${prefix}${key}.`) : [`${prefix}${key}`])

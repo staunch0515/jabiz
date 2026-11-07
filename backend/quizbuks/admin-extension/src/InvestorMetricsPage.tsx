@@ -30,7 +30,7 @@ const COUNTS = ['newSponsors', 'activeSponsors', 'retainedSponsors', 'publicatio
   'attempts', 'completions', 'passes', 'prizesWon', 'prizesClaimed', 'prizesRedeemed', 'invitationsSent',
   'invitationsAnswered', 'topUps'] as const
 const MONEY = ['topUpAmount', 'rewardsPaid', 'commission'] as const
-/** Counts of distinct people in a month: a merchant active in three months is one merchant, so they have no total. */
+/** Counts of distinct people in a month: a sponsor active in three months is one sponsor, so they have no total. */
 const STOCK: ReadonlySet<string> = new Set(['activeSponsors', 'retainedSponsors', 'activeTakers'])
 
 /** A share as a percentage with one decimal; empty when there is nothing to divide by. */
@@ -165,7 +165,7 @@ function Sponsors({ period }: { period: Period }) {
 
 /**
  * The investors' figures (Q27): one row per UTC month of the period in the address (`?from=YYYY-MM&to=YYYY-MM`, the
- * last six months when there is none), with a total, and the merchants behind them; exported, issued and archived
+ * last six months when there is none), with a total, and the sponsors behind them; exported, issued and archived
  * through the platform as the monthly reports are.
  */
 export default function InvestorMetricsPage() {

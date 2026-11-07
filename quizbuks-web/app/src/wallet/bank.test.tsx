@@ -134,7 +134,7 @@ describe('the bank page', () => {
     expect(call?.key).toBeTruthy()
   })
 
-  it('switches how the taker is paid', async () => {
+  it('switches how the Taker is paid', async () => {
     const { processCalls } = server({ bank: { enabled: true, fee: '0', minimum: '1000', cooldownHours: '72',
       payoutMethod: 'STRIPE', ...ACCOUNT } })
     window.history.replaceState(null, '', '/wallet/bank')

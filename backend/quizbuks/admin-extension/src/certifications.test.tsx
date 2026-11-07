@@ -99,7 +99,7 @@ function renderPage() {
 }
 
 describe('the certifications page', () => {
-  it('lists the sponsors’ own certifications (Q88a), named by their rows, narrowed by the company', async () => {
+  it('lists the Sponsors’ own certifications (Q88a), named by their rows, narrowed by the company', async () => {
     renderPage()
     const section = await screen.findByTestId('sponsor-certifications-section')
     const row = await within(section).findByTestId('sponsor-certification-row')
@@ -119,7 +119,7 @@ describe('the certifications page', () => {
     const rows = await screen.findAllByTestId('round-row')
     expect(rows).toHaveLength(2)
     expect(rows[0]).toHaveTextContent('Sponsor basics')
-    expect(rows[0]).toHaveTextContent('May apply to become a sponsor')
+    expect(rows[0]).toHaveTextContent('May apply to become a Sponsor')
     expect(rows[0]).toHaveTextContent('12')
     expect(within(rows[0]).getByTestId('round-close')).toBeInTheDocument()
     expect(within(rows[1]).queryByTestId('round-close')).not.toBeInTheDocument()

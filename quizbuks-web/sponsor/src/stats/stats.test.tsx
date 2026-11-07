@@ -62,7 +62,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe("the sponsor's page statistics (Q60c-2)", () => {
+describe("the Sponsor's page statistics (Q60c-2)", () => {
   it('have every text in every language, and take periods ending today', () => {
     const english = keyPaths(statsEn)
     for (const [lng, texts] of [['zh', statsZh], ['ja', statsJa]] as const) {

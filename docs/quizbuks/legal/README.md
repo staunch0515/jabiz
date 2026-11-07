@@ -1,7 +1,7 @@
 # QuizBuks — 法律文本的草稿
 
 这里是隐私政策的正式草稿（日文 `privacy-policy.ja.md` 为准据文本，中文、英文供参考），按代码中实际收集与使用的数据写成（2026-10-27 盘点；1.3 另加店员 Q39 与"关于我"Q47，2026-10-28；运营商与 AI 获客 Q48，2026-10-29：第2条第4项、第3条第8–9项、第5条两行、第8条一行；App 内扫码 Q52，2026-10-30：第2条第3项末尾一句；须由需求方或律师确认）。
-适用于答题 App、商家后台与招商网站；QuizBuks for Shopify 有自己的隐私政策页：`/shopify-app/privacy/`，正文在 `quizbuks-web/shopify-site/src/content/`（S4a，`shopify/S4-launch.md` §1），随应用构建，不经 `QB_LEGAL_PUBLISH`；两份政策描述的数据有改动时各自同步。
+适用于答题 App、发起方后台与招商网站；QuizBuks for Shopify 有自己的隐私政策页：`/shopify-app/privacy/`，正文在 `quizbuks-web/shopify-site/src/content/`（S4a，`shopify/S4-launch.md` §1），随应用构建，不经 `QB_LEGAL_PUBLISH`；两份政策描述的数据有改动时各自同步。
 它们不进入代码：`QB_SETUP` 只建测试占位的草稿（`LegalDrafts`），正式文本由内容管理员在管理后台粘贴、发布（`operations.md`，`QB_LEGAL_PUBLISH`）。
 
 ## 发布前
@@ -11,7 +11,7 @@
    在 `/qb/legal` 发布（需要二次验证）。
 3. 发布后的地址：`https://<域名>/taker/legal/privacy`。Meta（Facebook 登录）与 LINE 控制台的"隐私政策 URL"填它；Meta 的"用户数据删除"选"数据删除说明 URL"，同样填它（第10条写明了删除的请求方式）。
 
-4. 第10条的"删除账号"写明了 App 与商户后台的入口：发布含这一节的版本之前，先在生产开启 `QB_APP_ACCOUNT_DELETION` 与 `QB_SPONSOR_ACCOUNT_DELETION`（`deploy/quizbuks/DEPLOY.md` §1a，需要维护连接）。
+4. 第10条的"删除账号"写明了 App 与发起方后台的入口：发布含这一节的版本之前，先在生产开启 `QB_APP_ACCOUNT_DELETION` 与 `QB_SPONSOR_ACCOUNT_DELETION`（`deploy/quizbuks/DEPLOY.md` §1a，需要维护连接）。
 
 ## 有奖活动规则（Q49a）
 
@@ -23,7 +23,7 @@
 
 - 收集新的个人信息（例如资料增加生年、性别：1.3 的 Q47，已写入）
 - 增加外部服务（支付、邮件、登录方式、分析、嵌入）或改变送出的内容
-- 商家能看到的答题人信息、分析的最小人数（`qb.stats.min-group`）
+- 发起方能看到的学者信息、分析的最小人数（`qb.stats.min-group`）
 - 保存期间（`RetentionPolicy`）、本人能操作的功能（例如将来的导出；删除账号见第10条，Q72 / Q71，2026-11-01）
 
 政策改了，商店的数据申报（Google Play 数据安全表 `docs/quizbuks/store/play-data-safety.md`，以后的 Apple 隐私标签）一起核对并在 Console 中更新（Q49d）。

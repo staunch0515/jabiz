@@ -66,7 +66,7 @@ async function rewardOwed(request: Parameters<typeof approvedSponsor>[0], method
 
 const cashRewardOwed = (request: Parameters<typeof approvedSponsor>[0]) => rewardOwed(request, 'SPONSOR_CASH')
 
-test('the sponsor marks a cash reward paid and the taker confirms it', async ({ page, request }) => {
+test('the Sponsor marks a cash reward paid and the Taker confirms it', async ({ page, request }) => {
   test.setTimeout(240_000)
   const owed = await cashRewardOwed(request)
 
@@ -114,7 +114,7 @@ test('the sponsor marks a cash reward paid and the taker confirms it', async ({ 
     .toHaveAttribute('data-status', 'CONFIRMED')
 })
 
-test('a taker collects a prize by scanning the code on the sponsor\'s screen', async ({ page, request }) => {
+test('a Taker collects a prize by scanning the code on the Sponsor\'s screen', async ({ page, request }) => {
   test.setTimeout(240_000)
   const owed = await rewardOwed(request, 'OFFLINE_REDEEM')
 
@@ -171,7 +171,7 @@ test('a taker collects a prize by scanning the code on the sponsor\'s screen', a
     'REDEEMED')
 })
 
-test('a taker collects a prize by scanning the sponsor\'s screen with the app\'s own scanner (Q52)',
+test('a Taker collects a prize by scanning the Sponsor\'s screen with the app\'s own scanner (Q52)',
   async ({ page, request }) => {
     test.setTimeout(240_000)
     const owed = await rewardOwed(request, 'OFFLINE_REDEEM')
@@ -238,7 +238,7 @@ test('a taker collects a prize by scanning the sponsor\'s screen with the app\'s
     await expect(page.getByTestId('redeem-done')).toHaveAttribute('data-status', 'REDEEMED')
   })
 
-test('a sponsor names a taker to the staff by their ID, who hands out a prize at the counter (Q39)',
+test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at the counter (Q39)',
   async ({ page, request }) => {
     test.setTimeout(240_000)
     const owed = await rewardOwed(request, 'OFFLINE_REDEEM')

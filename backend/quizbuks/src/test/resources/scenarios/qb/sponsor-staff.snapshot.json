@@ -70,8 +70,8 @@
       },
       "body" : {
         "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the sponsor's place by 2026-10-31: A coffee at our counter",
-        "ja" : "「Coffee week」の賞品（300 クドス相当）を 2026-10-31 までにスポンサーの店舗で受け取ってください：A coffee at our counter",
-        "zh" : "请在 2026-10-31 前到商家处领取\"Coffee week\"的奖品（价值 300 学分）：A coffee at our counter"
+        "ja" : "「Coffee week」の賞品（300 クドス相当）を 2026-10-31 までに主催者の店舗で受け取ってください：A coffee at our counter",
+        "zh" : "请在 2026-10-31 前到发起方处领取\"Coffee week\"的奖品（价值 300 学分）：A coffee at our counter"
       },
       "publicationId" : "#uuid:3",
       "action" : "RESULT",
@@ -116,8 +116,8 @@
       },
       "body" : {
         "en" : "Collect your prize for \"Coffee week\" (worth 300 Kudos) at the sponsor's place by 2026-10-31: A coffee at our counter",
-        "ja" : "「Coffee week」の賞品（300 クドス相当）を 2026-10-31 までにスポンサーの店舗で受け取ってください：A coffee at our counter",
-        "zh" : "请在 2026-10-31 前到商家处领取\"Coffee week\"的奖品（价值 300 学分）：A coffee at our counter"
+        "ja" : "「Coffee week」の賞品（300 クドス相当）を 2026-10-31 までに主催者の店舗で受け取ってください：A coffee at our counter",
+        "zh" : "请在 2026-10-31 前到发起方处领取\"Coffee week\"的奖品（价值 300 学分）：A coffee at our counter"
       },
       "publicationId" : "#uuid:3",
       "action" : "RESULT",
@@ -134,8 +134,8 @@
       "kind" : "REDEEM_CLAIMED",
       "title" : {
         "en" : "A taker scanned your printed code",
-        "ja" : "回答者が印刷したコードをスキャンしました",
-        "zh" : "有答题人扫了你的固定码"
+        "ja" : "テイカーが印刷したコードをスキャンしました",
+        "zh" : "有学者扫了你的固定码"
       },
       "body" : {
         "en" : "Someone at your place claims the prize for \"Coffee week\" (code C-00000002, worth 300 Kudos). Confirm it on the redeem page within ten minutes, or decline it.",

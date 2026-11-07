@@ -104,7 +104,7 @@ export const TEMPLATE = {
   feeCharges: 'qb.admin.fee-charges',
   feeInvoices: 'qb.admin.fee-invoices',
   feeRequests: 'qb.admin.fee-requests',
-  /** The investors' figures (Q27): a row per UTC month of a period, and the merchants behind them (finance). */
+  /** The investors' figures (Q27): a row per UTC month of a period, and the sponsors behind them (finance). */
   investorMetrics: 'qb.admin.investor-metrics',
   investorSponsors: 'qb.admin.investor-sponsors',
   /** The platform's account balances (`ledger.read`). */

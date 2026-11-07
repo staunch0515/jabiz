@@ -83,7 +83,7 @@ export const APP_INSTALLED = 'qb.app.installed'
 /**
  * Whether a taker's link should simply be followed, to open in the installed app (Q41): on a desktop whose browser ran
  * the app installed, a link into its scope opens the app's own window (desktop Chrome 139+ by default), which the
- * phone-sized popup would bypass. Phones go to the app anyway; a merchant's link is never the app.
+ * phone-sized popup would bypass. Phones go to the app anyway; a sponsor's link is never the app.
  */
 export function opensInApp(kind, win) {
   if (kind !== 'taker' || isPhone(win)) return false
@@ -96,7 +96,7 @@ export function opensInApp(kind, win) {
 
 /**
  * Opens the app: a taker on a desktop gets a separate phone-sized window (a new tab when the browser blocks it), a
- * taker on a phone goes straight there, a merchant always gets a new tab. Used by the sign-up and sign-in links.
+ * taker on a phone goes straight there, a sponsor always gets a new tab. Used by the sign-up and sign-in links.
  */
 export function openSignUp(kind, href, win) {
   if (kind === 'taker' && !isPhone(win)) {

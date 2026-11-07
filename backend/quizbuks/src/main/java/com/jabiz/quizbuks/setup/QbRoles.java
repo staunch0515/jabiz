@@ -157,7 +157,7 @@ public final class QbRoles {
     private static final Map<String, Role> ROLES = new LinkedHashMap<>();
 
     static {
-        add(TAKER, labels("Quiz taker", "答题人", "回答者"), false, List.of(QbPermissions.COUNTRY_READ,
+        add(TAKER, labels("Taker", "学者", "テイカー"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.PLAY, QbPermissions.ME, QbPermissions.PAYOUT_ONBOARD, QbPermissions.ACCOUNT_READ,
             QbPermissions.SPONSOR_AVATAR_READ, QbPermissions.CONTENT_FILE_READ,
             // Q68: a sponsor's own figures and publications in the app, and pausing or resuming them.
@@ -166,7 +166,7 @@ public final class QbRoles {
             "document.archive.read",
             // Q82: writing to the sponsors of the publications they answered.
             QbPermissions.CONVERSATION_USE));
-        add(SPONSOR, labels("Sponsor", "商家", "スポンサー"), false, List.of(QbPermissions.COUNTRY_READ,
+        add(SPONSOR, labels("Sponsor", "发起方", "主催者"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
             QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,
             QbPermissions.SPONSOR_FINANCE_READ, QbPermissions.BROADCAST_WRITE, QbPermissions.ACCOUNT_READ,

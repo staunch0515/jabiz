@@ -7,8 +7,8 @@
       "roleCode" : "QB_TAKER",
       "labels" : {
         "en" : "Quiz taker",
-        "ja" : "回答者",
-        "zh" : "答题人"
+        "ja" : "テイカー",
+        "zh" : "学者"
       },
       "enabled" : true,
       "requireMfa" : false,
@@ -21,8 +21,8 @@
       "roleCode" : "QB_SPONSOR",
       "labels" : {
         "en" : "Sponsor",
-        "ja" : "スポンサー",
-        "zh" : "商家"
+        "ja" : "主催者",
+        "zh" : "发起方"
       },
       "enabled" : true,
       "requireMfa" : false,
@@ -7839,8 +7839,8 @@
       "kind" : "TERMS_SPONSOR",
       "title" : {
         "en" : "[TEST PLACEHOLDER] Sponsor terms",
-        "ja" : "[TEST PLACEHOLDER] スポンサー利用規約",
-        "zh" : "[TEST PLACEHOLDER] 商家条款"
+        "ja" : "[TEST PLACEHOLDER] 主催者利用規約",
+        "zh" : "[TEST PLACEHOLDER] 发起方条款"
       },
       "body" : {
         "en" : "> **[TEST PLACEHOLDER] This is not a legal text.** It exists so that development and tests have something to publish. The operator's counsel supplies the real text, in Japanese (which governs) and in English; an administrator replaces this draft with it before going live.\n\n## 1. Scope\n\nPlaceholder text.\n",

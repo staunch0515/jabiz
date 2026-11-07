@@ -87,8 +87,8 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('a sponsor\'s tree on their page (Q85)', () => {
-  it('draws the tree as the taker stands on it, with the progress and the next step', async () => {
+describe('a Sponsor\'s tree on their page (Q85)', () => {
+  it('draws the tree as the Taker stands on it, with the progress and the next step', async () => {
     const { asked } = server()
     window.history.replaceState(null, '', '/s/acme-bakery?node=pub2')
     render(<App />)

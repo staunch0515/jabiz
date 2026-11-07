@@ -49,7 +49,7 @@ public class ReportConfig {
                 "ja", "不快・不適切な内容")
             .item(QbReports.REWARD_NOT_GIVEN, "en", "Reward not given", "zh", "未兑现奖励", "ja", "報酬が支払われない")
             .item(QbReports.SPAM, "en", "Spam or advertising", "zh", "垃圾信息或广告", "ja", "スパム・宣伝")
-            .item(QbReports.MESSAGE, "en", "A message from the sponsor", "zh", "商户的留言", "ja", "スポンサーからのメッセージ")
+            .item(QbReports.MESSAGE, "en", "A message from the sponsor", "zh", "发起方的留言", "ja", "主催者からのメッセージ")
             .item(QbReports.OTHER, "en", "Something else", "zh", "其他", "ja", "その他"));
     }
 

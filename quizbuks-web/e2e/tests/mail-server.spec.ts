@@ -10,7 +10,7 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a sponsor sets up the mail server: the test mail arrives, a wrong port is reported', async ({ page, request }) => {
+test('a Sponsor sets up the mail server: the test mail arrives, a wrong port is reported', async ({ page, request }) => {
   test.setTimeout(180_000)
   const sponsor = await approvedSponsor(request, 'Mia')
   await signIn(page, '/sponsor/', sponsor.email)
