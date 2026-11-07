@@ -593,7 +593,13 @@ public final class OperatorProcesses {
 
     // ---- sponsors ----------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<AssignInput, AssignOutput, ProcessContext> assign() {
+    /**
+     * @param maxMoved the most open reviews one reassignment moves: the platform's single-call limit of
+     *                 {@code APPROVAL_SCOPE_MOVE} ({@code jabiz.approval.scope-move.max-items},
+     *                 {@link com.jabiz.runtime.approval.ApprovalScopeMoveSettings}); more is refused, never split, so
+     *                 that a reassignment stays one bounded transaction
+     */
+    public static ProcessDefinition<AssignInput, AssignOutput, ProcessContext> assign(int maxMoved) {
         return ProcessDefinition.define(ASSIGN, 1, AssignInput.class, AssignOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Moves a sponsor to another operator that takes sponsors, with a reason.")
@@ -620,8 +626,8 @@ public final class OperatorProcesses {
                             new QueryPredicate.In("preparerId", List.of(person(ctx))),
                             new QueryPredicate.In("status", List.of(ApprovalEntities.PENDING)),
                             new QueryPredicate.In("scopeName", List.of(QbOperators.SCOPE)))))
-                        .limit(MAX_REVIEWS_MOVED + 1).build(), PENDING_REVIEWS)))
-                .compute("Assign", (metadata, ctx) -> assign(ctx, ctx.get(INPUT, AssignInput.class)))
+                        .limit(maxMoved + 1).build(), PENDING_REVIEWS)))
+                .compute("Assign", (metadata, ctx) -> assign(ctx, ctx.get(INPUT, AssignInput.class), maxMoved))
                 // D76: the sponsor's pending reviews and their tasks go to the new operator; the caller needs
                 // approval.scope.move besides this process's.
                 .step("Move the sponsor's reviews", CallProcess.<ProcessContext>when(
@@ -641,9 +647,6 @@ public final class OperatorProcesses {
                         ctx.get(FROM, String.class), ctx.get(OUTPUT, AssignOutput.class).operatorId()), null)));
     }
 
-    /** The most open reviews of a sponsor one reassignment moves (the platform's move takes up to 500). */
-    static final int MAX_REVIEWS_MOVED = 500;
-
     /** The cases of the sponsor's open reviews, each once. */
     static List<ApprovalScopeMove.Case> reviewCases(ProcessContext ctx) {
         return OperatorChecks.list(ctx, PENDING_REVIEWS).stream()
@@ -652,7 +655,7 @@ public final class OperatorProcesses {
             .distinct().toList();
     }
 
-    static void assign(ProcessContext ctx, AssignInput input) {
+    static void assign(ProcessContext ctx, AssignInput input, int maxMoved) {
         if (OperatorChecks.first(ctx, SPONSOR) == null) {
             ctx.reject(new Violation("userId", OperatorCodes.NOT_A_SPONSOR, "The user runs no sponsor account",
                 Map.of()));
@@ -683,9 +686,9 @@ public final class OperatorProcesses {
             ctx.reject(new Violation("operatorId", OperatorCodes.SUSPENDED, "The operator is suspended", Map.of()));
         }
         // More open reviews than one move takes: none is expected (a sponsor has a few at a time).
-        if (OperatorChecks.list(ctx, PENDING_REVIEWS).size() > MAX_REVIEWS_MOVED) {
+        if (OperatorChecks.list(ctx, PENDING_REVIEWS).size() > maxMoved) {
             ctx.reject(new Violation("userId", OperatorCodes.REVIEW_PENDING, "The sponsor has more open reviews "
-                + "than one move takes", Map.of("max", MAX_REVIEWS_MOVED)));
+                + "than one move takes", Map.of("max", maxMoved)));
         }
         if (ctx.hasViolations()) {
             return;
