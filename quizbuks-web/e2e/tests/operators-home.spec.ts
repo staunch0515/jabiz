@@ -26,6 +26,8 @@ test('the platform lands on the operators’ home; a Sponsor sees their operator
   await expectAccessible(page, 'platform home')
 
   await signIn(page, '/sponsor/', sponsor.email)
+  // Signed in (the dashboard) before going to another page, as the other Sponsor tests do.
+  await expect(page.getByTestId('dashboard-status')).toBeVisible()
   await page.goto('/sponsor/profile')
   const card = page.getByTestId('profile-operator')
   await expect(card.getByTestId('profile-operator-name')).toHaveText(String(operator.name))
