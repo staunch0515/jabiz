@@ -1,7 +1,10 @@
 import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
   AppearanceProvider,
+  AppShell,
+  BottomBar,
   Button,
+  GlobalCreate,
   MailLinkPage,
   MailUnsubscribe,
   OfflineBanner,
@@ -10,13 +13,16 @@ import {
   PasswordResetRequest,
   PwaInstallBanner,
   PwaUpdatePrompt,
+  ShellNav,
   SignInForm,
   SignUpForm,
   StepUpProvider,
   ThemeToggle,
   VerifyEmailBanner,
-  cn,
+  type ShellMenuItem,
 } from '@jabiz/ui'
+import { ShoppingCartIcon } from 'lucide-react'
+import { AREAS } from './areas'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -24,7 +30,7 @@ import { PORTAL } from './messages'
 import { ACCOUNT_PATH, AccountPage, rememberLinked } from './pages/AccountPage'
 import { OrdersPage } from './pages/OrdersPage'
 import { PlaceOrderPage } from './pages/PlaceOrderPage'
-import { hrefOf, navigate, navigation, useLocation } from './router'
+import { navigate, navigation, portalLink, useLocation } from './router'
 
 /** Where a signed-in customer starts. */
 const HOME = '/orders'
@@ -47,24 +53,11 @@ function Redirect({ to }: { to: string }) {
   return null
 }
 
-function NavLink({ to, current, children }: { to: string; current: string; children: ReactNode }) {
-  return (
-    <a
-      href={hrefOf(to)}
-      aria-current={current === to ? 'page' : undefined}
-      className={cn('rounded-md px-3 py-2 text-sm font-medium hover:bg-accent', current === to && 'bg-accent')}
-      onClick={(event) => {
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-        event.preventDefault()
-        navigate(to)
-      }}
-    >
-      {children}
-    </a>
-  )
-}
-
-/** The pages of a signed-in customer, with the portal's header and the banners of the account and the app. */
+/**
+ * The pages of a signed-in customer in the platform's application frame (phase 17zj): a sidebar that collapses to
+ * icons, "+ New" (an order), and on a phone a bottom menu with the page's main action as a floating button; the
+ * account's and the app's banners above each page.
+ */
 function Shell({ path }: { path: string }) {
   const { t } = useTranslation(PORTAL)
   const { signOut, displayName } = useAuth()
@@ -73,17 +66,26 @@ function Shell({ path }: { path: string }) {
   else if (path === '/order') page = <PlaceOrderPage />
   else if (path === ACCOUNT_PATH) page = <AccountPage />
   else page = <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
+  const items: ShellMenuItem[] = (['orders', 'order', 'account'] as const).map((key) => ({
+    key, label: t(`nav.${key}`), path: AREAS[key].path, icon: AREAS[key].icon,
+  }))
+  const isActive = (to: string) => to === path
   return (
-    <div className="flex min-h-full flex-col">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2 px-4 py-3">
-          <span className="mr-4 font-semibold">{t('brand')}</span>
-          <nav aria-label={t('nav.label')} className="flex flex-wrap gap-1">
-            <NavLink to="/orders" current={path}>{t('nav.orders')}</NavLink>
-            <NavLink to="/order" current={path}>{t('nav.order')}</NavLink>
-            <NavLink to="/account" current={path}>{t('nav.account')}</NavLink>
-          </nav>
-          <span className="text-muted-foreground ml-auto text-sm" data-testid="portal-user">{displayName}</span>
+    <AppShell
+      brand={<span className="truncate px-2 py-1 font-semibold">{t('brand')}</span>}
+      collapsible="icon"
+      routeKey={path}
+      create={<GlobalCreate
+        items={[{ key: 'order', label: t('nav.order'), icon: ShoppingCartIcon, path: '/order' }]}
+        renderLink={(item, props) => portalLink(item.path, props)} />}
+      navigation={<ShellNav label={t('nav.label')} items={items} isActive={isActive}
+        renderLink={(item, props) => portalLink(item.path, props)} />}
+      bottomBar={<BottomBar label={t('nav.quick')} isActive={isActive}
+        items={items.map((item) => ({ key: item.key, label: item.label, path: item.path!, icon: item.icon! }))}
+        renderLink={(item, props) => portalLink(item.path, props)} />}
+      header={
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-muted-foreground text-sm" data-testid="portal-user">{displayName}</span>
           <ThemeToggle />
           <Button
             variant="outline"
@@ -94,8 +96,9 @@ function Shell({ path }: { path: string }) {
             {t('nav.signOut')}
           </Button>
         </div>
-      </header>
-      <main className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-6">
+      }
+    >
+      <main className="flex flex-col gap-4">
         <OfflineBanner />
         <PwaUpdatePrompt />
         {/* Signed-in customers only: an offer to install before signing in is mostly closed unread (16zj). */}
@@ -103,7 +106,7 @@ function Shell({ path }: { path: string }) {
         {path !== '/order' && <VerifyEmailBanner />}
         {page}
       </main>
-    </div>
+    </AppShell>
   )
 }
 

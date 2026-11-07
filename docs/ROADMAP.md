@@ -5037,7 +5037,7 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zh-6 | 信纸：core `MailLayout`、`MailLayoutRules`（显示名与替代文字一行、标志只用本站图片、页脚只用 `{baseUrl}` / `{entryUrl.<入口>}` 且照文字的链接规则；错误码 `MAIL_LAYOUT_*`）、`MailRenderer.wrap` / `plain`；迁移 `V61__mail_layouts.sql`（时态实体 `MailLayout`，三张投递表加列 `layout_version_no`，两张表的唯一索引挡住并发的首次写入）；缺省值 `jabiz.mail.layout.<语言>.*`（示范 `app` 三语）；修改只经受控变更 `MailLayout`（`MailLayoutControlTarget`、守卫 `MailLayoutGuard`），`MAIL_LAYOUT_RESET`、`MAIL_LAYOUT_TEST_SEND`（缺省每人每小时 10 次）；`GET /api/mail/layouts`、`POST /api/mail/layouts/preview`；模版邮件、待办通知、单据邮件、预览与测试信都放在信纸上并记版本；启动检查（缺省值不合格即错误，存的不合格告警）；17zh-a 安全审查的跟进 F5（按写入的流程判定是否经审批）与 F6b（只有平台的测试信按已渲染内容发出）；测试 `MailLayoutRulesTest`、`MailRendererTest`、`MailLayoutIT`、`MailTextIT`；文档 D72 第 6、7 条、18 §5.6、根 `CLAUDE.md` | 17zh-b |
 | 17zh-7 | 通用后台的"邮件模版"与"邮件信纸"页（列表、编辑器、预览、测试发送、恢复默认、历史与对比、提出修改） | 17zh-c（计划） |
 
-**17zh 状态**：17zh-a ✅ 已合并（#470）；17zh-b 📝 待评审（分支 `1.3/phase-17zhb-mail-layout`）；17zh-c 计划中。
+**17zh 状态**：17zh-a ✅ 已合并（#470）；17zh-b ✅ 已合并（#473）；17zh-c 计划中。
 
 ### 17zm 平台 CI 的 Playwright 作业固定 Ubuntu 24.04（2026-11-07，QuizBuks 首次上线 P8）
 
@@ -5087,3 +5087,17 @@ D17 下匿名不能写任何东西（15 §10）。
 | 17zl-4 | 测试：`ClientCountryTest`、`IpCountryDatabaseTest`、`ClientCountriesTest`、`ClientCountryIT`（测试地址库以文档地址段给出 CN / JP / HK / US）、`region.test.ts`；设计 10 §18、决策 D74、根 `CLAUDE.md`、`platform-features.md` |
 
 **17zl 状态**：✅ 已合并（#468）。
+
+### 17zj 应用框架组件与三种页面模板（2026-11-07，QuizBuks 首次上线 P3；Q108）
+
+**缘由**：QuizBuks 的发起方后台与学者 App 共用的框架（Q108 §3、§4、§6.1 第 5 条）：菜单越来越多、主按钮在宽屏上离标题太远、页面布局不统一。平台先行（根 `CLAUDE.md` §8）。
+
+| # | 内容 |
+|---|---|
+| 17zj-1 | `AppShell`：`collapsible="icon"`（图标窄条，名称为提示，分组点击先展开）、`create`、`bottomBar`（只在窄屏，`--bottom-bar-offset`）、`routeKey`（路由改变时焦点到标题）；`ShellNav` 的提示 |
+| 17zj-2 | `PageHeader` 的 `icon`、`primaryAction`（标题旁 / 手机上的 `Fab`）、`tabs`；`PageTabs`（链接、`aria-current`、横向滚动、方向键）；`GlobalCreate`；`BottomBar`（项数由应用给出、`raised`、徽标、"更多"抽屉） |
+| 17zj-3 | 主题 token `--content-max`、`--content-form-max`、`--bottom-bar-height`；`PageContent`、`ListPage`、`DetailPage`、`FormPage`（保存条、未保存的提示、`useUnsavedChanges`）；文案 `create.*`、`templates.*` 三语 |
+| 17zj-4 | 示范：门户改用 `AppShell`（图标窄条、新建、底部菜单）与三种模板（订单列表、下单、账户）；通用后台"我的待办"用 `ListPage`；e2e `portal.spec.ts` 按导航定位链接、以 `form-page-save` 下单 |
+| 17zj-5 | 测试：`app-frame.test.tsx`、`theme.test.ts`、门户 `App.test.tsx`、`TasksPage.test.tsx`（均含 axe 亮暗）；设计 12 §13、`app-spa.md` |
+
+**17zj 状态**：📝 待评审（分支 `1.3/phase-17zj-app-framework`）。

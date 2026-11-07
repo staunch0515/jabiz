@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   Label,
+  ListPage,
   notify,
   PageState,
   RadioGroup,
@@ -14,11 +15,11 @@ import {
   Textarea,
 } from '@jabiz/ui'
 import { useQueryClient } from '@tanstack/react-query'
+import { ListTodoIcon } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import ApprovalPanel from '../components/ApprovalPanel'
-import AdminPage from '../layout/AdminPage'
 import { useMyTasks, type MyTask } from '../meta/hooks'
 
 /** The longest note of `TASK_RESOLVE` (`TaskResolution.NOTE_LENGTH`). */
@@ -102,7 +103,8 @@ function ResolveForm({ taskId, titleId, onResolved }: { taskId: string; titleId:
 /**
  * The signed-in user's open tasks (docs/design/18-numbering-approvals-tasks.md section 5.3): assigned to them or to a
  * permission they hold. Approval tasks are decided here; the others link to where they are done, and holders of
- * `task.resolve` close them by hand with a note (work no process will close).
+ * `task.resolve` close them by hand with a note (work no process will close). On the platform's list template (phase
+ * 17zj): the toolbar searches the titles and picks approvals or the other tasks.
  */
 export default function TasksPage() {
   const { t } = useTranslation()
@@ -110,7 +112,11 @@ export default function TasksPage() {
   const { can } = useAuth()
   const queries = useQueryClient()
   const refresh = () => void queries.invalidateQueries({ queryKey: ['tasks'] })
-  const items = tasks.data?.tasks ?? []
+  const all = tasks.data?.tasks ?? []
+  const [search, setSearch] = useState('')
+  const [kind, setKind] = useState<'all' | 'approvals' | 'others'>('all')
+  const items = all.filter((task) => (kind === 'all' || (kind === 'approvals') === (task.type === 'approval'))
+    && (task.title ?? '').toLowerCase().includes(search.trim().toLowerCase()))
 
   const item = (task: MyTask) => (
     <li key={task.taskId} data-testid={`task-${task.taskId}`}>
@@ -140,7 +146,21 @@ export default function TasksPage() {
   )
 
   return (
-    <AdminPage title={t('tasks.title')}>
+    <ListPage
+      title={t('tasks.title')}
+      icon={ListTodoIcon}
+      search={all.length > 0 ? { value: search, onChange: setSearch, label: t('tasks.search') } : undefined}
+      chips={all.length > 0 ? {
+        label: t('tasks.kind'),
+        value: kind,
+        onChange: setKind,
+        options: [
+          { value: 'all', label: t('tasks.all') },
+          { value: 'approvals', label: t('tasks.approvals') },
+          { value: 'others', label: t('tasks.others') },
+        ],
+      } : undefined}
+    >
       {tasks.isLoading ? (
         <PageState kind="loading" />
       ) : items.length === 0 ? (
@@ -150,6 +170,6 @@ export default function TasksPage() {
           {items.map(item)}
         </ul>
       )}
-    </AdminPage>
+    </ListPage>
   )
 }

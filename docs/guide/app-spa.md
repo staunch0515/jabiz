@@ -203,6 +203,11 @@ export default defineConfig({
   ```
   流程与模板照常经 `runProcess` / `runQuery`。
 
+- **框架与页面模板**（17zj，设计 12 §13）：已登录的页面放进 `AppShell`（`collapsible="icon"`、`create={<GlobalCreate …/>}`、
+  `bottomBar={<BottomBar …/>}`、`routeKey={path}`），菜单用 `ShellNav`；每页用 `ListPage`、`DetailPage` 或 `FormPage`，页头给 `icon`（区域的图标）与
+  `primaryAction`（主操作，手机上自动成为浮动按钮），区域里的各页用 `PageTabs`。各组件的 `renderLink` 交给应用的路由（示范门户的 `portalLink`）。
+  宽度用主题 token `--content-max` / `--content-form-max`，不在页面里写死。
+
 ## 6. 服务端为 SPA 做的事（17 §3.2）
 
 - 客户端路由回退到该 SPA 的 `index.html`（没有入口的静态站点例外：命中有自己 `index.html` 的目录即交出该页，17 §3.2，16zf-b）；`index.html`、`sw.js`、`manifest.webmanifest` 为 `Cache-Control: no-cache`，`assets/*` 一年且 `immutable`；

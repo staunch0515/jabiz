@@ -1,7 +1,10 @@
 import { formatAmount, formatDateTime, runQuery } from '@jabiz/client'
-import { Badge, DataTable, PageState, type ColumnDef } from '@jabiz/ui'
+import { Badge, DataTable, ListPage, PageState, type ColumnDef } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { PlusIcon } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { AREAS } from '../areas'
+import { portalLink } from '../router'
 import { useTranslation } from 'react-i18next'
 import { PORTAL } from '../messages'
 
@@ -13,10 +16,15 @@ interface OrderRow {
   lineCount: number
 }
 
+/** "All" among the status chips. */
+const ALL = '*'
+
 /**
- * The customer's own orders (template `commerce.portal_orders`, scoped to the caller by the server). A `DataTable`
- * whose columns have card places (17zc): on a phone the orders are cards (the number as the title, the status as a
- * badge, the rest as label and value); the customer can switch.
+ * The customer's own orders (template `commerce.portal_orders`, scoped to the caller by the server), on the
+ * platform's list template (phase 17zj): placing an order is the main action beside the title (the floating button
+ * on a phone), the toolbar searches the order numbers and picks a status. A `DataTable` whose columns have card
+ * places (17zc): on a phone the orders are cards (the number as the title, the status as a badge, the rest as label
+ * and value); the customer can switch.
  */
 export function OrdersPage() {
   const { t } = useTranslation(PORTAL)
@@ -35,11 +43,25 @@ export function OrdersPage() {
     { accessorKey: 'totalAmount', header: t('orders.totalAmount'), meta: { className: 'text-right' }, enableSorting: false,
       cell: ({ row }) => formatAmount(row.original.totalAmount, { currency: 'JPY', scale: 0 }) },
   ], [t])
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState(ALL)
+  const items = orders.data?.items ?? []
+  const statuses = [...new Set(items.map((order) => order.status))].sort()
+  const shown = items.filter((order) => (status === ALL || order.status === status)
+    && order.orderNo.toLowerCase().includes(search.trim().toLowerCase()))
   return (
-    <section className="flex flex-col gap-4" aria-labelledby="orders-title">
-      <h1 id="orders-title" className="text-xl font-semibold">
-        {t('orders.title')}
-      </h1>
+    <ListPage
+      title={t('orders.title')}
+      icon={AREAS.orders.icon}
+      primaryAction={{ label: t('nav.order'), icon: PlusIcon, renderLink: (props) => portalLink(AREAS.order.path, props) }}
+      search={items.length > 0 ? { value: search, onChange: setSearch, label: t('orders.search') } : undefined}
+      chips={statuses.length > 1 ? {
+        label: t('orders.status'),
+        value: status,
+        onChange: setStatus,
+        options: [{ value: ALL, label: t('orders.all') }, ...statuses.map((s) => ({ value: s, label: s }))],
+      } : undefined}
+    >
       {orders.isPending && <PageState kind="loading" />}
       {orders.isError && <PageState kind="error" description={t('failed')} data-testid="orders-error" />}
       {orders.data && orders.data.items.length === 0 && (
@@ -49,11 +71,11 @@ export function OrdersPage() {
       )}
       {orders.data && orders.data.items.length > 0 && (
         <div data-testid="orders-table">
-          <DataTable label={t('orders.title')} columns={columns} data={orders.data.items}
+          <DataTable label={t('orders.title')} columns={columns} data={shown}
             getRowId={(order) => order.orderNo} storageKey="portal.orders"
             rowProps={() => ({ 'data-testid': 'order-row' })} />
         </div>
       )}
-    </section>
+    </ListPage>
   )
 }
