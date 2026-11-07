@@ -216,7 +216,7 @@
 - **原因**：登录的续期每次换一个新的刷新令牌（轮换），旧的作废；同一个旧令牌再次出现即视为被盗、整个会话吊销（服务器日志 `Refresh token of user … presented twice; revoking its session`）。页面在续期请求发出后、收到新令牌前被刷新或关闭，新令牌没存下，下一页拿旧令牌续期，就被当成重用。多个标签页之间已经用 Web Locks 排队（`@jabiz/client` 的 `withRefreshLock`），但页面卸载时锁随之释放，管不到这种情况。
 - **修复方向**（平台，需决策）：刷新令牌的重用宽限：被轮换掉的令牌在很短的时间内（如 30 秒，可配置）再出现时，不吊销会话，而是给出同一个后继（或作废后继、再发一个），超过宽限才按被盗处理；同时 e2e 的轮询改为等页面稳定后再刷新。
 - **使用者的解决办法**：重新登录即可，数据不受影响。
-- **运维**：设置、观测与处理见平台运维要点 `docs/guide/platform-operations.md` §5"刷新令牌的重用宽限"一行（随平台 17zx 合并到本线）：设置 `jabiz.security.refresh.reuse-grace`（缺省 30 秒，0 为关闭），
+- **运维**：设置、观测与处理见平台运维要点 `docs/guide/platform-operations.md` §5"刷新令牌的重用宽限"一行：设置 `jabiz.security.refresh.reuse-grace`（缺省 30 秒，0 为关闭），
   告警 `jabiz-refresh-reuse-granted` / `-revoked`（`operations.md` §5"安全"）。补发异常增多多半是客户端没有先保存新令牌（看最近发布的前端），其次是令牌被盗；不要调大宽限来"修"登出。
 
 ## T14 e2e 的统计用例在东京零点前后失败（内部）

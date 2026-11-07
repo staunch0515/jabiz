@@ -33,6 +33,6 @@
 
 - `alert-fire-test.sh rules` 只看文件夹 `jabiz`，`fire` 只伪造平台的规则：QuizBuks 的规则在 Grafana 中看健康状态；规则对真实 LGTM 的求值本次没有运行（这里没有 Grafana）。
 - 指标与仪表的名字按平台的约定（计时器 `_milliseconds_count`，仪表无后缀）写，未对真实的 LGTM 核对。
-- `tools/ops/env-check.sh` 与 `docs/guide/platform-operations.md` 在 `1.3/platform`（17zx），还没有合并到本线：文档先引用，合并后即可用。
+- `tools/ops/env-check.sh` 与 `docs/guide/platform-operations.md`（平台 17zx）已随同步 #511 到本线，规则测试照真实脚本执行。
 
 删除的功能：无。改写的运维文字（新工具取代原来的手工步骤，不是删除功能）：§1.1 的"轮换"一栏、§2.4 第 2、3 步、§5 的告警表、T13 的状态。

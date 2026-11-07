@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests of QuizBuks's rules for the platform's settings check (deploy/quizbuks/server/env-check.rules,
 # docs/quizbuks/launch-checklist.md "安全"): every line is a rule the platform's tools/ops/env-check.sh knows; and,
-# with that script (ENV_CHECK, default tools/ops/env-check.sh, which arrives with the platform's 17zx), a production
+# with that script (ENV_CHECK, default tools/ops/env-check.sh, the platform's 17zx), a production
 # .env passes while one with a test switch, a copied local .env or no monitoring fails, naming the variable.
 set -euo pipefail
 
@@ -31,7 +31,8 @@ done <"$rules"
 echo "ok   every line is a rule"
 
 if [[ ! -f "$script" ]]; then
-  echo "skip the platform's check is not here ($script): only the syntax was tested"
+  # The platform's script is on this line since the sync of 17zx (#511): a missing one is a broken checkout.
+  fail "the platform's check is not here ($script)"
 else
   key() { openssl rand -base64 48 | tr -d '\n'; }
   cat >"$work/good" <<ENV
