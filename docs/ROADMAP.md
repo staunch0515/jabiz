@@ -5338,3 +5338,16 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：未声明字段里有旧密钥下的密封值时，`platformCheck` 报错、启动时警告并告警、任务不报告可以撤下（没有其他工作时失败）；清零后任务报告可以撤下。
 
 **17zzz 状态**：📝 待评审（分支 `1.3/phase-17zzz-undeclared-sealed`）。
+
+### 17zz4 密钥轮换任务按数据视图的提交上限分批（D78 第 9 条，2026-11-07，S3 报告）
+
+**缘由**：任务一次最多处理 `jabiz.key-rotation.batch-size`（缺省 500）个值，而同一实体的改动一起提交，超过其数据视图的 `maxWriteBatchSize`（缺省 100）即整次运行失败（`BATCH_TOO_LARGE`："Batch size [101] exceeds dataset limit [100]"），轮换永远完不成；启动检查没有发现。
+
+| # | 内容 |
+|---|---|
+| 17zz4-1 | `FindRetiredValues.writeLimit(实体)` = `min(batch-size, maxWriteBatchSize)`；每次运行按实体记剩余额度（`TakeBackSecondFactors` 与重新加密共用 `SecUserMfa` 的额度），装满即 `more=true`。`KEYS`：声明的密封字段所在数据视图的上限小于 10 时警告 |
+| 17zz4-2 | 测试：`KeyRotationBatchIT`（101 个旧密钥下的仓库名：修改前整次运行失败；修改后第一次存 100 个、`more=true`，第二次存最后 1 个，第三次报告可以撤下；上限为 2 的数据视图得到警告，100 的不报）。`KeyRotationIT`、`KeyRotationUndeclaredIT`、`MfaReenrollmentIT`、`RestoreVerificationIT` 照旧通过 |
+
+**验收**：数据视图的提交上限小于任务批量时，轮换照常分几次完成（复现测试修改前失败、修改后通过）。
+
+**17zz4 状态**：📝 待评审（分支 `1.3/phase-17zz4-rekey-batch`，在 #509 之上）。

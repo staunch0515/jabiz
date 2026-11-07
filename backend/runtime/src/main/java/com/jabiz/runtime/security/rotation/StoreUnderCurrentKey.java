@@ -28,13 +28,11 @@ class StoreUnderCurrentKey implements BlockingStep<NoMetadata, ProcessContext> {
 
     private final MfaSecretCipher mfa;
     private final SecretSealer sealer;
-    private final FindRetiredValues finder;
     private final SecureRandom random = new SecureRandom();
 
-    StoreUnderCurrentKey(MfaSecretCipher mfa, SecretSealer sealer, FindRetiredValues finder) {
+    StoreUnderCurrentKey(MfaSecretCipher mfa, SecretSealer sealer) {
         this.mfa = mfa;
         this.sealer = sealer;
-        this.finder = finder;
     }
 
     @Override
@@ -77,7 +75,7 @@ class StoreUnderCurrentKey implements BlockingStep<NoMetadata, ProcessContext> {
         }
         int takenBackCount = takenBack.size();
         ctx.put(KeyRotationProcesses.OUTPUT, new KeyRotationProcesses.RekeyOutput(mfaSecrets, sealedValues,
-            unreadable, found.size() >= finder.batchSize() || takenBackCount >= finder.batchSize(), takenBackCount,
+            unreadable, ctx.contains(KeyRotationProcesses.MORE), takenBackCount,
             List.of(), false));
     }
 
