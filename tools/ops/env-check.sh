@@ -4,6 +4,8 @@
 # are missing or wrong, never a value. Exit 0 when nothing is wrong (warnings allowed), 1 otherwise.
 #
 #   env-check.sh <settings file> [<application rules file>]
+#   env-check.sh --app-only <settings file> <rules file>   only the rules file: for a settings file that is not the
+#                                                          application's (the backup tools' backup.env, say)
 #
 # An application rules file has one rule per line ('#' starts a comment):
 #   set NAME              NAME must be set and not empty
@@ -11,11 +13,21 @@
 #   equals NAME VALUE     NAME must be exactly VALUE
 #   not-equals NAME VALUE NAME must not be VALUE
 #   warn-absent NAME      a warning when NAME is set
+#   warn-unset NAME       a warning when NAME is not set (recommended)
+#   min-length NAME N     NAME must be set and at least N characters long (a passphrase)
+#   different NAME OTHER  NAME and OTHER must not have the same value (when both are set)
 set -euo pipefail
 
+app_only=false
+if [[ "${1:-}" == --app-only ]]; then
+  app_only=true
+  shift
+fi
 file=${1:-}
 rules=${2:-}
-[[ -f "$file" ]] || { echo "usage: env-check.sh <settings file> [<application rules file>]" >&2; exit 2; }
+usage="usage: env-check.sh [--app-only] <settings file> [<application rules file>]"
+[[ -f "$file" ]] || { echo "$usage" >&2; exit 2; }
+[[ "$app_only" == false || -n "$rules" ]] || { echo "env-check: --app-only needs a rules file" >&2; exit 2; }
 [[ -z "$rules" || -f "$rules" ]] || { echo "env-check: no rules file $rules" >&2; exit 2; }
 
 errors=0
@@ -50,6 +62,7 @@ key() {
   ((bytes >= 32)) || error "$name" "shorter than 32 bytes"
 }
 
+if [[ "$app_only" == false ]]; then
 # Keys of the platform (docs/guide/key-rotation.md): set, long enough, all different, none a known test value.
 keys=(JABIZ_JWT_SECRET JABIZ_INTEGRITY_KEY JABIZ_MFA_KEY)
 for name in "${keys[@]}"; do key "$name"; done
@@ -102,6 +115,7 @@ if ! has JABIZ_ALERT_EMAIL || [[ "${env[JABIZ_ALERT_EMAIL]}" == *@example.com* ]
   error JABIZ_ALERT_EMAIL "set the on-call address"
 fi
 [[ "${env[GF_SMTP_ENABLED]:-}" == "true" ]] || error GF_SMTP_ENABLED "alerts are mailed: Grafana needs its SMTP settings"
+fi
 
 # The application's rules.
 if [[ -n "$rules" ]]; then
@@ -115,6 +129,14 @@ if [[ -n "$rules" ]]; then
       equals) [[ "${env[$name]:-}" == "$value" ]] || error "$name" "must be $value" ;;
       not-equals) [[ "${env[$name]:-}" != "$value" ]] || error "$name" "must not be $value" ;;
       warn-absent) has "$name" && warn "$name" "is set: check it is meant" ;;
+      warn-unset) has "$name" || warn "$name" "not set (recommended)" ;;
+      min-length)
+        if ! has "$name"; then error "$name" "not set"
+        elif ((${#env[$name]} < value)); then error "$name" "shorter than $value characters"
+        fi ;;
+      different)
+        has "$name" && has "$value" && [[ "${env[$name]}" == "${env[$value]}" ]] \
+          && error "$name" "is the same as $value: each must be its own" ;;
       *) echo "env-check: unknown rule '$rule' in $rules" >&2; exit 2 ;;
     esac
   done <"$rules"
