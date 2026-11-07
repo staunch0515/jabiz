@@ -1,0 +1,6 @@
+# Test entries (ROADMAP phase 17zl): documentation ranges (RFC 5737, RFC 3849) given countries for the tests.
+"192.0.2.0","192.0.2.255","CN"
+198.51.100.0,198.51.100.255,JP
+203.0.113.0,203.0.113.127,HK
+2001:db8::,2001:db8:0:ffff:ffff:ffff:ffff:ffff,CN
+2001:db8:1::,2001:db8:1:ffff:ffff:ffff:ffff:ffff,US

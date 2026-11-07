@@ -110,7 +110,9 @@ public class SecurityConfig {
         // App proxies (decision D60): the other platform's signature is the credential, checked by the controller;
         // credentials sent along are not looked at. AppProxyWebFilter has refused unknown proxies and other methods.
         ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, "/api/proxy/*/*"),
-        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/api/proxy/*/*"));
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.POST, "/api/proxy/*/*"),
+        // The caller's own region by its address (decision D74): it says nothing about anybody else.
+        ServerWebExchangeMatchers.pathMatchers(HttpMethod.GET, com.jabiz.runtime.geo.ClientRegionController.PATH));
 
     /**
      * Public read access (docs/design/15-public-access.md section 6; decision D17), open to everyone and never
