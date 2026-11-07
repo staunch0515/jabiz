@@ -14,7 +14,7 @@
 ## 做法
 
 1. **用词测试**（先写）：`tools/quizbuks/terms/terms.test.mjs`，在 `quizbuks.yml` 的 `web` 作业中运行。扫描范围：
-   - 三个前端：App、发起方后台、后台扩展（不含测试文件）；
+   - 三个前端：App、发起方页面、平台管理系统扩展（不含测试文件）；
    - 维护页、招商网站 `biz`、品牌档案；
    - 服务端消息与资源（`db/` 迁移除外：那是历史，Flyway 也校验它们的校验和）；
    - 服务端 Java 里的中日文显示文字（角色名、字典）；
@@ -35,7 +35,7 @@
 ## 测试
 
 - 用词测试（含"测试本身能找到旧词、扫描的目录不为空"）。
-- App、发起方后台、后台扩展、`biz` 的 lint / typecheck / Vitest；共用文件夹 `src/qb` 两边相同；维护页与商店资料的测试。
+- App、发起方页面、平台管理系统扩展、`biz` 的 lint / typecheck / Vitest；共用文件夹 `src/qb` 两边相同；维护页与商店资料的测试。
 - 后端 `:quizbuks:test` 全部（消息、品牌、场景快照：快照中的字典标签与站内信文字随之更新，用 `-Dscenario.update-snapshots=true` 重写并逐个查看差异）。
 - e2e 在 CI 中跑（断言随替换一起改）。
 
@@ -43,7 +43,7 @@
 
 - QuizBuks for Shopify（`backend/quizbuks-shopify`、`quizbuks-web/shopify*`、`storefront`）：不在首次上线，那里的"商户"指 Shopify 店铺。
 - 帮助中心的 FAQ 存在数据库中（`QbFaqEntry`），由内容管理员照 troubleshooting 的新文案改；样板指南（Claude Doc）中"后台有时叫商户"一句由需求方删除。
-- 已有安装中 `QB_SETUP` 建好的角色名不会被改（`QbSetupRecord` 只补从未有过的项）：staging 由管理员在后台改一次；正式系统从空开始。
+- 已有安装中 `QB_SETUP` 建好的角色名不会被改（`QbSetupRecord` 只补从未有过的项）：staging 由管理员在平台管理系统中改一次；正式系统从空开始。
 - 发起方自定义称呼（Q91 §0-11 起的付费产品）。
 
 ## 风险

@@ -346,7 +346,7 @@ export const publishingEn = {
       imported: 'The draft is made. Check it and submit it.',
       summary: 'Settings of "{{name}}": {{tiers}} reward tiers, {{conditions}} matching conditions.',
       notSettings: 'This is not a publication settings file.',
-      newerVersion: 'This file was made by a newer version of the console. Reload the page and try again.',
+      newerVersion: 'This file was made by a newer version of the Sponsor app. Reload the page and try again.',
       conditionsFailed: 'The draft is made, but its matching conditions could not be saved. Set them in the audience step.',
     },
     qr: {

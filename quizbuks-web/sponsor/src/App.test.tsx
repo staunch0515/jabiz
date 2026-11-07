@@ -374,7 +374,7 @@ describe('a signed-in Sponsor', () => {
     expect(links.indexOf('Digital prizes')).toBe(links.indexOf('Cash rewards') + 1)
     expect(screen.getByRole('link', { name: 'Digital prizes' })).toHaveAttribute('href', '/digital-prizes')
     // Q34b: the menu in five sections by what they are for, with rules between them.
-    const nav = screen.getByRole('navigation', { name: 'Sponsor console' })
+    const nav = screen.getByRole('navigation', { name: 'QuizBuks for Sponsors' })
     expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
       .map((link) => link.textContent))).toEqual([
       // Q79: the sponsor's own pages (profile, products, staff, mail server) are the hub's sections, one entry here.

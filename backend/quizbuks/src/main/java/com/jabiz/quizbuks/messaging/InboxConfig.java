@@ -261,7 +261,7 @@ public class InboxConfig {
     StaticDictionary qbBroadcastAudienceDictionary() {
         return StaticDictionary.define(QbInbox.AUDIENCE_DICTIONARY, d -> d
             .item(QbInbox.AUDIENCE_APP, "en", "App", "zh", "App", "ja", "アプリ")
-            .item(QbInbox.AUDIENCE_SPONSOR, "en", "Sponsor console", "zh", "发起方后台", "ja", "主催者管理画面"));
+            .item(QbInbox.AUDIENCE_SPONSOR, "en", "Sponsor app", "zh", "发起方页面", "ja", "主催者ページ"));
     }
 
     @Bean

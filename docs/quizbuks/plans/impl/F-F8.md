@@ -4,8 +4,8 @@
 
 ## 范围
 
-- **应用（本 PR）**：「AI 获客 → 设置」（后台扩展 `ProspectSettingsPage.tsx`）新增"平台开关"一栏，照 `/qb/ai`（`AiPage.tsx` 的 `proposeSwitch`）的做法。
-- **平台（P7，S1）**：通用后台 `SysControlChange` 列表显示参数名 `paramKey` 并可按它筛选。在 `1.3/platform` 上做，本 PR 不碰。
+- **应用（本 PR）**：「AI 获客 → 设置」（平台管理系统扩展 `ProspectSettingsPage.tsx`）新增"平台开关"一栏，照 `/qb/ai`（`AiPage.tsx` 的 `proposeSwitch`）的做法。
+- **平台（P7，S1）**：平台管理系统的通用页面 `SysControlChange` 列表显示参数名 `paramKey` 并可按它筛选。在 `1.3/platform` 上做，本 PR 不碰。
 
 ## 要改的
 

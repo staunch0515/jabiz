@@ -1,5 +1,5 @@
 // The store listing texts (docs/quizbuks/store/{play,appstore}-listing.{ja,zh,en}.md, docs/quizbuks/plans/Q49d-store.md):
-// the same sections in every language, within each store's lengths, only the takers' app (the sponsor console and
+// the same sections in every language, within each store's lengths, only the takers' app (the Sponsor app and
 // top-ups stay out of the stores' apps), and the line each store's contest rules ask for. Run with `node --test`.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -28,14 +28,14 @@ const STORES = {
 }
 
 /**
- * Words that would put the sponsor side, money-making or rankings into the listing, and, in the launch phase
- * (operations.md "阶段一": prizes at the shop only, no transfers; Q49d-1 D-Q49d-6), any payout or cash. When cash
- * rewards start, the listing and these words change together.
+ * Words that would put the sponsor side (by its names old and new: F-F5, F-F5b), money-making or rankings into the
+ * listing, and, in the launch phase (operations.md "阶段一": prizes at the shop only, no transfers; Q49d-1 D-Q49d-6),
+ * any payout or cash. When cash rewards start, the listing and these words change together.
  */
 const FORBIDDEN = {
-  ja: [/スポンサー/, /主催者(?!・提供者ではなく)/, /チャージ/, /管理画面/, /稼/, /儲/, /No\.?\s*1/i, /お金|現金|振込|換金|出金/],
-  zh: [/充值/, /发起方后台/, /赚钱/, /第一/, /最好/, /现金|提现|转账|兑现/],
-  en: [/top[- ]?up/i, /sponsor console/i, /make money/i, /\bbest\b/i, /#1/, /cash|bank|withdraw|payout|transfer/i],
+  ja: [/スポンサー/, /主催者(?!・提供者ではなく)/, /チャージ/, /管理画面/, /コンソール/, /稼/, /儲/, /No\.?\s*1/i, /お金|現金|振込|換金|出金/],
+  zh: [/充值/, /后台/, /发起方页面/, /赚钱/, /第一/, /最好/, /现金|提现|转账|兑现/],
+  en: [/top[- ]?up/i, /sponsor console/i, /sponsor app/i, /for Sponsors/i, /make money/i, /\bbest\b/i, /#1/, /cash|bank|withdraw|payout|transfer/i],
 }
 /** The store is not the sponsor of the rewards (Google's contests policy, App Store Review Guideline 5.3.3). */
 const NOT_SPONSOR = {
