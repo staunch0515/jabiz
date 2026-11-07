@@ -5248,3 +5248,16 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 密钥轮换的演练在 C（D78）合并后加入同一脚本。
 
 **17zv 状态**：📝 待评审（分支 `1.3/phase-17zv-restore-verify`）。
+
+### 17zy `APPROVAL_SCOPE_MOVE` 的单次上限改为配置（2026-11-07，QuizBuks 首次上线 S2 的改派）
+
+**缘由**：单次上限是包内常量 `MAX_ITEMS = 500`，应用的改派流程分批时只能自己再写一遍 500。
+
+| # | 内容 |
+|---|---|
+| 17zy-1 | 配置 `jabiz.approval.scope-move.max-items`（缺省 500，1–10 000）；公开的 Bean `ApprovalScopeMoveSettings`（`maxItems()`，启动检查 `APPROVAL`）；常量 `ApprovalScopeMove.DEFAULT_MAX_ITEMS`、`MAX_LIMIT`；输入的 `@Size` 声明硬上限，步骤按配置检查，超过即与 `@Size` 同样的 400 违规（字段 `requests` / `taskSourceKeys`），在读取之前。D76 修订、18 §3.8 |
+| 17zy-2 | 测试：`ApprovalScopeMoveSettingsTest`（缺省、范围、越界的启动检查）、`ApprovalScopeMoveLimitIT`（上限 2：3 个案件与 3 个来源键各被 400 拒绝，2 个照常通过）；`ApprovalScopeMoveIT` 照旧通过 |
+
+**验收**：应用引用 `ApprovalScopeMoveSettings.maxItems()` 而不写 500；上限可配置且越界即启动失败。
+
+**17zy 状态**：📝 待评审（分支 `1.3/phase-17zy-scope-move-limit`）。
