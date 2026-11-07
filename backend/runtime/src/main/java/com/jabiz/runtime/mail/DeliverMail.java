@@ -2,10 +2,8 @@ package com.jabiz.runtime.mail;
 
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.FieldDefinition;
-import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.mail.MailSenderSettings;
 import com.jabiz.mail.MailSenderSource;
-import com.jabiz.mail.MailPlaceholders;
 import com.jabiz.mail.MailRenderer;
 import com.jabiz.mail.MailTemplate;
 import com.jabiz.process.ProcessContext;
@@ -47,8 +45,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Sends one recorded message: the only step of {@code MAIL_SEND} (docs/design/18-numbering-approvals-tasks.md
@@ -89,10 +89,11 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
 
     /** What a message is to the delivery. */
     private record Pending(String messageId, MailTemplate template, String templateName, UUID userId, String address,
-        Locale locale, Map<String, Object> params, int attempt, boolean done, boolean unsubscribed, String senderKey) {}
+        Locale locale, Map<String, Object> params, int attempt, boolean done, boolean unsubscribed, String senderKey,
+        MailRenderer.Rendered rendered) {}
 
     private final MailTemplates templates;
-    private final MessageCatalog messages;
+    private final MailTexts texts;
     private final NotificationSender sender;
     private final JwtService tokens;
     private final StorageAdapterRegistry storages;
@@ -106,7 +107,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
     private final SecretSealer sealer;
     private final SecureRandom random = new SecureRandom();
 
-    DeliverMail(MailTemplates templates, MessageCatalog messages, NotificationSender sender, JwtService tokens,
+    DeliverMail(MailTemplates templates, MailTexts texts, NotificationSender sender, JwtService tokens,
         StorageAdapterRegistry storages, EntityIdGenerator ids, JsonMapper json, Clock clock,
         @Value("${jabiz.storage.default-pool-ref:default}") String poolRef, ObjectProvider<MailSenderSource> sources,
         EntityDefinitionRegistry entities, MailSenders senders, SecretSealer sealer) {
@@ -115,7 +116,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         this.senders = senders;
         this.sealer = sealer;
         this.templates = templates;
-        this.messages = messages;
+        this.texts = texts;
         this.sender = sender;
         this.tokens = tokens;
         this.storages = storages;
@@ -140,10 +141,13 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                 if (pending.unsubscribed()) {
                     return skip(ctx, metadata, pending, "UNSUBSCRIBED");
                 }
-                return send(pending)
-                    .onErrorResume(error -> recordFailure(pending, error).then(Mono.error(error)))
+                // The version of the text the mail is rendered with, once known (decision D72 item 4).
+                AtomicReference<Integer> version = new AtomicReference<>();
+                return send(pending, version)
+                    .onErrorResume(error -> recordFailure(pending, error, version.get()).then(Mono.error(error)))
                     // The server has the mail: recorded at once and for good, whatever happens to the delivery.
-                    .then(engine().inNewTransaction(attempt(pending, MailEntities.SENT, null)))
+                    .then(Mono.defer(() -> engine().inNewTransaction(attempt(pending, MailEntities.SENT, null,
+                        version.get()))))
                     .doOnSuccess(sent -> ctx.put(metadata.outcomeKey(), MailEntities.SENT));
             });
         });
@@ -152,6 +156,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
     private Mono<Pending> load(String messageId) {
         return engine().select("""
                 SELECT m.template, m.user_id, m.address, m.locale, m.params, m.sender_key,
+                       m.rendered_subject, m.rendered_text, m.rendered_html,
                        (SELECT count(*) FROM sys_mail_attempt a WHERE a.message_id = m.message_id) AS attempts,
                        EXISTS (SELECT 1 FROM sys_mail_attempt a WHERE a.message_id = m.message_id
                                AND a.outcome IN ('SENT', 'SKIPPED')) AS done,
@@ -166,22 +171,40 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
             .switchIfEmpty(Mono.error(() -> new IllegalStateException("No mail message " + messageId)))
             .map(row -> {
                 String name = Rows.string(row.get("template"));
+                String renderedSubject = Rows.string(row.get("rendered_subject"));
+                MailRenderer.Rendered rendered = renderedSubject == null ? null : new MailRenderer.Rendered(
+                    renderedSubject, Objects.requireNonNullElse(Rows.string(row.get("rendered_text")), ""),
+                    Objects.requireNonNullElse(Rows.string(row.get("rendered_html")), ""));
                 return new Pending(messageId, templates.find(name).orElse(null), name, Rows.uuid(row.get("user_id")),
                     Rows.string(row.get("address")), Locale.of(Rows.string(row.get("locale"))),
                     json.readValue(Rows.string(row.get("params")), PARAMS),
                     Math.toIntExact(Rows.longValue(row.get("attempts"))) + 1,
                     Boolean.TRUE.equals(row.get("done")), Boolean.TRUE.equals(row.get("unsubscribed")),
-                    Rows.string(row.get("sender_key")));
+                    Rows.string(row.get("sender_key")), rendered);
             });
     }
 
     private Mono<Void> skip(ProcessContext ctx, Metadata metadata, Pending pending, String reason) {
-        return attempt(pending, MailEntities.SKIPPED, reason)
+        return attempt(pending, MailEntities.SKIPPED, reason, null)
             .doOnSuccess(skipped -> ctx.put(metadata.outcomeKey(), MailEntities.SKIPPED));
     }
 
-    /** Draws the tokens, commits their hashes, renders and sends. */
-    private Mono<Void> send(Pending pending) {
+    /**
+     * Draws the tokens, commits their hashes, renders with the texts in effect and sends; a message rendered when it
+     * was queued (a test mail of the texts, decision D72) is sent as it is, without tokens.
+     *
+     * @param version receives the version of the text used (null: the default)
+     */
+    private Mono<Void> send(Pending pending, AtomicReference<Integer> version) {
+        if (pending.rendered() != null) {
+            MailRenderer.Rendered mail = pending.rendered();
+            MailMessage message = new MailMessage(pending.address(), mail.subject(), mail.text(), mail.html(),
+                List.of());
+            return Mono.fromCallable(() -> {
+                sender.send(message);
+                return true;
+            }).subscribeOn(Schedulers.boundedElastic()).then();
+        }
         MailTemplate template = pending.template();
         if (template == null) {
             return Mono.error(new IllegalStateException("Mail template " + pending.templateName()
@@ -190,7 +213,11 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         List<String> purposes = List.copyOf(template.tokens().keySet());
         Mono<byte[]> drawn = purposes.isEmpty() ? Mono.just(new byte[0])
             : SingleUseSecrets.randomBytes(random, TOKEN_BYTES * purposes.size());
-        return drawn.flatMap(bytes -> {
+        Mono<MailTexts.Text> effective = texts.effective(template, pending.locale())
+            .doOnNext(text -> version.set(text.versionNo()));
+        return effective.zipWith(drawn).flatMap(found -> {
+            MailTexts.Text text = found.getT1();
+            byte[] bytes = found.getT2();
             Instant issued = now();
             Map<String, String> values = new LinkedHashMap<>();
             pending.params().forEach((name, value) -> values.put(name, value == null ? "" : String.valueOf(value)));
@@ -217,7 +244,7 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
                     template.tokens().get(purpose)));
             }
             Arrays.fill(bytes, (byte) 0);
-            MailRenderer.Rendered mail = render(template, pending.locale(), values);
+            MailRenderer.Rendered mail = texts.render(template, text.subject(), text.body(), values);
             MailMessage message = new MailMessage(pending.address(), mail.subject(), mail.text(), mail.html(),
                 List.of());
             Mono<Boolean> delivery = pending.senderKey() == null ? Mono.fromCallable(() -> {
@@ -276,18 +303,6 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
             }).subscribeOn(Schedulers.boundedElastic()));
     }
 
-    private MailRenderer.Rendered render(MailTemplate template, Locale locale, Map<String, String> values) {
-        String subject = messages.find(template.subjectKey(), locale).orElseThrow(() -> new IllegalStateException(
-            "No message " + template.subjectKey() + " [" + locale + "]"));
-        String body = messages.find(template.bodyKey(), locale).orElseThrow(() -> new IllegalStateException(
-            "No message " + template.bodyKey() + " [" + locale + "]"));
-        // The roots of named entries' frontends ({entryUrl.<entry>}, decision D43 item 4), from configuration.
-        Map<String, String> filled = new LinkedHashMap<>(values);
-        MailPlaceholders.of(subject + "\n" + body).stream().filter(MailTemplate::namedEntryUrl)
-            .forEach(name -> filled.put(name, templates.entryUrl(MailTemplate.entryOf(name))));
-        return MailRenderer.render(subject, body, filled, template.urlSafePlaceholders());
-    }
-
     private Mono<Void> storeToken(Pending pending, String purpose, String token, Instant issued, Duration validity) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("token_hash", SingleUseSecrets.sha256Hex(token));
@@ -301,8 +316,8 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
         return engine().insert("sys_mail_token", row);
     }
 
-    /** The attempt, timed when it is written (after the send, for {@code SENT}). */
-    private Mono<Void> attempt(Pending pending, String outcome, String detail) {
+    /** The attempt, timed when it is written (after the send, for {@code SENT}), with the text's version used. */
+    private Mono<Void> attempt(Pending pending, String outcome, String detail, Integer textVersionNo) {
         return Mono.defer(() -> {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("message_id", pending.messageId());
@@ -311,18 +326,19 @@ class DeliverMail implements StepHandler<DeliverMail.Metadata, ProcessContext> {
             row.put("outcome", outcome);
             row.put("detail", detail);
             row.put("attempted_time", now());
+            row.put("text_version_no", textVersionNo);
             return engine().insert("sys_mail_attempt", row);
         });
     }
 
     /** In a transaction of its own: the delivery's rolls back. */
-    private Mono<Void> recordFailure(Pending pending, Throwable error) {
+    private Mono<Void> recordFailure(Pending pending, Throwable error, Integer textVersionNo) {
         log.warn("Mail message {} could not be sent (attempt {}): {}", pending.messageId(), pending.attempt(),
             error.toString());
         String text = error.getClass().getName() + (error.getMessage() == null ? "" : ": " + error.getMessage());
         StorageEngine engine = engine();
         return engine.inNewTransaction(attempt(pending, MailEntities.FAILED,
-                text.length() > MAX_DETAIL ? text.substring(0, MAX_DETAIL) : text))
+                text.length() > MAX_DETAIL ? text.substring(0, MAX_DETAIL) : text, textVersionNo))
             // A concurrent delivery recorded this attempt number already: one row is enough.
             .onErrorResume(UniqueKeyViolationException.class, duplicate -> Mono.empty());
     }

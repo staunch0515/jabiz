@@ -72,6 +72,8 @@ public class TaskEntities {
         eb.field("address", f -> f.physicalColumn("address").immutable(true).required(true).asText(320));
         eb.field("subject", f -> f.physicalColumn("subject").immutable(true).required(true).asText(300));
         eb.field("body", f -> f.physicalColumn("body").immutable(true).required(true).asText(4000, true));
+        // The version of the mail text it was written with (decision D72 item 4); none for the default.
+        eb.field("textVersionNo", f -> f.physicalColumn("text_version_no").immutable(true).asNumeric(9, 0));
         eb.field("createdTime", f -> f.physicalColumn("created_time").immutable(true).required(true)
             .asTemporal(TemporalRole.SYSTEM_RECORDED));
         eb.field("processSeqId", f -> f.physicalColumn("process_seq_id").immutable(true).required(true)
