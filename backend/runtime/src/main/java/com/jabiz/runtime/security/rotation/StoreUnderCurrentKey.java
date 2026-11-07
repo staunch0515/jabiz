@@ -28,13 +28,11 @@ class StoreUnderCurrentKey implements BlockingStep<NoMetadata, ProcessContext> {
 
     private final MfaSecretCipher mfa;
     private final SecretSealer sealer;
-    private final FindRetiredValues finder;
     private final SecureRandom random = new SecureRandom();
 
-    StoreUnderCurrentKey(MfaSecretCipher mfa, SecretSealer sealer, FindRetiredValues finder) {
+    StoreUnderCurrentKey(MfaSecretCipher mfa, SecretSealer sealer) {
         this.mfa = mfa;
         this.sealer = sealer;
-        this.finder = finder;
     }
 
     @Override
@@ -46,6 +44,9 @@ class StoreUnderCurrentKey implements BlockingStep<NoMetadata, ProcessContext> {
         int unreadable = 0;
         java.util.Set<?> takenBack = ctx.contains(TakeBackSecondFactors.TAKEN_BACK_IDS)
             ? ctx.get(TakeBackSecondFactors.TAKEN_BACK_IDS, java.util.Set.class) : java.util.Set.of();
+        // One update per row with every value stored again: two sealed fields of one row are found as two values with
+        // the same version, and a second update at that version would fail the whole run (ROADMAP 17zz4).
+        Map<String, RowUpdate> updates = new java.util.LinkedHashMap<>();
         for (RetiredValue value : found) {
             if (value.target().kind() == RetiredValue.Kind.MFA && takenBack.contains(String.valueOf(value.row().id()))) {
                 // Taken back in this run: no longer confirmed, a new one replaces it; written once.
@@ -63,21 +64,25 @@ class StoreUnderCurrentKey implements BlockingStep<NoMetadata, ProcessContext> {
                 log.warn("Key rotation: {} does not open ({}): left under the retired key", value, e.getMessage());
                 continue;
             }
-            ctx.changes().update(value.row().entityType(), value.row().id(), value.row().version(),
-                Map.of(value.target().field(), renewed));
+            updates.computeIfAbsent(value.row().entityType() + "\n" + value.row().id(),
+                    key -> new RowUpdate(value.row().entityType(), value.row().id(), value.row().version(),
+                        new java.util.LinkedHashMap<>()))
+                .values().put(value.target().field(), renewed);
             if (value.target().kind() == RetiredValue.Kind.MFA) {
                 mfaSecrets++;
             } else {
                 sealedValues++;
             }
         }
+        updates.values().forEach(update -> ctx.changes().update(update.entityType(), update.id(), update.version(),
+            Map.copyOf(update.values())));
         if (!found.isEmpty()) {
             log.info("Key rotation: {} TOTP secrets and {} sealed values stored under the current key, {} unreadable",
                 mfaSecrets, sealedValues, unreadable);
         }
         int takenBackCount = takenBack.size();
         ctx.put(KeyRotationProcesses.OUTPUT, new KeyRotationProcesses.RekeyOutput(mfaSecrets, sealedValues,
-            unreadable, found.size() >= finder.batchSize() || takenBackCount >= finder.batchSize(), takenBackCount,
+            unreadable, ctx.contains(KeyRotationProcesses.MORE), takenBackCount,
             List.of(), false));
     }
 
@@ -91,4 +96,7 @@ class StoreUnderCurrentKey implements BlockingStep<NoMetadata, ProcessContext> {
             Arrays.fill(secret, (byte) 0);
         }
     }
+
+    /** The values of one row stored again, written as one update at the version they were read at. */
+    private record RowUpdate(String entityType, Object id, long version, Map<String, Object> values) {}
 }

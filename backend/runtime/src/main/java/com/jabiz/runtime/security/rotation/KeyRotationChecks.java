@@ -52,6 +52,8 @@ public class KeyRotationChecks implements PlatformCheck {
     private final boolean strict;
 
     static final Duration SCAN_TIMEOUT = Duration.ofMinutes(5);
+    /** Below this many changes per commit, a sealed field's dataset is reported: re-keying it would crawl. */
+    static final int SMALL_WRITE_LIMIT = 10;
 
     public KeyRotationChecks(ObjectProvider<SealedFields> declared, EntityDefinitionRegistry entities,
         DatasetRegistry datasets, JwtService jwt, MfaSecretCipher mfa, SecretSealer sealer, RetiredSealScan scan,
@@ -137,6 +139,13 @@ public class KeyRotationChecks implements PlatformCheck {
         }
         if (datasets.findForEntity(field.entity()).isEmpty()) {
             return Optional.of(CheckProblem.error(CATEGORY, location, "the entity has no dataset to re-key through"));
+        }
+        int writeLimit = datasets.findForEntity(field.entity()).orElseThrow().policy().maxWriteBatchSize();
+        if (writeLimit < SMALL_WRITE_LIMIT) {
+            // A run re-keys no more values of the entity than its dataset takes in one commit (17zz4).
+            return Optional.of(CheckProblem.warning(CATEGORY, location, "the entity's dataset takes " + writeLimit
+                + " change(s) per commit (maxWriteBatchSize): the job jabiz.key-rotation stores at most that many of its"
+                + " values per run, so a rotation can take long"));
         }
         if (!definition.get().sensitive()) {
             return Optional.of(CheckProblem.warning(CATEGORY, location, "a sealed field should be sensitive "

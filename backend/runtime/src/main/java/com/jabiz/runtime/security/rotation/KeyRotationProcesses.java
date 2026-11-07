@@ -36,6 +36,10 @@ public class KeyRotationProcesses {
     static final String INPUT = "input";
     static final String FOUND = "found";
     static final String OUTPUT = "output";
+    /** Writes left this run by entity type (see {@link FindRetiredValues#writeLimit}); a mutable map in the context. */
+    static final String WRITE_BUDGET = "writeBudget";
+    /** Set when a step filled what it may write this run, so that more may be left. */
+    static final String MORE = "more";
 
     /** @param scheduledTime when the job meant to run; null when run by hand */
     public record RekeyInput(Instant scheduledTime) {}
