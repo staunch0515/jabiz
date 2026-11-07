@@ -10,6 +10,7 @@ import { OidcButtons, type OidcProvider } from './OidcButtons'
 import { AUTH_LINK_CLASS, AuthError, AuthField, AuthFrame, AuthLink, AuthSubmit, Outcome, type AuthNavigation } from './frame'
 import { NewPasswordFields, ResendVerification, type NewPassword } from './MailLinkPage'
 import { EntryTabs, useRetryWait } from './entry'
+import { useEntryOffers } from './SignInForm'
 import { AUTH_NAMESPACE } from './messages'
 import { failure, passwordProblems } from './problems'
 
@@ -85,7 +86,9 @@ export function SignUpForm({ brand, appearance, signInPath, extra, onSubmitted, 
   const locale = useWatch({ control: form.control, name: 'locale' })
   const navigation = { onNavigate, hrefOf }
   const { seconds: wait, hold, message: waitMessage } = useRetryWait(t('account.failed'))
-  const tabs = withTabs && signInPath
+  // Tabs only where the entry takes self-registration, as on the sign-in page; otherwise the plain sign-in link.
+  const { selfRegistration } = useEntryOffers(!!withTabs, false, false)
+  const tabs = withTabs && signInPath && selfRegistration
     ? <EntryTabs current="signUp" signInPath={signInPath} signUpPath={signUpPath} {...navigation} /> : undefined
 
   if (sent !== null) {
