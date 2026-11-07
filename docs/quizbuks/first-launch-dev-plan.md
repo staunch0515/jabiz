@@ -1,6 +1,6 @@
 # 首次上线的开发安排（3 个会话）与平台基础的实施计划
 
-**状态**：2026-11-07 起草，待需求方确认。规格见 `docs/quizbuks/first-launch-spec.md`（以下"F-xx""P-x"均指它）。本文件是开发的总安排：谁做什么、按什么顺序、怎样不互相冲突，以及第一批（平台基础）的实施计划。
+**状态**：2026-11-07 需求方确认（分工、顺序、平台基础的计划、D73 的规则）；**规格写清楚的项目一次授权：写好计划即开工**。规格见 `docs/quizbuks/first-launch-spec.md`（以下"F-xx""P-x"均指它）。本文件是开发的总安排：谁做什么、按什么顺序、怎样不互相冲突，以及第一批（平台基础）的实施计划。
 
 ## 1. 三个会话
 
@@ -17,7 +17,7 @@
 ## 2. 共同的规则（三个会话都照此）
 
 1. **只依照规格**：`docs/quizbuks/first-launch-spec.md`。规格写不清楚的，先问需求方，答案写回规格再写代码。
-2. **每一项先给实施计划**（根 CLAUDE.md 第 7 节：要改的模块和类、表与迁移、测试清单、风险），等需求方说"可以"再写代码。平台基础的计划在本文件第 4 部分，需求方确认本文件即确认它。
+2. **每一项先写实施计划，写好即开工**（需求方 2026-11-07 对规格写清楚的项目一次授权）：计划（要改的模块和类、表与迁移、测试清单、风险）写在该项 PR 的第一个提交（`docs/quizbuks/plans/impl/<项目>.md`）与 PR 描述中，需求方事后看 PR。规格没写清楚、或计划要偏离规格的，先问需求方，答案写回规格再写代码。平台基础的计划即本文件第 4 部分。
 3. **闭合、完整**：规格中每一项的"运营闭合"与"验收"全部做到才算完成；没有测试的不算完成。
 4. **平台先行**：平台缺的能力只由 S1 在 `1.3/platform` 上做；S2、S3 发现平台缺东西，告诉需求方，由 S1 排进去，不在应用里绕过。
 5. **迁移编号**：应用的迁移（`db/migration/V<n>__quizbuks_*.sql`）在**合并前**按 `1.3/quizbuks` 当时的最大号 + 1 重新编号（Flyway 不允许乱序；staging 由 `1.3/quizbuks` 部署）。平台的迁移（`db/jabiz`）只有 S1 加。
@@ -114,23 +114,21 @@ S1 在每个平台 PR 合入 `1.3/platform` 后，立即开 `1.3/platform` → `
 **S1 平台**
 ```
 你负责 QuizBuks 首次上线的平台工作（会话 S1）。先读：根目录 CLAUDE.md、backend/quizbuks/CLAUDE.md、docs/quizbuks/first-launch-spec.md（尤其"平台工作总表"）、docs/quizbuks/first-launch-dev-plan.md（第 2、3、4 部分）。
-范围与顺序：第 4 部分的 P0、P8 → P1 → P7 → P3 → P4（先做原型给需求方看）→ P2 → P5 → P4 实现 → P6。平台工作只在 1.3/platform 的工作分支上做（分支名 1.3/phase-17z?-<名>，编号取 ROADMAP 中的空号），每项一个 PR 合入 1.3/platform；合入后立即开 1.3/platform → 1.3/quizbuks 的合并 PR。新的平台决策（D72–D75）写进 docs/design/09-decisions.md，并在 PR 中列出。第 4 部分即已确认的实施计划；偏离时先告诉需求方。每完成一项，更新 docs/quizbuks/first-launch-progress.md 中 S1 的行。
+范围与顺序：第 4 部分的 P0、P8 → P1 → P7 → P3 → P4（先做原型给需求方看）→ P2 → P5 → P4 实现 → P6。平台工作只在 1.3/platform 的工作分支上做（分支名 1.3/phase-17z?-<名>，编号取 ROADMAP 中的空号），每项一个 PR 合入 1.3/platform；合入后立即开 1.3/platform → 1.3/quizbuks 的合并 PR。新的平台决策（D72–D75）写进 docs/design/09-decisions.md，并在 PR 中列出。第 4 部分即已确认的实施计划，写好各项的细化即开工（需求方已一次授权）；偏离时先告诉需求方。每完成一项，更新 docs/quizbuks/first-launch-progress.md 中 S1 的行。
 ```
 
 **S2 结构与钱**
 ```
 你负责 QuizBuks 首次上线的结构与钱（会话 S2），分支 1.3/quizbuks。先读：根目录 CLAUDE.md、backend/quizbuks/CLAUDE.md、docs/quizbuks/first-launch-spec.md（F-S1～F-S7、F-M1～F-M15）、docs/quizbuks/first-launch-dev-plan.md（第 2、3 部分）。
-范围与顺序：F-S1 → F-S2 → F-S6、F-S7 → F-M1～F-M5 → F-M6～F-M10 → F-M11～F-M15 → F-S3、F-S4、F-S5（等平台的 P3 框架合入）。每一项先给实施计划（要改的类、表与迁移、测试、风险），需求方说"可以"后再写代码；工作分支 1.3/quizbuks-<编号>-<名>，每项一个 PR，CI 绿才合并。平台缺能力时告诉需求方（由 S1 做），不在应用中绕过。迁移编号在合并前按 1.3/quizbuks 的最大号 + 1 重新编号。答题路径的语句数以 AttemptStatementBudgetIT 为准。每完成一项，更新 docs/quizbuks/first-launch-progress.md 中 S2 的行。
+范围与顺序：F-S1 → F-S2 → F-S6、F-S7 → F-M1～F-M5 → F-M6～F-M10 → F-M11～F-M15 → F-S3、F-S4、F-S5（等平台的 P3 框架合入）。每一项先写实施计划（要改的类、表与迁移、测试、风险；写进 docs/quizbuks/plans/impl/<项目>.md 与 PR 描述），写好即开工（需求方已对规格写清楚的项目一次授权）；规格没写清楚或要偏离规格的，先问需求方；工作分支 1.3/quizbuks-<编号>-<名>，每项一个 PR，CI 绿才合并。平台缺能力时告诉需求方（由 S1 做），不在应用中绕过。迁移编号在合并前按 1.3/quizbuks 的最大号 + 1 重新编号。答题路径的语句数以 AttemptStatementBudgetIT 为准。每完成一项，更新 docs/quizbuks/first-launch-progress.md 中 S2 的行。
 ```
 
 **S3 内容与界面**
 ```
 你负责 QuizBuks 首次上线的内容与界面（会话 S3），分支 1.3/quizbuks。先读：根目录 CLAUDE.md、backend/quizbuks/CLAUDE.md、docs/quizbuks/first-launch-spec.md（F-C1～F-C11、F-S8～F-S14、F-F3～F-F14）、docs/quizbuks/first-launch-dev-plan.md（第 2、3 部分）。
-范围与顺序：F-F7（合并扫码修复 PR 458）、F-F8、F-F9 → F-F5 全产品改名（尽早，一次做完）→ F-C1～F-C3 → F-S8、F-S9 → F-C11 → F-S10、F-S11（等 P5）→ F-S12～F-S14（与 S2 的 F-M8 对齐）→ F-C4（等 F-S2）→ F-C5～F-C7（等 P6 与 F-M9）→ F-C8、F-C9（等 P2）→ F-C10 → F-F3、F-F4（等 P3、P4）→ 最后 F-F10～F-F14 与上线准备清单。每一项先给实施计划，需求方说"可以"后再写代码；工作分支 1.3/quizbuks-<编号>-<名>，每项一个 PR，CI 绿才合并。平台缺能力时告诉需求方（由 S1 做）。迁移编号在合并前按 1.3/quizbuks 的最大号 + 1 重新编号。每完成一项，更新 docs/quizbuks/first-launch-progress.md 中 S3 的行。
+范围与顺序：F-F7（合并扫码修复 PR 458）、F-F8、F-F9 → F-F5 全产品改名（尽早，一次做完）→ F-C1～F-C3 → F-S8、F-S9 → F-C11 → F-S10、F-S11（等 P5）→ F-S12～F-S14（与 S2 的 F-M8 对齐）→ F-C4（等 F-S2）→ F-C5～F-C7（等 P6 与 F-M9）→ F-C8、F-C9（等 P2）→ F-C10 → F-F3、F-F4（等 P3、P4）→ 最后 F-F10～F-F14 与上线准备清单。每一项先写实施计划（写进 docs/quizbuks/plans/impl/<项目>.md 与 PR 描述），写好即开工（需求方已对规格写清楚的项目一次授权）；规格没写清楚或要偏离规格的，先问需求方；工作分支 1.3/quizbuks-<编号>-<名>，每项一个 PR，CI 绿才合并。平台缺能力时告诉需求方（由 S1 做）。迁移编号在合并前按 1.3/quizbuks 的最大号 + 1 重新编号。每完成一项，更新 docs/quizbuks/first-launch-progress.md 中 S3 的行。
 ```
 
-## 6. 需求方要确认的
+## 6. 已确认（2026-11-07）
 
-1. 三个会话的分工与顺序（第 1、3 部分）。
-2. 平台基础的实施计划（第 4 部分），包括 D73 的具体规则（30 秒、上限 120 秒、补发一次）。
-3. 每项"先给计划、你说可以再写代码"的做法；如果你希望对规格中已写清楚的项目一次性授权（会话写好计划即开工、你事后看 PR），请说明，三个提示词改一句即可。
+分工与顺序、平台基础的实施计划（含 D73：30 秒、上限 120 秒、补发一次）、规格写清楚的项目一次授权（写好计划即开工，需求方事后看 PR）。
