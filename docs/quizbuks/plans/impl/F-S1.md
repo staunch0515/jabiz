@@ -23,7 +23,7 @@
 | PR | 内容 |
 |---|---|
 | **F-S1a 后端** | 迁移、运营商的新属性、平台运营商、直营发起方、归属必填、改派、审核与待办的范围、去掉 `direct`（获客、认证）与官方账号、现金争议、角色、每日核对、站内信；后端测试、夹具、场景快照、消息 |
-| **F-S1b 管理系统与文档** | 后台扩展的菜单拆分（`AX/index.tsx`）、总部页面收缩、运营商管理系统补齐（奖励方式、兑换与数字奖品争议、发起方主页与商品、举报、获客）、监控页的告警与审核积压、发起方页面"你的运营商"、帮助与 `operations.md`；前端测试、axe、e2e 改由运营商成员审核 |
+| **F-S1b 管理系统与文档** | 管理系统扩展的菜单拆分（`AX/index.tsx`）、平台管理系统页面收缩、运营商管理系统补齐（奖励方式、兑换与数字奖品争议、发起方主页与商品、举报、获客）、监控页的告警与审核积压、发起方页面"你的运营商"、帮助与 `operations.md`；前端测试、axe、e2e 改由运营商成员审核 |
 
 ## 2. 数据（迁移 `V78__quizbuks_operators_everywhere.sql`（S3 的 F-C1a 用了 V77），合并前按 `1.3/quizbuks` 的最大号 + 1 重新编号）
 
@@ -98,7 +98,7 @@
 10. 获客认领替换 `auto:language` 的归属｜—｜只替换 `auto:default`，有待审审批时不改派（等 S1）。
 11. `HQ_TAKEDOWN` / `HQ_BAN` 文案"总部"→"平台"（改名，行为不变）。
 
-**后台扩展（F-S1b，F-S1a 未动）**
+**管理系统扩展（F-S1b，F-S1a 未动）**
 12. `CashRewardsPage` 的裁决按钮与对话框、`resolveCashReward`、`ids.ts` 的 `cashResolve`（按钮现已因无权限不显示）。
 13. `CertificationsPage` 的官方出题方设置、`officialSet`、`CERTIFICATION_DIRECT` 与"总部"显示（现在调用会 404）。
 14. 获客页的总部 `DIRECT` 可写（`ProspectPage`、`ProspectSettingsPage`、`prospect-scope.ts`、`prospect-api.ts`）｜总部在平台管理系统中自己获客｜总部只读、按运营商筛选，获客在运营商管理系统。
