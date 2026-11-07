@@ -42,6 +42,9 @@ import {
 import { ContentImage } from './ContentImage'
 import { LIMITS } from './limits'
 import { useMoveToFocus } from './moving'
+import type { ContentLanguage } from '../qb/api'
+import { copiedAssetId, useAssetCopy, withAssets, type AssetCopy } from '../assets/copy'
+import { LibraryActions } from '../assets/LibraryActions'
 
 interface OptionDraft {
   key: string
@@ -60,7 +63,7 @@ const FIELDS = ['stem', 'image', 'points', 'options', 'selection'] as const
  * their order). A draft may be incomplete: two to six options with at least one correct are checked when a version
  * is saved. A survey's question (Q12) has no points and no correct option: it is single or multiple choice.
  */
-function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved }: {
+function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved, language = 'ja' }: {
   /** The question to change; a new one at the end when null. */
   question: Question | null
   /** Its place, from 1. */
@@ -70,6 +73,8 @@ function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved 
   onOpenChange: (open: boolean) => void
   /** The saved question's id (a new one's from the output), to show it open. */
   onSaved?: (questionId: string | null) => void
+  /** The quiz's language: an image saved to the asset library is in it (F-C1). */
+  language?: ContentLanguage
 }) {
   const { t } = useTranslation(SPONSOR)
   const editing = useEditing()
@@ -84,6 +89,17 @@ function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved 
     : [blankOption(), blankOption()])
   const [local, setLocal] = useState<string | null>(null)
   const optionsRef = useRef<HTMLOListElement>(null)
+  // F-C1: the question's image and each option's (by the option's key, which stays while the dialog is open, a new
+  // option's too) chosen from the asset library name their asset with the save while unchanged. The dialog closes on
+  // saving, so the copies are recorded once.
+  const imageCopy = useAssetCopy<string | null>()
+  const [optionCopies, setOptionCopies] = useState<Record<string, AssetCopy<string | null>>>({})
+  const choseOption = (key: string, assetId: string, value: string | null) =>
+    setOptionCopies((copies) => ({ ...copies, [key]: { assetId, value } }))
+  const imageName = (n?: number) => (n === undefined ? t('questions.image') : t('questions.optionImage', { number: n }))
+  const storeImage = (value: string | null, n?: number) => (value ? { kind: 'IMAGE' as const,
+    name: (stem.trim() ? `${stem.trim().slice(0, 80)} · ${imageName(n)}` : imageName(n)), language,
+    content: { image: value } } : null)
 
   const save = useMutation({
     mutationFn: () => saveQuestion({
@@ -93,7 +109,9 @@ function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved 
       image,
       points: survey ? 1 : wholeOrNull(points) ?? 1,
       options: options.map((o) => ({ optionId: o.optionId, text: textOrNull(o.text), image: o.image,
-        correct: !survey && o.correct })),
+        correct: !survey && o.correct,
+        ...withAssets({ imageAssetId: copiedAssetId(optionCopies[o.key] ?? null, o.image) }) })),
+      ...withAssets({ imageAssetId: imageCopy.idFor(image) }),
       baseRevision: editing.revision(),
       ...(survey ? { selection } : {}),
     }),
@@ -147,6 +165,13 @@ function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved 
           <FileField kind="image" label={t('questions.image')}
             uploadLabel={image ? t('questions.replaceImage') : t('questions.uploadImage')}
             value={image} onChange={setImage} error={problem('image')} testId="question-image" />
+          <LibraryActions target="QUESTION_IMAGE" disabled={editing.stale} testId="question-image-library"
+            name={imageName()} store={storeImage(image)}
+            onPick={(asset) => {
+              setImage(asset.image)
+              imageCopy.chose(asset.assetId, asset.image)
+            }}
+            onStored={(assetId) => imageCopy.chose(assetId, image)} />
           {survey ? (
             <fieldset className="flex flex-col gap-2">
               <legend className="mb-2 text-sm font-medium">{t('questions.selection')}</legend>
@@ -198,6 +223,13 @@ function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved 
                       : t('questions.uploadOptionImage', { number: index + 1 })}
                     value={option.image} onChange={(fileId) => change(option.key, { image: fileId })}
                     testId="option-image" />
+                  <LibraryActions target="OPTION_IMAGE" disabled={editing.stale} testId="option-image-library"
+                    name={imageName(index + 1)} store={storeImage(option.image, index + 1)}
+                    onPick={(asset) => {
+                      change(option.key, { image: asset.image })
+                      choseOption(option.key, asset.assetId, asset.image)
+                    }}
+                    onStored={(assetId) => choseOption(option.key, assetId, option.image)} />
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" variant="outline" size="sm" disabled={index === 0}
                       aria-label={t('questions.optionUp', { number: index + 1 })}
@@ -305,7 +337,9 @@ function QuestionsSummary({ questions, survey, onUnmarked }: { questions: Questi
  * choice instead of points and correct options. One question is open at a time; the one just added, changed or
  * moved opens.
  */
-export function QuestionsPanel({ questions, survey = false }: { questions: Question[]; survey?: boolean }) {
+export function QuestionsPanel({ questions, survey = false, language }: { questions: Question[]; survey?: boolean
+  /** The quiz's language (an image saved to the asset library is in it, F-C1). */
+  language?: ContentLanguage }) {
   const { t } = useTranslation(SPONSOR)
   const scoredBadge = useScoredBadge()
   const editing = useEditing()
@@ -468,7 +502,7 @@ export function QuestionsPanel({ questions, survey = false }: { questions: Quest
         )}
       {editingQuestion && (
         <QuestionDialog key={editingQuestion.question?.questionId ?? 'new'} question={editingQuestion.question}
-          number={editingQuestion.number} survey={survey} open onSaved={(id) => {
+          number={editingQuestion.number} survey={survey} language={language} open onSaved={(id) => {
             if (id) open(id)
           }} onOpenChange={(open) => {
             if (!open) setEditingQuestion(null)

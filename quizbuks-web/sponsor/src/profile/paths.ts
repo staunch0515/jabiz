@@ -5,7 +5,8 @@
  */
 export const PROFILE_PATH = '/profile'
 
-export const PROFILE_SECTIONS = ['overview', 'basics', 'page', 'products', 'staff', 'mail-server'] as const
+// F-C1c (the requester, 2026-11-07): the products moved to the asset library's "products" tab (`MOVED_PATHS`).
+export const PROFILE_SECTIONS = ['overview', 'basics', 'page', 'staff', 'mail-server'] as const
 export type ProfileSection = (typeof PROFILE_SECTIONS)[number]
 
 /** The address of a section; the overview is the hub's own. */
@@ -25,7 +26,21 @@ export function profileSectionOf(path: string): ProfileSection | null {
 export const LEGACY_PROFILE_PATHS: Readonly<Record<string, ProfileSection>> = {
   '/onboarding': 'basics',
   '/page': 'page',
-  '/products': 'products',
   '/staff': 'staff',
   '/mail-server': 'mail-server',
+}
+
+/**
+ * The addresses of pages that moved out of the hub and the menu into the asset library's tabs (F-C1c, the requester
+ * 2026-11-07): the products (`/profile/products`, and `/products` before the hub) and the certifications. Old
+ * bookmarks keep working.
+ */
+export const PRODUCTS_TAB_PATH = '/assets?tab=products'
+export const CERTIFICATIONS_TAB_PATH = '/assets?tab=certifications'
+export const MOVED_PATHS: Readonly<Record<string, string>> = {
+  '/products': PRODUCTS_TAB_PATH,
+  '/profile/products': PRODUCTS_TAB_PATH,
+  '/profile/products/': PRODUCTS_TAB_PATH,
+  '/certifications': CERTIFICATIONS_TAB_PATH,
+  '/certifications/': CERTIFICATIONS_TAB_PATH,
 }

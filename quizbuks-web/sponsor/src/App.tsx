@@ -23,7 +23,7 @@ import {
   type ShellMenuGroup,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { Award, CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, Network, ReceiptText, Store, UserRound,
+import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, Network, ReceiptText, Store, UserRound,
   Wallet,
   HandCoins,
   Gift,
@@ -33,10 +33,13 @@ import { Award, CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSq
   Package,
   MessageCircle,
   ClipboardList,
+  Library,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { analyticsIdOf } from './analytics/api'
+import { ASSETS_PATH } from './assets/api'
+import { AssetsPage, tabOf } from './assets/AssetsPage'
 import { PublicationAnalyticsPage } from './analytics/PublicationAnalyticsPage'
 import { QuizEditorPage } from './content/QuizEditorPage'
 import { QuizListPage } from './content/QuizListPage'
@@ -56,8 +59,6 @@ import { APP_BASE, publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths
 import { PreviewPage } from './preview/PreviewPage'
 import { TreePage } from './tree/TreePage'
 import { TREE_PATH } from './tree/api'
-import { CertificationsPage } from './certifications/CertificationsPage'
-import { CERTIFICATIONS_PATH } from './certifications/api'
 import './certifications/messages'
 import { previewOf } from './preview/paths'
 import { rememberSource } from './trial/claim'
@@ -65,10 +66,9 @@ import TrialPage, { trialKeyOf } from './trial/TrialPage'
 import { useMySponsor } from './profile/api'
 import { BasicsPage } from './profile/BasicsPage'
 import { OverviewPage } from './profile/OverviewPage'
-import { LEGACY_PROFILE_PATHS, PROFILE_PATH, profilePath, profileSectionOf } from './profile/paths'
+import { LEGACY_PROFILE_PATHS, MOVED_PATHS, PROFILE_PATH, profilePath, profileSectionOf } from './profile/paths'
 import { ProfileLayout } from './profile/ProfileLayout'
 import { SponsorPagePage } from './page/SponsorPageEditor'
-import { ProductsPage } from './products/ProductsPage'
 import { STATS_PATH, StatsPage } from './stats/StatsPage'
 import { MESSAGES_PATH } from './notices/api'
 import { MessagesPage } from './notices/MessagesPage'
@@ -197,15 +197,18 @@ function SignedIn({ path }: { path: string }) {
   const preview = previewOf(path)
   const profileSection = profileSectionOf(path)
   const legacyProfile = LEGACY_PROFILE_PATHS[path]
+  // F-C1c: the products and the certifications are tabs of the asset library now.
+  const moved = MOVED_PATHS[path]
   if (open) page = open
+  else if (moved) page = <Redirect to={moved} />
   else if (preview) page = <PreviewPage key={path} target={preview} />
   else if (path === DASHBOARD) page = <DashboardPage />
   else if (path === QUIZZES_PATH) page = <QuizListPage />
   else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
   else if (path === PUBLICATIONS_PATH) page = <PublicationListPage />
   else if (path === TREE_PATH) page = <TreePage key={search} />
-  // Q88a: the sponsor's own certifications.
-  else if (path === CERTIFICATIONS_PATH) page = <CertificationsPage />
+  // F-C1: the asset library (in the content group until the new frame's "library" area, F-F3).
+  else if (path === ASSETS_PATH) page = <AssetsPage tab={tabOf(search)} />
   else if (path === CASH_REWARDS_PATH) page = <CashRewardsPage />
   else if (path === DIGITAL_PRIZES_PATH) page = <DigitalPrizesPage />
   else if (path === REDEEM_PATH) page = <RedeemPage />
@@ -233,7 +236,6 @@ function SignedIn({ path }: { path: string }) {
         {profileSection === 'overview' ? <OverviewPage />
           : profileSection === 'basics' ? <BasicsPage />
             : profileSection === 'page' ? <SponsorPagePage />
-              : profileSection === 'products' ? <ProductsPage />
                 : profileSection === 'staff' ? <StaffPage />
                   : <MailServerPage />}
       </ProfileLayout>
@@ -259,8 +261,8 @@ function SignedIn({ path }: { path: string }) {
       { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
       // Q85: the publications as a tree, with the customers on it.
       { key: 'tree', label: t('tree.nav'), path: TREE_PATH, icon: Network },
-      // Q88a: the sponsor's own certifications, which their quizzes give and require.
-      { key: 'certifications', label: t('certifications.nav'), path: CERTIFICATIONS_PATH, icon: Award },
+      // F-C1: the asset library (moves to the new frame's "library" area in F-F3).
+      { key: 'assets', label: t('assets.nav'), path: ASSETS_PATH, icon: Library },
     ] },
     { key: 'rewards', label: t('nav.groups.rewards'), items: [
       { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },

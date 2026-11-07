@@ -1,4 +1,5 @@
 import { Checkbox, Input, Label, RadioGroup, RadioGroupItem, Textarea } from '@jabiz/ui'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import {
@@ -18,13 +19,15 @@ const DESCRIPTION_LENGTH = 500
  * rules: the platform adds none), and for how long. Every check is the server's; the problems come back as the save's
  * (`referral.<field>`).
  */
-export function ReferralFields({ id, form, set, locked, problemOf, methods }: {
+export function ReferralFields({ id, form, set, locked, problemOf, methods, library }: {
   id: string
   form: PublicationForm
   set: <K extends keyof PublicationForm>(field: K, value: PublicationForm[K]) => void
   locked: boolean
   problemOf: (field: string) => string | undefined
   methods: RewardMethod[]
+  /** F-C1: "choose from the library" and "save to the library" beside the description. */
+  library?: ReactNode
 }) {
   const { t } = useTranslation(SPONSOR)
   const methodLabel = useRewardMethodLabel()
@@ -83,6 +86,7 @@ export function ReferralFields({ id, form, set, locked, problemOf, methods }: {
                 aria-invalid={problem('description') ? true : undefined}
                 onChange={(event) => set('referralDescription', event.target.value)} />
               {problem('description') && <p className="text-destructive text-sm">{problem('description')}</p>}
+              {library}
             </div>
           )}
           <fieldset className="flex flex-col gap-2">

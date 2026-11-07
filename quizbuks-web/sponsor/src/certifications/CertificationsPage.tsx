@@ -50,7 +50,10 @@ const FIELDS = ['name', 'description', 'validityDays']
  * edited (a new version when the rules changed) and retired here; which quiz gives one is set in the quiz's wizard.
  * The server refuses everything while the switch is off (`QB_SPONSOR_CERTIFICATIONS_OFF`): the page shows its words.
  */
-export function CertificationsPage() {
+export function CertificationsPage({ embedded = false }: {
+  /** F-C1c: a tab of the asset library, under the library's own title (its heading is then a section's). */
+  embedded?: boolean
+} = {}) {
   const { t, i18n } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const queryClient = useQueryClient()
@@ -95,9 +98,20 @@ export function CertificationsPage() {
   ], [t, tQb, i18n.language, retire])
   return (
     <section className="flex flex-col gap-4" data-testid="certifications-page">
-      <PageHeader title={t('certifications.title')} description={t('certifications.intro')}
-        actions={<Button onClick={() => setEditing('new')} data-testid="certification-add">
-          <Plus aria-hidden className="size-4" />{t('certifications.add')}</Button>} />
+      {embedded
+        ? (
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              <h2 className="text-xl font-semibold" data-testid="certifications-title">{t('certifications.title')}</h2>
+              <p className="text-muted-foreground text-sm">{t('certifications.intro')}</p>
+            </div>
+            <Button onClick={() => setEditing('new')} data-testid="certification-add">
+              <Plus aria-hidden className="size-4" />{t('certifications.add')}</Button>
+          </div>
+        )
+        : <PageHeader title={t('certifications.title')} description={t('certifications.intro')}
+          actions={<Button onClick={() => setEditing('new')} data-testid="certification-add">
+            <Plus aria-hidden className="size-4" />{t('certifications.add')}</Button>} />}
       {certifications.isPending && <PageState kind="loading" />}
       {certifications.isError && <PageState kind="error" description={problemText(certifications.error)}
         action={<Button variant="outline" onClick={() => void certifications.refetch()}>{tQb('retry')}</Button>} />}

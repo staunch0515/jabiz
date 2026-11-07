@@ -102,6 +102,19 @@ describe('the Sponsor’s own certifications (Q88a)', () => {
     await expectAccessible()
   })
 
+  // F-C1c: a tab of the asset library (no menu item of their own); the old address leads there.
+  it('are the asset library’s tab, where their old address leads', async () => {
+    server()
+    window.history.replaceState(null, '', '/certifications')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe(CERTIFICATIONS_PATH))
+    expect(await screen.findAllByTestId('certification-row')).toHaveLength(2)
+    expect(screen.getByTestId('assets-tab-certifications')).toHaveAttribute('data-state', 'active')
+    expect(screen.getByRole('heading', { level: 2, name: 'Your certifications' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Certifications' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Asset library' })).toHaveAttribute('aria-current', 'page')
+  })
+
   it('define one (a name in at least one language, the validity), and edit one raising its version', async () => {
     const { calls } = server()
     window.history.replaceState(null, '', CERTIFICATIONS_PATH)
