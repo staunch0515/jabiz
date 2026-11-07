@@ -21,10 +21,10 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 - 镜像：`ghcr.io/staunch0515/jabiz-quizbuks:<提交 SHA>`（`linux/amd64`），两个环境用同一个镜像，只是部署的提交不同。
 - 仓库中的来源：`deploy/quizbuks/server/compose.yaml`（项目名与容器名取自 `.env` 的 `APP_NAME`）、`deploy/quizbuks/server/site.caddy.tpl`
   （占位 `__DOMAIN__`、`__APP_NAME__`、`__APP_DIR__`，由 workflow 按环境渲染）、`deploy/quizbuks/server/maintenance.html`（维护页）、
-  `.github/workflows/quizbuks-deploy.yml`。
-- 服务器上每个环境的目录中：`compose.yaml`、`site.caddy`、`maintenance/maintenance.html`（由 workflow 上传）、`.env`（只在服务器上手工维护，workflow 从不改它）；
+  告警规则（平台的 `docker/grafana/alerting/`、QuizBuks 的 `deploy/quizbuks/alerting/`，下文"2a"）、`.github/workflows/quizbuks-deploy.yml`。
+- 服务器上每个环境的目录中：`compose.yaml`、`site.caddy`、`maintenance/maintenance.html`、`alerting/`（由 workflow 上传）、`.env`（只在服务器上手工维护，workflow 从不改它）；
   维护期间另有手工建立的 `maintenance/maintenance.lock`（见"维护模式"）。
-- 网络：`proxy`（Caddy）、`db`（PostgreSQL），都是外部网络；不发布任何端口。
+- 网络：`proxy`（Caddy）、`db`（PostgreSQL），都是外部网络；另有本项目自己的 `telemetry`（应用与 LGTM，下文"2a"）。不对外发布端口（LGTM 的 Grafana 只绑定服务器的 `127.0.0.1`）。
 - 本机开发用的 `deploy/quizbuks/compose.dev.yaml`（自带数据库）与服务器无关，部署不使用它。
 
 **发布流程**：工作分支照常经 PR 合入 `1.3/quizbuks`，合入即部署到 staging；在 staging 上确认后，以 PR 把 `1.3/quizbuks` 合并进 `1.3/quizbuks-release`
@@ -161,6 +161,21 @@ ANTHROPIC_API_KEY=<sk-ant-…>
 # QuizBuks for Shopify（S1）：Shopify 应用的 API 密钥与密钥；还没有应用时填占位，密钥至少 32 个字符（openssl rand -hex 32）
 SHOPIFY_API_KEY=<API key 或占位>
 SHOPIFY_API_SECRET=<API secret 或占位>
+
+# 监控与告警（下文"2a"）：本环境的 LGTM 与应用推送的指标、日志、追踪；告警发给值班的人
+COMPOSE_PROFILES=observability
+MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED=true
+MANAGEMENT_OTLP_METRICS_EXPORT_URL=http://lgtm:4318/v1/metrics
+MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT=http://lgtm:4318/v1/logs
+MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://lgtm:4318/v1/traces
+JABIZ_ALERT_EMAIL=<值班的邮箱；几个以 ; 分隔>
+GF_SMTP_ENABLED=true
+GF_SMTP_HOST=<SMTP 主机:端口，如 smtp.gmail.com:587>
+GF_SMTP_USER=<SMTP 用户>
+GF_SMTP_PASSWORD=<SMTP 密码>
+GF_SMTP_FROM_ADDRESS=<发件地址>
+# staging 与 production 在同一台服务器上：各用一个端口（如 production 3000、staging 3001）
+QB_GRAFANA_PORT=3000
 ```
 
 **部署前的检查**：workflow 在服务器上改动任何东西之前，按所部署提交的 `deploy/quizbuks/server/required-env` 检查 `.env`
@@ -179,6 +194,25 @@ Caddy 重建后地址可能改变：改后应用只会把所有请求看成来�
 
 **不要**设 `SPRING_PROFILES_ACTIVE=dev`、`JABIZ_SECURITY_MFA_ADMINISTRATION=false`、`QB_DIRECT_EXPOSURE=true` 或 `server.forward-headers-strategy`
 （客户端地址只认 `JABIZ_TRUSTED_PROXIES` 中的代理）。
+
+### 2a. 监控与告警（LGTM）
+
+每个环境有自己的 LGTM 容器（`<APP_NAME>-lgtm`，镜像 `grafana/otel-lgtm`，与平台的 `docker-compose.yml` 相同：Grafana、Prometheus、Loki、Tempo 与 OpenTelemetry 收集器），
+在 compose 的 profile `observability` 中：`.env` 写 `COMPOSE_PROFILES=observability` 才启动（compose 从项目目录的 `.env` 读它），没有它的环境照旧只有应用。
+
+- **规则**：平台的 `docker/grafana/alerting/jabiz-alerts.yaml` 与 `render.sh`、QuizBuks 的 `deploy/quizbuks/alerting/quizbuks-alerts.yaml`，由 workflow 的"Upload deploy files"
+  一起上传到服务器的 `/opt/apps/<APP_NAME>/alerting/`（与 compose.yaml 同一目录，compose 以 `./alerting` 只读挂载到 `/otel-lgtm/jabiz/alerting`）；文件变了而容器在运行时，workflow 重启它。
+  容器以 `render.sh` 启动：把 `$JABIZ_ALERT_*` 换成容器的环境变量（compose 给出缺省，`.env` 可覆盖）后载入；值未设或含字母、数字与 `@._+,;-` 以外的字符时容器不启动。
+  联系点 `jabiz-oncall` 与路由是平台文件中的，QuizBuks 的文件只有规则（`docs/quizbuks/operations.md` §5）。
+- **第一次**：先部署一次（让 workflow 上传 `alerting/`），再在 `.env` 加上上面"监控与告警"的几行并重新部署；部署脚本只起部分服务时，在 `/opt/apps/<APP_NAME>/` 下
+  `docker compose up -d lgtm`。应用经本项目自己的网络 `telemetry` 推送到 `http://lgtm:4318`；数据在卷 `<APP_NAME>_lgtm`。
+- **访问 Grafana**：端口只绑定服务器的 `127.0.0.1:${QB_GRAFANA_PORT}`，不经 Caddy 公开；在本机 `ssh -L 3000:127.0.0.1:<QB_GRAFANA_PORT> <服务器>` 后打开 `http://localhost:3000`
+  （镜像缺省的账号 `admin` / `admin`，第一次登录后改密码；能登录服务器的人才到得了这里）。
+- **试发**：对 staging 运行 `tools/ops/alert-fire-test.sh`（经上面的隧道，`GRAFANA_URL=http://localhost:3000`、`GRAFANA_USER`、`GRAFANA_PASSWORD`；`fire` 与 `disk` 另需
+  `OTLP_URL` 与在服务器上执行，见脚本头部），`JABIZ_ALERT_SERVICE=quizbuks`。
+- **上线前的设置检查**（`docs/quizbuks/launch-checklist.md`"安全"）：把 `tools/ops/env-check.sh` 与 `deploy/quizbuks/server/env-check.rules` 复制到服务器
+  （`.env` 不离开服务器），`bash env-check.sh /opt/apps/quizbuks/.env env-check.rules`，只输出变量名。
+- 数据库主机（WAL 归档、备份、数据库所在磁盘）的告警由数据库托管方或主机监控提供，不在这里。
 
 ### 3. DNS
 

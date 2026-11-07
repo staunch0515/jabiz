@@ -1,0 +1,229 @@
+# QuizBuks's own alert rules (docs/quizbuks/operations.md section 5), provisioned next to the platform's
+# docker/grafana/alerting/jabiz-alerts.yaml and rendered by its render.sh: every JABIZ_ALERT_ placeholder (a dollar sign
+# and the name) comes from the LGTM container's environment (deploy/quizbuks/server/compose.yaml gives the defaults).
+# Groups only: the contact point jabiz-oncall and the one routing tree of the organisation are the platform's (a
+# second policies block would replace them), so these alerts reach the same on-call. Platform metrics only, and the
+# application's gauge qb.reconcile.differences (ReconcileGauge); timers are <name>_milliseconds_count, gauges as named.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: quizbuks
+    folder: quizbuks
+    interval: 1m
+    rules:
+      - uid: qb-reconcile-diff
+        title: Reconciliation found differences
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'max(qb_reconcile_differences{job="$JABIZ_ALERT_SERVICE"}) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: reconcile }
+        annotations:
+          summary: 'The daily reconciliation (qb.reconcile) found differences between the ledger, the wallets, Stripe and the fees: the journal exports stop until they are explained.'
+          runbook: docs/quizbuks/operations.md section 7.2
+      - uid: qb-reconcile-missing
+        title: No reconciliation for 26 hours
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'count((sum(increase(jabiz_process_milliseconds_count{job="$JABIZ_ALERT_SERVICE", process="QB_RECONCILE_RUN", outcome="success"}[26h])) or vector(0)) == 0) and on() count(present_over_time(jvm_memory_used_bytes{job="$JABIZ_ALERT_SERVICE"}[1h] offset 25h))'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: reconcile }
+        annotations:
+          summary: 'No reconciliation has succeeded for 26 hours (the job runs daily) although the application has been reporting for that long.'
+          runbook: docs/quizbuks/operations.md section 7.2
+      - uid: qb-transfer-failed
+        title: Stripe transfer failed
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (job_type) (increase(jabiz_external_job_milliseconds_count{job="$JABIZ_ALERT_SERVICE", job_type=~"qb.stripe.transfer|qb.stripe.transfer-check", outcome=~"FAILED|DISCARDED|error"}[1h])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: transfers }
+        annotations:
+          summary: 'A transfer to a taker or its check failed for good: the money is held until a person looks (finance page, transfers by status).'
+          runbook: docs/quizbuks/operations.md section 7.4
+      - uid: qb-stripe-webhooks
+        title: Stripe webhooks rejected or failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum by (provider, reason) (increase(jabiz_inbound_receive_milliseconds_count{job="$JABIZ_ALERT_SERVICE", provider=~"stripe|stripe-connect", result=~"REJECTED|FAILED"}[15m])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: stripe }
+        annotations:
+          summary: 'Stripe''s webhooks are rejected (signature, too old, malformed) or fail: top-ups and payouts are not recorded until they are delivered.'
+          runbook: docs/quizbuks/operations.md section 7.1
+      - uid: qb-stripe-calls
+        title: Stripe calls failing
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum(rate(jabiz_external_call_milliseconds_count{job="$JABIZ_ALERT_SERVICE", service="stripe", outcome=~"5xx|timeout|refused|error"}[15m])) / sum(rate(jabiz_external_call_milliseconds_count{job="$JABIZ_ALERT_SERVICE", service="stripe"}[15m])) > 0.05'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: page, area: stripe }
+        annotations:
+          summary: 'More than 5 % of the calls to Stripe fail: check status.stripe.com; transfers and top-ups wait and are retried.'
+          runbook: docs/quizbuks/operations.md section 5
+      - uid: qb-attempt-submit-busy
+        title: Answer submissions refused with 503
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum(rate(jabiz_process_milliseconds_count{job="$JABIZ_ALERT_SERVICE", process="QB_ATTEMPT_SUBMIT", status="503"}[5m])) / sum(rate(jabiz_process_milliseconds_count{job="$JABIZ_ALERT_SERVICE", process="QB_ATTEMPT_SUBMIT"}[5m])) > 0.01'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: play }
+        annotations:
+          summary: 'More than 1 % of answer submissions get 503 (the known launch risk): a hot publication is beyond the capacity of one lock.'
+          runbook: docs/quizbuks/operations.md section 7.6
+      - uid: qb-journal-export-rejected
+        title: Journal export refused
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'sum(increase(jabiz_process_milliseconds_count{job="$JABIZ_ALERT_SERVICE", process="QB_JOURNAL_EXPORT", outcome="rejected"}[1h])) > 0'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: journal }
+        annotations:
+          summary: 'The monthly journal export was refused: its error code says why (an open reconciliation difference, a mapping missing).'
+          runbook: docs/quizbuks/operations.md section 7.3
+      - uid: qb-ai-paused
+        title: AI jobs paused
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'max(jabiz_external_job_held{job="$JABIZ_ALERT_SERVICE", job_type=~"qb.ai.*"}) > $JABIZ_ALERT_QB_AI_HELD_MAX'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: ai }
+        annotations:
+          summary: 'The AI jobs wait because qb.ai.enabled is not true. Set JABIZ_ALERT_QB_AI_HELD_MAX=0 once AI is meant to be on (default 1: no alert while it is off on purpose).'
+          runbook: docs/quizbuks/operations.md section 7.8
