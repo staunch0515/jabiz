@@ -46,6 +46,10 @@ export interface Operator {
   revision: number
   members: number
   sponsors: number
+  /** F-S1: the operator the sponsors no operator found take (one at most). */
+  defaultForNew: boolean
+  /** F-S1: its own sponsor, its first lead's account. */
+  directSponsorId: string | null
 }
 
 function toOperator(row: Row): Operator {
@@ -62,6 +66,8 @@ function toOperator(row: Row): Operator {
     revision: num(row.revision),
     members: num(row.members),
     sponsors: num(row.sponsors),
+    defaultForNew: bool(row.defaultForNew),
+    directSponsorId: str(row.directSponsorId),
   }
 }
 
@@ -87,6 +93,10 @@ export interface OperatorInput {
   status?: OperatorStatus
   note?: string | null
   baseRevision?: number
+  /** F-S1: required for a new one; their account becomes its own sponsor. */
+  leadUserId?: string
+  /** F-S1: true makes it the default operator (the former one stops being it); absent leaves it as it is. */
+  defaultForNew?: boolean
 }
 
 export const saveOperator = (input: OperatorInput) =>
@@ -200,6 +210,8 @@ export interface Team {
   collection: string
   /** Whether the caller leads it: they remove members then. */
   lead: boolean
+  /** F-S1: whether the caller's account is the operator's own Sponsor (its first lead's). */
+  ownSponsor: boolean
   members: { userId: string; displayName: string | null; email: string | null; lead: boolean; addedAt: string | null;
     self: boolean }[]
 }
@@ -213,6 +225,7 @@ export async function readTeam(): Promise<Team> {
     status: String(output.status ?? ''),
     collection: String(output.collection ?? ''),
     lead: bool(output.lead),
+    ownSponsor: bool(output.ownSponsor),
     members: members.map((member) => ({
       userId: String(member.userId),
       displayName: str(member.displayName),
@@ -380,9 +393,10 @@ export const unbanSponsor = (userId: string, note: string | null) =>
  * The applications waiting for review as an operator reads them (it has no `qb.admin.sponsors`): the same rows, the
  * longest waiting first, with their count.
  */
-export async function readPendingSponsorsAsOperator(offset: number, limit: number, sorts?: SortSpec[]): Promise<Page<SponsorRow>> {
+export async function readPendingSponsorsAsOperator(offset: number, limit: number, sorts?: SortSpec[],
+  more?: Filter[]): Promise<Page<SponsorRow>> {
   const page = await runQuery<Row>(TEMPLATE.operatorSponsors, {
-    filters: [{ field: 'reviewStatus', op: 'eq', value: 'PENDING' }],
+    filters: [{ field: 'reviewStatus', op: 'eq', value: 'PENDING' }, ...more ?? []],
     sorts: sorts ?? [{ field: 'submittedAt', asc: true }],
     offset,
     limit,

@@ -97,6 +97,9 @@ class OperatorsEverywhereIT extends PlayItSupport {
             .satisfies(row -> assertThat(row).containsEntry("review_status", "APPROVED"));
         assertThat(query("SELECT lead FROM qb_operator_member WHERE user_id = ?::uuid", lead)).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("lead", true));
+        // F-S1b: the Operator Management System tells the lead their account is the operator's own sponsor.
+        assertThat(run(OperatorProcesses.TEAM, memberSession(lead, operator.operatorId()), body()))
+            .containsEntry("ownSponsor", true);
 
         // The lead gets the sponsor role by joining the sponsor entry themself (the platform's join).
         client.post().uri("/api/auth/account/entries/sponsor/join")

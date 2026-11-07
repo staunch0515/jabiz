@@ -13,6 +13,7 @@ import {
   UserName,
   useAuth,
   type ColumnDef,
+  type Filter,
 } from '@jabiz/admin'
 import { readPendingPublications, readPendingSponsors, type PublicationRow, type SponsorRow } from './api'
 import { readPendingSponsorsAsOperator } from './operator-api'
@@ -21,6 +22,7 @@ import { money, QUEUE, usePaged, when } from './hooks'
 import { PATH, PERMISSION } from './ids'
 import { readPendingSponsorPages } from './page-api'
 import { SponsorPageQueue } from './SponsorPagesPage'
+import { operatorColumn, useOperatorFilter } from './operator-filter'
 
 /** The columns sorted on the server, by the template's `list.sorts` field (Q53a). */
 const SORTS = { name: 'name', submittedAt: 'waitingSince' } as const
@@ -29,9 +31,13 @@ const SORTS_2 = { company: 'company', submittedAt: 'submittedAt' } as const
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
-function PublicationQueue() {
+/** F-S1b: what a queue shows the platform, which reads every operator's (by the one chosen) and decides none. */
+interface Across { filters: Filter[]; across: boolean }
+
+function PublicationQueue({ filters, across }: Across) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const { query, table, sortable } = usePaged(QUEUE.publications, readPendingPublications, true, SORTS)
+  const { query, table, sortable } = usePaged([...QUEUE.publications, filters],
+    (offset, limit, sorts) => readPendingPublications(offset, limit, sorts, filters), true, SORTS)
   const columns = useMemo<ColumnDef<PublicationRow, unknown>[]>(() => [
     {
       id: 'name',
@@ -59,6 +65,7 @@ function PublicationQueue() {
     },
     { id: 'sponsor', header: t('reviews.sponsor'),
       cell: ({ row }) => <PublisherLink kind={row.original.publisherKind} id={row.original.publisherId} /> },
+    ...(across ? [operatorColumn<PublicationRow>(t('pickers.operatorColumn'))] : []),
     { id: 'submittedAt', header: t('reviews.submittedAt'), cell: ({ row }) => when(row.original.waitingSince) },
     {
       id: 'budget',
@@ -66,7 +73,7 @@ function PublicationQueue() {
       meta: { className: 'text-right tabular-nums' },
       cell: ({ row }) => money(row.original.budgetCap),
     },
-  ], [t])
+  ], [t, across])
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
     <DataTable label={t('reviews.publicationsTable')} columns={sortable(columns)} {...table}
@@ -81,9 +88,11 @@ function useSponsorReader() {
   return !can(PERMISSION.usersRead) && can(PERMISSION.operatorUse) ? readPendingSponsorsAsOperator : readPendingSponsors
 }
 
-function SponsorQueue() {
+function SponsorQueue({ filters, across }: Across) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
-  const { query, table, sortable: sortable2 } = usePaged(QUEUE.sponsors, useSponsorReader(), true, SORTS_2)
+  const read = useSponsorReader()
+  const { query, table, sortable: sortable2 } = usePaged([...QUEUE.sponsors, filters],
+    (offset, limit, sorts) => read(offset, limit, sorts, filters), true, SORTS_2)
   const columns = useMemo<ColumnDef<SponsorRow, unknown>[]>(() => [
     {
       id: 'company',
@@ -101,8 +110,9 @@ function SponsorQueue() {
     },
     { id: 'contactName', header: t('reviews.contactName'), cell: ({ row }) => row.original.contactName ?? '' },
     { id: 'email', header: t('reviews.email'), cell: ({ row }) => row.original.email ?? '' },
+    ...(across ? [operatorColumn<SponsorRow>(t('pickers.operatorColumn'))] : []),
     { id: 'submittedAt', header: t('reviews.submittedAt'), cell: ({ row }) => when(row.original.submittedAt) },
-  ], [t])
+  ], [t, across])
   if (query.isError) return <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
   return (
     <DataTable label={t('reviews.sponsorsTable')} columns={sortable2(columns)} {...table}
@@ -112,7 +122,7 @@ function SponsorQueue() {
 }
 
 /** How many wait in a queue, as the server counted them (a request of one row). */
-function useCount(key: readonly string[], read: (offset: number, limit: number) => Promise<{ total?: number }>,
+function useCount(key: readonly unknown[], read: (offset: number, limit: number) => Promise<{ total?: number }>,
   enabled: boolean) {
   const count = useQuery({ queryKey: [...key, 'count'], queryFn: () => read(0, 1), enabled })
   return count.data?.total == null ? '…' : count.data.total.toLocaleString()
@@ -122,26 +132,35 @@ function useCount(key: readonly string[], read: (offset: number, limit: number) 
  * The review queue (02-design §7.3, P-09): submitted publications and sponsor applications that wait for a decision,
  * the longest waiting first, page by page with their counts. Each opens on a page that shows everything the decision
  * is about; the decision itself is taken there. A tab is offered to those who may review its kind; the server decides
- * either way.
+ * either way. F-S1b: the operators review; the platform reads every operator's queues, by the operator chosen, and
+ * decides none.
  */
 export default function ReviewsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const [search, setSearch] = useSearchParams()
-  const publications = can(PERMISSION.reviewPublication)
-  const sponsors = can(PERMISSION.reviewSponsor)
-  const publicationCount = useCount(QUEUE.publications, readPendingPublications, publications)
-  const sponsorCount = useCount(QUEUE.sponsors, useSponsorReader(), sponsors)
+  const operators = useOperatorFilter('reviews-operator')
+  const { filters, across } = operators
+  const publications = can(PERMISSION.reviewPublication) || (across && can(PERMISSION.publicationRead))
+  const sponsors = can(PERMISSION.reviewSponsor) || (across && can(PERMISSION.usersRead))
+  const readSponsors = useSponsorReader()
+  const publicationCount = useCount([...QUEUE.publications, filters],
+    (offset, limit) => readPendingPublications(offset, limit, undefined, filters), publications)
+  const sponsorCount = useCount([...QUEUE.sponsors, filters],
+    (offset, limit) => readSponsors(offset, limit, undefined, filters), sponsors)
   // Q60a-3: sponsors' pages are reviewed by those who review sponsors, read through a template that needs the
   // publications' read permission as well.
   const pages = sponsors && can(PERMISSION.publicationRead)
-  const pageCount = useCount(QUEUE.sponsorPages, readPendingSponsorPages, pages)
+  const pageCount = useCount([...QUEUE.sponsorPages, filters],
+    (offset, limit) => readPendingSponsorPages(offset, limit, undefined, filters), pages)
   const asked = search.get('tab')
   const tab = (asked === 'sponsors' && sponsors) || (asked === 'pages' && pages) ? asked
     : publications ? 'publications' : 'sponsors'
   return (
     <div className="flex flex-col gap-4" data-testid="qb-reviews">
-      <PageHeader title={t('reviews.title')} description={t('reviews.description')} className="pb-0" />
+      <PageHeader title={t('reviews.title')} description={t(across ? 'reviews.acrossDescription' : 'reviews.description')}
+        className="pb-0" />
+      {operators.bar}
       <Tabs value={tab} onValueChange={(value) => setSearch(value === 'publications' ? {} : { tab: value },
         { replace: true })}>
         <TabsList>
@@ -161,9 +180,9 @@ export default function ReviewsPage() {
             </TabsTrigger>
           )}
         </TabsList>
-        {publications && <TabsContent value="publications"><PublicationQueue /></TabsContent>}
-        {sponsors && <TabsContent value="sponsors"><SponsorQueue /></TabsContent>}
-        {pages && <TabsContent value="pages"><SponsorPageQueue /></TabsContent>}
+        {publications && <TabsContent value="publications"><PublicationQueue filters={filters} across={across} /></TabsContent>}
+        {sponsors && <TabsContent value="sponsors"><SponsorQueue filters={filters} across={across} /></TabsContent>}
+        {pages && <TabsContent value="pages"><SponsorPageQueue filters={filters} across={across} /></TabsContent>}
       </Tabs>
     </div>
   )
