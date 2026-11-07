@@ -1,0 +1,5 @@
+{
+  "comment": "The rule of a link name (F-F9): the console's HANDLE_PATTERN (page/api.ts) and the server's QbSponsorPages.HANDLE_PATTERN both pass these cases (page/handle.test.ts, QbSponsorPagesHandleTest).",
+  "valid": ["abc", "aini-helmet", "a1b", "123", "shop-2026", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+  "invalid": ["", "ab", "-abc", "abc-", "Aini", "aini_helmet", "aini helmet", "aini.helmet", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "https://aini.com", "爱你"]
+}
