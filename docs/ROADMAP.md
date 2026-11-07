@@ -5366,3 +5366,24 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：数据视图的提交上限小于任务批量时，轮换照常分几次完成（复现测试修改前失败、修改后通过）。
 
 **17zz4 状态**：📝 待评审（分支 `1.3/phase-17zz4-rekey-batch`，在 #509 之上）。
+
+### 17zz6 依赖的已知漏洞：Spring Boot 4.0.9、SCRAM 3.4、前端工具链（2026-11-07，QuizBuks 首次上线 checklist"安全"）
+
+**缘由**：上线清单要求评估依赖与镜像的已知漏洞。以 GitHub Advisory Database（已审核的条目）对照 `:app` 的运行时依赖，以 `pnpm audit` 对照前端与示范门户：
+- 后端：Jackson 2.21.5 / 3.1.5 有解析请求正文时的拒绝服务与类型校验绕过（GHSA-7hhh-6rmp-j9qf、GHSA-p6pp-m3f8-5c89、GHSA-cxp5-3px4-pw24、GHSA-q4xh-88c3-wmh7、GHSA-wv8q-qhhj-9h54 等，高）；
+  两个 PostgreSQL 驱动仍用 SCRAM 3.2（GHSA-p9jg-fcr6-3mhf，通道绑定被静默降级，高）。
+- 前端：都在构建与测试工具中（Vite 开发服务器、Vitest、jsdom 带的 undici、eslint 插件带的 zod、Tailwind 带的 source-map-js），不进打包结果。
+
+| # | 内容 |
+|---|---|
+| 17zz6-1 | Spring Boot 4.0.8 → 4.0.9（`build-logic` 的插件版本，唯一固定处）：随 BOM Jackson 3.1.7 / 2.21.7、PgJDBC 42.7.14、r2dbc-postgresql 1.1.3 |
+| 17zz6-2 | `runtime` 以依赖约束把 `com.ongres.scram:scram-client` / `scram-common` 定为 3.4（驱动仍要 3.2；BOM 的驱动要 3.3 及以上时删去） |
+| 17zz6-3 | 前端与示范门户：Vite 8.3.5、Vitest 5.0.5、jsdom 30.1.3（undici 8.12.3），锁文件中 zod 4.6.7、source-map-js 1.2.2；只选发布满两周的版本（`--config.minimum-release-age=20160`）；门户的版本与平台一致（`app:check`） |
+
+**不处理（说明）**：
+- OpenTelemetry API 1.55.0（GHSA-ccrj-gw8r-854m、GHSA-rcgg-9c38-7xpx，中）：解析请求头 `tracestate` / `baggage` 的耗费随头的长度增长，请求头总长受 `server.max-http-request-header-size`（缺省 8 KB）限制；随 Spring Boot 的 BOM 升级，不单独越过 BOM。
+- eslint 带的 minimatch 10（GHSA-g3hv-75wg-m249，中）：只在 lint 时匹配仓库内的路径模式，eslint 自己的版本范围不允许 11。
+
+**验收**：`./gradlew check` 与前端 `pnpm lint && pnpm typecheck && pnpm test && pnpm build`、`app:check`、`ext:check` 通过；对照结果中高与严重的条目为零。
+
+**17zz6 状态**：📝 待评审（分支 `1.3/phase-17zz6-tool-updates`）。
