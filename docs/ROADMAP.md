@@ -5200,3 +5200,19 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 请求是带原因的操作，执行记录写明请求人；授予 `job.run` 须另一位管理员审批；页面三语、亮暗通过 axe。
 
 **17zs 状态**：📝 待评审（分支 `1.3/phase-17zs-manual-job-runs`）。
+
+### 17zt 平台小修：连接、受控变更的值上限、限流的原子性（2026-11-07，QuizBuks 首次上线）
+
+**缘由**：17zr 的 `RemoteImageFetchIT` 在任何下载开始前就看到连接池中有一个连接被借出，测试只好与基线比较；D72 的剩余风险写着接近正文上限、大量需要转义的邮件正文可能提不上受控变更；
+`ProcessRateLimits` 先看全部桶再逐个取令牌，两步之间没有原子性。
+
+| # | 内容 |
+|---|---|
+| 17zt-1 | 查明被借出的连接：是 `DictionaryChangeListener` 为 `LISTEN jabiz_dict_changed` 一直占用的连接（02 §5，设计如此），不是泄漏：`pg_stat_activity` 中该会话最后的语句即 `LISTEN`，关掉监听（`jabiz.dictionary.listen.enabled=false`）后借出数为 0。`RemoteImageFetchIT` 改为断言恰好这一个（监听在运行、借出数 = 1），下载期间不变 |
+| 17zt-2 | 受控变更的值：上限的标题（300）与正文（20 000）全用控制字符时，写成 JSON（每个转义为 6 个字符）约 12 万字符，原先 400 `TOO_LONG`（列 `varchar(30000)`）。迁移 `V64__control_change_values_text.sql` 把 `change_values` 改为 `text`（文本改长度不改变封存的摘要，D58；不重写行），字段不限长；各目标以 `ControlTarget.maxValuesLength()` 给出值的上限（缺省 30 000，超过即 422 `TOO_LONG`），`MailText` 取配置的标题与正文上限之和的 6 倍另加 1 000：凡 `MAIL_TEXT_SAVE` 接受的文字都能提出。D72 的剩余风险与 18 §3.5、§5.6 随之更新 |
+| 17zt-3 | 限流的原子性：一个请求的全部桶（按人、地址、实例、租户、访客、主机）在该流程（或 `FILE_FETCH`）的一把锁下先看后取，全取或全不取；`Retry-After` 仍取第一个拒绝的桶，观测在锁外记录。此前并发时被拒的请求会已取走前面桶的令牌（单个桶本身不会超限）。10 §15 随之更新 |
+| 17zt-4 | 测试：`RemoteImageFetchIT`（断言已知的唯一持有者）；`MailTextIT.theLongestTextsTheRulesAcceptCanBeProposed`（上限的控制字符标题与正文可以提出，记下的值超过 12 万字符；多一个字符是规则的 `MAIL_TEXT_TOO_LONG`；同样长度的文字经 `MAIL_TEXT_SAVE` 存入；修改前 400 `TOO_LONG`）、`MailTextControlTargetTest`（2 例：缺省与放大的上限都容得下最坏的 JSON；其他字符转义后不超过 6 个）；`ProcessRateLimitsTest.requestsAtOnceTakeAllTheirBucketsOrNone`（4 000 个操作人、16 个线程、每人 1、每实例 1 000：恰好放行 1 000，被拒者再请求时由实例而不是本人的桶拒绝；修改前 4 次运行 4 次失败） |
+
+**验收**：空闲时被借出的连接有明确的持有者且测试断言之；任何经 `MAIL_TEXT_SAVE` 能存的文字都能作为受控变更提出；并发的请求不会让被拒的请求消耗其他桶的令牌，放行数不超过限额。
+
+**17zt 状态**：📝 待评审（分支 `1.3/phase-17zt-pool-and-limits`）。
