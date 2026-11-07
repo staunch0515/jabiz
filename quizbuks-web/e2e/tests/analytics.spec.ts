@@ -35,8 +35,31 @@ async function downloadedCsv(page: Page, testId: string): Promise<string[]> {
   return text.replace(/^﻿/, '').split(/\r\n/).filter((line) => line !== '')
 }
 
+/** How long the test may run: its assertions on "today" and the 7 days must not straddle a day change. */
+const RUN_MS = 300_000
+
+/**
+ * Waits for the deployment's day (Asia/Tokyo, UTC+9 without summer time) to change when the test would run across
+ * it: the spending "today", the day buckets and the trend read the day the job recorded, and a completion of 23:59
+ * is no longer "today" a minute later (docs/quizbuks/troubleshooting.md T14).
+ */
+async function notAcrossTokyoMidnight(): Promise<number> {
+  const day = 24 * 3_600_000
+  const sinceMidnight = (Date.now() + 9 * 3_600_000) % day
+  const left = day - sinceMidnight
+  if (left > RUN_MS) {
+    return 0
+  }
+  // A little past midnight, so that the job's next run has the new day too.
+  const wait = left + 90_000
+  await new Promise((resolve) => setTimeout(resolve, wait))
+  return wait
+}
+
 test('a Sponsor reads the dashboard and a publication\'s analytics, and exports its trend', async ({ page, request }) => {
-  test.setTimeout(300_000)
+  // The wait for midnight, at most RUN_MS and a little more, then the run.
+  test.setTimeout(2 * RUN_MS + 2 * 60_000)
+  await notAcrossTokyoMidnight()
   const other = await fundedSponsor(request, 1000)
   const sponsor = await fundedSponsor(request, 1000)
   const mia = await takerInJapan(request, unique('Mia '))
