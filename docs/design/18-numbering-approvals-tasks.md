@@ -177,7 +177,7 @@
 提出与发布时都按参数类型检查并规范化值（422 `PARAM_VALUE_INVALID`），并做写入时同样的字段校验；只能用于受控的键。提案记下所基于的参数（新建则无），
 发布时参数已不是那个即 422 `CONTROL_TARGET_CHANGED`。发布以参数在生效时刻的版本为基础写入新版本，这一次写入带平台生成的许可，是受控参数唯一能通过的写入。
 
-实现：每类目标是一个 `ControlTarget` Bean（runtime `approval`：加载所基于的状态、检查提案、检查并登记发布的写入）；审批规则、限额、职责分离规则为 `ApprovalControlTarget`，参数为 `ParamControlTarget`。
+实现：每类目标是一个 `ControlTarget` Bean（runtime `approval`：加载所基于的状态、检查提案、检查并登记发布的写入；记下的值写成 JSON 后不得超过目标的 `maxValuesLength()`，缺省 30000 字符，超过即 422 `TOO_LONG`，列本身不限长，17zt）；审批规则、限额、职责分离规则为 `ApprovalControlTarget`，参数为 `ParamControlTarget`。
 
 ### 3.6 影响预览
 
@@ -467,7 +467,7 @@ NOTIFICATION 缺 `{unsubscribeUrl}`；`{entryUrl}` 而模板没有参数 `entry`
 |---|---|---|
 | `MAIL_TEXT_SAVE` `{template, locale, subject, body, baseVersionNo}` | 普通类：校验后写入新版本，即时生效（与缺省相同即恢复默认）；安全类 422 `MAIL_TEXT_NEEDS_APPROVAL` | `mail.text.write` |
 | `MAIL_TEXT_RESET` `{template, locale, baseVersionNo}` | 写 `DEFAULT` 版本，两类都即时生效 | `mail.text.write` |
-| 受控变更，`targetEntity: MailText`，`values: {template, locale, subject, body}` | 安全类的修改：提出与发布都要求近期二次验证，另一位发布，发布时再校验；提出所据的版本已变即 `CONTROL_TARGET_CHANGED` | `control.propose` / `control.publish` |
+| 受控变更，`targetEntity: MailText`，`values: {template, locale, subject, body}` | 安全类的修改：提出与发布都要求近期二次验证，另一位发布，发布时再校验；提出所据的版本已变即 `CONTROL_TARGET_CHANGED`；记下的值以 JSON 至多为标题与正文上限之和的 6 倍另加 1000 字符（控制字符转义后占 6 个），凡 `MAIL_TEXT_SAVE` 接受的文字都能提出（17zt） | `control.propose` / `control.publish` |
 | `MAIL_TEXT_TEST_SEND` `{template, locale, subject?, body?}` | 草稿或当前文字以示例值渲染，作为已渲染的消息只寄给操作人自己账号的邮箱，标题加 `[TEST]`，不生成令牌；平台缺省限流每人每小时 10 次（`jabiz.process.rate-limits` 可改） | `mail.text.write` |
 | `POST /api/mail/texts/preview` | 预览（即计划中的 `MAIL_TEXT_PREVIEW`）：校验问题与渲染出的标题、纯文本、HTML；不是流程，不写任何记录 | `mail.text.read` |
 | `GET /api/mail/texts` | 每个模版：可用与必须保留的占位符、是否须审批；每种语言：缺省文字、覆盖、状态（`DEFAULT` / `CUSTOM` / `DEFAULT_UPDATED` / `INVALID`） | `mail.text.read` |
