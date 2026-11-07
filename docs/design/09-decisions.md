@@ -2759,7 +2759,7 @@ QuizBuks 首次上线时，运维需要在修好数据或外部服务恢复后�
 3. **应用的密封字段要声明**：`SealedFields` Bean（core，同步，无 I/O）列出 `SealedField.of(实体, 字段, 上下文字段 | 行 -> 上下文)`，上下文与 `SealSecret` 当初所用的
    完全相同。平台自己的（Apple 的令牌，`SecIdentityToken.sealedToken`）同样声明。启动检查 `KEYS`：实体、字段不存在，实体是 write-once（D29，不能重写），
    没有数据视图，字段不可变（`immutable`，重写不了），重复声明即错误；字段不是 `sensitive` 为警告。没有声明的密封字段不会被重新加密，旧密钥撤下后就再也解不开。
-4. **撤下旧密钥**：任务找不到剩余（输出 `more=false`、计数为 0）后，从环境中删去 `JABIZ_MFA_KEY_PREVIOUS` / `JABIZ_SEAL_KEY_PREVIOUS`；
+4. **撤下旧密钥**：任务报告可以撤下（输出 `retiredKeysRemovable=true`：声明的字段与未声明的字段都不剩，第 8 条）后，从环境中删去 `JABIZ_MFA_KEY_PREVIOUS` / `JABIZ_SEAL_KEY_PREVIOUS`；
    `JABIZ_JWT_SECRET_PREVIOUS` 保留到它签的令牌与邮件链接都可以过期（访问令牌 15 分钟、挑战令牌更短；退订链接见手册）；
    **`JABIZ_INTEGRITY_KEY_PREVIOUS` 永久保留**：封存块从不重签，旧块要一直能校验。配置着 JWT、MFA、SEAL 的旧密钥时启动检查 `KEYS` 给出"轮换进行中"的警告。
 5. **核对与演练**：恢复核对（13 §8）另有 `sealed-secrets`（声明的密封值都能以配置的密钥解开）；`jabiz.ops.verify-restore.rekey=true` 时先把重新加密跑到底。
@@ -2780,6 +2780,15 @@ QuizBuks 首次上线时，运维需要在修好数据或外部服务恢复后�
    即 `MFA_ENROLLMENT_REQUIRED`，确认新的二次验证后照常。批准之后才设定的不受影响；通行密钥不受影响（不含平台的秘密）。
 7. **旧 JWT 密钥的保留期**：`jabiz.security.jwt.previous-retention`（缺省 `P365D`，覆盖旧邮件中退订链接通常被使用的时间；退订链接本身不过期）。
    平台在应用就绪时把每个旧 JWT 密钥的标识（不是密钥）与首次见到的时刻记入只追加表 `sec_key_first_seen`；超过保留期，即使它仍在配置中，它签的令牌也被拒绝，日志提示删去。
+8. **未声明的密封字段**（17zzz，总控 2026-11-07 提出）：重新加密只处理声明的字段；应用经 `SealSecret` 写进、却没有声明的字段，撤下旧密钥后就解不开，而第 3 条的检查只看已有的声明。
+   密封值的存储形式以 `s1:<密钥标识>:` 开头，所以平台不必知道写进了哪里：配置着旧的 `JABIZ_SEAL_KEY` 时，`RetiredSealScan` 对每个有数据视图的实体的每个文本字段（声明的除外，当前版本）
+   按旧密钥的前缀计数（参数绑定）。结果：
+   - 启动检查 `KEYS`：每个这样的字段一条——`platformCheck` 中是**错误**（部署前与 CI 拦住），应用启动时只是**警告**（轮换中途重启不停服）；同时设仪表 `jabiz.keys.undeclared-sealed`，
+     告警 `jabiz-keys-undeclared-sealed`（13 §7）在大于 0 时通知值班。
+   - 任务 `jabiz.key-rotation`：每次运行最后再扫一次；本次没有可重新加密或收回的东西而仍有这样的值时，运行**失败**（422 `KEY_ROTATION_UNDECLARED_SEALED`，列出字段）；
+     有工作时照常提交并在输出 `undeclaredSealed` 中列出。旧 MFA 与密封密钥下什么都不剩时，输出 `retiredKeysRemovable=true`，日志写明"可以撤下"。**只在它报告可以撤下之后撤旧密钥**（第 4 条）。
+   - 恢复演练的 `key-rotation` 项同样以此为不通过。
+   不扫历史版本（第"剩余风险"条）、没有数据视图的实体（没有数据视图的实体也不能声明密封字段），也不扫非文本字段；普通文本恰以某把旧密钥的 `s1:<16 位标识>:` 开头的误报可以忽略。
 
 **不做**：改写只追加表中的历史密文（维护连接上的覆盖，类似 D62 的清除，需求方 2026-11-07 决定不做，记入上线后待议）：会改动封存的行，需要改封存的核对规则。
 

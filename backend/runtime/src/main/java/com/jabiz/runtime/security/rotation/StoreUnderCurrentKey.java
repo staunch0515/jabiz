@@ -77,7 +77,8 @@ class StoreUnderCurrentKey implements BlockingStep<NoMetadata, ProcessContext> {
         }
         int takenBackCount = takenBack.size();
         ctx.put(KeyRotationProcesses.OUTPUT, new KeyRotationProcesses.RekeyOutput(mfaSecrets, sealedValues,
-            unreadable, found.size() >= finder.batchSize() || takenBackCount >= finder.batchSize(), takenBackCount));
+            unreadable, found.size() >= finder.batchSize() || takenBackCount >= finder.batchSize(), takenBackCount,
+            List.of(), false));
     }
 
     private String reencrypt(String stored, String userId) {
