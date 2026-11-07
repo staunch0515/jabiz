@@ -36,6 +36,7 @@ vi.mock('@jabiz/admin', async (original) => {
     runQuery: server.runQuery,
     sessionFetch: server.sessionFetch,
     useAuth: () => ({ can: (p: string) => server.permissions.has(p) }),
+    UserName: ({ id }: { id: string | null }) => <span data-testid="user-name">{id}</span>,
   }
 })
 
@@ -132,8 +133,8 @@ describe('UsagePage', () => {
     expect(rows[0]).toHaveTextContent('600.0 MB')
     expect(rows[0]).toHaveTextContent('610.0 MB')
     expect(rows[1]).toHaveTextContent('12')
-    // A sponsor without an onboarding name shows its id; each leads to the sponsor's page.
-    expect(within(rows[2]).getByTestId('usage-sponsor')).toHaveTextContent(BOB)
+    // A sponsor without an onboarding name shows the user's name; each leads to the sponsor's page.
+    expect(within(rows[2]).getByTestId('user-name')).toHaveTextContent(BOB)
     expect(within(rows[0]).getByTestId('usage-sponsor')).toHaveAttribute('href', PATH.sponsor(ANN))
     // Nothing to change: the only buttons export.
     expect(screen.queryByRole('button', { name: /save|delete|edit|change/i })).toBeNull()

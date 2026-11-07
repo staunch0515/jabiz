@@ -14,6 +14,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  UserName,
   type ColumnDef,
 } from '@jabiz/admin'
 import { Download } from 'lucide-react'
@@ -62,7 +63,7 @@ export default function UsagePage() {
       { id: 'sponsor', header: t('usage.columns.sponsor'),
         cell: ({ row }) => (
           <Link to={PATH.sponsor(row.original.sponsorId)} className={linkClass} data-testid="usage-sponsor">
-            {row.original.company ?? row.original.sponsorId}
+            {row.original.company ?? <UserName id={row.original.sponsorId} />}
           </Link>
         ) },
       { id: 'month', header: t('usage.columns.month'), cell: ({ row }) => row.original.month },
