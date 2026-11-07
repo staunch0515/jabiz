@@ -1,0 +1,16 @@
+# One backup job (deploy/quizbuks/backup/backup.sh <job>), started by the timers beside this file. The script itself
+# pings and mails on failure; systemd only keeps one run of a job at a time and logs it (journalctl -u quizbuks-backup@<job>).
+[Unit]
+Description=QuizBuks backup: %i
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=BACKUP_ENV=/opt/infra/backup/backup.env
+ExecStart=/opt/infra/backup/backup.sh %i
+# A full backup of a large database can take hours; never two at once.
+TimeoutStartSec=12h
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

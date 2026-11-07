@@ -1,0 +1,35 @@
+# Reference for the shared PostgreSQL in /opt/infra (deploy/quizbuks/DEPLOY.md, "备份"): only the lines this setup
+# adds are marked "pgBackRest". Merge them into the existing service; keep its name (postgres), volume, networks and
+# password as they are. Rollback: restore the previous image line and command (archive_mode off), restart.
+services:
+  postgres:
+    # pgBackRest: the image built from deploy/quizbuks/backup/Dockerfile.postgres (was: postgres:16).
+    image: postgres-pgbackrest:16
+    container_name: postgres
+    restart: unless-stopped
+    # pgBackRest: the bucket, keys and passphrases (backup.env, mode 600, root only).
+    env_file:
+      - /opt/infra/backup/backup.env
+    # pgBackRest: WAL archiving; changing archive_mode needs this one restart.
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=main archive-push %p
+      # A finished WAL file at least every minute while anything is written: at most about a minute lost (RPO).
+      - -c
+      - archive_timeout=60
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # pgBackRest: the spool of WAL waiting for upload and the logs, kept across restarts.
+      - pgbackrest-spool:/var/spool/pgbackrest
+      - pgbackrest-log:/var/log/pgbackrest
+
+volumes:
+  pgdata:
+    external: true
+  pgbackrest-spool:
+  pgbackrest-log:

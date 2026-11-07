@@ -160,6 +160,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **一起备份的**：上传文件卷（`/var/lib/jabiz/files`：与库同一时刻的快照或每日同步）、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本（**不与备份放在一起**：拿到备份的人不应同时拿到密钥）。生成的文件（导出 CSV、收据 PDF）在库中（`sys_generated_file`、`sys_document_run`），随库备份。
 - 备份加密、异地（另一区域或账户）、只追加或带对象锁，防误删与勒索。
 - 监控：最近一次成功的基础备份与 WAL 归档的延迟（§5）。
+- **采用的做法**（需求方 2026-11-07 决定）：pgBackRest + Cloudflare R2（两个仓库：14 天时间点恢复、月末全量 10 年，都由 pgBackRest 加密），上传文件以 restic 每小时备份到同一个桶；
+  失败发邮件给值班，另可接死人开关服务。设置、首次启用、回退与恢复演练的步骤见 `deploy/quizbuks/DEPLOY.md`"备份的做法"。
 
 ### 2.4 恢复演练（每季度，上线前一次）
 

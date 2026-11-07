@@ -1,0 +1,13 @@
+# restic: production's uploaded files every hour.
+[Unit]
+Description=QuizBuks backup timer: files
+
+[Timer]
+OnCalendar=*-*-* *:17:00 UTC
+# A run missed while the server was off happens at the next boot.
+Persistent=true
+RandomizedDelaySec=120
+Unit=quizbuks-backup@files.service
+
+[Install]
+WantedBy=timers.target
