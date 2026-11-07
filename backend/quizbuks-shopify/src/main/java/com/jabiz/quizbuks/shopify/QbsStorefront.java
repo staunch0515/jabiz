@@ -160,7 +160,7 @@ public final class QbsStorefront {
         eb.field("shopDomain", f -> f.physicalColumn("shop_domain").immutable(true).required(true)
             .asText(Shopify.SHOP_DOMAIN_LENGTH));
         eb.field("seq", f -> f.physicalColumn("seq").immutable(true).required(true).asNumeric(4, 0));
-        eb.field("sealedCode", f -> f.physicalColumn("sealed_code").immutable(true).required(true).sensitive()
+        eb.field("sealedCode", f -> f.physicalColumn("sealed_code").required(true).sensitive()
             .asText(QbsShops.SEALED_LENGTH));
         eb.field("hint", f -> f.physicalColumn("hint").immutable(true).required(true).asText(HINT_LENGTH));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
