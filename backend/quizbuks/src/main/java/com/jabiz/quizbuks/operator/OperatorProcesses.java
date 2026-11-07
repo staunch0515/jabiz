@@ -394,7 +394,8 @@ public final class OperatorProcesses {
                 + "operator", Map.of()));
             return;
         }
-        // F-S1: the operator's first lead becomes its own sponsor (the platform operator QB_SETUP made has none).
+        // F-S1: an operator is created with its lead, its own sponsor; a lead named to one without (none today)
+        // becomes it.
         boolean direct = input.lead() && operator.get("directSponsorId") == null;
         if (place != null) {
             boolean changed = input.lead() != Boolean.TRUE.equals(place.get("lead"));

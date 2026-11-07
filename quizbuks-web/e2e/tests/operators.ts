@@ -40,6 +40,24 @@ export async function operatorWithLead(request: APIRequestContext, name = 'Ope')
     sponsorToken: await tokenOf(request, email, PASSWORD, 'sponsor') }
 }
 
+const OPERATORS = 'urn:jabiz:dataset:default:QbOperator'
+
+/**
+ * The default operator, which the sponsors who sign up by themselves belong to (F-S1): the platform's administrator
+ * creates it after installing, with its lead (its own sponsor). Created once; later runs find it.
+ */
+export async function ensureDefaultOperator(request: APIRequestContext): Promise<string> {
+  const admin = await adminToken(request)
+  const found = await rows(request, admin, OPERATORS, [{ field: 'defaultForNew', op: 'eq', value: true }], 1)
+  if (found.length > 0) return String(found[0].id)
+  const email = await verifiedUser(request, 'sponsor', 'Default lead')
+  const userId = String((await rows(request, admin, USERS, [{ field: 'userName', op: 'eq', value: email }], 1))[0].id)
+  const hq = await tokenOf(request, await contentAdmin(request), PASSWORD, 'admin')
+  const saved = await run(request, hq, 'QB_OPERATOR_SAVE', { name: 'QuizBuks', contactName: 'QuizBuks',
+    contactEmail: email, leadUserId: userId, defaultForNew: true })
+  return String(saved.operatorId)
+}
+
 /** Signs in at the operators' entry, enrolling TOTP the first time (the role requires a second factor). */
 async function operatorSignIn(request: APIRequestContext, email: string): Promise<string> {
   const login = () => request.post('/api/auth/login', { data: { userName: email, password: PASSWORD,

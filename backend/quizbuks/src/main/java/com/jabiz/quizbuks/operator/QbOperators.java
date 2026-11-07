@@ -125,7 +125,7 @@ public final class QbOperators {
         // Q59c: the operator's language, shown and used by prospecting; it no longer decides where sponsors go (F-S1).
         eb.field("language", f -> f.physicalColumn("language")
             .asCode(QbContent.LANGUAGE_DICTIONARY, QbContent.LANGUAGES.toArray(String[]::new)));
-        // F-S1: whether naturally arriving sponsors go to it (one operator at most: the platform operator).
+        // F-S1: whether naturally arriving sponsors go to it (one operator at most: the default operator).
         eb.field("defaultForNew", f -> f.physicalColumn("default_for_new").required(true).asBool());
         // F-S1: the kinds of publisher it takes, comma-separated (SPONSOR only in the first launch).
         eb.field("publisherKinds", f -> f.physicalColumn("publisher_kinds").required(true).asText(40));
@@ -140,7 +140,7 @@ public final class QbOperators {
         eb.listView("default", lv -> lv
             .columns("name", "language", "defaultForNew", "directSponsorId", "contactName", "contactEmail",
                 "collection", "status", "createdAt")
-            .filters("name", "status", "createdAt")
+            .filters("name", "defaultForNew", "status", "createdAt")
             .sorts("name", "createdAt")
             .defaultSort("createdAt", false));
     });

@@ -32,6 +32,13 @@ DEMO_PASSWORD = os.environ.get("QB_DEMO_PASSWORD", "quizbuks-demo-1")
 # role to QB_ADMIN_ROLES; never configure it on a reachable installation (the finance administrator publishes there).
 PUBLISHER_ROLE = "QB_DEMO_PUBLISHER"
 PUBLISHER_USER = "demo-publisher"
+# F-S1: the demo's operators administrator (a role of its own, without a second factor, like the publisher's: only
+# this demonstration adds it to QB_ADMIN_ROLES) creates the default operator, whose lead is its own sponsor.
+OPERATORS_ROLE = "QB_DEMO_OPERATORS"
+OPERATORS_ADMIN_EMAIL = "operators@quizbuks.local"
+OPERATOR_LEAD_EMAIL = "operator@quizbuks.local"
+OPERATORS = "urn:jabiz:dataset:default:QbOperator"
+USERS = "urn:jabiz:dataset:platform:SecUser"
 SPONSOR_EMAIL = "sponsor@quizbuks.local"
 TAKER_EMAIL = "taker@quizbuks.local"
 
@@ -207,8 +214,33 @@ QUESTIONS = [
 ]
 
 
+def default_operator(admin):
+    """The default operator (F-S1): without it nobody signs up as a sponsor. Created once, with its lead."""
+    if rows(admin, OPERATORS, [{"field": "defaultForNew", "op": "eq", "value": True}], 1):
+        return
+    found = rows(admin, ROLES, [{"field": "roleCode", "op": "eq", "value": OPERATORS_ROLE}], 1)
+    role_id = found[0]["id"] if found else None
+    if not role_id:
+        role_id = insert(admin, ROLES, {"roleCode": OPERATORS_ROLE, "labels": {"en": "Demo operators administrator"},
+                                        "enabled": True})["id"]
+        for permission in ("qb.operators.write", "qb.admin.operators.read"):
+            insert(admin, ROLE_PERMISSIONS, {"roleId": role_id, "permission": permission})
+    verified_user("sponsor", OPERATORS_ADMIN_EMAIL, "Demo operators administrator")
+    hq_id = rows(admin, USERS, [{"field": "userName", "op": "eq", "value": OPERATORS_ADMIN_EMAIL}], 1)[0]["id"]
+    if not rows(admin, USER_ROLES, [{"field": "userId", "op": "eq", "value": hq_id},
+                                    {"field": "roleId", "op": "eq", "value": role_id}], 1):
+        insert(admin, USER_ROLES, {"userId": hq_id, "roleId": role_id})
+    hq = login(OPERATORS_ADMIN_EMAIL, DEMO_PASSWORD)
+    verified_user("sponsor", OPERATOR_LEAD_EMAIL, "Demo operator lead")
+    lead_id = rows(admin, USERS, [{"field": "userName", "op": "eq", "value": OPERATOR_LEAD_EMAIL}], 1)[0]["id"]
+    run(hq, "QB_OPERATOR_SAVE", {"name": "QuizBuks", "contactName": "QuizBuks", "contactEmail": OPERATOR_LEAD_EMAIL,
+                                 "leadUserId": lead_id, "defaultForNew": True})
+    print(f"  default operator created (lead {OPERATOR_LEAD_EMAIL})")
+
+
 def seed():
     admin = admin_token()
+    default_operator(admin)
     sponsor = verified_user("sponsor", SPONSOR_EMAIL, "Sam Sponsor")
     mine = rows(sponsor, SPONSORS)
     if not mine or mine[0]["attributes"].get("reviewStatus") != "APPROVED":

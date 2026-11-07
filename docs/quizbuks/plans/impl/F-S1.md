@@ -14,6 +14,7 @@
    - **平台的管理系统中能查询到所有相关信息**：搬到运营商的功能，在平台一侧保留全部运营商的只读、可按运营商筛选的查询页（审核、发起方主页与商品、举报、兑换、数字奖品、奖励方式、获客、认证等）；F-S1b 不是去掉菜单项，而是改为只读查询页。
    - 平台运营商由 `QB_SETUP` 建立并负责其余一切；为以后扩大准备，一开始就可能建很多运营商：建运营商、加负责人与成员、改派的界面与流程要支持很多个（列表分页、选择器可搜索，F-S1b 逐处检查）。
    - 不再用"后台"一词：运营商的叫"运营商管理系统"，平台的叫"QuizBuks 平台管理系统"（日、英待定）；F-S1b 新写的文字照此。
+6. **运营商的建立**（2026-11-07，取代第 1 条中"`QB_SETUP` 建平台运营商、没有负责人"）：所有运营商都在 QuizBuks 平台管理系统中以 `QB_OPERATOR_SAVE` 建立，必须带负责人（即直营发起方）；第一个设为默认运营商（`defaultForNew`）。实现：`SaveInput.defaultForNew`（设为默认时在锁 `qb.operator.default` 内、同一事务取消原默认，先写原默认那一行以免撞部分唯一索引；默认的不能直接取消 `QB_OPERATOR_DEFAULT_KEEP`、不能停用 `QB_OPERATOR_DEFAULT_INACTIVE`）；`QB_SETUP` 不建运营商（`QbSetupProcesses` / `QbSetupRecords` 回到 F-S1 之前）；每日核对加 `NO_DEFAULT_OPERATOR`；IT 夹具在安装后以 `installDefaultOperator()` 建默认运营商，e2e 在 `prepareQuizbuks` 中以 `ensureDefaultOperator`，本机演示的 `seed` 以 `default_operator`（演示自己的角色 `QB_DEMO_OPERATORS`）。
 
 ## 1. 分 PR
 
