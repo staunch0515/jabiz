@@ -253,7 +253,8 @@
 
 - 事务性 Outbox：流程内 `PublishEvent`，或实体 `publishChanges()` 自动发布变更事件（只含字段名不含值）；事务回滚即无事件。
 - 投递：至少一次 + 消费端只处理一次（消费标记与消费者流程同一事务）；失败按指数退避重试、记录每次尝试；消费者就是流程（`EventSubscription`），以系统身份执行；新增订阅可收到历史事件。
-- 定时任务 `JobDefinition`：cron + 时区 + 调用的流程；多实例集群锁；同一计划时刻至多执行一次（幂等键）；执行记录只追加；任务列表接口；停机期间错过的时刻不补跑。
+- 定时任务 `JobDefinition`：cron + 时区 + 调用的流程；多实例集群锁；同一计划时刻至多执行一次（幂等键）；执行记录只追加；任务列表接口；停机期间错过的时刻不自动补跑。
+- 手动补跑（11 §4.2、D77）：管理员在通用管理系统的"定时任务"页（或 `POST /api/jobs/{job}/runs`）选一个过去的计划时刻（须是 cron 的真实时刻、至多 90 天前）并填写原因，平台以同一把集群锁、同一组幂等键再跑一次：已成功的不重复执行，只运行未成功的项（不受退避限制）；任务忙即 409；请求是带原因的操作，执行记录写明请求人；权限 `job.run`（受保护，授予须另一位管理员审批）、近期二次验证。
 - 平台事件：实体变更、审批请求 / 批准 / 驳回、待办创建、报表签发、单据签发、导入提交。平台任务：文件清扫、封存、校验。
 - Webhook（把事件送给其他系统）：订阅写在配置（名称、事件类型、地址、来自环境变量的密钥），每个订阅是一个独立的 Outbox 消费者；平台以签名的 POST（HMAC-SHA256，时间戳 + 正文）投递，2xx 即送达，否则记录尝试并按退避重试、不跟随重定向；目标主机白名单、仅 https；启动检查配置；业务代码不自己发 HTTP 请求。
 - 入站 Webhook（接收其他系统的回调，11 §2.5）：`POST /api/inbound/{提供方}`，提供方写在配置（签名方案 `stripe` 或 `hmac-sha256`、来自环境变量的密钥（可同时配新旧两个）、接受的事件类型、时间容差、正文上限 1 MB、按地址限流）；平台验签（常量时间、拒绝过旧与过于靠后的时间戳）、原样存档在只追加的 `sys_inbound_event`（读取需要 `inbound.read`）、按外部事件号去重，经 Outbox 以 `jabiz.inbound.<提供方>.<类型>` 交给应用的事件订阅（流程中以 `LoadInboundEvent` 读正文）；请求中不执行业务流程，被拒的请求一律 400 且不存储。只签正文的发送方（如 Shopify）用方案 `body-hmac-sha256`（11 §2.5.1、D57）：事件号、主题与元数据头（`metadata-headers`）取自不签名的请求头，只用于去重与路由，同类型的同一正文只存一次，签名失败可按提供方答 401（`reject-status`）。
@@ -496,7 +497,7 @@
 | 安全 | `security.user.read/.write/.create/.password/.unlock/.mfa-reset/.identity.write`、`security.role.read/.write`、`security.user-role.read/.write`、`security.menu.read/.write`、`security.login-record.read/.write`、`security.access-review.read/.sign`、`security.user.session.read/.revoke`（会话列表与结束，10 §15.9）；`*` 为全部 |
 | 业务参数 | `platform.param.read`、`platform.param.write` |
 | 账本 | `ledger.account.read/.write`、`ledger.read`、`ledger.post`、`ledger.reverse` |
-| 审计与任务 | `audit.read`、`job.read` |
+| 审计与任务 | `audit.read`、`job.read`、`job.run`（手动补跑，受保护，D77） |
 | 审批与控制 | `approval.decide`、`approval.read`、`control.propose`、`control.publish`、`sod.read`；受保护的安全变更的审批 `security.protected-change.decide`（D51） |
 | 待办与编号 | `task.read`、`task.notify`（系统）、`numbering.read` |
 | 邮件 | `mail.read`、`mail.send`（系统）；`auth.account`、`auth.mail-preference`（用户本人，不授予角色） |
@@ -509,10 +510,10 @@
 
 ## 附录 B 平台内置的流程、事件与任务
 
-- 流程：登录与二次验证、单点登录（`SPONSOR_*`）；用户管理（`SEC_USER_CREATE` / `SET_PASSWORD` / `UNLOCK` / `SEC_MFA_*` / `SEC_USER_SESSIONS_REVOKE` / `SEC_BOOTSTRAP_ADMIN`）；业务参数（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`）；账本（`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`）；文件（`FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` / `FILE_ARCHIVE`）；审批与控制（`APPROVAL_DECIDE`、子流程 `APPROVAL_SCOPE_MOVE`（D76）、`CONTROL_CHANGE_PROPOSE` / `PUBLISH` / `WITHDRAW`）；待办通知（`TASK_NOTIFY`）；事务邮件（`MAIL_SEND`，消费者 `jabiz.mail`；`SEC_MAIL_PREFERENCE_SET`、`SEC_USER_SET_LOCALE`）；报表（`REPORT_ISSUE`）；单据（`DOCUMENT_ISSUE` / `DOCUMENT_SEND`）；导入（`IMPORT_RUN`、`IMPORT_MAPPING_SAVE` / `REMOVE`）；Webhook 投递（`WEBHOOK_DELIVER`，消费者 `jabiz.webhook.<订阅名>`）；入站 Webhook（`INBOUND_RECEIVE`）；完整性（`INTEGRITY_SEAL` / `VERIFY`）；法律保全（`LEGAL_HOLD_PLACE` / `RELEASE`）；访问审查签核（`ACCESS_REVIEW_SIGN_OFF`）；数据导出（`DATA_EXPORT`）；通用实体流程（`ADD_ENTITY` / `UPDATE_ENTITY` / `DELETE_ENTITY`）。
+- 流程：登录与二次验证、单点登录（`SPONSOR_*`）；用户管理（`SEC_USER_CREATE` / `SET_PASSWORD` / `UNLOCK` / `SEC_MFA_*` / `SEC_USER_SESSIONS_REVOKE` / `SEC_BOOTSTRAP_ADMIN`）；业务参数（`PARAM_CREATE` / `SET` / `SCHEDULE` / `CANCEL_SCHEDULED`）；账本（`LEDGER_ACCOUNT_OPEN` / `LEDGER_POST` / `LEDGER_REVERSE`）；文件（`FILE_REGISTER` / `FILE_DELETE` / `FILE_PURGE_ORPHANS` / `FILE_ARCHIVE`）；审批与控制（`APPROVAL_DECIDE`、子流程 `APPROVAL_SCOPE_MOVE`（D76）、`CONTROL_CHANGE_PROPOSE` / `PUBLISH` / `WITHDRAW`）；待办通知（`TASK_NOTIFY`）；事务邮件（`MAIL_SEND`，消费者 `jabiz.mail`；`SEC_MAIL_PREFERENCE_SET`、`SEC_USER_SET_LOCALE`）；报表（`REPORT_ISSUE`）；单据（`DOCUMENT_ISSUE` / `DOCUMENT_SEND`）；导入（`IMPORT_RUN`、`IMPORT_MAPPING_SAVE` / `REMOVE`）；Webhook 投递（`WEBHOOK_DELIVER`，消费者 `jabiz.webhook.<订阅名>`）；入站 Webhook（`INBOUND_RECEIVE`）；完整性（`INTEGRITY_SEAL` / `VERIFY`）；手动补跑定时任务（`JOB_RUN_REQUEST`，D77）；法律保全（`LEGAL_HOLD_PLACE` / `RELEASE`）；访问审查签核（`ACCESS_REVIEW_SIGN_OFF`）；数据导出（`DATA_EXPORT`）；通用实体流程（`ADD_ENTITY` / `UPDATE_ENTITY` / `DELETE_ENTITY`）。
 - 事件：`jabiz.entity-changed.<实体>`、`jabiz.approval.requested` / `approved` / `rejected`、`jabiz.task.created`、`jabiz.mail.queued`、`jabiz.report.issued`、`jabiz.document.issued`、`jabiz.import.committed`。
 - 定时任务：`FILE_SWEEP`（每日）、`jabiz.integrity-seal`（每 5 分钟）、`jabiz.integrity-verify`（每日）。
 
 ## 附录 C 需求中常涉及的应用级配置
 
-本位币与小数位（`jabiz.ledger.currency` / `scale`）、会计年度末（`jabiz.fiscal-year-end`）、界面语言与区域（`jabizApp`）、报表公司名 / 时区 / 字体 / 导出行数上限（`jabiz.reports.*`）、单据纸张与上限（`jabiz.documents.*`）、导入行数上限（`jabiz.imports.max-rows`）、文件存储目录 / 请求上限 / 孤儿清扫时间 / 上传限流（`jabiz.files.*`）、公开访问开关 / 缓存 / 限流 / 上限（`jabiz.public.*`）、邮件（`jabiz.mail.enabled` / `from` / `base-url` / `unsubscribe-path` / `timeout`、`spring.mail.*`）、令牌有效期 / 闲置 / 锁定 / 密码 / 二次验证 / OIDC（`jabiz.security.*`）、事件投递与任务调度（`jabiz.events.*`、`jabiz.jobs.*`）、Webhook 订阅与主机白名单（`jabiz.webhooks.*`）、入站 Webhook 提供方（`jabiz.inbound-webhooks.providers.*`）、外部服务的地址与主机（`jabiz.external-services.<名>.*`）、外部作业执行器（`jabiz.external-jobs.executor.*`）、流程中读取上限与锁等待（`jabiz.process.max-read-rows` / `lock-timeout`）、封存与校验周期（`jabiz.integrity.*`）、按地址的国家的地址库（`jabiz.geoip.database` / `required` / `max-age`，D74）、密钥环境变量（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、OIDC 客户端密钥、外部服务声明的密钥）。
+本位币与小数位（`jabiz.ledger.currency` / `scale`）、会计年度末（`jabiz.fiscal-year-end`）、界面语言与区域（`jabizApp`）、报表公司名 / 时区 / 字体 / 导出行数上限（`jabiz.reports.*`）、单据纸张与上限（`jabiz.documents.*`）、导入行数上限（`jabiz.imports.max-rows`）、文件存储目录 / 请求上限 / 孤儿清扫时间 / 上传限流（`jabiz.files.*`）、下载链接中的图片的重定向次数 / 超时 / 端口 / 同时下载数（`jabiz.files.fetch.*`，D75）、公开访问开关 / 缓存 / 限流 / 上限（`jabiz.public.*`）、邮件（`jabiz.mail.enabled` / `from` / `base-url` / `unsubscribe-path` / `timeout`、`spring.mail.*`）、令牌有效期 / 闲置 / 锁定 / 密码 / 二次验证 / OIDC（`jabiz.security.*`）、事件投递与任务调度（`jabiz.events.*`、`jabiz.jobs.*`）、Webhook 订阅与主机白名单（`jabiz.webhooks.*`）、入站 Webhook 提供方（`jabiz.inbound-webhooks.providers.*`）、外部服务的地址与主机（`jabiz.external-services.<名>.*`）、外部作业执行器（`jabiz.external-jobs.executor.*`）、流程中读取上限与锁等待（`jabiz.process.max-read-rows` / `lock-timeout`）、封存与校验周期（`jabiz.integrity.*`）、按地址的国家的地址库（`jabiz.geoip.database` / `required` / `max-age`，D74）、密钥环境变量（`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、OIDC 客户端密钥、外部服务声明的密钥）。

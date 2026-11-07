@@ -16,6 +16,7 @@ POST /api/files?policy=… ──► FileUploadService（runtime）
                                6. 流程 FILE_REGISTER（internal）：插入 SysFile（一个操作，op_process）
                              失败时删除已写入的对象；清扫任务兜底（§6）
 外部作业产生的文件 ──► FileUploadService.storeGenerated：上面的第 2–6 步，以作业的请求人登记（§11，D50）
+POST /api/files/fetch?policy=… {url} ──► 服务器在事务外下载一次，上面的第 3–6 步（只收图片），以调用者登记（§12，D75）
 字段 `jabiz.file`（引用 SysFile）──► 写入时检查文件存在且策略相符
 GET /api/files/{id}/content[/{variant}] ──► 已认证 + 策略的读取权限（后台预览）
 GET /api/public/files/{id}[/{variant}]  ──► 匿名，仅当被公开数据引用（15 §4）
@@ -186,7 +187,7 @@ FilePolicy.define("qb.content")
 
 ## 8. 观测
 
-`PlatformObservations`：`jabiz.file.upload`（标签：策略、结果）、`jabiz.file.serve`（标签：公开 / 后台、结果）、`jabiz.file.sweep`（标签：结果）。
+`PlatformObservations`：`jabiz.file.upload`（标签：策略、结果）、`jabiz.file.serve`（标签：公开 / 后台、结果）、`jabiz.file.sweep`（标签：结果）、`jabiz.file.fetch`（标签只有 `outcome`，§12）。
 标签不含 `fileId`、文件名、操作人（D16 第 3 条）。
 
 ## 9. 测试
@@ -238,3 +239,47 @@ FilePolicy.define("qb.content")
 - **大小与时限**（修订 M1–M2、L3）：输出另有每次尝试的合计上限与每实例的输出预算（11 §4a）；复制与存储的时限随声明的大小增长；复制前检查上传区的可用空间；
   副本重算摘要；存储失败先在尝试内以同样的字节重试，仍失败则下一次尝试会再次调用外部服务。
 - **记录的遮蔽**（修订 L1）：`ExternalJobFile` 的文件编号与摘要只对 `file.read` 显示（`reveal`）；`privateMetadata()` 的文件，其记录的编号随机、时间只到日。
+
+## 12. 服务器下载链接中的图片【决策 D75，阶段 17zr】
+
+用户给出一个指向图片的 `https://…` 链接（如导入内容时附带的插图），由**服务器下载一次**，经过与上传**相同的流水线**，登记为**调用者上传的文件**。
+链接本身不保存，此后也不再访问。下载**从不在业务事务中**进行。两个入口：
+
+| 入口 | 谁用 | 登记 |
+|---|---|---|
+| `POST /api/files/fetch?policy={策略}`，正文 `{"url": "https://…"}` | 页面（`@jabiz/client` 的 `fetchFileFromLink(policy, url)`） | 与上传相同：`FILE_REGISTER`，`uploadedBy` 为调用者；201 `{fileId, contentType, sizeBytes, width, height, variants}` |
+| `ExternalJobContext.remoteImages().fetch(url, maxBytes)` | 外部作业的处理器（批量生成） | 处理器以 `ExternalJobResult…file(键, 名称, 字节)` 返回，D50 的输出文件流水线以作业的请求人登记（§11） |
+
+- **权限**：`/api/files/fetch` 须持有策略的上传权限（403，与 `/api/files` 相同）；策略须接受图片类型。作业的输出文件照 §11 在开始时检查上传权限。原名为中性名 `image`（链接的最后一段可能是令牌）。
+- **流水线**：类型按内容判定，**只收图片**：判定结果不是策略允许的图片类型 → 422 `FILE_FETCH_NOT_IMAGE`（策略同时允许 PDF 或音频也一样）；图片解码后重新编码（去掉 EXIF/GPS 等全部元数据）、
+  生成变体；大小上限即策略的 `maxBytes`；无法解码或像素过多照旧 400 `FILE_INVALID`；`privateMetadata()` 的策略照旧用随机编号。作业的 `remoteImages()` 只收 JPEG / PNG，其余在输出时照 §11 判定。
+- **链接**（core `RemoteImageLink`）：只接受 `https`（否则 422 `FILE_FETCH_NOT_HTTPS`）；不带用户名与密码；端口只限 `jabiz.files.fetch.allowed-ports`（缺省只有 443）；
+  主机须是至少两段、最后一段不全是数字的域名（`127.1`、`2130706433`、`0x7f000001`、`0177.0.0.1` 这类会被解析器读成地址的写法一律拒绝），或常规写法的 IPv4、方括号中的 IPv6（不带区域）；
+  国际化域名转为 ASCII；含空格、反斜杠、控制字符的拒绝；片段不发送；长度至多 2048。违者 422 `FILE_FETCH_LINK_INVALID`。
+- **地址**（core `PublicAddresses`）：每一跳的主机解析一次，**全部**地址都须是公网地址，否则 422 `FILE_FETCH_ADDRESS_NOT_PUBLIC`：拒绝本机、私网（10/8、172.16/12、192.168/16）、
+  链路本地（169.254/16，含云的元数据服务 169.254.169.254；fe80::/10）、运营商级 NAT 100.64/10、唯一本地 fc00::/7（含 fd00:ec2::254）、组播、0.0.0.0/8、广播与保留段、
+  文档与基准测试段（192.0.2/24、198.51.100/24、203.0.113/24、198.18/15、2001:db8::/32、3fff::/20）、IETF 协议段（192.0.0/24、2001::/23，含 Teredo）以及 IANA 特殊用途登记中的其他段；
+  IPv6 只有全球单播 2000::/3 中的地址算公网；以 IPv6 写出的 IPv4 地址（映射、兼容、6to4、NAT64 `64:ff9b::/96`）按其中的 IPv4 地址判断。
+- **连接经检查的地址**（防 DNS 重绑定）：解析在 `boundedElastic` 上做一次，连接交给 Netty 的是**已解析**的地址（带着主机名，用于 SNI 与证书校验），中间不再解析；
+  客户端自己的解析器（`AddressResolverGroup`）只接受已解析且允许的地址，是第二道防线。证书照常按主机名校验。
+- **重定向**：不自动跟随，最多 `jabiz.files.fetch.max-redirects`（缺省 3）次，`Location` 按当前链接解析后**照链接重新检查**（https、端口、主机、地址）并计入其主机的限流，超过即 422 `FILE_FETCH_TOO_MANY_REDIRECTS`。
+- **请求**：Reactor Netty，HTTP/1.1，每跳一个新连接（不复用、不重试、不经代理），只有固定的请求头：`Host`、`User-Agent: jabiz-image-fetch/1.0`、`Accept: image/png, image/jpeg`、`Connection: close`。
+  不带 Cookie（服务器设置的也不回送）、凭据、Referer 与调用者的任何信息；不请求压缩。响应头至多 16 KiB、状态行至多 4 KiB。只有 200 是图片，其他状态 422 `FILE_FETCH_FAILED`（`reason=STATUS`）。
+- **大小与时限**：声明的长度超过上限即拒绝；正文边收边计数，超过上限即中止（不信任 `Content-Length`，分块或到连接关闭为止的正文同样计数），422 `FILE_FETCH_TOO_LARGE`。
+  `jabiz.files.fetch.connect-timeout`（缺省 5 s）每次连接，`read-timeout`（20 s）两次读之间，`deadline`（60 s）整个下载（含解析与各跳），超时 422 `FILE_FETCH_TIMEOUT`；不另设最低速率，慢速发送由整体时限截断。
+  其他失败 422 `FILE_FETCH_FAILED`，参数 `reason`：`UNRESOLVED`（找不到主机）、`UNREACHABLE`、`TLS`、`STATUS`、`EMPTY`；被包装的网络错误同样如此，不带出原始消息。错误码与 `reason` 的文字三语，确认页可逐张列出原因；消息不含链接。
+  作业中这些拒绝是 `RemoteImages.Refused`（`code()`、`params()`），处理器自己决定怎样记下。
+- **同时下载与限流**：本实例同时至多 `jabiz.files.fetch.max-concurrent`（缺省 16）个下载，超过即 503 `PROCESS_BUSY`（带 `Retry-After`；作业的处理器等空出的名额，至多到其时限）；
+  每人同时至多 `max-concurrent-per-user`（缺省 2），超过即 429 `RATE_LIMITED`。频率只经 `jabiz.process.rate-limits.FILE_FETCH`（D45 的机制；`FILE_FETCH` 只是限流键，不是流程）：
+  按人（`per-user`；作业按其请求人）、**按主机**（`per-host`，只用于它，每一跳都计入其主机）与实例（`per-instance`）；缺省每人每分钟 30、每主机 60、每实例 300（配置整体替换缺省）。
+  超过即 429 `RATE_LIMITED`。启动检查拒绝 `FILE_FETCH` 上的 `per-address` 等与其他流程上的 `per-host`。
+- **连接池与内存**：下载期间不持有数据库连接，也不在任何事务中；登记是与上传相同的 `FILE_REGISTER` 短事务。慢的外部主机因此占不住连接池与锁，只占一个下载名额；
+  套接字与内存由名额约束：正文边收边计数后缓冲给文件写入，内存至多 `max-concurrent` × 策略上限。
+- **记录**：链接不保存，`FILE_REGISTER` 的 `input_summary` 只有文件编号、策略、类型与大小；日志与异常消息不含链接。流程输入中带链接的组件（如外部作业的输入）标 core 的 `@MaskedLink`，
+  `input_summary` 中只记 `https://主机/路径?…`（去掉查询与用户信息）。
+- **观测**：`jabiz.file.fetch`，标签只有 `outcome`（`fetched` 或错误码，D16），不含主机、链接与操作人。
+- **示范**：没有专门的示范流程；`RemoteImageFetchIT` 中商品图的流程是"以 `/api/files/fetch` 取得商品图策略下的文件，再经数据视图把编号写进商品的 `imageFileId`"，作业的示范在同一测试中。
+- **测试**：core `PublicAddressesTest`、`RemoteImageLinkTest`；runtime `RemoteImageFetcherTest`、`RemoteFetchChecksTest`、`ProcessRateLimitsTest`、`ProcessAdmissionChecksTest`、`SensitiveDataMaskerTest`；
+  app `RemoteImageFetchIT`（本机的 HTTPS 桩服务 `HttpsStubServer`，测试配置以 `@Primary` 的 `RemoteFetchNetwork` 替换解析器、地址判定与信任的证书：
+  成功路径与元数据去除、http 与端口、私网与元数据地址、重定向到私网 / http / 过多、重定向计入其主机的限流、DNS 重绑定、证书主机名、非图片、超大（有无长度）、超时、请求头、权限、按主机限流、
+  每人与本实例的同时下载上限（429 / 503）、下载期间不占连接池、观测标签、记录中没有链接、外部作业的下载与登记、示范的商品图）。

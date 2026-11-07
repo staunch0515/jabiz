@@ -10,7 +10,7 @@
 | P3 | 应用框架组件（17zj） | S1 | 已合并 | #467 | 已到 1.3/quizbuks（本同步 PR）；`Passkeys.test.tsx` 的竞态在其中修复 |
 | P4 | 入口页模板（17zk） | S1 | 已合并 | #478、#483、#482 | 需求方选方案 A：原型清单 132 条全部保留、11 个缺口补上、建议 ①–⑥ 照原型。平台模板 17zk（#478）与修正 17zk-b（#483，注册页的标签只在允许自助注册时显示）；学者 App 与发起方页面的接入（#482），三语叫法照需求方的最终叫法表。改前改后截图：https://claude.ai/artifact/SfWk9SwYiyC62McNGaGdRM（"实际效果"一节）
 | P5 | ClientCountry（17zl，D74） | S1 | 已合并 | #468 | 已到 1.3/quizbuks（本同步 PR）；地址库 DB-IP Lite（CSV），需求方 2026-11-07 确认；以后可另加 MMDB 读取器 |
-| P6 | 链接图片下载（D75） | S1 | 未开始 | | |
+| P6 | 链接图片下载（D75） | S1 | 已合并 | #490 | 17zr；已到 1.3/quizbuks（本同步 PR）。两条路，都不占事务：页面用 `POST /api/files/fetch?policy=…`（`@jabiz/client` 的 `fetchFileFromLink`，与上传同一条流水线，返回文件编号）；外部作业的处理器用 `ctx.remoteImages().fetch(…)`，字节经输出文件通道登记。只 https/443、只公网地址、每跳重验、在途上限（每用户 2、每实例 16）、按用户/主机/实例限速；错误码 `FILE_FETCH_*` 三语，供确认页逐张显示。业务代码不能直接用下载器（ArchUnit 规则 `PlatformArchRules.noRemoteImageInternals`，QuizBuks 的 ArchitectureTest 可加上） |
 | P7 | 受控变更列表显示参数名 | S1 | 已合并 | #466 | 17zn（迁移 V59）；已到 1.3/quizbuks |
 | P8 | 平台 CI 固定 Ubuntu 24.04 | S1 | 已合并 | #460 | 17zm；已到 1.3/quizbuks |
 | F-F1 | 平台：应用框架组件（Q108 §3、§4、§6.1 第 5 条） | S1 | 已合并 | #467 | 即 P3 |
@@ -73,3 +73,4 @@ S1 备注（平台的偏离与发现，2026-11-07，自原 S1 会话交接）：
 - 新加入 S1 队列：审批请求与其待办移到另一个入口范围（S2 发现，发起方改派运营商）：17zo（#475，决策 D76）已合并，已到 1.3/quizbuks（本同步 PR）；子流程 `APPROVAL_SCOPE_MOVE`、权限 `approval.scope.move`。
 - 场景回放中把用户的邮箱标为已验证（S2 的 F-S1a 需要）：17zp（#477）已合并，已到 1.3/quizbuks（本同步 PR）；步骤 `verifyEmail: "${用户}"`，只在测试夹具中。
 - sys_file 按上传者的索引（S3 的 F-C2 需要）：17zq（#488，平台迁移 V62）已合并，随本同步 PR 到 1.3/quizbuks。
+- 管理员手动补跑定时任务（总控排入，F-C2 用量快照等受益）：17zs（#491，决策 D77，平台迁移 V63）已合并，随同步 PR 到 1.3/quizbuks。`POST /api/jobs/{任务}/runs`（权限 `job.read` 看、`job.run` 补跑，`job.run` 是受保护权限，授予须另一位管理员审批）；同一计划时刻已成功的项跳过，只重跑没成功的；管理系统页面 `/jobs`。

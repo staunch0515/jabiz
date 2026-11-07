@@ -61,4 +61,15 @@ public interface ExternalJobContext {
             .orElseThrow(() -> new IllegalArgumentException("External job " + jobId() + " was not given file "
                 + fileId));
     }
+
+    /**
+     * Downloads images from links with the platform's rules (decision D75); the job's requester's rate limits apply.
+     * Blocking, for the handler's own thread. Return what it gives as output files of a type declaring
+     * {@code outputFiles}: the platform re-encodes and registers them.
+     *
+     * @throws UnsupportedOperationException outside the platform's executor
+     */
+    default com.jabiz.file.RemoteImages remoteImages() {
+        throw new UnsupportedOperationException("Images are downloaded within an attempt of the executor only");
+    }
 }

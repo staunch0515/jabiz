@@ -112,6 +112,24 @@ class ProcessAdmissionChecksTest {
     }
 
     @Test
+    void downloadsFromLinksAreLimitedPerUserHostAndInstanceAndPerHostIsForThemOnly() {
+        // FILE_FETCH is subProcessOnly and counts its own calls (decision D75).
+        assertThat(check(AdmissionSettings.DEFAULT, Map.of("FILE_FETCH",
+                new ProcessRateLimitProperties.Limit(10, null, 100, null, null, null, 5)),
+            process("FILE_FETCH", pb -> pb.subProcessOnly()))).isEmpty();
+        assertThat(messages(check(AdmissionSettings.DEFAULT, Map.of("FILE_FETCH",
+                new ProcessRateLimitProperties.Limit(null, 3, null, null, null, null, 0)),
+            process("FILE_FETCH", pb -> pb.subProcessOnly())))).containsExactly(
+                "ERROR jabiz.process.rate-limits.FILE_FETCH: FILE_FETCH counts per-user, per-host and per-instance"
+                    + " only (decision D75)",
+                "ERROR jabiz.process.rate-limits.FILE_FETCH.per-host: must be positive, not 0");
+        assertThat(messages(check(AdmissionSettings.DEFAULT, Map.of("OPEN",
+                new ProcessRateLimitProperties.Limit(null, null, null, null, null, null, 5)),
+            process("OPEN", pb -> { })))).containsExactly("ERROR jabiz.process.rate-limits.OPEN: per-host counts the"
+                + " downloads of FILE_FETCH only (decision D75)");
+    }
+
+    @Test
     void settingsMergeOverTheDefaults() {
         AdmissionSettings settings = new AdmissionSettings(null, null, null, null,
             new AdmissionSettings.Family(3, null, null, null),

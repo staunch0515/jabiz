@@ -23,6 +23,7 @@ import {
 } from '@jabiz/ui'
 import {
   Archive,
+  CalendarClock,
   ChartColumn,
   Database,
   FileCheck,
@@ -120,6 +121,8 @@ export default function AppLayout() {
     ...(can('integrity.read')
       ? [{ key: 'integrity', label: t('nav.integrity'), path: '/integrity', icon: ShieldCheck }]
       : []),
+    // The scheduled jobs and their runs; re-runs by hand for job.run (11 section 4; decision D77).
+    ...(can('job.read') ? [{ key: 'jobs', label: t('nav.jobs'), path: '/jobs', icon: CalendarClock }] : []),
     // The periodic access review (docs/design/10-security.md section 13.3).
     ...(can('security.access-review.read')
       ? [{ key: 'access-review', label: t('nav.accessReview'), path: '/access-review', icon: Users }]
