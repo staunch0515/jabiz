@@ -77,7 +77,7 @@ public class RegionRefusals {
     public static ProcessDefinition<FlushInput, FlushOutput, ProcessContext> flush() {
         return ProcessDefinition.define(FLUSH, 1, FlushInput.class, FlushOutput.class, ProcessContext.class, pb -> pb
             .description("Writes how many starts the rule on foreign videos refused, by day.")
-            .permissions(QbPermissions.ADMIN_REGION_READ)
+            .permissions(QbPermissions.ADMIN_REGION_MONITOR)
             .internal()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);

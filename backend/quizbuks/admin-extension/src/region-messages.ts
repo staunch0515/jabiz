@@ -1,5 +1,6 @@
 /**
- * Texts of the rule on foreign videos and mainland China (F-S11): headquarters' page of exceptions and refused starts,
+ * Texts of the rule on foreign videos and mainland China (F-S11): the page of exceptions (headquarters and operators)
+ * and refused starts (headquarters),
  * and the review page's notice, in every platform language, merged into the extension's messages under `region` (and
  * the menu's entry under `menu`).
  */
@@ -12,7 +13,7 @@ export const regionMenu = {
 export const regionMessages = {
   en: {
     title: 'Foreign videos and mainland China',
-    description: 'A publication whose quiz has a video mainland China cannot play (such as YouTube) cannot be answered from a mainland China address. Here headquarters lets a publication, or every publication of a Sponsor, be answered there anyway, with a reason and perhaps a last day; past it the exception no longer counts.',
+    description: 'A publication whose quiz has a video mainland China cannot play (such as YouTube) cannot be answered from a mainland China address. Here headquarters (for every Sponsor) or the operator (for its own Sponsors) lets a publication, or every publication of a Sponsor, be answered there anyway, with a reason and perhaps a last day; past it the exception no longer counts.',
     add: 'Add an exception',
     filter: 'Show',
     inForce: 'In force',
@@ -35,11 +36,11 @@ export const regionMessages = {
     day: 'Day (UTC)',
     refused: 'Refused',
     noRefusals: 'No start was refused in the last 30 days.',
-    reviewNotice: 'The quiz has a video that cannot be played in mainland China (such as YouTube), and the publication reaches mainland China: Takers there will not see or answer it unless headquarters makes an exception.',
+    reviewNotice: 'The quiz has a video that cannot be played in mainland China (such as YouTube), and the publication reaches mainland China: Takers there will not see or answer it unless headquarters or the operator of the Sponsor makes an exception.',
   },
   zh: {
     title: '境外视频与中国大陆',
-    description: '测验中含有中国大陆无法播放的视频（如 YouTube）的发布，从中国大陆的 IP 地址不能作答。总部可以在这里允许某个发布或某个发起方的所有发布照常在中国大陆作答，必须写原因，可以设到期日；过了到期日例外自动失效。',
+    description: '测验中含有中国大陆无法播放的视频（如 YouTube）的发布，从中国大陆的 IP 地址不能作答。总部（所有发起方）或运营商（自己的发起方）可以在这里允许某个发布或某个发起方的所有发布照常在中国大陆作答，必须写原因，可以设到期日；过了到期日例外自动失效。',
     add: '新增例外',
     filter: '显示',
     inForce: '生效中',
@@ -62,11 +63,11 @@ export const regionMessages = {
     day: '日期（UTC）',
     refused: '被拒次数',
     noRefusals: '最近 30 天没有被拒的开始。',
-    reviewNotice: '这个测验含有在中国大陆无法播放的视频（如 YouTube），而发布面向中国大陆：除非总部设了例外，中国大陆的学者看不到、也不能作答。',
+    reviewNotice: '这个测验含有在中国大陆无法播放的视频（如 YouTube），而发布面向中国大陆：除非总部或发起方的运营商设了例外，中国大陆的学者看不到、也不能作答。',
   },
   ja: {
     title: '海外の動画と中国本土',
-    description: 'クイズに中国本土で再生できない動画（YouTube など）が含まれる公開には、中国本土の IP アドレスからは回答できません。本部はここで、公開ごと、または主催者のすべての公開について、理由を記して（必要なら最終日を決めて）中国本土からの回答を認めることができます。最終日を過ぎた例外は自動的に無効になります。',
+    description: 'クイズに中国本土で再生できない動画（YouTube など）が含まれる公開には、中国本土の IP アドレスからは回答できません。本部（すべての主催者）または運営パートナー（自社が担当する主催者）はここで、公開ごと、または主催者のすべての公開について、理由を記して（必要なら最終日を決めて）中国本土からの回答を認めることができます。最終日を過ぎた例外は自動的に無効になります。',
     add: '例外を追加',
     filter: '表示',
     inForce: '有効',
@@ -89,6 +90,6 @@ export const regionMessages = {
     day: '日付（UTC）',
     refused: '拒否された回数',
     noRefusals: '最近 30 日間に拒否された開始はありません。',
-    reviewNotice: 'このクイズには中国本土で再生できない動画（YouTube など）が含まれ、公開の対象に中国本土が含まれます。本部が例外を設けない限り、中国本土のテイカーはこの公開を見ることも回答することもできません。',
+    reviewNotice: 'このクイズには中国本土で再生できない動画（YouTube など）が含まれ、公開の対象に中国本土が含まれます。本部または主催者の運営パートナーが例外を設けない限り、中国本土のテイカーはこの公開を見ることも回答することもできません。',
   },
 }

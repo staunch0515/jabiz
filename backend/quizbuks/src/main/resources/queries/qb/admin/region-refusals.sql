@@ -2,7 +2,8 @@
 id: qb.admin.region-refusals
 description: >-
   How many starts the rule on foreign videos refused (F-S11), by UTC day, newest first: only the counts, never who or
-  from which address; the last hour's are written by the next run of the job qb.region-refusals
+  from which address; the last hour's are written by the next run of the job qb.region-refusals. Platform-wide (no
+  sponsor), so headquarters' only (qb.admin.region.monitor), not the operators'
 entities: [QbRegionRefusalDay]
 datasets:
   QbRegionRefusalDay: urn:jabiz:dataset:default:QbRegionRefusalDay
@@ -15,7 +16,7 @@ list:
   sorts: [day]
   defaultSort: { field: day, asc: false }
   key: [day]
-permissions: [qb.admin.region.read]
+permissions: [qb.admin.region.monitor]
 ---*/
 SELECT
     d.{{QbRegionRefusalDay.day}}     AS day,

@@ -20,6 +20,7 @@ import {
 } from '@jabiz/admin'
 import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { QUEUE, usePaged, when } from './hooks'
+import { operatorColumn, useOperatorFilter } from './operator-filter'
 import { PATH, PERMISSION, REGION_PROCESS } from './ids'
 import { readRefusalDays, readRegionExceptions, type RegionException } from './region-api'
 
@@ -61,21 +62,27 @@ function Refusals() {
 }
 
 /**
- * Foreign videos and mainland China (F-S11, A3-15; docs/quizbuks/plans/impl/F-S11.md): headquarters' exceptions,
- * those in force by default, each with its reason, last day and state; adding one, changing its last day and revoking
- * it are the platform's process pages (with the exception filled in), where the reason is required and every change is
- * audited. Below, the starts the rule refused by day. The daily check of the address database links its task here.
+ * Foreign videos and mainland China (F-S11, A3-15; docs/quizbuks/plans/impl/F-S11.md): the exceptions, those in force
+ * by default, each with its Sponsor, reason, last day and state; adding one, changing its last day and revoking it are
+ * the platform's process pages (with the exception filled in), where the reason is required and every change is
+ * audited. One page for both management systems (the requester, 2026-11-07): headquarters sees and sets every
+ * Sponsor's, an operator its own Sponsors' (the server limits both). Below, for headquarters only
+ * (`qb.admin.region.monitor`), the starts the rule refused by day (platform-wide); the daily check of the address
+ * database links its task here.
  */
 export default function RegionPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const write = can(PERMISSION.regionWrite)
+  const monitor = can(PERMISSION.regionMonitor)
   const [show, setShow] = useState<string>(IN_FORCE)
   // The day that decides what is in force: the page's opening (the server compares by the UTC date).
   const [at] = useState(() => new Date().toISOString())
   const inForce = show === IN_FORCE ? true : null
-  const { query, table, sortable } = usePaged([...QUEUE.region, show, at],
-    (offset, limit, sorts) => readRegionExceptions(offset, limit, sorts, inForce, at), true, SORTS)
+  // F-S1b: the platform reads every operator's, filtered by operator; an operator's session its own Sponsors' only.
+  const operators = useOperatorFilter('region-operator-filter')
+  const { query, table, sortable } = usePaged([...QUEUE.region, show, at, operators.filters],
+    (offset, limit, sorts) => readRegionExceptions(offset, limit, sorts, inForce, at, operators.filters), true, SORTS)
   const columns = useMemo<ColumnDef<RegionException, unknown>[]>(() => {
     const link = (process: string, exceptionId: string) =>
       `${paths.process(process, REGION_PROCESS.version)}?${new URLSearchParams({ exceptionId })}`
@@ -90,13 +97,19 @@ export default function RegionPage() {
             {row.original.kind === 'PUBLICATION' && row.original.publicationId
               ? <Link to={PATH.publication(row.original.publicationId)} className={linkClass}
                 data-testid="region-publication">{nameOf(row.original)}</Link>
-              : row.original.sponsorId && <UserName id={row.original.sponsorId} />}
+              : row.original.sponsorId && (row.original.company
+                ?? <UserName id={row.original.sponsorId} />)}
+            {row.original.kind === 'PUBLICATION' && row.original.company && (
+              <span className="text-muted-foreground text-xs" data-testid="region-company">
+                {row.original.company}</span>
+            )}
             {row.original.foreignVideo === false && (
               <span className="text-muted-foreground text-xs">{t('region.noForeignVideo')}</span>
             )}
           </span>
         ),
       },
+      ...(operators.across ? [operatorColumn<RegionException>(t('pickers.operatorColumn'))] : []),
       // Plain text: what an administrator wrote is never rendered as markup.
       { id: 'reason', header: t('region.columns.reason'),
         cell: ({ row }) => <span className="text-sm whitespace-pre-wrap">{row.original.reason}</span> },
@@ -144,7 +157,7 @@ export default function RegionPage() {
         ),
       },
     ]
-  }, [t, write])
+  }, [t, write, operators.across])
   return (
     <div className="flex flex-col gap-4" data-testid="qb-region">
       <PageHeader title={t('region.title')} description={t('region.description')} className="pb-0"
@@ -164,12 +177,13 @@ export default function RegionPage() {
           </SelectContent>
         </Select>
       </div>
+      {operators.bar}
       {query.isError
         ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
         : <DataTable label={t('region.table')} columns={sortable(columns)} {...table}
           getRowId={(row) => row.exceptionId} empty={<EmptyState art="search" title={t('region.none')} />}
           rowProps={(row) => ({ 'data-testid': 'region-row', 'data-id': row.exceptionId })} />}
-      <Refusals />
+      {monitor && <Refusals />}
     </div>
   )
 }

@@ -227,6 +227,10 @@ export default defineExtension({
         // Q49a: takers' reports of quizzes.
         { key: 'qb-abuse-reports', label: 'menu.abuseReports', path: PATH.abuseReports, icon: Flag,
           permission: PERMISSION.publicationRead },
+        // F-S11: the exceptions to the rule on foreign videos and mainland China, one entry for both (the requester,
+        // 2026-11-07): an operator's session reads and sets its own sponsors', the platform's every operator's,
+        // filtered by operator; the platform-wide refusal counts show for headquarters only.
+        { key: 'qb-region', label: 'menu.region', path: PATH.region, icon: Globe, permission: PERMISSION.regionRead },
         // Q22: the cash rewards sponsors pay takers themselves (F-S1: nobody here decides their disputes).
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
           permission: PERMISSION.publicationRead },
@@ -244,8 +248,6 @@ export default defineExtension({
       label: 'menu.platformGroup',
       children: [
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
-        // F-S11: the exceptions to the rule on foreign videos and mainland China (headquarters only).
-        { key: 'qb-region', label: 'menu.region', path: PATH.region, icon: Globe, permission: PERMISSION.regionRead },
         { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
           permission: PERMISSION.usersRead },
         // Q48a: the operators, and the spot checks of the reviews they decided.

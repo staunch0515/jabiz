@@ -18,7 +18,7 @@ import java.util.Map;
  * The daily check of the address database (F-S11; platform decision D74): what the platform's startup check
  * ({@code GEOIP}) and the deployment's ({@code DeploySafetyCheck}) say at startup, again every day, since a database
  * goes stale while the application runs (the platform reads a new file without a restart, but nobody brings it unless
- * reminded). {@value #RUN}, run by the job {@value #JOB}, asks headquarters ({@code qb.admin.region.read}) with a task,
+ * reminded). {@value #RUN}, run by the job {@value #JOB}, asks headquarters ({@code qb.admin.region.monitor}) with a task,
  * one a day, when the database is missing, cannot be read, has no ranges or is older than {@code jabiz.geoip.max-age}.
  * It takes no lock and writes nothing else.
  */
@@ -45,7 +45,7 @@ public final class RegionCheck {
     public static ProcessDefinition<RunInput, RunOutput, ProcessContext> run(ClientCountries countries) {
         return ProcessDefinition.define(RUN, 1, RunInput.class, RunOutput.class, ProcessContext.class, pb -> pb
             .description("Checks the address database and asks headquarters when it is missing or old.")
-            .permissions(QbPermissions.ADMIN_REGION_READ)
+            .permissions(QbPermissions.ADMIN_REGION_MONITOR)
             .internal()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
@@ -56,7 +56,7 @@ public final class RegionCheck {
             .compute("Check the address database", (metadata, ctx) -> ctx.put(PROBLEMS, problems(countries)))
             .step("Ask headquarters", CreateTask.<ProcessContext>when(ctx -> !problems(ctx).isEmpty(),
                 ctx -> TaskSpec.forPermission(TASK_TYPE, TASK_TITLE, Map.of("problem", problems(ctx).getFirst()),
-                        QbPermissions.ADMIN_REGION_READ)
+                        QbPermissions.ADMIN_REGION_MONITOR)
                     .link("/qb/region")
                     .source(source(ctx.get(INPUT, RunInput.class).scheduledTime())))));
     }

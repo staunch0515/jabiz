@@ -308,7 +308,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 资源占用的计量（F-C2，§7.22） | `jabiz.job.run{job="qb.usage-snapshot", result}`；`jabiz.job.item{job="qb.usage-snapshot", result}`；`qb_usage_day` 的最新日期 | 运行 `FAILED` 或 `PARTIAL`（某些发起方当天缺快照）；快照时刻（缺省东京时间 03:17）之后 2 小时仍没有当天的成功运行；只读查询 `SELECT max(snapshot_day) FROM qb_usage_day` 早于部署时区的今天（当天缺少快照） |
 | 邮件 | `jabiz.job.item{job="qb.mail-funds-short-due", result}`；`jabiz.outbox.delivery{result="FAILED"}` | 补发任务的项连续失败；`sys_mail_message` 中 `FAILED` 增多（看发件服务商） |
 | 数据库 | 连接数、复制与 WAL 归档延迟、最近一次基础备份、磁盘、`pg_stat_statements` 的前几名、死锁（`pg_stat_database.deadlocks`） | 归档延迟 > 15 分钟；备份超过 26 小时；磁盘 > 80 %；死锁 > 0 |
-| 境外视频（F-S11，§7.24） | `jabiz.job.run{job="qb.region-check"|"qb.region-refusals"}`；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}`；待办 `qb.region-check`（权限 `qb.admin.region.read`）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频） |
+| 境外视频（F-S11，§7.24） | `jabiz.job.run{job="qb.region-check"|"qb.region-refusals"}`；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}`；待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频） |
 | 主机 | CPU、内存、JVM 堆 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6） |
 
 日志：结构化 JSON（`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`）；`quizbuks: WARNING`、`Platform check failed`、`Inbound webhook request of … rejected` 作为日志告警。日志与追踪中不应出现密钥、令牌与原始卡信息（平台已遮蔽；发现即视为缺陷）。
@@ -656,7 +656,9 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
   3. 第一次：在环境的 `.env` 中设 `JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz`，重新部署。之后每月只做第 2 步：平台一分钟内读入新文件（日志 `Address database …: N ranges`），无需重启。
   4. 核对：用中国大陆与日本的网络（或可信代理之后的测试请求）打开 `/api/client/region`，`country` 分别为 `CN`、`JP`。
   5. **署名**（CC BY 4.0 的要求）：隐私政策写明了使用 DB-IP 的数据（第二条第3项，`docs/quizbuks/legal/`）；不要删去那一句。改用别的地址库（如 MaxMind 的 CSV 转换）时同步改隐私政策与本节。
-  - 过旧（`JABIZ_GEOIP_MAX_AGE`，缺省 45 天）或缺失：启动检查（`GEOIP`；正式模式下没有配置为 `QUIZBUKS` 错误）与每日任务 `qb.region-check`（每天 19:23 UTC）给 `qb.admin.region.read` 一个待办（每天一个，链到 `/admin/qb/region`）。处理：照第 1–2 步更新，待办在下一次检查后不再出现，旧的待办手工关闭（`task.resolve`）。
+  6. **隐私政策的新版本须重新同意**（需求方 2026-11-07）：加入"按 IP 判断所在地区"与 DB-IP 署名的隐私政策新版本，在"QuizBuks → 规约类"（`/qb/legal`，§3 第 9 步）发布时**勾选"须重新同意"**（是实质性变更，不按措辞修订处理）；三语一起换好再发布，可以填以后的生效时间作预告（建议在部署 F-S11 之前或同时生效）。
+     发布时同时勾选"在收件箱中公告"（隐私政策 → App 与发起方页面）。发布后核对：用一个已同意旧版的测试账号登录 App 与发起方页面，应要求同意新版。
+  - 过旧（`JABIZ_GEOIP_MAX_AGE`，缺省 45 天）或缺失：启动检查（`GEOIP`；正式模式下没有配置为 `QUIZBUKS` 错误）与每日任务 `qb.region-check`（每天 19:23 UTC）给 `qb.admin.region.monitor`（总部的内容管理员，运营商没有）一个待办（每天一个，链到 `/admin/qb/region`）。处理：照第 1–2 步更新，待办在下一次检查后不再出现，旧的待办手工关闭（`task.resolve`）。
   - 测试系统（staging）可以不放地址库：所有地址查不到，按参数处理（缺省中国大陆，含境外视频的发布在那里不能答）。要在 staging 试答，放地址库，或把 `qb.region.unknown-ip-country` 设为别的国家（见下）。
 - **参数**：
 
@@ -666,13 +668,14 @@ AI 为运营商（或总部，`direct`）找发起方、调研、写体验问卷
   | `qb.region.unknown-ip-country` | `CN` | 否（不授予任何角色，由首个管理员以 `PARAM_SET` 改） | 地址库查不到的地址（内网、没有地址库）按哪个国家处理；空 = 不按任何国家（放行）。e2e 设为 `JP` |
 
   部署 F-S11 后运行一次 `QB_SETUP` 并由另一位管理员发布它提出的 `qb.video.mainland-accessible-sites`；发布之前按缺省值。
-- **例外**（A3-15）：平台管理系统的"中国大陆"页（`/admin/qb/region`，`qb.admin.region.read`；新增、改到期日、撤销要 `qb.admin.region.write`，都是内容管理员的权限）。按发布或按发起方（其全部发布，含以后的），**必须写原因**，到期日可选（UTC 的日期，当天有效，过了自动失效，不需要任务）。撤销后不能再改，要恢复就新增一个。
-  每次新增、修改、撤销都经平台审计（`/admin/audit`，`entityType=QbRegionException`）。例外只放开本规则，不改变地区定向等其他条件。
-- **被拒次数**：答题被本规则拒绝时只计数（不记是谁、不记地址），在内存中按 UTC 日累计，任务 `qb.region-refusals` 每小时写入 `QbRegionRefusalDay`；"中国大陆"页显示最近 30 天。实例停止时最近一小时内未写出的次数会丢（这只是统计）。
+- **例外**（A3-15）："中国大陆"页（平台管理系统 `/admin/qb/region`，运营商管理系统 `/operator/qb/region`；读 `qb.admin.region.read`，新增、改到期日、撤销要 `qb.admin.region.write`）。按发布或按发起方（其全部发布，含以后的），**必须写原因**，到期日可选（UTC 的日期，当天有效，过了自动失效，不需要任务）。撤销后不能再改，要恢复就新增一个。
+  **谁来设**（需求方 2026-11-07）：总部的内容管理员可以为所有发起方设、看到全部；运营商（角色 `QB_OPERATOR`）只为自己的发起方设、只看到自己发起方的（入口范围；按发布的例外按该发布的发起方归属，记在 `ownerId`）。别的运营商的发起方或发布：新增、修改、撤销一律 404（与不存在相同）。平台管理系统的列表带"运营商"一栏，可按运营商筛选（F-S1b）。发起方改派到别的运营商后，它的例外随之归新运营商。
+  每次新增、修改、撤销都经平台审计（`/admin/audit`，`entityType=QbRegionException`；记下是谁做的，运营商的成员同样）。例外只放开本规则，不改变地区定向等其他条件。
+- **被拒次数**：答题被本规则拒绝时只计数（不记是谁、不记地址），在内存中按 UTC 日累计，任务 `qb.region-refusals` 每小时写入 `QbRegionRefusalDay`；平台管理系统的"中国大陆"页显示最近 30 天。这是全平台的合计（不分发起方），只给总部看（`qb.admin.region.monitor`），运营商管理系统的同一页没有这一栏。实例停止时最近一小时内未写出的次数会丢（这只是统计）。
 - **"在中国大陆不能答"的排查**：
   1. 问用户所在的网络：VPN、公司网络、漫游的手机线路都可能被判为别的地区（地址库按看到的地址判断，需求方接受）。
   2. 平台管理系统的发布详情：卡片的"含中国大陆无法播放的视频"为是（或空：上线于 F-S11 之前且回填没有找到版本；按"是"处理）。看资料中的视频链接是哪个网站。
-  3. 是否有生效的例外（"中国大陆"页，"生效中"）。
+  3. 是否有生效的例外（"中国大陆"页，"生效中"；运营商只看到自己发起方的）。
   4. 用户说不在中国大陆却被拒：请他打开 `/api/client/region` 看 `country`；是 `CN` 即地址库的判断（可等下月更新，或经例外放开该发布）；`known` 为 `false` 即地址查不到，按参数处理（检查 `JABIZ_TRUSTED_PROXIES` 是否包括反向代理：不包括时所有人都是代理的内网地址）。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）

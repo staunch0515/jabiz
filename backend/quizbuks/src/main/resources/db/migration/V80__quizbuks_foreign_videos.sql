@@ -48,14 +48,18 @@ SET foreign_video = EXISTS (
       AND NOT quizbuks_mainland_video_link(l.url))
 WHERE c.foreign_video IS NULL;
 
--- Headquarters' exceptions (A3-15): a publication, or all of a sponsor's, that mainland China may answer although
--- foreign, with a reason and perhaps a last day (UTC, inclusive). Written by the QB_REGION_EXCEPTION_* processes only;
--- revoked, never deleted (the platform's audit keeps every change).
+-- The exceptions (A3-15; headquarters' for any sponsor, an operator's for its own sponsors): a publication, or all
+-- of a sponsor's, that mainland China may answer although foreign, with a reason and perhaps a last day (UTC,
+-- inclusive). Written by the QB_REGION_EXCEPTION_* processes only; revoked, never deleted (the platform's audit keeps
+-- every change).
 CREATE TABLE qb_region_exception (
     exception_id   varchar(36)   PRIMARY KEY,
     kind           varchar(12)   NOT NULL CHECK (kind IN ('PUBLICATION', 'SPONSOR')),
     publication_id varchar(36),
     sponsor_id     varchar(128),
+    -- Whose it is, for the operators' entry scope (the requester, 2026-11-07): the sponsor of a SPONSOR exception,
+    -- the publisher of a PUBLICATION exception's publication.
+    owner_id       varchar(128)  NOT NULL,
     reason         varchar(500)  NOT NULL,
     expires_on     date,
     revoked        boolean       NOT NULL DEFAULT false,
@@ -68,11 +72,14 @@ CREATE TABLE qb_region_exception (
     CONSTRAINT qb_region_exception_target_check CHECK (
         (kind = 'PUBLICATION' AND publication_id IS NOT NULL AND sponsor_id IS NULL)
         OR (kind = 'SPONSOR' AND sponsor_id IS NOT NULL AND publication_id IS NULL)),
+    CONSTRAINT qb_region_exception_owner_check CHECK (kind <> 'SPONSOR' OR owner_id = sponsor_id),
     CONSTRAINT qb_region_exception_revoked_check CHECK (NOT revoked OR revoke_reason IS NOT NULL)
 );
 -- The start reads a publication's and its sponsor's (only for a foreign card from mainland China).
 CREATE INDEX qb_region_exception_publication_idx ON qb_region_exception (publication_id) WHERE publication_id IS NOT NULL;
 CREATE INDEX qb_region_exception_sponsor_idx ON qb_region_exception (sponsor_id) WHERE sponsor_id IS NOT NULL;
+-- An operator's session reads its own sponsors' (through qb_sponsor_operator).
+CREATE INDEX qb_region_exception_owner_idx ON qb_region_exception (owner_id);
 
 -- How many starts the rule refused, by UTC day (counted in memory, written by the job qb.region-refusals): only the
 -- count, never who or from which address.

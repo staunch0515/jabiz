@@ -1,9 +1,10 @@
-import { runQuery } from '@jabiz/admin'
+import { runQuery, type Filter } from '@jabiz/admin'
 import type { Page, SortSpec } from './api'
 import { TEMPLATE } from './ids'
 
 /*
- * F-S11: headquarters' exceptions to the rule on foreign videos and mainland China (backend `region.RegionExceptions`,
+ * F-S11: the exceptions to the rule on foreign videos and mainland China (headquarters every Sponsor's, an operator its
+ * own Sponsors') (backend `region.RegionExceptions`,
  * docs/quizbuks/plans/impl/F-S11.md), the starts the rule refused by day, and the sites mainland China plays; typed by
  * hand after the templates. Adding, changing and revoking are the platform's process pages.
  */
@@ -17,6 +18,13 @@ export interface RegionException {
   /** The publication's card says it has a foreign video; null before it went on, or for a sponsor's exception. */
   foreignVideo: boolean | null
   sponsorId: string | null
+  /** The Sponsor it belongs to (a publication's: its publisher). */
+  ownerId: string | null
+  /** That Sponsor's company; null when the onboarding record is gone. */
+  company: string | null
+  /** That Sponsor's operator now (F-S1b: the platform's column and filter). */
+  operatorId: string | null
+  operatorName: string | null
   reason: string
   /** The last day it counts (UTC); null: until revoked. */
   expiresOn: string | null
@@ -41,9 +49,9 @@ const bool = (value: unknown): boolean => value === true || value === 'true'
 
 /** One page of the exceptions; only those in force when asked. */
 export async function readRegionExceptions(offset: number, limit: number, sorts: SortSpec[] | undefined,
-  inForce: boolean | null, at: string): Promise<Page<RegionException>> {
+  inForce: boolean | null, at: string, filters: Filter[] = []): Promise<Page<RegionException>> {
   const answer = await runQuery<Row>(TEMPLATE.regionExceptions, {
-    params: inForce == null ? { at } : { at, inForce }, sorts, offset, limit, count: true })
+    params: inForce == null ? { at } : { at, inForce }, filters, sorts, offset, limit, count: true })
   return {
     items: answer.items.map((row) => ({
       exceptionId: String(row.exceptionId ?? ''),
@@ -52,6 +60,10 @@ export async function readRegionExceptions(offset: number, limit: number, sorts:
       publicationName: str(row.publicationName),
       foreignVideo: row.foreignVideo == null ? null : bool(row.foreignVideo),
       sponsorId: str(row.sponsorId),
+      ownerId: str(row.ownerId),
+      company: str(row.company),
+      operatorId: str(row.operatorId),
+      operatorName: str(row.operatorName),
       reason: String(row.reason ?? ''),
       expiresOn: str(row.expiresOn),
       revoked: bool(row.revoked),

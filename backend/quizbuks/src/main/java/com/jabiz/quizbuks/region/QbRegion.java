@@ -8,8 +8,9 @@ import java.util.List;
 /**
  * The entities of the rule on foreign videos and mainland China (F-S11, docs/quizbuks/plans/impl/F-S11.md):
  * <ul>
- *   <li>{@value #EXCEPTION}: headquarters allows mainland China to answer one publication, or all of one sponsor's,
- *       although their videos are foreign (A3-15), with a reason and perhaps a last day; revoked, never deleted;</li>
+ *   <li>{@value #EXCEPTION}: headquarters (any sponsor) or an operator (its own sponsors; the requester,
+ *       2026-11-07) allows mainland China to answer one publication, or all of one sponsor's, although their videos
+ *       are foreign (A3-15), with a reason and perhaps a last day; revoked, never deleted;</li>
  *   <li>{@value #REFUSAL_DAY}: how many starts the rule refused on a UTC day (only the count).</li>
  * </ul>
  * Both are ordinary tables written by processes only ({@code processOnlyWrites}): every change goes through the
@@ -50,6 +51,9 @@ public final class QbRegion {
         eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).asText(36));
         // The sponsor's user id (the publisher id of a sponsor's publications).
         eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).asText(128));
+        // Whose exception it is, for the operators' entry scope (the requester, 2026-11-07): the sponsor of a SPONSOR
+        // exception, the publisher of a PUBLICATION exception's publication when it was added. Not part of the rule.
+        eb.field("ownerId", f -> f.physicalColumn("owner_id").immutable(true).required(true).asText(128));
         eb.field("reason", f -> f.physicalColumn("reason").required(true).asText(REASON_LENGTH));
         // The last day it counts (UTC, inclusive); none: until revoked.
         eb.field("expiresOn", f -> f.physicalColumn("expires_on").asDate());
@@ -62,8 +66,9 @@ public final class QbRegion {
         eb.field("changedBy", f -> f.physicalColumn("changed_by").required(true).asText(128));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv
-            .columns("kind", "publicationId", "sponsorId", "reason", "expiresOn", "revoked", "createdAt", "createdBy")
-            .filters("kind", "publicationId", "sponsorId", "revoked", "expiresOn")
+            .columns("kind", "publicationId", "sponsorId", "ownerId", "reason", "expiresOn", "revoked", "createdAt",
+                "createdBy")
+            .filters("kind", "publicationId", "sponsorId", "ownerId", "revoked", "expiresOn")
             .sorts("createdAt", "expiresOn")
             .defaultSort("createdAt", false));
     });

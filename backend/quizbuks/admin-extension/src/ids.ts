@@ -418,6 +418,8 @@ export const PERMISSION = {
   /** F-S11: the exceptions to the rule on foreign videos and mainland China (read, and add, change or revoke). */
   regionRead: 'qb.admin.region.read',
   regionWrite: 'qb.admin.region.write',
+  /** F-S11: the refusal counts and the address database (headquarters only, not the operators). */
+  regionMonitor: 'qb.admin.region.monitor',
   /** The AI page (Q8a). */
   aiRead: 'qb.admin.ai.read',
   /** A taker's transfer at once (Q14). */
