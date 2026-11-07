@@ -5152,3 +5152,14 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 不能放进模板而被删去的：无。QuizBuks 自己的部分（缺口 6 发起方公开框架的环境横条、学者与发起方的左栏文案与示意图、`otherEntry`、页脚链接、各入口的 `order`）在其应用分支上采用。
 
 **17zk 状态**：17zk ✅ 已合并（#478）；17zk-b 📝 待评审（分支 `1.3/phase-17zkb-signup-tabs`）。
+
+### 17zq sys_file 按上传者的索引（2026-11-07，QuizBuks 首次上线 S3 F-C2 的平台需要）
+
+**缘由**：QuizBuks 按上传者统计存储用量（F-C2：`SELECT count(*), sum(size_bytes) FROM sys_file WHERE uploaded_by = …`），`sys_file` 却只有主键与清扫用的 `(uploaded_time)` 索引，按上传者的查询（包括 `SysFile` 默认列表按 `uploadedBy` 筛选）在数据多时读全表。
+
+| # | 内容 |
+|---|---|
+| 17zq-1 | 迁移 `V62__sys_file_uploader_index.sql`：`sys_file_uploaded_by_idx (uploaded_by, uploaded_time)`。同一索引满足按上传者的计数与求和、按上传者筛选并按时间排序（任一方向）或取时间范围；清扫按 `(uploaded_time, file_id)` 分页、不带上传者，照旧用原索引；平台没有其他按上传者的查询，不另建索引 |
+| 17zq-2 | 测试：`FileUploadIT` 断言索引存在（`pg_indexes`）、按上传者的计数与求和正确，关闭顺序扫描时用量查询与"按上传者、按时间倒序"的列表查询的计划都用该索引（后者不排序）；设计 14 §2 |
+
+**17zq 状态**：📝 待评审（分支 `1.3/phase-17zq-file-uploader-index`）。
