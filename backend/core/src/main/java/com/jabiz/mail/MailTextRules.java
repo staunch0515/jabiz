@@ -235,6 +235,11 @@ public final class MailTextRules {
         }
 
         private void text(String literal, String where) {
+            text(literal, where, true);
+        }
+
+        /** @param written whether the literal is shown as text, where mail clients link the addresses in it */
+        private void text(String literal, String where, boolean written) {
             if (literal == null) {
                 return;
             }
@@ -245,7 +250,7 @@ public final class MailTextRules {
             }
             // Mail clients link addresses written out in the text: they follow the same rule as links.
             Matcher bare = BARE_URL.matcher(literal);
-            while (bare.find()) {
+            while (written && bare.find()) {
                 checkTarget(bare.group());
             }
         }
@@ -357,7 +362,7 @@ public final class MailTextRules {
         public void visit(Image image) {
             add("image", violation(BODY, PlatformErrorCodes.MAIL_TEXT_IMAGE, "The body contains an image",
                 Map.of()));
-            text(image.getDestination(), "an image");
+            text(image.getDestination(), "an image", false);
             text(image.getTitle(), "an image");
             visitChildren(image);
         }
