@@ -143,9 +143,11 @@ test('a Sponsor collects their content once, uses it, and support sees the libra
     await expect(page.getByTestId('asset-use')).toHaveCount(1)
     await expect(page.getByTestId('asset-use-stale')).toBeVisible()
     await page.keyboard.press('Escape')
-    const quiz = await rows(request, token, 'urn:jabiz:dataset:sponsor:QbQuiz',
-      [{ field: 'quizId', op: 'eq', value: first.quizId }])
-    expect(quiz[0].attributes.intro).toBe(intro)
+    // Read by its key: the quiz dataset is not filtered by key (as transfer.spec.ts).
+    const quiz = await request.get(`/api/datasets/${encodeURIComponent('urn:jabiz:dataset:sponsor:QbQuiz')}`
+      + `/entities/${first.quizId}`, { headers: { Authorization: `Bearer ${token}` } })
+    expect(quiz.status(), await quiz.text()).toBe(200)
+    expect(((await quiz.json()) as { attributes: Record<string, unknown> }).attributes.intro).toBe(intro)
     // The image is used by the question, up to date.
     await page.getByTestId('asset-row').filter({ hasText: String(image.name) }).getByTestId('asset-uses').click()
     await expect(page.getByTestId('asset-use')).toHaveCount(1)
