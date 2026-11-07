@@ -73,3 +73,27 @@
 2. **改派的过渡限制**：S1 的"移动审批请求"合入之前，有待审审批的发起方不能改派；运营上等审批结束再改派。合入后去掉 `QB_SPONSOR_REVIEW_PENDING`。
 3. **已有安装的授权**：从 `QbRoles` 去掉的权限不会自动收回（`QB_SETUP` 只补）；测试系统重置数据库即可，`operations.md` 写明。
 4. **F-S2 将删除认证**：本项对认证只做去掉 `direct` 与官方账号的最小改动，避免白做。
+
+## 6. 删除与搬移的清单（待需求方再次确认，确认之前不合并）
+
+需求方 2026-11-07 的新规则："千万不能随意减少已经做好的功能。要有需求方明确的指示才能去掉东西；删除旧功能要多一次确认。"本节逐条列出 F-S1 删去或搬走的已有功能（删了什么｜原来谁能做什么｜之后由谁怎么做），由总控交需求方确认。
+
+**后端（F-S1a）**
+1. 官方出题方：表 `qb_official_publisher`、`QB_OFFICIAL_PUBLISHER_SET`｜内容管理员把某账号设为运营商或总部的认证官方出题方｜官方出题方固定为该运营商的直营发起方。
+2. 平台裁决现金争议：`qb.cash.resolve`、`QB_CASH_REWARD_RESOLVE`、事件 `qb.cash-reward.resolved`、站内信 `CASH_RESOLVED` / `CASH_RESOLVED_SPONSOR`、管理员待办 `qb.cash-reward.dispute`｜管理员裁决，双方收到站内信｜平台不裁决；发起方再次标记已支付（`DISPUTED` → `MARKED_PAID`）或学者确认（答复 4）。
+3. `QB_ADMIN_CONTENT` 去掉 `qb.review.sponsor`、`qb.review.publication`、`qb.admin.reward-methods`、`qb.redemption.void`、`qb.digital.resolve`、`qb.prospect.use`、`qb.certification.manage`｜内容管理员审核、设奖励方式、作废兑换、处理数字奖品争议、获客、管理认证｜所属运营商的成员；总部做这些的人改为平台运营商的成员。`approval.decide` 保留（财务四眼）。已有安装中的授权不被 `QB_SETUP` 收回。
+4. 运营商语言唯一（`ux_qb_operator_active_language`、`QB_OPERATOR_LANGUAGE_TAKEN`、锁 `qb.operator.languages`）与按语言分配（`assignByLanguage`、`auto:language`）｜一种语言一个运营商，新发起方按语言自动归属｜语言只作展示与获客；自己入驻的归平台运营商，获客的归获客的运营商。
+5. 总部的 `direct` 归属（`QbProspects.DIRECT`、`QbCertifications.DIRECT`）｜总部自己获客、开认证轮｜总部只读；运营商成员以自己的运营商进行。价目表的 `direct` 未动（F-M）。
+6. 回到总部（`QB_SPONSOR_OPERATOR_ASSIGN` 不带 `operatorId`）｜总部把发起方移回直营｜只在运营商之间改派（可回平台运营商）。
+7. 无归属发起方的审核与待办到总部（`withOperator`、`sponsorScope` 的分支；举报"给总部建待办"的步骤）｜到总部｜一律到所属运营商；总部的 `QB_REPORT_RESOLVE` 保留。
+8. 建空运营商（`QB_OPERATOR_SAVE` 不带负责人）｜可先建后加成员｜建立时必填负责人（平台运营商例外）。
+9. 无运营商也能入驻｜归总部｜没有平台运营商即 422 `QB_OPERATOR_DEFAULT_MISSING`。
+10. 获客认领替换 `auto:language` 的归属｜—｜只替换 `auto:default`，有待审审批时不改派（等 S1）。
+11. `HQ_TAKEDOWN` / `HQ_BAN` 文案"总部"→"平台"（改名，行为不变）。
+
+**后台扩展（F-S1b，F-S1a 未动）**
+12. `CashRewardsPage` 的裁决按钮与对话框、`resolveCashReward`、`ids.ts` 的 `cashResolve`（按钮现已因无权限不显示）。
+13. `CertificationsPage` 的官方出题方设置、`officialSet`、`CERTIFICATION_DIRECT` 与"总部"显示（现在调用会 404）。
+14. 获客页的总部 `DIRECT` 可写（`ProspectPage`、`ProspectSettingsPage`、`prospect-scope.ts`、`prospect-api.ts`）｜总部在后台自己获客｜总部只读、按运营商筛选，获客在运营商后台。
+15. 菜单 `AX/index.tsx` 的"总部内容"：审核、发起方主页与商品、举报、兑换、数字奖品、奖励方式、获客移到运营商后台（搬移）。
+16. e2e 的入驻与发布审核改由运营商成员决定。
