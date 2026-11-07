@@ -8,7 +8,7 @@
 |---|---|
 | `operations.md` §1.1 | "轮换"一栏：四把密钥都可以轮换（D78，`docs/guide/key-rotation.md`）。JWT / MFA / SEAL 旧值放进 `*_PREVIOUS`，`jabiz.key-rotation` 完成后删去（JWT 在保留期后）；INTEGRITY 的旧值永久保留；每次轮换后更新离线副本 |
 | `operations.md` §1.5 | LGTM 的开关（`COMPOSE_PROFILES=observability`）、OTLP 的地址、告警收件人与 Grafana 的 SMTP、`QB_GRAFANA_PORT` |
-| `operations.md` §2.3 | 备份的配置与操作引用 S1 的备份配置说明（pgBackRest + R2；尚未合入本线，先写占位） |
+| `operations.md` §2.3 | 备份的配置与操作引用 `deploy/quizbuks/DEPLOY.md`"备份"（S1 的 #513：pgBackRest + R2 + restic + 死人开关） |
 | `operations.md` §2.4 | 第 2、3 步改为 `tools/ops/restore-drill.sh`（上线前的一次 `DRILL_ROTATE=true`）；QuizBuks 自己的核对是 `DRILL_TEMPLATES` 中只在有问题时返回行的模板；保留第 1 步（托管方的恢复）与第 4 步（与生产在 T 时的数字比较）；演练记录即脚本的 Markdown |
 | `queries/qb/admin/verify-unbalanced-periods.sql`、`verify-overdrawn-wallets.sql`（新） | 借贷不平的月份（按记账时间，UTC）、账本中为负的钱包（2110、2120、2130、2160 按对象）。2110 与钱包余额之差直接用每日核对的 `qb.system.recon-totals`（同样只在有差异时返回行，另含 2160 与账本合计），不另写一份 |
 | `operations.md` §5 | 平台指标的行改为引用平台规则（13 §7）；QuizBuks 自己的规则在 `deploy/quizbuks/alerting/quizbuks-alerts.yaml`；试发用 `alert-fire-test.sh`；数据库主机仍是托管方的告警 |

@@ -160,7 +160,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 ### 2.3 备份与时间点恢复
 
-**配置与操作见 S1 的备份配置说明（pgBackRest + Cloudflare R2，WAL 归档；尚未合入本线，合入后在此换成链接）。** 下面只是要求：
+**配置与操作见 `deploy/quizbuks/DEPLOY.md`"备份"（pgBackRest + Cloudflare R2，WAL 归档；上传文件 restic；死人开关）。** 下面只是要求：
 
 - **连续归档 + 定期基础备份**：WAL 归档（`archive_mode on`，用 pgBackRest、WAL-G，或托管服务的时间点恢复），基础备份每天一次，保留至少 14 天的时间点恢复窗口；另按会计要求保留月末的全量备份（凭证与分录是 10 年，L-4）。
 - **一起备份的**：上传文件卷（`/var/lib/jabiz/files`：与库同一时刻的快照或每日同步）、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本（**不与备份放在一起**：拿到备份的人不应同时拿到密钥）。生成的文件（导出 CSV、收据 PDF）在库中（`sys_generated_file`、`sys_document_run`），随库备份。
@@ -174,8 +174,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 在**隔离的环境**中做（不能连 Stripe 正式环境、不能发邮件，否则恢复出的实例会转账、发信）。第 2、3 步由平台的脚本 `tools/ops/restore-drill.sh` 完成（平台 13 §8：
 应用以核对模式启动一次，邮件、推送、定时任务、事件投递与外部作业一律关闭，只监听本机回环地址，核对完即停止，并写出演练记录）。
 
-1. 选一个时刻 T（如昨天 12:00 UTC），按 S1 的备份配置说明（pgBackRest + R2）把备份恢复到新的 PostgreSQL 实例（时间点恢复到 T），文件卷恢复到同一时刻；记录用时。
-   恢复命令可以交给脚本计时（`DRILL_RESTORE_COMMAND`，即该说明中的 pgBackRest 恢复命令）。
+1. 选一个时刻 T（如昨天 12:00 UTC），按 `deploy/quizbuks/DEPLOY.md`"备份"中的"C. 恢复演练"把备份恢复到新的 PostgreSQL 实例（时间点恢复到 T），文件卷恢复到同一时刻；记录用时。
+   恢复命令可以交给脚本计时（`DRILL_RESTORE_COMMAND`，即 DEPLOY.md"C. 恢复演练"中的 pgBackRest 恢复命令）。
 2. 准备副本的设置文件 `DRILL_ENV_FILE`：指向恢复的库（`SPRING_R2DBC_*`、`SPRING_FLYWAY_*`）与恢复的文件目录（`JABIZ_FILES_LOCAL_ROOT`）；
    `JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY` 用生产的值（从离线副本取）；让副本远离线上服务：`QB_STRIPE_LIVEMODE=false`、
    `STRIPE_API_KEY=sk_test_restore_drill`、两个签名密钥随机生成、`JABIZ_MAIL_ENABLED=false`（正式数据在测试模式下启动不被拒绝；反过来"正式模式 + 测试数据"才被拒）。
@@ -343,7 +343,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 安全 | 平台 `jabiz-refresh-reuse-granted`、`jabiz-refresh-reuse-revoked`（F-F6） | |
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，F-F13） | 工作目录与上传文件的卷 |
-| 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 S1 的备份配置说明） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
+| 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
 | 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
 
 日志：结构化 JSON（`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`）；`Platform check failed` 是平台的规则 `jabiz-platform-check-failed`（Loki）；`quizbuks: WARNING`、`Inbound webhook request of … rejected` 在 Loki 中查看（Webhook 被拒另有指标上的告警）。日志与追踪中不应出现密钥、令牌与原始卡信息（平台已遮蔽；发现即视为缺陷）。
