@@ -57,9 +57,9 @@ class ApprovalPreviewController {
         }
     }
 
-    record Change(String entityId, Instant evaluatedTime, Finding before, Finding after) {}
+    record PreviewChange(String entityId, Instant evaluatedTime, Finding before, Finding after) {}
 
-    record PreviewResponse(int evaluated, boolean truncated, List<Change> changed) {}
+    record PreviewResponse(int evaluated, boolean truncated, List<PreviewChange> changed) {}
 
     private final ApprovalSubjectRegistry subjects;
     private final ApprovalStore store;
@@ -91,7 +91,7 @@ class ApprovalPreviewController {
                 }
                 List<Map<String, Object>> cases = found.getT2();
                 boolean truncated = cases.size() > limit;
-                List<Change> changed = new ArrayList<>();
+                List<PreviewChange> changed = new ArrayList<>();
                 for (Map<String, Object> row : truncated ? cases.subList(0, limit) : cases) {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> facts = subject.normalizeFacts(
@@ -100,7 +100,7 @@ class ApprovalPreviewController {
                     Finding was = finding(ApprovalEvaluation.evaluate(before, facts));
                     Finding will = finding(ApprovalEvaluation.evaluate(after, facts));
                     if (!was.sameOutcome(will)) {
-                        changed.add(new Change((String) row.get("entity_id"), instant(row.get("evaluated_time")),
+                        changed.add(new PreviewChange((String) row.get("entity_id"), instant(row.get("evaluated_time")),
                             was, will));
                     }
                 }

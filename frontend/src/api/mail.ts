@@ -11,7 +11,7 @@ export type MailLanguageTexts = components['schemas']['LanguageTexts']
 export type MailLayouts = components['schemas']['LayoutsResponse']
 export type MailLanguageLayout = components['schemas']['LanguageLayout']
 export type MailLayoutValues = Pick<components['schemas']['MailLayout'], 'displayName' | 'logoUrl' | 'logoAlt' | 'footer'>
-export type MailPreview = components['schemas']['PreviewResponse']
+export type MailPreview = components['schemas']['MailTextPreviewResponse']
 export type MailTextState = NonNullable<MailLanguageTexts['state']>
 
 export const MAIL_TEXT_READ = 'mail.text.read'

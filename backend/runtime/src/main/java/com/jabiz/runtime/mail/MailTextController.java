@@ -77,13 +77,14 @@ class MailTextController {
         List<TemplateTexts> templates) {}
 
     /** @param subject with {@code body} a draft; both absent: the texts in effect */
-    record PreviewRequest(String template, String locale, String subject, String body) {}
+    record MailTextPreviewRequest(String template, String locale, String subject, String body) {}
 
     /**
      * @param versionNo the version of the override previewed; null for a draft or the default
      * @param problems  the draft's problems by the rules (the preview renders it all the same)
      */
-    record PreviewResponse(String subject, String text, String html, Integer versionNo, List<Violation> problems) {}
+    record MailTextPreviewResponse(String subject, String text, String html, Integer versionNo,
+        List<Violation> problems) {}
 
     private final MailTemplates templates;
     private final MailTexts texts;
@@ -148,7 +149,7 @@ class MailTextController {
     }
 
     @PostMapping("/preview")
-    Mono<PreviewResponse> preview(@RequestBody PreviewRequest body) {
+    Mono<MailTextPreviewResponse> preview(@RequestBody MailTextPreviewRequest body) {
         return RequestContexts.current().flatMap(request -> {
             Permissions.require(request, MailPermissions.TEXT_READ, "Previewing a mail text");
             MailTemplate template = templates.find(body.template()).orElseThrow(() -> invalid("template",
@@ -170,7 +171,8 @@ class MailTextController {
                     texts.sampleValues(template)), found.getT2().layout());
                 List<Violation> problems = body.subject() == null ? List.of()
                     : texts.problems(template, chosen.subject(), chosen.body());
-                return new PreviewResponse(mail.subject(), mail.text(), mail.html(), chosen.versionNo(), problems);
+                return new MailTextPreviewResponse(mail.subject(), mail.text(), mail.html(), chosen.versionNo(),
+                    problems);
             });
         });
     }
