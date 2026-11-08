@@ -47,8 +47,12 @@ subprojects {
         "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
     }
 
+    // One shard of the test classes when -Pjabiz.test.shard=<i>/<n> is given (CI's build-application, ROADMAP 17zz13).
+    val shard = com.jabiz.gradle.TestShards.parse(findProperty(com.jabiz.gradle.TestShards.PROPERTY) as String?)
+
     tasks.withType<Test> {
         useJUnitPlatform()
+        shard?.let { com.jabiz.gradle.TestShards.configure(this, it, file(com.jabiz.gradle.TestShards.TIMINGS)) }
         // Integration tests connect to a local PostgreSQL when these are set, otherwise to Testcontainers.
         listOf("JABIZ_TEST_DB_URL", "JABIZ_TEST_DB_USER", "JABIZ_TEST_DB_PASSWORD").forEach { name ->
             System.getenv(name)?.let { environment(name, it) }

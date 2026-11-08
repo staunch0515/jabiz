@@ -240,6 +240,7 @@ Gradle 9（wrapper）多模块工程，根目录为 `backend/`（模块：`core`
   只编译和测试：`./gradlew check`（CI 执行的就是这个）
 - 全部测试：`./gradlew test`；单个模块：`./gradlew :core:test`、`:ext-geo:test`、`:runtime:test`、`:app:test`；
   单个类：`./gradlew :app:test --tests '*DatasetEntityManagerIT'`
+  只跑一片：`-Pjabiz.test.shard=<i>/<n>`（CI 的 `build-application` 把应用模块的测试分三片并行，按模块根目录的 `test-timings.txt`，由 `tools/ci/test-timings.py` 生成；17zz13）
 - 覆盖率：`./gradlew :core:jacocoTestReport` → `core/build/reports/jacoco/test/html/index.html`；
   `check` 包含 `:core:jacocoTestCoverageVerification`（门禁类的行覆盖率 ≥ 80%）
 - 集成测试数据库：默认 Testcontainers `postgres:16`（需要 Docker）；无 Docker 时设置
