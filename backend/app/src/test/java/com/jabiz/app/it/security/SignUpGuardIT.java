@@ -271,6 +271,43 @@ class SignUpGuardIT extends SignUpItSupport {
     }
 
     @Test
+    void aGuardReadsTheRowAParameterNamesWhichBelongsToNoUser() {
+        // The demo portal's launch (PortalSignUpSwitch, decision D80): open while the product the parameter names is
+        // there and active. The guard reads the product's row by its SKU, a global load, before there is a user.
+        String key = "commerce.portal.launch-product";
+        post("/api/processes/PARAM_CREATE/latest", admin(), Map.of("key", key, "valueKind", Map.of("type", "text"),
+            "value", "IT-LAUNCH-1")).expectStatus().isOk();
+        // No such product: the launch is over.
+        String early = address("early");
+        Map<String, Object> refused = problem(register(PORTAL, early, PASSWORD), 403);
+        assertThat(ruleCode(refused)).isEqualTo("SIGN_UP_REFUSED");
+        assertThat(refused).containsEntry("reason", "commerce.launch-over");
+        assertThat(violations(refused).getFirst()).containsEntry("message",
+            "Registration was open for a product launch that has ended.");
+        assertThat(userOf(early)).isNull();
+
+        Map<String, Object> product = insert(com.jabiz.app.commerce.CommerceEntities.PRODUCT_DATASET, Map.of("sku",
+            "IT-LAUNCH-1", "productName", "Launch", "unitPrice", 1000, "active", true), null);
+        register(PORTAL, address("launch"), PASSWORD).expectStatus().isAccepted();
+
+        // Taken off sale: closed again, on every path into the portal.
+        post("/api/datasets/" + com.jabiz.app.commerce.CommerceEntities.PRODUCT_DATASET + "/commit", admin(),
+            Map.of("changes", List.of(Map.of("action", "UPDATE", "id", product.get("id"), "version", 1,
+                "attributes", Map.of("active", false))))).expectStatus().isOk();
+        assertThat(problem(register(PORTAL, address("late"), PASSWORD), 403))
+            .containsEntry("reason", "commerce.launch-over");
+        // Other entries are not the launch's concern.
+        register(CLUB, address("club-launch"), PASSWORD).expectStatus().isAccepted();
+
+        // The next launch (and the portal open for the other tests of this class).
+        insert(com.jabiz.app.commerce.CommerceEntities.PRODUCT_DATASET, Map.of("sku", "IT-LAUNCH-2", "productName",
+            "Next launch", "unitPrice", 1000, "active", true), null);
+        post("/api/processes/PARAM_SET/latest", admin(), Map.of("key", key, "value", "IT-LAUNCH-2"))
+            .expectStatus().isOk();
+        register(PORTAL, address("next"), PASSWORD).expectStatus().isAccepted();
+    }
+
+    @Test
     void aGuardRefusesTheMailedJoinAtTheLinkWhichStaysUnused() {
         String email = address("mailjoin");
         String userId = createUserWithEmail(unique("mailjoin"), email, PASSWORD);
