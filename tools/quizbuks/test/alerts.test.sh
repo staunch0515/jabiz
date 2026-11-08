@@ -94,6 +94,16 @@ for file in docker/grafana/alerting/jabiz-alerts.yaml docker/grafana/alerting/re
   check "the deploy workflow uploads $file" grep -q "$file" "$workflow"
 done
 
+# The made-up data for the platform's test-fire script (platform 17zz9): a line for every rule and none for a rule
+# that does not exist, each of a kind the script knows.
+fakes="$root/deploy/quizbuks/alerting/quizbuks-alerts.fakes"
+rule_uids=$(grep -o '^      - uid: [a-z0-9-]*' "$rules" | awk '{ print $3 }' | sort -u)
+fake_uids=$(grep -v '^\s*\(#\|$\)' "$fakes" | awk '{ print $1 }' | sort -u)
+check 'every rule has made-up data, and only the rules' test "$rule_uids" = "$fake_uids"
+check 'every line of the made-up data is of a known kind' bash -c \
+  "! grep -v '^\\s*\\(#\\|\$\\)' '$fakes' | awk '\$2 !~ /^(timer|gauge|log|skip)\$/' | grep -q ."
+check 'the deploy workflow uploads the made-up data' grep -q 'deploy/quizbuks/alerting/quizbuks-alerts.fakes' "$workflow"
+
 if ((failures > 0)); then
   echo "$failures failed"
   exit 1

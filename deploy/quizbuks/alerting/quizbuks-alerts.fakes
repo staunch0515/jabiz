@@ -1,0 +1,17 @@
+# Made-up data for QuizBuks's alert rules (quizbuks-alerts.yaml beside this file), for the platform's test-fire script
+# (platform 17zz9, design 13 section 7):
+#   ALERT_FOLDERS="jabiz quizbuks" ALERT_FAKES=<this file> tools/ops/alert-fire-test.sh fire
+# One line per series: <uid> timer <metric> <count> [key=value...] | gauge <metric> <unit or -> <value> [key=value...] |
+# log <message...> | skip <reason...>. The series carry the instance "alert-test"; rules over an hour clear within the
+# hour, the reconciliation's gauge with the application's next push (it reports the real value again).
+# Every rule of quizbuks-alerts.yaml has a line here (tools/quizbuks/test/alerts.test.sh).
+
+qb-reconcile-diff gauge qb.reconcile.differences - 1
+qb-reconcile-missing skip needs 26 hours without a successful QB_RECONCILE_RUN while the application runs
+qb-transfer-failed timer jabiz.external.job 1 job_type=qb.stripe.transfer outcome=FAILED
+qb-stripe-webhooks timer jabiz.inbound.receive 1 provider=stripe result=REJECTED reason=alert_test outcome=rejected status=401
+qb-stripe-calls timer jabiz.external.call 50 service=stripe outcome=5xx
+qb-attempt-submit-busy timer jabiz.process 50 process=QB_ATTEMPT_SUBMIT version=1 outcome=busy status=503
+qb-journal-export-rejected timer jabiz.process 1 process=QB_JOURNAL_EXPORT version=1 outcome=rejected status=422
+# Above JABIZ_ALERT_QB_AI_HELD_MAX (1 by default, 0 once AI is meant to be on).
+qb-ai-paused gauge jabiz.external.job.held - 5 job_type=qb.ai.questions
