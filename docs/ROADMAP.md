@@ -5387,4 +5387,18 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：`./gradlew check` 与前端 `pnpm lint && pnpm typecheck && pnpm test && pnpm build`、`app:check`、`ext:check` 通过；对照结果中高与严重的条目为零。
 
-**17zz6 状态**：📝 待评审（分支 `1.3/phase-17zz6-tool-updates`）。
+**17zz6 状态**：✅ 已合并（#523）。
+
+### 17zz7 删去 `PipelinedReadResumer`（2026-11-08，总控决定）
+
+**缘由**：Reactor Netty 1.3.8（17zz6 随 Spring Boot 4.0.9）在排空流水线请求后自己继续读连接，16c-2 为 1.3.1–1.3.7 加的绕过不再需要（17zz6 中探针已改为断言这一点）。
+它是平台内部的绕过、不是用户可感知的功能，由总控决定删去（2026-11-08）。
+
+| # | 内容 |
+|---|---|
+| 17zz7-1 | 删去 `PipelinedReadResumer`（`NettyServerCustomizer`）及其单元测试（装入管线、交换结束后补读） |
+| 17zz7-2 | 回归测试 `PipelinedReadingTest`：对不加任何处理器的 Reactor Netty 服务器，流水线请求立即答复后（含只带部分正文的 `POST`），同一连接上的下一个请求照常得到答复（各 20 个连接）；应用层的 `PipelinedRequestsIT`（Service Worker 守卫的 404 排在健康检查之后）照旧 |
+
+**验收**：`./gradlew check` 通过；以上两个回归测试通过。
+
+**17zz7 状态**：📝 待评审（分支 `1.3/phase-17zz7-drop-read-resumer`，在 17zz6 之上）。

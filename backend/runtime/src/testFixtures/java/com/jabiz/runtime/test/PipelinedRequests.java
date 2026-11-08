@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Speaks HTTP/1.1 over a plain socket to check that a keep-alive connection is still read after a pipelined request
- * (see {@code PipelinedReadResumer}): requests in one write, so that the later ones are buffered while the first is
+ * (ROADMAP 16c-2, 17zz7): requests in one write, so that the later ones are buffered while the first is
  * answered, then, once those answers are in, a last request on the same connection.
  */
 public final class PipelinedRequests {
