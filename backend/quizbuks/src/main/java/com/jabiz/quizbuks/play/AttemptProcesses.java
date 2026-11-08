@@ -183,6 +183,8 @@ public final class AttemptProcesses {
                     ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
                         new QueryPredicate.Eq("userId", ctx.request().actorId()),
                         new QueryPredicate.Eq("publicationId", ctx.get(PUB_KEY))))).limit(1).build(), VIEWS))
+                // F-S2d: a card bound to a node (only then: one statement), whether the caller sees it.
+                .steps(b -> TreeGate.load(b, ctx -> first(ctx, CARD)))
                 .compute("Record the view", (metadata, ctx) -> view(ctx)));
     }
 
@@ -192,7 +194,8 @@ public final class AttemptProcesses {
         String userId = ctx.request().actorId();
         // S2: a channel's publication (a shop's storefront quiz) is no App taker's: as good as none.
         if (card == null || !PublisherKind.sponsor(card.get("publisherKind"))
-            || !(first(ctx, MINE) != null || shown(ctx, card))) {
+            || !(first(ctx, MINE) != null || shown(ctx, card))
+            || !TreeGate.visible(ctx, card, first(ctx, MINE) != null)) {
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + publicationId + " not found");
         }
         boolean first = first(ctx, VIEWS) == null;
@@ -309,7 +312,7 @@ public final class AttemptProcesses {
                 .steps(b -> TreeGate.load(b, ctx -> starting(ctx) ? first(ctx, CARD_BEFORE) : null))
                 .compute("Refuse a node not unlocked", (metadata, ctx) -> {
                     if (starting(ctx)) {
-                        TreeGate.refuse(ctx, "publicationId", first(ctx, CARD_BEFORE));
+                        TreeGate.refuse(ctx, "publicationId", first(ctx, CARD_BEFORE), first(ctx, MINE) != null);
                     }
                 })
                 // Q88b (D-Q88-10, D-Q88-12): a publication charging an entry fee takes the caller's wallet lock

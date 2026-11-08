@@ -3,7 +3,7 @@ id: qb.app.inbox
 description: >-
   The taker's inbox (U-60 - U-63; Q7c D-Q7-9), newest first - their own messages and the announcements and sponsors'
   notices that match them now, with what they read; filtered by kind, unread, text and time, or one item
-entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbSponsor, QbPublicationCard, QbPublicationOwner]
+entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbSponsor, QbPublicationCard, QbPublicationOwner, QbAttempt, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   QbMessage: urn:jabiz:dataset:me:QbMessage
   QbBroadcastFeed: urn:jabiz:dataset:default:QbBroadcastFeed
@@ -15,6 +15,10 @@ datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
+  QbAttempt: urn:jabiz:dataset:taker:QbAttempt
+  QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
+  QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
 params:
   category: { kind: { type: text, maxLength: 10 }, description: "Only SYSTEM (system messages, announcements and notices), PROMO, REWARD, REMINDER or SPONSOR (a sponsor's own messages, Q68)" }
   unread:   { kind: { type: bool }, description: Only the unread ones }
@@ -142,7 +146,22 @@ items AS (
                    OR string_to_array(coalesce(c.{{QbPublicationCard.languages}}, c.{{QbPublicationCard.language}}), ',')
                           && string_to_array(CAST(:languages AS text), ','))
               AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
-                              WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}}))
+                              WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}})
+              -- F-S2d: a notice about a publication bound to a node whose prerequisites the taker has not all lit is hidden,
+              -- unless they have an attempt of it (tree.TreeLights#visible; qb.app.publication writes the same).
+              AND (c.{{QbPublicationCard.treeNodeId}} IS NULL
+                   OR EXISTS (SELECT 1 FROM {{QbAttempt}} ma WHERE ma.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}})
+                   OR NOT EXISTS (
+                       SELECT 1 FROM {{QbTreeNode}} tn
+                       WHERE tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}}
+                         AND tn.{{QbTreeNode.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
+                         AND EXISTS (
+                             SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
+                             WHERE NOT EXISTS (
+                                 SELECT 1 FROM {{QbTreeLit}} tl
+                                 WHERE tl.{{QbTreeLit.treeId}} = split_part(ba.node, '/', 1) AND tl.{{QbTreeLit.nodeId}} = split_part(ba.node, '/', 2)
+                                   AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                                                   WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))))))
 )
 SELECT
     i.item_kind      AS itemKind,

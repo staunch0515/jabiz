@@ -1,7 +1,6 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.play.PlayCodes;
 import com.jabiz.quizbuks.publishing.PublishingCodes;
 import com.jabiz.quizbuks.tree.TreeLights;
 import com.jabiz.quizbuks.tree.TreeProcesses;
@@ -95,13 +94,11 @@ class TreeLightingIT extends TreeItSupport {
         String userId = newTaker(unique("t-fs2b-light"), "JP");
         String mine = taker(userId);
 
-        // The advanced node wants the basics lit before answering: not in the feed, not startable, refused.
+        // The advanced node wants the basics lit before answering: to this taker it is as if it did not exist (F-S2d):
+        // not in the feed, no page, and the start is refused as for a publication that does not exist.
         assertThat(feedIds(mine)).contains(basics, plain).doesNotContain(advanced);
-        assertThat(detail(mine, advanced)).containsEntry("nodeUnlocked", false).containsEntry("canStart", false)
-            .containsEntry("treeNodeId", map.advanced());
-        Map<String, Object> refusal = refused("QB_ATTEMPT_START", mine, body("publicationId", advanced), 422);
-        assertThat(codes(refusal)).containsExactly(PlayCodes.TREE_NOT_UNLOCKED);
-        assertThat(violations(refusal).getFirst()).containsEntry("field", "publicationId");
+        assertThat(detail(mine, advanced)).isNull();
+        refused("QB_ATTEMPT_START", mine, body("publicationId", advanced), 404);
 
         // A failed attempt lights nothing; an ordinary publication's pass neither.
         assertThat(play(userId, plain, true, true)).containsEntry("passed", true);
@@ -174,7 +171,13 @@ class TreeLightingIT extends TreeItSupport {
         for (String userId : takers) {
             boolean unlocked = javaUnlocked(userId, map.treeId(), map.advanced());
             assertThat(userId.equals(takers.get(2))).as("lit " + userId).isEqualTo(unlocked);
-            assertThat(detail(taker(userId), advanced)).as(userId).containsEntry("nodeUnlocked", unlocked);
+            // F-S2d: not unlocked, the page is not there at all.
+            Map<String, Object> page = detail(taker(userId), advanced);
+            if (unlocked) {
+                assertThat(page).as(userId).containsEntry("nodeUnlocked", true);
+            } else {
+                assertThat(page).as(userId).isNull();
+            }
             assertThat(feedIds(taker(userId)).contains(advanced)).as(userId).isEqualTo(unlocked);
         }
         // The count of a draft bound to the advanced node, against the Java rule over every complete profile.
@@ -217,9 +220,9 @@ class TreeLightingIT extends TreeItSupport {
         if (nodes.isEmpty() || !Boolean.TRUE.equals(nodes.getFirst().get("active"))) {
             return false;
         }
-        List<TreeLights.Lit> lits = query("SELECT lit_id, node_id FROM qb_tree_lit_version WHERE subject_kind = 'USER' "
-            + "AND subject_id = ?", userId).stream().map(row -> new TreeLights.Lit(String.valueOf(row.get("lit_id")),
-                (String) row.get("node_id"))).toList();
+        List<TreeLights.Lit> lits = query("SELECT lit_id, tree_id, node_id FROM qb_tree_lit_version WHERE "
+            + "subject_kind = 'USER' AND subject_id = ?", userId).stream().map(row -> new TreeLights.Lit(
+                String.valueOf(row.get("lit_id")), (String) row.get("tree_id"), (String) row.get("node_id"))).toList();
         List<String> revoked = query("SELECT lit_id FROM qb_tree_lit_revocation_version WHERE subject_kind = 'USER' "
             + "AND subject_id = ?", userId).stream().map(row -> (String) row.get("lit_id")).toList();
         return TreeLights.unmet(TreeProcesses.nodeIds(nodes.getFirst().get("before_answer")),

@@ -62,7 +62,7 @@ WHERE string_to_array(coalesce(CAST(:regions AS text), 'GLOBAL'), ',') && string
             SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
             WHERE NOT EXISTS (
                 SELECT 1 FROM {{QbTreeLit}} tl
-                WHERE tl.{{QbTreeLit.nodeId}} = ba.node
+                WHERE tl.{{QbTreeLit.treeId}} = split_part(ba.node, '/', 1) AND tl.{{QbTreeLit.nodeId}} = split_part(ba.node, '/', 2)
                   AND tl.{{QbTreeLit.subjectKind}} = 'USER' AND tl.{{QbTreeLit.subjectId}} = p.{{QbProfile.userId}}
                   AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
                                   WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text))))))

@@ -121,6 +121,21 @@ public class TreeConfig {
         return defaultDataset(QbTrees.REVOCATION);
     }
 
+    /**
+     * F-S2d: the public pages (nobody signed in) list a publication bound to a node only when the node has no
+     * prerequisites: they read whether it has, through the public templates only (which project the whitelist; the
+     * dataset API is closed to everybody, as the public cards').
+     */
+    @Bean
+    DatasetDefinition qbPublicTreeNodeDataset() {
+        return DatasetDefinition.define(QbTrees.PUBLIC_NODES, d -> d
+            .targetEntityType(QbTrees.NODE)
+            .publicRead(p -> p.allRows().fields("treeId", "nodeId", "beforeAnswer"))
+            .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
     /** A person's own lit records (a Taker's: the subject is the caller as a person), for the templates and a start. */
     @Bean
     DatasetDefinition qbMyTreeLitDataset() {

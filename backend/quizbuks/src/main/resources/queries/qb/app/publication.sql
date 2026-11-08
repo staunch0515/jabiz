@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
-description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbReferral, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
+description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it (F-S2d: a node's prerequisites not lit)
+entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbReferral, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbTree, QbTreeNodeDef]
 datasets:
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
@@ -21,6 +21,8 @@ datasets:
   QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
   QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
+  QbTree: urn:jabiz:dataset:default:QbTree
+  QbTreeNodeDef: urn:jabiz:dataset:default:QbTreeNodeDef
   QbReferral: urn:jabiz:dataset:referee:QbReferral
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
   QbInvitation: urn:jabiz:dataset:me:QbInvitation
@@ -80,6 +82,8 @@ results:
   treeId:         { from: QbPublicationCard.treeId }
   treeNodeId:     { from: QbPublicationCard.treeNodeId }
   nodeUnlocked:   { kind: { type: bool } }
+  nodeName:       { from: QbTreeNodeDef.name }
+  nodeLit:        { kind: { type: bool } }
   certification:  { from: QbCertificationRound.certification }
   referral:       { from: QbPublicationCard.referral }
   myReferralStatus:    { from: QbReferral.status }
@@ -150,6 +154,8 @@ SELECT
     d.treeId AS treeId,
     d.treeNodeId AS treeNodeId,
     d.nodeUnlocked AS nodeUnlocked,
+    d.nodeName AS nodeName,
+    d.nodeLit AS nodeLit,
     d.certification AS certification,
     d.referral AS referral,
     d.myReferralStatus AS myReferralStatus,
@@ -275,9 +281,34 @@ SELECT
                SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
                WHERE NOT EXISTS (
                    SELECT 1 FROM {{QbTreeLit}} tl
-                   WHERE tl.{{QbTreeLit.nodeId}} = ba.node
+                   WHERE tl.{{QbTreeLit.treeId}} = split_part(ba.node, '/', 1) AND tl.{{QbTreeLit.nodeId}} = split_part(ba.node, '/', 2)
                      AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
                                      WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))))) AS nodeUnlocked,
+    -- F-S2d: a publication bound to a node whose prerequisites (the nodes to be lit before answering) the caller has
+    -- not all lit is as if it did not exist, unless they have an attempt of it (tree.TreeLights#visible; qb.app.feed,
+    -- qb.app.publication-tiers and qb.app.inbox write the same; TreeLightsIT compares). In effect or not.
+    (c.{{QbPublicationCard.treeNodeId}} IS NULL OR m.{{QbAttempt.attemptId}} IS NOT NULL OR NOT EXISTS (
+         SELECT 1 FROM {{QbTreeNode}} tn
+         WHERE tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}}
+           AND tn.{{QbTreeNode.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
+           AND EXISTS (
+               SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM {{QbTreeLit}} tl
+                   WHERE tl.{{QbTreeLit.treeId}} = split_part(ba.node, '/', 1) AND tl.{{QbTreeLit.nodeId}} = split_part(ba.node, '/', 2)
+                     AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                                     WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))))) AS visible,
+    -- F-S2d: the node's name in the version in effect, and whether the caller has lit it (one of the three states the
+    -- page shows: a publication they see has its prerequisites lit, so the node is lit or open to be lit).
+    (SELECT nd.{{QbTreeNodeDef.name}} FROM {{QbTree}} t
+     JOIN {{QbTreeNodeDef}} nd ON nd.{{QbTreeNodeDef.versionId}} = t.{{QbTree.currentVersionId}}
+     WHERE CAST(t.{{QbTree.treeId}} AS text) = c.{{QbPublicationCard.treeId}}
+       AND nd.{{QbTreeNodeDef.nodeId}} = c.{{QbPublicationCard.treeNodeId}}) AS nodeName,
+    (c.{{QbPublicationCard.treeNodeId}} IS NOT NULL AND EXISTS (
+         SELECT 1 FROM {{QbTreeLit}} tl
+         WHERE tl.{{QbTreeLit.treeId}} = c.{{QbPublicationCard.treeId}} AND tl.{{QbTreeLit.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
+           AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                           WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))) AS nodeLit,
     -- Q69: the certification of the catalog this is a round of (F-S2c2, D6: no sponsor's).
     cr0.{{QbCertificationRound.certification}} AS certification,
     -- Q70: "referrals welcome" as frozen on the card, and the caller's own referral to it, if a friend referred them
@@ -333,4 +364,4 @@ WHERE c.{{QbPublicationCard.publicationId}} = :publicationId
   -- S0 (D-S0-4): a shop's publication (S2) is not a page of the App.
   AND c.{{QbPublicationCard.publisherKind}} = 'SPONSOR'
 ) d
-WHERE d.shown OR d.myAttemptId IS NOT NULL
+WHERE (d.shown OR d.myAttemptId IS NOT NULL) AND d.visible
