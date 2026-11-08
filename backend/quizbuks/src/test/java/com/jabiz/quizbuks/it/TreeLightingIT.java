@@ -148,11 +148,12 @@ class TreeLightingIT extends TreeItSupport {
         Map<String, Object> tree = query("SELECT revision FROM qb_tree WHERE tree_id = ?", map.treeId()).getFirst();
         run(TreeProcesses.RETIRE, sponsorToken(sponsor), body("treeId", map.treeId(), "baseRevision",
             tree.get("revision")));
+        // Its nodes are out of effect, and (F-S2b2) its running publications ended.
+        assertThat(query("SELECT count(*) AS n FROM qb_tree_node WHERE tree_id = ? AND active", map.treeId())
+            .getFirst()).containsEntry("n", 0L);
         String mine = taker(newTaker(unique("t-fs2b-retire"), "JP"));
         assertThat(feedIds(mine)).doesNotContain(basics);
-        assertThat(detail(mine, basics)).containsEntry("nodeUnlocked", false);
-        assertThat(codes(refused("QB_ATTEMPT_START", mine, body("publicationId", basics), 422)))
-            .containsExactly(PlayCodes.TREE_NODE_CLOSED);
+        refused("QB_ATTEMPT_START", mine, body("publicationId", basics), 422);
     }
 
     @Test

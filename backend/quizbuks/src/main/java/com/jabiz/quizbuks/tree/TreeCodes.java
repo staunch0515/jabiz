@@ -22,8 +22,17 @@ public final class TreeCodes {
     /** The graph's name is required in at least one language. */
     public static final String NAME_REQUIRED = "QB_TREE_NAME_REQUIRED";
 
+    /** F-S2b2: the version removes nodes that running publications are bound to. */
+    public static final String NODE_IN_USE = "QB_TREE_NODE_IN_USE";
+    /** F-S2b2: the lit record is revoked already. */
+    public static final String ALREADY_REVOKED = "QB_TREE_ALREADY_REVOKED";
+    /** F-S2b2: a request to revoke the lit record is in review. */
+    public static final String REVOKE_PENDING = "QB_TREE_REVOKE_PENDING";
+    /** F-S2b2: one's own lighting is revoked by others. */
+    public static final String REVOKE_OWN = "QB_TREE_REVOKE_OWN";
+
     public static final List<String> ALL = List.of(CHANGED, STATE, LIMIT, NOT_A_TEMPLATE, COPY_EXISTS, HAS_PROBLEMS,
-        CONDITION_INVALID, NAME_REQUIRED);
+        CONDITION_INVALID, NAME_REQUIRED, NODE_IN_USE, ALREADY_REVOKED, REVOKE_PENDING, REVOKE_OWN);
 
     private TreeCodes() {}
 }

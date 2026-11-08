@@ -201,10 +201,29 @@ public final class TreeLighting {
             boundTo.put(String.valueOf((Object) card.get("publicationId")), new Candidate(
                 String.valueOf((Object) card.get("treeId")), String.valueOf((Object) card.get("treeNodeId"))));
         }
+        // F-S2b2: a revoked lighting is not lit again from the passes it rested on: only a pass after the person's
+        // last revoked lighting of the node counts (qb.system.tree-recheck-due, the same rule).
+        Map<String, String> nodeOfLit = new LinkedHashMap<>();
+        for (EntityInstance row : list(ctx, LITS)) {
+            nodeOfLit.put(String.valueOf(row.id()), row.get("treeId") + " " + row.get("nodeId"));
+        }
+        Map<String, java.time.Instant> revokedAt = new LinkedHashMap<>();
+        for (EntityInstance row : list(ctx, REVOCATIONS)) {
+            String node = nodeOfLit.get(String.valueOf((Object) row.get("litId")));
+            java.time.Instant at = instant(row.get("revokedAt"));
+            if (node != null && at != null) {
+                revokedAt.merge(node, at, (a, b) -> a.isAfter(b) ? a : b);
+            }
+        }
         Map<Candidate, String> passedBy = new LinkedHashMap<>();
         for (EntityInstance attempt : list(ctx, PASSES)) {
             Candidate node = boundTo.get(String.valueOf((Object) attempt.get("publicationId")));
-            if (node != null && !AttemptStatus.IN_PROGRESS.equals(attempt.get("status"))) {
+            if (node == null || AttemptStatus.IN_PROGRESS.equals(attempt.get("status"))) {
+                continue;
+            }
+            java.time.Instant revoked = revokedAt.get(node.treeId() + " " + node.nodeId());
+            java.time.Instant submitted = instant(attempt.get("submittedAt"));
+            if (revoked == null || submitted != null && submitted.isAfter(revoked)) {
                 passedBy.putIfAbsent(node, String.valueOf(attempt.id()));
             }
         }
@@ -283,6 +302,15 @@ public final class TreeLighting {
         Object depth = payload.get("depth");
         return new EvaluateInput(text(payload.get("subjectKind")), text(payload.get("subjectId")), null, nodes, true,
             depth == null ? 1 : Integer.parseInt(String.valueOf(depth)), null);
+    }
+
+    private static java.time.Instant instant(Object value) {
+        return switch (value) {
+            case null -> null;
+            case java.time.Instant i -> i;
+            case java.time.OffsetDateTime o -> o.toInstant();
+            default -> java.time.Instant.parse(String.valueOf(value));
+        };
     }
 
     private static String text(Object value) {
