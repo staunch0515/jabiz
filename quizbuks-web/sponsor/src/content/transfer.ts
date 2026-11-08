@@ -326,11 +326,12 @@ async function uploadPaced(policy: string, blob: Blob, name: string, wait: (ms: 
 }
 
 /**
- * Uploads the files the check named (each under its policy, from the file's data) and makes the draft. Files a
- * refused import leaves behind are swept by the platform as for any upload no quiz refers to.
+ * Uploads the files the check named, each under its policy, from the file's data; their keys with the uploaded ids.
+ * A file missing or spoiling one stops it before the first upload. Shared by the import of a new quiz and F-S6's
+ * import of questions into one.
  */
-export async function importQuiz(document: Record<string, unknown>, check: ImportCheck, onProgress?: Progress,
-  wait: (ms: number) => Promise<unknown> = sleep): Promise<Imported> {
+export async function uploadImportFiles(document: Record<string, unknown>, check: Pick<ImportCheck, 'files'>,
+  onProgress?: Progress, wait: (ms: number) => Promise<unknown> = sleep): Promise<Record<string, string>> {
   const files = (document.files ?? {}) as Record<string, Partial<QuizFileEntry>>
   const total = check.files.length
   const stepOf = (need: ImportFile, i: number): ImportStep =>
@@ -362,6 +363,16 @@ export async function importQuiz(document: Record<string, unknown>, check: Impor
     }
     onProgress?.(i + 1, total)
   }
+  return uploaded
+}
+
+/**
+ * Uploads the files the check named (each under its policy, from the file's data) and makes the draft. Files a
+ * refused import leaves behind are swept by the platform as for any upload no quiz refers to.
+ */
+export async function importQuiz(document: Record<string, unknown>, check: ImportCheck, onProgress?: Progress,
+  wait: (ms: number) => Promise<unknown> = sleep): Promise<Imported> {
+  const uploaded = await uploadImportFiles(document, check, onProgress, wait)
   try {
     return await runProcess<Imported>(CONTENT_PROCESS.quizImport, { document: withoutData(document), files: uploaded })
   } catch (e) {
