@@ -48,25 +48,25 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 
 - **Require a pull request before merging**（直接推送只留给计划文档这类不跑代码的改动时也可不勾，但下面的检查照样要）。
 - **Require status checks to pass before merging**，勾上 **Require branches to be up to date**，检查选这些作业（名字取自 workflow）：
-  平台 `ci.yml` 的 `scope`、`build-application`、`app-paths`、`e2e`；QuizBuks `quizbuks.yml` 的 `migration-order`、`web`、`package`、`e2e`、`local-demo`（`e2e` 是两个分片的汇总，分片名带 `(1/2)`，不用选）。
+  平台 `ci.yml` 的 `scope`、`build-application`、`app-paths`、`migration-order`、`e2e`；QuizBuks `quizbuks.yml` 的 `web`、`package`、`e2e`、`local-demo`（`e2e` 是两个分片的汇总，分片名带 `(1/2)`，不用选）。
 - `1.3/quizbuks-release` 只由 `1.3/quizbuks` 合并进来（上文第 3 步），同样勾 Require status checks。
 
 红的不合：CI 失败的 PR 先修到绿再合（修法与本机复现：`README.md` "本机 e2e"）。这些设置改不动 workflow，只在 GitHub 的仓库设置里。
 
 **迁移的顺序**（2026-11-08，一个 PR 的 V80 在另一个 PR 的 V81 之后合入，staging 部署失败并回滚）：Flyway 不执行比已应用的最新版本更旧的迁移。
-CI 的 `migration-order`（`tools/quizbuks/migration-order.sh`）检查 PR 新增或改名的 `backend/quizbuks*/…/db/migration/V<n>__*.sql`
-（QuizBuks 各模块共用一条序列）都大于 `1.3/quizbuks` **当时最新提交**上的最大号、且没有重号，不满足即失败并写明"基线已到 V<m>，请改为 V<m+1>"。
+CI 的 `migration-order`（平台 `ci.yml` 中的作业，脚本 `tools/check-migration-order.sh`，平台 17zz8）检查 PR 新增或改名的 `backend/quizbuks*/…/db/migration/V<n>__*.sql`
+（QuizBuks 各模块共用一条序列，写在 `.jabiz-migration-sequences` 中；平台自己的序列同样检查）都大于 `1.3/quizbuks` **当时最新提交**上的最大号、且没有重号，不满足即失败并写明"基线已到 V<m>，请改为 V<m+1>"。
 但它只在 CI 跑的那一刻看基线：之后别的 PR 带着更大的号先合入，这个 PR 的检查仍是绿的。所以**合并带迁移的 PR 之前**再看一次基线的最大号：
 
 ```sh
 git fetch origin 1.3/quizbuks
 git ls-tree -r --name-only origin/1.3/quizbuks -- backend | grep -E '^backend/quizbuks[^/]*/src/main/resources/db/migration/V[0-9]+__' \
   | sed -E 's#.*/V([0-9]+)__.*#\1#' | sort -n | tail -1      # 基线的最大号
-tools/quizbuks/migration-order.sh origin/1.3/quizbuks origin/<PR 的分支>   # 或直接再跑一次检查
+tools/check-migration-order.sh origin/1.3/quizbuks origin/<PR 的分支> 'backend/quizbuks[^/]*/src/main/resources/db/migration'   # 或直接再跑一次检查
 ```
 
 PR 的号不大于它，就先让 PR 把 `1.3/quizbuks` 合进来并改号，等 CI 再绿再合。勾了 **Require branches to be up to date** 时 GitHub 会要求先更新分支，
-更新即重跑检查，也能防住这一点。平台的迁移（`db/jabiz`）是另一条序列，不在这项检查中。
+更新即重跑检查，也能防住这一点。平台的迁移（`db/jabiz`）是另一条序列，同一检查各自核对。
 
 ## 首次部署前（在服务器上，每个环境各做一次）
 
