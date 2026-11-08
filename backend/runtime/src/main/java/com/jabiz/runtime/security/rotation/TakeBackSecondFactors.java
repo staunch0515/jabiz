@@ -65,6 +65,12 @@ class TakeBackSecondFactors implements StepHandler<NoMetadata, ProcessContext> {
             .flatMap(approved -> secondFactors(approved).collectList())
             .defaultIfEmpty(List.of())
             .flatMap(found -> {
+                // Shares the second factors' writes of this run with the re-keying (ROADMAP 17zz4).
+                int limit = finder.writeLimit(SecurityEntities.USER_MFA);
+                FindRetiredValues.budget(ctx).put(SecurityEntities.USER_MFA, limit - found.size());
+                if (found.size() >= limit) {
+                    ctx.put(KeyRotationProcesses.MORE, true);
+                }
                 ctx.put(TAKEN_BACK, found.size());
                 ctx.put(TAKEN_BACK_IDS, found.stream().map(mfa -> String.valueOf(mfa.id()))
                     .collect(java.util.stream.Collectors.toUnmodifiableSet()));
@@ -86,6 +92,6 @@ class TakeBackSecondFactors implements StepHandler<NoMetadata, ProcessContext> {
         return entityManager.queryAll(dataset, SecurityEntities.SEC_USER_MFA, EntityQuery.builder()
             .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("confirmed", true),
                 new QueryPredicate.Lt("confirmedTime", approved))))
-            .limit(finder.batchSize()).build());
+            .limit(finder.writeLimit(SecurityEntities.USER_MFA)).build());
     }
 }

@@ -1,6 +1,7 @@
 import type { APIRequestContext } from '@playwright/test'
 import { contentAdmin, totp } from './legal'
 import { adminToken, expect, insert, PASSWORD, rows, run, tokenOf, unique, verifiedUser } from './support'
+import { query } from './content'
 
 /*
  * Operators for the end-to-end tests (F-S1, docs/quizbuks/plans/impl/F-S1.md): every sponsor belongs to an operator,
@@ -42,6 +43,45 @@ export async function operatorWithLead(request: APIRequestContext, name = 'Ope')
   await insert(request, admin, USER_ROLES, { userId, roleId })
   return { operatorId: String(saved.operatorId), userId, email, operatorToken: await operatorSignIn(request, email),
     sponsorToken }
+}
+
+/** A member of the operator holding QB_OPERATOR, signed in at the operators' entry; returns the session. */
+async function newMember(request: APIRequestContext, operatorId: string, name: string): Promise<string> {
+  const email = await verifiedUser(request, 'sponsor', name)
+  const admin = await adminToken(request)
+  const userId = String((await rows(request, admin, USERS, [{ field: 'userName', op: 'eq', value: email }], 1))[0].id)
+  const hq = await tokenOf(request, await contentAdmin(request), PASSWORD, 'admin')
+  await run(request, hq, 'QB_OPERATOR_MEMBER_ADD', { operatorId, userId, lead: false })
+  const roleId = (await rows(request, admin, ROLES, [{ field: 'roleCode', op: 'eq', value: 'QB_OPERATOR' }], 1))[0].id
+  await insert(request, admin, USER_ROLES, { userId, roleId })
+  return operatorSignIn(request, email)
+}
+
+/** One reviewer per operator for this worker (a run adds its own: the tests only add data). */
+const reviewers = new Map<string, Promise<string>>()
+
+/**
+ * A session of a member of the operator that looks after the Sponsor (F-S1: reviews are the operators', decided in
+ * the Operator Management System), found as the Sponsor app finds "your operator" (`qb.sponsor.operator`). The member
+ * is not the operator's lead, so the lead's own publications are reviewed by another member, as in production.
+ */
+export async function reviewerFor(request: APIRequestContext, sponsorToken: string): Promise<string> {
+  const [own] = await query(request, sponsorToken, 'qb.sponsor.operator', {})
+  expect(own, 'the Sponsor has an operator').toBeTruthy()
+  const operatorId = String(own.operatorId)
+  let reviewer = reviewers.get(operatorId)
+  if (!reviewer) {
+    reviewer = newMember(request, operatorId, 'Reviewer')
+    reviewers.set(operatorId, reviewer)
+    reviewer.catch(() => reviewers.delete(operatorId))
+  }
+  return reviewer
+}
+
+/** The operator's member decides the Sponsor's request, as the review pages of the Operator Management System do. */
+export async function decideAsOperator(request: APIRequestContext, sponsorToken: string, requestId: unknown,
+  decision: 'APPROVE' | 'REJECT' = 'APPROVE', reason: string | null = null) {
+  return run(request, await reviewerFor(request, sponsorToken), 'APPROVAL_DECIDE', { requestId, decision, reason })
 }
 
 const OPERATORS = 'urn:jabiz:dataset:default:QbOperator'

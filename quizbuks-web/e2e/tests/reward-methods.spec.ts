@@ -1,7 +1,8 @@
 import { completeQuiz, query } from './content'
 import { contentAdmin } from './legal'
-import { adminToken, expect, expectAccessible, PASSWORD, prepareQuizbuks, rows, run, signIn, test, tokenOf } from './support'
+import { expect, expectAccessible, PASSWORD, prepareQuizbuks, rows, run, signIn, test, tokenOf } from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
+import { reviewerFor } from './operators'
 
 /**
  * The ways a reward is paid (docs/quizbuks/plans/Q22-reward-methods.md, Q22a): an administrator allows a sponsor to
@@ -20,7 +21,6 @@ type Method = 'SPONSOR_CASH' | 'OFFLINE_REDEEM'
  */
 async function rewardOwed(request: Parameters<typeof approvedSponsor>[0], method: Method) {
   const sponsor = await approvedSponsor(request, method === 'SPONSOR_CASH' ? 'Cash' : 'Prize')
-  const admin = await adminToken(request)
   const userId = (await rows(request, sponsor.token, 'urn:jabiz:dataset:sponsor:QbSponsor', []))[0].attributes.userId as string
   // Allowing the methods asks for a verified address, which the first administrator has not: a content administrator.
   const allower = await tokenOf(request, await contentAdmin(request, 'Rin'), PASSWORD, 'admin')
@@ -39,7 +39,7 @@ async function rewardOwed(request: Parameters<typeof approvedSponsor>[0], method
   const publicationId = saved.publicationId as string
   const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, admin, 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId, decision: 'APPROVE' })
+    await run(request, await reviewerFor(request, sponsor.token), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId, decision: 'APPROVE' })
   }
   const taker = await takerInJapan(request, 'Mei')
   await expect.poll(async () => {

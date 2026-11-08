@@ -19,12 +19,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Sponsors' pages (docs/quizbuks/plans/Q60-sponsor-page.md, Q60a): a draft goes to review once, is then shown to
@@ -229,7 +231,10 @@ class SponsorPageIT extends PlayItSupport {
         assertThat(sponsorHandleOf(publication)).isNull();
         // Its cover stops being public at once, not after the remembered decision's lifetime. The logo is the avatar,
         // public as an approved sponsor's (Q65b), not as the page's.
-        client.get().uri("/api/public/files/" + cover).exchange().expectStatus().isNotFound();
+        // After-commit steps (FileAccess.invalidate) run once the process has answered, so wait for the
+        // invalidation; well within the remembered decision's lifetime (60 s), so this still shows it ends at once.
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+            client.get().uri("/api/public/files/" + cover).exchange().expectStatus().isNotFound());
         client.get().uri("/api/public/files/" + logo).exchange().expectStatus().isOk();
         assertThat(run(SponsorPageProcesses.SUBMIT, token, body())).containsEntry("status", QbSponsorPages.PENDING);
         assertThat(query("SELECT count(*) AS n FROM qb_sponsor_page WHERE user_id = ?", sponsor).getFirst())

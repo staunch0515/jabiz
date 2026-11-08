@@ -8,7 +8,16 @@
 #
 # Settings (environment):
 #   DRILL_TARGET_TIME      the point in time T restored to (ISO-8601, e.g. 2026-11-06T12:00:00Z); required
-#   DRILL_RESTORE_COMMAND  optional: the backup tool's restore to T (pgBackRest, WAL-G, the provider's CLI...), timed
+#   DRILL_RESTORE_COMMAND  optional: the backup tool's restore to T (WAL-G, the provider's CLI...), timed
+#   DRILL_PGBACKREST       optional, instead of DRILL_RESTORE_COMMAND: how to run pgBackRest, whose restore to T this
+#                          script then composes, timed, always with --archive-mode=off (a restored copy must never push
+#                          its WAL into the production repository). E.g. "sudo -u postgres -E pgbackrest", or a docker
+#                          run of the database image with the backup settings and the new data directory mounted
+#   DRILL_PGBACKREST_PG_PATH  the new, empty data directory as pgBackRest sees it (required with DRILL_PGBACKREST)
+#   DRILL_PGBACKREST_STANZA   the stanza (default main)
+#   DRILL_PGBACKREST_REPO     the repository restored from (default 1: the one with point-in-time recovery)
+#   DRILL_RESTORE_ONLY     true: stop after the restore (start the restored database, then run the drill again without
+#                          a restore setting to verify it)
 #   DRILL_ENV_FILE         required: the application's settings for the copy - database (SPRING_R2DBC_*,
 #                          SPRING_FLYWAY_*), JABIZ_FILES_LOCAL_ROOT (the restored files), and the production values of
 #                          JABIZ_INTEGRITY_KEY, JABIZ_MFA_KEY and JABIZ_SEAL_KEY from their offline copy; application
@@ -26,12 +35,23 @@ set -euo pipefail
 die() { echo "restore-drill: $*" >&2; exit 2; }
 
 [[ -n "${DRILL_TARGET_TIME:-}" ]] || die "set DRILL_TARGET_TIME (the point in time restored to)"
-[[ -f "${DRILL_ENV_FILE:-}" ]] || die "set DRILL_ENV_FILE to the copy's settings"
-[[ -n "${DRILL_IMAGE:-}" || -n "${DRILL_JAR:-}" ]] || die "set DRILL_IMAGE or DRILL_JAR"
-for key in JABIZ_INTEGRITY_KEY JABIZ_MFA_KEY; do
-  grep -q "^$key=." "$DRILL_ENV_FILE" || die "$DRILL_ENV_FILE has no $key: the copy needs production's"
-done
 date -u -d "$DRILL_TARGET_TIME" >/dev/null 2>&1 || die "DRILL_TARGET_TIME is not a time: $DRILL_TARGET_TIME"
+restore_only=${DRILL_RESTORE_ONLY:-false}
+if [[ -n "${DRILL_PGBACKREST:-}" ]]; then
+  [[ -z "${DRILL_RESTORE_COMMAND:-}" ]] || die "set DRILL_PGBACKREST or DRILL_RESTORE_COMMAND, not both"
+  [[ -n "${DRILL_PGBACKREST_PG_PATH:-}" ]] || die "set DRILL_PGBACKREST_PG_PATH to the new, empty data directory"
+elif [[ "${DRILL_RESTORE_COMMAND:-}" == *pgbackrest*restore* && "${DRILL_RESTORE_COMMAND:-}" != *--archive-mode=off* ]]; then
+  die "a pgBackRest restore for a drill needs --archive-mode=off (or use DRILL_PGBACKREST): the copy would push its WAL into the production repository"
+fi
+if [[ "$restore_only" == true ]]; then
+  [[ -n "${DRILL_PGBACKREST:-}${DRILL_RESTORE_COMMAND:-}" ]] || die "DRILL_RESTORE_ONLY needs DRILL_PGBACKREST or DRILL_RESTORE_COMMAND"
+else
+  [[ -f "${DRILL_ENV_FILE:-}" ]] || die "set DRILL_ENV_FILE to the copy's settings"
+  [[ -n "${DRILL_IMAGE:-}" || -n "${DRILL_JAR:-}" ]] || die "set DRILL_IMAGE or DRILL_JAR"
+  for key in JABIZ_INTEGRITY_KEY JABIZ_MFA_KEY; do
+    grep -q "^$key=." "$DRILL_ENV_FILE" || die "$DRILL_ENV_FILE has no $key: the copy needs production's"
+  done
+fi
 
 started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 record=${DRILL_RECORD:-restore-drill-$(date -u +%Y-%m-%d).md}
@@ -40,12 +60,34 @@ trap 'rm -rf "$work"' EXIT
 chmod 777 "$work"   # the image's user writes the reports here
 
 restore_seconds=""
-if [[ -n "${DRILL_RESTORE_COMMAND:-}" ]]; then
+if [[ -n "${DRILL_PGBACKREST:-}" ]]; then
+  # The recovery target as PostgreSQL reads it; the copy is promoted at T and never archives.
+  target=$(date -u -d "$DRILL_TARGET_TIME" '+%Y-%m-%d %H:%M:%S+00')
+  echo "restoring with pgBackRest to $target (repo ${DRILL_PGBACKREST_REPO:-1}) into $DRILL_PGBACKREST_PG_PATH"
+  t0=$SECONDS
+  # shellcheck disable=SC2086 # DRILL_PGBACKREST is a command with its arguments
+  $DRILL_PGBACKREST --stanza="${DRILL_PGBACKREST_STANZA:-main}" --repo="${DRILL_PGBACKREST_REPO:-1}" \
+    --pg1-path="$DRILL_PGBACKREST_PG_PATH" --type=time --target="$target" --target-action=promote \
+    --archive-mode=off restore
+  restore_seconds=$((SECONDS - t0))
+  echo "restored in ${restore_seconds}s"
+elif [[ -n "${DRILL_RESTORE_COMMAND:-}" ]]; then
   echo "restoring: $DRILL_RESTORE_COMMAND"
   t0=$SECONDS
   bash -c "$DRILL_RESTORE_COMMAND"
   restore_seconds=$((SECONDS - t0))
   echo "restored in ${restore_seconds}s"
+fi
+if [[ "$restore_only" == true ]]; then
+  {
+    echo "# Restore drill $started (restore only)"
+    echo
+    echo "- Target time T: $DRILL_TARGET_TIME"
+    echo "- Restore: ${restore_seconds}s"
+    echo "- Next: start the restored database (archiving off), then run this script again without a restore setting"
+  } >"$record"
+  echo "restore only: record in $record"
+  exit 0
 fi
 
 # verify <name> [NAME=value...]: one run in verification mode with these settings over the env file's; writes

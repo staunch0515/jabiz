@@ -1,6 +1,7 @@
 # QuizBuks — 上线检查清单（Q10d）
 
 正式开放（Stripe 正式模式、真实用户）之前逐项确认，每项写上确认人、日期与依据（文档、记录或链接）。操作细节见 `operations.md`，切换正式模式的技术检查在其 §4。
+平台的各项（设置检查、告警试发、恢复演练与密钥轮换等）按顺序排在 `launch-day-platform-steps.md`。
 任何一项不成立都不上线；确需带着未完成项上线的，由需求方书面决定并写在本页末尾。
 
 ## 法务与合规
@@ -60,7 +61,7 @@
 ## 安全
 
 - [ ] **安全审查（Q10b）**的发现全部关闭（或逐条由需求方接受并记录），含已登记的跟进（题目图片原始文件名、保留期）
-- [ ] 依赖与镜像的已知漏洞已评估（`gradle dependencies`、`pnpm audit`、镜像扫描）
+- [x] 依赖与镜像的已知漏洞已评估（`gradle dependencies`、`pnpm audit`、镜像扫描）——S1，2026-11-08；依据 `security/dependency-review.md`：高、严重的条目或已升级（平台 #523、#524，QuizBuks #522、#527），或逐条说明够不到；#527 的 CI 镜像报告中应用镜像为 0
 - [ ] **全部管理员都有二次验证**；管理员角色设了"要求二次验证"；没有共用账号；首个管理员的 `JABIZ_BOOTSTRAP_ADMIN_*` 已从环境中删去
 - [ ] **至少两位超级管理员**（`QB_ADMIN_SUPER`，平台 16u，D51）在职、各自二次验证，按 `operations.md` §3 第 4–5 步的顺序建立（`QB_SETUP` 与职责分离规则的发布在第二位之前）；建立期已结束（`sec_protected_grants_armed` 有一行），试过一次由一位申请、另一位审批的角色分配；`JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED` 未设
 - [ ] **密钥已从任何演示或测试的值轮换**：`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY`、数据库密码、Stripe 密钥与签名密钥、SMTP、Google、Facebook 与 LINE 的客户端密钥都是为生产新生成的，没有在本机演示、e2e、压测或测试服务器上用过；`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本已保存
@@ -87,6 +88,13 @@
 - [ ] **短视频**（F-S10，`operations.md` §7.25）：`QB_SETUP` 已建 `qb.feed.shorts.positions` / `.per-shelf`；帮助"短视频"（`docs/quizbuks/help/shorts.md`）已由内容管理员发布为学者与发起方的 FAQ
 - [ ] 值班与联系方式：Stripe 支持、邮件服务商、数据库托管方
 - [ ] 本清单与 `operations.md` 中的步骤由将要值班的人读过
+
+## 测试环境（staging）
+
+- [ ] **更换 `JABIZ_SEAL_KEY` 之前**（含恢复演练的 `DRILL_ROTATE=true` 用的是测试库时）：迁移 V84 之前保存的 Shopify 访问令牌行没有店铺地址（`qbs_shop_token.shop_domain` 为空），
+      密钥轮换解不开它们（计为 `unreadable`，留在旧密钥下）。Shopify 不在首次上线中，这样的行只在测试库里：先重置测试库，或在内嵌页中重新连接店铺（`QBS_SHOP_CONNECT` 写入地址），再换密钥
+      （`plans/impl/F-F14-sealed-fields.md`）
+- [ ] **换 `JABIZ_SEAL_KEY` 之前重置测试库，或请数字产品的提供方重新装入码**（平台 D78，V81）：V81 之前由提供方装入码池的码没有记下装码人（`QbDigitalCode.fulfillerId`），换密钥后平台的 `jabiz.key-rotation` 以发布方为上下文算不出、打不开，记为 `unreadable` 并原样保留；正式环境从 V81 之后才有数据，不受影响
 
 ## 带着未完成项上线的决定
 

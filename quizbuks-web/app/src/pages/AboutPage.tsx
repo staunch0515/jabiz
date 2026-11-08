@@ -11,8 +11,9 @@ export const APP_VERSION = __QB_APP_VERSION__
 export const APP_BUILT_AT = __QB_APP_BUILT_AT__
 
 /**
- * About the app (U-74): its name, version and build date, and signing out. Readable without signing in; the frame of
- * the public pages links the help centre and the texts below it.
+ * About the app (U-74): its name, version and build date, the third-party data it uses (the IP address database's
+ * attribution, CC BY 4.0, F-S11), and signing out. Readable without signing in; the frame of the public pages links the
+ * help centre and the texts below it.
  */
 export function AboutPage() {
   const { t } = useTranslation(APP)
@@ -27,6 +28,14 @@ export function AboutPage() {
         { label: t('about.built'), value: <span data-testid="about-built">
           {APP_BUILT_AT ? formatDateTime(APP_BUILT_AT) : '—'}</span> },
       ]} />
+      <section className="flex flex-col gap-2" aria-labelledby="about-third-party" data-testid="about-third-party">
+        <h2 id="about-third-party" className="text-base font-semibold">{t('about.thirdParty')}</h2>
+        <p className="text-muted-foreground text-sm">
+          {t('about.dbIp')}{' '}
+          <a className="underline" href="https://db-ip.com" target="_blank" rel="noopener noreferrer"
+            data-testid="about-db-ip">db-ip.com</a>
+        </p>
+      </section>
       {auth?.signedIn && (
         <Button variant="outline" className="self-start" data-testid="about-sign-out"
           onClick={() => void auth.signOut().then(() => {
