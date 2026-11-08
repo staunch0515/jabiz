@@ -90,6 +90,11 @@ public final class AttemptFinishing {
     /** Events for the takers' messages (Q7): a reward paid, a reward pending. */
     public static final String SETTLED_EVENT = "qb.reward.settled";
     public static final String PENDING_EVENT = "qb.reward.pending";
+    /**
+     * F-S2b1: a pass of a publication bound to a knowledge graph's node; its consumer evaluates the node outside the
+     * answering (none is published for any other completion).
+     */
+    public static final String TREE_PASSED_EVENT = "qb.tree.passed";
     /** Q22: a reward owed in cash by the sponsor, a prize to collect at the sponsor's place. */
     public static final String CASH_EVENT = "qb.reward.cash-due";
     public static final String REDEEM_EVENT = "qb.reward.redeem-due";
@@ -376,7 +381,9 @@ public final class AttemptFinishing {
             .step("Announce a prize", PublishEvent.<ProcessContext>when(
                 ctx -> announced(ctx, RewardStatus.REDEEM), REDEEM_EVENT, AttemptFinishing::payload))
             .step("Announce a digital prize", PublishEvent.<ProcessContext>when(
-                ctx -> announced(ctx, RewardStatus.DIGITAL), DIGITAL_EVENT, AttemptFinishing::payload));
+                ctx -> announced(ctx, RewardStatus.DIGITAL), DIGITAL_EVENT, AttemptFinishing::payload))
+            .step("Announce a pass of a node", PublishEvent.<ProcessContext>when(AttemptFinishing::passedANode,
+                TREE_PASSED_EVENT, AttemptFinishing::nodePayload));
     }
 
     private static Plan plan(ProcessContext ctx) {
@@ -390,6 +397,22 @@ public final class AttemptFinishing {
     private static boolean announced(ProcessContext ctx, String rewardStatus) {
         return !ctx.hasViolations() && settlement(ctx) != null
             && rewardStatus.equals(settlement(ctx).rewardStatus());
+    }
+
+    /** Whether the attempt passed a publication bound to a node (the card says so, as frozen). */
+    private static boolean passedANode(ProcessContext ctx) {
+        Plan plan = plan(ctx);
+        return plan != null && plan.passed() && plan.card() != null && plan.card().get("treeNodeId") != null;
+    }
+
+    private static Map<String, Object> nodePayload(ProcessContext ctx) {
+        Plan plan = ctx.get(PLAN, Plan.class);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("attemptId", String.valueOf(plan.attempt().id()));
+        payload.put("userId", plan.attempt().get("userId"));
+        payload.put("treeId", plan.card().get("treeId"));
+        payload.put("nodeId", plan.card().get("treeNodeId"));
+        return payload;
     }
 
     private static Map<String, Object> payload(ProcessContext ctx) {

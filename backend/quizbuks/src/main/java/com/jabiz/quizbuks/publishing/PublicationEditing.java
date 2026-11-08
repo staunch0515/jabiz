@@ -631,7 +631,9 @@ final class PublicationEditing {
             // Q89b-1: the purchase the prizes come from and who hands them over.
             "benefitPurchaseId", "fulfillerId",
             // Q88b: the entry fee the start charges.
-            "entryFee")) {
+            "entryFee",
+            // F-S2b1: the node it is bound to.
+            "treeId", "treeNodeId")) {
             card.put(field, publication.get(field));
         }
         if (card.get("regions") == null) {
@@ -832,6 +834,11 @@ final class PublicationEditing {
         // was paid, the proofs): the reviewer approves it with the publication, and a change of it is reviewed again.
         if (publication.get("benefitSnapshot") != null) {
             content.put("benefit", publication.get("benefitSnapshot"));
+        }
+        // F-S2b1: the node it lights, when bound to one (so the approvals of the others stand).
+        if (publication.get("treeNodeId") != null) {
+            content.put("treeId", publication.get("treeId"));
+            content.put("treeNodeId", publication.get("treeNodeId"));
         }
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));
     }

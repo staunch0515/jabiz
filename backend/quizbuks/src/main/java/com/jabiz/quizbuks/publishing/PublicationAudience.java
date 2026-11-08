@@ -96,6 +96,9 @@ public final class PublicationAudience {
                     params.put("publicationId", String.valueOf(ctx.get(PUB_ID)));
                     params.put("regions", publication == null ? null : publication.get("regions"));
                     params.put("publisherId", publication == null ? null : publication.get("publisherId"));
+                    // F-S2b1: the node it is bound to, whose conditions before answering count too.
+                    params.put("treeId", publication == null ? null : publication.get("treeId"));
+                    params.put("treeNodeId", publication == null ? null : publication.get("treeNodeId"));
                     params.put("at", ctx.opTime());
                     return params;
                 }, COUNTED))

@@ -1,7 +1,7 @@
 /*---
 id: qb.system.audience-count
-description: How many takers a publication's regions, matching conditions (Q47) and prerequisites (Q76) reach now, exactly; run by QB_AUDIENCE_COUNT only, which rounds it
-entities: [SecUser, QbProfile, QbCountry, QbUserBan, QbProfileAttribute, QbPublicationCriterion, QbPublicationPrerequisite, QbAttempt, QbCertificationRound, QbCertificationRecord, QbSponsorCertification]
+description: How many takers a publication's regions, matching conditions (Q47) and prerequisites (Q76) and knowledge graph node (F-S2b1) reach now, exactly; run by QB_AUDIENCE_COUNT only, which rounds it
+entities: [SecUser, QbProfile, QbCountry, QbUserBan, QbProfileAttribute, QbPublicationCriterion, QbPublicationPrerequisite, QbAttempt, QbCertificationRound, QbCertificationRecord, QbSponsorCertification, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   QbProfile: urn:jabiz:dataset:default:QbProfile
   QbCountry: urn:jabiz:dataset:default:QbCountry
@@ -13,10 +13,15 @@ datasets:
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:default:QbCertificationRecord
+  QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
+  QbTreeLit: urn:jabiz:dataset:default:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
 params:
   publicationId: { like: QbPublicationCriterion.publicationId, required: true, description: The publication whose conditions count }
   regions:       { kind: { type: text, maxLength: 64 }, description: "The publication's regions (comma separated); none is GLOBAL" }
   publisherId:   { kind: { type: text, maxLength: 128 }, description: "The publisher, never counted (their own publication is not theirs to answer)" }
+  treeId:        { like: QbTreeNode.treeId, description: "F-S2b1: the knowledge graph of the node the publication is bound to (with treeNodeId)" }
+  treeNodeId:    { like: QbTreeNode.nodeId, description: "F-S2b1: the node the publication is bound to; none: no node" }
   at:            { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The time counted for (an age is the years since the birth year in UTC)" }
 results:
   takers: { kind: { type: numeric, precision: 9, scale: 0 } }
@@ -89,3 +94,17 @@ WHERE string_to_array(coalesce(CAST(:regions AS text), 'GLOBAL'), ',') && string
                                        WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
                                          AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'
                                              AND rv.{{QbCertificationRecord.userId}} = p.{{QbProfile.userId}}), '-infinity')))))
+  -- F-S2b1: a publication bound to a knowledge graph's node is for whoever has lit, now, every node it wants lit before
+  -- answering, while the node is in effect (tree.TreeLights and play.TreeGate are the definition; TreeLightsIT compares).
+  AND (CAST(:treeNodeId AS text) IS NULL OR EXISTS (
+      SELECT 1 FROM {{QbTreeNode}} tn
+      WHERE tn.{{QbTreeNode.treeId}} = CAST(:treeId AS text) AND tn.{{QbTreeNode.nodeId}} = CAST(:treeNodeId AS text)
+        AND tn.{{QbTreeNode.active}}
+        AND NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM {{QbTreeLit}} tl
+                WHERE tl.{{QbTreeLit.nodeId}} = ba.node
+                  AND tl.{{QbTreeLit.subjectKind}} = 'USER' AND tl.{{QbTreeLit.subjectId}} = p.{{QbProfile.userId}}
+                  AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                                  WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text))))))

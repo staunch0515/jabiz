@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral, QbPublicationPrerequisite, QbSponsorCertification]
+entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral, QbPublicationPrerequisite, QbSponsorCertification, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
@@ -21,6 +21,9 @@ datasets:
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
+  QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
+  QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
   QbReferral: urn:jabiz:dataset:referee:QbReferral
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
   QbInvitation: urn:jabiz:dataset:me:QbInvitation
@@ -77,6 +80,9 @@ results:
   regionBlocked:  { kind: { type: bool } }
   matched:        { kind: { type: bool } }
   prerequisitesMet: { kind: { type: bool } }
+  treeId:         { from: QbPublicationCard.treeId }
+  treeNodeId:     { from: QbPublicationCard.treeNodeId }
+  nodeUnlocked:   { kind: { type: bool } }
   prerequisites:  { kind: { type: text } }
   heldUntil:      { from: QbCertificationRecord.validUntil }
   certification:  { from: QbCertificationRound.certification }
@@ -142,11 +148,14 @@ SELECT
     d.last7d AS last7d,
     d.last30d AS last30d,
     d.statsAt AS statsAt,
-    (d.shown AND d.startable AND d.matched AND d.prerequisitesMet AND d.heldUntil IS NULL AND d.myAttemptId IS NULL
-     AND NOT d.regionBlocked) AS canStart,
+    (d.shown AND d.startable AND d.matched AND d.prerequisitesMet AND d.nodeUnlocked AND d.heldUntil IS NULL
+     AND d.myAttemptId IS NULL AND NOT d.regionBlocked) AS canStart,
     d.regionBlocked AS regionBlocked,
     d.matched AS matched,
     d.prerequisitesMet AS prerequisitesMet,
+    d.treeId AS treeId,
+    d.treeNodeId AS treeNodeId,
+    d.nodeUnlocked AS nodeUnlocked,
     d.prerequisites AS prerequisites,
     d.heldUntil AS heldUntil,
     d.certification AS certification,
@@ -293,6 +302,23 @@ SELECT
                      AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
                                           WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
                                             AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity'))))) AS prerequisitesMet,
+    -- F-S2b1: bound to a knowledge graph's node, the caller has lit now every node it wants lit before answering, and
+    -- the node is in effect (tree.TreeLights and play.TreeGate are the definition; qb.app.feed and
+    -- qb.system.audience-count write the same; TreeLightsIT compares). The view holds the caller's own records only.
+    c.{{QbPublicationCard.treeId}} AS treeId,
+    c.{{QbPublicationCard.treeNodeId}} AS treeNodeId,
+    (c.{{QbPublicationCard.treeNodeId}} IS NULL OR EXISTS (
+         SELECT 1 FROM {{QbTreeNode}} tn
+         WHERE tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}}
+           AND tn.{{QbTreeNode.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
+           AND tn.{{QbTreeNode.active}}
+           AND NOT EXISTS (
+               SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM {{QbTreeLit}} tl
+                   WHERE tl.{{QbTreeLit.nodeId}} = ba.node
+                     AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                                     WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))))) AS nodeUnlocked,
     -- Q76 (D-Q76-3): what to do first, each with its name in the page's language (the required publication's card,
     -- when it has one: a required publication was submitted, so it has one once live), whether the caller met it, and
     -- whether it still accepts attempts (its page says why not otherwise).

@@ -1,7 +1,7 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [SysParam, QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification]
+entities: [SysParam, QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
@@ -20,6 +20,9 @@ datasets:
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
+  QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
+  QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
 params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
@@ -279,6 +282,19 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
          AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
                               WHERE rv.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
                                 AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) IS NULL
+  -- F-S2b1: a publication bound to a knowledge graph's node is for whoever has lit, now, every node it wants lit before
+  -- answering, while the node is in effect (tree.TreeLights and play.TreeGate are the definition; TreeLightsIT compares).
+  AND (c.{{QbPublicationCard.treeNodeId}} IS NULL OR EXISTS (
+      SELECT 1 FROM {{QbTreeNode}} tn
+      WHERE tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}} AND tn.{{QbTreeNode.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
+        AND tn.{{QbTreeNode.active}}
+        AND NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM {{QbTreeLit}} tl
+                WHERE tl.{{QbTreeLit.nodeId}} = ba.node
+                  AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                                  WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text))))))
   -- F-S11: from mainland China (the page passes what the platform's clientRegion() said; the start checks the address
   -- itself), a publication whose card has a foreign video, or none recorded yet, is not for the caller unless an exception
   -- of headquarters is in force (the public dataset holds those not revoked; region.RegionRules is the one definition).

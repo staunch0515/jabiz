@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * caches, the sponsor's wallet row there), as in production.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = "it.sql-log.enabled=true")
-class AttemptStatementBudgetIT extends PlayItSupport {
+class AttemptStatementBudgetIT extends TreeItSupport {
 
     // ---- budgets: [Q10a, before platform phase 16p-1 / with 16p-1 merged, before Q10a3's changes] ------------------
     // Each has two numbers (as the platform's StatementBudgetIT): with the transaction's writes held (platform phase
@@ -180,6 +180,51 @@ class AttemptStatementBudgetIT extends PlayItSupport {
         report("QB_ATTEMPT_START (prerequisites)", start);
         assertBudget("QB_ATTEMPT_START (prerequisites)", start, budget(START_TOTAL) + 1, budget(START_LOCKED));
         assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(advanced));
+    }
+
+    /**
+     * F-S2b1: a publication bound to a knowledge map node reads the node's row with the caller's lit records and
+     * revocations, one statement more outside the start lock; the lock's part is an ordinary start's. Its pass sends
+     * {@code qb.tree.passed} for the lighting outside the answering: held, the event goes with the other writes (the
+     * paid submission's budget, unchanged); per commit, one statement of its own under the lock.
+     */
+    @Test
+    void aStartAndAPassOfAPublicationBoundToANode() {
+        warmUp();
+        String sponsor = newSponsor("s-budget-node");
+        credit(sponsor, 100_000);
+        Map3 map = map(sponsor);
+        Map<String, Object> global = Map.of("regions", List.of("GLOBAL"), "maxWinners", 100_000, "budgetCap",
+            1_000_000);
+        String basics = liveBound(sponsor, "Budget node basics", map.treeId(), map.basics(), global);
+        String advanced = liveBound(sponsor, "Budget node advanced", map.treeId(), map.advanced(), global);
+        // Warm: a taker who lit the basics starts and passes the advanced one, as counted below for the next.
+        String warm = newTaker("t-budget-node-warm-" + UUID.randomUUID(), null);
+        play(warm, basics, true, true);
+        deliverEvents();
+        play(warm, advanced, true, true);
+        String userId = newTaker("t-budget-node-" + UUID.randomUUID(), null);
+        play(userId, basics, true, true);
+        deliverEvents();
+        String token = taker(userId);
+
+        SqlStatementLog.clear();
+        Map<String, Object> started = keyed("QB_ATTEMPT_START", token, body("publicationId", advanced));
+        List<List<String>> start = SqlStatementLog.transactions();
+        report("QB_ATTEMPT_START (bound to a node)", start);
+        assertBudget("QB_ATTEMPT_START (bound to a node)", start, budget(START_TOTAL) + 1, budget(START_LOCKED));
+        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(advanced));
+
+        SqlStatementLog.clear();
+        Map<String, Object> submitted = keyed("QB_ATTEMPT_SUBMIT", token, body("attemptId", started.get("attemptId"),
+            "publicationId", advanced, "currentIndex", 1, "answers", shown((String) started.get("attemptId"),
+                answers(true, true))));
+        assertThat(submitted).containsEntry("passed", true);
+        List<List<String>> submit = SqlStatementLog.transactions();
+        report("QB_ATTEMPT_SUBMIT (a node's pass)", submit);
+        int event = batching.acrossTransaction() ? 0 : 1;
+        assertBudget("QB_ATTEMPT_SUBMIT (a node's pass)", submit, budget(SUBMIT_TOTAL) + event,
+            budget(SUBMIT_LOCKED) + event);
     }
 
     /**

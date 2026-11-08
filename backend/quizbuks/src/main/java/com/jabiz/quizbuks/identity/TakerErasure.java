@@ -81,7 +81,11 @@ public class TakerErasure {
                         "resolveNote"),
                     ErasedEntity.keep(QbRewards.REDEMPTION, "userId", "voidNote"),
                     // Q49a: their reports stay for the review under way; what they wrote goes.
-                    ErasedEntity.keep(QbReports.REPORT, "reporterId", "note"));
+                    ErasedEntity.keep(QbReports.REPORT, "reporterId", "note"),
+                    // F-S2b1: the nodes they lit stay as records holding their id only (the nodes' counts rest on
+                    // them); what lit them and why a lighting was revoked go.
+                    ErasedEntity.keep(com.jabiz.quizbuks.tree.QbTrees.LIT, "subjectId", "basis"),
+                    ErasedEntity.keep(com.jabiz.quizbuks.tree.QbTrees.REVOCATION, "subjectId", "reason"));
             }
 
             @Override

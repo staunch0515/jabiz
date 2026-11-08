@@ -65,11 +65,16 @@ public final class PlayCodes {
     public static final String ENTRY_FEE_SHORT = "QB_ENTRY_FEE_SHORT";
     /** Q76: the taker has not yet passed (or answered) a publication this one requires. */
     public static final String PREREQUISITE_NOT_MET = "QB_PREREQUISITE_NOT_MET";
+    /** F-S2b1: a node to be lit before answering the publication's node is not lit by the taker. */
+    public static final String TREE_NOT_UNLOCKED = "QB_TREE_NOT_UNLOCKED";
+    /** F-S2b1: the node the publication is bound to is no longer in effect. */
+    public static final String TREE_NODE_CLOSED = "QB_TREE_NODE_CLOSED";
 
     public static final List<String> ALL = List.of(TOO_FAST, NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
         ALREADY_TAKEN, VERSION_CHANGED, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
         FEE_RATE_INVALID, REWARD_PENDING, REWARD_CASH, REWARD_REDEEM, REWARD_DIGITAL,
-        REWARD_DIGITAL_DUE, LANGUAGE, WATCH_REQUIRED, PREREQUISITE_NOT_MET, ENTRY_FEE_SHORT);
+        REWARD_DIGITAL_DUE, LANGUAGE, WATCH_REQUIRED, PREREQUISITE_NOT_MET, ENTRY_FEE_SHORT, TREE_NOT_UNLOCKED,
+        TREE_NODE_CLOSED);
 
     private PlayCodes() {}
 }

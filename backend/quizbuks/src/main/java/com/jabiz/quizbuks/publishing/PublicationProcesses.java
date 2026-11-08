@@ -103,6 +103,10 @@ public final class PublicationProcesses {
      *                          set, as the save writes the whole draft); none shows the cover chosen otherwise
      * @param assets            F-C1b: the assets of the sponsor's library the console copied parts of the draft from;
      *                          a part given none keeps its record as it is
+     * @param treeId            F-S2b1: the knowledge graph of the node the publication is bound to (with
+     *                          {@code treeNodeId}, or neither): a node in effect asking for a pass, of the sponsor's
+     *                          own graph or, for an operator's direct Sponsor, of the platform's graph Takers light
+     * @param treeNodeId        F-S2b1: that node; none binds the publication to no node
      */
     public record SaveInput(UUID publicationId, UUID versionId, @NotNull String name, List<@NotNull String> regions,
         Instant startAt, Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap,
@@ -117,7 +121,22 @@ public final class PublicationProcesses {
             @Size(max = PublishingLimits.REDEEM_DESCRIPTION_LENGTH + 1) String>> translations,
         @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed, Integer pickCount,
         @Size(max = 36) String benefitPurchaseId, BigDecimal entryFee,
-        @Size(max = 3) Map<@NotNull @Size(max = 2) String, UUID> covers, PublicationAssets assets) {
+        @Size(max = 3) Map<@NotNull @Size(max = 2) String, UUID> covers, PublicationAssets assets,
+        @Size(max = 36) String treeId, @Size(max = 36) String treeNodeId) {
+
+        /** As before F-S2b1: bound to no node. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription, String audience,
+            String digitalDelivery, String digitalDescription, Integer digitalSendDays, String digitalContent,
+            UUID cover, ReferralInput referral, List<String> languages,
+            Map<String, Map<String, String>> translations, List<String> confirmed, Integer pickCount,
+            String benefitPurchaseId, BigDecimal entryFee, Map<String, UUID> covers, PublicationAssets assets) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
+                confirmed, pickCount, benefitPurchaseId, entryFee, covers, assets, null, null);
+        }
 
         /** As before F-C1b: nothing from the asset library. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
@@ -329,6 +348,11 @@ public final class PublicationProcesses {
             .steps(PublicationAudience::loadCriteria)
             // Q88a (D-Q88-5): a round of a certification may pay nothing; the problems say so as submitting would.
             .steps(PublicationRounds::load)
+            // F-S2b1: the node it is bound to, its graph, and whether the caller is an operator's direct Sponsor.
+            .steps(b -> PublicationNodes.load(b, ctx -> {
+                SaveInput input = ctx.get(INPUT, SaveInput.class);
+                return PublicationNodes.binding(input.treeId(), input.treeNodeId());
+            }))
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
             // Q64: who uploaded the covers given (Q98b: in each language too), which must be the sponsor's own files.
@@ -499,6 +523,10 @@ public final class PublicationProcesses {
         values.put("maxWinners", decimal(input.maxWinners()));
         // Q81: before the version's part, whose full score depends on it.
         values.put("pickCount", decimal(input.pickCount()));
+        // F-S2b1: the node it is bound to (checked with the problems below, and again on submission).
+        boolean bound = input.treeNodeId() != null && !input.treeNodeId().isBlank();
+        values.put("treeId", bound && input.treeId() != null ? input.treeId().strip() : null);
+        values.put("treeNodeId", bound && input.treeId() != null ? input.treeNodeId().strip() : null);
         // Q88b (D-Q88-9, D-Q88-14): the entry fee, none by default; set only while the switch is on.
         BigDecimal entryFee = input.entryFee() == null ? BigDecimal.ZERO : input.entryFee();
         if (entryFee.signum() > 0 && !PublicationEditing.entryFeeEnabled(ctx)) {
@@ -710,7 +738,10 @@ public final class PublicationProcesses {
         List<TierCoverage.Tier> ranges = tiers.stream().map(TierPlan::tier).toList();
         List<Violation> problems = new ArrayList<>(PublicationReadiness.check(PublicationEditing.draftOf(values),
             ranges, PublicationEditing.snapshot(version), ctx.opTime(), PublicationEditing.maxRewardPerAttempt(ctx),
-            PublicationRounds.isRound(ctx)));
+            PublicationRounds.isRound(ctx) || values.get("treeNodeId") != null));
+        // F-S2b1: the node it is bound to.
+        problems.addAll(PublicationNodes.problems(ctx, ctx.request().actorId(), (String) values.get("treeId"),
+            (String) values.get("treeNodeId")));
         // What submitting would also say: the caller is no approved sponsor, or is banned (D-Q2-6); the method is
         // one they may not use (Q22: a copy of a publication made before the method was taken away).
         problems.addAll(PublicationEditing.sponsorProblems(ctx));
@@ -789,6 +820,8 @@ public final class PublicationProcesses {
             .steps(PublicationEditing::loadTiers)
             .steps(PublicationAudience::loadCriteria)
             .steps(PublicationPrerequisites::load)
+            // F-S2b1: the node the source is bound to, which the copy keeps (its problems say if no longer usable).
+            .steps(b -> PublicationNodes.load(b, ctx -> PublicationNodes.binding(PublicationEditing.publication(ctx))))
             .steps(PublicationEditing::loadSponsor)
             .steps(PublicationEditing::loadSponsorMethods)
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
@@ -824,7 +857,9 @@ public final class PublicationProcesses {
             // Q89b-1: the purchase, as the source saw it; the copy's submission checks it again.
             "benefitPurchaseId", "benefitSnapshot", "fulfillerId",
             // Q88b: the entry fee (the copy keeps it whatever the switch says now: what was set stays set).
-            "entryFee")) {
+            "entryFee",
+            // F-S2b1: the node (the copy's submission checks it again).
+            "treeId", "treeNodeId")) {
             values.put(field, source.get(field));
         }
         values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));

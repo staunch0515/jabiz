@@ -327,6 +327,15 @@ public final class AttemptProcesses {
                         PrerequisiteRows.refuse(ctx, "publicationId");
                     }
                 })
+                // F-S2b1: a publication bound to a knowledge graph's node reads the node's row with the caller's lit
+                // records and revocations, one statement more before the lock (an ordinary publication's queries are
+                // empty and send nothing); the nodes to be lit before answering must be.
+                .steps(b -> TreeGate.load(b, ctx -> starting(ctx) ? first(ctx, CARD_BEFORE) : null))
+                .compute("Refuse a node not unlocked", (metadata, ctx) -> {
+                    if (starting(ctx)) {
+                        TreeGate.refuse(ctx, "publicationId", first(ctx, CARD_BEFORE));
+                    }
+                })
                 // Q88b (D-Q88-10, D-Q88-12): a publication charging an entry fee takes the caller's wallet lock
                 // before the publication's start lock (nobody takes them the other way round: completions take the
                 // publication's and the sponsor's wallet's, syncs and transfers the taker's alone) and reads under it

@@ -34,6 +34,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_SPONSOR_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_SPONSOR_PAGE_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_TREE_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_TREE_EVALUATE", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_BAN_PAUSE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_BENEFIT_PAUSE", ProcessAccess.SUB_PROCESS_ONLY),
