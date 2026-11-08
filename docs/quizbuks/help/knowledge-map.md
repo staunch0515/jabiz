@@ -23,6 +23,10 @@
 
 平台图上的一些节点点亮后会开放平台的功能，例如推荐朋友；发起方点亮相应的节点后可以提供或赞助权益。功能没有开放时，相应的页面会说明要点亮哪个节点。撤销点亮后功能随之关闭。
 
+### 中文 · 为什么我看不到某个 Quiz？
+
+绑定知识结构图节点的 Quiz，要先点亮这个节点要求"答题前点亮"的节点才能看到：在那之前，首页不列出它，打开链接也显示找不到，收件箱里关于它的通知也不显示。点亮要求的节点后它就会出现，页面上写着它的节点"合格即点亮"；合格后写"已点亮"。已经答过的 Quiz，随时都能看自己的结果。
+
 ### 日本語 · 知識マップとは何ですか？
 
 知識マップは、ある分野で学ぶことを一枚の図にまとめたものです。ノードはひとつの知識や力を表し、ノードをつなぐ線は「何を先に、何を後に学ぶか」を表します。プラットフォームのマップのほか、主催者が自分のマップを持つこともあります。
@@ -38,6 +42,10 @@
 
 プラットフォームのマップには、点灯すると機能が使えるようになるノードがあります。たとえば友だち紹介です。主催者は該当するノードを点灯すると、特典の提供や協賛ができるようになります。使えないときは、その画面にどのノードを点灯すればよいかが表示されます。点灯が取り消されると、その機能も使えなくなります。
 
+### 日本語 · 見えないクイズがあるのはなぜですか？
+
+知識マップのノードに結び付いたクイズは、そのノードが「回答前に点灯が必要」とするノードを先に点灯すると見えるようになります。それまではホームに出ず、リンクを開いても見つからないと表示され、そのクイズについての受信箱のお知らせも表示されません。必要なノードを点灯すると現れ、ページにはそのノードが「合格で点灯」と書かれます。合格すると「点灯済み」になります。回答したクイズは、いつでも自分の結果を見られます。
+
 ### English · What is a knowledge map?
 
 A knowledge map lays out what there is to learn in a field as one picture: each node is a piece of knowledge or a skill, and the lines between nodes show what to learn first and what comes next. The platform has its own maps, and a Sponsor may have one too.
@@ -52,6 +60,10 @@ If a lighting was wrong (for example, answers were shared), the operator or the 
 ### English · What does lighting a node unlock?
 
 Some nodes of the platform's maps unlock a feature once lit, such as referring friends; a Sponsor who lights the matching node may provide or sponsor benefits. While a feature is not open, its page says which node to light. If a lighting is revoked, the feature closes again.
+
+### English · Why can't I see a quiz?
+
+A quiz bound to a knowledge map node shows once you have lit the nodes it needs lit before answering: until then it is not on your home, its link says it cannot be found, and inbox notices about it do not show. Once those nodes are lit it appears, and its page says passing lights its node; after you pass, the node shows as lit. A quiz you have answered always shows your own result.
 
 ## 二、给发起方（FAQ 的 `audience` = `SPONSOR`，分类 `PUBLISHING`）
 
