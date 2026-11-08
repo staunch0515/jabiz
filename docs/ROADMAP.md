@@ -5476,6 +5476,23 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz11 状态**：✅ 已合并（#549）。
 
+### 17zz15 守卫的预读：按参数值的条件与不按用户的读取（2026-11-08，总控排入；决策 D80）
+
+**缘由**：QuizBuks 申请成为发起方的门槛（F-S2c2）要读参数所指的节点行（与用户无关）与本人在该节点上的点亮、撤销记录；预读此前只能读本人的全部行（至多 100 行）。
+需求方 2026-11-08 确认 D80（补充 D36 实现说明第 1 条与 D66 第 1 条并扩展 D79，不取代）。设计 10 §15.18。
+
+| # | 内容 |
+|---|---|
+| 17zz15-1 | core：`SignInLoad` 加条件（`whereParam(字段, 参数键[, 取值函数])`）、`SignInLoad.global(名, 数据视图)`、`paramKeys()`；三个参数的构造器与 `of` 不变 |
+| 17zz15-2 | runtime：`SignInGuards` / `SignUpGuards` 先读参数再预读；条件值来自参数（经取值函数），缺值或为 null 即该项预读为空、不查库；函数抛异常即拒绝；global 预读在注册时也读 |
+| 17zz15-3 | 启动检查（`SECURITY`）：条件字段不存在、参数键未在本守卫的 `params()` 中声明、global 没有条件（错误）；同名预读按形状比较（不比较取值函数）；`GuardLoadIndexCheck`：比较的列都不是索引首列（警告） |
+| 17zz15-4 | 示范：`PortalSignUpSwitch` 的参数 `commerce.portal.launch-product`（SKU）与 global 预读 `launchProduct`，商品不存在或停售即 `commerce.launch-over`（三语） |
+| 17zz15-5 | 测试：`SignInLoadTest`、`GuardParamsTest`、`GuardLoadChecksIT`、`SignUpGuardIT`、`PlatformCheckIT`（测试夹具的预读补上索引，`V1019`） |
+
+**验收**：CI 绿；同步到 `1.3/quizbuks` 后 S2 的 F-S2c2（c2b）可按参数所指的节点预读。
+
+**17zz15 状态**：📝 待评审（分支 `1.3/phase-17zz15-guard-load-conditions`）。
+
 ### 17zz13 应用的后端测试分片并行（2026-11-08，总控排入，采纳 17zz12 评估的方案 A）
 
 **缘由**：QuizBuks 的整套后端测试在一台机器上 43–45 分钟（17zz12）。本地实测：297 个测试类，190 个 IT 类各起新的 Spring 上下文与 schema，测试一个接一个跑，
