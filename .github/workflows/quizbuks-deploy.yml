@@ -222,7 +222,7 @@ jobs:
           fi
           ssh "$SERVER_USER@$SERVER_HOST" "sh /opt/apps/$APP_NAME/deploy-check/check-env.sh /opt/apps/$APP_NAME/.env \
             /opt/apps/$APP_NAME/deploy-check/required-env"
-      # Only the compose file, the site, the maintenance page, the alert rules and the store apps' statements; the
+      # Only the compose file, the site, the maintenance page, the alert rules (with the test-fire script) and the store apps' statements; the
       # server's .env and the maintenance lock file are never touched. A commit from before the maintenance page (a rollback) leaves the page
       # on the server as it is. The page is written again for the brand (the committed one is QuizBuks's; Q55b).
       - name: Upload deploy files
@@ -252,6 +252,14 @@ jobs:
                 rm -rf alerting && mv alerting.new alerting
                 if docker ps --format '{{.Names}}' | grep -qx '$APP_NAME-lgtm'; then docker restart '$APP_NAME-lgtm'; fi
               fi"
+          fi
+          # The platform's test-fire script and QuizBuks's made-up data for its rules (platform 17zz9), so that the
+          # alerts can be test-fired on the server without a checkout (docs/quizbuks/alert-test-fire.md). Not mounted
+          # anywhere; a commit from before them leaves the server's as they are.
+          if [ -f deploy/quizbuks/alerting/quizbuks-alerts.fakes ]; then
+            ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/ops"
+            scp tools/ops/alert-fire-test.sh deploy/quizbuks/alerting/quizbuks-alerts.fakes \
+              "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/ops/"
           fi
           if [ -f assetlinks.json ]; then
             ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/well-known"
