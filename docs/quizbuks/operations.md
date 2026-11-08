@@ -344,7 +344,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 安全 | 平台 `jabiz-refresh-reuse-granted`、`jabiz-refresh-reuse-revoked`（F-F6） | |
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
-| 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，F-F13） | 工作目录与上传文件的卷 |
+| 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
 | 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
 
@@ -358,6 +358,9 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **`max-active` ≥ 同时热门的发布数 × 4 + 1**：一个热门发布至多占 4 个许可（开始 2 + 完成 2），否则其他发布的答题在队列里等许可；提高 `max-active`（`jabiz.process.admission.max-active`）时把连接池设为它的两倍（读取另需一半连接）。
 - **CPU < 60–70 %**：在预期读取量下，应用与数据库的 CPU 保持在约 60–70 % 以下；88 % 时许可持有翻倍、吞吐减半（§8.3 第 4 条）。
 - **上线前在目标硬件上重测**：压测程序放在另一台主机，读者按预期的读取量限速（`LOAD_READ_RATE`），对打包的 jar 运行 `./gradlew :quizbuks:loadTest`（`LOAD_*` 参数，`LOAD_METRICS=yes` 从回环的管理端口读许可持有与语句数）；确认峰值低于饱和点并有 1.3 倍余量，结果写进报告。
+- **大题库与继续答题**（上线清单"性能"）：`LOAD_QUESTIONS`（题数，缺省 2）使版本快照变大，开始、继续与提交都随之变重；`LOAD_CONTINUE=yes` 让每个学者在开始之后再打开一次答题（`QB_ATTEMPT_START` 对进行中的答题即继续），单列一行。
+  本机对比（60 人、16 并发，2026-11-08，应用与数据库同机、CPU 饱和，只看相对值）：2 题 24.5 次完成 / 秒，开始 p95 249 ms、提交 p95 566 ms；100 题 15.9 次 / 秒，开始 p95 444 ms、继续 p95 437 ms、提交 p95 656 ms。
+  现在题数上限是 100（`ContentLimits.MAX_QUESTIONS`）；千题题库（F-S6）与抽题（F-S7）合入后，以 1000 题、每人抽 20 题重测（届时给压测程序加上抽题的参数）。
 - 单实例：准入的队列与限流按实例（D45 的已知限制）；多实例时热门发布的锁仍在数据库中串行，加实例不提高单个发布的容量。
 
 ## 7. 常见故障
@@ -622,7 +625,7 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
 
 - **开关是受控参数** `qb.play.entry-fee.enabled`（缺省 `false`，`QB_SETUP` 提出，另一位管理员发布）。它只管**能不能设**：关着时保存带报名费的草稿被拒（`QB_ENTRY_FEE_OFF`），已上架的照收（要停就由运营商下架或发起方结束）。问卷不能设（`QB_ENTRY_FEE_NOT_ALLOWED`），店面的发布没有报名费。
 - **部署后**：运行一次 `QB_SETUP`（开出科目 2170、提出参数 `qb.play.entry-fee.enabled` 与科目映射 `qb.journal.account.2170`）并发布提案；**上线前给 2170 配好会计科目代码**（`JournalMappingCheck` 否则告警，分录导出拒绝未映射的科目）。
-- **任务** `qb.entry-fee-settle`：每天 18:07 UTC（03:07 日本），每个 2170 有余额的发起方一个事务（发起方钱包锁内 2170 → 2160 并更新现金缓存）；`quizbuks.entry-fee.settle-cron`（`QB_ENTRY_FEE_SETTLE_CRON`）只给 e2e 改。失败的发起方下次照常入账（按余额，不按日期）。
+- **任务** `qb.entry-fee-settle`：每天 18:07 UTC（03:07 日本），每个 2170 有余额的发起方一个事务（发起方钱包锁内 2170 → 2160 并更新现金缓存）；`quizbuks.entry-fee.settle-cron`（`QB_ENTRY_FEE_SETTLE_CRON`）一般不改（e2e 也不改：测试以补跑 `POST /api/jobs/qb.entry-fee-settle/runs` 当即入账，F-F13）。失败的发起方下次照常入账（按余额，不按日期）。
 - **核对**：每日核对多一项 `ENTRY_FEES_UNSETTLED`（2170 按发起方不为负）；2120 = 学者缓存、2160 = 现金缓存照旧。月报多两类 `ENTRY_FEE`（付报名费）与 `ENTRY_FEE_SETTLED`（入账）；财务总览的"钱包"一节多"报名费待入账（2170）"。
 - **答题路径**：只有收报名费的开始多取用户的钱包锁（在开始锁之前）、多读钱包行与可转出额、多一笔分录；普通的开始一条语句也不多（`AttemptStatementBudgetIT`）。
 - **争议**：报名费不退（超时、放弃、下架都不退）；学者投诉时由运营商以手工加币处理。报名费不是平台收入，不进月结算与运营商分成。

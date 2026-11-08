@@ -54,6 +54,9 @@ public final class QbRoles {
         "approval.decide",
         // Q8a: the AI page (usage and failures; the switch changes only through controlled changes).
         QbPermissions.ADMIN_AI_READ,
+        // F-S2: the platform's knowledge graph templates (written and reviewed by content administrators), and
+        // reading every graph.
+        QbPermissions.TREE_EDIT, QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ,
         // Platform 16y: closing by hand, with a note, a task no process will close (never an approval's).
         "task.resolve",
         // Q13a: the second person on a bank top-up finance recorded.
@@ -103,7 +106,9 @@ public final class QbRoles {
         QbPermissions.FEE_BILLING,
         // F-S11 (the requester, 2026-11-07): the exceptions to the rule on foreign videos for its own sponsors (the
         // entry scope limits them); not the platform-wide refusal counts or the address database (ADMIN_REGION_MONITOR).
-        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE);
+        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE,
+        // F-S2: its copies of the platform's knowledge graphs, and reviewing them and its sponsors' graphs.
+        QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
@@ -197,7 +202,9 @@ public final class QbRoles {
             // Q82: answering their takers' conversations.
             QbPermissions.CONVERSATION_USE,
             // Q89: sponsored benefits, as a provider or a sponsor (the certifications decide which).
-            QbPermissions.BENEFIT_USE));
+            QbPermissions.BENEFIT_USE,
+            // F-S2: their own knowledge graph.
+            QbPermissions.TREE_EDIT));
         add(SHOPIFY_SHOP, labels("Shopify shop staff", "Shopify 店铺员工", "Shopify ストアのスタッフ"), false,
             List.of(com.jabiz.quizbuks.shopify.Shopify.USE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
