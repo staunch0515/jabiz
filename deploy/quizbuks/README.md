@@ -309,6 +309,7 @@ tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的
 | `QB_LOCAL_SECRETS` | 否 | 缺省 `false`（Q10b 评审 L5）：缺少任一平台密钥即拒绝启动。只在本机演示设 `true`：缺少的平台密钥与管理员密码生成到 secrets 卷（并导出 `QB_SECRETS_GENERATED=true`）；正式模式下无效 |
 | `QB_BOOTSTRAP_ADMIN_DONE` | 首个管理员建好后 | `true`：首个管理员已存在，不再需要 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD` |
 | `QB_DIRECT_EXPOSURE` | 没有反向代理时 | `true`：应用直接对外，不列可信代理（否则正式模式下缺少 `JABIZ_TRUSTED_PROXIES` 即启动失败） |
+| `QB_DEPLOY_KEEP_IMAGES` | 否 | 服务器上本环境保留的镜像数，缺省 `3`，至少 `2`（正在运行的与一个可回滚的）。部署工作流读它，应用不读（F-F13，`DEPLOY.md`"旧镜像的清理"）；不是不小于 2 的整数时部署前的检查即拒绝 |
 | `JABIZ_FILES_LOCAL_ROOT` | 是 | 上传文件目录；镜像中已设为卷 `/var/lib/jabiz/files` |
 | `JABIZ_GEOIP_DATABASE` | 正式模式（F-S11） | IP 地址库（DB-IP "IP to Country Lite" 的 CSV，可为 `.gz`），服务器上放在卷 `geoip`：`/var/lib/jabiz/geoip/dbip-country-lite.csv.gz`，每月更新（`docs/quizbuks/operations.md` §7.24）。正式模式下不设即启动失败；其他模式只警告，所有地址按 `qb.region.unknown-ip-country`（缺省中国大陆）处理 |
 | `SPRING_R2DBC_URL` / `SPRING_R2DBC_USERNAME` / `SPRING_R2DBC_PASSWORD`、`SPRING_FLYWAY_URL` / `SPRING_FLYWAY_USER` / `SPRING_FLYWAY_PASSWORD` | compose 已给 | 数据库连接（请求路径用 R2DBC，迁移用 JDBC） |
