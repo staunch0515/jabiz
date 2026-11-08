@@ -8,6 +8,8 @@
 
 ## 0. 前一天：测试环境（staging）
 
+照做的详细步骤（准备、每步应看到什么、不对时怎么办、记录表）：`alert-test-fire.md`。QuizBuks 自己的规则一起试发（`ALERT_FOLDERS="jabiz quizbuks"`、`ALERT_FAKES`，平台 17zz9）。
+
 | # | 做什么 | 命令 / 位置 | 应看到 | 本机彩排 |
 |---|---|---|---|---|
 | 0.1 | 告警的规则全部能求值 | 在服务器上，staging 的 Grafana：`GRAFANA_URL=http://localhost:3001 GRAFANA_USER=… GRAFANA_PASSWORD=… tools/ops/alert-fire-test.sh rules` | 每条规则 `ok`；QuizBuks 的文件夹 `quizbuks` 也在 | 服务器上做（规则的渲染与格式由 CI 的 `alerts.test.sh` 检查，已通过） |
