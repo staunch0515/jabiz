@@ -345,7 +345,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 安全 | 平台 `jabiz-refresh-reuse-granted`、`jabiz-refresh-reuse-revoked`（F-F6） | |
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
-| 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足） |
+| 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足）；`GATE_INVALID` 出现（门槛参数指不到可点亮的节点，功能对所有人关闭） |
 | 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
 | 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
@@ -796,7 +796,12 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **新版本与停用**：新版本不能去掉仍有进行中发布（排程、进行中、暂停、预算不足）绑定的节点（`QB_TREE_NODE_IN_USE`，列出这些发布）：保留节点，或等发布结束。停用整张图时其节点失效，绑定的进行中发布在同一事务中结束（结束原因 `TREE`，发起方照结束通知收到邮件）。
 - **点亮**：学者在绑定节点的发布上合格后，事件 `qb.tree.passed` 由 `QB_TREE_EVALUATE` 在答题之外判断并写只追加的点亮记录，再逐层连带判断依赖它的节点（每层一个事务，至多 `qb.tree.max-depth` 层）。点亮永久；已点亮的再合格不写新记录。
 - **撤销点亮**：运营商成员（本运营商的发起方的图与副本）或平台（任何图）以 `QB_TREE_LIT_REVOKE` 填写原因申请（持 `qb.tree.lit.revoke`；本人的点亮不能自己申请），另一位成员或管理员在审批中批准后才写撤销记录（只追加），学者收到站内信（`TREE_LIT_REVOKED`，含原因）；驳回则点亮照旧、记下驳回理由。撤销后，原来那次合格不再点亮它；之后新的合格照常点亮（新的一条记录）。节点证书随之作废与扣回赠送的部分在 F-S5、F-M。
-- **每日核对**（任务 `qb.tree-check`，每天 19:23 UTC，模板 `qb.admin.tree-health`）：合格了却没有点亮的（`UNLIT_PASS`：事件丢失或判断失败）、点亮记录指向不存在的节点（`ORPHAN_LIT`：绕过流程写入的数据）、等待审核过久的版本（`REVIEW_OVERDUE`）。有问题即给持 `qb.admin.trees.read` 的人一个待办（每天一个）。`UNLIT_PASS` 由随后的任务 `qb.tree-recheck`（19:33 UTC，逐项）自动重新判断；次日仍有即查 `QB_TREE_EVALUATE` 的失败记录（平台的操作记录）。`ORPHAN_LIT` 不自动处理：查是谁写入的，按撤销点亮的流程更正。
+- **每日核对**（任务 `qb.tree-check`，每天 19:23 UTC，模板 `qb.admin.tree-health`）：合格了却没有点亮的（`UNLIT_PASS`：事件丢失或判断失败）、点亮记录指向不存在的节点（`ORPHAN_LIT`：绕过流程写入的数据）、等待审核过久的版本（`REVIEW_OVERDUE`）、门槛参数指不到可点亮的节点（`GATE_INVALID`，见下）。有问题即给持 `qb.admin.trees.read` 的人一个待办（每天一个）。`UNLIT_PASS` 由随后的任务 `qb.tree-recheck`（19:33 UTC，逐项）自动重新判断；次日仍有即查 `QB_TREE_EVALUATE` 的失败记录（平台的操作记录）。`ORPHAN_LIT` 不自动处理：查是谁写入的，按撤销点亮的流程更正。
+- **指定门槛节点**（F-S2c）：点亮平台图上指定的节点即开放的平台功能，由四个受控参数各指一个节点：`qb.tree.gate.referrer-node`（推荐朋友）、`qb.tree.gate.benefit-provider-node`（提供权益）、`qb.tree.gate.benefit-sponsor-node`（赞助权益）、`qb.tree.gate.sponsor-apply-node`（申请成为发起方，F-S2c2 起生效）。**缺省没有参数 = 关闭**（谁也不能推荐、不能上架或赞助权益），`QB_SETUP` 不建立它们。
+  - 指定：内容管理员先建好、审核通过一张**平台图、点亮者为学者**，节点要求合格（`bindable`），并请运营商的直营发起方发布一个绑定该节点的发布（可以不设奖励档位）；然后一位管理员以受控变更提出 `SysParam`：`paramKey` 为上述键、`value` 为 `<图编号>/<节点编号>`（小写，如管理系统的知识结构图页所示）、第一次另给 `valueKind` `{type: text, maxLength: 73}`，另一位管理员发布。改指另一个节点、关闭（删除该参数）照样是受控变更。
+  - 判断（`tree.TreeGates`，流程与发起方页面的模板同一规则）：参数指向生效的、点亮者为学者的平台图中生效的节点，且本人此刻点亮了它（点亮记录没有撤销）。撤销点亮即关闭；图停用、节点去掉或参数写错即对所有人关闭，并由每日核对报 `GATE_INVALID`：改正参数或节点。已生成的推荐链接照旧有效。
+  - 证书暂停签发（D8）：`QB_CERTIFICATE_ISSUE` 一律 422 `QB_CERTIFICATE_PAUSED`，已签发的证书照常核实与下载，F-S5 改为节点证书。
+
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

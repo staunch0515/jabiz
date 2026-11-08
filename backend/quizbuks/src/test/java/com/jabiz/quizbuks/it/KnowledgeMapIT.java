@@ -28,11 +28,6 @@ class KnowledgeMapIT extends TreeItSupport {
             + "created_in_version, node_id", String.valueOf(treeId));
     }
 
-    private String mapWriter() {
-        return TestTokens.bearer(tokens, verifiedUser(unique("fs2-content")), QbPermissions.TREE_EDIT,
-            QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ, "approval.decide");
-    }
-
     @Test
     void aSponsorsMapIsReviewedByTheirOperatorAndPutsItsNodesInEffect() {
         String sponsor = newSponsor(unique("s-fs2-map"));

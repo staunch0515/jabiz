@@ -18,7 +18,6 @@ import { SETTINGS_QUERY, useSoundSetting } from '../qb/SoundSettings'
 import {
   appUrl,
   downloadCertificate,
-  issueCertificate,
   readMyCertifications,
   takerPagePath,
   verifyPath,
@@ -94,12 +93,6 @@ export function CertificatesPart() {
 function HeldItem({ held }: { held: HeldCertification }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
-  const queryClient = useQueryClient()
-  const issue = useMutation({
-    mutationFn: () => issueCertificate(held.certification, i18n.language),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: CERTIFICATIONS_QUERY }),
-    onError: (error) => notify.error(problemText(error)),
-  })
   const download = useMutation({
     mutationFn: () => downloadCertificate(held.certificateId!, held.verifyKey!),
     onError: (error) => notify.error(problemText(error)),
@@ -124,10 +117,10 @@ function HeldItem({ held }: { held: HeldCertification }) {
         </div>
       </div>
       {!held.certificateId && (
-        <Button size="sm" className="w-fit" disabled={issue.isPending} onClick={() => issue.mutate()}
-          data-testid={`certificate-issue-${held.certification}`}>
-          {t('certificates.issue')}
-        </Button>
+        // F-S2c (D8): no new certificate on a certification; certificates of the knowledge map's nodes replace them.
+        <p className="text-muted-foreground text-sm" data-testid={`certificate-paused-${held.certification}`}>
+          {t('certificates.paused')}
+        </p>
       )}
       {held.certificateId && link && (
         <>

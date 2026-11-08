@@ -110,17 +110,14 @@ test('a Sponsor defines a certification, a quiz paying nothing gives it, a Taker
   await expect(item).toBeVisible()
   await expect(item).toContainText(name)
   await expect(item.getByTestId('certificate-issuer')).toBeVisible()
-  await item.getByTestId(`certificate-issue-${key}`).click()
-  await expect(item.getByTestId(`certificate-download-${key}`)).toBeVisible()
+  // F-S2c (D8): no certificate is issued any more (one issued before names the Sponsor: SponsorCertificationIT).
+  await expect(item.getByTestId(`certificate-paused-${key}`)).toBeVisible()
+  await expect(item.getByTestId(`certificate-issue-${key}`)).toHaveCount(0)
   const held = (await run(request, me.token, 'QB_MY_CERTIFICATIONS', {})).held as { certification: string;
     verifyKey: string | null; sponsorName: string | null }[]
   const mine = held.find((h) => h.certification === key)!
   expect(mine.sponsorName).toBeTruthy()
-  await page.goto(`/taker/verify/${mine.verifyKey}`)
-  await expect(page.getByTestId('verify-state')).toHaveText('Valid')
-  await expect(page.getByTestId('verify-certification')).toHaveText(name)
-  await expect(page.getByTestId('verify-issuer')).toHaveText(mine.sponsorName!)
-  await expectAccessible(page, 'verify page of a Sponsor certification')
+  expect(mine.verifyKey).toBeNull()
 
   // The sponsor's list counts the holder.
   await signOut(page)

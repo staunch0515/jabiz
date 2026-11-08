@@ -9,8 +9,7 @@ import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.audience.AudienceRows;
-import com.jabiz.quizbuks.certification.Certifications;
-import com.jabiz.quizbuks.certification.RoundHolders;
+import com.jabiz.quizbuks.tree.TreeGates;
 import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.BanRules;
 import com.jabiz.quizbuks.identity.CallerChecks;
@@ -122,6 +121,8 @@ public final class ReferralProcesses {
     static final String RANDOM = "random";
     static final String LINK_ROW = "link";
     static final String CARD = "card";
+    /** F-S2c: the keys under which the referrer gate ({@link TreeGates}) is read. */
+    static final String GATE = "referral.gate.";
     static final String COUNTED = "counted";
     static final String MINE = "mine";
     static final String ATTEMPT = "attempt";
@@ -168,7 +169,8 @@ public final class ReferralProcesses {
                             LINK_ROW),
                         attempt(ReferralProcesses::publication, ctx -> ctx.request().actorId(), ATTEMPT),
                         counted(ReferralProcesses::publication)));
-            RoundHolders.loadHolding(pb, ctx -> first(ctx, LINK_ROW) == null ? Certifications.REFERRER : null);
+            // F-S2c: referring is unlocked by lighting the node the controlled parameter names (A2-11).
+            TreeGates.load(pb, QbParams.TREE_GATE_REFERRER, GATE, ctx -> first(ctx, LINK_ROW) == null);
             pb.compute("Make the link", (metadata, ctx) -> makeLink(ctx));
         });
     }
@@ -182,7 +184,7 @@ public final class ReferralProcesses {
         int left = policy == null ? 0 : Math.max(0, policy.quota() - list(ctx, COUNTED).size());
         EntityInstance existing = first(ctx, LINK_ROW);
         if (existing != null) {
-            // D-Q70-9: a link made stays the referrer's, whatever became of their certification since.
+            // D-Q70-9: a link made stays the referrer's, whatever became of their lighting of the gate since.
             ctx.put(OUTPUT, new LinkOutput(String.valueOf(publication(ctx)), (String) existing.get("linkKey"), left));
             return;
         }
@@ -195,8 +197,8 @@ public final class ReferralProcesses {
         if (left == 0) {
             throw refusal(ReferralCodes.QUOTA_FULL, "The publication's referrals are used up");
         }
-        if (RoundHolders.heldUntil(ctx, Certifications.REFERRER).isEmpty()) {
-            throw refusal(ReferralCodes.NOT_REFERRER, "Pass the referrer certification first");
+        if (!TreeGates.isOpen(ctx, QbParams.TREE_GATE_REFERRER, GATE)) {
+            throw refusal(ReferralCodes.NOT_REFERRER, "Light the knowledge map's node that unlocks referring first");
         }
         EntityInstance attempt = first(ctx, ATTEMPT);
         boolean completed = attempt != null && attempt.get("submittedAt") != null;

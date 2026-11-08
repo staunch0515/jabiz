@@ -4,7 +4,7 @@ import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessDefinitionBuilder;
-import com.jabiz.quizbuks.certification.Certifications;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
@@ -95,7 +95,7 @@ public final class PurchaseProcesses {
             BenefitSteps.common(pb, "Writes a purchase of another sponsor's benefit: how many, what was paid and when, "
                 + "with proofs; a change of one sent to the provider sends it again.");
             pb.outputMapper(ctx -> ctx.get(OUTPUT, PurchaseOutput.class));
-            BenefitSteps.loadHolding(pb, Certifications.BENEFIT_SPONSOR);
+            BenefitSteps.loadGate(pb, QbParams.TREE_GATE_BENEFIT_SPONSOR);
             lockAndLoad(pb, ctx -> saveInput(ctx).purchaseId(), QbBenefits.SPONSOR);
             pb.step("Load the benefit, the provider's ban and the proofs", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbBenefits.defaultDataset(QbBenefits.OFFER), ctx -> BenefitSteps.byId("offerId",
@@ -122,7 +122,7 @@ public final class PurchaseProcesses {
             if (ctx.request().actorId().equals(offer.get("providerId"))) {
                 throw BenefitSteps.refusal(BenefitCodes.OWN_OFFER, "This is your own benefit", Map.of());
             }
-            BenefitSteps.requireHolding(ctx, Certifications.BENEFIT_SPONSOR);
+            BenefitSteps.requireGate(ctx, QbParams.TREE_GATE_BENEFIT_SPONSOR);
             if (!QbBenefits.LISTED.equals(offer.get("status"))) {
                 throw BenefitSteps.refusal(BenefitCodes.OFFER_UNAVAILABLE, "The benefit is not offered now", Map.of());
             }

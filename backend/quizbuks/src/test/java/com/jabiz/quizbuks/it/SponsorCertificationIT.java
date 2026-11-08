@@ -137,12 +137,11 @@ class SponsorCertificationIT extends LegalItSupport {
         assertThat(Instant.parse((String) held.get("heldUntil"))).isAfter(clock.instant().plus(Duration.ofDays(364)));
         assertThat(claim(failer, key)).containsEntry("heldUntil", null).containsEntry("roundPublicationId", first);
 
-        // Who holds it starts none of its rounds (D-Q70-1); the other may (a second round of the same certification).
+        // F-S2c (D2): holding it no longer keeps anybody from another of its rounds.
         String second = freeDraft(sponsor, "Q88 keyboard basics II");
         setRound(sponsor, second, certificationId);
         run("QB_PUBLICATION_SUBMIT", token, body("publicationId", second));
-        assertThat(codes(refused("QB_ATTEMPT_START", taker(passer), body("publicationId", second), 422)))
-            .containsExactly(CertificationCodes.HELD);
+        assertThat(start(taker(passer), second)).containsKey("attemptId");
         assertThat(start(taker(failer), second)).containsKey("attemptId");
 
         // The sponsor's own certification gates their other publications (D-Q88-4); another sponsor cannot require it.
@@ -172,11 +171,15 @@ class SponsorCertificationIT extends LegalItSupport {
             assertThat(h).containsEntry("certification", key).containsEntry("sponsorName", company);
             assertThat((Map<String, Object>) h.get("name")).containsEntry("en", "Keyboard expert");
         });
-        Map<String, Object> issued = run(CertificateProcesses.ISSUE, taker(passer), body("certification", key,
-            "language", "en"));
-        String verifyKey = (String) issued.get("verifyKey");
+        // F-S2c (D8): no certificate is issued any more; one issued before names the sponsor as its issuer.
+        assertThat(codes(refused(CertificateProcesses.ISSUE, taker(passer), body("certification", key, "language",
+            "en"), 422))).containsExactly(CertificateProcesses.PAUSED);
+        String verifyKey = issuedBefore(passer, key, "Taker JP", "en", Map.of("certificationName", "Keyboard expert",
+            "issuerName", company));
+        Object certificateId = query("SELECT certificate_id FROM qb_certificate WHERE verify_key = ?", verifyKey)
+            .getFirst().get("certificate_id");
         List<Map<String, Object>> runs = client.get().uri("/api/documents/runs?layout={layout}&subject={subject}",
-                "qb.certificate", issued.get("certificateId")).header(HttpHeaders.AUTHORIZATION, taker(passer))
+                "qb.certificate", certificateId).header(HttpHeaders.AUTHORIZATION, taker(passer))
             .exchange().expectStatus().isOk().expectBodyList(Map.class).returnResult().getResponseBody().stream()
             .map(row -> (Map<String, Object>) row).toList();
         byte[] pdf = client.get().uri("/api/documents/runs/{id}/pdf", runs.getFirst().get("runId"))

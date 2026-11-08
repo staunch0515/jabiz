@@ -5,7 +5,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
-import com.jabiz.quizbuks.certification.Certifications;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
@@ -58,7 +58,7 @@ public final class OfferProcesses {
             BenefitSteps.common(pb, "Saves one of the caller's benefits: what it is, what one is worth, where and when "
                 + "it is collected; shown to the sponsors holding a benefit certification at once.");
             pb.outputMapper(ctx -> ctx.get(OUTPUT, OfferOutput.class));
-            BenefitSteps.loadHolding(pb, Certifications.BENEFIT_PROVIDER);
+            BenefitSteps.loadGate(pb, QbParams.TREE_GATE_BENEFIT_PROVIDER);
             pb.step("Take the provider's turn", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbBenefits.offerLock(ctx.request().actorId())))
                 .step("Load the provider's benefits and the images", QueryEntities.<ProcessContext>all(
@@ -89,7 +89,7 @@ public final class OfferProcesses {
         boolean showing = QbBenefits.LISTED.equals(status)
             && (offer == null || !QbBenefits.LISTED.equals(offer.get("status")));
         if (offer == null || showing) {
-            BenefitSteps.requireHolding(ctx, Certifications.BENEFIT_PROVIDER);
+            BenefitSteps.requireGate(ctx, QbParams.TREE_GATE_BENEFIT_PROVIDER);
         }
         List<UUID> images = BenefitSteps.distinct(input.images());
         String address = BenefitSteps.blankToNull(input.pickupAddress());

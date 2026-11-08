@@ -82,7 +82,7 @@ export function LinkCard({ link, publicationName }: { link: ReferralLink; public
 /**
  * "Referrals welcome" on a publication's page (Q70): to a referee, that a friend referred them and until when a pass
  * counts; to everybody else, what a friend's pass earns and the link to send (made on request; the server checks the
- * referrer certification and the publication's requirement, and says why not).
+ * node that unlocks referring (F-S2c) and the publication's requirement, and says why not).
  */
 export function ReferralPanel({ publication }: { publication: PublicationView }) {
   const { t } = useTranslation(APP)

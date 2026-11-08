@@ -84,7 +84,6 @@ results:
   treeNodeId:     { from: QbPublicationCard.treeNodeId }
   nodeUnlocked:   { kind: { type: bool } }
   prerequisites:  { kind: { type: text } }
-  heldUntil:      { from: QbCertificationRecord.validUntil }
   certification:  { from: QbCertificationRound.certification }
   certificationNames: { kind: { type: text } }
   referral:       { from: QbPublicationCard.referral }
@@ -148,7 +147,7 @@ SELECT
     d.last7d AS last7d,
     d.last30d AS last30d,
     d.statsAt AS statsAt,
-    (d.shown AND d.startable AND d.matched AND d.prerequisitesMet AND d.nodeUnlocked AND d.heldUntil IS NULL
+    (d.shown AND d.startable AND d.matched AND d.prerequisitesMet AND d.nodeUnlocked
      AND d.myAttemptId IS NULL AND NOT d.regionBlocked) AS canStart,
     d.regionBlocked AS regionBlocked,
     d.matched AS matched,
@@ -157,7 +156,6 @@ SELECT
     d.treeNodeId AS treeNodeId,
     d.nodeUnlocked AS nodeUnlocked,
     d.prerequisites AS prerequisites,
-    d.heldUntil AS heldUntil,
     d.certification AS certification,
     d.certificationNames AS certificationNames,
     d.referral AS referral,
@@ -376,31 +374,6 @@ SELECT
          LEFT JOIN {{QbPublicationCard}} rc
              ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
          WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}) AS prerequisites,
-    -- Q70a (D-Q70-1, option B): until when the caller holds the certification of this round (qb.app.feed, the same).
-    (SELECT max(e.until)
-         FROM {{QbCertificationRound}} cr
-         JOIN (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
-             ON cat.cert = cr.{{QbCertificationRound.certification}}
-         CROSS JOIN LATERAL (
-             SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
-                    rec.{{QbCertificationRecord.validUntil}} AS until
-             FROM {{QbCertificationRecord}} rec
-             WHERE rec.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
-               AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
-             UNION ALL
-             SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
-                    a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
-             FROM {{QbCertificationRound}} r2
-             JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
-             WHERE r2.{{QbCertificationRound.certification}} = cr.{{QbCertificationRound.certification}}
-               AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
-               AND (r2.{{QbCertificationRound.closedAt}} IS NULL
-                    OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
-         WHERE cr.{{QbCertificationRound.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
-           AND e.ver = cat.ver AND e.until > :at
-           AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
-                                WHERE rv.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
-                                  AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) AS heldUntil,
     -- Q88a (D-Q88-5): the certification this is a round of, and its name when it is a sponsor's.
     cr0.{{QbCertificationRound.certification}} AS certification,
     CAST(sc0.{{QbSponsorCertification.name}} AS text) AS certificationNames,

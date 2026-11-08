@@ -59,8 +59,9 @@ function server({ held = true, digital = false, confirmed = false }: { held?: bo
         return json(200, { items: [], offset: 0, limit: 20 })
       case '/api/queries/qb.sponsor.benefit-access':
         return json(200, { items: [
-          { certification: 'BENEFIT_PROVIDER', heldUntil: null, roundPublicationId: 'r1' },
-          { certification: 'BENEFIT_SPONSOR', heldUntil: held ? '2027-11-03T00:00:00Z' : null, roundPublicationId: null },
+          { certification: 'BENEFIT_PROVIDER', open: false, treeId: 't1', nodeId: 'n1',
+            nodeName: { en: 'Fair dealing', zh: '公平交易', ja: '公正な取引' } },
+          { certification: 'BENEFIT_SPONSOR', open: held, treeId: null, nodeId: null, nodeName: null },
         ], offset: 0, limit: 10 })
       case '/api/queries/qb.sponsor.benefit-catalog':
         return json(200, { items: held ? [NOODLES].filter((o) => !params.offerId || o.offerId === params.offerId) : [],
@@ -138,10 +139,11 @@ describe('sponsored benefits (Q89a)', () => {
     const offer = await screen.findByTestId('benefit-offer')
     expect(offer).toHaveTextContent('Beef noodles')
     expect(offer).toHaveTextContent('Ramen B')
-    // The certification card: the provider's one is missing, with the quiz to take in the app.
+    // F-S2c: the roles card: the provider's one is not open yet, with the node to light in the app.
     const rows = await screen.findAllByTestId('benefit-access-row')
     expect(rows.map((row) => row.getAttribute('data-held'))).toEqual(['false', 'true'])
-    expect(within(rows[0]).getByRole('link')).toHaveAttribute('href', '/taker/p/r1')
+    expect(rows[0]).toHaveTextContent('Light the node “Fair dealing” of the knowledge map in the app')
+    expect(rows[1]).toHaveTextContent('Open')
     await expectAccessible()
     await userEvent.click(within(offer).getByTestId('benefit-ask'))
     await userEvent.type(await screen.findByTestId('benefit-ask-body'), 'How much for 100?')
@@ -150,11 +152,14 @@ describe('sponsored benefits (Q89a)', () => {
       { offerId: 'o1', body: 'How much for 100?' }]))
   })
 
-  it('say the catalog is for certified Sponsors when it shows nothing', async () => {
+  it('say the catalog is for Sponsors with a benefit role open when it shows nothing', async () => {
     server({ held: false })
     window.history.replaceState(null, '', '/benefits')
     render(<App />)
-    expect(await screen.findByTestId('benefit-catalog-empty')).toHaveTextContent('benefit certification')
+    expect(await screen.findByTestId('benefit-catalog-empty')).toHaveTextContent('a benefit role is open')
+    // No node named for the sponsoring role: not available yet.
+    const rows = await screen.findAllByTestId('benefit-access-row')
+    expect(rows[1]).toHaveTextContent('Not available yet; ask your operator.')
   })
 
   it('record a new purchase of a catalog benefit', async () => {

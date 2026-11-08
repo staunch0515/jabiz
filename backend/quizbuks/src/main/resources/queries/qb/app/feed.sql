@@ -257,33 +257,6 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
                   AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
                                        WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
                                          AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')))))
-  -- Q70a (D-Q70-1, option B): a certification's round is not listed to whoever holds the certification now. The
-  -- holding is CertificationHolding's rule over the caller's records and the passes not recorded yet (RoundHolders, the
-  -- same; the catalog's versions and validity as Certifications, CertificationTemplatesTest), as in qb.app.publication.
-  AND (SELECT max(e.until)
-       FROM {{QbCertificationRound}} cr
-       JOIN (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
-           ON cat.cert = cr.{{QbCertificationRound.certification}}
-       CROSS JOIN LATERAL (
-           SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
-                  rec.{{QbCertificationRecord.validUntil}} AS until
-           FROM {{QbCertificationRecord}} rec
-           WHERE rec.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
-             AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
-           UNION ALL
-           SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
-                  a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
-           FROM {{QbCertificationRound}} r2
-           JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
-           WHERE r2.{{QbCertificationRound.certification}} = cr.{{QbCertificationRound.certification}}
-             AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
-             AND (r2.{{QbCertificationRound.closedAt}} IS NULL
-                  OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
-       WHERE cr.{{QbCertificationRound.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
-         AND e.ver = cat.ver AND e.until > :at
-         AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
-                              WHERE rv.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
-                                AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) IS NULL
   -- F-S2b1: a publication bound to a knowledge graph's node is for whoever has lit, now, every node it wants lit before
   -- answering, while the node is in effect (tree.TreeLights and play.TreeGate are the definition; TreeLightsIT compares).
   AND (c.{{QbPublicationCard.treeNodeId}} IS NULL OR EXISTS (

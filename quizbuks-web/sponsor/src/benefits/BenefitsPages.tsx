@@ -43,9 +43,9 @@ import { neutralName } from '../content/api'
 import { SPONSOR } from '../messages'
 import { type PublicationStatus } from '../publishing/api'
 import { DigitalPoolSection } from '../publishing/DigitalPool'
-import { APP_BASE } from '../publishing/paths'
 import { useStatusLabel } from '../publishing/shared'
 import { FileImage } from '../qb/FileImage'
+import { pickText } from '../qb/legal'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { fieldProblem, generalProblem, problemText } from '../qb/problems'
@@ -94,11 +94,11 @@ function proofName(fileName: string): string {
 const PROOF_TYPES = 'application/pdf,image/jpeg,image/png'
 
 /**
- * The two benefit certifications (D-Q89-1): held until when, or how to take the quiz in the app. The server decides
- * with them; this card only says where the caller stands.
+ * The two benefit roles (F-S2c): open, or which node of the platform's knowledge map to light in the app (none named:
+ * not available yet). The server decides with the same rule; this card only says where the caller stands.
  */
 export function BenefitAccess() {
-  const { t } = useTranslation(SPONSOR)
+  const { t, i18n } = useTranslation(SPONSOR)
   const access = useQuery({ queryKey: [...BENEFITS_QUERY, 'access'], queryFn: readAccess, staleTime: 60_000 })
   if (!access.data) return null
   return (
@@ -107,24 +107,26 @@ export function BenefitAccess() {
       <CardContent className="flex flex-col gap-2 text-sm">
         <p className="text-muted-foreground">{t('benefits.access.why')}</p>
         <ul className="flex flex-col gap-1">
-          {access.data.map((row) => (
-            <li key={row.certification} className="flex flex-wrap items-center gap-2"
-              data-testid="benefit-access-row" data-certification={row.certification}
-              data-held={row.heldUntil ? 'true' : 'false'}>
-              <span className="font-medium">{t(`benefits.access.${row.certification}`)}</span>
-              {row.heldUntil ? (
-                <Badge variant="secondary">{t('benefits.access.held', { until: formatDateTime(row.heldUntil) })}</Badge>
-              ) : (
-                <>
-                  <Badge variant="outline">{t('benefits.access.missing')}</Badge>
-                  {row.roundPublicationId ? (
-                    <a className="text-primary underline" href={`${APP_BASE}p/${encodeURIComponent(row.roundPublicationId)}`}
-                      target="_blank" rel="noreferrer">{t('benefits.access.take')}</a>
-                  ) : <span className="text-muted-foreground">{t('benefits.access.noRound')}</span>}
-                </>
-              )}
-            </li>
-          ))}
+          {access.data.map((row) => {
+            const node = pickText(row.nodeName, i18n.language)
+            return (
+              <li key={row.certification} className="flex flex-wrap items-center gap-2"
+                data-testid="benefit-access-row" data-certification={row.certification}
+                data-held={row.open ? 'true' : 'false'}>
+                <span className="font-medium">{t(`benefits.access.${row.certification}`)}</span>
+                {row.open ? (
+                  <Badge variant="secondary">{t('benefits.access.held')}</Badge>
+                ) : (
+                  <>
+                    <Badge variant="outline">{t('benefits.access.missing')}</Badge>
+                    {node.text ? (
+                      <span lang={node.lang}>{t('benefits.access.take', { node: node.text })}</span>
+                    ) : <span className="text-muted-foreground">{t('benefits.access.noRound')}</span>}
+                  </>
+                )}
+              </li>
+            )
+          })}
         </ul>
       </CardContent>
     </Card>

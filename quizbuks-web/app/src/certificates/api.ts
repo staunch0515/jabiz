@@ -42,12 +42,6 @@ export function certificateLanguage(language: string | undefined): 'en' | 'zh' |
   return code === 'zh' || code === 'ja' ? code : 'en'
 }
 
-/** Issues the certificate of a holding (in the language given the first time), or gives the one issued. */
-export function issueCertificate(certification: string, language: string | undefined): Promise<IssuedCertificate> {
-  return runProcess<IssuedCertificate>(CERTIFICATE_PROCESS.issue,
-    { certification, language: certificateLanguage(language) })
-}
-
 /** The PDF of a certificate exactly as issued, handed to the browser. */
 export async function downloadCertificate(certificateId: string, verifyKey: string) {
   const runs = await sessionFetch(`/api/documents/runs?layout=${encodeURIComponent(CERTIFICATE_LAYOUT)}`
