@@ -160,7 +160,8 @@ SPRING_MAIL_PASSWORD=<SMTP 密码>
 # 用 Gmail（quizbuks@gmail.com，Q41）发信时：JABIZ_MAIL_FROM=quizbuks@gmail.com、SPRING_MAIL_HOST=smtp.gmail.com、
 # SPRING_MAIL_PORT=587、SPRING_MAIL_USERNAME=quizbuks@gmail.com、SPRING_MAIL_PASSWORD=<该账号的应用专用密码>（须先开启两步验证）。
 # 发件人必须就是登录的 Gmail 账号，否则被当作冒充；个人 Gmail 每天约 500 封的上限，注册一多就要换成自有域名的发信服务。
-# 587 端口要先 STARTTLS 才能认证（服务商只给 465 时改为 SPRING_MAIL_PORT=465 与 …_SMTP_SSL_ENABLE=true）
+# 587 端口要先 STARTTLS 才能认证（服务商只给 465 时改为 SPRING_MAIL_PORT=465 与 …_SMTP_SSL_ENABLE=true，且不写下面两行 STARTTLS）。
+# 用 Cloudflare Email Sending 发信、或服务器在 Hetzner 上：先看下文"2b. 发信的服务器"。部署前的检查拒绝互相矛盾的设置与重复的行。
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED=true
@@ -233,6 +234,50 @@ production 与 staging 各跑一个（各限 2g 内存，总控 2026-11-07 定�
 - **上线前的设置检查**（`docs/quizbuks/launch-checklist.md`"安全"）：把 `tools/ops/env-check.sh` 与 `deploy/quizbuks/server/env-check.rules` 复制到服务器
   （`.env` 不离开服务器），`bash env-check.sh /opt/apps/quizbuks/.env env-check.rules`，只输出变量名。
 - 数据库主机（WAL 归档、备份、数据库所在磁盘）的告警由数据库托管方或主机监控提供，不在这里。
+
+### 2b. 发信的服务器（2026-11-08 staging 的邮件故障之后）
+
+**两种端口，设置不同**（写错时连不上或认证失败，邮件一直不到，见 `docs/quizbuks/troubleshooting.md` T15）：
+
+| 端口 | 加密 | `.env` |
+|---|---|---|
+| 587 | 先明文连接再 STARTTLS | `SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true`、`…_STARTTLS_REQUIRED=true`，**不写** `…_SSL_ENABLE` |
+| 465 | 一连上就是 TLS | `SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true`，**不写** STARTTLS 的两行 |
+
+部署前的检查（`server/check-env.sh`）拒绝：465 而没有开 SSL 或要求 STARTTLS、587 而开了 SSL、同一个变量写了两行（compose 取最后一行，改的往往不是生效的那一行）。
+
+**服务器在 Hetzner Cloud 上**：Hetzner 缺省封锁出站的 25 与 465 端口（587 可用）。先在服务器上测一下能不能连上（只测连接，不发信）：
+
+```bash
+timeout 10 bash -c '</dev/tcp/smtp.mx.cloudflare.net/465' && echo 465 可以连接 || echo 465 连不上
+timeout 10 bash -c '</dev/tcp/<发信服务商的主机>/587' && echo 587 可以连接 || echo 587 连不上
+```
+
+465 连不上时：在 Hetzner Console 提交解封出站 465 的申请（新项目通常要先付过一次账单），或改用支持 587 的发信服务。
+
+**用 Cloudflare Email Sending 发信**（beta，文档 https://developers.cloudflare.com/email-service/api/send-emails/smtp/ ）：
+
+1. Cloudflare 控制台 → Email Sending：登记发信的域名（如 `mail-staging.quizbuks.com`；production 另登记自己的），按提示设好 SPF、DKIM、DMARC。
+2. 建一个 API 令牌，权限 **Email Sending: Edit**（只给这一项）。
+3. 在服务器上测 465（上面的命令），Hetzner 上先解封。
+4. `.env` 中邮件的几行（删掉旧的同名行，每个变量只留一行）：
+
+   ```bash
+   JABIZ_MAIL_ENABLED=true
+   JABIZ_MAIL_FROM=noreply@mail-staging.quizbuks.com     # 必须是第 1 步登记的域名；不能是 gmail.com
+   SPRING_MAIL_HOST=smtp.mx.cloudflare.net
+   SPRING_MAIL_PORT=465                                  # 只有 465（隐式 TLS），没有 587
+   SPRING_MAIL_USERNAME=api_token                        # 就是这几个字，不是账号名
+   SPRING_MAIL_PASSWORD='<第 2 步的 API 令牌>'
+   SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
+   SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true
+   # 不写 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE / _REQUIRED
+   ```
+
+5. 让应用读到新的 `.env`：在 `/opt/apps/<APP_NAME>/` 下 `docker compose up -d app`（**不要**用 `docker restart` 或 `docker compose restart`：它们不重新读 `.env`），或重新运行部署。
+6. 核对：平台管理系统中对自己的邮箱发一封测试邮件（"邮件模版"页的测试发送），或注册一个测试账号看验证邮件；没有收到时看 T15 的查询。
+7. Grafana 的告警邮件（"2a"）也可以经同一个服务：`GF_SMTP_HOST=smtp.mx.cloudflare.net:465`、`GF_SMTP_USER=api_token`、`GF_SMTP_PASSWORD=<令牌>`、`GF_SMTP_FROM_ADDRESS=<登记域名的地址>`。
+   但告警邮件与应用的邮件走同一条路时，这条路断了告警也发不出去：上线后 Grafana 最好用另一个服务（或另一个端口），并以 `alert-fire-test.sh notify` 试过。
 
 ### 3. DNS
 

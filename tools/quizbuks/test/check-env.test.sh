@@ -76,6 +76,40 @@ fi
 run $'PLAIN=a\nLONG=12345678\nMAYBE='
 expect "an optional variable left empty" 0
 
+# A name twice (staging, 2026-11-08): refused, named once.
+run $'PLAIN=a\nLONG=12345678\nLONG=87654321\nOTHER=1'
+expect "a name defined twice" 1 "LONG is defined more than once"
+
+# The mail server's settings (DEPLOY.md, "发信的服务器").
+ok_base=$'PLAIN=a\nLONG=12345678'
+run "$ok_base"$'\nSPRING_MAIL_HOST=smtp.example.com\nSPRING_MAIL_PORT=587\nSPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true\nSPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED=true'
+expect "587 with STARTTLS" 0
+run "$ok_base"$'\nSPRING_MAIL_HOST=smtp.example.com\nSPRING_MAIL_PORT=465\nSPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true'
+expect "465 with SSL" 0
+run "$ok_base"$'\nSPRING_MAIL_HOST=smtp.example.com\nSPRING_MAIL_PORT=465\nSPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED=true'
+expect "465 without SSL" 1 "SMTP_SSL_ENABLE must be true"
+expect "465 with STARTTLS required" 1 "STARTTLS_REQUIRED must not be true"
+run "$ok_base"$'\nSPRING_MAIL_HOST=smtp.example.com\nSPRING_MAIL_PORT=587\nSPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=TRUE'
+expect "587 with SSL" 1 "SPRING_MAIL_PORT is 587 (STARTTLS): SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE must not be true"
+cloudflare=$'\nSPRING_MAIL_HOST=smtp.mx.cloudflare.net\nSPRING_MAIL_PORT=465\nSPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true\nSPRING_MAIL_USERNAME=api_token\nSPRING_MAIL_PASSWORD=cf-token-value\nJABIZ_MAIL_FROM=noreply@mail-staging.quizbuks.com'
+run "$ok_base$cloudflare"
+expect "Cloudflare as documented" 0
+# Staging's .env of 2026-11-08, without its password.
+run "$ok_base"$'\nSPRING_MAIL_HOST=smtp.mx.cloudflare.net\nSPRING_MAIL_PORT=465\nSPRING_MAIL_USERNAME=quizbuks-staging\nSPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true\nSPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED=true\nJABIZ_MAIL_FROM=quizbuks@gmail.com\nSPRING_MAIL_PORT=465'
+expect "staging's settings: SSL" 1 "SMTP_SSL_ENABLE must be true"
+expect "staging's settings: STARTTLS" 1 "STARTTLS_REQUIRED must not be true"
+expect "staging's settings: user name" 1 "SPRING_MAIL_USERNAME must be the literal api_token"
+expect "staging's settings: Gmail sender" 1 "JABIZ_MAIL_FROM must be an address of the domain registered"
+expect "staging's settings: the port twice" 1 "SPRING_MAIL_PORT is defined more than once"
+if grep -q "quizbuks-staging\|quizbuks@gmail" <<<"$out"; then
+  echo "FAIL a value is printed: $out"
+  failures=$((failures + 1))
+fi
+run "$ok_base"$'\nSPRING_MAIL_HOST=SMTP.MX.Cloudflare.net\nSPRING_MAIL_PORT=587\nSPRING_MAIL_USERNAME=api_token\nJABIZ_MAIL_FROM=noreply@mail.quizbuks.com'
+expect "Cloudflare on 587 (any letter case of the host)" 1 "SPRING_MAIL_PORT must be 465"
+run "$ok_base"$'\nSPRING_MAIL_PORT=465'
+expect "no mail server: nothing to check" 0
+
 # Variables of a Spring profile: needed only when SPRING_PROFILES_ACTIVE names it.
 cp "$work/required" "$work/plain"
 cat >>"$work/required" <<'LIST'
