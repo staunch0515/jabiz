@@ -138,6 +138,7 @@ public final class TreeProcesses {
     static final String TREE = "tree";
     static final String VERSIONS = "versions";
     static final String NODES = "nodes";
+    static final String REFS = "nodeRefs";
     static final String DEFS = "defs";
     static final String OWNED = "owned";
     static final String TEMPLATE = "template";
@@ -349,7 +350,11 @@ public final class TreeProcesses {
                     .limit(Integer.MAX_VALUE).build(), DEFS),
                 QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("treeId", ids(treeId(ctx)))).limit(Integer.MAX_VALUE).build(),
-                    NODES)));
+                    NODES),
+                // F-S2b1: which nodes the conditions in effect name (rewritten when a version goes into effect).
+                QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_REF), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("treeId", ids(treeId(ctx)))).limit(Integer.MAX_VALUE).build(),
+                    REFS)));
     }
 
     /** Whether the caller may edit the graph: its Sponsor, a member of its operator, or the platform's editor. */
@@ -850,6 +855,7 @@ public final class TreeProcesses {
             List<String> beforeAnswer = TreeRules.beforeAnswer(node.getValue());
             row.put("beforeAnswer", beforeAnswer.isEmpty() ? null : json(beforeAnswer));
             row.put("bindable", TreeRules.asksForAPass(node.getValue()));
+            row.put("condition", json(node.getValue().toMap()));
             EntityInstance existing = rows.remove(node.getKey());
             if (existing == null) {
                 row.put("treeId", String.valueOf(tree.id()));
@@ -867,9 +873,31 @@ public final class TreeProcesses {
                     "bindable", false));
             }
         }
+        writeRefs(ctx, String.valueOf(tree.id()), conditions);
         long revision = touch(ctx, Map.of("currentVersionId", String.valueOf(version.id())));
         ctx.put(OUTPUT, output(ctx, version, QbTrees.IN_EFFECT, revision, ApprovalOutcome.Status.APPROVED.name(),
             requestId));
+    }
+
+    /**
+     * F-S2b1: the references of the conditions in effect, rewritten to match them (one row for each node a condition
+     * names): lighting a node evaluates the nodes whose condition names it.
+     */
+    static void writeRefs(ProcessContext ctx, String treeId, Map<String, TreeCondition> conditions) {
+        Set<String> wanted = new LinkedHashSet<>();
+        conditions.forEach((node, condition) -> TreeRules.references(condition).forEach(ref ->
+            wanted.add(node + " " + ref)));
+        for (EntityInstance row : list(ctx, REFS)) {
+            String key = row.get("nodeId") + " " + row.get("refNodeId");
+            if (!wanted.remove(key)) {
+                ctx.changes().delete(QbTrees.NODE_REF, row.id(), row.version());
+            }
+        }
+        for (String key : wanted) {
+            int space = key.indexOf(' ');
+            ctx.changes().insert(QbTrees.NODE_REF, Map.of("treeId", treeId, "nodeId", key.substring(0, space),
+                "refNodeId", key.substring(space + 1)));
+        }
     }
 
     // ---- withdraw --------------------------------------------------------------------------------------------------
@@ -921,6 +949,13 @@ public final class TreeProcesses {
                         ctx.changes().update(QbTrees.VERSION, review.id(), review.version(), Map.of("status",
                             QbTrees.DRAFT, "editedAt", ctx.opTime()));
                         ctx.put(WITHDRAW_REVIEW, String.valueOf(review.id()));
+                    }
+                    // F-S2b1: its nodes go out of effect (no start, no lighting); their rows stay for the records.
+                    for (EntityInstance node : list(ctx, NODES)) {
+                        if (Boolean.TRUE.equals(node.get("active"))) {
+                            ctx.changes().update(QbTrees.NODE, node.id(), node.version(), Map.of("active", false,
+                                "bindable", false));
+                        }
                     }
                     long revision = touch(ctx, Map.of("status", QbTrees.RETIRED, "retiredAt", ctx.opTime()));
                     EntityInstance active = version(ctx, QbTrees.IN_EFFECT);
@@ -986,6 +1021,9 @@ public final class TreeProcesses {
                         QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE), ctx -> EntityQuery.builder()
                             .where(new QueryPredicate.In("treeId", ids(ctx.contains(TREE_ID) ? ctx.get(TREE_ID)
                                 : null))).limit(Integer.MAX_VALUE).build(), NODES),
+                        QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_REF), ctx -> EntityQuery.builder()
+                            .where(new QueryPredicate.In("treeId", ids(ctx.contains(TREE_ID) ? ctx.get(TREE_ID)
+                                : null))).limit(Integer.MAX_VALUE).build(), REFS),
                         QueryEntities.query(ApprovalEntities.REQUEST_DATASET, ctx -> EntityQuery.builder()
                             .where(new QueryPredicate.In("requestId", ownRequest(ctx)
                                 ? AccountEditing.uuids(result(ctx).requestId()) : new ArrayList<>()))
@@ -1137,6 +1175,12 @@ public final class TreeProcesses {
 
     static Map<String, Object> parse(String json) {
         return JSON.readValue(json, new TypeReference<Map<String, Object>>() {});
+    }
+
+    /** A node row's {@code beforeAnswer}: the node ids as a JSON array (none: empty). */
+    public static List<String> nodeIds(Object json) {
+        return json == null ? List.of() : List.copyOf(JSON.readValue(String.valueOf(json),
+            new TypeReference<List<String>>() {}));
     }
 
     static String json(Object value) {

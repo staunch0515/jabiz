@@ -150,6 +150,12 @@ public final class PublishingCodes {
     public static final String PREREQUISITE_CERTIFICATION = "QB_PREREQUISITE_CERTIFICATION";
     /** Q98b: a cover of its own for a language the publication does not offer, or for its base. */
     public static final String COVER_LANGUAGE = "QB_PUBLICATION_COVER_LANGUAGE";
+    /** F-S2b1: the node to bind is not one in effect of a graph the publisher may bind to. */
+    public static final String NODE_UNKNOWN = "QB_PUBLICATION_NODE_UNKNOWN";
+    /** F-S2b1: the node's condition asks for no pass: no publication lights it. */
+    public static final String NODE_NOT_BINDABLE = "QB_PUBLICATION_NODE_NOT_BINDABLE";
+    /** F-S2b1: Sponsors light the graph's nodes, which they cannot answer yet (F-S4). */
+    public static final String NODE_SPONSOR_LIT = "QB_PUBLICATION_NODE_SPONSOR_LIT";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -167,7 +173,7 @@ public final class PublishingCodes {
         SWITCH_LANGUAGES, COVER_LANGUAGE,
         PREREQUISITE_TOO_MANY, PREREQUISITE_REPEATED, PREREQUISITE_SELF, PREREQUISITE_NOT_OWN, PREREQUISITE_DRAFT,
         PREREQUISITE_CYCLE, PREREQUISITE_TOO_DEEP, PREREQUISITE_ONE_OF, PREREQUISITE_CERTIFICATION, SWITCH_PICK, PICK_RANGE, PICK_UNEQUAL_POINTS, PICK_SURVEY,
-        ENTRY_FEE_RANGE, ENTRY_FEE_NOT_ALLOWED, ENTRY_FEE_OFF);
+        ENTRY_FEE_RANGE, ENTRY_FEE_NOT_ALLOWED, ENTRY_FEE_OFF, NODE_UNKNOWN, NODE_NOT_BINDABLE, NODE_SPONSOR_LIT);
 
     private PublishingCodes() {}
 }

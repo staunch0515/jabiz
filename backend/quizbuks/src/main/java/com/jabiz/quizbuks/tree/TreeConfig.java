@@ -9,6 +9,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.runtime.approval.ApprovalProcesses;
+import com.jabiz.context.RequestContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -80,6 +81,66 @@ public class TreeConfig {
     @Bean
     DatasetDefinition qbTreeNodeDefDataset() {
         return defaultDataset(QbTrees.NODE_DEF);
+    }
+
+    // ---- F-S2b1: references, lit records and revocations ------------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbTreeNodeRefEntity() {
+        return QbTrees.NODE_REF_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbTreeLitEntity() {
+        return QbTrees.LIT_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbTreeLitRevocationEntity() {
+        return QbTrees.REVOCATION_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbTreeNodeRefDataset() {
+        return defaultDataset(QbTrees.NODE_REF);
+    }
+
+    @Bean
+    DatasetDefinition qbTreeLitDataset() {
+        return defaultDataset(QbTrees.LIT);
+    }
+
+    @Bean
+    DatasetDefinition qbTreeLitRevocationDataset() {
+        return defaultDataset(QbTrees.REVOCATION);
+    }
+
+    /** A person's own lit records (a Taker's: the subject is the caller as a person), for the templates and a start. */
+    @Bean
+    DatasetDefinition qbMyTreeLitDataset() {
+        return mine(QbTrees.MY_LITS, QbTrees.LIT);
+    }
+
+    @Bean
+    DatasetDefinition qbMyTreeLitRevocationDataset() {
+        return mine(QbTrees.MY_REVOCATIONS, QbTrees.REVOCATION);
+    }
+
+    private DatasetDefinition mine(String id, String entity) {
+        return DatasetDefinition.define(id, d -> d
+            .targetEntityType(entity)
+            .permissions(QbPermissions.TREES_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("subjectId", "actorId", RequestContext::actorId)
+                .fixed("subjectKind", QbTrees.USER)));
+    }
+
+    @Bean
+    StaticDictionary qbTreeLitSubjectDictionary() {
+        return StaticDictionary.define(QbTrees.LIT_SUBJECT_DICTIONARY, d -> d
+            .item(QbTrees.USER, "en", "A Taker", "zh", "学者", "ja", "テイカー")
+            .item(QbTrees.SPONSOR, "en", "A Sponsor", "zh", "发起方", "ja", "主催者"));
     }
 
     @Bean
@@ -169,5 +230,27 @@ public class TreeConfig {
     @Bean
     ProcessDefinition<TreeProcesses.TreeInput, TreeOutput, ProcessContext> qbTreeRetire() {
         return TreeProcesses.retire();
+    }
+
+    private static final ProcessDefinition<TreeLighting.EvaluateInput, TreeLighting.EvaluateOutput, ProcessContext>
+        EVALUATE = TreeLighting.evaluate();
+
+    @Bean
+    ProcessDefinition<TreeLighting.EvaluateInput, TreeLighting.EvaluateOutput, ProcessContext> qbTreeEvaluate() {
+        return EVALUATE;
+    }
+
+    /** A pass of a publication bound to a node evaluates the node (F-S2b1). */
+    @Bean
+    EventSubscription<TreeLighting.EvaluateInput> qbTreePassedSubscription() {
+        return EventSubscription.of(TreeLighting.PASSED_CONSUMER,
+            com.jabiz.quizbuks.play.AttemptFinishing.TREE_PASSED_EVENT, EVALUATE, TreeLighting::passedInput);
+    }
+
+    /** Nodes lit evaluate the nodes depending on them, one level per transaction. */
+    @Bean
+    EventSubscription<TreeLighting.EvaluateInput> qbTreeLitSubscription() {
+        return EventSubscription.of(TreeLighting.LIT_CONSUMER, TreeLighting.LIT_EVENT, EVALUATE,
+            TreeLighting::litInput);
     }
 }
