@@ -241,6 +241,37 @@ public class PublishingConfig {
     }
 
 
+    /** F-S12: the video of another sponsor's a draft picks from the catalog. */
+    @Bean
+    ProcessDefinition<PublicationSharedVideos.SharedVideoInput, PublicationOutput, ProcessContext>
+        qbPublicationSharedVideoSet() {
+        return PublicationSharedVideos.set();
+    }
+
+    private static final ProcessDefinition<PublicationSharedVideos.EndInput, PublicationOutput, ProcessContext>
+        SHARED_VIDEO_END = PublicationSharedVideos.end();
+
+    @Bean
+    ProcessDefinition<PublicationSharedVideos.EndInput, PublicationOutput, ProcessContext>
+        qbPublicationSharedVideoEnd() {
+        return SHARED_VIDEO_END;
+    }
+
+    /**
+     * F-S12: every minute, each publication on whose shared video was taken down ends, in a transaction of its own
+     * (platform decision D42): a takedown takes no publication's lock, and a publication that went on with it after the
+     * takedown read its users (a review approved meanwhile) is found by the next run.
+     */
+    @Bean
+    JobDefinition<PublicationSharedVideos.EndInput> qbSharedVideoEndsJob() {
+        return JobDefinition.forEach(com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses.END_JOB, "0 * * * * *",
+                ZoneOffset.UTC, JobItems.template(PublicationSharedVideos.ENDS_TEMPLATE, scheduledTime -> Map.of(),
+                    "publicationId"),
+                SHARED_VIDEO_END, (scheduledTime, row) -> new PublicationSharedVideos.EndInput(
+                    UUID.fromString(String.valueOf(row.get("publicationId")))))
+            .maxItems(PublishingLimits.TICK_BATCH);
+    }
+
     /** Q88a: a sponsor's publication as a round of the sponsor's own certification. */
     @Bean
     ProcessDefinition<PublicationRounds.SetInput, PublicationOutput, ProcessContext> qbSponsorRoundSet() {
@@ -329,7 +360,9 @@ public class PublishingConfig {
             .item(PublicationStatus.ADMIN, "en", "Ended by an administrator", "zh", "已被管理员结束",
                 "ja", "管理者が終了")
             .item(PublicationStatus.PUBLISHER, "en", "Ended by its publisher", "zh", "已被发布方结束",
-                "ja", "公開者が終了"));
+                "ja", "公開者が終了")
+            .item(PublicationStatus.SHARED_VIDEO, "en", "Its shared video was taken down", "zh", "所用的共享视频已下架",
+                "ja", "使用中の共有動画が公開停止"));
     }
 
     /** Q22: how a reward reaches the taker. */

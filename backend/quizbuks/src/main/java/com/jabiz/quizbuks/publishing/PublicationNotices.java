@@ -36,8 +36,11 @@ public final class PublicationNotices {
     public static final String FUNDS_SHORT = "FUNDS_SHORT";
     /** It ended by its end time, its winners or its budget. */
     public static final String ENDED = "ENDED";
+    /** F-S12: it ended because the shared video it used was taken down (not the sponsor's breach). */
+    public static final String SHARED_VIDEO_ENDED = "SHARED_VIDEO_ENDED";
 
-    public static final List<String> KINDS = List.of(APPROVED, REJECTED, TAKEN_DOWN, FUNDS_SHORT, ENDED);
+    public static final List<String> KINDS = List.of(APPROVED, REJECTED, TAKEN_DOWN, FUNDS_SHORT, ENDED,
+        SHARED_VIDEO_ENDED);
 
     static final String NOTICE = "publicationNotice";
 
@@ -51,6 +54,9 @@ public final class PublicationNotices {
      */
     public static String kindOf(String from, Map<String, Object> values) {
         Object to = values.get("status");
+        if (PublicationStatus.SHARED_VIDEO.equals(values.get("endReason"))) {
+            return SHARED_VIDEO_ENDED;
+        }
         if (PublicationStatus.ADMIN.equals(values.get("endReason"))) {
             return TAKEN_DOWN;
         }
