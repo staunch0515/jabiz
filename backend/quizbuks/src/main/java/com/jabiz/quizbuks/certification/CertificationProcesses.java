@@ -288,8 +288,12 @@ public final class CertificationProcesses {
                 List<EntityInstance> rounds = list(ctx, ROUNDS);
                 List<CertificationHolding.Entry> entries = new ArrayList<>(list(ctx, RECORDS).stream()
                     .map(CertificationProcesses::entry).toList());
-                for (Map<String, Object> pass : unrecordedPasses(certification, rounds, list(ctx, RECORDS),
-                    list(ctx, ATTEMPTS), ctx.request().actorId())) {
+                // F-S2c2 (D6): a sponsor's own certification takes no new pass (its rounds count no more); what was
+                // recorded before still holds it until it runs out.
+                List<Map<String, Object>> passes = SponsorCertifications.isSponsor(key) ? List.of()
+                    : unrecordedPasses(certification, rounds, list(ctx, RECORDS), list(ctx, ATTEMPTS),
+                        ctx.request().actorId());
+                for (Map<String, Object> pass : passes) {
                     ctx.changes().insert(QbCertifications.RECORD, pass);
                     entries.add(passEntry(pass));
                 }

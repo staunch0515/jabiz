@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it
-entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbReferral, QbPublicationPrerequisite, QbSponsorCertification, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
+entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbReferral, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
@@ -17,10 +17,7 @@ datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
-  QbPublicationPrerequisite: urn:jabiz:dataset:default:QbPublicationPrerequisite
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
-  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
-  QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
   QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
   QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
@@ -40,6 +37,7 @@ results:
   cover:          { from: QbPublicationCard.cover }
   watchRequired:  { from: QbPublicationCard.watchRequired }
   videoDurationSec: { from: QbPublicationCard.videoDurationSec }
+  video:          { from: QbPublicationCard.video }
   kind:           { from: QbPublicationCard.kind }
   language:       { from: QbPublicationCard.language }
   languages:      { from: QbPublicationCard.languages }
@@ -79,13 +77,10 @@ results:
   canStart:       { kind: { type: bool } }
   regionBlocked:  { kind: { type: bool } }
   matched:        { kind: { type: bool } }
-  prerequisitesMet: { kind: { type: bool } }
   treeId:         { from: QbPublicationCard.treeId }
   treeNodeId:     { from: QbPublicationCard.treeNodeId }
   nodeUnlocked:   { kind: { type: bool } }
-  prerequisites:  { kind: { type: text } }
   certification:  { from: QbCertificationRound.certification }
-  certificationNames: { kind: { type: text } }
   referral:       { from: QbPublicationCard.referral }
   myReferralStatus:    { from: QbReferral.status }
   myReferralExpiresAt: { from: QbReferral.expiresAt }
@@ -111,6 +106,7 @@ SELECT
     d.cover AS cover,
     d.watchRequired AS watchRequired,
     d.videoDurationSec AS videoDurationSec,
+    d.video AS video,
     d.kind AS kind,
     d.language AS language,
     d.languages AS languages,
@@ -147,17 +143,14 @@ SELECT
     d.last7d AS last7d,
     d.last30d AS last30d,
     d.statsAt AS statsAt,
-    (d.shown AND d.startable AND d.matched AND d.prerequisitesMet AND d.nodeUnlocked
+    (d.shown AND d.startable AND d.matched AND d.nodeUnlocked
      AND d.myAttemptId IS NULL AND NOT d.regionBlocked) AS canStart,
     d.regionBlocked AS regionBlocked,
     d.matched AS matched,
-    d.prerequisitesMet AS prerequisitesMet,
     d.treeId AS treeId,
     d.treeNodeId AS treeNodeId,
     d.nodeUnlocked AS nodeUnlocked,
-    d.prerequisites AS prerequisites,
     d.certification AS certification,
-    d.certificationNames AS certificationNames,
     d.referral AS referral,
     d.myReferralStatus AS myReferralStatus,
     d.myReferralExpiresAt AS myReferralExpiresAt,
@@ -181,6 +174,9 @@ SELECT
     -- how long it is as the sponsor gave it.
     c.{{QbPublicationCard.watchRequired}}  AS watchRequired,
     c.{{QbPublicationCard.videoDurationSec}} AS videoDurationSec,
+    -- F-S12: the card's video, which leads the start page when it is the shared video the publication picked (no
+    -- material of the version): the page plays what the home's card played.
+    c.{{QbPublicationCard.video}}          AS video,
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.language}}       AS language,
     coalesce(c.{{QbPublicationCard.languages}}, c.{{QbPublicationCard.language}}) AS languages,
@@ -265,41 +261,6 @@ SELECT
                                     - pa.{{QbProfileAttribute.valueNumber}}
                                 ELSE pa.{{QbProfileAttribute.valueNumber}} END
                             BETWEEN pc.{{QbPublicationCriterion.minValue}} AND pc.{{QbPublicationCriterion.maxValue}})))))) AS matched,
-    -- Q76 (D-Q76-2): the caller has finished an attempt (in progress does not count) of every publication this one
-    -- requires, a pass where it asks for one (play.PrerequisiteCheck, the one definition; qb.app.feed and
-    -- qb.system.audience-count write the same; the view holds the caller's own attempts only).
-    NOT EXISTS (
-         SELECT 1 FROM {{QbPublicationPrerequisite}} pr
-         WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}
-           -- Q86 (D-Q86-5): or a certification the caller must hold now.
-           AND NOT ((pr.{{QbPublicationPrerequisite.requiredPublicationId}} IS NOT NULL AND EXISTS (
-                 SELECT 1 FROM {{QbAttempt}} ra
-                 WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
-                   AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
-                   AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
-            OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
-                   SELECT 1
-                   FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
-                   CROSS JOIN LATERAL (
-                       SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
-                              rec.{{QbCertificationRecord.validUntil}} AS until
-                       FROM {{QbCertificationRecord}} rec
-                       WHERE rec.{{QbCertificationRecord.certification}} = cat.cert
-                         AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
-                       UNION ALL
-                       SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
-                              a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
-                       FROM {{QbCertificationRound}} r2
-                       JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
-                       WHERE r2.{{QbCertificationRound.certification}} = cat.cert
-                         AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
-                         AND (r2.{{QbCertificationRound.closedAt}} IS NULL
-                              OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
-                   WHERE cat.cert = pr.{{QbPublicationPrerequisite.certification}}
-                     AND e.ver = cat.ver AND e.until > CAST(:at AS timestamptz)
-                     AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
-                                          WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
-                                            AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity'))))) AS prerequisitesMet,
     -- F-S2b1: bound to a knowledge graph's node, the caller has lit now every node it wants lit before answering, and
     -- the node is in effect (tree.TreeLights and play.TreeGate are the definition; qb.app.feed and
     -- qb.system.audience-count write the same; TreeLightsIT compares). The view holds the caller's own records only.
@@ -317,66 +278,8 @@ SELECT
                    WHERE tl.{{QbTreeLit.nodeId}} = ba.node
                      AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
                                      WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))))) AS nodeUnlocked,
-    -- Q76 (D-Q76-3): what to do first, each with its name in the page's language (the required publication's card,
-    -- when it has one: a required publication was submitted, so it has one once live), whether the caller met it, and
-    -- whether it still accepts attempts (its page says why not otherwise).
-    (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
-                'requiredPublicationId', pr.{{QbPublicationPrerequisite.requiredPublicationId}},
-                'certification', pr.{{QbPublicationPrerequisite.certification}},
-                -- Q88a: a sponsor's own certification is named by its row (the catalog's by the front ends' texts).
-                'certificationNames', psc.{{QbSponsorCertification.name}},
-                'requirement', pr.{{QbPublicationPrerequisite.requirement}},
-                'name', coalesce(CAST(rc.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'name',
-                                 rc.{{QbPublicationCard.name}}),
-                'live', rc.{{QbPublicationCard.status}} = 'LIVE' AND rc.{{QbPublicationCard.startAt}} <= :at
-                        AND rc.{{QbPublicationCard.endAt}} > :at,
-                -- Q86: a certification's current round (open, its publication live), to send the taker to.
-                'roundPublicationId', (SELECT max(cr2.{{QbCertificationRound.publicationId}})
-                                       FROM {{QbCertificationRound}} cr2
-                                       JOIN {{QbPublicationCard}} rp ON CAST(rp.{{QbPublicationCard.publicationId}} AS text)
-                                           = cr2.{{QbCertificationRound.publicationId}}
-                                       WHERE cr2.{{QbCertificationRound.certification}} = pr.{{QbPublicationPrerequisite.certification}}
-                                         AND cr2.{{QbCertificationRound.closedAt}} IS NULL
-                                         AND rp.{{QbPublicationCard.status}} = 'LIVE' AND rp.{{QbPublicationCard.startAt}} <= :at
-                                         AND rp.{{QbPublicationCard.endAt}} > :at),
-                'met', ((pr.{{QbPublicationPrerequisite.requiredPublicationId}} IS NOT NULL AND EXISTS (
-                      SELECT 1 FROM {{QbAttempt}} ra
-                      WHERE ra.{{QbAttempt.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
-                        AND ra.{{QbAttempt.status}} <> 'IN_PROGRESS'
-                        AND (pr.{{QbPublicationPrerequisite.requirement}} = 'ANSWERED' OR ra.{{QbAttempt.passed}})))
-                 OR (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL AND EXISTS (
-                        SELECT 1
-                        FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
-                        CROSS JOIN LATERAL (
-                            SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
-                                   rec.{{QbCertificationRecord.validUntil}} AS until
-                            FROM {{QbCertificationRecord}} rec
-                            WHERE rec.{{QbCertificationRecord.certification}} = cat.cert
-                              AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
-                            UNION ALL
-                            SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
-                                   a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
-                            FROM {{QbCertificationRound}} r2
-                            JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
-                            WHERE r2.{{QbCertificationRound.certification}} = cat.cert
-                              AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
-                              AND (r2.{{QbCertificationRound.closedAt}} IS NULL
-                                   OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
-                        WHERE cat.cert = pr.{{QbPublicationPrerequisite.certification}}
-                          AND e.ver = cat.ver AND e.until > CAST(:at AS timestamptz)
-                          AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
-                                               WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
-                                                 AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')))))
-                ORDER BY rc.{{QbPublicationCard.name}}, pr.{{QbPublicationPrerequisite.requiredPublicationId}}), '[]') AS text)
-         FROM {{QbPublicationPrerequisite}} pr
-         LEFT JOIN {{QbSponsorCertification}} psc
-             ON 'sp:' || psc.{{QbSponsorCertification.certificationId}} = pr.{{QbPublicationPrerequisite.certification}}
-         LEFT JOIN {{QbPublicationCard}} rc
-             ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
-         WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}) AS prerequisites,
-    -- Q88a (D-Q88-5): the certification this is a round of, and its name when it is a sponsor's.
+    -- Q69: the certification of the catalog this is a round of (F-S2c2, D6: no sponsor's).
     cr0.{{QbCertificationRound.certification}} AS certification,
-    CAST(sc0.{{QbSponsorCertification.name}} AS text) AS certificationNames,
     -- Q70: "referrals welcome" as frozen on the card, and the caller's own referral to it, if a friend referred them
     -- (the view holds the caller's as referee only; the places left come with the referrer's link).
     c.{{QbPublicationCard.referral}}       AS referral,
@@ -410,12 +313,11 @@ LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.pu
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 LEFT JOIN {{QbSponsorPage}} sp_page ON sp_page.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
--- Q88a: the round the card is, if any, and the name of a sponsor's certification (the catalog's names are the
--- front ends' texts).
+-- Q69: the round of the catalog's certification the card is, if any (the names are the front ends' texts). F-S2c2
+-- (D6): a round of a sponsor's own certification ('sp:<id>', registered before) makes the card no round.
 LEFT JOIN {{QbCertificationRound}} cr0
     ON cr0.{{QbCertificationRound.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
-LEFT JOIN {{QbSponsorCertification}} sc0
-    ON 'sp:' || sc0.{{QbSponsorCertification.certificationId}} = cr0.{{QbCertificationRound.certification}}
+   AND cr0.{{QbCertificationRound.certification}} NOT LIKE 'sp:%'
 -- Q73b: the language shown: the caller's attempt's, else the first of the asked ones the card offers, else its main.
 CROSS JOIN LATERAL (
     SELECT coalesce(m.{{QbAttempt.language}},

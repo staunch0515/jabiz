@@ -1,7 +1,6 @@
 import { questionProducts, type PublicationProduct } from '../qb/products'
 import { PassButton } from '../pass/PassDialog'
-import { readPublicationProducts, readSponsorTree } from '../share/api'
-import { i18n } from '@jabiz/client'
+import { readPublicationProducts } from '../share/api'
 import { countProductClick } from '../share/counting'
 import { ProductCards } from '../qb/view/ProductCards'
 import { SponsorVisit } from './SponsorVisit'
@@ -538,12 +537,6 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
   const publication = useQuery({ queryKey: ['qb', 'result-publication', publicationId],
     queryFn: () => readPublication({ publicationId: publicationId!, at, country: null }), enabled: !!publicationId,
     retry: false })
-  // Q85 (D-Q85-7): "what comes next" leads to the sponsor's tree when their quizzes lead to one another.
-  const sponsorHandle = publication.data?.sponsorHandle ?? null
-  const tree = useQuery({ queryKey: ['qb', 'sponsor-tree', sponsorHandle, i18n.language.slice(0, 2)],
-    queryFn: () => readSponsorTree(sponsorHandle!, at, i18n.language.slice(0, 2)), enabled: !!sponsorHandle,
-    retry: false })
-  const hasTree = !!tree.data?.some((node) => node.requires.length > 0)
 
   if (result.isPending) return <PageState kind="loading" />
   // The submission's own answer stands in only when the server could not answer (not when it refused: a 404 or 403 is
@@ -653,12 +646,6 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
       {/* Q82: a completed attempt may write to the sponsor about it. */}
       {publication.data && (
         <ContactSponsor publicationId={data.publicationId} company={publication.data.sponsorCompany ?? null} />
-      )}
-      {hasTree && sponsorHandle && data.publicationId && (
-        <Button asChild variant="outline">
-          <Link to={`/s/${encodeURIComponent(sponsorHandle)}?node=${encodeURIComponent(data.publicationId)}`}
-            data-testid="result-next-step">{t('result.nextStep')}</Link>
-        </Button>
       )}
       {publication.data && (
         <SponsorVisit handle={publication.data.sponsorHandle} avatar={publication.data.sponsorAvatar}

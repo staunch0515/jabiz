@@ -116,6 +116,11 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_MAIL_TOPUP", ProcessAccess.INTERNAL),
         Map.entry("QB_MAIL_FUNDS_SHORT_DUE", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_NOTIFY", ProcessAccess.INTERNAL),
+        // F-S12: a shared video's review result, and the job ending the publications of one taken down.
+        Map.entry("QB_SHARED_VIDEO_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_SHARED_VIDEO_END", ProcessAccess.INTERNAL),
+        // F-S12 (总控 2026-11-08): a deleted provider's shares withdrawn, part of the erasure only.
+        Map.entry("QB_SHARED_VIDEO_ERASED_WITHDRAW", ProcessAccess.SUB_PROCESS_ONLY),
         // Q7c: the messages made from events, the reminders, the scheduled sending and a ban's withdrawal.
         Map.entry("QB_MESSAGE_FROM_EVENT", ProcessAccess.INTERNAL),
         Map.entry("QB_PAYOUT_REMINDER", ProcessAccess.INTERNAL),
@@ -125,6 +130,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_BROADCAST_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_BROADCAST_STATS", ProcessAccess.INTERNAL),
         Map.entry("QB_CASH_REWARD_OVERDUE", ProcessAccess.INTERNAL),
+        // F-S6: the daily content check (job qb.content-check).
+        Map.entry("QB_CONTENT_CHECK_RUN", ProcessAccess.INTERNAL),
         Map.entry("QB_CONVERSATION_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_CASH_REWARD_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_REDEMPTION_EXPIRE", ProcessAccess.INTERNAL),

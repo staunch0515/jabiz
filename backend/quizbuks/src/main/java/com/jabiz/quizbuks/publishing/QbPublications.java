@@ -152,6 +152,10 @@ public final class QbPublications {
         // the version's as they are). Only QB_PUBLICATION_TOPICS_SET writes it; frozen with the policy.
         eb.field("topicChanges", f -> f.physicalColumn("topic_changes").processOnly()
             .asText(com.jabiz.quizbuks.topic.TopicRules.CHANGES_LENGTH));
+        // F-S12: the video of another sponsor's it picked from the catalog (QbSharedVideo); none: its own videos only.
+        // Only QB_PUBLICATION_SHARED_VIDEO_SET writes it; frozen with the policy (a withdrawal does not touch it).
+        eb.field("sharedVideoId", f -> f.physicalColumn("shared_video_id").processOnly()
+            .asText(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.ID_LENGTH));
         eb.field("fullScore", f -> f.physicalColumn("full_score").processOnly().asNumeric(7, 0));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").processOnly().asMonetary("JPY", 0));
         eb.field("maxSpend", f -> f.physicalColumn("max_spend").processOnly().asMonetary("JPY", 0));
@@ -393,7 +397,8 @@ public final class QbPublications {
         eb.field("coverZh", f -> f.physicalColumn("cover_zh").asText(36));
         eb.field("coverEn", f -> f.physicalColumn("cover_en").asText(36));
         // Q19: the player of the version's video to watch (VideoEmbeds), shown on the App's home.
-        eb.field("video", f -> f.physicalColumn("video").asText(80));
+        // F-S15: a video file or another page plays at its own address, as long as a material's link (V86).
+        eb.field("video", f -> f.physicalColumn("video").asText(ContentLimits.URL_LENGTH));
         // Q75: whether that video is the one to watch before answering (the start requires its watching, D-Q75-4), and
         // how long it is as the sponsor gave it (none on a card from before Q75: then only its end counts).
         eb.field("watchRequired", f -> f.physicalColumn("watch_required").required(true).asBool());
@@ -411,6 +416,12 @@ public final class QbPublications {
         eb.field("topics", f -> f.physicalColumn("topics").asText(com.jabiz.quizbuks.topic.TopicRules.CODES_LENGTH));
         eb.field("customTopics", f -> f.physicalColumn("custom_topics")
             .asText(com.jabiz.quizbuks.topic.TopicRules.CUSTOM_LENGTH));
+        // F-S12: the shared video it froze (none: its own videos) and that video's provider, for blocking (F-S8) and
+        // the statistics; the card's video is that one unless a material's must be watched.
+        eb.field("sharedVideoId", f -> f.physicalColumn("shared_video_id")
+            .asText(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.ID_LENGTH));
+        eb.field("videoProviderId", f -> f.physicalColumn("video_provider_id")
+            .asText(com.jabiz.quizbuks.identity.AccountLimits.USER_ID_LENGTH));
 
         eb.field("versionId", f -> f.physicalColumn("version_id").required(true)
             .asReference(QbContent.VERSION));

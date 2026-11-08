@@ -20,6 +20,8 @@
 | T10 | 公开主页的"链接名"填了官网地址，提示"须为 3 至 30 个小写字母、数字或连字符" | 发起方 | 已改进（F-F9）：输入网址时提示并建议链接名；问答发布后归档 |
 | T14 | e2e 的统计用例（`analytics.spec.ts`）在东京零点前后失败 | 内部（测试） | 已修复（2026-11-07） |
 | T15 | 邮件一直不到（验证、找回密码、通知），发信记录全是 `Connect timed out` | 全部；处理在内部（运维） | 设置问题；部署前的检查已能拦下（2026-11-08） |
+| T16 | 视频资料是其他网站的网页，App 里只有一块空白 | 发起方、学者 | 设计如此（对方网站不允许嵌入） |
+| T17 | 视频文件（.mp4 等）在 App 里放不了，卡片只有封面与"打开视频" | 发起方、学者 | 设计如此（文件或服务器的问题） |
 
 ---
 
@@ -279,6 +281,22 @@
   答：メールは通常数分で届きます。まず迷惑メールやプロモーションのフォルダを確認し、入力したメールアドレスに誤りがないかご確認ください。それでも届かないときは、数分おいてから画面の「再送信」を押してください（パスワードの再設定はもう一度お申し込みください）。ずっと届かない場合は、メールアドレスを添えてサポートにご連絡ください。送信記録を確認します。
 - English · Q: I did not receive the verification or password reset email. What can I do?
   A: Emails usually arrive within a few minutes. Check your spam or promotions folder, and that the address you entered is correct. If it is still missing, wait a few minutes and press "Resend" on the page (for a password reset, request it again). If it never arrives, contact support with your email address and we will check the sending records.
+
+## T16 视频资料是其他网站的网页，App 里只有一块空白
+
+- **对象**：发起方（学者看到的是结果）。FAQ：`SPONSOR` / `CONTENT`
+- **状态**：设计如此（F-S15，`docs/quizbuks/plans/impl/F-S15.md`）。
+- **现象**：视频资料填的是七个已知网站以外的网页地址，发起方页面的预览与 App 的卡片、开始页中那块地方是空白的。
+- **原因**：很多网站（包括多数视频网站的普通视频页）用 `X-Frame-Options` 或 `frame-ancestors` 禁止被别的网站嵌入，浏览器就显示空白。页面读不到对方的这个设置（浏览器照样报告"已加载"），服务器端也不去探测（要发往任意网站，须改平台决策 D38，第一期不做），所以不能自动改为链接。
+- **使用者的解决办法**：改用该网站提供的**嵌入（embed）地址**（视频网站的"分享 → 嵌入"中 `<iframe src="…">` 的那个地址），或直接用视频文件的地址（`.mp4` 等）。发起方页面的资料对话框会当场显示预览并提示"如果这里一片空白……"。
+- **帮助页文案**（`docs/quizbuks/help/any-video.md` 第二节）。
+
+## T17 视频文件在 App 里放不了，卡片只有封面与"打开视频"
+
+- **对象**：发起方、学者。FAQ：`SPONSOR` / `CONTENT`
+- **状态**：设计如此（F-S15）。App 在 `<video>` 出错时自动改为封面加"打开视频"的链接，发起方页面的预览当场提示"这个视频文件打不开"。
+- **原因**：地址打不开（404、要登录、签名过期）；服务器没有按视频发送（`Content-Type` 不是 `video/*`）；格式浏览器不支持（`.webm` 在部分 iPhone 上、`.mov` 中的部分编码、H.265）；或网络到不了（中国大陆访问海外服务器）。
+- **使用者的解决办法**：在手机的浏览器中直接打开这个地址确认能播放；最好用 `.mp4`（H.264 视频 + AAC 音频，faststart）；服务器的要求见 `operations.md` §7.29。改好后在发起方页面重新打开资料对话框，预览读到时长即正常。
 
 ## 已归档
 

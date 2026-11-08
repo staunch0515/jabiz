@@ -174,66 +174,6 @@ public class PublishingConfig {
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
-    // ---- Q76: prerequisites ----------------------------------------------------------------------------------------
-
-    @Bean
-    EntityDefinition qbPublicationPrerequisiteEntity() {
-        return QbPrerequisites.ENTITY;
-    }
-
-    /** Written by the processes only; the administration reads every publication's prerequisites. */
-    @Bean
-    DatasetDefinition qbPublicationPrerequisiteDataset() {
-        return DatasetDefinition.define(QbPrerequisites.DEFAULT_DATASET, d -> d
-            .targetEntityType(QbPrerequisites.PREREQUISITE)
-            .asDefault()
-            .scope(OperatorScopes.of(QbPrerequisites.PREREQUISITE))
-            .permissions(QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(2 * QbPrerequisites.MAX_PREREQUISITES))
-            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
-    }
-
-    /** The sponsor's own publications' prerequisites, read only (its write permission is no role's). */
-    @Bean
-    DatasetDefinition qbSponsorPublicationPrerequisiteDataset() {
-        return DatasetDefinition.define(QbPrerequisites.SPONSOR_DATASET, d -> d
-            .targetEntityType(QbPrerequisites.PREREQUISITE)
-            .permissions(QbPermissions.PUBLICATION_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.readOnly(true).allowTimeTravel(false))
-            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
-            .scope(s -> s.fromContext("publisherId", "actorId", RequestContext::actorId)
-                .fixed("publisherKind", PublisherKind.SPONSOR)));
-    }
-
-    /**
-     * D-Q76-8: the sponsor's page shows which of its live publications lead to which; the public template joins both
-     * ends to the public cards (live, public), so a row of a paused or invited publication is never shown. Read through
-     * the template only, as the public cards.
-     */
-    @Bean
-    DatasetDefinition qbPublicPublicationPrerequisiteDataset() {
-        return DatasetDefinition.define(QbPrerequisites.PUBLIC_DATASET, d -> d
-            .targetEntityType(QbPrerequisites.PREREQUISITE)
-            .scope(s -> s.fixed("publisherKind", PublisherKind.SPONSOR))
-            .publicRead(p -> p.fields("publicationId", "requiredPublicationId", "certification", "requirement"))
-            .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.readOnly(true).allowTimeTravel(false))
-            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
-    }
-
-    @Bean
-    StaticDictionary qbPrerequisiteRequirementDictionary() {
-        return StaticDictionary.define(QbPrerequisites.DICTIONARY, d -> d
-            .item(QbPrerequisites.PASSED, "en", "Passed", "zh", "已通过", "ja", "合格済み")
-            .item(QbPrerequisites.ANSWERED, "en", "Answered", "zh", "已作答", "ja", "回答済み"));
-    }
-
-    @Bean
-    ProcessDefinition<PublicationPrerequisites.PrerequisitesInput, PublicationOutput, ProcessContext>
-        qbPublicationPrerequisitesSave() {
-        return PublicationPrerequisites.save();
-    }
-
     /** F-S9: what a draft adds to and removes from its version's topics. */
     @Bean
     ProcessDefinition<PublicationTopics.TopicsInput, PublicationOutput, ProcessContext> qbPublicationTopicsSet() {
@@ -241,16 +181,35 @@ public class PublishingConfig {
     }
 
 
-    /** Q88a: a sponsor's publication as a round of the sponsor's own certification. */
+    /** F-S12: the video of another sponsor's a draft picks from the catalog. */
     @Bean
-    ProcessDefinition<PublicationRounds.SetInput, PublicationOutput, ProcessContext> qbSponsorRoundSet() {
-        return PublicationRounds.set();
+    ProcessDefinition<PublicationSharedVideos.SharedVideoInput, PublicationOutput, ProcessContext>
+        qbPublicationSharedVideoSet() {
+        return PublicationSharedVideos.set();
     }
 
+    private static final ProcessDefinition<PublicationSharedVideos.EndInput, PublicationOutput, ProcessContext>
+        SHARED_VIDEO_END = PublicationSharedVideos.end();
+
     @Bean
-    ProcessDefinition<PublicationProcesses.PublicationRef, com.jabiz.quizbuks.certification.CertificationProcesses
-        .RoundOutput, ProcessContext> qbSponsorRoundClose() {
-        return PublicationRounds.close();
+    ProcessDefinition<PublicationSharedVideos.EndInput, PublicationOutput, ProcessContext>
+        qbPublicationSharedVideoEnd() {
+        return SHARED_VIDEO_END;
+    }
+
+    /**
+     * F-S12: every minute, each publication on whose shared video was taken down ends, in a transaction of its own
+     * (platform decision D42): a takedown takes no publication's lock, and a publication that went on with it after the
+     * takedown read its users (a review approved meanwhile) is found by the next run.
+     */
+    @Bean
+    JobDefinition<PublicationSharedVideos.EndInput> qbSharedVideoEndsJob() {
+        return JobDefinition.forEach(com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses.END_JOB, "0 * * * * *",
+                ZoneOffset.UTC, JobItems.template(PublicationSharedVideos.ENDS_TEMPLATE, scheduledTime -> Map.of(),
+                    "publicationId"),
+                SHARED_VIDEO_END, (scheduledTime, row) -> new PublicationSharedVideos.EndInput(
+                    UUID.fromString(String.valueOf(row.get("publicationId")))))
+            .maxItems(PublishingLimits.TICK_BATCH);
     }
 
     @Bean
@@ -331,7 +290,9 @@ public class PublishingConfig {
             .item(PublicationStatus.PUBLISHER, "en", "Ended by its publisher", "zh", "已被发布方结束",
                 "ja", "公開者が終了")
             .item(PublicationStatus.TREE, "en", "Its knowledge map was retired", "zh", "所绑定的知识结构图已停用",
-                "ja", "結び付いた知識マップの使用停止"));
+                "ja", "結び付いた知識マップの使用停止")
+            .item(PublicationStatus.SHARED_VIDEO, "en", "Its shared video was taken down", "zh", "所用的共享视频已下架",
+                "ja", "使用中の共有動画が公開停止"));
     }
 
     /** Q22: how a reward reaches the taker. */

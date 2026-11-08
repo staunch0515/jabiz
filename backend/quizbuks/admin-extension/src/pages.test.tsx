@@ -404,6 +404,26 @@ describe('PublicationReviewPage', () => {
     expect(await screen.findByTestId('publication-vertical')).toHaveTextContent('Vertical video')
   })
 
+  it('marks the pages of other sites the version frames, and no video of a known site or file (F-S15)', async () => {
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('LIVE'))
+    server.entities.set(`${DATASET.version}/${VERSION_ID}`, versionWithVideo('https://player.example.com/embed/1'))
+    renderPublication()
+    const notice = await screen.findByTestId('publication-embedded')
+    expect(notice).toHaveTextContent('Embedded pages not of a known site')
+    const link = within(notice).getByRole('link', { name: 'https://player.example.com/embed/1' })
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    await expectAccessible()
+  })
+
+  it('says nothing of embedding for a video file (F-S15)', async () => {
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('LIVE'))
+    server.entities.set(`${DATASET.version}/${VERSION_ID}`, versionWithVideo('https://cdn.example.com/clip.mp4'))
+    renderPublication()
+    expect(await screen.findByTestId('version-preview')).toBeInTheDocument()
+    expect(screen.queryByTestId('publication-embedded')).not.toBeInTheDocument()
+  })
+
   it('says nothing of a horizontal video (F-S10)', async () => {
     server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, publication('LIVE'))
     server.entities.set(`${DATASET.version}/${VERSION_ID}`, versionWithVideo('https://www.youtube.com/watch?v=dQw4w9WgXcQ'))

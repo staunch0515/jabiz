@@ -15,12 +15,10 @@ import { useMailServer } from '../publishing/MailServerPage'
 import { qrFileName, qrImageUrl, qrPng, qrSvg } from '../publishing/qr'
 import { useRewardMethodLabel } from '../publishing/shared'
 import { STAFF_QUERY } from '../publishing/StaffPage'
-import { UNDERSTANDING_SPONSOR } from '../qb/ids'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { appPublicationLink, sponsorPageLink } from '../qb/page'
+import { sponsorPageLink } from '../qb/page'
 import { Link } from '../qb/router'
-import { UnderstandingCards } from '../qb/UnderstandingCards'
 import { readYourOperator, useMySponsor, YOUR_OPERATOR_QUERY, type YourOperator } from './api'
 import { checklist, progress, type ChecklistKey } from './checklist'
 import { PRODUCTS_TAB_PATH, profilePath } from './paths'
@@ -96,10 +94,6 @@ export function OverviewPage() {
             )}
           </CardContent>
         </Card>
-
-        {/* Q86 (D-Q86-2): the sponsor's terms quiz, answered in the app (one account, two front ends). */}
-        <UnderstandingCards kinds={UNDERSTANDING_SPONSOR} hrefOf={appPublicationLink} held={false}
-          testId="profile-understanding" />
 
         <Card data-testid="profile-checklist">
           <CardHeader>

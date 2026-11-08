@@ -154,35 +154,6 @@ class AttemptStatementBudgetIT extends TreeItSupport {
     }
 
     /**
-     * Q76 (D-Q76-7): a publication with prerequisites reads the caller's attempts on them, one statement more and
-     * outside the start lock; the lock's budget is unchanged, and so is an ordinary publication's (above).
-     */
-    @Test
-    void aStartWithPrerequisites() {
-        warmUp();
-        String sponsor = newSponsor("s-budget-pre");
-        credit(sponsor, 100_000);
-        String basics = livePublication(sponsor, "Budget basics", Map.of("regions", List.of("GLOBAL"), "maxWinners",
-            100_000, "budgetCap", 1_000_000));
-        String advanced = liveRequiring(sponsor, "Budget advanced", Map.of("regions", List.of("GLOBAL"),
-            "maxWinners", 100_000, "budgetCap", 1_000_000), List.of(prerequisite(basics, "PASSED")));
-        // Warm: a taker who passed the basics starts the advanced one, as counted below for the next.
-        String warm = newTaker("t-budget-pre-warm-" + UUID.randomUUID(), null);
-        play(warm, basics, true, true);
-        keyed("QB_ATTEMPT_START", taker(warm), body("publicationId", advanced));
-        String userId = newTaker("t-budget-pre-" + UUID.randomUUID(), null);
-        play(userId, basics, true, true);
-        String token = taker(userId);
-
-        SqlStatementLog.clear();
-        keyed("QB_ATTEMPT_START", token, body("publicationId", advanced));
-        List<List<String>> start = SqlStatementLog.transactions();
-        report("QB_ATTEMPT_START (prerequisites)", start);
-        assertBudget("QB_ATTEMPT_START (prerequisites)", start, budget(START_TOTAL) + 1, budget(START_LOCKED));
-        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(advanced));
-    }
-
-    /**
      * F-S2b1: a publication bound to a knowledge map node reads the node's row with the caller's lit records and
      * revocations, one statement more outside the start lock; the lock's part is an ordinary start's. Its pass sends
      * {@code qb.tree.passed} for the lighting outside the answering: held, the event goes with the other writes (the
@@ -225,76 +196,6 @@ class AttemptStatementBudgetIT extends TreeItSupport {
         int event = batching.acrossTransaction() ? 0 : 1;
         assertBudget("QB_ATTEMPT_SUBMIT (a node's pass)", submit, budget(SUBMIT_TOTAL) + event,
             budget(SUBMIT_LOCKED) + event);
-    }
-
-    /**
-     * Q86 (D-Q86-6): a start that requires a certification reads the caller's holding of it, two statements more
-     * outside the lock (records and rounds in one, the attempts on those rounds in another); the lock's part is the
-     * same as an ordinary start.
-     */
-    @Test
-    void aStartWithACertificationPrerequisite() {
-        warmUp();
-        String sponsor = newSponsor("s-budget-cert");
-        credit(sponsor, 100_000);
-        String gated = liveRequiring(sponsor, "Budget gated", Map.of("regions", List.of("GLOBAL"),
-            "maxWinners", 100_000, "budgetCap", 1_000_000), List.of(body("certification", "REFERRER", "requirement", "PASSED")));
-        NewOperator operator = officialOperator("Budget");
-        String official = operator.leadId();
-        credit(official, 100_000);
-        String round = livePublication(official, "Budget round", Map.of("regions", List.of("GLOBAL"), "maxWinners",
-            100_000, "budgetCap", 1_000_000));
-        run(com.jabiz.quizbuks.certification.CertificationProcesses.ROUND_ADD, memberSession(official,
-            operator.operatorId()), body("publicationId", round, "certification", "REFERRER"));
-        String warm = newTaker("t-budget-cert-warm-" + UUID.randomUUID(), null);
-        play(warm, round, true, true);
-        keyed("QB_ATTEMPT_START", taker(warm), body("publicationId", gated));
-        String userId = newTaker("t-budget-cert-" + UUID.randomUUID(), null);
-        play(userId, round, true, true);
-        String token = taker(userId);
-
-        SqlStatementLog.clear();
-        keyed("QB_ATTEMPT_START", token, body("publicationId", gated));
-        List<List<String>> start = SqlStatementLog.transactions();
-        report("QB_ATTEMPT_START (certification prerequisite)", start);
-        assertBudget("QB_ATTEMPT_START (certification prerequisite)", start, budget(START_TOTAL) + 2,
-            budget(START_LOCKED));
-        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(gated));
-    }
-
-    /**
-     * F-S2c (D2): holding a certification no longer keeps anybody from its rounds, so a round of a sponsor's own
-     * certification starts as an ordinary publication does: no statement more (Q70a and Q88a read two).
-     */
-    @Test
-    void aStartOfASponsorsRound() {
-        warmUp();
-        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
-            "values", Map.of("paramKey", com.jabiz.quizbuks.setup.QbParams.SPONSOR_ROUNDS_ENABLED, "value", "true"),
-            "reason", "Q88a"));
-        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
-        String sponsor = newSponsor("s-budget-round");
-        credit(sponsor, 100_000);
-        String token = sponsorToken(sponsor);
-        String certificationId = (String) run(com.jabiz.quizbuks.certification.SponsorCertificationProcesses.CREATE,
-            token, body("name", Map.of("en", "Budget expert"), "validityDays", 365)).get("certificationId");
-        String versionId = version(token, "Budget round quiz");
-        java.time.Instant now = clock.instant();
-        Map<String, Object> save = complete(versionId, "Budget sponsor round", now, now.plus(java.time.Duration.ofDays(7)));
-        save.putAll(Map.of("regions", List.of("GLOBAL"), "maxWinners", 100_000, "budgetCap", 1_000_000));
-        String round = (String) run("QB_PUBLICATION_SAVE", token, save).get("publicationId");
-        run(com.jabiz.quizbuks.publishing.PublicationRounds.SET, token, body("publicationId", round,
-            "certificationId", certificationId));
-        assertThat(run("QB_PUBLICATION_SUBMIT", token, body("publicationId", round)).get("status")).isEqualTo("LIVE");
-        play(newTaker("t-budget-round-warm-" + UUID.randomUUID(), null), round, true, true);
-        String userId = newTaker("t-budget-round-" + UUID.randomUUID(), null);
-
-        SqlStatementLog.clear();
-        keyed("QB_ATTEMPT_START", taker(userId), body("publicationId", round));
-        List<List<String>> start = SqlStatementLog.transactions();
-        report("QB_ATTEMPT_START (sponsor's round)", start);
-        assertBudget("QB_ATTEMPT_START (sponsor's round)", start, budget(START_TOTAL), budget(START_LOCKED));
-        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(round));
     }
 
     /**

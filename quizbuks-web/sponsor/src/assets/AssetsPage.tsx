@@ -34,7 +34,6 @@ import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formProblem, ProblemList } from '../content/editing'
 import { quizPath } from '../content/paths'
-import { CertificationsPage } from '../certifications/CertificationsPage'
 import { EmptyState } from '../EmptyState'
 import { SPONSOR } from '../messages'
 import { ProductsPage } from '../products/ProductsPage'
@@ -65,6 +64,7 @@ import {
   type CollectOutput,
 } from './api'
 import { AssetDialog } from './AssetDialog'
+import { MySharedVideos, ShareVideoDialog } from '../sharedvideos/Sharing'
 import { ASSET_LIMITS } from './ids'
 import './messages'
 import { UsageCard } from './UsageCard'
@@ -105,6 +105,8 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
   const [editing, setEditing] = useState<Asset | 'new' | null>(null)
   const [usesOf, setUsesOf] = useState<Asset | null>(null)
   const [collecting, setCollecting] = useState(false)
+  // F-S12: the video link being shared with other Sponsors.
+  const [sharing, setSharing] = useState<Asset | null>(null)
   const refresh = () => Promise.all([ASSETS_QUERY, ASSET_STATS_QUERY, USAGE_QUERY]
     .map((queryKey) => queryClient.invalidateQueries({ queryKey }))).then(() => undefined)
   const remove = useMutation({
@@ -166,6 +168,14 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
             aria-label={t('assets.uses.openNamed', { name: row.original.name })} onClick={() => setUsesOf(row.original)}>
             {t('assets.uses.open')}
           </Button>
+          {/* F-S12: a video link with its duration may be shared with other Sponsors. */}
+          {row.original.kind === 'VIDEO_LINK' && (
+            <Button variant="ghost" size="sm" data-testid="asset-share"
+              aria-label={t('sharedVideos.shareNamed', { name: row.original.name })}
+              onClick={() => setSharing(row.original)}>
+              {t('sharedVideos.share')}
+            </Button>
+          )}
           <ConfirmDialog destructive title={t('assets.deleteTitle')} description={t('assets.deleteText')}
             confirmLabel={t('assets.delete')} cancelLabel={t('assets.cancel')}
             onConfirm={() => removeAsset(row.original)}
@@ -194,7 +204,6 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
           ))}
         </TabsList>
         {tab === 'products' && <TabsContent value={tab}><ProductsPage /></TabsContent>}
-        {tab === 'certifications' && <TabsContent value={tab}><CertificationsPage embedded /></TabsContent>}
         {isAssetTab(tab) && <TabsContent value={tab} className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3" role="search" aria-label={t('assets.search')}>
             <div className="flex flex-col gap-1">
@@ -261,6 +270,9 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
           }} />
       )}
       {usesOf && <UsesDialog asset={usesOf} onClose={() => setUsesOf(null)} />}
+      {sharing && <ShareVideoDialog asset={sharing} onClose={() => setSharing(null)} onShared={() => setSharing(null)} />}
+      {/* F-S12: the videos the Sponsor shares, with the review's result, on the tabs that hold video links. */}
+      {(tab === 'all' || tab === 'media') && <MySharedVideos />}
       {collecting && <CollectDialog onClose={() => setCollecting(false)} onCollected={refresh} />}
     </section>
   )

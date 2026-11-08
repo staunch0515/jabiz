@@ -40,7 +40,13 @@ public final class PublicationStatus {
     /** F-S2b2: the knowledge map whose node it is bound to was retired. */
     public static final String TREE = "TREE";
 
-    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN, PUBLISHER, TREE);
+    /**
+     * F-S12: the shared video it used was taken down (illegal or infringing): not the sponsor's breach, so not a
+     * takedown of the publication ({@code PublicationAdmin.takenDown} stays false: its quiz is reviewed as before).
+     */
+    public static final String SHARED_VIDEO = "SHARED_VIDEO";
+
+    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN, PUBLISHER, TREE, SHARED_VIDEO);
 
     /**
      * Who paused a paused publication ({@code pausedBy}, Q10b, review M2): its sponsor, who may resume it, or an

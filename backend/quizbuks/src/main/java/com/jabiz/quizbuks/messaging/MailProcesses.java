@@ -307,7 +307,8 @@ public final class MailProcesses {
                     : record(ctx).get("publisherId"))),
             ctx -> publicationMail(ctx, messages, values), messages, NotificationMails.PUBLICATION_APPROVED,
             NotificationMails.PUBLICATION_REJECTED, NotificationMails.PUBLICATION_TAKEN_DOWN,
-            NotificationMails.PUBLICATION_FUNDS_SHORT, NotificationMails.PUBLICATION_ENDED);
+            NotificationMails.PUBLICATION_FUNDS_SHORT, NotificationMails.PUBLICATION_ENDED,
+            com.jabiz.quizbuks.sharedvideo.SharedVideoMails.PUBLICATION_ENDED);
     }
 
     /** Whether the event names a sponsor's publication (S0): only sponsors have a mailbox with the platform. */
@@ -342,13 +343,20 @@ public final class MailProcesses {
                 decide(ctx, NotificationMails.PUBLICATION_APPROVED, params);
             }
             case PublicationNotices.REJECTED -> {
-                params.put("reason", input.reason() == null ? "" : input.reason());
+                // F-S12: a code (its shared video taken down in review) is read in the sponsor's language.
+                params.put("reason", input.reason() == null ? ""
+                    : com.jabiz.quizbuks.sharedvideo.SharedVideoCodes.TAKEN_DOWN.equals(input.reason())
+                        ? text(messages, ctx, input.reason()) : input.reason());
                 decide(ctx, NotificationMails.PUBLICATION_REJECTED, params);
             }
             case PublicationNotices.TAKEN_DOWN -> {
                 params.put("reason", input.reason() == null ? "" : input.reason());
                 decide(ctx, NotificationMails.PUBLICATION_TAKEN_DOWN, params);
             }
+            // F-S12: the shared video it used was taken down (transactional: not the sponsor's breach, and they must
+            // know their publication stopped).
+            case PublicationNotices.SHARED_VIDEO_ENDED ->
+                decide(ctx, com.jabiz.quizbuks.sharedvideo.SharedVideoMails.PUBLICATION_ENDED, params);
             case PublicationNotices.FUNDS_SHORT -> {
                 if (freshNotification(ctx) && addressed(ctx)) {
                     fundsShortMail(ctx, input.publisherId());
