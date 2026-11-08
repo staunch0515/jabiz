@@ -1,0 +1,3 @@
+# QuizBuks's Flyway migration sequences for the platform's migration-order check (tools/check-migration-order.sh,
+# docs/guide/version-lines.md "迁移的顺序"): one directory regex per line; all QuizBuks modules share one sequence.
+backend/quizbuks[^/]*/src/main/resources/db/migration

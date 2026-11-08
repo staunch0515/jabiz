@@ -2,6 +2,7 @@
 # Everything else belongs to the platform branch and must not be changed here.
 .jabiz-app-paths
 .jabiz-ci-no-backend
+.jabiz-migration-sequences
 backend/quizbuks/**
 backend/quizbuks-shopify/**
 backend/quizbuks-channel/**
