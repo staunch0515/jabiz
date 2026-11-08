@@ -45,6 +45,22 @@ export function trackable(player: string | null | undefined): boolean {
   return !!player && (player.startsWith(YOUTUBE_PLAYER) || player.startsWith(VIMEO_PLAYER))
 }
 
+/**
+ * F-S10: whether a video link is a YouTube Shorts link (`youtube.com/shorts/<id>`), read as `videoPlayer` reads links:
+ * such a video is vertical whatever its material says (the backend's `VideoEmbeds.shorts`, the same cases).
+ */
+export function isShorts(url: string | null | undefined): boolean {
+  if (!videoPlayer(url)) return false
+  const parsed = new URL(url!.trim())
+  const path = parsed.pathname.split('/')
+  return YOUTUBE_HOSTS.has(parsed.hostname.toLowerCase()) && path.length === 3 && path[1] === 'shorts'
+}
+
+/** F-S10: whether a video material is vertical: a YouTube Shorts link, or marked so by the sponsor. */
+export function verticalVideo(url: string | null | undefined, marked: boolean | null | undefined): boolean {
+  return !!marked || isShorts(url)
+}
+
 /** The player's address for a link to one video of the sites above; null for any other address. */
 export function videoPlayer(url: string | null | undefined): string | null {
   if (!url || !url.trim()) return null

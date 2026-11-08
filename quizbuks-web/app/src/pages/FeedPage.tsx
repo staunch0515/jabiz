@@ -24,7 +24,7 @@ import {
 } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Gift, HandCoins, LayoutGrid, SlidersHorizontal, X, type LucideIcon } from 'lucide-react'
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { UNDERSTANDING_TAKER } from '../qb/ids'
@@ -37,13 +37,17 @@ import { QB } from '../qb/messages'
 import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, rewardPath, type FeedCard, type FeedSort, type RewardMethod }
   from '../qb/play'
 import { problemText } from '../qb/problems'
-import { Link, navigate, useLocation } from '../qb/router'
+import { canGoBack, Link, navigate, useLocation } from '../qb/router'
 import { prefersStillVideo, trackable } from '../qb/video'
 import { QBVIEW } from '../qb/view/messages'
 import { openWithSound, VideoSlot } from '../video/stage'
 import { useSoundSetting } from '../qb/SoundSettings'
 import { HomeInstallOffer } from '../install'
 import { useMainlandChina } from '../qb/region'
+import { countShortsOpen, readShorts } from '../shorts/api'
+import { placeShelves, type Shelf } from '../shorts/shelves'
+import { ShortsShelf } from '../shorts/ShortsShelf'
+import { ShortsViewer } from '../shorts/ShortsViewer'
 
 /** The home's address, searched from the header (Q63): `/?q=<text>`. */
 export const HOME_PATH = '/'
@@ -55,6 +59,23 @@ export function searchPath(q: string): string {
 /** The search an address of the home carries; empty for none. */
 export function searchOf(search: string): string {
   return (new URLSearchParams(search).get('q') ?? '').trim().slice(0, 100)
+}
+
+/**
+ * F-S10: the home's address with the full-screen vertical mode open on a publication (`shorts=<id>`), the search
+ * kept: the mode lies over the home, so that the browser's back closes it and the home is where it was.
+ */
+export function shortsPath(q: string, publicationId: string | null): string {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (publicationId) params.set('shorts', publicationId)
+  const query = params.toString()
+  return query ? `${HOME_PATH}?${query}` : HOME_PATH
+}
+
+/** The publication the vertical mode is open on, from the home's address; null when it is closed. */
+export function shortsOf(search: string): string | null {
+  return new URLSearchParams(search).get('shorts') || null
 }
 
 /** Cards per page of the feed. */
@@ -394,7 +415,10 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   // The feed is for the moment the page opened; a search or a new sort asks again for that moment.
   const [at] = useState(() => new Date().toISOString())
   // Q63: searched from the header (`/?q=`).
-  const q = searchOf(useLocation().search)
+  const search = useLocation().search
+  const q = searchOf(search)
+  // F-S10: the vertical mode, open over the home on this publication.
+  const shortsOpen = shortsOf(search)
   // Q64: chosen from the header's filter button (Q22: one way of paying the reward, remembered on this device).
   const { method, chooseMethod, filters, setFilters, open: filtersOpen, setOpen: setFiltersOpen } = useFeedControls()
   const filterList = feedFilters(filters)
@@ -424,9 +448,32 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
     getNextPageParam: (last) => (last.items.length < FEED_PAGE ? undefined : last.offset + FEED_PAGE),
   })
   const cards = feed.data?.pages.flatMap((page) => page.items) ?? []
+  // F-S10: the vertical short videos under the same conditions (the template's `shorts`), once the feed is there.
+  const shorts = useQuery({
+    queryKey: ['qb', 'feed-shorts', at, country, q, filters.sort, filters.includeAnswered, method, filterList,
+      i18n.language, languages, mainlandChina],
+    queryFn: () => readShorts({ at, country, q, sort: filters.sort, method: method === 'ALL' ? null : method,
+      includeAnswered: filters.includeAnswered, languages, mainlandChina, filters: filterList }),
+    enabled: feed.isSuccess,
+  })
+  const shortCards = shorts.data?.cards ?? []
+  const shelves = shorts.data
+    ? placeShelves(cards.length, !feed.hasNextPage, shorts.data.positions, shorts.data.perShelf, shortCards) : []
+  const shelfAfter = new Map<number, Shelf>(shelves.map((shelf) => [shelf.after, shelf]))
+  const openShorts = useCallback((card: FeedCard) => {
+    countShortsOpen(card)
+    navigate(shortsPath(q, card.publicationId))
+  }, [q])
+  const closeShorts = useCallback(() => {
+    if (canGoBack()) window.history.back()
+    else navigate(shortsPath(q, null), { replace: true })
+  }, [q])
+  const viewing = shortsOpen !== null && shortCards.some((card) => card.publicationId === shortsOpen)
   const [list, setList] = useState<HTMLUListElement | null>(null)
   const [end, setEnd] = useState<HTMLDivElement | null>(null)
-  const playing = useCentredVideo(list, cards.length)
+  const centred = useCentredVideo(list, cards.length + shelves.length)
+  // Q65: one player: none of the home's while the vertical mode is open over it.
+  const playing = viewing ? null : centred
   useMoreNearTheEnd(end, () => {
     if (feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage()
   })
@@ -516,14 +563,26 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           {/* Q63: one card a row across the screen; the one with a video in the middle of the screen plays. */}
           <ul ref={setList} className="-mx-4 flex flex-col gap-4 sm:mx-0" data-testid="feed-list"
             aria-label={t('feed.listTitle')}>
-            {cards.map((card) => (
-              <FeedCardView key={card.publicationId} card={card} href={`/p/${card.publicationId}`}
-                playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
-                video={trackable(card.video) && <CardVideo card={card} player={card.video!} />}
-                onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />
-            ))}
+            {cards.map((card, i) => {
+              const shelf = shelfAfter.get(i + 1)
+              return (
+                <Fragment key={card.publicationId}>
+                  <FeedCardView card={card} href={`/p/${card.publicationId}`}
+                    playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
+                    video={trackable(card.video) && <CardVideo card={card} player={card.video!} />}
+                    onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />
+                  {/* F-S10: a shelf of short videos after this card (the parameters' places). */}
+                  {shelf && <ShortsShelf items={shelf.items} hrefOf={(c) => shortsPath(q, c.publicationId)}
+                    onOpen={openShorts} />}
+                </Fragment>
+              )
+            })}
           </ul>
           <div ref={setEnd} aria-hidden data-testid="feed-end" />
+          {viewing && (
+            <ShortsViewer cards={shortCards} startId={shortsOpen!} onClose={closeShorts}
+              onAnswer={(card) => navigate(`/p/${card.publicationId}`)} />
+          )}
           {feed.hasNextPage && (
             <Button variant="outline" disabled={feed.isFetchingNextPage} data-testid="feed-more"
               onClick={() => void feed.fetchNextPage()}>

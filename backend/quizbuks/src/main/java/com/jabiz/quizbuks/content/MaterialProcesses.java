@@ -58,13 +58,24 @@ public final class MaterialProcesses {
      * {@code assetId} (F-C1b): the asset of the sponsor's library the console copied the material's content from,
      * recorded as where the asset is used; none leaves the record of an existing material as it is. Only for a
      * material of the base language, of the asset's kind (an image group for an image).
+     * {@code vertical} (F-S10, VIDEO_LINK of the base language only; null is false): the video is vertical (a YouTube
+     * Shorts link is anyway, {@link VideoEmbeds#shorts}); the App's home shows such publications in its shelf of
+     * shorts. Its other languages' videos follow the base's mark.
      */
     public record MaterialInput(@NotNull UUID quizId, UUID materialId,
         @NotNull @Pattern(regexp = "ARTICLE|LINK|VIDEO_LINK|PDF|IMAGES|AUDIO") String kind, String title,
         String description, String body, String url, UUID pdf, UUID audio,
         @Size(max = ContentLimits.MAX_IMAGES) List<@Valid @NotNull ImageInput> images, Long baseRevision,
         Boolean watchToAnswer, UUID variantOf, @Pattern(regexp = "ja|zh|en") String language, Integer durationSec,
-        UUID assetId) {
+        UUID assetId, Boolean vertical) {
+
+        /** A material as before F-S10: not marked as a vertical video. */
+        public MaterialInput(UUID quizId, UUID materialId, String kind, String title, String description, String body,
+            String url, UUID pdf, UUID audio, List<ImageInput> images, Long baseRevision, Boolean watchToAnswer,
+            UUID variantOf, String language, Integer durationSec, UUID assetId) {
+            this(quizId, materialId, kind, title, description, body, url, pdf, audio, images, baseRevision,
+                watchToAnswer, variantOf, language, durationSec, assetId, null);
+        }
 
         /** A material as before F-C1b: not from the asset library. */
         public MaterialInput(UUID quizId, UUID materialId, String kind, String title, String description, String body,
@@ -260,6 +271,13 @@ public final class MaterialProcesses {
                 + ContentLimits.MIN_VIDEO_SECONDS + " to " + ContentLimits.MAX_VIDEO_SECONDS + " seconds",
                 Map.of("min", ContentLimits.MIN_VIDEO_SECONDS, "max", ContentLimits.MAX_VIDEO_SECONDS)));
         }
+        // F-S10: the mark of a vertical video belongs to a video of the base language (its languages follow it).
+        boolean vertical = Boolean.TRUE.equals(input.vertical());
+        if (vertical && (kind != MaterialKind.VIDEO_LINK || variant)) {
+            ctx.reject(new Violation("vertical", ContentCodes.MATERIAL_FIELD_NOT_ALLOWED, "A material of kind " + kind
+                + (variant ? " of another language" : "") + " has no vertical",
+                Map.of("kind", kind.name(), "field", "vertical")));
+        }
         // A video to watch is watched in every language: its other languages' videos must be playable too.
         if (variant && base != null && Boolean.TRUE.equals(base.get("watchToAnswer"))
             && VideoEmbeds.trackablePlayer(text(input.url())).isEmpty() && text(input.url()) != null) {
@@ -298,6 +316,8 @@ public final class MaterialProcesses {
         values.put("watchToAnswer", watch);
         values.put("durationSec", kind == MaterialKind.VIDEO_LINK && !variant && duration != null
             ? decimal(duration) : null);
+        // Only a marked video says so (none is not vertical): saving an unchanged material changes nothing.
+        values.put("vertical", vertical ? Boolean.TRUE : null);
         boolean changed = false;
         Object materialId;
         if (material == null) {

@@ -76,3 +76,7 @@ push:JABIZ_PUSH_SUBJECT - mailto:
 apns:JABIZ_APNS_TEAM_ID 10 - apple-id
 apns:JABIZ_APNS_KEY_ID 10 - apple-id
 apns:JABIZ_APNS_PRIVATE_KEY - - p8
+
+# How many images of this environment the server keeps after a deployment (F-F13, prune-images.sh): 3 when unset, at
+# least 2 (the running image and one to roll back to)
+?QB_DEPLOY_KEEP_IMAGES - - keep-images

@@ -1,8 +1,9 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification]
+entities: [SysParam, QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification]
 datasets:
+  SysParam: urn:jabiz:dataset:now:SysParam
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
@@ -26,6 +27,7 @@ params:
   includeAnswered: { kind: { type: bool }, description: "If true, also the publications the caller has answered (Q34); by default those are left out" }
   method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22, Q33): PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM or DIGITAL_PRIZE" }
   mainlandChina: { kind: { type: bool }, description: "F-S11: whether the caller's address is in mainland China, as GET /api/client/region said; publications with a foreign video and no exception are then not for them" }
+  shorts:  { kind: { type: bool }, description: "F-S10: if true, only the publications whose video is vertical (QbPublicationCard.videoVertical), for the home's shelf of shorts and its full-screen vertical mode; the same conditions as the feed otherwise" }
   languages: { kind: { type: text, maxLength: 20 }, description: "Only publications offering one of these languages (Q59a, Q73b), comma-separated in the taker's order (ja, zh, en): their switches, or their interface language; each shown in the first of them it offers; all when not given" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
@@ -37,6 +39,9 @@ results:
   video:          { from: QbPublicationCard.video }
   watchRequired:  { from: QbPublicationCard.watchRequired }
   videoDurationSec: { from: QbPublicationCard.videoDurationSec }
+  videoVertical:  { from: QbPublicationCard.videoVertical }
+  shortsPositions: { kind: { type: text, maxLength: 200 } }
+  shortsPerShelf: { kind: { type: text, maxLength: 20 } }
   kind:           { from: QbPublicationCard.kind }
   language:       { from: QbPublicationCard.language }
   languages:      { from: QbPublicationCard.languages }
@@ -98,6 +103,12 @@ SELECT
     -- Q75: whether that video must be watched before starting, and how long it is.
     c.{{QbPublicationCard.watchRequired}}  AS watchRequired,
     c.{{QbPublicationCard.videoDurationSec}} AS videoDurationSec,
+    -- F-S10: whether that video is vertical, and where the home puts its shelves of shorts and how many each shows
+    -- (the uncontrolled parameters qb.feed.shorts.positions and .per-shelf; none before the setup made them: the App
+    -- then takes the setup's values).
+    c.{{QbPublicationCard.videoVertical}}  AS videoVertical,
+    CAST(shp.positions AS varchar(200))    AS shortsPositions,
+    CAST(shp.perShelf AS varchar(20))      AS shortsPerShelf,
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.language}}       AS language,
     c.{{QbPublicationCard.languages}}      AS languages,
@@ -135,6 +146,13 @@ CROSS JOIN LATERAL (
                      WHERE u.l = ANY(string_to_array(coalesce(c.{{QbPublicationCard.languages}},
                                                               c.{{QbPublicationCard.language}}), ','))
                      ORDER BY u.i LIMIT 1), c.{{QbPublicationCard.language}}) AS lang) dl
+CROSS JOIN (
+    SELECT max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.feed.shorts.positions' THEN CAST(p.{{SysParam.value}} AS text) END)
+               AS positions,
+           max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.feed.shorts.per-shelf' THEN CAST(p.{{SysParam.value}} AS text) END)
+               AS perShelf
+    FROM {{SysParam}} p
+    WHERE p.{{SysParam.paramKey}} IN ('qb.feed.shorts.positions', 'qb.feed.shorts.per-shelf')) shp
 JOIN {{QbPublicationCounter}} n ON n.{{QbPublicationCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
 JOIN {{QbPublicationStartCounter}} s
     ON s.{{QbPublicationStartCounter.publicationId}} = c.{{QbPublicationCard.publicationId}}
@@ -168,6 +186,8 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
   AND (c.{{QbPublicationCard.rewardMethod}} <> 'PLATFORM'
        OR (coalesce(w.{{QbWallet.pendingCount}}, 0) = 0
            AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
+  -- F-S10: the shelf of shorts asks for the vertical ones only, under every other condition of the feed.
+  AND (CAST(:shorts AS boolean) IS NOT TRUE OR c.{{QbPublicationCard.videoVertical}})
   AND (CAST(:method AS text) IS NULL OR c.{{QbPublicationCard.rewardMethod}} = CAST(:method AS text))
   -- Q59a: publications of different languages are not listed together; the client says which the taker sees. Q73b:
   -- one offering several is listed when it offers one of them, once, in the first of them it offers.

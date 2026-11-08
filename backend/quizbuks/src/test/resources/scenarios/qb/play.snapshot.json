@@ -109,6 +109,7 @@
       "watchRequired" : false,
       "videoDurationSec" : null,
       "foreignVideo" : false,
+      "videoVertical" : false,
       "versionId" : "#uuid:5",
       "maxReward" : "100",
       "fullScore" : "5",

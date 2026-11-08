@@ -215,9 +215,25 @@ QB_OIDC_APPLE_FORM_POST=https://staging.example.com/api/auth/oidc/apple/form-pos
 expect "staging with apple and real values" 0
 cp "$work/plain" "$work/required"
 
+# The number of images kept after a deployment (prune-images.sh): optional, a whole number of at least 2.
+printf '?KEEP - - keep-images\n' >"$work/required"
+run 'OTHER=1'
+expect "the number of kept images unset" 0
+run 'KEEP=3'
+expect "three kept images" 0
+run 'KEEP="12"'
+expect "twelve, in quotes" 0
+run 'KEEP=1'
+expect "one kept image (nothing to roll back to)" 1 "KEEP is not of the form keep-images"
+run 'KEEP=three'
+expect "not a number" 1 "KEEP is not of the form keep-images"
+run 'KEEP=-3'
+expect "negative" 1 "KEEP is not of the form keep-images"
+cp "$work/plain" "$work/required"
+
 # The committed list: names (`?` when optional), each with an optional length (`-` for any), start (`-` for any) and
 # form.
-if grep -vE '^(#.*|\??([a-z][a-z0-9-]*:)?[A-Z][A-Z0-9_]*( ([0-9]+|-)( [^ ]+( (apple-id|url|p8|vapid-public|vapid-private))?)?)?|)$' \
+if grep -vE '^(#.*|\??([a-z][a-z0-9-]*:)?[A-Z][A-Z0-9_]*( ([0-9]+|-)( [^ ]+( (apple-id|url|p8|vapid-public|vapid-private|keep-images))?)?)?|)$' \
   "$root/deploy/quizbuks/server/required-env"; then
   echo "FAIL required-env has a line that is not a name with an optional length, start and form"
   failures=$((failures + 1))

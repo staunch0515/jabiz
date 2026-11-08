@@ -499,6 +499,23 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
   - **数据库迁移不随回滚撤销**：Flyway 只向前。回滚到更早的版本前确认其间没有新迁移（`backend/quizbuks/src/main/resources/db/migration` 与平台的 `db/jabiz`）：
     旧版本不认识新迁移改过的表结构，有新迁移时应修复后向前部署，而不是回滚。
 
+## 旧镜像的清理
+
+（F-F13，T8：以前每次部署都拉一个新镜像而从不删除，2026-11-05 staging 的磁盘因此用满，健康检查和回滚都失败了。）
+
+- **自动**：部署成功后，工作流在同一个 SSH 会话中运行 `deploy/quizbuks/server/prune-images.sh`（随检查 `.env` 那一步上传到 `/opt/apps/<APP_NAME>/deploy-check/`）：
+  1. 把部署的标签追加到 `/opt/apps/<APP_NAME>/deployed-images`（本环境的部署历史，只留最后 200 行）；
+  2. 保留：`/opt/apps` 下每个有部署历史的环境最近部署过的 N 个不同标签，N 是该环境 `.env` 中的 `QB_DEPLOY_KEEP_IMAGES`（缺省 3，至少 2：正在运行的与一个可回滚的）；
+     以及任何容器（运行中或已停止）正在用的镜像。staging 与 production 在同一台服务器、同一个镜像仓库，各自保留，互不删除；
+  3. 删除本仓库（`ghcr.io/<仓库>-quizbuks`）的其余镜像，不强制（容器在用的 Docker 本身就拒绝删除）。其他仓库的镜像（数据库镜像、服务器上的其他应用）从不碰。
+- **改保留数**：在环境的 `.env` 中设 `QB_DEPLOY_KEEP_IMAGES=<数>`，下次部署生效。值不是不小于 2 的整数时，部署前的检查（`required-env`）即拒绝，不会部署。
+- **被删的镜像仍在仓库中**：回滚到它时（Run workflow 填 `image-tag`，或服务器上的 `deploy-app.sh`）会重新拉取，只是多花拉取的时间。
+- **失败不影响部署**：部署已经成功，清理失败（Docker 不可用、历史文件不可写等）只在部署日志中写一行 `prune-images: … nothing deleted`，作业仍然成功；
+  日志中每次都有 `prune-images: deleted <n> image(s) …; kept tags: …`。早于本功能的提交（回滚到它）不清理。
+- **第一次清理**：功能上线后的第一次部署时，另一个环境还没有部署历史，它不在运行的旧镜像会被删掉（运行中的保留，回滚时重新拉取）。
+- **核对**（部署之后）：在服务器上 `docker image ls ghcr.io/<仓库>-quizbuks`，每个环境不超过 N 个，加上容器在用的；`df -h /` 与 `docker system df` 看占用。
+- **磁盘告警**：见 `operations.md` §5"应用的磁盘"。只有本环境的 LGTM 在运行时才有（正式环境必须开，staging 可选）。
+
 ## 维护模式
 
 手工开关：本环境目录中存在 `maintenance/maintenance.lock` 时，Caddy 对**所有**请求直接返回维护页（`maintenance.html`），
