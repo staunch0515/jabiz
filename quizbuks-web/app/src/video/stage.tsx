@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { VIMEO_PLAYER } from '../qb/video'
+import { VIMEO_PLAYER, videoKind } from '../qb/video'
+import { markVideoFailed } from '../qb/videoFailures'
 import { recordPlayback, UNKNOWN_AFTER_MS, type PlaybackEvent } from './playback'
 
 /*
@@ -49,6 +50,8 @@ interface StageState {
 let state: StageState = { slot: null, player: null, soundAsked: false, soundOn: false }
 const listeners = new Set<() => void>()
 let frame: HTMLIFrameElement | null = null
+/** F-S15: the stage's `<video>` while the player is a video file. */
+let media: HTMLVideoElement | null = null
 let release: ReturnType<typeof setTimeout> | null = null
 /** Until when a card's tap hands the player to the start page it opens (which may first load its data). */
 let handoffUntil = 0
@@ -126,7 +129,11 @@ function post(message: unknown) {
 /** Turns the sound on, within the viewer's tap (the browser judges the tap). */
 export function soundOn() {
   if (!state.player) return
-  if (state.player.startsWith(VIMEO_PLAYER)) {
+  if (media && videoKind(state.player) === 'file') {
+    media.muted = false
+    media.volume = 1
+    void media.play()?.catch(() => undefined)
+  } else if (state.player.startsWith(VIMEO_PLAYER)) {
     post({ method: 'setMuted', value: false })
     post({ method: 'setVolume', value: 1 })
     post({ method: 'play' })
@@ -201,6 +208,61 @@ function listen(event: MessageEvent) {
     heard = true
     always({ type: 'duration', durationSec: data.value })
   }
+}
+
+/** F-S15: what the stage's `<video>` says, as the frames' messages say it. */
+function mediaEvent(event: Event) {
+  const element = event.currentTarget as HTMLVideoElement
+  if (element !== media) return
+  const at = Date.now()
+  switch (event.type) {
+    case 'durationchange':
+    case 'loadedmetadata':
+      if (Number.isFinite(element.duration) && element.duration > 0) {
+        heard = true
+        always({ type: 'duration', durationSec: element.duration })
+      }
+      return
+    case 'timeupdate':
+      heard = true
+      report({ type: 'time', currentTime: element.currentTime, playing: !element.paused, at })
+      return
+    case 'play':
+    case 'pause':
+      heard = true
+      playerPlaying = event.type === 'play'
+      report({ type: 'state', playing: playerPlaying, at })
+      return
+    case 'ended':
+      heard = true
+      playerPlaying = false
+      report({ type: 'ended' })
+      return
+    case 'volumechange': {
+      const on = !element.muted && element.volume > 0
+      if (state.soundOn !== on) {
+        set({ soundOn: on })
+        if (on) startCounting()
+      }
+      return
+    }
+    default:
+  }
+}
+
+const MEDIA_EVENTS = ['durationchange', 'loadedmetadata', 'timeupdate', 'play', 'pause', 'ended', 'volumechange']
+
+/** F-S15: the stage's `<video>` comes or goes: a new player, nothing heard yet, its events listened to. */
+function attachMedia(element: HTMLVideoElement | null) {
+  if (element === media) return
+  if (media) MEDIA_EVENTS.forEach((type) => media!.removeEventListener(type, mediaEvent))
+  media = element
+  if (!element) return
+  MEDIA_EVENTS.forEach((type) => element.addEventListener(type, mediaEvent))
+  heard = false
+  playerPlaying = false
+  if (state.soundAsked) soundOn()
+  startCounting()
 }
 
 function youtubeState(playerState: number, at: number) {
@@ -350,6 +412,24 @@ export function VideoStage() {
         height: rect?.height ?? 0, visibility: visible ? 'visible' : 'hidden',
         // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
         zIndex: slot?.mode === 'short' ? 55 : 5 }}>
+      {videoKind(stage.player) === 'file' ? (
+        // F-S15: a video file, started muted; its controls on the start page and in the vertical mode only.
+        <video
+          key={stage.player}
+          ref={attachMedia}
+          src={stage.player}
+          title={slot?.title ?? ''}
+          aria-label={slot?.title ?? ''}
+          className="size-full bg-black object-contain"
+          data-testid="video-stage-file"
+          autoPlay
+          muted
+          playsInline
+          preload="auto"
+          controls={!!slot && slot.mode !== 'card'}
+          onError={() => markVideoFailed(stage.player!)}
+        />
+      ) : (
       <iframe
         key={stage.player}
         ref={(element) => {
@@ -371,6 +451,7 @@ export function VideoStage() {
           startCounting()
         }}
       />
+      )}
       {/* On a card nothing in the player is for touching: the whole of it opens the start page. */}
       {slot?.mode === 'card' && (
         <button type="button" className="absolute inset-0 size-full cursor-pointer" data-testid="video-open"

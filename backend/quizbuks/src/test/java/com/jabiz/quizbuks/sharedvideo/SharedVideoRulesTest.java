@@ -40,10 +40,22 @@ class SharedVideoRulesTest {
             .containsExactly(SharedVideoCodes.NOT_VIDEO);
         assertThat(codes(SharedVideoRules.problems(share("VIDEO_LINK", YOUTUBE, null, TITLES, List.of("pets")), WORDS,
             10))).containsExactly(SharedVideoCodes.ASSET_INCOMPLETE);
-        assertThat(codes(SharedVideoRules.problems(share("VIDEO_LINK", "https://video.example/x", 95, TITLES,
+        // Not a link QuizBuks plays: plain http, or an address of a known site that is not one video (a channel).
+        assertThat(codes(SharedVideoRules.problems(share("VIDEO_LINK", "http://video.example/x", 95, TITLES,
             List.of("pets")), WORDS, 10))).containsExactly(SharedVideoCodes.ASSET_INCOMPLETE);
+        assertThat(codes(SharedVideoRules.problems(share("VIDEO_LINK", "https://www.youtube.com/@channel", 95,
+            TITLES, List.of("pets")), WORDS, 10))).containsExactly(SharedVideoCodes.ASSET_INCOMPLETE);
         assertThat(codes(SharedVideoRules.problems(share("VIDEO_LINK", YOUTUBE, 7_201, TITLES, List.of("pets")), WORDS,
             10))).containsExactly(SharedVideoCodes.ASSET_INCOMPLETE);
+    }
+
+    @Test
+    void aVideoFileOrAnotherPageIsSharedToo() {
+        // F-S15: any link QuizBuks plays, a video file's or another https page's as well as the seven sites'.
+        assertThat(SharedVideoRules.problems(share("VIDEO_LINK", "https://videos.example.com/cats.mp4", 95, TITLES,
+            List.of("pets")), WORDS, 10)).isEmpty();
+        assertThat(SharedVideoRules.problems(share("VIDEO_LINK", "https://video.example/x", 95, TITLES,
+            List.of("pets")), WORDS, 10)).isEmpty();
     }
 
     @Test

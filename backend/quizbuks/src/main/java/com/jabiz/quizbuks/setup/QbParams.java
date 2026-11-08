@@ -345,8 +345,8 @@ public final class QbParams {
      */
     public static final String REGION_UNKNOWN_IP_COUNTRY = "qb.region.unknown-ip-country";
     /**
-     * F-S11: the video sites mainland China plays ({@code VideoEmbeds.Site} keys, comma-separated); a video of any other
-     * site, or of none recognised, is foreign ({@code content.ForeignVideos}). Controlled: taking a site off hides
+     * F-S11: the video sites mainland China plays ({@code VideoEmbeds.Site} keys, comma-separated; F-S15: and host names,
+     * for video files and other pages there); a video of any other site, or of none recognised, is foreign ({@code content.ForeignVideos}). Controlled: taking a site off hides
      * publications from mainland China, adding one shows them videos that may not play. Read as optional: the setup's
      * value ({@code ForeignVideos.DEFAULT_SITES}) until its proposal is published.
      */
@@ -601,8 +601,9 @@ public final class QbParams {
                 + "(CN: mainland China; empty: none)"),
         new Param(VIDEO_MAINLAND_SITES, Map.of("type", "text", "maxLength", 200),
             com.jabiz.quizbuks.content.ForeignVideos.DEFAULT_SITES,
-            "Video sites mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, "
-                + "youku, tencent); a video of any other site is foreign and not answerable from mainland China"),
+            "Video sites and hosts mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, "
+                + "dailymotion, youku, tencent, or a host name such as videos.example.com for video files and pages "
+                + "there); a video of any other site is foreign and not answerable from mainland China"),
         // F-S10: the home's shelves of vertical short videos (ordinary; last, so that the setup's earlier keys stay).
         new Param(FEED_SHORTS_POSITIONS, Map.of("type", "text", "maxLength", 200), "3,12",
             "After which cards of the App's home a shelf of vertical short videos is shown, comma-separated (the first "

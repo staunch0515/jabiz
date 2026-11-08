@@ -42,6 +42,8 @@ class VideoEmbedsTest {
     })
     void aVideoLinkIsShownAsItsPlayer(String url, String player) {
         assertThat(VideoEmbeds.player(url)).hasValue(player);
+        assertThat(VideoEmbeds.sitePlayer(url)).hasValue(player);
+        assertThat(VideoEmbeds.kind(player)).hasValue(VideoEmbeds.Kind.SITE);
     }
 
     @ParameterizedTest
@@ -67,8 +69,10 @@ class VideoEmbedsTest {
         "https://v.qq.com/x/page/x0029zdtwz6", "https://v.qq.com/x/cover/mzc00200abcdefg.html",
         "https://v.qq.com.evil.example/x/page/x0029zdtwz6.html", "https://evil.example/txp/iframe/player.html?vid=x0029zdtwz6",
     })
-    void anyOtherAddressIsNoPlayer(String url) {
-        assertThat(VideoEmbeds.player(url)).isEmpty();
+    void anyOtherAddressIsNoSitesPlayer(String url) {
+        // F-S15: some of these are another page (any https address), which is no site's player.
+        assertThat(VideoEmbeds.sitePlayer(url)).isEmpty();
+        assertThat(VideoEmbeds.site(url)).isEmpty();
     }
 
     /** Q99 (D-Q99-2): only YouTube's and Vimeo's players say where they are, so only their videos can be watched. */
@@ -142,5 +146,63 @@ class VideoEmbedsTest {
     void aShortsLinkIsVertical(String url, boolean shorts) {
         assertThat(VideoEmbeds.shorts(url)).isEqualTo(shorts);
         assertThat(VideoEmbeds.shorts(null)).isFalse();
+    }
+
+    /**
+     * F-S15: a video link on any https address: a video file (its path ends with .mp4, .webm or .mov; the query and
+     * fragment do not count) plays in the pages' own {@code <video>} and says where it is; any other https address is a
+     * page framed in a sandbox and does not. The address is the link with its scheme and host in lower case. The App's
+     * and the console's {@code video.test.ts} have these cases.
+     */
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4|FILE|https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4",
+        "'  https://cdn.example.com/a/b/clip.webm  '|FILE|https://cdn.example.com/a/b/clip.webm",
+        "HTTPS://CDN.Example.com/Clip.MOV|FILE|https://cdn.example.com/Clip.MOV",
+        "https://cdn.example.com/clip.mp4?sig=abc&exp=1|FILE|https://cdn.example.com/clip.mp4?sig=abc&exp=1",
+        "https://cdn.example.com/clip.mp4#t=10|FILE|https://cdn.example.com/clip.mp4#t=10",
+        "https://cdn.example.com/%E5%BE%AE.mp4|FILE|https://cdn.example.com/%E5%BE%AE.mp4",
+        "https://video.example/capitals|PAGE|https://video.example/capitals",
+        "https://Player.Example.com/embed/123?autoplay=0|PAGE|https://player.example.com/embed/123?autoplay=0",
+        "https://evil.example/watch?v=dQw4w9WgXcQ|PAGE|https://evil.example/watch?v=dQw4w9WgXcQ",
+        "https://cdn.example.com/clip.mp4/|PAGE|https://cdn.example.com/clip.mp4/",
+        "https://cdn.example.com|PAGE|https://cdn.example.com",
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ|SITE|https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+        "https://v.qq.com/x/page/x0029zdtwz6.html|SITE|https://v.qq.com/txp/iframe/player.html?vid=x0029zdtwz6",
+    })
+    void aLinkOnAnyAddressIsAFileOrAPage(String url, String kind, String player) {
+        assertThat(VideoEmbeds.player(url)).hasValue(player);
+        assertThat(VideoEmbeds.kind(player)).hasValue(VideoEmbeds.Kind.valueOf(kind));
+        assertThat(VideoEmbeds.trackable(player)).isEqualTo(kind.equals("FILE") || player.contains("youtube"));
+        assertThat(VideoEmbeds.trackablePlayer(url).isPresent()).isEqualTo(VideoEmbeds.trackable(player));
+        // The address played is read again the same way.
+        assertThat(VideoEmbeds.player(player)).hasValue(player);
+        if (!kind.equals("SITE")) {
+            assertThat(VideoEmbeds.site(url)).isEmpty();
+            assertThat(VideoEmbeds.host(url)).hasValue(java.net.URI.create(player).getHost());
+        }
+    }
+
+    /** F-S15: not https, a user or a port, no host name, dot or empty segments, other characters: no video. */
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "http://cdn.example.com/clip.mp4", "http://video.example/capitals", "ftp://cdn.example.com/clip.mp4",
+        "https://user@cdn.example.com/clip.mp4", "https://user:pw@video.example/capitals",
+        "https://cdn.example.com:8443/clip.mp4", "https://video.example:443/capitals",
+        "https://203.0.113.7/clip.mp4", "https://localhost/clip.mp4", "https://-cdn.example.com/clip.mp4",
+        "https://cdn.example.com/a/../clip.mp4", "https://cdn.example.com/a/./clip.mp4",
+        "https://cdn.example.com//clip.mp4", "https://cdn.example.com/a b.mp4", "https://cdn.example.com/a\"b.mp4",
+        "https://cdn.example.com/<script>.mp4", "https://cdn.example.com/a%2.mp4", "https://cdn.example.com/a\\b.mp4",
+        "//cdn.example.com/clip.mp4", "cdn.example.com/clip.mp4", "javascript:alert(1)", "", "   ",
+        // On the seven sites' hosts, an address that is not one video is none (channels, short links).
+        "https://www.youtube.com/@channel", "https://www.youtube.com/", "https://youtu.be/",
+        "https://vimeo.com/channels/staffpicks", "https://b23.tv/BV1GJ411x7h7", "https://www.bilibili.com/",
+        "https://www.youtube.com/clip.mp4",
+    })
+    void anyOtherAddressIsNoVideo(String url) {
+        assertThat(VideoEmbeds.player(url)).isEmpty();
+        assertThat(VideoEmbeds.filePlayer(url)).isEmpty();
+        assertThat(VideoEmbeds.pagePlayer(url)).isEmpty();
+        assertThat(VideoEmbeds.kind(url)).isEmpty();
     }
 }

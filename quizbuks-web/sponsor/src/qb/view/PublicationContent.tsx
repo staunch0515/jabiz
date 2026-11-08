@@ -15,6 +15,7 @@ import { REWARD_METHOD_ICONS } from './FeedCard'
 import { leadVideo, Materials } from './Materials'
 import { QBVIEW } from './messages'
 import { VideoPlayer } from './VideoPlayer'
+import { useVideoFailed } from '../videoFailures'
 
 /** The time limit as people read it: minutes, with seconds when not whole. */
 export function useDuration() {
@@ -166,7 +167,10 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   const prize = p.rewardMethod === 'OFFLINE_REDEEM' || p.rewardMethod === 'DIGITAL_PRIZE'
   const prizeText = p.rewardMethod === 'OFFLINE_REDEEM' ? p.redeemDescription
     : p.rewardMethod === 'DIGITAL_PRIZE' ? p.digitalDescription : null
-  const lead = leadVideo(p.materials, p.video ?? null)
+  const found = leadVideo(p.materials, p.video ?? null)
+  // F-S15: a video file that failed to play does not lead the page: the cover does, the file stays in the materials.
+  const leadFailed = useVideoFailed(found?.player)
+  const lead = leadFailed ? null : found
   const leadTitle = lead?.material?.title ?? t('feed.videoTitle', { name: p.name })
   const reward = (
     <span className="bg-primary text-primary-foreground inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold shadow-sm">
