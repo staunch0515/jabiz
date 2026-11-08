@@ -40,6 +40,7 @@ runtime `com.jabiz.runtime.observability.PlatformObservations` 把平台的工�
 | `jabiz.file.fetch` | 服务器下载链接中的图片（`POST /api/files/fetch` 的下载与存储、外部作业的 `remoteImages()`，14 §12、D75） | `outcome`（`fetched` 或错误码；不含主机与链接） |
 | `jabiz.process.admission` | 根流程在热门命名锁之前的排队（06 §4.2，D45；`ProcessAdmission`，嵌在 `jabiz.process` 之内，计时即排队的时间） | `family` `process` `result`（`ADMITTED` / `QUEUE_FULL` / `WAIT_TIMEOUT` / `CANCELLED`），没有 `outcome` 与 `status`；不放准入键、主键、操作人 |
 | `jabiz.process.admission.waiting` / `.active`（仪表，不是观测） | 当前在队列中等待的、已取得许可的根流程数，按族合计 | `family` |
+| `jabiz.keys.undeclared-sealed`（仪表，不是观测） | 密钥轮换（D78 第 8 条）：最近一次扫描（启动或任务 `jabiz.key-rotation` 的一次运行）发现的、未声明为密封字段的字段中旧密封密钥下的值的个数；没有旧密封密钥时为 0 | 无 |
 | `jabiz.geoip.ranges` / `jabiz.geoip.stale`（仪表，不是观测） | 地址库（`ClientCountries`，10 §18、D74）：使用中的库的范围数（读不出为 0），文件比 `jabiz.geoip.max-age` 旧或启动时读不出为 1；与启动检查 `GEOIP` 同一判断，但运行中变旧也看得到。没有配置地址库不登记 | 无 |
 | `jabiz.process.rate_limited` | 流程接口的限流拒绝（10 §15.10；只计数，不记操作人与客户端地址） | `process` `scope`（`user` / `address` / `instance`） |
 | `jabiz.auth.rate_limited` | 登录类接口按地址限流的拒绝（10 §4.1，D47；只计数，不记客户端地址） | `kind`（`password` / `oidc_callback` / `second_factor` / `refresh`） |
@@ -136,6 +137,7 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 | `jabiz-refresh-reuse-granted` | 被换下的刷新令牌在宽限内再出现异常频繁（D73） | — | 客户端缺陷（不先保存新令牌）或令牌被盗：看最近的版本与登录记录 |
 | `jabiz-refresh-reuse-revoked` | 因重用而结束的会话异常多 | — | 同上；可能有人在重放令牌 |
 | `jabiz-geoip-stale` / `jabiz-geoip-empty` | 地址库比 `jabiz.geoip.max-age` 旧或读不出 / 没有范围（D74） | 1 小时 / 15 分钟 | 下载新的库替换文件（运行中自动重读，不必重启） |
+| `jabiz-keys-undeclared-sealed` | 轮换中（配置了旧的 `JABIZ_SEAL_KEY`），未声明为密封字段的字段里仍有旧密钥下的密封值（仪表 `jabiz.keys.undeclared-sealed`，D78 第 8 条） | — | 不要撤旧密钥；在应用中声明这些字段（`SealedFields`），让任务 `jabiz.key-rotation` 处理完（`docs/guide/key-rotation.md`） |
 | `jabiz-disk-usage` | 应用测量的某个文件系统用量高于阈值 | 10 分钟 | 清理旧镜像与日志、扩容；上传文件的目录满了上传会失败 |
 
 数据库主机（WAL 归档、备份、数据库所在磁盘）不由应用测量，由数据库的托管方或主机监控告警。
@@ -173,7 +175,10 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 
 **演练**：`tools/ops/restore-drill.sh`（环境变量见脚本头部）：
 
-1. 可选 `DRILL_RESTORE_COMMAND`：备份工具恢复到 T 的命令，脚本计时；
+1. 可选 `DRILL_RESTORE_COMMAND`：备份工具恢复到 T 的命令，脚本计时；用 pgBackRest 时改设 `DRILL_PGBACKREST`（运行 pgBackRest 的方式）与 `DRILL_PGBACKREST_PG_PATH`（新的空数据目录），
+   脚本自己组成 `restore --type=time --target=T --target-action=promote --archive-mode=off`（17zz3）：**恢复出的副本绝不归档**——否则它会把自己的 WAL 推进生产的仓库；
+   手写的 pgBackRest 恢复命令缺 `--archive-mode=off` 即拒绝。恢复出的库启动时也要有备份的设置（`archive-get` 要用加密口令）。`DRILL_RESTORE_ONLY=true` 只恢复、写记录后停止，
+   启动副本后再不带恢复设置运行一次以核对；
 2. 以生产同版本的镜像（`DRILL_IMAGE`，`DRILL_DOCKER_ARGS` 给出只通向恢复的库的内部网络）或 jar（`DRILL_JAR`）在核对模式下启动一次，
    设置来自 `DRILL_ENV_FILE`：库、恢复出的文件目录、从离线副本取来的生产 `JABIZ_INTEGRITY_KEY` / `JABIZ_MFA_KEY` / `JABIZ_SEAL_KEY`，以及应用自己让副本远离线上服务的开关（支付的测试模式等）；
 3. `DRILL_ROTATE=true` 时在同一副本上演练密钥轮换（D78，`docs/guide/key-rotation.md`）：再启动两次，先以新密钥、生产密钥作旧密钥并重新加密到底，

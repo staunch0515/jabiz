@@ -1,5 +1,6 @@
 import type { APIRequestContext } from '@playwright/test'
-import { adminToken, expect, PASSWORD, rows, run, tokenOf, unique, verifiedUser } from './support'
+import { expect, PASSWORD, rows, run, tokenOf, unique, verifiedUser } from './support'
+import { reviewerFor } from './operators'
 
 /*
  * Data for the wallet tests (docs/quizbuks/plans/QP-pages.md, QP4), made through the processes the pages call: an
@@ -17,7 +18,7 @@ export async function approvedSponsor(request: APIRequestContext, name = 'Sora',
   const token = await tokenOf(request, email, PASSWORD, 'sponsor')
   const applied = await run(request, token, 'QB_SPONSOR_APPLY', { displayName: name, company, acceptTerms: true })
   if (applied.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: applied.approvalRequestId,
+    await run(request, await reviewerFor(request, token), 'APPROVAL_DECIDE', { requestId: applied.approvalRequestId,
       decision: 'APPROVE' })
   }
   await expect.poll(async () => (await rows(request, token, SPONSOR_DATASET, []))[0]?.attributes.reviewStatus,
@@ -81,7 +82,7 @@ export async function earnReward(request: APIRequestContext, takerToken: string,
   const publicationId = saved.publicationId as string
   const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    await run(request, await reviewerFor(request, sponsor.token), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
       decision: 'APPROVE' })
   }
   await expect.poll(async () => {

@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The application's own server keeps reading a keep-alive connection after a request it buffered as pipelined was
- * answered at once ({@code PipelinedReadResumer}): here the Service Worker guard's 404 behind the health check, as a
+ * answered at once (Reactor Netty 1.3.8 does it by itself, 17zz7; the runtime's {@code PipelinedReadingTest}): here the Service Worker guard's 404 behind the health check, as a
  * PWA's install revalidating its shell does it behind the page's own requests (ROADMAP phase 16c-2).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)

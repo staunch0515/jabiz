@@ -5151,7 +5151,7 @@ D 回调（7）：处理中、错误、Apple 取消、`OIDC_ACCOUNT_EXISTS`、�
 F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架（12）、I 退出（2）：全部不变（G 的页面进入模板，确认通行密钥补上登录链接；H、I 属应用，不在本阶段改动）。
 不能放进模板而被删去的：无。QuizBuks 自己的部分（缺口 6 发起方公开框架的环境横条、学者与发起方的左栏文案与示意图、`otherEntry`、页脚链接、各入口的 `order`）在其应用分支上采用。
 
-**17zk 状态**：17zk ✅ 已合并（#478）；17zk-b 📝 待评审（分支 `1.3/phase-17zkb-signup-tabs`）。
+**17zk 状态**：17zk ✅ 已合并（#478）；17zk-b ✅ 已合并（#483）。
 
 ### 17zq sys_file 按上传者的索引（2026-11-07，QuizBuks 首次上线 S3 F-C2 的平台需要）
 
@@ -5162,7 +5162,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 | 17zq-1 | 迁移 `V62__sys_file_uploader_index.sql`：`sys_file_uploaded_by_idx (uploaded_by, uploaded_time)`。同一索引满足按上传者的计数与求和、按上传者筛选并按时间排序（任一方向）或取时间范围；清扫按 `(uploaded_time, file_id)` 分页、不带上传者，照旧用原索引；平台没有其他按上传者的查询，不另建索引 |
 | 17zq-2 | 测试：`FileUploadIT` 断言索引存在（`pg_indexes`）、按上传者的计数与求和正确，关闭顺序扫描时用量查询与"按上传者、按时间倒序"的列表查询的计划都用该索引（后者不排序）；设计 14 §2 |
 
-**17zq 状态**：📝 待评审（分支 `1.3/phase-17zq-file-uploader-index`）。
+**17zq 状态**：✅ 已合并（#488）。
 
 ### 17zr 服务器下载链接中的图片（2026-11-07，QuizBuks 首次上线 P6 / F-C6；决策 D75）
 
@@ -5199,7 +5199,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：管理员选一个过去的计划时刻并填写原因即可补跑，已成功的部分不重复，只运行未成功的部分；不是计划时刻、未到、过旧、任务忙、无权限或无近期二次验证一律拒绝且不运行；
 请求是带原因的操作，执行记录写明请求人；授予 `job.run` 须另一位管理员审批；页面三语、亮暗通过 axe。
 
-**17zs 状态**：📝 待评审（分支 `1.3/phase-17zs-manual-job-runs`）。
+**17zs 状态**：✅ 已合并（#491）。
 
 ### 17zt 平台小修：连接、受控变更的值上限、限流的原子性（2026-11-07，QuizBuks 首次上线）
 
@@ -5215,7 +5215,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：空闲时被借出的连接有明确的持有者且测试断言之；任何经 `MAIL_TEXT_SAVE` 能存的文字都能作为受控变更提出；并发的请求（流程接口与登录类接口）不会让被拒的请求消耗其他桶的令牌，放行数不超过限额。
 
-**17zt 状态**：📝 待评审（分支 `1.3/phase-17zt-pool-and-limits`）。
+**17zt 状态**：✅ 已合并（#494）。
 
 ### 17zu 告警规则与试发（2026-11-07，QuizBuks 首次上线的上线准备 A）
 
@@ -5231,7 +5231,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：上线清单中平台的告警都有规则与处理说明；每条规则都可以在测试环境试发（`jabiz-metrics-absent` 以停掉应用试）；值的修改只在部署配置中。
 
-**17zu 状态**：📝 待评审（分支 `1.3/phase-17zu-alerts`）。
+**17zu 状态**：✅ 已合并（#497）。
 
 ### 17zv 恢复核对与演练（2026-11-07，QuizBuks 首次上线的上线准备 B）
 
@@ -5247,7 +5247,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：一条命令完成恢复后的全部平台核对并写出带 RTO 与恢复点的记录；带错密钥、文件不全、恢复越过 T 都被报告；核对期间不发邮件、不跑任务、不投递事件。
 密钥轮换的演练在 C（D78）合并后加入同一脚本。
 
-**17zv 状态**：📝 待评审（分支 `1.3/phase-17zv-restore-verify`）。
+**17zv 状态**：✅ 已合并（#498）。
 
 ### 17zy `APPROVAL_SCOPE_MOVE` 的单次上限改为配置（2026-11-07，QuizBuks 首次上线 S2 的改派）
 
@@ -5260,7 +5260,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：应用引用 `ApprovalScopeMoveSettings.maxItems()` 而不写 500；上限可配置且越界即启动失败。
 
-**17zy 状态**：📝 待评审（分支 `1.3/phase-17zy-scope-move-limit`）。
+**17zy 状态**：✅ 已合并（#502）。
 
 ### 17zw 密钥轮换（D78，2026-11-07，QuizBuks 首次上线的上线准备 C）
 
@@ -5278,7 +5278,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：四把密钥都能在不停机、不丢数据的情况下更换；重新加密完成后撤下 MFA、SEAL 的旧密钥，一切照常；演练脚本在恢复出的副本上演练过一次轮换。
 
-**17zw 状态**：📝 待评审（分支 `1.3/phase-17zw-key-rotation`）。
+**17zw 状态**：✅ 已合并（#500）。
 
 ### 17zx 平台运维要点与上线前的设置检查（2026-11-07，QuizBuks 首次上线的上线准备 D/E）
 
@@ -5292,7 +5292,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：运维只看一页就知道平台各功能怎么设、看什么、出了事怎么办；上线前一条命令核对设置，不泄露值。
 
-**17zx 状态**：📝 待评审（分支 `1.3/phase-17zx-ops-guide`）。
+**17zx 状态**：✅ 已合并（#501）。
 
 ### 17zz 准入门：交出许可时恰逢取消，许可丢失（2026-11-07，#500 CI 中 `AdmissionGateStressTest` 的一次失败）
 
@@ -5308,7 +5308,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：交出与取消同时发生时许可不丢失（复现测试修改前失败、修改后通过）。
 
-**17zz 状态**：📝 待评审（分支 `1.3/phase-17zz-admission-handover`）。
+**17zz 状态**：✅ 已合并（#506）。
 
 ### 17zz2 公开计数器：以引用为主键的普通表，键按 uuid 绑定（2026-11-07，S3 报告）
 
@@ -5321,4 +5321,98 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：以引用为主键的普通表上的计数器正常计数（复现测试修改前失败、修改后通过）。
 
-**17zz2 状态**：📝 待评审（分支 `1.3/phase-17zz2-counter-uuid-key`）。
+**17zz2 状态**：✅ 已合并（#510）。
+
+### 17zzz 未声明的密封字段：轮换中按密文前缀找出（D78 第 8 条，2026-11-07，总控提出）
+
+**缘由**：重新加密只处理 `SealedFields` 声明的字段；应用经 `SealSecret` 写进、却没有声明的字段，撤下旧 `JABIZ_SEAL_KEY` 后就解不开，而 `KEYS` 只检查已有的声明，不会发现。
+
+| # | 内容 |
+|---|---|
+| 17zzz-1 | `RetiredSealScan`：配置着旧密封密钥时，对每个有数据视图的实体一条语句（经存储引擎，参数绑定，表名列名取自元数据），按 `count(*) FILTER (WHERE 列 LIKE ANY(:旧密钥前缀))` 统计每个文本字段（列确实是文本类型：`MetaModelConsistencyChecker.textColumns`，按表缓存；声明的字段除外）；不受数据视图范围限制，时态实体只看各实例当前的版本；只返回计数。仪表 `jabiz.keys.undeclared-sealed` |
+| 17zzz-2 | 启动检查 `KEYS`：每个这样的字段一条——`platformCheck` 中为错误，应用启动时为警告（轮换中途重启不停服）；告警 `jabiz-keys-undeclared-sealed`（`severity: page`，13 §7） |
+| 17zzz-3 | 任务 `jabiz.key-rotation`：新的最后一步 `CheckUndeclaredSealed`。本次没有可重新加密或收回的东西而仍有这样的值时运行失败（422 `KEY_ROTATION_UNDECLARED_SEALED`，三种语言），有工作时照常提交；输出新增 `undeclaredSealed` 与 `retiredKeysRemovable`（旧 MFA 与密封密钥下什么都不剩时为真，日志写明可以撤下）。恢复演练的 `key-rotation` 项同样以此为不通过 |
+| 17zzz-4 | 文档：D78 第 8 条（第 4 条改为"任务报告可以撤下之后"）、`docs/guide/key-rotation.md`、13 §7 与仪表表、CLAUDE.md |
+| 17zzz-5 | 测试：`KeyRotationUndeclaredIT`（未声明的仓库名中有一个旧密钥密文、另一个以 `s1:` 开头的普通文本不算：扫描找到 1 个、仪表为 1、`KEYS` 启动时为警告而严格时为错误、任务失败并给出错误码；值换掉后任务报告可以撤下、仪表为 0；一开始什么都没有时也报告可以撤下）；`KeyRotationIT` 补断言（打不开的值仍在时不报告可以撤下） |
+
+**验收**：未声明字段里有旧密钥下的密封值时，`platformCheck` 报错、启动时警告并告警、任务不报告可以撤下（没有其他工作时失败）；清零后任务报告可以撤下。
+
+**17zzz 状态**：✅ 已合并（#509）。
+
+### 17zz3 备份工具的平台部分：pgBackRest 恢复演练与只检查规则的设置文件（2026-11-07，QuizBuks 备份）
+
+**缘由**：需求方定了 pgBackRest + Cloudflare R2 的备份（应用分支 `deploy/quizbuks/backup`）。平台的演练脚本只接受手写的恢复命令；在测试环境演练时发现，恢复出的副本继承了 `archive_mode=on`，会把自己的 WAL 推进生产的仓库（演练中只因数据目录不同而失败；容器中目录相同，就会推进去）。备份的设置文件不是应用的设置，`env-check` 却总套平台的规则。
+
+| # | 内容 |
+|---|---|
+| 17zz3-1 | `tools/ops/restore-drill.sh`：`DRILL_PGBACKREST`（运行方式）、`DRILL_PGBACKREST_PG_PATH`（新的空数据目录）、`_STANZA`（缺省 `main`）、`_REPO`（缺省 1），脚本组成 `restore --type=time --target=T --target-action=promote --archive-mode=off` 并计时；手写的 pgBackRest 恢复命令缺 `--archive-mode=off` 即拒绝；`DRILL_RESTORE_ONLY=true` 只恢复并写记录。13 §8 |
+| 17zz3-2 | `tools/ops/env-check.sh --app-only <文件> <规则>`：只按规则文件检查；新规则 `warn-unset`、`min-length`、`different`。`docs/guide/platform-operations.md` §1 |
+| 17zz3-3 | 测试：`tools/test/restore-drill.test.sh`（以替身记下参数：时间目标、提升、不归档、仓库与 stanza；拒绝的设置），`tools/test/env-check.test.sh` 新例；CI 的 `app-paths` 作业运行前者。以真实的 pgBackRest 2.50 对 S3 替身（moto）演练：全量、差异、两个仓库的 WAL、恢复到 T（数据正确，副本不归档），`restore-drill.sh` 的只恢复模式实测 |
+
+**验收**：演练脚本以 pgBackRest 恢复到 T 且副本绝不归档；备份的设置文件可以只按应用的规则检查。
+
+**17zz3 状态**：✅ 已合并（#512）。
+
+### 17zz4 密钥轮换任务按数据视图的提交上限分批（D78 第 9 条，2026-11-07，S3 报告）
+
+**缘由**：任务一次最多处理 `jabiz.key-rotation.batch-size`（缺省 500）个值，而同一实体的改动一起提交，超过其数据视图的 `maxWriteBatchSize`（缺省 100）即整次运行失败（`BATCH_TOO_LARGE`："Batch size [101] exceeds dataset limit [100]"），轮换永远完不成；启动检查没有发现。
+
+| # | 内容 |
+|---|---|
+| 17zz4-1 | `FindRetiredValues.writeLimit(实体)` = `min(batch-size, maxWriteBatchSize)`；每次运行按实体记剩余额度（`TakeBackSecondFactors` 与重新加密共用 `SecUserMfa` 的额度），装满即 `more=true`。`KEYS`：声明的密封字段所在数据视图的上限小于 10 时警告 |
+| 17zz4-1b | 一行一条更新（S3 报告）：`StoreUnderCurrentKey` 把同一行的各个密封字段合成一条按版本的更新；此前每个字段各一条、都用读到的版本，同一行两个密封字段时第二条 409（"expected version [1], stored version [2]"），整批回滚，恢复演练的 `DRILL_ROTATE` 同样失败。收回二次验证与重新加密同一行时只写收回那一条（原已如此） |
+| 17zz4-2 | 测试：`KeyRotationBatchIT`（另加一例：测试迁移 `V1017__it_sealed_pair.sql`，一行两个密封字段，修改前 409，修改后一次运行两者都重新密封、行版本只加 1）（101 个旧密钥下的仓库名：修改前整次运行失败；修改后第一次存 100 个、`more=true`，第二次存最后 1 个，第三次报告可以撤下；上限为 2 的数据视图得到警告，100 的不报）。`KeyRotationIT`、`KeyRotationUndeclaredIT`、`MfaReenrollmentIT`、`RestoreVerificationIT` 照旧通过 |
+
+**验收**：数据视图的提交上限小于任务批量时，轮换照常分几次完成（复现测试修改前失败、修改后通过）。
+
+**17zz4 状态**：✅ 已合并（#514）。
+
+### 17zz6 依赖的已知漏洞：Spring Boot 4.0.9、SCRAM 3.4、前端工具链（2026-11-07，QuizBuks 首次上线 checklist"安全"）
+
+**缘由**：上线清单要求评估依赖与镜像的已知漏洞。以 GitHub Advisory Database（已审核的条目）对照 `:app` 的运行时依赖，以 `pnpm audit` 对照前端与示范门户：
+- 后端：Jackson 2.21.5 / 3.1.5 有解析请求正文时的拒绝服务与类型校验绕过（GHSA-7hhh-6rmp-j9qf、GHSA-p6pp-m3f8-5c89、GHSA-cxp5-3px4-pw24、GHSA-q4xh-88c3-wmh7、GHSA-wv8q-qhhj-9h54 等，高）；
+  两个 PostgreSQL 驱动仍用 SCRAM 3.2（GHSA-p9jg-fcr6-3mhf，通道绑定被静默降级，高）。
+- 前端：都在构建与测试工具中（Vite 开发服务器、Vitest、jsdom 带的 undici、eslint 插件带的 zod、Tailwind 带的 source-map-js），不进打包结果。
+
+| # | 内容 |
+|---|---|
+| 17zz6-1 | Spring Boot 4.0.8 → 4.0.9（`build-logic` 的插件版本，唯一固定处）：随 BOM Jackson 3.1.7 / 2.21.7、PgJDBC 42.7.14、r2dbc-postgresql 1.1.3 |
+| 17zz6-2 | `runtime` 以依赖约束把 `com.ongres.scram:scram-client` / `scram-common` 定为 3.4（驱动仍要 3.2；BOM 的驱动要 3.3 及以上时删去） |
+| 17zz6-2b | Reactor Netty 1.3.7 → 1.3.8（随 BOM）自己在排空流水线请求后继续读连接：`PipelinedReadResumerTest` 中两个"没有它就停读"的探针因此失败（16c-2 设的触发条件）。两例改为断言 Reactor Netty 自己继续读；`PipelinedReadResumer` 暂留（读两次即一次，现在不改变行为），是否删去待确认 |
+| 17zz6-3 | 前端与示范门户：Vite 8.3.5、Vitest 5.0.5、jsdom 30.1.3（undici 8.12.3），锁文件中 zod 4.6.7、source-map-js 1.2.2；只选发布满两周的版本（`--config.minimum-release-age=20160`）；门户的版本与平台一致（`app:check`） |
+
+**不处理（说明）**：
+- OpenTelemetry API 1.55.0（GHSA-ccrj-gw8r-854m、GHSA-rcgg-9c38-7xpx，中）：解析请求头 `tracestate` / `baggage` 的耗费随头的长度增长，请求头总长受 `server.max-http-request-header-size`（缺省 8 KB）限制；随 Spring Boot 的 BOM 升级，不单独越过 BOM。
+- eslint 带的 minimatch 10（GHSA-g3hv-75wg-m249，中）：只在 lint 时匹配仓库内的路径模式，eslint 自己的版本范围不允许 11。
+
+**验收**：`./gradlew check` 与前端 `pnpm lint && pnpm typecheck && pnpm test && pnpm build`、`app:check`、`ext:check` 通过；对照结果中高与严重的条目为零。
+
+**17zz6 状态**：✅ 已合并（#523）。
+
+### 17zz7 删去 `PipelinedReadResumer`（2026-11-08，总控决定）
+
+**缘由**：Reactor Netty 1.3.8（17zz6 随 Spring Boot 4.0.9）在排空流水线请求后自己继续读连接，16c-2 为 1.3.1–1.3.7 加的绕过不再需要（17zz6 中探针已改为断言这一点）。
+它是平台内部的绕过、不是用户可感知的功能，由总控决定删去（2026-11-08）。
+
+| # | 内容 |
+|---|---|
+| 17zz7-1 | 删去 `PipelinedReadResumer`（`NettyServerCustomizer`）及其单元测试（装入管线、交换结束后补读） |
+| 17zz7-2 | 回归测试 `PipelinedReadingTest`：对不加任何处理器的 Reactor Netty 服务器，流水线请求立即答复后（含只带部分正文的 `POST`），同一连接上的下一个请求照常得到答复（各 20 个连接）；应用层的 `PipelinedRequestsIT`（Service Worker 守卫的 404 排在健康检查之后）照旧 |
+
+**验收**：`./gradlew check` 通过；以上两个回归测试通过。
+
+**17zz7 状态**：📝 待评审（分支 `1.3/phase-17zz7-drop-read-resumer`，在 17zz6 之上）。
+
+### 17zz8 迁移的顺序检查（2026-11-08，总控排入）
+
+**缘由**：`1.3/quizbuks` 上一个 PR 的 V80 在另一个 PR 的 V81 之后合入，Flyway 拒绝更旧的待应用版本，staging 部署两次失败并回滚。平台分支的序列（`db/jabiz`、示范应用）同样可能并行撞号或乱序。
+
+| # | 内容 |
+|---|---|
+| 17zz8-1 | `tools/check-migration-order.sh <base> <head> [<序列>…]`：PR 新增或改名的 `V<n>__*.sql`（`git diff base...head`）必须大于 `<base>` 最新提交上同一序列的最大号，同一序列不重号；失败时写明"基线已到 V<m>，请改为 V<m+1>"。序列是目录的正则；缺省为平台的三条（`db/jabiz`、示范应用的 `db/migration` 与测试迁移 `db/testmigration`） |
+| 17zz8-2 | `ci.yml` 作业 `migration-order`（PR 时，草稿也跑）：平台序列加应用分支 `.jabiz-migration-sequences` 中的序列 |
+| 17zz8-3 | 离线测试 `tools/test/check-migration-order.test.sh`（14 例：落后、在后、三条序列各自独立、改名、重号、目标分支在 PR 之后前进、序列外的测试夹具、应用序列中基线 V81 而 PR 为 V80）；`docs/guide/version-lines.md`"迁移的顺序"（合并带迁移的 PR 之前再看一次基线） |
+
+**验收**：重放 `1.3/quizbuks` 的 #505（以合入时的基线）报"基线已到 V81，请改为 V82"；重放平台的 #491（V63，基线 V62）通过；当前 `1.3/platform` 通过。
+
+**17zz8 状态**：📝 待评审（分支 `1.3/phase-17zz8-migration-order-check`）。

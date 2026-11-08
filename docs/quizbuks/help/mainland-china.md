@@ -11,16 +11,19 @@
 
 有些 Quiz 用了在中国大陆无法播放的视频（例如 YouTube）。从中国大陆访问时，这些 Quiz 不会出现在首页和发起方的主页上；从通知或链接打开时，页面会说明"该内容在你所在的地区不可用"，不能开始作答。
 所在地区按你访问时的网络（IP 地址）判断，与"关于我"里填写的国家无关。离开中国大陆后再打开就可以正常作答。已经答完的 Quiz 照常可以查看结果。
+IP 地址的地区判断使用 DB-IP（https://db-ip.com）的数据，CC BY 4.0（也列在"关于本 App"中）。
 
 ### 日本語 · 中国本土で一部のクイズが見えない、または「このコンテンツは、いまいる地域ではご利用いただけません」と表示されるのはなぜですか？
 
 一部のクイズには、中国本土では再生できない動画（YouTube など）が使われています。中国本土からアクセスすると、これらのクイズはホームや主催者のページに表示されません。お知らせやリンクから開いた場合は「このコンテンツは、いまいる地域ではご利用いただけません」と表示され、回答を始めることはできません。
 地域はアクセスしたときのネットワーク（IP アドレス）で判定し、「プロフィール」に入力した国とは関係ありません。中国本土の外から開けば通常どおり回答できます。回答済みのクイズの結果はいつでも見られます。
+IP アドレスによる地域の判定には DB-IP（https://db-ip.com）のデータ（CC BY 4.0）を使用しています（「このアプリについて」にも記載）。
 
 ### English · Why can't I see some quizzes in mainland China, or why does a page say "This content is not available in your region"?
 
 Some quizzes use a video that cannot be played in mainland China (such as YouTube). From mainland China, these quizzes are not listed on the home page or on a Sponsor's page; opened from a notice or a link, the page says "This content is not available in your region" and the quiz cannot be started.
 Your region is judged by the network you are using (your IP address), not by the country in your profile. Open the quiz again from outside mainland China and you can answer it as usual. Results of quizzes you have answered stay available.
+The region of an IP address is determined with data from DB-IP (https://db-ip.com), licensed under CC BY 4.0 (also listed under "About the app").
 
 ## 二、给发起方（FAQ 的 `audience` = `SPONSOR`，分类 `PUBLISHING`）
 

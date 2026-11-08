@@ -131,10 +131,17 @@ public class ShopifyConfig {
         return systemDataset(QbsShops.MEMBER);
     }
 
+    /**
+     * The processes write one shop's tokens; the platform's key rotation (decision D78, {@link ShopifySealedFields})
+     * stores a batch of them again in one commit, up to {@code jabiz.key-rotation.batch-size} (at most 10,000).
+     */
     @Bean
     DatasetDefinition qbsShopTokenDataset() {
-        return systemDataset(QbsShops.TOKEN);
+        return systemDataset(QbsShops.TOKEN, KEY_ROTATION_BATCH);
     }
+
+    /** The most rows the platform's key rotation writes in one commit. */
+    static final int KEY_ROTATION_BATCH = 10_000;
 
     @Bean
     DatasetDefinition qbsComplianceRequestDataset() {

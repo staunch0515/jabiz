@@ -158,6 +158,15 @@ const en = {
       max: 'Highest reward per attempt: {{amount}}',
     },
     statsLink: 'Page statistics',
+    operator: {
+      title: 'Your operator',
+      hint: 'The operator looks after your account: it reviews your publications and your page, and answers your questions.',
+      own: 'This is your own operator: you lead it.',
+      contact: 'Contact',
+      since: 'Since {{time}}',
+      none: 'No operator looks after your account yet. It is given when your application is sent.',
+      help: 'About operators',
+    },
     basics: {
       identity: 'Who you are',
       identityHint: 'The name we address you by and your company, shown on your quizzes.',
@@ -362,6 +371,15 @@ const zh: typeof en = {
       max: '每次答题的最高奖励：{{amount}}',
     },
     statsLink: '主页统计',
+    operator: {
+      title: '你的运营商',
+      hint: '运营商负责你的账号：审核你的发布与主页，并回答你的问题。',
+      own: '这是你自己的运营商：你是它的负责人。',
+      contact: '联系方式',
+      since: '自 {{time}} 起',
+      none: '还没有运营商负责你的账号。提交申请时即会确定。',
+      help: '关于运营商',
+    },
     basics: {
       identity: '你是谁',
       identityHint: '我们称呼你的名字，以及显示在答卷上的公司名。',
@@ -566,6 +584,15 @@ const ja: typeof en = {
       max: '1 回の回答の最高報酬：{{amount}}',
     },
     statsLink: 'ページの統計',
+    operator: {
+      title: 'あなたの運営パートナー',
+      hint: '運営パートナーがあなたのアカウントを担当します。公開と主催者ページの審査を行い、質問に答えます。',
+      own: 'あなた自身の運営パートナーです（あなたが責任者です）。',
+      contact: '連絡先',
+      since: '{{time}} から',
+      none: 'まだ担当の運営パートナーはいません。申し込みを送ると決まります。',
+      help: '運営パートナーについて',
+    },
     basics: {
       identity: 'あなたについて',
       identityHint: 'お呼びする名前と、クイズに表示される会社名。',

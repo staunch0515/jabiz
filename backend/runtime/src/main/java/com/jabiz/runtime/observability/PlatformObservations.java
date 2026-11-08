@@ -72,6 +72,8 @@ public class PlatformObservations {
     public static final String GEOIP_RANGES = "jabiz.geoip.ranges";
     /** Gauge: 1 while the address database is older than {@code jabiz.geoip.max-age} or could not be read (D74). */
     public static final String GEOIP_STALE = "jabiz.geoip.stale";
+    /** Gauge: values under a retired seal key in fields not declared as sealed, at the last scan (D78 item 8). */
+    public static final String KEYS_UNDECLARED_SEALED = "jabiz.keys.undeclared-sealed";
     public static final String DOCUMENT_RENDER = "jabiz.document.render";
     public static final String WEBHOOK = "jabiz.webhook.delivery";
     /** A call to a declared external service (decision D38); tagged with the service and its outcome only. */

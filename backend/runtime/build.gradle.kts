@@ -46,6 +46,12 @@ dependencies {
     // JDBC: Flyway, and the precompile check of SQL templates (reads server error positions).
     implementation("org.postgresql:postgresql")
     implementation("org.postgresql:r2dbc-postgresql")
+    constraints {
+        // Both drivers still ask for SCRAM 3.2 (GHSA-p9jg-fcr6-3mhf: silent downgrade from channel binding on servers with
+        // Ed25519 certificates, fixed in 3.3). Drop when the Spring Boot BOM's drivers ask for 3.3 or later.
+        api("com.ongres.scram:scram-client:3.4")
+        api("com.ongres.scram:scram-common:3.4")
+    }
 
     // Shared by the integration tests of runtime and app (docs/design/07-quality.md section 7).
     testFixturesApi("org.springframework.boot:spring-boot-starter-test")

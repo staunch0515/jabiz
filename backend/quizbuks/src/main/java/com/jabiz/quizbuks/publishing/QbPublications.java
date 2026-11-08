@@ -460,7 +460,8 @@ public final class QbPublications {
         eb.field("digitalDescription", f -> f.physicalColumn("digital_description").immutable(true)
             .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
         eb.field("digitalSendDays", f -> f.physicalColumn("digital_send_days").immutable(true).asNumeric(3, 0));
-        eb.field("sealedDigitalContent", f -> f.physicalColumn("sealed_digital_content").immutable(true)
+        // Frozen with the card, but stored again under a new seal key (D78): mutable, sensitive, written by processes only.
+        eb.field("sealedDigitalContent", f -> f.physicalColumn("sealed_digital_content")
             .sensitive().asText(PublishingLimits.SEALED_LENGTH));
         // Q70: the referral policy as submitted (ReferralPolicy's JSON), for the link, the claim and the reward.
         eb.field("referral", f -> f.physicalColumn("referral").immutable(true)

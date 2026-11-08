@@ -1,7 +1,7 @@
 import type { APIRequestContext } from '@playwright/test'
 import {
   address,
-  adminToken,
+  
   expect,
   expectAccessible,
   linkIn,
@@ -12,6 +12,7 @@ import {
   unique,
 } from './support'
 import { fundedSponsor } from './play'
+import { reviewerFor } from './operators'
 
 /**
  * A publication's share link (docs/quizbuks/plans/Q15-share-link.md): the sponsor copies it, a visitor opens it
@@ -42,7 +43,7 @@ async function sharedPublication(request: APIRequestContext) {
   const publicationId = saved.publicationId as string
   const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    await run(request, await reviewerFor(request, sponsor.token), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
       decision: 'APPROVE' })
   }
   return { publicationId, name }

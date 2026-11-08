@@ -90,6 +90,19 @@ git push
 - 旧线上的修复**不加迁移**（平台 `db/jabiz` 与应用 `db/migration` 都不加）：需要改表结构的修复只做在最新线上。
 - 向前合并时 `.jabiz-platform-line` 不会冲突：旧线从不改它。
 
+### 迁移的顺序（17zz8）
+
+Flyway 不执行比已应用的最新版本更旧的迁移（"Detected resolved migration not applied to database"）。两个 PR 并行时，号小的那个后合入，部署就会失败
+（2026-11-08 在 `1.3/quizbuks`：V80 在 V81 之后合入）。CI 的 `migration-order`（`ci.yml`，`tools/check-migration-order.sh`）对每个 PR 检查：
+它新增或改名的 `V<n>__*.sql` 都大于目标分支**当时最新提交**上同一序列的最大号，且同一序列中没有重号；不满足即失败并写明"基线已到 V<m>，请改为 V<m+1>"。
+
+- 平台的序列：`backend/runtime/src/main/resources/db/jabiz`（平台）、`backend/app/src/main/resources/db/migration`（示范应用）、
+  `backend/app/src/test/resources/db/testmigration`（示范应用的测试迁移，V1000 起）。各算各的。
+- 应用分支在 `.jabiz-migration-sequences`（应用自己的文件，列在 `.jabiz-app-paths` 中）里每行写一个目录的正则（`#` 起注释），
+  如 `backend/quizbuks[^/]*/src/main/resources/db/migration`：匹配的各目录合为一条序列。
+- 检查只看 CI 那一刻的目标分支：之后别的 PR 带着更大的号先合入，这个 PR 仍是绿的。**合并带迁移的 PR 之前**再跑一次
+  `tools/check-migration-order.sh origin/<目标分支> origin/<PR 的分支> [<应用的序列>…]`（或开启分支保护的"要求分支是最新的"）。
+
 ## 7. 发布
 
 ```sh
