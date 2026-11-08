@@ -8,7 +8,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** F-S6: the attempt's column widths fit the largest attempt, the migration's widths (V91). */
+/** F-S6: the attempt's column widths fit the largest attempt, the migration's widths (V93). */
 class PlayLimitsTest {
 
     @Test
