@@ -5401,7 +5401,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：`./gradlew check` 通过；以上两个回归测试通过。
 
-**17zz7 状态**：📝 待评审（分支 `1.3/phase-17zz7-drop-read-resumer`，在 17zz6 之上）。
+**17zz7 状态**：✅ 已合并（#524）。
 
 ### 17zz8 迁移的顺序检查（2026-11-08，总控排入）
 
@@ -5415,4 +5415,19 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：重放 `1.3/quizbuks` 的 #505（以合入时的基线）报"基线已到 V81，请改为 V82"；重放平台的 #491（V63，基线 V62）通过；当前 `1.3/platform` 通过。
 
-**17zz8 状态**：📝 待评审（分支 `1.3/phase-17zz8-migration-order-check`）。
+**17zz8 状态**：✅ 已合并（#530）。
+
+### 17zz9 试发应用自己的告警规则（2026-11-08，总控排入）
+
+**缘由**：告警的试发只经 `tools/ops/alert-fire-test.sh`（13 §7），但它只认平台的文件夹 `jabiz` 与平台规则的假数据，应用自己的规则（QuizBuks 的每日核对差异、Stripe、AI 暂停等）无法试发；
+另外 17zzz 加的 `jabiz-keys-undeclared-sealed` 没有假数据，不带参数的 `fire` 在它那里中止。
+
+| # | 内容 |
+|---|---|
+| 17zz9-1 | `ALERT_FOLDERS`（空格分隔，缺省 `jabiz`）：`rules` 与 `fire` 覆盖的文件夹（应用的文件以文件名为文件夹）；`ALERT_FAKES`：应用的假数据文件，每行 `<uid> timer <指标> <次数> [键=值…]`、`<uid> gauge <指标> <单位或 -> <值> [键=值…]`、`<uid> log <消息…>` 或 `<uid> skip <原因…>`（不能伪造，打印原因）；同一规则可有几行 |
+| 17zz9-2 | `jabiz-keys-undeclared-sealed` 的假数据（仪表 `jabiz.keys.undeclared-sealed` = 1） |
+| 17zz9-3 | 离线测试 `tools/test/alert-fire.test.sh`（CI，15 项，假的 `curl`）：缺省与 `ALERT_FOLDERS` 的文件夹；不带参数的 `fire` 对平台的每条规则都有假数据（`jabiz-metrics-absent` 除外，规则清单取自 `jabiz-alerts.yaml`，以后新加规则而忘了假数据即失败）；应用规则的四种行、一条规则多行、跳过、缺文件、未知的规则与种类、不反应的规则 |
+
+**验收**：CI 绿；`13-observability-ops.md` §7"试发"写明应用规则的做法。
+
+**17zz9 状态**：📝 待评审（分支 `1.3/phase-17zz9-alert-fire-app-rules`）。

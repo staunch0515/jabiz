@@ -187,6 +187,8 @@ jobs:
       - run: tools/test/ci-backend-scope.test.sh
       # The alert rules rendered with a deployment's settings (docker/grafana/alerting, 13 section 7).
       - run: tools/test/alert-render.test.sh
+      # The test-fire script: made-up data for every platform rule, an application's rules (ALERT_FAKES), offline.
+      - run: tools/test/alert-fire.test.sh
       # The wiki's publishing scripts (docs/guide/wiki.md), tested on every branch like the script above.
       - run: node --test tools/wiki/*.test.mjs && tools/test/wiki-publish.test.sh
       # The read-only check of production settings (docs/guide/platform-operations.md section 1).
