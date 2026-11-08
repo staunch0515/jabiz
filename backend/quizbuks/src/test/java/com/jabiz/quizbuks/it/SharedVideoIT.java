@@ -187,6 +187,10 @@ class SharedVideoIT extends PlayItSupport {
             .containsEntry("video_vertical", true).containsEntry("foreign_video", true)
             .containsEntry("watch_required", false);
         assertThat(row(draft)).containsEntry("shared_video_id", sharedVideoId);
+        // The start page gets the card's video, with which it leads (the shared video is no material of the version).
+        String reader = taker(newTaker(unique("t-fs12-page"), "JP"));
+        assertThat(items("qb.app.publication", reader, body("params", body("publicationId", draft,
+            "at", clock.instant().toString()))).getFirst()).containsEntry("video", VideoEmbeds.player(YOUTUBE).get());
         // Submitted, frozen: the draft-only process refuses it.
         refused(PublicationSharedVideos.SET, userToken, body("publicationId", draft, "sharedVideoId", null), 422);
         // A copy keeps the pick.

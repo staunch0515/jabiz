@@ -800,7 +800,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **使用数**：运营商看到的"使用中的发布"只含自己发起方的发布；平台看到全部。共享视频的主题词只用于目录搜索，不并入发布的主题词。
 - **审计**：共享、审核结果、撤回、下架都经平台的写入路径（`GET /api/audit/records?entityType=QbSharedVideo`）；发布的结束在发布的历史中。
 - **"选不到某个共享视频"的排查**：视频的状态（平台管理系统的"共享视频"页；只有"共享中"的在目录中）；提供方的入驻记录被删除（账号删除）时目录不列它。
-- **数据**：`qb_shared_video`（共享的内容不变；状态、理由、时间由流程写）；发布 `qb_publication_version.shared_video_id`（草稿时 `QB_PUBLICATION_SHARED_VIDEO_SET`，提交即冻结）；卡片 `qb_publication_card.shared_video_id`、`video_provider_id`（上线时冻结，供以后的屏蔽 F-S8 与统计）。卡片的视频即共享视频，除非 Quiz 有"看完才能答题"的视频；共享视频的链接计入"中国大陆看不到"（§7.24）与竖屏（§7.25）。答题路径不变。
+- **数据**：`qb_shared_video`（共享的内容不变；状态、理由、时间由流程写）；发布 `qb_publication_version.shared_video_id`（草稿时 `QB_PUBLICATION_SHARED_VIDEO_SET`，提交即冻结）；卡片 `qb_publication_card.shared_video_id`、`video_provider_id`（上线时冻结，供以后的屏蔽 F-S8 与统计）。卡片的视频即共享视频，除非 Quiz 有"看完才能答题"的视频；App 的开始答题页以卡片的共享视频开头（Quiz 自己的视频仍在资料中）；共享视频的链接计入"中国大陆看不到"（§7.24）与竖屏（§7.25）。答题路径不变。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

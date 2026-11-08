@@ -129,6 +129,8 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
       // Q64: the publication's own cover, as its card shows it; else the version's.
       cover: p.cover ?? snapshot?.cover ?? null,
       watchRequired: video.watchRequired,
+      // F-S12: the card's video, which leads the start page when it is the shared one (`leadVideo`).
+      video: video.player,
       videoDurationSec: video.videoDurationSec,
       kind: snapshot?.kind === 'SURVEY' ? 'SURVEY' : 'QUIZ',
       intro: snapshot?.intro ?? null,
@@ -174,6 +176,8 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
       quizTitle: q.title,
       cover: q.cover,
       watchRequired: video.watchRequired,
+      // F-S12: the card's video, which leads the start page when it is the shared one (`leadVideo`).
+      video: video.player,
       videoDurationSec: video.videoDurationSec,
       kind: q.kind,
       intro: q.intro,
