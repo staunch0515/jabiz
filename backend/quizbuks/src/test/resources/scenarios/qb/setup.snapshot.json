@@ -3404,7 +3404,7 @@
         "type" : "text"
       },
       "value" : "bilibili,youku,tencent",
-      "description" : "Video sites mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, youku, tencent); a video of any other site is foreign and not answerable from mainland China",
+      "description" : "Video sites and hosts mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, youku, tencent, or a host name such as videos.example.com for video files and pages there); a video of any other site is foreign and not answerable from mainland China",
       "versionNo" : 1,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -4727,7 +4727,7 @@
       "targetEntity" : "SysParam",
       "targetId" : null,
       "changeAction" : "UPSERT",
-      "changeValues" : "{\"paramKey\":\"qb.video.mainland-accessible-sites\",\"valueKind\":{\"maxLength\":200,\"type\":\"text\"},\"value\":\"bilibili,youku,tencent\",\"description\":\"Video sites mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, youku, tencent); a video of any other site is foreign and not answerable from mainland China\"}",
+      "changeValues" : "{\"paramKey\":\"qb.video.mainland-accessible-sites\",\"valueKind\":{\"maxLength\":200,\"type\":\"text\"},\"value\":\"bilibili,youku,tencent\",\"description\":\"Video sites and hosts mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, youku, tencent, or a host name such as videos.example.com for video files and pages there); a video of any other site is foreign and not answerable from mainland China\"}",
       "targetKey" : "qb.video.mainland-accessible-sites",
       "effectiveTime" : null,
       "reason" : "First value of the QuizBuks parameter, proposed by QB_SETUP",

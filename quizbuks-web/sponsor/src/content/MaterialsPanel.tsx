@@ -55,7 +55,8 @@ import {
 import { ContentImage } from './ContentImage'
 import { formatDuration, parseDuration } from './duration'
 import { VideoDurationProbe } from './VideoDurationProbe'
-import { isShorts, trackable, videoPlayer } from '../qb/video'
+import { isShorts, trackable, videoKind, videoPlayer } from '../qb/video'
+import { VideoPlayer } from '../qb/view/VideoPlayer'
 import { isShortVideoLink, resolveVideoLink } from './api'
 import { DOCUMENT_FIELD, LIMITS } from './limits'
 import { useMoveFocus } from './moving'
@@ -160,6 +161,12 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
   // Q99: a video the App plays whose player cannot say how much was watched.
   const shownPlayer = videoPlayer(url)
   const untrackable = shownPlayer !== null && !trackable(shownPlayer)
+  // F-S15: a video file is previewed for real: whether it opened and its length was read (by its address).
+  const shownKind = videoKind(shownPlayer)
+  const [fileState, setFileState] = useState<{ player: string; state: 'read' | 'failed' } | null>(null)
+  const fileFailed = shownKind === 'file' && fileState?.player === shownPlayer && fileState.state === 'failed'
+  const fileRead = shownKind === 'file' && fileState?.player === shownPlayer && fileState.state === 'read'
+  const [fileProblem, setFileProblem] = useState<string | null>(null)
   // Q99b: a short link (b23.tv) is turned into the video's full address as soon as it is typed or pasted.
   const resolving = useMutation({
     mutationFn: resolveVideoLink,
@@ -179,6 +186,15 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
     setDuration((current) => (durationTyped && current !== '' ? current : formatDuration(seconds)))
     setDurationFromPlayer(true)
   }, [durationTyped])
+  // F-S15: the file's length read, or the file not opening, by the preview.
+  const onFileDuration = useCallback((seconds: number) => {
+    if (shownPlayer) setFileState({ player: shownPlayer, state: 'read' })
+    setFileProblem(null)
+    onDuration(seconds)
+  }, [onDuration, shownPlayer])
+  const onFileFailed = useCallback(() => {
+    if (shownPlayer) setFileState({ player: shownPlayer, state: 'failed' })
+  }, [shownPlayer])
   const [pdf, setPdf] = useState<string | null>(material?.pdf ?? null)
   const [audio, setAudio] = useState<string | null>(material?.audio ?? null)
   const [images, setImages] = useState<ImageDraft[]>(() => (material?.images ?? []).map((i) => ({
@@ -256,6 +272,12 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
       return
     }
     setDurationProblem(null)
+    // F-S15: a video file is the video to watch only once the preview read its length (it opens, it is a video).
+    if (kind === 'VIDEO_LINK' && !variant && watch && shownKind === 'file' && !fileRead) {
+      setFileProblem(t('materials.fileDurationNeeded'))
+      return
+    }
+    setFileProblem(null)
     save.mutate()
   }
   const problem = (field: string) => fieldProblem(save.error, field)
@@ -351,6 +373,27 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
                 </p>
               )}
               {problem('url') && <p id={`${id}-url-error`} className="text-destructive text-sm">{problem('url')}</p>}
+              {/* F-S15: a video file and a page of another site are previewed for real, as the App will show them. */}
+              {kind === 'VIDEO_LINK' && shownPlayer && shownKind === 'file' && (
+                <div className="flex flex-col gap-1" data-testid="material-file-preview">
+                  <span className="text-sm font-medium">{t('materials.filePreview')}</span>
+                  <VideoDurationProbe player={shownPlayer} title={t('materials.filePreview')}
+                    onDuration={onFileDuration} onFailed={onFileFailed} />
+                  {fileFailed && (
+                    <p role="alert" className="text-destructive text-sm" data-testid="material-file-unplayable">
+                      {t('materials.fileUnplayable')}</p>
+                  )}
+                </div>
+              )}
+              {kind === 'VIDEO_LINK' && shownPlayer && shownKind === 'page' && (
+                <div className="flex flex-col gap-1" data-testid="material-page-preview">
+                  <span className="text-sm font-medium">{t('materials.pagePreview')}</span>
+                  <VideoPlayer player={shownPlayer} title={t('materials.pagePreview')}
+                    className="bg-muted aspect-video w-full max-w-xs overflow-hidden rounded-md border" />
+                  <p className="text-muted-foreground text-sm" data-testid="material-page-hint">
+                    {t('materials.pageEmbedHint')}</p>
+                </div>
+              )}
               {kind === 'VIDEO_LINK' && !variant && (
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
@@ -370,6 +413,10 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
                   )}
                   {problem('watchToAnswer') && (
                     <p id={`${id}-watch-error`} className="text-destructive text-sm">{problem('watchToAnswer')}</p>
+                  )}
+                  {fileProblem && watch && (
+                    <p role="alert" className="text-destructive text-sm" data-testid="material-file-duration-needed">
+                      {fileProblem}</p>
                   )}
                 </div>
               )}
@@ -391,7 +438,7 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
               {kind === 'VIDEO_LINK' && !variant && (
                 // Q75 (D-Q75-5): the duration, read from the player's preview when the video is the one to watch.
                 <div className="flex flex-col gap-2" data-testid="material-duration-field">
-                  {watch && shownPlayer && !untrackable && (
+                  {watch && shownPlayer && !untrackable && shownKind !== 'file' && (
                     <VideoDurationProbe player={shownPlayer} title={t('materials.durationPreview')}
                       onDuration={onDuration} />
                   )}

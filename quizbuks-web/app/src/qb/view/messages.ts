@@ -109,6 +109,8 @@ const en = {
   feed: {
     videoTitle: 'Video: {{name}}',
     hasVideo: 'With a video',
+    // F-S15: a video file that does not play: its link instead.
+    openVideo: 'Open the video',
     watchFirst: 'Watch to answer',
     upTo: 'Up to {{amount}}',
     entryFee: 'Entry fee {{amount}}',
@@ -220,6 +222,7 @@ const zh: typeof en = {
   feed: {
     videoTitle: '视频：{{name}}',
     hasVideo: '有视频',
+    openVideo: '打开视频',
     watchFirst: '看完即可答题',
     upTo: '最高 {{amount}}',
     entryFee: '报名费 {{amount}}',
@@ -331,6 +334,7 @@ const ja: typeof en = {
   feed: {
     videoTitle: '動画：{{name}}',
     hasVideo: '動画あり',
+    openVideo: '動画を開く',
     watchFirst: '見れば回答できる',
     upTo: '最高 {{amount}}',
     entryFee: '参加費 {{amount}}',
