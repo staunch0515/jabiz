@@ -322,6 +322,21 @@ public final class QbParams {
     /** Q86 (D-Q86-4): the handle of the headquarters' official account's page, whose tree is the platform's; empty: none. */
     public static final String TREE_PLATFORM_HANDLE = "qb.tree.platform-handle";
 
+    /**
+     * F-S11 (docs/quizbuks/plans/impl/F-S11.md): the country a request whose address the address database does not know
+     * counts as for the rule on foreign videos ({@code ClientCountry} unknown: a private address, no database). Mainland
+     * China ({@code CN}) by default: rather refuse than show a video that does not play; empty counts as no country (not
+     * mainland China). Not controlled (neither money nor a review switch); the end-to-end tests set another.
+     */
+    public static final String REGION_UNKNOWN_IP_COUNTRY = "qb.region.unknown-ip-country";
+    /**
+     * F-S11: the video sites mainland China plays ({@code VideoEmbeds.Site} keys, comma-separated); a video of any other
+     * site, or of none recognised, is foreign ({@code content.ForeignVideos}). Controlled: taking a site off hides
+     * publications from mainland China, adding one shows them videos that may not play. Read as optional: the setup's
+     * value ({@code ForeignVideos.DEFAULT_SITES}) until its proposal is published.
+     */
+    public static final String VIDEO_MAINLAND_SITES = "qb.video.mainland-accessible-sites";
+
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
         KUDOS_BUY_ENABLED, KUDOS_SELL_ENABLED, TRANSFER_FEE_RATE);
@@ -339,7 +354,7 @@ public final class QbParams {
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         List.of(UNDERSTANDING_ENABLED), CASH_ACCOUNT_PARAMS, FEE_PARAMS, List.of(SPONSOR_ROUNDS_ENABLED),
-        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES))
+        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES))
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -550,6 +565,7 @@ public final class QbParams {
         // F-C11: the products' limit (ordinary; last after F-C2, so that the setup's earlier keys stay as they were).
         new Param(PRODUCTS_MAX, Map.of("type", "numeric", "precision", 6, "scale", 0), "50",
             "The most products one sponsor has, on the products page and in a profile package"),
+<<<<<<< HEAD
         // F-S2: knowledge graphs (ordinary; last).
         new Param(TREE_MAX_NODES, Map.of("type", "numeric", "precision", 4, "scale", 0), "200",
             "The most nodes one knowledge graph has"),
@@ -561,6 +577,16 @@ public final class QbParams {
             "How many knowledge graphs of their own one Sponsor has"),
         new Param(TREE_REVIEW_REMIND_AFTER, Map.of("type", "numeric", "precision", 3, "scale", 0), "3",
             "After how many days a knowledge graph's version waiting for review is reminded to its reviewers"));
+=======
+        // F-S11: foreign videos and mainland China (the controlled one last, in the order of CONTROLLED).
+        new Param(REGION_UNKNOWN_IP_COUNTRY, Map.of("type", "text", "maxLength", 2), "CN",
+            "The country a request whose address the address database does not know counts as for foreign videos "
+                + "(CN: mainland China; empty: none)"),
+        new Param(VIDEO_MAINLAND_SITES, Map.of("type", "text", "maxLength", 200),
+            com.jabiz.quizbuks.content.ForeignVideos.DEFAULT_SITES,
+            "Video sites mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, "
+                + "youku, tencent); a video of any other site is foreign and not answerable from mainland China"));
+>>>>>>> origin/1.3/quizbuks
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

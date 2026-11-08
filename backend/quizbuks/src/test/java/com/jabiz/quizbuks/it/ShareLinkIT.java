@@ -63,7 +63,9 @@ class ShareLinkIT extends PlayItSupport {
                 // Q75: whether the video must be watched first, and how long it is.
                 "watchRequired", "videoDurationSec",
                 // Q60a-2: the sponsor's published page (public itself), none here.
-                "sponsorHandle");
+                "sponsorHandle",
+                // F-S11: asked from mainland China, whether its video cannot be played there (not asked here: false).
+                "regionBlocked");
             assertThat(row).containsEntry("publicationId", publicationId).containsEntry("name", "Shared")
                 .containsEntry("kind", "QUIZ").containsEntry("questionCount", 2);
             assertThat(row.get("sponsorCompany")).isNotNull();

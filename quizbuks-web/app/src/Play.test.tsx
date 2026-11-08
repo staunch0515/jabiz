@@ -1163,6 +1163,47 @@ describe('a publication\'s page', () => {
   })
 })
 
+describe('foreign videos and mainland China (F-S11)', () => {
+  const mainland = (path: string) => (path === '/api/client/region'
+    ? json(200, { country: 'CN', mainlandChina: true, known: true }) : undefined)
+
+  it('asks the home without what mainland China cannot answer, by what the platform says of the address', async () => {
+    const { calls } = server({ extra: mainland })
+    render(<App />)
+    await screen.findByTestId('feed-card')
+    const feed = calls.find((c) => c.path === '/api/queries/qb.app.feed')!.body as { params: Record<string, unknown> }
+    expect(feed.params).toMatchObject({ mainlandChina: true })
+    // The region is asked before the feed, so a card that cannot be played there never shows for a moment.
+    const region = calls.findIndex((c) => c.path === '/api/client/region')
+    expect(region).toBeGreaterThanOrEqual(0)
+    expect(region).toBeLessThan(calls.findIndex((c) => c.path === '/api/queries/qb.app.feed'))
+  })
+
+  it('asks as not mainland China when the platform cannot say', async () => {
+    const { calls } = server()
+    render(<App />)
+    await screen.findByTestId('feed-card')
+    const feed = calls.find((c) => c.path === '/api/queries/qb.app.feed')!.body as { params: Record<string, unknown> }
+    expect(feed.params).toMatchObject({ mainlandChina: false })
+  })
+
+  it('says a publication opened from a notice is not available in the region, and shows nothing of it', async () => {
+    const { calls } = server({ extra: mainland, publicationPage: () => json(200, { items: [publication({
+      regionBlocked: true, canStart: false })], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const page = await screen.findByTestId('detail-region-unavailable')
+    expect(page).toHaveTextContent('This content is not available in your region')
+    expect(page).toHaveTextContent('YouTube')
+    expect(screen.queryByTestId('detail-start')).toBeNull()
+    expect(screen.queryByTestId('detail')).toBeNull()
+    const read = calls.find((c) => c.path === '/api/queries/qb.app.publication')!.body as {
+      params: Record<string, unknown> }
+    expect(read.params).toMatchObject({ mainlandChina: true })
+    await expectAccessible()
+  })
+})
+
 describe('certification rounds (Q70a)', () => {
   it('says until when the Taker holds the certification instead of offering its round', async () => {
     const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,

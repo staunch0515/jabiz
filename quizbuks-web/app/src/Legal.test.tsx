@@ -212,6 +212,9 @@ describe('a visitor', () => {
     render(<App />)
     expect(await screen.findByTestId('about-version')).toHaveTextContent(APP_VERSION)
     expect(screen.getByTestId('about-built')).not.toHaveTextContent('')
+    // The IP address database's attribution (CC BY 4.0, F-S11).
+    expect(screen.getByTestId('about-third-party')).toHaveTextContent('DB-IP')
+    expect(screen.getByTestId('about-db-ip')).toHaveAttribute('href', 'https://db-ip.com')
     expect(screen.getByTestId('legal-links').querySelector('a[href="/legal/privacy"]')).not.toBeNull()
     expect(screen.queryByTestId('about-sign-out')).toBeNull()
   })

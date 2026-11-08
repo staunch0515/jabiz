@@ -94,4 +94,17 @@ class DeploySafetyCheckTest {
             .satisfies(p -> assertThat(p.toString()).contains(DeploySafetyCheck.MAIL_BASE_URL));
         assertThat(DeploySafetyCheck.devProblems(true, "0.0.0.0", "https://localhost.example")).hasSize(2);
     }
+
+    /** F-S11: without an address database nobody in mainland China's place answers a foreign video. */
+    @Test
+    void noAddressDatabaseIsAnErrorInLiveModeOnly() {
+        assertThat(DeploySafetyCheck.geoipProblems(true, true)).isEmpty();
+        assertThat(DeploySafetyCheck.geoipProblems(false, false)).singleElement()
+            .satisfies(p -> {
+                assertThat(p.severity()).isEqualTo(CheckProblem.Severity.WARNING);
+                assertThat(p.location()).isEqualTo(DeploySafetyCheck.GEOIP_DATABASE);
+            });
+        assertThat(DeploySafetyCheck.geoipProblems(false, true)).singleElement()
+            .satisfies(p -> assertThat(p.severity()).isEqualTo(CheckProblem.Severity.ERROR));
+    }
 }

@@ -74,7 +74,10 @@ public final class QbRoles {
         // Q47c: which kinds of audience rule sponsors may use and which are charged for.
         QbPermissions.AUDIENCE_RULES_WRITE,
         // Q89: every sponsored benefit, conversation between sponsors and purchase order (disputes).
-        QbPermissions.BENEFIT_READ);
+        QbPermissions.BENEFIT_READ,
+        // F-S11: the exceptions to the rule on foreign videos and mainland China (every sponsor's), its figures and
+        // the daily check of the address database.
+        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR);
 
     /**
      * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's
@@ -98,8 +101,14 @@ public final class QbRoles {
         QbPermissions.CONVERSATION_READ,
         // Q87: how its sponsors pay the platform's fees (prepaid, or postpaid within a credit limit).
         QbPermissions.FEE_BILLING,
+<<<<<<< HEAD
         // F-S2: its copies of the platform's knowledge graphs, and reviewing them and its sponsors' graphs.
         QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE);
+=======
+        // F-S11 (the requester, 2026-11-07): the exceptions to the rule on foreign videos for its own sponsors (the
+        // entry scope limits them); not the platform-wide refusal counts or the address database (ADMIN_REGION_MONITOR).
+        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE);
+>>>>>>> origin/1.3/quizbuks
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,

@@ -26,6 +26,13 @@ public class MailServerConfig {
         return QbMailServers.ENTITY_DEFINITION;
     }
 
+    /**
+     * The most servers one commit writes: the processes write one, but the platform's key rotation (decision D78,
+     * {@link MailServerSealedFields}) stores a batch of sealed passwords again in one commit, up to
+     * {@code jabiz.key-rotation.batch-size} (at most 10,000).
+     */
+    static final int MAX_WRITE_BATCH = 10_000;
+
     /** Written by the processes only; the administration reads every server (the password is never returned). */
     @Bean
     DatasetDefinition qbSponsorMailServerDataset() {
@@ -33,7 +40,7 @@ public class MailServerConfig {
             .targetEntityType(QbMailServers.ENTITY)
             .asDefault()
             .permissions(QbPermissions.ADMIN_USERS_READ, QbPermissions.SPONSOR_VIEW_WRITE)
-            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(1))
+            .policy(p -> p.processOnlyWrites().maxWriteBatchSize(MAX_WRITE_BATCH))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 

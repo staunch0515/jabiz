@@ -25,6 +25,24 @@ permissions:
 # platform's ci.yml (build-application, app-paths). The jobs start together: the end-to-end tests do not wait for the
 # web checks, so the slowest job sets the time.
 jobs:
+  # QuizBuks's migrations stay in order (2026-11-08: a pull request's V80 was merged after another one's V81 and its
+  # deployment failed): every migration a pull request adds or renames comes after the highest one the line branch
+  # has now, not at the merge base, and no version occurs twice (tools/quizbuks/migration-order.sh). Drafts too: it is
+  # cheap and the earlier it says so the better. The line branch can move on after this ran: DEPLOY.md, "合并前的门槛".
+  migration-order:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: tools/quizbuks/test/migration-order.test.sh
+      # HEAD is the pull request merged into the line branch's latest commit (GitHub's merge ref).
+      - run: git fetch --no-tags origin "$BASE_REF" && tools/quizbuks/migration-order.sh "origin/$BASE_REF" HEAD
+        env:
+          BASE_REF: ${{ github.base_ref }}
+
   # The QuizBuks front ends (docs/quizbuks/plans/QP-pages.md section 7): the app and the sponsor console use the
   # platform's versions (app:check), pass their own lint, types and tests, and keep the shared folder src/qb the same.
   web:
@@ -196,6 +214,20 @@ jobs:
           if grep -q 'Platform check failed' quizbuks-compose.log; then echo "platform check failed"; exit 1; fi
           for name in STRIPE_API_KEY STRIPE_WEBHOOK_SECRET STRIPE_CONNECT_WEBHOOK_SECRET; do
             grep -q "quizbuks: WARNING: $name is not set" quizbuks-compose.log || { echo "no warning for $name"; exit 1; }
+          done
+      # Known vulnerabilities of the deployed images (launch checklist "安全"): the application image just built and
+      # the database image with pgBackRest (deploy/quizbuks/backup). A report only, it never fails the job; the findings
+      # are assessed in docs/quizbuks/security/dependency-review.md.
+      - name: Image vulnerability report
+        run: |
+          docker build -q -t postgres-pgbackrest:16 -f deploy/quizbuks/backup/Dockerfile.postgres deploy/quizbuks/backup \
+            || echo "::warning::the database image did not build"
+          for image in quizbuks:local postgres-pgbackrest:16; do
+            echo "::group::$image"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.0 image \
+              --scanners vuln --severity HIGH,CRITICAL --exit-code 0 --no-progress "$image" \
+              || echo "::warning::the vulnerability report of $image did not run"
+            echo "::endgroup::"
           done
       - if: failure()
         run: $COMPOSE logs app

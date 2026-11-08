@@ -34,6 +34,7 @@ import { ReferralPanel } from '../referral/ReferralPanel'
 import { ReportButton } from '../report/ReportButton'
 import { legalPath } from '../qb/legal'
 import { claimReferral, forgetReferral, pendingReferral } from '../referral/api'
+import { useMainlandChina } from '../qb/region'
 
 /** Whole minutes from now until a time, at least 0 (by the device's clock: a hint only). */
 export function minutesUntil(time: string | null, now: number = Date.now()): number {
@@ -260,12 +261,15 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const [chosen, setChosen] = useState<string | null>(() => linkLanguageOf(window.location.pathname))
   const shown = shownLanguages(settings.data, i18n.language)
   const languages = chosen ? [chosen, ...shown.filter((l) => l !== chosen)] : shown
-  const request = { publicationId, at, country, languages }
+  // F-S11: from mainland China, a publication with a video that cannot be played there says it is not available.
+  const region = useMainlandChina()
+  const request = { publicationId, at, country, languages, mainlandChina: region.mainlandChina }
   // Q70: how many referral claims this page made: the page is read again after one (a new key, so that a claim
   // answered while the first read is on its way is not lost in that read).
   const [claims, setClaims] = useState(0)
   const publication = useQuery({ queryKey: ['qb', 'publication', request, i18n.language, claims],
-    queryFn: () => readPublication(request), enabled: !settings.isPending, placeholderData: keepPreviousData })
+    queryFn: () => readPublication(request), enabled: !settings.isPending && !region.pending,
+    placeholderData: keepPreviousData })
   const tiers = useQuery({ queryKey: ['qb', 'publication-tiers', publicationId, at, country],
     queryFn: () => readTiers(request),
     enabled: !!publication.data })
@@ -313,6 +317,13 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       description={`${t('detail.notFoundHint')} ${t('detail.invitedHint')}`}
       action={<Button asChild variant="outline"><Link to="/">{t('detail.backHome')}</Link></Button>}
       data-testid="detail-not-found" />
+  }
+  if (p.regionBlocked && !p.myAttemptId) {
+    // F-S11 (A3-16): reached from a notice or a link in mainland China: why it cannot be opened, nothing of it shown.
+    return <PageState kind="notFound" titleAs="h1" title={t('detail.regionUnavailable')}
+      description={t('detail.regionUnavailableHint')}
+      action={<Button asChild variant="outline"><Link to="/">{t('detail.backHome')}</Link></Button>}
+      data-testid="detail-region-unavailable" />
   }
   return (
     <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">

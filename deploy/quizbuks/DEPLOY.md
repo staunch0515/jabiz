@@ -48,10 +48,25 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 
 - **Require a pull request before merging**（直接推送只留给计划文档这类不跑代码的改动时也可不勾，但下面的检查照样要）。
 - **Require status checks to pass before merging**，勾上 **Require branches to be up to date**，检查选这些作业（名字取自 workflow）：
-  平台 `ci.yml` 的 `scope`、`build-application`、`app-paths`、`e2e`；QuizBuks `quizbuks.yml` 的 `web`、`package`、`e2e`、`local-demo`（`e2e` 是两个分片的汇总，分片名带 `(1/2)`，不用选）。
+  平台 `ci.yml` 的 `scope`、`build-application`、`app-paths`、`e2e`；QuizBuks `quizbuks.yml` 的 `migration-order`、`web`、`package`、`e2e`、`local-demo`（`e2e` 是两个分片的汇总，分片名带 `(1/2)`，不用选）。
 - `1.3/quizbuks-release` 只由 `1.3/quizbuks` 合并进来（上文第 3 步），同样勾 Require status checks。
 
 红的不合：CI 失败的 PR 先修到绿再合（修法与本机复现：`README.md` "本机 e2e"）。这些设置改不动 workflow，只在 GitHub 的仓库设置里。
+
+**迁移的顺序**（2026-11-08，一个 PR 的 V80 在另一个 PR 的 V81 之后合入，staging 部署失败并回滚）：Flyway 不执行比已应用的最新版本更旧的迁移。
+CI 的 `migration-order`（`tools/quizbuks/migration-order.sh`）检查 PR 新增或改名的 `backend/quizbuks*/…/db/migration/V<n>__*.sql`
+（QuizBuks 各模块共用一条序列）都大于 `1.3/quizbuks` **当时最新提交**上的最大号、且没有重号，不满足即失败并写明"基线已到 V<m>，请改为 V<m+1>"。
+但它只在 CI 跑的那一刻看基线：之后别的 PR 带着更大的号先合入，这个 PR 的检查仍是绿的。所以**合并带迁移的 PR 之前**再看一次基线的最大号：
+
+```sh
+git fetch origin 1.3/quizbuks
+git ls-tree -r --name-only origin/1.3/quizbuks -- backend | grep -E '^backend/quizbuks[^/]*/src/main/resources/db/migration/V[0-9]+__' \
+  | sed -E 's#.*/V([0-9]+)__.*#\1#' | sort -n | tail -1      # 基线的最大号
+tools/quizbuks/migration-order.sh origin/1.3/quizbuks origin/<PR 的分支>   # 或直接再跑一次检查
+```
+
+PR 的号不大于它，就先让 PR 把 `1.3/quizbuks` 合进来并改号，等 CI 再绿再合。勾了 **Require branches to be up to date** 时 GitHub 会要求先更新分支，
+更新即重跑检查，也能防住这一点。平台的迁移（`db/jabiz`）是另一条序列，不在这项检查中。
 
 ## 首次部署前（在服务器上，每个环境各做一次）
 
@@ -176,6 +191,10 @@ GF_SMTP_PASSWORD=<SMTP 密码>
 GF_SMTP_FROM_ADDRESS=<发件地址>
 # staging 与 production 在同一台服务器上：各用一个端口（如 production 3000、staging 3001）
 QB_GRAFANA_PORT=3000
+
+# IP 地址库（F-S11，含境外视频的发布不让中国大陆的地址答题）：文件放在卷 geoip 中，见下文"3c"。
+# 正式模式（Stripe live）下不设即启动失败；staging 不设只警告，所有地址按中国大陆处理（含境外视频的发布答不了）
+JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz
 ```
 
 **部署前的检查**：workflow 在服务器上改动任何东西之前，按所部署提交的 `deploy/quizbuks/server/required-env` 检查 `.env`
@@ -288,6 +307,14 @@ Cloudflare 的浏览器检查（Browser Integrity Check）与 Bot Fight Mode 把
 - 以后若换存储商（如阿里云 OSS），用同一个迁移工具搬一次；只要还在 R2 就不用动。
 - 费用：R2 每月有免费额度（存储、读写次数），**下载流量不收费**；准确价格以 Cloudflare 的价格页为准。
 
+### 3c. IP 地址库（F-S11，每个环境各做一次，之后每月更新）
+
+1. 从 DB-IP 下载 "IP to Country Lite" 的 CSV（`dbip-country-lite-YYYY-MM.csv.gz`，CC BY 4.0，须署名：隐私政策中已写），不用解压。
+2. 放进本环境的卷 `geoip`：`docker run --rm -v <APP_NAME>_geoip:/g -v "$PWD":/src alpine cp /src/dbip-country-lite-YYYY-MM.csv.gz /g/dbip-country-lite.csv.gz`
+   （卷名以 `docker volume ls` 为准；同一路径覆盖即可，应用一分钟内读入新文件，无需重启，新文件读不懂即继续用旧的）。
+3. `.env` 写 `JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz`，部署后从中国大陆与日本的网络各打开一次 `/api/client/region` 核对。
+4. 每月初换新文件（排进值班表）；文件旧于 45 天时启动检查与每日检查告警（`operations.md` §7.24）。
+
 ### 4. 第一次部署
 
 **production 的第一次部署之前，先把 quizbuks.com 从 staging 移交出来**：上线前 quizbuks.com 暂时与 staging 共用（见"Google AdSense"中的"上线前 quizbuks.com 与 staging 共用"），
@@ -301,7 +328,8 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
 1. 以 `admin` 登录 `https://<本环境的域名>/admin/`，在右上角用户名 →"安全设置"中开启两步验证。
 2. 在"流程"中执行 `QB_SETUP`，再按 `docs/quizbuks/operations.md` §3 建财务管理员并由其发布 `QB_SETUP` 的提案（发布之前充值、入驻与提交发布一律被拒）。
-3. 从 `.env` 删去 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，加上 `QB_BOOTSTRAP_ADMIN_DONE=true`（入口脚本在两者都没有时拒绝启动），
+3. 从 `.env` 删去 `JABIZ_BOOTSTRAP_ADMIN_USER` 与 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，加上 `QB_BOOTSTRAP_ADMIN_DONE=true`（入口脚本在密码与这一行都没有时拒绝启动；
+   上线前的设置检查 `env-check.sh` 对留下的任何一个都报错），
    再以下文"回滚"的方式重新部署当前的 SHA（Run workflow，`image-tag` 填当前的 SHA，即 `docker inspect <APP_NAME>-app -f '{{.Config.Image}}'` 中冒号后的部分），
    经 `deploy-app.sh` 等待健康并在失败时回滚。
 
@@ -705,9 +733,12 @@ docker volume create drill-files
 docker run --rm --env-file /opt/infra/backup/backup.env -v drill-files:/restore restic/restic:0.17.3 \
   restore latest --host quizbuks-files --target /restore
 
-# 4) 以核对模式启动应用并写演练记录（operations.md §2.4 的设置；DRILL_ENV_FILE 指向 drill-db 与 drill-files）
+# 4) 以核对模式启动应用并写演练记录（operations.md §2.4 的设置；DRILL_ENV_FILE 指向 drill-db 与 drill-files）：
+#    QuizBuks 的三个核对模板；上线前的那一次与每次换密钥之前加 DRILL_ROTATE=true（上线清单"运维"要求）
 DRILL_TARGET_TIME=2026-12-01T12:00:00Z DRILL_IMAGE=ghcr.io/staunch0515/jabiz-quizbuks:<生产的版本> \
-DRILL_ENV_FILE=drill.env DRILL_DOCKER_ARGS="--network drill-net -v drill-files:/var/lib/jabiz/files" tools/ops/restore-drill.sh
+DRILL_ENV_FILE=drill.env DRILL_DOCKER_ARGS="--network drill-net -v drill-files:/var/lib/jabiz/files" \
+DRILL_TEMPLATES=qb.admin.verify-unbalanced-periods,qb.admin.verify-overdrawn-wallets,qb.system.recon-totals \
+DRILL_ROTATE=true tools/ops/restore-drill.sh
 
 # 5) 收拾
 docker rm -f drill-db && docker volume rm drill-pgdata drill-files && docker network rm drill-net
@@ -715,6 +746,7 @@ docker rm -f drill-db && docker volume rm drill-pgdata drill-files && docker net
 
 要知道的：
 
+- 第 1 步与第 4 步各写一份记录：第 1 步的记录有恢复用时，第 4 步的有核对用时（它写"Restore: not timed here"），RTO 是两者之和；**两份都**附在上线清单的"备份已测试"一项。
 - 恢复出的库是**整个集群**（staging 等其他库也在里面），只用其中的 `quizbuks`。
 - 从 repo2（月末全量）恢复用 `DRILL_PGBACKREST_REPO=2`，T 取该月末之后不久的时刻。
 - 2026-11-07 在测试环境以 S3 替身演练：全量 171 MB 用 34 秒，恢复并启动到可用约 16 秒（数据量小）；生产的数字以首次演练为准。

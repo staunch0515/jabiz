@@ -5,7 +5,10 @@
 # directory is used as it is.
 FROM postgres:16
 
+# The base image's packages are brought up to date first: security fixes published after it was built
+# (docs/quizbuks/security/dependency-review.md).
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends pgbackrest ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -o postgres -g postgres -m 0750 /var/log/pgbackrest /var/lib/pgbackrest /var/spool/pgbackrest

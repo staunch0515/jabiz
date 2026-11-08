@@ -43,6 +43,7 @@ import { QBVIEW } from '../qb/view/messages'
 import { openWithSound, VideoSlot } from '../video/stage'
 import { useSoundSetting } from '../qb/SoundSettings'
 import { HomeInstallOffer } from '../install'
+import { useMainlandChina } from '../qb/region'
 
 /** The home's address, searched from the header (Q63): `/?q=<text>`. */
 export const HOME_PATH = '/'
@@ -407,14 +408,18 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   // Q59a: only the languages the taker switched on (the app's language until they choose).
   const settings = useSoundSetting()
   const languages = shownLanguages(settings.data, i18n.language)
+  // F-S11: from mainland China, what has a video that cannot be played there is left out.
+  const region = useMainlandChina()
+  const mainlandChina = region.mainlandChina
   const feed = useInfiniteQuery({
     queryKey: ['qb', 'feed', at, country, q, filters.sort, filters.includeAnswered, method, filterList, i18n.language,
-      languages],
+      languages, mainlandChina],
     queryFn: ({ pageParam }) => readFeed({ at, country, q, sort: filters.sort, method: method === 'ALL' ? null : method,
-      includeAnswered: filters.includeAnswered, languages, filters: filterList, offset: pageParam,
+      includeAnswered: filters.includeAnswered, languages, mainlandChina, filters: filterList, offset: pageParam,
       limit: FEED_PAGE }),
-    // The settings first: a feed of the wrong languages would show for a moment otherwise.
-    enabled: !settings.isPending,
+    // The settings and the region first: a feed of the wrong languages, or of quizzes that cannot be played here, would
+    // show for a moment otherwise.
+    enabled: !settings.isPending && !region.pending,
     initialPageParam: 0,
     getNextPageParam: (last) => (last.items.length < FEED_PAGE ? undefined : last.offset + FEED_PAGE),
   })

@@ -389,6 +389,10 @@ public final class QbPublications {
         // how long it is as the sponsor gave it (none on a card from before Q75: then only its end counts).
         eb.field("watchRequired", f -> f.physicalColumn("watch_required").required(true).asBool());
         eb.field("videoDurationSec", f -> f.physicalColumn("video_duration_sec").asNumeric(5, 0));
+        // F-S11: whether the version on has a video mainland China cannot play (content.ForeignVideos); then a start
+        // from a mainland address is refused unless headquarters allowed it. None (a card before its backfill) counts
+        // as foreign.
+        eb.field("foreignVideo", f -> f.physicalColumn("foreign_video").asBool());
         eb.field("versionId", f -> f.physicalColumn("version_id").required(true)
             .asReference(QbContent.VERSION));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").immutable(true).required(true)
@@ -432,7 +436,8 @@ public final class QbPublications {
         eb.field("digitalDescription", f -> f.physicalColumn("digital_description").immutable(true)
             .asText(PublishingLimits.REDEEM_DESCRIPTION_LENGTH, true));
         eb.field("digitalSendDays", f -> f.physicalColumn("digital_send_days").immutable(true).asNumeric(3, 0));
-        eb.field("sealedDigitalContent", f -> f.physicalColumn("sealed_digital_content").immutable(true)
+        // Frozen with the card, but stored again under a new seal key (D78): mutable, sensitive, written by processes only.
+        eb.field("sealedDigitalContent", f -> f.physicalColumn("sealed_digital_content")
             .sensitive().asText(PublishingLimits.SEALED_LENGTH));
         // Q70: the referral policy as submitted (ReferralPolicy's JSON), for the link, the claim and the reward.
         eb.field("referral", f -> f.physicalColumn("referral").immutable(true)
