@@ -38,8 +38,11 @@ class QbRolesTest {
                 // Q82: its sponsors' conversations with takers (the entry scope limits them), never writing in them.
                 QbPermissions.CONVERSATION_READ,
                 // Q87: its sponsors' billing mode (prepaid or postpaid), not the fees themselves.
-                QbPermissions.FEE_BILLING)
-            .doesNotContain(QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
+                QbPermissions.FEE_BILLING,
+                // F-S2: its copies of the platform's knowledge graphs, reviewing them and its sponsors' graphs.
+                QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE)
+            .doesNotContain(QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ, QbPermissions.TREE_SYSTEM,
+                QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
                 QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN,
@@ -55,8 +58,10 @@ class QbRolesTest {
         // the platform operator); headquarters keeps reading, spot checks, the global rules and the emergency acts.
         assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
             .contains(QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.SPOT_CHECK, QbPermissions.OPERATORS_READ,
-                QbPermissions.ADMIN_PROSPECT, QbPermissions.AUDIENCE_RULES_WRITE)
-            .doesNotContain(QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
+                QbPermissions.ADMIN_PROSPECT, QbPermissions.AUDIENCE_RULES_WRITE,
+                // F-S2: the platform's knowledge graph templates; never the operators' review of Sponsors' graphs.
+                QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ)
+            .doesNotContain(QbPermissions.REVIEW_TREE, QbPermissions.TREE_SYSTEM, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 QbPermissions.PROSPECT_USE, QbPermissions.CERTIFICATION_MANAGE)
             .doesNotHaveDuplicates();

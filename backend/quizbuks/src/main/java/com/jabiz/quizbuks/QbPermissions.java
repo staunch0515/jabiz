@@ -274,5 +274,20 @@ public final class QbPermissions {
     /** The prospecting jobs' items and outcomes ({@code internal()}). Granted to no role. */
     public static final String PROSPECT_SYSTEM = "qb.prospect.system";
 
+    /**
+     * F-S2: editing knowledge graphs, submitting and withdrawing their versions; which graph is the caller's is
+     * checked in the process (the Sponsor's own, the caller's operator's copy, or the platform's templates for those
+     * holding {@link #TREE_PLATFORM_WRITE}). Sponsors, operators' members and the content administrator.
+     */
+    public static final String TREE_EDIT = "qb.tree.edit";
+    /** F-S2: the platform's templates of knowledge graphs, and reviewing them. Content administrator. */
+    public static final String TREE_PLATFORM_WRITE = "qb.tree.platform.write";
+    /** F-S2: reviewing the Sponsors' graphs and the operators' copies (within the operator's scope). Operators. */
+    public static final String REVIEW_TREE = "qb.review.tree";
+    /** F-S2: reading every knowledge graph (the default datasets). The platform's administrators. */
+    public static final String TREES_READ = "qb.admin.trees.read";
+    /** F-S2: the graphs' approval results and jobs ({@code internal()}). Granted to no role. */
+    public static final String TREE_SYSTEM = "qb.tree.system";
+
     private QbPermissions() {}
 }

@@ -228,6 +228,16 @@ public final class QbParams {
     public static final String USAGE_RETENTION_DAYS = "qb.usage.retention-days";
     /** F-C11: the most products one sponsor has (not controlled: no money, no review); the profile package's too. */
     public static final String PRODUCTS_MAX = "qb.products.max";
+    /** F-S2: the most nodes one knowledge graph has (not controlled). */
+    public static final String TREE_MAX_NODES = "qb.tree.max-nodes";
+    /** F-S2: the most items (nodes and the pass) one node's condition names, at every level (not controlled). */
+    public static final String TREE_MAX_CONDITIONS = "qb.tree.max-conditions-per-node";
+    /** F-S2: the longest chain of nodes naming nodes, which bounds the lighting's chained evaluation (not controlled). */
+    public static final String TREE_MAX_DEPTH = "qb.tree.max-depth";
+    /** F-S2: how many graphs of their own one Sponsor has (not controlled). */
+    public static final String TREE_SPONSOR_MAX_TREES = "qb.tree.sponsor.max-trees";
+    /** F-S2: after how many days a version waiting for review is reminded to its reviewers once (not controlled). */
+    public static final String TREE_REVIEW_REMIND_AFTER = "qb.tree.review.remind-after";
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**
@@ -539,7 +549,18 @@ public final class QbParams {
             "How many days the daily usage snapshots are kept"),
         // F-C11: the products' limit (ordinary; last after F-C2, so that the setup's earlier keys stay as they were).
         new Param(PRODUCTS_MAX, Map.of("type", "numeric", "precision", 6, "scale", 0), "50",
-            "The most products one sponsor has, on the products page and in a profile package"));
+            "The most products one sponsor has, on the products page and in a profile package"),
+        // F-S2: knowledge graphs (ordinary; last).
+        new Param(TREE_MAX_NODES, Map.of("type", "numeric", "precision", 4, "scale", 0), "200",
+            "The most nodes one knowledge graph has"),
+        new Param(TREE_MAX_CONDITIONS, Map.of("type", "numeric", "precision", 3, "scale", 0), "20",
+            "The most items one node's condition names"),
+        new Param(TREE_MAX_DEPTH, Map.of("type", "numeric", "precision", 3, "scale", 0), "20",
+            "The longest chain of nodes that name nodes"),
+        new Param(TREE_SPONSOR_MAX_TREES, Map.of("type", "numeric", "precision", 3, "scale", 0), "1",
+            "How many knowledge graphs of their own one Sponsor has"),
+        new Param(TREE_REVIEW_REMIND_AFTER, Map.of("type", "numeric", "precision", 3, "scale", 0), "3",
+            "After how many days a knowledge graph's version waiting for review is reminded to its reviewers"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

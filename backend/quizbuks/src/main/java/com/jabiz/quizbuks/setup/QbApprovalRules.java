@@ -123,9 +123,28 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.TOPUP_BANK_APPROVE)), 100,
         "Platform fees charged by hand and invoices voided take another administrator's approval");
 
+    /**
+     * F-S2: a Sponsor's knowledge graph is reviewed by a member of their operator (the request is in the operator's
+     * scope), an operator's copy of a template by another member of the operator, the platform's template by another
+     * administrator who writes templates. None goes without review.
+     */
+    public static final Rule TREE_REVIEW = new Rule(com.jabiz.quizbuks.tree.TreeApprovals.SPONSOR_RULE,
+        com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT, entries("fact", "ownerKind", "op", "eq", "value", "SPONSOR"),
+        List.of(entries("permission", QbPermissions.REVIEW_TREE)), 100,
+        "Sponsors' knowledge graphs are reviewed by their operator");
+    public static final Rule TREE_COPY_REVIEW = new Rule(com.jabiz.quizbuks.tree.TreeApprovals.OPERATOR_RULE,
+        com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT, entries("fact", "ownerKind", "op", "eq", "value", "OPERATOR"),
+        List.of(entries("permission", QbPermissions.REVIEW_TREE)), 100,
+        "Operators' copies of the platform's knowledge graphs are reviewed by another member of the operator");
+    public static final Rule TREE_PLATFORM_REVIEW = new Rule(com.jabiz.quizbuks.tree.TreeApprovals.PLATFORM_RULE,
+        com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT, entries("fact", "ownerKind", "op", "eq", "value", "PLATFORM"),
+        List.of(entries("permission", QbPermissions.TREE_PLATFORM_WRITE)), 100,
+        "The platform's knowledge graph templates are reviewed by another administrator");
+
     public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW,
         BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW, SPONSOR_PAGE_REVIEW,
-        OPERATOR_PLAN_REVIEW, OPERATOR_WITHDRAWAL_REVIEW, FEE_REQUEST_REVIEW);
+        OPERATOR_PLAN_REVIEW, OPERATOR_WITHDRAWAL_REVIEW, FEE_REQUEST_REVIEW, TREE_REVIEW, TREE_COPY_REVIEW,
+        TREE_PLATFORM_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();
