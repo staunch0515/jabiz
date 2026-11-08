@@ -842,15 +842,23 @@ public final class R2dbcStorageEngine implements StorageEngine {
     private Mono<Void> execute(ContextView view, List<WriteBatch.Statement> statements) {
         return Flux.fromIterable(statements).concatMap(statement -> Mono.defer(() -> {
             counted(view);
-            DatabaseClient.GenericExecuteSpec spec = db.sql(statement.sql());
-            for (int i = 0; i < statement.values().size(); i++) {
-                spec = spec.bind("v" + i, toStorage(statement.values().get(i)));
-            }
-            return spec.then()
+            return db.sql(statement.sql()).bindValues(boundValues(statement.values())).then()
                 .onErrorMap(R2dbcStorageEngine::translate)
                 .onErrorMap(error -> heldError(error, statement.rows(), Map.of(), statement.rows().size() > 1))
                 .doOnError(error -> failed(view));
         })).then();
+    }
+
+    /**
+     * A rendered insert's values by their names {@code v0..vN}, bound in one call (ROADMAP 17zz14): binding them one by
+     * one copies every value bound before each, quadratic in a large batch (a thousand-question quiz: minutes).
+     */
+    static Map<String, Object> boundValues(List<Object> values) {
+        Map<String, Object> bound = new java.util.LinkedHashMap<>(values.size() * 2);
+        for (int i = 0; i < values.size(); i++) {
+            bound.put("v" + i, toStorage(values.get(i)));
+        }
+        return bound;
     }
 
     private static final Pattern DUPLICATE_KEY = Pattern.compile("Key \\((.+)\\)=\\((.*)\\) already exists");
@@ -1000,16 +1008,17 @@ public final class R2dbcStorageEngine implements StorageEngine {
     private Flux<Map<String, Object>> send(ContextView view, String sql, Map<String, BoundValue> params,
         Map<String, Object> held, Duration timeout, List<WriteBatch.Row> rows,
         Map<Integer, WriteBatch.Update> updates) {
-        DatabaseClient.GenericExecuteSpec spec = db.sql(sql);
+        // One bind of all values (17zz14): the held writes can bring tens of thousands, and each bind copies them all.
+        Map<String, Object> values = new java.util.LinkedHashMap<>((params.size() + held.size()) * 2);
         for (Map.Entry<String, BoundValue> e : params.entrySet()) {
             BoundValue bound = e.getValue();
-            spec = bound.value() == null
-                ? spec.bindNull(e.getKey(), storageType(bound.type()))
-                : spec.bind(e.getKey(), toStorage(bound.value()));
+            values.put(e.getKey(), bound.value() == null ? io.r2dbc.spi.Parameters.in(storageType(bound.type()))
+                : toStorage(bound.value()));
         }
         for (Map.Entry<String, Object> e : held.entrySet()) {
-            spec = spec.bind(e.getKey(), toStorage(e.getValue()));
+            values.put(e.getKey(), toStorage(e.getValue()));
         }
+        DatabaseClient.GenericExecuteSpec spec = db.sql(sql).bindValues(values);
         Flux<Map<String, Object>> result;
         if (timeout == null) {
             DatabaseClient.GenericExecuteSpec platform = spec;

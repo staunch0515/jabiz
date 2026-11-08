@@ -619,6 +619,7 @@ class PortalSignInGuard implements SignInGuard {
 - 启动检查：预读的数据视图或字段不存在、字段放不下用户编号（UUID，如数值、时间字段）、同名的预读含义不同、`loads()` 抛异常 → 错误。预读经数据视图（其范围适用，权限不适用，同流程内的平台 I/O 步骤）。
   用户编号以文本交给查询，按字段的语义类型转换（引用 `SecUser` 的字段比较 UUID，文本字段比较文本），同其他查询条件（03 §2.2）。
 - 守卫要读业务参数（开关、阈值）时以 `params()` 声明，平台在问守卫之前按尝试的时间读出，见 §15.17（决策 D79）。
+- 预读可以加按参数值的相等条件，也可以读与用户无关的行（`SignInLoad.global`），见 §15.18（决策 D80）。
 
 ### 15.4 邮箱验证状态与 `requiresVerifiedEmail`
 
@@ -1004,6 +1005,7 @@ class PortalSignUpGuard implements SignUpGuard {
 - **没有守卫**：一切照旧（全部放行）。
 - **启动检查**：同 §15.3（预读的数据视图或字段不存在、字段放不下用户编号、同名预读含义不同、`loads()` 抛异常）；登录与注册守卫的预读名各自检查。
 - **业务参数**：守卫以 `params()` 声明要读的业务参数，有没有用户都照样读出，见 §15.17（决策 D79）。
+- **按参数的预读**：与用户无关的预读（`SignInLoad.global`）在注册时也照样读出，按用户的预读在没有用户时是空，见 §15.18（决策 D80）。
 - **前端**：`@jabiz/client` 的 `joinEntry(entry)`（以会话的 fetch 发送，非 2xx 抛 `ApiError`）。
 - **测试**：`SignUpGuardTypesTest`、`SignUpGuardsTest`（全部放行、第一个拒绝、抛异常与 null 即拒绝、缺少文字的原因、新账号不读数据、读不到即拒绝）、
   `SignUpGuardIT`（加入、重复加入不改、未验证 403、不开放注册与不存在同为 404、未登录 401、受保护的注册角色 422、守卫拒绝与抛异常、注册时没有用户且对新旧地址答复相同、
@@ -1065,6 +1067,8 @@ jabiz:
 
 ### 15.17 守卫读业务参数（阶段 17zz11，决策 D79）
 
+按参数的值取行（条件、与用户无关的行）见 §15.18（决策 D80）。
+
 登录与注册的守卫（§15.3、§15.15）此前只能预读"用户编号字段 = 该用户"的行。开关、阈值这类**按时间、与用户无关**的业务参数（04 §9）
 现在以 `params()` 声明，由平台在问守卫之前读出；守卫仍然同步、无 I/O。
 
@@ -1090,7 +1094,7 @@ class PortalSignUpSwitch implements SignUpGuard {
   `GuardParam.optional(键)` 可以未设置。
 - **读取**：每次尝试一次读出全部守卫（登录守卫与注册守卫各自一组）的参数，键取并集；同一个键任何一个守卫要求必须有值即按必须有值处理。
   按尝试的时间（`attempt.time()`，即操作时间或续期时间）读，所以排定了生效时间的改动（`PARAM_SCHEDULE`）到时自行生效。以系统身份读，不看登录者的权限
-  （与预读只受数据视图范围约束一致）；注册时没有用户也照样读。预读与参数在流程中先后读出（同一个事务，不并发）。
+  （与预读只受数据视图范围约束一致）；注册时没有用户也照样读。先读参数，再做预读（预读的条件可以取自参数，§15.18、决策 D80；同一个事务，不并发）。
   值经 `SignInAttempt.params()` / `SignUpAttempt.params()`（core 已有的 `ParamValues`）交给守卫：`get(键, 类型)`、`find(键, 类型)`、`has(键)`；
   可以未设置而此刻没有值的键不在其中（`find` 为空），含义由守卫决定。
 - **拒绝（fail closed）**：必须有值的键在那一刻没有值，或读取失败，即拒绝，守卫不被调用：登录为 `SIGN_IN_REFUSED`（刷新时 401，§15.3），
@@ -1103,6 +1107,52 @@ class PortalSignUpSwitch implements SignUpGuard {
   原因 `commerce.sign-up-closed`（三语消息）。
 - **测试**：`GuardParamTest`（core：声明、缺省为空、新旧构造器）、`GuardParamsTest`（并集与必须有值优先、按尝试时间一次读出、可以未设置的缺席、
   必须有值缺少或读取失败即拒绝且不问守卫、不声明不读、注册时没有用户照样读、启动检查）、`SignUpGuardIT`（示范开关：排定的关闭到时生效，匿名注册与登录后加入门户都被拒，其他入口不受影响）。
+
+### 15.18 守卫的预读：按参数值的条件与不按用户的读取（阶段 17zz15，决策 D80）
+
+§15.17 让守卫读到参数的值；本节让预读**按参数的值取行**。"某个配置指向的对象，加上本人与它的关系"（QuizBuks 的门槛：参数指向的节点，本人在该节点上的点亮）
+由平台按声明预读，守卫仍是同步的纯函数。按用户读（`SignInLoad.of`）仍是缺省做法。
+
+```java
+@Component
+class PortalSignUpSwitch implements SignUpGuard {
+    public List<GuardParam> params() {
+        return List.of(GuardParam.optional("commerce.portal.sign-up-closed"),
+            GuardParam.optional("commerce.portal.launch-product"));
+    }
+
+    // 不是用户的行：参数所指的商品（按 SKU，唯一、有索引）；参数未设置即不读
+    public List<SignInLoad> loads() {
+        return List.of(SignInLoad.global("launchProduct", CommerceEntities.PRODUCT_DATASET)
+            .whereParam("sku", "commerce.portal.launch-product"));
+    }
+
+    public SignUpDecision check(SignUpAttempt attempt) {
+        // …关闭开关同 §15.17…
+        if (attempt.params().has("commerce.portal.launch-product")
+            && attempt.rows("launchProduct").stream().noneMatch(p -> Boolean.TRUE.equals(p.get("active")))) {
+            return SignUpDecision.refuse("commerce.launch-over");
+        }
+        return SignUpDecision.ALLOW;
+    }
+}
+```
+
+- **条件**：`.whereParam(字段, 参数键)` 与 `.whereParam(字段, 参数键, 取值函数)`，可以追加多个，AND 连接的相等比较，值经参数绑定、按字段的语义类型转换（同用户编号，§15.3）。
+  参数键必须在同一守卫的 `params()` 中声明。取值函数是纯函数（如把 `"<图>/<节点>"` 拆开），在读取之前算出；它抛异常即拒绝（fail closed，同预读失败）。
+- **没有值即空**：参数此刻没有值（可以未设置的键）或取值函数返回 null，这一项预读就是空（`attempt.rows(名)` 为空列表），不查数据库。
+- **不按用户的读取**：`SignInLoad.global(名, 数据视图)` 没有用户字段，必须至少有一个条件。经数据视图读（范围适用、权限不适用），以系统身份读，至多 `MAX_ROWS`（100）行，超过即拒绝。
+  注册（没有用户）时也照样读。
+- **按用户的读取加条件**：`SignInLoad.of(名, 数据视图, 用户字段).whereParam(…)` 只读本人且满足条件的行，不受"本人全部行不能超过 100"的限制；没有用户时照旧是空。
+- **顺序**：先读参数（§15.17），再按参数的值做预读。预读之间互不引用：条件值只来自参数与用户编号。
+- **启动检查**（`SECURITY`）：条件的字段不存在、参数键不在本守卫的 `params()` 中、global 预读没有条件 → 错误；同名预读含义不同 → 错误（比较数据视图、用户字段与各条件的字段和参数键；
+  取值函数无法比较，同名只读一次，以先声明者为准）。`GuardLoadIndexCheck`：预读比较的列（用户字段与条件字段）都不是其表上任何索引的首列 → 警告（读取会扫全表；小表可以不理会）。
+  登录守卫、注册守卫与入口范围解析器的预读都检查。
+- **兼容**：`SignInLoad.of(…)` 与三个参数的构造器不变；已有的守卫与测试不用改。
+- **示范**：`app` 的 `PortalSignUpSwitch`——参数 `commerce.portal.launch-product`（文本，SKU，可以未设置）设了时，只在该商品存在且在售时给门户的角色，否则原因 `commerce.launch-over`（三语消息）。
+- **测试**：`SignInLoadTest`（core：条件、global、取值函数、校验）、`GuardParamsTest`（条件取自参数、缺值或函数为 null 即空、函数抛异常、按用户读时用户在前、注册时按用户的预读为空而 global 照读）、
+  `GuardLoadChecksIT`（真实数据视图上的启动检查：未声明的参数、未知字段、没有条件的 global、同名同形的两次声明与不同形；索引警告）、
+  `SignUpGuardIT`（示范：商品不存在即拒，在售即放行，停售再拒，其他入口不受影响）、`PlatformCheckIT`（示范的预读走索引，无新警告）。
 
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 

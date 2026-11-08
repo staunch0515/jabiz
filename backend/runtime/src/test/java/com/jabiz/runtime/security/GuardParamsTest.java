@@ -233,4 +233,36 @@ class GuardParamsTest {
             .extracting(CheckProblem::toString)
             .anySatisfy(text -> assertThat(text).contains("SignUpGuard", "'Bad' is not a parameter key"));
     }
+
+    /** Decision D80: a load's equalities come from the user's id and the parameters; without a value it reads nothing. */
+    @Test
+    void conditionsAreFilledFromTheParametersAndAnyMissingValueLeavesTheLoadEmpty() {
+        com.jabiz.security.SignInLoad node = com.jabiz.security.SignInLoad.global("node", "d")
+            .whereParam("mapId", "app.gate", value -> ((String) value).split("/")[0])
+            .whereParam("nodeId", "app.gate", value -> ((String) value).split("/")[1]);
+        ParamValues set = new ParamValues(TIME, Map.of("app.gate", "m1/n7"));
+        assertThat(SignInGuards.where(node, null, set)).hasValueSatisfying(where -> assertThat(where)
+            .containsExactly(new com.jabiz.query.QueryPredicate.Eq("mapId", "m1"),
+                new com.jabiz.query.QueryPredicate.Eq("nodeId", "n7")));
+        // The parameter unset: no rows, nothing read.
+        assertThat(SignInGuards.where(node, "u1", new ParamValues(TIME, Map.of()))).isEmpty();
+        // A function giving null: the same.
+        assertThat(SignInGuards.where(com.jabiz.security.SignInLoad.global("n", "d")
+            .whereParam("f", "app.gate", value -> null), null, set)).isEmpty();
+        // A function that throws refuses (the error reaches the caller, which refuses the attempt).
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> SignInGuards.where(com.jabiz.security.SignInLoad
+            .global("n", "d").whereParam("f", "app.gate", value -> {
+                throw new IllegalStateException("bad value");
+            }), null, set)).hasMessage("bad value");
+
+        // The user's rows on a node: the user first, then the condition.
+        com.jabiz.security.SignInLoad lit = com.jabiz.security.SignInLoad.of("lit", "d", "userId")
+            .whereParam("nodeId", "app.gate", value -> ((String) value).split("/")[1]);
+        assertThat(SignInGuards.where(lit, "u1", set)).hasValueSatisfying(where -> assertThat(where)
+            .containsExactly(new com.jabiz.query.QueryPredicate.Eq("userId", "u1"),
+                new com.jabiz.query.QueryPredicate.Eq("nodeId", "n7")));
+        // Without a user (a registration) the user's rows are none; a global load is read alike.
+        assertThat(SignInGuards.where(lit, null, set)).isEmpty();
+        assertThat(SignInGuards.where(node, null, set)).isPresent();
+    }
 }
