@@ -90,7 +90,7 @@
 
 ## 测试环境（staging）
 
-- [ ] **更换 `JABIZ_SEAL_KEY` 之前**（含恢复演练的 `DRILL_ROTATE=true` 用的是测试库时）：迁移 V82 之前保存的 Shopify 访问令牌行没有店铺地址（`qbs_shop_token.shop_domain` 为空），
+- [ ] **更换 `JABIZ_SEAL_KEY` 之前**（含恢复演练的 `DRILL_ROTATE=true` 用的是测试库时）：迁移 V84 之前保存的 Shopify 访问令牌行没有店铺地址（`qbs_shop_token.shop_domain` 为空），
       密钥轮换解不开它们（计为 `unreadable`，留在旧密钥下）。Shopify 不在首次上线中，这样的行只在测试库里：先重置测试库，或在内嵌页中重新连接店铺（`QBS_SHOP_CONNECT` 写入地址），再换密钥
       （`plans/impl/F-F14-sealed-fields.md`）
 - [ ] **换 `JABIZ_SEAL_KEY` 之前重置测试库，或请数字产品的提供方重新装入码**（平台 D78，V81）：V81 之前由提供方装入码池的码没有记下装码人（`QbDigitalCode.fulfillerId`），换密钥后平台的 `jabiz.key-rotation` 以发布方为上下文算不出、打不开，记为 `unreadable` 并原样保留；正式环境从 V81 之后才有数据，不受影响

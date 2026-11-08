@@ -10,7 +10,7 @@ import java.util.List;
  * The values QuizBuks for Shopify seals (platform decision D78), so that a new {@code JABIZ_SEAL_KEY} can take over:
  * a discount code ({@link DiscountPool}) is sealed for its shop's address, which the row keeps as {@code shopDomain};
  * a shop's access and refresh tokens ({@link ConnectionProcesses}) are sealed for the same address, which their row
- * keeps as {@code shopDomain} too (V82; empty on rows from before it, which the re-keying counts as unreadable and
+ * keeps as {@code shopDomain} too (V84; empty on rows from before it, which the re-keying counts as unreadable and
  * leaves under the retired key: test databases only). Both tokens are on one row; the platform writes a row's sealed
  * fields in one update (17zz4).
  */
