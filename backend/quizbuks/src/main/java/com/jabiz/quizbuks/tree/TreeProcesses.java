@@ -819,7 +819,8 @@ public final class TreeProcesses {
         }
         if (!inUse.isEmpty()) {
             throw rule(null, TreeCodes.NODE_IN_USE, "Running publications are bound to nodes the version removes",
-                Map.of("nodes", inUse, "publications", publications, "count", publications.size()));
+                Map.of("nodes", String.join(", ", inUse), "publications", String.join(", ", publications),
+                    "count", publications.size()));
         }
         ApprovalCase review = ApprovalCase.of(String.valueOf(draft.id()),
             TreeApprovals.facts(String.valueOf((Object) tree.get("ownerKind"))), TreeApprovals.content(draft, defs))

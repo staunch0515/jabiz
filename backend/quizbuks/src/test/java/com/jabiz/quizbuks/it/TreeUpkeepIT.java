@@ -155,7 +155,7 @@ class TreeUpkeepIT extends TreeItSupport {
         Map<String, Object> refusal = refused(TreeProcesses.SUBMIT, token, body("treeId", map.treeId(),
             "baseRevision", draft.get("revision")), 422);
         assertThat(codes(refusal)).containsExactly(TreeCodes.NODE_IN_USE);
-        assertThat(String.valueOf(violations(refusal).getFirst().get("params"))).contains(advanced);
+        assertThat(String.valueOf(violations(refusal).getFirst().get("message"))).contains(advanced);
 
         // Retired: its running publications end, telling the Sponsor.
         run(TreeProcesses.RETIRE, token, body("treeId", map.treeId(), "baseRevision", draft.get("revision")));
@@ -171,9 +171,10 @@ class TreeUpkeepIT extends TreeItSupport {
         String basics = liveBound(sponsor, "Check basics", map.treeId(), map.basics());
         String userId = newTaker(unique("t-fs2b2-check"), "JP");
         play(userId, basics, true, true);
-        // The pass's event is lost.
-        execute("DELETE FROM sys_outbox_event WHERE event_type = 'qb.tree.passed' AND payload::jsonb ->> 'userId' = ?",
-            userId);
+        // The pass's event is lost: recorded as consumed by the lighting's consumer, which then never sees it.
+        execute("INSERT INTO sys_event_consumption (consumer, event_id, consumed_time) SELECT ?, event_id, now() "
+            + "FROM sys_outbox_event WHERE event_type = 'qb.tree.passed' AND payload ->> 'userId' = ?",
+            TreeLighting.PASSED_CONSUMER, userId);
         deliverEvents();
         assertThat(lits(userId)).isEmpty();
         runJob(checkJob);

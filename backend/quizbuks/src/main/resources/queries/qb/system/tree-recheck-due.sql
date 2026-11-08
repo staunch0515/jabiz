@@ -9,19 +9,23 @@ datasets:
   QbTreeLit: urn:jabiz:dataset:default:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
 results:
+  itemKey: { kind: { type: text, maxLength: 32 } }
   userId: { from: QbAttempt.userId }
   treeId: { from: QbPublicationCard.treeId }
   nodeId: { from: QbPublicationCard.treeNodeId }
 list:
   sorts: [userId]
   defaultSort: { field: userId, asc: true }
-  key: [userId, treeId, nodeId]
+  key: [itemKey]
 permissions: [qb.tree.system]
 ---*/
+-- The item's key is an md5 of the three ids (a job's item keys are at most 36 characters).
 -- A pass counts only after the person's last revoked lighting of the node (tree.TreeLighting, the same rule): a
 -- revoked lighting is not lit again from the passes it rested on. QB_TREE_EVALUATE reads everything again under the
 -- person's lighting lock and lights only what holds; the node's condition may ask for more than the pass.
-SELECT DISTINCT a.{{QbAttempt.userId}} AS userId, c.{{QbPublicationCard.treeId}} AS treeId,
+SELECT DISTINCT md5(a.{{QbAttempt.userId}} || '|' || c.{{QbPublicationCard.treeId}} || '|'
+           || c.{{QbPublicationCard.treeNodeId}}) AS itemKey,
+       a.{{QbAttempt.userId}} AS userId, c.{{QbPublicationCard.treeId}} AS treeId,
        c.{{QbPublicationCard.treeNodeId}} AS nodeId
 FROM {{QbPublicationCard}} c
 JOIN {{QbTreeNode}} tn ON tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}}

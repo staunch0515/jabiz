@@ -55,6 +55,7 @@ class SetupIT extends QbItSupport {
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_COPY_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_PLATFORM_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.TREE_LIT_REVOKE_REVIEW.code(),
             QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
@@ -161,6 +162,11 @@ class SetupIT extends QbItSupport {
                     .containsEntry("subject", com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT)
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("OPERATOR"))
                     .satisfies(r -> assertThat(r.get("levels").toString()).contains(QbPermissions.REVIEW_TREE)),
+                // F-S2b2: revoking a lit node, by another member or administrator who revokes.
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.tree.TreeRevocations.RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.tree.TreeRevocations.SUBJECT)
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.TREE_LIT_REVOKE)),
                 rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.tree.TreeApprovals.PLATFORM_RULE)
                     .containsEntry("subject", com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT)
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("PLATFORM"))

@@ -19,7 +19,7 @@ steps:
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review,
         qb.operator-withdrawal.review, qb.fee-request.review,
-        qb.tree.review, qb.tree.copy.review, qb.tree.platform.review,
+        qb.tree.review, qb.tree.copy.review, qb.tree.platform.review, qb.tree.lit-revoke.review,
         qb.sod.control-changes, qb.sod.security-administration]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",

@@ -309,8 +309,7 @@ public class TreeConfig {
     @Bean
     JobDefinition<TreeLighting.EvaluateInput> qbTreeRecheckJob() {
         return JobDefinition.forEach(TreeUpkeep.RECHECK_JOB, TreeUpkeep.RECHECK_CRON, ZoneOffset.UTC,
-                JobItems.template(TreeUpkeep.RECHECK_TEMPLATE, scheduledTime -> Map.of(), "userId", "treeId",
-                    "nodeId"),
+                JobItems.template(TreeUpkeep.RECHECK_TEMPLATE, "itemKey"),
                 EVALUATE,
                 (scheduledTime, row) -> new TreeLighting.EvaluateInput(QbTrees.USER, String.valueOf(row.get("userId")),
                     String.valueOf(row.get("treeId")), List.of(String.valueOf(row.get("nodeId"))), false, 1, null))
