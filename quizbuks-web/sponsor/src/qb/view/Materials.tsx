@@ -6,7 +6,8 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { QBVIEW } from './messages'
 import { CONTENT_IMAGE_VARIANTS } from '../ids'
-import { videoPlayer } from '../video'
+import { trackable, videoKind, videoPlayer } from '../video'
+import { useVideoFailed } from '../videoFailures'
 import { VideoPlayer } from './VideoPlayer'
 import type { Material, MaterialKind } from '../play'
 import { DetailCard } from './DetailCard'
@@ -63,12 +64,14 @@ function OutLink({ url, label }: { url: string; label: string }) {
 function MaterialContent({ material, title }: { material: Material; title: string }) {
   const { t } = useTranslation(QBVIEW)
   const m = material
+  const failed = useVideoFailed(m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
   return (
     <>
       {m.kind === 'ARTICLE' && m.body && <MarkdownView text={m.body} />}
       {m.kind === 'LINK' && m.url && <OutLink url={m.url} label={t('detail.openLink')} />}
-      {m.kind === 'VIDEO_LINK' && m.url && (videoPlayer(m.url)
-        // Q19: a YouTube or Vimeo video plays in the page; any other video opens on its own site.
+      {m.kind === 'VIDEO_LINK' && m.url && (videoPlayer(m.url) && !failed
+        // Q19: a video the app plays plays in the page (F-S15: any https address); any other link, or a video file
+        // that failed to play, opens on its own site.
         ? <VideoPlayer player={videoPlayer(m.url)!} title={title} />
         : <OutLink url={m.url} label={t('detail.watchVideo')} />)}
       {m.kind === 'PDF' && m.pdf && <FilePreview fileId={m.pdf} field={FILE_FIELD} width={0} />}
@@ -105,7 +108,9 @@ function hasContent(m: Material): boolean {
  */
 export function leadVideo(materials: Material[]): { material: Material; player: string } | null {
   const playerOf = (m: Material) => (m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
-  const material = materials.find((m) => m.watchToAnswer && playerOf(m)) ?? materials.find((m) => playerOf(m))
+  // F-S15: a page of another site (which may refuse to be framed) only when there is nothing else, as on the card.
+  const material = materials.find((m) => m.watchToAnswer && trackable(playerOf(m)))
+    ?? materials.find((m) => playerOf(m) && videoKind(playerOf(m)) !== 'page') ?? materials.find((m) => playerOf(m))
   return material ? { material, player: playerOf(material)! } : null
 }
 

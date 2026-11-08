@@ -1,5 +1,5 @@
 import type { Material, PublicationView, Tier } from '../qb/play'
-import { videoPlayer } from '../qb/video'
+import { trackable, videoKind, videoPlayer } from '../qb/video'
 import type { Sponsor } from '../qb/api'
 import { choiceOf, type Draft, type Selection, type Snapshot } from '../content/api'
 import { COVER_KEY, optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from '../content/languages'
@@ -42,15 +42,16 @@ function material(m: SnapshotMaterial | Draft['materials'][number], no: number):
 
 /**
  * The home card's video, as the server's card has it (Q63, `PublicationEditing.cardVideo`): the video watching which
- * is enough to answer, else the first the app plays.
+ * is enough to answer (YouTube, Vimeo or, F-S15, a video file), else the first of a site or a video file, else the first
+ * page of another site.
  */
 function videoOf(materials: { kind: string; url: string | null; watchToAnswer?: boolean; durationSec?: number | null }[]):
   { player: string | null; watchRequired: boolean; videoDurationSec: number | null } {
   const playable = (m: (typeof materials)[number]) => (m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
-  const watch = materials.find((m) => m.watchToAnswer && playable(m))
+  const watch = materials.find((m) => m.watchToAnswer && trackable(playable(m)))
   // Q75: the card says whether its video is the one to watch, and how long it is (the sponsor's figure).
   if (watch) return { player: playable(watch), watchRequired: true, videoDurationSec: watch.durationSec ?? null }
-  const first = materials.find((m) => playable(m))
+  const first = materials.find((m) => playable(m) && videoKind(playable(m)) !== 'page') ?? materials.find((m) => playable(m))
   return { player: first ? playable(first) : null, watchRequired: false, videoDurationSec: null }
 }
 

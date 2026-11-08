@@ -30,6 +30,11 @@ describe('the preview (Q34b)', () => {
     expect(draftPreview(withMaterials([video('https://vimeo.com/76979871', false),
       video('https://youtu.be/dQw4w9WgXcQ', true)]), null, at).video)
       .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+    // F-S15: a video file is taken as a site's video is; a page of another site only when there is nothing else.
+    expect(draftPreview(withMaterials([video('https://video.example/a', false), video('https://cdn.example.com/a.mp4', false)]),
+      null, at).video).toBe('https://cdn.example.com/a.mp4')
+    expect(draftPreview(withMaterials([video('http://cdn.example.com/a.mp4', false), video('https://video.example/a', false)]),
+      null, at).video).toBe('https://video.example/a')
     expect(draftPreview(DRAFT, null, at).video).toBeNull()
   })
 

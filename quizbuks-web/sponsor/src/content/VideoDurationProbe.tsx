@@ -1,12 +1,33 @@
 import { useEffect, useRef } from 'react'
-import { VIMEO_PLAYER } from '../qb/video'
+import { VIMEO_PLAYER, videoKind } from '../qb/video'
 
 /**
  * A preview of the video to watch that reads its duration from the player (Q75, D-Q75-5): YouTube's player tells it
  * in its `infoDelivery` once a page says it listens (`enablejsapi`), Vimeo's answers `getDuration`. Only these two
  * players are framed (the console's content security policy), and only a message from this frame is heard.
+ *
+ * F-S15: a video file is previewed in a `<video>` that reads its length from the file's metadata (no CORS needed);
+ * a file that fails, or whose length cannot be read, is `onFailed`.
  */
-export function VideoDurationProbe({ player, title, onDuration }: { player: string; title: string
+export function VideoDurationProbe({ player, title, onDuration, onFailed }: { player: string; title: string
+  onDuration: (seconds: number) => void
+  onFailed?: () => void }) {
+  if (videoKind(player) === 'file') {
+    return (
+      <video key={player} src={player} title={title} aria-label={title} data-testid="material-video-probe"
+        className="bg-muted aspect-video w-full max-w-xs rounded-md" controls muted playsInline preload="metadata"
+        onLoadedMetadata={(event) => {
+          const seconds = event.currentTarget.duration
+          if (Number.isFinite(seconds) && seconds > 0) onDuration(Math.round(seconds))
+          else onFailed?.()
+        }}
+        onError={() => onFailed?.()} />
+    )
+  }
+  return <FrameProbe player={player} title={title} onDuration={onDuration} />
+}
+
+function FrameProbe({ player, title, onDuration }: { player: string; title: string
   onDuration: (seconds: number) => void }) {
   const ref = useRef<HTMLIFrameElement>(null)
   const vimeo = player.startsWith(VIMEO_PLAYER)
