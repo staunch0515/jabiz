@@ -157,14 +157,15 @@ function RevokeDialog({ lit, nodeName, onClose }: { lit: LitRecord; nodeName: st
   )
 }
 
-function LitSection({ treeId, nameOf }: { treeId: string; nameOf: (nodeId: string) => string }) {
+function LitSection({ operator, treeId, nameOf }: { operator: boolean; treeId: string;
+  nameOf: (nodeId: string) => string }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const { can } = useAuth()
   const subjectLabel = useLabels(DICTIONARY.treeLitSubject)
   const mayRevoke = can(PERMISSION.treeLitRevoke)
   const [revoking, setRevoking] = useState<LitRecord | null>(null)
-  const { query, table } = usePaged([...TREES_KEY, 'lit', treeId],
-    (offset, limit) => readTreeLit(treeId, offset, limit))
+  const { query, table } = usePaged([...TREES_KEY, 'lit', operator, treeId],
+    (offset, limit) => readTreeLit(operator, treeId, offset, limit))
   const columns = useMemo<ColumnDef<LitRecord, unknown>[]>(() => [
     { id: 'subject', header: t('trees.lit.subject'), cell: ({ row }) => (row.original.subjectKind === 'USER'
       ? <UserName id={row.original.subjectId} />
@@ -220,8 +221,8 @@ function LitSection({ treeId, nameOf }: { treeId: string; nameOf: (nodeId: strin
  * version in effect (what it adds, changes and removes, the conditions in words, and the running publications bound
  * to each node: those of a removed node could no longer start), the platform's `ApprovalPanel` while it waits for
  * review, and who lit which node, with the revocation asked for with a reason (`QB_TREE_LIT_REVOKE`, another member
- * approves it). The node and lit reads are the platform's (`qb.admin.trees.read`); an operator's member sees its
- * map's state and decides its review.
+ * approves it). An operator's member reads the same through the operator's templates (only the maps its operator
+ * looks after), as the list does.
  */
 export default function TreeReviewPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
@@ -231,7 +232,6 @@ export default function TreeReviewPage() {
   const queryClient = useQueryClient()
   const after = useAfterDecision()
   const operator = useOperatorTrees()
-  const readsNodes = can(PERMISSION.treesRead)
   const statusLabel = useLabels(DICTIONARY.treeStatus)
   const versionLabel = useLabels(DICTIONARY.treeVersionStatus)
   const subjectLabel = useLabels(DICTIONARY.treeSubject)
@@ -243,17 +243,17 @@ export default function TreeReviewPage() {
   })
   const shownVersion = tree.data ? (tree.data.openVersionId ?? tree.data.currentVersionId) : null
   const nodes = useQuery({
-    queryKey: [...TREES_KEY, 'version', shownVersion],
-    queryFn: () => readTreeVersion(shownVersion!),
-    enabled: readsNodes && !!shownVersion,
+    queryKey: [...TREES_KEY, 'version', operator, shownVersion],
+    queryFn: () => readTreeVersion(operator, shownVersion!),
+    enabled: !!shownVersion,
     refetchOnWindowFocus: false,
   })
   const effect = tree.data?.currentVersionId ?? null
   // The lit records name the nodes in effect (a removed node by the open version's REMOVED row).
   const effectNodes = useQuery({
-    queryKey: [...TREES_KEY, 'version', effect],
-    queryFn: () => readTreeVersion(effect!),
-    enabled: readsNodes && !!effect && effect !== shownVersion,
+    queryKey: [...TREES_KEY, 'version', operator, effect],
+    queryFn: () => readTreeVersion(operator, effect!),
+    enabled: !!effect && effect !== shownVersion,
     refetchOnWindowFocus: false,
   })
   const names = useMemo(() => {
@@ -279,7 +279,7 @@ export default function TreeReviewPage() {
   const name = i18nText(m.name, language) || t('trees.unnamed')
   const pending = m.openStatus === REVIEW && !!m.approvalRequestId
   // The decision is offered only on what the reviewer has read: every read of the page done, none failed.
-  const readsDone = !readsNodes || !shownVersion || (nodes.isSuccess && (effect === shownVersion || !effect
+  const readsDone = !shownVersion || (nodes.isSuccess && (effect === shownVersion || !effect
     || effectNodes.isSuccess))
   const readFailed = nodes.isError || effectNodes.isError
   const items: DescriptionItem[] = [
@@ -343,23 +343,14 @@ export default function TreeReviewPage() {
       {shownVersion && (
         <Section title={m.openVersionId ? t('trees.nodes.title', { n: shownNo }) : t('trees.nodes.inEffectTitle')}
           testId="tree-nodes">
-          {!readsNodes ? <p className="text-muted-foreground text-sm">{t('trees.nodes.noAccess')}</p> : (
-            <>
-              {m.openVersionId && effect && <p className="text-muted-foreground text-sm">{t('trees.nodes.hint')}</p>}
-              {nodes.isPending ? <PageState kind="loading" />
-                : nodes.isError ? <LoadFailed error={nodes.error} onRetry={() => void nodes.refetch()} />
-                  : <NodesTable nodes={nodes.data} title={t('trees.nodes.table')} />}
-            </>
-          )}
+          {m.openVersionId && effect && <p className="text-muted-foreground text-sm">{t('trees.nodes.hint')}</p>}
+          {nodes.isPending ? <PageState kind="loading" />
+            : nodes.isError ? <LoadFailed error={nodes.error} onRetry={() => void nodes.refetch()} />
+              : <NodesTable nodes={nodes.data} title={t('trees.nodes.table')} />}
         </Section>
       )}
       <Section title={t('trees.review')} testId="tree-decision">{decision}</Section>
-      {readsNodes ? <LitSection treeId={m.treeId} nameOf={nameOf} />
-        : (
-          <Section title={t('trees.lit.title')} testId="tree-lit">
-            <p className="text-muted-foreground text-sm">{t('trees.lit.noAccess')}</p>
-          </Section>
-        )}
+      <LitSection operator={operator} treeId={m.treeId} nameOf={nameOf} />
     </div>
   )
 }

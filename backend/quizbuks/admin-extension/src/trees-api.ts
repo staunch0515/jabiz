@@ -85,8 +85,9 @@ export interface VersionNode {
   runningBound: number
 }
 
-export async function readTreeVersion(versionId: string): Promise<VersionNode[]> {
-  const page = await runQuery<Row>(TEMPLATE.treeVersion, { params: { versionId }, limit: 1000 })
+/** A version node by node: the platform's template, or an operator's (only the maps the operator looks after). */
+export async function readTreeVersion(operator: boolean, versionId: string): Promise<VersionNode[]> {
+  const page = await runQuery<Row>(operator ? TEMPLATE.operatorTreeVersion : TEMPLATE.treeVersion, { params: { versionId }, limit: 1000 })
   return page.items.map((row) => ({ nodeId: String(row.nodeId), change: String(row.change ?? ''), name: str(row.name),
     description: str(row.description),
     condition: row.condition == null ? null : typeof row.condition === 'string' ? row.condition : JSON.stringify(row.condition), runningBound: num(row.runningBound) }))
@@ -106,8 +107,9 @@ export interface LitRecord {
   requestedBy: string | null
 }
 
-export async function readTreeLit(treeId: string, offset: number, limit: number): Promise<Page<LitRecord>> {
-  const page = await runQuery<Row>(TEMPLATE.treeLit, { params: { treeId }, offset, limit, count: true })
+export async function readTreeLit(operator: boolean, treeId: string, offset: number,
+  limit: number): Promise<Page<LitRecord>> {
+  const page = await runQuery<Row>(operator ? TEMPLATE.operatorTreeLit : TEMPLATE.treeLit, { params: { treeId }, offset, limit, count: true })
   return {
     total: page.total,
     items: page.items.map((row) => ({ litId: String(row.litId), subjectKind: String(row.subjectKind ?? ''),

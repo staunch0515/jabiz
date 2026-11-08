@@ -13,7 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The review side's templates of knowledge maps (F-S2b3a): every map for the platform, an operator's own for its
  * members, one version node by node against the version in effect (with the running publications a removal would
- * close), and the lit records with their revocations and the requests waiting for review.
+ * close), and the lit records with their revocations and the requests waiting for review; an operator's member reads
+ * the same for the maps its operator looks after, nothing of another operator's.
  */
 class TreeTemplatesIT extends TreeItSupport {
 
@@ -79,6 +80,21 @@ class TreeTemplatesIT extends TreeItSupport {
         assertThat(lits).singleElement().satisfies(lit -> assertThat(lit).containsEntry("subjectId", userId)
             .containsEntry("nodeId", map.basics()).containsEntry("revokedAt", null).containsEntry("requestId", null));
         Object litId = lits.getFirst().get("litId");
+        // The operator looking after the Sponsor reads the same rows; another operator's member none.
+        String member = platformOperatorMember();
+        NewOperator other = officialOperator("Templates other reader");
+        String stranger = memberSession(other.leadId(), other.operatorId());
+        assertThat(items("qb.operator.tree-version", member, Map.of("params", Map.of("versionId",
+            draft.get("versionId"))))).extracting(n -> n.get("change"))
+            .containsExactly("SAME", "ADDED", "REMOVED", "REMOVED");
+        assertThat(items("qb.operator.tree-lit", member, Map.of("params", Map.of("treeId", map.treeId()))))
+            .singleElement().satisfies(lit -> assertThat(lit).containsEntry("litId", litId));
+        assertThat(items("qb.operator.tree-version", stranger, Map.of("params", Map.of("versionId",
+            draft.get("versionId"))))).isEmpty();
+        assertThat(items("qb.operator.tree-lit", stranger, Map.of("params", Map.of("treeId", map.treeId()))))
+            .isEmpty();
+        assertThat(items("qb.operator.tree-lit", stranger, Map.of("params", Map.of("subjectId", userId))))
+            .isEmpty();
         Map<String, Object> asked = run(TreeRevocations.REVOKE, platformOperatorMember(), body("litId", litId,
             "reason", "Shared answers"));
         assertThat(items("qb.admin.tree-lit", reader, Map.of("params", Map.of("subjectId", userId))))
@@ -99,9 +115,16 @@ class TreeTemplatesIT extends TreeItSupport {
         Map3 map = map(sponsor);
         assertThat(items("qb.operator.trees", platformOperatorMember(), Map.of()))
             .extracting(row -> row.get("treeId")).contains(map.treeId());
+        String effect = (String) query("SELECT current_version_id FROM qb_tree WHERE tree_id = ?", map.treeId())
+            .getFirst().get("current_version_id");
+        assertThat(items("qb.operator.tree-version", platformOperatorMember(), Map.of("params",
+            Map.of("versionId", effect)))).hasSize(3);
         NewOperator other = officialOperator("Templates other");
-        assertThat(items("qb.operator.trees", memberSession(other.leadId(), other.operatorId()), Map.of()))
+        String stranger = memberSession(other.leadId(), other.operatorId());
+        assertThat(items("qb.operator.trees", stranger, Map.of()))
             .extracting(row -> row.get("treeId")).doesNotContain(map.treeId());
+        assertThat(items("qb.operator.tree-version", stranger, Map.of("params", Map.of("versionId", effect))))
+            .isEmpty();
         // Without a membership: nothing.
         assertThat(items("qb.operator.trees", TestTokens.bearer(tokens, verifiedUser(unique("fs2b3-nobody")),
             QbPermissions.OPERATOR_USE), Map.of())).isEmpty();

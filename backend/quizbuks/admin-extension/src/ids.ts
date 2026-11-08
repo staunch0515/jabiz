@@ -46,6 +46,8 @@ export const TEMPLATE = {
   operatorTrees: 'qb.operator.trees',
   treeVersion: 'qb.admin.tree-version',
   treeLit: 'qb.admin.tree-lit',
+  operatorTreeVersion: 'qb.operator.tree-version',
+  operatorTreeLit: 'qb.operator.tree-lit',
   /** F-C2: the sponsors' usage by month and meter (headquarters every sponsor, an operator its own). */
   usage: 'qb.admin.usage',
   /** Q88a: the sponsors' own certifications (headquarters every one, an operator its sponsors'). */

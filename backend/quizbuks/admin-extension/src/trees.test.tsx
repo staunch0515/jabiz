@@ -230,13 +230,33 @@ describe('TreeReviewPage', () => {
     expect(await screen.findByText('You may not decide this review.')).toBeInTheDocument()
   })
 
-  it('shows an operator’s member its map and the decision, the platform’s reads left out', async () => {
+  it('shows an operator’s member its map through the operator’s templates, with the decision and revoking', async () => {
     server.permissions = new Set(['qb.operator.use', 'qb.review.tree', 'qb.tree.lit.revoke'])
     server.templates.set(TEMPLATE.operatorTrees, [tree()])
-    renderReview()
+    server.templates.set(TEMPLATE.operatorTreeLit, [LIT])
+    server.runQuery.mockImplementation(async (id: string, options: { params?: Row } = {}) => {
+      const rows = id === TEMPLATE.operatorTreeVersion
+        ? (options.params?.versionId === OPEN_ID ? OPEN_NODES : EFFECT_NODES)
+        : server.templates.get(id) ?? []
+      return { items: rows, offset: 0, limit: 100, total: (rows as Row[]).length }
+    })
+    const { container } = renderReview()
     expect(await screen.findByTestId('approval-panel')).toBeInTheDocument()
-    expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.treeVersion, expect.anything())
-    expect(server.runQuery).not.toHaveBeenCalledWith(TEMPLATE.treeLit, expect.anything())
-    expect(screen.getByText('The lit nodes are read on the platform’s Knowledge maps page.')).toBeInTheDocument()
+    expect(screen.getAllByTestId('tree-node')).toHaveLength(3)
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.operatorTreeVersion, expect.objectContaining({
+      params: { versionId: OPEN_ID } }))
+    await waitFor(() => expect(screen.getByTestId('tree-lit-row')).toHaveTextContent('Advanced'))
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.operatorTreeLit, expect.objectContaining({
+      params: { treeId: TREE_ID } }))
+    for (const platform of [TEMPLATE.trees, TEMPLATE.treeVersion, TEMPLATE.treeLit]) {
+      expect(server.runQuery).not.toHaveBeenCalledWith(platform, expect.anything())
+    }
+    await expectAccessible(container)
+    await userEvent.click(screen.getByTestId('tree-lit-revoke'))
+    const dialog = await screen.findByTestId('tree-revoke-dialog')
+    await userEvent.type(within(dialog).getByTestId('tree-revoke-reason'), 'Shared answers')
+    await userEvent.click(within(dialog).getByTestId('tree-revoke-submit'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeLitRevoke,
+      { litId: LIT_ID, reason: 'Shared answers' }))
   })
 })

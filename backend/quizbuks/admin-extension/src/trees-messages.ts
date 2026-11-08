@@ -46,7 +46,6 @@ export const treesMessages = {
       changes: { ADDED: 'Added', CHANGED: 'Changed', SAME: 'Unchanged', REMOVED: 'Removed' },
       runningRemoved_one: '{{count}} running publication is bound to this removed node',
       runningRemoved_other: '{{count}} running publications are bound to this removed node',
-      noAccess: 'The nodes of a version are read on the platform’s Knowledge maps page.',
     },
     condition: {
       all: 'all of: {{items}}',
@@ -69,7 +68,6 @@ export const treesMessages = {
       requestedBy: 'Asked by',
       revoke: 'Revoke',
       revokeFor: 'Revoke the lit node {{node}}',
-      noAccess: 'The lit nodes are read on the platform’s Knowledge maps page.',
     },
     revoke: {
       title: 'Revoke a lit node',
@@ -121,7 +119,6 @@ export const treesMessages = {
       changes: { ADDED: '新增', CHANGED: '已修改', SAME: '未变', REMOVED: '去掉' },
       runningRemoved_one: '有 {{count}} 个进行中的发布绑定在这个被去掉的节点上',
       runningRemoved_other: '有 {{count}} 个进行中的发布绑定在这个被去掉的节点上',
-      noAccess: '版本的节点在平台的"知识结构图"页面查看。',
     },
     condition: {
       all: '全部满足：{{items}}',
@@ -144,7 +141,6 @@ export const treesMessages = {
       requestedBy: '申请人',
       revoke: '撤销',
       revokeFor: '撤销节点 {{node}} 的点亮',
-      noAccess: '点亮记录在平台的"知识结构图"页面查看。',
     },
     revoke: {
       title: '撤销点亮',
@@ -196,7 +192,6 @@ export const treesMessages = {
       changes: { ADDED: '追加', CHANGED: '変更', SAME: '変更なし', REMOVED: '削除' },
       runningRemoved_one: '削除されるこのノードに進行中の公開が {{count}} 件あります',
       runningRemoved_other: '削除されるこのノードに進行中の公開が {{count}} 件あります',
-      noAccess: '版のノードはプラットフォームの「知識マップ」ページで確認します。',
     },
     condition: {
       all: 'すべて：{{items}}',
@@ -219,7 +214,6 @@ export const treesMessages = {
       requestedBy: '申請者',
       revoke: '取り消す',
       revokeFor: 'ノード {{node}} の点灯を取り消す',
-      noAccess: '点灯の記録はプラットフォームの「知識マップ」ページで確認します。',
     },
     revoke: {
       title: '点灯の取り消し',
