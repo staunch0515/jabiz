@@ -62,6 +62,7 @@
 - `TakerErasureIT.anErasedTakersLikedTopicsGo`：删除账号后设置行没有了，审计中看不到喜欢的主题，别人的照旧。
 - `SetupIT` 的参数表、场景 `setup` 的 `paramsCreated`；场景快照按 `-Dscenario.update-snapshots=true` 更新并核对差异。
 - 前端：App `qb/topics.test.ts`（与发起方页面相同）、`pages/topics.test.tsx`（可选的词、勾选即保存、严格模式需要喜欢的主题、已不再提供的词、关掉、"关于我"中的一节、首页提示、axe 亮暗）；发起方页面 `topics/topics.test.tsx`（Quiz 的主题词按界面语言、修改即保存与修订号、只能选可选的词、上限、发布的继承与增删 `effectiveTopics`、axe 亮暗）；管理系统扩展 `topics.test.tsx`（列表、三语、状态、发布数、少于 k、流程页链接、只读、axe）。
+- 端到端 `quizbuks-web/e2e/tests/topics.spec.ts`：总部在"主题词"页经平台的流程页新增两个词（列表中三语名称与状态）；发起方在 Quiz 编辑页选词表中的词与自定义词并保存版本，在发布向导第一步看到版本的词、加另一个词表中的词，提交、审核通过上线；另有没有主题词、只有自定义词（与喜欢的词同名）的两个发布；学者在"账户 → 关于我"勾选喜欢的主题、打开严格模式，首页只列有交集的那一个、显示提示与"修改"链接，关掉后三个都在；新页面状态亮暗都过 axe。测试的内容管理员角色 `QB_E2E_CONTENT`（`tests/legal.ts`）加上 `qb.admin.topic.read` / `.write`；词的代码随时间递减，使每次运行的新词排在最前（列表按代码排序，App 与发起方页面至多读 500 个）。
 
 ## 5. 运维与部署
 
