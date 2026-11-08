@@ -26,7 +26,7 @@ class CertificationTemplatesTest {
                 + "sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc)");
         // Q86: every template that tells whether somebody holds a certification writes the catalog.
         for (String template : new String[] {"queries/qb/app/feed.sql", "queries/qb/app/publication.sql",
-            "queries/qb/app/understanding.sql", "queries/qb/app/sponsor-tree.sql", "queries/qb/system/audience-count.sql",
+"queries/qb/app/sponsor-tree.sql", "queries/qb/system/audience-count.sql",
             "queries/qb/sponsor/tree.sql", "queries/qb/sponsor/tree-people.sql", "queries/qb/sponsor/tree-person.sql"}) {
             // F-S2c: the benefit roles (qb.sponsor.benefit-access, -catalog) are unlocked by a lit node, not held.
             try (InputStream in = getClass().getClassLoader().getResourceAsStream(template)) {

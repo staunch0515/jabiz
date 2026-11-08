@@ -525,8 +525,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 科技树（Q85，`plans/Q85-tech-tree.md`，`src/qb/TechTree.tsx`）：登录后商户主页缺省显示该商户的答卷树（节点 = 进行中的公开发布与本人答过的，边 = 前置条件），按本人的状态上色（已点亮 / 答过未合格 / 进行中 / 可开始 / 锁定 / 未开放，`tree.TreeStates`），页顶"已点亮 n / m，下一步：…"，列表一键切换；
   结果页在商户的答卷互为前置时有"看看下一步"，链到树并标出刚答的节点。内联 SVG，不引入布局库；宽屏按层从左到右、手机从上到下；超过 60 个节点按层折叠。
 - 协议答题（Q86，`plans/Q86-agreement-quiz-tree.md`）：三种"协议理解"认证（`TERMS_APP_UNDERSTOOD`、`CONTEST_RULES_UNDERSTOOD`、`TERMS_SPONSOR_UNDERSTOOD`）是官方账号出的普通轮次（Q69）；
-  同意的流程一字不改。首页顶部与账户页"我的认证"各显示"确认你的理解"卡（`qb/UnderstandingCards.tsx`，模板 `qb.app.understanding`：受控参数 `qb.understanding.enabled` 开、当前有进行中的轮才显示；账户页已持有的显示"已通过，至 …"），
-  "开始"链到当前一轮的发布。参数 `qb.tree.platform-handle` 有值时账户页加入口"平台之树"（总部官方账号的主页树）。发布页的前置可以是"先持有：X"（`data-certification`），链到当前一轮；
+  同意的流程一字不改。~~首页与账户页的"确认你的理解"卡、受控参数 `qb.understanding.enabled`、参数 `qb.tree.platform-handle` 与账户页的"平台之树"入口~~已由 F-S2c2 删去（D3）。发布页的前置可以是"先持有：X"（`data-certification`），链到当前一轮；
   树上的认证前置画成虚线圆角的平台节点（持有 = 已点亮、否则锁定，不计入进度；点它去平台之树，没有 handle 时去当前一轮）。
 
 ### 7.2 发起方页面（`quizbuks-web/sponsor`）

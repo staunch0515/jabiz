@@ -19,7 +19,7 @@ export function appPublicationPath(publicationId: string): string {
   return `/p/${encodeURIComponent(publicationId)}`
 }
 
-/** The link to a publication in the app, from anywhere on this site (the console's understanding cards, Q86). */
+/** The link to a publication in the app, from anywhere on this site. */
 export function appPublicationLink(publicationId: string, origin: string = window.location.origin): string {
   return `${origin}/taker${appPublicationPath(publicationId)}`
 }

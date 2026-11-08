@@ -72,8 +72,6 @@ export const PLAY = {
   history: 'qb.app.history',
   /** Q85: a sponsor's tree as the caller stands on it (`qb.app.sponsor-tree`). */
   sponsorTree: 'qb.app.sponsor-tree',
-  /** Q86: the understanding certifications' cards (whether offered, held, the round to answer; the platform tree's handle). */
-  understanding: 'qb.app.understanding',
 } as const
 
 /**
@@ -117,9 +115,6 @@ export const PREREQUISITES = {
 export const CERTIFICATIONS = ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD',
   'TERMS_SPONSOR_UNDERSTOOD', 'BENEFIT_PROVIDER', 'BENEFIT_SPONSOR'] as const
 export type CertificationKey = (typeof CERTIFICATIONS)[number]
-/** Q86: the understanding certifications the app's takers answer, and the sponsors' one. */
-export const UNDERSTANDING_TAKER: readonly CertificationKey[] = ['TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD']
-export const UNDERSTANDING_SPONSOR: readonly CertificationKey[] = ['TERMS_SPONSOR_UNDERSTOOD']
 
 /** What a prerequisite asks of the taker on the required publication. */
 export const REQUIREMENTS = ['PASSED', 'ANSWERED'] as const

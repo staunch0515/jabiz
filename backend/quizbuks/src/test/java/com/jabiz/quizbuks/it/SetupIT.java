@@ -211,7 +211,7 @@ class SetupIT extends QbItSupport {
             Object type = kind.get("type");
             // The commission rate is a fraction below 1; the days (Q10b) are whole.
             // Q8a: a code (the AI model and effort) takes a listed value other than its first one.
-            // A switch is set to what it is not (Q86: qb.understanding.enabled starts true).
+            // A switch is set to what it is not.
             String value = "bool".equals(type) ? String.valueOf(!Boolean.TRUE.equals(param.value()))
                 : "code".equals(type) ? String.valueOf(((List<?>) kind.get("allowedValues")).getLast())
                 : "numeric".equals(type) && !Integer.valueOf(0).equals(kind.get("scale"))
@@ -348,9 +348,6 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.TREE_REVIEW_REMIND_AFTER, "3");
         // Q13a: bank top-ups' range, and the receiving account empty until finance sets it with four eyes.
         expected.put(QbParams.TOPUP_BANK_MIN, "1000");
-        // Q86: the understanding quizzes are offered; no platform tree until an official account is named.
-        expected.put(QbParams.UNDERSTANDING_ENABLED, "true");
-        expected.put(QbParams.TREE_PLATFORM_HANDLE, "");
         expected.put(QbParams.TOPUP_BANK_MAX, "10000000");
         QbParams.BANK_RECEIVING.forEach(key -> expected.put(key, ""));
         expected.put(QbParams.WITHDRAWAL_BANK_ENABLED, "false");

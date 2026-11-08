@@ -118,16 +118,6 @@ const en = {
     sponsorNode: 'Certification of {{sponsor}}',
   },
   /** Q86: the card offered after accepting an agreement. */
-  understanding: {
-    title: 'Confirm your understanding',
-    body: { TERMS_APP_UNDERSTOOD: 'A short quiz about the terms and the privacy policy you accepted: five questions, a few minutes, and a certification you hold for a year.',
-      CONTEST_RULES_UNDERSTOOD: 'A short quiz about the contest rules: five questions, a few minutes, and a certification you hold for a year.',
-      TERMS_SPONSOR_UNDERSTOOD: 'A short quiz about the Sponsor terms you accepted: five questions, a few minutes, and a certification you hold for a year.' },
-    start: 'Start the quiz',
-    held: 'Passed · until {{until}}',
-    platformTree: 'The platform\'s tree',
-    platformTreeHint: 'Where you stand on the platform\'s own quizzes.',
-  },
   /** Q85: a sponsor's tree, drawn the same in the app and the console. */
   tree: {
     state: { LIT: 'Lit', ANSWERED: 'Answered', IN_PROGRESS: 'In progress', UNLOCKED: 'Ready', LOCKED: 'Locked',
@@ -273,16 +263,6 @@ const zh: typeof en = {
     gives: '合格授予：{{name}}', issuedBy: '由 {{sponsor}} 颁发', ofSponsor: '{{name}} · {{sponsor}}',
     sponsorNode: '{{sponsor}} 的认证',
   },
-  understanding: {
-    title: '确认你的理解',
-    body: { TERMS_APP_UNDERSTOOD: '关于你同意的条款与隐私政策的小测：五道题、几分钟，答对即持有一年的认证。',
-      CONTEST_RULES_UNDERSTOOD: '关于有奖活动规则的小测：五道题、几分钟，答对即持有一年的认证。',
-      TERMS_SPONSOR_UNDERSTOOD: '关于你同意的发起方条款的小测：五道题、几分钟，答对即持有一年的认证。' },
-    start: '开始答题',
-    held: '已通过 · 至 {{until}}',
-    platformTree: '平台之树',
-    platformTreeHint: '你在平台自己的答卷上走到哪里了。',
-  },
   tree: {
     state: { LIT: '已点亮', ANSWERED: '答过未合格', IN_PROGRESS: '进行中', UNLOCKED: '可开始', LOCKED: '锁定',
       CLOSED: '未开放' },
@@ -426,16 +406,6 @@ const ja: typeof en = {
     hold: '保有する', held: '保有済み', required: '認定が必要です',
     gives: '合格で付与：{{name}}', issuedBy: '{{sponsor}} 発行', ofSponsor: '{{name}} · {{sponsor}}',
     sponsorNode: '{{sponsor}} の認定',
-  },
-  understanding: {
-    title: '理解の確認',
-    body: { TERMS_APP_UNDERSTOOD: '同意した利用規約とプライバシーポリシーについての小テストです。5 問、数分で、合格すると 1 年間有効な認定を保有できます。',
-      CONTEST_RULES_UNDERSTOOD: '懸賞規約についての小テストです。5 問、数分で、合格すると 1 年間有効な認定を保有できます。',
-      TERMS_SPONSOR_UNDERSTOOD: '同意した主催者規約についての小テストです。5 問、数分で、合格すると 1 年間有効な認定を保有できます。' },
-    start: 'クイズを始める',
-    held: '合格 · {{until}} まで',
-    platformTree: 'プラットフォームのツリー',
-    platformTreeHint: 'プラットフォーム自身のクイズでの現在地です。',
   },
   tree: {
     state: { LIT: '達成', ANSWERED: '回答済み（不合格）', IN_PROGRESS: '進行中', UNLOCKED: '挑戦できます', LOCKED: 'ロック中',

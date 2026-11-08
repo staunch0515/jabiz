@@ -19,7 +19,6 @@ import { Link, useLocation } from '../qb/router'
 import { TechTree, TreeProgress, type TechTreeNode } from '../qb/TechTree'
 import { certificationName, isSponsorCertification } from '../qb/certifications'
 import { certificationNodeId, certificationOfNode, progressOf } from '../qb/tree'
-import { readUnderstanding, UNDERSTANDING_QUERY } from '../qb/understanding'
 import { sharePath } from './share'
 import { countPageView, countProductClick } from './counting'
 import { linkLanguageOf } from '../linkLanguage'
@@ -77,9 +76,8 @@ export function SponsorPage({ handle }: { handle: string }) {
   const selected = new URLSearchParams(search).get('node')
   // Q86 (D-Q86-7): a certification required is a platform node; it leads to the platform's tree (D-Q86-4) when one is
   // named and is not this page, else to the certification's current round.
-  const understanding = useQuery({ queryKey: [...UNDERSTANDING_QUERY, at], queryFn: () => readUnderstanding(at),
-    enabled: signedIn && !!page.data, retry: false })
-  const platformHandle = understanding.data?.[0]?.platformHandle ?? null
+  // F-S2c (D3): the platform's tree is no longer named (the knowledge maps come with F-S3).
+  const platformHandle: string | null = null
   const treeNodes: TechTreeNode[] = useMemo(() => {
     const rows = tree.data ?? []
     const certifications = new Map<string, { held: boolean; roundPublicationId: string | null;
