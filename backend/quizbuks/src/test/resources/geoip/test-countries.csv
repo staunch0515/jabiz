@@ -1,0 +1,7 @@
+# F-S11's test entries (as the platform's, backend/app/src/test/resources/geoip): documentation ranges (RFC 5737,
+# RFC 3849) given countries. 192.0.2.0/24 is mainland China, 198.51.100.0/24 Japan, 203.0.113.0/25 Hong Kong.
+"192.0.2.0","192.0.2.255","CN"
+198.51.100.0,198.51.100.255,JP
+203.0.113.0,203.0.113.127,HK
+2001:db8::,2001:db8:0:ffff:ffff:ffff:ffff:ffff,CN
+2001:db8:1::,2001:db8:1:ffff:ffff:ffff:ffff:ffff,US

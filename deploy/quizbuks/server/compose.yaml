@@ -40,6 +40,9 @@ services:
     volumes:
       - files:/var/lib/jabiz/files
       - secrets:/var/lib/jabiz/secrets
+      # F-S11: the IP address database (operations.md §7.24), put here by the operator every month; the .env names it
+      # (JABIZ_GEOIP_DATABASE=/var/lib/jabiz/geoip/dbip-country-lite.csv.gz).
+      - geoip:/var/lib/jabiz/geoip
     # telemetry: the environment's own LGTM below (profile "observability"), at http://lgtm:4318 for the OTLP settings
     # of the .env (docs/quizbuks/operations.md section 1.5).
     networks: [proxy, db, telemetry]
@@ -96,6 +99,8 @@ volumes:
   # The image's secrets folder: no platform key or administrator password is generated on a server (the start is
   # refused instead); the platform's entrypoint keeps only the demo application's placeholder key here.
   secrets:
+  # F-S11: the IP address database (not backed up: downloaded again).
+  geoip:
   # The LGTM container's data (metrics, logs, traces, Grafana's state), <APP_NAME>_lgtm.
   lgtm:
 

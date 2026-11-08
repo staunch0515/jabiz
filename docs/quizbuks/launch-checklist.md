@@ -1,6 +1,7 @@
 # QuizBuks — 上线检查清单（Q10d）
 
 正式开放（Stripe 正式模式、真实用户）之前逐项确认，每项写上确认人、日期与依据（文档、记录或链接）。操作细节见 `operations.md`，切换正式模式的技术检查在其 §4。
+平台的各项（设置检查、告警试发、恢复演练与密钥轮换等）按顺序排在 `launch-day-platform-steps.md`。
 任何一项不成立都不上线；确需带着未完成项上线的，由需求方书面决定并写在本页末尾。
 
 ## 法务与合规
@@ -60,7 +61,7 @@
 ## 安全
 
 - [ ] **安全审查（Q10b）**的发现全部关闭（或逐条由需求方接受并记录），含已登记的跟进（题目图片原始文件名、保留期）
-- [ ] 依赖与镜像的已知漏洞已评估（`gradle dependencies`、`pnpm audit`、镜像扫描）
+- [ ] 依赖与镜像的已知漏洞已评估（`gradle dependencies`、`pnpm audit`、镜像扫描）——评估见 `security/dependency-review.md`（S1，2026-11-08；升级在平台 17zz6 与其后的 QuizBuks PR 中，合入后勾选）
 - [ ] **全部管理员都有二次验证**；管理员角色设了"要求二次验证"；没有共用账号；首个管理员的 `JABIZ_BOOTSTRAP_ADMIN_*` 已从环境中删去
 - [ ] **至少两位超级管理员**（`QB_ADMIN_SUPER`，平台 16u，D51）在职、各自二次验证，按 `operations.md` §3 第 4–5 步的顺序建立（`QB_SETUP` 与职责分离规则的发布在第二位之前）；建立期已结束（`sec_protected_grants_armed` 有一行），试过一次由一位申请、另一位审批的角色分配；`JABIZ_SECURITY_PROTECTEDGRANTS_ENABLED` 未设
 - [ ] **密钥已从任何演示或测试的值轮换**：`JABIZ_JWT_SECRET`、`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY`、`JABIZ_SEAL_KEY`、数据库密码、Stripe 密钥与签名密钥、SMTP、Google、Facebook 与 LINE 的客户端密钥都是为生产新生成的，没有在本机演示、e2e、压测或测试服务器上用过；`JABIZ_INTEGRITY_KEY`、`JABIZ_MFA_KEY` 与 `JABIZ_SEAL_KEY` 的离线副本已保存
@@ -83,6 +84,7 @@
       在 staging 上以 `tools/ops/alert-fire-test.sh` 试过：`rules`（全部求值无误；QuizBuks 的文件夹 `quizbuks` 在 Grafana 中看）、`notify`（值班的人收到了测试告警）、`fire`、
       `disk <上传文件的目录>`（F-F13 的验收"把磁盘填到阈值"：磁盘告警进入 pending 后脚本删去临时文件）；数据库主机的 WAL 归档、备份与磁盘告警由托管方或主机监控配置并试过
 - [ ] 首次启动（`operations.md` §3）完成：`QB_SETUP` 的提案已发布，科目映射已设（含 Q87 的 `qb.journal.account.2160 / 1130 / 4120 / 2150`），审批规则已发布（含 `qb.fee-request.review`）
+- [ ] **IP 地址库**（F-S11，`DEPLOY.md`"3c"、`operations.md` §7.24）：DB-IP Lite 的 CSV 已放进卷 `geoip`、`.env` 设了 `JABIZ_GEOIP_DATABASE`（正式模式下不设即启动失败），每月更新排进值班表；从中国大陆与日本的网络核对过 `/api/client/region`；`qb.video.mainland-accessible-sites` 已发布；隐私政策含"按 IP 判断所在地区"与 DB-IP 署名的版本已**勾选"须重新同意"**发布（需求方 2026-11-07，§7.24 第 6 步），已同意旧版的测试账号登录时被要求同意新版
 - [ ] 值班与联系方式：Stripe 支持、邮件服务商、数据库托管方
 - [ ] 本清单与 `operations.md` 中的步骤由将要值班的人读过
 

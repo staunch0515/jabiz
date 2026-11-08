@@ -156,7 +156,10 @@ class ProcessAccessIT extends QbItSupport {
         // F-S1: the daily check of the operators, and the hand-over of a moved sponsor's tasks.
         Map.entry("QB_OPERATOR_CHECK_RUN", ProcessAccess.INTERNAL),
         Map.entry("QB_OPERATOR_TASK_HANDOVER", ProcessAccess.SUB_PROCESS_ONLY),
-        Map.entry("QB_OPERATOR_TASK_MOVE", ProcessAccess.SUB_PROCESS_ONLY));
+        Map.entry("QB_OPERATOR_TASK_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
+        // F-S11: the daily check of the address database, and writing the refused starts.
+        Map.entry("QB_REGION_CHECK_RUN", ProcessAccess.INTERNAL),
+        Map.entry("QB_REGION_REFUSALS_FLUSH", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

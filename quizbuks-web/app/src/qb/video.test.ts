@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoplaying, trackable, trustedPlayer, videoPlayer } from './video'
+import { autoplaying, foreignVideo, mainlandSites, trackable, trustedPlayer, videoPlayer, videoSite } from './video'
 
 /** The cases of the backend's `VideoEmbedsTest` (Q19): the App reads links as the server does. */
 describe('videoPlayer', () => {
@@ -93,5 +93,57 @@ describe('videoPlayer', () => {
     expect(trustedPlayer('https://www.bilibili.com/video/BV1GJ411x7h7')).toBeNull()
     expect(trustedPlayer('https://evil.example/embed/dQw4w9WgXcQ')).toBeNull()
     expect(trustedPlayer(null)).toBeNull()
+  })
+})
+
+/** F-S11: the cases of the backend's `VideoEmbedsTest.aVideoLinkHasItsSite` and `ForeignVideosTest`. */
+describe('videoSite and foreignVideo', () => {
+  it.each([
+    ['https://youtu.be/dQw4w9WgXcQ', 'youtube'],
+    ['https://www.youtube.com/shorts/dQw4w9WgXcQ', 'youtube'],
+    ['https://vimeo.com/76979871', 'vimeo'],
+    ['https://www.bilibili.com/video/BV1GJ411x7h7/?spm_id_from=333.1007', 'bilibili'],
+    ['https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&autoplay=0', 'bilibili'],
+    ['https://nico.ms/sm9', 'niconico'],
+    ['https://dai.ly/x7tgad0', 'dailymotion'],
+    ['https://v.youku.com/v_show/id_XNTk4MjQzMzQ0OA==.html?spm=a2h0c', 'youku'],
+    ['https://player.youku.com/embed/XNTk4MjQzMzQ0OA==', 'youku'],
+    ['https://v.qq.com/x/cover/mzc00200abcdefg/x0029zdtwz6.html', 'tencent'],
+    ['https://v.qq.com/txp/iframe/player.html?vid=x0029zdtwz6', 'tencent'],
+    ['https://b23.tv/BV1GJ411x7h7', null],
+    ['https://video.example/capitals', null],
+    ['https://www.bilibili.com/', null],
+    ['https://v.qq.com.evil.example/x/page/x0029zdtwz6.html', null],
+    ['', null],
+  ])('says the site of %s is %s', (url, site) => {
+    expect(videoSite(url)).toBe(site)
+  })
+
+  const mainland = mainlandSites(null)
+
+  it.each([
+    ['https://youtu.be/dQw4w9WgXcQ', true],
+    ['https://vimeo.com/76979871', true],
+    ['https://nico.ms/sm9', true],
+    ['https://dai.ly/x7tgad0', true],
+    ['https://www.bilibili.com/video/BV1GJ411x7h7', false],
+    ['https://v.youku.com/v_show/id_XNTk4MjQzMzQ0OA==.html?spm=a2h0c', false],
+    ['https://v.qq.com/x/page/x0029zdtwz6.html', false],
+    ['https://video.example/capitals', true],
+    ['https://b23.tv/BV1GJ411x7h7', true],
+    ['https://www.bilibili.com/', true],
+    ['', false],
+    ['   ', false],
+  ])('says whether %j is foreign: %s', (url, foreign) => {
+    expect(foreignVideo([url], mainland)).toBe(foreign)
+  })
+
+  it('reads the parameter as the server does', () => {
+    expect([...mainland].sort()).toEqual(['bilibili', 'tencent', 'youku'])
+    expect([...mainlandSites(' YouTube , nothing,,bilibili')].sort()).toEqual(['bilibili', 'youtube'])
+    expect(mainlandSites('').size).toBe(0)
+    expect(foreignVideo(['https://v.qq.com/x/page/x0029zdtwz6.html'], new Set(['bilibili']))).toBe(true)
+    expect(foreignVideo(['https://youtu.be/dQw4w9WgXcQ'], new Set(['youtube']))).toBe(false)
+    expect(foreignVideo([], mainland)).toBe(false)
   })
 })

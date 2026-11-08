@@ -132,3 +132,39 @@ export function trustedPlayer(address: string | null | undefined): string | null
   if (!address) return null
   return videoPlayer(address) === address ? address : null
 }
+
+/** The video sites as the parameter `qb.video.mainland-accessible-sites` names them (the backend's `VideoEmbeds.Site`). */
+export type VideoSite = 'youtube' | 'vimeo' | 'bilibili' | 'niconico' | 'dailymotion' | 'youku' | 'tencent'
+
+const SITE_PLAYERS: [VideoSite, string][] = [['youtube', YOUTUBE_PLAYER], ['vimeo', VIMEO_PLAYER],
+  ['bilibili', BILIBILI_PLAYER], ['niconico', NICONICO_PLAYER], ['dailymotion', DAILYMOTION_PLAYER],
+  ['youku', YOUKU_PLAYER], ['tencent', TENCENT_PLAYER]]
+
+/** F-S11: the site of a link to one video, as `videoPlayer` reads it; null for any other address. */
+export function videoSite(url: string | null | undefined): VideoSite | null {
+  const player = videoPlayer(url)
+  return player ? SITE_PLAYERS.find(([, prefix]) => player.startsWith(prefix))?.[0] ?? null : null
+}
+
+/** The parameter's first value: the sites mainland China plays (the backend's `ForeignVideos.DEFAULT_SITES`). */
+export const MAINLAND_SITES_DEFAULT = 'bilibili,youku,tencent'
+
+/** The sites of the parameter's value (unknown keys ignored); the default's when there is none. */
+export function mainlandSites(value: string | null | undefined): Set<VideoSite> {
+  const known = new Set<string>(SITE_PLAYERS.map(([site]) => site))
+  return new Set((value ?? MAINLAND_SITES_DEFAULT).split(',').map((key) => key.trim().toLowerCase())
+    .filter((key): key is VideoSite => known.has(key)))
+}
+
+/**
+ * F-S11: whether any of these video links is foreign, as the backend's `ForeignVideos` decides: a link of a site not
+ * in `accessible`, or of no site recognised; a blank link is no video. Only for the hints of the pages: the server
+ * freezes the answer on the publication's card and refuses a start from mainland China by it.
+ */
+export function foreignVideo(links: readonly (string | null | undefined)[], accessible: ReadonlySet<VideoSite>): boolean {
+  return links.some((link) => {
+    if (!link || !link.trim()) return false
+    const site = videoSite(link)
+    return !site || !accessible.has(site)
+  })
+}

@@ -15,6 +15,7 @@ import { QB } from '../qb/messages'
 import { hrefOf, Link } from '../qb/router'
 import { InAppBrowserNotice } from '../install'
 import { readSharedPublication, sharePath } from './share'
+import { useMainlandChina } from '../qb/region'
 
 /**
  * A publication's share link before signing in (Q15; docs/quizbuks/plans/Q15-share-link.md): what the quiz is, from
@@ -25,7 +26,10 @@ export function SharePage({ publicationId }: { publicationId: string }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const duration = useDuration()
-  const shared = useQuery({ queryKey: ['qb', 'share', publicationId], queryFn: () => readSharedPublication(publicationId) })
+  // F-S11: asked from mainland China, a quiz with a video that cannot be played there says so instead.
+  const region = useMainlandChina()
+  const shared = useQuery({ queryKey: ['qb', 'share', publicationId, region.mainlandChina],
+    queryFn: () => readSharedPublication(publicationId, region.mainlandChina), enabled: !region.pending })
   // Q60b: the products the sponsor shows with the quiz; quietly none when they cannot be read.
   const products = useQuery({ queryKey: ['qb', 'publication-products', publicationId],
     queryFn: () => readPublicationProducts(publicationId), enabled: !!shared.data, retry: false })
@@ -43,6 +47,13 @@ export function SharePage({ publicationId }: { publicationId: string }) {
       <PageState kind="notFound" titleAs="h1" title={t('share.notFound')} description={t('share.notFoundHint')}
         action={<Link to="/login" className="text-primary text-sm underline" data-testid="share-sign-in">
           {t('share.home')}</Link>} />
+    )
+  }
+  if (p.regionBlocked) {
+    return (
+      <PageState kind="notFound" titleAs="h1" title={t('share.regionUnavailable')}
+        description={t('share.regionUnavailableHint')} data-testid="share-region-unavailable"
+        action={<Link to="/login" className="text-primary text-sm underline">{t('share.home')}</Link>} />
     )
   }
   const survey = p.kind === 'SURVEY'

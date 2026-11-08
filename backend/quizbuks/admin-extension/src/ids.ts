@@ -57,6 +57,10 @@ export const TEMPLATE = {
   sponsorProducts: 'qb.admin.sponsor-products',
   /** Q49a: the reported publications, with their reports counted by reason. */
   abuseReports: 'qb.admin.reports',
+  /** F-S11: headquarters' exceptions to the rule on foreign videos, the starts it refused by day, and its sites. */
+  regionExceptions: 'qb.admin.region-exceptions',
+  regionRefusals: 'qb.admin.region-refusals',
+  videoSites: 'qb.admin.video-sites',
   /** Q60c-2: one sponsor's page views and product clicks in a period. */
   sponsorStats: 'qb.admin.sponsor-stats',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
@@ -415,6 +419,11 @@ export const PERMISSION = {
   approvalRead: 'approval.read',
   /** Taking publications down (Q10b). */
   contentWrite: 'qb.admin.content.write',
+  /** F-S11: the exceptions to the rule on foreign videos and mainland China (read, and add, change or revoke). */
+  regionRead: 'qb.admin.region.read',
+  regionWrite: 'qb.admin.region.write',
+  /** F-S11: the refusal counts and the address database (headquarters only, not the operators). */
+  regionMonitor: 'qb.admin.region.monitor',
   /** The AI page (Q8a). */
   aiRead: 'qb.admin.ai.read',
   /** A taker's transfer at once (Q14). */
@@ -495,6 +504,14 @@ export const SPONSOR_PRODUCT_PROCESS = {
 /** Q73d-2: a reviewer's AI comparison of a publication's translations (`content.ai.AiProcesses`). */
 export const TRANSLATION_CHECK_PROCESS = 'QB_AI_TRANSLATION_CHECK_REQUEST'
 
+/** F-S11: headquarters' exceptions to the rule on foreign videos (run on the platform's process page). */
+export const REGION_PROCESS = {
+  add: 'QB_REGION_EXCEPTION_ADD',
+  expirySet: 'QB_REGION_EXCEPTION_EXPIRY_SET',
+  revoke: 'QB_REGION_EXCEPTION_REVOKE',
+  version: 1,
+} as const
+
 export const REPORT_PROCESS = {
   resolve: 'QB_REPORT_RESOLVE',
   operatorResolve: 'QB_OPERATOR_REPORT_RESOLVE',
@@ -536,6 +553,8 @@ export const PATH = {
   sponsorProducts: '/qb/sponsor-products',
   /** Q49a: takers' reports of quizzes. */
   abuseReports: '/qb/abuse-reports',
+  /** F-S11: foreign videos and mainland China: the exceptions and the refused starts (the daily check links here). */
+  region: '/qb/region',
   /** Q82: one conversation between a taker and a sponsor, read only (from a report of it). */
   conversation: (conversationId: string) => `/qb/conversations/${encodeURIComponent(conversationId)}`,
   users: '/qb/users',

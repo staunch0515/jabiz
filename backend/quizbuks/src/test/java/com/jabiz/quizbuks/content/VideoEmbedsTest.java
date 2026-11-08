@@ -92,4 +92,31 @@ class VideoEmbedsTest {
     void nothingIsNoPlayer() {
         assertThat(VideoEmbeds.player(null)).isEmpty();
     }
+
+    /**
+     * F-S11: the site of a video link, as the parameter of the sites mainland China plays names it; none for a link
+     * QuizBuks does not recognise. The App's {@code video.test.ts} has these cases.
+     */
+    @ParameterizedTest
+    @CsvSource({
+        "https://youtu.be/dQw4w9WgXcQ, youtube",
+        "https://www.youtube.com/shorts/dQw4w9WgXcQ, youtube",
+        "https://vimeo.com/76979871, vimeo",
+        "https://www.bilibili.com/video/BV1GJ411x7h7/?spm_id_from=333.1007, bilibili",
+        "https://player.bilibili.com/player.html?bvid=BV1GJ411x7h7&autoplay=0, bilibili",
+        "https://nico.ms/sm9, niconico",
+        "https://dai.ly/x7tgad0, dailymotion",
+        "https://v.youku.com/v_show/id_XNTk4MjQzMzQ0OA==.html?spm=a2h0c, youku",
+        "https://player.youku.com/embed/XNTk4MjQzMzQ0OA==, youku",
+        "https://v.qq.com/x/cover/mzc00200abcdefg/x0029zdtwz6.html, tencent",
+        "https://v.qq.com/txp/iframe/player.html?vid=x0029zdtwz6, tencent",
+        "https://b23.tv/BV1GJ411x7h7, none",
+        "https://video.example/capitals, none",
+        "https://www.bilibili.com/, none",
+        "https://v.qq.com.evil.example/x/page/x0029zdtwz6.html, none",
+        "'', none",
+    })
+    void aVideoLinkHasItsSite(String url, String site) {
+        assertThat(VideoEmbeds.site(url).map(VideoEmbeds.Site::key).orElse("none")).isEqualTo(site);
+    }
 }

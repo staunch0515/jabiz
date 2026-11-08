@@ -1,5 +1,5 @@
 import { runQuery } from '@jabiz/client'
-import { publicQuery } from '../qb/legal'
+import { minuteNow, publicQuery } from '../qb/legal'
 import type { ContentLanguage } from '../qb/api'
 import type { QuizKind, RewardMethod } from '../qb/play'
 import type { PublicProduct, PublicationProduct } from '../qb/products'
@@ -53,8 +53,11 @@ export async function readPublicSponsorPage(handle: string, languages: readonly 
 }
 
 /** The live public publications of the page with the handle, ending soonest first. */
-export function readPagePublications(handle: string): Promise<PagePublication[]> {
-  return publicQuery<PagePublication>(SPONSOR_PAGE_TEMPLATE.publications, { handle: handle.toLowerCase() }, 50)
+export function readPagePublications(handle: string, mainlandChina = false): Promise<PagePublication[]> {
+  // F-S11: from mainland China (as the platform said), without what has a video that cannot be played there; the
+  // template answers by these parameters only (the time to the minute), so the shared cache serves it.
+  return publicQuery<PagePublication>(SPONSOR_PAGE_TEMPLATE.publications, { handle: handle.toLowerCase(),
+    ...(mainlandChina ? { mainlandChina: 'true', at: minuteNow() } : {}) }, 50)
 }
 
 /** A published page's listed products, in the sponsor's order. */
