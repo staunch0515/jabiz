@@ -131,8 +131,33 @@ class TakerErasureIT extends PayoutItSupport {
             || where.equals("sys_outbox_event.payload"));
     }
 
+    /** F-S9: the topics a taker liked and their strict mode go with the account, from the audit records too. */
+    @Test
+    void anErasedTakersLikedTopicsGo() {
+        String dee = payee("t-fs9-dee-" + UUID.randomUUID().toString().substring(0, 8));
+        String eve = payee("t-fs9-eve-" + UUID.randomUUID().toString().substring(0, 8));
+        String code = "fs9-erase-" + UUID.randomUUID().toString().substring(0, 8);
+        run("QB_TOPIC_ADD", TestTokens.bearer(tokens, "topic-admin", QbPermissions.ADMIN_TOPIC_WRITE),
+            body("topicId", code, "nameZh", "抹除", "nameJa", "消去", "nameEn", "Erase"));
+        for (String id : List.of(dee, eve)) {
+            run("QB_SETTINGS_SAVE", taker(id), body("likedTopics", List.of(code), "strictTopics", true));
+        }
+
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", dee, "requestedBy", "it-support"));
+        deliverEvents();
+
+        assertThat(query("SELECT 1 FROM qb_user_settings WHERE user_id = ?", dee)).isEmpty();
+        assertThat(query("SELECT changes FROM sys_audit_record WHERE entity_type = 'QbUserSettings' AND entity_id = ?",
+            dee)).isNotEmpty().allSatisfy(row -> assertThat(String.valueOf(row.get("changes"))).doesNotContain(code));
+        // Another taker's are untouched.
+        assertThat(query("SELECT liked_topics, strict_topics FROM qb_user_settings WHERE user_id = ?", eve))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("liked_topics", code)
+                .containsEntry("strict_topics", true));
+    }
+
     @Test
     void anErasedTakersMessagesLoseTheirTextAndTheirBlocksGo() {
+
         // Q82 (D-Q82-11): the conversation stays for the sponsor (holding only her id), what she wrote goes, what
         // the sponsor wrote stays; the sponsors she blocked are no longer recorded.
         String sponsor = newSponsor("s-q82-" + UUID.randomUUID().toString().substring(0, 8));

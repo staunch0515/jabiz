@@ -61,6 +61,8 @@ export const TEMPLATE = {
   regionExceptions: 'qb.admin.region-exceptions',
   regionRefusals: 'qb.admin.region-refusals',
   videoSites: 'qb.admin.video-sites',
+  /** F-S9: the word list of topics with its figures by topic (headquarters). */
+  topics: 'qb.admin.topics',
   /** Q60c-2: one sponsor's page views and product clicks in a period. */
   sponsorStats: 'qb.admin.sponsor-stats',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
@@ -420,6 +422,9 @@ export const PERMISSION = {
   regionWrite: 'qb.admin.region.write',
   /** F-S11: the refusal counts and the address database (headquarters only, not the operators). */
   regionMonitor: 'qb.admin.region.monitor',
+  /** F-S9: the word list of topics and its figures (read), adding, renaming, deactivating and merging (write). */
+  topicRead: 'qb.admin.topic.read',
+  topicWrite: 'qb.admin.topic.write',
   /** The AI page (Q8a). */
   aiRead: 'qb.admin.ai.read',
   /** A taker's transfer at once (Q14). */
@@ -508,6 +513,16 @@ export const REGION_PROCESS = {
   version: 1,
 } as const
 
+/** F-S9: headquarters' upkeep of the word list of topics (run on the platform's process page). */
+export const TOPIC_PROCESS = {
+  add: 'QB_TOPIC_ADD',
+  rename: 'QB_TOPIC_RENAME',
+  deactivate: 'QB_TOPIC_DEACTIVATE',
+  reactivate: 'QB_TOPIC_REACTIVATE',
+  merge: 'QB_TOPIC_MERGE',
+  version: 1,
+} as const
+
 export const REPORT_PROCESS = {
   resolve: 'QB_REPORT_RESOLVE',
   operatorResolve: 'QB_OPERATOR_REPORT_RESOLVE',
@@ -551,6 +566,9 @@ export const PATH = {
   abuseReports: '/qb/abuse-reports',
   /** F-S11: foreign videos and mainland China: the exceptions and the refused starts (the daily check links here). */
   region: '/qb/region',
+  /** F-S9: the word list of topics. */
+  topics: '/qb/topics',
+
   /** Q82: one conversation between a taker and a sponsor, read only (from a report of it). */
   conversation: (conversationId: string) => `/qb/conversations/${encodeURIComponent(conversationId)}`,
   users: '/qb/users',

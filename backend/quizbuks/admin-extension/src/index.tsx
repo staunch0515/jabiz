@@ -28,7 +28,9 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Tag } from 'lucide-react'
+import TopicsPage from './TopicsPage'
+
 import BankTopUpPage from './BankTopUpPage'
 import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
@@ -116,6 +118,8 @@ export default defineExtension({
     { path: '/qb/conversations/:conversationId', element: <ConversationPage /> },
     // F-S11: foreign videos and mainland China (headquarters' exceptions, the refused starts).
     { path: PATH.region, element: <RegionPage /> },
+    // F-S9: the word list of topics (headquarters).
+    { path: PATH.topics, element: <TopicsPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -248,6 +252,8 @@ export default defineExtension({
       label: 'menu.platformGroup',
       children: [
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
+        // F-S9: the word list of topics, kept by headquarters, with its figures by topic.
+        { key: 'qb-topics', label: 'menu.topics', path: PATH.topics, icon: Tag, permission: PERMISSION.topicRead },
         { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
           permission: PERMISSION.usersRead },
         // Q48a: the operators, and the spot checks of the reviews they decided.

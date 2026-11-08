@@ -155,4 +155,6 @@ export const QUEUE = {
   sponsorProducts: ['qb-ext', 'sponsor-products'],
   abuseReports: ['qb-ext', 'abuse-reports'],
   region: ['qb-ext', 'region'],
+  topics: ['qb-ext', 'topics'],
+
 } as const

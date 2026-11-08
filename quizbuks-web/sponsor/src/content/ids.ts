@@ -23,7 +23,10 @@ export const CONTENT_PROCESS = {
   /** Q73a: the quiz's other languages, and the translations of its text into them. */
   languagesSet: 'QB_QUIZ_LANGUAGES_SET',
   translationSave: 'QB_TRANSLATION_SAVE',
+  /** F-S9: the quiz's topics (words of the word list and custom words). */
+  topicsSet: 'QB_QUIZ_TOPICS_SET',
 } as const
+
 
 /** SQL templates (`queries/qb/sponsor`). */
 export const CONTENT_TEMPLATE = {

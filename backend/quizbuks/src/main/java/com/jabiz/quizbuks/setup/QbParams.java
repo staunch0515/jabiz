@@ -333,6 +333,14 @@ public final class QbParams {
      */
     public static final String FEED_SHORTS_POSITIONS = "qb.feed.shorts.positions";
     public static final String FEED_SHORTS_PER_SHELF = "qb.feed.shorts.per-shelf";
+    /**
+     * F-S9: the most topics of a quiz or a publication (words of the list and custom words together; at most
+     * {@code TopicRules.HARD_MAX}), and the most characters of one custom word (at most
+     * {@code TopicRules.CUSTOM_HARD_MAX_LENGTH}); not controlled. Read as optional: the declared values before the
+     * setup made them.
+     */
+    public static final String TOPIC_MAX_PER_QUIZ = "qb.topic.max-per-quiz";
+    public static final String TOPIC_CUSTOM_MAX_LENGTH = "qb.topic.custom-max-length";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -575,7 +583,15 @@ public final class QbParams {
             "After which cards of the App's home a shelf of vertical short videos is shown, comma-separated (the first "
                 + "card is 1); empty: no shelf"),
         new Param(FEED_SHORTS_PER_SHELF, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
-            "How many vertical short videos one shelf of the App's home shows"));
+            "How many vertical short videos one shelf of the App's home shows"),
+        // F-S9: topics (ordinary; last, so that the setup's earlier keys stay as they were).
+        new Param(TOPIC_MAX_PER_QUIZ, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.topic.TopicRules.DEFAULT_MAX_PER_QUIZ),
+            "The most topics of a quiz or a publication, words of the list and custom words together (at most 30)"),
+        new Param(TOPIC_CUSTOM_MAX_LENGTH, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.topic.TopicRules.DEFAULT_CUSTOM_MAX_LENGTH),
+            "The most characters of one custom topic (at most 60)"));
+
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

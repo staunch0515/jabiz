@@ -74,9 +74,12 @@ public final class QbRoles {
         QbPermissions.BENEFIT_READ,
         // F-S11: the exceptions to the rule on foreign videos and mainland China (every sponsor's), its figures and
         // the daily check of the address database.
-        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR);
+        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR,
+        // F-S9: the word list of topics (adding, renaming, deactivating, merging) and its figures by topic.
+        QbPermissions.ADMIN_TOPIC_READ, QbPermissions.ADMIN_TOPIC_WRITE);
 
     /**
+
      * What an operator's member holds (Q48a, D-Q48-4): reviewing sponsors and publications (final, with the platform's
      * approval panel), reading quizzes and publications, the disputes that move no money (prizes collected at a
      * sponsor's place, digital prizes), and the operator's own acts and pages. Not users and their profiles (only the

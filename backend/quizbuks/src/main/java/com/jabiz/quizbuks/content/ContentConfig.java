@@ -342,6 +342,13 @@ public class ContentConfig {
         return TranslationProcesses.setLanguages();
     }
 
+    /** F-S9: a quiz's topics. */
+    @Bean
+    ProcessDefinition<QuizTopics.TopicsInput, EditOutput, ProcessContext> qbQuizTopicsSet() {
+        return QuizTopics.set();
+    }
+
+
     @Bean
     ProcessDefinition<TranslationProcesses.SaveInput, EditOutput, ProcessContext> qbTranslationSave() {
         return TranslationProcesses.save();
