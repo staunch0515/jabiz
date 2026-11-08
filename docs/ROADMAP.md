@@ -5491,7 +5491,23 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 **验收**：平台分支上 `build-application` 不运行，分片在应用分支上验证：QuizBuks 的同步 PR（带 `backend/quizbuks/test-timings.txt`）三片都绿、各约 15–20 分钟，汇总检查名为 `build-application`；
 `TestShardsTest`（解析、读表、分配、每个类恰在一片、嵌套类）；本地 `:core:test` 分三片跑出的类与不分片完全相同。
 
-**17zz13 状态**：📝 待评审（分支 `1.3/phase-17zz13-app-test-shards`）。
+**17zz13 状态**：✅ 已合并（#550）。
+
+### 17zz14 大批写入的参数绑定（2026-11-08，F-S6 中发现）
+
+**缘由**：
+- QuizBuks 导入 100 题、三语的 Quiz 要 30 秒，不带翻译时 50 题 2 秒、100 题 8.5 秒、300 题 32 秒，接近平方增长；千题题库（F-S6）因此不可用。
+- 原因：流程把插入缓存起来，以多行语句写出（每条至多 `WriteBatch.MAX_BINDS` = 30 000 个值）。`R2dbcStorageEngine` 把这些值逐个交给 `DatabaseClient` 的 `bind`；Spring 的执行规格每次 bind 都复制此前绑定的全部值，一条语句的绑定就是平方。
+- 所有在一个事务里写很多行的流程都受影响，比如导入、复制、密钥轮换的大批。
+
+| # | 内容 |
+|---|---|
+| 17zz14-1 | `R2dbcStorageEngine`：缓存的插入（`execute`）与带缓存写入的查询（`send`）把全部值放进一个 Map，以一次 `bindValues` 绑定；类型化的空值用 `Parameters.in(类型)`，即 `bindNull` 所用的同一个值。语句与语句数不变 |
+| 17zz14-2 | 测试：`R2dbcStorageEngineStatementsTest`（按名称、按顺序一次绑定 5 000 个值）；`BulkWriteIT`（测试表 `it_bulk_row`，一个流程一次提交 3 000 行：修复后约 1.5 秒，修复前约 15 秒，断言 8 秒内） |
+
+**验收**：CI 绿；`StatementBudgetIT` 不变；同步到 `1.3/quizbuks` 后，QuizBuks 导入 100 题三语约 1 秒，此前 30 秒（本地实测）。
+
+**17zz14 状态**：📝 待评审（分支 `1.3/phase-17zz14-batch-bind`）。
 
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
