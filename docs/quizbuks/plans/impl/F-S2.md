@@ -76,8 +76,23 @@
 
 ## 7. 删除清单（待需求方确认，F-S2c）
 
-（盘点中）
+按用户看得到的功能列出；每项之下是要删的代码（盘点于 2026-11-08，路径在 PR 中逐一列出）。`qb_official_publisher` 已在 F-S1 删除（V78），不在此列。表一律删除、不搬数据（平台在测试，重置数据库）。
+
+| # | 功能（删除） | 涉及 |
+|---|---|---|
+| D1 | **平台的认证、轮与记录**（Q69/Q70）：认证目录（发起方申请、推荐人、三种协议理解、两种权益）、轮的登记与关闭、人工授予与收回、认领合格、平台与运营商的认证概况 | 包 `certification` 的 `Certifications`、`CertificationHolding`、`CertificationProcesses`（`QB_CERTIFICATION_ROUND_ADD/_CLOSE/_GRANT/_REVOKE/_CLAIM/_OVERVIEW/_OVERVIEW_OF`）、`RoundHolders`、`QbCertifications`、`CertificationCodes`；表 `qb_certification_round`、`qb_certification_record`；字典两个；权限 `qb.certification.manage`、`qb.certification.admin`；管理系统扩展的「认证」页（运营商与平台两处菜单）；App 的"成为发起方"中认领合格的一步；共用 `qb/certifications.ts` 与卡片上的认证标记 |
+| D2 | **答题时"持有认证即不能答该轮"**（Q70a） | 开始答题的 `RoundHolders.load/refuse`；`qb.app.feed` / `qb.app.publication` 的同段 SQL；`AttemptStatementBudgetIT.aStartOfASponsorsRound` |
+| D3 | **协议理解答题卡**（Q86）：App 首页与发起方概况的"理解条款"卡、受控参数 `qb.understanding.enabled`、启动检查 `CERTIFICATION_LEGAL` | `qb.app.understanding`、`UnderstandingCards.tsx`、`understanding.ts`、`CertificationLegalCheck`、`operations.md` §7.16、e2e `agreement-quiz.spec.ts`（见 §8 问题 2） |
+| D4 | **发布的前置条件**（Q76，含 Q86 的"持有认证"前置）：向导的"前置"一步、发布页"先完成：X"、商户主页按层显示 | `QbPrerequisites`、`PublicationPrerequisites`（`QB_PUBLICATION_PREREQUISITES_SAVE`）、`PrerequisiteRules`、`PrerequisiteCheck`、`PrerequisiteRows`、`QB_PREREQUISITE_*`；表 `qb_publication_prerequisite`；三个数据视图与字典；`qb.sponsor.publication-prerequisites`；feed / publication / audience-count / sponsor-page-publications 中的前置 SQL；App `share/levels.ts`；发起方 `Prerequisites.tsx`；e2e `prerequisites.spec.ts`；`AttemptStatementBudgetIT` 两个前置用例 |
+| D5 | **Q85 的科技树**：发起方页面「科技树」（`/tree`，人数、名单、一个人的树）、App 商户主页上的树与结果页"接下来"的链接、参数 `qb.tree.platform-handle` | `tree/TreeStates`（重写为新模型）；`qb.sponsor.tree`、`tree-people`、`tree-person`、`qb.app.sponsor-tree`；共用 `qb/TechTree.tsx`、`qb/tree.ts`；发起方 `src/tree/`；e2e `tech-tree.spec.ts`（见 §8 问题 3） |
+| D6 | **发起方自己的认证与轮**（Q88a）：资源库的「认证」标签、发布页的"登记为认证的一轮"、0 奖励的轮、受控开关 `qb.certification.sponsor-rounds.enabled` | `QbSponsorCertifications`、`SponsorCertifications`、`SponsorCertificationProcesses`（`QB_SPONSOR_CERTIFICATION_*`）、`PublicationRounds`（`QB_SPONSOR_ROUND_SET/_CLOSE`）、`TierCoverage` 的 `rewardOptional`；表 `qb_sponsor_certification`；三个数据视图与字典；`qb.sponsor.certifications`、`qb.sponsor.publication-round`、`qb.admin.sponsor-certifications`；发起方 `src/certifications/` 与资源库标签；`operations.md` §7.19；e2e `sponsor-certification.spec.ts`（0 奖励见 §8 问题 4） |
+| D7 | **以认证作门槛的三处**：申请发起方（`SponsorApplyGuard` 查 `SPONSOR_APPLY`）、生成推荐链接（`REFERRER`）、两种权益（`BENEFIT_PROVIDER` / `BENEFIT_SPONSOR`） | 不删功能，改门槛：改为"点亮受控参数指定的节点"（规格），缺省空 = 关闭 |
+| D8 | **Q77 证书**（按认证签发）：本人签发证书、公开核实页、公开的学者页 | 见 §8 问题 1：建议本项不删，只停止按认证签发，F-S5 改为节点证书 |
 
 ## 8. 待需求方决定的问题
 
-（见 §7 之后）
+1. **Q77 证书在 F-S5 之前**：证书现在按"认证"签发，认证删除后没有签发的依据。建议 (a)：保留证书表、版式、公开核实页与学者公开页，已签发的照常可核实；F-S2c 起暂停签发（`QB_CERTIFICATE_ISSUE` 拒绝），F-S5 改为节点证书。或 (b)：本项一并删除，F-S5 重做。
+2. **协议理解答题卡（Q86）**：规格只写了删 Q86 的"发布前置"。建议删除答题卡、三种协议理解的认证与开关（同 D3）；以后在学者的平台图上建"了解条款"的节点，由 F-S3 的看图显示。或保留答题卡、改为读平台图上指定的节点（多一个受控参数）。
+3. **Q85 画面与 F-S3 之间的空档**：F-S2c 删了旧的树页，新的看图在 F-S3（要等 P3）。建议：F-S2c 的后端改动照常合入，**删除前端画面（D4 的商户主页分层、D5 的三处画面）的部分推迟到 F-S3 的 PR 中一起做**，期间画面读不到数据时显示"即将更新"。或接受空档。
+4. **0 奖励的发布**：Q88a 允许"认证的一轮"不设奖励；轮删除后，绑定节点的发布是否允许不设奖励档位？建议允许（规格"照常得奖励"只说有奖励时照常，平台图的入门节点常常不给奖励）。
+5. **门槛由谁点亮**：申请发起方与推荐人按**人**（学者的平台图，主体 `USER`）；两种权益按**发起方**（点亮者为发起方的平台图，主体 `SPONSOR`，F-S4 起才能在发起方页面答题点亮）。在 F-S4 之前，权益门槛的节点即使设了也无人能点亮。请确认，或改为两种权益也按人。
