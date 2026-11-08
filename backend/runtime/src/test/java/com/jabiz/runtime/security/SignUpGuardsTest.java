@@ -30,8 +30,9 @@ class SignUpGuardsTest {
             factory.addBean("guard" + i, guards[i]);
         }
         SignInGuards reader = new SignInGuards(new StaticListableBeanFactory().getBeanProvider(SignInGuard.class),
-            new StaticListableBeanFactory().getBeanProvider(EntryScopeResolver.class), null, null, null, null, null);
-        return new SignUpGuards(factory.getBeanProvider(SignUpGuard.class), reader, MESSAGES);
+            new StaticListableBeanFactory().getBeanProvider(EntryScopeResolver.class), null, null, null, null, null,
+            new GuardParams(null));
+        return new SignUpGuards(factory.getBeanProvider(SignUpGuard.class), reader, MESSAGES, new GuardParams(null));
     }
 
     private static SignUpDecision check(SignUpGuards guards, String userId) {
