@@ -168,8 +168,13 @@ public final class QbDigitalPrizes {
         PublisherKind.declare(eb, false);
         // The order loaded: issued from the lowest.
         eb.field("seq", f -> f.physicalColumn("seq").immutable(true).required(true).asNumeric(9, 0));
-        eb.field("sealedContent", f -> f.physicalColumn("sealed_content").immutable(true).required(true)
+        // Sealed under its loader's id (QbRewards.handlerOf of the row: the provider of a digital product, else the
+        // publisher); stored again under a new seal key (D78), so mutable, but written by processes only.
+        eb.field("sealedContent", f -> f.physicalColumn("sealed_content").required(true)
             .sensitive().asText(PublishingLimits.SEALED_LENGTH));
+        // Q89b-2: the provider of the digital product who loaded the code (the publication's fulfiller then); none:
+        // the publisher. The context its content is sealed for.
+        eb.field("fulfillerId", f -> f.physicalColumn("fulfiller_id").immutable(true).processOnly().asText(128));
         eb.field("hint", f -> f.physicalColumn("hint").immutable(true).asText(HINT_LENGTH + 1));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(CODE_STATUS_DICTIONARY, DigitalPrizeStatus.CODE_STATUSES.toArray(String[]::new)));
