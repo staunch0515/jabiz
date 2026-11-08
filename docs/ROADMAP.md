@@ -5402,3 +5402,17 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：`./gradlew check` 通过；以上两个回归测试通过。
 
 **17zz7 状态**：📝 待评审（分支 `1.3/phase-17zz7-drop-read-resumer`，在 17zz6 之上）。
+
+### 17zz8 迁移的顺序检查（2026-11-08，总控排入）
+
+**缘由**：`1.3/quizbuks` 上一个 PR 的 V80 在另一个 PR 的 V81 之后合入，Flyway 拒绝更旧的待应用版本，staging 部署两次失败并回滚。平台分支的序列（`db/jabiz`、示范应用）同样可能并行撞号或乱序。
+
+| # | 内容 |
+|---|---|
+| 17zz8-1 | `tools/check-migration-order.sh <base> <head> [<序列>…]`：PR 新增或改名的 `V<n>__*.sql`（`git diff base...head`）必须大于 `<base>` 最新提交上同一序列的最大号，同一序列不重号；失败时写明"基线已到 V<m>，请改为 V<m+1>"。序列是目录的正则；缺省为平台的三条（`db/jabiz`、示范应用的 `db/migration` 与测试迁移 `db/testmigration`） |
+| 17zz8-2 | `ci.yml` 作业 `migration-order`（PR 时，草稿也跑）：平台序列加应用分支 `.jabiz-migration-sequences` 中的序列 |
+| 17zz8-3 | 离线测试 `tools/test/check-migration-order.test.sh`（14 例：落后、在后、三条序列各自独立、改名、重号、目标分支在 PR 之后前进、序列外的测试夹具、应用序列中基线 V81 而 PR 为 V80）；`docs/guide/version-lines.md`"迁移的顺序"（合并带迁移的 PR 之前再看一次基线） |
+
+**验收**：重放 `1.3/quizbuks` 的 #505（以合入时的基线）报"基线已到 V81，请改为 V82"；重放平台的 #491（V63，基线 V62）通过；当前 `1.3/platform` 通过。
+
+**17zz8 状态**：📝 待评审（分支 `1.3/phase-17zz8-migration-order-check`）。
