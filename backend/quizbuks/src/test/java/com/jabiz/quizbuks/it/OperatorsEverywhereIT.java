@@ -67,6 +67,18 @@ class OperatorsEverywhereIT extends PlayItSupport {
         }
     }
 
+    /** F-S1b: "your operator" as the Sponsor app reads it (at most one row: the caller's own). */
+    private List<Map<String, Object>> yourOperator(String sponsorId) {
+        return items("qb.sponsor.operator", sponsorToken(sponsorId), Map.of());
+    }
+
+    /** F-S1b: an operator's row of the platform's workload (its reviews waiting, and decided in the last day). */
+    private Map<String, Object> workload(String operatorId) {
+        return items("qb.admin.operator-workload", hq(), Map.of("params", Map.of("since",
+            clock.instant().minus(Duration.ofDays(1)).toString()), "limit", 500)).stream()
+            .filter(row -> operatorId.equals(row.get("operatorId"))).findFirst().orElseThrow();
+    }
+
     private List<Map<String, Object>> openTasks(String sourceKey) {
         return query("SELECT * FROM (SELECT DISTINCT ON (task_id) * FROM sys_task_version ORDER BY task_id, "
             + "version_no DESC) t WHERE source_key = ? AND status = 'OPEN' AND NOT is_deleted", sourceKey);
@@ -77,6 +89,10 @@ class OperatorsEverywhereIT extends PlayItSupport {
         String sponsor = newSponsor(unique("s-fs1-own"));
         assertThat(assignment(sponsor)).containsEntry("operator_id", platformOperator())
             .containsEntry("assigned_by", QbOperators.BY_DEFAULT).containsEntry("fixed", false);
+        // The Sponsor app shows them the operator and how to reach it.
+        assertThat(yourOperator(sponsor)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("operatorId", platformOperator()).containsEntry("own", false)
+            .containsKeys("name", "contactName", "contactEmail", "language", "assignedAt"));
         credit(sponsor, 10_000);
         String publication = livePublication(sponsor, "FS1 card");
         assertThat(card(publication).get("operator_id")).isEqualTo(platformOperator());
@@ -110,6 +126,9 @@ class OperatorsEverywhereIT extends PlayItSupport {
         run(OperatorProcesses.MEMBER_ADD, hq(), body("operatorId", operator.operatorId(), "userId", other,
             "lead", false));
 
+        // Their "your operator" is their own operator.
+        assertThat(yourOperator(lead)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("operatorId", operator.operatorId()).containsEntry("own", true));
         credit(lead, 10_000);
         String requestId = pendingReview(lead, "FS1 direct");
         assertThat(query("SELECT scope_name, scope_value FROM sys_approval_request_version WHERE request_id = ?::uuid",
@@ -242,8 +261,12 @@ class OperatorsEverywhereIT extends PlayItSupport {
             "reason", "Move"))).containsEntry("changed", true);
         assertThat(assignment(sponsor)).containsEntry("operator_id", kyushu.operatorId())
             .containsEntry("assigned_by", "fs1-hq");
+        assertThat(yourOperator(sponsor)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("operatorId", kyushu.operatorId()).containsEntry("own", false));
         assertThat(query("SELECT scope_value FROM sys_approval_request_version WHERE request_id = ?::uuid ORDER BY "
             + "version_no DESC LIMIT 1", requestId).getFirst()).containsEntry("scope_value", kyushu.operatorId());
+        // F-S1b: the platform's home counts it as the new operator's, waiting.
+        assertThat(workload(kyushu.operatorId())).containsEntry("pending", 1).containsEntry("decided", 0);
         assertThat(query("SELECT DISTINCT ON (task_id) scope_value, status FROM sys_task_version WHERE subject_id = "
             + "? ORDER BY task_id, version_no DESC", requestId)).isNotEmpty().allSatisfy(task ->
             assertThat(task).containsEntry("scope_value", kyushu.operatorId()));
@@ -252,6 +275,7 @@ class OperatorsEverywhereIT extends PlayItSupport {
         deliverEvents();
         assertThat(query("SELECT status FROM sys_approval_request_version WHERE request_id = ?::uuid ORDER BY "
             + "version_no DESC LIMIT 1", requestId).getFirst()).containsEntry("status", "APPROVED");
+        assertThat(workload(kyushu.operatorId())).containsEntry("pending", 0).containsEntry("decided", 1);
         assertThat(InboxItSupport.messagesOf(sponsor)).filteredOn(m -> "OPERATOR_CHANGED".equals(m.get("kind")))
             .singleElement().satisfies(m -> assertThat(String.valueOf(m.get("body"))).contains("ops@"));
     }

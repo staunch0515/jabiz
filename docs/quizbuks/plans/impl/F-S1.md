@@ -135,3 +135,4 @@
 - 发起方页面（`quizbuks-web/sponsor`）显示"你的运营商"（名称与联系方式；模板 `qb.sponsor.operator`）；帮助说明。
 - `operations.md`：运营商、直营发起方、改派（含审批移动）、获客、现金奖励各节；已有安装收回 `QB_ADMIN_CONTENT` 去掉的授权。
 - e2e：入驻与发布审核改由运营商成员完成（`operators.ts` 的 `operatorWithLead` 与成员登录 `/operator/`）。
+- 实施记录：首页 `/qb/home` 为扩展的 `home`（`HomePage.tsx`：运营商入口的会话显示运营商首页；平台会话有 `qb.admin.operators.read` 时显示每日核对与新模板 `qb.admin.operator-workload`：每个运营商现在待审的审批请求（范围 `operator`）与自页面打开前 30 天起决定的个数，按待审降序，分页）；"你的运营商"读新的只读数据视图 `sponsor:QbSponsorOperator`（本人的归属）与模板 `qb.sponsor.operator`（权限 `qb.sponsor.me`），显示在"发起方资料 → 概况"的右栏，帮助底稿 `docs/quizbuks/help/your-operator.md`；e2e 的 `reviewerFor` 按发起方的 `qb.sponsor.operator` 找到其运营商，为它加一位持 `QB_OPERATOR` 的成员（每个运营商、每个 worker 一位，不是负责人）并以其 `/operator/` 会话决定入驻、发布与主页的审核。没有新迁移。

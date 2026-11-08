@@ -21,7 +21,7 @@ import { QB } from '../qb/messages'
 import { appPublicationLink, sponsorPageLink } from '../qb/page'
 import { Link } from '../qb/router'
 import { UnderstandingCards } from '../qb/UnderstandingCards'
-import { useMySponsor } from './api'
+import { readYourOperator, useMySponsor, YOUR_OPERATOR_QUERY, type YourOperator } from './api'
 import { checklist, progress, type ChecklistKey } from './checklist'
 import { PRODUCTS_TAB_PATH, profilePath } from './paths'
 import { PreviewCard } from './PreviewCard'
@@ -164,11 +164,57 @@ export function OverviewPage() {
             {page.data?.status === 'PUBLISHED' && <PageLinks handle={page.data.handle} company={sponsor.data?.company ?? ''} />}
           </>
         )}
+        <YourOperatorCard />
         <Button asChild variant="link" className="self-start px-0">
           <Link to="/stats" data-testid="profile-stats-link">{t('profile.statsLink')}</Link>
         </Button>
       </aside>
     </div>
+  )
+}
+
+/** "Your operator" (F-S1b): who looks after the Sponsor and how to reach them; read only. */
+function YourOperatorCard() {
+  const { t } = useTranslation(SPONSOR)
+  const { t: tQb } = useTranslation(QB)
+  const operator = useQuery({ queryKey: YOUR_OPERATOR_QUERY, queryFn: readYourOperator, staleTime: 60_000 })
+  return (
+    <Card data-testid="profile-operator">
+      <CardHeader>
+        <CardTitle>{t('profile.operator.title')}</CardTitle>
+        <CardDescription>{t('profile.operator.hint')}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2 text-sm">
+        {operator.isPending && <PageState kind="loading" />}
+        {operator.isError && <p className="text-destructive">{tQb('failed')}</p>}
+        {operator.isSuccess && (operator.data
+          ? <OperatorDetails operator={operator.data} />
+          : <p className="text-muted-foreground" data-testid="profile-operator-none">{t('profile.operator.none')}</p>)}
+        <Link to="/help" className="text-primary self-start font-medium underline-offset-4 hover:underline"
+          data-testid="profile-operator-help">{t('profile.operator.help')}</Link>
+      </CardContent>
+    </Card>
+  )
+}
+
+function OperatorDetails({ operator }: { operator: YourOperator }) {
+  const { t } = useTranslation(SPONSOR)
+  return (
+    <>
+      <p className="font-medium" data-testid="profile-operator-name">{operator.name}</p>
+      {operator.own && <p data-testid="profile-operator-own">{t('profile.operator.own')}</p>}
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+        <dt className="text-muted-foreground">{t('profile.operator.contact')}</dt>
+        <dd className="break-words">
+          {operator.contactName}{' '}
+          <a href={`mailto:${operator.contactEmail}`} className="text-primary underline-offset-4 hover:underline"
+            data-testid="profile-operator-email">{operator.contactEmail}</a>
+        </dd>
+      </dl>
+      {operator.assignedAt && (
+        <p className="text-muted-foreground">{t('profile.operator.since', { time: formatDateTime(operator.assignedAt) })}</p>
+      )}
+    </>
   )
 }
 

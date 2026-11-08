@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import {
-  adminToken,
+  
   expect,
   expectAccessible,
   prepareQuizbuks,
@@ -11,6 +11,7 @@ import {
   setAppearance,
 } from './support'
 import { fundedSponsor, searchHome, taker, untilLive } from './play'
+import { reviewerFor } from './operators'
 
 /**
  * Answering in the app (docs/quizbuks/plans/QP-pages.md, QP2): the feed, a publication's page, one question per page
@@ -59,7 +60,7 @@ async function seedPublication(request: APIRequestContext, timeLimitSec: number)
   const publicationId = saved.publicationId as string
   const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    await run(request, await reviewerFor(request, sponsor.token), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
       decision: 'APPROVE' })
   }
   return { publicationId, name, reward: sponsor.balance }

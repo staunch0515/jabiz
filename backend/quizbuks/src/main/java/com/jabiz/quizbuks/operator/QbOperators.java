@@ -86,6 +86,8 @@ public final class QbOperators {
 
     /** The caller's own memberships (the operator's templates start from it). */
     public static final String OWN_MEMBERSHIP_DATASET = "urn:jabiz:dataset:operator:QbOperatorMember";
+    /** The Sponsor's own assignment, read only (F-S1b: "your operator" on the Sponsor app). */
+    public static final String OWN_ASSIGNMENT_DATASET = "urn:jabiz:dataset:sponsor:QbSponsorOperator";
 
     public static String defaultDataset(String entity) {
         return "urn:jabiz:dataset:default:" + entity;
