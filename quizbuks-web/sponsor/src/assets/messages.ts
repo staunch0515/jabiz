@@ -3,7 +3,7 @@ import { SPONSOR } from '../messages'
 
 /**
  * The asset library's texts (F-C1), part of the Sponsor app's namespace `sponsor` (added here, next to the pages that
- * use them, as `certifications/messages.ts`). The kinds, uses and places are the server's dictionaries; the rules an
+ * use them). The kinds, uses and places are the server's dictionaries; the rules an
  * asset breaks are the server's words (`QB_ASSET_*`).
  */
 const en = {
@@ -13,7 +13,7 @@ const en = {
     intro: 'Your images, files, links, articles, texts and prize cards, kept once and copied into your quizzes and publications. What is copied stays as it is when you change the asset later; the places then show that they use older content.',
     add: 'New asset',
     collect: 'Collect from my content',
-    tabs: { label: 'Kinds of assets', all: 'All', media: 'Media', text: 'Texts', prize: 'Prizes', products: 'Products', certifications: 'Certifications' },
+    tabs: { label: 'Kinds of assets', all: 'All', media: 'Media', text: 'Texts', prize: 'Prizes', products: 'Products' },
     search: 'Search',
     searchPlaceholder: 'Name, description or tag',
     kindFilter: 'Kind',
@@ -148,7 +148,7 @@ const zh: typeof en = {
     intro: '你的图片、文件、链接、文章、文字与奖品卡片，在这里保存一次，复制到 Quiz 与发布中使用。之后修改资源，已复制的内容不变；用到它的地方会提示"用的是旧的内容"。',
     add: '新建资源',
     collect: '从我的内容收集',
-    tabs: { label: '资源的种类', all: '全部', media: '素材', text: '文字', prize: '奖品', products: '商品', certifications: '认证' },
+    tabs: { label: '资源的种类', all: '全部', media: '素材', text: '文字', prize: '奖品', products: '商品' },
     search: '搜索',
     searchPlaceholder: '名称、说明或标签',
     kindFilter: '种类',
@@ -283,7 +283,7 @@ const ja: typeof en = {
     intro: '画像、ファイル、リンク、記事、テキスト、賞品カードを一度保存し、クイズや公開にコピーして使います。あとでリソースを変更しても、コピー済みの内容は変わりません。使っている場所には「古い内容」と表示されます。',
     add: '新しいリソース',
     collect: '自分のコンテンツから集める',
-    tabs: { label: 'リソースの種類', all: 'すべて', media: '素材', text: 'テキスト', prize: '賞品', products: '商品', certifications: '認定' },
+    tabs: { label: 'リソースの種類', all: 'すべて', media: '素材', text: 'テキスト', prize: '賞品', products: '商品' },
     search: '検索',
     searchPlaceholder: '名前、説明、タグ',
     kindFilter: '種類',

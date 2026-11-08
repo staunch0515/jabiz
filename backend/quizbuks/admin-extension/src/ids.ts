@@ -51,7 +51,6 @@ export const TEMPLATE = {
   /** F-C2: the sponsors' usage by month and meter (headquarters every sponsor, an operator its own). */
   usage: 'qb.admin.usage',
   /** Q88a: the sponsors' own certifications (headquarters every one, an operator its sponsors'). */
-  sponsorCertifications: 'qb.admin.sponsor-certifications',
   /** Q73e-1: a publication by the language its attempts are answered in. */
   publicationLanguages: 'qb.admin.publication-languages',
   /** Q73d-2: the latest AI comparison of a publication's translations in one language (its reviewers). */

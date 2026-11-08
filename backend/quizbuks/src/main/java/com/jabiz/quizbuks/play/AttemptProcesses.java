@@ -270,9 +270,7 @@ public final class AttemptProcesses {
                     // Q47: the publication's conditions and the caller's attributes, in the same statement (the
                     // statement budget stays); conditions are frozen with the publication, so not read again.
                     AudienceRows.conditions(ctx -> ctx.get(PUB_KEY), CONDITIONS),
-                    AudienceRows.callers(ATTRIBUTES),
-                    // Q76: the publication's prerequisites, in the same statement (frozen with the publication).
-                    PrerequisiteRows.of(ctx -> ctx.get(PUB_KEY), PrerequisiteRows.PREREQUISITES)))
+                    AudienceRows.callers(ATTRIBUTES)))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
                 // Q51: an attempt keeps the version it started with, whichever the publication has switched to since;
                 // a new one takes the card's (checked again against the card read under the lock).
@@ -305,17 +303,6 @@ public final class AttemptProcesses {
                 // enough watching; the card read outside the lock says so and how long the video is. A continued
                 // attempt is not asked again. No read: nothing changes in the statement budget (D-Q75-7).
                 .compute("Refuse an unwatched video", (metadata, ctx) -> refuseUnwatched(ctx))
-                // Q76 (D-Q76-2, D-Q76-7): a publication with prerequisites reads the caller's attempts on them, one
-                // statement more before the lock (an ordinary publication's query is empty and sends nothing).
-                .steps(b -> PrerequisiteRows.loadAttempts(b, AttemptProcesses::starting))
-                // Q86 (D-Q86-6): a certification required reads the caller's holding of it, two statements more
-                // before the lock, only then.
-                .steps(b -> PrerequisiteRows.loadHoldings(b, AttemptProcesses::starting))
-                .compute("Refuse unmet prerequisites", (metadata, ctx) -> {
-                    if (starting(ctx)) {
-                        PrerequisiteRows.refuse(ctx, "publicationId");
-                    }
-                })
                 // F-S2b1: a publication bound to a knowledge graph's node reads the node's row with the caller's lit
                 // records and revocations, one statement more before the lock (an ordinary publication's queries are
                 // empty and send nothing); the nodes to be lit before answering must be.

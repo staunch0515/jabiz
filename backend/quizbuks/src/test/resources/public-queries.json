@@ -815,10 +815,6 @@
         "scale" : 0,
         "type" : "numeric"
       },
-      "prerequisites" : {
-        "multiline" : false,
-        "type" : "text"
-      },
       "publicationId" : {
         "targetEntity" : "QbPublication",
         "type" : "reference"

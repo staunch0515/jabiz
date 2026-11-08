@@ -27,7 +27,7 @@ export function RewardText({ card }: { card: FeedCard }) {
   const { t: tQb, i18n } = useTranslation(QB)
   // Q88a (D-Q88-5): a round of a certification says what passing gives; one paying nothing says only that.
   const gives = card.certification
-    ? tQb('certification.gives', { name: certificationName(card.certification, card.certificationNames, i18n.language, tQb) })
+    ? tQb('certification.gives', { name: certificationName(card.certification, null, i18n.language, tQb) })
     : null
   const reward = card.kind === 'SURVEY' ? t('feed.surveyReward', { amount: formatKudos(card.maxReward) })
     : t('feed.upTo', { amount: formatKudos(card.maxReward) })

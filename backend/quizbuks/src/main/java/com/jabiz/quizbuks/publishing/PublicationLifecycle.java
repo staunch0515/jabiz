@@ -139,8 +139,6 @@ public final class PublicationLifecycle {
                 .step("Lock the quiz", HoldLock.<ProcessContext>shared(
                     ctx -> QbContent.lockName(ctx.get(FIRST, EntityInstance.class).get("quizId"))))
                 .steps(PublicationEditing::lockAndLoad)
-                // Q88a (D-Q88-5): whether it is a round of a certification, which lets its tiers pay nothing.
-                .steps(PublicationRounds::load)
                 // F-S2b1: the node it is bound to, checked again (its graph may have changed since the save).
                 .steps(b -> PublicationNodes.load(b, ctx -> PublicationNodes.binding(
                     PublicationEditing.publication(ctx))))
@@ -244,8 +242,8 @@ public final class PublicationLifecycle {
         }
         PublicationReadiness.check(PublicationEditing.draftOf(publication),
             PublicationEditing.tiersOf(list(ctx, TIERS)), PublicationEditing.snapshot(version), ctx.opTime(),
-            PublicationEditing.maxRewardPerAttempt(ctx), PublicationRounds.isRound(ctx)
-                || publication.get("treeNodeId") != null).forEach(ctx::reject);
+            PublicationEditing.maxRewardPerAttempt(ctx),
+            publication.get("treeNodeId") != null).forEach(ctx::reject);
         PublicationNodes.problems(ctx, publication.get("publisherId"), (String) publication.get("treeId"),
             (String) publication.get("treeNodeId")).forEach(ctx::reject);
         PublicationReadiness.pool(PublicationEditing.draftOf(publication), list(ctx, POOL).size())

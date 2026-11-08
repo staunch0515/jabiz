@@ -39,23 +39,11 @@ import { Link, navigate } from '../qb/router'
 import { WALLET_PATH } from '../wallet/api'
 import type { Condition } from '../qb/audience'
 import { AudienceConditions, AudienceCountPanel, AudienceFeePanel } from './AudienceConditions'
-import { Prerequisites } from './Prerequisites'
-import { CERTIFICATIONS_QUERY, readMyCertifications, readPublicationRound, roundQuery, setPublicationRound,
-  type PublicationRound } from '../certifications/api'
-import '../certifications/messages'
-import { certificationName } from '../qb/certifications'
-import { QB } from '../qb/messages'
 import { LanguagesFields } from './LanguagesFields'
 import { ReferralFields } from './ReferralFields'
 import {
   asSurvey,
   conditionsQuery,
-  prerequisitesQuery,
-  readPrerequisites,
-  savePrerequisites,
-  searchPublications,
-  type Prerequisite,
-  type PrerequisiteRow,
   countAudience,
   feeQuoteQuery,
   readFeeQuote,
@@ -191,7 +179,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   /** The page's heading, given the revision the wizard last saw (for the actions). */
   header: (revision: number) => ReactNode
 }) {
-  const { t } = useTranslation(SPONSOR)
+  const { t, i18n } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
   const id = useId()
   const regionLabel = useRegionLabel()
@@ -222,42 +210,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     queryFn: () => readFeeQuote(publicationId!),
     enabled: publicationId !== null,
   })
-  // Q76: the prerequisites, saved with each save of the draft once changed (their own process); the sponsor's other
-  // submitted publications are what can be required.
-  const savedPrerequisites = useQuery({
-    queryKey: prerequisitesQuery(publicationId),
-    queryFn: () => readPrerequisites(publicationId!),
-    enabled: publicationId !== null,
-  })
-  const candidates = useQuery({
-    queryKey: [...PUBLICATIONS_QUERY, 'prerequisite-candidates'],
-    queryFn: () => searchPublications({ offset: 0, limit: 100, sorts: [{ field: 'name', asc: true }] }),
-    select: (page) => page.items.filter((row) => row.status !== 'DRAFT' && row.publicationId !== publicationId),
-  })
-  const [editedPrerequisites, setEditedPrerequisites] = useState<Prerequisite[] | null>(null)
-  // Q88a: the sponsor's own certifications (which the draft may give, D-Q88-3, or require, D-Q88-4) and the round
-  // the draft is, saved with each save once changed (its own process, after the prerequisites).
-  const { t: tQb, i18n } = useTranslation(QB)
-  const ownCertifications = useQuery({ queryKey: CERTIFICATIONS_QUERY, queryFn: () => readMyCertifications(),
-    staleTime: 60_000 })
-  const activeCertifications = (ownCertifications.data ?? []).filter((c) => c.status === 'ACTIVE')
-  const ownNamed = activeCertifications.map((c) => ({ key: c.key,
-    name: certificationName(c.key, c.name, i18n.language, tQb) }))
-  const savedRound = useQuery({
-    queryKey: roundQuery(publicationId),
-    queryFn: () => readPublicationRound(publicationId!),
-    enabled: publicationId !== null,
-  })
-  const [editedRound, setEditedRound] = useState<string | null | undefined>(undefined)
-  const roundCertificationId: string | null = editedRound !== undefined ? editedRound
-    : savedRound.data?.certificationId ?? null
-  const roundName = roundCertificationId === null ? null
-    : (() => {
-      const own = (ownCertifications.data ?? []).find((c) => c.certificationId === roundCertificationId)
-      return own ? certificationName(own.key, own.name, i18n.language, tQb)
-        : savedRound.data ? certificationName(savedRound.data.certification, savedRound.data.name, i18n.language, tQb)
-          : null
-    })()
   // F-S9: the changes of the version's topics, saved with each save of the draft once changed (their own process,
   // last), as the page last saved or read them.
   const [savedTopics, setSavedTopics] = useState<TopicChanges>(detail?.publication.topicChanges ?? NO_TOPIC_CHANGES)
@@ -268,9 +220,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const [editedShared, setEditedShared] = useState<string | null | undefined>(undefined)
   const sharedVideoId = editedShared !== undefined ? editedShared : savedShared
   const sharedVideo = useSharedVideo(sharedVideoId)
-  const prerequisites: Prerequisite[] = editedPrerequisites ?? (savedPrerequisites.data ?? []).map((row) => (
-    row.certification ? { certification: row.certification, requirement: 'PASSED' }
-      : { requiredPublicationId: row.requiredPublicationId, requirement: row.requirement }))
 
   // After moving between steps, focus goes to the new step's heading (its content replaced what had focus).
   useEffect(() => {
@@ -364,9 +313,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   }
 
   const save = useMutation({
-    mutationFn: async ({ input, criteria, prerequisites: wanted, round, topics, shared }: { input: SaveInput;
-      keys: string[]; then: 'stay' | 'next' | 'count'; criteria: Condition[] | null;
-      prerequisites: Prerequisite[] | null; round: string | null | undefined; topics: TopicChanges | null;
+    mutationFn: async ({ input, criteria, topics, shared }: { input: SaveInput; keys: string[];
+      then: 'stay' | 'next' | 'count'; criteria: Condition[] | null; topics: TopicChanges | null;
       shared: string | null | undefined }) => {
       const saved = await savePublication(input)
       // The draft is saved whatever happens to its conditions next: the page knows its new revision.
@@ -377,16 +325,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         const out = await saveConditions(saved.publicationId, revision, input.audience === 'INVITED' ? [] : criteria)
         revision = out.revision
         setRevision(revision)
-      }
-      if (wanted !== null) {
-        // Q76: the prerequisites, once changed, after the conditions (each save gives the next revision).
-        const out = await savePrerequisites(saved.publicationId, revision, wanted)
-        revision = out.revision
-      }
-      if (round !== undefined) {
-        // Q88a: the certification the draft gives, once changed, last.
-        const out = await setPublicationRound(saved.publicationId, revision, round)
-        revision = out.revision
       }
       if (topics !== null && input.versionId) {
         // F-S9: the changes of the version's topics, once changed, last (they need the version).
@@ -401,7 +339,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       return { saved: { ...saved, revision }, counted: null }
     },
     onMutate: () => setSubmitError(null),
-    onSuccess: async ({ saved }, { input, keys, then, criteria, prerequisites: wanted, round, topics, shared }) => {
+    onSuccess: async ({ saved }, { input, keys, then, criteria, topics, shared }) => {
       if (topics !== null && input.versionId) {
         setSavedTopics(topics)
         setEditedTopics(null)
@@ -419,25 +357,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         queryClient.setQueryData(conditionsQuery(saved.publicationId),
           audienceOfSave === 'INVITED' ? [] : criteria)
         setEditedConditions(null)
-      }
-      if (wanted !== null) {
-        // What was just stored, named by the candidates the page chose from.
-        queryClient.setQueryData(prerequisitesQuery(saved.publicationId), wanted.map((p): PrerequisiteRow => {
-          const candidate = candidates.data?.find((row) => row.publicationId === p.requiredPublicationId)
-          return { ...p, prerequisiteId: p.certification ?? p.requiredPublicationId ?? '', name: candidate?.name ?? '',
-            certificationNames: ownCertifications.data?.find((c) => c.key === p.certification)?.name ?? null,
-            status: candidate?.status ?? 'LIVE', startAt: candidate?.startAt ?? null, endAt: candidate?.endAt ?? null }
-        }))
-        setEditedPrerequisites(null)
-      }
-      if (round !== undefined) {
-        // What was just stored, as the sponsor's certification the page chose from names it.
-        const own = ownCertifications.data?.find((c) => c.certificationId === round)
-        queryClient.setQueryData(roundQuery(saved.publicationId), own ? ({ roundId: '', certification: own.key,
-          certificationVersion: own.certificationVersion, addedAt: saved.editedAt, closedAt: null,
-          certificationId: own.certificationId, name: own.name, status: own.status,
-          currentVersion: own.certificationVersion } satisfies PublicationRound) : null)
-        setEditedRound(undefined)
       }
       setOutput(saved)
       void queryClient.invalidateQueries({ queryKey: feeQuoteQuery(saved.publicationId) })
@@ -499,7 +418,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     const input = Object.values(assets).some((assetId) => assetId !== null) ? { ...built.input, assets } : built.input
     save.mutate({ input, keys: shaped.tiers.map((tier) => tier.key), then,
       criteria: editedConditions ?? (shaped.audience === 'INVITED' && conditions.length > 0 ? [] : null),
-      prerequisites: editedPrerequisites, round: editedRound, topics: editedTopics, shared: editedShared })
+      topics: editedTopics, shared: editedShared })
   }
 
   const submit = () => {
@@ -837,29 +756,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         <TiersEditor tiers={form.tiers} onChange={(tiers) => set('tiers', tiers)} fullScore={fullScore}
           problemOf={problemOf} disabled={locked} />
       )}
-      {/* Q88a (D-Q88-3, D-Q88-5): the certification passing gives, one of the sponsor's own; such a quiz may pay nothing. */}
-      {!survey && (activeCertifications.length > 0 || roundCertificationId !== null) && (
-        <Field id={`${id}-round`} label={t('certifications.round.title')} problem={problemOf('certificationId')}
-          hint={t('certifications.round.hint')}>
-          {(aria) => (
-            <Select value={roundCertificationId ?? '-'} disabled={locked || (publicationId !== null && savedRound.isPending)}
-              onValueChange={(value) => setEditedRound(value === '-' ? null : value)}>
-              <SelectTrigger {...aria} className="w-full max-w-md" data-testid="publication-round"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="-">{t('certifications.round.none')}</SelectItem>
-                {activeCertifications.map((c) => (
-                  <SelectItem key={c.certificationId} value={c.certificationId}>
-                    {certificationName(c.key, c.name, i18n.language, tQb)}
-                  </SelectItem>
-                ))}
-                {roundCertificationId !== null && !activeCertifications.some((c) => c.certificationId === roundCertificationId) && (
-                  <SelectItem value={roundCertificationId}>{t('certifications.round.retiredOption', { name: roundName ?? '' })}</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          )}
-        </Field>
-      )}
       <div className="grid gap-4 md:grid-cols-2">
         <Field id={`${id}-budget`} label={t('publishing.field.budgetCap')} problem={problemOf('budgetCap')}
           hint={t('publishing.field.budgetHint')}>
@@ -949,14 +845,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       {foreignVideo && reachesMainland(form.audience, form.regions) && (
         <MainlandNotice testId="publication-mainland-audience" />
       )}
-      {/* Q76: what a taker must have done first, whoever the publication is for. */}
-      {publicationId && (savedPrerequisites.isPending || candidates.isPending)
-        ? <p className="text-muted-foreground text-sm">{t('publishing.prerequisites.loading')}</p>
-        : <Prerequisites value={prerequisites} candidates={candidates.data ?? []} disabled={locked}
-          ownCertifications={ownNamed} onChange={setEditedPrerequisites} />}
-      {problemOf('prerequisites') && (
-        <p className="text-destructive text-sm" role="alert">{problemOf('prerequisites')}</p>
-      )}
     </div>,
 
     // 4. Everything at once, every problem, and submitting.
@@ -1001,16 +889,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         regions: form.audience === 'INVITED' ? [] : REGIONS.filter((region) => form.regions.includes(region)),
         audience: form.audience,
         conditions: form.audience === 'INVITED' ? [] : conditions,
-        roundName: publicationId !== null && savedRound.isPending ? undefined : roundName,
-        prerequisites: prerequisites.map((p): PrerequisiteRow => {
-          const known = savedPrerequisites.data?.find((row) => p.certification
-            ? row.certification === p.certification : row.requiredPublicationId === p.requiredPublicationId)
-          const candidate = p.certification ? undefined
-            : candidates.data?.find((row) => row.publicationId === p.requiredPublicationId)
-          return { ...p, prerequisiteId: known?.prerequisiteId ?? p.certification ?? p.requiredPublicationId ?? '',
-            name: candidate?.name ?? known?.name ?? '', status: candidate?.status ?? known?.status ?? 'LIVE',
-            startAt: candidate?.startAt ?? known?.startAt ?? null, endAt: candidate?.endAt ?? known?.endAt ?? null }
-        }),
         startAt: form.startAt,
         endAt: form.endAt,
         // Left empty, the time limit is the version's: the server wrote it with the last save.

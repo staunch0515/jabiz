@@ -34,7 +34,6 @@ import { useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formProblem, ProblemList } from '../content/editing'
 import { quizPath } from '../content/paths'
-import { CertificationsPage } from '../certifications/CertificationsPage'
 import { EmptyState } from '../EmptyState'
 import { SPONSOR } from '../messages'
 import { ProductsPage } from '../products/ProductsPage'
@@ -205,7 +204,6 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
           ))}
         </TabsList>
         {tab === 'products' && <TabsContent value={tab}><ProductsPage /></TabsContent>}
-        {tab === 'certifications' && <TabsContent value={tab}><CertificationsPage embedded /></TabsContent>}
         {isAssetTab(tab) && <TabsContent value={tab} className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3" role="search" aria-label={t('assets.search')}>
             <div className="flex flex-col gap-1">

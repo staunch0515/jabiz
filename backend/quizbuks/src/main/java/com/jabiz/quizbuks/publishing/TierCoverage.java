@@ -34,8 +34,8 @@ public final class TierCoverage {
     }
 
     /**
-     * As {@link #check(List, Integer)}; with {@code rewardOptional} (Q88a, D-Q88-5: the publication is a round of a
-     * certification, which is what passing it gives) every tier may pay 0. The tiers still cover every score.
+     * As {@link #check(List, Integer)}; with {@code rewardOptional} (F-S2b1: the publication is bound to a node, which
+     * is what passing it gives) every tier may pay 0. The tiers still cover every score.
      */
     public static List<Violation> check(List<Tier> tiers, Integer fullScore, boolean rewardOptional) {
         List<Violation> problems = new ArrayList<>();
