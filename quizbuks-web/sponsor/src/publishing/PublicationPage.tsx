@@ -21,6 +21,7 @@ import { InvitationsSection } from './Invitations'
 import { PublicationActions } from './PublicationActions'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
 import { ReferralsSection } from './ReferralsSection'
+import '../sharedvideos/messages'
 import { MainlandNotice, PublicationSummary, reachesMainland, StatusBadge, useEndReasonLabel, useVersionOf }
   from './shared'
 import { PreviewButton } from '../preview/PreviewButton'
@@ -49,7 +50,10 @@ function SentBack({ publication }: { publication: Publication }) {
       ? t('publishing.detail.expiredInReview')
       : publication.rejectCode === 'QB_USER_BANNED'
         ? t('publishing.detail.sentBackBanned')
-        : publication.rejectCode
+        // F-S12: its shared video was taken down while it was in review.
+        : publication.rejectCode === 'QB_SHARED_VIDEO_TAKEN_DOWN'
+          ? t('sharedVideos.field.takenDownInReview')
+          : publication.rejectCode
   return (
     <Alert variant="warning" data-testid="publication-sent-back-reason">
       <AlertTitle>{t('publishing.detail.sentBack')}</AlertTitle>

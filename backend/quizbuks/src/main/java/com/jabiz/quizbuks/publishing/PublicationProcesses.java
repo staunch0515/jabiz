@@ -856,6 +856,8 @@ public final class PublicationProcesses {
             "sealedDigitalContent", "referral", "languages", "translations", "pickCount",
             // F-S9: what it adds to and removes from its version's topics.
             "topicChanges",
+            // F-S12: the shared video it picked (the copy's submission checks it is still in the catalog).
+            "sharedVideoId",
             // Q89b-1: the purchase, as the source saw it; the copy's submission checks it again.
 
             "benefitPurchaseId", "benefitSnapshot", "fulfillerId",

@@ -261,6 +261,11 @@ export interface PublicationView {
   /** Q75: the card's video must be watched before starting (the start waits for it), and its duration in seconds. */
   watchRequired: boolean
   videoDurationSec: number | null
+  /**
+   * F-S12: the card's video (one of `qb/video.ts`'s players), else null. A shared video the publication picked is no
+   * material: the start page leads with it as the card plays it (`leadVideo`).
+   */
+  video?: string | null
   kind: QuizKind
   /** Markdown. */
   intro: string | null
@@ -413,6 +418,7 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     cover: textOrNull(row.cover),
     watchRequired: row.watchRequired === true || row.watchRequired === 'true',
     videoDurationSec: row.videoDurationSec == null ? null : numberOf(row.videoDurationSec),
+    video: trustedPlayer(textOrNull(row.video)),
     kind: kindOf(row.kind),
     intro: textOrNull(row.intro),
     materials: parseMaterials(row.materials),

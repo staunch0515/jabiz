@@ -792,6 +792,29 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(screen.queryByTestId('video-sound')).toBeNull()
   })
 
+  it('leads the start page with the card’s shared video, which is no material, and keeps the materials (F-S12)',
+    async () => {
+    const io = intersections()
+    // The version's own video is listed further down; the card plays the shared one, and so does the page.
+    server({ feed: [{ ...CARD, video: PLAYER }], publicationPage: () => json(200, { items: [publication({
+      video: PLAYER, materials: JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Background', description: null,
+        body: null, url: 'https://vimeo.com/76979871', pdf: null, audio: null, images: [], watchToAnswer: false }]) })],
+    offset: 0, limit: 1 }) })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    io.fire(card, true, MIDDLE)
+    const frame = await screen.findByTitle('Video: Capitals week') as HTMLIFrameElement
+    await userEvent.click(screen.getByTestId('video-open'))
+    await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
+    const hero = await screen.findByTestId('detail-hero')
+    await waitFor(() => expect(within(hero).getByTestId('video-slot')).toHaveAttribute('data-mode', 'page'))
+    // The card's player carries on (not a new one); the version's own video plays further down, in its own player.
+    expect(screen.getByTestId('video-stage').querySelector('iframe')).toBe(frame)
+    const materials = screen.getByTestId('materials')
+    expect(within(materials).getByText('Background')).toBeInTheDocument()
+    expect(materials.querySelector('iframe')).toHaveAttribute('src', 'https://player.vimeo.com/video/76979871')
+  })
+
   it("asks for the sound from a tap on a card not playing: the start page's player turns it on once ready (Q66)",
     async () => {
     intersections()

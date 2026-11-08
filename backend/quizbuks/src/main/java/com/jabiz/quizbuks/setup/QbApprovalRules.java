@@ -147,10 +147,20 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.TREE_LIT_REVOKE)), 100,
         "Revoking a node someone lit takes another member's approval");
 
+    /**
+     * F-S12: every video a sponsor shares with other sponsors is reviewed once, by those who review publications (the
+     * provider's operator: the case is in its scope); the fact is always true, nothing skips it.
+     */
+    public static final Rule SHARED_VIDEO_REVIEW = new Rule(
+        com.jabiz.quizbuks.sharedvideo.SharedVideoApprovals.RULE, com.jabiz.quizbuks.sharedvideo.SharedVideoApprovals.SUBJECT,
+        entries("fact", "shared", "op", "eq", "value", true),
+        List.of(entries("permission", QbPermissions.REVIEW_PUBLICATION)), 100,
+        "Every shared video is reviewed once by the provider's operator");
+
     public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW,
         BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW, SPONSOR_PAGE_REVIEW,
         OPERATOR_PLAN_REVIEW, OPERATOR_WITHDRAWAL_REVIEW, FEE_REQUEST_REVIEW, TREE_REVIEW, TREE_COPY_REVIEW,
-        TREE_PLATFORM_REVIEW, TREE_LIT_REVOKE_REVIEW);
+        TREE_PLATFORM_REVIEW, TREE_LIT_REVOKE_REVIEW, SHARED_VIDEO_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();

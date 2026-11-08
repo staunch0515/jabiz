@@ -25,6 +25,7 @@ import { PublicationContent } from '../qb/view/PublicationContent'
 import { draftIn, draftPreview, publicationPreview, snapshotIn, type Preview, type PreviewQuestion } from './model'
 import { CONTENT_LANGUAGES, type ContentLanguage } from '../qb/api'
 import type { PreviewTarget } from './paths'
+import { useSharedVideo } from '../sharedvideos/SharedVideoField'
 
 type Screen = 'home' | 'page' | 'questions'
 
@@ -92,7 +93,7 @@ function Screens({ preview }: { preview: Preview }) {
         {screen === 'home' && (
           // Q63: one card a row, as on the app's home; the video's play mark, the video not started.
           <ul className="flex flex-col" aria-label={t('preview.home')}>
-            <FeedCardView card={{ ...preview.view, video: preview.video }} href={null} />
+            <FeedCardView card={{ ...preview.view, video: preview.video, videoVertical: preview.videoVertical }} href={null} />
           </ul>
         )}
         {screen === 'page' && (
@@ -118,6 +119,9 @@ function usePreview(target: PreviewTarget, chosen: ContentLanguage | null) {
     enabled: !!versionId })
   const draft = useQuery({ queryKey: draftQuery(target.id), queryFn: () => readDraft(target.id),
     enabled: target.kind === 'quiz' })
+  // F-S12: the shared video the publication picked, which takes its card's video as on the App.
+  const sharedVideoId = target.kind === 'publication' ? publication.data?.publication.sharedVideoId ?? null : null
+  const shared = useSharedVideo(sharedVideoId)
   if (target.kind === 'quiz') {
     if (draft.isPending || sponsor.isPending) return { state: 'loading' as const }
     if (draft.isError) return { state: 'error' as const, retry: () => void draft.refetch() }
@@ -128,9 +132,12 @@ function usePreview(target: PreviewTarget, chosen: ContentLanguage | null) {
     return { state: 'ready' as const, preview: draftPreview(draftIn(draft.data, language), sponsor.data ?? null),
       title: draft.data.quiz.title, back: quizPath(target.id), languages, language }
   }
-  if (publication.isPending || sponsor.isPending || (versionId && version.isPending)) return { state: 'loading' as const }
-  if (publication.isError || version.isError) {
-    return { state: 'error' as const, retry: () => { void publication.refetch(); void version.refetch() } }
+  if (publication.isPending || sponsor.isPending || (versionId && version.isPending)
+    || (sharedVideoId && shared.isPending)) return { state: 'loading' as const }
+  if (publication.isError || version.isError || shared.isError) {
+    return { state: 'error' as const, retry: () => {
+      void publication.refetch(); void version.refetch(); if (sharedVideoId) void shared.refetch()
+    } }
   }
   if (!publication.data) return { state: 'missing' as const }
   const { publication: p, tiers } = publication.data
@@ -142,7 +149,7 @@ function usePreview(target: PreviewTarget, chosen: ContentLanguage | null) {
   const language = chosen && languages.includes(chosen) ? chosen : languages[0] ?? null
   return { state: 'ready' as const,
     preview: publicationPreview(p, tiers, content && language ? snapshotIn(content, language) : content,
-      sponsor.data ?? null),
+      sponsor.data ?? null, undefined, shared.data ?? null),
     title: p.name, back: publicationPath(target.id), languages, language }
 }
 
