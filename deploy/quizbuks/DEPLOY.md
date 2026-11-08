@@ -313,7 +313,8 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
 1. 以 `admin` 登录 `https://<本环境的域名>/admin/`，在右上角用户名 →"安全设置"中开启两步验证。
 2. 在"流程"中执行 `QB_SETUP`，再按 `docs/quizbuks/operations.md` §3 建财务管理员并由其发布 `QB_SETUP` 的提案（发布之前充值、入驻与提交发布一律被拒）。
-3. 从 `.env` 删去 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，加上 `QB_BOOTSTRAP_ADMIN_DONE=true`（入口脚本在两者都没有时拒绝启动），
+3. 从 `.env` 删去 `JABIZ_BOOTSTRAP_ADMIN_USER` 与 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，加上 `QB_BOOTSTRAP_ADMIN_DONE=true`（入口脚本在密码与这一行都没有时拒绝启动；
+   上线前的设置检查 `env-check.sh` 对留下的任何一个都报错），
    再以下文"回滚"的方式重新部署当前的 SHA（Run workflow，`image-tag` 填当前的 SHA，即 `docker inspect <APP_NAME>-app -f '{{.Config.Image}}'` 中冒号后的部分），
    经 `deploy-app.sh` 等待健康并在失败时回滚。
 
@@ -717,9 +718,12 @@ docker volume create drill-files
 docker run --rm --env-file /opt/infra/backup/backup.env -v drill-files:/restore restic/restic:0.17.3 \
   restore latest --host quizbuks-files --target /restore
 
-# 4) 以核对模式启动应用并写演练记录（operations.md §2.4 的设置；DRILL_ENV_FILE 指向 drill-db 与 drill-files）
+# 4) 以核对模式启动应用并写演练记录（operations.md §2.4 的设置；DRILL_ENV_FILE 指向 drill-db 与 drill-files）：
+#    QuizBuks 的三个核对模板；上线前的那一次与每次换密钥之前加 DRILL_ROTATE=true（上线清单"运维"要求）
 DRILL_TARGET_TIME=2026-12-01T12:00:00Z DRILL_IMAGE=ghcr.io/staunch0515/jabiz-quizbuks:<生产的版本> \
-DRILL_ENV_FILE=drill.env DRILL_DOCKER_ARGS="--network drill-net -v drill-files:/var/lib/jabiz/files" tools/ops/restore-drill.sh
+DRILL_ENV_FILE=drill.env DRILL_DOCKER_ARGS="--network drill-net -v drill-files:/var/lib/jabiz/files" \
+DRILL_TEMPLATES=qb.admin.verify-unbalanced-periods,qb.admin.verify-overdrawn-wallets,qb.system.recon-totals \
+DRILL_ROTATE=true tools/ops/restore-drill.sh
 
 # 5) 收拾
 docker rm -f drill-db && docker volume rm drill-pgdata drill-files && docker network rm drill-net
@@ -727,6 +731,7 @@ docker rm -f drill-db && docker volume rm drill-pgdata drill-files && docker net
 
 要知道的：
 
+- 第 1 步与第 4 步各写一份记录：第 1 步的记录有恢复用时，第 4 步的有核对用时（它写"Restore: not timed here"），RTO 是两者之和；**两份都**附在上线清单的"备份已测试"一项。
 - 恢复出的库是**整个集群**（staging 等其他库也在里面），只用其中的 `quizbuks`。
 - 从 repo2（月末全量）恢复用 `DRILL_PGBACKREST_REPO=2`，T 取该月末之后不久的时刻。
 - 2026-11-07 在测试环境以 S3 替身演练：全量 171 MB 用 34 秒，恢复并启动到可用约 16 秒（数据量小）；生产的数字以首次演练为准。
