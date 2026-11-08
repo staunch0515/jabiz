@@ -4,6 +4,17 @@
 
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /src
+# Gradle's home outside the cache mount below, so that the wrapper's distribution can live in a layer of its own.
+ENV GRADLE_USER_HOME=/opt/gradle-home
+# The Gradle distribution first, in a layer that only the wrapper's files invalidate: a build with the layer cache
+# (CI's) does not download it again, and a slow download is tried three times rather than failing the build
+# (ROADMAP 17zz10; the wrapper's own timeout is networkTimeout in gradle-wrapper.properties).
+COPY backend/gradlew backend/gradlew
+COPY backend/gradle/wrapper backend/gradle/wrapper
+RUN cd backend && for attempt in 1 2 3; do \
+      ./gradlew --version --no-daemon --console=plain >/dev/null && exit 0; \
+      echo "downloading Gradle failed (attempt $attempt), trying again" >&2; sleep 15; \
+    done; exit 1
 COPY backend backend
 COPY frontend frontend
 COPY spec spec
@@ -11,7 +22,7 @@ COPY spec spec
 # sign-in page shows it. The repository itself stays out of the build context (.dockerignore).
 ARG JABIZ_BUILD_COMMIT=""
 # node-gradle downloads Node and pnpm and builds the frontend before packaging it (backend/build.gradle.kts).
-RUN --mount=type=cache,target=/root/.gradle \
+RUN --mount=type=cache,target=/opt/gradle-home/caches \
     cd backend && JABIZ_BUILD_COMMIT="$JABIZ_BUILD_COMMIT" ./gradlew :app:bootJar --no-daemon --console=plain \
     && cp app/build/libs/app-0.0.1-SNAPSHOT.jar /src/app.jar
 

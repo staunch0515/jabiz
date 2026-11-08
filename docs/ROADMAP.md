@@ -5432,6 +5432,20 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **17zz9 状态**：📝 待评审（分支 `1.3/phase-17zz9-alert-fire-app-rules`）。
 
+### 17zz10 构建镜像时 Gradle 发行包的下载（2026-11-08，总控排入）
+
+**缘由**：QuizBuks 的 CI 构建镜像时，wrapper 下载 `gradle-9.1.0-bin.zip` 连续两次在 10 秒处 SSL 读取超时（#539 的 run 42464310109），一次服务器变慢就让 CI 失败。
+两个 Dockerfile 的 BuildKit 缓存挂载（`/root/.gradle`）在 CI 的一次性构建器之间不保留，每次构建都重新下载发行包；层缓存（`cache-from: type=gha`）则会保留。
+
+| # | 内容 |
+|---|---|
+| 17zz10-1 | `gradle-wrapper.properties` 的 `networkTimeout` 10 s → 60 s |
+| 17zz10-2 | 平台的 `Dockerfile`：`GRADLE_USER_HOME=/opt/gradle-home`；先只复制 `gradlew` 与 `gradle/wrapper`，在单独的一层中 `./gradlew --version` 下载发行包（失败隔 15 秒再试，共 3 次），这一层只随 wrapper 的文件失效，有层缓存的构建不再下载；缓存挂载只留依赖（`/opt/gradle-home/caches`）。应用的 Dockerfile 照此（QuizBuks 在同步时改） |
+
+**验收**：CI 绿；镜像照常构建（compose 作业）。
+
+**17zz10 状态**：📝 待评审（分支 `1.3/phase-17zz10-gradle-download`）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
