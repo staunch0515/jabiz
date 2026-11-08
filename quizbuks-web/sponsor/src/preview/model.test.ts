@@ -73,6 +73,55 @@ describe('the preview (Q34b)', () => {
     expect(publicationPreview(toPublication(row), [], null, null).view.cover).toBeNull()
   })
 
+  describe('F-S12: the publication\'s shared video, chosen as the server\'s card chooses it', () => {
+    const row = { publicationId: 'p1', name: 'Autumn', status: 'DRAFT', revision: 1, editedAt: '2026-10-26T00:00:00Z',
+      sharedVideoId: 'sv1' }
+    const material = (no: number, url: string, extra: Record<string, unknown> = {}) => ({ no, kind: 'VIDEO_LINK',
+      title: 'V', description: null, body: null, url, pdf: null, audio: null, images: [], ...extra })
+    const snapshotWith = (materials: unknown[]) => ({ title: 'Coffee', intro: null, cover: null, timeLimitSec: 60,
+      kind: 'QUIZ', materials, questions: [] }) as unknown as Snapshot
+    const horizontal = { url: 'https://vimeo.com/76979871', vertical: false }
+    const preview = (materials: unknown[], shared: { url: string; vertical: boolean } | null, own = row) =>
+      publicationPreview(toPublication(own), [], snapshotWith(materials), null, new Date('2026-10-26T00:00:00Z'), shared)
+
+    it('takes the card when no material\'s video must be watched, before the materials\' videos', () => {
+      const p = preview([material(1, 'https://youtu.be/dQw4w9WgXcQ')], horizontal)
+      expect(p.video).toBe('https://player.vimeo.com/video/76979871')
+      expect(p.view).toMatchObject({ watchRequired: false, videoDurationSec: null })
+      expect(p.videoVertical).toBe(false)
+      // Vertical as the provider shared it, or a Shorts link (SharedVideoRules.vertical).
+      expect(preview([], { ...horizontal, vertical: true }).videoVertical).toBe(true)
+      const shorts = preview([], { url: 'https://www.youtube.com/shorts/dQw4w9WgXcQ', vertical: false })
+      expect(shorts.video).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+      expect(shorts.videoVertical).toBe(true)
+    })
+
+    it('gives way to a material\'s video to watch before answering (Q75)', () => {
+      const p = preview([material(1, 'https://vimeo.com/1'),
+        material(2, 'https://youtu.be/dQw4w9WgXcQ', { watchToAnswer: true, durationSec: 90 })], horizontal)
+      expect(p.video).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+      expect(p.view).toMatchObject({ watchRequired: true, videoDurationSec: 90 })
+      expect(p.videoVertical).toBe(false)
+      // A video to watch that the App cannot follow (not YouTube or Vimeo) does not keep the card from the shared one.
+      expect(preview([material(1, 'https://www.bilibili.com/video/BV1xx411c7mD', { watchToAnswer: true })], horizontal)
+        .video).toBe('https://player.vimeo.com/video/76979871')
+    })
+
+    it('leaves the card as before without one, or with one the App does not play', () => {
+      const materials = [material(1, 'https://video.example/a'), material(2, 'https://youtu.be/dQw4w9WgXcQ',
+        { vertical: true })]
+      for (const p of [preview(materials, null), preview(materials, { url: 'http://video.example/b.mp4', vertical: true }),
+        // The catalog's row is only the publication's while it names it.
+        preview(materials, horizontal, { ...row, sharedVideoId: null as never })]) {
+        expect(p.video).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+        expect(p.view.watchRequired).toBe(false)
+        expect(p.videoVertical).toBe(true)
+      }
+      expect(preview([], null).video).toBeNull()
+      expect(preview([], null).videoVertical).toBe(false)
+    })
+  })
+
   it('has its own addresses', () => {
     expect(previewOf(previewOfPublication('p 1'))).toEqual({ kind: 'publication', id: 'p 1' })
     expect(previewOf(previewOfQuiz('q1'))).toEqual({ kind: 'quiz', id: 'q1' })
