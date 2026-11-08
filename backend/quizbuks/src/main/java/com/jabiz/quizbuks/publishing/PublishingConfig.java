@@ -234,6 +234,13 @@ public class PublishingConfig {
         return PublicationPrerequisites.save();
     }
 
+    /** F-S9: what a draft adds to and removes from its version's topics. */
+    @Bean
+    ProcessDefinition<PublicationTopics.TopicsInput, PublicationOutput, ProcessContext> qbPublicationTopicsSet() {
+        return PublicationTopics.set();
+    }
+
+
     /** Q88a: a sponsor's publication as a round of the sponsor's own certification. */
     @Bean
     ProcessDefinition<PublicationRounds.SetInput, PublicationOutput, ProcessContext> qbSponsorRoundSet() {

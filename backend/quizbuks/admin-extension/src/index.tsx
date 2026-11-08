@@ -28,7 +28,9 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag } from 'lucide-react'
+import TopicsPage from './TopicsPage'
+
 import BankTopUpPage from './BankTopUpPage'
 import TreesPage from './TreesPage'
 import TreeReviewPage from './TreeReviewPage'
@@ -126,6 +128,8 @@ export default defineExtension({
     // F-S2b3a: the knowledge maps and the review of a map's version (headquarters every map, an operator its own).
     { path: PATH.trees, element: <TreesPage /> },
     { path: '/qb/trees/:treeId', element: <TreeReviewPage /> },
+    // F-S9: the word list of topics (headquarters).
+    { path: PATH.topics, element: <TopicsPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -262,6 +266,8 @@ export default defineExtension({
       children: [
         { key: 'qb-home', label: 'menu.home', path: PATH.home, icon: House, permission: PERMISSION.operatorsRead },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
+        // F-S9: the word list of topics, kept by headquarters, with its figures by topic.
+        { key: 'qb-topics', label: 'menu.topics', path: PATH.topics, icon: Tag, permission: PERMISSION.topicRead },
         { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
           permission: PERMISSION.usersRead },
         // Q48a: the operators, and the spot checks of the reviews they decided.

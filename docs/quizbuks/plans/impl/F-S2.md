@@ -28,7 +28,7 @@
 
 **F-S2b 再拆为两个 PR**（2026-11-08，范围大，先让点亮可用）：
 
-- **F-S2b1 绑定与点亮**（迁移 V87，开 PR 时再按最大号 + 1 定）：发布与卡片加 `tree_id` / `tree_node_id`；草稿保存与提交检查节点（本人图或学者的平台图中生效、`bindable` 的节点；点亮者为发起方的图在 F-S4 之前不能绑定）、复制随发布、卡片冻结；绑定节点的发布可以不设奖励档位（§0 第 4 条）；开始答题的答题前条件（锁外一条语句：节点行 + 本人的点亮与撤销）；`qb.app.feed` / `qb.app.publication` / `qb.system.audience-count` 的同段 SQL 与比较测试；合格且卡片绑定节点时发 `qb.tree.passed`，`QB_TREE_EVALUATE`（`internal`）点亮并以 `qb.tree.lit` 连带判断依赖它的节点（每层一个事务，深度不超过 `qb.tree.max-depth`；依赖关系是节点生效时写下的普通表 `qb_tree_node_ref`，节点行另记生效的条件 `condition`）；停用图时节点行一并失效；`AttemptStatementBudgetIT` 新基线；删除账号的登记。
+- **F-S2b1 绑定与点亮**（迁移 V88：#539 先合入占用了 V87）：发布与卡片加 `tree_id` / `tree_node_id`；草稿保存与提交检查节点（本人图或学者的平台图中生效、`bindable` 的节点；点亮者为发起方的图在 F-S4 之前不能绑定）、复制随发布、卡片冻结；绑定节点的发布可以不设奖励档位（§0 第 4 条）；开始答题的答题前条件（锁外一条语句：节点行 + 本人的点亮与撤销）；`qb.app.feed` / `qb.app.publication` / `qb.system.audience-count` 的同段 SQL 与比较测试；合格且卡片绑定节点时发 `qb.tree.passed`，`QB_TREE_EVALUATE`（`internal`）点亮并以 `qb.tree.lit` 连带判断依赖它的节点（每层一个事务，深度不超过 `qb.tree.max-depth`；依赖关系是节点生效时写下的普通表 `qb_tree_node_ref`，节点行另记生效的条件 `condition`）；停用图时节点行一并失效；`AttemptStatementBudgetIT` 新基线；删除账号的登记。
 - **F-S2b2 更正与运营**：撤销点亮（四眼）、每日核对与补判断、审核的待办与提醒、新版本删除有开放发布绑定的节点即拒绝、停用图时结束绑定的发布、读取的模板（§5）与管理系统扩展的审核页。
 - **F-S2b3 再拆为两部分**（2026-11-08）：**F-S2b3a 审核侧**——模板 `qb.admin.trees`（全部图）、`qb.operator.trees`（运营商成员：本运营商的副本与它负责的发起方的图）、`qb.admin.tree-version`（一个版本逐节点对照生效版本：新增、修改、未变、去掉，及各节点进行中的绑定发布数）、`qb.admin.tree-lit`（点亮记录及其撤销与待审的撤销申请），运营商成员的 `qb.operator.tree-version` / `qb.operator.tree-lit`（同列，只限本运营商负责的图），与管理系统扩展的知识结构图列表与审核页（`TreesPage`、`TreeReviewPage`：读完且无误才给出审批面板，持 `qb.tree.lit.revoke` 才能申请撤销点亮）；**F-S2b3b**——学者与发起方的模板（各节点的点亮、可答与等待人数按最小分组），与消费它们的 F-S3 一起做。
 

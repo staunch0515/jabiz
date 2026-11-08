@@ -32,6 +32,12 @@ public final class QbSettings {
         eb.field("publicHandle", f -> f.physicalColumn("public_handle").asText(PublicHandles.MAX_LENGTH));
         eb.field("publicPage", f -> f.physicalColumn("public_page").required(true).asBool());
         eb.unique("uk_qb_user_settings_public_handle", "publicHandle");
+        // F-S9: the topics the user likes (codes of the word list, comma-separated; personal data, deleted with the
+        // account) and strict mode: the home, the shelf of shorts and push show only publications with one of them.
+        eb.field("likedTopics", f -> f.physicalColumn("liked_topics")
+            .asText(com.jabiz.quizbuks.topic.TopicRules.LIKED_LENGTH));
+        eb.field("strictTopics", f -> f.physicalColumn("strict_topics").required(true).asBool());
+
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.listView("default", lv -> lv.columns("userId", "soundOff", "contentLanguages").filters("userId", "soundOff")
             .sorts("userId").defaultSort("userId", true));

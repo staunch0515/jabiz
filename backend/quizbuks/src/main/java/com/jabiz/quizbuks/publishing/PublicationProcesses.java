@@ -854,7 +854,10 @@ public final class PublicationProcesses {
             "timeLimitSec", "passScore", "budgetCap",
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
             "sealedDigitalContent", "referral", "languages", "translations", "pickCount",
+            // F-S9: what it adds to and removes from its version's topics.
+            "topicChanges",
             // Q89b-1: the purchase, as the source saw it; the copy's submission checks it again.
+
             "benefitPurchaseId", "benefitSnapshot", "fulfillerId",
             // Q88b: the entry fee (the copy keeps it whatever the switch says now: what was set stays set).
             "entryFee",

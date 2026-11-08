@@ -181,10 +181,18 @@ export interface UserSettings {
   /** Q77: the public certification page's name (`/u/<name>`) and whether the page is on. */
   publicHandle?: string | null
   publicPage?: boolean
+  /** F-S9: the topics liked (codes of the word list) and strict mode (only publications with one of them). */
+  likedTopics?: string[]
+  strictTopics?: boolean
 }
 
 export const DEFAULT_SETTINGS: UserSettings = { soundOn: true, contentLanguages: [], publicHandle: null,
-  publicPage: false }
+  publicPage: false, likedTopics: [], strictTopics: false }
+
+function topicsOf(value: unknown): string[] {
+  const listed = Array.isArray(value) ? value.map(String) : typeof value === 'string' ? value.split(',') : []
+  return listed.map((code) => code.trim()).filter((code) => code !== '')
+}
 
 function languagesOf(value: unknown): ContentLanguage[] {
   const listed = Array.isArray(value) ? value.map(String) : typeof value === 'string' ? value.split(',') : []
@@ -194,7 +202,8 @@ function languagesOf(value: unknown): ContentLanguage[] {
 export async function readMySettings(): Promise<UserSettings> {
   const row = await ownRow(DATASET.mySettings)
   return { soundOn: row?.soundOff !== true, contentLanguages: languagesOf(row?.contentLanguages),
-    publicHandle: typeof row?.publicHandle === 'string' ? row.publicHandle : null, publicPage: row?.publicPage === true }
+    publicHandle: typeof row?.publicHandle === 'string' ? row.publicHandle : null, publicPage: row?.publicPage === true,
+    likedTopics: topicsOf(row?.likedTopics), strictTopics: row?.strictTopics === true }
 }
 
 /** Saves the settings given; one left out stays as it is. */
@@ -203,11 +212,16 @@ export async function saveMySettings(input: Partial<UserSettings>): Promise<User
   const output = await runProcess<Record<string, unknown>>(PROCESS.settingsSave, {
     soundOn: input.soundOn ?? null, contentLanguages: input.contentLanguages ?? null,
     publicHandle: input.publicHandle === undefined ? null : (input.publicHandle ?? ''),
-    publicPage: input.publicPage ?? null })
+    publicPage: input.publicPage ?? null,
+    // F-S9: sent only when changed, so that the other settings' saves stay as they were.
+    ...(input.likedTopics !== undefined ? { likedTopics: input.likedTopics } : {}),
+    ...(input.strictTopics !== undefined ? { strictTopics: input.strictTopics } : {}) })
   return { soundOn: output.soundOn !== false, contentLanguages: languagesOf(output.contentLanguages),
     publicHandle: typeof output.publicHandle === 'string' ? output.publicHandle : null,
-    publicPage: output.publicPage === true }
+    publicPage: output.publicPage === true, likedTopics: topicsOf(output.likedTopics),
+    strictTopics: output.strictTopics === true }
 }
+
 
 /** The languages whose quizzes are shown: the ones switched on, else the interface language. */
 export function shownLanguages(settings: UserSettings | undefined, interfaceLanguage: string): ContentLanguage[] {

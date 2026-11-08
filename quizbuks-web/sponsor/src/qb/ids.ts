@@ -17,7 +17,11 @@ export const PROCESS = {
 /** SQL templates. */
 export const TEMPLATE = {
   mySignIns: 'qb.me.sign-ins',
+  /** F-S9: the word list of topics, as the app (a taker's liked topics) and the sponsor console read it. */
+  appTopics: 'qb.app.topics',
+  sponsorTopics: 'qb.sponsor.topics',
 } as const
+
 
 /** Datasets (`identity.QbAccounts`, `country.QbCountries`, `settings.QbSettings`). */
 export const DATASET = {
