@@ -2,13 +2,14 @@ import type { APIRequestContext } from '@playwright/test'
 import { completeQuiz, query } from './content'
 import { decideReview, publicationOf } from './publishing'
 import { fundedSponsor, taker } from './play'
-import { expect, expectAccessible, prepareQuizbuks, run, setControlledParam, signIn, signOut, test, unique } from './support'
+import { expect, expectAccessible, prepareQuizbuks, run, runJobNow, setControlledParam, signIn, signOut, test,
+  unique } from './support'
 
 /**
  * A quiz's entry fee (docs/quizbuks/plans/Q88-sponsor-certifications-entry-fee.md, Q88b): the sponsor sets it in the
  * wizard's step "Time and rewards" while the switch is on; a taker who cannot pay is told how much is missing; one who
  * won Kudos elsewhere confirms and starts, and their transactions list the fee; the sponsor's wallet shows the fees
- * waiting, and the daily job (every minute here) settles them into the cash account.
+ * waiting, and the daily job, run by the test as an operator re-runs it (F-F13), settles them into the cash account.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
@@ -99,11 +100,12 @@ test('a quiz charges an entry fee from transferable Kudos, settled into the Spon
   await signIn(page, '/sponsor/', sponsor.email)
   await expect(page).not.toHaveURL(/\/login/)
   await page.goto('/sponsor/wallet')
-  await expect.poll(async () => {
-    await page.reload()
-    // The amount's formatting keeps the number and the unit together with a no-break space.
-    return (await page.getByTestId('wallet-cash-balance').textContent())?.replace(/\s+/g, ' ').trim()
-  }, { message: 'the fee is settled into the cash account', timeout: 120_000, intervals: [5_000] }).toBe('30 Kudos')
+  await expect(page.getByTestId('wallet-entry-fees')).toBeVisible()
+  await runJobNow(request, 'qb.entry-fee-settle')
+  await page.reload()
+  // The amount's formatting keeps the number and the unit together with a no-break space.
+  await expect.poll(async () => (await page.getByTestId('wallet-cash-balance').textContent())?.replace(/\s+/g, ' ')
+    .trim(), { message: 'the fee is settled into the cash account' }).toBe('30 Kudos')
   await expect(page.getByTestId('wallet-entry-fees')).toHaveCount(0)
   await page.goto(`/sponsor/publications/${charging}`)
   await expect(page.getByTestId('publication-entry-fees')).toContainText('collected so far 30 Kudos')
