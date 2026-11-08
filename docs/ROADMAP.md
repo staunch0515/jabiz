@@ -5387,7 +5387,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：`./gradlew check` 与前端 `pnpm lint && pnpm typecheck && pnpm test && pnpm build`、`app:check`、`ext:check` 通过；对照结果中高与严重的条目为零。
 
-**17zz6 状态**：📝 待评审（分支 `1.3/phase-17zz6-tool-updates`）。
+**17zz6 状态**：✅ 已合并（#523）。
 
 ### 17zz7 删去 `PipelinedReadResumer`（2026-11-08，总控决定）
 
