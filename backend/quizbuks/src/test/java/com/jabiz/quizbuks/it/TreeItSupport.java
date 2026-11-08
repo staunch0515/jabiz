@@ -106,6 +106,73 @@ abstract class TreeItSupport extends PlayItSupport {
         return publicationId;
     }
 
+    /** F-S2c: a platform map Takers light, its one node (a pass), and a live publication bound to it. */
+    record Gate(String treeId, String nodeId, String publicationId) {
+        String param() {
+            return treeId + "/" + nodeId;
+        }
+    }
+
+    /** A token of headquarters that writes and reviews the platform's maps. */
+    String mapWriter() {
+        return com.jabiz.runtime.test.TestTokens.bearer(tokens, verifiedUser(unique("fs2-content")),
+            com.jabiz.quizbuks.QbPermissions.TREE_EDIT, com.jabiz.quizbuks.QbPermissions.TREE_PLATFORM_WRITE,
+            com.jabiz.quizbuks.QbPermissions.TREES_READ, "approval.decide");
+    }
+
+    /**
+     * A gate node as production makes one: a platform map Takers light, reviewed by another administrator, with a
+     * free publication of an operator's own Sponsor bound to its node (the only Sponsor who may bind a platform map).
+     */
+    Gate gate() {
+        String writer = mapWriter();
+        Map<String, Object> tree = run(TreeProcesses.CREATE, writer, body("ownerKind", "PLATFORM", "subjectKind",
+            "TAKER", "name", name("Gates")));
+        Map<String, Object> saved = save(writer, tree, List.of(node(null, "gate", "Fair dealing", all(passed()))));
+        assertThat((List<?>) saved.get("problems")).isEmpty();
+        @SuppressWarnings("unchecked")
+        String nodeId = ((Map<String, String>) saved.get("nodeIds")).get("gate");
+        decide(mapWriter(), submit(writer, saved).get("approvalRequestId"), "APPROVE", null);
+        String treeId = String.valueOf(tree.get("treeId"));
+        NewOperator operator = officialOperator("FS2c gate");
+        String publicationId = liveBound(operator.leadId(), unique("Gate"), treeId, nodeId,
+            Map.of("tiers", List.of(body("fromScore", 0, "toScore", 5, "reward", 0))));
+        return new Gate(treeId, nodeId, publicationId);
+    }
+
+    /** The users light the gate's node: each passes its publication, and the lighting's events are delivered. */
+    void light(Gate gate, String... userIds) {
+        for (String userId : userIds) {
+            // A Sponsor's account answers in the app as a Taker: it needs the profile the app asks for.
+            Map<String, Object> profile = profileOf(userId);
+            if (profile == null || profile.get("country_code") == null) {
+                profile(userId, "JP");
+            }
+            assertThat(play(userId, gate.publicationId(), true, true)).containsEntry("passed", true);
+        }
+        deliverEvents();
+    }
+
+    /** Names the gate's node in the controlled parameter {@code key} (four eyes: proposed and published). */
+    void nameGate(String key, Gate gate) {
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", key, "value", gate.param(), "valueKind",
+                com.jabiz.quizbuks.setup.QbParams.TREE_GATE_KIND), "reason", "F-S2c gate"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+    }
+
+    private final Map<String, Gate> gates = new LinkedHashMap<>();
+
+    /** Opens the gate {@code key} to the users: its node (made and named the first time) lit by each of them. */
+    void unlock(String key, String... userIds) {
+        Gate gate = gates.computeIfAbsent(key, k -> {
+            Gate made = gate();
+            nameGate(k, made);
+            return made;
+        });
+        light(gate, userIds);
+    }
+
     void advance(Duration duration) {
         clock.set(clock.instant().plus(duration));
     }

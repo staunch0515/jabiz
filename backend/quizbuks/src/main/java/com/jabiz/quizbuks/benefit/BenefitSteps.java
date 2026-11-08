@@ -6,8 +6,7 @@ import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.certification.Certifications.Certification;
-import com.jabiz.quizbuks.certification.RoundHolders;
+import com.jabiz.quizbuks.tree.TreeGates;
 import com.jabiz.quizbuks.identity.AccountCodes;
 import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.CallerChecks;
@@ -33,8 +32,8 @@ final class BenefitSteps {
     static final String OUTPUT = "output";
     static final String FILES = "benefitFiles";
     static final String OTHER_BAN = "otherBan";
-    /** The key prefix of {@link RoundHolders#loadHoldings} for the benefits' certifications. */
-    private static final String HOLDINGS = "benefit.";
+    /** The key prefix of {@link TreeGates#load} for the benefits' gates. */
+    private static final String GATE = "benefit.gate.";
 
     private BenefitSteps() {}
 
@@ -51,21 +50,19 @@ final class BenefitSteps {
         CallerChecks.refuseBanned(pb);
     }
 
-    /** Reads whether the caller holds {@code certification} (their records, the rounds and their passes). */
-    static <I, O> void loadHolding(ProcessDefinitionBuilder<I, O, ProcessContext> pb, Certification certification) {
-        RoundHolders.loadHoldings(pb, ctx -> List.of(certification), HOLDINGS);
+    /**
+     * Reads whether the caller has the benefit role {@code gate} (F-S2c: one of {@code QbParams.TREE_GATE_BENEFIT_*},
+     * the node whose lighting unlocks it, {@link TreeGates}).
+     */
+    static <I, O> void loadGate(ProcessDefinitionBuilder<I, O, ProcessContext> pb, String gate) {
+        TreeGates.load(pb, gate, GATE, ctx -> true);
     }
 
-    static boolean holds(ProcessContext ctx, Certification certification) {
-        return RoundHolders.heldKeys(ctx, List.of(certification), HOLDINGS).contains(certification.key());
-    }
-
-    /** 422 {@code QB_BENEFIT_NOT_CERTIFIED} when the caller does not hold {@code certification}. */
-    static void requireHolding(ProcessContext ctx, Certification certification) {
-        if (!holds(ctx, certification)) {
+    /** 422 {@code QB_BENEFIT_NOT_CERTIFIED} when the caller has not unlocked the benefit role {@code gate}. */
+    static void requireGate(ProcessContext ctx, String gate) {
+        if (!TreeGates.isOpen(ctx, gate, GATE)) {
             throw new BusinessRuleViolationException(new Violation(null, BenefitCodes.NOT_CERTIFIED,
-                "Pass the certification " + certification.key() + " first", Map.of("certification",
-                    certification.key())));
+                "Light the knowledge map's node that unlocks " + gate + " first", Map.of("gate", gate)));
         }
     }
 

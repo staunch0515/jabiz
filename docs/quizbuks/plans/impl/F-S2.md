@@ -36,6 +36,18 @@
 
 撤销记录也带主体（`subject_kind` / `subject_id`），开始答题因此能在一条语句中读出本人的点亮与撤销。点亮记录只含用户编号（同平台 D62 第 4 条，记录留下）；删除账号时 `qb_tree_lit` 以 `keep` 登记、清除点亮依据 `basis`，撤销记录清除理由 `reason`。
 
+**F-S2c 再拆为两个 PR**（2026-11-08）：
+
+- **F-S2c1 门槛与停用旧模型的入口**（无迁移）：
+  - 四个受控参数 `qb.tree.gate.sponsor-apply-node`、`.referrer-node`、`.benefit-provider-node`、`.benefit-sponsor-node`（规格的参数表），值为 `<图编号>/<节点编号>`（节点编号只在一张图内唯一）；照 Shopify 的两个参数：列入 `ControlledParams`（只经受控变更），`QB_SETUP` 不建立，以 `LoadParams.optional` 读，**缺少即关闭**（规格"缺省为空 = 关闭"）。
+  - 门槛只由 `tree.TreeGates` 判断：参数指向**点亮者为学者的平台图**中生效的节点，且调用者（`USER`，操作人）此刻点亮它（`TreeLights`：有点亮记录、没有撤销）。读取是一条 `QueryEntities.all`（节点行、图、本人的点亮与撤销），不在答题路径上。参数写错（格式不对、节点不存在、不是学者的平台图、节点已失效）即关闭，并由每日核对 `qb.tree-check` 报 `GATE_INVALID`（待办给 `qb.admin.trees.read`）。
+  - 推荐链接（`QB_REFERRAL_LINK`，已生成的链接照旧有效）与两种权益（上架权益、洽谈与采购单）改用 `TreeGates`；错误码不变（`QB_REFERRAL_NOT_REFERRER`、`QB_BENEFIT_NOT_CERTIFIED`），三语文字改为"先点亮指定的节点"。模板 `qb.sponsor.benefit-access` / `-catalog` 改为同一判断（读 `now:SysParam`），发起方页面的权益页随之显示"已开放"或"需要点亮的节点"。
+  - D2：去掉"持有认证即不能答该轮"（开始答题的 `RoundHolders.load/refuse`，`qb.app.feed` / `qb.app.publication` / `qb.system.audience-count` 的同段 SQL，`AttemptStatementBudgetIT.aStartOfASponsorsRound`）。
+  - D8（§0 第 1 条）：`QB_CERTIFICATE_ISSUE` 一律 422 `QB_CERTIFICATE_PAUSED`；已签发的证书、公开核实页与学者公开页照旧；App 的证书页不再给出签发。
+  - **发起方申请资格暂不改**：门槛是 `SignUpGuard`（`SponsorApplyGuard`，加入 `sponsor` 入口），守卫只能预读"用户编号字段 = 该用户"的行，读不到业务参数（平台 10 §15.15）。已作为平台缺口报给总控（2026-11-08，S1 补）；补上之前照旧按认证判断。
+- **实施记录（F-S2c1）**：门槛只在 `tree.TreeGates`（纯 Java 的 `parse` / `open` / `names` 与读取的步骤），点亮按图与节点两者核对（节点编号只在一张图内唯一，副本沿用模板的编号）。D2 的两个测试改为现在的行为（发起方认证的一轮像普通发布一样开始，语句数不加；持有者照常答其他轮），不删。D8：`QB_CERTIFICATE_ISSUE` 只剩拒绝，签发的代码删去；测试以 `PlayItSupport.issuedBefore`（照原流程写入证书行并由持有人签发单据）代表"暂停之前签发的"，核实、公开页、下载、删除账号照旧验证。e2e 的证书用例改为"暂停签发"的画面（签发与核实由 `CertificateIT` 覆盖）。
+- **F-S2c2 拆除**（迁移：删表）：发起方申请资格改用 `TreeGates`（依赖上面的平台能力）；删除 D1、D3、D4、D5、D6 的后端与 D1、D3、D6 的页面，D4、D5 的页面推迟到 F-S3（§0 第 3 条，期间读不到数据即显示"即将更新"）；文档（`operations.md`、帮助、`CLAUDE.md`、词表）。
+
 ## 2. 数据（F-S2a、F-S2b）
 
 | 表 | 种类 | 主要列 |

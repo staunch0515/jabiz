@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.benefit.BenefitCodes;
 import com.jabiz.quizbuks.benefit.BenefitConversationProcesses;
@@ -7,7 +8,6 @@ import com.jabiz.quizbuks.benefit.OfferProcesses;
 import com.jabiz.quizbuks.benefit.PurchaseProcesses;
 import com.jabiz.quizbuks.benefit.PurchaseStatus;
 import com.jabiz.quizbuks.benefit.QbBenefits;
-import com.jabiz.quizbuks.certification.CertificationProcesses;
 import com.jabiz.quizbuks.identity.AccountCodes;
 import com.jabiz.runtime.test.FileSamples;
 import com.jabiz.runtime.test.TestTokens;
@@ -28,16 +28,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@code BENEFIT_SPONSOR} asks about it (contact details allowed) and records what it bought and paid, with proofs;
  * the provider confirms the revision it read or sends it back; a change asks it again; purchases are only inserted.
  */
-class BenefitIT extends PlayItSupport {
+class BenefitIT extends TreeItSupport {
 
     private String hq() {
         return TestTokens.bearer(tokens, "q89-hq", QbPermissions.CERTIFICATION_ADMIN,
             QbPermissions.CERTIFICATION_MANAGE);
     }
 
-    private void grant(String userId, String certification) {
-        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", certification, "reason",
-            "Q89 test"));
+    /** F-S2c: the benefit role opened as production opens it: the gate's node lit by the user. */
+    private void grant(String userId, String role) {
+        unlock(role.equals("BENEFIT_PROVIDER") ? QbParams.TREE_GATE_BENEFIT_PROVIDER : QbParams.TREE_GATE_BENEFIT_SPONSOR,
+            userId);
     }
 
     /** A provider holding BENEFIT_PROVIDER, a sponsor holding BENEFIT_SPONSOR and a sponsor holding neither. */
@@ -70,8 +71,7 @@ class BenefitIT extends PlayItSupport {
     }
 
     private List<Map<String, Object>> catalog(String userId) {
-        return items("qb.sponsor.benefit-catalog", sponsorToken(userId), Map.of("params",
-            Map.of("at", clock.instant().toString()), "limit", 500));
+        return items("qb.sponsor.benefit-catalog", sponsorToken(userId), Map.of("limit", 500));
     }
 
     private String today() {
@@ -122,11 +122,11 @@ class BenefitIT extends PlayItSupport {
                 assertThat(row.get("providerCompany")).isNotNull();
             });
         assertThat(catalog(s.stranger())).isEmpty();
-        assertThat(items("qb.sponsor.benefit-access", sponsorToken(s.sponsor()), Map.of("params",
-            Map.of("at", clock.instant().toString())))).extracting(row -> row.get("certification"),
-                row -> row.get("heldUntil") != null)
-            .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple("BENEFIT_PROVIDER", false),
-                org.assertj.core.groups.Tuple.tuple("BENEFIT_SPONSOR", true));
+        // F-S2c: the roles open to the caller, with the node that opens each (both named here).
+        assertThat(items("qb.sponsor.benefit-access", sponsorToken(s.sponsor()), Map.of()))
+            .extracting(row -> row.get("certification"), row -> row.get("open"), row -> row.get("nodeId") != null)
+            .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple("BENEFIT_PROVIDER", false, true),
+                org.assertj.core.groups.Tuple.tuple("BENEFIT_SPONSOR", true, true));
 
         // Hidden by its provider: off the catalog; a stale edit is refused.
         run(OfferProcesses.SAVE, sponsorToken(s.provider()), noodles("offerId", offerId, "listed", false,

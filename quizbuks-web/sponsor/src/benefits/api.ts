@@ -1,5 +1,5 @@
 import { runProcess, runQuery } from '@jabiz/client'
-import { minuteNow } from '../qb/legal'
+import { type I18nText } from '../qb/legal'
 import { BENEFIT_PROCESS, BENEFIT_TEMPLATE, type BenefitCertification, type BenefitKind, type IncidentKind } from './ids'
 
 /*
@@ -40,10 +40,14 @@ export function idOf(path: string, prefix: string): string | null {
   }
 }
 
+/**
+ * F-S2c: whether a benefit role is open to the caller, and the knowledge map's node that opens it (none: no node is
+ * named, the role is closed to everyone). The server decides; this only says where the caller stands.
+ */
 export interface Access {
   certification: BenefitCertification
-  heldUntil: string | null
-  roundPublicationId: string | null
+  open: boolean
+  nodeName: I18nText | null
 }
 
 export interface Offer {
@@ -171,17 +175,17 @@ function offerOf(row: Row): Offer {
 }
 
 export async function readAccess(): Promise<Access[]> {
-  const page = await runQuery<Row>(BENEFIT_TEMPLATE.access, { params: { at: minuteNow() }, limit: 10 })
+  const page = await runQuery<Row>(BENEFIT_TEMPLATE.access, { limit: 10 })
   return page.items.map((row) => ({
     certification: String(row.certification) as BenefitCertification,
-    heldUntil: text(row.heldUntil),
-    roundPublicationId: text(row.roundPublicationId),
+    open: row.open === true,
+    nodeName: row.nodeName && typeof row.nodeName === 'object' ? (row.nodeName as I18nText) : null,
   }))
 }
 
 export async function readCatalog(filter: { kind?: BenefitKind | null; q?: string; offerId?: string } = {})
   : Promise<Offer[]> {
-  const params: Row = { at: minuteNow() }
+  const params: Row = {}
   if (filter.kind) params.kind = filter.kind
   if (filter.q?.trim()) params.q = filter.q.trim()
   if (filter.offerId) params.offerId = filter.offerId

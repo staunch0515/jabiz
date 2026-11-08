@@ -263,10 +263,8 @@ class AttemptStatementBudgetIT extends TreeItSupport {
     }
 
     /**
-     * Q88a (D-Q88-3, D-Q88-6 of Q86): a sponsor's publication that is a round of the sponsor's own certification
-     * reads, before the lock, the caller's records, the rounds and the certification's row (one statement) and their
-     * attempts on the rounds (one more), as an official publisher's round does (Q70a): two statements more; the
-     * lock's budget is unchanged, and so is an ordinary publication's (above).
+     * F-S2c (D2): holding a certification no longer keeps anybody from its rounds, so a round of a sponsor's own
+     * certification starts as an ordinary publication does: no statement more (Q70a and Q88a read two).
      */
     @Test
     void aStartOfASponsorsRound() {
@@ -295,7 +293,7 @@ class AttemptStatementBudgetIT extends TreeItSupport {
         keyed("QB_ATTEMPT_START", taker(userId), body("publicationId", round));
         List<List<String>> start = SqlStatementLog.transactions();
         report("QB_ATTEMPT_START (sponsor's round)", start);
-        assertBudget("QB_ATTEMPT_START (sponsor's round)", start, budget(START_TOTAL) + 2, budget(START_LOCKED));
+        assertBudget("QB_ATTEMPT_START (sponsor's round)", start, budget(START_TOTAL), budget(START_LOCKED));
         assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(round));
     }
 

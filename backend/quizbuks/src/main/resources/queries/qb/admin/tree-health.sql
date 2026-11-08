@@ -1,10 +1,11 @@
 /*---
 id: qb.admin.tree-health
-description: "F-S2b2: what is wrong with the knowledge maps' lighting and review, one row a kind of problem: passes of bound publications that lit nothing (the daily recheck evaluates them), lit records naming no node, versions waiting for review past the reminder; empty when all is well"
-entities: [QbAttempt, QbPublicationCard, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbTreeVersion, SysParam]
+description: "F-S2b2: what is wrong with the knowledge maps' lighting and review, one row a kind of problem: passes of bound publications that lit nothing (the daily recheck evaluates them), lit records naming no node, versions waiting for review past the reminder, gate parameters naming no node to light (F-S2c); empty when all is well"
+entities: [QbAttempt, QbPublicationCard, QbTree, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbTreeVersion, SysParam]
 datasets:
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
+  QbTree: urn:jabiz:dataset:default:QbTree
   QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
   QbTreeLit: urn:jabiz:dataset:default:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
@@ -63,4 +64,20 @@ WHERE v.{{QbTreeVersion.status}} = 'REVIEW'
   AND v.{{QbTreeVersion.submittedAt}} <= CAST(:at AS timestamptz) - make_interval(days => (
       SELECT CAST(max(p.{{SysParam.value}}) AS int) FROM {{SysParam}} p
       WHERE p.{{SysParam.paramKey}} = 'qb.tree.review.remind-after' AND p.{{SysParam.value}} ~ '^[0-9]{1,4}$'))
+HAVING count(*) > 0
+UNION ALL
+-- GATE_INVALID (F-S2c): a gate parameter that names no node to light (tree.TreeGates.names: a node in effect of a
+-- platform map Takers light, as <treeId>/<nodeId>): the feature it opens is closed to everyone.
+SELECT CAST('GATE_INVALID' AS varchar(30)), CAST(count(*) AS numeric)
+FROM {{SysParam}} p
+WHERE p.{{SysParam.paramKey}} IN ('qb.tree.gate.sponsor-apply-node', 'qb.tree.gate.referrer-node',
+                                  'qb.tree.gate.benefit-provider-node', 'qb.tree.gate.benefit-sponsor-node')
+  AND NOT EXISTS (
+      SELECT 1 FROM {{QbTree}} t
+      JOIN {{QbTreeNode}} tn ON tn.{{QbTreeNode.treeId}} = CAST(t.{{QbTree.treeId}} AS text)
+      WHERE p.{{SysParam.value}} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND CAST(t.{{QbTree.treeId}} AS text) = split_part(p.{{SysParam.value}}, '/', 1)
+        AND tn.{{QbTreeNode.nodeId}} = split_part(p.{{SysParam.value}}, '/', 2)
+        AND t.{{QbTree.ownerKind}} = 'PLATFORM' AND t.{{QbTree.subjectKind}} = 'TAKER'
+        AND t.{{QbTree.status}} = 'ACTIVE' AND tn.{{QbTreeNode.active}})
 HAVING count(*) > 0

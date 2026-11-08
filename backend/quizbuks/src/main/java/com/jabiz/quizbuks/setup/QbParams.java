@@ -238,6 +238,21 @@ public final class QbParams {
     public static final String TREE_SPONSOR_MAX_TREES = "qb.tree.sponsor.max-trees";
     /** F-S2: after how many days a version waiting for review is reminded to its reviewers once (not controlled). */
     public static final String TREE_REVIEW_REMIND_AFTER = "qb.tree.review.remind-after";
+    /**
+     * F-S2c: the platform features a Taker unlocks by lighting a node (A2-11): each names the node as
+     * {@code <treeId>/<nodeId>} of a platform map Takers light ({@code tree.TreeGates}). Controlled (they open what
+     * the old certifications opened), but not created by {@code QB_SETUP} and read as optional, like
+     * {@link #SHOPIFY_DAILY_CODES}: an absent parameter is the specification's "empty by default = closed" (nobody may
+     * refer, nobody may offer or sponsor benefits). Kept out of {@link #CONTROLLED} and {@link #ALL} for that reason.
+     */
+    public static final String TREE_GATE_SPONSOR_APPLY = "qb.tree.gate.sponsor-apply-node";
+    public static final String TREE_GATE_REFERRER = "qb.tree.gate.referrer-node";
+    public static final String TREE_GATE_BENEFIT_PROVIDER = "qb.tree.gate.benefit-provider-node";
+    public static final String TREE_GATE_BENEFIT_SPONSOR = "qb.tree.gate.benefit-sponsor-node";
+    public static final List<String> TREE_GATES = List.of(TREE_GATE_SPONSOR_APPLY, TREE_GATE_REFERRER,
+        TREE_GATE_BENEFIT_PROVIDER, TREE_GATE_BENEFIT_SPONSOR);
+    /** The kind the controlled change that creates a gate parameter gives: two UUIDs and a slash. */
+    public static final Map<String, Object> TREE_GATE_KIND = Map.of("type", "text", "maxLength", 73);
     /** The oldest version of the app that may still be used. */
     public static final String APP_MIN_VERSION = "qb.app.min-version";
     /**

@@ -27,9 +27,8 @@ class CertificationTemplatesTest {
         // Q86: every template that tells whether somebody holds a certification writes the catalog.
         for (String template : new String[] {"queries/qb/app/feed.sql", "queries/qb/app/publication.sql",
             "queries/qb/app/understanding.sql", "queries/qb/app/sponsor-tree.sql", "queries/qb/system/audience-count.sql",
-            "queries/qb/sponsor/tree.sql", "queries/qb/sponsor/tree-people.sql", "queries/qb/sponsor/tree-person.sql",
-            // Q89a: whether a sponsor holds a benefit certification (the page, and the catalog shown only then).
-            "queries/qb/sponsor/benefit-access.sql", "queries/qb/sponsor/benefit-catalog.sql"}) {
+            "queries/qb/sponsor/tree.sql", "queries/qb/sponsor/tree-people.sql", "queries/qb/sponsor/tree-person.sql"}) {
+            // F-S2c: the benefit roles (qb.sponsor.benefit-access, -catalog) are unlocked by a lit node, not held.
             try (InputStream in = getClass().getClassLoader().getResourceAsStream(template)) {
                 assertThat(in).as(template).isNotNull();
                 assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).as(template)
