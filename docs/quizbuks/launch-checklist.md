@@ -36,7 +36,7 @@
 - [ ] 同一次压测中让分析任务 `qb.analytics` 照常每 10 分钟运行（Q9e，`perf/Q9e-analytics.md`）：提交 p95 与吞吐与不运行时相同，任务每次运行 < 1 分钟
 - [ ] 提交过载（503、以 EXPIRED 结束）的风险已向需求方说明并接受，或已做缓解（`operations.md` §7.6）
 - [ ] `max-active` 与连接池按"同时热门的发布数 × 4 + 1"确认
-- [ ] **从中国大陆访问（Q50）**：在中国大陆的网络（手机流量与家庭宽带各一）打开首页、登录、答一份问卷，记下首屏与答题页的加载时间与有没有打不开的资源；**平台自己的视频服务器上的视频文件能播放，以及开始播放的等待时间**（F-S15，`operations.md` §7.28；能播放后经受控变更把主机加进 `qb.video.mainland-accessible-sites`）；以后偶尔复测（尤其是改了 CDN、字体、第三方脚本或视频服务器之后）
+- [ ] **从中国大陆访问（Q50）**：在中国大陆的网络（手机流量与家庭宽带各一）打开首页、登录、答一份问卷，记下首屏与答题页的加载时间与有没有打不开的资源；**平台自己的视频服务器（正式 `videos.quizbuks.com`，测试 `videos.staging.quizbuks.com`）上的视频文件能播放，以及开始播放的等待时间**（F-S15，`operations.md` §7.28；能播放后由总部经受控变更（四眼）把该环境自己的主机加进 `qb.video.mainland-accessible-sites`：正式环境只登记 `videos.quizbuks.com`，测试环境只登记 `videos.staging.quizbuks.com`；不写进 `QB_SETUP`）；以后偶尔复测（尤其是改了 CDN、字体、第三方脚本或视频服务器之后）
 
 ## AI（Q8a、Q8b）
 

@@ -791,7 +791,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 视频资料可以是任何 https 地址（`docs/quizbuks/plans/impl/F-S15.md`）：七个已知网站照旧用各自的播放器；**视频文件**（路径以 `.mp4`、`.webm`、`.mov` 结尾，查询串与片段不算）用 App 自己的 `<video>`，可以设为"看完才能答"；**其他网页**原样嵌入（iframe，沙箱中不能跳转、弹窗、提交表单）。给用户的帮助文案在 `docs/quizbuks/help/any-video.md`，常见问题见 `troubleshooting.md` T15、T16。没有新的环境变量、参数或部署设置。
 
-- **放视频的服务器的要求**（平台自己的服务器，如 `videos.staging.quizbuks.com`；正式环境的域名待需求方确认）：
+- **放视频的服务器的要求**（平台自己的服务器：正式环境 `videos.quizbuks.com`，测试环境 `videos.staging.quizbuks.com`；需求方 2026-11-08 确认）：
   1. https（http 的地址不算视频）；用标准端口（地址中不能写端口）。
   2. 支持 HTTP Range 请求（`Accept-Ranges: bytes`、`206 Partial Content`）：浏览器拖动进度条、iPhone 播放都要靠它。
   3. 正确的 `Content-Type`（`video/mp4`、`video/webm`、`video/quicktime`），不要 `application/octet-stream`。
@@ -800,7 +800,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   6. 要用签名地址时，签名的有效期要长于发布的期间：地址随版本冻结，过期即打不开（App 改为封面与链接）。
 - **中国大陆**：程序只保证**不拦截**这些视频；能不能看到、多久开始播放取决于服务器与线路（海外机房或 Cloudflare 在中国大陆可能很慢或打不开）。要让中国大陆的学者能答含这类视频的发布：
   1. 确认服务器从中国大陆能访问（上线检查清单"从中国大陆访问"一行，含开始播放的等待时间）；
-  2. 总部经受控变更（四眼，`CONTROL_CHANGE_PROPOSE` / `_PUBLISH`）把主机名加进 `qb.video.mainland-accessible-sites`（如 `bilibili,youku,tencent,videos.quizbuks.com`；主机名小写、不带协议与路径）。**参数值至多 200 个字符**（参数定义 `maxLength` 200，已有安装的定义不随代码改变），只够登记几个主机：主机多了先合并到少数几个域名。之后上线或切换版本的发布按新值冻结，**已上线的卡片不变**（要变就切换版本）；
+  2. 总部经受控变更（四眼，`CONTROL_CHANGE_PROPOSE` / `_PUBLISH`）把主机名加进 `qb.video.mainland-accessible-sites`（主机名小写、不带协议与路径）：**正式环境只登记 `videos.quizbuks.com`**（值如 `bilibili,youku,tencent,videos.quizbuks.com`），**测试环境只登记 `videos.staging.quizbuks.com`**（值如 `bilibili,youku,tencent,videos.staging.quizbuks.com`）。这两个主机**不写在 `QB_SETUP` 或代码中**：`QB_SETUP` 提出的初值仍只有三个网站的键，主机由总部在各环境按上述各登记一个。**参数值至多 200 个字符**（参数定义 `maxLength` 200，已有安装的定义不随代码改变），只够登记几个主机：主机多了先合并到少数几个域名。之后上线或切换版本的发布按新值冻结，**已上线的卡片不变**（要变就切换版本）；
   3. 只对个别发布或发起方放行时，用 §7.24 的例外（总部或运营商设）。
 - **审核**：审核页对所审的版本标出"非已知网站的嵌入页"并逐个列出地址：嵌入页的内容由对方网站控制，审核人照内容标准检查；上线后内容被改，照常经举报下架（Q10b）。
 - **安全**：学者 App 与发起方页面的内容安全策略是 `frame-src https:`、`media-src 'self' https:`（`application.yml`，`QuizbuksAppIT` 检查）；其他网页的 iframe 有固定的沙箱与 `referrerpolicy="no-referrer"`。不要为某个网站放宽沙箱。
