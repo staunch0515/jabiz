@@ -52,6 +52,7 @@ class SetupIT extends QbItSupport {
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_PLAN_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_WITHDRAWAL_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.FEE_REQUEST_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.SHARED_VIDEO_REVIEW.code(),
             QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
@@ -117,6 +118,14 @@ class SetupIT extends QbItSupport {
                 rule -> assertThat(rule).containsEntry("rule_code", PublicationApprovals.RULE)
                     .containsEntry("subject", PublicationApprovals.SUBJECT).containsEntry("enabled", true)
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.REVIEW_PUBLICATION)),
+                // F-S12: every shared video, reviewed once by the provider's operator.
+                rule -> assertThat(rule).containsEntry("rule_code",
+                    com.jabiz.quizbuks.sharedvideo.SharedVideoApprovals.RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.sharedvideo.SharedVideoApprovals.SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("shared"))
                     .satisfies(r -> assertThat(r.get("levels").toString())
                         .contains(QbPermissions.REVIEW_PUBLICATION)),
                 // Q60a: sponsors' pages, reviewed by those who review the onboarding.

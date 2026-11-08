@@ -110,6 +110,9 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_MAIL_TOPUP", ProcessAccess.INTERNAL),
         Map.entry("QB_MAIL_FUNDS_SHORT_DUE", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_NOTIFY", ProcessAccess.INTERNAL),
+        // F-S12: a shared video's review result, and the job ending the publications of one taken down.
+        Map.entry("QB_SHARED_VIDEO_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        Map.entry("QB_PUBLICATION_SHARED_VIDEO_END", ProcessAccess.INTERNAL),
         // Q7c: the messages made from events, the reminders, the scheduled sending and a ban's withdrawal.
         Map.entry("QB_MESSAGE_FROM_EVENT", ProcessAccess.INTERNAL),
         Map.entry("QB_PAYOUT_REMINDER", ProcessAccess.INTERNAL),
