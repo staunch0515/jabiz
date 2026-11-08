@@ -1,6 +1,8 @@
 import type { ReferralPolicy } from '../qb/play'
 import { formatDateTime } from '@jabiz/client'
 import {
+  Alert,
+  AlertDescription,
   Badge,
   DescriptionList,
   Table,
@@ -12,6 +14,7 @@ import {
   type DescriptionItem,
 } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
+import { Globe } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { readVersions } from '../content/api'
@@ -151,6 +154,32 @@ export function LabelledProblems({ problems, testId }: {
 }
 
 /** The quiz version a publication uses, by its quiz's versions (none once the quiz is removed). */
+/**
+ * F-S11: the regions that reach mainland China: mainland China is in CN and ASIA, and every country is in GLOBAL. An
+ * invitation may reach anybody.
+ */
+export const MAINLAND_REGIONS: readonly string[] = ['GLOBAL', 'CN', 'ASIA']
+
+export function reachesMainland(audience: Audience, regions: readonly string[]): boolean {
+  return audience === 'INVITED' || regions.some((region) => MAINLAND_REGIONS.includes(region))
+}
+
+/**
+ * F-S11: "mainland China cannot see this": the quiz version has a video mainland China cannot play (Q106 §2.4). Only a
+ * notice, never a reason not to submit: the server keeps mainland China out at the start.
+ */
+export function MainlandNotice({ testId, pending = false }: { testId: string; pending?: boolean }) {
+  const { t } = useTranslation(SPONSOR)
+  return (
+    <Alert variant="warning" data-testid={testId}>
+      <Globe aria-hidden />
+      <AlertDescription className="text-current">
+        {pending ? t('publishing.mainland.pending') : t('publishing.mainland.hint')}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
 export function useVersionOf(quizId: string | null, versionId: string | null) {
   const versions = useQuery({
     queryKey: versionsQuery(quizId ?? ''),

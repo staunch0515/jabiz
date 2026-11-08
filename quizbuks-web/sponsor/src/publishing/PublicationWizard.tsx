@@ -89,7 +89,7 @@ import {
 } from './api'
 import { publicationPath, PUBLICATIONS_QUERY } from './paths'
 import { LabelledProblems, PublicationSummary, useAudienceLabel, useDebounced, useDigitalDeliveryLabel, useRegionLabel,
-  useRewardMethodLabel, useVersionOf } from './shared'
+  useRewardMethodLabel, useVersionOf, MainlandNotice, reachesMainland } from './shared'
 import { TiersEditor } from './TiersEditor'
 import { playSound } from '../qb/sound'
 import { BenefitPurchaseField } from '../benefits/BenefitPurchaseField'
@@ -898,6 +898,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           <AudienceFeePanel quote={feeQuote.data?.quote ?? null} pending={feeQuote.isFetching && !feeQuote.data} />
         </div>
       )}
+      {/* F-S11: the quiz's video cannot be played in mainland China, which these regions reach (a notice only). */}
+      {version?.foreignVideo && reachesMainland(form.audience, form.regions) && (
+        <MainlandNotice testId="publication-mainland-audience" />
+      )}
       {/* Q76: what a taker must have done first, whoever the publication is for. */}
       {publicationId && (savedPrerequisites.isPending || candidates.isPending)
         ? <p className="text-muted-foreground text-sm">{t('publishing.prerequisites.loading')}</p>
@@ -937,6 +941,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       )}
       {form.audience === 'PUBLIC' && (
         <AudienceFeePanel quote={feeQuote.data?.quote ?? null} pending={feeQuote.isFetching && !feeQuote.data} />
+      )}
+      {/* F-S11: said again where the publication is checked before submitting (a notice only). */}
+      {version?.foreignVideo && reachesMainland(form.audience, form.regions) && (
+        <MainlandNotice testId="publication-mainland-check" />
       )}
       <PublicationSummary values={{
         name: form.name,

@@ -236,7 +236,7 @@ public final class AttemptProcesses {
 
     /** @param shuffle the order of each attempt's options, keyed by the server (Q10b, review M-a) */
     public static ProcessDefinition<PublicationRef, StartOutput, ProcessContext> start(OptionShuffle shuffle,
-        QuestionPick pick) {
+        QuestionPick pick, com.jabiz.quizbuks.region.RegionRefusals refusals) {
         return ProcessDefinition.define(START, 1, PublicationRef.class, StartOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Starts the caller's attempt of a publication, or continues the one in progress.")
@@ -297,6 +297,13 @@ public final class AttemptProcesses {
                     }
                 })
                 .compute("Continue an attempt in progress", (metadata, ctx) -> resume(ctx))
+                // F-S11: a new start of a card with a foreign video, from mainland China (by the address; an unknown
+                // one by the parameter), is refused unless headquarters made an exception. Before any lock; an
+                // ordinary start reads nothing more (the statement budget stays). Invited publications alike.
+                .steps(b -> com.jabiz.quizbuks.region.RegionStart.load(b, ctx -> first(ctx, CARD_BEFORE),
+                    AttemptProcesses::starting))
+                .compute("Refuse a foreign video in mainland China", (metadata, ctx) -> com.jabiz.quizbuks.region
+                    .RegionStart.refuse(ctx, first(ctx, CARD_BEFORE), ctx.get(PUB_KEY), starting(ctx), refusals))
                 // Q75 (D-Q75-4): a card whose video must be watched refuses a new start without the App's report of
                 // enough watching; the card read outside the lock says so and how long the video is. A continued
                 // attempt is not asked again. No read: nothing changes in the statement budget (D-Q75-7).

@@ -1,10 +1,11 @@
 /*---
 id: qb.sponsor.quiz-versions
 description: The versions of one of the sponsor's quizzes (M-27), newest first; the content is read by version
-entities: [QbQuizVersion, QbQuiz]
+entities: [QbQuizVersion, QbQuiz, SysParam]
 datasets:
   QbQuizVersion: urn:jabiz:dataset:default:QbQuizVersion
   QbQuiz: urn:jabiz:dataset:sponsor:QbQuiz
+  SysParam: urn:jabiz:dataset:now:SysParam
 params:
   quizId: { like: QbQuizVersion.quizId, required: true, description: The quiz }
 results:
@@ -19,6 +20,8 @@ results:
   fullScore:     { from: QbQuizVersion.fullScore }
   versionedAt:   { from: QbQuizVersion.versionedAt }
   contentHash:   { from: QbQuizVersion.contentHash }
+  videoLinks:    { kind: { type: text } }
+  mainlandSites: { kind: { type: text, maxLength: 200 } }
 list:
   filters: [versionNo, versionedAt]
   sorts:   [versionNo, versionedAt]
@@ -39,7 +42,19 @@ SELECT
     v.{{QbQuizVersion.questionCount}} AS questionCount,
     v.{{QbQuizVersion.fullScore}}     AS fullScore,
     v.{{QbQuizVersion.versionedAt}}   AS versionedAt,
-    v.{{QbQuizVersion.contentHash}}   AS contentHash
+    v.{{QbQuizVersion.contentHash}}   AS contentHash,
+    -- F-S11: the version's video links, every language's (a JSON list), and the sites mainland China plays (the
+    -- controlled parameter; none before it is published: the page takes the setup's value), so that the wizard, the
+    -- submit check and the publication's page say "mainland China cannot see this" (only a hint: the card freezes the
+    -- server's own answer, content.ForeignVideos, which qb/video.ts follows with the same cases).
+    (SELECT CAST(coalesce(jsonb_agg(l.u), '[]'::jsonb) AS text)
+     FROM (SELECT jsonb_path_query(CAST(v.{{QbQuizVersion.content}} AS jsonb),
+                                   'lax $.materials[*] ? (@.kind == "VIDEO_LINK").url') AS u
+           UNION ALL
+           SELECT jsonb_path_query(CAST(v.{{QbQuizVersion.content}} AS jsonb),
+                                   'lax $.translations.*.materials[*] ? (@.kind == "VIDEO_LINK").url')) l) AS videoLinks,
+    (SELECT CAST(max(p.{{SysParam.value}}) AS varchar(200)) FROM {{SysParam}} p
+     WHERE p.{{SysParam.paramKey}} = 'qb.video.mainland-accessible-sites') AS mainlandSites
 FROM {{QbQuizVersion}} v
 JOIN {{QbQuiz}} z ON z.{{QbQuiz.quizId}} = v.{{QbQuizVersion.quizId}}
 WHERE v.{{QbQuizVersion.quizId}} = :quizId

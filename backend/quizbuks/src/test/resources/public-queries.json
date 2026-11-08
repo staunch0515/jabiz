@@ -402,6 +402,21 @@
       "sorts" : [ ]
     },
     "params" : {
+      "at" : {
+        "kind" : {
+          "role" : "EVENT_TIME",
+          "type" : "temporal"
+        },
+        "list" : false,
+        "required" : false
+      },
+      "mainlandChina" : {
+        "kind" : {
+          "type" : "bool"
+        },
+        "list" : false,
+        "required" : false
+      },
       "publicationId" : {
         "kind" : {
           "targetEntity" : "QbPublication",
@@ -474,6 +489,9 @@
         "maxLength" : 500,
         "multiline" : true,
         "type" : "text"
+      },
+      "regionBlocked" : {
+        "type" : "bool"
       },
       "rewardMethod" : {
         "allowedValues" : [ "PLATFORM", "SPONSOR_CASH", "OFFLINE_REDEEM", "DIGITAL_PRIZE", "CHANNEL" ],
@@ -747,6 +765,14 @@
       "sorts" : [ "endAt" ]
     },
     "params" : {
+      "at" : {
+        "kind" : {
+          "role" : "EVENT_TIME",
+          "type" : "temporal"
+        },
+        "list" : false,
+        "required" : false
+      },
       "handle" : {
         "kind" : {
           "maxLength" : 30,
@@ -755,6 +781,13 @@
         },
         "list" : false,
         "required" : true
+      },
+      "mainlandChina" : {
+        "kind" : {
+          "type" : "bool"
+        },
+        "list" : false,
+        "required" : false
       }
     },
     "results" : {

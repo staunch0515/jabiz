@@ -98,6 +98,8 @@ function Takedowns({ takedowns }: { takedowns: UseQueryResult<Takedown[]> }) {
   )
 }
 import { VersionPreview } from './VersionPreview'
+import { readVideoSites } from './region-api'
+import { foreignVideo, mainlandSites, reachesMainland, snapshotVideoLinks } from './video'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const IMAGE = { image: true, variants: CONTENT_IMAGE_VARIANTS }
@@ -537,6 +539,9 @@ export default function PublicationReviewPage() {
     enabled: !!sponsorId && !!quizId,
     refetchOnWindowFocus: false,
   })
+  // F-S11: the sites mainland China plays, for the notice that it cannot see this publication (the version reviewed).
+  const videoSites = useQuery({ queryKey: ['qb-ext', 'video-sites'], queryFn: readVideoSites, staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false, retry: false })
   const reasonOf = useAdminReason()
   // Q73b: the languages ticked as read, for the request they were read for.
   const [seenLanguages, setSeenLanguages] = useState<string[]>([])
@@ -660,6 +665,13 @@ export default function PublicationReviewPage() {
             {t('publication.switch', { from: p.versionLabel ?? '', to: p.pendingVersionLabel ?? '',
               time: when(p.pendingSince) })}
           </AlertDescription>
+        </Alert>
+      )}
+      {/* F-S11: a notice only (the start refuses mainland China by the card); after a switch, of the new version. */}
+      {shownVersion?.content && reachesMainland(p.audience, p.regions)
+        && foreignVideo(snapshotVideoLinks(shownVersion.content), mainlandSites(videoSites.data ?? null)) && (
+        <Alert variant="warning" data-testid="publication-mainland">
+          <AlertDescription>{t('region.reviewNotice')}</AlertDescription>
         </Alert>
       )}
       <Takedowns takedowns={takedowns} />

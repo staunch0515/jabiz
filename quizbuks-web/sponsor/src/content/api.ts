@@ -8,6 +8,7 @@ import {
   CONTENT_PROCESS,
   CONTENT_TEMPLATE,
 } from './ids'
+import { foreignVideo, mainlandSites } from '../qb/video'
 
 /*
  * The content workshop's calls, typed by hand after the Java records of backend/quizbuks `content` (processes have no
@@ -274,6 +275,12 @@ export interface VersionRow {
   fullScore: number
   versionedAt: string
   contentHash: string
+  /**
+   * F-S11: whether the version has a video mainland China cannot play (`qb/video.ts` `foreignVideo`, as the server's
+   * `ForeignVideos`, by the sites of `qb.video.mainland-accessible-sites`): only for the hint "mainland China cannot
+   * see this"; the card freezes the server's own answer.
+   */
+  foreignVideo: boolean
 }
 
 type SnapshotMaterial = {
@@ -532,7 +539,33 @@ function toVersionRow(row: Row): VersionRow {
     fullScore: num(row.fullScore),
     versionedAt: String(row.versionedAt ?? ''),
     contentHash: String(row.contentHash ?? ''),
+    foreignVideo: foreignVideo(linksOf(row.videoLinks), mainlandSites(paramText(row.mainlandSites))),
   }
+}
+
+/** F-S11: the JSON list of video links `qb.sponsor.quiz-versions` gives; none when absent or unreadable. */
+function linksOf(value: unknown): string[] {
+  if (typeof value !== 'string' || !value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.filter((link): link is string => typeof link === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/** A text parameter's value as the template reads it (its JSON string or the bare text); null when none. */
+function paramText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const text = value.trim()
+  return text.length >= 2 && text.startsWith('"') && text.endsWith('"') ? text.slice(1, -1) : text
+}
+
+/** F-S11: the video links of a snapshot, every language's. */
+export function snapshotVideoLinks(content: Snapshot): string[] {
+  const materials = [...content.materials, ...Object.values(content.translations ?? {})
+    .flatMap((language) => language?.materials ?? [])]
+  return materials.filter((m) => m.kind === 'VIDEO_LINK' && !!m.url).map((m) => m.url as string)
 }
 
 /** The versions of one of the sponsor's quizzes, newest first. */
@@ -559,6 +592,8 @@ export async function readVersion(versionId: string): Promise<VersionDetail | nu
     timeLimitSec: numOrNull(row.timeLimitSec),
     materialCount: num(row.materialCount),
     content,
+    // F-S11: from its content (the template of one version gives no list); the sites are the setup's here.
+    foreignVideo: foreignVideo(snapshotVideoLinks(content), mainlandSites(null)),
   }
 }
 

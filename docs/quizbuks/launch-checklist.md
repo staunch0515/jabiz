@@ -83,6 +83,7 @@
       在 staging 上以 `tools/ops/alert-fire-test.sh` 试过：`rules`（全部求值无误；QuizBuks 的文件夹 `quizbuks` 在 Grafana 中看）、`notify`（值班的人收到了测试告警）、`fire`、
       `disk <上传文件的目录>`（F-F13 的验收"把磁盘填到阈值"：磁盘告警进入 pending 后脚本删去临时文件）；数据库主机的 WAL 归档、备份与磁盘告警由托管方或主机监控配置并试过
 - [ ] 首次启动（`operations.md` §3）完成：`QB_SETUP` 的提案已发布，科目映射已设（含 Q87 的 `qb.journal.account.2160 / 1130 / 4120 / 2150`），审批规则已发布（含 `qb.fee-request.review`）
+- [ ] **IP 地址库**（F-S11，`DEPLOY.md`"3c"、`operations.md` §7.24）：DB-IP Lite 的 CSV 已放进卷 `geoip`、`.env` 设了 `JABIZ_GEOIP_DATABASE`（正式模式下不设即启动失败），每月更新排进值班表；从中国大陆与日本的网络核对过 `/api/client/region`；`qb.video.mainland-accessible-sites` 已发布；隐私政策含"按 IP 判断所在地区"与 DB-IP 署名的版本已**勾选"须重新同意"**发布（需求方 2026-11-07，§7.24 第 6 步），已同意旧版的测试账号登录时被要求同意新版
 - [ ] 值班与联系方式：Stripe 支持、邮件服务商、数据库托管方
 - [ ] 本清单与 `operations.md` 中的步骤由将要值班的人读过
 

@@ -35,6 +35,10 @@ import java.util.regex.Pattern;
  *       tests and the local demonstration): an error in live mode.</li>
  *   <li>The {@code dev} profile (actor headers: anybody is anybody) only listening on a loopback address
  *       ({@code server.address}) and with mail links to this machine ({@code jabiz.mail.base-url}).</li>
+ *   <li>No address database ({@code jabiz.geoip.database}, {@code JABIZ_GEOIP_DATABASE}; F-S11, platform decision
+ *       D74): every address is then unknown and counts as mainland China ({@code qb.region.unknown-ip-country}), so
+ *       nobody answers a publication with a foreign video. An error in live mode, a warning otherwise. A file that
+ *       cannot be read, or is old, is the platform's own check ({@code GEOIP}).</li>
  *   <li>Secrets the image's entrypoint generated ({@value #SECRETS_GENERATED}{@code =true}, review L5: a local
  *       demonstration's, kept in a volume): an error in live mode.</li>
  * </ul>
@@ -47,6 +51,7 @@ class DeploySafetyCheck implements PlatformCheck {
     static final String MFA_ADMINISTRATION = "jabiz.security.mfa.administration";
     static final String SERVER_ADDRESS = "server.address";
     static final String MAIL_BASE_URL = "jabiz.mail.base-url";
+    static final String GEOIP_DATABASE = "jabiz.geoip.database";
     /** Set by deploy/quizbuks/entrypoint.sh when it let the platform's keys or the first password be generated. */
     static final String SECRETS_GENERATED = "QB_SECRETS_GENERATED";
 
@@ -83,9 +88,11 @@ class DeploySafetyCheck implements PlatformCheck {
     private final String mailBaseUrl;
     private final boolean live;
     private final boolean secretsGenerated;
+    private final boolean geoipConfigured;
 
     DeploySafetyCheck(StripeSettings settings, @Value("${" + StripeService.API_KEY + ":}") String apiKey,
-        Environment environment) {
+        Environment environment, com.jabiz.runtime.geo.ClientCountries countries) {
+        this.geoipConfigured = countries.configured();
         this.trustedProxies = Binder.get(environment).bind(TRUSTED_PROXIES, Bindable.listOf(String.class))
             .orElse(List.of());
         this.directExposure = environment.getProperty(DIRECT_EXPOSURE, Boolean.class, false);
@@ -104,7 +111,20 @@ class DeploySafetyCheck implements PlatformCheck {
         problems.addAll(mfaProblems(mfaAdministration, live));
         problems.addAll(devProblems(dev, serverAddress, mailBaseUrl));
         problems.addAll(secretProblems(secretsGenerated, live));
+        problems.addAll(geoipProblems(geoipConfigured, live));
         return problems;
+    }
+
+    /** F-S11: no address database configured. */
+    static List<CheckProblem> geoipProblems(boolean configured, boolean live) {
+        if (configured) {
+            return List.of();
+        }
+        String message = "No address database is configured (jabiz.geoip.database, JABIZ_GEOIP_DATABASE): every "
+            + "client address is unknown and counts as qb.region.unknown-ip-country (mainland China by default), so "
+            + "nobody answers a publication with a foreign video (operations.md, the address database)";
+        return List.of(live ? CheckProblem.error(CountryCatalog.CATEGORY, GEOIP_DATABASE, message)
+            : CheckProblem.warning(CountryCatalog.CATEGORY, GEOIP_DATABASE, message));
     }
 
     static List<CheckProblem> secretProblems(boolean generated, boolean live) {

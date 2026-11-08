@@ -8,6 +8,7 @@ import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.content.ForeignVideos;
 import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.country.Regions;
@@ -217,6 +218,8 @@ final class PublicationEditing {
     static final String SPONSOR_METHODS = "sponsorMethods";
     /** The reward parameters (Q28): the default methods and the highest reward per attempt, at the operation time. */
     static final String REWARD_PARAMS = "rewardParams";
+    /** F-S11: the parameter of the sites mainland China plays ({@link #loadVideoSites}). */
+    static final String VIDEO_SITES = "videoSites";
 
     /**
      * Loads the setting of the methods the caller may publish with (Q22, {@code QbSponsorRewardMethods}; none means
@@ -376,6 +379,27 @@ final class PublicationEditing {
         pb.step("Load the tiers", QueryEntities.<ProcessContext>of(QbPublications.defaultDataset(QbPublications.TIER),
             ctx -> EntityQuery.builder().where(new QueryPredicate.In("publicationId", ids(ctx.get(PUB_ID))))
                 .limit(Integer.MAX_VALUE).build(), TIERS));
+    }
+
+    /**
+     * F-S11: the sites mainland China plays ({@code qb.video.mainland-accessible-sites}), for the card a publication
+     * gets when it goes on or switches its version ({@link #foreignVideo}). Optional: the setup's value until its
+     * proposal is published.
+     */
+    static <I, O> void loadVideoSites(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Load the sites mainland China plays", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
+            VIDEO_SITES, QbParams.VIDEO_MAINLAND_SITES));
+    }
+
+    /**
+     * F-S11: whether a version has a video mainland China cannot play ({@link ForeignVideos}), by the sites
+     * {@link #loadVideoSites} read (the setup's value where the process read none: a channel's publication, whose
+     * storefront starts are not the App's).
+     */
+    static boolean foreignVideo(ProcessContext ctx, QuizSnapshot snapshot) {
+        ParamValues params = ctx.contains(VIDEO_SITES) ? ctx.get(VIDEO_SITES, ParamValues.class) : null;
+        String sites = params == null ? null : params.find(QbParams.VIDEO_MAINLAND_SITES, String.class).orElse(null);
+        return ForeignVideos.foreign(snapshot, ForeignVideos.sites(sites));
     }
 
     /** Loads the version {@code versionId} names (none when it names none) and, for a sponsor, its quiz. */
@@ -634,6 +658,8 @@ final class PublicationEditing {
         card.put("translations", PublicationLanguages.cardJson(publication.get("translations"), snapshot, offered,
             String.valueOf((Object) version.get("language"))));
         cardVideo(snapshot.materials()).writeTo(card);
+        // F-S11: whether mainland China may answer it (its version's videos, every language), frozen with it.
+        card.put("foreignVideo", foreignVideo(ctx, snapshot));
         card.put("wentOnAt", ctx.opTime());
         EntityInstance operator = first(ctx, SPONSOR_OPERATOR);
         card.put("operatorId", operator == null ? null : operator.get("operatorId"));

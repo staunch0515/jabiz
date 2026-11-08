@@ -21,7 +21,8 @@ import { InvitationsSection } from './Invitations'
 import { PublicationActions } from './PublicationActions'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
 import { ReferralsSection } from './ReferralsSection'
-import { PublicationSummary, StatusBadge, useEndReasonLabel, useVersionOf } from './shared'
+import { MainlandNotice, PublicationSummary, reachesMainland, StatusBadge, useEndReasonLabel, useVersionOf }
+  from './shared'
 import { PreviewButton } from '../preview/PreviewButton'
 import { previewOfPublication } from '../preview/paths'
 import { VersionNotice } from './VersionNotice'
@@ -140,7 +141,10 @@ function PublicationView({ detail, stale, onStale }: {
   const { t } = useTranslation(SPONSOR)
   const endReason = useEndReasonLabel()
   const { publication, tiers } = detail
-  const { version } = useVersionOf(publication.quizId, publication.versionId)
+  const { versions, version } = useVersionOf(publication.quizId, publication.versionId)
+  // F-S11: the version shown, or the one a switch in review would show, has a video mainland China cannot play.
+  const pendingVersion = versions.data?.find((v) => v.versionId === publication.pendingVersionId)
+  const reaches = reachesMainland(publication.audience, publication.regions)
   // Q47: the conditions it was submitted with (frozen with it).
   const conditions = useQuery({ queryKey: conditionsQuery(publication.publicationId),
     queryFn: () => readConditions(publication.publicationId), enabled: publication.audience === 'PUBLIC' })
@@ -197,6 +201,10 @@ function PublicationView({ detail, stale, onStale }: {
       )}
       <AdminNotice publication={publication} />
       <VersionNotice publication={publication} disabled={stale} onStale={onStale} />
+      {reaches && version?.foreignVideo && <MainlandNotice testId="publication-mainland" />}
+      {reaches && !version?.foreignVideo && pendingVersion?.foreignVideo && (
+        <MainlandNotice testId="publication-mainland-pending" pending />
+      )}
       <PublicationSummary values={{
         ...publication,
         quizTitle: version?.title ?? null,

@@ -163,7 +163,9 @@ public class PublishingConfig {
                 "startAt", "endAt", "timeLimitSec", "questionCount", "pickCount", "fullScore", "passScore", "maxReward",
                 "rewardMethod", "redeemDescription", "digitalDelivery", "digitalDescription",
                 // Q75: the share page says the video must be watched first, and how long it is.
-                "watchRequired", "videoDurationSec"))
+                "watchRequired", "videoDurationSec",
+                // F-S11: whether mainland China may answer it (the page passes where the visitor is).
+                "foreignVideo"))
             // Read anonymously through the public template only, which projects the whitelist. The dataset API, which
             // does not, is closed to everybody (no role holds the permission): an operator's session would read every
             // live card with its budget and operator (Q59c-2); headquarters reads the cards' own dataset.

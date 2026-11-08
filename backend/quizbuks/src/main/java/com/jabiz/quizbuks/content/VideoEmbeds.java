@@ -48,6 +48,49 @@ public final class VideoEmbeds {
     }
 
     /**
+     * The video sites QuizBuks recognises (F-S11): each is named by its key in the controlled parameter
+     * {@code qb.video.mainland-accessible-sites}. A link whose site this does not recognise is none of them.
+     */
+    public enum Site {
+        YOUTUBE("youtube", YOUTUBE_PLAYER), VIMEO("vimeo", VIMEO_PLAYER), BILIBILI("bilibili", BILIBILI_PLAYER),
+        NICONICO("niconico", NICONICO_PLAYER), DAILYMOTION("dailymotion", DAILYMOTION_PLAYER),
+        YOUKU("youku", YOUKU_PLAYER), TENCENT("tencent", TENCENT_PLAYER);
+
+        private final String key;
+        private final String player;
+
+        Site(String key, String player) {
+            this.key = key;
+            this.player = player;
+        }
+
+        /** The site's key, as the parameter lists it (lower case). */
+        public String key() {
+            return key;
+        }
+
+        /** The site of a key (case and surrounding blanks aside); empty for any other text. */
+        public static Optional<Site> ofKey(String key) {
+            String wanted = key == null ? "" : key.strip().toLowerCase(Locale.ROOT);
+            for (Site site : values()) {
+                if (site.key.equals(wanted)) {
+                    return Optional.of(site);
+                }
+            }
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * The site of a link to one video, as {@link #player} reads it (F-S11); empty for any other address, which a
+     * video link may well be (a material's link is any address).
+     */
+    public static Optional<Site> site(String url) {
+        return player(url).flatMap(player -> java.util.Arrays.stream(Site.values())
+            .filter(site -> player.startsWith(site.player)).findFirst());
+    }
+
+    /**
      * Whether a player (as {@link #player} gives it) says where it is, so that the App can tell that it was watched:
      * YouTube's and Vimeo's (Q75). The others play, but cannot be the video to watch before answering.
      */
