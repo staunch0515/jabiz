@@ -1,22 +1,23 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { query, sponsor } from './content'
-import { adminToken, expect, rows, run } from './support'
+import { expect, rows, run } from './support'
+import { reviewerFor } from './operators'
 
 /*
  * Publishing for the end-to-end tests (docs/quizbuks/plans/Q4-publishing.md): an approved sponsor, a publication's
- * review decided by the administrator as the review queue would, and the times the wizard's fields take.
+ * review decided by a member of the Sponsor's operator as the Operator Management System's review queue would, and the times the wizard's fields take.
  */
 
 const SPONSOR_DATASET = 'urn:jabiz:dataset:sponsor:QbSponsor'
 const PUBLICATIONS = 'urn:jabiz:dataset:sponsor:QbPublication'
 
-/** A sponsor whose onboarding the administrator approved: they may submit publications. */
+/** A sponsor whose onboarding their operator approved (F-S1): they may submit publications. */
 export async function approvedSponsor(request: APIRequestContext, name = 'Pia') {
   const made = await sponsor(request, name)
   const applied = await run(request, made.token, 'QB_SPONSOR_APPLY', { displayName: name,
     company: `${name} Co`, acceptTerms: true })
   if (applied.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: applied.approvalRequestId,
+    await run(request, await reviewerFor(request, made.token), 'APPROVAL_DECIDE', { requestId: applied.approvalRequestId,
       decision: 'APPROVE' })
   }
   await expect.poll(async () => (await rows(request, made.token, SPONSOR_DATASET, []))[0]?.attributes.reviewStatus,
@@ -33,14 +34,14 @@ export async function publicationOf(request: APIRequestContext, token: string, p
 }
 
 /**
- * The administrator decides the publication's review, as the review queue (the administration's tasks) does: the
- * request the publication waits for, approved or sent back with a reason.
+ * A member of the Sponsor's operator decides the publication's review (F-S1), as the operator's review queue does:
+ * the request the publication waits for, approved or sent back with a reason.
  */
 export async function decideReview(request: APIRequestContext, token: string, publicationId: string,
   decision: 'APPROVE' | 'REJECT', reason?: string) {
   const publication = await publicationOf(request, token, publicationId)
   expect(publication.status).toBe('PENDING_REVIEW')
-  await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: publication.approvalRequestId,
+  await run(request, await reviewerFor(request, token), 'APPROVAL_DECIDE', { requestId: publication.approvalRequestId,
     decision, reason: reason ?? null })
 }
 

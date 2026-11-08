@@ -1,5 +1,6 @@
 import type { APIRequestContext, Page } from '@playwright/test'
-import { adminToken, expect, PASSWORD, rows, run, tokenOf, unique, verifiedUser } from './support'
+import { expect, PASSWORD, rows, run, tokenOf, unique, verifiedUser } from './support'
+import { reviewerFor } from './operators'
 
 /*
  * What the answering tests prepare through the API (play.spec, survey.spec): a funded sponsor, a taker in Japan and
@@ -17,7 +18,7 @@ export async function fundedSponsor(request: APIRequestContext) {
   const applied = await run(request, token, 'QB_SPONSOR_APPLY', { displayName: 'Sora',
     company: unique('Quiz Co '), acceptTerms: true })
   if (applied.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: applied.approvalRequestId,
+    await run(request, await reviewerFor(request, token), 'APPROVAL_DECIDE', { requestId: applied.approvalRequestId,
       decision: 'APPROVE' })
   }
   await expect.poll(async () => (await rows(request, token, SPONSOR_DATASET, []))[0]?.attributes.reviewStatus,

@@ -1,8 +1,9 @@
 import { signInAdmin } from './admin'
 import { completeQuiz, query } from './content'
 import { contentAdmin } from './legal'
-import { adminToken, expect, expectAccessible, PASSWORD, prepareQuizbuks, rows, run, signIn, test, tokenOf } from './support'
+import { expect, expectAccessible, PASSWORD, prepareQuizbuks, rows, run, signIn, test, tokenOf } from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
+import { reviewerFor } from './operators'
 
 /**
  * Digital prizes (docs/quizbuks/plans/Q33-digital-prize.md, Q33a): a sponsor allowed the method publishes a quiz whose
@@ -44,7 +45,7 @@ async function goLive(request: Parameters<typeof approvedSponsor>[0], sponsorTok
   takerToken: string) {
   const submitted = await run(request, sponsorToken, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    await run(request, await reviewerFor(request, sponsorToken), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
       decision: 'APPROVE' })
   }
   await expect.poll(async () => {

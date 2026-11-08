@@ -1,5 +1,6 @@
-import { adminToken, expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 import { fundedSponsor, searchHome, taker, untilLive } from './play'
+import { reviewerFor } from './operators'
 
 /*
  * The video to watch (docs/quizbuks/plans/Q19-embedded-video.md): a sponsor ticks "Watching this video is enough to
@@ -76,7 +77,7 @@ test('a video to watch is shown on the home with its reward and starts the quiz'
   const publicationId = saved.publicationId as string
   const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    await run(request, await reviewerFor(request, sponsor.token), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
       decision: 'APPROVE' })
   }
   const me = await taker(request, 'Vic')

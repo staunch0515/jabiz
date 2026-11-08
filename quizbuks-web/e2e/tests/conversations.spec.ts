@@ -1,7 +1,8 @@
 import type { APIRequestContext } from '@playwright/test'
 import { completeQuiz, query } from './content'
-import { adminToken, expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 import { fundedSponsor, takerInJapan } from './wallet'
+import { reviewerFor } from './operators'
 
 /*
  * Conversations between takers and sponsors (docs/quizbuks/plans/Q82-conversations.md): a taker who completed a quiz
@@ -27,7 +28,7 @@ async function liveQuiz(request: APIRequestContext, sponsorToken: string, takerT
   const publicationId = saved.publicationId as string
   const submitted = await run(request, sponsorToken, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    await run(request, await reviewerFor(request, sponsorToken), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
       decision: 'APPROVE' })
   }
   await expect.poll(async () => {
