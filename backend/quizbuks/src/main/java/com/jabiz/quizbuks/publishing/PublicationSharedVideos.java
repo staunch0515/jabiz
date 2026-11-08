@@ -142,6 +142,15 @@ public final class PublicationSharedVideos {
         return video != null && SharedVideoRules.available(video.get("status")) ? List.of() : List.of(unavailable());
     }
 
+    /**
+     * Whether the publication's shared video was taken down (总控 2026-11-08: checked again where a reviewed
+     * publication goes on, which then does not).
+     */
+    static boolean takenDown(ProcessContext ctx, EntityInstance publication) {
+        EntityInstance video = video(ctx, publication);
+        return video != null && QbSharedVideos.TAKEN_DOWN.equals(video.get("status"));
+    }
+
     /** The shared video {@link #load} read for the publication; none when it has none. */
     static EntityInstance video(ProcessContext ctx, EntityInstance publication) {
         Object id = publication == null ? null : publication.get("sharedVideoId");

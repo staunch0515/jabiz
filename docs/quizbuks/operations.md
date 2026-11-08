@@ -780,7 +780,9 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   2. 用到它的发布由每分钟的任务 `qb.shared-video-ends` 逐个结束（结束原因"所用的共享视频已下架"，`end_reason = SHARED_VIDEO`），进行中的答题照常完成；每个使用方收到邮件 `qb.publication.shared-video-ended`。这**不是**下架发布：不算使用方违约，可以复制，同一 Quiz 以后的发布照常审核。
   3. 费用（曝光费的结算等）随 F-M8，本项不收不退。
   4. 核对：`SELECT c.publication_id, c.status FROM qb_publication_card c JOIN qb_shared_video v ON v.shared_video_id = c.shared_video_id WHERE v.shared_video_id = '<编号>'`：一分钟后应全部为 `ENDED`。没有结束的：查任务的执行（`/admin/jobs`，`qb.shared-video-ends`）与失败的项。
-- **撤回**：提供方自己在资源库中撤回；只影响以后的新发布（已提交的照常用到结束）。撤回的视频仍可下架。
+- **撤回**：提供方自己在资源库中撤回；只影响以后的新发布（已提交的照常用到结束）。撤回的视频仍可下架。提供方的账号删除（Q72）时，其待审核与共享中的视频自动撤回（`QB_SHARED_VIDEO_ERASED_WITHDRAW`，总控 2026-11-08）。
+- **审核期间被下架**：发布审核通过、要上架时再查一次；所用的共享视频已下架即不上架，退回草稿（`reject_code = QB_SHARED_VIDEO_TAKEN_DOWN`），发起方收到"发布被退回"的邮件并在发布页看到原因。
+- **使用数**：运营商看到的"使用中的发布"只含自己发起方的发布；平台看到全部。共享视频的主题词只用于目录搜索，不并入发布的主题词。
 - **审计**：共享、审核结果、撤回、下架都经平台的写入路径（`GET /api/audit/records?entityType=QbSharedVideo`）；发布的结束在发布的历史中。
 - **"选不到某个共享视频"的排查**：视频的状态（平台管理系统的"共享视频"页；只有"共享中"的在目录中）；提供方的入驻记录被删除（账号删除）时目录不列它。
 - **数据**：`qb_shared_video`（共享的内容不变；状态、理由、时间由流程写）；发布 `qb_publication_version.shared_video_id`（草稿时 `QB_PUBLICATION_SHARED_VIDEO_SET`，提交即冻结）；卡片 `qb_publication_card.shared_video_id`、`video_provider_id`（上线时冻结，供以后的屏蔽 F-S8 与统计）。卡片的视频即共享视频，除非 Quiz 有"看完才能答题"的视频；共享视频的链接计入"中国大陆看不到"（§7.24）与竖屏（§7.25）。答题路径不变。

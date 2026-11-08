@@ -64,6 +64,7 @@ const en = {
       remove: 'Use none',
       by: 'Shared by {{provider}}',
       unavailable: 'This video is no longer in the catalog ({{status}}): choose another one, or none, before submitting.',
+      takenDownInReview: 'Its shared video was taken down while it was in review (illegal or infringing), so it did not go on. Choose another video, or none, and submit it again; this is not a breach on your part.',
     },
     picker: {
       title: 'Shared videos',
@@ -143,6 +144,7 @@ const zh: typeof en = {
       remove: '不用共享视频',
       by: '由 {{provider}} 共享',
       unavailable: '这个视频已不在目录中（{{status}}）：提交前请另选一个，或不用共享视频。',
+      takenDownInReview: '审核期间，它使用的共享视频已被下架（违法或侵权），所以没有上架。请另选一个视频或不用共享视频，再重新提交；这不算您的违约。',
     },
     picker: {
       title: '共享视频目录',
@@ -222,6 +224,7 @@ const ja: typeof en = {
       remove: '使わない',
       by: '{{provider}} が共有',
       unavailable: 'この動画はもうカタログにありません（{{status}}）。提出する前にほかの動画を選ぶか、使わないでください。',
+      takenDownInReview: '審査中に、使っていた共有動画が公開停止された（違法または権利侵害）ため、公開されませんでした。ほかの動画を選ぶか使わないようにして、もう一度申請してください。あなたの違反ではありません。',
     },
     picker: {
       title: '共有動画カタログ',

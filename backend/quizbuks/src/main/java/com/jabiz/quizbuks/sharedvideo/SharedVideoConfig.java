@@ -108,6 +108,12 @@ public class SharedVideoConfig {
     }
 
     @Bean
+    ProcessDefinition<SharedVideoProcesses.ErasedWithdrawInput, VideoOutput, ProcessContext>
+        qbSharedVideoErasedWithdraw() {
+        return SharedVideoProcesses.erasedWithdraw();
+    }
+
+    @Bean
     ProcessDefinition<SharedVideoProcesses.TakedownInput, VideoOutput, ProcessContext> qbSharedVideoTakedown() {
         return SharedVideoProcesses.takedown();
     }

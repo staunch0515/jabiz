@@ -420,4 +420,79 @@ class SharedVideoIT extends PlayItSupport {
             .containsEntry("shared_video_id", sharedVideoId).containsEntry("video_provider_id", provider)
             .containsEntry("foreign_video", true);
     }
+
+    /** 总控 2026-11-08: a provider's account deleted withdraws their shares; submitted publications keep them. */
+    @Test
+    void aDeletedProvidersVideosAreWithdrawnWhatWasSubmittedKeepsThem() {
+        String provider = newSponsor(unique("s-fs12-erased"));
+        String user = newSponsor(unique("s-fs12-erased-user"));
+        credit(user, 10_000);
+        String approved = approvedVideo(provider, BILIBILI, false);
+        String token = sponsorToken(provider);
+        String pending = (String) run(SharedVideoProcesses.SHARE, token,
+            share(videoAsset(token, "Pending", YOUTUBE), false, word("fs12-pets"))).get("sharedVideoId");
+        String rejectedAsset = videoAsset(token, "Rejected", YOUTUBE);
+        Map<String, Object> rejected = run(SharedVideoProcesses.SHARE, token, share(rejectedAsset, false,
+            word("fs12-pets")));
+        decide((String) rejected.get("approvalRequestId"), "REJECT", "No");
+        String live = liveWith(user, "FS12 erased live", approved);
+
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", provider, "requestedBy", "it-support"));
+        deliverEvents();
+
+        assertThat(videoRow(approved)).containsEntry("status", "WITHDRAWN");
+        assertThat(videoRow(pending)).containsEntry("status", "WITHDRAWN");
+        assertThat(videoRow((String) rejected.get("sharedVideoId"))).containsEntry("status", "REJECTED");
+        // The review in progress is withdrawn with it.
+        assertThat(query("SELECT status FROM sys_approval_request_version WHERE entity_id = ? ORDER BY version_no "
+            + "DESC LIMIT 1", pending).getFirst().get("status")).isNotEqualTo("PENDING");
+        // The user's publication keeps it, live; no new publication picks it.
+        assertThat(status(live)).isEqualTo("LIVE");
+        assertThat(card(live)).containsEntry("shared_video_id", approved);
+        String draft = draftWith(user, "FS12 erased draft", null, null);
+        assertThat(codes(refused(PublicationSharedVideos.SET, sponsorToken(user), body("publicationId", draft,
+            "sharedVideoId", approved), 422))).containsExactly(SharedVideoCodes.UNAVAILABLE);
+    }
+
+    /** 总控 2026-11-08: a publication in review whose shared video is taken down meanwhile does not go on. */
+    @Test
+    void aReviewedPublicationWhoseVideoWasTakenDownMeanwhileDoesNotGoOn() {
+        String provider = newSponsor(unique("s-fs12-golive"));
+        String user = newSponsor(unique("s-fs12-golive-user"));
+        credit(user, 10_000);
+        String sharedVideoId = approvedVideo(provider, BILIBILI, false);
+        String other = approvedVideo(provider, YOUTUBE, false);
+        autoApprove(false);
+        try {
+            String token = sponsorToken(user);
+            String publicationId = draftWith(user, "FS12 go-live", sharedVideoId, null);
+            Map<String, Object> submitted = submit(token, publicationId);
+            assertThat(submitted).containsEntry("status", "PENDING_REVIEW");
+            String kept = draftWith(user, "FS12 go-live kept", other, null);
+            Map<String, Object> keptSubmitted = submit(token, kept);
+            run(SharedVideoProcesses.TAKEDOWN, videoAdmin(), body("sharedVideoId", sharedVideoId, "reason",
+                "Infringes"));
+            runEnds();
+            assertThat(status(publicationId)).isEqualTo("PENDING_REVIEW");
+
+            decide((String) submitted.get("approvalRequestId"), "APPROVE", null);
+            assertThat(row(publicationId)).containsEntry("status", "DRAFT")
+                .containsEntry("reject_code", SharedVideoCodes.TAKEN_DOWN);
+            assertThat(query("SELECT 1 FROM qb_publication_card WHERE publication_id = ?::uuid", publicationId))
+                .isEmpty();
+            // Another video's publication goes on as before.
+            decide((String) keptSubmitted.get("approvalRequestId"), "APPROVE", null);
+            assertThat(status(kept)).isEqualTo("LIVE");
+            // The sponsor is told, in their language, why.
+            deliverEvents();
+            assertThat(query("SELECT params FROM sys_mail_message WHERE user_id = ?::uuid AND template = "
+                + "'qb.publication.rejected'", user)).singleElement()
+                .satisfies(m -> assertThat(m.get("params").toString()).contains("taken down while it was in review"));
+            // Another video, and it goes on.
+            run(PublicationSharedVideos.SET, token, body("publicationId", publicationId, "sharedVideoId", other));
+            assertThat(submit(token, publicationId)).containsEntry("status", "PENDING_REVIEW");
+        } finally {
+            autoApprove(true);
+        }
+    }
 }

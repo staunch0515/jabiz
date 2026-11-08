@@ -367,16 +367,67 @@ public final class SharedVideoProcesses {
                 if (!in(ctx, video, SharedVideoRules.withdrawable(video.get("status")))) {
                     return;
                 }
-                ctx.put(WITHDRAW_REVIEW, QbSharedVideos.PENDING.equals(video.get("status")));
-                Map<String, Object> values = new LinkedHashMap<>();
-                values.put("status", QbSharedVideos.WITHDRAWN);
-                values.put("withdrawnAt", ctx.opTime());
-                write(ctx, video, values);
+                withdrawn(ctx, video);
             });
-            pb.step("Withdraw the review", WithdrawApproval.<ProcessContext>when(
-                ctx -> Boolean.TRUE.equals(ctx.get(WITHDRAW_REVIEW)), SharedVideoApprovals.SUBJECT,
-                ctx -> first(ctx, VIDEO).id()));
+            withdrawReview(pb);
         });
+    }
+
+    /** The video withdrawn now (a review in progress is withdrawn too, by {@link #withdrawReview}). */
+    private static void withdrawn(ProcessContext ctx, EntityInstance video) {
+        ctx.put(WITHDRAW_REVIEW, QbSharedVideos.PENDING.equals(video.get("status")));
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("status", QbSharedVideos.WITHDRAWN);
+        values.put("withdrawnAt", ctx.opTime());
+        write(ctx, video, values);
+    }
+
+    private static <I, O> void withdrawReview(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Withdraw the review", WithdrawApproval.<ProcessContext>when(
+            ctx -> Boolean.TRUE.equals(ctx.get(WITHDRAW_REVIEW)), SharedVideoApprovals.SUBJECT,
+            ctx -> first(ctx, VIDEO).id()));
+    }
+
+    // ---- the provider's account erased -----------------------------------------------------------------------------
+
+    /** {@value #ERASED_WITHDRAW}: one of an erased provider's standing shares, withdrawn. */
+    public static final String ERASED_WITHDRAW = "QB_SHARED_VIDEO_ERASED_WITHDRAW";
+
+    /** Input of {@value #ERASED_WITHDRAW}: the share and its provider (the erased account). */
+    public record ErasedWithdrawInput(@NotBlank @Size(max = QbSharedVideos.ID_LENGTH) String sharedVideoId,
+        @NotBlank String providerId) {}
+
+    /**
+     * {@value #ERASED_WITHDRAW} (总控 2026-11-08): when a provider's account is erased (Q72, {@code QB_SPONSOR_ERASED}),
+     * each of their shares in review or approved is withdrawn, as the provider would: no new publication picks it, and
+     * the publications submitted with it keep it until they end. Only a sub-process of the erasure (its root declares
+     * the permission); one withdrawn, rejected or taken down meanwhile is left as it is. Locks as {@value #WITHDRAW}:
+     * the provider's sharing, then the video's (after the account's and the publications' the erasure took).
+     */
+    public static ProcessDefinition<ErasedWithdrawInput, VideoOutput, ProcessContext> erasedWithdraw() {
+        return ProcessDefinition.define(ERASED_WITHDRAW, 1, ErasedWithdrawInput.class, VideoOutput.class,
+            ProcessContext.class, pb -> {
+                pb.description("Withdraws a shared video of a provider whose account was erased (part of the erasure "
+                        + "only).")
+                    .permissions(QbPermissions.SHARED_VIDEO_SYSTEM)
+                    .subProcessOnly()
+                    .contextFactory((start, input) -> start(start, input, input.sharedVideoId()))
+                    .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, VideoOutput.class)
+                        : new VideoOutput(id(ctx), null, null, null));
+                pb.step("Lock the provider's sharing", HoldLock.<ProcessContext>exclusive(
+                    ctx -> QbSharedVideos.providerLockName(ctx.get(INPUT, ErasedWithdrawInput.class).providerId())));
+                lockAndLoad(pb);
+                pb.compute("Withdraw", (metadata, ctx) -> {
+                    EntityInstance video = first(ctx, VIDEO);
+                    if (video == null || !ctx.get(INPUT, ErasedWithdrawInput.class).providerId()
+                        .equals(video.get("providerId")) || !SharedVideoRules.withdrawable(video.get("status"))) {
+                        unchanged(ctx, video);
+                        return;
+                    }
+                    withdrawn(ctx, video);
+                });
+                withdrawReview(pb);
+            });
     }
 
     // ---- takedown --------------------------------------------------------------------------------------------------

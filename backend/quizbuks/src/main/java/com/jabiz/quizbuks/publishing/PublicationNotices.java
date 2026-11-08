@@ -71,6 +71,11 @@ public final class PublicationNotices {
                 return APPROVED;
             }
             Object reason = values.get("rejectReason");
+            // F-S12: sent back because its shared video was taken down in review: the sponsor must know.
+            if (PublicationStatus.DRAFT.equals(to)
+                && com.jabiz.quizbuks.sharedvideo.SharedVideoCodes.TAKEN_DOWN.equals(values.get("rejectCode"))) {
+                return REJECTED;
+            }
             return PublicationStatus.DRAFT.equals(to) && reason != null && !reason.toString().isBlank() ? REJECTED
                 : null;
         }
@@ -100,7 +105,8 @@ public final class PublicationNotices {
         payload.put("to", to == null ? from : to.toString());
         payload.put("kind", kind);
         Object reason = switch (kind) {
-            case REJECTED -> values.get("rejectReason");
+            case REJECTED -> values.get("rejectReason") != null ? values.get("rejectReason")
+                : values.get("rejectCode");
             case TAKEN_DOWN -> values.get("adminReason");
             case ENDED -> values.get("endReason");
             default -> null;

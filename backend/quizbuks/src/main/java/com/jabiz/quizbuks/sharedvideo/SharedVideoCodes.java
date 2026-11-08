@@ -20,8 +20,14 @@ public final class SharedVideoCodes {
     /** A publication picks, or is submitted with, a video not in the catalog (withdrawn, taken down, in review). */
     public static final String UNAVAILABLE = "QB_SHARED_VIDEO_UNAVAILABLE";
 
+    /**
+     * A publication in review whose shared video was taken down meanwhile: it went back to its draft instead of going
+     * on (its {@code rejectCode}; the sponsor is mailed).
+     */
+    public static final String TAKEN_DOWN = "QB_SHARED_VIDEO_TAKEN_DOWN";
+
     public static final List<String> ALL = List.of(NOT_VIDEO, ASSET_INCOMPLETE, TITLE_REQUIRED, TOPIC_REQUIRED,
-        ALREADY_SHARED, STATE, UNAVAILABLE);
+        ALREADY_SHARED, STATE, UNAVAILABLE, TAKEN_DOWN);
 
     private SharedVideoCodes() {}
 }

@@ -343,7 +343,10 @@ public final class MailProcesses {
                 decide(ctx, NotificationMails.PUBLICATION_APPROVED, params);
             }
             case PublicationNotices.REJECTED -> {
-                params.put("reason", input.reason() == null ? "" : input.reason());
+                // F-S12: a code (its shared video taken down in review) is read in the sponsor's language.
+                params.put("reason", input.reason() == null ? ""
+                    : com.jabiz.quizbuks.sharedvideo.SharedVideoCodes.TAKEN_DOWN.equals(input.reason())
+                        ? text(messages, ctx, input.reason()) : input.reason());
                 decide(ctx, NotificationMails.PUBLICATION_REJECTED, params);
             }
             case PublicationNotices.TAKEN_DOWN -> {

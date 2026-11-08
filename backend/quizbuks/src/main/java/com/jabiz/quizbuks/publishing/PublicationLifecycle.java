@@ -585,6 +585,12 @@ public final class PublicationLifecycle {
                 values.put("status", DRAFT);
                 values.put("rejectCode", com.jabiz.quizbuks.identity.AccountCodes.USER_BANNED);
                 values.put("rejectReason", null);
+            } else if (PublicationSharedVideos.takenDown(ctx, publication)) {
+                // F-S12 (总控 2026-11-08): its shared video was taken down while it was reviewed: it does not go on;
+                // back to the draft, and the sponsor is told (they choose another video, or none, and submit again).
+                values.put("status", DRAFT);
+                values.put("rejectCode", com.jabiz.quizbuks.sharedvideo.SharedVideoCodes.TAKEN_DOWN);
+                values.put("rejectReason", null);
             } else if (ctx.opTime().isBefore(instant(publication.get("endAt")))) {
                 values.putAll(PublicationEditing.goingOn(ctx, publication, approval.requestId()));
             } else {
