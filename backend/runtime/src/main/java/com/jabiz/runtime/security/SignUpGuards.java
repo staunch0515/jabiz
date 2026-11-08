@@ -24,7 +24,8 @@ import java.util.Map;
  * Runs the applications' {@link SignUpGuard}s (docs/design/10-security.md section 15.15; decision D66) before an
  * account gets an entry's registration roles, on every path ({@link SignUpGuardStep}). Reads the data they declare as
  * the sign-in guards' is read ({@link SignInGuards#read}); without a user (a new account, a registration) every load
- * has no rows and nothing is read. All guards must allow; a guard that throws, answers nothing or names a reason
+ * has no rows and nothing is read. The business parameters they declare ({@link GuardParams}, decision D79) are read
+ * alike with or without a user. All guards must allow; a guard that throws, answers nothing or names a reason
  * without a text, or data that cannot be read, refuses with {@value SignUpDecision#REFUSED} (fail closed).
  *
  * <p>The startup check reports loads naming a dataset or field that does not exist or a field that cannot hold a user
@@ -38,11 +39,14 @@ public class SignUpGuards implements PlatformCheck {
     private final List<SignUpGuard> guards;
     private final SignInGuards reader;
     private final MessageCatalog messages;
+    private final GuardParams params;
 
-    public SignUpGuards(ObjectProvider<SignUpGuard> guards, SignInGuards reader, MessageCatalog messages) {
+    public SignUpGuards(ObjectProvider<SignUpGuard> guards, SignInGuards reader, MessageCatalog messages,
+        GuardParams params) {
         this.guards = guards.orderedStream().toList();
         this.reader = reader;
         this.messages = messages;
+        this.params = params;
     }
 
     /** Whether any application declares a guard. */
@@ -60,10 +64,15 @@ public class SignUpGuards implements PlatformCheck {
         if (guards.isEmpty()) {
             return Mono.just(SignUpDecision.ALLOW);
         }
-        return Mono.defer(() -> data(userId))
-            .map(data -> decide(new SignUpAttempt(entry, path, userId, email, emailVerified, time, data)))
+        // One read after the other: inside a process both go through the same transaction.
+        return Mono.defer(() -> data(userId)
+                .flatMap(data -> params.read(GuardParams.merge(guards.stream().map(SignUpGuard::params).toList()), time)
+                    .map(values -> reactor.util.function.Tuples.of(data, values))))
+            .map(read -> decide(new SignUpAttempt(entry, path, userId, email, emailVerified, time, read.getT1(),
+                read.getT2())))
             .onErrorResume(e -> {
-                log.warn("Sign-up guard data of user {} could not be read; refusing: {}", userId, e.toString());
+                log.warn("Sign-up guard data or parameters of user {} could not be read; refusing: {}", userId,
+                    e.toString());
                 return Mono.just(SignUpDecision.refuse(SignUpDecision.REFUSED));
             });
     }
@@ -127,6 +136,16 @@ public class SignUpGuards implements PlatformCheck {
                 continue;
             }
             problems.addAll(reader.loadProblems(location, loads, seen));
+        }
+        Map<String, com.jabiz.security.GuardParam> seenParams = new LinkedHashMap<>();
+        for (SignUpGuard guard : guards) {
+            String location = "SignUpGuard " + guard.getClass().getName();
+            try {
+                problems.addAll(GuardParams.problems(location, guard.params(), seenParams));
+            } catch (RuntimeException e) {
+                problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "params() failed: "
+                    + e.getMessage()));
+            }
         }
         return problems;
     }

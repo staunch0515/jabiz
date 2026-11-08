@@ -5459,6 +5459,23 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz12 状态**：📝 待评审（分支 `1.3/phase-17zz12-app-test-timeout`）。
 
+### 17zz11 登录与注册守卫读业务参数（2026-11-08，总控排入；决策 D79）
+
+**缘由**：QuizBuks 的守卫（F-S2c2）要读受控的业务参数（如 `qb.tree.gate.sponsor-apply-node`），而守卫的数据此前只经 `loads()`（按用户编号读的行，D36、D66）。
+需求方 2026-11-08 确认 D79（补充 D36 实现说明第 1 条与 D66 第 1 条，不取代）。设计 10 §15.17。
+
+| # | 内容 |
+|---|---|
+| 17zz11-1 | core：`GuardParam.required/optional(键)`；`SignInGuard` / `SignUpGuard` 的缺省方法 `params()`；`SignInAttempt` / `SignUpAttempt` 加 `params()`（`ParamValues`），保留原有的构造器 |
+| 17zz11-2 | runtime：`GuardParams` 按尝试的时间以系统身份一次读出全部守卫的参数（键取并集，必须有值优先），在预读之后读（同一事务、不并发）；必须有值的键没有值或读取失败即拒绝、不问守卫；不声明即不读 |
+| 17zz11-3 | 启动检查（`SECURITY`）：键的格式（错误）、同一个键必须有值与可以未设置并存（警告）、`params()` 抛异常（错误） |
+| 17zz11-4 | 示范：`app` 的 `PortalSignUpSwitch`（参数 `commerce.portal.sign-up-closed`，bool、可以未设置；原因 `commerce.sign-up-closed`，三语） |
+| 17zz11-5 | 测试：`GuardParamTest`、`GuardParamsTest`、`SignUpGuardIT` 的示范开关（排定的关闭到时生效；匿名注册、登录后加入门户都被拒；其他入口不受影响） |
+
+**验收**：CI 绿；同步到 `1.3/quizbuks` 后 S2 的守卫可用 `params()`。
+
+**17zz11 状态**：📝 待评审（分支 `1.3/phase-17zz11-guard-params`）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
