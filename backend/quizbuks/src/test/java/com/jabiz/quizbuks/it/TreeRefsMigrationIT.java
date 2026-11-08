@@ -18,7 +18,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The migration that names each referenced node by its graph (V93, docs/quizbuks/plans/impl/F-S2d.md §2): the
+ * The migration that names each referenced node by its graph (V95, docs/quizbuks/plans/impl/F-S2d.md §2): the
  * references and the node rows' before_answer written before it are resolved as tree.TreeRules#resolve does (the
  * graph's own node first, else the one other graph in effect it may name that has it); a reference no single graph
  * has stays bare. Its own schemas, migrated by Flyway as the platform does, without the application.
@@ -26,7 +26,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TreeRefsMigrationIT {
 
     private static final PostgresTestDatabase DB = PostgresTestDatabase.get();
-    private static final String BEFORE = "92";
 
     private final List<String> schemas = new ArrayList<>();
 
@@ -94,8 +93,17 @@ class TreeRefsMigrationIT {
         Flyway.configure().dataSource(DB.jdbcUrl(), DB.username(), DB.password()).schemas(schema)
             .defaultSchema(schema).createSchemas(true).locations("classpath:db/jabiz").table("jabiz_schema_history")
             .baselineOnMigrate(true).baselineVersion("0").load().migrate();
-        migrate(schema, BEFORE);
+        migrate(schema, before(schema));
         return schema;
+    }
+
+    /** The latest migration before V95 that this branch has (V93 and V94, F-S6a's, may or may not be merged yet). */
+    private static String before(String schema) {
+        return java.util.Arrays.stream(Flyway.configure().dataSource(DB.jdbcUrl(), DB.username(), DB.password())
+                .schemas(schema).defaultSchema(schema).locations("classpath:db/migration").load().info().all())
+            .map(org.flywaydb.core.api.MigrationInfo::getVersion)
+            .filter(version -> version.isNewerThan("0") && !version.isAtLeast("95"))
+            .max(org.flywaydb.core.api.MigrationVersion::compareTo).orElseThrow().getVersion();
     }
 
     private static void migrate(String schema, String target) {
