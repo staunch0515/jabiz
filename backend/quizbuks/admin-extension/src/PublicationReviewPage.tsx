@@ -99,7 +99,7 @@ function Takedowns({ takedowns }: { takedowns: UseQueryResult<Takedown[]> }) {
 }
 import { VersionPreview } from './VersionPreview'
 import { readVideoSites } from './region-api'
-import { cardVideoVertical, foreignVideo, mainlandSites, reachesMainland, snapshotVideoLinks } from './video'
+import { cardVideoVertical, embeddedPages, foreignVideo, mainlandSites, reachesMainland, snapshotVideoLinks } from './video'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const IMAGE = { image: true, variants: CONTENT_IMAGE_VARIANTS }
@@ -679,6 +679,20 @@ export default function PublicationReviewPage() {
       {shownVersion?.content && cardVideoVertical(shownVersion.content) && (
         <Alert data-testid="publication-vertical">
           <AlertDescription>{t('region.verticalNotice')}</AlertDescription>
+        </Alert>
+      )}
+      {/* F-S15: the pages of other sites the version frames: their content is the reviewer's to check. */}
+      {shownVersion?.content && embeddedPages(shownVersion.content).length > 0 && (
+        <Alert variant="warning" data-testid="publication-embedded">
+          <AlertDescription className="flex flex-col gap-1">
+            <span>{t('region.embeddedNotice')}</span>
+            <ul className="list-disc pl-5">
+              {embeddedPages(shownVersion.content).map((page) => (
+                <li key={page} className="break-all"><a href={page} target="_blank" rel="noopener noreferrer"
+                  className="underline underline-offset-2">{page}</a></li>
+              ))}
+            </ul>
+          </AlertDescription>
         </Alert>
       )}
       <Takedowns takedowns={takedowns} />

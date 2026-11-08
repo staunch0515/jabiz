@@ -159,6 +159,89 @@ class WatchVideoIT extends PlayItSupport {
         assertThat(WatchRules.needed(120)).isEqualTo(108);
     }
 
+    /**
+     * F-S15: a video file on any https host plays in the App's own {@code <video>}, which says where it is: it can be
+     * the video to watch, the card carries its address, and a start needs the App's report as for YouTube (the same
+     * report, WatchRules). A page of another site cannot be the one; neither can a file over http.
+     */
+    @Test
+    void aVideoFileCanBeTheOneToWatch() {
+        String file = "https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4?sig=abc";
+        String sponsor = newSponsor("s-watch-file");
+        credit(sponsor, 10_000);
+        String token = sponsorToken(sponsor);
+        String quizId = newQuiz(token, "Video file quiz");
+        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", "Video file quiz", "timeLimitSec", 300));
+        for (String other : List.of("https://videos.staging.quizbuks.com/player/1",
+            "http://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4",
+            "https://videos.staging.quizbuks.com:8443/quizbuks-demo-30s.mp4")) {
+            assertThat(codes(refused("QB_MATERIAL_SAVE", token, video(quizId, other, true), 422))).as(other)
+                .containsExactly(ContentCodes.MATERIAL_VIDEO_NOT_EMBEDDABLE);
+        }
+        Map<String, Object> timed = video(quizId, file, true);
+        timed.put("durationSec", 30);
+        run("QB_MATERIAL_SAVE", token, timed);
+        run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of France?", "points", 2,
+            "options", List.of(body("text", "Paris", "correct", true), body("text", "Lyon"))));
+        run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of Japan?", "points", 3,
+            "options", List.of(body("text", "Tokyo", "correct", true), body("text", "Osaka"))));
+        String versionId = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
+        Instant now = clock.instant();
+        Map<String, Object> save = complete(versionId, "Video file run", now, now.plus(Duration.ofDays(7)));
+        save.put("regions", List.of("GLOBAL"));
+        String publicationId = (String) run("QB_PUBLICATION_SAVE", token, save).get("publicationId");
+        run("QB_PUBLICATION_SUBMIT", token, body("publicationId", publicationId));
+
+        List<Map<String, Object>> feed = items("qb.app.feed", taker(newTaker("t-watch-file", null)), body("params",
+            body("at", clock.instant().toString()), "limit", 200));
+        assertThat(feed).filteredOn(row -> row.get("publicationId").equals(publicationId)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("video", file).containsEntry("watchRequired", true)
+                .containsEntry("videoDurationSec", 30));
+        String taker = taker(newTaker("t-watch-file-start", null));
+        assertThat(codes(refused("QB_ATTEMPT_START", taker, body("publicationId", publicationId,
+            "playback", body("status", "REPORTED", "watchedSec", 20, "ended", false)), 422)))
+            .containsExactly(PlayCodes.WATCH_REQUIRED);
+        assertThat(run("QB_ATTEMPT_START", taker, body("publicationId", publicationId, "playback",
+            body("status", "REPORTED", "watchedSec", 27, "ended", false, "reportedDurationSec", 30))))
+            .containsEntry("resumed", false);
+    }
+
+    /**
+     * F-S15: without a video to watch, the card takes the first video of the seven sites or a video file; a page of
+     * another site (which may refuse to be framed) only when there is nothing else, and a long address whole.
+     */
+    @Test
+    void aPageOfAnotherSiteComesLastOnTheCard() {
+        String sponsor = newSponsor("s-watch-page");
+        credit(sponsor, 10_000);
+        String longFile = "https://cdn.example.com/" + "a".repeat(150) + "/clip.webm";
+        assertThat(cardVideoOf(sponsor, "Page first", List.of("https://player.example.com/embed/1", longFile)))
+            .isEqualTo(longFile);
+        assertThat(cardVideoOf(sponsor, "Page only", List.of("http://cdn.example.com/x.mp4",
+            "https://player.example.com/embed/1"))).isEqualTo("https://player.example.com/embed/1");
+    }
+
+    private Object cardVideoOf(String sponsor, String title, List<String> links) {
+        String token = sponsorToken(sponsor);
+        String quizId = newQuiz(token, title);
+        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", title, "timeLimitSec", 300));
+        for (String link : links) {
+            run("QB_MATERIAL_SAVE", token, video(quizId, link, null));
+        }
+        run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of France?", "points", 2,
+            "options", List.of(body("text", "Paris", "correct", true), body("text", "Lyon"))));
+        run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of Japan?", "points", 3,
+            "options", List.of(body("text", "Tokyo", "correct", true), body("text", "Osaka"))));
+        String versionId = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
+        Instant now = clock.instant();
+        Map<String, Object> save = complete(versionId, title, now, now.plus(Duration.ofDays(7)));
+        save.put("regions", List.of("GLOBAL"));
+        String publicationId = (String) run("QB_PUBLICATION_SAVE", token, save).get("publicationId");
+        run("QB_PUBLICATION_SUBMIT", token, body("publicationId", publicationId));
+        return query("SELECT video FROM qb_publication_card WHERE publication_id = ?::uuid", publicationId)
+            .getFirst().get("video");
+    }
+
     @Test
     void withoutAVideoToWatchTheCardCarriesTheFirstVideoTheAppPlays() {
         String sponsor = newSponsor("s-watch-learn");
