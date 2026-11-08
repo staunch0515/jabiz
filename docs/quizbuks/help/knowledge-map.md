@@ -1,7 +1,7 @@
 # 帮助文案：知识结构图（F-S2）
 
 给学者与发起方看的帮助文案（三语）。帮助中心的内容存在数据库里（FAQ 为 `QbFaqEntry`），**由内容管理员在平台管理系统的"FAQ"中发布**，改了不用重新部署；这里是文案的底稿，功能改了先改这里再请内容管理员照改。
-用词照 `docs/quizbuks/glossary.md`；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。规则与运维见 `docs/quizbuks/plans/impl/F-S2.md`、`operations.md` §7.26。
+用词照 `docs/quizbuks/glossary.md`；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。规则与运维见 `docs/quizbuks/plans/impl/F-S2.md`、`operations.md` §7.27。
 
 - **发布的时机**：看图与编辑的页面在 F-S3。F-S3 上线之前不发布这些条目（页面上还看不到图）。
 - 参数（写进文案的是缺省值，改了参数时同步改这里）：一张图至多 200 个节点（`qb.tree.max-nodes`），一位发起方一张自己的图（`qb.tree.sponsor.max-trees`）。

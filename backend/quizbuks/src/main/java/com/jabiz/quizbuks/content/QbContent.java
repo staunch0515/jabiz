@@ -96,6 +96,12 @@ public final class QbContent {
         // Q73a: the quiz's other languages, comma-separated (ContentLanguages); none for its base language only.
         eb.field("translationLanguages", f -> f.physicalColumn("translation_languages").processOnly()
             .asText(ContentLanguages.LIST_LENGTH));
+        // F-S9: the quiz's topics (only QB_QUIZ_TOPICS_SET): codes of the word list, comma-separated in the order
+        // chosen, and the sponsor's custom words (a JSON array, for search only). A version keeps them as they are.
+        eb.field("topics", f -> f.physicalColumn("topics").processOnly()
+            .asText(com.jabiz.quizbuks.topic.TopicRules.CODES_LENGTH));
+        eb.field("customTopics", f -> f.physicalColumn("custom_topics").processOnly()
+            .asText(com.jabiz.quizbuks.topic.TopicRules.CUSTOM_LENGTH));
         // Markdown, rendered by the frontends only, without raw HTML.
         eb.field("intro", f -> f.physicalColumn("intro").asText(ContentLimits.INTRO_LENGTH, true));
         eb.field("cover", f -> f.physicalColumn("cover").kind(FileKind.of(IMAGE_POLICY)));
@@ -263,6 +269,13 @@ public final class QbContent {
         // Q73a: every language of the version, the base first, comma-separated; none for its base language only.
         eb.field("languages", f -> f.physicalColumn("languages").immutable(true)
             .asText(ContentLanguages.LIST_LENGTH));
+        // F-S9: the quiz's topics when the version was made (its publications inherit them): codes of the word list
+        // and custom words; none on a version without, or from before.
+        eb.field("topics", f -> f.physicalColumn("topics").immutable(true)
+            .asText(com.jabiz.quizbuks.topic.TopicRules.CODES_LENGTH));
+        eb.field("customTopics", f -> f.physicalColumn("custom_topics").immutable(true)
+            .asText(com.jabiz.quizbuks.topic.TopicRules.CUSTOM_LENGTH));
+
         eb.field("questionCount", f -> f.physicalColumn("question_count").immutable(true).required(true)
             .asNumeric(4, 0));
         eb.field("materialCount", f -> f.physicalColumn("material_count").immutable(true).required(true)

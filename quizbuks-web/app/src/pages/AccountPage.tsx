@@ -30,6 +30,7 @@ import { legalPath } from '../qb/legal'
 import { SoundSwitch } from '../qb/SoundSettings'
 import { Link, navigate, Redirect, useLocation } from '../qb/router'
 import { MenuItem, MenuList } from './Menu'
+import { LikedTopics } from './LikedTopics'
 import { ProfileDetails } from './ProfileDetails'
 import { QuizLanguages } from './QuizLanguages'
 import { PROFILE_QUERY, ProfileForm } from './ProfileForm'
@@ -219,13 +220,26 @@ function AccountPartPage({ part }: { part: AccountPart }) {
 function PartContent({ part }: { part: AccountPart }) {
   switch (part) {
     case 'profile': return <ProfilePart />
-    case 'details': return <div data-testid="account-details"><ProfileDetails /></div>
+    case 'details': return <DetailsPart />
     case 'certificates': return <CertificatesPart />
     case 'security': return <SecurityPart />
     case 'mail': return <MailPart />
     case 'preferences': return <PreferencesPart />
     case 'id': return <div className="flex flex-col gap-8"><StaffAccount /></div>
   }
+}
+
+/** "About me": the details for matching (Q47) and, F-S9, the topics liked with strict mode. */
+function DetailsPart() {
+  const { t: tApp } = useTranslation(APP)
+  return (
+    <div className="flex flex-col gap-8">
+      <div data-testid="account-details"><ProfileDetails /></div>
+      <AccountSection title={tApp('topics.title')} testId="account-topics">
+        <LikedTopics />
+      </AccountSection>
+    </div>
+  )
 }
 
 function ProfilePart() {
