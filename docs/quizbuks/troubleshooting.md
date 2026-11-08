@@ -15,10 +15,11 @@
 | T5 | 首页卡片上的优酷、腾讯视频不自动播放；其他网站的视频没有声音 | 学者、发起方 | 设计如此（Q99b） |
 | T6 | 在中国扫不出兑换奖品的轮换码 | 学者、店员 | 已修复（2026-11-04）；与 T12 合并，待真机确认后一起归档 |
 | T7 | 导入 Quiz 文件失败，只说"出错了，请重试" | 发起方 | 已修复（2026-11-04） |
-| T8 | 部署失败：`application not healthy after 3m0s`，回滚也失败 | 内部（运维） | 服务器磁盘满，待清理 |
+| T8 | 部署失败：`application not healthy after 3m0s`，回滚也失败 | 内部（运维） | 预防已做（F-F13）：部署后自动只留最近几个镜像，磁盘告警；服务器上核对与告警试发后归档 |
 | T9 | 平台管理系统找不到 AI 获客的平台开关（`qb.prospect.*`），设了"每天获客"也不执行 | 内部（管理员） | 设置页已有平台开关（F-F8）；参数名列表待平台 P7 |
 | T10 | 公开主页的"链接名"填了官网地址，提示"须为 3 至 30 个小写字母、数字或连字符" | 发起方 | 已改进（F-F9）：输入网址时提示并建议链接名；问答发布后归档 |
 | T14 | e2e 的统计用例（`analytics.spec.ts`）在东京零点前后失败 | 内部（测试） | 已修复（2026-11-07） |
+| T15 | 邮件一直不到（验证、找回密码、通知），发信记录全是 `Connect timed out` | 全部；处理在内部（运维） | 设置问题；部署前的检查已能拦下（2026-11-08） |
 
 ---
 
@@ -148,7 +149,11 @@
   `DiskSpaceHealthIndicator … Free disk space at path '/app/.' below threshold. Available: 0 bytes`，`/actuator/health` 一直 503。应用本身已经启动（定时任务照常 `SUCCEEDED`）。
 - **原因**：Spring 的磁盘检查在可用空间低于 10 MB 时把健康状态判为不健康。容器的文件系统就是服务器的磁盘，每次部署都拉一个新镜像，旧镜像不会自动删除，磁盘会慢慢被占满。磁盘满时上传文件、数据库写入也会失败，所以这个检查应当保留。
 - **处理**：在服务器上查看占用（`df -h /`、`docker system df`），删除不用的旧镜像（只删没有容器在用的），再重新部署（Actions → QuizBuks deploy → Run workflow，分支 `1.3/quizbuks`，`image-tag` 留空）。同一台服务器上的数据库也在这块盘上的话，先确认它还能写入。
-- **预防（待决定）**：部署成功后自动只保留本应用最近几个镜像；监控中加磁盘告警（`operations.md` §5 已有数据库磁盘 > 80 % 的告警，应用服务器还没有）。
+- **预防（F-F13，已做）**：
+  - 部署成功后自动只保留每个环境最近 N 个镜像（`QB_DEPLOY_KEEP_IMAGES`，缺省 3；`DEPLOY.md`"旧镜像的清理"）。
+  - 磁盘告警：平台的 `jabiz-disk-usage` 测量的正是容器的工作目录 `/app` 所在的盘（就是这次满的那块），超过 `JABIZ_ALERT_DISK_PERCENT`（缺省 80 %）10 分钟即告警（`operations.md` §5）；
+    要求本环境的 LGTM 在运行。
+  - 归档前：部署之后在服务器上核对每个环境只剩 N 个镜像；以 `tools/ops/alert-fire-test.sh disk <目录>` 试发一次磁盘告警。
 
 ## T9 平台管理系统找不到 AI 获客的平台开关，设好了也不执行（内部）
 
@@ -225,6 +230,55 @@
 - **现象**：`analytics.spec.ts` 在东京时间 23:55 前后开始时偶尔失败："今天的支出"或 7 天的按日统计少了刚才的两次完成（#485 的 CI，重跑即通过）。
 - **原因**：统计按部署的时区（Asia/Tokyo）分日；用例在 23:59 完成答题，统计任务在 0:00 之后运行，完成就不再算"今天"。不是统计的问题。
 - **解决**：用例开始前，如果离东京零点不到一次运行的时长（5 分钟），先等到零点后 90 秒再开始（`notAcrossTokyoMidnight`），用例的时限相应加长。新的按日断言的用例照此处理。
+
+## T15 邮件一直不到，发信记录是 `Connect timed out`（处理在内部）
+
+- **对象**：使用者看到的是"收不到验证邮件 / 找回密码的邮件"；处理在运维。FAQ：`APP` 与 `SPONSOR` / `ACCOUNT`。
+- **状态**：2026-11-08 staging 出现（04:30–05:20 UTC 全部失败，约 50 分钟没有人发现）；需求方改了邮件服务器的设置并重启。部署前的检查（`deploy/quizbuks/server/check-env.sh`）现在拒绝下面原因中的设置错误；
+  "邮件连续发送失败"由平台告警 `jabiz-outbox-failed`（消费者 `jabiz.mail`）报告，前提是本环境的 LGTM 在运行、Grafana 的发信不走同一条断了的路（`operations.md` §5）。
+- **现象**：注册后收不到验证邮件、找回密码收不到；平台管理系统的发信记录（`sys_mail_attempt`）一条接一条 `FAILED`，`detail` 为
+  `Couldn't connect to host, port: smtp.mx.cloudflare.net, 465 … Connect timed out`；日志中同一封信每隔一段时间重试，用满次数（缺省 10 次）后记一条 `could not be delivered … no longer retried` 的错误。
+- **原因**（这次是前两条，第 3 条同时存在）：
+  1. **服务器连不出去**：服务器在 Hetzner Cloud，Hetzner 缺省封锁出站的 25 与 465 端口（587 可用）。`Connect timed out` 就是这个样子（服务器不回答），不是密码错。
+  2. **465 的设置写成了 587 的**：465 是一连上就 TLS，要 `SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true`、不开 STARTTLS；`.env` 里却是 `STARTTLS_ENABLE/REQUIRED=true`、没有 SSL；而且有重复的行（compose 取最后一行）。
+  3. **Cloudflare Email Sending 的要求没满足**：用户名必须是字面的 `api_token`（密码是带 Email Sending: Edit 的 API 令牌），发件地址必须是在 Email Sending 中登记过的域名（不能是 `quizbuks@gmail.com`）。
+- **处理**（`deploy/quizbuks/DEPLOY.md`"2b. 发信的服务器"）：
+  1. 在服务器上测端口：`timeout 10 bash -c '</dev/tcp/smtp.mx.cloudflare.net/465' && echo ok`。连不上：请 Hetzner 解封出站 465，或改用支持 587 + STARTTLS 的发信服务。
+  2. 按"2b"改 `.env`：465 用 SSL、不写 STARTTLS；Cloudflare 的用户名 `api_token`、发件地址用登记的域名；同一个变量只留一行。
+  3. 重建应用的容器（`docker restart` 不重新读 `.env`；compose 要求 `IMAGE_TAG`）：在 `/opt/apps/<APP_NAME>/` 下 `IMAGE_TAG=$(docker inspect --format '{{.Config.Image}}' <APP_NAME>-app | cut -d: -f2) docker compose up -d app`，或 `deploy-app.sh <APP_NAME> <当前 SHA>`，或重新部署（部署前的检查会指出还剩的设置问题）。
+  4. 核对：平台管理系统"邮件模版"的测试发送到自己的邮箱；再用下面第一条查询看最近的发信。
+- **只读的查询**（在数据库上；只读，不改任何东西）：
+
+  ```sql
+  -- 最近 2 小时每 10 分钟的发信结果
+  SELECT date_trunc('hour', attempted_time) + floor(extract(minute FROM attempted_time) / 10) * interval '10 min' AS slot,
+         outcome, count(*)
+  FROM sys_mail_attempt
+  WHERE attempted_time > now() - interval '2 hours'
+  GROUP BY 1, 2 ORDER BY 1, 2;
+
+  -- 还没有发出去的邮件（没有 SENT / SKIPPED 的），各自失败了几次、最后的错误
+  SELECT m.message_id, m.template, m.created_time, count(a.*) AS attempts, max(a.attempted_time) AS last_attempt,
+         (array_agg(a.detail ORDER BY a.attempt_no DESC))[1] AS last_detail
+  FROM sys_mail_message m
+  JOIN sys_mail_attempt a ON a.message_id = m.message_id
+  WHERE m.created_time > now() - interval '1 day'
+    AND NOT EXISTS (SELECT 1 FROM sys_mail_attempt s WHERE s.message_id = m.message_id AND s.outcome IN ('SENT', 'SKIPPED'))
+  GROUP BY m.message_id, m.template, m.created_time
+  ORDER BY m.created_time;
+  ```
+
+  第二条中次数已到上限（缺省 10）的邮件不会再自动重试：服务器修好后，请收件人在页面上重新发送（"重新发送验证邮件"、重新"找回密码"）；通知类的邮件不再补发。
+- **使用者的解决办法**：先看垃圾邮件夹；几分钟后在页面上点"重新发送"；仍然收不到就联系客服（我们查发信记录）。
+
+**帮助页文案**（对象：学者与发起方各一条，内容相同；分类：`ACCOUNT`）
+
+- 中文 · 问：收不到验证邮件或找回密码的邮件怎么办？
+  答：邮件通常在几分钟内到达。请先看看垃圾邮件或"广告"文件夹，并确认填写的邮箱地址没有写错。仍然没有时，等几分钟后在页面上点"重新发送"（找回密码请重新提交一次）。如果一直收不到，请联系客服并告诉我们你的邮箱地址，我们会查看发信记录。
+- 日本語 · 問：確認メールやパスワード再設定のメールが届きません。
+  答：メールは通常数分で届きます。まず迷惑メールやプロモーションのフォルダを確認し、入力したメールアドレスに誤りがないかご確認ください。それでも届かないときは、数分おいてから画面の「再送信」を押してください（パスワードの再設定はもう一度お申し込みください）。ずっと届かない場合は、メールアドレスを添えてサポートにご連絡ください。送信記録を確認します。
+- English · Q: I did not receive the verification or password reset email. What can I do?
+  A: Emails usually arrive within a few minutes. Check your spam or promotions folder, and that the address you entered is correct. If it is still missing, wait a few minutes and press "Resend" on the page (for a password reset, request it again). If it never arrives, contact support with your email address and we will check the sending records.
 
 ## 已归档
 

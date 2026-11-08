@@ -149,8 +149,12 @@ Spring Boot 自动提供：WebFlux 服务端请求（`http.server.requests`）�
 - `fire [uid…]`：以应用的服务名推送满足各条规则的假数据（实例与名称为 `alert-test`），等到每条都进入 pending 或 firing；
   `jabiz-metrics-absent` 无法伪造，停掉应用 5 分钟来试；按一小时计算的规则在一小时内自行恢复；
 - `disk <目录>`：在该目录所在的文件系统上放一个临时文件，使用量到阈值以上 1 %，等到磁盘告警进入 pending 后删除。规则已在 pending 或 firing 时拒绝执行。
+- **应用自己的规则**（17zz9）：`ALERT_FOLDERS="jabiz <应用的文件夹>"`（应用的文件以文件名为文件夹，如 `quizbuks`）使 `rules` 与 `fire` 也覆盖它；
+  `fire` 的假数据由应用在自己的文件中给出，`ALERT_FAKES=<文件>`，每行一个序列：`<uid> timer <指标> <次数> [键=值…]`（按 Micrometer 的计时器推送 0 与次数）、
+  `<uid> gauge <指标> <单位或 -> <值> [键=值…]`、`<uid> log <消息…>`（ERROR 日志）、`<uid> skip <原因…>`（不能伪造，打印原因）；同一规则可有几行。
+  应用把这个文件与规则放在一起（如 `deploy/<应用>/alerting/<应用>-alerts.fakes`），新加规则时同时加它的假数据。
 
-测试：`tools/test/alert-render.test.sh`（CI）检查填入、遗漏与非法的值、应用自己的文件。规则的指标名与标签、
+测试：`tools/test/alert-render.test.sh`（CI）检查填入、遗漏与非法的值、应用自己的文件；`tools/test/alert-fire.test.sh`（CI，假的 `curl`）检查平台的每条规则都有假数据（`jabiz-metrics-absent` 除外）与 `ALERT_FOLDERS` / `ALERT_FAKES`。规则的指标名与标签、
 联系点的投递、各条规则的触发与 `disk` 的填充都对真实的 LGTM 容器与应用核对过（17zu 的 PR）。
 
 ## 8. 恢复核对与演练（阶段 17zv）

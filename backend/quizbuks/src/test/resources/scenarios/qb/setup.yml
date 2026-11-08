@@ -23,8 +23,9 @@ steps:
         qb.ai.price.input-per-mtok-usd, qb.ai.price.output-per-mtok-usd, qb.tree.platform-handle,
         qb.fee.due-days, qb.assets.max-count, qb.assets.max-tags, qb.assets.tag-length,
         qb.usage.retention-days, qb.products.max, qb.region.unknown-ip-country, qb.feed.shorts.positions, qb.feed.shorts.per-shelf,
+        qb.tree.max-nodes, qb.tree.max-conditions-per-node, qb.tree.max-depth, qb.tree.sponsor.max-trees,
+        qb.tree.review.remind-after,
         qb.topic.max-per-quiz, qb.topic.custom-max-length]
-
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,
@@ -48,7 +49,8 @@ steps:
         qb.fee.default-billing-mode, qb.fee.overdue.block-submit, qb.certification.sponsor-rounds.enabled,
         qb.play.entry-fee.enabled, qb.usage.storage.free-bytes, qb.video.mainland-accessible-sites]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
-        qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review, qb.shared-video.review,
+        qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review,
+        qb.tree.review, qb.tree.copy.review, qb.tree.platform.review, qb.shared-video.review,
         qb.sod.control-changes, qb.sod.security-administration]
       legalDraftsCreated: [TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE, CONTEST_RULES]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
