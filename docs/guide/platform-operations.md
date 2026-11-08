@@ -27,6 +27,7 @@ GRAFANA_USER=… GRAFANA_PASSWORD=… tools/ops/alert-fire-test.sh disk /var/lib
 ```
 
 `jabiz-metrics-absent` 以停掉应用 5 分钟来试。应用自己的规则写在 `docker/grafana/alerting` 下自己的文件中（同一格式，自己的组与文件夹）。
+应用的规则一起试发：`ALERT_FOLDERS="jabiz <应用的文件夹>" ALERT_FAKES=<应用的假数据文件> tools/ops/alert-fire-test.sh rules|fire`（文件格式见 13 §7"试发"）。
 
 ## 3. 备份与恢复演练
 

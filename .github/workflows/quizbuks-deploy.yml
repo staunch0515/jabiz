@@ -216,9 +216,13 @@ jobs:
           ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/deploy-check"
           scp deploy/quizbuks/server/check-env.sh deploy/quizbuks/server/required-env \
             "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/deploy-check/"
+          # The deploy step runs it after a successful deployment (F-F13).
+          if [ -f deploy/quizbuks/server/prune-images.sh ]; then
+            scp deploy/quizbuks/server/prune-images.sh "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/deploy-check/"
+          fi
           ssh "$SERVER_USER@$SERVER_HOST" "sh /opt/apps/$APP_NAME/deploy-check/check-env.sh /opt/apps/$APP_NAME/.env \
             /opt/apps/$APP_NAME/deploy-check/required-env"
-      # Only the compose file, the site, the maintenance page, the alert rules and the store apps' statements; the
+      # Only the compose file, the site, the maintenance page, the alert rules (with the test-fire script) and the store apps' statements; the
       # server's .env and the maintenance lock file are never touched. A commit from before the maintenance page (a rollback) leaves the page
       # on the server as it is. The page is written again for the brand (the committed one is QuizBuks's; Q55b).
       - name: Upload deploy files
@@ -249,6 +253,14 @@ jobs:
                 if docker ps --format '{{.Names}}' | grep -qx '$APP_NAME-lgtm'; then docker restart '$APP_NAME-lgtm'; fi
               fi"
           fi
+          # The platform's test-fire script and QuizBuks's made-up data for its rules (platform 17zz9), so that the
+          # alerts can be test-fired on the server without a checkout (docs/quizbuks/alert-test-fire.md). Not mounted
+          # anywhere; a commit from before them leaves the server's as they are.
+          if [ -f deploy/quizbuks/alerting/quizbuks-alerts.fakes ]; then
+            ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/ops"
+            scp tools/ops/alert-fire-test.sh deploy/quizbuks/alerting/quizbuks-alerts.fakes \
+              "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/ops/"
+          fi
           if [ -f assetlinks.json ]; then
             ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p /opt/apps/$APP_NAME/well-known"
             scp assetlinks.json "$SERVER_USER@$SERVER_HOST:/opt/apps/$APP_NAME/well-known/assetlinks.json"
@@ -265,10 +277,16 @@ jobs:
       # compose replace that environment's containers); the registry login goes into a Docker configuration of this
       # deployment alone (other applications' logins on the shared server are neither replaced nor removed), the
       # deploy script pulls with it, and it is deleted afterwards. The job's token expires with the job anyway.
+      # After a successful deployment the server keeps only the latest images of each environment (F-F13, T8;
+      # prune-images.sh, DEPLOY.md "旧镜像的清理"); a commit from before that (a rollback) deletes nothing.
       - name: Deploy
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          prune=:
+          if [ -f deploy/quizbuks/server/prune-images.sh ]; then
+            prune="sh /opt/apps/$APP_NAME/deploy-check/prune-images.sh /opt/apps $APP_NAME ghcr.io/${GITHUB_REPOSITORY,,}-quizbuks $IMAGE_TAG"
+          fi
           printf '%s' "$GHCR_TOKEN" | ssh "$SERVER_USER@$SERVER_HOST" "set -e
             grep -qx 'APP_NAME=$APP_NAME' /opt/apps/$APP_NAME/.env \\
               || { echo '/opt/apps/$APP_NAME/.env must contain the line APP_NAME=$APP_NAME' >&2; exit 1; }
@@ -281,4 +299,5 @@ jobs:
             export DOCKER_CONFIG=\$(mktemp -d)
             trap 'rm -rf \"\$DOCKER_CONFIG\"' EXIT
             docker login ghcr.io -u '$REGISTRY_USER' --password-stdin
-            /opt/infra/scripts/deploy-app.sh $APP_NAME $IMAGE_TAG"
+            /opt/infra/scripts/deploy-app.sh $APP_NAME $IMAGE_TAG
+            $prune"

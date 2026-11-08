@@ -73,7 +73,11 @@ import java.util.regex.Pattern;
  * {@code QB_ADMIN_ROLES}), {@code LOAD_PASSWORD} (the test users' password, required), {@code LOAD_TAKERS} (1000),
  * {@code LOAD_CONCURRENCY} (64: the closed loop's takers at a time), {@code LOAD_RATE} (arrivals a second: an open
  * loop instead, every taker starting at its time whatever the others' answers took), {@code LOAD_READERS} (8),
- * {@code LOAD_BASELINE} (15s), {@code LOAD_SETUP_CONCURRENCY} (8), {@code LOAD_REWARD} (10), {@code LOAD_LABEL}
+ * {@code LOAD_BASELINE} (15s), {@code LOAD_SETUP_CONCURRENCY} (8), {@code LOAD_REWARD} (10), {@code LOAD_QUESTIONS}
+ * (2: the quiz's questions, each with three options; a large bank makes the version's snapshot, and so the start, the
+ * continuation and the submission, larger: launch checklist "性能"), {@code LOAD_CONTINUE} ({@code yes}: after its
+ * start every taker opens the attempt again, {@code QB_ATTEMPT_START} on an attempt in progress, as reopening the
+ * page does, measured apart; default no), {@code LOAD_LABEL}
  * (a heading for the run), {@code LOAD_REPORT} (a Markdown file to write), {@code LOAD_DB_URL} / {@code LOAD_DB_USER}
  * / {@code LOAD_DB_PASSWORD} / {@code LOAD_DB_NAME} (JDBC, optional), {@code LOAD_TIMEOUT} (60s: how long a client of
  * the load waits; one not answered by then is 599 {@code TIMEOUT}), {@code LOAD_RETRY_BUSY} ({@code yes}: a 503
@@ -137,6 +141,10 @@ public final class QuizbuksLoadTest {
     private final double readRate = Double.parseDouble(env("LOAD_READ_RATE", "0"));
     /** Whether a busy answer is tried again as the App does ({@code LOAD_RETRY_BUSY}, default yes). */
     private final boolean retryBusy = !"no".equals(env("LOAD_RETRY_BUSY", "yes"));
+    /** The quiz's questions ({@code LOAD_QUESTIONS}, default 2), all answered right by every taker. */
+    private final int questions = Integer.parseInt(env("LOAD_QUESTIONS", "2"));
+    /** Whether every taker continues its attempt once before submitting ({@code LOAD_CONTINUE=yes}). */
+    private final boolean continuing = "yes".equals(System.getenv("LOAD_CONTINUE"));
     /** Whether to read the application's meters ({@code LOAD_METRICS=yes}), from {@link #metricsUrl}. */
     private final boolean metrics = "yes".equals(System.getenv("LOAD_METRICS"));
     /** The application's management server ({@code LOAD_METRICS_URL}): on loopback only (Q10a3 review M1). */
@@ -243,6 +251,9 @@ public final class QuizbuksLoadTest {
         Duration baseline = Duration.parse("PT" + env("LOAD_BASELINE", "15s").toUpperCase(Locale.ROOT));
         double rate = Double.parseDouble(env("LOAD_RATE", "0"));
         refuseRemote();
+        if (questions < 1) {
+            throw new IllegalArgumentException("LOAD_QUESTIONS must be at least 1");
+        }
         if (metrics) {
             checkMetrics();
         }
@@ -253,7 +264,8 @@ public final class QuizbuksLoadTest {
         line("");
         line("Target " + baseUrl + "; " + takers + " takers, " + (rate > 0 ? String.format(Locale.ROOT,
             "arriving at %.1f a second (open loop)", rate) : concurrency + " at a time") + ", each starting and "
-            + "submitting one attempt of one publication (all answers right, reward " + reward + " each); " + readers
+            + "submitting one attempt of one publication of " + questions + " question(s)" + (continuing
+            ? ", continuing it once in between" : "") + " (all answers right, reward " + reward + " each); " + readers
             + " readers of the feed and the publication's page; baseline of the readers alone " + baseline.toSeconds()
             + " s.");
         line("");
@@ -284,7 +296,7 @@ public final class QuizbuksLoadTest {
         if (db != null) {
             db.reset();
         }
-        Load load = Load.of();
+        Load load = Load.of(continuing);
         AtomicInteger next = new AtomicInteger();
         AtomicBoolean playing = new AtomicBoolean(true);
         Database.Sampler sampler = db == null ? null : db.sample(publicationId);
@@ -344,6 +356,9 @@ public final class QuizbuksLoadTest {
         line("");
         line(HEADER);
         line(starts.row(seconds));
+        if (continuing) {
+            line(load.continues().row(seconds));
+        }
         line(submits.row(seconds));
         line(load.startsSeen().row(seconds));
         line(load.submitsSeen().row(seconds));
@@ -410,7 +425,7 @@ public final class QuizbuksLoadTest {
         if (path != null && !path.isBlank()) {
             Files.writeString(Path.of(path), report.toString());
         }
-        if (!consistent || !countersConsistent || starts.errors() + submits.errors() > 0) {
+        if (!consistent || !countersConsistent || starts.errors() + load.continues().errors() + submits.errors() > 0) {
             System.exit(1);
         }
     }
@@ -418,13 +433,15 @@ public final class QuizbuksLoadTest {
     // ---- the load -----------------------------------------------------------------------------------------------
 
     /** The calls of the load: each HTTP answer, and each operation as the taker sees it (with its retries). */
-    record Load(Stats starts, Stats submits, Stats startsSeen, Stats submitsSeen, Stats completions,
+    record Load(Stats starts, Stats continues, Stats submits, Stats startsSeen, Stats submitsSeen, Stats completions,
         Map<String, LongAdder> rewards, LongAdder retries, List<String> unfinished, List<Long> finishedAt) {
 
-        static Load of() {
+        static Load of(boolean continuing) {
             return new Load(new Stats("start (QB_ATTEMPT_START), each call"),
+                new Stats("continue (QB_ATTEMPT_START, attempt in progress), each call"),
                 new Stats("submit (QB_ATTEMPT_SUBMIT), each call"), new Stats("start as the taker sees it"),
-                new Stats("submit as the taker sees it"), new Stats("start + submit, one taker"),
+                new Stats("submit as the taker sees it"),
+                new Stats(continuing ? "start + continue + submit, one taker" : "start + submit, one taker"),
                 new ConcurrentHashMap<>(), new LongAdder(), java.util.Collections.synchronizedList(new ArrayList<>()),
                 java.util.Collections.synchronizedList(new ArrayList<>()));
         }
@@ -514,6 +531,19 @@ public final class QuizbuksLoadTest {
             return started.status() == 422;
         }
         JsonNode output = started.json().get("output");
+        if (continuing && !drain) {
+            // As reopening the page: the attempt in progress again (a new page, so a key of its own).
+            String continueKey = UUID.randomUUID().toString();
+            Answer continued = retried(load.continues(), null, retries,
+                () -> call("POST", "/api/processes/QB_ATTEMPT_START/latest", Map.of("publicationId", publicationId),
+                    token, "Idempotency-Key", continueKey));
+            if (continued.status() == 200) {
+                output = continued.json().get("output");
+                if (!output.path("resumed").asBoolean(false)) {
+                    throw new IllegalStateException("a second start did not continue the attempt in progress");
+                }
+            }
+        }
         List<Map<String, Object>> answers = new ArrayList<>();
         for (JsonNode question : output.get("questions")) {
             for (JsonNode option : question.get("options")) {
@@ -799,8 +829,8 @@ public final class QuizbuksLoadTest {
     /** A new quiz, its version and a publication of it, approved and LIVE: a large budget, no winner cap. */
     private String publication(String admin, String sponsor, long reward, int takers) throws Exception {
         String quiz = run(sponsor, "QB_QUIZ_SAVE", Map.of("title", "Load " + run, "timeLimitSec", 600, "intro",
-            "Two questions.")).get("quizId").asString();
-        for (int q = 1; q <= 2; q++) {
+            questions + " questions.")).get("quizId").asString();
+        for (int q = 1; q <= questions; q++) {
             run(sponsor, "QB_QUESTION_SAVE", Map.of("quizId", quiz, "stem", "Question " + q, "points", 1, "options",
                 List.of(Map.of("text", "Right " + q, "correct", true), Map.of("text", "Wrong " + q, "correct", false),
                     Map.of("text", "Other " + q, "correct", false))));
@@ -815,11 +845,11 @@ public final class QuizbuksLoadTest {
         save.put("regions", List.of("GLOBAL"));
         save.put("startAt", now.minusSeconds(60).toString());
         save.put("endAt", now.plus(Duration.ofDays(1)).toString());
-        save.put("passScore", 2);
+        save.put("passScore", questions);
         save.put("budgetCap", reward * (takers + 10));
         save.put("maxWinners", null);
-        save.put("tiers", List.of(Map.of("fromScore", 0, "toScore", 1, "reward", 0), Map.of("fromScore", 2,
-            "toScore", 2, "reward", reward)));
+        save.put("tiers", List.of(Map.of("fromScore", 0, "toScore", questions - 1, "reward", 0), Map.of("fromScore",
+            questions, "toScore", questions, "reward", reward)));
         String publication = run(sponsor, "QB_PUBLICATION_SAVE", save).get("publicationId").asString();
         run(sponsor, "QB_PUBLICATION_SUBMIT", Map.of("publicationId", publication));
         String path = "/api/datasets/" + encode(PUBLICATIONS) + "/entities/" + publication;
@@ -904,10 +934,47 @@ public final class QuizbuksLoadTest {
 
     // ---- HTTP ---------------------------------------------------------------------------------------------------
 
+    /** The sponsors' texts (Q7b): accepted with an application, and needed before a top-up or a submission. */
+    private static final List<String> SPONSOR_TEXTS = List.of("TERMS_SPONSOR", "PRIVACY");
+    /** The money and contract actions the server refuses until the texts in effect are accepted (Q7b, Q7-2). */
+    private static final List<String> GATED = List.of("QB_TOPUP_START", "QB_PUBLICATION_SUBMIT");
+
+    /**
+     * Runs a process as the pages do: an application carries the versions of the texts in effect it accepts, and the
+     * texts not yet accepted are accepted first before an action that needs them (as the prompt after signing in).
+     */
     private JsonNode run(String token, String process, Map<String, ?> input) throws Exception {
-        Answer answer = send("POST", "/api/processes/" + process + "/latest", JSON.writeValueAsString(input), token,
+        Map<String, Object> sent = new LinkedHashMap<>(input);
+        if (GATED.contains(process)) {
+            acceptDue(token);
+        }
+        if ("QB_SPONSOR_APPLY".equals(process) && !sent.containsKey("termsVersionNo")) {
+            Map<String, Integer> versions = new LinkedHashMap<>();
+            consents(token).forEach(row -> versions.put(row.get("kind").asString(), row.get("versionNo").asInt()));
+            sent.put("termsVersionNo", versions.get("TERMS_SPONSOR"));
+            sent.put("privacyVersionNo", versions.get("PRIVACY"));
+        }
+        Answer answer = send("POST", "/api/processes/" + process + "/latest", JSON.writeValueAsString(sent), token,
             "application/json", "Idempotency-Key", UUID.randomUUID().toString());
         return ok(answer).get("output");
+    }
+
+    /** The caller's standing with the sponsors' texts in effect ({@code qb.me.consents}): a row per text. */
+    private List<JsonNode> consents(String token) throws Exception {
+        return query(token, "qb.me.consents", Map.of("kinds", SPONSOR_TEXTS, "at", Instant.now().toString()));
+    }
+
+    private void acceptDue(String token) throws Exception {
+        List<Map<String, Object>> due = new ArrayList<>();
+        for (JsonNode row : consents(token)) {
+            if (row.path("mustAccept").asBoolean(false)) {
+                due.add(Map.of("kind", row.get("kind").asString(), "versionNo", row.get("versionNo").asInt()));
+            }
+        }
+        if (!due.isEmpty()) {
+            ok(send("POST", "/api/processes/QB_CONSENT_ACCEPT/latest", JSON.writeValueAsString(Map.of("items", due)),
+                token, "application/json", "Idempotency-Key", UUID.randomUUID().toString()));
+        }
     }
 
     private List<JsonNode> rows(String token, String dataset, List<Map<String, Object>> filters, int limit)
