@@ -19,6 +19,16 @@ public final class QbTrees {
     public static final String VERSION = "QbTreeVersion";
     public static final String NODE = "QbTreeNode";
     public static final String NODE_DEF = "QbTreeNodeDef";
+    /** Which nodes a node's condition in effect names (F-S2b1): who to evaluate when a node is lit. */
+    public static final String NODE_REF = "QbTreeNodeRef";
+    /** A node lit by a person or a Sponsor (F-S2b1, written once). */
+    public static final String LIT = "QbTreeLit";
+    /** A lit record revoked (F-S2b, written once; the revocation itself comes in F-S2b2). */
+    public static final String REVOCATION = "QbTreeLitRevocation";
+
+    /** A person's own lit records and revocations ({@code me:}). */
+    public static final String MY_LITS = "urn:jabiz:dataset:me:" + LIT;
+    public static final String MY_REVOCATIONS = "urn:jabiz:dataset:me:" + REVOCATION;
 
     public static String defaultDataset(String entity) {
         return "urn:jabiz:dataset:default:" + entity;
@@ -28,6 +38,8 @@ public final class QbTrees {
     public static final String SUBJECT_DICTIONARY = "urn:jabiz:dict:quizbuks:tree-subject";
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:tree-status";
     public static final String VERSION_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:tree-version-status";
+    public static final String LIT_SUBJECT_DICTIONARY = "urn:jabiz:dict:quizbuks:tree-lit-subject";
+
 
     /** The platform's template (no owner id). */
     public static final String PLATFORM = "PLATFORM";
@@ -40,6 +52,10 @@ public final class QbTrees {
     /** Who lights the nodes. */
     public static final String TAKER = "TAKER";
     public static final List<String> SUBJECTS = List.of(TAKER, SPONSOR);
+
+    /** Who lit a node: a person (a Taker) or a Sponsor (from F-S4); both ids are user ids. */
+    public static final String USER = "USER";
+    public static final List<String> LIT_SUBJECTS = List.of(USER, SPONSOR);
 
     public static final String ACTIVE = "ACTIVE";
     public static final String RETIRED = "RETIRED";
@@ -60,6 +76,11 @@ public final class QbTrees {
     /** Editing a graph (its drafts, review, retirement): one process at a time, before any publication's lock. */
     public static String lockName(Object treeId) {
         return treeId == null ? null : "qb.tree:" + treeId;
+    }
+
+    /** Lighting a subject's nodes (F-S2b1): never held with a publication's, start or wallet lock. */
+    public static String litLockName(String subjectKind, Object subjectId) {
+        return "qb.tree-lit:" + subjectKind + ":" + subjectId;
     }
 
     /** Creating an owner's graphs (their number is limited), before {@link #lockName}. */
@@ -146,6 +167,8 @@ public final class QbTrees {
         eb.field("beforeAnswer", f -> f.physicalColumn("before_answer").processOnly().asText(null, true));
         // Whether the version in effect's condition asks for a pass: only then may publications be bound to it.
         eb.field("bindable", f -> f.physicalColumn("bindable").required(true).processOnly().asBool());
+        // F-S2b1: the version in effect's condition (TreeCondition#toMap as JSON), which lighting evaluates.
+        eb.field("condition", f -> f.physicalColumn("condition").processOnly().asText(null, true));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_tree_node", "treeId", "nodeId");
         eb.listView("default", lv -> lv
@@ -175,6 +198,75 @@ public final class QbTrees {
             .filters("versionId", "nodeId")
             .sorts("seq")
             .defaultSort("seq", true));
+    });
+
+    public static final EntityDefinition NODE_REF_ENTITY = EntityDefinition.define(NODE_REF, eb -> {
+        eb.physicalTable("qb_tree_node_ref");
+        eb.primaryKey("rowId");
+        eb.field("rowId", f -> f.physicalColumn("row_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:tree-node-ref"));
+        eb.field("treeId", f -> f.physicalColumn("tree_id").immutable(true).required(true).asText(ID_LENGTH));
+        eb.field("nodeId", f -> f.physicalColumn("node_id").immutable(true).required(true).asText(ID_LENGTH));
+        // A node the condition names, in this graph or another it may name.
+        eb.field("refNodeId", f -> f.physicalColumn("ref_node_id").immutable(true).required(true)
+            .asText(ID_LENGTH));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.unique("uk_qb_tree_node_ref", "treeId", "nodeId", "refNodeId");
+        eb.listView("default", lv -> lv
+            .columns("treeId", "nodeId", "refNodeId")
+            .filters("treeId", "nodeId", "refNodeId")
+            .sorts("nodeId")
+            .defaultSort("nodeId", true));
+    });
+
+    public static final EntityDefinition LIT_ENTITY = EntityDefinition.define(LIT, eb -> {
+        eb.physicalTable("qb_tree_lit_version");
+        eb.primaryKey("litId");
+        eb.field("litId", f -> f.physicalColumn("lit_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:tree-lit"));
+        eb.field("subjectKind", f -> f.physicalColumn("subject_kind").immutable(true).required(true)
+            .asCode(LIT_SUBJECT_DICTIONARY, LIT_SUBJECTS.toArray(String[]::new)));
+        eb.field("subjectId", f -> f.physicalColumn("subject_id").immutable(true).required(true)
+            .asText(OWNER_LENGTH));
+        eb.field("treeId", f -> f.physicalColumn("tree_id").immutable(true).required(true).asText(ID_LENGTH));
+        eb.field("nodeId", f -> f.physicalColumn("node_id").immutable(true).required(true).asText(ID_LENGTH));
+        eb.field("litAt", f -> f.physicalColumn("lit_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        // What lit it, as JSON: the attempt passed, or the node whose lighting made the condition hold.
+        eb.field("basis", f -> f.physicalColumn("basis").immutable(true).asText(null, true));
+        eb.temporal(t -> t.allowScheduled(false).writeOnce());
+        eb.listView("default", lv -> lv
+            .columns("subjectKind", "subjectId", "treeId", "nodeId", "litAt")
+            .filters("subjectKind", "subjectId", "treeId", "nodeId")
+            .sorts("litAt")
+            .defaultSort("litAt", false));
+    });
+
+    public static final EntityDefinition REVOCATION_ENTITY = EntityDefinition.define(REVOCATION, eb -> {
+        eb.physicalTable("qb_tree_lit_revocation_version");
+        eb.primaryKey("revocationId");
+        eb.field("revocationId", f -> f.physicalColumn("revocation_id").immutable(true).required(true)
+            .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:tree-lit-revocation"));
+        eb.field("litId", f -> f.physicalColumn("lit_id").immutable(true).required(true).asText(ID_LENGTH));
+        // The lit record's subject again, so that a start reads a person's lit records and revocations at once.
+        eb.field("subjectKind", f -> f.physicalColumn("subject_kind").immutable(true).required(true)
+            .asCode(LIT_SUBJECT_DICTIONARY, LIT_SUBJECTS.toArray(String[]::new)));
+        eb.field("subjectId", f -> f.physicalColumn("subject_id").immutable(true).required(true)
+            .asText(OWNER_LENGTH));
+        eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true)
+            .asText(REASON_LENGTH, true));
+        eb.field("requestedBy", f -> f.physicalColumn("requested_by").immutable(true).required(true)
+            .asText(OWNER_LENGTH));
+        eb.field("approvalRequestId", f -> f.physicalColumn("approval_request_id").immutable(true)
+            .asText(ID_LENGTH));
+        eb.field("revokedAt", f -> f.physicalColumn("revoked_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.temporal(t -> t.allowScheduled(false).writeOnce());
+        eb.listView("default", lv -> lv
+            .columns("litId", "subjectKind", "subjectId", "revokedAt")
+            .filters("litId", "subjectKind", "subjectId")
+            .sorts("revokedAt")
+            .defaultSort("revokedAt", false));
     });
 
     private QbTrees() {}

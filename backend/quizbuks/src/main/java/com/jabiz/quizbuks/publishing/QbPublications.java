@@ -106,6 +106,11 @@ public final class QbPublications {
         // them. Frozen with the policy; the full score is then this many times the common points (D-Q81-2).
         eb.field("pickCount", f -> f.physicalColumn("pick_count").asNumeric(4, 0)
             .apply(Rules.range(PublishingCodes.PICK_RANGE, BigDecimal.ONE, decimal(ContentLimits.MAX_QUESTIONS))));
+        // F-S2b1: the knowledge graph's node the publication is bound to (both or neither); a pass of it lights the
+        // node, and the node's conditions before answering say who may start. Frozen with the policy.
+        eb.field("treeId", f -> f.physicalColumn("tree_id").asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
+        eb.field("treeNodeId", f -> f.physicalColumn("tree_node_id")
+            .asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
         eb.field("budgetCap", f -> f.physicalColumn("budget_cap").asMonetary("JPY", 0)
             .apply(Rules.range(PublishingCodes.BUDGET_RANGE, BigDecimal.ONE, PublishingLimits.MAX_MONEY)));
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").asNumeric(9, 0)
@@ -421,6 +426,11 @@ public final class QbPublications {
         eb.field("pickCount", f -> f.physicalColumn("pick_count").immutable(true).asNumeric(4, 0));
         // Q88b: the entry fee the start charges (0: none).
         eb.field("entryFee", f -> f.physicalColumn("entry_fee").immutable(true).required(true).asMonetary("JPY", 0));
+        // F-S2b1: the node the publication is bound to, as submitted.
+        eb.field("treeId", f -> f.physicalColumn("tree_id").immutable(true)
+            .asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
+        eb.field("treeNodeId", f -> f.physicalColumn("tree_node_id").immutable(true)
+            .asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
         eb.field("budgetCap", f -> f.physicalColumn("budget_cap").immutable(true).asMonetary("JPY", 0));
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").immutable(true).asNumeric(9, 0));
         // CardTiers' JSON: the tiers are frozen at submission too.
