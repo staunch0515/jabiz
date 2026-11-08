@@ -101,7 +101,9 @@ jobs:
     needs: scope
     if: needs.scope.outputs.application == 'true' && needs.scope.outputs.tasks != '' && needs.scope.outputs.backend == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # An application's whole suite runs here in one job (QuizBuks: about 300 test classes, most of them integration tests
+    # against PostgreSQL, 43-45 minutes in November 2026); 75 leaves room until the suite is split (ROADMAP 17zz12).
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
