@@ -618,6 +618,7 @@ class PortalSignInGuard implements SignInGuard {
   因此封禁在下一次刷新时生效（访问令牌在到期前仍有效，同 §2 的已知限制）。
 - 启动检查：预读的数据视图或字段不存在、字段放不下用户编号（UUID，如数值、时间字段）、同名的预读含义不同、`loads()` 抛异常 → 错误。预读经数据视图（其范围适用，权限不适用，同流程内的平台 I/O 步骤）。
   用户编号以文本交给查询，按字段的语义类型转换（引用 `SecUser` 的字段比较 UUID，文本字段比较文本），同其他查询条件（03 §2.2）。
+- 守卫要读业务参数（开关、阈值）时以 `params()` 声明，平台在问守卫之前按尝试的时间读出，见 §15.17（决策 D79）。
 
 ### 15.4 邮箱验证状态与 `requiresVerifiedEmail`
 
@@ -1002,6 +1003,7 @@ class PortalSignUpGuard implements SignUpGuard {
   只有收得到这封邮件的人才看到。邮件登录链接开户同样在使用链接时检查（邮箱已证明）。
 - **没有守卫**：一切照旧（全部放行）。
 - **启动检查**：同 §15.3（预读的数据视图或字段不存在、字段放不下用户编号、同名预读含义不同、`loads()` 抛异常）；登录与注册守卫的预读名各自检查。
+- **业务参数**：守卫以 `params()` 声明要读的业务参数，有没有用户都照样读出，见 §15.17（决策 D79）。
 - **前端**：`@jabiz/client` 的 `joinEntry(entry)`（以会话的 fetch 发送，非 2xx 抛 `ApiError`）。
 - **测试**：`SignUpGuardTypesTest`、`SignUpGuardsTest`（全部放行、第一个拒绝、抛异常与 null 即拒绝、缺少文字的原因、新账号不读数据、读不到即拒绝）、
   `SignUpGuardIT`（加入、重复加入不改、未验证 403、不开放注册与不存在同为 404、未登录 401、受保护的注册角色 422、守卫拒绝与抛异常、注册时没有用户且对新旧地址答复相同、
@@ -1060,6 +1062,47 @@ jabiz:
   `verifyWithPasskey`、`enrolPasskey`、`stepUpWithPasskey`、`listPasskeys` / `addPasskey(proof, name)` / `requestPasskeyConfirmation` / `renamePasskey` / `removePasskey`
   （关闭系统对话框即 `PasskeyCancelledError`，什么也不发送）；积木见 12"登录与账户的积木"。原生外壳的 `webcredentials` 见 17 §3.2。
 - **测试**：`PasskeyPropertiesTest`、`PasskeyVerifierTest`、`PasskeyIT`（软件实现的认证器，测试夹具 `TestAuthenticator`：ES256、"none"、可答错来源、不验证用户、回退计数）、`ErasureIT`。
+
+### 15.17 守卫读业务参数（阶段 17zz11，决策 D79）
+
+登录与注册的守卫（§15.3、§15.15）此前只能预读"用户编号字段 = 该用户"的行。开关、阈值这类**按时间、与用户无关**的业务参数（04 §9）
+现在以 `params()` 声明，由平台在问守卫之前读出；守卫仍然同步、无 I/O。
+
+```java
+@Component
+class PortalSignUpSwitch implements SignUpGuard {
+    // 可以未设置：从没设过即开放
+    public List<GuardParam> params() {
+        return List.of(GuardParam.optional("commerce.portal.sign-up-closed"));
+    }
+
+    public SignUpDecision check(SignUpAttempt attempt) {
+        if (!"portal".equals(attempt.entry())) {
+            return SignUpDecision.ALLOW;
+        }
+        return attempt.params().find("commerce.portal.sign-up-closed", Boolean.class).orElse(false)
+            ? SignUpDecision.refuse("commerce.sign-up-closed") : SignUpDecision.ALLOW;
+    }
+}
+```
+
+- **声明**：`SignInGuard.params()` 与 `SignUpGuard.params()`（缺省方法，缺省为空）返回 `GuardParam` 的列表：`GuardParam.required(键)` 必须有值，
+  `GuardParam.optional(键)` 可以未设置。
+- **读取**：每次尝试一次读出全部守卫（登录守卫与注册守卫各自一组）的参数，键取并集；同一个键任何一个守卫要求必须有值即按必须有值处理。
+  按尝试的时间（`attempt.time()`，即操作时间或续期时间）读，所以排定了生效时间的改动（`PARAM_SCHEDULE`）到时自行生效。以系统身份读，不看登录者的权限
+  （与预读只受数据视图范围约束一致）；注册时没有用户也照样读。预读与参数在流程中先后读出（同一个事务，不并发）。
+  值经 `SignInAttempt.params()` / `SignUpAttempt.params()`（core 已有的 `ParamValues`）交给守卫：`get(键, 类型)`、`find(键, 类型)`、`has(键)`；
+  可以未设置而此刻没有值的键不在其中（`find` 为空），含义由守卫决定。
+- **拒绝（fail closed）**：必须有值的键在那一刻没有值，或读取失败，即拒绝，守卫不被调用：登录为 `SIGN_IN_REFUSED`（刷新时 401，§15.3），
+  注册与加入为 `SIGN_UP_REFUSED` 的通用原因 `refused`（§15.15）；原因只记日志。
+- **代价**：没有守卫或守卫不声明参数时什么也不读。登录守卫在每次续期时也问，所以声明了参数的登录守卫在每次续期时多一次按键、走索引的读取（`sys_param` 的键）。
+- **启动检查**（`SECURITY`）：键不合于参数键的格式（小写字母与数字组成的词，以 `.`、`-` 或 `_` 连接，同 `ControlledParams`）→ 错误；
+  同一个键在一个守卫中必须有值、在另一个中可以未设置 → 警告（按必须有值读）；`params()` 抛异常 → 错误。
+- **兼容**：`SignInAttempt` / `SignUpAttempt` 保留原有的构造器（参数为空、时点为尝试的时间），已有的守卫与测试不用改。
+- **示范**：`app` 的 `PortalSignUpSwitch`——参数 `commerce.portal.sign-up-closed`（bool，可以未设置）为 `true` 时，任何途径都不给门户的角色，
+  原因 `commerce.sign-up-closed`（三语消息）。
+- **测试**：`GuardParamTest`（core：声明、缺省为空、新旧构造器）、`GuardParamsTest`（并集与必须有值优先、按尝试时间一次读出、可以未设置的缺席、
+  必须有值缺少或读取失败即拒绝且不问守卫、不声明不读、注册时没有用户照样读、启动检查）、`SignUpGuardIT`（示范开关：排定的关闭到时生效，匿名注册与登录后加入门户都被拒，其他入口不受影响）。
 
 ## 16. 受保护的授权：四眼【决策 D48 第 1 条，阶段 16r】
 

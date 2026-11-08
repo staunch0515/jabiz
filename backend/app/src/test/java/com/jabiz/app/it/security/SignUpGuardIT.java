@@ -235,6 +235,42 @@ class SignUpGuardIT extends SignUpItSupport {
     }
 
     @Test
+    void aGuardReadsABusinessParameterAsInEffectAtTheAttemptsTime() {
+        // The demo portal's switch (PortalSignUpSwitch, decision D79): open now, closed from tomorrow on.
+        String key = "commerce.portal.sign-up-closed";
+        post("/api/processes/PARAM_CREATE/latest", admin(), Map.of("key", key, "valueKind", Map.of("type", "bool"),
+            "value", "false")).expectStatus().isOk();
+        java.time.Instant closing = clock.instant().plus(java.time.Duration.ofDays(1));
+        post("/api/processes/PARAM_SCHEDULE/latest", admin(), Map.of("key", key, "value", "true",
+            "effectiveTime", closing.toString())).expectStatus().isOk();
+
+        // Read without a user and as the system: an anonymous registration sees the value in effect now.
+        register(PORTAL, address("before"), PASSWORD).expectStatus().isAccepted();
+
+        clock.set(closing.plusSeconds(60));
+        String late = address("late");
+        Map<String, Object> refused = problem(register(PORTAL, late, PASSWORD), 403);
+        assertThat(ruleCode(refused)).isEqualTo("SIGN_UP_REFUSED");
+        assertThat(refused).containsEntry("reason", "commerce.sign-up-closed");
+        assertThat(violations(refused).getFirst()).containsEntry("message",
+            "The customer portal is not taking new registrations at the moment.");
+        assertThat(userOf(late)).isNull();
+        // Closed for every path into the portal: a signed-in customer elsewhere cannot join it either.
+        clock.set(closing.minusSeconds(60));
+        String member = address("member");
+        register(CLUB, member, PASSWORD).expectStatus().isAccepted();
+        deliver();
+        anonymous("/api/auth/verify-email", Map.of("token", token(VERIFY_LINK, member), "password", PASSWORD))
+            .expectStatus().isNoContent();
+        Map<String, Object> club = session(member, PASSWORD, CLUB);
+        clock.set(closing.plusSeconds(60));
+        assertThat(problem(joinAt(PORTAL, bearerOf(club)), 403)).containsEntry("reason", "commerce.sign-up-closed");
+        assertThat(rolesOf(idOf(member))).containsExactly(MEMBER);
+        // Other entries are not the switch's concern.
+        register(CLUB, address("club"), PASSWORD).expectStatus().isAccepted();
+    }
+
+    @Test
     void aGuardRefusesTheMailedJoinAtTheLinkWhichStaysUnused() {
         String email = address("mailjoin");
         String userId = createUserWithEmail(unique("mailjoin"), email, PASSWORD);

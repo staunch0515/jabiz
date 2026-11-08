@@ -1,5 +1,7 @@
 package com.jabiz.security;
 
+import com.jabiz.param.ParamValues;
+
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -22,9 +24,11 @@ import java.util.Objects;
  *                      session); never for a registration
  * @param time          when (the operation time)
  * @param data          the rows of the guards' {@link SignUpGuard#loads()}, by load name; empty lists without a user
+ * @param params        the business parameters of the guards' {@link SignUpGuard#params()} as in effect at {@code time}
+ *                      (decision D79), read alike with or without a user; those that may be unset and are have no value
  */
 public record SignUpAttempt(String entry, Path path, String userId, String email, boolean emailVerified,
-    Instant time, Map<String, List<Map<String, Object>>> data) {
+    Instant time, Map<String, List<Map<String, Object>>> data, ParamValues params) {
 
     /** The way an account gets an entry's registration roles. */
     public enum Path {
@@ -51,6 +55,13 @@ public record SignUpAttempt(String entry, Path path, String userId, String email
             data.forEach((name, rows) -> copy.put(name, rows == null ? List.of() : List.copyOf(rows)));
         }
         data = Collections.unmodifiableMap(copy);
+        params = params == null ? new ParamValues(time, Map.of()) : params;
+    }
+
+    /** An attempt without business parameters (as before decision D79). */
+    public SignUpAttempt(String entry, Path path, String userId, String email, boolean emailVerified, Instant time,
+        Map<String, List<Map<String, Object>>> data) {
+        this(entry, path, userId, email, emailVerified, time, data, null);
     }
 
     /** Whether the account exists already (a join); false for a new account and for a registration. */

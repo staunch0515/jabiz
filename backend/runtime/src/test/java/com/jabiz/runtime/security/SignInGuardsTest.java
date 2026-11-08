@@ -40,7 +40,7 @@ class SignInGuardsTest {
         SignInEntries entries = new SignInEntries(java.util.Map.of("portal", new SignInEntries.Config(
             java.util.List.of("CUSTOMER"), false, java.util.List.of(), null, "/portal/", null, null)), false, null);
         return new SignInGuards(factory.getBeanProvider(SignInGuard.class),
-            factory.getBeanProvider(EntryScopeResolver.class), entries, null, null, null, null);
+            factory.getBeanProvider(EntryScopeResolver.class), entries, null, null, null, null, new GuardParams(null));
     }
 
     /** A resolver of the scope {@code store} for {@code entry}, answering {@code value}. */
