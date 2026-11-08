@@ -23,8 +23,8 @@ import java.util.Map;
 /**
  * Runs the applications' {@link SignUpGuard}s (docs/design/10-security.md section 15.15; decision D66) before an
  * account gets an entry's registration roles, on every path ({@link SignUpGuardStep}). Reads the data they declare as
- * the sign-in guards' is read ({@link SignInGuards#read}); without a user (a new account, a registration) every load
- * has no rows and nothing is read. The business parameters they declare ({@link GuardParams}, decision D79) are read
+ * the sign-in guards' is read ({@link SignInGuards#read}); without a user (a new account, a registration) a load of
+ * the user's rows has none and is not read, while a global load (decision D80) is read alike. The business parameters they declare ({@link GuardParams}, decision D79) are read
  * alike with or without a user. All guards must allow; a guard that throws, answers nothing or names a reason
  * without a text, or data that cannot be read, refuses with {@value SignUpDecision#REFUSED} (fail closed).
  *
@@ -65,9 +65,9 @@ public class SignUpGuards implements PlatformCheck {
             return Mono.just(SignUpDecision.ALLOW);
         }
         // One read after the other: inside a process both go through the same transaction.
-        return Mono.defer(() -> data(userId)
-                .flatMap(data -> params.read(GuardParams.merge(guards.stream().map(SignUpGuard::params).toList()), time)
-                    .map(values -> reactor.util.function.Tuples.of(data, values))))
+        // The parameters first (the loads' conditions take their values, decision D80), then the loads.
+        return Mono.defer(() -> params.read(GuardParams.merge(guards.stream().map(SignUpGuard::params).toList()), time)
+                .flatMap(values -> data(userId, values).map(data -> reactor.util.function.Tuples.of(data, values))))
             .map(read -> decide(new SignUpAttempt(entry, path, userId, email, emailVerified, time, read.getT1(),
                 read.getT2())))
             .onErrorResume(e -> {
@@ -111,15 +111,11 @@ public class SignUpGuards implements PlatformCheck {
         return SignUpDecision.refuse(SignUpDecision.REFUSED);
     }
 
-    private Mono<Map<String, List<Map<String, Object>>>> data(String userId) {
+    /** The loads' rows: without a user (a new account) only the global loads (decision D80) find any. */
+    private Mono<Map<String, List<Map<String, Object>>>> data(String userId, com.jabiz.param.ParamValues values) {
         Map<String, SignInLoad> loads = new LinkedHashMap<>();
         guards.forEach(guard -> guard.loads().forEach(load -> loads.putIfAbsent(load.name(), load)));
-        if (userId == null) {
-            Map<String, List<Map<String, Object>>> none = new LinkedHashMap<>();
-            loads.keySet().forEach(name -> none.put(name, List.of()));
-            return Mono.just(none);
-        }
-        return reader.read(loads.values(), userId);
+        return reader.read(loads.values(), userId, values);
     }
 
     @Override
@@ -135,7 +131,7 @@ public class SignUpGuards implements PlatformCheck {
                 problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "loads() failed: " + e.getMessage()));
                 continue;
             }
-            problems.addAll(reader.loadProblems(location, loads, seen));
+            problems.addAll(reader.loadProblems(location, loads, seen, guard));
         }
         Map<String, com.jabiz.security.GuardParam> seenParams = new LinkedHashMap<>();
         for (SignUpGuard guard : guards) {
