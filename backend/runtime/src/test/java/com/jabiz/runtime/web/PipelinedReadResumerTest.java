@@ -50,18 +50,18 @@ class PipelinedReadResumerTest {
     }
 
     /**
-     * Reactor Netty by itself stops reading such a connection. When this fails, Reactor Netty resumes reading by itself
-     * and {@link PipelinedReadResumer} can go (with this test).
+     * Reactor Netty 1.3.8 (Spring Boot 4.0.9) resumes reading such a connection by itself; up to 1.3.7 it stopped, and
+     * this test asserted that. {@link PipelinedReadResumer} stays until its removal is confirmed (ROADMAP 17zz6): a
+     * read asked for twice is one read, so it changes nothing now. Should this fail after an upgrade, the handler is
+     * what keeps the connection read.
      */
     @Test
-    void withoutItReactorNettyStopsReading() throws IOException {
+    void withoutItReactorNettyKeepsReading() throws IOException {
         DisposableServer server = start(UnaryOperator.identity());
         try {
-            boolean stalled = false;
-            for (int i = 0; i < CONNECTIONS && !stalled; i++) {
-                stalled = !thirdAnswered(server);
+            for (int i = 0; i < CONNECTIONS; i++) {
+                assertThat(thirdAnswered(server)).as("connection %d", i).isTrue();
             }
-            assertThat(stalled).isTrue();
         }
         finally {
             server.disposeNow();
@@ -85,15 +85,14 @@ class PipelinedReadResumerTest {
         }
     }
 
+    /** As {@link #withoutItReactorNettyKeepsReading()}, for a buffered request with part of its body. */
     @Test
-    void withoutItReactorNettyStopsReadingAfterARequestWithPartOfItsBody() throws IOException {
+    void withoutItReactorNettyKeepsReadingAfterARequestWithPartOfItsBody() throws IOException {
         DisposableServer server = start(UnaryOperator.identity());
         try {
-            boolean stalled = false;
-            for (int i = 0; i < CONNECTIONS && !stalled; i++) {
-                stalled = !answeredAfterPartialBody(server);
+            for (int i = 0; i < CONNECTIONS; i++) {
+                assertThat(answeredAfterPartialBody(server)).as("connection %d", i).isTrue();
             }
-            assertThat(stalled).isTrue();
         }
         finally {
             server.disposeNow();

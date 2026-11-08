@@ -21,7 +21,7 @@ import java.util.concurrent.RejectedExecutionException;
  * {@link ServiceWorkerScriptGuard}, a 401), its response completes while the rest of the request is still in the
  * buffer (its end, or only part of its body): the drain hands that on and stops, and nothing asks the channel to read
  * again. The connection is still open, so the browser sends its next request on it, which is never read and never
- * answered (Reactor Netty 1.3.1 to 1.3.7 at least). A PWA's Service Worker meets this as a matter of course: its
+ * answered (Reactor Netty 1.3.1 to 1.3.7). A PWA's Service Worker meets this as a matter of course: its
  * install revalidates the shell (304s) while the page loads, and the page's next navigation hangs (the reload after a
  * new version took over, ROADMAP phase 16c-2).
  *
@@ -32,8 +32,9 @@ import java.util.concurrent.RejectedExecutionException;
  * before it has ended (Reactor Netty ends it only once the last write completes): the exchange drops the content
  * without reading and then ends, again with nothing asking to read. So content that goes past while an exchange is
  * still bound has that exchange watched, and once it ends, a read is asked for if no other exchange has started by
- * then. A read asked for twice is one read, so where Reactor Netty asks too nothing changes. Remove it once Reactor
- * Netty resumes reading after such a drain itself ({@code PipelinedReadResumerTest} says when).
+ * then. A read asked for twice is one read, so where Reactor Netty asks too nothing changes. Reactor Netty 1.3.8
+ * (Spring Boot 4.0.9) resumes reading after such a drain itself ({@code PipelinedReadResumerTest}); the handler stays
+ * until its removal is confirmed (ROADMAP 17zz6).
  *
  * <p>Limits: the handler is added when the channel is initialised and only where the HTTP/1.1 traffic handler is
  * already in place, so HTTP/1.1 negotiated later (TLS with ALPN, where Reactor Netty adds that handler after the
