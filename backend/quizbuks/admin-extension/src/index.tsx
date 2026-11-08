@@ -28,10 +28,12 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Tag } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag } from 'lucide-react'
 import TopicsPage from './TopicsPage'
 
 import BankTopUpPage from './BankTopUpPage'
+import TreesPage from './TreesPage'
+import TreeReviewPage from './TreeReviewPage'
 import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
 import BankWithdrawalsPage from './BankWithdrawalsPage'
@@ -123,6 +125,9 @@ export default defineExtension({
     { path: '/qb/conversations/:conversationId', element: <ConversationPage /> },
     // F-S11: foreign videos and mainland China (headquarters' exceptions, the refused starts).
     { path: PATH.region, element: <RegionPage /> },
+    // F-S2b3a: the knowledge maps and the review of a map's version (headquarters every map, an operator its own).
+    { path: PATH.trees, element: <TreesPage /> },
+    { path: '/qb/trees/:treeId', element: <TreeReviewPage /> },
     // F-S9: the word list of topics (headquarters).
     { path: PATH.topics, element: <TopicsPage /> },
     { path: PATH.users, element: <UsersPage /> },
@@ -210,6 +215,9 @@ export default defineExtension({
         // Q47c: the operator's own prices of the audience rules.
         { key: 'qb-operator-audience-prices', label: 'menu.audiencePrices', path: PATH.operatorAudiencePrices,
           icon: Tags, permission: PERMISSION.operatorUse },
+        // F-S2b3a: the operator's and its Sponsors' knowledge maps, and their reviews.
+        { key: 'qb-operator-trees', label: 'menu.operatorTrees', path: PATH.trees, icon: Network,
+          permission: PERMISSION.operatorUse },
       ],
     },
     // F-S1b: the sponsors' day-to-day, shared by both: an operator's session reads and runs its own sponsors' (the
@@ -286,6 +294,8 @@ export default defineExtension({
           permission: PERMISSION.audienceRulesWrite },
         { key: 'qb-audience-prices', label: 'menu.audiencePrices', path: PATH.audiencePrices, icon: Tags,
           permission: PERMISSION.audiencePricesWrite },
+        // F-S2b3a: every knowledge map, its versions' reviews and its lit nodes.
+        { key: 'qb-trees', label: 'menu.trees', path: PATH.trees, icon: Network, permission: PERMISSION.treesRead },
       ],
     },
     {
