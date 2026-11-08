@@ -114,7 +114,8 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
      * Q19: the App frames the two video players it shows (YouTube without cookies, Vimeo); Q75: the sponsor console
      * frames the same two (the material dialog's preview reads the video's duration from the player). Google AdSense in
      * the App, the console and the business site: its loader and requests from Google's ad hosts, its frames, ad images
-     * from any https host. The administration keeps the platform's default.
+     * from any https host. The administration keeps the platform's default. F-S15: the App and the console frame and
+     * play video links on any https address.
      */
     @Test
     void theAppFramesOnlyTheVideoPlayersAndGooglesAds() {
@@ -130,17 +131,34 @@ class QuizbuksAppIT extends PostgresIntegrationTest {
         String withAds = "default-src 'self'; script-src 'self' " + adScripts + "; img-src 'self' blob: data: https:; "
             + "style-src 'self' 'unsafe-inline'; connect-src 'self' " + adRequests + "; frame-ancestors 'none'; "
             + "base-uri 'self'; object-src 'none'; form-action 'self'; worker-src 'self'; manifest-src 'self'; frame-src ";
-        String players = "https://www.youtube-nocookie.com https://player.vimeo.com https://player.bilibili.com https://www.bilibili.com https://m.bilibili.com "
-            + "https://embed.nicovideo.jp https://www.dailymotion.com https://geo.dailymotion.com https://player.youku.com "
-            + "https://v.qq.com ";
-        assertThat(policies.get("/taker")).isEqualTo(withAds + players + adFrames);
-        assertThat(policies.get("/sponsor")).isEqualTo(withAds + players + adFrames);
+        // F-S15: a video link may be on any https address: frames (the sites' players, other pages in a sandbox, the
+        // ads) and video files from any https address.
+        String anyVideo = "https:; media-src 'self' https:";
+        assertThat(policies.get("/taker")).isEqualTo(withAds + anyVideo);
+        assertThat(policies.get("/sponsor")).isEqualTo(withAds + anyVideo);
         assertThat(policies.get("/biz")).isEqualTo(withAds + adFrames);
         assertThat(policies.get("/admin")).isEqualTo(JabizWebProperties.DEFAULT_CONTENT_SECURITY_POLICY);
         // Never scripts other than the origin's and Google's ad hosts, never framed.
         for (String path : java.util.List.of("/taker", "/sponsor", "/biz")) {
             assertThat(policies.get(path)).doesNotContain("'unsafe-eval'").contains("frame-ancestors 'none'")
                 .doesNotContain("script-src 'self' 'unsafe-inline'");
+        }
+    }
+
+    /**
+     * F-S15: the policy is the header of the App's and the console's responses (an entry page, a client route), not
+     * only the configuration; the business site and the administration play no video and keep theirs.
+     */
+    @Test
+    void theAppAndTheConsoleFrameAndPlayVideosOnAnyHttpsAddress() {
+        for (String path : java.util.List.of("/taker/", "/taker/p/1", "/sponsor/")) {
+            client.get().uri(path).exchange().expectHeader().value("Content-Security-Policy",
+                policy -> assertThat(policy).contains("frame-src https:; media-src 'self' https:")
+                    .contains("script-src 'self' https://pagead2").contains("frame-ancestors 'none'"));
+        }
+        for (String path : java.util.List.of("/biz/", "/admin/")) {
+            client.get().uri(path).exchange().expectHeader().value("Content-Security-Policy",
+                policy -> assertThat(policy).doesNotContain("media-src").doesNotContain("frame-src https:;"));
         }
     }
 }

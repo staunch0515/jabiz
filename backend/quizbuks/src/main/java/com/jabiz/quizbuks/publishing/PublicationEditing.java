@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -683,18 +684,25 @@ final class PublicationEditing {
 
     /**
      * The video on the publication's card (Q19, Q63): the one watching which is enough to answer, else the first
-     * material's video the App plays (any site of {@link VideoEmbeds}; Q99), so that the taker learns from it before answering; else none.
+     * material's video the App plays (any site of {@link VideoEmbeds}; Q99; F-S15: a video file before a page of another
+     * site), so that the taker learns from it before answering; else none.
      */
     static CardVideo cardVideo(List<QuizSnapshot.Material> materials) {
-        return materials.stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
+        Optional<CardVideo> watched = materials.stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
             .flatMap(material -> VideoEmbeds.trackablePlayer(material.url())
-                .map(player -> new CardVideo(player, true, material.durationSec(), vertical(material))))
-            .or(() -> materials.stream()
-                .filter(material -> "VIDEO_LINK".equals(material.kind()) && material.url() != null)
-                .flatMap(material -> VideoEmbeds.player(material.url()).stream()
-                    .map(player -> new CardVideo(player, false, null, vertical(material))))
-                .findFirst())
+                .map(player -> new CardVideo(player, true, material.durationSec(), vertical(material))));
+        // F-S15: a page framed from another site comes last: it may refuse to be framed, which the App cannot tell.
+        return watched.or(() -> firstVideo(materials, false)).or(() -> firstVideo(materials, true))
             .orElse(CardVideo.NONE);
+    }
+
+    private static Optional<CardVideo> firstVideo(List<QuizSnapshot.Material> materials, boolean pages) {
+        return materials.stream()
+            .filter(material -> "VIDEO_LINK".equals(material.kind()) && material.url() != null)
+            .flatMap(material -> VideoEmbeds.player(material.url()).stream()
+                .filter(player -> VideoEmbeds.kind(player).filter(VideoEmbeds.Kind.PAGE::equals).isPresent() == pages)
+                .map(player -> new CardVideo(player, false, null, vertical(material))))
+            .findFirst();
     }
 
     /** F-S10: whether a material's video is vertical: a YouTube Shorts link, or marked so by the sponsor. */

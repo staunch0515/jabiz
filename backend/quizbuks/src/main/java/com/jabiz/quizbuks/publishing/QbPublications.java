@@ -388,7 +388,8 @@ public final class QbPublications {
         eb.field("coverZh", f -> f.physicalColumn("cover_zh").asText(36));
         eb.field("coverEn", f -> f.physicalColumn("cover_en").asText(36));
         // Q19: the player of the version's video to watch (VideoEmbeds), shown on the App's home.
-        eb.field("video", f -> f.physicalColumn("video").asText(80));
+        // F-S15: a video file or another page plays at its own address, as long as a material's link (V86).
+        eb.field("video", f -> f.physicalColumn("video").asText(ContentLimits.URL_LENGTH));
         // Q75: whether that video is the one to watch before answering (the start requires its watching, D-Q75-4), and
         // how long it is as the sponsor gave it (none on a card from before Q75: then only its end counts).
         eb.field("watchRequired", f -> f.physicalColumn("watch_required").required(true).asBool());

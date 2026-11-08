@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ForeignVideosTest {
 
-    private static final Set<VideoEmbeds.Site> MAINLAND = ForeignVideos.sites(ForeignVideos.DEFAULT_SITES);
+    private static final ForeignVideos.Accessible MAINLAND = ForeignVideos.sites(ForeignVideos.DEFAULT_SITES);
 
     @ParameterizedTest
     @CsvSource({
@@ -42,17 +42,21 @@ class ForeignVideosTest {
 
     @Test
     void theParameterNamesTheSitesAndIgnoresWhatItDoesNotKnow() {
-        assertThat(MAINLAND).containsExactlyInAnyOrder(VideoEmbeds.Site.BILIBILI, VideoEmbeds.Site.YOUKU,
+        assertThat(MAINLAND.sites()).containsExactlyInAnyOrder(VideoEmbeds.Site.BILIBILI, VideoEmbeds.Site.YOUKU,
             VideoEmbeds.Site.TENCENT);
+        assertThat(MAINLAND.hosts()).isEmpty();
         assertThat(ForeignVideos.sites(null)).isEqualTo(MAINLAND);
-        assertThat(ForeignVideos.sites(" YouTube , nothing,,bilibili")).containsExactlyInAnyOrder(
+        assertThat(ForeignVideos.sites(" YouTube , nothing,,bilibili").sites()).containsExactlyInAnyOrder(
             VideoEmbeds.Site.YOUTUBE, VideoEmbeds.Site.BILIBILI);
-        assertThat(ForeignVideos.sites("")).isEmpty();
+        assertThat(ForeignVideos.sites("").sites()).isEmpty();
         // A site taken off the list makes its videos foreign; one added, not.
         assertThat(ForeignVideos.foreign(List.of("https://v.qq.com/x/page/x0029zdtwz6.html"),
-            EnumSet.of(VideoEmbeds.Site.BILIBILI))).isTrue();
+            ForeignVideos.Accessible.of(EnumSet.of(VideoEmbeds.Site.BILIBILI)))).isTrue();
         assertThat(ForeignVideos.foreign(List.of("https://youtu.be/dQw4w9WgXcQ"),
-            EnumSet.of(VideoEmbeds.Site.YOUTUBE))).isFalse();
+            ForeignVideos.Accessible.of(EnumSet.of(VideoEmbeds.Site.YOUTUBE)))).isFalse();
+        // F-S15: host names too (lower case); anything else is ignored.
+        assertThat(ForeignVideos.sites("bilibili, Videos.QuizBuks.com ,https://x.example,203.0.113.7,localhost").hosts())
+            .containsExactly("videos.quizbuks.com");
     }
 
     @Test
@@ -71,6 +75,30 @@ class ForeignVideosTest {
         assertThat(ForeignVideos.videoLinks(snapshot(List.of(bilibili, link), Map.of("en", en))))
             .containsExactly(bilibili.url(), youtube.url());
         assertThat(ForeignVideos.foreign((QuizSnapshot) null, MAINLAND)).isFalse();
+    }
+
+    /**
+     * F-S15: a video file's or another page's link is not foreign when the parameter lists its host; a host listed does
+     * not make a site's link (or a site's address that is not one video) playable. The App's and the console's
+     * {@code video.test.ts} have these cases.
+     */
+    @ParameterizedTest
+    @CsvSource({
+        "https://videos.quizbuks.com/quizbuks-demo-30s.mp4, false",
+        "https://VIDEOS.quizbuks.com/a/b.webm?sig=1, false",
+        "https://videos.quizbuks.com/player/1, false",
+        "https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4, true",
+        "https://cdn.example.com/clip.mp4, true",
+        "http://videos.quizbuks.com/quizbuks-demo-30s.mp4, true",
+        "https://youtu.be/dQw4w9WgXcQ, true",
+        "https://www.bilibili.com/video/BV1GJ411x7h7, false",
+        "https://www.youtube.com/@channel, true",
+    })
+    void aFileOrAPageIsForeignUnlessItsHostIsListed(String url, boolean foreign) {
+        ForeignVideos.Accessible accessible = ForeignVideos.sites(ForeignVideos.DEFAULT_SITES + ",videos.quizbuks.com,www.youtube.com");
+        assertThat(ForeignVideos.foreign(List.of(url), accessible)).isEqualTo(foreign);
+        // Without the host every file and page is foreign, as before.
+        assertThat(ForeignVideos.foreign(List.of(url), MAINLAND)).isEqualTo(foreign || !url.contains("bilibili"));
     }
 
     private static QuizSnapshot.Material video(int no, String url) {
