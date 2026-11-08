@@ -73,7 +73,7 @@ public final class ChannelPublishing {
         }
         QuizSnapshot snapshot = snapshot(input);
         List<Violation> problems = new ArrayList<>(QuizCompleteness.check(snapshot));
-        if (input.video() != null && !input.video().isBlank() && VideoEmbeds.trackablePlayer(input.video()).isEmpty()) {
+        if (input.video() != null && !input.video().isBlank() && channelPlayer(input.video()).isEmpty()) {
             problems.add(new Violation("video", PublishingCodes.CHANNEL_VIDEO, "Only a YouTube or Vimeo video can be "
                 + "watched", Map.of()));
         }
@@ -217,7 +217,7 @@ public final class ChannelPublishing {
         PublicationEditing.schedule(ctx, publicationRow, PublicationStatus.LIVE);
         ctx.put(OUTPUT, new Channel.PublishOutput(PublicationEditing.uuid(publicationId), PublicationEditing.uuid(versionId),
             PublicationStatus.LIVE, snapshot.fullScore(), snapshot.questions().size(),
-            input.video() == null ? null : VideoEmbeds.trackablePlayer(input.video().strip()).orElse(null)));
+            input.video() == null ? null : channelPlayer(input.video().strip()).orElse(null)));
     }
 
     /** A row just inserted, as the shared steps read one (the card is made from it in this transaction). */
@@ -296,4 +296,12 @@ public final class ChannelPublishing {
     }
 
     private ChannelPublishing() {}
+
+    /**
+     * A channel's video (the storefront's player): YouTube's or Vimeo's only, as before F-S15 (a video file or another
+     * page plays in QuizBuks's own pages only).
+     */
+    private static java.util.Optional<String> channelPlayer(String url) {
+        return VideoEmbeds.sitePlayer(url).filter(VideoEmbeds::trackable);
+    }
 }

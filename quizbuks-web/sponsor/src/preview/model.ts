@@ -1,5 +1,5 @@
 import type { Material, PublicationView, Tier } from '../qb/play'
-import { trackable, verticalVideo, videoPlayer } from '../qb/video'
+import { trackable, verticalVideo, videoKind, videoPlayer } from '../qb/video'
 import type { Sponsor } from '../qb/api'
 import { choiceOf, type Draft, type Selection, type Snapshot } from '../content/api'
 import { COVER_KEY, optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from '../content/languages'
@@ -61,33 +61,28 @@ type VideoMaterial = { kind: string; url: string | null; watchToAnswer?: boolean
 
 /**
  * The home card's video, as the server's card has it (Q63, `PublicationEditing.cardVideo`), the same rule step by step:
- * a material's video to watch before answering (one the App can follow, YouTube or Vimeo: Q75) stays the card's;
- * else, F-S12, the publication's shared video when the App plays it (never one to watch; vertical as the provider
- * shared it or a Shorts link); else the first material's video to watch, else the first material's video the App plays.
+ * the first material's video to watch before answering that the App can follow (YouTube, Vimeo or, F-S15, a video
+ * file: Q75) stays the card's; else, F-S12, the publication's shared video when the App plays it (never one to watch;
+ * vertical as the provider shared it or a Shorts link); else the first material's video of a site or a video file,
+ * else the first page of another site (F-S15).
  */
 export function videoOf(materials: VideoMaterial[], shared: PreviewSharedVideo | null = null): CardVideo {
-  const trackablePlayer = (m: VideoMaterial) => {
-    const player = videoPlayer(m.url)
-    return trackable(player) ? player : null
+  const playable = (m: VideoMaterial) => (m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
+  const watch = materials.find((m) => m.watchToAnswer && trackable(playable(m)))
+  // Q75: the card says whether its video is the one to watch, and how long it is (the sponsor's figure).
+  if (watch) {
+    return { player: playable(watch), watchRequired: true, videoDurationSec: watch.durationSec ?? null,
+      vertical: verticalVideo(watch.url, watch.vertical) }
   }
-  const watch = materials.some((m) => m.watchToAnswer && trackablePlayer(m))
-  if (shared && !watch) {
+  if (shared) {
     const player = videoPlayer(shared.url)
     if (player) {
       return { player, watchRequired: false, videoDurationSec: null, vertical: verticalVideo(shared.url, shared.vertical) }
     }
   }
-  const first = materials.find((m) => m.watchToAnswer)
-  const firstPlayer = first ? trackablePlayer(first) : null
-  // Q75: the card says whether its video is the one to watch, and how long it is (the sponsor's figure).
-  if (first && firstPlayer) {
-    return { player: firstPlayer, watchRequired: true, videoDurationSec: first.durationSec ?? null,
-      vertical: verticalVideo(first.url, first.vertical) }
-  }
-  const playable = materials.find((m) => m.kind === 'VIDEO_LINK' && videoPlayer(m.url))
-  return playable
-    ? { player: videoPlayer(playable.url), watchRequired: false, videoDurationSec: null,
-      vertical: verticalVideo(playable.url, playable.vertical) }
+  const first = materials.find((m) => playable(m) && videoKind(playable(m)) !== 'page') ?? materials.find((m) => playable(m))
+  return first
+    ? { player: playable(first), watchRequired: false, videoDurationSec: null, vertical: verticalVideo(first.url, first.vertical) }
     : { player: null, watchRequired: false, videoDurationSec: null, vertical: false }
 }
 

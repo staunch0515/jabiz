@@ -30,6 +30,11 @@ describe('the preview (Q34b)', () => {
     expect(draftPreview(withMaterials([video('https://vimeo.com/76979871', false),
       video('https://youtu.be/dQw4w9WgXcQ', true)]), null, at).video)
       .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+    // F-S15: a video file is taken as a site's video is; a page of another site only when there is nothing else.
+    expect(draftPreview(withMaterials([video('https://video.example/a', false), video('https://cdn.example.com/a.mp4', false)]),
+      null, at).video).toBe('https://cdn.example.com/a.mp4')
+    expect(draftPreview(withMaterials([video('http://cdn.example.com/a.mp4', false), video('https://video.example/a', false)]),
+      null, at).video).toBe('https://video.example/a')
     expect(draftPreview(DRAFT, null, at).video).toBeNull()
   })
 
@@ -107,7 +112,7 @@ describe('the preview (Q34b)', () => {
     it('leaves the card as before without one, or with one the App does not play', () => {
       const materials = [material(1, 'https://video.example/a'), material(2, 'https://youtu.be/dQw4w9WgXcQ',
         { vertical: true })]
-      for (const p of [preview(materials, null), preview(materials, { url: 'https://video.example/b', vertical: true }),
+      for (const p of [preview(materials, null), preview(materials, { url: 'http://video.example/b.mp4', vertical: true }),
         // The catalog's row is only the publication's while it names it.
         preview(materials, horizontal, { ...row, sharedVideoId: null as never })]) {
         expect(p.video).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')

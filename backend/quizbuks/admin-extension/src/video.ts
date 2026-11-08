@@ -1,19 +1,20 @@
 /**
  * F-S11: which video links mainland China cannot play, for the review page's notice: a copy of the App's
  * `qb/video.ts` (`videoPlayer`, `videoSite`, `foreignVideo`; the backend's `VideoEmbeds` and `ForeignVideos`), with the
- * same cases in `video.test.ts`. Change them together.
+ * same cases in `video.test.ts`. Change them together. F-S15: links on any https address (video files, pages of other
+ * sites), and host names in the parameter; the review page marks the pages of other sites (`embeddedPages`).
  */
 import type { Snapshot } from './snapshot'
 
-const YOUTUBE_PLAYER = 'https://www.youtube-nocookie.com/embed/'
-const VIMEO_PLAYER = 'https://player.vimeo.com/video/'
-const BILIBILI_PLAYER = 'https://player.bilibili.com/player.html?bvid='
+export const YOUTUBE_PLAYER = 'https://www.youtube-nocookie.com/embed/'
+export const VIMEO_PLAYER = 'https://player.vimeo.com/video/'
+export const BILIBILI_PLAYER = 'https://player.bilibili.com/player.html?bvid='
 /** Bilibili's player starts by itself unless told not to. */
 const BILIBILI_SUFFIX = '&autoplay=0'
-const NICONICO_PLAYER = 'https://embed.nicovideo.jp/watch/'
-const DAILYMOTION_PLAYER = 'https://www.dailymotion.com/embed/video/'
-const YOUKU_PLAYER = 'https://player.youku.com/embed/'
-const TENCENT_PLAYER = 'https://v.qq.com/txp/iframe/player.html?vid='
+export const NICONICO_PLAYER = 'https://embed.nicovideo.jp/watch/'
+export const DAILYMOTION_PLAYER = 'https://www.dailymotion.com/embed/video/'
+export const YOUKU_PLAYER = 'https://player.youku.com/embed/'
+export const TENCENT_PLAYER = 'https://v.qq.com/txp/iframe/player.html?vid='
 
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/
 const VIMEO_ID = /^[0-9]{1,12}$/
@@ -36,35 +37,104 @@ const html = (segment: string | undefined) => (segment && segment.endsWith('.htm
 
 const youtube = (id: string | null | undefined) => (id && YOUTUBE_ID.test(id) ? YOUTUBE_PLAYER + id : null)
 
+/** F-S15: an https address as written: a host, plain path segments, an optional query and fragment; no user, no port. */
+const CHARS = "(?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})"
+const ADDRESS = new RegExp(`^[Hh][Tt][Tt][Pp][Ss]://([A-Za-z0-9.-]+)((?:/${CHARS}+)*/?)(\\?(?:${CHARS}|[/?])*)?(#(?:${CHARS}|[/?])*)?$`)
+const HOST = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/
+/** F-S15: the endings of a video file's path played with `<video>`. */
+export const FILE_EXTENSIONS = ['.mp4', '.webm', '.mov'] as const
+/** The seven sites' hosts: an address there that is not one video is no video (a channel, a short link). */
+const SITE_HOSTS = new Set([...YOUTUBE_HOSTS, ...VIMEO_HOSTS, ...BILIBILI_HOSTS, ...NICONICO_HOSTS, ...DAILYMOTION_HOSTS,
+  'youtu.be', 'player.bilibili.com', 'b23.tv', 'www.b23.tv', 'nico.ms', 'dai.ly', 'geo.dailymotion.com', 'v.youku.com',
+  'player.youku.com', 'youku.com', 'www.youku.com', 'v.qq.com'])
+
+function address(url: string | null | undefined): RegExpExecArray | null {
+  if (!url) return null
+  const found = ADDRESS.exec(url.trim())
+  if (!found || !HOST.test(found[1].toLowerCase())) return null
+  // Dot segments: a browser resolves them, so the address played would differ; none is taken.
+  if (found[2].split('/').some((segment) => segment === '.' || segment === '..')) return null
+  return found
+}
+
+const normal = (found: RegExpExecArray) => `https://${found[1].toLowerCase()}${found[2]}${found[3] ?? ''}${found[4] ?? ''}`
+
 /**
- * F-S10: whether a video link is a YouTube Shorts link, read as `videoPlayer` reads links (the backend's
- * `VideoEmbeds.shorts`, the same cases).
+ * F-S15: a video file on any host but the sites': an https address whose path ends with `.mp4`, `.webm` or `.mov` (the
+ * query and fragment do not count); the address played is the link with its scheme and host in lower case.
+ */
+export function filePlayer(url: string | null | undefined): string | null {
+  const found = address(url)
+  if (!found || SITE_HOSTS.has(found[1].toLowerCase())) return null
+  const last = found[2].slice(found[2].lastIndexOf('/') + 1).toLowerCase()
+  return FILE_EXTENSIONS.some((ending) => last.length > ending.length && last.endsWith(ending)) ? normal(found) : null
+}
+
+/** F-S15: any other https page, framed in a sandbox: not the sites' hosts, not a video file. */
+export function pagePlayer(url: string | null | undefined): string | null {
+  const found = address(url)
+  if (!found || SITE_HOSTS.has(found[1].toLowerCase()) || filePlayer(url)) return null
+  return normal(found)
+}
+
+/** F-S15: the host of a video file's or a page's link (lower case), for F-S11's hosts. */
+export function videoHost(url: string | null | undefined): string | null {
+  const found = address(url)
+  return found ? found[1].toLowerCase() : null
+}
+
+/** F-S15: the three kinds of player. */
+export type VideoKind = 'site' | 'file' | 'page'
+
+/** The kind of a player as `videoPlayer` gives it; null for any other address. */
+export function videoKind(player: string | null | undefined): VideoKind | null {
+  if (!player) return null
+  if (sitePlayer(player) === player) return 'site'
+  if (filePlayer(player) === player) return 'file'
+  return pagePlayer(player) === player ? 'page' : null
+}
+
+/**
+ * F-S15: the frame of a page of another site: its scripts in its own origin (its player keeps its storage), no
+ * navigation of the app, no pop-ups, no forms; no referrer.
+ */
+export const PAGE_SANDBOX = 'allow-scripts allow-same-origin allow-presentation'
+export const PAGE_ALLOW = 'autoplay; fullscreen; picture-in-picture'
+
+/**
+ * Whether a player (as `videoPlayer` gives it) says where it is (Q75): YouTube's and Vimeo's. The others play, with
+ * their own play button, but cannot be the video to watch before answering.
+ */
+export function trackable(player: string | null | undefined): boolean {
+  return !!player && (player.startsWith(YOUTUBE_PLAYER) || player.startsWith(VIMEO_PLAYER) || videoKind(player) === 'file')
+}
+
+/**
+ * F-S10: whether a video link is a YouTube Shorts link (`youtube.com/shorts/<id>`), read as `videoPlayer` reads links:
+ * such a video is vertical whatever its material says (the backend's `VideoEmbeds.shorts`, the same cases).
  */
 export function isShorts(url: string | null | undefined): boolean {
-  if (!videoPlayer(url)) return false
+  if (!sitePlayer(url)) return false
   const parsed = new URL(url!.trim())
   const path = parsed.pathname.split('/')
   return YOUTUBE_HOSTS.has(parsed.hostname.toLowerCase()) && path.length === 3 && path[1] === 'shorts'
 }
 
-/**
- * F-S10: whether the card of a version's publication would show a vertical video, as the backend's
- * `PublicationEditing.cardVideo` chooses it: the video to watch (YouTube or Vimeo), else the first video link with a
- * player; vertical when it is a YouTube Shorts link or the sponsor marked it.
- */
-export function cardVideoVertical(content: Snapshot): boolean {
-  const trackable = (url: string | null) => {
-    const player = videoPlayer(url)
-    return !!player && (player.startsWith(YOUTUBE_PLAYER) || player.startsWith(VIMEO_PLAYER))
-  }
-  const watched = content.materials.find((material) => material.watchToAnswer)
-  const card = watched && trackable(watched.url) ? watched
-    : content.materials.find((material) => material.kind === 'VIDEO_LINK' && !!videoPlayer(material.url))
-  return !!card && (card.vertical === true || isShorts(card.url))
+/** F-S10: whether a video material is vertical: a YouTube Shorts link, or marked so by the sponsor. */
+export function verticalVideo(url: string | null | undefined, marked: boolean | null | undefined): boolean {
+  return !!marked || isShorts(url)
 }
 
-/** The player's address for a link to one video of the sites above; null for any other address. */
+/**
+ * The player's address for a link to any video the app plays (F-S15): the seven sites' player, else a video file, else
+ * another https page; null for anything else.
+ */
 export function videoPlayer(url: string | null | undefined): string | null {
+  return sitePlayer(url) ?? filePlayer(url) ?? pagePlayer(url)
+}
+
+/** The player's address for a link to one video of the seven sites above; null for any other address. */
+export function sitePlayer(url: string | null | undefined): string | null {
   if (!url || !url.trim()) return null
   let parsed: URL
   try {
@@ -125,6 +195,32 @@ export function videoPlayer(url: string | null | undefined): string | null {
   return null
 }
 
+/**
+ * The player started muted at once (Q63: the home's card in the middle of the screen, the start page): browsers let
+ * a page start only a silent video by itself; the viewer turns the sound on in the player. Every site the same way
+ * (Q99b), each with its own parameters; a site without them (Youku, Tencent Video) shows its play button instead.
+ */
+export function autoplaying(player: string): string {
+  if (player.startsWith(VIMEO_PLAYER)) return `${player}?autoplay=1&muted=1&playsinline=1`
+  if (player.startsWith(YOUTUBE_PLAYER)) return `${player}?autoplay=1&mute=1&playsinline=1`
+  if (player.startsWith(BILIBILI_PLAYER)) return `${player.replace(BILIBILI_SUFFIX, '')}&autoplay=1&muted=1`
+  if (player.startsWith(DAILYMOTION_PLAYER)) return `${player}?autoplay=1&mute=1`
+  if (player.startsWith(NICONICO_PLAYER)) return `${player}?autoplay=1&mute=1`
+  return player
+}
+
+/** Whether the viewer asked for less motion: then no video starts by itself (Q63). */
+export function prefersStillVideo(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+/** A player address the server gave (the card's): only one of the players above (F-S15: a file, a page), else none. */
+export function trustedPlayer(address: string | null | undefined): string | null {
+  if (!address) return null
+  return videoPlayer(address) === address ? address : null
+}
+
 /** The video sites as the parameter `qb.video.mainland-accessible-sites` names them (the backend's `VideoEmbeds.Site`). */
 export type VideoSite = 'youtube' | 'vimeo' | 'bilibili' | 'niconico' | 'dailymotion' | 'youku' | 'tencent'
 
@@ -134,31 +230,70 @@ const SITE_PLAYERS: [VideoSite, string][] = [['youtube', YOUTUBE_PLAYER], ['vime
 
 /** F-S11: the site of a link to one video, as `videoPlayer` reads it; null for any other address. */
 export function videoSite(url: string | null | undefined): VideoSite | null {
-  const player = videoPlayer(url)
+  const player = sitePlayer(url)
   return player ? SITE_PLAYERS.find(([, prefix]) => player.startsWith(prefix))?.[0] ?? null : null
 }
 
 /** The parameter's first value: the sites mainland China plays (the backend's `ForeignVideos.DEFAULT_SITES`). */
 export const MAINLAND_SITES_DEFAULT = 'bilibili,youku,tencent'
 
-/** The sites of the parameter's value (unknown keys ignored); the default's when there is none. */
-export function mainlandSites(value: string | null | undefined): Set<VideoSite> {
+/** What mainland China plays (F-S11, F-S15): the sites the parameter names, and the hosts it names. */
+export interface MainlandAccessible {
+  sites: ReadonlySet<VideoSite>
+  hosts: ReadonlySet<string>
+}
+
+/** The sites and host names of the parameter's value (anything else ignored); the default's when there is none. */
+export function mainlandSites(value: string | null | undefined): MainlandAccessible {
   const known = new Set<string>(SITE_PLAYERS.map(([site]) => site))
-  return new Set((value ?? MAINLAND_SITES_DEFAULT).split(',').map((key) => key.trim().toLowerCase())
-    .filter((key): key is VideoSite => known.has(key)))
+  const sites = new Set<VideoSite>()
+  const hosts = new Set<string>()
+  for (const key of (value ?? MAINLAND_SITES_DEFAULT).split(',').map((entry) => entry.trim().toLowerCase())) {
+    if (known.has(key)) sites.add(key as VideoSite)
+    else if (HOST.test(key)) hosts.add(key)
+  }
+  return { sites, hosts }
+}
+
+/** Whether a video link plays in mainland China: its site is listed, or (a file, a page) its host. */
+function playsInMainland(link: string, accessible: MainlandAccessible): boolean {
+  const site = videoSite(link)
+  if (site) return accessible.sites.has(site)
+  if (sitePlayer(link) || !videoPlayer(link)) return false
+  const host = videoHost(link)
+  return !!host && accessible.hosts.has(host)
 }
 
 /**
  * F-S11: whether any of these video links is foreign, as the backend's `ForeignVideos` decides: a link of a site not
- * in `accessible`, or of no site recognised; a blank link is no video. Only for the hints of the pages: the server
- * freezes the answer on the publication's card and refuses a start from mainland China by it.
+ * listed, a file or page whose host is not listed (F-S15), or a link of nothing recognised; a blank link is no video.
+ * Only for the hints of the pages: the server freezes the answer on the publication's card and refuses a start from
+ * mainland China by it.
  */
-export function foreignVideo(links: readonly (string | null | undefined)[], accessible: ReadonlySet<VideoSite>): boolean {
-  return links.some((link) => {
-    if (!link || !link.trim()) return false
-    const site = videoSite(link)
-    return !site || !accessible.has(site)
-  })
+export function foreignVideo(links: readonly (string | null | undefined)[], accessible: MainlandAccessible): boolean {
+  return links.some((link) => !!link && !!link.trim() && !playsInMainland(link, accessible))
+}
+
+/**
+ * F-S10: whether the card of a version's publication would show a vertical video, as the backend's
+ * `PublicationEditing.cardVideo` chooses it: the video to watch (YouTube, Vimeo or, F-S15, a video file), else the first
+ * video of a site or a video file, else the first page of another site; vertical when it is a YouTube Shorts link or the
+ * sponsor marked it.
+ */
+export function cardVideoVertical(content: Snapshot): boolean {
+  const videos = content.materials.filter((material) => material.kind === 'VIDEO_LINK' && !!videoPlayer(material.url))
+  const watched = content.materials.find((material) => material.watchToAnswer)
+  const card = watched && trackable(videoPlayer(watched.url)) ? watched
+    : videos.find((material) => videoKind(videoPlayer(material.url)) !== 'page') ?? videos[0]
+  return !!card && (card.vertical === true || isShorts(card.url))
+}
+
+/**
+ * F-S15: the pages of other sites a version frames (its video links that are no site's video and no video file), every
+ * language's, for the review page: their content is the reviewer's to check.
+ */
+export function embeddedPages(content: Snapshot): string[] {
+  return snapshotVideoLinks(content).map((link) => pagePlayer(link)).filter((page): page is string => !!page)
 }
 
 /** The video links of a version's snapshot, every language's (the base's materials and each language's own). */
