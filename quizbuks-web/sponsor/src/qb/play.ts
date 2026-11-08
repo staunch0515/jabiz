@@ -75,8 +75,6 @@ export interface FeedCard {
   language?: string | null
   /** The highest reward, in Kudos. */
   maxReward: unknown
-  /** Q69: the catalog's certification passing it gives (the key of its round; F-S2c2, D6: no sponsor's own). */
-  certification?: string | null
   /** How the reward reaches the taker (Q22). */
   rewardMethod: RewardMethod
   /** Q33: how a digital prize is delivered and what it is; null for the other methods. */
@@ -152,7 +150,6 @@ export function feedCard(row: Record<string, unknown>): FeedCard {
     kind: kindOf(row.kind),
     language: textOrNull(row.language),
     maxReward: row.maxReward,
-    certification: textOrNull(row.certification),
     rewardMethod: methodOf(row.rewardMethod),
     digitalDelivery: digitalDeliveryOf(row.digitalDelivery),
     digitalDescription: textOrNull(row.digitalDescription),
@@ -282,8 +279,6 @@ export interface PublicationView {
   fullScore: number
   passScore: number
   maxReward: unknown
-  /** Q69: the catalog's certification passing it gives (the key of its round; F-S2c2, D6: no sponsor's own). */
-  certification: string | null
   /** How the reward reaches the taker (Q22), and the prize when it is collected at the sponsor's place. */
   rewardMethod: RewardMethod
   redeemDescription: string | null
@@ -438,7 +433,6 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     fullScore: numberOf(row.fullScore),
     passScore: numberOf(row.passScore),
     maxReward: row.maxReward,
-    certification: textOrNull(row.certification),
     rewardMethod: methodOf(row.rewardMethod),
     redeemDescription: textOrNull(row.redeemDescription),
     digitalDelivery: digitalDeliveryOf(row.digitalDelivery),

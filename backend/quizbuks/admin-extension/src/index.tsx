@@ -3,7 +3,6 @@ import {
   ArrowLeftRight,
   Banknote,
   BookOpenCheck,
-  BadgeCheck,
   ClipboardCheck,
   FileQuestion,
   FileSpreadsheet,
@@ -43,7 +42,6 @@ import FeeRequestPage from './FeeRequestPage'
 import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
 import { AudiencePricesPage, AudienceRulesPage, OperatorAudiencePricesPage } from './AudiencePricingPages'
-import CertificationsPage from './CertificationsPage'
 import ReferralsPage from './ReferralsPage'
 import RegionPage from './RegionPage'
 import SharedVideosPage from './SharedVideosPage'
@@ -183,8 +181,6 @@ export default defineExtension({
     // Q48e-2: the operator's account and withdrawals, and finance's view of the withdrawals.
     { path: PATH.operatorAccount, element: <OperatorAccountPage /> },
     { path: PATH.operatorWithdrawals, element: <OperatorWithdrawalsPage /> },
-    // Q69: certification rounds and records by hand (headquarters and operators), and the official publishers.
-    { path: PATH.certifications, element: <CertificationsPage /> },
     { path: PATH.referrals, element: <ReferralsPage /> },
     // Q47c: the audience rules and their prices (headquarters), and an operator's own prices.
     { path: PATH.audienceRules, element: <AudienceRulesPage /> },
@@ -206,8 +202,6 @@ export default defineExtension({
         { key: 'qb-operator-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
           permission: PERMISSION.prospectUse },
         // Q69: the rounds of the operator's own sponsor, and grants and revocations by hand.
-        { key: 'qb-operator-certifications', label: 'menu.certifications', path: PATH.certifications, icon: BadgeCheck,
-          permission: PERMISSION.certificationManage },
         // Q87b: how the operator's sponsors pay the platform's fees.
         { key: 'qb-operator-billing', label: 'menu.operatorBilling', path: PATH.operatorBilling, icon: Receipt,
           permission: PERMISSION.operatorUse },
@@ -287,9 +281,6 @@ export default defineExtension({
         // Q48c, F-S1b: every operator's prospecting, read only.
         { key: 'qb-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
           permission: PERMISSION.adminProspect },
-        // Q69, F-S1b: every operator's certification rounds and records by hand, read only.
-        { key: 'qb-certifications', label: 'menu.certifications', path: PATH.certifications, icon: BadgeCheck,
-          permission: PERMISSION.certificationAdmin },
         // Q70: every referral (content and finance administrators).
         { key: 'qb-referrals', label: 'menu.referrals', path: PATH.referrals, icon: UserRoundPlus,
           permission: PERMISSION.referralsRead },
