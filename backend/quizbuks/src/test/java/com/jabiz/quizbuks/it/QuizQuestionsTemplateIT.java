@@ -111,4 +111,29 @@ class QuizQuestionsTemplateIT extends ContentItSupport {
             setParam(QbParams.CONTENT_IMPORT_BATCH, "200");
         }
     }
+
+    @Test
+    void theQuizListIsSearchedByTitleTopicNameAndCustomWord() {
+        // F-S6 §3.2 (confirmed 2026-11-08): topics belong to the quiz; its list finds them by name in any language.
+        if (query("SELECT 1 FROM qb_topic WHERE topic_id = ?", "volcano").isEmpty()) {
+            run(com.jabiz.quizbuks.topic.TopicProcesses.ADD, com.jabiz.runtime.test.TestTokens.bearer(tokens,
+                "topic-admin", com.jabiz.quizbuks.QbPermissions.ADMIN_TOPIC_READ,
+                com.jabiz.quizbuks.QbPermissions.ADMIN_TOPIC_WRITE), body("topicId", "volcano", "nameZh", "火山学",
+                "nameJa", "火山の科学", "nameEn", "Volcanology"));
+        }
+        String byWord = newQuiz(sponsorA(), "Mountains");
+        run(com.jabiz.quizbuks.content.QuizTopics.SET, sponsorA(), body("quizId", byWord, "topics",
+            List.of("volcano"), "customTopics", List.of("Lava flows")));
+        String byTitle = newQuiz(sponsorA(), "Volcanoes of Japan");
+        String other = newQuiz(sponsorA(), "Rivers");
+
+        java.util.function.Function<String, List<Object>> search = q -> items("qb.sponsor.quizzes", sponsorA(),
+            body("params", Map.of("q", q))).stream().map(row -> row.get("quizId")).toList();
+        assertThat(search.apply("volcan")).contains(byWord, byTitle).doesNotContain(other);
+        assertThat(search.apply("火山")).contains(byWord).doesNotContain(byTitle, other);
+        assertThat(search.apply("lava")).containsExactly(byWord);
+        // Not a piece of the JSON the custom words are kept in.
+        assertThat(search.apply("\",\"")).isEmpty();
+        assertThat(search.apply("river")).containsExactly(other);
+    }
 }
