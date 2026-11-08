@@ -41,6 +41,13 @@ export const DATASET = {
 
 /** SQL templates (`queries/qb/admin`). */
 export const TEMPLATE = {
+  /** F-S2b3a: the knowledge maps: every one (the platform's), the operator's own, a version node by node, the nodes lit. */
+  trees: 'qb.admin.trees',
+  operatorTrees: 'qb.operator.trees',
+  treeVersion: 'qb.admin.tree-version',
+  treeLit: 'qb.admin.tree-lit',
+  operatorTreeVersion: 'qb.operator.tree-version',
+  operatorTreeLit: 'qb.operator.tree-lit',
   /** F-C2: the sponsors' usage by month and meter (headquarters every sponsor, an operator its own). */
   usage: 'qb.admin.usage',
   /** Q88a: the sponsors' own certifications (headquarters every one, an operator its sponsors'). */
@@ -241,6 +248,8 @@ export const BROADCAST = {
 
 /** Processes the finance pages run (Q9c); the server checks each. */
 export const PROCESS = {
+  /** F-S2b2: asks another member to approve revoking a lit node (`qb.tree.lit.revoke`, reason required). */
+  treeLitRevoke: 'QB_TREE_LIT_REVOKE',
   /** Lets transfers to a taker held after a rejected or reversed transfer go on (`qb.payout.review`). */
   holdRelease: 'QB_TRANSFER_HOLD_RELEASE',
   /** Q14: what the daily run would do for a taker now (`qb.admin.finance.read`), and doing it at once (`qb.transfer.now`). */
@@ -324,6 +333,12 @@ export const TRANSFER_REVIEW = 'REVIEW'
 
 /** Dictionaries, labelled by the server in the request's language. */
 export const DICTIONARY = {
+  /** F-S2: knowledge maps: whose, who lights them, their state and their versions' state, who lit a node. */
+  treeOwner: 'urn:jabiz:dict:quizbuks:tree-owner',
+  treeSubject: 'urn:jabiz:dict:quizbuks:tree-subject',
+  treeStatus: 'urn:jabiz:dict:quizbuks:tree-status',
+  treeVersionStatus: 'urn:jabiz:dict:quizbuks:tree-version-status',
+  treeLitSubject: 'urn:jabiz:dict:quizbuks:tree-lit-subject',
   /** F-C2: the usage meters (`usage.UsageMeters`). */
   usageMeter: 'urn:jabiz:dict:quizbuks:usage-meter',
   /** F-C1: an asset's kind, what a text asset is for, and the places an asset is copied to. */
@@ -400,6 +415,12 @@ export type Certification = (typeof CERTIFICATIONS)[number]
 
 /** Permissions (`QbPermissions`): they only decide what the pages offer; the server checks every call. */
 export const PERMISSION = {
+  /** F-S2: every knowledge map (the platform's administrators), and revoking a lit node (operators and the platform). */
+  treesRead: 'qb.admin.trees.read',
+  treeLitRevoke: 'qb.tree.lit.revoke',
+  /** F-S2a: deciding the review of a Sponsor's map or an operator's copy (operators), of a platform template. */
+  reviewTree: 'qb.review.tree',
+  treePlatformWrite: 'qb.tree.platform.write',
   reviewPublication: 'qb.review.publication',
   reviewSponsor: 'qb.review.sponsor',
   quizRead: 'qb.admin.quiz.read',
@@ -567,6 +588,9 @@ export const SPONSOR_PENDING = 'PENDING'
 
 /** The extension's own pages (not platform paths, `PLATFORM_PATHS`). */
 export const PATH = {
+  /** F-S2b3a: the knowledge maps, and one map's review and lit nodes. */
+  trees: '/qb/trees',
+  tree: (treeId: string) => `/qb/trees/${encodeURIComponent(treeId)}`,
   reviews: '/qb/reviews',
   /** F-C2: the sponsors' usage by month (`?sponsor=` for one). */
   usage: '/qb/usage',
