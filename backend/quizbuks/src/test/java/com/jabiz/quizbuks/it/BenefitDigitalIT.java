@@ -113,6 +113,9 @@ class BenefitDigitalIT extends PlayItSupport {
         assertThat(run(DigitalCodeProcesses.LOAD, studio, body("publicationId", publicationId, "pastedCodes",
             "https://films.example/watch?k=AAAA1111\nhttps://films.example/watch?k=BBBB2222")))
             .containsEntry("loaded", 2).containsEntry("available", 2);
+        // D78: each code keeps whom it is sealed for (the studio), so a new seal key can take over.
+        assertThat(query("SELECT fulfiller_id FROM qb_digital_code WHERE publication_id = CAST(? AS uuid)",
+            publicationId)).hasSize(2).allSatisfy(row -> assertThat(row).containsEntry("fulfiller_id", s.studio()));
         assertThat(rows("qb.sponsor.benefit-digital-pool-summary", studio, Map.of("publicationId", publicationId)))
             .singleElement().satisfies(row -> assertThat(row).containsEntry("available", 2));
         assertThat(rows("qb.sponsor.benefit-digital-codes", studio, Map.of("publicationId", publicationId)))

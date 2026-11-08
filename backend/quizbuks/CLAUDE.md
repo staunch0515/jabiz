@@ -183,7 +183,7 @@
   （都是时态实体，状态在 `QbRewards.TRANSITIONS`，流程在现金记录锁 `qb.cash:<记录>` 内）并记计数；现金的状态只经 `QB_CASH_REWARD_*` 流程改变，逾期禁止开始只在 `CashRewardChecks.refuseOverdue`。**现金争议平台不管**（F-S1）：没有 `qb.cash.resolve` 与平台的处理，学者提出争议只通知发起方；发起方与学者解决后再次标记已支付（`DISPUTED` → `MARKED_PAID`，确认期限重新起算），或学者直接确认。
   期限 `qb.reward.cash.confirm-days` / `cash.pay-days` / `redeem-days` / `digital.send-days` 是普通参数（`LoadParams` 读，不受控）。
   电子奖品（Q33，`plans/Q33-digital-prize.md`，`reward.QbDigitalPrizes`、`DigitalCodeProcesses`、`DigitalPrizeProcesses`）：第四种方式 `DIGITAL_PRIZE`，发布上 `digitalDelivery`（`POOL`/`SHARED`/`SPONSOR_SENT`）、
-  `digitalDescription`、`digitalSendDays`，共用码 `sealedDigitalContent` 经 `SealSecret` 以**商户编号**为上下文密封（码池 `QbDigitalCode.sealedContent`、奖品 `QbDigitalPrize.sealedContent` 同一上下文），
+  `digitalDescription`、`digitalSendDays`，共用码 `sealedDigitalContent` 经 `SealSecret` 以**商户编号**为上下文密封（码池 `QbDigitalCode.sealedContent`、奖品 `QbDigitalPrize.sealedContent` 同一上下文；码池以装码人为上下文，数字产品是履约方，码行记 `fulfillerId`；这四处在 `publishing.PrizeSealedFields` 中以 `SealedField` 声明，换 `JABIZ_SEAL_KEY` 时由平台的 `jabiz.key-rotation` 重新密封（平台 D78），新增保存密封值的字段同样声明，字段须可变、敏感），
   字段 `sensitive()`（不再加 `processOnly()`：敏感已含）；明文只在 `QB_DIGITAL_PRIZE_OPEN` 的输出 `prizeContent` 中（标 `@Sensitive(returned = true)`：响应中返回，`op_process_result`、事件与摘要中遮蔽），输出 record 的 `toString()` 遮蔽；
   码池只经 `QB_DIGITAL_CODES_LOAD`/`REVOKE` 写、结算在池锁 `qb.digital-pool:<发布>` 内按 `seq` 取码；`POOL` 的提交在 `PublicationLifecycle.submit` 数可用码（`PublicationReadiness.pool`）。
   列表与结果只给 `hint`（末 4 位，共用码没有）。
