@@ -111,7 +111,9 @@ public class SponsorErasure {
                     ErasedEntity.delete(QbInvitations.INVITATION, "publisherId", "email"),
                     // The account's own: profile, settings and inbox.
                     ErasedEntity.delete(QbAccounts.PROFILE, "userId", "displayName", "city"),
-                    ErasedEntity.delete(QbSettings.SETTINGS, "userId", "publicHandle"),
+                    // F-S9: with the topics they liked (masked in the audit records too).
+                    ErasedEntity.delete(QbSettings.SETTINGS, "userId", "publicHandle", "likedTopics"),
+
                     ErasedEntity.delete(QbInbox.STATE, "userId"),
                     ErasedEntity.delete(QbInbox.MESSAGE, "recipientId", "title", "body"),
                     ErasedEntity.delete(QbMessaging.NOTICE, "recipientId"),

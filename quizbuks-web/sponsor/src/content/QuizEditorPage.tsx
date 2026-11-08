@@ -39,6 +39,7 @@ import { Link, navigate } from '../qb/router'
 import { cloneQuiz, deleteQuiz, isStale, publishVersion, readDraft, type LanguageStatus, type Quiz } from './api'
 import { EditingProvider, failedRemoval, formProblem, ProblemList, type Editing } from './editing'
 import { HeadingForm } from './HeadingForm'
+import { QuizTopicsField } from '../topics/QuizTopicsField'
 import { LIMITS } from './limits'
 import { MaterialsPanel } from './MaterialsPanel'
 import { draftQuery, quizPath, QUIZZES_PATH, QUIZZES_QUERY, versionsQuery } from './paths'
@@ -337,6 +338,8 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
           </TabsList>
           <TabsContent value="quiz" className="flex flex-col gap-6 pt-4">
             <HeadingForm key={generation} quiz={quiz} />
+            {/* F-S9: the quiz's topics, each change saved at once. */}
+            <QuizTopicsField quiz={quiz} />
           </TabsContent>
           <TabsContent value="questions" className="flex flex-col gap-4 pt-4">
             {/* AI does not write a survey's questions (Q12, D-Q12-9). */}

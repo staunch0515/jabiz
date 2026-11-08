@@ -22,6 +22,8 @@ results:
   contentHash:   { from: QbQuizVersion.contentHash }
   videoLinks:    { kind: { type: text } }
   mainlandSites: { kind: { type: text, maxLength: 200 } }
+  topics:        { from: QbQuizVersion.topics }
+  customTopics:  { from: QbQuizVersion.customTopics }
 list:
   filters: [versionNo, versionedAt]
   sorts:   [versionNo, versionedAt]
@@ -54,7 +56,11 @@ SELECT
            SELECT jsonb_path_query(CAST(v.{{QbQuizVersion.content}} AS jsonb),
                                    'lax $.translations.*.materials[*] ? (@.kind == "VIDEO_LINK").url')) l) AS videoLinks,
     (SELECT CAST(max(p.{{SysParam.value}}) AS varchar(200)) FROM {{SysParam}} p
-     WHERE p.{{SysParam.paramKey}} = 'qb.video.mainland-accessible-sites') AS mainlandSites
+     WHERE p.{{SysParam.paramKey}} = 'qb.video.mainland-accessible-sites') AS mainlandSites,
+    -- F-S9: the version's topics, which its publications inherit (the wizard adds or removes some).
+    v.{{QbQuizVersion.topics}}        AS topics,
+    v.{{QbQuizVersion.customTopics}}  AS customTopics
+
 FROM {{QbQuizVersion}} v
 JOIN {{QbQuiz}} z ON z.{{QbQuiz.quizId}} = v.{{QbQuizVersion.quizId}}
 WHERE v.{{QbQuizVersion.quizId}} = :quizId
