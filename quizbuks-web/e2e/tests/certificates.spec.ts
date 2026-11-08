@@ -3,16 +3,18 @@ import { operatorWithLead } from './operators'
 import { taker } from './play'
 
 /*
- * Certificates (docs/quizbuks/plans/Q77-certificates.md): a taker who holds a certification issues its certificate in
- * the app's account, downloads the PDF and copies its link; anybody opens the link and sees it valid; the taker turns
- * the public certification page on under a name of their own, and anybody sees the certificate there. A grant by hand
- * stands in for passing a round (the rounds are Q69's tests).
+ * Certificates (docs/quizbuks/plans/Q77-certificates.md). F-S2c (D8, the requester's answer of 2026-11-08): no new
+ * certificate is issued until the knowledge map's certificates (F-S5): a taker who holds a certification sees it in the
+ * app's account with the note, and no button to issue; the public certification page still takes a name of the
+ * taker's own and turns on, and shows "not available" while it lists no certificate; an unknown key verifies nothing.
+ * Certificates issued before stay verifiable and downloadable (CertificateIT). A grant by hand stands in for passing a
+ * round (the rounds are Q69's tests).
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a holder issues a certificate, anybody verifies it and sees it on the public page', async ({ page, browser,
+test('a holder sees issuing paused, and the public pages show nothing to verify', async ({ page, browser,
   baseURL, request }) => {
   test.setTimeout(180_000)
   const name = unique('Cert ')
@@ -29,16 +31,9 @@ test('a holder issues a certificate, anybody verifies it and sees it on the publ
   await page.goto('/taker/account/certificates')
   const item = page.getByTestId('certificate-SPONSOR_APPLY')
   await expect(item).toContainText('Sponsor Certification')
+  await expect(item.getByTestId('certificate-paused-SPONSOR_APPLY')).toContainText('not issued for now')
+  await expect(item.getByTestId('certificate-issue-SPONSOR_APPLY')).toHaveCount(0)
   await expectAccessible(page, 'app certificates')
-  await item.getByTestId('certificate-issue-SPONSOR_APPLY').click()
-  const link = item.getByTestId('certificate-link-SPONSOR_APPLY')
-  await expect(link).toContainText('/taker/verify/')
-  const address = (await link.textContent())!.trim()
-
-  const downloading = page.waitForEvent('download')
-  await item.getByTestId('certificate-download-SPONSOR_APPLY').click()
-  const pdf = await downloading
-  expect(pdf.suggestedFilename()).toMatch(/\.pdf$/)
 
   // The public page: a name of the taker's own, then on.
   const handle = unique('cert-').toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 30).replace(/-+$/, '')
@@ -49,30 +44,19 @@ test('a holder issues a certificate, anybody verifies it and sees it on the publ
   await on.click()
   await expect(page.getByTestId('certificates-page-link')).toBeVisible()
 
-  // Anybody, signed out: the verify page and the public page.
+  // Anybody, signed out: no certificate is listed, so the page is not available; an unknown key verifies nothing.
   // A context of its own (signed out; axe needs a page of a context, not of the bare browser), at the tests' address.
   const visitorContext = await browser.newContext({ baseURL })
   const visitor = await visitorContext.newPage()
-  await visitor.goto(address)
-  await expect(visitor.getByTestId('verify-state')).toHaveText('Valid')
-  await expect(visitor.getByTestId('verify-holder')).toHaveText(name)
-  await expectAccessible(visitor, 'certificate verify page')
   await visitor.goto(`/taker/u/${handle}`)
-  await expect(visitor.getByTestId('taker-page-name')).toHaveText(name)
-  await expect(visitor.getByTestId('taker-page-SPONSOR_APPLY')).toBeVisible()
+  await expect(visitor.getByText('This page is not available')).toBeVisible()
   await expectAccessible(visitor, 'public certification page')
-  await visitor.getByTestId('taker-page-SPONSOR_APPLY').click()
-  await expect(visitor.getByTestId('verify-state')).toHaveText('Valid')
-
+  await visitor.goto(`/taker/verify/${'0'.repeat(32)}`)
+  await expect(visitor.getByText('No such certificate')).toBeVisible()
+  await expectAccessible(visitor, 'certificate verify page')
   await visitorContext.close()
 
-  // Off again: the page is as unknown. A public answer may be kept for its cacheSeconds (60) by a browser that read
-  // it, so a new visitor (an empty cache) checks it.
+  // Off again.
   await on.click()
   await expect(page.getByTestId('certificates-page-link')).toBeHidden()
-  const laterContext = await browser.newContext({ baseURL })
-  const later = await laterContext.newPage()
-  await later.goto(`/taker/u/${handle}`)
-  await expect(later.getByText('This page is not available')).toBeVisible()
-  await laterContext.close()
 })

@@ -1,0 +1,325 @@
+package com.jabiz.quizbuks.tree;
+
+import com.jabiz.event.DomainEvent;
+import com.jabiz.param.ParamValues;
+import com.jabiz.process.ProcessContext;
+import com.jabiz.process.ProcessDefinition;
+import com.jabiz.query.EntityQuery;
+import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.play.AttemptStatus;
+import com.jabiz.quizbuks.play.QbPlay;
+import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.LoadParams;
+import com.jabiz.runtime.process.steps.PublishEvent;
+import com.jabiz.runtime.process.steps.QueryEntities;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * Lighting knowledge graphs' nodes (F-S2b1, docs/quizbuks/plans/impl/F-S2.md §4): {@value #EVALUATE} judges, outside
+ * the answering, whether a subject's nodes hold now and writes a lit record for each that does and is not lit yet.
+ * A pass of a publication bound to a node ({@code qb.tree.passed}, published by the completion) evaluates that node;
+ * a node lit ({@value #LIT_EVENT}, published here) evaluates the nodes whose condition names it, one level per
+ * transaction, at most {@code qb.tree.max-depth} levels down. Lighting is permanent (A2-12): a node lit is never lit
+ * again while its record stands; a person who passes again gets the reward as usual and no new record.
+ *
+ * <p>The subject's lock {@code qb.tree-lit:<kind>:<id>} is taken first and alone (never with a publication's, start
+ * or wallet lock); every record is read again under it. In the first launch the subjects are people (Takers): the
+ * graphs Sponsors light have no bound publications before F-S4, so a Sponsor's evaluation finds nothing to do.
+ */
+public final class TreeLighting {
+
+    public static final String EVALUATE = "QB_TREE_EVALUATE";
+    /** Nodes just lit, whose dependants are evaluated next. */
+    public static final String LIT_EVENT = "qb.tree.lit";
+    public static final String PASSED_CONSUMER = "qb.tree-passed";
+    public static final String LIT_CONSUMER = "qb.tree-lit";
+
+    static final String INPUT = "lighting.input";
+    static final String OUTPUT = "lighting.output";
+    static final String LITS = "lighting.lits";
+    static final String REVOCATIONS = "lighting.revocations";
+    static final String REFS = "lighting.refs";
+    static final String CANDIDATES = "lighting.candidates";
+    static final String NODES = "lighting.nodes";
+    static final String CARDS = "lighting.cards";
+    static final String PASSES = "lighting.passes";
+    static final String PARAMS = "lighting.params";
+    static final String LIT_NOW = "lighting.litNow";
+    static final int MAX_ROWS = 5000;
+
+    private TreeLighting() {}
+
+    /**
+     * What to evaluate for a subject: the nodes named ({@code dependants} false: a pass of one of them), or the nodes
+     * whose condition names them ({@code dependants} true: they were just lit).
+     *
+     * @param depth     how many levels of lighting led here (1 for a pass)
+     * @param attemptId the attempt passed, for a pass
+     */
+    public record EvaluateInput(String subjectKind, String subjectId, String treeId, List<String> nodeIds,
+        boolean dependants, int depth, String attemptId) {
+        public EvaluateInput {
+            nodeIds = nodeIds == null ? List.of() : List.copyOf(nodeIds);
+        }
+    }
+
+    /** The nodes lit by this evaluation (graph and node). */
+    public record EvaluateOutput(List<String> litNodeIds) {
+        public EvaluateOutput {
+            litNodeIds = List.copyOf(litNodeIds);
+        }
+    }
+
+    /** A node to evaluate. */
+    record Candidate(String treeId, String nodeId) {}
+
+    public static ProcessDefinition<EvaluateInput, EvaluateOutput, ProcessContext> evaluate() {
+        return ProcessDefinition.define(EVALUATE, 1, EvaluateInput.class, EvaluateOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Lights the knowledge graphs' nodes whose condition holds for a person now.")
+                .permissions(QbPermissions.TREE_SYSTEM)
+                .internal()
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(INPUT, input);
+                    return ctx;
+                })
+                .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, EvaluateOutput.class)
+                    : new EvaluateOutput(List.of()))
+                .step("Lock the subject's lighting", HoldLock.<ProcessContext>exclusive(ctx -> person(ctx) == null
+                    ? null : QbTrees.litLockName(QbTrees.USER, person(ctx))))
+                .step("Load the subject's lit nodes and the nodes depending on these", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbTrees.defaultDataset(QbTrees.LIT), ctx -> mine(ctx), LITS),
+                    QueryEntities.query(QbTrees.defaultDataset(QbTrees.REVOCATION), ctx -> mine(ctx), REVOCATIONS),
+                    QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_REF), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("refNodeId", person(ctx) != null && input(ctx).dependants()
+                            ? new ArrayList<Object>(input(ctx).nodeIds()) : List.of()))
+                        .limit(MAX_ROWS).build(), REFS)))
+                .compute("Know the nodes to evaluate", (metadata, ctx) -> ctx.put(CANDIDATES, candidates(ctx)))
+                .step("Load the nodes and the publications bound to them", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("nodeId", candidateNodes(ctx))).limit(MAX_ROWS).build(), NODES),
+                    QueryEntities.query(QbPublications.defaultDataset(QbPublications.CARD), ctx -> EntityQuery
+                        .builder().where(new QueryPredicate.In("treeNodeId", candidateNodes(ctx)))
+                        .limit(MAX_ROWS).build(), CARDS)))
+                .step("Load the person's passes of them", QueryEntities.<ProcessContext>of(
+                    QbPlay.defaultDataset(QbPlay.ATTEMPT), ctx -> {
+                        List<Object> publications = new ArrayList<>();
+                        for (EntityInstance card : list(ctx, CARDS)) {
+                            if (candidate(ctx, card.get("treeId"), card.get("treeNodeId"))) {
+                                publications.add(card.get("publicationId"));
+                            }
+                        }
+                        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("publicationId", publications),
+                            new QueryPredicate.Eq("userId", person(ctx) == null ? "" : person(ctx)),
+                            new QueryPredicate.Eq("passed", true)))).limit(MAX_ROWS).build();
+                    }, PASSES))
+                .step("Load the depth limit", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+                    QbParams.TREE_MAX_DEPTH))
+                .compute("Light the nodes that hold", (metadata, ctx) -> light(ctx))
+                .step("Evaluate the nodes depending on them", PublishEvent.<ProcessContext>when(
+                    TreeLighting::goesDeeper, LIT_EVENT, TreeLighting::litPayload)));
+    }
+
+    /** The person evaluated: a Taker's evaluation; none for another kind of subject (nothing to do before F-S4). */
+    private static String person(ProcessContext ctx) {
+        EvaluateInput input = input(ctx);
+        return QbTrees.USER.equals(input.subjectKind()) && input.subjectId() != null
+            && !input.subjectId().isBlank() && !input.nodeIds().isEmpty() ? input.subjectId() : null;
+    }
+
+    private static EvaluateInput input(ProcessContext ctx) {
+        return ctx.get(INPUT, EvaluateInput.class);
+    }
+
+    private static EntityQuery mine(ProcessContext ctx) {
+        String person = person(ctx);
+        return EntityQuery.builder().where(new QueryPredicate.And(List.of(
+            new QueryPredicate.In("subjectId", person == null ? List.of() : List.of(person)),
+            new QueryPredicate.Eq("subjectKind", QbTrees.USER)))).limit(MAX_ROWS).build();
+    }
+
+    private static List<Candidate> candidates(ProcessContext ctx) {
+        EvaluateInput input = input(ctx);
+        Set<Candidate> found = new LinkedHashSet<>();
+        if (person(ctx) == null) {
+            return List.of();
+        }
+        if (input.dependants()) {
+            for (EntityInstance ref : list(ctx, REFS)) {
+                found.add(new Candidate(String.valueOf((Object) ref.get("treeId")),
+                    String.valueOf((Object) ref.get("nodeId"))));
+            }
+        } else if (input.treeId() != null) {
+            input.nodeIds().forEach(node -> found.add(new Candidate(input.treeId(), node)));
+        }
+        return List.copyOf(found);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Candidate> candidateList(ProcessContext ctx) {
+        return ctx.contains(CANDIDATES) ? (List<Candidate>) ctx.get(CANDIDATES) : List.of();
+    }
+
+    private static List<Object> candidateNodes(ProcessContext ctx) {
+        return candidateList(ctx).stream().map(Candidate::nodeId).distinct().map(Object.class::cast).toList();
+    }
+
+    private static boolean candidate(ProcessContext ctx, Object treeId, Object nodeId) {
+        return candidateList(ctx).contains(new Candidate(String.valueOf(treeId), String.valueOf(nodeId)));
+    }
+
+    /**
+     * Writes a lit record for every candidate in effect whose condition holds now and that is not lit now: its pass
+     * is any finished, passed attempt of a publication bound to it (an ended publication's too).
+     */
+    static void light(ProcessContext ctx) {
+        Set<String> litNow = new LinkedHashSet<>(TreeLights.litNow(list(ctx, LITS).stream()
+                .map(row -> new TreeLights.Lit(String.valueOf(row.id()), String.valueOf((Object) row.get("nodeId"))))
+                .toList(),
+            list(ctx, REVOCATIONS).stream().map(row -> String.valueOf((Object) row.get("litId"))).toList()));
+        Map<Candidate, EntityInstance> nodes = new LinkedHashMap<>();
+        for (EntityInstance node : list(ctx, NODES)) {
+            Candidate key = new Candidate(String.valueOf((Object) node.get("treeId")),
+                String.valueOf((Object) node.get("nodeId")));
+            nodes.put(key, node);
+        }
+        Map<String, Candidate> boundTo = new LinkedHashMap<>();
+        for (EntityInstance card : list(ctx, CARDS)) {
+            boundTo.put(String.valueOf((Object) card.get("publicationId")), new Candidate(
+                String.valueOf((Object) card.get("treeId")), String.valueOf((Object) card.get("treeNodeId"))));
+        }
+        // F-S2b2: a revoked lighting is not lit again from the passes it rested on: only a pass after the person's
+        // last revoked lighting of the node counts (qb.system.tree-recheck-due, the same rule).
+        Map<String, String> nodeOfLit = new LinkedHashMap<>();
+        for (EntityInstance row : list(ctx, LITS)) {
+            nodeOfLit.put(String.valueOf(row.id()), row.get("treeId") + " " + row.get("nodeId"));
+        }
+        Map<String, java.time.Instant> revokedAt = new LinkedHashMap<>();
+        for (EntityInstance row : list(ctx, REVOCATIONS)) {
+            String node = nodeOfLit.get(String.valueOf((Object) row.get("litId")));
+            java.time.Instant at = instant(row.get("revokedAt"));
+            if (node != null && at != null) {
+                revokedAt.merge(node, at, (a, b) -> a.isAfter(b) ? a : b);
+            }
+        }
+        Map<Candidate, String> passedBy = new LinkedHashMap<>();
+        for (EntityInstance attempt : list(ctx, PASSES)) {
+            Candidate node = boundTo.get(String.valueOf((Object) attempt.get("publicationId")));
+            if (node == null || AttemptStatus.IN_PROGRESS.equals(attempt.get("status"))) {
+                continue;
+            }
+            java.time.Instant revoked = revokedAt.get(node.treeId() + " " + node.nodeId());
+            java.time.Instant submitted = instant(attempt.get("submittedAt"));
+            if (revoked == null || submitted != null && submitted.isAfter(revoked)) {
+                passedBy.putIfAbsent(node, String.valueOf(attempt.id()));
+            }
+        }
+        EvaluateInput input = input(ctx);
+        List<String> lit = new ArrayList<>();
+        for (Candidate candidate : candidateList(ctx)) {
+            EntityInstance node = nodes.get(candidate);
+            if (node == null || !Boolean.TRUE.equals(node.get("active")) || node.get("condition") == null
+                || litNow.contains(candidate.nodeId())) {
+                continue;
+            }
+            TreeCondition condition = TreeCondition.parse(TreeProcesses.parse(String.valueOf(
+                (Object) node.get("condition"))));
+            String attempt = passedBy.get(candidate);
+            if (!TreeRules.holds(condition, litNow, attempt != null)) {
+                continue;
+            }
+            Map<String, Object> basis = new LinkedHashMap<>();
+            if (attempt != null) {
+                basis.put("attemptId", attempt);
+            }
+            if (input.dependants()) {
+                basis.put("nodes", input.nodeIds());
+            }
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("subjectKind", QbTrees.USER);
+            values.put("subjectId", person(ctx));
+            values.put("treeId", candidate.treeId());
+            values.put("nodeId", candidate.nodeId());
+            values.put("litAt", ctx.opTime());
+            values.put("basis", TreeProcesses.json(basis));
+            ctx.changes().insert(QbTrees.LIT, values);
+            // A node lit here counts for the next candidates of the same level.
+            litNow.add(candidate.nodeId());
+            lit.add(candidate.nodeId());
+        }
+        ctx.put(LIT_NOW, List.copyOf(lit));
+        ctx.put(OUTPUT, new EvaluateOutput(lit));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> litHere(ProcessContext ctx) {
+        return ctx.contains(LIT_NOW) ? (List<String>) ctx.get(LIT_NOW) : List.of();
+    }
+
+    /** Whether the nodes lit here have dependants to evaluate within the depth limit. */
+    private static boolean goesDeeper(ProcessContext ctx) {
+        return !litHere(ctx).isEmpty() && input(ctx).depth() < QbParams.count(ctx.get(PARAMS, ParamValues.class),
+            QbParams.TREE_MAX_DEPTH);
+    }
+
+    private static Map<String, Object> litPayload(ProcessContext ctx) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("subjectKind", QbTrees.USER);
+        payload.put("subjectId", person(ctx));
+        payload.put("nodeIds", litHere(ctx));
+        payload.put("depth", input(ctx).depth() + 1);
+        return payload;
+    }
+
+    /** A pass of a node (from the completion's event). */
+    static EvaluateInput passedInput(DomainEvent event) {
+        Map<String, Object> payload = event.payload();
+        Object node = payload.get("nodeId");
+        return new EvaluateInput(QbTrees.USER, text(payload.get("userId")), text(payload.get("treeId")),
+            node == null ? List.of() : List.of(String.valueOf(node)), false, 1, text(payload.get("attemptId")));
+    }
+
+    /** Nodes lit (from {@value #LIT_EVENT}): their dependants. */
+    static EvaluateInput litInput(DomainEvent event) {
+        Map<String, Object> payload = event.payload();
+        List<String> nodes = new ArrayList<>();
+        if (payload.get("nodeIds") instanceof List<?> list) {
+            list.stream().filter(Objects::nonNull).map(String::valueOf).forEach(nodes::add);
+        }
+        Object depth = payload.get("depth");
+        return new EvaluateInput(text(payload.get("subjectKind")), text(payload.get("subjectId")), null, nodes, true,
+            depth == null ? 1 : Integer.parseInt(String.valueOf(depth)), null);
+    }
+
+    private static java.time.Instant instant(Object value) {
+        return switch (value) {
+            case null -> null;
+            case java.time.Instant i -> i;
+            case java.time.OffsetDateTime o -> o.toInstant();
+            default -> java.time.Instant.parse(String.valueOf(value));
+        };
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<EntityInstance> list(ProcessContext ctx, String key) {
+        List<EntityInstance> found = ctx.contains(key) ? (List<EntityInstance>) ctx.get(key) : null;
+        return found == null ? List.of() : found;
+    }
+}

@@ -20,7 +20,8 @@ class SetupConfig {
     @Bean
     ControlledParams qbControlledParams() {
         return ControlledParams.of(java.util.stream.Stream.of(QbParams.CONTROLLED.stream(),
-            java.util.stream.Stream.of(QbParams.SHOPIFY_DAILY_CODES), QbParams.SHOPIFY_PLAN_LIMITS.stream())
+            java.util.stream.Stream.of(QbParams.SHOPIFY_DAILY_CODES), QbParams.SHOPIFY_PLAN_LIMITS.stream(),
+            QbParams.TREE_GATES.stream())
             .flatMap(java.util.function.Function.identity()).toArray(String[]::new));
     }
 }

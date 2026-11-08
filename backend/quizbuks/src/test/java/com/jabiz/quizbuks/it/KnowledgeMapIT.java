@@ -17,55 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the template's node ids and taking the template's changes node by node; the drafts give every problem the rules
  * find, and only the owner edits a map.
  */
-class KnowledgeMapIT extends PlayItSupport {
-
-    private static Map<String, Object> name(String text) {
-        return Map.of("en", text);
-    }
-
-    private static Map<String, Object> node(String nodeId, String key, String name, Map<String, Object> condition) {
-        Map<String, Object> node = new LinkedHashMap<>();
-        node.put("nodeId", nodeId);
-        node.put("key", key);
-        node.put("name", name(name));
-        node.put("condition", condition);
-        return node;
-    }
-
-    private static Map<String, Object> passed() {
-        return Map.of("passed", true);
-    }
-
-    private static Map<String, Object> all(Object... items) {
-        return Map.of("op", "ALL", "items", List.of(items));
-    }
-
-    private static Map<String, Object> lit(String node, boolean beforeAnswer) {
-        return beforeAnswer ? Map.of("node", node, "beforeAnswer", true) : Map.of("node", node);
-    }
-
-    private Map<String, Object> save(String token, Map<String, Object> tree, List<Map<String, Object>> nodes) {
-        Map<String, Object> input = new LinkedHashMap<>();
-        input.put("treeId", tree.get("treeId"));
-        input.put("baseRevision", tree.get("revision"));
-        input.put("name", name("Coffee"));
-        input.put("nodes", nodes);
-        return run(TreeProcesses.SAVE, token, input);
-    }
-
-    private Map<String, Object> submit(String token, Map<String, Object> tree) {
-        return run(TreeProcesses.SUBMIT, token, body("treeId", tree.get("treeId"), "baseRevision",
-            tree.get("revision")));
-    }
-
-    private void decide(String token, Object requestId, String decision, String reason) {
-        Map<String, Object> input = new LinkedHashMap<>();
-        input.put("requestId", requestId);
-        input.put("decision", decision);
-        input.put("reason", reason);
-        run("APPROVAL_DECIDE", token, input);
-        deliverEvents();
-    }
+class KnowledgeMapIT extends TreeItSupport {
 
     private Map<String, Object> treeRow(Object treeId) {
         return query("SELECT * FROM qb_tree WHERE tree_id = ?", String.valueOf(treeId)).getFirst();
@@ -74,11 +26,6 @@ class KnowledgeMapIT extends PlayItSupport {
     private List<Map<String, Object>> nodes(Object treeId) {
         return query("SELECT node_id, active, before_answer, bindable FROM qb_tree_node WHERE tree_id = ? ORDER BY "
             + "created_in_version, node_id", String.valueOf(treeId));
-    }
-
-    private String mapWriter() {
-        return TestTokens.bearer(tokens, verifiedUser(unique("fs2-content")), QbPermissions.TREE_EDIT,
-            QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ, "approval.decide");
     }
 
     @Test

@@ -20,9 +20,10 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Certificates (Q77, docs/quizbuks/plans/Q77-certificates.md): a holder issues the certificate of a holding once, as
- * a platform document only they read; anybody with its key verifies it, revoked or not; the public certification page
- * lists the issued, unrevoked ones once its holder turned it on under a name of their own.
+ * Certificates (Q77, docs/quizbuks/plans/Q77-certificates.md): F-S2c (D8) pauses issuing until the knowledge map's
+ * certificates (F-S5); one issued before stays a platform document only its holder reads; anybody with its key
+ * verifies it, revoked or not; the public certification page lists the issued, unrevoked ones once its holder turned
+ * it on under a name of their own.
  */
 class CertificateIT extends LegalItSupport {
 
@@ -36,10 +37,6 @@ class CertificateIT extends LegalItSupport {
     private void grant(String userId) {
         run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", CERT, "reason",
             "Met at the fair"));
-    }
-
-    private Map<String, Object> issue(String userId, String language) {
-        return run(CertificateProcesses.ISSUE, taker(userId), body("certification", CERT, "language", language));
     }
 
     @SuppressWarnings("unchecked")
@@ -78,35 +75,26 @@ class CertificateIT extends LegalItSupport {
     }
 
     @Test
-    void aHolderIssuesTheCertificateOfAHoldingOnceAndOnlyTheyReadIt() throws Exception {
+    void issuingIsPausedAndACertificateIssuedBeforeIsTheHoldersToRead() throws Exception {
         String ann = newTaker("q77-ann", "JP");
-        // Not held: nothing to list, nothing to issue.
+        // F-S2c (D8): no certificate is issued any more, held or not.
         assertThat(held(ann)).isEmpty();
         assertThat(codes(refused(CertificateProcesses.ISSUE, taker(ann), body("certification", CERT, "language",
-            "en"), 422))).containsExactly(CertificateProcesses.NOT_HELD);
-        assertThat(codes(refused(CertificateProcesses.ISSUE, taker(ann), body("certification", "NO_SUCH",
-            "language", "en"), 422))).containsExactly(CertificateProcesses.NOT_HELD);
-
+            "en"), 422))).containsExactly(CertificateProcesses.PAUSED);
         grant(ann);
         assertThat(held(ann)).singleElement().satisfies(h -> {
             assertThat(h).containsEntry("certification", CERT).containsEntry("source", "GRANTED")
                 .containsEntry("certificateId", null);
             assertThat(h.get("heldUntil")).isNotNull();
         });
+        assertThat(codes(refused(CertificateProcesses.ISSUE, taker(ann), body("certification", CERT, "language",
+            "en"), 422))).containsExactly(CertificateProcesses.PAUSED);
+        assertThat(query("SELECT 1 FROM qb_certificate WHERE user_id = ?", ann)).isEmpty();
 
-        Map<String, Object> issued = issue(ann, "en");
-        assertThat(issued).containsEntry("issued", true);
-        String certificateId = (String) issued.get("certificateId");
-        String key = (String) issued.get("verifyKey");
-        assertThat(key).matches("[0-9a-f]{32}");
-        // Asking again, in another language, gives the same certificate.
-        assertThat(issue(ann, "ja")).containsEntry("certificateId", certificateId).containsEntry("verifyKey", key)
-            .containsEntry("issued", false);
-        assertThat(held(ann)).singleElement().satisfies(h -> assertThat(h)
-            .containsEntry("certificateId", certificateId).containsEntry("verifyKey", key));
-        assertThat(query("SELECT holder_name, language FROM qb_certificate WHERE user_id = ?", ann))
-            .singleElement().satisfies(row -> assertThat(row).containsEntry("holder_name", "Taker JP")
-                .containsEntry("language", "en"));
+        // One issued before: its PDF stays the holder's.
+        String key = issuedBefore(ann, CERT, "Taker JP", "en");
+        String certificateId = (String) query("SELECT certificate_id FROM qb_certificate WHERE verify_key = ?", key)
+            .getFirst().get("certificate_id");
 
         // The PDF: one run of the layout, the holder's own.
         List<Map<String, Object>> runs = runsOf(certificateId, taker(ann));
@@ -130,7 +118,7 @@ class CertificateIT extends LegalItSupport {
     void anybodyWithTheKeyVerifiesItAndSeesARevocation() {
         String cid = newTaker("q77-cid", "JP");
         grant(cid);
-        String key = (String) issue(cid, "zh").get("verifyKey");
+        String key = issuedBefore(cid, CERT, "Taker JP", "zh");
 
         assertThat(publicItems("qb.public.certificate", "p.key=" + key)).singleElement().satisfies(row -> {
             assertThat(row).containsEntry("certification", CERT).containsEntry("holderName", "Taker JP")
@@ -143,17 +131,15 @@ class CertificateIT extends LegalItSupport {
         run(CertificationProcesses.REVOKE, certificationGranter(), body("userId", cid, "certification", CERT, "reason", "Mistake"));
         assertThat(publicItems("qb.public.certificate", "p.key=" + key)).singleElement()
             .satisfies(row -> assertThat(row.get("revokedAt")).isNotNull());
-        // Not held any more: the list shows nothing, the issue refuses.
+        // Not held any more: the list shows nothing.
         assertThat(held(cid)).isEmpty();
-        assertThat(codes(refused(CertificateProcesses.ISSUE, taker(cid), body("certification", CERT, "language",
-            "en"), 422))).containsExactly(CertificateProcesses.NOT_HELD);
     }
 
     @Test
     void thePublicPageListsTheIssuedUnrevokedCertificatesOnceTurnedOn() {
         String dee = newTaker("q77-dee", "JP");
         grant(dee);
-        String key = (String) issue(dee, "en").get("verifyKey");
+        String key = issuedBefore(dee, CERT, "Taker JP", "en");
 
         // Off by default: the name alone shows nothing.
         assertThat(saveSettings(dee, "  Dee-Q77 ", null)).containsEntry("publicHandle", "dee-q77")

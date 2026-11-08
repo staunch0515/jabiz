@@ -96,6 +96,7 @@ public final class MessageProcesses {
     public static final String USAGE_OVER_CONSUMER = "qb.msg-usage-over";
     /** F-S1: a sponsor moved to another operator. */
     public static final String OPERATOR_CHANGED_CONSUMER = "qb.msg-operator-changed";
+    public static final String TREE_LIT_REVOKED_CONSUMER = "qb.msg-tree-lit-revoked";
 
     /**
      * The taker's push notification of a prize won (platform 17k, decision D69): the moment a taker learns of a prize,
@@ -153,6 +154,7 @@ public final class MessageProcesses {
     static final String USAGE = "usage";
     static final String FREE = "free";
     static final String OPERATOR = "operator";
+    static final String REVOKE_REQUEST = "revokeRequest";
 
     /** A push: which, to whom, and the page of the app a tap opens. */
     record Push(PushTemplate template, String userId, String link) {}
@@ -208,6 +210,11 @@ public final class MessageProcesses {
                         com.jabiz.quizbuks.conversation.QbConversations.CONVERSATION), ctx -> byId("conversationId",
                         QbInbox.CONVERSATION_REPLY.equals(input(ctx).kind()) ? input(ctx).sourceId() : null),
                         CONVERSATION),
+                    // F-S2b2: the revocation request the event names (revoked still?).
+                    QueryEntities.query(com.jabiz.quizbuks.tree.QbTrees.defaultDataset(
+                        com.jabiz.quizbuks.tree.QbTrees.REVOKE_REQUEST), ctx -> byId("requestId",
+                        QbInbox.TREE_LIT_REVOKED.equals(input(ctx).kind()) ? input(ctx).sourceId() : null),
+                        REVOKE_REQUEST),
                     // F-S1: the operator a sponsor was moved to.
                     QueryEntities.query(com.jabiz.quizbuks.operator.QbOperators.defaultDataset(
                         com.jabiz.quizbuks.operator.QbOperators.OPERATOR), ctx -> byId("operatorId",
@@ -301,6 +308,7 @@ public final class MessageProcesses {
             case QbInbox.CONVERSATION_REPLY -> conversationMessage(ctx, params);
             case QbInbox.USAGE_OVER_FREE -> usageMessage(ctx, input, params);
             case QbInbox.OPERATOR_CHANGED -> operatorMessage(ctx, input, params);
+            case QbInbox.TREE_LIT_REVOKED -> revokedMessage(ctx, params);
             default -> null;
         };
         if (draft != null) {
@@ -633,6 +641,17 @@ public final class MessageProcesses {
         return new Draft(sponsor, QbInbox.TYPE_SYSTEM, QbInbox.OPERATOR_CHANGED, null, null, null);
     }
 
+    /** F-S2b2: a person's lit node revoked, only while the request says so; the reason as the reviewers wrote it. */
+    private static Draft revokedMessage(ProcessContext ctx, Map<String, MessageTexts.Value> params) {
+        EntityInstance request = first(ctx, REVOKE_REQUEST);
+        if (request == null || !com.jabiz.quizbuks.tree.QbTrees.REVOKE_DONE.equals(request.get("status"))
+            || !com.jabiz.quizbuks.tree.QbTrees.USER.equals(request.get("subjectKind"))) {
+            return null;
+        }
+        params.put("reason", MessageTexts.Value.of(request.get("reason")));
+        return new Draft(request.get("subjectId"), QbInbox.TYPE_SYSTEM, QbInbox.TREE_LIT_REVOKED, null, null, null);
+    }
+
     private static String afterBar(String value) {
         return value == null || value.indexOf('|') < 0 ? null : value.substring(value.indexOf('|') + 1);
     }
@@ -676,6 +695,11 @@ public final class MessageProcesses {
     }
 
     /** Q22: a cash reward's or a redemption's event: the record's id and its publication. */
+    /** F-S2b2: the revocation request. */
+    static EventInput treeLitRevokedInput(DomainEvent event) {
+        return new EventInput(QbInbox.TREE_LIT_REVOKED, text(event, "requestId"), null, event.createdTime());
+    }
+
     /** F-S1: the sponsor and the operator they were moved to. */
     static EventInput operatorChangedInput(DomainEvent event) {
         return new EventInput(QbInbox.OPERATOR_CHANGED, text(event, "userId") + "|" + text(event, "operatorId"), null,

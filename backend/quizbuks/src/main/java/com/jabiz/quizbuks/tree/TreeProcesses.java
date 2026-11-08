@@ -14,6 +14,9 @@ import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.operator.OperatorChecks;
 import com.jabiz.quizbuks.operator.QbOperators;
+import com.jabiz.quizbuks.publishing.PublicationAdmin;
+import com.jabiz.quizbuks.publishing.PublicationStatus;
+import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.ReviewCodes;
 import com.jabiz.quizbuks.tree.TreeRules.Graph;
@@ -28,9 +31,11 @@ import com.jabiz.runtime.approval.ApprovalEntities;
 import com.jabiz.runtime.approval.ApprovalOutcome;
 import com.jabiz.runtime.approval.RequireApproval;
 import com.jabiz.runtime.approval.WithdrawApproval;
+import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.task.CloseTasks;
 import com.jabiz.runtime.security.RandomBytesStep;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -138,6 +143,19 @@ public final class TreeProcesses {
     static final String TREE = "tree";
     static final String VERSIONS = "versions";
     static final String NODES = "nodes";
+    static final String REFS = "nodeRefs";
+    /** F-S2b2: the running publications bound to the graph's nodes (their cards). */
+    static final String BOUND = "boundCards";
+
+    /** The running publications bound to the graph's nodes, under the graph's lock, in the order of their ids. */
+    private static <I, O> void loadBound(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Load the running publications bound to the graph", QueryEntities.<ProcessContext>of(
+            QbPublications.defaultDataset(QbPublications.CARD), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.And(List.of(
+                    new QueryPredicate.In("treeId", ids(treeId(ctx))),
+                    new QueryPredicate.In("status", new ArrayList<Object>(PublicationStatus.RUNNING)))))
+                .orderBy("publicationId", true).limit(Integer.MAX_VALUE).build(), BOUND));
+    }
     static final String DEFS = "defs";
     static final String OWNED = "owned";
     static final String TEMPLATE = "template";
@@ -349,7 +367,11 @@ public final class TreeProcesses {
                     .limit(Integer.MAX_VALUE).build(), DEFS),
                 QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("treeId", ids(treeId(ctx)))).limit(Integer.MAX_VALUE).build(),
-                    NODES)));
+                    NODES),
+                // F-S2b1: which nodes the conditions in effect name (rewritten when a version goes into effect).
+                QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_REF), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("treeId", ids(treeId(ctx)))).limit(Integer.MAX_VALUE).build(),
+                    REFS)));
     }
 
     /** Whether the caller may edit the graph: its Sponsor, a member of its operator, or the platform's editor. */
@@ -449,7 +471,10 @@ public final class TreeProcesses {
             pb.compute("Write the draft", (metadata, ctx) -> saved(ctx))
                 .step("Withdraw the review", WithdrawApproval.<ProcessContext>when(
                     ctx -> ctx.contains(WITHDRAW_REVIEW), TreeApprovals.SUBJECT,
-                    TreeProcesses::reviewedVersionId));
+                    TreeProcesses::reviewedVersionId))
+                // F-S2b2: the reminder of the review, when one was sent, goes with it.
+                .step("Close the reminder", CloseTasks.<ProcessContext>cancel(ctx -> TreeUpkeep.reminderSource(
+                    ctx.contains(WITHDRAW_REVIEW) ? reviewedVersionId(ctx) : "none")));
         });
     }
 
@@ -683,7 +708,10 @@ public final class TreeProcesses {
             loadRules(pb);
             pb.compute("Take the template's nodes", (metadata, ctx) -> adopted(ctx))
                 .step("Withdraw the review", WithdrawApproval.<ProcessContext>when(
-                    ctx -> ctx.contains(WITHDRAW_REVIEW), TreeApprovals.SUBJECT, TreeProcesses::reviewedVersionId));
+                    ctx -> ctx.contains(WITHDRAW_REVIEW), TreeApprovals.SUBJECT, TreeProcesses::reviewedVersionId))
+                // F-S2b2: the reminder of the review, when one was sent, goes with it.
+                .step("Close the reminder", CloseTasks.<ProcessContext>cancel(ctx -> TreeUpkeep.reminderSource(
+                    ctx.contains(WITHDRAW_REVIEW) ? reviewedVersionId(ctx) : "none")));
         });
     }
 
@@ -752,6 +780,7 @@ public final class TreeProcesses {
                             QbTrees.SPONSOR.equals(tree.get("ownerKind")) ? List.of(String.valueOf(
                                 (Object) tree.get("ownerId"))) : List.of())).limit(1).build();
                     }, ASSIGNMENT))
+                .steps(TreeProcesses::loadBound)
                 .compute("Check the draft", (metadata, ctx) -> checkSubmit(ctx))
                 .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
                     TreeApprovals.SUBJECT, ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL))
@@ -773,6 +802,25 @@ public final class TreeProcesses {
             throw new BusinessRuleViolationException(problems.stream().map(p -> new Violation(
                 p.nodeId() == null ? null : "nodes." + p.nodeId(), p.code(), "The draft has problems", p.params()))
                 .toList());
+        }
+        // F-S2b2: a new version keeps every node a running publication is bound to (the spec: 422, naming them).
+        Set<String> kept = new LinkedHashSet<>();
+        defs.forEach(def -> kept.add(String.valueOf((Object) def.get("nodeId"))));
+        List<String> inUse = new ArrayList<>();
+        List<String> publications = new ArrayList<>();
+        for (EntityInstance card : list(ctx, BOUND)) {
+            String node = String.valueOf((Object) card.get("treeNodeId"));
+            if (!kept.contains(node)) {
+                if (!inUse.contains(node)) {
+                    inUse.add(node);
+                }
+                publications.add(String.valueOf((Object) card.get("publicationId")));
+            }
+        }
+        if (!inUse.isEmpty()) {
+            throw rule(null, TreeCodes.NODE_IN_USE, "Running publications are bound to nodes the version removes",
+                Map.of("nodes", String.join(", ", inUse), "publications", String.join(", ", publications),
+                    "count", publications.size()));
         }
         ApprovalCase review = ApprovalCase.of(String.valueOf(draft.id()),
             TreeApprovals.facts(String.valueOf((Object) tree.get("ownerKind"))), TreeApprovals.content(draft, defs))
@@ -850,6 +898,7 @@ public final class TreeProcesses {
             List<String> beforeAnswer = TreeRules.beforeAnswer(node.getValue());
             row.put("beforeAnswer", beforeAnswer.isEmpty() ? null : json(beforeAnswer));
             row.put("bindable", TreeRules.asksForAPass(node.getValue()));
+            row.put("condition", json(node.getValue().toMap()));
             EntityInstance existing = rows.remove(node.getKey());
             if (existing == null) {
                 row.put("treeId", String.valueOf(tree.id()));
@@ -867,9 +916,31 @@ public final class TreeProcesses {
                     "bindable", false));
             }
         }
+        writeRefs(ctx, String.valueOf(tree.id()), conditions);
         long revision = touch(ctx, Map.of("currentVersionId", String.valueOf(version.id())));
         ctx.put(OUTPUT, output(ctx, version, QbTrees.IN_EFFECT, revision, ApprovalOutcome.Status.APPROVED.name(),
             requestId));
+    }
+
+    /**
+     * F-S2b1: the references of the conditions in effect, rewritten to match them (one row for each node a condition
+     * names): lighting a node evaluates the nodes whose condition names it.
+     */
+    static void writeRefs(ProcessContext ctx, String treeId, Map<String, TreeCondition> conditions) {
+        Set<String> wanted = new LinkedHashSet<>();
+        conditions.forEach((node, condition) -> TreeRules.references(condition).forEach(ref ->
+            wanted.add(node + " " + ref)));
+        for (EntityInstance row : list(ctx, REFS)) {
+            String key = row.get("nodeId") + " " + row.get("refNodeId");
+            if (!wanted.remove(key)) {
+                ctx.changes().delete(QbTrees.NODE_REF, row.id(), row.version());
+            }
+        }
+        for (String key : wanted) {
+            int space = key.indexOf(' ');
+            ctx.changes().insert(QbTrees.NODE_REF, Map.of("treeId", treeId, "nodeId", key.substring(0, space),
+                "refNodeId", key.substring(space + 1)));
+        }
     }
 
     // ---- withdraw --------------------------------------------------------------------------------------------------
@@ -894,7 +965,10 @@ public final class TreeProcesses {
                     ctx.put(OUTPUT, output(ctx, review, QbTrees.DRAFT, touch(ctx, Map.of()), null, null));
                 })
                 .step("Withdraw the review", WithdrawApproval.<ProcessContext>when(
-                    ctx -> ctx.contains(WITHDRAW_REVIEW), TreeApprovals.SUBJECT, TreeProcesses::reviewedVersionId));
+                    ctx -> ctx.contains(WITHDRAW_REVIEW), TreeApprovals.SUBJECT, TreeProcesses::reviewedVersionId))
+                // F-S2b2: the reminder of the review, when one was sent, goes with it.
+                .step("Close the reminder", CloseTasks.<ProcessContext>cancel(ctx -> TreeUpkeep.reminderSource(
+                    ctx.contains(WITHDRAW_REVIEW) ? reviewedVersionId(ctx) : "none")));
         });
     }
 
@@ -913,6 +987,7 @@ public final class TreeProcesses {
                 .contextFactory(TreeProcesses::start)
                 .outputMapper(ctx -> ctx.get(OUTPUT, TreeOutput.class));
             loadGraph(pb);
+            loadBound(pb);
             pb.compute("Retire the graph", (metadata, ctx) -> {
                     current(ctx, ctx.get(INPUT, TreeInput.class).baseRevision());
                     requireActive(ctx);
@@ -921,6 +996,13 @@ public final class TreeProcesses {
                         ctx.changes().update(QbTrees.VERSION, review.id(), review.version(), Map.of("status",
                             QbTrees.DRAFT, "editedAt", ctx.opTime()));
                         ctx.put(WITHDRAW_REVIEW, String.valueOf(review.id()));
+                    }
+                    // F-S2b1: its nodes go out of effect (no start, no lighting); their rows stay for the records.
+                    for (EntityInstance node : list(ctx, NODES)) {
+                        if (Boolean.TRUE.equals(node.get("active"))) {
+                            ctx.changes().update(QbTrees.NODE, node.id(), node.version(), Map.of("active", false,
+                                "bindable", false));
+                        }
                     }
                     long revision = touch(ctx, Map.of("status", QbTrees.RETIRED, "retiredAt", ctx.opTime()));
                     EntityInstance active = version(ctx, QbTrees.IN_EFFECT);
@@ -931,7 +1013,16 @@ public final class TreeProcesses {
                         Map.of(), List.of(), null, null));
                 })
                 .step("Withdraw the review", WithdrawApproval.<ProcessContext>when(
-                    ctx -> ctx.contains(WITHDRAW_REVIEW), TreeApprovals.SUBJECT, TreeProcesses::reviewedVersionId));
+                    ctx -> ctx.contains(WITHDRAW_REVIEW), TreeApprovals.SUBJECT, TreeProcesses::reviewedVersionId))
+                // F-S2b2: the reminder of the review, when one was sent, goes with it.
+                .step("Close the reminder", CloseTasks.<ProcessContext>cancel(ctx -> TreeUpkeep.reminderSource(
+                    ctx.contains(WITHDRAW_REVIEW) ? reviewedVersionId(ctx) : "none")))
+                // F-S2b2: its running publications end, each telling its Sponsor; the graph's lock (held) comes
+                // before the publications' locks, taken in the order of their ids.
+                .step("End the publications bound to it", CallProcess.forEach(PublicationAdmin.TREE_END, 1,
+                    ctx -> ctx.hasViolations() ? List.of() : list(ctx, BOUND).stream()
+                        .map(card -> new PublicationAdmin.BanPauseInput(UUID.fromString(String.valueOf(
+                            (Object) card.get("publicationId"))))).toList(), null));
         });
     }
 
@@ -986,6 +1077,9 @@ public final class TreeProcesses {
                         QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE), ctx -> EntityQuery.builder()
                             .where(new QueryPredicate.In("treeId", ids(ctx.contains(TREE_ID) ? ctx.get(TREE_ID)
                                 : null))).limit(Integer.MAX_VALUE).build(), NODES),
+                        QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_REF), ctx -> EntityQuery.builder()
+                            .where(new QueryPredicate.In("treeId", ids(ctx.contains(TREE_ID) ? ctx.get(TREE_ID)
+                                : null))).limit(Integer.MAX_VALUE).build(), REFS),
                         QueryEntities.query(ApprovalEntities.REQUEST_DATASET, ctx -> EntityQuery.builder()
                             .where(new QueryPredicate.In("requestId", ownRequest(ctx)
                                 ? AccountEditing.uuids(result(ctx).requestId()) : new ArrayList<>()))
@@ -998,7 +1092,10 @@ public final class TreeProcesses {
                         ctx -> boundRequest(ctx) && ApprovalEntities.APPROVED.equals(result(ctx).status()),
                         TreeApprovals.SUBJECT, ctx -> storedCase(ctx).preparedBy(result(ctx).preparerId()),
                         APPROVAL))
-                    .compute("Put in effect or send back", (metadata, ctx) -> approvalResult(ctx));
+                    .compute("Put in effect or send back", (metadata, ctx) -> approvalResult(ctx))
+                    // F-S2b2: the reminder of the review, when one was sent, ends with it.
+                    .step("Close the reminder", CloseTasks.<ProcessContext>cancel(ctx -> TreeUpkeep.reminderSource(
+                        ownRequest(ctx) ? result(ctx).entityId() : "none")));
             });
     }
 
@@ -1137,6 +1234,12 @@ public final class TreeProcesses {
 
     static Map<String, Object> parse(String json) {
         return JSON.readValue(json, new TypeReference<Map<String, Object>>() {});
+    }
+
+    /** A node row's {@code beforeAnswer}: the node ids as a JSON array (none: empty). */
+    public static List<String> nodeIds(Object json) {
+        return json == null ? List.of() : List.copyOf(JSON.readValue(String.valueOf(json),
+            new TypeReference<List<String>>() {}));
     }
 
     static String json(Object value) {

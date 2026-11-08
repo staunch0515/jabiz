@@ -112,7 +112,9 @@ public final class QbInbox {
     public static final String USAGE_OVER_FREE = "USAGE_OVER_FREE";
     /** F-S1: the sponsor was moved to another operator (to the sponsor; the source is "<sponsor>|<operator>"). */
     public static final String OPERATOR_CHANGED = "OPERATOR_CHANGED";
-    public static final List<String> MESSAGE_KINDS = List.of(USAGE_OVER_FREE, OPERATOR_CHANGED, CONVERSATION_REPLY, REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
+    /** F-S2b2: a node the person lit was revoked, with the reason (to the person; the source is the request). */
+    public static final String TREE_LIT_REVOKED = "TREE_LIT_REVOKED";
+    public static final List<String> MESSAGE_KINDS = List.of(USAGE_OVER_FREE, OPERATOR_CHANGED, TREE_LIT_REVOKED, CONVERSATION_REPLY, REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
         REFERRAL_FUNDS_SHORT, REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
         TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER, CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED,
         CASH_DISPUTED, CASH_OVERDUE, REDEEM_DUE, REDEEM_CLAIMED,

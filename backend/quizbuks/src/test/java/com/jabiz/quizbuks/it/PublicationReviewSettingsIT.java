@@ -48,6 +48,7 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_COPY_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_PLATFORM_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.TREE_LIT_REVOKE_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.SHARED_VIDEO_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbSodRules.CONTROL.code(), com.jabiz.quizbuks.setup.QbSodRules.SECURITY.code()));
         String id = draft(sponsorA(), version(sponsorA(), "Settings"), "Configured?");

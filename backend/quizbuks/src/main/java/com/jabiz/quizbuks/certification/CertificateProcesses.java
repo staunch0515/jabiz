@@ -1,7 +1,6 @@
 package com.jabiz.quizbuks.certification;
 
 import com.jabiz.entity.Violation;
-import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessDefinitionBuilder;
@@ -9,37 +8,29 @@ import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.quizbuks.certification.Certifications.Certification;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.play.QbPlay;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.EntityInstance;
-import com.jabiz.runtime.document.DocumentProcesses;
-import com.jabiz.runtime.process.steps.CallProcess;
-import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
-import com.jabiz.runtime.process.steps.SaveChanges;
-import com.jabiz.runtime.security.RandomBytesStep;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
 /**
  * A taker's certifications and certificates (Q77, docs/quizbuks/plans/Q77-certificates.md): {@link #MINE} says which
  * of the catalog's certifications the caller holds now, from when and until when, by what and with which certificate;
- * {@link #ISSUE} issues the certificate of one holding as a platform document ({@value QbCertificates#LAYOUT_ID}),
- * once: asking again gives the one issued. Holding is {@link CertificationHolding}'s, over the caller's records and
+ * {@link #ISSUE} issued the certificate of one holding as a platform document ({@value QbCertificates#LAYOUT_ID});
+ * F-S2c (D8) pauses it until certificates of nodes (F-S5), those issued staying verifiable and downloadable. Holding is {@link CertificationHolding}'s, over the caller's records and
  * their passes not recorded yet, as the gates read it.
  */
 public final class CertificateProcesses {
@@ -48,9 +39,8 @@ public final class CertificateProcesses {
     public static final String ISSUE = "QB_CERTIFICATE_ISSUE";
 
     public static final String NOT_HELD = "QB_CERTIFICATE_NOT_HELD";
-
-    /** The certification's name on a certificate: {@code qb.certification.<key>} in the certificate's language. */
-    static final String NAME_KEY = "qb.certification.";
+    /** F-S2c (D8): issuing is paused until certificates of nodes (F-S5). */
+    public static final String PAUSED = "QB_CERTIFICATE_PAUSED";
 
     public record MineInput() {}
 
@@ -89,10 +79,6 @@ public final class CertificateProcesses {
     static final String PASSES = "certPasses";
     static final String SPONSOR_ROWS = "certSponsorRows";
     static final String SPONSORS = "certSponsors";
-    static final String PROFILE = "profile";
-    static final String RANDOM = "random";
-    static final String NEW_ID = "newCertificateId";
-    static final String ISSUED = "issued";
 
     public static ProcessDefinition<MineInput, MineOutput, ProcessContext> mine() {
         return ProcessDefinition.define(MINE, 1, MineInput.class, MineOutput.class, ProcessContext.class, pb -> {
@@ -105,34 +91,21 @@ public final class CertificateProcesses {
         });
     }
 
-    /**
-     * @param siteUrl the site's address ({@code jabiz.mail.base-url}); the certificate's verify address is
-     *                {@code <siteUrl>/taker/verify/<key>}, a path alone without one (development and tests)
-     */
-    public static ProcessDefinition<IssueInput, IssueOutput, ProcessContext> issue(MessageCatalog messages,
-        String siteUrl) {
+    /** F-S2c (D8): kept so that the App's older calls get the reason; it issues nothing until F-S5. */
+    public static ProcessDefinition<IssueInput, IssueOutput, ProcessContext> issue() {
         return ProcessDefinition.define(ISSUE, 1, IssueInput.class, IssueOutput.class, ProcessContext.class, pb -> {
-            pb.description("Issues the certificate of a certification the caller holds, or gives the one issued.")
+            pb.description("Paused (F-S2c): refuses with QB_CERTIFICATE_PAUSED; certificates of nodes come with F-S5.")
                 .permissions(QbPermissions.ME)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> start(start, input))
                 .outputMapper(ctx -> ctx.get(OUTPUT, IssueOutput.class))
-                .step("Draw the verify key", RandomBytesStep.class,
-                    new RandomBytesStep.Metadata(RANDOM, QbCertificates.KEY_BYTES))
-                // The caller's certifications are written one process at a time (claims, grants and certificates).
-                .step("Lock the caller's certifications", HoldLock.<ProcessContext>exclusive(
-                    ctx -> QbCertifications.lockName(ctx.request().actorId())));
-            loadHoldings(pb);
-            pb.step("Load the caller's name", QueryEntities.<ProcessContext>of(QbAccounts.MY_PROFILE_DATASET,
-                    ctx -> EntityQuery.builder().limit(1).build(), PROFILE))
-                .compute("Check the holding", (metadata, ctx) -> prepare(ctx))
-                .step("Write the certificate", SaveChanges.now())
-                // At the issue time: the certificate shows the holding as it is now.
-                .step("Issue the document", CallProcess.<ProcessContext>when(ctx -> ctx.contains(NEW_ID),
-                    DocumentProcesses.ISSUE, 1, ctx -> new DocumentProcesses.IssueInput(QbCertificates.LAYOUT_ID,
-                        documentParams(messages, siteUrl, ctx), null, null,
-                        ctx.get(INPUT, IssueInput.class).language()), ISSUED));
+                // F-S2c (D8, the requester's answer of 2026-11-08): no certificate is issued on a certification any
+                // more; certificates of nodes come with F-S5. Those issued stay verifiable and downloadable.
+                .compute("Refuse: issuing is paused", (metadata, ctx) -> {
+                    throw new BusinessRuleViolationException(new Violation("certification", PAUSED,
+                        "Certificates are not issued until the knowledge map's certificates come", Map.of()));
+                });
         });
     }
 
@@ -251,79 +224,6 @@ public final class CertificateProcesses {
             .findFirst().orElse(null);
     }
 
-    /** The certificate to issue, or the one issued before; 422 when the certification is not held now. */
-    static void prepare(ProcessContext ctx) {
-        IssueInput input = ctx.get(INPUT, IssueInput.class);
-        Certification certification = resolve(ctx, input.certification()).orElse(null);
-        Optional<CertificationHolding.Holding> holding = certification == null ? Optional.empty()
-            : holding(ctx, certification);
-        if (holding.isEmpty()) {
-            ctx.reject(new Violation("certification", NOT_HELD, "The caller does not hold " + input.certification()));
-            return;
-        }
-        CertificationHolding.Holding h = holding.get();
-        EntityInstance existing = certificateOf(ctx, certification, h.until());
-        if (existing != null) {
-            ctx.put(OUTPUT, new IssueOutput(String.valueOf(existing.id()), existing.get("verifyKey"), h.until(),
-                false));
-            return;
-        }
-        EntityInstance profile = CertificationProcesses.first(ctx, PROFILE);
-        String name = profile == null ? null : profile.get("displayName");
-        String key = HexFormat.of().formatHex(ctx.get(RANDOM, byte[].class));
-        Map<String, Object> values = new LinkedHashMap<>();
-        values.put("userId", ctx.request().actorId());
-        values.put("certification", certification.key());
-        values.put("certificationVersion", BigDecimal.valueOf(certification.version()));
-        values.put("heldFrom", h.from());
-        values.put("validUntil", h.until());
-        values.put("holderName", name == null || name.isBlank() ? "-" : name.strip());
-        values.put("verifyKey", key);
-        values.put("language", input.language());
-        values.put("issuedAt", ctx.opTime());
-        Object id = ctx.changes().insert(QbCertificates.CERTIFICATE, values);
-        ctx.put(NEW_ID, id);
-        ctx.put(OUTPUT, new IssueOutput(String.valueOf(id), key, h.until(), true));
-    }
-
-    /** Where the certificate is verified: the App's verify page of its key. */
-    static String verifyAddress(String siteUrl, String key) {
-        String base = siteUrl == null ? "" : siteUrl.strip().replaceAll("/+$", "");
-        return base + VERIFY_PATH + key;
-    }
-
-    /** The App's verify page (the entry {@code app}'s path and the route). */
-    public static final String VERIFY_PATH = "/taker/verify/";
-
-    /**
-     * What the certificate's templates take: the row, the certification's name in the certificate's language and the
-     * verify address; for a sponsor's certification (Q88a, D-Q88-6) the name from its row and the sponsor as the
-     * issuer (the platform's issuer otherwise, qb.me.certificate-issuer).
-     */
-    static Map<String, Object> documentParams(MessageCatalog messages, String siteUrl, ProcessContext ctx) {
-        IssueInput input = ctx.get(INPUT, IssueInput.class);
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("certificateId", String.valueOf(ctx.get(NEW_ID)));
-        params.put("verifyAddress", verifyAddress(siteUrl, ctx.get(OUTPUT, IssueOutput.class).verifyKey()));
-        EntityInstance row = sponsorRow(ctx, input.certification());
-        if (row == null) {
-            params.put("certificationName", name(messages, input));
-        } else {
-            String name = SponsorCertifications.text(row.get("name"), input.language());
-            params.put("certificationName", name == null ? input.certification() : name);
-            String issuer = sponsorName(ctx, row);
-            if (issuer != null && !issuer.isBlank()) {
-                params.put("issuerName", issuer);
-            }
-        }
-        return params;
-    }
-
-    /** The certification's name in the certificate's language (the catalog's: a message). */
-    static String name(MessageCatalog messages, IssueInput input) {
-        return messages.find(NAME_KEY + input.certification(), Locale.forLanguageTag(input.language()))
-            .orElse(input.certification());
-    }
 
     private static ProcessContext start(ProcessStart start, Object input) {
         ProcessContext ctx = new ProcessContext(start);

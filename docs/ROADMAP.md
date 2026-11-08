@@ -5430,7 +5430,68 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 
 **验收**：CI 绿；`13-observability-ops.md` §7"试发"写明应用规则的做法。
 
-**17zz9 状态**：📝 待评审（分支 `1.3/phase-17zz9-alert-fire-app-rules`）。
+**17zz9 状态**：✅ 已合并（#534）。
+
+### 17zz10 构建镜像时 Gradle 发行包的下载（2026-11-08，总控排入）
+
+**缘由**：QuizBuks 的 CI 构建镜像时，wrapper 下载 `gradle-9.1.0-bin.zip` 连续两次在 10 秒处 SSL 读取超时（#539 的 run 42464310109），一次服务器变慢就让 CI 失败。
+两个 Dockerfile 的 BuildKit 缓存挂载（`/root/.gradle`）在 CI 的一次性构建器之间不保留，每次构建都重新下载发行包；层缓存（`cache-from: type=gha`）则会保留。
+
+| # | 内容 |
+|---|---|
+| 17zz10-1 | `gradle-wrapper.properties` 的 `networkTimeout` 10 s → 60 s |
+| 17zz10-2 | 平台的 `Dockerfile`：`GRADLE_USER_HOME=/opt/gradle-home`；先只复制 `gradlew` 与 `gradle/wrapper`，在单独的一层中 `./gradlew --version` 下载发行包（失败后等 15、30、60、120 秒再试，共 5 次，约 4 分钟：services.gradle.org 转到 GitHub 的发行下载，后者曾连续几分钟答 504），这一层只随 wrapper 的文件失效，有层缓存的构建不再下载；缓存挂载只留依赖（`/opt/gradle-home/caches`）。应用的 Dockerfile 照此（QuizBuks 在同步时改） |
+
+**验收**：CI 绿；镜像照常构建（compose 作业）。
+
+**17zz10 状态**：✅ 已合并（#542）。
+
+### 17zz12 应用的整套后端测试的时限（2026-11-08，总控排入）
+
+**缘由**：`ci.yml` 的 `build-application`（应用分支的整套后端测试，QuizBuks 约 300 个测试类，多数是连接 PostgreSQL 的集成测试）时限 45 分钟；
+QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消。
+
+| # | 内容 |
+|---|---|
+| 17zz12-1 | `build-application` 的 `timeout-minutes` 45 → 75，先止血；把测试分片并行、压到 30 分钟内另作评估（结论报总控，先不做） |
+
+**验收**：CI 绿；同步到 `1.3/quizbuks` 后 QuizBuks 的拉取请求不再到点取消。
+
+**17zz12 状态**：✅ 已合并（#548）。
+
+### 17zz11 登录与注册守卫读业务参数（2026-11-08，总控排入；决策 D79）
+
+**缘由**：QuizBuks 的守卫（F-S2c2）要读受控的业务参数（如 `qb.tree.gate.sponsor-apply-node`），而守卫的数据此前只经 `loads()`（按用户编号读的行，D36、D66）。
+需求方 2026-11-08 确认 D79（补充 D36 实现说明第 1 条与 D66 第 1 条，不取代）。设计 10 §15.17。
+
+| # | 内容 |
+|---|---|
+| 17zz11-1 | core：`GuardParam.required/optional(键)`；`SignInGuard` / `SignUpGuard` 的缺省方法 `params()`；`SignInAttempt` / `SignUpAttempt` 加 `params()`（`ParamValues`），保留原有的构造器 |
+| 17zz11-2 | runtime：`GuardParams` 按尝试的时间以系统身份一次读出全部守卫的参数（键取并集，必须有值优先），在预读之后读（同一事务、不并发）；必须有值的键没有值或读取失败即拒绝、不问守卫；不声明即不读 |
+| 17zz11-3 | 启动检查（`SECURITY`）：键的格式（错误）、同一个键必须有值与可以未设置并存（警告）、`params()` 抛异常（错误） |
+| 17zz11-4 | 示范：`app` 的 `PortalSignUpSwitch`（参数 `commerce.portal.sign-up-closed`，bool、可以未设置；原因 `commerce.sign-up-closed`，三语） |
+| 17zz11-5 | 测试：`GuardParamTest`、`GuardParamsTest`、`SignUpGuardIT` 的示范开关（排定的关闭到时生效；匿名注册、登录后加入门户都被拒；其他入口不受影响） |
+
+**验收**：CI 绿；同步到 `1.3/quizbuks` 后 S2 的守卫可用 `params()`。
+
+**17zz11 状态**：✅ 已合并（#549）。
+
+### 17zz13 应用的后端测试分片并行（2026-11-08，总控排入，采纳 17zz12 评估的方案 A）
+
+**缘由**：QuizBuks 的整套后端测试在一台机器上 43–45 分钟（17zz12）。本地实测：297 个测试类，190 个 IT 类各起新的 Spring 上下文与 schema，测试一个接一个跑，
+没有单个大类拖慢；分到几台机器上几乎按比例见效。
+
+| # | 内容 |
+|---|---|
+| 17zz13-1 | `backend/build-logic` 的 `TestShards`：`-Pjabiz.test.shard=<i>/<n>` 只跑第 i 片的测试类（嵌套类随外层类）；按模块根目录的 `test-timings.txt`（`<类> <秒>`）由长到短分给当前最轻的一片（耗时超过 1 秒的类另加 5 秒，算上类之外的上下文启动），没列出的类按类名哈希；各片算出同一个分配。`backend/build.gradle.kts` 对所有测试任务生效 |
+| 17zz13-2 | `tools/ci/test-timings.py`：由一次运行的 JUnit 结果写出 `test-timings.txt`（jqwik 容器的时长跨整个运行，改计其测试之和）；离线测试 `tools/test/test-timings.test.sh`（`app-paths` 作业） |
+| 17zz13-3 | `ci.yml`：`build-application-shard` 三片（matrix，`fail-fast: false`）；第 1 片跑应用模块的 `check`（含 `platformCheck`、`spaCheck`），其余跑 `test`；报告的 artifact 按片命名；汇总作业 `build-application` 在全部分片成功时成功、分片被跳过时跳过，分支保护的必需检查名不变 |
+| 17zz13-4 | 时限：各片暂留 75 分钟；分片稳定后改为 40 分钟（另一个 PR） |
+
+**验收**：平台分支上 `build-application` 不运行，分片在应用分支上验证：QuizBuks 的同步 PR（带 `backend/quizbuks/test-timings.txt`）三片都绿、各约 15–20 分钟，汇总检查名为 `build-application`；
+`TestShardsTest`（解析、读表、分配、每个类恰在一片、嵌套类）；本地 `:core:test` 分三片跑出的类与不分片完全相同。
+
+**17zz13 状态**：📝 待评审（分支 `1.3/phase-17zz13-app-test-shards`）。
 
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 

@@ -317,6 +317,11 @@ public final class QbPermissions {
     public static final String TREES_READ = "qb.admin.trees.read";
     /** F-S2: the graphs' approval results and jobs ({@code internal()}). Granted to no role. */
     public static final String TREE_SYSTEM = "qb.tree.system";
+    /**
+     * F-S2b2: asking to revoke a lit node and approving another's request (another member: the platform's approvals
+     * keep the preparer from approving). Operators (their Sponsors' graphs and copies), content administrators.
+     */
+    public static final String TREE_LIT_REVOKE = "qb.tree.lit.revoke";
 
     private QbPermissions() {}
 }

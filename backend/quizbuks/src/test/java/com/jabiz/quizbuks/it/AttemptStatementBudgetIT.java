@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * caches, the sponsor's wallet row there), as in production.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = "it.sql-log.enabled=true")
-class AttemptStatementBudgetIT extends PlayItSupport {
+class AttemptStatementBudgetIT extends TreeItSupport {
 
     // ---- budgets: [Q10a, before platform phase 16p-1 / with 16p-1 merged, before Q10a3's changes] ------------------
     // Each has two numbers (as the platform's StatementBudgetIT): with the transaction's writes held (platform phase
@@ -183,6 +183,51 @@ class AttemptStatementBudgetIT extends PlayItSupport {
     }
 
     /**
+     * F-S2b1: a publication bound to a knowledge map node reads the node's row with the caller's lit records and
+     * revocations, one statement more outside the start lock; the lock's part is an ordinary start's. Its pass sends
+     * {@code qb.tree.passed} for the lighting outside the answering: held, the event goes with the other writes (the
+     * paid submission's budget, unchanged); per commit, one statement of its own under the lock.
+     */
+    @Test
+    void aStartAndAPassOfAPublicationBoundToANode() {
+        warmUp();
+        String sponsor = newSponsor("s-budget-node");
+        credit(sponsor, 100_000);
+        Map3 map = map(sponsor);
+        Map<String, Object> global = Map.of("regions", List.of("GLOBAL"), "maxWinners", 100_000, "budgetCap",
+            1_000_000);
+        String basics = liveBound(sponsor, "Budget node basics", map.treeId(), map.basics(), global);
+        String advanced = liveBound(sponsor, "Budget node advanced", map.treeId(), map.advanced(), global);
+        // Warm: a taker who lit the basics starts and passes the advanced one, as counted below for the next.
+        String warm = newTaker("t-budget-node-warm-" + UUID.randomUUID(), null);
+        play(warm, basics, true, true);
+        deliverEvents();
+        play(warm, advanced, true, true);
+        String userId = newTaker("t-budget-node-" + UUID.randomUUID(), null);
+        play(userId, basics, true, true);
+        deliverEvents();
+        String token = taker(userId);
+
+        SqlStatementLog.clear();
+        Map<String, Object> started = keyed("QB_ATTEMPT_START", token, body("publicationId", advanced));
+        List<List<String>> start = SqlStatementLog.transactions();
+        report("QB_ATTEMPT_START (bound to a node)", start);
+        assertBudget("QB_ATTEMPT_START (bound to a node)", start, budget(START_TOTAL) + 1, budget(START_LOCKED));
+        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(advanced));
+
+        SqlStatementLog.clear();
+        Map<String, Object> submitted = keyed("QB_ATTEMPT_SUBMIT", token, body("attemptId", started.get("attemptId"),
+            "publicationId", advanced, "currentIndex", 1, "answers", shown((String) started.get("attemptId"),
+                answers(true, true))));
+        assertThat(submitted).containsEntry("passed", true);
+        List<List<String>> submit = SqlStatementLog.transactions();
+        report("QB_ATTEMPT_SUBMIT (a node's pass)", submit);
+        int event = batching.acrossTransaction() ? 0 : 1;
+        assertBudget("QB_ATTEMPT_SUBMIT (a node's pass)", submit, budget(SUBMIT_TOTAL) + event,
+            budget(SUBMIT_LOCKED) + event);
+    }
+
+    /**
      * Q86 (D-Q86-6): a start that requires a certification reads the caller's holding of it, two statements more
      * outside the lock (records and rounds in one, the attempts on those rounds in another); the lock's part is the
      * same as an ordinary start.
@@ -218,10 +263,8 @@ class AttemptStatementBudgetIT extends PlayItSupport {
     }
 
     /**
-     * Q88a (D-Q88-3, D-Q88-6 of Q86): a sponsor's publication that is a round of the sponsor's own certification
-     * reads, before the lock, the caller's records, the rounds and the certification's row (one statement) and their
-     * attempts on the rounds (one more), as an official publisher's round does (Q70a): two statements more; the
-     * lock's budget is unchanged, and so is an ordinary publication's (above).
+     * F-S2c (D2): holding a certification no longer keeps anybody from its rounds, so a round of a sponsor's own
+     * certification starts as an ordinary publication does: no statement more (Q70a and Q88a read two).
      */
     @Test
     void aStartOfASponsorsRound() {
@@ -250,7 +293,7 @@ class AttemptStatementBudgetIT extends PlayItSupport {
         keyed("QB_ATTEMPT_START", taker(userId), body("publicationId", round));
         List<List<String>> start = SqlStatementLog.transactions();
         report("QB_ATTEMPT_START (sponsor's round)", start);
-        assertBudget("QB_ATTEMPT_START (sponsor's round)", start, budget(START_TOTAL) + 2, budget(START_LOCKED));
+        assertBudget("QB_ATTEMPT_START (sponsor's round)", start, budget(START_TOTAL), budget(START_LOCKED));
         assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(round));
     }
 

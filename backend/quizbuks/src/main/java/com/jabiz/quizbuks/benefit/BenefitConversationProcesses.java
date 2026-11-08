@@ -7,7 +7,6 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
-import com.jabiz.quizbuks.certification.Certifications;
 import com.jabiz.quizbuks.conversation.ConversationRules;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.BusinessRuleViolationException;
@@ -92,7 +91,7 @@ public final class BenefitConversationProcesses {
                 .step("Load the provider's ban", QueryEntities.<ProcessContext>all(
                     BenefitSteps.ban(ctx -> first(ctx, OFFER).get("providerId"))))
                 .compute("Refuse a suspended provider", (metadata, ctx) -> BenefitSteps.refuseBannedOther(ctx));
-            BenefitSteps.loadHolding(pb, Certifications.BENEFIT_SPONSOR);
+            BenefitSteps.loadGate(pb, QbParams.TREE_GATE_BENEFIT_SPONSOR);
             pb.step("Take the conversation's turn", HoldLock.<ProcessContext>exclusive(
                     ctx -> QbBenefits.conversationLock(openInput(ctx).offerId(), ctx.request().actorId())))
                 .step("Load the conversation", QueryEntities.<ProcessContext>of(
@@ -114,7 +113,7 @@ public final class BenefitConversationProcesses {
         boolean created = existing == null;
         if (created) {
             // Asking about a benefit begins with the certification and a benefit the catalog shows (D-Q89-3).
-            BenefitSteps.requireHolding(ctx, Certifications.BENEFIT_SPONSOR);
+            BenefitSteps.requireGate(ctx, QbParams.TREE_GATE_BENEFIT_SPONSOR);
             if (!QbBenefits.LISTED.equals(offer.get("status"))) {
                 throw BenefitSteps.refusal(BenefitCodes.OFFER_UNAVAILABLE, "The benefit is not offered now", Map.of());
             }

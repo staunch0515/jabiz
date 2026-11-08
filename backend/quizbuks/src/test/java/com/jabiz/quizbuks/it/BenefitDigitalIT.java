@@ -1,11 +1,11 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.benefit.BenefitCodes;
 import com.jabiz.quizbuks.benefit.OfferProcesses;
 import com.jabiz.quizbuks.benefit.PurchaseProcesses;
 import com.jabiz.quizbuks.benefit.QbBenefits;
-import com.jabiz.quizbuks.certification.CertificationProcesses;
 import com.jabiz.quizbuks.publishing.DigitalDelivery;
 import com.jabiz.quizbuks.publishing.RewardMethod;
 import com.jabiz.quizbuks.publishing.RewardMethodProcesses;
@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * codes the studio loads (sealed under its key, opened under it); the café can follow the pool but not load it, and
  * a shared code or a prize sent by hand is refused.
  */
-class BenefitDigitalIT extends PlayItSupport {
+class BenefitDigitalIT extends TreeItSupport {
 
     private String hq() {
         return TestTokens.bearer(tokens, "q89b2-hq", QbPermissions.CERTIFICATION_ADMIN,
@@ -39,9 +39,10 @@ class BenefitDigitalIT extends PlayItSupport {
             QbPermissions.ADMIN_PUBLICATION_READ);
     }
 
-    private void grant(String userId, String certification) {
-        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", certification, "reason",
-            "Q89b-2 test"));
+    /** F-S2c: the benefit role opened as production opens it: the gate's node lit by the user. */
+    private void grant(String userId, String role) {
+        unlock(role.equals("BENEFIT_PROVIDER") ? QbParams.TREE_GATE_BENEFIT_PROVIDER : QbParams.TREE_GATE_BENEFIT_SPONSOR,
+            userId);
     }
 
     private record Setting(String studio, String cafe, String purchaseId) {}

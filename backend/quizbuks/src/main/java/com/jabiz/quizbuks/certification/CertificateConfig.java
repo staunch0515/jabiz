@@ -4,7 +4,6 @@ import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.document.DocumentLayout;
 import com.jabiz.entity.EntityDefinition;
-import com.jabiz.i18n.MessageCatalog;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
@@ -100,7 +99,7 @@ public class CertificateConfig {
 
     @Bean
     ProcessDefinition<CertificateProcesses.IssueInput, CertificateProcesses.IssueOutput, ProcessContext>
-        qbCertificateIssue(MessageCatalog messages, @Value("${jabiz.mail.base-url:}") String siteUrl) {
-        return CertificateProcesses.issue(messages, siteUrl);
+        qbCertificateIssue() {
+        return CertificateProcesses.issue();
     }
 }

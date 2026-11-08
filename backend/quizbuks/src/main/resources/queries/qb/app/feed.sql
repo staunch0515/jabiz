@@ -1,7 +1,7 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [SysParam, QbRegionException, QbUserSettings, QbTopic, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification]
+entities: [SysParam, QbRegionException, QbUserSettings, QbTopic, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
@@ -22,6 +22,9 @@ datasets:
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
+  QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
+  QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
 params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
@@ -254,33 +257,19 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
                   AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
                                        WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
                                          AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')))))
-  -- Q70a (D-Q70-1, option B): a certification's round is not listed to whoever holds the certification now. The
-  -- holding is CertificationHolding's rule over the caller's records and the passes not recorded yet (RoundHolders, the
-  -- same; the catalog's versions and validity as Certifications, CertificationTemplatesTest), as in qb.app.publication.
-  AND (SELECT max(e.until)
-       FROM {{QbCertificationRound}} cr
-       JOIN (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
-           ON cat.cert = cr.{{QbCertificationRound.certification}}
-       CROSS JOIN LATERAL (
-           SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
-                  rec.{{QbCertificationRecord.validUntil}} AS until
-           FROM {{QbCertificationRecord}} rec
-           WHERE rec.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
-             AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
-           UNION ALL
-           SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
-                  a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
-           FROM {{QbCertificationRound}} r2
-           JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
-           WHERE r2.{{QbCertificationRound.certification}} = cr.{{QbCertificationRound.certification}}
-             AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
-             AND (r2.{{QbCertificationRound.closedAt}} IS NULL
-                  OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
-       WHERE cr.{{QbCertificationRound.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
-         AND e.ver = cat.ver AND e.until > :at
-         AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
-                              WHERE rv.{{QbCertificationRecord.certification}} = cr.{{QbCertificationRound.certification}}
-                                AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) IS NULL
+  -- F-S2b1: a publication bound to a knowledge graph's node is for whoever has lit, now, every node it wants lit before
+  -- answering, while the node is in effect (tree.TreeLights and play.TreeGate are the definition; TreeLightsIT compares).
+  AND (c.{{QbPublicationCard.treeNodeId}} IS NULL OR EXISTS (
+      SELECT 1 FROM {{QbTreeNode}} tn
+      WHERE tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}} AND tn.{{QbTreeNode.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
+        AND tn.{{QbTreeNode.active}}
+        AND NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM {{QbTreeLit}} tl
+                WHERE tl.{{QbTreeLit.nodeId}} = ba.node
+                  AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                                  WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text))))))
   -- F-S11: from mainland China (the page passes what the platform's clientRegion() said; the start checks the address
   -- itself), a publication whose card has a foreign video, or none recorded yet, is not for the caller unless an exception
   -- of headquarters is in force (the public dataset holds those not revoked; region.RegionRules is the one definition).

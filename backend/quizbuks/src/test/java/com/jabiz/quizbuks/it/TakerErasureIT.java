@@ -7,7 +7,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.certification.CertificateProcesses;
 import com.jabiz.quizbuks.certification.CertificationProcesses;
 import com.jabiz.runtime.test.TestTokens;
 import java.time.Duration;
@@ -105,8 +104,7 @@ class TakerErasureIT extends PayoutItSupport {
             "JPY"));
         run(CertificationProcesses.GRANT, certificationGranter(), body("userId", cat, "certification", "SPONSOR_APPLY", "reason",
             "Met at the fair"));
-        String key = (String) run(CertificateProcesses.ISSUE, taker(cat), body("certification", "SPONSOR_APPLY",
-            "language", "en")).get("verifyKey");
+        String key = issuedBefore(cat, "SPONSOR_APPLY", name, "en");
         run("QB_SETTINGS_SAVE", taker(cat), body("publicHandle", handle, "publicPage", true));
         List<Object> runs = query("SELECT run_id FROM sys_document_run WHERE layout_id = 'qb.certificate' AND "
             + "document_no = ?", key).stream().map(row -> row.get("run_id")).toList();

@@ -25,6 +25,7 @@ import { pickersMessages } from './pickers-messages'
 import { usageMenu, usageMessages } from './usage-messages'
 import { regionMenu, regionMessages } from './region-messages'
 import { homeMenu, homeMessages } from './home-messages'
+import { treesMenu, treesMessages } from './trees-messages'
 import { topicMenu, topicMessages } from './topic-messages'
 import { sharedVideoMenu, sharedVideoMessages } from './shared-video-messages'
 import { BRAND_NAMES } from './brand'
@@ -35,9 +36,10 @@ export const messages = {
     menu: { group: BRAND_NAMES.en, reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
       ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
       ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en, ...accountMenu.en, ...pageMenu.en, ...productMenu.en, ...abuseReportMenu.en,
-      ...certificationMenu.en, ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en, ...usageMenu.en, ...regionMenu.en, ...homeMenu.en, ...topicMenu.en, ...sharedVideoMenu.en },
+      ...certificationMenu.en, ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en, ...usageMenu.en, ...regionMenu.en, ...homeMenu.en, ...treesMenu.en, ...topicMenu.en, ...sharedVideoMenu.en },
     region: regionMessages.en,
     home: homeMessages.en,
+    trees: treesMessages.en,
     sharedVideos: sharedVideoMessages.en,
     topics: topicMessages.en,
     fee: feeMessages.en,
@@ -341,9 +343,10 @@ export const messages = {
     menu: { group: BRAND_NAMES.zh, reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
       ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
       ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh, ...accountMenu.zh, ...pageMenu.zh, ...productMenu.zh, ...abuseReportMenu.zh,
-      ...certificationMenu.zh, ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh, ...usageMenu.zh, ...regionMenu.zh, ...homeMenu.zh, ...topicMenu.zh, ...sharedVideoMenu.zh },
+      ...certificationMenu.zh, ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh, ...usageMenu.zh, ...regionMenu.zh, ...homeMenu.zh, ...treesMenu.zh, ...topicMenu.zh, ...sharedVideoMenu.zh },
     region: regionMessages.zh,
     home: homeMessages.zh,
+    trees: treesMessages.zh,
     sharedVideos: sharedVideoMessages.zh,
     topics: topicMessages.zh,
     fee: feeMessages.zh,
@@ -647,9 +650,10 @@ export const messages = {
     menu: { group: BRAND_NAMES.ja, reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
       ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
       ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja, ...accountMenu.ja, ...pageMenu.ja, ...productMenu.ja, ...abuseReportMenu.ja,
-      ...certificationMenu.ja, ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja, ...usageMenu.ja, ...regionMenu.ja, ...homeMenu.ja, ...topicMenu.ja, ...sharedVideoMenu.ja },
+      ...certificationMenu.ja, ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja, ...usageMenu.ja, ...regionMenu.ja, ...homeMenu.ja, ...treesMenu.ja, ...topicMenu.ja, ...sharedVideoMenu.ja },
     region: regionMessages.ja,
     home: homeMessages.ja,
+    trees: treesMessages.ja,
     sharedVideos: sharedVideoMessages.ja,
     topics: topicMessages.ja,
     fee: feeMessages.ja,
