@@ -101,14 +101,11 @@ public final class QbRoles {
         QbPermissions.CONVERSATION_READ,
         // Q87: how its sponsors pay the platform's fees (prepaid, or postpaid within a credit limit).
         QbPermissions.FEE_BILLING,
-<<<<<<< HEAD
-        // F-S2: its copies of the platform's knowledge graphs, and reviewing them and its sponsors' graphs.
-        QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE);
-=======
         // F-S11 (the requester, 2026-11-07): the exceptions to the rule on foreign videos for its own sponsors (the
         // entry scope limits them); not the platform-wide refusal counts or the address database (ADMIN_REGION_MONITOR).
-        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE);
->>>>>>> origin/1.3/quizbuks
+        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE,
+        // F-S2: its copies of the platform's knowledge graphs, and reviewing them and its sponsors' graphs.
+        QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,

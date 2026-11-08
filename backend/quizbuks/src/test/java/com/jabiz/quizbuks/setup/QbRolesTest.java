@@ -39,17 +39,13 @@ class QbRolesTest {
                 QbPermissions.CONVERSATION_READ,
                 // Q87: its sponsors' billing mode (prepaid or postpaid), not the fees themselves.
                 QbPermissions.FEE_BILLING,
-<<<<<<< HEAD
-                // F-S2: its copies of the platform's knowledge graphs, reviewing them and its sponsors' graphs.
-                QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE)
-            .doesNotContain(QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ, QbPermissions.TREE_SYSTEM,
-                QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
-=======
                 // F-S11 (the requester, 2026-11-07): the exceptions for foreign videos of its own sponsors (the entry
                 // scope limits them), not the platform-wide refusal counts or the address database's check.
-                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE)
-            .doesNotContain(QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
->>>>>>> origin/1.3/quizbuks
+                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE,
+                // F-S2: its copies of the platform's knowledge graphs, reviewing them and its sponsors' graphs.
+                QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE)
+            .doesNotContain(QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.TREE_PLATFORM_WRITE,
+                QbPermissions.TREES_READ, QbPermissions.TREE_SYSTEM, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
                 QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN,
@@ -66,15 +62,11 @@ class QbRolesTest {
         assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
             .contains(QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.SPOT_CHECK, QbPermissions.OPERATORS_READ,
                 QbPermissions.ADMIN_PROSPECT, QbPermissions.AUDIENCE_RULES_WRITE,
-<<<<<<< HEAD
+                // F-S11: every sponsor's exceptions for foreign videos, the refusal counts and the address database.
+                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR,
                 // F-S2: the platform's knowledge graph templates; never the operators' review of Sponsors' graphs.
                 QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ)
             .doesNotContain(QbPermissions.REVIEW_TREE, QbPermissions.TREE_SYSTEM, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
-=======
-                // F-S11: every sponsor's exceptions for foreign videos, the refusal counts and the address database.
-                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR)
-            .doesNotContain(QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
->>>>>>> origin/1.3/quizbuks
                 QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 QbPermissions.PROSPECT_USE, QbPermissions.CERTIFICATION_MANAGE)
             .doesNotHaveDuplicates();

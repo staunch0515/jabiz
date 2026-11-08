@@ -565,7 +565,14 @@ public final class QbParams {
         // F-C11: the products' limit (ordinary; last after F-C2, so that the setup's earlier keys stay as they were).
         new Param(PRODUCTS_MAX, Map.of("type", "numeric", "precision", 6, "scale", 0), "50",
             "The most products one sponsor has, on the products page and in a profile package"),
-<<<<<<< HEAD
+        // F-S11: foreign videos and mainland China (the controlled one last, in the order of CONTROLLED).
+        new Param(REGION_UNKNOWN_IP_COUNTRY, Map.of("type", "text", "maxLength", 2), "CN",
+            "The country a request whose address the address database does not know counts as for foreign videos "
+                + "(CN: mainland China; empty: none)"),
+        new Param(VIDEO_MAINLAND_SITES, Map.of("type", "text", "maxLength", 200),
+            com.jabiz.quizbuks.content.ForeignVideos.DEFAULT_SITES,
+            "Video sites mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, "
+                + "youku, tencent); a video of any other site is foreign and not answerable from mainland China"),
         // F-S2: knowledge graphs (ordinary; last).
         new Param(TREE_MAX_NODES, Map.of("type", "numeric", "precision", 4, "scale", 0), "200",
             "The most nodes one knowledge graph has"),
@@ -577,16 +584,6 @@ public final class QbParams {
             "How many knowledge graphs of their own one Sponsor has"),
         new Param(TREE_REVIEW_REMIND_AFTER, Map.of("type", "numeric", "precision", 3, "scale", 0), "3",
             "After how many days a knowledge graph's version waiting for review is reminded to its reviewers"));
-=======
-        // F-S11: foreign videos and mainland China (the controlled one last, in the order of CONTROLLED).
-        new Param(REGION_UNKNOWN_IP_COUNTRY, Map.of("type", "text", "maxLength", 2), "CN",
-            "The country a request whose address the address database does not know counts as for foreign videos "
-                + "(CN: mainland China; empty: none)"),
-        new Param(VIDEO_MAINLAND_SITES, Map.of("type", "text", "maxLength", 200),
-            com.jabiz.quizbuks.content.ForeignVideos.DEFAULT_SITES,
-            "Video sites mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, "
-                + "youku, tencent); a video of any other site is foreign and not answerable from mainland China"));
->>>>>>> origin/1.3/quizbuks
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {
