@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.operator;
 
+import com.jabiz.context.RequestContext;
 import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.approval.ApprovalSubject;
 import com.jabiz.dictionary.StaticDictionary;
@@ -116,6 +117,20 @@ public class OperatorConfig {
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
             .scope(s -> s.fromContext("userId", "actorId", context -> AccountEditing.uuidOrNull(context.actorId()))));
+    }
+
+    /**
+     * The Sponsor's own assignment, read only and without history: the Sponsor app shows which operator looks after
+     * the caller and how to reach it (F-S1b, {@code qb.sponsor.operator}).
+     */
+    @Bean
+    DatasetDefinition qbOwnSponsorOperatorDataset() {
+        return DatasetDefinition.define(QbOperators.OWN_ASSIGNMENT_DATASET, d -> d
+            .targetEntityType(QbOperators.ASSIGNMENT)
+            .permissions(QbPermissions.SPONSOR_ME, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("userId", "actorId", RequestContext::actorId)));
     }
 
     @Bean

@@ -1,7 +1,8 @@
 import { decideReview, livePublication, publicationOf } from './publishing'
 import { fundedSponsor, taker } from './play'
-import { adminToken, expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 import { startAttempt, submitRight } from './transactions'
+import { reviewerFor } from './operators'
 
 /**
  * The tree's pictures (docs/quizbuks/plans/Q85-tech-tree.md): a sponsor requires "Basics" before "Advanced"; a taker
@@ -43,7 +44,7 @@ test('the Sponsor sees who lit which node; the Taker sees where they stand (Q85)
     website: 'https://example.com/coffee' })
   const page$ = await run(request, sponsor.token, 'QB_SPONSOR_PAGE_SUBMIT', {})
   if (page$.approvalRequestId) {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: page$.approvalRequestId,
+    await run(request, await reviewerFor(request, sponsor.token), 'APPROVAL_DECIDE', { requestId: page$.approvalRequestId,
       decision: 'APPROVE', reason: null })
   }
   await expect.poll(async () => {

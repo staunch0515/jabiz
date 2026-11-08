@@ -19,6 +19,8 @@ const PUBLISHED = { userId: 's1', handle: 'acme-bakery', language: 'en', headlin
   publishedAt: '2026-10-15T00:00:00Z', reviewRequired: false, revision: 3 }
 const PRODUCT = { productId: 'pr1', name: 'Rye', description: null, image: null, price: null, currency: null,
   shopUrl: null, seq: 0, status: 'LISTED', revision: 1 }
+const OPERATOR = { operatorId: 'op1', name: 'Kanto Partners', language: 'ja', contactName: 'Ken',
+  contactEmail: 'ken@kanto.example', own: false, assignedAt: '2026-10-14T00:00:00Z' }
 
 interface Server {
   sponsor?: Record<string, unknown> | null
@@ -28,6 +30,7 @@ interface Server {
   mailServer?: Record<string, unknown> | null
   methods?: string
   understanding?: Record<string, unknown>[]
+  operator?: Record<string, unknown> | null
 }
 
 /** The server as the hub sees it: the sponsor, the page, the products, the staff, the mail server, the methods. */
@@ -67,6 +70,10 @@ function server(options: Server = {}) {
           { code: 'OFFLINE_REDEEM', label: "Prize at the Sponsor's place" }])
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
+      case '/api/queries/qb.sponsor.operator': {
+        const operator = options.operator === undefined ? OPERATOR : options.operator
+        return json(200, { items: operator ? [operator] : [], offset: 0, limit: 1 })
+      }
       case '/api/queries/qb.app.understanding':
         return json(200, { items: options.understanding ?? [], offset: 0, limit: 10 })
       default:
@@ -128,6 +135,12 @@ describe('the Sponsor hub (Q79)', () => {
     expect(within(nav).queryByTestId('profile-nav-products')).toBeNull()
     expect(within(nav).getByTestId('profile-nav-overview')).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByTestId('profile-nav-staff')).not.toHaveAttribute('aria-current')
+    // F-S1b: the operator that looks after the Sponsor, with how to reach it.
+    const operator = screen.getByTestId('profile-operator')
+    expect(await within(operator).findByTestId('profile-operator-name')).toHaveTextContent('Kanto Partners')
+    expect(within(operator).getByTestId('profile-operator-email')).toHaveAttribute('href', 'mailto:ken@kanto.example')
+    expect(within(operator).queryByTestId('profile-operator-own')).toBeNull()
+    expect(within(operator).getByTestId('profile-operator-help')).toHaveAttribute('href', '/help')
     await expectAccessible()
     // The QR code of the page.
     await userEvent.click(screen.getByTestId('profile-preview-qr'))
@@ -188,6 +201,18 @@ describe('the Sponsor hub (Q79)', () => {
       cleanup()
       vi.restoreAllMocks()
     }
+  })
+
+  it('says when the Sponsor leads their own operator, and when none looks after them yet (F-S1b)', async () => {
+    server({ operator: { ...OPERATOR, own: true } })
+    window.history.replaceState(null, '', '/profile')
+    render(<App />)
+    expect(await screen.findByTestId('profile-operator-own')).toHaveTextContent('you lead it')
+    await expectAccessible()
+    cleanup()
+    server({ operator: null })
+    render(<App />)
+    expect(await screen.findByTestId('profile-operator-none')).toBeInTheDocument()
   })
 
   it('tells an approved Sponsor without a page to publish it next', async () => {
