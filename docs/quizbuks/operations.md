@@ -345,6 +345,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 安全 | 平台 `jabiz-refresh-reuse-granted`、`jabiz-refresh-reuse-revoked`（F-F6） | |
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
+| 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足） |
 | 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
 | 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
@@ -787,11 +788,21 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   3. 合并：`SELECT topic_id, merged_into, active FROM qb_topic WHERE topic_id IN (…)`。
   4. 其余按首页的排查（地区、客户匹配、中国大陆 §7.24 等）；关掉"只看喜欢的主题"后能看到即是主题词的原因。
 
-### 7.27 共享视频的审核与下架（F-S12）
+### 7.27 知识结构图：审核、点亮与撤销（F-S2）
+
+知识结构图的定义、审核与点亮（`docs/quizbuks/plans/impl/F-S2.md`）。编辑与看图的页面在 F-S3；在那之前经流程页面（`QB_TREE_*`）操作。
+
+- **审核**：发起方的图由其运营商的另一位成员审（规则 `qb.tree.review`，持 `qb.review.tree`），运营商的副本由同一运营商的另一位成员审（`qb.tree.copy.review`），平台模板由另一位持 `qb.tree.platform.write` 的平台管理员审（`qb.tree.platform.review`）。三条规则与撤销点亮的规则 `qb.tree.lit-revoke.review` 由 `QB_SETUP` 提出、另一位管理员发布；没有规则时提交被拒（`QB_REVIEW_NOT_CONFIGURED`），从不免审。审核超过 `qb.tree.review.remind-after` 天（普通参数，缺省 3）由任务 `qb.tree-review-remind`（每天 00:43 UTC）给审核方一个提醒待办（每个版本一次，审核结束、撤回或停用时关闭），并计入每日核对的 `REVIEW_OVERDUE`。
+- **新版本与停用**：新版本不能去掉仍有进行中发布（排程、进行中、暂停、预算不足）绑定的节点（`QB_TREE_NODE_IN_USE`，列出这些发布）：保留节点，或等发布结束。停用整张图时其节点失效，绑定的进行中发布在同一事务中结束（结束原因 `TREE`，发起方照结束通知收到邮件）。
+- **点亮**：学者在绑定节点的发布上合格后，事件 `qb.tree.passed` 由 `QB_TREE_EVALUATE` 在答题之外判断并写只追加的点亮记录，再逐层连带判断依赖它的节点（每层一个事务，至多 `qb.tree.max-depth` 层）。点亮永久；已点亮的再合格不写新记录。
+- **撤销点亮**：运营商成员（本运营商的发起方的图与副本）或平台（任何图）以 `QB_TREE_LIT_REVOKE` 填写原因申请（持 `qb.tree.lit.revoke`；本人的点亮不能自己申请），另一位成员或管理员在审批中批准后才写撤销记录（只追加），学者收到站内信（`TREE_LIT_REVOKED`，含原因）；驳回则点亮照旧、记下驳回理由。撤销后，原来那次合格不再点亮它；之后新的合格照常点亮（新的一条记录）。节点证书随之作废与扣回赠送的部分在 F-S5、F-M。
+- **每日核对**（任务 `qb.tree-check`，每天 19:23 UTC，模板 `qb.admin.tree-health`）：合格了却没有点亮的（`UNLIT_PASS`：事件丢失或判断失败）、点亮记录指向不存在的节点（`ORPHAN_LIT`：绕过流程写入的数据）、等待审核过久的版本（`REVIEW_OVERDUE`）。有问题即给持 `qb.admin.trees.read` 的人一个待办（每天一个）。`UNLIT_PASS` 由随后的任务 `qb.tree-recheck`（19:33 UTC，逐项）自动重新判断；次日仍有即查 `QB_TREE_EVALUATE` 的失败记录（平台的操作记录）。`ORPHAN_LIT` 不自动处理：查是谁写入的，按撤销点亮的流程更正。
+
+### 7.28 共享视频的审核与下架（F-S12）
 
 发起方可以把资源库中的视频链接共享给其他发起方，其他发起方在发布向导中从共享目录选用（`docs/quizbuks/plans/impl/F-S12.md`）。给发起方的帮助文案在 `docs/quizbuks/help/shared-videos.md`（由内容管理员发布为 FAQ）。
 
-- **部署**：迁移 `V89`建 `qb_shared_video`，发布与卡片各加列。部署后运行一次 `QB_SETUP`：补上新权限 `qb.admin.shared-video.read` / `.write`（内容管理员与运营商），并**提出审批规则 `qb.shared-video.review`，由另一位管理员发布**。发布之前，共享一律被拒（`QB_REVIEW_NOT_CONFIGURED`）。
+- **部署**：迁移 `V90`建 `qb_shared_video`，发布与卡片各加列。部署后运行一次 `QB_SETUP`：补上新权限 `qb.admin.shared-video.read` / `.write`（内容管理员与运营商），并**提出审批规则 `qb.shared-video.review`，由另一位管理员发布**。发布之前，共享一律被拒（`QB_REVIEW_NOT_CONFIGURED`）。
 - **审核**（提供方所属的运营商，F-S1 的审核去向）：共享的视频出现在运营商管理系统的待办与"共享视频"页（`/operator/qb/shared-videos`，缺省列出待审核的）。打开一个视频：三语标题、在视频网站上观看的链接、时长、竖横、主题词；用平台的审批面板通过或驳回（驳回写理由，提供方看得到）。标准是娱乐内容：合法、不侵权、适合所有学者。**通过一次即可**：其他发起方使用时只审核他们的发布，不再审视频。审批人要持 `qb.review.publication`（运营商角色 `QB_OPERATOR` 有）。
 - **平台**：平台管理系统的同一页（`/admin/qb/shared-videos`）列出所有运营商的共享视频，带"运营商"一栏，可按运营商筛选；平台不审核（规则的审批人是运营商的审核人员），只在紧急时下架。
 - **下架**（违法、侵权）：视频的页面上"下架"（平台的流程页 `QB_SHARED_VIDEO_TAKEDOWN`，理由必填，总是要求二次验证）。运营商只能下架自己发起方的视频（别的 404），平台可以下架任何一个。只能下架"共享中"或"已撤回"的（已撤回的视频仍可能被已提交的发布使用）；待审核的请驳回。下架不能撤销。

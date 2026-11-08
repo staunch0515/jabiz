@@ -233,6 +233,8 @@ public class InboxConfig {
                 "受取口座の開設")
             .item(QbInbox.OPERATOR_CHANGED, "en", "Your operator changed", "zh", "你的运营商已变更", "ja",
                 "運営パートナーの変更")
+            .item(QbInbox.TREE_LIT_REVOKED, "en", "A lit node was revoked", "zh", "点亮的节点被撤销", "ja",
+                "点灯の取り消し")
             .item(QbInbox.REFERRAL_CLAIMED, "en", "A friend came", "zh", "朋友来了", "ja", "友だちが来ました")
             .item(QbInbox.REFERRAL_REWARDED, "en", "Referral rewarded", "zh", "推荐成功", "ja", "紹介の成立")
             .item(QbInbox.REFERRAL_EXPIRED, "en", "Referral ended", "zh", "推荐已结束", "ja", "紹介の終了")
@@ -585,6 +587,16 @@ public class InboxConfig {
             qbMessageFromEvent) {
         return EventSubscription.of(MessageProcesses.CASH_DISPUTED_CONSUMER, CashRewardProcesses.DISPUTED_EVENT,
             qbMessageFromEvent, event -> MessageProcesses.cashInput(event, QbInbox.CASH_DISPUTED));
+    }
+
+    /** F-S2b2: a person whose lit node was revoked hears it, with the reason. */
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageTreeLitRevokedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.TREE_LIT_REVOKED_CONSUMER,
+            com.jabiz.quizbuks.tree.TreeRevocations.REVOKED_EVENT, qbMessageFromEvent,
+            MessageProcesses::treeLitRevokedInput);
     }
 
     /** F-S1: a sponsor moved to another operator hears who looks after them now. */

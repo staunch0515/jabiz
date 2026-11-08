@@ -1,7 +1,7 @@
 # 帮助文案：共享视频（F-S12）
 
 给发起方看的帮助文案（三语）。帮助中心的内容存在数据库里（FAQ 为 `QbFaqEntry`），**由内容管理员在平台管理系统的"FAQ"中发布**，改了不用重新部署；这里是文案的底稿，功能改了先改这里再请内容管理员照改。
-用词照 `docs/quizbuks/glossary.md`；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。规则与运维见 `docs/quizbuks/plans/impl/F-S12.md`、`operations.md` §7.27。
+用词照 `docs/quizbuks/glossary.md`；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。规则与运维见 `docs/quizbuks/plans/impl/F-S12.md`、`operations.md` §7.28。
 
 ## 给发起方（FAQ 的 `audience` = `SPONSOR`，分类 `PUBLISHING`）
 

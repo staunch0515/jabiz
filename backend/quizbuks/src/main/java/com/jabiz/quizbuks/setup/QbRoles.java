@@ -57,6 +57,8 @@ public final class QbRoles {
         // F-S2: the platform's knowledge graph templates (written and reviewed by content administrators), and
         // reading every graph.
         QbPermissions.TREE_EDIT, QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ,
+        // F-S2b2: revoking a lit node of any graph, and approving another administrator's request.
+        QbPermissions.TREE_LIT_REVOKE,
         // Platform 16y: closing by hand, with a note, a task no process will close (never an approval's).
         "task.resolve",
         // Q13a: the second person on a bank top-up finance recorded.
@@ -111,6 +113,8 @@ public final class QbRoles {
         QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE,
         // F-S2: its copies of the platform's knowledge graphs, and reviewing them and its sponsors' graphs.
         QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE,
+        // F-S2b2: revoking a lit node of its Sponsors' graphs and its copies, and approving another member's request.
+        QbPermissions.TREE_LIT_REVOKE,
         // F-S12: its own sponsors' shared videos (reviewing them is REVIEW_PUBLICATION's) and taking them down.
         QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE);
 
