@@ -362,7 +362,7 @@ public class PublishingConfig {
             .item(PublicationStatus.PUBLISHER, "en", "Ended by its publisher", "zh", "已被发布方结束",
                 "ja", "公開者が終了")
             .item(PublicationStatus.TREE, "en", "Its knowledge map was retired", "zh", "所绑定的知识结构图已停用",
-                "ja", "結び付いた知識マップの使用停止"),
+                "ja", "結び付いた知識マップの使用停止")
             .item(PublicationStatus.SHARED_VIDEO, "en", "Its shared video was taken down", "zh", "所用的共享视频已下架",
                 "ja", "使用中の共有動画が公開停止"));
     }
