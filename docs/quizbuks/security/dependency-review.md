@@ -25,7 +25,7 @@
 
 - OpenTelemetry API 1.55.0（GHSA-ccrj-gw8r-854m、GHSA-rcgg-9c38-7xpx）：**不受影响**。解析请求头 `tracestate`、`baggage` 的耗费随头的长度增长，而请求头总长受 8 KB 的上限约束（`server.max-http-request-header-size` 缺省）。随 Spring Boot 的版本表升级，不单独越过它。
 
-升级时附带的变化：Reactor Netty 1.3.7 → 1.3.8 修好了平台以 `PipelinedReadResumer` 绕过的问题（流水线请求排空后不再读连接）。平台的探针测试因此改为断言 Reactor Netty 自己继续读；`PipelinedReadResumer` 暂留，删不删待总控确认（平台 17zz6）。
+升级时附带的变化：Reactor Netty 1.3.7 → 1.3.8 修好了平台以 `PipelinedReadResumer` 绕过的问题（流水线请求排空后不再读连接），绕过已删去（平台 17zz7，#524）。
 
 ## 3. 前端
 
@@ -71,6 +71,6 @@
 
 ## 5. 未完成与跟进
 
-- 平台 17zz6（Spring Boot 4.0.9、SCRAM 3.4、前端工具）合入并同步后，开 QuizBuks 的 SPA 升级 PR；之后 CI 的镜像报告中 `app.jar` 的条目应为 0，届时在本页补记。
-- `PipelinedReadResumer` 是否删去：待总控确认。
+- ~~平台 17zz6 合入并同步、QuizBuks 的 SPA 升级~~：已完成（平台 #523、#524，同步与 SPA 升级 #527，2026-11-08）。#527 的 CI 镜像报告：应用镜像 `app.jar` **0**（原 12 条）、Ubuntu 系统包 **0**（原 2 条）；数据库镜像 Debian 系统包 65 条（原 67 条，zlib 的两条已修正）与 gosu 26 条，都是 §4.2 中说明够不到的。
+- ~~`PipelinedReadResumer` 是否删去~~：总控决定删去，平台 17zz7（#524）已删，以 `PipelinedReadingTest` 保留回归测试。
 - 正式服务器上已在运行的镜像：上线前按 `DEPLOY.md` 重新构建并部署一次（应用镜像随部署工作流，数据库镜像在服务器上构建）。
