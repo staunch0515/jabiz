@@ -1,56 +1,60 @@
 /*---
 id: qb.sponsor.benefit-access
 description: >-
-  Q89a (D-Q89-1): until when the caller holds each of the two benefit certifications (none: not held), and the
-  publication of each one's current round (none: no round open now), for the pages that need one
-entities: [QbCertificationRound, QbCertificationRecord, QbPublicationCard, QbAttempt, QbSponsorCertification]
+  F-S2c: whether each of the two benefit roles is open to the caller, and the knowledge map's node that opens it (the
+  controlled parameters qb.tree.gate.benefit-provider-node and qb.tree.gate.benefit-sponsor-node; none: closed), for
+  the pages that need one
+entities: [SysParam, QbTree, QbTreeNode, QbTreeNodeDef, QbTreeLit, QbTreeLitRevocation]
 datasets:
-  QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
-  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
-  QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
-  QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
-  QbAttempt: urn:jabiz:dataset:taker:QbAttempt
-params:
-  at: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time asked about (the client's now) }
+  SysParam: urn:jabiz:dataset:now:SysParam
+  QbTree: urn:jabiz:dataset:default:QbTree
+  QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
+  QbTreeNodeDef: urn:jabiz:dataset:default:QbTreeNodeDef
+  QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
 results:
-  certification:      { kind: { type: text, maxLength: 40 } }
-  heldUntil:          { kind: { type: temporal, role: EVENT_TIME } }
-  roundPublicationId: { kind: { type: text, maxLength: 36 } }
+  certification: { kind: { type: text, maxLength: 40 } }
+  open:          { kind: { type: bool } }
+  treeId:        { kind: { type: text, maxLength: 36 } }
+  nodeId:        { kind: { type: text, maxLength: 36 } }
+  nodeName:      { from: QbTreeNodeDef.name }
 list:
   key: [certification]
   sorts: [certification]
   defaultSort: { field: certification, asc: true }
 permissions: [qb.benefit.use]
 ---*/
--- One row per benefit certification (the catalog as Certifications writes it, CertificationTemplatesTest). The holding
--- is CertificationHolding's rule over the caller's records and their passes not recorded yet (as qb.app.understanding);
--- the processes decide with RoundHolders, the same rule: this only tells the pages what to show.
+-- One row per benefit role. The rule is tree.TreeGates's (the processes decide with it; this only tells the pages
+-- what to show): the parameter names <treeId>/<nodeId> of a node in effect of a platform map Takers light, and the
+-- caller has a lit record of that node without a revocation. A malformed parameter names nothing (closed).
+WITH gate(role, param_key) AS (
+    VALUES ('BENEFIT_PROVIDER', 'qb.tree.gate.benefit-provider-node'),
+           ('BENEFIT_SPONSOR', 'qb.tree.gate.benefit-sponsor-node')
+), named AS (
+    SELECT g.role, split_part(p.{{SysParam.value}}, '/', 1) AS tree_id, split_part(p.{{SysParam.value}}, '/', 2) AS node_id
+    FROM gate g
+    LEFT JOIN {{SysParam}} p
+        ON p.{{SysParam.paramKey}} = g.param_key
+       AND p.{{SysParam.value}} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+)
 SELECT
-    cat.cert AS certification,
-    (SELECT max(e.until)
-     FROM (SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
-                  rec.{{QbCertificationRecord.validUntil}} AS until
-           FROM {{QbCertificationRecord}} rec
-           WHERE rec.{{QbCertificationRecord.certification}} = cat.cert
-             AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
-           UNION ALL
-           SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
-                  a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
-           FROM {{QbCertificationRound}} r2
-           JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
-           WHERE r2.{{QbCertificationRound.certification}} = cat.cert
-             AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
-             AND (r2.{{QbCertificationRound.closedAt}} IS NULL
-                  OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
-     WHERE e.ver = cat.ver AND e.until > CAST(:at AS timestamptz)
-       AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
-                            WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
-                              AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) AS heldUntil,
-    (SELECT max(cr.{{QbCertificationRound.publicationId}})
-     FROM {{QbCertificationRound}} cr
-     JOIN {{QbPublicationCard}} rp ON CAST(rp.{{QbPublicationCard.publicationId}} AS text) = cr.{{QbCertificationRound.publicationId}}
-     WHERE cr.{{QbCertificationRound.certification}} = cat.cert AND cr.{{QbCertificationRound.closedAt}} IS NULL
-       AND rp.{{QbPublicationCard.status}} = 'LIVE' AND rp.{{QbPublicationCard.startAt}} <= CAST(:at AS timestamptz)
-       AND rp.{{QbPublicationCard.endAt}} > CAST(:at AS timestamptz)) AS roundPublicationId
-FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
-WHERE cat.cert IN ('BENEFIT_PROVIDER', 'BENEFIT_SPONSOR')
+    n.role AS certification,
+    (t.{{QbTree.treeId}} IS NOT NULL AND tn.{{QbTreeNode.nodeId}} IS NOT NULL AND EXISTS (
+        SELECT 1 FROM {{QbTreeLit}} tl
+        WHERE tl.{{QbTreeLit.subjectKind}} = 'USER'
+          AND tl.{{QbTreeLit.treeId}} = n.tree_id AND tl.{{QbTreeLit.nodeId}} = n.node_id
+          AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                          WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))) AS open,
+    CAST(CASE WHEN tn.{{QbTreeNode.nodeId}} IS NOT NULL THEN n.tree_id END AS varchar(36)) AS treeId,
+    CAST(CASE WHEN tn.{{QbTreeNode.nodeId}} IS NOT NULL THEN n.node_id END AS varchar(36)) AS nodeId,
+    nd.{{QbTreeNodeDef.name}} AS nodeName
+FROM named n
+LEFT JOIN {{QbTree}} t
+    ON CAST(t.{{QbTree.treeId}} AS text) = n.tree_id
+   AND t.{{QbTree.ownerKind}} = 'PLATFORM' AND t.{{QbTree.subjectKind}} = 'TAKER' AND t.{{QbTree.status}} = 'ACTIVE'
+LEFT JOIN {{QbTreeNode}} tn
+    ON t.{{QbTree.treeId}} IS NOT NULL
+   AND tn.{{QbTreeNode.treeId}} = n.tree_id AND tn.{{QbTreeNode.nodeId}} = n.node_id AND tn.{{QbTreeNode.active}}
+LEFT JOIN {{QbTreeNodeDef}} nd
+    ON tn.{{QbTreeNode.nodeId}} IS NOT NULL
+   AND nd.{{QbTreeNodeDef.versionId}} = t.{{QbTree.currentVersionId}} AND nd.{{QbTreeNodeDef.nodeId}} = n.node_id

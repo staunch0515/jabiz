@@ -1,12 +1,12 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.benefit.BenefitCodes;
 import com.jabiz.quizbuks.benefit.IncidentProcesses;
 import com.jabiz.quizbuks.benefit.OfferProcesses;
 import com.jabiz.quizbuks.benefit.PurchaseProcesses;
 import com.jabiz.quizbuks.benefit.QbBenefits;
-import com.jabiz.quizbuks.certification.CertificationProcesses;
 import com.jabiz.quizbuks.publishing.RewardMethod;
 import com.jabiz.quizbuks.publishing.RewardMethodProcesses;
 import com.jabiz.quizbuks.reward.RedemptionProcesses;
@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * job); its publications cannot be resumed nor new ones submitted until the purchase is resumed; either side records
  * incidents and their outcome; the purchase lists say what became of it (D-Q89-13).
  */
-class BenefitSuspendIT extends PlayItSupport {
+class BenefitSuspendIT extends TreeItSupport {
 
     @Autowired
     @Qualifier("qbBenefitVoidJob")
@@ -50,9 +50,10 @@ class BenefitSuspendIT extends PlayItSupport {
             QbPermissions.ADMIN_PUBLICATION_READ);
     }
 
-    private void grant(String userId, String certification) {
-        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", certification, "reason",
-            "Q89d test"));
+    /** F-S2c: the benefit role opened as production opens it: the gate's node lit by the user. */
+    private void grant(String userId, String role) {
+        unlock(role.equals("BENEFIT_PROVIDER") ? QbParams.TREE_GATE_BENEFIT_PROVIDER : QbParams.TREE_GATE_BENEFIT_SPONSOR,
+            userId);
     }
 
     private record Setting(String shop, String maker, String purchaseId) {}

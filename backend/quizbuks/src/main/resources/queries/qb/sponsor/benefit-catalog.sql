@@ -1,19 +1,19 @@
 /*---
 id: qb.sponsor.benefit-catalog
 description: >-
-  Q89a (D-Q89-3): the benefits sponsors list, for a sponsor holding a benefit certification (none otherwise),
+  Q89a (D-Q89-3): the benefits sponsors list, for a Sponsor to whom a benefit role is open (F-S2c: a gate node lit; none otherwise),
   newest first; with the provider's company and the caller's conversation about each
-entities: [QbBenefitOffer, QbBenefitConversation, QbSponsor, QbCertificationRound, QbCertificationRecord, QbAttempt, QbSponsorCertification]
+entities: [QbBenefitOffer, QbBenefitConversation, QbSponsor, SysParam, QbTree, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   QbBenefitOffer: urn:jabiz:dataset:default:QbBenefitOffer
   QbBenefitConversation: urn:jabiz:dataset:sponsor:QbBenefitConversation
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
-  QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
-  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
-  QbCertificationRecord: urn:jabiz:dataset:me:QbCertificationRecord
-  QbAttempt: urn:jabiz:dataset:taker:QbAttempt
+  SysParam: urn:jabiz:dataset:now:SysParam
+  QbTree: urn:jabiz:dataset:default:QbTree
+  QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
+  QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
 params:
-  at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time asked about (the client's now) }
   kind:    { kind: { type: text, maxLength: 10 }, description: "Only benefits of this kind" }
   q:       { kind: { type: text, maxLength: 100 }, description: "Only benefits whose name or provider contains this text" }
   offerId: { kind: { type: text, maxLength: 36 }, description: "Only this benefit (its page)" }
@@ -40,33 +40,29 @@ list:
   key: [offerId]
 permissions: [qb.benefit.use]
 ---*/
--- Only the listed benefits (the caller's own too: buying one's own is refused by the processes), and only while the caller holds either
--- certification (CertificationHolding's rule, as qb.sponsor.benefit-access; the catalog as Certifications writes it).
+-- Only the listed benefits (the caller's own too: buying one's own is refused by the processes), and only while either
+-- benefit role is open to the caller.
 -- A provider whose onboarding is gone (an erased account) is not shown. The text is found as written: strpos takes
 -- it literally.
 WITH held AS (
+    -- F-S2c: either benefit role open to the caller (tree.TreeGates's rule, as qb.sponsor.benefit-access).
     SELECT 1 AS yes
-    FROM (SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), ('TERMS_APP_UNDERSTOOD', 1, 31536000), ('CONTEST_RULES_UNDERSTOOD', 1, 31536000), ('TERMS_SPONSOR_UNDERSTOOD', 1, 31536000), ('BENEFIT_PROVIDER', 1, 31536000), ('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc) AS cat(cert, ver, secs)
-    WHERE cat.cert IN ('BENEFIT_PROVIDER', 'BENEFIT_SPONSOR')
-      AND (SELECT max(e.until)
-     FROM (SELECT rec.{{QbCertificationRecord.certificationVersion}} AS ver, rec.{{QbCertificationRecord.at}} AS at,
-                  rec.{{QbCertificationRecord.validUntil}} AS until
-           FROM {{QbCertificationRecord}} rec
-           WHERE rec.{{QbCertificationRecord.certification}} = cat.cert
-             AND rec.{{QbCertificationRecord.kind}} IN ('PASSED', 'GRANTED')
-           UNION ALL
-           SELECT r2.{{QbCertificationRound.certificationVersion}}, a.{{QbAttempt.submittedAt}},
-                  a.{{QbAttempt.submittedAt}} + make_interval(secs => cat.secs)
-           FROM {{QbCertificationRound}} r2
-           JOIN {{QbAttempt}} a ON CAST(a.{{QbAttempt.publicationId}} AS text) = r2.{{QbCertificationRound.publicationId}}
-           WHERE r2.{{QbCertificationRound.certification}} = cat.cert
-             AND a.{{QbAttempt.passed}} AND a.{{QbAttempt.submittedAt}} IS NOT NULL
-             AND (r2.{{QbCertificationRound.closedAt}} IS NULL
-                  OR a.{{QbAttempt.submittedAt}} < r2.{{QbCertificationRound.closedAt}})) e
-     WHERE e.ver = cat.ver AND e.until > CAST(:at AS timestamptz)
-       AND e.at > coalesce((SELECT max(rv.{{QbCertificationRecord.at}}) FROM {{QbCertificationRecord}} rv
-                            WHERE rv.{{QbCertificationRecord.certification}} = cat.cert
-                              AND rv.{{QbCertificationRecord.kind}} = 'REVOKED'), '-infinity')) IS NOT NULL
+    FROM (VALUES ('qb.tree.gate.benefit-provider-node'), ('qb.tree.gate.benefit-sponsor-node')) AS g(param_key)
+    JOIN {{SysParam}} p
+        ON p.{{SysParam.paramKey}} = g.param_key
+       AND p.{{SysParam.value}} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    JOIN {{QbTree}} t
+        ON CAST(t.{{QbTree.treeId}} AS text) = split_part(p.{{SysParam.value}}, '/', 1)
+       AND t.{{QbTree.ownerKind}} = 'PLATFORM' AND t.{{QbTree.subjectKind}} = 'TAKER' AND t.{{QbTree.status}} = 'ACTIVE'
+    JOIN {{QbTreeNode}} tn
+        ON tn.{{QbTreeNode.treeId}} = split_part(p.{{SysParam.value}}, '/', 1)
+       AND tn.{{QbTreeNode.nodeId}} = split_part(p.{{SysParam.value}}, '/', 2) AND tn.{{QbTreeNode.active}}
+    WHERE EXISTS (
+        SELECT 1 FROM {{QbTreeLit}} tl
+        WHERE tl.{{QbTreeLit.subjectKind}} = 'USER'
+          AND tl.{{QbTreeLit.treeId}} = tn.{{QbTreeNode.treeId}} AND tl.{{QbTreeLit.nodeId}} = tn.{{QbTreeNode.nodeId}}
+          AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                          WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))
     LIMIT 1
 )
 SELECT

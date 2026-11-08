@@ -19,6 +19,10 @@
 只有你此刻能开始的 Quiz 才算"可答"：受众、邀请、地区、视频等条件不符合，或你已答过，都不算。
 如果点亮有误（例如答案外流），运营商或平台可以经另一位成员审核后撤销，你会收到站内信说明原因。撤销后，原来那次合格不再算；以后在这个节点的 Quiz 上再次合格，会重新点亮。
 
+### 中文 · 点亮节点能开放什么？
+
+平台图上的一些节点点亮后会开放平台的功能，例如推荐朋友；发起方点亮相应的节点后可以提供或赞助权益。功能没有开放时，相应的页面会说明要点亮哪个节点。撤销点亮后功能随之关闭。
+
 ### 日本語 · 知識マップとは何ですか？
 
 知識マップは、ある分野で学ぶことを一枚の図にまとめたものです。ノードはひとつの知識や力を表し、ノードをつなぐ線は「何を先に、何を後に学ぶか」を表します。プラットフォームのマップのほか、主催者が自分のマップを持つこともあります。
@@ -30,6 +34,10 @@
 「回答できる」のは、いま始められるクイズだけです。対象、招待、地域、動画などの条件が合わないもの、すでに回答したものは含まれません。
 点灯に誤りがあった場合（答えの流出など）、運営パートナーまたはプラットフォームが、別のメンバーの審査を経て取り消すことがあります。その場合は理由をメッセージでお知らせします。取り消し後は元の合格は数えられません。そのノードのクイズにあらためて合格すると、もう一度点灯します。
 
+### 日本語 · ノードを点灯すると何が使えるようになりますか？
+
+プラットフォームのマップには、点灯すると機能が使えるようになるノードがあります。たとえば友だち紹介です。主催者は該当するノードを点灯すると、特典の提供や協賛ができるようになります。使えないときは、その画面にどのノードを点灯すればよいかが表示されます。点灯が取り消されると、その機能も使えなくなります。
+
 ### English · What is a knowledge map?
 
 A knowledge map lays out what there is to learn in a field as one picture: each node is a piece of knowledge or a skill, and the lines between nodes show what to learn first and what comes next. The platform has its own maps, and a Sponsor may have one too.
@@ -40,6 +48,10 @@ Each node says how it is lit: usually by passing a quiz bound to it, sometimes o
 Pass a quiz bound to the node and it lights (within seconds to minutes of passing); the nodes that depend on it light in turn when their conditions are met. A node stays lit: answering other quizzes of the same node gives their rewards as usual, but the node is not "lit again".
 Only the quizzes you can start right now count as open to you: not those whose audience, invitation, region or video rules leave you out, and not those you have answered.
 If a lighting was wrong (for example, answers were shared), the operator or the platform may revoke it after another member reviews the request; you will get a message with the reason. After that, the pass it rested on no longer counts; passing a quiz of the node again lights it anew.
+
+### English · What does lighting a node unlock?
+
+Some nodes of the platform's maps unlock a feature once lit, such as referring friends; a Sponsor who lights the matching node may provide or sponsor benefits. While a feature is not open, its page says which node to light. If a lighting is revoked, the feature closes again.
 
 ## 二、给发起方（FAQ 的 `audience` = `SPONSOR`，分类 `PUBLISHING`）
 

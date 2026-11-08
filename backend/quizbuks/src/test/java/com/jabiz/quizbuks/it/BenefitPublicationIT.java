@@ -1,12 +1,12 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.benefit.AllocationProcesses;
 import com.jabiz.quizbuks.benefit.BenefitCodes;
 import com.jabiz.quizbuks.benefit.OfferProcesses;
 import com.jabiz.quizbuks.benefit.PurchaseProcesses;
 import com.jabiz.quizbuks.benefit.QbBenefits;
-import com.jabiz.quizbuks.certification.CertificationProcesses;
 import com.jabiz.quizbuks.publishing.RewardMethod;
 import com.jabiz.quizbuks.publishing.RewardMethodProcesses;
 import com.jabiz.quizbuks.reward.RedemptionProcesses;
@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * requirement's acceptance scenario B: a refrigerator maker buys 100 bowls of beef noodles from a noodle shop, the
  * 101st winner finds none left.
  */
-class BenefitPublicationIT extends PlayItSupport {
+class BenefitPublicationIT extends TreeItSupport {
 
     @Autowired
     @Qualifier("qbBenefitAllocationReleaseJob")
@@ -53,9 +53,10 @@ class BenefitPublicationIT extends PlayItSupport {
             QbPermissions.ADMIN_PUBLICATION_READ);
     }
 
-    private void grant(String userId, String certification) {
-        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", certification, "reason",
-            "Q89b test"));
+    /** F-S2c: the benefit role opened as production opens it: the gate's node lit by the user. */
+    private void grant(String userId, String role) {
+        unlock(role.equals("BENEFIT_PROVIDER") ? QbParams.TREE_GATE_BENEFIT_PROVIDER : QbParams.TREE_GATE_BENEFIT_SPONSOR,
+            userId);
     }
 
     private String today() {

@@ -121,6 +121,41 @@ abstract class PlayItSupport extends AccountItSupport {
     }
 
     /** A taker's token, with the permissions of {@code QB_TAKER} and a verified address. */
+    /**
+     * F-S2c (D8): a certificate issued before issuing paused, as {@code QB_CERTIFICATE_ISSUE} wrote one: the row (only
+     * ever inserted) and its document, issued by the holder at the platform (the layout {@code qb.certificate}, the
+     * holder's own row as its data). Returns the verify key, which is also the document's number.
+     */
+    String issuedBefore(String userId, String certification, String holderName, String language) {
+        return issuedBefore(userId, certification, holderName, language, Map.of("certificationName",
+            "Sponsor Certification"));
+    }
+
+    /** As above, with the document's names ({@code certificationName}, a sponsor's {@code issuerName}). */
+    String issuedBefore(String userId, String certification, String holderName, String language,
+        Map<String, Object> names) {
+        String certificateId = java.util.UUID.randomUUID().toString();
+        String key = java.util.HexFormat.of().formatHex(java.nio.ByteBuffer.allocate(16)
+            .putLong(java.util.UUID.randomUUID().getMostSignificantBits())
+            .putLong(java.util.UUID.randomUUID().getLeastSignificantBits()).array());
+        java.time.Instant now = clock.instant();
+        execute("INSERT INTO qb_certificate (certificate_id, user_id, certification, certification_version, held_from, "
+            + "valid_until, holder_name, verify_key, language, issued_at, version) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, "
+            + "?, 1)", certificateId, userId, certification, java.sql.Timestamp.from(now),
+            java.sql.Timestamp.from(now.plus(java.time.Duration.ofDays(365))), holderName, key, language,
+            java.sql.Timestamp.from(now));
+        Map<String, Object> params = new java.util.LinkedHashMap<>(names);
+        params.put("certificateId", certificateId);
+        params.put("verifyAddress", "/taker/verify/" + key);
+        // The holder issued it (the layout shows a reader only the documents they issued); a taker's permissions
+        // and the platform's one to issue a document, as QB_CERTIFICATE_ISSUE's subprocess ran.
+        List<String> permissions = new ArrayList<>(QbRoles.of(QbRoles.TAKER).permissions());
+        permissions.add("document.issue");
+        run("DOCUMENT_ISSUE", TestTokens.bearer(tokens, userId, permissions.stream().distinct()
+            .toArray(String[]::new)), body("layoutId", "qb.certificate", "params", params, "language", language));
+        return key;
+    }
+
     String taker(String userId) {
         return tokenOf(userId, QbRoles.TAKER);
     }

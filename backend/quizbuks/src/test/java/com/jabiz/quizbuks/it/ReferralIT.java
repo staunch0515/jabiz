@@ -1,8 +1,7 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.certification.CertificationProcesses;
-import com.jabiz.quizbuks.certification.Certifications;
 import com.jabiz.quizbuks.publishing.PublishingCodes;
 import com.jabiz.quizbuks.publishing.RefereeRules;
 import com.jabiz.quizbuks.publishing.ReferralPolicy;
@@ -28,18 +27,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * earns the referrer the publication's referral reward, paid by the job afterwards, the publication's way; what does
  * not count (the sponsor's rules, the fixed conditions, the limits) is simply not recorded.
  */
-class ReferralIT extends PlayItSupport {
+class ReferralIT extends TreeItSupport {
 
     private String hq() {
         return TestTokens.bearer(tokens, "q70-hq", QbPermissions.CERTIFICATION_MANAGE, QbPermissions.CERTIFICATION_ADMIN,
             QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.ADMIN_USERS_READ, QbPermissions.ADMIN_PUBLICATION_READ);
     }
 
-    /** A taker who holds the referrer certification (granted by hand, as an operator may). */
+    /** A taker to whom referring is open (F-S2c: they lit the node the referrer gate names). */
     private String referrer(String name) {
         String userId = newTaker(name, "JP");
-        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", Certifications.REFERRER.key(),
-            "reason", "Q70 test"));
+        unlock(QbParams.TREE_GATE_REFERRER, userId);
         return userId;
     }
 
