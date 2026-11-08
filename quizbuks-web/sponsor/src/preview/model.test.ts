@@ -87,7 +87,9 @@ describe('the preview (Q34b)', () => {
     it('takes the card when no material\'s video must be watched, before the materials\' videos', () => {
       const p = preview([material(1, 'https://youtu.be/dQw4w9WgXcQ')], horizontal)
       expect(p.video).toBe('https://player.vimeo.com/video/76979871')
-      expect(p.view).toMatchObject({ watchRequired: false, videoDurationSec: null })
+      // The start page's screen leads with it too (`leadVideo`), as the App's does.
+      expect(p.view).toMatchObject({ watchRequired: false, videoDurationSec: null,
+        video: 'https://player.vimeo.com/video/76979871' })
       expect(p.videoVertical).toBe(false)
       // Vertical as the provider shared it, or a Shorts link (SharedVideoRules.vertical).
       expect(preview([], { ...horizontal, vertical: true }).videoVertical).toBe(true)

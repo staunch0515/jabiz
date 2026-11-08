@@ -143,6 +143,10 @@ export const TEMPLATE = {
   broadcasts: 'qb.admin.broadcasts',
   /** Q48a, headquarters: the operators, an operator's members, the reviews they decided (`qb.admin.spot-check`). */
   operators: 'qb.admin.operators',
+  /** F-S1: what is wrong with the operators' structure, one row a problem (the daily check's rows). */
+  operatorHealth: 'qb.admin.operator-health',
+  /** F-S1b: each operator's reviews waiting and decided since a time. */
+  operatorWorkload: 'qb.admin.operator-workload',
   operatorMembers: 'qb.admin.operator-members',
   operatorReviews: 'qb.admin.operator-reviews',
   /** Q48a, an operator's own pages (`qb.operator.use`): the totals and the sponsors, never a taker's profile. */
@@ -638,6 +642,8 @@ export const PATH = {
   ai: '/qb/ai',
   /** Q48a, headquarters: the operators, one operator, and the spot checks of their reviews. */
   operators: '/qb/operators',
+  /** F-S1b: where a session lands: the platform's home, or the operator's in the Operator Management System. */
+  home: '/qb/home',
   operator: (operatorId: string) => `/qb/operators/${encodeURIComponent(operatorId)}`,
   operatorReviews: '/qb/operator-reviews',
   /** Q48a, an operator's own pages: home (totals and team) and the sponsors. */

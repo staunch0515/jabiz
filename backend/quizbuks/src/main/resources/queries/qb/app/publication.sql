@@ -37,6 +37,7 @@ results:
   cover:          { from: QbPublicationCard.cover }
   watchRequired:  { from: QbPublicationCard.watchRequired }
   videoDurationSec: { from: QbPublicationCard.videoDurationSec }
+  video:          { from: QbPublicationCard.video }
   kind:           { from: QbPublicationCard.kind }
   language:       { from: QbPublicationCard.language }
   languages:      { from: QbPublicationCard.languages }
@@ -106,6 +107,7 @@ SELECT
     d.cover AS cover,
     d.watchRequired AS watchRequired,
     d.videoDurationSec AS videoDurationSec,
+    d.video AS video,
     d.kind AS kind,
     d.language AS language,
     d.languages AS languages,
@@ -174,6 +176,9 @@ SELECT
     -- how long it is as the sponsor gave it.
     c.{{QbPublicationCard.watchRequired}}  AS watchRequired,
     c.{{QbPublicationCard.videoDurationSec}} AS videoDurationSec,
+    -- F-S12: the card's video, which leads the start page when it is the shared video the publication picked (no
+    -- material of the version): the page plays what the home's card played.
+    c.{{QbPublicationCard.video}}          AS video,
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.language}}       AS language,
     coalesce(c.{{QbPublicationCard.languages}}, c.{{QbPublicationCard.language}}) AS languages,

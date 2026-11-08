@@ -11,7 +11,9 @@
 - `JABIZ_TRUSTED_PROXIES` 已设、`JABIZ_WEB_ENVIRONMENT=production`；
 - 告警的收件人与 Grafana 的 SMTP（§2）。
 
-应用的规则文件每行一条：`set 名`、`absent 名`、`equals 名 值`、`not-equals 名 值`、`warn-absent 名`（`#` 起注释），如 QuizBuks 的 `absent QB_WALLET_DEV_CREDIT`、`equals QB_STRIPE_PLACEHOLDERS false`。
+应用的规则文件每行一条：`set 名`、`absent 名`、`equals 名 值`、`not-equals 名 值`、`warn-absent 名`、`warn-unset 名`（没设时提示）、`min-length 名 长度`（口令）、
+`different 名 另一名`（两个口令不得相同）（`#` 起注释），如 QuizBuks 的 `absent QB_WALLET_DEV_CREDIT`、`equals QB_STRIPE_PLACEHOLDERS false`。
+不是应用设置的文件（如备份工具的 `backup.env`）用 `env-check.sh --app-only <文件> <规则文件>`：只按规则文件检查，不套平台的规则（17zz3）。
 
 ## 2. 监控与告警
 
@@ -25,6 +27,7 @@ GRAFANA_USER=… GRAFANA_PASSWORD=… tools/ops/alert-fire-test.sh disk /var/lib
 ```
 
 `jabiz-metrics-absent` 以停掉应用 5 分钟来试。应用自己的规则写在 `docker/grafana/alerting` 下自己的文件中（同一格式，自己的组与文件夹）。
+应用的规则一起试发：`ALERT_FOLDERS="jabiz <应用的文件夹>" ALERT_FAKES=<应用的假数据文件> tools/ops/alert-fire-test.sh rules|fire`（文件格式见 13 §7"试发"）。
 
 ## 3. 备份与恢复演练
 

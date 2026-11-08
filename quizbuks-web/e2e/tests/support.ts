@@ -180,6 +180,41 @@ export async function setControlledParam(request: APIRequestContext, paramKey: s
   await run(request, await publisherToken(request, admin), 'CONTROL_CHANGE_PUBLISH', { changeId: change.changeId })
 }
 
+/**
+ * Runs a scheduled job now, as an operator re-runs a scheduled time (platform 17zs, D77: `POST /api/jobs/{job}/runs`,
+ * the administrator's `job.run`): its latest scheduled time again, waiting for the run to end. For a job of items the
+ * items are selected from the data as it is now, so whatever is due now is done (an item done at that time before is
+ * replayed); a test need not wait for the schedule (F-F13).
+ */
+export async function runJobNow(request: APIRequestContext, job: string) {
+  const admin = await adminToken(request)
+  const headers = { Authorization: `Bearer ${admin}` }
+  const listed = await request.get('/api/jobs', { headers })
+  expect(listed.status(), await listed.text()).toBe(200)
+  const definition = ((await listed.json()) as { name: string; rerunTimes?: string[] }[]).find((j) => j.name === job)
+  const scheduledTime = definition?.rerunTimes?.[0]
+  expect(scheduledTime, `a time of ${job} to run again`).toBeTruthy()
+  let requestSeqId = 0
+  // 409 JOB_BUSY while a scheduled run holds the job's lock: asked again until it is free.
+  await expect.poll(async () => {
+    const asked = await request.post(`/api/jobs/${encodeURIComponent(job)}/runs`, {
+      headers: { ...headers, 'Idempotency-Key': crypto.randomUUID() },
+      data: { scheduledTime, reason: 'End-to-end test' },
+    })
+    if (asked.status() === 202) requestSeqId = (await asked.json()).requestSeqId
+    else expect(asked.status(), await asked.text()).toBe(409)
+    return asked.status()
+  }, { message: `${job} accepted to run`, timeout: 30_000, intervals: [1_000] }).toBe(202)
+  let outcome: string | undefined
+  await expect.poll(async () => {
+    const runs = await request.get(`/api/jobs/${encodeURIComponent(job)}/runs?requestSeqId=${requestSeqId}`, { headers })
+    expect(runs.status(), await runs.text()).toBe(200)
+    outcome = ((await runs.json()) as { outcome?: string }[])[0]?.outcome
+    return outcome !== undefined
+  }, { message: `${job} ran`, timeout: 60_000, intervals: [500] }).toBe(true)
+  expect(outcome, `${job}'s run`).toBe('SUCCEEDED')
+}
+
 /** F-S11: the country an address the address database does not know counts as (backend `QbParams`). */
 export const REGION_UNKNOWN_IP_COUNTRY = 'qb.region.unknown-ip-country'
 

@@ -171,6 +171,8 @@ jobs:
       - run: tools/quizbuks/test/stripe-test-mode.test.sh
       # The deploy's check of the server's .env (deploy/quizbuks/server/check-env.sh), offline.
       - run: tools/quizbuks/test/check-env.test.sh
+      # The deploy's clean-up of old images on the server (deploy/quizbuks/server/prune-images.sh, F-F13), offline.
+      - run: tools/quizbuks/test/prune-images.test.sh
       # The maintenance login's script (deploy/quizbuks/server/create-maintenance-login.sh), offline.
       - run: tools/quizbuks/test/create-maintenance-login.test.sh
       # The local e2e run's script (tools/quizbuks/e2e.sh), offline: its environment is app.env's, as the e2e job reads it.
@@ -196,6 +198,20 @@ jobs:
           if grep -q 'Platform check failed' quizbuks-compose.log; then echo "platform check failed"; exit 1; fi
           for name in STRIPE_API_KEY STRIPE_WEBHOOK_SECRET STRIPE_CONNECT_WEBHOOK_SECRET; do
             grep -q "quizbuks: WARNING: $name is not set" quizbuks-compose.log || { echo "no warning for $name"; exit 1; }
+          done
+      # Known vulnerabilities of the deployed images (launch checklist "安全"): the application image just built and
+      # the database image with pgBackRest (deploy/quizbuks/backup). A report only, it never fails the job; the findings
+      # are assessed in docs/quizbuks/security/dependency-review.md.
+      - name: Image vulnerability report
+        run: |
+          docker build -q -t postgres-pgbackrest:16 -f deploy/quizbuks/backup/Dockerfile.postgres deploy/quizbuks/backup \
+            || echo "::warning::the database image did not build"
+          for image in quizbuks:local postgres-pgbackrest:16; do
+            echo "::group::$image"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.0 image \
+              --scanners vuln --severity HIGH,CRITICAL --exit-code 0 --no-progress "$image" \
+              || echo "::warning::the vulnerability report of $image did not run"
+            echo "::endgroup::"
           done
       - if: failure()
         run: $COMPOSE logs app

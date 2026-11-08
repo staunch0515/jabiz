@@ -187,10 +187,13 @@ jobs:
       - run: tools/test/ci-backend-scope.test.sh
       # The alert rules rendered with a deployment's settings (docker/grafana/alerting, 13 section 7).
       - run: tools/test/alert-render.test.sh
+      # The test-fire script: made-up data for every platform rule, an application's rules (ALERT_FAKES), offline.
+      - run: tools/test/alert-fire.test.sh
       # The wiki's publishing scripts (docs/guide/wiki.md), tested on every branch like the script above.
       - run: node --test tools/wiki/*.test.mjs && tools/test/wiki-publish.test.sh
       # The read-only check of production settings (docs/guide/platform-operations.md section 1).
       - run: tools/test/env-check.test.sh
+      - run: tools/test/restore-drill.test.sh
       - name: Application paths and version line
         env:
           # HEAD is detached in CI; the script needs the branch's name for the line check.
@@ -201,6 +204,35 @@ jobs:
             git fetch --no-tags origin "+refs/heads/$base:refs/remotes/origin/$base"
           fi
           tools/check-app-paths.sh
+
+  # Migrations stay in order (17zz8): every Flyway migration a pull request adds or renames comes after the highest one
+  # of its sequence on the target branch's latest commit, and no version occurs twice (tools/check-migration-order.sh;
+  # 2026-11-08 a V80 merged after a V81 failed its deployment). The platform's sequences are the script's own; an
+  # application branch adds its own in .jabiz-migration-sequences (one directory regex per line, # comments). Drafts too.
+  migration-order:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: tools/test/check-migration-order.test.sh
+      - name: Migration order against the target branch
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        # HEAD is the pull request merged into the target branch's latest commit (GitHub's merge ref).
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          sequences=(backend/runtime/src/main/resources/db/jabiz backend/app/src/main/resources/db/migration
+            backend/app/src/test/resources/db/testmigration)
+          if [ -f .jabiz-migration-sequences ]; then
+            while IFS= read -r line; do
+              line=${line%%#*}; line=${line#"${line%%[![:space:]]*}"}; line=${line%"${line##*[![:space:]]}"}
+              [ -n "$line" ] && sequences+=("$line")
+            done < .jabiz-migration-sequences
+          fi
+          tools/check-migration-order.sh "origin/$BASE_REF" HEAD "${sequences[@]}"
 
   # End-to-end: the packaged application (API + frontend in one jar) against PostgreSQL, driven by Playwright.
   # The two slow jobs below start only after the fast ones pass (so not on an application branch), and not on draft pull

@@ -103,11 +103,15 @@ function hasContent(m: Material): boolean {
 }
 
 /**
- * The video a taker learns from before answering (Q63), as the card's (`PublicationEditing.cardVideo`): the one watching
- * which is enough to answer, else the first video the App plays; with its player.
+ * The video leading the start page (Q63), as the card's (`PublicationEditing.cardVideo`): the one watching which is
+ * enough to answer, else the first video the App plays; with its player. F-S12: `cardVideo` is the card's player; when
+ * it is none of the materials' it is the shared video the publication picked (no material: `material` is null), which
+ * leads the page as it played on the card (Q65: the home's player carries on here).
  */
-export function leadVideo(materials: Material[]): { material: Material; player: string } | null {
+export function leadVideo(materials: Material[], cardVideo: string | null = null):
+  { material: Material | null; player: string } | null {
   const playerOf = (m: Material) => (m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
+  if (cardVideo && !materials.some((m) => playerOf(m) === cardVideo)) return { material: null, player: cardVideo }
   // F-S15: a page of another site (which may refuse to be framed) only when there is nothing else, as on the card.
   const material = materials.find((m) => m.watchToAnswer && trackable(playerOf(m)))
     ?? materials.find((m) => playerOf(m) && videoKind(playerOf(m)) !== 'page') ?? materials.find((m) => playerOf(m))

@@ -79,6 +79,7 @@ import TransfersPage from './TransfersPage'
 import UserSummaryPage from './UserSummaryPage'
 import UsersPage from './UsersPage'
 import OperatorHomePage from './OperatorHomePage'
+import HomePage from './HomePage'
 import OperatorPage from './OperatorPage'
 import OperatorReviewsPage from './OperatorReviewsPage'
 import OperatorsPage from './OperatorsPage'
@@ -104,7 +105,11 @@ import OperatorWithdrawalsPage from './OperatorWithdrawalsPage'
 export default defineExtension({
   // Q55b: the brand profile's name, mark and icon in place of the platform's.
   brand: BRAND,
+  // F-S1b: where a session lands: the operator's home in the Operator Management System, the operators' structure
+  // and workload in the platform's.
+  home: PATH.home,
   routes: [
+    { path: PATH.home, element: <HomePage /> },
     { path: PATH.reviews, element: <ReviewsPage /> },
     { path: '/qb/reviews/publications/:publicationId', element: <PublicationReviewPage /> },
     { path: '/qb/reviews/sponsors/:userId', element: <SponsorReviewPage /> },
@@ -260,6 +265,7 @@ export default defineExtension({
       key: 'quizbuks-platform',
       label: 'menu.platformGroup',
       children: [
+        { key: 'qb-home', label: 'menu.home', path: PATH.home, icon: House, permission: PERMISSION.operatorsRead },
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         // F-S9: the word list of topics, kept by headquarters, with its figures by topic.
         { key: 'qb-topics', label: 'menu.topics', path: PATH.topics, icon: Tag, permission: PERMISSION.topicRead },

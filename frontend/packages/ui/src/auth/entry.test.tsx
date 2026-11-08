@@ -278,7 +278,7 @@ describe('SignInForm in the template', () => {
       expect(screen.getByRole('group', { name: 'Other ways to sign in' })).toBe(first)
       // The mailed link is there in English too, behind a button among the other ways.
       expect(screen.queryByTestId('email-link-form')).toBeNull()
-      const open = screen.getByTestId('login-email-link-open')
+      const open = await screen.findByTestId('login-email-link-open')
       expect(first.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       await user().click(open)
       expect(screen.getByTestId('email-link-form')).toBeInTheDocument()

@@ -42,9 +42,12 @@ class QbRolesTest {
                 // F-S11 (the requester, 2026-11-07): the exceptions for foreign videos of its own sponsors (the entry
                 // scope limits them), not the platform-wide refusal counts or the address database's check.
                 QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE,
+                // F-S2: its copies of the platform's knowledge graphs, reviewing them and its sponsors' graphs.
+                QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE,
                 // F-S12: its own sponsors' shared videos and taking them down (reviewing is REVIEW_PUBLICATION's).
                 QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE)
-            .doesNotContain(QbPermissions.SHARED_VIDEO_SYSTEM, QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
+            .doesNotContain(QbPermissions.SHARED_VIDEO_SYSTEM, QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.TREE_PLATFORM_WRITE,
+                QbPermissions.TREES_READ, QbPermissions.TREE_SYSTEM, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
                 QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN,
@@ -63,9 +66,11 @@ class QbRolesTest {
                 QbPermissions.ADMIN_PROSPECT, QbPermissions.AUDIENCE_RULES_WRITE,
                 // F-S11: every sponsor's exceptions for foreign videos, the refusal counts and the address database.
                 QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR,
+                // F-S2: the platform's knowledge graph templates; never the operators' review of Sponsors' graphs.
+                QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ,
                 // F-S12: every provider's shared videos and the platform's emergency takedown.
                 QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE)
-            .doesNotContain(QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
+            .doesNotContain(QbPermissions.REVIEW_TREE, QbPermissions.TREE_SYSTEM, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 QbPermissions.PROSPECT_USE, QbPermissions.CERTIFICATION_MANAGE)
             .doesNotHaveDuplicates();

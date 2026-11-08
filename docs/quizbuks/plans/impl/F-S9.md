@@ -39,7 +39,7 @@
 | `identity.SponsorErasure` | 设置的抹除遮蔽 `likedTopics`（设置行本来就随账户删除） |
 | `setup.QbParams` | `qb.topic.max-per-quiz`（10）、`qb.topic.custom-max-length`（30），不受控，加在最后 |
 | `QbPermissions` / `QbRoles` | `qb.admin.topic.read` / `.write`，给内容管理员（超级管理员经内容管理员的列表也有）；运营商没有 |
-| 迁移 `V84__quizbuks_topics.sql`（临时编号：V80–V83 被其他分支占用；合并前按 `1.3/quizbuks` 的最大号 + 1 重编） | 新表 `qb_topic`；只追加表 `qb_quiz_version`、`qb_quiz_version_version`、`qb_publication_version` 只加列；卡片与 `qb_user_settings` 加列 |
+| 迁移 `V87__quizbuks_topics.sql`（F-S10 的 V85、F-S2a 的 V86 之后） | 新表 `qb_topic`；只追加表 `qb_quiz_version`、`qb_quiz_version_version`、`qb_publication_version` 只加列；卡片与 `qb_user_settings` 加列 |
 | 模板 | `qb.app.feed`：读本人的设置（`me:QbUserSettings`）与词表，严格模式的条件；`qb.app.topics`（`qb.play`）、`qb.sponsor.topics`（`qb.content.write`）：词表；`qb.admin.topics`（`qb.admin.topic.read`）：词表与统计；`qb.sponsor.quiz-versions` 多返回版本的主题词 |
 | 消息 | 三语：错误码、实体与字段、流程、参数、模板的列 |
 | App | 账户"关于我"的"喜欢的主题"一节（`pages/LikedTopics.tsx`：词表中可选的词按界面语言、勾选即保存；以前选过、已不再提供的照常列出；严格模式开关与说明）；首页在严格模式时提示"只显示你喜欢的主题"并链接到设置；首页与短视频的查询键含设置；共用的 `qb/topics.ts`（两个 SPA 一致）与 `qb/api.ts` 的设置 |
@@ -62,6 +62,7 @@
 - `TakerErasureIT.anErasedTakersLikedTopicsGo`：删除账号后设置行没有了，审计中看不到喜欢的主题，别人的照旧。
 - `SetupIT` 的参数表、场景 `setup` 的 `paramsCreated`；场景快照按 `-Dscenario.update-snapshots=true` 更新并核对差异。
 - 前端：App `qb/topics.test.ts`（与发起方页面相同）、`pages/topics.test.tsx`（可选的词、勾选即保存、严格模式需要喜欢的主题、已不再提供的词、关掉、"关于我"中的一节、首页提示、axe 亮暗）；发起方页面 `topics/topics.test.tsx`（Quiz 的主题词按界面语言、修改即保存与修订号、只能选可选的词、上限、发布的继承与增删 `effectiveTopics`、axe 亮暗）；管理系统扩展 `topics.test.tsx`（列表、三语、状态、发布数、少于 k、流程页链接、只读、axe）。
+- 端到端 `quizbuks-web/e2e/tests/topics.spec.ts`：总部在"主题词"页经平台的流程页新增两个词（列表中三语名称与状态）；发起方在 Quiz 编辑页选词表中的词与自定义词并保存版本，在发布向导第一步看到版本的词、加另一个词表中的词，提交、审核通过上线；另有没有主题词、只有自定义词（与喜欢的词同名）的两个发布；学者在"账户 → 关于我"勾选喜欢的主题、打开严格模式，首页只列有交集的那一个、显示提示与"修改"链接，关掉后三个都在；新页面状态亮暗都过 axe。测试的内容管理员角色 `QB_E2E_CONTENT`（`tests/legal.ts`）加上 `qb.admin.topic.read` / `.write`；词的代码随时间递减，使每次运行的新词排在最前（列表按代码排序，App 与发起方页面至多读 500 个）。
 
 ## 5. 运维与部署
 

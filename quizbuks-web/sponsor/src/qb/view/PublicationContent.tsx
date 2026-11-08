@@ -167,10 +167,11 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   const prize = p.rewardMethod === 'OFFLINE_REDEEM' || p.rewardMethod === 'DIGITAL_PRIZE'
   const prizeText = p.rewardMethod === 'OFFLINE_REDEEM' ? p.redeemDescription
     : p.rewardMethod === 'DIGITAL_PRIZE' ? p.digitalDescription : null
-  const found = leadVideo(p.materials)
+  const found = leadVideo(p.materials, p.video ?? null)
   // F-S15: a video file that failed to play does not lead the page: the cover does, the file stays in the materials.
   const leadFailed = useVideoFailed(found?.player)
   const lead = leadFailed ? null : found
+  const leadTitle = lead?.material?.title ?? t('feed.videoTitle', { name: p.name })
   const reward = (
     <span className="bg-primary text-primary-foreground inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold shadow-sm">
       {rewardOnly ? <Trophy aria-hidden className="size-3.5" /> : <Award aria-hidden className="size-3.5" />}
@@ -196,9 +197,8 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
         // Q63: a video to learn from before answering leads the page and starts (muted) as it opens; the name, the
         // sponsor and what passing earns follow it.
         <header className="-mx-4 flex flex-col gap-3 sm:mx-0" data-testid="detail-hero" data-video>
-          {video ? video(lead.player, lead.material.title ?? t('feed.videoTitle', { name: p.name }))
-            : <VideoPlayer player={lead.player} autoplay={autoplay}
-              title={lead.material.title ?? t('feed.videoTitle', { name: p.name })}
+          {video ? video(lead.player, leadTitle)
+            : <VideoPlayer player={lead.player} autoplay={autoplay} title={leadTitle}
               className="bg-muted aspect-video w-full overflow-hidden sm:border" />}
           <div className="flex flex-col gap-1 px-4 sm:px-0">
             <div className="flex items-start justify-between gap-2">
@@ -255,7 +255,7 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
           {t('detail.invitedOnly')}
         </p>
       )}
-      <Materials materials={p.materials} exclude={lead?.material.no} />
+      <Materials materials={p.materials} exclude={lead?.material?.no} />
       {p.intro && (
         // Q65: the introduction without a card of its own, its first lines and the rest on demand.
         <section aria-label={t('detail.intro')} className="px-0.5 text-sm" data-testid="detail-intro">

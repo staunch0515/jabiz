@@ -48,10 +48,25 @@ QuizBuks 是**一个镜像、一个服务**（`<APP_NAME>-app`，容器内端口
 
 - **Require a pull request before merging**（直接推送只留给计划文档这类不跑代码的改动时也可不勾，但下面的检查照样要）。
 - **Require status checks to pass before merging**，勾上 **Require branches to be up to date**，检查选这些作业（名字取自 workflow）：
-  平台 `ci.yml` 的 `scope`、`build-application`、`app-paths`、`e2e`；QuizBuks `quizbuks.yml` 的 `web`、`package`、`e2e`、`local-demo`（`e2e` 是两个分片的汇总，分片名带 `(1/2)`，不用选）。
+  平台 `ci.yml` 的 `scope`、`build-application`、`app-paths`、`migration-order`、`e2e`；QuizBuks `quizbuks.yml` 的 `web`、`package`、`e2e`、`local-demo`（`e2e` 是两个分片的汇总，分片名带 `(1/2)`，不用选）。
 - `1.3/quizbuks-release` 只由 `1.3/quizbuks` 合并进来（上文第 3 步），同样勾 Require status checks。
 
 红的不合：CI 失败的 PR 先修到绿再合（修法与本机复现：`README.md` "本机 e2e"）。这些设置改不动 workflow，只在 GitHub 的仓库设置里。
+
+**迁移的顺序**（2026-11-08，一个 PR 的 V80 在另一个 PR 的 V81 之后合入，staging 部署失败并回滚）：Flyway 不执行比已应用的最新版本更旧的迁移。
+CI 的 `migration-order`（平台 `ci.yml` 中的作业，脚本 `tools/check-migration-order.sh`，平台 17zz8）检查 PR 新增或改名的 `backend/quizbuks*/…/db/migration/V<n>__*.sql`
+（QuizBuks 各模块共用一条序列，写在 `.jabiz-migration-sequences` 中；平台自己的序列同样检查）都大于 `1.3/quizbuks` **当时最新提交**上的最大号、且没有重号，不满足即失败并写明"基线已到 V<m>，请改为 V<m+1>"。
+但它只在 CI 跑的那一刻看基线：之后别的 PR 带着更大的号先合入，这个 PR 的检查仍是绿的。所以**合并带迁移的 PR 之前**再看一次基线的最大号：
+
+```sh
+git fetch origin 1.3/quizbuks
+git ls-tree -r --name-only origin/1.3/quizbuks -- backend | grep -E '^backend/quizbuks[^/]*/src/main/resources/db/migration/V[0-9]+__' \
+  | sed -E 's#.*/V([0-9]+)__.*#\1#' | sort -n | tail -1      # 基线的最大号
+tools/check-migration-order.sh origin/1.3/quizbuks origin/<PR 的分支> 'backend/quizbuks[^/]*/src/main/resources/db/migration'   # 或直接再跑一次检查
+```
+
+PR 的号不大于它，就先让 PR 把 `1.3/quizbuks` 合进来并改号，等 CI 再绿再合。勾了 **Require branches to be up to date** 时 GitHub 会要求先更新分支，
+更新即重跑检查，也能防住这一点。平台的迁移（`db/jabiz`）是另一条序列，同一检查各自核对。
 
 ## 首次部署前（在服务器上，每个环境各做一次）
 
@@ -145,7 +160,8 @@ SPRING_MAIL_PASSWORD=<SMTP 密码>
 # 用 Gmail（quizbuks@gmail.com，Q41）发信时：JABIZ_MAIL_FROM=quizbuks@gmail.com、SPRING_MAIL_HOST=smtp.gmail.com、
 # SPRING_MAIL_PORT=587、SPRING_MAIL_USERNAME=quizbuks@gmail.com、SPRING_MAIL_PASSWORD=<该账号的应用专用密码>（须先开启两步验证）。
 # 发件人必须就是登录的 Gmail 账号，否则被当作冒充；个人 Gmail 每天约 500 封的上限，注册一多就要换成自有域名的发信服务。
-# 587 端口要先 STARTTLS 才能认证（服务商只给 465 时改为 SPRING_MAIL_PORT=465 与 …_SMTP_SSL_ENABLE=true）
+# 587 端口要先 STARTTLS 才能认证（服务商只给 465 时改为 SPRING_MAIL_PORT=465 与 …_SMTP_SSL_ENABLE=true，且不写下面两行 STARTTLS）。
+# 用 Cloudflare Email Sending 发信、或服务器在 Hetzner 上：先看下文"2b. 发信的服务器"。部署前的检查拒绝互相矛盾的设置与重复的行。
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true
 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED=true
@@ -218,6 +234,58 @@ production 与 staging 各跑一个（各限 2g 内存，总控 2026-11-07 定�
 - **上线前的设置检查**（`docs/quizbuks/launch-checklist.md`"安全"）：把 `tools/ops/env-check.sh` 与 `deploy/quizbuks/server/env-check.rules` 复制到服务器
   （`.env` 不离开服务器），`bash env-check.sh /opt/apps/quizbuks/.env env-check.rules`，只输出变量名。
 - 数据库主机（WAL 归档、备份、数据库所在磁盘）的告警由数据库托管方或主机监控提供，不在这里。
+
+### 2b. 发信的服务器（2026-11-08 staging 的邮件故障之后）
+
+**两种端口，设置不同**（写错时连不上或认证失败，邮件一直不到，见 `docs/quizbuks/troubleshooting.md` T15）：
+
+| 端口 | 加密 | `.env` |
+|---|---|---|
+| 587 | 先明文连接再 STARTTLS | `SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=true`、`…_STARTTLS_REQUIRED=true`，**不写** `…_SSL_ENABLE` |
+| 465 | 一连上就是 TLS | `SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true`，**不写** STARTTLS 的两行 |
+
+部署前的检查（`server/check-env.sh`）拒绝：465 而没有开 SSL 或要求 STARTTLS、587 而开了 SSL、同一个变量写了两行（compose 取最后一行，改的往往不是生效的那一行）。
+
+**服务器在 Hetzner Cloud 上**：Hetzner 缺省封锁出站的 25 与 465 端口（587 可用）。先在服务器上测一下能不能连上（只测连接，不发信）：
+
+```bash
+timeout 10 bash -c '</dev/tcp/smtp.mx.cloudflare.net/465' && echo 465 可以连接 || echo 465 连不上
+timeout 10 bash -c '</dev/tcp/<发信服务商的主机>/587' && echo 587 可以连接 || echo 587 连不上
+```
+
+465 连不上时：在 Hetzner Console 提交解封出站 465 的申请（新项目通常要先付过一次账单），或改用支持 587 的发信服务。
+
+**用 Cloudflare Email Sending 发信**（beta，文档 https://developers.cloudflare.com/email-service/api/send-emails/smtp/ ）：
+
+1. Cloudflare 控制台 → Email Sending：登记发信的域名（如 `mail-staging.quizbuks.com`；production 另登记自己的），按提示设好 SPF、DKIM、DMARC。
+2. 建一个 API 令牌，权限 **Email Sending: Edit**（只给这一项）。
+3. 在服务器上测 465（上面的命令），Hetzner 上先解封。
+4. `.env` 中邮件的几行（删掉旧的同名行，每个变量只留一行）：
+
+   ```bash
+   JABIZ_MAIL_ENABLED=true
+   JABIZ_MAIL_FROM=noreply@mail-staging.quizbuks.com     # 必须是第 1 步登记的域名；不能是 gmail.com
+   SPRING_MAIL_HOST=smtp.mx.cloudflare.net
+   SPRING_MAIL_PORT=465                                  # 只有 465（隐式 TLS），没有 587
+   SPRING_MAIL_USERNAME=api_token                        # 就是这几个字，不是账号名
+   SPRING_MAIL_PASSWORD='<第 2 步的 API 令牌>'
+   SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true
+   SPRING_MAIL_PROPERTIES_MAIL_SMTP_SSL_ENABLE=true
+   # 不写 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE / _REQUIRED
+   ```
+
+5. 让应用读到新的 `.env`（**不要**用 `docker restart` 或 `docker compose restart`：它们不重新读 `.env`）。compose 要求 `IMAGE_TAG`（部署时由 `deploy-app.sh` 给出），手动重建时用正在运行的那个标签：
+
+   ```bash
+   APP=quizbuks-staging          # production 为 quizbuks
+   cd /opt/apps/$APP
+   IMAGE_TAG=$(docker inspect --format '{{.Config.Image}}' $APP-app | cut -d: -f2) docker compose up -d app
+   ```
+
+   或者用部署脚本重新部署当前的版本：`/opt/infra/scripts/deploy-app.sh $APP <当前的 40 位 SHA>`（同上一条命令中 `cut` 得到的值；它等待健康、失败时回滚），也可以在 GitHub 上重新运行部署。
+6. 核对：平台管理系统中对自己的邮箱发一封测试邮件（"邮件模版"页的测试发送），或注册一个测试账号看验证邮件；没有收到时看 T15 的查询。
+7. Grafana 的告警邮件（"2a"）也可以经同一个服务：`GF_SMTP_HOST=smtp.mx.cloudflare.net:465`、`GF_SMTP_USER=api_token`、`GF_SMTP_PASSWORD=<令牌>`、`GF_SMTP_FROM_ADDRESS=<登记域名的地址>`。
+   但告警邮件与应用的邮件走同一条路时，这条路断了告警也发不出去：上线后 Grafana 最好用另一个服务（或另一个端口），并以 `alert-fire-test.sh notify` 试过。
 
 ### 3. DNS
 
@@ -313,7 +381,8 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
 
 1. 以 `admin` 登录 `https://<本环境的域名>/admin/`，在右上角用户名 →"安全设置"中开启两步验证。
 2. 在"流程"中执行 `QB_SETUP`，再按 `docs/quizbuks/operations.md` §3 建财务管理员并由其发布 `QB_SETUP` 的提案（发布之前充值、入驻与提交发布一律被拒）。
-3. 从 `.env` 删去 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，加上 `QB_BOOTSTRAP_ADMIN_DONE=true`（入口脚本在两者都没有时拒绝启动），
+3. 从 `.env` 删去 `JABIZ_BOOTSTRAP_ADMIN_USER` 与 `JABIZ_BOOTSTRAP_ADMIN_PASSWORD`，加上 `QB_BOOTSTRAP_ADMIN_DONE=true`（入口脚本在密码与这一行都没有时拒绝启动；
+   上线前的设置检查 `env-check.sh` 对留下的任何一个都报错），
    再以下文"回滚"的方式重新部署当前的 SHA（Run workflow，`image-tag` 填当前的 SHA，即 `docker inspect <APP_NAME>-app -f '{{.Config.Image}}'` 中冒号后的部分），
    经 `deploy-app.sh` 等待健康并在失败时回滚。
 
@@ -429,6 +498,23 @@ Run workflow，分支选该环境的分支，`image-tag` 留空。第一次启�
     workflow 的登录只在它自己的临时 Docker 配置中，部署后即删除，不影响服务器上其他应用的登录。
   - **数据库迁移不随回滚撤销**：Flyway 只向前。回滚到更早的版本前确认其间没有新迁移（`backend/quizbuks/src/main/resources/db/migration` 与平台的 `db/jabiz`）：
     旧版本不认识新迁移改过的表结构，有新迁移时应修复后向前部署，而不是回滚。
+
+## 旧镜像的清理
+
+（F-F13，T8：以前每次部署都拉一个新镜像而从不删除，2026-11-05 staging 的磁盘因此用满，健康检查和回滚都失败了。）
+
+- **自动**：部署成功后，工作流在同一个 SSH 会话中运行 `deploy/quizbuks/server/prune-images.sh`（随检查 `.env` 那一步上传到 `/opt/apps/<APP_NAME>/deploy-check/`）：
+  1. 把部署的标签追加到 `/opt/apps/<APP_NAME>/deployed-images`（本环境的部署历史，只留最后 200 行）；
+  2. 保留：`/opt/apps` 下每个有部署历史的环境最近部署过的 N 个不同标签，N 是该环境 `.env` 中的 `QB_DEPLOY_KEEP_IMAGES`（缺省 3，至少 2：正在运行的与一个可回滚的）；
+     以及任何容器（运行中或已停止）正在用的镜像。staging 与 production 在同一台服务器、同一个镜像仓库，各自保留，互不删除；
+  3. 删除本仓库（`ghcr.io/<仓库>-quizbuks`）的其余镜像，不强制（容器在用的 Docker 本身就拒绝删除）。其他仓库的镜像（数据库镜像、服务器上的其他应用）从不碰。
+- **改保留数**：在环境的 `.env` 中设 `QB_DEPLOY_KEEP_IMAGES=<数>`，下次部署生效。值不是不小于 2 的整数时，部署前的检查（`required-env`）即拒绝，不会部署。
+- **被删的镜像仍在仓库中**：回滚到它时（Run workflow 填 `image-tag`，或服务器上的 `deploy-app.sh`）会重新拉取，只是多花拉取的时间。
+- **失败不影响部署**：部署已经成功，清理失败（Docker 不可用、历史文件不可写等）只在部署日志中写一行 `prune-images: … nothing deleted`，作业仍然成功；
+  日志中每次都有 `prune-images: deleted <n> image(s) …; kept tags: …`。早于本功能的提交（回滚到它）不清理。
+- **第一次清理**：功能上线后的第一次部署时，另一个环境还没有部署历史，它不在运行的旧镜像会被删掉（运行中的保留，回滚时重新拉取）。
+- **核对**（部署之后）：在服务器上 `docker image ls ghcr.io/<仓库>-quizbuks`，每个环境不超过 N 个，加上容器在用的；`df -h /` 与 `docker system df` 看占用。
+- **磁盘告警**：见 `operations.md` §5"应用的磁盘"。只有本环境的 LGTM 在运行时才有（正式环境必须开，staging 可选）。
 
 ## 维护模式
 
@@ -717,9 +803,12 @@ docker volume create drill-files
 docker run --rm --env-file /opt/infra/backup/backup.env -v drill-files:/restore restic/restic:0.17.3 \
   restore latest --host quizbuks-files --target /restore
 
-# 4) 以核对模式启动应用并写演练记录（operations.md §2.4 的设置；DRILL_ENV_FILE 指向 drill-db 与 drill-files）
+# 4) 以核对模式启动应用并写演练记录（operations.md §2.4 的设置；DRILL_ENV_FILE 指向 drill-db 与 drill-files）：
+#    QuizBuks 的三个核对模板；上线前的那一次与每次换密钥之前加 DRILL_ROTATE=true（上线清单"运维"要求）
 DRILL_TARGET_TIME=2026-12-01T12:00:00Z DRILL_IMAGE=ghcr.io/staunch0515/jabiz-quizbuks:<生产的版本> \
-DRILL_ENV_FILE=drill.env DRILL_DOCKER_ARGS="--network drill-net -v drill-files:/var/lib/jabiz/files" tools/ops/restore-drill.sh
+DRILL_ENV_FILE=drill.env DRILL_DOCKER_ARGS="--network drill-net -v drill-files:/var/lib/jabiz/files" \
+DRILL_TEMPLATES=qb.admin.verify-unbalanced-periods,qb.admin.verify-overdrawn-wallets,qb.system.recon-totals \
+DRILL_ROTATE=true tools/ops/restore-drill.sh
 
 # 5) 收拾
 docker rm -f drill-db && docker volume rm drill-pgdata drill-files && docker network rm drill-net
@@ -727,6 +816,7 @@ docker rm -f drill-db && docker volume rm drill-pgdata drill-files && docker net
 
 要知道的：
 
+- 第 1 步与第 4 步各写一份记录：第 1 步的记录有恢复用时，第 4 步的有核对用时（它写"Restore: not timed here"），RTO 是两者之和；**两份都**附在上线清单的"备份已测试"一项。
 - 恢复出的库是**整个集群**（staging 等其他库也在里面），只用其中的 `quizbuks`。
 - 从 repo2（月末全量）恢复用 `DRILL_PGBACKREST_REPO=2`，T 取该月末之后不久的时刻。
 - 2026-11-07 在测试环境以 S3 替身演练：全量 171 MB 用 34 秒，恢复并启动到可用约 16 秒（数据量小）；生产的数字以首次演练为准。
