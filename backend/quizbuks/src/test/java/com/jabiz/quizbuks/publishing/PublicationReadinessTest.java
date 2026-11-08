@@ -234,4 +234,25 @@ class PublicationReadinessTest {
         assertThat(PublicationReadiness.pickProblems(null, quiz())).isEmpty();
         assertThat(PublicationReadiness.pickProblems(1, null)).isEmpty();
     }
+
+    /** F-S6: a version larger than one attempt holds must be drawn from, and no pick is larger than one attempt. */
+    @Test
+    void aBankLargerThanOneAttemptMustBeDrawnFrom() {
+        int most = com.jabiz.quizbuks.play.PlayLimits.MAX_PER_ATTEMPT_TECH;
+        List<QuizSnapshot.Question> questions = new java.util.ArrayList<>();
+        for (int q = 1; q <= most + 50; q++) {
+            questions.add(new QuizSnapshot.Question(q, "Q" + q + "?", null, 1, List.of(
+                new QuizSnapshot.Option(1, "Yes", null, true), new QuizSnapshot.Option(2, "No", null, false))));
+        }
+        QuizSnapshot bank = new QuizSnapshot("Bank", null, null, 300, false, List.of(), questions);
+        assertThat(PublicationReadiness.pickProblems(null, bank)).extracting(Violation::ruleCode)
+            .containsExactly(PublishingCodes.PICK_REQUIRED);
+        assertThat(PublicationReadiness.pickProblems(most + 1, bank)).extracting(Violation::ruleCode)
+            .containsExactly(PublishingCodes.PICK_TOO_MANY);
+        assertThat(PublicationReadiness.pickProblems(most, bank)).isEmpty();
+        assertThat(PublicationReadiness.pickProblems(most + 50, bank)).extracting(Violation::ruleCode)
+            .containsExactly(PublishingCodes.PICK_RANGE);
+        // Up to one attempt's worth, asking all of them stays possible.
+        assertThat(PublicationReadiness.pickProblems(null, equalPoints())).isEmpty();
+    }
 }

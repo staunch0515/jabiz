@@ -1,7 +1,7 @@
 # F-S6 题库：千题、分页、搜索、分批导入（实施计划）
 
 规格：`first-launch-spec.md` 的 F-S6（与 F-S7 一起交付）。负责：S1（总控 2026-11-08 由 S2 改派）。
-分两个 PR：**F-S6a 后端**、**F-S6b 编辑器**；F-S7 另见 `F-S7.md`。删除的功能：无（排序由"提交全部题号"改为"移动一题"，旧接口保留到前端不再使用后照旧可用，见 §3.3）。
+分三个 PR：**F-S6a1 上限与容量**（§1、§2、每次答题的硬上限）、**F-S6a2 编辑与导入的后端**（§3.1–§3.4）、**F-S6b 编辑器**（§3.5）；F-S7 另见 `F-S7.md`。删除的功能：无（排序由"提交全部题号"改为"移动一题"，旧接口保留到前端不再使用后照旧可用，见 §3.3）。
 
 ## 0. 现状（2026-11-08 调查）
 
@@ -29,6 +29,15 @@
 | `ContentLimits.MAX_QUESTIONS_TECH` | 常数 | 2000 | 技术上限：`@Size`、列宽、数据视图批量；参数不能超过它（启动检查与 `QB_SETUP`） |
 | `PlayLimits.MAX_PER_ATTEMPT_TECH` | 常数 | 200 | 答题列宽：`answers`、`result`、`question_set`、`option_order` |
 
+- **实施（F-S6a1）**：
+  - 常数改名为 `ContentLimits.MAX_QUESTIONS_TECH`，改名迫使每个用处都重新判断。
+  - 业务判断经 `content.QuizBankLimits`：以 `LoadParams.optional` 读这三个参数；还没有建立的参数（部署后尚未重跑 `QB_SETUP`）按声明的缺省值；不超过技术上限（取较小者，不另设启动检查）。
+  - 加题（`QB_QUESTION_SAVE`）、AI 接受（`QB_AI_ACCEPT`）、导入新 Quiz（`QB_QUIZ_IMPORT_CHECK` / `QB_QUIZ_IMPORT`，`QuizFileChecks.check(file, 上限)`）按 `qb.content.max-questions`。
+  - **每次答题**：F-S6a1 只按技术上限 200 判断：
+    - 版本超过它而不抽题：`PICK_REQUIRED`；
+    - 抽题数超过它：`PICK_TOO_MANY`；
+    - 切换到超过它的版本而不抽题：`PICK_REQUIRED`。
+    按参数 `qb.play.max-questions-per-attempt` 判断（发布的保存、提交、切换要读参数）随 F-S7 一起做：那几个流程正被 S2 的 F-S2c2 改动，等它合入后再动。
 - 代码中不再以 `MAX_QUESTIONS` 判断业务上限。流程以 `LoadParams` 读参数，模板以 `now:SysParam` 读同一个值，照 F-C11 的商品上限的写法。
 - 参数调低后，已有的大题库照常读取、修改、删除，只是不能再加题（`TOO_MANY_QUESTIONS` 带上限）。
 - 列宽：迁移 V(N)：
@@ -42,7 +51,7 @@
 
 ## 2. 版本与快照（F-S6a）
 
-- **版本文件的登记分批**：`QB_QUIZ_PUBLISH_VERSION` 把版本文件按 `RELEASE_CHUNK` 分段写入，用的就是 `Chunks.of`，数据视图的批量照此。`MAX_FILES_PER_VERSION` 按技术上限重算，只作说明。
+- **版本文件的登记**：数据视图的写入上限是按提交算的，在同一个事务中分段写入不起作用。所以把版本文件数据视图的上限改为 `MAX_FILES_PER_VERSION`（按技术上限重算：一个版本最多用到的文件数），版本照旧在它的一次提交中登记全部文件；删除时照旧按 `RELEASE_CHUNK` 分段释放。实际的题库多半只有少量图片。
 - **快照大小**：1000 题 × 6 个选项 × 三语约 1–2 MB，在 `MAX_SNAPSHOT_BYTES`（6 MB）之内。新加测试 `LargeBankIT`：
   - 生成千题题库并保存版本；
   - 计时开始与提交，结果写进测试报告 `docs/quizbuks/perf/F-S6-large-bank.md`。
@@ -68,9 +77,9 @@
   - Quiz 列表（发起方的 Quiz 页、首页的 `q`）：加上 Quiz 的主题词（词表名称的三语）与自定义词。这也接上了 F-S9 留下的"自定义词的搜索等 F-S6"。
   - 若需求方要的是"每道题有自己的主题词"，那是新的数据，另议。这一理解在 PR 描述中写明，请总控转需求方确认。
 
-### 3.3 写入不再读全部题目
+### 3.3 移动一题与批量操作
 
-- `QB_QUESTION_SAVE` / `_DELETE` 只读该题与题数。新题的 `seq` 用 `max(seq)+1`，一条查询；题数取自 `QbQuiz.questionCount`。
+- `QB_QUESTION_SAVE` / `_DELETE` 照旧读本 Quiz 的全部题目：一条语句，语句数不随题数增长；千题时多读的行在实测中可以接受（`LargeBankIT`），所以不改写这两个流程，减少风险。
 - **移动一题** `QB_QUESTION_MOVE`：
   - 输入：`quizId`、`questionId`、`beforeQuestionId?`（null 表示移到末尾）、`baseRevision`；
   - 用 `Reorder.next` 在两邻居之间取 `seq`；没有空隙时重新编号该 Quiz 的全部题目，这是唯一一次全量写，按 `seq` 批量。
@@ -117,14 +126,24 @@
 
 ## 5. 迁移（开 PR 时取当时最大号 + 1）
 
-- **F-S6a**：
-  - `qb_attempt` 的列加宽；
+- **F-S6a1**：`qb_attempt` 的列加宽（参数由 `QB_SETUP` 建立，不在迁移中）。
+- **F-S6a2**：
   - `qb_question_version.import_id`；
-  - `qb_question_import` 表（只经流程写入，普通表）；
-  - 参数由 `QB_SETUP` 建立，不在迁移中。
+  - `qb_question_import` 表（只经流程写入，普通表）。
 - **F-S6b**：无。
 
-## 6. 测试清单（F-S6a）
+## 6. 测试清单（F-S6a1 / F-S6a2）
+
+- F-S6a1：
+  - `PlayLimitsTest`：列宽与迁移一致，最大的 `questionSet` 放得下；
+  - `PublicationReadinessTest`：`PICK_REQUIRED` / `PICK_TOO_MANY`；
+  - `ContentIT`：参数为 3 时第 4 题被拒，调低到 2 后已有的题照常修改与删除；
+  - `AiCostControlIT`：AI 接受按参数；
+  - `QuizFileTest`：导入的题数按上限；
+  - `ContentHealthIT`：每日核对；
+  - `LargeBankIT`：千题题库（6 个选项、三语）导入、保存版本、要求抽题、抽 100 题开始与提交，计时；
+  - `AttemptStatementBudgetIT` 不变。
+- F-S6a2 及以后：
 
 - `ContentLimitsTest` / `PlayLimitsTest`：常数与列宽一致，参数不能超过技术上限。
 - `ContentIT`：
