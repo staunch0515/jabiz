@@ -2,10 +2,6 @@ package com.jabiz.quizbuks.certification;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -15,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CertificationTemplatesTest {
 
     @Test
-    void theAppsTemplatesWriteTheCatalog() throws IOException {
+    void theAppsTemplatesWriteTheCatalog() {
         // Q88a (D-Q88-2): the sponsors' own certifications follow the catalog, under their keys sp:<id>.
         assertThat(Certifications.sqlValues())
             .isEqualTo("(SELECT * FROM (VALUES ('SPONSOR_APPLY', 1, 31536000), ('REFERRER', 1, 31536000), "
@@ -24,16 +20,7 @@ class CertificationTemplatesTest {
                 + "('BENEFIT_SPONSOR', 1, 31536000)) AS v(cert, ver, secs) UNION ALL SELECT 'sp:' || "
                 + "sc.{{QbSponsorCertification.certificationId}}, sc.{{QbSponsorCertification.certificationVersion}}, "
                 + "sc.{{QbSponsorCertification.validityDays}} * 86400 FROM {{QbSponsorCertification}} sc)");
-        // Q86: every template that tells whether somebody holds a certification writes the catalog.
-        for (String template : new String[] {"queries/qb/app/feed.sql", "queries/qb/app/publication.sql",
-"queries/qb/app/sponsor-tree.sql", "queries/qb/system/audience-count.sql",
-            "queries/qb/sponsor/tree.sql", "queries/qb/sponsor/tree-people.sql", "queries/qb/sponsor/tree-person.sql"}) {
-            // F-S2c: the benefit roles (qb.sponsor.benefit-access, -catalog) are unlocked by a lit node, not held.
-            try (InputStream in = getClass().getClassLoader().getResourceAsStream(template)) {
-                assertThat(in).as(template).isNotNull();
-                assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).as(template)
-                    .contains(Certifications.sqlValues());
-            }
-        }
+        // F-S2c2 (D4, D5): no template tells any more whether somebody holds a certification (the prerequisites and
+        // the Q85 tree are gone); the catalog itself goes with D1.
     }
 }

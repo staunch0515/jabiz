@@ -6,14 +6,12 @@ description: >-
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
-entities: [QbRegionException, QbPublicationCard, QbSponsorPage, QbSponsor, QbPublicationPrerequisite, QbSponsorCertification]
+entities: [QbRegionException, QbPublicationCard, QbSponsorPage, QbSponsor]
 datasets:
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:public:QbPublicationCard
   QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
   QbSponsor: urn:jabiz:dataset:public:QbSponsor
-  QbPublicationPrerequisite: urn:jabiz:dataset:public:QbPublicationPrerequisite
-  QbSponsorCertification: urn:jabiz:dataset:public:QbSponsorCertification
 params:
   handle: { like: QbSponsorPage.handle, required: true, description: The page's handle (lowercase) }
   mainlandChina: { kind: { type: bool }, description: "F-S11: whether the visitor's address is in mainland China, as GET /api/client/region said" }
@@ -30,7 +28,6 @@ results:
   pickCount:     { from: QbPublicationCard.pickCount }
   maxReward:     { from: QbPublicationCard.maxReward }
   rewardMethod:  { from: QbPublicationCard.rewardMethod }
-  prerequisites: { kind: { type: text } }
 list:
   key: [publicationId]
   sorts: [endAt]
@@ -38,8 +35,6 @@ list:
 ---*/
 -- Live public cards only (their dataset's fixed scope): who may start one is decided after signing in, as on the
 -- share page. The page shows only while its sponsor is approved, as qb.public.sponsor-page does.
--- Q76 (D-Q76-8): which of the listed publications each one requires first (both ends live and public: a required
--- publication that is not listed is not named), so the page draws the sponsor's levels.
 SELECT
     c.{{QbPublicationCard.publicationId}} AS publicationId,
     c.{{QbPublicationCard.name}}          AS name,
@@ -51,24 +46,7 @@ SELECT
     c.{{QbPublicationCard.questionCount}} AS questionCount,
     c.{{QbPublicationCard.pickCount}}     AS pickCount,
     c.{{QbPublicationCard.maxReward}}     AS maxReward,
-    c.{{QbPublicationCard.rewardMethod}}  AS rewardMethod,
-    (SELECT CAST(coalesce(jsonb_agg(jsonb_build_object(
-                'requiredPublicationId', pr.{{QbPublicationPrerequisite.requiredPublicationId}},
-                'certification', pr.{{QbPublicationPrerequisite.certification}},
-                -- Q88a: a sponsor's own certification is named by its row (the catalog's by the front ends' texts).
-                'certificationNames', psc.{{QbSponsorCertification.name}},
-                'requirement', pr.{{QbPublicationPrerequisite.requirement}})
-                ORDER BY pr.{{QbPublicationPrerequisite.requiredPublicationId}}), '[]') AS text)
-     FROM {{QbPublicationPrerequisite}} pr
-     LEFT JOIN {{QbSponsorCertification}} psc
-         ON 'sp:' || psc.{{QbSponsorCertification.certificationId}} = pr.{{QbPublicationPrerequisite.certification}}
-     -- Q86: a certification required is named as such (no publication to find); a required publication only when listed.
-     LEFT JOIN {{QbPublicationCard}} rc
-         ON rc.{{QbPublicationCard.publicationId}} = pr.{{QbPublicationPrerequisite.requiredPublicationId}}
-        AND rc.{{QbPublicationCard.publisherId}} = c.{{QbPublicationCard.publisherId}}
-     WHERE pr.{{QbPublicationPrerequisite.publicationId}} = c.{{QbPublicationCard.publicationId}}
-       AND (pr.{{QbPublicationPrerequisite.certification}} IS NOT NULL
-            OR rc.{{QbPublicationCard.publicationId}} IS NOT NULL)) AS prerequisites
+    c.{{QbPublicationCard.rewardMethod}}  AS rewardMethod
 FROM {{QbPublicationCard}} c
 JOIN {{QbSponsorPage}} p ON p.{{QbSponsorPage.userId}} = c.{{QbPublicationCard.publisherId}}
 JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = p.{{QbSponsorPage.userId}}

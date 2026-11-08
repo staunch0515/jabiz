@@ -104,8 +104,6 @@ const en = {
       operator: 'Operator Management System' },
     unknownDevice: 'Unknown device',
   },
-  /** Q76: what a prerequisite asks of the taker on the required publication. */
-  prerequisite: { PASSED: 'Pass', ANSWERED: 'Answer', passed: 'Passed', answered: 'Answered' },
   /** Q86: the certifications by key (the catalog), and a certification required first. */
   certification: {
     names: { SPONSOR_APPLY: `${BRAND.names.en} Sponsor Certification`, REFERRER: `${BRAND.names.en} Referrer Certification`,
@@ -253,7 +251,6 @@ const zh: typeof en = {
     entries: { app: 'App', sponsor: `${BRAND.names.zh}发起方`, admin: `${BRAND.names.zh}平台管理系统`, operator: '运营商管理系统' },
     unknownDevice: '未知设备',
   },
-  prerequisite: { PASSED: '通过', ANSWERED: '作答', passed: '已通过', answered: '已作答' },
   certification: {
     names: { SPONSOR_APPLY: `${BRAND.names.zh} 赞助商认证`, REFERRER: `${BRAND.names.zh} 推荐人认证`,
       TERMS_APP_UNDERSTOOD: '已理解：条款与隐私政策', CONTEST_RULES_UNDERSTOOD: '已理解：有奖活动规则',
@@ -397,7 +394,6 @@ const ja: typeof en = {
       operator: '運営パートナー管理システム' },
     unknownDevice: '不明なデバイス',
   },
-  prerequisite: { PASSED: '合格する', ANSWERED: '回答する', passed: '合格済み', answered: '回答済み' },
   certification: {
     names: { SPONSOR_APPLY: `${BRAND.names.ja} 主催者認定`, REFERRER: `${BRAND.names.ja} 紹介者認定`,
       TERMS_APP_UNDERSTOOD: '理解済み：利用規約とプライバシーポリシー', CONTEST_RULES_UNDERSTOOD: '理解済み：懸賞規約',

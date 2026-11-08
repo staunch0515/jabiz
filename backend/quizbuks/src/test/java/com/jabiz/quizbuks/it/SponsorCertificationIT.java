@@ -6,7 +6,6 @@ import com.jabiz.quizbuks.certification.CertificationCodes;
 import com.jabiz.quizbuks.certification.CertificationProcesses;
 import com.jabiz.quizbuks.certification.SponsorCertificationProcesses;
 import com.jabiz.quizbuks.certification.SponsorCertifications;
-import com.jabiz.quizbuks.play.PlayCodes;
 import com.jabiz.quizbuks.publishing.PublicationRounds;
 import com.jabiz.quizbuks.publishing.PublishingCodes;
 import com.jabiz.quizbuks.setup.QbParams;
@@ -144,21 +143,10 @@ class SponsorCertificationIT extends LegalItSupport {
         assertThat(start(taker(passer), second)).containsKey("attemptId");
         assertThat(start(taker(failer), second)).containsKey("attemptId");
 
-        // The sponsor's own certification gates their other publications (D-Q88-4); another sponsor cannot require it.
-        String gated = liveRequiring(sponsor, "Q88 advanced", Map.of("regions", List.of("GLOBAL")),
-            List.of(body("certification", key, "requirement", "PASSED")));
-        assertThat(codes(refused("QB_ATTEMPT_START", taker(failer), body("publicationId", gated), 422)))
-            .containsExactly(PlayCodes.PREREQUISITE_NOT_MET);
-        assertThat(start(taker(passer), gated)).containsKey("attemptId");
-        assertThat(card(failer, gated)).containsEntry("prerequisitesMet", false);
-        assertThat(String.valueOf(card(failer, gated).get("prerequisites"))).contains("Keyboard expert");
+        // Another sponsor cannot make their publication a round of it: another's is not found.
         String other = newSponsor("q88-other");
         credit(other, 10_000);
         String othersDraft = freeDraft(other, "Q88 other");
-        assertThat(codes(refused("QB_PUBLICATION_PREREQUISITES_SAVE", sponsorToken(other), body("publicationId",
-            othersDraft, "prerequisites", List.of(body("certification", key, "requirement", "PASSED"))), 422)))
-            .containsExactly(PublishingCodes.PREREQUISITE_CERTIFICATION);
-        // Nor make their publication a round of it: another's is not found.
         refused(PublicationRounds.SET, sponsorToken(other), body("publicationId", othersDraft, "certificationId",
             certificationId), 404);
 
@@ -209,7 +197,8 @@ class SponsorCertificationIT extends LegalItSupport {
         String secondRoundId = (String) round(sponsor, second).getFirst().get("roundId");
         assertThat(run(CertificationProcesses.ROUND_CLOSE, platformOperatorMember(), body("roundId", secondRoundId)).get("closedAt"))
             .isNotNull();
-        assertThat(codes(refused(PublicationRounds.CLOSE, token, body("publicationId", gated), 422)))
+        String plain = livePublication(sponsor, "Q88 advanced", Map.of("regions", List.of("GLOBAL")));
+        assertThat(codes(refused(PublicationRounds.CLOSE, token, body("publicationId", plain), 422)))
             .containsExactly(CertificationCodes.NOT_A_ROUND);
 
         // A new version: what was held under the old one counts no more (D-Q88-1), and the open rounds close
@@ -228,14 +217,11 @@ class SponsorCertificationIT extends LegalItSupport {
         assertThat(round(sponsor, third).getFirst()).containsEntry("certificationVersion", 2)
             .containsEntry("closedAt", null);
 
-        // Retired: no new round, no new prerequisite; its draft is refused, a draft deleted takes its round.
+        // Retired: no new round; its draft is refused, a draft deleted takes its round.
         run(SponsorCertificationProcesses.RETIRE, token, body("certificationId", certificationId));
         String fourth = freeDraft(sponsor, "Q88 keyboard IV");
         assertThat(codes(refused(PublicationRounds.SET, token, body("publicationId", fourth, "certificationId",
             certificationId), 422))).containsExactly(CertificationCodes.SPONSOR_RETIRED);
-        assertThat(codes(refused("QB_PUBLICATION_PREREQUISITES_SAVE", token, body("publicationId", fourth,
-            "prerequisites", List.of(body("certification", key, "requirement", "PASSED"))), 422)))
-            .containsExactly(PublishingCodes.PREREQUISITE_CERTIFICATION);
         assertThat(codes(refused(SponsorCertificationProcesses.UPDATE, token, body("certificationId",
             certificationId, "name", Map.of("en", "x")), 422))).containsExactly(CertificationCodes.SPONSOR_RETIRED);
         run("QB_PUBLICATION_DELETE", token, body("publicationId", third));

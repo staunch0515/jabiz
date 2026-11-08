@@ -434,26 +434,20 @@ describe('the ways a reward is paid (Q22)', () => {
     expect(visit).toHaveTextContent('See their products and story')
     // Opened first (from the history's link or a mail), the header's arrow goes home.
     expect(screen.getByTestId('header-back')).toBeInTheDocument()
-    // Q85: no tree (the sponsor's quizzes lead to no other): no "what comes next".
-    expect(screen.queryByTestId('result-next-step')).toBeNull()
   })
 
-  it('leads from the result to the Sponsor\'s tree when their quizzes lead to one another (Q85)', async () => {
+  it('asks for no tree and offers no "what comes next" (Q85, removed by F-S2c2 until F-S3)', async () => {
+    const asked: string[] = []
     server({ publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals' })], offset: 0, limit: 1 }),
-      extra: (path) => path === '/api/queries/qb.app.sponsor-tree'
-        ? json(200, { items: [
-          { publicationId: PUB, name: 'Capitals week', kind: 'QUIZ', endAt: '2099-01-01T00:00:00Z', maxReward: '100',
-            live: true, state: 'LIT', prerequisites: '[]' },
-          { publicationId: 'p-next', name: 'Rivers', kind: 'QUIZ', endAt: '2099-01-01T00:00:00Z', maxReward: '200',
-            live: true, state: 'UNLOCKED',
-            prerequisites: JSON.stringify([{ requiredPublicationId: PUB, requirement: 'PASSED', name: 'Capitals week' }]) },
-        ], offset: 0, limit: 200 })
-        : undefined })
+      extra: (path) => {
+        asked.push(path)
+        return undefined
+      } })
     window.history.replaceState(null, '', `/result/${ATTEMPT}`)
     render(<App />)
-    const next = await screen.findByTestId('result-next-step')
-    expect(next).toHaveAttribute('href', `/s/capitals?node=${PUB}`)
-    expect(next).toHaveTextContent('See what comes next')
+    expect(await screen.findByTestId('sponsor-visit')).toHaveAttribute('href', '/s/capitals')
+    expect(screen.queryByTestId('result-next-step')).toBeNull()
+    expect(asked).not.toContain('/api/queries/qb.app.sponsor-tree')
   })
 
   it('shows a prize with what it is and until when', async () => {
@@ -1215,33 +1209,6 @@ describe('certification rounds (Q70a)', () => {
     const notice = await screen.findByTestId('detail-certification-held')
     expect(notice).toHaveTextContent('You hold this certification')
     expect(notice).toHaveTextContent('2027')
-    expect(screen.queryByTestId('detail-start')).toBeNull()
-    expect(screen.queryByTestId('detail-unavailable')).toBeNull()
-    expect(posted('QB_ATTEMPT_START')).toEqual([])
-  })
-})
-
-describe('prerequisites (Q76)', () => {
-  it('lists what to finish first, each leading to its page, instead of offering the start', async () => {
-    const prerequisites = JSON.stringify([
-      { requiredPublicationId: 'basics', requirement: 'PASSED', name: 'Capitals basics', live: true, met: true },
-      { requiredPublicationId: 'flags', requirement: 'ANSWERED', name: 'Flags survey', live: false, met: false }])
-    const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,
-      prerequisitesMet: false, prerequisites })], offset: 0, limit: 1 }) })
-    window.history.replaceState(null, '', `/p/${PUB}`)
-    render(<App />)
-    const notice = await screen.findByTestId('detail-prerequisites')
-    expect(notice).toHaveTextContent('Finish these quizzes first')
-    const items = within(notice).getAllByTestId('detail-prerequisite')
-    expect(items).toHaveLength(2)
-    expect(items[0]).toHaveAttribute('data-met', 'true')
-    expect(items[0]).toHaveTextContent('Capitals basics')
-    expect(items[0]).toHaveTextContent('Passed')
-    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/p/basics')
-    expect(items[1]).toHaveAttribute('data-met', 'false')
-    expect(items[1]).toHaveTextContent('Flags survey')
-    expect(items[1]).toHaveTextContent('Answer')
-    expect(items[1]).toHaveTextContent('not open now')
     expect(screen.queryByTestId('detail-start')).toBeNull()
     expect(screen.queryByTestId('detail-unavailable')).toBeNull()
     expect(posted('QB_ATTEMPT_START')).toEqual([])

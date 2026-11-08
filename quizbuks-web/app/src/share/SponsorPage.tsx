@@ -1,10 +1,10 @@
 import { readPageProducts } from './api'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
-import { formatDateTime, i18n, useAuth } from '@jabiz/client'
-import { Button, MarkdownView, PageState, SegmentedControl } from '@jabiz/ui'
+import { formatDateTime, i18n } from '@jabiz/client'
+import { Button, MarkdownView, PageState } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ExternalLink, Trophy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -14,11 +14,8 @@ import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { levelsOf } from './levels'
 import { prerequisitesOf } from '../qb/play'
-import { readPagePublications, readPublicSponsorPage, readSponsorTree } from './api'
-import { Link, useLocation } from '../qb/router'
-import { TechTree, TreeProgress, type TechTreeNode } from '../qb/TechTree'
-import { certificationName, isSponsorCertification } from '../qb/certifications'
-import { certificationNodeId, certificationOfNode, progressOf } from '../qb/tree'
+import { readPagePublications, readPublicSponsorPage } from './api'
+import { Link } from '../qb/router'
 import { sharePath } from './share'
 import { countPageView, countProductClick } from './counting'
 import { linkLanguageOf } from '../linkLanguage'
@@ -64,56 +61,6 @@ export function SponsorPage({ handle }: { handle: string }) {
   const region = useMainlandChina()
   const publications = useQuery({ queryKey: ['qb', 'sponsor-page-publications', handle, region.mainlandChina],
     queryFn: () => readPagePublications(handle, region.mainlandChina), enabled: !!page.data && !region.pending })
-  // Q85 (D-Q85-6): signed in, the tree as the caller stands on it (their own attempts), the picture by default;
-  // the list stays for anybody. `?node=` marks a node (the result page's "what comes next").
-  const { signedIn } = useAuth()
-  const { search } = useLocation()
-  const [at] = useState(() => new Date().toISOString())
-  const lang = i18n.language.slice(0, 2)
-  const tree = useQuery({ queryKey: ['qb', 'sponsor-tree', handle, lang],
-    queryFn: () => readSponsorTree(handle, at, lang), enabled: signedIn && !!page.data })
-  const [view, setView] = useState<'tree' | 'list'>('tree')
-  const selected = new URLSearchParams(search).get('node')
-  // Q86 (D-Q86-7): a certification required is a platform node; it leads to the platform's tree (D-Q86-4) when one is
-  // named and is not this page, else to the certification's current round.
-  // F-S2c (D3): the platform's tree is no longer named (the knowledge maps come with F-S3).
-  const platformHandle: string | null = null
-  const treeNodes: TechTreeNode[] = useMemo(() => {
-    const rows = tree.data ?? []
-    const certifications = new Map<string, { held: boolean; roundPublicationId: string | null;
-      names: Record<string, string> | null }>()
-    for (const row of rows) {
-      for (const c of row.certifications) {
-        const before = certifications.get(c.key)
-        certifications.set(c.key, { held: c.held || !!before?.held,
-          roundPublicationId: c.roundPublicationId ?? before?.roundPublicationId ?? null,
-          names: c.names ?? before?.names ?? null })
-      }
-    }
-    return [
-      ...rows.map((row): TechTreeNode => ({ id: row.id, name: row.name, requires: row.requires, state: row.state,
-        live: row.live, nodeKind: 'publication' })),
-      // Q88a (D-Q88-4): a sponsor's own certification is a node of this sponsor's tree, named by its row.
-      ...[...certifications.entries()].map(([key, c]): TechTreeNode => ({ id: certificationNodeId(key),
-        name: certificationName(key, c.names, lang, tQb), requires: [], nodeKind: 'certification',
-        state: c.held ? 'LIT' : 'LOCKED',
-        subtitle: isSponsorCertification(key) ? tQb('certification.sponsorNode', { sponsor: page.data?.company ?? '' })
-          : tQb('tree.certification') })),
-    ]
-  }, [tree.data, tQb, lang, page.data?.company])
-  const rounds = useMemo(() => new Map((tree.data ?? []).flatMap((row) => row.certifications
-    .filter((c) => c.roundPublicationId).map((c) => [c.key, c.roundPublicationId!]))), [tree.data])
-  const hrefOf = (node: TechTreeNode): string | null => {
-    const key = certificationOfNode(node.id)
-    if (!key) return `/p/${encodeURIComponent(node.id)}`
-    // A sponsor's own certification (Q88a) is earned here: its round, never the platform's tree.
-    if (!isSponsorCertification(key) && platformHandle && platformHandle !== handle) {
-      return `/s/${encodeURIComponent(platformHandle)}`
-    }
-    const round = rounds.get(key)
-    return round ? `/p/${encodeURIComponent(round)}` : null
-  }
-
   // Q60c: a view of a page that exists (published), once per page shown; the server counts a visitor once a day.
   const shown = page.data ? page.data.handle : null
   useEffect(() => {
@@ -185,25 +132,10 @@ export function SponsorPage({ handle }: { handle: string }) {
       <section aria-labelledby="sponsor-page-quizzes" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="sponsor-page-quizzes" className="text-lg font-semibold">{t('sponsorPage.quizzes')}</h2>
-          {signedIn && tree.isSuccess && tree.data.length > 0 && (
-            <SegmentedControl value={view} onChange={setView} aria-label={t('sponsorPage.quizzes')}
-              data-testid="sponsor-page-view" options={[
-                { value: 'tree', label: t('sponsorPage.tree') },
-                { value: 'list', label: t('sponsorPage.list') },
-              ]} />
-          )}
         </div>
-        {signedIn && view === 'tree' && tree.isSuccess && tree.data.length > 0 && (
-          <div className="flex flex-col gap-2" data-testid="sponsor-page-tree">
-            <TreeProgress lit={progressOf(treeNodes.filter((n) => n.nodeKind !== 'certification')).lit}
-              total={tree.data.length}
-              next={progressOf(treeNodes.filter((n) => n.nodeKind !== 'certification')).next.map((node) => node.name)} />
-            <TechTree nodes={treeNodes} selected={selected} label={t('sponsorPage.treeLabel', { company: p.company })}
-              hrefOf={hrefOf} />
-            <p className="text-muted-foreground text-xs">{t('sponsorPage.treeHint')}</p>
-          </div>
-        )}
-        {(!signedIn || view === 'list' || !tree.isSuccess || tree.data.length === 0) && <>
+        {/* F-S2c2 (D4, D5): the old tree and the levels from the prerequisites are gone; F-S3 shows the knowledge
+            maps here (plan F-S2 §0 item 3). */}
+        <p className="text-muted-foreground text-sm" data-testid="sponsor-page-tree-soon">{t('sponsorPage.treeSoon')}</p>
         {publications.isPending && <PageState kind="loading" />}
         {publications.isError && <PageState kind="error" description={tQb('failed')} />}
         {publications.isSuccess && publications.data.length === 0 && (
@@ -242,7 +174,6 @@ export function SponsorPage({ handle }: { handle: string }) {
             </ul>
           </div>
         ))}
-        </>}
       </section>
     </article>
   )

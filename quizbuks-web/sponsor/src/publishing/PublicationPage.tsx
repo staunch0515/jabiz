@@ -8,7 +8,7 @@ import { QB } from '../qb/messages'
 import { Link, navigate, useLocation } from '../qb/router'
 import { treePathOf } from '../tree/api'
 import '../tree/messages'
-import { conditionsQuery, prerequisitesQuery, readConditions, readEntryFeesCollected, readPrerequisites,
+import { conditionsQuery, readConditions, readEntryFeesCollected,
   readPublication, type Publication, type PublicationDetail } from './api'
 import { formatKudos } from '../qb/kudos'
 import { NEW_PUBLICATION, publicationQuery, PUBLICATIONS_PATH, PUBLICATIONS_QUERY } from './paths'
@@ -148,9 +148,6 @@ function PublicationView({ detail, stale, onStale }: {
   // Q47: the conditions it was submitted with (frozen with it).
   const conditions = useQuery({ queryKey: conditionsQuery(publication.publicationId),
     queryFn: () => readConditions(publication.publicationId), enabled: publication.audience === 'PUBLIC' })
-  // Q76: what a taker must have done first (frozen with it too).
-  const prerequisites = useQuery({ queryKey: prerequisitesQuery(publication.publicationId),
-    queryFn: () => readPrerequisites(publication.publicationId) })
   // Q88a: the certification passing it gives (its round), which can only be closed once submitted.
   const round = useQuery({ queryKey: roundQuery(publication.publicationId),
     queryFn: () => readPublicationRound(publication.publicationId) })
@@ -211,7 +208,6 @@ function PublicationView({ detail, stale, onStale }: {
         questionCount: version?.questionCount ?? null,
         tiers,
         conditions: conditions.data,
-        prerequisites: prerequisites.data,
         roundName: round.isPending ? undefined : round.data
           ? certificationName(round.data.certification, round.data.name, i18n.language, tQb) : null,
       }} />

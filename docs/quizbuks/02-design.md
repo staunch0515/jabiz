@@ -185,11 +185,7 @@ docs/quizbuks/               本文件等
 | `QbConsent` | W | `userId`、`kind`、`legalVersionId`、`versionNumber`、`acceptedAt`、`entry`、`source`（`WELCOME` / `ONBOARDING` / `RECONSENT`） | 同意记录；须同意版本 = 已生效版本中须同意的最大版本号（第一版总是），已同意的版本不低于它即可 |
 | `QbFaqEntry` | T | `audience`（APP / SPONSOR / ALL）、`category`、`question`、`answer`（多语言，英语必填）、`seq`、`published` | 帮助中心（Q7b）；内容管理员在管理系统的通用页面直接编辑，公开视图固定为已发布 |
 
-- **前置条件**（Q76，`plans/Q76-prerequisites.md`）：普通表 `QbPublicationPrerequisite`（发布、前置发布、要求 `PASSED` / `ANSWERED`、发布方那一对），
-  一个发布至多 5 条，只能指向本商户已提交过的发布，不能成环（深度 20）；只经 `QB_PUBLICATION_PREREQUISITES_SAVE` 在草稿时整体替换，提交即冻结，复制时随发布复制。
-  满足的唯一定义是 `play.PrerequisiteCheck`：在前置发布上有已完成的会话（进行中不算），`PASSED` 另要求合格；学过就算，没有有效期。
-  **前置的第二种**（Q86，`plans/Q86-agreement-quiz-tree.md`）：同一张表的 `certification`（目录中对象是答题者的认证键，与 `requiredPublicationId` 二选一、CHECK；要求固定为"持有"），
-  满足 = 此刻持有（`CertificationHolding` 的定义：记录或未认领的合格、有效期内、版本当前、晚于最近的撤销），首页 / 发布页 / 人数 / 树的模板写同一段 SQL；开始时只在有认证前置时锁外多一条语句读持有。
+- ~~**前置条件**（Q76，表 `QbPublicationPrerequisite`；Q86 的"持有认证"前置）~~已由 F-S2c2 删去（D4）；"先答哪些"改为知识结构图节点的"答前须点亮"（F-S2b1）。
 
 ## 4. 账本
 
@@ -522,11 +518,9 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
   打开即已读，按钮（去结果、钱包、收款或发布）记点击；全部已读；推广开关。
 
 - 与商户的对话（Q82，`plans/Q82-conversations.md`，`app/src/conversation/`）：完成过的测验的结果页有“联系商户”（写第一条消息即开启；已有对话时为“查看对话”）；收件箱顶部的“与商户的对话”进入列表 `/conversations`（新回复标“新”，下方是已屏蔽的商户与解除），对话页 `/conversations/<id>`（打开即已读；发送、关闭、关闭后再写即重开、举报这段对话、屏蔽商户）；商户的回复写一条站内信（每对话每小时至多一条，去处为对话）并推送 `qb.conversation-reply`。商户显示为公司名，从不显示用户编号。
-- 科技树（Q85，`plans/Q85-tech-tree.md`，`src/qb/TechTree.tsx`）：登录后商户主页缺省显示该商户的答卷树（节点 = 进行中的公开发布与本人答过的，边 = 前置条件），按本人的状态上色（已点亮 / 答过未合格 / 进行中 / 可开始 / 锁定 / 未开放，`tree.TreeStates`），页顶"已点亮 n / m，下一步：…"，列表一键切换；
-  结果页在商户的答卷互为前置时有"看看下一步"，链到树并标出刚答的节点。内联 SVG，不引入布局库；宽屏按层从左到右、手机从上到下；超过 60 个节点按层折叠。
+- ~~科技树（Q85，`src/qb/TechTree.tsx`，商户主页的答卷树与结果页的"看看下一步"）~~已由 F-S2c2 删去（D5）：商户主页在答卷列表上方说明"即将更新"（读不到前置，按层显示只剩一层），F-S3 改为看知识结构图。
 - 协议答题（Q86，`plans/Q86-agreement-quiz-tree.md`）：三种"协议理解"认证（`TERMS_APP_UNDERSTOOD`、`CONTEST_RULES_UNDERSTOOD`、`TERMS_SPONSOR_UNDERSTOOD`）是官方账号出的普通轮次（Q69）；
   同意的流程一字不改。~~首页与账户页的"确认你的理解"卡、受控参数 `qb.understanding.enabled`、参数 `qb.tree.platform-handle` 与账户页的"平台之树"入口~~已由 F-S2c2 删去（D3）。发布页的前置可以是"先持有：X"（`data-certification`），链到当前一轮；
-  树上的认证前置画成虚线圆角的平台节点（持有 = 已点亮、否则锁定，不计入进度；点它去平台之树，没有 handle 时去当前一轮）。
 
 ### 7.2 发起方页面（`quizbuks-web/sponsor`）
 
@@ -539,9 +533,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 发起方页面的列表（Q80，`plans/Q80-list-cards.md`）：`DataTable` 的列表都给 `meta.card`（标题、副标题、徽章、操作）与 `storageKey`（`qb.sponsor.<列表>`），手机宽度缺省成卡片、桌面表格、用户可切换（平台 17zc）；通告页与主页统计的商品表也是 `DataTable`。模版与发布保留 Q34b 的画廊卡片（不加第二种）；分析的数字对照表与按日表（图表的数据表）保持表格。
 - 抽题（Q81，`plans/Q81-question-pick.md`）：发布的设置 `pickCount`（1 ≤ k < n，空 = 全考），只允许同分的题库（满分 = k × 每题分，问卷不抽）；每次开始以服务端密钥的 HMAC 种子从 n 题中取 k 题、保留题序，记在会话 `questionSet`（敏感，不返回），会话的快照只经 `PlaySteps.forAttempt`（先按语言投影、再取子集）；答题人看到的题号是位置 1..k（开始、继续、提交、结果都如此），存储的 `result` 仍记版本题号；题目统计按被抽到的完成数、逐题最小分组发表；版本切换要求新版本能承接 k；卡片带 `pickCount`，App 显示“从 n 题中随机 k 题”；店面不支持。
 - 与答题者的对话（Q82，`sponsor/src/conversations/`）：消息中心的第三个标签“对话”（`/messages?tab=conversations`，`DataTable` 卡片：答题者的资料名为标题、测验为副标题、状态徽章；待回复的在前，可只看待回复的），菜单“消息”的徽标为有未读的对话数（进入、回到前台、每 5 分钟）；对话页 `/messages/conversations/<id>`：消息、回复框、关闭，右栏为该答题者在这个测验上由商户结算的奖励（现金、到店领取、电子奖品，码或末 4 位与状态，链到各自的页）。店员不回复（D-Q82-4）。
-- 科技树（Q85，`sponsor/src/tree/`，`/tree`，菜单"内容"组）：提交过的发布都是节点，每个节点上写客户中已点亮 / 答过未合格 / 可开始的人数（`qb.sponsor.tree`）；点节点，右栏按状态列出上面的人（显示名与交易页的 `userKey`，不多给，D-Q85-5；链到交易页按此人筛选、有对话时链到消息中心），"锁定"的只列本商户的客户；
-  粘贴或点选一位客户的键，整棵树按他的状态点亮（`qb.sponsor.tree-person`）。可隐藏已结束与孤立的节点；没有先后关系时提示去向导设置。发布页链到"在树上查看"。
-  认证前置（Q86）画成平台节点：不计人数、点它不出名单。向导"客户匹配"一步的前置区块在本商户的发布之下另有"须持有的认证"一组（目录中对象是答题者的四种），摘要写"X（持有）"；
+- ~~科技树（Q85，`sponsor/src/tree/` 的人数、名单与一个人的树；向导"客户匹配"一步的前置区块）~~已由 F-S2c2 删去（D4、D5）：`/tree` 与菜单项保留，只显示"即将更新"，F-S3 改为看知识结构图。
   概况页在商户条款理解的轮进行中、本人未持有时显示"确认你的理解"卡，"开始"在新标签页打开 App 的发布页（一个账号、两个前端）。
 - 钱包页（Q9d）：已到账的充值行有"收据"：首次以当前界面语言签发（`QB_TOPUP_RECEIPT_ISSUE`），之后下载同一份存档 PDF。
 - 钱包页的现金账户（Q87a / Q87b，`sponsor/src/wallet/`）：三块——现金账户（余额、现金换学分、按开关显示换回；Q87b 加未付账单与逾期提醒、计费方式与信用额）、学分（现页；充值对话框按 `qb.sponsor.cash-settings` 显示目标 KUDOS / CASH，只给一个目标时不显示选择）、账单（Q87b：列表、从现金账户付、下载账单 PDF；后付的商户在月底之前"现在用现金账户付清"尚未开账单的费用）；换出与提交被未付账单拦住时页面写明并链到账单。运营商管理系统另有"商户的计费方式"页。概览加"现金余额""待付账单"两张卡。
@@ -605,8 +597,8 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 - 选项按会话打乱（`optionOrder`），题目顺序不打乱。打乱的种子是服务端密钥下的 HMAC-SHA256（用户 | 发布 | 题号；密钥 = HMAC(`JABIZ_INTEGRITY_KEY`, `qb.option-shuffle`)，Q10b 评审 M-a），答题人无法自行算出。答题人看到、保存、提交与结果中的选项编号都是本次显示的位置 1..k（Q10b，评审 M1），只在评分时经 `optionOrder` 换回版本的编号；`optionOrder` 是敏感字段，任何读接口（含答题人本人的数据视图）都不返回。
 - 一人一次：`QbAttempt (userId, publicationId)` 唯一。
 - **看完视频才能开始**（Q75，`plans/Q75-video-playback.md`）：卡片冻结 `watchRequired` 与 `videoDurationSec`（商户填的时长）；要求看完的发布，新的开始须带 App 从播放器接口读到的报告（播完，或已看 ≥ 时长的 90%），否则 422 `QB_ATTEMPT_WATCH_REQUIRED`；读不到播放器的报告 `UNKNOWN` 放行并记在会话上。规则只在 `play.WatchRules`（App 的 `video/playback.ts` 同一规则）。**服务器不能验证报告的真伪**：它保证的是诚实的客户端不看完不能开始，并把报告记下来供分析与防刷使用；伪造报告的脚本由最短作答时间等后续手段对付。继续进行中的会话不查；答题路径不多一条语句。
-- **开始前的三条规则**，都在锁外、三个模板写同一段 SQL：客户匹配（Q47，`AudienceMatch`，422 `QB_AUDIENCE_NOT_MATCHED`）、持有该轮的认证（Q70a，`RoundHolders`，422 `QB_CERTIFICATION_HELD`）、
-  前置条件（Q76，`PrerequisiteCheck`，422 `QB_PREREQUISITE_NOT_MET`；Q86 的认证前置同一条规则，不满足同一个错误码）。首页只列出三条都满足的；发布页照样显示并说明缺什么。普通发布一条语句也不加（有前置的开始多一条锁外语句，有认证前置的再多一条读持有）。
+- **开始前的规则**，都在锁外、模板写同一段 SQL：客户匹配（Q47，`AudienceMatch`，422 `QB_AUDIENCE_NOT_MATCHED`）；~~持有该轮的认证（Q70a）~~由 F-S2c1 去掉（D2），
+  ~~前置条件（Q76、Q86）~~由 F-S2c2 去掉（D4），节点的"答前须点亮"（F-S2b1，`play.TreeGate`）代替。首页只列出都满足的；发布页照样显示并说明缺什么。
 - **管理员下架之后**（Q10b，评审 M-d）："被下架"= 管理员结束的，或管理员暂停（含封禁的暂停）而没有被管理员恢复的，此后因时间或名额结束的也算（`pausedBy = ADMIN` 保留，只有管理员恢复清除它；核查修正）。被下架的发布不能复制（422 `QB_PUBLICATION_TAKEN_DOWN`）；同一 Quiz 以后的任何发布都要人工审核：
   提交时案件的事实 `autoApprove = false`、`takenDown = true`（不论免审核开关），规则仍不要求审核或会沿用以前的批准时拒绝提交（422 `QB_PUBLICATION_REVIEW_REQUIRED`）；
   管理系统扩展的审核页以模板 `qb.admin.quiz-takedowns` 显示被下架的发布与理由，读好之前不给出决定面板。封禁的暂停记固定的理由 `QB_ACCOUNT_SUSPENDED`（评审 L3，封禁的理由是内部的），封禁期间管理员不能恢复（评审 L9；恢复先取商家的账户锁，与封禁依次进行）。

@@ -467,8 +467,6 @@ const en = {
     certificationHeld: 'You hold this certification (until {{time}}): you can answer its quiz again once it ends.',
     notMatched: 'This quiz is for people whose profile matches what the Sponsor is looking for. Telling more about yourself may let you answer it.',
     completeProfile: 'Complete my profile',
-    prerequisites: 'Finish these quizzes first:',
-    prerequisiteClosed: 'not open now',
     verifyFirst: 'Verify your e-mail address to answer quizzes: open the link we sent you.',
   },
   play: {
@@ -534,7 +532,6 @@ const en = {
     earned: 'Points: {{earned}} of {{points}}',
     more: 'More quizzes',
     toQuiz: 'About this quiz',
-    nextStep: 'See what comes next',
   },
   history: {
     title: 'History',
@@ -606,10 +603,7 @@ const en = {
     home: 'See all quizzes',
     level: 'Level {{n}}',
     after: 'After: {{names}}',
-    tree: 'Tree',
-    list: 'List',
-    treeLabel: 'The quizzes of {{company}} and how you stand on them',
-    treeHint: 'Lit quizzes are yours; ready ones you can start now; locked ones open after the quiz they name.',
+    treeSoon: 'Coming soon: the knowledge maps will show here how the quizzes lead to one another.',
   },
   share: {
     by: 'By {{sponsor}}',
@@ -1118,8 +1112,6 @@ const zh: typeof en = {
     certificationHeld: '你已持有该资格（至 {{time}}），到期后才能再次回答这份认证题。',
     notMatched: '这份答卷面向资料符合发起方条件的人。完善你的资料后，也许就能回答。',
     completeProfile: '完善我的资料',
-    prerequisites: '请先完成这些答卷：',
-    prerequisiteClosed: '现在未开放',
     verifyFirst: '验证邮箱后才能答题：请打开我们发送的链接。',
   },
   play: {
@@ -1185,7 +1177,6 @@ const zh: typeof en = {
     earned: '得分：{{earned}} / {{points}}',
     more: '更多 Quiz',
     toQuiz: '问答介绍',
-    nextStep: '看看下一步',
   },
   history: {
     title: '答题记录',
@@ -1257,10 +1248,7 @@ const zh: typeof en = {
     home: '查看所有 Quiz',
     level: '第 {{n}} 级',
     after: '先完成：{{names}}',
-    tree: '科技树',
-    list: '列表',
-    treeLabel: '{{company}} 的答卷与你的位置',
-    treeHint: '已点亮的是你完成的；可开始的现在就能答；锁定的要先完成它标出的那份。',
+    treeSoon: '即将更新：这里以后用知识结构图显示答卷之间的先后。',
   },
   share: {
     by: '来自 {{sponsor}}',
@@ -1769,8 +1757,6 @@ const ja: typeof en = {
     certificationHeld: 'この資格をお持ちです（{{time}} まで）。有効期限が切れると、もう一度この認定クイズに回答できます。',
     notMatched: 'このクイズは、主催者が求める条件にプロフィールが合う方向けです。プロフィールを充実させると回答できるかもしれません。',
     completeProfile: 'プロフィールを充実させる',
-    prerequisites: '先にこれらのクイズを終えてください：',
-    prerequisiteClosed: '現在は開いていません',
     verifyFirst: 'クイズに回答するにはメールアドレスの確認が必要です。お送りしたリンクを開いてください。',
   },
   play: {
@@ -1836,7 +1822,6 @@ const ja: typeof en = {
     earned: '得点：{{earned}} / {{points}}',
     more: 'ほかのクイズ',
     toQuiz: 'クイズの紹介',
-    nextStep: '次のステップを見る',
   },
   history: {
     title: '回答履歴',
@@ -1908,10 +1893,7 @@ const ja: typeof en = {
     home: 'すべてのクイズを見る',
     level: 'レベル {{n}}',
     after: '先に：{{names}}',
-    tree: 'ツリー',
-    list: 'リスト',
-    treeLabel: '{{company}} のクイズとあなたの現在地',
-    treeHint: '達成したものはあなたのもの。挑戦できるものは今すぐ回答できます。ロック中のものは先に示されたクイズを終えると開きます。',
+    treeSoon: '近日更新予定：ここには今後、クイズのつながりを知識マップで表示します。',
   },
   share: {
     by: '提供：{{sponsor}}',
