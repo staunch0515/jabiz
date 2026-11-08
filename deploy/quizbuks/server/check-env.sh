@@ -5,7 +5,8 @@
 # SPRING_PROFILES_ACTIVE names that Spring profile (the providers of "social", say). A fourth column names a form the
 # value must have, as the application checks it at startup: `apple-id` (ten capital letters or digits), `url` (an https
 # address with a host and nothing a URL cannot hold, such as a placeholder's `<host>`), `p8` (a .p8 key: PEM, line
-# breaks written \n, or its Base64 body), `vapid-public` / `vapid-private` (the halves of a VAPID key pair). A value with a carriage return (a .env saved with Windows line endings) is
+# breaks written \n, or its Base64 body), `vapid-public` / `vapid-private` (the halves of a VAPID key pair), `keep-images` (a whole number of at least 2: the
+# running image and one to roll back to; prune-images.sh). A value with a carriage return (a .env saved with Windows line endings) is
 # refused whatever its form. Run by the deploy workflow on the server before the image is pulled. Prints the names of
 # what is missing, too short or of the wrong form, never a value; exits 1 if anything is.
 set -eu
@@ -36,6 +37,7 @@ has_form() {
     # key 32 bytes, both Base64url without padding.
     vapid-public) printf '%s' "$1" | grep -Eqx 'B[A-Za-z0-9_-]{86}' ;;
     vapid-private) printf '%s' "$1" | grep -Eqx '[A-Za-z0-9_-]{43}' ;;
+    keep-images) printf '%s' "$1" | grep -Eqx '[0-9]+' && [ "$1" -ge 2 ] 2>/dev/null ;;
     url) printf '%s' "$1" | grep -Eqx "https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~%/!\$&'()*+,;=:@-]*)?" ;;
     p8)
       # A PEM over several lines in one pair of quotes (compose reads it whole) cannot be checked line by line here.
