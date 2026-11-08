@@ -33,14 +33,13 @@ export const LEGACY_PROFILE_PATHS: Readonly<Record<string, ProfileSection>> = {
 /**
  * The addresses of pages that moved out of the hub and the menu into the asset library's tabs (F-C1c, the requester
  * 2026-11-07): the products (`/profile/products`, and `/products` before the hub) and the certifications. Old
- * bookmarks keep working.
+ * bookmarks keep working; the certifications' went with them (F-S2c2, D6) and lead to the library.
  */
 export const PRODUCTS_TAB_PATH = '/assets?tab=products'
-export const CERTIFICATIONS_TAB_PATH = '/assets?tab=certifications'
 export const MOVED_PATHS: Readonly<Record<string, string>> = {
   '/products': PRODUCTS_TAB_PATH,
   '/profile/products': PRODUCTS_TAB_PATH,
   '/profile/products/': PRODUCTS_TAB_PATH,
-  '/certifications': CERTIFICATIONS_TAB_PATH,
-  '/certifications/': CERTIFICATIONS_TAB_PATH,
+  '/certifications': '/assets',
+  '/certifications/': '/assets',
 }

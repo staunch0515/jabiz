@@ -23,8 +23,8 @@ import {
  * A publication's settings as a file (Q102, docs/quizbuks/plans/Q102-publication-copy-transfer.md): what makes it
  * worth reusing, without what belongs to one run or one account. Left out: the quiz version and the times (chosen on
  * import), the covers and the purchase (the account's own files and records), the invitation list, the digital
- * codes and shared content (secrets the server never reads back) and the prerequisites (other publications of the
- * account). Scores travel with the full score they were set for, so an import onto another full score rescales them.
+ * codes and shared content (secrets the server never reads back). Scores travel with the full score they were set
+ * for, so an import onto another full score rescales them.
  */
 export const SETTINGS_FORMAT = 'quizbuks.publication-settings'
 export const SETTINGS_VERSION = 1

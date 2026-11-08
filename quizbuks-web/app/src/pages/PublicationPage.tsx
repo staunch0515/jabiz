@@ -1,20 +1,18 @@
 import { readPublicationProducts } from '../share/api'
-import { sharePath } from '../share/share'
 import { quizProducts } from '../qb/products'
 import { countProductClick } from '../share/counting'
 import { ProductCards } from '../qb/view/ProductCards'
 import { QBVIEW } from '../qb/view/messages'
-import { formatDateTime, i18n, useAuth } from '@jabiz/client'
+import { i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, ConfirmDialog, PageState } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { BadgeCheck, Circle, CircleCheck, ListChecks, MailWarning, Play, UserRoundSearch } from 'lucide-react'
+import { MailWarning, Play, UserRoundSearch } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
 import { useStartAttempt } from '../play/useStartAttempt'
 import { ACCOUNT_DETAILS_PATH } from './AccountPage'
-import { certificationName } from '../qb/certifications'
 import { QB } from '../qb/messages'
 import { shownLanguages } from '../qb/api'
 import { useSoundSetting } from '../qb/SoundSettings'
@@ -82,7 +80,7 @@ function EntryFeeStart({ fee, disabled, busy, describedBy, onStart }: { fee: num
 /** What the caller can do: start, continue the attempt in progress, see their result, or nothing now. */
 function Action({ publication, onLanguage }: { publication: PublicationView; onLanguage: (language: string) => void }) {
   const { t } = useTranslation(APP)
-  const { t: tQb, i18n: qbI18n } = useTranslation(QB)
+  const { t: tQb } = useTranslation(QB)
   const { emailVerified } = useAuth()
   const start = useStartAttempt()
   const duration = useDuration()
@@ -169,16 +167,6 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
         )}
       </>
     )
-  } else if (publication.heldUntil) {
-    // Q70a (option B): a certification's round, and the caller holds the certification.
-    action = (
-      <Alert data-testid="detail-certification-held">
-        <BadgeCheck aria-hidden />
-        <AlertDescription className="text-current">
-          {t('detail.certificationHeld', { time: formatDateTime(publication.heldUntil) })}
-        </AlertDescription>
-      </Alert>
-    )
   } else if (!publication.matched) {
     // Q47: aimed at people the caller's profile does not (yet) say they are.
     action = (
@@ -189,39 +177,6 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
           <Link to={ACCOUNT_DETAILS_PATH} className="text-primary underline" data-testid="detail-complete-profile">
             {t('detail.completeProfile')}
           </Link>
-        </AlertDescription>
-      </Alert>
-    )
-  } else if (!publication.prerequisitesMet) {
-    // Q76 (D-Q76-3): what to finish first, each leading to its page; done ones ticked.
-    action = (
-      <Alert data-testid="detail-prerequisites">
-        <ListChecks aria-hidden />
-        <AlertDescription className="text-current flex flex-col items-start gap-2">
-          <span>{t('detail.prerequisites')}</span>
-          <ul className="flex flex-col gap-1">
-            {publication.prerequisites.map((p) => (
-              <li key={p.certification ?? p.requiredPublicationId ?? ''} className="flex flex-wrap items-center gap-x-2"
-                data-testid="detail-prerequisite" data-met={p.met} data-certification={p.certification ?? undefined}>
-                {p.met
-                  ? <CircleCheck aria-hidden className="text-primary size-4" />
-                  : <Circle aria-hidden className="text-muted-foreground size-4" />}
-                {/* Q86 (D-Q86-5): a certification to hold, leading to its current round when one is open. */}
-                {p.certification
-                  ? p.roundPublicationId && !p.met
-                    ? <Link to={sharePath(p.roundPublicationId)} className="text-primary underline">
-                      {certificationName(p.certification, p.certificationNames, qbI18n.language, tQb)}</Link>
-                    : <span>{certificationName(p.certification, p.certificationNames, qbI18n.language, tQb)}</span>
-                  : <Link to={sharePath(p.requiredPublicationId!)} className="text-primary underline">{p.name}</Link>}
-                <span className="text-muted-foreground text-sm">
-                  {p.certification
-                    ? (p.met ? tQb('certification.held') : tQb('certification.hold'))
-                    : p.met ? tQb(`prerequisite.${p.requirement.toLowerCase()}`) : tQb(`prerequisite.${p.requirement}`)}
-                  {!p.met && !p.live && !p.certification && ` · ${t('detail.prerequisiteClosed')}`}
-                </span>
-              </li>
-            ))}
-          </ul>
         </AlertDescription>
       </Alert>
     )

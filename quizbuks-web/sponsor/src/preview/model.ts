@@ -93,7 +93,7 @@ function base(given: Sponsor | null) {
     sponsorName: sponsor?.contactName ?? null, sponsorCompany: sponsor?.company ?? null,
     sponsorIntro: sponsor?.intro ?? null, sponsorAvatar: sponsor?.avatar ?? null, sponsorCountry: null,
     completions: 0, last1h: 0, last24h: 0, last7d: 0, last30d: 0, statsAt: null,
-    canStart: false, regionBlocked: false, matched: true, prerequisitesMet: true, prerequisites: [], heldUntil: null, referral: null, myReferralStatus: null, myReferralExpiresAt: null, myAttemptId: null, myStatus: null, myDeadline: null, invited: false,
+    canStart: false, regionBlocked: false, matched: true, referral: null, myReferralStatus: null, myReferralExpiresAt: null, myAttemptId: null, myStatus: null, myDeadline: null, invited: false,
     // Q73b: a preview is read in one language, the one it is shown in.
     languages: [], displayLanguage: null,
   }
@@ -141,7 +141,6 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
       maxReward: p.maxReward ?? 0,
       // Q88a: a preview shows no certification (the round is set in the wizard, not previewed).
       certification: null,
-      certificationNames: null,
       rewardMethod: p.rewardMethod,
       redeemDescription: p.redeemDescription,
       digitalDelivery: p.digitalDelivery,
@@ -187,7 +186,6 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
       passScore: 0,
       maxReward: 0,
       certification: null,
-      certificationNames: null,
       rewardMethod: 'PLATFORM',
       redeemDescription: null,
       digitalDelivery: null,

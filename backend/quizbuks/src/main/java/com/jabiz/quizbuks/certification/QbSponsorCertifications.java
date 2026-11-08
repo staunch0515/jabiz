@@ -9,8 +9,8 @@ import com.jabiz.entity.i18n.I18nText;
  * passing one of the sponsor's publications is used for, defined by the sponsor (a name in the languages they
  * choose, a validity, a version they raise when the rules change, retired when no longer given). The rounds, records,
  * prerequisites and certificates refer to one by the key {@code sp:<certificationId>}
- * ({@link SponsorCertifications#keyOf}, D-Q88-2). An ordinary table written by
- * {@link SponsorCertificationProcesses} only.
+ * ({@link SponsorCertifications#keyOf}, D-Q88-2). F-S2c2 (D6): nothing defines, changes or retires one any more;
+ * the rows defined before are read only, for the certificates issued of them (D8), the holdings and their pages.
  */
 public final class QbSponsorCertifications {
 
@@ -20,17 +20,10 @@ public final class QbSponsorCertifications {
     public static final String ACTIVE = "ACTIVE";
     public static final String RETIRED = "RETIRED";
 
-    /** Headquarters' and the operators' (through their scope) read; nobody writes through it. */
+    /** Headquarters' and the operators' (through their scope) read; nobody writes. */
     public static final String DEFAULT_DATASET = "urn:jabiz:dataset:default:" + CERTIFICATION;
-    /** The sponsor's own rows, read only. */
-    public static final String SPONSOR_DATASET = "urn:jabiz:dataset:sponsor:" + CERTIFICATION;
     /** What the public pages show of one (its name and whose it is), through the public templates only. */
     public static final String PUBLIC_DATASET = "urn:jabiz:dataset:public:" + CERTIFICATION;
-
-    /** A sponsor's certifications are written one process at a time. */
-    public static String lockName(Object sponsorId) {
-        return "qb.sponsor-certifications:" + sponsorId;
-    }
 
     public static final EntityDefinition ENTITY = EntityDefinition.define(CERTIFICATION, eb -> {
         eb.physicalTable("qb_sponsor_certification");

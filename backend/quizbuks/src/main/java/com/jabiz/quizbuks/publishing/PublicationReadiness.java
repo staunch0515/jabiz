@@ -125,8 +125,8 @@ public final class PublicationReadiness {
     }
 
     /**
-     * As {@link #check(Draft, List, QuizSnapshot, Instant, BigDecimal)}, with whether the publication is a round of a
-     * certification (Q88a, D-Q88-5): then its tiers may all pay 0 (passing gives the certification).
+     * As {@link #check(Draft, List, QuizSnapshot, Instant, BigDecimal)}, with whether the publication is bound to a
+     * node (F-S2b1): then its tiers may all pay 0 (passing lights the node).
      */
     public static List<Violation> check(Draft draft, List<TierCoverage.Tier> tiers, QuizSnapshot version,
         Instant now, BigDecimal maxRewardPerAttempt, boolean round) {

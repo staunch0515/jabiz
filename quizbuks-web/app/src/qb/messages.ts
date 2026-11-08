@@ -104,8 +104,6 @@ const en = {
       operator: 'Operator Management System' },
     unknownDevice: 'Unknown device',
   },
-  /** Q76: what a prerequisite asks of the taker on the required publication. */
-  prerequisite: { PASSED: 'Pass', ANSWERED: 'Answer', passed: 'Passed', answered: 'Answered' },
   /** Q86: the certifications by key (the catalog), and a certification required first. */
   certification: {
     names: { SPONSOR_APPLY: `${BRAND.names.en} Sponsor Certification`, REFERRER: `${BRAND.names.en} Referrer Certification`,
@@ -118,16 +116,6 @@ const en = {
     sponsorNode: 'Certification of {{sponsor}}',
   },
   /** Q86: the card offered after accepting an agreement. */
-  understanding: {
-    title: 'Confirm your understanding',
-    body: { TERMS_APP_UNDERSTOOD: 'A short quiz about the terms and the privacy policy you accepted: five questions, a few minutes, and a certification you hold for a year.',
-      CONTEST_RULES_UNDERSTOOD: 'A short quiz about the contest rules: five questions, a few minutes, and a certification you hold for a year.',
-      TERMS_SPONSOR_UNDERSTOOD: 'A short quiz about the Sponsor terms you accepted: five questions, a few minutes, and a certification you hold for a year.' },
-    start: 'Start the quiz',
-    held: 'Passed · until {{until}}',
-    platformTree: 'The platform\'s tree',
-    platformTreeHint: 'Where you stand on the platform\'s own quizzes.',
-  },
   /** Q85: a sponsor's tree, drawn the same in the app and the console. */
   tree: {
     state: { LIT: 'Lit', ANSWERED: 'Answered', IN_PROGRESS: 'In progress', UNLOCKED: 'Ready', LOCKED: 'Locked',
@@ -263,7 +251,6 @@ const zh: typeof en = {
     entries: { app: 'App', sponsor: `${BRAND.names.zh}发起方`, admin: `${BRAND.names.zh}平台管理系统`, operator: '运营商管理系统' },
     unknownDevice: '未知设备',
   },
-  prerequisite: { PASSED: '通过', ANSWERED: '作答', passed: '已通过', answered: '已作答' },
   certification: {
     names: { SPONSOR_APPLY: `${BRAND.names.zh} 赞助商认证`, REFERRER: `${BRAND.names.zh} 推荐人认证`,
       TERMS_APP_UNDERSTOOD: '已理解：条款与隐私政策', CONTEST_RULES_UNDERSTOOD: '已理解：有奖活动规则',
@@ -272,16 +259,6 @@ const zh: typeof en = {
     hold: '持有', held: '已持有', required: '需要持有认证',
     gives: '合格授予：{{name}}', issuedBy: '由 {{sponsor}} 颁发', ofSponsor: '{{name}} · {{sponsor}}',
     sponsorNode: '{{sponsor}} 的认证',
-  },
-  understanding: {
-    title: '确认你的理解',
-    body: { TERMS_APP_UNDERSTOOD: '关于你同意的条款与隐私政策的小测：五道题、几分钟，答对即持有一年的认证。',
-      CONTEST_RULES_UNDERSTOOD: '关于有奖活动规则的小测：五道题、几分钟，答对即持有一年的认证。',
-      TERMS_SPONSOR_UNDERSTOOD: '关于你同意的发起方条款的小测：五道题、几分钟，答对即持有一年的认证。' },
-    start: '开始答题',
-    held: '已通过 · 至 {{until}}',
-    platformTree: '平台之树',
-    platformTreeHint: '你在平台自己的答卷上走到哪里了。',
   },
   tree: {
     state: { LIT: '已点亮', ANSWERED: '答过未合格', IN_PROGRESS: '进行中', UNLOCKED: '可开始', LOCKED: '锁定',
@@ -417,7 +394,6 @@ const ja: typeof en = {
       operator: '運営パートナー管理システム' },
     unknownDevice: '不明なデバイス',
   },
-  prerequisite: { PASSED: '合格する', ANSWERED: '回答する', passed: '合格済み', answered: '回答済み' },
   certification: {
     names: { SPONSOR_APPLY: `${BRAND.names.ja} 主催者認定`, REFERRER: `${BRAND.names.ja} 紹介者認定`,
       TERMS_APP_UNDERSTOOD: '理解済み：利用規約とプライバシーポリシー', CONTEST_RULES_UNDERSTOOD: '理解済み：懸賞規約',
@@ -426,16 +402,6 @@ const ja: typeof en = {
     hold: '保有する', held: '保有済み', required: '認定が必要です',
     gives: '合格で付与：{{name}}', issuedBy: '{{sponsor}} 発行', ofSponsor: '{{name}} · {{sponsor}}',
     sponsorNode: '{{sponsor}} の認定',
-  },
-  understanding: {
-    title: '理解の確認',
-    body: { TERMS_APP_UNDERSTOOD: '同意した利用規約とプライバシーポリシーについての小テストです。5 問、数分で、合格すると 1 年間有効な認定を保有できます。',
-      CONTEST_RULES_UNDERSTOOD: '懸賞規約についての小テストです。5 問、数分で、合格すると 1 年間有効な認定を保有できます。',
-      TERMS_SPONSOR_UNDERSTOOD: '同意した主催者規約についての小テストです。5 問、数分で、合格すると 1 年間有効な認定を保有できます。' },
-    start: 'クイズを始める',
-    held: '合格 · {{until}} まで',
-    platformTree: 'プラットフォームのツリー',
-    platformTreeHint: 'プラットフォーム自身のクイズでの現在地です。',
   },
   tree: {
     state: { LIT: '達成', ANSWERED: '回答済み（不合格）', IN_PROGRESS: '進行中', UNLOCKED: '挑戦できます', LOCKED: 'ロック中',

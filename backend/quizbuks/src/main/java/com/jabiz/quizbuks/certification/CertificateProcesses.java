@@ -183,7 +183,7 @@ public final class CertificateProcesses {
                 held.add(new Held(certification.key(), h.kind(), h.from(), h.until(),
                     certificate == null ? null : String.valueOf(certificate.id()),
                     certificate == null ? null : certificate.get("verifyKey"),
-                    row == null ? null : SponsorCertificationProcesses.texts(row.get("name")),
+                    row == null ? null : SponsorCertifications.texts(row.get("name")),
                     row == null ? null : sponsorName(ctx, row)));
             });
         }

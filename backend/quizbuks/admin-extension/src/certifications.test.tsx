@@ -38,7 +38,6 @@ const PUBLICATION = '0192f0a0-0000-7000-8000-00000000a001'
 const NEW_PUBLICATION = '0192f0a0-0000-7000-8000-00000000a002'
 const TAKER = '0192f0a0-0000-7000-8000-00000000b001'
 const ADMIN = '0192f0a0-0000-7000-8000-00000000c001'
-const SPONSOR = '0192f0a0-0000-7000-8000-00000000d001'
 const OPERATOR = '0192f0a0-0000-7000-8000-00000000e001'
 
 const overview = () => ({
@@ -71,15 +70,11 @@ beforeEach(() => {
       closedAt: null, recordId: 'h3', kind: 'GRANTED', validUntil: null }
   })
   server.get.mockReset().mockRejectedValue(new ApiError(404, { detail: 'Not found' }))
-  // Q88a: the sponsors' own certifications (the template; narrowed by the company name typed).
-  server.runQuery.mockReset().mockImplementation(async (id: string, options: { params?: { q?: string } }) => {
+  server.runQuery.mockReset().mockImplementation(async (id: string) => {
     if (id === TEMPLATE.operators) {
       return { items: [{ operatorId: OPERATOR, name: 'Kanto Partners', contactEmail: 'ops@kanto.example' }], total: 1 }
     }
-    if (id !== TEMPLATE.sponsorCertifications) throw new ApiError(403, { detail: 'Forbidden' })
-    const rows = [{ certificationId: 'sc1', key: 'sp:sc1', sponsorId: SPONSOR, company: 'Keys Co', name: '{"en":"Keyboard expert","ja":"キーボード達人"}',
-      validityDays: 365, certificationVersion: 2, status: 'ACTIVE', createdAt: '2026-11-01T01:00:00Z', rounds: 3, holders: 7 }]
-    return { items: options.params?.q && !'Keys Co'.includes(options.params.q) ? [] : rows, total: 1 }
+    throw new ApiError(403, { detail: 'Forbidden' })
   })
   server.post.mockReset().mockRejectedValue(new ApiError(403, { detail: 'Forbidden' }))
 })
@@ -100,21 +95,6 @@ function renderPage() {
 }
 
 describe('the certifications page', () => {
-  it('lists the Sponsors’ own certifications (Q88a), named by their rows, narrowed by the company', async () => {
-    renderPage()
-    const section = await screen.findByTestId('sponsor-certifications-section')
-    const row = await within(section).findByTestId('sponsor-certification-row')
-    expect(row).toHaveTextContent('Keys Co')
-    expect(within(row).getByTestId('sponsor-certification-name')).toHaveTextContent('Keyboard expert')
-    expect(row).toHaveTextContent('365 days')
-    expect(row).toHaveTextContent('7')
-    expect(within(row).getByTestId('sponsor-certification-sponsor')).toHaveAttribute('href', PATH.user(SPONSOR))
-    const user = userEvent.setup()
-    await user.type(within(section).getByTestId('sponsor-certifications-search'), 'Nobody{enter}')
-    await waitFor(() => expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.sponsorCertifications,
-      expect.objectContaining({ params: expect.objectContaining({ q: 'Nobody' }) })))
-    await waitFor(() => expect(within(section).queryByTestId('sponsor-certification-row')).not.toBeInTheDocument())
-  })
   it('shows the rounds and the records by hand', async () => {
     const { container } = renderPage()
     const rows = await screen.findAllByTestId('round-row')
