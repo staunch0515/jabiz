@@ -156,6 +156,8 @@ public final class TreeProcesses {
     static final String REQUEST = "request";
     static final String DECISIONS = "decisions";
     static final String FIRST = "first";
+    /** More of the graph's fields a save writes with its revision. */
+    static final String TOUCH = "touch";
 
     private TreeProcesses() {}
 
@@ -339,8 +341,9 @@ public final class TreeProcesses {
                 QueryEntities.query(QbTrees.defaultDataset(QbTrees.TREE), ctx -> byIds("treeId", treeId(ctx)), TREE),
                 QueryEntities.query(QbTrees.defaultDataset(QbTrees.VERSION), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(new QueryPredicate.In("treeId", ids(treeId(ctx))),
-                        new QueryPredicate.In("status", List.of(QbTrees.DRAFT, QbTrees.REVIEW, QbTrees.IN_EFFECT)))))
-                    .limit(3).build(), VERSIONS)))
+                        new QueryPredicate.In("status", List.of(QbTrees.DRAFT, QbTrees.REVIEW, QbTrees.REJECTED,
+                            QbTrees.IN_EFFECT)))))
+                    .limit(4).build(), VERSIONS)))
             .compute("Check that the graph is the caller's", (metadata, ctx) -> requireEditor(ctx))
             .step("Load the versions' nodes", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_DEF), ctx -> EntityQuery.builder()
@@ -382,10 +385,22 @@ public final class TreeProcesses {
         return list(ctx, VERSIONS).stream().filter(v -> status.equals(v.get("status"))).findFirst().orElse(null);
     }
 
-    /** The draft or the version in review, if any. */
+    /**
+     * The version being worked on, if any: the draft, the one in review, or the one sent back (which stays the draft
+     * to change and submit again; at most one of them exists).
+     */
     private static EntityInstance open(ProcessContext ctx) {
         EntityInstance draft = version(ctx, QbTrees.DRAFT);
-        return draft != null ? draft : version(ctx, QbTrees.REVIEW);
+        if (draft == null) {
+            draft = version(ctx, QbTrees.REVIEW);
+        }
+        return draft != null ? draft : version(ctx, QbTrees.REJECTED);
+    }
+
+    /** The version a submission sends: the draft, or the one sent back. */
+    private static EntityInstance submittable(ProcessContext ctx) {
+        EntityInstance draft = version(ctx, QbTrees.DRAFT);
+        return draft != null ? draft : version(ctx, QbTrees.REJECTED);
     }
 
     private static List<EntityInstance> defsOf(ProcessContext ctx, EntityInstance version) {
@@ -436,7 +451,7 @@ public final class TreeProcesses {
             loadRules(pb);
             pb.compute("Write the draft", (metadata, ctx) -> saved(ctx))
                 .step("Withdraw the review", WithdrawApproval.<ProcessContext>when(
-                    ctx -> Boolean.TRUE.equals(ctx.get(WITHDRAW_REVIEW)), TreeApprovals.SUBJECT,
+                    ctx -> ctx.contains(WITHDRAW_REVIEW), TreeApprovals.SUBJECT,
                     TreeProcesses::reviewedVersionId));
         });
     }
@@ -523,7 +538,9 @@ public final class TreeProcesses {
             values.put("description", input.description() == null || input.description().isEmpty() ? null
                 : input.description());
             values.put("editedAt", ctx.opTime());
-            if (QbTrees.REVIEW.equals(open.get("status"))) {
+            if (QbTrees.REJECTED.equals(open.get("status"))) {
+                values.put("status", QbTrees.DRAFT);
+            } else if (QbTrees.REVIEW.equals(open.get("status"))) {
                 values.put("status", QbTrees.DRAFT);
                 values.put("approvalRequestId", null);
                 values.put("contentHash", null);
@@ -539,7 +556,9 @@ public final class TreeProcesses {
             insertDef(ctx, versionId, order.get(i), node.name(), node.description(),
                 json(conditions.get(order.get(i)).toMap()), i);
         }
-        long revision = touch(ctx, Map.of());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> more = ctx.contains(TOUCH) ? (Map<String, Object>) ctx.get(TOUCH) : Map.of();
+        long revision = touch(ctx, more);
         ctx.put(OUTPUT, new TreeOutput(String.valueOf(tree.id()), String.valueOf(versionId), versionNo,
             QbTrees.DRAFT, revision, Map.copyOf(newIds), views(problems), null, null));
     }
@@ -677,14 +696,10 @@ public final class TreeProcesses {
             i18n(def.get("description")), parse(String.valueOf(def.get("condition"))))));
         ctx.put(INPUT, new SaveInput(input.treeId(), input.baseRevision(), i18n(base.get("name")),
             i18n(base.get("description")), nodes));
+        // The copy has now taken the template up to its version in effect (what it took or left is in its versions),
+        // written with the save's own change to the graph.
+        ctx.put(TOUCH, Map.of("templateVersionNo", templateVersion.get("versionNo")));
         saved(ctx);
-        TreeOutput output = ctx.get(OUTPUT, TreeOutput.class);
-        // The copy has now taken the template up to its version in effect (what it took or left is in its versions).
-        long revision = AccountEditing.number(first(ctx, TREE).get("revision")) + 1;
-        ctx.put(OUTPUT, new TreeOutput(output.treeId(), output.versionId(), output.versionNo(), output.status(),
-            revision, output.nodeIds(), output.problems(), null, null));
-        ctx.changes().update(QbTrees.TREE, tree.id(), tree.version(), Map.of("templateVersionNo",
-            templateVersion.get("versionNo"), "revision", BigDecimal.valueOf(revision)));
     }
 
     private static Map<String, Object> fields(EntityInstance def) {
@@ -725,7 +740,7 @@ public final class TreeProcesses {
     static void checkSubmit(ProcessContext ctx) {
         current(ctx, ctx.get(INPUT, TreeInput.class).baseRevision());
         requireActive(ctx);
-        EntityInstance draft = version(ctx, QbTrees.DRAFT);
+        EntityInstance draft = submittable(ctx);
         if (draft == null) {
             throw rule(null, TreeCodes.STATE, "The graph has no draft to submit", Map.of());
         }
@@ -754,7 +769,7 @@ public final class TreeProcesses {
     }
 
     static void submitted(ProcessContext ctx) {
-        EntityInstance draft = version(ctx, QbTrees.DRAFT);
+        EntityInstance draft = submittable(ctx);
         ApprovalOutcome approval = ctx.get(APPROVAL, ApprovalOutcome.class);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("submittedAt", ctx.opTime());
@@ -939,8 +954,8 @@ public final class TreeProcesses {
                             .where(new QueryPredicate.And(List.of(new QueryPredicate.In("treeId",
                                     ids(ctx.contains(TREE_ID) ? ctx.get(TREE_ID) : null)),
                                 new QueryPredicate.In("status", List.of(QbTrees.DRAFT, QbTrees.REVIEW,
-                                    QbTrees.IN_EFFECT)))))
-                            .limit(3).build(), VERSIONS)))
+                                    QbTrees.REJECTED, QbTrees.IN_EFFECT)))))
+                            .limit(4).build(), VERSIONS)))
                     .step("Load the versions' nodes", QueryEntities.<ProcessContext>all(
                         QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_DEF), ctx -> EntityQuery.builder()
                             .where(new QueryPredicate.In("versionId", list(ctx, VERSIONS).stream()
