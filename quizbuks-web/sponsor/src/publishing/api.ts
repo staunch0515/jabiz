@@ -133,6 +133,8 @@ export interface Publication {
   copiedFrom: string | null
   /** F-S9: what it adds to and removes from its version's topics. */
   topicChanges?: TopicChanges
+  /** F-S12: the video another Sponsor shares that it picked; null: none. */
+  sharedVideoId?: string | null
 }
 
 /** F-S9: a publication's changes of its version's topics (backend `TopicRules.Changes`). */
@@ -445,6 +447,7 @@ export function toPublication(row: Row): Publication {
     editedAt: String(row.editedAt ?? ''),
     copiedFrom: str(row.copiedFrom),
     topicChanges: topicChangesOf(row.topicChanges),
+    sharedVideoId: str(row.sharedVideoId),
   }
 }
 

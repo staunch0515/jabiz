@@ -37,7 +37,13 @@ public final class PublicationStatus {
     /** Its publisher ended it: a channel's publisher (S2), which ends a publication rather than withdrawing it. */
     public static final String PUBLISHER = "PUBLISHER";
 
-    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN, PUBLISHER);
+    /**
+     * F-S12: the shared video it used was taken down (illegal or infringing): not the sponsor's breach, so not a
+     * takedown of the publication ({@code PublicationAdmin.takenDown} stays false: its quiz is reviewed as before).
+     */
+    public static final String SHARED_VIDEO = "SHARED_VIDEO";
+
+    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN, PUBLISHER, SHARED_VIDEO);
 
     /**
      * Who paused a paused publication ({@code pausedBy}, Q10b, review M2): its sponsor, who may resume it, or an

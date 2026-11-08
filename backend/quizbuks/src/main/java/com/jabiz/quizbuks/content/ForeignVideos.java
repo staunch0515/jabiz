@@ -19,7 +19,8 @@ import java.util.stream.Stream;
  * page's link on a listed host is not foreign ({@link Accessible}). Nothing is built in: headquarters registers a host
  * through the controlled change.
  *
- * <p>Only the links: the shared videos of F-S12 join through {@link #foreign(Stream, Accessible)} once they exist.
+ * <p>Only the links: a publication's shared video (F-S12) joins the version's links where the card is frozen
+ * ({@code PublicationEditing.foreignVideo(ctx, snapshot, shared)}).
  * The App's and the console's {@code qb/video.ts} ({@code foreignVideo}) read links the same way, with the same cases.
  */
 public final class ForeignVideos {

@@ -28,7 +28,7 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Tag } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Tag, Clapperboard } from 'lucide-react'
 import TopicsPage from './TopicsPage'
 
 import BankTopUpPage from './BankTopUpPage'
@@ -44,6 +44,8 @@ import { AudiencePricesPage, AudienceRulesPage, OperatorAudiencePricesPage } fro
 import CertificationsPage from './CertificationsPage'
 import ReferralsPage from './ReferralsPage'
 import RegionPage from './RegionPage'
+import SharedVideosPage from './SharedVideosPage'
+import SharedVideoPage from './SharedVideoPage'
 import AiPage from './AiPage'
 import AttemptsPage from './AttemptsPage'
 import { BRAND } from './brand'
@@ -118,6 +120,9 @@ export default defineExtension({
     { path: '/qb/conversations/:conversationId', element: <ConversationPage /> },
     // F-S11: foreign videos and mainland China (headquarters' exceptions, the refused starts).
     { path: PATH.region, element: <RegionPage /> },
+    // F-S12: the videos Sponsors share: an operator's own Sponsors' to review and take down, the platform's all.
+    { path: PATH.sharedVideos, element: <SharedVideosPage /> },
+    { path: '/qb/shared-videos/:sharedVideoId', element: <SharedVideoPage /> },
     // F-S9: the word list of topics (headquarters).
     { path: PATH.topics, element: <TopicsPage /> },
     { path: PATH.users, element: <UsersPage /> },
@@ -235,6 +240,10 @@ export default defineExtension({
         // 2026-11-07): an operator's session reads and sets its own sponsors', the platform's every operator's,
         // filtered by operator; the platform-wide refusal counts show for headquarters only.
         { key: 'qb-region', label: 'menu.region', path: PATH.region, icon: Globe, permission: PERMISSION.regionRead },
+        // F-S12: the videos Sponsors share, one entry for both: an operator's session reviews and takes down its own
+        // Sponsors', the platform's reads every operator's (filtered by operator) and takes down in an emergency.
+        { key: 'qb-shared-videos', label: 'menu.sharedVideos', path: PATH.sharedVideos, icon: Clapperboard,
+          permission: PERMISSION.sharedVideoRead },
         // Q22: the cash rewards sponsors pay takers themselves (F-S1: nobody here decides their disputes).
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
           permission: PERMISSION.publicationRead },

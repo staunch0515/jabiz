@@ -76,7 +76,9 @@ public final class QbRoles {
         // the daily check of the address database.
         QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR,
         // F-S9: the word list of topics (adding, renaming, deactivating, merging) and its figures by topic.
-        QbPermissions.ADMIN_TOPIC_READ, QbPermissions.ADMIN_TOPIC_WRITE);
+        QbPermissions.ADMIN_TOPIC_READ, QbPermissions.ADMIN_TOPIC_WRITE,
+        // F-S12: every provider's shared videos, and the platform's emergency takedown.
+        QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE);
 
     /**
 
@@ -103,7 +105,9 @@ public final class QbRoles {
         QbPermissions.FEE_BILLING,
         // F-S11 (the requester, 2026-11-07): the exceptions to the rule on foreign videos for its own sponsors (the
         // entry scope limits them); not the platform-wide refusal counts or the address database (ADMIN_REGION_MONITOR).
-        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE);
+        QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE,
+        // F-S12: its own sponsors' shared videos (reviewing them is REVIEW_PUBLICATION's) and taking them down.
+        QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,

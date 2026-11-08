@@ -48,7 +48,7 @@ steps:
         qb.fee.default-billing-mode, qb.fee.overdue.block-submit, qb.certification.sponsor-rounds.enabled,
         qb.play.entry-fee.enabled, qb.usage.storage.free-bytes, qb.video.mainland-accessible-sites]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
-        qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review,
+        qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review, qb.shared-video.review,
         qb.sod.control-changes, qb.sod.security-administration]
       legalDraftsCreated: [TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE, CONTEST_RULES]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",

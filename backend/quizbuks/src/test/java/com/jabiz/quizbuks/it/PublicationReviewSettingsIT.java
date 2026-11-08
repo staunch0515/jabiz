@@ -45,6 +45,7 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_PLAN_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_WITHDRAWAL_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.FEE_REQUEST_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.SHARED_VIDEO_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbSodRules.CONTROL.code(), com.jabiz.quizbuks.setup.QbSodRules.SECURITY.code()));
         String id = draft(sponsorA(), version(sponsorA(), "Settings"), "Configured?");
         // The separation of duties (Q10b) comes last and is left unpublished: the rules are counted before it.

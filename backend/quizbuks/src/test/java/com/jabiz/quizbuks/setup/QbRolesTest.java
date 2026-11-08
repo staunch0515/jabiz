@@ -41,8 +41,10 @@ class QbRolesTest {
                 QbPermissions.FEE_BILLING,
                 // F-S11 (the requester, 2026-11-07): the exceptions for foreign videos of its own sponsors (the entry
                 // scope limits them), not the platform-wide refusal counts or the address database's check.
-                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE)
-            .doesNotContain(QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
+                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE,
+                // F-S12: its own sponsors' shared videos and taking them down (reviewing is REVIEW_PUBLICATION's).
+                QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE)
+            .doesNotContain(QbPermissions.SHARED_VIDEO_SYSTEM, QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
                 QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN,
@@ -60,7 +62,9 @@ class QbRolesTest {
             .contains(QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.SPOT_CHECK, QbPermissions.OPERATORS_READ,
                 QbPermissions.ADMIN_PROSPECT, QbPermissions.AUDIENCE_RULES_WRITE,
                 // F-S11: every sponsor's exceptions for foreign videos, the refusal counts and the address database.
-                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR)
+                QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE, QbPermissions.ADMIN_REGION_MONITOR,
+                // F-S12: every provider's shared videos and the platform's emergency takedown.
+                QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE)
             .doesNotContain(QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 QbPermissions.PROSPECT_USE, QbPermissions.CERTIFICATION_MANAGE)
