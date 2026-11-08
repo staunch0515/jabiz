@@ -5431,3 +5431,10 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 **验收**：CI 绿；`13-observability-ops.md` §7"试发"写明应用规则的做法。
 
 **17zz9 状态**：📝 待评审（分支 `1.3/phase-17zz9-alert-fire-app-rules`）。
+
+### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
+
+| 候选 | 缘由 | 粗估 |
+|---|---|---|
+| 补投放弃的事件 | 事件消费者用满 `jabiz.events.delivery.max-attempts`（缺省 10）后只记 error 日志，11 §2 写"由运维处理"却没有工具（2026-11-08 staging 的邮件因出站 465 被封全部放弃）。做法：受保护的权限、必填原因、按消费者与时间范围补投；邮件另有年龄限制（发信时才生成令牌的旧消息记为 `SKIPPED`，不在几小时后寄出登录链接）；`DeliverMail` 已跳过 `SENT` 的消息，不会重复 | 约 2 天 |
+| 经 HTTPS 发信 API 发信（如 Cloudflare Email Sending） | 服务器的出站 SMTP 端口被托管商封锁时不依赖端口。`NotificationSender` 的第二个实现，`jabiz.mail.transport` 选择；令牌只取自环境变量、出站主机白名单、4xx 不重试；附件视 API 而定（不支持则 `DOCUMENT_SEND` 明确拒绝）；应用登记的发信服务器（D56）仍走 SMTP。设计 18 §5.6 增节，可能需要新决策 | 约 1.5–2 天 |
