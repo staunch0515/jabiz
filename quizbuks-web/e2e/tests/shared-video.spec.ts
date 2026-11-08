@@ -29,6 +29,10 @@ import {
  * the live publication goes on), then the operator takes it down: the minute's job ends the publication using it
  * (reason SHARED_VIDEO, not a takedown of the publication), both sides are mailed, and the App no longer lists it.
  * The player is a blank page here: the test does not reach YouTube.
+ *
+ * F-C3 (docs/quizbuks/plans/impl/F-C3.md): the asset's row says how its share stands (and offers "Share" again once
+ * it no longer stands), the provider's own catalog leaves their video out, the takedown reaches the provider's inbox
+ * (leading to the asset library), and the administration's video page lists the publication the takedown ended.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
@@ -122,6 +126,9 @@ test('a provider shares a video, its operator reviews it once, another Sponsor u
     await expect(mine.getByTestId('shared-video-status')).toHaveAttribute('data-status', 'PENDING')
     await expect(mine).toContainText(title.en)
     await expect(mine).toContainText(word.english)
+    // F-C3: the asset's row says it is in review, and offers no second share.
+    await expect(row.getByTestId('shared-video-status')).toHaveAttribute('data-status', 'PENDING')
+    await expect(row.getByTestId('asset-share')).toHaveCount(0)
     await expectAccessible(page, 'console my shared videos in review')
 
     // 2. Waiting for the review: not in the catalog yet; headquarters see it in the administration.
@@ -148,6 +155,9 @@ test('a provider shares a video, its operator reviews it once, another Sponsor u
     await run(request, reviewer, 'APPROVAL_DECIDE', { requestId: pending.approvalRequestId, decision: 'APPROVE' })
     await expect.poll(async () => (await myShare(request, provider.token, assetId))?.status,
       { message: 'the share is approved', timeout: 30_000 }).toBe('APPROVED')
+    // F-C3: in the catalog for others, not for the provider (their own videos come from their materials).
+    expect(await query(request, user.token, 'qb.sponsor.shared-videos', { q: mark })).toHaveLength(1)
+    expect(await query(request, provider.token, 'qb.sponsor.shared-videos', { q: mark })).toHaveLength(0)
 
     // 4. Another Sponsor: a draft of a quiz without a video picks it from the catalog in the wizard's first step.
     const quiz = await completeQuiz(request, user.token, { title: unique('Harbour quiz ') })
@@ -243,6 +253,9 @@ test('a provider shares a video, its operator reviews it once, another Sponsor u
     await page.getByRole('alertdialog').getByRole('button', { name: 'Withdraw' }).click()
     await expect(mine.getByTestId('shared-video-status')).toHaveAttribute('data-status', 'WITHDRAWN')
     await expect(mine.getByTestId('shared-video-withdraw')).toHaveCount(0)
+    // F-C3: the asset's row says so, and offers sharing it again.
+    await expect(row.getByTestId('shared-video-status')).toHaveAttribute('data-status', 'WITHDRAWN')
+    await expect(row.getByTestId('asset-share')).toBeVisible()
     expect(await query(request, user.token, 'qb.sponsor.shared-videos', { q: mark })).toHaveLength(0)
     expect((await publicationOf(request, user.token, publicationId)).status).toBe('LIVE')
 
@@ -263,15 +276,40 @@ test('a provider shares a video, its operator reviews it once, another Sponsor u
     await page.reload()
     await expect(mine.getByTestId('shared-video-status')).toHaveAttribute('data-status', 'TAKEN_DOWN')
     await expect(mine.getByTestId('shared-video-reason')).toContainText(reason)
+    await expect(row.getByTestId('shared-video-status')).toHaveAttribute('data-status', 'TAKEN_DOWN')
     await expectAccessible(page, 'console my shared video taken down')
+
+    // F-C3: the provider's inbox has it too, with the reason, leading to the asset library.
+    await expect.poll(async () => (await query(request, provider.token, 'qb.sponsor.inbox', {}))
+      .some((item) => item.kind === 'SHARED_VIDEO_TAKEN_DOWN' && JSON.stringify(item.title).includes(title.en)),
+    { message: 'the provider\'s notice', timeout: 30_000 }).toBe(true)
+    await page.goto('/sponsor/messages?tab=inbox')
+    const notice = page.getByTestId('announcement').filter({ hasText: title.en })
+    await expect(notice).toContainText('was taken down')
+    await notice.getByTestId('announcement-open').click()
+    await expect(notice).toContainText(reason)
+    await expectAccessible(page, 'console inbox shared video taken down')
+    await notice.getByTestId('announcement-action').click()
+    await expect(page).toHaveURL(/\/sponsor\/assets/)
+    await expect(row.getByTestId('shared-video-status')).toHaveAttribute('data-status', 'TAKEN_DOWN')
+
     await setAppearance(page, 'dark')
     await page.reload()
     await expect(mine.getByTestId('shared-video-reason')).toContainText(reason)
     await expectAccessible(page, 'console my shared video taken down (dark)')
+    await page.goto('/sponsor/messages?tab=inbox')
+    await notice.getByTestId('announcement-open').click()
+    await expect(notice).toContainText(reason)
+    await expectAccessible(page, 'console inbox shared video taken down (dark)')
     await signInAdmin(page)
     await page.goto(`/admin/qb/shared-videos/${sharedVideoId}`)
     await expect(page.getByTestId('shared-video-page')).toHaveAttribute('data-status', 'TAKEN_DOWN')
     await expect(page.getByTestId('shared-video-content')).toContainText(reason)
+    // F-C3: the publication the takedown ended, linked, with why.
+    const ended = page.locator(`[data-testid="shared-video-use"][data-id="${publicationId}"]`)
+    await expect(ended).toHaveAttribute('data-end-reason', 'SHARED_VIDEO')
+    await expect(ended).toHaveAttribute('data-status', 'ENDED')
+    await expect(ended.getByTestId('shared-video-use-link')).toHaveText(name)
     await expectAccessible(page, 'admin shared video taken down (dark)')
 
     // The App no longer lists the publication.
