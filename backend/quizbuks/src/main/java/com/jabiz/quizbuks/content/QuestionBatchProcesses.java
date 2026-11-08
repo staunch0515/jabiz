@@ -116,13 +116,7 @@ public final class QuestionBatchProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
-                .step("Load their options", QueryEntities.<ProcessContext>of(
-                    QbContent.defaultDataset(QbContent.OPTION), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)),
-                            new QueryPredicate.In("questionId", new ArrayList<>(named(ctx))))))
-                        .limit(Integer.MAX_VALUE).build(), OPTIONS))
-                .steps(b -> TranslationProcesses.loadTranslationsOf(b, QuestionBatchProcesses::translationKeys))
-                .steps(b -> AssetUses.load(b, ctx -> List.of(), QuestionBatchProcesses::places))
+                .steps(QuestionBatchProcesses::loadPartsOfTargets)
                 .compute("Delete the questions", (metadata, ctx) -> deleteMany(ctx)));
     }
 
@@ -137,13 +131,7 @@ public final class QuestionBatchProcesses {
         if (doomed == null) {
             return;
         }
-        TranslationProcesses.deleteTranslationsOf(ctx, new HashSet<>(translationKeys(ctx)));
-        // Options first: a question still referred to cannot be deleted.
-        List<EntityInstance> options = list(ctx, OPTIONS);
-        options.forEach(option -> ctx.changes().delete(QbContent.OPTION, option.id(), option.version()));
-        doomed.forEach(question -> ctx.changes().delete(QbContent.QUESTION, question.id(), question.version()));
-        AssetUses.forget(ctx, QbAssets.QUESTION_IMAGE, doomed.stream().map(EntityInstance::id).toList());
-        AssetUses.forget(ctx, QbAssets.OPTION_IMAGE, options.stream().map(EntityInstance::id).toList());
+        remove(ctx, doomed, QuizEditing.groups(list(ctx, OPTIONS), "questionId"));
         QuizEditing.touch(ctx, quiz, Map.of("questionCount", decimal(questions.size() - doomed.size())), null,
             List.of());
     }
@@ -207,39 +195,75 @@ public final class QuestionBatchProcesses {
         return ctx.hasViolations() ? null : found;
     }
 
-    /** The questions the input names, as text (whether or not they are in the quiz). */
-    private static Set<String> named(ProcessContext ctx) {
+    /**
+     * The steps that load what removing the target questions takes: their options, their and their options'
+     * translations, and where their images came from (F-C1b). The targets are the input's ({@link #targetIds}).
+     */
+    static <I, O> void loadPartsOfTargets(com.jabiz.process.ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Load their options", QueryEntities.<ProcessContext>of(
+            QbContent.defaultDataset(QbContent.OPTION), ctx -> EntityQuery.builder()
+                .where(new QueryPredicate.And(List.of(new QueryPredicate.Eq("quizId", ctx.get(QUIZ_ID)),
+                    new QueryPredicate.In("questionId", new ArrayList<>(targetIds(ctx))))))
+                .limit(Integer.MAX_VALUE).build(), OPTIONS));
+        TranslationProcesses.loadTranslationsOf(pb, ctx -> translationKeys(ctx, targetsIn(ctx, list(ctx, QUESTIONS))));
+        AssetUses.load(pb, ctx -> List.of(), ctx -> places(ctx, targetsIn(ctx, list(ctx, QUESTIONS))));
+    }
+
+    /**
+     * The questions the input is about, as text: those {@code QB_QUESTION_DELETE_MANY} names (whether or not in the
+     * quiz), or the quiz's questions an import batch added ({@code QB_QUESTION_IMPORT_UNDO}).
+     */
+    static Set<String> targetIds(ProcessContext ctx) {
         Set<String> ids = new java.util.LinkedHashSet<>();
-        ctx.get(INPUT, ManyInput.class).questionIds().forEach(id -> ids.add(key(id)));
+        Object input = ctx.get(INPUT);
+        if (input instanceof ManyInput many) {
+            many.questionIds().forEach(id -> ids.add(key(id)));
+        } else if (input instanceof QuestionImportProcesses.UndoInput undo) {
+            String batch = key(undo.importId());
+            list(ctx, QUESTIONS).stream().filter(q -> batch.equals(String.valueOf((Object) q.get("importId"))))
+                .forEach(q -> ids.add(key(q.id())));
+        }
         return ids;
     }
 
-    /** Only of the named questions of this quiz: the options are loaded for this quiz only. */
-    private static List<String> translationKeys(ProcessContext ctx) {
-        Set<String> inQuiz = new HashSet<>();
-        list(ctx, QUESTIONS).forEach(row -> inQuiz.add(key(row.id())));
-        Map<String, List<Object>> options = new LinkedHashMap<>();
-        list(ctx, OPTIONS).forEach(o -> options.computeIfAbsent(key(o.get("questionId")), k -> new ArrayList<>())
-            .add(o.id()));
+    /** The target questions among the quiz's. */
+    static List<EntityInstance> targetsIn(ProcessContext ctx, List<EntityInstance> questions) {
+        Set<String> ids = targetIds(ctx);
+        return questions.stream().filter(q -> ids.contains(key(q.id()))).toList();
+    }
+
+    /** Removes the questions with their options, translations and image records (loaded by the steps above). */
+    static void remove(ProcessContext ctx, List<EntityInstance> doomed, Map<String, List<EntityInstance>> options) {
+        TranslationProcesses.deleteTranslationsOf(ctx, new HashSet<>(translationKeys(ctx, doomed)));
+        List<EntityInstance> theirOptions = new ArrayList<>();
+        doomed.forEach(q -> theirOptions.addAll(options.getOrDefault(key(q.id()), List.of())));
+        // Options first: a question still referred to cannot be deleted.
+        theirOptions.forEach(option -> ctx.changes().delete(QbContent.OPTION, option.id(), option.version()));
+        doomed.forEach(question -> ctx.changes().delete(QbContent.QUESTION, question.id(), question.version()));
+        AssetUses.forget(ctx, QbAssets.QUESTION_IMAGE, doomed.stream().map(EntityInstance::id).toList());
+        AssetUses.forget(ctx, QbAssets.OPTION_IMAGE, theirOptions.stream().map(EntityInstance::id).toList());
+    }
+
+    /** The translation keys of the questions and of their options (as loaded). */
+    private static List<String> translationKeys(ProcessContext ctx, List<EntityInstance> questions) {
+        Map<String, List<EntityInstance>> options = QuizEditing.groups(list(ctx, OPTIONS), "questionId");
         List<String> keys = new ArrayList<>();
-        for (String id : named(ctx)) {
-            if (inQuiz.contains(id)) {
-                keys.addAll(ContentLanguages.keysOf(UUID.fromString(id), options.getOrDefault(id, List.of())));
-            }
+        for (EntityInstance question : questions) {
+            keys.addAll(ContentLanguages.keysOf(question.id(), options.getOrDefault(key(question.id()), List.of())
+                .stream().map(EntityInstance::id).toList()));
         }
         return keys;
     }
 
-    private static List<AssetUses.Place> places(ProcessContext ctx) {
-        Set<String> inQuiz = new HashSet<>();
-        list(ctx, QUESTIONS).forEach(row -> inQuiz.add(key(row.id())));
+    private static List<AssetUses.Place> places(ProcessContext ctx, List<EntityInstance> questions) {
         List<AssetUses.Place> places = new ArrayList<>();
-        for (String id : named(ctx)) {
-            if (inQuiz.contains(id)) {
-                places.add(new AssetUses.Place(QbAssets.QUESTION_IMAGE, uuid(id)));
-            }
-        }
-        list(ctx, OPTIONS).forEach(o -> places.add(new AssetUses.Place(QbAssets.OPTION_IMAGE, o.id())));
+        Set<String> ids = new HashSet<>();
+        questions.forEach(q -> {
+            ids.add(key(q.id()));
+            places.add(new AssetUses.Place(QbAssets.QUESTION_IMAGE, q.id()));
+        });
+        list(ctx, OPTIONS).stream().filter(o -> ids.contains(key(o.get("questionId"))))
+            .forEach(o -> places.add(new AssetUses.Place(QbAssets.OPTION_IMAGE, o.id())));
         return places;
     }
 

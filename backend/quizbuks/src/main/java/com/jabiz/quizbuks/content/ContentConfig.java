@@ -70,6 +70,21 @@ public class ContentConfig {
     }
 
     @Bean
+    EntityDefinition qbQuestionImportEntity() {
+        return QbContent.QUESTION_IMPORT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbQuestionImportDataset() {
+        return defaultDataset(QbContent.QUESTION_IMPORT, 1);
+    }
+
+    @Bean
+    DatasetDefinition qbQuestionImportSponsorDataset() {
+        return sponsorDataset(QbContent.QUESTION_IMPORT);
+    }
+
+    @Bean
     EntityDefinition qbQuizEntity() {
         return QbContent.QUIZ_ENTITY;
     }
@@ -340,6 +355,18 @@ public class ContentConfig {
     @Bean
     ProcessDefinition<QuestionBatchProcesses.PointsInput, EditOutput, ProcessContext> qbQuestionPointsSet() {
         return QuestionBatchProcesses.pointsSet();
+    }
+
+    @Bean
+    ProcessDefinition<QuestionImportProcesses.ImportInput, QuestionImportProcesses.ImportOutput, ProcessContext>
+        qbQuizImportQuestions() {
+        return QuestionImportProcesses.importQuestions();
+    }
+
+    @Bean
+    ProcessDefinition<QuestionImportProcesses.UndoInput, QuestionImportProcesses.UndoOutput, ProcessContext>
+        qbQuestionImportUndo() {
+        return QuestionImportProcesses.undo();
     }
 
     @Bean

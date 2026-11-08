@@ -40,7 +40,8 @@ public final class OperatorScopes {
     static {
         Map<String, String> fields = new LinkedHashMap<>();
         for (String entity : new String[] {QbContent.QUIZ, QbContent.MATERIAL, QbContent.MATERIAL_IMAGE,
-            QbContent.QUESTION, QbContent.OPTION, QbContent.VERSION, QbContent.VERSION_FILE, QbContent.TRANSLATION}) {
+            QbContent.QUESTION, QbContent.OPTION, QbContent.VERSION, QbContent.VERSION_FILE, QbContent.TRANSLATION,
+            QbContent.QUESTION_IMPORT}) {
             fields.put(entity, "ownerId");
         }
         for (String entity : new String[] {QbPublications.PUBLICATION, QbPublications.TIER, QbPublications.CARD,

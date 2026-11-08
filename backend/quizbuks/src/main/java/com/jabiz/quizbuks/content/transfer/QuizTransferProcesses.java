@@ -208,6 +208,14 @@ public final class QuizTransferProcesses {
 
     /** The file, read and checked; null (with the problems rejected) when it cannot be imported. */
     private static QuizFile read(ProcessContext ctx, Map<String, ?> document) {
+        return read(ctx, document, QuizBankLimits.maxQuestions(ctx.get(LIMITS, ParamValues.class)));
+    }
+
+    /**
+     * The file, read and checked with at most {@code maxQuestions} questions; null (with the problems rejected) when
+     * it cannot be imported. F-S6: also for a batch of questions imported into a quiz.
+     */
+    public static QuizFile read(ProcessContext ctx, Map<String, ?> document, int maxQuestions) {
         QuizFileFormat.Reading reading = QuizFileFormat.read(document);
         ctx.put(READING, reading);
         if (!reading.supported()) {
@@ -219,8 +227,7 @@ public final class QuizTransferProcesses {
             ctx.reject(new Violation(null, ContentCodes.QUIZ_FILE_UNSUPPORTED, reading.problem(), params));
             return null;
         }
-        List<Violation> problems = QuizFileChecks.check(reading.file(),
-            QuizBankLimits.maxQuestions(ctx.get(LIMITS, ParamValues.class)));
+        List<Violation> problems = QuizFileChecks.check(reading.file(), maxQuestions);
         problems.forEach(ctx::reject);
         return problems.isEmpty() ? reading.file() : null;
     }
@@ -231,8 +238,28 @@ public final class QuizTransferProcesses {
         if (file == null) {
             return;
         }
+        Map<String, UUID> ids = uploaded(ctx, file, input.files());
+        if (ids == null) {
+            return;
+        }
+        // Q73a: the base language the file names (else the caller's), and the hashes its translations were made from.
+        Map<String, Map<String, String>> hashes = new LinkedHashMap<>();
+        file.translations().forEach((language, t) -> hashes.put(language, t.hashes()));
+        Object quizId = QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null,
+            file.language(), hashes);
+        links(ctx, file);
+        QuizFileFormat.Reading reading = ctx.get(READING, QuizFileFormat.Reading.class);
+        ctx.put(OUTPUT, new ImportOutput(QuizEditing.uuid(quizId), reading.version(), reading.readers()));
+    }
+
+    /**
+     * The files the file uses, by their keys, as uploaded by the caller for it (loaded by
+     * {@link QuizEditing#loadFiles}); null (with the problems rejected) when one is missing, another's or of the wrong
+     * kind.
+     */
+    public static Map<String, UUID> uploaded(ProcessContext ctx, QuizFile file, Map<String, UUID> files) {
         String actor = ctx.request().actorId();
-        Map<String, UUID> given = input.files() == null ? Map.of() : input.files();
+        Map<String, UUID> given = files == null ? Map.of() : files;
         Map<String, UUID> ids = new LinkedHashMap<>();
         for (QuizFileChecks.Use use : QuizFileChecks.uses(file)) {
             UUID fileId = given.get(use.key());
@@ -251,21 +278,11 @@ public final class QuizTransferProcesses {
                 ids.put(use.key(), fileId);
             }
         }
-        if (ctx.hasViolations()) {
-            return;
-        }
-        // Q73a: the base language the file names (else the caller's), and the hashes its translations were made from.
-        Map<String, Map<String, String>> hashes = new LinkedHashMap<>();
-        file.translations().forEach((language, t) -> hashes.put(language, t.hashes()));
-        Object quizId = QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null,
-            file.language(), hashes);
-        links(ctx, file);
-        QuizFileFormat.Reading reading = ctx.get(READING, QuizFileFormat.Reading.class);
-        ctx.put(OUTPUT, new ImportOutput(QuizEditing.uuid(quizId), reading.version(), reading.readers()));
+        return ctx.hasViolations() ? null : ids;
     }
 
     /** The file as a draft's content, its files by their uploaded keys, numbered in their order. */
-    static QuizSnapshot snapshot(QuizFile file, Map<String, UUID> ids) {
+    public static QuizSnapshot snapshot(QuizFile file, Map<String, UUID> ids) {
         List<QuizSnapshot.Material> materials = new ArrayList<>();
         for (int m = 0; m < file.materials().size(); m++) {
             materials.add(material(file.materials().get(m), m + 1, ids));
