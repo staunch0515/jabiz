@@ -97,8 +97,10 @@ class LargeBankIT extends PlayItSupport {
         Map<String, Object> tooMany = new LinkedHashMap<>(all);
         tooMany.put("publicationId", whole.get("publicationId"));
         tooMany.put("pickCount", PlayLimits.MAX_PER_ATTEMPT_TECH + 1);
-        assertThat(run("QB_PUBLICATION_SAVE", token, tooMany).get("problems").toString())
-            .contains(PublishingCodes.PICK_TOO_MANY);
+        // Over the technical ceiling the field itself refuses it (400; PICK_TOO_MANY answers a pick under the ceiling
+        // but over the parameter, F-S7).
+        assertThat(codes(refused("QB_PUBLICATION_SAVE", token, tooMany, 400)))
+            .containsExactly(PublishingCodes.PICK_RANGE);
 
         Map<String, Object> save = complete(versionId, "Large bank", now, now.plus(Duration.ofDays(7)));
         save.put("regions", List.of("GLOBAL"));
