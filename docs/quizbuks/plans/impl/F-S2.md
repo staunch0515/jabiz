@@ -54,6 +54,12 @@
   - `TierCoverage.rewardOptional` 留着：F-S2b1 绑定节点的发布用它，只去掉了轮的情形。
   - D4、D5 的页面：发起方 `/tree` 与 App 商户主页的树显示"即将更新"，F-S3 换成看图；`share/levels.ts`、`qb/TechTree.tsx`、`qb/tree.ts` 留到 F-S3。结果页的"看看下一步"（D5 清单内）提前删除：它只在答卷互为前置时出现，前置删除后不会再出现。
   - 发起方的旧地址 `/certifications` 转到资源库 `/assets`。
+- **实施记录（F-S2c2b）**：
+  - 发起方申请资格（D7）：注册守卫 `tree.SponsorApplyGuard`（原 `certification.SponsorApplyGuard`）按平台 D80 预读：参数所指的节点与图（`SignInLoad.global(…).whereParam`）、本人在该图与节点上的点亮（`SignInLoad.of(…, "subjectId").whereParam`）、本人的撤销；判断用 `TreeGates.parse` / `open`，没有参数即关闭。只管已登录学者加入发起方入口（`SIGNED_IN_JOIN`）；运营商自己的发起方照旧放行。拒绝的原因码 `qb.certification-required` 不变，三语文字改为"先点亮……的节点"。V96 为撤销按 `subject_id` 建索引（D80 的启动检查要比较的列有以它开头的索引）。
+  - D1 删除：`Certifications`、`CertificationHolding`、`CertificationProcesses`（`QB_CERTIFICATION_ROUND_ADD/_CLOSE/_GRANT/_REVOKE/_CLAIM/_OVERVIEW/_OVERVIEW_OF`）、`RoundHolders`、`CertificationCodes`、轮的实体与数据视图、认证字典、本人记录的视图、权限 `qb.certification.manage` / `admin`（及角色中的授予）、首页与发布页的 `certification` 列、草稿删除时连带删轮；管理系统扩展的「认证」页（两处菜单）；App"成为发起方"的认领一步（改为直接申请，由守卫判断并说明原因）、卡片与发布页的"合格授予"。V96 删除 `qb_certification_round`。
+  - **只读留下的**（总控 2026-11-08 的规则：已签发证书要读的先保留）：`qb_certification_record`（核实页与学者公开页读之前记下的撤销）、`qb_sponsor_certification`（名称与签发方）、证书名的三语文字（后端 `qb.certification.<键>`、App 与管理系统扩展的名字）。F-S5 改为节点证书时迁移后再删。
+  - "我的认证"（`QB_MY_CERTIFICATIONS`）改为列出仍有效的已签发证书（未到期、没有持有开始之后的撤销，每种认证最新的一张），不再有"持有而没有证书"的一项；暂停签发的说明放在列表下方。
+  - `qb_official_publisher` 早已在 V78 删除。
 
 ## 2. 数据（F-S2a、F-S2b）
 
