@@ -68,7 +68,9 @@ test('a Shorts publication is in the shelf; the vertical mode swipes on and lead
   await expectAccessible(page, 'app vertical mode')
   // A swipe up shows the next one; the keys and the buttons move as well.
   const screens = viewer.getByTestId('shorts-screens')
-  await screens.hover()
+  // The pointer over the screens but off the player: its frame covers the middle (a wheel there goes to the
+  // frame's page, and Playwright refuses to hover a covered point).
+  await screens.hover({ position: { x: 8, y: 8 } })
   await page.mouse.wheel(0, 900)
   await expect(viewer.locator('[data-testid="shorts-screen"][data-current]')).toHaveAttribute('data-publication', first)
   await page.keyboard.press('ArrowUp')
