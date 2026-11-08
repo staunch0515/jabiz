@@ -6,6 +6,18 @@
 
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /src
+# As the platform's Dockerfile (ROADMAP 17zz10): Gradle's home outside the cache mount, and the Gradle distribution in
+# a layer of its own that only the wrapper's files invalidate (CI's layer cache keeps it), downloaded with five
+# attempts, waiting 15, 30, 60 and 120 s between (services.gradle.org redirects to GitHub's release downloads, which
+# answered 504 for minutes at a time on 2026-11-08).
+ENV GRADLE_USER_HOME=/opt/gradle-home
+COPY backend/gradlew backend/gradlew
+COPY backend/gradle/wrapper backend/gradle/wrapper
+RUN cd backend && wait=15 && for attempt in 1 2 3 4 5; do \
+      ./gradlew --version --no-daemon --console=plain >/dev/null && exit 0; \
+      [ "$attempt" -lt 5 ] || break; \
+      echo "downloading Gradle failed (attempt $attempt), trying again in $wait s" >&2; sleep "$wait"; wait=$((wait * 2)); \
+    done; exit 1
 COPY backend backend
 COPY frontend frontend
 COPY quizbuks-web quizbuks-web
@@ -21,7 +33,7 @@ ARG QB_SHOPIFY_SUPPORT_EMAIL=""
 # The brand profile (quizbuks-web/brands/<brand>, Q54/Q55b): its name, marks, colours, support address and site in the
 # messages and every front end. Empty: QuizBuks.
 ARG QB_BRAND=""
-RUN --mount=type=cache,target=/root/.gradle \
+RUN --mount=type=cache,target=/opt/gradle-home/caches \
     cd backend && JABIZ_BUILD_COMMIT="$JABIZ_BUILD_COMMIT" QB_SHOPIFY_SUPPORT_EMAIL="$QB_SHOPIFY_SUPPORT_EMAIL" \
     QB_BRAND="$QB_BRAND" ./gradlew :quizbuks:bootJar --no-daemon --console=plain \
     && cp quizbuks/build/libs/quizbuks-0.0.1-SNAPSHOT.jar /src/app.jar
