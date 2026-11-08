@@ -26,6 +26,9 @@ public final class QbTrees {
     /** A lit record revoked (F-S2b, written once; the revocation itself comes in F-S2b2). */
     public static final String REVOCATION = "QbTreeLitRevocation";
 
+    /** A request to revoke a lit record, reviewed by another member (F-S2b2). */
+    public static final String REVOKE_REQUEST = "QbTreeLitRevokeRequest";
+
     /** A person's own lit records and revocations ({@code me:}). */
     public static final String MY_LITS = "urn:jabiz:dataset:me:" + LIT;
     public static final String MY_REVOCATIONS = "urn:jabiz:dataset:me:" + REVOCATION;
@@ -39,6 +42,12 @@ public final class QbTrees {
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:tree-status";
     public static final String VERSION_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:tree-version-status";
     public static final String LIT_SUBJECT_DICTIONARY = "urn:jabiz:dict:quizbuks:tree-lit-subject";
+    public static final String REVOKE_STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:tree-revoke-status";
+
+    /** A revocation request's states: in review, then revoked or rejected (or withdrawn by a new request, never). */
+    public static final String REVOKE_REVIEW = "REVIEW";
+    public static final String REVOKE_DONE = "REVOKED";
+    public static final String REVOKE_REJECTED = "REJECTED";
 
 
     /** The platform's template (no owner id). */
@@ -138,6 +147,9 @@ public final class QbTrees {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("submittedBy", f -> f.physicalColumn("submitted_by").processOnly().asText(OWNER_LENGTH));
         eb.field("decidedAt", f -> f.physicalColumn("decided_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        // F-S2b2: when a version waiting too long for its review was reminded (once).
+        eb.field("remindedAt", f -> f.physicalColumn("reminded_at").processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("rejectReason", f -> f.physicalColumn("reject_reason").processOnly().asText(REASON_LENGTH, true));
         eb.field("editedAt", f -> f.physicalColumn("edited_at").required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
@@ -267,6 +279,46 @@ public final class QbTrees {
             .filters("litId", "subjectKind", "subjectId")
             .sorts("revokedAt")
             .defaultSort("revokedAt", false));
+    });
+
+    public static final EntityDefinition REVOKE_REQUEST_ENTITY = EntityDefinition.define(REVOKE_REQUEST, eb -> {
+        eb.physicalTable("qb_tree_lit_revoke_request");
+        eb.primaryKey("requestId");
+        eb.field("requestId", f -> f.physicalColumn("request_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:tree-lit-revoke-request"));
+        eb.field("litId", f -> f.physicalColumn("lit_id").immutable(true).required(true).processOnly()
+            .asText(ID_LENGTH));
+        eb.field("subjectKind", f -> f.physicalColumn("subject_kind").immutable(true).required(true).processOnly()
+            .asCode(LIT_SUBJECT_DICTIONARY, LIT_SUBJECTS.toArray(String[]::new)));
+        eb.field("subjectId", f -> f.physicalColumn("subject_id").immutable(true).required(true).processOnly()
+            .asText(OWNER_LENGTH));
+        eb.field("treeId", f -> f.physicalColumn("tree_id").immutable(true).required(true).processOnly()
+            .asText(ID_LENGTH));
+        eb.field("nodeId", f -> f.physicalColumn("node_id").immutable(true).required(true).processOnly()
+            .asText(ID_LENGTH));
+        // The operator whose members review it (the graph's Sponsor's or the copy's); none: the platform's.
+        eb.field("operatorId", f -> f.physicalColumn("operator_id").immutable(true).processOnly()
+            .asText(ID_LENGTH));
+        eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true).processOnly()
+            .asText(REASON_LENGTH, true));
+        eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
+            .asCode(REVOKE_STATUS_DICTIONARY, REVOKE_REVIEW, REVOKE_DONE, REVOKE_REJECTED));
+        eb.field("requestedBy", f -> f.physicalColumn("requested_by").immutable(true).required(true).processOnly()
+            .asText(OWNER_LENGTH));
+        eb.field("requestedAt", f -> f.physicalColumn("requested_at").immutable(true).required(true).processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("approvalRequestId", f -> f.physicalColumn("approval_request_id").processOnly().asText(ID_LENGTH));
+        eb.field("decidedAt", f -> f.physicalColumn("decided_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("rejectReason", f -> f.physicalColumn("reject_reason").processOnly().asText(REASON_LENGTH, true));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.stateTransitions("status", st -> st
+            .initial(REVOKE_REVIEW)
+            .from(REVOKE_REVIEW).to(REVOKE_DONE, REVOKE_REJECTED));
+        eb.listView("default", lv -> lv
+            .columns("subjectId", "treeId", "nodeId", "status", "requestedBy", "requestedAt")
+            .filters("subjectId", "treeId", "nodeId", "status", "operatorId", "requestedAt")
+            .sorts("requestedAt")
+            .defaultSort("requestedAt", false));
     });
 
     private QbTrees() {}

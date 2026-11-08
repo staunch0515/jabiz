@@ -37,7 +37,10 @@ public final class PublicationStatus {
     /** Its publisher ended it: a channel's publisher (S2), which ends a publication rather than withdrawing it. */
     public static final String PUBLISHER = "PUBLISHER";
 
-    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN, PUBLISHER);
+    /** F-S2b2: the knowledge map whose node it is bound to was retired. */
+    public static final String TREE = "TREE";
+
+    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN, PUBLISHER, TREE);
 
     /**
      * Who paused a paused publication ({@code pausedBy}, Q10b, review M2): its sponsor, who may resume it, or an

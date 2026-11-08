@@ -72,7 +72,7 @@ public final class PublicationNotices {
             return FUNDS_SHORT;
         }
         if (PublicationStatus.ENDED.equals(to) && List.of(PublicationStatus.EXPIRED, PublicationStatus.QUOTA,
-            PublicationStatus.BUDGET).contains(values.get("endReason"))) {
+            PublicationStatus.BUDGET, PublicationStatus.TREE).contains(values.get("endReason"))) {
             return ENDED;
         }
         return null;

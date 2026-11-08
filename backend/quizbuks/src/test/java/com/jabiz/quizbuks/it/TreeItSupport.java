@@ -105,4 +105,13 @@ abstract class TreeItSupport extends PlayItSupport {
         assertThat(submit(token, publicationId).get("status")).isIn("LIVE", "SCHEDULED");
         return publicationId;
     }
+
+    void advance(Duration duration) {
+        clock.set(clock.instant().plus(duration));
+    }
+
+    static long outboxEvents(String type, String key, String value) {
+        return ((Number) query("SELECT count(*) AS n FROM sys_outbox_event WHERE event_type = ? "
+            + "AND payload::jsonb ->> ? = ?", type, key, value).getFirst().get("n")).longValue();
+    }
 }

@@ -141,10 +141,16 @@ public final class QbApprovalRules {
         List.of(entries("permission", QbPermissions.TREE_PLATFORM_WRITE)), 100,
         "The platform's knowledge graph templates are reviewed by another administrator");
 
+    /** F-S2b2: revoking a lit node takes another member's (or administrator's) approval. */
+    public static final Rule TREE_LIT_REVOKE_REVIEW = new Rule(com.jabiz.quizbuks.tree.TreeRevocations.RULE,
+        com.jabiz.quizbuks.tree.TreeRevocations.SUBJECT, entries("fact", "revoke", "op", "eq", "value", true),
+        List.of(entries("permission", QbPermissions.TREE_LIT_REVOKE)), 100,
+        "Revoking a node someone lit takes another member's approval");
+
     public static final List<Rule> ALL = List.of(PUBLICATION_REVIEW, SPONSOR_REVIEW, TRANSFER_REVIEW,
         BANK_TOPUP_REVIEW, MANUAL_CREDIT_REVIEW, OPERATOR_PAYMENT_REVIEW, SPONSOR_PAGE_REVIEW,
         OPERATOR_PLAN_REVIEW, OPERATOR_WITHDRAWAL_REVIEW, FEE_REQUEST_REVIEW, TREE_REVIEW, TREE_COPY_REVIEW,
-        TREE_PLATFORM_REVIEW);
+        TREE_PLATFORM_REVIEW, TREE_LIT_REVOKE_REVIEW);
 
     private static Map<String, Object> entries(Object... pairs) {
         Map<String, Object> map = new LinkedHashMap<>();

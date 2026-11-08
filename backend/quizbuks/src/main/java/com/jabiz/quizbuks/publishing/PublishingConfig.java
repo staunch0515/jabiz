@@ -329,7 +329,9 @@ public class PublishingConfig {
             .item(PublicationStatus.ADMIN, "en", "Ended by an administrator", "zh", "已被管理员结束",
                 "ja", "管理者が終了")
             .item(PublicationStatus.PUBLISHER, "en", "Ended by its publisher", "zh", "已被发布方结束",
-                "ja", "公開者が終了"));
+                "ja", "公開者が終了")
+            .item(PublicationStatus.TREE, "en", "Its knowledge map was retired", "zh", "所绑定的知识结构图已停用",
+                "ja", "結び付いた知識マップの使用停止"));
     }
 
     /** Q22: how a reward reaches the taker. */
@@ -473,6 +475,11 @@ public class PublishingConfig {
     @Bean
     ProcessDefinition<PublicationAdmin.BanPauseInput, PublicationOutput, ProcessContext> qbPublicationErasedEnd() {
         return PublicationAdmin.erasedEnd();
+    }
+
+    @Bean
+    ProcessDefinition<PublicationAdmin.BanPauseInput, PublicationOutput, ProcessContext> qbPublicationTreeEnd() {
+        return PublicationAdmin.treeEnd();
     }
 
     @Bean

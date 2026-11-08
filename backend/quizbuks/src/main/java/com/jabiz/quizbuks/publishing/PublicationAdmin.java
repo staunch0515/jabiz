@@ -57,6 +57,8 @@ public final class PublicationAdmin {
     public static final String BAN_PAUSE = "QB_PUBLICATION_BAN_PAUSE";
     /** Q72: ends a publication of a sponsor whose account was erased (a sub-process of {@code QB_SPONSOR_ERASED}). */
     public static final String ERASED_END = "QB_PUBLICATION_ERASED_END";
+    /** F-S2b2: ends a publication bound to a node of a knowledge map being retired (a sub-process of the retirement). */
+    public static final String TREE_END = "QB_PUBLICATION_TREE_END";
     public static final String OPERATOR_PAUSE = "QB_OPERATOR_PUBLICATION_PAUSE";
     public static final String OPERATOR_RESUME = "QB_OPERATOR_PUBLICATION_RESUME";
     public static final String OPERATOR_END = "QB_OPERATOR_PUBLICATION_END";
@@ -256,6 +258,40 @@ public final class PublicationAdmin {
         values.put("endedAt", ctx.opTime());
         values.put("endReason", PublicationStatus.ADMIN);
         values.put("adminReason", ACCOUNT_DELETED);
+        PublicationEditing.write(ctx, publication, values);
+    }
+
+    /**
+     * {@value #TREE_END} (F-S2b2): ends a publication bound to a node of a knowledge map being retired (a
+     * sub-process of {@code QB_TREE_RETIRE}, under the map's lock, in the order of the publications' ids), with the
+     * reason {@link PublicationStatus#TREE}; its sponsor is told as of an end by time or quota. One that ended or went
+     * back to its draft meanwhile is left as it is.
+     */
+    public static ProcessDefinition<BanPauseInput, PublicationOutput, ProcessContext> treeEnd() {
+        return ProcessDefinition.define(TREE_END, 1, BanPauseInput.class, PublicationOutput.class,
+            ProcessContext.class, pb -> {
+                pb.description("Ends a publication bound to a node of a knowledge map being retired (part of the "
+                        + "retirement only).")
+                    .permissions(QbPermissions.PUBLICATION_SYSTEM)
+                    .subProcessOnly()
+                    .contextFactory((start, input) -> PublicationEditing.start(start, input, input.publicationId()))
+                    .outputMapper(ctx -> ctx.get(OUTPUT, PublicationOutput.class))
+                    .steps(PublicationEditing::lockStatesAndLoadAny)
+                    .compute("End", (metadata, ctx) -> endTree(ctx));
+                PublicationNotices.announce(pb);
+            });
+    }
+
+    static void endTree(ProcessContext ctx) {
+        EntityInstance publication = PublicationEditing.publication(ctx);
+        if (!ENDABLE.contains(String.valueOf((Object) publication.get("status")))) {
+            PublicationEditing.unchanged(ctx, publication);
+            return;
+        }
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("status", ENDED);
+        values.put("endedAt", ctx.opTime());
+        values.put("endReason", PublicationStatus.TREE);
         PublicationEditing.write(ctx, publication, values);
     }
 

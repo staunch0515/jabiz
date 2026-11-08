@@ -5,6 +5,8 @@ import com.jabiz.dataset.DatasetDefinition;
 import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.event.EventSubscription;
+import com.jabiz.job.JobDefinition;
+import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
@@ -13,6 +15,10 @@ import com.jabiz.context.RequestContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
 
 import static com.jabiz.quizbuks.tree.TreeProcesses.ApprovalResultInput;
 import static com.jabiz.quizbuks.tree.TreeProcesses.TreeOutput;
@@ -234,6 +240,97 @@ public class TreeConfig {
 
     private static final ProcessDefinition<TreeLighting.EvaluateInput, TreeLighting.EvaluateOutput, ProcessContext>
         EVALUATE = TreeLighting.evaluate();
+
+    // ---- F-S2b2: revoking a lit node -------------------------------------------------------------------------------
+
+    private static final ProcessDefinition<ApprovalResultInput, TreeRevocations.RevokeOutput, ProcessContext>
+        REVOKE_RESULT = TreeRevocations.approvalResult();
+
+    @Bean
+    EntityDefinition qbTreeLitRevokeRequestEntity() {
+        return QbTrees.REVOKE_REQUEST_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbTreeLitRevokeRequestDataset() {
+        return defaultDataset(QbTrees.REVOKE_REQUEST);
+    }
+
+    @Bean
+    StaticDictionary qbTreeRevokeStatusDictionary() {
+        return StaticDictionary.define(QbTrees.REVOKE_STATUS_DICTIONARY, d -> d
+            .item(QbTrees.REVOKE_REVIEW, "en", "In review", "zh", "审核中", "ja", "審査中")
+            .item(QbTrees.REVOKE_DONE, "en", "Revoked", "zh", "已撤销", "ja", "取り消し済み")
+            .item(QbTrees.REVOKE_REJECTED, "en", "Rejected", "zh", "已驳回", "ja", "却下"));
+    }
+
+    @Bean
+    ApprovalSubject qbTreeLitApprovalSubject() {
+        return TreeRevocations.subject();
+    }
+
+    @Bean
+    EventSubscription<ApprovalResultInput> qbTreeLitApprovedSubscription() {
+        return EventSubscription.of("qb.tree-lit-approved", ApprovalProcesses.APPROVED_EVENT, REVOKE_RESULT,
+            TreeRevocations::resultInput);
+    }
+
+    @Bean
+    EventSubscription<ApprovalResultInput> qbTreeLitRejectedSubscription() {
+        return EventSubscription.of("qb.tree-lit-rejected", ApprovalProcesses.REJECTED_EVENT, REVOKE_RESULT,
+            TreeRevocations::resultInput);
+    }
+
+    @Bean
+    ProcessDefinition<ApprovalResultInput, TreeRevocations.RevokeOutput, ProcessContext> qbTreeLitRevokeResult() {
+        return REVOKE_RESULT;
+    }
+
+    @Bean
+    ProcessDefinition<TreeRevocations.RevokeInput, TreeRevocations.RevokeOutput, ProcessContext> qbTreeLitRevoke() {
+        return TreeRevocations.revoke();
+    }
+
+    // ---- F-S2b2: the daily check, the recheck and the reminder ----------------------------------------------------
+
+    @Bean
+    ProcessDefinition<TreeUpkeep.CheckInput, TreeUpkeep.CheckOutput, ProcessContext> qbTreeCheckRun() {
+        return TreeUpkeep.check();
+    }
+
+    @Bean
+    JobDefinition<TreeUpkeep.CheckInput> qbTreeCheckJob(
+        ProcessDefinition<TreeUpkeep.CheckInput, TreeUpkeep.CheckOutput, ProcessContext> qbTreeCheckRun) {
+        return JobDefinition.cron(TreeUpkeep.CHECK_JOB, TreeUpkeep.CHECK_CRON, ZoneOffset.UTC, qbTreeCheckRun,
+            TreeUpkeep.CheckInput::new);
+    }
+
+    /** Each pass that lit nothing is evaluated again, one transaction each. */
+    @Bean
+    JobDefinition<TreeLighting.EvaluateInput> qbTreeRecheckJob() {
+        return JobDefinition.forEach(TreeUpkeep.RECHECK_JOB, TreeUpkeep.RECHECK_CRON, ZoneOffset.UTC,
+                JobItems.template(TreeUpkeep.RECHECK_TEMPLATE, "itemKey"),
+                EVALUATE,
+                (scheduledTime, row) -> new TreeLighting.EvaluateInput(QbTrees.USER, String.valueOf(row.get("userId")),
+                    String.valueOf(row.get("treeId")), List.of(String.valueOf(row.get("nodeId"))), false, 1, null))
+            .maxItems(10_000);
+    }
+
+    @Bean
+    ProcessDefinition<TreeUpkeep.RemindInput, TreeUpkeep.RemindOutput, ProcessContext> qbTreeReviewRemind() {
+        return TreeUpkeep.remind();
+    }
+
+    @Bean
+    JobDefinition<TreeUpkeep.RemindInput> qbTreeReviewRemindJob(
+        ProcessDefinition<TreeUpkeep.RemindInput, TreeUpkeep.RemindOutput, ProcessContext> qbTreeReviewRemind) {
+        return JobDefinition.forEach(TreeUpkeep.REMIND_JOB, TreeUpkeep.REMIND_CRON, ZoneOffset.UTC,
+                JobItems.template(TreeUpkeep.REMIND_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "versionId"),
+                qbTreeReviewRemind,
+                (scheduledTime, row) -> new TreeUpkeep.RemindInput(String.valueOf(row.get("versionId"))))
+            .maxItems(10_000);
+    }
 
     @Bean
     ProcessDefinition<TreeLighting.EvaluateInput, TreeLighting.EvaluateOutput, ProcessContext> qbTreeEvaluate() {
