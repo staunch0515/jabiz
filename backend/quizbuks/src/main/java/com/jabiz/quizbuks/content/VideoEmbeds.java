@@ -14,6 +14,12 @@ import java.util.regex.Pattern;
  * players only (`frame-src`), so any other link stays a link. Only YouTube's and Vimeo's players say where they are
  * ({@link #trackable}): only their videos can be the one to watch before answering (Q75, D-Q99-2). The App's
  * {@code qb/video.ts} reads links the same way (its test has the cases of {@code VideoEmbedsTest}).
+ *
+ * <p>F-S15 (docs/quizbuks/plans/impl/F-S15.md): a video link may be on any https address. Besides the seven sites
+ * ({@link #sitePlayer}), a video file ({@code .mp4}, {@code .webm}, {@code .mov} on any host, {@link #filePlayer}) plays
+ * in the pages' own {@code <video>}, which says where it is ({@link #trackable}); any other https address
+ * ({@link #pagePlayer}) is a player page framed in a sandbox. Links are read as text, not through a URI parser, the
+ * same way as the App (a browser's parser resolves dot segments).
  */
 public final class VideoEmbeds {
 
@@ -43,6 +49,21 @@ public final class VideoEmbeds {
     private static final Pattern YOUKU_ID = Pattern.compile("[A-Za-z0-9]{8,28}={0,2}");
     private static final Pattern TENCENT_ID = Pattern.compile("[a-z0-9]{11}");
     private static final Pattern TENCENT_COVER = Pattern.compile("[a-z0-9]{15}");
+    /**
+     * F-S15: an https address as written: a host name, a path of plain segments (unreserved characters, sub-delimiters,
+     * {@code :} and {@code @}, and escapes), an optional query and fragment of the same characters and {@code /} and
+     * {@code ?}; no user, no port.
+     */
+    private static final String CHARS = "(?:[A-Za-z0-9._~!$&'()*+,;=:@-]|%[0-9A-Fa-f]{2})";
+    private static final Pattern ADDRESS = Pattern.compile("(?i:https)://([A-Za-z0-9.-]+)((?:/" + CHARS + "+)*/?)"
+        + "(\\?(?:" + CHARS + "|[/?])*)?(#(?:" + CHARS + "|[/?])*)?");
+    /** A plain host name: labels of letters, digits and inner hyphens, at least two, the last not a number. */
+    private static final Pattern HOST = Pattern.compile(
+        "(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?");
+    /** F-S15: the endings of a video file's path the pages play with {@code <video>}. */
+    public static final java.util.List<String> FILE_EXTENSIONS = java.util.List.of(".mp4", ".webm", ".mov");
+    /** The hosts of the seven sites: an address there that is not one video is no video (a channel, a short link). */
+    private static final Set<String> SITE_HOSTS = siteHosts();
 
     private VideoEmbeds() {
     }
@@ -86,16 +107,18 @@ public final class VideoEmbeds {
      * video link may well be (a material's link is any address).
      */
     public static Optional<Site> site(String url) {
-        return player(url).flatMap(player -> java.util.Arrays.stream(Site.values())
+        return sitePlayer(url).flatMap(player -> java.util.Arrays.stream(Site.values())
             .filter(site -> player.startsWith(site.player)).findFirst());
     }
 
     /**
      * Whether a player (as {@link #player} gives it) says where it is, so that the App can tell that it was watched:
-     * YouTube's and Vimeo's (Q75). The others play, but cannot be the video to watch before answering.
+     * YouTube's and Vimeo's (Q75), and (F-S15) a video file's {@code <video>}. The others play, but cannot be the video
+     * to watch before answering.
      */
     public static boolean trackable(String player) {
-        return player != null && (player.startsWith(YOUTUBE_PLAYER) || player.startsWith(VIMEO_PLAYER));
+        return player != null && (player.startsWith(YOUTUBE_PLAYER) || player.startsWith(VIMEO_PLAYER)
+            || kind(player).filter(Kind.FILE::equals).isPresent());
     }
 
     /**
@@ -104,7 +127,7 @@ public final class VideoEmbeds {
      * has the same cases.
      */
     public static boolean shorts(String url) {
-        if (player(url).isEmpty()) {
+        if (sitePlayer(url).isEmpty()) {
             return false;
         }
         URI uri = URI.create(url.trim());
@@ -118,8 +141,103 @@ public final class VideoEmbeds {
         return player(url).filter(VideoEmbeds::trackable);
     }
 
-    /** The player's address for a link to one video of the sites above; empty for any other address. */
+    /**
+     * The player's address for a link to any video QuizBuks plays (F-S15): one of the seven sites' ({@link #sitePlayer}),
+     * else a video file ({@link #filePlayer}), else another https page ({@link #pagePlayer}); empty for anything else.
+     */
     public static Optional<String> player(String url) {
+        return sitePlayer(url).or(() -> filePlayer(url)).or(() -> pagePlayer(url));
+    }
+
+    /** The three kinds of player (F-S15). */
+    public enum Kind { SITE, FILE, PAGE }
+
+    /** The kind of a player as {@link #player} gives it; empty for any other address. */
+    public static Optional<Kind> kind(String player) {
+        if (player == null) {
+            return Optional.empty();
+        }
+        if (sitePlayer(player).filter(player::equals).isPresent()) {
+            return Optional.of(Kind.SITE);
+        }
+        if (filePlayer(player).filter(player::equals).isPresent()) {
+            return Optional.of(Kind.FILE);
+        }
+        return pagePlayer(player).filter(player::equals).map(page -> Kind.PAGE);
+    }
+
+    /**
+     * F-S15: a video file on any host but the seven sites': an https address (as {@link #pagePlayer} takes it) whose
+     * path ends with one of
+     * {@link #FILE_EXTENSIONS}; the query and fragment do not count (a signed {@code .mp4?sig=…} is one). The address
+     * played is the link with its scheme and host in lower case.
+     */
+    public static Optional<String> filePlayer(String url) {
+        Optional<java.util.regex.Matcher> address = address(url);
+        if (address.isEmpty() || SITE_HOSTS.contains(address.get().group(1).toLowerCase(Locale.ROOT))) {
+            return Optional.empty();
+        }
+        String path = address.get().group(2);
+        String last = path.substring(path.lastIndexOf('/') + 1).toLowerCase(Locale.ROOT);
+        boolean file = FILE_EXTENSIONS.stream().anyMatch(ending -> last.length() > ending.length() && last.endsWith(ending));
+        return file ? Optional.of(normal(address.get())) : Optional.empty();
+    }
+
+    /**
+     * F-S15: any other https page, framed as a player page in a sandbox: not one of the seven sites' hosts (an address
+     * there that is not one video stays no video), and not a video file. The address played is the link with its scheme
+     * and host in lower case.
+     */
+    public static Optional<String> pagePlayer(String url) {
+        Optional<java.util.regex.Matcher> address = address(url);
+        if (address.isEmpty() || SITE_HOSTS.contains(address.get().group(1).toLowerCase(Locale.ROOT))
+            || filePlayer(url).isPresent()) {
+            return Optional.empty();
+        }
+        return Optional.of(normal(address.get()));
+    }
+
+    /** F-S15: the host of a video file's or a page's link (lower case), for F-S11's hosts; empty for any other. */
+    public static Optional<String> host(String url) {
+        return address(url).map(matcher -> matcher.group(1).toLowerCase(Locale.ROOT));
+    }
+
+    private static Optional<java.util.regex.Matcher> address(String url) {
+        if (url == null) {
+            return Optional.empty();
+        }
+        java.util.regex.Matcher matcher = ADDRESS.matcher(url.strip());
+        if (!matcher.matches() || !HOST.matcher(matcher.group(1).toLowerCase(Locale.ROOT)).matches()) {
+            return Optional.empty();
+        }
+        // Dot segments: a browser resolves them, so the App would read another address; none is taken.
+        for (String segment : matcher.group(2).split("/", -1)) {
+            if (segment.equals(".") || segment.equals("..")) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(matcher);
+    }
+
+    private static String normal(java.util.regex.Matcher address) {
+        return "https://" + address.group(1).toLowerCase(Locale.ROOT) + address.group(2)
+            + (address.group(3) == null ? "" : address.group(3)) + (address.group(4) == null ? "" : address.group(4));
+    }
+
+    private static Set<String> siteHosts() {
+        Set<String> hosts = new java.util.HashSet<>();
+        hosts.addAll(YOUTUBE_HOSTS);
+        hosts.addAll(VIMEO_HOSTS);
+        hosts.addAll(BILIBILI_HOSTS);
+        hosts.addAll(NICONICO_HOSTS);
+        hosts.addAll(DAILYMOTION_HOSTS);
+        hosts.addAll(Set.of("youtu.be", "player.bilibili.com", "b23.tv", "www.b23.tv", "nico.ms", "dai.ly",
+            "geo.dailymotion.com", "v.youku.com", "player.youku.com", "youku.com", "www.youku.com", "v.qq.com"));
+        return Set.copyOf(hosts);
+    }
+
+    /** The player's address for a link to one video of the seven sites above; empty for any other address. */
+    public static Optional<String> sitePlayer(String url) {
         if (url == null || url.isBlank()) {
             return Optional.empty();
         }

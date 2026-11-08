@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { cardVideoVertical, foreignVideo, isShorts, mainlandSites, reachesMainland, snapshotVideoLinks, videoPlayer, videoSite } from './video'
+import { cardVideoVertical, embeddedPages, foreignVideo, isShorts, MAINLAND_SITES_DEFAULT, mainlandSites, reachesMainland, sitePlayer,
+  snapshotVideoLinks, videoKind, videoPlayer, videoSite } from './video'
 import type { Snapshot } from './snapshot'
 
 /** The cases of the App's `qb/video.test.ts` (the backend's `VideoEmbedsTest` and `ForeignVideosTest`). */
@@ -56,8 +57,10 @@ describe('videoPlayer', () => {
     'https://v.youku.com/v_show/id_XNTk4MjQzMzQ0OA==', 'https://v.youku.com/v_show/id_<x>.html',
     'https://v.qq.com/x/page/x0029zdtwz6', 'https://v.qq.com/x/cover/mzc00200abcdefg.html',
     'https://v.qq.com.evil.example/x/page/x0029zdtwz6.html', 'https://evil.example/txp/iframe/player.html?vid=x0029zdtwz6',
-  ])('shows %j as no player', (url) => {
-    expect(videoPlayer(url)).toBeNull()
+  ])('shows %j as no site\'s player', (url) => {
+    // F-S15: some of these are another page (any https address), which is no site's player.
+    expect(sitePlayer(url)).toBeNull()
+    expect(videoSite(url)).toBeNull()
   })
 
 })
@@ -105,11 +108,14 @@ describe('videoSite and foreignVideo', () => {
   })
 
   it('reads the parameter as the server does', () => {
-    expect([...mainland].sort()).toEqual(['bilibili', 'tencent', 'youku'])
-    expect([...mainlandSites(' YouTube , nothing,,bilibili')].sort()).toEqual(['bilibili', 'youtube'])
-    expect(mainlandSites('').size).toBe(0)
-    expect(foreignVideo(['https://v.qq.com/x/page/x0029zdtwz6.html'], new Set(['bilibili']))).toBe(true)
-    expect(foreignVideo(['https://youtu.be/dQw4w9WgXcQ'], new Set(['youtube']))).toBe(false)
+    expect([...mainland.sites].sort()).toEqual(['bilibili', 'tencent', 'youku'])
+    expect([...mainlandSites(' YouTube , nothing,,bilibili').sites].sort()).toEqual(['bilibili', 'youtube'])
+    expect(mainlandSites('').sites.size).toBe(0)
+    expect(foreignVideo(['https://v.qq.com/x/page/x0029zdtwz6.html'], { sites: new Set(['bilibili']), hosts: new Set() }))
+      .toBe(true)
+    expect(foreignVideo(['https://youtu.be/dQw4w9WgXcQ'], { sites: new Set(['youtube']), hosts: new Set() })).toBe(false)
+    expect([...mainlandSites('bilibili, Videos.QuizBuks.com ,https://x.example,203.0.113.7,localhost').hosts])
+      .toEqual(['videos.quizbuks.com'])
     expect(foreignVideo([], mainland)).toBe(false)
   })
 })
@@ -129,6 +135,17 @@ describe('a version and its audience', () => {
     expect(reachesMainland('PUBLIC', ['ASIA'])).toBe(true)
     expect(reachesMainland('PUBLIC', ['GLOBAL'])).toBe(true)
     expect(reachesMainland('INVITED', [])).toBe(true)
+  })
+
+  it('lists the pages of other sites a version frames, every language\'s (F-S15)', () => {
+    const material = (no: number, kind: string, url: string | null) => ({ no, kind, url, title: null, description: null,
+      body: null, pdf: null, audio: null, images: [] })
+    const content = { materials: [material(1, 'VIDEO_LINK', 'https://Player.Example.com/embed/1'),
+      material(2, 'VIDEO_LINK', 'https://cdn.example.com/clip.mp4'), material(3, 'LINK', 'https://other.example/x'),
+      material(4, 'VIDEO_LINK', 'https://youtu.be/dQw4w9WgXcQ')],
+    translations: { en: { texts: {}, images: {}, materials: [material(1, 'VIDEO_LINK', 'https://en.example/watch')] } },
+    } as unknown as Snapshot
+    expect(embeddedPages(content)).toEqual(['https://player.example.com/embed/1', 'https://en.example/watch'])
   })
 })
 
@@ -163,8 +180,60 @@ describe('isShorts and cardVideoVertical', () => {
     // The video to watch comes first; else the first with a player.
     expect(cardVideoVertical(version(video('https://www.youtube.com/shorts/dQw4w9WgXcQ'),
       video('https://vimeo.com/76979871', { watchToAnswer: true })))).toBe(false)
+    // F-S15: a page of another site comes last; a video file is taken as a site's video is.
     expect(cardVideoVertical(version(video('https://video.example/x'),
       video('https://www.youtube.com/shorts/dQw4w9WgXcQ')))).toBe(true)
+    expect(cardVideoVertical(version(video('https://cdn.example.com/a.mp4', { vertical: true }),
+      video('https://www.youtube.com/watch?v=dQw4w9WgXcQ')))).toBe(true)
+    expect(cardVideoVertical(version(video('https://video.example/x', { vertical: true })))).toBe(true)
+    expect(cardVideoVertical(version(video('https://cdn.example.com/a.mp4', { watchToAnswer: true }),
+      video('https://www.youtube.com/shorts/dQw4w9WgXcQ')))).toBe(false)
     expect(cardVideoVertical(version())).toBe(false)
   })
 })
+
+/** F-S15: the cases of the App's `qb/video.test.ts` (the backend's `VideoEmbedsTest`, `ForeignVideosTest`). */
+describe('video files and pages of other sites', () => {
+  it.each([
+    ['https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4', 'file', 'https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4'],
+    ['  https://cdn.example.com/a/b/clip.webm  ', 'file', 'https://cdn.example.com/a/b/clip.webm'],
+    ['HTTPS://CDN.Example.com/Clip.MOV', 'file', 'https://cdn.example.com/Clip.MOV'],
+    ['https://cdn.example.com/clip.mp4?sig=abc&exp=1', 'file', 'https://cdn.example.com/clip.mp4?sig=abc&exp=1'],
+    ['https://cdn.example.com/clip.mp4#t=10', 'file', 'https://cdn.example.com/clip.mp4#t=10'],
+    ['https://cdn.example.com/%E5%BE%AE.mp4', 'file', 'https://cdn.example.com/%E5%BE%AE.mp4'],
+    ['https://video.example/capitals', 'page', 'https://video.example/capitals'],
+    ['https://Player.Example.com/embed/123?autoplay=0', 'page', 'https://player.example.com/embed/123?autoplay=0'],
+    ['https://evil.example/watch?v=dQw4w9WgXcQ', 'page', 'https://evil.example/watch?v=dQw4w9WgXcQ'],
+    ['https://cdn.example.com/clip.mp4/', 'page', 'https://cdn.example.com/clip.mp4/'],
+    ['https://cdn.example.com', 'page', 'https://cdn.example.com'],
+    ['https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'site', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'],
+    ['https://v.qq.com/x/page/x0029zdtwz6.html', 'site', 'https://v.qq.com/txp/iframe/player.html?vid=x0029zdtwz6'],
+  ] as const)('plays %s as a %s', (url, kind, player) => {
+    expect(videoPlayer(url)).toBe(player)
+    expect(videoKind(player)).toBe(kind)
+  })
+
+  it.each([
+    'http://cdn.example.com/clip.mp4', 'https://user@cdn.example.com/clip.mp4', 'https://cdn.example.com:8443/clip.mp4',
+    'https://203.0.113.7/clip.mp4', 'https://localhost/clip.mp4', 'https://cdn.example.com/a/../clip.mp4',
+    'https://cdn.example.com//clip.mp4', 'https://cdn.example.com/a b.mp4', 'https://www.youtube.com/@channel',
+    'https://b23.tv/BV1GJ411x7h7', 'https://www.youtube.com/clip.mp4', 'javascript:alert(1)', '',
+  ])('plays no video at %j', (url) => {
+    expect(videoPlayer(url)).toBeNull()
+  })
+
+  it.each([
+    ['https://videos.quizbuks.com/quizbuks-demo-30s.mp4', false],
+    ['https://VIDEOS.quizbuks.com/a/b.webm?sig=1', false],
+    ['https://videos.quizbuks.com/player/1', false],
+    ['https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4', true],
+    ['https://cdn.example.com/clip.mp4', true],
+    ['http://videos.quizbuks.com/quizbuks-demo-30s.mp4', true],
+    ['https://youtu.be/dQw4w9WgXcQ', true],
+    ['https://www.bilibili.com/video/BV1GJ411x7h7', false],
+    ['https://www.youtube.com/@channel', true],
+  ] as const)('says whether %s is foreign when its host is listed: %s', (url, foreign) => {
+    expect(foreignVideo([url], mainlandSites(`${MAINLAND_SITES_DEFAULT},videos.quizbuks.com,www.youtube.com`))).toBe(foreign)
+  })
+})
+

@@ -5476,6 +5476,23 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz11 状态**：✅ 已合并（#549）。
 
+### 17zz15 守卫的预读：按参数值的条件与不按用户的读取（2026-11-08，总控排入；决策 D80）
+
+**缘由**：QuizBuks 申请成为发起方的门槛（F-S2c2）要读参数所指的节点行（与用户无关）与本人在该节点上的点亮、撤销记录；预读此前只能读本人的全部行（至多 100 行）。
+需求方 2026-11-08 确认 D80（补充 D36 实现说明第 1 条与 D66 第 1 条并扩展 D79，不取代）。设计 10 §15.18。
+
+| # | 内容 |
+|---|---|
+| 17zz15-1 | core：`SignInLoad` 加条件（`whereParam(字段, 参数键[, 取值函数])`）、`SignInLoad.global(名, 数据视图)`、`paramKeys()`；三个参数的构造器与 `of` 不变 |
+| 17zz15-2 | runtime：`SignInGuards` / `SignUpGuards` 先读参数再预读；条件值来自参数（经取值函数），缺值或为 null 即该项预读为空、不查库；函数抛异常即拒绝；global 预读在注册时也读 |
+| 17zz15-3 | 启动检查（`SECURITY`）：条件字段不存在、参数键未在本守卫的 `params()` 中声明、global 没有条件（错误）；同名预读按形状比较（不比较取值函数）；`GuardLoadIndexCheck`：比较的列都不是索引首列（警告） |
+| 17zz15-4 | 示范：`PortalSignUpSwitch` 的参数 `commerce.portal.launch-product`（SKU）与 global 预读 `launchProduct`，商品不存在或停售即 `commerce.launch-over`（三语） |
+| 17zz15-5 | 测试：`SignInLoadTest`、`GuardParamsTest`、`GuardLoadChecksIT`、`SignUpGuardIT`、`PlatformCheckIT`（测试夹具的预读补上索引，`V1019`） |
+
+**验收**：CI 绿；同步到 `1.3/quizbuks` 后 S2 的 F-S2c2（c2b）可按参数所指的节点预读。
+
+**17zz15 状态**：📝 待评审（分支 `1.3/phase-17zz15-guard-load-conditions`）。
+
 ### 17zz13 应用的后端测试分片并行（2026-11-08，总控排入，采纳 17zz12 评估的方案 A）
 
 **缘由**：QuizBuks 的整套后端测试在一台机器上 43–45 分钟（17zz12）。本地实测：297 个测试类，190 个 IT 类各起新的 Spring 上下文与 schema，测试一个接一个跑，
@@ -5491,7 +5508,23 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 **验收**：平台分支上 `build-application` 不运行，分片在应用分支上验证：QuizBuks 的同步 PR（带 `backend/quizbuks/test-timings.txt`）三片都绿、各约 15–20 分钟，汇总检查名为 `build-application`；
 `TestShardsTest`（解析、读表、分配、每个类恰在一片、嵌套类）；本地 `:core:test` 分三片跑出的类与不分片完全相同。
 
-**17zz13 状态**：📝 待评审（分支 `1.3/phase-17zz13-app-test-shards`）。
+**17zz13 状态**：✅ 已合并（#550）。
+
+### 17zz14 大批写入的参数绑定（2026-11-08，F-S6 中发现）
+
+**缘由**：
+- QuizBuks 导入 100 题、三语的 Quiz 要 30 秒，不带翻译时 50 题 2 秒、100 题 8.5 秒、300 题 32 秒，接近平方增长；千题题库（F-S6）因此不可用。
+- 原因：流程把插入缓存起来，以多行语句写出（每条至多 `WriteBatch.MAX_BINDS` = 30 000 个值）。`R2dbcStorageEngine` 把这些值逐个交给 `DatabaseClient` 的 `bind`；Spring 的执行规格每次 bind 都复制此前绑定的全部值，一条语句的绑定就是平方。
+- 所有在一个事务里写很多行的流程都受影响，比如导入、复制、密钥轮换的大批。
+
+| # | 内容 |
+|---|---|
+| 17zz14-1 | `R2dbcStorageEngine`：缓存的插入（`execute`）与带缓存写入的查询（`send`）把全部值放进一个 Map，以一次 `bindValues` 绑定；类型化的空值用 `Parameters.in(类型)`，即 `bindNull` 所用的同一个值。语句与语句数不变 |
+| 17zz14-2 | 测试：`R2dbcStorageEngineStatementsTest`（按名称、按顺序一次绑定 5 000 个值）；`BulkWriteIT`（测试表 `it_bulk_row`，一个流程一次提交 3 000 行：修复后约 1.5 秒，修复前约 15 秒，断言 8 秒内） |
+
+**验收**：CI 绿；`StatementBudgetIT` 不变；同步到 `1.3/quizbuks` 后，QuizBuks 导入 100 题三语约 1 秒，此前 30 秒（本地实测）。
+
+**17zz14 状态**：📝 待评审（分支 `1.3/phase-17zz14-batch-bind`）。
 
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 

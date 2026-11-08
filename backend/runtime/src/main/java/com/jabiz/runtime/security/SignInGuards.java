@@ -107,10 +107,11 @@ public class SignInGuards implements PlatformCheck {
         if (guards.isEmpty() && resolver == null) {
             return Mono.just(SignInDecision.ALLOW);
         }
-        // One read after the other: inside a process both go through the same transaction.
-        return Mono.defer(() -> load(userId, resolver)
-                .flatMap(data -> params.read(GuardParams.merge(guards.stream().map(SignInGuard::params).toList()), time)
-                    .map(values -> reactor.util.function.Tuples.of(data, values))))
+        // The parameters first (the loads' conditions take their values, decision D80), then the loads: one read after
+        // the other, inside a process through the same transaction.
+        return Mono.defer(() -> params.read(GuardParams.merge(guards.stream().map(SignInGuard::params).toList()), time)
+                .flatMap(values -> load(userId, resolver, values)
+                    .map(data -> reactor.util.function.Tuples.of(data, values))))
             .map(read -> {
                 SignInAttempt attempt = new SignInAttempt(userId, userName, entry, roles, emailVerified, factor, time,
                     read.getT1(), read.getT2());
@@ -163,34 +164,64 @@ public class SignInGuards implements PlatformCheck {
         return SignInDecision.allow(new EntryScope(resolver.scope(), value));
     }
 
-    private Mono<Map<String, List<Map<String, Object>>>> load(String userId, EntryScopeResolver resolver) {
+    private Mono<Map<String, List<Map<String, Object>>>> load(String userId, EntryScopeResolver resolver,
+        com.jabiz.param.ParamValues values) {
         Map<String, SignInLoad> loads = new LinkedHashMap<>();
         guards.forEach(guard -> guard.loads().forEach(load -> loads.putIfAbsent(load.name(), load)));
         if (resolver != null) {
             resolver.loads().forEach(load -> loads.putIfAbsent(load.name(), load));
         }
-        return read(loads.values(), userId);
+        return read(loads.values(), userId, values);
     }
 
     /**
-     * The rows of {@code loads} for {@code userId}, by load name (also for the sign-up guards, decision D66); an
-     * error when one cannot be read or finds more than {@link SignInGuard#MAX_ROWS}.
+     * The rows of {@code loads} for {@code userId}, by load name (also for the sign-up guards, decision D66), their
+     * conditions taking the parameters {@code values} (decision D80); an error when one cannot be read, finds more
+     * than {@link SignInGuard#MAX_ROWS} or a condition's function throws. A load of the user's rows without a user (a
+     * registration) and a load whose condition has no value have no rows and read nothing.
      */
-    Mono<Map<String, List<Map<String, Object>>>> read(java.util.Collection<SignInLoad> loads, String userId) {
+    Mono<Map<String, List<Map<String, Object>>>> read(java.util.Collection<SignInLoad> loads, String userId,
+        com.jabiz.param.ParamValues values) {
         return Flux.fromIterable(loads)
-            .concatMap(load -> rows(load, userId).map(rows -> Map.entry(load.name(), rows)))
+            .concatMap(load -> rows(load, userId, values).map(rows -> Map.entry(load.name(), rows)))
             .collectMap(Map.Entry::getKey, Map.Entry::getValue, LinkedHashMap::new)
             .map(map -> (Map<String, List<Map<String, Object>>>) map);
     }
 
-    private Mono<List<Map<String, Object>>> rows(SignInLoad load, String userId) {
+    /** The equalities of a load: the user's id and each condition's value; empty when one of them has no value. */
+    static Optional<List<QueryPredicate>> where(SignInLoad load, String userId, com.jabiz.param.ParamValues values) {
+        List<QueryPredicate> where = new ArrayList<>();
+        if (!load.global()) {
+            if (userId == null) {
+                return Optional.empty();
+            }
+            // The id as text: the query compiler converts it to the type of the field (a uuid reference to the user,
+            // or text), as for every other comparison.
+            where.add(new QueryPredicate.Eq(load.userField(), userId));
+        }
+        for (SignInLoad.Condition condition : load.conditions()) {
+            Object paramValue = values == null ? null : values.values().get(condition.paramKey());
+            Object value = condition.valueOf(paramValue);
+            if (value == null) {
+                return Optional.empty();
+            }
+            where.add(new QueryPredicate.Eq(condition.field(), value));
+        }
+        return Optional.of(where);
+    }
+
+    private Mono<List<Map<String, Object>>> rows(SignInLoad load, String userId, com.jabiz.param.ParamValues values) {
+        Optional<List<QueryPredicate>> where = where(load, userId, values);
+        if (where.isEmpty()) {
+            return Mono.just(List.of());
+        }
         DatasetDefinition dataset = datasets.findById(load.dataset())
             .orElseThrow(() -> new IllegalStateException("Unknown dataset " + load.dataset()));
         EntityDefinition def = definitions.getOrThrow(dataset.targetEntityType());
-        // The id as text: the query compiler converts it to the type of the field (a uuid reference to the user, or
-        // text), as for every other comparison.
+        List<QueryPredicate> all = where.get();
         // One past the limit, so that more rows than allowed are noticed instead of cut off.
-        EntityQuery query = EntityQuery.builder().where(new QueryPredicate.Eq(load.userField(), userId))
+        EntityQuery query = EntityQuery.builder()
+            .where(all.size() == 1 ? all.getFirst() : new QueryPredicate.And(all))
             .limit(SignInGuard.MAX_ROWS + 1).build();
         return entities.queryAll(dataset, def, query).map(EntityInstance::attributes).collectList()
             .flatMap(rows -> rows.size() > SignInGuard.MAX_ROWS
@@ -257,7 +288,7 @@ public class SignInGuards implements PlatformCheck {
                 problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "loads() failed: " + e.getMessage()));
                 continue;
             }
-            problems.addAll(loadProblems(location, loads, seen));
+            problems.addAll(loadProblems(location, loads, seen, declaredParams(source)));
         }
         Map<String, com.jabiz.security.GuardParam> seenParams = new LinkedHashMap<>();
         for (SignInGuard guard : guards) {
@@ -272,15 +303,44 @@ public class SignInGuards implements PlatformCheck {
         return problems;
     }
 
+    /** The keys of the parameters a guard declares (a resolver declares none); none when {@code params()} throws. */
+    private static Set<String> declaredParams(Object source) {
+        try {
+            List<com.jabiz.security.GuardParam> params = source instanceof SignInGuard guard ? guard.params()
+                : source instanceof com.jabiz.security.SignUpGuard guard ? guard.params() : List.of();
+            return params.stream().map(com.jabiz.security.GuardParam::key).collect(java.util.stream.Collectors.toSet());
+        } catch (RuntimeException e) {
+            return Set.of();
+        }
+    }
+
+    /** As {@link #loadProblems(String, List, Map, Set)} for a guard of {@code source}'s declared parameters. */
+    List<CheckProblem> loadProblems(String location, List<SignInLoad> loads, Map<String, SignInLoad> seen,
+        Object source) {
+        return loadProblems(location, loads, seen, declaredParams(source));
+    }
+
     /**
      * What is wrong with a guard's {@code loads}: an unknown dataset or field, a field that cannot hold a user id, a
-     * name {@code seen} before with another meaning. Also for the sign-up guards (decision D66).
+     * name {@code seen} before with another meaning; decision D80: a condition on an unknown field or on a parameter
+     * the guard does not declare ({@code declared}), a global load without a condition.
      */
-    List<CheckProblem> loadProblems(String location, List<SignInLoad> loads, Map<String, SignInLoad> seen) {
+    public List<CheckProblem> loadProblems(String location, List<SignInLoad> loads, Map<String, SignInLoad> seen,
+        Set<String> declared) {
         List<CheckProblem> problems = new ArrayList<>();
         for (SignInLoad load : loads) {
+            if (load.global() && load.conditions().isEmpty()) {
+                problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load " + load.name()
+                    + " is global and has no condition: it would read the whole dataset"));
+            }
+            for (String key : load.paramKeys()) {
+                if (!declared.contains(key)) {
+                    problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load " + load.name()
+                        + " has a condition on parameter " + key + ", which the guard's params() does not declare"));
+                }
+            }
             SignInLoad earlier = seen.putIfAbsent(load.name(), load);
-            if (earlier != null && !earlier.equals(load)) {
+            if (earlier != null && !sameShape(earlier, load)) {
                 problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load " + load.name()
                     + " is declared with another dataset or field elsewhere"));
             }
@@ -290,12 +350,32 @@ public class SignInGuards implements PlatformCheck {
                     + " reads unknown dataset " + load.dataset()));
                 continue;
             }
-            definitions.find(dataset.get().targetEntityType())
-                .flatMap(def -> userFieldProblem(def, load))
-                .ifPresent(problem -> problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load "
-                    + load.name() + ": " + problem)));
+            Optional<EntityDefinition> def = definitions.find(dataset.get().targetEntityType());
+            if (def.isEmpty()) {
+                continue;
+            }
+            if (!load.global()) {
+                userFieldProblem(def.get(), load).ifPresent(problem -> problems.add(CheckProblem.error(
+                    SessionChecks.CATEGORY, location, "load " + load.name() + ": " + problem)));
+            }
+            for (SignInLoad.Condition condition : load.conditions()) {
+                if (def.get().findField(condition.field()).isEmpty()) {
+                    problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "load " + load.name()
+                        + ": entity " + def.get().name + " has no field " + condition.field()));
+                }
+            }
         }
         return problems;
+    }
+
+    /**
+     * Whether two declarations of a load name mean the same read: dataset, user field and each condition's field and
+     * parameter. A condition's function cannot be compared; the same name reads once, so give it one function.
+     */
+    static boolean sameShape(SignInLoad a, SignInLoad b) {
+        return a.dataset().equals(b.dataset()) && java.util.Objects.equals(a.userField(), b.userField())
+            && a.conditions().stream().map(c -> c.field() + "=" + c.paramKey()).toList()
+                .equals(b.conditions().stream().map(c -> c.field() + "=" + c.paramKey()).toList());
     }
 
     /**
