@@ -7,13 +7,16 @@ WORKDIR /src
 # Gradle's home outside the cache mount below, so that the wrapper's distribution can live in a layer of its own.
 ENV GRADLE_USER_HOME=/opt/gradle-home
 # The Gradle distribution first, in a layer that only the wrapper's files invalidate: a build with the layer cache
-# (CI's) does not download it again, and a slow download is tried three times rather than failing the build
-# (ROADMAP 17zz10; the wrapper's own timeout is networkTimeout in gradle-wrapper.properties).
+# (CI's) does not download it again, and a failed download is tried five times, waiting 15, 30, 60 and 120 s between
+# (about four minutes: services.gradle.org redirects to GitHub's release downloads, which have answered 504 for
+# minutes at a time) rather than failing the build (ROADMAP 17zz10; the wrapper's own timeout is networkTimeout in
+# gradle-wrapper.properties).
 COPY backend/gradlew backend/gradlew
 COPY backend/gradle/wrapper backend/gradle/wrapper
-RUN cd backend && for attempt in 1 2 3; do \
+RUN cd backend && wait=15 && for attempt in 1 2 3 4 5; do \
       ./gradlew --version --no-daemon --console=plain >/dev/null && exit 0; \
-      echo "downloading Gradle failed (attempt $attempt), trying again" >&2; sleep 15; \
+      [ "$attempt" -lt 5 ] || break; \
+      echo "downloading Gradle failed (attempt $attempt), trying again in $wait s" >&2; sleep "$wait"; wait=$((wait * 2)); \
     done; exit 1
 COPY backend backend
 COPY frontend frontend

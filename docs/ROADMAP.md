@@ -5440,7 +5440,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 | # | 内容 |
 |---|---|
 | 17zz10-1 | `gradle-wrapper.properties` 的 `networkTimeout` 10 s → 60 s |
-| 17zz10-2 | 平台的 `Dockerfile`：`GRADLE_USER_HOME=/opt/gradle-home`；先只复制 `gradlew` 与 `gradle/wrapper`，在单独的一层中 `./gradlew --version` 下载发行包（失败隔 15 秒再试，共 3 次），这一层只随 wrapper 的文件失效，有层缓存的构建不再下载；缓存挂载只留依赖（`/opt/gradle-home/caches`）。应用的 Dockerfile 照此（QuizBuks 在同步时改） |
+| 17zz10-2 | 平台的 `Dockerfile`：`GRADLE_USER_HOME=/opt/gradle-home`；先只复制 `gradlew` 与 `gradle/wrapper`，在单独的一层中 `./gradlew --version` 下载发行包（失败后等 15、30、60、120 秒再试，共 5 次，约 4 分钟：services.gradle.org 转到 GitHub 的发行下载，后者曾连续几分钟答 504），这一层只随 wrapper 的文件失效，有层缓存的构建不再下载；缓存挂载只留依赖（`/opt/gradle-home/caches`）。应用的 Dockerfile 照此（QuizBuks 在同步时改） |
 
 **验收**：CI 绿；镜像照常构建（compose 作业）。
 
