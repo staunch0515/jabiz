@@ -5378,6 +5378,7 @@ F 找回密码（2）、G 邮件链接页（23）、H 登录前的公开框架�
 |---|---|
 | 17zz6-1 | Spring Boot 4.0.8 → 4.0.9（`build-logic` 的插件版本，唯一固定处）：随 BOM Jackson 3.1.7 / 2.21.7、PgJDBC 42.7.14、r2dbc-postgresql 1.1.3 |
 | 17zz6-2 | `runtime` 以依赖约束把 `com.ongres.scram:scram-client` / `scram-common` 定为 3.4（驱动仍要 3.2；BOM 的驱动要 3.3 及以上时删去） |
+| 17zz6-2b | Reactor Netty 1.3.7 → 1.3.8（随 BOM）自己在排空流水线请求后继续读连接：`PipelinedReadResumerTest` 中两个"没有它就停读"的探针因此失败（16c-2 设的触发条件）。两例改为断言 Reactor Netty 自己继续读；`PipelinedReadResumer` 暂留（读两次即一次，现在不改变行为），是否删去待确认 |
 | 17zz6-3 | 前端与示范门户：Vite 8.3.5、Vitest 5.0.5、jsdom 30.1.3（undici 8.12.3），锁文件中 zod 4.6.7、source-map-js 1.2.2；只选发布满两周的版本（`--config.minimum-release-age=20160`）；门户的版本与平台一致（`app:check`） |
 
 **不处理（说明）**：
