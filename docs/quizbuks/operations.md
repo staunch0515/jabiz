@@ -773,7 +773,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   | `qb.topic.max-per-quiz` | `10` | 一个 Quiz 或发布最多的主题词（词表中的词与自定义词合计，最多 30） | 只在保存主题词时检查；调低后已有的不受影响，下次修改时要先减到上限以内 |
   | `qb.topic.custom-max-length` | `30` | 一个自定义词最多的字数（最多 60） | 同上 |
 
-- **数据**：Quiz `qb_quiz_version.topics` / `custom_topics`（`QB_QUIZ_TOPICS_SET`）；版本保存时复制到 `qb_quiz_version_version`；发布的增删 `qb_publication_version.topic_changes`（`QB_PUBLICATION_TOPICS_SET`，只在草稿）；上线与切换版本时冻结到卡片 `qb_publication_card.topics` / `custom_topics`；学者的 `qb_user_settings.liked_topics` / `strict_topics`（删除账号时随设置一起删除，审计中遮蔽）。迁移 `V86`（临时编号，合并前按最大号 + 1 重编）之前上线的卡片没有主题词：在"只看喜欢的主题"中不出现，直到切换版本。
+- **数据**：Quiz `qb_quiz_version.topics` / `custom_topics`（`QB_QUIZ_TOPICS_SET`）；版本保存时复制到 `qb_quiz_version_version`；发布的增删 `qb_publication_version.topic_changes`（`QB_PUBLICATION_TOPICS_SET`，只在草稿）；上线与切换版本时冻结到卡片 `qb_publication_card.topics` / `custom_topics`；学者的 `qb_user_settings.liked_topics` / `strict_topics`（删除账号时随设置一起删除，审计中遮蔽）。迁移 `V87`（临时编号，合并前按最大号 + 1 重编）之前上线的卡片没有主题词：在"只看喜欢的主题"中不出现，直到切换版本。
 - **"只看喜欢的主题"**：首页模板 `qb.app.feed`（含短视频一排）读学者自己的设置，只列卡片的词表中的词（合并的词按目标词）与喜欢的主题有交集的发布；自定义词、没有主题词的发布不列。指定邮箱的邀请（不进首页）、对话不受影响。推送（F-S13）做时套用同一条件。答题路径不读主题词，`AttemptStatementBudgetIT` 不变。
 - **统计**：同一页显示每个词的发布数（全部、进行中）与喜欢的人数（其中打开"只看喜欢的主题"的人数）；人数只在达到最小分组（`qb.stats.min-group`，缺省 5、下限 3）时显示，否则"少于 k"。合并的词的数字算在目标词上。模板 `qb.admin.topics`。
 - **以后**：自定义词的搜索在 F-S6（题库与搜索）合入后接上（卡片已保存自定义词）；推送在 F-S13。
