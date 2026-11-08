@@ -5459,6 +5459,23 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz12 状态**：📝 待评审（分支 `1.3/phase-17zz12-app-test-timeout`）。
 
+### 17zz13 应用的后端测试分片并行（2026-11-08，总控排入，采纳 17zz12 评估的方案 A）
+
+**缘由**：QuizBuks 的整套后端测试在一台机器上 43–45 分钟（17zz12）。本地实测：297 个测试类，190 个 IT 类各起新的 Spring 上下文与 schema，测试一个接一个跑，
+没有单个大类拖慢；分到几台机器上几乎按比例见效。
+
+| # | 内容 |
+|---|---|
+| 17zz13-1 | `backend/build-logic` 的 `TestShards`：`-Pjabiz.test.shard=<i>/<n>` 只跑第 i 片的测试类（嵌套类随外层类）；按模块根目录的 `test-timings.txt`（`<类> <秒>`）由长到短分给当前最轻的一片（耗时超过 1 秒的类另加 5 秒，算上类之外的上下文启动），没列出的类按类名哈希；各片算出同一个分配。`backend/build.gradle.kts` 对所有测试任务生效 |
+| 17zz13-2 | `tools/ci/test-timings.py`：由一次运行的 JUnit 结果写出 `test-timings.txt`（jqwik 容器的时长跨整个运行，改计其测试之和）；离线测试 `tools/test/test-timings.test.sh`（`app-paths` 作业） |
+| 17zz13-3 | `ci.yml`：`build-application-shard` 三片（matrix，`fail-fast: false`）；第 1 片跑应用模块的 `check`（含 `platformCheck`、`spaCheck`），其余跑 `test`；报告的 artifact 按片命名；汇总作业 `build-application` 在全部分片成功时成功、分片被跳过时跳过，分支保护的必需检查名不变 |
+| 17zz13-4 | 时限：各片暂留 75 分钟；分片稳定后改为 40 分钟（另一个 PR） |
+
+**验收**：平台分支上 `build-application` 不运行，分片在应用分支上验证：QuizBuks 的同步 PR（带 `backend/quizbuks/test-timings.txt`）三片都绿、各约 15–20 分钟，汇总检查名为 `build-application`；
+`TestShardsTest`（解析、读表、分配、每个类恰在一片、嵌套类）；本地 `:core:test` 分三片跑出的类与不分片完全相同。
+
+**17zz13 状态**：📝 待评审（分支 `1.3/phase-17zz13-app-test-shards`）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |
