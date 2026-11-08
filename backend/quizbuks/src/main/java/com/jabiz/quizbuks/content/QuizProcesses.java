@@ -471,6 +471,8 @@ public final class QuizProcesses {
         EntityInstance source = quiz(ctx);
         QuizSnapshot content;
         Map<String, Map<String, String>> hashes = Map.of();
+        // F-S9: the topics go with the copy, the draft's or the version's.
+        EntityInstance topicsOf = source;
         if (input.versionNo() == null) {
             // Q73a: the draft's other languages as they are, complete or not, and out of date where they are.
             QuizLanguages.Draft draft = QuizLanguages.of(source, list(ctx, MATERIALS), list(ctx, IMAGES),
@@ -484,10 +486,14 @@ public final class QuizProcesses {
                 + input.versionNo(), Map.of("versionNo", input.versionNo())));
             return;
         } else {
-            content = QuizSnapshots.fromJson(list(ctx, VERSIONS).getFirst().get("content"));
+            topicsOf = list(ctx, VERSIONS).getFirst();
+            content = QuizSnapshots.fromJson(topicsOf.get("content"));
         }
+        Map<String, Object> topics = new LinkedHashMap<>();
+        topics.put("topics", topicsOf.get("topics"));
+        topics.put("customTopics", topicsOf.get("customTopics"));
         Object quizId = insertContent(ctx, content, text(input.title()) == null ? content.title() : input.title(),
-            content.aiGenerated(), source.id(), source.get("language"), hashes);
+            content.aiGenerated(), source.id(), source.get("language"), hashes, topics);
         ctx.put(OUTPUT, new CloneOutput(uuid(quizId), uuid(source.id()), input.versionNo(), 1, ctx.opTime()));
     }
 
@@ -511,6 +517,15 @@ public final class QuizProcesses {
      */
     public static Object insertContent(ProcessContext ctx, QuizSnapshot content, String title, boolean aiGenerated,
         Object clonedFrom, Object language, Map<String, Map<String, String>> hashes) {
+        return insertContent(ctx, content, title, aiGenerated, clonedFrom, language, hashes, Map.of());
+    }
+
+    /**
+     * As {@link #insertContent(ProcessContext, QuizSnapshot, String, boolean, Object, Object, Map)}, with more of the
+     * quiz's own values ({@code more}: F-S9's topics of a copy).
+     */
+    static Object insertContent(ProcessContext ctx, QuizSnapshot content, String title, boolean aiGenerated,
+        Object clonedFrom, Object language, Map<String, Map<String, String>> hashes, Map<String, Object> more) {
         Map<String, Object> heading = new LinkedHashMap<>();
         heading.put("title", title);
         if (language != null) {
@@ -526,7 +541,9 @@ public final class QuizProcesses {
         List<String> languages = QbContent.LANGUAGES.stream().filter(content.translations()::containsKey)
             .filter(l -> !l.equals(values.get("language"))).toList();
         values.put("translationLanguages", ContentLanguages.joinList(languages));
+        values.putAll(more);
         Object quizId = ctx.changes().insert(QbContent.QUIZ, values);
+
         String owner = ctx.request().actorId();
         Map<Integer, Object> materialIds = new LinkedHashMap<>();
         for (QuizSnapshot.Material material : content.materials()) {
@@ -722,9 +739,14 @@ public final class QuizProcesses {
         Object language = quiz.get("language");
         List<String> languages = draft.languages(String.valueOf(language));
         String languagesColumn = content.translations().isEmpty() ? null : ContentLanguages.joinList(languages);
+        // F-S9: the topics are the version's own columns too (not in the content, whose hash stays what it was).
+        com.jabiz.quizbuks.topic.TopicRules.Topics topics = com.jabiz.quizbuks.topic.TopicRules.Topics.of(
+            quiz.get("topics"), quiz.get("customTopics"));
         if (!latest.isEmpty() && hash.equals(latest.getFirst().get("contentHash"))
             && java.util.Objects.equals(language, latest.getFirst().get("language"))
-            && java.util.Objects.equals(languagesColumn, latest.getFirst().get("languages"))) {
+            && java.util.Objects.equals(languagesColumn, latest.getFirst().get("languages"))
+            && topics.equals(com.jabiz.quizbuks.topic.TopicRules.Topics.of(latest.getFirst().get("topics"),
+                latest.getFirst().get("customTopics")))) {
             ctx.reject(new Violation(null, ContentCodes.VERSION_UNCHANGED, "The quiz is as its version "
                 + latest.getFirst().get("label") + " was", Map.of("label", latest.getFirst().get("label"))));
             return;
@@ -741,6 +763,8 @@ public final class QuizProcesses {
         version.put("timeLimitSec", content.timeLimitSec() == null ? null : decimal(content.timeLimitSec()));
         version.put("language", language);
         version.put("languages", languagesColumn);
+        version.put("topics", topics.codesColumn());
+        version.put("customTopics", topics.customColumn());
         version.put("questionCount", decimal(content.questions().size()));
         version.put("materialCount", decimal(content.materials().size()));
         version.put("fullScore", decimal(content.fullScore()));

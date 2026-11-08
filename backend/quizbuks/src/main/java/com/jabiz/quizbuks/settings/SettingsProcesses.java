@@ -11,7 +11,12 @@ import com.jabiz.quizbuks.content.QbContent;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.quizbuks.topic.TopicCodes;
+import com.jabiz.quizbuks.topic.TopicRules;
+import com.jabiz.quizbuks.topic.TopicSteps;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+
 import jakarta.validation.constraints.Size;
 
 import java.util.ArrayList;
@@ -37,10 +42,20 @@ public final class SettingsProcesses {
      *                         only, whichever it is
      * @param publicHandle     Q77: the public certification page's name ({@link PublicHandles}); blank clears it
      * @param publicPage       Q77: whether that page is shown; on needs a name
+     * @param likedTopics      F-S9: the topics liked, codes of the word list, all of them (empty: none); a word liked
+     *                         anew must be offered, one liked before stays though deactivated since
+     * @param strictTopics     F-S9: strict mode (only publications with a liked topic on the home, the shelf of shorts
+     *                         and push); on needs a liked topic, off always works
      */
     public record SaveInput(Boolean soundOn,
         @Size(max = 3) List<@Pattern(regexp = "ja|zh|en") String> contentLanguages,
-        @Size(max = 60) String publicHandle, Boolean publicPage) {
+        @Size(max = 60) String publicHandle, Boolean publicPage,
+        @Size(max = TopicRules.MAX_LIKED + 1) List<@NotNull @Size(max = TopicRules.CODE_LENGTH) String> likedTopics,
+        Boolean strictTopics) {
+
+        public SaveInput(Boolean soundOn, List<String> contentLanguages, String publicHandle, Boolean publicPage) {
+            this(soundOn, contentLanguages, publicHandle, publicPage, null, null);
+        }
 
         public SaveInput(Boolean soundOn) {
             this(soundOn, null);
@@ -53,7 +68,7 @@ public final class SettingsProcesses {
 
     /** The settings after the save; no content languages: the interface language. */
     public record SettingsOutput(boolean soundOn, List<String> contentLanguages, String publicHandle,
-        boolean publicPage) {
+        boolean publicPage, List<String> likedTopics, boolean strictTopics) {
     }
 
     private static final String INPUT = "input";
@@ -68,6 +83,11 @@ public final class SettingsProcesses {
                 .permissions(QbPermissions.ACCOUNT_READ)
                 .contextFactory(SettingsProcesses::start)
                 .outputMapper(ctx -> ctx.get(OUTPUT, SettingsOutput.class));
+            // F-S9: the words liked, to check those liked anew (none given: no statement).
+            TopicSteps.loadWords(pb, ctx -> {
+                List<String> liked = ctx.get(INPUT, SaveInput.class).likedTopics();
+                return liked == null ? List.of() : liked.stream().map(String::strip).toList();
+            });
             pb.step("Lock the settings", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbSettings.lockName(ctx.request().actorId())));
             pb.step("Load the settings", QueryEntities.<ProcessContext>of(QbSettings.DEFAULT_DATASET,
@@ -94,6 +114,25 @@ public final class SettingsProcesses {
             : current == null ? null : (String) current.get("publicHandle");
         boolean publicPage = input.publicPage() != null ? input.publicPage()
             : current != null && Boolean.TRUE.equals(current.get("publicPage"));
+        List<String> likedBefore = TopicRules.codes(current == null ? null : current.get("likedTopics"));
+        List<String> liked = input.likedTopics() != null
+            ? TopicRules.codes(String.join(",", input.likedTopics().stream().map(String::strip).toList()))
+            : likedBefore;
+        boolean strict = input.strictTopics() != null ? input.strictTopics()
+            : current != null && Boolean.TRUE.equals(current.get("strictTopics"));
+        if (input.likedTopics() != null) {
+            TopicRules.choiceProblems("likedTopics", liked, likedBefore, TopicSteps.words(ctx)).forEach(ctx::reject);
+            if (liked.size() > TopicRules.MAX_LIKED) {
+                ctx.reject(new Violation("likedTopics", TopicCodes.TOO_MANY_LIKED, "More than " + TopicRules.MAX_LIKED
+                    + " liked topics", Map.of("max", TopicRules.MAX_LIKED)));
+            }
+        }
+        // Strict mode without a liked topic would show nothing: turning it on, or leaving none while on, is refused.
+        if (strict && liked.isEmpty() && (input.strictTopics() != null || input.likedTopics() != null)) {
+            ctx.reject(new Violation("strictTopics", TopicCodes.STRICT_NEEDS_TOPICS, "Strict mode needs a liked topic",
+                Map.of()));
+        }
+        String likedColumn = TopicRules.joinCodes(liked);
         if (input.publicHandle() != null && handle != null) {
             String problem = PublicHandles.problem(handle);
             if (problem != null) {
@@ -115,20 +154,26 @@ public final class SettingsProcesses {
             row.put("contentLanguages", languages);
             row.put("publicHandle", handle);
             row.put("publicPage", publicPage);
+            row.put("likedTopics", likedColumn);
+            row.put("strictTopics", strict);
             ctx.changes().insert(QbSettings.SETTINGS, row);
         } else if (!Boolean.valueOf(soundOff).equals(current.get("soundOff"))
             || !Objects.equals(languages, current.get("contentLanguages"))
             || !Objects.equals(handle, current.get("publicHandle"))
-            || !Boolean.valueOf(publicPage).equals(current.get("publicPage"))) {
+            || !Boolean.valueOf(publicPage).equals(current.get("publicPage"))
+            || !Objects.equals(likedColumn, current.get("likedTopics"))
+            || !Boolean.valueOf(strict).equals(current.get("strictTopics"))) {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("soundOff", soundOff);
             values.put("contentLanguages", languages);
             values.put("publicHandle", handle);
             values.put("publicPage", publicPage);
+            values.put("likedTopics", likedColumn);
+            values.put("strictTopics", strict);
             ctx.changes().update(QbSettings.SETTINGS, current.id(), current.version(), values);
         }
         ctx.put(OUTPUT, new SettingsOutput(!soundOff, languages == null ? List.of()
-            : Arrays.asList(languages.split(",")), handle, publicPage));
+            : Arrays.asList(languages.split(",")), handle, publicPage, liked, strict));
     }
 
     /** The languages as stored: in the platform's order, each once; none as null. */

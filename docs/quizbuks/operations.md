@@ -754,6 +754,39 @@ App 首页在参数给出的位置插入一排竖屏小卡（"短视频"），�
   3. 参数 `qb.feed.shorts.positions` 是否为空或位置太靠后（卡片不够且还有下一页时，那一排要等滚到那里才出现）。
   4. 全屏模式中只有一个播放器：YouTube、Vimeo 由 App 的播放器播放并可以开声音；其他网站点播放器本身开声音（A3-18）。系统设为"减少动态效果"时不自动播放，要点"播放"。
 
+### 7.26 主题词的词表（F-S9）
+
+Quiz 与发布有主题词（平台词表中的词与自定义词），学者可以选喜欢的主题并打开"只看喜欢的主题"（`docs/quizbuks/plans/impl/F-S9.md`）。给用户的帮助文案在 `docs/quizbuks/help/topics.md`（由内容管理员发布为 FAQ）。**词表由总部维护**：平台管理系统的"主题词"页（`/qb/topics`，权限 `qb.admin.topic.read` / `.write`，内容管理员与超级管理员有），新增词不改代码、不用部署。
+
+- **一个词**：代码（`topic_id`，小写字母与数字，单词之间一个连字符，2–40 字，以后不能改，Quiz、发布与学者的选择都记代码）与三语名称（中文、日文、英文都必填）。
+- **维护**（都在平台的流程页上做，每次修改由平台留审计记录，`GET /api/audit/records?entityType=QbTopic`）：
+
+  | 操作 | 流程 | 效果 |
+  |---|---|---|
+  | 新增 | `QB_TOPIC_ADD` | 填代码与三语名称；代码已被用时拒绝（`QB_TOPIC_CODE_TAKEN`） |
+  | 改名 | `QB_TOPIC_RENAME` | 三语名称一起改；已选的地方随之显示新名称 |
+  | 停用 / 重新启用 | `QB_TOPIC_DEACTIVATE` / `QB_TOPIC_REACTIVATE` | 停用后不能再选；已选的 Quiz、发布与学者照常显示（标为"已不再提供"），"只看喜欢的主题"与统计照常算它 |
+  | 合并 | `QB_TOPIC_MERGE`（词、合并到哪个词） | 被合并的词停用，以后在"只看喜欢的主题"与统计中算作目标词，显示目标词的名称；以前合并到它的词一起改为目标词（合并总是一步）。只能合并到可选的词；合并后不能再改、不能撤销（要撤销就新建一个词） |
+
+  不删除词。名称写错了改名；不再用的停用；与另一个词重复的合并。
+- **启动检查**：词表中有词缺少某种语言的名称时（只可能来自手工改库或迁移，流程都要求三语），启动检查与 `platformCheck` 报错（类别 `QUIZBUKS`，定位 `topic:<代码>`），**正式模式下应用起不来**。处理：用 `QB_TOPIC_RENAME` 补全名称后重启（应用起不来时先在数据库中补上 `name` 的 JSON，再重启并用流程改一次名留下审计）。
+- **参数**（普通参数，`PARAM_SET`，不受控；部署后运行一次 `QB_SETUP` 建立）：
+
+  | 参数 | 缺省 | 作用 | 调整的影响 |
+  |---|---|---|---|
+  | `qb.topic.max-per-quiz` | `10` | 一个 Quiz 或发布最多的主题词（词表中的词与自定义词合计，最多 30） | 只在保存主题词时检查；调低后已有的不受影响，下次修改时要先减到上限以内 |
+  | `qb.topic.custom-max-length` | `30` | 一个自定义词最多的字数（最多 60） | 同上 |
+
+- **数据**：Quiz `qb_quiz_version.topics` / `custom_topics`（`QB_QUIZ_TOPICS_SET`）；版本保存时复制到 `qb_quiz_version_version`；发布的增删 `qb_publication_version.topic_changes`（`QB_PUBLICATION_TOPICS_SET`，只在草稿）；上线与切换版本时冻结到卡片 `qb_publication_card.topics` / `custom_topics`；学者的 `qb_user_settings.liked_topics` / `strict_topics`（删除账号时随设置一起删除，审计中遮蔽）。迁移 `V87`（临时编号，合并前按最大号 + 1 重编）之前上线的卡片没有主题词：在"只看喜欢的主题"中不出现，直到切换版本。
+- **"只看喜欢的主题"**：首页模板 `qb.app.feed`（含短视频一排）读学者自己的设置，只列卡片的词表中的词（合并的词按目标词）与喜欢的主题有交集的发布；自定义词、没有主题词的发布不列。指定邮箱的邀请（不进首页）、对话不受影响。推送（F-S13）做时套用同一条件。答题路径不读主题词，`AttemptStatementBudgetIT` 不变。
+- **统计**：同一页显示每个词的发布数（全部、进行中）与喜欢的人数（其中打开"只看喜欢的主题"的人数）；人数只在达到最小分组（`qb.stats.min-group`，缺省 5、下限 3）时显示，否则"少于 k"。合并的词的数字算在目标词上。模板 `qb.admin.topics`。
+- **以后**：自定义词的搜索在 F-S6（题库与搜索）合入后接上（卡片已保存自定义词）；推送在 F-S13。
+- **"学者说看不到发布"的排查**（打开了"只看喜欢的主题"时）：
+  1. 学者的设置：`SELECT liked_topics, strict_topics FROM qb_user_settings WHERE user_id = '<学者>'`。
+  2. 发布卡片的主题词：`SELECT topics, custom_topics FROM qb_publication_card WHERE publication_id = '<发布>'`；只有自定义词或为空时不会列出（发起方在新版本中加词表中的词后切换版本）。
+  3. 合并：`SELECT topic_id, merged_into, active FROM qb_topic WHERE topic_id IN (…)`。
+  4. 其余按首页的排查（地区、客户匹配、中国大陆 §7.24 等）；关掉"只看喜欢的主题"后能看到即是主题词的原因。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。

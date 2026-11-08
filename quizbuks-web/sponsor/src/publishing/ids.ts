@@ -7,6 +7,9 @@
 /** Processes (`publishing.PublicationProcesses`, `PublicationLifecycle`). */
 export const PUBLISHING_PROCESS = {
   save: 'QB_PUBLICATION_SAVE',
+  /** F-S9: what a draft adds to and removes from its quiz version's topics. */
+  topicsSet: 'QB_PUBLICATION_TOPICS_SET',
+
   /** The invitation list of an invited publication (Q25). */
   invitationAdd: 'QB_INVITATION_ADD',
   invitationRemove: 'QB_INVITATION_REMOVE',

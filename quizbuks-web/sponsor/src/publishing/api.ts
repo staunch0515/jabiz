@@ -131,7 +131,36 @@ export interface Publication {
   revision: number
   editedAt: string
   copiedFrom: string | null
+  /** F-S9: what it adds to and removes from its version's topics. */
+  topicChanges?: TopicChanges
 }
+
+/** F-S9: a publication's changes of its version's topics (backend `TopicRules.Changes`). */
+export interface TopicChanges {
+  add: string[]
+  remove: string[]
+  customAdd: string[]
+  customRemove: string[]
+}
+
+export const NO_TOPIC_CHANGES: TopicChanges = { add: [], remove: [], customAdd: [], customRemove: [] }
+
+/** The changes a column holds (a JSON object of lists); none when absent or unreadable. */
+export function topicChangesOf(value: unknown): TopicChanges {
+  if (typeof value !== 'string' || value === '') return NO_TOPIC_CHANGES
+  try {
+    const parsed = JSON.parse(value) as Partial<Record<keyof TopicChanges, unknown>>
+    const list = (key: keyof TopicChanges) => (Array.isArray(parsed[key]) ? (parsed[key] as unknown[]).map(String) : [])
+    return { add: list('add'), remove: list('remove'), customAdd: list('customAdd'), customRemove: list('customRemove') }
+  } catch {
+    return NO_TOPIC_CHANGES
+  }
+}
+
+/** F-S9: all a draft's changes of its version's topics (at the revision the page edited). */
+export const setPublicationTopics = (publicationId: string, baseRevision: number | null, changes: TopicChanges) =>
+  runProcess<PublicationOutput>(PUBLISHING_PROCESS.topicsSet, { publicationId, baseRevision, ...changes })
+
 
 /** A publication with its tiers in their order. */
 export interface PublicationDetail {
@@ -415,6 +444,7 @@ export function toPublication(row: Row): Publication {
     revision: num(row.revision),
     editedAt: String(row.editedAt ?? ''),
     copiedFrom: str(row.copiedFrom),
+    topicChanges: topicChangesOf(row.topicChanges),
   }
 }
 

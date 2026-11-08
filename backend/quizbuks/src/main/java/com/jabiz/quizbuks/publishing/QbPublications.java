@@ -143,6 +143,10 @@ public final class QbPublications {
         // other one, translated from the base's (PublicationLanguages). Frozen with the policy.
         eb.field("languages", f -> f.physicalColumn("languages").asText(ContentLanguages.LIST_LENGTH));
         eb.field("translations", f -> f.physicalColumn("translations").asText(PublicationLanguages.JSON_LENGTH));
+        // F-S9: what the publication adds to and removes from its version's topics (TopicRules.Changes' JSON; none:
+        // the version's as they are). Only QB_PUBLICATION_TOPICS_SET writes it; frozen with the policy.
+        eb.field("topicChanges", f -> f.physicalColumn("topic_changes").processOnly()
+            .asText(com.jabiz.quizbuks.topic.TopicRules.CHANGES_LENGTH));
         eb.field("fullScore", f -> f.physicalColumn("full_score").processOnly().asNumeric(7, 0));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").processOnly().asMonetary("JPY", 0));
         eb.field("maxSpend", f -> f.physicalColumn("max_spend").processOnly().asMonetary("JPY", 0));
@@ -396,6 +400,13 @@ public final class QbPublications {
         // F-S10: whether that video is vertical (a YouTube Shorts link, or marked so on its material); the App's home
         // shows such publications in its shelf of shorts and their full-screen vertical mode.
         eb.field("videoVertical", f -> f.physicalColumn("video_vertical").required(true).asBool());
+        // F-S9: the publication's topics (its version's with its own changes, TopicRules.effective), when it goes on
+        // and at a switch of version: codes of the word list (strict mode and the statistics read only these) and
+        // custom words (a JSON array, for search only, F-S6).
+        eb.field("topics", f -> f.physicalColumn("topics").asText(com.jabiz.quizbuks.topic.TopicRules.CODES_LENGTH));
+        eb.field("customTopics", f -> f.physicalColumn("custom_topics")
+            .asText(com.jabiz.quizbuks.topic.TopicRules.CUSTOM_LENGTH));
+
         eb.field("versionId", f -> f.physicalColumn("version_id").required(true)
             .asReference(QbContent.VERSION));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").immutable(true).required(true)

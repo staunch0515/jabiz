@@ -435,9 +435,12 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   // F-S11: from mainland China, what has a video that cannot be played there is left out.
   const region = useMainlandChina()
   const mainlandChina = region.mainlandChina
+  // F-S9: strict mode is the server's (it reads the taker's settings); a change of it asks again.
+  const strictTopics = settings.data?.strictTopics === true
+  const likedKey = (settings.data?.likedTopics ?? []).join(',')
   const feed = useInfiniteQuery({
     queryKey: ['qb', 'feed', at, country, q, filters.sort, filters.includeAnswered, method, filterList, i18n.language,
-      languages, mainlandChina],
+      languages, mainlandChina, strictTopics, likedKey],
     queryFn: ({ pageParam }) => readFeed({ at, country, q, sort: filters.sort, method: method === 'ALL' ? null : method,
       includeAnswered: filters.includeAnswered, languages, mainlandChina, filters: filterList, offset: pageParam,
       limit: FEED_PAGE }),
@@ -451,7 +454,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   // F-S10: the vertical short videos under the same conditions (the template's `shorts`), once the feed is there.
   const shorts = useQuery({
     queryKey: ['qb', 'feed-shorts', at, country, q, filters.sort, filters.includeAnswered, method, filterList,
-      i18n.language, languages, mainlandChina],
+      i18n.language, languages, mainlandChina, strictTopics, likedKey],
     queryFn: () => readShorts({ at, country, q, sort: filters.sort, method: method === 'ALL' ? null : method,
       includeAnswered: filters.includeAnswered, languages, mainlandChina, filters: filterList }),
     enabled: feed.isSuccess,
@@ -533,7 +536,16 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           </Button>
         </div>
       )}
+      {/* F-S9: strict mode leaves out what has none of the topics liked; say so, with the way to change it. */}
+      {strictTopics && (
+        <div className="text-muted-foreground flex items-center gap-2 text-sm" data-testid="home-strict-topics">
+          <span className="min-w-0">{t('topics.homeNotice')}</span>
+          <Link to="/account/details" className="text-foreground underline underline-offset-4"
+            data-testid="home-strict-topics-change">{t('topics.homeChange')}</Link>
+        </div>
+      )}
       <FiltersSheet open={filtersOpen} onOpenChange={setFiltersOpen} value={filters} onApply={setFilters}
+
         method={method} onMethod={chooseMethod} />
       </div>
       {feed.isPending ? (

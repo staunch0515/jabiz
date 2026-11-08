@@ -660,7 +660,10 @@ final class PublicationEditing {
         cardVideo(snapshot.materials()).writeTo(card);
         // F-S11: whether mainland China may answer it (its version's videos, every language), frozen with it.
         card.put("foreignVideo", foreignVideo(ctx, snapshot));
+        // F-S9: its version's topics with its own changes, frozen with it.
+        PublicationTopics.writeTo(card, publication, version);
         card.put("wentOnAt", ctx.opTime());
+
         EntityInstance operator = first(ctx, SPONSOR_OPERATOR);
         card.put("operatorId", operator == null ? null : operator.get("operatorId"));
         return card;
