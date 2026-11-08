@@ -241,7 +241,7 @@
 - **处理**（`deploy/quizbuks/DEPLOY.md`"2b. 发信的服务器"）：
   1. 在服务器上测端口：`timeout 10 bash -c '</dev/tcp/smtp.mx.cloudflare.net/465' && echo ok`。连不上：请 Hetzner 解封出站 465，或改用支持 587 + STARTTLS 的发信服务。
   2. 按"2b"改 `.env`：465 用 SSL、不写 STARTTLS；Cloudflare 的用户名 `api_token`、发件地址用登记的域名；同一个变量只留一行。
-  3. `docker compose up -d app`（在 `/opt/apps/<APP_NAME>/` 下；`docker restart` 不重新读 `.env`），或重新部署（部署前的检查会指出还剩的设置问题）。
+  3. 重建应用的容器（`docker restart` 不重新读 `.env`；compose 要求 `IMAGE_TAG`）：在 `/opt/apps/<APP_NAME>/` 下 `IMAGE_TAG=$(docker inspect --format '{{.Config.Image}}' <APP_NAME>-app | cut -d: -f2) docker compose up -d app`，或 `deploy-app.sh <APP_NAME> <当前 SHA>`，或重新部署（部署前的检查会指出还剩的设置问题）。
   4. 核对：平台管理系统"邮件模版"的测试发送到自己的邮箱；再用下面第一条查询看最近的发信。
 - **只读的查询**（在数据库上；只读，不改任何东西）：
 

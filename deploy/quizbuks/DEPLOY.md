@@ -274,7 +274,15 @@ timeout 10 bash -c '</dev/tcp/<发信服务商的主机>/587' && echo 587 可以
    # 不写 SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE / _REQUIRED
    ```
 
-5. 让应用读到新的 `.env`：在 `/opt/apps/<APP_NAME>/` 下 `docker compose up -d app`（**不要**用 `docker restart` 或 `docker compose restart`：它们不重新读 `.env`），或重新运行部署。
+5. 让应用读到新的 `.env`（**不要**用 `docker restart` 或 `docker compose restart`：它们不重新读 `.env`）。compose 要求 `IMAGE_TAG`（部署时由 `deploy-app.sh` 给出），手动重建时用正在运行的那个标签：
+
+   ```bash
+   APP=quizbuks-staging          # production 为 quizbuks
+   cd /opt/apps/$APP
+   IMAGE_TAG=$(docker inspect --format '{{.Config.Image}}' $APP-app | cut -d: -f2) docker compose up -d app
+   ```
+
+   或者用部署脚本重新部署当前的版本：`/opt/infra/scripts/deploy-app.sh $APP <当前的 40 位 SHA>`（同上一条命令中 `cut` 得到的值；它等待健康、失败时回滚），也可以在 GitHub 上重新运行部署。
 6. 核对：平台管理系统中对自己的邮箱发一封测试邮件（"邮件模版"页的测试发送），或注册一个测试账号看验证邮件；没有收到时看 T15 的查询。
 7. Grafana 的告警邮件（"2a"）也可以经同一个服务：`GF_SMTP_HOST=smtp.mx.cloudflare.net:465`、`GF_SMTP_USER=api_token`、`GF_SMTP_PASSWORD=<令牌>`、`GF_SMTP_FROM_ADDRESS=<登记域名的地址>`。
    但告警邮件与应用的邮件走同一条路时，这条路断了告警也发不出去：上线后 Grafana 最好用另一个服务（或另一个端口），并以 `alert-fire-test.sh notify` 试过。
