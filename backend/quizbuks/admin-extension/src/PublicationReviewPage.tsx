@@ -99,7 +99,7 @@ function Takedowns({ takedowns }: { takedowns: UseQueryResult<Takedown[]> }) {
 }
 import { VersionPreview } from './VersionPreview'
 import { readVideoSites } from './region-api'
-import { foreignVideo, mainlandSites, reachesMainland, snapshotVideoLinks } from './video'
+import { cardVideoVertical, foreignVideo, mainlandSites, reachesMainland, snapshotVideoLinks } from './video'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const IMAGE = { image: true, variants: CONTENT_IMAGE_VARIANTS }
@@ -672,6 +672,13 @@ export default function PublicationReviewPage() {
         && foreignVideo(snapshotVideoLinks(shownVersion.content), mainlandSites(videoSites.data ?? null)) && (
         <Alert variant="warning" data-testid="publication-mainland">
           <AlertDescription>{t('region.reviewNotice')}</AlertDescription>
+        </Alert>
+      )}
+      {/* F-S10: the publication goes into the app's shelf of short videos (the card freezes it; after a switch, the new
+          version's). */}
+      {shownVersion?.content && cardVideoVertical(shownVersion.content) && (
+        <Alert data-testid="publication-vertical">
+          <AlertDescription>{t('region.verticalNotice')}</AlertDescription>
         </Alert>
       )}
       <Takedowns takedowns={takedowns} />

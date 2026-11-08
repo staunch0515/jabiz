@@ -115,6 +115,10 @@ public final class QuizSnapshots {
                     m.put("durationSec", material.durationSec());
                 }
             }
+            // F-S10: only a video the sponsor marked as vertical says so; every other material's text stays the same.
+            if (material.vertical()) {
+                m.put("vertical", true);
+            }
             materials.add(m);
         }
         return materials;
@@ -130,7 +134,7 @@ public final class QuizSnapshots {
             materials.add(new QuizSnapshot.Material(number(m.get("no")), string(m.get("kind")),
                 string(m.get("title")), string(m.get("description")), string(m.get("body")), string(m.get("url")),
                 uuid(m.get("pdf")), uuid(m.get("audio")), images, Boolean.TRUE.equals(m.get("watchToAnswer")), null,
-                m.get("durationSec") instanceof Number d ? d.intValue() : null));
+                m.get("durationSec") instanceof Number d ? d.intValue() : null, Boolean.TRUE.equals(m.get("vertical"))));
         }
         return materials;
     }
@@ -199,10 +203,11 @@ public final class QuizSnapshots {
         List<QuizSnapshot.Material> materials = new ArrayList<>();
         for (QuizSnapshot.Material base : snapshot.materials()) {
             QuizSnapshot.Material m = own.get(base.no());
-            // Q75: the duration is the base's (the video to watch is watched in every language).
+            // Q75: the duration is the base's (the video to watch is watched in every language); F-S10: so is the
+            // sponsor's mark of a vertical video.
             materials.add(m == null ? base : new QuizSnapshot.Material(base.no(), base.kind(), m.title(),
                 m.description(), m.body(), m.url(), m.pdf(), m.audio(), m.images(), base.watchToAnswer(), language,
-                base.durationSec()));
+                base.durationSec(), base.vertical()));
         }
         List<QuizSnapshot.Question> questions = new ArrayList<>();
         for (QuizSnapshot.Question q : snapshot.questions()) {

@@ -55,7 +55,7 @@ import {
 import { ContentImage } from './ContentImage'
 import { formatDuration, parseDuration } from './duration'
 import { VideoDurationProbe } from './VideoDurationProbe'
-import { trackable, videoPlayer } from '../qb/video'
+import { isShorts, trackable, videoPlayer } from '../qb/video'
 import { isShortVideoLink, resolveVideoLink } from './api'
 import { DOCUMENT_FIELD, LIMITS } from './limits'
 import { useMoveFocus } from './moving'
@@ -122,7 +122,8 @@ interface ImageDraft {
   caption: string
 }
 
-const FIELDS = ['kind', 'title', 'description', 'body', 'url', 'pdf', 'audio', 'images', 'watchToAnswer', 'durationSec'] as const
+const FIELDS = ['kind', 'title', 'description', 'body', 'url', 'pdf', 'audio', 'images', 'watchToAnswer', 'durationSec',
+  'vertical'] as const
 
 /**
  * One reference material (M-23) with its content, saved with `QB_MATERIAL_SAVE`: a Markdown article, a link, a
@@ -153,6 +154,9 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
   const [body, setBody] = useState(material?.body ?? '')
   const [url, setUrl] = useState(material?.url ?? '')
   const [watch, setWatch] = useState(material?.watchToAnswer ?? false)
+  // F-S10: a vertical video, ticked by the sponsor; a YouTube Shorts link is one anyway (said, and ticked for them).
+  const [vertical, setVertical] = useState(material?.vertical ?? false)
+  const shorts = isShorts(url)
   // Q99: a video the App plays whose player cannot say how much was watched.
   const shownPlayer = videoPlayer(url)
   const untrackable = shownPlayer !== null && !trackable(shownPlayer)
@@ -218,7 +222,9 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
         return { ...base, body: textOrNull(body) }
       case 'url':
         return { ...base, url: url.trim() === '' ? null : url.trim(),
-          ...(kind === 'VIDEO_LINK' && !variant ? { watchToAnswer: watch, durationSec: parseDuration(duration) } : {}) }
+          ...(kind === 'VIDEO_LINK' && !variant ? { watchToAnswer: watch, durationSec: parseDuration(duration),
+            // F-S10: sent only when ticked (none is not vertical; a Shorts link is vertical without it).
+            ...(vertical && !shorts ? { vertical: true } : {}) } : {}) }
       case 'pdf':
         return { ...base, pdf }
       case 'audio':
@@ -365,6 +371,21 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
                   {problem('watchToAnswer') && (
                     <p id={`${id}-watch-error`} className="text-destructive text-sm">{problem('watchToAnswer')}</p>
                   )}
+                </div>
+              )}
+              {kind === 'VIDEO_LINK' && !variant && (
+                // F-S10: a vertical video goes into the App's shelf of short videos (a Shorts link always does).
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <Checkbox id={`${id}-vertical`} checked={vertical || shorts} disabled={shorts}
+                      data-testid="material-vertical" aria-describedby={`${id}-vertical-hint`}
+                      onCheckedChange={(checked) => setVertical(checked === true)} />
+                    <Label htmlFor={`${id}-vertical`}>{t('materials.vertical')}</Label>
+                  </div>
+                  <p id={`${id}-vertical-hint`} className="text-muted-foreground text-sm" data-testid="material-vertical-hint">
+                    {shorts ? t('materials.verticalShorts') : t('materials.verticalHint')}
+                  </p>
+                  {problem('vertical') && <p className="text-destructive text-sm">{problem('vertical')}</p>}
                 </div>
               )}
               {kind === 'VIDEO_LINK' && !variant && (
@@ -582,6 +603,9 @@ export function MaterialsPanel({ materials, language }: {
                       <Badge variant="outline">{kindLabel(material.kind)}</Badge>
                       {material.watchToAnswer && (
                         <Badge variant="secondary" data-testid="material-watch-badge">{t('materials.watchBadge')}</Badge>
+                      )}
+                      {material.kind === 'VIDEO_LINK' && (material.vertical || isShorts(material.url)) && (
+                        <Badge variant="outline" data-testid="material-vertical-badge">{t('materials.verticalBadge')}</Badge>
                       )}
                       {material.kind === 'VIDEO_LINK' && material.durationSec != null && (
                         <Badge variant="outline" data-testid="material-duration-badge">

@@ -153,6 +153,9 @@ public final class QbContent {
         eb.field("watchToAnswer", f -> f.physicalColumn("watch_to_answer").required(true).asBool());
         // Q75: how long the video is, as the sponsor gives it (D-Q75-5); the start checks the watching against it.
         eb.field("durationSec", f -> f.physicalColumn("duration_sec").asNumeric(5, 0));
+        // F-S10: the sponsor marks a vertical video (a YouTube Shorts link is one anyway, VideoEmbeds.shorts); the
+        // card freezes it and the App's home shows such publications in its shelf of shorts. None is not vertical.
+        eb.field("vertical", f -> f.physicalColumn("vertical").asBool());
         // Q73a (§2.2b): a material in another language of the quiz stands for the base material variantOf there;
         // a base material has neither.
         eb.field("variantOf", f -> f.physicalColumn("variant_of").immutable(true).asReference(MATERIAL));

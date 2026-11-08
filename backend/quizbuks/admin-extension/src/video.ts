@@ -36,6 +36,33 @@ const html = (segment: string | undefined) => (segment && segment.endsWith('.htm
 
 const youtube = (id: string | null | undefined) => (id && YOUTUBE_ID.test(id) ? YOUTUBE_PLAYER + id : null)
 
+/**
+ * F-S10: whether a video link is a YouTube Shorts link, read as `videoPlayer` reads links (the backend's
+ * `VideoEmbeds.shorts`, the same cases).
+ */
+export function isShorts(url: string | null | undefined): boolean {
+  if (!videoPlayer(url)) return false
+  const parsed = new URL(url!.trim())
+  const path = parsed.pathname.split('/')
+  return YOUTUBE_HOSTS.has(parsed.hostname.toLowerCase()) && path.length === 3 && path[1] === 'shorts'
+}
+
+/**
+ * F-S10: whether the card of a version's publication would show a vertical video, as the backend's
+ * `PublicationEditing.cardVideo` chooses it: the video to watch (YouTube or Vimeo), else the first video link with a
+ * player; vertical when it is a YouTube Shorts link or the sponsor marked it.
+ */
+export function cardVideoVertical(content: Snapshot): boolean {
+  const trackable = (url: string | null) => {
+    const player = videoPlayer(url)
+    return !!player && (player.startsWith(YOUTUBE_PLAYER) || player.startsWith(VIMEO_PLAYER))
+  }
+  const watched = content.materials.find((material) => material.watchToAnswer)
+  const card = watched && trackable(watched.url) ? watched
+    : content.materials.find((material) => material.kind === 'VIDEO_LINK' && !!videoPlayer(material.url))
+  return !!card && (card.vertical === true || isShorts(card.url))
+}
+
 /** The player's address for a link to one video of the sites above; null for any other address. */
 export function videoPlayer(url: string | null | undefined): string | null {
   if (!url || !url.trim()) return null

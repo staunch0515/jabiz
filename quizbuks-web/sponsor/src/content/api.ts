@@ -117,6 +117,8 @@ export interface Material {
   watchToAnswer: boolean
   /** Q75: how long the video is, in seconds (a video of the base language; the video to watch needs it for a version). */
   durationSec: number | null
+  /** F-S10: the sponsor marked the video as vertical (a YouTube Shorts link is vertical anyway). */
+  vertical?: boolean
   /** Q73a: a material of another language stands for the base material `variantOf` in `language`. */
   variantOf: string | null
   language: ContentLanguage | null
@@ -211,6 +213,8 @@ export interface MaterialInput {
   watchToAnswer?: boolean
   /** VIDEO_LINK of the base language only (Q75): the video's duration in seconds. */
   durationSec?: number | null
+  /** VIDEO_LINK of the base language only (F-S10): the video is vertical; the App's home shows it among its shorts. */
+  vertical?: boolean
   /** Q73a: a material of another language, made with both and changed with the same. */
   variantOf?: string | null
   language?: ContentLanguage | null
@@ -452,6 +456,7 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
       images: imagesOf.get(String(m.materialId)) ?? [],
       watchToAnswer: m.watchToAnswer === true,
       durationSec: typeof m.durationSec === 'number' ? m.durationSec : m.durationSec == null ? null : Number(m.durationSec),
+      vertical: m.vertical === true,
       variantOf: str(m.variantOf),
       language: m.language == null ? null : contentLanguageOf(String(m.language)),
     }

@@ -119,4 +119,28 @@ class VideoEmbedsTest {
     void aVideoLinkHasItsSite(String url, String site) {
         assertThat(VideoEmbeds.site(url).map(VideoEmbeds.Site::key).orElse("none")).isEqualTo(site);
     }
+
+    /**
+     * F-S10: a YouTube Shorts link is a vertical video (the material's own check box marks the others). The App's
+     * {@code video.test.ts} has these cases.
+     */
+    @ParameterizedTest
+    @CsvSource({
+        "https://www.youtube.com/shorts/dQw4w9WgXcQ, true",
+        "https://m.youtube.com/shorts/dQw4w9WgXcQ?feature=share, true",
+        "'  https://youtube.com/shorts/dQw4w9WgXcQ  ', true",
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ, false",
+        "https://youtu.be/dQw4w9WgXcQ, false",
+        "https://www.youtube.com/embed/dQw4w9WgXcQ, false",
+        "https://www.youtube.com/shorts/short, false",
+        "https://www.youtube.com/shorts/dQw4w9WgXcQ/, false",
+        "https://evil.example/shorts/dQw4w9WgXcQ, false",
+        "https://vimeo.com/76979871, false",
+        "https://www.bilibili.com/video/BV1GJ411x7h7, false",
+        "'', false",
+    })
+    void aShortsLinkIsVertical(String url, boolean shorts) {
+        assertThat(VideoEmbeds.shorts(url)).isEqualTo(shorts);
+        assertThat(VideoEmbeds.shorts(null)).isFalse();
+    }
 }
