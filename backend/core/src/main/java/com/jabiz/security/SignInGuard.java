@@ -5,7 +5,8 @@ import java.util.List;
 /**
  * An application's check before a session is granted or renewed (docs/design/10-security.md section 15; decision D36
  * item 6), for example "a blocked customer may not sign in". Synchronous and free of I/O like every business extension
- * point: the application data it needs is declared by {@link #loads()} and read by the platform beforehand.
+ * point: the application data it needs is declared by {@link #loads()}, the business parameters by {@link #params()}
+ * (decision D79), and both are read by the platform beforehand.
  *
  * <p>Called after the password (or identity provider, or second factor) was found right and the roles accepted, before
  * any token is issued, on every sign-in path and at every refresh. All guards must allow; one that throws refuses
@@ -20,6 +21,14 @@ public interface SignInGuard {
 
     /** The application data the guard reads: rows of datasets whose field holds the user id. None by default. */
     default List<SignInLoad> loads() {
+        return List.of();
+    }
+
+    /**
+     * The business parameters the guard reads (decision D79), as they are in effect at the attempt's time; they reach
+     * it as the attempt's {@code params()}. None by default.
+     */
+    default List<GuardParam> params() {
         return List.of();
     }
 

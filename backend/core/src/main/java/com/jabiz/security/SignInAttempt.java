@@ -1,5 +1,7 @@
 package com.jabiz.security;
 
+import com.jabiz.param.ParamValues;
+
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,9 +20,11 @@ import java.util.Set;
  * @param factor        what the attempt proved the user with
  * @param time          when (the operation time, or the refresh time)
  * @param data          the rows of the guard's {@link SignInGuard#loads()}, by load name
+ * @param params        the business parameters of the guards' {@link SignInGuard#params()} as in effect at {@code time}
+ *                      (decision D79); those that may be unset and are have no value
  */
 public record SignInAttempt(String userId, String userName, String entry, Set<String> roles, boolean emailVerified,
-    Factor factor, Instant time, Map<String, List<Map<String, Object>>> data) {
+    Factor factor, Instant time, Map<String, List<Map<String, Object>>> data, ParamValues params) {
 
     /** How the attempt proved the user. */
     public enum Factor {
@@ -49,6 +53,13 @@ public record SignInAttempt(String userId, String userName, String entry, Set<St
             data.forEach((name, rows) -> copy.put(name, rows == null ? List.of() : List.copyOf(rows)));
         }
         data = java.util.Collections.unmodifiableMap(copy);
+        params = params == null ? new ParamValues(time, Map.of()) : params;
+    }
+
+    /** An attempt without business parameters (as before decision D79). */
+    public SignInAttempt(String userId, String userName, String entry, Set<String> roles, boolean emailVerified,
+        Factor factor, Instant time, Map<String, List<Map<String, Object>>> data) {
+        this(userId, userName, entry, roles, emailVerified, factor, time, data, null);
     }
 
     /** The rows of the load {@code name}; empty when it found none. */

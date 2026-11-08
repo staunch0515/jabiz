@@ -6,7 +6,8 @@ import java.util.List;
  * An application's check before an account gets the registration roles of a sign-in entry (docs/design/10-security.md
  * section 15.15; decision D66), for example "the account of a blocked customer may not join the portal again".
  * Synchronous and free of I/O like {@link SignInGuard}: the application data it needs is declared by {@link #loads()}
- * (rows of datasets whose field holds the user id) and read by the platform beforehand.
+ * (rows of datasets whose field holds the user id), the business parameters by {@link #params()} (decision D79), and
+ * both are read by the platform beforehand.
  *
  * <p>Asked on every path that gives an account an entry's registration roles ({@link SignUpAttempt.Path}): a
  * registration, the link of the "you already have an account" mail, a signed-in user joining another entry, and an
@@ -22,6 +23,14 @@ public interface SignUpGuard {
 
     /** The application data the guard reads: rows of datasets whose field holds the user id. None by default. */
     default List<SignInLoad> loads() {
+        return List.of();
+    }
+
+    /**
+     * The business parameters the guard reads (decision D79), as they are in effect at the attempt's time; they reach
+     * it as the attempt's {@code params()}. None by default.
+     */
+    default List<GuardParam> params() {
         return List.of();
     }
 
