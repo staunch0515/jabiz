@@ -52,6 +52,9 @@ class SetupIT extends QbItSupport {
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_PLAN_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.OPERATOR_WITHDRAWAL_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.FEE_REQUEST_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.TREE_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.TREE_COPY_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.TREE_PLATFORM_REVIEW.code(),
             QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
@@ -151,7 +154,22 @@ class SetupIT extends QbItSupport {
                     .containsEntry("enabled", true)
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("needsReview"))
                     .satisfies(r -> assertThat(r.get("levels").toString())
-                        .contains(QbPermissions.PAYOUT_REVIEW)));
+                        .contains(QbPermissions.PAYOUT_REVIEW)),
+                // F-S2: knowledge maps, one rule by owner: an operator's copy and a Sponsor's map by the operator's
+                // members, the platform's template by another administrator who writes templates.
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.tree.TreeApprovals.OPERATOR_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("OPERATOR"))
+                    .satisfies(r -> assertThat(r.get("levels").toString()).contains(QbPermissions.REVIEW_TREE)),
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.tree.TreeApprovals.PLATFORM_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("PLATFORM"))
+                    .satisfies(r -> assertThat(r.get("levels").toString())
+                        .contains(QbPermissions.TREE_PLATFORM_WRITE)),
+                rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.tree.TreeApprovals.SPONSOR_RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.tree.TreeApprovals.SUBJECT)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("SPONSOR"))
+                    .satisfies(r -> assertThat(r.get("levels").toString()).contains(QbPermissions.REVIEW_TREE)));
         assertRoles();
         assertAccounts();
         assertCountries();
@@ -309,6 +327,12 @@ class SetupIT extends QbItSupport {
         // F-S11: unknown addresses count as mainland China; the sites mainland China plays (controlled).
         expected.put(QbParams.REGION_UNKNOWN_IP_COUNTRY, "CN");
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
+        // F-S2: the knowledge maps' limits and the review reminder (ordinary).
+        expected.put(QbParams.TREE_MAX_NODES, "200");
+        expected.put(QbParams.TREE_MAX_CONDITIONS, "20");
+        expected.put(QbParams.TREE_MAX_DEPTH, "20");
+        expected.put(QbParams.TREE_SPONSOR_MAX_TREES, "1");
+        expected.put(QbParams.TREE_REVIEW_REMIND_AFTER, "3");
         // Q13a: bank top-ups' range, and the receiving account empty until finance sets it with four eyes.
         expected.put(QbParams.TOPUP_BANK_MIN, "1000");
         // Q86: the understanding quizzes are offered; no platform tree until an official account is named.

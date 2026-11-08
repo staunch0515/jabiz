@@ -91,7 +91,7 @@ public class TreeCheck implements PlatformCheck {
         return problems;
     }
 
-    /** Which maps a map may name nodes of (as the draft's check: the template {@code qb.system.tree-graphs}). */
+    /** Which maps a map may name nodes of (as the draft's check in {@code TreeProcesses}: the same groups). */
     static boolean mayName(Stored map, Stored other) {
         return switch (map.ownerKind()) {
             case QbTrees.SPONSOR -> QbTrees.PLATFORM.equals(other.ownerKind())

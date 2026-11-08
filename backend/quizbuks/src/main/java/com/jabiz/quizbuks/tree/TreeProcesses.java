@@ -31,7 +31,6 @@ import com.jabiz.runtime.approval.WithdrawApproval;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
-import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.security.RandomBytesStep;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -84,9 +83,6 @@ public final class TreeProcesses {
     public static final String WITHDRAW = "QB_TREE_WITHDRAW";
     public static final String APPROVAL_RESULT = "QB_TREE_APPROVAL_RESULT";
     public static final String RETIRE = "QB_TREE_RETIRE";
-
-    /** The graphs a draft may name nodes of (in effect), by the draft's owner. */
-    public static final String GRAPHS_TEMPLATE = "qb.system.tree-graphs";
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -147,6 +143,7 @@ public final class TreeProcesses {
     static final String TEMPLATE = "template";
     static final String TEMPLATE_DEFS = "templateDefs";
     static final String GRAPHS = "graphs";
+    static final String GRAPH_DEFS = "graphDefs";
     static final String ASSIGNMENT = "assignment";
     static final String PARAMS = "params";
     static final String RANDOM = "random";
@@ -456,20 +453,48 @@ public final class TreeProcesses {
         });
     }
 
-    /** The graphs in effect a draft may name nodes of, and the limits. */
+    /**
+     * The graphs in effect a draft may name nodes of (a Sponsor's draft, the platform's templates lit by Takers; a
+     * template, the platform's other templates lit by the same; an operator's copy, the operator's other copies),
+     * with their nodes' definitions, and the limits. Read in the process (not through a template a caller could run
+     * with other parameters): what an operator reads of other graphs is only what its own draft may name.
+     */
     private static <I, O> void loadRules(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
-        pb.step("Load the graphs in effect the draft may use", RunTemplate.<ProcessContext>of(GRAPHS_TEMPLATE,
-                ctx -> {
+        pb.step("Load the graphs in effect the draft may use", QueryEntities.<ProcessContext>of(
+                QbTrees.defaultDataset(QbTrees.TREE), ctx -> {
                     EntityInstance tree = first(ctx, TREE);
-                    Map<String, Object> params = new HashMap<>();
-                    params.put("treeId", String.valueOf(tree.id()));
-                    params.put("ownerKind", tree.get("ownerKind"));
-                    params.put("ownerId", tree.get("ownerId"));
-                    params.put("subjectKind", tree.get("subjectKind"));
-                    return params;
+                    List<QueryPredicate> where = new ArrayList<>();
+                    where.add(new QueryPredicate.In("status", List.of(QbTrees.ACTIVE)));
+                    switch (String.valueOf((Object) tree.get("ownerKind"))) {
+                        case QbTrees.SPONSOR -> {
+                            where.add(new QueryPredicate.In("ownerKind", List.of(QbTrees.PLATFORM)));
+                            where.add(new QueryPredicate.In("subjectKind", List.of(QbTrees.TAKER)));
+                        }
+                        case QbTrees.PLATFORM -> {
+                            where.add(new QueryPredicate.In("ownerKind", List.of(QbTrees.PLATFORM)));
+                            where.add(new QueryPredicate.In("subjectKind", List.of((Object) tree.get("subjectKind"))));
+                        }
+                        default -> {
+                            where.add(new QueryPredicate.In("ownerKind", List.of(QbTrees.OPERATOR)));
+                            where.add(new QueryPredicate.In("ownerId", List.of((Object) tree.get("ownerId"))));
+                        }
+                    }
+                    return EntityQuery.builder().where(new QueryPredicate.And(where)).limit(Integer.MAX_VALUE)
+                        .build();
                 }, GRAPHS))
+            .step("Load their nodes", QueryEntities.<ProcessContext>of(QbTrees.defaultDataset(QbTrees.NODE_DEF),
+                ctx -> EntityQuery.builder().where(new QueryPredicate.In("versionId", otherGraphs(ctx).stream()
+                        .map(graph -> graph.get("currentVersionId")).filter(java.util.Objects::nonNull)
+                        .map(String::valueOf).map(Object.class::cast).toList()))
+                    .limit(Integer.MAX_VALUE).build(), GRAPH_DEFS))
             .step("Load the limits", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
                 QbParams.TREE_MAX_NODES, QbParams.TREE_MAX_CONDITIONS, QbParams.TREE_MAX_DEPTH));
+    }
+
+    /** The other graphs {@link #loadRules} found (never the draft's own: its draft replaces it). */
+    private static List<EntityInstance> otherGraphs(ProcessContext ctx) {
+        String own = String.valueOf(first(ctx, TREE).id());
+        return list(ctx, GRAPHS).stream().filter(graph -> !own.equals(String.valueOf(graph.id()))).toList();
     }
 
     static void saved(ProcessContext ctx) {
@@ -598,23 +623,20 @@ public final class TreeProcesses {
             Subject.valueOf(String.valueOf((Object) tree.get("subjectKind"))), nodes);
     }
 
-    /** The other graphs in effect the template gave, grouped by graph. */
-    @SuppressWarnings("unchecked")
+    /** The other graphs in effect {@link #loadRules} read, as the rules see them. */
     private static List<Graph> graphs(ProcessContext ctx) {
-        Map<String, Map<String, TreeCondition>> nodes = new LinkedHashMap<>();
-        Map<String, Map<String, Object>> trees = new HashMap<>();
-        for (Map<String, Object> row : (List<Map<String, Object>>) ctx.get(GRAPHS)) {
-            String treeId = String.valueOf(row.get("treeId"));
-            trees.putIfAbsent(treeId, row);
-            nodes.computeIfAbsent(treeId, id -> new LinkedHashMap<>()).put(String.valueOf(row.get("nodeId")),
-                TreeCondition.parse(parse(String.valueOf(row.get("condition")))));
+        Map<String, List<EntityInstance>> defs = new HashMap<>();
+        for (EntityInstance def : list(ctx, GRAPH_DEFS)) {
+            defs.computeIfAbsent(String.valueOf((Object) def.get("versionId")), id -> new ArrayList<>()).add(def);
         }
         List<Graph> graphs = new ArrayList<>();
-        nodes.forEach((treeId, conditions) -> {
-            Map<String, Object> row = trees.get(treeId);
-            graphs.add(new Graph(treeId, !QbTrees.SPONSOR.equals(row.get("ownerKind")),
-                Subject.valueOf(String.valueOf(row.get("subjectKind"))), conditions));
-        });
+        for (EntityInstance graph : otherGraphs(ctx)) {
+            List<EntityInstance> nodes = defs.getOrDefault(String.valueOf((Object) graph.get("currentVersionId")),
+                List.of());
+            if (!nodes.isEmpty()) {
+                graphs.add(graph(graph, conditionsOf(nodes)));
+            }
+        }
         return graphs;
     }
 
