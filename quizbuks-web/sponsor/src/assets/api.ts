@@ -29,21 +29,20 @@ export const PRIZE_METHODS: readonly PrizeMethod[] = ['OFFLINE_REDEEM', 'DIGITAL
 export const DIGITAL_DELIVERIES: readonly DigitalDelivery[] = ['POOL', 'SHARED', 'SPONSOR_SENT']
 
 /**
- * The page's tabs (the spec's "全部 / 素材 / 文字 / 奖品 / 商品 / 认证"). The products (Q60b) and the certifications
- * (Q88a) moved in as they were (the requester, 2026-11-07): their own pages, data and actions; they are not assets, so
- * "all" lists the assets only.
+ * The page's tabs (the spec's "全部 / 素材 / 文字 / 奖品 / 商品"). The products (Q60b) moved in as they were (the
+ * requester, 2026-11-07): their own page, data and actions; they are not assets, so "all" lists the assets only. The
+ * certifications' tab (Q88a) went with the sponsors' own certifications (F-S2c2, D6).
  */
-export type AssetTab = 'all' | 'media' | 'text' | 'prize' | 'products' | 'certifications'
-export const ASSET_TABS: readonly AssetTab[] = ['all', 'media', 'text', 'prize', 'products', 'certifications']
+export type AssetTab = 'all' | 'media' | 'text' | 'prize' | 'products'
+export const ASSET_TABS: readonly AssetTab[] = ['all', 'media', 'text', 'prize', 'products']
 /** The tabs of the library's own assets. */
-export const isAssetTab = (tab: AssetTab) => tab !== 'products' && tab !== 'certifications'
+export const isAssetTab = (tab: AssetTab) => tab !== 'products'
 export const TAB_KINDS: Record<AssetTab, readonly AssetKind[]> = {
   all: ASSET_KINDS,
   media: ['IMAGE', 'PDF', 'AUDIO', 'VIDEO_LINK', 'LINK', 'ARTICLE'],
   text: ['TEXT'],
   prize: ['PRIZE'],
   products: [],
-  certifications: [],
 }
 
 /** The content fields an asset may have; each kind fills its own (`AssetKind.contentFields`). */

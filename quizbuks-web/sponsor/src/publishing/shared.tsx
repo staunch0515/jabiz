@@ -194,8 +194,6 @@ export interface SummaryValues {
   cover?: string | null
   /** Q47: the matching conditions of a public publication; undefined while unknown (not shown). */
   conditions?: readonly Condition[]
-  /** Q88a: the name of the certification passing gives; null for none; undefined while unknown (not shown). */
-  roundName?: string | null
   quizTitle: string | null
   versionLabel: string | null
   regions: readonly string[]
@@ -277,9 +275,6 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
     ...(audience === 'PUBLIC' && values.conditions
       ? [{ key: 'conditions', label: t('publishing.audience.title'),
         value: <span data-testid="summary-conditions">{conditionsText(values.conditions)}</span> }] : []),
-    ...(values.roundName !== undefined
-      ? [{ key: 'round', label: t('certifications.round.summary'),
-        value: <span data-testid="summary-round">{values.roundName ?? t('certifications.round.none')}</span> }] : []),
     { key: 'period', label: t('publishing.list.period'), value: <Period startAt={values.startAt} endAt={values.endAt} /> },
     {
       key: 'timeLimit',

@@ -284,7 +284,7 @@ class OperatorsEverywhereIT extends PlayItSupport {
     private static final Map<String, Map<String, Object>> BY_OPERATOR = Map.of(
         "qb.admin.publications", Map.of(), "qb.admin.sponsor-pages", Map.of(), "qb.admin.sponsor-products", Map.of(),
         "qb.admin.reports", Map.of(), "qb.admin.redemptions", Map.of(), "qb.admin.digital-prizes", Map.of(),
-        "qb.admin.cash-rewards", Map.of(), "qb.admin.sponsor-certifications", Map.of("at", "2026-10-01T00:00:00Z"));
+        "qb.admin.cash-rewards", Map.of());
 
     @Test
     void thePlatformReadsEveryOperatorsRowsByOperatorAndAnOperatorStillOnlyItsOwn() {

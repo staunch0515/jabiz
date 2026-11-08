@@ -7,6 +7,7 @@ import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
+import com.jabiz.quizbuks.certification.QbCertifications;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.asset.AssetUses;
 import com.jabiz.quizbuks.asset.QbAssets;
@@ -346,8 +347,6 @@ public final class PublicationProcesses {
             .steps(PublicationEditing::loadTiers)
             // Q47: an invited publication takes its list; switching to it clears the matching conditions.
             .steps(PublicationAudience::loadCriteria)
-            // Q88a (D-Q88-5): a round of a certification may pay nothing; the problems say so as submitting would.
-            .steps(PublicationRounds::load)
             // F-S2b1: the node it is bound to, its graph, and whether the caller is an operator's direct Sponsor.
             .steps(b -> PublicationNodes.load(b, ctx -> {
                 SaveInput input = ctx.get(INPUT, SaveInput.class);
@@ -400,6 +399,8 @@ public final class PublicationProcesses {
 
     /** The context key of the shared content sealed, when the save gives one. */
     static final String SEALED_DIGITAL = "sealedDigital";
+    /** Q88a: the round a draft was made before F-S2c2 (D6), deleted with it. */
+    static final String ROUND = "publicationRound";
 
     static String sharedContent(ProcessContext ctx) {
         SaveInput input = ctx.get(INPUT, SaveInput.class);
@@ -738,7 +739,7 @@ public final class PublicationProcesses {
         List<TierCoverage.Tier> ranges = tiers.stream().map(TierPlan::tier).toList();
         List<Violation> problems = new ArrayList<>(PublicationReadiness.check(PublicationEditing.draftOf(values),
             ranges, PublicationEditing.snapshot(version), ctx.opTime(), PublicationEditing.maxRewardPerAttempt(ctx),
-            PublicationRounds.isRound(ctx) || values.get("treeNodeId") != null));
+            values.get("treeNodeId") != null));
         // F-S2b1: the node it is bound to.
         problems.addAll(PublicationNodes.problems(ctx, ctx.request().actorId(), (String) values.get("treeId"),
             (String) values.get("treeNodeId")));
@@ -773,7 +774,11 @@ public final class PublicationProcesses {
                 .steps(PublicationEditing::lockAndLoad)
                 .steps(PublicationEditing::loadTiers)
                 .steps(PublicationAudience::loadCriteria)
-                .steps(PublicationRounds::load)
+                // A draft made a round of a sponsor's certification before F-S2c2 (D6) takes its round with it.
+                .step("Load the publication's round", QueryEntities.<ProcessContext>of(
+                    QbCertifications.defaultDataset(QbCertifications.ROUND), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("publicationId", PublicationEditing.ids(ctx.get(PUB_ID))))
+                        .limit(1).build(), ROUND))
                 // F-C1b: where its parts were filled from the asset library goes with it.
                 .steps(b -> AssetUses.load(b, ctx -> List.of(), ctx -> ASSET_TARGETS.stream()
                     .map(kind -> new AssetUses.Place(kind, PublicationEditing.publication(ctx).id())).toList()))
@@ -790,8 +795,8 @@ public final class PublicationProcesses {
                     list(ctx, PublicationAudience.CRITERIA).forEach(row -> ctx.changes().delete(
                         com.jabiz.quizbuks.audience.QbAudience.CRITERION, row.id(), row.version()));
                     // Q88a: and its round (a draft's round has no record on it).
-                    list(ctx, PublicationRounds.ROUND).forEach(row -> ctx.changes().delete(
-                        com.jabiz.quizbuks.certification.QbCertifications.ROUND, row.id(), row.version()));
+                    list(ctx, ROUND).forEach(row -> ctx.changes().delete(QbCertifications.ROUND, row.id(),
+                        row.version()));
                     ctx.changes().delete(QbPublications.PUBLICATION, publication.id(), publication.version());
                     ASSET_TARGETS.forEach(kind -> AssetUses.forget(ctx, kind, List.of(publication.id())));
                     ctx.put(OUTPUT, new PublicationOutput(uuid(publication.id()), PublicationStatus.DRAFT,

@@ -1,7 +1,7 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [SysParam, QbRegionException, QbUserSettings, QbTopic, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbSponsorCertification, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
+entities: [SysParam, QbRegionException, QbUserSettings, QbTopic, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
@@ -19,7 +19,6 @@ datasets:
   QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
   QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
-  QbSponsorCertification: urn:jabiz:dataset:default:QbSponsorCertification
   QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
   QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
@@ -35,7 +34,6 @@ params:
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
   certification:  { from: QbCertificationRound.certification }
-  certificationNames: { kind: { type: text } }
   name:           { from: QbPublicationCard.name }
   quizTitle:      { from: QbPublicationCard.quizTitle }
   cover:          { from: QbPublicationCard.cover }
@@ -91,9 +89,8 @@ permissions: [qb.play]
 -- reserved s.reservedTotal - n.released.
 SELECT
     c.{{QbPublicationCard.publicationId}}  AS publicationId,
-    -- Q88a (D-Q88-5): the certification the card is a round of, and its name when it is a sponsor's.
+    -- Q69: the certification of the catalog the card is a round of (F-S2c2, D6: no sponsor's).
     cr0.{{QbCertificationRound.certification}} AS certification,
-    CAST(sc0.{{QbSponsorCertification.name}} AS text) AS certificationNames,
     -- Q73b: the texts in the language shown (the card's translations), else the card's own.
     coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> dl.lang ->> 'name',
              c.{{QbPublicationCard.name}}) AS name,
@@ -165,12 +162,11 @@ LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.pu
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 LEFT JOIN {{QbSponsorPage}} sp_page ON sp_page.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
--- Q88a: the round the card is, if any, and the name of a sponsor's certification (the catalog's names are the
--- front ends' texts).
+-- Q69: the round of the catalog's certification the card is, if any (the names are the front ends' texts). F-S2c2
+-- (D6): a round of a sponsor's own certification ('sp:<id>', registered before) makes the card no round.
 LEFT JOIN {{QbCertificationRound}} cr0
     ON cr0.{{QbCertificationRound.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
-LEFT JOIN {{QbSponsorCertification}} sc0
-    ON 'sp:' || sc0.{{QbSponsorCertification.certificationId}} = cr0.{{QbCertificationRound.certification}}
+   AND cr0.{{QbCertificationRound.certification}} NOT LIKE 'sp:%'
 WHERE c.{{QbPublicationCard.status}} = 'LIVE'
   -- S0 (D-S0-4): the App lists the sponsors' publications; a shop's (S2) are answered in its storefront.
   AND c.{{QbPublicationCard.publisherKind}} = 'SPONSOR'

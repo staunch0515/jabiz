@@ -159,7 +159,7 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   const sponsor = p.sponsorCompany ?? p.sponsorName
   // Q88a (D-Q88-5): a round of a certification says what passing gives; one paying nothing says only that.
   const gives = p.certification
-    ? certificationName(p.certification, p.certificationNames, i18n.language, tQb) : null
+    ? certificationName(p.certification, null, i18n.language, tQb) : null
   const rewardOnly = !gives || Number(p.maxReward ?? 0) > 0
   const survey = p.kind === 'SURVEY'
   const MethodIcon = REWARD_METHOD_ICONS[p.rewardMethod]

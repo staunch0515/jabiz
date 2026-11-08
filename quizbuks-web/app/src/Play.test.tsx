@@ -1200,21 +1200,6 @@ describe('foreign videos and mainland China (F-S11)', () => {
   })
 })
 
-describe('certification rounds (Q70a)', () => {
-  it('says until when the Taker holds the certification instead of offering its round', async () => {
-    const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,
-      heldUntil: '2027-10-31T00:00:00Z' })], offset: 0, limit: 1 }) })
-    window.history.replaceState(null, '', `/p/${PUB}`)
-    render(<App />)
-    const notice = await screen.findByTestId('detail-certification-held')
-    expect(notice).toHaveTextContent('You hold this certification')
-    expect(notice).toHaveTextContent('2027')
-    expect(screen.queryByTestId('detail-start')).toBeNull()
-    expect(screen.queryByTestId('detail-unavailable')).toBeNull()
-    expect(posted('QB_ATTEMPT_START')).toEqual([])
-  })
-})
-
 describe('referrals (Q70)', () => {
   const POLICY = { quota: 20, method: 'PLATFORM', amount: '300', description: null, referrerRequires: 'NONE',
     refereeRules: ['NOT_REGULAR'], days: 7 }

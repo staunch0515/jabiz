@@ -205,11 +205,6 @@ public final class QbParams {
     public static final String FEE_OVERDUE_BLOCK = "qb.fee.overdue.block-submit";
     public static final String FEE_DUE_DAYS = "qb.fee.due-days";
     /**
-     * Q88a (D-Q88-7): whether sponsors define certifications of their own and make their publications rounds of
-     * them (controlled: a switch for the administrators; off keeps what is held, required and drawn as it is).
-     */
-    public static final String SPONSOR_ROUNDS_ENABLED = "qb.certification.sponsor-rounds.enabled";
-    /**
      * Q88b (D-Q88-14): whether sponsors may set an entry fee on a quiz (controlled; read only when a draft is saved:
      * off refuses a fee, what is live keeps charging).
      */
@@ -379,7 +374,7 @@ public final class QbParams {
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
-        CASH_ACCOUNT_PARAMS, FEE_PARAMS, List.of(SPONSOR_ROUNDS_ENABLED),
+        CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES))
         .flatMap(List::stream).toList();
 
@@ -565,9 +560,6 @@ public final class QbParams {
             "How a sponsor without a billing mode of their own pays the platform's fees: PREPAID or POSTPAID"),
         new Param(FEE_OVERDUE_BLOCK, BOOL, true,
             "Whether unpaid platform fees stop a sponsor from converting cash to Kudos and submitting publications"),
-        // Q88a: the sponsors' own certifications (controlled, last). Off keeps what the platform did before.
-        new Param(SPONSOR_ROUNDS_ENABLED, BOOL, false,
-            "Whether sponsors define certifications of their own and make their publications rounds of them (Q88)"),
         // Q88b: entry fees (controlled, last). Off keeps what the platform did before; what is live keeps charging.
         new Param(ENTRY_FEE_ENABLED, BOOL, false,
             "Whether sponsors may charge an entry fee in Kudos for answering a quiz (Q88)"),

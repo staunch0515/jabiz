@@ -39,11 +39,6 @@ import { Link, navigate } from '../qb/router'
 import { WALLET_PATH } from '../wallet/api'
 import type { Condition } from '../qb/audience'
 import { AudienceConditions, AudienceCountPanel, AudienceFeePanel } from './AudienceConditions'
-import { CERTIFICATIONS_QUERY, readMyCertifications, readPublicationRound, roundQuery, setPublicationRound,
-  type PublicationRound } from '../certifications/api'
-import '../certifications/messages'
-import { certificationName } from '../qb/certifications'
-import { QB } from '../qb/messages'
 import { LanguagesFields } from './LanguagesFields'
 import { ReferralFields } from './ReferralFields'
 import {
@@ -182,7 +177,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   /** The page's heading, given the revision the wizard last saw (for the actions). */
   header: (revision: number) => ReactNode
 }) {
-  const { t } = useTranslation(SPONSOR)
+  const { t, i18n } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
   const id = useId()
   const regionLabel = useRegionLabel()
@@ -213,27 +208,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     queryFn: () => readFeeQuote(publicationId!),
     enabled: publicationId !== null,
   })
-  // Q88a: the sponsor's own certifications (which the draft may give, D-Q88-3) and the round
-  // the draft is, saved with each save once changed (its own process, after the conditions).
-  const { t: tQb, i18n } = useTranslation(QB)
-  const ownCertifications = useQuery({ queryKey: CERTIFICATIONS_QUERY, queryFn: () => readMyCertifications(),
-    staleTime: 60_000 })
-  const activeCertifications = (ownCertifications.data ?? []).filter((c) => c.status === 'ACTIVE')
-  const savedRound = useQuery({
-    queryKey: roundQuery(publicationId),
-    queryFn: () => readPublicationRound(publicationId!),
-    enabled: publicationId !== null,
-  })
-  const [editedRound, setEditedRound] = useState<string | null | undefined>(undefined)
-  const roundCertificationId: string | null = editedRound !== undefined ? editedRound
-    : savedRound.data?.certificationId ?? null
-  const roundName = roundCertificationId === null ? null
-    : (() => {
-      const own = (ownCertifications.data ?? []).find((c) => c.certificationId === roundCertificationId)
-      return own ? certificationName(own.key, own.name, i18n.language, tQb)
-        : savedRound.data ? certificationName(savedRound.data.certification, savedRound.data.name, i18n.language, tQb)
-          : null
-    })()
   // F-S9: the changes of the version's topics, saved with each save of the draft once changed (their own process,
   // last), as the page last saved or read them.
   const [savedTopics, setSavedTopics] = useState<TopicChanges>(detail?.publication.topicChanges ?? NO_TOPIC_CHANGES)
@@ -330,9 +304,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   }
 
   const save = useMutation({
-    mutationFn: async ({ input, criteria, round, topics }: { input: SaveInput; keys: string[];
-      then: 'stay' | 'next' | 'count'; criteria: Condition[] | null;
-      round: string | null | undefined; topics: TopicChanges | null }) => {
+    mutationFn: async ({ input, criteria, topics }: { input: SaveInput; keys: string[];
+      then: 'stay' | 'next' | 'count'; criteria: Condition[] | null; topics: TopicChanges | null }) => {
       const saved = await savePublication(input)
       // The draft is saved whatever happens to its conditions next: the page knows its new revision.
       setRevision(saved.revision)
@@ -343,11 +316,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         revision = out.revision
         setRevision(revision)
       }
-      if (round !== undefined) {
-        // Q88a: the certification the draft gives, once changed, last.
-        const out = await setPublicationRound(saved.publicationId, revision, round)
-        revision = out.revision
-      }
       if (topics !== null && input.versionId) {
         // F-S9: the changes of the version's topics, once changed, last (they need the version).
         const out = await setPublicationTopics(saved.publicationId, revision, topics)
@@ -356,7 +324,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       return { saved: { ...saved, revision }, counted: null }
     },
     onMutate: () => setSubmitError(null),
-    onSuccess: async ({ saved }, { input, keys, then, criteria, round, topics }) => {
+    onSuccess: async ({ saved }, { input, keys, then, criteria, topics }) => {
       if (topics !== null && input.versionId) {
         setSavedTopics(topics)
         setEditedTopics(null)
@@ -370,15 +338,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         queryClient.setQueryData(conditionsQuery(saved.publicationId),
           audienceOfSave === 'INVITED' ? [] : criteria)
         setEditedConditions(null)
-      }
-      if (round !== undefined) {
-        // What was just stored, as the sponsor's certification the page chose from names it.
-        const own = ownCertifications.data?.find((c) => c.certificationId === round)
-        queryClient.setQueryData(roundQuery(saved.publicationId), own ? ({ roundId: '', certification: own.key,
-          certificationVersion: own.certificationVersion, addedAt: saved.editedAt, closedAt: null,
-          certificationId: own.certificationId, name: own.name, status: own.status,
-          currentVersion: own.certificationVersion } satisfies PublicationRound) : null)
-        setEditedRound(undefined)
       }
       setOutput(saved)
       void queryClient.invalidateQueries({ queryKey: feeQuoteQuery(saved.publicationId) })
@@ -440,7 +399,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     const input = Object.values(assets).some((assetId) => assetId !== null) ? { ...built.input, assets } : built.input
     save.mutate({ input, keys: shaped.tiers.map((tier) => tier.key), then,
       criteria: editedConditions ?? (shaped.audience === 'INVITED' && conditions.length > 0 ? [] : null),
-      round: editedRound, topics: editedTopics })
+      topics: editedTopics })
   }
 
   const submit = () => {
@@ -776,29 +735,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         <TiersEditor tiers={form.tiers} onChange={(tiers) => set('tiers', tiers)} fullScore={fullScore}
           problemOf={problemOf} disabled={locked} />
       )}
-      {/* Q88a (D-Q88-3, D-Q88-5): the certification passing gives, one of the sponsor's own; such a quiz may pay nothing. */}
-      {!survey && (activeCertifications.length > 0 || roundCertificationId !== null) && (
-        <Field id={`${id}-round`} label={t('certifications.round.title')} problem={problemOf('certificationId')}
-          hint={t('certifications.round.hint')}>
-          {(aria) => (
-            <Select value={roundCertificationId ?? '-'} disabled={locked || (publicationId !== null && savedRound.isPending)}
-              onValueChange={(value) => setEditedRound(value === '-' ? null : value)}>
-              <SelectTrigger {...aria} className="w-full max-w-md" data-testid="publication-round"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="-">{t('certifications.round.none')}</SelectItem>
-                {activeCertifications.map((c) => (
-                  <SelectItem key={c.certificationId} value={c.certificationId}>
-                    {certificationName(c.key, c.name, i18n.language, tQb)}
-                  </SelectItem>
-                ))}
-                {roundCertificationId !== null && !activeCertifications.some((c) => c.certificationId === roundCertificationId) && (
-                  <SelectItem value={roundCertificationId}>{t('certifications.round.retiredOption', { name: roundName ?? '' })}</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          )}
-        </Field>
-      )}
       <div className="grid gap-4 md:grid-cols-2">
         <Field id={`${id}-budget`} label={t('publishing.field.budgetCap')} problem={problemOf('budgetCap')}
           hint={t('publishing.field.budgetHint')}>
@@ -932,7 +868,6 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         regions: form.audience === 'INVITED' ? [] : REGIONS.filter((region) => form.regions.includes(region)),
         audience: form.audience,
         conditions: form.audience === 'INVITED' ? [] : conditions,
-        roundName: publicationId !== null && savedRound.isPending ? undefined : roundName,
         startAt: form.startAt,
         endAt: form.endAt,
         // Left empty, the time limit is the version's: the server wrote it with the last save.

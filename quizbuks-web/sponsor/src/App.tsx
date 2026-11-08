@@ -59,7 +59,6 @@ import { APP_BASE, publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths
 import { PreviewPage } from './preview/PreviewPage'
 import { TreePage } from './tree/TreePage'
 import { TREE_PATH } from './tree/api'
-import './certifications/messages'
 import { previewOf } from './preview/paths'
 import { rememberSource } from './trial/claim'
 import TrialPage, { trialKeyOf } from './trial/TrialPage'

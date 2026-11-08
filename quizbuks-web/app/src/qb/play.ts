@@ -75,9 +75,8 @@ export interface FeedCard {
   language?: string | null
   /** The highest reward, in Kudos. */
   maxReward: unknown
-  /** Q88a (D-Q88-5): the certification passing it gives (the key of its round), and a sponsor's own one's names. */
+  /** Q69: the catalog's certification passing it gives (the key of its round; F-S2c2, D6: no sponsor's own). */
   certification?: string | null
-  certificationNames?: I18nText | null
   /** How the reward reaches the taker (Q22). */
   rewardMethod: RewardMethod
   /** Q33: how a digital prize is delivered and what it is; null for the other methods. */
@@ -154,7 +153,6 @@ export function feedCard(row: Record<string, unknown>): FeedCard {
     language: textOrNull(row.language),
     maxReward: row.maxReward,
     certification: textOrNull(row.certification),
-    certificationNames: certificationNamesOf(row.certificationNames),
     rewardMethod: methodOf(row.rewardMethod),
     digitalDelivery: digitalDeliveryOf(row.digitalDelivery),
     digitalDescription: textOrNull(row.digitalDescription),
@@ -279,9 +277,8 @@ export interface PublicationView {
   fullScore: number
   passScore: number
   maxReward: unknown
-  /** Q88a (D-Q88-5): the certification passing it gives (the key of its round), and a sponsor's own one's names. */
+  /** Q69: the catalog's certification passing it gives (the key of its round; F-S2c2, D6: no sponsor's own). */
   certification: string | null
-  certificationNames: I18nText | null
   /** How the reward reaches the taker (Q22), and the prize when it is collected at the sponsor's place. */
   rewardMethod: RewardMethod
   redeemDescription: string | null
@@ -315,11 +312,6 @@ export interface PublicationView {
    * exception: the page says it is not available in the caller's region instead of showing it; it cannot be started.
    */
   regionBlocked: boolean
-  /**
-   * Q70a: until when the caller holds the certification this publication is a round of; meanwhile it cannot be
-   * started (null for an ordinary publication, or one the caller does not hold).
-   */
-  heldUntil: string | null
   /** Q70: "referrals welcome" as frozen on the card (its JSON, `ReferralPolicy`); null when not welcome. */
   referral: ReferralPolicy | null
   /** Q70: the caller's own referral to this publication (a friend referred them), and until when it counts. */
@@ -435,7 +427,6 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     passScore: numberOf(row.passScore),
     maxReward: row.maxReward,
     certification: textOrNull(row.certification),
-    certificationNames: certificationNamesOf(row.certificationNames),
     rewardMethod: methodOf(row.rewardMethod),
     redeemDescription: textOrNull(row.redeemDescription),
     digitalDelivery: digitalDeliveryOf(row.digitalDelivery),
@@ -456,7 +447,6 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     canStart: row.canStart === true || row.canStart === 'true',
     regionBlocked: row.regionBlocked === true || row.regionBlocked === 'true',
     matched: row.matched !== false && row.matched !== 'false',
-    heldUntil: textOrNull(row.heldUntil),
     referral: translatedReferral(referralPolicy(row.referral), row.referralDescription),
     myReferralStatus: textOrNull(row.myReferralStatus),
     myReferralExpiresAt: textOrNull(row.myReferralExpiresAt),
