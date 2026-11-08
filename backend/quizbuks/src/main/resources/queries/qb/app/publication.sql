@@ -1,6 +1,6 @@
 /*---
 id: qb.app.publication
-description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it (F-S2d: a node's prerequisites not lit)
+description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it (F-S2d, a node's prerequisites not lit)
 entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbReferral, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbTree, QbTreeNodeDef]
 datasets:
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
