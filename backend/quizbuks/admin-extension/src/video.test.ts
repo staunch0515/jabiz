@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { foreignVideo, mainlandSites, reachesMainland, snapshotVideoLinks, videoPlayer, videoSite } from './video'
+import { cardVideoVertical, foreignVideo, isShorts, mainlandSites, reachesMainland, snapshotVideoLinks, videoPlayer, videoSite } from './video'
 import type { Snapshot } from './snapshot'
 
 /** The cases of the App's `qb/video.test.ts` (the backend's `VideoEmbedsTest` and `ForeignVideosTest`). */
@@ -129,5 +129,42 @@ describe('a version and its audience', () => {
     expect(reachesMainland('PUBLIC', ['ASIA'])).toBe(true)
     expect(reachesMainland('PUBLIC', ['GLOBAL'])).toBe(true)
     expect(reachesMainland('INVITED', [])).toBe(true)
+  })
+})
+
+/** F-S10: the cases of the backend's `VideoEmbedsTest.aShortsLinkIsVertical`, and the card's choice of its video. */
+describe('isShorts and cardVideoVertical', () => {
+  it.each([
+    ['https://www.youtube.com/shorts/dQw4w9WgXcQ', true],
+    ['https://m.youtube.com/shorts/dQw4w9WgXcQ?feature=share', true],
+    ['  https://youtube.com/shorts/dQw4w9WgXcQ  ', true],
+    ['https://www.youtube.com/watch?v=dQw4w9WgXcQ', false],
+    ['https://youtu.be/dQw4w9WgXcQ', false],
+    ['https://www.youtube.com/embed/dQw4w9WgXcQ', false],
+    ['https://www.youtube.com/shorts/short', false],
+    ['https://www.youtube.com/shorts/dQw4w9WgXcQ/', false],
+    ['https://evil.example/shorts/dQw4w9WgXcQ', false],
+    ['https://vimeo.com/76979871', false],
+    ['https://www.bilibili.com/video/BV1GJ411x7h7', false],
+    ['', false],
+  ])('says whether %j is a Shorts link: %s', (url, shorts) => {
+    expect(isShorts(url)).toBe(shorts)
+  })
+
+  const video = (url: string, more: Partial<Snapshot['materials'][number]> = {}) => ({ no: 1, kind: 'VIDEO_LINK' as const,
+    title: null, description: null, body: null, url, pdf: null, audio: null, images: [], watchToAnswer: false,
+    durationSec: null, ...more })
+  const version = (...materials: Snapshot['materials']) => ({ materials } as unknown as Snapshot)
+
+  it('takes the card\'s video as the server chooses it', () => {
+    expect(cardVideoVertical(version(video('https://www.youtube.com/shorts/dQw4w9WgXcQ')))).toBe(true)
+    expect(cardVideoVertical(version(video('https://www.bilibili.com/video/BV1GJ411x7h7', { vertical: true })))).toBe(true)
+    expect(cardVideoVertical(version(video('https://www.bilibili.com/video/BV1GJ411x7h7')))).toBe(false)
+    // The video to watch comes first; else the first with a player.
+    expect(cardVideoVertical(version(video('https://www.youtube.com/shorts/dQw4w9WgXcQ'),
+      video('https://vimeo.com/76979871', { watchToAnswer: true })))).toBe(false)
+    expect(cardVideoVertical(version(video('https://video.example/x'),
+      video('https://www.youtube.com/shorts/dQw4w9WgXcQ')))).toBe(true)
+    expect(cardVideoVertical(version())).toBe(false)
   })
 })

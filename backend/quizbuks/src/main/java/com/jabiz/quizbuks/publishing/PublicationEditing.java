@@ -685,25 +685,33 @@ final class PublicationEditing {
     static CardVideo cardVideo(List<QuizSnapshot.Material> materials) {
         return materials.stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
             .flatMap(material -> VideoEmbeds.trackablePlayer(material.url())
-                .map(player -> new CardVideo(player, true, material.durationSec())))
+                .map(player -> new CardVideo(player, true, material.durationSec(), vertical(material))))
             .or(() -> materials.stream()
                 .filter(material -> "VIDEO_LINK".equals(material.kind()) && material.url() != null)
-                .flatMap(material -> VideoEmbeds.player(material.url()).stream()).findFirst()
-                .map(player -> new CardVideo(player, false, null)))
+                .flatMap(material -> VideoEmbeds.player(material.url()).stream()
+                    .map(player -> new CardVideo(player, false, null, vertical(material))))
+                .findFirst())
             .orElse(CardVideo.NONE);
+    }
+
+    /** F-S10: whether a material's video is vertical: a YouTube Shorts link, or marked so by the sponsor. */
+    static boolean vertical(QuizSnapshot.Material material) {
+        return material.vertical() || VideoEmbeds.shorts(material.url());
     }
 
     /**
      * The video on a publication's card (Q19, Q63, Q75): its player, whether it is the video to watch (the start then
-     * requires its watching, D-Q75-4) and how long it is (as the sponsor gave it; none for an ordinary video).
+     * requires its watching, D-Q75-4), how long it is (as the sponsor gave it; none for an ordinary video) and, F-S10,
+     * whether it is vertical (the App's home then shows the publication in its shelf of shorts).
      */
-    public record CardVideo(String player, boolean watchRequired, Integer durationSec) {
-        static final CardVideo NONE = new CardVideo(null, false, null);
+    public record CardVideo(String player, boolean watchRequired, Integer durationSec, boolean vertical) {
+        static final CardVideo NONE = new CardVideo(null, false, null, false);
 
         void writeTo(Map<String, Object> card) {
             card.put("video", player);
             card.put("watchRequired", watchRequired);
             card.put("videoDurationSec", durationSec == null ? null : BigDecimal.valueOf(durationSec));
+            card.put("videoVertical", vertical);
         }
     }
 

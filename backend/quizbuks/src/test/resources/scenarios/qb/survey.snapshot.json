@@ -222,6 +222,7 @@
       "watchRequired" : false,
       "videoDurationSec" : null,
       "foreignVideo" : false,
+      "videoVertical" : false,
       "versionId" : "#uuid:10",
       "maxReward" : "30",
       "fullScore" : "2",
