@@ -40,7 +40,7 @@ const TARGETS = [['QUIZ_COVER', 'Quiz cover'], ['QUIZ_INTRO', 'Quiz introduction
 /** The server as the asset pages see it, for an approved sponsor. Records what was posted. */
 export function assetServer(options: { assets?: Record<string, unknown>[]; uses?: Record<string, unknown>[];
   candidates?: Record<string, unknown>[]; answers?: Record<string, (body: Record<string, unknown>) => Response>;
-  usage?: Record<string, unknown>; stats?: Record<string, unknown>[] } = {}) {
+  usage?: Record<string, unknown>; stats?: Record<string, unknown>[]; shared?: Record<string, unknown>[] } = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
@@ -77,6 +77,9 @@ export function assetServer(options: { assets?: Record<string, unknown>[]; uses?
           assetsCount: null, freeBytes: 524288000, overFree: false }], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.asset-stats':
         return json(200, { items: body?.offset ? [] : options.stats ?? [], offset: 0, limit: 500 })
+      // F-C3: the Sponsor's shared videos (none unless the test gives them).
+      case '/api/queries/qb.sponsor.my-shared-videos':
+        return json(200, { items: options.shared ?? [], offset: 0, limit: 200 })
       case '/api/queries/qb.sponsor.asset-candidates':
         return json(200, { items: options.candidates ?? [], offset: 0, limit: 200 })
       case '/api/processes/QB_ASSET_SAVE/latest':
@@ -417,5 +420,53 @@ describe('the usage on the asset library (F-C2)', () => {
     await userEvent.click(screen.getByTestId('assets-unused'))
     await waitFor(() => expect(shownNames()).toEqual(['Shop tour', 'Poster']))
     await expectAccessible()
+  })
+})
+
+/** A video share of the Sponsor's, as `qb.sponsor.my-shared-videos` gives it. */
+const shareOf = (assetId: string, status: string, sharedAt: string, change: Record<string, unknown> = {}) => ({
+  sharedVideoId: `${assetId}-${sharedAt}`, assetId, title: JSON.stringify({ zh: '视频', ja: '動画', en: 'Video' }),
+  url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', durationSec: 90, vertical: false, topics: 'pets', status,
+  sharedAt, approvedAt: null, rejectReason: null, withdrawnAt: null, takenDownAt: null, takedownReason: null,
+  revision: 1, usesRunning: 0, ...change })
+
+describe('the sharing on the asset library (F-C3)', () => {
+  const video = (assetId: string, name: string) => ({ ...USAGE_VIDEO, assetId, name })
+
+  it('shows how each video link\'s latest share stands, and offers sharing only while none stands', async () => {
+    const { calls } = assetServer({
+      assets: [USAGE_LOGO, video('v-none', 'Never shared'), video('v-review', 'In review'),
+        video('v-shared', 'Shared'), video('v-back', 'Sent back'), video('v-gone', 'Taken down'),
+        video('v-again', 'Shared again')],
+      shared: [
+        shareOf('v-review', 'PENDING', '2026-11-08T03:00:00Z'),
+        shareOf('v-shared', 'APPROVED', '2026-11-08T02:00:00Z'),
+        shareOf('v-back', 'REJECTED', '2026-11-08T01:00:00Z', { rejectReason: 'Not entertainment' }),
+        shareOf('v-gone', 'TAKEN_DOWN', '2026-11-08T01:00:00Z', { takedownReason: 'Infringes' }),
+        // The latest share counts: withdrawn, then shared again and in review.
+        shareOf('v-again', 'PENDING', '2026-11-08T05:00:00Z'),
+        shareOf('v-again', 'WITHDRAWN', '2026-11-08T04:00:00Z'),
+      ],
+    })
+    openLibrary()
+    await waitFor(() => expect(screen.getAllByTestId('asset-row')).toHaveLength(7))
+    const row = (id: string) => screen.getAllByTestId('asset-row').find((each) => each.getAttribute('data-id') === id)!
+    await waitFor(() => expect(within(row('v-review')).getByTestId('shared-video-status'))
+      .toHaveAttribute('data-status', 'PENDING'))
+    const states = Object.fromEntries(['v-none', 'v-review', 'v-shared', 'v-back', 'v-gone', 'v-again'].map((id) => [id,
+      within(row(id)).getByTestId('shared-video-status').textContent]))
+    expect(states).toEqual({ 'v-none': 'Not shared', 'v-review': 'In review', 'v-shared': 'Shared',
+      'v-back': 'Sent back', 'v-gone': 'Taken down', 'v-again': 'In review' })
+    // Not a video link: no sharing at all.
+    expect(within(row('a1')).queryByTestId('shared-video-status')).toBeNull()
+    expect(within(row('a1')).queryByTestId('asset-share')).toBeNull()
+    // Shared or in review: no second share; never shared, sent back or taken down: shared (again).
+    for (const id of ['v-review', 'v-shared', 'v-again']) expect(within(row(id)).queryByTestId('asset-share'), id).toBeNull()
+    for (const id of ['v-none', 'v-back', 'v-gone']) expect(within(row(id)).getByTestId('asset-share'), id).toBeInTheDocument()
+    await expectAccessible()
+    // Sharing a sent-back one again opens the dialog for it.
+    await userEvent.click(within(row('v-back')).getByTestId('asset-share'))
+    expect(await screen.findByTestId('share-video-dialog')).toBeInTheDocument()
+    expect(calls('QB_SHARED_VIDEO_SHARE')).toEqual([])
   })
 })

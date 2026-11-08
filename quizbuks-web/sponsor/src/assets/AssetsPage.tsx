@@ -65,7 +65,8 @@ import {
   type CollectOutput,
 } from './api'
 import { AssetDialog } from './AssetDialog'
-import { MySharedVideos, ShareVideoDialog } from '../sharedvideos/Sharing'
+import { latestShares, MY_SHARED_QUERY, readMySharedVideos, standing } from '../sharedvideos/api'
+import { MySharedVideos, SharedStatus, ShareVideoDialog } from '../sharedvideos/Sharing'
 import { ASSET_LIMITS } from './ids'
 import './messages'
 import { UsageCard } from './UsageCard'
@@ -89,6 +90,9 @@ export function tabOf(search: string): AssetTab {
  * F-C2: the usage card on top (the latest daily snapshot against the free amount, a banner above it), each asset's
  * size (its file as uploaded and its texts, `qb.sponsor.asset-stats`) to sort by, and "only the unused assets" (copied
  * nowhere) to clean up with.
+ *
+ * F-C3: a video link's row shows how its latest share stands (`qb.sponsor.my-shared-videos`); "Share" is offered while
+ * no share stands (never shared, or the last one sent back, withdrawn or taken down).
  */
 export function AssetsPage({ tab }: { tab: AssetTab }) {
   const { t } = useTranslation(SPONSOR)
@@ -108,6 +112,8 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
   const [collecting, setCollecting] = useState(false)
   // F-S12: the video link being shared with other Sponsors.
   const [sharing, setSharing] = useState<Asset | null>(null)
+  const shares = useQuery({ queryKey: MY_SHARED_QUERY, queryFn: readMySharedVideos, enabled: isAssetTab(tab) })
+  const latest = useMemo(() => latestShares(shares.data ?? []), [shares.data])
   const refresh = () => Promise.all([ASSETS_QUERY, ASSET_STATS_QUERY, USAGE_QUERY]
     .map((queryKey) => queryClient.invalidateQueries({ queryKey }))).then(() => undefined)
   const remove = useMutation({
@@ -152,6 +158,14 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
           {row.original.tags.map((value) => <Badge key={value} variant="outline">{value}</Badge>)}
         </span>
       ) },
+    { id: 'sharing', header: t('sharedVideos.column'), enableSorting: false,
+      cell: ({ row }) => {
+        if (row.original.kind !== 'VIDEO_LINK') return ''
+        const share = latest.get(row.original.assetId)
+        return share ? <SharedStatus status={share.status} />
+          : <span className="text-muted-foreground text-sm" data-testid="shared-video-status" data-status="NONE">
+            {t('sharedVideos.columnNone')}</span>
+      } },
     { id: 'edited', header: t('assets.columns.edited'), enableSorting: false,
       cell: ({ row }) => (row.original.editedAt ? formatDateTime(row.original.editedAt) : '') },
     { id: 'size', header: t('assets.columns.size'), enableSorting: true, sortDescFirst: true,
@@ -169,8 +183,9 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
             aria-label={t('assets.uses.openNamed', { name: row.original.name })} onClick={() => setUsesOf(row.original)}>
             {t('assets.uses.open')}
           </Button>
-          {/* F-S12: a video link with its duration may be shared with other Sponsors. */}
-          {row.original.kind === 'VIDEO_LINK' && (
+          {/* F-S12: a video link with its duration may be shared with other Sponsors (F-C3: while no share of it
+              stands; again after one was sent back, withdrawn or taken down; the server refuses a second one anyway). */}
+          {row.original.kind === 'VIDEO_LINK' && !standing(latest.get(row.original.assetId)?.status ?? 'WITHDRAWN') && (
             <Button variant="ghost" size="sm" data-testid="asset-share"
               aria-label={t('sharedVideos.shareNamed', { name: row.original.name })}
               onClick={() => setSharing(row.original)}>
@@ -184,7 +199,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
               aria-label={t('assets.deleteNamed', { name: row.original.name })}>{t('assets.delete')}</Button>} />
         </span>
       ) },
-  ], [t, removeAsset, removing, statsOf])
+  ], [t, removeAsset, removing, statsOf, latest])
 
   return (
     <section className="flex flex-col gap-4" data-testid="assets-page">
