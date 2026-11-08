@@ -20,6 +20,7 @@ import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -28,6 +29,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Sponsors' products (docs/quizbuks/plans/Q60-sponsor-page.md, Q60b): shown on a published page and with the
@@ -132,7 +134,10 @@ class SponsorProductIT extends PlayItSupport {
         client.get().uri("/api/public/files/" + image).exchange().expectStatus().isOk();
         pictured.put("listed", false);
         run(SponsorProductProcesses.SAVE, token, pictured);
-        client.get().uri("/api/public/files/" + image).exchange().expectStatus().isNotFound();
+        // After-commit steps (FileAccess.invalidate) run once the process has answered, so wait for the
+        // invalidation; well within the remembered decision's lifetime (60 s), so this still shows it ends at once.
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+            client.get().uri("/api/public/files/" + image).exchange().expectStatus().isNotFound());
         pictured.put("listed", true);
         run(SponsorProductProcesses.SAVE, token, pictured);
         // Another's product is not found to change.

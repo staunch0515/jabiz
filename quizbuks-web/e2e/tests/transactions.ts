@@ -1,5 +1,6 @@
 import type { APIRequestContext } from '@playwright/test'
-import { adminToken, expect, run, unique } from './support'
+import { expect, run, unique } from './support'
+import { reviewerFor } from './operators'
 
 /*
  * Data for the transactions tests (docs/quizbuks/plans/Q9b-sponsor-transactions.md), made through the processes the
@@ -31,7 +32,7 @@ export async function rewardingPublication(request: APIRequestContext, sponsorTo
   const publicationId = saved.publicationId as string
   const submitted = await run(request, sponsorToken, 'QB_PUBLICATION_SUBMIT', { publicationId })
   if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    await run(request, await reviewerFor(request, sponsorToken), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
       decision: 'APPROVE' })
   }
   await expect.poll(async () => {

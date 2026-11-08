@@ -39,7 +39,7 @@
 | `identity.SponsorErasure` | 设置的抹除遮蔽 `likedTopics`（设置行本来就随账户删除） |
 | `setup.QbParams` | `qb.topic.max-per-quiz`（10）、`qb.topic.custom-max-length`（30），不受控，加在最后 |
 | `QbPermissions` / `QbRoles` | `qb.admin.topic.read` / `.write`，给内容管理员（超级管理员经内容管理员的列表也有）；运营商没有 |
-| 迁移 `V84__quizbuks_topics.sql`（临时编号：V80–V83 被其他分支占用；合并前按 `1.3/quizbuks` 的最大号 + 1 重编） | 新表 `qb_topic`；只追加表 `qb_quiz_version`、`qb_quiz_version_version`、`qb_publication_version` 只加列；卡片与 `qb_user_settings` 加列 |
+| 迁移 `V86__quizbuks_topics.sql`（F-S10 的 V85 之后） | 新表 `qb_topic`；只追加表 `qb_quiz_version`、`qb_quiz_version_version`、`qb_publication_version` 只加列；卡片与 `qb_user_settings` 加列 |
 | 模板 | `qb.app.feed`：读本人的设置（`me:QbUserSettings`）与词表，严格模式的条件；`qb.app.topics`（`qb.play`）、`qb.sponsor.topics`（`qb.content.write`）：词表；`qb.admin.topics`（`qb.admin.topic.read`）：词表与统计；`qb.sponsor.quiz-versions` 多返回版本的主题词 |
 | 消息 | 三语：错误码、实体与字段、流程、参数、模板的列 |
 | App | 账户"关于我"的"喜欢的主题"一节（`pages/LikedTopics.tsx`：词表中可选的词按界面语言、勾选即保存；以前选过、已不再提供的照常列出；严格模式开关与说明）；首页在严格模式时提示"只显示你喜欢的主题"并链接到设置；首页与短视频的查询键含设置；共用的 `qb/topics.ts`（两个 SPA 一致）与 `qb/api.ts` 的设置 |

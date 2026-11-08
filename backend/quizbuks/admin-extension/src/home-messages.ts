@@ -1,0 +1,85 @@
+/** The menu entry of the platform's home (F-S1b). */
+export const homeMenu = {
+  en: { home: 'Home' },
+  zh: { home: '首页' },
+  ja: { home: 'ホーム' },
+}
+
+/** The platform's home: the operators' daily check and their reviews (F-S1b). */
+export const homeMessages = {
+  en: {
+    title: 'Home',
+    description: 'How the operators stand: what the daily check finds, and the reviews each operator has waiting.',
+    menuHint: 'Choose a page from the menu.',
+    noDefaultTitle: 'Create the default operator first',
+    noDefaultText: 'Without a default operator, nobody can apply as a Sponsor. Create an operator and make it the default.',
+    noDefaultAction: 'Go to the operators',
+    problemsTitle: 'Daily check',
+    allWell: 'Nothing to put right.',
+    problems: {
+      NO_DEFAULT_OPERATOR: 'There is no default operator.',
+      NO_OPERATOR: 'A Sponsor no operator looks after:',
+      DIRECT_SPONSOR_one: 'An operator with {{count}} own Sponsor instead of exactly one:',
+      DIRECT_SPONSOR_other: 'An operator with {{count}} own Sponsors instead of exactly one:',
+      FEW_REVIEWERS_one: 'An operator with only {{count}} member who can review:',
+      FEW_REVIEWERS_other: 'An operator with only {{count}} members who can review:',
+    },
+    workload: {
+      title: 'Operators’ reviews',
+      hint: 'Reviews waiting now, and decided in the period shown. Sort by a column to see who is behind.',
+      operator: 'Operator',
+      pending: 'Waiting',
+      decided: 'Decided (last {{days}} days)',
+    },
+  },
+  zh: {
+    title: '首页',
+    description: '运营商的情况：每日核对发现的问题，以及各运营商待处理的审核。',
+    menuHint: '请从菜单中选择页面。',
+    noDefaultTitle: '请先建默认运营商',
+    noDefaultText: '没有默认运营商，就没有人能申请成为发起方。请建立一个运营商并设为默认。',
+    noDefaultAction: '前往运营商',
+    problemsTitle: '每日核对',
+    allWell: '没有需要处理的问题。',
+    problems: {
+      NO_DEFAULT_OPERATOR: '没有默认运营商。',
+      NO_OPERATOR: '没有运营商负责的发起方：',
+      DIRECT_SPONSOR_one: '直营发起方有 {{count}} 个而不是恰好一个的运营商：',
+      DIRECT_SPONSOR_other: '直营发起方有 {{count}} 个而不是恰好一个的运营商：',
+      FEW_REVIEWERS_one: '能审核的成员只有 {{count}} 位的运营商：',
+      FEW_REVIEWERS_other: '能审核的成员只有 {{count}} 位的运营商：',
+    },
+    workload: {
+      title: '各运营商的审核',
+      hint: '现在待处理的审核与所示期间内已决定的审核。按列排序即可看出谁积压。',
+      operator: '运营商',
+      pending: '待处理',
+      decided: '已决定（最近 {{days}} 天）',
+    },
+  },
+  ja: {
+    title: 'ホーム',
+    description: '運営パートナーの状況：毎日の点検で見つかった問題と、各運営パートナーの未処理の審査です。',
+    menuHint: 'メニューからページを選んでください。',
+    noDefaultTitle: 'まず既定の運営パートナーを作成してください',
+    noDefaultText: '既定の運営パートナーがないと、誰も主催者に申し込めません。運営パートナーを作成し、既定に設定してください。',
+    noDefaultAction: '運営パートナーへ',
+    problemsTitle: '毎日の点検',
+    allWell: '対応が必要な問題はありません。',
+    problems: {
+      NO_DEFAULT_OPERATOR: '既定の運営パートナーがありません。',
+      NO_OPERATOR: '担当の運営パートナーがない主催者：',
+      DIRECT_SPONSOR_one: '直営の主催者がちょうど 1 つではなく {{count}} つの運営パートナー：',
+      DIRECT_SPONSOR_other: '直営の主催者がちょうど 1 つではなく {{count}} つの運営パートナー：',
+      FEW_REVIEWERS_one: '審査できるメンバーが {{count}} 人しかいない運営パートナー：',
+      FEW_REVIEWERS_other: '審査できるメンバーが {{count}} 人しかいない運営パートナー：',
+    },
+    workload: {
+      title: '各運営パートナーの審査',
+      hint: '今待っている審査と、表示の期間に決定した審査です。列で並べ替えると遅れている先がわかります。',
+      operator: '運営パートナー',
+      pending: '未処理',
+      decided: '決定済み（直近 {{days}} 日）',
+    },
+  },
+}

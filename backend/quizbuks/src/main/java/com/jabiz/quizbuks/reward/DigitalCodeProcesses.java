@@ -226,6 +226,8 @@ public final class DigitalCodeProcesses {
             values.put("publicationId", publication.id());
             values.put("publisherKind", publication.get("publisherKind"));
             values.put("publisherId", publication.get("publisherId"));
+            // Whom the codes are sealed for (SealDigitalCodes: the caller, the handler requireHandler checked).
+            values.put("fulfillerId", publication.get("fulfillerId"));
             values.put("seq", BigDecimal.valueOf(++seq));
             values.put("sealedContent", sealed.get(i));
             values.put("hint", QbDigitalPrizes.hintOf(lines.get(i)));

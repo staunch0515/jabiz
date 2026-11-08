@@ -185,6 +185,9 @@ class KeyRotationIT extends SecurityItSupport {
         assertThat(second.mfaSecrets()).isZero();
         assertThat(second.sealedValues()).isZero();
         assertThat(second.unreadable()).isEqualTo(1);
+        // A value that does not open is still under the retired key: it cannot be removed yet (D78 item 8).
+        assertThat(second.undeclaredSealed()).isEmpty();
+        assertThat(second.retiredKeysRemovable()).isFalse();
         // The re-keying went through the write path: new versions, audited with the secret masked.
         assertThat(query("SELECT count(*) AS n FROM warehouse_version WHERE warehouse_code = ?", sealed)
             .getFirst().get("n")).isEqualTo(2L);

@@ -29,8 +29,11 @@ RUN --mount=type=cache,target=/root/.gradle \
 FROM eclipse-temurin:21-jre
 # Chinese and Japanese in the PDFs (receipts, monthly reports; Q9d, D-5): TrueType fonts the platform's PDF writer can
 # embed (application.yml jabiz.reports.pdf.fonts), IPA Gothic for Japanese, Droid Sans Fallback for Chinese. curl is
-# the health check's client (below and deploy/quizbuks/server/compose.yaml), installed rather than assumed.
+# the health check's client (below and deploy/quizbuks/server/compose.yaml), installed rather than assumed. The base
+# image's packages are brought up to date first: security fixes published after the base image was built
+# (docs/quizbuks/security/dependency-review.md).
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends fonts-ipafont-gothic fonts-droid-fallback curl \
     && rm -rf /var/lib/apt/lists/*
 ENV JABIZ_REPORTS_PDF_FONTS=/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf,/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
