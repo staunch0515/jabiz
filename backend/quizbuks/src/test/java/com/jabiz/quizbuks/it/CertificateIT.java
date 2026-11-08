@@ -1,11 +1,8 @@
 package com.jabiz.quizbuks.it;
 
-import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.certification.CertificateProcesses;
-import com.jabiz.quizbuks.certification.CertificationProcesses;
 import com.jabiz.quizbuks.certification.QbCertificates;
 import com.jabiz.quizbuks.settings.PublicHandles;
-import com.jabiz.runtime.test.TestTokens;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -28,16 +25,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CertificateIT extends LegalItSupport {
 
     private static final String CERT = "SPONSOR_APPLY";
-
-    private String hq() {
-        return TestTokens.bearer(tokens, "q77-hq", QbPermissions.CERTIFICATION_ADMIN,
-            QbPermissions.CERTIFICATION_MANAGE);
-    }
-
-    private void grant(String userId) {
-        run(CertificationProcesses.GRANT, certificationGranter(), body("userId", userId, "certification", CERT, "reason",
-            "Met at the fair"));
-    }
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> held(String userId) {
@@ -81,20 +68,18 @@ class CertificateIT extends LegalItSupport {
         assertThat(held(ann)).isEmpty();
         assertThat(codes(refused(CertificateProcesses.ISSUE, taker(ann), body("certification", CERT, "language",
             "en"), 422))).containsExactly(CertificateProcesses.PAUSED);
-        grant(ann);
-        assertThat(held(ann)).singleElement().satisfies(h -> {
-            assertThat(h).containsEntry("certification", CERT).containsEntry("source", "GRANTED")
-                .containsEntry("certificateId", null);
-            assertThat(h.get("heldUntil")).isNotNull();
-        });
-        assertThat(codes(refused(CertificateProcesses.ISSUE, taker(ann), body("certification", CERT, "language",
-            "en"), 422))).containsExactly(CertificateProcesses.PAUSED);
         assertThat(query("SELECT 1 FROM qb_certificate WHERE user_id = ?", ann)).isEmpty();
 
-        // One issued before: its PDF stays the holder's.
+        // One issued before: the holder's list shows it until its end (F-S2c2b: no certification is held any more,
+        // the certificates are what is left), and its PDF stays the holder's.
         String key = issuedBefore(ann, CERT, "Taker JP", "en");
         String certificateId = (String) query("SELECT certificate_id FROM qb_certificate WHERE verify_key = ?", key)
             .getFirst().get("certificate_id");
+        assertThat(held(ann)).singleElement().satisfies(h -> {
+            assertThat(h).containsEntry("certification", CERT).containsEntry("certificateId", certificateId)
+                .containsEntry("verifyKey", key).doesNotContainKey("source");
+            assertThat(h.get("heldUntil")).isNotNull();
+        });
 
         // The PDF: one run of the layout, the holder's own.
         List<Map<String, Object>> runs = runsOf(certificateId, taker(ann));
@@ -117,7 +102,6 @@ class CertificateIT extends LegalItSupport {
     @Test
     void anybodyWithTheKeyVerifiesItAndSeesARevocation() {
         String cid = newTaker("q77-cid", "JP");
-        grant(cid);
         String key = issuedBefore(cid, CERT, "Taker JP", "zh");
 
         assertThat(publicItems("qb.public.certificate", "p.key=" + key)).singleElement().satisfies(row -> {
@@ -128,17 +112,24 @@ class CertificateIT extends LegalItSupport {
         assertThat(publicItems("qb.public.certificate", "p.key=" + "0".repeat(32))).isEmpty();
 
         clock.advance(Duration.ofDays(1));
-        run(CertificationProcesses.REVOKE, certificationGranter(), body("userId", cid, "certification", CERT, "reason", "Mistake"));
+        assertThat(held(cid)).hasSize(1);
+        // A revocation recorded before D1 ends it: the verify page says so, the holder's list drops it.
+        revokedBefore(cid, CERT);
         assertThat(publicItems("qb.public.certificate", "p.key=" + key)).singleElement()
             .satisfies(row -> assertThat(row.get("revokedAt")).isNotNull());
-        // Not held any more: the list shows nothing.
         assertThat(held(cid)).isEmpty();
+
+        // Past its end: no longer in the holder's list (the verify page still shows it, with its end).
+        String fay = newTaker("q77-fay", "JP");
+        String faysKey = issuedBefore(fay, CERT, "Taker JP", "en");
+        clock.advance(Duration.ofDays(366));
+        assertThat(held(fay)).isEmpty();
+        assertThat(publicItems("qb.public.certificate", "p.key=" + faysKey)).hasSize(1);
     }
 
     @Test
     void thePublicPageListsTheIssuedUnrevokedCertificatesOnceTurnedOn() {
         String dee = newTaker("q77-dee", "JP");
-        grant(dee);
         String key = issuedBefore(dee, CERT, "Taker JP", "en");
 
         // Off by default: the name alone shows nothing.
@@ -172,7 +163,7 @@ class CertificateIT extends LegalItSupport {
         assertThat(publicItems("qb.public.taker-page", "p.handle=dee-q77")).isEmpty();
         assertThat(publicItems("qb.public.taker-page", "p.handle=dee-renamed")).hasSize(1);
         clock.advance(Duration.ofDays(1));
-        run(CertificationProcesses.REVOKE, certificationGranter(), body("userId", dee, "certification", CERT, "reason", "Mistake"));
+        revokedBefore(dee, CERT);
         assertThat(publicItems("qb.public.taker-page", "p.handle=dee-renamed")).isEmpty();
         saveSettings(dee, null, false);
         assertThat(publicItems("qb.public.taker-page", "p.handle=dee-renamed")).isEmpty();

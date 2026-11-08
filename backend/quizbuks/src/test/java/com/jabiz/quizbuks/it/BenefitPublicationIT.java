@@ -48,8 +48,7 @@ class BenefitPublicationIT extends TreeItSupport {
     JobRunner jobs;
 
     private String hq() {
-        return TestTokens.bearer(tokens, "q89b-hq", QbPermissions.CERTIFICATION_ADMIN,
-            QbPermissions.CERTIFICATION_MANAGE, QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.ADMIN_USERS_READ,
+        return TestTokens.bearer(tokens, "q89b-hq", QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.ADMIN_USERS_READ,
             QbPermissions.ADMIN_PUBLICATION_READ);
     }
 

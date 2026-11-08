@@ -32,7 +32,6 @@ class QbRolesTest {
             .contains(QbPermissions.OPERATOR_USE, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 "approval.decide", QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 // Q69: its own certification rounds, grants and revocations (its own sponsor publishes them).
-                QbPermissions.CERTIFICATION_MANAGE,
                 // F-S1: which reward methods its sponsors may use.
                 QbPermissions.ADMIN_REWARD_METHODS,
                 // Q82: its sponsors' conversations with takers (the entry scope limits them), never writing in them.
@@ -49,7 +48,7 @@ class QbRolesTest {
                 // F-S12: its own sponsors' shared videos and taking them down (reviewing is REVIEW_PUBLICATION's).
                 QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE)
             .doesNotContain(QbPermissions.SHARED_VIDEO_SYSTEM, QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.TREE_PLATFORM_WRITE,
-                QbPermissions.TREES_READ, QbPermissions.TREE_SYSTEM, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
+                QbPermissions.TREES_READ, QbPermissions.TREE_SYSTEM, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.REFERRAL_READ,
                 QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
                 QbPermissions.ADMIN_CONTENT_WRITE, QbPermissions.ADMIN_USERS_BAN,
@@ -76,7 +75,7 @@ class QbRolesTest {
                 QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE)
             .doesNotContain(QbPermissions.REVIEW_TREE, QbPermissions.TREE_SYSTEM, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
-                QbPermissions.PROSPECT_USE, QbPermissions.CERTIFICATION_MANAGE)
+                QbPermissions.PROSPECT_USE)
             .doesNotHaveDuplicates();
         // Nobody resolves cash disputes (the platform does not decide them).
         assertThat(QbRoles.all()).allSatisfy(role -> assertThat(role.permissions()).doesNotContain(

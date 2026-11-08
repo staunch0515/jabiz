@@ -30,8 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ReferralIT extends TreeItSupport {
 
     private String hq() {
-        return TestTokens.bearer(tokens, "q70-hq", QbPermissions.CERTIFICATION_MANAGE, QbPermissions.CERTIFICATION_ADMIN,
-            QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.ADMIN_USERS_READ, QbPermissions.ADMIN_PUBLICATION_READ);
+        return TestTokens.bearer(tokens, "q70-hq", QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.ADMIN_USERS_READ, QbPermissions.ADMIN_PUBLICATION_READ);
     }
 
     /** A taker to whom referring is open (F-S2c: they lit the node the referrer gate names). */

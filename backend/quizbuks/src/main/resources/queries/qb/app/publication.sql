@@ -1,7 +1,7 @@
 /*---
 id: qb.app.publication
 description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it (F-S2d, a node's prerequisites not lit)
-entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbReferral, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbTree, QbTreeNodeDef]
+entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbReferral, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbTree, QbTreeNodeDef]
 datasets:
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
@@ -17,7 +17,6 @@ datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbProfileAttribute: urn:jabiz:dataset:me:QbProfileAttribute
   QbPublicationCriterion: urn:jabiz:dataset:default:QbPublicationCriterion
-  QbCertificationRound: urn:jabiz:dataset:default:QbCertificationRound
   QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
   QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
@@ -84,7 +83,6 @@ results:
   nodeUnlocked:   { kind: { type: bool } }
   nodeName:       { from: QbTreeNodeDef.name }
   nodeLit:        { kind: { type: bool } }
-  certification:  { from: QbCertificationRound.certification }
   referral:       { from: QbPublicationCard.referral }
   myReferralStatus:    { from: QbReferral.status }
   myReferralExpiresAt: { from: QbReferral.expiresAt }
@@ -156,7 +154,6 @@ SELECT
     d.nodeUnlocked AS nodeUnlocked,
     d.nodeName AS nodeName,
     d.nodeLit AS nodeLit,
-    d.certification AS certification,
     d.referral AS referral,
     d.myReferralStatus AS myReferralStatus,
     d.myReferralExpiresAt AS myReferralExpiresAt,
@@ -309,8 +306,6 @@ SELECT
          WHERE tl.{{QbTreeLit.treeId}} = c.{{QbPublicationCard.treeId}} AND tl.{{QbTreeLit.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
            AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
                            WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))) AS nodeLit,
-    -- Q69: the certification of the catalog this is a round of (F-S2c2, D6: no sponsor's).
-    cr0.{{QbCertificationRound.certification}} AS certification,
     -- Q70: "referrals welcome" as frozen on the card, and the caller's own referral to it, if a friend referred them
     -- (the view holds the caller's as referee only; the places left come with the referrer's link).
     c.{{QbPublicationCard.referral}}       AS referral,
@@ -344,11 +339,6 @@ LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.pu
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 LEFT JOIN {{QbSponsorPage}} sp_page ON sp_page.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
--- Q69: the round of the catalog's certification the card is, if any (the names are the front ends' texts). F-S2c2
--- (D6): a round of a sponsor's own certification ('sp:<id>', registered before) makes the card no round.
-LEFT JOIN {{QbCertificationRound}} cr0
-    ON cr0.{{QbCertificationRound.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
-   AND cr0.{{QbCertificationRound.certification}} NOT LIKE 'sp:%'
 -- Q73b: the language shown: the caller's attempt's, else the first of the asked ones the card offers, else its main.
 CROSS JOIN LATERAL (
     SELECT coalesce(m.{{QbAttempt.language}},

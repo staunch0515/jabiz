@@ -184,12 +184,6 @@ public final class QbPermissions {
      */
     public static final String SPONSOR_APP = "qb.sponsor.app";
     /**
-     * Running certification rounds and granting or revoking certifications by hand (Q69,
-     * docs/quizbuks/plans/Q69-certifications.md): content administrators for headquarters, operators' members for
-     * their operator (the operators' entry scope decides whose).
-     */
-    public static final String CERTIFICATION_MANAGE = "qb.certification.manage";
-    /**
      * Q70: the referrals' system processes ({@code QB_REFERRAL_REWARD}, {@code _EXPIRE}, {@code internal()}), their
      * templates and the default datasets. Granted to no role.
      */
@@ -219,8 +213,6 @@ public final class QbPermissions {
     public static final String AUDIENCE_RULES_WRITE = "qb.audience.rules.write";
     /** Q47c: headquarters' price lists of the audience rules, their own and the operators' (finance). */
     public static final String AUDIENCE_PRICES_WRITE = "qb.audience.prices.write";
-    /** Marking the official publishers whose publications may be rounds (Q69): headquarters' content administrators. */
-    public static final String CERTIFICATION_ADMIN = "qb.certification.admin";
     /** Q87: the platform's fees. The jobs and sub-processes (granted to no role). */
     public static final String FEE_SYSTEM = "qb.fee.system";
     /** Q87: finance records fees by hand and voids invoices (another administrator approves), reads them all. */
