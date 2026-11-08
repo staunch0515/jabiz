@@ -97,11 +97,21 @@ jobs:
 
   # An application branch: its modules' check (their unit and integration tests, platformCheck, the SPAs' version checks
   # spaCheck<name>), which compiles the platform's modules without testing them again.
-  build-application:
+  # The application's tests in three shards on three machines (ROADMAP 17zz13): -Pjabiz.test.shard=<i>/3 runs a third
+  # of each module's test classes, dealt out by the module's test-timings.txt (backend/build-logic TestShards). Shard 1
+  # runs the modules' whole check (also platformCheck and the SPAs' checks), the others their tests only.
+  build-application-shard:
     needs: scope
     if: needs.scope.outputs.application == 'true' && needs.scope.outputs.tasks != '' && needs.scope.outputs.backend == 'true'
+    name: build-application (shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # QuizBuks's whole suite on one machine took 43-45 minutes in November 2026 (17zz12); a shard takes about a third
+    # of the tests plus the compilation.
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -111,16 +121,42 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-      - run: ./gradlew ${{ needs.scope.outputs.tasks }}
+      - name: Check (shard ${{ matrix.shard }}/3)
         working-directory: backend
+        env:
+          TASKS: ${{ needs.scope.outputs.tasks }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          if [ "$SHARD" = 1 ]; then
+            tasks="$TASKS"
+          else
+            tasks="${TASKS//:check/:test}"
+          fi
+          echo "shard $SHARD/3: $tasks"
+          # shellcheck disable=SC2086 # one argument per task
+          ./gradlew $tasks -Pjabiz.test.shard="$SHARD/3"
       - if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: test-reports
+          name: test-reports-shard-${{ matrix.shard }}
           path: |
             backend/*/build/reports/tests/
             backend/*/build/test-results/
           retention-days: 7
+
+  # The check branch protection requires: green when every shard is, skipped when they are (as before the split).
+  build-application:
+    needs: [scope, build-application-shard]
+    if: always() && needs.scope.outputs.application == 'true' && needs.scope.outputs.tasks != '' && needs.scope.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every shard passed
+        env:
+          RESULT: ${{ needs.build-application-shard.result }}
+        run: |
+          echo "shards: $RESULT"
+          [ "$RESULT" = success ]
 
   # The metadata-driven frontend (docs/design/12-frontend.md): lint, types, generated API types up to date,
   # unit tests of the adapter layer (including the validation cases shared with the backend) and the build.
@@ -194,6 +230,7 @@ jobs:
       # The read-only check of production settings (docs/guide/platform-operations.md section 1).
       - run: tools/test/env-check.test.sh
       - run: tools/test/restore-drill.test.sh
+      - run: tools/test/test-timings.test.sh
       - name: Application paths and version line
         env:
           # HEAD is detached in CI; the script needs the branch's name for the line check.
