@@ -1,10 +1,12 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [SysParam, QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification]
+entities: [SysParam, QbRegionException, QbUserSettings, QbTopic, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbCertificationRecord, QbPublicationPrerequisite, QbSponsorCertification]
 datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
+  QbUserSettings: urn:jabiz:dataset:me:QbUserSettings
+  QbTopic: urn:jabiz:dataset:default:QbTopic
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
@@ -291,7 +293,22 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
                      AND rx.{{QbRegionException.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text))
                     OR (rx.{{QbRegionException.kind}} = 'SPONSOR'
                         AND rx.{{QbRegionException.sponsorId}} = c.{{QbPublicationCard.publisherId}}))))
+  -- F-S9: with the caller's strict mode on (their own settings: the view holds their row only), only a publication
+  -- sharing a word of the word list with the topics they like; each word counts as the one it was merged into, a
+  -- custom word never (its own column), a card without words never. topic.TopicRules.strictAllows is the one
+  -- definition (TopicIT compares the two); F-S13's push applies the same condition.
+  AND (NOT coalesce((SELECT us.{{QbUserSettings.strictTopics}} FROM {{QbUserSettings}} us), false)
+       OR EXISTS (
+           SELECT 1
+           FROM unnest(string_to_array(c.{{QbPublicationCard.topics}}, ',')) AS ct(code)
+           JOIN {{QbTopic}} t ON t.{{QbTopic.topicId}} = ct.code
+           JOIN (SELECT coalesce(lt.{{QbTopic.mergedInto}}, lt.{{QbTopic.topicId}}) AS code
+                 FROM {{QbUserSettings}} lus
+                 CROSS JOIN unnest(string_to_array(lus.{{QbUserSettings.likedTopics}}, ',')) AS l(code)
+                 JOIN {{QbTopic}} lt ON lt.{{QbTopic.topicId}} = l.code) liked
+               ON liked.code = coalesce(t.{{QbTopic.mergedInto}}, t.{{QbTopic.topicId}})))
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
+
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL
        OR strpos(lower(c.{{QbPublicationCard.name}}), lower(CAST(:q AS text))) > 0

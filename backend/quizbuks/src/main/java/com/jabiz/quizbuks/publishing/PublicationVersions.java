@@ -299,7 +299,10 @@ public final class PublicationVersions {
             PublicationEditing.cardVideo(snapshot.materials()).writeTo(values);
             // F-S11: and whether the new version's videos play in mainland China.
             values.put("foreignVideo", PublicationEditing.foreignVideo(ctx, snapshot));
+            // F-S9: the new version's topics with the publication's own changes.
+            PublicationTopics.writeTo(values, publication, version);
             ctx.changes().update(QbPublications.CARD, card.id(), card.version(), values);
+
         }
         EntityInstance schedule = first(ctx, SCHEDULE);
         if (schedule != null) {

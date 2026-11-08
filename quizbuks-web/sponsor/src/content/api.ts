@@ -9,6 +9,7 @@ import {
   CONTENT_TEMPLATE,
 } from './ids'
 import { foreignVideo, mainlandSites } from '../qb/video'
+import { codesOf, customOf } from '../qb/topics'
 
 /*
  * The content workshop's calls, typed by hand after the Java records of backend/quizbuks `content` (processes have no
@@ -78,6 +79,9 @@ export interface Quiz {
   clonedFrom: string | null
   /** Q73a: the quiz's other languages besides its base (`language`), in the platform's order. */
   translationLanguages: ContentLanguage[]
+  /** F-S9: its topics: codes of the word list, and custom words (for search only). */
+  topics?: string[]
+  customTopics?: string[]
 }
 
 export interface Option {
@@ -285,6 +289,9 @@ export interface VersionRow {
    * see this"; the card freezes the server's own answer.
    */
   foreignVideo: boolean
+  /** F-S9: the version's topics, which its publications inherit (none from the one-version template). */
+  topics?: string[]
+  customTopics?: string[]
 }
 
 type SnapshotMaterial = {
@@ -392,6 +399,8 @@ export function toQuiz(row: Row): Quiz {
     materialCount: num(row.materialCount),
     clonedFrom: str(row.clonedFrom),
     translationLanguages: languagesOf(row.translationLanguages),
+    topics: codesOf(row.topics),
+    customTopics: customOf(row.customTopics),
   }
 }
 
@@ -545,6 +554,8 @@ function toVersionRow(row: Row): VersionRow {
     versionedAt: String(row.versionedAt ?? ''),
     contentHash: String(row.contentHash ?? ''),
     foreignVideo: foreignVideo(linksOf(row.videoLinks), mainlandSites(paramText(row.mainlandSites))),
+    topics: codesOf(row.topics),
+    customTopics: customOf(row.customTopics),
   }
 }
 
@@ -662,7 +673,12 @@ export const reorderMaterials = (quizId: string, materialIds: string[], baseRevi
 export const setLanguages = (quizId: string, languages: ContentLanguage[], baseRevision: number) =>
   runProcess<EditOutput>(CONTENT_PROCESS.languagesSet, { quizId, languages, baseRevision })
 
+/** F-S9: all the quiz's topics: words of the list (codes) and custom words; those left out are removed. */
+export const setQuizTopics = (quizId: string, topics: string[], customTopics: string[], baseRevision: number) =>
+  runProcess<EditOutput>(CONTENT_PROCESS.topicsSet, { quizId, topics, customTopics, baseRevision })
+
 /** Q73a: some elements of the quiz in one of its other languages. */
+
 export const saveTranslations = (quizId: string, language: ContentLanguage, entries: TranslationEntry[],
   baseRevision: number) =>
   runProcess<EditOutput>(CONTENT_PROCESS.translationSave, { quizId, language, entries, baseRevision })

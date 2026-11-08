@@ -283,6 +283,13 @@ public final class QbPermissions {
      * address database. Headquarters' content administrators only, not the operators.
      */
     public static final String ADMIN_REGION_MONITOR = "qb.admin.region.monitor";
+    /**
+     * F-S9: the word list of topics with its figures by topic (read), and adding, renaming, deactivating and merging
+     * words (write). Headquarters' content administrators.
+     */
+    public static final String ADMIN_TOPIC_READ = "qb.admin.topic.read";
+    public static final String ADMIN_TOPIC_WRITE = "qb.admin.topic.write";
+
     /** The prospecting jobs' items and outcomes ({@code internal()}). Granted to no role. */
     public static final String PROSPECT_SYSTEM = "qb.prospect.system";
 

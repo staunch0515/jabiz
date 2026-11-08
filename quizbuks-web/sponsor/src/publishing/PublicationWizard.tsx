@@ -73,6 +73,9 @@ import {
   DIGITAL_DESCRIPTION_LENGTH,
   REGIONS,
   savePublication,
+  setPublicationTopics,
+  NO_TOPIC_CHANGES,
+  type TopicChanges,
   submitPublication,
   surveyReward,
   AUDIENCES,
@@ -97,6 +100,7 @@ import { PRIZE_METHODS, type Asset, type PrizeMethod } from '../assets/api'
 import { useAssetCopy } from '../assets/copy'
 import { LibraryActions, type StoredContent } from '../assets/LibraryActions'
 import { contentLanguageOf } from '../qb/api'
+import { PublicationTopicsField } from '../topics/PublicationTopicsField'
 
 /** What of a prize the library copies (F-C1): the method and the fields of that method, compared before naming it. */
 function prizeShape(form: Pick<PublicationForm, 'rewardMethod' | 'redeemDescription' | 'digitalDescription'
@@ -252,6 +256,11 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         : savedRound.data ? certificationName(savedRound.data.certification, savedRound.data.name, i18n.language, tQb)
           : null
     })()
+  // F-S9: the changes of the version's topics, saved with each save of the draft once changed (their own process,
+  // last), as the page last saved or read them.
+  const [savedTopics, setSavedTopics] = useState<TopicChanges>(detail?.publication.topicChanges ?? NO_TOPIC_CHANGES)
+  const [editedTopics, setEditedTopics] = useState<TopicChanges | null>(null)
+  const topicChanges = editedTopics ?? savedTopics
   const prerequisites: Prerequisite[] = editedPrerequisites ?? (savedPrerequisites.data ?? []).map((row) => (
     row.certification ? { certification: row.certification, requirement: 'PASSED' }
       : { requiredPublicationId: row.requiredPublicationId, requirement: row.requirement }))
@@ -346,9 +355,9 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   }
 
   const save = useMutation({
-    mutationFn: async ({ input, criteria, prerequisites: wanted, round }: { input: SaveInput; keys: string[];
+    mutationFn: async ({ input, criteria, prerequisites: wanted, round, topics }: { input: SaveInput; keys: string[];
       then: 'stay' | 'next' | 'count'; criteria: Condition[] | null; prerequisites: Prerequisite[] | null;
-      round: string | null | undefined }) => {
+      round: string | null | undefined; topics: TopicChanges | null }) => {
       const saved = await savePublication(input)
       // The draft is saved whatever happens to its conditions next: the page knows its new revision.
       setRevision(saved.revision)
@@ -369,10 +378,19 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         const out = await setPublicationRound(saved.publicationId, revision, round)
         revision = out.revision
       }
+      if (topics !== null && input.versionId) {
+        // F-S9: the changes of the version's topics, once changed, last (they need the version).
+        const out = await setPublicationTopics(saved.publicationId, revision, topics)
+        revision = out.revision
+      }
       return { saved: { ...saved, revision }, counted: null }
     },
     onMutate: () => setSubmitError(null),
-    onSuccess: async ({ saved }, { input, keys, then, criteria, prerequisites: wanted, round }) => {
+    onSuccess: async ({ saved }, { input, keys, then, criteria, prerequisites: wanted, round, topics }) => {
+      if (topics !== null && input.versionId) {
+        setSavedTopics(topics)
+        setEditedTopics(null)
+      }
       // The copies are recorded; a later save names no asset unless one is chosen again.
       if (input.assets) [coverCopy, redeemCopy, digitalCopy, prizeCopy, referralCopy].forEach((copy) => copy.saved())
       const audienceOfSave = input.audience
@@ -462,7 +480,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     const input = Object.values(assets).some((assetId) => assetId !== null) ? { ...built.input, assets } : built.input
     save.mutate({ input, keys: shaped.tiers.map((tier) => tier.key), then,
       criteria: editedConditions ?? (shaped.audience === 'INVITED' && conditions.length > 0 ? [] : null),
-      prerequisites: editedPrerequisites, round: editedRound })
+      prerequisites: editedPrerequisites, round: editedRound, topics: editedTopics })
   }
 
   const submit = () => {
@@ -564,7 +582,15 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           )}
         </Field>
       )}
+      {/* F-S9: the version's topics, some left out and others added. */}
+      {form.versionId ? (
+        <PublicationTopicsField version={version} changes={topicChanges} onChange={setEditedTopics} disabled={locked} />
+      ) : (
+        <p className="text-muted-foreground text-sm" data-testid="publication-topics-version-first">
+          {t('topics.chooseVersion')}</p>
+      )}
     </div>,
+
 
     // 2. Who sees it and when, the marks, the rewards and the money.
     <div key="policy" className="flex flex-col gap-6">

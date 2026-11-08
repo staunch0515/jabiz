@@ -329,6 +329,10 @@ class SetupIT extends QbItSupport {
         // F-S10: the home's shelves of short videos (ordinary parameters).
         expected.put(QbParams.FEED_SHORTS_POSITIONS, "3,12");
         expected.put(QbParams.FEED_SHORTS_PER_SHELF, "10");
+        // F-S9: the limits of topics (ordinary parameters).
+        expected.put(QbParams.TOPIC_MAX_PER_QUIZ, "10");
+        expected.put(QbParams.TOPIC_CUSTOM_MAX_LENGTH, "30");
+
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // F-S2: the knowledge maps' limits and the review reminder (ordinary).
         expected.put(QbParams.TREE_MAX_NODES, "200");
