@@ -328,6 +328,21 @@ public class ContentConfig {
     }
 
     @Bean
+    ProcessDefinition<QuestionBatchProcesses.MoveInput, EditOutput, ProcessContext> qbQuestionMove() {
+        return QuestionBatchProcesses.move();
+    }
+
+    @Bean
+    ProcessDefinition<QuestionBatchProcesses.ManyInput, EditOutput, ProcessContext> qbQuestionDeleteMany() {
+        return QuestionBatchProcesses.deleteMany();
+    }
+
+    @Bean
+    ProcessDefinition<QuestionBatchProcesses.PointsInput, EditOutput, ProcessContext> qbQuestionPointsSet() {
+        return QuestionBatchProcesses.pointsSet();
+    }
+
+    @Bean
     ProcessDefinition<MaterialProcesses.MaterialInput, EditOutput, ProcessContext> qbMaterialSave() {
         return MaterialProcesses.save();
     }
