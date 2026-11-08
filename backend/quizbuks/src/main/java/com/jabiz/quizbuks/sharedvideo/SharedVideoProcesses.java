@@ -27,6 +27,7 @@ import com.jabiz.runtime.approval.RequireApproval;
 import com.jabiz.runtime.approval.WithdrawApproval;
 import com.jabiz.runtime.mail.SendMail;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.security.SecurityEntities;
 import com.jabiz.security.MfaRequirement;
@@ -67,6 +68,16 @@ public final class SharedVideoProcesses {
     public static final String TAKEDOWN = "QB_SHARED_VIDEO_TAKEDOWN";
     /** The minute's job that ends the publications using a video taken down (one transaction each). */
     public static final String END_JOB = "qb.shared-video-ends";
+    /**
+     * F-C3: a share the review sent back, published in the transaction of {@value #APPROVAL_RESULT} (payload
+     * {@code sharedVideoId}, {@code providerId}): the provider's in-app notice ({@code QB_MESSAGE_FROM_EVENT}).
+     */
+    public static final String REJECTED_EVENT = "qb.shared-video.rejected";
+    /**
+     * F-C3: a video taken down, published in the transaction of {@value #TAKEDOWN} (payload as
+     * {@link #REJECTED_EVENT}): the provider's in-app notice, beside the mail.
+     */
+    public static final String TAKEN_DOWN_EVENT = "qb.shared-video.taken-down";
 
     /**
      * @param assetId  the provider's video link in their library
@@ -112,6 +123,7 @@ public final class SharedVideoProcesses {
     static final String DECISIONS = "decisions";
     static final String PROVIDER = "provider";
     static final String TAKEN_DOWN_NOW = "takenDownNow";
+    static final String REJECTED_NOW = "rejectedNow";
 
     private SharedVideoProcesses() {
     }
@@ -130,12 +142,14 @@ public final class SharedVideoProcesses {
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, VideoOutput.class));
-            CallerChecks.refuseBanned(pb);
             // The word list and the limit change nothing of the share: read before the lock.
             TopicSteps.loadParams(pb);
             TopicSteps.loadWords(pb, ctx -> SharedVideoRules.topics(ctx.get(INPUT, ShareInput.class).topics()));
             pb.step("Lock the sponsor's sharing", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbSharedVideos.providerLockName(ctx.request().actorId())));
+            // F-C3: the ban read under the sharing's lock, which a ban takes before it withdraws the shares: a share
+            // either sees the ban or is withdrawn by it.
+            CallerChecks.refuseBanned(pb);
             pb.step("Load the asset, its standing share and the operator", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbAssets.DEFAULT_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
@@ -269,6 +283,10 @@ public final class SharedVideoProcesses {
                     SharedVideoApprovals.SUBJECT, ctx -> storedCase(ctx).preparedBy(result(ctx).preparerId()),
                     APPROVAL));
                 pb.compute("Approve or send back", (metadata, ctx) -> approvalResult(ctx));
+                // F-C3: the provider hears of a rejection in their inbox too (the review's reason in it).
+                pb.step("Tell the provider of the rejection", PublishEvent.<ProcessContext>when(
+                    ctx -> !ctx.hasViolations() && Boolean.TRUE.equals(ctx.get(REJECTED_NOW)), REJECTED_EVENT,
+                    SharedVideoProcesses::eventPayload));
             });
     }
 
@@ -320,6 +338,7 @@ public final class SharedVideoProcesses {
             && ApprovalEntities.REJECTED.equals(first(ctx, REQUEST).get("status"))) {
             values.put("status", QbSharedVideos.REJECTED);
             values.put("rejectReason", rejectReason(ctx));
+            ctx.put(REJECTED_NOW, true);
         } else {
             unchanged(ctx, video);
             return;
@@ -390,25 +409,29 @@ public final class SharedVideoProcesses {
 
     // ---- the provider's account erased -----------------------------------------------------------------------------
 
-    /** {@value #ERASED_WITHDRAW}: one of an erased provider's standing shares, withdrawn. */
+    /**
+     * {@value #ERASED_WITHDRAW}: one of a provider's standing shares, withdrawn by the system: their account erased
+     * (F-S12) or banned (F-C3). The name stays the erasure's, where it began (it is a sub-process only, recorded so).
+     */
     public static final String ERASED_WITHDRAW = "QB_SHARED_VIDEO_ERASED_WITHDRAW";
 
-    /** Input of {@value #ERASED_WITHDRAW}: the share and its provider (the erased account). */
+    /** Input of {@value #ERASED_WITHDRAW}: the share and its provider (the erased or banned account). */
     public record ErasedWithdrawInput(@NotBlank @Size(max = QbSharedVideos.ID_LENGTH) String sharedVideoId,
         @NotBlank String providerId) {}
 
     /**
-     * {@value #ERASED_WITHDRAW} (总控 2026-11-08): when a provider's account is erased (Q72, {@code QB_SPONSOR_ERASED}),
-     * each of their shares in review or approved is withdrawn, as the provider would: no new publication picks it, and
-     * the publications submitted with it keep it until they end. Only a sub-process of the erasure (its root declares
-     * the permission); one withdrawn, rejected or taken down meanwhile is left as it is. Locks as {@value #WITHDRAW}:
-     * the provider's sharing, then the video's (after the account's and the publications' the erasure took).
+     * {@value #ERASED_WITHDRAW} (总控 2026-11-08): when a provider's account is erased (Q72, {@code QB_SPONSOR_ERASED})
+     * or the provider is banned (F-C3, {@code QB_USER_BAN} and {@code QB_OPERATOR_SPONSOR_BAN}), each of their shares in
+     * review or approved is withdrawn, as the provider would: no new publication picks it, and the publications
+     * submitted with it keep it until they end. Only a sub-process (its root declares its own permission); one
+     * withdrawn, rejected or taken down meanwhile is left as it is. Locks as {@value #WITHDRAW}: the provider's sharing,
+     * then the video's (after the account's and the publications' the erasure or the ban took).
      */
     public static ProcessDefinition<ErasedWithdrawInput, VideoOutput, ProcessContext> erasedWithdraw() {
         return ProcessDefinition.define(ERASED_WITHDRAW, 1, ErasedWithdrawInput.class, VideoOutput.class,
             ProcessContext.class, pb -> {
-                pb.description("Withdraws a shared video of a provider whose account was erased (part of the erasure "
-                        + "only).")
+                pb.description("Withdraws a shared video of a provider whose account was erased or who was banned "
+                        + "(part of the erasure or the ban only).")
                     .permissions(QbPermissions.SHARED_VIDEO_SYSTEM)
                     .subProcessOnly()
                     .contextFactory((start, input) -> start(start, input, input.sharedVideoId()))
@@ -483,7 +506,18 @@ public final class SharedVideoProcesses {
                     SharedVideoMails.TAKEN_DOWN, ctx -> MailRecipient.user(String.valueOf((Object) first(ctx, VIDEO).get("providerId"))),
                     Map.of("title", SharedVideoProcesses::titleForMail,
                         "reason", ctx -> ctx.get(INPUT, TakedownInput.class).reason().strip())));
+                // F-C3: and in their inbox (an address or not), linked to their asset library.
+                pb.step("Tell the provider in their inbox", PublishEvent.<ProcessContext>when(
+                    ctx -> !ctx.hasViolations() && Boolean.TRUE.equals(ctx.get(TAKEN_DOWN_NOW)), TAKEN_DOWN_EVENT,
+                    SharedVideoProcesses::eventPayload));
             });
+    }
+
+    /** The payload of {@link #REJECTED_EVENT} and {@link #TAKEN_DOWN_EVENT}: the video and its provider. */
+    static Map<String, Object> eventPayload(ProcessContext ctx) {
+        EntityInstance video = first(ctx, VIDEO);
+        return Map.of("sharedVideoId", String.valueOf(video.id()), "providerId",
+            String.valueOf((Object) video.get("providerId")));
     }
 
     /** Whether the provider has an address to mail. */
