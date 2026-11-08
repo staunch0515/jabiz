@@ -1,0 +1,114 @@
+package com.jabiz.quizbuks.it;
+
+import com.jabiz.param.ParamValues;
+import com.jabiz.quizbuks.content.ContentLanguages;
+import com.jabiz.quizbuks.content.QuizBankLimits;
+import com.jabiz.quizbuks.setup.QbParams;
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * F-S6 (docs/quizbuks/plans/impl/F-S6.md §3.1, §3.5): the editor reads a large bank a page at a time, searched by text
+ * or number, and the bank's limits from the template that reads them as the processes do.
+ */
+class QuizQuestionsTemplateIT extends ContentItSupport {
+
+    private Map<String, Object> page(String quizId, Map<String, Object> more, int offset, int limit) {
+        Map<String, Object> params = new HashMap<>(more);
+        params.put("quizId", quizId);
+        return template("qb.sponsor.quiz-questions", sponsorA(), body("params", params, "offset", offset, "limit",
+            limit));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> rows(Map<String, Object> page) {
+        return (List<Map<String, Object>>) page.get("items");
+    }
+
+    private static int number(Object value) {
+        return ((Number) value).intValue();
+    }
+
+    @Test
+    void aBankIsReadAPageAtATimeAndSearchedByTextOrNumber() {
+        String quizId = newQuiz(sponsorA(), "Paged");
+        List<String> ids = new ArrayList<>();
+        for (int i = 1; i <= 12; i++) {
+            ids.add((String) run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem",
+                (i % 4 == 0 ? "Capital " : "River ") + i, "points", i, "options",
+                List.of(body("text", "a", "correct", true), body("text", "b"), body("text", "c")))).get("itemId"));
+        }
+        run("QB_QUIZ_LANGUAGES_SET", sponsorA(), body("quizId", quizId, "languages", List.of("ja", "zh")));
+        run("QB_TRANSLATION_SAVE", sponsorA(), body("quizId", quizId, "language", "ja", "entries", List.of(
+            body("key", ContentLanguages.stem(ids.get(0)), "text", "川 1"))));
+        run("QB_TRANSLATION_SAVE", sponsorA(), body("quizId", quizId, "language", "zh", "entries", List.of(
+            body("key", ContentLanguages.stem(ids.get(0)), "text", "河 1"))));
+
+        Map<String, Object> second = page(quizId, Map.of(), 5, 5);
+        assertThat(number(second.get("total"))).isEqualTo(12);
+        assertThat(rows(second)).extracting(row -> number(row.get("questionNo"))).containsExactly(6, 7, 8, 9, 10);
+        assertThat(rows(second).getFirst()).containsEntry("questionId", ids.get(5)).containsEntry("stem", "River 6");
+        assertThat(number(rows(second).getFirst().get("optionCount"))).isEqualTo(3);
+        Map<String, Object> first = rows(page(quizId, Map.of(), 0, 1)).getFirst();
+        assertThat(number(first.get("translated"))).isEqualTo(2);
+
+        // By text, ignoring case, and the questions found keep their numbers.
+        Map<String, Object> found = page(quizId, Map.of("q", "capital"), 0, 50);
+        assertThat(number(found.get("total"))).isEqualTo(3);
+        assertThat(rows(found)).extracting(row -> number(row.get("questionNo"))).containsExactly(4, 8, 12);
+        // A % is a %, not a wildcard.
+        assertThat(rows(page(quizId, Map.of("q", "%"), 0, 50))).isEmpty();
+        // By number.
+        assertThat(rows(page(quizId, Map.of("no", 7), 0, 50))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("questionId", ids.get(6)));
+
+        // A move changes the numbers: they are the order's.
+        run("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", ids.get(11), "beforeQuestionId",
+            ids.get(0)));
+        assertThat(rows(page(quizId, Map.of(), 0, 2))).extracting(row -> row.get("questionId"))
+            .containsExactly(ids.get(11), ids.get(0));
+
+        // Another sponsor sees nothing of it.
+        assertThat(rows(template("qb.sponsor.quiz-questions", sponsorB(), body("params", Map.of("quizId", quizId)))))
+            .isEmpty();
+    }
+
+    private Map<String, Object> limits() {
+        return items("qb.sponsor.quiz-limits", sponsorA(), body()).getFirst();
+    }
+
+    /** The template's limits are the processes' (QuizBankLimits) for the same parameters. */
+    private void sameAsTheProcesses(Map<String, Object> values) {
+        ParamValues params = new ParamValues(Instant.EPOCH, values);
+        assertThat(number(limits().get("maxQuestions"))).isEqualTo(QuizBankLimits.maxQuestions(params));
+        assertThat(number(limits().get("maxPerAttempt"))).isEqualTo(QuizBankLimits.maxPerAttempt(params));
+        assertThat(number(limits().get("importBatch"))).isEqualTo(QuizBankLimits.importBatch(params));
+    }
+
+    @Test
+    void theLimitsAreReadAsTheProcessesReadThem() {
+        try {
+            sameAsTheProcesses(Map.of(QbParams.CONTENT_MAX_QUESTIONS, new java.math.BigDecimal(1000),
+                QbParams.PLAY_MAX_PER_ATTEMPT, new java.math.BigDecimal(100), QbParams.CONTENT_IMPORT_BATCH,
+                new java.math.BigDecimal(200)));
+            setParam(QbParams.CONTENT_MAX_QUESTIONS, "5000");
+            setParam(QbParams.PLAY_MAX_PER_ATTEMPT, "20");
+            setParam(QbParams.CONTENT_IMPORT_BATCH, "0");
+            sameAsTheProcesses(Map.of(QbParams.CONTENT_MAX_QUESTIONS, new java.math.BigDecimal(5000),
+                QbParams.PLAY_MAX_PER_ATTEMPT, new java.math.BigDecimal(20), QbParams.CONTENT_IMPORT_BATCH,
+                java.math.BigDecimal.ZERO));
+            assertThat(limits()).containsEntry("maxPerAttempt", 20);
+        } finally {
+            setParam(QbParams.CONTENT_MAX_QUESTIONS, "1000");
+            setParam(QbParams.PLAY_MAX_PER_ATTEMPT, "100");
+            setParam(QbParams.CONTENT_IMPORT_BATCH, "200");
+        }
+    }
+}
