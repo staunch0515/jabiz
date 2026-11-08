@@ -13,7 +13,8 @@ import java.util.stream.Stream;
  * material's link may be any address: rather show it to fewer takers than one they cannot open). Every language counts:
  * the base's materials and each other language's own (Q73). A blank link is no video.
  *
- * <p>Only the links: the shared videos of F-S12 join through {@link #foreign(Stream, Set)} once they exist.
+ * <p>Only the links: a publication's shared video (F-S12) joins the version's links where the card is frozen
+ * ({@code PublicationEditing.foreignVideo(ctx, snapshot, shared)}).
  * The App's and the console's {@code qb/video.ts} ({@code foreignVideo}) read links the same way, with the same cases.
  */
 public final class ForeignVideos {

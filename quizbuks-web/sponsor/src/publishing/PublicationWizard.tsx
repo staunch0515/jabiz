@@ -101,6 +101,8 @@ import { useAssetCopy } from '../assets/copy'
 import { LibraryActions, type StoredContent } from '../assets/LibraryActions'
 import { contentLanguageOf } from '../qb/api'
 import { PublicationTopicsField } from '../topics/PublicationTopicsField'
+import { setPublicationSharedVideo } from '../sharedvideos/api'
+import { SharedVideoField, sharedVideoForeign, useSharedVideo } from '../sharedvideos/SharedVideoField'
 
 /** What of a prize the library copies (F-C1): the method and the fields of that method, compared before naming it. */
 function prizeShape(form: Pick<PublicationForm, 'rewardMethod' | 'redeemDescription' | 'digitalDescription'
@@ -261,6 +263,11 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const [savedTopics, setSavedTopics] = useState<TopicChanges>(detail?.publication.topicChanges ?? NO_TOPIC_CHANGES)
   const [editedTopics, setEditedTopics] = useState<TopicChanges | null>(null)
   const topicChanges = editedTopics ?? savedTopics
+  // F-S12: the shared video picked (undefined: unchanged since the page read or saved it), saved last with the draft.
+  const [savedShared, setSavedShared] = useState<string | null>(detail?.publication.sharedVideoId ?? null)
+  const [editedShared, setEditedShared] = useState<string | null | undefined>(undefined)
+  const sharedVideoId = editedShared !== undefined ? editedShared : savedShared
+  const sharedVideo = useSharedVideo(sharedVideoId)
   const prerequisites: Prerequisite[] = editedPrerequisites ?? (savedPrerequisites.data ?? []).map((row) => (
     row.certification ? { certification: row.certification, requirement: 'PASSED' }
       : { requiredPublicationId: row.requiredPublicationId, requirement: row.requirement }))
@@ -284,6 +291,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     placeholderData: keepPreviousData,
   })
   const { versions, version } = useVersionOf(form.quizId, form.versionId)
+  // F-S11: the shared video counts for mainland China as the quiz's own videos do.
+  const foreignVideo = !!version?.foreignVideo || (sharedVideoId !== null && sharedVideoForeign(sharedVideo.data))
   // Q81: a pick of k equal-point questions scores k times the points; the server decides (SaveOutput.fullScore),
   // the page only anticipates it for the hints when the version's points are all the same.
   const pick = form.pickCount.trim() === '' ? null : Number(form.pickCount)
@@ -355,9 +364,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   }
 
   const save = useMutation({
-    mutationFn: async ({ input, criteria, prerequisites: wanted, round, topics }: { input: SaveInput; keys: string[];
-      then: 'stay' | 'next' | 'count'; criteria: Condition[] | null; prerequisites: Prerequisite[] | null;
-      round: string | null | undefined; topics: TopicChanges | null }) => {
+    mutationFn: async ({ input, criteria, prerequisites: wanted, round, topics, shared }: { input: SaveInput;
+      keys: string[]; then: 'stay' | 'next' | 'count'; criteria: Condition[] | null;
+      prerequisites: Prerequisite[] | null; round: string | null | undefined; topics: TopicChanges | null;
+      shared: string | null | undefined }) => {
       const saved = await savePublication(input)
       // The draft is saved whatever happens to its conditions next: the page knows its new revision.
       setRevision(saved.revision)
@@ -383,13 +393,22 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         const out = await setPublicationTopics(saved.publicationId, revision, topics)
         revision = out.revision
       }
+      if (shared !== undefined) {
+        // F-S12: the shared video, once changed, last.
+        const out = await setPublicationSharedVideo(saved.publicationId, revision, shared)
+        revision = out.revision
+      }
       return { saved: { ...saved, revision }, counted: null }
     },
     onMutate: () => setSubmitError(null),
-    onSuccess: async ({ saved }, { input, keys, then, criteria, prerequisites: wanted, round, topics }) => {
+    onSuccess: async ({ saved }, { input, keys, then, criteria, prerequisites: wanted, round, topics, shared }) => {
       if (topics !== null && input.versionId) {
         setSavedTopics(topics)
         setEditedTopics(null)
+      }
+      if (shared !== undefined) {
+        setSavedShared(shared)
+        setEditedShared(undefined)
       }
       // The copies are recorded; a later save names no asset unless one is chosen again.
       if (input.assets) [coverCopy, redeemCopy, digitalCopy, prizeCopy, referralCopy].forEach((copy) => copy.saved())
@@ -480,7 +499,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     const input = Object.values(assets).some((assetId) => assetId !== null) ? { ...built.input, assets } : built.input
     save.mutate({ input, keys: shaped.tiers.map((tier) => tier.key), then,
       criteria: editedConditions ?? (shaped.audience === 'INVITED' && conditions.length > 0 ? [] : null),
-      prerequisites: editedPrerequisites, round: editedRound, topics: editedTopics })
+      prerequisites: editedPrerequisites, round: editedRound, topics: editedTopics, shared: editedShared })
   }
 
   const submit = () => {
@@ -589,6 +608,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         <p className="text-muted-foreground text-sm" data-testid="publication-topics-version-first">
           {t('topics.chooseVersion')}</p>
       )}
+      {/* F-S12: a video another Sponsor shares, shown by this publication. */}
+      <SharedVideoField value={sharedVideoId} onChange={setEditedShared} disabled={locked} />
     </div>,
 
 
@@ -925,7 +946,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         </div>
       )}
       {/* F-S11: the quiz's video cannot be played in mainland China, which these regions reach (a notice only). */}
-      {version?.foreignVideo && reachesMainland(form.audience, form.regions) && (
+      {foreignVideo && reachesMainland(form.audience, form.regions) && (
         <MainlandNotice testId="publication-mainland-audience" />
       )}
       {/* Q76: what a taker must have done first, whoever the publication is for. */}
@@ -969,7 +990,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         <AudienceFeePanel quote={feeQuote.data?.quote ?? null} pending={feeQuote.isFetching && !feeQuote.data} />
       )}
       {/* F-S11: said again where the publication is checked before submitting (a notice only). */}
-      {version?.foreignVideo && reachesMainland(form.audience, form.regions) && (
+      {foreignVideo && reachesMainland(form.audience, form.regions) && (
         <MainlandNotice testId="publication-mainland-check" />
       )}
       <PublicationSummary values={{
