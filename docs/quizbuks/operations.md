@@ -822,7 +822,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **"选不到某个共享视频"的排查**：视频的状态（平台管理系统的"共享视频"页；只有"共享中"的在目录中）；提供方的入驻记录被删除（账号删除）时目录不列它。
 - **数据**：`qb_shared_video`（共享的内容不变；状态、理由、时间由流程写）；发布 `qb_publication_version.shared_video_id`（草稿时 `QB_PUBLICATION_SHARED_VIDEO_SET`，提交即冻结）；卡片 `qb_publication_card.shared_video_id`、`video_provider_id`（上线时冻结，供以后的屏蔽 F-S8 与统计）。卡片的视频即共享视频，除非 Quiz 有"看完才能答题"的视频；App 的开始答题页以卡片的共享视频开头（Quiz 自己的视频仍在资料中）；共享视频的链接计入"中国大陆看不到"（§7.24）与竖屏（§7.25）。答题路径不变。
 
-### 7.28 任意网址的视频（F-S15）
+### 7.29 任意网址的视频（F-S15）
 
 视频资料可以是任何 https 地址（`docs/quizbuks/plans/impl/F-S15.md`）：七个已知网站照旧用各自的播放器；**视频文件**（路径以 `.mp4`、`.webm`、`.mov` 结尾，查询串与片段不算）用 App 自己的 `<video>`，可以设为"看完才能答"；**其他网页**原样嵌入（iframe，沙箱中不能跳转、弹窗、提交表单）。给用户的帮助文案在 `docs/quizbuks/help/any-video.md`，常见问题见 `troubleshooting.md` T16、T17。没有新的环境变量、参数或部署设置。
 

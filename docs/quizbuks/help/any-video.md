@@ -1,7 +1,7 @@
 # 帮助文案：任意网址的视频（F-S15）
 
 给发起方与学者看的帮助文案（三语）。帮助中心的内容存在数据库里（FAQ 为 `QbFaqEntry`），**由内容管理员在平台管理系统的"FAQ"中发布**，改了不用重新部署；这里是文案的底稿，功能改了先改这里再请内容管理员照改。
-用词照 `docs/quizbuks/glossary.md`；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。规则与运维见 `docs/quizbuks/plans/impl/F-S15.md`、`operations.md` §7.28，常见问题见 `troubleshooting.md` T16、T17。
+用词照 `docs/quizbuks/glossary.md`；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。规则与运维见 `docs/quizbuks/plans/impl/F-S15.md`、`operations.md` §7.29，常见问题见 `troubleshooting.md` T16、T17。
 
 - 参数（写进文案的网站是缺省值，改了受控参数 `qb.video.mainland-accessible-sites` 时同步改这里与 `mainland-china.md`）：中国大陆可以播放哔哩哔哩、优酷、腾讯视频，以及总部登记过的主机。
 
