@@ -344,7 +344,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 安全 | 平台 `jabiz-refresh-reuse-granted`、`jabiz-refresh-reuse-revoked`（F-F6） | |
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
-| 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，F-F13） | 工作目录与上传文件的卷 |
+| 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
 | 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
 
@@ -729,6 +729,26 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
   2. 平台管理系统的发布详情：卡片的"含中国大陆无法播放的视频"为是（或空：上线于 F-S11 之前且回填没有找到版本；按"是"处理）。看资料中的视频链接是哪个网站。
   3. 是否有生效的例外（"中国大陆"页，"生效中"；运营商只看到自己发起方的）。
   4. 用户说不在中国大陆却被拒：请他打开 `/api/client/region` 看 `country`；是 `CN` 即地址库的判断（可等下月更新，或经例外放开该发布）；`known` 为 `false` 即地址查不到，按参数处理（检查 `JABIZ_TRUSTED_PROXIES` 是否包括反向代理：不包括时所有人都是代理的内网地址）。
+
+### 7.25 竖屏短视频与竖屏模式（F-S10）
+
+App 首页在参数给出的位置插入一排竖屏小卡（"短视频"），点开进入全屏的竖屏模式，一个一个滑动（`docs/quizbuks/plans/impl/F-S10.md`）。给用户的帮助文案在 `docs/quizbuks/help/shorts.md`（由内容管理员发布为 FAQ）。
+
+- **哪些算竖屏**：卡片视频（看完即可答题的视频，否则第一个能播放的视频）是 YouTube 的 Shorts 链接，或发起方在视频资料上勾选了"竖屏视频"。上线与切换版本时冻结到卡片 `videoVertical`（平台管理系统发布卡片的"竖屏视频"）；已上线的卡片不随资料的修改而变，要变就保存新版本并切换。迁移 `V85`（合并前按最大号 + 1 重编）按版本快照回填了已上线卡片中的 Shorts 链接。
+- **参数**（普通参数，`PARAM_SET`，不受控；部署后运行一次 `QB_SETUP` 建立）：
+
+  | 参数 | 缺省 | 作用 | 调整的影响 |
+  |---|---|---|---|
+  | `qb.feed.shorts.positions` | `3,12` | 在第几张卡之后放一排（以逗号分隔，第一张卡为 1；空 = 不放） | 第 n 个位置放第 n 组短视频；卡片不够时第一排放在列表末尾。App 下次打开首页时生效 |
+  | `qb.feed.shorts.per-shelf` | `10` | 每排的个数（1–50） | 全屏模式可以滑过全部读到的短视频（至多 50 个） |
+
+- **数据**：短视频由首页模板 `qb.app.feed` 加参数 `shorts=true` 读取，条件与首页相同（地区、客户匹配、前置条件、语言、搜索与筛选、F-S11 的中国大陆、以后 F-S8 的屏蔽）；没有竖屏发布时不显示这一排。答题路径一条语句也不加。
+- **打开数**：每次打开竖屏模式计入平台的公开计数器 `qb.shorts-open`（按打开时的发布 `publicationId`，每个访客每个发布每天一次，日期按 `jabiz.fiscal-year-zone`），写入 `sys_public_counter_day`。只读查询：`SELECT day, sum(hits) FROM sys_public_counter_day WHERE counter_name = 'qb.shorts-open' GROUP BY day ORDER BY day DESC`。发起方经 `me:PublicCounterDay` 只看到自己发布的数字；显示页面随 F-S13（推送与曝光的计数）一起做。
+- **"短视频不出现"的排查**：
+  1. 发布卡片的"竖屏视频"是否为是（平台管理系统的发布卡片；审核页的"竖屏"提示）。不是：卡片视频不是 Shorts 链接也没有勾选，或者"看完即可答题"的视频是另一个横屏视频。
+  2. 学者在首页能否看到这张卡（短视频与首页同样的条件）；看不到就按首页的排查（地区、客户匹配、中国大陆 §7.24 等）。
+  3. 参数 `qb.feed.shorts.positions` 是否为空或位置太靠后（卡片不够且还有下一页时，那一排要等滚到那里才出现）。
+  4. 全屏模式中只有一个播放器：YouTube、Vimeo 由 App 的播放器播放并可以开声音；其他网站点播放器本身开声音（A3-18）。系统设为"减少动态效果"时不自动播放，要点"播放"。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

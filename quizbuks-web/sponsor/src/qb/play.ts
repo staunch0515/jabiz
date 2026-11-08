@@ -68,6 +68,8 @@ export interface FeedCard {
   /** Q75: whether that video must be watched before starting (D-Q75-4), and how long it is (seconds; null unknown). */
   watchRequired?: boolean
   videoDurationSec?: number | null
+  /** F-S10: that video is vertical (a YouTube Shorts link, or marked so): the home's shelf of shorts shows it. */
+  videoVertical?: boolean
   kind: QuizKind
   /** The language the quiz is written in (Q59a); a preview's card has none. */
   language?: string | null
@@ -129,13 +131,16 @@ export interface FeedRequest {
   languages?: readonly string[]
   /** F-S11: the browser's address is in mainland China (`useMainlandChina`): publications it cannot answer are left out. */
   mainlandChina?: boolean
+  /** F-S10: only the publications whose video is vertical (the home's shelf of shorts). */
+  shorts?: boolean
   sort?: FeedSort
   filters?: Filter[]
   offset?: number
   limit?: number
 }
 
-function feedCard(row: Record<string, unknown>): FeedCard {
+/** A card of a row of the feed's template. */
+export function feedCard(row: Record<string, unknown>): FeedCard {
   return {
     publicationId: String(row.publicationId),
     name: String(row.name ?? ''),
@@ -144,6 +149,7 @@ function feedCard(row: Record<string, unknown>): FeedCard {
     video: trustedPlayer(textOrNull(row.video)),
     watchRequired: row.watchRequired === true || row.watchRequired === 'true',
     videoDurationSec: row.videoDurationSec == null ? null : numberOf(row.videoDurationSec),
+    videoVertical: row.videoVertical === true || row.videoVertical === 'true',
     kind: kindOf(row.kind),
     language: textOrNull(row.language),
     maxReward: row.maxReward,
@@ -187,7 +193,7 @@ export async function readFeed(request: FeedRequest): Promise<QueryPage<FeedCard
     params: { at: request.at, country: request.country, q: request.q?.trim() || null,
       method: request.method ?? null, includeAnswered: request.includeAnswered ?? false,
       languages: request.languages && request.languages.length > 0 ? request.languages.join(',') : null,
-      mainlandChina: request.mainlandChina ?? false },
+      mainlandChina: request.mainlandChina ?? false, ...(request.shorts ? { shorts: true } : {}) },
     filters: request.filters,
     sorts: request.sort ? [FEED_SORTS[request.sort]] : undefined,
     offset: request.offset,
