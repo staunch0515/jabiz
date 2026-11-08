@@ -781,7 +781,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   6. 要用签名地址时，签名的有效期要长于发布的期间：地址随版本冻结，过期即打不开（App 改为封面与链接）。
 - **中国大陆**：程序只保证**不拦截**这些视频；能不能看到、多久开始播放取决于服务器与线路（海外机房或 Cloudflare 在中国大陆可能很慢或打不开）。要让中国大陆的学者能答含这类视频的发布：
   1. 确认服务器从中国大陆能访问（上线检查清单"从中国大陆访问"一行，含开始播放的等待时间）；
-  2. 总部经受控变更（四眼，`CONTROL_CHANGE_PROPOSE` / `_PUBLISH`）把主机名加进 `qb.video.mainland-accessible-sites`（如 `bilibili,youku,tencent,videos.quizbuks.com`；主机名小写、不带协议与路径；参数总长 200 字）。之后上线或切换版本的发布按新值冻结，**已上线的卡片不变**（要变就切换版本）；
+  2. 总部经受控变更（四眼，`CONTROL_CHANGE_PROPOSE` / `_PUBLISH`）把主机名加进 `qb.video.mainland-accessible-sites`（如 `bilibili,youku,tencent,videos.quizbuks.com`；主机名小写、不带协议与路径）。**参数值至多 200 个字符**（参数定义 `maxLength` 200，已有安装的定义不随代码改变），只够登记几个主机：主机多了先合并到少数几个域名。之后上线或切换版本的发布按新值冻结，**已上线的卡片不变**（要变就切换版本）；
   3. 只对个别发布或发起方放行时，用 §7.24 的例外（总部或运营商设）。
 - **审核**：审核页对所审的版本标出"非已知网站的嵌入页"并逐个列出地址：嵌入页的内容由对方网站控制，审核人照内容标准检查；上线后内容被改，照常经举报下架（Q10b）。
 - **安全**：学者 App 与发起方页面的内容安全策略是 `frame-src https:`、`media-src 'self' https:`（`application.yml`，`QuizbuksAppIT` 检查）；其他网页的 iframe 有固定的沙箱与 `referrerpolicy="no-referrer"`。不要为某个网站放宽沙箱。

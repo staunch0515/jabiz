@@ -1,87 +1,77 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import type { APIRequestContext, Page } from '@playwright/test'
 import { adminToken, expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 import { fundedSponsor, searchHome, taker, untilLive } from './play'
 
 /*
- * F-S15 (docs/quizbuks/plans/impl/F-S15.md): a video file on any https address. A sponsor enters a .mp4 address; the
- * console's preview reads its length (and only then it can be the video to watch); once the publication is live, the
- * taker's home plays it on the card in the app's one player, muted and by itself, and the start page waits for the
- * watching before the start.
+ * F-S15 (docs/quizbuks/plans/impl/F-S15.md): a video file on any https address. A sponsor enters the file's address;
+ * the console's preview loads it and reads its length (only then it can be the video to watch); once the publication
+ * is live, the taker's home plays it on the card in the app's one player, muted and by itself, and the start page waits
+ * for the watching before the start. A file that does not open falls back to the cover and a link.
  *
- * The test reaches no video server and plays no real media (the open-source Chromium has no H.264): the file's
- * request is answered by the test, and an init script stands in for the browser's media playback — a `<video>` with
- * this address "loads" a ten-second video and, once played, reports its time like a browser does, to its end.
+ * The file is a real ten-second video (VP8 + Opus, `media/quizbuks-demo-10s.webm`): Playwright's open-source Chromium
+ * has no H.264, so the test plays WebM; recognising `.mp4` is the unit tests' (VideoEmbedsTest, qb/video.test.ts). The
+ * address is answered by the test (no video server is reached), the missing one with a 404.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-const FILE = 'https://videos.e2e.quizbuks.test/quizbuks-demo-10s.mp4'
+const FILE = 'https://videos.e2e.quizbuks.test/quizbuks-demo-10s.webm'
+const MISSING = 'https://videos.e2e.quizbuks.test/missing.webm'
+const VIDEO = readFileSync(fileURLToPath(new URL('./media/quizbuks-demo-10s.webm', import.meta.url)))
 
-/** Stands in for media playback of the test's file only: metadata, then time updates while playing, then its end. */
-function fakeMedia(file: string) {
-  const proto = HTMLMediaElement.prototype
-  const times = new WeakMap<HTMLMediaElement, number>()
-  const timers = new WeakMap<HTMLMediaElement, ReturnType<typeof setInterval>>()
-  const ours = (media: HTMLMediaElement) => media.currentSrc === file || media.getAttribute('src') === file
-  const durationOf = Object.getOwnPropertyDescriptor(proto, 'duration')!
-  const timeOf = Object.getOwnPropertyDescriptor(proto, 'currentTime')!
-  const pausedOf = Object.getOwnPropertyDescriptor(proto, 'paused')!
-  const readyOf = Object.getOwnPropertyDescriptor(proto, 'readyState')!
-  const play = proto.play
-  const pause = proto.pause
-  const playing = new WeakSet<HTMLMediaElement>()
-  Object.defineProperty(proto, 'duration', { configurable: true,
-    get() { return ours(this) ? 10 : durationOf.get!.call(this) } })
-  Object.defineProperty(proto, 'readyState', { configurable: true,
-    get() { return ours(this) ? 4 : readyOf.get!.call(this) } })
-  Object.defineProperty(proto, 'currentTime', { configurable: true,
-    get() { return ours(this) ? times.get(this) ?? 0 : timeOf.get!.call(this) },
-    set(value: number) { if (ours(this)) times.set(this, value); else timeOf.set!.call(this, value) } })
-  Object.defineProperty(proto, 'paused', { configurable: true,
-    get() { return ours(this) ? !playing.has(this) : pausedOf.get!.call(this) } })
-  proto.play = function (this: HTMLMediaElement) {
-    if (!ours(this)) return play.call(this)
-    if (!playing.has(this)) {
-      playing.add(this)
-      this.dispatchEvent(new Event('play'))
-      timers.set(this, setInterval(() => {
-        const next = Math.min(10, (times.get(this) ?? 0) + 0.5)
-        times.set(this, next)
-        this.dispatchEvent(new Event('timeupdate'))
-        if (next >= 10) {
-          clearInterval(timers.get(this))
-          playing.delete(this)
-          this.dispatchEvent(new Event('ended'))
-        }
-      }, 500))
+/** The video server: the file, with byte ranges as a real one answers them (browsers ask for ranges of media). */
+async function videoServer(page: Page) {
+  await page.route(FILE, (route) => {
+    const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '')
+    if (!range) {
+      return route.fulfill({ status: 200, contentType: 'video/webm', body: VIDEO,
+        headers: { 'Accept-Ranges': 'bytes' } })
     }
-    return Promise.resolve()
+    const from = Number(range[1])
+    const to = range[2] ? Math.min(Number(range[2]), VIDEO.length - 1) : VIDEO.length - 1
+    return route.fulfill({ status: 206, contentType: 'video/webm', body: VIDEO.subarray(from, to + 1),
+      headers: { 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${from}-${to}/${VIDEO.length}` } })
+  })
+  await page.route(MISSING, (route) => route.fulfill({ status: 404, contentType: 'text/plain', body: 'Not found' }))
+}
+
+/** A live publication of the sponsor's whose quiz has a video link of `url` (to watch first when `watch`). */
+async function livePublication(request: APIRequestContext, sponsor: { token: string; balance: number }, url: string,
+  durationSec: number | null, watch: boolean) {
+  const quiz = await run(request, sponsor.token, 'QB_QUIZ_SAVE', { title: unique('Video file quiz '), timeLimitSec: 300 })
+  const quizId = quiz.quizId as string
+  await run(request, sponsor.token, 'QB_MATERIAL_SAVE', { quizId, kind: 'VIDEO_LINK', title: 'Watch this first', url,
+    watchToAnswer: watch, durationSec })
+  return publish(request, sponsor, quizId)
+}
+
+async function publish(request: APIRequestContext, sponsor: { token: string; balance: number }, quizId: string) {
+  await run(request, sponsor.token, 'QB_QUESTION_SAVE', { quizId, stem: 'What did the video show?', points: 1,
+    options: [{ text: 'A demo', correct: true }, { text: 'A map' }] })
+  const version = await run(request, sponsor.token, 'QB_QUIZ_PUBLISH_VERSION', { quizId })
+  const name = unique('Video file run ')
+  const now = Date.now()
+  const saved = await run(request, sponsor.token, 'QB_PUBLICATION_SAVE', {
+    versionId: version.versionId, name, regions: ['GLOBAL'],
+    startAt: new Date(now - 60_000).toISOString(), endAt: new Date(now + 7 * 86_400_000).toISOString(),
+    timeLimitSec: 300, passScore: 1, tiers: [{ fromScore: 0, toScore: 0, reward: 0 },
+      { fromScore: 1, toScore: 1, reward: Math.floor(sponsor.balance / 4) }],
+  })
+  const publicationId = saved.publicationId as string
+  const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
+  if (submitted.approval === 'PENDING') {
+    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+      decision: 'APPROVE' })
   }
-  proto.pause = function (this: HTMLMediaElement) {
-    if (!ours(this)) return pause.call(this)
-    clearInterval(timers.get(this))
-    if (playing.delete(this)) this.dispatchEvent(new Event('pause'))
-  }
-  // A `<video>` given the address: its metadata, then (autoplay) it plays.
-  new MutationObserver((records) => {
-    for (const record of records) {
-      for (const node of [...record.addedNodes, record.target]) {
-        if (!(node instanceof HTMLVideoElement) || !ours(node) || node.dataset.fake) continue
-        node.dataset.fake = 'yes'
-        setTimeout(() => {
-          node.dispatchEvent(new Event('loadedmetadata'))
-          node.dispatchEvent(new Event('durationchange'))
-          if (node.autoplay) void node.play()
-        }, 100)
-      }
-    }
-  }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] })
+  return { publicationId, name }
 }
 
 test('a video file plays muted on the home and is the video to watch before the start', async ({ page, request }) => {
   test.setTimeout(180_000)
-  await page.addInitScript(fakeMedia, FILE)
-  await page.route(FILE, (route) => route.fulfill({ status: 200, contentType: 'video/mp4', body: Buffer.alloc(16) }))
+  await videoServer(page)
   const sponsor = await fundedSponsor(request)
   const quiz = await run(request, sponsor.token, 'QB_QUIZ_SAVE', { title: unique('Video file quiz '), timeLimitSec: 300 })
   const quizId = quiz.quizId as string
@@ -104,23 +94,7 @@ test('a video file plays muted on the home and is the video to watch before the 
   await dialog.getByTestId('material-save').click()
   await expect(page.getByTestId('material-watch-badge')).toBeVisible()
 
-  await run(request, sponsor.token, 'QB_QUESTION_SAVE', { quizId, stem: 'What did the video show?', points: 1,
-    options: [{ text: 'A demo', correct: true }, { text: 'A map' }] })
-  const version = await run(request, sponsor.token, 'QB_QUIZ_PUBLISH_VERSION', { quizId })
-  const name = unique('Video file run ')
-  const now = Date.now()
-  const saved = await run(request, sponsor.token, 'QB_PUBLICATION_SAVE', {
-    versionId: version.versionId, name, regions: ['GLOBAL'],
-    startAt: new Date(now - 60_000).toISOString(), endAt: new Date(now + 7 * 86_400_000).toISOString(),
-    timeLimitSec: 300, passScore: 1, tiers: [{ fromScore: 0, toScore: 0, reward: 0 },
-      { fromScore: 1, toScore: 1, reward: sponsor.balance }],
-  })
-  const publicationId = saved.publicationId as string
-  const submitted = await run(request, sponsor.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
-  if (submitted.approval === 'PENDING') {
-    await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
-      decision: 'APPROVE' })
-  }
+  const { publicationId, name } = await publish(request, sponsor, quizId)
   const me = await taker(request, 'Vid')
   await untilLive(request, me.token, publicationId)
 
@@ -139,15 +113,42 @@ test('a video file plays muted on the home and is the video to watch before the 
   expect(await video.evaluate((element: HTMLVideoElement) => element.muted && element.autoplay)).toBe(true)
   await expect(page.locator('iframe[src*="quizbuks-demo"]')).toHaveCount(0)
   await expectAccessible(page, 'app home video file')
-  // A tap opens the start page with the same player; the start waits for the watching it reports.
+  // It really plays: its time goes on.
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.currentTime)).toBeGreaterThan(0.5)
+  // A tap opens the start page with the same player (its sound on); the start waits for the watching it reports.
   await page.getByTestId('video-open').click()
   await expect(page).toHaveURL(/\/p\/[^/]+$/)
   await expect(page.getByTestId('detail-hero').getByTestId('video-slot')).toHaveAttribute('data-mode', 'page')
   await expect(page.getByTestId('detail-watch')).toBeVisible()
+  expect(await video.evaluate((element: HTMLVideoElement) => element.controls)).toBe(true)
+  // The home's muted playing did not count: the taker watches it from the start with the player's own controls.
+  await video.evaluate((element: HTMLVideoElement) => { element.currentTime = 0; void element.play() })
   await expect(page.getByTestId('detail-start')).toBeEnabled({ timeout: 30_000 })
   await expect(page.getByTestId('detail-watch')).toHaveText('Video watched: you can start.')
   await expectAccessible(page, 'app start page with its video file')
   await page.getByTestId('detail-start').click()
   await expect(page).toHaveURL(/\/play\/[^/]+$/)
   await expect(page.getByTestId('play-question')).toContainText('What did the video show?')
+})
+
+test('a video file that does not open falls back to its cover and a link', async ({ page, request }) => {
+  test.setTimeout(120_000)
+  await videoServer(page)
+  const sponsor = await fundedSponsor(request)
+  const { publicationId, name } = await livePublication(request, sponsor, MISSING, null, false)
+  const me = await taker(request, 'Vix')
+  await untilLive(request, me.token, publicationId)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await signIn(page, '/taker/', me.email)
+  await expect(page.getByTestId('home')).toBeVisible()
+  await searchHome(page, name)
+  const card = page.getByTestId('feed-card').filter({ hasText: name })
+  await card.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+  // The player fails: the card shows its cover again, and a link to the file.
+  const link = card.getByTestId('feed-card-open-video')
+  await expect(link).toHaveAttribute('href', MISSING)
+  await expect(link).toHaveAttribute('target', '_blank')
+  await expect(card).not.toHaveAttribute('data-video', 'true')
+  await expect(page.getByTestId('video-stage-file')).toHaveCount(0)
+  await expectAccessible(page, 'app home video file that does not open')
 })

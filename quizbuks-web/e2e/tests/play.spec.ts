@@ -41,8 +41,9 @@ async function seedPublication(request: APIRequestContext, timeLimitSec: number)
   const quizId = quiz.quizId as string
   await run(request, sponsor.token, 'QB_MATERIAL_SAVE', { quizId, kind: 'ARTICLE', title: 'Read first',
     body: 'Paris is **the capital** of France.' })
+  // F-S15: any https page is embedded as a video; one not on https stays a link that opens in a new tab.
   await run(request, sponsor.token, 'QB_MATERIAL_SAVE', { quizId, kind: 'VIDEO_LINK', title: 'A tour',
-    url: 'https://video.example.com/tour' })
+    url: 'http://video.example.com/tour' })
   await run(request, sponsor.token, 'QB_QUESTION_SAVE', { quizId, stem: 'Capital of France?', points: 1,
     options: [{ text: 'Paris', correct: true }, { text: 'Lyon' }] })
   await run(request, sponsor.token, 'QB_QUESTION_SAVE', { quizId, stem: 'Capital of Japan?', points: 1,
