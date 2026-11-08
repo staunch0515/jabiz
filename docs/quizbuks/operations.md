@@ -622,7 +622,7 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
 
 - **开关是受控参数** `qb.play.entry-fee.enabled`（缺省 `false`，`QB_SETUP` 提出，另一位管理员发布）。它只管**能不能设**：关着时保存带报名费的草稿被拒（`QB_ENTRY_FEE_OFF`），已上架的照收（要停就由运营商下架或发起方结束）。问卷不能设（`QB_ENTRY_FEE_NOT_ALLOWED`），店面的发布没有报名费。
 - **部署后**：运行一次 `QB_SETUP`（开出科目 2170、提出参数 `qb.play.entry-fee.enabled` 与科目映射 `qb.journal.account.2170`）并发布提案；**上线前给 2170 配好会计科目代码**（`JournalMappingCheck` 否则告警，分录导出拒绝未映射的科目）。
-- **任务** `qb.entry-fee-settle`：每天 18:07 UTC（03:07 日本），每个 2170 有余额的发起方一个事务（发起方钱包锁内 2170 → 2160 并更新现金缓存）；`quizbuks.entry-fee.settle-cron`（`QB_ENTRY_FEE_SETTLE_CRON`）只给 e2e 改。失败的发起方下次照常入账（按余额，不按日期）。
+- **任务** `qb.entry-fee-settle`：每天 18:07 UTC（03:07 日本），每个 2170 有余额的发起方一个事务（发起方钱包锁内 2170 → 2160 并更新现金缓存）；`quizbuks.entry-fee.settle-cron`（`QB_ENTRY_FEE_SETTLE_CRON`）一般不改（e2e 也不改：测试以补跑 `POST /api/jobs/qb.entry-fee-settle/runs` 当即入账，F-F13）。失败的发起方下次照常入账（按余额，不按日期）。
 - **核对**：每日核对多一项 `ENTRY_FEES_UNSETTLED`（2170 按发起方不为负）；2120 = 学者缓存、2160 = 现金缓存照旧。月报多两类 `ENTRY_FEE`（付报名费）与 `ENTRY_FEE_SETTLED`（入账）；财务总览的"钱包"一节多"报名费待入账（2170）"。
 - **答题路径**：只有收报名费的开始多取用户的钱包锁（在开始锁之前）、多读钱包行与可转出额、多一笔分录；普通的开始一条语句也不多（`AttemptStatementBudgetIT`）。
 - **争议**：报名费不退（超时、放弃、下架都不退）；学者投诉时由运营商以手工加币处理。报名费不是平台收入，不进月结算与运营商分成。
