@@ -12,12 +12,23 @@
 # Settings (environment): GRAFANA_URL (http://localhost:3000), GRAFANA_USER and GRAFANA_PASSWORD (required),
 # OTLP_URL (http://localhost:4318), JABIZ_ALERT_SERVICE (jabiz), JABIZ_ALERT_DISK_PERCENT (80), WAIT_SECONDS (300).
 # Made-up series carry the instance "alert-test" and names "alert-test"; rules over an hour clear within the hour.
+#
+# An application's own rules (its file beside the platform's, rendered into the folder named after the file):
+# ALERT_FOLDERS lists the folders `rules` and `fire` cover (space-separated, default "jabiz"), and ALERT_FAKES names
+# the application's file of made-up data for its rules, one line per series (blank lines and # comments ignored):
+#   <uid> timer <metric> <count> [key=value...]         a timer growing by <count> (Micrometer's histogram, ms)
+#   <uid> gauge <metric> <unit or -> <value> [key=value...]
+#   <uid> log <message...>                               an ERROR log line
+#   <uid> skip <reason...>                               cannot be faked; the reason is printed
+# A rule with several lines gets all of them. Values must not contain spaces or quotes.
 set -euo pipefail
 
 GRAFANA_URL=${GRAFANA_URL:-http://localhost:3000}
 OTLP_URL=${OTLP_URL:-http://localhost:4318}
 SERVICE=${JABIZ_ALERT_SERVICE:-jabiz}
 DISK_PERCENT=${JABIZ_ALERT_DISK_PERCENT:-80}
+FOLDERS=${ALERT_FOLDERS:-jabiz}
+FAKES=${ALERT_FAKES:-}
 WAIT_SECONDS=${WAIT_SECONDS:-300}
 
 die() { echo "alert-fire-test: $*" >&2; exit 1; }
@@ -27,23 +38,24 @@ grafana() {
   curl -fsS -u "$GRAFANA_USER:$GRAFANA_PASSWORD" -H 'Content-Type: application/json' "$@"
 }
 
-# Prints "uid state health" for every rule of the jabiz folder.
+# Prints "uid state health" for every rule of the folders in ALERT_FOLDERS.
 rule_states() {
   grafana "$GRAFANA_URL/api/prometheus/grafana/api/v1/rules" | python3 -c '
 import json, sys
+folders = sys.argv[1].split()
 for group in json.load(sys.stdin)["data"]["groups"]:
-    if group.get("file") != "jabiz":
+    if group.get("file") not in folders:
         continue
     for rule in group["rules"]:
         labels = rule.get("labels") or {}
         print(rule.get("uid", labels.get("__alert_rule_uid__", "?")), rule["state"], rule["health"])
-'
+' "$FOLDERS"
 }
 
 cmd_rules() {
   local states
   states=$(rule_states)
-  [[ -n "$states" ]] || die "no rules in the folder jabiz: is docker/grafana/alerting mounted?"
+  [[ -n "$states" ]] || die "no rules in the folder(s) $FOLDERS: is docker/grafana/alerting mounted?"
   echo "$states"
   if awk '$3 != "ok" { bad = 1 } END { exit !bad }' <<<"$states"; then
     die "some rules do not evaluate (health is not ok)"
@@ -137,12 +149,36 @@ fake() {  # uid
     jabiz-refresh-reuse-revoked) push_timer jabiz.auth.refresh.reuse 200 result=revoked outcome=success status=none ;;
     jabiz-geoip-stale) push_gauge jabiz.geoip.stale "" 1 ;;
     jabiz-geoip-empty) push_gauge jabiz.geoip.ranges "" 0 ;;
+    jabiz-keys-undeclared-sealed) push_gauge jabiz.keys.undeclared-sealed "" 1 ;;
     jabiz-disk-usage)
       push_gauge disk.free bytes 1 path=/alert-test
       push_gauge disk.total bytes 100 path=/alert-test ;;
     jabiz-metrics-absent) echo "  $1: cannot be faked; stop the application for 5 minutes instead" >&2; return 1 ;;
-    *) die "unknown rule $1" ;;
+    *) fake_from_file "$1" ;;
   esac
+}
+
+# The application's made-up data for a rule (ALERT_FAKES); dies when the rule has none.
+fake_from_file() {  # uid
+  local uid=$1 found=false skipped=false line rule kind rest
+  [[ -n "$FAKES" ]] || die "unknown rule $uid (an application's rules need ALERT_FAKES)"
+  [[ -r "$FAKES" ]] || die "cannot read ALERT_FAKES $FAKES"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "${line// }" || "$line" == \#* ]] && continue
+    read -r rule kind rest <<<"$line"
+    [[ "$rule" == "$uid" ]] || continue
+    found=true
+    # shellcheck disable=SC2086 # the fields of the line, as written
+    case $kind in
+      timer) push_timer $rest ;;
+      gauge) set -- $rest; local name=$1 unit=$2; shift 2; [[ "$unit" == - ]] && unit=""; push_gauge "$name" "$unit" "$@" ;;
+      log) push_log "$rest" ;;
+      skip) echo "  $uid: cannot be faked: $rest" >&2; skipped=true ;;
+      *) die "ALERT_FAKES: unknown kind '$kind' for $uid (timer, gauge, log or skip)" ;;
+    esac
+  done <"$FAKES"
+  $found || die "unknown rule $uid (not in ALERT_FAKES $FAKES)"
+  ! $skipped
 }
 
 # Waits until every given rule is pending or firing.
