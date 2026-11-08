@@ -36,8 +36,8 @@ import java.util.Set;
 
 /**
  * Runs the applications' {@link SignInGuard}s (docs/design/10-security.md section 15; decision D36 item 6): reads the
- * data they declare (rows of a dataset whose user field is the user, at most {@link SignInGuard#MAX_ROWS} each),
- * then asks every guard. All must allow; a guard that throws, or data that cannot be read, refuses (fail closed).
+ * data they declare (rows of a dataset whose user field is the user, at most {@link SignInGuard#MAX_ROWS} each) and
+ * the business parameters ({@link GuardParams}, decision D79), then asks every guard. All must allow; a guard that throws, or data that cannot be read, refuses (fail closed).
  * Used by the sign-in processes ({@link SignInGuardStep}) and by the refresh ({@link RbacService}).
  *
  * <p>The user id is given to the query as text and converted to the type of the load's field like every other compared
@@ -68,10 +68,11 @@ public class SignInGuards implements PlatformCheck {
     private final DatasetRegistry datasets;
     private final EntityDefinitionRegistry definitions;
     private final QueryCompiler compiler;
+    private final GuardParams params;
 
     public SignInGuards(ObjectProvider<SignInGuard> guards, ObjectProvider<EntryScopeResolver> resolvers,
         SignInEntries entries, DatasetEntityManager entities, DatasetRegistry datasets,
-        EntityDefinitionRegistry definitions, QueryCompiler compiler) {
+        EntityDefinitionRegistry definitions, QueryCompiler compiler, GuardParams params) {
         this.guards = guards.orderedStream().toList();
         this.resolvers = resolvers.orderedStream().toList();
         this.resolvers.forEach(resolver -> byEntry.putIfAbsent(resolver.entry(), resolver));
@@ -82,6 +83,7 @@ public class SignInGuards implements PlatformCheck {
         this.datasets = datasets;
         this.definitions = definitions;
         this.compiler = compiler;
+        this.params = params;
     }
 
     /** Whether any application declares a guard or an entry scope. */
@@ -105,15 +107,19 @@ public class SignInGuards implements PlatformCheck {
         if (guards.isEmpty() && resolver == null) {
             return Mono.just(SignInDecision.ALLOW);
         }
-        return Mono.defer(() -> load(userId, resolver))
-            .map(data -> {
+        // One read after the other: inside a process both go through the same transaction.
+        return Mono.defer(() -> load(userId, resolver)
+                .flatMap(data -> params.read(GuardParams.merge(guards.stream().map(SignInGuard::params).toList()), time)
+                    .map(values -> reactor.util.function.Tuples.of(data, values))))
+            .map(read -> {
                 SignInAttempt attempt = new SignInAttempt(userId, userName, entry, roles, emailVerified, factor, time,
-                    data);
+                    read.getT1(), read.getT2());
                 SignInDecision decision = decide(attempt);
                 return decision.allowed() && resolver != null ? scope(resolver, attempt) : decision;
             })
             .onErrorResume(e -> {
-                log.warn("Sign-in guard data of user {} could not be read; refusing: {}", userId, e.toString());
+                log.warn("Sign-in guard data or parameters of user {} could not be read; refusing: {}", userId,
+                    e.toString());
                 return Mono.just(SignInDecision.refuse(UNDECIDED));
             });
     }
@@ -252,6 +258,16 @@ public class SignInGuards implements PlatformCheck {
                 continue;
             }
             problems.addAll(loadProblems(location, loads, seen));
+        }
+        Map<String, com.jabiz.security.GuardParam> seenParams = new LinkedHashMap<>();
+        for (SignInGuard guard : guards) {
+            String location = "SignInGuard " + guard.getClass().getName();
+            try {
+                problems.addAll(GuardParams.problems(location, guard.params(), seenParams));
+            } catch (RuntimeException e) {
+                problems.add(CheckProblem.error(SessionChecks.CATEGORY, location, "params() failed: "
+                    + e.getMessage()));
+            }
         }
         return problems;
     }
