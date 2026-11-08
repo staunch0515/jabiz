@@ -74,8 +74,8 @@ public final class PlatformArchRules {
 
     /** The platform's own classes that talk to the database outside every transaction. */
     static final List<String> OUTSIDE_TRANSACTIONS = List.of(
-        // The startup check of the metamodel.
-        "com.jabiz.runtime.entity.MetaModelConsistencyChecker",
+        // The startup checks of the metamodel and of the guards' loads' indexes (decision D80).
+        "com.jabiz.runtime.entity.MetaModelConsistencyChecker", "com.jabiz.runtime.security.GuardLoadIndexCheck",
         // The default ProcessSequence and its configuration: the platform numbers operations by the insert of their
         // record, so it never asks it inside a transaction; an application that replaces it is asked instead.
         "com.jabiz.runtime.process.DatabaseProcessSequence", "com.jabiz.runtime.process.ProcessConfig",

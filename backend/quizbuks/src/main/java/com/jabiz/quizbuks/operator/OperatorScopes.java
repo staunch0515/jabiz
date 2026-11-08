@@ -71,6 +71,8 @@ public final class OperatorScopes {
         // F-S11 (the requester, 2026-11-07): the exceptions for foreign videos, by the sponsor whose publications they
         // cover (a publication's: its publisher).
         fields.put(com.jabiz.quizbuks.region.QbRegion.EXCEPTION, "ownerId");
+        // F-S12: the videos a sponsor shares, by their provider.
+        fields.put(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.VIDEO, "providerId");
         // Q89: a benefit by its provider; the conversations and purchases by the sponsor that buys (the provider's
         // operator reads its side through its own datasets, Q89d).
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.OFFER, "providerId");

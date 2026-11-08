@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -397,9 +398,18 @@ final class PublicationEditing {
      * storefront starts are not the App's).
      */
     static boolean foreignVideo(ProcessContext ctx, QuizSnapshot snapshot) {
+        return foreignVideo(ctx, snapshot, null);
+    }
+
+    /** F-S12: and the publication's shared video, whose link counts as any of its version's. */
+    static boolean foreignVideo(ProcessContext ctx, QuizSnapshot snapshot, PublicationSharedVideos.Frozen shared) {
         ParamValues params = ctx.contains(VIDEO_SITES) ? ctx.get(VIDEO_SITES, ParamValues.class) : null;
         String sites = params == null ? null : params.find(QbParams.VIDEO_MAINLAND_SITES, String.class).orElse(null);
-        return ForeignVideos.foreign(snapshot, ForeignVideos.sites(sites));
+        List<String> links = new java.util.ArrayList<>(snapshot == null ? List.of() : ForeignVideos.videoLinks(snapshot));
+        if (shared != null) {
+            links.add(shared.url());
+        }
+        return ForeignVideos.foreign(links, ForeignVideos.sites(sites));
     }
 
     /** Loads the version {@code versionId} names (none when it names none) and, for a sponsor, its quiz. */
@@ -659,9 +669,14 @@ final class PublicationEditing {
         card.put("languages", String.join(",", offered));
         card.put("translations", PublicationLanguages.cardJson(publication.get("translations"), snapshot, offered,
             String.valueOf((Object) version.get("language"))));
-        cardVideo(snapshot.materials()).writeTo(card);
-        // F-S11: whether mainland China may answer it (its version's videos, every language), frozen with it.
-        card.put("foreignVideo", foreignVideo(ctx, snapshot));
+        // F-S12: the shared video it picked, frozen with it (the card's video unless one must be watched) and its
+        // provider.
+        PublicationSharedVideos.Frozen shared = PublicationSharedVideos.frozen(ctx, publication);
+        cardVideo(snapshot.materials(), shared).writeTo(card);
+        PublicationSharedVideos.writeTo(card, shared);
+        // F-S11: whether mainland China may answer it (its version's videos, every language, and the shared one),
+        // frozen with it.
+        card.put("foreignVideo", foreignVideo(ctx, snapshot, shared));
         // F-S9: its version's topics with its own changes, frozen with it.
         PublicationTopics.writeTo(card, publication, version);
         card.put("wentOnAt", ctx.opTime());
@@ -685,18 +700,43 @@ final class PublicationEditing {
 
     /**
      * The video on the publication's card (Q19, Q63): the one watching which is enough to answer, else the first
-     * material's video the App plays (any site of {@link VideoEmbeds}; Q99), so that the taker learns from it before answering; else none.
+     * material's video the App plays (any site of {@link VideoEmbeds}; Q99; F-S15: a video file before a page of another
+     * site), so that the taker learns from it before answering; else none.
      */
     static CardVideo cardVideo(List<QuizSnapshot.Material> materials) {
-        return materials.stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
+        return cardVideo(materials, null);
+    }
+
+    /**
+     * F-S12: with the publication's shared video, which takes the card's video unless a material's video must be
+     * watched before answering (Q75, kept as before: the shared one is then only counted as foreign). Its player is any
+     * {@link VideoEmbeds#player} gives (F-S15: a site's, a video file's or another page's; it was reviewed and the
+     * sponsor picked it, so it comes before the materials' whatever its kind). Vertical as the provider shared it (or a
+     * YouTube Shorts link, F-S10); never one to watch.
+     */
+    static CardVideo cardVideo(List<QuizSnapshot.Material> materials, PublicationSharedVideos.Frozen shared) {
+        Optional<CardVideo> watched = materials.stream().filter(QuizSnapshot.Material::watchToAnswer).findFirst()
             .flatMap(material -> VideoEmbeds.trackablePlayer(material.url())
-                .map(player -> new CardVideo(player, true, material.durationSec(), vertical(material))))
-            .or(() -> materials.stream()
-                .filter(material -> "VIDEO_LINK".equals(material.kind()) && material.url() != null)
-                .flatMap(material -> VideoEmbeds.player(material.url()).stream()
-                    .map(player -> new CardVideo(player, false, null, vertical(material))))
-                .findFirst())
+                .map(player -> new CardVideo(player, true, material.durationSec(), vertical(material))));
+        if (watched.isEmpty() && shared != null) {
+            Optional<String> player = VideoEmbeds.player(shared.url());
+            if (player.isPresent()) {
+                return new CardVideo(player.get(), false, null,
+                    com.jabiz.quizbuks.sharedvideo.SharedVideoRules.vertical(shared.vertical(), shared.url()));
+            }
+        }
+        // F-S15: a page framed from another site comes last: it may refuse to be framed, which the App cannot tell.
+        return watched.or(() -> firstVideo(materials, false)).or(() -> firstVideo(materials, true))
             .orElse(CardVideo.NONE);
+    }
+
+    private static Optional<CardVideo> firstVideo(List<QuizSnapshot.Material> materials, boolean pages) {
+        return materials.stream()
+            .filter(material -> "VIDEO_LINK".equals(material.kind()) && material.url() != null)
+            .flatMap(material -> VideoEmbeds.player(material.url()).stream()
+                .filter(player -> VideoEmbeds.kind(player).filter(VideoEmbeds.Kind.PAGE::equals).isPresent() == pages)
+                .map(player -> new CardVideo(player, false, null, vertical(material))))
+            .findFirst();
     }
 
     /** F-S10: whether a material's video is vertical: a YouTube Shorts link, or marked so by the sponsor. */
@@ -842,6 +882,11 @@ final class PublicationEditing {
         if (publication.get("treeNodeId") != null) {
             content.put("treeId", publication.get("treeId"));
             content.put("treeNodeId", publication.get("treeNodeId"));
+        }
+        // F-S12: the shared video it picked (reviewed once on its own: the reviewer approves its use here), named only
+        // when there is one, so earlier hashes stand.
+        if (publication.get("sharedVideoId") != null) {
+            content.put("sharedVideoId", String.valueOf((Object) publication.get("sharedVideoId")));
         }
         return ApprovalCase.of(publication.id(), facts, content).reference(publication.get("name"));
     }

@@ -11,6 +11,7 @@ import { Link } from '../router'
 import { LazyImage } from './LazyImage'
 import { QBVIEW } from './messages'
 import { VideoPlayer } from './VideoPlayer'
+import { useVideoFailed } from '../videoFailures'
 
 /** The icon of each way a reward is paid (Q34): on the cards, the quiz's page and the home's reward menu. */
 export const REWARD_METHOD_ICONS: Record<RewardMethod, LucideIcon> = {
@@ -58,6 +59,8 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen 
   const { t } = useTranslation(QBVIEW)
   const sponsor = card.sponsorCompany ?? card.sponsorName
   const MethodIcon = REWARD_METHOD_ICONS[card.rewardMethod]
+  // F-S15: a video file that failed to play: the cover, and a link to the file.
+  const failed = useVideoFailed(card.video)
   const picture = (
     <span className="group bg-muted relative block aspect-video overflow-hidden">
       {card.cover
@@ -78,7 +81,7 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen 
             data-testid="feed-card-survey">{t('feed.survey')}</span>
         )}
       </span>
-      {card.video && (
+      {card.video && !failed && (
         <span className="absolute inset-0 flex items-center justify-center" data-testid="feed-card-video-mark">
           <span className="bg-background/85 text-foreground flex size-12 items-center justify-center rounded-full shadow-md">
             <Play aria-hidden className="ml-0.5 size-6" />
@@ -98,7 +101,7 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen 
     </span>
   // Q99b: every site's video plays on the home the same way; YouTube's and Vimeo's in the app's one player (`video`),
   // the others in their own (their sound is their own button).
-  const plays = !!card.video
+  const plays = !!card.video && !failed
   return (
     <li className="flex flex-col" data-testid="feed-card" data-publication={card.publicationId}
       data-video={plays || undefined} data-playing={(plays && playing) || undefined}>
@@ -142,6 +145,14 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen 
               <>
                 <span aria-hidden>·</span>
                 {note}
+              </>
+            )}
+            {/* F-S15: a video file that does not play here: the file itself, in a new tab. */}
+            {failed && card.video && (
+              <>
+                <span aria-hidden>·</span>
+                <a href={card.video} target="_blank" rel="noopener noreferrer" data-testid="feed-card-open-video"
+                  className="underline underline-offset-2">{t('feed.openVideo')}</a>
               </>
             )}
           </span>

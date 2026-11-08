@@ -128,7 +128,12 @@ class AssetRulesTest {
         AssetRules.Asset video = with(of("VIDEO_LINK"), "url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
         assertThat(codes(video)).isEmpty();
         assertThat(codes(with(of("VIDEO_LINK"), "url", "https://www.bilibili.com/video/BV1xx411c7mD"))).isEmpty();
-        assertThat(codes(with(of("VIDEO_LINK"), "url", "https://example.com/video.mp4")))
+        // F-S15: any https address is a video link (a file, another page); not https, or a site's non-video address, not.
+        assertThat(codes(with(of("VIDEO_LINK"), "url", "https://example.com/video.mp4"))).isEmpty();
+        assertThat(codes(with(of("VIDEO_LINK"), "url", "https://example.com/player/1"))).isEmpty();
+        assertThat(codes(with(of("VIDEO_LINK"), "url", "http://example.com/video.mp4")))
+            .containsExactly(AssetCodes.VIDEO_SITE);
+        assertThat(codes(with(of("VIDEO_LINK"), "url", "https://www.youtube.com/@channel")))
             .containsExactly(AssetCodes.VIDEO_SITE);
         assertThat(codes(with(video, "durationSec", ContentLimits.MIN_VIDEO_SECONDS))).isEmpty();
         assertThat(codes(with(video, "durationSec", ContentLimits.MAX_VIDEO_SECONDS))).isEmpty();

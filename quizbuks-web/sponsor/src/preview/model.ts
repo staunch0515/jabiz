@@ -1,5 +1,5 @@
 import type { Material, PublicationView, Tier } from '../qb/play'
-import { videoPlayer } from '../qb/video'
+import { trackable, verticalVideo, videoKind, videoPlayer } from '../qb/video'
 import type { Sponsor } from '../qb/api'
 import { choiceOf, type Draft, type Selection, type Snapshot } from '../content/api'
 import { COVER_KEY, optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from '../content/languages'
@@ -22,6 +22,8 @@ export interface Preview {
   view: PublicationView
   /** The player of the video to watch (Q19), which makes the home's card a video card, as the server's card has it. */
   video: string | null
+  /** F-S10: that video is vertical (the App's home then shows the publication among its shorts), as the card has it. */
+  videoVertical: boolean
   tiers: Tier[]
   questions: PreviewQuestion[]
   /** A quiz's draft has no publication yet: no reward, period or counts to show. */
@@ -40,18 +42,48 @@ function material(m: SnapshotMaterial | Draft['materials'][number], no: number):
   }
 }
 
+/** F-S12: what the card takes of the publication's shared video (the catalog's row of the one it picked). */
+export interface PreviewSharedVideo {
+  url: string
+  vertical: boolean
+}
+
+interface CardVideo {
+  player: string | null
+  watchRequired: boolean
+  videoDurationSec: number | null
+  /** F-S10: the App's home shows it among its shorts. */
+  vertical: boolean
+}
+
+type VideoMaterial = { kind: string; url: string | null; watchToAnswer?: boolean; durationSec?: number | null;
+  vertical?: boolean }
+
 /**
- * The home card's video, as the server's card has it (Q63, `PublicationEditing.cardVideo`): the video watching which
- * is enough to answer, else the first the app plays.
+ * The home card's video, as the server's card has it (Q63, `PublicationEditing.cardVideo`), the same rule step by step:
+ * the first material's video to watch before answering that the App can follow (YouTube, Vimeo or, F-S15, a video
+ * file: Q75) stays the card's; else, F-S12, the publication's shared video when the App plays it (never one to watch;
+ * vertical as the provider shared it or a Shorts link); else the first material's video of a site or a video file,
+ * else the first page of another site (F-S15).
  */
-function videoOf(materials: { kind: string; url: string | null; watchToAnswer?: boolean; durationSec?: number | null }[]):
-  { player: string | null; watchRequired: boolean; videoDurationSec: number | null } {
-  const playable = (m: (typeof materials)[number]) => (m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
-  const watch = materials.find((m) => m.watchToAnswer && playable(m))
+export function videoOf(materials: VideoMaterial[], shared: PreviewSharedVideo | null = null): CardVideo {
+  const playable = (m: VideoMaterial) => (m.kind === 'VIDEO_LINK' ? videoPlayer(m.url) : null)
+  const watch = materials.find((m) => m.watchToAnswer && trackable(playable(m)))
   // Q75: the card says whether its video is the one to watch, and how long it is (the sponsor's figure).
-  if (watch) return { player: playable(watch), watchRequired: true, videoDurationSec: watch.durationSec ?? null }
-  const first = materials.find((m) => playable(m))
-  return { player: first ? playable(first) : null, watchRequired: false, videoDurationSec: null }
+  if (watch) {
+    return { player: playable(watch), watchRequired: true, videoDurationSec: watch.durationSec ?? null,
+      vertical: verticalVideo(watch.url, watch.vertical) }
+  }
+  if (shared) {
+    const player = videoPlayer(shared.url)
+    if (player) {
+      return { player, watchRequired: false, videoDurationSec: null, vertical: verticalVideo(shared.url, shared.vertical) }
+    }
+  }
+  const first = materials.find((m) => playable(m) && videoKind(playable(m)) !== 'page') ?? materials.find((m) => playable(m))
+  return first
+    ? { player: playable(first), watchRequired: false, videoDurationSec: null, vertical: verticalVideo(first.url, first.vertical) }
+    : { player: null, watchRequired: false, videoDurationSec: null, vertical: false }
 }
 
 function base(given: Sponsor | null) {
@@ -67,14 +99,18 @@ function base(given: Sponsor | null) {
   }
 }
 
-/** A publication's preview from the sponsor's own rows: its fields, its version's snapshot and the sponsor's profile. */
+/**
+ * A publication's preview from the sponsor's own rows: its fields, its version's snapshot, the sponsor's profile and,
+ * F-S12, the shared video it picked (the catalog's row; none when it picked none), which takes the card as on the App.
+ */
 export function publicationPreview(p: Publication, tiers: SponsorTier[], snapshot: Snapshot | null,
-  sponsor: Sponsor | null, now: Date = new Date()): Preview {
+  sponsor: Sponsor | null, now: Date = new Date(), shared: PreviewSharedVideo | null = null): Preview {
   const questions = snapshot?.questions ?? []
-  const video = videoOf(snapshot?.materials ?? [])
+  const video = videoOf(snapshot?.materials ?? [], p.sharedVideoId ? shared : null)
   return {
     draft: false,
     video: video.player,
+    videoVertical: video.vertical,
     tiers: tiers.map((tier, index) => ({ seq: index + 1, fromScore: tier.fromScore, toScore: tier.toScore,
       reward: tier.reward })),
     questions: questions.map((q) => ({ no: q.no, stem: q.stem, image: q.image, points: q.points,
@@ -88,6 +124,8 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
       // Q64: the publication's own cover, as its card shows it; else the version's.
       cover: p.cover ?? snapshot?.cover ?? null,
       watchRequired: video.watchRequired,
+      // F-S12: the card's video, which leads the start page when it is the shared one (`leadVideo`).
+      video: video.player,
       videoDurationSec: video.videoDurationSec,
       kind: snapshot?.kind === 'SURVEY' ? 'SURVEY' : 'QUIZ',
       intro: snapshot?.intro ?? null,
@@ -120,6 +158,7 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
   return {
     draft: true,
     video: video.player,
+    videoVertical: video.vertical,
     tiers: [],
     questions: draft.questions.map((question, index) => ({ no: index + 1, stem: question.stem, image: question.image,
       points: question.points,
@@ -132,6 +171,8 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
       quizTitle: q.title,
       cover: q.cover,
       watchRequired: video.watchRequired,
+      // F-S12: the card's video, which leads the start page when it is the shared one (`leadVideo`).
+      video: video.player,
       videoDurationSec: video.videoDurationSec,
       kind: q.kind,
       intro: q.intro,
@@ -174,7 +215,8 @@ export function snapshotIn(snapshot: Snapshot, language: ContentLanguage): Snaps
     cover: image('cover', snapshot.cover),
     materials: snapshot.materials.map((m) => {
       const own = t.materials.find((o) => o.no === m.no)
-      return own ? { ...own, no: m.no, kind: m.kind, watchToAnswer: m.watchToAnswer } : m
+      // F-S10: the orientation is the base material's (a language's version has none of its own).
+      return own ? { ...own, no: m.no, kind: m.kind, watchToAnswer: m.watchToAnswer, vertical: m.vertical } : m
     }),
     questions: snapshot.questions.map((q) => ({
       ...q,
@@ -198,7 +240,7 @@ export function draftIn(draft: Draft, language: ContentLanguage): Draft {
       intro: text('quiz.intro', draft.quiz.intro), cover: image(COVER_KEY, draft.quiz.cover) },
     materials: draft.materials.map((m) => {
       const own = variantOf(draft, m, language)
-      return own ? { ...own, watchToAnswer: m.watchToAnswer } : m
+      return own ? { ...own, watchToAnswer: m.watchToAnswer, vertical: m.vertical } : m
     }),
     questions: draft.questions.map((q) => ({
       ...q,

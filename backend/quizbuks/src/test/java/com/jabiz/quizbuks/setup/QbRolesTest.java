@@ -45,8 +45,10 @@ class QbRolesTest {
                 // F-S2: its copies of the platform's knowledge graphs, reviewing them and its sponsors' graphs.
                 QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE,
                 // F-S2b2: revoking a lit node of them (another member approves).
-                QbPermissions.TREE_LIT_REVOKE)
-            .doesNotContain(QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.TREE_PLATFORM_WRITE,
+                QbPermissions.TREE_LIT_REVOKE,
+                // F-S12: its own sponsors' shared videos and taking them down (reviewing is REVIEW_PUBLICATION's).
+                QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE)
+            .doesNotContain(QbPermissions.SHARED_VIDEO_SYSTEM, QbPermissions.ADMIN_REGION_MONITOR, QbPermissions.TREE_PLATFORM_WRITE,
                 QbPermissions.TREES_READ, QbPermissions.TREE_SYSTEM, QbPermissions.FEE_MANAGE, QbPermissions.FEE_SYSTEM, QbPermissions.CERTIFICATION_ADMIN, QbPermissions.REFERRAL_READ,
                 QbPermissions.CONVERSATION_USE, QbPermissions.CONVERSATION_SYSTEM, QbPermissions.ADMIN_USERS_READ,
                 QbPermissions.ADMIN_FINANCE_READ,
@@ -69,7 +71,9 @@ class QbRolesTest {
                 // F-S2: the platform's knowledge graph templates; never the operators' review of Sponsors' graphs.
                 QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ,
                 // F-S2b2: revoking a lit node of any graph (another administrator approves).
-                QbPermissions.TREE_LIT_REVOKE)
+                QbPermissions.TREE_LIT_REVOKE,
+                // F-S12: every provider's shared videos and the platform's emergency takedown.
+                QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE)
             .doesNotContain(QbPermissions.REVIEW_TREE, QbPermissions.TREE_SYSTEM, QbPermissions.REVIEW_SPONSOR, QbPermissions.REVIEW_PUBLICATION,
                 QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.REDEMPTION_VOID, QbPermissions.DIGITAL_RESOLVE,
                 QbPermissions.PROSPECT_USE, QbPermissions.CERTIFICATION_MANAGE)
