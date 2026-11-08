@@ -334,6 +334,12 @@ export interface PublicationView {
    */
   languages: string[]
   displayLanguage: string | null
+  /**
+   * F-S2d: the knowledge map node the publication is bound to (its name in the version in effect), and whether the
+   * caller has lit it. A publication they see has the node's prerequisites lit: the node is lit, or lit by passing.
+   */
+  nodeName?: I18nText | null
+  nodeLit?: boolean
 }
 
 /**
@@ -463,6 +469,8 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     invited: row.invited === true || row.invited === 'true',
     languages: String(row.languages ?? '').split(',').map((l) => l.trim()).filter((l) => l !== ''),
     displayLanguage: textOrNull(row.displayLanguage),
+    nodeName: row.nodeName && typeof row.nodeName === 'object' ? (row.nodeName as I18nText) : null,
+    nodeLit: row.nodeLit === true || row.nodeLit === 'true',
   }
 }
 
