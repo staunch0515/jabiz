@@ -36,8 +36,11 @@ public final class PublicationNotices {
     public static final String FUNDS_SHORT = "FUNDS_SHORT";
     /** It ended by its end time, its winners or its budget. */
     public static final String ENDED = "ENDED";
+    /** F-S12: it ended because the shared video it used was taken down (not the sponsor's breach). */
+    public static final String SHARED_VIDEO_ENDED = "SHARED_VIDEO_ENDED";
 
-    public static final List<String> KINDS = List.of(APPROVED, REJECTED, TAKEN_DOWN, FUNDS_SHORT, ENDED);
+    public static final List<String> KINDS = List.of(APPROVED, REJECTED, TAKEN_DOWN, FUNDS_SHORT, ENDED,
+        SHARED_VIDEO_ENDED);
 
     static final String NOTICE = "publicationNotice";
 
@@ -51,6 +54,9 @@ public final class PublicationNotices {
      */
     public static String kindOf(String from, Map<String, Object> values) {
         Object to = values.get("status");
+        if (PublicationStatus.SHARED_VIDEO.equals(values.get("endReason"))) {
+            return SHARED_VIDEO_ENDED;
+        }
         if (PublicationStatus.ADMIN.equals(values.get("endReason"))) {
             return TAKEN_DOWN;
         }
@@ -65,6 +71,11 @@ public final class PublicationNotices {
                 return APPROVED;
             }
             Object reason = values.get("rejectReason");
+            // F-S12: sent back because its shared video was taken down in review: the sponsor must know.
+            if (PublicationStatus.DRAFT.equals(to)
+                && com.jabiz.quizbuks.sharedvideo.SharedVideoCodes.TAKEN_DOWN.equals(values.get("rejectCode"))) {
+                return REJECTED;
+            }
             return PublicationStatus.DRAFT.equals(to) && reason != null && !reason.toString().isBlank() ? REJECTED
                 : null;
         }
@@ -94,7 +105,8 @@ public final class PublicationNotices {
         payload.put("to", to == null ? from : to.toString());
         payload.put("kind", kind);
         Object reason = switch (kind) {
-            case REJECTED -> values.get("rejectReason");
+            case REJECTED -> values.get("rejectReason") != null ? values.get("rejectReason")
+                : values.get("rejectCode");
             case TAKEN_DOWN -> values.get("adminReason");
             case ENDED -> values.get("endReason");
             default -> null;

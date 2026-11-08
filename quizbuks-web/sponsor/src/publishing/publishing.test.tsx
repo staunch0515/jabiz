@@ -780,6 +780,15 @@ describe('the publication wizard', () => {
     expect(reason).toHaveTextContent('Your account was suspended while it was in review')
     expect(reason).not.toHaveTextContent('QB_USER_BANNED')
   })
+
+  it('words a draft sent back because its shared video was taken down in review (F-S12)', async () => {
+    server({ publication: { ...DRAFT, rejectCode: 'QB_SHARED_VIDEO_TAKEN_DOWN' } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const reason = await screen.findByTestId('publication-sent-back-reason')
+    expect(reason).toHaveTextContent('Its shared video was taken down while it was in review')
+    expect(reason).not.toHaveTextContent('QB_SHARED_VIDEO_TAKEN_DOWN')
+  })
 })
 
 describe('referrals welcome (Q70)', () => {

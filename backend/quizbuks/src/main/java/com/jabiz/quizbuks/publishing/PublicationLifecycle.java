@@ -159,6 +159,8 @@ public final class PublicationLifecycle {
                 .steps(b -> PublicationEditing.loadVersion(b,
                     ctx -> PublicationEditing.publication(ctx).get("versionId"), true))
                 .steps(PublicationEditing::loadVideoSites)
+                // F-S12: the shared video it picked, still in the catalog, for its card.
+                .steps(b -> PublicationSharedVideos.load(b, PublicationEditing::publication))
                 // Q33: a digital prize from a pool promises each winner a code: the pool is counted (no statement
                 // for the other publications).
                 .step("Load the pool", QueryEntities.<ProcessContext>of(
@@ -259,6 +261,8 @@ public final class PublicationLifecycle {
             .forEach(ctx::reject);
         PublicationEditing.languageProblems(publication.attributes(), version).forEach(ctx::reject);
         benefitProblems(ctx, publication);
+        // F-S12: the shared video it picked is still in the catalog (not withdrawn or taken down since).
+        PublicationSharedVideos.submitProblems(ctx, publication).forEach(ctx::reject);
         // Q70: the referral reward's method is one the sponsor may still use (a copy keeps the one it had).
         ReferralPolicy referral = ReferralPolicy.fromJson(publication.get("referral"));
         if (referral != null && RewardMethod.ALL.contains(referral.method())) {
@@ -512,6 +516,8 @@ public final class PublicationLifecycle {
                     return found == null ? null : found.get("versionId");
                 }, false))
                 .steps(PublicationEditing::loadVideoSites)
+                // F-S12: the shared video it froze, for its card.
+                .steps(b -> PublicationSharedVideos.load(b, ctx -> first(ctx, FOUND)))
                 .steps(b -> PublicationVersions.loadPending(b, FOUND))
                 .steps(PublicationEditing::loadSchedule)
                 .steps(b -> PublicationEditing.loadSponsorProfile(b, ctx -> first(ctx, FOUND)))
@@ -584,6 +590,12 @@ public final class PublicationLifecycle {
                 // Banned while it was reviewed (Q10b, M2): a banned sponsor's publication does not go on.
                 values.put("status", DRAFT);
                 values.put("rejectCode", com.jabiz.quizbuks.identity.AccountCodes.USER_BANNED);
+                values.put("rejectReason", null);
+            } else if (PublicationSharedVideos.takenDown(ctx, publication)) {
+                // F-S12 (总控 2026-11-08): its shared video was taken down while it was reviewed: it does not go on;
+                // back to the draft, and the sponsor is told (they choose another video, or none, and submit again).
+                values.put("status", DRAFT);
+                values.put("rejectCode", com.jabiz.quizbuks.sharedvideo.SharedVideoCodes.TAKEN_DOWN);
                 values.put("rejectReason", null);
             } else if (ctx.opTime().isBefore(instant(publication.get("endAt")))) {
                 values.putAll(PublicationEditing.goingOn(ctx, publication, approval.requestId()));

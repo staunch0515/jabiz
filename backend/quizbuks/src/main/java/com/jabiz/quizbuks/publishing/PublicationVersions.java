@@ -126,6 +126,8 @@ public final class PublicationVersions {
                 .steps(PublicationEditing::loadTiers)
                 .steps(b -> PublicationEditing.loadVersion(b, ctx -> input(ctx).versionId(), true))
                 .steps(PublicationEditing::loadVideoSites)
+                // F-S12: the shared video the publication froze, for the card.
+                .steps(b -> PublicationSharedVideos.load(b, PublicationEditing::publication))
                 .compute("Check the switch", (metadata, ctx) -> check(ctx))
                 .step("Ask for a review", RequireApproval.<ProcessContext>when(ctx -> ctx.contains(CASE),
                     PublicationApprovals.SUBJECT, ctx -> ctx.get(CASE, ApprovalCase.class), APPROVAL))
@@ -296,9 +298,11 @@ public final class PublicationVersions {
             // Q98b: and each language's, from the new version where the publication has none of its own.
             values.putAll(PublicationCovers.card(publication::get, snapshot, (String) values.get("cover")));
             // Q19, Q63, Q75: the new version's video, whether it must be watched and how long it is, as going on.
-            PublicationEditing.cardVideo(snapshot.materials()).writeTo(values);
-            // F-S11: and whether the new version's videos play in mainland China.
-            values.put("foreignVideo", PublicationEditing.foreignVideo(ctx, snapshot));
+            // F-S12: the shared video the publication froze stays (its provider too, on the card already).
+            PublicationSharedVideos.Frozen shared = PublicationSharedVideos.frozen(ctx, publication);
+            PublicationEditing.cardVideo(snapshot.materials(), shared).writeTo(values);
+            // F-S11: and whether the new version's videos (and the shared one) play in mainland China.
+            values.put("foreignVideo", PublicationEditing.foreignVideo(ctx, snapshot, shared));
             // F-S9: the new version's topics with the publication's own changes.
             PublicationTopics.writeTo(values, publication, version);
             ctx.changes().update(QbPublications.CARD, card.id(), card.version(), values);
