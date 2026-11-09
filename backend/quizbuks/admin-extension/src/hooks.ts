@@ -158,6 +158,7 @@ export const QUEUE = {
   topics: ['qb-ext', 'topics'],
   blocks: ['qb-ext', 'blocks'],
   exposure: ['qb-ext', 'exposure'],
+  videoUses: ['qb-ext', 'video-uses'],
   sharedVideos: ['qb-ext', 'shared-videos'],
 
 } as const

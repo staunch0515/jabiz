@@ -66,6 +66,7 @@ import {
 import { AssetDialog } from './AssetDialog'
 import { latestShares, MY_SHARED_QUERY, readMySharedVideos, standing } from '../sharedvideos/api'
 import { MySharedVideos, SharedStatus, ShareVideoDialog } from '../sharedvideos/Sharing'
+import { VideoUsesProvided } from '../videouses/VideoUsesProvided'
 import { ASSET_LIMITS } from './ids'
 import './messages'
 import { UsageCard } from './UsageCard'
@@ -288,6 +289,8 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
       {sharing && <ShareVideoDialog asset={sharing} onClose={() => setSharing(null)} onShared={() => setSharing(null)} />}
       {/* F-S12: the videos the Sponsor shares, with the review's result, on the tabs that hold video links. */}
       {(tab === 'all' || tab === 'media') && <MySharedVideos />}
+      {/* F-S14: the uses of those videos: the ledger entries to confirm and the figures. */}
+      {(tab === 'all' || tab === 'media') && <VideoUsesProvided />}
       {collecting && <CollectDialog onClose={() => setCollecting(false)} onCollected={refresh} />}
     </section>
   )
