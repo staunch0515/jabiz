@@ -52,6 +52,17 @@
 - 月报 `FEE_PAID` 按来源分列；核对 `FEE_CREDIT`（2190 = 各笔剩余）、`CASH_LOTS`（2160 = 现金各笔剩余）、`FEE_PAYMENTS`（分摊 = 付款分录）。
 - 测试：`FeeAllocationTest`（顺序、到期不用、部分付）、`FeeAccountIT`（2 笔赠送 + 现金付清；`PARTIAL`；余额不为负；学分钱包不变）、语句预算（`QB_FEE_CHARGE` 有变化就说明）、`AdminFinanceIT`、`ReconciliationIT`。
 
+#### M1 实施记录（`1.3/quizbuks-FM1-account`）
+
+- **做法**：`fee.FeeAllocation`（纯 Java）定使用顺序；`QB_FEE_SETTLE`（`subProcessOnly`）在调用方的钱包锁内一条 `QueryEntities.all` 读未到期的赠送、现金笔与两个钱包，分摊、一次 `LEDGER_POST`、写分摊与各笔剩余；`QB_FEE_REFUND`（`subProcessOnly`）在作废的冲正之后按原分摊退回。`QB_FEE_CHARGE` 的预付即扣、`QB_FEE_INVOICE_PAY`、`QB_FEE_SETTLE_ITEM`（提前付清）都调 `QB_FEE_SETTLE`；子流程自己读锁内的行，调用方之后不再写这两个钱包（避免按旧版本更新）。
+- **行为的改变**（§2.d 之内）：预付的费用与账单先用赠送额度、再用现金，账户不够时付一部分（`PARTIAL`），只在一分也付不了时 `QB_FEE_CASH_SHORT`；提前付清仍要求付得起所选的全部（是选择，不是欠款）；`InvoiceOutput` 多 `paidAmount`、`paidNow`、`creditPaid`、`cashPaid`；催款邮件的金额是还欠的部分；文案"现金账户"在付款按钮上改为"平台费账户"。删除的功能：无。
+- **现金笔**：卡充值 `CARD`、银行转账 `BANK`（来源记录为充值）、报名费入账 `OTHER`（来源 `QbEntryFeeSettlement` + 日期）、学分换回 `OTHER`（来源为兑换记录）；买学分按进账先后取，扣回（退款、争议）先取该充值自己的一笔。取用时各笔不够也不拒绝（不因内部记账拒绝学分购买或退款），差异由 `CASH_LOTS` 报出。
+- **迁移**：表、钱包种类、账单 `PARTIAL` 与 `paid_amount`（已付记全额），每个发起方 2160 余额一笔 `OTHER`（`source_entity = 'MIGRATION'`，迁移的 `now()` 只定它在顺序中的位置，注释写明）。文件暂名 `V99`，开 PR 时由总控定号（S3 #571 用 V99，S1 F-S7 用 V100）；`FeeAccountMigrationIT` 按版本号前一个迁移取起点，改号时同时改它的 `MIGRATION` 常量。
+- **核对与月报**：`qb.system.recon-fee-account`（`FEE_CREDIT`、`CASH_LOTS`、`FEE_PAYMENTS`；F-M1 之前没有分摊的付款及其冲正不核）；`FEES_RECEIVABLE` 按还欠的部分；月报 `FEE_PAID` 认 1130 与 2160 / 2190 的组合，新列 `feeCredit`；余额表、过账检查、分录导出含 2190。
+- **语句数**：`QB_FEE_CHARGE` 的预付多一次读（子流程的 `QueryEntities.all`）与分摊的写入；本应用没有平台费的语句预算测试（`AttemptStatementBudgetIT` 只管答题，答题路径不碰 2160 / 2190，不变）。
+- **页面**：发起方钱包页的"平台费账户"块与账单的"已付"列、部分付款；平台管理系统发起方页的只读分解（财务；运营商以 `qb.operator.fee-*` 模板只读自己的发起方）；财务总览按子账户汇总。
+- **平台缺口**：无。
+
 ### M2 赠送（F-M2，不含 `LIGHT`）
 - `QB_FEE_CREDIT_GRANT`（`subProcessOnly`，借 5140 / 贷 2190）；`QB_FEE_CREDIT_ONBOARDING`（运营商负责人，权限 `qb.fee-credit.onboarding.confirm`）；`QB_FEE_CREDIT_MANUAL_REQUEST` + 审批（`ApprovalSubject` `qb.fee-credit`，另一位批准，受 `qb.fee-credit.manual.max` 约束，未设置即不限）；到期 `qb.fee-credit-expire`（`JobDefinition.forEach`，每日，借 2190 / 贷 5140）；到期前提醒（`MailTemplate` `NOTIFICATION`，可退订，按笔与提醒日去重，每人 24 小时至多一封）。
 - 参数（受控）：`qb.fee-credit.grant.enabled`（false）、`.grant.basic`（1000）、`.grant.certified`（10000）、`qb.fee-credit.valid-days`（90）、`qb.fee-credit.manual.max`（空）；普通 `qb.fee-credit.expiry-notice-days`（14）。

@@ -925,3 +925,19 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
     - 请发起方把题库拆成两个 Quiz，或删去不用的题和翻译，之后才能保存新版本；
     - 已有的版本照常可用。
 - **耗时**：千题、6 个选项、三语的题库实测见 `docs/quizbuks/perf/F-S6-large-bank.md`。
+
+### 7.32 可支付平台费的账户（F-M1）
+
+每个发起方有一个"可支付平台费的账户"（`docs/quizbuks/plans/impl/F-M.md` §M1）：**赠送额度**（平台费 Kudos，科目 2190，钱包种类 `FEE_CREDIT`，按笔 `qb_fee_credit_grant`，各有到期）与**现金**（2160，钱包种类 `CASH`，按进账一笔一行 `qb_cash_lot`，来源 `CARD` / `BANK` / `OPERATOR` / `OTHER`）。平台费一律经子流程 `QB_FEE_SETTLE` 支付：先用赠送额度（最早到期的先用，同时到期的先发放的），再按进账先后用现金（不超过未被争议冻结的部分）；账户有多少付多少，其余留在账单上（状态 `PARTIAL`，`paid_amount`）。每次付款一笔分录（借 2190 / 2160、贷 1130，来源为费用或账单），每用到一笔记一行 `qb_fee_payment_version`（只追加）；作废账单（`QB_FEE_REQUEST` 的作废）冲正这些分录，并以 `QB_FEE_REFUND` 把每一部分退回原来的那一笔（F-M1 之前已付的账单没有分摊，退回为一笔新的现金 `OTHER`）。学分钱包（2110）从不用来付平台费。
+
+- **部署**：迁移（开 PR 时定号）建三张表、允许钱包种类 `FEE_CREDIT` 与账单状态 `PARTIAL`、给账单加 `paid_amount`（已付的账单记为全额），并把每个发起方**此刻的 2160 余额写成一笔** `OTHER`（`source_entity = 'MIGRATION'`，进账时刻 = 迁移时；它排在以后的进账之前，总控答复 c3）。之后：
+  1. 运行一次 `QB_SETUP`：建科目 2190 与受控参数 `qb.journal.account.2190`（首个值为空，作为提案）。
+  2. **另一位管理员发布** `qb.journal.account.2190` 的提案（受控变更，四眼）：值是会计系统中"平台费 Kudos（赠送额度）"的科目代码。没有发布之前分录导出会被拒（`JournalMappingCheck` 与导出的"所动科目未映射"），一旦 F-M2 开始赠送，2190 就会出现在分录里。
+  3. 没有新的环境变量与任务；F-M1 本身不赠送（赠送是 F-M2），所以上线时所有发起方的赠送额度为 0，行为与之前相同，只是付款记分摊、账单可以部分付。
+- **页面**：发起方页面的钱包页"平台费账户"一块（合计、赠送额度、现金；剩余的各笔按使用顺序与到期；每笔付款的分摊）；平台管理系统的发起方页（财务，`qb.admin.finance.read`）与运营商管理系统的发起方页（只限自己的发起方）只读同样内容；财务总览"平台费账户（按子账户）"给出全平台的余额、各笔剩余与本月付款。
+- **每日核对**（`qb.reconcile`，模板 `qb.system.recon-fee-account`）：`FEE_CREDIT`（某发起方的 2190 = 其 `FEE_CREDIT` 钱包 = 各笔赠送剩余之和）、`CASH_LOTS`（2160 = 各笔现金剩余之和）、`FEE_PAYMENTS`（费用与账单的付款分录从 2160 / 2190 取走的 = 分摊之和；F-M1 之前的付款没有分摊，不核）。差异照旧给 `qb.reconcile` 待办。常见原因：有人绕过流程直接改了表；一笔现金被取走时各笔加起来不够（买学分、扣回从不因此被拒，差异由 `CASH_LOTS` 报出）。
+- **月报**（`qb.admin.monthly`）：付款仍是 `FEE_PAID`，新列 `feeCredit`（2190）与 `sponsorCash`（2160）分别是两种来源付的（借方为正）；作废的冲正在 `FEE_VOIDED`。余额表（`qb.admin.balances`）多 2190 一行，检查 `SPONSOR_WALLETS` 与 `NO_OVERDRAWN_WALLET` 含 2190。
+- **"发起方说平台费付得不对"的排查**：
+  1. 账户：`SELECT kind, balance, held FROM qb_wallet WHERE owner_id = '<发起方>' AND kind IN ('FEE_CREDIT', 'CASH')`；各笔：`SELECT grant_id, source, remaining, expires_at FROM qb_fee_credit_grant WHERE sponsor_id = '<发起方>' AND remaining > 0 ORDER BY expires_at, granted_at`，`SELECT lot_id, source, remaining, arrived_at FROM qb_cash_lot WHERE sponsor_id = '<发起方>' AND remaining > 0 ORDER BY arrived_at`。
+  2. 一张账单的付款：`SELECT paid_at, sub_account, coalesce(grant_id, cash_lot_id) AS lot, amount, transaction_id FROM qb_fee_payment_version WHERE target_id IN ('<账单>', '<账单的 charge_id>') ORDER BY process_seq_id, row_id`。
+  3. 部分付款的账单：`SELECT status, total, paid_amount, due_on FROM qb_fee_invoice WHERE invoice_id = '<账单>'`；剩余 = `total - paid_amount`，到期后照旧变为 `OVERDUE` 并提醒。

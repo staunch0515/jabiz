@@ -23,9 +23,9 @@ export const billingModeOf = (value: unknown): BillingMode => (value === 'POSTPA
 export const REQUEST_KINDS = ['MANUAL', 'VOID'] as const
 export type RequestKind = (typeof REQUEST_KINDS)[number]
 
-/** The invoice states (backend `QbFees`); the first two are unpaid. */
-export const INVOICE_STATUSES = ['OPEN', 'OVERDUE', 'PAID', 'VOID'] as const
-export const INVOICE_UNPAID: readonly string[] = ['OPEN', 'OVERDUE']
+/** The invoice states (backend `QbFees`); the first three are unpaid (F-M1: an invoice may be paid in part). */
+export const INVOICE_STATUSES = ['OPEN', 'PARTIAL', 'OVERDUE', 'PAID', 'VOID'] as const
+export const INVOICE_UNPAID: readonly string[] = ['OPEN', 'PARTIAL', 'OVERDUE']
 /** The request states: waiting for the approval, done, or rejected (by the approver, or refused by the server). */
 export const REQUEST_STATUSES = ['REVIEW', 'DONE', 'REJECTED'] as const
 export const REQUEST_REVIEW = 'REVIEW'
@@ -61,6 +61,8 @@ export interface FeeInvoice {
   amount: string
   tax: string
   total: string
+  /** F-M1: what has been paid of the total. */
+  paidAmount: string
   status: string
   issuedAt: string | null
   dueOn: string | null
@@ -119,6 +121,7 @@ function toInvoice(row: Row): FeeInvoice {
     amount: amount(row.amount),
     tax: amount(row.tax),
     total: amount(row.total),
+    paidAmount: amount(row.paidAmount),
     status: String(row.status ?? ''),
     issuedAt: str(row.issuedAt),
     dueOn: str(row.dueOn),
@@ -214,3 +217,85 @@ export const FEES_KEY = ['qb-ext', 'finance', 'fees'] as const
 export const setBilling = (input: BillingInput) =>
   runProcess<{ userId: string; billingMode: BillingMode; creditLimit: string | number; changed: boolean }>(
     FEE_PROCESS.billingSet, input)
+
+// ---- F-M1: the account that pays the platform's fees ---------------------------------------------------------------
+
+/** One Sponsor's account: the granted credit, the cash and what open disputes hold of it (`qb.*.fee-account`). */
+export interface FeeAccount {
+  feeCreditBalance: string
+  cashBalance: string
+  cashHeld: string
+}
+
+/** A lot with money left, in the order the account is spent (`qb.*.fee-account-lots`). */
+export interface FeeAccountLot {
+  seq: number
+  subAccount: string
+  lotId: string
+  source: string
+  amount: string
+  remaining: string
+  arrivedAt: string | null
+  expiresAt: string | null
+}
+
+/** A part of a payment (`qb.*.fee-payments`); negative: given back when an invoice was voided. */
+export interface FeePaymentPart {
+  paymentId: string
+  paidAt: string | null
+  targetEntity: string
+  invoiceNo: string | null
+  subAccount: string
+  source: string | null
+  amount: string
+}
+
+/** The accounts in all, by sub-account (`qb.admin.fee-account-totals`). */
+export interface FeeAccountTotal {
+  subAccount: string
+  balance: string
+  lotsRemaining: string
+  openLots: number
+  sponsors: number
+  paidFees: string
+}
+
+/** Finance reads any Sponsor's account; an operator only its own Sponsors' (another's: nothing). */
+const accountTemplates = (operator: boolean) => (operator
+  ? { account: TEMPLATE.operatorFeeAccount, lots: TEMPLATE.operatorFeeAccountLots, payments: TEMPLATE.operatorFeePayments }
+  : { account: TEMPLATE.feeAccount, lots: TEMPLATE.feeAccountLots, payments: TEMPLATE.feePayments })
+
+export async function readFeeAccount(sponsorId: string, operator: boolean): Promise<FeeAccount> {
+  const page = await runQuery<Row>(accountTemplates(operator).account, { params: { sponsorId }, limit: 1 })
+  const row = page.items[0] ?? {}
+  return { feeCreditBalance: amount(row.feeCreditBalance), cashBalance: amount(row.cashBalance),
+    cashHeld: amount(row.cashHeld) }
+}
+
+export async function readFeeAccountLots(sponsorId: string, operator: boolean, offset: number, limit: number):
+  Promise<Page<FeeAccountLot>> {
+  const page = await runQuery<Row>(accountTemplates(operator).lots, { params: { sponsorId }, offset, limit,
+    count: true })
+  return { total: page.total, items: page.items.map((row) => ({
+    seq: num(row.seq), subAccount: String(row.subAccount ?? ''), lotId: String(row.lotId ?? ''),
+    source: String(row.source ?? ''), amount: amount(row.amount), remaining: amount(row.remaining),
+    arrivedAt: str(row.arrivedAt), expiresAt: str(row.expiresAt) })) }
+}
+
+export async function readFeePayments(sponsorId: string, operator: boolean, offset: number, limit: number):
+  Promise<Page<FeePaymentPart>> {
+  const page = await runQuery<Row>(accountTemplates(operator).payments, { params: { sponsorId }, offset, limit,
+    count: true })
+  return { total: page.total, items: page.items.map((row) => ({
+    paymentId: String(row.paymentId), paidAt: str(row.paidAt), targetEntity: String(row.targetEntity ?? ''),
+    invoiceNo: str(row.invoiceNo), subAccount: String(row.subAccount ?? ''), source: str(row.source),
+    amount: amount(row.amount) })) }
+}
+
+/** The month (`from`, `to`: UTC instants) of the payments counted. */
+export async function readFeeAccountTotals(from: string, to: string): Promise<FeeAccountTotal[]> {
+  const page = await runQuery<Row>(TEMPLATE.feeAccountTotals, { params: { from, to }, limit: 10 })
+  return page.items.map((row) => ({ subAccount: String(row.subAccount ?? ''), balance: amount(row.balance),
+    lotsRemaining: amount(row.lotsRemaining), openLots: num(row.openLots), sponsors: num(row.sponsors),
+    paidFees: amount(row.paidFees) }))
+}

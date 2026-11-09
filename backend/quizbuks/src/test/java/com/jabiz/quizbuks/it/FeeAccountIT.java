@@ -189,6 +189,14 @@ class FeeAccountIT extends PlayItSupport {
         assertThat(items("qb.sponsor.fee-payments", sponsorToken(newSponsor(unique("s-fm1-else"))), Map.of()))
             .isEmpty();
         assertThat(differences(sponsor)).isEmpty();
+        // The monthly report: the payment is FEE_PAID, its columns what each sub-account paid (debit less credit).
+        java.time.YearMonth month = java.time.YearMonth.from(clock.instant().atZone(java.time.ZoneOffset.UTC));
+        Map<String, Object> feePaid = items("qb.admin.monthly", finance(), Map.of("params", Map.of(
+                "from", month.atDay(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toString(),
+                "to", month.plusMonths(1).atDay(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toString()),
+            "limit", 100)).stream().filter(row -> "FEE_PAID".equals(row.get("category"))).findFirst().orElseThrow();
+        assertThat(new BigDecimal(String.valueOf(feePaid.get("feeCredit")))).isGreaterThanOrEqualTo(new BigDecimal("800"));
+        assertThat(new BigDecimal(String.valueOf(feePaid.get("sponsorCash")))).isGreaterThanOrEqualTo(new BigDecimal("300"));
     }
 
     @Test

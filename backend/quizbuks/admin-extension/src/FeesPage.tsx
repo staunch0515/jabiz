@@ -280,6 +280,9 @@ function Invoices({ onVoid }: { onVoid: ((invoiceId: string) => void) | null }) 
     { id: 'billingMode', header: t('fee.billingMode'), cell: ({ row }) => mode(row.original.billingMode) },
     { id: 'total', header: t('fee.total'), meta: right,
       cell: ({ row }) => <span data-testid="fee-invoice-total">{money(row.original.total)}</span> },
+    // F-M1: an invoice may be paid in part.
+    { id: 'paidAmount', header: t('fee.paidAmount'), meta: right,
+      cell: ({ row }) => <span data-testid="fee-invoice-paid">{money(row.original.paidAmount)}</span> },
     { id: 'dueOn', header: t('fee.dueOn'), cell: ({ row }) => row.original.dueOn ?? '' },
     { id: 'status', header: t('fee.status'),
       cell: ({ row }) => (

@@ -567,7 +567,7 @@ steps:
   - expect:
       query: qb.admin.balances
       params: { from: "2026-10-01T00:00:00Z", to: "2026-11-01T00:00:00Z" }
-      rows: 19
+      rows: 20
       values:
         - { rowKind: ACCOUNT, code: "1110", opening: 0, debit: 5100, credit: 180, closing: 4920 }
         - { rowKind: ACCOUNT, code: "1120", opening: 0, debit: 0, credit: 0, closing: 0 }
@@ -579,6 +579,7 @@ steps:
         - { rowKind: ACCOUNT, code: "2150", closing: 0 }
         - { rowKind: ACCOUNT, code: "2160", closing: 0 }
         - { rowKind: ACCOUNT, code: "2170", closing: 0 }
+        - { rowKind: ACCOUNT, code: "2190", closing: 0 }
         - { rowKind: ACCOUNT, code: "4110", closing: 0 }
         - { rowKind: ACCOUNT, code: "4120", closing: 0 }
         - { rowKind: ACCOUNT, code: "5110", debit: 180, closing: 180 }
