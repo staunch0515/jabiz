@@ -4,63 +4,27 @@ import com.jabiz.entity.EntityDefinition;
 import com.jabiz.entity.TemporalRole;
 
 /**
- * The certifications' records (Q69, docs/quizbuks/plans/Q69-certifications.md): the rounds (which publication counts
- * for which certification), the people's records (passes, grants and revocations, only ever inserted) and the
- * official publishers (the sponsor accounts whose publications may be rounds). Ordinary tables written by the
- * {@code QB_CERTIFICATION_*} processes only.
+ * The certifications' records (Q69): passes, grants and revocations, only ever inserted. F-S2c2b (D1) removed the
+ * certifications, their rounds and every process that wrote them; the knowledge map's nodes replace them. The records
+ * stay, read only, because the certificates issued before (D8) read their revocations from here.
  */
 public final class QbCertifications {
 
-    public static final String ROUND = "QbCertificationRound";
     public static final String RECORD = "QbCertificationRecord";
     public static final String RECORD_KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:certification-record-kind";
 
-    /**
-     * The caller's own records (Q70a): only the scope of the App's templates (qb.app.feed, qb.app.publication), which
-     * pick the columns; read by headquarters' permission like the default dataset, never by a taker's.
-     */
-    public static final String MY_RECORD_DATASET = "urn:jabiz:dataset:me:" + RECORD;
+    public static final String PASSED = "PASSED";
+    public static final String GRANTED = "GRANTED";
+    public static final String REVOKED = "REVOKED";
 
     public static String defaultDataset(String entity) {
         return "urn:jabiz:dataset:default:" + entity;
     }
 
-    /** One person's certifications are written one process at a time. */
-    public static String lockName(Object userId) {
-        return "qb.certification:" + userId;
-    }
-
-    /**
-     * A round: one publication of an official publisher counting for a certification's version (D-Q69-2). Closed, it
-     * counts only the passes submitted before it closed (answers leak; the next round is a new publication).
-     */
-    public static final EntityDefinition ROUND_ENTITY = EntityDefinition.define(ROUND, eb -> {
-        eb.physicalTable("qb_certification_round");
-        eb.primaryKey("roundId");
-        eb.field("roundId", f -> f.physicalColumn("round_id").immutable(true).required(true).generated(true)
-            .asSemanticIdentity("urn:jabiz:entity:quizbuks:certification-round"));
-        eb.field("certification", f -> f.physicalColumn("certification").immutable(true).required(true)
-            .asText(40));
-        eb.field("certificationVersion", f -> f.physicalColumn("certification_version").immutable(true)
-            .required(true).asNumeric(4, 0));
-        eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true).asText(36));
-        eb.field("owner", f -> f.physicalColumn("owner").immutable(true).required(true).asText(128));
-        eb.field("addedBy", f -> f.physicalColumn("added_by").immutable(true).required(true).asText(128));
-        eb.field("addedAt", f -> f.physicalColumn("added_at").immutable(true).required(true)
-            .asTemporal(TemporalRole.EVENT_TIME));
-        eb.field("closedAt", f -> f.physicalColumn("closed_at").asTemporal(TemporalRole.EVENT_TIME));
-        eb.field("version", f -> f.physicalColumn("version").asVersion());
-        eb.unique("uk_qb_certification_round_publication", "publicationId");
-        eb.listView("default", lv -> lv
-            .columns("certification", "certificationVersion", "publicationId", "owner", "addedAt", "closedAt")
-            .filters("certification", "publicationId", "owner", "closedAt")
-            .sorts("addedAt")
-            .defaultSort("addedAt", false));
-    });
-
     /**
      * A person's record of a certification (D-Q69-3, D-Q69-4): a pass (the attempt, once), a grant or a revocation by
-     * an operator or headquarters with its reason. Only inserted; {@link CertificationHolding} reads them.
+     * an operator or headquarters with its reason. Nothing writes one any more (F-S2c2b, D1); a revocation after a
+     * certificate's holding began still ends it on the verify page and the Taker's page.
      */
     public static final EntityDefinition RECORD_ENTITY = EntityDefinition.define(RECORD, eb -> {
         eb.physicalTable("qb_certification_record");
@@ -73,8 +37,7 @@ public final class QbCertifications {
         eb.field("certificationVersion", f -> f.physicalColumn("certification_version").immutable(true)
             .required(true).asNumeric(4, 0));
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)
-            .asCode(RECORD_KIND_DICTIONARY, CertificationHolding.PASSED, CertificationHolding.GRANTED,
-                CertificationHolding.REVOKED));
+            .asCode(RECORD_KIND_DICTIONARY, PASSED, GRANTED, REVOKED));
         eb.field("attemptId", f -> f.physicalColumn("attempt_id").immutable(true).asText(36));
         eb.field("roundId", f -> f.physicalColumn("round_id").immutable(true).asText(36));
         eb.field("reason", f -> f.physicalColumn("reason").immutable(true).asText(500, true));

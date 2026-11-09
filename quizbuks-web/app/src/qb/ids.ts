@@ -93,11 +93,6 @@ export const AUDIENCE = {
   ruleClosed: 'QB_AUDIENCE_RULE_CLOSED',
 } as const
 
-/** The certifications' keys (`certification.Certifications`); names in `qb/messages.ts` `certification.names`. */
-export const CERTIFICATIONS = ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD',
-  'TERMS_SPONSOR_UNDERSTOOD', 'BENEFIT_PROVIDER', 'BENEFIT_SPONSOR'] as const
-export type CertificationKey = (typeof CERTIFICATIONS)[number]
-
 /** The widths the policy `qb.content.image` keeps of every image (covers, questions, options, materials). */
 export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280'] as const
 

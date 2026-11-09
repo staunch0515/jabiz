@@ -21,7 +21,7 @@
 
 ### 中文 · 点亮节点能开放什么？
 
-平台图上的一些节点点亮后会开放平台的功能，例如推荐朋友；发起方点亮相应的节点后可以提供或赞助权益。功能没有开放时，相应的页面会说明要点亮哪个节点。撤销点亮后功能随之关闭。
+平台图上的一些节点点亮后会开放平台的功能，例如推荐朋友、在 App 中申请成为发起方；发起方点亮相应的节点后可以提供或赞助权益。功能没有开放时，相应的页面会说明要点亮哪个节点。撤销点亮后功能随之关闭。
 
 ### 中文 · 为什么我看不到某个 Quiz？
 
@@ -40,7 +40,7 @@
 
 ### 日本語 · ノードを点灯すると何が使えるようになりますか？
 
-プラットフォームのマップには、点灯すると機能が使えるようになるノードがあります。たとえば友だち紹介です。主催者は該当するノードを点灯すると、特典の提供や協賛ができるようになります。使えないときは、その画面にどのノードを点灯すればよいかが表示されます。点灯が取り消されると、その機能も使えなくなります。
+プラットフォームのマップには、点灯すると機能が使えるようになるノードがあります。たとえば友だち紹介や、アプリからの主催者への申請です。主催者は該当するノードを点灯すると、特典の提供や協賛ができるようになります。使えないときは、その画面にどのノードを点灯すればよいかが表示されます。点灯が取り消されると、その機能も使えなくなります。
 
 ### 日本語 · 見えないクイズがあるのはなぜですか？
 
@@ -59,7 +59,7 @@ If a lighting was wrong (for example, answers were shared), the operator or the 
 
 ### English · What does lighting a node unlock?
 
-Some nodes of the platform's maps unlock a feature once lit, such as referring friends; a Sponsor who lights the matching node may provide or sponsor benefits. While a feature is not open, its page says which node to light. If a lighting is revoked, the feature closes again.
+Some nodes of the platform's maps unlock a feature once lit, such as referring friends or applying in the App to become a Sponsor; a Sponsor who lights the matching node may provide or sponsor benefits. While a feature is not open, its page says which node to light. If a lighting is revoked, the feature closes again.
 
 ### English · Why can't I see a quiz?
 

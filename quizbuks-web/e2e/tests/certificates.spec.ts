@@ -1,38 +1,29 @@
-import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
-import { operatorWithLead } from './operators'
+import { expect, expectAccessible, prepareQuizbuks, signIn, test, unique } from './support'
 import { taker } from './play'
 
 /*
  * Certificates (docs/quizbuks/plans/Q77-certificates.md). F-S2c (D8, the requester's answer of 2026-11-08): no new
- * certificate is issued until the knowledge map's certificates (F-S5): a taker who holds a certification sees it in the
- * app's account with the note, and no button to issue; the public certification page still takes a name of the
- * taker's own and turns on, and shows "not available" while it lists no certificate; an unknown key verifies nothing.
- * Certificates issued before stay verifiable and downloadable (CertificateIT). A grant by hand stands in for passing a
- * round (the rounds are Q69's tests).
+ * certificate is issued until the knowledge map's certificates (F-S5), and F-S2c2b (D1) removed the certifications: a
+ * Taker's account lists the certificates still valid (none here) with the note that issuing is paused; the public
+ * certification page still takes a name of the Taker's own and turns on, and shows "not available" while it lists no
+ * certificate; an unknown key verifies nothing. Certificates issued before stay verifiable and downloadable
+ * (CertificateIT).
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
-test('a holder sees issuing paused, and the public pages show nothing to verify', async ({ page, browser,
+test('a Taker sees issuing paused, and the public pages show nothing to verify', async ({ page, browser,
   baseURL, request }) => {
   test.setTimeout(180_000)
   const name = unique('Cert ')
   const me = await taker(request, name)
-  const userId = String((await (await request.get('/api/auth/me', {
-    headers: { Authorization: `Bearer ${me.token}` } })).json()).userId)
-  // F-S1: certifications are an operator's: one of the tests' own grants it.
-  const granter = (await operatorWithLead(request, 'Gra')).operatorToken
-  await run(request, granter, 'QB_CERTIFICATION_GRANT', { userId, certification: 'SPONSOR_APPLY',
-    reason: 'End-to-end test' })
 
   await signIn(page, '/taker/', me.email)
   await expect(page).not.toHaveURL(/\/login/)
   await page.goto('/taker/account/certificates')
-  const item = page.getByTestId('certificate-SPONSOR_APPLY')
-  await expect(item).toContainText('Sponsor Certification')
-  await expect(item.getByTestId('certificate-paused-SPONSOR_APPLY')).toContainText('not issued for now')
-  await expect(item.getByTestId('certificate-issue-SPONSOR_APPLY')).toHaveCount(0)
+  await expect(page.getByTestId('certificates-none')).toBeVisible()
+  await expect(page.getByTestId('certificates-paused')).toContainText('not issued for now')
   await expectAccessible(page, 'app certificates')
 
   // The public page: a name of the taker's own, then on.

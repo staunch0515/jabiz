@@ -64,6 +64,7 @@ public final class QbSetupProcesses {
     /**
      * @param rolesCreated     roles that did not exist
      * @param permissionsAdded permissions granted to existing or new roles
+     * @param permissionsRemoved grants of the retired codes ({@link QbPermissions#RETIRED}) removed, from any role
      * @param accountsOpened   codes of the ledger accounts opened
      * @param countriesAdded   countries that did not exist
      * @param paramsCreated    keys of the business parameters declared
@@ -76,7 +77,8 @@ public final class QbSetupProcesses {
      *                         {@link LegalDrafts}); nothing is published
      * @param legalDraftIds    the keys of those drafts, in the same order ({@code QB_LEGAL_PUBLISH} takes them)
      */
-    public record SetupOutput(List<String> rolesCreated, int permissionsAdded, List<String> accountsOpened,
+    public record SetupOutput(List<String> rolesCreated, int permissionsAdded, int permissionsRemoved,
+        List<String> accountsOpened,
         int countriesAdded, List<String> paramsCreated, List<String> paramsProposed, List<String> rulesProposed,
         List<String> proposals, List<String> legalDraftsCreated, List<String> legalDraftIds) {}
 
@@ -85,6 +87,7 @@ public final class QbSetupProcesses {
     static final String GRANTS = "grants";
     static final String ROLES_AHEAD = "rolesAhead";
     static final String GRANTS_AHEAD = "grantsAhead";
+    static final String RETIRED_GRANTS = "retiredGrants";
     static final String ACCOUNTS = "accounts";
     static final String PARAMS = "params";
     static final String COUNTRIES = "countries";
@@ -125,6 +128,12 @@ public final class QbSetupProcesses {
             .step("Load their permissions", QueryEntities.of(SecurityEntities.ROLE_PERMISSION_DATASET,
                 ctx -> all(new QueryPredicate.In("roleId", new ArrayList<>(list(ctx, ROLES).stream()
                     .map(EntityInstance::id).toList()))), GRANTS))
+            // F-S2c2b: the grants of codes that no longer exist, on any role (removed below; nothing left is nothing
+            // to do). Grants of them scheduled to begin later cannot be cancelled from here (their time and version
+            // are not read): the first run after they begin removes them.
+            .step("Load the grants of retired codes", QueryEntities.of(SecurityEntities.ROLE_PERMISSION_DATASET,
+                ctx -> all(new QueryPredicate.In("permission", new ArrayList<>(QbPermissions.RETIRED))),
+                RETIRED_GRANTS))
             .step("Load the roles scheduled to begin", RunTemplate.at("qb.setup.roles", ctx -> Map.of(),
                 ctx -> AHEAD, ctx -> null, ROLES_AHEAD))
             .step("Load the grants scheduled to begin", RunTemplate.at("qb.setup.grants", ctx -> Map.of(),
@@ -159,7 +168,8 @@ public final class QbSetupProcesses {
         SetupOutput made = ctx.get(OUTPUT, SetupOutput.class);
         List<String> proposals = listOf(ctx, PROPOSED).stream()
             .map(change -> ((ControlChanges.ChangeOutput) change).changeId()).toList();
-        return new SetupOutput(made.rolesCreated(), made.permissionsAdded(), made.accountsOpened(),
+        return new SetupOutput(made.rolesCreated(), made.permissionsAdded(), made.permissionsRemoved(),
+            made.accountsOpened(),
             made.countriesAdded(), made.paramsCreated(), made.paramsProposed(), made.rulesProposed(), proposals,
             made.legalDraftsCreated(), made.legalDraftIds());
     }
@@ -208,6 +218,13 @@ public final class QbSetupProcesses {
                     added++;
                 }
             }
+        }
+
+        // F-S2c2b: removing a grant grants nothing, so it is no protected change (platform D48).
+        int removed = 0;
+        for (EntityInstance grant : list(ctx, RETIRED_GRANTS)) {
+            ctx.changes().delete(SecurityEntities.ROLE_PERMISSION, grant.id(), grant.version());
+            removed++;
         }
 
         List<LedgerProcesses.OpenAccountInput> open = new ArrayList<>();
@@ -299,7 +316,7 @@ public final class QbSetupProcesses {
         ctx.put(OPEN, List.copyOf(open));
         ctx.put(CREATE, List.copyOf(create));
         ctx.put(PROPOSE, List.copyOf(propose));
-        ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added,
+        ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added, removed,
             open.stream().map(LedgerProcesses.OpenAccountInput::accountCode).toList(), countriesAdded,
             create.stream().map(ParamProcesses.CreateInput::key).toList(), List.copyOf(proposed), List.copyOf(rules),
             List.of(), List.copyOf(drafts), List.copyOf(draftIds)));
