@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * The start and the view of a publication bound to a knowledge graph's node (F-S2b1, F-S2d): the publication is seen
+ * The start, the view and the referral links of a publication bound to a knowledge graph's node (F-S2b1, F-S2d): the publication is seen
  * only by whoever has lit, now, the nodes its node's condition wants lit before answering (or has an attempt of it),
  * and started only while the node is in effect ({@link TreeLights}). The node's row (with what
  * it wants lit before answering, written when its version went into effect) and the caller's lit records and
@@ -37,7 +37,7 @@ public final class TreeGate {
 
     private TreeGate() {}
 
-    static <I, O> void load(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+    public static <I, O> void load(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, EntityInstance> card) {
         pb.step("Load the node and the caller's lit nodes", QueryEntities.<ProcessContext>all(
             QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE), ctx -> {
@@ -88,7 +88,7 @@ public final class TreeGate {
      * Whether the caller sees the card (F-S2d, {@link TreeLights#visible}), from what {@link #load} read: a card bound
      * to no node always; a node not found hides nothing.
      */
-    static boolean visible(ProcessContext ctx, EntityInstance card, boolean attempted) {
+    public static boolean visible(ProcessContext ctx, EntityInstance card, boolean attempted) {
         if (bound(card) == null) {
             return true;
         }

@@ -43,6 +43,7 @@ F-S3 的五态在 OPEN 内细分，F-S3 自己做。
 | 开始答题 `TreeGate.refuse` | 改为 404，与不存在相同；已有答题记录的照旧由"只答一次"拒绝 |
 | `qb.public.publication`、`qb.public.sponsor-page-publications` | 不登录：绑定的节点有答题前条件即不列出、不返回；没绑定的照旧 |
 | `qb.app.inbox`、`inbox-unread` | 发起方关于某个发布的通知，不可见即隐藏，也不计入未读 |
+| 推荐链接 `QB_REFERRAL_LINK`（推荐人）、`QB_REFERRAL_CLAIM`（朋友） | 对调用者不可见即 404，与不存在相同；已生成的链接照旧有效，前置点亮后即可领取 |
 
 本人的结果页、答题记录、钱包照旧（规格："已有答题记录的仍能看自己的结果"）。
 
