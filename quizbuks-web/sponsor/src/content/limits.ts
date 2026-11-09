@@ -1,9 +1,9 @@
 /**
  * The limits of quiz content, copied from the server's `content.ContentLimits` and the file policies of
  * `content.ContentConfig`. The server checks them all; the page uses them to stop typing early and to say them.
+ * The question bank's own limits are parameters, read from `qb.sponsor.quiz-limits` (`readBankLimits`, F-S6).
  */
 export const LIMITS = {
-  questions: 100,
   materials: 10,
   options: 6,
   minOptions: 2,
@@ -36,3 +36,9 @@ export const UPLOADS = {
 
 /** A PDF or an audio file: shown as a download. */
 export const DOCUMENT_FIELD = { image: false }
+
+/** F-S6: the questions one page of the editor's list shows. */
+export const QUESTION_PAGE = 50
+
+/** F-S6: up to this many questions the "move to" control lists every place; above it the place is typed. */
+export const MOVE_LIST_MAX = 100

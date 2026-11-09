@@ -344,7 +344,8 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
           <TabsContent value="questions" className="flex flex-col gap-4 pt-4">
             {/* AI does not write a survey's questions (Q12, D-Q12-9). */}
             {quiz.kind !== 'SURVEY' && <AiQuestionsPanel quiz={quiz} materials={materials} />}
-            <QuestionsPanel questions={questions} survey={quiz.kind === 'SURVEY'} language={quiz.language} />
+            <QuestionsPanel questions={questions} survey={quiz.kind === 'SURVEY'} language={quiz.language}
+              count={Math.max(quiz.questionCount, questions.length)} />
           </TabsContent>
           <TabsContent value="materials" className="pt-4">
             <MaterialsPanel materials={materials} language={quiz.language} />

@@ -366,13 +366,20 @@ const bool = (value: unknown): boolean => value === true || value === 'true'
 /** The most rows a dataset answers at once (the platform's page limit). */
 const PAGE = 100
 
-/** Every row of one of the sponsor's datasets that matches, page by page, in the dataset's order. */
-async function readAll(dataset: string, quizId: string, sorts: Sort[]): Promise<Row[]> {
+/** Every row of one of the sponsor's datasets of a quiz, page by page, in the dataset's order. */
+function readAll(dataset: string, quizId: string, sorts: Sort[]): Promise<Row[]> {
+  return readWhere(dataset, [{ field: 'quizId', op: 'eq', value: quizId }], sorts)
+}
+
+type Filter = { field: string; op: 'eq'; value: string }
+
+/** Every row of one of the sponsor's datasets that matches the filters, page by page. */
+async function readWhere(dataset: string, filters: Filter[], sorts: Sort[]): Promise<Row[]> {
   const rows: Row[] = []
   for (let offset = 0; ; offset += PAGE) {
     const page = await unwrap(api.POST('/api/datasets/{resourceId}/query', {
       params: { path: { resourceId: dataset } },
-      body: { offset, limit: PAGE, filters: [{ field: 'quizId', op: 'eq', value: quizId }], sorts },
+      body: { offset, limit: PAGE, filters, sorts },
     }))
     const items = page.items ?? []
     for (const item of items) rows.push((item.attributes ?? {}) as Row)
@@ -661,6 +668,163 @@ export const deleteQuestion = (quizId: string, questionId: string, baseRevision:
 
 export const reorderQuestions = (quizId: string, questionIds: string[], baseRevision: number) =>
   runProcess<EditOutput>(CONTENT_PROCESS.questionReorder, { quizId, questionIds, baseRevision })
+
+/** F-S6: moves one question before another (`QB_QUESTION_MOVE`); none puts it at the end. */
+export const moveQuestion = (quizId: string, questionId: string, beforeQuestionId: string | null,
+  baseRevision: number) =>
+  runProcess<EditOutput>(CONTENT_PROCESS.questionMove, { quizId, questionId, beforeQuestionId, baseRevision })
+
+/** F-S6: the most questions one batch operation names (`QuestionBatchProcesses.MAX_BATCH`). */
+export const MAX_BATCH = 200
+
+/** F-S6: deletes several questions with their options and translations (`QB_QUESTION_DELETE_MANY`). */
+export const deleteQuestions = (quizId: string, questionIds: string[], baseRevision: number) =>
+  runProcess<EditOutput>(CONTENT_PROCESS.questionDeleteMany, { quizId, questionIds, baseRevision })
+
+/** F-S6: gives several questions the same points (`QB_QUESTION_POINTS_SET`; a survey's are fixed). */
+export const setQuestionPoints = (quizId: string, questionIds: string[], points: number, baseRevision: number) =>
+  runProcess<EditOutput>(CONTENT_PROCESS.questionPointsSet, { quizId, questionIds, points, baseRevision })
+
+/** F-S6: a row of `qb.sponsor.quiz-questions`: a question with its place in the quiz (from 1). */
+export interface QuestionRow {
+  questionId: string
+  no: number
+  stem: string | null
+  image: string | null
+  points: number
+  selection: Selection | null
+  optionCount: number
+  /** In how many of the quiz's other languages its text is translated. */
+  translated: number
+}
+
+/** F-S6: what a search box holds, as the template's parameters: a whole number is a place, anything else text. */
+export function questionSearchParams(search: string): { q?: string; no?: number } {
+  const text = search.trim()
+  if (!text) return {}
+  return /^\d{1,4}$/.test(text) ? { no: Number(text) } : { q: text.slice(0, 100) }
+}
+
+/** F-S6: one page of a quiz's questions in their order, searched, counted. */
+export async function searchQuestions({ quizId, search = '', offset, limit }: { quizId: string; search?: string
+  offset: number; limit: number }): Promise<{ items: QuestionRow[]; total: number }> {
+  const page = await runQuery<Row>(CONTENT_TEMPLATE.quizQuestions, {
+    params: { quizId, ...questionSearchParams(search) },
+    offset,
+    limit,
+    count: true,
+  })
+  const items = page.items.map((row): QuestionRow => ({
+    questionId: String(row.questionId),
+    no: num(row.questionNo),
+    stem: str(row.stem),
+    image: str(row.image),
+    points: num(row.points) || 1,
+    selection: selectionOf(row.selection),
+    optionCount: num(row.optionCount),
+    translated: num(row.translated),
+  }))
+  return { items, total: page.total ?? items.length }
+}
+
+/** F-S6: the question at a place of the quiz (from 1); null when there is none. */
+export async function questionAt(quizId: string, no: number): Promise<QuestionRow | null> {
+  const page = await runQuery<Row>(CONTENT_TEMPLATE.quizQuestions, { params: { quizId, no }, limit: 1 })
+  const row = page.items[0]
+  return row ? { questionId: String(row.questionId), no: num(row.questionNo), stem: str(row.stem),
+    image: str(row.image), points: num(row.points) || 1, selection: selectionOf(row.selection),
+    optionCount: num(row.optionCount), translated: num(row.translated) } : null
+}
+
+/** F-S6: the question bank's limits in effect (`qb.sponsor.quiz-limits`). */
+export interface BankLimits {
+  /** The most questions a quiz has. */
+  maxQuestions: number
+  /** The most questions one attempt asks: a larger bank is drawn from when published. */
+  maxPerAttempt: number
+  /** The most questions one import batch adds. */
+  importBatch: number
+}
+
+export async function readBankLimits(): Promise<BankLimits> {
+  const page = await runQuery<Row>(CONTENT_TEMPLATE.quizLimits, { limit: 1 })
+  const row = page.items[0] ?? {}
+  return { maxQuestions: num(row.maxQuestions), maxPerAttempt: num(row.maxPerAttempt),
+    importBatch: num(row.importBatch) }
+}
+
+/**
+ * F-S6: one question with its options, read when it is opened (the list's page does not carry them); null when it
+ * is not the sponsor's or deleted.
+ */
+export async function readQuestion(questionId: string): Promise<Question | null> {
+  const { data, error, response } = await api.GET('/api/datasets/{resourceId}/entities/{id}', {
+    params: { path: { resourceId: CONTENT_DATASET.question, id: questionId } },
+  })
+  if (response.status === 404) return null
+  if (error !== undefined || !data) throw await toApiError(response, error)
+  const row = (data.attributes ?? {}) as Row
+  const options = await readWhere(CONTENT_DATASET.option, [{ field: 'questionId', op: 'eq', value: questionId }],
+    BY_SEQ)
+  return {
+    questionId: String(row.questionId ?? questionId),
+    stem: str(row.stem),
+    image: str(row.image),
+    points: num(row.points) || 1,
+    options: options.map((o) => ({ optionId: String(o.optionId), text: str(o.text), image: str(o.image),
+      correct: bool(o.correct) })),
+    selection: selectionOf(row.selection),
+  }
+}
+
+/** F-S6: one batch of `QB_QUIZ_IMPORT_QUESTIONS` (`QbQuestionImport`). */
+export interface ImportBatch {
+  importId: string
+  questionCount: number
+  importedAt: string
+  /** Set once the batch was undone (it cannot be again). */
+  undoneAt: string | null
+  removedCount: number | null
+}
+
+/** F-S6: the batches imported into a quiz, newest first. */
+export async function readImportBatches(quizId: string): Promise<ImportBatch[]> {
+  const rows = await readAll(CONTENT_DATASET.questionImport, quizId, [{ field: 'importedAt', asc: false }])
+  return rows.map((row) => ({
+    importId: String(row.importId),
+    questionCount: num(row.questionCount),
+    importedAt: String(row.importedAt ?? ''),
+    undoneAt: str(row.undoneAt),
+    removedCount: numOrNull(row.removedCount),
+  }))
+}
+
+/** `QuestionImportProcesses.ImportOutput`. */
+export interface ImportQuestionsOutput {
+  quizId: string
+  importId: string
+  questions: number
+  revision: number
+  /** The file's languages the quiz has not: their translations were not imported. */
+  skippedLanguages: string[]
+}
+
+/** `QuestionImportProcesses.UndoOutput`: `kept` are the batch's questions changed since, which stay. */
+export interface UndoImportOutput {
+  quizId: string
+  revision: number
+  removed: number
+  kept: string[]
+}
+
+/** F-S6: one batch of questions from a quiz file (questions only) into the quiz; `files` as uploaded. */
+export const importQuestions = (quizId: string, document: Record<string, unknown>, files: Record<string, string>,
+  baseRevision: number) =>
+  runProcess<ImportQuestionsOutput>(CONTENT_PROCESS.quizImportQuestions, { quizId, document, files, baseRevision })
+
+/** F-S6: removes the batch's questions not changed since it was imported, once. */
+export const undoImport = (quizId: string, importId: string, baseRevision: number) =>
+  runProcess<UndoImportOutput>(CONTENT_PROCESS.questionImportUndo, { quizId, importId, baseRevision })
 
 export const saveMaterial = (input: MaterialInput) =>
   runProcess<EditOutput>(CONTENT_PROCESS.materialSave, { ...input })
