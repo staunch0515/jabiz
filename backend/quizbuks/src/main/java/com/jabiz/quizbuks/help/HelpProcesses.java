@@ -214,7 +214,8 @@ public final class HelpProcesses {
                 Map.of("limit", settings.userDaily()));
         }
         EntityInstance everybody = first(ctx, EVERYBODY);
-        long used = everybody == null ? 0 : number(everybody.get("inputTokens")) + number(everybody.get("outputTokens"));
+        long used = everybody == null ? 0 : settings.counted(number(everybody.get("inputTokens")),
+            number(everybody.get("outputTokens")), number(everybody.get("cacheReadTokens")));
         if (used >= settings.globalMonthlyTokens()) {
             throw refused(HelpCodes.MONTHLY_LIMIT, "The AI help's tokens of the month are used up", Map.of());
         }

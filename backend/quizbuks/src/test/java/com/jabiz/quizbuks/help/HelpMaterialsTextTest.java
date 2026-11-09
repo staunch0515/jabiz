@@ -28,7 +28,11 @@ class HelpMaterialsTextTest {
         new HelpMaterialsText.Legal(QbLegal.TERMS_SPONSOR, 1, Instant.parse("2026-10-01T00:00:00Z"),
             Map.of("en", "Sponsor terms"), Map.of("en", "Sponsors' terms")),
         new HelpMaterialsText.Legal(QbLegal.PRIVACY, 2, Instant.parse("2026-09-01T00:00:00Z"),
-            Map.of("en", "Privacy"), Map.of("en", "What we keep")));
+            Map.of("en", "Privacy"), Map.of("en", "What we keep")),
+        new HelpMaterialsText.Legal(QbLegal.COMMERCE_NOTICE, 1, Instant.parse("2026-09-01T00:00:00Z"),
+            Map.of("en", "Commerce notice"), Map.of("en", "Commerce notice text")),
+        new HelpMaterialsText.Legal(QbLegal.AI_NOTICE, 1, Instant.parse("2026-09-01T00:00:00Z"),
+            Map.of("en", "AI notice"), Map.of("en", "AI notice text")));
 
     @Test
     void aSnapshotHoldsTheEntrysManualFaqAndLegalTextsInItsLanguage() {
@@ -39,8 +43,9 @@ class HelpMaterialsTextTest {
             .doesNotContain("Taker manual", "How do I withdraw?", "How do I publish?");
         // The Takers' legal texts with their path, version and date; never the Sponsors'.
         assertThat(zh).contains("(/taker/legal/terms, version 3, in effect since 2026-10-01)", "Takers' terms",
-            "/taker/legal/privacy", "What we keep", "/taker/legal/contest-rules", "(Not published yet.)")
-            .doesNotContain("Sponsors' terms");
+            "/taker/legal/privacy", "What we keep", "/taker/legal/contest-rules", "(Not published yet.)",
+            "AI notice text", "(/taker/legal/ai, version 1")
+            .doesNotContain("Sponsors' terms", "Commerce notice text", "/taker/legal/commerce");
         // A text missing in Chinese is given in English, and says so.
         assertThat(zh).contains("(not available in this language; given in English)");
         // The FAQ in its order: the one for both first.
@@ -51,8 +56,13 @@ class HelpMaterialsTextTest {
     void theSponsorsSnapshotHasTheirsAndSaysWhatIsNotPublished() {
         String ja = HelpMaterialsText.build(QbHelp.SPONSOR, "ja", null, FAQS, LEGAL);
         assertThat(ja).contains("(No manual has been published yet.)", "How do I publish?", "ウィザードを使います。",
-            "/sponsor/help", "/sponsor/legal/sponsor-terms", "Sponsors' terms", "/sponsor/legal/privacy")
+            "/sponsor/help", "/sponsor/legal/sponsor-terms", "Sponsors' terms", "/sponsor/legal/privacy",
+            "(/sponsor/legal/commerce, version 1", "Commerce notice text", "(/sponsor/legal/ai, version 1",
+            "AI notice text")
             .doesNotContain("How do I withdraw?", "Takers' terms", "contest-rules");
+        // The legal texts in their order: terms, privacy, the commerce notice, the AI notice.
+        assertThat(ja.indexOf("/sponsor/legal/privacy")).isLessThan(ja.indexOf("/sponsor/legal/commerce"));
+        assertThat(ja.indexOf("/sponsor/legal/commerce")).isLessThan(ja.indexOf("/sponsor/legal/ai"));
         assertThat(HelpMaterialsText.build(QbHelp.SPONSOR, "en", null, List.of(), List.of()))
             .contains("(No questions have been published yet.)");
     }

@@ -424,12 +424,19 @@ public final class QbParams {
     public static final String HELP_ANSWER_MAX_LENGTH = "qb.help.answer-max-length";
     /** The most links of the site one answer keeps (0 to 10). */
     public static final String HELP_MAX_LINKS = "qb.help.max-links";
+    /**
+     * F-C10b: how much one input token read from the provider's prompt cache counts towards
+     * {@code qb.help.global-monthly-tokens} (0 to 1; the provider bills such a token at about a tenth). Controlled: it
+     * changes what the help may spend.
+     */
+    public static final String HELP_CACHE_READ_WEIGHT = "qb.help.cache-read-weight";
     /** The help's controlled parameters (last, in this order). */
-    public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_GLOBAL_MONTHLY_TOKENS);
+    public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_GLOBAL_MONTHLY_TOKENS,
+        HELP_CACHE_READ_WEIGHT);
     public static final List<String> HELP = List.of(HELP_ENABLED, HELP_MODEL, HELP_USER_DAILY,
         HELP_GLOBAL_MONTHLY_TOKENS, HELP_HISTORY_TURNS, HELP_RETENTION_DAYS, HELP_MANUAL_MAX_BYTES, HELP_POLL_SECONDS,
         HELP_POLL_MAX_MINUTES, HELP_ESCALATION_REMIND_DAYS, HELP_AUTO_CLOSE_DAYS, HELP_QUESTION_MAX_LENGTH,
-        HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS);
+        HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS, HELP_CACHE_READ_WEIGHT);
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -767,7 +774,9 @@ public final class QbParams {
             "The most links of the site one AI help answer keeps (0 to 10)"),
         new Param(HELP_ENABLED, BOOL, false, "Whether Takers and Sponsors may ask the AI help (Claude)"),
         new Param(HELP_GLOBAL_MONTHLY_TOKENS, TOKENS, "20000000",
-            "The tokens the AI help may use a month, everybody together"));
+            "The tokens the AI help may use a month, everybody together"),
+        new Param(HELP_CACHE_READ_WEIGHT, Map.of("type", "numeric", "precision", 3, "scale", 2), "0.10",
+            "How much an input token read from the prompt cache counts towards the AI help's monthly tokens (0 to 1)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

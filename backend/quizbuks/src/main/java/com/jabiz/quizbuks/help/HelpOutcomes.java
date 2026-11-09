@@ -135,7 +135,8 @@ public final class HelpOutcomes {
             .step("Take everybody's usage", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbHelp.usageLock(QbHelp.EVERYBODY)))
             .step("Load the monthly tokens and the answers' limits", LoadParams.<ProcessContext>optional(
-                ProcessContext::opTime, PARAMS, QbParams.HELP_GLOBAL_MONTHLY_TOKENS, QbParams.HELP_ANSWER_MAX_LENGTH,
+                ProcessContext::opTime, PARAMS, QbParams.HELP_GLOBAL_MONTHLY_TOKENS, QbParams.HELP_CACHE_READ_WEIGHT,
+                QbParams.HELP_ANSWER_MAX_LENGTH,
                 QbParams.HELP_MAX_LINKS))
             .step("Load the question and the usage", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbHelp.defaultDataset(QbHelp.THREAD),
@@ -187,10 +188,10 @@ public final class HelpOutcomes {
         if (thread != null) {
             add(ctx, HelpProcesses.first(ctx, USER_USAGE), outcome.requestedBy(), month, outcome.kind(), usage, cost);
         }
-        long total = add(ctx, HelpProcesses.first(ctx, EVERYBODY_USAGE), QbHelp.EVERYBODY, month, outcome.kind(),
+        long[] total = add(ctx, HelpProcesses.first(ctx, EVERYBODY_USAGE), QbHelp.EVERYBODY, month, outcome.kind(),
             usage, cost);
-        ctx.put(PERCENT, percent(total, HelpSettings.of(ctx.contains(PARAMS) ? ctx.get(PARAMS, ParamValues.class)
-            : null).globalMonthlyTokens()));
+        HelpSettings settings = HelpSettings.of(ctx.contains(PARAMS) ? ctx.get(PARAMS, ParamValues.class) : null);
+        ctx.put(PERCENT, percent(settings.counted(total[0], total[1], total[2]), settings.globalMonthlyTokens()));
     }
 
     /**
@@ -283,8 +284,8 @@ public final class HelpOutcomes {
             .withCache(recorded.cacheWriteInputTokens(), recorded.cacheReadInputTokens());
     }
 
-    /** Adds the job to a usage row (made the first time); returns the row's tokens after it. */
-    private static long add(ProcessContext ctx, EntityInstance row, String userId, String month, String kind,
+    /** Adds the job to a usage row (made the first time); returns the row's input, output and cache-read tokens. */
+    private static long[] add(ProcessContext ctx, EntityInstance row, String userId, String month, String kind,
         ClaudeApi.Usage usage, BigDecimal cost) {
         long in = usage.inputTokens();
         long out = usage.outputTokens();
@@ -303,7 +304,7 @@ public final class HelpOutcomes {
             values.put("cacheReadTokens", BigDecimal.valueOf(usage.cacheReadInputTokens()));
             values.put("costUsd", cost);
             ctx.changes().insert(QbHelp.USAGE, values);
-            return in + out;
+            return new long[] {in, out, usage.cacheReadInputTokens()};
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("questions", BigDecimal.valueOf(HelpProcesses.number(row.get("questions")) + 1));
@@ -321,16 +322,16 @@ public final class HelpOutcomes {
             values.put("cacheWriteTokens", BigDecimal.valueOf(HelpProcesses.number(row.get("cacheWriteTokens"))
                 + usage.cacheWriteInputTokens()));
         }
+        long cacheRead = HelpProcesses.number(row.get("cacheReadTokens")) + usage.cacheReadInputTokens();
         if (usage.cacheReadInputTokens() > 0) {
-            values.put("cacheReadTokens", BigDecimal.valueOf(HelpProcesses.number(row.get("cacheReadTokens"))
-                + usage.cacheReadInputTokens()));
+            values.put("cacheReadTokens", BigDecimal.valueOf(cacheRead));
         }
         if (cost != null) {
             Object before = row.get("costUsd");
             values.put("costUsd", (before == null ? BigDecimal.ZERO : new BigDecimal(before.toString())).add(cost));
         }
         ctx.changes().update(QbHelp.USAGE, row.id(), row.version(), values);
-        return tokensIn + tokensOut;
+        return new long[] {tokensIn, tokensOut, cacheRead};
     }
 
     /** The share of the monthly tokens used, in whole percent (100 and above: reached). */

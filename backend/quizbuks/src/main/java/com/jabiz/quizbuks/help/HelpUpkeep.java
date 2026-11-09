@@ -166,15 +166,16 @@ public final class HelpUpkeep {
                 .outputMapper(ctx -> new UsageCheckOutput(ctx.contains(HelpUsageGauge.PERCENT)
                     ? ((Number) ctx.get(HelpUsageGauge.PERCENT)).longValue() : 0))
                 .step("Load the monthly tokens", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
-                    QbParams.HELP_GLOBAL_MONTHLY_TOKENS))
+                    QbParams.HELP_GLOBAL_MONTHLY_TOKENS, QbParams.HELP_CACHE_READ_WEIGHT))
                 .step("Load everybody's usage", QueryEntities.<ProcessContext>of(QbHelp.defaultDataset(QbHelp.USAGE),
                     ctx -> HelpProcesses.usageOf(QbHelp.EVERYBODY, AiLimits.month(ctx.opTime(), zone)), EVERYBODY))
                 .compute("Work out the share", (metadata, ctx) -> {
                     EntityInstance row = HelpProcesses.first(ctx, EVERYBODY);
-                    long used = row == null ? 0 : HelpProcesses.number(row.get("inputTokens"))
-                        + HelpProcesses.number(row.get("outputTokens"));
-                    ctx.put(HelpUsageGauge.PERCENT, HelpOutcomes.percent(used, HelpSettings.of(ctx.contains(PARAMS)
-                        ? ctx.get(PARAMS, ParamValues.class) : null).globalMonthlyTokens()));
+                    HelpSettings settings = HelpSettings.of(ctx.contains(PARAMS) ? ctx.get(PARAMS, ParamValues.class)
+                        : null);
+                    long used = row == null ? 0 : settings.counted(HelpProcesses.number(row.get("inputTokens")),
+                        HelpProcesses.number(row.get("outputTokens")), HelpProcesses.number(row.get("cacheReadTokens")));
+                    ctx.put(HelpUsageGauge.PERCENT, HelpOutcomes.percent(used, settings.globalMonthlyTokens()));
                 })
                 .afterCommit("Show the usage on the gauge", HelpUsageGauge.class, NoMetadata.INSTANCE));
     }

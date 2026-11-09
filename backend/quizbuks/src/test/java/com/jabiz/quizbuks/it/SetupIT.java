@@ -435,6 +435,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.HELP_MODEL, "claude-haiku-5-5");
         expected.put(QbParams.HELP_USER_DAILY, "20");
         expected.put(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, "20000000");
+        // F-C10b: a cache read's weight towards the monthly tokens (controlled).
+        expected.put(QbParams.HELP_CACHE_READ_WEIGHT, "0.10");
         expected.put(QbParams.HELP_HISTORY_TURNS, "6");
         expected.put(QbParams.HELP_RETENTION_DAYS, "180");
         expected.put(QbParams.HELP_MANUAL_MAX_BYTES, "204800");

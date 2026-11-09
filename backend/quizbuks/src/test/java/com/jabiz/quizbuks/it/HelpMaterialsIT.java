@@ -311,6 +311,40 @@ class HelpMaterialsIT extends HelpItSupport {
     // ---- the prompt cache's tokens -----------------------------------------------------------------------------------
 
     @Test
+    void theMonthlyCapCountsCacheReadsByTheirWeight() {
+        String taker = taker(newTaker("t-fc10b-cap-" + UUID.randomUUID(), "JP"));
+        askIn(taker, QbHelp.APP, "en", "Warm up?");
+        runJobs();
+        Map<String, Object> everybody = helpUsage(QbHelp.EVERYBODY);
+        long in = number(everybody.get("input_tokens"));
+        long out = number(everybody.get("output_tokens"));
+        // Pretend most of the month's input was read from the cache (the outcomes write it so).
+        long read = in - 1;
+        execute("UPDATE qb_help_usage SET cache_read_tokens = ? WHERE usage_id = ?", BigDecimal.valueOf(read),
+            everybody.get("usage_id"));
+        long weighted = in - read + (read + 9) / 10 + out;
+        // Below the cap by its weighted count, though the raw tokens are above it: asked.
+        param(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, String.valueOf(weighted + 1));
+        try {
+            askIn(taker, QbHelp.APP, "en", "Within the cap?");
+            // A cache read counting fully: the raw tokens reach the cap, refused.
+            param(QbParams.HELP_CACHE_READ_WEIGHT, "1");
+            assertThat(codes(refused(com.jabiz.quizbuks.help.HelpProcesses.ASK, taker, askIn("en", "Over?"), 422)))
+                .containsExactly(HelpCodes.MONTHLY_LIMIT);
+        } finally {
+            param(QbParams.HELP_CACHE_READ_WEIGHT, "0.10");
+            param(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, "20000000");
+        }
+        runJobs();
+    }
+
+    Map<String, Object> askIn(String language, String text) {
+        Map<String, Object> input = askInput(null, QbHelp.APP, text, null);
+        input.put("language", language);
+        return input;
+    }
+
+    @Test
     void theCachesTokensAreCountedApartAndTheirWritesPricedAbove() {
         String takerId = newTaker("t-fc10b-cache-" + UUID.randomUUID(), "JP");
         String taker = taker(takerId);

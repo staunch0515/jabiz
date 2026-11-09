@@ -15,7 +15,8 @@ import java.util.Map;
 
 /**
  * The text of one entry's and language's materials snapshot (F-C10b): the published manual, the published FAQ of the
- * entry's audience and both, and the legal texts in effect of the entry, as Markdown in that language; a text missing
+ * entry's audience and both, and the legal texts in effect of the entry (Takers: terms of use, privacy policy, contest
+ * rules, AI notice; Sponsors: Sponsor terms, privacy policy, the commerce notice, AI notice), as Markdown in that language; a text missing
  * in it is given in English (else Japanese, else Chinese), marked so. The same sources give the same bytes (nothing of
  * the time it was built is in it), so an unchanged snapshot keeps its hash, its file and the provider's prompt cache.
  */
@@ -32,8 +33,9 @@ public final class HelpMaterialsText {
 
     /** The legal texts of each entry, in order. */
     static List<String> legalKinds(String entry) {
-        return QbHelp.SPONSOR.equals(entry) ? List.of(QbLegal.TERMS_SPONSOR, QbLegal.PRIVACY)
-            : List.of(QbLegal.TERMS_APP, QbLegal.PRIVACY, QbLegal.CONTEST_RULES);
+        return QbHelp.SPONSOR.equals(entry)
+            ? List.of(QbLegal.TERMS_SPONSOR, QbLegal.PRIVACY, QbLegal.COMMERCE_NOTICE, QbLegal.AI_NOTICE)
+            : List.of(QbLegal.TERMS_APP, QbLegal.PRIVACY, QbLegal.CONTEST_RULES, QbLegal.AI_NOTICE);
     }
 
     /** The FAQ audience of an entry (and {@code ALL}). */
@@ -47,7 +49,8 @@ public final class HelpMaterialsText {
     }
 
     private static final Map<String, String> LEGAL_SLUGS = Map.of(QbLegal.TERMS_APP, "terms",
-        QbLegal.TERMS_SPONSOR, "sponsor-terms", QbLegal.PRIVACY, "privacy", QbLegal.CONTEST_RULES, "contest-rules");
+        QbLegal.TERMS_SPONSOR, "sponsor-terms", QbLegal.PRIVACY, "privacy", QbLegal.CONTEST_RULES, "contest-rules",
+        QbLegal.COMMERCE_NOTICE, "commerce", QbLegal.AI_NOTICE, "ai");
 
     private static final Map<String, String> HEADINGS_EN = Map.of("title", "Help materials", "manual", "User manual",
         "faq", "Frequently asked questions", "legal", "Terms and policies", "fallback", "(not available in this "

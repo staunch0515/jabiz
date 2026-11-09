@@ -4,7 +4,7 @@ description: >-
   F-C10: the AI help's usage by month (headquarters' AI page; apart from the Sponsors' AI usage): questions, failed and
   stopped jobs, tokens in and out (an attempt without an answer at its estimate; of the input, what the prompt cache
   wrote and read, F-C10b), a dollar estimate, how many people
-  asked, and the share of qb.help.global-monthly-tokens used
+  asked, and the share of qb.help.global-monthly-tokens used (cache reads weighted by qb.help.cache-read-weight)
 entities: [QbHelpUsage, SysParam]
 datasets:
   QbHelpUsage: urn:jabiz:dataset:default:QbHelpUsage
@@ -33,11 +33,17 @@ permissions: [qb.admin.ai.read]
 ---*/
 -- Everybody's row of each month ("*"), with the number of people who asked that month and the monthly tokens in effect
 -- now (not a whole number, or none yet: its default, 20,000,000).
+-- F-C10b: an input token read from the prompt cache counts qb.help.cache-read-weight (0 to 1; none yet or not a
+-- number: its default, 0.1), rounded up, as the processes count it.
 WITH cap AS (
-    SELECT coalesce(max(CASE WHEN CAST(p.{{SysParam.value}} AS text) ~ '^[0-9]{1,15}$'
-                             THEN CAST(CAST(p.{{SysParam.value}} AS text) AS numeric) END), 20000000) AS tokens
+    SELECT coalesce(max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.help.global-monthly-tokens'
+                              AND CAST(p.{{SysParam.value}} AS text) ~ '^[0-9]{1,15}$'
+                             THEN CAST(CAST(p.{{SysParam.value}} AS text) AS numeric) END), 20000000) AS tokens,
+           least(1, greatest(0, coalesce(max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.help.cache-read-weight'
+                              AND CAST(p.{{SysParam.value}} AS text) ~ '^[0-9]+(\.[0-9]+)?$'
+                             THEN CAST(CAST(p.{{SysParam.value}} AS text) AS numeric) END), 0.1))) AS weight
     FROM {{SysParam}} p
-    WHERE p.{{SysParam.paramKey}} = 'qb.help.global-monthly-tokens')
+    WHERE p.{{SysParam.paramKey}} IN ('qb.help.global-monthly-tokens', 'qb.help.cache-read-weight'))
 SELECT
     u.{{QbHelpUsage.month}}         AS month,
     u.{{QbHelpUsage.questions}}     AS questions,
@@ -53,7 +59,9 @@ SELECT
          AS numeric(9, 0)) AS people,
     CAST(c.tokens AS numeric(15, 0)) AS monthlyTokens,
     CAST(CASE WHEN c.tokens > 0
-              THEN round((u.{{QbHelpUsage.inputTokens}} + u.{{QbHelpUsage.outputTokens}}) * 100.0 / c.tokens, 1)
+              THEN round((u.{{QbHelpUsage.inputTokens}} - u.{{QbHelpUsage.cacheReadTokens}}
+                          + ceil(u.{{QbHelpUsage.cacheReadTokens}} * c.weight)
+                          + u.{{QbHelpUsage.outputTokens}}) * 100.0 / c.tokens, 1)
          END AS numeric(6, 1)) AS percentUsed
 FROM {{QbHelpUsage}} u
 CROSS JOIN cap c
