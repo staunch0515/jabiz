@@ -207,7 +207,7 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
     return <PageState kind="notFound" titleAs="h1" description={t('editor.notFound')}
       action={<Button variant="outline" onClick={() => navigate(QUIZZES_PATH)}>{t('editor.backToList')}</Button>} />
   }
-  const { quiz, questions, materials } = draft.data
+  const { quiz, materials } = draft.data
   const versionProblems = versionOutcome?.problems ?? []
 
   return (
@@ -321,7 +321,7 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
           <TabsList className="flex-wrap">
             <TabsTrigger value="quiz" data-testid="tab-quiz">{t('editor.tabs.quiz')}</TabsTrigger>
             <TabsTrigger value="questions" data-testid="tab-questions">
-              {t('editor.tabs.questionsCount', { n: questions.length })}
+              {t('editor.tabs.questionsCount', { n: quiz.questionCount })}
             </TabsTrigger>
             <TabsTrigger value="materials" data-testid="tab-materials">
               {t('editor.tabs.materialsCount', { n: materials.length })}
@@ -344,8 +344,7 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
           <TabsContent value="questions" className="flex flex-col gap-4 pt-4">
             {/* AI does not write a survey's questions (Q12, D-Q12-9). */}
             {quiz.kind !== 'SURVEY' && <AiQuestionsPanel quiz={quiz} materials={materials} />}
-            <QuestionsPanel questions={questions} survey={quiz.kind === 'SURVEY'} language={quiz.language}
-              count={Math.max(quiz.questionCount, questions.length)} />
+            <QuestionsPanel survey={quiz.kind === 'SURVEY'} language={quiz.language} count={quiz.questionCount} />
           </TabsContent>
           <TabsContent value="materials" className="pt-4">
             <MaterialsPanel materials={materials} language={quiz.language} />
@@ -357,7 +356,7 @@ export function QuizEditorPage({ quizId }: { quizId: string }) {
             <VersionsPanel quizId={quizId} stale={stale} />
           </TabsContent>
           <TabsContent value="products" className="pt-4">
-            <QuizProductsPanel quizId={quizId} questions={questions} />
+            <QuizProductsPanel quizId={quizId} />
           </TabsContent>
         </Tabs>
         {copying && <CopyDialog quiz={quiz} open onOpenChange={setCopying} />}

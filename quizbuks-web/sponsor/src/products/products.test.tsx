@@ -27,7 +27,9 @@ const CAKE = { ...RYE, productId: 'p2', name: 'Cake', price: '9.50', currency: '
 
 /** The server as the products pages see it, for an approved sponsor. Records what was posted. */
 function server(options: { products?: Record<string, unknown>[]; links?: Record<string, unknown>[];
-  answers?: Record<string, () => Response>; limit?: number | null | 'fail'; paged?: boolean } = {}) {
+  answers?: Record<string, () => Response>; limit?: number | null | 'fail'; paged?: boolean
+  /** F-S6d: the quiz's questions as `qb.sponsor.quiz-questions` numbers them. */
+  questions?: Record<string, unknown>[] } = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
@@ -62,6 +64,12 @@ function server(options: { products?: Record<string, unknown>[]; links?: Record<
       case '/api/datasets/urn:jabiz:dataset:me:QbQuizProduct/query':
         return json(200, { items: (options.links ?? []).map((row, i) => ({ id: `l${i}`, version: 1, attributes: row })),
           offset: 0, limit: 200 })
+      case '/api/queries/qb.sponsor.quiz-questions': {
+        const all = options.questions ?? []
+        const offset = Number(body?.offset ?? 0)
+        const limit = Number(body?.limit ?? 50)
+        return json(200, { items: all.slice(offset, offset + limit), offset, limit, total: all.length })
+      }
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
       case '/api/processes/QB_PRODUCT_SAVE/latest':
@@ -76,7 +84,7 @@ function server(options: { products?: Record<string, unknown>[]; links?: Record<
   })
   const calls = (process: string) => posted.filter((p) => p.path === `/api/processes/${process}/latest`)
     .map((p) => p.body)
-  return { calls }
+  return { calls, posted }
 }
 
 beforeAll(() => configureClient({ entry: 'sponsor' }))
@@ -211,14 +219,14 @@ describe("the Sponsor's products (Q60b)", () => {
 
 describe("a quiz's products (Q60b)", () => {
   const questions = [
-    { questionId: 'q1', stem: 'Capital of France?', image: null, points: 2, options: [], selection: null },
-    { questionId: 'q2', stem: 'Capital of Japan?', image: null, points: 3, options: [], selection: null },
+    { questionId: 'q1', questionNo: 1, stem: 'Capital of France?', image: null, points: 2, optionCount: 0 },
+    { questionId: 'q2', questionNo: 2, stem: 'Capital of Japan?', image: null, points: 3, optionCount: 0 },
   ]
 
   function renderPanel() {
     return render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <QuizProductsPanel quizId="quiz1" questions={questions} />
+        <QuizProductsPanel quizId="quiz1" />
       </QueryClientProvider>,
     )
   }
@@ -226,11 +234,11 @@ describe("a quiz's products (Q60b)", () => {
   it('starts from the links saved and sends the whole quiz’s again', async () => {
     const { calls } = server({ links: [{ quizId: 'quiz1', questionNo: 0, productId: 'p2', seq: 0 },
       { quizId: 'quiz1', questionNo: 2, productId: 'p1', seq: 0 },
-      { quizId: 'quiz1', questionNo: 3, productId: 'p1', seq: 0 }] })
+      { quizId: 'quiz1', questionNo: 3, productId: 'p1', seq: 0 }], questions })
     renderPanel()
     expect(await screen.findByTestId('quiz-product-slot-1')).toHaveTextContent('Cake')
     expect(screen.getByTestId('quiz-product-slot-2')).toHaveTextContent('None')
-    expect(screen.getByTestId('question-product-2')).toHaveTextContent('Rye loaf')
+    expect(await screen.findByTestId('question-product-2')).toHaveTextContent('Rye loaf')
     // A number beyond the draft's questions is shown, so it can be removed.
     expect(screen.getByTestId('question-product-3-gone')).toBeInTheDocument()
     await userEvent.click(screen.getByTestId('question-product-3'))
@@ -242,6 +250,25 @@ describe("a quiz's products (Q60b)", () => {
       quizProducts: ['p2', 'p1'], questionProducts: [{ questionNo: 2, productId: 'p1' }] }]))
     expect(await screen.findByTestId('quiz-products-done')).toBeInTheDocument()
     await expectAccessible()
+  })
+
+  it('lists a large quiz\'s questions a page at a time and keeps the choices of every page (F-S6d)', async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({ questionId: `k${i + 1}`, questionNo: i + 1,
+      stem: `Question ${i + 1}?`, image: null, points: 1, optionCount: 2 }))
+    const { calls, posted } = server({ links: [{ quizId: 'quiz1', questionNo: 2, productId: 'p1', seq: 0 }],
+      questions: many })
+    renderPanel()
+    expect(await screen.findByTestId('question-product-50')).toBeInTheDocument()
+    expect(screen.queryByTestId('question-product-51')).toBeNull()
+    expect(screen.getByTestId('question-products-page')).toHaveTextContent('Page 1 of 3')
+    await userEvent.click(screen.getByTestId('question-products-next'))
+    await userEvent.click(await screen.findByTestId('question-product-60'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Cake' }))
+    expect(posted.filter((p) => p.path === '/api/queries/qb.sponsor.quiz-questions').map((p) => p.body.offset))
+      .toEqual([0, 50])
+    await userEvent.click(screen.getByTestId('quiz-products-save'))
+    await waitFor(() => expect(calls('QB_QUIZ_PRODUCTS_SET')).toEqual([{ quizId: 'quiz1', quizProducts: [],
+      questionProducts: [{ questionNo: 2, productId: 'p1' }, { questionNo: 60, productId: 'p2' }] }]))
   })
 
   it('points to the products page while there are none', async () => {
