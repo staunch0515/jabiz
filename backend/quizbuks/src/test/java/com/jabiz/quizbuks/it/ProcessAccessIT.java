@@ -176,7 +176,9 @@ class ProcessAccessIT extends QbItSupport {
         // F-S13: the end of what used up its exposures (job item), the daily check, and the purchase for F-M8.
         Map.entry("QB_PUBLICATION_EXPOSURE_END", ProcessAccess.INTERNAL),
         Map.entry("QB_EXPOSURE_CHECK_RUN", ProcessAccess.INTERNAL),
-        Map.entry("QB_EXPOSURE_PURCHASED_SET", ProcessAccess.SUB_PROCESS_ONLY));
+        Map.entry("QB_EXPOSURE_PURCHASED_SET", ProcessAccess.SUB_PROCESS_ONLY),
+        // F-C4: the retention job's item deleting an old record of a sponsor package's import.
+        Map.entry("QB_PACKAGE_IMPORT_EXPIRE", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;
