@@ -131,7 +131,8 @@ public final class QuizFileFormat {
             }
             questions.add(new QuizFile.Question(text(question.get("stem"), at + ".stem"),
                 text(question.get("image"), at + ".image"), whole(question.get("points"), at + ".points"),
-                text(question.get("selection"), at + ".selection"), options));
+                text(question.get("selection"), at + ".selection"), options,
+                text(question.get("difficulty"), at + ".difficulty")));
         }
         Map<String, QuizFile.FileEntry> files = new LinkedHashMap<>();
         Object listed = document.get("files");
@@ -168,7 +169,15 @@ public final class QuizFileFormat {
         return new QuizFile(kind, text(quiz.get("title"), "quiz.title"), text(quiz.get("intro"), "quiz.intro"),
             text(quiz.get("cover"), "quiz.cover"), whole(quiz.get("timeLimitSec"), "quiz.timeLimitSec"), materials,
             questions, files, text(quiz.get("language"), "quiz.language"), translations,
-            products(document.get("products")));
+            products(document.get("products")), flag(quiz.get("shuffleQuestions"), "quiz.shuffleQuestions"));
+    }
+
+    /** F-S7: an optional true or false. */
+    private static Boolean flag(Object value, String at) {
+        if (value != null && !(value instanceof Boolean)) {
+            throw new IllegalArgumentException(at + " must be true or false");
+        }
+        return (Boolean) value;
     }
 
     private static QuizFile.Products products(Object value) {

@@ -96,6 +96,9 @@ public final class QbsStorefront {
         // when published.
         eb.field("questions", f -> f.physicalColumn("questions").required(true).asText(QUESTIONS_LENGTH, true));
         eb.field("percent", f -> f.physicalColumn("percent").required(true).asNumeric(2, 0));
+        // F-S7: whether each visitor gets the questions in an order of their own (A2-14: by default), frozen into the
+        // engine's version when published.
+        eb.field("shuffleQuestions", f -> f.physicalColumn("shuffle_questions").required(true).asBool());
         // The video's player, as the engine made it of the link when the campaign was published.
         eb.field("player", f -> f.physicalColumn("player").processOnly().asText(QbsStorefront.PLAYER_LENGTH));
         eb.field("publicationId", f -> f.physicalColumn("publication_id").processOnly().asText(QbsShops.ID_LENGTH));

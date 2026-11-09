@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
   Steps,
+  Switch,
   Textarea,
 } from '@jabiz/ui'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -27,7 +28,7 @@ import { ArrowLeft, ArrowRight, CircleCheck, FileText, RefreshCw, Save, Send, Sl
   type LucideIcon } from 'lucide-react'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { readVersions, searchQuizzes } from '../content/api'
+import { DIFFICULTIES, readVersions, searchQuizzes, type Difficulty } from '../content/api'
 import { QUIZZES_QUERY, versionsQuery } from '../content/paths'
 import { SPONSOR } from '../messages'
 import { ShownAt, type ShownField } from '../content/ShownAt'
@@ -123,6 +124,61 @@ function prizeOf(asset: Asset): Pick<PublicationForm, 'rewardMethod' | 'redeemDe
 export const STEP_COUNT = 4
 
 /** A field with its label, hint and problem, the problem tied to it by `aria-describedby`. */
+/**
+ * F-S7: the draw by difficulty: whether each taker gets a number of questions of each difficulty instead of k of all
+ * of them, and how many of each (with how many the version has; every question needs one).
+ */
+function DifficultyDraw({ form, counts, questionCount, total, disabled, problemOf, onMode, onQuota }: {
+  form: PublicationForm
+  counts: Record<Difficulty, number> | null
+  questionCount: number | null
+  total: number
+  disabled: boolean
+  problemOf: (field: string) => string | undefined
+  onMode: (on: boolean) => void
+  onQuota: (level: Difficulty, value: string) => void
+}) {
+  const { t } = useTranslation(SPONSOR)
+  const id = useId()
+  const unset = counts && questionCount !== null
+    ? questionCount - DIFFICULTIES.reduce((sum, level) => sum + counts[level], 0) : 0
+  return (
+    <div className="flex flex-col gap-3 md:col-span-2" data-testid="publication-difficulty-draw">
+      <div className="flex items-center gap-3">
+        <Switch id={`${id}-mode`} checked={form.byDifficulty} disabled={disabled} aria-describedby={`${id}-mode-hint`}
+          data-testid="publication-by-difficulty" onCheckedChange={onMode} />
+        <Label htmlFor={`${id}-mode`}>{t('publishing.field.byDifficulty')}</Label>
+      </div>
+      <p id={`${id}-mode-hint`} className="text-muted-foreground text-sm">{t('publishing.field.byDifficultyHint')}</p>
+      {problemOf('pickByDifficulty') && <p className="text-destructive text-sm">{problemOf('pickByDifficulty')}</p>}
+      {form.byDifficulty && (
+        <>
+          {unset > 0 && (
+            <p className="text-warning text-sm" data-testid="publication-difficulty-unset">
+              {t('publishing.field.difficultyUnset', { count: unset })}
+            </p>
+          )}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {DIFFICULTIES.map((level) => (
+              <Field key={level} id={`${id}-${level}`} problem={problemOf(`pickByDifficulty.${level}`)}
+                label={t('publishing.field.quota', { level: t(`difficulty.levels.${level}`) })}
+                hint={counts ? t('publishing.field.quotaHint', { available: counts[level] }) : undefined}>
+                {(aria) => (
+                  <Input {...aria} inputMode="numeric" value={form.quotas[level]} autoComplete="off" disabled={disabled}
+                    data-testid={`publication-quota-${level}`} onChange={(event) => onQuota(level, event.target.value)} />
+                )}
+              </Field>
+            ))}
+          </div>
+          <p className="text-sm" role="status" data-testid="publication-quota-total">
+            {t('publishing.field.quotaTotal', { total })}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}
+
 function Field({ id, label, hint, problem, shown, children }: {
   id: string
   label: ReactNode
@@ -244,7 +300,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const foreignVideo = !!version?.foreignVideo || (sharedVideoId !== null && sharedVideoForeign(sharedVideo.data))
   // Q81: a pick of k equal-point questions scores k times the points; the server decides (SaveOutput.fullScore),
   // the page only anticipates it for the hints when the version's points are all the same.
-  const pick = form.pickCount.trim() === '' ? null : Number(form.pickCount)
+  // F-S7: a draw by difficulty gives each taker the sum of its counts.
+  const quotaTotal = DIFFICULTIES.reduce((sum, level) => sum + (Number(form.quotas[level]) || 0), 0)
+  const pick = form.byDifficulty ? (quotaTotal > 0 ? quotaTotal : null)
+    : form.pickCount.trim() === '' ? null : Number(form.pickCount)
   const points = version && version.questionCount > 0 && version.fullScore % version.questionCount === 0
     ? version.fullScore / version.questionCount : null
   const fullScore = version && pick !== null && points !== null && Number.isInteger(pick) && pick >= 1
@@ -729,7 +788,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
             )}
           </Field>
         )}
-        {!survey && (
+        {!survey && !form.byDifficulty && (
           <Field id={`${id}-pick`} label={t('publishing.field.pickCount')} problem={problemOf('pickCount')}
             hint={version && points !== null
               ? t('publishing.field.pickCountHint', { questionCount: version.questionCount, points })
@@ -739,6 +798,12 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
                 data-testid="publication-pick-count" onChange={(event) => set('pickCount', event.target.value)} />
             )}
           </Field>
+        )}
+        {!survey && (
+          <DifficultyDraw form={form} counts={version?.difficultyCounts ?? null}
+            questionCount={version?.questionCount ?? null} total={quotaTotal} disabled={locked} problemOf={problemOf}
+            onMode={(on) => set('byDifficulty', on)}
+            onQuota={(level, value) => set('quotas', { ...form.quotas, [level]: value })} />
         )}
         {/* Q88b (D-Q88-14, D-Q88-16): a quiz may charge an entry fee while the switch is on; one set before stays
             visible (the server refuses a new one while it is off). */}
@@ -896,6 +961,9 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           : Number(form.timeLimitSec),
         passScore: form.passScore.trim() === '' ? null : Number(form.passScore),
         pickCount: pick !== null && Number.isInteger(pick) ? pick : null,
+        pickByDifficulty: form.byDifficulty ? Object.fromEntries(DIFFICULTIES
+          .filter((level) => Number(form.quotas[level]) > 0).map((level) => [level, Number(form.quotas[level])])) : null,
+        shuffled: version?.shuffled,
         entryFee: survey || form.entryFee.trim() === '' ? 0 : Number(form.entryFee),
         questionCount: version?.questionCount ?? null,
         fullScore,

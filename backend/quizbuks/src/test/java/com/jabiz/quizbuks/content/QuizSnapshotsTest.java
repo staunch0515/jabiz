@@ -133,6 +133,44 @@ class QuizSnapshotsTest {
         assertThat(QuizSnapshots.fromJson(quiz).kind()).isEqualTo(QbContent.KIND_QUIZ);
     }
 
+    /**
+     * F-S7: the fixed order and a question's difficulty are written only when set, so a snapshot of neither has the text
+     * and hash it had (the exact text above stands); one without the order is shuffled, as every older one (A2-14).
+     */
+    @Test
+    void theFixedOrderAndADifficultyAreWrittenOnlyWhenSet() {
+        QuizSnapshot shuffled = Drafts.complete();
+        assertThat(shuffled.fixedOrder()).isFalse();
+        assertThat(shuffled.shuffled()).isTrue();
+        assertThat(QuizSnapshots.toMap(shuffled)).doesNotContainKey("questionOrder");
+        assertThat(QuizSnapshots.toJson(shuffled)).doesNotContain("difficulty");
+
+        QuizSnapshot.Question first = shuffled.questions().getFirst();
+        List<QuizSnapshot.Question> graded = new java.util.ArrayList<>(shuffled.questions());
+        graded.set(0, new QuizSnapshot.Question(first.no(), first.stem(), first.image(), first.points(),
+            first.options(), first.selection(), "HARD"));
+        QuizSnapshot fixed = new QuizSnapshot(shuffled.title(), shuffled.intro(), shuffled.cover(),
+            shuffled.timeLimitSec(), shuffled.aiGenerated(), shuffled.materials(), graded, false, Map.of(), true);
+        String text = QuizSnapshots.toJson(fixed);
+        assertThat(text).contains("\"questionOrder\":\"fixed\"").contains("\"difficulty\":\"HARD\"");
+        assertThat(text.split("\"difficulty\"", -1)).hasSize(2);
+        assertThat(QuizSnapshots.fromJson(text)).isEqualTo(fixed);
+        assertThat(QuizSnapshots.fromJson(text).shuffled()).isFalse();
+        assertThat(QuizSnapshots.hash(fixed)).isNotEqualTo(QuizSnapshots.hash(shuffled));
+        // The order and the difficulty survive a language and a subset.
+        assertThat(QuizSnapshots.in(fixed, "en").fixedOrder()).isTrue();
+        assertThat(fixed.subset(List.of(first.no())).questions().getFirst().difficulty()).isEqualTo("HARD");
+        assertThat(fixed.subset(List.of(first.no())).fixedOrder()).isTrue();
+
+        // A survey is never shuffled and keeps no setting; another order is not this format.
+        QuizSnapshot survey = Drafts.survey();
+        assertThat(survey.shuffled()).isFalse();
+        assertThat(QuizSnapshots.toMap(survey.withFixedOrder(true))).doesNotContainKey("questionOrder");
+        Map<String, Object> other = QuizSnapshots.toMap(fixed);
+        other.put("questionOrder", "random");
+        assertThatThrownBy(() -> QuizSnapshots.fromMap(other)).isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test
     void refusesAnUnknownKind() {
         Map<String, Object> map = QuizSnapshots.toMap(Drafts.survey());

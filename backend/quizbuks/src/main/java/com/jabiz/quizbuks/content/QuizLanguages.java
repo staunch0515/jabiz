@@ -155,8 +155,7 @@ public final class QuizLanguages {
                 complete.put(language, present);
             }
         }
-        QuizSnapshot snapshot = new QuizSnapshot(base.title(), base.intro(), base.cover(), base.timeLimitSec(),
-            base.aiGenerated(), base.materials(), base.questions(), base.survey(), complete);
+        QuizSnapshot snapshot = base.withTranslations(complete);
         return new Draft(snapshot, all, hashes, statuses);
     }
 

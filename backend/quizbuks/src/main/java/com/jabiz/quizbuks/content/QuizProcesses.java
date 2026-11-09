@@ -81,10 +81,20 @@ public final class QuizProcesses {
      * @param coverAssetId F-C1b: the image asset of the sponsor's library the cover was copied from; none leaves the
      *                     record of an existing quiz as it is
      * @param introAssetId F-C1b: the text asset (for a quiz's introduction) the introduction was copied from; the same
+     * @param shuffleQuestions F-S7: whether each taker gets the questions in an order of their own; when not given, a
+     *                     new quiz shuffles (A2-14) and a changed one keeps its setting. A survey is never shuffled
+     *                     whatever it says.
      */
     public record QuizInput(UUID quizId, @NotNull String title, String intro, UUID cover, Integer timeLimitSec,
         Long baseRevision, String kind, @Pattern(regexp = "ja|zh|en") String language, UUID coverAssetId,
-        UUID introAssetId) {
+        UUID introAssetId, Boolean shuffleQuestions) {
+
+        /** As before F-S7: the order setting not given. */
+        public QuizInput(UUID quizId, String title, String intro, UUID cover, Integer timeLimitSec, Long baseRevision,
+            String kind, String language, UUID coverAssetId, UUID introAssetId) {
+            this(quizId, title, intro, cover, timeLimitSec, baseRevision, kind, language, coverAssetId, introAssetId,
+                null);
+        }
 
         /** As before F-C1b: nothing from the asset library. */
         public QuizInput(UUID quizId, String title, String intro, UUID cover, Integer timeLimitSec, Long baseRevision,
@@ -187,6 +197,9 @@ public final class QuizProcesses {
         if (input.language() != null) {
             heading.put("language", input.language());
         }
+        if (input.shuffleQuestions() != null) {
+            heading.put("shuffleQuestions", input.shuffleQuestions());
+        }
         if (input.quizId() == null) {
             QuizEditing.requireOwnFile(ctx, ctx.request().actorId(), "cover", input.cover(), null);
             if (ctx.hasViolations()) {
@@ -241,6 +254,8 @@ public final class QuizProcesses {
         boolean ai, Object clonedFrom) {
         Map<String, Object> values = new LinkedHashMap<>(heading);
         values.putIfAbsent("language", languageOf(ctx));
+        // F-S7 (A2-14): a new quiz shuffles its questions unless told otherwise.
+        values.putIfAbsent("shuffleQuestions", true);
         values.put("ownerId", ctx.request().actorId());
         values.put("kind", kind);
         values.put("status", QbContent.DRAFT);
@@ -592,8 +607,7 @@ public final class QuizProcesses {
             QuizLanguages.Draft draft = QuizLanguages.of(source, list(ctx, MATERIALS), list(ctx, IMAGES),
                 list(ctx, QUESTIONS), list(ctx, OPTIONS), list(ctx, TranslationProcesses.TRANSLATIONS));
             QuizSnapshot base = draft.snapshot();
-            content = new QuizSnapshot(base.title(), base.intro(), base.cover(), base.timeLimitSec(),
-                base.aiGenerated(), base.materials(), base.questions(), base.survey(), draft.all());
+            content = base.withTranslations(draft.all());
             hashes = draft.hashes();
         } else if (list(ctx, VERSIONS).isEmpty()) {
             ctx.reject(new Violation("versionNo", ContentCodes.VERSION_NOT_FOUND, "The quiz has no version "
@@ -648,6 +662,8 @@ public final class QuizProcesses {
         heading.put("intro", content.intro());
         heading.put("cover", content.cover());
         heading.put("timeLimitSec", content.timeLimitSec() == null ? null : decimal(content.timeLimitSec()));
+        // F-S7: a copy or an import keeps the order setting.
+        heading.put("shuffleQuestions", !content.fixedOrder());
         // A copy is of the same kind (D-Q12-1: the kind only changes by making a new quiz).
         Map<String, Object> values = newQuiz(ctx, heading, content.kind(), aiGenerated, clonedFrom);
         values.put("questionCount", decimal(content.questions().size()));
@@ -690,6 +706,8 @@ public final class QuizProcesses {
             q.put("image", question.image());
             q.put("points", decimal(question.points()));
             q.put("selection", question.selection());
+            // F-S7: and its difficulty.
+            q.put("difficulty", question.difficulty());
             q.putAll(more.apply(question));
             Object questionId = ctx.changes().insert(QbContent.QUESTION, q);
             for (QuizSnapshot.Option option : question.options()) {

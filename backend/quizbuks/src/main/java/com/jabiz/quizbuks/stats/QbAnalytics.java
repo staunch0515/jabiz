@@ -133,6 +133,8 @@ public final class QbAnalytics {
             .asNumeric(4, 0));
         count(eb, "completions", "completions");
         count(eb, "correct", "correct");
+        // F-S7 (F-S6 §4): how many of the version's attempts read were given the question.
+        count(eb, "drawn", "drawn");
         count(eb, "basedOn", "based_on");
         eb.field("shownAt", f -> f.physicalColumn("shown_at").required(true).asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());

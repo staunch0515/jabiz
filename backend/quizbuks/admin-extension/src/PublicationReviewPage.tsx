@@ -132,11 +132,13 @@ function Funds({ publicationId }: { publicationId: string }) {
   )
 }
 
-function Settings({ publication, tiers, quiz, finance }: {
+function Settings({ publication, tiers, quiz, finance, shuffled }: {
   publication: Publication
   tiers: UseQueryResult<ForRequest<Tier[]>>
   quiz: string | null
   finance: boolean
+  /** F-S7: whether the version shuffles its questions; undefined while its content is read (not shown). */
+  shuffled?: boolean
 }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const region = useLabels(DICTIONARY.region)
@@ -189,6 +191,15 @@ function Settings({ publication, tiers, quiz, finance }: {
     // Q81: a publication drawing questions says how many each taker gets (the approval's content names it).
     ...(publication.pickCount != null ? [{ key: 'pickCount', label: t('publication.pickCount'),
       value: <span data-testid="review-pick-count">{t('publication.pickCountValue', { count: publication.pickCount })}</span> }] : []),
+    // F-S7: and how many of each difficulty when it draws by difficulty, and whether the questions are shuffled.
+    ...(publication.pickByDifficulty ? [{ key: 'pickByDifficulty', label: t('publication.pickByDifficulty'),
+      value: <span data-testid="review-pick-by-difficulty">{(['EASY', 'MEDIUM', 'HARD'] as const)
+        .filter((level) => publication.pickByDifficulty?.[level])
+        .map((level) => `${t(`publication.difficulty.${level}`)} ${publication.pickByDifficulty?.[level]}`)
+        .join(' · ')}</span> }] : []),
+    ...(shuffled !== undefined ? [{ key: 'questionOrder', label: t('publication.questionOrder'),
+      value: <span data-testid="review-question-order">
+        {t(shuffled ? 'publication.shuffled' : 'publication.fixedOrder')}</span> }] : []),
     { key: 'budgetCap', label: t('publication.budgetCap'), value: money(publication.budgetCap) || notSet },
     { key: 'maxReward', label: t('publication.maxReward'), value: money(publication.maxReward) || notSet },
     { key: 'maxSpend', label: t('publication.maxSpend'), value: money(publication.maxSpend) || notSet },
@@ -696,7 +707,7 @@ export default function PublicationReviewPage() {
         </Alert>
       )}
       <Takedowns takedowns={takedowns} />
-      <Settings publication={p} tiers={tiers} quiz={quiz} finance={finance} />
+      <Settings publication={p} tiers={tiers} quiz={quiz} finance={finance} shuffled={shownVersion?.content?.shuffled} />
       <Content versionId={versionId} version={version} />
       {others.length > 0 && (
         <Languages publication={p} others={others} content={shownVersion?.content} seen={seen} onSeen={(language, on) => setSeenLanguages((all) =>

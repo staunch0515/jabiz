@@ -99,3 +99,53 @@
 
 - 场景快照大改：缺省乱序之后，每个创建 Quiz 的场景都要显式关掉乱序，一次改完，审查时逐个核对。
 - 难度的档位与名称已确认（2026-11-08）：以后要改档位改枚举，改名称只改消息。
+
+## 7. 实施记录（2026-11-09，分支 `1.3/quizbuks-FS7-shuffle`）
+
+### 7.1 做了什么
+
+- **迁移** `V100__quizbuks_question_order.sql` 与 Shopify 模块的 `V101__quizbuks_shopify_shuffle.sql`（只加列；`qb_question_stat` 是普通表，已有行的 `drawn` 设为 `completions`）。
+- **乱序**：
+  - `QbQuiz.shuffleQuestions`（缺省 `true`）；`QB_QUIZ_SAVE` 的 `QuizInput.shuffleQuestions`（`Boolean`：不给即新 Quiz 乱序、已有的保持，旧构造器保留）。
+  - `QuizSnapshot` 加组件 `fixedOrder`（旧的九参构造器保留，即乱序），`shuffled()` = 非问卷且非固定；问卷的 `fixedOrder` 一律为 false（不保存设置）。
+    `QuizSnapshots` 只在固定顺序时写 `"questionOrder":"fixed"`，读到其他值即拒绝；`in` / `subset` / 复制 / 导入都带上它。
+  - `play.QuestionOrder`（HMAC 标签 `qb.question-order`，输入 `userId|publicationId`，按题号排序后 Fisher-Yates，与给出的顺序无关）。
+  - `QuestionPick.set(userId, publicationId, snapshot, card)`：先抽（`pickByDifficulty` 优先，再 `pickCount`），再由 `QuestionOrder` 定顺序；
+    不抽且固定顺序时返回 null（`questionSet` 照旧为空）。`QuestionPick.pick` 照旧返回按题号排的集合（`QuestionPickTest` 不变）。
+    `AttemptProcesses.start` 只改了抽题那几行（与 S2 约定），签名、`ChannelPlay`、`PlayConfig` 不变；语句数不变。
+- **难度**：
+  - `content.QuestionDifficulty`（`EASY` / `MEDIUM` / `HARD`），字典 `urn:jabiz:dict:quizbuks:question-difficulty`，名称在消息 `qb.difficulty.<档位>`（三语）。
+  - `QbQuestion.difficulty`；`QB_QUESTION_SAVE` 的 `difficulty`（不给即保持，空串清除）；批量 `QB_QUESTION_DIFFICULTY_SET`（≤ 200 题，同 `QB_QUESTION_POINTS_SET`）；
+    AI 出题接受时填上请求的难度；快照只在设了时写；Quiz 文件（格式版本仍为 3，见 7.2）与复制带上。
+  - 发布 `pickByDifficulty`（`SaveInput` 加组件，旧构造器保留）：保存时 `pickCount` = 各档之和；规则 `PublicationReadiness.difficultyProblems`：
+    `QB_PUBLICATION_PICK_DIFFICULTY_INVALID`（档位不对或负数）、`_UNSET`（有题没设难度）、`_SHORT`（某档不够）、问卷 `PICK_SURVEY`；
+    审批内容只在设了时加 `pickByDifficulty`；卡片冻结它；版本切换不满足即 `SWITCH_PICK`；复制发布带上它。
+- **模板**：
+  - `qb.sponsor.quiz-questions` 加结果 `difficulty` 与参数 `difficulty`（`NONE` 为未设）；
+  - `qb.sponsor.quiz-versions` 加 `shuffled` 与 `easyCount` / `mediumCount` / `hardCount`（向导与详情用）；
+  - `qb.app.feed` 的 `q` 加卡片主题词的名称（任一语言）与自定义词；
+  - `qb.sponsor.analytics.questions` 的 `difficulty` 改名 `observedDifficulty`（显示文字不变），新的 `difficulty` 是设定的难度，另加 `drawn`。
+- **统计 `drawn`**：`analytics-attempts.sql` 每题加 `qDrawn`，`QuestionTotals.Count` 加 `drawn`（只在与完成数不同时写第四个数，已有的累计文本不变），
+  `QbQuestionStat.drawn` 随其他数字一起按最小分组发表。
+- **前端**（发起方页面）：Quiz 设置的乱序开关与说明（问卷不显示）；题目对话框的难度下拉；批量设难度；按难度筛选；行上的难度标记；
+  发布向导"按难度抽题"（各档题数、配额、合计、未设难度的提示）；预览的乱序提示；发布详情与向导摘要的"按难度抽题"与"题目顺序"；
+  题目统计的"设定的难度""被抽到"与按设定难度的正确率。平台管理系统的审核页显示按难度抽题与题目顺序。导出只在非缺省时写 `shuffleQuestions: false` 与 `difficulty`。
+- **压测**：`loadTest` 加 `LOAD_DRAW`（每人抽题数，0 = 全部）。本 PR 没有对运行中的应用重测（需要部署的 jar），千题、每人 20 题的重测留作待办。
+
+### 7.2 与计划的差别
+
+- **`drawn` 的口径**：`question_set` 是敏感字段，SQL 模板不能读（设计 02 §6.1），所以 `drawn` 按读到的（完成或超时的）答题中 `result` 列出该题的次数计算：
+  `result` 列出答题被给的每一题（答没答都有），所以等于"被抽到且结束"的人数，进行中的答题在结束时计入。今天它与 `completions` 相同；
+  分开保存是为了让统计页明说"被抽到"，以后完成数改口径时它不变。
+  **完成后才计入**（总部 2026-11-09 确认）：进行中的答题不计，结束后由下一次 `qb.analytics` 计入；题目统计在"被抽到"一栏旁注明"完成后才计入"（三语），表下另有一句说明；
+  `operations.md` §7.7 与帮助底稿 `help/large-banks.md` 同样写明。
+- **Quiz 文件格式不升版本**：`quiz.shuffleQuestions` 与 `questions[].difficulty` 是版本 3 中的可选键，旧的读取方跳过它们（不拒绝文件）。
+- **店面（Shopify 活动）缺省乱序，店员可以关掉**（总部 2026-11-09 确认）：按 A2-14 缺省乱序；活动编辑页有与发起方 Quiz 设置相同的"题目乱序"开关（`@jabiz/ui` 的 `Switch`，三语说明）。
+  `QBS_CAMPAIGN_SAVE` 加 `shuffleQuestions`（与 `QB_QUIZ_SAVE` 同名同义：不给即新草稿乱序、编辑保持），`qbs_campaign.shuffle_questions`（迁移 `V101__quizbuks_shopify_shuffle.sql`，已有活动为 true），
+  活动的复制带上它；发布时经渠道合约 `Channel.PublishInput.shuffleQuestions`（旧构造器保留，即乱序）交给 `ChannelPublishing`，关掉时快照写 `"questionOrder":"fixed"`、`QbQuiz.shuffleQuestions` 为 false。
+  测试：`ShopifyStorefrontIT.theStaffMayKeepTheQuestionsInTheOrderWritten`、`quizbuks-web/shopify` 的 `CampaignsPage.test.tsx`。
+- **问卷的快照不写 `questionOrder`**，问卷的 `QbQuiz.shuffleQuestions` 不起作用。
+- **重用的发布设置**（`publishing/settings.ts`）不带按难度抽题（照旧带 `pickCount`），因为各档题数取决于当时的题库（总部 2026-11-09 确认）：
+  导入设置的对话框提示"设置中不保存按难度抽题，请在草稿中按所选版本的题目重新设定各档难度的题数"（三语，`publication-import-difficulty`，`publishing.test.tsx`）。
+- **测试中的 Quiz**：共用的辅助（`ContentItSupport.newQuiz`、`PublicationItSupport`、`AiItSupport`）与各场景的 `QB_QUIZ_SAVE` 显式 `shuffleQuestions: false`；
+  只有新场景 `qb/play-order.yml` 与专门的测试打开乱序。

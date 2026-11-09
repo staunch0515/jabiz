@@ -60,6 +60,12 @@ public final class PublishingCodes {
     public static final String PICK_UNEQUAL_POINTS = "QB_PUBLICATION_PICK_UNEQUAL_POINTS";
     /** Q81 (D-Q81-2): a survey is answered whole. */
     public static final String PICK_SURVEY = "QB_PUBLICATION_PICK_SURVEY";
+    /** F-S7: a level is drawn more questions than the version has of it. */
+    public static final String PICK_DIFFICULTY_SHORT = "QB_PUBLICATION_PICK_DIFFICULTY_SHORT";
+    /** F-S7: drawing by difficulty needs every question of the version to have one. */
+    public static final String PICK_DIFFICULTY_UNSET = "QB_PUBLICATION_PICK_DIFFICULTY_UNSET";
+    /** F-S7: a draw by difficulty names levels that are not EASY, MEDIUM or HARD, or a count below 0. */
+    public static final String PICK_DIFFICULTY_INVALID = "QB_PUBLICATION_PICK_DIFFICULTY_INVALID";
     public static final String SWITCH_NOT_PENDING = "QB_PUBLICATION_SWITCH_NOT_PENDING";
     /** Not a refusal: why a switch in review was dropped when its publication ended first. */
     public static final String SWITCH_ENDED = "QB_PUBLICATION_SWITCH_ENDED";
@@ -159,7 +165,7 @@ public final class PublishingCodes {
         SWITCH_LANGUAGES, COVER_LANGUAGE,
         SWITCH_PICK, PICK_RANGE, PICK_UNEQUAL_POINTS, PICK_SURVEY,
         ENTRY_FEE_RANGE, ENTRY_FEE_NOT_ALLOWED, ENTRY_FEE_OFF, NODE_UNKNOWN, NODE_NOT_BINDABLE, NODE_SPONSOR_LIT,
-        PICK_REQUIRED, PICK_TOO_MANY);
+        PICK_REQUIRED, PICK_TOO_MANY, PICK_DIFFICULTY_SHORT, PICK_DIFFICULTY_UNSET, PICK_DIFFICULTY_INVALID);
 
     private PublishingCodes() {}
 }

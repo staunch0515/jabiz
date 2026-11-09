@@ -60,12 +60,27 @@ public final class Channel {
      * @param name      the publication's name, as its publisher lists it (also the quiz's title)
      * @param video     the YouTube or Vimeo link to watch before answering; none for a quiz alone
      * @param passScore how many questions must be answered right (each question is worth a point)
+     * @param shuffleQuestions whether each taker gets the questions in an order of their own (F-S7, A2-14): none or
+     *                  true shuffles them, as a quiz does by default; false keeps the order given
      */
     public record PublishInput(@NotNull @Valid Publisher publisher, @NotBlank @Size(max = NAME_LENGTH) String name,
         @Size(max = URL_LENGTH) String video,
         @NotNull @Min(MIN_TIME_LIMIT_SEC) @Max(MAX_TIME_LIMIT_SEC) Integer timeLimitSec,
         @NotNull @Min(1) Integer passScore,
-        @NotNull @Size(min = 1, max = MAX_QUESTIONS) List<@Valid @NotNull QuestionInput> questions) {}
+        @NotNull @Size(min = 1, max = MAX_QUESTIONS) List<@Valid @NotNull QuestionInput> questions,
+        Boolean shuffleQuestions) {
+
+        /** A publication whose questions are shuffled (the default). */
+        public PublishInput(Publisher publisher, String name, String video, Integer timeLimitSec, Integer passScore,
+            List<QuestionInput> questions) {
+            this(publisher, name, video, timeLimitSec, passScore, questions, null);
+        }
+
+        /** Whether the questions keep the order given (only when asked to). */
+        public boolean fixedOrder() {
+            return Boolean.FALSE.equals(shuffleQuestions);
+        }
+    }
 
     /** @param video the player the storefront shows (null without a video) */
     public record PublishOutput(UUID publicationId, UUID versionId, String status, int fullScore, int questionCount,

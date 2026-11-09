@@ -279,6 +279,20 @@ describe('PublicationReviewPage', () => {
     expect(files.map((f) => f.getAttribute('data-file'))).toEqual(expect.arrayContaining([COVER, PICTURE, PDF]))
     expect(files.find((f) => f.getAttribute('data-file') === PDF)).toHaveAttribute('data-image', 'false')
     expect(within(preview).getAllByTestId('preview-material')).toHaveLength(6)
+    // F-S7: a version without the fixed order shuffles its questions for each Taker; no draw by difficulty.
+    expect(screen.getByTestId('review-question-order')).toHaveTextContent('Shuffled for each Taker')
+    expect(screen.queryByTestId('review-pick-by-difficulty')).toBeNull()
+  })
+
+  it('shows a draw by difficulty and a version in the fixed order (F-S7)', async () => {
+    server.entities.set(`${DATASET.publication}/${PUBLICATION_ID}`, { ...publication(), pickCount: 3,
+      pickByDifficulty: '{"EASY":2,"HARD":1}' })
+    server.entities.set(`${DATASET.version}/${VERSION_ID}`, { versionId: VERSION_ID, label: 'v1',
+      title: 'World capitals', contentHash: 'a'.repeat(64), versionedAt: '2026-10-14T00:00:00Z',
+      content: JSON.stringify({ ...JSON.parse(SNAPSHOT_JSON) as Record<string, unknown>, questionOrder: 'fixed' }) })
+    renderPublication()
+    expect(await screen.findByTestId('review-pick-by-difficulty')).toHaveTextContent('Easy 2 · Hard 1')
+    expect(await screen.findByTestId('review-question-order')).toHaveTextContent('Fixed order (as in the quiz)')
   })
 
   it('opens web links in a new tab and makes no other link live', async () => {

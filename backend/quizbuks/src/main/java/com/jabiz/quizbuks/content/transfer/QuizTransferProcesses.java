@@ -324,7 +324,7 @@ public final class QuizTransferProcesses {
             }
             // A survey's question is worth 1, as editing makes it.
             questions.add(new QuizSnapshot.Question(q + 1, question.stem(), key(ids, question.image()),
-                survey ? 1 : question.points(), options, survey ? question.selection() : null));
+                survey ? 1 : question.points(), options, survey ? question.selection() : null, question.difficulty()));
         }
         Map<String, QuizSnapshot.Language> translations = new LinkedHashMap<>();
         file.translations().forEach((language, t) -> {
@@ -334,7 +334,7 @@ public final class QuizTransferProcesses {
                 .map(own -> material(own.material(), own.no(), ids)).toList()));
         });
         return new QuizSnapshot(file.title(), file.intro(), key(ids, file.cover()), file.timeLimitSec(), false,
-            materials, questions, survey, translations);
+            materials, questions, survey, translations, Boolean.FALSE.equals(file.shuffleQuestions()));
     }
 
     private static QuizSnapshot.Material material(QuizFile.Material material, int no, Map<String, UUID> ids) {

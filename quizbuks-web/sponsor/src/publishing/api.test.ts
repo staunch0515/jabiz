@@ -25,6 +25,8 @@ const FORM: PublicationForm = {
   timeLimitSec: '',
   passScore: '2',
   pickCount: '',
+  byDifficulty: false,
+  quotas: { EASY: '', MEDIUM: '', HARD: '' },
   entryFee: '',
   budgetCap: '1000',
   maxWinners: ' 10 ',
