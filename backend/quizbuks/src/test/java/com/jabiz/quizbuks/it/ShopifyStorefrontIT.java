@@ -126,12 +126,13 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
     }
 
     @SuppressWarnings("unchecked")
-    static List<Map<String, Object>> answersAllRight(Map<String, Object> started, Map<Integer, String> rightText) {
+    static List<Map<String, Object>> answersAllRight(Map<String, Object> started, Map<String, String> rightText) {
         List<Map<String, Object>> answers = new ArrayList<>();
         for (Map<String, Object> question : (List<Map<String, Object>>) started.get("questions")) {
             int no = (Integer) question.get("no");
             Map<String, Object> right = ((List<Map<String, Object>>) question.get("options")).stream()
-                .filter(option -> option.get("text").equals(rightText.get(no))).findFirst().orElseThrow();
+                .filter(option -> option.get("text").equals(rightText.get((String) question.get("stem"))))
+                .findFirst().orElseThrow();
             answers.add(Map.of("questionNo", no, "selected", List.of(right.get("no"))));
         }
         return answers;
@@ -139,11 +140,12 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
 
     static final int DISCOUNT_BATCH = 250;
 
-    static final Map<Integer, String> RIGHT = Map.of(1, "First option 2", 2, "Second option 3");
-    static final Map<Integer, String> WRONG = Map.of(1, "First option 1", 2, "Second option 1");
+    // By question (F-S7: the storefront shuffles by default, so a question's place is not its number in the campaign).
+    static final Map<String, String> RIGHT = Map.of("First", "First option 2", "Second", "Second option 3");
+    static final Map<String, String> WRONG = Map.of("First", "First option 1", "Second", "Second option 1");
 
     /** A visitor (or customer) answers: started, then submitted after a person's pace. */
-    Map<String, Object> play(LiveShop live, String customer, String visitor, Map<Integer, String> chosen) {
+    Map<String, Object> play(LiveShop live, String customer, String visitor, Map<String, String> chosen) {
         Map<String, Object> started = ok(storefront("QBS_SF_START", live.shop(), customer, visitor,
             Map.of("publicationId", live.publicationId(), "visitor", visitor)));
         later(Duration.ofSeconds(10));
@@ -498,6 +500,69 @@ class ShopifyStorefrontIT extends ShopifyItSupport {
         }
         assertThat(query("SELECT status FROM qb_publication_card WHERE publication_id = ?::uuid", live.publicationId()))
             .extracting(row -> row.get("status")).containsExactly("ENDED");
+    }
+
+    /**
+     * F-S7 (controller 2026-11-09): the storefront shuffles by default (A2-14), and the staff turn it off with the same
+     * setting as a sponsor's quiz: the engine's version then keeps the order written, for every visitor.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void theStaffMayKeepTheQuestionsInTheOrderWritten() {
+        String shop = shop("order");
+        Staff admin = open(shop, "1");
+        run("QBS_SHOP_CONNECT", admin.bearer(), Map.of("sessionToken", sessionToken(shop, "1")));
+        List<Map<String, Object>> questions = new ArrayList<>();
+        for (int i = 1; i <= 8; i++) {
+            questions.add(question("Q" + i, 1));
+        }
+        // A new draft shuffles unless told otherwise; an edit without the setting keeps it.
+        Map<String, Object> draft = new LinkedHashMap<>(draft("Ordered quiz"));
+        draft.put("questions", questions);
+        Map<String, Object> saved = run("QBS_CAMPAIGN_SAVE", admin.bearer(), draft);
+        assertThat(saved).containsEntry("shuffleQuestions", true);
+        Map<String, Object> off = new LinkedHashMap<>(draft);
+        off.put("campaignId", saved.get("campaignId"));
+        off.put("shuffleQuestions", false);
+        saved = run("QBS_CAMPAIGN_SAVE", admin.bearer(), off);
+        assertThat(saved).containsEntry("shuffleQuestions", false);
+        Map<String, Object> kept = new LinkedHashMap<>(draft);
+        kept.put("campaignId", saved.get("campaignId"));
+        kept.put("name", "Ordered quiz 2");
+        assertThat(run("QBS_CAMPAIGN_SAVE", admin.bearer(), kept)).containsEntry("shuffleQuestions", false);
+        assertThat((List<Map<String, Object>>) run("QBS_CAMPAIGN_LIST", admin.bearer(), Map.of()).get("campaigns"))
+            .singleElement().satisfies(c -> assertThat(c).containsEntry("shuffleQuestions", false));
+
+        Map<String, Object> live = run("QBS_CAMPAIGN_PUBLISH", admin.bearer(), Map.of("campaignId",
+            saved.get("campaignId")));
+        assertThat(live).containsEntry("status", "LIVE").containsEntry("shuffleQuestions", false);
+        String publicationId = (String) live.get("publicationId");
+        Map<String, Object> version = query("SELECT v.content, q.shuffle_questions FROM qb_publication_card c"
+            + " JOIN qb_quiz_version_version v ON v.version_id = c.version_id"
+            + " JOIN qb_quiz_version q ON q.quiz_id = v.quiz_id WHERE c.publication_id = ?::uuid"
+            + " ORDER BY q.version_no DESC LIMIT 1", publicationId).getFirst();
+        assertThat((String) version.get("content")).contains("\"questionOrder\":\"fixed\"");
+        assertThat(version).containsEntry("shuffle_questions", false);
+        // Every visitor gets the questions as written.
+        LiveShop ordered = new LiveShop(shop, admin, (String) saved.get("campaignId"), publicationId);
+        for (int n = 0; n < 3; n++) {
+            String visitor = visitor();
+            Map<String, Object> started = ok(storefront("QBS_SF_START", ordered.shop(), null, visitor,
+                Map.of("publicationId", ordered.publicationId(), "visitor", visitor)));
+            assertThat((List<Map<String, Object>>) started.get("questions")).extracting(q -> q.get("stem"))
+                .containsExactly("Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8");
+        }
+
+        // Another shop's campaign left as it is: shuffled, as before F-S7 (the snapshot says nothing).
+        LiveShop shuffled = liveShop("shuffled");
+        assertThat((List<Map<String, Object>>) run("QBS_CAMPAIGN_LIST", shuffled.admin().bearer(), Map.of())
+            .get("campaigns")).singleElement().satisfies(c -> assertThat(c).containsEntry("shuffleQuestions", true));
+        Map<String, Object> other = query("SELECT v.content, q.shuffle_questions FROM qb_publication_card c"
+            + " JOIN qb_quiz_version_version v ON v.version_id = c.version_id"
+            + " JOIN qb_quiz_version q ON q.quiz_id = v.quiz_id WHERE c.publication_id = ?::uuid"
+            + " ORDER BY q.version_no DESC LIMIT 1", shuffled.publicationId()).getFirst();
+        assertThat((String) other.get("content")).doesNotContain("questionOrder");
+        assertThat(other).containsEntry("shuffle_questions", true);
     }
 
     @Test

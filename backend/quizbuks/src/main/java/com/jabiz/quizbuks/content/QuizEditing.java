@@ -186,12 +186,14 @@ public final class QuizEditing {
                     Boolean.TRUE.equals(option.get("correct"))));
             }
             q.add(new QuizSnapshot.Question(q.size() + 1, question.get("stem"), uuid(question.get("image")),
-                (int) number(question.get("points")), list, question.get("selection")));
+                (int) number(question.get("points")), list, question.get("selection"), question.get("difficulty")));
         }
         Object limit = quiz.get("timeLimitSec");
+        // F-S7: a quiz is shuffled unless set otherwise (a quiz read without the setting is shuffled too).
         return new QuizSnapshot(quiz.get("title"), quiz.get("intro"), uuid(quiz.get("cover")),
             limit == null ? null : (int) number(limit), Boolean.TRUE.equals(quiz.get("aiGenerated")), m, q,
-            QbContent.KIND_SURVEY.equals(quiz.get("kind")));
+            QbContent.KIND_SURVEY.equals(quiz.get("kind")), java.util.Map.of(),
+            Boolean.FALSE.equals(quiz.get("shuffleQuestions")));
     }
 
     /**

@@ -20,6 +20,7 @@ results:
   questionNo:    { kind: { type: numeric, precision: 4, scale: 0 } }
   qCompletions:  { kind: { type: numeric, precision: 12, scale: 0 } }
   qCorrect:      { kind: { type: numeric, precision: 12, scale: 0 } }
+  qDrawn:        { kind: { type: numeric, precision: 12, scale: 0 } }
   attempts:      { kind: { type: numeric, precision: 12, scale: 0 } }
   submitted:     { kind: { type: numeric, precision: 12, scale: 0 } }
   expired:       { kind: { type: numeric, precision: 12, scale: 0 } }
@@ -38,7 +39,9 @@ permissions: [qb.stats.system]
 -- right when it earned points, which for a multiple choice means all of it right; a result that is not such JSON
 -- (it never is) counts as a completion without questions instead of failing the chunk. Average times count the submitted
 -- attempts only (an expired one took the whole time limit, E-6). Questions are counted per version the attempt ran on
--- (Q51b): after a switch the same numbers are other questions.
+-- (Q51b): after a switch the same numbers are other questions. F-S7 (F-S6 §4): a question's drawn is the attempts read
+-- that were given it; the attempt's question_set is sensitive (no template reads it, design 02 §6.1), so it is the
+-- attempts whose result names the question: a result has every question the attempt was given, answered or not.
 WITH pubs AS (
     SELECT k.{{QbPublicationCard.publicationId}} AS pid,
            c.{{QbAnalyticsCursor.watermarkAt}} AS wm_at, c.{{QbAnalyticsCursor.watermarkId}} AS wm_id
@@ -86,7 +89,7 @@ per_version AS (
     FROM attempts a
     GROUP BY a.pid, a.vid),
 per_question AS (
-    SELECT a.pid, a.vid, CAST(q.value ->> 'no' AS int) AS qno, count(*) AS n,
+    SELECT a.pid, a.vid, CAST(q.value ->> 'no' AS int) AS qno, count(*) AS n, count(DISTINCT a.aid) AS drawn,
            count(*) FILTER (WHERE jsonb_typeof(q.value -> 'earned') = 'number'
                               AND CAST(q.value ->> 'earned' AS numeric) > 0) AS correct
     FROM attempts a
@@ -101,6 +104,7 @@ SELECT
     CAST(q.qno AS numeric(4, 0))               AS questionNo,
     CAST(coalesce(q.n, 0) AS numeric(12, 0))   AS qCompletions,
     CAST(coalesce(q.correct, 0) AS numeric(12, 0)) AS qCorrect,
+    CAST(coalesce(q.drawn, 0) AS numeric(12, 0)) AS qDrawn,
     CAST(p.attempts AS numeric(12, 0))         AS attempts,
     CAST(p.submitted AS numeric(12, 0))        AS submitted,
     CAST(p.expired AS numeric(12, 0))          AS expired,

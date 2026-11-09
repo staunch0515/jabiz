@@ -26,7 +26,7 @@ datasets:
 params:
   at:      { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time the feed is for (the client's now) }
   country: { kind: { type: text, maxLength: 2 }, description: "The taker's country (QbCountry.code); without one only publications aimed at GLOBAL" }
-  q:       { kind: { type: text, maxLength: 100 }, description: Only publications whose name or quiz title contains this text }
+  q:       { kind: { type: text, maxLength: 100 }, description: "Only publications whose name, quiz title, a topic's name (any language) or a custom word contains this text" }
   includeAnswered: { kind: { type: bool }, description: "If true, also the publications the caller has answered (Q34); by default those are left out" }
   method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22, Q33): PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM or DIGITAL_PRIZE" }
   mainlandChina: { kind: { type: bool }, description: "F-S11: whether the caller's address is in mainland China, as GET /api/client/region said; publications with a foreign video and no exception are then not for them" }
@@ -305,4 +305,13 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})
   AND (CAST(:q AS text) IS NULL
        OR strpos(lower(c.{{QbPublicationCard.name}}), lower(CAST(:q AS text))) > 0
-       OR strpos(lower(c.{{QbPublicationCard.quizTitle}}), lower(CAST(:q AS text))) > 0)
+       OR strpos(lower(c.{{QbPublicationCard.quizTitle}}), lower(CAST(:q AS text))) > 0
+       OR EXISTS (SELECT 1
+                  FROM unnest(string_to_array(c.{{QbPublicationCard.topics}}, ',')) AS qt(code)
+                  JOIN {{QbTopic}} qw ON qw.{{QbTopic.topicId}} = qt.code
+                  CROSS JOIN jsonb_each_text(CAST(qw.{{QbTopic.name}} AS jsonb)) AS qn(language, name)
+                  WHERE strpos(lower(qn.name), lower(CAST(:q AS text))) > 0)
+       OR EXISTS (SELECT 1
+                  FROM jsonb_array_elements_text(CAST(coalesce(c.{{QbPublicationCard.customTopics}}, '[]') AS jsonb))
+                       AS qc(word)
+                  WHERE strpos(lower(qc.word), lower(CAST(:q AS text))) > 0))

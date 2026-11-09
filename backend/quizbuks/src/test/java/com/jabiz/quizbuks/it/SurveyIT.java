@@ -59,6 +59,10 @@ class SurveyIT extends PlayItSupport {
         assertThat(snapshot.questions()).flatExtracting(QuizSnapshot.Question::options)
             .extracting(QuizSnapshot.Option::correct).containsOnly(false);
         assertThat(snapshot.fullScore()).isEqualTo(2);
+        // F-S7: a survey's snapshot keeps no order setting (it is never shuffled).
+        assertThat(snapshot.shuffled()).isFalse();
+        assertThat((String) query("SELECT content FROM qb_quiz_version_version WHERE version_id = ?::uuid", versionId)
+            .getFirst().get("content")).doesNotContain("questionOrder");
     }
 
     @Test
@@ -73,6 +77,12 @@ class SurveyIT extends PlayItSupport {
         assertThat((List<Map<String, Object>>) started.get("questions")).extracting(q -> q.get("selection"))
             .containsExactly("SINGLE", "MULTIPLE");
         String attemptId = (String) started.get("attemptId");
+        // F-S7: a survey is never shuffled, though made with the default setting: the questions in their order, no
+        // set stored.
+        assertThat((List<Map<String, Object>>) started.get("questions")).extracting(q -> q.get("stem"))
+            .containsExactly("How often?", "Which ones?");
+        assertThat(query("SELECT question_set FROM qb_attempt WHERE attempt_id = ?", attemptId).getFirst()
+            .get("question_set")).isNull();
 
         // Not every question answered, or a single choice with two options: refused, nothing finished.
         assertThat(codes(refused("QB_ATTEMPT_SUBMIT", token, submission(attemptId, "answers",

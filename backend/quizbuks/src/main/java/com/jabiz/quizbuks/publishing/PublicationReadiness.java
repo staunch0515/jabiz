@@ -24,7 +24,22 @@ public final class PublicationReadiness {
     public record Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
         Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
         String redeemDescription, String audience, String digitalDelivery, String digitalDescription,
-        boolean hasDigitalContent, ReferralPolicy referral, Integer pickCount, BigDecimal entryFee) {
+        boolean hasDigitalContent, ReferralPolicy referral, Integer pickCount, BigDecimal entryFee,
+        Map<String, Integer> pickByDifficulty) {
+
+        public Draft {
+            pickByDifficulty = pickByDifficulty == null ? Map.of() : Map.copyOf(pickByDifficulty);
+        }
+
+        /** As before F-S7: no draw by difficulty. */
+        public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
+            Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners, String rewardMethod,
+            String redeemDescription, String audience, String digitalDelivery, String digitalDescription,
+            boolean hasDigitalContent, ReferralPolicy referral, Integer pickCount, BigDecimal entryFee) {
+            this(versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap, maxWinners,
+                rewardMethod, redeemDescription, audience, digitalDelivery, digitalDescription, hasDigitalContent,
+                referral, pickCount, entryFee, Map.of());
+        }
 
         /** As before Q88b: no entry fee. */
         public Draft(UUID versionId, String name, String regions, Instant startAt, Instant endAt,
@@ -135,6 +150,10 @@ public final class PublicationReadiness {
         // leaves the version's.
         Integer fullScore = version == null ? null : fullScore(version, draft.pickCount());
         problems.addAll(pickProblems(draft.pickCount(), version));
+        // F-S7: a draw by difficulty, each level from its own questions.
+        if (problems.isEmpty()) {
+            problems.addAll(difficultyProblems(draft.pickByDifficulty(), version));
+        }
         // Q88b (D-Q88-9): only a quiz charges an entry fee (a survey pays people to answer).
         if (draft.chargesEntryFee() && version != null && version.survey()) {
             problems.add(new Violation("entryFee", PublishingCodes.ENTRY_FEE_NOT_ALLOWED, "A survey charges no "
@@ -317,6 +336,49 @@ public final class PublicationReadiness {
                 + "question of the version to score the same", Map.of()));
         }
         return List.of();
+    }
+
+    /**
+     * F-S7 (§2): why the version cannot give each taker {@code quotas} questions of each difficulty: a level that is
+     * not one, a count below 0, a question of the version without a difficulty ({@code PICK_DIFFICULTY_UNSET}), or a
+     * level drawn more questions than the version has of it ({@code PICK_DIFFICULTY_SHORT}). The total is the pick's
+     * count, checked by {@link #pickProblems}. None for no draw by difficulty or no version.
+     */
+    public static List<Violation> difficultyProblems(Map<String, Integer> quotas, QuizSnapshot version) {
+        if (quotas == null || quotas.isEmpty()) {
+            return List.of();
+        }
+        List<Violation> problems = new ArrayList<>();
+        for (Map.Entry<String, Integer> quota : quotas.entrySet()) {
+            if (!com.jabiz.quizbuks.content.QuestionDifficulty.known(quota.getKey()) || quota.getValue() == null
+                || quota.getValue() < 0) {
+                return List.of(new Violation("pickByDifficulty", PublishingCodes.PICK_DIFFICULTY_INVALID,
+                    "Each difficulty is drawn 0 or more questions", Map.of()));
+            }
+        }
+        if (version == null) {
+            return List.of();
+        }
+        if (version.survey()) {
+            return List.of(new Violation("pickByDifficulty", PublishingCodes.PICK_SURVEY, "A survey is answered "
+                + "whole", Map.of()));
+        }
+        long unset = version.questions().stream().filter(question -> question.difficulty() == null).count();
+        if (unset > 0) {
+            return List.of(new Violation("pickByDifficulty", PublishingCodes.PICK_DIFFICULTY_UNSET, unset
+                + " questions of the version have no difficulty", Map.of("unset", unset)));
+        }
+        for (Map.Entry<String, Integer> quota : quotas.entrySet()) {
+            long available = version.questions().stream()
+                .filter(question -> quota.getKey().equals(question.difficulty())).count();
+            if (quota.getValue() > available) {
+                problems.add(new Violation("pickByDifficulty." + quota.getKey(),
+                    PublishingCodes.PICK_DIFFICULTY_SHORT, "The version has " + available + " questions of "
+                    + quota.getKey(), Map.of("difficulty", quota.getKey(), "available", available,
+                    "count", quota.getValue())));
+            }
+        }
+        return problems;
     }
 
     private static List<Violation> survey(Draft draft, List<TierCoverage.Tier> tiers, int fullScore) {

@@ -1,4 +1,4 @@
-import { Button, Input, Label } from '@jabiz/ui'
+import { Button, Input, Label, Switch } from '@jabiz/ui'
 import { useMutation } from '@tanstack/react-query'
 import { CircleCheck } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
@@ -17,8 +17,9 @@ import { LibraryActions } from '../assets/LibraryActions'
 const FIELDS = ['title', 'intro', 'cover', 'timeLimitSec'] as const
 
 /**
- * The quiz's heading (M-21, M-22): title, language (Q59a), introduction (Markdown), cover image and time limit, saved together with
- * `QB_QUIZ_SAVE`. A draft may be incomplete; only the title is required.
+ * The quiz's heading (M-21, M-22): title, language (Q59a), introduction (Markdown), cover image, time limit and (F-S7, a scored
+ * quiz only) whether the questions are shuffled, saved together with `QB_QUIZ_SAVE`. A draft may be incomplete; only the title
+ * is required.
  */
 export function HeadingForm({ quiz }: { quiz: Quiz }) {
   const { t } = useTranslation(SPONSOR)
@@ -35,6 +36,8 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
   }
   const [timeLimit, setTimeLimit] = useState(quiz.timeLimitSec == null ? '' : String(quiz.timeLimitSec))
   const [language, setLanguage] = useState<ContentLanguage>(quiz.language)
+  const [shuffle, setShuffle] = useState(quiz.shuffleQuestions)
+  const survey = quiz.kind === 'SURVEY'
   const [local, setLocal] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   // F-C1: the cover and the introduction chosen from the asset library (or saved to it) name their asset with the
@@ -50,6 +53,8 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
       cover,
       timeLimitSec: wholeOrNull(timeLimit),
       language,
+      // F-S7: a survey is never shuffled, so it sends nothing.
+      ...(survey ? {} : { shuffleQuestions: shuffle }),
       baseRevision: editing.revision(),
       // Only a copy says so: other saves send what they always did.
       ...withAssets({ coverAssetId: coverCopy.idFor(cover), introAssetId: introCopy.idFor(intro) }),
@@ -132,6 +137,19 @@ export function HeadingForm({ quiz }: { quiz: Quiz }) {
         </p>
         {timeProblem && <p id={`${id}-time-error`} className="text-destructive text-sm">{timeProblem}</p>}
       </div>
+      {!survey && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <Switch id={`${id}-shuffle`} checked={shuffle} aria-describedby={`${id}-shuffle-hint`}
+              data-testid="heading-shuffle" onCheckedChange={(next) => {
+                setDone(false)
+                setShuffle(next)
+              }} />
+            <Label htmlFor={`${id}-shuffle`}>{t('editor.shuffleQuestions')}</Label>
+          </div>
+          <p id={`${id}-shuffle-hint`} className="text-muted-foreground text-sm">{t('editor.shuffleQuestionsHint')}</p>
+        </div>
+      )}
       <ProblemList problems={formProblem(save.error, FIELDS)} testId="heading-error" />
       {done && !save.isPending && (
         <p role="status" className="text-success flex items-center gap-2 text-sm" data-testid="heading-saved">

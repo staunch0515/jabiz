@@ -14,10 +14,20 @@ import java.util.Objects;
  * @param cover        a key of {@link #files}, or null
  * @param language     the base language (version 2, Q73a); null for the importer's interface language
  * @param translations the quiz's other languages (version 2, Q73a), by code
+ * @param shuffleQuestions F-S7 ({@code quiz.shuffleQuestions}, optional in version 3: older readers skip it): whether
+ *                     each taker gets the questions in an order of their own; absent is the default, shuffled
  */
 public record QuizFile(String kind, String title, String intro, String cover, Integer timeLimitSec,
     List<Material> materials, List<Question> questions, Map<String, FileEntry> files, String language,
-    Map<String, Language> translations, Products products) {
+    Map<String, Language> translations, Products products, Boolean shuffleQuestions) {
+
+    /** As before F-S7: the order setting not given (shuffled). */
+    public QuizFile(String kind, String title, String intro, String cover, Integer timeLimitSec,
+        List<Material> materials, List<Question> questions, Map<String, FileEntry> files, String language,
+        Map<String, Language> translations, Products products) {
+        this(kind, title, intro, cover, timeLimitSec, materials, questions, files, language, translations, products,
+            null);
+    }
 
     /** A quiz without products (before version 3). */
     public QuizFile(String kind, String title, String intro, String cover, Integer timeLimitSec,
@@ -114,10 +124,20 @@ public record QuizFile(String kind, String title, String intro, String cover, In
 
     public record Image(String image, String caption) {}
 
-    /** @param selection a survey's {@code SINGLE} or {@code MULTIPLE}; null for a scored question */
-    public record Question(String stem, String image, Integer points, String selection, List<Option> options) {
+    /**
+     * @param selection  a survey's {@code SINGLE} or {@code MULTIPLE}; null for a scored question
+     * @param difficulty F-S7 (optional in version 3: older readers skip it): {@code EASY}, {@code MEDIUM} or
+     *                   {@code HARD}; null when not set
+     */
+    public record Question(String stem, String image, Integer points, String selection, List<Option> options,
+        String difficulty) {
         public Question {
             options = List.copyOf(Objects.requireNonNull(options, "options must not be null"));
+        }
+
+        /** Without a difficulty (before F-S7). */
+        public Question(String stem, String image, Integer points, String selection, List<Option> options) {
+            this(stem, image, points, selection, options, null);
         }
     }
 

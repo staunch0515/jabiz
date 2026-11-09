@@ -59,6 +59,42 @@ class QuestionPickTest {
         assertThat(PICK.pick("user", "pub", questions, 3)).isNotEqualTo(PICK.pick("user", "other-pub", questions, 3));
     }
 
+    /** F-S7: six questions, two of each difficulty. */
+    private static List<QuizSnapshot.Question> graded() {
+        String[] levels = {"EASY", "EASY", "MEDIUM", "MEDIUM", "HARD", "HARD"};
+        List<QuizSnapshot.Question> questions = new java.util.ArrayList<>();
+        for (QuizSnapshot.Question q : OptionShuffleTest.questions(6, 2)) {
+            questions.add(new QuizSnapshot.Question(q.no(), q.stem(), q.image(), q.points(), q.options(), null,
+                levels[q.no() - 1]));
+        }
+        return questions;
+    }
+
+    @Property(tries = 100)
+    void aDrawByDifficultyTakesEachLevelsCountOfThatLevelOnly(@ForAll @AlphaChars String user,
+        @ForAll @IntRange(min = 0, max = 2) int easy, @ForAll @IntRange(min = 0, max = 2) int hard) {
+        List<QuizSnapshot.Question> questions = graded();
+        java.util.Map<String, Integer> quotas = new java.util.LinkedHashMap<>();
+        quotas.put("EASY", easy);
+        quotas.put("MEDIUM", 1);
+        quotas.put("HARD", hard);
+        List<Integer> drawn = PICK.pickByDifficulty(user, "pub", questions, quotas);
+        assertThat(drawn).hasSize(easy + 1 + hard).doesNotHaveDuplicates().isSorted();
+        assertThat(drawn.stream().filter(no -> no <= 2)).hasSize(easy);
+        assertThat(drawn.stream().filter(no -> no == 3 || no == 4)).hasSize(1);
+        assertThat(drawn.stream().filter(no -> no >= 5)).hasSize(hard);
+        assertThat(PICK.pickByDifficulty(user, "pub", questions, quotas)).isEqualTo(drawn);
+        // Shuffled by the order's own seed: the same numbers.
+        QuizSnapshot quiz = new QuizSnapshot("t", null, null, null, false, List.of(), questions);
+        assertThat(PICK.set(user, "pub", quiz, easy + 1 + hard, quotas)).containsExactlyInAnyOrderElementsOf(drawn);
+    }
+
+    @Test
+    void aLevelOfFewerQuestionsThanItsCountIsNoDraw() {
+        assertThatThrownBy(() -> PICK.pickByDifficulty("user", "pub", graded(), java.util.Map.of("HARD", 3)))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test
     void theSetIsStoredAsJsonAndNoneForEveryQuestion() {
         assertThat(QuestionPick.toJson(List.of(2, 5, 7))).isEqualTo("[2,5,7]");

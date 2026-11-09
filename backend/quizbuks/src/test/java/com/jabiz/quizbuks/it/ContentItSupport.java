@@ -127,8 +127,9 @@ abstract class ContentItSupport extends QbItSupport {
         return map;
     }
 
+    /** A new quiz; F-S7: its questions in the fixed order, so that the tests know which question is where. */
     String newQuiz(String token, String title) {
-        return (String) run("QB_QUIZ_SAVE", token, body("title", title)).get("quizId");
+        return (String) run("QB_QUIZ_SAVE", token, body("title", title, "shuffleQuestions", false)).get("quizId");
     }
 
     /** A question with two options, the first correct. */
