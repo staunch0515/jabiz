@@ -179,7 +179,11 @@ class ProcessAccessIT extends QbItSupport {
         // F-S13: the end of what used up its exposures (job item), the daily check, and the purchase for F-M8.
         Map.entry("QB_PUBLICATION_EXPOSURE_END", ProcessAccess.INTERNAL),
         Map.entry("QB_EXPOSURE_CHECK_RUN", ProcessAccess.INTERNAL),
-        Map.entry("QB_EXPOSURE_PURCHASED_SET", ProcessAccess.SUB_PROCESS_ONLY));
+        Map.entry("QB_EXPOSURE_PURCHASED_SET", ProcessAccess.SUB_PROCESS_ONLY),
+        // F-S14: the figures of a shared video's use (job item), the reminder (job item) and the daily check.
+        Map.entry("QB_VIDEO_USE_FIGURES_REFRESH", ProcessAccess.INTERNAL),
+        Map.entry("QB_VIDEO_USE_REMIND", ProcessAccess.INTERNAL),
+        Map.entry("QB_VIDEO_USE_CHECK_RUN", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;
