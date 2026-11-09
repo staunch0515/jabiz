@@ -28,10 +28,11 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban, Eye } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban, Eye, NotebookTabs } from 'lucide-react'
 import TopicsPage from './TopicsPage'
 import BlocksPage from './BlocksPage'
 import ExposurePage from './ExposurePage'
+import VideoUsesPage from './VideoUsesPage'
 
 import BankTopUpPage from './BankTopUpPage'
 import TreesPage from './TreesPage'
@@ -141,6 +142,8 @@ export default defineExtension({
     { path: PATH.blocks, element: <BlocksPage /> },
     // F-S13: the suspicious inflation of exposures (headquarters and the operators, scoped).
     { path: PATH.exposure, element: <ExposurePage /> },
+    // F-S14: the ledger of shared videos' uses (headquarters and the operators, scoped; read only).
+    { path: PATH.videoUses, element: <VideoUsesPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -267,6 +270,9 @@ export default defineExtension({
         // session reads its own Sponsors' publications only).
         { key: 'qb-exposure', label: 'menu.exposure', path: PATH.exposure, icon: Eye,
           permission: PERMISSION.exposureRead },
+        // F-S14: the ledger of shared videos' uses, read only (an operator's session reads its own Sponsors').
+        { key: 'qb-video-uses', label: 'menu.videoUses', path: PATH.videoUses, icon: NotebookTabs,
+          permission: PERMISSION.videoUseRead },
         // Q22: the cash rewards sponsors pay takers themselves (F-S1: nobody here decides their disputes).
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
           permission: PERMISSION.publicationRead },
