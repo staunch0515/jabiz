@@ -88,7 +88,7 @@ function Picker({ onPick, onClose }: { onPick: (video: SharedVideo) => void; onC
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="shared-video-picker">
         <DialogHeader>
           <DialogTitle>{t('sharedVideos.picker.title')}</DialogTitle>
-          <DialogDescription>{t('sharedVideos.picker.intro')}</DialogDescription>
+          <DialogDescription>{t('sharedVideos.picker.intro')} {t('sharedVideos.picker.ownHint')}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-end gap-3" role="search" aria-label={t('sharedVideos.picker.search')}>
           <div className="flex flex-col gap-1">

@@ -160,3 +160,16 @@ export const setPublicationSharedVideo = (publicationId: string, baseRevision: n
 
 /** Whether a share still stands (in review or shared): the asset is not shared again until it is withdrawn. */
 export const standing = (status: SharedVideoStatus) => status === 'PENDING' || status === 'APPROVED'
+
+/**
+ * F-C3: each asset's latest share (by when it was shared), from the provider's own list: what the asset library shows
+ * on the asset's row. An asset is shared again only when its latest share no longer stands.
+ */
+export function latestShares(shares: readonly MySharedVideo[]): Map<string, MySharedVideo> {
+  const latest = new Map<string, MySharedVideo>()
+  for (const share of shares) {
+    const known = latest.get(share.assetId)
+    if (!known || (share.sharedAt ?? '') > (known.sharedAt ?? '')) latest.set(share.assetId, share)
+  }
+  return latest
+}

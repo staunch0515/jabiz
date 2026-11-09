@@ -280,13 +280,29 @@ public final class PublicationReadiness {
     /**
      * Q81 (D-Q81-1, D-Q81-2): why {@code pickCount} questions cannot be drawn from the version: not 1..n-1 of its n
      * questions (all of them is left empty), a survey (answered whole), or questions of unequal points (each taker's
-     * full score would differ). None without a pick or a version.
+     * full score would differ); F-S6: no pick of a version larger than one attempt holds, nor a pick larger than it.
+     * None without a version.
      */
+    /** F-S6: the refusal of asking all of a version's {@code n} questions when one attempt holds {@code most}. */
+    public static Violation pickRequired(int n, int most) {
+        return new Violation("pickCount", PublishingCodes.PICK_REQUIRED, "The version has " + n + " questions and one "
+            + "attempt gives at most " + most + "; set how many to draw", Map.of("questionCount", n, "max", most));
+    }
+
     public static List<Violation> pickProblems(Integer pickCount, QuizSnapshot version) {
-        if (pickCount == null || version == null) {
+        if (version == null) {
             return List.of();
         }
         int n = version.questions().size();
+        int most = com.jabiz.quizbuks.play.PlayLimits.MAX_PER_ATTEMPT_TECH;
+        // F-S6: one attempt holds at most this many questions; a larger bank is drawn from.
+        if (pickCount == null) {
+            return n <= most ? List.of() : List.of(pickRequired(n, most));
+        }
+        if (pickCount > most && pickCount < n) {
+            return List.of(new Violation("pickCount", PublishingCodes.PICK_TOO_MANY, "One attempt gives at most "
+                + most + " questions", Map.of("pickCount", pickCount, "max", most)));
+        }
         if (pickCount < 1 || pickCount >= n) {
             return List.of(new Violation("pickCount", PublishingCodes.PICK_RANGE, "The pick must be between 1 and "
                 + (n - 1) + " of the version's " + n + " questions; leave it empty to ask all of them",

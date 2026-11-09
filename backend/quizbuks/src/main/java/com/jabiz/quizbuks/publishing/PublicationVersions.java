@@ -189,6 +189,13 @@ public final class PublicationVersions {
         // Q81 (D-Q81-7): a publication drawing k questions needs a version that can give them (equal points, more
         // than k questions); its full score is then k times the points, compared as before.
         Integer pickCount = PublicationEditing.integer(publication.get("pickCount"));
+        // F-S6: a publication asking every question cannot switch to a version larger than one attempt holds.
+        long questionCount = number(version.get("questionCount"));
+        if (pickCount == null && questionCount > com.jabiz.quizbuks.play.PlayLimits.MAX_PER_ATTEMPT_TECH) {
+            ctx.reject(PublicationReadiness.pickRequired((int) questionCount,
+                com.jabiz.quizbuks.play.PlayLimits.MAX_PER_ATTEMPT_TECH));
+            return;
+        }
         QuizSnapshot newSnapshot = pickCount == null ? null : PublicationEditing.snapshot(version);
         if (pickCount != null && !PublicationReadiness.pickProblems(pickCount, newSnapshot).isEmpty()) {
             ctx.reject(new Violation("versionId", PublishingCodes.SWITCH_PICK, "Version " + version.get("label")

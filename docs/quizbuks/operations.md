@@ -346,6 +346,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
 | 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足）；`GATE_INVALID` 出现（门槛参数指不到可点亮的节点，功能对所有人关闭） |
+| 题库（F-S6，§7.28） | 平台 `jabiz-job-failed`（`qb.content-check`）；每日核对的待办 `qb.content-health`（权限 `qb.admin.quiz.read`） | `SNAPSHOT_NEAR_LIMIT` 出现（某个版本的快照超过上限的 80 %，题库再增长即不能保存下一个版本） |
 | 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
 | 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
@@ -362,7 +363,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **上线前在目标硬件上重测**：压测程序放在另一台主机，读者按预期的读取量限速（`LOAD_READ_RATE`），对打包的 jar 运行 `./gradlew :quizbuks:loadTest`（`LOAD_*` 参数，`LOAD_METRICS=yes` 从回环的管理端口读许可持有与语句数）；确认峰值低于饱和点并有 1.3 倍余量，结果写进报告。
 - **大题库与继续答题**（上线清单"性能"）：`LOAD_QUESTIONS`（题数，缺省 2）使版本快照变大，开始、继续与提交都随之变重；`LOAD_CONTINUE=yes` 让每个学者在开始之后再打开一次答题（`QB_ATTEMPT_START` 对进行中的答题即继续），单列一行。
   本机对比（60 人、16 并发，2026-11-08，应用与数据库同机、CPU 饱和，只看相对值）：2 题 24.5 次完成 / 秒，开始 p95 249 ms、提交 p95 566 ms；100 题 15.9 次 / 秒，开始 p95 444 ms、继续 p95 437 ms、提交 p95 656 ms。
-  现在题数上限是 100（`ContentLimits.MAX_QUESTIONS`）；千题题库（F-S6）与抽题（F-S7）合入后，以 1000 题、每人抽 20 题重测（届时给压测程序加上抽题的参数）。
+  题库的题数现在是参数 `qb.content.max-questions`（缺省 1000，F-S6，§7.28）；抽题与乱序（F-S7）合入后，以 1000 题、每人抽 20 题重测（届时给压测程序加上抽题的参数）。
 - 单实例：准入的队列与限流按实例（D45 的已知限制）；多实例时热门发布的锁仍在数据库中串行，加实例不提高单个发布的容量。
 
 ## 7. 常见故障
@@ -799,19 +800,19 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   - 证书暂停签发（D8）：`QB_CERTIFICATE_ISSUE` 一律 422 `QB_CERTIFICATE_PAUSED`，已签发的证书照常核实与下载，F-S5 改为节点证书。
 
 
-### 7.28 共享视频的审核与下架（F-S12）
+### 7.28 共享视频的审核与下架（F-S12、F-C3）
 
-发起方可以把资源库中的视频链接共享给其他发起方，其他发起方在发布向导中从共享目录选用（`docs/quizbuks/plans/impl/F-S12.md`）。给发起方的帮助文案在 `docs/quizbuks/help/shared-videos.md`（由内容管理员发布为 FAQ）。
+发起方可以把资源库中的视频链接共享给其他发起方，其他发起方在发布向导中从共享目录选用（`docs/quizbuks/plans/impl/F-S12.md`；资源库一侧与运营闭合见 `docs/quizbuks/plans/impl/F-C3.md`）。目录不列发起方本人的视频（自己的视频从资料中选；草稿以前选过自己的，照常保留）。给发起方的帮助文案在 `docs/quizbuks/help/shared-videos.md`（由内容管理员发布为 FAQ）。
 
 - **部署**：迁移 `V90`建 `qb_shared_video`，发布与卡片各加列。部署后运行一次 `QB_SETUP`：补上新权限 `qb.admin.shared-video.read` / `.write`（内容管理员与运营商），并**提出审批规则 `qb.shared-video.review`，由另一位管理员发布**。发布之前，共享一律被拒（`QB_REVIEW_NOT_CONFIGURED`）。
-- **审核**（提供方所属的运营商，F-S1 的审核去向）：共享的视频出现在运营商管理系统的待办与"共享视频"页（`/operator/qb/shared-videos`，缺省列出待审核的）。打开一个视频：三语标题、在视频网站上观看的链接、时长、竖横、主题词；用平台的审批面板通过或驳回（驳回写理由，提供方看得到）。标准是娱乐内容：合法、不侵权、适合所有学者。**通过一次即可**：其他发起方使用时只审核他们的发布，不再审视频。审批人要持 `qb.review.publication`（运营商角色 `QB_OPERATOR` 有）。
+- **审核**（提供方所属的运营商，F-S1 的审核去向）：共享的视频出现在运营商管理系统的待办与"共享视频"页（`/operator/qb/shared-videos`，缺省列出待审核的）。打开一个视频：三语标题、在视频网站上观看的链接、时长、竖横、主题词；用平台的审批面板通过或驳回（驳回写理由，提供方看得到）。标准是娱乐内容：合法、不侵权、适合所有学者。**通过一次即可**：其他发起方使用时只审核他们的发布，不再审视频。审批人要持 `qb.review.publication`（运营商角色 `QB_OPERATOR` 有）。每个发起方都有运营商（F-S1），所以没有"直营"的单独队列：总部的审核人员（不带入口范围的会话）照平台的审批规则也能看到并决定任何运营商的案件。审核的待办随共享开立，决定、撤回或封禁撤回时关闭。驳回时提供方收到站内信（带理由，链到资源库）。
 - **平台**：平台管理系统的同一页（`/admin/qb/shared-videos`）列出所有运营商的共享视频，带"运营商"一栏，可按运营商筛选；平台不审核（规则的审批人是运营商的审核人员），只在紧急时下架。
 - **下架**（违法、侵权）：视频的页面上"下架"（平台的流程页 `QB_SHARED_VIDEO_TAKEDOWN`，理由必填，总是要求二次验证）。运营商只能下架自己发起方的视频（别的 404），平台可以下架任何一个。只能下架"共享中"或"已撤回"的（已撤回的视频仍可能被已提交的发布使用）；待审核的请驳回。下架不能撤销。
-  1. 提供方立即收到邮件 `qb.shared-video.taken-down`（带理由），"我共享的视频"中显示理由。
+  1. 提供方立即收到邮件 `qb.shared-video.taken-down`（带理由）与一条站内信（F-C3，链到资源库；没有邮箱的也收到站内信），"我共享的视频"与资源库该行显示"被下架"与理由。
   2. 用到它的发布由每分钟的任务 `qb.shared-video-ends` 逐个结束（结束原因"所用的共享视频已下架"，`end_reason = SHARED_VIDEO`），进行中的答题照常完成；每个使用方收到邮件 `qb.publication.shared-video-ended`。这**不是**下架发布：不算使用方违约，可以复制，同一 Quiz 以后的发布照常审核。
   3. 费用（曝光费的结算等）随 F-M8，本项不收不退。
-  4. 核对：`SELECT c.publication_id, c.status FROM qb_publication_card c JOIN qb_shared_video v ON v.shared_video_id = c.shared_video_id WHERE v.shared_video_id = '<编号>'`：一分钟后应全部为 `ENDED`。没有结束的：查任务的执行（`/admin/jobs`，`qb.shared-video-ends`）与失败的项。
-- **撤回**：提供方自己在资源库中撤回；只影响以后的新发布（已提交的照常用到结束）。撤回的视频仍可下架。提供方的账号删除（Q72）时，其待审核与共享中的视频自动撤回（`QB_SHARED_VIDEO_ERASED_WITHDRAW`，总控 2026-11-08）。
+  4. 核对：视频的页面下方"用过它的发布"（F-C3，模板 `qb.admin.shared-video-uses`）列出用这个视频上架过的发布，带发起方、状态、结束原因与时间；一分钟后应全部为"已结束 / 所用的共享视频已下架"（页面顶部的"使用中的发布"随之变为 0）。运营商只看到自己发起方的发布，总部看到全部。也可直接查：`SELECT c.publication_id, c.status FROM qb_publication_card c WHERE c.shared_video_id = '<编号>'`。没有结束的：查任务的执行（`/admin/jobs`，`qb.shared-video-ends`）与失败的项。
+- **撤回**：提供方自己在资源库中撤回；只影响以后的新发布（已提交的照常用到结束）。撤回的视频仍可下架。提供方的账号删除（Q72）时，其待审核与共享中的视频自动撤回（`QB_SHARED_VIDEO_ERASED_WITHDRAW`，总控 2026-11-08）。**封禁**提供方（总部的 `QB_USER_BAN` 或运营商的 `QB_OPERATOR_SPONSOR_BAN`）时同样在封禁的事务中撤回（F-C3；审核中的连同审批撤回，已驳回、已下架的不动，已提交的发布照常进行）；解封不恢复共享，提供方需要时重新共享（重新审核）。
 - **审核期间被下架**：发布审核通过、要上架时再查一次；所用的共享视频已下架即不上架，退回草稿（`reject_code = QB_SHARED_VIDEO_TAKEN_DOWN`），发起方收到"发布被退回"的邮件并在发布页看到原因。
 - **使用数**：运营商看到的"使用中的发布"只含自己发起方的发布；平台看到全部。共享视频的主题词只用于目录搜索，不并入发布的主题词。
 - **审计**：共享、审核结果、撤回、下架都经平台的写入路径（`GET /api/audit/records?entityType=QbSharedVideo`）；发布的结束在发布的历史中。
@@ -853,3 +854,19 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
 6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
 
 回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。
+
+### 7.28 题库的上限与每日核对（F-S6）
+
+- **参数**（普通参数，`QB_SETUP` 建立，平台管理系统的参数页可以改，改动即时生效）：
+  - `qb.content.max-questions`（缺省 1000）：一个 Quiz（题库）至多几题。至多 2000（代码的技术上限 `ContentLimits.MAX_QUESTIONS_TECH`），填得更大也按 2000。调低后已有的大题库照常读取、修改、删除，只是不能再加题（`QB_TOO_MANY_QUESTIONS`，提示中带上限）。
+  - `qb.play.max-questions-per-attempt`（缺省 100）：一次答题至多几题，题库更大时发布必须抽题。至多 200（`PlayLimits.MAX_PER_ATTEMPT_TECH`，答题记录的列宽按它）。在 F-S7 合入前，发布只按 200 检查（`QB_PUBLICATION_PICK_REQUIRED` / `QB_PUBLICATION_PICK_TOO_MANY`）。
+  - `qb.content.import.batch-size`（缺省 200）：往已有的 Quiz 中导入时每批的题数（分批导入随 F-S6 的编辑器一起提供）。
+  - 部署后没有重跑 `QB_SETUP` 时，三个参数都按缺省值。
+- **每日核对**：任务 `qb.content-check`，每天 19:13 UTC，模板 `qb.admin.content-health`。
+  - `SNAPSHOT_NEAR_LIMIT`：版本的快照超过上限（6 MB）的 80 %。
+  - 有问题即给持 `qb.admin.quiz.read` 的人一个待办，每天一个。
+  - 处理：
+    - 模板 `qb.admin.large-versions`（参数 `overBytes`，每日核对用的是 5033164，即 6 MB 的 80 %）列出是哪些 Quiz 的哪个版本、多大；
+    - 请发起方把题库拆成两个 Quiz，或删去不用的题和翻译，之后才能保存新版本；
+    - 已有的版本照常可用。
+- **耗时**：千题、6 个选项、三语的题库实测见 `docs/quizbuks/perf/F-S6-large-bank.md`。
