@@ -67,7 +67,7 @@ test('a sponsor package is exported, imported into a new account and its drafts 
   expect(document.trees).toHaveLength(1)
   const packed = document.quizzes.find((q: { versions: { file: { quiz: { title: string } } }[] }) =>
     q.versions.some((v) => v.file.quiz.title === title))
-  expect(packed.versions.map((v: { label: string }) => v.label)).toEqual(['v1', 'v2'])
+  expect(packed.versions.map((v: { label: string }) => v.label)).toEqual(['v1.0', 'v1.1'])
   expect(packed.current).toBeNull()
   expect(document.publications.map((p: { settings: { name: string } }) => p.settings.name))
     .toEqual(expect.arrayContaining([boundName, freeName]))
@@ -102,14 +102,14 @@ test('a sponsor package is exported, imported into a new account and its drafts 
   const quizzes = await query(request, target.token, 'qb.sponsor.quizzes', { q: title })
   expect(quizzes).toHaveLength(1)
   const versions = await query(request, target.token, 'qb.sponsor.quiz-versions', { quizId: quizzes[0].quizId })
-  expect(versions.map((v) => v.label).sort()).toEqual(['v1', 'v2'])
+  expect(versions.map((v) => v.label).sort()).toEqual(['v1.0', 'v1.1'])
   const drafts = (await rows(request, target.token, PUBLICATIONS, [])).map((r) => r.attributes)
   const bound = drafts.find((p) => p.name === boundName)!
   const free = drafts.find((p) => p.name === freeName)!
   expect(bound).toMatchObject({ status: 'DRAFT', treeId: importedTree.treeId, treeNodeId: importedNode.nodeId })
   expect(free).toMatchObject({ status: 'DRAFT', treeId: null })
-  expect(versions.find((v) => v.versionId === bound.versionId)?.label).toBe('v1')
-  expect(versions.find((v) => v.versionId === free.versionId)?.label).toBe('v2')
+  expect(versions.find((v) => v.versionId === bound.versionId)?.label).toBe('v1.0')
+  expect(versions.find((v) => v.versionId === free.versionId)?.label).toBe('v1.1')
 
   // The Sponsor applies with the filled form and is approved; then every draft goes into review.
   const applied = await run(request, target.token, 'QB_SPONSOR_APPLY', { displayName: 'Nova', company,
