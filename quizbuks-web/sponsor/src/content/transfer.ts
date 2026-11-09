@@ -56,11 +56,15 @@ export interface QuizFileDocument {
   formatVersion: number
   exportedAt: string
   quiz: { kind: string; title: string; intro: string | null; timeLimitSec: number | null; cover: string | null
-    language: ContentLanguage }
+    language: ContentLanguage
+    /** F-S7: present (false) only when the questions keep their order; absent is shuffled. */
+    shuffleQuestions?: boolean }
   materials: FileMaterial[]
   questions: {
     stem: string | null; image: string | null; points: number; selection: string | null
     options: { text: string | null; image: string | null; correct: boolean }[]
+    /** F-S7: present only when set. */
+    difficulty?: string
   }[]
   files: Record<string, QuizFileEntry>
   /** Present only when the quiz has other languages. */
@@ -139,11 +143,14 @@ export async function exportDraft(draft: Draft, onProgress?: Progress,
     formatVersion: QUIZ_FILE_VERSION,
     exportedAt: new Date().toISOString(),
     quiz: { kind: quiz.kind, title: quiz.title, intro: quiz.intro, timeLimitSec: quiz.timeLimitSec,
-      cover: key(quiz.cover, 'image'), language: quiz.language },
+      cover: key(quiz.cover, 'image'), language: quiz.language,
+      // F-S7: only the fixed order is written (older readers skip it; absent is shuffled).
+      ...(quiz.kind !== 'SURVEY' && quiz.shuffleQuestions === false ? { shuffleQuestions: false } : {}) },
     materials: draft.materials.map(material),
     questions: draft.questions.map((q) => ({
       stem: q.stem, image: key(q.image, 'image'), points: q.points, selection: q.selection,
       options: q.options.map((o) => ({ text: o.text, image: key(o.image, 'image'), correct: o.correct })),
+      ...(q.difficulty ? { difficulty: q.difficulty } : {}),
     })),
     files: {},
   }

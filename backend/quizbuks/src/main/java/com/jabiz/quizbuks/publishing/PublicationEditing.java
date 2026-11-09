@@ -638,6 +638,8 @@ final class PublicationEditing {
         for (String field : List.of("regions", "startAt", "endAt", "name", "versionId", "maxReward", "fullScore",
             "passScore", "timeLimitSec", "budgetCap", "maxWinners", "redeemDescription", "digitalDelivery",
             "digitalDescription", "digitalSendDays", "sealedDigitalContent", "referral", "pickCount",
+            // F-S7: and how many of each difficulty.
+            "pickByDifficulty",
             // Q89b-1: the purchase the prizes come from and who hands them over.
             "benefitPurchaseId", "fulfillerId",
             // Q88b: the entry fee the start charges.
@@ -771,7 +773,8 @@ final class PublicationEditing {
             Audience.of(values.get("audience")), DigitalDelivery.of(values.get("digitalDelivery")),
             (String) values.get("digitalDescription"), values.get("sealedDigitalContent") != null,
             ReferralPolicy.fromJson(values.get("referral")), integer(values.get("pickCount")),
-            money(values.get("entryFee")));
+            money(values.get("entryFee")),
+            com.jabiz.quizbuks.content.QuestionDifficulty.parseQuotas(values.get("pickByDifficulty")));
     }
 
     /**

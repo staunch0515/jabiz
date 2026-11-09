@@ -108,6 +108,9 @@ public final class PublicationProcesses {
      *                          {@code treeNodeId}, or neither): a node in effect asking for a pass, of the sponsor's
      *                          own graph or, for an operator's direct Sponsor, of the platform's graph Takers light
      * @param treeNodeId        F-S2b1: that node; none binds the publication to no node
+     * @param pickByDifficulty  F-S7: drawn by difficulty, how many questions of each ({@code EASY}, {@code MEDIUM},
+     *                          {@code HARD}); {@code pickCount} is then their sum, whatever was given. None (or all
+     *                          0): drawn from the whole version, or not at all
      */
     public record SaveInput(UUID publicationId, UUID versionId, @NotNull String name, List<@NotNull String> regions,
         Instant startAt, Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap,
@@ -123,7 +126,23 @@ public final class PublicationProcesses {
         @Size(max = 12) List<@NotNull @Size(max = 40) String> confirmed, Integer pickCount,
         @Size(max = 36) String benefitPurchaseId, BigDecimal entryFee,
         @Size(max = 3) Map<@NotNull @Size(max = 2) String, UUID> covers, PublicationAssets assets,
-        @Size(max = 36) String treeId, @Size(max = 36) String treeNodeId) {
+        @Size(max = 36) String treeId, @Size(max = 36) String treeNodeId,
+        @Size(max = 3) Map<@NotNull @Size(max = 8) String, Integer> pickByDifficulty) {
+
+        /** As before F-S7: no draw by difficulty. */
+        public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
+            Instant endAt, Integer timeLimitSec, Integer passScore, BigDecimal budgetCap, Integer maxWinners,
+            List<TierInput> tiers, Long baseRevision, String rewardMethod, String redeemDescription, String audience,
+            String digitalDelivery, String digitalDescription, Integer digitalSendDays, String digitalContent,
+            UUID cover, ReferralInput referral, List<String> languages,
+            Map<String, Map<String, String>> translations, List<String> confirmed, Integer pickCount,
+            String benefitPurchaseId, BigDecimal entryFee, Map<String, UUID> covers, PublicationAssets assets,
+            String treeId, String treeNodeId) {
+            this(publicationId, versionId, name, regions, startAt, endAt, timeLimitSec, passScore, budgetCap,
+                maxWinners, tiers, baseRevision, rewardMethod, redeemDescription, audience, digitalDelivery,
+                digitalDescription, digitalSendDays, digitalContent, cover, referral, languages, translations,
+                confirmed, pickCount, benefitPurchaseId, entryFee, covers, assets, treeId, treeNodeId, null);
+        }
 
         /** As before F-S2b1: bound to no node. */
         public SaveInput(UUID publicationId, UUID versionId, String name, List<String> regions, Instant startAt,
@@ -522,8 +541,13 @@ public final class PublicationProcesses {
         values.put("passScore", decimal(input.passScore()));
         values.put("budgetCap", input.budgetCap());
         values.put("maxWinners", decimal(input.maxWinners()));
-        // Q81: before the version's part, whose full score depends on it.
-        values.put("pickCount", decimal(input.pickCount()));
+        // Q81: before the version's part, whose full score depends on it. F-S7: a draw by difficulty draws their sum.
+        String quotas = com.jabiz.quizbuks.content.QuestionDifficulty.formatQuotas(input.pickByDifficulty());
+        values.put("pickByDifficulty", quotas);
+        Integer drawn = quotas == null ? input.pickCount() : Integer.valueOf(
+            com.jabiz.quizbuks.content.QuestionDifficulty.total(
+                com.jabiz.quizbuks.content.QuestionDifficulty.parseQuotas(quotas)));
+        values.put("pickCount", decimal(drawn));
         // F-S2b1: the node it is bound to (checked with the problems below, and again on submission).
         boolean bound = input.treeNodeId() != null && !input.treeNodeId().isBlank();
         values.put("treeId", bound && input.treeId() != null ? input.treeId().strip() : null);
@@ -853,7 +877,7 @@ public final class PublicationProcesses {
         for (String field : List.of("cover", "coverJa", "coverZh", "coverEn", "regions", "startAt", "endAt",
             "timeLimitSec", "passScore", "budgetCap",
             "maxWinners", "redeemDescription", "digitalDelivery", "digitalDescription", "digitalSendDays",
-            "sealedDigitalContent", "referral", "languages", "translations", "pickCount",
+            "sealedDigitalContent", "referral", "languages", "translations", "pickCount", "pickByDifficulty",
             // F-S9: what it adds to and removes from its version's topics.
             "topicChanges",
             // F-S12: the shared video it picked (the copy's submission checks it is still in the catalog).

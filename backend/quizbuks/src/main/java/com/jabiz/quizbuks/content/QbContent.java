@@ -53,6 +53,9 @@ public final class QbContent {
     public static final String SINGLE = "SINGLE";
     public static final String MULTIPLE = "MULTIPLE";
 
+    /** F-S7: how hard a question is ({@link QuestionDifficulty}). */
+    public static final String DIFFICULTY_DICTIONARY = "urn:jabiz:dict:quizbuks:question-difficulty";
+
     /** File policies of content: uploaded with {@code qb.content.write}, read with {@code qb.content.file.read}. */
     public static final String IMAGE_POLICY = "qb.content.image";
     public static final String PDF_POLICY = "qb.content.pdf";
@@ -128,6 +131,9 @@ public final class QbContent {
         eb.field("materialCount", f -> f.physicalColumn("material_count").required(true).processOnly()
             .asNumeric(4, 0));
         eb.field("clonedFrom", f -> f.physicalColumn("cloned_from").immutable(true).asReference(QUIZ));
+        // F-S7: whether each taker is given the questions in an order of their own (A2-14: by default, the quizzes
+        // made before too); a survey's are never shuffled.
+        eb.field("shuffleQuestions", f -> f.physicalColumn("shuffle_questions").required(true).asBool());
         eb.display("title");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
@@ -220,6 +226,9 @@ public final class QbContent {
         // undoing the batch removes only the questions not changed since.
         eb.field("importId", f -> f.physicalColumn("import_id").immutable(true).processOnly().asText(36));
         eb.field("importHash", f -> f.physicalColumn("import_hash").processOnly().asText(64));
+        // F-S7: how hard the sponsor says it is ({@link QuestionDifficulty}); none when not set.
+        eb.field("difficulty", f -> f.physicalColumn("difficulty")
+            .asCode(DIFFICULTY_DICTIONARY, QuestionDifficulty.codes()));
         eb.display("stem");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv

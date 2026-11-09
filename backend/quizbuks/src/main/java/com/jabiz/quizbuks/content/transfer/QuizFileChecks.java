@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.content.transfer;
 import com.jabiz.entity.Violation;
 import com.jabiz.file.MediaTypes;
 import com.jabiz.quizbuks.content.ContentCodes;
+import com.jabiz.quizbuks.content.QuestionDifficulty;
 import com.jabiz.quizbuks.content.ContentLanguages;
 import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.MaterialKind;
@@ -333,6 +334,9 @@ public final class QuizFileChecks {
             && !QbContent.MULTIPLE.equals(selection))) {
             problems.add(new Violation(at + ".selection", ContentCodes.SELECTION_NOT_ALLOWED, survey
                 ? "SINGLE or MULTIPLE" : "A scored question has no selection"));
+        }
+        if (question.difficulty() != null && !QuestionDifficulty.known(question.difficulty())) {
+            problems.add(value(at + ".difficulty", "EASY, MEDIUM or HARD"));
         }
         count(problems, at + ".options", question.options().size(), ContentLimits.MAX_OPTIONS);
         for (int o = 0; o < question.options().size(); o++) {

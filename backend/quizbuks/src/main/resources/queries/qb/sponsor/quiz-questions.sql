@@ -14,6 +14,7 @@ params:
   quizId: { like: QbQuiz.quizId, required: true, description: The quiz }
   q:      { kind: { type: text, maxLength: 100 }, description: Only questions whose text contains this text }
   no:     { kind: { type: numeric, precision: 4, scale: 0 }, description: Only the question with this number }
+  difficulty: { kind: { type: text, maxLength: 8 }, description: "F-S7: only the questions of this difficulty (EASY, MEDIUM, HARD), or NONE for those without one" }
 results:
   questionId:  { from: QbQuestion.questionId }
   questionNo:  { kind: { type: numeric, precision: 4, scale: 0 } }
@@ -21,6 +22,7 @@ results:
   image:       { from: QbQuestion.image }
   points:      { from: QbQuestion.points }
   selection:   { from: QbQuestion.selection }
+  difficulty:  { from: QbQuestion.difficulty }
   optionCount: { kind: { type: numeric, precision: 4, scale: 0 } }
   translated:  { kind: { type: numeric, precision: 4, scale: 0 } }
 list:
@@ -40,6 +42,7 @@ SELECT
     n.image       AS image,
     n.points      AS points,
     n.selection   AS selection,
+    n.difficulty  AS difficulty,
     CAST((SELECT count(*) FROM {{QbOption}} o
           WHERE o.{{QbOption.questionId}} = n.questionId) AS numeric(4, 0)) AS optionCount,
     CAST((SELECT count(DISTINCT t.{{QbContentTranslation.language}}) FROM {{QbContentTranslation}} t
@@ -53,6 +56,7 @@ FROM (SELECT
           q.{{QbQuestion.image}}      AS image,
           q.{{QbQuestion.points}}     AS points,
           q.{{QbQuestion.selection}}  AS selection,
+          q.{{QbQuestion.difficulty}} AS difficulty,
           CAST(row_number() OVER (ORDER BY q.{{QbQuestion.seq}}, CAST(q.{{QbQuestion.questionId}} AS text))
                AS numeric(4, 0))      AS questionNo
       FROM {{QbQuestion}} q
@@ -60,3 +64,4 @@ FROM (SELECT
       WHERE q.{{QbQuestion.quizId}} = :quizId) n
 WHERE (CAST(:q AS text) IS NULL OR strpos(lower(coalesce(n.stem, '')), lower(CAST(:q AS text))) > 0)
   AND (CAST(:no AS numeric) IS NULL OR n.questionNo = :no)
+  AND (CAST(:difficulty AS text) IS NULL OR coalesce(n.difficulty, 'NONE') = CAST(:difficulty AS text))

@@ -197,7 +197,11 @@ public final class PublicationVersions {
             return;
         }
         QuizSnapshot newSnapshot = pickCount == null ? null : PublicationEditing.snapshot(version);
-        if (pickCount != null && !PublicationReadiness.pickProblems(pickCount, newSnapshot).isEmpty()) {
+        // F-S7: and a draw by difficulty, a version that has enough of each.
+        java.util.Map<String, Integer> quotas = com.jabiz.quizbuks.content.QuestionDifficulty.parseQuotas(
+            publication.get("pickByDifficulty"));
+        if (pickCount != null && (!PublicationReadiness.pickProblems(pickCount, newSnapshot).isEmpty()
+            || !PublicationReadiness.difficultyProblems(quotas, newSnapshot).isEmpty())) {
             ctx.reject(new Violation("versionId", PublishingCodes.SWITCH_PICK, "Version " + version.get("label")
                 + " cannot give each taker " + pickCount + " questions of equal points",
                 Map.of("pickCount", pickCount, "questionCount", newSnapshot.questions().size())));
