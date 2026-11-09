@@ -16,7 +16,10 @@ import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
+import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.quizbuks.sharedvideo.QbSharedVideos;
+import com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses;
 import com.jabiz.runtime.security.SecurityEntities;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -41,7 +44,8 @@ import static com.jabiz.quizbuks.identity.AccountEditing.list;
  * still works until it expires, so valuable actions check the ban again. Administrators are not banned (they are
  * disabled through the platform), and nobody bans themselves. Banning a sponsor pauses their running publications in
  * the same transaction ({@code QB_PUBLICATION_BAN_PAUSE}, Q10b): only an administrator resumes them, after the unban.
- * Their page (Q60a) is taken down in the same transaction too, back only through a new review.
+ * Their page (Q60a) is taken down in the same transaction too, back only through a new review, and the videos they
+ * share are withdrawn (F-C3: no new picks; submitted publications keep them).
  * The sponsor reads a fixed reason ("account suspended"), not the ban's, which is internal (review L3). The history of
  * {@code QbUserBan} is the record of bans and lifts.
  *
@@ -143,7 +147,36 @@ public final class BanProcesses {
             pb.step("Withdraw the sponsor's notices", CallProcess.<ProcessContext>when(
                 ctx -> !ctx.hasViolations() && ctx.contains(OUTPUT), BroadcastProcesses.BAN_WITHDRAW, 1,
                 ctx -> new BroadcastProcesses.SponsorRef(AccountEditing.userId(ctx)), "withdrawnNotices"));
+            // F-C3: the videos they share are withdrawn (no new picks; the publications submitted with them keep
+            // them), as when their account is erased. The sharing's lock before reading them (lock order: account,
+            // publications, sharing, each video): a share running meanwhile reads the ban under it, or is read here.
+            pb.step("Lock the sponsor's sharing", HoldLock.<ProcessContext>exclusive(ctx -> banned(ctx)
+                ? QbSharedVideos.providerLockName(AccountEditing.userId(ctx)) : null));
+            pb.step("Load the videos they share", QueryEntities.<ProcessContext>of(QbSharedVideos.DEFAULT_DATASET,
+                ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                    new QueryPredicate.In("providerId", banned(ctx)
+                        ? new ArrayList<Object>(List.of(AccountEditing.userId(ctx))) : new ArrayList<Object>()),
+                    new QueryPredicate.In("status", new ArrayList<Object>(QbSharedVideos.STANDING)))))
+                    .limit(Integer.MAX_VALUE).build(), SHARED_VIDEOS));
+            pb.step("Withdraw the videos they share", CallProcess.forEach(SharedVideoProcesses.ERASED_WITHDRAW, 1,
+                BanProcesses::sharedVideos, "withdrawnSharedVideos"));
         });
+    }
+
+    static final String SHARED_VIDEOS = "bannedSharedVideos";
+
+    /** Whether the ban was made now (the steps after it act only then). */
+    private static boolean banned(ProcessContext ctx) {
+        return !ctx.hasViolations() && ctx.contains(OUTPUT);
+    }
+
+    /** F-C3: the banned provider's shares still standing, in the order of their ids; none when the ban was refused. */
+    static List<SharedVideoProcesses.ErasedWithdrawInput> sharedVideos(ProcessContext ctx) {
+        if (!banned(ctx)) {
+            return List.of();
+        }
+        return list(ctx, SHARED_VIDEOS).stream().map(video -> String.valueOf(video.id())).sorted()
+            .map(id -> new SharedVideoProcesses.ErasedWithdrawInput(id, AccountEditing.userId(ctx))).toList();
     }
 
     /**

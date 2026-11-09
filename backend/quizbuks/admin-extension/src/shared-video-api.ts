@@ -113,3 +113,32 @@ export function duration(seconds: number): string {
   const s = String(seconds % 60).padStart(2, '0')
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
 }
+
+/** F-C3: a publication that went on with a shared video (`qb.admin.shared-video-uses`). */
+export interface SharedVideoUse {
+  publicationId: string
+  name: string
+  publisherKind: string | null
+  publisherId: string
+  status: string
+  /** Why it ended (`SHARED_VIDEO` after a takedown); null while it has not. */
+  endReason: string | null
+  endedAt: string | null
+}
+
+/**
+ * The publications that went on with the video, newest first: after a takedown, those it ended. An operator's session
+ * reads its own Sponsors' only (the server's scope).
+ */
+export async function readSharedVideoUses(sharedVideoId: string): Promise<SharedVideoUse[]> {
+  const answer = await runQuery<Row>(TEMPLATE.sharedVideoUses, { params: { sharedVideoId }, limit: 200 })
+  return answer.items.map((row) => ({
+    publicationId: String(row.publicationId ?? ''),
+    name: String(row.name ?? ''),
+    publisherKind: str(row.publisherKind),
+    publisherId: String(row.publisherId ?? ''),
+    status: String(row.status ?? ''),
+    endReason: str(row.endReason),
+    endedAt: str(row.endedAt),
+  }))
+}
