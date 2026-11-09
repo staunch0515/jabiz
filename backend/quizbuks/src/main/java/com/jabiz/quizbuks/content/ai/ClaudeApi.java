@@ -92,10 +92,16 @@ public final class ClaudeApi {
      *                  counted (a request without documents, whose text is estimated from its size)
      */
     public record Request(String model, String effort, int maxTokens, String system, String user, String userKey,
-        Map<String, Object> schema, List<Document> documents, Long countedInputTokens) {
+        Map<String, Object> schema, List<Document> documents, Long countedInputTokens, List<String> cachedSystem) {
 
         public Request {
             documents = documents == null ? List.of() : List.copyOf(documents);
+            cachedSystem = cachedSystem == null ? List.of() : List.copyOf(cachedSystem);
+        }
+
+        public Request(String model, String effort, int maxTokens, String system, String user, String userKey,
+            Map<String, Object> schema, List<Document> documents, Long countedInputTokens) {
+            this(model, effort, maxTokens, system, user, userKey, schema, documents, countedInputTokens, null);
         }
 
         public Request(String model, String effort, int maxTokens, String system, String user, String userKey,
@@ -110,24 +116,44 @@ public final class ClaudeApi {
 
         /** This request with the provider's count of its input. */
         public Request counted(long inputTokens) {
-            return new Request(model, effort, maxTokens, system, user, userKey, schema, documents, inputTokens);
+            return new Request(model, effort, maxTokens, system, user, userKey, schema, documents, inputTokens,
+                cachedSystem);
+        }
+
+        /**
+         * This request with static texts after its system prompt (F-C10b: the AI help's materials), sent as system
+         * blocks of their own, the last one marked for the provider's prompt cache ({@code cache_control}): the system
+         * prompt and these texts are the same for every request that shares them, and nothing of the user is in them.
+         */
+        public Request withCachedSystem(List<String> texts) {
+            return new Request(model, effort, maxTokens, system, user, userKey, schema, documents, countedInputTokens,
+                texts);
         }
 
         /** The documents' sizes only: the request's text and files may be personal. */
         @Override
         public String toString() {
             return "Request[model=" + model + ", effort=" + effort + ", maxTokens=" + maxTokens + ", user="
-                + user.length() + " chars, documents=" + documents + ", countedInputTokens=" + countedInputTokens + "]";
+                + user.length() + " chars, documents=" + documents + ", countedInputTokens=" + countedInputTokens
+                + ", cachedSystem=" + cachedSystem.size() + " blocks]";
         }
     }
 
     /**
      * Tokens of one call, over every model that ran it; the {@code fallback} ones are those of the provider's fallback
      * model (part of the totals, billed at that model's price); the {@code longPrompt} ones those of calls the provider
-     * prices at its long-prompt rate (part of the totals; {@link AiCost}).
+     * prices at its long-prompt rate (part of the totals; {@link AiCost}); the {@code cache} ones the input the
+     * provider wrote to and read from its prompt cache (F-C10b; part of the input, which counts every input token).
      */
     public record Usage(long inputTokens, long outputTokens, long fallbackInputTokens, long fallbackOutputTokens,
-        long longPromptInputTokens, long longPromptOutputTokens) {
+        long longPromptInputTokens, long longPromptOutputTokens, long cacheWriteInputTokens,
+        long cacheReadInputTokens) {
+
+        public Usage(long inputTokens, long outputTokens, long fallbackInputTokens, long fallbackOutputTokens,
+            long longPromptInputTokens, long longPromptOutputTokens) {
+            this(inputTokens, outputTokens, fallbackInputTokens, fallbackOutputTokens, longPromptInputTokens,
+                longPromptOutputTokens, 0, 0);
+        }
 
         public Usage(long inputTokens, long outputTokens, long fallbackInputTokens, long fallbackOutputTokens) {
             this(inputTokens, outputTokens, fallbackInputTokens, fallbackOutputTokens, 0, 0);
@@ -144,7 +170,14 @@ public final class ClaudeApi {
          */
         public Usage asLongPrompt() {
             return new Usage(inputTokens, outputTokens, fallbackInputTokens, fallbackOutputTokens,
-                Math.max(0, inputTokens - fallbackInputTokens), Math.max(0, outputTokens - fallbackOutputTokens));
+                Math.max(0, inputTokens - fallbackInputTokens), Math.max(0, outputTokens - fallbackOutputTokens),
+                cacheWriteInputTokens, cacheReadInputTokens);
+        }
+
+        /** This usage with the part of its input written to and read from the provider's prompt cache. */
+        public Usage withCache(long cacheWrite, long cacheRead) {
+            return new Usage(inputTokens, outputTokens, fallbackInputTokens, fallbackOutputTokens,
+                longPromptInputTokens, longPromptOutputTokens, cacheWrite, cacheRead);
         }
     }
 
@@ -335,7 +368,24 @@ public final class ClaudeApi {
         output.put("format", Map.of("type", "json_schema", "schema",
             request.schema() == null ? AiPrompt.schema() : request.schema()));
         body.put("output_config", output);
-        body.put("system", request.system());
+        if (request.cachedSystem().isEmpty()) {
+            body.put("system", request.system());
+        } else {
+            // F-C10b: the system prompt, then the static texts, the last one marked for the prompt cache (the prefix up
+            // to it is cached: the rules and the texts, never the user's message).
+            List<Map<String, Object>> system = new ArrayList<>();
+            system.add(Map.of("type", "text", "text", request.system()));
+            for (int i = 0; i < request.cachedSystem().size(); i++) {
+                Map<String, Object> block = new LinkedHashMap<>();
+                block.put("type", "text");
+                block.put("text", request.cachedSystem().get(i));
+                if (i == request.cachedSystem().size() - 1) {
+                    block.put("cache_control", Map.of("type", "ephemeral"));
+                }
+                system.add(block);
+            }
+            body.put("system", system);
+        }
         // The documents first, then the request's text that names them (as the provider advises).
         List<Map<String, Object>> content = new ArrayList<>();
         for (Document document : request.documents()) {
@@ -421,17 +471,22 @@ public final class ClaudeApi {
             long out = 0;
             long fallbackIn = 0;
             long fallbackOut = 0;
+            long cacheWrite = 0;
+            long cacheRead = 0;
             for (JsonNode iteration : iterations) {
                 in += input(iteration);
                 out += count(iteration.get("output_tokens"));
+                cacheWrite += count(iteration.get("cache_creation_input_tokens"));
+                cacheRead += count(iteration.get("cache_read_input_tokens"));
                 if ("fallback_message".equals(textOf(iteration.get("type")))) {
                     fallbackIn += input(iteration);
                     fallbackOut += count(iteration.get("output_tokens"));
                 }
             }
-            return new Usage(in, out, fallbackIn, fallbackOut);
+            return new Usage(in, out, fallbackIn, fallbackOut).withCache(cacheWrite, cacheRead);
         }
-        return new Usage(input(usage), count(usage.get("output_tokens")));
+        return new Usage(input(usage), count(usage.get("output_tokens")))
+            .withCache(count(usage.get("cache_creation_input_tokens")), count(usage.get("cache_read_input_tokens")));
     }
 
     private static long input(JsonNode usage) {

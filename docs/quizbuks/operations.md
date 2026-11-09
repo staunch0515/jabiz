@@ -921,10 +921,10 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 ### 7.33 AI 问题解答（F-C10）
 
-学者（App"我的 → 帮助"）与发起方（页头"？"）可以问 AI 使用方法；没解决的可以**转人工**：发起方的转给其运营商（待办在运营商的范围内），直营发起方与学者的转给总部（内容管理员）。依据只有公开的 FAQ、条款与使用手册（第一期 a 只有后端，资料快照在 b，页面在 c：`docs/quizbuks/plans/impl/F-C10.md`）。**对用户免费**，用量记在 `qb_help_usage`（按用户 × 月，另有全平台一行 `*`），**不计入发起方的 AI 用量、AI 费与 AI 限额**。
+学者（App"我的 → 帮助"）与发起方（页头"？"）可以问 AI 使用方法；没解决的可以**转人工**：发起方的转给其运营商（待办在运营商的范围内），直营发起方与学者的转给总部（内容管理员）。依据只有公开的 FAQ、条款与使用手册（a 是后端，b 是资料快照与可编辑的手册，页面在 c：`docs/quizbuks/plans/impl/F-C10.md`）。**对用户免费**，用量记在 `qb_help_usage`（按用户 × 月，另有全平台一行 `*`），**不计入发起方的 AI 用量、AI 费与 AI 限额**。
 
 - **部署**：迁移 `V104` 建三张普通表 `qb_help_thread`、`qb_help_message`、`qb_help_usage`。部署后运行一次 `QB_SETUP`：建十二个普通参数、提出两个受控参数（另一位管理员发布），给学者与发起方补上 `qb.help.use`，给内容管理员与运营商补上 `qb.admin.help`。四个任务：`qb.help-retention`（UTC 19:13，逐项）、`qb.help-auto-close`（UTC 19:23，逐项）、`qb.help-remind`（UTC 00:37，逐项）、`qb.help-usage`（UTC 23:53）。外部服务沿用 `anthropic`（`ANTHROPIC_API_KEY`）；并发 `quizbuks.help.max-concurrency`（缺省 4）。
-- **开关**：`qb.help.enabled`（受控，缺省关）。**b 的资料快照合入之前不要打开**（没有资料时 AI 只会说"不确定"）。关掉以后：新的提问 422 `QB_HELP_DISABLED`（页面提示并可直接转人工），排队中的作业暂停（平台 D52 第 4 条，不用掉尝试），转人工与客服回复照常。
+- **开关**：`qb.help.enabled`（受控，缺省关）。**两份使用手册发布、快照生成之前不要打开**（没有资料时 AI 只会说"不确定"；见下面的"资料与使用手册"）。关掉以后：新的提问 422 `QB_HELP_DISABLED`（页面提示并可直接转人工），排队中的作业暂停（平台 D52 第 4 条，不用掉尝试），转人工与客服回复照常。
 - **限额**：每人每天 `qb.help.user-daily` 次（在本人的锁内数当天的提问；一个对话同时只问一个）；全平台每月 `qb.help.global-monthly-tokens`（按已记的用量判断，**不取全平台锁**，并发下可能略超）；入口限流在 `application.yml` 的 `jabiz.process.rate-limits`（`QB_HELP_ASK` 每人、每地址）。没有回答的尝试按预估计入（预留的输入 + 最大输出），作业的完成、失败、取消都计入。
 - **发给 AI 的**：问题、同一对话最近 `qb.help.history-turns` 轮、白名单中的页面名（`help.HelpPages`；答题页没有入口）与匿名键（`AiUserKeys`）。不发送题目、选项、答案与版本内容，也不发送本人或他人的数据。回答中只保留本站的链接；模型标了"被要求答题"即换成固定的拒绝（尽力而为）。
 - **转人工**：待办 `qb.help.escalated`（来源键 `qb.help:<对话>`），客服在管理系统的帮助页回复（`QB_HELP_REPLY`，运营商只能回复转给自己的），用户收到站内信 `HELP_REPLY`。用户标"解决了"、关闭对话、或客服回复后 `qb.help.auto-close-days` 天没有再问（自动关闭）时待办关闭。等待客服超过 `qb.help.escalation-remind-days` 天，给处理人再建一个提醒待办 `qb.help.remind`（每等一次一个）。
@@ -938,7 +938,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   | `qb.help.global-monthly-tokens` | `20000000` | 是 | 全平台每月的令牌数 |
   | `qb.help.history-turns` | `6` | 否 | 一起发送的最近轮数（至多 20） |
   | `qb.help.retention-days` | `180` | 否 | 对话在最后一次活动后保留的天数。**改它必须同时改**隐私政策第8条（三语，`legal/privacy-policy.*.md`，重新发布）与商店的数据申报（`store/play-data-safety.md` 的"其他用户生成的内容"、`store/appstore-privacy.md` 的"客户支持"，并在 Play Console 与 App Store Connect 中更新），三处都写着 180 日 |
-  | `qb.help.manual-max-bytes` | `204800` | 否 | 一次提问可带的资料上限；超过即启动检查报错（`QB_HELP_MATERIALS`，b 接上资料后生效） |
+  | `qb.help.manual-max-bytes` | `204800` | 否 | 一个入口 × 语言的资料快照（手册 + FAQ + 条款）的上限，字节；发布超过的手册被拒，生成的快照超过即不保存并且启动检查报错（`QB_HELP_MATERIALS`）。无论参数多大，快照至多 800 KiB |
   | `qb.help.poll-seconds` / `qb.help.poll-max-minutes` | `3` / `3` | 否 | 页面查询回答的间隔与最长等待 |
   | `qb.help.escalation-remind-days` | `2` | 否 | 转人工后多少天没人处理即提醒 |
   | `qb.help.auto-close-days` | `14` | 否 | 客服回复后多少天没再问即自动关闭 |
@@ -949,6 +949,14 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   部署配置（改后重启；超出范围即启动失败）：`quizbuks.help.max-concurrency`（缺省 4）、`quizbuks.help.attempts`（每个提问的尝试次数，缺省 2，1–5）、`quizbuks.help.attempt-timeout`（每次尝试的时限，缺省 `PT3M`，30 秒–10 分钟）。
 
 - **统计**：每月"没解决"与转人工的提问 `qb.admin.help-gaps`（内容管理员据此补 FAQ 与手册）；帮助用量 `qb.admin.help-usage`（总部 AI 页，与发起方的 AI 用量分开）。
+- **资料与使用手册（F-C10b）**：AI 只依据**快照**回答：每个入口（学者 `app` / 发起方 `sponsor`）× 语言（中日英）一份，内容是已发布的使用手册、已发布的 FAQ（该入口与"两者"）和当前生效的法律文本（学者：用户条款、隐私政策、有奖活动规则；发起方：发起方条款、隐私政策）。快照存成文件（策略 `qb.help.materials`），每次提问作为作业的文件交给 AI，并经提供方的提示缓存（5 分钟）复用。
+  - **部署**：迁移 `V105` 建 `qb_help_manual_version`（手册，只追加）与 `qb_help_material`（快照），`qb_help_usage` 加缓存的两列。部署后运行一次 `QB_SETUP`：建两份手册的草稿（仓库中的初稿，**不发布**）。新任务 `qb.help-materials`（每小时第 41 分，UTC）；新外部作业 `qb.help.materials`（只把文本存成文件，不调用外部服务）。
+  - **编辑与发布手册**：平台管理系统 → "AI 问题解答使用手册"（`QbHelpManual`），编辑草稿（三语 Markdown，写本站路径如 `/taker/help`、`/sponsor/publications`，让回答能附链接；不要写外部网址，回答中的外部链接会被去掉）；行操作"发布"（`QB_HELP_PUBLISH`，内容管理员）。三语缺一、超过上限即 422，什么都不改。发布后几秒内生成新快照（事件），下一次提问就用新内容。快照的状态在"AI 问题解答资料"（`QbHelpMaterial`：在用的大小、生成时间，最近一次生成的大小，保存中）。
+  - **改了 FAQ 或法律文本**：每小时的任务会把它们放进快照；要立刻生效，不选手册运行 `QB_HELP_PUBLISH`（只重新生成快照）。以后生效的法律文本在生效后的一小时内进入快照。
+  - **功能变化后的手册**：开发者在功能的 PR 中改仓库的初稿（`backend/quizbuks/src/main/resources/quizbuks/help/manual-*.md`）。部署后启动检查 `QB_HELP_MANUAL_SOURCE` 警告"仓库的使用手册不是草稿最近载入的"：内容管理员在手册的行上运行 `QB_HELP_MANUAL_LOAD`。草稿在管理系统中没改过就直接换成新文本；改过则拒绝（`QB_HELP_MANUAL_EDITED`），这时对照 PR 的改动手工合进草稿，再以"保留草稿"（`keepDraft`）记为已合并，或以"覆盖"（`replace`）放弃管理系统中的修改。然后检查并发布。
+  - **大小超过上限**（启动检查 `QB_HELP_MATERIALS` 报错，或发布被拒 `QB_HELP_MATERIALS_TOO_LARGE`）：错误中写着入口、语言与字节数。缩短手册或删减 FAQ（多半是 FAQ 增多），或调高 `qb.help.manual-max-bytes`（每次提问的费用随之增加；预留的令牌按快照大小每 3 字节一个计）。超过上限的新快照不会保存，在用的旧快照照旧，所以服务不中断；改好后发布或等每小时的任务，检查在下次启动时通过。
+  - **快照一直"保存中"**：看平台的作业 `qb.help.materials`（`sys_external_job`）；失败或 30 分钟没完成时下一次生成会重试。
+  - **缓存的用量**：`qb.admin.help-usage` 显示缓存写入与读取的令牌（已包含在输入令牌中）；读取多说明缓存在起作用。美元估算按标价计（偏高）并加上缓存写入多出的部分。
 - **事故处理**：回答明显有误或被诱导（例如帮人答题）：先关 `qb.help.enabled`（受控，另一位管理员发布），再查 `qb_help_message`（`kind = 'ANSWER'`）与平台的作业记录（`sys_external_job` 的 `qb.ai.help`），补资料或手册后再开。提供方故障：作业按平台规则重试后失败，用户看到失败说明并可转人工。用量突增：看 `qb.admin.help-usage` 与 `qb-help-usage-high`，必要时调低 `qb.help.user-daily`。
 - **改派运营商**：发起方改派时，其转人工、由原运营商回答的对话与待办（含等待的提醒）随之移到新运营商（平台的 `APPROVAL_SCOPE_MOVE`，与待审的审批同一上限，超过即 422 `QB_SPONSOR_HELP_PENDING`：先关闭一些对话）；总部回答的不动。
 - **删除账号**：三张表中本人的行由抹除流程删除（`help.HelpConfig` 的 `PersonalDataEraser`），作业的输入与结果由平台按请求人清除；全平台的用量行保留（不含个人）。

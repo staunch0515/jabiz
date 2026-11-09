@@ -9,7 +9,8 @@ import java.util.List;
 
 /**
  * The asynchronous external job {@value #TYPE} (F-C10): one question to the AI help, answered from the published
- * materials only (part b gives them as the job's file; until then the prompt has none). Started by
+ * materials only: the snapshot of the entry's and language's materials is the job's one file (F-C10b; none before the
+ * first snapshot is stored), sent as a cached system block. Started by
  * {@code QB_HELP_ASK}, answered by {@code QB_HELP_JOB_COMPLETED} / {@code _FAILED} / {@code _CANCELLED}. The handler
  * never reads the database; the input holds only what the request needs: the model, the entry, the language, the page's
  * name (from the list), the conversation's latest turns, the question and the user's anonymous key.
@@ -94,6 +95,8 @@ public final class HelpJob {
             .timeout(attemptTimeout).retry(attempts, Duration.ofSeconds(5), Duration.ofSeconds(30))
             .maxConcurrency(maxConcurrency).maxOpenPerRequester(MAX_OPEN).oneOpenPerReference()
             .maxInputSize(MAX_JOB_INPUT_BYTES)
+            // F-C10b: the entry's and language's materials snapshot, the one file a question reads.
+            .inputFiles(1, QbHelpMaterials.MAX_FILE_BYTES, QbHelpMaterials.POLICY)
             .onCompleted(HelpOutcomes.COMPLETED).onFailed(HelpOutcomes.FAILED)
             .onCancelled(HelpOutcomes.CANCELLED).enabledBy(QbParams.HELP_ENABLED));
     }

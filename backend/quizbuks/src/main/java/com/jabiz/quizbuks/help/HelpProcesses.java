@@ -38,6 +38,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * The AI help's processes for people (F-C10, docs/quizbuks/plans/impl/F-C10.md):
@@ -74,6 +75,8 @@ public final class HelpProcesses {
     static final String TODAY = "today";
     static final String EVERYBODY = "everybody";
     static final String JOB_INPUT = "jobInput";
+    static final String MATERIAL = "material";
+    static final String MATERIAL_FILE = "materialFile";
     static final String JOB_ID = "jobId";
     static final String REFERENCE = "reference";
     static final String ASSIGNMENT = "assignment";
@@ -157,11 +160,18 @@ public final class HelpProcesses {
                             new QueryPredicate.Gte("createdAt", AiLimits.dayStart(ctx.opTime(), zone)))))
                         .limit(settings(ctx).userDaily() + 1).build(), TODAY),
                     QueryEntities.query(QbHelp.defaultDataset(QbHelp.USAGE), ctx -> usageOf(QbHelp.EVERYBODY,
-                        AiLimits.month(ctx.opTime(), zone)), EVERYBODY)))
+                        AiLimits.month(ctx.opTime(), zone)), EVERYBODY),
+                    // F-C10b: the snapshot of the entry's and language's materials in use, the job's file.
+                    QueryEntities.query(QbHelpMaterials.defaultDataset(QbHelpMaterials.MATERIAL),
+                        ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.Eq("entry", askInput(ctx).entry()),
+                            new QueryPredicate.Eq("language", askInput(ctx).language())))).limit(1).build(),
+                        MATERIAL)))
                 .compute("Ask", (metadata, ctx) -> asked(ctx, userKeys, json))
                 .step("Start the job", StartExternalJob.<ProcessContext>of(HelpJob.TYPE, ctx -> ctx.get(JOB_INPUT))
                     .when(ctx -> ctx.contains(JOB_INPUT))
                     .reference(ctx -> (String) ctx.get(REFERENCE))
+                    .files(ctx -> ctx.contains(MATERIAL_FILE) ? List.of((UUID) ctx.get(MATERIAL_FILE)) : List.of())
                     .outputKey(JOB_ID));
         });
     }
@@ -228,7 +238,14 @@ public final class HelpProcesses {
         }
         HelpJob.Input draft = new HelpJob.Input(settings.model(), input.entry(), input.language(), page,
             history(recent, settings.historyTurns()), text, userKeys.of(actor), 0);
-        long reserved = HelpPrompt.reservedInput(HelpPrompt.SYSTEM, HelpPrompt.user(draft, json));
+        // F-C10b: the materials are the job's file (not copied into its input); the reservation counts their size.
+        EntityInstance material = first(ctx, MATERIAL);
+        UUID materialFile = material == null ? null : fileId(material.get("fileId"));
+        long materialBytes = materialFile == null ? 0 : number(material.get("bytes"));
+        if (materialFile != null) {
+            ctx.put(MATERIAL_FILE, materialFile);
+        }
+        long reserved = HelpPrompt.reservedInput(HelpPrompt.SYSTEM, materialBytes, HelpPrompt.user(draft, json));
         HelpJob.Input jobInput = new HelpJob.Input(draft.model(), draft.entry(), draft.language(), draft.page(),
             draft.history(), draft.question(), draft.userKey(), reserved);
         Map<String, Object> question = new LinkedHashMap<>();
@@ -604,6 +621,11 @@ public final class HelpProcesses {
         if (!ctx.request().hasPermission(permission)) {
             throw refused(HelpCodes.ENTRY, "The caller does not use the entry " + entry, Map.of("entry", entry));
         }
+    }
+
+    /** A file field's value as an id; null when there is none. */
+    static UUID fileId(Object value) {
+        return value == null ? null : value instanceof UUID id ? id : UUID.fromString(value.toString());
     }
 
     static EntityQuery byId(String field, Object id) {

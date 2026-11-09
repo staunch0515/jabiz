@@ -2,7 +2,8 @@
 id: qb.admin.help-usage
 description: >-
   F-C10: the AI help's usage by month (headquarters' AI page; apart from the Sponsors' AI usage): questions, failed and
-  stopped jobs, tokens in and out (an attempt without an answer at its estimate), a dollar estimate, how many people
+  stopped jobs, tokens in and out (an attempt without an answer at its estimate; of the input, what the prompt cache
+  wrote and read, F-C10b), a dollar estimate, how many people
   asked, and the share of qb.help.global-monthly-tokens used
 entities: [QbHelpUsage, SysParam]
 datasets:
@@ -17,6 +18,8 @@ results:
   cancelledJobs: { from: QbHelpUsage.cancelledJobs }
   inputTokens:   { from: QbHelpUsage.inputTokens }
   outputTokens:  { from: QbHelpUsage.outputTokens }
+  cacheReadTokens:  { from: QbHelpUsage.cacheReadTokens }
+  cacheWriteTokens: { from: QbHelpUsage.cacheWriteTokens }
   estimatedUsd:  { kind: { type: numeric, precision: 14, scale: 2 } }
   people:        { kind: { type: numeric, precision: 9, scale: 0 } }
   monthlyTokens: { kind: { type: numeric, precision: 15, scale: 0 } }
@@ -42,6 +45,8 @@ SELECT
     u.{{QbHelpUsage.cancelledJobs}} AS cancelledJobs,
     u.{{QbHelpUsage.inputTokens}}   AS inputTokens,
     u.{{QbHelpUsage.outputTokens}}  AS outputTokens,
+    u.{{QbHelpUsage.cacheReadTokens}}  AS cacheReadTokens,
+    u.{{QbHelpUsage.cacheWriteTokens}} AS cacheWriteTokens,
     CAST(round(u.{{QbHelpUsage.costUsd}}, 2) AS numeric(14, 2)) AS estimatedUsd,
     CAST((SELECT count(*) FROM {{QbHelpUsage}} x
           WHERE x.{{QbHelpUsage.month}} = u.{{QbHelpUsage.month}} AND x.{{QbHelpUsage.userId}} <> '*')
