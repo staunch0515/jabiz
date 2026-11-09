@@ -32,7 +32,7 @@ import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
 import { readCountries, shownLanguages } from '../qb/api'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, rewardPath, type FeedCard, type FeedSort, type RewardMethod }
+import { cardProgress, FEED_SORTS, readFeed, readOpenCashRewards, readOpenRedemptions, rewardPath, type BlockKind, type FeedCard, type FeedSort, type RewardMethod }
   from '../qb/play'
 import { problemText } from '../qb/problems'
 import { canGoBack, Link, navigate, useLocation } from '../qb/router'
@@ -46,6 +46,8 @@ import { countShortsOpen, readShorts } from '../shorts/api'
 import { placeShelves, type Shelf } from '../shorts/shelves'
 import { ShortsShelf } from '../shorts/ShortsShelf'
 import { ShortsViewer } from '../shorts/ShortsViewer'
+import { BlockMenu } from '../blocks/BlockMenu'
+import { covers } from '../blocks/api'
 
 /** The home's address, searched from the header (Q63): `/?q=<text>`. */
 export const HOME_PATH = '/'
@@ -469,6 +471,15 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
     if (canGoBack()) window.history.back()
     else navigate(shortsPath(q, null), { replace: true })
   }, [q])
+  // F-S8: a block in the vertical mode moves it on to the next short the block leaves (the list is read again); none
+  // left closes it.
+  const blockedInShorts = (card: FeedCard, kind: BlockKind) => {
+    const at = shortCards.findIndex((c) => c.publicationId === card.publicationId)
+    const next = [...shortCards.slice(at + 1), ...shortCards.slice(0, Math.max(0, at)).reverse()]
+      .find((c) => !covers(kind, card, c))
+    if (next) navigate(shortsPath(q, next.publicationId), { replace: true })
+    else closeShorts()
+  }
   const viewing = shortsOpen !== null && shortCards.some((card) => card.publicationId === shortsOpen)
   const [list, setList] = useState<HTMLUListElement | null>(null)
   const [end, setEnd] = useState<HTMLDivElement | null>(null)
@@ -576,6 +587,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
                 <Fragment key={card.publicationId}>
                   <FeedCardView card={card} href={`/p/${card.publicationId}`}
                     playing={playing === card.publicationId} note={<CardProgressNote card={card} at={at} />}
+                    menu={<BlockMenu item={card} />}
                     video={trackable(card.video) && <CardVideo card={card} player={card.video!} />}
                     onOpen={trackable(card.video) ? () => openWithSound(card.video!) : undefined} />
                   {/* F-S10: a shelf of short videos after this card (the parameters' places). */}
@@ -588,7 +600,8 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           <div ref={setEnd} aria-hidden data-testid="feed-end" />
           {viewing && (
             <ShortsViewer cards={shortCards} startId={shortsOpen!} onClose={closeShorts}
-              onAnswer={(card) => navigate(`/p/${card.publicationId}`)} />
+              onAnswer={(card) => navigate(`/p/${card.publicationId}`)}
+              menu={(card) => <BlockMenu item={card} onBlocked={(kind) => blockedInShorts(card, kind)} />} />
           )}
           {feed.hasNextPage && (
             <Button variant="outline" disabled={feed.isFetchingNextPage} data-testid="feed-more"

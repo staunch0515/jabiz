@@ -15,6 +15,7 @@ import com.jabiz.quizbuks.identity.BanRules;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.play.QbPlay;
+import com.jabiz.quizbuks.play.TreeGate;
 import com.jabiz.quizbuks.publishing.DigitalDelivery;
 import com.jabiz.quizbuks.publishing.PublicationRules;
 import com.jabiz.quizbuks.publishing.PublisherKind;
@@ -169,6 +170,8 @@ public final class ReferralProcesses {
                             LINK_ROW),
                         attempt(ReferralProcesses::publication, ctx -> ctx.request().actorId(), ATTEMPT),
                         counted(ReferralProcesses::publication)));
+            // F-S2d: a publication the caller does not see (a prerequisite not lit) is as if it did not exist.
+            TreeGate.load(pb, ctx -> first(ctx, CARD));
             // F-S2c: referring is unlocked by lighting the node the controlled parameter names (A2-11).
             TreeGates.load(pb, QbParams.TREE_GATE_REFERRER, GATE, ctx -> first(ctx, LINK_ROW) == null);
             pb.compute("Make the link", (metadata, ctx) -> makeLink(ctx));
@@ -178,7 +181,8 @@ public final class ReferralProcesses {
     static void makeLink(ProcessContext ctx) {
         EntityInstance card = first(ctx, CARD);
         ReferralPolicy policy = card == null ? null : ReferralPolicy.fromJson(card.get("referral"));
-        if (card == null || !PublisherKind.sponsor(card.get("publisherKind"))) {
+        if (card == null || !PublisherKind.sponsor(card.get("publisherKind"))
+            || !TreeGate.visible(ctx, card, first(ctx, ATTEMPT) != null)) {
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + publication(ctx) + " not found");
         }
         int left = policy == null ? 0 : Math.max(0, policy.quota() - list(ctx, COUNTED).size());
@@ -266,6 +270,15 @@ public final class ReferralProcesses {
             .step("Load the sponsor's ban and the caller's passes with the sponsor", QueryEntities.<ProcessContext>all(
                 ban(ctx -> cardValue(ctx, "publisherId")),
                 passes(ctx -> ctx.request().actorId(), ctx -> cardValue(ctx, "publisherId"))))
+            // F-S2d: a link to a publication the caller does not see (a prerequisite not lit) leads nowhere.
+            .steps(b -> TreeGate.load(b, ctx -> first(ctx, CARD)))
+            .compute("Refuse a publication the caller does not see", (metadata, ctx) -> {
+                EntityInstance card = first(ctx, CARD);
+                if (card != null && !TreeGate.visible(ctx, card, first(ctx, ATTEMPT) != null)) {
+                    throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + linkPublication(ctx)
+                        + " not found");
+                }
+            })
             .compute("Record the referral", (metadata, ctx) -> recordClaim(ctx))
             .step("Tell the referrer", PublishEvent.<ProcessContext>when(
                 ctx -> ctx.get(OUTPUT, ClaimOutput.class).counted() && ctx.contains(REFERRAL_ROW),

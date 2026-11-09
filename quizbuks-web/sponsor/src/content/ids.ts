@@ -17,6 +17,12 @@ export const CONTENT_PROCESS = {
   questionSave: 'QB_QUESTION_SAVE',
   questionDelete: 'QB_QUESTION_DELETE',
   questionReorder: 'QB_QUESTION_REORDER',
+  /** F-S6: one question to another place, several deleted or given points at once, a batch imported and undone. */
+  questionMove: 'QB_QUESTION_MOVE',
+  questionDeleteMany: 'QB_QUESTION_DELETE_MANY',
+  questionPointsSet: 'QB_QUESTION_POINTS_SET',
+  quizImportQuestions: 'QB_QUIZ_IMPORT_QUESTIONS',
+  questionImportUndo: 'QB_QUESTION_IMPORT_UNDO',
   materialSave: 'QB_MATERIAL_SAVE',
   materialDelete: 'QB_MATERIAL_DELETE',
   materialReorder: 'QB_MATERIAL_REORDER',
@@ -33,6 +39,13 @@ export const CONTENT_TEMPLATE = {
   quizzes: 'qb.sponsor.quizzes',
   quizVersions: 'qb.sponsor.quiz-versions',
   quizVersion: 'qb.sponsor.quiz-version',
+  /** F-S6: a page of a quiz's questions, searched by text or number; the bank's limits in effect. */
+  quizQuestions: 'qb.sponsor.quiz-questions',
+  quizLimits: 'qb.sponsor.quiz-limits',
+  /** F-S6c: a page of a quiz's questions in one of its other languages, with their options and translations. */
+  quizTranslations: 'qb.sponsor.quiz-translations',
+  /** F-S6c: per other language, the texts missing and out of date over the whole quiz. */
+  quizTranslationProgress: 'qb.sponsor.quiz-translation-progress',
 } as const
 
 /** The sponsor's own rows of the content entities (read only; writing is the processes'). */
@@ -43,6 +56,8 @@ export const CONTENT_DATASET = {
   material: 'urn:jabiz:dataset:sponsor:QbMaterial',
   materialImage: 'urn:jabiz:dataset:sponsor:QbMaterialImage',
   translation: 'urn:jabiz:dataset:sponsor:QbContentTranslation',
+  /** F-S6: the batches imported into a quiz (`QB_QUIZ_IMPORT_QUESTIONS`). */
+  questionImport: 'urn:jabiz:dataset:sponsor:QbQuestionImport',
 } as const
 
 /** Dictionaries, labelled by the server in the request's language. */

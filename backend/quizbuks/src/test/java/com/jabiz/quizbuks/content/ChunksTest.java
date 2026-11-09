@@ -23,8 +23,14 @@ class ChunksTest {
 
     @Test
     void oneVersionsFilesFitOneCommit() {
-        // Publishing a version writes its new files in one commit through the dataset limited to RELEASE_CHUNK.
-        assertThat(ContentLimits.MAX_FILES_PER_VERSION).isEqualTo(2701)
-            .isLessThanOrEqualTo(ContentLimits.RELEASE_CHUNK);
+        // Publishing a version writes its new files in one commit. F-S6: a bank of up to MAX_QUESTIONS_TECH questions
+        // has more files than a removal releases per commit, so the files' dataset allows the larger of the two
+        // (ContentConfig); a version of the old limit (100 questions) still fits one release chunk.
+        assertThat(ContentLimits.MAX_FILES_PER_VERSION).isEqualTo(1 + ContentLanguages.MAX_LANGUAGES
+            * (ContentLimits.MAX_QUESTIONS_TECH * (1 + ContentLimits.MAX_OPTIONS)
+            + ContentLimits.MAX_MATERIALS * ContentLimits.MAX_IMAGES)).isEqualTo(42_601)
+            .isGreaterThan(ContentLimits.RELEASE_CHUNK);
+        assertThat(1 + ContentLanguages.MAX_LANGUAGES * (100 * (1 + ContentLimits.MAX_OPTIONS)
+            + ContentLimits.MAX_MATERIALS * ContentLimits.MAX_IMAGES)).isLessThanOrEqualTo(ContentLimits.RELEASE_CHUNK);
     }
 }

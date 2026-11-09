@@ -106,8 +106,9 @@ jobs:
     name: build-application (shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
     # QuizBuks's whole suite on one machine took 43-45 minutes in November 2026 (17zz12); a shard takes about a third
-    # of the tests plus the compilation.
-    timeout-minutes: 75
+    # of the tests plus the compilation: 13-18 minutes in its first sharded runs (#551, #557), so 40 leaves room
+    # for growth and stops a hung run early (17zz16).
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:

@@ -346,6 +346,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
 | 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足）；`GATE_INVALID` 出现（门槛参数指不到可点亮的节点，功能对所有人关闭） |
+| 题库（F-S6，§7.28） | 平台 `jabiz-job-failed`（`qb.content-check`）；每日核对的待办 `qb.content-health`（权限 `qb.admin.quiz.read`） | `SNAPSHOT_NEAR_LIMIT` 出现（某个版本的快照超过上限的 80 %，题库再增长即不能保存下一个版本） |
 | 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
 | 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
@@ -362,7 +363,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **上线前在目标硬件上重测**：压测程序放在另一台主机，读者按预期的读取量限速（`LOAD_READ_RATE`），对打包的 jar 运行 `./gradlew :quizbuks:loadTest`（`LOAD_*` 参数，`LOAD_METRICS=yes` 从回环的管理端口读许可持有与语句数）；确认峰值低于饱和点并有 1.3 倍余量，结果写进报告。
 - **大题库与继续答题**（上线清单"性能"）：`LOAD_QUESTIONS`（题数，缺省 2）使版本快照变大，开始、继续与提交都随之变重；`LOAD_CONTINUE=yes` 让每个学者在开始之后再打开一次答题（`QB_ATTEMPT_START` 对进行中的答题即继续），单列一行。
   本机对比（60 人、16 并发，2026-11-08，应用与数据库同机、CPU 饱和，只看相对值）：2 题 24.5 次完成 / 秒，开始 p95 249 ms、提交 p95 566 ms；100 题 15.9 次 / 秒，开始 p95 444 ms、继续 p95 437 ms、提交 p95 656 ms。
-  现在题数上限是 100（`ContentLimits.MAX_QUESTIONS`）；千题题库（F-S6）与抽题（F-S7）合入后，以 1000 题、每人抽 20 题重测（届时给压测程序加上抽题的参数）。
+  题库的题数现在是参数 `qb.content.max-questions`（缺省 1000，F-S6，§7.28）；抽题与乱序（F-S7）合入后，以 1000 题、每人抽 20 题重测（届时给压测程序加上抽题的参数）。
 - 单实例：准入的队列与限流按实例（D45 的已知限制）；多实例时热门发布的锁仍在数据库中串行，加实例不提高单个发布的容量。
 
 ## 7. 常见故障
@@ -786,7 +787,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **审核**：发起方的图由其运营商的另一位成员审（规则 `qb.tree.review`，持 `qb.review.tree`），运营商的副本由同一运营商的另一位成员审（`qb.tree.copy.review`），平台模板由另一位持 `qb.tree.platform.write` 的平台管理员审（`qb.tree.platform.review`）。三条规则与撤销点亮的规则 `qb.tree.lit-revoke.review` 由 `QB_SETUP` 提出、另一位管理员发布；没有规则时提交被拒（`QB_REVIEW_NOT_CONFIGURED`），从不免审。审核超过 `qb.tree.review.remind-after` 天（普通参数，缺省 3）由任务 `qb.tree-review-remind`（每天 00:43 UTC）给审核方一个提醒待办（每个版本一次，审核结束、撤回或停用时关闭），并计入每日核对的 `REVIEW_OVERDUE`。
 - **新版本与停用**：新版本不能去掉仍有进行中发布（排程、进行中、暂停、预算不足）绑定的节点（`QB_TREE_NODE_IN_USE`，列出这些发布）：保留节点，或等发布结束。停用整张图时其节点失效，绑定的进行中发布在同一事务中结束（结束原因 `TREE`，发起方照结束通知收到邮件）。
 - **点亮**：学者在绑定节点的发布上合格后，事件 `qb.tree.passed` 由 `QB_TREE_EVALUATE` 在答题之外判断并写只追加的点亮记录，再逐层连带判断依赖它的节点（每层一个事务，至多 `qb.tree.max-depth` 层）。点亮永久；已点亮的再合格不写新记录。
-- **节点对一个人的三态与不可见**（F-S2d）：节点对每个学者是三态之一：**未满足前置**（答题前须点亮的节点还有没点亮的）、**可挑战**（前置都已点亮，含挑战中）、**已点亮**。未满足前置时，绑定该节点的发布对这个人**等同于不存在**：首页不列出，详情与档位读不到，查看（`QB_VIEW`）与开始答题 404，收件箱中发起方关于它的通知不显示、不计入未读；本人已有答题记录的发布照旧能看自己的结果。公开页（不登录）只列没有答题前条件的绑定发布。前置点亮后发布即出现，发布页写明节点名与"合格即点亮"，合格并点亮后写"已点亮"。点亮一律按**图与节点两者**核对（节点编号只在一张图内唯一，副本沿用模板的编号）：条件中的节点在版本生效时解析到一张图（本图优先，否则可引用的生效图中唯一有它的一张）；两张以上都有即提交时拒绝（`QB_TREE_AMBIGUOUS_NODE`，启动检查 `QB_TREE` 也报告）。学者问"为什么看不到某个发布"：多半是还没点亮它要求的前置节点。
+- **节点对一个人的三态与不可见**（F-S2d）：节点对每个学者是三态之一：**未满足前置**（答题前须点亮的节点还有没点亮的）、**可挑战**（前置都已点亮，含挑战中）、**已点亮**。未满足前置时，绑定该节点的发布对这个人**等同于不存在**：首页不列出，详情与档位读不到，查看（`QB_VIEW`）、开始答题、推荐链接的生成与领取都 404，收件箱中发起方关于它的通知与推广不显示、不计入未读（系统公告照旧）；本人已有答题记录的发布照旧能看自己的结果。公开页（不登录）只列没有答题前条件的绑定发布。前置点亮后发布即出现，发布页写明节点名与"合格即点亮"，合格并点亮后写"已点亮"。点亮一律按**图与节点两者**核对（节点编号只在一张图内唯一，副本沿用模板的编号）：条件中的节点在版本生效时解析到一张图（本图优先，否则可引用的生效图中唯一有它的一张）；两张以上都有即提交时拒绝（`QB_TREE_AMBIGUOUS_NODE`，启动检查 `QB_TREE` 也报告）。学者问"为什么看不到某个发布"：多半是还没点亮它要求的前置节点。
 - **撤销点亮**：运营商成员（本运营商的发起方的图与副本）或平台（任何图）以 `QB_TREE_LIT_REVOKE` 填写原因申请（持 `qb.tree.lit.revoke`；本人的点亮不能自己申请），另一位成员或管理员在审批中批准后才写撤销记录（只追加），学者收到站内信（`TREE_LIT_REVOKED`，含原因）；驳回则点亮照旧、记下驳回理由。撤销后，原来那次合格不再点亮它；之后新的合格照常点亮（新的一条记录）。撤销**不连带下游**：已经因它点亮的节点照旧点亮；前置因此不再满足的发布按上面的规则对这个人不可见（已有答题记录的仍能看自己的结果）。节点证书随之作废与扣回赠送的部分在 F-S5、F-M。
 - **每日核对**（任务 `qb.tree-check`，每天 19:23 UTC，模板 `qb.admin.tree-health`）：合格了却没有点亮的（`UNLIT_PASS`：事件丢失或判断失败）、点亮记录指向不存在的节点（`ORPHAN_LIT`：绕过流程写入的数据）、等待审核过久的版本（`REVIEW_OVERDUE`）、门槛参数指不到可点亮的节点（`GATE_INVALID`，见下）、生效的节点引用了没有唯一一张图的节点（`BEFORE_ANSWER_UNRESOLVED`：这个引用永远不算点亮，绑定的发布对所有人不可见）。有问题即给持 `qb.admin.trees.read` 的人一个待办（每天一个）。`UNLIT_PASS` 由随后的任务 `qb.tree-recheck`（19:33 UTC，逐项）自动重新判断；次日仍有即查 `QB_TREE_EVALUATE` 的失败记录（平台的操作记录）。`ORPHAN_LIT` 不自动处理：查是谁写入的，按撤销点亮的流程更正。`BEFORE_ANSWER_UNRESOLVED` 不自动处理：引用的节点所在的图停用、去掉了该节点或出现了同编号的另一张图；改图后重新提交审核。
 - **指定门槛节点**（F-S2c）：点亮平台图上指定的节点即开放的平台功能，由四个受控参数各指一个节点：`qb.tree.gate.referrer-node`（推荐朋友）、`qb.tree.gate.benefit-provider-node`（提供权益）、`qb.tree.gate.benefit-sponsor-node`（赞助权益）、`qb.tree.gate.sponsor-apply-node`（在 App 中申请成为发起方，F-S2c2b）。**缺省没有参数 = 关闭**（谁也不能推荐、不能上架或赞助权益，学者不能从 App 申请成为发起方；在发起方页面注册照旧），`QB_SETUP` 不建立它们。
@@ -836,6 +837,30 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **没有做的**：服务器端探测（判断地址是不是视频、能不能嵌入）要发往任意主机，须先改平台决策 D38；HLS（`.m3u8`）；发起方把视频上传到平台的服务器（需求方 2026-11-08 定：只放平台自己的视频，发起方贴链接使用）。
 - **共享视频（F-S12）**：共享的视频链接同样可以是三类中的任何一类（共享时按同一规则判断"QuizBuks 能播放"）；卡片上共享视频照旧优先（除非 Quiz 有"看完才能答"的视频），即使它是其他网页；审核运营商对其他网页的共享视频同样照内容标准检查。
 
+### 7.30 屏蔽（F-S8）
+
+学者可以屏蔽一个发布（"不想看"）、一个 Quiz 的所有期（含以后新发的）、一个发起方，或者共享视频的制作方（`docs/quizbuks/plans/impl/F-S8.md`）。给用户的帮助文案在 `docs/quizbuks/help/blocks.md`（由内容管理员发布为 FAQ）。**硬屏蔽是平台原则：付多少钱都越不过**（奖励、推广、受众规则，以后的付费曝光同样不能越过）。
+
+- **部署**：迁移 `V95`建 `qb_block`，卡片加列 `quiz_id` 并按版本回填（一条 `UPDATE`，卡片多时几秒）。部署后运行一次 `QB_SETUP`：建两个普通参数，给内容管理员补上 `qb.admin.block.read`。没有任务，没有新的环境变量。
+- **生效的地方**：App 的首页、"短视频"一排、竖屏模式、搜索、发布的页面（显示"你已屏蔽"与解除，不显示内容；已经开始或答过的照常可以看结果、继续答）、收件箱中发起方的通知与带发布的推广（未读数一致）；开始答题 422 `QB_PUBLICATION_BLOCKED`。系统公告照常；发送时的触达人数不减去屏蔽的人（否则发起方能推算出屏蔽人数）。
+- **学者自己**：卡片、竖屏模式与发布页面的菜单（⋮）屏蔽，提示中可以撤销；"账户 → App 设置 → 屏蔽"列出全部，逐个解除。
+- **参数**（普通参数，`PARAM_SET`，不受控）：
+
+  | 参数 | 缺省 | 作用 | 调整的影响 |
+  |---|---|---|---|
+  | `qb.block.max-per-user` | `1000` | 一个学者最多的屏蔽数（四种合计，最多 10000） | 满了的学者再屏蔽被拒（`QB_BLOCK_LIMIT`）；调低后已有的照常生效 |
+  | `qb.block.count-min-group` | `20` | 屏蔽人数少于它时发起方只看到"少于 N"（下限 5） | 达到时向下取整到 10 的倍数（不小于 N）；调低会让人数更早出现，不要低于 20 除非需求方同意 |
+
+- **发起方**：发起方页面首页的"屏蔽你的学者"一格（模板 `qb.sponsor.blockers`）：屏蔽了它、它的 Quiz 或发布、或它作为视频制作方的不同学者，取整；看不到是谁、屏蔽了什么。
+- **总部**：平台管理系统的"屏蔽"页（`/qb/blocks`，平台组，`qb.admin.block.read`，内容管理员与超级管理员有，运营商没有）：按种类的屏蔽数与学者数、有屏蔽的学者总数、被屏蔽最多的发起方（取整，少于 N 不列）。**只有汇总**：屏蔽表的数据视图没有角色能读；排查个别学者时只在数据库中查（下面），不对发起方透露。
+- **删除账号**：学者的屏蔽随之删除（`PersonalDataEraser`）；被屏蔽的发起方删除账号时，别人屏蔽它的行保留（只有编号）。
+- **审计**：屏蔽与解除都经平台的写入路径（`GET /api/audit/records?entityType=QbBlock`，只有持 `audit.read` 的人）。
+- **"学者说看不到某个发布"的排查**：
+  1. 学者的屏蔽：`SELECT kind, object_id, created_at FROM qb_block WHERE user_id = '<学者>'`。
+  2. 卡片的对象：`SELECT publication_id, quiz_id, publisher_id, video_provider_id FROM qb_publication_card WHERE publication_id = '<发布>'`；四者之一出现在第 1 步即被屏蔽（请学者在"App 设置 → 屏蔽"中解除）。
+  3. 其余按首页的排查（地区、客户匹配、中国大陆 §7.24、只看喜欢的主题 §7.26）。
+- **"发起方问谁屏蔽了我"**：不回答。屏蔽只属于学者本人，发起方只看到取整的人数。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
@@ -851,3 +876,19 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
 6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
 
 回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。
+
+### 7.28 题库的上限与每日核对（F-S6）
+
+- **参数**（普通参数，`QB_SETUP` 建立，平台管理系统的参数页可以改，改动即时生效）：
+  - `qb.content.max-questions`（缺省 1000）：一个 Quiz（题库）至多几题。至多 2000（代码的技术上限 `ContentLimits.MAX_QUESTIONS_TECH`），填得更大也按 2000。调低后已有的大题库照常读取、修改、删除，只是不能再加题（`QB_TOO_MANY_QUESTIONS`，提示中带上限）。
+  - `qb.play.max-questions-per-attempt`（缺省 100）：一次答题至多几题，题库更大时发布必须抽题。至多 200（`PlayLimits.MAX_PER_ATTEMPT_TECH`，答题记录的列宽按它）。在 F-S7 合入前，发布只按 200 检查（`QB_PUBLICATION_PICK_REQUIRED` / `QB_PUBLICATION_PICK_TOO_MANY`）。
+  - `qb.content.import.batch-size`（缺省 200）：往已有的 Quiz 中导入时每批的题数（分批导入随 F-S6 的编辑器一起提供）。
+  - 部署后没有重跑 `QB_SETUP` 时，三个参数都按缺省值。
+- **每日核对**：任务 `qb.content-check`，每天 19:13 UTC，模板 `qb.admin.content-health`。
+  - `SNAPSHOT_NEAR_LIMIT`：版本的快照超过上限（6 MB）的 80 %。
+  - 有问题即给持 `qb.admin.quiz.read` 的人一个待办，每天一个。
+  - 处理：
+    - 模板 `qb.admin.large-versions`（参数 `overBytes`，每日核对用的是 5033164，即 6 MB 的 80 %）列出是哪些 Quiz 的哪个版本、多大；
+    - 请发起方把题库拆成两个 Quiz，或删去不用的题和翻译，之后才能保存新版本；
+    - 已有的版本照常可用。
+- **耗时**：千题、6 个选项、三语的题库实测见 `docs/quizbuks/perf/F-S6-large-bank.md`。

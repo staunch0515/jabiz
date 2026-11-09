@@ -6,6 +6,7 @@ import com.jabiz.dictionary.StaticDictionary;
 import com.jabiz.entity.EntityDefinition;
 import com.jabiz.file.FilePolicy;
 import com.jabiz.file.MediaTypes;
+import com.jabiz.job.JobDefinition;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
@@ -14,6 +15,8 @@ import com.jabiz.quizbuks.operator.OperatorScopes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.ZoneOffset;
 
 /**
  * Registers quiz content (docs/quizbuks/plans/Q3-content.md): the seven entities, two datasets each, the two
@@ -64,6 +67,21 @@ public class ContentConfig {
                 }
             });
         });
+    }
+
+    @Bean
+    EntityDefinition qbQuestionImportEntity() {
+        return QbContent.QUESTION_IMPORT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbQuestionImportDataset() {
+        return defaultDataset(QbContent.QUESTION_IMPORT, 1);
+    }
+
+    @Bean
+    DatasetDefinition qbQuestionImportSponsorDataset() {
+        return sponsorDataset(QbContent.QUESTION_IMPORT);
     }
 
     @Bean
@@ -125,12 +143,12 @@ public class ContentConfig {
 
     @Bean
     DatasetDefinition qbQuestionDataset() {
-        return defaultDataset(QbContent.QUESTION, ContentLimits.MAX_QUESTIONS);
+        return defaultDataset(QbContent.QUESTION, ContentLimits.MAX_QUESTIONS_TECH);
     }
 
     @Bean
     DatasetDefinition qbOptionDataset() {
-        return defaultDataset(QbContent.OPTION, ContentLimits.MAX_QUESTIONS * ContentLimits.MAX_OPTIONS);
+        return defaultDataset(QbContent.OPTION, ContentLimits.MAX_QUESTIONS_TECH * ContentLimits.MAX_OPTIONS);
     }
 
     @Bean
@@ -140,8 +158,10 @@ public class ContentConfig {
 
     @Bean
     DatasetDefinition qbVersionFileDataset() {
-        // A version registers at most MAX_FILES_PER_VERSION files; a removal releases them in chunks of this size.
-        return defaultDataset(QbContent.VERSION_FILE, ContentLimits.RELEASE_CHUNK);
+        // A version registers every file it uses in its one commit (F-S6: a bank of up to MAX_QUESTIONS_TECH
+        // questions); a removal releases them in chunks of RELEASE_CHUNK.
+        return defaultDataset(QbContent.VERSION_FILE,
+            Math.max(ContentLimits.MAX_FILES_PER_VERSION, ContentLimits.RELEASE_CHUNK));
     }
 
     @Bean
@@ -323,6 +343,33 @@ public class ContentConfig {
     }
 
     @Bean
+    ProcessDefinition<QuestionBatchProcesses.MoveInput, EditOutput, ProcessContext> qbQuestionMove() {
+        return QuestionBatchProcesses.move();
+    }
+
+    @Bean
+    ProcessDefinition<QuestionBatchProcesses.ManyInput, EditOutput, ProcessContext> qbQuestionDeleteMany() {
+        return QuestionBatchProcesses.deleteMany();
+    }
+
+    @Bean
+    ProcessDefinition<QuestionBatchProcesses.PointsInput, EditOutput, ProcessContext> qbQuestionPointsSet() {
+        return QuestionBatchProcesses.pointsSet();
+    }
+
+    @Bean
+    ProcessDefinition<QuestionImportProcesses.ImportInput, QuestionImportProcesses.ImportOutput, ProcessContext>
+        qbQuizImportQuestions() {
+        return QuestionImportProcesses.importQuestions();
+    }
+
+    @Bean
+    ProcessDefinition<QuestionImportProcesses.UndoInput, QuestionImportProcesses.UndoOutput, ProcessContext>
+        qbQuestionImportUndo() {
+        return QuestionImportProcesses.undo();
+    }
+
+    @Bean
     ProcessDefinition<MaterialProcesses.MaterialInput, EditOutput, ProcessContext> qbMaterialSave() {
         return MaterialProcesses.save();
     }
@@ -352,5 +399,19 @@ public class ContentConfig {
     @Bean
     ProcessDefinition<TranslationProcesses.SaveInput, EditOutput, ProcessContext> qbTranslationSave() {
         return TranslationProcesses.save();
+    }
+
+    // ---- F-S6: the content's daily check -----------------------------------------------------------------------------
+
+    @Bean
+    ProcessDefinition<ContentHealth.CheckInput, ContentHealth.CheckOutput, ProcessContext> qbContentCheckRun() {
+        return ContentHealth.check();
+    }
+
+    @Bean
+    JobDefinition<ContentHealth.CheckInput> qbContentCheckJob(
+        ProcessDefinition<ContentHealth.CheckInput, ContentHealth.CheckOutput, ProcessContext> qbContentCheckRun) {
+        return JobDefinition.cron(ContentHealth.CHECK_JOB, ContentHealth.CHECK_CRON, ZoneOffset.UTC,
+            qbContentCheckRun, ContentHealth.CheckInput::new);
     }
 }

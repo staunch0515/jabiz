@@ -1,12 +1,15 @@
 /*---
 id: qb.sponsor.quizzes
-description: The sponsor's own quizzes, not removed (M-20), and whether published; searched by title, ignoring case
-entities: [QbQuiz, QbPublication]
+description: >-
+  The sponsor's own quizzes, not removed (M-20), and whether published; searched by title, by the names (in any
+  language) of their topics of the word list and by their custom words, ignoring case (F-S6)
+entities: [QbQuiz, QbPublication, QbTopic]
 datasets:
   QbQuiz: urn:jabiz:dataset:sponsor:QbQuiz
   QbPublication: urn:jabiz:dataset:sponsor:QbPublication
+  QbTopic: urn:jabiz:dataset:default:QbTopic
 params:
-  q: { kind: { type: text, maxLength: 100 }, description: Only quizzes whose title contains this text }
+  q: { kind: { type: text, maxLength: 100 }, description: "Only quizzes whose title, a topic name or a custom word contains this text" }
 results:
   quizId:              { from: QbQuiz.quizId }
   title:               { from: QbQuiz.title }
@@ -30,7 +33,9 @@ list:
   key: [quizId]
 permissions: [qb.content.write]
 ---*/
--- The text is found as written: strpos takes it literally, so % _ and \ match themselves. A quiz is published once a
+-- The text is found as written: strpos takes it literally, so % _ and \ match themselves. F-S6: also in the names of
+-- the quiz's topics (a word list's word, by its code in the comma-separated column; any of its languages) and in its
+-- custom words (a JSON array). A quiz is published once a
 -- publication of it was submitted (any state but a draft; Q4, M-20).
 SELECT
     z.{{QbQuiz.quizId}}              AS quizId,
@@ -53,4 +58,13 @@ LEFT JOIN (SELECT p.{{QbPublication.quizId}} AS of_quiz, count(*) AS submitted
            FROM {{QbPublication}} p
            WHERE p.{{QbPublication.status}} <> 'DRAFT'
            GROUP BY p.{{QbPublication.quizId}}) n ON n.of_quiz = z.{{QbQuiz.quizId}}
-WHERE (CAST(:q AS text) IS NULL OR strpos(lower(z.{{QbQuiz.title}}), lower(CAST(:q AS text))) > 0)
+WHERE (CAST(:q AS text) IS NULL
+       OR strpos(lower(z.{{QbQuiz.title}}), lower(CAST(:q AS text))) > 0
+       OR EXISTS (SELECT 1
+                  FROM unnest(string_to_array(z.{{QbQuiz.topics}}, ',')) AS zt(code)
+                  JOIN {{QbTopic}} t ON t.{{QbTopic.topicId}} = zt.code
+                  CROSS JOIN jsonb_each_text(CAST(t.{{QbTopic.name}} AS jsonb)) AS n(language, name)
+                  WHERE strpos(lower(n.name), lower(CAST(:q AS text))) > 0)
+       OR EXISTS (SELECT 1
+                  FROM jsonb_array_elements_text(CAST(coalesce(z.{{QbQuiz.customTopics}}, '[]') AS jsonb)) AS w(word)
+                  WHERE strpos(lower(w.word), lower(CAST(:q AS text))) > 0))

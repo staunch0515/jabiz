@@ -46,6 +46,45 @@ interface Server {
   aiTranslation?: Record<string, unknown> | null
   /** F-C1: the sponsor's asset library. */
   assets?: Record<string, unknown>[]
+  /** F-S6: the quiz's questions as `qb.sponsor.quiz-questions` numbers them (else QUESTIONS in their order). */
+  bank?: Record<string, unknown>[]
+  /** F-S6: the bank's limits. */
+  limits?: Record<string, unknown>
+  /** F-S6: the quiz's import batches. */
+  imports?: Record<string, unknown>[]
+  /** F-S6c: the rows of `qb.sponsor.quiz-translations` (else QUESTIONS and OPTIONS with `translations`). */
+  translationBank?: Record<string, unknown>[]
+}
+
+/** F-S6: the rows of `qb.sponsor.quiz-questions` of the default quiz: QUESTIONS in their order, numbered. */
+function bankOf(questions: Record<string, unknown>[], options: Record<string, unknown>[]) {
+  return [...questions].sort((a, b) => Number(a.seq) - Number(b.seq)).map((q, i) => ({
+    questionId: q.questionId, questionNo: i + 1, stem: q.stem, image: q.image, points: q.points,
+    selection: q.selection ?? null, optionCount: options.filter((o) => o.questionId === q.questionId).length,
+    translated: 0 }))
+}
+
+/**
+ * F-S6c: the rows of `qb.sponsor.quiz-translations` of the default quiz in a language: QUESTIONS in their order with
+ * their options and translations. The server judges a translation's state by the hash of the base text; here the
+ * hash 0000000000000000 stands for one made from another text.
+ */
+function translationBankOf(language: string, translations: Record<string, unknown>[]) {
+  const of = (key: string) => translations.find((t) => t.language === language && t.elementKey === key)
+  const state = (text: unknown, key: string) => !text ? 'none' : !of(key)?.text ? 'missing'
+    : of(key)!.sourceHash === '0000000000000000' ? 'stale' : 'done'
+  return [...QUESTIONS].sort((a, b) => a.seq - b.seq).map((q, i) => {
+    const options = OPTIONS.filter((o) => o.questionId === q.questionId).sort((a, b) => a.seq - b.seq)
+      .map((o, j) => ({ optionId: o.optionId, no: j + 1, text: o.text, image: o.image,
+        translation: of(`option:${o.optionId}.text`)?.text ?? null, state: state(o.text, `option:${o.optionId}.text`),
+        by: of(`option:${o.optionId}.text`)?.translatedBy ?? null, ownImage: of(`option:${o.optionId}.image`)?.image ?? null }))
+    const stemState = state(q.stem, `question:${q.questionId}.stem`)
+    return { questionId: q.questionId, questionNo: i + 1, stem: q.stem, image: q.image,
+      stemText: of(`question:${q.questionId}.stem`)?.text ?? null, stemState,
+      stemBy: of(`question:${q.questionId}.stem`)?.translatedBy ?? null,
+      ownImage: of(`question:${q.questionId}.image`)?.image ?? null, options: JSON.stringify(options),
+      pending: [stemState, ...options.map((o) => o.state)].filter((x) => x === 'missing' || x === 'stale').length }
+  })
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor with one quiz. Records what was posted. */
@@ -70,6 +109,12 @@ function server(options: Server = {}) {
       const answer = answers[Math.min(turn, answers.length - 1)]
       return json(answer.status, answer.body)
     }
+    const question = /^\/api\/datasets\/urn:jabiz:dataset:sponsor:QbQuestion\/entities\/(.+)$/.exec(path)
+    if (question) {
+      const row = (options.bank ?? []).find((r) => r.questionId === question[1])
+      return row ? json(200, { id: question[1], version: 1, attributes: { ...row, quizId: 'q1' } })
+        : json(404, { detail: 'Not found' })
+    }
     switch (path) {
       case '/api/auth/entries/sponsor':
         return json(200, ENTRY)
@@ -85,12 +130,20 @@ function server(options: Server = {}) {
           : json(404, { detail: 'Not found' })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbQuestion/query':
         return rows(QUESTIONS)
-      case '/api/datasets/urn:jabiz:dataset:sponsor:QbOption/query':
-        return rows(OPTIONS)
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbOption/query': {
+        // F-S6b: one question's options when opened on its own.
+        const byQuestion = (body?.filters as { field: string; value: string }[] | undefined)
+          ?.find((f) => f.field === 'questionId')?.value
+        return rows(byQuestion ? OPTIONS.filter((o) => o.questionId === byQuestion) : OPTIONS)
+      }
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterial/query':
         return rows([...MATERIALS, ...(options.variants ?? [])])
-      case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query':
-        return rows(options.translations ?? [])
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query': {
+        // F-S6c: by key when the filter names keys (the editor reads only the quiz's own).
+        const keys = (body?.filters as { field: string; values?: string[] }[] | undefined)
+          ?.find((f) => f.field === 'elementKey')?.values
+        return rows((options.translations ?? []).filter((t) => !keys || keys.includes(String(t.elementKey))))
+      }
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterialImage/query':
         return rows([])
       case '/api/datasets/urn:jabiz:dataset:me:QbAsset/query':
@@ -103,6 +156,49 @@ function server(options: Server = {}) {
       case '/api/queries/qb.sponsor.quizzes':
         return options.noQuizzes ? json(200, { items: [], offset: 0, limit: 20, total: 0 })
           : json(200, { items: [{ ...QUIZ, publicationCount: 0, published: false }], offset: 0, limit: 20, total: 1 })
+      case '/api/queries/qb.sponsor.quiz-questions': {
+        // As the template answers: searched by text or number, then the page asked for, counted.
+        const params = (body?.params ?? {}) as { q?: string; no?: number }
+        const all = (options.bank ?? bankOf(QUESTIONS, OPTIONS)).filter((row) =>
+          (params.q === undefined || String(row.stem ?? '').toLowerCase().includes(params.q.toLowerCase()))
+          && (params.no === undefined || row.questionNo === params.no))
+        const offset = Number(body?.offset ?? 0)
+        const limit = Number(body?.limit ?? 50)
+        return json(200, { items: all.slice(offset, offset + limit), offset, limit, total: all.length })
+      }
+      case '/api/queries/qb.sponsor.quiz-translations': {
+        // As the template answers: searched by a question's or an option's text, only what needs doing, then the
+        // page asked for, counted.
+        const params = (body?.params ?? {}) as { language: string; q?: string; untranslated?: boolean }
+        const has = (text: unknown) => params.q === undefined
+          || String(text ?? '').toLowerCase().includes(params.q.toLowerCase())
+        const all = (options.translationBank ?? translationBankOf(params.language, options.translations ?? []))
+          .filter((row) => (has(row.stem) || (JSON.parse(String(row.options)) as { text: string }[])
+            .some((o) => has(o.text))) && (!params.untranslated || Number(row.pending) > 0))
+        const offset = Number(body?.offset ?? 0)
+        const limit = Number(body?.limit ?? 50)
+        return json(200, { items: all.slice(offset, offset + limit), offset, limit, total: all.length })
+      }
+      case '/api/queries/qb.sponsor.quiz-translation-progress': {
+        // As the template answers: per other language, the texts missing and out of date (by the stand-in hash).
+        const languages = String(quiz.current?.translationLanguages ?? '').split(',').filter(Boolean)
+        return json(200, { items: languages.map((language) => {
+          const of = (key: string) => (options.translations ?? [])
+            .find((t) => t.language === language && t.elementKey === key)
+          const texts: [string, unknown][] = [['quiz.title', quiz.current?.title], ['quiz.intro', quiz.current?.intro],
+            ...QUESTIONS.map((q): [string, unknown] => [`question:${q.questionId}.stem`, q.stem]),
+            ...OPTIONS.map((o): [string, unknown] => [`option:${o.optionId}.text`, o.text])]
+          const states = texts.filter(([, text]) => text).map(([key]) => !of(key)?.text ? 'missing'
+            : of(key)!.sourceHash === '0000000000000000' ? 'stale' : 'done')
+          return { language, missing: states.filter((x) => x === 'missing').length,
+            stale: states.filter((x) => x === 'stale').length }
+        }), offset: 0, limit: 10 })
+      }
+      case '/api/queries/qb.sponsor.quiz-limits':
+        return json(200, { items: [options.limits ?? { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 200 }],
+          offset: 0, limit: 1 })
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbQuestionImport/query':
+        return rows(options.imports ?? [])
       case '/api/queries/qb.sponsor.quiz-versions':
         return json(200, { items: [], offset: 0, limit: 100 })
       case '/api/queries/qb.sponsor.ai-usage':
@@ -257,8 +353,8 @@ describe('the quiz editor', () => {
     expect(processCalls('QB_QUIZ_SAVE').map((b) => b.baseRevision)).toEqual([7, 9])
   })
 
-  it('shows the questions folded in their order, opens one at a time, and moves one with the whole order', async () => {
-    const { processCalls } = server({ processes: { QB_QUESTION_REORDER: [edit(8)] } })
+  it('shows the questions folded in their order, opens one at a time, and moves one to another place', async () => {
+    const { processCalls } = server({ processes: { QB_QUESTION_MOVE: [edit(8)] } })
     render(<App />)
     await userEvent.click(await screen.findByTestId('tab-questions'))
     const questions = await screen.findAllByTestId('question')
@@ -273,7 +369,7 @@ describe('the quiz editor', () => {
     expect(within(screen.getByTestId('menu-group-settings')).queryByTestId('menu-staff')).toBeNull()
     expect(within(screen.getByTestId('menu-group-rewards')).queryByTestId('menu-staff')).toBeNull()
     const summary = screen.getByTestId('questions-summary')
-    expect(summary).toHaveTextContent('2 / 100 questions')
+    expect(summary).toHaveTextContent('2 / 1,000 questions')
     expect(summary).toHaveTextContent('Full score 3')
     expect(summary).toHaveTextContent('Single choice 1 · multiple choice 0')
     expect(within(summary).getByTestId('questions-unmarked')).toHaveTextContent('1 question has no correct option')
@@ -292,11 +388,12 @@ describe('the quiz editor', () => {
     expect(screen.queryByTestId('question-row-detail')).toBeNull()
     await userEvent.click(within(summary).getByTestId('questions-unmarked'))
     expect(within(questions[1]).getByTestId('question-row-toggle')).toHaveAttribute('aria-expanded', 'true')
-    // "Move to" sends the whole order.
+    // F-S6b: "Move to" moves the one question (`QB_QUESTION_MOVE`); past the last place it goes to the end.
     await userEvent.click(screen.getByRole('combobox', { name: 'Move question 1 to' }))
     await userEvent.click(await screen.findByRole('option', { name: 'Place 2' }))
-    await waitFor(() => expect(processCalls('QB_QUESTION_REORDER')).toEqual([{ quizId: 'q1',
-      questionIds: ['k2', 'k1'], baseRevision: 7 }]))
+    await waitFor(() => expect(processCalls('QB_QUESTION_MOVE')).toEqual([{ quizId: 'q1', questionId: 'k1',
+      beforeQuestionId: null, baseRevision: 7 }]))
+    expect(processCalls('QB_QUESTION_REORDER')).toEqual([])
   })
 
   it('saves a new question with its options in their order', async () => {
@@ -607,7 +704,7 @@ describe('the quiz\'s other languages (Q73a)', () => {
   const FIRST_HASH = '4a3c3009935c1351'
 
   it('adds a language, shows the texts side by side and saves the changed ones', async () => {
-    const { processCalls } = server({
+    const { processCalls, posted } = server({
       quiz: { ...QUIZ, translationLanguages: 'en' },
       translations: [
         { translationId: 't1', quizId: 'q1', language: 'en', elementKey: 'question:k1.stem', text: 'First?',
@@ -621,6 +718,15 @@ describe('the quiz\'s other languages (Q73a)', () => {
     await userEvent.click(await screen.findByTestId('tab-languages'))
     const panel = await screen.findByTestId('translations')
     expect(screen.getByTestId('tab-languages')).toHaveTextContent('(2)')
+    // F-S6c: the draft reads only the quiz's own translations, by key; the counts are the server's.
+    const translationQueries = posted.filter((p) => p.path.endsWith(':QbContentTranslation/query'))
+    expect(translationQueries.length).toBeGreaterThan(0)
+    expect(translationQueries.every((p) => JSON.stringify(p.body.filters).includes(
+      '{"field":"elementKey","op":"in","values":["quiz.title","quiz.intro","quiz.cover"]}'))).toBe(true)
+    // English lacks: the title and introduction, question 2's text (out of date), and both options.
+    await waitFor(() => expect(within(panel).getByTestId('translation-language')).toHaveTextContent('English (5)'))
+    expect(posted.some((p) => p.path === '/api/queries/qb.sponsor.quiz-translation-progress'
+      && JSON.stringify(p.body.params) === '{"quizId":"q1"}')).toBe(true)
     // Done, out of date and missing, by the base's hashes.
     await waitFor(() => expect(within(panel).getAllByTestId('translation-text')
       .find((row) => row.dataset.key === 'question:k1.stem')).toHaveAttribute('data-state', 'done'))
@@ -654,38 +760,52 @@ describe('the quiz\'s other languages (Q73a)', () => {
         candidates: JSON.stringify({ schema: 1, language: 'en', translations: [
           { no: 1, key: 'quiz.title', sourceHash: 'h', text: 'Coffee basics (AI)' },
           { no: 2, key: 'option:o1.text', sourceHash: 'h', text: 'Coffee (AI)' }] }) },
-      processes: { QB_AI_TRANSLATION_ACCEPT: [edit(8)], QB_TRANSLATION_SAVE: [edit(9)] },
+      processes: { QB_AI_TRANSLATION_ACCEPT: [edit(8), edit(9)], QB_TRANSLATION_SAVE: [edit(10)] },
     })
     render(<App />)
     await userEvent.click(await screen.findByTestId('tab-languages'))
     const panel = await screen.findByTestId('translations')
     expect(await within(panel).findByTestId('ai-translate-ready')).toHaveTextContent('2 AI translations')
-    const rows = within(panel).getAllByTestId('translation-text')
-    const title = rows.find((row) => row.dataset.key === 'quiz.title')!
+    const texts = within(panel).getByTestId('translation-texts')
+    const title = within(texts).getAllByTestId('translation-text').find((row) => row.dataset.key === 'quiz.title')!
     expect(within(title).getByTestId('ai-suggestion')).toHaveTextContent('Coffee basics (AI)')
+    // F-S6c: the questions' suggestions are shown on their page.
+    const questions = within(panel).getByTestId('translation-questions')
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text').length).toBeGreaterThan(0))
+    const option = within(questions).getAllByTestId('translation-text')
+      .find((row) => row.dataset.key === 'option:o1.text')!
+    expect(within(option).getByTestId('ai-suggestion')).toHaveTextContent('Coffee (AI)')
     await expectAccessible()
 
-    // Every suggestion used at once; each must be checked before the save.
-    await userEvent.click(within(panel).getByTestId('ai-translate-use-all'))
+    // Every suggestion of the quiz's texts used at once; each must be checked before the save.
+    await userEvent.click(within(texts).getByTestId('ai-translate-use-all'))
     expect(within(title).getByTestId('translation-input')).toHaveValue('Coffee basics (AI)')
-    await userEvent.click(within(panel).getByTestId('translation-save'))
-    expect(within(panel).getByTestId('ai-translate-review-first')).toBeInTheDocument()
+    await userEvent.click(within(texts).getByTestId('translation-save'))
+    expect(within(texts).getByTestId('ai-translate-review-first')).toBeInTheDocument()
     expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toEqual([])
-
-    // The title checked as given; the option changed, then checked; the question translated by hand.
+    // The title checked as given.
     await userEvent.click(within(title).getByTestId('ai-suggestion-reviewed'))
-    const option = rows.find((row) => row.dataset.key === 'option:o1.text')!
+    await userEvent.click(within(texts).getByTestId('translation-save'))
+    await waitFor(() => expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toHaveLength(1))
+
+    // On the page: every suggestion of the page used, the option changed, then checked; the question translated by
+    // hand; saved together.
+    await userEvent.click(within(questions).getByTestId('ai-translate-use-all'))
+    expect(within(questions).getByTestId('ai-translate-use-all')).toHaveTextContent('on this page')
     await userEvent.clear(within(option).getByTestId('translation-input'))
     await userEvent.type(within(option).getByTestId('translation-input'), 'Coffee')
     await userEvent.click(within(option).getByTestId('ai-suggestion-reviewed'))
-    const question = rows.find((row) => row.dataset.key === 'question:k1.stem')!
+    const question = within(questions).getAllByTestId('translation-text')
+      .find((row) => row.dataset.key === 'question:k1.stem')!
     await userEvent.type(within(question).getByTestId('translation-input'), 'First?')
-    await userEvent.click(within(panel).getByTestId('translation-save'))
+    await userEvent.click(within(questions).getByTestId('translation-page-save'))
     await waitFor(() => expect(processCalls('QB_TRANSLATION_SAVE')).toHaveLength(1))
-    expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toEqual([{ aiJobId: 'j1', quizId: 'q1', baseRevision: 7,
-      translations: [{ candidateNo: 1, text: 'Coffee basics (AI)', reviewed: true },
-        { candidateNo: 2, text: 'Coffee', reviewed: true }] }])
-    expect(processCalls('QB_TRANSLATION_SAVE')).toEqual([{ quizId: 'q1', language: 'en', baseRevision: 8,
+    expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toEqual([
+      { aiJobId: 'j1', quizId: 'q1', baseRevision: 7,
+        translations: [{ candidateNo: 1, text: 'Coffee basics (AI)', reviewed: true }] },
+      { aiJobId: 'j1', quizId: 'q1', baseRevision: 8,
+        translations: [{ candidateNo: 2, text: 'Coffee', reviewed: true }] }])
+    expect(processCalls('QB_TRANSLATION_SAVE')).toEqual([{ quizId: 'q1', language: 'en', baseRevision: 9,
       entries: [{ key: 'question:k1.stem', text: 'First?' }] }])
   })
 
@@ -717,6 +837,99 @@ describe('the quiz\'s other languages (Q73a)', () => {
     await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toEqual([{ quizId: 'q1', materialId: null,
       kind: 'LINK', title: 'Read more (EN)', description: null, baseRevision: 7, variantOf: 'm1', language: 'en',
       url: 'https://example.com/en' }]))
+  })
+
+  /** F-S6c: 120 questions in English, as the template answers; question 2 already translated. */
+  const TRANSLATION_BANK = Array.from({ length: 120 }, (_, i) => ({ questionId: `b${i + 1}`, questionNo: i + 1,
+    stem: i === 60 ? 'Roast coffee?' : `Question ${i + 1}?`, image: i === 50 ? 'img51' : null,
+    stemText: i === 1 ? 'Frage 2?' : null, stemState: i === 1 ? 'done' : 'missing', stemBy: null,
+    ownImage: null, options: JSON.stringify([
+      { optionId: `b${i + 1}o1`, no: 1, text: 'Yes', image: null, translation: i === 1 ? 'Ja' : null,
+        state: i === 1 ? 'done' : 'missing', by: null, ownImage: null },
+      { optionId: `b${i + 1}o2`, no: 2, text: 'No', image: null, translation: i === 1 ? 'Nein' : null,
+        state: i === 1 ? 'done' : 'missing', by: null, ownImage: null }]),
+    pending: i === 1 ? 0 : 3 }))
+  const translationCalls = (posted: { path: string; body: Record<string, unknown> }[]) =>
+    posted.filter((p) => p.path === '/api/queries/qb.sponsor.quiz-translations').map((p) => p.body)
+
+  it('reads the questions a page at a time and saves a translation from the second page (F-S6c)', async () => {
+    const { posted, processCalls } = server({ quiz: { ...QUIZ, translationLanguages: 'en', questionCount: 120 },
+      translationBank: TRANSLATION_BANK, processes: { QB_TRANSLATION_SAVE: [edit(8)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-languages'))
+    const questions = await screen.findByTestId('translation-questions')
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text')).toHaveLength(150))
+    expect(translationCalls(posted)[0]).toEqual({ params: { quizId: 'q1', language: 'en' }, offset: 0, limit: 50,
+      count: true })
+    expect(within(questions).getByTestId('translations-page')).toHaveTextContent('Page 1 of 3')
+    const done = within(questions).getAllByTestId('translation-text').find((row) => row.dataset.key === 'question:b2.stem')!
+    expect(done).toHaveAttribute('data-state', 'done')
+    expect(within(done).getByTestId('translation-input')).toHaveValue('Frage 2?')
+
+    await userEvent.click(within(questions).getByTestId('translations-next'))
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text')[0])
+      .toHaveAttribute('data-key', 'question:b51.stem'))
+    expect(translationCalls(posted).at(-1)).toEqual({ params: { quizId: 'q1', language: 'en' }, offset: 50,
+      limit: 50, count: true })
+    // The page's own images: question 51's.
+    expect(within(within(questions).getByTestId('translation-page-images')).getByTestId('translation-image'))
+      .toHaveAttribute('data-key', 'question:b51.image')
+    await expectAccessible()
+
+    const row = within(questions).getAllByTestId('translation-text')[0]
+    expect(row).toHaveTextContent('Question 51')
+    await userEvent.type(within(row).getByTestId('translation-input'), 'Frage 51?')
+    // A change not saved keeps the page.
+    expect(within(questions).getByTestId('translations-next')).toBeDisabled()
+    expect(within(questions).getByTestId('translations-save-first')).toBeInTheDocument()
+    expect(screen.getByTestId('translation-only-pending')).toBeDisabled()
+    await userEvent.click(within(questions).getByTestId('translation-page-save'))
+    await waitFor(() => expect(processCalls('QB_TRANSLATION_SAVE')).toEqual([{ quizId: 'q1', language: 'en',
+      entries: [{ key: 'question:b51.stem', text: 'Frage 51?' }], baseRevision: 7 }]))
+  })
+
+  it('searches the questions and shows only what needs doing (F-S6c)', async () => {
+    const { posted } = server({ quiz: { ...QUIZ, translationLanguages: 'en', questionCount: 120 },
+      translationBank: TRANSLATION_BANK })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-languages'))
+    const questions = await screen.findByTestId('translation-questions')
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text')).toHaveLength(150))
+    await userEvent.click(within(questions).getByTestId('translations-next'))
+    await waitFor(() => expect(translationCalls(posted).at(-1)).toMatchObject({ offset: 50 }))
+
+    // The filter starts again at the first page.
+    await userEvent.click(screen.getByTestId('translation-only-pending'))
+    await waitFor(() => expect(translationCalls(posted).at(-1)).toEqual({ params: { quizId: 'q1', language: 'en',
+      untranslated: true }, offset: 0, limit: 50, count: true }))
+    await waitFor(() => expect(within(questions).queryAllByTestId('translation-text')
+      .find((row) => row.dataset.key === 'question:b2.stem')).toBeUndefined())
+    expect(within(questions).getByTestId('translations-found')).toHaveTextContent('119 questions found')
+
+    await userEvent.type(within(questions).getByTestId('translations-search'), 'roast')
+    await userEvent.click(within(questions).getByTestId('translations-search-submit'))
+    await waitFor(() => expect(translationCalls(posted).at(-1)).toEqual({ params: { quizId: 'q1', language: 'en',
+      q: 'roast', untranslated: true }, offset: 0, limit: 50, count: true }))
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text')[0])
+      .toHaveAttribute('data-key', 'question:b61.stem'))
+    expect(within(questions).getByTestId('translations-found')).toHaveTextContent('1 question found')
+    await expectAccessible()
+
+    await userEvent.clear(within(questions).getByTestId('translations-search'))
+    await userEvent.type(within(questions).getByTestId('translations-search'), 'nothing like it')
+    await userEvent.click(within(questions).getByTestId('translations-search-submit'))
+    expect(await within(questions).findByTestId('translations-no-questions')).toHaveTextContent('No question matches')
+  })
+
+  it('reads every translation only for the preview, when it opens (F-S6c)', async () => {
+    const { posted } = server({ quiz: { ...QUIZ, translationLanguages: 'en' }, translations: [
+      { translationId: 't1', quizId: 'q1', language: 'en', elementKey: 'question:k1.stem', text: 'First, in English?',
+        image: null, sourceHash: 'h' }] })
+    window.history.replaceState(null, '', '/quizzes/q1/preview')
+    render(<App />)
+    expect(await screen.findByTestId('preview-language')).toBeInTheDocument()
+    const filters = posted.filter((p) => p.path.endsWith(':QbContentTranslation/query')).map((p) => p.body.filters)
+    expect(filters).toEqual([[{ field: 'quizId', op: 'eq', value: 'q1' }]])
   })
 
   it('keeps the base language while the quiz has others', async () => {
@@ -870,5 +1083,216 @@ describe('the asset library in the quiz editor (F-C1)', () => {
     await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
     expect(processCalls('QB_MATERIAL_SAVE')[0]).toMatchObject({ kind: 'LINK', title: 'Our blog',
       description: 'Beans explained', url: 'https://example.com/blog', assetId: 'a-link', baseRevision: 7 })
+  })
+})
+
+describe('the question bank (F-S6b)', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/quizzes/q1'))
+
+  /** 120 questions as the template numbers them; the draft holds only QUESTIONS. */
+  const BANK = Array.from({ length: 120 }, (_, i) => ({ questionId: `b${i + 1}`, questionNo: i + 1,
+    stem: i === 6 ? 'Roast coffee?' : `Question ${i + 1}?`, image: null, points: 1, selection: null,
+    optionCount: 2, translated: 0 }))
+  const BIG = { ...QUIZ, questionCount: 120 }
+  const queryCalls = (posted: { path: string; body: Record<string, unknown> }[]) =>
+    posted.filter((p) => p.path === '/api/queries/qb.sponsor.quiz-questions').map((p) => p.body)
+
+  it('reads the list a page at a time, searches by text or number, and reads an opened question alone', async () => {
+    const { posted } = server({ quiz: BIG, bank: BANK })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await waitFor(() => expect(screen.getAllByTestId('question')).toHaveLength(50))
+    expect(queryCalls(posted)[0]).toEqual({ params: { quizId: 'q1' }, offset: 0, limit: 50, count: true })
+    expect(screen.getByTestId('questions-count')).toHaveTextContent('120 / 1,000 questions')
+    // The limits are the template's; one attempt's limit explains drawing.
+    expect(screen.getByTestId('questions-draw-hint')).toHaveTextContent('One attempt asks at most 100 questions')
+    expect(screen.getByTestId('questions-page')).toHaveTextContent('Page 1 of 3')
+    await userEvent.click(screen.getByTestId('questions-next'))
+    await waitFor(() => expect(screen.getAllByTestId('question')[0]).toHaveAttribute('data-no', '51'))
+    expect(queryCalls(posted).at(-1)).toMatchObject({ offset: 50, limit: 50 })
+    await expectAccessible()
+
+    await userEvent.type(screen.getByTestId('questions-search'), '7')
+    await userEvent.click(screen.getByTestId('questions-search-submit'))
+    await waitFor(() => expect(screen.getAllByTestId('question')).toHaveLength(1))
+    expect(queryCalls(posted).at(-1)).toEqual({ params: { quizId: 'q1', no: 7 }, offset: 0, limit: 50, count: true })
+    await userEvent.clear(screen.getByTestId('questions-search'))
+    await userEvent.type(screen.getByTestId('questions-search'), 'roast')
+    await userEvent.click(screen.getByTestId('questions-search-submit'))
+    await waitFor(() => expect(queryCalls(posted).at(-1)?.params).toEqual({ quizId: 'q1', q: 'roast' }))
+    expect(await screen.findByTestId('questions-found')).toHaveTextContent('1 question found')
+    const found = screen.getByTestId('question')
+    expect(found).toHaveAttribute('data-no', '7')
+
+    // Not in the draft: its options are read when it opens.
+    await userEvent.click(within(found).getByTestId('question-row-toggle'))
+    expect(await within(found).findByTestId('question-stem-text')).toHaveTextContent('Roast coffee?')
+    expect(posted.some((p) => p.path.endsWith(':QbOption/query')
+      && JSON.stringify(p.body.filters).includes('"b7"'))).toBe(true)
+    await userEvent.click(screen.getByTestId('questions-search-clear'))
+    await waitFor(() => expect(screen.getAllByTestId('question')).toHaveLength(50))
+  })
+
+  it('moves a question up or down with QB_QUESTION_MOVE and keeps the keyboard on it', async () => {
+    const { processCalls } = server({ processes: { QB_QUESTION_MOVE: [edit(8), edit(9)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    const questions = await screen.findAllByTestId('question')
+    expect(within(questions[0]).getByRole('button', { name: 'Move question 1 up' })).toBeDisabled()
+    expect(within(questions[1]).getByRole('button', { name: 'Move question 2 down' })).toBeDisabled()
+    const up = within(questions[1]).getByRole('button', { name: 'Move question 2 up' })
+    await userEvent.click(up)
+    await waitFor(() => expect(processCalls('QB_QUESTION_MOVE')).toEqual([{ quizId: 'q1', questionId: 'k2',
+      beforeQuestionId: 'k1', baseRevision: 7 }]))
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-move')).toMatch(/^k2:/))
+    await userEvent.click(within(screen.getAllByTestId('question')[0]).getByRole('button',
+      { name: 'Move question 1 down' }))
+    // Down from the place before last: to the end.
+    await waitFor(() => expect(processCalls('QB_QUESTION_MOVE')[1]).toEqual({ quizId: 'q1', questionId: 'k1',
+      beforeQuestionId: null, baseRevision: 8 }))
+    // The whole-order reorder stays for others (the import tools, tests); the page no longer sends it.
+    expect(processCalls('QB_QUESTION_REORDER')).toEqual([])
+  })
+
+  it('moves a question of a large quiz to a typed place, finding the question there', async () => {
+    const { processCalls, posted } = server({ quiz: BIG, bank: BANK, processes: { QB_QUESTION_MOVE: [edit(8)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    const first = (await screen.findAllByTestId('question'))[0]
+    await userEvent.click(within(first).getByRole('button', { name: 'Move question 1 to' }))
+    const dialog = await screen.findByTestId('question-move-dialog')
+    await userEvent.clear(within(dialog).getByTestId('question-move-place-input'))
+    await userEvent.type(within(dialog).getByTestId('question-move-place-input'), '500')
+    await userEvent.click(within(dialog).getByTestId('question-move-confirm'))
+    expect(within(dialog).getByText('Choose a whole number from 1 to 120.')).toBeInTheDocument()
+    await userEvent.clear(within(dialog).getByTestId('question-move-place-input'))
+    await userEvent.type(within(dialog).getByTestId('question-move-place-input'), '60')
+    await userEvent.click(within(dialog).getByTestId('question-move-confirm'))
+    // Going down to 60: before the question now at 61, which is on another page.
+    await waitFor(() => expect(processCalls('QB_QUESTION_MOVE')).toEqual([{ quizId: 'q1', questionId: 'b1',
+      beforeQuestionId: 'b61', baseRevision: 7 }]))
+    expect(queryCalls(posted).some((b) => (b.params as Record<string, unknown>).no === 61)).toBe(true)
+    // The list follows it to its page.
+    await waitFor(() => expect(screen.getByTestId('questions-page')).toHaveTextContent('Page 2 of 3'))
+  })
+
+  it('deletes the selected questions after confirming, and sets their points', async () => {
+    const { processCalls } = server({ processes: { QB_QUESTION_DELETE_MANY: [edit(8)],
+      QB_QUESTION_POINTS_SET: [edit(9)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await screen.findAllByTestId('question')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select the questions on this page' }))
+    expect(screen.getByTestId('bank-selected')).toHaveTextContent('2 selected')
+    await userEvent.click(screen.getByTestId('bank-points'))
+    const points = await screen.findByTestId('bank-points-dialog')
+    await userEvent.clear(within(points).getByTestId('bank-points-input'))
+    await userEvent.type(within(points).getByTestId('bank-points-input'), '0')
+    await userEvent.click(within(points).getByTestId('bank-points-save'))
+    expect(within(points).getByText(/Points are a whole number from 1/)).toBeInTheDocument()
+    await userEvent.clear(within(points).getByTestId('bank-points-input'))
+    await userEvent.type(within(points).getByTestId('bank-points-input'), '5')
+    await userEvent.click(within(points).getByTestId('bank-points-save'))
+    await waitFor(() => expect(processCalls('QB_QUESTION_POINTS_SET')).toEqual([{ quizId: 'q1',
+      questionIds: ['k1', 'k2'], points: 5, baseRevision: 7 }]))
+    await waitFor(() => expect(screen.queryByTestId('bank-selection')).toBeNull())
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }))
+    await userEvent.click(screen.getByTestId('bank-delete'))
+    const confirm = await screen.findByRole('alertdialog')
+    expect(confirm).toHaveTextContent('Delete 1 question?')
+    await expectAccessible()
+    expect(processCalls('QB_QUESTION_DELETE_MANY')).toEqual([])
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(processCalls('QB_QUESTION_DELETE_MANY')).toEqual([{ quizId: 'q1',
+      questionIds: ['k2'], baseRevision: 9 }]))
+  })
+
+  it('offers no batch points for a survey', async () => {
+    server({ quiz: { ...QUIZ, kind: 'SURVEY' } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await screen.findAllByTestId('question')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }))
+    expect(screen.getByTestId('bank-delete')).toBeInTheDocument()
+    expect(screen.queryByTestId('bank-points')).toBeNull()
+  })
+
+  const FILE = {
+    format: 'quizbuks.quiz', formatVersion: 3, exportedAt: '2026-11-08T00:00:00Z',
+    quiz: { kind: 'QUIZ', title: 'Beans', intro: null, timeLimitSec: null, cover: null, language: 'zh' },
+    materials: [],
+    questions: [1, 2, 3].map((n) => ({ stem: `Q${n}`, image: null, points: 1, selection: null,
+      options: [{ text: 'A', image: null, correct: true }, { text: 'B', image: null, correct: false }] })),
+    files: {},
+    translations: { en: { texts: { 'q1.stem': 'E1', 'q3.stem': 'E3', title: 'Beans' }, images: {}, materials: [],
+      hashes: { 'q3.stem': 'h3' } } },
+  }
+  const CHECKED = { status: 200, body: { output: { formatVersion: 3, currentVersion: 3, readers: [3], kind: 'QUIZ',
+    title: 'Beans', questions: 3, materials: 0, files: [], language: 'zh', languages: ['en'] } } }
+  const imported = (revision: number, questions: number) => ({ status: 200, body: { output: { quizId: 'q1',
+    importId: `i${revision}`, questions, revision, skippedLanguages: ['en'] } } })
+
+  it('imports a file\'s questions in batches of the limit, renumbered, with progress and the languages skipped',
+    async () => {
+      const { processCalls } = server({ limits: { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 2 },
+        processes: { QB_QUIZ_IMPORT_CHECK: [CHECKED], QB_QUIZ_IMPORT_QUESTIONS: [imported(8, 2), imported(9, 1)] } })
+      render(<App />)
+      await userEvent.click(await screen.findByTestId('tab-questions'))
+      await waitFor(() => expect(screen.getByTestId('bank-import')).toBeEnabled())
+      await userEvent.upload(screen.getByTestId('bank-import-file'), new File([JSON.stringify(FILE)], 'beans.json',
+        { type: 'application/json' }))
+      expect(await screen.findByTestId('bank-import-summary')).toHaveTextContent('3 questions in 2 batches, 0 files.')
+      await userEvent.click(screen.getByTestId('bank-import-confirm'))
+      expect(await screen.findByTestId('bank-import-done')).toHaveTextContent('3 questions imported in 2 batches.')
+      expect(screen.getByTestId('bank-import-skipped')).toHaveTextContent('English')
+      const calls = processCalls('QB_QUIZ_IMPORT_QUESTIONS')
+      expect(calls.map((c) => c.baseRevision)).toEqual([7, 8])
+      const second = calls[1].document as typeof FILE
+      expect(second.questions.map((q) => q.stem)).toEqual(['Q3'])
+      expect(second.translations.en).toEqual({ texts: { 'q1.stem': 'E3' }, images: {}, materials: [],
+        hashes: { 'q1.stem': 'h3' } })
+      // The whole file, then each batch, checked by the server.
+      expect(processCalls('QB_QUIZ_IMPORT_CHECK')).toHaveLength(3)
+      await expectAccessible()
+    })
+
+  it('stops at a refused batch, saying which and why; the batches before it stay', async () => {
+    server({ limits: { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 2 },
+      processes: { QB_QUIZ_IMPORT_CHECK: [CHECKED], QB_QUIZ_IMPORT_QUESTIONS: [imported(8, 2),
+        { status: 422, body: { detail: 'Refused', violations: [{ field: null, ruleCode: 'QB_QUIZ_TOO_MANY_QUESTIONS',
+          message: 'A quiz has at most 3 questions.' }] } }] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await waitFor(() => expect(screen.getByTestId('bank-import')).toBeEnabled())
+    await userEvent.upload(screen.getByTestId('bank-import-file'), new File([JSON.stringify(FILE)], 'beans.json',
+      { type: 'application/json' }))
+    await userEvent.click(await screen.findByTestId('bank-import-confirm'))
+    const problems = await screen.findByTestId('bank-import-problems')
+    expect(problems).toHaveTextContent('Batch 2 of 2 was not imported. The 2 questions of the batches before it stay')
+    expect(problems).toHaveTextContent('Importing the batch: A quiz has at most 3 questions.')
+  })
+
+  it('lists the import batches and undoes one, saying what was removed and what stayed', async () => {
+    const { processCalls } = server({ imports: [
+      { importId: 'i2', quizId: 'q1', questionCount: 2, importedAt: '2026-11-08T03:00:00Z', undoneAt: null,
+        removedCount: null },
+      { importId: 'i1', quizId: 'q1', questionCount: 5, importedAt: '2026-11-08T02:00:00Z',
+        undoneAt: '2026-11-08T02:30:00Z', removedCount: 5 }],
+    processes: { QB_QUESTION_IMPORT_UNDO: [{ status: 200, body: { output: { quizId: 'q1', revision: 8, removed: 1,
+      kept: ['k9'] } } }] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    const batches = await screen.findAllByTestId('bank-batch')
+    expect(batches).toHaveLength(2)
+    expect(batches[0]).toHaveTextContent('2 questions')
+    expect(within(batches[1]).getByTestId('bank-batch-undone')).toHaveTextContent('5 removed')
+    expect(within(batches[1]).queryByTestId('bank-batch-undo')).toBeNull()
+    await userEvent.click(within(batches[0]).getByTestId('bank-batch-undo'))
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(processCalls('QB_QUESTION_IMPORT_UNDO')).toEqual([{ quizId: 'q1', importId: 'i2',
+      baseRevision: 7 }]))
+    expect(await screen.findByTestId('bank-undo-result')).toHaveTextContent(
+      '1 questions removed; 1 kept because they were changed.')
   })
 })

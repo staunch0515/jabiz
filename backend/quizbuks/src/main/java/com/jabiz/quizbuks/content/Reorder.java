@@ -78,5 +78,48 @@ public final class Reorder {
         return new Next<>(place + 1, moves);
     }
 
+    /**
+     * F-S6: the places that change when one item moves before another ({@code before}; null moves it to the end),
+     * without writing every item. It takes a place between its new neighbours while there is a gap; only when there is
+     * none are all the items spread again over 1..{@code max} with equal steps, the one write of every item.
+     *
+     * @param current every item's place, in their order
+     * @return the new place of each item that moves (the moved item first); empty when it stays where it is
+     * @throws IllegalArgumentException when {@code item} or {@code before} is not one of the items
+     */
+    public static <T> Map<T, Integer> move(Map<T, Integer> current, T item, T before, int max) {
+        if (!current.containsKey(item) || (before != null && !current.containsKey(before))) {
+            throw new IllegalArgumentException("Not an item: " + (current.containsKey(item) ? before : item));
+        }
+        List<T> order = new java.util.ArrayList<>(current.keySet());
+        int from = order.indexOf(item);
+        if (item.equals(before) || (before == null ? from == order.size() - 1
+            : from + 1 < order.size() && order.get(from + 1).equals(before))) {
+            return Map.of();
+        }
+        order.remove(item);
+        int at = before == null ? order.size() : order.indexOf(before);
+        int previous = at == 0 ? 0 : current.get(order.get(at - 1));
+        int next = before == null ? max + 1 : current.get(before);
+        Map<T, Integer> moves = new LinkedHashMap<>();
+        if (next - previous > 1) {
+            moves.put(item, previous + (next - previous) / 2);
+            return moves;
+        }
+        order.add(at, item);
+        int step = Math.max(1, max / (order.size() + 1));
+        if ((long) step * order.size() > max) {
+            throw new IllegalStateException("No place left: " + order.size() + " items, at most " + max);
+        }
+        moves.put(item, step * (at + 1));
+        for (int i = 0; i < order.size(); i++) {
+            T other = order.get(i);
+            if (!other.equals(item) && current.get(other) != step * (i + 1)) {
+                moves.put(other, step * (i + 1));
+            }
+        }
+        return moves;
+    }
+
     private Reorder() {}
 }

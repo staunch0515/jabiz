@@ -5,7 +5,6 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.invitation.InvitationStatus;
@@ -122,7 +121,7 @@ public final class AttemptProcesses {
      * @param currentIndex the question the taker is on, from 0; unchanged when not given
      */
     public record SaveInput(@NotBlank @Size(max = 36) String attemptId, Integer currentIndex,
-        @Size(max = ContentLimits.MAX_QUESTIONS) List<Answers.@Valid @NotNull Given> answers) {}
+        @Size(max = PlayLimits.MAX_PER_ATTEMPT_TECH) List<Answers.@Valid @NotNull Given> answers) {}
 
     public record SaveOutput(String attemptId, int currentIndex, List<Answers.Given> answers, Instant deadline,
         Instant serverTime) {}
@@ -273,7 +272,9 @@ public final class AttemptProcesses {
                     // Q47: the publication's conditions and the caller's attributes, in the same statement (the
                     // statement budget stays); conditions are frozen with the publication, so not read again.
                     AudienceRows.conditions(ctx -> ctx.get(PUB_KEY), CONDITIONS),
-                    AudienceRows.callers(ATTRIBUTES)))
+                    AudienceRows.callers(ATTRIBUTES),
+                    // F-S8: whether the caller has any block (one row at most), in the same statement.
+                    com.jabiz.quizbuks.block.BlockStart.any()))
                 .steps(b -> PlaySteps.loadRegions(b, ctx -> ctx.request().actorId()))
                 // Q51: an attempt keeps the version it started with, whichever the publication has switched to since;
                 // a new one takes the card's (checked again against the card read under the lock).
@@ -295,6 +296,13 @@ public final class AttemptProcesses {
                     }
                 })
                 .compute("Continue an attempt in progress", (metadata, ctx) -> resume(ctx))
+                // F-S8: a new start of a publication the caller blocked (its publication, quiz, sponsor or video's
+                // provider) is refused, whatever it pays. A caller without blocks sends nothing more (the first read
+                // said so); with blocks, one statement before any lock reads those covering the card.
+                .steps(b -> com.jabiz.quizbuks.block.BlockStart.load(b, ctx -> first(ctx, CARD_BEFORE),
+                    AttemptProcesses::starting))
+                .compute("Refuse a blocked publication", (metadata, ctx) -> com.jabiz.quizbuks.block.BlockStart
+                    .refuse(ctx, first(ctx, CARD_BEFORE), starting(ctx)))
                 // F-S11: a new start of a card with a foreign video, from mainland China (by the address; an unknown
                 // one by the parameter), is refused unless headquarters made an exception. Before any lock; an
                 // ordinary start reads nothing more (the statement budget stays). Invited publications alike.

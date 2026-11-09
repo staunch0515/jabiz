@@ -1,12 +1,13 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [SysParam, QbRegionException, QbUserSettings, QbTopic, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
+entities: [SysParam, QbRegionException, QbUserSettings, QbTopic, QbBlock, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbUserSettings: urn:jabiz:dataset:me:QbUserSettings
   QbTopic: urn:jabiz:dataset:default:QbTopic
+  QbBlock: urn:jabiz:dataset:me:QbBlock
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
@@ -39,6 +40,9 @@ results:
   watchRequired:  { from: QbPublicationCard.watchRequired }
   videoDurationSec: { from: QbPublicationCard.videoDurationSec }
   videoVertical:  { from: QbPublicationCard.videoVertical }
+  quizId:         { from: QbPublicationCard.quizId }
+  videoProviderId: { from: QbPublicationCard.videoProviderId }
+  videoProviderName: { from: QbSponsor.company }
   shortsPositions: { kind: { type: text, maxLength: 200 } }
   shortsPerShelf: { kind: { type: text, maxLength: 20 } }
   kind:           { from: QbPublicationCard.kind }
@@ -103,6 +107,11 @@ SELECT
     -- (the uncontrolled parameters qb.feed.shorts.positions and .per-shelf; none before the setup made them: the App
     -- then takes the setup's values).
     c.{{QbPublicationCard.videoVertical}}  AS videoVertical,
+    -- F-S8: what of the card a taker can block besides the publication and its sponsor: its quiz and its shared video's
+    -- provider (none without a shared video), with the provider's company to name it.
+    c.{{QbPublicationCard.quizId}}         AS quizId,
+    c.{{QbPublicationCard.videoProviderId}} AS videoProviderId,
+    vp.{{QbSponsor.company}}               AS videoProviderName,
     CAST(shp.positions AS varchar(200))    AS shortsPositions,
     CAST(shp.perShelf AS varchar(20))      AS shortsPerShelf,
     c.{{QbPublicationCard.kind}}           AS kind,
@@ -157,6 +166,7 @@ LEFT JOIN {{QbWallet}} w ON w.{{QbWallet.ownerId}} = c.{{QbPublicationCard.publi
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
     AND sp.{{QbSponsor.reviewStatus}} = 'APPROVED'
 LEFT JOIN {{QbSponsorPage}} sp_page ON sp_page.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
+LEFT JOIN {{QbSponsor}} vp ON vp.{{QbSponsor.userId}} = c.{{QbPublicationCard.videoProviderId}}
 LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}}
 WHERE c.{{QbPublicationCard.status}} = 'LIVE'
   -- S0 (D-S0-4): the App lists the sponsors' publications; a shop's (S2) are answered in its storefront.
@@ -246,6 +256,19 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
                  CROSS JOIN unnest(string_to_array(lus.{{QbUserSettings.likedTopics}}, ',')) AS l(code)
                  JOIN {{QbTopic}} lt ON lt.{{QbTopic.topicId}} = l.code) liked
                ON liked.code = coalesce(t.{{QbTopic.mergedInto}}, t.{{QbTopic.topicId}})))
+  -- F-S8: not blocked by the caller (the view holds their own blocks only): neither the publication, nor the quiz its card
+  -- froze (its later publications too), nor its sponsor, nor its shared video's provider. A hard block: nothing the
+  -- card pays or promotes gets past it. block.BlockRules.blocks is the one definition; qb.app.publication,
+  -- qb.app.inbox, qb.app.inbox-unread and the start (block.BlockStart) write the same (BlockIT compares them); F-S6's
+  -- search and F-S13's push apply it too.
+  AND NOT EXISTS (
+      SELECT 1 FROM {{QbBlock}} bl
+      WHERE ((bl.{{QbBlock.kind}} = 'PUBLICATION'
+              AND bl.{{QbBlock.objectId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text))
+          OR (bl.{{QbBlock.kind}} = 'QUIZ' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.quizId}})
+          OR (bl.{{QbBlock.kind}} = 'SPONSOR' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.publisherId}})
+          OR (bl.{{QbBlock.kind}} = 'PROVIDER'
+              AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.videoProviderId}})))
   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
 
                   WHERE own.{{QbPublicationOwner.publicationId}} = c.{{QbPublicationCard.publicationId}})

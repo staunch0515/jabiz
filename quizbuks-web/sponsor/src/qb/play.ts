@@ -70,6 +70,13 @@ export interface FeedCard {
   videoDurationSec?: number | null
   /** F-S10: that video is vertical (a YouTube Shorts link, or marked so): the home's shelf of shorts shows it. */
   videoVertical?: boolean
+  /**
+   * F-S8: what of the card a taker can block besides the publication and its sponsor: the quiz it froze, and the
+   * provider of the shared video it froze with the provider's company (none without a shared video).
+   */
+  quizId?: string | null
+  videoProviderId?: string | null
+  videoProviderName?: string | null
   kind: QuizKind
   /** The language the quiz is written in (Q59a); a preview's card has none. */
   language?: string | null
@@ -147,6 +154,9 @@ export function feedCard(row: Record<string, unknown>): FeedCard {
     watchRequired: row.watchRequired === true || row.watchRequired === 'true',
     videoDurationSec: row.videoDurationSec == null ? null : numberOf(row.videoDurationSec),
     videoVertical: row.videoVertical === true || row.videoVertical === 'true',
+    quizId: textOrNull(row.quizId),
+    videoProviderId: textOrNull(row.videoProviderId),
+    videoProviderName: textOrNull(row.videoProviderName),
     kind: kindOf(row.kind),
     language: textOrNull(row.language),
     maxReward: row.maxReward,
@@ -263,6 +273,15 @@ export interface PublicationView {
    * material: the start page leads with it as the card plays it (`leadVideo`).
    */
   video?: string | null
+  /** F-S8: as the feed's card: its quiz, and its shared video's provider and the provider's company. */
+  quizId?: string | null
+  videoProviderId?: string | null
+  videoProviderName?: string | null
+  /**
+   * F-S8: the caller's blocks covering it (its publication, quiz, sponsor or video's provider), in that order; empty
+   * when not blocked. The page then says so with a way to unblock each; the start is not offered.
+   */
+  blocks?: PublicationBlock[]
   kind: QuizKind
   /** Markdown. */
   intro: string | null
@@ -404,6 +423,33 @@ export interface PublicationRequest {
   mainlandChina?: boolean
 }
 
+/** F-S8: what a block blocks: a publication, a quiz, a sponsor or a video provider. */
+export type BlockKind = 'PUBLICATION' | 'QUIZ' | 'SPONSOR' | 'PROVIDER'
+
+export const BLOCK_KINDS: readonly BlockKind[] = ['PUBLICATION', 'QUIZ', 'SPONSOR', 'PROVIDER']
+
+/** F-S8: one of the caller's blocks covering a publication (the page's `blocks`). */
+export interface PublicationBlock {
+  blockId: string
+  kind: BlockKind
+}
+
+/** The page's `blocks` (a JSON array of `{blockId, kind}`); empty for none or anything else. */
+export function publicationBlocks(value: unknown): PublicationBlock[] {
+  if (typeof value !== 'string' || value === '') return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((item) => {
+      const { blockId, kind } = (item ?? {}) as Record<string, unknown>
+      return typeof blockId === 'string' && (BLOCK_KINDS as readonly unknown[]).includes(kind)
+        ? [{ blockId, kind: kind as BlockKind }] : []
+    })
+  } catch {
+    return []
+  }
+}
+
 /** A publication's page; null when the caller cannot see it (not live for them and no attempt of theirs). */
 export async function readPublication(request: PublicationRequest): Promise<PublicationView | null> {
   const { languages, mainlandChina, ...rest } = request
@@ -420,6 +466,10 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     watchRequired: row.watchRequired === true || row.watchRequired === 'true',
     videoDurationSec: row.videoDurationSec == null ? null : numberOf(row.videoDurationSec),
     video: trustedPlayer(textOrNull(row.video)),
+    quizId: textOrNull(row.quizId),
+    videoProviderId: textOrNull(row.videoProviderId),
+    videoProviderName: textOrNull(row.videoProviderName),
+    blocks: publicationBlocks(row.blocks),
     kind: kindOf(row.kind),
     intro: textOrNull(row.intro),
     materials: parseMaterials(row.materials),

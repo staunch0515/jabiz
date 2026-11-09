@@ -1,9 +1,10 @@
 /*---
 id: qb.app.publication
-description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it (F-S2d, a node's prerequisites not lit)
-entities: [QbRegionException, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbReferral, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbTree, QbTreeNodeDef]
+description: One publication's page for a taker (U-20 – U-23) with the caller's own attempt; none when they cannot see it (F-S8 blocked; F-S2d, a node's prerequisites not lit)
+entities: [QbRegionException, QbBlock, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbPublicationStats, QbStatsRun, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbQuizVersion, QbAttempt, QbPublicationOwner, QbInvitation, QbProfileAttribute, QbPublicationCriterion, QbReferral, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbTree, QbTreeNodeDef]
 datasets:
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
+  QbBlock: urn:jabiz:dataset:me:QbBlock
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
@@ -39,6 +40,11 @@ results:
   watchRequired:  { from: QbPublicationCard.watchRequired }
   videoDurationSec: { from: QbPublicationCard.videoDurationSec }
   video:          { from: QbPublicationCard.video }
+  quizId:         { from: QbPublicationCard.quizId }
+  videoProviderId: { from: QbPublicationCard.videoProviderId }
+  videoProviderName: { from: QbSponsor.company }
+  blocks:         { kind: { type: text } }
+  blocked:        { kind: { type: bool } }
   kind:           { from: QbPublicationCard.kind }
   language:       { from: QbPublicationCard.language }
   languages:      { from: QbPublicationCard.languages }
@@ -109,6 +115,11 @@ SELECT
     d.watchRequired AS watchRequired,
     d.videoDurationSec AS videoDurationSec,
     d.video AS video,
+    d.quizId AS quizId,
+    d.videoProviderId AS videoProviderId,
+    d.videoProviderName AS videoProviderName,
+    d.blocks AS blocks,
+    (d.blocks IS NOT NULL) AS blocked,
     d.kind AS kind,
     d.language AS language,
     d.languages AS languages,
@@ -146,7 +157,7 @@ SELECT
     d.last30d AS last30d,
     d.statsAt AS statsAt,
     (d.shown AND d.startable AND d.matched AND d.nodeUnlocked
-     AND d.myAttemptId IS NULL AND NOT d.regionBlocked) AS canStart,
+     AND d.myAttemptId IS NULL AND NOT d.regionBlocked AND d.blocks IS NULL) AS canStart,
     d.regionBlocked AS regionBlocked,
     d.matched AS matched,
     d.treeId AS treeId,
@@ -180,6 +191,23 @@ SELECT
     -- F-S12: the card's video, which leads the start page when it is the shared video the publication picked (no
     -- material of the version): the page plays what the home's card played.
     c.{{QbPublicationCard.video}}          AS video,
+    -- F-S8: what of the card a taker can block, and the caller's blocks covering it (the view holds their own only), as
+    -- a JSON array of {blockId, kind}, none when not blocked: the page then says "you blocked this" with a way to
+    -- unblock each, and the start is not offered. The condition of qb.app.feed (block.BlockRules.blocks; BlockIT).
+    c.{{QbPublicationCard.quizId}}         AS quizId,
+    c.{{QbPublicationCard.videoProviderId}} AS videoProviderId,
+    (SELECT vp.{{QbSponsor.company}} FROM {{QbSponsor}} vp
+     WHERE vp.{{QbSponsor.userId}} = c.{{QbPublicationCard.videoProviderId}}) AS videoProviderName,
+    (SELECT CAST(jsonb_agg(jsonb_build_object('blockId', bl.{{QbBlock.blockId}}, 'kind', bl.{{QbBlock.kind}})
+                           ORDER BY array_position(ARRAY['PUBLICATION', 'QUIZ', 'SPONSOR', 'PROVIDER'],
+                                                   CAST(bl.{{QbBlock.kind}} AS text))) AS text)
+     FROM {{QbBlock}} bl
+     WHERE ((bl.{{QbBlock.kind}} = 'PUBLICATION'
+             AND bl.{{QbBlock.objectId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text))
+         OR (bl.{{QbBlock.kind}} = 'QUIZ' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.quizId}})
+         OR (bl.{{QbBlock.kind}} = 'SPONSOR' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.publisherId}})
+         OR (bl.{{QbBlock.kind}} = 'PROVIDER'
+             AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.videoProviderId}}))) AS blocks,
     c.{{QbPublicationCard.kind}}           AS kind,
     c.{{QbPublicationCard.language}}       AS language,
     coalesce(c.{{QbPublicationCard.languages}}, c.{{QbPublicationCard.language}}) AS languages,

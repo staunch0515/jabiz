@@ -105,7 +105,7 @@ public final class QbPublications {
         // Q81 (D-Q81-1): how many of the version's questions each taker is given, drawn at the start; none is all of
         // them. Frozen with the policy; the full score is then this many times the common points (D-Q81-2).
         eb.field("pickCount", f -> f.physicalColumn("pick_count").asNumeric(4, 0)
-            .apply(Rules.range(PublishingCodes.PICK_RANGE, BigDecimal.ONE, decimal(ContentLimits.MAX_QUESTIONS))));
+            .apply(Rules.range(PublishingCodes.PICK_RANGE, BigDecimal.ONE, decimal(com.jabiz.quizbuks.play.PlayLimits.MAX_PER_ATTEMPT_TECH))));
         // F-S2b1: the knowledge graph's node the publication is bound to (both or neither); a pass of it lights the
         // node, and the node's conditions before answering say who may start. Frozen with the policy.
         eb.field("treeId", f -> f.physicalColumn("tree_id").asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
@@ -425,6 +425,10 @@ public final class QbPublications {
 
         eb.field("versionId", f -> f.physicalColumn("version_id").required(true)
             .asReference(QbContent.VERSION));
+        // F-S8: the quiz of that version, frozen when it goes on (a switch stays within the quiz): blocking a quiz
+        // covers its later publications. As text (no reference check on the way on); written on every card, null only on
+        // one whose version row the migration did not find.
+        eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).asText(36));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").immutable(true).required(true)
             .asMonetary("JPY", 0));
         eb.field("fullScore", f -> f.physicalColumn("full_score").immutable(true).required(true).asNumeric(7, 0));

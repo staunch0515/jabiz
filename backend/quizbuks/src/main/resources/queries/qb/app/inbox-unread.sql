@@ -3,7 +3,7 @@ id: qb.app.inbox-unread
 description: >-
   How many messages and announcements of the taker's inbox are unread (the navigation's badge, U-61), each counted to
   at most 99
-entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbPublicationCard, QbPublicationOwner, QbAttempt, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
+entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbPublicationCard, QbPublicationOwner, QbBlock, QbAttempt, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   QbMessage: urn:jabiz:dataset:me:QbMessage
   QbBroadcastFeed: urn:jabiz:dataset:default:QbBroadcastFeed
@@ -14,6 +14,7 @@ datasets:
   QbCountry: urn:jabiz:dataset:default:QbCountry
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
+  QbBlock: urn:jabiz:dataset:me:QbBlock
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
   QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
@@ -71,22 +72,38 @@ unread_feed AS NOT MATERIALIZED (
                        OR string_to_array(coalesce(c.{{QbPublicationCard.languages}}, c.{{QbPublicationCard.language}}), ',')
                           && string_to_array(CAST(:languages AS text), ','))
                   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
-                                  WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}})
-                  -- F-S2d: a notice about a publication bound to a node whose prerequisites the taker has not all lit is hidden,
-                  -- unless they have an attempt of it (tree.TreeLights#visible; qb.app.publication writes the same).
-                  AND (c.{{QbPublicationCard.treeNodeId}} IS NULL
-                       OR EXISTS (SELECT 1 FROM {{QbAttempt}} ma WHERE ma.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}})
-                       OR NOT EXISTS (
-                           SELECT 1 FROM {{QbTreeNode}} tn
-                           WHERE tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}}
-                             AND tn.{{QbTreeNode.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
-                             AND EXISTS (
-                                 SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
-                                 WHERE NOT EXISTS (
-                                     SELECT 1 FROM {{QbTreeLit}} tl
-                                     WHERE tl.{{QbTreeLit.treeId}} = split_part(ba.node, '/', 1) AND tl.{{QbTreeLit.nodeId}} = split_part(ba.node, '/', 2)
-                                       AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
-                                                       WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text)))))))
+                                  WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}}))
+          -- F-S8: a sponsor's notice or a promotion about a publication the caller blocked (its publication, quiz, sponsor or
+          -- video's provider) is left out; a system announcement naming one stays. The condition of qb.app.feed
+          -- (block.BlockRules.blocks; BlockIT); the view holds the caller's own blocks only.
+          AND (c.{{QbPublicationCard.publicationId}} IS NULL
+               OR (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR' AND f.{{QbBroadcastFeed.type}} <> 'PROMO')
+               OR NOT EXISTS (
+                   SELECT 1 FROM {{QbBlock}} bl
+                   WHERE ((bl.{{QbBlock.kind}} = 'PUBLICATION'
+                           AND bl.{{QbBlock.objectId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text))
+                       OR (bl.{{QbBlock.kind}} = 'QUIZ' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.quizId}})
+                       OR (bl.{{QbBlock.kind}} = 'SPONSOR' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.publisherId}})
+                       OR (bl.{{QbBlock.kind}} = 'PROVIDER'
+                           AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.videoProviderId}}))))
+          -- F-S2d: a sponsor's notice or a promotion about a publication bound to a node whose prerequisites the taker
+          -- has not all lit is not counted, unless they have an attempt of it (tree.TreeLights#visible; qb.app.inbox
+          -- writes the same); a system announcement naming one is, as for blocks (F-S8).
+          AND (c.{{QbPublicationCard.publicationId}} IS NULL
+               OR (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR' AND f.{{QbBroadcastFeed.type}} <> 'PROMO')
+               OR c.{{QbPublicationCard.treeNodeId}} IS NULL
+               OR EXISTS (SELECT 1 FROM {{QbAttempt}} ma WHERE ma.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}})
+               OR NOT EXISTS (
+                   SELECT 1 FROM {{QbTreeNode}} tn
+                   WHERE tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}}
+                     AND tn.{{QbTreeNode.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
+                     AND EXISTS (
+                         SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
+                         WHERE NOT EXISTS (
+                             SELECT 1 FROM {{QbTreeLit}} tl
+                             WHERE tl.{{QbTreeLit.treeId}} = split_part(ba.node, '/', 1) AND tl.{{QbTreeLit.nodeId}} = split_part(ba.node, '/', 2)
+                               AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                                               WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text))))))
 )
 SELECT
     (SELECT count(*) FROM (

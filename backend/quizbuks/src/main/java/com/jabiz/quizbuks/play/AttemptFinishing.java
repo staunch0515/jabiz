@@ -10,7 +10,6 @@ import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.publishing.CardTiers;
@@ -110,7 +109,7 @@ public final class AttemptFinishing {
      *                      and waits for the lock on a connection (Q10a2 review M2)
      */
     public record SubmitInput(@NotBlank @Size(max = 36) String attemptId, Integer currentIndex,
-        @Size(max = ContentLimits.MAX_QUESTIONS) List<Answers.@Valid @NotNull Given> answers,
+        @Size(max = PlayLimits.MAX_PER_ATTEMPT_TECH) List<Answers.@Valid @NotNull Given> answers,
         @NotNull UUID publicationId) {}
 
     /**

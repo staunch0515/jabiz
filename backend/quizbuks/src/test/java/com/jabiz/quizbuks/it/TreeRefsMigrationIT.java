@@ -18,7 +18,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The migration that names each referenced node by its graph (V95, docs/quizbuks/plans/impl/F-S2d.md §2): the
+ * The migration that names each referenced node by its graph (V96, docs/quizbuks/plans/impl/F-S2d.md §2): the
  * references and the node rows' before_answer written before it are resolved as tree.TreeRules#resolve does (the
  * graph's own node first, else the one other graph in effect it may name that has it); a reference no single graph
  * has stays bare. Its own schemas, migrated by Flyway as the platform does, without the application.
@@ -97,12 +97,12 @@ class TreeRefsMigrationIT {
         return schema;
     }
 
-    /** The latest migration before V95 that this branch has (V93 and V94, F-S6a's, may or may not be merged yet). */
+    /** The latest migration before V96 that this branch has (whichever of the earlier ones are merged). */
     private static String before(String schema) {
         return java.util.Arrays.stream(Flyway.configure().dataSource(DB.jdbcUrl(), DB.username(), DB.password())
                 .schemas(schema).defaultSchema(schema).locations("classpath:db/migration").load().info().all())
             .map(org.flywaydb.core.api.MigrationInfo::getVersion)
-            .filter(version -> version.isNewerThan("0") && !version.isAtLeast("95"))
+            .filter(version -> version.isNewerThan("0") && !version.isAtLeast("96"))
             .max(org.flywaydb.core.api.MigrationVersion::compareTo).orElseThrow().getVersion();
     }
 

@@ -219,7 +219,8 @@ class QuizFileTest {
         quiz.put("title", " ");
         quiz.put("timeLimitSec", 5);
         List<Object> questions = new ArrayList<>();
-        for (int i = 0; i <= ContentLimits.MAX_QUESTIONS; i++) {
+        // F-S6: the bank's limit is the process's parameter; five here.
+        for (int i = 0; i <= 5; i++) {
             questions.add(map("stem", "Q" + i, "points", 1, "options", List.of()));
         }
         questions.set(0, map("stem", "x".repeat(ContentLimits.STEM_LENGTH + 1), "points", 0, "selection", "SINGLE",
@@ -227,7 +228,7 @@ class QuizFileTest {
         document.put("questions", questions);
         document.put("materials", List.of(map("kind", "LINK", "url", "ftp://x", "body", "not for a link"),
             map("kind", "VIDEO", "title", "?"), map("kind", "PDF", "pdf", "f1")));
-        List<Violation> problems = QuizFileChecks.check(QuizFileFormat.read(document).file());
+        List<Violation> problems = QuizFileChecks.check(QuizFileFormat.read(document).file(), 5);
         assertThat(problems).extracting(v -> v.field() + " " + v.ruleCode()).contains(
             "quiz.title " + ContentCodes.QUIZ_FILE_VALUE,
             "quiz.timeLimitSec " + ContentCodes.QUIZ_FILE_VALUE,

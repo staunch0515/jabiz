@@ -33,6 +33,8 @@ import { ReportButton } from '../report/ReportButton'
 import { legalPath } from '../qb/legal'
 import { claimReferral, forgetReferral, pendingReferral } from '../referral/api'
 import { useMainlandChina } from '../qb/region'
+import { BlockMenu } from '../blocks/BlockMenu'
+import { BlockedNotice } from '../blocks/BlockedNotice'
 
 /** Whole minutes from now until a time, at least 0 (by the device's clock: a hint only). */
 export function minutesUntil(time: string | null, now: number = Date.now()): number {
@@ -280,8 +282,21 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       action={<Button asChild variant="outline"><Link to="/">{t('detail.backHome')}</Link></Button>}
       data-testid="detail-region-unavailable" />
   }
+  const blocks = p.blocks ?? []
+  if (blocks.length > 0 && !p.myAttemptId) {
+    // F-S8: a link to a publication the caller blocked: that they did, and the way to unblock; nothing of it shown.
+    return (
+      <section className="flex flex-col gap-4" aria-labelledby="detail-blocked-title" data-testid="detail-blocked-page">
+        <h1 id="detail-blocked-title" className="text-xl font-semibold">{t('blocks.noticeTitle')}</h1>
+        <BlockedNotice item={p} blocks={blocks} />
+        <Button asChild variant="outline" className="self-start"><Link to="/">{t('detail.backHome')}</Link></Button>
+      </section>
+    )
+  }
   return (
     <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">
+      {/* F-S8: blocked after starting it: the attempt stays reachable (its result, or the rest of its time). */}
+      {blocks.length > 0 && <BlockedNotice item={p} blocks={blocks} />}
       {/* Q65: the home's player carries on here, its sound on from the tap that opened the page; a viewer who
           asked for less motion gets a player that waits for their own tap. */}
       <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor autoplay={!prefersStillVideo()}
@@ -305,8 +320,12 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
           ? <Link to={legalPath('CONTEST_RULES')} className="text-muted-foreground text-sm underline"
             data-testid="detail-contest-rules">{t('contestRules')}</Link>
           : <span />}
-        {/* The server takes reports of verified takers only (as it records views). */}
-        {emailVerified && <ReportButton publicationId={p.publicationId} name={p.name} />}
+        <span className="flex items-center gap-1">
+          {/* The server takes reports of verified takers only (as it records views). */}
+          {emailVerified && <ReportButton publicationId={p.publicationId} name={p.name} />}
+          {/* F-S8: not interested, or block its quiz, Sponsor or video provider. */}
+          <BlockMenu item={p} />
+        </span>
       </div>
       <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
         <Action publication={p} onLanguage={setChosen} />

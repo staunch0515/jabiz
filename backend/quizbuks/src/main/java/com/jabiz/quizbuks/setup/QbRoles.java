@@ -81,7 +81,9 @@ public final class QbRoles {
         // F-S9: the word list of topics (adding, renaming, deactivating, merging) and its figures by topic.
         QbPermissions.ADMIN_TOPIC_READ, QbPermissions.ADMIN_TOPIC_WRITE,
         // F-S12: every provider's shared videos, and the platform's emergency takedown.
-        QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE);
+        QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE,
+        // F-S8: the figures of blocking (aggregates and rounded counts only).
+        QbPermissions.ADMIN_BLOCK_READ);
 
     /**
 

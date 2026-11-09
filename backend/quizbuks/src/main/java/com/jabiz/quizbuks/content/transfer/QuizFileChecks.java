@@ -105,7 +105,14 @@ public final class QuizFileChecks {
         return needed;
     }
 
+    /** {@link #check(QuizFile, int)} against the declared bank limit (tests and tools without the parameters). */
     public static List<Violation> check(QuizFile file) {
+        return check(file, Integer.parseInt(com.jabiz.quizbuks.setup.QbParams.defaultOf(
+            com.jabiz.quizbuks.setup.QbParams.CONTENT_MAX_QUESTIONS)));
+    }
+
+    /** The file's problems; {@code maxQuestions} is the bank's limit as the process read it (F-S6). */
+    public static List<Violation> check(QuizFile file, int maxQuestions) {
         List<Violation> problems = new ArrayList<>();
         boolean survey = QbContent.KIND_SURVEY.equals(file.kind());
         if (file.title() == null || file.title().isBlank()) {
@@ -125,7 +132,7 @@ public final class QuizFileChecks {
         if (file.materials().stream().filter(QuizFile.Material::watchToAnswer).count() > 1) {
             problems.add(new Violation("materials", ContentCodes.QUIZ_ONE_WATCH_VIDEO, "A quiz has one video to watch"));
         }
-        count(problems, "questions", file.questions().size(), ContentLimits.MAX_QUESTIONS);
+        count(problems, "questions", file.questions().size(), maxQuestions);
         for (int q = 0; q < file.questions().size(); q++) {
             question(problems, "questions[" + q + "]", file.questions().get(q), survey);
         }
@@ -145,7 +152,7 @@ public final class QuizFileChecks {
         return List.copyOf(problems);
     }
 
-    private static final Pattern TEXT_KEY = Pattern.compile("q(\\d{1,3})(?:\\.o(\\d{1,2}))?\\.(stem|text|image)");
+    private static final Pattern TEXT_KEY = Pattern.compile("q(\\d{1,4})(?:\\.o(\\d{1,2}))?\\.(stem|text|image)");
     private static final Pattern HASH = Pattern.compile("[0-9a-f]{16}");
 
     /**

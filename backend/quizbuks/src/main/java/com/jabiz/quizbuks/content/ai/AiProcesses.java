@@ -33,6 +33,7 @@ import com.jabiz.runtime.param.ParamEntities;
 import com.jabiz.runtime.process.steps.CancelExternalJob;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadEntity;
+import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.StartExternalJob;
@@ -104,6 +105,8 @@ public final class AiProcesses {
     public static final String COMPLETED = "QB_AI_JOB_COMPLETED";
     public static final String FAILED = "QB_AI_JOB_FAILED";
     public static final String ACCEPT = "QB_AI_ACCEPT";
+    /** F-S6: the bank's limits as {@value #ACCEPT} reads them. */
+    static final String BANK_LIMITS = "bankLimits";
     public static final String DISCARD = "QB_AI_DISCARD";
     public static final String CANCEL = "QB_AI_CANCEL";
     public static final String EXPIRE = "QB_AI_EXPIRE";
@@ -1246,6 +1249,9 @@ public final class AiProcesses {
                     jobById(ctx -> ctx.get(INPUT, AcceptInput.class).aiJobId()),
                     QueryEntities.query(QbContent.defaultDataset(QbContent.QUESTION),
                         ctx -> QuizEditing.ofQuiz(ctx.get(QuizEditing.QUIZ_ID)), QuizEditing.QUESTIONS)))
+                // F-S6: the bank's limit, as in effect now.
+                .step("Load the bank's limits", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
+                    BANK_LIMITS, com.jabiz.quizbuks.content.QuizBankLimits.PARAMS))
                 .compute("Add the questions", (metadata, ctx) -> acceptQuestions(ctx)));
     }
 
@@ -1289,9 +1295,11 @@ public final class AiProcesses {
             problems.addAll(AiCandidates.problems(reviewed, path, existing.size() + i + 1));
             accepted.add(reviewed);
         }
-        if (existing.size() + input.questions().size() > ContentLimits.MAX_QUESTIONS) {
+        int max = com.jabiz.quizbuks.content.QuizBankLimits.maxQuestions(
+            ctx.get(BANK_LIMITS, com.jabiz.param.ParamValues.class));
+        if (existing.size() + input.questions().size() > max) {
             problems.add(new Violation("questions", ContentCodes.TOO_MANY_QUESTIONS, "A quiz has at most "
-                + ContentLimits.MAX_QUESTIONS + " questions", Map.of("max", ContentLimits.MAX_QUESTIONS)));
+                + max + " questions", Map.of("max", max)));
         }
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems);

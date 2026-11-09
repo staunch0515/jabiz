@@ -337,7 +337,7 @@ public final class SponsorProductProcesses {
                 badNumber = true;
                 continue;
             }
-            if (link.questionNo() < 1 || link.questionNo() > ContentLimits.MAX_QUESTIONS
+            if (link.questionNo() < 1 || link.questionNo() > ContentLimits.MAX_QUESTIONS_TECH
                 || !seenQuestions.add(link.questionNo())) {
                 badNumber = true;
             }
