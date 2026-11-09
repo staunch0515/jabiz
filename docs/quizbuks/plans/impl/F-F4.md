@@ -348,3 +348,10 @@ CI 怎样对待缺少的截图（Playwright 1.56，`playwright.config.ts` 没有
 
 若以后希望 CI 直接把基线作为单独的产物上传（不靠失败时的报告），需要在 `quizbuks.yml` 的 e2e 作业中加一步上传 `quizbuks-web/e2e/tests/*-snapshots/`；本计划**没有**做这个改动，现有做法已够用。
 
+
+## 16. 进度与下一步（2026-11-09 18:10 UTC，按总控降速暂停）
+
+- **状态**：F-F4a 已推送（`de1fc799`：`frame/areas.ts`、`OLD_ROUTES`、`LEGACY_APP_PATHS` 与单元测试、`home-frame.spec.ts`；界面不变）；草稿 PR 已开。
+- **基线截图**：已在本分支上手动触发一次 `quizbuks.yml`（run 42613966838）：e2e 第 2 片**只**因 12 张基线不存在而失败（其余全部通过），与预期一致；图片在该次的 `quizbuks-e2e-report-2` 中（保留到 2026-11-16）。**取不回来**：S3 的环境只允许 `productionresultssa15.blob.core.windows.net`，这次的产物在 `productionresultssa10.blob.core.windows.net`（主机随次而变）。
+- **下一步（二选一，需总控决定）**：① 由能下载 Actions 产物的会话（或需求方）下载该产物，把 12 个 `…-actual.png` 按 §15 改名放进 `quizbuks-web/e2e/tests/home-frame.spec.ts-snapshots/`，逐张看过后提交；② 在 `quizbuks.yml` 的 e2e 作业加一步：基线缺失时把实际截图另作产物上传，并在作业摘要中写出每张的 SHA-256，便于核对（属于 CI 改动，需要批准）。之后连跑两次第 2 片都绿，F-F4a 才能合。
+- **之后**：F-F4b（外框、我的、消息、待领奖、出示领奖码、`qb.app.prizes` 与 `qb.app.wallet.usable`、e2e、帮助、CLAUDE.md §5）、F-F4c（发布详情标签与固定的开始答题）。F-F4b/c 不得更新首页基线。
