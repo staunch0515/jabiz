@@ -346,6 +346,8 @@ class SetupIT extends QbItSupport {
         expected.put("4120", "REVENUE");
         expected.put("2150", "LIABILITY");
         expected.put("2170", "LIABILITY");
+        // F-M1: the Sponsors' platform fee Kudos (granted credit).
+        expected.put("2190", "LIABILITY");
         assertThat(accounts).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
@@ -448,6 +450,9 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.HELP_ANSWER_MAX_LENGTH, "8000");
         expected.put(QbParams.HELP_MAX_LINKS, "5");
         expected.put(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, "3660");
+        // F-C4: the sponsor package (ordinary parameters).
+        expected.put(QbParams.PACKAGE_CONFIRM_BYTES, "104857600");
+        expected.put(QbParams.PACKAGE_IMPORT_RETENTION_DAYS, "90");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // F-S2: the knowledge maps' limits and the review reminder (ordinary).

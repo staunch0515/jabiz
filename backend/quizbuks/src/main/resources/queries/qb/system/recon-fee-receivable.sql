@@ -26,9 +26,11 @@ SELECT CAST('FEES_RECEIVABLE' AS varchar(30)) AS checkCode,
 FROM (
     SELECT o.o_sponsor AS i_sponsor, sum(o.o_total) AS i_owed
     FROM (
-        SELECT x.{{QbFeeInvoice.sponsorId}} AS o_sponsor, x.{{QbFeeInvoice.total}} AS o_total
+        -- F-M1: what is still owed of an invoice paid in part.
+        SELECT x.{{QbFeeInvoice.sponsorId}} AS o_sponsor,
+               x.{{QbFeeInvoice.total}} - x.{{QbFeeInvoice.paidAmount}} AS o_total
         FROM {{QbFeeInvoice}} x
-        WHERE x.{{QbFeeInvoice.status}} IN ('OPEN', 'OVERDUE')
+        WHERE x.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')
         UNION ALL
         -- A postpaid charge is receivable from the day it is made; its month's invoice comes on the 2nd of the next
         -- (or its own, when the sponsor paid it early).

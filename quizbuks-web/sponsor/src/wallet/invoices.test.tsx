@@ -24,13 +24,16 @@ interface Server {
   wallet?: Record<string, unknown>
   invoices?: Record<string, unknown>[]
   pay?: { status: number; body: unknown }
+  /** F-M1: the account's lots and payment parts. */
+  lots?: Record<string, unknown>[]
+  payments?: Record<string, unknown>[]
 }
 
 const WALLET = { balance: '2000', held: '0', pendingCount: 0, pendingAmount: '0', toppedUp: '6000', takenBack: '0',
   topUpCount: 1, spent: '1000', cashBalance: '4000', cashHeld: '0', unpaidTotal: '1100', unpaidCount: 1,
   overdueCount: 0, billingMode: 'PREPAID', creditLimit: '0' }
 const INVOICE = { invoiceId: 'i1', invoiceNo: 'QBF-2026-00001', period: '2026-01', billingMode: 'PREPAID',
-  amount: '1000', tax: '100', total: '1100', status: 'OPEN', issuedAt: '2026-01-02T00:00:00Z', dueOn: '2026-02-01',
+  amount: '1000', tax: '100', total: '1100', paidAmount: '0', status: 'OPEN', issuedAt: '2026-01-02T00:00:00Z', dueOn: '2026-02-01',
   paidAt: null, documentRunId: null }
 
 function server(options: Server = {}) {
@@ -67,6 +70,16 @@ function server(options: Server = {}) {
       case '/api/queries/qb.sponsor.bank-account':
         return json(200, { items: [{ bank: 'Bank', branch: 'Main', accountType: 'ORDINARY', accountNumber: '1',
           accountHolder: 'QuizBuks' }], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.fee-account-lots':
+        return json(200, { items: options.lots ?? [], offset: 0, limit: 10, total: options.lots?.length ?? 0 })
+      case '/api/queries/qb.sponsor.fee-payments':
+        return json(200, { items: options.payments ?? [], offset: 0, limit: 10, total: options.payments?.length ?? 0 })
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:fee-sub-account':
+        return json(200, [{ code: 'FEE_CREDIT', label: 'Granted credit' }, { code: 'CASH', label: 'Cash' }])
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:fee-credit-source':
+        return json(200, [{ code: 'MANUAL', label: 'Granted by hand' }])
+      case '/api/dictionaries/urn:jabiz:dict:quizbuks:cash-source':
+        return json(200, [{ code: 'CARD', label: 'Card top-up' }])
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
       case '/api/processes/QB_FEE_INVOICE_PAY/latest':
@@ -168,15 +181,69 @@ describe("the platform's invoices", () => {
     render(<App />)
     const button = await screen.findByTestId('invoice-pay-early')
     expect(button).toBeDisabled()
-    expect(button).toHaveTextContent('cash 500 Kudos is not enough')
+    expect(button).toHaveTextContent('the platform fee account has 500 Kudos')
   })
 
-  it('cannot pay an invoice the cash does not cover', async () => {
-    server({ wallet: { ...WALLET, cashBalance: '500' } })
+  it('pays in part what the account has (F-M1), and nothing from an empty account', async () => {
+    const { processCalls } = server({ wallet: { ...WALLET, cashBalance: '300', feeCreditBalance: '200' },
+      pay: { status: 200, body: { output: { invoiceId: 'i1', invoiceNo: 'QBF-2026-00001', status: 'PARTIAL',
+        total: 1100, cashBalance: 0, paidAmount: 500, paidNow: 500 } } } })
+    window.history.replaceState(null, '', '/wallet')
+    const user = userEvent.setup()
+    render(<App />)
+    const row = (await screen.findAllByTestId('invoice-row'))[0]
+    const pay = within(row).getByTestId('invoice-row-pay')
+    expect(pay).toBeEnabled()
+    expect(pay).toHaveAttribute('data-covered', 'false')
+    expect(pay).toHaveTextContent('Pay 500 Kudos now (in part)')
+    await user.click(pay)
+    expect(await screen.findByTestId('invoice-notice'))
+      .toHaveTextContent('Paid 500 Kudos of invoice QBF-2026-00001; 600 Kudos still to pay.')
+    expect(processCalls()[0]).toEqual({ path: '/api/processes/QB_FEE_INVOICE_PAY/latest', body: { invoiceId: 'i1' } })
+  })
+
+  it('cannot pay an invoice from an empty account', async () => {
+    server({ wallet: { ...WALLET, cashBalance: '0' } })
     window.history.replaceState(null, '', '/wallet')
     render(<App />)
     const row = (await screen.findAllByTestId('invoice-row'))[0]
     expect(within(row).getByTestId('invoice-row-pay')).toBeDisabled()
-    expect(within(row).getByTestId('invoice-row-pay')).toHaveTextContent('cash 500 Kudos is not enough')
+    expect(within(row).getByTestId('invoice-row-pay')).toHaveTextContent('the platform fee account has 0 Kudos')
+  })
+
+  it('shows a partly paid invoice with what is paid of it', async () => {
+    server({ invoices: [{ ...INVOICE, status: 'PARTIAL', paidAmount: '500' }] })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    const row = (await screen.findAllByTestId('invoice-row'))[0]
+    expect(row).toHaveAttribute('data-status', 'PARTIAL')
+    expect(within(row).getByTestId('invoice-row-paid')).toHaveTextContent('500 Kudos')
+  })
+})
+
+describe('the platform fee account (F-M1)', () => {
+  it('shows the total, the granted credit and the cash, the lots in their order and how fees were paid', async () => {
+    server({ wallet: { ...WALLET, feeCreditBalance: '900', cashBalance: '700' },
+      lots: [
+        { seq: 1, subAccount: 'FEE_CREDIT', lotId: 'g1', source: 'MANUAL', amount: '900', remaining: '900',
+          arrivedAt: '2026-11-01T00:00:00Z', expiresAt: '2027-01-30T00:00:00Z' },
+        { seq: 2, subAccount: 'CASH', lotId: 'c1', source: 'CARD', amount: '1000', remaining: '700',
+          arrivedAt: '2026-11-02T00:00:00Z', expiresAt: null }],
+      payments: [
+        { paymentId: 'p1', paidAt: '2026-11-02T01:07:00Z', invoiceNo: 'QBF-2026-00001', subAccount: 'FEE_CREDIT',
+          source: 'MANUAL', amount: '800' },
+        { paymentId: 'p2', paidAt: '2026-11-02T01:07:00Z', invoiceNo: 'QBF-2026-00001', subAccount: 'CASH',
+          source: 'CARD', amount: '300' }] })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    const block = await screen.findByTestId('wallet-fee-account')
+    expect(within(block).getByTestId('fee-account-total')).toHaveTextContent('1,600 Kudos')
+    expect(within(block).getByTestId('fee-account-credit')).toHaveTextContent('900 Kudos')
+    const lots = await within(block).findAllByTestId('fee-lot-row')
+    expect(lots.map((row) => row.dataset.subAccount)).toEqual(['FEE_CREDIT', 'CASH'])
+    expect(lots[1]).toHaveTextContent('700 Kudos')
+    expect(await within(block).findAllByTestId('fee-payment-row')).toHaveLength(2)
+    expect(block.textContent).not.toMatch(/JPY|yen|円/)
+    await expectAccessible(block)
   })
 })

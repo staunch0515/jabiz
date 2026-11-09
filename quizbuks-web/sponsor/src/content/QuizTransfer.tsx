@@ -29,8 +29,8 @@ import {
   exportQuiz,
   importQuiz,
   ImportStepError,
-  LARGE_EXPORT_BYTES,
   MissingFileData,
+  readConfirmBytes,
   readJsonFile,
   type ExportFile,
   type ImportCheck,
@@ -38,7 +38,8 @@ import {
 
 /**
  * A quiz's "Export" (Q16; docs/quizbuks/plans/Q16-quiz-transfer.md): the draft and every file it uses into one JSON
- * file the browser downloads. Fetching the files shows how far it got; a file over 100 MB is downloaded after asking.
+ * file the browser downloads. Fetching the files shows how far it got; a file over `qb.package.confirm-bytes` (100 MB
+ * by default) is downloaded after asking.
  */
 export function ExportQuizButton({ quizId, title }: { quizId: string; title: string }) {
   const { t } = useTranslation(SPONSOR)
@@ -48,11 +49,12 @@ export function ExportQuizButton({ quizId, title }: { quizId: string; title: str
   const run = async () => {
     setProgress({ done: 0, total: 0 })
     try {
-      const document = await exportQuiz(quizId, (done, total) => setProgress({ done, total }))
+      const [document, confirmBytes] = await Promise.all([
+        exportQuiz(quizId, (done, total) => setProgress({ done, total })), readConfirmBytes()])
       if (!document) throw new Error('not found')
-      // Written once: the size asked about is the file downloaded.
+      // Written once: the size asked about is the file downloaded; above qb.package.confirm-bytes it asks first.
       const file = exportFile(document)
-      if (file.size > LARGE_EXPORT_BYTES) setLarge(file)
+      if (file.size > confirmBytes) setLarge(file)
       else {
         download(file)
         notify.success(t('quizzes.transfer.exported'))

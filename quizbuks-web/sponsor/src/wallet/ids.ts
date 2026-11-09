@@ -37,6 +37,9 @@ export const WALLET_TEMPLATE = {
   feeInvoices: 'qb.sponsor.fee-invoices',
   feeCharges: 'qb.sponsor.fee-charges',
   feeInvoiceLines: 'qb.sponsor.fee-invoice-lines',
+  /** F-M1: the account's lots with money left, and how each fee was paid. */
+  feeAccountLots: 'qb.sponsor.fee-account-lots',
+  feePayments: 'qb.sponsor.fee-payments',
 } as const
 
 /** The sponsor's own top-ups, read only (the checkout's address included: it is theirs). */
@@ -49,4 +52,8 @@ export const WALLET_DICTIONARY = {
   topUpStatus: 'urn:jabiz:dict:quizbuks:topup-status',
   /** Q87b: the states of the platform's invoices. */
   feeInvoiceStatus: 'urn:jabiz:dict:quizbuks:fee-invoice-status',
+  /** F-M1: the account's sub-accounts and where its lots came from. */
+  feeSubAccount: 'urn:jabiz:dict:quizbuks:fee-sub-account',
+  feeCreditSource: 'urn:jabiz:dict:quizbuks:fee-credit-source',
+  cashSource: 'urn:jabiz:dict:quizbuks:cash-source',
 } as const

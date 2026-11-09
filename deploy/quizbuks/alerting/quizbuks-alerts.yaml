@@ -253,4 +253,4 @@ groups:
         labels: { severity: warning, area: ai }
         annotations:
           summary: 'The AI help used at least $JABIZ_ALERT_QB_HELP_USAGE_PERCENT% of qb.help.global-monthly-tokens this month (the gauge qb.help.usage.percent; at 100% questions are refused until the month ends or the limit is raised with four eyes).'
-          runbook: docs/quizbuks/operations.md section 7.33
+          runbook: docs/quizbuks/operations.md section 7.34

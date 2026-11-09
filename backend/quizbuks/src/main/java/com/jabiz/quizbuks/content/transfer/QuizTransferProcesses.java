@@ -70,8 +70,19 @@ public final class QuizTransferProcesses {
         String title, int questions, int materials, List<FileNeed> files, String language, List<String> languages,
         int products, List<String> missingProducts) {}
 
-    /** @param files the key of each file the quiz uses (its key in the file) as uploaded by the caller */
-    public record ImportInput(@NotNull Map<String, Object> document, Map<String, UUID> files) {}
+    /**
+     * @param files      the key of each file the quiz uses (its key in the file) as uploaded by the caller
+     * @param intoQuizId F-C4: instead of a new draft, the caller's own quiz whose whole content the file replaces;
+     *                   only a quiz without publications (422 {@code QB_QUIZ_IMPORT_HAS_PUBLICATIONS}); another's or
+     *                   a removed one: 404
+     */
+    public record ImportInput(@NotNull Map<String, Object> document, Map<String, UUID> files, UUID intoQuizId) {
+
+        /** As before F-C4: a new draft. */
+        public ImportInput(Map<String, Object> document, Map<String, UUID> files) {
+            this(document, files, null);
+        }
+    }
 
     public record ImportOutput(UUID quizId, int formatVersion, List<Integer> readers) {}
 
@@ -114,16 +125,22 @@ public final class QuizTransferProcesses {
     public static ProcessDefinition<ImportInput, ImportOutput, ProcessContext> importQuiz() {
         return ProcessDefinition.define(IMPORT, 1, ImportInput.class, ImportOutput.class, ProcessContext.class,
             pb -> pb
-                .description("Imports a quiz file into a new draft, with the files uploaded for it.")
+                .description("Imports a quiz file into a new draft, or into one of the caller's quizzes without "
+                    + "publications, with the files uploaded for it.")
                 .permissions(QbPermissions.CONTENT_WRITE)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
                 .contextFactory((start, input) -> {
                     ProcessContext ctx = new ProcessContext(start);
                     ctx.put(INPUT, input);
+                    if (input.intoQuizId() != null) {
+                        ctx.put(QuizEditing.QUIZ_ID, input.intoQuizId());
+                    }
                     return ctx;
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, ImportOutput.class))
+                // F-C4: the quiz whose content the file replaces (nothing read for a new draft).
+                .steps(QuizProcesses::loadForReplace)
                 .step("Load the caller's products", loadProducts())
                 .step("Load the bank's limits", LoadParams.<ProcessContext>optional(ProcessContext::opTime, LIMITS,
                     QuizBankLimits.PARAMS))
@@ -134,12 +151,17 @@ public final class QuizTransferProcesses {
                 .compute("Import the quiz", (metadata, ctx) -> imported(ctx))
                 // Q100e: the products the file names that the caller has, as the products page sets them (the new
                 // draft saved first: the sub-process reads it).
-                .step("Save the draft", SaveChanges.<ProcessContext>when(ctx -> !ctx.hasViolations()
-                    && ctx.contains(LINKS) && ctx.get(LINKS, ProductLinks.class).count() > 0))
-                .step("Show the products", CallProcess.<ProcessContext>when(
-                    ctx -> !ctx.hasViolations() && ctx.contains(LINKS) && ctx.get(LINKS, ProductLinks.class).count() > 0,
+                // F-C4: a replaced content replaces the quiz's products too (none in the file: none any more).
+                .step("Save the draft", SaveChanges.<ProcessContext>when(QuizTransferProcesses::showsProducts))
+                .step("Show the products", CallProcess.<ProcessContext>when(QuizTransferProcesses::showsProducts,
                     SponsorProductProcesses.QUIZ_PRODUCTS_SET, 1, ctx -> ctx.get(LINKS, ProductLinks.class)
                         .input(ctx.get(OUTPUT, ImportOutput.class).quizId()), null)));
+    }
+
+    /** Whether the import sets the quiz's products: some found, or a replaced content (whose old ones go). */
+    private static boolean showsProducts(ProcessContext ctx) {
+        return !ctx.hasViolations() && ctx.contains(LINKS) && (ctx.get(LINKS, ProductLinks.class).count() > 0
+            || ctx.get(INPUT, ImportInput.class).intoQuizId() != null);
     }
 
     private static final String PRODUCTS = "products";
@@ -245,8 +267,12 @@ public final class QuizTransferProcesses {
         // Q73a: the base language the file names (else the caller's), and the hashes its translations were made from.
         Map<String, Map<String, String>> hashes = new LinkedHashMap<>();
         file.translations().forEach((language, t) -> hashes.put(language, t.hashes()));
-        Object quizId = QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null,
-            file.language(), hashes);
+        Object quizId = input.intoQuizId() == null
+            ? QuizProcesses.insertContent(ctx, snapshot(file, ids), file.title(), false, null, file.language(), hashes)
+            : QuizProcesses.replaceContent(ctx, snapshot(file, ids), file.title(), file.language(), hashes);
+        if (quizId == null) {
+            return;
+        }
         links(ctx, file);
         QuizFileFormat.Reading reading = ctx.get(READING, QuizFileFormat.Reading.class);
         ctx.put(OUTPUT, new ImportOutput(QuizEditing.uuid(quizId), reading.version(), reading.readers()));

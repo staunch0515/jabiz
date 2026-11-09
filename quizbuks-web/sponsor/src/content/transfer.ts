@@ -1,7 +1,7 @@
-import { ApiError, fetchFileContent, runProcess, uploadFile } from '@jabiz/client'
+import { ApiError, fetchFileContent, runProcess, runQuery, uploadFile } from '@jabiz/client'
 import type { ContentLanguage } from '../qb/api'
 import { readMyProducts, readMyQuizLinks, type MyProduct, type QuizLink } from '../products/api'
-import { readDraft, type Draft, type Material } from './api'
+import { readDraft, type Draft, type Material, type VersionDetail } from './api'
 import { COVER_KEY, optionImageKey, optionTextKey, questionImageKey, stemKey, translationsIn, variantOf } from './languages'
 import { CONTENT_FILE_POLICY, CONTENT_PROCESS } from './ids'
 
@@ -18,8 +18,25 @@ export const QUIZ_FILE_FORMAT = 'quizbuks.quiz'
  * (Q73a) adds the base language and the other languages; version 3 (Q100e) the sponsor's products the quiz shows.
  */
 export const QUIZ_FILE_VERSION = 3
-/** Above this size the export asks before going on (base64 adds about a third to the files). */
+/**
+ * The declared value of `qb.package.confirm-bytes` (F-C4): above it an export asks before going on (base64 adds
+ * about a third to the files). Only a fallback: the export reads the parameter ({@link readConfirmBytes}).
+ */
 export const LARGE_EXPORT_BYTES = 100 * 1024 * 1024
+
+/**
+ * Above how many bytes an export asks first: the parameter `qb.package.confirm-bytes` (every number a parameter,
+ * F-C4), read through `qb.sponsor.package-state`; its declared value when it cannot be read.
+ */
+export async function readConfirmBytes(): Promise<number> {
+  try {
+    const row = (await runQuery<Record<string, unknown>>('qb.sponsor.package-state', { limit: 1 })).items[0]
+    const n = Number(row?.confirmBytes)
+    return row?.confirmBytes != null && Number.isFinite(n) && n >= 0 ? n : LARGE_EXPORT_BYTES
+  } catch {
+    return LARGE_EXPORT_BYTES
+  }
+}
 
 export interface QuizFileEntry {
   name: string
@@ -202,6 +219,74 @@ export async function exportDraft(draft: Draft, onProgress?: Progress,
       quiz: ordered.filter((l) => l.questionNo === 0).map((l) => ref(l.productId)),
       questions: ordered.filter((l) => l.questionNo > 0 && l.questionNo <= draft.questions.length)
         .map((l) => ({ no: l.questionNo, product: ref(l.productId) })),
+    }
+  }
+  let done = 0
+  onProgress?.(0, keys.size)
+  for (const [fileId, { key: fileKey, kind }] of keys) {
+    const blob = await read(fileId)
+    document.files[fileKey] = { name: nameOf(kind, blob.type), type: blob.type, size: blob.size,
+      data: await base64Of(blob) }
+    onProgress?.(++done, keys.size)
+  }
+  return document
+}
+
+/**
+ * F-C4 (docs/quizbuks/plans/impl/F-C4.md): a saved version as a quiz file of the same format as {@link exportDraft}
+ * writes, from its snapshot: its heading, materials, questions and other languages (a version holds only complete
+ * languages, so no base hashes are written: imported, they are up to date), its files keyed `f1`, `f2` … A version
+ * records no products (they are the quiz's, written with its current content).
+ */
+export async function exportVersion(version: VersionDetail, onProgress?: Progress,
+  read: (fileId: string) => Promise<Blob> = (id) => fetchFileContent(id)): Promise<QuizFileDocument> {
+  const keys = new Map<string, { key: string; kind: 'image' | 'pdf' | 'audio' }>()
+  const key = (fileId: string | null | undefined, kind: 'image' | 'pdf' | 'audio'): string | null => {
+    if (!fileId) return null
+    if (!keys.has(fileId)) keys.set(fileId, { key: `f${keys.size + 1}`, kind })
+    return keys.get(fileId)!.key
+  }
+  const snapshot = version.content
+  const byNo = <T extends { no: number }>(items: readonly T[]) => [...items].sort((a, b) => a.no - b.no)
+  type SnapshotMaterial = VersionDetail['content']['materials'][number]
+  const material = (m: SnapshotMaterial, watch: boolean): FileMaterial => ({
+    kind: m.kind, title: m.title, description: m.description, body: m.body, url: m.url,
+    pdf: key(m.pdf, 'pdf'), audio: key(m.audio, 'audio'),
+    images: byNo(m.images).map((i) => ({ image: key(i.image, 'image')!, caption: i.caption })),
+    ...(watch && m.watchToAnswer ? { watchToAnswer: true as const } : {}),
+    ...(watch && m.watchToAnswer && m.durationSec != null ? { durationSec: m.durationSec } : {}),
+  })
+  const survey = snapshot.kind === 'SURVEY' || version.kind === 'SURVEY'
+  const document: QuizFileDocument = {
+    format: QUIZ_FILE_FORMAT,
+    formatVersion: QUIZ_FILE_VERSION,
+    exportedAt: new Date().toISOString(),
+    quiz: { kind: survey ? 'SURVEY' : 'QUIZ', title: snapshot.title, intro: snapshot.intro,
+      timeLimitSec: snapshot.timeLimitSec, cover: key(snapshot.cover, 'image'), language: version.language,
+      // F-S7: as exportDraft, only the fixed order is written.
+      ...(!survey && snapshot.questionOrder === 'fixed' ? { shuffleQuestions: false } : {}) },
+    materials: byNo(snapshot.materials).map((m) => material(m, true)),
+    questions: byNo(snapshot.questions).map((q) => ({
+      stem: q.stem, image: key(q.image, 'image'), points: q.points, selection: q.selection ?? null,
+      options: byNo(q.options).map((o) => ({ text: o.text, image: key(o.image, 'image'), correct: o.correct })),
+      ...(q.difficulty ? { difficulty: q.difficulty } : {}),
+    })),
+    files: {},
+  }
+  const languages = Object.entries(snapshot.translations ?? {})
+  if (languages.length > 0) {
+    document.translations = {}
+    for (const [language, t] of languages) {
+      if (!t) continue
+      const texts: Record<string, string> = {}
+      for (const [k, text] of Object.entries(t.texts ?? {})) if (text) texts[k] = text
+      const images: Record<string, string> = {}
+      for (const [k, image] of Object.entries(t.images ?? {})) {
+        const fileKey = key(image, 'image')
+        if (fileKey) images[k] = fileKey
+      }
+      document.translations[language as ContentLanguage] = { texts, images, hashes: {},
+        materials: byNo(t.materials ?? []).map((m) => ({ no: m.no, ...material(m, false) })) }
     }
   }
   let done = 0

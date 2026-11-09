@@ -20,6 +20,7 @@ import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
 import {
   downloadInvoiceDocument,
+  feeAccountAvailable,
   INVOICE_UNPAID,
   payEarly,
   payInvoice,
@@ -36,6 +37,7 @@ const PAGE_SIZE = 10
 
 const STATUS_BADGES: Record<InvoiceStatus, 'success' | 'secondary' | 'outline' | 'warning' | 'destructive'> = {
   OPEN: 'warning',
+  PARTIAL: 'warning',
   OVERDUE: 'destructive',
   PAID: 'success',
   VOID: 'outline',
@@ -49,8 +51,9 @@ function useInvoiceStatusLabel() {
 }
 
 /**
- * The platform's invoices to the sponsor (Q87, `qb.sponsor.fee-invoices`): paid from the cash account when open
- * (`QB_FEE_INVOICE_PAY`; the server checks the state and the cash), their document issued once and downloaded as kept
+ * The platform's invoices to the sponsor (Q87, `qb.sponsor.fee-invoices`): paid from the account that pays the
+ * platform's fees when open (`QB_FEE_INVOICE_PAY`; F-M1: the granted credit first, then the cash, as far as they go,
+ * the rest staying owed; the server checks the state and allocates), their document issued once and downloaded as kept
  * (`QB_FEE_INVOICE_DOCUMENT`); the postpaid fees not invoiced yet paid early (`QB_FEE_PAY_EARLY`, each getting an
  * invoice of its own). The page records nothing itself.
  */
@@ -75,7 +78,10 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
     mutationFn: (invoiceId: string) => payInvoice(invoiceId),
     onMutate: () => setNotice(null),
     onSuccess: async (output) => {
-      setNotice({ kind: 'ok', text: t('wallet.invoices.paid', { number: output.invoiceNo, cash: formatKudos(output.cashBalance) }) })
+      setNotice({ kind: 'ok', text: output.status === 'PAID'
+        ? t('wallet.invoices.paid', { number: output.invoiceNo, cash: formatKudos(output.cashBalance) })
+        : t('wallet.invoices.paidPart', { number: output.invoiceNo, amount: formatKudos(output.paidNow),
+          owed: formatKudos(Math.max(0, output.total - output.paidAmount)) }) })
       await queryClient.invalidateQueries({ queryKey: WALLET_QUERY })
     },
     onError: (error) => setNotice({ kind: 'error', text: problemText(error) }),
@@ -96,7 +102,8 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [...WALLET_QUERY, 'invoices'] }),
     onError: (error) => setNotice({ kind: 'error', text: problemText(error) }),
   })
-  const cashAvailable = Math.max(0, wallet.cashBalance - wallet.cashHeld)
+  // F-M1: the granted credit and the cash not held by a dispute; the server allocates.
+  const accountAvailable = feeAccountAvailable(wallet)
   const columns = useMemo<ColumnDef<InvoiceRow, unknown>[]>(() => [
     { id: 'issuedAt', header: t('wallet.invoices.issued'), meta: { card: 'subtitle' },
       cell: ({ row }) => formatDateTime(row.original.issuedAt) },
@@ -106,6 +113,9 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
       cell: ({ row }) => `${row.original.period} · ${t(`wallet.invoices.billingMode.${row.original.billingMode}`)}` },
     { id: 'total', header: t('wallet.invoices.total'), meta: { className: 'text-right' },
       cell: ({ row }) => <span data-testid="invoice-row-total">{formatKudos(row.original.total)}</span> },
+    // F-M1: an invoice may be paid in part; what is paid of it.
+    { id: 'paidAmount', header: t('wallet.invoices.paidAmount'), enableSorting: false, meta: { className: 'text-right' },
+      cell: ({ row }) => <span data-testid="invoice-row-paid">{formatKudos(row.original.paidAmount)}</span> },
     { id: 'dueOn', header: t('wallet.invoices.due'),
       cell: ({ row }) => (row.original.dueOn ? formatDate(row.original.dueOn) : '—') },
     { id: 'status', header: t('wallet.invoices.status'), meta: { card: 'badge' },
@@ -119,14 +129,17 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
       cell: ({ row }) => {
         const invoice = row.original
         const unpaid = INVOICE_UNPAID.includes(invoice.status)
-        const covered = cashAvailable >= invoice.total
+        const owed = Math.max(0, invoice.total - invoice.paidAmount)
+        const covered = accountAvailable >= owed
         return (
           <span className="flex flex-wrap justify-end gap-2">
             {unpaid && (
-              <Button size="sm" disabled={!covered || pay.isPending} aria-busy={pay.isPending || undefined}
-                data-testid="invoice-row-pay" onClick={() => pay.mutate(invoice.invoiceId)}>
+              <Button size="sm" disabled={accountAvailable <= 0 || pay.isPending} aria-busy={pay.isPending || undefined}
+                data-testid="invoice-row-pay" data-covered={covered} onClick={() => pay.mutate(invoice.invoiceId)}>
                 <Wallet aria-hidden />
-                {covered ? t('wallet.invoices.pay') : t('wallet.invoices.payShort', { cash: formatKudos(cashAvailable) })}
+                {covered ? t('wallet.invoices.pay')
+                  : accountAvailable > 0 ? t('wallet.invoices.payPart', { amount: formatKudos(accountAvailable) })
+                    : t('wallet.invoices.payShort', { cash: formatKudos(accountAvailable) })}
                 <span className="sr-only">: {invoice.invoiceNo}</span>
               </Button>
             )}
@@ -141,7 +154,7 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
           </span>
         )
       } },
-  ], [t, statusLabel, cashAvailable, pay, download])
+  ], [t, statusLabel, accountAvailable, pay, download])
   return (
     <section aria-labelledby="wallet-invoices" className="flex flex-col gap-3" data-testid="wallet-invoices">
       <h2 id="wallet-invoices" className="text-lg font-semibold">{t('wallet.invoices.title')}</h2>
@@ -168,11 +181,11 @@ export function Invoices({ wallet }: { wallet: SponsorWallet }) {
       {wallet.uninvoicedTotal > 0 && (
         <div className="flex flex-wrap items-center gap-3" data-testid="wallet-uninvoiced">
           <p className="text-muted-foreground text-sm">{t('wallet.invoices.uninvoicedHint', { amount: formatKudos(wallet.uninvoicedTotal) })}</p>
-          <Button size="sm" variant="outline" disabled={cashAvailable < wallet.uninvoicedTotal || early.isPending}
+          <Button size="sm" variant="outline" disabled={accountAvailable < wallet.uninvoicedTotal || early.isPending}
             aria-busy={early.isPending || undefined} data-testid="invoice-pay-early" onClick={() => early.mutate()}>
             <Wallet aria-hidden />
-            {cashAvailable >= wallet.uninvoicedTotal ? t('wallet.invoices.payEarly')
-              : t('wallet.invoices.payShort', { cash: formatKudos(cashAvailable) })}
+            {accountAvailable >= wallet.uninvoicedTotal ? t('wallet.invoices.payEarly')
+              : t('wallet.invoices.payShort', { cash: formatKudos(accountAvailable) })}
           </Button>
         </div>
       )}

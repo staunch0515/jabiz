@@ -141,6 +141,9 @@ class ProcessAccessIT extends QbItSupport {
         // Q87: the platform fees' charge (a sub-process), its job items, the approval result and the invoice mails.
         Map.entry("QB_FEE_CHARGE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_SETTLE_ITEM", ProcessAccess.SUB_PROCESS_ONLY),
+        // F-M1: paying a fee from the account, and giving a voided invoice's payment back.
+        Map.entry("QB_FEE_SETTLE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_FEE_REFUND", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_MONTHLY_ITEM", ProcessAccess.INTERNAL),
         // Q88b: the daily settlement of the entry fees (job item).
         Map.entry("QB_ENTRY_FEE_SETTLE", ProcessAccess.INTERNAL),
@@ -193,7 +196,10 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_HELP_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_HELP_USAGE_CHECK", ProcessAccess.INTERNAL),
         // F-C10: a reassigned Sponsor's help conversations (QB_SPONSOR_OPERATOR_ASSIGN's sub-process).
-        Map.entry("QB_HELP_OPERATOR_MOVE", ProcessAccess.SUB_PROCESS_ONLY));
+        Map.entry("QB_HELP_OPERATOR_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
+
+        // F-C4: the retention job's item deleting an old record of a sponsor package's import.
+        Map.entry("QB_PACKAGE_IMPORT_EXPIRE", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

@@ -261,7 +261,9 @@ public final class MailProcesses {
                     String.valueOf((Object) invoice.get("status")))) {
                     decide(ctx, reminder ? NotificationMails.FEE_INVOICE_OVERDUE : NotificationMails.FEE_INVOICE_ISSUED,
                         Map.of("invoiceNo", String.valueOf((Object) invoice.get("invoiceNo")),
-                            "total", MailValues.amount(invoice.get("total")),
+                            // What is still owed (F-M1: an invoice may be paid in part).
+                            "total", MailValues.amount(new java.math.BigDecimal(String.valueOf((Object) invoice.get("total")))
+                                .subtract(new java.math.BigDecimal(String.valueOf((Object) invoice.get("paidAmount"))))),
                             "dueOn", String.valueOf((Object) invoice.get("dueOn"))));
                 }
             }, messages, NotificationMails.FEE_INVOICE_ISSUED, NotificationMails.FEE_INVOICE_OVERDUE);

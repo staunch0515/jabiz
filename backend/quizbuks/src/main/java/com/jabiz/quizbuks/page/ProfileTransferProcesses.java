@@ -45,8 +45,10 @@ import java.util.UUID;
  * </ul>
  * <b>An import never changes a review</b> (D-Q100-3): it skips the basics while the onboarding is not approved (they
  * fill the application instead, which the sponsor submits), and the page while it waits for review (a save would
- * withdraw it) or before the onboarding is approved. Products are replaced as a whole (D-Q100-4). Image links are not
- * downloaded yet (Q100b): such an image is listed and left as it is.
+ * withdraw it) or before the onboarding is approved. Products are replaced as a whole (D-Q100-4). An image given as a
+ * link is listed in the plan with the policy to download it under (F-C6): the page has the server download it once
+ * ({@code POST /api/files/fetch}, decision D75: never in this transaction) and passes the file like an uploaded one;
+ * a link without a file leaves the image there is as it is.
  */
 public final class ProfileTransferProcesses {
 
@@ -87,8 +89,11 @@ public final class ProfileTransferProcesses {
     /** A file the import needs uploaded: where it is used (its key in {@code files} of the import) and the policy. */
     public record FileNeed(String path, String key, String policy, String type, long size) {}
 
-    /** An image given as a link, not downloaded yet (Q100b): the image there is stays. */
-    public record Link(String path, String url) {}
+    /**
+     * An image given as a link (F-C6): the page downloads it under {@code policy} and passes the file by this path; a
+     * link given no file leaves the image there is.
+     */
+    public record Link(String path, String url, String policy) {}
 
     /**
      * What the import does: each part's action ({@link #SAVE}, {@link #NONE}, {@link #APPLY_FORM},
@@ -104,7 +109,7 @@ public final class ProfileTransferProcesses {
     public record CheckOutput(Plan plan) {}
 
     /**
-     * @param files        the id of each file uploaded for the package, by its {@link FileNeed#path}
+     * @param files        the id of each file uploaded for the package (or downloaded for a link of it, F-C6), by its path
      * @param mailPassword the mail server's password; none keeps the stored one when the server is the same
      */
     public record ImportInput(@NotNull Map<String, Object> document, Map<String, UUID> files,
@@ -293,11 +298,12 @@ public final class ProfileTransferProcesses {
         List<Link> links = new ArrayList<>();
         profile.images().forEach((path, image) -> {
             if (image.isLink()) {
-                links.add(new Link(path, image.url()));
+                if (wanted(path, basics, pageAction)) {
+                    links.add(new Link(path, image.url(), policyOf(path)));
+                }
             } else if (image.isFile() && wanted(path, basics, pageAction)) {
                 ProfilePackage.FileEntry entry = profile.files().get(image.key());
-                files.add(new FileNeed(path, image.key(), path.equals("basics.avatar") ? QbAccounts.AVATAR_POLICY
-                    : QbSponsorPages.IMAGE_POLICY, entry.type(), entry.size()));
+                files.add(new FileNeed(path, image.key(), policyOf(path), entry.type(), entry.size()));
             }
         });
         return new Plan(basics, pageAction, List.copyOf(added), List.copyOf(changed), deleted, mail,
@@ -320,6 +326,11 @@ public final class ProfileTransferProcesses {
                 : product.productId() == null ? null : byId.get(product.productId()));
         }
         return matches;
+    }
+
+    /** The file policy an image of the package is stored under: the avatar's, else the page images'. */
+    private static String policyOf(String path) {
+        return path.equals("basics.avatar") ? QbAccounts.AVATAR_POLICY : QbSponsorPages.IMAGE_POLICY;
     }
 
     /** Whether the image of {@code path} is saved by this import (a part left alone uploads nothing). */
@@ -358,12 +369,18 @@ public final class ProfileTransferProcesses {
         return files == null ? Map.of() : files;
     }
 
-    /** The image to save at {@code path}: the uploaded one, none, or (left out or a link) the stored one. */
+    /**
+     * The image to save at {@code path}: the uploaded one, none, or the stored one (left out, or a link the page
+     * downloaded no file for: F-C6). A file passed for a link is checked like an uploaded one, by the save.
+     */
     private static UUID imageAt(ProcessContext ctx, String path, ProfilePackage.Image image, Object stored) {
         if (image == null) {
             return null;
         }
         if (image.isFile()) {
+            return uploaded(ctx).get(path);
+        }
+        if (image.isLink() && uploaded(ctx).get(path) != null) {
             return uploaded(ctx).get(path);
         }
         return stored == null ? null : UUID.fromString(String.valueOf(stored));
