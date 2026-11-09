@@ -199,6 +199,36 @@ class AttemptStatementBudgetIT extends TreeItSupport {
     }
 
     /**
+     * F-S8: a caller with blocks (none covering the publication) reads the blocks covering the card, one statement more
+     * outside the start lock; the lock's part is an ordinary start's. Whether the caller has any block rides on the
+     * start's first read, so a caller without blocks sends what {@link #aStartAndAPaidSubmission} counts, unchanged.
+     */
+    @Test
+    void aStartWithBlocks() {
+        warmUp();
+        String sponsor = newSponsor("s-budget-blocks");
+        credit(sponsor, 100_000);
+        String other = newSponsor("s-budget-blocks-other");
+        credit(other, 10_000);
+        String publicationId = livePublication(sponsor, "Budget blocks", Map.of("regions", List.of("GLOBAL"),
+            "maxWinners", 100_000, "budgetCap", 1_000_000));
+        String elsewhere = livePublication(other, "Budget blocks elsewhere", Map.of("regions", List.of("GLOBAL")));
+        List<List<String>> start = null;
+        // The first is warm (as in production: the plans cached), the second counted.
+        for (int round = 0; round < 2; round++) {
+            String token = taker(newTaker("t-budget-blocks-" + UUID.randomUUID(), null));
+            keyed(com.jabiz.quizbuks.block.BlockProcesses.ADD, token, body("publicationId", elsewhere, "kind",
+                "SPONSOR"));
+            SqlStatementLog.clear();
+            keyed("QB_ATTEMPT_START", token, body("publicationId", publicationId));
+            start = SqlStatementLog.transactions();
+        }
+        report("QB_ATTEMPT_START (with blocks)", start);
+        assertBudget("QB_ATTEMPT_START (with blocks)", start, budget(START_TOTAL) + 1, budget(START_LOCKED));
+        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(publicationId));
+    }
+
+    /**
      * Q88b (D-Q88-12): a start of a quiz charging an entry fee takes the caller's wallet lock before the start lock,
      * and reads under it the wallet row with the hold period (one statement) and the transferable balance (the
      * transfers' template); it saves the attempt for the fee's posting and posts it ({@code LEDGER_POST}). An ordinary
