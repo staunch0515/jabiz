@@ -597,6 +597,7 @@ class ExposureIT extends PlayItSupport {
 
     @Test
     void theDailyReconciliationFindsWhatWentTooFarAndWhatCountedAfterTheEnd() {
+        startReconciliationOnANewDay();
         String provider = newSponsor(unique("s-fs13-check-provider"));
         String user = newSponsor(unique("s-fs13-check-user"));
         credit(user, 100_000);
@@ -626,6 +627,7 @@ class ExposureIT extends PlayItSupport {
     /** The reconciliation's tolerance and the grace after an end are parameters (the requester: every number one). */
     @Test
     void theReconciliationsToleranceAndGraceAreParameters() {
+        startReconciliationOnANewDay();
         String provider = newSponsor(unique("s-fs13-check-p-provider"));
         String user = newSponsor(unique("s-fs13-check-p-user"));
         credit(user, 100_000);
@@ -667,6 +669,17 @@ class ExposureIT extends PlayItSupport {
         } finally {
             run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_END_GRACE_SEC, "value", "60"));
         }
+    }
+
+    /**
+     * The check reads every publication in the schema and its task is one per day, so a reconciliation test starts on
+     * a day of its own with no counts left by the other methods (whatever order they ran in, e.g. with a filter).
+     */
+    void startReconciliationOnANewDay() {
+        clock.set(clock.instant().plus(Duration.ofDays(1)));
+        execute("DELETE FROM qb_exposure");
+        runCheck();
+        assertThat(task()).as("no difference left by another method").isNull();
     }
 
     /** As {@link #runCheck}, with the earlier differences put right first (so only the new one is found). */
