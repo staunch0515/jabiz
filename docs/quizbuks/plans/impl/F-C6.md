@@ -8,7 +8,7 @@
 2. **服务器从不在导入的事务里下载**（D75）。发起方页面在点「导入」后先逐张调 `fetchFileFromLink`（平台每人同时至多 2 个，所以顺序下载），得到的文件是发起方自己的，再放进导入的 `files`。
 3. **确认页**逐张显示状态（将会下载 / 正在下载 / 已下载 / 使用你自己的文件 / 下载不了 + 服务器的原因）。下载不了的每张可「重试」「改为上传图片」（走同一策略的上传）；仍有下载不了的，须勾选「保持现状」才能导入（总控要求：不静默丢图）。点「导入」不会重试失败的图片（重试只经按钮）。导入仍不改变审核。
 4. **护栏**：QuizBuks 的 `ArchitectureTest` 加 `PlatformArchRules.noRemoteImageInternals`（业务代码不得直接用下载器）。
-5. **运维文档**：`operations.md` §7.33（失败原因表、平台参数与限流的缺省、观测）。
+5. **运维文档**：`operations.md` §7.36（失败原因表、平台参数与限流的缺省、观测）。
 6. **文案同步**：确认页消息（三语）、`profile-package-prompts.md`、帮助底稿 `help/profile-package.md`、`plans/impl/F-C5.md`、`backend/quizbuks/CLAUDE.md`。
 
 ## 不做
