@@ -1,4 +1,4 @@
-import { fetchFileContent, runProcess, uploadFile } from '@jabiz/client'
+import { fetchFileContent, fetchFileFromLink, runProcess, uploadFile } from '@jabiz/client'
 import { parseStoredTranslations, type TextsByLanguage } from '../content/TextTranslationsFields'
 import { base64Of, blobOf, withoutData } from '../content/transfer'
 import type { MySponsorPage } from '../page/api'
@@ -140,6 +140,9 @@ export type PartAction = 'SAVE' | 'NONE' | 'APPLY_FORM' | 'PENDING' | 'NOT_APPRO
 
 export interface FileNeed { path: string; key: string; policy: string; type: string; size: number }
 
+/** An image given as a link (F-C6): downloaded by the server under `policy` before the import, once. */
+export interface LinkNeed { path: string; url: string; policy: string }
+
 /** `ProfileTransferProcesses.Plan`. */
 export interface ImportPlan {
   basics: PartAction
@@ -149,7 +152,7 @@ export interface ImportPlan {
   deleted: string[]
   mailServer: PartAction
   files: FileNeed[]
-  links: { path: string; url: string }[]
+  links: LinkNeed[]
   /** D-Q100-13: products the import deletes that quizzes show, with those quizzes' titles. */
   linked: { product: string; quizzes: string[] }[]
 }
@@ -163,13 +166,34 @@ export async function checkProfileImport(document: Record<string, unknown>): Pro
 const KNOWN_POLICIES = new Set<string>([FILE_POLICY.sponsorAvatar, SPONSOR_PAGE.imagePolicy])
 
 /**
- * Uploads the images the plan needs, each through its policy; their paths with the uploaded ids. F-C4's sponsor
- * package imports the same profile part through its own import record.
+ * Has the server download one linked image under its policy (F-C6, decision D75: never inside the import's
+ * transaction); the file is the caller's own, as an upload is. Throws the server's reason when it is refused.
+ */
+export async function downloadLink(link: LinkNeed): Promise<string> {
+  if (!KNOWN_POLICIES.has(link.policy)) throw new Error(`No policy for ${link.path}`)
+  const { fileId } = await fetchFileFromLink(link.policy, link.url)
+  if (!fileId) throw new Error(`No image for ${link.path}`)
+  return fileId
+}
+
+/** The sponsor's own file for a link the server could not download: uploaded through the same policy. */
+export async function uploadForLink(link: LinkNeed, file: Blob, name: string): Promise<string> {
+  if (!KNOWN_POLICIES.has(link.policy)) throw new Error(`No policy for ${link.path}`)
+  const { fileId } = await uploadFile(link.policy, file, name)
+  if (!fileId) throw new Error(`No image for ${link.path}`)
+  return fileId
+}
+
+/**
+ * Uploads the images the plan needs, each through its policy; their paths with the uploaded ids. `linked` holds the
+ * files downloaded (or uploaded instead) for the plan's links, by path (F-C6): a link without one leaves the image
+ * there is. F-C4's sponsor package imports the same profile part through its own import record.
  */
 export async function uploadProfileImages(document: Record<string, unknown>, plan: ImportPlan,
-  onProgress?: (done: number, total: number) => void): Promise<Record<string, string>> {
+  onProgress?: (done: number, total: number) => void, linked: Record<string, string> = {}):
+  Promise<Record<string, string>> {
   const files = (document.files ?? {}) as Record<string, Partial<PackageFile>>
-  const uploaded: Record<string, string> = {}
+  const uploaded: Record<string, string> = { ...linked }
   let done = 0
   onProgress?.(done, plan.files.length)
   for (const need of plan.files) {
@@ -186,8 +210,8 @@ export async function uploadProfileImages(document: Record<string, unknown>, pla
 
 /** Uploads the images the plan needs, then imports; a refusal throws and nothing is changed. */
 export async function importProfile(document: Record<string, unknown>, plan: ImportPlan, mailPassword: string,
-  onProgress?: (done: number, total: number) => void): Promise<ImportPlan> {
-  const uploaded = await uploadProfileImages(document, plan, onProgress)
+  onProgress?: (done: number, total: number) => void, linked: Record<string, string> = {}): Promise<ImportPlan> {
+  const uploaded = await uploadProfileImages(document, plan, onProgress, linked)
   const output = await runProcess<{ plan: ImportPlan }>(PROFILE_TRANSFER.import, {
     document: withoutData(document), files: uploaded, mailPassword: mailPassword || null,
   })

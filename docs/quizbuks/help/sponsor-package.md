@@ -19,6 +19,7 @@
 **导入**：点"导入发起方包"并选择文件。页面先检查整个包，一次列出全部问题与将要生成的内容（知识结构图、Quiz 与版本、发布草稿）；有问题时先解决再导入。确认之前什么也不写入。
 - 从未提交过发布的账户可以导入整个包；已有的 Quiz 草稿不影响，标题相同的会标出来（导入的另外新建）。
 - 提交过发布的账户只能"只导入资料部分"。
+- 资料部分中以链接给出的图片，检查页会列出；导入时由 QuizBuks 下载，下载不了的保留原来的图片，请导入后在页面上设置。
 - 你的账户还没有提交过知识结构图时，包里的图导入为草稿；已经有的，不导入图，发布按节点对应到你的图中相同的节点，对应不上的会列出来，导入后请自己选节点。
 - 共享视频只在这里也有同一个已共享的视频时才挂上，否则会列出来，导入后请重新选择。
 - 发布一律导入为草稿，开始时间是导入时的下一个整点，天数与原来相同。
@@ -36,6 +37,7 @@
 **インポート**：「主催者パッケージをインポート」を押してファイルを選びます。まずパッケージ全体を確認し、すべての問題と作成するもの（知識マップ、クイズとバージョン、公開の下書き）を一覧で表示します。問題があるときは先に解決してください。確定するまで何も書き込みません。
 - 公開を申請したことのないアカウントはパッケージ全体をインポートできます。既存のクイズの下書きは影響しません。同じタイトルのものは表示されます（インポートでは別に新しく作成します）。
 - 公開を申請したことのあるアカウントは「プロフィール部分だけをインポート」できます。
+- プロフィール部分でリンクとして指定された画像は確認画面に一覧表示され、インポート時に QuizBuks がダウンロードします。ダウンロードできなかった画像は元のままなので、インポート後にページで設定してください。
 - 知識マップを申請したことがまだないときは、パッケージの知識マップを下書きとしてインポートします。すでにあるときは知識マップをインポートせず、公開をあなたのマップの同じノードに結び付けます。結び付けられないものは一覧で表示されるので、インポート後にノードを選んでください。
 - 共有動画は、ここにも同じ共有動画が共有されているときだけ付けます。そうでないものは一覧で表示されるので、インポート後に選び直してください。
 - 公開はすべて下書きとしてインポートします。開始日時はインポート時の次の正時、日数は元と同じです。
@@ -53,6 +55,7 @@
 **Importing**: choose "Import sponsor package" and pick the file. The page first checks the whole package and lists every problem and what it will make (knowledge maps, quizzes and versions, publication drafts); fix the problems first. Nothing is written before you confirm.
 - An account that never submitted a publication imports the whole package. Quiz drafts you have do not matter; those with the same title are pointed out (the import adds new ones).
 - An account that submitted a publication imports only the profile part.
+- Images given as links in the profile part are listed on the check page and downloaded by QuizBuks during the import; one that cannot be downloaded keeps the image there is, so set it on your page afterwards.
 - When your account has not submitted a knowledge map yet, the package's maps are imported as drafts. When it has, no map is imported: the publications are bound to the same nodes of your map, and those that cannot be are listed: choose their nodes after the import.
 - A shared video is attached only when the same video is shared here too; otherwise it is listed: choose one again after the import.
 - Every publication is imported as a draft, starting at the next full hour after the import and running as many days as before.

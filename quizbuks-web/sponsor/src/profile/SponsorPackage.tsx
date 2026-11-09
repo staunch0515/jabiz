@@ -258,6 +258,7 @@ export function SponsorPackageCard() {
     ['videosAgain', plan.videosAgain, 'names'],
     ['tooLarge', plan.tooLarge, 'titles'],
     ['orphans', plan.orphans, 'names'],
+    ['links', (checked?.profilePlan?.links ?? []).map((l) => l.path), 'paths'],
   ] as const).filter(([, list]) => list.length > 0) : []
   return (
     <Card data-testid="sponsor-package">

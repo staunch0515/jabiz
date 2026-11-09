@@ -83,13 +83,21 @@ function server({ submittedPublication = false, open = null, failOnce = {} }: Se
           delete failing[step]
           return json(422, { title: 'Refused', violations: [{ field: null, ruleCode: 'QB_X', message }] })
         }
-        const result = step.startsWith('tree') ? { treeId: 'T1', nodeIds: { n1: 'node-1' } }
+        const result = step === 'profile' ? {} : step.startsWith('tree') ? { treeId: 'T1', nodeIds: { n1: 'node-1' } }
           : step.endsWith(':version') ? { quizId: 'Q1', versionId: 'V1' }
             : step.startsWith('publication') ? { publicationId: 'P1' } : { quizId: 'Q1' }
         done[step] = result
         return json(200, { output: { importId: 'imp', step, status: 'RUNNING', stepsDone: Object.keys(done).length,
           stepsTotal: 4, result, repeated: false } })
       }
+      case '/api/processes/QB_PROFILE_IMPORT_CHECK/latest':
+        return json(200, { output: { plan: { basics: 'UPDATE', page: 'UPDATE', added: [], changed: [], deleted: [],
+          mailServer: 'NONE', files: [], linked: [], links: [
+            { path: 'page.cover', url: 'https://shop.example/cover.jpg', policy: 'qb.sponsor-page-image' },
+            { path: 'page.gallery.0', url: 'https://shop.example/gone.jpg', policy: 'qb.sponsor-page-image' }] } } })
+      case '/api/files/fetch':
+        return String(body?.url).endsWith('gone.jpg')
+          ? json(422, { title: 'Refused', detail: 'not an image' }) : json(201, { fileId: 'dl-cover' })
       case '/api/processes/QB_PACKAGE_IMPORT_ABANDON/latest':
         return json(200, { output: { importId: 'imp', status: 'ABANDONED', retiredTrees: ['T1'],
           deletedPublications: [], removedQuizzes: ['Q1'], keptQuizzes: [] } })
@@ -169,6 +177,21 @@ describe('the sponsor package card', () => {
     expect(plan).toHaveAttribute('data-mode', 'PROFILE')
     expect(within(plan).getByTestId('sponsor-package-profile-only')).toBeInTheDocument()
     expect(within(dialog).getByTestId('sponsor-package-confirm')).toHaveTextContent('Import only the profile part')
+  })
+
+  it('lists the images given as links, has the server download them and imports without one it refuses', async () => {
+    const { posted, steps } = server({ submittedPublication: true })
+    renderCard()
+    await userEvent.upload(screen.getByTestId('sponsor-package-file'),
+      packageFile({ ...PACKAGE, profile: { format: 'quizbuks.profile', basics: {}, files: {} } }))
+    const dialog = await screen.findByTestId('sponsor-package-dialog')
+    const plan = await within(dialog).findByTestId('sponsor-package-plan')
+    expect(within(plan).getByTestId('sponsor-package-links')).toHaveTextContent('page.cover、page.gallery.0')
+    await userEvent.click(within(dialog).getByTestId('sponsor-package-confirm'))
+    await within(dialog).findByTestId('sponsor-package-done')
+    expect(steps()).toEqual(['profile'])
+    const step = posted.find((p) => p.path.endsWith('QB_PACKAGE_IMPORT_STEP/latest'))!
+    expect((step.body.profile as { files: Record<string, string> }).files).toEqual({ 'page.cover': 'dl-cover' })
   })
 
   it('refuses another file before asking the server', async () => {

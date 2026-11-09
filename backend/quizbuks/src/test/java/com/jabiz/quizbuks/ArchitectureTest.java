@@ -34,6 +34,8 @@ class ArchitectureTest {
         PlatformArchRules.handlersStayOutOfTheDatabase("com.jabiz.quizbuks..").check(CLASSES);
         // Q8b: the AI jobs read PDFs and produce covers only through their context (decision D50).
         PlatformArchRules.handlersReadFilesThroughTheirContext("com.jabiz.quizbuks..").check(CLASSES);
+        // F-C6: link images are fetched only through POST /api/files/fetch or an external job's remoteImages() (D75).
+        PlatformArchRules.noRemoteImageInternals("com.jabiz.quizbuks..").check(CLASSES);
     }
 
     /**

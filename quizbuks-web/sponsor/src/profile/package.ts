@@ -24,7 +24,7 @@ import { PUBLISHING_PROCESS } from '../publishing/ids'
 import { endAfter, formOfSettings, nextHour, parseSettings, settingsOf, type PublicationSettings }
   from '../publishing/settings'
 import { readMySponsor, type ContentLanguage } from '../qb/api'
-import { exportProfile, uploadProfileImages, type ImportPlan, type ProfilePackageDocument } from './transfer'
+import { downloadLink, exportProfile, uploadProfileImages, type ImportPlan, type ProfilePackageDocument } from './transfer'
 
 /*
  * The sponsor package (F-C4, docs/quizbuks/plans/impl/F-C4.md; Q103): one Sponsor's profile, quizzes (with the
@@ -770,7 +770,17 @@ async function stepInput(step: PlannedStep, document: SponsorPackageDocument, ch
       const plan = checks.profile
       if (!plan || !document.profile) throw new Error('No profile part was checked')
       const raw = document.profile as unknown as Record<string, unknown>
-      const files = await uploadProfileImages(raw, plan)
+      // F-C6: images given as links are downloaded by the server first; one it refuses keeps the image there is (the
+      // check page said which links there are, so the sponsor sets that image on the page afterwards).
+      const linked: Record<string, string> = {}
+      for (const link of plan.links ?? []) {
+        try {
+          linked[link.path] = await downloadLink(link)
+        } catch {
+          // left as it is: listed before the import
+        }
+      }
+      const files = await uploadProfileImages(raw, plan, undefined, linked)
       return { profile: { document: withoutData(raw), files, mailPassword: checks.mailPassword || null } }
     }
     case 'tree': {
