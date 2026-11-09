@@ -139,8 +139,6 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
       fullScore: p.fullScore ?? questions.reduce((sum, q) => sum + q.points, 0),
       passScore: p.passScore ?? 0,
       maxReward: p.maxReward ?? 0,
-      // Q88a: a preview shows no certification (the round is set in the wizard, not previewed).
-      certification: null,
       rewardMethod: p.rewardMethod,
       redeemDescription: p.redeemDescription,
       digitalDelivery: p.digitalDelivery,
@@ -185,7 +183,6 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
       fullScore: draft.questions.reduce((sum, question) => sum + question.points, 0),
       passScore: 0,
       maxReward: 0,
-      certification: null,
       rewardMethod: 'PLATFORM',
       redeemDescription: null,
       digitalDelivery: null,

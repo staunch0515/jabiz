@@ -107,7 +107,7 @@ docs/quizbuks/               本文件等
 | `QbCountry` | T（字典） | `code`（ISO 3166-1）、`name`（多语言）、`regions`（多值：GLOBAL、JP、CN、US、EUROPE、ASIA、NORTH_AMERICA、SOUTH_AMERICA） | 【缺省 Q7】国家到地区的映射。平台没有多值字段：`regions` 存为按固定顺序、以逗号连接的地区代码（`GLOBAL,JP,ASIA`），总含 GLOBAL（Q1）。只经流程写入（`QB_SETUP` 导入） |
 | `QbPayoutAccount` | P（Q6b） | `userId`（唯一）、`provider`（STRIPE_CONNECT）、`externalAccountId`（唯一，`f.masked(qb.admin.finance.read, LAST4)`）、`country`、`status`（PENDING / ENABLED / RESTRICTED / DEAUTHORIZED）、`payoutsEnabled`、`detailsSubmitted`、`requirementsDue`、`stripeUpdatedAt`（以上 `processOnly`，由 Stripe 的 Connect 通知更新，只取更新的报告） | 用户的收款账户；银行信息由 Stripe 保存，平台不存银行账号。普通表（不是计划中的时态表）：通知按 Stripe 账户号查找，且只有表的唯一约束能保证一个 Stripe 账户只属于一个用户；历史由平台审计保留。开通链接另存普通表 `QbPayoutOnboarding`（每人一行、覆盖，只有本人的数据视图给出） |
 
-| `QbCertificate` | P（Q77） | 主键 `certificateId`；`userId`、`certification`、`certificationVersion`、`heldFrom`、`validUntil`（与前三项唯一：同一段持有一张）、`holderName`（签发时冻结）、`verifyKey`（随机 128 位，唯一）、`language`、`issuedAt` | 本人签发的证书（`plans/Q77-certificates.md`），只经 `QB_CERTIFICATE_ISSUE` 插入；PDF 是平台单据 `qb.certificate`（主体即此行）。`QbUserSettings` 另有 `publicHandle`（唯一）与 `publicPage`（缺省关闭）：公开认证页 `/taker/u/<名>` |
+| `QbCertificate` | P（Q77） | 主键 `certificateId`；`userId`、`certification`、`certificationVersion`、`heldFrom`、`validUntil`（与前三项唯一：同一段持有一张）、`holderName`（签发时冻结）、`verifyKey`（随机 128 位，唯一）、`language`、`issuedAt` | 本人签发的证书（`plans/Q77-certificates.md`），只经 `QB_CERTIFICATE_ISSUE` 插入；PDF 是平台单据 `qb.certificate`（主体即此行）。`QbUserSettings` 另有 `publicHandle`（唯一）与 `publicPage`（缺省关闭）：公开认证页 `/taker/u/<名>`。F-S2c 起暂停签发（D8）；F-S2c2b 删去认证与轮（D1）之后，已签发的照常有效："我的认证"列出仍有效的，`qb_certification_record` 只读保留，供核实页与学者公开页读之前记下的撤销 |
 | `QbSponsorCertification` | P（Q88a） | 主键 `certificationId`；`sponsorId`、`name` 与 `description`（多语言 `I18nText`）、`validityDays`（30–3650）、`certificationVersion`（商户升版）、`status`（`ACTIVE` / `RETIRED`）、`createdAt`、`updatedAt` | 商户自己的认证（`plans/Q88-sponsor-certifications-entry-fee.md`），在轮、记录、前置、证书中的键是 `sp:<certificationId>`（四张表的 `certification` 列改为文本，目录不变）。~~`QB_SPONSOR_CERTIFICATION_CREATE` / `_UPDATE` / `_RETIRE`、`QB_SPONSOR_ROUND_SET` / `_CLOSE`、0 奖励的轮与受控开关 `qb.certification.sponsor-rounds.enabled`~~已由 F-S2c2 删去（D6）：之前的行只读，供已持有的记录与已签发的证书（D8）显示名字与颁发方；之前登记的轮不再记入合格、不再显示 |
 
 ### 3.2 内容：模版、版本、题目、资料
@@ -519,8 +519,7 @@ SCHEDULED / LIVE / PAUSED / FUNDS_SHORT ──到结束时间（Q4）、名额�
 
 - 与商户的对话（Q82，`plans/Q82-conversations.md`，`app/src/conversation/`）：完成过的测验的结果页有“联系商户”（写第一条消息即开启；已有对话时为“查看对话”）；收件箱顶部的“与商户的对话”进入列表 `/conversations`（新回复标“新”，下方是已屏蔽的商户与解除），对话页 `/conversations/<id>`（打开即已读；发送、关闭、关闭后再写即重开、举报这段对话、屏蔽商户）；商户的回复写一条站内信（每对话每小时至多一条，去处为对话）并推送 `qb.conversation-reply`。商户显示为公司名，从不显示用户编号。
 - ~~科技树（Q85，`src/qb/TechTree.tsx`，商户主页的答卷树与结果页的"看看下一步"）~~已由 F-S2c2 删去（D5）：商户主页在答卷列表上方说明"即将更新"（读不到前置，按层显示只剩一层），F-S3 改为看知识结构图。
-- 协议答题（Q86，`plans/Q86-agreement-quiz-tree.md`）：三种"协议理解"认证（`TERMS_APP_UNDERSTOOD`、`CONTEST_RULES_UNDERSTOOD`、`TERMS_SPONSOR_UNDERSTOOD`）是官方账号出的普通轮次（Q69）；
-  同意的流程一字不改。~~首页与账户页的"确认你的理解"卡、受控参数 `qb.understanding.enabled`、参数 `qb.tree.platform-handle` 与账户页的"平台之树"入口~~已由 F-S2c2 删去（D3）。发布页的前置可以是"先持有：X"（`data-certification`），链到当前一轮；
+- ~~协议答题（Q86，`plans/Q86-agreement-quiz-tree.md`）：三种"协议理解"认证由官方账号出题、登记为认证的轮次（Q69）；"确认你的理解"卡、参数 `qb.understanding.enabled` 与 `qb.tree.platform-handle`、发布页的"先持有：X"~~已由 F-S2c2 删去（D3、D4；认证、轮与记录 D1 在 F-S2c2b）。同意的流程一字不改。
 
 ### 7.2 发起方页面（`quizbuks-web/sponsor`）
 

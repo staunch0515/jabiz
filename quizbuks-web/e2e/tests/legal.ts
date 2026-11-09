@@ -11,13 +11,11 @@ import { adminToken, expect, insert, PASSWORD, rows, tokenOf, verifiedUser } fro
 
 export const CONTENT_ROLE = 'QB_E2E_CONTENT'
 // Q22: the content administrator also allows a sponsor's reward methods (reward-methods.spec).
-// Q77: qb.certification.manage, so that the certificates' test can grant one by hand (the first administrator has
-// no verified address). Q86: qb.certification.admin, so that the agreement quiz's test can mark an official account.
 // Q47c: the audience rules and their prices (audience-pricing.spec).
 // F-S1: qb.admin.operators.write, so that the tests make operators (operators.ts: QuizBuks's writes need a verified address).
 // F-S9: the word list of topics (topics.spec), which the content managers keep.
 const CONTENT_PERMISSIONS = ['qb.admin.content.write', 'qb.admin.users.read', 'qb.admin.reward-methods',
-  'qb.certification.manage', 'qb.certification.admin', 'qb.audience.rules.write', 'qb.audience.prices.write',
+  'qb.audience.rules.write', 'qb.audience.prices.write',
   'qb.admin.operators.write', 'qb.admin.topic.read', 'qb.admin.topic.write']
 
 const ROLES = 'urn:jabiz:dataset:platform:SecRole'
