@@ -31,6 +31,7 @@ import { SoundSwitch } from '../qb/SoundSettings'
 import { Link, navigate, Redirect, useLocation } from '../qb/router'
 import { MenuItem, MenuList } from './Menu'
 import { LikedTopics } from './LikedTopics'
+import { BlockList } from '../blocks/BlockList'
 import { ProfileDetails } from './ProfileDetails'
 import { QuizLanguages } from './QuizLanguages'
 import { PROFILE_QUERY, ProfileForm } from './ProfileForm'
@@ -295,6 +296,10 @@ function PreferencesPart() {
       </AccountSection>
       <AccountSection title={t('sound.title')} testId="account-sound">
         <SoundSwitch />
+      </AccountSection>
+      {/* F-S8: everything blocked, each unblocked on its own. */}
+      <AccountSection title={tApp('blocks.title')} testId="account-blocks">
+        <BlockList />
       </AccountSection>
       <AccountInstallEntry />
     </div>

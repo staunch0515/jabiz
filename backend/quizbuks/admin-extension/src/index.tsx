@@ -28,8 +28,9 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban } from 'lucide-react'
 import TopicsPage from './TopicsPage'
+import BlocksPage from './BlocksPage'
 
 import BankTopUpPage from './BankTopUpPage'
 import TreesPage from './TreesPage'
@@ -135,6 +136,8 @@ export default defineExtension({
     { path: '/qb/shared-videos/:sharedVideoId', element: <SharedVideoPage /> },
     // F-S9: the word list of topics (headquarters).
     { path: PATH.topics, element: <TopicsPage /> },
+    // F-S8: the figures of blocking (headquarters, aggregates only).
+    { path: PATH.blocks, element: <BlocksPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -277,6 +280,8 @@ export default defineExtension({
         { key: 'qb-users', label: 'menu.users', path: PATH.users, icon: Users, permission: PERMISSION.usersRead },
         // F-S9: the word list of topics, kept by headquarters, with its figures by topic.
         { key: 'qb-topics', label: 'menu.topics', path: PATH.topics, icon: Tag, permission: PERMISSION.topicRead },
+        // F-S8: the figures of blocking (totals by kind, the Sponsors most blocked, rounded).
+        { key: 'qb-blocks', label: 'menu.blocks', path: PATH.blocks, icon: Ban, permission: PERMISSION.blockRead },
         { key: 'qb-attempts', label: 'menu.attempts', path: PATH.attempts, icon: ListChecks,
           permission: PERMISSION.usersRead },
         // Q48a: the operators, and the spot checks of the reviews they decided.

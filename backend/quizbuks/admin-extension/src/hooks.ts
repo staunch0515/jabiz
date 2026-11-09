@@ -156,6 +156,7 @@ export const QUEUE = {
   abuseReports: ['qb-ext', 'abuse-reports'],
   region: ['qb-ext', 'region'],
   topics: ['qb-ext', 'topics'],
+  blocks: ['qb-ext', 'blocks'],
   sharedVideos: ['qb-ext', 'shared-videos'],
 
 } as const

@@ -72,6 +72,9 @@ public class TakerErasure {
                     // Q82: the sponsors they blocked (their conversations stay, holding only their id; what they wrote
                     // is emptied with every account's messages, SponsorErasure).
                     ErasedEntity.delete(com.jabiz.quizbuks.conversation.QbConversations.BLOCK, "takerId"),
+                    // F-S8: what they blocked (publications, quizzes, Sponsors, video providers) goes with them; the
+                    // rows naming an erased Sponsor as the object stay, holding ids only.
+                    ErasedEntity.delete(com.jabiz.quizbuks.block.QbBlocks.BLOCK, "userId"),
                     // Q77: their certificates (the verify page finds none since) and the PDFs issued of them.
                     ErasedEntity.delete(QbCertificates.CERTIFICATE, "userId", "holderName", "verifyKey")
                         .documents(QbCertificates.LAYOUT_ID),

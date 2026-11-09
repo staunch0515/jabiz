@@ -363,6 +363,9 @@ public final class QbParams {
      */
     public static final String TOPIC_MAX_PER_QUIZ = "qb.topic.max-per-quiz";
     public static final String TOPIC_CUSTOM_MAX_LENGTH = "qb.topic.custom-max-length";
+    /** F-S8: the most blocks one taker has, and the smallest group of blockers a sponsor is shown a count of. */
+    public static final String BLOCK_MAX_PER_USER = "qb.block.max-per-user";
+    public static final String BLOCK_COUNT_MIN_GROUP = "qb.block.count-min-group";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -623,7 +626,16 @@ public final class QbParams {
         new Param(PLAY_MAX_PER_ATTEMPT, Map.of("type", "numeric", "precision", 6, "scale", 0), "100",
             "The most questions one attempt gives; a larger bank is drawn from (at most 200)"),
         new Param(CONTENT_IMPORT_BATCH, Map.of("type", "numeric", "precision", 6, "scale", 0), "200",
-            "The most questions one import batch adds to a quiz"));
+            "The most questions one import batch adds to a quiz"),
+        // F-S8: blocking (ordinary; last, so that the setup's earlier keys stay as they were).
+        new Param(BLOCK_MAX_PER_USER, Map.of("type", "numeric", "precision", 5, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.block.BlockRules.DEFAULT_MAX_PER_USER),
+            "The most blocks one taker has (publications, quizzes, Sponsors and video providers together; at most "
+                + "10000)"),
+        new Param(BLOCK_COUNT_MIN_GROUP, Map.of("type", "numeric", "precision", 4, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.block.BlockRules.DEFAULT_COUNT_MIN_GROUP),
+            "Below how many blockers a Sponsor is told only \"fewer than\" this number (at least 5); above it the "
+                + "count is rounded down to tens"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {
