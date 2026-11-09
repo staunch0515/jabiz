@@ -168,7 +168,9 @@ class QbRolesTest {
             // Q77: the PDFs of their own certificates.
             "document.archive.read",
             // Q82: writing to the sponsors of the quizzes they answered (each process finds their side).
-            QbPermissions.CONVERSATION_USE);
+            QbPermissions.CONVERSATION_USE,
+            // F-C10: the AI help (their own conversations only).
+            QbPermissions.HELP_USE);
         // Q9d: besides their own (qb.*), the receipts they issued (the platform shows each sponsor only theirs).
         assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).allMatch(p -> p.startsWith("qb.")
                 || "document.archive.read".equals(p))
@@ -179,6 +181,15 @@ class QbRolesTest {
                 QbPermissions.BENEFIT_READ);
         assertThat(QbRoles.of(QbRoles.TAKER).permissions()).doesNotContain(QbPermissions.BENEFIT_USE);
         assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.BENEFIT_READ);
+        // F-C10: the help's people are headquarters' content administrators and the operators; nobody runs its
+        // system processes.
+        assertThat(QbRoles.of(QbRoles.SPONSOR).permissions()).contains(QbPermissions.HELP_USE)
+            .doesNotContain(QbPermissions.ADMIN_HELP);
+        for (String role : List.of(QbRoles.ADMIN_CONTENT, QbRoles.OPERATOR)) {
+            assertThat(QbRoles.of(role).permissions()).as(role).contains(QbPermissions.ADMIN_HELP);
+        }
+        QbRoles.all().forEach(role -> assertThat(role.permissions()).as(role.code())
+            .doesNotContain(QbPermissions.HELP_SYSTEM));
     }
 
     @Test
