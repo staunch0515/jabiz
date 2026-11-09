@@ -73,6 +73,18 @@ public final class ContentCodes {
     /** Q99b: a short link that does not lead to one video ({@code QB_VIDEO_LINK_RESOLVE}). */
     public static final String VIDEO_LINK_NOT_RESOLVED = "QB_VIDEO_LINK_NOT_RESOLVED";
 
+    /** F-S6: a survey's questions are worth 1 point each ({@code QB_QUESTION_POINTS_SET}). */
+    public static final String SURVEY_POINTS_FIXED = "QB_QUESTION_SURVEY_POINTS_FIXED";
+
+    /** F-S6: an import batch of more questions than {@code qb.content.import.batch-size}. */
+    public static final String IMPORT_BATCH_TOO_LARGE = "QB_IMPORT_BATCH_TOO_LARGE";
+    /** F-S6: a batch imported into a quiz holds questions only (no materials). */
+    public static final String IMPORT_QUESTIONS_ONLY = "QB_IMPORT_QUESTIONS_ONLY";
+    /** F-S6: a batch's questions in another language than the quiz's. */
+    public static final String IMPORT_LANGUAGE = "QB_IMPORT_LANGUAGE";
+    /** F-S6: an import undone already. */
+    public static final String IMPORT_UNDONE = "QB_IMPORT_UNDONE";
+
     /** Every code above. */
     public static final List<String> ALL = List.of(QUIZ_TITLE_BLANK, QUIZ_TIME_LIMIT_RANGE, QUESTION_POINTS_RANGE,
         MATERIAL_URL_FORMAT, QUIZ_CHANGED, CONTENT_NOT_IN_QUIZ, TOO_MANY_QUESTIONS, TOO_MANY_MATERIALS, ORDER_MISMATCH,
@@ -81,7 +93,8 @@ public final class ContentCodes {
         VERSION_UNCHANGED, TOO_LARGE, MATERIAL_VIDEO_NOT_EMBEDDABLE, QUIZ_ONE_WATCH_VIDEO, BASE_HAS_TRANSLATIONS,
         LANGUAGE_IS_BASE, TRANSLATION_LANGUAGE, TRANSLATION_KEY, TRANSLATION_NO_SOURCE, TRANSLATION_TOO_LONG,
         TRANSLATION_FIELD, MATERIAL_VARIANT_EXISTS, MATERIAL_VARIANT_FIXED, MATERIAL_DURATION_REQUIRED,
-        MATERIAL_DURATION_RANGE, VIDEO_LINK_NOT_RESOLVED);
+        MATERIAL_DURATION_RANGE, VIDEO_LINK_NOT_RESOLVED, SURVEY_POINTS_FIXED,
+        IMPORT_BATCH_TOO_LARGE, IMPORT_QUESTIONS_ONLY, IMPORT_LANGUAGE, IMPORT_UNDONE);
 
     private ContentCodes() {}
 }
