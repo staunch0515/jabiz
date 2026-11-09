@@ -35,6 +35,8 @@ public final class QbFees {
     /** A request's kinds: a fee charged by hand, an invoice voided. */
     public static final String REQUEST_MANUAL = "MANUAL";
     public static final String REQUEST_VOID = "VOID";
+    /** F-M2: platform fee Kudos granted to a sponsor by hand (four eyes, within {@code qb.fee-credit.manual.max}). */
+    public static final String REQUEST_CREDIT = "CREDIT";
     /** A request's statuses: waiting for the approval, done, rejected (or approved by the sponsor themselves). */
     public static final String REVIEW = "REVIEW";
     public static final String DONE = "DONE";
@@ -182,12 +184,14 @@ public final class QbFees {
         eb.field("requestId", f -> f.physicalColumn("request_id").immutable(true).required(true).generated(true)
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:fee-request"));
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true).processOnly()
-            .asCode(REQUEST_KIND_DICTIONARY, REQUEST_MANUAL, REQUEST_VOID));
+            .asCode(REQUEST_KIND_DICTIONARY, REQUEST_MANUAL, REQUEST_VOID, REQUEST_CREDIT));
         eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).processOnly()
             .asText(128));
         // A manual fee: what and why; a void: which invoice and why.
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).processOnly().asMonetary("JPY", 0));
         eb.field("invoiceId", f -> f.physicalColumn("invoice_id").immutable(true).processOnly().asText(36));
+        // A grant by hand (F-M2): for how many days it is valid (none: qb.fee-credit.valid-days at the approval).
+        eb.field("validDays", f -> f.physicalColumn("valid_days").immutable(true).processOnly().asNumeric(3, 0));
         eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true).processOnly()
             .asText(REASON_LENGTH, true));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
@@ -200,6 +204,7 @@ public final class QbFees {
         eb.field("decidedAt", f -> f.physicalColumn("decided_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         // What the approval made: the charge, or the invoice voided.
         eb.field("chargeId", f -> f.physicalColumn("charge_id").processOnly().asText(36));
+        eb.field("grantId", f -> f.physicalColumn("grant_id").processOnly().asText(36));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.stateTransitions("status", st -> st
             .initial(REVIEW)

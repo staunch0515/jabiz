@@ -31,6 +31,7 @@ results:
   taxPayable:       { kind: { type: monetary, currency: JPY, scale: 0 } }
   entryFeesUnsettled: { kind: { type: monetary, currency: JPY, scale: 0 } }
   feeCredit:        { kind: { type: monetary, currency: JPY, scale: 0 } }
+  feeCreditPromotion: { kind: { type: monetary, currency: JPY, scale: 0 } }
 list:
   filters: [category]
   sorts:   [seq]
@@ -97,7 +98,8 @@ per_tx AS (
            coalesce(sum(net) FILTER (WHERE code = '4120'), 0) AS a4120,
            coalesce(sum(net) FILTER (WHERE code = '2150'), 0) AS a2150,
            coalesce(sum(net) FILTER (WHERE code = '2170'), 0) AS a2170,
-           coalesce(sum(net) FILTER (WHERE code = '2190'), 0) AS a2190
+           coalesce(sum(net) FILTER (WHERE code = '2190'), 0) AS a2190,
+           coalesce(sum(net) FILTER (WHERE code = '5140'), 0) AS a5140
     FROM moves
     GROUP BY tx_key, src, ref_kind, reversal
 ),
@@ -173,6 +175,12 @@ kinds AS (
                     AND p.a2120 > 0 AND p.a2170 < 0 THEN 'ENTRY_FEE'
                WHEN p.src = 'QbWallet' AND NOT p.reversal AND p.accts = '2160,2170'
                     AND p.a2170 > 0 AND p.a2160 < 0 THEN 'ENTRY_FEE_SETTLED'
+               -- F-M2: platform fee Kudos granted (the promotion expenses 5140 against 2190, the source the lot) and
+               -- what expired of them unused, voided back.
+               WHEN p.src = 'QbFeeCreditGrant' AND NOT p.reversal AND p.accts = '2190,5140'
+                    AND p.a5140 > 0 AND p.a2190 < 0 THEN 'FEE_CREDIT_GRANTED'
+               WHEN p.src = 'QbFeeCreditGrant' AND NOT p.reversal AND p.accts = '2190,5140'
+                    AND p.a5140 < 0 AND p.a2190 > 0 THEN 'FEE_CREDIT_VOIDED'
                ELSE 'OTHER'
            END AS kind
     FROM per_tx p
@@ -197,14 +205,15 @@ SELECT
     coalesce(sum(k.a4120), 0)   AS feeRevenue,
     coalesce(sum(k.a2150), 0)   AS taxPayable,
     coalesce(sum(k.a2170), 0)   AS entryFeesUnsettled,
-    coalesce(sum(k.a2190), 0)   AS feeCredit
+    coalesce(sum(k.a2190), 0)   AS feeCredit,
+    coalesce(sum(k.a5140), 0)   AS feeCreditPromotion
 FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'), (5, 'REFUND'), (6, 'DISPUTE'),
              (7, 'STRIPE_FEE'), (8, 'REWARD'), (9, 'TRANSFER_SENT'), (10, 'TRANSFER_SETTLED'), (11, 'WITHDRAWAL_PAID'),
              (12, 'TRANSFER_FAILED'), (13, 'TRANSFER_REVERSED'), (14, 'PAYOUT'), (15, 'PAYOUT_FAILED'),
              (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'REFERRAL_REWARD'), (19, 'CASH_TOPUP'),
              (20, 'CASH_BANK_TOPUP'), (21, 'CASH_REFUND'), (22, 'CASH_DISPUTE'), (23, 'KUDOS_BOUGHT'),
              (24, 'KUDOS_SOLD'), (25, 'FEE_CHARGED'), (26, 'FEE_PAID'), (27, 'FEE_VOIDED'), (28, 'ENTRY_FEE'),
-             (29, 'ENTRY_FEE_SETTLED'), (30, 'OTHER'))
+             (29, 'ENTRY_FEE_SETTLED'), (30, 'FEE_CREDIT_GRANTED'), (31, 'FEE_CREDIT_VOIDED'), (32, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

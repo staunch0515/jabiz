@@ -41,6 +41,8 @@ public final class QbLedger {
      * never turned into Kudos or money. Its lines carry the sponsor; each grant is a lot ({@code QbFeeCreditGrant}).
      */
     public static final String FEE_CREDIT = "2190";
+    /** F-M2: what the platform spends granting platform fee Kudos (granted less voided), apart from 5120's Kudos. */
+    public static final String FEE_CREDIT_PROMOTION = "5140";
 
     /** The name of the dimension that carries the party (a user's id) on the wallet accounts. */
     public static final String PARTY = "party";
@@ -65,7 +67,8 @@ public final class QbLedger {
         new Account(PLATFORM_FEE_REVENUE, "Platform fee revenue", "REVENUE"),
         new Account(TAX_PAYABLE, "Consumption tax payable", "LIABILITY"),
         new Account(ENTRY_FEES_UNSETTLED, "Entry fees unsettled", "LIABILITY"),
-        new Account(FEE_CREDIT, "Sponsor platform fee Kudos (fee credit)", "LIABILITY"));
+        new Account(FEE_CREDIT, "Sponsor platform fee Kudos (fee credit)", "LIABILITY"),
+        new Account(FEE_CREDIT_PROMOTION, "Promotion expenses (platform fee Kudos granted)", "EXPENSE"));
 
     private QbLedger() {}
 }

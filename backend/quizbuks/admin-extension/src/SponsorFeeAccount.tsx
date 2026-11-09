@@ -1,13 +1,68 @@
-import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { DataTable, DescriptionList, EXTENSION_NAMESPACE, PageState, type ColumnDef } from '@jabiz/admin'
+import { Alert, AlertDescription, ApiError, Button, DataTable, DescriptionList, EXTENSION_NAMESPACE, notify, PageState,
+  useAuth, type ColumnDef } from '@jabiz/admin'
 import { EmptyState, LoadFailed, Section } from './components'
-import { readFeeAccount, readFeeAccountLots, readFeePayments, type FeeAccountLot, type FeePaymentPart } from './fee-api'
+import { confirmOnboarding, readFeeAccount, readFeeAccountLots, readFeePayments, readOnboarding, type FeeAccountLot,
+  type FeePaymentPart } from './fee-api'
 import { money, useLabels, usePaged, when } from './hooks'
-import { DICTIONARY } from './ids'
+import { DICTIONARY, PERMISSION } from './ids'
 
 const right = { className: 'text-right tabular-nums' }
+
+/**
+ * F-M2: the Sponsor's onboarding platform fee Kudos, on the operator's page. A lead of the Sponsor's operator confirms
+ * that the Sponsor's details are complete, which grants them once; the server refuses while the grant is switched off,
+ * for a Sponsor not approved or banned, once given, and for a member who is not a lead (its words are shown).
+ */
+function OnboardingGrant({ userId }: { userId: string }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const queryClient = useQueryClient()
+  const key = ['qb-ext', 'fee-onboarding', userId]
+  const onboarding = useQuery({ queryKey: key, queryFn: () => readOnboarding(userId) })
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  if (onboarding.isError) return <LoadFailed error={onboarding.error} onRetry={() => void onboarding.refetch()} />
+  if (onboarding.isPending || !onboarding.data) return null
+  const { enabled, grantedAt, amount, expiresAt } = onboarding.data
+  const confirm = async () => {
+    setBusy(true)
+    setProblem(null)
+    try {
+      await confirmOnboarding(userId)
+      notify.success(t('fee.onboarding.done'))
+      void queryClient.invalidateQueries({ queryKey: ['qb-ext'] })
+    } catch (e) {
+      setProblem(e instanceof ApiError ? e.display : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="flex flex-col gap-2" data-testid="sponsor-fee-onboarding">
+      <h3 className="font-semibold">{t('fee.onboarding.title')}</h3>
+      {grantedAt ? (
+        <p className="text-sm" data-testid="fee-onboarding-granted">
+          {t('fee.onboarding.granted', { amount: money(amount ?? '0'), at: when(grantedAt), until: when(expiresAt) })}
+        </p>
+      ) : (
+        <>
+          <p className="text-muted-foreground text-sm">{t(enabled ? 'fee.onboarding.hint' : 'fee.onboarding.off')}</p>
+          <span>
+            <Button size="sm" disabled={!enabled || busy} aria-busy={busy || undefined} onClick={() => void confirm()}
+              data-testid="fee-onboarding-confirm">
+              {t('fee.onboarding.confirm')}
+            </Button>
+          </span>
+        </>
+      )}
+      {problem && (
+        <Alert variant="destructive" data-testid="fee-onboarding-problem"><AlertDescription>{problem}</AlertDescription></Alert>
+      )}
+    </div>
+  )
+}
 
 /**
  * One Sponsor's account that pays the platform's fees (F-M1), read only: the granted credit and the cash, the lots with
@@ -17,6 +72,7 @@ const right = { className: 'text-right tabular-nums' }
  */
 export function SponsorFeeAccount({ userId, operator }: { userId: string; operator: boolean }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const { can } = useAuth()
   const subAccount = useLabels(DICTIONARY.feeSubAccount)
   const creditSource = useLabels(DICTIONARY.feeCreditSource)
   const cashSource = useLabels(DICTIONARY.cashSource)
@@ -64,6 +120,7 @@ export function SponsorFeeAccount({ userId, operator }: { userId: string; operat
     <Section title={t('fee.account.title')} testId="sponsor-fee-account">
       <p className="text-muted-foreground text-sm">{t('fee.account.hint')}</p>
       {totals}
+      {operator && can(PERMISSION.feeCreditOnboarding) && <OnboardingGrant userId={userId} />}
       <div className="flex flex-col gap-2" data-testid="sponsor-fee-lots">
         <h3 className="font-semibold">{t('fee.account.lots')}</h3>
         {lots.query.isError

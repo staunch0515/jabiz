@@ -64,6 +64,9 @@ export function FeeAccount({ wallet }: { wallet: SponsorWallet }) {
       cell: ({ row }) => (row.original.arrivedAt ? formatDateTime(row.original.arrivedAt) : '—') },
     { id: 'expiresAt', header: t('wallet.feeAccount.expires'), enableSorting: false,
       cell: ({ row }) => (row.original.expiresAt ? formatDateTime(row.original.expiresAt) : '—') },
+    // F-M2: what of each lot was spent (the amount less what is left).
+    { id: 'used', header: t('wallet.feeAccount.used'), enableSorting: false, meta: { className: 'text-right' },
+      cell: ({ row }) => <span data-testid="fee-lot-used">{formatKudos(row.original.amount - row.original.remaining)}</span> },
     { id: 'remaining', header: t('wallet.feeAccount.remaining'), enableSorting: false, meta: { card: 'badge', className: 'text-right' },
       cell: ({ row }) => <span data-testid="fee-lot-remaining">{formatKudos(row.original.remaining)}</span> },
   ], [t, subAccount, sourceOf])

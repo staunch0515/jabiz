@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.fee;
 
 import com.jabiz.approval.ContentHash;
 import com.jabiz.entity.Violation;
+import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
@@ -9,6 +10,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.identity.SponsorStatus;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.wallet.QbWallets;
 import com.jabiz.quizbuks.wallet.TransferProcesses;
 import com.jabiz.runtime.BusinessRuleViolationException;
@@ -20,6 +22,7 @@ import com.jabiz.runtime.approval.RequireApproval;
 import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.SaveChanges;
@@ -27,6 +30,8 @@ import com.jabiz.runtime.task.CloseTasks;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -45,13 +50,16 @@ import static com.jabiz.quizbuks.fee.FeeProcesses.money;
 /**
  * What headquarters asks a second administrator to approve about the platform's fees (Q87, D-Q87-4, D-Q87-6):
  * <ul>
- *   <li>{@value #RECORD} (finance): a fee charged by hand ({@code MANUAL}: the sponsor, the amount, why) or an
- *       invoice voided ({@code VOID}: which, why). The request is written and another administrator's approval asked
+ *   <li>{@value #RECORD} (finance): a fee charged by hand ({@code MANUAL}: the sponsor, the amount, why), an
+ *       invoice voided ({@code VOID}: which, why) or platform fee Kudos granted by hand ({@code CREDIT}, F-M2: the
+ *       sponsor, the amount within {@code qb.fee-credit.manual.max} (none set: no cap), why, and for how many days). The request is written and another administrator's approval asked
  *       (the recorder is the preparer, so they cannot approve their own); nothing is charged or voided before it.</li>
  *   <li>{@value #APPROVAL_RESULT} ({@code internal()}, on the approval's events): an approval of the request's own
  *       case charges the fee ({@code QB_FEE_CHARGE}, under the sponsor's wallet lock, in the current month) or voids
  *       the invoice (its charges' postings reversed, a payment given back to the cash account); a rejection, or an
- *       approval by the sponsor themselves, rejects the request.</li>
+ *       approval by the sponsor themselves, rejects the request. A grant is made by {@code QB_FEE_CREDIT_GRANT}
+ *       (source {@code MANUAL}, once per request); one above the cap when approved (the cap lowered since) is
+ *       rejected.</li>
  * </ul>
  */
 public final class FeeRequests {
@@ -67,15 +75,25 @@ public final class FeeRequests {
      * @param invoiceId a void: the invoice
      * @param reason    why, as the approver reads it
      */
-    public record RequestInput(@NotBlank @Pattern(regexp = "MANUAL|VOID") String kind,
+    public record RequestInput(@NotBlank @Pattern(regexp = "MANUAL|VOID|CREDIT") String kind,
         @Size(max = 128) String sponsorId,
         @DecimalMin("1") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @Pattern(regexp = "[0-9a-fA-F-]{36}") String invoiceId,
-        @NotBlank @Size(max = QbFees.REASON_LENGTH) String reason) {}
+        @NotBlank @Size(max = QbFees.REASON_LENGTH) String reason,
+        @Min(1) @Max(FeeCreditRules.MAX_VALID_DAYS) Integer validDays) {
 
-    /** @param approvalRequestId the request another administrator decides */
+        /** A fee by hand or a void, as before F-M2 (no validity). */
+        public RequestInput(String kind, String sponsorId, BigDecimal amount, String invoiceId, String reason) {
+            this(kind, sponsorId, amount, invoiceId, reason, null);
+        }
+    }
+
+    /**
+     * @param approvalRequestId the request another administrator decides
+     * @param grantId           a grant by hand: the lot the approval made
+     */
     public record RequestOutput(String requestId, String kind, String status, String approvalRequestId,
-        String chargeId) {}
+        String chargeId, String grantId) {}
 
     static final String INPUT = "input";
     static final String SPONSOR = "sponsor";
@@ -94,6 +112,9 @@ public final class FeeRequests {
     static final String STATUS_AFTER = "statusAfter";
     static final String DO_VOID = "doVoid";
     static final String DO_CHARGE = "doCharge";
+    static final String DO_GRANT = "doGrant";
+    static final String GRANTED = "granted";
+    static final String CAP = "cap";
     /** How many decisions of one request are read (one person at most decides each level). */
     static final int MAX_DECISIONS = 20;
 
@@ -109,6 +130,9 @@ public final class FeeRequests {
             .requiresVerifiedEmail()
             .contextFactory(FeeProcesses::context)
             .outputMapper(FeeRequests::output)
+            // F-M2: the cap of a grant by hand; not set (the setup does not create it) is no cap.
+            .step("Load the cap of a grant by hand", LoadParams.<ProcessContext>optional(ProcessContext::opTime, CAP,
+                QbParams.FEE_CREDIT_MANUAL_MAX))
             .step("Load the sponsor, the invoice and the review rule", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.And(List.of(
@@ -139,15 +163,21 @@ public final class FeeRequests {
     static void check(ProcessContext ctx) {
         RequestInput input = input(ctx);
         List<Violation> problems = new ArrayList<>();
-        boolean manual = QbFees.REQUEST_MANUAL.equals(input.kind());
+        boolean manual = bySponsor(input.kind());
+        boolean credit = QbFees.REQUEST_CREDIT.equals(input.kind());
         EntityInstance invoice = first(ctx, INVOICE);
         if (manual) {
             if (input.amount() == null) {
                 problems.add(new Violation("amount", FeeCodes.FEE_PARAMS, "A manual fee has an amount", Map.of()));
             }
             if (first(ctx, SPONSOR) == null) {
-                problems.add(new Violation("sponsorId", FeeCodes.FEE_SPONSOR, "Only an approved sponsor is charged",
+                problems.add(new Violation("sponsorId", credit ? FeeCodes.FEE_CREDIT_SPONSOR : FeeCodes.FEE_SPONSOR,
+                    credit ? "Only an approved sponsor is granted platform fee Kudos" : "Only an approved sponsor is charged",
                     Map.of()));
+            }
+            if (credit && input.amount() != null && !FeeCreditRules.withinCap(input.amount(), cap(ctx))) {
+                problems.add(new Violation("amount", FeeCodes.FEE_CREDIT_MAX,
+                    "Above the most one grant by hand may be", Map.of("max", cap(ctx).setScale(0).toPlainString())));
             }
         } else {
             if (invoice == null) {
@@ -175,15 +205,33 @@ public final class FeeRequests {
             Map.of());
     }
 
+    /** Whether a kind of request names its sponsor and an amount (a fee or a grant by hand), not an invoice. */
+    static boolean bySponsor(Object kind) {
+        return QbFees.REQUEST_MANUAL.equals(kind) || QbFees.REQUEST_CREDIT.equals(kind);
+    }
+
+    /** A grant's validity in days as recorded; null for none (the parameter's at the approval). */
+    static Integer validDays(EntityInstance row) {
+        Object days = row.get("validDays");
+        return days == null ? null : money(days).intValueExact();
+    }
+
+    /** The cap of a grant by hand in effect; null when not set (no cap). */
+    static BigDecimal cap(ProcessContext ctx) {
+        ParamValues params = ctx.get(CAP, ParamValues.class);
+        return params == null ? null : params.find(QbParams.FEE_CREDIT_MANUAL_MAX, BigDecimal.class).orElse(null);
+    }
+
     static void insert(ProcessContext ctx) {
         RequestInput input = input(ctx);
-        boolean manual = QbFees.REQUEST_MANUAL.equals(input.kind());
+        boolean manual = bySponsor(input.kind());
         EntityInstance invoice = first(ctx, INVOICE);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("kind", input.kind());
         values.put("sponsorId", manual ? input.sponsorId() : invoice.get("sponsorId"));
         values.put("amount", manual ? input.amount() : null);
         values.put("invoiceId", manual ? null : String.valueOf(invoice.id()));
+        values.put("validDays", QbFees.REQUEST_CREDIT.equals(input.kind()) ? input.validDays() : null);
         values.put("reason", input.reason().strip());
         values.put("status", QbFees.REVIEW);
         values.put("requestedBy", ctx.request().actorId());
@@ -216,6 +264,10 @@ public final class FeeRequests {
         content.put("amount", row.get("amount") == null ? null : money(row.get("amount")).setScale(0));
         content.put("invoiceId", row.get("invoiceId"));
         content.put("reason", row.get("reason"));
+        // F-M2: only a grant's (a request recorded before keeps the content it was asked to approve).
+        if (row.get("validDays") != null) {
+            content.put("validDays", validDays(row));
+        }
         return ApprovalCase.of(String.valueOf(row.id()), facts, content).preparedBy(row.get("requestedBy"))
             .reference((String) row.get("kind") + " " + (row.get("invoiceId") != null ? row.get("invoiceId")
                 : row.get("sponsorId")));
@@ -233,6 +285,8 @@ public final class FeeRequests {
                 .internal()
                 .contextFactory(FeeProcesses::context)
                 .outputMapper(FeeRequests::output)
+                .step("Load the cap of a grant by hand", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
+                    CAP, QbParams.FEE_CREDIT_MANUAL_MAX))
                 .step("Find the request", QueryEntities.<ProcessContext>of(QbFees.defaultDataset(QbFees.REQUEST),
                     ctx -> FeeProcesses.byId("requestId", QbFees.APPROVAL_SUBJECT.equals(approvalInput(ctx).subject())
                         ? approvalInput(ctx).entityId() : null), FOUND))
@@ -265,6 +319,13 @@ public final class FeeRequests {
                         FeeRules.MANUAL, FeeRules.period(ctx.opTime(), zone), money(first(ctx, ROW).get("amount")),
                         first(ctx, ROW).get("reason"), "request:" + first(ctx, ROW).id(), first(ctx, ROW).get("requestedBy")),
                     CHARGED))
+                // F-M2: a grant by hand, once per request (the wallet lock is held).
+                .step("Grant the platform fee Kudos", CallProcess.<ProcessContext>when(
+                    ctx -> Boolean.TRUE.equals(ctx.get(DO_GRANT)), FeeCredits.GRANT, 1,
+                    ctx -> new FeeCredits.GrantInput(first(ctx, ROW).get("sponsorId"), QbFeeAccount.MANUAL,
+                        FeeCreditRules.manualKey(first(ctx, ROW).id()), money(first(ctx, ROW).get("amount")),
+                        validDays(first(ctx, ROW))),
+                    GRANTED))
                 // A void reverses the invoice's postings: the charges' (and a prepaid charge's own payment) by their
                 // source, and a postpaid payment by the invoice's transaction.
                 .step("Find the invoice's postings", RunTemplate.<ProcessContext>of(TRANSACTIONS_TEMPLATE, ctx -> {
@@ -325,7 +386,8 @@ public final class FeeRequests {
                 ctx.put(STATUS_AFTER, QbFees.REJECTED);
                 return;
             }
-            boolean manual = QbFees.REQUEST_MANUAL.equals(row.get("kind"));
+            boolean manual = bySponsor(row.get("kind"));
+            boolean credit = QbFees.REQUEST_CREDIT.equals(row.get("kind"));
             EntityInstance invoice = first(ctx, INVOICE);
             if (!manual && (invoice == null || QbFees.VOID.equals(invoice.get("status")))) {
                 ctx.put(STATUS_AFTER, QbFees.REJECTED);
@@ -335,7 +397,12 @@ public final class FeeRequests {
                 ctx.put(STATUS_AFTER, QbFees.REJECTED);
                 return;
             }
-            ctx.put(manual ? DO_CHARGE : DO_VOID, true);
+            // The cap lowered since the request: what it allows now decides (a control point, A1-6).
+            if (credit && !FeeCreditRules.withinCap(money(row.get("amount")), cap(ctx))) {
+                ctx.put(STATUS_AFTER, QbFees.REJECTED);
+                return;
+            }
+            ctx.put(credit ? DO_GRANT : manual ? DO_CHARGE : DO_VOID, true);
             ctx.put(STATUS_AFTER, QbFees.DONE);
         } else if (ApprovalEntities.REJECTED.equals(input.status()) && rejected(ctx, row)) {
             ctx.put(STATUS_AFTER, QbFees.REJECTED);
@@ -371,6 +438,9 @@ public final class FeeRequests {
         values.put("decidedAt", ctx.opTime());
         if (ctx.contains(CHARGED)) {
             values.put("chargeId", ((FeeProcesses.ChargeOutput) ctx.get(CHARGED)).chargeId());
+        }
+        if (ctx.contains(GRANTED)) {
+            values.put("grantId", ((FeeCredits.GrantOutput) ctx.get(GRANTED)).grantId());
         }
         ctx.changes().update(QbFees.REQUEST, row.id(), row.version(), values);
         if (Boolean.TRUE.equals(ctx.get(DO_VOID))) {
@@ -426,6 +496,8 @@ public final class FeeRequests {
             ? approval.requestId() : row == null ? null : row.get("approvalRequestId");
         return new RequestOutput(row == null ? null : String.valueOf(row.id()), row == null ? null : row.get("kind"),
             status, requestId, ctx.contains(CHARGED) ? ((FeeProcesses.ChargeOutput) ctx.get(CHARGED)).chargeId()
-                : row == null ? null : row.get("chargeId"));
+                : row == null ? null : row.get("chargeId"),
+            ctx.contains(GRANTED) ? ((FeeCredits.GrantOutput) ctx.get(GRANTED)).grantId()
+                : row == null ? null : row.get("grantId"));
     }
 }
