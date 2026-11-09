@@ -3,7 +3,8 @@ id: qb.sponsor.quiz-questions
 description: >-
   F-S6: the questions of one of the sponsor's own quizzes, a page at a time (docs/quizbuks/plans/impl/F-S6.md §3.1) -
   each with its number in the quiz, text, points, number of options and in how many of the quiz's translation
-  languages its text is translated; searched by text (ignoring case) or by number
+  languages its text is translated; F-S6d: how many of its options are correct and whether any has an image (the
+  list's badges, without the draft's options); searched by text (ignoring case) or by number
 entities: [QbQuiz, QbQuestion, QbOption, QbContentTranslation]
 datasets:
   QbQuiz: urn:jabiz:dataset:sponsor:QbQuiz
@@ -25,6 +26,8 @@ results:
   difficulty:  { from: QbQuestion.difficulty }
   optionCount: { kind: { type: numeric, precision: 4, scale: 0 } }
   translated:  { kind: { type: numeric, precision: 4, scale: 0 } }
+  correctCount: { kind: { type: numeric, precision: 4, scale: 0 } }
+  optionImages: { kind: { type: bool } }
 list:
   sorts: [questionNo]
   defaultSort: { field: questionNo, asc: true }
@@ -45,6 +48,10 @@ SELECT
     n.difficulty  AS difficulty,
     CAST((SELECT count(*) FROM {{QbOption}} o
           WHERE o.{{QbOption.questionId}} = n.questionId) AS numeric(4, 0)) AS optionCount,
+    CAST((SELECT count(*) FROM {{QbOption}} o
+          WHERE o.{{QbOption.questionId}} = n.questionId AND o.{{QbOption.correct}}) AS numeric(4, 0)) AS correctCount,
+    EXISTS (SELECT 1 FROM {{QbOption}} o
+            WHERE o.{{QbOption.questionId}} = n.questionId AND o.{{QbOption.image}} IS NOT NULL) AS optionImages,
     CAST((SELECT count(DISTINCT t.{{QbContentTranslation.language}}) FROM {{QbContentTranslation}} t
           WHERE t.{{QbContentTranslation.quizId}} = n.quizId
             AND t.{{QbContentTranslation.elementKey}} = 'question:' || CAST(n.questionId AS text) || '.stem'

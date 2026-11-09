@@ -157,12 +157,16 @@ export interface Translation {
  */
 export interface Draft {
   quiz: Quiz
+  /**
+   * The questions with their options, in their order: all of them in a draft read whole (`readDraft(…, 'all')`: an
+   * export, the preview); none in the editor's (F-S6d), which reads them a page at a time from the server.
+   */
   questions: Question[]
   /** The base materials. */
   materials: Material[]
   /** The other languages' materials, each standing for a base material (`variantOf`). */
   variants: Material[]
-  /** The translations read with it: the quiz's own, or all (`readDraft`, F-S6c). */
+  /** The translations read with it: the quiz's own in the editor's draft, or all (`readDraft`, F-S6c). */
   translations: Translation[]
 }
 
@@ -507,31 +511,56 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
 const QUIZ_KEYS = ['quiz.title', 'quiz.intro', 'quiz.cover']
 
 /**
- * Which translations a draft is read with: only the quiz's own (its title, introduction and cover: what the editor
- * shows from the draft; F-S6c reads the questions' a page at a time, `searchTranslations`), or all of them (an
- * export, the preview).
+ * How much of a quiz a draft is read with. The editor's (`editor`): the quiz, its materials and only its own
+ * translations (title, introduction, cover); a number of requests that does not grow with its questions (F-S6c,
+ * F-S6d): the questions and their translations are read a page at a time (`searchQuestions`, `searchTranslations`),
+ * the summary from the server (`readQuestionSummary`), a question opened alone (`readQuestion`). The whole of it
+ * (`all`): every question, option and translation, read when an export or the preview asks for it.
  */
-export type DraftTranslations = 'quiz' | 'all'
+export type DraftScope = 'editor' | 'all'
 
 /**
  * A quiz's draft, read from the sponsor's datasets; null when it is not theirs or removed (the datasets show only the
- * sponsor's own rows, and of quizzes only those not removed). Its `translations` are the quiz's own unless `all` are
- * asked for: a large bank has tens of thousands.
+ * sponsor's own rows, and of quizzes only those not removed).
  */
-export async function readDraft(quizId: string, translations: DraftTranslations = 'quiz'): Promise<Draft | null> {
+export async function readDraft(quizId: string, scope: DraftScope = 'editor'): Promise<Draft | null> {
+  const all = scope === 'all'
   const [quiz, questions, options, materials, images, rows] = await Promise.all([
     readQuizRow(quizId),
-    readAll(CONTENT_DATASET.question, quizId, BY_SEQ),
-    readAll(CONTENT_DATASET.option, quizId, BY_SEQ),
+    all ? readAll(CONTENT_DATASET.question, quizId, BY_SEQ) : Promise.resolve([]),
+    all ? readAll(CONTENT_DATASET.option, quizId, BY_SEQ) : Promise.resolve([]),
     readAll(CONTENT_DATASET.material, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.materialImage, quizId, BY_SEQ),
-    translations === 'all'
+    all
       ? readAll(CONTENT_DATASET.translation, quizId, [{ field: 'elementKey', asc: true }])
       : readWhere(CONTENT_DATASET.translation, [{ field: 'quizId', op: 'eq', value: quizId },
         { field: 'elementKey', op: 'in', values: QUIZ_KEYS }], [{ field: 'elementKey', asc: true }]),
   ])
   if (!quiz) return null
   return assembleDraft(quiz, questions, options, materials, images, rows)
+}
+
+/** F-S6d: the summary line over a quiz's questions (`qb.sponsor.quiz-question-summary`), counted by the server. */
+export interface QuestionSummary {
+  questionCount: number
+  fullScore: number
+  /** Scored questions by their correct options: exactly one, several. */
+  single: number
+  multiple: number
+  /** Questions with no correct option, and the first of them. */
+  unmarked: number
+  firstUnmarked: { questionId: string; no: number } | null
+}
+
+export async function readQuestionSummary(quizId: string): Promise<QuestionSummary> {
+  const page = await runQuery<Row>(CONTENT_TEMPLATE.quizQuestionSummary, { params: { quizId }, limit: 1 })
+  const row = page.items[0] ?? {}
+  return {
+    questionCount: num(row.questionCount), fullScore: num(row.fullScore), single: num(row.singleCount),
+    multiple: num(row.multipleCount), unmarked: num(row.unmarkedCount),
+    firstUnmarked: row.firstUnmarkedId == null ? null
+      : { questionId: String(row.firstUnmarkedId), no: num(row.firstUnmarkedNo) },
+  }
 }
 
 /** F-S6c: what one of the quiz's other languages lacks of the base's texts (`qb.sponsor.quiz-translation-progress`). */
@@ -753,6 +782,26 @@ export interface QuestionRow {
   optionCount: number
   /** In how many of the quiz's other languages its text is translated. */
   translated: number
+  /** F-S6d: how many of its options are correct (a scored question's single or multiple choice). */
+  correctCount: number
+  /** F-S6d: whether any of its options has an image. */
+  optionImages: boolean
+}
+
+function toQuestionRow(row: Row): QuestionRow {
+  return {
+    questionId: String(row.questionId),
+    no: num(row.questionNo),
+    stem: str(row.stem),
+    image: str(row.image),
+    points: num(row.points) || 1,
+    selection: selectionOf(row.selection),
+    difficulty: difficultyOf(row.difficulty),
+    optionCount: num(row.optionCount),
+    translated: num(row.translated),
+    correctCount: num(row.correctCount),
+    optionImages: bool(row.optionImages),
+  }
 }
 
 /** F-S6: what a search box holds, as the template's parameters: a whole number is a place, anything else text. */
@@ -773,17 +822,7 @@ export async function searchQuestions({ quizId, search = '', offset, limit, diff
     limit,
     count: true,
   })
-  const items = page.items.map((row): QuestionRow => ({
-    questionId: String(row.questionId),
-    no: num(row.questionNo),
-    stem: str(row.stem),
-    image: str(row.image),
-    points: num(row.points) || 1,
-    selection: selectionOf(row.selection),
-    difficulty: difficultyOf(row.difficulty),
-    optionCount: num(row.optionCount),
-    translated: num(row.translated),
-  }))
+  const items = page.items.map(toQuestionRow)
   return { items, total: page.total ?? items.length }
 }
 
@@ -791,9 +830,7 @@ export async function searchQuestions({ quizId, search = '', offset, limit, diff
 export async function questionAt(quizId: string, no: number): Promise<QuestionRow | null> {
   const page = await runQuery<Row>(CONTENT_TEMPLATE.quizQuestions, { params: { quizId, no }, limit: 1 })
   const row = page.items[0]
-  return row ? { questionId: String(row.questionId), no: num(row.questionNo), stem: str(row.stem),
-    image: str(row.image), points: num(row.points) || 1, selection: selectionOf(row.selection),
-    difficulty: difficultyOf(row.difficulty), optionCount: num(row.optionCount), translated: num(row.translated) } : null
+  return row ? toQuestionRow(row) : null
 }
 
 /** F-S6c: the state of a text in a language, as `qb.sponsor.quiz-translations` and `languages.ts` judge it. */
