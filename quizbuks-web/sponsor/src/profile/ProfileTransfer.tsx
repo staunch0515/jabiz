@@ -1,7 +1,7 @@
 import { Alert, AlertDescription, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Dialog,
   DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, notify } from '@jabiz/ui'
 import { useQueryClient } from '@tanstack/react-query'
-import { Download, Upload } from 'lucide-react'
+import { Copy, Download, Sparkles, Upload } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { reasonsOf } from '../content/QuizTransfer'
@@ -12,6 +12,9 @@ import { readMyProducts } from '../products/api'
 import { readMailServer } from '../publishing/api'
 import { contentLanguageOf, readMySponsor } from '../qb/api'
 import { navigate } from '../qb/router'
+import { AiPromptDialog } from './AiPromptDialog'
+import { fixPrompt } from './aiPrompt'
+import { copyText } from './copyText'
 import { profilePath } from './paths'
 import { checkProfileImport, exportProfile, importProfile, keepApplyDraft, packageFileName, type ImportPlan }
   from './transfer'
@@ -36,6 +39,7 @@ export function ProfileTransferCard() {
   const [exporting, setExporting] = useState(false)
   const [state, setState] = useState<ImportState | null>(null)
   const [password, setPassword] = useState('')
+  const [prompting, setPrompting] = useState(false)
   // D-Q100-13: the sponsor confirms that deleted products leave the quizzes they are shown on.
   const [leaving, setLeaving] = useState(false)
   const leavingId = useId()
@@ -55,6 +59,13 @@ export function ProfileTransferCard() {
     } finally {
       setExporting(false)
     }
+  }
+
+  // F-C5: the problems as they are, for the AI tool that wrote the file (alone, or in the fixing prompt).
+  const copyProblems = async (problems: string[], withPrompt: boolean) => {
+    const done = await copyText(withPrompt ? fixPrompt(problems) : problems.join('\n'))
+    if (done) notify.success(t('profile.transfer.problemsCopied'))
+    else notify.error(t('profile.transfer.prompt.copyFailed'))
   }
 
   const chosen = async (file: File) => {
@@ -117,7 +128,12 @@ export function ProfileTransferCard() {
           <Upload aria-hidden />
           {t('profile.transfer.import')}
         </Button>
+        <Button variant="outline" data-testid="profile-prompt" onClick={() => setPrompting(true)}>
+          <Sparkles aria-hidden />
+          {t('profile.transfer.prompt.open')}
+        </Button>
       </CardContent>
+      <AiPromptDialog open={prompting} onClose={() => setPrompting(false)} />
       <Dialog open={state !== null} onOpenChange={(open) => {
         if (!open && !busy) setState(null)
       }}>
@@ -198,6 +214,16 @@ export function ProfileTransferCard() {
                 <ul className="list-disc pl-5">
                   {state.problems.map((problem, i) => <li key={i}>{problem}</li>)}
                 </ul>
+                <span className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" data-testid="profile-problems-copy"
+                    onClick={() => void copyProblems(state.problems, false)}>
+                    <Copy aria-hidden />{t('profile.transfer.copyProblems')}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" data-testid="profile-problems-copy-fix"
+                    onClick={() => void copyProblems(state.problems, true)}>
+                    <Copy aria-hidden />{t('profile.transfer.copyFix')}
+                  </Button>
+                </span>
               </AlertDescription>
             </Alert>
           )}
