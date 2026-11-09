@@ -82,6 +82,7 @@ import { InboxPage } from './inbox/InboxPage'
 import { useUnread } from './inbox/useUnread'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
+import { legacyTarget } from './frame/areas'
 import { pendingRedeem, redeemPath, rememberRedeem } from './redeemReturn'
 import { signInOrder } from './signin'
 import { InAppBrowserNotice, useInAppNotice } from './install'
@@ -130,13 +131,6 @@ let pendingStep: { step: SignInStep; to: string } | undefined
 
 /** Every page of a mailed link the platform has (`MAIL_LINK_PAGES`, gap 3), each at `/auth/<page>`. */
 const MAIL_PAGES = new Set(MAIL_LINK_PAGES.map((page) => `/auth/${page}`))
-
-/**
- * Asking for the deletion of an account without the app (Q71; Google Play's account deletion policy): the address
- * given to the stores, which leads to the platform's request page (the address, then a mailed link to confirm).
- */
-const DELETE_ACCOUNT_PATH = '/delete-account'
-const ACCOUNT_DELETION_REQUEST = '/auth/account-deletion'
 
 /**
  * The unsubscribe page of the app's notification mail (platform decision D52 item 3):
@@ -559,7 +553,10 @@ function Routes() {
   // The blocks of mailed links and of the identity provider's return read the address themselves, once: the token
   // and the code are removed from it right away.
   if (path === UNSUBSCRIBE_PATH) return frame(<MailUnsubscribe brand={brand} search={search} />)
-  if (path === DELETE_ACCOUNT_PATH) return <Redirect to={ACCOUNT_DELETION_REQUEST} />
+  // F-F4: an address that changed leads to its page now (the one list, `LEGACY_APP_PATHS`): the stores' address of a
+  // deletion without the app (Q71), the account's old section of the details (Q56).
+  const legacy = legacyTarget(path, search)
+  if (legacy) return <Redirect to={legacy} />
   if (MAIL_PAGES.has(path)) {
     return frame(<MailLinkPage {...navigation} page={path.slice('/auth/'.length)} brand={brand}
       signInPath="/login" passwordResetPath="/password-reset" />)

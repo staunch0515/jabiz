@@ -28,7 +28,7 @@ import { LanguageSelect } from '../qb/LanguageSelect'
 import { QB } from '../qb/messages'
 import { legalPath } from '../qb/legal'
 import { SoundSwitch } from '../qb/SoundSettings'
-import { Link, navigate, Redirect, useLocation } from '../qb/router'
+import { Link, navigate, Redirect } from '../qb/router'
 import { MenuItem, MenuList } from './Menu'
 import { LikedTopics } from './LikedTopics'
 import { BlockList } from '../blocks/BlockList'
@@ -99,14 +99,10 @@ const ICONS: Record<AccountPart, LucideIcon> = {
  * matching (Q47), signing in and security (the address, which cannot be changed, U-70; the password, two-step
  * verification, linked accounts, the sessions and the latest sign-ins), the notifications (the mail, Q7a; push on this device, platform 17k), the app's settings (the
  * interface language, the sound effects, installing the app), the taker's ID and their place on a sponsor's staff (Q39); then help and
- * the legal texts. The old `/account?section=details` still opens the details.
+ * the legal texts. The old `/account?section=details` leads to the details (`frame/areas.ts`, `LEGACY_APP_PATHS`).
  */
 export function AccountPage({ path }: { path: string }) {
-  const { search } = useLocation()
   const part = partOf(path)
-  if (part === null && new URLSearchParams(search).get('section') === 'details') {
-    return <Redirect to={ACCOUNT_DETAILS_PATH} />
-  }
   if (path === ACCOUNT_DELETION_PATH) return <DeletionPage />
   if (part === undefined) return <Redirect to={ACCOUNT_PATH} />
   if (part === null) return <AccountMenu />

@@ -1,0 +1,22 @@
+/*
+ * home-frame.spec.ts (F-F4 section 6): what changes from run to run or is meant to change with F-F4, taken out of the
+ * comparison the same way in the baseline and in every later run.
+ */
+
+/*
+ * The searched words carry the run's unique token: kept in their place at one width (wide enough for the words of
+ * the spec's token in every language), not drawn, so that the button after them stays where it is.
+ */
+[data-testid="feed-searched"] > span:first-child {
+  visibility: hidden !important;
+  flex: 0 0 12rem !important;
+}
+
+/*
+ * The bottom menu and the wide screen's left column are what F-F4 changes. Fixed to the screen, they would otherwise
+ * be drawn over the home; the home has no navigation of its own.
+ */
+nav,
+aside {
+  visibility: hidden !important;
+}
