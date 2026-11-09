@@ -88,6 +88,7 @@
 - [ ] **短视频**（F-S10，`operations.md` §7.25）：`QB_SETUP` 已建 `qb.feed.shorts.positions` / `.per-shelf`；帮助"短视频"（`docs/quizbuks/help/shorts.md`）已由内容管理员发布为学者与发起方的 FAQ
 - [ ] **主题词**（F-S9，`operations.md` §7.26）：`QB_SETUP` 已建 `qb.topic.max-per-quiz` / `.custom-max-length`；总部已在平台管理系统的"主题词"页建好首批词（三语名称齐全，启动检查无 `topic:` 错误）；帮助"主题词与只看喜欢的主题"（`docs/quizbuks/help/topics.md`）已由内容管理员发布为学者与发起方的 FAQ（自定义词的搜索一句等 F-S6）
 - [ ] **屏蔽**（F-S8，`operations.md` §7.30）：`QB_SETUP` 已建 `qb.block.max-per-user` / `.count-min-group`，内容管理员有 `qb.admin.block.read`（平台管理系统的"屏蔽"页只有汇总）；帮助"屏蔽与解除"（`docs/quizbuks/help/blocks.md`）已由内容管理员发布为学者与发起方的 FAQ
+- [ ] **曝光计数**（F-S13，`operations.md` §7.31）：`QB_SETUP` 已建五个 `qb.exposure.*` 参数，内容管理员有 `qb.admin.exposure.read` / `.monitor`、运营商有 `qb.admin.exposure.read`；"定时任务"页中 `qb.exposure-ends`（每分钟）与 `qb.exposure-check`（每天）在跑；帮助"共享视频的曝光"（`docs/quizbuks/help/exposure.md`）已由内容管理员发布为学者与发起方的 FAQ
 - [ ] 值班与联系方式：Stripe 支持、邮件服务商、数据库托管方
 - [ ] 本清单与 `operations.md` 中的步骤由将要值班的人读过
 

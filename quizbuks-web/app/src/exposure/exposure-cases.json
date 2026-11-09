@@ -1,0 +1,728 @@
+{
+  "comment": "The rules of counting exposures and of the pushes (F-S13): the server's exposure.ExposureRules (ExposureRulesTest, run in backend/quizbuks) and the App's exposure/rules.ts (exposure.test.ts) both pass these cases. The reconciliation's tolerance and every bound come from the parameters. Card: p publisher, v provider; the viewer t, staff of the sponsors listed.",
+  "neededSec": [
+    {
+      "seconds": 10,
+      "durationSec": null,
+      "needed": 10
+    },
+    {
+      "seconds": 10,
+      "durationSec": 95,
+      "needed": 10
+    },
+    {
+      "seconds": 10,
+      "durationSec": 6,
+      "needed": 6
+    },
+    {
+      "seconds": 10,
+      "durationSec": 0,
+      "needed": 10
+    }
+  ],
+  "decide": [
+    {
+      "name": "ten seconds in the vertical mode count",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": 95
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 10,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "COUNTED"
+    },
+    {
+      "name": "nine seconds do not",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": 95
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 9,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "TOO_SHORT"
+    },
+    {
+      "name": "a video shorter than the seconds counts when played through",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": 6
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 6,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "COUNTED"
+    },
+    {
+      "name": "a horizontal video counts on the start page",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": false,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "START",
+      "reportedSec": 12,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "COUNTED"
+    },
+    {
+      "name": "once per taker and publication",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": false,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "START",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": true,
+      "countedToday": 1,
+      "cap": 200,
+      "outcome": "ALREADY"
+    },
+    {
+      "name": "a horizontal video does not count in the vertical mode",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": false,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "WRONG_SURFACE"
+    },
+    {
+      "name": "a vertical video does not count on the start page",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "START",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "WRONG_SURFACE"
+    },
+    {
+      "name": "one's own shared video does not count",
+      "card": {
+        "publisherId": "p",
+        "providerId": "p",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "OWN_VIDEO"
+    },
+    {
+      "name": "no shared video does not count",
+      "card": {
+        "publisherId": "p",
+        "providerId": null,
+        "sharedVideo": false,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "OWN_VIDEO"
+    },
+    {
+      "name": "the publisher does not count",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "p",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "EXCLUDED"
+    },
+    {
+      "name": "the provider does not count",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "v",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "EXCLUDED"
+    },
+    {
+      "name": "the publisher's staff does not count",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [
+        "p"
+      ],
+      "surface": "VERTICAL",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "EXCLUDED"
+    },
+    {
+      "name": "the provider's staff does not count",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": false,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [
+        "v"
+      ],
+      "surface": "START",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "EXCLUDED"
+    },
+    {
+      "name": "another sponsor's staff counts",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": false,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [
+        "x"
+      ],
+      "surface": "START",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "COUNTED"
+    },
+    {
+      "name": "the daily cap reached",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 200,
+      "cap": 200,
+      "outcome": "DAILY_CAP"
+    },
+    {
+      "name": "one below the cap",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 199,
+      "cap": 200,
+      "outcome": "COUNTED"
+    },
+    {
+      "name": "an ended publication no longer counts",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": false,
+        "durationSec": null
+      },
+      "viewer": "t",
+      "staffOf": [],
+      "surface": "VERTICAL",
+      "reportedSec": 30,
+      "seconds": 10,
+      "alreadyCounted": false,
+      "countedToday": 0,
+      "cap": 200,
+      "outcome": "NOT_LIVE"
+    }
+  ],
+  "pushable": [
+    {
+      "name": "another's vertical video, not opened",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "opened": false,
+      "pushable": true
+    },
+    {
+      "name": "opened once, never again",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "opened": true,
+      "pushable": false
+    },
+    {
+      "name": "a horizontal video is not pushed",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": false,
+        "live": true,
+        "durationSec": null
+      },
+      "opened": false,
+      "pushable": false
+    },
+    {
+      "name": "one's own video is not pushed",
+      "card": {
+        "publisherId": "p",
+        "providerId": "p",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": true,
+        "durationSec": null
+      },
+      "opened": false,
+      "pushable": false
+    },
+    {
+      "name": "an ended publication is not pushed",
+      "card": {
+        "publisherId": "p",
+        "providerId": "v",
+        "sharedVideo": true,
+        "vertical": true,
+        "live": false,
+        "durationSec": null
+      },
+      "opened": false,
+      "pushable": false
+    }
+  ],
+  "pushAt": [
+    {
+      "offset": 0,
+      "every": 5,
+      "push": false
+    },
+    {
+      "offset": 4,
+      "every": 5,
+      "push": false
+    },
+    {
+      "offset": 5,
+      "every": 5,
+      "push": true
+    },
+    {
+      "offset": 10,
+      "every": 5,
+      "push": true
+    },
+    {
+      "offset": 1,
+      "every": 1,
+      "push": true
+    },
+    {
+      "offset": 3,
+      "every": 2,
+      "push": false
+    }
+  ],
+  "billing": [
+    {
+      "successes": 0,
+      "purchased": 2,
+      "usedUp": false,
+      "billable": 0,
+      "overshoot": 0,
+      "minTolerance": 20,
+      "tolerancePercent": 5,
+      "reconciles": true
+    },
+    {
+      "successes": 2,
+      "purchased": 2,
+      "usedUp": true,
+      "billable": 2,
+      "overshoot": 0,
+      "minTolerance": 20,
+      "tolerancePercent": 5,
+      "reconciles": true
+    },
+    {
+      "successes": 3,
+      "purchased": 2,
+      "usedUp": true,
+      "billable": 2,
+      "overshoot": 1,
+      "minTolerance": 20,
+      "tolerancePercent": 5,
+      "reconciles": true
+    },
+    {
+      "successes": 22,
+      "purchased": 2,
+      "usedUp": true,
+      "billable": 2,
+      "overshoot": 20,
+      "minTolerance": 20,
+      "tolerancePercent": 5,
+      "reconciles": true
+    },
+    {
+      "successes": 23,
+      "purchased": 2,
+      "usedUp": true,
+      "billable": 2,
+      "overshoot": 21,
+      "minTolerance": 20,
+      "tolerancePercent": 5,
+      "reconciles": false
+    },
+    {
+      "successes": 1050,
+      "purchased": 1000,
+      "usedUp": true,
+      "billable": 1000,
+      "overshoot": 50,
+      "minTolerance": 20,
+      "tolerancePercent": 5,
+      "reconciles": true
+    },
+    {
+      "successes": 1051,
+      "purchased": 1000,
+      "usedUp": true,
+      "billable": 1000,
+      "overshoot": 51,
+      "minTolerance": 20,
+      "tolerancePercent": 5,
+      "reconciles": false
+    },
+    {
+      "successes": 1102,
+      "purchased": 1001,
+      "usedUp": true,
+      "billable": 1001,
+      "overshoot": 101,
+      "minTolerance": 0,
+      "tolerancePercent": 10,
+      "reconciles": true
+    },
+    {
+      "successes": 1103,
+      "purchased": 1001,
+      "usedUp": true,
+      "billable": 1001,
+      "overshoot": 102,
+      "minTolerance": 0,
+      "tolerancePercent": 10,
+      "reconciles": false
+    },
+    {
+      "successes": 3,
+      "purchased": 2,
+      "usedUp": true,
+      "billable": 2,
+      "overshoot": 1,
+      "minTolerance": 0,
+      "tolerancePercent": 0,
+      "reconciles": false
+    },
+    {
+      "successes": 5000,
+      "purchased": null,
+      "usedUp": false,
+      "billable": 5000,
+      "overshoot": 0,
+      "minTolerance": 20,
+      "tolerancePercent": 5,
+      "reconciles": true
+    }
+  ],
+  "params": {
+    "seconds": [
+      [
+        null,
+        10
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        15,
+        15
+      ],
+      [
+        9999,
+        600
+      ]
+    ],
+    "dailyCap": [
+      [
+        null,
+        200
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        99999,
+        10000
+      ]
+    ],
+    "pushEvery": [
+      [
+        null,
+        5
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        99,
+        50
+      ]
+    ],
+    "reportBatch": [
+      [
+        null,
+        20
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        999,
+        200
+      ]
+    ],
+    "reportIntervalSec": [
+      [
+        null,
+        30
+      ],
+      [
+        1,
+        5
+      ],
+      [
+        9999,
+        600
+      ]
+    ],
+    "maxPerCall": [
+      [
+        null,
+        50
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        120,
+        120
+      ],
+      [
+        999,
+        200
+      ]
+    ],
+    "minTolerance": [
+      [
+        null,
+        20
+      ],
+      [
+        -5,
+        0
+      ],
+      [
+        7,
+        7
+      ]
+    ],
+    "tolerancePercent": [
+      [
+        null,
+        5
+      ],
+      [
+        -1,
+        0
+      ],
+      [
+        150,
+        100
+      ]
+    ],
+    "endGraceSec": [
+      [
+        null,
+        60
+      ],
+      [
+        -1,
+        0
+      ],
+      [
+        99999,
+        86400
+      ]
+    ]
+  }
+}

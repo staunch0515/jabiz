@@ -46,7 +46,14 @@ public final class PublicationStatus {
      */
     public static final String SHARED_VIDEO = "SHARED_VIDEO";
 
-    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN, PUBLISHER, TREE, SHARED_VIDEO);
+    /**
+     * F-S13: the exposures purchased for another's shared video are used up (F-M8 buys them): not the sponsor's breach,
+     * an end as any other ({@code PublicationAdmin.takenDown} stays false).
+     */
+    public static final String EXPOSURE = "EXPOSURE";
+
+    public static final List<String> END_REASONS = List.of(EXPIRED, QUOTA, BUDGET, ADMIN, PUBLISHER, TREE, SHARED_VIDEO,
+        EXPOSURE);
 
     /**
      * Who paused a paused publication ({@code pausedBy}, Q10b, review M2): its sponsor, who may resume it, or an

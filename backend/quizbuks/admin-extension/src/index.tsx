@@ -27,9 +27,10 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban, Eye } from 'lucide-react'
 import TopicsPage from './TopicsPage'
 import BlocksPage from './BlocksPage'
+import ExposurePage from './ExposurePage'
 
 import BankTopUpPage from './BankTopUpPage'
 import TreesPage from './TreesPage'
@@ -136,6 +137,8 @@ export default defineExtension({
     { path: PATH.topics, element: <TopicsPage /> },
     // F-S8: the figures of blocking (headquarters, aggregates only).
     { path: PATH.blocks, element: <BlocksPage /> },
+    // F-S13: the suspicious inflation of exposures (headquarters and the operators, scoped).
+    { path: PATH.exposure, element: <ExposurePage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -254,6 +257,10 @@ export default defineExtension({
         // Sponsors', the platform's reads every operator's (filtered by operator) and takes down in an emergency.
         { key: 'qb-shared-videos', label: 'menu.sharedVideos', path: PATH.sharedVideos, icon: Clapperboard,
           permission: PERMISSION.sharedVideoRead },
+        // F-S13: the exposures of shared videos, one entry for both: the Takers the daily cap refused (an operator's
+        // session reads its own Sponsors' publications only).
+        { key: 'qb-exposure', label: 'menu.exposure', path: PATH.exposure, icon: Eye,
+          permission: PERMISSION.exposureRead },
         // Q22: the cash rewards sponsors pay takers themselves (F-S1: nobody here decides their disputes).
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
           permission: PERMISSION.publicationRead },

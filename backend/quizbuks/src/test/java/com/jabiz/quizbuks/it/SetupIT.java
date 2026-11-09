@@ -410,6 +410,16 @@ class SetupIT extends QbItSupport {
         // F-S8: blocking's limit and the smallest group a sponsor is shown a count of (ordinary parameters).
         expected.put(QbParams.BLOCK_MAX_PER_USER, "1000");
         expected.put(QbParams.BLOCK_COUNT_MIN_GROUP, "20");
+        // F-S13: the exposures and the pushes (ordinary parameters).
+        expected.put(QbParams.EXPOSURE_SECONDS, "10");
+        expected.put(QbParams.EXPOSURE_DAILY_CAP, "200");
+        expected.put(QbParams.EXPOSURE_PUSH_EVERY, "5");
+        expected.put(QbParams.EXPOSURE_REPORT_BATCH, "20");
+        expected.put(QbParams.EXPOSURE_REPORT_INTERVAL, "30");
+        expected.put(QbParams.EXPOSURE_REPORT_MAX_PER_CALL, "50");
+        expected.put(QbParams.EXPOSURE_RECONCILE_MIN_TOLERANCE, "20");
+        expected.put(QbParams.EXPOSURE_RECONCILE_TOLERANCE_PERCENT, "5");
+        expected.put(QbParams.EXPOSURE_END_GRACE_SEC, "60");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // F-S2: the knowledge maps' limits and the review reminder (ordinary).

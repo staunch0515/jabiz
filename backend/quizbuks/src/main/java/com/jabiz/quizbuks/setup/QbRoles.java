@@ -83,7 +83,9 @@ public final class QbRoles {
         // F-S12: every provider's shared videos, and the platform's emergency takedown.
         QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE,
         // F-S8: the figures of blocking (aggregates and rounded counts only).
-        QbPermissions.ADMIN_BLOCK_READ);
+        QbPermissions.ADMIN_BLOCK_READ,
+        // F-S13: the suspicious inflation of exposures (every sponsor's) and the daily reconciliation's task.
+        QbPermissions.ADMIN_EXPOSURE_READ, QbPermissions.ADMIN_EXPOSURE_MONITOR);
 
     /**
 
@@ -114,7 +116,9 @@ public final class QbRoles {
         // F-S2b2: revoking a lit node of its Sponsors' graphs and its copies, and approving another member's request.
         QbPermissions.TREE_LIT_REVOKE,
         // F-S12: its own sponsors' shared videos (reviewing them is REVIEW_PUBLICATION's) and taking them down.
-        QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE);
+        QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE,
+        // F-S13: the suspicious inflation of exposures on its own sponsors' publications (not the reconciliation's task).
+        QbPermissions.ADMIN_EXPOSURE_READ);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,

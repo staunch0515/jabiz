@@ -1,4 +1,4 @@
-import { i18n, type Filter } from '@jabiz/client'
+import { i18n, useAuth, type Filter } from '@jabiz/client'
 import {
   Alert,
   AlertDescription,
@@ -22,7 +22,7 @@ import {
   Spinner,
   Switch,
 } from '@jabiz/ui'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Gift, HandCoins, LayoutGrid, SlidersHorizontal, X, type LucideIcon } from 'lucide-react'
 import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -48,6 +48,10 @@ import { ShortsShelf } from '../shorts/ShortsShelf'
 import { ShortsViewer } from '../shorts/ShortsViewer'
 import { BlockMenu } from '../blocks/BlockMenu'
 import { covers } from '../blocks/api'
+import { readPushes } from '../exposure/api'
+import { useExposureSettings } from '../exposure/ExposureWatch'
+import { placePushes } from '../exposure/pushes'
+import { DEFAULT_PUSH_EVERY } from '../exposure/rules'
 
 /** The home's address, searched from the header (Q63): `/?q=<text>`. */
 export const HOME_PATH = '/'
@@ -459,7 +463,38 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
       includeAnswered: filters.includeAnswered, languages, mainlandChina, filters: filterList }),
     enabled: feed.isSuccess,
   })
-  const shortCards = shorts.data?.cards ?? []
+  const shortCards = useMemo(() => shorts.data?.cards ?? [], [shorts.data])
+  // F-S13: the vertical mode's pushes (another's vertical video, never opened), under the same conditions; read again
+  // once the mode closes, so that those opened in it are not pushed again.
+  const { emailVerified } = useAuth()
+  const queryClient = useQueryClient()
+  const pushKey = ['qb', 'feed-pushes', at, country, q, filters.sort, filters.includeAnswered, method, filterList,
+    i18n.language, languages, mainlandChina, strictTopics, likedKey]
+  const pushes = useQuery({
+    queryKey: pushKey,
+    queryFn: () => readPushes({ at, country, q, sort: filters.sort, method: method === 'ALL' ? null : method,
+      includeAnswered: filters.includeAnswered, languages, mainlandChina, filters: filterList }),
+    enabled: feed.isSuccess,
+    staleTime: Infinity,
+  })
+  const exposureSettings = useExposureSettings()
+  const pushEvery = exposureSettings?.pushEvery ?? DEFAULT_PUSH_EVERY
+  // The screens are placed from the one the mode opened on, and stay so while it is open (a block moves it on within
+  // them).
+  const [openedOn, setOpenedOn] = useState<string | null>(null)
+  if (shortsOpen === null && openedOn !== null) setOpenedOn(null)
+  if (shortsOpen !== null && openedOn === null) setOpenedOn(shortsOpen)
+  const pushCards = pushes.data
+  const placed = useMemo(() => openedOn ? placePushes(shortCards, pushCards ?? [], openedOn, pushEvery)
+    : shortCards, [shortCards, pushCards, openedOn, pushEvery])
+  // The same screens stay the same list (the mode moves back to the screen the address names whenever its list
+  // changes): a read that changes nothing, or the parameters arriving, must not move the taker back. Adjusted while
+  // rendering (React's derived state).
+  const [screens, setScreens] = useState<readonly FeedCard[]>(placed)
+  const sameScreens = screens.length === placed.length
+    && screens.every((card, i) => card.publicationId === placed[i].publicationId)
+  if (!sameScreens) setScreens(placed)
+  const viewerCards = sameScreens ? screens : placed
   const shelves = shorts.data
     ? placeShelves(cards.length, !feed.hasNextPage, shorts.data.positions, shorts.data.perShelf, shortCards) : []
   const shelfAfter = new Map<number, Shelf>(shelves.map((shelf) => [shelf.after, shelf]))
@@ -468,19 +503,20 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
     navigate(shortsPath(q, card.publicationId))
   }, [q])
   const closeShorts = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['qb', 'feed-pushes'] })
     if (canGoBack()) window.history.back()
     else navigate(shortsPath(q, null), { replace: true })
-  }, [q])
+  }, [q, queryClient])
   // F-S8: a block in the vertical mode moves it on to the next short the block leaves (the list is read again); none
   // left closes it.
   const blockedInShorts = (card: FeedCard, kind: BlockKind) => {
-    const at = shortCards.findIndex((c) => c.publicationId === card.publicationId)
-    const next = [...shortCards.slice(at + 1), ...shortCards.slice(0, Math.max(0, at)).reverse()]
+    const at = viewerCards.findIndex((c) => c.publicationId === card.publicationId)
+    const next = [...viewerCards.slice(at + 1), ...viewerCards.slice(0, Math.max(0, at)).reverse()]
       .find((c) => !covers(kind, card, c))
     if (next) navigate(shortsPath(q, next.publicationId), { replace: true })
     else closeShorts()
   }
-  const viewing = shortsOpen !== null && shortCards.some((card) => card.publicationId === shortsOpen)
+  const viewing = shortsOpen !== null && viewerCards.some((card) => card.publicationId === shortsOpen)
   const [list, setList] = useState<HTMLUListElement | null>(null)
   const [end, setEnd] = useState<HTMLDivElement | null>(null)
   const centred = useCentredVideo(list, cards.length + shelves.length)
@@ -599,7 +635,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
           </ul>
           <div ref={setEnd} aria-hidden data-testid="feed-end" />
           {viewing && (
-            <ShortsViewer cards={shortCards} startId={shortsOpen!} onClose={closeShorts}
+            <ShortsViewer cards={viewerCards} startId={shortsOpen!} onClose={closeShorts} exposure={emailVerified}
               onAnswer={(card) => navigate(`/p/${card.publicationId}`)}
               menu={(card) => <BlockMenu item={card} onBlocked={(kind) => blockedInShorts(card, kind)} />} />
           )}

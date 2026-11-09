@@ -130,6 +130,16 @@ export function clock(seconds: number): string {
 const KEY = 'qb.play.playback.'
 const records = new Map<string, PlaybackRecord>()
 const listeners = new Set<() => void>()
+/** F-S13: who else hears each event as it comes (the exposures' timer: a run without a break, `exposure/timer.ts`). */
+const eventListeners = new Set<(publicationId: string, event: PlaybackEvent) => void>()
+
+/** F-S13: hears every playback event the stage hands over, with its publication; returns the way to stop. */
+export function onPlaybackEvent(listener: (publicationId: string, event: PlaybackEvent) => void): () => void {
+  eventListeners.add(listener)
+  return () => {
+    eventListeners.delete(listener)
+  }
+}
 
 function stored(publicationId: string): PlaybackRecord {
   try {
@@ -167,6 +177,7 @@ export function recordPlayback(publicationId: string, event: PlaybackEvent) {
     // Kept in memory only.
   }
   listeners.forEach((listener) => listener())
+  eventListeners.forEach((listener) => listener(publicationId, event))
 }
 
 /** Forgets every record (on signing out, with the attempts). */

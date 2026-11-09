@@ -71,6 +71,8 @@ export const TEMPLATE = {
   /** F-S8: the figures of blocking by kind, and the Sponsors most blocked (rounded; headquarters). */
   blocks: 'qb.admin.blocks',
   blockedSponsors: 'qb.admin.blocked-sponsors',
+  /** F-S13: the accounts the daily cap of exposures refused (headquarters and the operators, scoped). */
+  exposureSuspicious: 'qb.admin.exposure-suspicious',
   /** F-S12: the videos Sponsors share (headquarters every provider's, an operator its own Sponsors'). */
   sharedVideos: 'qb.admin.shared-videos',
   /** F-C3: the publications that went on with a shared video (an operator's own Sponsors' only). */
@@ -445,6 +447,8 @@ export const PERMISSION = {
   topicWrite: 'qb.admin.topic.write',
   /** F-S8: the figures of blocking (aggregates only). */
   blockRead: 'qb.admin.block.read',
+  /** F-S13: the suspicious inflation of exposures (headquarters and the operators). */
+  exposureRead: 'qb.admin.exposure.read',
   /** The AI page (Q8a). */
   aiRead: 'qb.admin.ai.read',
   /** A taker's transfer at once (Q14). */
@@ -596,6 +600,8 @@ export const PATH = {
   topics: '/qb/topics',
   /** F-S8: the figures of blocking. */
   blocks: '/qb/blocks',
+  /** F-S13: the suspicious inflation of exposures. */
+  exposure: '/qb/exposure',
   /** F-S12: the videos Sponsors share, and one video's review and takedown. */
   sharedVideos: '/qb/shared-videos',
   sharedVideo: (sharedVideoId: string) => `/qb/shared-videos/${encodeURIComponent(sharedVideoId)}`,

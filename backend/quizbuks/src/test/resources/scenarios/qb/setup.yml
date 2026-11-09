@@ -26,7 +26,10 @@ steps:
         qb.tree.max-nodes, qb.tree.max-conditions-per-node, qb.tree.max-depth, qb.tree.sponsor.max-trees,
         qb.tree.review.remind-after,
         qb.topic.max-per-quiz, qb.topic.custom-max-length, qb.content.max-questions,
-        qb.play.max-questions-per-attempt, qb.content.import.batch-size, qb.block.max-per-user, qb.block.count-min-group]
+        qb.play.max-questions-per-attempt, qb.content.import.batch-size, qb.block.max-per-user, qb.block.count-min-group,
+        qb.exposure.seconds, qb.exposure.daily-cap-per-user, qb.exposure.push.every, qb.exposure.report.batch,
+        qb.exposure.report.interval-sec, qb.exposure.report.max-per-call, qb.exposure.reconcile.min-tolerance,
+        qb.exposure.reconcile.tolerance-percent, qb.exposure.reconcile.end-grace-sec]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,

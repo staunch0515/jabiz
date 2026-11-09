@@ -26,9 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * F-S8 (docs/quizbuks/plans/impl/F-S8.md): a taker blocks a publication, a quiz, a sponsor or a video provider from a
- * card; the home (its shelf of shorts and the search), the page, the inbox's notices and the start all apply the one
- * definition {@link BlockRules#blocks} (the comparison test); unblocking restores; sponsors see a rounded count only,
- * headquarters aggregates only; the limit and the processes' refusals.
+ * card; the home (its shelf of shorts, the search and F-S13's pushes), the page, the inbox's notices and the start all
+ * apply the one definition {@link BlockRules#blocks} (the comparison test); unblocking restores; sponsors see a
+ * rounded count only, headquarters aggregates only; the limit and the processes' refusals.
  */
 class BlockIT extends InboxItSupport {
 
@@ -140,6 +140,11 @@ class BlockIT extends InboxItSupport {
         return feed(token, "JP", params).stream().map(row -> row.get("publicationId")).toList();
     }
 
+    /** F-S13: the vertical mode's pushes (the feed's template with {@code push}) among the search's. */
+    List<Object> pushed(String token, String q) {
+        return feed(token, "JP", Map.of("q", q, "push", true)).stream().map(row -> row.get("publicationId")).toList();
+    }
+
     Map<String, Object> page(String token, String publicationId) {
         List<Map<String, Object>> rows = items("qb.app.publication", token, Map.of("params", Map.of("publicationId",
             publicationId, "at", clock.instant().toString(), "country", "JP")));
@@ -187,6 +192,11 @@ class BlockIT extends InboxItSupport {
             assertThat(listed(token, "fs8-cmp", false)).as("home " + label).containsExactlyInAnyOrderElementsOf(shown);
             // The shelf of shorts: the shared video is vertical (B and C).
             assertThat(listed(token, "fs8-cmp", true)).as("shorts " + label)
+                .containsExactlyInAnyOrderElementsOf(shown.stream().filter(id -> id.equals(b) || id.equals(c))
+                    .toList());
+            // F-S13: the pushes of the vertical mode, the provider's vertical shared video on another's publication (B
+            // and C): a hard block, nothing paid gets past it.
+            assertThat(pushed(token, "fs8-cmp")).as("pushes " + label)
                 .containsExactlyInAnyOrderElementsOf(shown.stream().filter(id -> id.equals(b) || id.equals(c))
                     .toList());
             // The page: found, saying blocked and not offering the start exactly when blocked.

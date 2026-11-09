@@ -34,7 +34,7 @@ public final class PublicationNotices {
     public static final String TAKEN_DOWN = "TAKEN_DOWN";
     /** The sponsor's wallet could not pay a reward: it takes no new attempts until topped up. */
     public static final String FUNDS_SHORT = "FUNDS_SHORT";
-    /** It ended by its end time, its winners or its budget. */
+    /** It ended by its end time, its winners, its budget, its knowledge map or its exposures used up (F-S13). */
     public static final String ENDED = "ENDED";
     /** F-S12: it ended because the shared video it used was taken down (not the sponsor's breach). */
     public static final String SHARED_VIDEO_ENDED = "SHARED_VIDEO_ENDED";
@@ -83,7 +83,8 @@ public final class PublicationNotices {
             return FUNDS_SHORT;
         }
         if (PublicationStatus.ENDED.equals(to) && List.of(PublicationStatus.EXPIRED, PublicationStatus.QUOTA,
-            PublicationStatus.BUDGET, PublicationStatus.TREE).contains(values.get("endReason"))) {
+            PublicationStatus.BUDGET, PublicationStatus.TREE, PublicationStatus.EXPOSURE)
+            .contains(values.get("endReason"))) {
             return ENDED;
         }
         return null;

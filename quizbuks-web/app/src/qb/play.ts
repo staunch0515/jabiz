@@ -77,6 +77,17 @@ export interface FeedCard {
   quizId?: string | null
   videoProviderId?: string | null
   videoProviderName?: string | null
+  /**
+   * F-S13: its video is another's shared video (the provider is not the publisher): its exposures count, in the
+   * vertical mode when vertical (where it stands as a push), on the start page otherwise.
+   */
+  exposed?: boolean
+  /**
+   * F-S13: a push's turn (its publisher's n-th push) and its place in the turn, as the server numbers them by the
+   * publisher's id (which the App never gets); only on the vertical mode's pushes.
+   */
+  pushTurn?: number | null
+  pushRank?: number | null
   kind: QuizKind
   /** The language the quiz is written in (Q59a); a preview's card has none. */
   language?: string | null
@@ -137,6 +148,8 @@ export interface FeedRequest {
   mainlandChina?: boolean
   /** F-S10: only the publications whose video is vertical (the home's shelf of shorts). */
   shorts?: boolean
+  /** F-S13: only the vertical mode's pushes (another's vertical shared video, never opened). */
+  push?: boolean
   sort?: FeedSort
   filters?: Filter[]
   offset?: number
@@ -157,6 +170,9 @@ export function feedCard(row: Record<string, unknown>): FeedCard {
     quizId: textOrNull(row.quizId),
     videoProviderId: textOrNull(row.videoProviderId),
     videoProviderName: textOrNull(row.videoProviderName),
+    exposed: row.exposed === true || row.exposed === 'true',
+    pushTurn: row.pushTurn == null ? null : numberOf(row.pushTurn),
+    pushRank: row.pushRank == null ? null : numberOf(row.pushRank),
     kind: kindOf(row.kind),
     language: textOrNull(row.language),
     maxReward: row.maxReward,
@@ -198,7 +214,8 @@ export async function readFeed(request: FeedRequest): Promise<QueryPage<FeedCard
     params: { at: request.at, country: request.country, q: request.q?.trim() || null,
       method: request.method ?? null, includeAnswered: request.includeAnswered ?? false,
       languages: request.languages && request.languages.length > 0 ? request.languages.join(',') : null,
-      mainlandChina: request.mainlandChina ?? false, ...(request.shorts ? { shorts: true } : {}) },
+      mainlandChina: request.mainlandChina ?? false, ...(request.shorts ? { shorts: true } : {}),
+      ...(request.push ? { push: true } : {}) },
     filters: request.filters,
     sorts: request.sort ? [FEED_SORTS[request.sort]] : undefined,
     offset: request.offset,
@@ -277,6 +294,9 @@ export interface PublicationView {
   quizId?: string | null
   videoProviderId?: string | null
   videoProviderName?: string | null
+  /** F-S13: as the feed's card: another's shared video, whose exposure counts on this page when horizontal. */
+  exposed?: boolean
+  videoVertical?: boolean
   /**
    * F-S8: the caller's blocks covering it (its publication, quiz, sponsor or video's provider), in that order; empty
    * when not blocked. The page then says so with a way to unblock each; the start is not offered.
@@ -469,6 +489,8 @@ export async function readPublication(request: PublicationRequest): Promise<Publ
     quizId: textOrNull(row.quizId),
     videoProviderId: textOrNull(row.videoProviderId),
     videoProviderName: textOrNull(row.videoProviderName),
+    exposed: row.exposed === true || row.exposed === 'true',
+    videoVertical: row.videoVertical === true || row.videoVertical === 'true',
     blocks: publicationBlocks(row.blocks),
     kind: kindOf(row.kind),
     intro: textOrNull(row.intro),
