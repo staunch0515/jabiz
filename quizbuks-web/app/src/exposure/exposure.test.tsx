@@ -42,7 +42,7 @@ interface Call { path: string; method: string; body: unknown }
 
 function server(options: { shorts?: Record<string, unknown>[]; pushes?: Record<string, unknown>[];
   feed?: Record<string, unknown>[]; publication?: Record<string, unknown>; seconds?: string;
-  emailVerified?: boolean } = {}) {
+  emailVerified?: boolean; settingsAfter?: Promise<unknown> } = {}) {
   const calls: Call[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input
@@ -69,6 +69,7 @@ function server(options: { shorts?: Record<string, unknown>[]; pushes?: Record<s
         return json(200, { items, offset: 0, limit: 10 })
       }
       case '/api/queries/qb.app.exposure-settings':
+        if (options.settingsAfter) await options.settingsAfter
         return json(200, { items: [{ seconds: options.seconds ?? '10', pushEvery: '2', reportBatch: '1',
           reportIntervalSec: '30', maxPerCall: '50' }], offset: 0, limit: 1 })
       case '/api/queries/qb.app.publication':
@@ -145,6 +146,20 @@ describe('the vertical mode\'s pushes (F-S13)', () => {
     expect((reads[0].body as { sorts: unknown }).sorts).toEqual([{ field: 'pushTurn', asc: true },
       { field: 'pushRank', asc: true }])
     await expectAccessible(viewer)
+  })
+
+  it('stays on the screen shown when the parameters arrive after the mode opened', async () => {
+    let arrive = () => {}
+    const { calls } = server({ settingsAfter: new Promise<void>((resolve) => { arrive = resolve }) })
+    render(<App />)
+    const { user, viewer } = await open('s1')
+    await user.click(within(viewer).getByTestId('shorts-next'))
+    const shown = current().dataset.publication
+    expect(shown).not.toBe('s1')
+    arrive()
+    await waitFor(() => expect(calls.some((c) => c.path === '/api/queries/qb.app.exposure-settings')).toBe(true))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(current().dataset.publication).toBe(shown)
   })
 
   it('reports a push opened, and reads them again once the mode closes', async () => {

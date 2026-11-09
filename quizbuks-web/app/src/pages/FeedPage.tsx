@@ -485,8 +485,16 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
   if (shortsOpen === null && openedOn !== null) setOpenedOn(null)
   if (shortsOpen !== null && openedOn === null) setOpenedOn(shortsOpen)
   const pushCards = pushes.data
-  const viewerCards = useMemo(() => openedOn ? placePushes(shortCards, pushCards ?? [], openedOn, pushEvery)
+  const placed = useMemo(() => openedOn ? placePushes(shortCards, pushCards ?? [], openedOn, pushEvery)
     : shortCards, [shortCards, pushCards, openedOn, pushEvery])
+  // The same screens stay the same list (the mode moves back to the screen the address names whenever its list
+  // changes): a read that changes nothing, or the parameters arriving, must not move the taker back. Adjusted while
+  // rendering (React's derived state).
+  const [screens, setScreens] = useState<readonly FeedCard[]>(placed)
+  const sameScreens = screens.length === placed.length
+    && screens.every((card, i) => card.publicationId === placed[i].publicationId)
+  if (!sameScreens) setScreens(placed)
+  const viewerCards = sameScreens ? screens : placed
   const shelves = shorts.data
     ? placeShelves(cards.length, !feed.hasNextPage, shorts.data.positions, shorts.data.perShelf, shortCards) : []
   const shelfAfter = new Map<number, Shelf>(shelves.map((shelf) => [shelf.after, shelf]))

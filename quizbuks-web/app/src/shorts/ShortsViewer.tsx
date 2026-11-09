@@ -61,7 +61,11 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer, menu, exposure
   const [scrollTo, setScrollTo] = useState<number | null>(null)
   if (seen.cards !== cards || seen.startId !== startId) {
     setSeen({ cards, startId })
-    const found = cards.findIndex((card) => card.publicationId === startId)
+    // F-S13: the list read again or placed anew (the pushes, the parameters arriving) keeps the screen shown; a new
+    // address (a block moved it on) goes there.
+    const shownId = seen.startId === startId ? seen.cards[index]?.publicationId : undefined
+    const kept = shownId ? cards.findIndex((card) => card.publicationId === shownId) : -1
+    const found = kept >= 0 ? kept : cards.findIndex((card) => card.publicationId === startId)
     const at = found >= 0 ? found : Math.min(index, Math.max(0, cards.length - 1))
     if (at !== index) {
       setIndex(at)
