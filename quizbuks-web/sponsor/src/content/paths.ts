@@ -11,3 +11,5 @@ export function quizIdOf(path: string): string | null {
 export const QUIZZES_QUERY = ['qb', 'quizzes'] as const
 export const draftQuery = (quizId: string) => [...QUIZZES_QUERY, 'draft', quizId] as const
 export const versionsQuery = (quizId: string) => [...QUIZZES_QUERY, 'versions', quizId] as const
+/** F-S6: the question bank's limits, the same for every quiz. */
+export const BANK_LIMITS_QUERY = ['qb', 'bank-limits'] as const

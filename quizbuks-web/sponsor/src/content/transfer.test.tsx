@@ -59,6 +59,9 @@ interface Server {
   processes?: Record<string, { status: number; body: unknown }[]>
   /** Answers to uploads, in turn (the last one repeats). */
   uploads?: { status: number; body: unknown }[]
+  /** F-S6c: the quiz's other languages and translations. */
+  translationLanguages?: string
+  translations?: Record<string, unknown>[]
 }
 
 /** The sponsor console's server with one quiz and its cover; records posts and uploads. */
@@ -102,14 +105,20 @@ function server(options: Server = {}) {
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsor/query':
         return rows([{ contactName: 'Sara', company: 'Acme', reviewStatus: 'APPROVED', revision: 1 }])
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbQuiz/entities/q1':
-        return json(200, { id: 'q1', version: 1, attributes: QUIZ })
+        return json(200, { id: 'q1', version: 1, attributes: { ...QUIZ,
+          translationLanguages: options.translationLanguages ?? QUIZ.translationLanguages } })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbQuestion/query':
         return rows([{ questionId: 'k1', quizId: 'q1', seq: 1, stem: 'First?', image: null, points: 2 }])
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbOption/query':
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterial/query':
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterialImage/query':
-      case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query':
         return rows([])
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query': {
+        // F-S6c: by key when the filter names keys.
+        const keys = ((body as { filters?: { field: string; values?: string[] }[] } | null)?.filters ?? [])
+          .find((f) => f.field === 'elementKey')?.values
+        return rows((options.translations ?? []).filter((t) => !keys || keys.includes(String(t.elementKey))))
+      }
       // Q100e: the quiz's products, by code where the product has one.
       case '/api/datasets/urn:jabiz:dataset:me:QbQuizProduct/query':
         return rows([{ quizId: 'q1', questionNo: 0, productId: 'pr1', seq: 0 },
@@ -130,7 +139,7 @@ function server(options: Server = {}) {
   })
   const processCalls = (name: string) =>
     posted.filter((p) => p.path === `/api/processes/${name}/latest`).map((p) => p.body)
-  return { processCalls, uploads }
+  return { processCalls, uploads, posted }
 }
 
 beforeAll(() => configureClient({ entry: 'sponsor' }))
@@ -287,6 +296,33 @@ describe('the quiz list', () => {
       cover: 'f1' }, questions: [{ stem: 'First?', points: 2 }] })
     expect(document.products).toEqual({ quiz: [{ code: 'TEA-1' }], questions: [{ no: 1, product: { productId: 'pr2' } }] })
     expect(document.files.f1).toMatchObject({ type: 'image/png', size: 3, data: btoa('\x01\x02\x03') })
+  })
+
+  it('exports every translation, read only when the export is asked for (F-S6c)', async () => {
+    const { posted } = server({ translationLanguages: 'zh', translations: [
+      { translationId: 't1', quizId: 'q1', language: 'zh', elementKey: 'quiz.title', text: '咖啡入门', image: null,
+        sourceHash: 'aaaaaaaaaaaaaaaa' },
+      { translationId: 't2', quizId: 'q1', language: 'zh', elementKey: 'question:k1.stem', text: '第一？',
+        image: null, sourceHash: 'bbbbbbbbbbbbbbbb' }] })
+    const created: Blob[] = []
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      created.push(blob as Blob)
+      return 'blob:quiz'
+    })
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    window.history.replaceState(null, '', '/quizzes')
+    render(<App />)
+    const row = await screen.findByTestId('quiz-row')
+    const translationQueries = () => posted.filter((p) => p.path.endsWith(':QbContentTranslation/query'))
+    expect(translationQueries()).toEqual([])
+    await userEvent.click(within(row).getByRole('button', { name: 'Export Coffee basics' }))
+    await waitFor(() => expect(click).toHaveBeenCalled())
+    // All of them: not only the quiz's own keys.
+    expect(translationQueries().map((p) => (p.body as { filters: unknown }).filters)).toEqual([
+      [{ field: 'quizId', op: 'eq', value: 'q1' }]])
+    const document = JSON.parse(await created.find((blob) => blob.type === 'application/json')!.text())
+    expect(document.translations.zh.texts).toEqual({ title: '咖啡入门', 'q1.stem': '第一？' })
   })
 
   it('imports a quiz file after the server read it, and opens the new draft', async () => {

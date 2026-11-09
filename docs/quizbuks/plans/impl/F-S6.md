@@ -129,6 +129,29 @@
   - e2e `content-bank.spec.ts`：导入两批，撤销一批，搜索，移动一题，批量改分；
   - axe 亮暗两种外观。
 
+### 3.5a F-S6b 的实现与计划的差别（2026-11-08）
+
+- **草稿照旧整份读取**：编辑器的其他部分（翻译页、商品、AI 面板、摘要行的满分与单选多选计数）仍用 `readDraft`；题目列表本身只读当前页（模板），打开或编辑一题时，草稿中没有这一题就单独读它与它的选项（`readQuestion`）。去掉整份读取留给以后（风险大，涉及翻译页）。
+- **翻译页按页没有做**：需要新模板 `qb.sponsor.quiz-translations`（后端），本 PR 不改后端；翻译页照旧整份读取。→ 已在 **F-S6c** 做完，见 §3.5b。**首次上线必做（总控 2026-11-09）**。
+- **"移到…"**：题数不超过 100 时照旧是列出全部位置的下拉，超过时改为输入位置的对话框；两者与上移、下移都用 `QB_QUESTION_MOVE`（目标位置上的题不在当前页时以模板的 `no` 查出它）。
+- **导入题目**：先以 `QB_QUIZ_IMPORT_CHECK` 检查整个文件（一次列出全部问题），再按 `importBatch` 分批，每批是只含这些题的 Quiz 文件（题号与译文的键 `q<N>.…` 从 1 重新编号，没有资料、商品与封面，只带这批用到的文件），每批照旧先检查、上传文件、再导入；文件中的资料与商品不导入，页面在开始前说明。一批失败即停，说明第几批与原因，之前的批次保留。页面在最后一批之后才重新读取 Quiz。
+- **帮助**：`docs/quizbuks/help/large-banks.md`（三语底稿）；题目页的说明链接到帮助中心 `/help`。
+
+### 3.5b F-S6c 翻译页按页（2026-11-09，首次上线必做（总控 2026-11-09））
+
+- **模板** `qb.sponsor.quiz-translations`（`qb.content.write`，商家数据视图）：参数 `quizId`、`language`（必填）、`q`、`untranslated`；`list:` 按题号分页（页面每页 50 题，`offset` / `limit`）。
+  每行一题：题号（Quiz 的顺序，在搜索与筛选之前编号）、题干与图片、该语言的题干译文、状态与作者、该语言自己的图片，选项（JSON 列表：编号、文字、图片、译文、状态、作者、自己的图片），以及待处理的文字数 `pending`。
+  - 状态即 `QuizLanguages` 的规则：基准没有文字为 `none`，没有译文为 `missing`，译文的 `sourceHash` 不等于现在基准文字的哈希为 `stale`，否则 `done`。哈希在 SQL 中照 `ContentLanguages.sourceHash` 计算（NFC、UTF-8、SHA-256 的前 16 个十六进制字符），`QuizTranslationsTemplateIT` 用流程写入的哈希核对（含需要 NFC 的文字）。
+  - `q` 搜题干或任一选项的文字（`strpos`，不分大小写）；`untranslated` 只列 `pending > 0` 的题。
+- **页面**（`content/TranslationsPanel.tsx`）：
+  - 标题与简介、资料、封面照旧取自草稿（数量少）。
+  - 语言切换上"还差几项"的数目：文字部分来自新模板 `qb.sponsor.quiz-translation-progress`（每种语言整份 Quiz 的缺少与过时的文字数，状态规则同上，`QuizTranslationsTemplateIT` 核对它等于按页模板的 `pending` 之和加上标题与简介），资料部分照旧按草稿中的语言版本计算。
+  - 题目部分按页读模板：上一页 / 下一页、搜索框、"只看需要处理的"（同一个勾选框也筛选标题与简介），本页题目与选项自己的图片列在本页之下。
+  - 保存照旧是 `QB_TRANSLATION_SAVE`（同样的 `entries` 与 `baseRevision`），AI 的建议照旧逐条"采用"并确认、经 `QB_AI_TRANSLATION_ACCEPT` 写入；"全部采用"改为分两处：标题与简介一处，本页一处（"采用本页全部 AI 建议"），各自保存。
+  - 一页有未保存的修改时，翻页、搜索与筛选都停用并提示先保存（不在页之间保留未保存的输入）。
+- **草稿不再读全部译文**：编辑器的草稿（`readDraft`）只按键读 Quiz 自己的译文（`quiz.title`、`quiz.intro`、`quiz.cover`；商家译文数据视图因此可按 `elementKey` 筛选）。千题、六个选项、三种语言约 4.2 万行译文，以前每次打开编辑器约 420 次请求，现在一次。
+  需要全部译文的只在用户要求时读取（`readDraft(quizId, 'all')`）：导出在按下"导出"时，预览在打开预览页时（缓存键与编辑器的草稿分开），行为不变。题目与选项仍整份读取（§3.5a）。
+
 ## 4. 统计
 
 - 每题的被抽人数（Q81 D-6）：`QbQuestionStat` 加列 `drawn`（迁移），由 `analytics-attempts.sql` 从开始了的答题的 `question_set` 计算。没有抽题的发布等于该版本的开始人数，照最小分组公布。
