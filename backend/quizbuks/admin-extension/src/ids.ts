@@ -70,6 +70,8 @@ export const TEMPLATE = {
   topics: 'qb.admin.topics',
   /** F-S12: the videos Sponsors share (headquarters every provider's, an operator its own Sponsors'). */
   sharedVideos: 'qb.admin.shared-videos',
+  /** F-C3: the publications that went on with a shared video (an operator's own Sponsors' only). */
+  sharedVideoUses: 'qb.admin.shared-video-uses',
   /** Q60c-2: one sponsor's page views and product clicks in a period. */
   sponsorStats: 'qb.admin.sponsor-stats',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
@@ -351,6 +353,7 @@ export const DICTIONARY = {
   contentLanguage: 'urn:jabiz:dict:quizbuks:content-language',
   audience: 'urn:jabiz:dict:quizbuks:publication-audience',
   publicationStatus: 'urn:jabiz:dict:quizbuks:publication-status',
+  publicationEndReason: 'urn:jabiz:dict:quizbuks:publication-end-reason',
   quizStatus: 'urn:jabiz:dict:quizbuks:quiz-status',
   quizKind: 'urn:jabiz:dict:quizbuks:quiz-kind',
   sponsorReviewStatus: 'urn:jabiz:dict:quizbuks:sponsor-review-status',

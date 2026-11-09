@@ -114,7 +114,15 @@ public final class QbInbox {
     public static final String OPERATOR_CHANGED = "OPERATOR_CHANGED";
     /** F-S2b2: a node the person lit was revoked, with the reason (to the person; the source is the request). */
     public static final String TREE_LIT_REVOKED = "TREE_LIT_REVOKED";
-    public static final List<String> MESSAGE_KINDS = List.of(USAGE_OVER_FREE, OPERATOR_CHANGED, TREE_LIT_REVOKED, CONVERSATION_REPLY, REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
+    /**
+     * F-C3: the review sent back a video the sponsor shared, with its reason; an operator or headquarters took one down
+     * (to the provider; the source is the shared video; linked to the asset library).
+     */
+    public static final String SHARED_VIDEO_REJECTED = "SHARED_VIDEO_REJECTED";
+    public static final String SHARED_VIDEO_TAKEN_DOWN = "SHARED_VIDEO_TAKEN_DOWN";
+    public static final List<String> SHARED_VIDEO_KINDS = List.of(SHARED_VIDEO_REJECTED, SHARED_VIDEO_TAKEN_DOWN);
+    public static final List<String> MESSAGE_KINDS = List.of(SHARED_VIDEO_REJECTED, SHARED_VIDEO_TAKEN_DOWN,
+        USAGE_OVER_FREE, OPERATOR_CHANGED, TREE_LIT_REVOKED, CONVERSATION_REPLY, REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
         REFERRAL_FUNDS_SHORT, REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
         TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER, CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED,
         CASH_DISPUTED, CASH_OVERDUE, REDEEM_DUE, REDEEM_CLAIMED,

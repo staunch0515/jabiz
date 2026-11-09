@@ -119,6 +119,19 @@ class SharedVideoIT extends PlayItSupport {
         jobRunner.run(endsJob, clock.instant());
     }
 
+    /** The state of the review task of an approval request (the platform's ApprovalTasks); null when none. */
+    static Object reviewTask(Object requestId) {
+        List<Map<String, Object>> tasks = query("SELECT status FROM (SELECT DISTINCT ON (task_id) * FROM "
+            + "sys_task_version ORDER BY task_id, version_no DESC) t WHERE source_key = ?", "approval:" + requestId);
+        return tasks.isEmpty() ? null : tasks.getFirst().get("status");
+    }
+
+    /** F-C3: the provider's in-app notices of a kind about one shared video. */
+    static List<Map<String, Object>> notices(String userId, String kind, String sharedVideoId) {
+        return query("SELECT kind, action, title::text AS title, body::text AS body FROM qb_message WHERE recipient_id = ? "
+            + "AND kind = ? AND source_key LIKE ?", userId, kind, "%" + sharedVideoId);
+    }
+
     static List<Object> mailTemplates(String userId) {
         return query("SELECT template FROM sys_mail_message WHERE user_id = ?::uuid ORDER BY created_time", userId)
             .stream().map(row -> row.get("template")).toList();
@@ -146,6 +159,8 @@ class SharedVideoIT extends PlayItSupport {
         Map<String, Object> shared = run(SharedVideoProcesses.SHARE, token, share(asset, true, pets));
         assertThat(shared).containsEntry("status", "PENDING").containsEntry("approval", "PENDING");
         String sharedVideoId = (String) shared.get("sharedVideoId");
+        // F-C3: the review is a task of the platform's approvals, open until it is decided.
+        assertThat(reviewTask(shared.get("approvalRequestId"))).isEqualTo("OPEN");
         assertThat(videoRow(sharedVideoId)).containsEntry("provider_id", provider).containsEntry("url", YOUTUBE)
             .containsEntry("vertical", true).containsEntry("topics", pets);
         // One share of an asset stands at a time.
@@ -164,8 +179,16 @@ class SharedVideoIT extends PlayItSupport {
                 "SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?", provider).getFirst()
                 .get("operator_id"))));
 
+        // Headquarters (an unscoped session) decides any operator's case (F-C3: no operator is needed for that).
         decide((String) shared.get("approvalRequestId"), "APPROVE", null);
         assertThat(videoRow(sharedVideoId)).containsEntry("status", "APPROVED");
+        assertThat(reviewTask(shared.get("approvalRequestId"))).isEqualTo("DONE");
+        // F-C3: the provider's own video is not in their catalog (they pick it from their materials); looked up by
+        // its key (a draft that picked it before), it still is.
+        assertThat(items("qb.sponsor.shared-videos", token, body("params", body())))
+            .extracting(row -> row.get("sharedVideoId")).doesNotContain(sharedVideoId);
+        assertThat(items("qb.sponsor.shared-videos", token, body("params", body("sharedVideoId", sharedVideoId))))
+            .extracting(row -> row.get("sharedVideoId")).containsExactly(sharedVideoId);
         assertThat(items("qb.sponsor.my-shared-videos", token, body("params", body())))
             .filteredOn(row -> sharedVideoId.equals(row.get("sharedVideoId"))).singleElement()
             .satisfies(row -> assertThat(row).containsEntry("status", "APPROVED"));
@@ -205,6 +228,19 @@ class SharedVideoIT extends PlayItSupport {
         assertThat(items("qb.sponsor.my-shared-videos", token, body("params", body("assetId", second))))
             .singleElement().satisfies(row -> assertThat(row).containsEntry("status", "REJECTED")
                 .containsEntry("rejectReason", "Not entertainment"));
+        assertThat(reviewTask(rejected.get("approvalRequestId"))).isEqualTo("DONE");
+        // F-C3: and an in-app notice with the reason, leading to the asset library; once, however often delivered.
+        String rejectedId = (String) rejected.get("sharedVideoId");
+        assertThat(notices(provider, "SHARED_VIDEO_REJECTED", rejectedId)).singleElement().satisfies(notice -> {
+            assertThat(notice).containsEntry("action", "ASSETS");
+            assertThat(notice.get("title").toString()).contains("Cats " + second.substring(0, 6), "猫の動画");
+            assertThat(notice.get("body").toString()).contains("Not entertainment");
+        });
+        assertThat(items("qb.sponsor.inbox", token, body("params", body())))
+            .extracting(row -> row.get("kind")).contains("SHARED_VIDEO_REJECTED");
+        // An approval makes no notice.
+        assertThat(query("SELECT 1 FROM qb_message WHERE recipient_id = ? AND source_key LIKE ?", provider,
+            "%" + sharedVideoId)).isEmpty();
         // Shared again after the rejection: a new share, reviewed anew.
         assertThat(run(SharedVideoProcesses.SHARE, token, share(second, false, pets))).containsEntry("status",
             "PENDING");
@@ -332,6 +368,19 @@ class SharedVideoIT extends PlayItSupport {
         assertThat(mailTemplates(first)).contains("qb.publication.shared-video-ended")
             .doesNotContain("qb.publication.taken-down", "qb.publication.ended");
         assertThat(mailTemplates(second)).contains("qb.publication.shared-video-ended");
+        // F-C3: the provider's in-app notice too, with the reason.
+        assertThat(notices(provider, "SHARED_VIDEO_TAKEN_DOWN", sharedVideoId)).singleElement()
+            .satisfies(notice -> assertThat(notice.get("body").toString()).contains("Infringes a copyright"));
+        // F-C3: the publications the takedown ended, for headquarters every sponsor's: why and when they ended.
+        assertThat(items("qb.admin.shared-video-uses", videoAdmin(), body("params", body("sharedVideoId",
+            sharedVideoId)))).extracting(r -> r.get("publicationId"), r -> r.get("status"), r -> r.get("endReason"),
+            r -> r.get("publisherId")).containsExactlyInAnyOrder(
+                org.assertj.core.groups.Tuple.tuple(a, "ENDED", "SHARED_VIDEO", first),
+                org.assertj.core.groups.Tuple.tuple(b, "ENDED", "SHARED_VIDEO", second));
+        assertThat(items("qb.admin.shared-video-uses", videoAdmin(), body("params", body("sharedVideoId",
+            sharedVideoId)))).allSatisfy(r -> assertThat(r.get("endedAt")).isNotNull());
+        assertThat(items("qb.admin.shared-video-uses", videoAdmin(), body("params", body())))
+            .isEmpty();
         // Not a takedown of the user's publication: it is copied as any ended one.
         assertThat(run(PublicationProcesses.COPY, sponsorToken(first), body("publicationId", a)))
             .containsKey("publicationId");
@@ -393,6 +442,20 @@ class SharedVideoIT extends PlayItSupport {
         assertThat(videoRow(sharedVideoId)).containsEntry("takedown_operator_id", north.operatorId());
         runEnds();
         assertThat(row(using)).containsEntry("status", "ENDED").containsEntry("end_reason", "SHARED_VIDEO");
+        // F-C3: the publications it ended: headquarters reads them all, an operator only its own sponsors' (the user
+        // is not North's) until the user is North's.
+        Map<String, Object> uses = body("params", body("sharedVideoId", sharedVideoId));
+        assertThat(items("qb.admin.shared-video-uses", videoAdmin(), uses)).extracting(r -> r.get("publicationId"))
+            .containsExactly(using);
+        assertThat(items("qb.admin.shared-video-uses", northSession, uses)).isEmpty();
+        run(OperatorProcesses.ASSIGN, hq, body("userId", user, "operatorId", north.operatorId(), "reason", "F-C3"));
+        assertThat(items("qb.admin.shared-video-uses", northSession, uses)).extracting(r -> r.get("publicationId"))
+            .containsExactly(using);
+        assertThat(items("qb.admin.shared-video-uses", southSession, uses)).isEmpty();
+        client.post().uri("/api/queries/qb.admin.shared-video-uses")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, sponsorToken(user)).bodyValue(uses).exchange()
+            .expectStatus().isForbidden();
         // Neither a taker nor a sponsor reads the administrators' list.
         call("QB_SHARED_VIDEO_TAKEDOWN", sponsorToken(user), body("sharedVideoId", theirVideo, "reason", "x"))
             .expectStatus().isForbidden();
@@ -454,6 +517,72 @@ class SharedVideoIT extends PlayItSupport {
         assertThat(status(live)).isEqualTo("LIVE");
         assertThat(card(live)).containsEntry("shared_video_id", approved);
         String draft = draftWith(user, "FS12 erased draft", null, null);
+        assertThat(codes(refused(PublicationSharedVideos.SET, sponsorToken(user), body("publicationId", draft,
+            "sharedVideoId", approved), 422))).containsExactly(SharedVideoCodes.UNAVAILABLE);
+    }
+
+    /**
+     * F-C3 (总控 2026-11-08): banning a provider withdraws their shares in review (with the review) and approved, in the
+     * ban's transaction; rejected and taken down ones stay as they are; a publication submitted with one goes on. Both
+     * bans: headquarters' and an operator's.
+     */
+    @Test
+    void aBannedProvidersVideosAreWithdrawnWhatWasSubmittedKeepsThem() {
+        String boss = userWithRole(unique("fc3-boss"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER);
+        String bossToken = tokenOf(boss, com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER);
+        String hqProvider = newSponsor(unique("s-fc3-banned-hq"));
+        assertBanWithdraws(hqProvider, () -> run(com.jabiz.quizbuks.identity.BanProcesses.BAN, bossToken,
+            body("userId", hqProvider, "reason", "Fraud")), "QB_USER_BAN");
+
+        String hq = operatorsAdmin();
+        NewOperator east = newOperatorWithLead(hq, unique("FC3 East"), null);
+        String opProvider = newSponsor(unique("s-fc3-banned-op"));
+        run(OperatorProcesses.ASSIGN, hq, body("userId", opProvider, "operatorId", east.operatorId(), "reason",
+            "F-C3"));
+        String eastSession = memberSession(east.leadId(), east.operatorId());
+        assertBanWithdraws(opProvider, () -> run(com.jabiz.quizbuks.identity.BanProcesses.OPERATOR_BAN, eastSession,
+            body("userId", opProvider, "reason", "Fraud")), "QB_OPERATOR_SPONSOR_BAN");
+    }
+
+    private void assertBanWithdraws(String provider, Runnable ban, String banProcess) {
+        String user = newSponsor(unique("s-fc3-banned-user"));
+        credit(user, 10_000);
+        String approved = approvedVideo(provider, BILIBILI, false);
+        String token = sponsorToken(provider);
+        Map<String, Object> pendingShare = run(SharedVideoProcesses.SHARE, token,
+            share(videoAsset(token, "Pending", YOUTUBE), false, word("fs12-pets")));
+        String pending = (String) pendingShare.get("sharedVideoId");
+        Map<String, Object> rejected = run(SharedVideoProcesses.SHARE, token,
+            share(videoAsset(token, "Rejected", YOUTUBE), false, word("fs12-pets")));
+        decide((String) rejected.get("approvalRequestId"), "REJECT", "No");
+        String takenDown = approvedVideo(provider, YOUTUBE, true);
+        String live = liveWith(user, "FC3 banned live", approved);
+        run(SharedVideoProcesses.TAKEDOWN, videoAdmin(), body("sharedVideoId", takenDown, "reason", "Illegal"));
+        assertThat(items("qb.sponsor.shared-videos", sponsorToken(user), body("params", body(), "limit", 200)))
+            .extracting(row -> row.get("sharedVideoId")).contains(approved);
+
+        ban.run();
+
+        assertThat(videoRow(approved)).containsEntry("status", "WITHDRAWN");
+        assertThat(videoRow(pending)).containsEntry("status", "WITHDRAWN");
+        assertThat(videoRow((String) rejected.get("sharedVideoId"))).containsEntry("status", "REJECTED");
+        assertThat(videoRow(takenDown)).containsEntry("status", "TAKEN_DOWN");
+        // The review in progress is withdrawn with it, and its task closed.
+        assertThat(query("SELECT status FROM sys_approval_request_version WHERE request_id = ?::uuid ORDER BY "
+            + "version_no DESC LIMIT 1", pendingShare.get("approvalRequestId")).getFirst().get("status"))
+            .isNotEqualTo("PENDING");
+        assertThat(reviewTask(pendingShare.get("approvalRequestId"))).isNotEqualTo("OPEN");
+        // Inside the ban: its sub-processes, one per share standing.
+        assertThat(query("SELECT count(*) AS n FROM op_process c JOIN op_process p ON p.process_seq_id = "
+            + "c.parent_seq_id WHERE p.process_name = ? AND c.process_name = ? AND c.input_summary ->> 'providerId' = ?",
+            banProcess, SharedVideoProcesses.ERASED_WITHDRAW, provider).getFirst().get("n"))
+            .isEqualTo(2L);
+        // The catalog no longer lists the banned provider's video; the publication submitted with it goes on.
+        assertThat(items("qb.sponsor.shared-videos", sponsorToken(user), body("params", body(), "limit", 200)))
+            .extracting(row -> row.get("sharedVideoId")).doesNotContain(approved, pending);
+        assertThat(status(live)).isEqualTo("LIVE");
+        assertThat(card(live)).containsEntry("shared_video_id", approved);
+        String draft = draftWith(user, "FC3 banned draft", null, null);
         assertThat(codes(refused(PublicationSharedVideos.SET, sponsorToken(user), body("publicationId", draft,
             "sharedVideoId", approved), 422))).containsExactly(SharedVideoCodes.UNAVAILABLE);
     }
