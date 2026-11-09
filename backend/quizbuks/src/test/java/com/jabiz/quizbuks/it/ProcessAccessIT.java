@@ -190,7 +190,10 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_HELP_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_HELP_USAGE_CHECK", ProcessAccess.INTERNAL),
         // F-C10: a reassigned Sponsor's help conversations (QB_SPONSOR_OPERATOR_ASSIGN's sub-process).
-        Map.entry("QB_HELP_OPERATOR_MOVE", ProcessAccess.SUB_PROCESS_ONLY));
+        Map.entry("QB_HELP_OPERATOR_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
+
+        // F-C4: the retention job's item deleting an old record of a sponsor package's import.
+        Map.entry("QB_PACKAGE_IMPORT_EXPIRE", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

@@ -34,6 +34,8 @@ public final class QbTrees {
     /** F-S2d: the nodes as the public pages read them (whether a node has prerequisites), templates only. */
     public static final String PUBLIC_NODES = "urn:jabiz:dataset:public:" + NODE;
     public static final String MY_REVOCATIONS = "urn:jabiz:dataset:me:" + REVOCATION;
+    /** F-C4: a Sponsor's own graphs, read only (the sponsor package's export and its binding by node key). */
+    public static final String SPONSOR_TREES = "urn:jabiz:dataset:sponsor:" + TREE;
 
     public static String defaultDataset(String entity) {
         return "urn:jabiz:dataset:default:" + entity;

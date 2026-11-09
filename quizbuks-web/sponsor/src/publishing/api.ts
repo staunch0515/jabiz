@@ -136,6 +136,9 @@ export interface Publication {
   topicChanges?: TopicChanges
   /** F-S12: the video another Sponsor shares that it picked; null: none. */
   sharedVideoId?: string | null
+  /** F-S2b1: the knowledge map and node it is bound to; null: none (F-C4 carries them in a sponsor package). */
+  treeId?: string | null
+  treeNodeId?: string | null
 }
 
 /** F-S9: a publication's changes of its version's topics (backend `TopicRules.Changes`). */
@@ -452,6 +455,8 @@ export function toPublication(row: Row): Publication {
     copiedFrom: str(row.copiedFrom),
     topicChanges: topicChangesOf(row.topicChanges),
     sharedVideoId: str(row.sharedVideoId),
+    treeId: str(row.treeId),
+    treeNodeId: str(row.treeNodeId),
   }
 }
 
