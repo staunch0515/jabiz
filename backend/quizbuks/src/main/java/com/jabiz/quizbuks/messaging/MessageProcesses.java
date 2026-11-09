@@ -97,6 +97,9 @@ public final class MessageProcesses {
     /** F-S1: a sponsor moved to another operator. */
     public static final String OPERATOR_CHANGED_CONSUMER = "qb.msg-operator-changed";
     public static final String TREE_LIT_REVOKED_CONSUMER = "qb.msg-tree-lit-revoked";
+    /** F-C3: a shared video sent back by its review, or taken down. */
+    public static final String SHARED_VIDEO_REJECTED_CONSUMER = "qb.msg-shared-video-rejected";
+    public static final String SHARED_VIDEO_TAKEN_DOWN_CONSUMER = "qb.msg-shared-video-taken-down";
 
     /**
      * The taker's push notification of a prize won (platform 17k, decision D69): the moment a taker learns of a prize,
@@ -155,6 +158,7 @@ public final class MessageProcesses {
     static final String FREE = "free";
     static final String OPERATOR = "operator";
     static final String REVOKE_REQUEST = "revokeRequest";
+    static final String SHARED_VIDEO = "sharedVideo";
 
     /** A push: which, to whom, and the page of the app a tap opens. */
     record Push(PushTemplate template, String userId, String link) {}
@@ -220,6 +224,10 @@ public final class MessageProcesses {
                         com.jabiz.quizbuks.operator.QbOperators.OPERATOR), ctx -> byId("operatorId",
                         QbInbox.OPERATOR_CHANGED.equals(input(ctx).kind()) ? afterBar(input(ctx).sourceId()) : null),
                         OPERATOR),
+                    // F-C3: the shared video the event names (sent back or taken down still?).
+                    QueryEntities.query(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.DEFAULT_DATASET,
+                        ctx -> byId("sharedVideoId", QbInbox.SHARED_VIDEO_KINDS.contains(input(ctx).kind())
+                            ? input(ctx).sourceId() : null), SHARED_VIDEO),
                     // Q33: the digital prize the event names.
                     QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE),
                         ctx -> byId("digitalPrizeId", QbInbox.DIGITAL_KINDS.contains(input(ctx).kind())
@@ -309,6 +317,7 @@ public final class MessageProcesses {
             case QbInbox.USAGE_OVER_FREE -> usageMessage(ctx, input, params);
             case QbInbox.OPERATOR_CHANGED -> operatorMessage(ctx, input, params);
             case QbInbox.TREE_LIT_REVOKED -> revokedMessage(ctx, params);
+            case QbInbox.SHARED_VIDEO_REJECTED, QbInbox.SHARED_VIDEO_TAKEN_DOWN -> sharedVideoMessage(ctx, input, params);
             default -> null;
         };
         if (draft != null) {
@@ -650,6 +659,42 @@ public final class MessageProcesses {
         }
         params.put("reason", MessageTexts.Value.of(request.get("reason")));
         return new Draft(request.get("subjectId"), QbInbox.TYPE_SYSTEM, QbInbox.TREE_LIT_REVOKED, null, null, null);
+    }
+
+    /**
+     * F-C3: the provider's shared video sent back or taken down, only while it still is; its title in each language
+     * and the reason as the reviewer or the one who took it down wrote it (the review may give none). Linked to the
+     * asset library, where their shares are listed.
+     */
+    @SuppressWarnings("unchecked")
+    private static Draft sharedVideoMessage(ProcessContext ctx, EventInput input,
+        Map<String, MessageTexts.Value> params) {
+        EntityInstance video = first(ctx, SHARED_VIDEO);
+        boolean rejected = QbInbox.SHARED_VIDEO_REJECTED.equals(input.kind());
+        String status = rejected ? com.jabiz.quizbuks.sharedvideo.QbSharedVideos.REJECTED
+            : com.jabiz.quizbuks.sharedvideo.QbSharedVideos.TAKEN_DOWN;
+        if (video == null || !status.equals(video.get("status"))) {
+            return null;
+        }
+        Map<String, Object> titles = video.get("title") instanceof Map<?, ?> map ? (Map<String, Object>) map
+            : Map.of();
+        params.put("title", locale -> {
+            Object title = titles.get(locale.getLanguage());
+            if (title == null) {
+                title = titles.get("en");
+            }
+            return title == null ? "" : title.toString();
+        });
+        Object reason = video.get(rejected ? "rejectReason" : "takedownReason");
+        params.put("reason", MessageTexts.Value.of(reason == null || reason.toString().isBlank() ? "—"
+            : reason.toString().strip()));
+        return new Draft(video.get("providerId"), QbInbox.TYPE_SYSTEM, input.kind(), null, QbInbox.ACTION_ASSETS,
+            null);
+    }
+
+    /** F-C3: a shared video's event: the video (the provider is read with it). */
+    static EventInput sharedVideoInput(DomainEvent event, String kind) {
+        return new EventInput(kind, text(event, "sharedVideoId"), null, event.createdTime());
     }
 
     private static String afterBar(String value) {

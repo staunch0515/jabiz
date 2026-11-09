@@ -44,6 +44,8 @@ const en = {
     withdrawTitle: 'Withdraw this shared video?',
     withdrawText: 'New publications can no longer choose it. The publications already submitted with it keep it until they end.',
     withdrawn: 'Withdrawn.',
+    column: 'Sharing',
+    columnNone: 'Not shared',
     status: {
       PENDING: 'In review',
       APPROVED: 'Shared',
@@ -69,6 +71,7 @@ const en = {
     picker: {
       title: 'Shared videos',
       intro: 'Videos other Sponsors share, reviewed by their operator.',
+      ownHint: 'Your own videos are not listed here: choose them from your quiz\'s materials.',
       search: 'Search',
       searchPlaceholder: 'Title or Sponsor',
       topic: 'Topic',
@@ -124,6 +127,8 @@ const zh: typeof en = {
     withdrawTitle: '撤回这个共享视频？',
     withdrawText: '新的发布不能再选择它。已提交的、用到它的发布照常用到结束。',
     withdrawn: '已撤回。',
+    column: '共享',
+    columnNone: '未共享',
     status: {
       PENDING: '待审核',
       APPROVED: '共享中',
@@ -149,6 +154,7 @@ const zh: typeof en = {
     picker: {
       title: '共享视频目录',
       intro: '其他发起方共享、经其运营商审核的视频。',
+      ownHint: '这里不列出您自己的视频：自己的视频请在 Quiz 的资料中选用。',
       search: '搜索',
       searchPlaceholder: '标题或发起方',
       topic: '主题词',
@@ -204,6 +210,8 @@ const ja: typeof en = {
     withdrawTitle: 'この共有動画を取り下げますか？',
     withdrawText: '新しい公開では選べなくなります。すでに提出された、この動画を使う公開は終了まで使い続けます。',
     withdrawn: '取り下げました。',
+    column: '共有',
+    columnNone: '共有していません',
     status: {
       PENDING: '審査待ち',
       APPROVED: '共有中',
@@ -229,6 +237,7 @@ const ja: typeof en = {
     picker: {
       title: '共有動画カタログ',
       intro: 'ほかの主催者が共有し、その運営パートナーが審査した動画です。',
+      ownHint: 'ご自分の動画はここには表示されません。Quiz の資料から選んでください。',
       search: '検索',
       searchPlaceholder: 'タイトルまたは主催者',
       topic: 'トピック',

@@ -242,7 +242,11 @@ public class InboxConfig {
                 "推荐奖励待充值", "ja", "紹介報酬の残高不足")
             .item(QbInbox.CONVERSATION_REPLY, "en", "Sponsor replied", "zh", "发起方回复", "ja", "主催者からの返信")
             .item(QbInbox.USAGE_OVER_FREE, "en", "Storage above the free amount", "zh", "存储超过免费额度",
-                "ja", "ストレージが無料枠を超えました"));
+                "ja", "ストレージが無料枠を超えました")
+            .item(QbInbox.SHARED_VIDEO_REJECTED, "en", "Shared video sent back", "zh", "共享视频被驳回", "ja",
+                "共有動画の差し戻し")
+            .item(QbInbox.SHARED_VIDEO_TAKEN_DOWN, "en", "Shared video taken down", "zh", "共享视频被下架", "ja",
+                "共有動画の公開停止"));
     }
 
     @Bean
@@ -607,6 +611,26 @@ public class InboxConfig {
         return EventSubscription.of(MessageProcesses.OPERATOR_CHANGED_CONSUMER,
             com.jabiz.quizbuks.operator.OperatorProcesses.OPERATOR_CHANGED_EVENT, qbMessageFromEvent,
             MessageProcesses::operatorChangedInput);
+    }
+
+    /** F-C3: a provider whose shared video the review sent back hears it, with the reason. */
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageSharedVideoRejectedSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.SHARED_VIDEO_REJECTED_CONSUMER,
+            com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses.REJECTED_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.sharedVideoInput(event, QbInbox.SHARED_VIDEO_REJECTED));
+    }
+
+    /** F-C3: a provider whose shared video was taken down hears it in their inbox too (beside the mail). */
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageSharedVideoTakenDownSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.SHARED_VIDEO_TAKEN_DOWN_CONSUMER,
+            com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses.TAKEN_DOWN_EVENT, qbMessageFromEvent,
+            event -> MessageProcesses.sharedVideoInput(event, QbInbox.SHARED_VIDEO_TAKEN_DOWN));
     }
 
     @Bean
