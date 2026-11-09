@@ -17,8 +17,8 @@ const ENTRY = { name: 'app', selfRegistration: true, requireVerifiedEmail: false
 const USER = '01a0f4fe-4660-7000-8000-0000000000cc'
 const KEY = '0123456789abcdef0123456789abcdef'
 
-const HELD = { certification: 'SPONSOR_APPLY', source: 'PASSED', heldFrom: '2026-10-01T00:00:00Z',
-  heldUntil: '2099-10-01T00:00:00Z', certificateId: null, verifyKey: null }
+const HELD = { certification: 'SPONSOR_APPLY', heldFrom: '2026-10-01T00:00:00Z',
+  heldUntil: '2099-10-01T00:00:00Z', certificateId: 'c1', verifyKey: KEY }
 
 const VERIFIED: VerifiedCertificate = { certification: 'SPONSOR_APPLY', certificationVersion: 1, holderName: 'Mei',
   heldFrom: '2026-10-01T00:00:00Z', validUntil: '2099-10-01T00:00:00Z', issuedAt: '2026-10-02T00:00:00Z',
@@ -116,21 +116,17 @@ describe('certificates (Q77)', () => {
     expect(stateOf({ ...VERIFIED, revokedAt: '2026-11-01T00:00:00Z' }, now)).toBe('REVOKED')
   })
 
-  it('lists the certifications held; issuing is paused, and an issued certificate keeps its link', async () => {
+  it('lists the certificates still valid with their links; issuing is paused (F-S2c, F-S2c2b)', async () => {
     session.store('access', 'refresh')
-    const { processCalls } = server({ held: [HELD, { ...HELD, certification: 'REFERRER', certificateId: 'c1',
-      verifyKey: KEY }] })
+    const { processCalls } = server({ held: [HELD] })
     window.history.replaceState(null, '', '/account/certificates')
     render(<App />)
     const item = await screen.findByTestId('certificate-SPONSOR_APPLY')
     expect(item).toHaveTextContent('Sponsor Certification')
-    expect(item).toHaveTextContent('Passed the certification quiz')
-    // F-S2c (D8): no certificate is issued any more; one issued before still verifies and downloads.
-    expect(within(item).getByTestId('certificate-paused-SPONSOR_APPLY')).toHaveTextContent('not issued for now')
-    expect(within(item).queryByRole('button')).toBeNull()
-    const issued = await screen.findByTestId('certificate-REFERRER')
-    expect(within(issued).getByTestId('certificate-link-REFERRER')).toHaveTextContent(`/verify/${KEY}`)
-    expect(within(issued).getByTestId('certificate-download-REFERRER')).toBeEnabled()
+    expect(within(item).getByTestId('certificate-link-SPONSOR_APPLY')).toHaveTextContent(`/verify/${KEY}`)
+    expect(within(item).getByTestId('certificate-download-SPONSOR_APPLY')).toBeEnabled()
+    // F-S2c (D8): no certificate is issued any more; the page says so once.
+    expect(screen.getByTestId('certificates-paused')).toHaveTextContent('not issued for now')
     expect(processCalls('QB_CERTIFICATE_ISSUE')).toEqual([])
     await expectAccessible()
   })

@@ -507,7 +507,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 ### 7.13 运营商（Q48a、F-S1）
 
-每个发起方都由一个运营商负责：审核（入驻、发布、发起方主页与商品）、举报、兑换与数字奖品争议、奖励方式、获客与认证都在运营商管理系统 `/operator/` 中由运营商的成员做，审核即终审；平台只做财务、抽查、全局规则与应急，并在平台管理系统中**只读**查看全部运营商的这些列表（可按运营商筛选）（`plans/Q48-operators.md`、`plans/impl/F-S1.md`）。
+每个发起方都由一个运营商负责：审核（入驻、发布、发起方主页与商品）、举报、兑换与数字奖品争议、奖励方式、获客（~~与认证~~已由 F-S2c2b 删去，D1）都在运营商管理系统 `/operator/` 中由运营商的成员做，审核即终审；平台只做财务、抽查、全局规则与应急，并在平台管理系统中**只读**查看全部运营商的这些列表（可按运营商筛选）（`plans/Q48-operators.md`、`plans/impl/F-S1.md`）。
 
 **第一个运营商（上线前必做）**：没有默认运营商时，谁也不能申请成为发起方（入驻 422 `QB_OPERATOR_DEFAULT_MISSING`），平台管理系统首页（`/admin/` 登录后的"首页"）以红色提示"请先建默认运营商"。
 
@@ -562,17 +562,13 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
 - **费用** = max（最低使用费，Σ 所用计费规则的日价 × 天数），天数为发布期间按 24 小时向上取整；没用计费规则的不收。
 - **开关**（受控参数，四眼）：`qb.audience.billing.enabled`（缺省关：报价为 0）、`qb.audience.price.fallback`、`qb.audience.fee.refund-unused-days`（Q47c-2 才起作用）。打开之前先设好价目表；**Q47c-2 上线之前不要打开**（打开后发起方看到费用，但提交时还不扣款）。部署后执行一次 `QB_SETUP` 提出这三个参数，由另一位管理员发布。
 
-### 7.16 协议答题（Q86）
+### 7.16 ~~协议答题（Q86）~~
 
-协议理解是三种普通的认证（`TERMS_APP_UNDERSTOOD` 条款 + 隐私、`CONTEST_RULES_UNDERSTOOD` 有奖活动规则、`TERMS_SPONSOR_UNDERSTOOD` 发起方条款，`plans/Q86-agreement-quiz-tree.md`）：
-同意照旧，答题自愿；题目与轮次照 Q69 / Q70 的办法由官方账号出。出一轮：
-
-1. 总部经营一个普通的发起方账号（入驻、审核通过、充值换学分：它的奖励由它自己的学分出），持 `qb.certification.admin` 的管理员以 `QB_OFFICIAL_PUBLISHER_SET` 把它标为官方账号（管理系统扩展「认证」页）。
-2. 以该账号出题（题库 ≥ 15 题、每人抽 5 题 `pickCount`、同分、合格线 = 满分、每题写解析；三语以日文为准，AI 初稿由内容管理员校对）并发布一个公开的发布（至少一档奖励 > 0）。
-3. 持 `qb.certification.manage` 的管理员以 `QB_CERTIFICATION_ROUND_ADD` 把该发布登记为该认证的一轮；每月关闭旧轮（`QB_CERTIFICATION_ROUND_CLOSE`）、换题再登记新轮。
-4. 法律文本发布了**须重新同意**的新版时，由开发升 `Certifications` 中该认证的版本（启动检查 `CERTIFICATION_LEGAL` 在版本落后时警告，不是错误：先发文本再出题是正常顺序），再出新一轮；措辞修订不升。
+~~三种协议理解的认证（`TERMS_APP_UNDERSTOOD`、`CONTEST_RULES_UNDERSTOOD`、`TERMS_SPONSOR_UNDERSTOOD`）、由官方账号出题并登记为认证的一轮（`QB_CERTIFICATION_ROUND_ADD` / `_CLOSE`，权限 `qb.certification.manage` / `qb.certification.admin`）、启动检查 `CERTIFICATION_LEGAL`~~已由 F-S2c2 删去（D3：答题卡；D1：认证、轮与记录，F-S2c2b）。同意的流程一字不改。以后在学者的平台图上建"了解条款"的节点（F-S3 的看图显示）。
 
 - ~~**发起方的前置**（向导"客户匹配"一步要求先持有认证）~~已由 F-S2c2 删去（D4）。
+- **已有安装**：已删除的权限 `qb.certification.manage`、`qb.certification.admin` 由 `QB_SETUP` 自动从所有角色（不只 QuizBuks 的角色）上去掉（输出 `permissionsRemoved`，审计中记为删除）：部署后执行一次即可，不用手工改「用户与角色」。排程在以后才开始的这类授予，在开始之后的下一次执行时去掉。
+
 ### 7.17 现金账户（Q87a）
 
 发起方除学分钱包外有现金账户（科目 2160），平台上的钱，需要时一比一换成学分（`plans/Q87-fee-account.md`）。部署后执行一次 `QB_SETUP`（开立 2160、提出新参数），由另一位管理员发布。
@@ -794,10 +790,12 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **节点对一个人的三态与不可见**（F-S2d）：节点对每个学者是三态之一：**未满足前置**（答题前须点亮的节点还有没点亮的）、**可挑战**（前置都已点亮，含挑战中）、**已点亮**。未满足前置时，绑定该节点的发布对这个人**等同于不存在**：首页不列出，详情与档位读不到，查看（`QB_VIEW`）、开始答题、推荐链接的生成与领取都 404，收件箱中发起方关于它的通知与推广不显示、不计入未读（系统公告照旧）；本人已有答题记录的发布照旧能看自己的结果。公开页（不登录）只列没有答题前条件的绑定发布。前置点亮后发布即出现，发布页写明节点名与"合格即点亮"，合格并点亮后写"已点亮"。点亮一律按**图与节点两者**核对（节点编号只在一张图内唯一，副本沿用模板的编号）：条件中的节点在版本生效时解析到一张图（本图优先，否则可引用的生效图中唯一有它的一张）；两张以上都有即提交时拒绝（`QB_TREE_AMBIGUOUS_NODE`，启动检查 `QB_TREE` 也报告）。学者问"为什么看不到某个发布"：多半是还没点亮它要求的前置节点。
 - **撤销点亮**：运营商成员（本运营商的发起方的图与副本）或平台（任何图）以 `QB_TREE_LIT_REVOKE` 填写原因申请（持 `qb.tree.lit.revoke`；本人的点亮不能自己申请），另一位成员或管理员在审批中批准后才写撤销记录（只追加），学者收到站内信（`TREE_LIT_REVOKED`，含原因）；驳回则点亮照旧、记下驳回理由。撤销后，原来那次合格不再点亮它；之后新的合格照常点亮（新的一条记录）。撤销**不连带下游**：已经因它点亮的节点照旧点亮；前置因此不再满足的发布按上面的规则对这个人不可见（已有答题记录的仍能看自己的结果）。节点证书随之作废与扣回赠送的部分在 F-S5、F-M。
 - **每日核对**（任务 `qb.tree-check`，每天 19:23 UTC，模板 `qb.admin.tree-health`）：合格了却没有点亮的（`UNLIT_PASS`：事件丢失或判断失败）、点亮记录指向不存在的节点（`ORPHAN_LIT`：绕过流程写入的数据）、等待审核过久的版本（`REVIEW_OVERDUE`）、门槛参数指不到可点亮的节点（`GATE_INVALID`，见下）、生效的节点引用了没有唯一一张图的节点（`BEFORE_ANSWER_UNRESOLVED`：这个引用永远不算点亮，绑定的发布对所有人不可见）。有问题即给持 `qb.admin.trees.read` 的人一个待办（每天一个）。`UNLIT_PASS` 由随后的任务 `qb.tree-recheck`（19:33 UTC，逐项）自动重新判断；次日仍有即查 `QB_TREE_EVALUATE` 的失败记录（平台的操作记录）。`ORPHAN_LIT` 不自动处理：查是谁写入的，按撤销点亮的流程更正。`BEFORE_ANSWER_UNRESOLVED` 不自动处理：引用的节点所在的图停用、去掉了该节点或出现了同编号的另一张图；改图后重新提交审核。
-- **指定门槛节点**（F-S2c）：点亮平台图上指定的节点即开放的平台功能，由四个受控参数各指一个节点：`qb.tree.gate.referrer-node`（推荐朋友）、`qb.tree.gate.benefit-provider-node`（提供权益）、`qb.tree.gate.benefit-sponsor-node`（赞助权益）、`qb.tree.gate.sponsor-apply-node`（申请成为发起方，F-S2c2 起生效）。**缺省没有参数 = 关闭**（谁也不能推荐、不能上架或赞助权益），`QB_SETUP` 不建立它们。
+- **指定门槛节点**（F-S2c）：点亮平台图上指定的节点即开放的平台功能，由四个受控参数各指一个节点：`qb.tree.gate.referrer-node`（推荐朋友）、`qb.tree.gate.benefit-provider-node`（提供权益）、`qb.tree.gate.benefit-sponsor-node`（赞助权益）、`qb.tree.gate.sponsor-apply-node`（在 App 中申请成为发起方，F-S2c2b）。**缺省没有参数 = 关闭**（谁也不能推荐、不能上架或赞助权益，学者不能从 App 申请成为发起方；在发起方页面注册照旧），`QB_SETUP` 不建立它们。
   - 指定：内容管理员先建好、审核通过一张**平台图、点亮者为学者**，节点要求合格（`bindable`），并请运营商的直营发起方发布一个绑定该节点的发布（可以不设奖励档位）；然后一位管理员以受控变更提出 `SysParam`：`paramKey` 为上述键、`value` 为 `<图编号>/<节点编号>`（小写，如管理系统的知识结构图页所示）、第一次另给 `valueKind` `{type: text, maxLength: 73}`，另一位管理员发布。改指另一个节点、关闭（删除该参数）照样是受控变更。
   - 判断（`tree.TreeGates`，流程与发起方页面的模板同一规则）：参数指向生效的、点亮者为学者的平台图中生效的节点，且本人此刻点亮了它（点亮记录没有撤销）。撤销点亮即关闭；图停用、节点去掉或参数写错即对所有人关闭，并由每日核对报 `GATE_INVALID`：改正参数或节点。已生成的推荐链接照旧有效。
+  - 申请成为发起方由平台的注册守卫判断（`tree.SponsorApplyGuard`，同一规则；平台决策 D80：按参数的值预读节点与图、本人的点亮与撤销）：只管已登录学者加入发起方入口；运营商自己的发起方（其第一位负责人）照旧不受门槛限制。被拒时 App 显示原因"先点亮……的节点"。
   - 证书暂停签发（D8）：`QB_CERTIFICATE_ISSUE` 一律 422 `QB_CERTIFICATE_PAUSED`，已签发的证书照常核实与下载，F-S5 改为节点证书。
+  - 已签发证书在"我的认证"中列到有效期为止（F-S2c2b）：之前记下的撤销照旧使它失效。认证本身、轮与人工授予、收回、认领都已删去（D1），管理系统扩展的「认证」页随之去掉。
 
 
 ### 7.28 共享视频的审核与下架（F-S12、F-C3）
@@ -896,16 +894,39 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   4. 不计的常见原因：用自己的视频、方向不对（竖视频只在竖屏模式计，横视频只在开始页计）、学者没验证邮箱、店员、到了每日上限、发布已结束、系统设为"减少动态效果"时视频不自动播放（学者点播放才开始计）。
 - **"学者说竖屏模式里总是同一家"**：推送按发起方编号轮流（服务器按编号排轮次，一轮中谁先每天换一次），同一家的新的在前；打开过的不再推送。看 `qb.exposure.push.every` 与有几家在用共享视频。
 
-### 7.32 发起方包与测试期的导回（F-C4）
+### 7.32 共享视频的使用台账（F-S14）
+
+用了**其他发起方共享视频**的发布（F-S12，卡片的提供方不是发布方），使用方（发布的发起方）在发布页"共享视频的台账"中记下与提供方的线下约定：期间、计价方式（固定价、每千次曝光成功、每位去答题的学者）与价格，提交给提供方；提供方在资源页"我的视频的使用台账"中确认，或写原因拒绝，使用方更正后重新提交（`docs/quizbuks/plans/impl/F-S14.md`）。**平台不代收代付**，台账不进平台的会计账本。给用户的帮助文案在 `docs/quizbuks/help/video-uses.md`。
+
+- **部署**：迁移 `V99`建只追加表 `qb_video_use_version` 与普通表 `qb_video_use_figures`。部署后运行一次 `QB_SETUP`：建两个普通参数（下表），给内容管理员与运营商补上 `qb.admin.video-use.read`。三个任务都每天一次：`qb.video-use-figures`（UTC 19:53，逐项）、`qb.video-use-check`（UTC 20:07）、`qb.video-use-remind`（UTC 00:47，逐项）。没有新的环境变量。
+- **版本**：每次保存、提交、确认、拒绝都是 `qb_video_use_version` 的新版本（不改旧行，平台的审计 `GET /api/audit/records` 有前后值）。**版本记录**在双方的页面上（"查看版本记录"）与管理页（每行的"版本记录"）：每个版本的操作（填写、更正、提交、确认、拒绝）、谁（发起方页面上为哪一方，管理页为平台用户）、时间、当时的计价与期间、拒绝原因；读的是只读视图 `qb_video_use_history`（版本行 + 平台的操作记录 `op_process`）。等待提供方确认时使用方不能改；已确认的更正后回到草稿，须重新确认（确认记下所确认的版本号）。
+- **数字**：打开、曝光成功、去答题的人数、合格人数（去答题的人中合格的），每天由 `qb.video-use-figures` 从计数表 `qb_exposure` 与 `qb_attempt` 重算一次（截止为运行时刻），发布结束后的第一次运行**定稿**（截止为卡片的 `ended_at`），之后不再写。两边与运营商的页面上，少于统计的最小分组 `qb.stats.min-group`（Q9e，不小于 3）的数字不显示，所依据的数字不显示时参考金额也不显示。
+- **核对**（`qb.video-use-check`）：每天把定稿的数字按同一截止从计数表重算比较，不一致即给内容管理员（`qb.admin.exposure.monitor`）一个待办（一天一个）。计数表的行只设置一次，正常情况下不会不一致；常见原因是手工改了 `qb_exposure` 或迁移补了旧时间的行。
+- **提醒**：等待提供方确认超过 `qb.video-use.remind-days` 天，给双方各一个待办（每个提交的版本一次，有邮件时随待办通知），答复后关闭。
+- **参数**（普通参数，`PARAM_SET`，不受控）：
+
+  | 参数 | 缺省 | 作用 | 调整的影响 |
+  |---|---|---|---|
+  | `qb.video-use.remind-days` | `7` | 等待提供方确认超过多少天提醒双方（1–90） | 调低提醒更早；每个提交的版本只提醒一次 |
+  | `qb.video-use.max-period-days` | `3660` | 一条台账的期间至多多少天（1–36600） | 只约束以后的保存；已保存的台账不受影响 |
+
+- **管理页**：平台管理系统的"视频使用台账"页（`/qb/video-uses`，两边共用的组，`qb.admin.video-use.read`，**只读**）：每条台账的使用方、提供方、状态、计价、期间、数字与参考金额；总部看全部；运营商看自己发起方的台账，不论它是使用方（经 `qb.admin.video-uses`）还是提供方（经 `qb.admin.video-uses-provided`，只含已提交过的台账；读路径为 `urn:jabiz:dataset:operator-provider:*`），页面把两条路径合并，每条台账一行。双方的争议由运营商联系双方处理，平台不改台账。
+- **删除账号**：台账保留（双方的记录），使用方的备注与提供方的拒绝原因由抹除流程覆盖（`SponsorErasure`）。
+- **"数字不对"的排查**：
+  1. 定稿与截止：`SELECT opens, successes, goes, qualified, cutoff_at, finalised_at FROM qb_video_use_figures WHERE publication_id = '<发布>'`。
+  2. 按截止重算：`SELECT count(*) FILTER (WHERE counted_at <= '<截止>') AS successes, count(*) FILTER (WHERE went_to_answer_at <= '<截止>') AS goes FROM qb_exposure WHERE publication_id = '<发布>'`。
+  3. 台账的全部版本：`SELECT version_no, status, pricing, price, period_from, period_to, reject_reason, created_time FROM qb_video_use_version WHERE publication_id = '<发布>' ORDER BY version_no`。
+
+### 7.33 发起方包与测试期的导回（F-C4）
 
 发起方包（`docs/quizbuks/plans/impl/F-C4.md`）把一个发起方的资料、Quiz（含没结束的发布用到的版本）、没结束的发布与知识结构图写进一个文件（格式 `quizbuks.sponsor-package` 第 2 版，第 1 版照旧能读），再导入另一个账户或环境。只带内容与设置，不带状态、记录、钱、店员、密码、码与邀请名单、资源库。导入以后一切照常审核（入驻、主页、图、发布），没有免审。给用户的帮助文案在 `docs/quizbuks/help/sponsor-package.md`。
 
-- **部署**：迁移 `V101`（临时编号）建普通表 `qb_package_import`。部署后运行一次 `QB_SETUP`：建两个普通参数（下表）。任务 `qb.package-import-expire`（每天 UTC 18:53，逐项）。没有新的环境变量、新角色权限。
+- **部署**：迁移 `V100`（临时编号）建普通表 `qb_package_import`。部署后运行一次 `QB_SETUP`：建两个普通参数（下表）。任务 `qb.package-import-expire`（每天 UTC 18:53，逐项）。没有新的环境变量、新角色权限。
 - **参数**（普通参数，`PARAM_SET`）：
 
   | 参数 | 缺省 | 作用 |
   |---|---|---|
-  | `qb.package.confirm-bytes` | `104857600`（100 MB） | 导出的文件超过它即先问发起方再保存 |
+  | `qb.package.confirm-bytes` | `104857600`（100 MB） | 发起方包与 Quiz 文件的导出超过它即先问发起方再保存 |
   | `qb.package.import-retention-days` | `90` | 导入记录在最后一次更新后保留的天数；过期即由任务删除（未完成的也删除，已生成的草稿留下，成为普通草稿） |
 
   大题库按 `qb.content.import.batch-size` 分批导入、总数受 `qb.content.max-questions` 限制（§7.28）；一次导入开始时记下当时的每批题数，继续时沿用。

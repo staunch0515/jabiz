@@ -257,4 +257,26 @@ describe('the full-screen vertical mode (F-S10)', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/p/s1'))
     expect(screen.queryByTestId('shorts-viewer')).toBeNull()
   })
+
+  it('keeps the app\'s player within the screens while a screen moves in, off the header\'s buttons', async () => {
+    server()
+    render(<App />)
+    const { viewer } = await open('s1')
+    const stage = await screen.findByTestId('video-stage')
+    const box = (top: number, height: number) => () => ({ top, bottom: top + height, left: 0, right: 390, width: 390,
+      height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+    const screens = within(viewer).getByTestId('shorts-screens')
+    vi.spyOn(screens, 'getBoundingClientRect').mockImplementation(box(48, 796))
+    const slot = within(current()).getByTestId('video-slot')
+    // The screen coming down from above (a move up, travelling): its top part is still over the header.
+    const moving = vi.spyOn(slot, 'getBoundingClientRect').mockImplementation(box(-300, 640))
+    await waitFor(() => expect(stage.style.clipPath).toBe('inset(348px 0px 0px 0px)'))
+    expect(stage.style.visibility).toBe('visible')
+    // Settled within the screens: nothing cut.
+    moving.mockImplementation(box(60, 640))
+    await waitFor(() => expect(stage.style.clipPath).toBe('inset(0px 0px 0px 0px)'))
+    // Wholly outside them: not shown at all (nor touched).
+    moving.mockImplementation(box(-700, 640))
+    await waitFor(() => expect(stage.style.visibility).toBe('hidden'))
+  })
 })

@@ -27,7 +27,8 @@ interface Server {
   figures?: Record<string, unknown>
   publications?: Record<string, unknown>[]
   inbox?: Record<string, unknown>[]
-  claim?: Record<string, unknown>
+  /** The platform's sign-up guard refuses the join (the gate's node not lit). */
+  refuseJoin?: boolean
 }
 
 /** The server as the app sees it, for a verified taker who may also be a sponsor. Records what was posted. */
@@ -40,12 +41,13 @@ function server(options: Server = {}) {
     const path = decodeURIComponent(url.pathname)
     const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
     if (request.method === 'POST') posted.push({ path, body })
-    if (path === '/api/auth/account/entries/sponsor/join') return new Response(null, { status: 204 })
-    const process = /^\/api\/processes\/([A-Z_]+)\/latest$/.exec(path)
-    if (process?.[1] === 'QB_CERTIFICATION_CLAIM') {
-      return json(200, { output: options.claim ?? { certification: 'SPONSOR_APPLY', heldUntil: null,
-        roundPublicationId: 'pub-cert' } })
+    if (path === '/api/auth/account/entries/sponsor/join') {
+      return options.refuseJoin
+        ? json(403, { title: 'Sign-up refused', status: 403, code: 'SIGN_UP_REFUSED',
+          detail: 'Light the node first: then you can apply to become a Sponsor.' })
+        : new Response(null, { status: 204 })
     }
+    const process = /^\/api\/processes\/([A-Z_]+)\/latest$/.exec(path)
     if (process) {
       const id = (body as { publicationId: string }).publicationId
       const status = process[1] === 'QB_PUBLICATION_PAUSE' ? 'PAUSED' : 'LIVE'
@@ -185,20 +187,22 @@ describe('a Sponsor in the app (Q68)', () => {
     expect(await screen.findByRole('option', { name: 'Sponsor' })).toBeInTheDocument()
   })
 
-  it('offers a Taker who is no Sponsor the certification quiz, then the application once they hold it (Q69)',
+  it('tells a Taker who is no Sponsor what opens applying, and says why when the join is refused (F-S2c2b)',
     async () => {
-    server({ account: null })
+    const api = server({ account: null, refuseJoin: true })
     window.history.replaceState(null, '', '/account')
     render(<App />)
     const section = await screen.findByTestId('become-sponsor')
-    expect(await within(section).findByTestId('become-sponsor-quiz')).toHaveAttribute('href', '/p/pub-cert')
-    expect(within(section).queryByTestId('become-sponsor-apply')).toBeNull()
+    expect(within(section).getByTestId('become-sponsor-needed')).toHaveTextContent('knowledge map')
+    await userEvent.click(within(section).getByTestId('become-sponsor-apply'))
+    expect(await within(section).findByTestId('become-sponsor-refused')).toBeInTheDocument()
+    expect(within(section).queryByTestId('become-sponsor-onboarding')).toBeNull()
+    expect(api.joined()).toBe(1)
     await expectAccessible()
   })
 
-  it('applies with the certification: the Sponsor sign-in is added and the console is linked (Q69)', async () => {
-    const api = server({ account: null, claim: { certification: 'SPONSOR_APPLY',
-      heldUntil: '2027-10-31T00:00:00Z', roundPublicationId: null } })
+  it('applies once the gate is open: the Sponsor sign-in is added and the console is linked', async () => {
+    const api = server({ account: null })
     window.history.replaceState(null, '', '/account')
     render(<App />)
     await userEvent.click(await screen.findByTestId('become-sponsor-apply'))

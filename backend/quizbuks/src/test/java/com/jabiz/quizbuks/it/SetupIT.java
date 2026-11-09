@@ -11,9 +11,12 @@ import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.quizbuks.setup.QbSodRules;
 import com.jabiz.quizbuks.country.Regions;
 import com.jabiz.quizbuks.wallet.QbLedger;
+import com.jabiz.runtime.security.SecurityEntities;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -33,6 +36,7 @@ class SetupIT extends QbItSupport {
         assertThat(first.get("rolesCreated")).isEqualTo(QbRoles.all().stream().map(QbRoles.Role::code).toList());
         int granted = QbRoles.all().stream().mapToInt(role -> role.permissions().size()).sum();
         assertThat(first.get("permissionsAdded")).isEqualTo(granted);
+        assertThat(first.get("permissionsRemoved")).isEqualTo(0);
         assertThat(first.get("accountsOpened"))
             .isEqualTo(QbLedger.ACCOUNTS.stream().map(QbLedger.Account::code).toList());
         assertThat(first.get("countriesAdded")).isEqualTo(249);
@@ -192,6 +196,7 @@ class SetupIT extends QbItSupport {
 
         Map<String, Object> second = setup();
         assertThat(second).containsEntry("rolesCreated", List.of()).containsEntry("permissionsAdded", 0)
+            .containsEntry("permissionsRemoved", 0)
             .containsEntry("accountsOpened", List.of()).containsEntry("countriesAdded", 0)
             .containsEntry("paramsCreated", List.of()).containsEntry("paramsProposed", List.of())
             .containsEntry("rulesProposed", List.of()).containsEntry("proposals", List.of())
@@ -202,6 +207,57 @@ class SetupIT extends QbItSupport {
         assertOnlyInserted("qb_country_version");
         assertOnlyInserted("qb_setup_record_version");
         assertOnlyInserted("qb_legal_doc_version");
+    }
+
+    /**
+     * F-S2c2b (D1): the codes of the certifications are retired; an installation that granted them, to a QuizBuks role
+     * or any other, has them removed by the next run (a tombstone, through the platform's write path, audited). A grant
+     * of one scheduled to begin later is removed by the first run after it begins; a run with nothing left does nothing.
+     */
+    @Test
+    void retiredCodesAreRemovedFromEveryRole() {
+        setup();
+        String content = roleId(QbRoles.ADMIN_CONTENT);
+        commit(SecurityEntities.ROLE_DATASET, "INSERT", null, null, Map.of("roleCode", "CUSTOM_CERTIFIERS",
+            "labels", Map.of("en", "Certifiers"), "enabled", true), null);
+        String custom = roleId("CUSTOM_CERTIFIERS");
+        for (String permission : QbPermissions.RETIRED) {
+            commit(SecurityEntities.ROLE_PERMISSION_DATASET, "INSERT", null, null, Map.of("roleId", content,
+                "permission", permission), null);
+            commit(SecurityEntities.ROLE_PERMISSION_DATASET, "INSERT", null, null, Map.of("roleId", custom,
+                "permission", permission), null);
+        }
+        Instant later = clock.instant().plus(Duration.ofDays(30));
+        String scheduledRole = roleId(QbRoles.ADMIN_FINANCE);
+        commit(SecurityEntities.ROLE_PERMISSION_DATASET, "INSERT", null, null, Map.of("roleId", scheduledRole,
+            "permission", "qb.certification.admin"), later);
+        List<Object> ids = query("SELECT DISTINCT role_permission_id FROM sec_role_permission_version WHERE "
+            + "permission IN ('qb.certification.manage', 'qb.certification.admin') AND role_id IN (?::uuid, ?::uuid)",
+            content, custom).stream().map(row -> row.get("role_permission_id")).toList();
+        assertThat(ids).hasSize(4);
+
+        assertThat(setup()).containsEntry("permissionsRemoved", 4).containsEntry("permissionsAdded", 0);
+        for (Object id : ids) {
+            assertThat(query("SELECT is_deleted FROM sec_role_permission_version WHERE role_permission_id = ? "
+                + "ORDER BY version_no DESC LIMIT 1", id).getFirst().get("is_deleted")).as("%s", id).isEqualTo(true);
+            assertThat(query("SELECT 1 FROM sys_audit_record WHERE entity_type = 'SecRolePermission' AND entity_id = ? "
+                + "AND action = 'DELETE'", String.valueOf(id))).as("%s", id).hasSize(1);
+        }
+        // The other grants of the roles stay.
+        assertThat(query("SELECT 1 FROM sec_role_permission_version WHERE role_id = ?::uuid AND permission = ? AND NOT "
+            + "is_deleted", content, QbRoles.of(QbRoles.ADMIN_CONTENT).permissions().getFirst())).isNotEmpty();
+
+        // Nothing left now (the scheduled one has not begun): nothing to do.
+        assertThat(setup()).containsEntry("permissionsRemoved", 0);
+        // Once the scheduled grant began, the next run removes it.
+        clock.advance(Duration.ofDays(31));
+        assertThat(setup()).containsEntry("permissionsRemoved", 1);
+        assertThat(setup()).containsEntry("permissionsRemoved", 0);
+    }
+
+    private String roleId(String code) {
+        return String.valueOf(query("SELECT role_id FROM sec_role_version WHERE role_code = ?", code).getFirst()
+            .get("role_id"));
     }
 
     @Test
@@ -364,6 +420,9 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.EXPOSURE_RECONCILE_MIN_TOLERANCE, "20");
         expected.put(QbParams.EXPOSURE_RECONCILE_TOLERANCE_PERCENT, "5");
         expected.put(QbParams.EXPOSURE_END_GRACE_SEC, "60");
+        // F-S14: the reminder of a shared video's use waiting for its provider (ordinary).
+        expected.put(QbParams.VIDEO_USE_REMIND_DAYS, "7");
+        expected.put(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, "3660");
         // F-C4: the sponsor package (ordinary parameters).
         expected.put(QbParams.PACKAGE_CONFIRM_BYTES, "104857600");
         expected.put(QbParams.PACKAGE_IMPORT_RETENTION_DAYS, "90");

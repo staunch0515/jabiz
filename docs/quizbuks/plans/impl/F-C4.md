@@ -70,7 +70,7 @@
 | `tree.TreeConfig` / `QbTrees` | 数据视图 `urn:jabiz:dataset:sponsor:QbTree`（本人的图，只读），供发起方包的模板经它读本人的版本与节点 |
 | `application.yml` | 限流：`QB_PACKAGE_IMPORT_START` 30/时、`_STEP` 3000/时、`_ABANDON` 30/时；`QB_QUIZ_IMPORT_CHECK` 60 → 300/时（检查页逐个检查包里的 Quiz 文件） |
 | `sponsorpackage`（新包） | `QbPackageImports`（实体、数据视图名、锁名）、`PackageImportRules`（纯 Java：哈希与步骤键的格式、结果的读写、可否全部导入、保留期）、`PackageImportCodes`、`PackageImportProcesses`（`QB_PACKAGE_IMPORT_START` / `_STEP` / `_ABANDON` / `_EXPIRE`）、`PackageImportConfig`（实体、两个数据视图、流程、保留期任务 `qb.package-import-expire`） |
-| 迁移 `V101__quizbuks_package_import.sql`（临时编号：基线最大 V97，V98–V100 已被占用；合并前按最大号 + 1 重编） | 新表 `qb_package_import`（普通表），部分唯一索引（每个发起方一个 `RUNNING`），按发起方与开始时间、按更新时间的索引 |
+| 迁移 `V100__quizbuks_package_import.sql`（临时编号：基线最大 V99；合并前按最大号 + 1 重编） | 新表 `qb_package_import`（普通表），部分唯一索引（每个发起方一个 `RUNNING`），按发起方与开始时间、按更新时间的索引 |
 | 模板 | `qb.sponsor.package-state`（是否提交过发布、是否有提交过的图、确认的字节数、图的上限、未结束的导入）、`qb.sponsor.package-trees` / `qb.sponsor.package-tree-nodes`（本人的图与节点）、`qb.system.package-imports-expired`（保留期任务的项） |
 | `setup.QbParams` | 加在最后（普通参数）：`qb.package.confirm-bytes`（104857600）、`qb.package.import-retention-days`（90） |
 | `QbPermissions` | `qb.package.system`（保留期任务，不授予任何角色）；发起方的三个流程用 `qb.content.write`（子流程各自照常检查自己的权限） |
@@ -79,7 +79,8 @@
 | 消息 | 三语：错误码、实体与字段、流程、参数、模板的列 |
 | 发起方页面 | `profile/package.ts`（写包、读包、导入的计划、逐步导入、继续、放弃、提交全部草稿）、`profile/SponsorPackage.tsx`（概况页的卡片：导出、检查页、进度、继续 / 放弃）、`publishing/SubmitAllDrafts.tsx`（发布列表的按钮与结果）、`content/transfer.ts` 加 `exportVersion`（版本快照 → Quiz 文件）、`profile/transfer.ts` 的导入可经导入记录执行；三语文案 |
 | 管理系统扩展 | 发起方详情（`SponsorReviewPage`）加只读的"发起方包的导入记录"（`SponsorPackageImports.tsx`，`qb.admin.publication.read`，运营商只看到自己的发起方） |
-| 文档 | 本计划；`operations.md` §7.32"发起方包与测试期的导回"；帮助 `docs/quizbuks/help/sponsor-package.md`（三语）；`backend/quizbuks/CLAUDE.md` 一条；进度表 |
+| Quiz 文件的导出（`content/QuizTransfer.tsx`、`content/transfer.ts` 的 `readConfirmBytes`） | 超过 `qb.package.confirm-bytes` 先确认（以前是固定的 100 MB，缺省值相同） |
+| 文档 | 本计划；`operations.md` §7.33"发起方包与测试期的导回"；帮助 `docs/quizbuks/help/sponsor-package.md`（三语）；`backend/quizbuks/CLAUDE.md` 一条；进度表 |
 
 ## 4. 语句数
 
@@ -104,7 +105,7 @@
 
 ## 6. 运维
 
-见 `operations.md` §7.32。部署后运行一次 `QB_SETUP`（建两个普通参数）。任务 `qb.package-import-expire`（每天 UTC 18:53，逐项删除）。没有新的环境变量。
+见 `operations.md` §7.33。部署后运行一次 `QB_SETUP`（建两个普通参数）。任务 `qb.package-import-expire`（每天 UTC 18:53，逐项删除）。没有新的环境变量。
 
 ## 7. 决定（需转达总控 / 需求方，可改）
 
@@ -124,7 +125,7 @@
 14. **共享视频按编号认**：目标环境的共享目录中有这个编号且已共享才挂上。
 15. **发起方的流程用 `qb.content.write`**，不新加授予给角色的权限；保留期任务用新权限 `qb.package.system`（不授予任何角色）。
 16. **`intoQuizId` 有任何发布（含草稿）即拒**：规格"没有发布的 Quiz"；导入时 Quiz 的版本都在发布之前生成，所以不受影响。
-17. **确认的字节数只用于发起方包**；Quiz 文件（Q16）的导出照旧用它自己的 100 MB（§8 第 3 条）。
+17. **确认的字节数是一个参数，两处共用**：发起方包与 Quiz 文件（Q16）的导出都读 `qb.package.confirm-bytes`（经模板 `qb.sponsor.package-state`；缺省 100 MB 与以前相同，读不到时用缺省值），代码中不再有这个数字的常数（只留作读不到时的缺省）。
 18. **一次导入记下每批题数**：继续时沿用开始时的批大小（参数中途改了也不会把题目分错批）。
 19. **检查页逐个检查每个 Quiz 文件**（`QB_QUIZ_IMPORT_CHECK`，它的限流放宽到每人每小时 300 次），步骤中的上传按检查的结果只传这一批用到的文件。
 20. **新建的图的条件中指向平台模版节点的编号**按原样带（跨环境多半对不上）：保存草稿时由规则列为图的问题，提交前由发起方改正；直营发起方绑定在平台图上的发布不按键绑定（列为"不绑定"）。
@@ -133,5 +134,4 @@
 
 1. **F-S7（题目乱序）的负责人要补**：Quiz 文件版本 4 加 `quiz.shuffle`（布尔，没有即关）——`QuizFile` 字段、`QuizFileFormat` 的读法链 `3 → 4`、`QuizTransferProcesses.snapshot` 与 `QuizProcesses.replaceContent` 写进草稿、`content/transfer.ts` 的 `exportDraft` 与 `exportVersion`（由版本快照）写出；发起方包不用改格式（它原样带 Quiz 文件），只把 `PACKAGE_VERSION` 的说明与 `package.test.ts` 的样例补上乱序开关。若乱序开关在发布上而不在 Quiz 上，则改为在发布的 `settings`（Q102 设置文件）中加字段，`importSettings` 照写。
 2. F-S3（知识结构图的界面）可以直接用 `qb.sponsor.package-trees` / `-tree-nodes`，或换成自己的模板（届时一并改 `package.ts`）。
-3. Quiz 文件（Q16）的导出阈值改读 `qb.package.confirm-bytes`（需求方"数字一律是参数"），本项不改 Q16 的行为。
-4. 不做：一次导入多个发起方（D-Q103-7）；带记录的完整备份。
+3. 不做：一次导入多个发起方（D-Q103-7）；带记录的完整备份。

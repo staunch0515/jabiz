@@ -49,6 +49,10 @@ class MessagesTest {
             .containsAll(com.jabiz.quizbuks.asset.AssetCodes.ALL)
             .containsAll(com.jabiz.quizbuks.tree.TreeCodes.ALL).containsAll(com.jabiz.quizbuks.tree.TreeRules.CODES)
             .containsAll(com.jabiz.quizbuks.sharedvideo.SharedVideoCodes.ALL)
+            // F-S14: the ledger of shared videos' uses.
+            .containsAll(com.jabiz.quizbuks.videouse.VideoUseCodes.ALL)
+            .contains("entity.QbVideoUse", "entity.QbVideoUseFigures", "process.QB_VIDEO_USE_SAVE",
+                "param.qb.video-use.remind-days", "task.qb.video-use.confirm", "query.qb.sponsor.video-uses")
             .contains("process.QB_ASSET_SAVE", "process.QB_ASSET_DELETE", "process.QB_ASSET_COLLECT",
                 "param.qb.assets.max-count", "param.qb.assets.max-tags", "param.qb.assets.tag-length",
                 "param.qb.products.max", "query.qb.sponsor.product-limit", "query.qb.sponsor.product-limit.max",
@@ -168,7 +172,6 @@ class MessagesTest {
             Properties texts = load(language);
             assertThat(texts.stringPropertyNames()).as(language)
                 .containsAll(com.jabiz.quizbuks.reward.RewardCodes.ALL)
-                .containsAll(com.jabiz.quizbuks.certification.CertificationCodes.ALL)
                 .containsAll(com.jabiz.quizbuks.referral.ReferralCodes.ALL)
                 .contains("QB_DIGITAL_DELIVERY_INVALID", "QB_DIGITAL_SEND_DAYS_RANGE", "QB_DIGITAL_POOL_SHORT",
                     "QB_DIGITAL_PRIZE_STATE", "QB_DIGITAL_UNREADABLE", "QB_DIGITAL_DISPUTE_NOTE",

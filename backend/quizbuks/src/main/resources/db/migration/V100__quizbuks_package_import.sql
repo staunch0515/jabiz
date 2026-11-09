@@ -1,5 +1,5 @@
 -- F-C4 (docs/quizbuks/plans/impl/F-C4.md): the records of the sponsor packages' imports. The number is temporary
--- (the base's last is V97, V98–V100 are taken by other open branches): renumbered to the highest on 1.3/quizbuks + 1
+-- (the base's last is V99): renumbered to the highest on 1.3/quizbuks + 1
 -- before merging.
 
 -- One row per import a Sponsor starts (QB_PACKAGE_IMPORT_START / _STEP / _ABANDON only, every change audited by the

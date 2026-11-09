@@ -4,9 +4,8 @@ import { adminToken, expect, insert, PASSWORD, rows, run, tokenOf, unique, verif
 import { query } from './content'
 
 /*
- * Operators for the end-to-end tests (F-S1, docs/quizbuks/plans/impl/F-S1.md): every sponsor belongs to an operator,
- * and the operators run the sponsors' certifications. An operator is created with its lead, whose account is the
- * operator's own sponsor (the official publisher of its certification rounds); the lead, registered at the sponsor
+ * Operators for the end-to-end tests (F-S1, docs/quizbuks/plans/impl/F-S1.md): every sponsor belongs to an operator.
+ * An operator is created with its lead, whose account is the operator's own sponsor; the lead, registered at the sponsor
  * entry, holds the sponsor role already. The role QB_OPERATOR asks for a second factor: the lead enrols TOTP at the
  * first sign-in at the operators' entry.
  */
@@ -46,7 +45,7 @@ export async function operatorWithLead(request: APIRequestContext, name = 'Ope')
 }
 
 /** A member of the operator holding QB_OPERATOR, signed in at the operators' entry; returns the session. */
-async function newMember(request: APIRequestContext, operatorId: string, name: string): Promise<string> {
+async function newMember(request: APIRequestContext, operatorId: string, name: string): Promise<Member> {
   const email = await verifiedUser(request, 'sponsor', name)
   const admin = await adminToken(request)
   const userId = String((await rows(request, admin, USERS, [{ field: 'userName', op: 'eq', value: email }], 1))[0].id)
@@ -54,11 +53,23 @@ async function newMember(request: APIRequestContext, operatorId: string, name: s
   await run(request, hq, 'QB_OPERATOR_MEMBER_ADD', { operatorId, userId, lead: false })
   const roleId = (await rows(request, admin, ROLES, [{ field: 'roleCode', op: 'eq', value: 'QB_OPERATOR' }], 1))[0].id
   await insert(request, admin, USER_ROLES, { userId, roleId })
-  return operatorSignIn(request, email)
+  return { email, ...await operatorSession(request, email) }
 }
 
-/** One reviewer per operator for this worker (a run adds its own: the tests only add data). */
-const reviewers = new Map<string, Promise<string>>()
+/** A member of an operator signed in at the operators' entry: the address, the TOTP secret and the session. */
+interface Member extends OperatorSession {
+  email: string
+}
+
+/**
+ * One reviewer per operator for this worker (a run adds its own: the tests only add data). The reviewer is kept, not
+ * its session: an access token lives jabiz.security.jwt.access-token-ttl (15 minutes) and a full run is longer, so a
+ * session about to end is replaced by signing in again (with the reviewer's second factor).
+ */
+const reviewers = new Map<string, Promise<Member>>()
+
+/** How long before its end an access token is no longer handed out. */
+const TOKEN_MARGIN_MS = 2 * 60_000
 
 /**
  * A session of a member of the operator that looks after the Sponsor (F-S1: reviews are the operators', decided in
@@ -75,7 +86,17 @@ export async function reviewerFor(request: APIRequestContext, sponsorToken: stri
     reviewers.set(operatorId, reviewer)
     reviewer.catch(() => reviewers.delete(operatorId))
   }
-  return reviewer
+  const member = await reviewer
+  if (member.expiresAt - Date.now() > TOKEN_MARGIN_MS) return member.token
+  const renewed = newSession(request, member)
+  reviewers.set(operatorId, renewed)
+  renewed.catch(() => reviewers.delete(operatorId))
+  return (await renewed).token
+}
+
+/** The member signed in again, with the second factor enrolled at the first sign-in. */
+async function newSession(request: APIRequestContext, member: Member): Promise<Member> {
+  return { email: member.email, ...await operatorSession(request, member.email, member.secret) }
 }
 
 /** The operator's member decides the Sponsor's request, as the review pages of the Operator Management System do. */
@@ -104,6 +125,24 @@ export async function ensureDefaultOperator(request: APIRequestContext): Promise
 
 /** Signs in at the operators' entry, enrolling TOTP the first time (the role requires a second factor). */
 async function operatorSignIn(request: APIRequestContext, email: string): Promise<string> {
+  return (await operatorSession(request, email)).token
+}
+
+interface OperatorSession {
+  /** The TOTP secret enrolled at the first sign-in. */
+  secret: string
+  token: string
+  /** When the access token ends (its `exp`), in milliseconds. */
+  expiresAt: number
+}
+
+/**
+ * A session at the operators' entry: the first sign-in enrols TOTP; a later one (with the secret) passes the second
+ * factor with the current code. Signing in again is for a session about to end, minutes after the last code, so the
+ * code is not one used before.
+ */
+async function operatorSession(request: APIRequestContext, email: string, known?: string): Promise<OperatorSession> {
+  let secret = known ?? ''
   const login = () => request.post('/api/auth/login', { data: { userName: email, password: PASSWORD,
     entry: 'operator' } })
   let response = await login()
@@ -112,7 +151,7 @@ async function operatorSignIn(request: APIRequestContext, email: string): Promis
   if (body.status === 'MFA_ENROLLMENT_REQUIRED') {
     const enrolled = await request.post('/api/auth/challenge/enroll', { data: { challenge: body.challenge } })
     expect(enrolled.status(), await enrolled.text()).toBe(200)
-    const secret = (await enrolled.json()).secret as string
+    secret = (await enrolled.json()).secret as string
     const confirmed = await request.post('/api/auth/challenge/enroll/confirm', { data: { challenge: body.challenge,
       code: totp(secret) } })
     expect(confirmed.status(), await confirmed.text()).toBe(200)
@@ -123,7 +162,14 @@ async function operatorSignIn(request: APIRequestContext, email: string): Promis
       code: totp(secret, Date.now() + 30_000) } })
     expect(verified.status(), await verified.text()).toBe(200)
     body = await verified.json()
+  } else if (body.status === 'MFA_REQUIRED' && secret) {
+    const verified = await request.post('/api/auth/challenge/verify', { data: { challenge: body.challenge,
+      code: totp(secret) } })
+    expect(verified.status(), await verified.text()).toBe(200)
+    body = await verified.json()
   }
   expect(body.accessToken, JSON.stringify(body.status)).toBeTruthy()
-  return body.accessToken as string
+  const token = body.accessToken as string
+  const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')) as { exp: number }
+  return { secret, token, expiresAt: claims.exp * 1000 }
 }

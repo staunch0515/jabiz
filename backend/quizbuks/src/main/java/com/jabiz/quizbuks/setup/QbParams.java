@@ -385,7 +385,14 @@ public final class QbParams {
     public static final String EXPOSURE_RECONCILE_MIN_TOLERANCE = "qb.exposure.reconcile.min-tolerance";
     public static final String EXPOSURE_RECONCILE_TOLERANCE_PERCENT = "qb.exposure.reconcile.tolerance-percent";
     public static final String EXPOSURE_END_GRACE_SEC = "qb.exposure.reconcile.end-grace-sec";
-    /** F-C4: above how many bytes a sponsor package's export asks before it is saved. */
+    /**
+     * F-S14: after how many days a shared video's use waiting for its provider reminds both sides (the requester: every
+     * number a parameter); not controlled. Read as optional ({@code VideoUseRules.remindDays} bounds it).
+     */
+    public static final String VIDEO_USE_REMIND_DAYS = "qb.video-use.remind-days";
+    /** F-S14 (the controller: every number a parameter): the longest period one use covers, in days; not controlled. */
+    public static final String VIDEO_USE_MAX_PERIOD_DAYS = "qb.video-use.max-period-days";
+    /** F-C4: above how many bytes the export of a sponsor package or a quiz file asks before it is saved. */
     public static final String PACKAGE_CONFIRM_BYTES = "qb.package.confirm-bytes";
     /** F-C4: how many days the record of a sponsor package's import is kept after its last change. */
     public static final String PACKAGE_IMPORT_RETENTION_DAYS = "qb.package.import-retention-days";
@@ -690,9 +697,18 @@ public final class QbParams {
             String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_END_GRACE_SEC),
             "How many seconds after a publication ended an exposure may still be counted (a report on its way) "
                 + "before the daily check reports it (0 to 86400)"),
+        // F-S14: the reminder of a use waiting for its provider (ordinary; last).
+        new Param(VIDEO_USE_REMIND_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.videouse.VideoUseRules.DEFAULT_REMIND_DAYS),
+            "After how many days a shared video's use waiting for its provider reminds both sides (1 to 90)"),
+        // F-S14: the longest period of a use (ordinary; last).
+        new Param(VIDEO_USE_MAX_PERIOD_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.videouse.VideoUseRules.DEFAULT_MAX_PERIOD_DAYS),
+            "The longest period, in days, one ledger entry of a shared video's use covers (1 to 36600)"),
         // F-C4: the sponsor package (ordinary; last, so that the setup's earlier keys stay as they were).
         new Param(PACKAGE_CONFIRM_BYTES, Map.of("type", "numeric", "precision", 12, "scale", 0), "104857600",
-            "Above how many bytes the export of a sponsor package asks before it is saved (100 MB by default)"),
+            "Above how many bytes the export of a sponsor package or a quiz file asks before it is saved (100 MB by "
+                + "default)"),
         new Param(PACKAGE_IMPORT_RETENTION_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0), "90",
             "Days the record of a sponsor package's import is kept after its last change"));
 

@@ -75,6 +75,10 @@ public final class OperatorScopes {
         fields.put(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.VIDEO, "providerId");
         // F-S13: the exposures, by the publisher of the publication they are of.
         fields.put(com.jabiz.quizbuks.exposure.QbExposures.EXPOSURE, "publisherId");
+        // F-S14: the ledger of shared videos' uses and their figures, by the user (the publication's sponsor).
+        fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.USE, "sponsorId");
+        fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.FIGURES, "sponsorId");
+        fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.HISTORY, "sponsorId");
         // F-C4: a Sponsor's imports of sponsor packages.
         fields.put(com.jabiz.quizbuks.sponsorpackage.QbPackageImports.IMPORT, "sponsorId");
         // Q89: a benefit by its provider; the conversations and purchases by the sponsor that buys (the provider's

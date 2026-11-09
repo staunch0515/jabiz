@@ -184,12 +184,6 @@ public final class QbPermissions {
      */
     public static final String SPONSOR_APP = "qb.sponsor.app";
     /**
-     * Running certification rounds and granting or revoking certifications by hand (Q69,
-     * docs/quizbuks/plans/Q69-certifications.md): content administrators for headquarters, operators' members for
-     * their operator (the operators' entry scope decides whose).
-     */
-    public static final String CERTIFICATION_MANAGE = "qb.certification.manage";
-    /**
      * Q70: the referrals' system processes ({@code QB_REFERRAL_REWARD}, {@code _EXPIRE}, {@code internal()}), their
      * templates and the default datasets. Granted to no role.
      */
@@ -219,8 +213,6 @@ public final class QbPermissions {
     public static final String AUDIENCE_RULES_WRITE = "qb.audience.rules.write";
     /** Q47c: headquarters' price lists of the audience rules, their own and the operators' (finance). */
     public static final String AUDIENCE_PRICES_WRITE = "qb.audience.prices.write";
-    /** Marking the official publishers whose publications may be rounds (Q69): headquarters' content administrators. */
-    public static final String CERTIFICATION_ADMIN = "qb.certification.admin";
     /** Q87: the platform's fees. The jobs and sub-processes (granted to no role). */
     public static final String FEE_SYSTEM = "qb.fee.system";
     /** Q87: finance records fees by hand and voids invoices (another administrator approves), reads them all. */
@@ -302,6 +294,11 @@ public final class QbPermissions {
     public static final String ADMIN_EXPOSURE_READ = "qb.admin.exposure.read";
     /** F-S13: the daily reconciliation's task on the exposures. Headquarters' content administrators only. */
     public static final String ADMIN_EXPOSURE_MONITOR = "qb.admin.exposure.monitor";
+    /**
+     * F-S14: the ledger of shared videos' uses and both sides' figures, read only. Content administrators for every
+     * sponsor, the operators for their own sponsors' publications (the entry scope limits what they see).
+     */
+    public static final String ADMIN_VIDEO_USE_READ = "qb.admin.video-use.read";
 
     /**
      * F-S12: the shared videos of every provider (read), and taking one down (write). Content administrators for
@@ -335,6 +332,13 @@ public final class QbPermissions {
      * keep the preparer from approving). Operators (their Sponsors' graphs and copies), content administrators.
      */
     public static final String TREE_LIT_REVOKE = "qb.tree.lit.revoke";
+
+    /**
+     * Codes that no longer exist (F-S2c2b, D1: the certifications and their rounds are gone). {@code QB_SETUP} removes
+     * every grant of them, from any role, so that an installation that had them keeps no stale grant.
+     */
+    public static final java.util.Set<String> RETIRED = java.util.Set.of("qb.certification.manage",
+        "qb.certification.admin");
 
     /** F-C4: the sponsor packages' import records past their retention ({@code internal()}). Granted to no role. */
     public static final String PACKAGE_SYSTEM = "qb.package.system";

@@ -68,7 +68,7 @@ public class CertificateConfig {
     DatasetDefinition qbPublicCertificationRevocationDataset() {
         return DatasetDefinition.define(QbCertificates.PUBLIC_RECORD_DATASET, d -> d
             .targetEntityType(QbCertifications.RECORD)
-            .scope(s -> s.fixed("kind", CertificationHolding.REVOKED))
+            .scope(s -> s.fixed("kind", QbCertifications.REVOKED))
             .publicRead(p -> p.fields("userId", "certification", "kind", "at"))
             .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))

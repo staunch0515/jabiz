@@ -3,7 +3,6 @@ import {
   ArrowLeftRight,
   Banknote,
   BookOpenCheck,
-  BadgeCheck,
   ClipboardCheck,
   FileQuestion,
   FileSpreadsheet,
@@ -28,10 +27,11 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban, Eye } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban, Eye, NotebookTabs } from 'lucide-react'
 import TopicsPage from './TopicsPage'
 import BlocksPage from './BlocksPage'
 import ExposurePage from './ExposurePage'
+import VideoUsesPage from './VideoUsesPage'
 
 import BankTopUpPage from './BankTopUpPage'
 import TreesPage from './TreesPage'
@@ -45,7 +45,6 @@ import FeeRequestPage from './FeeRequestPage'
 import ManualCreditsPage from './ManualCreditsPage'
 import BroadcastsPage from './BroadcastsPage'
 import { AudiencePricesPage, AudienceRulesPage, OperatorAudiencePricesPage } from './AudiencePricingPages'
-import CertificationsPage from './CertificationsPage'
 import ReferralsPage from './ReferralsPage'
 import RegionPage from './RegionPage'
 import SharedVideosPage from './SharedVideosPage'
@@ -141,6 +140,8 @@ export default defineExtension({
     { path: PATH.blocks, element: <BlocksPage /> },
     // F-S13: the suspicious inflation of exposures (headquarters and the operators, scoped).
     { path: PATH.exposure, element: <ExposurePage /> },
+    // F-S14: the ledger of shared videos' uses (headquarters and the operators, scoped; read only).
+    { path: PATH.videoUses, element: <VideoUsesPage /> },
     { path: PATH.users, element: <UsersPage /> },
     { path: '/qb/users/:userId', element: <UserSummaryPage /> },
     { path: PATH.attempts, element: <AttemptsPage /> },
@@ -189,8 +190,6 @@ export default defineExtension({
     // Q48e-2: the operator's account and withdrawals, and finance's view of the withdrawals.
     { path: PATH.operatorAccount, element: <OperatorAccountPage /> },
     { path: PATH.operatorWithdrawals, element: <OperatorWithdrawalsPage /> },
-    // Q69: certification rounds and records by hand (headquarters and operators), and the official publishers.
-    { path: PATH.certifications, element: <CertificationsPage /> },
     { path: PATH.referrals, element: <ReferralsPage /> },
     // Q47c: the audience rules and their prices (headquarters), and an operator's own prices.
     { path: PATH.audienceRules, element: <AudienceRulesPage /> },
@@ -212,8 +211,6 @@ export default defineExtension({
         { key: 'qb-operator-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
           permission: PERMISSION.prospectUse },
         // Q69: the rounds of the operator's own sponsor, and grants and revocations by hand.
-        { key: 'qb-operator-certifications', label: 'menu.certifications', path: PATH.certifications, icon: BadgeCheck,
-          permission: PERMISSION.certificationManage },
         // Q87b: how the operator's sponsors pay the platform's fees.
         { key: 'qb-operator-billing', label: 'menu.operatorBilling', path: PATH.operatorBilling, icon: Receipt,
           permission: PERMISSION.operatorUse },
@@ -267,6 +264,9 @@ export default defineExtension({
         // session reads its own Sponsors' publications only).
         { key: 'qb-exposure', label: 'menu.exposure', path: PATH.exposure, icon: Eye,
           permission: PERMISSION.exposureRead },
+        // F-S14: the ledger of shared videos' uses, read only (an operator's session reads its own Sponsors').
+        { key: 'qb-video-uses', label: 'menu.videoUses', path: PATH.videoUses, icon: NotebookTabs,
+          permission: PERMISSION.videoUseRead },
         // Q22: the cash rewards sponsors pay takers themselves (F-S1: nobody here decides their disputes).
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
           permission: PERMISSION.publicationRead },
@@ -299,9 +299,6 @@ export default defineExtension({
         // Q48c, F-S1b: every operator's prospecting, read only.
         { key: 'qb-prospects', label: 'menu.prospects', path: PATH.prospects, icon: Radar,
           permission: PERMISSION.adminProspect },
-        // Q69, F-S1b: every operator's certification rounds and records by hand, read only.
-        { key: 'qb-certifications', label: 'menu.certifications', path: PATH.certifications, icon: BadgeCheck,
-          permission: PERMISSION.certificationAdmin },
         // Q70: every referral (content and finance administrators).
         { key: 'qb-referrals', label: 'menu.referrals', path: PATH.referrals, icon: UserRoundPlus,
           permission: PERMISSION.referralsRead },

@@ -177,6 +177,10 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_PUBLICATION_EXPOSURE_END", ProcessAccess.INTERNAL),
         Map.entry("QB_EXPOSURE_CHECK_RUN", ProcessAccess.INTERNAL),
         Map.entry("QB_EXPOSURE_PURCHASED_SET", ProcessAccess.SUB_PROCESS_ONLY),
+        // F-S14: the figures of a shared video's use (job item), the reminder (job item) and the daily check.
+        Map.entry("QB_VIDEO_USE_FIGURES_REFRESH", ProcessAccess.INTERNAL),
+        Map.entry("QB_VIDEO_USE_REMIND", ProcessAccess.INTERNAL),
+        Map.entry("QB_VIDEO_USE_CHECK_RUN", ProcessAccess.INTERNAL),
         // F-C4: the retention job's item deleting an old record of a sponsor package's import.
         Map.entry("QB_PACKAGE_IMPORT_EXPIRE", ProcessAccess.INTERNAL));
 

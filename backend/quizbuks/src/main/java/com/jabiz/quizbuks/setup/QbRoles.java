@@ -65,8 +65,6 @@ public final class QbRoles {
         QbPermissions.TOPUP_BANK_APPROVE,
         // Q48a: the operators, and the spot checks of the reviews they decided.
         QbPermissions.OPERATORS_READ, QbPermissions.SPOT_CHECK,
-        // Q69: reading every operator's certification rounds and records (F-S1: managing them is the operators').
-        QbPermissions.CERTIFICATION_ADMIN,
         // Q48c: every owner's prospects (read only: prospecting is the operators').
         QbPermissions.ADMIN_PROSPECT,
         // Q70: every referral (support: who referred whom, and what came of it).
@@ -87,7 +85,9 @@ public final class QbRoles {
         // F-S8: the figures of blocking (aggregates and rounded counts only).
         QbPermissions.ADMIN_BLOCK_READ,
         // F-S13: the suspicious inflation of exposures (every sponsor's) and the daily reconciliation's task.
-        QbPermissions.ADMIN_EXPOSURE_READ, QbPermissions.ADMIN_EXPOSURE_MONITOR);
+        QbPermissions.ADMIN_EXPOSURE_READ, QbPermissions.ADMIN_EXPOSURE_MONITOR,
+        // F-S14: the ledger of shared videos' uses, read only (every sponsor's).
+        QbPermissions.ADMIN_VIDEO_USE_READ);
 
     /**
 
@@ -106,8 +106,6 @@ public final class QbRoles {
         QbPermissions.ADMIN_REWARD_METHODS,
         // Q48c: the operator's own AI prospecting (its own directions, drafts and blocks).
         QbPermissions.PROSPECT_USE,
-        // Q69: the rounds of its official publisher, and grants and revocations, in its own name.
-        QbPermissions.CERTIFICATION_MANAGE,
         // Q82: its sponsors' conversations with takers (disputes and reports).
         QbPermissions.CONVERSATION_READ,
         // Q87: how its sponsors pay the platform's fees (prepaid, or postpaid within a credit limit).
@@ -122,7 +120,9 @@ public final class QbRoles {
         // F-S12: its own sponsors' shared videos (reviewing them is REVIEW_PUBLICATION's) and taking them down.
         QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE,
         // F-S13: the suspicious inflation of exposures on its own sponsors' publications (not the reconciliation's task).
-        QbPermissions.ADMIN_EXPOSURE_READ);
+        QbPermissions.ADMIN_EXPOSURE_READ,
+        // F-S14: the ledger of shared videos' uses of its own sponsors' publications, read only.
+        QbPermissions.ADMIN_VIDEO_USE_READ);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,

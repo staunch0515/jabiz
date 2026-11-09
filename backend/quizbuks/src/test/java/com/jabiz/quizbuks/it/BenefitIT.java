@@ -30,11 +30,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class BenefitIT extends TreeItSupport {
 
-    private String hq() {
-        return TestTokens.bearer(tokens, "q89-hq", QbPermissions.CERTIFICATION_ADMIN,
-            QbPermissions.CERTIFICATION_MANAGE);
-    }
-
     /** F-S2c: the benefit role opened as production opens it: the gate's node lit by the user. */
     private void grant(String userId, String role) {
         unlock(role.equals("BENEFIT_PROVIDER") ? QbParams.TREE_GATE_BENEFIT_PROVIDER : QbParams.TREE_GATE_BENEFIT_SPONSOR,

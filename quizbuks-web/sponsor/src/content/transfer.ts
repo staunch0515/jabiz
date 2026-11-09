@@ -1,4 +1,4 @@
-import { ApiError, fetchFileContent, runProcess, uploadFile } from '@jabiz/client'
+import { ApiError, fetchFileContent, runProcess, runQuery, uploadFile } from '@jabiz/client'
 import type { ContentLanguage } from '../qb/api'
 import { readMyProducts, readMyQuizLinks, type MyProduct, type QuizLink } from '../products/api'
 import { readDraft, type Draft, type Material, type VersionDetail } from './api'
@@ -18,8 +18,25 @@ export const QUIZ_FILE_FORMAT = 'quizbuks.quiz'
  * (Q73a) adds the base language and the other languages; version 3 (Q100e) the sponsor's products the quiz shows.
  */
 export const QUIZ_FILE_VERSION = 3
-/** Above this size the export asks before going on (base64 adds about a third to the files). */
+/**
+ * The declared value of `qb.package.confirm-bytes` (F-C4): above it an export asks before going on (base64 adds
+ * about a third to the files). Only a fallback: the export reads the parameter ({@link readConfirmBytes}).
+ */
 export const LARGE_EXPORT_BYTES = 100 * 1024 * 1024
+
+/**
+ * Above how many bytes an export asks first: the parameter `qb.package.confirm-bytes` (every number a parameter,
+ * F-C4), read through `qb.sponsor.package-state`; its declared value when it cannot be read.
+ */
+export async function readConfirmBytes(): Promise<number> {
+  try {
+    const row = (await runQuery<Record<string, unknown>>('qb.sponsor.package-state', { limit: 1 })).items[0]
+    const n = Number(row?.confirmBytes)
+    return row?.confirmBytes != null && Number.isFinite(n) && n >= 0 ? n : LARGE_EXPORT_BYTES
+  } catch {
+    return LARGE_EXPORT_BYTES
+  }
+}
 
 export interface QuizFileEntry {
   name: string
