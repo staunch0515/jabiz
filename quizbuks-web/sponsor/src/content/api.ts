@@ -152,6 +152,7 @@ export interface Draft {
   materials: Material[]
   /** The other languages' materials, each standing for a base material (`variantOf`). */
   variants: Material[]
+  /** The translations read with it: the quiz's own, or all (`readDraft`, F-S6c). */
   translations: Translation[]
 }
 
@@ -371,7 +372,7 @@ function readAll(dataset: string, quizId: string, sorts: Sort[]): Promise<Row[]>
   return readWhere(dataset, [{ field: 'quizId', op: 'eq', value: quizId }], sorts)
 }
 
-type Filter = { field: string; op: 'eq'; value: string }
+type Filter = { field: string; op: 'eq'; value: string } | { field: string; op: 'in'; values: string[] }
 
 /** Every row of one of the sponsor's datasets that matches the filters, page by page. */
 async function readWhere(dataset: string, filters: Filter[], sorts: Sort[]): Promise<Row[]> {
@@ -481,21 +482,49 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
   }
 }
 
+/** F-S6c: the keys of the quiz's own translated elements (`languages.ts`'s TITLE_KEY, INTRO_KEY and COVER_KEY). */
+const QUIZ_KEYS = ['quiz.title', 'quiz.intro', 'quiz.cover']
+
+/**
+ * Which translations a draft is read with: only the quiz's own (its title, introduction and cover: what the editor
+ * shows from the draft; F-S6c reads the questions' a page at a time, `searchTranslations`), or all of them (an
+ * export, the preview).
+ */
+export type DraftTranslations = 'quiz' | 'all'
+
 /**
  * A quiz's draft, read from the sponsor's datasets; null when it is not theirs or removed (the datasets show only the
- * sponsor's own rows, and of quizzes only those not removed).
+ * sponsor's own rows, and of quizzes only those not removed). Its `translations` are the quiz's own unless `all` are
+ * asked for: a large bank has tens of thousands.
  */
-export async function readDraft(quizId: string): Promise<Draft | null> {
-  const [quiz, questions, options, materials, images, translations] = await Promise.all([
+export async function readDraft(quizId: string, translations: DraftTranslations = 'quiz'): Promise<Draft | null> {
+  const [quiz, questions, options, materials, images, rows] = await Promise.all([
     readQuizRow(quizId),
     readAll(CONTENT_DATASET.question, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.option, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.material, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.materialImage, quizId, BY_SEQ),
-    readAll(CONTENT_DATASET.translation, quizId, [{ field: 'elementKey', asc: true }]),
+    translations === 'all'
+      ? readAll(CONTENT_DATASET.translation, quizId, [{ field: 'elementKey', asc: true }])
+      : readWhere(CONTENT_DATASET.translation, [{ field: 'quizId', op: 'eq', value: quizId },
+        { field: 'elementKey', op: 'in', values: QUIZ_KEYS }], [{ field: 'elementKey', asc: true }]),
   ])
   if (!quiz) return null
-  return assembleDraft(quiz, questions, options, materials, images, translations)
+  return assembleDraft(quiz, questions, options, materials, images, rows)
+}
+
+/** F-S6c: what one of the quiz's other languages lacks of the base's texts (`qb.sponsor.quiz-translation-progress`). */
+export interface TranslationProgress {
+  language: ContentLanguage
+  missing: number
+  stale: number
+}
+
+/** F-S6c: per other language of the quiz, its texts missing and out of date, counted by the server. */
+export async function readTranslationProgress(quizId: string): Promise<TranslationProgress[]> {
+  const page = await runQuery<Row>(CONTENT_TEMPLATE.quizTranslationProgress, { params: { quizId }, limit: 10 })
+  return page.items.map((row) => ({ language: contentLanguageOf(str(row.language) ?? undefined),
+    missing: num(row.missing), stale: num(row.stale) }))
 }
 
 /** The quiz's own row by its key; null when the sponsor's dataset does not have it (not theirs, or removed). */
@@ -734,6 +763,91 @@ export async function questionAt(quizId: string, no: number): Promise<QuestionRo
   return row ? { questionId: String(row.questionId), no: num(row.questionNo), stem: str(row.stem),
     image: str(row.image), points: num(row.points) || 1, selection: selectionOf(row.selection),
     optionCount: num(row.optionCount), translated: num(row.translated) } : null
+}
+
+/** F-S6c: the state of a text in a language, as `qb.sponsor.quiz-translations` and `languages.ts` judge it. */
+export type TranslationState = 'none' | 'missing' | 'stale' | 'done'
+
+const stateOf = (value: unknown): TranslationState =>
+  value === 'missing' || value === 'stale' || value === 'done' ? value : 'none'
+
+/** F-S6c: an option of a question on the translation page, with its translation into the language asked for. */
+export interface TranslatedOption {
+  optionId: string
+  /** Its place in the question (from 1). */
+  no: number
+  text: string | null
+  image: string | null
+  translation: string | null
+  state: TranslationState
+  /** Who wrote the translation (`SPONSOR` or `AI`); null without one. */
+  translatedBy: string | null
+  /** The language's own image of the option; null shows the base's. */
+  ownImage: string | null
+}
+
+/** F-S6c: a row of `qb.sponsor.quiz-translations`: a question and its options with their translations. */
+export interface TranslationRow {
+  questionId: string
+  /** Its place in the quiz (from 1). */
+  no: number
+  stem: string | null
+  image: string | null
+  stemText: string | null
+  stemState: TranslationState
+  stemBy: string | null
+  ownImage: string | null
+  options: TranslatedOption[]
+  /** How many of its texts (its own and its options') are missing or out of date. */
+  pending: number
+}
+
+function translatedOptions(value: unknown): TranslatedOption[] {
+  let list: unknown
+  try {
+    list = typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return []
+  }
+  if (!Array.isArray(list)) return []
+  return (list as Row[]).map((o) => ({
+    optionId: String(o.optionId), no: num(o.no), text: str(o.text), image: str(o.image),
+    translation: str(o.translation), state: stateOf(o.state), translatedBy: str(o.by), ownImage: str(o.ownImage),
+  }))
+}
+
+/**
+ * F-S6c: one page of a quiz's questions in one of its other languages, in their order, counted: searched by the text
+ * of a question or an option, or only those with a text missing or out of date.
+ */
+export async function searchTranslations({ quizId, language, search = '', untranslated = false, offset, limit }: {
+  quizId: string
+  language: ContentLanguage
+  search?: string
+  untranslated?: boolean
+  offset: number
+  limit: number
+}): Promise<{ items: TranslationRow[]; total: number }> {
+  const q = search.trim().slice(0, 100)
+  const page = await runQuery<Row>(CONTENT_TEMPLATE.quizTranslations, {
+    params: { quizId, language, ...(q ? { q } : {}), ...(untranslated ? { untranslated: true } : {}) },
+    offset,
+    limit,
+    count: true,
+  })
+  const items = page.items.map((row): TranslationRow => ({
+    questionId: String(row.questionId),
+    no: num(row.questionNo),
+    stem: str(row.stem),
+    image: str(row.image),
+    stemText: str(row.stemText),
+    stemState: stateOf(row.stemState),
+    stemBy: str(row.stemBy),
+    ownImage: str(row.ownImage),
+    options: translatedOptions(row.options),
+    pending: num(row.pending),
+  }))
+  return { items, total: page.total ?? items.length }
 }
 
 /** F-S6: the question bank's limits in effect (`qb.sponsor.quiz-limits`). */

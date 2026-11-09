@@ -5,7 +5,7 @@ import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } 
  * F-S6b (docs/quizbuks/plans/impl/F-S6.md §3.5): the editor of a large question bank against the packaged server: a
  * quiz file's questions imported in two batches (`QB_QUIZ_IMPORT_QUESTIONS`), one batch undone, the list searched a
  * page at a time, one question moved (`QB_QUESTION_MOVE`) and several given the same points at once
- * (`QB_QUESTION_POINTS_SET`).
+ * (`QB_QUESTION_POINTS_SET`). F-S6c: the translations tab of a large bank, a page at a time.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
@@ -92,4 +92,45 @@ test('a Sponsor imports a large bank in batches, undoes one, searches, moves and
   const rows = await query(request, token, 'qb.sponsor.quiz-questions', { quizId })
   expect(rows.slice(0, 50).every((row) => Number(row.points) === 3)).toBe(true)
   expect(rows.slice(50).every((row) => Number(row.points) === 1)).toBe(true)
+})
+
+test('a Sponsor translates a large bank a page at a time (F-S6c)', async ({ page, request }) => {
+  const { email, token } = await sponsor(request, 'Bruno')
+  const quiz = await run(request, token, 'QB_QUIZ_SAVE', { title: unique('Translated bank '), intro: null,
+    cover: null, timeLimitSec: null, language: 'en' })
+  const quizId = quiz.quizId as string
+  // More than a page (50) of questions, and a language to translate them into.
+  await run(request, token, 'QB_QUIZ_IMPORT_QUESTIONS', { quizId, document: quizFile(60), files: {} })
+  await run(request, token, 'QB_QUIZ_LANGUAGES_SET', { quizId, languages: ['ja'] })
+
+  await signIn(page, '/sponsor/', email)
+  await expect(page).not.toHaveURL(/\/login/)
+  await page.goto(`/sponsor/quizzes/${quizId}`)
+  await page.getByTestId('tab-languages').click()
+  const questions = page.getByTestId('translation-questions')
+  await expect(questions.getByTestId('translations-page')).toHaveText('Page 1 of 2')
+  // Each question with its two options.
+  await expect(questions.getByTestId('translation-text')).toHaveCount(150)
+  await questions.getByTestId('translations-next').click()
+  await expect(questions.getByTestId('translations-page')).toHaveText('Page 2 of 2')
+  const row = questions.getByTestId('translation-text').first()
+  await expect(row).toContainText('Question 51')
+  await expect(row).toHaveAttribute('data-state', 'missing')
+  await expectAccessible(page, 'translations page 2')
+
+  await row.getByTestId('translation-input').fill('バンク 問 51')
+  await questions.getByTestId('translation-page-save').click()
+  // Saved, and read back from the server as done; the page stays on page 2.
+  await expect(questions.getByTestId('translation-text').first()).toHaveAttribute('data-state', 'done')
+  await expect(questions.getByTestId('translation-text').first().getByTestId('translation-input'))
+    .toHaveValue('バンク 問 51')
+  await expect(questions.getByTestId('translations-page')).toHaveText('Page 2 of 2')
+  const [saved] = await query(request, token, 'qb.sponsor.quiz-translations', { quizId, language: 'ja',
+    q: 'Bank Q51' })
+  expect(saved.stemText).toBe('バンク 問 51')
+  expect(saved.stemState).toBe('done')
+
+  // Only what needs doing: the question translated has its options still to do; question 1 has everything.
+  await page.getByTestId('translation-only-pending').click()
+  await expect(questions.getByTestId('translations-page')).toHaveText('Page 1 of 2')
 })

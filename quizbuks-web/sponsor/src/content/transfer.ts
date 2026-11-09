@@ -208,9 +208,12 @@ export async function exportDraft(draft: Draft, onProgress?: Progress,
   return document
 }
 
-/** Reads a quiz's draft and exports it; null when the quiz is not the sponsor's. */
+/**
+ * Reads a quiz's draft with all its translations (read only now, when the export is asked for: F-S6c) and exports
+ * it; null when the quiz is not the sponsor's.
+ */
 export async function exportQuiz(quizId: string, onProgress?: Progress): Promise<QuizFileDocument | null> {
-  const draft = await readDraft(quizId)
+  const draft = await readDraft(quizId, 'all')
   if (!draft) return null
   const [links, products] = await Promise.all([readMyQuizLinks(quizId), readMyProducts()])
   return exportDraft(draft, onProgress, undefined, { links, products })

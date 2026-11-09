@@ -117,7 +117,8 @@ function usePreview(target: PreviewTarget, chosen: ContentLanguage | null) {
   const versionId = publication.data?.publication.versionId ?? null
   const version = useQuery({ queryKey: ['qb', 'quiz-version', versionId], queryFn: () => readVersion(versionId!),
     enabled: !!versionId })
-  const draft = useQuery({ queryKey: draftQuery(target.id), queryFn: () => readDraft(target.id),
+  // F-S6c: with all its translations, read when the preview opens (the editor's draft has only the quiz's own).
+  const draft = useQuery({ queryKey: [...draftQuery(target.id), 'all'], queryFn: () => readDraft(target.id, 'all'),
     enabled: target.kind === 'quiz' })
   // F-S12: the shared video the publication picked, which takes its card's video as on the App.
   const sharedVideoId = target.kind === 'publication' ? publication.data?.publication.sharedVideoId ?? null : null
