@@ -293,7 +293,7 @@ abstract class AiItSupport extends LegalItSupport {
     /** A quiz of the sponsor's with an introduction and one article; returns {quizId, materialId}. */
     List<String> quizWithArticle(String token, String title, String article) {
         String quizId = newQuiz(token, title);
-        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", title, "intro", "About " + title));
+        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", title, "intro", "About " + title, "shuffleQuestions", false));
         String materialId = (String) run("QB_MATERIAL_SAVE", token, body("quizId", quizId, "kind", "ARTICLE",
             "title", "Article of " + title, "body", article)).get("itemId");
         return List.of(quizId, materialId);

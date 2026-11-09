@@ -13,6 +13,7 @@ results:
   questionNo:    { from: QbQuestionStat.questionNo }
   completions:   { from: QbQuestionStat.completions }
   correct:       { from: QbQuestionStat.correct }
+  drawn:         { from: QbQuestionStat.drawn }
   basedOn:       { from: QbQuestionStat.basedOn }
   version:       { from: QbQuestionStat.version }
 list:
@@ -27,6 +28,7 @@ SELECT
     s.{{QbQuestionStat.questionNo}}    AS questionNo,
     s.{{QbQuestionStat.completions}}   AS completions,
     s.{{QbQuestionStat.correct}}       AS correct,
+    s.{{QbQuestionStat.drawn}}         AS drawn,
     s.{{QbQuestionStat.basedOn}}       AS basedOn,
     s.{{QbQuestionStat.version}}       AS version
 FROM {{QbQuestionStat}} s

@@ -20,6 +20,8 @@ export interface SnapshotQuestion {
   options: SnapshotOption[]
   /** A survey's question (Q12): one option or several; null for a scored question. */
   selection: 'SINGLE' | 'MULTIPLE' | null
+  /** F-S7: the difficulty the sponsor set; null when none. */
+  difficulty?: 'EASY' | 'MEDIUM' | 'HARD' | null
 }
 
 export interface SnapshotMaterial {
@@ -62,6 +64,8 @@ export interface Snapshot {
   aiGenerated: boolean
   materials: SnapshotMaterial[]
   questions: SnapshotQuestion[]
+  /** F-S7: whether each taker gets the questions in an order of their own (a survey never; "fixed" in the snapshot). */
+  shuffled?: boolean
 }
 
 /** The schemas this page understands (2 has translations, Q73a); another one is shown as unreadable rather than half. */
@@ -119,6 +123,7 @@ export function parseSnapshot(content: unknown): Snapshot {
     cover: text(json.cover),
     timeLimitSec: typeof json.timeLimitSec === 'number' ? json.timeLimitSec : null,
     aiGenerated: json.aiGenerated === true,
+    shuffled: json.kind !== 'SURVEY' && json.questionOrder !== 'fixed',
     materials: materialsOf(json.materials),
     questions: list(json.questions).map((q) => ({
       no: whole(q.no),
@@ -126,6 +131,7 @@ export function parseSnapshot(content: unknown): Snapshot {
       image: text(q.image),
       points: whole(q.points),
       selection: q.selection === 'SINGLE' || q.selection === 'MULTIPLE' ? q.selection : null,
+      difficulty: q.difficulty === 'EASY' || q.difficulty === 'MEDIUM' || q.difficulty === 'HARD' ? q.difficulty : null,
       options: list(q.options).map((o) => ({
         no: whole(o.no),
         text: text(o.text),

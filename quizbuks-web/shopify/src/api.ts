@@ -89,6 +89,8 @@ export interface Campaign {
   editedAt: string
   publishedAt: string | null
   endedAt: string | null
+  /** F-S7: whether each visitor gets the questions in an order of their own (A2-14: on by default). */
+  shuffleQuestions: boolean
 }
 
 /** CampaignProcesses.Pool: the running campaign's codes left to hand out, and those handed out. */
@@ -113,6 +115,8 @@ export interface CampaignDraft {
   passScore: number
   percent: number
   questions: CampaignQuestion[]
+  /** F-S7: off keeps the order of the questions as written. */
+  shuffleQuestions: boolean
 }
 
 /** The limits the server keeps (Channel and CampaignProcesses): the form says them before the server does. */

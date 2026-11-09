@@ -15,7 +15,8 @@ import java.util.UUID;
  * change. Files are their {@code fileId}s.
  */
 public record QuizSnapshot(String title, String intro, UUID cover, Integer timeLimitSec, boolean aiGenerated,
-    List<Material> materials, List<Question> questions, boolean survey, Map<String, Language> translations) {
+    List<Material> materials, List<Question> questions, boolean survey, Map<String, Language> translations,
+    boolean fixedOrder) {
 
     /**
      * The version of this format, written into every snapshot. A survey's snapshot adds its kind and its questions'
@@ -33,6 +34,37 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
         materials = List.copyOf(Objects.requireNonNull(materials, "materials must not be null"));
         questions = List.copyOf(Objects.requireNonNull(questions, "questions must not be null"));
         translations = translations == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(translations));
+        // F-S7: a survey is never shuffled, so it keeps no setting of its own.
+        fixedOrder = fixedOrder && !survey;
+    }
+
+    /**
+     * As before F-S7: the questions are shuffled for each taker ({@code fixedOrder} false), which is also what a
+     * snapshot written before F-S7 means (A2-14).
+     */
+    public QuizSnapshot(String title, String intro, UUID cover, Integer timeLimitSec, boolean aiGenerated,
+        List<Material> materials, List<Question> questions, boolean survey, Map<String, Language> translations) {
+        this(title, intro, cover, timeLimitSec, aiGenerated, materials, questions, survey, translations, false);
+    }
+
+    /**
+     * F-S7: whether each taker is given the questions in an order of their own: a quiz not set to the fixed order; a
+     * survey never.
+     */
+    public boolean shuffled() {
+        return !survey && !fixedOrder;
+    }
+
+    /** F-S7: the same content with this order setting (ignored for a survey). */
+    public QuizSnapshot withFixedOrder(boolean fixed) {
+        return new QuizSnapshot(title, intro, cover, timeLimitSec, aiGenerated, materials, questions, survey,
+            translations, fixed);
+    }
+
+    /** The same content with these translations, its order setting kept. */
+    public QuizSnapshot withTranslations(Map<String, Language> others) {
+        return new QuizSnapshot(title, intro, cover, timeLimitSec, aiGenerated, materials, questions, survey, others,
+            fixedOrder);
     }
 
     /** A quiz or survey of its base language only. */
@@ -138,12 +170,19 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
     public record Image(int no, UUID image, String caption) {}
 
     /**
-     * @param selection a survey's question: {@code SINGLE} or {@code MULTIPLE} ({@link QbContent}); null for a scored
-     *                  question (and for a survey's question not yet set, which a version does not accept)
+     * @param selection  a survey's question: {@code SINGLE} or {@code MULTIPLE} ({@link QbContent}); null for a scored
+     *                   question (and for a survey's question not yet set, which a version does not accept)
+     * @param difficulty F-S7: {@link QuestionDifficulty}'s code; null when not set
      */
-    public record Question(int no, String stem, UUID image, int points, List<Option> options, String selection) {
+    public record Question(int no, String stem, UUID image, int points, List<Option> options, String selection,
+        String difficulty) {
         public Question {
             options = List.copyOf(Objects.requireNonNull(options, "options must not be null"));
+        }
+
+        /** As before F-S7: no difficulty set. */
+        public Question(int no, String stem, UUID image, int points, List<Option> options, String selection) {
+            this(no, stem, image, points, options, selection, null);
         }
 
         /** A scored question. */
@@ -200,6 +239,6 @@ public record QuizSnapshot(String title, String intro, UUID cover, Integer timeL
             chosen.add(question);
         }
         return new QuizSnapshot(title, intro, cover, timeLimitSec, aiGenerated, materials, chosen, survey,
-            translations);
+            translations, fixedOrder);
     }
 }

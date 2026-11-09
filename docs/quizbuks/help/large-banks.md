@@ -27,6 +27,8 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 **批量操作**：勾选题目前面的方框（"选择本页的题目"一次选中一页），可以一次删除，或一次把它们设为同一个分数（问卷没有分数，不显示）。一次最多 200 道。删除前会再问一次；已保存的版本不受影响。
 
+**题目统计中的"被抽到"**：发布的题目统计中，"被抽到"是已结束的答题中被给出这道题的次数，完成后才计入：正在作答的答题要等结束后才算进去。
+
 ### 日本語 · 大きな問題集と出題
 
 **上限**：1 つのクイズに入れられる問題は 1000 問までです（問題集の上限）。1 回の回答で出題されるのは 100 問までです。「問題」タブの上に、今の問題数と上限、1 回の回答の上限が表示されます。上限はプラットフォームが変更することがあるので、画面の表示を確認してください。問題集の上限に達すると、問題の追加やインポートはできません。今ある問題の変更や削除はこれまでどおりできます。
@@ -43,6 +45,8 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 **まとめて操作**：問題の前のチェックボックス（「このページの問題を選択」で 1 ページ分をまとめて選択）で選ぶと、まとめて削除したり、同じ配点にしたりできます（アンケートには配点がないので表示されません）。一度に 200 問までです。削除の前に確認があります。保存済みのバージョンは変わりません。
 
+**問題の統計の「出題された数」**：公開の問題の統計の「出題された数」は、終わった解答のうちこの問題が出題された回数で、完了後に集計されます。解答中のものは終わってから数に入ります。
+
 ### English · Large question banks and drawing
 
 **Limits**: a quiz holds up to 1000 questions: that is the bank's limit. One attempt asks at most 100 questions. Above the list on the "Questions" tab you see how many questions the quiz has, its limit, and one attempt's limit. The platform may change the limits; the page always shows the current ones. When the bank is full, you cannot add or import questions; you can still change and delete the ones it has.
@@ -58,3 +62,5 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 **Moving**: move a question up or down, or to any place with "Move to…" (in a large quiz, type the new place). The other questions make room.
 
 **Batch actions**: tick the boxes in front of questions ("Select the questions on this page" ticks a whole page) to delete them at once or give them all the same points (not shown for a survey, which has no points). Up to 200 at once. Deleting asks first; saved versions keep their questions.
+
+**"Drawn" in the question figures**: in a publication's question figures, "Drawn" is how many finished attempts were given the question. It is counted once an attempt is finished: attempts still in progress are added when they end.

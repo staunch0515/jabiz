@@ -1307,6 +1307,9 @@ public final class AiProcesses {
 
         Object owner = quiz.get("ownerId");
         int seq = placesFor(ctx, existing, accepted.size());
+        // F-S7: the questions take the difficulty they were asked for.
+        Object asked = params(job).get("difficulty");
+        String difficulty = com.jabiz.quizbuks.content.QuestionDifficulty.known(asked) ? asked.toString() : null;
         List<String> ids = new ArrayList<>();
         for (AiQuestionsJob.Candidate question : accepted) {
             Map<String, Object> values = new LinkedHashMap<>();
@@ -1315,6 +1318,7 @@ public final class AiProcesses {
             values.put("seq", BigDecimal.valueOf(seq++));
             values.put("stem", question.stem());
             values.put("points", BigDecimal.valueOf(question.points()));
+            values.put("difficulty", difficulty);
             values.put("aiJobId", String.valueOf(job.id()));
             Object questionId = ctx.changes().insert(QbContent.QUESTION, values);
             for (int j = 0; j < question.options().size(); j++) {

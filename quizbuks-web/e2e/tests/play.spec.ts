@@ -38,7 +38,8 @@ interface Seeded {
 async function seedPublication(request: APIRequestContext, timeLimitSec: number): Promise<Seeded> {
   const sponsor = await fundedSponsor(request)
   const quiz = await run(request, sponsor.token, 'QB_QUIZ_SAVE', { title: 'World capitals',
-    intro: 'Two **easy** questions about capitals.', timeLimitSec })
+    // F-S7: in the fixed order, so that the steps below know which question comes first.
+    intro: 'Two **easy** questions about capitals.', timeLimitSec, shuffleQuestions: false })
   const quizId = quiz.quizId as string
   await run(request, sponsor.token, 'QB_MATERIAL_SAVE', { quizId, kind: 'ARTICLE', title: 'Read first',
     body: 'Paris is **the capital** of France.' })

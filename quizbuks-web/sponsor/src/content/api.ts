@@ -38,6 +38,12 @@ const kindOf = (value: unknown): QuizKind => (value === 'SURVEY' ? 'SURVEY' : 'Q
 const selectionOf = (value: unknown): Selection | null =>
   value === 'SINGLE' || value === 'MULTIPLE' ? value : null
 
+/** F-S7: how hard a question is, as the sponsor says (`QuestionDifficulty`); none when not set. */
+export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD'
+export const DIFFICULTIES: readonly Difficulty[] = ['EASY', 'MEDIUM', 'HARD']
+export const difficultyOf = (value: unknown): Difficulty | null =>
+  (DIFFICULTIES as readonly unknown[]).includes(value) ? value as Difficulty : null
+
 /** A row of `qb.sponsor.quizzes` (M-20). */
 export interface QuizRow {
   quizId: string
@@ -67,6 +73,8 @@ export interface Quiz {
   intro: string | null
   cover: string | null
   timeLimitSec: number | null
+  /** F-S7: whether each Taker gets the questions in an order of their own (a survey's never are). */
+  shuffleQuestions: boolean
   status: QuizStatus
   latestVersionNo: number
   versionLabel: string | null
@@ -99,6 +107,8 @@ export interface Question {
   options: Option[]
   /** A survey's question; null for a scored question (and a survey's one not set yet). */
   selection: Selection | null
+  /** F-S7: its difficulty; null when not set. */
+  difficulty?: Difficulty | null
 }
 
 export interface MaterialImage {
@@ -186,6 +196,8 @@ export interface QuizInput {
   coverAssetId?: string | null
   /** F-C1b: the text asset (a quiz's introduction) the introduction is still a copy of. */
   introAssetId?: string | null
+  /** F-S7: whether the questions are shuffled for each Taker; not given keeps the quiz's (a new one shuffles). */
+  shuffleQuestions?: boolean
 }
 
 /** `QuestionProcesses.QuestionInput`; `options` is the whole list in its order. */
@@ -203,6 +215,8 @@ export interface QuestionInput {
   imageAssetId?: string
   /** A survey's question only: the server takes a point each and no correct option. */
   selection?: Selection | null
+  /** F-S7: its difficulty; an empty one clears it, none leaves it as it is. */
+  difficulty?: Difficulty | ''
 }
 
 /** `MaterialProcesses.MaterialInput`: only the content field of the kind is given. */
@@ -297,6 +311,10 @@ export interface VersionRow {
   /** F-S9: the version's topics, which its publications inherit (none from the one-version template). */
   topics?: string[]
   customTopics?: string[]
+  /** F-S7: whether its questions are shuffled for each Taker (none from the one-version template: see its content). */
+  shuffled?: boolean
+  /** F-S7: how many of its questions are of each difficulty (the rest have none). */
+  difficultyCounts?: Record<Difficulty, number>
 }
 
 type SnapshotMaterial = {
@@ -347,7 +365,11 @@ export interface Snapshot {
     options: { no: number; text: string | null; image: string | null; correct: boolean }[]
     /** A survey's question only. */
     selection?: Selection
+    /** F-S7: only a question with a difficulty. */
+    difficulty?: Difficulty
   }[]
+  /** F-S7: only a quiz whose questions keep their order says so; without it they are shuffled. */
+  questionOrder?: 'fixed'
 }
 
 /** One version with its whole content (`qb.sponsor.quiz-version`). */
@@ -403,6 +425,8 @@ export function toQuiz(row: Row): Quiz {
     intro: str(row.intro),
     cover: str(row.cover),
     timeLimitSec: numOrNull(row.timeLimitSec),
+    // F-S7: shuffled unless set otherwise (A2-14).
+    shuffleQuestions: row.shuffleQuestions !== false && row.shuffleQuestions !== 'false',
     status: (row.status as QuizStatus) ?? 'DRAFT',
     latestVersionNo: num(row.latestVersionNo),
     versionLabel: str(row.versionLabel),
@@ -452,6 +476,7 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
       points: num(q.points) || 1,
       options: optionsOf.get(String(q.questionId)) ?? [],
       selection: selectionOf(q.selection),
+      difficulty: difficultyOf(q.difficulty),
     })),
     materials: [...materials].filter((m) => m.variantOf == null).sort(bySeq).map(toMaterial),
     variants: materials.filter((m) => m.variantOf != null).map(toMaterial),
@@ -623,6 +648,9 @@ function toVersionRow(row: Row): VersionRow {
     foreignVideo: foreignVideo(linksOf(row.videoLinks), mainlandSites(paramText(row.mainlandSites))),
     topics: codesOf(row.topics),
     customTopics: customOf(row.customTopics),
+    ...(row.shuffled === undefined ? {} : { shuffled: bool(row.shuffled) }),
+    ...(row.easyCount === undefined ? {} : { difficultyCounts: { EASY: num(row.easyCount),
+      MEDIUM: num(row.mediumCount), HARD: num(row.hardCount) } }),
   }
 }
 
@@ -743,6 +771,11 @@ export const deleteQuestions = (quizId: string, questionIds: string[], baseRevis
 export const setQuestionPoints = (quizId: string, questionIds: string[], points: number, baseRevision: number) =>
   runProcess<EditOutput>(CONTENT_PROCESS.questionPointsSet, { quizId, questionIds, points, baseRevision })
 
+/** F-S7: gives several questions the same difficulty, or none (`QB_QUESTION_DIFFICULTY_SET`). */
+export const setQuestionDifficulty = (quizId: string, questionIds: string[], difficulty: Difficulty | '',
+  baseRevision: number) =>
+  runProcess<EditOutput>(CONTENT_PROCESS.questionDifficultySet, { quizId, questionIds, difficulty, baseRevision })
+
 /** F-S6: a row of `qb.sponsor.quiz-questions`: a question with its place in the quiz (from 1). */
 export interface QuestionRow {
   questionId: string
@@ -751,6 +784,8 @@ export interface QuestionRow {
   image: string | null
   points: number
   selection: Selection | null
+  /** F-S7: its difficulty; null when not set. */
+  difficulty?: Difficulty | null
   optionCount: number
   /** In how many of the quiz's other languages its text is translated. */
   translated: number
@@ -768,6 +803,7 @@ function toQuestionRow(row: Row): QuestionRow {
     image: str(row.image),
     points: num(row.points) || 1,
     selection: selectionOf(row.selection),
+    difficulty: difficultyOf(row.difficulty),
     optionCount: num(row.optionCount),
     translated: num(row.translated),
     correctCount: num(row.correctCount),
@@ -783,10 +819,12 @@ export function questionSearchParams(search: string): { q?: string; no?: number 
 }
 
 /** F-S6: one page of a quiz's questions in their order, searched, counted. */
-export async function searchQuestions({ quizId, search = '', offset, limit }: { quizId: string; search?: string
-  offset: number; limit: number }): Promise<{ items: QuestionRow[]; total: number }> {
+export async function searchQuestions({ quizId, search = '', offset, limit, difficulty }: { quizId: string
+  search?: string; offset: number; limit: number
+  /** F-S7: only the questions of this difficulty, or (`NONE`) of none. */
+  difficulty?: Difficulty | 'NONE' | null }): Promise<{ items: QuestionRow[]; total: number }> {
   const page = await runQuery<Row>(CONTENT_TEMPLATE.quizQuestions, {
-    params: { quizId, ...questionSearchParams(search) },
+    params: { quizId, ...questionSearchParams(search), ...(difficulty ? { difficulty } : {}) },
     offset,
     limit,
     count: true,
@@ -925,6 +963,7 @@ export async function readQuestion(questionId: string): Promise<Question | null>
     options: options.map((o) => ({ optionId: String(o.optionId), text: str(o.text), image: str(o.image),
       correct: bool(o.correct) })),
     selection: selectionOf(row.selection),
+    difficulty: difficultyOf(row.difficulty),
   }
 }
 

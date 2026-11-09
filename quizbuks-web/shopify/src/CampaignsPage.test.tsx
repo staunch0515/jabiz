@@ -16,7 +16,7 @@ function campaign(overrides: Partial<Campaign> = {}): Campaign {
   return {
     campaignId: 'c1', status: 'DRAFT', name: 'Spring quiz', video: null, timeLimitSec: 120, passScore: 1,
     percent: 15, revision: 3, publicationId: null, createdAt: '2026-10-27T00:00:00Z',
-    editedAt: '2026-10-27T00:00:00Z', publishedAt: null, endedAt: null,
+    editedAt: '2026-10-27T00:00:00Z', publishedAt: null, endedAt: null, shuffleQuestions: true,
     questions: [{ stem: 'Which?', options: [{ text: 'A', correct: false }, { text: 'B', correct: true }] }],
     ...overrides,
   }
@@ -124,7 +124,7 @@ describe('the quiz campaigns (S2b)', () => {
         { stem: 'First?', options: [{ text: 'No', correct: false }, { text: 'Yes', correct: true }] },
         { stem: 'Second?', options: [{ text: 'Red', correct: false }, { text: 'Green', correct: false },
           { text: 'Blue', correct: true }] },
-      ] } })
+      ], shuffleQuestions: true } })
     expect(await screen.findByText('Saved: Autumn quiz.')).toBeInTheDocument()
   })
 
@@ -185,6 +185,30 @@ describe('the quiz campaigns (S2b)', () => {
     await waitFor(() => expect(posted).toHaveLength(1))
     expect(posted[0].body).not.toHaveProperty('campaignId')
     expect(posted[0].body).toMatchObject({ name: 'Spring quiz', percent: 15 })
+  })
+
+  it('turns the shuffle off as a sponsor does on a quiz, and a copy keeps the setting (F-S7)', async () => {
+    const posted = server({ campaigns: [campaign(), campaign({ campaignId: 'e', name: 'Fixed one', status: 'ENDED',
+      shuffleQuestions: false })] })
+    const user = userEvent.setup()
+    page()
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    const shuffle = screen.getByRole('switch', { name: 'Shuffle the questions' })
+    expect(shuffle).toBeChecked()
+    expect(shuffle).toHaveAccessibleDescription(/Each visitor gets the questions in an order of their own/)
+    await user.click(shuffle)
+    expect(shuffle).not.toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }))
+    await waitFor(() => expect(posted).toHaveLength(1))
+    expect(posted[0].body).toMatchObject({ campaignId: 'c1', shuffleQuestions: false })
+    await expectAccessible()
+
+    await user.click(await screen.findByRole('button', { name: 'Copy into a new draft' }))
+    expect(screen.getByRole('switch', { name: 'Shuffle the questions' })).not.toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Save the draft' }))
+    await waitFor(() => expect(posted).toHaveLength(2))
+    expect(posted[1].body).not.toHaveProperty('campaignId')
+    expect(posted[1].body).toMatchObject({ name: 'Fixed one', shuffleQuestions: false })
   })
 
   it('shows the server\'s refusal at its field', async () => {

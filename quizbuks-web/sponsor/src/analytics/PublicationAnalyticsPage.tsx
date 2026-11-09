@@ -35,6 +35,7 @@ import {
   percent,
   readOverview,
   readLanguages,
+  rateByDifficulty,
   readQuestions,
   readVersions,
   REFRESH_MS,
@@ -299,6 +300,14 @@ function QuestionsSection({ questions, o, picker }: {
                 <TableHead scope="col" className="text-right">{t('analytics.questions.answered')}</TableHead>
                 <TableHead scope="col">{t('analytics.questions.correctRate')}</TableHead>
                 <TableHead scope="col">{t('analytics.questions.difficulty')}</TableHead>
+                <TableHead scope="col">{t('analytics.questions.setDifficulty')}</TableHead>
+                <TableHead scope="col" className="text-right">
+                  {t('analytics.questions.drawn')}
+                  {/* F-S7 (controller 2026-11-09): only finished attempts are counted. */}
+                  <span className="text-muted-foreground block text-xs font-normal" data-testid="question-drawn-note">
+                    {t('analytics.questions.drawnNote')}
+                  </span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -324,11 +333,18 @@ function QuestionsSection({ questions, o, picker }: {
                         </span>
                       </TableCell>
                       <TableCell>
-                        {q.difficulty && <Badge variant={DIFFICULTY_BADGE[q.difficulty]} data-testid="question-difficulty"
-                          data-difficulty={q.difficulty}>{t(`analytics.questions.${q.difficulty}`)}</Badge>}
+                        {q.observedDifficulty && <Badge variant={DIFFICULTY_BADGE[q.observedDifficulty]}
+                          data-testid="question-difficulty" data-difficulty={q.observedDifficulty}>
+                          {t(`analytics.questions.${q.observedDifficulty}`)}</Badge>}
                       </TableCell>
                     </>
                   )}
+                  <TableCell data-testid="question-set-difficulty">
+                    {q.difficulty ? t(`analytics.questions.${q.difficulty}`) : '—'}
+                  </TableCell>
+                  <TableCell className="text-right" data-testid="question-drawn">
+                    {q.drawn?.toLocaleString(locale) ?? '—'}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -336,7 +352,33 @@ function QuestionsSection({ questions, o, picker }: {
         </ScrollRegion>
       )}
       <p className="text-muted-foreground text-xs">{t('analytics.questions.difficultyHint')}</p>
+      {questions.length > 0 && (
+        <p className="text-muted-foreground text-xs" data-testid="question-drawn-hint">
+          {t('analytics.questions.drawnHint')}
+        </p>
+      )}
+      <ByDifficulty questions={questions} />
     </section>
+  )
+}
+
+/** F-S7: the right rate of the questions of each difficulty the sponsor set (shown questions only). */
+function ByDifficulty({ questions }: { questions: QuestionFigures[] }) {
+  const { t, i18n } = useTranslation(SPONSOR)
+  const rows = rateByDifficulty(questions)
+  if (rows.length === 0) return null
+  return (
+    <div className="flex flex-col gap-2" data-testid="questions-by-difficulty">
+      <h3 className="text-sm font-medium">{t('analytics.questions.byDifficulty')}</h3>
+      <ul className="flex flex-wrap gap-4 text-sm">
+        {rows.map((row) => (
+          <li key={row.difficulty} data-testid="by-difficulty" data-difficulty={row.difficulty}>
+            {t('analytics.questions.byDifficultyValue', { level: t(`analytics.questions.${row.difficulty}`),
+              rate: percent(row.rate, i18n.language), count: row.questions })}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
