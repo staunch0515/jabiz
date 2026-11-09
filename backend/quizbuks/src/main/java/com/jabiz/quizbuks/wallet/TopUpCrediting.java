@@ -2,6 +2,8 @@ package com.jabiz.quizbuks.wallet;
 
 import com.jabiz.ledger.Direction;
 import com.jabiz.process.ProcessContext;
+import com.jabiz.quizbuks.fee.CashLots;
+import com.jabiz.quizbuks.fee.QbFeeAccount;
 import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
@@ -162,6 +164,10 @@ public final class TopUpCrediting {
                 BigDecimal amount = QbTopUps.money(topUp.get("amount"));
                 QbWallets.change(ctx, first(ctx, WALLET), TopUpTargets.walletKind(TopUpTargets.of(topUp)),
                     topUp.get("sponsorId"), amount, 0, BigDecimal.ZERO);
+                if (TopUpTargets.CASH.equals(TopUpTargets.of(topUp))) {
+                    // F-M1: money into the cash account is a lot of its own, spent in the order it arrived.
+                    CashLots.add(ctx, topUp.get("sponsorId"), QbFeeAccount.CARD, amount, QbTopUps.TOPUP, topUp.id());
+                }
                 values.put("status", TopUpStatus.PAID);
                 values.put("checkoutSessionId", session.id());
                 values.put("paymentIntentId", session.paymentIntentId());

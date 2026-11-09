@@ -6,6 +6,8 @@ import com.jabiz.entity.Violation;
 import com.jabiz.ledger.Direction;
 import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
+import com.jabiz.quizbuks.fee.CashLots;
+import com.jabiz.quizbuks.fee.QbFeeAccount;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.identity.CallerChecks;
@@ -82,6 +84,7 @@ public final class KudosExchanges {
     static final String INPUT = "input";
     static final String PARAMS = "params";
     static final String KUDOS_WALLET = "kudosWallet";
+    static final String CASH_LOTS = "cashLots";
     static final String CASH_WALLET = "cashWallet";
     static final String EXCHANGE_ID = "exchangeId";
     static final String POSTING = "posting";
@@ -150,7 +153,10 @@ public final class KudosExchanges {
                 QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
                     ctx -> QbWallets.query(QbWallets.SPONSOR, ctx.request().actorId()), KUDOS_WALLET),
                 QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
-                    ctx -> QbWallets.query(QbWallets.CASH, ctx.request().actorId()), CASH_WALLET)))
+                    ctx -> QbWallets.query(QbWallets.CASH, ctx.request().actorId()), CASH_WALLET),
+                // F-M1: buying takes from the cash lots, the oldest first (same statement).
+                QueryEntities.query(CashLots.dataset(), ctx -> CashLots.open(toKudos ? ctx.request().actorId() : null),
+                    CASH_LOTS)))
             .compute("Check and record the exchange", (metadata, ctx) -> record(ctx, toKudos, switchKey))
             // The posting checks that its source document exists: the exchange is written first.
             .step("Save the exchange", SaveChanges.now())
@@ -205,7 +211,12 @@ public final class KudosExchanges {
         QbWallets.change(ctx, first(ctx, KUDOS_WALLET), QbWallets.SPONSOR, sponsorId,
             toKudos ? amount : amount.negate(), 0, BigDecimal.ZERO);
         QbWallets.change(ctx, first(ctx, CASH_WALLET), QbWallets.CASH, sponsorId,
-            toKudos ? amount.negate() : amount, 0, BigDecimal.ZERO);
+            toKudos ? amount.negate() : amount, 0, BigDecimal.ZERO);        if (toKudos) {
+            CashLots.take(ctx, TopUpCrediting.list(ctx, CASH_LOTS), amount, null);
+        } else {
+            // F-M1: Kudos sold back are cash that arrived now.
+            CashLots.add(ctx, sponsorId, QbFeeAccount.OTHER, amount, EXCHANGE, ctx.get(EXCHANGE_ID));
+        }
     }
 
     private static Output output(ProcessContext ctx, boolean toKudos) {

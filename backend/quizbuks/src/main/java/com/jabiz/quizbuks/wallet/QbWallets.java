@@ -42,6 +42,11 @@ public final class QbWallets {
      * ({@code lockName(SPONSOR, sponsor)}), so a purchase of Kudos moves both under one lock.
      */
     public static final String CASH = "CASH";
+    /**
+     * F-M1: a sponsor's platform fee Kudos (the fee credit, account 2190), a third row of the same owner, changed under
+     * the same lock: the cache of 2190 for them, the sum of their grants' remaining amounts ({@code QbFeeCreditGrant}).
+     */
+    public static final String FEE_CREDIT = "FEE_CREDIT";
 
     /** The process that pays a sponsor's pending rewards, in their order (in the {@code play} module). */
     public static final String PENDING_SETTLE = "QB_PENDING_SETTLE";
@@ -86,7 +91,7 @@ public final class QbWallets {
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:wallet"));
         eb.field("ownerId", f -> f.physicalColumn("owner_id").immutable(true).required(true).asText(128));
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true)
-            .asCode(KIND_DICTIONARY, SPONSOR, TAKER, CASH));
+            .asCode(KIND_DICTIONARY, SPONSOR, TAKER, CASH, FEE_CREDIT));
         eb.field("balance", f -> f.physicalColumn("balance").required(true).asMonetary("JPY", 0));
         eb.field("pendingCount", f -> f.physicalColumn("pending_count").required(true).asNumeric(9, 0));
         eb.field("pendingAmount", f -> f.physicalColumn("pending_amount").required(true).asMonetary("JPY", 0));

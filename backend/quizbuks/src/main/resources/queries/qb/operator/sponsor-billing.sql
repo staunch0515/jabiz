@@ -33,8 +33,8 @@ list:
 permissions: [qb.operator.use]
 ---*/
 -- Only the sponsors the caller's operator looks after (the membership dataset is the caller's own; Q59c-2). The
--- billing mode in effect is the sponsor's own ("own"), else the platform's default. Unpaid: the invoices open or
--- overdue; not invoiced yet: the postpaid charges the month's invoice (or paying early) has not covered.
+-- billing mode in effect is the sponsor's own ("own"), else the platform's default. Unpaid: what the invoices open,
+-- partly paid or overdue still owe; not invoiced yet: the postpaid charges the month's invoice (or paying early) has not covered.
 SELECT
     s.{{QbSponsor.userId}}        AS userId,
     s.{{QbSponsor.company}}       AS company,
@@ -54,11 +54,11 @@ JOIN {{QbSponsorOperator}} a ON a.{{QbSponsorOperator.userId}} = s.{{QbSponsor.u
 JOIN {{QbOperatorMember}} me ON me.{{QbOperatorMember.removedAt}} IS NULL
   AND me.{{QbOperatorMember.operatorId}} = a.{{QbSponsorOperator.operatorId}}
 LEFT JOIN LATERAL (
-    SELECT sum(i.{{QbFeeInvoice.total}}) AS f_total,
+    SELECT sum(i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.paidAmount}}) AS f_total,
            count(*) FILTER (WHERE i.{{QbFeeInvoice.status}} = 'OVERDUE') AS f_overdue
     FROM {{QbFeeInvoice}} i
     WHERE i.{{QbFeeInvoice.sponsorId}} = s.{{QbSponsor.userId}}
-      AND i.{{QbFeeInvoice.status}} IN ('OPEN', 'OVERDUE')) f ON true
+      AND i.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')) f ON true
 LEFT JOIN LATERAL (
     SELECT sum(c.{{QbFeeCharge.total}}) AS u_total
     FROM {{QbFeeCharge}} c
