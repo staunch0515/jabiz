@@ -126,7 +126,7 @@ describe('the reports (F-S13)', () => {
 })
 
 const card = (id: string, more: Partial<FeedCard> = {}): FeedCard => ({ publicationId: id, name: id, quizTitle: id,
-  cover: null, video: 'v', kind: 'SCORED', maxReward: 0, rewardMethod: 'PLATFORM', digitalDelivery: null,
+  cover: null, video: 'v', kind: 'QUIZ', maxReward: 0, rewardMethod: 'PLATFORM', digitalDelivery: null,
   digitalDescription: null, completions: 0, sponsorName: null, sponsorCompany: 'S', sponsorAvatar: null,
   sponsorCountry: null, startAt: '', endAt: '', timeLimitSec: 60, questionCount: 1, pickCount: null, fullScore: 1,
   videoVertical: true, ...more })
