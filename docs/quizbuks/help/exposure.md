@@ -18,7 +18,7 @@
 
 ### English · Why does the vertical mode show quizzes I did not tap?
 
-In the full-screen vertical mode of "Shorts", every few screens a quiz using a video another Sponsor shared appears (a push), several Sponsors taking turns. A push you opened once is not shown to you again. Nothing you blocked (a quiz, every round of a quiz, a Sponsor, a video provider) and, with "Only topics I like" on, no quiz outside your topics is pushed: no payment gets past your settings. Your home page stays as it is.
+In the full-screen vertical mode of "Shorts", every few screens a quiz using a video another Sponsor shared appears (a push), several Sponsors taking turns. A push you opened once is not shown to you again. Nothing you blocked (a quiz, every round of a quiz, a Sponsor, a video provider) and, with "Show only the topics I like" on, no quiz outside your topics is pushed: no payment gets past your settings. Your home page stays as it is.
 
 ## 二、给发起方（FAQ 的 `audience` = `SPONSOR`，分类 `PUBLISHING`）
 
