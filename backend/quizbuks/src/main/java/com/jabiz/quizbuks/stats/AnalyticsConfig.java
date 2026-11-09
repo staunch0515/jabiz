@@ -119,7 +119,7 @@ public class AnalyticsConfig {
     @Bean
     DatasetDefinition qbQuestionStatDataset() {
         return defaultDataset(QbAnalytics.QUESTION_STAT,
-            AnalyticsLimits.CHUNK_MAX * com.jabiz.quizbuks.content.ContentLimits.MAX_QUESTIONS);
+            AnalyticsLimits.CHUNK_MAX * com.jabiz.quizbuks.content.ContentLimits.MAX_QUESTIONS_TECH);
     }
 
     @Bean

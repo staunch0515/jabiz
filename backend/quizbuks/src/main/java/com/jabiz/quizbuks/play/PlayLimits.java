@@ -46,19 +46,29 @@ public final class PlayLimits {
     public static final int STATS_DAYS = 31;
 
     /**
-     * Longest canonical JSON of an attempt's option order and of its answers: one list of at most
-     * {@link ContentLimits#MAX_OPTIONS} one-digit numbers per question, for {@link ContentLimits#MAX_QUESTIONS}.
+     * F-S6: the technical ceiling of questions in one attempt (column widths, input sizes). The business limit is the
+     * parameter {@code qb.play.max-questions-per-attempt} (100 by default, {@code QuizBankLimits.maxPerAttempt}), never
+     * above this; a bank larger than the limit is drawn from (F-S7).
      */
-    public static final int ANSWERS_LENGTH = 4 + ContentLimits.MAX_QUESTIONS * (3 + 2 * ContentLimits.MAX_OPTIONS);
+    public static final int MAX_PER_ATTEMPT_TECH = 200;
+
+    /**
+     * Longest canonical JSON of an attempt's option order and of its answers: one list of at most
+     * {@link ContentLimits#MAX_OPTIONS} one-digit numbers per question, for {@link #MAX_PER_ATTEMPT_TECH} questions.
+     */
+    public static final int ANSWERS_LENGTH = 4 + MAX_PER_ATTEMPT_TECH * (3 + 2 * ContentLimits.MAX_OPTIONS);
 
     /**
      * Longest JSON of an attempt's result: per question its number, points, what was earned and the chosen and correct
      * options (some 100 characters at most).
      */
-    public static final int RESULT_LENGTH = 4 + ContentLimits.MAX_QUESTIONS * 120;
+    public static final int RESULT_LENGTH = 4 + MAX_PER_ATTEMPT_TECH * 120;
 
-    /** Q81: the JSON of the version's numbers of the questions an attempt was given (at most every question). */
-    public static final int QUESTION_SET_LENGTH = 2 + ContentLimits.MAX_QUESTIONS * 5;
+    /**
+     * Q81: the JSON of the version's numbers of the questions an attempt was given: at most
+     * {@link #MAX_PER_ATTEMPT_TECH} numbers of up to four digits, each with its comma.
+     */
+    public static final int QUESTION_SET_LENGTH = 2 + MAX_PER_ATTEMPT_TECH * 5;
 
     private PlayLimits() {}
 }

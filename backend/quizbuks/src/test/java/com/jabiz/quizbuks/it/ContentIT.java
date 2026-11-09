@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.content.ContentCodes;
 import com.jabiz.quizbuks.content.ContentLimits;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.content.QuizSnapshots;
 import org.junit.jupiter.api.AfterEach;
@@ -172,13 +173,29 @@ class ContentIT extends ContentItSupport {
     }
 
     @Test
-    void aQuizHasAtMostAHundredQuestions() {
-        String quizId = newQuiz(sponsorA(), "Many");
-        for (int i = 0; i < ContentLimits.MAX_QUESTIONS; i++) {
-            run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem", "Q" + i));
+    void aQuizHasAtMostTheBanksLimitOfQuestions() {
+        // F-S6: the limit is the parameter qb.content.max-questions (1000 by default); three here.
+        setParam(QbParams.CONTENT_MAX_QUESTIONS, "3");
+        try {
+            String quizId = newQuiz(sponsorA(), "Many");
+            List<String> ids = new java.util.ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                ids.add(question(sponsorA(), quizId, "Q" + i));
+            }
+            Map<String, Object> refusal = refused("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem",
+                "one more"), 422);
+            assertThat(codes(refusal)).containsExactly(ContentCodes.TOO_MANY_QUESTIONS);
+            assertThat(refusal.toString()).contains("at most 3 questions");
+
+            // Lowered below what a bank has: the bank stays readable and editable, only adding is refused.
+            setParam(QbParams.CONTENT_MAX_QUESTIONS, "2");
+            run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "questionId", ids.get(0), "stem", "Changed"));
+            run("QB_QUESTION_DELETE", sponsorA(), body("quizId", quizId, "questionId", ids.get(1)));
+            assertThat(codes(refused("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem", "again"), 422)))
+                .containsExactly(ContentCodes.TOO_MANY_QUESTIONS);
+        } finally {
+            setParam(QbParams.CONTENT_MAX_QUESTIONS, "1000");
         }
-        assertThat(codes(refused("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem", "one more"), 422)))
-            .containsExactly(ContentCodes.TOO_MANY_QUESTIONS);
     }
 
     @Test

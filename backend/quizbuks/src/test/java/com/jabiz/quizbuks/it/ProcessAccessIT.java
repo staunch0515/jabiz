@@ -130,6 +130,8 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_BROADCAST_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_BROADCAST_STATS", ProcessAccess.INTERNAL),
         Map.entry("QB_CASH_REWARD_OVERDUE", ProcessAccess.INTERNAL),
+        // F-S6: the daily content check (job qb.content-check).
+        Map.entry("QB_CONTENT_CHECK_RUN", ProcessAccess.INTERNAL),
         Map.entry("QB_CONVERSATION_EXPIRE", ProcessAccess.INTERNAL),
         Map.entry("QB_CASH_REWARD_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_REDEMPTION_EXPIRE", ProcessAccess.INTERNAL),

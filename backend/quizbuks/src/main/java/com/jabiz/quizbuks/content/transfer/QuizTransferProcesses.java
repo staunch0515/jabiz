@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.content.transfer;
 
 import com.jabiz.entity.Violation;
+import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.StepSpec;
@@ -9,6 +10,7 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.content.ContentCodes;
 import com.jabiz.quizbuks.content.QuizEditing;
+import com.jabiz.quizbuks.content.QuizBankLimits;
 import com.jabiz.quizbuks.content.QuizProcesses;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
@@ -17,6 +19,7 @@ import com.jabiz.quizbuks.page.SponsorProductProcesses;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.file.FileEntities;
 import com.jabiz.runtime.process.steps.CallProcess;
+import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import jakarta.validation.constraints.NotNull;
@@ -48,6 +51,8 @@ public final class QuizTransferProcesses {
     private static final String INPUT = "input";
     private static final String READING = "reading";
     private static final String OUTPUT = "output";
+    /** F-S6: the bank's limits as read by the process. */
+    private static final String LIMITS = "bankLimits";
 
     /** @param document the file's JSON; its files' {@code data} may be left out (they are never read) */
     public record CheckInput(@NotNull Map<String, Object> document) {}
@@ -86,6 +91,8 @@ public final class QuizTransferProcesses {
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, CheckOutput.class))
                 .step("Load the caller's products", loadProducts())
+                .step("Load the bank's limits", LoadParams.<ProcessContext>optional(ProcessContext::opTime, LIMITS,
+                    QuizBankLimits.PARAMS))
                 .compute("Read the file", (metadata, ctx) -> {
                     QuizFile file = read(ctx, ctx.get(INPUT, CheckInput.class).document());
                     if (file == null) {
@@ -118,6 +125,8 @@ public final class QuizTransferProcesses {
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, ImportOutput.class))
                 .step("Load the caller's products", loadProducts())
+                .step("Load the bank's limits", LoadParams.<ProcessContext>optional(ProcessContext::opTime, LIMITS,
+                    QuizBankLimits.PARAMS))
                 .steps(b -> QuizEditing.loadFiles(b, ctx -> {
                     Map<String, UUID> files = ctx.get(INPUT, ImportInput.class).files();
                     return files == null ? List.of() : List.copyOf(files.values());
@@ -210,7 +219,8 @@ public final class QuizTransferProcesses {
             ctx.reject(new Violation(null, ContentCodes.QUIZ_FILE_UNSUPPORTED, reading.problem(), params));
             return null;
         }
-        List<Violation> problems = QuizFileChecks.check(reading.file());
+        List<Violation> problems = QuizFileChecks.check(reading.file(),
+            QuizBankLimits.maxQuestions(ctx.get(LIMITS, ParamValues.class)));
         problems.forEach(ctx::reject);
         return problems.isEmpty() ? reading.file() : null;
     }

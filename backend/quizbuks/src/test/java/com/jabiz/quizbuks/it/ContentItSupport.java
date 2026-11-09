@@ -51,6 +51,21 @@ abstract class ContentItSupport extends QbItSupport {
 
     /** Runs a process that must succeed; returns its output. */
     @SuppressWarnings("unchecked")
+    /**
+     * Sets an ordinary parameter of QuizBuks's ({@code QbParams.ALL}) as the super administrator would, creating it
+     * with its declared kind when {@code QB_SETUP} has not run in the test's schema.
+     */
+    protected void setParam(String key, String value) {
+        com.jabiz.quizbuks.setup.QbParams.Param declared = com.jabiz.quizbuks.setup.QbParams.ALL.stream()
+            .filter(param -> param.key().equals(key)).findFirst().orElseThrow();
+        if (query("SELECT 1 FROM sys_param_version WHERE param_key = ?", key).isEmpty()) {
+            run("PARAM_CREATE", admin(), Map.of("key", key, "valueKind", declared.valueKind(), "value", value,
+                "description", declared.description()));
+        } else {
+            run("PARAM_SET", admin(), Map.of("key", key, "value", value));
+        }
+    }
+
     Map<String, Object> run(String process, String token, Map<String, ?> body) {
         var result = call(process, token, body).expectBody(MAP).returnResult();
         assertThat(result.getStatus().value()).as(process + " answered " + result.getResponseBody()).isEqualTo(200);

@@ -11,8 +11,12 @@ import java.util.List;
  */
 public final class ContentLimits {
 
-    /** Questions in one quiz. */
-    public static final int MAX_QUESTIONS = 100;
+    /**
+     * F-S6: the technical ceiling of questions in one quiz (input sizes, dataset write limits, column widths). The
+     * business limit is the parameter {@code qb.content.max-questions} (1000 by default, {@code
+     * QuizBankLimits.maxQuestions}), never above this.
+     */
+    public static final int MAX_QUESTIONS_TECH = 2_000;
     /** Materials in one quiz. */
     public static final int MAX_MATERIALS = 10;
     /** Options of one question, in a draft; a version needs at least {@link #MIN_OPTIONS}. */
@@ -50,17 +54,18 @@ public final class ContentLimits {
      * (Q73a) the same again in each of the quiz's other languages.
      */
     public static final int MAX_FILES_PER_VERSION = 1 + ContentLanguages.MAX_LANGUAGES
-        * (MAX_QUESTIONS * (1 + MAX_OPTIONS) + MAX_MATERIALS * MAX_IMAGES);
+        * (MAX_QUESTIONS_TECH * (1 + MAX_OPTIONS) + MAX_MATERIALS * MAX_IMAGES);
 
     /**
-     * Version files released per commit when a quiz is removed, and the write limit of their dataset: a version
-     * registers at most {@link #MAX_FILES_PER_VERSION} files at once, and a removal any number, chunk by chunk.
+     * Version files released per commit when a quiz is removed (a version registers all of its files, at most
+     * {@link #MAX_FILES_PER_VERSION}, in its one commit).
      */
     public static final int RELEASE_CHUNK = 3_000;
 
     /**
-     * Largest canonical snapshot text of a version, in UTF-8 bytes; the limits above keep one language near 1 MB, and
-     * a version holds up to {@link ContentLanguages#MAX_LANGUAGES} (Q73a).
+     * Largest canonical snapshot text of a version, in UTF-8 bytes: a bank of 1000 questions with six options is some
+     * 1-2 MB in three languages (F-S6); a version over this cannot be saved (the daily reconciliation reports versions
+     * near it).
      */
     public static final int MAX_SNAPSHOT_BYTES = 6 * 1024 * 1024;
 
