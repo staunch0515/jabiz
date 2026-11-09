@@ -209,7 +209,29 @@ public class SponsorErasure {
                     SponsorErasure::ends, "ended"));
                 pb.step("Withdraw their notices", CallProcess.<ProcessContext>of(BroadcastProcesses.BAN_WITHDRAW, 1,
                     ctx -> new BroadcastProcesses.SponsorRef(AccountEditing.userId(ctx)), "withdrawn"));
+                // F-S12 (总控 2026-11-08): the videos they share are withdrawn (no new picks); the publications
+                // submitted with them keep them until they end.
+                pb.step("Load the videos they share", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.sharedvideo.QbSharedVideos.DEFAULT_DATASET, ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.Eq("providerId", AccountEditing.userId(ctx)),
+                            new QueryPredicate.In("status", new ArrayList<Object>(
+                                com.jabiz.quizbuks.sharedvideo.QbSharedVideos.STANDING)))))
+                        .limit(Integer.MAX_VALUE).build(), SHARED_VIDEOS));
+                pb.step("Withdraw the videos they share", CallProcess.forEach(
+                    com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses.ERASED_WITHDRAW, 1,
+                    SponsorErasure::sharedVideos, "sharedVideosWithdrawn"));
             });
+    }
+
+    static final String SHARED_VIDEOS = "erasedSharedVideos";
+
+    /** F-S12: the erased provider's shares still standing, in the order of their ids. */
+    static List<com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses.ErasedWithdrawInput> sharedVideos(
+        ProcessContext ctx) {
+        return AccountEditing.list(ctx, SHARED_VIDEOS).stream().map(video -> String.valueOf(video.id())).sorted()
+            .map(id -> new com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses.ErasedWithdrawInput(id,
+                AccountEditing.userId(ctx))).toList();
     }
 
     /** The erased sponsor's publications that still run, in the order of their ids. */

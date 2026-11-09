@@ -1,12 +1,7 @@
-import { runQuery } from '@jabiz/client'
 import { minuteNow, publicQuery } from '../qb/legal'
 import type { ContentLanguage } from '../qb/api'
 import type { QuizKind, RewardMethod } from '../qb/play'
 import type { PublicProduct, PublicationProduct } from '../qb/products'
-import { PLAY } from '../qb/ids'
-import { certificationNamesOf } from '../qb/certifications'
-import type { I18nText } from '../qb/legal'
-import { edgesOf, readAllRows, treeStateOf, type TreeEdge, type TreeState } from '../qb/tree'
 import { SPONSOR_PAGE_TEMPLATE } from './ids'
 
 /* A sponsor's page as anybody reads it in the app (Q60a, Q60b): from the public templates only. */
@@ -40,7 +35,10 @@ export interface PagePublication {
   pickCount?: number | null
   maxReward: unknown
   rewardMethod: RewardMethod
-  /** Q76: the listed publications it requires first, as JSON (`PublicationPrerequisite` without names); none: `[]`. */
+  /**
+   * Q76: the listed publications it required first, as JSON. F-S2c2 (D4) removed the prerequisites and the template
+   * gives none; the page's levels (`levels.ts`) read it until F-S3 replaces them.
+   */
   prerequisites?: string | null
 }
 
@@ -72,66 +70,3 @@ export async function readPublicationProducts(publicationId: string): Promise<Pu
   return [...rows].sort((a, b) => Number(a.questionNo) - Number(b.questionNo) || Number(a.seq) - Number(b.seq))
 }
 
-/** A node of `qb.app.sponsor-tree` (Q85): one of the sponsor's publications as the caller stands on it. */
-export interface SponsorTreeNode {
-  id: string
-  name: string
-  kind: QuizKind
-  endAt: string
-  maxReward: unknown
-  live: boolean
-  state: TreeState
-  requires: TreeEdge[]
-  /** The required publications' names, by their id (from the `prerequisites` JSON). */
-  requiredNames: Record<string, string>
-  /** Q86: the certifications the node requires, whether the caller holds each and its current round. */
-  certifications: { key: string; held: boolean; roundPublicationId: string | null; names: I18nText | null }[]
-}
-
-/**
- * The sponsor's tree for the signed-in caller: their live public publications and those the caller answered, each
- * with the caller's state. None when the page is not published.
- */
-export async function readSponsorTree(handle: string, at: string, lang: string): Promise<SponsorTreeNode[]> {
-  const rows = await readAllRows((offset, limit) => runQuery<Record<string, unknown>>(PLAY.sponsorTree,
-    { params: { handle: handle.toLowerCase(), at, lang }, offset, limit }))
-  return rows.flatMap((row): SponsorTreeNode[] => {
-    const state = treeStateOf(row.state)
-    if (typeof row.publicationId !== 'string' || !state) return []
-    const requiredNames: Record<string, string> = {}
-    const certifications: SponsorTreeNode['certifications'] = []
-    let raw: unknown = row.prerequisites
-    if (typeof raw === 'string') {
-      try {
-        raw = JSON.parse(raw)
-      } catch {
-        raw = []
-      }
-    }
-    if (Array.isArray(raw)) {
-      for (const item of raw) {
-        if (!item || typeof item !== 'object') continue
-        const p = item as Record<string, unknown>
-        if (typeof p.certification === 'string' && p.certification) {
-          certifications.push({ key: p.certification, held: p.held === true || p.held === 'true',
-            roundPublicationId: typeof p.roundPublicationId === 'string' ? p.roundPublicationId : null,
-            names: certificationNamesOf(p.certificationNames) })
-        } else if (typeof p.requiredPublicationId === 'string' && typeof p.name === 'string') {
-          requiredNames[p.requiredPublicationId] = p.name
-        }
-      }
-    }
-    return [{
-      id: row.publicationId,
-      name: String(row.name ?? ''),
-      kind: (row.kind as QuizKind) ?? 'QUIZ',
-      endAt: String(row.endAt ?? ''),
-      maxReward: row.maxReward,
-      live: row.live === true || row.live === 'true',
-      state,
-      requires: edgesOf(row.prerequisites),
-      requiredNames,
-      certifications,
-    }]
-  })
-}

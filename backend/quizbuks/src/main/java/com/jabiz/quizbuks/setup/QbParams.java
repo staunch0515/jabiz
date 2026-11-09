@@ -205,11 +205,6 @@ public final class QbParams {
     public static final String FEE_OVERDUE_BLOCK = "qb.fee.overdue.block-submit";
     public static final String FEE_DUE_DAYS = "qb.fee.due-days";
     /**
-     * Q88a (D-Q88-7): whether sponsors define certifications of their own and make their publications rounds of
-     * them (controlled: a switch for the administrators; off keeps what is held, required and drawn as it is).
-     */
-    public static final String SPONSOR_ROUNDS_ENABLED = "qb.certification.sponsor-rounds.enabled";
-    /**
      * Q88b (D-Q88-14): whether sponsors may set an entry fee on a quiz (controlled; read only when a draft is saved:
      * off refuses a fee, what is live keeps charging).
      */
@@ -338,10 +333,6 @@ public final class QbParams {
     public static final List<String> AUDIENCE_BILLING_PARAMS = List.of(AUDIENCE_BILLING_ENABLED, AUDIENCE_PRICE_FALLBACK,
         AUDIENCE_REFUND_UNUSED_DAYS);
 
-    /** Q86: whether the "confirm your understanding" cards show after consenting (controlled: a switch for the administrators). */
-    public static final String UNDERSTANDING_ENABLED = "qb.understanding.enabled";
-    /** Q86 (D-Q86-4): the handle of the headquarters' official account's page, whose tree is the platform's; empty: none. */
-    public static final String TREE_PLATFORM_HANDLE = "qb.tree.platform-handle";
 
     /**
      * F-S11 (docs/quizbuks/plans/impl/F-S11.md): the country a request whose address the address database does not know
@@ -351,8 +342,8 @@ public final class QbParams {
      */
     public static final String REGION_UNKNOWN_IP_COUNTRY = "qb.region.unknown-ip-country";
     /**
-     * F-S11: the video sites mainland China plays ({@code VideoEmbeds.Site} keys, comma-separated); a video of any other
-     * site, or of none recognised, is foreign ({@code content.ForeignVideos}). Controlled: taking a site off hides
+     * F-S11: the video sites mainland China plays ({@code VideoEmbeds.Site} keys, comma-separated; F-S15: and host names,
+     * for video files and other pages there); a video of any other site, or of none recognised, is foreign ({@code content.ForeignVideos}). Controlled: taking a site off hides
      * publications from mainland China, adding one shows them videos that may not play. Read as optional: the setup's
      * value ({@code ForeignVideos.DEFAULT_SITES}) until its proposal is published.
      */
@@ -389,7 +380,7 @@ public final class QbParams {
         TOPUP_MIN, TOPUP_MAX, TRANSFER_FEE, TRANSFER_HOLD_DAYS, TOPUP_NEW_SPONSOR_DAYS, TOPUP_NEW_SPONSOR_MAX_TOTAL),
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
-        List.of(UNDERSTANDING_ENABLED), CASH_ACCOUNT_PARAMS, FEE_PARAMS, List.of(SPONSOR_ROUNDS_ENABLED),
+        CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES))
         .flatMap(List::stream).toList();
 
@@ -554,11 +545,6 @@ public final class QbParams {
             "How sponsors of an operator without a price list are priced: headquarters' list, or free"),
         new Param(AUDIENCE_REFUND_UNUSED_DAYS, BOOL, false,
             "Whether the unused days of the audience rules are refunded when a publication ends early"),
-        // Q86: the understanding quizzes (controlled, last, in the order of CONTROLLED) and the platform's tree.
-        new Param(UNDERSTANDING_ENABLED, BOOL, true,
-            "Whether the app and the console offer the quiz about an agreement after it is accepted (Q86)"),
-        new Param(TREE_PLATFORM_HANDLE, Map.of("type", "text", "maxLength", 60), "",
-            "The page handle of the headquarters' official account, whose tree is the platform's (Q86); empty: none"),
         // Q87a: the cash account (controlled, last, in the order of CASH_ACCOUNT_PARAMS). The defaults keep what was:
         // a top-up goes straight into the Kudos wallet unless the sponsor chooses the cash account.
         new Param(TOPUP_TARGETS, Map.of("type", "text", "maxLength", 20), "KUDOS,CASH",
@@ -580,9 +566,6 @@ public final class QbParams {
             "How a sponsor without a billing mode of their own pays the platform's fees: PREPAID or POSTPAID"),
         new Param(FEE_OVERDUE_BLOCK, BOOL, true,
             "Whether unpaid platform fees stop a sponsor from converting cash to Kudos and submitting publications"),
-        // Q88a: the sponsors' own certifications (controlled, last). Off keeps what the platform did before.
-        new Param(SPONSOR_ROUNDS_ENABLED, BOOL, false,
-            "Whether sponsors define certifications of their own and make their publications rounds of them (Q88)"),
         // Q88b: entry fees (controlled, last). Off keeps what the platform did before; what is live keeps charging.
         new Param(ENTRY_FEE_ENABLED, BOOL, false,
             "Whether sponsors may charge an entry fee in Kudos for answering a quiz (Q88)"),
@@ -607,8 +590,9 @@ public final class QbParams {
                 + "(CN: mainland China; empty: none)"),
         new Param(VIDEO_MAINLAND_SITES, Map.of("type", "text", "maxLength", 200),
             com.jabiz.quizbuks.content.ForeignVideos.DEFAULT_SITES,
-            "Video sites mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, dailymotion, "
-                + "youku, tencent); a video of any other site is foreign and not answerable from mainland China"),
+            "Video sites and hosts mainland China plays, comma-separated (youtube, vimeo, bilibili, niconico, "
+                + "dailymotion, youku, tencent, or a host name such as videos.example.com for video files and pages "
+                + "there); a video of any other site is foreign and not answerable from mainland China"),
         // F-S10: the home's shelves of vertical short videos (ordinary; last, so that the setup's earlier keys stay).
         new Param(FEED_SHORTS_POSITIONS, Map.of("type", "text", "maxLength", 200), "3,12",
             "After which cards of the App's home a shelf of vertical short videos is shown, comma-separated (the first "

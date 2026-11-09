@@ -88,10 +88,7 @@ class OperatorScopesIT extends QbItSupport {
         // Q73d-2: a reviewer's AI check, joined to the publication it is of (qb.admin.ai-translation-check).
         "urn:jabiz:dataset:default:QbAiJob",
         // Q73e-1: a publication's attempts by language, joined to the publication (qb.admin.publication-languages).
-        "urn:jabiz:dataset:default:QbAttempt",
-        // Q88a: the rounds of a sponsor's certification, counted per certification already limited to the operator's
-        // sponsors (qb.admin.sponsor-certifications); the rows themselves are not listed.
-        "urn:jabiz:dataset:default:QbCertificationRound");
+        "urn:jabiz:dataset:default:QbAttempt");
 
     /** The operators' own templates read the caller's membership (limited to the caller) and filter by it. */
     static final String MEMBERSHIP = QbOperators.OWN_MEMBERSHIP_DATASET;

@@ -308,6 +308,8 @@ type SnapshotMaterial = {
   watchToAnswer?: boolean
   /** Q75: present on the video to watch when the sponsor gave its duration (seconds). */
   durationSec?: number
+  /** F-S10: the sponsor marked the video as vertical (a YouTube Shorts link is vertical anyway). */
+  vertical?: boolean
 }
 
 /**

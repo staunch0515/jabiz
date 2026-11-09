@@ -12,6 +12,7 @@ import { LazyImage } from '../qb/view/LazyImage'
 import { RewardText } from '../qb/view/FeedCard'
 import { QBVIEW } from '../qb/view/messages'
 import { VideoPlayer } from '../qb/view/VideoPlayer'
+import { useVideoFailed, videoFailed } from '../qb/videoFailures'
 import { openWithSound, soundOn, stagePlayer, useStage, VideoSlot } from '../video/stage'
 
 /**
@@ -42,6 +43,8 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer }: {
   const scroller = useRef<HTMLDivElement>(null)
   const dialog = useRef<HTMLDivElement>(null)
   const stage = useStage()
+  // F-S15: re-rendered when a video file fails.
+  useVideoFailed(null)
 
   // The home underneath does not scroll while the mode is open; its place is kept for the way back.
   useEffect(() => {
@@ -144,7 +147,9 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer }: {
         data-testid="shorts-screens">
         {cards.map((card, at) => {
           const shown = at === index
-          const plays = shown && !!card.video && (!still || played.has(card.publicationId))
+          // F-S15: a video file that failed to play shows its cover, and a link to the file.
+          const failed = videoFailed(card.video)
+          const plays = shown && !!card.video && !failed && (!still || played.has(card.publicationId))
           const sponsor = card.sponsorCompany ?? card.sponsorName
           return (
             <section key={card.publicationId} data-shorts-screen={at} data-testid="shorts-screen"
@@ -166,7 +171,15 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer }: {
                           {card.cover
                             ? <LazyImage fileId={card.cover} variant="w640" alt="" className="absolute inset-0 size-full object-cover" />
                             : <CoverPlaceholder seed={card.publicationId} className="absolute inset-0 size-full" />}
-                          {shown && card.video && (
+                          {shown && card.video && failed && (
+                            <span className="absolute inset-0 flex items-center justify-center">
+                              <Button asChild size="lg" variant="secondary">
+                                <a href={card.video} target="_blank" rel="noopener noreferrer"
+                                  data-testid="shorts-open-video">{tView('feed.openVideo')}</a>
+                              </Button>
+                            </span>
+                          )}
+                          {shown && card.video && !failed && (
                             <span className="absolute inset-0 flex items-center justify-center">
                               <Button size="lg" data-testid="shorts-play"
                                 onClick={() => setPlayed((done) => new Set(done).add(card.publicationId))}>

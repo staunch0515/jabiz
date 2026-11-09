@@ -121,4 +121,17 @@ class R2dbcStorageEngineStatementsTest {
         assertThatThrownBy(() -> R2dbcStorageEngine.rowJson(Map.of("bad name", 1)))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    /** ROADMAP 17zz14: a rendered insert's values are bound in one call, by name in their order. */
+    @Test
+    void anInsertsValuesAreBoundAtOnceByName() {
+        List<Object> values = new java.util.ArrayList<>();
+        for (int i = 0; i < 5000; i++) {
+            values.add(i % 2 == 0 ? "row " + i : BigDecimal.valueOf(i));
+        }
+        Map<String, Object> bound = R2dbcStorageEngine.boundValues(values);
+        assertThat(bound).hasSize(5000);
+        assertThat(bound.keySet()).startsWith("v0", "v1", "v2").endsWith("v4999");
+        assertThat(bound).containsEntry("v0", "row 0").containsEntry("v4999", BigDecimal.valueOf(4999));
+    }
 }

@@ -187,6 +187,44 @@ class ForeignVideoIT extends PlayItSupport {
             .returnResult().getResponseBody())).containsExactly(RegionCodes.REGION_VIDEO);
     }
 
+    /**
+     * F-S15: a video file or a page of another site is foreign unless headquarters lists its host in the controlled
+     * parameter (four eyes): then its card says so and mainland China answers it; nothing else is built in.
+     */
+    @Test
+    void aListedHostsVideoFileIsAnsweredFromMainlandChina() {
+        autoApprove(true);
+        String sponsor = newSponsor("s-fs15-host");
+        credit(sponsor, 10_000);
+        String file = "https://videos.quizbuks.test/quizbuks-demo-30s.mp4";
+        String before = videoPublication(sponsor, "FS15 before", file);
+        assertThat(foreignOf(before)).isEqualTo(true);
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", QbParams.VIDEO_MAINLAND_SITES, "value",
+                ForeignVideos.DEFAULT_SITES + ",videos.quizbuks.test"), "reason", "Our own video server"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+        try {
+            String listed = videoPublication(sponsor, "FS15 listed", file);
+            String page = videoPublication(sponsor, "FS15 listed page", "https://videos.quizbuks.test/player/1");
+            String elsewhere = videoPublication(sponsor, "FS15 elsewhere", "https://cdn.other.test/clip.mp4");
+            assertThat(card(listed)).containsEntry("foreign_video", false).containsEntry("video", file);
+            assertThat(foreignOf(page)).isEqualTo(false);
+            assertThat(foreignOf(elsewhere)).isEqualTo(true);
+            // Frozen: the card that went on before the host was listed stays as it was.
+            assertThat(foreignOf(before)).isEqualTo(true);
+            address = MAINLAND;
+            assertThat(start(taker(newTaker("t-fs15-mainland", "CN")), listed)).containsEntry("resumed", false);
+            assertThat(startRefused(taker(newTaker("t-fs15-mainland-2", "CN")), elsewhere))
+                .containsExactly(RegionCodes.REGION_VIDEO);
+        } finally {
+            address = JAPAN;
+            Map<String, Object> back = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+                "values", Map.of("paramKey", QbParams.VIDEO_MAINLAND_SITES, "value", ForeignVideos.DEFAULT_SITES),
+                "reason", "Back"));
+            run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", back.get("changeId")));
+        }
+    }
+
     @Test
     void anUnknownAddressCountsAsTheParameterSays() {
         autoApprove(true);

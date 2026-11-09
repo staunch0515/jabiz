@@ -12,6 +12,7 @@ import { stagedPlayer } from './video/stage'
 import { activeFilterCount, containsPattern, feedFilters, NO_FILTERS } from './pages/FeedPage'
 import { forgetAttempts, storeResult, storeStart } from './play/storage'
 import { forgetPlayback } from './video/playback'
+import { resetVideoFailures } from './qb/videoFailures'
 import type { StartOutput, SubmitOutput } from './qb/play'
 
 function json(status: number, body: unknown) {
@@ -32,7 +33,7 @@ const CARD = { publicationId: PUB, name: 'Capitals week', quizTitle: 'World capi
 const MATERIALS = JSON.stringify([
   { no: 1, kind: 'ARTICLE', title: 'Read first', description: 'Two lines on France', body: 'Paris is **the capital**.', url: null,
     pdf: null, audio: null, images: [] },
-  { no: 2, kind: 'VIDEO_LINK', title: 'A tour', description: null, body: null, url: 'https://video.example.com/tour',
+  { no: 2, kind: 'VIDEO_LINK', title: 'A tour', description: null, body: null, url: 'http://video.example.com/tour',
     pdf: null, audio: null, images: [] },
   { no: 3, kind: 'VIDEO_LINK', title: 'On YouTube', description: null, body: null,
     url: 'https://youtu.be/dQw4w9WgXcQ', pdf: null, audio: null, images: [] },
@@ -434,26 +435,20 @@ describe('the ways a reward is paid (Q22)', () => {
     expect(visit).toHaveTextContent('See their products and story')
     // Opened first (from the history's link or a mail), the header's arrow goes home.
     expect(screen.getByTestId('header-back')).toBeInTheDocument()
-    // Q85: no tree (the sponsor's quizzes lead to no other): no "what comes next".
-    expect(screen.queryByTestId('result-next-step')).toBeNull()
   })
 
-  it('leads from the result to the Sponsor\'s tree when their quizzes lead to one another (Q85)', async () => {
+  it('asks for no tree and offers no "what comes next" (Q85, removed by F-S2c2 until F-S3)', async () => {
+    const asked: string[] = []
     server({ publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals' })], offset: 0, limit: 1 }),
-      extra: (path) => path === '/api/queries/qb.app.sponsor-tree'
-        ? json(200, { items: [
-          { publicationId: PUB, name: 'Capitals week', kind: 'QUIZ', endAt: '2099-01-01T00:00:00Z', maxReward: '100',
-            live: true, state: 'LIT', prerequisites: '[]' },
-          { publicationId: 'p-next', name: 'Rivers', kind: 'QUIZ', endAt: '2099-01-01T00:00:00Z', maxReward: '200',
-            live: true, state: 'UNLOCKED',
-            prerequisites: JSON.stringify([{ requiredPublicationId: PUB, requirement: 'PASSED', name: 'Capitals week' }]) },
-        ], offset: 0, limit: 200 })
-        : undefined })
+      extra: (path) => {
+        asked.push(path)
+        return undefined
+      } })
     window.history.replaceState(null, '', `/result/${ATTEMPT}`)
     render(<App />)
-    const next = await screen.findByTestId('result-next-step')
-    expect(next).toHaveAttribute('href', `/s/capitals?node=${PUB}`)
-    expect(next).toHaveTextContent('See what comes next')
+    expect(await screen.findByTestId('sponsor-visit')).toHaveAttribute('href', '/s/capitals')
+    expect(screen.queryByTestId('result-next-step')).toBeNull()
+    expect(asked).not.toContain('/api/queries/qb.app.sponsor-tree')
   })
 
   it('shows a prize with what it is and until when', async () => {
@@ -798,6 +793,29 @@ describe('the video to watch (Q19, Q63)', () => {
     expect(screen.queryByTestId('video-sound')).toBeNull()
   })
 
+  it('leads the start page with the card’s shared video, which is no material, and keeps the materials (F-S12)',
+    async () => {
+    const io = intersections()
+    // The version's own video is listed further down; the card plays the shared one, and so does the page.
+    server({ feed: [{ ...CARD, video: PLAYER }], publicationPage: () => json(200, { items: [publication({
+      video: PLAYER, materials: JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Background', description: null,
+        body: null, url: 'https://vimeo.com/76979871', pdf: null, audio: null, images: [], watchToAnswer: false }]) })],
+    offset: 0, limit: 1 }) })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    io.fire(card, true, MIDDLE)
+    const frame = await screen.findByTitle('Video: Capitals week') as HTMLIFrameElement
+    await userEvent.click(screen.getByTestId('video-open'))
+    await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
+    const hero = await screen.findByTestId('detail-hero')
+    await waitFor(() => expect(within(hero).getByTestId('video-slot')).toHaveAttribute('data-mode', 'page'))
+    // The card's player carries on (not a new one); the version's own video plays further down, in its own player.
+    expect(screen.getByTestId('video-stage').querySelector('iframe')).toBe(frame)
+    const materials = screen.getByTestId('materials')
+    expect(within(materials).getByText('Background')).toBeInTheDocument()
+    expect(materials.querySelector('iframe')).toHaveAttribute('src', 'https://player.vimeo.com/video/76979871')
+  })
+
   it("asks for the sound from a tap on a card not playing: the start page's player turns it on once ready (Q66)",
     async () => {
     intersections()
@@ -871,12 +889,27 @@ describe('the video to watch (Q19, Q63)', () => {
 
   it('frames no other address, whatever the server says', async () => {
     const io = intersections()
-    server({ feed: [{ ...CARD, video: 'https://evil.example/embed/dQw4w9WgXcQ' }] })
+    server({ feed: [{ ...CARD, video: 'http://evil.example/embed/dQw4w9WgXcQ' }] })
     render(<App />)
     const card = await screen.findByTestId('feed-card')
     expect(card).not.toHaveAttribute('data-video')
     io.fire(card, true, MIDDLE)
     expect(document.querySelector('iframe')).toBeNull()
+  })
+
+  it('frames a page of another site in a strict sandbox, with no referrer (F-S15)', async () => {
+    const io = intersections()
+    server({ feed: [{ ...CARD, video: 'https://player.example.com/embed/1' }] })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    expect(card).toHaveAttribute('data-video')
+    io.fire(card, true, MIDDLE)
+    const frame = await screen.findByTitle('Video: Capitals week')
+    expect(frame).toHaveAttribute('src', 'https://player.example.com/embed/1')
+    expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation')
+    expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer')
+    expect(frame).toHaveAttribute('allow', 'autoplay; fullscreen; picture-in-picture')
+    await expectAccessible()
   })
 })
 
@@ -1003,9 +1036,9 @@ describe('a publication\'s page', () => {
     await expectAccessible()
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByTestId('material-sheet')).toBeNull())
-    // A video the app cannot play is a row that goes to its site in a new tab.
+    // A video the app cannot play (F-S15: not https) is a row that goes to its site in a new tab.
     const link = within(materials).getByTestId('material-link')
-    expect(link).toHaveAttribute('href', 'https://video.example.com/tour')
+    expect(link).toHaveAttribute('href', 'http://video.example.com/tour')
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     expect(within(materials).queryByTitle('On YouTube')).toBeNull()
@@ -1203,48 +1236,6 @@ describe('foreign videos and mainland China (F-S11)', () => {
       params: Record<string, unknown> }
     expect(read.params).toMatchObject({ mainlandChina: true })
     await expectAccessible()
-  })
-})
-
-describe('certification rounds (Q70a)', () => {
-  it('says until when the Taker holds the certification instead of offering its round', async () => {
-    const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,
-      heldUntil: '2027-10-31T00:00:00Z' })], offset: 0, limit: 1 }) })
-    window.history.replaceState(null, '', `/p/${PUB}`)
-    render(<App />)
-    const notice = await screen.findByTestId('detail-certification-held')
-    expect(notice).toHaveTextContent('You hold this certification')
-    expect(notice).toHaveTextContent('2027')
-    expect(screen.queryByTestId('detail-start')).toBeNull()
-    expect(screen.queryByTestId('detail-unavailable')).toBeNull()
-    expect(posted('QB_ATTEMPT_START')).toEqual([])
-  })
-})
-
-describe('prerequisites (Q76)', () => {
-  it('lists what to finish first, each leading to its page, instead of offering the start', async () => {
-    const prerequisites = JSON.stringify([
-      { requiredPublicationId: 'basics', requirement: 'PASSED', name: 'Capitals basics', live: true, met: true },
-      { requiredPublicationId: 'flags', requirement: 'ANSWERED', name: 'Flags survey', live: false, met: false }])
-    const { posted } = server({ publicationPage: () => json(200, { items: [publication({ canStart: false,
-      prerequisitesMet: false, prerequisites })], offset: 0, limit: 1 }) })
-    window.history.replaceState(null, '', `/p/${PUB}`)
-    render(<App />)
-    const notice = await screen.findByTestId('detail-prerequisites')
-    expect(notice).toHaveTextContent('Finish these quizzes first')
-    const items = within(notice).getAllByTestId('detail-prerequisite')
-    expect(items).toHaveLength(2)
-    expect(items[0]).toHaveAttribute('data-met', 'true')
-    expect(items[0]).toHaveTextContent('Capitals basics')
-    expect(items[0]).toHaveTextContent('Passed')
-    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/p/basics')
-    expect(items[1]).toHaveAttribute('data-met', 'false')
-    expect(items[1]).toHaveTextContent('Flags survey')
-    expect(items[1]).toHaveTextContent('Answer')
-    expect(items[1]).toHaveTextContent('not open now')
-    expect(screen.queryByTestId('detail-start')).toBeNull()
-    expect(screen.queryByTestId('detail-unavailable')).toBeNull()
-    expect(posted('QB_ATTEMPT_START')).toEqual([])
   })
 })
 
@@ -2089,5 +2080,129 @@ describe('the video to watch first (Q75)', () => {
     await userEvent.click(start)
     await waitFor(() => expect(posted('QB_ATTEMPT_START')).toHaveLength(1))
     expect(posted('QB_ATTEMPT_START')[0]).not.toHaveProperty('playback')
+  })
+})
+
+describe('a video file on any https address (F-S15)', () => {
+  const FILE = 'https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4'
+  const WATCH_FILE = JSON.stringify([{ no: 1, kind: 'VIDEO_LINK', title: 'Watch first', description: null, body: null,
+    url: FILE, pdf: null, audio: null, images: [], watchToAnswer: true, durationSec: 30 }])
+  const required = () => json(200, { items: [publication({ watchRequired: true, videoDurationSec: 30,
+    materials: WATCH_FILE })], offset: 0, limit: 1 })
+
+  /** The stage's `<video>` says something, as a browser's media element does. */
+  function media(video: HTMLVideoElement, type: string, values: Partial<Record<'currentTime' | 'duration' | 'paused'
+    | 'muted' | 'volume', number | boolean>> = {}) {
+    for (const [name, value] of Object.entries(values)) Object.defineProperty(video, name, { value, configurable: true })
+    act(() => {
+      video.dispatchEvent(new Event(type))
+    })
+  }
+
+  /** axe waits for media to have loaded (its media preload): jsdom loads none, so the element says it has. */
+  function loaded() {
+    document.querySelectorAll('video').forEach((video) => Object.defineProperty(video, 'readyState',
+      { value: 4, configurable: true }))
+  }
+
+  beforeEach(() => resetVideoFailures())
+  afterEach(() => forgetPlayback())
+
+  it('plays a video file on the home card muted and by itself, in the app\'s one player', async () => {
+    const io = intersections()
+    server({ feed: [{ ...CARD, video: FILE, watchRequired: true, videoDurationSec: 30 }] })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    expect(card).toHaveAttribute('data-video')
+    io.fire(card, true, MIDDLE)
+    const video = await screen.findByTestId('video-stage-file') as HTMLVideoElement
+    expect(video).toHaveAttribute('src', FILE)
+    expect(video.muted).toBe(true)
+    expect(video.autoplay).toBe(true)
+    expect(video).toHaveAttribute('playsinline')
+    // On a card nothing in the player is for touching: no controls, a tap opens the start page.
+    expect(video.controls).toBe(false)
+    expect(screen.getByTestId('video-open')).toBeInTheDocument()
+    expect(document.querySelector('iframe')).toBeNull()
+    loaded()
+    await expectAccessible()
+  })
+
+  it('starts nothing by itself for a viewer who asked for less motion', async () => {
+    const io = intersections()
+    const query = vi.spyOn(window, 'matchMedia').mockImplementation((text) => ({ matches: text.includes('reduce'),
+      media: text, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(),
+      removeEventListener: vi.fn(), dispatchEvent: vi.fn() }) as MediaQueryList)
+    try {
+      server({ feed: [{ ...CARD, video: FILE }] })
+      render(<App />)
+      const card = await screen.findByTestId('feed-card')
+      io.fire(card, true, MIDDLE)
+      expect(document.querySelector('video')).toBeNull()
+    } finally {
+      query.mockRestore()
+    }
+  })
+
+  it('counts the watching of a video file on the start page and reports it at the start (Q75)', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    const { posted } = server({ publicationPage: required })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    const video = await screen.findByTestId('video-stage-file') as HTMLVideoElement
+    // The start page's player has its controls.
+    expect(video.controls).toBe(true)
+    const start = await screen.findByTestId('detail-start')
+    expect(start).toBeDisabled()
+    media(video, 'durationchange', { duration: 30 })
+    media(video, 'play', { paused: false })
+    media(video, 'timeupdate', { currentTime: 0, paused: false })
+    now.mockReturnValue(1_028_000)
+    media(video, 'timeupdate', { currentTime: 28 })
+    expect(screen.getByTestId('detail-watch')).toHaveTextContent('Video watched: you can start.')
+    await userEvent.click(start)
+    await waitFor(() => expect(posted('QB_ATTEMPT_START')).toHaveLength(1))
+    expect(posted('QB_ATTEMPT_START')[0]).toMatchObject({ publicationId: PUB,
+      playback: { status: 'REPORTED', watchedSec: 28, ended: false, reportedDurationSec: 30 } })
+  })
+
+  it('turns the sound of a video file on within the tap that opens the start page (Q65)', async () => {
+    const io = intersections()
+    server({ feed: [{ ...CARD, video: FILE }], publicationPage: required })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    io.fire(card, true, MIDDLE)
+    const video = await screen.findByTestId('video-stage-file') as HTMLVideoElement
+    const play = vi.spyOn(video, 'play').mockResolvedValue(undefined)
+    await userEvent.click(screen.getByTestId('video-open'))
+    await waitFor(() => expect(window.location.pathname).toBe(`/p/${PUB}`))
+    expect(video.muted).toBe(false)
+    expect(play).toHaveBeenCalled()
+    // The start page takes the same player over.
+    await waitFor(() => expect(screen.getByTestId('video-slot')).toHaveAttribute('data-mode', 'page'))
+    expect(screen.getByTestId('video-stage-file')).toBe(video)
+  })
+
+  it('shows the cover and a link to the file when a video file does not play', async () => {
+    const io = intersections()
+    server({ feed: [{ ...CARD, video: FILE }], publicationPage: required })
+    render(<App />)
+    const card = await screen.findByTestId('feed-card')
+    io.fire(card, true, MIDDLE)
+    const video = await screen.findByTestId('video-stage-file') as HTMLVideoElement
+    media(video, 'error')
+    await waitFor(() => expect(card).not.toHaveAttribute('data-video'))
+    expect(screen.queryByTestId('video-stage-file')).toBeNull()
+    const link = within(card).getByTestId('feed-card-open-video')
+    expect(link).toHaveAttribute('href', FILE)
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(link).toHaveTextContent('Open the video')
+    await expectAccessible()
+    // The start page leads with the cover; the file is among the materials as a link.
+    await userEvent.click(within(card).getByTestId('feed-card-link'))
+    const hero = await screen.findByTestId('detail-hero')
+    expect(hero).not.toHaveAttribute('data-video')
+    expect(within(screen.getByTestId('materials')).getAllByTestId('material').length).toBeGreaterThan(0)
   })
 })

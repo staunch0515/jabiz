@@ -1,7 +1,7 @@
 import { formatDate, i18n } from '@jabiz/client'
 import { Button, Input, Label, notify, PageState, Switch } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Award, Copy, Download, ExternalLink, Network } from 'lucide-react'
+import { Award, Copy, Download, ExternalLink } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -10,10 +10,7 @@ import { DEFAULT_SETTINGS, saveMySettings, type UserSettings } from '../qb/api'
 import { problemText } from '../qb/problems'
 import { certificationName } from '../qb/certifications'
 import { Link } from '../qb/router'
-import { UNDERSTANDING_TAKER } from '../qb/ids'
 import { QB } from '../qb/messages'
-import { readUnderstanding, UNDERSTANDING_QUERY } from '../qb/understanding'
-import { UnderstandingCards } from '../qb/UnderstandingCards'
 import { SETTINGS_QUERY, useSoundSetting } from '../qb/SoundSettings'
 import {
   appUrl,
@@ -25,24 +22,6 @@ import {
 } from './api'
 
 export const CERTIFICATIONS_QUERY = ['qb', 'my-certifications']
-
-/** The way to the platform's tree (Q86, D-Q86-4), when the headquarters' official account is named. */
-function PlatformTreeLink({ at }: { at: string }) {
-  const { t: tQb } = useTranslation(QB)
-  const rows = useQuery({ queryKey: [...UNDERSTANDING_QUERY, at], queryFn: () => readUnderstanding(at), retry: false })
-  const handle = rows.data?.[0]?.platformHandle ?? null
-  if (!handle) return null
-  return (
-    <Link to={`/s/${encodeURIComponent(handle)}`} className="bg-card hover:bg-accent flex items-center gap-3 rounded-lg border p-3"
-      data-testid="platform-tree">
-      <Network aria-hidden className="size-5 shrink-0" />
-      <span className="flex flex-col">
-        <span className="font-medium">{tQb('understanding.platformTree')}</span>
-        <span className="text-muted-foreground text-sm">{tQb('understanding.platformTreeHint')}</span>
-      </span>
-    </Link>
-  )
-}
 
 /** Copies a text, or says it could not (the text stays on screen to copy by hand). */
 async function copy(text: string, done: string, failed: string) {
@@ -62,8 +41,6 @@ async function copy(text: string, done: string, failed: string) {
 export function CertificatesPart() {
   const { t } = useTranslation(APP)
   const held = useQuery({ queryKey: CERTIFICATIONS_QUERY, queryFn: readMyCertifications })
-  // Q86: the understanding cards and the platform tree's link read the same rows, once.
-  const [at] = useState(() => new Date().toISOString())
   return (
     <div className="flex flex-col gap-8">
       <AccountSection title={t('certificates.held')} testId="certificates">
@@ -78,10 +55,6 @@ export function CertificatesPart() {
           </ul>
         )}
         <p className="text-muted-foreground text-sm">{t('certificates.hint')}</p>
-        {/* Q86: the understanding quizzes, held or to answer, and the platform's tree when one is named. */}
-        <UnderstandingCards kinds={UNDERSTANDING_TAKER} hrefOf={(id) => `/p/${encodeURIComponent(id)}`} at={at}
-          testId="account-understanding" />
-        <PlatformTreeLink at={at} />
       </AccountSection>
       <AccountSection title={t('certificates.page.title')} testId="certificates-page">
         <PublicPageSettings />

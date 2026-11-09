@@ -29,7 +29,6 @@ interface Server {
   staff?: Record<string, unknown>[]
   mailServer?: Record<string, unknown> | null
   methods?: string
-  understanding?: Record<string, unknown>[]
   operator?: Record<string, unknown> | null
 }
 
@@ -74,8 +73,6 @@ function server(options: Server = {}) {
         const operator = options.operator === undefined ? OPERATOR : options.operator
         return json(200, { items: operator ? [operator] : [], offset: 0, limit: 1 })
       }
-      case '/api/queries/qb.app.understanding':
-        return json(200, { items: options.understanding ?? [], offset: 0, limit: 10 })
       default:
         if (/^\/api\/files\/[^/]+$/.test(path)) return json(200, { fileId: path.split('/').at(-1), variants: [] })
         return json(404, {})
@@ -174,33 +171,6 @@ describe('the Sponsor hub (Q79)', () => {
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe(to))
     expect(await screen.findByTestId('profile')).toHaveAttribute('data-section', to.slice('/profile/'.length))
-  })
-
-  it('offers the terms quiz while its round is open, leading to the app (Q86)', async () => {
-    const row = (more: Record<string, unknown>) => ({ certification: 'TERMS_SPONSOR_UNDERSTOOD', enabled: true,
-      heldUntil: null, roundPublicationId: 'round-1', platformHandle: 'quizbuks', ...more })
-    server({ understanding: [row({})] })
-    window.history.replaceState(null, '', '/profile')
-    render(<App />)
-    const cards = await screen.findByTestId('profile-understanding')
-    const card = within(cards).getByTestId('understanding-card')
-    expect(card).toHaveAttribute('data-certification', 'TERMS_SPONSOR_UNDERSTOOD')
-    expect(card).toHaveTextContent('Understood: Sponsor Terms')
-    expect(within(card).getByTestId('understanding-start'))
-      .toHaveAttribute('href', `${window.location.origin}/taker/p/round-1`)
-    await expectAccessible()
-    cleanup()
-    vi.restoreAllMocks()
-    // Held already, or switched off, or no round: nothing on the overview.
-    for (const more of [{ heldUntil: '2027-11-01T00:00:00Z' }, { enabled: false }, { roundPublicationId: null }]) {
-      server({ understanding: [row(more)] })
-      window.history.replaceState(null, '', '/profile')
-      render(<App />)
-      await screen.findByTestId('profile-checklist')
-      expect(screen.queryByTestId('profile-understanding')).toBeNull()
-      cleanup()
-      vi.restoreAllMocks()
-    }
   })
 
   it('says when the Sponsor leads their own operator, and when none looks after them yet (F-S1b)', async () => {

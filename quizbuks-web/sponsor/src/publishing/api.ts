@@ -2,10 +2,8 @@ import { api, ApiError, runProcess, runQuery, toApiError, unwrap, type Filter, t
 import { CONTENT_LANGUAGES, readDictionary, type ContentLanguage, type DictionaryItem } from '../qb/api'
 import { minuteNow } from '../qb/legal'
 import { CRITERIA, type Condition } from '../qb/audience'
-import { AUDIENCE, PREREQUISITES, type Requirement } from '../qb/ids'
+import { AUDIENCE } from '../qb/ids'
 import { referralPolicy, type ReferralPolicy } from '../qb/play'
-import { certificationNamesOf } from '../qb/certifications'
-import type { I18nText } from '../qb/legal'
 import { BENEFIT_TEMPLATE } from '../benefits/ids'
 import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_PROCESS, PUBLISHING_TEMPLATE } from './ids'
 
@@ -133,6 +131,8 @@ export interface Publication {
   copiedFrom: string | null
   /** F-S9: what it adds to and removes from its version's topics. */
   topicChanges?: TopicChanges
+  /** F-S12: the video another Sponsor shares that it picked; null: none. */
+  sharedVideoId?: string | null
 }
 
 /** F-S9: a publication's changes of its version's topics (backend `TopicRules.Changes`). */
@@ -445,6 +445,7 @@ export function toPublication(row: Row): Publication {
     editedAt: String(row.editedAt ?? ''),
     copiedFrom: str(row.copiedFrom),
     topicChanges: topicChangesOf(row.topicChanges),
+    sharedVideoId: str(row.sharedVideoId),
   }
 }
 
@@ -1630,54 +1631,6 @@ export const feeQuoteQuery = (publicationId: string | null) => ['qb', 'publicati
 /** The rule fee of a publication's saved conditions and run, and every rule's state and daily price. */
 export const readFeeQuote = (publicationId: string) =>
   runProcess<FeeQuoteOutput>(AUDIENCE.feeQuote, { publicationId })
-
-// ---- Q76: prerequisites -------------------------------------------------------------------------------------------
-
-/**
- * `PublicationPrerequisites.PrerequisiteInput`: a publication the taker must first have passed or answered, or (Q86)
- * a certification the taker must hold (`certification` set, `requiredPublicationId` absent, requirement PASSED).
- */
-export interface Prerequisite {
-  requiredPublicationId?: string
-  certification?: string
-  requirement: Requirement
-}
-
-/** A row of `qb.sponsor.publication-prerequisites`: a stored prerequisite with the required publication as it is now. */
-export interface PrerequisiteRow extends Prerequisite {
-  prerequisiteId: string
-  /** The required publication's name; empty for a certification (named by `certification.names`, or Q88a its row). */
-  name: string
-  /** Q88a: a sponsor's own certification's names by language; null for the catalog's or a required publication. */
-  certificationNames?: I18nText | null
-  status: PublicationStatus
-  startAt: string | null
-  endAt: string | null
-}
-
-/** The query of a publication's prerequisites: apart from the publications' (a draft's save sets it from what it sent). */
-export const prerequisitesQuery = (publicationId: string | null) =>
-  ['qb', 'publication-prerequisites', publicationId] as const
-
-/** A draft's (or a frozen publication's) prerequisites, by the required publications' names. */
-export async function readPrerequisites(publicationId: string): Promise<PrerequisiteRow[]> {
-  const page = await runQuery<Row>(PREREQUISITES.sponsorTemplate, { params: { publicationId }, limit: PAGE })
-  return page.items.map((row): PrerequisiteRow => ({
-    prerequisiteId: String(row.prerequisiteId),
-    ...(typeof row.certification === 'string' && row.certification
-      ? { certification: row.certification } : { requiredPublicationId: String(row.requiredPublicationId) }),
-    requirement: row.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED',
-    certificationNames: certificationNamesOf(row.certificationNames),
-    name: String(row.name ?? ''),
-    status: (row.status as PublicationStatus) ?? 'DRAFT',
-    startAt: str(row.startAt),
-    endAt: str(row.endAt),
-  }))
-}
-
-/** Replaces a draft's prerequisites with these (none: nothing to do first). */
-export const savePrerequisites = (publicationId: string, baseRevision: number | null, prerequisites: Prerequisite[]) =>
-  runProcess<PublicationOutput>(PREREQUISITES.save, { publicationId, baseRevision, prerequisites })
 
 /** Q89c: `PassProcesses.CheckOutput`: the prize a taker's pass is for, before handing it over. */
 export interface PassPrize {

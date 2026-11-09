@@ -51,7 +51,6 @@ export const TEMPLATE = {
   /** F-C2: the sponsors' usage by month and meter (headquarters every sponsor, an operator its own). */
   usage: 'qb.admin.usage',
   /** Q88a: the sponsors' own certifications (headquarters every one, an operator its sponsors'). */
-  sponsorCertifications: 'qb.admin.sponsor-certifications',
   /** Q73e-1: a publication by the language its attempts are answered in. */
   publicationLanguages: 'qb.admin.publication-languages',
   /** Q73d-2: the latest AI comparison of a publication's translations in one language (its reviewers). */
@@ -70,6 +69,8 @@ export const TEMPLATE = {
   videoSites: 'qb.admin.video-sites',
   /** F-S9: the word list of topics with its figures by topic (headquarters). */
   topics: 'qb.admin.topics',
+  /** F-S12: the videos Sponsors share (headquarters every provider's, an operator its own Sponsors'). */
+  sharedVideos: 'qb.admin.shared-videos',
   /** Q60c-2: one sponsor's page views and product clicks in a period. */
   sponsorStats: 'qb.admin.sponsor-stats',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
@@ -447,6 +448,9 @@ export const PERMISSION = {
   regionWrite: 'qb.admin.region.write',
   /** F-S11: the refusal counts and the address database (headquarters only, not the operators). */
   regionMonitor: 'qb.admin.region.monitor',
+  /** F-S12: the shared videos (read) and taking one down (write); reviewing them is `reviewPublication`'s. */
+  sharedVideoRead: 'qb.admin.shared-video.read',
+  sharedVideoWrite: 'qb.admin.shared-video.write',
   /** F-S9: the word list of topics and its figures (read), adding, renaming, deactivating and merging (write). */
   topicRead: 'qb.admin.topic.read',
   topicWrite: 'qb.admin.topic.write',
@@ -538,6 +542,12 @@ export const REGION_PROCESS = {
   version: 1,
 } as const
 
+/** F-S12: taking a shared video down (the provider's operator, or headquarters; the platform's process page). */
+export const SHARED_VIDEO_PROCESS = {
+  takedown: 'QB_SHARED_VIDEO_TAKEDOWN',
+  version: 1,
+} as const
+
 /** F-S9: headquarters' upkeep of the word list of topics (run on the platform's process page). */
 export const TOPIC_PROCESS = {
   add: 'QB_TOPIC_ADD',
@@ -596,6 +606,9 @@ export const PATH = {
   region: '/qb/region',
   /** F-S9: the word list of topics. */
   topics: '/qb/topics',
+  /** F-S12: the videos Sponsors share, and one video's review and takedown. */
+  sharedVideos: '/qb/shared-videos',
+  sharedVideo: (sharedVideoId: string) => `/qb/shared-videos/${encodeURIComponent(sharedVideoId)}`,
 
   /** Q82: one conversation between a taker and a sponsor, read only (from a report of it). */
   conversation: (conversationId: string) => `/qb/conversations/${encodeURIComponent(conversationId)}`,

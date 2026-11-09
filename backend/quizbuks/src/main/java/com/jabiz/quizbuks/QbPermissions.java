@@ -290,6 +290,16 @@ public final class QbPermissions {
     public static final String ADMIN_TOPIC_READ = "qb.admin.topic.read";
     public static final String ADMIN_TOPIC_WRITE = "qb.admin.topic.write";
 
+    /**
+     * F-S12: the shared videos of every provider (read), and taking one down (write). Content administrators for
+     * every provider (the platform's emergency), the operators for their own sponsors (the entry scope limits what they
+     * see, and the process checks the provider). Reviewing a shared video is {@link #REVIEW_PUBLICATION}'s.
+     */
+    public static final String ADMIN_SHARED_VIDEO_READ = "qb.admin.shared-video.read";
+    public static final String ADMIN_SHARED_VIDEO_WRITE = "qb.admin.shared-video.write";
+    /** F-S12: the shared videos' system processes (a review's result; ending the publications of one taken down). */
+    public static final String SHARED_VIDEO_SYSTEM = "qb.shared-video.system";
+
     /** The prospecting jobs' items and outcomes ({@code internal()}). Granted to no role. */
     public static final String PROSPECT_SYSTEM = "qb.prospect.system";
 

@@ -11,7 +11,6 @@ import com.jabiz.quizbuks.invitation.QbInvitations;
 import com.jabiz.quizbuks.page.QbSponsorPages;
 import com.jabiz.quizbuks.page.QbSponsorProducts;
 import com.jabiz.quizbuks.play.QbPlay;
-import com.jabiz.quizbuks.publishing.QbPrerequisites;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.report.QbReports;
 import com.jabiz.quizbuks.reward.QbDigitalPrizes;
@@ -46,7 +45,7 @@ public final class OperatorScopes {
         }
         for (String entity : new String[] {QbPublications.PUBLICATION, QbPublications.TIER, QbPublications.CARD,
             QbRewards.CASH_REWARD, QbRewards.REDEMPTION, QbDigitalPrizes.DIGITAL_PRIZE, QbDigitalPrizes.DIGITAL_CODE,
-            QbInvitations.INVITATION, QbAudience.CRITERION, QbPrerequisites.PREREQUISITE, QbAnalytics.HOUR, QbAnalytics.CURSOR,
+            QbInvitations.INVITATION, QbAudience.CRITERION, QbAnalytics.HOUR, QbAnalytics.CURSOR,
             QbAnalytics.QUESTION_STAT, QbReports.REPORT,
             // Q82: the conversations with the operator's sponsors.
             QbConversations.CONVERSATION, QbConversations.MESSAGE, QbConversations.BLOCK}) {
@@ -72,6 +71,8 @@ public final class OperatorScopes {
         // F-S11 (the requester, 2026-11-07): the exceptions for foreign videos, by the sponsor whose publications they
         // cover (a publication's: its publisher).
         fields.put(com.jabiz.quizbuks.region.QbRegion.EXCEPTION, "ownerId");
+        // F-S12: the videos a sponsor shares, by their provider.
+        fields.put(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.VIDEO, "providerId");
         // Q89: a benefit by its provider; the conversations and purchases by the sponsor that buys (the provider's
         // operator reads its side through its own datasets, Q89d).
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.OFFER, "providerId");

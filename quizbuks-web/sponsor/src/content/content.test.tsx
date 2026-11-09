@@ -1,5 +1,5 @@
 import { configureClient, session } from '@jabiz/client'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expectAccessible } from '@jabiz/ui/testing'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -464,8 +464,8 @@ describe('the quiz editor', () => {
     const dialog = await screen.findByTestId('material-dialog')
     await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
     const url = within(dialog).getByTestId('material-url')
-    // An address the App does not play is said to be only a link.
-    await userEvent.type(url, 'https://video.example/1')
+    // An address the App does not play (F-S15: not https) is said to be only a link.
+    await userEvent.type(url, 'http://video.example/1')
     expect(within(dialog).getByTestId('material-url-status')).toHaveTextContent('cannot play this address')
     // A short link is asked for once pasted, and replaced by the video's address.
     await userEvent.clear(url)
@@ -481,6 +481,77 @@ describe('the quiz editor', () => {
     await waitFor(() => expect(within(dialog).getByTestId('material-url-status'))
       .toHaveTextContent('could not be turned into the address of one Bilibili video'))
     expect(url).toHaveValue('https://b23.tv/gone123')
+    await expectAccessible()
+  })
+
+  it('previews a video file, reads its length, and requires the length for watching it (F-S15)', async () => {
+    const { processCalls } = server({ processes: { QB_MATERIAL_SAVE: [edit(8, { itemId: 'm2' })] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-materials'))
+    await userEvent.click(await screen.findByTestId('material-add'))
+    const dialog = await screen.findByTestId('material-dialog')
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
+    await userEvent.type(within(dialog).getByTestId('material-title'), 'Demo')
+    const url = within(dialog).getByTestId('material-url')
+    await userEvent.type(url, 'https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4')
+    expect(within(dialog).getByTestId('material-url-status')).toHaveTextContent('Plays in the App')
+    // Previewed for real at once, and its watching can be required.
+    const probe = within(dialog).getByTestId('material-video-probe') as HTMLVideoElement
+    expect(probe.tagName).toBe('VIDEO')
+    expect(probe).toHaveAttribute('src', 'https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4')
+    const watch = within(dialog).getByRole('checkbox', { name: 'Watching this video is enough to answer' })
+    expect(watch).toBeEnabled()
+    await userEvent.click(watch)
+    // Not saved before its length was read.
+    await userEvent.click(within(dialog).getByTestId('material-save'))
+    expect(await within(dialog).findByTestId('material-file-duration-needed'))
+      .toHaveTextContent('wait until the preview has read the video\'s length')
+    expect(processCalls('QB_MATERIAL_SAVE')).toEqual([])
+    // The file's metadata says how long it is: filled in, and the save goes ahead.
+    Object.defineProperty(probe, 'duration', { value: 30.2, configurable: true })
+    act(() => {
+      probe.dispatchEvent(new Event('loadedmetadata'))
+    })
+    await waitFor(() => expect(within(dialog).getByTestId('material-duration')).toHaveValue('0:30'))
+    Object.defineProperty(probe, 'readyState', { value: 4, configurable: true })
+    await expectAccessible()
+    await userEvent.click(within(dialog).getByTestId('material-save'))
+    await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_MATERIAL_SAVE')[0]).toMatchObject({ kind: 'VIDEO_LINK', watchToAnswer: true,
+      durationSec: 30, url: 'https://videos.staging.quizbuks.com/quizbuks-demo-30s.mp4' })
+  })
+
+  it('says on the spot when a video file cannot be opened (F-S15)', async () => {
+    server()
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-materials'))
+    await userEvent.click(await screen.findByTestId('material-add'))
+    const dialog = await screen.findByTestId('material-dialog')
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
+    await userEvent.type(within(dialog).getByTestId('material-url'), 'https://cdn.example.com/missing.mp4')
+    const probe = within(dialog).getByTestId('material-video-probe') as HTMLVideoElement
+    act(() => {
+      probe.dispatchEvent(new Event('error'))
+    })
+    expect(await within(dialog).findByTestId('material-file-unplayable')).toHaveTextContent('cannot be opened')
+  })
+
+  it('previews a page of another site, says what a blank preview means, and does not take it as the video to watch (F-S15)',
+    async () => {
+    server()
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-materials'))
+    await userEvent.click(await screen.findByTestId('material-add'))
+    const dialog = await screen.findByTestId('material-dialog')
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'VIDEO_LINK' }))
+    await userEvent.type(within(dialog).getByTestId('material-url'), 'https://player.example.com/embed/1')
+    const preview = within(dialog).getByTestId('material-page-preview')
+    const frame = preview.querySelector('iframe')!
+    expect(frame).toHaveAttribute('src', 'https://player.example.com/embed/1')
+    expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation')
+    expect(frame).toHaveAttribute('referrerpolicy', 'no-referrer')
+    expect(within(dialog).getByTestId('material-page-hint')).toHaveTextContent('If this preview stays blank')
+    expect(within(dialog).getByRole('checkbox', { name: 'Watching this video is enough to answer' })).toBeDisabled()
     await expectAccessible()
   })
 

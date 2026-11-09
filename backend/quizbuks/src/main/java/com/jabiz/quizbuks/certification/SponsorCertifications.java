@@ -1,11 +1,9 @@
 package com.jabiz.quizbuks.certification;
 
-import com.jabiz.entity.Violation;
-import com.jabiz.i18n.PlatformLanguages;
 import com.jabiz.quizbuks.certification.Certifications.Certification;
 import com.jabiz.runtime.EntityInstance;
 import java.time.Duration;
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -13,8 +11,8 @@ import java.util.Optional;
 /**
  * A sponsor's certifications as the rules read them (Q88a, D-Q88-1, D-Q88-2): their key in the tables that hold
  * both the catalog's ({@link Certifications}) and the sponsors' ({@code sp:<certificationId>}), the
- * {@link Certification} a row stands for (the holding rule {@link CertificationHolding} is the same), the name in a
- * reader's language, and what a sponsor may define. Pure: the processes and the templates' tests ask here.
+ * {@link Certification} a row stands for (the holding rule {@link CertificationHolding} is the same) and its name.
+ * F-S2c2 (D6): nobody defines one any more; the rows defined before are read for what was held and issued of them.
  */
 public final class SponsorCertifications {
 
@@ -23,11 +21,8 @@ public final class SponsorCertifications {
 
     public static final int NAME_LENGTH = 100;
     public static final int DESCRIPTION_LENGTH = 500;
-    public static final int MIN_VALIDITY_DAYS = 30;
+    /** The longest validity one could be defined with (the holdings' SQL reads back this far). */
     public static final int MAX_VALIDITY_DAYS = 3650;
-    public static final int DEFAULT_VALIDITY_DAYS = 365;
-    /** A sponsor defines at most this many (active or retired). */
-    public static final int MAX_PER_SPONSOR = 20;
 
     private SponsorCertifications() {}
 
@@ -58,64 +53,18 @@ public final class SponsorCertifications {
         return rows.stream().filter(r -> key.equals(keyOf(r.id()))).findFirst().map(SponsorCertifications::of);
     }
 
-    /** The fallback order when a text is not in the reader's language (as the legal texts fall back). */
-    private static final List<String> FALLBACK = List.of("ja", "en", "zh");
-
-    /**
-     * A multilingual text in {@code language}, else in the platform's languages' order (ja, en, zh as the legal texts
-     * fall back); null when there is none.
-     */
-    public static String text(Map<?, ?> texts, String language) {
-        if (texts == null || texts.isEmpty()) {
+    /** The texts without blank ones; null when none is left. */
+    static Map<String, String> texts(Object given) {
+        if (!(given instanceof Map<?, ?> map)) {
             return null;
         }
-        for (String code : language == null ? FALLBACK : List.of(language, "ja", "en", "zh")) {
-            Object value = texts.get(code);
-            if (value != null && !value.toString().isBlank()) {
-                return value.toString();
+        Map<String, String> texts = new LinkedHashMap<>();
+        map.forEach((language, text) -> {
+            if (text != null && !text.toString().isBlank()) {
+                texts.put(String.valueOf(language), text.toString().strip());
             }
-        }
-        return null;
-    }
-
-    /**
-     * What a sponsor's certification must be: a name in at least one language (each within {@link #NAME_LENGTH}), a
-     * description within {@link #DESCRIPTION_LENGTH} when given, a validity of {@link #MIN_VALIDITY_DAYS} to
-     * {@link #MAX_VALIDITY_DAYS} days. Every problem at once.
-     */
-    public static List<Violation> problems(Map<?, ?> name, Map<?, ?> description, Integer validityDays) {
-        List<Violation> problems = new ArrayList<>();
-        if (text(name, null) == null) {
-            problems.add(new Violation("name", CertificationCodes.SPONSOR_NAME_REQUIRED, "A name in at least one "
-                + "language is required", Map.of()));
-        }
-        problems.addAll(lengths(name, "name", NAME_LENGTH));
-        problems.addAll(lengths(description, "description", DESCRIPTION_LENGTH));
-        if (validityDays == null || validityDays < MIN_VALIDITY_DAYS || validityDays > MAX_VALIDITY_DAYS) {
-            problems.add(new Violation("validityDays", CertificationCodes.SPONSOR_VALIDITY_RANGE, "The validity "
-                + "must be between " + MIN_VALIDITY_DAYS + " and " + MAX_VALIDITY_DAYS + " days",
-                Map.of("min", MIN_VALIDITY_DAYS, "max", MAX_VALIDITY_DAYS)));
-        }
-        return List.copyOf(problems);
-    }
-
-    private static List<Violation> lengths(Map<?, ?> texts, String field, int max) {
-        List<Violation> problems = new ArrayList<>();
-        if (texts == null) {
-            return problems;
-        }
-        for (Map.Entry<?, ?> entry : texts.entrySet()) {
-            String language = String.valueOf(entry.getKey());
-            if (!PlatformLanguages.CODES.contains(language)) {
-                problems.add(new Violation(field + "." + language, CertificationCodes.SPONSOR_LANGUAGE,
-                    "Not one of the platform's languages", Map.of("language", language)));
-            } else if (entry.getValue() != null && entry.getValue().toString().codePointCount(0,
-                entry.getValue().toString().length()) > max) {
-                problems.add(new Violation(field + "." + language, CertificationCodes.SPONSOR_TEXT_TOO_LONG,
-                    "At most " + max + " characters", Map.of("max", max, "language", language)));
-            }
-        }
-        return problems;
+        });
+        return texts.isEmpty() ? null : Map.copyOf(texts);
     }
 
     public static int number(Object value) {

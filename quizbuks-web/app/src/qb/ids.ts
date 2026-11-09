@@ -70,10 +70,6 @@ export const PLAY = {
   publication: 'qb.app.publication',
   publicationTiers: 'qb.app.publication-tiers',
   history: 'qb.app.history',
-  /** Q85: a sponsor's tree as the caller stands on it (`qb.app.sponsor-tree`). */
-  sponsorTree: 'qb.app.sponsor-tree',
-  /** Q86: the understanding certifications' cards (whether offered, held, the round to answer; the platform tree's handle). */
-  understanding: 'qb.app.understanding',
 } as const
 
 /**
@@ -97,33 +93,10 @@ export const AUDIENCE = {
   ruleClosed: 'QB_AUDIENCE_RULE_CLOSED',
 } as const
 
-/**
- * Prerequisites (Q76, `publishing.PublicationPrerequisites`, `play.PrerequisiteCheck`;
- * docs/quizbuks/plans/Q76-prerequisites.md): the sponsor's other publications a taker must first pass or answer.
- */
-export const PREREQUISITES = {
-  /** Replaces a draft's prerequisites (at most `MAX`), each a required publication and `PASSED` or `ANSWERED`. */
-  save: 'QB_PUBLICATION_PREREQUISITES_SAVE',
-  /** The sponsor's own rows, with the required publications' names (`queries/qb/sponsor`). */
-  sponsorTemplate: 'qb.sponsor.publication-prerequisites',
-  /** 422: the caller has not yet passed (or answered) a publication this one requires, or holds no certification it requires. */
-  notMet: 'QB_PREREQUISITE_NOT_MET',
-  max: 5,
-  /** Q86 (D-Q86-5): the certifications a publication may require (takers' ones, `Certifications.FOR_TAKERS`). */
-  certifications: ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD'],
-} as const
-
 /** The certifications' keys (`certification.Certifications`); names in `qb/messages.ts` `certification.names`. */
 export const CERTIFICATIONS = ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD',
   'TERMS_SPONSOR_UNDERSTOOD', 'BENEFIT_PROVIDER', 'BENEFIT_SPONSOR'] as const
 export type CertificationKey = (typeof CERTIFICATIONS)[number]
-/** Q86: the understanding certifications the app's takers answer, and the sponsors' one. */
-export const UNDERSTANDING_TAKER: readonly CertificationKey[] = ['TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD']
-export const UNDERSTANDING_SPONSOR: readonly CertificationKey[] = ['TERMS_SPONSOR_UNDERSTOOD']
-
-/** What a prerequisite asks of the taker on the required publication. */
-export const REQUIREMENTS = ['PASSED', 'ANSWERED'] as const
-export type Requirement = (typeof REQUIREMENTS)[number]
 
 /** The widths the policy `qb.content.image` keeps of every image (covers, questions, options, materials). */
 export const CONTENT_IMAGE_VARIANTS = ['w320', 'w640', 'w1280'] as const

@@ -35,7 +35,7 @@ async function rescaled(output: SaveOutput, from: number | null): Promise<Placed
 
 /**
  * Copies a publication onto the version, times and name chosen (Q102). The server copies its policy, tiers,
- * conditions and prerequisites (`QB_PUBLICATION_COPY`); onto another full score the scores are then rescaled.
+ * and conditions (`QB_PUBLICATION_COPY`); onto another full score the scores are then rescaled.
  */
 export async function copyOnto(publication: Publication, placement: Omit<Placement, 'fullScore'>): Promise<Placed> {
   const copied = await copyPublication(publication.publicationId, placement.name, {

@@ -29,7 +29,7 @@ import java.util.Map;
  * (category {@code QUIZBUKS}), one problem a word naming the languages it lacks.
  *
  * <p>The word list is data, so the check reads the database itself (JDBC with Flyway's settings, as
- * {@code LiveModeDataCheck} and {@code CertificationLegalCheck}), at startup and in {@code platformCheck}, never on the
+ * {@code LiveModeDataCheck}), at startup and in {@code platformCheck}, never on the
  * request path. When it cannot read it says so as a warning. The table and columns come from the entity's metadata.
  */
 @Component
