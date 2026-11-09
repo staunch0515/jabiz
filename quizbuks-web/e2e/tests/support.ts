@@ -347,8 +347,11 @@ export async function signIn(page: Page, base: string, email: string) {
  * then one of its tabs (`page-tab-<tab>`). On a phone the menu is behind the bottom menu's "More".
  */
 export async function openArea(page: Page, area: string, tab?: string) {
-  const entry = page.getByTestId(`menu-${area}`).getByRole('link')
-  if (!(await entry.first().isVisible())) await page.getByTestId('bottom-bar-more').click()
+  const entry = page.getByTestId(`menu-${area}`).getByRole('link').first()
+  const more = page.getByTestId('bottom-bar-more')
+  // Signed in just now, the frame may not be drawn yet: wait for the menu (or, on a phone, "More").
+  await expect(entry.or(more).first()).toBeVisible()
+  if (!(await entry.isVisible())) await more.click()
   await page.getByTestId(`menu-${area}`).getByRole('link').first().click()
   if (tab) await page.getByTestId(`page-tab-${tab}`).click()
 }

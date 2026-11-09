@@ -384,7 +384,7 @@
   **以后加功能只加标签（或头像菜单中的一项），不加菜单项，也不加底部菜单项**（两个 SPA 同一条规则：学者 App 见 F-F4；取代 Q79"新的商户设置页加为一个节"）。
   路由只在 `shell/routes.tsx` 的 `pageOf`（新页面加一行）；全局"＋ 新建"只在 `shell/SponsorShell.tsx`（打开的对话框以 `?new=1` 进入，导入发布设置在点击的同一手势里打开文件框）；手机底部菜单只经参数 `qb.sponsor.bottom-bar`（普通参数，模板 `qb.sponsor.layout`，页面先用 `shell/bottom-bar.default.json`，`SponsorLayoutParamsTest` 核对它与 `QbParams` 的缺省一致）。
   **旧地址只在 `shell/legacy-paths.json`**（取代 Q79 的 `LEGACY_PROFILE_PATHS` 与 F-C1c 的 `MOVED_PATHS`；每条带示例与期望，`shell/shell.test.tsx` 与 e2e `sponsor-areas.spec.ts` 逐条打开），改地址时加一条、目标直接写新地址（不连环转）；邮件与 Stripe 的返回地址用新地址（`CheckoutRequest.returnUrl` 为 `money/wallet/topups/`）。
-  显示条件只是隐藏（服务端照旧判断）：学分钱包只在可付 Kudos 时（Q28），合作权益只在 `qb.sponsor.benefit-access` 有角色开放时；不显示的标签的地址转到该区域第一个显示的标签。
+  显示条件只是隐藏（服务端照旧判断）：学分钱包只在可付 Kudos 时（Q28），合作权益只在 `qb.sponsor.benefit-access` 有角色开放时（没有角色的发起方由概况的 `BenefitsEntryCard` 带到 `/benefits`，入口不减少）；不显示的标签的地址转到该区域第一个显示的标签。
   发起方中心（Q79，`sponsor/src/profile/`）的各节是这个区域的标签（概况、基本信息、公开主页（含统计 `/profile/page/stats`）、店员、邮件服务器；商品是资源库的标签），由 `ProfileLayout` 给出页头，节内只用 h2；概况的完成度清单是纯函数 `profile/checklist.ts`，只读各节已有的读取。
 - **内容工坊**（`sponsor/src/content/`，QP3a）：每次编辑带上页面所见的 `revision` 作 `baseRevision`；`QB_QUIZ_CHANGED` / `QB_ORDER_MISMATCH` 或读到别人的新 revision 即提示重新加载，
   重新加载之前不再提交。上传只经 `uploadFile(内容策略)`（`qb.content.image|pdf|audio`），文件名用中性的 `<种类>.<扩展名>`（`content/api.ts` 的 `neutralName`，Q10b：答题人能读内容文件的元数据；商家头像同样以 `avatar.<扩展名>` 上传，内容与头像的策略都声明 `privateMetadata()`），页面的类型与大小检查只为省一次往返；图片按文件自己的变体显示（小图没有变体，`ContentImage`）。

@@ -929,7 +929,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 | 发布 | `/publications` | 全部发布 / 知识结构图 `/publications/map`；单个发布 `/publications/<id>` |
 | 奖品与兑换 | `/prizes/redeem` | 到店兑换 / 现金奖励 `/prizes/cash` / 电子奖品 `/prizes/digital` |
 | 客户与消息 | `/messages/conversations` | 对话 / 通知与公告 `/messages/notices` |
-| 合作权益 | `/benefits` | 目录 / 我的权益 / 洽谈 / 采购单（菜单只对有权益角色的发起方显示，地址照常可用） |
+| 合作权益 | `/benefits` | 目录 / 我的权益 / 洽谈 / 采购单（菜单只对有权益角色的发起方显示；没有角色的从"发起方中心 → 概况"的"合作权益"卡片进入，看怎样开通） |
 | 资金 | `/money/transactions` | 交易 / 学分钱包 `/money/wallet`（只在可付 Kudos 时）/ 平台费账户 `/money/account` / AI 额度 `/money/ai` / 账单 `/money/bills` |
 | 资源库 | `/assets` | 全部 / 素材 / 文字 / 奖品 / 商品（`/assets/<标签>`） |
 | 发起方中心 | `/profile` | 概况 / 基本信息 / 公开主页（含统计 `/profile/page/stats`）/ 店员 / 邮件服务器 |

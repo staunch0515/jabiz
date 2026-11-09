@@ -23,6 +23,7 @@ import { readYourOperator, useMySponsor, YOUR_OPERATOR_QUERY, type YourOperator 
 import { checklist, progress, type ChecklistKey } from './checklist'
 import { PRODUCTS_TAB_PATH, profilePath } from './paths'
 import { STATS_PATH } from '../shell/paths'
+import { BenefitsEntryCard } from './BenefitsEntryCard'
 import { PreviewCard } from './PreviewCard'
 import { ProfileTransferCard } from './ProfileTransfer'
 
@@ -160,6 +161,8 @@ export function OverviewPage() {
           </>
         )}
         <YourOperatorCard />
+        {/* F-F3: the sponsored benefits for a Sponsor without a benefit role (no menu entry for them). */}
+        <BenefitsEntryCard />
         <Button asChild variant="link" className="self-start px-0">
           <Link to={STATS_PATH} data-testid="profile-stats-link">{t('profile.statsLink')}</Link>
         </Button>

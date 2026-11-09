@@ -15,7 +15,7 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 - **行为上的改变**（PR 描述中逐条列出）：
   1. （F-F3a 实现时取消）旧的 `/messages` 转到"通知与公告"（`/messages/notices`），与原来的缺省一致；`?tab=conversations` 转到"对话"。
   2. 资金区域里"平台费账户"与"账单"对所有发起方显示（没有 Kudos 的发起方在平台费账户中充值到现金，充值记录与收据也列在那里）；现在它们在钱包页内、钱包页只对可付 Kudos 的发起方显示（Q28），没有 Kudos 奖励方式的发起方看不到自己的账单——这是缺口，顺带补上（服务端照旧判断）。"学分钱包"仍只对可付 Kudos 的发起方显示。
-  3. 合作权益区域只对持有 `BENEFIT_PROVIDER` 或 `BENEFIT_SPONSOR` 的发起方显示（规格）；现在对所有人显示。直接打开地址照旧可用，能做什么由服务端判断。
+  3. 合作权益区域只对持有 `BENEFIT_PROVIDER` 或 `BENEFIT_SPONSOR` 的发起方显示（规格）；现在对所有人显示。直接打开地址照旧可用，能做什么由服务端判断。两种角色都没有的发起方在"发起方中心 → 概况"有一张"合作权益"卡片（`profile/BenefitsEntryCard.tsx`），带到 `/benefits` 的目录与"怎样开通"的说明，原有的入口不减少（总控 2026-11-09）。
   4. Stripe 充值的返回地址与邮件中的链接改为新地址（`CheckoutRequest.returnUrl`、`mail.qb.*` 中的 `{entryUrl.sponsor}wallet`），老邮件与进行中的 Checkout 靠转向。
 - **不做**：用户自定义首页、拖动菜单；运营商管理系统与平台管理系统扩展换框架；Quiz 编辑器内部的四个标签（基本信息 / 题目 / 资料 / 语言）改成路由（与 S1 的 F-S6、F-S7 冲突最大，留在页内，§2 注 3）；学者 App（F-F4）。
 - **无迁移。** 新增一个只读模板 `qb.sponsor.todo`、一个参数 `qb.sponsor.bottom-bar`（§4）；后端只改 Stripe 返回地址与邮件文字中的路径。
@@ -255,5 +255,6 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 - 分支 `1.3/quizbuks-ff3-sponsor-areas`。新目录 `sponsor/src/shell/`：`areas.ts`、`paths.ts`、`routes.tsx`（`pageOf`）、`legacy-paths.json` + `legacy.ts`、`AreaPageHeader.tsx`、`SponsorShell.tsx`、`AvatarMenu.tsx`、`layout.ts` + `bottom-bar.default.json`、`messages.ts`、`shell.test.tsx`。
 - 后端：参数 `qb.sponsor.bottom-bar`（普通，`QbParams` 最后）、模板 `qb.sponsor.layout`、`SponsorLayoutParamsTest`；`CheckoutRequest.returnUrl` 改为 `money/wallet/topups/`；邮件链接 `money/wallet`、`money/bills`（三语）。无迁移。
 - 页面文件不搬家：各标签页把 `PageHeader` 换成 `AreaPageHeader`；资源库与消息的 `?tab=` 改为路径标签；`WalletPage` 拆出 `FeeAccountPage`（现金账户，带"充值"，缺省选现金）、`BillsPage`（账单）、`AiCreditPage`（本月的 AI 用量）。S2 的 F-M1（#578）合入后，`FeeAccount` 放进 `FeeAccountPage`、`Invoices` 已在 `BillsPage`。
+- 合作权益的入口：没有权益角色时概况上的卡片（`BenefitsEntryCard`，Vitest 两种情形在 `benefits/benefits.test.tsx`）。
 - 全局新建的"导入发布设置"在外框中常驻一个不带按钮的 `ImportSettingsButton`（`opener`），点击的同一手势里打开文件框。
 - 未做（照拆分留给 b、c、d）：首页的"待我处理"与 `qb.sponsor.todo`（F-F3b）；发布详情的标签与共用的 `PublicationContent`（F-F3c）；列表 / 表单模板、主按钮改 `primaryAction`、概况的卡片与页头"导入与导出"（F-F3d）。

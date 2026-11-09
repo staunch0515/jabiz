@@ -12,7 +12,7 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 ### 中文 · 菜单在哪里
 
-**菜单**：左侧是"首页"和 8 个区域：Quiz、发布、奖品与兑换、客户与消息、合作权益（只在你有权益角色时出现）、资金、资源库、发起方中心。每个区域里的页面在标题下的一排标签中切换，每个标签都有自己的地址，可以加书签。屏幕宽时，左侧菜单可以收成一列图标。
+**菜单**：左侧是"首页"和 8 个区域：Quiz、发布、奖品与兑换、客户与消息、合作权益（只在你有权益角色时出现；没有时，"发起方中心 → 概况"中的"合作权益"卡片带你去看怎样开通）、资金、资源库、发起方中心。每个区域里的页面在标题下的一排标签中切换，每个标签都有自己的地址，可以加书签。屏幕宽时，左侧菜单可以收成一列图标。
 
 **手机上**：底部有首页、发布、兑换、消息四项，"更多"打开完整的菜单。
 
@@ -35,7 +35,7 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 ### 日本語 · メニューの場所
 
-**メニュー**：左側に「ホーム」と 8 つのエリアがあります：クイズ、公開、景品と引き換え、お客様とメッセージ、協賛特典（特典の権限があるときだけ表示）、資金、リソースライブラリ、主催者センター。各エリアのページは、タイトルの下に並ぶタブで切り替えます。タブにはそれぞれのアドレスがあり、ブックマークできます。画面が広いときは、左のメニューをアイコンだけの列にたためます。
+**メニュー**：左側に「ホーム」と 8 つのエリアがあります：クイズ、公開、景品と引き換え、お客様とメッセージ、協賛特典（特典の権限があるときだけ表示。ないときは「主催者センター → 概要」の「協賛特典」カードから開きかたを確認できます）、資金、リソースライブラリ、主催者センター。各エリアのページは、タイトルの下に並ぶタブで切り替えます。タブにはそれぞれのアドレスがあり、ブックマークできます。画面が広いときは、左のメニューをアイコンだけの列にたためます。
 
 **スマートフォンでは**：下部にホーム、公開、引き換え、メッセージの 4 つがあり、「その他」でメニュー全体を開きます。
 
@@ -58,7 +58,7 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 ### English · Where things are
 
-**The menu**: on the left, "Home" and eight areas: Quizzes, Publications, Prizes, Customers & messages, Sponsored benefits (only when you hold a benefit role), Money, Asset library and Sponsor hub. The pages of an area are the tabs under its title; each tab has an address of its own, so you can bookmark it. On a wide screen the menu folds into a column of icons.
+**The menu**: on the left, "Home" and eight areas: Quizzes, Publications, Prizes, Customers & messages, Sponsored benefits (only when you hold a benefit role; until then, the "Sponsored benefits" card on "Sponsor hub → Overview" shows how to open them), Money, Asset library and Sponsor hub. The pages of an area are the tabs under its title; each tab has an address of its own, so you can bookmark it. On a wide screen the menu folds into a column of icons.
 
 **On a phone**: the bottom menu has Home, Publications, Redeem and Messages; "More" opens the whole menu.
 
