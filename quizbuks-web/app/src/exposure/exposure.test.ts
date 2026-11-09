@@ -3,8 +3,9 @@ import type { FeedCard } from '../qb/play'
 import cases from './exposure-cases.json'
 import { placePushes, rotate } from './pushes'
 import { configureReporter, flushReports, forgetReports, pendingReports, queueReport, reported } from './reporter'
-import { billable, dailyCap, decide, neededSec, overshoot, pushAt, pushable, pushEvery, reconciles, reportBatch,
-  reportIntervalSec, seconds, usedUp, type RulesCard } from './rules'
+import { billable, dailyCap, decide, endGraceSec, maxPerCall, minTolerance, neededSec, overshoot, pushAt, pushable,
+  pushEvery, reconciles, reportBatch, reportIntervalSec, seconds, tolerancePercent, usedUp,
+  type RulesCard } from './rules'
 import { NO_RUN, playerRun, screenRun } from './timer'
 
 const client = vi.hoisted(() => ({ runProcess: vi.fn() }))
@@ -43,7 +44,7 @@ describe('the rules (F-S13; ExposureRulesTest has the same cases)', () => {
       expect(usedUp(c.successes, c.purchased)).toBe(c.usedUp)
       expect(billable(c.successes, c.purchased)).toBe(c.billable)
       expect(overshoot(c.successes, c.purchased)).toBe(c.overshoot)
-      expect(reconciles(c.successes, c.purchased)).toBe(c.reconciles)
+      expect(reconciles(c.successes, c.purchased, c.minTolerance, c.tolerancePercent)).toBe(c.reconciles)
     }
   })
 
@@ -55,6 +56,10 @@ describe('the rules (F-S13; ExposureRulesTest has the same cases)', () => {
     check(cases.params.pushEvery, pushEvery)
     check(cases.params.reportBatch, reportBatch)
     check(cases.params.reportIntervalSec, reportIntervalSec)
+    check(cases.params.maxPerCall, maxPerCall)
+    check(cases.params.minTolerance, minTolerance)
+    check(cases.params.tolerancePercent, tolerancePercent)
+    check(cases.params.endGraceSec, endGraceSec)
   })
 })
 
@@ -114,6 +119,18 @@ describe('the reports (F-S13)', () => {
     expect(client.runProcess).toHaveBeenCalledTimes(1)
   })
 
+  it('sends no more in one call than the parameter says', async () => {
+    client.runProcess.mockResolvedValue({ results: [], counted: 0 })
+    configureReporter({ reportBatch: 50, reportIntervalSec: 30, maxPerCall: 2 })
+    queueReport({ publicationId: 'q1', kind: 'OPEN', surface: 'VERTICAL' })
+    queueReport({ publicationId: 'q2', kind: 'OPEN', surface: 'VERTICAL' })
+    await vi.waitFor(() => expect(client.runProcess).toHaveBeenCalledTimes(1))
+    queueReport({ publicationId: 'q3', kind: 'OPEN', surface: 'VERTICAL' })
+    await flushReports()
+    expect(client.runProcess.mock.calls.map((call) => (call[1] as { reports: unknown[] }).reports.length))
+      .toEqual([2, 1])
+  })
+
   it('keeps the reports of a failed call for the next, drops those the server refused', async () => {
     client.runProcess.mockRejectedValueOnce(Object.assign(new Error('down'), { status: 503 }))
     queueReport({ publicationId: 'p3', kind: 'OPEN', surface: 'VERTICAL' })
@@ -132,15 +149,21 @@ const card = (id: string, more: Partial<FeedCard> = {}): FeedCard => ({ publicat
   videoVertical: true, ...more })
 
 describe('where the pushes stand (F-S13)', () => {
-  it('takes turns among the Sponsors', () => {
-    const pushes = [card('a1', { sponsorCompany: 'A' }), card('a2', { sponsorCompany: 'A' }),
-      card('b1', { sponsorCompany: 'B' }), card('c1', { sponsorCompany: 'C' })]
-    expect(rotate(pushes).map((c) => c.publicationId)).toEqual(['a1', 'b1', 'c1', 'a2'])
+  it('takes the turns the server gives (by the publisher\'s id, which the App never gets), not the names', () => {
+    // Two publishers of the same name: their turns still alternate.
+    const pushes = [card('a1', { sponsorCompany: 'Same', pushTurn: 1, pushRank: 2 }),
+      card('a2', { sponsorCompany: 'Same', pushTurn: 2, pushRank: 2 }),
+      card('b1', { sponsorCompany: 'Same', pushTurn: 1, pushRank: 1 }),
+      card('c1', { sponsorCompany: 'Other', pushTurn: 1, pushRank: 3 })]
+    expect(rotate(pushes).map((c) => c.publicationId)).toEqual(['b1', 'a1', 'c1', 'a2'])
+    // Without turns: as given.
+    expect(rotate([card('x'), card('y')]).map((c) => c.publicationId)).toEqual(['x', 'y'])
   })
 
   it('puts a push every n-th screen from the one opened on, the rest after', () => {
     const shorts = ['s1', 's2', 's3', 's4', 's5', 's6'].map((id) => card(id))
-    const pushes = [card('x', { exposed: true, sponsorCompany: 'X' }), card('y', { exposed: true, sponsorCompany: 'Y' })]
+    const pushes = [card('x', { exposed: true, pushTurn: 1, pushRank: 1 }),
+      card('y', { exposed: true, pushTurn: 1, pushRank: 2 })]
     // The shelf shows x too (an exposed short): in the vertical mode it stands only as a push.
     const screens = placePushes([...shorts, card('x', { exposed: true })], pushes, 's2', 2)
     expect(screens.map((c) => c.publicationId)).toEqual(['s1', 's2', 's3', 'x', 's4', 'y', 's5', 's6'])

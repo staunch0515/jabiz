@@ -3,7 +3,7 @@
 给学者与发起方看的帮助文案（三语）。帮助中心的内容存在数据库里（FAQ 为 `QbFaqEntry`），**由内容管理员在平台管理系统的"FAQ"中发布**，改了不用重新部署；这里是文案的底稿，功能改了先改这里再请内容管理员照改。
 用词照 `docs/quizbuks/glossary.md`；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。规则与运维见 `docs/quizbuks/plans/impl/F-S13.md`、`operations.md` §7.31。
 
-- 参数（写进文案的是缺省值，改了参数时同步改这里）：连续看 10 秒算一次（`qb.exposure.seconds`）；竖屏模式中每 5 屏一个推送（`qb.exposure.push.every`）；每位学者每天至多计 200 次（`qb.exposure.daily-cap-per-user`）。
+- 参数（写进文案的是缺省值，改了参数时同步改这里）：连续看 10 秒算一次（`qb.exposure.seconds`）；竖屏模式中每 5 屏一个推送（`qb.exposure.push.every`）；每位学者每天（日本时间）至多计 200 次（`qb.exposure.daily-cap-per-user`）。
 - 内部备注（不写进 FAQ）：购买曝光、追加购买与用完前的提醒随 F-M8；在那之前发起方页面只显示"不限"与已成功次数。
 
 ## 一、给学者（FAQ 的 `audience` = `TAKER`，分类 `ANSWERING`）

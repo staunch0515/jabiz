@@ -1,5 +1,6 @@
 import { runProcess } from '@jabiz/client'
-import { DEFAULT_REPORT_BATCH, DEFAULT_REPORT_INTERVAL_SEC, MAX_BATCH, reportBatch, reportIntervalSec,
+import { DEFAULT_MAX_PER_CALL, DEFAULT_REPORT_BATCH, DEFAULT_REPORT_INTERVAL_SEC, MAX_BATCH, maxPerCall, reportBatch,
+  reportIntervalSec,
   type ReportKind, type Surface, type Timer } from './rules'
 
 /*
@@ -24,6 +25,7 @@ export interface ExposureReport {
 
 let batch = DEFAULT_REPORT_BATCH
 let intervalMs = DEFAULT_REPORT_INTERVAL_SEC * 1000
+let perCall = DEFAULT_MAX_PER_CALL
 const queue: ExposureReport[] = []
 const made = new Set<string>()
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -58,9 +60,11 @@ function restore(): ExposureReport[] {
 const keyOf = (report: Pick<ExposureReport, 'publicationId' | 'kind'>) => `${report.publicationId}:${report.kind}`
 
 /** The parameters as read (`qb.app.exposure-settings`), bounded as the server bounds them. */
-export function configureReporter(settings: { reportBatch?: number | null; reportIntervalSec?: number | null }) {
+export function configureReporter(settings: { reportBatch?: number | null; reportIntervalSec?: number | null;
+  maxPerCall?: number | null }) {
   batch = reportBatch(settings.reportBatch)
   intervalMs = reportIntervalSec(settings.reportIntervalSec) * 1000
+  perCall = maxPerCall(settings.maxPerCall)
 }
 
 /** Whether this tab reported that already (an open, an exposure, going on to answer). */
@@ -76,7 +80,7 @@ export function queueReport(report: ExposureReport): boolean {
   queue.push(report)
   save()
   listen()
-  if (queue.length >= batch) {
+  if (queue.length >= Math.min(batch, perCall)) {
     void flushReports()
   } else if (!timer) {
     timer = setTimeout(() => {
@@ -95,7 +99,7 @@ export async function flushReports(): Promise<void> {
   }
   if (sending) await sending
   if (queue.length === 0) return
-  const reports = queue.splice(0, MAX_BATCH)
+  const reports = queue.splice(0, perCall)
   inFlight = reports
   sending = runProcess(REPORT_PROCESS, { reports }).then(() => undefined, (error: unknown) => {
     const status = (error as { status?: number } | null)?.status
@@ -106,7 +110,7 @@ export async function flushReports(): Promise<void> {
     save()
   })
   await sending
-  if (queue.length >= batch) await flushReports()
+  if (queue.length >= Math.min(batch, perCall)) await flushReports()
   else if (queue.length > 0 && !timer) {
     timer = setTimeout(() => {
       timer = null
@@ -126,6 +130,7 @@ export function forgetReports() {
   timer = null
   batch = DEFAULT_REPORT_BATCH
   intervalMs = DEFAULT_REPORT_INTERVAL_SEC * 1000
+  perCall = DEFAULT_MAX_PER_CALL
 }
 
 /** What is waiting to be sent (for tests). */

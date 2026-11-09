@@ -6,32 +6,23 @@ import { pushAt } from './rules'
  * (and later the new frame of Q108) only renders the list this makes.
  */
 
-/** Whose a card is, for the turns: its Sponsor's name (a card carries no Sponsor's id), else the card itself. */
-const sponsorOf = (card: FeedCard) => card.sponsorCompany ?? card.sponsorName ?? card.publicationId
-
-/** The pushes taking turns among their Sponsors (each Sponsor's in the feed's order), the first Sponsor first. */
+/**
+ * The pushes in their turns: every publisher's first, then every publisher's second... as the server numbers them
+ * (`pushTurn`, `pushRank`: by the publisher's id, which never reaches the App). A card without them keeps its place.
+ */
 export function rotate(pushes: readonly FeedCard[]): FeedCard[] {
-  const bySponsor = new Map<string, FeedCard[]>()
-  for (const card of pushes) {
-    const key = sponsorOf(card)
-    const list = bySponsor.get(key)
-    if (list) list.push(card)
-    else bySponsor.set(key, [card])
-  }
-  const lists = [...bySponsor.values()]
-  const turns: FeedCard[] = []
-  for (let round = 0; turns.length < pushes.length; round++) {
-    for (const list of lists) {
-      if (round < list.length) turns.push(list[round])
-    }
-  }
-  return turns
+  const key = (card: FeedCard) => [card.pushTurn ?? Number.MAX_SAFE_INTEGER, card.pushRank ?? Number.MAX_SAFE_INTEGER]
+  return pushes.map((card, i) => ({ card, i })).sort((a, b) => {
+    const [ta, ra] = key(a.card)
+    const [tb, rb] = key(b.card)
+    return ta - tb || ra - rb || a.i - b.i
+  }).map(({ card }) => card)
 }
 
 /**
  * The vertical mode's screens, opened on `startId`: the short videos in their order, the publications using another's
  * video (`exposed`) only as pushes, every `every`-th screen after the one opened on (the rules' `pushAt`), taking turns
- * among their Sponsors. Pushes left when the short videos run out follow one after another; short videos left when
+ * among their publishers (`rotate`). Pushes left when the short videos run out follow one after another; short videos left when
  * the pushes run out fill the places. The one opened on stays first wherever it came from (a push tapped on the home's
  * shelf is opened, and counted, as any). Opened earlier and no longer a push: not shown again.
  */

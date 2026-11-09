@@ -805,7 +805,7 @@
   - 并发下可能略超已购次数，超出部分不收费。
   - 用完之前可以追加购买，按发布修改的审核规则（金额与预留见 F-M）。
   - **与 F-M8 的接口**（总控 2026-11-09 决定 A）：已购次数是发布上的字段 `QbPublication.exposurePurchased`（`processOnly`，整数 ≥ 1；空即不限，永不因曝光结束），卡片同名字段随之同步；只经内部子流程 `QB_EXPOSURE_PURCHASED_SET {publicationId, purchased}`（`subProcessOnly`，取发布锁，草稿与进行中都可设，已结束的拒绝）写入，供 F-M8 的购买与追加购买调用，不给发起方页面与管理系统。结束流程、通知与每日核对都按"成功 ≥ 已购"；超出已购的成功照记、不计费：计费次数 = min（成功，已购），成功即 `qb_exposure` 中该发布已计数的行数（`qb.sponsor.exposure` 的 `billable` / `overshoot`）。实施计划 `plans/impl/F-S13.md`。
-- **参数**：`qb.exposure.seconds`（10）、`qb.exposure.daily-cap-per-user`（建议 200）、`qb.exposure.push.every`（每滑几个出现一个推送，5）、上报批量与间隔，以上不受控；单价与最少购买次数在 F-M。
+- **参数**：`qb.exposure.seconds`（10）、`qb.exposure.daily-cap-per-user`（建议 200）、`qb.exposure.push.every`（每滑几个出现一个推送，5）、上报批量与间隔（`qb.exposure.report.batch` 20、`.interval-sec` 30、一次至多 `.max-per-call` 50）、核对的容差与宽限（`qb.exposure.reconcile.min-tolerance` 20、`.tolerance-percent` 5、`.end-grace-sec` 60），以上不受控（需求方：数字一律是参数）；每日上限与核对的日界按部署的时区 `jabiz.fiscal-year-zone`（`Asia/Tokyo`）；单价与最少购买次数在 F-M。
 - **运营闭合**：
   - 用户：使用方在发起方页面看已购与已成功次数；用完前按比例提醒（参数）；可以追加购买。
   - 管理页：运营商看可疑的刷量（按账号的每日上限命中数）。

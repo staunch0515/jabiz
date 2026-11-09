@@ -31,11 +31,11 @@ function card(id: string, more: Record<string, unknown> = {}) {
 
 const short = (id: string, video = YOUTUBE.replace('dQw4w9WgXcQ', `${id}xxxxxxxxxx`.slice(0, 11))) =>
   card(id, { video, videoVertical: true })
-const push = (id: string, company: string, video = YOUTUBE) =>
-  card(id, { video, videoVertical: true, exposed: true, sponsorCompany: company, videoDurationSec: 95 })
+const push = (id: string, turn: number, rank: number, video = YOUTUBE) =>
+  card(id, { video, videoVertical: true, exposed: true, videoDurationSec: 95, pushTurn: turn, pushRank: rank })
 
 const FEED = Array.from({ length: 3 }, (_, i) => card(`p${i + 1}`))
-const PUSH_X = push('x', 'Xavier Co')
+const PUSH_X = push('x', 1, 1)
 const SHORTS = [short('s1'), short('s2'), PUSH_X, short('s3')]
 
 interface Call { path: string; method: string; body: unknown }
@@ -70,7 +70,7 @@ function server(options: { shorts?: Record<string, unknown>[]; pushes?: Record<s
       }
       case '/api/queries/qb.app.exposure-settings':
         return json(200, { items: [{ seconds: options.seconds ?? '10', pushEvery: '2', reportBatch: '1',
-          reportIntervalSec: '30' }], offset: 0, limit: 1 })
+          reportIntervalSec: '30', maxPerCall: '50' }], offset: 0, limit: 1 })
       case '/api/queries/qb.app.publication':
         return json(200, { items: options.publication ? [options.publication] : [], offset: 0, limit: 1 })
       case '/api/processes/QB_EXPOSURE_REPORT/latest':
@@ -127,21 +127,23 @@ const order = () => screen.getAllByTestId('shorts-screen').map((s) => s.dataset.
 
 describe('the vertical mode\'s pushes (F-S13)', () => {
   it('reads them under the feed\'s conditions and places them every n-th screen, taking turns', async () => {
-    const pushY = push('y', 'Yoshi Co', YOUTUBE.replace('dQw4w9WgXcQ', 'yyyyyyyyyyy'))
-    const { calls, pushReads } = server({ shorts: [...SHORTS, short('s4')], pushes: [PUSH_X, push('x2', 'Xavier Co'),
+    const pushY = push('y', 1, 2, YOUTUBE.replace('dQw4w9WgXcQ', 'yyyyyyyyyyy'))
+    const { calls, pushReads } = server({ shorts: [...SHORTS, short('s4')], pushes: [PUSH_X, push('x2', 2, 1),
       pushY] })
     render(<App />)
     // The home's shelf still shows every vertical publication, x among them (its preview never counts).
     const shelf = (await screen.findAllByTestId('shorts-shelf'))[0]
     expect(within(shelf).getAllByTestId('shorts-card').map((c) => c.dataset.publication)).toContain('x')
     const { viewer } = await open('s1')
-    // Every second screen from the one opened on (the parameter), the Sponsors taking turns: x, y, then x2.
+    // Every second screen from the one opened on (the parameter), in the server's turns: x, y, then x2.
     expect(order()).toEqual(['s1', 's2', 'x', 's3', 'y', 's4', 'x2'])
     const reads = pushReads()
     expect(reads.length).toBeGreaterThan(0)
     const main = calls.find((c) => c.path === '/api/queries/qb.app.feed') as Call
     expect((reads[0].body as { params: object }).params).toMatchObject({
       ...(main.body as { params: object }).params, push: true })
+    expect((reads[0].body as { sorts: unknown }).sorts).toEqual([{ field: 'pushTurn', asc: true },
+      { field: 'pushRank', asc: true }])
     await expectAccessible(viewer)
   })
 
@@ -195,7 +197,7 @@ describe('the vertical mode\'s pushes (F-S13)', () => {
   })
 
   it('times another site\'s player on the screen, and nothing plays or counts with less motion', async () => {
-    const other = push('o', 'Other Co', BILIBILI)
+    const other = push('o', 1, 1, BILIBILI)
     const { reports } = server({ shorts: [other, short('s1')], pushes: [other], seconds: '1' })
     render(<App />)
     await open('o')

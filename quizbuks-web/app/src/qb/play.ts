@@ -82,6 +82,12 @@ export interface FeedCard {
    * vertical mode when vertical (where it stands as a push), on the start page otherwise.
    */
   exposed?: boolean
+  /**
+   * F-S13: a push's turn (its publisher's n-th push) and its place in the turn, as the server numbers them by the
+   * publisher's id (which the App never gets); only on the vertical mode's pushes.
+   */
+  pushTurn?: number | null
+  pushRank?: number | null
   kind: QuizKind
   /** The language the quiz is written in (Q59a); a preview's card has none. */
   language?: string | null
@@ -167,6 +173,8 @@ export function feedCard(row: Record<string, unknown>): FeedCard {
     videoProviderId: textOrNull(row.videoProviderId),
     videoProviderName: textOrNull(row.videoProviderName),
     exposed: row.exposed === true || row.exposed === 'true',
+    pushTurn: row.pushTurn == null ? null : numberOf(row.pushTurn),
+    pushRank: row.pushRank == null ? null : numberOf(row.pushRank),
     kind: kindOf(row.kind),
     language: textOrNull(row.language),
     maxReward: row.maxReward,

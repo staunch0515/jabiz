@@ -20,8 +20,13 @@ export const DEFAULT_DAILY_CAP = 200
 export const DEFAULT_PUSH_EVERY = 5
 export const DEFAULT_REPORT_BATCH = 20
 export const DEFAULT_REPORT_INTERVAL_SEC = 30
-/** The most reports one call takes. */
-export const MAX_BATCH = 50
+/** The most reports one call takes, whatever `qb.exposure.report.max-per-call` says. */
+export const MAX_BATCH = 200
+export const DEFAULT_MAX_PER_CALL = 50
+/** The reconciliation's tolerance and the grace after an end, as the setup declares them. */
+export const DEFAULT_MIN_TOLERANCE = 20
+export const DEFAULT_TOLERANCE_PERCENT = 5
+export const DEFAULT_END_GRACE_SEC = 60
 
 /** What of a publication's card the rules read. */
 export interface RulesCard {
@@ -97,13 +102,14 @@ export function overshoot(successes: number, purchased: number | null): number {
   return successes - billable(successes, purchased)
 }
 
-/** How far beyond the purchased the daily reconciliation lets the successes go. */
-export function tolerance(purchased: number | null): number {
-  return purchased == null ? 0 : Math.max(20, Math.ceil(purchased / 20))
+/** How far beyond the purchased the daily reconciliation lets the successes go (its two parameters). */
+export function tolerance(purchased: number | null, minTolerance: number, percent: number): number {
+  return purchased == null ? 0 : Math.max(minTolerance, Math.ceil((purchased * percent) / 100))
 }
 
-export function reconciles(successes: number, purchased: number | null): boolean {
-  return purchased == null || successes <= purchased + tolerance(purchased)
+export function reconciles(successes: number, purchased: number | null, minTolerance: number,
+  percent: number): boolean {
+  return purchased == null || successes <= purchased + tolerance(purchased, minTolerance, percent)
 }
 
 export const seconds = (value: number | null | undefined) => clamp(read(value, DEFAULT_SECONDS), 1, 600)
@@ -112,3 +118,8 @@ export const pushEvery = (value: number | null | undefined) => clamp(read(value,
 export const reportBatch = (value: number | null | undefined) => clamp(read(value, DEFAULT_REPORT_BATCH), 1, MAX_BATCH)
 export const reportIntervalSec = (value: number | null | undefined) =>
   clamp(read(value, DEFAULT_REPORT_INTERVAL_SEC), 5, 600)
+export const maxPerCall = (value: number | null | undefined) => clamp(read(value, DEFAULT_MAX_PER_CALL), 1, MAX_BATCH)
+export const minTolerance = (value: number | null | undefined) => Math.max(0, read(value, DEFAULT_MIN_TOLERANCE))
+export const tolerancePercent = (value: number | null | undefined) =>
+  clamp(read(value, DEFAULT_TOLERANCE_PERCENT), 0, 100)
+export const endGraceSec = (value: number | null | undefined) => clamp(read(value, DEFAULT_END_GRACE_SEC), 0, 86_400)

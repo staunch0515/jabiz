@@ -1,7 +1,7 @@
 import { runQuery } from '@jabiz/client'
 import { PLAY } from '../qb/ids'
-import { FEED_SORTS, feedCard, type FeedCard, type FeedRequest } from '../qb/play'
-import { pushEvery, reportBatch, reportIntervalSec, seconds } from './rules'
+import { feedCard, type FeedCard, type FeedRequest } from '../qb/play'
+import { maxPerCall, pushEvery, reportBatch, reportIntervalSec, seconds } from './rules'
 
 /** The template of the parameters the App applies (F-S13). */
 export const EXPOSURE_SETTINGS = 'qb.app.exposure-settings'
@@ -12,6 +12,8 @@ export interface ExposureSettings {
   pushEvery: number
   reportBatch: number
   reportIntervalSec: number
+  /** The most reports one call takes (`qb.exposure.report.max-per-call`). */
+  maxPerCall: number
 }
 
 const numberOr = (value: unknown): number | null => {
@@ -28,6 +30,7 @@ export async function readExposureSettings(): Promise<ExposureSettings> {
     pushEvery: pushEvery(numberOr(row.pushEvery)),
     reportBatch: reportBatch(numberOr(row.reportBatch)),
     reportIntervalSec: reportIntervalSec(numberOr(row.reportIntervalSec)),
+    maxPerCall: maxPerCall(numberOr(row.maxPerCall)),
   }
 }
 
@@ -37,7 +40,8 @@ export const PUSHES_LIMIT = 50
 /**
  * The vertical mode's pushes: the feed's template with `push` (another's vertical shared video, never opened by the
  * caller), under every condition the feed has (the blocks of F-S8, the strict mode of F-S9, the region of F-S11), in
- * the feed's order. Only cards that are what the server said are kept.
+ * turns the server gives them: every publisher's first push, then every publisher's second... (by the publisher's id,
+ * which stays on the server: `pushTurn`, `pushRank`). Only cards that are what the server said are kept.
  */
 export async function readPushes(request: Omit<FeedRequest, 'shorts' | 'offset' | 'limit'>): Promise<FeedCard[]> {
   const page = await runQuery<Record<string, unknown>>(PLAY.feed, {
@@ -46,7 +50,7 @@ export async function readPushes(request: Omit<FeedRequest, 'shorts' | 'offset' 
       languages: request.languages && request.languages.length > 0 ? request.languages.join(',') : null,
       mainlandChina: request.mainlandChina ?? false, push: true },
     filters: request.filters,
-    sorts: request.sort ? [FEED_SORTS[request.sort]] : undefined,
+    sorts: [{ field: 'pushTurn', asc: true }, { field: 'pushRank', asc: true }],
     offset: 0,
     limit: PUSHES_LIMIT,
   })
