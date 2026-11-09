@@ -390,6 +390,8 @@ public final class QbParams {
      * number a parameter); not controlled. Read as optional ({@code VideoUseRules.remindDays} bounds it).
      */
     public static final String VIDEO_USE_REMIND_DAYS = "qb.video-use.remind-days";
+    /** F-S14 (the controller: every number a parameter): the longest period one use covers, in days; not controlled. */
+    public static final String VIDEO_USE_MAX_PERIOD_DAYS = "qb.video-use.max-period-days";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -694,7 +696,11 @@ public final class QbParams {
         // F-S14: the reminder of a use waiting for its provider (ordinary; last).
         new Param(VIDEO_USE_REMIND_DAYS, Map.of("type", "numeric", "precision", 2, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.videouse.VideoUseRules.DEFAULT_REMIND_DAYS),
-            "After how many days a shared video's use waiting for its provider reminds both sides (1 to 90)"));
+            "After how many days a shared video's use waiting for its provider reminds both sides (1 to 90)"),
+        // F-S14: the longest period of a use (ordinary; last).
+        new Param(VIDEO_USE_MAX_PERIOD_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.videouse.VideoUseRules.DEFAULT_MAX_PERIOD_DAYS),
+            "The longest period, in days, one ledger entry of a shared video's use covers (1 to 36600)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

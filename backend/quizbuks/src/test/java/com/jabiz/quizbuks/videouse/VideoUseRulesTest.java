@@ -15,7 +15,7 @@ class VideoUseRulesTest {
     static final LocalDate DAY = LocalDate.of(2026, 11, 9);
 
     static List<String> codes(VideoUseRules.Entry entry) {
-        return VideoUseRules.problems(entry).stream().map(Violation::ruleCode).toList();
+        return VideoUseRules.problems(entry, VideoUseRules.DEFAULT_MAX_PERIOD_DAYS).stream().map(Violation::ruleCode).toList();
     }
 
     @Test
@@ -55,10 +55,21 @@ class VideoUseRulesTest {
             .containsExactly(VideoUseCodes.PERIOD);
         assertThat(codes(new VideoUseRules.Entry(null, DAY, VideoUseRules.FIXED, BigDecimal.ONE)))
             .containsExactly(VideoUseCodes.PERIOD);
-        assertThat(codes(new VideoUseRules.Entry(DAY, DAY.plusDays(VideoUseRules.MAX_PERIOD_DAYS - 1),
+        assertThat(codes(new VideoUseRules.Entry(DAY, DAY.plusDays(VideoUseRules.DEFAULT_MAX_PERIOD_DAYS - 1),
             VideoUseRules.PER_MILLE, BigDecimal.ONE))).isEmpty();
-        assertThat(codes(new VideoUseRules.Entry(DAY, DAY.plusDays(VideoUseRules.MAX_PERIOD_DAYS),
+        assertThat(codes(new VideoUseRules.Entry(DAY, DAY.plusDays(VideoUseRules.DEFAULT_MAX_PERIOD_DAYS),
             VideoUseRules.PER_MILLE, BigDecimal.ONE))).containsExactly(VideoUseCodes.PERIOD);
+        // The longest period is a parameter (qb.video-use.max-period-days), read within its bounds.
+        assertThat(VideoUseRules.problems(new VideoUseRules.Entry(DAY, DAY.plusDays(30), VideoUseRules.FIXED,
+            BigDecimal.ONE), 31)).isEmpty();
+        assertThat(VideoUseRules.problems(new VideoUseRules.Entry(DAY, DAY.plusDays(31), VideoUseRules.FIXED,
+            BigDecimal.ONE), 31)).extracting(Violation::ruleCode).containsExactly(VideoUseCodes.PERIOD);
+        assertThat(VideoUseRules.problems(new VideoUseRules.Entry(DAY, DAY.plusDays(31), VideoUseRules.FIXED,
+            BigDecimal.ONE), 31).getFirst().params()).containsEntry("maxDays", 31);
+        assertThat(VideoUseRules.maxPeriodDays(null)).isEqualTo(3_660);
+        assertThat(VideoUseRules.maxPeriodDays(0)).isEqualTo(1);
+        assertThat(VideoUseRules.maxPeriodDays(99_999)).isEqualTo(36_600);
+        assertThat(VideoUseRules.maxPeriodDays(400)).isEqualTo(400);
         assertThat(codes(new VideoUseRules.Entry(DAY, DAY, "PER_VIEW", BigDecimal.ONE)))
             .containsExactly(VideoUseCodes.PRICING);
         assertThat(codes(new VideoUseRules.Entry(DAY, DAY, VideoUseRules.PER_TAKER, new BigDecimal("-1"))))

@@ -32,8 +32,10 @@ public final class VideoUseRules {
     public static final String PER_TAKER = "PER_TAKER";
     public static final List<String> PRICINGS = List.of(FIXED, PER_MILLE, PER_TAKER);
 
-    /** The longest period one use covers, in days (ten years: a bound, not a business rule). */
-    public static final long MAX_PERIOD_DAYS = 3_660;
+    /** {@code qb.video-use.max-period-days}: the longest period one use covers, in days, its default and bounds. */
+    public static final int DEFAULT_MAX_PERIOD_DAYS = 3_660;
+    public static final int MIN_MAX_PERIOD_DAYS = 1;
+    public static final int MAX_MAX_PERIOD_DAYS = 36_600;
     /** The highest price (a bound of the column, numeric(19, 0), with room). */
     public static final BigDecimal MAX_PRICE = new BigDecimal("1000000000000");
 
@@ -90,16 +92,24 @@ public final class VideoUseRules {
     /** What a save says, before it is written. */
     public record Entry(LocalDate periodFrom, LocalDate periodTo, String pricing, BigDecimal price) {}
 
-    /** The problems of an entry (none: it may be written). */
-    public static List<Violation> problems(Entry entry) {
+    /** {@code qb.video-use.max-period-days} as read (none: the default; out of bounds: the nearest bound). */
+    public static int maxPeriodDays(Integer configured) {
+        if (configured == null) {
+            return DEFAULT_MAX_PERIOD_DAYS;
+        }
+        return Math.max(MIN_MAX_PERIOD_DAYS, Math.min(MAX_MAX_PERIOD_DAYS, configured));
+    }
+
+    /** The problems of an entry (none: it may be written) when a period covers at most {@code maxDays} days. */
+    public static List<Violation> problems(Entry entry, int maxDays) {
         List<Violation> problems = new ArrayList<>();
         if (entry.periodFrom() == null || entry.periodTo() == null) {
             problems.add(new Violation("periodTo", VideoUseCodes.PERIOD, "The period needs its first and last day",
-                Map.of("maxDays", MAX_PERIOD_DAYS)));
+                Map.of("maxDays", maxDays)));
         } else if (entry.periodTo().isBefore(entry.periodFrom())
-            || ChronoUnit.DAYS.between(entry.periodFrom(), entry.periodTo()) + 1 > MAX_PERIOD_DAYS) {
+            || ChronoUnit.DAYS.between(entry.periodFrom(), entry.periodTo()) + 1 > maxDays) {
             problems.add(new Violation("periodTo", VideoUseCodes.PERIOD, "The last day is not before the first, and "
-                + "the period is at most " + MAX_PERIOD_DAYS + " days", Map.of("maxDays", MAX_PERIOD_DAYS)));
+                + "the period is at most " + maxDays + " days", Map.of("maxDays", maxDays)));
         }
         if (!PRICINGS.contains(entry.pricing())) {
             problems.add(new Violation("pricing", VideoUseCodes.PRICING, "Unknown pricing " + entry.pricing(),

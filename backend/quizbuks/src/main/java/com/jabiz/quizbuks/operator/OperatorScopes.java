@@ -78,6 +78,7 @@ public final class OperatorScopes {
         // F-S14: the ledger of shared videos' uses and their figures, by the user (the publication's sponsor).
         fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.USE, "sponsorId");
         fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.FIGURES, "sponsorId");
+        fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.HISTORY, "sponsorId");
         // Q89: a benefit by its provider; the conversations and purchases by the sponsor that buys (the provider's
         // operator reads its side through its own datasets, Q89d).
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.OFFER, "providerId");

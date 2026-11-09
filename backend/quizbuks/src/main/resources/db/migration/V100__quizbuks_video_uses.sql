@@ -37,6 +37,7 @@ SELECT quizbuks_create_temporal_table('qb_video_use_version', 'video_use_id', '
     note                varchar(1000),
     status              varchar(10)    NOT NULL CHECK (status IN (''DRAFT'', ''SUBMITTED'', ''CONFIRMED'',
                                                                   ''REJECTED'')),
+    sent_to_provider    boolean        NOT NULL,
     submitted_at        timestamptz,
     confirmed_at        timestamptz,
     confirmed_by        varchar(128),
@@ -77,3 +78,17 @@ CREATE TABLE qb_video_use_figures (
 -- The provider's side, and the operators' scope by the user (the publication's sponsor).
 CREATE INDEX qb_video_use_figures_provider_idx ON qb_video_use_figures (provider_id);
 CREATE INDEX qb_video_use_figures_sponsor_idx ON qb_video_use_figures (sponsor_id);
+
+-- The history of a use as both sides and the operators read it (F-S14 follow-up): every version with the operation
+-- that wrote it (who, which act, when). A read-only view over the append-only versions and the platform's operation
+-- records: what the erasure overwrites in the versions is overwritten here too.
+CREATE VIEW qb_video_use_history AS
+SELECT CAST(v.row_id AS varchar(20))        AS history_id,
+       CAST(v.video_use_id AS varchar(36))  AS video_use_id,
+       CAST(v.version_no AS numeric(9, 0))  AS version_no,
+       v.publication_id, v.sponsor_id, v.provider_id, v.status, v.pricing, v.price, v.period_from, v.period_to,
+       v.reject_reason, v.revision, v.sent_to_provider, v.created_time AS recorded_at,
+       CAST(p.actor_id AS varchar(128))     AS actor_id,
+       CAST(p.process_name AS varchar(64))  AS process_name
+FROM qb_video_use_version v
+JOIN op_process p ON p.process_seq_id = v.process_seq_id;

@@ -53,16 +53,14 @@ list:
 permissions: [qb.stats.read]
 ---*/
 -- The caller's side only (both provider datasets hold the rows whose provider is the caller): the figures the daily
--- job counted for the publications using the caller's videos, and the uses their users submitted at least once (a
--- draft never submitted is the user's own). The user is shown by their company. Each figure below k is not shown, and
+-- job counted for the publications using the caller's videos, and the uses their users sent at least once (the
+-- dataset's scope: sentToProvider; a draft never sent is the user's own). The user is shown by their company. Each figure below k is not shown, and
 -- the reference amount is VideoUseRules.amount, as on the user's side (qb.sponsor.video-uses).
 WITH params AS (
     SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,9}$'
                                          THEN CAST(p.{{SysParam.value}} AS int) END), 5)) AS k
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.stats.min-group'),
-uses AS (
-    SELECT * FROM {{QbVideoUse}} x WHERE x.{{QbVideoUse.submittedAt}} IS NOT NULL),
 rows AS (
     SELECT coalesce(f.{{QbVideoUseFigures.publicationId}}, u.{{QbVideoUse.publicationId}}) AS pid,
            coalesce(f.{{QbVideoUseFigures.sharedVideoId}}, u.{{QbVideoUse.sharedVideoId}}) AS svid,
@@ -78,7 +76,7 @@ rows AS (
            u.{{QbVideoUse.rejectReason}} AS u_reason, u.{{QbVideoUse.revision}} AS u_revision,
            u.{{QbVideoUse.editedAt}} AS u_edited
     FROM {{QbVideoUseFigures}} f
-    FULL JOIN uses u ON u.{{QbVideoUse.publicationId}} = f.{{QbVideoUseFigures.publicationId}})
+    FULL JOIN {{QbVideoUse}} u ON u.{{QbVideoUse.publicationId}} = f.{{QbVideoUseFigures.publicationId}})
 SELECT
     r.pid AS publicationId,
     c.{{QbPublicationCard.name}} AS name,

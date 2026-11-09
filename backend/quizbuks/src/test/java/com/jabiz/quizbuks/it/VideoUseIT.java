@@ -72,6 +72,8 @@ class VideoUseIT extends VideoUseItSupport {
             422))).containsExactly(VideoUseCodes.EXISTS);
         // A draft never submitted is the user's own: the provider does not see it, nor answers it.
         assertThat(providerRow(w.provider(), w.publicationId())).isNull();
+        assertThat(history("qb.sponsor.video-use-history-provided", id, provider)).isEmpty();
+        assertThat(history("qb.sponsor.video-use-history", id, user)).hasSize(1);
         assertThat(codes(refused(VideoUseProcesses.CONFIRM, provider, body("videoUseId", id, "baseRevision", 1), 422)))
             .containsExactly(VideoUseCodes.STATE);
 
@@ -136,6 +138,26 @@ class VideoUseIT extends VideoUseItSupport {
             + "?::uuid ORDER BY version_no", id)).extracting(row -> row.get("status")).containsExactly("DRAFT",
             "SUBMITTED", "REJECTED", "DRAFT", "SUBMITTED", "CONFIRMED", "DRAFT");
         assertThat(query("SELECT 1 FROM sys_audit_record WHERE entity_id = ?", id)).hasSizeGreaterThanOrEqualTo(7);
+
+        // Both sides read the history on their pages: who did what, when, with the reason sent back.
+        List<Map<String, Object>> versions = history("qb.sponsor.video-use-history", id, sponsorToken(w.user()));
+        assertThat(versions).extracting(v -> v.get("processName")).containsExactly(VideoUseProcesses.SAVE,
+            VideoUseProcesses.SUBMIT, VideoUseProcesses.REJECT, VideoUseProcesses.SAVE, VideoUseProcesses.SUBMIT,
+            VideoUseProcesses.CONFIRM, VideoUseProcesses.SAVE);
+        assertThat(versions).extracting(v -> v.get("status")).containsExactly("DRAFT", "SUBMITTED", "REJECTED",
+            "DRAFT", "SUBMITTED", "CONFIRMED", "DRAFT");
+        assertThat(versions.get(2)).containsEntry("rejectReason", "We agreed 60,000 yen").containsEntry("revision", 3)
+            .doesNotContainKey("actorId");
+        assertThat(versions).allSatisfy(v -> assertThat(v.get("recordedAt")).isNotNull());
+        assertThat(history("qb.sponsor.video-use-history-provided", id, provider)).hasSize(7);
+        // Another sponsor reads none of it, on either side.
+        String stranger = sponsorToken(newSponsor(unique("s-fs14-reader")));
+        assertThat(history("qb.sponsor.video-use-history", id, stranger)).isEmpty();
+        assertThat(history("qb.sponsor.video-use-history-provided", id, stranger)).isEmpty();
+        // Headquarters reads who did each.
+        assertThat(history("qb.admin.video-use-history", id, TestTokens.bearer(tokens, "fs14-hq",
+            QbPermissions.ADMIN_VIDEO_USE_READ))).extracting(v -> v.get("actorId")).containsExactly(w.user(), w.user(),
+            w.provider(), w.user(), w.user(), w.provider(), w.user());
     }
 
     @Test
@@ -303,27 +325,85 @@ class VideoUseIT extends VideoUseItSupport {
     // ---- the operators ----------------------------------------------------------------------------------------------
 
     @Test
-    void theOperatorsReadTheirOwnSponsorsUsesOnly() {
+    void theOperatorsOfBothSidesReadTheUseAndItsHistoryAndAThirdDoesNot() {
         NewOperator north = newOperatorWithLead(operatorsAdmin(), unique("FS14 North"), null);
+        NewOperator east = newOperatorWithLead(operatorsAdmin(), unique("FS14 East"), null);
         World w = world("operators");
         run(OperatorProcesses.ASSIGN, operatorsAdmin(), body("userId", w.user(), "operatorId", north.operatorId(),
+            "reason", "F-S14"));
+        run(OperatorProcesses.ASSIGN, operatorsAdmin(), body("userId", w.provider(), "operatorId", east.operatorId(),
             "reason", "F-S14"));
         String id = (String) run(VideoUseProcesses.SAVE, sponsorToken(w.user()), entry(w.publicationId(),
             VideoUseRules.PER_MILLE, 3_000)).get("videoUseId");
         String headquarters = TestTokens.bearer(tokens, "fs14-hq", QbPermissions.ADMIN_VIDEO_USE_READ);
-        for (String reader : List.of(headquarters, memberSession(north.leadId(), north.operatorId()))) {
+        String northSession = memberSession(north.leadId(), north.operatorId());
+        String eastSession = memberSession(east.leadId(), east.operatorId());
+        // The user's operator and headquarters read it at once (the users' page).
+        for (String reader : List.of(headquarters, northSession)) {
             assertThat(items("qb.admin.video-uses", reader, body("params", body())))
                 .filteredOn(row -> id.equals(row.get("videoUseId"))).singleElement()
                 .satisfies(row -> assertThat(row).containsEntry("sponsorId", w.user())
                     .containsEntry("providerId", w.provider()).containsEntry("pricing", VideoUseRules.PER_MILLE));
         }
+        assertThat(items("qb.admin.video-uses", eastSession, body("params", body())))
+            .noneMatch(row -> id.equals(row.get("videoUseId")));
+        // The provider's operator, once the user sent it (the providers' page; a draft never sent is the user's own).
+        assertThat(items("qb.admin.video-uses-provided", eastSession, body("params", body())))
+            .noneMatch(row -> id.equals(row.get("videoUseId")));
+        run(VideoUseProcesses.SUBMIT, sponsorToken(w.user()), body("videoUseId", id, "baseRevision", 1));
+        for (String reader : List.of(headquarters, eastSession)) {
+            assertThat(items("qb.admin.video-uses-provided", reader, body("params", body())))
+                .filteredOn(row -> id.equals(row.get("videoUseId"))).singleElement()
+                .satisfies(row -> assertThat(row).containsEntry("providerId", w.provider())
+                    .containsEntry("name", "FS14 operators").containsEntry("status", VideoUseRules.SUBMITTED));
+        }
+        assertThat(items("qb.admin.video-uses-provided", northSession, body("params", body())))
+            .noneMatch(row -> id.equals(row.get("videoUseId")));
+        // Each reads the history through its own path; a third operator reads neither the pages nor the history.
+        assertThat(history("qb.admin.video-use-history", id, northSession)).hasSize(2);
+        assertThat(history("qb.admin.video-use-history-provided", id, eastSession)).hasSize(2)
+            .extracting(v -> v.get("actorId")).containsExactly(w.user(), w.user());
+        assertThat(history("qb.admin.video-use-history", id, headquarters)).hasSize(2);
+        assertThat(history("qb.admin.video-use-history-provided", id, headquarters)).hasSize(2);
+        assertThat(history("qb.admin.video-use-history", id, eastSession)).isEmpty();
+        assertThat(history("qb.admin.video-use-history-provided", id, northSession)).isEmpty();
         NewOperator south = newOperatorWithLead(operatorsAdmin(), unique("FS14 South"), null);
-        assertThat(items("qb.admin.video-uses", memberSession(south.leadId(), south.operatorId()),
-            body("params", body()))).noneMatch(row -> id.equals(row.get("videoUseId")));
-        // Read only: the sponsors cannot read the page, nor anyone write the table.
-        client.post().uri("/api/queries/{id}", "qb.admin.video-uses")
-            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, sponsorToken(w.user())).bodyValue(Map.of())
-            .exchange().expectStatus().isForbidden();
+        String southSession = memberSession(south.leadId(), south.operatorId());
+        for (String template : List.of("qb.admin.video-uses", "qb.admin.video-uses-provided")) {
+            assertThat(items(template, southSession, body("params", body())))
+                .noneMatch(row -> id.equals(row.get("videoUseId")));
+        }
+        assertThat(history("qb.admin.video-use-history", id, southSession)).isEmpty();
+        assertThat(history("qb.admin.video-use-history-provided", id, southSession)).isEmpty();
+        // Read only: the sponsors cannot read the pages, nor anyone write the table.
+        for (String template : List.of("qb.admin.video-uses", "qb.admin.video-uses-provided")) {
+            client.post().uri("/api/queries/{id}", template)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .header(org.springframework.http.HttpHeaders.AUTHORIZATION, sponsorToken(w.user()))
+                .bodyValue(Map.of()).exchange().expectStatus().isForbidden();
+        }
+    }
+
+    /** The period's longest length is a parameter. */
+    @Test
+    void theLongestPeriodIsAParameter() {
+        World w = world("period");
+        Map<String, Object> year = entry(w.publicationId(), VideoUseRules.FIXED, 1);
+        year.put("periodTo", LocalDate.parse(today()).plusDays(31).toString());
+        try {
+            setParam(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, "31");
+            Map<String, Object> problem = refused(VideoUseProcesses.SAVE, sponsorToken(w.user()), year, 422);
+            assertThat(codes(problem)).containsExactly(VideoUseCodes.PERIOD);
+            assertThat(String.valueOf(violations(problem).getFirst().get("message"))).contains("31");
+            setParam(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, "32");
+            run(VideoUseProcesses.SAVE, sponsorToken(w.user()), year);
+        } finally {
+            setParam(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, "3660");
+        }
+    }
+
+    /** The versions of a use through one of the four history templates, as {@code reader}, oldest first. */
+    List<Map<String, Object>> history(String template, String videoUseId, String reader) {
+        return items(template, reader, body("params", body("videoUseId", videoUseId), "limit", 100));
     }
 }

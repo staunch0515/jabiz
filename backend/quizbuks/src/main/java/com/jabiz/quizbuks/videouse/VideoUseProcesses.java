@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.videouse;
 
 import com.jabiz.entity.Violation;
+import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessDefinitionBuilder;
@@ -11,10 +12,12 @@ import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.QbPublications;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.HoldLock;
+import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.task.CloseTasks;
 import com.jabiz.runtime.task.CreateTask;
@@ -60,6 +63,7 @@ public final class VideoUseProcesses {
     public static final String RESUBMIT_TASK_TITLE = "task.qb.video-use.resubmit";
 
     static final String INPUT = "input";
+    static final String PARAMS = "params";
     static final String OUTPUT = "output";
     static final String FOUND = "found";
     static final String USES = "uses";
@@ -114,6 +118,8 @@ public final class VideoUseProcesses {
         return ProcessDefinition.define(SAVE, 1, SaveInput.class, VideoUseOutput.class, ProcessContext.class, pb -> {
             common(pb, QbPermissions.PUBLICATION_WRITE, "Writes or corrects the ledger's use of another Sponsor's "
                 + "shared video by a publication of the caller's: the period, the pricing and the price.");
+            pb.step("Load the longest period", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
+                QbParams.VIDEO_USE_MAX_PERIOD_DAYS));
             lockAndLoad(pb, ctx -> saveInput(ctx).videoUseId(), QbVideoUses.SPONSOR,
                 ctx -> saveInput(ctx).publicationId() == null ? null : saveInput(ctx).publicationId().toString());
             pb.compute("Write the use", (metadata, ctx) -> saved(ctx));
@@ -151,7 +157,7 @@ public final class VideoUseProcesses {
             }
         }
         VideoUseRules.problems(new VideoUseRules.Entry(input.periodFrom(), input.periodTo(), input.pricing(),
-            input.price())).forEach(ctx::reject);
+            input.price()), maxPeriodDays(ctx)).forEach(ctx::reject);
         if (ctx.hasViolations()) {
             return;
         }
@@ -161,6 +167,7 @@ public final class VideoUseProcesses {
             values.put("sharedVideoId", String.valueOf((Object) card.get("sharedVideoId")));
             values.put("sponsorId", ctx.request().actorId());
             values.put("providerId", String.valueOf((Object) card.get("videoProviderId")));
+            values.put("sentToProvider", false);
         }
         values.put("periodFrom", input.periodFrom());
         values.put("periodTo", input.periodTo());
@@ -169,6 +176,13 @@ public final class VideoUseProcesses {
         values.put("note", blankToNull(input.note()));
         values.put("status", VideoUseRules.afterSave());
         write(ctx, use, values);
+    }
+
+    /** {@code qb.video-use.max-period-days} as {@link VideoUseRules#maxPeriodDays} reads it. */
+    static int maxPeriodDays(ProcessContext ctx) {
+        Integer configured = ctx.contains(PARAMS) ? ctx.get(PARAMS, ParamValues.class)
+            .find(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, BigDecimal.class).map(BigDecimal::intValue).orElse(null) : null;
+        return VideoUseRules.maxPeriodDays(configured);
     }
 
     // ---- submit ----------------------------------------------------------------------------------------------------
@@ -187,6 +201,7 @@ public final class VideoUseProcesses {
                 Map<String, Object> values = new LinkedHashMap<>();
                 values.put("status", VideoUseRules.SUBMITTED);
                 values.put("submittedAt", ctx.opTime());
+                values.put("sentToProvider", true);
                 // A new submission: the provider's last reason was answered by the correction.
                 values.put("rejectedAt", null);
                 values.put("rejectReason", null);

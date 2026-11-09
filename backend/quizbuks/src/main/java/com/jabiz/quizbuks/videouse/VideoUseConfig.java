@@ -9,7 +9,9 @@ import com.jabiz.job.JobItems;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.dataset.EntryScopeVia;
 import com.jabiz.quizbuks.operator.OperatorScopes;
+import com.jabiz.quizbuks.operator.QbOperators;
 import com.jabiz.quizbuks.publishing.PublishingLimits;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -65,14 +67,92 @@ public class VideoUseConfig {
         return defaultDataset(QbVideoUses.FIGURES);
     }
 
+    /** The user's own uses, for its templates only. */
     @Bean
     DatasetDefinition qbSponsorVideoUseDataset() {
-        return own(QbVideoUses.SPONSOR, QbVideoUses.USE, "sponsorId");
+        return DatasetDefinition.define(QbVideoUses.sideDataset(QbVideoUses.SPONSOR, QbVideoUses.USE), d -> d
+            .targetEntityType(QbVideoUses.USE)
+            .permissions(QbPermissions.PUBLICATION_SYSTEM, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("sponsorId", "actorId", RequestContext::actorId)));
+    }
+
+    /** The provider's uses, once their users sent them (a draft never sent is the user's own), for its templates only. */
+    @Bean
+    DatasetDefinition qbProviderVideoUseDataset() {
+        return DatasetDefinition.define(QbVideoUses.sideDataset(QbVideoUses.PROVIDER, QbVideoUses.USE), d -> d
+            .targetEntityType(QbVideoUses.USE)
+            .permissions(QbPermissions.PUBLICATION_SYSTEM, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("providerId", "actorId", RequestContext::actorId).fixed("sentToProvider", true)));
+    }
+
+    /**
+     * The provider's operator's read path (the default datasets follow the user's operator): the uses sent to its own
+     * sponsors as providers, their figures and the publications' cards; headquarters reads every row through them too.
+     */
+    @Bean
+    DatasetDefinition qbProviderOperatorVideoUseDataset() {
+        return providerOperator(QbVideoUses.USE, "providerId", true);
     }
 
     @Bean
-    DatasetDefinition qbProviderVideoUseDataset() {
-        return own(QbVideoUses.PROVIDER, QbVideoUses.USE, "providerId");
+    DatasetDefinition qbProviderOperatorVideoUseFiguresDataset() {
+        return providerOperator(QbVideoUses.FIGURES, "providerId", false);
+    }
+
+    @Bean
+    DatasetDefinition qbProviderOperatorVideoUseHistoryDataset() {
+        return providerOperator(QbVideoUses.HISTORY, "providerId", false);
+    }
+
+    @Bean
+    EntityDefinition qbVideoUseHistoryEntity() {
+        return QbVideoUses.HISTORY_ENTITY;
+    }
+
+    /** The history's default dataset: headquarters, and the users' operators for their own sponsors; never written. */
+    @Bean
+    DatasetDefinition qbVideoUseHistoryDataset() {
+        return DatasetDefinition.define(QbVideoUses.defaultDataset(QbVideoUses.HISTORY), d -> d
+            .targetEntityType(QbVideoUses.HISTORY)
+            .asDefault()
+            .permissions(QbPermissions.ADMIN_VIDEO_USE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .scope(OperatorScopes.of(QbVideoUses.HISTORY))
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorVideoUseHistoryDataset() {
+        return own(QbVideoUses.SPONSOR, QbVideoUses.HISTORY, "sponsorId");
+    }
+
+    @Bean
+    DatasetDefinition qbProviderVideoUseHistoryDataset() {
+        return own(QbVideoUses.PROVIDER, QbVideoUses.HISTORY, "providerId");
+    }
+
+    @Bean
+    DatasetDefinition qbProviderOperatorCardDataset() {
+        return providerOperator(com.jabiz.quizbuks.publishing.QbPublications.CARD, "videoProviderId", false);
+    }
+
+    private DatasetDefinition providerOperator(String entity, String providerField, boolean sentOnly) {
+        return DatasetDefinition.define(QbVideoUses.providerOperatorDataset(entity), d -> d
+            .targetEntityType(entity)
+            .permissions(QbPermissions.ADMIN_VIDEO_USE_READ, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> {
+                s.withinEntryScope(QbOperators.SCOPE, providerField,
+                    EntryScopeVia.of(QbOperators.ASSIGNMENT, "userId", "operatorId"));
+                if (sentOnly) {
+                    s.fixed("sentToProvider", true);
+                }
+            }));
     }
 
     @Bean

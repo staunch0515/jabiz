@@ -22,6 +22,8 @@ public final class QbVideoUses {
 
     public static final String USE = "QbVideoUse";
     public static final String FIGURES = "QbVideoUseFigures";
+    /** Every version of a use with the operation that wrote it (a read-only view, {@code qb_video_use_history}). */
+    public static final String HISTORY = "QbVideoUseHistory";
 
     public static final String PRICING_DICTIONARY = "urn:jabiz:dict:quizbuks:video-use-pricing";
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:video-use-status";
@@ -57,6 +59,18 @@ public final class QbVideoUses {
         return "qb.video-use:" + publicationId;
     }
 
+    /** The provider's operator's read path (F-S14 follow-up): the uses and figures of its own sponsors' videos. */
+    public static String providerOperatorDataset(String entity) {
+        return "urn:jabiz:dataset:operator-provider:" + entity;
+    }
+
+    public static final String ADMIN_PROVIDED_TEMPLATE = "qb.admin.video-uses-provided";
+    /** The history of one use: the user's side, the provider's, the users' operators', the providers' operators'. */
+    public static final String SPONSOR_HISTORY_TEMPLATE = "qb.sponsor.video-use-history";
+    public static final String PROVIDER_HISTORY_TEMPLATE = "qb.sponsor.video-use-history-provided";
+    public static final String ADMIN_HISTORY_TEMPLATE = "qb.admin.video-use-history";
+    public static final String ADMIN_PROVIDED_HISTORY_TEMPLATE = "qb.admin.video-use-history-provided";
+
     /** A publication's figures: the job's item and nothing else writes them. */
     public static String figuresLockName(Object publicationId) {
         return "qb.video-use-figures:" + publicationId;
@@ -87,6 +101,9 @@ public final class QbVideoUses {
         eb.field("note", f -> f.physicalColumn("note").processOnly().asText(NOTE_LENGTH, true));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
             .asCode(STATUS_DICTIONARY, VideoUseRules.STATUSES.toArray(String[]::new)));
+        // Whether the user ever sent it to the provider (true from the first submission on, never false again): the
+        // provider's side and the provider's operator read only these (their datasets' scope), with every version.
+        eb.field("sentToProvider", f -> f.physicalColumn("sent_to_provider").required(true).processOnly().asBool());
         eb.field("submittedAt", f -> f.physicalColumn("submitted_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("confirmedAt", f -> f.physicalColumn("confirmed_at").processOnly()
@@ -142,6 +159,45 @@ public final class QbVideoUses {
             .filters("publicationId", "sponsorId", "providerId")
             .sorts("refreshedAt")
             .defaultSort("refreshedAt", false));
+    });
+
+    /**
+     * Every version of a use with who wrote it, which act and when: a read-only view over the append-only versions and
+     * the platform's operation records (written by nothing; the processes write {@link #USE_ENTITY}).
+     */
+    public static final EntityDefinition HISTORY_ENTITY = EntityDefinition.define(HISTORY, eb -> {
+        eb.physicalTable("qb_video_use_history");
+        eb.primaryKey("historyId");
+        eb.field("historyId", f -> f.physicalColumn("history_id").immutable(true).required(true).asText(20));
+        eb.field("videoUseId", f -> f.physicalColumn("video_use_id").immutable(true).required(true).asText(ID_LENGTH));
+        eb.field("versionNo", f -> f.physicalColumn("version_no").immutable(true).required(true).asNumeric(9, 0));
+        eb.field("publicationId", f -> f.physicalColumn("publication_id").immutable(true).required(true)
+            .asText(ID_LENGTH));
+        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true)
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("providerId", f -> f.physicalColumn("provider_id").immutable(true).required(true)
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("status", f -> f.physicalColumn("status").immutable(true).required(true)
+            .asCode(STATUS_DICTIONARY, VideoUseRules.STATUSES.toArray(String[]::new)));
+        eb.field("pricing", f -> f.physicalColumn("pricing").immutable(true).required(true)
+            .asCode(PRICING_DICTIONARY, VideoUseRules.PRICINGS.toArray(String[]::new)));
+        eb.field("price", f -> f.physicalColumn("price").immutable(true).required(true).asMonetary("JPY", 0));
+        eb.field("periodFrom", f -> f.physicalColumn("period_from").immutable(true).required(true).asDate());
+        eb.field("periodTo", f -> f.physicalColumn("period_to").immutable(true).required(true).asDate());
+        eb.field("rejectReason", f -> f.physicalColumn("reject_reason").immutable(true).asText(REASON_LENGTH, true));
+        eb.field("revision", f -> f.physicalColumn("revision").immutable(true).required(true).asNumeric(9, 0));
+        eb.field("sentToProvider", f -> f.physicalColumn("sent_to_provider").immutable(true).required(true)
+            .asBool());
+        eb.field("recordedAt", f -> f.physicalColumn("recorded_at").immutable(true).required(true)
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("actorId", f -> f.physicalColumn("actor_id").immutable(true).required(true)
+            .asText(AccountLimits.USER_ID_LENGTH));
+        eb.field("processName", f -> f.physicalColumn("process_name").immutable(true).required(true).asText(64));
+        eb.listView("default", lv -> lv
+            .columns("videoUseId", "versionNo", "status", "processName", "recordedAt")
+            .filters("videoUseId", "sponsorId", "providerId")
+            .sorts("versionNo")
+            .defaultSort("versionNo", true));
     });
 
     private QbVideoUses() {}
