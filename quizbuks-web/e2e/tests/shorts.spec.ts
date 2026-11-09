@@ -73,11 +73,48 @@ test('a Shorts publication is in the shelf; the vertical mode swipes on and lead
   await screens.hover({ position: { x: 8, y: 8 } })
   await page.mouse.wheel(0, 900)
   await expect(viewer.locator('[data-testid="shorts-screen"][data-current]')).toHaveAttribute('data-publication', first)
-  await page.keyboard.press('ArrowUp')
-  await expect(viewer.locator('[data-testid="shorts-screen"][data-current]')).toHaveAttribute('data-publication', second)
-  await viewer.getByTestId('shorts-next').click()
   const current = viewer.locator('[data-testid="shorts-screen"][data-current]')
+  await page.keyboard.press('ArrowUp')
+  await expect(current).toHaveAttribute('data-publication', second)
+  // "Next" tapped while the scroll up is still travelling (the screen shown changes at once, its smooth scroll
+  // follows): the tap reaches the button and the next one is shown, and scrolled to. The app's player follows the
+  // screen coming down from above; it must stay within the screens, not cover the header's buttons on its way (a tap
+  // on them then went to the player and was lost).
+  await viewer.getByTestId('shorts-next').click()
   await expect(current).toHaveAttribute('data-publication', first)
+  await expect(current).toBeInViewport({ ratio: 0.9 })
+  await expect(current).toHaveAttribute('data-publication', first)
+  await expect(viewer.getByTestId('shorts-position')).toHaveText('2 of 2')
+  // Again with nothing in between, as fast as a person taps twice.
+  await page.keyboard.press('ArrowUp')
+  await viewer.getByTestId('shorts-next').click()
+  await expect(current).toHaveAttribute('data-publication', first)
+  await expect(current).toBeInViewport({ ratio: 0.9 })
+  // While a screen moves in from above, every frame: what is under the header's buttons is the buttons, not the player.
+  const covered = await page.evaluate(async () => {
+    const under: string[] = []
+    const buttons = ['shorts-close', 'shorts-previous', 'shorts-next']
+      .map((id) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
+    const end = performance.now() + 1500
+    while (performance.now() < end) {
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+      // A disabled button takes no pointer (the first screen's "previous").
+      for (const button of buttons.filter((b) => !(b as HTMLButtonElement).disabled)) {
+        const box = button.getBoundingClientRect()
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+        if (!hit || !button.contains(hit)) under.push(`${button.dataset.testid}: ${hit?.tagName ?? 'nothing'}`)
+      }
+    }
+    return under
+  })
+  expect(covered).toEqual([])
+  await expect(current).toHaveAttribute('data-publication', second)
+  await viewer.getByTestId('shorts-next').click()
+  await expect(current).toHaveAttribute('data-publication', first)
+  await expect(current).toBeInViewport({ ratio: 0.9 })
+  await expect(current).toHaveAttribute('data-publication', first)
+  await expect(viewer.getByTestId('shorts-position')).toHaveText('2 of 2')
   await expect(page.locator('iframe')).toHaveCount(1)
 
   // Back to the home, where it was; then again, and on to answering.
