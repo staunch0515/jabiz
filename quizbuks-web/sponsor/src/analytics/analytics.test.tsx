@@ -47,13 +47,13 @@ const OVERVIEW_BIG = { ...OVERVIEW_SMALL, completions: 12, basedOn: 10, avgDurat
   suppressed: false, largestDrop: 'VIEW_START', viewsBelowStarts: true }
 
 const QUESTIONS_SMALL = [1, 2].map((no) => ({ questionNo: no, stem: `Question ${no}?`, points: no + 1,
-  completions: null, correct: null, correctRate: null, difficulty: null, suppressed: true, basedOn: 4, minGroup: 5,
+  completions: null, correct: null, correctRate: null, observedDifficulty: null, difficulty: null, suppressed: true, basedOn: 4, minGroup: 5,
   shownAt: null }))
 const QUESTIONS_BIG = [
   { questionNo: 1, stem: 'The capital of France?', points: 2, completions: 10, correct: 9, correctRate: '0.9',
-    difficulty: 'EASY', suppressed: false, basedOn: 10, minGroup: 5, shownAt: '2026-10-18T01:10:00Z' },
+    observedDifficulty: 'EASY', difficulty: 'HARD', drawn: 10, suppressed: false, basedOn: 10, minGroup: 5, shownAt: '2026-10-18T01:10:00Z' },
   { questionNo: 2, stem: 'The square root of 2?', points: 3, completions: 10, correct: 3, correctRate: '0.3',
-    difficulty: 'HARD', suppressed: false, basedOn: 10, minGroup: 5, shownAt: '2026-10-18T01:10:00Z' },
+    observedDifficulty: 'HARD', difficulty: 'HARD', drawn: 12, suppressed: false, basedOn: 10, minGroup: 5, shownAt: '2026-10-18T01:10:00Z' },
 ]
 
 const VERSION_2 = { versionId: 'v2', versionNumber: 2, label: 'v2.0', title: 'Capitals', current: true,
@@ -316,6 +316,16 @@ describe('a publication\'s analytics', () => {
     expect(within(rows[0]).getByTestId('question-rate')).toHaveTextContent('90%')
     expect(within(rows[0]).getByTestId('question-difficulty')).toHaveTextContent('Easy')
     expect(within(rows[1]).getByTestId('question-difficulty')).toHaveTextContent('Hard')
+    // F-S7: the difficulty set on each question, how many were given it, and the right rate by the set difficulty
+    // (both hard ones: 12 right of 20 answers).
+    expect(within(rows[0]).getByTestId('question-set-difficulty')).toHaveTextContent('Hard')
+    expect(within(rows[1]).getByTestId('question-drawn')).toHaveTextContent('12')
+    // Counted only once an attempt is finished (controller 2026-11-09), said next to the column and below the table.
+    expect(screen.getByTestId('question-drawn-note')).toHaveTextContent('counted once finished')
+    expect(screen.getByTestId('question-drawn-hint')).toHaveTextContent(
+      'An attempt still in progress counts only once it is finished.')
+    expect(screen.getAllByTestId('by-difficulty').map((item) => item.dataset.difficulty)).toEqual(['HARD'])
+    expect(screen.getByTestId('by-difficulty')).toHaveTextContent('Hard: 60% (2 questions)')
     expect(screen.queryByTestId('questions-suppressed')).toBeNull()
     expect(screen.getByTestId('questions-based-on')).toHaveTextContent('Based on 10 completions')
     expect(screen.getByTestId('overview-avg-duration-value')).toHaveTextContent('42.5 s')

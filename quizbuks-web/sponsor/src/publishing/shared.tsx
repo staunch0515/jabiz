@@ -17,7 +17,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Globe } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { readVersions } from '../content/api'
+import { DIFFICULTIES, readVersions, type Difficulty } from '../content/api'
 import { Thumbnail } from '../content/ContentImage'
 import { versionsQuery } from '../content/paths'
 import { SPONSOR } from '../messages'
@@ -203,6 +203,10 @@ export interface SummaryValues {
   passScore: number | null
   /** Q81: the questions drawn per taker (null: all of them), and the version's count when known. */
   pickCount?: number | null
+  /** F-S7: drawn by difficulty, how many of each (null or missing: not by difficulty). */
+  pickByDifficulty?: Partial<Record<Difficulty, number>> | null
+  /** F-S7: whether the version shuffles its questions for each taker; undefined while unknown (not shown). */
+  shuffled?: boolean | null
   /** Q88b: the entry fee (0 or missing: none). */
   entryFee?: number | null
   questionCount?: number | null
@@ -286,6 +290,14 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
       value: <span data-testid="summary-pick">{values.questionCount
         ? t('publishing.summary.pickCountOf', { k: values.pickCount, n: values.questionCount })
         : t('publishing.summary.pickCountOnly', { k: values.pickCount })}</span> }] : []),
+    ...(values.pickByDifficulty ? [{ key: 'pickByDifficulty', label: t('publishing.field.byDifficulty'),
+      value: <span data-testid="summary-by-difficulty">{t('publishing.summary.byDifficulty', {
+        counts: DIFFICULTIES.filter((level) => values.pickByDifficulty?.[level])
+          .map((level) => `${t(`difficulty.levels.${level}`)} ${values.pickByDifficulty?.[level]}`).join(' · ') })}</span> }]
+      : []),
+    ...(values.shuffled != null ? [{ key: 'questionOrder', label: t('publishing.summary.questionOrder'),
+      value: <span data-testid="summary-question-order">{t(values.shuffled ? 'publishing.summary.shuffled'
+        : 'publishing.summary.fixedOrder')}</span> }] : []),
     ...(values.entryFee ? [{ key: 'entryFee', label: t('publishing.field.entryFee'),
       value: <span data-testid="summary-entry-fee">{formatKudos(values.entryFee)}</span> }] : []),
     { key: 'fullScore', label: t('publishing.summary.fullScore'), value: values.fullScore ?? notSet },

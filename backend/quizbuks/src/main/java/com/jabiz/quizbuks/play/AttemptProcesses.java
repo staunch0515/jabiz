@@ -550,12 +550,11 @@ public final class AttemptProcesses {
         QuizSnapshot snapshot = PlaySteps.snapshot(ctx);
         Object publicationId = ctx.get(PUB_KEY);
         Instant deadline = AttemptRules.deadline(ctx.opTime(), PlaySteps.integer(card.get("timeLimitSec")));
-        // Q81 (D-Q81-3, D-Q81-4): a publication drawing k questions gives this taker their set, in the version's order;
-        // from here on the attempt's snapshot is that subset (the language first: its texts are keyed by the
-        // version's numbers).
-        Integer pickCount = PlaySteps.integerOrNull(card.get("pickCount"));
-        List<Integer> questionSet = pickCount == null ? null
-            : pick.pick(userId, publicationId, snapshot.questions(), pickCount);
+        // Q81 (D-Q81-3, D-Q81-4): a publication drawing k questions gives this taker their set; F-S7: or k of each
+        // difficulty, and in an order of their own when the version shuffles (else the version's). From here on the
+        // attempt's snapshot is that subset in that order (the language first: its texts are keyed by the version's
+        // numbers).
+        List<Integer> questionSet = pick.set(userId, publicationId, snapshot, card);
         QuizSnapshot given = questionSet == null ? snapshot : snapshot.subset(questionSet);
         List<List<Integer>> order = shuffle.order(userId, publicationId, given.questions());
         Map<String, Object> values = new LinkedHashMap<>();

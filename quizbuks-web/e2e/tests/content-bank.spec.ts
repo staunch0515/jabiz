@@ -1,11 +1,14 @@
 import { query, sponsor } from './content'
+import { decideReview } from './publishing'
 import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { fundedSponsor, takerInJapan } from './wallet'
 
 /**
  * F-S6b (docs/quizbuks/plans/impl/F-S6.md §3.5): the editor of a large question bank against the packaged server: a
  * quiz file's questions imported in two batches (`QB_QUIZ_IMPORT_QUESTIONS`), one batch undone, the list searched a
  * page at a time, one question moved (`QB_QUESTION_MOVE`) and several given the same points at once
- * (`QB_QUESTION_POINTS_SET`). F-S6c: the translations tab of a large bank, a page at a time.
+ * (`QB_QUESTION_POINTS_SET`). F-S6c: the translations tab of a large bank, a page at a time. F-S7: difficulties set
+ * in bulk in the editor and a publication drawing one question of each, answered by a Taker.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
@@ -184,4 +187,74 @@ test('opening the editor costs the same requests for 1000 questions as for 3 (F-
   expect(many.length).toBe(few.length)
   expect([...many].sort()).toEqual([...few].sort().map((path) => path.replace(small, large)))
   await expect(page.getByTestId('questions-page')).toContainText('Page 1 of 20')
+})
+
+test('a Sponsor sets difficulties in bulk and a publication draws one of each for a Taker (F-S7)', async ({ page,
+  request }) => {
+  const funded = await fundedSponsor(request, 1000, 'Dita')
+  const quiz = await run(request, funded.token, 'QB_QUIZ_SAVE', { title: unique('Levels '), intro: null, cover: null,
+    timeLimitSec: 300, language: 'en' })
+  const quizId = quiz.quizId as string
+  for (const stem of ['Easy A?', 'Easy B?', 'Hard A?', 'Hard B?']) {
+    await run(request, funded.token, 'QB_QUESTION_SAVE', { quizId, stem, points: 1, options: [
+      { text: `Right ${stem}`, correct: true }, { text: `Wrong ${stem}`, correct: false }] })
+  }
+
+  await signIn(page, '/sponsor/', funded.email)
+  await expect(page).not.toHaveURL(/\/login/)
+  await page.goto(`/sponsor/quizzes/${quizId}`)
+  // A new quiz shuffles its questions (A2-14).
+  await expect(page.getByRole('switch', { name: 'Shuffle the questions' })).toBeChecked()
+  await page.getByTestId('tab-questions').click()
+  await expect(page.getByTestId('question')).toHaveCount(4)
+  /** Selects the questions of these numbers and gives them the difficulty, from the bulk actions. */
+  const setLevel = async (numbers: number[], level: string) => {
+    for (const n of numbers) await page.getByRole('checkbox', { name: `Select question ${n}` }).click()
+    await page.getByTestId('bank-difficulty').click()
+    const dialog = page.getByTestId('bank-difficulty-dialog')
+    await dialog.getByRole('combobox', { name: 'Difficulty' }).click()
+    await page.getByRole('option', { name: level }).click()
+    await dialog.getByTestId('bank-difficulty-save').click()
+    await expect(page.getByTestId('bank-selection')).toBeHidden()
+  }
+  await setLevel([1, 2], 'Easy')
+  await setLevel([3, 4], 'Hard')
+  await expect(page.getByTestId('question').first().getByTestId('question-difficulty-badge')).toHaveText('Easy')
+  // The list filtered by difficulty: none is left without one.
+  await page.getByRole('combobox', { name: 'Difficulty' }).click()
+  await page.getByRole('option', { name: 'Not set' }).click()
+  await expect(page.getByTestId('questions-no-match')).toBeVisible()
+  await expectAccessible(page, 'question difficulties')
+
+  await run(request, funded.token, 'QB_QUIZ_PUBLISH_VERSION', { quizId })
+  const [version] = await query(request, funded.token, 'qb.sponsor.quiz-versions', { quizId })
+  expect(Number(version.easyCount)).toBe(2)
+  expect(Number(version.hardCount)).toBe(2)
+  const now = Date.now()
+  const saved = await run(request, funded.token, 'QB_PUBLICATION_SAVE', { versionId: version.versionId,
+    name: unique('One of each '), regions: ['GLOBAL'], startAt: new Date(now - 60_000).toISOString(),
+    endAt: new Date(now + 7 * 86_400_000).toISOString(), passScore: 2, pickByDifficulty: { EASY: 1, HARD: 1 },
+    budgetCap: 500, maxWinners: 5, tiers: [{ fromScore: 0, toScore: 1, reward: 0 },
+      { fromScore: 2, toScore: 2, reward: 10 }] })
+  expect(saved.problems).toEqual([])
+  expect(saved.fullScore).toBe(2)
+  const publicationId = saved.publicationId as string
+  await run(request, funded.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
+  await decideReview(request, funded.token, publicationId, 'APPROVE')
+  await page.goto(`/sponsor/publications/${publicationId}`)
+  await expect(page.getByTestId('summary-by-difficulty')).toContainText('Easy 1 · Hard 1')
+  await expect(page.getByTestId('summary-question-order')).toContainText('Shuffled for each Taker')
+
+  // The Taker gets one easy and one hard question, numbered 1 and 2, and full marks pay the top tier.
+  const taker = await takerInJapan(request, 'Levi')
+  const started = await run(request, taker.token, 'QB_ATTEMPT_START', { publicationId })
+  const questions = started.questions as { no: number; stem: string; options: { no: number; text: string }[] }[]
+  expect(questions.map((q) => q.no)).toEqual([1, 2])
+  expect(questions.filter((q) => q.stem.startsWith('Easy'))).toHaveLength(1)
+  expect(questions.filter((q) => q.stem.startsWith('Hard'))).toHaveLength(1)
+  const result = await run(request, taker.token, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, publicationId,
+    answers: questions.map((q) => ({ questionNo: q.no,
+      selected: q.options.filter((o) => o.text.startsWith('Right')).map((o) => o.no) })) })
+  expect(result.score).toBe(2)
+  expect(result.rewardStatus).toBe('PAID')
 })

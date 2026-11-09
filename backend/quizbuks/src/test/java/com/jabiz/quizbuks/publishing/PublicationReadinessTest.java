@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -233,6 +234,45 @@ class PublicationReadinessTest {
             .containsExactly(PublishingCodes.PICK_SURVEY);
         assertThat(PublicationReadiness.pickProblems(null, quiz())).isEmpty();
         assertThat(PublicationReadiness.pickProblems(1, null)).isEmpty();
+    }
+
+    /** F-S7: the version of {@link #equalPoints()} with each question's difficulty (null: none). */
+    private static QuizSnapshot graded(String... levels) {
+        List<QuizSnapshot.Question> questions = new java.util.ArrayList<>();
+        for (QuizSnapshot.Question q : equalPoints().questions()) {
+            questions.add(new QuizSnapshot.Question(q.no(), q.stem(), q.image(), q.points(), q.options(), null,
+                levels[q.no() - 1]));
+        }
+        return new QuizSnapshot("Graded", null, null, 300, false, List.of(), questions);
+    }
+
+    /** F-S7 (§2): a draw by difficulty needs every question to have one and each level enough questions. */
+    @Test
+    void aDrawByDifficultyNeedsEnoughOfEachLevelAndEveryQuestionGraded() {
+        QuizSnapshot version = graded("EASY", "EASY", "HARD");
+        assertThat(PublicationReadiness.difficultyProblems(Map.of("EASY", 1, "HARD", 1), version)).isEmpty();
+        assertThat(PublicationReadiness.difficultyProblems(Map.of("HARD", 2), version))
+            .extracting(Violation::field, Violation::ruleCode)
+            .containsExactly(tuple("pickByDifficulty.HARD", PublishingCodes.PICK_DIFFICULTY_SHORT));
+        assertThat(PublicationReadiness.difficultyProblems(Map.of("EASY", 1), graded("EASY", null, "HARD")))
+            .extracting(Violation::ruleCode).containsExactly(PublishingCodes.PICK_DIFFICULTY_UNSET);
+        assertThat(PublicationReadiness.difficultyProblems(Map.of("TRICKY", 1), version))
+            .extracting(Violation::ruleCode).containsExactly(PublishingCodes.PICK_DIFFICULTY_INVALID);
+        assertThat(PublicationReadiness.difficultyProblems(Map.of("EASY", -1), version))
+            .extracting(Violation::ruleCode).containsExactly(PublishingCodes.PICK_DIFFICULTY_INVALID);
+        assertThat(PublicationReadiness.difficultyProblems(Map.of("EASY", 1), survey()))
+            .extracting(Violation::ruleCode).containsExactly(PublishingCodes.PICK_SURVEY);
+        assertThat(PublicationReadiness.difficultyProblems(Map.of(), version)).isEmpty();
+        // In the whole check, with the pick's count their sum; the full score is k times the points.
+        PublicationReadiness.Draft draft = new PublicationReadiness.Draft(VERSION, "Graded", "GLOBAL",
+            NOW.plus(Duration.ofDays(1)), NOW.plus(Duration.ofDays(8)), 300, 2, BigDecimal.valueOf(10_000), 50,
+            RewardMethod.PLATFORM, null, Audience.PUBLIC, null, null, false, null, 2, null,
+            Map.of("EASY", 1, "HARD", 1));
+        List<TierCoverage.Tier> tiers = List.of(new TierCoverage.Tier(0, 1, BigDecimal.ZERO),
+            new TierCoverage.Tier(2, 2, BigDecimal.TEN));
+        assertThat(PublicationReadiness.check(draft, tiers, version, NOW)).isEmpty();
+        assertThat(PublicationReadiness.check(draft, tiers, graded("EASY", "EASY", null), NOW))
+            .extracting(Violation::ruleCode).contains(PublishingCodes.PICK_DIFFICULTY_UNSET);
     }
 
     /** F-S6: a version larger than one attempt holds must be drawn from, and no pick is larger than one attempt. */

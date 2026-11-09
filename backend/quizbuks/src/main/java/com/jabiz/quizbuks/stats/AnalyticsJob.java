@@ -284,7 +284,8 @@ public final class AnalyticsJob {
             Object questionNo = column(row, "questionNo");
             if (questionNo != null) {
                 version.questions().put((int) number(questionNo), new QuestionTotals.Count(
-                    number(column(row, "qCompletions")), number(column(row, "qCorrect"))));
+                    number(column(row, "qCompletions")), number(column(row, "qCorrect")),
+                    number(column(row, "qDrawn"))));
             }
         }
         return reads;
@@ -522,6 +523,7 @@ public final class AnalyticsJob {
             Map<String, Object> values = new LinkedHashMap<>();
             values.put("completions", count.completions());
             values.put("correct", count.correct());
+            values.put("drawn", count.drawn());
             values.put("basedOn", version.attempts());
             values.put("shownAt", at);
             if (row == null) {
@@ -534,6 +536,7 @@ public final class AnalyticsJob {
                 written++;
             } else if (number(column(row, "completions")) != count.completions()
                 || number(column(row, "correct")) != count.correct()
+                || number(column(row, "drawn")) != count.drawn()
                 || number(column(row, "basedOn")) != version.attempts()) {
                 ctx.changes().update(QbAnalytics.QUESTION_STAT, text(column(row, "statId")),
                     number(column(row, "version")), values);

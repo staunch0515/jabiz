@@ -170,6 +170,8 @@ function PublicationView({ detail, stale, onStale }: {
         ...publication,
         quizTitle: version?.title ?? null,
         questionCount: version?.questionCount ?? null,
+        // F-S7: whether the version shuffles its questions (unknown while it is read: not shown).
+        shuffled: version?.shuffled,
         tiers,
         conditions: conditions.data,
       }} />

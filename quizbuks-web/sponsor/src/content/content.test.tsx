@@ -60,7 +60,8 @@ interface Server {
 function bankOf(questions: Record<string, unknown>[], options: Record<string, unknown>[]) {
   return [...questions].sort((a, b) => Number(a.seq) - Number(b.seq)).map((q, i) => ({
     questionId: q.questionId, questionNo: i + 1, stem: q.stem, image: q.image, points: q.points,
-    selection: q.selection ?? null, optionCount: options.filter((o) => o.questionId === q.questionId).length,
+    selection: q.selection ?? null, difficulty: q.difficulty ?? null,
+    optionCount: options.filter((o) => o.questionId === q.questionId).length,
     translated: 0, correctCount: options.filter((o) => o.questionId === q.questionId && o.correct).length,
     optionImages: options.some((o) => o.questionId === q.questionId && o.image) }))
 }
@@ -161,10 +162,11 @@ function server(options: Server = {}) {
           : json(200, { items: [{ ...QUIZ, publicationCount: 0, published: false }], offset: 0, limit: 20, total: 1 })
       case '/api/queries/qb.sponsor.quiz-questions': {
         // As the template answers: searched by text or number, then the page asked for, counted.
-        const params = (body?.params ?? {}) as { q?: string; no?: number }
+        const params = (body?.params ?? {}) as { q?: string; no?: number; difficulty?: string }
         const all = (options.bank ?? bankOf(QUESTIONS, OPTIONS)).filter((row) =>
           (params.q === undefined || String(row.stem ?? '').toLowerCase().includes(params.q.toLowerCase()))
-          && (params.no === undefined || row.questionNo === params.no))
+          && (params.no === undefined || row.questionNo === params.no)
+          && (params.difficulty === undefined || (row.difficulty ?? 'NONE') === params.difficulty))
         const offset = Number(body?.offset ?? 0)
         const limit = Number(body?.limit ?? 50)
         return json(200, { items: all.slice(offset, offset + limit), offset, limit, total: all.length })
@@ -317,7 +319,26 @@ describe('the quiz editor', () => {
     await userEvent.click(screen.getByTestId('heading-save'))
     expect(await screen.findByTestId('heading-saved')).toBeInTheDocument()
     expect(processCalls('QB_QUIZ_SAVE')).toEqual([{ quizId: 'q1', title: 'Coffee 101', intro: 'About **coffee**.',
-      cover: null, timeLimitSec: 300, language: 'zh', baseRevision: 7 }])
+      cover: null, timeLimitSec: 300, language: 'zh', shuffleQuestions: true, baseRevision: 7 }])
+  })
+
+  it('turns the shuffling of the questions off with the heading, a survey not at all (F-S7)', async () => {
+    const { processCalls } = server({ processes: { QB_QUIZ_SAVE: [edit(8)] } })
+    render(<App />)
+    const shuffle = await screen.findByRole('switch', { name: 'Shuffle the questions' })
+    expect(shuffle).toBeChecked()
+    expect(shuffle).toHaveAccessibleDescription(/an order of their own/)
+    await userEvent.click(shuffle)
+    await userEvent.click(screen.getByTestId('heading-save'))
+    expect(await screen.findByTestId('heading-saved')).toBeInTheDocument()
+    expect(processCalls('QB_QUIZ_SAVE')).toEqual([expect.objectContaining({ quizId: 'q1', shuffleQuestions: false })])
+  })
+
+  it('shows no shuffling for a survey', async () => {
+    server({ quiz: { ...QUIZ, kind: 'SURVEY' } })
+    render(<App />)
+    await screen.findByTestId('heading-title')
+    expect(screen.queryByTestId('heading-shuffle')).toBeNull()
   })
 
   it('previews the introduction as Markdown', async () => {
@@ -436,11 +457,29 @@ describe('the quiz editor', () => {
     await userEvent.click(within(dialog).getByTestId('question-save'))
     await waitFor(() => expect(screen.queryByTestId('question-dialog')).toBeNull())
     expect(processCalls('QB_QUESTION_SAVE')).toEqual([{ quizId: 'q1', questionId: null, stem: 'Which is a bean?',
-      image: null, points: 1, baseRevision: 7, options: [
+      image: null, points: 1, baseRevision: 7, difficulty: '', options: [
         { optionId: null, text: 'Rock', image: null, correct: false },
         { optionId: null, text: 'Cocoa', image: null, correct: false },
         { optionId: null, text: 'Coffee', image: null, correct: true },
       ] }])
+  })
+
+  it('saves a question\'s difficulty, chosen in its dialog (F-S7)', async () => {
+    const { processCalls } = server({ processes: { QB_QUESTION_SAVE: [edit(8, { itemId: 'k3' })] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await userEvent.click(await screen.findByTestId('question-add'))
+    const dialog = await screen.findByTestId('question-dialog')
+    await userEvent.type(within(dialog).getByTestId('question-stem'), 'Which is a bean?')
+    await userEvent.type(within(dialog).getAllByTestId('option-text')[0], 'Coffee')
+    await userEvent.type(within(dialog).getAllByTestId('option-text')[1], 'Rock')
+    await userEvent.click(within(dialog).getAllByTestId('option-correct')[0])
+    expect(within(dialog).getByRole('combobox', { name: 'Difficulty' })).toHaveTextContent('Not set')
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Difficulty' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Medium' }))
+    await userEvent.click(within(dialog).getByTestId('question-save'))
+    await waitFor(() => expect(screen.queryByTestId('question-dialog')).toBeNull())
+    expect(processCalls('QB_QUESTION_SAVE')).toEqual([expect.objectContaining({ difficulty: 'MEDIUM' })])
   })
 
   it('asks a survey\'s question for single or multiple choice, without points or correct options (Q12)', async () => {
@@ -1277,6 +1316,40 @@ describe('the question bank (F-S6b)', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }))
     expect(screen.getByTestId('bank-delete')).toBeInTheDocument()
     expect(screen.queryByTestId('bank-points')).toBeNull()
+    // F-S7: nor difficulty: a survey is never drawn by it.
+    expect(screen.queryByTestId('bank-difficulty')).toBeNull()
+    expect(screen.queryByTestId('questions-difficulty-filter')).toBeNull()
+  })
+
+  it('sets the selected questions\' difficulty, shows it on the rows and filters the list by it (F-S7)', async () => {
+    const bank = [
+      { questionId: 'd1', questionNo: 1, stem: 'Easy one?', image: null, points: 1, selection: null, difficulty: 'EASY',
+        optionCount: 2, translated: 0, correctCount: 1, optionImages: false },
+      { questionId: 'd2', questionNo: 2, stem: 'No level?', image: null, points: 1, selection: null, difficulty: null,
+        optionCount: 2, translated: 0, correctCount: 1, optionImages: false },
+    ]
+    const { processCalls, posted } = server({ bank, processes: { QB_QUESTION_DIFFICULTY_SET: [edit(8)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    const rows = await screen.findAllByTestId('question')
+    expect(within(rows[0]).getByTestId('question-difficulty-badge')).toHaveTextContent('Easy')
+    expect(within(rows[1]).queryByTestId('question-difficulty-badge')).toBeNull()
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Difficulty' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Not set' }))
+    await waitFor(() => expect(screen.getAllByTestId('question')).toHaveLength(1))
+    expect(queryCalls(posted).at(-1)).toMatchObject({ params: { quizId: 'q1', difficulty: 'NONE' } })
+    expect(screen.getByTestId('questions-found')).toHaveTextContent('1')
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }))
+    await userEvent.click(screen.getByTestId('bank-difficulty'))
+    const dialog = await screen.findByTestId('bank-difficulty-dialog')
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Difficulty' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Hard' }))
+    await userEvent.click(within(dialog).getByTestId('bank-difficulty-save'))
+    await waitFor(() => expect(processCalls('QB_QUESTION_DIFFICULTY_SET')).toEqual([{ quizId: 'q1',
+      questionIds: ['d2'], difficulty: 'HARD', baseRevision: 7 }]))
+    await waitFor(() => expect(screen.queryByTestId('bank-selection')).toBeNull())
   })
 
   const FILE = {

@@ -165,6 +165,11 @@
 - **抽题**（Q81，`publishing.PublicationReadiness.pickProblems` / `fullScore`、`play.QuestionPick`、`QuizSnapshot.subset`，`docs/quizbuks/plans/Q81-question-pick.md`）：发布的 `pickCount` 让每个答题者只答版本的 k 题（1 ≤ k < n，空 = 全考；只允许每题同分的版本，满分 = k × 每题分，问卷不抽；复制随发布、审批内容含它、卡片冻结它）。
   开始时 `QuestionPick.pick`（HMAC 种子同选项打乱，`qb.question-pick`）取 k 题、保留题序，记在会话 `questionSet`（敏感）；**会话的快照只经 `PlaySteps.forAttempt` / `subset`**（先 `QuizSnapshots.in` 再 `subset`：译文键是版本题号），开始、继续、提交、超时、结果都用它，不自己按 `questionSet` 过滤。
   **答题人看到的题号是位置 1..k**（`QuestionView.no`、提交与结果输出的 `no`；App 发回的 `questionNo` 就是位置），存储的 `result` 行记版本题号（统计的键）。题目统计每题按被抽到的完成数计，`AnalyticsJob.showQuestions` 逐题以最小分组发表。版本切换的新版本须能承接 k（`QB_PUBLICATION_SWITCH_PICK`）。店面的活动没有这个设置，卡片 `pickCount` 为空即全考。语句数不变。
+- **题目乱序与难度**（F-S7，`play.QuestionOrder`、`QuestionPick.set`、`content.QuestionDifficulty`，`docs/quizbuks/plans/impl/F-S7.md`）：Quiz 的 `shuffleQuestions` 缺省开（A2-14，已有的也开），问卷不乱序；
+  快照只在固定顺序时写 `"questionOrder":"fixed"`、只在设了时写题目的 `difficulty`，**没有这一项的快照按乱序处理**，已有版本的哈希不变（新的快照键一律"只写非缺省值"）。
+  开始时只经 `QuestionPick.set`：先抽（`pickByDifficulty` 每档在该档中抽，否则 `pickCount`），再以 HMAC 种子（`qb.question-order`）排列；乱序即写 `questionSet`（顺序即答题顺序），不乱序且不抽题时为空。
+  难度只有三档（改档位改枚举，名称在消息 `qb.difficulty.<档位>`）；按难度抽题时卡片的 `pickCount` 仍是总数 k（首页与公开页照旧"从 n 题中随机 k 题"），规则 `QB_PUBLICATION_PICK_DIFFICULTY_*`。
+  测试与场景中新建的 Quiz 显式 `shuffleQuestions: false`（只在专门的测试中乱序），以免题序随种子变化。题目统计的 `observedDifficulty` 是按正确率算的，`difficulty` 是设定的。
 - **商家自己的邮件服务器**（包 `mailserver`，`docs/quizbuks/plans/Q29-merchant-mail-server.md`，平台 D56）：实体 `QbSponsorMailServer`（每个商家一行）只经 `QB_MAIL_SERVER_SET`（平台步骤 `SealSecret` 密封密码，阻塞步骤 `TestMailServer` 用平台的 `MailSenders` 检查设置并给商家自己的地址发测试邮件，结果写 `verifiedAt` / `lastError`）与 `QB_MAIL_SERVER_REMOVE` 写入；
   平台的 `MailSenderSource` Bean（`MailServerConfig`）只交出验证过的行。邀请只经 `SendMail.via(商家编号)` 发出（`QB_INVITATION_SEND` 没有验证过的服务器即 422 `QB_INVITATION_NO_MAIL_SERVER`；`QB_INVITATION_MAIL` 发现服务器不可用即退回 `ADDED`），绝不回退到平台的服务器；
   平台自己的邮件照旧。模板 `qb.sponsor.mail-server` 从不返回密码。`JABIZ_SEAL_KEY` 是部署必需（入口脚本检查、本机演示自己生成）；`jabiz.mail.senders.trust-all-for-tests` 只在测试配置与 e2e 中开。

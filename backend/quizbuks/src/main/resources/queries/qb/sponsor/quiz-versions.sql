@@ -24,6 +24,10 @@ results:
   mainlandSites: { kind: { type: text, maxLength: 200 } }
   topics:        { from: QbQuizVersion.topics }
   customTopics:  { from: QbQuizVersion.customTopics }
+  shuffled:      { kind: { type: bool } }
+  easyCount:     { kind: { type: numeric, precision: 4, scale: 0 } }
+  mediumCount:   { kind: { type: numeric, precision: 4, scale: 0 } }
+  hardCount:     { kind: { type: numeric, precision: 4, scale: 0 } }
 list:
   filters: [versionNo, versionedAt]
   sorts:   [versionNo, versionedAt]
@@ -59,7 +63,20 @@ SELECT
      WHERE p.{{SysParam.paramKey}} = 'qb.video.mainland-accessible-sites') AS mainlandSites,
     -- F-S9: the version's topics, which its publications inherit (the wizard adds or removes some).
     v.{{QbQuizVersion.topics}}        AS topics,
-    v.{{QbQuizVersion.customTopics}}  AS customTopics
+    v.{{QbQuizVersion.customTopics}}  AS customTopics,
+    -- F-S7: whether its questions are shuffled for each taker (a survey never; a snapshot says "fixed" otherwise), and
+    -- how many of its questions are of each difficulty (the wizard's draw by difficulty; the rest have none).
+    z.{{QbQuiz.kind}} <> 'SURVEY'
+        AND coalesce(CAST(v.{{QbQuizVersion.content}} AS jsonb) ->> 'questionOrder', '') <> 'fixed' AS shuffled,
+    (SELECT CAST(count(*) AS numeric(4, 0))
+     FROM jsonb_array_elements(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'questions') q
+     WHERE q.value ->> 'difficulty' = 'EASY') AS easyCount,
+    (SELECT CAST(count(*) AS numeric(4, 0))
+     FROM jsonb_array_elements(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'questions') q
+     WHERE q.value ->> 'difficulty' = 'MEDIUM') AS mediumCount,
+    (SELECT CAST(count(*) AS numeric(4, 0))
+     FROM jsonb_array_elements(CAST(v.{{QbQuizVersion.content}} AS jsonb) -> 'questions') q
+     WHERE q.value ->> 'difficulty' = 'HARD') AS hardCount
 
 FROM {{QbQuizVersion}} v
 JOIN {{QbQuiz}} z ON z.{{QbQuiz.quizId}} = v.{{QbQuizVersion.quizId}}

@@ -154,12 +154,13 @@ class AnalyticsVersionsMigrationIT {
             UUID.randomUUID().toString(), publication, no, completions, correct);
     }
 
+    /** A row as the job writes it after the migrations (F-S7: with drawn). */
     private static void stat(Connection connection, UUID publication, UUID version, int no, int completions,
         int correct) {
         execute(connection, "INSERT INTO qb_question_stat (stat_id, publication_id, publisher_kind, publisher_id, version_id, "
-            + "question_no, completions, correct, based_on, shown_at, version) VALUES (?, ?, 'SPONSOR', 'sponsor-a', ?, ?, ?, ?, "
-            + "?, now(), 1)", UUID.randomUUID().toString(), publication, version, no, completions, correct,
-            completions);
+            + "question_no, completions, correct, drawn, based_on, shown_at, version) VALUES (?, ?, 'SPONSOR', 'sponsor-a', ?, "
+            + "?, ?, ?, ?, ?, now(), 1)", UUID.randomUUID().toString(), publication, version, no, completions, correct,
+            completions, completions);
     }
 
     private static void execute(Connection connection, String sql, Object... parameters) {

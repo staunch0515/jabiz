@@ -649,6 +649,33 @@ describe('the publication wizard', () => {
     expect(within(summary).getByTestId('summary-pick')).toHaveTextContent('3 of 4 at random')
   })
 
+  it('draws by difficulty: each level\'s count with what the version has, sent and summed (F-S7)', async () => {
+    const { processCalls } = server({ versions: [{ ...VERSIONS[0], questionCount: 6, fullScore: 6, shuffled: true,
+      easyCount: 2, mediumCount: 2, hardCount: 1 }],
+      processes: { QB_PUBLICATION_SAVE: [saved(4, { fullScore: 3 }), saved(5, { fullScore: 3 })] } })
+    window.history.replaceState(null, '', '/publications/p1?step=1')
+    render(<App />)
+    await screen.findByTestId('publication-pick-count')
+    await userEvent.click(screen.getByRole('switch', { name: 'Draw by difficulty' }))
+    expect(screen.queryByTestId('publication-pick-count')).toBeNull()
+    // One of the six has no difficulty: said before submitting.
+    expect(await screen.findByTestId('publication-difficulty-unset')).toHaveTextContent('1 questions')
+    const easy = screen.getByRole('textbox', { name: 'Easy questions' })
+    await waitFor(() => expect(easy).toHaveAccessibleDescription('The version has 2.'))
+    await userEvent.type(easy, '2')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Hard questions' }), '1')
+    expect(screen.getByTestId('publication-quota-total')).toHaveTextContent('3 questions per Taker')
+    await waitFor(() => expect(screen.getByTestId('publication-pass-score')).toHaveAccessibleDescription(/\(3\)/))
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ pickCount: null,
+      pickByDifficulty: { EASY: 2, HARD: 1 } })
+    await userEvent.click(await screen.findByTestId('publication-next'))
+    const summary = await screen.findByTestId('publication-summary')
+    expect(within(summary).getByTestId('summary-by-difficulty')).toHaveTextContent('Easy 2 · Hard 1')
+    expect(within(summary).getByTestId('summary-question-order')).toHaveTextContent('Shuffled for each Taker')
+  })
+
   it('offers the entry fee only while it is offered, sends it and shows it in the summary (Q88b)', async () => {
     server({ processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
     window.history.replaceState(null, '', '/publications/p1?step=1')
@@ -1738,6 +1765,9 @@ describe('copying a publication and moving its settings (Q102)', () => {
       new File([text], 'Coffee-week.publication.json', { type: 'application/json' }))
     const dialog = await screen.findByTestId('publication-import-dialog')
     expect(within(dialog).getByTestId('publication-import-summary')).toHaveTextContent('Coffee week')
+    // F-S7: the settings carry no draw by difficulty; it is set again against the version's questions.
+    expect(within(dialog).getByTestId('publication-import-difficulty')).toHaveTextContent(
+      'set the number of questions of each difficulty again in the draft')
     expect(within(dialog).getByTestId('publication-import-confirm')).toBeDisabled()
     await userEvent.click(within(dialog).getByTestId('transfer-quiz'))
     await userEvent.click(await screen.findByRole('option', { name: /Coffee basics/ }))

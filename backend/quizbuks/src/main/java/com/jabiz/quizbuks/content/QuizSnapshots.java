@@ -32,6 +32,9 @@ public final class QuizSnapshots {
 
     private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() {};
 
+    /** F-S7: the value of {@code questionOrder} of a quiz whose questions are not shuffled. */
+    public static final String FIXED_ORDER = "fixed";
+
     public static Map<String, Object> toMap(QuizSnapshot snapshot) {
         Map<String, Object> map = new LinkedHashMap<>();
         // Q73a: only a snapshot with translations is of the new schema; one without stays as it was, text and hash.
@@ -46,6 +49,11 @@ public final class QuizSnapshots {
         if (snapshot.survey()) {
             map.put("kind", QbContent.KIND_SURVEY);
         }
+        // F-S7: only a quiz set to the fixed order says so; every other snapshot's text and hash stay as they were, and
+        // a snapshot without it is shuffled (A2-14).
+        if (snapshot.fixedOrder()) {
+            map.put("questionOrder", FIXED_ORDER);
+        }
         map.put("materials", materials(snapshot.materials()));
         List<Object> questions = new ArrayList<>();
         for (QuizSnapshot.Question question : snapshot.questions()) {
@@ -56,6 +64,10 @@ public final class QuizSnapshots {
             q.put("points", question.points());
             if (snapshot.survey()) {
                 q.put("selection", question.selection());
+            }
+            // F-S7: only a question with a difficulty says so.
+            if (question.difficulty() != null) {
+                q.put("difficulty", question.difficulty());
             }
             List<Object> options = new ArrayList<>();
             for (QuizSnapshot.Option option : question.options()) {
@@ -151,6 +163,10 @@ public final class QuizSnapshots {
             throw new IllegalArgumentException("Not a kind of quiz: " + kind);
         }
         boolean survey = kind != null;
+        Object order = map.get("questionOrder");
+        if (order != null && !FIXED_ORDER.equals(order)) {
+            throw new IllegalArgumentException("Not an order of questions: " + order);
+        }
         List<QuizSnapshot.Material> materials = materialsOf(map.get("materials"));
         List<QuizSnapshot.Question> questions = new ArrayList<>();
         for (Map<String, ?> q : maps(map.get("questions"))) {
@@ -160,7 +176,8 @@ public final class QuizSnapshots {
                     Boolean.TRUE.equals(o.get("correct"))));
             }
             questions.add(new QuizSnapshot.Question(number(q.get("no")), string(q.get("stem")), uuid(q.get("image")),
-                number(q.get("points")), options, survey ? string(q.get("selection")) : null));
+                number(q.get("points")), options, survey ? string(q.get("selection")) : null,
+                string(q.get("difficulty"))));
         }
         Map<String, QuizSnapshot.Language> translations = new LinkedHashMap<>();
         if (map.get("translations") instanceof Map<?, ?> given) {
@@ -183,7 +200,7 @@ public final class QuizSnapshots {
         Object limit = map.get("timeLimitSec");
         return new QuizSnapshot(string(map.get("title")), string(map.get("intro")), uuid(map.get("cover")),
             limit == null ? null : number(limit), Boolean.TRUE.equals(map.get("aiGenerated")), materials, questions,
-            survey, translations);
+            survey, translations, order != null);
     }
 
     /**
@@ -196,7 +213,8 @@ public final class QuizSnapshots {
         QuizSnapshot.Language t = snapshot.translations().get(language);
         if (t == null) {
             return new QuizSnapshot(snapshot.title(), snapshot.intro(), snapshot.cover(), snapshot.timeLimitSec(),
-                snapshot.aiGenerated(), snapshot.materials(), snapshot.questions(), snapshot.survey());
+                snapshot.aiGenerated(), snapshot.materials(), snapshot.questions(), snapshot.survey(), Map.of(),
+                snapshot.fixedOrder());
         }
         Map<Integer, QuizSnapshot.Material> own = new LinkedHashMap<>();
         t.materials().forEach(material -> own.put(material.no(), material));
@@ -220,12 +238,13 @@ public final class QuizSnapshots {
             questions.add(new QuizSnapshot.Question(q.no(),
                 t.texts().getOrDefault(QuizSnapshot.stemKey(q.no()), q.stem()),
                 t.images().getOrDefault(QuizSnapshot.questionImageKey(q.no()), q.image()), q.points(), options,
-                q.selection()));
+                q.selection(), q.difficulty()));
         }
         return new QuizSnapshot(t.texts().getOrDefault(QuizSnapshot.TITLE_KEY, snapshot.title()),
             t.texts().getOrDefault(QuizSnapshot.INTRO_KEY, snapshot.intro()),
             t.images().getOrDefault(QuizSnapshot.COVER_KEY, snapshot.cover()),
-            snapshot.timeLimitSec(), snapshot.aiGenerated(), materials, questions, snapshot.survey());
+            snapshot.timeLimitSec(), snapshot.aiGenerated(), materials, questions, snapshot.survey(), Map.of(),
+            snapshot.fixedOrder());
     }
 
     /** The canonical text: keys sorted, no white space, absent values written as {@code null}. */

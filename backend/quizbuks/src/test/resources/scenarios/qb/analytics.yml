@@ -360,7 +360,7 @@ steps:
     setClock: 2026-10-01T01:00:00Z
   - actor: { id: "${a}", permissions: [qb.content.write, qb.publication.write] }
     process: QB_QUIZ_SAVE@latest
-    input: { title: World capitals, timeLimitSec: 300 }
+    input: { title: World capitals, timeLimitSec: 300, shuffleQuestions: false }
     save: { quiz: $.quizId }
   - actor: { id: "${a}", permissions: [qb.content.write] }
     process: QB_QUESTION_SAVE@latest

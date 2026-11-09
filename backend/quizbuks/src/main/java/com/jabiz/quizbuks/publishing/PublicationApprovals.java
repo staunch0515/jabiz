@@ -79,6 +79,10 @@ public final class PublicationApprovals {
         if (draft.pickCount() != null) {
             content.put("pickCount", draft.pickCount());
         }
+        // F-S7: likewise only a draw by difficulty names its counts.
+        if (!draft.pickByDifficulty().isEmpty()) {
+            content.put("pickByDifficulty", new LinkedHashMap<>(draft.pickByDifficulty()));
+        }
         // Q88b: likewise only a publication charging an entry fee names it, so earlier hashes stand.
         if (draft.chargesEntryFee()) {
             content.put("entryFee", draft.entryFee());
