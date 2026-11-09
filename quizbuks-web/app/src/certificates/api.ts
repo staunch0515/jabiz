@@ -9,16 +9,13 @@ import { CERTIFICATE_LAYOUT, CERTIFICATE_PROCESS, CERTIFICATE_TEMPLATE } from '.
  * test `certificates.spec.ts` runs them against the server.
  */
 
-/** A certification the caller holds now (`CertificateProcesses.Held`). */
+/** A certificate of the caller's still valid (`CertificateProcesses.Held`; F-S2c2b: no certification is held any more). */
 export interface HeldCertification {
   certification: string
-  /** `PASSED` (a round passed) or `GRANTED` (by hand). */
-  source: string
   heldFrom: string
   heldUntil: string
-  /** The certificate of this holding, once issued. */
-  certificateId: string | null
-  verifyKey: string | null
+  certificateId: string
+  verifyKey: string
   /** Q88a: a sponsor's own certification's names by language and the sponsor's name; null for the catalog's. */
   name?: I18nText | null
   sponsorName?: string | null

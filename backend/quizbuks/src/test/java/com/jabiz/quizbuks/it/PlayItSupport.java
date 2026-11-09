@@ -156,6 +156,16 @@ abstract class PlayItSupport extends AccountItSupport {
         return key;
     }
 
+    /**
+     * F-S2c2b (D1): a revocation of {@code certification} recorded now, as headquarters or an operator wrote one
+     * before the certifications were removed; it ends the certificates whose holding began before it.
+     */
+    void revokedBefore(String userId, String certification) {
+        execute("INSERT INTO qb_certification_record (record_id, user_id, certification, certification_version, kind, "
+            + "reason, actor, owner, at, version) VALUES (?, ?, ?, 1, 'REVOKED', 'Mistake', 'hq', 'direct', ?, 1)",
+            java.util.UUID.randomUUID().toString(), userId, certification, java.sql.Timestamp.from(clock.instant()));
+    }
+
     String taker(String userId) {
         return tokenOf(userId, QbRoles.TAKER);
     }
