@@ -1,6 +1,7 @@
 # The content workshop (docs/quizbuks/plans/Q3-content.md): sponsor A writes a quiz with two materials and three
 # questions, reorders them, saves v1.0, changes a question and saves v1.1; saving again without a change is refused.
 # A copies v1.0 into a new quiz; sponsor B cannot touch A's quiz; A removes the original, and only the copy is listed.
+# F-S6: two questions imported into the copy as a batch, which is undone.
 # No files: a scenario cannot upload one yet (platform gap 2 of the plan); ContentFilesIT covers them.
 name: Writing a quiz
 clock: 2026-10-01T00:00:00Z
@@ -127,6 +128,37 @@ steps:
       query: qb.sponsor.quizzes
       params: { q: CAPITALS (v1 }
       rows: 1
+  - note: F-S6 - two more questions imported into the copy as one batch, then the batch undone.
+    advanceClock: PT5M
+  - process: QB_QUIZ_IMPORT_QUESTIONS@latest
+    input:
+      quizId: "${copy}"
+      document:
+        format: quizbuks.quiz
+        formatVersion: 3
+        quiz: { kind: QUIZ, title: More capitals, timeLimitSec: 300 }
+        materials: []
+        files: {}
+        translations: {}
+        questions:
+          - stem: Capital of Italy?
+            points: 1
+            options: [{ text: Rome, correct: true }, { text: Milan, correct: false }]
+          - stem: Capital of Spain?
+            points: 1
+            options: [{ text: Madrid, correct: true }, { text: Seville, correct: false }]
+    expectOutput: { questions: 2 }
+    save: { batch: $.importId }
+  - expect: { entity: QbQuiz, id: "${copy}", fields: { questionCount: 5 } }
+  - process: QB_QUESTION_IMPORT_UNDO@latest
+    input: { quizId: "${copy}", importId: "${batch}" }
+    expectOutput: { removed: 2 }
+  - expect: { entity: QbQuiz, id: "${copy}", fields: { questionCount: 3 } }
+  - expectError:
+      process: QB_QUESTION_IMPORT_UNDO@latest
+      input: { quizId: "${copy}", importId: "${batch}" }
+      status: 422
+      ruleCode: QB_IMPORT_UNDONE
 snapshot:
   entities: [QbQuiz, QbMaterial, QbQuestion, QbOption, QbQuizVersion, QbVersionFile]
   asOf: end

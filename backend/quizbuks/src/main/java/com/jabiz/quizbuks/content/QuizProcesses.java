@@ -551,15 +551,32 @@ public final class QuizProcesses {
         }
         Map<Integer, Object> questionIds = new LinkedHashMap<>();
         Map<String, Object> optionIds = new LinkedHashMap<>();
-        for (QuizSnapshot.Question question : content.questions()) {
+        insertQuestions(ctx, quizId, owner, content.questions(), 0, question -> Map.of(), questionIds, optionIds);
+        for (String translated : languages) {
+            insertLanguage(ctx, quizId, owner, translated, content, content.translations().get(translated),
+                hashes.getOrDefault(translated, Map.of()), materialIds, questionIds, optionIds);
+        }
+        return quizId;
+    }
+
+    /**
+     * Inserts questions with their options, each at its number plus {@code offset}, with more values of its own
+     * ({@code more}: F-S6's import batch); fills {@code questionIds} (by number) and {@code optionIds} (by
+     * {@link QuizSnapshot#optionTextKey}).
+     */
+    static void insertQuestions(ProcessContext ctx, Object quizId, String owner, List<QuizSnapshot.Question> questions,
+        int offset, java.util.function.Function<QuizSnapshot.Question, Map<String, Object>> more,
+        Map<Integer, Object> questionIds, Map<String, Object> optionIds) {
+        for (QuizSnapshot.Question question : questions) {
             Map<String, Object> q = new LinkedHashMap<>();
             q.put("quizId", quizId);
             q.put("ownerId", owner);
-            q.put("seq", decimal(question.no()));
+            q.put("seq", decimal(question.no() + offset));
             q.put("stem", question.stem());
             q.put("image", question.image());
             q.put("points", decimal(question.points()));
             q.put("selection", question.selection());
+            q.putAll(more.apply(question));
             Object questionId = ctx.changes().insert(QbContent.QUESTION, q);
             for (QuizSnapshot.Option option : question.options()) {
                 Map<String, Object> o = new LinkedHashMap<>();
@@ -575,11 +592,40 @@ public final class QuizProcesses {
             }
             questionIds.put(question.no(), questionId);
         }
-        for (String translated : languages) {
-            insertLanguage(ctx, quizId, owner, translated, content, content.translations().get(translated),
-                hashes.getOrDefault(translated, Map.of()), materialIds, questionIds, optionIds);
+    }
+
+    /**
+     * F-S6: the translations of imported questions and their options only (no title, intro or materials), keyed by
+     * the questions' numbers in the batch.
+     */
+    static void insertQuestionTranslations(ProcessContext ctx, Object quizId, String owner, String language,
+        List<QuizSnapshot.Question> questions, QuizSnapshot.Language t, Map<String, String> hashes,
+        Map<Integer, Object> questionIds, Map<String, Object> optionIds) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        for (QuizSnapshot.Question q : questions) {
+            sources.put(QuizSnapshot.stemKey(q.no()), q.stem());
+            q.options().forEach(o -> sources.put(QuizSnapshot.optionTextKey(q.no(), o.no()), o.text()));
         }
-        return quizId;
+        Map<String, Object[]> rows = new LinkedHashMap<>();
+        t.texts().forEach((key, text) -> rows.put(key, new Object[] {text, null}));
+        t.images().forEach((key, image) -> rows.put(key, new Object[] {null, image}));
+        rows.forEach((key, value) -> {
+            String element = SNAPSHOT_KEY.matcher(key).matches() ? elementKey(key, questionIds, optionIds) : null;
+            if (element == null) {
+                return;
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("quizId", quizId);
+            row.put("ownerId", owner);
+            row.put("language", language);
+            row.put("elementKey", element);
+            row.put("text", value[0]);
+            row.put("image", value[1]);
+            row.put("sourceHash", value[0] == null ? null
+                : hashes.getOrDefault(key, ContentLanguages.sourceHash(sources.get(key))));
+            row.put("translatedBy", ContentLanguages.BY_SPONSOR);
+            ctx.changes().insert(QbContent.TRANSLATION, row);
+        });
     }
 
     private static Object insertMaterial(ProcessContext ctx, Object quizId, String owner,

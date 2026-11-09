@@ -101,6 +101,17 @@
 - AI 出题：`QB_AI_QUESTIONS_REQUEST` 的个数照旧（`AiQuestionsJob.MAX_COUNT`），`QB_AI_ACCEPT` 的累计检查改用参数。规格中的 `qb.ai.questions.batch-size` 即沿用的现有限额，不新建参数。
 - 新建 Quiz 的导入（`QB_QUIZ_IMPORT`）题数也按参数，超过时按批：先建 Quiz 与第一批，其余批次由前端接着以 `QB_QUIZ_IMPORT_QUESTIONS` 导入。
 
+### 3.4a F-S6a2 的实现与计划的差别（2026-11-08）
+
+- **撤销判断"没有改过"**：每道导入的题记下本批加入时的内容哈希（`importHash`：题干、图片、分数、单选多选与各选项的文字、图片、对错，`ImportHash`），撤销时与现在的内容比较，相同才删除。
+  移动与翻译不算修改。不按版本号判断：移动一题、重新编号都会写新版本。
+- **导入到已有的 Quiz 只收题目**：文件中有资料（或翻译中有资料）即拒绝（`QB_IMPORT_QUESTIONS_ONLY`）；题目的种类（测验 / 问卷）与 Quiz 不同即 `QB_QUIZ_KIND_FIXED`；文件的基础语言与 Quiz 不同即 `QB_IMPORT_LANGUAGE`。
+  翻译只导入 Quiz 已有的语言，其余语言在答复的 `skippedLanguages` 中列出。
+- **`QB_QUIZ_IMPORT`（新建 Quiz）照旧一次可以导入到题库上限**，不改为必须分批，以免减少已有的功能；前端可以先以它建 Quiz 与第一批，再以 `QB_QUIZ_IMPORT_QUESTIONS` 接着导入。
+- **`QB_QUIZ_IMPORT_CHECK` 不加 `quizId`**：累计题数由每批导入自己检查（超过即整批拒绝并给出上限），前端对每批照旧先调用检查。
+- **翻译页的分页模板**（`qb.sponsor.quiz-translations`）随 F-S6b 的翻译页一起做。
+- **首页的主题词搜索**（`feed.sql`）等 S2 的 c2a 与 F-S2d 合入后再做；发起方的 Quiz 列表（`qb.sponsor.quizzes`）本 PR 已按主题词名称（三语）与自定义词搜索。
+
 ### 3.5 编辑器（F-S6b）
 
 - 题目列表：

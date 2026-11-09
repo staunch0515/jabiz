@@ -26,6 +26,8 @@ public final class QbContent {
     public static final String VERSION_FILE = "QbVersionFile";
     /** Q73a: the translations of a quiz's text into its other languages ({@link ContentLanguages}). */
     public static final String TRANSLATION = "QbContentTranslation";
+    /** F-S6: a batch of questions imported into a quiz, which can be undone once. */
+    public static final String QUESTION_IMPORT = "QbQuestionImport";
 
     public static final String STATUS_DICTIONARY = "urn:jabiz:dict:quizbuks:quiz-status";
     public static final String KIND_DICTIONARY = "urn:jabiz:dict:quizbuks:material-kind";
@@ -214,6 +216,10 @@ public final class QbContent {
         eb.field("selection", f -> f.physicalColumn("selection").asCode(SELECTION_DICTIONARY, SINGLE, MULTIPLE));
         // The AI job the question was reviewed and accepted from (Q8a, M-20): the review pages mark it.
         eb.field("aiJobId", f -> f.physicalColumn("ai_job_id").immutable(true).processOnly().asText(36));
+        // F-S6: the import batch that added it, and a hash of what it added (the question and its options), so that
+        // undoing the batch removes only the questions not changed since.
+        eb.field("importId", f -> f.physicalColumn("import_id").immutable(true).processOnly().asText(36));
+        eb.field("importHash", f -> f.physicalColumn("import_hash").processOnly().asText(64));
         eb.display("stem");
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
@@ -327,6 +333,31 @@ public final class QbContent {
      * quiz, language and element, which the processes keep under the quiz's lock (a temporal table has no unique
      * constraint on them).
      */
+    /**
+     * F-S6 (docs/quizbuks/plans/impl/F-S6.md §3.4): one batch of {@code QB_QUIZ_IMPORT_QUESTIONS}. Written only by
+     * the import and its undo; {@code undoneAt} set means it was undone and cannot be again.
+     */
+    public static final EntityDefinition QUESTION_IMPORT_ENTITY = EntityDefinition.define(QUESTION_IMPORT, eb -> {
+        eb.physicalTable("qb_question_import");
+        eb.primaryKey("importId");
+        eb.field("importId", f -> f.physicalColumn("import_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:question-import"));
+        eb.field("quizId", f -> f.physicalColumn("quiz_id").immutable(true).required(true).asText(36));
+        eb.field("ownerId", f -> f.physicalColumn("owner_id").immutable(true).required(true).asText(128));
+        eb.field("questionCount", f -> f.physicalColumn("question_count").immutable(true).required(true)
+            .asNumeric(6, 0));
+        eb.field("importedAt", f -> f.physicalColumn("imported_at").immutable(true).required(true)
+            .asTemporal(com.jabiz.entity.TemporalRole.EVENT_TIME));
+        eb.field("undoneAt", f -> f.physicalColumn("undone_at").asTemporal(com.jabiz.entity.TemporalRole.EVENT_TIME));
+        eb.field("removedCount", f -> f.physicalColumn("removed_count").asNumeric(6, 0));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.listView("default", lv -> lv
+            .columns("quizId", "questionCount", "importedAt", "undoneAt", "removedCount")
+            .filters("quizId", "importedAt", "undoneAt")
+            .sorts("importedAt")
+            .defaultSort("importedAt", false));
+    });
+
     public static final EntityDefinition TRANSLATION_ENTITY = EntityDefinition.define(TRANSLATION, eb -> {
         eb.physicalTable("qb_content_translation_version");
         eb.primaryKey("translationId");
