@@ -89,7 +89,9 @@ public final class QbRoles {
         // F-S14: the ledger of shared videos' uses, read only (every sponsor's).
         QbPermissions.ADMIN_VIDEO_USE_READ,
         // F-C10: the AI help's conversations handed to a person (every one), replying and closing them.
-        QbPermissions.ADMIN_HELP);
+        QbPermissions.ADMIN_HELP,
+        // F-C10c: what the help did not solve (the controller, 2026-11-09: content administrators only).
+        QbPermissions.ADMIN_HELP_GAPS);
 
     /**
 

@@ -494,6 +494,8 @@ export const PERMISSION = {
   feeBilling: 'qb.fee.billing',
   /** F-C10: the AI help's conversations handed to a person (content administrators, the operators' members). */
   adminHelp: 'qb.admin.help',
+  /** F-C10c: what the AI help did not solve (headquarters' content administrators only). */
+  adminHelpGaps: 'qb.admin.help.gaps',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */

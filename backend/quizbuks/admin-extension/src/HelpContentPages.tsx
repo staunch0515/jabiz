@@ -35,14 +35,15 @@ import {
   type HelpManual,
 } from './help-api'
 import { when } from './hooks'
+import { currentMonthInJapan } from './account-api'
 import { HELP, PATH } from './ids'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/
 
-/** This month (UTC), `YYYY-MM`. */
+/** The month to start from, `YYYY-MM`: Japan's, the zone of the default deployment; the picker corrects it. */
 function thisMonth(now = new Date()): string {
-  return now.toISOString().slice(0, 7)
+  return currentMonthInJapan(now)
 }
 
 /**

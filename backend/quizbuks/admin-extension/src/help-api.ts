@@ -117,14 +117,9 @@ export interface HelpGap {
   at: string
 }
 
-/** The start of a month (`YYYY-MM`) in the deployment's zone is the server's; the page sends the UTC month's bounds. */
-export function monthBounds(month: string): { from: string; to: string } {
-  const [y, m] = month.split('-').map(Number)
-  return { from: new Date(Date.UTC(y, m - 1, 1)).toISOString(), to: new Date(Date.UTC(y, m, 1)).toISOString() }
-}
-
+/** The month (`YYYY-MM`) is the deployment's accounting zone's (`jabiz.fiscal-year-zone`); the server splits by it. */
 export async function readHelpGaps(month: string): Promise<HelpGap[]> {
-  const page = await runQuery<Row>(HELP.gaps, { params: monthBounds(month), limit: 500 })
+  const page = await runQuery<Row>(HELP.gaps, { params: { month }, limit: 500 })
   return page.items.map((row) => ({
     rowKey: String(row.rowKey),
     reason: String(row.reason ?? ''),

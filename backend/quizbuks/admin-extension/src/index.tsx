@@ -321,7 +321,7 @@ export default defineExtension({
         { key: 'qb-ai', label: 'menu.ai', path: PATH.ai, icon: Sparkles, permission: PERMISSION.aiRead },
         // F-C10c: what the AI help did not solve (to add to the FAQ and the manuals), and the manuals.
         { key: 'qb-help-gaps', label: 'menu.helpGaps', path: PATH.helpGaps, icon: MessageCircleQuestion,
-          permission: PERMISSION.aiRead },
+          permission: PERMISSION.adminHelpGaps },
         { key: 'qb-help-manuals', label: 'menu.helpManuals', path: PATH.helpManuals, icon: BookOpen,
           permission: PERMISSION.contentWrite },
         // Q47c: the audience rules (content administrators) and every owner's prices (finance).

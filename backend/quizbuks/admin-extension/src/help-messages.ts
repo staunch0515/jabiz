@@ -55,7 +55,7 @@ export const helpMessages = {
     gaps: {
       title: 'Help gaps',
       description: 'What the AI help did not solve in a month: questions whose answer was rated “not solved”, and conversations handed to a person with their first question. Use them to add to the FAQ and the AI help manuals. Who asked is not shown.',
-      month: 'Month (UTC)',
+      month: 'Month (accounting time zone of the deployment)',
       table: 'Questions the AI help did not solve',
       none: 'Nothing for this month.',
       columns: { at: 'When', reason: 'Why', entry: 'From', language: 'Language', page: 'Page', question: 'Question' },
@@ -151,7 +151,7 @@ export const helpMessages = {
     gaps: {
       title: '帮助缺口',
       description: '某月 AI 帮助没有解决的问题：回答被标为"没解决"的提问，以及转人工的对话（附第一个问题）。据此补充 FAQ 与 AI 帮助手册。不显示提问人。',
-      month: '月份（UTC）',
+      month: '月份（按部署的会计时区）',
       table: 'AI 帮助没有解决的问题',
       none: '这个月没有。',
       columns: { at: '时间', reason: '原因', entry: '来自', language: '语言', page: '页面', question: '问题' },
@@ -246,7 +246,7 @@ export const helpMessages = {
     gaps: {
       title: 'ヘルプの不足',
       description: 'ある月に AI ヘルプが解決できなかったもの：回答が「解決しない」と評価された質問と、担当者に引き継がれた会話（最初の質問）。FAQ と AI ヘルプのマニュアルの補充に使います。質問した人は表示しません。',
-      month: '月（UTC）',
+      month: '月（導入先の会計タイムゾーン）',
       table: 'AI ヘルプが解決できなかった質問',
       none: 'この月はありません。',
       columns: { at: '日時', reason: '理由', entry: '種別', language: '言語', page: 'ページ', question: '質問' },

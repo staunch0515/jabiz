@@ -11,7 +11,6 @@ import { expectAccessible } from '@jabiz/admin/testing'
 import AiPage from './AiPage'
 import { HelpGapsPage, HelpManualsPage } from './HelpContentPages'
 import { HelpThreadPage, HelpThreadsPage } from './HelpDeskPages'
-import { monthBounds } from './help-api'
 import { helpMessages } from './help-messages'
 import { HELP } from './ids'
 import { messages } from './messages'
@@ -59,7 +58,7 @@ function thread(over: Row = {}): Row {
 }
 
 beforeEach(() => {
-  server.permissions = new Set(['qb.admin.help', 'qb.admin.ai.read', 'qb.admin.content.write'])
+  server.permissions = new Set(['qb.admin.help', 'qb.admin.help.gaps', 'qb.admin.ai.read', 'qb.admin.content.write'])
   server.threads = [thread(), thread({ threadId: 't2', entry: 'app', name: 'Mei', operatorId: null,
     operatorName: null, waitingFor: 'USER' })]
   server.messages = [
@@ -218,12 +217,15 @@ describe('the help gaps', () => {
     expect(rows[1]).toHaveTextContent('Handed to a person')
     expect(screen.queryByTestId('user-name')).toBeNull()
     expect(server.runQuery).toHaveBeenCalledWith(HELP.gaps, expect.objectContaining({
-      params: { from: '2026-11-01T00:00:00.000Z', to: '2026-12-01T00:00:00.000Z' } }))
+      params: { month: '2026-11' } }))
     await expectAccessible()
   })
 
-  it('turns a month into its bounds, December included', () => {
-    expect(monthBounds('2026-12')).toEqual({ from: '2026-12-01T00:00:00.000Z', to: '2027-01-01T00:00:00.000Z' })
+  it('asks for the month itself: the server splits months by the deployment\'s accounting time zone', async () => {
+    renderAt('/qb/help-gaps?month=2026-12', <Route path="/qb/help-gaps" element={<HelpGapsPage />} />)
+    await screen.findAllByTestId('help-gap')
+    expect(server.runQuery).toHaveBeenLastCalledWith(HELP.gaps, expect.objectContaining({
+      params: { month: '2026-12' } }))
   })
 })
 
