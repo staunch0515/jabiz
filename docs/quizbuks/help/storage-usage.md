@@ -40,7 +40,7 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 **How it is counted**: files count as you uploaded them, without thumbnails or other variants. A file counts once however many places use it (assets, quiz covers and materials, publications), for the account that uploaded it. Links to outside videos such as YouTube take no storage; only their number is counted.
 
-**The free amount**: each Sponsor has 500 MB of storage free of charge. **Nothing is charged in the first launch**: above the free amount you only see a notice; uploads and your content keep working and nothing is refused.
+**The free amount**: each Sponsor has 500 MB of storage free of charge. **Nothing is charged in the first launch**: above free amount you only see a notice; uploads and your content keep working and nothing is refused.
 
 **When you are above it**: the top of the asset library shows a notice, and the first time you go above it you also get a message in your inbox (once for the same crossing; going below and above again sends another).
 
