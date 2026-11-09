@@ -440,7 +440,8 @@ public final class CampaignProcesses {
             (String) values.get("video"), integer(values.get("timeLimitSec")), integer(values.get("passScore")),
             integer(values.get("percent")), questions(values.get("questions")), (String) values.get("publicationId"),
             number(values.get("revision")), instant(values.get("createdAt")), instant(values.get("editedAt")),
-            instant(values.get("publishedAt")), instant(values.get("endedAt")), shuffled(values.get("shuffleQuestions")));
+            instant(values.get("publishedAt")), instant(values.get("endedAt")),
+            shuffled(values.get("shuffleQuestions")));
     }
 
     static int integer(Object value) {
