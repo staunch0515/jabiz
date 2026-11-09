@@ -57,7 +57,7 @@
 - **做法**：`fee.FeeAllocation`（纯 Java）定使用顺序；`QB_FEE_SETTLE`（`subProcessOnly`）在调用方的钱包锁内一条 `QueryEntities.all` 读未到期的赠送、现金笔与两个钱包，分摊、一次 `LEDGER_POST`、写分摊与各笔剩余；`QB_FEE_REFUND`（`subProcessOnly`）在作废的冲正之后按原分摊退回。`QB_FEE_CHARGE` 的预付即扣、`QB_FEE_INVOICE_PAY`、`QB_FEE_SETTLE_ITEM`（提前付清）都调 `QB_FEE_SETTLE`；子流程自己读锁内的行，调用方之后不再写这两个钱包（避免按旧版本更新）。
 - **行为的改变**（§2.d 之内）：预付的费用与账单先用赠送额度、再用现金，账户不够时付一部分（`PARTIAL`），只在一分也付不了时 `QB_FEE_CASH_SHORT`；提前付清仍要求付得起所选的全部（是选择，不是欠款）；`InvoiceOutput` 多 `paidAmount`、`paidNow`、`creditPaid`、`cashPaid`；催款邮件的金额是还欠的部分；文案"现金账户"在付款按钮上改为"平台费账户"。删除的功能：无。
 - **现金笔**：卡充值 `CARD`、银行转账 `BANK`（来源记录为充值）、报名费入账 `OTHER`（来源 `QbEntryFeeSettlement` + 日期）、学分换回 `OTHER`（来源为兑换记录）；买学分按进账先后取，扣回（退款、争议）先取该充值自己的一笔。取用时各笔不够也不拒绝（不因内部记账拒绝学分购买或退款），差异由 `CASH_LOTS` 报出。
-- **迁移**：表、钱包种类、账单 `PARTIAL` 与 `paid_amount`（已付记全额），每个发起方 2160 余额一笔 `OTHER`（`source_entity = 'MIGRATION'`，迁移的 `now()` 只定它在顺序中的位置，注释写明）。定为 `V102`（V99 是 #571，V100、V101 是 S1 的 #573；#578 先绿，总控定）；`FeeAccountMigrationIT` 按版本号前一个迁移取起点，改号时同时改它的 `MIGRATION` 常量。
+- **迁移**：表、钱包种类、账单 `PARTIAL` 与 `paid_amount`（已付记全额），每个发起方 2160 余额一笔 `OTHER`（`source_entity = 'MIGRATION'`，迁移的 `now()` 只定它在顺序中的位置，注释写明）。定为 `V103`（V99 是 #571，V100、V101 是 S1 的 #573，V102 是 S3 的 #581；总控定）；`FeeAccountMigrationIT` 按版本号前一个迁移取起点，改号时同时改它的 `MIGRATION` 常量。
 - **核对与月报**：`qb.system.recon-fee-account`（`FEE_CREDIT`、`CASH_LOTS`、`FEE_PAYMENTS`；F-M1 之前没有分摊的付款及其冲正不核）；`FEES_RECEIVABLE` 按还欠的部分；月报 `FEE_PAID` 认 1130 与 2160 / 2190 的组合，新列 `feeCredit`；余额表、过账检查、分录导出含 2190。
 - **语句数**：`QB_FEE_CHARGE` 的预付多一次读（子流程的 `QueryEntities.all`）与分摊的写入；本应用没有平台费的语句预算测试（`AttemptStatementBudgetIT` 只管答题，答题路径不碰 2160 / 2190，不变）。
 - **页面**：发起方钱包页的"平台费账户"块与账单的"已付"列、部分付款；平台管理系统发起方页的只读分解（财务；运营商以 `qb.operator.fee-*` 模板只读自己的发起方）；财务总览按子账户汇总。

@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FeeAccountMigrationIT {
 
     private static final PostgresTestDatabase DB = PostgresTestDatabase.get();
-    private static final String MIGRATION = "102";
+    private static final String MIGRATION = "103";
 
     private final List<String> schemas = new ArrayList<>();
     private long seq;
