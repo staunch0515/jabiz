@@ -33,6 +33,7 @@ import { CardGrid, Pager, useListView, ViewSwitch } from '../ListView'
 import { CoverPlaceholder } from '../qb/Illustrations'
 import { Thumbnail } from '../content/ContentImage'
 import { ImportSettingsButton } from './PublicationTransfer'
+import { SubmitAllDraftsButton } from './SubmitAllDrafts'
 
 const PAGE_SIZE = 20
 const ALL = 'all'
@@ -231,6 +232,8 @@ export function PublicationListPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <ImportSettingsButton />
+            {/* F-C4: every draft into review, one by one; those refused are listed with the reasons. */}
+            <SubmitAllDraftsButton />
             <Button onClick={() => navigate(publicationPath(NEW_PUBLICATION))} data-testid="new-publication">
               <Plus aria-hidden />
               {t('publishing.list.new')}

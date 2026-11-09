@@ -162,9 +162,12 @@ export async function checkProfileImport(document: Record<string, unknown>): Pro
 
 const KNOWN_POLICIES = new Set<string>([FILE_POLICY.sponsorAvatar, SPONSOR_PAGE.imagePolicy])
 
-/** Uploads the images the plan needs, then imports; a refusal throws and nothing is changed. */
-export async function importProfile(document: Record<string, unknown>, plan: ImportPlan, mailPassword: string,
-  onProgress?: (done: number, total: number) => void): Promise<ImportPlan> {
+/**
+ * Uploads the images the plan needs, each through its policy; their paths with the uploaded ids. F-C4's sponsor
+ * package imports the same profile part through its own import record.
+ */
+export async function uploadProfileImages(document: Record<string, unknown>, plan: ImportPlan,
+  onProgress?: (done: number, total: number) => void): Promise<Record<string, string>> {
   const files = (document.files ?? {}) as Record<string, Partial<PackageFile>>
   const uploaded: Record<string, string> = {}
   let done = 0
@@ -178,6 +181,13 @@ export async function importProfile(document: Record<string, unknown>, plan: Imp
     uploaded[need.path] = fileId
     onProgress?.(++done, plan.files.length)
   }
+  return uploaded
+}
+
+/** Uploads the images the plan needs, then imports; a refusal throws and nothing is changed. */
+export async function importProfile(document: Record<string, unknown>, plan: ImportPlan, mailPassword: string,
+  onProgress?: (done: number, total: number) => void): Promise<ImportPlan> {
+  const uploaded = await uploadProfileImages(document, plan, onProgress)
   const output = await runProcess<{ plan: ImportPlan }>(PROFILE_TRANSFER.import, {
     document: withoutData(document), files: uploaded, mailPassword: mailPassword || null,
   })
