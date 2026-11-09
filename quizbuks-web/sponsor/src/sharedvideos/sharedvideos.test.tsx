@@ -175,6 +175,8 @@ describe('shared videos in the sponsor console (F-S12)', () => {
     await userEvent.click(screen.getByTestId('publication-shared-video-choose'))
     const picker = await screen.findByTestId('shared-video-picker')
     await waitFor(() => expect(within(picker).getAllByTestId('shared-video-option')).toHaveLength(2))
+    // F-C3: the catalog leaves out the Sponsor's own videos, and says so.
+    expect(picker).toHaveTextContent('Your own videos are not listed here')
     await userEvent.type(within(picker).getByTestId('shared-video-search'), 'Dog')
     await waitFor(() => expect(within(picker).getAllByTestId('shared-video-option')).toHaveLength(1))
     expect(queries('qb.sponsor.shared-videos').at(-1)).toEqual(expect.objectContaining({

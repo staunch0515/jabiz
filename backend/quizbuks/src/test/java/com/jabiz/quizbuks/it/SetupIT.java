@@ -347,6 +347,10 @@ class SetupIT extends QbItSupport {
         // F-S9: the limits of topics (ordinary parameters).
         expected.put(QbParams.TOPIC_MAX_PER_QUIZ, "10");
         expected.put(QbParams.TOPIC_CUSTOM_MAX_LENGTH, "30");
+        // F-S6: the question bank's limits (ordinary parameters).
+        expected.put(QbParams.CONTENT_MAX_QUESTIONS, "1000");
+        expected.put(QbParams.PLAY_MAX_PER_ATTEMPT, "100");
+        expected.put(QbParams.CONTENT_IMPORT_BATCH, "200");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // F-S2: the knowledge maps' limits and the review reminder (ordinary).
