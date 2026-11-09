@@ -378,12 +378,37 @@ export function VideoSlot({ id, player, title, mode, publicationId = null, activ
 }
 
 /**
+ * The area a slot's player is kept within (F-S10: the vertical mode's screens): the element around the slot marked
+ * `data-video-area`. The stage lies above the page, so without it the player of a screen moving in or out would cover
+ * what is around the screens while the scroll travels: the mode's header, whose buttons a tap then misses (the tap goes
+ * to the player).
+ */
+const VIDEO_AREA = 'data-video-area'
+
+interface Clip { top: number; right: number; bottom: number; left: number }
+
+interface Placement { top: number; left: number; width: number; height: number; clip: Clip | null }
+
+/** What of the slot's place lies outside its area, from each side; null when the slot has no area. */
+function clipOf(element: HTMLElement, box: DOMRect): Clip | null {
+  const area = element.closest(`[${VIDEO_AREA}]`)?.getBoundingClientRect()
+  if (!area) return null
+  return { top: Math.max(0, area.top - box.top), right: Math.max(0, box.right - area.right),
+    bottom: Math.max(0, box.bottom - area.bottom), left: Math.max(0, area.left - box.left) }
+}
+
+function sameClip(a: Clip | null, b: Clip | null): boolean {
+  return a === b || (!!a && !!b && a.top === b.top && a.right === b.right && a.bottom === b.bottom
+    && a.left === b.left)
+}
+
+/**
  * The stage itself, once in the app's frame: the iframe over the slot's place, followed while the page moves. The
  * frame stays the same element as long as the video does.
  */
 export function VideoStage() {
   const stage = useStage()
-  const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
+  const [rect, setRect] = useState<Placement | null>(null)
   const slot = stage.slot
   useEffect(() => {
     window.addEventListener('message', listen)
@@ -395,21 +420,27 @@ export function VideoStage() {
     const place = () => {
       if (!running) return
       const box = slot.element.getBoundingClientRect()
-      const next = { top: box.top + window.scrollY, left: box.left + window.scrollX, width: box.width,
-        height: box.height }
+      const next: Placement = { top: box.top + window.scrollY, left: box.left + window.scrollX, width: box.width,
+        height: box.height, clip: clipOf(slot.element, box) }
       setRect((current) => (current && current.top === next.top && current.left === next.left
-        && current.width === next.width && current.height === next.height ? current : next))
+        && current.width === next.width && current.height === next.height && sameClip(current.clip, next.clip)
+        ? current : next))
       requestAnimationFrame(place)
     }
     place()
     return () => { running = false }
   }, [slot])
   if (!stage.player || typeof document === 'undefined') return null
-  const visible = !!slot && !!rect
+  // Nothing of the slot's place within its area: the player is not shown (nor touched).
+  const clip = rect?.clip
+  const hidden = !!clip && !!rect && rect.height > 0 && (clip.top + clip.bottom >= rect.height
+    || clip.left + clip.right >= rect.width)
+  const visible = !!slot && !!rect && !hidden
   return createPortal(
     <div data-testid="video-stage" data-mode={slot?.mode}
       style={{ position: 'absolute', top: rect?.top ?? 0, left: rect?.left ?? 0, width: rect?.width ?? 0,
         height: rect?.height ?? 0, visibility: visible ? 'visible' : 'hidden',
+        clipPath: clip ? `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px)` : undefined,
         // F-S10: above the vertical mode's screens (which lie over the home at z-index 50).
         zIndex: slot?.mode === 'short' ? 55 : 5 }}>
       {videoKind(stage.player) === 'file' ? (

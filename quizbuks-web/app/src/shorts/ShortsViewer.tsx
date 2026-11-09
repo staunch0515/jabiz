@@ -182,8 +182,10 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer, menu, exposure
           <ChevronDown aria-hidden />
         </Button>
       </div>
+      {/* The app's player stays within the screens (the stage's `data-video-area`): a screen's player moving in from
+          above must not cover the header, whose buttons would then miss a tap made while the scroll travels. */}
       <div ref={scroller} className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain"
-        data-testid="shorts-screens">
+        data-testid="shorts-screens" data-video-area="">
         {cards.map((card, at) => {
           const shown = at === index
           // F-S15: a video file that failed to play shows its cover, and a link to the file.
