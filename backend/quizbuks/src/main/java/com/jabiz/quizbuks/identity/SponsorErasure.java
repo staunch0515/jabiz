@@ -133,6 +133,10 @@ public class SponsorErasure {
                     ErasedEntity.keep(QbBenefits.PURCHASE, "suspendedBy", "suspendReason"),
                     ErasedEntity.keep(QbBenefits.INCIDENT, "recordedBy", "note"),
                     ErasedEntity.keep(QbBenefits.INCIDENT, "resolvedBy", "resolution"),
+                    // F-S14: a shared video's use is a record between two sponsors and stays (as a purchase); only the
+                    // free text each side wrote goes: the user's note, the provider's reason for sending it back.
+                    ErasedEntity.keep(com.jabiz.quizbuks.videouse.QbVideoUses.USE, "sponsorId", "note"),
+                    ErasedEntity.keep(com.jabiz.quizbuks.videouse.QbVideoUses.USE, "providerId", "rejectReason"),
                     // The onboarding: tombstoned; the purge overwrites who they are in every version.
                     ErasedEntity.delete(QbAccounts.SPONSOR, "userId", "contactName", "company", "intro", "avatar",
                         "introTranslations"),

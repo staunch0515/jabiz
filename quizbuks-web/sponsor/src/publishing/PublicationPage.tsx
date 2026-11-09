@@ -22,6 +22,7 @@ import { PublicationActions } from './PublicationActions'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
 import { ReferralsSection } from './ReferralsSection'
 import { ExposureSection } from '../exposure/ExposureCounts'
+import { VideoUseSection } from '../videouses/VideoUseSection'
 import '../sharedvideos/messages'
 import { MainlandNotice, PublicationSummary, reachesMainland, StatusBadge, useEndReasonLabel, useVersionOf }
   from './shared'
@@ -185,6 +186,8 @@ function PublicationView({ detail, stale, onStale }: {
       )}
       {/* F-S13: the exposures of another Sponsor's shared video it uses (nothing for its own videos). */}
       {publication.status !== 'DRAFT' && <ExposureSection publicationId={publication.publicationId} />}
+      {/* F-S14: the ledger of that shared video and both sides' figures (nothing for its own videos). */}
+      {publication.status !== 'DRAFT' && <VideoUseSection publicationId={publication.publicationId} />}
       {pooled(publication) && <DigitalPoolSection publicationId={publication.publicationId} status={publication.status}
         mode={poolMode(publication)} />}
       {dates.length > 0 && (
