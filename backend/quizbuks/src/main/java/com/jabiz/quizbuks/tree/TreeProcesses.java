@@ -485,10 +485,24 @@ public final class TreeProcesses {
      * with other parameters): what an operator reads of other graphs is only what its own draft may name.
      */
     private static <I, O> void loadRules(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        loadGraphsInEffect(pb);
+        pb.step("Load the limits", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
+            QbParams.TREE_MAX_NODES, QbParams.TREE_MAX_CONDITIONS, QbParams.TREE_MAX_DEPTH));
+    }
+
+    /**
+     * The graphs in effect the graph may name nodes of, with their nodes' definitions: the rules check a draft against
+     * them, and a version going into effect resolves its references with them (F-S2d). Nothing without a graph.
+     */
+    private static <I, O> void loadGraphsInEffect(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Load the graphs in effect the draft may use", QueryEntities.<ProcessContext>of(
                 QbTrees.defaultDataset(QbTrees.TREE), ctx -> {
                     EntityInstance tree = first(ctx, TREE);
                     List<QueryPredicate> where = new ArrayList<>();
+                    if (tree == null) {
+                        return EntityQuery.builder().where(new QueryPredicate.In("treeId", List.of())).limit(1)
+                            .build();
+                    }
                     where.add(new QueryPredicate.In("status", List.of(QbTrees.ACTIVE)));
                     switch (String.valueOf((Object) tree.get("ownerKind"))) {
                         case QbTrees.SPONSOR -> {
@@ -511,13 +525,14 @@ public final class TreeProcesses {
                 ctx -> EntityQuery.builder().where(new QueryPredicate.In("versionId", otherGraphs(ctx).stream()
                         .map(graph -> graph.get("currentVersionId")).filter(java.util.Objects::nonNull)
                         .map(String::valueOf).map(Object.class::cast).toList()))
-                    .limit(Integer.MAX_VALUE).build(), GRAPH_DEFS))
-            .step("Load the limits", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-                QbParams.TREE_MAX_NODES, QbParams.TREE_MAX_CONDITIONS, QbParams.TREE_MAX_DEPTH));
+                    .limit(Integer.MAX_VALUE).build(), GRAPH_DEFS));
     }
 
     /** The other graphs {@link #loadRules} found (never the draft's own: its draft replaces it). */
     private static List<EntityInstance> otherGraphs(ProcessContext ctx) {
+        if (first(ctx, TREE) == null) {
+            return List.of();
+        }
         String own = String.valueOf(first(ctx, TREE).id());
         return list(ctx, GRAPHS).stream().filter(graph -> !own.equals(String.valueOf(graph.id()))).toList();
     }
@@ -889,6 +904,8 @@ public final class TreeProcesses {
         values.put("approvalRequestId", requestId);
         ctx.changes().update(QbTrees.VERSION, version.id(), version.version(), values);
         Map<String, TreeCondition> conditions = conditionsOf(defsOf(ctx, version));
+        // F-S2d: each node a condition names, as the node of one graph (unresolved: kept bare, reported daily).
+        Map<String, String> graphOf = TreeRules.resolve(graph(tree, conditions), graphs(ctx));
         Map<String, EntityInstance> rows = new HashMap<>();
         list(ctx, NODES).forEach(node -> rows.put(String.valueOf((Object) node.get("nodeId")), node));
         long versionNo = AccountEditing.number(version.get("versionNo"));
@@ -896,7 +913,8 @@ public final class TreeProcesses {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("active", true);
             List<String> beforeAnswer = TreeRules.beforeAnswer(node.getValue());
-            row.put("beforeAnswer", beforeAnswer.isEmpty() ? null : json(beforeAnswer));
+            row.put("beforeAnswer", beforeAnswer.isEmpty() ? null : json(beforeAnswer.stream()
+                .map(ref -> graphOf.containsKey(ref) ? graphOf.get(ref) + "/" + ref : ref).toList()));
             row.put("bindable", TreeRules.asksForAPass(node.getValue()));
             row.put("condition", json(node.getValue().toMap()));
             EntityInstance existing = rows.remove(node.getKey());
@@ -916,7 +934,7 @@ public final class TreeProcesses {
                     "bindable", false));
             }
         }
-        writeRefs(ctx, String.valueOf(tree.id()), conditions);
+        writeRefs(ctx, String.valueOf(tree.id()), conditions, graphOf);
         long revision = touch(ctx, Map.of("currentVersionId", String.valueOf(version.id())));
         ctx.put(OUTPUT, output(ctx, version, QbTrees.IN_EFFECT, revision, ApprovalOutcome.Status.APPROVED.name(),
             requestId));
@@ -926,20 +944,27 @@ public final class TreeProcesses {
      * F-S2b1: the references of the conditions in effect, rewritten to match them (one row for each node a condition
      * names): lighting a node evaluates the nodes whose condition names it.
      */
-    static void writeRefs(ProcessContext ctx, String treeId, Map<String, TreeCondition> conditions) {
-        Set<String> wanted = new LinkedHashSet<>();
+    static void writeRefs(ProcessContext ctx, String treeId, Map<String, TreeCondition> conditions,
+        Map<String, String> graphOf) {
+        // node, referenced node, its graph (empty: none resolved); a reference resolved anew is written anew.
+        Set<List<String>> wanted = new LinkedHashSet<>();
         conditions.forEach((node, condition) -> TreeRules.references(condition).forEach(ref ->
-            wanted.add(node + " " + ref)));
+            wanted.add(List.of(node, ref, graphOf.getOrDefault(ref, "")))));
         for (EntityInstance row : list(ctx, REFS)) {
-            String key = row.get("nodeId") + " " + row.get("refNodeId");
+            Object refTree = row.get("refTreeId");
+            List<String> key = List.of(String.valueOf((Object) row.get("nodeId")),
+                String.valueOf((Object) row.get("refNodeId")), refTree == null ? "" : String.valueOf(refTree));
             if (!wanted.remove(key)) {
                 ctx.changes().delete(QbTrees.NODE_REF, row.id(), row.version());
             }
         }
-        for (String key : wanted) {
-            int space = key.indexOf(' ');
-            ctx.changes().insert(QbTrees.NODE_REF, Map.of("treeId", treeId, "nodeId", key.substring(0, space),
-                "refNodeId", key.substring(space + 1)));
+        for (List<String> key : wanted) {
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("treeId", treeId);
+            values.put("nodeId", key.get(0));
+            values.put("refNodeId", key.get(1));
+            values.put("refTreeId", key.get(2).isEmpty() ? null : key.get(2));
+            ctx.changes().insert(QbTrees.NODE_REF, values);
         }
     }
 
@@ -1087,8 +1112,10 @@ public final class TreeProcesses {
                         QueryEntities.query(ApprovalEntities.DECISION_DATASET, ctx -> EntityQuery.builder()
                             .where(new QueryPredicate.In("requestId", ownRequest(ctx)
                                 ? AccountEditing.uuids(result(ctx).requestId()) : new ArrayList<>()))
-                            .limit(Integer.MAX_VALUE).build(), DECISIONS)))
-                    .step("Check the approval", RequireApproval.<ProcessContext>when(
+                            .limit(Integer.MAX_VALUE).build(), DECISIONS)));
+                // F-S2d: a version going into effect resolves its references with the graphs in effect.
+                loadGraphsInEffect(pb);
+                pb.step("Check the approval", RequireApproval.<ProcessContext>when(
                         ctx -> boundRequest(ctx) && ApprovalEntities.APPROVED.equals(result(ctx).status()),
                         TreeApprovals.SUBJECT, ctx -> storedCase(ctx).preparedBy(result(ctx).preparerId()),
                         APPROVAL))
@@ -1236,7 +1263,7 @@ public final class TreeProcesses {
         return JSON.readValue(json, new TypeReference<Map<String, Object>>() {});
     }
 
-    /** A node row's {@code beforeAnswer}: the node ids as a JSON array (none: empty). */
+    /** A node row's {@code beforeAnswer}: its entries ({@code <graph>/<node>}, F-S2d), from a JSON array (none: empty). */
     public static List<String> nodeIds(Object json) {
         return json == null ? List.of() : List.copyOf(JSON.readValue(String.valueOf(json),
             new TypeReference<List<String>>() {}));

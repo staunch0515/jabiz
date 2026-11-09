@@ -10,11 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@jabiz/ui'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleCheck } from 'lucide-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronLeft, ChevronRight, CircleCheck } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { Question } from '../content/api'
+import { searchQuestions } from '../content/api'
+import { QUESTION_PAGE } from '../content/limits'
+import { QUIZZES_QUERY } from '../content/paths'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { generalProblem } from '../qb/problems'
@@ -34,9 +36,10 @@ const linksQuery = (quizId: string) => ['qb', 'quiz-products', quizId] as const
 /**
  * The products one of the sponsor's quizzes shows (Q60b): up to {@link MAX_QUIZ_PRODUCTS} on its page, and one under
  * a question of its result, by the question's number. Saved at once for the whole quiz (`QB_QUIZ_PRODUCTS_SET`), not
- * part of its versions: its publications show them without publishing again.
+ * part of its versions: its publications show them without publishing again. F-S6d: the questions are listed a page at
+ * a time (`qb.sponsor.quiz-questions`); the choices of every page are kept and saved together.
  */
-export function QuizProductsPanel({ quizId, questions }: { quizId: string; questions: Question[] }) {
+export function QuizProductsPanel({ quizId }: { quizId: string }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const products = useQuery({ queryKey: PRODUCTS_QUERY, queryFn: readMyProducts })
@@ -53,15 +56,14 @@ export function QuizProductsPanel({ quizId, questions }: { quizId: string; quest
       </div>
       {products.data.length === 0
         ? <p className="text-muted-foreground text-sm" data-testid="quiz-products-none">{t('products.quiz.noProducts')}</p>
-        : <LinksForm key={JSON.stringify(links.data)} quizId={quizId} questions={questions} products={products.data}
+        : <LinksForm key={JSON.stringify(links.data)} quizId={quizId} products={products.data}
           links={links.data} done={done} setDone={setDone} />}
     </section>
   )
 }
 
-function LinksForm({ quizId, questions, products, links, done, setDone }: {
+function LinksForm({ quizId, products, links, done, setDone }: {
   quizId: string
-  questions: Question[]
   products: MyProduct[]
   links: QuizLink[]
   done: boolean
@@ -77,9 +79,17 @@ function LinksForm({ quizId, questions, products, links, done, setDone }: {
   })
   const [byQuestion, setByQuestion] = useState<Record<number, string>>(() => Object.fromEntries(
     links.filter((link) => link.questionNo > 0).map((link) => [link.questionNo, link.productId])))
-  // The draft's questions, and any number a link holds beyond them (a question removed since): shown so it can go.
-  const linked = links.filter((link) => link.questionNo > questions.length).map((link) => link.questionNo)
-  const rows = Math.max(questions.length, ...linked, 0)
+  const [page, setPage] = useState(0)
+  const list = useQuery({
+    queryKey: [...QUIZZES_QUERY, 'questions', quizId, '', page],
+    queryFn: () => searchQuestions({ quizId, offset: page * QUESTION_PAGE, limit: QUESTION_PAGE }),
+    placeholderData: keepPreviousData,
+  })
+  const total = list.data?.total ?? 0
+  const pages = Math.max(1, Math.ceil(total / QUESTION_PAGE))
+  // Any number a link holds beyond the questions (a question removed since): shown so it can go.
+  const gone = list.data ? links.filter((link) => link.questionNo > total).map((link) => link.questionNo)
+    .sort((a, b) => a - b) : []
   const save = useMutation({
     mutationFn: () => setQuizProducts(quizId, slots.filter((slot) => slot !== NONE),
       Object.entries(byQuestion).filter(([, product]) => product !== NONE)
@@ -119,15 +129,15 @@ function LinksForm({ quizId, questions, products, links, done, setDone }: {
           </div>
         ))}
       </fieldset>
-      {rows > 0 && (
+      {(total > 0 || gone.length > 0) && (
         <fieldset className="flex flex-col gap-2" aria-describedby={`${id}-question-hint`}>
           <legend className="mb-1 font-medium">{t('products.quiz.questionProducts')}</legend>
           <p id={`${id}-question-hint`} className="text-muted-foreground text-sm">{t('products.quiz.questionHint')}</p>
-          {Array.from({ length: rows }, (_, i) => {
-            const no = i + 1
-            const question: Question | undefined = questions[i]
+          {[...(list.data?.items ?? []).map((row) => ({ no: row.no, key: row.questionId, stem: row.stem })),
+            ...gone.map((no) => ({ no, key: `no-${no}`, stem: null, gone: true }))].map((row) => {
+            const no = row.no
             return (
-              <div key={question?.questionId ?? `no-${no}`} className="flex flex-wrap items-center gap-3">
+              <div key={row.key} className="flex flex-wrap items-center gap-3">
                 <Label htmlFor={`${id}-q-${no}`} className="w-24 font-normal">{t('products.quiz.question', { n: no })}</Label>
                 <Select value={byQuestion[no] ?? NONE} onValueChange={(value) => {
                   setDone(false)
@@ -138,12 +148,30 @@ function LinksForm({ quizId, questions, products, links, done, setDone }: {
                   </SelectTrigger>
                   {options}
                 </Select>
-                {question?.stem && <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm">{question.stem}</span>}
-                {!question && <span className="text-muted-foreground text-sm" data-testid={`question-product-${no}-gone`}>
+                {row.stem && <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm">{row.stem}</span>}
+                {'gone' in row && <span className="text-muted-foreground text-sm" data-testid={`question-product-${no}-gone`}>
                   {t('products.quiz.gone')}</span>}
               </div>
             )
           })}
+          {pages > 1 && (
+            <nav aria-label={t('bank.pages')} className="flex flex-wrap items-center gap-2"
+              data-testid="question-products-pages">
+              <Button type="button" variant="outline" size="sm" disabled={page === 0}
+                data-testid="question-products-previous" onClick={() => setPage((p) => Math.max(0, p - 1))}>
+                <ChevronLeft aria-hidden />
+                {t('bank.previous')}
+              </Button>
+              <span className="text-sm" aria-live="polite" data-testid="question-products-page">
+                {t('bank.pageOf', { page: page + 1, pages })}
+              </span>
+              <Button type="button" variant="outline" size="sm" disabled={page + 1 >= pages}
+                data-testid="question-products-next" onClick={() => setPage((p) => Math.min(pages - 1, p + 1))}>
+                {t('bank.next')}
+                <ChevronRight aria-hidden />
+              </Button>
+            </nav>
+          )}
         </fieldset>
       )}
       {general && (

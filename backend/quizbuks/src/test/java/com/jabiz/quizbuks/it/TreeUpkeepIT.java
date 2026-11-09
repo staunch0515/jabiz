@@ -1,7 +1,6 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
-import com.jabiz.quizbuks.play.PlayCodes;
 import com.jabiz.quizbuks.tree.TreeCodes;
 import com.jabiz.quizbuks.tree.TreeLighting;
 import com.jabiz.quizbuks.tree.TreeProcesses;
@@ -100,9 +99,8 @@ class TreeUpkeepIT extends TreeItSupport {
         assertThat(query("SELECT reason, requested_by FROM qb_tree_lit_revocation_version WHERE lit_id = ?",
             String.valueOf(litId)).getFirst()).containsEntry("reason", "Answers shared in a group chat");
         assertThat(messageKinds(userId)).contains("TREE_LIT_REVOKED");
-        // The advanced node is locked again for them.
-        assertThat(codes(refused("QB_ATTEMPT_START", taker(userId), body("publicationId", advanced), 422)))
-            .containsExactly(PlayCodes.TREE_NOT_UNLOCKED);
+        // The advanced node is locked again for them: its publication is as if it did not exist (F-S2d).
+        refused("QB_ATTEMPT_START", taker(userId), body("publicationId", advanced), 404);
         assertThat(codes(refused(TreeRevocations.REVOKE, first, body("litId", litId, "reason", "Again"), 422)))
             .containsExactly(TreeCodes.ALREADY_REVOKED);
 

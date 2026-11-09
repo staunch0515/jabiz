@@ -3,7 +3,7 @@ id: qb.app.inbox-unread
 description: >-
   How many messages and announcements of the taker's inbox are unread (the navigation's badge, U-61), each counted to
   at most 99
-entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbPublicationCard, QbPublicationOwner, QbBlock]
+entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbPublicationCard, QbPublicationOwner, QbBlock, QbAttempt, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   QbMessage: urn:jabiz:dataset:me:QbMessage
   QbBroadcastFeed: urn:jabiz:dataset:default:QbBroadcastFeed
@@ -15,6 +15,10 @@ datasets:
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
   QbBlock: urn:jabiz:dataset:me:QbBlock
+  QbAttempt: urn:jabiz:dataset:taker:QbAttempt
+  QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
+  QbTreeLit: urn:jabiz:dataset:me:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:me:QbTreeLitRevocation
 params:
   withOldest: { kind: { type: bool }, description: "Also when the oldest unread broadcast was sent (QB_MESSAGE_MARK's read-through mark)" }
   languages: { kind: { type: text, maxLength: 20 }, description: "Only the sponsors' notices about publications in these languages (Q59b), comma-separated (ja, zh, en): the taker's switches, or their interface language; all when not given" }
@@ -82,6 +86,24 @@ unread_feed AS NOT MATERIALIZED (
                        OR (bl.{{QbBlock.kind}} = 'SPONSOR' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.publisherId}})
                        OR (bl.{{QbBlock.kind}} = 'PROVIDER'
                            AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.videoProviderId}}))))
+          -- F-S2d: a sponsor's notice or a promotion about a publication bound to a node whose prerequisites the taker
+          -- has not all lit is not counted, unless they have an attempt of it (tree.TreeLights#visible; qb.app.inbox
+          -- writes the same); a system announcement naming one is, as for blocks (F-S8).
+          AND (c.{{QbPublicationCard.publicationId}} IS NULL
+               OR (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR' AND f.{{QbBroadcastFeed.type}} <> 'PROMO')
+               OR c.{{QbPublicationCard.treeNodeId}} IS NULL
+               OR EXISTS (SELECT 1 FROM {{QbAttempt}} ma WHERE ma.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.publicationId}})
+               OR NOT EXISTS (
+                   SELECT 1 FROM {{QbTreeNode}} tn
+                   WHERE tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}}
+                     AND tn.{{QbTreeNode.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
+                     AND EXISTS (
+                         SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
+                         WHERE NOT EXISTS (
+                             SELECT 1 FROM {{QbTreeLit}} tl
+                             WHERE tl.{{QbTreeLit.treeId}} = split_part(ba.node, '/', 1) AND tl.{{QbTreeLit.nodeId}} = split_part(ba.node, '/', 2)
+                               AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
+                                               WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text))))))
 )
 SELECT
     (SELECT count(*) FROM (

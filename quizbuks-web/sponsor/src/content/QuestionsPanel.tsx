@@ -41,10 +41,12 @@ import {
   questionAt,
   readBankLimits,
   readQuestion,
+  readQuestionSummary,
   saveQuestion,
   searchQuestions,
   setQuestionPoints,
   type Question,
+  type QuestionSummary,
   type QuestionRow,
   type Selection,
 } from './api'
@@ -328,31 +330,34 @@ function ChoiceHint({ correct }: { correct: number }) {
   )
 }
 
-/** Q78: the summary line over the list: how many, the full score, how many of each choice, how many unmarked. */
-function QuestionsSummary({ questions, count, max, survey, onUnmarked }: { questions: Question[]
+/**
+ * Q78: the summary line over the list: how many, the full score, how many of each choice, how many unmarked (F-S6d:
+ * counted by the server, `qb.sponsor.quiz-question-summary`, so the editor reads no question for it).
+ */
+function QuestionsSummary({ summary, count, max, survey, onUnmarked }: { summary: QuestionSummary | undefined
   /** The quiz's questions (F-S6: counted by the server, not by what the page holds). */
   count: number
   /** The bank's limit (F-S6), once read. */
   max: number | undefined
   survey: boolean
-  onUnmarked: (questionId: string) => void }) {
+  onUnmarked: (questionId: string, no: number) => void }) {
   const { t } = useTranslation(SPONSOR)
-  const correctOf = (q: Question) => q.options.filter((o) => o.correct).length
-  const single = questions.filter((q) => choiceOf(correctOf(q)) === 'SINGLE').length
-  const multiple = questions.filter((q) => choiceOf(correctOf(q)) === 'MULTIPLE').length
-  const unmarked = questions.filter((q) => correctOf(q) === 0)
-  const score = questions.reduce((sum, q) => sum + q.points, 0)
+  const first = summary?.firstUnmarked
   return (
     <p className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-testid="questions-summary">
       <span data-testid="questions-count">
         {max ? t('questions.summary.count', { count, max: max.toLocaleString() }) : t('bank.countOnly', { count })}
       </span>
-      {!survey && <span data-testid="questions-score">{t('questions.summary.score', { score })}</span>}
-      {!survey && <span>{t('questions.summary.choices', { single, multiple })}</span>}
-      {!survey && unmarked.length > 0 && (
+      {!survey && summary && (
+        <span data-testid="questions-score">{t('questions.summary.score', { score: summary.fullScore })}</span>
+      )}
+      {!survey && summary && (
+        <span>{t('questions.summary.choices', { single: summary.single, multiple: summary.multiple })}</span>
+      )}
+      {!survey && summary && summary.unmarked > 0 && first && (
         <Button type="button" variant="link" size="sm" className="text-destructive h-auto p-0"
-          data-testid="questions-unmarked" onClick={() => onUnmarked(unmarked[0].questionId)}>
-          {t('questions.summary.unmarked', { count: unmarked.length })}
+          data-testid="questions-unmarked" onClick={() => onUnmarked(first.questionId, first.no)}>
+          {t('questions.summary.unmarked', { count: summary.unmarked })}
         </Button>
       )}
     </p>
@@ -450,13 +455,12 @@ function PointsDialog({ count, onClose, onSave, error, pending }: { count: numbe
 /** The key of one question read on its own (F-S6b), under the quizzes' key so that an edit reads it again. */
 const questionQuery = (questionId: string) => [...QUIZZES_QUERY, 'question', questionId] as const
 
-/** An open question's options: those the draft holds, or (F-S6b) read for it alone. */
-function QuestionDetail({ row, full }: { row: QuestionRow; full: Question | undefined }) {
+/** An open question's options, read for it alone when it opens (F-S6b; F-S6d: the editor's draft has none). */
+function QuestionDetail({ row }: { row: QuestionRow }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
-  const read = useQuery({ queryKey: questionQuery(row.questionId), queryFn: () => readQuestion(row.questionId),
-    enabled: !full })
-  const question = full ?? read.data ?? null
+  const read = useQuery({ queryKey: questionQuery(row.questionId), queryFn: () => readQuestion(row.questionId) })
+  const question = read.data ?? null
   if (!question) {
     return read.isError ? <p className="text-destructive text-sm">{tQb('failed')}</p>
       : <p role="status" className="text-muted-foreground text-sm">{t('bank.loading')}</p>
@@ -498,14 +502,12 @@ function QuestionDetail({ row, full }: { row: QuestionRow; full: Question | unde
  * survey's (Q12) say single or multiple choice instead of points and correct options. One question is open at a
  * time; the one just added, changed or moved opens.
  */
-export function QuestionsPanel({ questions, survey = false, language, count = questions.length }: {
-  /** The draft's questions (for the summary and the rows' details; the list itself reads its page). */
-  questions: Question[]
+export function QuestionsPanel({ survey = false, language, count: quizCount }: {
   survey?: boolean
   /** The quiz's language (an image saved to the asset library is in it, F-C1). */
   language?: ContentLanguage
-  /** The quiz's questions, as the server counts them. */
-  count?: number }) {
+  /** The quiz's questions as its row counts them, until the summary is read. */
+  count: number }) {
   const { t } = useTranslation(SPONSOR)
   const scoredBadge = useScoredBadge()
   const editing = useEditing()
@@ -532,7 +534,10 @@ export function QuestionsPanel({ questions, survey = false, language, count = qu
   const rows = list.data?.items ?? []
   const total = list.data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / QUESTION_PAGE))
-  const byId = new Map(questions.map((q) => [q.questionId, q]))
+  // F-S6d: the summary line from the server; the editor holds no question of its own.
+  const summary = useQuery({ queryKey: [...QUIZZES_QUERY, 'question-summary', editing.quizId],
+    queryFn: () => readQuestionSummary(editing.quizId) })
+  const count = summary.data?.questionCount ?? quizCount
   const max = limits.data?.maxQuestions
   const full = max !== undefined && count >= max
 
@@ -595,9 +600,9 @@ export function QuestionsPanel({ questions, survey = false, language, count = qu
       (error: unknown) => failedRemoval(editing, error),
     )
 
-  /** Opens a question: its page (unsearched), the row, scrolled to. */
-  const open = (questionId: string) => {
-    const index = questions.findIndex((q) => q.questionId === questionId)
+  /** Opens a question at its place (from 1): its page (unsearched), the row, scrolled to. */
+  const open = (questionId: string, no: number) => {
+    const index = no - 1
     if (index >= 0 && (search || Math.floor(index / QUESTION_PAGE) !== page)) {
       setSearch('')
       setTyped('')
@@ -607,8 +612,7 @@ export function QuestionsPanel({ questions, survey = false, language, count = qu
     requestAnimationFrame(() => rowRefs.current.get(questionId)?.scrollIntoView?.({ block: 'nearest' }))
   }
   const edit = async (row: QuestionRow) => {
-    const question = byId.get(row.questionId)
-      ?? await queryClient.fetchQuery({ queryKey: questionQuery(row.questionId), queryFn: () => readQuestion(row.questionId) })
+    const question = await queryClient.fetchQuery({ queryKey: questionQuery(row.questionId), queryFn: () => readQuestion(row.questionId) })
     if (question) setEditingQuestion({ question, number: row.no })
   }
   const toggle = (questionId: string, on: boolean) => setSelected((ids) => on
@@ -640,7 +644,7 @@ export function QuestionsPanel({ questions, survey = false, language, count = qu
             </Button>
           </div>
         </div>
-        {count > 0 && <QuestionsSummary questions={questions} count={count} max={max} survey={survey} onUnmarked={open} />}
+        {count > 0 && <QuestionsSummary summary={summary.data} count={count} max={max} survey={survey} onUnmarked={open} />}
       </div>
       <p role="status" className="sr-only">{announcement}</p>
       <ProblemList problems={formProblem(move.error, [])} />
@@ -730,12 +734,10 @@ export function QuestionsPanel({ questions, survey = false, language, count = qu
               )}
               <ol className="flex flex-col gap-2" data-testid="questions-list">
                 {rows.map((row) => {
-                  const question = byId.get(row.questionId)
-                  const correct = question ? question.options.filter((o) => o.correct).length : null
+                  const correct = row.correctCount
                   const badge = survey ? row.selection ? t(`questions.selections.${row.selection}`)
                     : t('questions.noSelection')
-                    : correct === null ? t('questions.pointsValue', { points: row.points })
-                      : scoredBadge(correct, row.points)
+                    : scoredBadge(correct, row.points)
                   const isOpen = expanded === row.questionId
                   const isSelected = selected.includes(row.questionId)
                   return (
@@ -766,7 +768,7 @@ export function QuestionsPanel({ questions, survey = false, language, count = qu
                               {!survey && correct === 0 && row.optionCount > 0 && (
                                 <Badge variant="destructive" data-testid="question-unmarked">{t('questions.unmarked')}</Badge>
                               )}
-                              {(row.image || question?.options.some((o) => o.image)) && (
+                              {(row.image || row.optionImages) && (
                                 <ImageIcon aria-label={t('questions.hasImage')} className="text-muted-foreground size-4" />
                               )}
                             </>
@@ -825,7 +827,7 @@ export function QuestionsPanel({ questions, survey = false, language, count = qu
                                 } />
                             </>
                           }>
-                          <QuestionDetail row={row} full={question} />
+                          <QuestionDetail row={row} />
                         </Disclosure>
                       </div>
                     </li>
@@ -862,7 +864,7 @@ export function QuestionsPanel({ questions, survey = false, language, count = qu
               setTyped('')
               setPage(Math.floor(count / QUESTION_PAGE))
               setExpanded(id)
-            } else open(id)
+            } else open(id, editingQuestion.number)
           }} onOpenChange={(open) => {
             if (!open) setEditingQuestion(null)
           }} />

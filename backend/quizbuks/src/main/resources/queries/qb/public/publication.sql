@@ -6,10 +6,11 @@ description: >-
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
-entities: [QbRegionException, QbPublicationCard, QbSponsor, QbSponsorPage]
+entities: [QbRegionException, QbTreeNode, QbPublicationCard, QbSponsor, QbSponsorPage]
 datasets:
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbPublicationCard: urn:jabiz:dataset:public:QbPublicationCard
+  QbTreeNode: urn:jabiz:dataset:public:QbTreeNode
   QbSponsor: urn:jabiz:dataset:public:QbSponsor
   QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
 params:
@@ -85,3 +86,10 @@ FROM {{QbPublicationCard}} c
 LEFT JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = c.{{QbPublicationCard.publisherId}}
 LEFT JOIN {{QbSponsorPage}} pg ON pg.{{QbSponsorPage.userId}} = sp.{{QbSponsor.userId}}
 WHERE c.{{QbPublicationCard.publicationId}} = :publicationId
+  -- F-S2d: nobody is signed in, so a publication bound to a node with prerequisites (nodes to be lit before
+  -- answering) is not shown; one bound to a node without them is (tree.TreeLights#visible, for a person).
+  AND (c.{{QbPublicationCard.treeNodeId}} IS NULL OR NOT EXISTS (
+      SELECT 1 FROM {{QbTreeNode}} tn
+      WHERE tn.{{QbTreeNode.treeId}} = c.{{QbPublicationCard.treeId}}
+        AND tn.{{QbTreeNode.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
+        AND jsonb_array_length(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) > 0))

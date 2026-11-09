@@ -1,10 +1,11 @@
 import { formatDateTime } from '@jabiz/client'
 import { MarkdownView, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@jabiz/ui'
-import { Award, BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Store, Target, Ticket, Timer, TrendingUp, Trophy, type LucideIcon } from 'lucide-react'
+import { Award, BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Network, Store, Target, Ticket, Timer, TrendingUp, Trophy, type LucideIcon } from 'lucide-react'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { certificationName } from '../certifications'
 import { FileImage } from '../FileImage'
+import { pickText } from '../legal'
 import { QB } from '../messages'
 import { sponsorPagePath } from '../page'
 import { Link } from '../router'
@@ -162,6 +163,7 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   const gives = p.certification
     ? certificationName(p.certification, null, i18n.language, tQb) : null
   const rewardOnly = !gives || Number(p.maxReward ?? 0) > 0
+  const nodeName = p.nodeName ? pickText(p.nodeName, i18n.language).text : ''
   const survey = p.kind === 'SURVEY'
   const MethodIcon = REWARD_METHOD_ICONS[p.rewardMethod]
   const prize = p.rewardMethod === 'OFFLINE_REDEEM' || p.rewardMethod === 'DIGITAL_PRIZE'
@@ -241,6 +243,10 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
         <Fact icon={Trophy} label={survey ? t('detail.surveyReward') : prize ? t('detail.prizeValue') : t('detail.maxReward')}
           value={draft ? '–' : formatKudos(p.maxReward)} />
         {gives && <Fact icon={Award} label={t('detail.gives')} testId="detail-certification" value={gives} />}
+        {/* F-S2d: the node passing lights, and whether the caller has lit it. */}
+        {nodeName ? <Fact icon={Network} label={t('detail.node')} testId="detail-node"
+          value={<span data-testid="detail-node-state" data-lit={p.nodeLit ? 'true' : 'false'}>
+            {t(p.nodeLit ? 'detail.nodeLit' : 'detail.nodeOpen', { name: nodeName })}</span>} /> : null}
         {/* Q88b: what starting costs, paid once from the transferable Kudos and not refunded. */}
         {p.entryFee ? <Fact icon={Ticket} label={t('detail.entryFee')} testId="detail-entry-fee"
           value={formatKudos(p.entryFee)} /> : null}

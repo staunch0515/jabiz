@@ -31,6 +31,8 @@ public final class QbTrees {
 
     /** A person's own lit records and revocations ({@code me:}). */
     public static final String MY_LITS = "urn:jabiz:dataset:me:" + LIT;
+    /** F-S2d: the nodes as the public pages read them (whether a node has prerequisites), templates only. */
+    public static final String PUBLIC_NODES = "urn:jabiz:dataset:public:" + NODE;
     public static final String MY_REVOCATIONS = "urn:jabiz:dataset:me:" + REVOCATION;
 
     public static String defaultDataset(String entity) {
@@ -175,7 +177,8 @@ public final class QbTrees {
             .asNumeric(6, 0));
         // Whether the version in effect has the node (a removed node keeps its row: lit records name it).
         eb.field("active", f -> f.physicalColumn("active").required(true).processOnly().asBool());
-        // The version in effect's nodes to be lit before answering, as a JSON array (read by a start, F-S2b).
+        // The version in effect's nodes to be lit before answering, as a JSON array of "<graph>/<node>" (F-S2d; read by a
+        // start and the templates of what a person sees, F-S2b); an entry naming no single graph is a bare node id.
         eb.field("beforeAnswer", f -> f.physicalColumn("before_answer").processOnly().asText(null, true));
         // Whether the version in effect's condition asks for a pass: only then may publications be bound to it.
         eb.field("bindable", f -> f.physicalColumn("bindable").required(true).processOnly().asBool());
@@ -222,11 +225,14 @@ public final class QbTrees {
         // A node the condition names, in this graph or another it may name.
         eb.field("refNodeId", f -> f.physicalColumn("ref_node_id").immutable(true).required(true)
             .asText(ID_LENGTH));
+        // F-S2d: the graph of that node (ids are unique within a graph only): this one when it has the node, else the one
+        // other graph it may name that has it; none when no single graph has it (the daily check reports it).
+        eb.field("refTreeId", f -> f.physicalColumn("ref_tree_id").immutable(true).asText(ID_LENGTH));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_tree_node_ref", "treeId", "nodeId", "refNodeId");
         eb.listView("default", lv -> lv
-            .columns("treeId", "nodeId", "refNodeId")
-            .filters("treeId", "nodeId", "refNodeId")
+            .columns("treeId", "nodeId", "refNodeId", "refTreeId")
+            .filters("treeId", "nodeId", "refNodeId", "refTreeId")
             .sorts("nodeId")
             .defaultSort("nodeId", true));
     });

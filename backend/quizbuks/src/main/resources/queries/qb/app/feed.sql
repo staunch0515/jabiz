@@ -267,7 +267,7 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
             SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
             WHERE NOT EXISTS (
                 SELECT 1 FROM {{QbTreeLit}} tl
-                WHERE tl.{{QbTreeLit.nodeId}} = ba.node
+                WHERE tl.{{QbTreeLit.treeId}} = split_part(ba.node, '/', 1) AND tl.{{QbTreeLit.nodeId}} = split_part(ba.node, '/', 2)
                   AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} tr
                                   WHERE tr.{{QbTreeLitRevocation.litId}} = CAST(tl.{{QbTreeLit.litId}} AS text))))))
   -- F-S11: from mainland China (the page passes what the platform's clientRegion() said; the start checks the address

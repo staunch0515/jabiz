@@ -8,17 +8,21 @@ import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.tree.QbTrees;
 import com.jabiz.quizbuks.tree.TreeLights;
 import com.jabiz.quizbuks.tree.TreeProcesses;
+import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.EntityNotFoundException;
 import com.jabiz.runtime.process.steps.QueryEntities;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
- * The start of a publication bound to a knowledge graph's node (F-S2b1): the node must be in effect, and the nodes its
- * condition wants lit before answering must be lit by the caller now ({@link TreeLights}). The node's row (with what
+ * The start, the view and the referral links of a publication bound to a knowledge graph's node (F-S2b1, F-S2d): the publication is seen
+ * only by whoever has lit, now, the nodes its node's condition wants lit before answering (or has an attempt of it),
+ * and started only while the node is in effect ({@link TreeLights}). The node's row (with what
  * it wants lit before answering, written when its version went into effect) and the caller's lit records and
  * revocations are read in one statement before the lock, only for a bound card: an ordinary publication's queries are
  * empty and send nothing, so its statement budget is unchanged.
@@ -33,7 +37,7 @@ public final class TreeGate {
 
     private TreeGate() {}
 
-    static <I, O> void load(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
+    public static <I, O> void load(ProcessDefinitionBuilder<I, O, ProcessContext> pb,
         Function<ProcessContext, EntityInstance> card) {
         pb.step("Load the node and the caller's lit nodes", QueryEntities.<ProcessContext>all(
             QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE), ctx -> {
@@ -50,10 +54,19 @@ public final class TreeGate {
                 .limit(MAX_ROWS).build(), REVOCATIONS)));
     }
 
-    /** Refuses the start: the node is out of effect (422 {@code QB_TREE_NODE_CLOSED}), or not unlocked. */
-    static void refuse(ProcessContext ctx, String field, EntityInstance card) {
+    /**
+     * Refuses the start (F-S2d): a publication whose node's prerequisites the caller has not all lit is as if it did
+     * not exist (404, like one that does not), unless they have an attempt of it; then the node out of effect (422
+     * {@code QB_TREE_NODE_CLOSED}), or a prerequisite not lit (422 {@code QB_TREE_NOT_UNLOCKED}, the caller having an
+     * attempt of it, which the start refuses anyway).
+     */
+    static void refuse(ProcessContext ctx, String field, EntityInstance card, boolean attempted) {
         if (bound(card) == null) {
             return;
+        }
+        if (!visible(ctx, card, attempted)) {
+            throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + card.get("publicationId")
+                + " not found");
         }
         EntityInstance node = PlaySteps.first(ctx, NODE);
         if (node == null || !Boolean.TRUE.equals(node.get("active"))) {
@@ -71,10 +84,24 @@ public final class TreeGate {
         }
     }
 
+    /**
+     * Whether the caller sees the card (F-S2d, {@link TreeLights#visible}), from what {@link #load} read: a card bound
+     * to no node always; a node not found hides nothing.
+     */
+    public static boolean visible(ProcessContext ctx, EntityInstance card, boolean attempted) {
+        if (bound(card) == null) {
+            return true;
+        }
+        EntityInstance node = PlaySteps.first(ctx, NODE);
+        return node == null || TreeLights.visible(TreeProcesses.nodeIds(node.get("beforeAnswer")), litNow(ctx),
+            attempted);
+    }
+
     /** The nodes the caller has lit now, from what was read. */
-    static java.util.Set<String> litNow(ProcessContext ctx) {
+    static Set<TreeLights.NodeRef> litNow(ProcessContext ctx) {
         return TreeLights.litNow(PlaySteps.list(ctx, LITS).stream().map(row -> new TreeLights.Lit(
-                String.valueOf(row.id()), String.valueOf((Object) row.get("nodeId")))).toList(),
+                String.valueOf(row.id()), String.valueOf((Object) row.get("treeId")),
+                String.valueOf((Object) row.get("nodeId")))).toList(),
             PlaySteps.list(ctx, REVOCATIONS).stream().map(row -> String.valueOf((Object) row.get("litId"))).toList());
     }
 
