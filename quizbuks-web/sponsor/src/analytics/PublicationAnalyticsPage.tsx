@@ -301,7 +301,13 @@ function QuestionsSection({ questions, o, picker }: {
                 <TableHead scope="col">{t('analytics.questions.correctRate')}</TableHead>
                 <TableHead scope="col">{t('analytics.questions.difficulty')}</TableHead>
                 <TableHead scope="col">{t('analytics.questions.setDifficulty')}</TableHead>
-                <TableHead scope="col" className="text-right">{t('analytics.questions.drawn')}</TableHead>
+                <TableHead scope="col" className="text-right">
+                  {t('analytics.questions.drawn')}
+                  {/* F-S7 (controller 2026-11-09): only finished attempts are counted. */}
+                  <span className="text-muted-foreground block text-xs font-normal" data-testid="question-drawn-note">
+                    {t('analytics.questions.drawnNote')}
+                  </span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -346,6 +352,11 @@ function QuestionsSection({ questions, o, picker }: {
         </ScrollRegion>
       )}
       <p className="text-muted-foreground text-xs">{t('analytics.questions.difficultyHint')}</p>
+      {questions.length > 0 && (
+        <p className="text-muted-foreground text-xs" data-testid="question-drawn-hint">
+          {t('analytics.questions.drawnHint')}
+        </p>
+      )}
       <ByDifficulty questions={questions} />
     </section>
   )

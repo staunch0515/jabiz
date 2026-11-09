@@ -514,11 +514,17 @@ steps:
     process: QB_ATTEMPT_START@latest
     input: { publicationId: "${all}" }
     expectOutput: { attemptId: "${u1all}", resumed: true }
-  - note: U1 answers the first option of every place; the result names the version's numbers.
+  - note: U1 and U2 answer the first option of every place; each result names the version's numbers.
     advanceClock: PT1M
   - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
     process: QB_ATTEMPT_SUBMIT@latest
     input: { attemptId: "${u1all}", publicationId: "${all}", answers: [{ questionNo: 1, selected: [1] },
+      { questionNo: 2, selected: [1] }, { questionNo: 3, selected: [1] }, { questionNo: 4, selected: [1] },
+      { questionNo: 5, selected: [1] }, { questionNo: 6, selected: [1] }] }
+    expectOutput: { status: SUBMITTED }
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${u2all}", publicationId: "${all}", answers: [{ questionNo: 1, selected: [1] },
       { questionNo: 2, selected: [1] }, { questionNo: 3, selected: [1] }, { questionNo: 4, selected: [1] },
       { questionNo: 5, selected: [1] }, { questionNo: 6, selected: [1] }] }
     expectOutput: { status: SUBMITTED }
@@ -535,3 +541,8 @@ steps:
     input: { attemptId: "${u3drawn}", publicationId: "${drawn}", answers: [{ questionNo: 1, selected: [1] },
       { questionNo: 2, selected: [1] }, { questionNo: 3, selected: [1] }] }
     expectOutput: { status: SUBMITTED }
+snapshot:
+  # The attempts' results list the questions in the order each was given (the version's numbers); the versions say
+  # nothing of the order (shuffled, the default) and the card freezes the draw by difficulty.
+  entities: [QbAttempt, QbQuizVersion, QbPublicationCard]
+  asOf: end

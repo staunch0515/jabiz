@@ -1765,6 +1765,9 @@ describe('copying a publication and moving its settings (Q102)', () => {
       new File([text], 'Coffee-week.publication.json', { type: 'application/json' }))
     const dialog = await screen.findByTestId('publication-import-dialog')
     expect(within(dialog).getByTestId('publication-import-summary')).toHaveTextContent('Coffee week')
+    // F-S7: the settings carry no draw by difficulty; it is set again against the version's questions.
+    expect(within(dialog).getByTestId('publication-import-difficulty')).toHaveTextContent(
+      'set the number of questions of each difficulty again in the draft')
     expect(within(dialog).getByTestId('publication-import-confirm')).toBeDisabled()
     await userEvent.click(within(dialog).getByTestId('transfer-quiz'))
     await userEvent.click(await screen.findByRole('option', { name: /Coffee basics/ }))

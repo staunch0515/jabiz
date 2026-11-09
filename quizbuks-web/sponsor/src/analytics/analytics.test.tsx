@@ -320,6 +320,10 @@ describe('a publication\'s analytics', () => {
     // (both hard ones: 12 right of 20 answers).
     expect(within(rows[0]).getByTestId('question-set-difficulty')).toHaveTextContent('Hard')
     expect(within(rows[1]).getByTestId('question-drawn')).toHaveTextContent('12')
+    // Counted only once an attempt is finished (controller 2026-11-09), said next to the column and below the table.
+    expect(screen.getByTestId('question-drawn-note')).toHaveTextContent('counted once finished')
+    expect(screen.getByTestId('question-drawn-hint')).toHaveTextContent(
+      'An attempt still in progress counts only once it is finished.')
     expect(screen.getAllByTestId('by-difficulty').map((item) => item.dataset.difficulty)).toEqual(['HARD'])
     expect(screen.getByTestId('by-difficulty')).toHaveTextContent('Hard: 60% (2 questions)')
     expect(screen.queryByTestId('questions-suppressed')).toBeNull()
