@@ -27,7 +27,12 @@ export function InboxItemPage({ kind, id }: { kind: ItemKind; id: string }) {
   const marked = useRef(false)
   const read = useMutation({
     mutationFn: () => markItem(kind, id, 'READ'),
-    onSettled: () => void queryClient.invalidateQueries({ queryKey: [...INBOX_QUERY, 'unread'] }),
+    // The badge, and the list too: a taker who goes back before the mark was written has asked for a list that still
+    // shows the item unread, and nothing else would ask again (the list is one list for as long as the page stays).
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: [...INBOX_QUERY, 'unread'] })
+      void queryClient.invalidateQueries({ queryKey: [...INBOX_QUERY, 'list'] })
+    },
   })
   const click = useMutation({ mutationFn: () => markItem(kind, id, 'CLICK') })
   const found = item.data

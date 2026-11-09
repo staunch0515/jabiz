@@ -425,6 +425,9 @@ class SetupIT extends QbItSupport {
         // F-S14: the reminder of a shared video's use waiting for its provider (ordinary).
         expected.put(QbParams.VIDEO_USE_REMIND_DAYS, "7");
         expected.put(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, "3660");
+        // F-C4: the sponsor package (ordinary parameters).
+        expected.put(QbParams.PACKAGE_CONFIRM_BYTES, "104857600");
+        expected.put(QbParams.PACKAGE_IMPORT_RETENTION_DAYS, "90");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // F-S2: the knowledge maps' limits and the review reminder (ordinary).

@@ -918,6 +918,36 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   2. 按截止重算：`SELECT count(*) FILTER (WHERE counted_at <= '<截止>') AS successes, count(*) FILTER (WHERE went_to_answer_at <= '<截止>') AS goes FROM qb_exposure WHERE publication_id = '<发布>'`。
   3. 台账的全部版本：`SELECT version_no, status, pricing, price, period_from, period_to, reject_reason, created_time FROM qb_video_use_version WHERE publication_id = '<发布>' ORDER BY version_no`。
 
+### 7.33 发起方包与测试期的导回（F-C4）
+
+发起方包（`docs/quizbuks/plans/impl/F-C4.md`）把一个发起方的资料、Quiz（含没结束的发布用到的版本）、没结束的发布与知识结构图写进一个文件（格式 `quizbuks.sponsor-package` 第 2 版，第 1 版照旧能读），再导入另一个账户或环境。只带内容与设置，不带状态、记录、钱、店员、密码、码与邀请名单、资源库。导入以后一切照常审核（入驻、主页、图、发布），没有免审。给用户的帮助文案在 `docs/quizbuks/help/sponsor-package.md`。
+
+- **部署**：迁移 `V102` 建普通表 `qb_package_import`。部署后运行一次 `QB_SETUP`：建两个普通参数（下表）。任务 `qb.package-import-expire`（每天 UTC 18:53，逐项）。没有新的环境变量、新角色权限。
+- **参数**（普通参数，`PARAM_SET`）：
+
+  | 参数 | 缺省 | 作用 |
+  |---|---|---|
+  | `qb.package.confirm-bytes` | `104857600`（100 MB） | 发起方包与 Quiz 文件的导出超过它即先问发起方再保存 |
+  | `qb.package.import-retention-days` | `90` | 导入记录在最后一次更新后保留的天数；过期即由任务删除（未完成的也删除，已生成的草稿留下，成为普通草稿） |
+
+  大题库按 `qb.content.import.batch-size` 分批导入、总数受 `qb.content.max-questions` 限制（§7.28）；一次导入开始时记下当时的每批题数，继续时沿用。
+- **限流**（`application.yml`）：`QB_PACKAGE_IMPORT_START` 每人每小时 30 次、`QB_PACKAGE_IMPORT_STEP` 3000 次、`QB_PACKAGE_IMPORT_ABANDON` 30 次；检查页逐个检查包里的每个 Quiz 文件，`QB_QUIZ_IMPORT_CHECK` 因此放宽到每人每小时 300 次。
+- **导入记录**：每次导入（包括"只导入资料部分"）记一行：发起方、包的 SHA-256、方式（`FULL` / `PROFILE`）、状态（`RUNNING` 未完成 / `DONE` 完成 / `ABANDONED` 已放弃）、已完成的步数与每一步生成的编号。每个发起方同时只有一个未完成的导入。每一步与记录在同一个事务中提交，所以继续不会重做、不会生成两份。总部与运营商在平台管理系统的发起方详情页（"发起方包的导入记录"，`qb.admin.publication.read`）只读查看，运营商只看到自己的发起方；删除账号时一并删除。
+- **排查**：
+  1. 发起方说"导入停在某一步"：看详情页的"最后完成的一步"与状态；页面上显示的拒绝原因就是那一步的流程的原文（例如入场费开关关着时 `QB_ENTRY_FEE_OFF`、图超过上限 `QB_TREE_LIMIT`）。排除原因后请发起方选同一个文件"继续"；也可以"放弃"。
+  2. "另一个包的导入还没有完成"（`QB_PACKAGE_IMPORT_OPEN`）：同一个账户有未完成的导入，先在概况页继续完成或放弃它。
+  3. "只能导入资料部分"（`QB_PACKAGE_SUBMITTED`）：账户提交过发布（有发布不是草稿或有提交时间）。整个包只能导入新账户或从未提交过发布的账户。
+  4. 记录的细节：`SELECT status, mode, steps_done, steps_total, last_step, started_at, updated_at, done FROM qb_package_import WHERE sponsor_id = '<用户编号>' ORDER BY started_at DESC`（`done` 只有编号，没有内容与秘密）。
+- **放弃**删除这次导入生成的草稿（图以退役代替删除，仍是草稿的发布删除，没有被已提交的发布用着的 Quiz 移除），资料部分不还原。审计由各现有流程照常记录（`GET /api/audit/records`）。
+- **测试期重置数据库之后的导回**（需求方 2026-11-05：测试期反复重置数据库）：
+  1. 重置**之前**：每个要保留的发起方登录发起方页面，在"概况"页"导出发起方包"，把文件存好（每个发起方一个文件；文件含图片，可能较大）。运营商的直营发起方（样板间）同样导出。
+  2. 重置数据库并部署（§2），运行 `QB_SETUP` 并由另一位管理员发布受控参数的首个值（§1）。
+  3. 重新建立账户：发起方重新注册（或由运营商为直营发起方建立），验证邮箱。
+  4. 每个发起方在"概况"页"导入发起方包"，选第 1 步的文件：检查页列出全部问题与将要生成的内容，确认导入。邮件服务器需要重新输入密码（包里从不带密码）。
+  5. 入驻还没通过时，基本信息填进入驻申请表：打开申请表，同意条款后提交，由运营商审核。
+  6. 导入完成后点"提交全部草稿"：知识结构图进入运营商另一位成员的审核；绑定在图上的发布要等图生效后再点一次。不绑定的发布照常进入审核（资金不足的会列出原因，先充值）。
+  7. 共享视频在新库中要由提供方重新共享并审核通过；列为"请重新选择"的发布在共享通过后到发布向导中重新选。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
@@ -933,6 +963,30 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
 6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
 
 回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。
+
+### 7.33 资料包中的链接图片（F-C6）
+
+发起方导入的资料包里，图片可以写成 `{"url": "https://…"}`。导入时由发起方页面请服务器**逐张下载一次**（平台能力 D75：`POST /api/files/fetch`，不在导入的事务中；
+下载得到的是发起方自己的文件，与上传同一条流水线：按内容判断类型、重新编码、去掉 EXIF 与位置信息）。链接不保存，以后不再访问原网站。
+
+- **没有新的参数、迁移或定时任务**。下载的限制是平台的 `jabiz.files.fetch.*`（缺省：只 https/443、至多 3 跳、连接 5 秒、读 20 秒、整个下载 60 秒、每人同时 2 个、每实例同时 16 个）
+  与 `jabiz.process.rate-limits.FILE_FETCH`（缺省每人每分钟 30、每主机 60、每实例 300；整体替换缺省），见 `docs/design/14-files.md` §12。QuizBuks 没有改它们。
+- **导入不改变审核**：下载失败不会让导入失败。确认页逐张显示结果；没取到的图片可以重试、换成发起方自己上传的图片，或勾选"保持现状"后导入（现有的图片留着）。
+- **发起方常见的失败原因**（确认页显示服务器的原文，三语）：
+
+| 错误码 | 意思 | 发起方可以做的 |
+|---|---|---|
+| `FILE_FETCH_NOT_HTTPS` / `FILE_FETCH_LINK_INVALID` | 不是 https，或链接写法不对（含用户名密码、奇怪的主机或端口） | 改链接，或自己上传 |
+| `FILE_FETCH_ADDRESS_NOT_PUBLIC` | 链接指向内网、本机或云的元数据地址 | 自己上传（这是有意的限制，不会放开） |
+| `FILE_FETCH_TOO_MANY_REDIRECTS` | 跳转超过缺省 3 次 | 用最终的图片地址 |
+| `FILE_FETCH_NOT_IMAGE` | 不是可接受的图片（只收 JPEG、PNG） | 换成图片的直接地址 |
+| `FILE_FETCH_TOO_LARGE` | 超过该文件策略的大小上限（封面与商品图 5 MB，头像 2 MB） | 缩小后上传 |
+| `FILE_FETCH_TIMEOUT` / `FILE_FETCH_FAILED`（`reason`：找不到主机、连不上、证书、状态码、空） | 对方网站慢、关闭或拒绝 | 稍后重试，或自己上传 |
+| `RATE_LIMITED` / `PROCESS_BUSY` | 下载太频繁，或本实例的下载名额满了 | 稍后重试 |
+
+- **观测**：平台的 `jabiz.file.fetch`（标签只有结果，失败的原因按错误码计数），告警照平台（13 §7）。看到某个发起方大量失败时，通常是他的网站拒绝机器访问（robots 之外的防护），请他改为自己上传。
+- **测试**：后端 `ProfileLinkImagesIT`（本机 HTTPS 桩，测试配置以 `@Primary` 的 `RemoteFetchNetwork` 替换网络；下载 → 导入、没有文件时保留现有图片、别人的文件被拒），页面 `transfer.test.tsx`，
+  e2e `profile-links.spec.ts` 只测失败路径（e2e 没有公网图片源，D75 没有"只在测试中放行"的属性，有意如此）。
 
 ### 7.28 题库的上限与每日核对（F-S6）
 

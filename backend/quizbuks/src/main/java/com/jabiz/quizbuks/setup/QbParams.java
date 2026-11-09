@@ -394,6 +394,10 @@ public final class QbParams {
     public static final String VIDEO_USE_REMIND_DAYS = "qb.video-use.remind-days";
     /** F-S14 (the controller: every number a parameter): the longest period one use covers, in days; not controlled. */
     public static final String VIDEO_USE_MAX_PERIOD_DAYS = "qb.video-use.max-period-days";
+    /** F-C4: above how many bytes the export of a sponsor package or a quiz file asks before it is saved. */
+    public static final String PACKAGE_CONFIRM_BYTES = "qb.package.confirm-bytes";
+    /** F-C4: how many days the record of a sponsor package's import is kept after its last change. */
+    public static final String PACKAGE_IMPORT_RETENTION_DAYS = "qb.package.import-retention-days";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -703,7 +707,13 @@ public final class QbParams {
         // F-S14: the longest period of a use (ordinary; last).
         new Param(VIDEO_USE_MAX_PERIOD_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.videouse.VideoUseRules.DEFAULT_MAX_PERIOD_DAYS),
-            "The longest period, in days, one ledger entry of a shared video's use covers (1 to 36600)"));
+            "The longest period, in days, one ledger entry of a shared video's use covers (1 to 36600)"),
+        // F-C4: the sponsor package (ordinary; last, so that the setup's earlier keys stay as they were).
+        new Param(PACKAGE_CONFIRM_BYTES, Map.of("type", "numeric", "precision", 12, "scale", 0), "104857600",
+            "Above how many bytes the export of a sponsor package or a quiz file asks before it is saved (100 MB by "
+                + "default)"),
+        new Param(PACKAGE_IMPORT_RETENTION_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0), "90",
+            "Days the record of a sponsor package's import is kept after its last change"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {
