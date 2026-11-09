@@ -566,7 +566,7 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
 ~~三种协议理解的认证（`TERMS_APP_UNDERSTOOD`、`CONTEST_RULES_UNDERSTOOD`、`TERMS_SPONSOR_UNDERSTOOD`）、由官方账号出题并登记为认证的一轮（`QB_CERTIFICATION_ROUND_ADD` / `_CLOSE`，权限 `qb.certification.manage` / `qb.certification.admin`）、启动检查 `CERTIFICATION_LEGAL`~~已由 F-S2c2 删去（D3：答题卡；D1：认证、轮与记录，F-S2c2b）。同意的流程一字不改。以后在学者的平台图上建"了解条款"的节点（F-S3 的看图显示）。
 
 - ~~**发起方的前置**（向导"客户匹配"一步要求先持有认证）~~已由 F-S2c2 删去（D4）。
-- **已有安装**：F-S2c2b 之后在「用户与角色」中去掉已删除的权限 `qb.certification.manage`、`qb.certification.admin`（`QB_SETUP` 只补、不收回）。
+- **已有安装**：已删除的权限 `qb.certification.manage`、`qb.certification.admin` 由 `QB_SETUP` 自动从所有角色（不只 QuizBuks 的角色）上去掉（输出 `permissionsRemoved`，审计中记为删除）：部署后执行一次即可，不用手工改「用户与角色」。排程在以后才开始的这类授予，在开始之后的下一次执行时去掉。
 
 ### 7.17 现金账户（Q87a）
 

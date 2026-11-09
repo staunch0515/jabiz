@@ -60,6 +60,7 @@
   - **只读留下的**（总控 2026-11-08 的规则：已签发证书要读的先保留）：`qb_certification_record`（核实页与学者公开页读之前记下的撤销）、`qb_sponsor_certification`（名称与签发方）、证书名的三语文字（后端 `qb.certification.<键>`、App 与管理系统扩展的名字）。F-S5 改为节点证书时迁移后再删。
   - "我的认证"（`QB_MY_CERTIFICATIONS`）改为列出仍有效的已签发证书（未到期、没有持有开始之后的撤销，每种认证最新的一张），不再有"持有而没有证书"的一项；暂停签发的说明放在列表下方。
   - `qb_official_publisher` 早已在 V78 删除。
+  - 已删除的权限码（`QbPermissions.RETIRED`）由 `QB_SETUP` 自动从所有角色删去（`ctx.changes().delete` 写墓碑，审计记为 `DELETE`；删去授予不是授予，受保护授权的规则不拦），输出 `permissionsRemoved`；每次都查，所以不需要 `QbSetupRecords`。排程在以后才开始的授予读不到其时刻与版本（`QueryEntities` 没有时点），不能从这里取消：开始之后的下一次执行删去（`SetupIT` 验证）。
 
 ## 2. 数据（F-S2a、F-S2b）
 

@@ -315,5 +315,12 @@ public final class QbPermissions {
      */
     public static final String TREE_LIT_REVOKE = "qb.tree.lit.revoke";
 
+    /**
+     * Codes that no longer exist (F-S2c2b, D1: the certifications and their rounds are gone). {@code QB_SETUP} removes
+     * every grant of them, from any role, so that an installation that had them keeps no stale grant.
+     */
+    public static final java.util.Set<String> RETIRED = java.util.Set.of("qb.certification.manage",
+        "qb.certification.admin");
+
     private QbPermissions() {}
 }
