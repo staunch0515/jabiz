@@ -185,7 +185,7 @@
 - `pages/AccountPage.tsx`：菜单改为 §2.4 的"我的"；`ACCOUNT_PARTS` 加 `blocks`；`DetailsPart` 去掉 `LikedTopics`、`PreferencesPart` 去掉 `BlockList`，两者合成 `BlocksPart`；`PreferencesPart` 加"外观"一节（平台 `APPEARANCES` 与 `useAppearance`，三选一，testid `appearance-<值>` 沿用）；`id` 的标题改为"店员柜台"。
 - `wallet/WalletPage.tsx`：余额旁"即将开放"（§2.4 同一条件）。
 - `pages/PublicationPage.tsx` 与 `qb/view/PublicationContent.tsx`（两份同步）：§2.5。
-- 消息键：三语一起加（`nav.*`、`frame.*`、`me.*`、`prizes.*`、`pass.mine.*`），用词照 `docs/quizbuks/glossary.md`（学者、发起方、Kudos），不出现"后台"；用词测试 `terms.test.mjs` 与 `messages.test.ts` 覆盖。
+- 消息键：三语一起加（`nav.*`、`frame.*`、`me.*`、`prizes.*`、`pass.mine.*`），用词照 `docs/quizbuks/glossary.md`（学者、发起方、Kudos），F-F5b 停用的叫法一律不用；用词测试 `terms.test.mjs` 与 `messages.test.ts` 覆盖。
 
 ### 5.5 名称（三语）
 
