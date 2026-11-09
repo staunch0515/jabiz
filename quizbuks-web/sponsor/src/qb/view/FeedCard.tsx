@@ -49,13 +49,16 @@ export function RewardText({ card }: { card: FeedCard }) {
  * and `note` (the taker's own progress). The facts are the same whether the video plays or not (Q66). A publication
  * with a video (`card.video`: the one to watch to answer, else the first the App plays) shows a play mark on its
  * picture, and its player instead while `playing` (the home plays the card in the middle of the screen). `onOpen` is
- * told of a tap that opens the card (its picture, its name).
+ * told of a tap that opens the card (its picture, its name). `menu` (F-S8: the app's blocking) ends the line under the
+ * picture.
  */
-export function FeedCardView({ card, href, playing = false, note, video, onOpen }: { card: FeedCard
+export function FeedCardView({ card, href, playing = false, note, video, onOpen, menu }: { card: FeedCard
   href: string | null; playing?: boolean; note?: ReactNode
   /** Q65: the app's own place for the playing video (its one player); a plain player otherwise. */
   video?: ReactNode
-  onOpen?: () => void }) {
+  onOpen?: () => void
+  /** F-S8: the app's menu of the card (blocking), at the end of its line; none in a preview. */
+  menu?: ReactNode }) {
   const { t } = useTranslation(QBVIEW)
   const sponsor = card.sponsorCompany ?? card.sponsorName
   const MethodIcon = REWARD_METHOD_ICONS[card.rewardMethod]
@@ -157,6 +160,7 @@ export function FeedCardView({ card, href, playing = false, note, video, onOpen 
             )}
           </span>
         </div>
+        {menu && <div className="-mr-2 shrink-0" data-testid="feed-card-menu">{menu}</div>}
       </div>
     </li>
   )

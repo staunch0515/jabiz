@@ -46,6 +46,20 @@ interface Server {
   aiTranslation?: Record<string, unknown> | null
   /** F-C1: the sponsor's asset library. */
   assets?: Record<string, unknown>[]
+  /** F-S6: the quiz's questions as `qb.sponsor.quiz-questions` numbers them (else QUESTIONS in their order). */
+  bank?: Record<string, unknown>[]
+  /** F-S6: the bank's limits. */
+  limits?: Record<string, unknown>
+  /** F-S6: the quiz's import batches. */
+  imports?: Record<string, unknown>[]
+}
+
+/** F-S6: the rows of `qb.sponsor.quiz-questions` of the default quiz: QUESTIONS in their order, numbered. */
+function bankOf(questions: Record<string, unknown>[], options: Record<string, unknown>[]) {
+  return [...questions].sort((a, b) => Number(a.seq) - Number(b.seq)).map((q, i) => ({
+    questionId: q.questionId, questionNo: i + 1, stem: q.stem, image: q.image, points: q.points,
+    selection: q.selection ?? null, optionCount: options.filter((o) => o.questionId === q.questionId).length,
+    translated: 0 }))
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor with one quiz. Records what was posted. */
@@ -70,6 +84,12 @@ function server(options: Server = {}) {
       const answer = answers[Math.min(turn, answers.length - 1)]
       return json(answer.status, answer.body)
     }
+    const question = /^\/api\/datasets\/urn:jabiz:dataset:sponsor:QbQuestion\/entities\/(.+)$/.exec(path)
+    if (question) {
+      const row = (options.bank ?? []).find((r) => r.questionId === question[1])
+      return row ? json(200, { id: question[1], version: 1, attributes: { ...row, quizId: 'q1' } })
+        : json(404, { detail: 'Not found' })
+    }
     switch (path) {
       case '/api/auth/entries/sponsor':
         return json(200, ENTRY)
@@ -85,8 +105,12 @@ function server(options: Server = {}) {
           : json(404, { detail: 'Not found' })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbQuestion/query':
         return rows(QUESTIONS)
-      case '/api/datasets/urn:jabiz:dataset:sponsor:QbOption/query':
-        return rows(OPTIONS)
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbOption/query': {
+        // F-S6b: one question's options when opened on its own.
+        const byQuestion = (body?.filters as { field: string; value: string }[] | undefined)
+          ?.find((f) => f.field === 'questionId')?.value
+        return rows(byQuestion ? OPTIONS.filter((o) => o.questionId === byQuestion) : OPTIONS)
+      }
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterial/query':
         return rows([...MATERIALS, ...(options.variants ?? [])])
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query':
@@ -103,6 +127,21 @@ function server(options: Server = {}) {
       case '/api/queries/qb.sponsor.quizzes':
         return options.noQuizzes ? json(200, { items: [], offset: 0, limit: 20, total: 0 })
           : json(200, { items: [{ ...QUIZ, publicationCount: 0, published: false }], offset: 0, limit: 20, total: 1 })
+      case '/api/queries/qb.sponsor.quiz-questions': {
+        // As the template answers: searched by text or number, then the page asked for, counted.
+        const params = (body?.params ?? {}) as { q?: string; no?: number }
+        const all = (options.bank ?? bankOf(QUESTIONS, OPTIONS)).filter((row) =>
+          (params.q === undefined || String(row.stem ?? '').toLowerCase().includes(params.q.toLowerCase()))
+          && (params.no === undefined || row.questionNo === params.no))
+        const offset = Number(body?.offset ?? 0)
+        const limit = Number(body?.limit ?? 50)
+        return json(200, { items: all.slice(offset, offset + limit), offset, limit, total: all.length })
+      }
+      case '/api/queries/qb.sponsor.quiz-limits':
+        return json(200, { items: [options.limits ?? { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 200 }],
+          offset: 0, limit: 1 })
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbQuestionImport/query':
+        return rows(options.imports ?? [])
       case '/api/queries/qb.sponsor.quiz-versions':
         return json(200, { items: [], offset: 0, limit: 100 })
       case '/api/queries/qb.sponsor.ai-usage':
@@ -257,8 +296,8 @@ describe('the quiz editor', () => {
     expect(processCalls('QB_QUIZ_SAVE').map((b) => b.baseRevision)).toEqual([7, 9])
   })
 
-  it('shows the questions folded in their order, opens one at a time, and moves one with the whole order', async () => {
-    const { processCalls } = server({ processes: { QB_QUESTION_REORDER: [edit(8)] } })
+  it('shows the questions folded in their order, opens one at a time, and moves one to another place', async () => {
+    const { processCalls } = server({ processes: { QB_QUESTION_MOVE: [edit(8)] } })
     render(<App />)
     await userEvent.click(await screen.findByTestId('tab-questions'))
     const questions = await screen.findAllByTestId('question')
@@ -273,7 +312,7 @@ describe('the quiz editor', () => {
     expect(within(screen.getByTestId('menu-group-settings')).queryByTestId('menu-staff')).toBeNull()
     expect(within(screen.getByTestId('menu-group-rewards')).queryByTestId('menu-staff')).toBeNull()
     const summary = screen.getByTestId('questions-summary')
-    expect(summary).toHaveTextContent('2 / 100 questions')
+    expect(summary).toHaveTextContent('2 / 1,000 questions')
     expect(summary).toHaveTextContent('Full score 3')
     expect(summary).toHaveTextContent('Single choice 1 · multiple choice 0')
     expect(within(summary).getByTestId('questions-unmarked')).toHaveTextContent('1 question has no correct option')
@@ -292,11 +331,12 @@ describe('the quiz editor', () => {
     expect(screen.queryByTestId('question-row-detail')).toBeNull()
     await userEvent.click(within(summary).getByTestId('questions-unmarked'))
     expect(within(questions[1]).getByTestId('question-row-toggle')).toHaveAttribute('aria-expanded', 'true')
-    // "Move to" sends the whole order.
+    // F-S6b: "Move to" moves the one question (`QB_QUESTION_MOVE`); past the last place it goes to the end.
     await userEvent.click(screen.getByRole('combobox', { name: 'Move question 1 to' }))
     await userEvent.click(await screen.findByRole('option', { name: 'Place 2' }))
-    await waitFor(() => expect(processCalls('QB_QUESTION_REORDER')).toEqual([{ quizId: 'q1',
-      questionIds: ['k2', 'k1'], baseRevision: 7 }]))
+    await waitFor(() => expect(processCalls('QB_QUESTION_MOVE')).toEqual([{ quizId: 'q1', questionId: 'k1',
+      beforeQuestionId: null, baseRevision: 7 }]))
+    expect(processCalls('QB_QUESTION_REORDER')).toEqual([])
   })
 
   it('saves a new question with its options in their order', async () => {
@@ -870,5 +910,216 @@ describe('the asset library in the quiz editor (F-C1)', () => {
     await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toHaveLength(1))
     expect(processCalls('QB_MATERIAL_SAVE')[0]).toMatchObject({ kind: 'LINK', title: 'Our blog',
       description: 'Beans explained', url: 'https://example.com/blog', assetId: 'a-link', baseRevision: 7 })
+  })
+})
+
+describe('the question bank (F-S6b)', () => {
+  beforeEach(() => window.history.replaceState(null, '', '/quizzes/q1'))
+
+  /** 120 questions as the template numbers them; the draft holds only QUESTIONS. */
+  const BANK = Array.from({ length: 120 }, (_, i) => ({ questionId: `b${i + 1}`, questionNo: i + 1,
+    stem: i === 6 ? 'Roast coffee?' : `Question ${i + 1}?`, image: null, points: 1, selection: null,
+    optionCount: 2, translated: 0 }))
+  const BIG = { ...QUIZ, questionCount: 120 }
+  const queryCalls = (posted: { path: string; body: Record<string, unknown> }[]) =>
+    posted.filter((p) => p.path === '/api/queries/qb.sponsor.quiz-questions').map((p) => p.body)
+
+  it('reads the list a page at a time, searches by text or number, and reads an opened question alone', async () => {
+    const { posted } = server({ quiz: BIG, bank: BANK })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await waitFor(() => expect(screen.getAllByTestId('question')).toHaveLength(50))
+    expect(queryCalls(posted)[0]).toEqual({ params: { quizId: 'q1' }, offset: 0, limit: 50, count: true })
+    expect(screen.getByTestId('questions-count')).toHaveTextContent('120 / 1,000 questions')
+    // The limits are the template's; one attempt's limit explains drawing.
+    expect(screen.getByTestId('questions-draw-hint')).toHaveTextContent('One attempt asks at most 100 questions')
+    expect(screen.getByTestId('questions-page')).toHaveTextContent('Page 1 of 3')
+    await userEvent.click(screen.getByTestId('questions-next'))
+    await waitFor(() => expect(screen.getAllByTestId('question')[0]).toHaveAttribute('data-no', '51'))
+    expect(queryCalls(posted).at(-1)).toMatchObject({ offset: 50, limit: 50 })
+    await expectAccessible()
+
+    await userEvent.type(screen.getByTestId('questions-search'), '7')
+    await userEvent.click(screen.getByTestId('questions-search-submit'))
+    await waitFor(() => expect(screen.getAllByTestId('question')).toHaveLength(1))
+    expect(queryCalls(posted).at(-1)).toEqual({ params: { quizId: 'q1', no: 7 }, offset: 0, limit: 50, count: true })
+    await userEvent.clear(screen.getByTestId('questions-search'))
+    await userEvent.type(screen.getByTestId('questions-search'), 'roast')
+    await userEvent.click(screen.getByTestId('questions-search-submit'))
+    await waitFor(() => expect(queryCalls(posted).at(-1)?.params).toEqual({ quizId: 'q1', q: 'roast' }))
+    expect(await screen.findByTestId('questions-found')).toHaveTextContent('1 question found')
+    const found = screen.getByTestId('question')
+    expect(found).toHaveAttribute('data-no', '7')
+
+    // Not in the draft: its options are read when it opens.
+    await userEvent.click(within(found).getByTestId('question-row-toggle'))
+    expect(await within(found).findByTestId('question-stem-text')).toHaveTextContent('Roast coffee?')
+    expect(posted.some((p) => p.path.endsWith(':QbOption/query')
+      && JSON.stringify(p.body.filters).includes('"b7"'))).toBe(true)
+    await userEvent.click(screen.getByTestId('questions-search-clear'))
+    await waitFor(() => expect(screen.getAllByTestId('question')).toHaveLength(50))
+  })
+
+  it('moves a question up or down with QB_QUESTION_MOVE and keeps the keyboard on it', async () => {
+    const { processCalls } = server({ processes: { QB_QUESTION_MOVE: [edit(8), edit(9)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    const questions = await screen.findAllByTestId('question')
+    expect(within(questions[0]).getByRole('button', { name: 'Move question 1 up' })).toBeDisabled()
+    expect(within(questions[1]).getByRole('button', { name: 'Move question 2 down' })).toBeDisabled()
+    const up = within(questions[1]).getByRole('button', { name: 'Move question 2 up' })
+    await userEvent.click(up)
+    await waitFor(() => expect(processCalls('QB_QUESTION_MOVE')).toEqual([{ quizId: 'q1', questionId: 'k2',
+      beforeQuestionId: 'k1', baseRevision: 7 }]))
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-move')).toMatch(/^k2:/))
+    await userEvent.click(within(screen.getAllByTestId('question')[0]).getByRole('button',
+      { name: 'Move question 1 down' }))
+    // Down from the place before last: to the end.
+    await waitFor(() => expect(processCalls('QB_QUESTION_MOVE')[1]).toEqual({ quizId: 'q1', questionId: 'k1',
+      beforeQuestionId: null, baseRevision: 8 }))
+    // The whole-order reorder stays for others (the import tools, tests); the page no longer sends it.
+    expect(processCalls('QB_QUESTION_REORDER')).toEqual([])
+  })
+
+  it('moves a question of a large quiz to a typed place, finding the question there', async () => {
+    const { processCalls, posted } = server({ quiz: BIG, bank: BANK, processes: { QB_QUESTION_MOVE: [edit(8)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    const first = (await screen.findAllByTestId('question'))[0]
+    await userEvent.click(within(first).getByRole('button', { name: 'Move question 1 to' }))
+    const dialog = await screen.findByTestId('question-move-dialog')
+    await userEvent.clear(within(dialog).getByTestId('question-move-place-input'))
+    await userEvent.type(within(dialog).getByTestId('question-move-place-input'), '500')
+    await userEvent.click(within(dialog).getByTestId('question-move-confirm'))
+    expect(within(dialog).getByText('Choose a whole number from 1 to 120.')).toBeInTheDocument()
+    await userEvent.clear(within(dialog).getByTestId('question-move-place-input'))
+    await userEvent.type(within(dialog).getByTestId('question-move-place-input'), '60')
+    await userEvent.click(within(dialog).getByTestId('question-move-confirm'))
+    // Going down to 60: before the question now at 61, which is on another page.
+    await waitFor(() => expect(processCalls('QB_QUESTION_MOVE')).toEqual([{ quizId: 'q1', questionId: 'b1',
+      beforeQuestionId: 'b61', baseRevision: 7 }]))
+    expect(queryCalls(posted).some((b) => (b.params as Record<string, unknown>).no === 61)).toBe(true)
+    // The list follows it to its page.
+    await waitFor(() => expect(screen.getByTestId('questions-page')).toHaveTextContent('Page 2 of 3'))
+  })
+
+  it('deletes the selected questions after confirming, and sets their points', async () => {
+    const { processCalls } = server({ processes: { QB_QUESTION_DELETE_MANY: [edit(8)],
+      QB_QUESTION_POINTS_SET: [edit(9)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await screen.findAllByTestId('question')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select the questions on this page' }))
+    expect(screen.getByTestId('bank-selected')).toHaveTextContent('2 selected')
+    await userEvent.click(screen.getByTestId('bank-points'))
+    const points = await screen.findByTestId('bank-points-dialog')
+    await userEvent.clear(within(points).getByTestId('bank-points-input'))
+    await userEvent.type(within(points).getByTestId('bank-points-input'), '0')
+    await userEvent.click(within(points).getByTestId('bank-points-save'))
+    expect(within(points).getByText(/Points are a whole number from 1/)).toBeInTheDocument()
+    await userEvent.clear(within(points).getByTestId('bank-points-input'))
+    await userEvent.type(within(points).getByTestId('bank-points-input'), '5')
+    await userEvent.click(within(points).getByTestId('bank-points-save'))
+    await waitFor(() => expect(processCalls('QB_QUESTION_POINTS_SET')).toEqual([{ quizId: 'q1',
+      questionIds: ['k1', 'k2'], points: 5, baseRevision: 7 }]))
+    await waitFor(() => expect(screen.queryByTestId('bank-selection')).toBeNull())
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select question 2' }))
+    await userEvent.click(screen.getByTestId('bank-delete'))
+    const confirm = await screen.findByRole('alertdialog')
+    expect(confirm).toHaveTextContent('Delete 1 question?')
+    await expectAccessible()
+    expect(processCalls('QB_QUESTION_DELETE_MANY')).toEqual([])
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(processCalls('QB_QUESTION_DELETE_MANY')).toEqual([{ quizId: 'q1',
+      questionIds: ['k2'], baseRevision: 9 }]))
+  })
+
+  it('offers no batch points for a survey', async () => {
+    server({ quiz: { ...QUIZ, kind: 'SURVEY' } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await screen.findAllByTestId('question')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select question 1' }))
+    expect(screen.getByTestId('bank-delete')).toBeInTheDocument()
+    expect(screen.queryByTestId('bank-points')).toBeNull()
+  })
+
+  const FILE = {
+    format: 'quizbuks.quiz', formatVersion: 3, exportedAt: '2026-11-08T00:00:00Z',
+    quiz: { kind: 'QUIZ', title: 'Beans', intro: null, timeLimitSec: null, cover: null, language: 'zh' },
+    materials: [],
+    questions: [1, 2, 3].map((n) => ({ stem: `Q${n}`, image: null, points: 1, selection: null,
+      options: [{ text: 'A', image: null, correct: true }, { text: 'B', image: null, correct: false }] })),
+    files: {},
+    translations: { en: { texts: { 'q1.stem': 'E1', 'q3.stem': 'E3', title: 'Beans' }, images: {}, materials: [],
+      hashes: { 'q3.stem': 'h3' } } },
+  }
+  const CHECKED = { status: 200, body: { output: { formatVersion: 3, currentVersion: 3, readers: [3], kind: 'QUIZ',
+    title: 'Beans', questions: 3, materials: 0, files: [], language: 'zh', languages: ['en'] } } }
+  const imported = (revision: number, questions: number) => ({ status: 200, body: { output: { quizId: 'q1',
+    importId: `i${revision}`, questions, revision, skippedLanguages: ['en'] } } })
+
+  it('imports a file\'s questions in batches of the limit, renumbered, with progress and the languages skipped',
+    async () => {
+      const { processCalls } = server({ limits: { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 2 },
+        processes: { QB_QUIZ_IMPORT_CHECK: [CHECKED], QB_QUIZ_IMPORT_QUESTIONS: [imported(8, 2), imported(9, 1)] } })
+      render(<App />)
+      await userEvent.click(await screen.findByTestId('tab-questions'))
+      await waitFor(() => expect(screen.getByTestId('bank-import')).toBeEnabled())
+      await userEvent.upload(screen.getByTestId('bank-import-file'), new File([JSON.stringify(FILE)], 'beans.json',
+        { type: 'application/json' }))
+      expect(await screen.findByTestId('bank-import-summary')).toHaveTextContent('3 questions in 2 batches, 0 files.')
+      await userEvent.click(screen.getByTestId('bank-import-confirm'))
+      expect(await screen.findByTestId('bank-import-done')).toHaveTextContent('3 questions imported in 2 batches.')
+      expect(screen.getByTestId('bank-import-skipped')).toHaveTextContent('English')
+      const calls = processCalls('QB_QUIZ_IMPORT_QUESTIONS')
+      expect(calls.map((c) => c.baseRevision)).toEqual([7, 8])
+      const second = calls[1].document as typeof FILE
+      expect(second.questions.map((q) => q.stem)).toEqual(['Q3'])
+      expect(second.translations.en).toEqual({ texts: { 'q1.stem': 'E3' }, images: {}, materials: [],
+        hashes: { 'q1.stem': 'h3' } })
+      // The whole file, then each batch, checked by the server.
+      expect(processCalls('QB_QUIZ_IMPORT_CHECK')).toHaveLength(3)
+      await expectAccessible()
+    })
+
+  it('stops at a refused batch, saying which and why; the batches before it stay', async () => {
+    server({ limits: { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 2 },
+      processes: { QB_QUIZ_IMPORT_CHECK: [CHECKED], QB_QUIZ_IMPORT_QUESTIONS: [imported(8, 2),
+        { status: 422, body: { detail: 'Refused', violations: [{ field: null, ruleCode: 'QB_QUIZ_TOO_MANY_QUESTIONS',
+          message: 'A quiz has at most 3 questions.' }] } }] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await waitFor(() => expect(screen.getByTestId('bank-import')).toBeEnabled())
+    await userEvent.upload(screen.getByTestId('bank-import-file'), new File([JSON.stringify(FILE)], 'beans.json',
+      { type: 'application/json' }))
+    await userEvent.click(await screen.findByTestId('bank-import-confirm'))
+    const problems = await screen.findByTestId('bank-import-problems')
+    expect(problems).toHaveTextContent('Batch 2 of 2 was not imported. The 2 questions of the batches before it stay')
+    expect(problems).toHaveTextContent('Importing the batch: A quiz has at most 3 questions.')
+  })
+
+  it('lists the import batches and undoes one, saying what was removed and what stayed', async () => {
+    const { processCalls } = server({ imports: [
+      { importId: 'i2', quizId: 'q1', questionCount: 2, importedAt: '2026-11-08T03:00:00Z', undoneAt: null,
+        removedCount: null },
+      { importId: 'i1', quizId: 'q1', questionCount: 5, importedAt: '2026-11-08T02:00:00Z',
+        undoneAt: '2026-11-08T02:30:00Z', removedCount: 5 }],
+    processes: { QB_QUESTION_IMPORT_UNDO: [{ status: 200, body: { output: { quizId: 'q1', revision: 8, removed: 1,
+      kept: ['k9'] } } }] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    const batches = await screen.findAllByTestId('bank-batch')
+    expect(batches).toHaveLength(2)
+    expect(batches[0]).toHaveTextContent('2 questions')
+    expect(within(batches[1]).getByTestId('bank-batch-undone')).toHaveTextContent('5 removed')
+    expect(within(batches[1]).queryByTestId('bank-batch-undo')).toBeNull()
+    await userEvent.click(within(batches[0]).getByTestId('bank-batch-undo'))
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(processCalls('QB_QUESTION_IMPORT_UNDO')).toEqual([{ quizId: 'q1', importId: 'i2',
+      baseRevision: 7 }]))
+    expect(await screen.findByTestId('bank-undo-result')).toHaveTextContent(
+      '1 questions removed; 1 kept because they were changed.')
   })
 })

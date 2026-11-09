@@ -1,6 +1,6 @@
 import { Button } from '@jabiz/ui'
 import { ArrowLeft, ChevronDown, ChevronUp, Play, Volume2 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { CoverPlaceholder } from '../qb/Illustrations'
@@ -28,11 +28,13 @@ import { openWithSound, soundOn, stagePlayer, useStage, VideoSlot } from '../vid
  * Not tied to the home's layout: it takes the short videos, the one to start on and what to do on leaving or
  * answering, so that it moves into the new frame of Q108 as it is.
  */
-export function ShortsViewer({ cards, startId, onClose, onAnswer }: {
+export function ShortsViewer({ cards, startId, onClose, onAnswer, menu }: {
   cards: readonly FeedCard[]
   startId: string
   onClose: () => void
   onAnswer: (card: FeedCard) => void
+  /** F-S8: the screen's menu (blocking), beside "answer". */
+  menu?: (card: FeedCard) => ReactNode
 }) {
   const { t } = useTranslation(APP)
   const { t: tView } = useTranslation(QBVIEW)
@@ -45,6 +47,23 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer }: {
   const stage = useStage()
   // F-S15: re-rendered when a video file fails.
   useVideoFailed(null)
+  // F-S8: the screen shown follows the publication the address names (a block moves it on), and stays within the list
+  // when the list is read again shorter: adjusted while rendering (React's derived state), the scroll after it.
+  const [seen, setSeen] = useState({ cards, startId })
+  const [scrollTo, setScrollTo] = useState<number | null>(null)
+  if (seen.cards !== cards || seen.startId !== startId) {
+    setSeen({ cards, startId })
+    const found = cards.findIndex((card) => card.publicationId === startId)
+    const at = found >= 0 ? found : Math.min(index, Math.max(0, cards.length - 1))
+    if (at !== index) {
+      setIndex(at)
+      setScrollTo(at)
+    }
+  }
+  useEffect(() => {
+    if (scrollTo === null) return
+    scroller.current?.querySelectorAll<HTMLElement>('[data-shorts-screen]')[scrollTo]?.scrollIntoView?.({ block: 'start' })
+  }, [scrollTo])
 
   // The home underneath does not scroll while the mode is open; its place is kept for the way back.
   useEffect(() => {
@@ -212,6 +231,7 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer }: {
                     </span>
                   </div>
                   <Button onClick={() => answer(card)} data-testid="shorts-answer">{t('shorts.answer')}</Button>
+                  {menu?.(card)}
                 </div>
                 {/* The sound: YouTube's and Vimeo's with the app's button (it then stays on); the others' by a tap on
                     their own player (A3-18). */}

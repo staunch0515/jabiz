@@ -114,6 +114,12 @@ class TreeVisibilityIT extends TreeItSupport {
             .containsEntry("nodeName", Map.of("en", "Advanced"));
         assertThat(tiers(mine, advanced)).isNotEmpty();
         assertThat(inboxItems(mine)).contains(noticeId);
+        // A sponsor's notice is the inbox's promotion about a publication (category PROMO): the case the condition
+        // covers; platform announcements carry no publication, so there is no system one to keep.
+        assertThat(items("qb.app.inbox", mine, Map.of("params", Map.of(), "limit", 500)))
+            .filteredOn(item -> noticeId.equals(item.get("itemId"))).singleElement()
+            .satisfies(item -> assertThat(item).containsEntry("category", "PROMO")
+                .containsEntry("publicationId", advanced));
         assertThat(unreadBroadcasts(mine)).isEqualTo(unreadBefore + 1);
         run("QB_VIEW", mine, body("publicationId", advanced));
         assertThat(shared(advanced)).as("still nobody's: the public page knows no one").isEmpty();
