@@ -37,6 +37,8 @@ export const DATASET = {
    */
   asset: 'urn:jabiz:dataset:default:QbAsset',
   assetUse: 'urn:jabiz:dataset:default:QbAssetUse',
+  /** F-C4: a Sponsor's imports of sponsor packages, read only (the same readers as the asset library). */
+  packageImport: 'urn:jabiz:dataset:default:QbPackageImport',
 } as const
 
 /** SQL templates (`queries/qb/admin`). */
@@ -356,6 +358,9 @@ export const DICTIONARY = {
   assetKind: 'urn:jabiz:dict:quizbuks:asset-kind',
   assetTextUsage: 'urn:jabiz:dict:quizbuks:asset-text-usage',
   assetUseTarget: 'urn:jabiz:dict:quizbuks:asset-use-target',
+  /** F-C4: how a sponsor package was imported, and the import's state. */
+  packageImportMode: 'urn:jabiz:dict:quizbuks:package-import-mode',
+  packageImportStatus: 'urn:jabiz:dict:quizbuks:package-import-status',
   sponsorPageStatus: 'urn:jabiz:dict:quizbuks:sponsor-page-status',
   sponsorProductStatus: 'urn:jabiz:dict:quizbuks:sponsor-product-status',
   reportReason: 'urn:jabiz:dict:quizbuks:report-reason',

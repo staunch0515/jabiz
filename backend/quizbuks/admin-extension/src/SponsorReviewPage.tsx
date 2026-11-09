@@ -28,6 +28,7 @@ import { readRewardDefaults, readSponsorMethods, REWARD_METHODS, setSponsorMetho
 import { AVATAR_VARIANTS, DICTIONARY, isUserId, PATH, PERMISSION, SPONSOR_PENDING } from './ids'
 import { AfterDecision, LoadFailed, Section, StatusBadge } from './components'
 import { SponsorAssets } from './SponsorAssets'
+import { SponsorPackageImports } from './SponsorPackageImports'
 import { QUEUE, useAfterDecision, useLabels, when } from './hooks'
 
 const AVATAR = { image: true, variants: AVATAR_VARIANTS }
@@ -233,6 +234,8 @@ export default function SponsorReviewPage() {
       <RewardMethods userId={userId} />
       {/* F-C1d: the Sponsor's asset library, read only, for support (an operator's: its own Sponsors'). */}
       {can(PERMISSION.publicationRead) && <SponsorAssets userId={userId} />}
+      {/* F-C4: the Sponsor's imports of sponsor packages, read only (an operator's: its own Sponsors'). */}
+      {can(PERMISSION.publicationRead) && <SponsorPackageImports userId={userId} />}
     </div>
   )
 }
