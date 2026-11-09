@@ -514,7 +514,7 @@ export const messages = {
       textField: '文字',
       textBase: '原文',
       textTranslated: '{{language}}',
-      textFields: { name: '名称', redeemDescription: '到店领取的奖品', digitalDescription: '数字奖品', referralDescription: '推荐奖励' },
+      textFields: { name: '名称', redeemDescription: '到店领取的奖品', digitalDescription: '电子奖品', referralDescription: '推荐奖励' },
       admin: '下架处理',
       adminHint: '暂停、恢复或结束此发布。发起方能看到理由；需要二次验证。',
       adminPause: '暂停',

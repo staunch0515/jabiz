@@ -13,7 +13,7 @@ export const zh = {
     maps: { title: `${BRAND.names.zh}知识结构图`, description: '一张事先画好、整体可见的图：每个节点是要学会的一件事，答对挑战即点亮，点亮的节点有证书可以出示与核实。' },
     sponsors: { title: `${BRAND.names.zh}发起方`, description: '发布关于你的店或商品的调查问卷，奖励答对的人；用你的知识结构图培养真正懂你的顾客。线下奖品与电子奖品，现在全部免费。' },
     takers: { title: `${BRAND.names.zh}学者`, description: '两分钟的调查问卷，关于你身边的店、商品和地方。答对即可到店领奖或收到电子奖品，点亮你的知识结构图，拿到证书。' },
-    surveys: { title: `${BRAND.names.zh}调查问卷`, description: '人们愿意做完的调查问卷：每份完整回答都有奖品，每人一份，按天统计，可只向指定邮箱开放。' },
+    surveys: { title: `${BRAND.names.zh}调查问卷`, description: '人们愿意做完的调查问卷：每份完整回答都有奖励，每人一份，按天统计，可只向指定邮箱开放。' },
     pricing: { title: `${BRAND.names.zh}费用`, description: '现在全部免费。将来也不变的三条原则：交易永不抽成，工具与资源按价目收费，服务按次收费。' },
     contact: { title: `联系${BRAND.names.zh}`, description: '写邮件给我们、注册成为发起方，或打开 App 的帮助页。' },
   },
@@ -35,7 +35,7 @@ export const zh = {
       text: '广告被看一秒就忘。调查问卷会被读、被思考、被记住，而每一个回答都告诉你什么信息被接收到了。',
       cards: [
         { icon: 'target', title: '只有真正的注意力才算', text: '奖品要答对才拿得到，你的预算只花在读了你信息的人身上，而不是划过去的人。' },
-        { icon: 'chart', title: '每个回答都是数据', text: '答题数、通过率、哪些题答错、奖品领取数：按天、按问卷，可导出。' },
+        { icon: 'chart', title: '每个回答都是数据', text: '答题数、通过率、哪些题答错、奖品领取数：按天、按每次发布，可导出。' },
         { icon: 'gift', title: '把人带进店的奖品', text: '一杯咖啡、一张折扣、柜台上的试用品，或者一张电子优惠券。奖品与中奖人数由你决定。' },
       ],
     },
