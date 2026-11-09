@@ -5538,6 +5538,19 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz16 状态**：📝 待评审（分支 `1.3/phase-17zz16-shard-timeout`）。
 
+### 17zz17 关闭时定时任务调度器不再报 TaskRejectedException（2026-11-09，S2 报告）
+
+**缘由**：`:quizbuks:platformCheck` 结束（及任何上下文关闭）时，`JobScheduler.scheduleNext` 抛出两次 `TaskRejectedException`（"ExecutorService in shutdown state"），由 Spring 的 `TaskUtils$LoggingErrorHandler` 记为 ERROR。一个正在运行（或恰好触发）的任务结束后为自己安排下一次，而执行器已在 `stop()` 中关闭。结果不受影响，只有误导的错误日志。
+
+| # | 内容 |
+|---|---|
+| 17zz17-1 | `JobScheduler`：`stop()` 一开始即置 `stopping`，`scheduleNext` 此后不再提交；与关闭竞争而被拒绝的提交在 `stopping` 时视为预期，正常运行中的拒绝照旧抛出。宽限期与 `runner.stop()` 的顺序不变 |
+| 17zz17-2 | 测试：`JobSchedulerShutdownTest`（任务运行中关闭，断言无 ERROR 日志；修复前失败） |
+
+**验收**：`:runtime:check`、`:app:test --tests '*Job*'` 绿；`:app:platformCheck` 输出无 `TaskRejectedException`。
+
+**17zz17 状态**：📝 待评审（分支 `1.3/phase-17zz17-job-scheduler-shutdown`）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |

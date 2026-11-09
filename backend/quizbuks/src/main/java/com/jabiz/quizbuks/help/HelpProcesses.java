@@ -288,7 +288,7 @@ public final class HelpProcesses {
 
     // ---- rate ------------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<RateInput, ThreadOutput, ProcessContext> rate() {
+    public static ProcessDefinition<RateInput, ThreadOutput, ProcessContext> rate(ZoneId zone) {
         return ProcessDefinition.define(RATE, 1, RateInput.class, ThreadOutput.class, ProcessContext.class, pb -> {
             user(pb, "Rates an AI help answer or a person's reply as solved or not.");
             pb.step("Take the conversation's turn", HoldLock.<ProcessContext>exclusive(
@@ -298,12 +298,12 @@ public final class HelpProcesses {
                         ctx -> byId("threadId", ctx.get(INPUT, RateInput.class).threadId()), THREAD),
                     QueryEntities.query(QbHelp.defaultDataset(QbHelp.MESSAGE),
                         ctx -> byId("messageId", ctx.get(INPUT, RateInput.class).messageId()), RECENT)))
-                .compute("Rate", (metadata, ctx) -> rated(ctx));
+                .compute("Rate", (metadata, ctx) -> rated(ctx, zone));
             closeTasks(pb);
         });
     }
 
-    static void rated(ProcessContext ctx) {
+    static void rated(ProcessContext ctx, ZoneId zone) {
         RateInput input = ctx.get(INPUT, RateInput.class);
         EntityInstance thread = ownThread(ctx, input.threadId(), null);
         EntityInstance message = first(ctx, RECENT);
@@ -315,7 +315,7 @@ public final class HelpProcesses {
         }
         Instant now = stamp(ctx.opTime(), thread);
         ctx.changes().update(QbHelp.MESSAGE, message.id(), message.version(), Map.of("rating", input.rating(),
-            "ratedAt", now));
+            "ratedAt", now, "ratedMonth", AiLimits.month(now, zone)));
         boolean solved = QbHelp.SOLVED.equals(input.rating());
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("resolved", solved);
@@ -330,7 +330,7 @@ public final class HelpProcesses {
 
     // ---- escalate --------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<EscalateInput, ThreadOutput, ProcessContext> escalate() {
+    public static ProcessDefinition<EscalateInput, ThreadOutput, ProcessContext> escalate(ZoneId zone) {
         return ProcessDefinition.define(ESCALATE, 1, EscalateInput.class, ThreadOutput.class, ProcessContext.class,
             pb -> {
                 user(pb, "Hands an AI help conversation, or a question, to a person: a Sponsor's to its operator, a "
@@ -346,7 +346,7 @@ public final class HelpProcesses {
                             sponsorEntry(ctx) ? ctx.request().actorId() : null), ASSIGNMENT),
                         QueryEntities.query(QbOperators.defaultDataset(QbOperators.OPERATOR), ctx -> byId(
                             "directSponsorId", sponsorEntry(ctx) ? ctx.request().actorId() : null), DIRECT_OF)))
-                    .compute("Hand it over", (metadata, ctx) -> escalated(ctx))
+                    .compute("Hand it over", (metadata, ctx) -> escalated(ctx, zone))
                     .step("Ask a person", CreateTask.<ProcessContext>when(ctx -> ctx.contains(TASK),
                         ctx -> ctx.get(TASK, TaskSpec.class)));
             });
@@ -356,7 +356,7 @@ public final class HelpProcesses {
         return QbHelp.SPONSOR.equals(ctx.get(INPUT, EscalateInput.class).entry());
     }
 
-    static void escalated(ProcessContext ctx) {
+    static void escalated(ProcessContext ctx, ZoneId zone) {
         EscalateInput input = ctx.get(INPUT, EscalateInput.class);
         requireEntry(ctx, input.entry());
         EntityInstance thread = ownThread(ctx, input.threadId(), input.entry());
@@ -379,6 +379,7 @@ public final class HelpProcesses {
         values.put("status", QbHelp.ESCALATED);
         values.put("escalated", true);
         values.put("escalatedAt", now);
+        values.put("escalatedMonth", AiLimits.month(now, zone));
         values.put("operatorId", operatorId);
         values.put("waitingFor", QbHelp.WAIT_STAFF);
         values.put("waitingSince", now);

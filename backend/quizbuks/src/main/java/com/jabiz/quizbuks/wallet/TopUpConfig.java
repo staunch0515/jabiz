@@ -241,7 +241,9 @@ class TopUpConfig {
                 "ja", "付与クレジット（2190）")
             .item(ReconChecks.CASH_LOTS, "en", "Cash account by arrival", "zh", "现金账户（按进账）",
                 "ja", "現金口座（入金ごと）")
-            .item(ReconChecks.FEE_PAYMENTS, "en", "Platform fee payments", "zh", "平台费付款", "ja", "利用料の支払い"));
+            .item(ReconChecks.FEE_PAYMENTS, "en", "Platform fee payments", "zh", "平台费付款", "ja", "利用料の支払い")
+            .item(ReconChecks.FEE_CREDIT_PROMOTION, "en", "Promotion expenses of granted credit (5140, by operator)",
+                "zh", "赠送额度推广费（5140，按运营商）", "ja", "付与クレジットの販促費（5140、運営パートナー別）"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */

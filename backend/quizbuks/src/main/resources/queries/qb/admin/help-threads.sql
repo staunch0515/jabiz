@@ -3,7 +3,7 @@ id: qb.admin.help-threads
 description: >-
   F-C10: the AI help conversations handed to a person: who asked (a Taker's display name, a Sponsor's company), where
   each went (an operator, or headquarters), whom it waits for and since when. Headquarters sees every one, an operator
-  its own Sponsors' only
+  its own Sponsors' only; or one of them (the list's filter on threadId: the conversation's page, F-C10c)
 entities: [QbHelpThread, QbSponsor, QbProfile, QbOperator]
 datasets:
   QbHelpThread: urn:jabiz:dataset:staff:QbHelpThread
@@ -27,7 +27,7 @@ results:
   closeReason:    { from: QbHelpThread.closeReason }
   lastActivityAt: { from: QbHelpThread.lastActivityAt }
 list:
-  filters: [status, entry, waitingFor, operatorId]
+  filters: [status, entry, waitingFor, operatorId, threadId]
   sorts:   [waitingSince, escalatedAt, lastActivityAt]
   defaultSort: { field: lastActivityAt, asc: false }
   key: [threadId]

@@ -64,4 +64,5 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 ## Help and terms
 
 - Help centre with frequently asked questions: /sponsor/help. When the answer is not there, hand your question to a person: your operator answers, or the platform if you have none.
+- Ask the AI: the "?" at the top right of every page opens the help panel. It answers how to use the Sponsor pages, with links to the pages; mark an answer solved or not solved. "Ask a person" hands the conversation to your operator (or the platform), whose reply comes there and in Messages. Your earlier conversations are under "Your conversations".
 - Sponsor terms: /sponsor/legal/sponsor-terms. Privacy policy: /sponsor/legal/privacy.

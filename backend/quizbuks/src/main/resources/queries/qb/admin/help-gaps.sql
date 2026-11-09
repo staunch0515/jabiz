@@ -9,8 +9,7 @@ datasets:
   QbHelpThread: urn:jabiz:dataset:default:QbHelpThread
   QbHelpMessage: urn:jabiz:dataset:default:QbHelpMessage
 params:
-  from: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The period's start (the month's first day, 00:00 in the deployment's zone)" }
-  to:   { kind: { type: temporal, role: EVENT_TIME }, required: true, description: "The period's end, not included" }
+  month: { kind: { type: text, maxLength: 7 }, required: true, description: "The month (YYYY-MM, the deployment's zone: jabiz.fiscal-year-zone, as the processes record it)" }
 results:
   rowKey:   { kind: { type: text, maxLength: 60 } }
   reason:   { kind: { type: text, maxLength: 10 } }
@@ -25,7 +24,7 @@ list:
   sorts:   [at, page]
   defaultSort: { field: at, asc: false }
   key: [rowKey]
-permissions: [qb.admin.help, qb.admin.ai.read]
+permissions: [qb.admin.help.gaps]
 ---*/
 -- An unsolved question: the first answer after it was rated "not solved" (rated within the period). A conversation
 -- handed over within the period: its first question, or the words handed over directly when it had none.
@@ -37,7 +36,8 @@ WITH unsolved AS (
     FROM {{QbHelpMessage}} q
     JOIN {{QbHelpThread}} t ON CAST(t.{{QbHelpThread.threadId}} AS text) = q.{{QbHelpMessage.threadId}}
     CROSS JOIN LATERAL (
-        SELECT n.{{QbHelpMessage.rating}} AS rating, n.{{QbHelpMessage.ratedAt}} AS ratedAt
+        SELECT n.{{QbHelpMessage.rating}} AS rating, n.{{QbHelpMessage.ratedAt}} AS ratedAt,
+               n.{{QbHelpMessage.ratedMonth}} AS ratedMonth
         FROM {{QbHelpMessage}} n
         WHERE n.{{QbHelpMessage.threadId}} = q.{{QbHelpMessage.threadId}}
           AND n.{{QbHelpMessage.kind}} = 'ANSWER'
@@ -46,7 +46,7 @@ WITH unsolved AS (
         LIMIT 1) a
     WHERE q.{{QbHelpMessage.kind}} = 'QUESTION'
       AND a.rating = 'UNSOLVED'
-      AND a.ratedAt >= CAST(:from AS timestamptz) AND a.ratedAt < CAST(:to AS timestamptz)
+      AND a.ratedMonth = :month
 ), escalated AS (
     SELECT 'E:' || CAST(t.{{QbHelpThread.threadId}} AS text) AS rowKey, 'ESCALATED' AS reason,
            t.{{QbHelpThread.threadId}} AS threadId, t.{{QbHelpThread.entry}} AS entry,
@@ -61,8 +61,7 @@ WITH unsolved AS (
         ORDER BY m.{{QbHelpMessage.createdAt}}
         LIMIT 1) f
     WHERE t.{{QbHelpThread.escalated}}
-      AND t.{{QbHelpThread.escalatedAt}} >= CAST(:from AS timestamptz)
-      AND t.{{QbHelpThread.escalatedAt}} < CAST(:to AS timestamptz)
+      AND t.{{QbHelpThread.escalatedMonth}} = :month
 )
 SELECT rowKey, reason, threadId, entry, language, page, question, at FROM unsolved
 UNION ALL

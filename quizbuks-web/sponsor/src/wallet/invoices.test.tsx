@@ -242,6 +242,9 @@ describe('the platform fee account (F-M1)', () => {
     const lots = await within(block).findAllByTestId('fee-lot-row')
     expect(lots.map((row) => row.dataset.subAccount)).toEqual(['FEE_CREDIT', 'CASH'])
     expect(lots[1]).toHaveTextContent('700 Kudos')
+    // F-M2: what of each lot was spent.
+    expect(within(lots[1]).getByTestId('fee-lot-used')).toHaveTextContent('300 Kudos')
+    expect(within(lots[0]).getByTestId('fee-lot-used')).toHaveTextContent('0 Kudos')
     expect(await within(block).findAllByTestId('fee-payment-row')).toHaveLength(2)
     expect(block.textContent).not.toMatch(/JPY|yen|円/)
     await expectAccessible(block)

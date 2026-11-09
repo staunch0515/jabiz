@@ -1,6 +1,6 @@
 /*---
 id: qb.system.recon-fee-account
-description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts (the daily reconciliation; differences only)
+description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; and by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided (the daily reconciliation; differences only)
 entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
@@ -23,6 +23,8 @@ permissions: [qb.wallet.system]
 -- FEE_CREDIT: 2190 for a sponsor (credit less debit) against their FEE_CREDIT wallet and against what their grants have
 --   left (the wallet when it differs, else the grants).
 -- CASH_LOTS: 2160 for a sponsor against what their cash lots have left.
+-- FEE_CREDIT_PROMOTION (F-M2): 5140 posted from the grants (debit less credit) by the operator each grant recorded when
+--   it was made, against the grants' amounts less what was voided of them; sponsorId holds the operator ('-': none).
 -- FEE_PAYMENTS: what the postings of fees and invoices took from 2160 and 2190 for a sponsor (debit less credit: a
 --   voided invoice's reversal gives it back) against the parts written for those postings. A payment from before F-M1
 --   has no parts: a posting no part names, of a payment made before the first part was written, is left out, and so is
@@ -64,6 +66,25 @@ parts AS (
     SELECT p.{{QbFeePayment.transactionId}} AS r_tx, sum(p.{{QbFeePayment.amount}}) AS r_amount
     FROM {{QbFeePayment}} p
     GROUP BY p.{{QbFeePayment.transactionId}}
+),
+promotion_ledger AS (
+    SELECT coalesce(g.{{QbFeeCreditGrant.operatorId}}, '-') AS r_operator,
+           sum(CASE WHEN e.{{LedgerEntry.direction}} = 'DEBIT' THEN e.{{LedgerEntry.amount}}
+               ELSE -e.{{LedgerEntry.amount}} END) AS r_balance
+    FROM {{LedgerTransaction}} t
+    JOIN {{LedgerEntry}} e ON e.{{LedgerEntry.transactionId}} = t.{{LedgerTransaction.transactionId}}
+    JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
+    LEFT JOIN {{QbFeeCreditGrant}} g
+        ON CAST(g.{{QbFeeCreditGrant.grantId}} AS text) = t.{{LedgerTransaction.sourceId}}
+    WHERE t.{{LedgerTransaction.sourceEntity}} = 'QbFeeCreditGrant'
+      AND a.{{LedgerAccount.accountCode}} = '5140'
+    GROUP BY coalesce(g.{{QbFeeCreditGrant.operatorId}}, '-')
+),
+promotion_grants AS (
+    SELECT coalesce(g.{{QbFeeCreditGrant.operatorId}}, '-') AS r_operator,
+           sum(g.{{QbFeeCreditGrant.amount}} - g.{{QbFeeCreditGrant.voidedAmount}}) AS r_net
+    FROM {{QbFeeCreditGrant}} g
+    GROUP BY coalesce(g.{{QbFeeCreditGrant.operatorId}}, '-')
 ),
 first_part AS (
     SELECT min(p.{{QbFeePayment.paidAt}}) AS r_at FROM {{QbFeePayment}} p
@@ -107,6 +128,12 @@ SELECT CAST('CASH_LOTS' AS varchar(30)), CAST(coalesce(c.r_party, x.r_party) AS 
 FROM cash_ledger c
 FULL OUTER JOIN lots x ON x.r_party = c.r_party
 WHERE coalesce(c.r_balance, 0) <> coalesce(x.r_remaining, 0)
+UNION ALL
+SELECT CAST('FEE_CREDIT_PROMOTION' AS varchar(30)), CAST(coalesce(pg.r_operator, pl.r_operator) AS varchar(128)),
+       coalesce(pg.r_net, 0), coalesce(pl.r_balance, 0)
+FROM promotion_grants pg
+FULL OUTER JOIN promotion_ledger pl ON pl.r_operator = pg.r_operator
+WHERE coalesce(pg.r_net, 0) <> coalesce(pl.r_balance, 0)
 UNION ALL
 SELECT CAST('FEE_PAYMENTS' AS varchar(30)), CAST(k.r_party AS varchar(128)), sum(k.r_taken), sum(k.r_parts)
 FROM checked_tx k

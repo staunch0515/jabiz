@@ -223,12 +223,12 @@ public class HelpConfig {
 
     @Bean
     ProcessDefinition<HelpProcesses.RateInput, HelpProcesses.ThreadOutput, ProcessContext> qbHelpRate() {
-        return HelpProcesses.rate();
+        return HelpProcesses.rate(zone);
     }
 
     @Bean
     ProcessDefinition<HelpProcesses.EscalateInput, HelpProcesses.ThreadOutput, ProcessContext> qbHelpEscalate() {
-        return HelpProcesses.escalate();
+        return HelpProcesses.escalate(zone);
     }
 
     @Bean

@@ -36,7 +36,7 @@ const en = {
     back: 'All messages',
     gone: 'This message is no longer in your inbox.',
     viewQuiz: 'View quiz',
-    action: { RESULT: 'See the result', WALLET: 'Open My Kudos', PAYOUT: 'Open the payout account', CASH: 'Open My Sponsor account', REDEEM: 'Open My Sponsor account', DIGITAL: 'Open My Sponsor account' },
+    action: { RESULT: 'See the result', WALLET: 'Open My Kudos', PAYOUT: 'Open the payout account', CASH: 'Open My Sponsor account', REDEEM: 'Open My Sponsor account', DIGITAL: 'Open My Sponsor account', HELP: 'Open the conversation' },
     until: 'Until {{time}}',
   },
 }
@@ -73,7 +73,7 @@ const zh: Texts = {
     back: '全部消息',
     gone: '这条消息已不在你的收件箱中。',
     viewQuiz: '查看 Quiz',
-    action: { RESULT: '查看结果', WALLET: '打开我的学分', PAYOUT: '打开收款账户', CASH: '打开我的发起方', REDEEM: '打开我的发起方', DIGITAL: '打开我的发起方' },
+    action: { RESULT: '查看结果', WALLET: '打开我的学分', PAYOUT: '打开收款账户', CASH: '打开我的发起方', REDEEM: '打开我的发起方', DIGITAL: '打开我的发起方', HELP: '查看对话' },
     until: '至 {{time}}',
   },
 }
@@ -108,7 +108,7 @@ const ja: Texts = {
     back: 'メッセージ一覧',
     gone: 'このメッセージは受信箱にありません。',
     viewQuiz: 'クイズを見る',
-    action: { RESULT: '結果を見る', WALLET: 'マイクドスを開く', PAYOUT: '受取口座を開く', CASH: '主催者アカウントを開く', REDEEM: '主催者アカウントを開く', DIGITAL: '主催者アカウントを開く' },
+    action: { RESULT: '結果を見る', WALLET: 'マイクドスを開く', PAYOUT: '受取口座を開く', CASH: '主催者アカウントを開く', REDEEM: '主催者アカウントを開く', DIGITAL: '主催者アカウントを開く', HELP: '会話を開く' },
     until: '{{time}} まで',
   },
 }

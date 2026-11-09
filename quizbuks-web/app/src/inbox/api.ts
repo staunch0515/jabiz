@@ -1,5 +1,6 @@
 import { api, runProcess, runQuery, unwrap, type QueryPage } from '@jabiz/client'
 import type { I18nText } from '../qb/legal'
+import { helpThreadPath } from '../help/pages'
 import { MY_SPONSOR_PATH } from '../mysponsor/api'
 import { INBOX_DATASET, INBOX_PROCESS, INBOX_TEMPLATE } from './ids'
 
@@ -15,6 +16,7 @@ export type ItemKind = 'MESSAGE' | 'BROADCAST'
 export type Category = 'SYSTEM' | 'PROMO' | 'REWARD' | 'REMINDER' | 'SPONSOR'
 /** Where a message leads (`QbInbox.ACTION_*`). */
 export type Action = 'RESULT' | 'WALLET' | 'PAYOUT' | 'CASH' | 'REDEEM' | 'DIGITAL' | 'REFERRALS' | 'CONVERSATION'
+  | 'HELP'
 
 /** A row of `qb.app.inbox`: a message of the taker's own, or an announcement or notice that matches them. */
 export interface InboxItem {
@@ -99,6 +101,8 @@ export function targetOf(item: Pick<InboxItem, 'itemKind' | 'action' | 'actionId
     if (item.action === 'PAYOUT') return '/wallet/payout'
     // Q82: a sponsor's reply leads to the conversation.
     if (item.action === 'CONVERSATION' && item.actionId) return `/conversations/${encodeURIComponent(item.actionId)}`
+    // F-C10c: a person's reply in the AI help leads to the conversation at the help page.
+    if (item.action === 'HELP' && item.actionId) return helpThreadPath(item.actionId)
     // Q68: a sponsor's own message leads to their page in the app (what to do about it is the console's).
     if (item.action === 'CASH' || item.action === 'REDEEM' || item.action === 'DIGITAL') return MY_SPONSOR_PATH
   }

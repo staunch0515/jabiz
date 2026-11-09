@@ -31,6 +31,9 @@ import java.util.regex.Pattern;
  *       {@code input_tokens}: a token per four characters of the request without its files (and without the output
  *       limit, user id and fallback, which the count does not take), and 1,500 a document; the paid call of the same
  *       request reports the same number as its input usage;</li>
+ *   <li>an AI help question (F-C10, {@code <help_question>}) is answered from the help's materials sent with it
+ *       ({@code <help_materials>}): when a FAQ heading ({@code ### ...}) is the question itself, its answer with the
+ *       site's paths in it as the links (else the FAQ's page); otherwise "not sure", without links;</li>
  *   <li>a quiz whose title contains {@code [refuse]} is declined ({@code stop_reason: refusal}), one with
  *       {@code [busy]} is answered 529 (overloaded), so that the console's failure texts can be seen.</li>
  * </ul>
@@ -85,6 +88,10 @@ public final class ClaudeStub {
                 send(exchange, 200, message(model, "refusal", null, in, 0));
                 return;
             }
+            if (body.contains("<help_question>")) {
+                send(exchange, 200, message(model, "end_turn", helpAnswer(unescaped(body)), in, 120));
+                return;
+            }
             if (body.contains("Number of pairs: ")) {
                 // Q73d-2: every pair compared means the same.
                 Matcher numbers = TEXT_NO.matcher(body);
@@ -126,6 +133,90 @@ public final class ClaudeStub {
             String text = "{\"questions\":[" + String.join(",", questions) + "]}";
             send(exchange, 200, message(model, "end_turn", text, in, 200L * count));
         }
+    }
+
+    /** A site path in a help answer: the Takers' or the Sponsors' pages. */
+    private static final Pattern SITE_PATH = Pattern.compile("/(?:taker|sponsor)(?:/[A-Za-z0-9._~?=&%-]+)*/?");
+
+    /**
+     * The help's answer (F-C10) as the job's JSON: the answer of the FAQ entry whose heading is the question, with the
+     * site's paths it names (else the FAQ's page, which the heading's section names); "not sure" otherwise.
+     */
+    static String helpAnswer(String request) {
+        String question = between(request, "<help_question>\n", "\n</help_question>", true);
+        String materials = between(request, "<help_materials>", "</help_materials>", false);
+        String answer = null;
+        List<String> links = new ArrayList<>();
+        if (question != null && materials != null) {
+            String wanted = question.strip();
+            String[] lines = materials.split("\n", -1);
+            String section = null;
+            for (int i = 0; i < lines.length && answer == null; i++) {
+                if (lines[i].startsWith("## ")) {
+                    Matcher path = SITE_PATH.matcher(lines[i]);
+                    section = path.find() ? path.group() : null;
+                } else if (lines[i].startsWith("### ") && lines[i].substring(4).strip().equalsIgnoreCase(wanted)) {
+                    StringBuilder text = new StringBuilder();
+                    for (int j = i + 1; j < lines.length && !lines[j].startsWith("#"); j++) {
+                        if (!lines[j].isBlank()) {
+                            text.append(text.isEmpty() ? "" : "\n").append(lines[j].strip());
+                        }
+                    }
+                    answer = text.toString();
+                    Matcher path = SITE_PATH.matcher(answer);
+                    while (path.find()) {
+                        links.add(path.group());
+                    }
+                    if (links.isEmpty() && section != null) {
+                        links.add(section);
+                    }
+                }
+            }
+        }
+        if (answer == null || answer.isBlank()) {
+            answer = "I am not sure about this. A person can help: choose to ask a person.";
+        }
+        StringBuilder json = new StringBuilder("{\"answer\":").append(quoted(answer)).append(",\"links\":[");
+        for (int i = 0; i < links.size(); i++) {
+            json.append(i == 0 ? "" : ",").append(quoted(links.get(i)));
+        }
+        return json.append("],\"quiz_request\":false}").toString();
+    }
+
+    /** The text between two marks: the last such text, or the first; null when there is none. */
+    private static String between(String text, String start, String end, boolean last) {
+        int from = last ? text.lastIndexOf(start) : text.indexOf(start);
+        if (from < 0) {
+            return null;
+        }
+        int to = text.indexOf(end, from + start.length());
+        return to < 0 ? null : text.substring(from + start.length(), to);
+    }
+
+    /** The request with its JSON strings' escapes undone (good enough to read the help's tags and texts). */
+    static String unescaped(String body) {
+        StringBuilder text = new StringBuilder(body.length());
+        for (int i = 0; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (c != '\\' || i + 1 >= body.length()) {
+                text.append(c);
+                continue;
+            }
+            char next = body.charAt(++i);
+            switch (next) {
+                case 'n' -> text.append('\n');
+                case 't' -> text.append('\t');
+                case 'r' -> text.append('\r');
+                case 'u' -> {
+                    if (i + 4 < body.length()) {
+                        text.append((char) Integer.parseInt(body.substring(i + 1, i + 5), 16));
+                        i += 4;
+                    }
+                }
+                default -> text.append(next);
+            }
+        }
+        return text.toString();
     }
 
     /**

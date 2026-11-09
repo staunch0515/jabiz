@@ -20,7 +20,7 @@ export type BillingMode = (typeof BILLING_MODES)[number]
 export const billingModeOf = (value: unknown): BillingMode => (value === 'POSTPAID' ? 'POSTPAID' : 'PREPAID')
 
 /** A fee request's kind (backend `QbFees`): a fee charged by hand, or an invoice voided. */
-export const REQUEST_KINDS = ['MANUAL', 'VOID'] as const
+export const REQUEST_KINDS = ['MANUAL', 'VOID', 'CREDIT'] as const
 export type RequestKind = (typeof REQUEST_KINDS)[number]
 
 /** The invoice states (backend `QbFees`); the first three are unpaid (F-M1: an invoice may be paid in part). */
@@ -87,6 +87,9 @@ export interface FeeRequest {
   approvalRequestId: string | null
   decidedAt: string | null
   chargeId: string | null
+  /** F-M2: a grant by hand's days of validity (none: the parameter's) and the lot the approval made. */
+  validDays: number | null
+  grantId: string | null
 }
 
 function toCharge(row: Row): FeeCharge {
@@ -135,7 +138,7 @@ function toInvoice(row: Row): FeeInvoice {
 function toRequest(row: Row): FeeRequest {
   return {
     requestId: String(row.requestId),
-    kind: row.kind === 'VOID' ? 'VOID' : 'MANUAL',
+    kind: row.kind === 'VOID' ? 'VOID' : row.kind === 'CREDIT' ? 'CREDIT' : 'MANUAL',
     sponsorId: String(row.sponsorId ?? ''),
     company: str(row.company),
     amount: str(row.amount),
@@ -147,6 +150,8 @@ function toRequest(row: Row): FeeRequest {
     approvalRequestId: str(row.approvalRequestId),
     decidedAt: str(row.decidedAt),
     chargeId: str(row.chargeId),
+    validDays: row.validDays == null ? null : num(row.validDays),
+    grantId: str(row.grantId),
   }
 }
 
@@ -191,11 +196,14 @@ export async function readFeeRequest(requestId: string): Promise<FeeRequest | nu
 
 /**
  * `FeeRequests.RequestInput`: a fee by hand names the sponsor and the amount (the tax is the server's); an invoice
- * voided names the invoice. Both give the reason the approver reads.
+ * voided names the invoice; platform fee Kudos granted by hand (F-M2) name the sponsor, the amount (within the cap
+ * `qb.fee-credit.manual.max`, the server's check) and, if not the parameter's, the days valid. All give the reason
+ * the approver reads.
  */
 export type FeeRequestInput =
   | { kind: 'MANUAL'; sponsorId: string; amount: number; reason: string }
   | { kind: 'VOID'; invoiceId: string; reason: string }
+  | { kind: 'CREDIT'; sponsorId: string; amount: number; reason: string; validDays?: number }
 
 /** Records the request for another administrator's approval; the output names the approval. */
 export const recordFeeRequest = (input: FeeRequestInput) =>
@@ -299,3 +307,100 @@ export async function readFeeAccountTotals(from: string, to: string): Promise<Fe
     lotsRemaining: amount(row.lotsRemaining), openLots: num(row.openLots), sponsors: num(row.sponsors),
     paidFees: amount(row.paidFees) }))
 }
+
+// ---- F-M2: platform fee Kudos granted ---------------------------------------------------------------------------
+
+/** A row of `qb.admin.fee-credit-grants`: one lot, with its operator when it was granted. */
+export interface FeeCreditGrant {
+  grantId: string
+  sponsorId: string
+  company: string | null
+  operatorId: string | null
+  operatorName: string | null
+  source: string
+  amount: string
+  spent: string
+  remaining: string
+  voidedAmount: string
+  grantedAt: string | null
+  expiresAt: string | null
+  voidedAt: string | null
+}
+
+/** How the grants are summed (`qb.admin.fee-credit-summary`'s `groupBy`). */
+export const GRANT_GROUPS = ['OPERATOR', 'SPONSOR', 'SOURCE'] as const
+export type GrantGroup = (typeof GRANT_GROUPS)[number]
+
+/** A row of `qb.admin.fee-credit-summary`: `groupKey` is the operator ('-': none), the Sponsor or the source. */
+export interface FeeCreditSum {
+  groupKey: string
+  label: string | null
+  lots: number
+  granted: string
+  spent: string
+  remaining: string
+  voided: string
+}
+
+/** The lots granted, newest first. */
+export async function readFeeCreditGrants(offset: number, limit: number, sorts?: SortSpec[], filters?: Filter[]):
+  Promise<Page<FeeCreditGrant>> {
+  const page = await runQuery<Row>(TEMPLATE.feeCreditGrants, { filters, sorts, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row) => ({
+      grantId: String(row.grantId),
+      sponsorId: String(row.sponsorId ?? ''),
+      company: str(row.company),
+      operatorId: str(row.operatorId),
+      operatorName: str(row.operatorName),
+      source: String(row.source ?? ''),
+      amount: amount(row.amount),
+      spent: amount(row.spent),
+      remaining: amount(row.remaining),
+      voidedAmount: amount(row.voidedAmount),
+      grantedAt: str(row.grantedAt),
+      expiresAt: str(row.expiresAt),
+      voidedAt: str(row.voidedAt),
+    })),
+  }
+}
+
+/** The grants summed one way, the most granted first. */
+export async function readFeeCreditSummary(groupBy: GrantGroup, offset: number, limit: number):
+  Promise<Page<FeeCreditSum>> {
+  const page = await runQuery<Row>(TEMPLATE.feeCreditSummary, { params: { groupBy }, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row) => ({
+      groupKey: String(row.groupKey ?? ''),
+      label: str(row.label),
+      lots: num(row.lots),
+      granted: amount(row.granted),
+      spent: amount(row.spent),
+      remaining: amount(row.remaining),
+      voided: amount(row.voided),
+    })),
+  }
+}
+
+/** An operator's Sponsor's onboarding grant: whether it is switched on, and the lot if given; null: not its Sponsor. */
+export interface Onboarding {
+  enabled: boolean
+  grantedAt: string | null
+  amount: string | null
+  expiresAt: string | null
+}
+
+export async function readOnboarding(sponsorId: string): Promise<Onboarding | null> {
+  const page = await runQuery<Row>(TEMPLATE.operatorFeeCreditOnboarding, { params: { sponsorId }, limit: 1 })
+  const row = page.items[0]
+  if (!row) return null
+  return { enabled: row.enabled === true, grantedAt: str(row.grantedAt), amount: str(row.amount),
+    expiresAt: str(row.expiresAt) }
+}
+
+/** Confirms the Sponsor (a lead of its operator) and grants the onboarding platform fee Kudos once. */
+export const confirmOnboarding = (sponsorId: string) =>
+  runProcess<{ grantId: string | null; granted: boolean; amount: number | null; expiresAt: string | null }>(
+    FEE_PROCESS.onboarding, { sponsorId })

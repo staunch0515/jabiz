@@ -348,6 +348,8 @@ class SetupIT extends QbItSupport {
         expected.put("2170", "LIABILITY");
         // F-M1: the Sponsors' platform fee Kudos (granted credit).
         expected.put("2190", "LIABILITY");
+        // F-M2: the promotion expenses of the platform fee Kudos granted.
+        expected.put("5140", "EXPENSE");
         assertThat(accounts).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
@@ -453,6 +455,12 @@ class SetupIT extends QbItSupport {
         // F-C4: the sponsor package (ordinary parameters).
         expected.put(QbParams.PACKAGE_CONFIRM_BYTES, "104857600");
         expected.put(QbParams.PACKAGE_IMPORT_RETENTION_DAYS, "90");
+        // F-M2: the platform fee Kudos granted (the reminder ordinary, the rest controlled; the cap not set up).
+        expected.put(QbParams.FEE_CREDIT_EXPIRY_NOTICE_DAYS, "14");
+        expected.put(QbParams.FEE_CREDIT_GRANT_ENABLED, "false");
+        expected.put(QbParams.FEE_CREDIT_GRANT_BASIC, "1000");
+        expected.put(QbParams.FEE_CREDIT_GRANT_CERTIFIED, "10000");
+        expected.put(QbParams.FEE_CREDIT_VALID_DAYS, "90");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // F-S2: the knowledge maps' limits and the review reminder (ordinary).

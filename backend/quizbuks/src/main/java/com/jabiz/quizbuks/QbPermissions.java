@@ -220,6 +220,11 @@ public final class QbPermissions {
     /** Q87: setting a sponsor's billing mode and credit limit (an operator for its own, headquarters for any). */
     public static final String FEE_BILLING = "qb.fee.billing";
     /**
+     * F-M2: an operator's lead confirms that an approved sponsor of the operator is complete and gives them the
+     * onboarding platform fee Kudos (the process checks the caller's place: a lead of the sponsor's operator).
+     */
+    public static final String FEE_CREDIT_ONBOARDING_CONFIRM = "qb.fee-credit.onboarding.confirm";
+    /**
      * The analytics job's item process ({@code QB_ANALYTICS_ITEM}, {@code internal()}), its templates and its own
      * datasets. Granted to no role.
      */
@@ -343,6 +348,11 @@ public final class QbPermissions {
      * administrators for every conversation, the operators for their own Sponsors' (the entry scope limits them).
      */
     public static final String ADMIN_HELP = "qb.admin.help";
+    /**
+     * F-C10c: the report of what the AI help did not solve (the questions' words, never who asked). Headquarters'
+     * content administrators only, not the operators (controller, 2026-11-09).
+     */
+    public static final String ADMIN_HELP_GAPS = "qb.admin.help.gaps";
     /**
      * F-C10: the help's datasets read by processes only, its job outcomes and daily jobs ({@code internal()}). Granted
      * to no role.
