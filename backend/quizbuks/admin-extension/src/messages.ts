@@ -21,6 +21,7 @@ import { certificationMenu, certificationMessages } from './certification-messag
 import { referralMenu, referralMessages } from './referral-messages'
 import { feeMenu, feeMessages } from './fee-messages'
 import { assetMessages } from './asset-messages'
+import { packageImportMessages } from './package-messages'
 import { pickersMessages } from './pickers-messages'
 import { usageMenu, usageMessages } from './usage-messages'
 import { regionMenu, regionMessages } from './region-messages'
@@ -48,6 +49,7 @@ export const messages = {
     exposure: exposureMessages.en,
     fee: feeMessages.en,
     assets: assetMessages.en,
+    packageImports: packageImportMessages.en,
     pickers: pickersMessages.en,
     usage: usageMessages.en,
     certification: certificationMessages.en,
@@ -357,6 +359,7 @@ export const messages = {
     exposure: exposureMessages.zh,
     fee: feeMessages.zh,
     assets: assetMessages.zh,
+    packageImports: packageImportMessages.zh,
     pickers: pickersMessages.zh,
     usage: usageMessages.zh,
     certification: certificationMessages.zh,
@@ -666,6 +669,7 @@ export const messages = {
     exposure: exposureMessages.ja,
     fee: feeMessages.ja,
     assets: assetMessages.ja,
+    packageImports: packageImportMessages.ja,
     pickers: pickersMessages.ja,
     usage: usageMessages.ja,
     certification: certificationMessages.ja,
