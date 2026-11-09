@@ -255,6 +255,11 @@ public final class QbHelp {
         eb.field("inputTokens", f -> f.physicalColumn("input_tokens").required(true).processOnly().asNumeric(15, 0));
         eb.field("outputTokens", f -> f.physicalColumn("output_tokens").required(true).processOnly()
             .asNumeric(15, 0));
+        // F-C10b: the part of the input tokens the provider wrote to its prompt cache and read from it.
+        eb.field("cacheWriteTokens", f -> f.physicalColumn("cache_write_tokens").required(true).processOnly()
+            .asNumeric(15, 0));
+        eb.field("cacheReadTokens", f -> f.physicalColumn("cache_read_tokens").required(true).processOnly()
+            .asNumeric(15, 0));
         // Dollars at the models' list prices (AiCost), for reference only.
         eb.field("costUsd", f -> f.physicalColumn("cost_usd").processOnly().asNumeric(16, 6));
         eb.field("version", f -> f.physicalColumn("version").asVersion());

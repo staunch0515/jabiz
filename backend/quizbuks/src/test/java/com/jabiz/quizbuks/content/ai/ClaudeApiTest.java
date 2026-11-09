@@ -49,6 +49,42 @@ class ClaudeApiTest {
     }
 
     @Test
+    void cachedSystemTextsGoAfterTheSystemPromptAndTheLastIsMarkedForTheCache() {
+        // F-C10b: the system prompt as before when nothing is cached.
+        assertThat(JSON.readTree(ClaudeApi.body(request(ClaudeService.HAIKU), JSON)).get("system").isString())
+            .isTrue();
+        ClaudeApi.Request cached = request(ClaudeService.HAIKU).withCachedSystem(List.of("first static", "materials"));
+        JsonNode body = JSON.readTree(ClaudeApi.body(cached, JSON));
+        JsonNode system = body.get("system");
+        assertThat(system.isArray()).isTrue();
+        assertThat(system).hasSize(3);
+        assertThat(system.get(0).get("text").asString()).isEqualTo(AiPrompt.SYSTEM);
+        assertThat(system.get(0).has("cache_control")).isFalse();
+        assertThat(system.get(1).has("cache_control")).isFalse();
+        assertThat(system.get(2).get("text").asString()).isEqualTo("materials");
+        assertThat(system.get(2).get("cache_control").get("type").asString()).isEqualTo("ephemeral");
+        // The user's message is never marked: it varies with every request.
+        assertThat(body.get("messages").toString()).doesNotContain("cache_control");
+        // The count takes the same system blocks; the request keeps them when counted.
+        assertThat(JSON.readTree(ClaudeApi.countBody(cached, JSON)).get("system")).isEqualTo(system);
+        assertThat(cached.counted(10).cachedSystem()).containsExactly("first static", "materials");
+    }
+
+    @Test
+    void cacheWritesAndReadsAreAddedUpOverTheFallbacksAttempts() {
+        String body = "{\"model\":\"claude-opus-5\",\"stop_reason\":\"end_turn\",\"content\":[],\"usage\":{"
+            + "\"iterations\":[{\"type\":\"message\",\"input_tokens\":10,\"cache_creation_input_tokens\":90,"
+            + "\"output_tokens\":0},{\"type\":\"fallback_message\",\"input_tokens\":10,"
+            + "\"cache_read_input_tokens\":90,\"output_tokens\":5}]}}";
+        ClaudeApi.Usage usage = ClaudeApi.answer(200, body, JSON).usage();
+        assertThat(usage.inputTokens()).isEqualTo(200);
+        assertThat(usage.cacheWriteInputTokens()).isEqualTo(90);
+        assertThat(usage.cacheReadInputTokens()).isEqualTo(90);
+        // Kept when priced at the long-prompt rate.
+        assertThat(usage.asLongPrompt().cacheReadInputTokens()).isEqualTo(90);
+    }
+
+    @Test
     void haikuHasNoFallbackAndNoUserIdIsSentWhenNoneIsGiven() {
         JsonNode body = JSON.readTree(ClaudeApi.body(new ClaudeApi.Request(ClaudeService.HAIKU, "low", 4_600,
             AiPrompt.SYSTEM, "x", null), JSON));
@@ -112,8 +148,8 @@ class ClaudeApiTest {
         assertThat(answer.text()).isEqualTo("{\"questions\":[]}");
         assertThat(answer.servedModel()).isEqualTo("claude-opus-5-5");
         assertThat(answer.fellBack()).isFalse();
-        // Cache writes and reads are input too.
-        assertThat(answer.usage()).isEqualTo(new ClaudeApi.Usage(125, 40));
+        // Cache writes and reads are input too, and recorded apart as well (F-C10b).
+        assertThat(answer.usage()).isEqualTo(new ClaudeApi.Usage(125, 40).withCache(5, 20));
     }
 
     @Test

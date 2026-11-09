@@ -35,8 +35,20 @@ public final class HelpCodes {
     /** An operator stopped the job at the platform. */
     public static final String STOPPED = "QB_HELP_STOPPED";
 
+    /** F-C10b: the manual changed since the administrator read it. */
+    public static final String MANUAL_CHANGED = "QB_HELP_MANUAL_CHANGED";
+    /** A manual is published in every language the help answers in. */
+    public static final String MANUAL_LANGUAGE = "QB_HELP_MANUAL_LANGUAGE";
+    /** The materials of an entry and language would be larger than {@code qb.help.manual-max-bytes}. */
+    public static final String MATERIALS_TOO_LARGE = "QB_HELP_MATERIALS_TOO_LARGE";
+    /** The draft was edited since the repository's text was last loaded: replacing it is asked for explicitly. */
+    public static final String MANUAL_EDITED = "QB_HELP_MANUAL_EDITED";
+    /** A snapshot's job was given a text that is not the one its hash names (the job fails; the next build retries). */
+    public static final String MATERIALS_CHANGED = "QB_HELP_MATERIALS_CHANGED";
+
     public static final List<String> ALL = List.of(DISABLED, DAILY_LIMIT, MONTHLY_LIMIT, WAITING, CLOSED,
-        ALREADY_ESCALATED, NOT_ESCALATED, ENTRY, NOT_RATABLE, TEXT_REQUIRED, TEXT_TOO_LONG, MODEL, QUIZ_REFUSED, STOPPED);
+        ALREADY_ESCALATED, NOT_ESCALATED, ENTRY, NOT_RATABLE, TEXT_REQUIRED, TEXT_TOO_LONG, MODEL, QUIZ_REFUSED, STOPPED,
+        MANUAL_CHANGED, MANUAL_LANGUAGE, MATERIALS_TOO_LARGE, MANUAL_EDITED, MATERIALS_CHANGED);
 
     private HelpCodes() {}
 }

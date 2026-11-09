@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * What the AI help asks Claude (F-C10): a fixed system prompt (the rules; part b puts the published materials before
- * it, cached), and one user message with the page, the conversation's latest turns and the question, all as data
+ * What the AI help asks Claude (F-C10): a fixed system prompt (the rules), the published materials after it in a
+ * system block of their own, cached by the provider (F-C10b), and one user message with the page, the conversation's latest turns and the question, all as data
  * between tags. The answer is one JSON document (structured outputs).
  */
 public final class HelpPrompt {
@@ -42,7 +42,21 @@ public final class HelpPrompt {
         - Answer in the language the user message names, in short plain sentences (no Markdown, no tables).
         """;
 
+    /** The tags the materials are put between, in their own system block. */
+    static final String MATERIALS_OPEN = "<help_materials>\n";
+    static final String MATERIALS_CLOSE = "\n</help_materials>";
+
     private HelpPrompt() {}
+
+    /**
+     * The system block of the materials (F-C10b): the snapshot as published, between tags, after the rules. The same
+     * for every question of the entry and language, so the provider's prompt cache serves it; nothing of the user is in
+     * it.
+     */
+    public static String materials(String snapshot) {
+        return MATERIALS_OPEN + "The platform's published materials for this user (the manual, the FAQ and the terms):"
+            + "\n\n" + snapshot.strip() + MATERIALS_CLOSE;
+    }
 
     /** The user message: the language, the page, the latest turns and the question, as tagged JSON data. */
     public static String user(HelpJob.Input input, JsonMapper json) {
@@ -75,10 +89,15 @@ public final class HelpPrompt {
     /**
      * What one request's input may come to, from its size: a token per three bytes of the prompt and the framing (as
      * the other AI jobs estimate), so that an attempt that recorded nothing is charged no less than it may have cost.
-     * Part b adds the materials' size.
      */
     public static long reservedInput(String system, String user) {
-        long bytes = system.getBytes(StandardCharsets.UTF_8).length + user.getBytes(StandardCharsets.UTF_8).length;
+        return reservedInput(system, 0, user);
+    }
+
+    /** As {@link #reservedInput(String, String)}, with a materials snapshot of {@code materialsBytes} (F-C10b). */
+    public static long reservedInput(String system, long materialsBytes, String user) {
+        long bytes = system.getBytes(StandardCharsets.UTF_8).length + user.getBytes(StandardCharsets.UTF_8).length
+            + (materialsBytes > 0 ? materialsBytes + materials("").getBytes(StandardCharsets.UTF_8).length : 0);
         return com.jabiz.quizbuks.content.ai.AiLimits.inputEstimate(bytes);
     }
 

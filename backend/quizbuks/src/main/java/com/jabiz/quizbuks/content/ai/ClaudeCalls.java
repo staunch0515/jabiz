@@ -120,6 +120,13 @@ public final class ClaudeCalls {
             ctx.recordUsage(AiQuestionsJob.LONG_INPUT_TOKENS, priced.longPromptInputTokens());
             ctx.recordUsage(AiQuestionsJob.LONG_OUTPUT_TOKENS, priced.longPromptOutputTokens());
         }
+        // F-C10b: the part of the input written to and read from the prompt cache (already in the input above).
+        if (priced.cacheWriteInputTokens() > 0) {
+            ctx.recordUsage(AiQuestionsJob.CACHE_WRITE_INPUT_TOKENS, priced.cacheWriteInputTokens());
+        }
+        if (priced.cacheReadInputTokens() > 0) {
+            ctx.recordUsage(AiQuestionsJob.CACHE_READ_INPUT_TOKENS, priced.cacheReadInputTokens());
+        }
         if (reserved != null && usage.inputTokens() + usage.outputTokens() > reserved.totalTokens()) {
             // The limits counted on the reservation (a provider's fallback runs the input again): worth a look.
             log.warn("AI usage of one attempt above its reservation (job type {})", reserved.jobType());
