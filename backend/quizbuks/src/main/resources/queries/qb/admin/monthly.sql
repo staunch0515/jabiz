@@ -30,6 +30,7 @@ results:
   feeRevenue:       { kind: { type: monetary, currency: JPY, scale: 0 } }
   taxPayable:       { kind: { type: monetary, currency: JPY, scale: 0 } }
   entryFeesUnsettled: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  feeCredit:        { kind: { type: monetary, currency: JPY, scale: 0 } }
 list:
   filters: [category]
   sorts:   [seq]
@@ -95,7 +96,8 @@ per_tx AS (
            coalesce(sum(net) FILTER (WHERE code = '1130'), 0) AS a1130,
            coalesce(sum(net) FILTER (WHERE code = '4120'), 0) AS a4120,
            coalesce(sum(net) FILTER (WHERE code = '2150'), 0) AS a2150,
-           coalesce(sum(net) FILTER (WHERE code = '2170'), 0) AS a2170
+           coalesce(sum(net) FILTER (WHERE code = '2170'), 0) AS a2170,
+           coalesce(sum(net) FILTER (WHERE code = '2190'), 0) AS a2190
     FROM moves
     GROUP BY tx_key, src, ref_kind, reversal
 ),
@@ -157,10 +159,14 @@ kinds AS (
                -- Q87b: a platform fee charged (1130 against 4120 and the tax), paid from the cash account, voided.
                WHEN p.src = 'QbFeeCharge' AND NOT p.reversal AND p.accts IN ('1130,4120', '1130,2150,4120')
                     AND p.a1130 > 0 AND p.a4120 < 0 AND p.a2150 <= 0 THEN 'FEE_CHARGED'
-               WHEN p.src IN ('QbFeeCharge', 'QbFeeInvoice') AND NOT p.reversal AND p.accts = '1130,2160'
-                    AND p.a2160 > 0 AND p.a1130 < 0 THEN 'FEE_PAID'
+               -- F-M1: paid from the fee credit (2190) and the cash (2160), either or both: the row's two columns
+               -- (feeCredit, sponsorCash) are what each paid.
+               WHEN p.src IN ('QbFeeCharge', 'QbFeeInvoice') AND NOT p.reversal
+                    AND p.accts IN ('1130,2160', '1130,2190', '1130,2160,2190')
+                    AND p.a2160 >= 0 AND p.a2190 >= 0 AND p.a1130 < 0 THEN 'FEE_PAID'
                WHEN p.src IN ('QbFeeCharge', 'QbFeeInvoice') AND p.reversal
-                    AND p.accts IN ('1130,4120', '1130,2150,4120', '1130,2160') THEN 'FEE_VOIDED'
+                    AND p.accts IN ('1130,4120', '1130,2150,4120', '1130,2160', '1130,2190', '1130,2160,2190')
+                    THEN 'FEE_VOIDED'
                -- Q88b: an entry fee paid at a start (the taker's 2120 to 2170 for the sponsor), and a day's fees
                -- settled into the sponsor's cash account (2170 to 2160; the source is the cash wallet row).
                WHEN p.src = 'QbAttempt' AND NOT p.reversal AND p.accts = '2120,2170'
@@ -190,7 +196,8 @@ SELECT
     coalesce(sum(k.a1130), 0)   AS feesReceivable,
     coalesce(sum(k.a4120), 0)   AS feeRevenue,
     coalesce(sum(k.a2150), 0)   AS taxPayable,
-    coalesce(sum(k.a2170), 0)   AS entryFeesUnsettled
+    coalesce(sum(k.a2170), 0)   AS entryFeesUnsettled,
+    coalesce(sum(k.a2190), 0)   AS feeCredit
 FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'), (5, 'REFUND'), (6, 'DISPUTE'),
              (7, 'STRIPE_FEE'), (8, 'REWARD'), (9, 'TRANSFER_SENT'), (10, 'TRANSFER_SETTLED'), (11, 'WITHDRAWAL_PAID'),
              (12, 'TRANSFER_FAILED'), (13, 'TRANSFER_REVERSED'), (14, 'PAYOUT'), (15, 'PAYOUT_FAILED'),

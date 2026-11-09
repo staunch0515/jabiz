@@ -2,6 +2,8 @@ package com.jabiz.quizbuks.wallet;
 
 import com.jabiz.ledger.Direction;
 import com.jabiz.process.ProcessContext;
+import com.jabiz.quizbuks.fee.CashLots;
+import com.jabiz.quizbuks.fee.QbFeeAccount;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.runtime.EntityInstance;
@@ -80,6 +82,9 @@ public final class EntryFeeSettlements {
                 Object walletId = QbWallets.change(ctx, cash, QbWallets.CASH, input(ctx).sponsorId(), amount, 0,
                     BigDecimal.ZERO, BigDecimal.ZERO);
                 ctx.put(AMOUNT, amount);
+                // F-M1: the day's entry fees are a cash lot of their own (the record: the day's settlement).
+                CashLots.add(ctx, input(ctx).sponsorId(), QbFeeAccount.OTHER, amount, DESCRIPTION_SOURCE,
+                    input(ctx).date());
                 ctx.put(POSTING, posting(ctx.opTime(), input(ctx).sponsorId(), String.valueOf(walletId),
                     input(ctx).date(), amount));
             })
@@ -103,6 +108,9 @@ public final class EntryFeeSettlements {
                 Map.of(QbLedger.PARTY, sponsorId)));
         return new LedgerProcesses.PostInput(bookingTime, DESCRIPTION, date, lines, QbWallets.WALLET, walletId);
     }
+
+    /** The record a lot of entry fees names: the day settled ({@code yyyy-MM-dd}) of {@link #SETTLE}. */
+    static final String DESCRIPTION_SOURCE = "QbEntryFeeSettlement";
 
     static SettleInput input(ProcessContext ctx) {
         return ctx.get(INPUT, SettleInput.class);

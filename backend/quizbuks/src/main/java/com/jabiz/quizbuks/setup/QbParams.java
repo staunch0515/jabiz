@@ -314,10 +314,12 @@ public final class QbParams {
     public static final String JOURNAL_ACCOUNT_2150 = JOURNAL_ACCOUNT_PREFIX + "2150";
     /** Q88b: the entry fees unsettled. */
     public static final String JOURNAL_ACCOUNT_2170 = JOURNAL_ACCOUNT_PREFIX + "2170";
+    /** F-M1: the sponsors' platform fee Kudos (the fee credit). */
+    public static final String JOURNAL_ACCOUNT_2190 = JOURNAL_ACCOUNT_PREFIX + "2190";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
         JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
         JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160, JOURNAL_ACCOUNT_1130,
-        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170);
+        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170, JOURNAL_ACCOUNT_2190);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -392,6 +394,10 @@ public final class QbParams {
     public static final String VIDEO_USE_REMIND_DAYS = "qb.video-use.remind-days";
     /** F-S14 (the controller: every number a parameter): the longest period one use covers, in days; not controlled. */
     public static final String VIDEO_USE_MAX_PERIOD_DAYS = "qb.video-use.max-period-days";
+    /** F-C4: above how many bytes the export of a sponsor package or a quiz file asks before it is saved. */
+    public static final String PACKAGE_CONFIRM_BYTES = "qb.package.confirm-bytes";
+    /** F-C4: how many days the record of a sponsor package's import is kept after its last change. */
+    public static final String PACKAGE_IMPORT_RETENTION_DAYS = "qb.package.import-retention-days";
 
     /*
      * F-C10 (docs/quizbuks/first-launch-spec.md F-C10, plans/impl/F-C10.md): the AI help. The switch and the platform's
@@ -517,6 +523,7 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_4120, "4120 Platform fee revenue"),
         journal(JOURNAL_ACCOUNT_2150, "2150 Consumption tax payable"),
         journal(JOURNAL_ACCOUNT_2170, "2170 Entry fees unsettled"),
+        journal(JOURNAL_ACCOUNT_2190, "2190 Sponsor platform fee Kudos"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
@@ -746,6 +753,12 @@ public final class QbParams {
         new Param(VIDEO_USE_MAX_PERIOD_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.videouse.VideoUseRules.DEFAULT_MAX_PERIOD_DAYS),
             "The longest period, in days, one ledger entry of a shared video's use covers (1 to 36600)"),
+        // F-C4: the sponsor package (ordinary).
+        new Param(PACKAGE_CONFIRM_BYTES, Map.of("type", "numeric", "precision", 12, "scale", 0), "104857600",
+            "Above how many bytes the export of a sponsor package or a quiz file asks before it is saved (100 MB by "
+                + "default)"),
+        new Param(PACKAGE_IMPORT_RETENTION_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0), "90",
+            "Days the record of a sponsor package's import is kept after its last change"),
         // F-C10: the AI help (the ordinary ones, then the controlled ones in the order of HELP_CONTROLLED; last).
         new Param(HELP_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",
             List.of("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")), "claude-haiku-5-5",

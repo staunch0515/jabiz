@@ -61,12 +61,14 @@ public final class QbFees {
     public static final String INVOICE_SEQUENCE = "qb.fee-invoice";
 
     public static final String OPEN = "OPEN";
+    /** Paid in part (F-M1): {@code paidAmount} of {@code total}, not past its due day. */
+    public static final String PARTIAL = "PARTIAL";
     public static final String OVERDUE = "OVERDUE";
     public static final String PAID = "PAID";
     public static final String VOID = "VOID";
-    public static final List<String> INVOICE_STATUSES = List.of(OPEN, OVERDUE, PAID, VOID);
-    /** The statuses an invoice is owed in. */
-    public static final List<String> UNPAID = List.of(OPEN, OVERDUE);
+    public static final List<String> INVOICE_STATUSES = List.of(OPEN, PARTIAL, OVERDUE, PAID, VOID);
+    /** The statuses an invoice is owed in (what is owed: {@code total - paidAmount}). */
+    public static final List<String> UNPAID = List.of(OPEN, PARTIAL, OVERDUE);
 
     /** Event: an invoice was issued ({@code {invoiceId, sponsorId}}), for the mail. */
     public static final String INVOICE_ISSUED_EVENT = "qb.fee.invoice-issued";
@@ -142,6 +144,9 @@ public final class QbFees {
         eb.field("issuedAt", f -> f.physicalColumn("issued_at").immutable(true).required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("dueOn", f -> f.physicalColumn("due_on").immutable(true).required(true).processOnly().asDate());
+        // What has been paid of the total (F-M1: an invoice may be paid in part); the total once PAID.
+        eb.field("paidAmount", f -> f.physicalColumn("paid_amount").required(true).processOnly()
+            .asMonetary("JPY", 0));
         eb.field("paidAt", f -> f.physicalColumn("paid_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("paymentTransactionId", f -> f.physicalColumn("payment_transaction_id").processOnly().asText(64));
         eb.field("voidedAt", f -> f.physicalColumn("voided_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
@@ -158,13 +163,14 @@ public final class QbFees {
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_fee_invoice_no", "invoiceNo");
         eb.stateTransitions("status", st -> st
-            .initial(OPEN, PAID)
-            .from(OPEN).to(OVERDUE, PAID, VOID)
+            .initial(OPEN, PARTIAL, PAID)
+            .from(OPEN).to(PARTIAL, OVERDUE, PAID, VOID)
+            .from(PARTIAL).to(OVERDUE, PAID, VOID)
             .from(OVERDUE).to(PAID, VOID)
             .from(PAID).to(VOID));
         eb.listView("default", lv -> lv
-            .columns("invoiceNo", "sponsorId", "operatorId", "billingMode", "period", "total", "status", "issuedAt",
-                "dueOn", "paidAt")
+            .columns("invoiceNo", "sponsorId", "operatorId", "billingMode", "period", "total", "paidAmount", "status",
+                "issuedAt", "dueOn", "paidAt")
             .filters("sponsorId", "operatorId", "status", "period", "issuedAt", "dueOn", "chargeId", "invoiceNo")
             .sorts("issuedAt", "dueOn", "total")
             .defaultSort("issuedAt", false));

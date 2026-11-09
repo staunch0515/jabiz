@@ -167,6 +167,12 @@ class EntryFeeIT extends PlayItSupport {
         assertThat(cash(sponsor)).isEqualByComparingTo("30");
         settle();
         assertThat(cash(sponsor)).isEqualByComparingTo("30");
+        // F-M1: the day's fees are a cash lot of their own, once.
+        assertThat(query("SELECT source, amount, remaining, source_entity FROM qb_cash_lot WHERE sponsor_id = ?",
+            sponsor)).singleElement().satisfies(lot -> {
+                assertThat(lot).containsEntry("source", "OTHER").containsEntry("source_entity", "QbEntryFeeSettlement");
+                assertThat((BigDecimal) lot.get("remaining")).isEqualByComparingTo("30");
+            });
         assertThat(amount(items("qb.sponsor.wallet", sponsorToken(sponsor), Map.of()).getFirst(), "entryFeesUnsettled"))
             .isEqualByComparingTo("0");
 

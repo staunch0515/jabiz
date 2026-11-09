@@ -23,8 +23,8 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   const inReview = page.getByTestId('finance-in-review')
   await expect(inReview).toBeVisible()
   expect(Number(await inReview.getAttribute('data-count'))).toBeGreaterThanOrEqual(1)
-  // Q9c's eight accounts, Q87's four and Q88b's 2170 (entry fees unsettled).
-  await expect(page.getByTestId('finance-account')).toHaveCount(13)
+  // Q9c's eight accounts, Q87's four, Q88b's 2170 (entry fees unsettled) and F-M1's 2190 (granted credit).
+  await expect(page.getByTestId('finance-account')).toHaveCount(14)
   await inReview.click()
   await expect(page).toHaveURL(/\/admin\/qb\/finance\/transfers\?status=REVIEW$/)
   const row = page.locator(`[data-testid="transfer-row"][data-id="${transferId}"]`)

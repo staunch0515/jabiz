@@ -5,6 +5,8 @@ import com.jabiz.entity.Violation;
 import com.jabiz.ledger.Direction;
 import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
+import com.jabiz.quizbuks.fee.CashLots;
+import com.jabiz.quizbuks.fee.QbFeeAccount;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
@@ -607,6 +609,10 @@ public final class BankTopUps {
         BigDecimal amount = QbTopUps.money(topUp.get("amount"));
         QbWallets.change(ctx, first(ctx, WALLET), TopUpTargets.walletKind(TopUpTargets.of(topUp)),
             topUp.get("sponsorId"), amount, 0, BigDecimal.ZERO);
+        if (TopUpTargets.CASH.equals(TopUpTargets.of(topUp))) {
+            // F-M1: a lot of its own in the cash account.
+            CashLots.add(ctx, topUp.get("sponsorId"), QbFeeAccount.BANK, amount, QbTopUps.TOPUP, topUp.id());
+        }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("status", TopUpStatus.PAID);
         values.put("paidAt", ctx.opTime());

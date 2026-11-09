@@ -10,6 +10,7 @@ import { ApiError, AppearanceProvider, EXTENSION_NAMESPACE, Toaster } from '@jab
 import { expectAccessible } from '@jabiz/admin/testing'
 import FeeRequestPage from './FeeRequestPage'
 import FeesPage from './FeesPage'
+import { SponsorFeeAccount } from './SponsorFeeAccount'
 import { FEE_PROCESS, TEMPLATE } from './ids'
 import { messages } from './messages'
 
@@ -55,11 +56,23 @@ const charge = (change: Row = {}): Row => ({ chargeId: CHARGE, sponsorId: SPONSO
   chargedAt: '2026-10-02T01:07:00Z', chargedBy: null, invoiceNo: 'QBF-2026-00001', invoiceStatus: 'PAID', ...change })
 const invoice = (change: Row = {}): Row => ({ invoiceId: INVOICE, invoiceNo: 'QBF-2026-00002', sponsorId: SPONSOR,
   company: 'Acme', operatorId: null, period: '2026-10', billingMode: 'POSTPAID', amount: 1000, tax: 100, total: 1100,
-  status: 'OVERDUE', issuedAt: '2026-11-02T01:17:00Z', dueOn: '2026-12-02', paidAt: null, remindersSent: 1,
+  paidAmount: 300, status: 'OVERDUE', issuedAt: '2026-11-02T01:17:00Z', dueOn: '2026-12-02', paidAt: null, remindersSent: 1,
   voidedAt: null, voidReason: null, ...change })
 const request = (change: Row = {}): Row => ({ requestId: REQUEST, kind: 'MANUAL', sponsorId: SPONSOR, company: 'Acme',
   amount: 500, invoiceId: null, reason: 'Extra support', status: 'REVIEW', requestedBy: FINANCE_ADMIN,
   requestedAt: '2026-11-03T01:00:00Z', approvalRequestId: APPROVAL, decidedAt: null, chargeId: null, ...change })
+
+const ACCOUNT: Row[] = [{ feeCreditBalance: 900, cashBalance: 700, cashHeld: 0 }]
+const LOTS: Row[] = [
+  { seq: 1, subAccount: 'FEE_CREDIT', lotId: 'g-1', source: 'MANUAL', amount: 900, remaining: 900,
+    arrivedAt: '2026-11-01T00:00:00Z', expiresAt: '2027-01-30T00:00:00Z' },
+  { seq: 2, subAccount: 'CASH', lotId: 'c-1', source: 'CARD', amount: 1000, remaining: 700,
+    arrivedAt: '2026-11-02T00:00:00Z', expiresAt: null }]
+const PAYMENTS: Row[] = [
+  { paymentId: 'p-1', paidAt: '2026-11-02T01:07:00Z', targetEntity: 'QbFeeCharge', invoiceNo: 'QBF-2026-00001',
+    subAccount: 'FEE_CREDIT', source: 'MANUAL', amount: 800 },
+  { paymentId: 'p-2', paidAt: '2026-11-02T01:07:00Z', targetEntity: 'QbFeeCharge', invoiceNo: 'QBF-2026-00001',
+    subAccount: 'CASH', source: 'CARD', amount: 300 }]
 
 beforeAll(async () => {
   await i18next.use(initReactI18next).init({ lng: 'en', resources: { en: { [EXTENSION_NAMESPACE]: messages.en } } })
@@ -80,7 +93,10 @@ beforeEach(() => {
     const items = id === TEMPLATE.sponsors ? server.sponsors
       : id === TEMPLATE.feeCharges ? server.charges
         : id === TEMPLATE.feeInvoices ? one(server.invoices, 'invoiceId')
-          : id === TEMPLATE.feeRequests ? one(server.requests, 'requestId') : []
+          : id === TEMPLATE.feeRequests ? one(server.requests, 'requestId')
+            : id === TEMPLATE.feeAccount || id === TEMPLATE.operatorFeeAccount ? ACCOUNT
+              : id === TEMPLATE.feeAccountLots || id === TEMPLATE.operatorFeeAccountLots ? LOTS
+                : id === TEMPLATE.feePayments || id === TEMPLATE.operatorFeePayments ? PAYMENTS : []
     return { items, offset: 0, limit: 20, ...(options.count ? { total: items.length } : {}) }
   })
   server.runProcess.mockReset().mockResolvedValue({ requestId: REQUEST, kind: 'MANUAL', status: 'REVIEW',
@@ -204,5 +220,29 @@ describe('FeeRequestPage', () => {
   it('says when there is no such request', async () => {
     renderAt('/qb/finance/fees/requests/nope', '/qb/finance/fees/requests/:requestId', <FeeRequestPage />)
     expect(await screen.findByText('There is no such request.')).toBeInTheDocument()
+  })
+})
+
+describe('SponsorFeeAccount', () => {
+  it('shows the account, its lots in the order they are spent and the payments, read only', async () => {
+    const view = renderAt('/here', '/here', <SponsorFeeAccount userId={SPONSOR} operator={false} />)
+    const lots = await screen.findAllByTestId('fee-lot-row')
+    expect(lots.map((row) => row.dataset.subAccount)).toEqual(['FEE_CREDIT', 'CASH'])
+    expect(await screen.findAllByTestId('fee-payment-row')).toHaveLength(2)
+    expect(screen.getByTestId('sponsor-fee-account')).toHaveTextContent('900')
+    expect(screen.queryByRole('button', { name: /pay|grant/i })).not.toBeInTheDocument()
+    const calls = server.runQuery.mock.calls.map(([template, options]) => [template, options?.params?.sponsorId])
+    expect(calls).toContainEqual([TEMPLATE.feeAccount, SPONSOR])
+    expect(calls).toContainEqual([TEMPLATE.feePayments, SPONSOR])
+    await expectAccessible(view.container)
+  })
+
+  it('reads an operator\'s own Sponsor through the operator\'s templates', async () => {
+    renderAt('/here', '/here', <SponsorFeeAccount userId={SPONSOR} operator />)
+    await screen.findAllByTestId('fee-lot-row')
+    const templates = server.runQuery.mock.calls.map(([template]) => template)
+    expect(templates).toEqual(expect.arrayContaining([TEMPLATE.operatorFeeAccount, TEMPLATE.operatorFeeAccountLots,
+      TEMPLATE.operatorFeePayments]))
+    expect(templates).not.toContain(TEMPLATE.feeAccount)
   })
 })

@@ -37,6 +37,8 @@ export const DATASET = {
    */
   asset: 'urn:jabiz:dataset:default:QbAsset',
   assetUse: 'urn:jabiz:dataset:default:QbAssetUse',
+  /** F-C4: a Sponsor's imports of sponsor packages, read only (the same readers as the asset library). */
+  packageImport: 'urn:jabiz:dataset:default:QbPackageImport',
 } as const
 
 /** SQL templates (`queries/qb/admin`). */
@@ -135,6 +137,14 @@ export const TEMPLATE = {
   /** Q87: the platform's fees charged to sponsors, their invoices, and the requests another administrator approves. */
   feeCharges: 'qb.admin.fee-charges',
   feeInvoices: 'qb.admin.fee-invoices',
+  /** F-M1: one Sponsor's account that pays the platform's fees (finance; an operator's own Sponsors'), and in all. */
+  feeAccount: 'qb.admin.fee-account',
+  feeAccountLots: 'qb.admin.fee-account-lots',
+  feePayments: 'qb.admin.fee-payments',
+  feeAccountTotals: 'qb.admin.fee-account-totals',
+  operatorFeeAccount: 'qb.operator.fee-account',
+  operatorFeeAccountLots: 'qb.operator.fee-account-lots',
+  operatorFeePayments: 'qb.operator.fee-payments',
   feeRequests: 'qb.admin.fee-requests',
   /** The investors' figures (Q27): a row per UTC month of a period, and the sponsors behind them (finance). */
   investorMetrics: 'qb.admin.investor-metrics',
@@ -327,7 +337,9 @@ export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110',
   // Q87: the sponsors' cash accounts, the fees receivable, the fee revenue and the tax on it.
   '2160', '1130', '4120', '2150',
   // Q88b: the entry fees unsettled (until the daily job moves them to the sponsors' cash accounts).
-  '2170'] as const
+  '2170',
+  // F-M1: the sponsors' granted credit (platform fee Kudos).
+  '2190'] as const
 
 /** A transfer still sending this long after it was created is in doubt (the backend's `STALE_AFTER`). */
 export const STALE_AFTER_MS = 60 * 60 * 1000
@@ -356,6 +368,9 @@ export const DICTIONARY = {
   assetKind: 'urn:jabiz:dict:quizbuks:asset-kind',
   assetTextUsage: 'urn:jabiz:dict:quizbuks:asset-text-usage',
   assetUseTarget: 'urn:jabiz:dict:quizbuks:asset-use-target',
+  /** F-C4: how a sponsor package was imported, and the import's state. */
+  packageImportMode: 'urn:jabiz:dict:quizbuks:package-import-mode',
+  packageImportStatus: 'urn:jabiz:dict:quizbuks:package-import-status',
   sponsorPageStatus: 'urn:jabiz:dict:quizbuks:sponsor-page-status',
   sponsorProductStatus: 'urn:jabiz:dict:quizbuks:sponsor-product-status',
   reportReason: 'urn:jabiz:dict:quizbuks:report-reason',
@@ -405,6 +420,10 @@ export const DICTIONARY = {
   billingMode: 'urn:jabiz:dict:quizbuks:billing-mode',
   feeKind: 'urn:jabiz:dict:quizbuks:fee-kind',
   feeInvoiceStatus: 'urn:jabiz:dict:quizbuks:fee-invoice-status',
+  /** F-M1: the account's sub-accounts and where its lots came from. */
+  feeSubAccount: 'urn:jabiz:dict:quizbuks:fee-sub-account',
+  feeCreditSource: 'urn:jabiz:dict:quizbuks:fee-credit-source',
+  cashSource: 'urn:jabiz:dict:quizbuks:cash-source',
   feeRequestKind: 'urn:jabiz:dict:quizbuks:fee-request-kind',
   feeRequestStatus: 'urn:jabiz:dict:quizbuks:fee-request-status',
 } as const
