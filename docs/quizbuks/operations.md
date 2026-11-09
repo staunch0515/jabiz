@@ -430,6 +430,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **任务** `qb.analytics`（每 10 分钟，:00、:10 …；逐项任务，每项一个事务的 `QB_ANALYTICS_ITEM`）：读进行中、暂停、预算不足、1 天内结束与结束后尚未定稿的发布，按发布编号分块（每块一项），把计数的增量写进按小时的桶，从水位线读已完成的会话（滞后 5 分钟）；结束 30 分钟后每个发布一项整体重算并定稿；最后一项写运行记录并删除 400 天前的小时桶（每次至多 2 000 行）。不取业务锁，不影响答题。
   **一项失败不影响其他项**：其他项照常提交，运行记为 `PARTIAL`，失败的项由平台退避后在以后的运行中重试（平台的任务项记录中有错误），其间该块的发布的数字停在上次。
   发起方页面上的"每 10 分钟更新，最近更新 hh:mm"就是这个任务最近一次运行的时刻（`qb_stats_run` 中 `job = 'qb.analytics'` 的行，`zone` 是它按哪个时区分日：`jabiz.fiscal-year-zone`，日本部署 `Asia/Tokyo`）。
+- **每题的"被抽到"**（F-S7，`QbQuestionStat.drawn`）：已结束（完成或超时）的答题中被给出这一题的次数，**完成后才计入**：进行中的答题不算，结束后由下一次运行计入（总部 2026-11-09 确认）。与其他每题数字一起按最小分组发表；今天它与完成数相同。发起方的题目统计在这一栏旁注明"完成后才计入"。
 - **参数** `qb.stats.min-group`（普通参数，缺省 5，任何值都至少按 3）：分组小于它时每题正确率、平均用时与超时人数不显示，且这些数字只在新增至少这么多个完成后才变化。调大立即生效（模板按现值隐藏）；调小只在下次新增够数时显示新值。
 - **配置**（`application.yml` 的 `quizbuks.analytics.*`，通常不改）：`chunk-size`（每块的发布数，缺省 100，至多 200）、`max-attempts-per-chunk`（每块每次至多读的已完成会话，缺省 50 000，至多 200 000；热门发布每 10 分钟约 3 万个，`perf/Q9e-analytics.md`）、`max-recount`（结束后整体重算的发布至多有多少个完成，缺省 1 000 000，使重算在读取时限 2 分钟之内；更大的发布在逐块读完之后不重算即定稿）。
   部署时区 `jabiz.fiscal-year-zone` 只能是 `UTC` 或地区名（如 `Asia/Tokyo`）：`+09:00`、`GMT+9`、`Etc/GMT-9` 这类偏移写法在 PostgreSQL 中方向相反，启动检查拒绝（类别 `QUIZBUKS`）。
@@ -893,6 +894,29 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   3. 集中的账号：`SELECT user_id, capped_days, last_capped_on FROM qb_exposure WHERE publication_id = '<发布>' ORDER BY capped_days DESC LIMIT 20`。
   4. 不计的常见原因：用自己的视频、方向不对（竖视频只在竖屏模式计，横视频只在开始页计）、学者没验证邮箱、店员、到了每日上限、发布已结束、系统设为"减少动态效果"时视频不自动播放（学者点播放才开始计）。
 - **"学者说竖屏模式里总是同一家"**：推送按发起方编号轮流（服务器按编号排轮次，一轮中谁先每天换一次），同一家的新的在前；打开过的不再推送。看 `qb.exposure.push.every` 与有几家在用共享视频。
+
+### 7.32 共享视频的使用台账（F-S14）
+
+用了**其他发起方共享视频**的发布（F-S12，卡片的提供方不是发布方），使用方（发布的发起方）在发布页"共享视频的台账"中记下与提供方的线下约定：期间、计价方式（固定价、每千次曝光成功、每位去答题的学者）与价格，提交给提供方；提供方在资源页"我的视频的使用台账"中确认，或写原因拒绝，使用方更正后重新提交（`docs/quizbuks/plans/impl/F-S14.md`）。**平台不代收代付**，台账不进平台的会计账本。给用户的帮助文案在 `docs/quizbuks/help/video-uses.md`。
+
+- **部署**：迁移 `V99`建只追加表 `qb_video_use_version` 与普通表 `qb_video_use_figures`。部署后运行一次 `QB_SETUP`：建两个普通参数（下表），给内容管理员与运营商补上 `qb.admin.video-use.read`。三个任务都每天一次：`qb.video-use-figures`（UTC 19:53，逐项）、`qb.video-use-check`（UTC 20:07）、`qb.video-use-remind`（UTC 00:47，逐项）。没有新的环境变量。
+- **版本**：每次保存、提交、确认、拒绝都是 `qb_video_use_version` 的新版本（不改旧行，平台的审计 `GET /api/audit/records` 有前后值）。**版本记录**在双方的页面上（"查看版本记录"）与管理页（每行的"版本记录"）：每个版本的操作（填写、更正、提交、确认、拒绝）、谁（发起方页面上为哪一方，管理页为平台用户）、时间、当时的计价与期间、拒绝原因；读的是只读视图 `qb_video_use_history`（版本行 + 平台的操作记录 `op_process`）。等待提供方确认时使用方不能改；已确认的更正后回到草稿，须重新确认（确认记下所确认的版本号）。
+- **数字**：打开、曝光成功、去答题的人数、合格人数（去答题的人中合格的），每天由 `qb.video-use-figures` 从计数表 `qb_exposure` 与 `qb_attempt` 重算一次（截止为运行时刻），发布结束后的第一次运行**定稿**（截止为卡片的 `ended_at`），之后不再写。两边与运营商的页面上，少于统计的最小分组 `qb.stats.min-group`（Q9e，不小于 3）的数字不显示，所依据的数字不显示时参考金额也不显示。
+- **核对**（`qb.video-use-check`）：每天把定稿的数字按同一截止从计数表重算比较，不一致即给内容管理员（`qb.admin.exposure.monitor`）一个待办（一天一个）。计数表的行只设置一次，正常情况下不会不一致；常见原因是手工改了 `qb_exposure` 或迁移补了旧时间的行。
+- **提醒**：等待提供方确认超过 `qb.video-use.remind-days` 天，给双方各一个待办（每个提交的版本一次，有邮件时随待办通知），答复后关闭。
+- **参数**（普通参数，`PARAM_SET`，不受控）：
+
+  | 参数 | 缺省 | 作用 | 调整的影响 |
+  |---|---|---|---|
+  | `qb.video-use.remind-days` | `7` | 等待提供方确认超过多少天提醒双方（1–90） | 调低提醒更早；每个提交的版本只提醒一次 |
+  | `qb.video-use.max-period-days` | `3660` | 一条台账的期间至多多少天（1–36600） | 只约束以后的保存；已保存的台账不受影响 |
+
+- **管理页**：平台管理系统的"视频使用台账"页（`/qb/video-uses`，两边共用的组，`qb.admin.video-use.read`，**只读**）：每条台账的使用方、提供方、状态、计价、期间、数字与参考金额；总部看全部；运营商看自己发起方的台账，不论它是使用方（经 `qb.admin.video-uses`）还是提供方（经 `qb.admin.video-uses-provided`，只含已提交过的台账；读路径为 `urn:jabiz:dataset:operator-provider:*`），页面把两条路径合并，每条台账一行。双方的争议由运营商联系双方处理，平台不改台账。
+- **删除账号**：台账保留（双方的记录），使用方的备注与提供方的拒绝原因由抹除流程覆盖（`SponsorErasure`）。
+- **"数字不对"的排查**：
+  1. 定稿与截止：`SELECT opens, successes, goes, qualified, cutoff_at, finalised_at FROM qb_video_use_figures WHERE publication_id = '<发布>'`。
+  2. 按截止重算：`SELECT count(*) FILTER (WHERE counted_at <= '<截止>') AS successes, count(*) FILTER (WHERE went_to_answer_at <= '<截止>') AS goes FROM qb_exposure WHERE publication_id = '<发布>'`。
+  3. 台账的全部版本：`SELECT version_no, status, pricing, price, period_from, period_to, reject_reason, created_time FROM qb_video_use_version WHERE publication_id = '<发布>' ORDER BY version_no`。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

@@ -23,6 +23,8 @@ class SealedColumnsMigrationIT {
         assertThat(result.lost()).as("sealed columns that verifying would no longer find").isEmpty();
         // It saw the tables S0b is about.
         assertThat(result.tables()).contains("qb_publication_version", "qb_reward_tier_version",
-            "qb_cash_reward_version", "qb_redemption_version", "qb_digital_prize_version");
+            "qb_cash_reward_version", "qb_redemption_version", "qb_digital_prize_version",
+            // F-S14: the ledger of shared videos' uses.
+            "qb_video_use_version");
     }
 }

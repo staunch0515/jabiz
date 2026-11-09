@@ -5,6 +5,7 @@ import { CRITERIA, type Condition } from '../qb/audience'
 import { AUDIENCE } from '../qb/ids'
 import { referralPolicy, type ReferralPolicy } from '../qb/play'
 import { BENEFIT_TEMPLATE } from '../benefits/ids'
+import { DIFFICULTIES, type Difficulty } from '../content/api'
 import { PUBLISHING_CODE, PUBLISHING_DATASET, PUBLISHING_DICTIONARY, PUBLISHING_PROCESS, PUBLISHING_TEMPLATE } from './ids'
 
 /*
@@ -81,6 +82,8 @@ export interface Publication {
   passScore: number | null
   /** Q81: how many of the version's questions each taker is given, drawn at the start; null asks all of them. */
   pickCount: number | null
+  /** F-S7: drawn by difficulty, how many of each (pickCount is their sum); null: from the whole version. */
+  pickByDifficulty: Partial<Record<Difficulty, number>> | null
   /** Q88b: the entry fee in Kudos a taker pays at the start (0: none). */
   entryFee: number
   budgetCap: string | null
@@ -224,6 +227,8 @@ export interface SaveInput {
   passScore: number | null
   /** Q81: the questions drawn per taker; null asks all of them. */
   pickCount: number | null
+  /** F-S7: drawn by difficulty, how many of each; the server then draws their sum. Not given: not by difficulty. */
+  pickByDifficulty?: Partial<Record<Difficulty, number>>
   /** Q88b: the entry fee (0: none); the server refuses one while the switch is off. */
   entryFee: number
   budgetCap: number | null
@@ -409,6 +414,7 @@ export function toPublication(row: Row): Publication {
     timeLimitSec: numOrNull(row.timeLimitSec),
     passScore: numOrNull(row.passScore),
     pickCount: numOrNull(row.pickCount),
+    pickByDifficulty: quotasOf(row.pickByDifficulty),
     entryFee: numOrNull(row.entryFee) ?? 0,
     budgetCap: str(row.budgetCap),
     maxWinners: numOrNull(row.maxWinners),
@@ -973,6 +979,9 @@ export interface PublicationForm {
   passScore: string
   /** Q81: the questions drawn per taker; empty asks all of them. */
   pickCount: string
+  /** F-S7: whether the questions are drawn by difficulty, and how many of each as typed (empty is none). */
+  byDifficulty: boolean
+  quotas: Record<Difficulty, string>
   /** Q88b: the entry fee as typed; empty is none. */
   entryFee: string
   budgetCap: string
@@ -1031,6 +1040,9 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     timeLimitSec: text(p?.timeLimitSec),
     passScore: text(p?.passScore),
     pickCount: text(p?.pickCount),
+    byDifficulty: !!p?.pickByDifficulty,
+    quotas: { EASY: text(p?.pickByDifficulty?.EASY), MEDIUM: text(p?.pickByDifficulty?.MEDIUM),
+      HARD: text(p?.pickByDifficulty?.HARD) },
     entryFee: p?.entryFee ? String(p.entryFee) : '',
     budgetCap: text(p?.budgetCap),
     maxWinners: text(p?.maxWinners),
@@ -1060,6 +1072,22 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
   }
 }
 
+/** F-S7: a stored draw by difficulty (`{"EASY":2,...}`); null when none or unreadable. */
+export function quotasOf(value: unknown): Partial<Record<Difficulty, number>> | null {
+  if (typeof value !== 'string' || !value) return null
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    const quotas: Partial<Record<Difficulty, number>> = {}
+    for (const level of DIFFICULTIES) {
+      const n = Number(parsed[level])
+      if (Number.isInteger(n) && n > 0) quotas[level] = n
+    }
+    return Object.keys(quotas).length ? quotas : null
+  } catch {
+    return null
+  }
+}
+
 /** A whole number typed into a field: null when blank, NaN when not a whole number of at least 0. */
 function whole(value: string): number | null {
   if (value.trim() === '') return null
@@ -1084,7 +1112,15 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
   }
   const timeLimitSec = read('timeLimitSec', form.timeLimitSec)
   const passScore = read('passScore', form.passScore)
-  const pickCount = read('pickCount', form.pickCount)
+  // F-S7: a draw by difficulty sends each level's count (the server draws their sum), not the count.
+  const quotas: Partial<Record<Difficulty, number>> = {}
+  if (form.byDifficulty) {
+    for (const level of DIFFICULTIES) {
+      const n = read(`pickByDifficulty.${level}`, form.quotas[level])
+      if (n) quotas[level] = n
+    }
+  }
+  const pickCount = form.byDifficulty ? null : read('pickCount', form.pickCount)
   const entryFee = read('entryFee', form.entryFee) ?? 0
   const budgetCap = read('budgetCap', form.budgetCap)
   const maxWinners = read('maxWinners', form.maxWinners)
@@ -1124,6 +1160,7 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       timeLimitSec,
       passScore,
       pickCount,
+      ...(form.byDifficulty ? { pickByDifficulty: quotas } : {}),
       entryFee,
       budgetCap,
       maxWinners,
@@ -1195,7 +1232,7 @@ export function nextTier(tiers: readonly TierDraft[], fullScore: number | null):
 
 /** The fields of the publication the pages name (`entity.QbPublication.<field>` on the server). */
 export const PUBLICATION_FIELDS = ['name', 'versionId', 'regions', 'startAt', 'endAt', 'timeLimitSec', 'passScore',
-  'pickCount', 'entryFee', 'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'digitalDelivery', 'digitalDescription',
+  'pickCount', 'pickByDifficulty', 'entryFee', 'budgetCap', 'maxWinners', 'rewardMethod', 'redeemDescription', 'digitalDelivery', 'digitalDescription',
   'digitalSendDays', 'digitalContent', 'audience', 'referral', 'benefitPurchaseId'] as const
 export type PublicationField = (typeof PUBLICATION_FIELDS)[number]
 

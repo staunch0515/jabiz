@@ -106,6 +106,10 @@ public final class QbPublications {
         // them. Frozen with the policy; the full score is then this many times the common points (D-Q81-2).
         eb.field("pickCount", f -> f.physicalColumn("pick_count").asNumeric(4, 0)
             .apply(Rules.range(PublishingCodes.PICK_RANGE, BigDecimal.ONE, decimal(com.jabiz.quizbuks.play.PlayLimits.MAX_PER_ATTEMPT_TECH))));
+        // F-S7: the draw by difficulty, how many of each ({@link com.jabiz.quizbuks.content.QuestionDifficulty}
+        // JSON); pickCount is then their sum. None: the pick (if any) is from the whole version.
+        eb.field("pickByDifficulty", f -> f.physicalColumn("pick_by_difficulty")
+            .asText(com.jabiz.quizbuks.content.QuestionDifficulty.QUOTAS_LENGTH));
         // F-S2b1: the knowledge graph's node the publication is bound to (both or neither); a pass of it lights the
         // node, and the node's conditions before answering say who may start. Frozen with the policy.
         eb.field("treeId", f -> f.physicalColumn("tree_id").asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
@@ -445,6 +449,9 @@ public final class QbPublications {
             .asNumeric(4, 0));
         // Q81: how many of them each taker is given (none: all); the feed and the page say "k of n".
         eb.field("pickCount", f -> f.physicalColumn("pick_count").immutable(true).asNumeric(4, 0));
+        // F-S7: drawn by difficulty, how many of each (pickCount is their sum); none for a draw from the whole.
+        eb.field("pickByDifficulty", f -> f.physicalColumn("pick_by_difficulty").immutable(true)
+            .asText(com.jabiz.quizbuks.content.QuestionDifficulty.QUOTAS_LENGTH));
         // Q88b: the entry fee the start charges (0: none).
         eb.field("entryFee", f -> f.physicalColumn("entry_fee").immutable(true).required(true).asMonetary("JPY", 0));
         // F-S2b1: the node the publication is bound to, as submitted.

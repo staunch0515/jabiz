@@ -12,7 +12,8 @@ import java.util.TreeMap;
 
 /**
  * Each version's attempts read and its questions' completions and right answers so far, as the cursor keeps them:
- * canonical JSON {@code {"<version>": {"n": attempts, "q": [[no, completions, correct], ...]}, ...}}, versions in the
+ * canonical JSON {@code {"<version>": {"n": attempts, "q": [[no, completions, correct(, drawn)], ...]}, ...}} (F-S7: drawn
+ * only where it is not the completions), versions in the
  * order of their keys and questions in their order. Per version (Q51b): a publication that switched its version asks
  * other questions under the same numbers. Kept in the cursor's one row rather than a row per question, so that a run
  * writes one row per publication however many questions it has (the audit records every write); the rows of
@@ -26,10 +27,18 @@ public final class QuestionTotals {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final TypeReference<Map<String, Stored>> VERSIONS = new TypeReference<>() {};
 
-    /** One question's completions and right answers. */
-    public record Count(long completions, long correct) {
+    /**
+     * One question's completions and right answers, and (F-S7) the attempts given it. Totals kept before F-S7 have no
+     * drawn: it was what completions counted (a result has every question its attempt was given).
+     */
+    public record Count(long completions, long correct, long drawn) {
+        /** Drawn as many times as completed (totals from before F-S7). */
+        public Count(long completions, long correct) {
+            this(completions, correct, completions);
+        }
+
         public Count plus(Count other) {
-            return new Count(completions + other.completions, correct + other.correct);
+            return new Count(completions + other.completions, correct + other.correct, drawn + other.drawn);
         }
     }
 
@@ -63,7 +72,8 @@ public final class QuestionTotals {
             SortedMap<Integer, Count> questions = new TreeMap<>();
             if (stored.q() != null) {
                 for (List<Long> row : stored.q()) {
-                    questions.put(row.get(0).intValue(), new Count(row.get(1), row.get(2)));
+                    questions.put(row.get(0).intValue(), row.size() > 3 ? new Count(row.get(1), row.get(2), row.get(3))
+                        : new Count(row.get(1), row.get(2)));
                 }
             }
             totals.put(versionId, new Version(stored.n(), questions));
@@ -76,8 +86,11 @@ public final class QuestionTotals {
         Map<String, Map<String, Object>> versions = new LinkedHashMap<>();
         new TreeMap<>(totals).forEach((versionId, version) -> {
             List<List<Long>> rows = new ArrayList<>();
-            version.questions().forEach((no, count) -> rows.add(List.of((long) no, count.completions(),
-                count.correct())));
+            // F-S7: drawn only when it differs from the completions, so that totals of every attempt read stay as
+            // they were written.
+            version.questions().forEach((no, count) -> rows.add(count.drawn() == count.completions()
+                ? List.of((long) no, count.completions(), count.correct())
+                : List.of((long) no, count.completions(), count.correct(), count.drawn())));
             Map<String, Object> stored = new LinkedHashMap<>();
             stored.put("n", version.attempts());
             stored.put("q", rows);

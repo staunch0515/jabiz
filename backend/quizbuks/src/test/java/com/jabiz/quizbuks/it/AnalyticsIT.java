@@ -136,12 +136,15 @@ class AnalyticsIT extends AnalyticsItSupport {
         // Questions: the first right only by T1 (1 of 4: hard), the second by T1 and T2 (2 of 4: medium).
         List<Map<String, Object>> questions = questions(sponsorToken(sponsor), publication);
         assertThat(questions).extracting(row -> count(row.get("questionNo"))).containsExactly(1L, 2L);
-        assertThat(questions.getFirst()).containsEntry("stem", "Capital of France?").containsEntry("difficulty", "HARD")
+        assertThat(questions.getFirst()).containsEntry("stem", "Capital of France?").containsEntry("observedDifficulty", "HARD")
             .containsEntry("suppressed", false);
         assertThat(count(questions.getFirst().get("points"))).isEqualTo(2);
         assertThat(count(questions.getFirst().get("completions"))).isEqualTo(4);
+        // F-S7: every completion was given the question; no difficulty was set on it.
+        assertThat(count(questions.getFirst().get("drawn"))).isEqualTo(4);
+        assertThat(questions.getFirst()).containsEntry("difficulty", null);
         assertThat(decimal(questions.getFirst().get("correctRate"))).isEqualByComparingTo("0.25");
-        assertThat(questions.get(1)).containsEntry("difficulty", "MEDIUM");
+        assertThat(questions.get(1)).containsEntry("observedDifficulty", "MEDIUM");
         assertThat(decimal(questions.get(1).get("correctRate"))).isEqualByComparingTo("0.5");
         // Nothing of the options or the right answers.
         assertThat(questions.toString()).doesNotContain("Paris", "Lyon", "Tokyo", "Osaka", "correct=[");
@@ -287,7 +290,7 @@ class AnalyticsIT extends AnalyticsItSupport {
         assertThat(nothing).containsEntry("largestDrop", null).containsEntry("completionRate", null)
             .containsEntry("viewToStart", null);
         assertThat(questions(sponsorToken(sponsor), quiet)).hasSize(2).allSatisfy(q -> assertThat(q)
-            .containsEntry("suppressed", true).containsEntry("correctRate", null).containsEntry("difficulty", null));
+            .containsEntry("suppressed", true).containsEntry("correctRate", null).containsEntry("observedDifficulty", null));
     }
 
     @Test
@@ -376,7 +379,7 @@ class AnalyticsIT extends AnalyticsItSupport {
         runAnalytics(h.plus(Duration.ofMinutes(10)));
         assertThat(questions(sponsorToken(sponsor), publication)).hasSize(2).allSatisfy(row -> assertThat(row)
             .containsEntry("suppressed", true).containsEntry("completions", null).containsEntry("correct", null)
-            .containsEntry("correctRate", null).containsEntry("difficulty", null));
+            .containsEntry("correctRate", null).containsEntry("observedDifficulty", null));
         Map<String, Object> small = overview(sponsorToken(sponsor), publication);
         assertThat(small).containsEntry("suppressed", true).containsEntry("avgDurationSec", null)
             .containsEntry("timeouts", null);

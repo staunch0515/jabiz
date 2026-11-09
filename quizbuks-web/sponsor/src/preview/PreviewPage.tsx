@@ -177,6 +177,9 @@ export function PreviewPage({ target }: { target: PreviewTarget }) {
       {result.preview.draft && (
         <Alert data-testid="preview-draft"><AlertDescription>{t('preview.draftNote')}</AlertDescription></Alert>
       )}
+      {result.preview.shuffled && (
+        <Alert data-testid="preview-shuffled"><AlertDescription>{t('preview.shuffledNote')}</AlertDescription></Alert>
+      )}
       {result.languages.length > 1 && result.language && (
         <SegmentedControl<ContentLanguage> value={result.language} onChange={setChosen}
           aria-label={t('translations.choose')} data-testid="preview-language"

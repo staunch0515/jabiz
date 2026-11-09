@@ -294,6 +294,11 @@ public final class QbPermissions {
     public static final String ADMIN_EXPOSURE_READ = "qb.admin.exposure.read";
     /** F-S13: the daily reconciliation's task on the exposures. Headquarters' content administrators only. */
     public static final String ADMIN_EXPOSURE_MONITOR = "qb.admin.exposure.monitor";
+    /**
+     * F-S14: the ledger of shared videos' uses and both sides' figures, read only. Content administrators for every
+     * sponsor, the operators for their own sponsors' publications (the entry scope limits what they see).
+     */
+    public static final String ADMIN_VIDEO_USE_READ = "qb.admin.video-use.read";
 
     /**
      * F-S12: the shared videos of every provider (read), and taking one down (write). Content administrators for

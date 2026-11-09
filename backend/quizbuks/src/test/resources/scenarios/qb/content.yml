@@ -8,7 +8,7 @@ clock: 2026-10-01T00:00:00Z
 actor: { id: sponsor-a, permissions: [qb.content.write] }
 steps:
   - process: QB_QUIZ_SAVE@latest
-    input: { title: World capitals, intro: "Ten minutes on **capitals**.", timeLimitSec: 300 }
+    input: { title: World capitals, intro: "Ten minutes on **capitals**.", timeLimitSec: 300, shuffleQuestions: false }
     expectOutput: { revision: 1 }
     save: { quiz: $.quizId }
 

@@ -63,6 +63,19 @@ describe('the preview (Q34b)', () => {
     expect(draftPreview(withVideo, null).video).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
   })
 
+  it('says when the Takers get the questions in an order of their own (F-S7)', () => {
+    // A draft read without the setting shuffles (A2-14); a quiz set to the fixed order does not; a survey never.
+    expect(draftPreview(DRAFT, null).shuffled).toBe(true)
+    expect(draftPreview({ ...DRAFT, quiz: { ...DRAFT.quiz, shuffleQuestions: false } }, null).shuffled).toBe(false)
+    expect(draftPreview({ ...DRAFT, quiz: { ...DRAFT.quiz, kind: 'SURVEY' } }, null).shuffled).toBe(false)
+    const snapshot = { title: 'Coffee basics', intro: null, cover: null, timeLimitSec: 120, materials: [],
+      questions: [] } as unknown as Snapshot
+    const row = toPublication({ publicationId: 'p1', name: 'Autumn', status: 'LIVE', revision: 1, editedAt: '' })
+    expect(publicationPreview(row, [], snapshot, null).shuffled).toBe(true)
+    expect(publicationPreview(row, [], { ...snapshot, questionOrder: 'fixed' }, null).shuffled).toBe(false)
+    expect(publicationPreview(row, [], { ...snapshot, kind: 'SURVEY' }, null).shuffled).toBe(false)
+  })
+
   it('shows a publication with its own cover, else its version\'s (Q64)', () => {
     const snapshot = { title: 'Coffee basics', intro: null, cover: 'quiz-cover', timeLimitSec: 120, kind: 'QUIZ',
       materials: [], questions: [] } as unknown as Snapshot

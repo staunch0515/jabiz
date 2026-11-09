@@ -51,11 +51,16 @@ describe('the analytics calls', () => {
 
   it('give no figure of a suppressed question, whatever came with it', () => {
     const hidden = toQuestion({ questionNo: 1, stem: 'Q', points: 2, completions: 4, correct: 4, correctRate: 1,
-      difficulty: 'EASY', suppressed: true, basedOn: 4, minGroup: 5 })
-    expect(hidden).toMatchObject({ suppressed: true, completions: null, correctRate: null, difficulty: null, minGroup: 5 })
+      observedDifficulty: 'EASY', difficulty: 'MEDIUM', drawn: 4, suppressed: true, basedOn: 4, minGroup: 5 })
+    expect(hidden).toMatchObject({ suppressed: true, completions: null, correctRate: null, observedDifficulty: null,
+      drawn: null, minGroup: 5 })
+    // F-S7: the difficulty the sponsor set is the sponsor's own: shown whatever the figures.
+    expect(hidden.difficulty).toBe('MEDIUM')
     const shown = toQuestion({ questionNo: '2', stem: 'Q2', points: '3', completions: '10', correct: '4',
-      correctRate: '0.4', difficulty: 'HARD', suppressed: false, basedOn: '10', minGroup: '5' })
-    expect(shown).toMatchObject({ questionNo: 2, completions: 10, correctRate: 0.4, difficulty: 'HARD' })
+      correctRate: '0.4', observedDifficulty: 'HARD', difficulty: null, drawn: '10', suppressed: false, basedOn: '10',
+      minGroup: '5' })
+    expect(shown).toMatchObject({ questionNo: 2, completions: 10, correctRate: 0.4, observedDifficulty: 'HARD',
+      difficulty: null, drawn: 10 })
   })
 
   it('give no average time or timeouts below the minimum group, whatever came with them', () => {

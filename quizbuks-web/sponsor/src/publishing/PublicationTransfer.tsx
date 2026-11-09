@@ -342,6 +342,10 @@ export function ImportSettingsButton() {
                 <PlacementFields value={value} update={(change) => setValue((v) => (v ? change(v) : v))}
                   disabled={run.isPending}
                   nameHint={t('publishing.transfer.nameHint')} />
+                {/* F-S7 (controller 2026-11-09): the quotas depend on the bank, so the file carries only the count. */}
+                <p className="text-muted-foreground text-sm" data-testid="publication-import-difficulty">
+                  {t('publishing.transfer.byDifficulty')}
+                </p>
               </>
             )}
             {run.isError && <ProblemList problems={reasonsOf(run.error, t)} />}

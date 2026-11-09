@@ -229,6 +229,15 @@ public class ContentConfig {
             .item(QbContent.MULTIPLE, "en", "Multiple choice", "zh", "多选", "ja", "複数選択"));
     }
 
+    /** F-S7: the names here are the dictionary's; the pages use the messages {@code qb.difficulty.<level>}. */
+    @Bean
+    StaticDictionary qbQuestionDifficultyDictionary() {
+        return StaticDictionary.define(QbContent.DIFFICULTY_DICTIONARY, d -> d
+            .item(QuestionDifficulty.EASY.name(), "en", "Easy", "zh", "易", "ja", "やさしい")
+            .item(QuestionDifficulty.MEDIUM.name(), "en", "Medium", "zh", "中", "ja", "ふつう")
+            .item(QuestionDifficulty.HARD.name(), "en", "Hard", "zh", "难", "ja", "むずかしい"));
+    }
+
     @Bean
     StaticDictionary qbMaterialKindDictionary() {
         return StaticDictionary.define(QbContent.KIND_DICTIONARY, d -> d
@@ -355,6 +364,12 @@ public class ContentConfig {
     @Bean
     ProcessDefinition<QuestionBatchProcesses.PointsInput, EditOutput, ProcessContext> qbQuestionPointsSet() {
         return QuestionBatchProcesses.pointsSet();
+    }
+
+    /** F-S7. */
+    @Bean
+    ProcessDefinition<QuestionBatchProcesses.DifficultyInput, EditOutput, ProcessContext> qbQuestionDifficultySet() {
+        return QuestionBatchProcesses.difficultySet();
     }
 
     @Bean

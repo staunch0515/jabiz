@@ -21,6 +21,7 @@ export const CONTENT_PROCESS = {
   questionMove: 'QB_QUESTION_MOVE',
   questionDeleteMany: 'QB_QUESTION_DELETE_MANY',
   questionPointsSet: 'QB_QUESTION_POINTS_SET',
+  questionDifficultySet: 'QB_QUESTION_DIFFICULTY_SET',
   quizImportQuestions: 'QB_QUIZ_IMPORT_QUESTIONS',
   questionImportUndo: 'QB_QUESTION_IMPORT_UNDO',
   materialSave: 'QB_MATERIAL_SAVE',

@@ -172,7 +172,7 @@ abstract class PublicationItSupport extends ContentItSupport {
     /** A complete quiz of the sponsor's with two questions (2 and 3 points: full score 5), saved as a version. */
     String version(String token, String title) {
         String quizId = newQuiz(token, title);
-        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", title, "timeLimitSec", 300));
+        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", title, "timeLimitSec", 300, "shuffleQuestions", false));
         run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of France?", "points", 2,
             "options", List.of(body("text", "Paris", "correct", true), body("text", "Lyon"))));
         run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of Japan?", "points", 3,

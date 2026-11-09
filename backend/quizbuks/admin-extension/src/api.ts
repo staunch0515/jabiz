@@ -226,6 +226,8 @@ export interface Publication {
   passScore: number | null
   /** Q81: the questions drawn per taker; null asks all of the version's. */
   pickCount: number | null
+  /** F-S7: drawn by difficulty, how many of each (pickCount is their sum); null: not by difficulty. */
+  pickByDifficulty: Partial<Record<'EASY' | 'MEDIUM' | 'HARD', number>> | null
   fullScore: number | null
   budgetCap: string | null
   maxReward: string | null
@@ -290,6 +292,22 @@ function referralDescription(value: unknown): string | null {
   }
 }
 
+/** F-S7: a stored draw by difficulty (`{"EASY":2,...}`); null when none or unreadable. */
+export function quotasOf(value: unknown): Partial<Record<'EASY' | 'MEDIUM' | 'HARD', number>> | null {
+  if (typeof value !== 'string' || !value) return null
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>
+    const quotas: Partial<Record<'EASY' | 'MEDIUM' | 'HARD', number>> = {}
+    for (const level of ['EASY', 'MEDIUM', 'HARD'] as const) {
+      const n = Number(parsed[level])
+      if (Number.isInteger(n) && n > 0) quotas[level] = n
+    }
+    return Object.keys(quotas).length ? quotas : null
+  } catch {
+    return null
+  }
+}
+
 export async function readPublication(publicationId: string): Promise<Publication | null> {
   const row = await readEntity(DATASET.publication, publicationId)
   if (!row) return null
@@ -312,6 +330,7 @@ export async function readPublication(publicationId: string): Promise<Publicatio
     timeLimitSec: num(row.timeLimitSec),
     passScore: num(row.passScore),
     pickCount: num(row.pickCount),
+    pickByDifficulty: quotasOf(row.pickByDifficulty),
     fullScore: num(row.fullScore),
     budgetCap: amount(row.budgetCap),
     maxReward: amount(row.maxReward),

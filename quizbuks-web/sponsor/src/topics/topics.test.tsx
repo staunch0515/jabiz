@@ -48,7 +48,7 @@ function server() {
 }
 
 const QUIZ = { quizId: 'q1', title: 'Coffee basics', kind: 'QUIZ', language: 'en', intro: null, cover: null,
-  timeLimitSec: null, status: 'DRAFT', latestVersionNo: 0, versionLabel: null, revision: 7, editedAt: '',
+  timeLimitSec: null, shuffleQuestions: true, status: 'DRAFT', latestVersionNo: 0, versionLabel: null, revision: 7, editedAt: '',
   changedSinceVersion: true, questionCount: 0, materialCount: 0, clonedFrom: null, translationLanguages: [],
   topics: ['coffee', 'old'], customTopics: ['Latte art'] } as Quiz
 

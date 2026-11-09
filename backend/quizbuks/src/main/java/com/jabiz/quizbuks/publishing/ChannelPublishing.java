@@ -118,7 +118,9 @@ public final class ChannelPublishing {
         List<QuizSnapshot.Material> materials = input.video() == null || input.video().isBlank() ? List.of()
             : List.of(new QuizSnapshot.Material(1, MaterialKind.VIDEO_LINK.name(), input.name().strip(), null, null,
                 input.video().strip(), null, null, List.of()));
-        return new QuizSnapshot(input.name().strip(), null, null, input.timeLimitSec(), false, materials, questions);
+        // F-S7 (A2-14): shuffled unless the publisher turned it off, as the quiz setting of the other paths.
+        return new QuizSnapshot(input.name().strip(), null, null, input.timeLimitSec(), false, materials, questions,
+            false, Map.of(), input.fixedOrder());
     }
 
     static void publish(ProcessContext ctx) {
@@ -139,6 +141,7 @@ public final class ChannelPublishing {
         String language = com.jabiz.quizbuks.content.QuizProcesses.languageOf(ctx);
         quiz.put("language", language);
         quiz.put("timeLimitSec", BigDecimal.valueOf(input.timeLimitSec()));
+        quiz.put("shuffleQuestions", !snapshot.fixedOrder());
         quiz.put("status", QbContent.VERSIONED);
         quiz.put("removed", false);
         quiz.put("aiGenerated", false);

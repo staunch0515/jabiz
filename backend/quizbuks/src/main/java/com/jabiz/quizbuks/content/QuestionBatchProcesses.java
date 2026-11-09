@@ -40,13 +40,15 @@ import static com.jabiz.quizbuks.content.QuizEditing.uuid;
  * {@code QB_QUESTION_MOVE} moves one question before another (or to the end), writing only its own place while there
  * is a gap ({@link Reorder#move}); {@code QB_QUESTION_DELETE_MANY} deletes up to {@value #MAX_BATCH} questions with
  * their options, translations and asset records; {@code QB_QUESTION_POINTS_SET} gives up to {@value #MAX_BATCH}
- * questions the same points. Each is one transaction under the quiz's lock, like the one-question processes.
+ * questions the same points; F-S7's {@code QB_QUESTION_DIFFICULTY_SET} the same difficulty. Each is one transaction under the quiz's lock, like the one-question processes.
  */
 public final class QuestionBatchProcesses {
 
     public static final String MOVE = "QB_QUESTION_MOVE";
     public static final String DELETE_MANY = "QB_QUESTION_DELETE_MANY";
     public static final String POINTS_SET = "QB_QUESTION_POINTS_SET";
+    /** F-S7: gives several questions the same difficulty (or none). */
+    public static final String DIFFICULTY_SET = "QB_QUESTION_DIFFICULTY_SET";
 
     /** The most questions one batch operation names. */
     public static final int MAX_BATCH = 200;
@@ -61,6 +63,12 @@ public final class QuestionBatchProcesses {
     /** @param points within the field's range ({@code QB_QUESTION_POINTS_RANGE}, checked as the question is saved) */
     public record PointsInput(@NotNull UUID quizId, @NotEmpty @Size(max = MAX_BATCH) List<@NotNull UUID> questionIds,
         @NotNull Integer points, Long baseRevision) {}
+
+    /** @param difficulty {@code EASY}, {@code MEDIUM} or {@code HARD}; empty clears it */
+    public record DifficultyInput(@NotNull UUID quizId,
+        @NotEmpty @Size(max = MAX_BATCH) List<@NotNull UUID> questionIds,
+        @NotNull @jakarta.validation.constraints.Pattern(regexp = "|EASY|MEDIUM|HARD") String difficulty,
+        Long baseRevision) {}
 
     public static ProcessDefinition<MoveInput, EditOutput, ProcessContext> move() {
         return ProcessDefinition.define(MOVE, 1, MoveInput.class, EditOutput.class, ProcessContext.class, pb -> pb
@@ -170,6 +178,47 @@ public final class QuestionBatchProcesses {
             if (number(question.get("points")) != input.points()) {
                 ctx.changes().update(QbContent.QUESTION, question.id(), question.version(),
                     Map.of("points", decimal(input.points())));
+                changed = true;
+            }
+        }
+        if (changed) {
+            QuizEditing.touch(ctx, quiz, Map.of(), null, List.of());
+        } else {
+            QuizEditing.unchanged(ctx, quiz, null, List.of());
+        }
+    }
+
+    public static ProcessDefinition<DifficultyInput, EditOutput, ProcessContext> difficultySet() {
+        return ProcessDefinition.define(DIFFICULTY_SET, 1, DifficultyInput.class, EditOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Gives several questions of a quiz the same difficulty, or none.")
+                .permissions(QbPermissions.CONTENT_WRITE)
+                .requiresVerifiedEmail()
+                .steps(CallerChecks::refuseBanned)
+                .contextFactory((start, input) -> QuizEditing.start(start, input, input.quizId()))
+                .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
+                .steps(QuizEditing::lockAndLoad)
+                .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
+                .compute("Set the difficulty", (metadata, ctx) -> difficultySet(ctx)));
+    }
+
+    static void difficultySet(ProcessContext ctx) {
+        DifficultyInput input = ctx.get(INPUT, DifficultyInput.class);
+        EntityInstance quiz = quiz(ctx);
+        if (!QuizEditing.current(ctx, quiz, input.baseRevision())) {
+            return;
+        }
+        List<EntityInstance> chosen = known(ctx, list(ctx, QUESTIONS), input.questionIds());
+        if (chosen == null) {
+            return;
+        }
+        String difficulty = input.difficulty().isEmpty() ? null : input.difficulty();
+        boolean changed = false;
+        for (EntityInstance question : chosen) {
+            if (!java.util.Objects.equals(question.get("difficulty"), difficulty)) {
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("difficulty", difficulty);
+                ctx.changes().update(QbContent.QUESTION, question.id(), question.version(), values);
                 changed = true;
             }
         }

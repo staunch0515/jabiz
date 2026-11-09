@@ -68,10 +68,19 @@ public final class QuestionProcesses {
      *                  a survey's options are never correct, whatever {@code correct} says
      * @param imageAssetId F-C1b: the image asset of the sponsor's library the question's image was copied from;
      *                  none leaves the record of an existing question as it is
+     * @param difficulty F-S7: {@code EASY}, {@code MEDIUM} or {@code HARD}; an empty one clears it, none leaves an
+     *                  existing question's as it is (a new one has none)
      */
     public record QuestionInput(@NotNull UUID quizId, UUID questionId, String stem, UUID image, Integer points,
         @Size(max = ContentLimits.MAX_OPTIONS) List<@Valid @NotNull OptionInput> options, Long baseRevision,
-        String selection, UUID imageAssetId) {
+        String selection, UUID imageAssetId,
+        @jakarta.validation.constraints.Pattern(regexp = "|EASY|MEDIUM|HARD") String difficulty) {
+
+        /** A question as before F-S7: its difficulty not given. */
+        public QuestionInput(UUID quizId, UUID questionId, String stem, UUID image, Integer points,
+            List<OptionInput> options, Long baseRevision, String selection, UUID imageAssetId) {
+            this(quizId, questionId, stem, image, points, options, baseRevision, selection, imageAssetId, null);
+        }
 
         /** A question as before F-C1b: its image not from the asset library. */
         public QuestionInput(UUID quizId, UUID questionId, String stem, UUID image, Integer points,
@@ -175,6 +184,9 @@ public final class QuestionProcesses {
         values.put("image", input.image());
         values.put("points", decimal(survey || input.points() == null ? 1 : input.points()));
         values.put("selection", survey ? input.selection() : null);
+        if (input.difficulty() != null) {
+            values.put("difficulty", input.difficulty().isEmpty() ? null : input.difficulty());
+        }
         boolean changed = false;
         Object questionId;
         if (question == null) {
