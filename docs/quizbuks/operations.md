@@ -867,7 +867,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 用了**其他发起方共享视频**（F-S12，卡片的提供方不是发布方）的发布，学者看得够久即计一次曝光（`docs/quizbuks/plans/impl/F-S13.md`）：竖视频在 App 的竖屏模式中（这类发布在那里作为"推送"每隔几屏出现一个，几家发起方轮流，打开过的不再推送给这个人），横视频在开始答题页（视频在画面上、页面在前台）；首页的预览与自动播放从不计。每位学者每个发布至多一次，每天至多 `qb.exposure.daily-cap-per-user` 次（日界按 `jabiz.fiscal-year-zone`，即日本时间的午夜，每日核对同）；发布方、提供方本人及两边的店员（Q39）不计；用自己视频的发布不计、不推送。给用户的帮助文案在 `docs/quizbuks/help/exposure.md`。屏蔽（§7.30）与"只看喜欢的主题"（§7.26）同样作用于推送：付多少钱都越不过。
 
-- **部署**：迁移 `V98`建 `qb_exposure`，发布（只追加表，只加列）与卡片加列 `exposure_purchased`。部署后运行一次 `QB_SETUP`：建九个普通参数（下表），给内容管理员补上 `qb.admin.exposure.read` / `.monitor`、给运营商补上 `qb.admin.exposure.read`。两个任务：`qb.exposure-ends`（每分钟，逐项）、`qb.exposure-check`（每天 UTC 19:47）。没有新的环境变量。
+- **部署**：迁移 `V97`建 `qb_exposure`，发布（只追加表，只加列）与卡片加列 `exposure_purchased`。部署后运行一次 `QB_SETUP`：建九个普通参数（下表），给内容管理员补上 `qb.admin.exposure.read` / `.monitor`、给运营商补上 `qb.admin.exposure.read`。两个任务：`qb.exposure-ends`（每分钟，逐项）、`qb.exposure-check`（每天 UTC 19:47）。没有新的环境变量。
 - **已购次数**（总控决定 A）：发布的 `exposurePurchased`，空即不限（永不因曝光结束）。只由 F-M8 的购买流程经子流程 `QB_EXPOSURE_PURCHASED_SET` 写入；**本项没有任何页面能改它**（F-M8 之前所有发布都是"不限"）。
 - **用完即停**：每分钟的 `qb.exposure-ends` 找出成功次数 ≥ 已购的进行中发布，每个以 `QB_PUBLICATION_EXPOSURE_END` 结束（结束原因"曝光已用完" `EXPOSURE`，不是下架，可以复制）；进行中的答题照常完成，发起方收到"发布已结束"的邮件。补跑用平台的"定时任务"页（`job.run`）。
 - **超出不计费**：上报不取发布锁，任务每分钟一次，所以成功次数可能略超已购；超出的照记，**计费次数 = min（成功，已购）**（F-M8 按它结算）。发起方页面的发布页"共享视频的曝光"一节显示已购（或"不限"）、已成功、计费、超出、推送被打开、去答题。
