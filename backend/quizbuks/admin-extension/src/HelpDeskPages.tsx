@@ -82,7 +82,7 @@ export function HelpThreadsPage() {
   else if (threads.data.length === 0) body = <EmptyState title={t('help.none')} testId="help-threads-none" />
   else {
     body = (
-      <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={t('help.table')}>
+      <div className="overflow-x-auto [&_[data-slot=table-container]]:overflow-visible" tabIndex={0} role="region" aria-label={t('help.table')}>
         <Table data-testid="help-threads">
           <TableHeader>
             <TableRow>

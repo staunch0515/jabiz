@@ -67,7 +67,7 @@ export function HelpGapsPage() {
       <>
         <p className="text-muted-foreground text-sm" data-testid="help-gaps-count">
           {t('help.gaps.count', { count: gaps.data.length })}</p>
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={t('help.gaps.table')}>
+        <div className="overflow-x-auto [&_[data-slot=table-container]]:overflow-visible" tabIndex={0} role="region" aria-label={t('help.gaps.table')}>
           <Table data-testid="help-gaps">
             <TableHeader>
               <TableRow>
@@ -131,7 +131,7 @@ export function HelpUsageSection({ month }: { month: string | null }) {
   else if (usage.data.length === 0) body = <p className="text-muted-foreground text-sm">{t('help.usage.none')}</p>
   else {
     body = (
-      <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={t('help.usage.table')}>
+      <div className="overflow-x-auto [&_[data-slot=table-container]]:overflow-visible" tabIndex={0} role="region" aria-label={t('help.usage.table')}>
         <Table data-testid="help-usage">
           <TableHeader>
             <TableRow>
@@ -311,7 +311,7 @@ export function HelpManualsPage() {
         )}
         {materials.isError && <LoadFailed error={materials.error} onRetry={() => void materials.refetch()} />}
         {materials.isSuccess && (
-          <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={t('help.manuals.materialsTable')}>
+          <div className="overflow-x-auto [&_[data-slot=table-container]]:overflow-visible" tabIndex={0} role="region" aria-label={t('help.manuals.materialsTable')}>
             <Table data-testid="help-materials">
               <TableHeader>
                 <TableRow>
