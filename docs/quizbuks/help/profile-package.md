@@ -18,7 +18,7 @@
 
 **导入被拒绝**：确认页会逐条列出问题。点"复制问题和修正提示词"，连同文件一起交回 AI，让它只改报错的地方。
 
-**图片**：AI 只能给出图片的链接，目前不会自动下载；确认页会提示"请下载后自己上传"，其余内容照常导入。
+**图片**：AI 只能给出图片的链接。导入时服务器会把链接里的图片逐张下载一次；下载不了的（对方网站拒绝、不是图片等），确认页会写明原因，你可以重试、改为自己上传图片，或让它保持现状，其余内容照常导入。
 
 ### 日本語 · AI で公式サイトから主催者資料パッケージを作る
 
@@ -28,7 +28,7 @@
 
 **取り込みが拒否されたとき**：確認画面に問題が一つずつ表示されます。「問題と修正用プロンプトをコピー」を押し、ファイルと一緒に AI に渡して、エラーの箇所だけ直してもらいます。
 
-**画像**：AI が出せるのは画像のリンクだけで、現在は自動ではダウンロードされません。確認画面に「ダウンロードしてご自身でアップロードしてください」と表示され、ほかの内容は通常どおり取り込まれます。
+**画像**：AI が出せるのは画像のリンクだけです。取り込むときにサーバーが一枚ずつダウンロードします。ダウンロードできなかったもの（相手のサイトが拒否した、画像ではない、など）は確認画面に理由が表示され、やり直す、ご自身の画像をアップロードする、そのままにする、のいずれかを選べます。ほかの内容は通常どおり取り込まれます。
 
 ### English · Create a profile package from your website with an AI tool
 
@@ -38,4 +38,4 @@
 
 **If the import is refused**: the confirmation screen lists each problem. Press "Copy the problems with the fixing prompt" and give it back to the AI together with the file, so it changes only what was reported.
 
-**Images**: an AI can only give links to images, and they are not downloaded automatically for now; the confirmation screen says "download it and upload it yourself", and everything else is imported as usual.
+**Images**: an AI can only give links to images. When you import, the server downloads each linked image once. One it cannot download (the other site refuses, it is not an image and so on) is shown on the confirmation screen with the reason, and you can try again, upload an image of your own, or leave it as it is. Everything else is imported as usual.

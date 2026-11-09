@@ -16,8 +16,15 @@ import { AiPromptDialog } from './AiPromptDialog'
 import { fixPrompt } from './aiPrompt'
 import { copyText } from './copyText'
 import { profilePath } from './paths'
-import { checkProfileImport, exportProfile, importProfile, keepApplyDraft, packageFileName, type ImportPlan }
-  from './transfer'
+import { checkProfileImport, downloadLink, exportProfile, importProfile, keepApplyDraft, packageFileName,
+  uploadForLink, type ImportPlan, type LinkNeed } from './transfer'
+
+/** One linked image (F-C6): not asked yet, being downloaded, a file of the sponsor's, or refused with the reasons. */
+type LinkState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'done'; fileId: string; own: boolean }
+  | { kind: 'failed'; reasons: string[] }
 
 type ImportState =
   | { kind: 'checking' }
@@ -43,6 +50,13 @@ export function ProfileTransferCard() {
   // D-Q100-13: the sponsor confirms that deleted products leave the quizzes they are shown on.
   const [leaving, setLeaving] = useState(false)
   const leavingId = useId()
+  // F-C6: what became of each linked image (by its path), and whether the sponsor lets the failed ones stay as they are.
+  const [linkStates, setLinkStates] = useState<Record<string, LinkState>>({})
+  const [keepImages, setKeepImages] = useState(false)
+  const keepId = useId()
+  const replacement = useRef<HTMLInputElement>(null)
+  const [replacing, setReplacing] = useState<LinkNeed | null>(null)
+  const setLink = (path: string, next: LinkState) => setLinkStates((all) => ({ ...all, [path]: next }))
 
   const exportNow = async () => {
     setExporting(true)
@@ -71,6 +85,8 @@ export function ProfileTransferCard() {
   const chosen = async (file: File) => {
     setPassword('')
     setLeaving(false)
+    setLinkStates({})
+    setKeepImages(false)
     setState({ kind: 'checking' })
     let document: Record<string, unknown>
     try {
@@ -86,10 +102,46 @@ export function ProfileTransferCard() {
     }
   }
 
+  // F-C6: the server downloads every linked image that has no file yet, one after the other (the platform lets a
+  // sponsor have two downloads at once); what it refuses is shown with its reasons and can be tried again.
+  const downloadOne = async (link: LinkNeed): Promise<LinkState> => {
+    setLink(link.path, { kind: 'loading' })
+    let result: LinkState
+    try {
+      result = { kind: 'done', fileId: await downloadLink(link), own: false }
+    } catch (e) {
+      result = { kind: 'failed', reasons: reasonsOf(e, t) }
+    }
+    setLink(link.path, result)
+    return result
+  }
+
+  const replaceWith = async (link: LinkNeed, file: File) => {
+    setLink(link.path, { kind: 'loading' })
+    try {
+      setLink(link.path, { kind: 'done', fileId: await uploadForLink(link, file, file.name), own: true })
+    } catch (e) {
+      setLink(link.path, { kind: 'failed', reasons: reasonsOf(e, t) })
+    }
+  }
+
   const start = async (document: Record<string, unknown>, plan: ImportPlan) => {
+    const states = { ...linkStates }
+    for (const link of plan.links) {
+      // A refused one is not asked again here: the sponsor retries it, replaces it or lets it stay.
+      if (!states[link.path] || states[link.path].kind === 'idle') states[link.path] = await downloadOne(link)
+    }
+    // A refused image waits for the sponsor's choice: try again, upload another, or let the image stay as it is.
+    if (plan.links.some((link) => states[link.path]?.kind !== 'done') && !keepImages) return
+    const linked: Record<string, string> = {}
+    for (const link of plan.links) {
+      const state = states[link.path]
+      if (state?.kind === 'done') linked[link.path] = state.fileId
+    }
     setState({ kind: 'importing', done: 0, total: plan.files.length })
     try {
-      await importProfile(document, plan, password, (done, total) => setState({ kind: 'importing', done, total }))
+      await importProfile(document, plan, password, (done, total) => setState({ kind: 'importing', done, total }),
+        linked)
       setState(null)
       notify.success(t('profile.transfer.imported'))
       await queryClient.invalidateQueries({ queryKey: ['qb'] })
@@ -106,6 +158,8 @@ export function ProfileTransferCard() {
   const plan = state?.kind === 'checked' ? state.plan : null
   const needsPassword = plan?.mailServer === 'PASSWORD'
   const linked = plan?.linked ?? []
+  const refused = (plan?.links ?? []).filter((link) => linkStates[link.path]?.kind === 'failed')
+  const downloading = (plan?.links ?? []).some((link) => linkStates[link.path]?.kind === 'loading')
   return (
     <Card data-testid="profile-transfer">
       <CardHeader>
@@ -187,9 +241,53 @@ export function ProfileTransferCard() {
                 <Alert data-testid="profile-import-links">
                   <AlertDescription className="flex flex-col gap-1">
                     <span>{t('profile.transfer.links')}</span>
-                    <ul className="list-disc pl-5 break-all">
-                      {plan.links.map((link) => <li key={link.path}>{link.url}</li>)}
+                    <ul className="flex flex-col gap-2">
+                      {plan.links.map((link, i) => {
+                        const state = linkStates[link.path] ?? { kind: 'idle' as const }
+                        return (
+                          <li key={link.path} className="flex flex-col gap-1" data-testid={`profile-import-link-${i}`}
+                            data-state={state.kind}>
+                            <span className="break-all">{link.url}</span>
+                            <span className="text-muted-foreground" role={state.kind === 'failed' ? 'alert' : 'status'}>
+                              {t(`profile.transfer.linkState.${state.kind === 'done' && state.own ? 'own' : state.kind}`)}
+                            </span>
+                            {state.kind === 'failed' && (
+                              <>
+                                <ul className="list-disc pl-5" data-testid={`profile-import-link-${i}-reasons`}>
+                                  {state.reasons.map((reason, r) => <li key={r}>{reason}</li>)}
+                                </ul>
+                                <span className="flex flex-wrap gap-2">
+                                  <Button type="button" variant="outline" size="sm" disabled={downloading}
+                                    data-testid={`profile-import-link-${i}-retry`} onClick={() => void downloadOne(link)}>
+                                    {t('profile.transfer.linkRetry')}
+                                  </Button>
+                                  <Button type="button" variant="outline" size="sm" disabled={downloading}
+                                    data-testid={`profile-import-link-${i}-upload`} onClick={() => {
+                                      setReplacing(link)
+                                      replacement.current?.click()
+                                    }}>
+                                    {t('profile.transfer.linkUpload')}
+                                  </Button>
+                                </span>
+                              </>
+                            )}
+                          </li>
+                        )
+                      })}
                     </ul>
+                    {refused.length > 0 && (
+                      <span className="flex items-center gap-2">
+                        <Checkbox id={keepId} checked={keepImages} data-testid="profile-import-keep-images"
+                          onCheckedChange={(checked) => setKeepImages(checked === true)} />
+                        <Label htmlFor={keepId}>{t('profile.transfer.linkKeep')}</Label>
+                      </span>
+                    )}
+                    <input ref={replacement} type="file" accept="image/jpeg,image/png" className="sr-only" tabIndex={-1}
+                      aria-hidden data-testid="profile-import-link-file" onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        event.target.value = ''
+                        if (file && replacing) void replaceWith(replacing, file)
+                      }} />
                   </AlertDescription>
                 </Alert>
               )}
@@ -233,7 +331,8 @@ export function ProfileTransferCard() {
             </Button>
             {state?.kind === 'checked' && (
               <Button data-testid="profile-import-confirm"
-                disabled={(needsPassword && !password) || (linked.length > 0 && !leaving)}
+                disabled={(needsPassword && !password) || (linked.length > 0 && !leaving) || downloading
+                  || (refused.length > 0 && !keepImages)}
                 onClick={() => void start(state.document, state.plan)}>
                 {t('profile.transfer.confirm')}
               </Button>
