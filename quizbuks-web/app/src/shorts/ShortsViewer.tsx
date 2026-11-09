@@ -14,6 +14,8 @@ import { QBVIEW } from '../qb/view/messages'
 import { VideoPlayer } from '../qb/view/VideoPlayer'
 import { useVideoFailed, videoFailed } from '../qb/videoFailures'
 import { openWithSound, soundOn, stagePlayer, useStage, VideoSlot } from '../video/stage'
+import { ExposureWatch } from '../exposure/ExposureWatch'
+import { queueReport } from '../exposure/reporter'
 
 /**
  * F-S10 (docs/quizbuks/plans/impl/F-S10.md): the full-screen vertical mode, like YouTube's Shorts. It lies over the
@@ -25,16 +27,22 @@ import { openWithSound, soundOn, stagePlayer, useStage, VideoSlot } from '../vid
  * on it (A3-18). With less motion asked for, nothing plays by itself: the screen offers a play button. "Answer" opens
  * the start page with the same player.
  *
+ * F-S13: with `exposure` (a signed-in taker with a verified address), a screen of another's video (`exposed`: the
+ * pushes the home places among the short videos) reports that it was opened, the exposure once it played on for the
+ * seconds of the parameter, and going on to answer (`exposure/`).
+ *
  * Not tied to the home's layout: it takes the short videos, the one to start on and what to do on leaving or
  * answering, so that it moves into the new frame of Q108 as it is.
  */
-export function ShortsViewer({ cards, startId, onClose, onAnswer, menu }: {
+export function ShortsViewer({ cards, startId, onClose, onAnswer, menu, exposure = false }: {
   cards: readonly FeedCard[]
   startId: string
   onClose: () => void
   onAnswer: (card: FeedCard) => void
   /** F-S8: the screen's menu (blocking), beside "answer". */
   menu?: (card: FeedCard) => ReactNode
+  /** F-S13: whether this taker's watching is reported (signed in, address verified). */
+  exposure?: boolean
 }) {
   const { t } = useTranslation(APP)
   const { t: tView } = useTranslation(QBVIEW)
@@ -53,7 +61,11 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer, menu }: {
   const [scrollTo, setScrollTo] = useState<number | null>(null)
   if (seen.cards !== cards || seen.startId !== startId) {
     setSeen({ cards, startId })
-    const found = cards.findIndex((card) => card.publicationId === startId)
+    // F-S13: the list read again or placed anew (the pushes, the parameters arriving) keeps the screen shown; a new
+    // address (a block moved it on) goes there.
+    const shownId = seen.startId === startId ? seen.cards[index]?.publicationId : undefined
+    const kept = shownId ? cards.findIndex((card) => card.publicationId === shownId) : -1
+    const found = kept >= 0 ? kept : cards.findIndex((card) => card.publicationId === startId)
     const at = found >= 0 ? found : Math.min(index, Math.max(0, cards.length - 1))
     if (at !== index) {
       setIndex(at)
@@ -74,6 +86,13 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer, menu }: {
       document.body.style.overflow = before
     }
   }, [])
+
+  // F-S13: a push shown is opened (however long it is watched): it is not pushed to this taker again.
+  const current = cards[index]
+  const openedId = exposure && current?.exposed ? current.publicationId : null
+  useEffect(() => {
+    if (openedId) queueReport({ publicationId: openedId, kind: 'OPEN', surface: 'VERTICAL' })
+  }, [openedId])
 
   const screenAt = (at: number) => scroller.current?.querySelectorAll<HTMLElement>('[data-shorts-screen]')[at]
 
@@ -137,6 +156,7 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer, menu }: {
   }, [])
 
   const answer = (card: FeedCard) => {
+    if (exposure && card.exposed) queueReport({ publicationId: card.publicationId, kind: 'GO', surface: 'VERTICAL' })
     // The start page takes over the playing player with its sound (Q65, Q66).
     if (card.video && trackable(card.video)) openWithSound(card.video)
     onAnswer(card)
@@ -176,6 +196,11 @@ export function ShortsViewer({ cards, startId, onClose, onAnswer, menu }: {
               aria-roledescription={t('shorts.slide')} aria-label={t('shorts.position', { n: at + 1, total: cards.length })}
               aria-hidden={shown ? undefined : true} inert={!shown || undefined}
               className="flex h-full snap-start flex-col items-center gap-3 px-4 pb-4">
+              {/* F-S13: the screen shown of another's video counts its exposure while it plays. */}
+              {shown && exposure && card.exposed && (
+                <ExposureWatch key={card.publicationId} publicationId={card.publicationId} surface="VERTICAL"
+                  video={card.video} durationSec={card.videoDurationSec} active={plays} />
+              )}
               <div className="flex min-h-0 w-full flex-1 justify-center">
                 <div className="bg-muted relative aspect-[9/16] h-full max-w-full overflow-hidden rounded-md">
                   {plays && trackable(card.video)

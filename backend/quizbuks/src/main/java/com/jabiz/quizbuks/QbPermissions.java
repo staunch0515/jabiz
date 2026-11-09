@@ -294,6 +294,14 @@ public final class QbPermissions {
      * never whose blocks. Headquarters' content administrators, not the operators.
      */
     public static final String ADMIN_BLOCK_READ = "qb.admin.block.read";
+    /**
+     * F-S13: the suspicious inflation of exposures (the accounts the daily cap refused, by account). Content
+     * administrators for every sponsor, the operators for their own sponsors' publications (the entry scope limits what
+     * they see).
+     */
+    public static final String ADMIN_EXPOSURE_READ = "qb.admin.exposure.read";
+    /** F-S13: the daily reconciliation's task on the exposures. Headquarters' content administrators only. */
+    public static final String ADMIN_EXPOSURE_MONITOR = "qb.admin.exposure.monitor";
 
     /**
      * F-S12: the shared videos of every provider (read), and taking one down (write). Content administrators for

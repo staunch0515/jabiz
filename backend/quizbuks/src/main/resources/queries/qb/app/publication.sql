@@ -44,6 +44,8 @@ results:
   quizId:         { from: QbPublicationCard.quizId }
   videoProviderId: { from: QbPublicationCard.videoProviderId }
   videoProviderName: { from: QbSponsor.company }
+  exposed:        { kind: { type: bool } }
+  videoVertical:  { from: QbPublicationCard.videoVertical }
   blocks:         { kind: { type: text } }
   blocked:        { kind: { type: bool } }
   kind:           { from: QbPublicationCard.kind }
@@ -120,6 +122,8 @@ SELECT
     d.quizId AS quizId,
     d.videoProviderId AS videoProviderId,
     d.videoProviderName AS videoProviderName,
+    d.exposed AS exposed,
+    d.videoVertical AS videoVertical,
     d.blocks AS blocks,
     (d.blocks IS NOT NULL) AS blocked,
     d.kind AS kind,
@@ -201,6 +205,11 @@ SELECT
     c.{{QbPublicationCard.videoProviderId}} AS videoProviderId,
     (SELECT vp.{{QbSponsor.company}} FROM {{QbSponsor}} vp
      WHERE vp.{{QbSponsor.userId}} = c.{{QbPublicationCard.videoProviderId}}) AS videoProviderName,
+    -- F-S13: whether its video is another's shared video: a horizontal one's exposure counts on this page
+    -- (exposure.ExposureRules.othersVideo; qb.app.feed the same).
+    (c.{{QbPublicationCard.sharedVideoId}} IS NOT NULL AND c.{{QbPublicationCard.videoProviderId}} IS NOT NULL
+     AND c.{{QbPublicationCard.videoProviderId}} <> c.{{QbPublicationCard.publisherId}}) AS exposed,
+    c.{{QbPublicationCard.videoVertical}}  AS videoVertical,
     (SELECT CAST(jsonb_agg(jsonb_build_object('blockId', bl.{{QbBlock.blockId}}, 'kind', bl.{{QbBlock.kind}})
                            ORDER BY array_position(ARRAY['PUBLICATION', 'QUIZ', 'SPONSOR', 'PROVIDER'],
                                                    CAST(bl.{{QbBlock.kind}} AS text))) AS text)

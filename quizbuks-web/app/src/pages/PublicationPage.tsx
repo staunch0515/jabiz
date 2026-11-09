@@ -24,6 +24,8 @@ import { prefersStillVideo, trackable } from '../qb/video'
 import { VideoPlayer } from '../qb/view/VideoPlayer'
 import { SponsorVisit } from './SponsorVisit'
 import { VideoSlot } from '../video/stage'
+import { StartPageExposure } from '../exposure/ExposureWatch'
+import { queueReport } from '../exposure/reporter'
 import { clock, satisfied, shortfallSec, toInput, usePlayback } from '../video/playback'
 import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
 import { formatKudos } from '../qb/kudos'
@@ -97,9 +99,15 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
   const report = noPlayer && !toInput(playback) ? { status: 'UNKNOWN' as const } : toInput(playback)
   // Q88b: the entry fee a new start pays (an attempt in progress paid it already).
   const fee = publication.entryFee ?? 0
-  const begin = () => start.mutate({ publicationId: publication.publicationId,
-    language: inProgress ? null : publication.displayLanguage,
-    playback: inProgress ? null : report })
+  const begin = () => {
+    // F-S13: going on to answer a horizontal publication using another's video (statistics only).
+    if (!inProgress && emailVerified && publication.exposed && !publication.videoVertical) {
+      queueReport({ publicationId: publication.publicationId, kind: 'GO', surface: 'START' })
+    }
+    start.mutate({ publicationId: publication.publicationId,
+      language: inProgress ? null : publication.displayLanguage,
+      playback: inProgress ? null : report })
+  }
 
   let action
   if (mine && !inProgress) {
@@ -300,12 +308,18 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       {/* Q65: the home's player carries on here, its sound on from the tap that opened the page; a viewer who
           asked for less motion gets a player that waits for their own tap. */}
       <PublicationContent publication={p} tiers={tiers.data ?? []} linkSponsor autoplay={!prefersStillVideo()}
-        video={prefersStillVideo() ? undefined : (player, title) => (trackable(player)
-          ? <VideoSlot id={`page:${p.publicationId}`} player={player} title={title} mode="page"
-            publicationId={p.publicationId}
-            className="bg-muted relative aspect-video w-full sm:border" />
-          // Q99b: another site's player is the page's own (the app cannot hand it the sound) and starts the same way.
-          : <VideoPlayer player={player} title={title} autoplay className="bg-muted aspect-video w-full overflow-hidden sm:border" />
+        video={prefersStillVideo() ? undefined : (player, title) => (
+          // F-S13: a horizontal video of another's counts its exposure here, once on the screen long enough.
+          <StartPageExposure publicationId={p.publicationId} video={player} durationSec={p.videoDurationSec}
+            active={emailVerified && p.exposed === true && p.videoVertical !== true && player === p.video}>
+            {trackable(player)
+              ? <VideoSlot id={`page:${p.publicationId}`} player={player} title={title} mode="page"
+                publicationId={p.publicationId}
+                className="bg-muted relative aspect-video w-full sm:border" />
+              // Q99b: another site's player is the page's own (the app cannot hand it the sound) and starts the same
+              // way.
+              : <VideoPlayer player={player} title={title} autoplay className="bg-muted aspect-video w-full overflow-hidden sm:border" />}
+          </StartPageExposure>
         )} />
       <ProductCards products={quizProducts(products.data)}
         title={tView('products.title')} testId="publication-products" onOpen={countProductClick} />

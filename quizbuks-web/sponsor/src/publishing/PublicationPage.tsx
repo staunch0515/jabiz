@@ -21,6 +21,7 @@ import { InvitationsSection } from './Invitations'
 import { PublicationActions } from './PublicationActions'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
 import { ReferralsSection } from './ReferralsSection'
+import { ExposureSection } from '../exposure/ExposureCounts'
 import '../sharedvideos/messages'
 import { MainlandNotice, PublicationSummary, reachesMainland, StatusBadge, useEndReasonLabel, useVersionOf }
   from './shared'
@@ -180,6 +181,8 @@ function PublicationView({ detail, stale, onStale }: {
       {publication.referral && publication.status !== 'DRAFT' && (
         <ReferralsSection publicationId={publication.publicationId} />
       )}
+      {/* F-S13: the exposures of another Sponsor's shared video it uses (nothing for its own videos). */}
+      {publication.status !== 'DRAFT' && <ExposureSection publicationId={publication.publicationId} />}
       {pooled(publication) && <DigitalPoolSection publicationId={publication.publicationId} status={publication.status}
         mode={poolMode(publication)} />}
       {dates.length > 0 && (

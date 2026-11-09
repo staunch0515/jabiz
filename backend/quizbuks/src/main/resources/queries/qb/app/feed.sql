@@ -1,13 +1,14 @@
 /*---
 id: qb.app.feed
 description: The publications a taker can answer now (U-10 – U-14), newest first; searched by name and title
-entities: [SysParam, QbRegionException, QbUserSettings, QbTopic, QbBlock, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
+entities: [SysParam, QbRegionException, QbUserSettings, QbTopic, QbBlock, QbExposure, QbPublicationCard, QbPublicationCounter, QbPublicationStartCounter, QbWallet, QbCountry, QbSponsor, QbSponsorPage, QbPublicationOwner, QbAttempt, QbProfileAttribute, QbPublicationCriterion, QbCertificationRound, QbTreeNode, QbTreeLit, QbTreeLitRevocation]
 datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
   QbRegionException: urn:jabiz:dataset:public:QbRegionException
   QbUserSettings: urn:jabiz:dataset:me:QbUserSettings
   QbTopic: urn:jabiz:dataset:default:QbTopic
   QbBlock: urn:jabiz:dataset:me:QbBlock
+  QbExposure: urn:jabiz:dataset:me:QbExposure
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationCounter: urn:jabiz:dataset:default:QbPublicationCounter
   QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
@@ -31,6 +32,7 @@ params:
   method:  { like: QbPublicationCard.rewardMethod, description: "Only publications whose reward comes this way (Q22, Q33): PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM or DIGITAL_PRIZE" }
   mainlandChina: { kind: { type: bool }, description: "F-S11: whether the caller's address is in mainland China, as GET /api/client/region said; publications with a foreign video and no exception are then not for them" }
   shorts:  { kind: { type: bool }, description: "F-S10: if true, only the publications whose video is vertical (QbPublicationCard.videoVertical), for the home's shelf of shorts and its full-screen vertical mode; the same conditions as the feed otherwise" }
+  push:    { kind: { type: bool }, description: "F-S13: if true, only the pushes of the vertical mode: publications whose vertical video is another's shared video (its provider is not its publisher) that the caller never opened; the same conditions as the feed otherwise (blocks, strict mode, region)" }
   languages: { kind: { type: text, maxLength: 20 }, description: "Only publications offering one of these languages (Q59a, Q73b), comma-separated in the taker's order (ja, zh, en): their switches, or their interface language; each shown in the first of them it offers; all when not given" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
@@ -45,6 +47,9 @@ results:
   quizId:         { from: QbPublicationCard.quizId }
   videoProviderId: { from: QbPublicationCard.videoProviderId }
   videoProviderName: { from: QbSponsor.company }
+  exposed:        { kind: { type: bool } }
+  pushTurn:       { kind: { type: numeric, precision: 9, scale: 0 } }
+  pushRank:       { kind: { type: numeric, precision: 9, scale: 0 } }
   shortsPositions: { kind: { type: text, maxLength: 200 } }
   shortsPerShelf: { kind: { type: text, maxLength: 20 } }
   kind:           { from: QbPublicationCard.kind }
@@ -75,7 +80,7 @@ results:
   myDeadline:     { from: QbAttempt.deadline }
 list:
   filters: [sponsorCountry, sponsorName, sponsorCompany, maxReward, rewardMethod, completions, startAt]
-  sorts:   [startAt, maxReward, completions]
+  sorts:   [startAt, maxReward, completions, pushTurn, pushRank]
   defaultSort: { field: startAt, asc: false }
   key: [publicationId]
 permissions: [qb.play]
@@ -116,6 +121,22 @@ SELECT
     c.{{QbPublicationCard.quizId}}         AS quizId,
     c.{{QbPublicationCard.videoProviderId}} AS videoProviderId,
     vp.{{QbSponsor.company}}               AS videoProviderName,
+    -- F-S13: whether its video is another's shared video (the provider is not the publisher): its exposures count, in
+    -- the vertical mode when vertical, on the start page otherwise (exposure.ExposureRules.othersVideo).
+    (c.{{QbPublicationCard.sharedVideoId}} IS NOT NULL AND c.{{QbPublicationCard.videoProviderId}} IS NOT NULL
+     AND c.{{QbPublicationCard.videoProviderId}} <> c.{{QbPublicationCard.publisherId}}) AS exposed,
+    -- F-S13: the pushes take turns among their publishers (by id, which never leaves the server): the publisher's n-th
+    -- push (newest first), and the publisher's place in a turn, an order of the publishers that changes every day (a
+    -- hash of the id and the day: who comes first rotates); sorting by the two gives every publisher's first, then every
+    -- publisher's second... The App gets the two numbers only. Only with push (none otherwise).
+    CASE WHEN CAST(:push AS boolean) IS TRUE
+         THEN row_number() OVER (PARTITION BY c.{{QbPublicationCard.publisherId}}
+                                 ORDER BY c.{{QbPublicationCard.startAt}} DESC, c.{{QbPublicationCard.publicationId}}) END
+        AS pushTurn,
+    CASE WHEN CAST(:push AS boolean) IS TRUE
+         THEN dense_rank() OVER (ORDER BY md5(c.{{QbPublicationCard.publisherId}}
+                                       || CAST(CAST(CAST(:at AS timestamptz) AT TIME ZONE 'UTC' AS date) AS text)),
+                                 c.{{QbPublicationCard.publisherId}}) END AS pushRank,
     CAST(shp.positions AS varchar(200))    AS shortsPositions,
     CAST(shp.perShelf AS varchar(20))      AS shortsPerShelf,
     c.{{QbPublicationCard.kind}}           AS kind,
@@ -197,6 +218,16 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
            AND coalesce(w.{{QbWallet.balance}} - w.{{QbWallet.held}}, 0) >= c.{{QbPublicationCard.maxReward}}))
   -- F-S10: the shelf of shorts asks for the vertical ones only, under every other condition of the feed.
   AND (CAST(:shorts AS boolean) IS NOT TRUE OR c.{{QbPublicationCard.videoVertical}})
+  -- F-S13: the vertical mode's pushes: another's vertical shared video, never opened by the caller (the view holds their
+  -- own rows only), under every other condition of the feed (exposure.ExposureRules.pushable is the one definition;
+  -- BlockIT and ExposureIT compare).
+  AND (CAST(:push AS boolean) IS NOT TRUE
+       OR (c.{{QbPublicationCard.videoVertical}}
+           AND c.{{QbPublicationCard.sharedVideoId}} IS NOT NULL AND c.{{QbPublicationCard.videoProviderId}} IS NOT NULL
+           AND c.{{QbPublicationCard.videoProviderId}} <> c.{{QbPublicationCard.publisherId}}
+           AND NOT EXISTS (SELECT 1 FROM {{QbExposure}} ex
+                           WHERE ex.{{QbExposure.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
+                             AND ex.{{QbExposure.openedAt}} IS NOT NULL)))
   AND (CAST(:method AS text) IS NULL OR c.{{QbPublicationCard.rewardMethod}} = CAST(:method AS text))
   -- Q59a: publications of different languages are not listed together; the client says which the taker sees. Q73b:
   -- one offering several is listed when it offers one of them, once, in the first of them it offers.
@@ -254,7 +285,7 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
   -- F-S9: with the caller's strict mode on (their own settings: the view holds their row only), only a publication
   -- sharing a word of the word list with the topics they like; each word counts as the one it was merged into, a
   -- custom word never (its own column), a card without words never. topic.TopicRules.strictAllows is the one
-  -- definition (TopicIT compares the two); F-S13's push applies the same condition.
+  -- definition (TopicIT compares the two); F-S13's push (the parameter push) is this template, so it applies it too.
   AND (NOT coalesce((SELECT us.{{QbUserSettings.strictTopics}} FROM {{QbUserSettings}} us), false)
        OR EXISTS (
            SELECT 1
@@ -269,7 +300,7 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
   -- froze (its later publications too), nor its sponsor, nor its shared video's provider. A hard block: nothing the
   -- card pays or promotes gets past it. block.BlockRules.blocks is the one definition; qb.app.publication,
   -- qb.app.inbox, qb.app.inbox-unread and the start (block.BlockStart) write the same (BlockIT compares them); F-S6's
-  -- search and F-S13's push apply it too.
+  -- search applies it too, and F-S13's push (the parameter push) is this template.
   AND NOT EXISTS (
       SELECT 1 FROM {{QbBlock}} bl
       WHERE ((bl.{{QbBlock.kind}} = 'PUBLICATION'
