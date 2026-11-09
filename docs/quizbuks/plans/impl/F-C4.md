@@ -41,7 +41,7 @@
 - **第 2 版比第 1 版多**：`trees`（节点与条件）、发布的 `node`、Quiz 版本与当前内容的 `topics` / `customTopics`、发布的 `topics`（增删）、发布的 `sharedVideo`。没有乱序开关（§0）。
 - **只带内容与设置**：不带状态与审核结果、记录、钱与账本、店员、邮件服务器的密码（资料包本来就不带）、电子奖品的码与共用码、领奖码、邀请名单、资源库、发布的封面与福利购买（Q102 的决定：账户自己的文件与记录）。
 - **Quiz**：未移除的 Quiz 都带当前内容；没有结束的发布用到的每个版本也带上（`versions` 按版本号先后）。当前内容与最后一个带上的版本相同（`changedSinceVersion` 为假且最后一个带上的就是最新版本）时 `current` 为 `null`，不再替换。
-- **发布**：只带没有结束的（`DRAFT`、`REVIEW`、`SCHEDULED`、`LIVE`、`PAUSED`、`FUNDS_SHORT`）。
+- **发布**：只带没有结束的（`DRAFT`、`PENDING_REVIEW`、`SCHEDULED`、`LIVE`、`PAUSED`、`FUNDS_SHORT`）。
 - **图**：本人未退役的图，带生效的版本（没有生效的带草稿）。节点与图的键是源环境的编号（导入时由服务器发新编号，`QB_TREE_DRAFT_SAVE` 的 `key`）。
 - **共享视频**：只带编号（目录中的 `sharedVideoId`）。
 - 读包（`package.ts` 的 `readPackage`）只认 `format` 与 `version` 1、2；其他文件、更新的版本、形状不对一律拒绝并说明原因。Quiz 文件、资料包的内容由服务器的检查流程逐个检查（`QB_QUIZ_IMPORT_CHECK`、`QB_PROFILE_IMPORT_CHECK`）。
@@ -66,7 +66,9 @@
 | 位置 | 改动 |
 |---|---|
 | `content.transfer.QuizTransferProcesses` | `ImportInput` 加可选的 `intoQuizId`：取 Quiz 锁、经商家视图读（别人的、已移除的 404）、有任何发布（含草稿）即 422 `QB_QUIZ_IMPORT_HAS_PUBLICATIONS`、种类不同 422 `QB_QUIZ_KIND_FIXED`；整体替换（题目、选项、资料、图片、译文删除后按文件插入，标题与简介等换成文件的，`revision + 1`，资源库的使用记录随删除的部分一起忘掉，同移除）。不给时与以前相同 |
-| `content.QuizProcesses` | 把移除时删除各部分的代码抽成 `clearContent`（移除与替换共用），加 `replaceContent` |
+| `content.QuizProcesses` | 把移除时删除各部分的代码抽成 `clearContent`（移除与替换共用），加 `loadForReplace` / `replaceContent` |
+| `tree.TreeConfig` / `QbTrees` | 数据视图 `urn:jabiz:dataset:sponsor:QbTree`（本人的图，只读），供发起方包的模板经它读本人的版本与节点 |
+| `application.yml` | 限流：`QB_PACKAGE_IMPORT_START` 30/时、`_STEP` 3000/时、`_ABANDON` 30/时；`QB_QUIZ_IMPORT_CHECK` 60 → 300/时（检查页逐个检查包里的 Quiz 文件） |
 | `sponsorpackage`（新包） | `QbPackageImports`（实体、数据视图名、锁名）、`PackageImportRules`（纯 Java：哈希与步骤键的格式、结果的读写、可否全部导入、保留期）、`PackageImportCodes`、`PackageImportProcesses`（`QB_PACKAGE_IMPORT_START` / `_STEP` / `_ABANDON` / `_EXPIRE`）、`PackageImportConfig`（实体、两个数据视图、流程、保留期任务 `qb.package-import-expire`） |
 | 迁移 `V101__quizbuks_package_import.sql`（临时编号：基线最大 V97，V98–V100 已被占用；合并前按最大号 + 1 重编） | 新表 `qb_package_import`（普通表），部分唯一索引（每个发起方一个 `RUNNING`），按发起方与开始时间、按更新时间的索引 |
 | 模板 | `qb.sponsor.package-state`（是否提交过发布、是否有提交过的图、确认的字节数、图的上限、未结束的导入）、`qb.sponsor.package-trees` / `qb.sponsor.package-tree-nodes`（本人的图与节点）、`qb.system.package-imports-expired`（保留期任务的项） |
@@ -123,6 +125,9 @@
 15. **发起方的流程用 `qb.content.write`**，不新加授予给角色的权限；保留期任务用新权限 `qb.package.system`（不授予任何角色）。
 16. **`intoQuizId` 有任何发布（含草稿）即拒**：规格"没有发布的 Quiz"；导入时 Quiz 的版本都在发布之前生成，所以不受影响。
 17. **确认的字节数只用于发起方包**；Quiz 文件（Q16）的导出照旧用它自己的 100 MB（§8 第 3 条）。
+18. **一次导入记下每批题数**：继续时沿用开始时的批大小（参数中途改了也不会把题目分错批）。
+19. **检查页逐个检查每个 Quiz 文件**（`QB_QUIZ_IMPORT_CHECK`，它的限流放宽到每人每小时 300 次），步骤中的上传按检查的结果只传这一批用到的文件。
+20. **新建的图的条件中指向平台模版节点的编号**按原样带（跨环境多半对不上）：保存草稿时由规则列为图的问题，提交前由发起方改正；直营发起方绑定在平台图上的发布不按键绑定（列为"不绑定"）。
 
 ## 8. 以后（需要别人补的与之后的事）
 
