@@ -70,7 +70,7 @@
 | `tree.TreeConfig` / `QbTrees` | 数据视图 `urn:jabiz:dataset:sponsor:QbTree`（本人的图，只读），供发起方包的模板经它读本人的版本与节点 |
 | `application.yml` | 限流：`QB_PACKAGE_IMPORT_START` 30/时、`_STEP` 3000/时、`_ABANDON` 30/时；`QB_QUIZ_IMPORT_CHECK` 60 → 300/时（检查页逐个检查包里的 Quiz 文件） |
 | `sponsorpackage`（新包） | `QbPackageImports`（实体、数据视图名、锁名）、`PackageImportRules`（纯 Java：哈希与步骤键的格式、结果的读写、可否全部导入、保留期）、`PackageImportCodes`、`PackageImportProcesses`（`QB_PACKAGE_IMPORT_START` / `_STEP` / `_ABANDON` / `_EXPIRE`）、`PackageImportConfig`（实体、两个数据视图、流程、保留期任务 `qb.package-import-expire`） |
-| 迁移 `V103__quizbuks_package_import.sql`（`1.3/quizbuks` 最大 V102 之后，先绿先合） | 新表 `qb_package_import`（普通表），部分唯一索引（每个发起方一个 `RUNNING`），按发起方与开始时间、按更新时间的索引 |
+| 迁移 `V102__quizbuks_package_import.sql`（`1.3/quizbuks` 最大 V101 之后，先绿先合） | 新表 `qb_package_import`（普通表），部分唯一索引（每个发起方一个 `RUNNING`），按发起方与开始时间、按更新时间的索引 |
 | 模板 | `qb.sponsor.package-state`（是否提交过发布、是否有提交过的图、确认的字节数、图的上限、未结束的导入）、`qb.sponsor.package-trees` / `qb.sponsor.package-tree-nodes`（本人的图与节点）、`qb.system.package-imports-expired`（保留期任务的项） |
 | `setup.QbParams` | 加在最后（普通参数）：`qb.package.confirm-bytes`（104857600）、`qb.package.import-retention-days`（90） |
 | `QbPermissions` | `qb.package.system`（保留期任务，不授予任何角色）；发起方的三个流程用 `qb.content.write`（子流程各自照常检查自己的权限） |
