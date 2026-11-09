@@ -804,6 +804,7 @@
   - 用完即停：分钟级的逐项任务汇总成功次数，用完后以平台的结束流程结束发布（新的结束原因"曝光已用完"，进行中的答题照常完成，发起方收到通知）。
   - 并发下可能略超已购次数，超出部分不收费。
   - 用完之前可以追加购买，按发布修改的审核规则（金额与预留见 F-M）。
+  - **与 F-M8 的接口**（总控 2026-11-09 决定 A）：已购次数是发布上的字段 `QbPublication.exposurePurchased`（`processOnly`，整数 ≥ 1；空即不限，永不因曝光结束），卡片同名字段随之同步；只经内部子流程 `QB_EXPOSURE_PURCHASED_SET {publicationId, purchased}`（`subProcessOnly`，取发布锁，草稿与进行中都可设，已结束的拒绝）写入，供 F-M8 的购买与追加购买调用，不给发起方页面与管理系统。结束流程、通知与每日核对都按"成功 ≥ 已购"；超出已购的成功照记、不计费：计费次数 = min（成功，已购），成功即 `qb_exposure` 中该发布已计数的行数（`qb.sponsor.exposure` 的 `billable` / `overshoot`）。实施计划 `plans/impl/F-S13.md`。
 - **参数**：`qb.exposure.seconds`（10）、`qb.exposure.daily-cap-per-user`（建议 200）、`qb.exposure.push.every`（每滑几个出现一个推送，5）、上报批量与间隔，以上不受控；单价与最少购买次数在 F-M。
 - **运营闭合**：
   - 用户：使用方在发起方页面看已购与已成功次数；用完前按比例提醒（参数）；可以追加购买。
@@ -1276,6 +1277,7 @@
   - 提交时购买次数 ≥ 最少购买次数，预付 = 次数 × 单价（含税），与配送预付同一套（F-M5）；单价提交时冻结。
   - 与配送费**同一结算流程**：每月按差额结算成功次数（不超过已购次数），费用种类 `EXPOSURE`；超出部分不收；用完即以平台结束流程结束发布（原因"曝光已用完"）并通知；用完前可追加购买（按发布修改的审核规则，追加部分另行预付）；提前结束退回未用的预付。
   - 价目表按运营商、总部给范围；归属按提交时冻结的运营商。
+  - **F-S13 已做的接口**（总控 2026-11-09 决定 A）：购买与追加购买以子流程 `QB_EXPOSURE_PURCHASED_SET {publicationId, purchased}`（`subProcessOnly`，在发布锁内以 `CallProcess.of` 调用；`purchased` 是购买的总次数，空即不限）写发布的 `exposurePurchased`（卡片同步）；结束由 F-S13 的分钟任务 `qb.exposure-ends` 按"成功 ≥ 已购"做（结束原因 `EXPOSURE`），每日核对 `qb.exposure-check`；结算的次数 = min（成功，已购），成功即 `qb_exposure` 中该发布 `counted_at` 不为空的行数，超出部分照记不收。按比例提醒与追加购买的界面随本项。
 - **参数**：`qb.exposure.billing.enabled`（false，受控）；运营商价目 `unit`、`unit-floor`、`unit-ceiling`；总部范围（受控）；`qb.exposure.min-purchase`（受控）；`qb.exposure.seconds`（10）属推送组。
 - **运营闭合**：向导的购买与预付、发布页已购 / 已用 / 剩余；剩余低于一成时提醒（比例普通参数）；运营商与总部的价目与结算列表；用完结束由分钟级任务（推送组）调用；核对：结算次数 ≤ 已购、预付余额；月报随配送费的类加种类 `EXPOSURE`。
 - **依赖**：F-M5、F-M6、Q112a、Q110a。
