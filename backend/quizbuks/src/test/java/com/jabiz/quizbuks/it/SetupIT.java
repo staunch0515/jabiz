@@ -422,6 +422,18 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.EXPOSURE_END_GRACE_SEC, "60");
         // F-S14: the reminder of a shared video's use waiting for its provider (ordinary).
         expected.put(QbParams.VIDEO_USE_REMIND_DAYS, "7");
+        // F-C10: the AI help (off and the monthly tokens controlled; the rest ordinary).
+        expected.put(QbParams.HELP_ENABLED, "false");
+        expected.put(QbParams.HELP_MODEL, "claude-haiku-5-5");
+        expected.put(QbParams.HELP_USER_DAILY, "20");
+        expected.put(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, "20000000");
+        expected.put(QbParams.HELP_HISTORY_TURNS, "6");
+        expected.put(QbParams.HELP_RETENTION_DAYS, "180");
+        expected.put(QbParams.HELP_MANUAL_MAX_BYTES, "204800");
+        expected.put(QbParams.HELP_POLL_SECONDS, "3");
+        expected.put(QbParams.HELP_POLL_MAX_MINUTES, "3");
+        expected.put(QbParams.HELP_ESCALATION_REMIND_DAYS, "2");
+        expected.put(QbParams.HELP_AUTO_CLOSE_DAYS, "14");
         expected.put(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, "3660");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");

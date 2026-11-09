@@ -100,6 +100,8 @@ public final class MessageProcesses {
     /** F-C3: a shared video sent back by its review, or taken down. */
     public static final String SHARED_VIDEO_REJECTED_CONSUMER = "qb.msg-shared-video-rejected";
     public static final String SHARED_VIDEO_TAKEN_DOWN_CONSUMER = "qb.msg-shared-video-taken-down";
+    /** F-C10: a person's reply in an AI help conversation. */
+    public static final String HELP_REPLY_CONSUMER = "qb.msg-help-reply";
 
     /**
      * The taker's push notification of a prize won (platform 17k, decision D69): the moment a taker learns of a prize,
@@ -159,6 +161,7 @@ public final class MessageProcesses {
     static final String OPERATOR = "operator";
     static final String REVOKE_REQUEST = "revokeRequest";
     static final String SHARED_VIDEO = "sharedVideo";
+    static final String HELP_REPLY = "helpReply";
 
     /** A push: which, to whom, and the page of the app a tap opens. */
     record Push(PushTemplate template, String userId, String link) {}
@@ -228,6 +231,10 @@ public final class MessageProcesses {
                     QueryEntities.query(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.DEFAULT_DATASET,
                         ctx -> byId("sharedVideoId", QbInbox.SHARED_VIDEO_KINDS.contains(input(ctx).kind())
                             ? input(ctx).sourceId() : null), SHARED_VIDEO),
+                    // F-C10: the reply the event names.
+                    QueryEntities.query(com.jabiz.quizbuks.help.QbHelp.defaultDataset(
+                        com.jabiz.quizbuks.help.QbHelp.MESSAGE), ctx -> byId("messageId",
+                        QbInbox.HELP_REPLY.equals(input(ctx).kind()) ? input(ctx).sourceId() : null), HELP_REPLY),
                     // Q33: the digital prize the event names.
                     QueryEntities.query(QbDigitalPrizes.defaultDataset(QbDigitalPrizes.DIGITAL_PRIZE),
                         ctx -> byId("digitalPrizeId", QbInbox.DIGITAL_KINDS.contains(input(ctx).kind())
@@ -318,6 +325,7 @@ public final class MessageProcesses {
             case QbInbox.OPERATOR_CHANGED -> operatorMessage(ctx, input, params);
             case QbInbox.TREE_LIT_REVOKED -> revokedMessage(ctx, params);
             case QbInbox.SHARED_VIDEO_REJECTED, QbInbox.SHARED_VIDEO_TAKEN_DOWN -> sharedVideoMessage(ctx, input, params);
+            case QbInbox.HELP_REPLY -> helpReplyMessage(ctx);
             default -> null;
         };
         if (draft != null) {
@@ -690,6 +698,21 @@ public final class MessageProcesses {
             : reason.toString().strip()));
         return new Draft(video.get("providerId"), QbInbox.TYPE_SYSTEM, input.kind(), null, QbInbox.ACTION_ASSETS,
             null);
+    }
+
+    /** F-C10: a person's reply, to the conversation's user, while the reply is there (an erased account's is not). */
+    private static Draft helpReplyMessage(ProcessContext ctx) {
+        EntityInstance reply = first(ctx, HELP_REPLY);
+        if (reply == null || !com.jabiz.quizbuks.help.QbHelp.STAFF.equals(reply.get("kind"))) {
+            return null;
+        }
+        return new Draft(reply.get("userId"), QbInbox.TYPE_SYSTEM, QbInbox.HELP_REPLY, null, QbInbox.ACTION_HELP,
+            String.valueOf((Object) reply.get("threadId")));
+    }
+
+    /** F-C10: a person's reply in an AI help conversation (the reply). */
+    static EventInput helpReplyInput(DomainEvent event) {
+        return new EventInput(QbInbox.HELP_REPLY, text(event, "messageId"), null, event.createdTime());
     }
 
     /** F-C3: a shared video's event: the video (the provider is read with it). */

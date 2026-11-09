@@ -49,6 +49,11 @@ class MessagesTest {
             .containsAll(com.jabiz.quizbuks.asset.AssetCodes.ALL)
             .containsAll(com.jabiz.quizbuks.tree.TreeCodes.ALL).containsAll(com.jabiz.quizbuks.tree.TreeRules.CODES)
             .containsAll(com.jabiz.quizbuks.sharedvideo.SharedVideoCodes.ALL)
+            // F-C10: the AI help.
+            .containsAll(com.jabiz.quizbuks.help.HelpCodes.ALL)
+            .contains("entity.QbHelpThread", "entity.QbHelpMessage", "entity.QbHelpUsage", "process.QB_HELP_ASK",
+                "param.qb.help.enabled", "task.qb.help.escalated.app", "task.qb.help.escalated.sponsor",
+                "task.qb.help.remind", "query.qb.admin.help-gaps", "qb.msg.HELP_REPLY.title", "qb.help.quiz-refusal")
             // F-S14: the ledger of shared videos' uses.
             .containsAll(com.jabiz.quizbuks.videouse.VideoUseCodes.ALL)
             .contains("entity.QbVideoUse", "entity.QbVideoUseFigures", "process.QB_VIDEO_USE_SAVE",

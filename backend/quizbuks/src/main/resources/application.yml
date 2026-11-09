@@ -122,6 +122,12 @@ jabiz:
       "[QB_AI_PUBLICATION_TRANSLATE_REQUEST]": { per-user: 5, period: 1m }
       "[QB_AI_PUBLICATION_TEXTS_ACCEPT]": { per-user: 30, period: 1m }
       "[QB_AI_TRANSLATION_CHECK_REQUEST]": { per-user: 5, period: 1m }
+      # F-C10: the AI help (free to its users, the platform pays): a person asks a few questions a minute; per address
+      # as well, so that many accounts behind one address do not add up (the daily count per person is qb.help.user-daily).
+      "[QB_HELP_ASK]": { per-user: 6, per-address: 30, period: 1m }
+      "[QB_HELP_ESCALATE]": { per-user: 10, period: 1h }
+      "[QB_HELP_RATE]": { per-user: 60, period: 1m }
+      "[QB_HELP_REPLY]": { per-user: 60, period: 1m }
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
   # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
   integrity:

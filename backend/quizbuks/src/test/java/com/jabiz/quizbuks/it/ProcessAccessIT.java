@@ -180,7 +180,15 @@ class ProcessAccessIT extends QbItSupport {
         // F-S14: the figures of a shared video's use (job item), the reminder (job item) and the daily check.
         Map.entry("QB_VIDEO_USE_FIGURES_REFRESH", ProcessAccess.INTERNAL),
         Map.entry("QB_VIDEO_USE_REMIND", ProcessAccess.INTERNAL),
-        Map.entry("QB_VIDEO_USE_CHECK_RUN", ProcessAccess.INTERNAL));
+        Map.entry("QB_VIDEO_USE_CHECK_RUN", ProcessAccess.INTERNAL),
+        // F-C10: the AI help's job outcomes, its daily items and the usage check.
+        Map.entry("QB_HELP_JOB_COMPLETED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_JOB_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_JOB_CANCELLED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_RETENTION", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_AUTO_CLOSE", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_REMIND", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_USAGE_CHECK", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

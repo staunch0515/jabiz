@@ -87,7 +87,9 @@ public final class QbRoles {
         // F-S13: the suspicious inflation of exposures (every sponsor's) and the daily reconciliation's task.
         QbPermissions.ADMIN_EXPOSURE_READ, QbPermissions.ADMIN_EXPOSURE_MONITOR,
         // F-S14: the ledger of shared videos' uses, read only (every sponsor's).
-        QbPermissions.ADMIN_VIDEO_USE_READ);
+        QbPermissions.ADMIN_VIDEO_USE_READ,
+        // F-C10: the AI help's conversations handed to a person (every one), replying and closing them.
+        QbPermissions.ADMIN_HELP);
 
     /**
 
@@ -122,7 +124,9 @@ public final class QbRoles {
         // F-S13: the suspicious inflation of exposures on its own sponsors' publications (not the reconciliation's task).
         QbPermissions.ADMIN_EXPOSURE_READ,
         // F-S14: the ledger of shared videos' uses of its own sponsors' publications, read only.
-        QbPermissions.ADMIN_VIDEO_USE_READ);
+        QbPermissions.ADMIN_VIDEO_USE_READ,
+        // F-C10: its own Sponsors' AI help conversations handed to a person, replying and closing them.
+        QbPermissions.ADMIN_HELP);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
@@ -201,7 +205,9 @@ public final class QbRoles {
             // Q77: the PDFs of their own certificates (the platform shows a reader only what they issued).
             "document.archive.read",
             // Q82: writing to the sponsors of the publications they answered.
-            QbPermissions.CONVERSATION_USE));
+            QbPermissions.CONVERSATION_USE,
+            // F-C10: the AI help.
+            QbPermissions.HELP_USE));
         add(SPONSOR, labels("Sponsor", "发起方", "主催者"), false, List.of(QbPermissions.COUNTRY_READ,
             QbPermissions.SPONSOR_ME, QbPermissions.CONTENT_WRITE, QbPermissions.CONTENT_FILE_READ,
             QbPermissions.AI_USE, QbPermissions.PUBLICATION_WRITE, QbPermissions.TOPUP,
@@ -218,7 +224,9 @@ public final class QbRoles {
             // Q89: sponsored benefits, as a provider or a sponsor (the certifications decide which).
             QbPermissions.BENEFIT_USE,
             // F-S2: their own knowledge graph.
-            QbPermissions.TREE_EDIT));
+            QbPermissions.TREE_EDIT,
+            // F-C10: the AI help.
+            QbPermissions.HELP_USE));
         add(SHOPIFY_SHOP, labels("Shopify shop staff", "Shopify 店铺员工", "Shopify ストアのスタッフ"), false,
             List.of(com.jabiz.quizbuks.shopify.Shopify.USE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);

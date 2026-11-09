@@ -79,6 +79,9 @@ public final class OperatorScopes {
         fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.USE, "sponsorId");
         fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.FIGURES, "sponsorId");
         fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.HISTORY, "sponsorId");
+        // F-C10: the AI help's conversations and messages, by their user (a Sponsor's; a Taker's are no operator's).
+        fields.put(com.jabiz.quizbuks.help.QbHelp.THREAD, "userId");
+        fields.put(com.jabiz.quizbuks.help.QbHelp.MESSAGE, "userId");
         // Q89: a benefit by its provider; the conversations and purchases by the sponsor that buys (the provider's
         // operator reads its side through its own datasets, Q89d).
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.OFFER, "providerId");
