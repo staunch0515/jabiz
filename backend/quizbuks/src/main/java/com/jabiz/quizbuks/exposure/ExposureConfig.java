@@ -12,7 +12,9 @@ import com.jabiz.quizbuks.operator.OperatorScopes;
 import com.jabiz.quizbuks.publishing.PublicationExposure;
 import com.jabiz.quizbuks.publishing.PublicationOutput;
 import com.jabiz.quizbuks.publishing.PublishingLimits;
+import com.jabiz.runtime.process.steps.CallProcess;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -98,6 +100,34 @@ public class ExposureConfig {
                 END, (scheduledTime, row) -> new PublicationExposure.EndInput(
                     UUID.fromString(String.valueOf(row.get("publicationId")))))
             .maxItems(PublishingLimits.TICK_BATCH);
+    }
+
+    /**
+     * The end-to-end tests' purchase ({@value #E2E_PURCHASE}): only with their switch {@code quizbuks.e2e.enabled}
+     * ({@code QB_E2E_ENABLED}, refused next to Stripe's live mode by {@code TransferScheduleCheck}), a root that runs
+     * the purchase's sub-process as F-M8's purchase will, so that a test can use exposures up. Not there otherwise.
+     */
+    public static final String E2E_PURCHASE = "QB_E2E_EXPOSURE_PURCHASE";
+
+    @Configuration
+    @ConditionalOnProperty(name = "quizbuks.e2e.enabled", havingValue = "true")
+    static class EndToEnd {
+
+        @Bean
+        ProcessDefinition<PublicationExposure.PurchasedInput, PublicationOutput, ProcessContext> qbE2eExposurePurchase() {
+            return ProcessDefinition.define(E2E_PURCHASE, 1, PublicationExposure.PurchasedInput.class,
+                PublicationOutput.class, ProcessContext.class, pb -> pb
+                    .description("End-to-end tests only: sets the exposures bought for a publication.")
+                    .permissions(QbPermissions.ADMIN_CONTENT_WRITE)
+                    .contextFactory((start, input) -> {
+                        ProcessContext ctx = new ProcessContext(start);
+                        ctx.put("input", input);
+                        return ctx;
+                    })
+                    .outputMapper(ctx -> ctx.get("output", PublicationOutput.class))
+                    .step("Buy", CallProcess.<ProcessContext>of(PublicationExposure.PURCHASED_SET, 1,
+                        ctx -> ctx.get("input"), "output")));
+        }
     }
 
     @Bean
