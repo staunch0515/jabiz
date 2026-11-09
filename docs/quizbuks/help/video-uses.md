@@ -15,6 +15,7 @@
 - **提供方**（共享视频的一方）在"资源库"页"我共享的视频"下的"我的视频的使用台账"中看到提交的台账：与约定一致时确认，否则写原因拒绝。使用方看到原因，更正后重新提交。
 - 每次修改、提交、确认、拒绝都会留下新的版本，旧的不会被改掉。已确认的台账也可以更正，但要请提供方重新确认。
 - 等待确认超过 7 天时，平台会提醒双方。
+- 双方都可以在台账下点"查看版本记录"，看到每一次填写、更正、提交、确认与拒绝：哪一方、什么时间、当时的价格与期间，以及拒绝的原因。
 
 台账旁边是双方都能看到的同一组数字：推送被打开、曝光成功、去答题的人数与合格人数。数字每天更新一次，发布结束后定稿，不再变化。为保护学者的隐私，少于 5 的数字显示为"少于 5"。按数字与价格算出的参考金额只供你们结算时参考。
 
@@ -27,6 +28,7 @@
 - **提供者**（動画を共有した側）は、「リソースライブラリ」ページの「共有している動画」の下にある「自分の共有動画の利用台帳」で提出された台帳を確認します。取り決めどおりなら確認し、違う場合は理由を書いて差し戻します。利用する主催者は理由を見て修正し、もう一度提出します。
 - 修正、提出、確認、差し戻しのたびに新しい版が残り、前の版は書き換えられません。確認済みの台帳も修正できますが、提供者にもう一度確認してもらいます。
 - 確認待ちが 7 日を超えると、双方にお知らせします。
+- 双方とも、台帳の下の「履歴を表示」で、作成・修正・提出・確認・差し戻しのそれぞれについて、どちらが、いつ、そのときの価格と期間、差し戻しの理由を確認できます。
 
 台帳の横には、双方が同じ数字を見られます：開かれたプッシュ、カウントした表示回数、回答に進んだ人数、合格した人数。数字は 1 日に 1 回更新し、公開の終了後に確定して変わらなくなります。テイカーのプライバシーを守るため、5 未満の数字は「5 未満」と表示します。数字と価格から計算した参考金額は、精算の参考です。
 
@@ -39,6 +41,7 @@ When your publication uses a video another Sponsor shared, the two of you agree 
 - **The provider** (the Sponsor who shared the video) finds it on the "Asset library" page under "Uses of my shared videos", below "Videos you share": they confirm it when it is what you agreed, or send it back with a reason. The Sponsor using the video reads the reason, corrects it and sends it again.
 - Every correction, submission, confirmation and sending back leaves a new revision; earlier ones are never overwritten. A confirmed entry can be corrected too, and then goes back to the provider to confirm again.
 - After 7 days waiting for the provider, both of you are reminded.
+- Both of you can open "Show the history" under the entry to see every time it was written, corrected, sent, confirmed or sent back: by which side, when, the price and period then, and the reason it was sent back.
 
 Next to the ledger, both of you see the same figures: the pushes opened, the exposures counted, the Takers who went on to answer and those who passed. They are updated once a day and become final when the publication ends. To protect the Takers' privacy, figures below 5 are shown as "Fewer than 5". The reference amount, from the figures and the price, is for your own settlement.
 
