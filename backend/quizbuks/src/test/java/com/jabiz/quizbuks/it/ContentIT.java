@@ -228,6 +228,94 @@ class ContentIT extends ContentItSupport {
             .get("material_count").toString()).isEqualTo("1");
     }
 
+    /** The quiz's questions in their order (by place, then key), as the editor lists them. */
+    private static List<String> order(String quizId) {
+        return query("SELECT question_id::text AS id FROM (SELECT DISTINCT ON (question_id) * FROM qb_question_version"
+            + " ORDER BY question_id, effect_start_time DESC, version_no DESC) v WHERE quiz_id = ?::uuid"
+            + " AND NOT is_deleted ORDER BY seq, question_id", quizId).stream().map(row -> (String) row.get("id"))
+            .toList();
+    }
+
+    @Test
+    void oneQuestionMovesWithoutRewritingTheOthers() {
+        // F-S6 §3.3: QB_QUESTION_MOVE takes a place between the new neighbours.
+        String quizId = newQuiz(sponsorA(), "Move");
+        String a = question(sponsorA(), quizId, "A");
+        String b = question(sponsorA(), quizId, "B");
+        String c = question(sponsorA(), quizId, "C");
+        String d = question(sponsorA(), quizId, "D");
+        // Places 1..4 have no gap: the first move spreads them once.
+        run("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", d, "beforeQuestionId", b));
+        assertThat(order(quizId)).containsExactly(a, d, b, c);
+        long versionsOfA = query("SELECT 1 FROM qb_question_version WHERE question_id = ?::uuid", a).size();
+        // Now there are gaps: a move writes the moved question only.
+        run("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", c, "beforeQuestionId", d));
+        assertThat(order(quizId)).containsExactly(a, c, d, b);
+        assertThat(query("SELECT 1 FROM qb_question_version WHERE question_id = ?::uuid", a)).hasSize(
+            (int) versionsOfA);
+        // To the end; and where it already is, nothing changes.
+        run("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", a));
+        assertThat(order(quizId)).containsExactly(c, d, b, a);
+        Object revision = run("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", a)).get("revision");
+        assertThat(run("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", d, "beforeQuestionId", b))
+            .get("revision")).isEqualTo(revision);
+        // A question of another quiz, or a stale page.
+        String other = question(sponsorA(), newQuiz(sponsorA(), "Other"), "X");
+        assertThat(codes(refused("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", other), 422)))
+            .containsExactly(ContentCodes.CONTENT_NOT_IN_QUIZ);
+        assertThat(codes(refused("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", a,
+            "beforeQuestionId", other), 422))).containsExactly(ContentCodes.CONTENT_NOT_IN_QUIZ);
+        assertThat(codes(refused("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", a,
+            "beforeQuestionId", c, "baseRevision", 1), 422))).containsExactly(ContentCodes.QUIZ_CHANGED);
+        // Not one's own quiz: as if it did not exist.
+        refused("QB_QUESTION_MOVE", sponsorB(), body("quizId", quizId, "questionId", a), 404);
+    }
+
+    @Test
+    void questionsAreDeletedAndGivenPointsInOneGo() {
+        String quizId = newQuiz(sponsorA(), "Batch");
+        List<String> ids = new java.util.ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            ids.add((String) run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem", "Q" + i, "options",
+                List.of(body("text", "yes", "correct", true), body("text", "no")))).get("itemId"));
+        }
+        run("QB_QUIZ_LANGUAGES_SET", sponsorA(), body("quizId", quizId, "languages", List.of("ja")));
+        run("QB_TRANSLATION_SAVE", sponsorA(), body("quizId", quizId, "language", "ja", "entries", List.of(
+            body("key", com.jabiz.quizbuks.content.ContentLanguages.stem(ids.get(0)), "text", "問題"),
+            body("key", com.jabiz.quizbuks.content.ContentLanguages.stem(ids.get(2)), "text", "残る"))));
+
+        run("QB_QUESTION_POINTS_SET", sponsorA(), body("quizId", quizId, "questionIds", ids.subList(0, 3),
+            "points", 5));
+        assertThat(latest("qb_question_version", "question_id", "quiz_id = '" + quizId + "'").stream()
+            .map(row -> ((Number) row.get("points")).intValue()).sorted().toList()).containsExactly(1, 1, 5, 5, 5);
+        assertThat(codes(refused("QB_QUESTION_POINTS_SET", sponsorA(), body("quizId", quizId, "questionIds",
+            List.of(ids.get(0)), "points", 0), 400))).containsExactly(ContentCodes.QUESTION_POINTS_RANGE);
+
+        // Deleted with their options, all or none.
+        assertThat(codes(refused("QB_QUESTION_DELETE_MANY", sponsorA(), body("quizId", quizId, "questionIds",
+            List.of(ids.get(0), java.util.UUID.randomUUID().toString())), 422)))
+            .containsExactly(ContentCodes.CONTENT_NOT_IN_QUIZ);
+        assertThat(order(quizId)).hasSize(5);
+        run("QB_QUESTION_DELETE_MANY", sponsorA(), body("quizId", quizId, "questionIds",
+            List.of(ids.get(0), ids.get(1), ids.get(0))));
+        assertThat(order(quizId)).containsExactly(ids.get(2), ids.get(3), ids.get(4));
+        assertThat(latest("qb_option_version", "option_id", "question_id IN ('" + ids.get(0) + "', '" + ids.get(1)
+            + "') AND NOT is_deleted")).isEmpty();
+        assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst()
+            .get("question_count").toString()).isEqualTo("3");
+        // Their translations went with them; the others' stay.
+        assertThat(latest("qb_content_translation_version", "translation_id", "quiz_id = '" + quizId
+            + "' AND NOT is_deleted")).extracting(row -> row.get("element_key")).containsExactly(
+            com.jabiz.quizbuks.content.ContentLanguages.stem(ids.get(2)));
+
+        // A survey's questions keep 1 point.
+        String survey = (String) run("QB_QUIZ_SAVE", sponsorA(), body("title", "Survey", "kind", "SURVEY"))
+            .get("quizId");
+        String asked = question(sponsorA(), survey, "How?");
+        assertThat(codes(refused("QB_QUESTION_POINTS_SET", sponsorA(), body("quizId", survey, "questionIds",
+            List.of(asked), "points", 2), 422))).containsExactly(ContentCodes.SURVEY_POINTS_FIXED);
+    }
+
     @Test
     void anIncompleteDraftIsSavedButNotVersionedAndEveryProblemIsReported() {
         String quizId = newQuiz(sponsorA(), "Incomplete");
