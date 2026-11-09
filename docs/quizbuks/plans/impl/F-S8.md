@@ -33,7 +33,7 @@
 |---|---|
 | `block`（新包） | `QbBlocks`（实体、字典、数据视图名、锁名）、`BlockRules`（纯 Java：种类、对象、`blocks`、`matching`、上限、取整）、`BlockCodes`、`BlockProcesses`（`QB_BLOCK_ADD`、`QB_BLOCK_REMOVE`）、`BlockStart`（开始答题的读取与拒绝）、`BlockConfig` |
 | `publishing.QbPublications` / `PublicationEditing.cardOf` | 卡片新列 `quizId`（不可变，上线时写版本的 Quiz） |
-| 迁移 `V93__quizbuks_blocks.sql`（临时编号，基准最大 V92） | 新表 `qb_block`（普通表；唯一 `(user_id, kind, object_id)` 兼作按人的索引，`(kind, object_id)` 索引供发起方的人数与汇总）；卡片加列 `quiz_id`，按版本回填，加索引（列可空：只有手工做的、找不到版本的卡片为空） |
+| 迁移 `V97__quizbuks_blocks.sql`（临时编号：V93–V96 已被 S1、S2 占用，合并前按最大号 + 1 重编） | 新表 `qb_block`（普通表；唯一 `(user_id, kind, object_id)` 兼作按人的索引，`(kind, object_id)` 索引供发起方的人数与汇总）；卡片加列 `quiz_id`，按版本回填，加索引（列可空：只有手工做的、找不到版本的卡片为空） |
 | 模板 | `qb.app.feed`：返回 `quizId`、`videoProviderId`、`videoProviderName`，F-S8 的条件；`qb.app.publication`：返回同上与 `blocks`（本人覆盖它的屏蔽，JSON）、`blocked`，`canStart` 加上没有被屏蔽；`qb.app.inbox`、`qb.app.inbox-unread`：发起方的通知与带发布的推广照同一条件；`qb.app.blocks`（新，`qb.play`）：本人的全部屏蔽与对象的名称；`qb.sponsor.blockers`（新，`qb.sponsor.me`）：取整的人数；`qb.admin.blocks`、`qb.admin.blocked-sponsors`（新，`qb.admin.block.read`）：汇总 |
 | `play.AttemptProcesses.start` | 第一条读取多读"本人有没有屏蔽"（同一条语句）；有屏蔽且是新的开始时，锁外再读覆盖这张卡片的屏蔽（一条），被屏蔽即 422 |
 | `identity.TakerErasure` | `ErasedEntity.delete(QbBlock, "userId")` |
