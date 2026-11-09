@@ -39,8 +39,8 @@ import java.util.UUID;
  *       settings, the "you blocked this" page). Another's, or none, is 404.</li>
  * </ul>
  * Both take the caller's own lock ({@link QbBlocks#lockName}) and read their blocks under it; no publication's, start
- * or wallet lock: answering is not touched. Anyone who answers ({@code qb.play}) blocks; no verified address is needed
- * (it only hides things from oneself).
+ * or wallet lock: answering is not touched. Anyone who answers ({@code qb.play}) blocks, with a verified address as
+ * every write of a taker's (D-Q40-4, {@code VerifiedEmailWritesIT}).
  */
 public final class BlockProcesses {
 
@@ -79,6 +79,7 @@ public final class BlockProcesses {
             .description("Blocks a publication, its quiz, its sponsor or its video's provider for the caller: none of "
                 + "it is shown to them or started by them until the block is removed.")
             .permissions(QbPermissions.PLAY)
+            .requiresVerifiedEmail()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);
@@ -104,6 +105,7 @@ public final class BlockProcesses {
             .description("Removes one of the caller's blocks: what it blocked is shown to them and can be started "
                 + "again.")
             .permissions(QbPermissions.PLAY)
+            .requiresVerifiedEmail()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);

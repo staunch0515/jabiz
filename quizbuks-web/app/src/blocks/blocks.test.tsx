@@ -33,7 +33,8 @@ const PAGE = {
 }
 
 /** The server for a verified taker: the home's card, a publication's page, the blocks and the two processes. */
-function server({ card = CARD as Record<string, unknown>, page = PAGE, blocks = [] as Record<string, unknown>[] } = {}) {
+function server({ card = CARD as Record<string, unknown>, page = PAGE, blocks = [] as Record<string, unknown>[],
+  verified = true } = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
   let list = [...blocks]
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
@@ -48,7 +49,7 @@ function server({ card = CARD as Record<string, unknown>, page = PAGE, blocks = 
         return json(200, [])
       case '/api/auth/me':
         return json(200, { userId: 'u1', displayName: 'Kai', email: 'kai@example.com', roles: ['QB_TAKER'],
-          permissions: ['qb.me', 'qb.account.read', 'qb.play'], emailVerified: true, idleTimeoutSeconds: 0 })
+          permissions: ['qb.me', 'qb.account.read', 'qb.play'], emailVerified: verified, idleTimeoutSeconds: 0 })
       case '/api/datasets/urn:jabiz:dataset:me:QbProfile/query':
         return json(200, { items: [{ id: 'p1', version: 1, attributes: { displayName: 'Kai', countryCode: 'JP',
           city: null, preferredCurrency: 'JPY', revision: 1 } }], offset: 0, limit: 1 })
@@ -130,6 +131,13 @@ describe('blocking (F-S8)', () => {
     await waitFor(() => expect(calls('QB_BLOCK_ADD')).toEqual([{ publicationId: 'p-1', kind: 'PROVIDER' }]))
     await waitFor(() => expect(screen.queryByTestId('shorts-viewer')).toBeNull())
     document.body.style.overflow = ''
+  })
+
+  it('offers no menu to an unverified account (blocking is a write)', async () => {
+    server({ verified: false })
+    render(<App />)
+    expect(await screen.findByTestId('feed-card')).toBeInTheDocument()
+    expect(screen.queryByTestId('block-menu')).toBeNull()
   })
 
   it('offers no video provider for a card without a shared video', async () => {

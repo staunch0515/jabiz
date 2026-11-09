@@ -6,6 +6,7 @@ import {
   DropdownMenuTrigger,
   notify,
 } from '@jabiz/ui'
+import { useAuth } from '@jabiz/client'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Ban, EllipsisVertical, EyeOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -50,14 +51,17 @@ export function useBlock(onBlocked?: (kind: BlockKind, output: BlockOutput) => v
 /**
  * The menu of a card, the vertical mode's screen or a publication's page (F-S8): "not interested" (the publication),
  * every publication of its quiz, its Sponsor, and its shared video's provider when it has one. Each is undone from the
- * message that follows, or later in the app's settings. `onBlocked` is told first (the vertical mode moves on).
+ * message that follows, or later in the app's settings. `onBlocked` is told first (the vertical mode moves on). Not
+ * shown to an unverified account: blocking is a write, which needs a verified address (D-Q40-4).
  */
 export function BlockMenu({ item, onBlocked, className }: { item: Blockable
   onBlocked?: (kind: BlockKind, output: BlockOutput) => void
   className?: string }) {
   const { t } = useTranslation(APP)
+  const { emailVerified } = useAuth()
   const block = useBlock(onBlocked)
   const sponsor = item.sponsorCompany ?? item.sponsorName
+  if (!emailVerified) return null
   const choose = (kind: BlockKind) => block.mutate({ publicationId: item.publicationId, kind })
   return (
     <DropdownMenu>
