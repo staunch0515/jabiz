@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Component;
@@ -36,6 +37,8 @@ public class JobScheduler {
     private final int poolSize;
     private final Duration shutdownGrace;
     private volatile ThreadPoolTaskScheduler scheduler;
+    /** Set when stop() begins: a run ending from then on must not schedule its successor on the closing executor. */
+    private volatile boolean stopping;
 
     public JobScheduler(JobRegistry jobs, JobRunner runner, Clock clock,
         @Value("${jabiz.jobs.scheduler.enabled:true}") boolean enabled,
@@ -61,6 +64,7 @@ public class JobScheduler {
         tasks.setWaitForTasksToCompleteOnShutdown(true);
         tasks.setAwaitTerminationMillis(shutdownGrace.toMillis());
         tasks.initialize();
+        stopping = false;
         scheduler = tasks;
         jobs.all().forEach(job -> scheduleNext(job, clock.instant()));
         log.info("Scheduled {} job(s)", jobs.all().size());
@@ -70,6 +74,7 @@ public class JobScheduler {
     public synchronized void stop() {
         // Runs in progress start no new item (per-item jobs); the shutdown below waits up to
         // jabiz.jobs.scheduler.shutdown-grace for the items under way to end, then interrupts what is left.
+        stopping = true;
         runner.stop();
         if (scheduler != null) {
             scheduler.shutdown();
@@ -86,20 +91,28 @@ public class JobScheduler {
     private void scheduleNext(JobDefinition<?> job, Instant after) {
         ThreadPoolTaskScheduler tasks = scheduler;
         Instant next = nextTime(job, after);
-        if (tasks == null || next == null) {
+        if (tasks == null || next == null || stopping) {
             return;
         }
-        tasks.schedule(() -> {
-            try {
-                JobRunner.Outcome outcome = runner.run(job, next);
-                log.info("Job {} at {}: {}", job.name(), next, outcome);
-            } catch (RuntimeException e) {
-                log.error("Job {} at {} could not run", job.name(), next, e);
-            } finally {
-                // From now, not from the time just run: times missed by a long run or a pause are skipped.
-                Instant now = clock.instant();
-                scheduleNext(job, now.isAfter(next) ? now : next);
+        try {
+            tasks.schedule(() -> {
+                try {
+                    JobRunner.Outcome outcome = runner.run(job, next);
+                    log.info("Job {} at {}: {}", job.name(), next, outcome);
+                } catch (RuntimeException e) {
+                    log.error("Job {} at {} could not run", job.name(), next, e);
+                } finally {
+                    // From now, not from the time just run: times missed by a long run or a pause are skipped.
+                    Instant now = clock.instant();
+                    scheduleNext(job, now.isAfter(next) ? now : next);
+                }
+            }, next);
+        } catch (TaskRejectedException e) {
+            // A run that ends while stop() shuts the executor down races the flag check above: expected, not an error.
+            // A rejection while running normally is a genuine failure and propagates.
+            if (!stopping) {
+                throw e;
             }
-        }, next);
+        }
     }
 }
