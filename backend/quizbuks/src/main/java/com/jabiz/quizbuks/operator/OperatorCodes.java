@@ -44,6 +44,8 @@ public final class OperatorCodes {
     public static final String KIND_NOT_TAKEN = "QB_OPERATOR_KIND_NOT_TAKEN";
     /** F-S1: a sponsor with reviews pending is not moved until the platform can move the reviews with them. */
     public static final String REVIEW_PENDING = "QB_SPONSOR_REVIEW_PENDING";
+    /** F-C10: the sponsor has more AI help conversations with a person than one move takes. */
+    public static final String HELP_PENDING = "QB_SPONSOR_HELP_PENDING";
     /** F-S1: no default operator takes new sponsors yet (the platform's administrator creates it after installing). */
     public static final String DEFAULT_MISSING = "QB_OPERATOR_DEFAULT_MISSING";
     /** The default operator stops being it only when another becomes it (F-S1). */
@@ -97,7 +99,7 @@ public final class OperatorCodes {
 
     public static final List<String> ALL = List.of(NOT_MEMBER, SUSPENDED, NOT_LEAD, FIELD, CODE, CHANGED,
         MEMBER_ELSEWHERE, MEMBER_IS_SPONSOR, MEMBER_UNVERIFIED, MEMBERS_FULL, LEAD_SELF, NOT_A_SPONSOR, HQ_TAKEDOWN,
-        HQ_BAN, LEAD_REQUIRED, DIRECT_SPONSOR_FIXED, KIND_NOT_TAKEN, REVIEW_PENDING, DEFAULT_MISSING, DEFAULT_KEEP,
+        HQ_BAN, LEAD_REQUIRED, DIRECT_SPONSOR_FIXED, KIND_NOT_TAKEN, REVIEW_PENDING, HELP_PENDING, DEFAULT_MISSING, DEFAULT_KEEP,
         DEFAULT_INACTIVE,
         NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR, MONTH_OPEN, NO_SHARE, SETTLEMENT_STATE,
         SETTLEMENT_NOTHING, SETTLEMENT_NO_REVIEW, NO_RATE, PLAN_MONTH, PLAN_PENDING, PLAN_NO_REVIEW, NO_PLAN,

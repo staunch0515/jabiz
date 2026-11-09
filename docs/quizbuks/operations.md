@@ -134,7 +134,7 @@
 | `MANAGEMENT_OPENTELEMETRY_LOGGING_EXPORT_OTLP_ENDPOINT` | 日志 |
 | `COMPOSE_PROFILES=observability` | 启动本环境的 LGTM（`deploy/quizbuks/server/compose.yaml` 的 `lgtm`）；上面三项即 `http://lgtm:4318/v1/traces`、`…/v1/metrics`、`…/v1/logs` |
 | `JABIZ_ALERT_EMAIL`、`GF_SMTP_ENABLED=true`、`GF_SMTP_HOST`、`GF_SMTP_USER`、`GF_SMTP_PASSWORD`、`GF_SMTP_FROM_ADDRESS` | 告警的收件人（值班的人，几个以 `;` 分隔）与 Grafana 发信用的 SMTP（§5） |
-| `JABIZ_ALERT_*` 的阈值 | 缺省见 compose（平台 13 §7）；QuizBuks 的 `JABIZ_ALERT_QB_AI_HELD_MAX`（§5"AI 作业暂停"） |
+| `JABIZ_ALERT_*` 的阈值 | 缺省见 compose（平台 13 §7）；QuizBuks 的 `JABIZ_ALERT_QB_AI_HELD_MAX`（§5"AI 作业暂停"）、`JABIZ_ALERT_QB_HELP_USAGE_PERCENT`（§5"AI 问题解答的用量"，缺省 80） |
 | `QB_GRAFANA_PORT` | Grafana 在服务器 `127.0.0.1` 上的端口（缺省 3000；staging 与 production 在同一台服务器上时各用一个），经 SSH 隧道访问 |
 
 遥测缺省不外发、只经 OTLP 推送；**不开放**匿名的指标端点（应用端口上的 `/actuator/metrics` 不要暴露，平台 13）。
@@ -337,7 +337,8 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | Stripe（§7.1） | QuizBuks `qb-stripe-webhooks`（`stripe` / `stripe-connect` 的 Webhook 被拒或失败）、`qb-stripe-calls`（调用失败 > 5 %）；平台 `jabiz-inbound-rejected`、`jabiz-external-call-errors` | 资金相关，QuizBuks 的两条为 `page`；Stripe Dashboard 的端点"失败的投递"同时会发邮件 |
 | 事件消费 | 平台 `jabiz-outbox-failed` | |
 | 分录导出被拒（§7.3） | QuizBuks `qb-journal-export-rejected` | 看错误码 |
-| AI 作业暂停（§7.8） | QuizBuks `qb-ai-paused`（仪表 `jabiz.external.job.held{job_type=~"qb.ai.*"}`） | 缺省 `JABIZ_ALERT_QB_AI_HELD_MAX=1`：AI 有意关闭时不告警；开启 `qb.ai.enabled` 后在 `.env` 设为 `0` 并重启 LGTM，此后暂停超过 5 分钟即告警 |
+| AI 作业暂停（§7.8） | QuizBuks `qb-ai-paused`（仪表 `jabiz.external.job.held{job_type=~"qb.ai.*"}`，不含 AI 问题解答的 `qb.ai.help`） | 缺省 `JABIZ_ALERT_QB_AI_HELD_MAX=1`：AI 有意关闭时不告警；开启 `qb.ai.enabled` 后在 `.env` 设为 `0` 并重启 LGTM，此后暂停超过 5 分钟即告警 |
+| AI 问题解答的用量（§7.33） | QuizBuks `qb-help-usage-high`（仪表 `qb.help.usage.percent`：本月已用 `qb.help.global-monthly-tokens` 的百分比，作业结局与每日任务 `qb.help-usage` 更新） | 缺省 `JABIZ_ALERT_QB_HELP_USAGE_PERCENT=80`；到 100 % 时新的提问被拒（可直接转人工），到月底或经受控变更调高上限 |
 | 任务 | 平台 `jabiz-job-failed`（`FAILED` / `PARTIAL`）、`jabiz-job-locked` | 包括 `qb.analytics`、`qb.usage-snapshot`、`qb.fee-*`、`qb.broadcast-*` 等每个任务 |
 | 站内信、平台费、邮件补发 | 平台 `jabiz-job-item-failed`、`jabiz-outbox-failed` | 平台费的核对项 `FEES_RECEIVABLE` 属于 `qb-reconcile-diff`；`sys_mail_message` 中 `FAILED` 增多看发件服务商；徽标模板 `qb.app.inbox-unread` 的耗时（目标 < 5 ms，`perf/Q7c-inbox.md`）在仪表盘上看 |
 | 发起方分析（§7.7）、资源占用的计量（§7.22） | 平台 `jabiz-job-failed` | 30 分钟内没有成功的分析、当天缺少计量快照（`SELECT max(snapshot_day) FROM qb_usage_day` 早于今天）：仪表盘与只读查询 |
@@ -947,6 +948,40 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   5. 入驻还没通过时，基本信息填进入驻申请表：打开申请表，同意条款后提交，由运营商审核。
   6. 导入完成后点"提交全部草稿"：知识结构图进入运营商另一位成员的审核；绑定在图上的发布要等图生效后再点一次。不绑定的发布照常进入审核（资金不足的会列出原因，先充值）。
   7. 共享视频在新库中要由提供方重新共享并审核通过；列为"请重新选择"的发布在共享通过后到发布向导中重新选。
+
+### 7.34 AI 问题解答（F-C10）
+
+学者（App"我的 → 帮助"）与发起方（页头"？"）可以问 AI 使用方法；没解决的可以**转人工**：发起方的转给其运营商（待办在运营商的范围内），直营发起方与学者的转给总部（内容管理员）。依据只有公开的 FAQ、条款与使用手册（第一期 a 只有后端，资料快照在 b，页面在 c：`docs/quizbuks/plans/impl/F-C10.md`）。**对用户免费**，用量记在 `qb_help_usage`（按用户 × 月，另有全平台一行 `*`），**不计入发起方的 AI 用量、AI 费与 AI 限额**。
+
+- **部署**：迁移 `V104` 建三张普通表 `qb_help_thread`、`qb_help_message`、`qb_help_usage`。部署后运行一次 `QB_SETUP`：建十二个普通参数、提出两个受控参数（另一位管理员发布），给学者与发起方补上 `qb.help.use`，给内容管理员与运营商补上 `qb.admin.help`。四个任务：`qb.help-retention`（UTC 19:13，逐项）、`qb.help-auto-close`（UTC 19:23，逐项）、`qb.help-remind`（UTC 00:37，逐项）、`qb.help-usage`（UTC 23:53）。外部服务沿用 `anthropic`（`ANTHROPIC_API_KEY`）；并发 `quizbuks.help.max-concurrency`（缺省 4）。
+- **开关**：`qb.help.enabled`（受控，缺省关）。**b 的资料快照合入之前不要打开**（没有资料时 AI 只会说"不确定"）。关掉以后：新的提问 422 `QB_HELP_DISABLED`（页面提示并可直接转人工），排队中的作业暂停（平台 D52 第 4 条，不用掉尝试），转人工与客服回复照常。
+- **限额**：每人每天 `qb.help.user-daily` 次（在本人的锁内数当天的提问；一个对话同时只问一个）；全平台每月 `qb.help.global-monthly-tokens`（按已记的用量判断，**不取全平台锁**，并发下可能略超）；入口限流在 `application.yml` 的 `jabiz.process.rate-limits`（`QB_HELP_ASK` 每人、每地址）。没有回答的尝试按预估计入（预留的输入 + 最大输出），作业的完成、失败、取消都计入。
+- **发给 AI 的**：问题、同一对话最近 `qb.help.history-turns` 轮、白名单中的页面名（`help.HelpPages`；答题页没有入口）与匿名键（`AiUserKeys`）。不发送题目、选项、答案与版本内容，也不发送本人或他人的数据。回答中只保留本站的链接；模型标了"被要求答题"即换成固定的拒绝（尽力而为）。
+- **转人工**：待办 `qb.help.escalated`（来源键 `qb.help:<对话>`），客服在管理系统的帮助页回复（`QB_HELP_REPLY`，运营商只能回复转给自己的），用户收到站内信 `HELP_REPLY`。用户标"解决了"、关闭对话、或客服回复后 `qb.help.auto-close-days` 天没有再问（自动关闭）时待办关闭。等待客服超过 `qb.help.escalation-remind-days` 天，给处理人再建一个提醒待办 `qb.help.remind`（每等一次一个）。
+- **参数**：
+
+  | 参数 | 缺省 | 受控 | 作用 |
+  |---|---|---|---|
+  | `qb.help.enabled` | `false` | 是 | 总开关 |
+  | `qb.help.model` | `claude-haiku-5-5` | 否 | 只能是平台允许的三个模型 |
+  | `qb.help.user-daily` | `20` | 否 | 每人每天的提问次数 |
+  | `qb.help.global-monthly-tokens` | `20000000` | 是 | 全平台每月的令牌数 |
+  | `qb.help.history-turns` | `6` | 否 | 一起发送的最近轮数（至多 20） |
+  | `qb.help.retention-days` | `180` | 否 | 对话在最后一次活动后保留的天数。**改它必须同时改**隐私政策第8条（三语，`legal/privacy-policy.*.md`，重新发布）与商店的数据申报（`store/play-data-safety.md` 的"其他用户生成的内容"、`store/appstore-privacy.md` 的"客户支持"，并在 Play Console 与 App Store Connect 中更新），三处都写着 180 日 |
+  | `qb.help.manual-max-bytes` | `204800` | 否 | 一次提问可带的资料上限；超过即启动检查报错（`QB_HELP_MATERIALS`，b 接上资料后生效） |
+  | `qb.help.poll-seconds` / `qb.help.poll-max-minutes` | `3` / `3` | 否 | 页面查询回答的间隔与最长等待 |
+  | `qb.help.escalation-remind-days` | `2` | 否 | 转人工后多少天没人处理即提醒 |
+  | `qb.help.auto-close-days` | `14` | 否 | 客服回复后多少天没再问即自动关闭 |
+  | `qb.help.question-max-length` | `2000` | 否 | 提问（及转给客服的内容）的最长字数（100–4000） |
+  | `qb.help.answer-max-length` | `8000` | 否 | 保存的 AI 回答的最长字数（500–8000，超过截断） |
+  | `qb.help.max-links` | `5` | 否 | 一个回答最多保留的本站链接（0–10） |
+
+  部署配置（改后重启；超出范围即启动失败）：`quizbuks.help.max-concurrency`（缺省 4）、`quizbuks.help.attempts`（每个提问的尝试次数，缺省 2，1–5）、`quizbuks.help.attempt-timeout`（每次尝试的时限，缺省 `PT3M`，30 秒–10 分钟）。
+
+- **统计**：每月"没解决"与转人工的提问 `qb.admin.help-gaps`（内容管理员据此补 FAQ 与手册）；帮助用量 `qb.admin.help-usage`（总部 AI 页，与发起方的 AI 用量分开）。
+- **事故处理**：回答明显有误或被诱导（例如帮人答题）：先关 `qb.help.enabled`（受控，另一位管理员发布），再查 `qb_help_message`（`kind = 'ANSWER'`）与平台的作业记录（`sys_external_job` 的 `qb.ai.help`），补资料或手册后再开。提供方故障：作业按平台规则重试后失败，用户看到失败说明并可转人工。用量突增：看 `qb.admin.help-usage` 与 `qb-help-usage-high`，必要时调低 `qb.help.user-daily`。
+- **改派运营商**：发起方改派时，其转人工、由原运营商回答的对话与待办（含等待的提醒）随之移到新运营商（平台的 `APPROVAL_SCOPE_MOVE`，与待审的审批同一上限，超过即 422 `QB_SPONSOR_HELP_PENDING`：先关闭一些对话）；总部回答的不动。
+- **删除账号**：三张表中本人的行由抹除流程删除（`help.HelpConfig` 的 `PersonalDataEraser`），作业的输入与结果由平台按请求人清除；全平台的用量行保留（不含个人）。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
