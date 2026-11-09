@@ -11,6 +11,7 @@ results:
   treeId:           { from: QbTree.treeId }
   currentVersionId: { from: QbTree.currentVersionId }
   versionId:        { kind: { type: text, maxLength: 36 } }
+  status:           { kind: { type: text, maxLength: 20 } }
   name:             { kind: { type: text } }
   description:      { kind: { type: text } }
   submitted:        { kind: { type: bool } }
@@ -22,7 +23,7 @@ permissions: [qb.sponsor.me]
 ---*/
 -- The caller's maps only (the dataset is limited to the caller); the versions through them.
 SELECT t.{{QbTree.treeId}} AS treeId, t.{{QbTree.currentVersionId}} AS currentVersionId,
-       x.{{QbTreeVersion.versionId}} AS versionId,
+       x.{{QbTreeVersion.versionId}} AS versionId, x.{{QbTreeVersion.status}} AS status,
        CAST(x.{{QbTreeVersion.name}} AS text) AS name,
        CAST(x.{{QbTreeVersion.description}} AS text) AS description,
        (t.{{QbTree.currentVersionId}} IS NOT NULL OR EXISTS (
@@ -31,7 +32,8 @@ SELECT t.{{QbTree.treeId}} AS treeId, t.{{QbTree.currentVersionId}} AS currentVe
            AS submitted
 FROM {{QbTree}} t
 JOIN LATERAL (
-    SELECT v.{{QbTreeVersion.versionId}}, v.{{QbTreeVersion.name}}, v.{{QbTreeVersion.description}}
+    SELECT v.{{QbTreeVersion.versionId}}, v.{{QbTreeVersion.status}}, v.{{QbTreeVersion.name}},
+           v.{{QbTreeVersion.description}}
     FROM {{QbTreeVersion}} v
     WHERE v.{{QbTreeVersion.treeId}} = t.{{QbTree.treeId}}
       AND (v.{{QbTreeVersion.versionId}} = t.{{QbTree.currentVersionId}}
