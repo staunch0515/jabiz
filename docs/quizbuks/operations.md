@@ -922,7 +922,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 发起方包（`docs/quizbuks/plans/impl/F-C4.md`）把一个发起方的资料、Quiz（含没结束的发布用到的版本）、没结束的发布与知识结构图写进一个文件（格式 `quizbuks.sponsor-package` 第 2 版，第 1 版照旧能读），再导入另一个账户或环境。只带内容与设置，不带状态、记录、钱、店员、密码、码与邀请名单、资源库。导入以后一切照常审核（入驻、主页、图、发布），没有免审。给用户的帮助文案在 `docs/quizbuks/help/sponsor-package.md`。
 
-- **部署**：迁移 `V100`（临时编号）建普通表 `qb_package_import`。部署后运行一次 `QB_SETUP`：建两个普通参数（下表）。任务 `qb.package-import-expire`（每天 UTC 18:53，逐项）。没有新的环境变量、新角色权限。
+- **部署**：迁移 `V103` 建普通表 `qb_package_import`。部署后运行一次 `QB_SETUP`：建两个普通参数（下表）。任务 `qb.package-import-expire`（每天 UTC 18:53，逐项）。没有新的环境变量、新角色权限。
 - **参数**（普通参数，`PARAM_SET`）：
 
   | 参数 | 缺省 | 作用 |

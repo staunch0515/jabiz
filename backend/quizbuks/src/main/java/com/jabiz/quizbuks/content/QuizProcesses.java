@@ -513,6 +513,8 @@ public final class QuizProcesses {
         values.put("intro", content.intro());
         values.put("cover", content.cover());
         values.put("timeLimitSec", content.timeLimitSec() == null ? null : decimal(content.timeLimitSec()));
+        // F-S7: the replaced content brings its order setting, as an import into a new quiz does.
+        values.put("shuffleQuestions", !content.fixedOrder());
         values.put("questionCount", decimal(content.questions().size()));
         values.put("materialCount", decimal(content.materials().size()));
         values.put("translationLanguages", ContentLanguages.joinList(languages));

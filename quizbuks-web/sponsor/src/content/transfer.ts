@@ -262,11 +262,14 @@ export async function exportVersion(version: VersionDetail, onProgress?: Progres
     formatVersion: QUIZ_FILE_VERSION,
     exportedAt: new Date().toISOString(),
     quiz: { kind: survey ? 'SURVEY' : 'QUIZ', title: snapshot.title, intro: snapshot.intro,
-      timeLimitSec: snapshot.timeLimitSec, cover: key(snapshot.cover, 'image'), language: version.language },
+      timeLimitSec: snapshot.timeLimitSec, cover: key(snapshot.cover, 'image'), language: version.language,
+      // F-S7: as exportDraft, only the fixed order is written.
+      ...(!survey && snapshot.questionOrder === 'fixed' ? { shuffleQuestions: false } : {}) },
     materials: byNo(snapshot.materials).map((m) => material(m, true)),
     questions: byNo(snapshot.questions).map((q) => ({
       stem: q.stem, image: key(q.image, 'image'), points: q.points, selection: q.selection ?? null,
       options: byNo(q.options).map((o) => ({ text: o.text, image: key(o.image, 'image'), correct: o.correct })),
+      ...(q.difficulty ? { difficulty: q.difficulty } : {}),
     })),
     files: {},
   }

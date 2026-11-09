@@ -52,6 +52,8 @@ test('a sponsor package is exported, imported into a new account and its drafts 
 
   // Exported from the overview: version 2 of the format, only content and settings.
   await signIn(page, '/sponsor/', source.email)
+  // Signed in before leaving the page: a navigation now would cut the sign-in request off.
+  await expect(page.getByTestId('dashboard-status')).toBeVisible()
   await page.goto('/sponsor/profile')
   await expect(page.getByTestId('sponsor-package')).toBeVisible()
   const downloaded = page.waitForEvent('download')

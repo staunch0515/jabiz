@@ -9,7 +9,7 @@
 
 - 一个 PR：格式第 2 版的写出与读入（读第 1 版）、检查页、逐步导入、导入记录 `QbPackageImport`（继续 / 放弃）、"提交全部草稿"、`QB_QUIZ_IMPORT` 的 `intoQuizId`、保留期任务、删除账号、管理系统的只读记录、文档。
 - **第 1 版从未实现过**：Q103 只到计划（代码中没有发起方包）。"第 1 版照旧能读"按 Q103 §2 的格式实现读法（没有图、主题词、共享视频），`SponsorPackageTest` / `package.test.ts` 各有第 1 版的样例。
-- **题目乱序（F-S7）没有合入**：基线中 Quiz 没有乱序开关，本项**不带**乱序开关，也不造这个字段。F-S7 的负责人需要补（见 §8 第 1 条）。
+- **题目乱序（F-S7，#573 已合入）**：Quiz 文件第 3 版的 `quiz.shuffleQuestions`（只写固定顺序）与题目的 `difficulty` 由包里的 Quiz 文件原样带上；本项的两条新路径也照做：`exportVersion` 由版本快照的 `questionOrder` 与题目的难度写出，`intoQuizId`（`QuizProcesses.replaceContent`）把文件的顺序设定写进被替换的 Quiz。
 - **发起方读本人知识结构图的模板不存在**（F-S2b3b"随 F-S3"，F-S3 未开始）：导出与按节点绑定都需要读，本项加两个只读模板 `qb.sponsor.package-trees` / `qb.sponsor.package-tree-nodes`（只读本人的图，F-S3 可以直接用或另写自己的）。
 
 ## 1. 文件格式（`format: quizbuks.sponsor-package`，`version: 2`，一个 JSON）
@@ -70,7 +70,7 @@
 | `tree.TreeConfig` / `QbTrees` | 数据视图 `urn:jabiz:dataset:sponsor:QbTree`（本人的图，只读），供发起方包的模板经它读本人的版本与节点 |
 | `application.yml` | 限流：`QB_PACKAGE_IMPORT_START` 30/时、`_STEP` 3000/时、`_ABANDON` 30/时；`QB_QUIZ_IMPORT_CHECK` 60 → 300/时（检查页逐个检查包里的 Quiz 文件） |
 | `sponsorpackage`（新包） | `QbPackageImports`（实体、数据视图名、锁名）、`PackageImportRules`（纯 Java：哈希与步骤键的格式、结果的读写、可否全部导入、保留期）、`PackageImportCodes`、`PackageImportProcesses`（`QB_PACKAGE_IMPORT_START` / `_STEP` / `_ABANDON` / `_EXPIRE`）、`PackageImportConfig`（实体、两个数据视图、流程、保留期任务 `qb.package-import-expire`） |
-| 迁移 `V100__quizbuks_package_import.sql`（临时编号：基线最大 V99；合并前按最大号 + 1 重编） | 新表 `qb_package_import`（普通表），部分唯一索引（每个发起方一个 `RUNNING`），按发起方与开始时间、按更新时间的索引 |
+| 迁移 `V103__quizbuks_package_import.sql`（`1.3/quizbuks` 最大 V102 之后，先绿先合） | 新表 `qb_package_import`（普通表），部分唯一索引（每个发起方一个 `RUNNING`），按发起方与开始时间、按更新时间的索引 |
 | 模板 | `qb.sponsor.package-state`（是否提交过发布、是否有提交过的图、确认的字节数、图的上限、未结束的导入）、`qb.sponsor.package-trees` / `qb.sponsor.package-tree-nodes`（本人的图与节点）、`qb.system.package-imports-expired`（保留期任务的项） |
 | `setup.QbParams` | 加在最后（普通参数）：`qb.package.confirm-bytes`（104857600）、`qb.package.import-retention-days`（90） |
 | `QbPermissions` | `qb.package.system`（保留期任务，不授予任何角色）；发起方的三个流程用 `qb.content.write`（子流程各自照常检查自己的权限） |
@@ -110,7 +110,7 @@
 ## 7. 决定（需转达总控 / 需求方，可改）
 
 1. **第 1 版按 Q103 §2 实现读法**：第 1 版从未有代码写出，读法照计划的格式；第 2 版是唯一写出的版本。
-2. **不带乱序开关**：F-S7 未合入，字段不存在（§8 第 1 条）。
+2. **乱序开关随 Quiz 文件**：F-S7 合入以后，包的格式不变（第 2 版），顺序设定与难度在 Quiz 文件中；导出版本与替换内容两条路径都带上。
 3. **主题词放在包里，不放进 Quiz 文件**：版本的主题词随版本、当前的随当前内容，导入时以 `QB_QUIZ_TOPICS_SET` 设上，Quiz 文件仍是第 3 版。
 4. **节点的键是源环境的节点编号**；已有图时先按键、再按基准语言的节点名（完全相同且唯一）找生效的节点；都找不到的不绑定、列出。
 5. **导出图的生效版本**（没有生效的导出草稿），退役的图不导出。
@@ -132,6 +132,5 @@
 
 ## 8. 以后（需要别人补的与之后的事）
 
-1. **F-S7（题目乱序）的负责人要补**：Quiz 文件版本 4 加 `quiz.shuffle`（布尔，没有即关）——`QuizFile` 字段、`QuizFileFormat` 的读法链 `3 → 4`、`QuizTransferProcesses.snapshot` 与 `QuizProcesses.replaceContent` 写进草稿、`content/transfer.ts` 的 `exportDraft` 与 `exportVersion`（由版本快照）写出；发起方包不用改格式（它原样带 Quiz 文件），只把 `PACKAGE_VERSION` 的说明与 `package.test.ts` 的样例补上乱序开关。若乱序开关在发布上而不在 Quiz 上，则改为在发布的 `settings`（Q102 设置文件）中加字段，`importSettings` 照写。
-2. F-S3（知识结构图的界面）可以直接用 `qb.sponsor.package-trees` / `-tree-nodes`，或换成自己的模板（届时一并改 `package.ts`）。
-3. 不做：一次导入多个发起方（D-Q103-7）；带记录的完整备份。
+1. F-S3（知识结构图的界面）可以直接用 `qb.sponsor.package-trees` / `-tree-nodes`，或换成自己的模板（届时一并改 `package.ts`）。
+2. 不做：一次导入多个发起方（D-Q103-7）；带记录的完整备份。

@@ -257,7 +257,21 @@ class PackageImportIT extends TreeItSupport {
         assertThat(out).containsEntry("quizId", quizId);
         assertThat(stemsOf(quizId)).containsExactly("New one?", "New two?");
         assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst())
-            .containsEntry("title", "Replaced");
+            .containsEntry("title", "Replaced").containsEntry("shuffle_questions", true);
+
+        // F-S7: a file whose questions keep their order replaces the content with that setting, and back.
+        Map<String, Object> fixed = quizFile("Fixed", "First?", "Second?");
+        fixed.put("formatVersion", 3);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> heading = (Map<String, Object>) fixed.get("quiz");
+        heading.put("shuffleQuestions", false);
+        run("QB_QUIZ_IMPORT", token, body("document", fixed, "files", body(), "intoQuizId", quizId));
+        assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst())
+            .containsEntry("shuffle_questions", false);
+        run("QB_QUIZ_IMPORT", token, body("document", quizFile("Shuffled", "One?"), "files", body(),
+            "intoQuizId", quizId));
+        assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst())
+            .containsEntry("shuffle_questions", true);
 
         // Another's quiz: not found.
         String other = sponsorToken(newSponsor(unique("s-fc4-into-other")));

@@ -127,6 +127,23 @@ describe('writing a sponsor package', () => {
     expect(read).toHaveBeenCalledTimes(2)
     expect(Object.keys(file.files)).toEqual(['f1', 'f2'])
     expect(file.products).toBeUndefined()
+    // F-S7: shuffled (the default) is not written, nor a difficulty the question has not.
+    expect(file.quiz.shuffleQuestions).toBeUndefined()
+    expect(file.questions[0].difficulty).toBeUndefined()
+  })
+
+  it('writes a fixed question order and the questions\' difficulty (F-S7)', async () => {
+    const version = { versionId: 'v', quizId: 'q', versionNo: 1, label: 'v1', title: 'Tea', kind: 'QUIZ',
+      language: 'en', languages: ['en'], questionCount: 1, fullScore: 1, versionedAt: '', contentHash: '',
+      foreignVideo: false, timeLimitSec: 60, materialCount: 0,
+      content: { title: 'Tea', intro: null, cover: null, timeLimitSec: 60, materials: [], questionOrder: 'fixed',
+        questions: [{ no: 1, stem: 'Green?', image: null, points: 1, difficulty: 'HARD', options: [
+          { no: 1, text: 'Yes', image: null, correct: true }, { no: 2, text: 'No', image: null, correct: false }] }],
+        translations: {} },
+    } as unknown as VersionDetail
+    const file = await exportVersion(version, undefined, vi.fn())
+    expect(file.quiz.shuffleQuestions).toBe(false)
+    expect(file.questions[0].difficulty).toBe('HARD')
   })
 })
 
