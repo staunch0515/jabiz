@@ -416,6 +416,44 @@ public final class QbParams {
     /** F-C4: how many days the record of a sponsor package's import is kept after its last change. */
     public static final String PACKAGE_IMPORT_RETENTION_DAYS = "qb.package.import-retention-days";
 
+    /*
+     * F-C10 (docs/quizbuks/first-launch-spec.md F-C10, plans/impl/F-C10.md): the AI help. The switch and the platform's
+     * monthly tokens are controlled (they decide what the platform pays); the rest ordinary. The help's usage is its own
+     * (QbHelpUsage), never a Sponsor's AI usage, fees or limits.
+     */
+    public static final String HELP_ENABLED = "qb.help.enabled";
+    /** The model the help asks: only one the platform allows (the parameter's kind, and again per request). */
+    public static final String HELP_MODEL = "qb.help.model";
+    /** The questions to the AI one person asks a day (the deployment's zone). */
+    public static final String HELP_USER_DAILY = "qb.help.user-daily";
+    /** The tokens the help uses a month, everybody together; judged from the usage recorded (it may go a little over). */
+    public static final String HELP_GLOBAL_MONTHLY_TOKENS = "qb.help.global-monthly-tokens";
+    /** The latest turns of a conversation sent with a question. */
+    public static final String HELP_HISTORY_TURNS = "qb.help.history-turns";
+    /** Days after its last activity a conversation is deleted. */
+    public static final String HELP_RETENTION_DAYS = "qb.help.retention-days";
+    /** The largest materials (FAQ, terms, manual) one request's prompt takes, in bytes; above it the startup check fails. */
+    public static final String HELP_MANUAL_MAX_BYTES = "qb.help.manual-max-bytes";
+    /** How often the pages ask for an answer, in seconds, and for how many minutes at most. */
+    public static final String HELP_POLL_SECONDS = "qb.help.poll-seconds";
+    public static final String HELP_POLL_MAX_MINUTES = "qb.help.poll-max-minutes";
+    /** Days a conversation handed to a person waits before its handler is reminded. */
+    public static final String HELP_ESCALATION_REMIND_DAYS = "qb.help.escalation-remind-days";
+    /** Days after a person's reply without a new question before the conversation closes by itself. */
+    public static final String HELP_AUTO_CLOSE_DAYS = "qb.help.auto-close-days";
+    /** The longest question (and words handed to a person) a user writes, in characters (100 to 4000). */
+    public static final String HELP_QUESTION_MAX_LENGTH = "qb.help.question-max-length";
+    /** The longest AI answer kept, in characters (500 to 8000); a longer one is cut with an ellipsis. */
+    public static final String HELP_ANSWER_MAX_LENGTH = "qb.help.answer-max-length";
+    /** The most links of the site one answer keeps (0 to 10). */
+    public static final String HELP_MAX_LINKS = "qb.help.max-links";
+    /** The help's controlled parameters (last, in this order). */
+    public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_GLOBAL_MONTHLY_TOKENS);
+    public static final List<String> HELP = List.of(HELP_ENABLED, HELP_MODEL, HELP_USER_DAILY,
+        HELP_GLOBAL_MONTHLY_TOKENS, HELP_HISTORY_TURNS, HELP_RETENTION_DAYS, HELP_MANUAL_MAX_BYTES, HELP_POLL_SECONDS,
+        HELP_POLL_MAX_MINUTES, HELP_ESCALATION_REMIND_DAYS, HELP_AUTO_CLOSE_DAYS, HELP_QUESTION_MAX_LENGTH,
+        HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS);
+
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
         KUDOS_BUY_ENABLED, KUDOS_SELL_ENABLED, TRANSFER_FEE_RATE);
@@ -436,7 +474,7 @@ public final class QbParams {
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
-        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), FEE_CREDIT_PARAMS)
+        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -729,12 +767,41 @@ public final class QbParams {
         new Param(VIDEO_USE_MAX_PERIOD_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.videouse.VideoUseRules.DEFAULT_MAX_PERIOD_DAYS),
             "The longest period, in days, one ledger entry of a shared video's use covers (1 to 36600)"),
-        // F-C4: the sponsor package (ordinary; last, so that the setup's earlier keys stay as they were).
+        // F-C4: the sponsor package (ordinary).
         new Param(PACKAGE_CONFIRM_BYTES, Map.of("type", "numeric", "precision", 12, "scale", 0), "104857600",
             "Above how many bytes the export of a sponsor package or a quiz file asks before it is saved (100 MB by "
                 + "default)"),
         new Param(PACKAGE_IMPORT_RETENTION_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0), "90",
             "Days the record of a sponsor package's import is kept after its last change"),
+        // F-C10: the AI help (the ordinary ones, then the controlled ones in the order of HELP_CONTROLLED; last).
+        new Param(HELP_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",
+            List.of("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")), "claude-haiku-5-5",
+            "The model the AI help asks (a smaller, faster one)"),
+        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
+            "The questions to the AI help one person asks a day (0: none)"),
+        new Param(HELP_HISTORY_TURNS, Map.of("type", "numeric", "precision", 2, "scale", 0), "6",
+            "The latest turns of a conversation sent to the AI with a question (0 to 20)"),
+        new Param(HELP_RETENTION_DAYS, DAYS, "180", "Days after its last activity an AI help conversation is deleted"),
+        new Param(HELP_MANUAL_MAX_BYTES, Map.of("type", "numeric", "precision", 9, "scale", 0), "204800",
+            "The largest materials (FAQ, terms, manual) one AI help request takes, in bytes; above it the startup "
+                + "check fails"),
+        new Param(HELP_POLL_SECONDS, Map.of("type", "numeric", "precision", 3, "scale", 0), "3",
+            "How often, in seconds, the pages ask for the AI help's answer"),
+        new Param(HELP_POLL_MAX_MINUTES, Map.of("type", "numeric", "precision", 3, "scale", 0), "3",
+            "For how many minutes at most the pages wait for the AI help's answer"),
+        new Param(HELP_ESCALATION_REMIND_DAYS, DAYS, "2",
+            "Days an AI help conversation handed to a person waits before its handler is reminded"),
+        new Param(HELP_AUTO_CLOSE_DAYS, DAYS, "14",
+            "Days after a person's reply without a new question before an AI help conversation closes by itself"),
+        new Param(HELP_QUESTION_MAX_LENGTH, Map.of("type", "numeric", "precision", 4, "scale", 0), "2000",
+            "The longest question to the AI help (and words handed to a person), in characters (100 to 4000)"),
+        new Param(HELP_ANSWER_MAX_LENGTH, Map.of("type", "numeric", "precision", 4, "scale", 0), "8000",
+            "The longest AI help answer kept, in characters (500 to 8000); a longer one is cut"),
+        new Param(HELP_MAX_LINKS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
+            "The most links of the site one AI help answer keeps (0 to 10)"),
+        new Param(HELP_ENABLED, BOOL, false, "Whether Takers and Sponsors may ask the AI help (Claude)"),
+        new Param(HELP_GLOBAL_MONTHLY_TOKENS, TOKENS, "20000000",
+            "The tokens the AI help may use a month, everybody together"),
         // F-M2: platform fee Kudos granted (the reminder ordinary, the rest controlled; last). Off keeps what the
         // platform did before: nothing is granted.
         new Param(FEE_CREDIT_EXPIRY_NOTICE_DAYS, DAYS, "14",

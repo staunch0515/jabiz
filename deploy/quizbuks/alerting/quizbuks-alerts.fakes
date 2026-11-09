@@ -15,3 +15,5 @@ qb-attempt-submit-busy timer jabiz.process 50 process=QB_ATTEMPT_SUBMIT version=
 qb-journal-export-rejected timer jabiz.process 1 process=QB_JOURNAL_EXPORT version=1 outcome=rejected status=422
 # Above JABIZ_ALERT_QB_AI_HELD_MAX (1 by default, 0 once AI is meant to be on).
 qb-ai-paused gauge jabiz.external.job.held - 5 job_type=qb.ai.questions
+# At or above JABIZ_ALERT_QB_HELP_USAGE_PERCENT (80 by default) of the AI help's monthly tokens.
+qb-help-usage-high gauge qb.help.usage.percent - 95

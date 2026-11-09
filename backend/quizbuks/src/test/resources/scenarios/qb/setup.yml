@@ -31,6 +31,10 @@ steps:
         qb.exposure.report.interval-sec, qb.exposure.report.max-per-call, qb.exposure.reconcile.min-tolerance,
         qb.exposure.reconcile.tolerance-percent, qb.exposure.reconcile.end-grace-sec, qb.video-use.remind-days,
         qb.video-use.max-period-days, qb.package.confirm-bytes, qb.package.import-retention-days,
+        qb.help.model, qb.help.user-daily, qb.help.history-turns,
+        qb.help.retention-days, qb.help.manual-max-bytes, qb.help.poll-seconds, qb.help.poll-max-minutes,
+        qb.help.escalation-remind-days, qb.help.auto-close-days, qb.help.question-max-length,
+        qb.help.answer-max-length, qb.help.max-links,
         qb.fee-credit.expiry-notice-days]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
@@ -53,7 +57,8 @@ steps:
         qb.audience.price.fallback, qb.audience.fee.refund-unused-days,
         qb.topup.targets, qb.topup.default-target, qb.kudos.buy.enabled, qb.kudos.sell.enabled, qb.transfer.fee-rate, qb.fee.monthly, qb.fee.tax-rate,
         qb.fee.default-billing-mode, qb.fee.overdue.block-submit,
-        qb.play.entry-fee.enabled, qb.usage.storage.free-bytes, qb.video.mainland-accessible-sites,
+        qb.play.entry-fee.enabled, qb.usage.storage.free-bytes, qb.video.mainland-accessible-sites, qb.help.enabled,
+        qb.help.global-monthly-tokens,
         qb.fee-credit.grant.enabled, qb.fee-credit.grant.basic, qb.fee-credit.grant.certified, qb.fee-credit.valid-days]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review,

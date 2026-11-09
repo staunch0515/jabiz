@@ -189,6 +189,17 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_VIDEO_USE_FIGURES_REFRESH", ProcessAccess.INTERNAL),
         Map.entry("QB_VIDEO_USE_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_VIDEO_USE_CHECK_RUN", ProcessAccess.INTERNAL),
+        // F-C10: the AI help's job outcomes, its daily items and the usage check.
+        Map.entry("QB_HELP_JOB_COMPLETED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_JOB_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_JOB_CANCELLED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_RETENTION", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_AUTO_CLOSE", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_REMIND", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_USAGE_CHECK", ProcessAccess.INTERNAL),
+        // F-C10: a reassigned Sponsor's help conversations (QB_SPONSOR_OPERATOR_ASSIGN's sub-process).
+        Map.entry("QB_HELP_OPERATOR_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
+
         // F-C4: the retention job's item deleting an old record of a sponsor package's import.
         Map.entry("QB_PACKAGE_IMPORT_EXPIRE", ProcessAccess.INTERNAL));
 
