@@ -69,6 +69,9 @@ export const TEMPLATE = {
   videoSites: 'qb.admin.video-sites',
   /** F-S9: the word list of topics with its figures by topic (headquarters). */
   topics: 'qb.admin.topics',
+  /** F-S8: the figures of blocking by kind, and the Sponsors most blocked (rounded; headquarters). */
+  blocks: 'qb.admin.blocks',
+  blockedSponsors: 'qb.admin.blocked-sponsors',
   /** F-S12: the videos Sponsors share (headquarters every provider's, an operator its own Sponsors'). */
   sharedVideos: 'qb.admin.shared-videos',
   /** Q60c-2: one sponsor's page views and product clicks in a period. */
@@ -454,6 +457,8 @@ export const PERMISSION = {
   /** F-S9: the word list of topics and its figures (read), adding, renaming, deactivating and merging (write). */
   topicRead: 'qb.admin.topic.read',
   topicWrite: 'qb.admin.topic.write',
+  /** F-S8: the figures of blocking (aggregates only). */
+  blockRead: 'qb.admin.block.read',
   /** The AI page (Q8a). */
   aiRead: 'qb.admin.ai.read',
   /** A taker's transfer at once (Q14). */
@@ -606,6 +611,8 @@ export const PATH = {
   region: '/qb/region',
   /** F-S9: the word list of topics. */
   topics: '/qb/topics',
+  /** F-S8: the figures of blocking. */
+  blocks: '/qb/blocks',
   /** F-S12: the videos Sponsors share, and one video's review and takedown. */
   sharedVideos: '/qb/shared-videos',
   sharedVideo: (sharedVideoId: string) => `/qb/shared-videos/${encodeURIComponent(sharedVideoId)}`,

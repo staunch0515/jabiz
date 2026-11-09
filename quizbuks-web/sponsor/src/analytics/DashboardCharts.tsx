@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Coins, HandCoins, Hourglass, Megaphone, PiggyBank, Receipt, Users, Wallet } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { AiUsageMetric } from '../ai/AiUsageMetric'
+import { BlockersMetric } from '../blocks/BlockersMetric'
 import { SPONSOR } from '../messages'
 import { StatusBadge } from '../publishing/shared'
 import { formatKudos } from '../qb/kudos'
@@ -85,6 +86,8 @@ function Metrics({ d }: { d: Dashboard }) {
       <CashMetrics />
       {/* Q8a: the AI usage (tokens) of the month (M-10). */}
       <AiUsageMetric zone={d.zone} />
+      {/* F-S8: how many takers block the Sponsor, rounded (blocks are private). */}
+      <BlockersMetric />
     </section>
   )
 }
