@@ -144,11 +144,13 @@
   - 状态即 `QuizLanguages` 的规则：基准没有文字为 `none`，没有译文为 `missing`，译文的 `sourceHash` 不等于现在基准文字的哈希为 `stale`，否则 `done`。哈希在 SQL 中照 `ContentLanguages.sourceHash` 计算（NFC、UTF-8、SHA-256 的前 16 个十六进制字符），`QuizTranslationsTemplateIT` 用流程写入的哈希核对（含需要 NFC 的文字）。
   - `q` 搜题干或任一选项的文字（`strpos`，不分大小写）；`untranslated` 只列 `pending > 0` 的题。
 - **页面**（`content/TranslationsPanel.tsx`）：
-  - 标题与简介、资料、封面照旧取自草稿（数量少）；语言切换上"还差几项"的数目照旧按草稿计算。
+  - 标题与简介、资料、封面照旧取自草稿（数量少）。
+  - 语言切换上"还差几项"的数目：文字部分来自新模板 `qb.sponsor.quiz-translation-progress`（每种语言整份 Quiz 的缺少与过时的文字数，状态规则同上，`QuizTranslationsTemplateIT` 核对它等于按页模板的 `pending` 之和加上标题与简介），资料部分照旧按草稿中的语言版本计算。
   - 题目部分按页读模板：上一页 / 下一页、搜索框、"只看需要处理的"（同一个勾选框也筛选标题与简介），本页题目与选项自己的图片列在本页之下。
   - 保存照旧是 `QB_TRANSLATION_SAVE`（同样的 `entries` 与 `baseRevision`），AI 的建议照旧逐条"采用"并确认、经 `QB_AI_TRANSLATION_ACCEPT` 写入；"全部采用"改为分两处：标题与简介一处，本页一处（"采用本页全部 AI 建议"），各自保存。
   - 一页有未保存的修改时，翻页、搜索与筛选都停用并提示先保存（不在页之间保留未保存的输入）。
-- **仍是整份读取的**：草稿（`readDraft`）照旧读全部题目、选项与译文，供导出、预览与语言的数目使用；去掉它不在 F-S6c 的范围内（§3.5a）。
+- **草稿不再读全部译文**：编辑器的草稿（`readDraft`）只按键读 Quiz 自己的译文（`quiz.title`、`quiz.intro`、`quiz.cover`；商家译文数据视图因此可按 `elementKey` 筛选）。千题、六个选项、三种语言约 4.2 万行译文，以前每次打开编辑器约 420 次请求，现在一次。
+  需要全部译文的只在用户要求时读取（`readDraft(quizId, 'all')`）：导出在按下"导出"时，预览在打开预览页时（缓存键与编辑器的草稿分开），行为不变。题目与选项仍整份读取（§3.5a）。
 
 ## 4. 统计
 
