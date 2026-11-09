@@ -338,7 +338,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 事件消费 | 平台 `jabiz-outbox-failed` | |
 | 分录导出被拒（§7.3） | QuizBuks `qb-journal-export-rejected` | 看错误码 |
 | AI 作业暂停（§7.8） | QuizBuks `qb-ai-paused`（仪表 `jabiz.external.job.held{job_type=~"qb.ai.*"}`，不含 AI 问题解答的 `qb.ai.help`） | 缺省 `JABIZ_ALERT_QB_AI_HELD_MAX=1`：AI 有意关闭时不告警；开启 `qb.ai.enabled` 后在 `.env` 设为 `0` 并重启 LGTM，此后暂停超过 5 分钟即告警 |
-| AI 问题解答的用量（§7.33） | QuizBuks `qb-help-usage-high`（仪表 `qb.help.usage.percent`：本月已用 `qb.help.global-monthly-tokens` 的百分比，作业结局与每日任务 `qb.help-usage` 更新） | 缺省 `JABIZ_ALERT_QB_HELP_USAGE_PERCENT=80`；到 100 % 时新的提问被拒（可直接转人工），到月底或经受控变更调高上限 |
+| AI 问题解答的用量（§7.34） | QuizBuks `qb-help-usage-high`（仪表 `qb.help.usage.percent`：本月已用 `qb.help.global-monthly-tokens` 的百分比，作业结局与每日任务 `qb.help-usage` 更新） | 缺省 `JABIZ_ALERT_QB_HELP_USAGE_PERCENT=80`；到 100 % 时新的提问被拒（可直接转人工），到月底或经受控变更调高上限 |
 | 任务 | 平台 `jabiz-job-failed`（`FAILED` / `PARTIAL`）、`jabiz-job-locked` | 包括 `qb.analytics`、`qb.usage-snapshot`、`qb.fee-*`、`qb.broadcast-*` 等每个任务 |
 | 站内信、平台费、邮件补发 | 平台 `jabiz-job-item-failed`、`jabiz-outbox-failed` | 平台费的核对项 `FEES_RECEIVABLE` 属于 `qb-reconcile-diff`；`sys_mail_message` 中 `FAILED` 增多看发件服务商；徽标模板 `qb.app.inbox-unread` 的耗时（目标 < 5 ms，`perf/Q7c-inbox.md`）在仪表盘上看 |
 | 发起方分析（§7.7）、资源占用的计量（§7.22） | 平台 `jabiz-job-failed` | 30 分钟内没有成功的分析、当天缺少计量快照（`SELECT max(snapshot_day) FROM qb_usage_day` 早于今天）：仪表盘与只读查询 |
@@ -347,7 +347,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
 | 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足）；`GATE_INVALID` 出现（门槛参数指不到可点亮的节点，功能对所有人关闭） |
-| 题库（F-S6，§7.28） | 平台 `jabiz-job-failed`（`qb.content-check`）；每日核对的待办 `qb.content-health`（权限 `qb.admin.quiz.read`） | `SNAPSHOT_NEAR_LIMIT` 出现（某个版本的快照超过上限的 80 %，题库再增长即不能保存下一个版本） |
+| 题库（F-S6，§7.37） | 平台 `jabiz-job-failed`（`qb.content-check`）；每日核对的待办 `qb.content-health`（权限 `qb.admin.quiz.read`） | `SNAPSHOT_NEAR_LIMIT` 出现（某个版本的快照超过上限的 80 %，题库再增长即不能保存下一个版本） |
 | 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
 | 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
@@ -364,7 +364,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **上线前在目标硬件上重测**：压测程序放在另一台主机，读者按预期的读取量限速（`LOAD_READ_RATE`），对打包的 jar 运行 `./gradlew :quizbuks:loadTest`（`LOAD_*` 参数，`LOAD_METRICS=yes` 从回环的管理端口读许可持有与语句数）；确认峰值低于饱和点并有 1.3 倍余量，结果写进报告。
 - **大题库与继续答题**（上线清单"性能"）：`LOAD_QUESTIONS`（题数，缺省 2）使版本快照变大，开始、继续与提交都随之变重；`LOAD_CONTINUE=yes` 让每个学者在开始之后再打开一次答题（`QB_ATTEMPT_START` 对进行中的答题即继续），单列一行。
   本机对比（60 人、16 并发，2026-11-08，应用与数据库同机、CPU 饱和，只看相对值）：2 题 24.5 次完成 / 秒，开始 p95 249 ms、提交 p95 566 ms；100 题 15.9 次 / 秒，开始 p95 444 ms、继续 p95 437 ms、提交 p95 656 ms。
-  题库的题数现在是参数 `qb.content.max-questions`（缺省 1000，F-S6，§7.28）；抽题与乱序（F-S7）合入后，以 1000 题、每人抽 20 题重测（届时给压测程序加上抽题的参数）。
+  题库的题数现在是参数 `qb.content.max-questions`（缺省 1000，F-S6，§7.37）；抽题与乱序（F-S7）合入后，以 1000 题、每人抽 20 题重测（届时给压测程序加上抽题的参数）。
 - 单实例：准入的队列与限流按实例（D45 的已知限制）；多实例时热门发布的锁仍在数据库中串行，加实例不提高单个发布的容量。
 
 ## 7. 常见故障
@@ -684,16 +684,6 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
 - **调整的影响**：调低不删已有的商品，只是不能再新增，已有的照常修改、上下架与删除；多于新上限的发起方导出的资料包要先删掉几件才能再导入。
 - **部署后**：运行一次 `QB_SETUP`（建这个参数；缺少时启动检查警告，流程按缺省值 50）。没有新任务、新科目、新环境变量。
 
-### 7.15 通行密钥（Q97）
-
-指纹、面容登录（平台 D71）在 App、发起方页面、平台管理系统与运营商管理系统开启（`QB_PASSKEYS`，缺省开；`docs/quizbuks/plans/Q97-passkeys.md`）。
-
-- **依赖方**是部署自己的主机（取 `JABIZ_MAIL_BASE_URL`，或 `QB_PASSKEY_RP_ID` / `QB_PASSKEY_ORIGINS`）。**换域名或改依赖方会使全部已绑定的通行密钥失效**：用户只能改用密码或邮件登录后重新绑定。换之前先发公告。
-- 用户在"账户 → 登录与安全"中添加、改名、删除；没有密码的用户（邮件链接、Google / Facebook / LINE 登录）先经确认邮件（`auth/passkey-confirm`），所以需要邮件已开启。
-- 用户丢了设备：本人在另一台设备上删除；管理员可代为删除（平台的 `SEC_PASSKEY_REMOVE_ADMIN`，要求二次验证），不能代为绑定。
-- 通行密钥登录算两个因素：要求二次验证的管理员与运营商可以只用它登录。封禁与运营商成员关系的检查照旧。
-- 商店 App（iOS / Android 外壳）暂未开启：外壳中的网页暂时不能用通行密钥（需要 `apple-app-site-association` 的 `webcredentials` 与 `assetlinks.json` 的登录凭据授权，另立阶段）。
-
 ### 7.24 含境外视频的发布与中国大陆（F-S11）
 
 含有中国大陆无法播放的视频（YouTube 等）的发布，不能从中国大陆的 IP 地址作答（`docs/quizbuks/plans/impl/F-S11.md`）。判断在开始答题时由服务端做（422 `QB_PUBLICATION_REGION_VIDEO`），
@@ -931,7 +921,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   | `qb.package.confirm-bytes` | `104857600`（100 MB） | 发起方包与 Quiz 文件的导出超过它即先问发起方再保存 |
   | `qb.package.import-retention-days` | `90` | 导入记录在最后一次更新后保留的天数；过期即由任务删除（未完成的也删除，已生成的草稿留下，成为普通草稿） |
 
-  大题库按 `qb.content.import.batch-size` 分批导入、总数受 `qb.content.max-questions` 限制（§7.28）；一次导入开始时记下当时的每批题数，继续时沿用。
+  大题库按 `qb.content.import.batch-size` 分批导入、总数受 `qb.content.max-questions` 限制（§7.37）；一次导入开始时记下当时的每批题数，继续时沿用。
 - **限流**（`application.yml`）：`QB_PACKAGE_IMPORT_START` 每人每小时 30 次、`QB_PACKAGE_IMPORT_STEP` 3000 次、`QB_PACKAGE_IMPORT_ABANDON` 30 次；检查页逐个检查包里的每个 Quiz 文件，`QB_QUIZ_IMPORT_CHECK` 因此放宽到每人每小时 300 次。
 - **导入记录**：每次导入（包括"只导入资料部分"）记一行：发起方、包的 SHA-256、方式（`FULL` / `PROFILE`）、状态（`RUNNING` 未完成 / `DONE` 完成 / `ABANDONED` 已放弃）、已完成的步数与每一步生成的编号。每个发起方同时只有一个未完成的导入。每一步与记录在同一个事务中提交，所以继续不会重做、不会生成两份。总部与运营商在平台管理系统的发起方详情页（"发起方包的导入记录"，`qb.admin.publication.read`）只读查看，运营商只看到自己的发起方；删除账号时一并删除。
 - **排查**：
@@ -983,23 +973,17 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **改派运营商**：发起方改派时，其转人工、由原运营商回答的对话与待办（含等待的提醒）随之移到新运营商（平台的 `APPROVAL_SCOPE_MOVE`，与待审的审批同一上限，超过即 422 `QB_SPONSOR_HELP_PENDING`：先关闭一些对话）；总部回答的不动。
 - **删除账号**：三张表中本人的行由抹除流程删除（`help.HelpConfig` 的 `PersonalDataEraser`），作业的输入与结果由平台按请求人清除；全平台的用量行保留（不含个人）。
 
-## 8. 升级到线 1.3（S0 的迁移 V29、V30）
+### 7.35 通行密钥（Q97）
 
-S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
-五张只追加表（发布、档位、现金、兑换、电子奖品的 `*_version`）由 V29 改名、V30 改回 `sponsor_id`：它们的行已被完整性封存，封存过的列不能改名（设计 21 §2.1，S0 §10）。
-迁移只有 DDL、不改写行，但旧 jar 不能在新表上运行、新 jar 不能在旧表上运行（一步到位，同 V10 的锁拆分），所以**停机升级**：
+指纹、面容登录（平台 D71）在 App、发起方页面、平台管理系统与运营商管理系统开启（`QB_PASSKEYS`，缺省开；`docs/quizbuks/plans/Q97-passkeys.md`）。
 
-1. 停止应用（`docker compose stop app` 或服务器的 `deploy-app.sh` 之前先停旧容器）。
-2. 确认 Outbox 已投递完：`SELECT count(*) FROM sys_outbox WHERE delivered_time IS NULL`（表名以平台 `db/jabiz` 为准）为 0。
-   事件 `qb.publication.status` 的载荷从 `sponsorId` 改为 `publisherKind` + `publisherId`：升级前未投递的这类事件，新版本的消费者读不到发布方，**什么也不做**（最坏丢一封发布状态的通知邮件，不影响数据）；钱包事件的载荷不变。
-3. 启动新 jar：Flyway 依次执行 V29 与 V30（**一起执行，不要停在 V29**：只停在 V29 时一旦封存运行，V30 之后这些块会报告被改）。V29 做 `ALTER TABLE … RENAME COLUMN`、`ADD COLUMN … DEFAULT 'SPONSOR'` 再 `DROP DEFAULT`、`CHECK`、索引改名、重建视图 `qb_publication_owner`；V30 把五张只追加表的列名改回。`qb_attempt` 很大时 `CHECK` 的校验扫一遍表，秒级。
-4. 升级后运行一次 `INTEGRITY_VERIFY`（或等每日的校验）：应当完好，升级前封存的行不报告 `MODIFIED`。
-5. 启动检查无新告警；待审核的发布照常（审批绑定的内容不含发布方）；平台管理系统「发布」列表多出"发布方类型"一列。
-6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
+- **依赖方**是部署自己的主机（取 `JABIZ_MAIL_BASE_URL`，或 `QB_PASSKEY_RP_ID` / `QB_PASSKEY_ORIGINS`）。**换域名或改依赖方会使全部已绑定的通行密钥失效**：用户只能改用密码或邮件登录后重新绑定。换之前先发公告。
+- 用户在"账户 → 登录与安全"中添加、改名、删除；没有密码的用户（邮件链接、Google / Facebook / LINE 登录）先经确认邮件（`auth/passkey-confirm`），所以需要邮件已开启。
+- 用户丢了设备：本人在另一台设备上删除；管理员可代为删除（平台的 `SEC_PASSKEY_REMOVE_ADMIN`，要求二次验证），不能代为绑定。
+- 通行密钥登录算两个因素：要求二次验证的管理员与运营商可以只用它登录。封禁与运营商成员关系的检查照旧。
+- 商店 App（iOS / Android 外壳）暂未开启：外壳中的网页暂时不能用通行密钥（需要 `apple-app-site-association` 的 `webcredentials` 与 `assetlinks.json` 的登录凭据授权，另立阶段）。
 
-回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。
-
-### 7.33 资料包中的链接图片（F-C6）
+### 7.36 资料包中的链接图片（F-C6）
 
 发起方导入的资料包里，图片可以写成 `{"url": "https://…"}`。导入时由发起方页面请服务器**逐张下载一次**（平台能力 D75：`POST /api/files/fetch`，不在导入的事务中；
 下载得到的是发起方自己的文件，与上传同一条流水线：按内容判断类型、重新编码、去掉 EXIF 与位置信息）。链接不保存，以后不再访问原网站。
@@ -1023,7 +1007,7 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
 - **测试**：后端 `ProfileLinkImagesIT`（本机 HTTPS 桩，测试配置以 `@Primary` 的 `RemoteFetchNetwork` 替换网络；下载 → 导入、没有文件时保留现有图片、别人的文件被拒），页面 `transfer.test.tsx`，
   e2e `profile-links.spec.ts` 只测失败路径（e2e 没有公网图片源，D75 没有"只在测试中放行"的属性，有意如此）。
 
-### 7.28 题库的上限与每日核对（F-S6）
+### 7.37 题库的上限与每日核对（F-S6）
 
 - **参数**（普通参数，`QB_SETUP` 建立，平台管理系统的参数页可以改，改动即时生效）：
   - `qb.content.max-questions`（缺省 1000）：一个 Quiz（题库）至多几题。至多 2000（代码的技术上限 `ContentLimits.MAX_QUESTIONS_TECH`），填得更大也按 2000。调低后已有的大题库照常读取、修改、删除，只是不能再加题（`QB_TOO_MANY_QUESTIONS`，提示中带上限）。
@@ -1039,7 +1023,7 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
     - 已有的版本照常可用。
 - **耗时**：千题、6 个选项、三语的题库实测见 `docs/quizbuks/perf/F-S6-large-bank.md`。
 
-### 7.33 可支付平台费的账户（F-M1）
+### 7.38 可支付平台费的账户（F-M1）
 
 每个发起方有一个"可支付平台费的账户"（`docs/quizbuks/plans/impl/F-M.md` §M1）：**赠送额度**（平台费 Kudos，科目 2190，钱包种类 `FEE_CREDIT`，按笔 `qb_fee_credit_grant`，各有到期）与**现金**（2160，钱包种类 `CASH`，按进账一笔一行 `qb_cash_lot`，来源 `CARD` / `BANK` / `OPERATOR` / `OTHER`）。平台费一律经子流程 `QB_FEE_SETTLE` 支付：先用赠送额度（最早到期的先用，同时到期的先发放的），再按进账先后用现金（不超过未被争议冻结的部分）；账户有多少付多少，其余留在账单上（状态 `PARTIAL`，`paid_amount`）。每次付款一笔分录（借 2190 / 2160、贷 1130，来源为费用或账单），每用到一笔记一行 `qb_fee_payment_version`（只追加）；作废账单（`QB_FEE_REQUEST` 的作废）冲正这些分录，并以 `QB_FEE_REFUND` 把每一部分退回原来的那一笔（F-M1 之前已付的账单没有分摊，退回为一笔新的现金 `OTHER`）。学分钱包（2110）从不用来付平台费。
 
@@ -1054,3 +1038,19 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
   1. 账户：`SELECT kind, balance, held FROM qb_wallet WHERE owner_id = '<发起方>' AND kind IN ('FEE_CREDIT', 'CASH')`；各笔：`SELECT grant_id, source, remaining, expires_at FROM qb_fee_credit_grant WHERE sponsor_id = '<发起方>' AND remaining > 0 ORDER BY expires_at, granted_at`，`SELECT lot_id, source, remaining, arrived_at FROM qb_cash_lot WHERE sponsor_id = '<发起方>' AND remaining > 0 ORDER BY arrived_at`。
   2. 一张账单的付款：`SELECT paid_at, sub_account, coalesce(grant_id, cash_lot_id) AS lot, amount, transaction_id FROM qb_fee_payment_version WHERE target_id IN ('<账单>', '<账单的 charge_id>') ORDER BY process_seq_id, row_id`。
   3. 部分付款的账单：`SELECT status, total, paid_amount, due_on FROM qb_fee_invoice WHERE invoice_id = '<账单>'`；剩余 = `total - paid_amount`，到期后照旧变为 `OVERDUE` 并提醒。
+
+## 8. 升级到线 1.3（S0 的迁移 V29、V30）
+
+S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
+五张只追加表（发布、档位、现金、兑换、电子奖品的 `*_version`）由 V29 改名、V30 改回 `sponsor_id`：它们的行已被完整性封存，封存过的列不能改名（设计 21 §2.1，S0 §10）。
+迁移只有 DDL、不改写行，但旧 jar 不能在新表上运行、新 jar 不能在旧表上运行（一步到位，同 V10 的锁拆分），所以**停机升级**：
+
+1. 停止应用（`docker compose stop app` 或服务器的 `deploy-app.sh` 之前先停旧容器）。
+2. 确认 Outbox 已投递完：`SELECT count(*) FROM sys_outbox WHERE delivered_time IS NULL`（表名以平台 `db/jabiz` 为准）为 0。
+   事件 `qb.publication.status` 的载荷从 `sponsorId` 改为 `publisherKind` + `publisherId`：升级前未投递的这类事件，新版本的消费者读不到发布方，**什么也不做**（最坏丢一封发布状态的通知邮件，不影响数据）；钱包事件的载荷不变。
+3. 启动新 jar：Flyway 依次执行 V29 与 V30（**一起执行，不要停在 V29**：只停在 V29 时一旦封存运行，V30 之后这些块会报告被改）。V29 做 `ALTER TABLE … RENAME COLUMN`、`ADD COLUMN … DEFAULT 'SPONSOR'` 再 `DROP DEFAULT`、`CHECK`、索引改名、重建视图 `qb_publication_owner`；V30 把五张只追加表的列名改回。`qb_attempt` 很大时 `CHECK` 的校验扫一遍表，秒级。
+4. 升级后运行一次 `INTEGRITY_VERIFY`（或等每日的校验）：应当完好，升级前封存的行不报告 `MODIFIED`。
+5. 启动检查无新告警；待审核的发布照常（审批绑定的内容不含发布方）；平台管理系统「发布」列表多出"发布方类型"一列。
+6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
+
+回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。

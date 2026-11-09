@@ -66,6 +66,8 @@ jobs:
         run: node --test tools/quizbuks/store/listing.test.mjs
       - name: The product's terms (F-F5)
         run: node --test tools/quizbuks/terms/terms.test.mjs
+      - name: The numbered sections of operations.md (each number once, references to sections that exist)
+        run: node --test tools/quizbuks/ops-sections/ops-sections.test.mjs
       - name: App
         working-directory: quizbuks-web/app
         run: |
