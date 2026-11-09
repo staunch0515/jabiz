@@ -364,6 +364,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.EXPOSURE_RECONCILE_MIN_TOLERANCE, "20");
         expected.put(QbParams.EXPOSURE_RECONCILE_TOLERANCE_PERCENT, "5");
         expected.put(QbParams.EXPOSURE_END_GRACE_SEC, "60");
+        // F-S14: the reminder of a shared video's use waiting for its provider (ordinary).
+        expected.put(QbParams.VIDEO_USE_REMIND_DAYS, "7");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // F-S2: the knowledge maps' limits and the review reminder (ordinary).
