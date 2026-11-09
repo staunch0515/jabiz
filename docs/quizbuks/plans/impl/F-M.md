@@ -78,7 +78,7 @@
   3. `qb.fee-credit.manual.max` 与 `TREE_GATES` 一样列入 `ControlledParams`（`SetupConfig`），不在 `QbParams.CONTROLLED`（那里是 `QB_SETUP` 要提案的），以 `LoadParams.optional` 读。
   4. 每日核对的 `FEE_CREDIT_PROMOTION` 一行的 `sponsorId` 列放运营商（`-` 为无）：核对项的键只有这一列。
 - **认证**：F-M3 之前所有发起方按未认证（`FeeCreditRules.onboardingAmount(false, …)`，代码注明）；钱包页"认证后补到 10,000"的提示与 `CERTIFIED_TOP_UP` 随 M3。
-- **迁移**：`V105`（V102 是 S3 的 #581，V103 是 M1 #578，V104 是 S1 的 F-C10a；总控定）：`qb_fee_credit_grant` 加 `voided_amount`、`voided_at`、`reminded_at`（约束：作废时剩余为 0）与到期索引；`qb_fee_request` 加种类 `CREDIT`、`valid_days`、`grant_id`。科目 5140 与参数由 `QB_SETUP` 建。
+- **迁移**：`V106`（V102 是 S3 的 #581，V103 是 M1 #578，V104、V105 是 S1 的 #582、#584；总控定）：`qb_fee_credit_grant` 加 `voided_amount`、`voided_at`、`reminded_at`（约束：作废时剩余为 0）与到期索引；`qb_fee_request` 加种类 `CREDIT`、`valid_days`、`grant_id`。科目 5140 与参数由 `QB_SETUP` 建。
 - **页面**：发起方钱包页各笔多"已用"；运营商的发起方页"入驻赠送"块与确认按钮（`qb.fee-credit.onboarding.confirm`）；平台管理系统"平台费"页的"追加赠送"按钮（`FEE_MANAGE`）与"平台费 Kudos"标签（按运营商 / 发起方 / 来源汇总与逐笔，财务只读）。
 - **平台缺口**：无。
 
