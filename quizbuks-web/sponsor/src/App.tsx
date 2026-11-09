@@ -93,6 +93,7 @@ import {
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { GrowthArt, Wordmark } from './qb/Illustrations'
 import { HelpPage } from './qb/HelpPage'
+import { HelpPanel } from './help/HelpPanel'
 import { LEGAL } from './qb/ids'
 import { legalKindOf, type LegalKind } from './qb/legal'
 import { EntryLegalLinks, LegalLinks } from './qb/LegalLinks'
@@ -310,6 +311,8 @@ function SignedIn({ path }: { path: string }) {
       header={
         <div className="ml-auto flex items-center gap-2">
           <span className="text-muted-foreground hidden text-sm sm:inline" data-testid="sponsor-user">{displayName}</span>
+          {/* F-C10c: the AI help, over any page (moved as it is to the new frame's header in F-F3). */}
+          <HelpPanel path={path} search={search} />
           <ThemeToggle />
           <Button variant="outline" size="sm" data-testid="sign-out" onClick={() => void signOut().then(toSignIn)}>
             {tQb('signOut')}

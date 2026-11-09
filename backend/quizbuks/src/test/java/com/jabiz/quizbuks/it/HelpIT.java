@@ -318,6 +318,32 @@ class HelpIT extends HelpItSupport {
     }
 
     @Test
+    void thePagesReadTheSettingsAndOneConversationByItsKey() {
+        // F-C10c: the pages size the question box by the parameter and open one conversation (an inbox's link).
+        String taker = newTaker("t-fc10-pages-" + UUID.randomUUID(), "JP");
+        setParam(QbParams.HELP_QUESTION_MAX_LENGTH, "150");
+        try {
+            Map<String, Object> settings = items("qb.me.help-settings", taker(taker), Map.of()).getFirst();
+            assertThat(number(settings.get("questionMaxLength"))).isEqualTo(150);
+            assertThat(settings).containsEntry("enabled", true);
+        } finally {
+            setParam(QbParams.HELP_QUESTION_MAX_LENGTH, "2000");
+        }
+        Object first = escalate(taker(taker), null, QbHelp.APP, "First?").get("threadId");
+        escalate(taker(taker), null, QbHelp.APP, "Second?");
+        List<Map<String, Object>> byKey = List.of(Map.of("field", "threadId", "op", "eq", "value", first));
+        assertThat(items("qb.me.help-threads", taker(taker), Map.of("params", Map.of("entry", QbHelp.APP),
+            "filters", byKey))).singleElement().satisfies(row -> assertThat(row)
+                .containsEntry("threadId", first).containsEntry("firstQuestion", "First?"));
+        // Another's key finds nothing; the staff's list finds it the same way.
+        assertThat(items("qb.me.help-threads", taker(newTaker("t-fc10-pages-o-" + UUID.randomUUID(), "JP")),
+            Map.of("params", Map.of("entry", QbHelp.APP), "filters", byKey))).isEmpty();
+        assertThat(items("qb.admin.help-threads", hqHelp(), Map.of("filters", byKey))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("threadId", first).containsEntry("status",
+                QbHelp.ESCALATED));
+    }
+
+    @Test
     void aTakersAndADirectSponsorsQuestionGoToHeadquarters() {
         NewOperator north = newOperatorWithLead(operatorsAdmin(), unique("Help Direct"), null);
         String northStaff = memberSession(north.leadId(), north.operatorId());

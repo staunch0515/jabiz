@@ -2,7 +2,8 @@
 id: qb.me.help-threads
 description: >-
   F-C10: the caller's AI help conversations of one entry (a Taker's in the app, a Sponsor's on the Sponsor pages),
-  newest first: where each stands, whether it went to a person and what its first question was
+  newest first: where each stands, whether it went to a person and what its first question was; or one of them (the
+  list's filter on threadId: the conversation's page, F-C10c)
 entities: [QbHelpThread, QbHelpMessage]
 datasets:
   QbHelpThread: urn:jabiz:dataset:me:QbHelpThread
@@ -20,7 +21,7 @@ results:
   lastActivityAt: { from: QbHelpThread.lastActivityAt }
   firstQuestion:  { kind: { type: text, maxLength: 8000 } }
 list:
-  filters: [status]
+  filters: [status, threadId]
   sorts:   [lastActivityAt, createdAt]
   defaultSort: { field: lastActivityAt, asc: false }
   key: [threadId]

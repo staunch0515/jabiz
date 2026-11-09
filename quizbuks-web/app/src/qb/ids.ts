@@ -131,3 +131,32 @@ export const CODE = {
   /** 503: the queue before a hot quiz's lock is full or its wait ran out (platform decision D45); try again later. */
   processBusy: 'PROCESS_BUSY',
 } as const
+
+/**
+ * The AI help (F-C10, `help.HelpProcesses`, templates `queries/qb/me/help-*`; docs/quizbuks/plans/impl/F-C10.md): a
+ * Taker's at the help page, a Sponsor's in the header's panel. Each process is the caller's own.
+ */
+export const HELP = {
+  ask: 'QB_HELP_ASK',
+  rate: 'QB_HELP_RATE',
+  escalate: 'QB_HELP_ESCALATE',
+  close: 'QB_HELP_CLOSE',
+  settings: 'qb.me.help-settings',
+  threads: 'qb.me.help-threads',
+  messages: 'qb.me.help-messages',
+  /** The permission of asking (Takers and Sponsors hold it). */
+  use: 'qb.help.use',
+} as const
+
+/** The AI help's problems the pages answer with something of their own (the server's text shows besides). */
+export const HELP_CODE = {
+  disabled: 'QB_HELP_DISABLED',
+  dailyLimit: 'QB_HELP_DAILY_LIMIT',
+  monthlyLimit: 'QB_HELP_MONTHLY_LIMIT',
+  waiting: 'QB_HELP_WAITING',
+  closed: 'QB_HELP_CLOSED',
+  alreadyEscalated: 'QB_HELP_ALREADY_ESCALATED',
+  textTooLong: 'QB_HELP_TEXT_TOO_LONG',
+  /** A job's failure: the help was asked to answer a quiz. */
+  quizRefused: 'QB_HELP_QUIZ_REFUSED',
+} as const
