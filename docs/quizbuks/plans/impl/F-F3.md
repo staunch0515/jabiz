@@ -41,13 +41,13 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 |---|---|---|---|
 | 首页 / ホーム / Home | `House` | 仪表盘与待我处理 `/home` | 全部 |
 | Quiz / クイズ / Quizzes | `FileQuestion` | 列表 `/quizzes`；编辑 `/quizzes/<id>`（详情，无标签行，面包屑回列表） | 全部 |
-| 发布 / 公開 / Publications | `Megaphone` | 列表 `/publications` / 结构图 `/publications/map` / 统计 `/publications/stats`；发布详情另有标签（§2.2） | 全部 |
+| 发布 / 公開 / Publications | `Megaphone` | 列表 `/publications` / 结构图 `/publications/map`；发布详情另有标签（§2.2） | 全部 |
 | 奖品与兑换 / 景品と引き換え / Prizes | `Gift` | 到店兑换 `/prizes/redeem` / 现金奖励 `/prizes/cash` / 电子奖品 `/prizes/digital` | 全部 |
-| 客户与消息 / お客様とメッセージ / Customers & messages | `MessagesSquare`（徽标：未读对话） | 对话 `/messages/conversations` / 通知与公告 `/messages/notices` / 客户 `/messages/customers`（§2 注 4） | 全部 |
+| 客户与消息 / お客様とメッセージ / Customers & messages | `MessagesSquare`（徽标：未读对话） | 对话 `/messages/conversations` / 通知与公告 `/messages/notices`（"客户"标签以后再做，§2 注 4） | 全部 |
 | 合作权益 / 協賛特典 / Sponsored benefits | `Handshake` | 目录 `/benefits` / 我的权益 `/benefits/offers` / 洽谈 `/benefits/conversations` / 采购单 `/benefits/purchases` | `qb.sponsor.benefit-access` 中任一角色 `open` |
 | 资金 / 資金 / Money | `Wallet` | 交易 `/money/transactions` / 学分钱包 `/money/wallet` / 平台费账户 `/money/account` / AI 额度 `/money/ai` / 账单 `/money/bills` | 学分钱包只在可付 Kudos 时（Q28，同现在） |
 | 资源库 / リソースライブラリ / Asset library | `Library` | 全部 `/assets` / 素材 `/assets/media` / 文字 `/assets/text` / 奖品 `/assets/prizes` / 商品 `/assets/products` | 全部 |
-| 发起方中心 / 主催者センター / Sponsor hub | `Store` | 概况 `/profile` / 基本信息 `/profile/basics` / 公开主页 `/profile/page` / 店员 `/profile/staff` / 邮件服务器 `/profile/mail-server` | 全部 |
+| 发起方中心 / 主催者センター / Sponsor hub | `Store` | 概况 `/profile` / 基本信息 `/profile/basics` / 公开主页 `/profile/page`（下有统计 `/profile/page/stats`）/ 店员 `/profile/staff` / 邮件服务器 `/profile/mail-server` | 全部 |
 
 - 区域根地址（`/prizes`、`/money`、`/messages` 等）转到第一个**可见**标签；打开不可见标签的地址（如没有 Kudos 时的 `/money/wallet`）同样转到该区域第一个可见标签。
 - 合作权益、资源库、发起方中心沿用现有前缀，书签不变。区域名的中文照规格；"合作权益"的日文、英文沿用现有菜单的叫法（協賛特典 / Sponsored benefits），三语写进 `glossary.md`。
@@ -65,7 +65,7 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 | 7 | 单个发布的分析 | `/publications/<id>/analytics` | 发布详情 → 统计 | 不变 | — |
 | 8 | 发布预览 | `/publications/<id>/preview` | 发布 | 不变 | — |
 | 9 | 树（F-S3 之前是"正在更新"） | `/tree`（`?publication=`） | 发布 → 结构图 | `/publications/map`（带原查询） | 是 |
-| 10 | 统计（主页访问与商品点击） | `/stats` | 发布 → 统计 | `/publications/stats` | 是 |
+| 10 | 统计（主页访问与商品点击） | `/stats` | 发起方中心 → 公开主页 → 统计（总控 2026-11-09） | `/profile/page/stats` | 是 |
 | 11 | 资源库各标签 | `/assets?tab=all\|media\|text\|prize\|products` | 资源库 → 全部 / 素材 / 文字 / 奖品 / 商品 | `/assets`、`/assets/media`、`/assets/text`、`/assets/prizes`、`/assets/products` | 是（按 `tab`） |
 | 12 | 到店兑换 | `/redeem` | 奖品与兑换 → 到店兑换 | `/prizes/redeem` | 是 |
 | 13 | 现金奖励 | `/cash-rewards` | 奖品与兑换 → 现金奖励 | `/prizes/cash` | 是 |
@@ -76,7 +76,7 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 | 21 | 钱包：平台的账单（Q87） | `/wallet` 页内 | 资金 → 账单 | `/money/bills` | — |
 | 22 | 卡充值的页面（Stripe 返回 `?checkout=`） | `/wallet/topups/<id>` | 资金 → 学分钱包 | `/money/wallet/topups/<id>`（带原查询） | 是（前缀） |
 | 23 | 银行转账充值的页面 | `/wallet/bank/<id>` | 资金 → 学分钱包 | `/money/wallet/bank/<id>` | 是（前缀） |
-| 24 | AI 用量卡（现在只在仪表盘） | — | 资金 → AI 额度（首页照旧有；F-M9 在此加购买） | `/money/ai` | — |
+| 24 | AI 用量卡（现在只在仪表盘） | — | 资金 → AI 额度（首页照旧有；F-M9（S2 的 M7）在此加购买，不放空标签） | `/money/ai` | — |
 | 25 | 交易（筛选在地址中） | `/transactions?…` | 资金 → 交易 | `/money/transactions?…`（带原查询） | 是 |
 | 26 | 发起方资料：概况、基本信息、公开主页、店员、邮件服务器 | `/profile/**` | 发起方中心 → 各标签 | 不变 | — |
 | 27 | 消息中心：我发的通知、收到的公告 | `/messages` | 客户与消息 → 通知与公告（页内"我发的 / 收到的"两段，`?view=inbox`） | `/messages/notices` | 是 |
@@ -91,10 +91,10 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 
 注：
 1. **"认证"标签不加**：规格的资源库标签列了"认证"，但发起方自己的认证已由 F-S2c2（D6，需求方确认）删除，资源库现在没有这个标签；旧地址 `/certifications` 照旧转到资源库。
-2. **统计**：照规格放在"发布 → 统计"（Q108 写明"现在设置下的'统计'"）。它的内容是公开主页的访问与商品点击，是否改放"发起方中心 → 公开主页"见 §11 问题 3。
+2. **统计**：内容是公开主页的访问与商品点击，放在"发起方中心 → 公开主页"下（公开主页的编辑与统计两段，统计有自己的地址 `/profile/page/stats`；总控 2026-11-09 答复问题 3，取代规格中的"发布 → 统计"）。
 3. **Quiz 编辑器**内部的 4 个标签留在页内（不是路由）：S1 的 F-S6、F-S7 正在改编辑器；本项只给它的 `PageHeader` 加区域图标与面包屑。
-4. **客户**标签（"结构图上的人"）现在没有页面：旧的树上的客户随 F-S2c2（D5）去掉，F-S3 的规格也没有它。`areas.ts` 中预留路由，没有页面时不显示（不放空标签），见 §11 问题 1。
-5. 原来"设置"组没有了：账户与帮助进头像菜单，统计进发布，消息成为区域，发起方资料成为发起方中心。
+4. **客户**标签（"结构图上的人"）**以后再做**（总控 2026-11-09）：旧的树上的客户随 F-S2c2（D5）去掉，现在没有页面，首次上线不做新的客户列表。菜单、路由、帮助都不指向它（不预留路由，规格 F-F3 同样记为"以后"）。
+5. 原来"设置"组没有了：账户与帮助进头像菜单，统计进发起方中心 → 公开主页，消息成为区域，发起方资料成为发起方中心。
 
 ### 2.2 发布详情的标签（已提交的发布）
 
@@ -111,6 +111,7 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 | 分享与二维码 | `…/share` | 分享链接与二维码（现在在 `PublicationActions` 的对话框 `PublicationQrDialog`，对话框照旧可从页头打开） |
 
 `PublicationSummary` 按上表拆成各标签的块（同一组件按块导出），不改读取。
+发起方一侧的发布预览（`/publications/<id>/preview`）用同样的标签：内容由共用的 `PublicationContent` 给出，详情与预览各自套框（F-F4 决定 ⑤，在 F-F3c 做）。
 
 ## 3. 首页与"待我处理"
 
@@ -126,7 +127,7 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 | 审核中 | 入驻（`useMySponsor` 的 `reviewStatus`）；`PENDING_REVIEW` 的发布；审核中的公开主页；审核中的共享视频 | 入驻现有；其余 **新模板列** `publicationsInReview`、`pageInReview`、`sharedVideosInReview` | 各自的页 |
 | 资料缺项 | `profile/checklist.ts`（纯函数，读各节已有的读取） | 现有，抽成 `useChecklist()` 与概况页共用 | `/profile`（概况） |
 | 赠送额度即将到期 | F-M2 的 `QbFeeCreditGrant`，天数复用 `qb.fee-credit.expiry-notice-days`（F-M2 计划，缺省 14） | **F-M2 加列** `creditsExpiring` | `/money/account` |
-| AI 额度不足 | F-M9 的 AI 额度 | **F-M9 加列** `aiCreditShort`；阈值见 §11 问题 2 | `/money/ai` |
+| AI 额度不足 | F-M9 的 AI 额度 | **F-M9 加列** `aiCreditShort`：可用额度不够再出一次题（F-M9 的单次最高费用估算）即提示，不设新数字（总控 2026-11-09） | `/money/ai` |
 | 共享视频台账待确认（提供方） | F-S14 `qb_video_use` 中提交给本人的 | **新模板列** `videoUsesToConfirm`（§11 决定 5） | `/assets/media`（我的视频的使用台账） |
 
 - **新模板** `qb.sponsor.todo`（`queries/qb/sponsor/todo.sql`，只读、一行、只给数目，权限同 `qb.sponsor.conversations-unread`（`qb.publication.write`），数据视图一律限本人，同其他 `qb.sponsor.*`）。阈值一律来自已有的规则与参数，模板与页面都不写数字；以后的项（F-M2、F-M9 与其他）各在自己的 PR 中加一列与一行文案。
@@ -174,7 +175,7 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 | F-C4 发起方包（S3，`1.3/quizbuks-fc4-sponsor-package`，未合入） | 概况加 `SponsorPackageCard`、发布列表加 `SubmitAllDraftsButton` | 发起方中心 → 概况页头"导入与导出"；发布 → 列表的 `actions` | 建议 F-C4 先合入；F-F3d 把卡片移到页头 |
 | F-S14 视频台账（S3，已合入 #571） | 发布页 `VideoUseSection`、资源库 `VideoUsesProvided` | 发布详情 → 费用；资源库 → 素材（不变） | F-F3c 移块 |
 | F-S13 曝光计数（已合入） | 发布页 `ExposureSection` | 发布详情 → 费用 | F-F3c |
-| F-C3 共享视频的资源库一侧（S3，草稿 #558） | 资源库页 | 资源库 → 素材 | 冲突在 `AssetsPage.tsx`；先合者为准，后合者合并 |
+| F-C3 共享视频的资源库一侧（S3，#558 已合并） | 资源库页 | 资源库 → 素材 | 已在基线中，随 F-F3a 一起挂到路由标签 |
 | F-S3 知识结构图界面 / F-S4 发起方答题点亮（S2，未开始） | 树页"正在更新" | 发布 → 结构图（`/publications/map`，"答题点亮"即 F-S4 的"挑战"也在这里，规格未决 3）；子页由 F-S3/F-S4 在 `/publications/map/…` 下自定 | 直接按新框架写 |
 | F-M1 平台费账户（S2，进行中）、F-M2 赠送、F-M13 账单收据 | 钱包页的块 | 资金 → 平台费账户 / 账单；待我处理加列 | F-M 计划 §3 已约定"F-F3 先搬，或我改后 S3 一起搬"：F-F3a 只把 `WalletPage` 拆成三个组件文件（`KudosWallet`、`CashAccount`、`Invoices` 已是独立函数），S2 在各自的组件里改 |
 | F-M4–M6 提交时的资金检查、配送费、受众规则费（S2） | 向导与 `settings.ts` | 向导不动；费用显示在发布详情 → 费用 | F-F3 不改向导 |
@@ -203,7 +204,7 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 |---|---|---|
 | **F-F3a 区域、地址与外框** | `shell/areas.ts`、`routes.tsx`、`legacy-paths.json` + `legacy.ts`（取代两张旧表）、`AreaPageHeader`；`AppShell` 换成新外框（收起成图标、全局新建、头像菜单、底部菜单 + 参数 `qb.sponsor.bottom-bar` 与模板 `qb.sponsor.layout`）；各页换区域页头（不搬文件）；资源库与消息改成路由标签；奖品、资金的新地址；`WalletPage` 拆成学分钱包 / 平台费账户 / 账单三个标签、AI 额度标签放用量卡；合作权益按 `benefit-access` 显示；Stripe 返回地址与邮件链接；`CLAUDE.md` 第 5 节；帮助 `sponsor-areas.md` 与各底稿的路径；`operations.md`；`glossary.md`；e2e 导航改写 + `sponsor-areas.spec.ts`（旧地址逐条、底部菜单、新建、头像菜单） | 2.5 天 |
 | **F-F3b 首页与待我处理** | 模板 `qb.sponsor.todo` + `SponsorTodoIT`；首页的待我处理、`useChecklist` 抽出；兑换的徽标；帮助中"首页"一句 | 1 天 |
-| **F-F3c 发布详情的标签** | §2.2 的 7 个标签与 `DetailPage` 右栏；`PublicationSummary` 拆块；`video-uses.md`、`exposure.md` 改为"费用"标签；e2e 中打开发布详情的断言 | 1 天 |
+| **F-F3c 发布详情的标签** | §2.2 的 7 个标签与 `DetailPage` 右栏；`PublicationSummary` 拆块；发起方的发布预览用同样的标签（共用 `PublicationContent`，F-F4 决定 ⑤）；`video-uses.md`、`exposure.md` 改为"费用"标签；e2e 中打开发布详情的断言 | 1 天 |
 | **F-F3d 模板、概况与验收** | 列表页 / 表单页模板套到其余页面、主按钮改 `primaryAction`、内容宽度；概况的完成度卡片与页头"导入与导出"（接 F-C4）；a11y：每个区域亮暗两种外观各一条 axe；360 px 每个区域无横向滚动；宽屏主按钮紧贴标题的断言 | 1–1.5 天 |
 
 合计 5.5–6 天。顺序：F-F5b 合入 → F-F3a →（b、c、d 可并行，各自合入最新的 a）。a 是冲突最集中的一个，开工前在进度表与给总控的消息中预告，合入后通知 S1、S2 新的路由表与区域页头的写法。
@@ -230,17 +231,18 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 6. **头像菜单在应用中组成**（`@jabiz/ui` 的下拉菜单与头像），不加平台组件：只有发起方页面需要。
 7. **Quiz 编辑器内部标签、发布向导不动**，避开 S1、S2 正在改的文件。
 
-问题（请总控 / 需求方定）：
-1. **"客户"标签放什么**："结构图上的人"随旧树去掉，现在没有页面。建议首次上线不显示该标签（路由预留），等有了客户列表再加；或者给出最小的"答过我的发布的学者"列表（另起一项，按 `userKey`、不给邮箱与用户编号）。
-2. **"AI 额度不足"的界线**：F-M9 计划没有低额度的阈值。建议不设新数字：可用额度不够再出一次题（F-M9 的单次最高费用估算）即提示；如需参数，由 F-M9 加 `qb.ai.credit.low-notice`。
-3. **"统计"放哪**：现在的统计是公开主页的访问与商品点击，照规格放"发布 → 统计"；更贴切的位置可能是"发起方中心 → 公开主页"下面。
-4. **区域名的日文、英文**：主催者センター / Sponsor hub、お客様とメッセージ / Customers & messages、景品と引き換え / Prizes 等（§2 表），请需求方看一遍。
-5. 规格未决 3 的其余落点（发起方的答题点亮在"发布 → 结构图"、AI 额度在"资金"、共享视频在"资源库 → 素材"）本计划照此做，仍待需求方确认。
+总控的答复（2026-11-09，计划已批准，拆分 a → b / c / d）：
+1. **"客户"标签**：首次上线不显示，不做新的客户列表；记为"以后"（本计划 §2 注 4 与规格 F-F3），菜单、路由、帮助都不指向它。
+2. **"AI 额度不足"的界线**：可用额度不够再出一次题即提示，不设新数字（F-M9 加列时照此）。
+3. **"统计"**：放"发起方中心 → 公开主页"下（`/profile/page/stats`，旧 `/stats` 转向）。
+4. **区域名的日文、英文**：照 §2 表，写进 `glossary.md`，并在 PR 中列出，需求方以后可改。
+5. 规格未决 3 的落点照本计划。
+6. §0 的三条行为改变都同意（尤其是发起方能看到自己的账单）。
 
 ## 12. 风险
 
 - **与其他会话的合并冲突**（最大的风险）。最容易冲突的文件：
-  `sponsor/src/App.tsx`（所有新页面都在这里加路由与菜单）、`sponsor/src/messages.ts` 与各功能的 `messages.ts`、`publishing/PublicationPage.tsx`（S2 的 F-M5–M8、S3 的后续）、`publishing/PublicationListPage.tsx`（F-C4）、`profile/OverviewPage.tsx` 与 `profile/paths.ts`（F-C4、F-C7、F-C11b、F-M2 的入驻赠送）、`wallet/WalletPage.tsx`（S2 的 F-M1/M2/M7/M9/M13）、`assets/AssetsPage.tsx`（F-C3 草稿 #558、F-C6）、`pages/DashboardPage.tsx` 与 `analytics/DashboardCharts.tsx`、`notices/MessagesPage.tsx`、`tree/TreePage.tsx`（F-S3）、`profile/ProfileLayout.tsx`、e2e 的 `support.ts` 与各 spec。
+  `sponsor/src/App.tsx`（所有新页面都在这里加路由与菜单）、`sponsor/src/messages.ts` 与各功能的 `messages.ts`、`publishing/PublicationPage.tsx`（S2 的 F-M5–M8、S3 的后续）、`publishing/PublicationListPage.tsx`（F-C4）、`profile/OverviewPage.tsx` 与 `profile/paths.ts`（F-C4、F-C7、F-C11b、F-M2 的入驻赠送）、`wallet/WalletPage.tsx`（S2 的 F-M1/M2/M7/M9/M13）、`assets/AssetsPage.tsx`（F-C6；F-C3 #558 已合并）、`pages/DashboardPage.tsx` 与 `analytics/DashboardCharts.tsx`、`notices/MessagesPage.tsx`、`tree/TreePage.tsx`（F-S3）、`profile/ProfileLayout.tsx`、e2e 的 `support.ts` 与各 spec。
   对策：页面文件不搬家，只换页头一处；路由与区域集中到 `shell/` 的新文件，以后的功能只加一行；`WalletPage` 按 F-M 计划的约定先拆成独立组件；F-F3a 尽快合入并通知；b、c、d 小而短。
 - **e2e 大面积改动**：先加 `openArea` 等辅助函数并一次改完；本机跑 `tools/quizbuks/e2e.sh`，跑不了的在 PR 中写明，CI 上连跑确认。
 - **Stripe 返回地址**：进行中的 Checkout（有效期内）返回旧地址，靠前缀转向带上 `?checkout=`；`sponsor/src/wallet/stripePage.ts` 的检查与轮询不变；e2e `topup`、`cash-account` 覆盖。
