@@ -31,6 +31,7 @@ import {
   type Pricing,
   type VideoUseRow,
 } from './api'
+import { VideoUseHistory } from './History'
 import { FiguresGrid, UseSummary, VideoUseBadge } from './parts'
 import './messages'
 
@@ -94,6 +95,7 @@ export function VideoUseSection({ publicationId }: { publicationId: string }) {
               {t('videoUses.confirmedNote', { revision: use.confirmedRevision })}</p>
           )}
           <UseSummary row={data} use={use} />
+          <VideoUseHistory side="user" use={use} userName={t('videoUses.you')} providerName={company} />
         </>
       )}
       <div className="flex flex-wrap gap-2">

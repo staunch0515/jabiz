@@ -3,8 +3,10 @@ import { TEMPLATE } from './ids'
 
 /*
  * F-S14: the ledger of shared videos' uses, read only (template `qb.admin.video-uses`;
- * docs/quizbuks/plans/impl/F-S14.md), typed by hand after the template. An operator's session reads its own Sponsors'
- * (the users') uses only (the server's scope). Each figure below the minimum group comes as none.
+ * docs/quizbuks/plans/impl/F-S14.md), typed by hand after the template, and the same as the providers' operators read it
+ * (`qb.admin.video-uses-provided`). An operator's session reads the uses of its own Sponsors, as users through the first
+ * and as providers through the second (the server's scope); headquarters reads every one through both. Each figure
+ * below the minimum group comes as none.
  */
 
 export type VideoUseStatus = 'DRAFT' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED'
@@ -12,6 +14,8 @@ export type Pricing = 'FIXED' | 'PER_MILLE' | 'PER_TAKER'
 
 /** A use: its two sides, its state and pricing, the figures and the reference amount. */
 export interface AdminVideoUse {
+  /** Through which read path it came: the users' operators' (`user`) or the providers' (`provider`); both for HQ. */
+  paths: ('user' | 'provider')[]
   videoUseId: string
   publicationId: string
   name: string | null
@@ -60,11 +64,25 @@ export function titleIn(values: Record<string, string>, language: string): strin
   return values[language.split('-')[0]] || values.en || Object.values(values).find((v) => !!v) || ''
 }
 
-/** The uses, last changed first (at most `limit`). */
+/** The uses through both read paths, each once, last changed first (at most `limit` a path). */
 export async function readVideoUses(limit = 200): Promise<AdminVideoUse[]> {
-  const answer = await runQuery<Row>(TEMPLATE.videoUses, { params: {}, limit,
-    sorts: [{ field: 'editedAt', asc: false }] })
-  return answer.items.map((row) => ({
+  const options = { params: {}, limit, sorts: [{ field: 'editedAt', asc: false }] }
+  const [users, providers] = await Promise.all([runQuery<Row>(TEMPLATE.videoUses, options),
+    runQuery<Row>(TEMPLATE.videoUsesProvided, options)])
+  const merged = new Map<string, AdminVideoUse>()
+  for (const [path, answer] of [['user', users], ['provider', providers]] as const) {
+    for (const row of answer.items) {
+      const use = toUse(row)
+      const known = merged.get(use.videoUseId)
+      if (known) known.paths.push(path)
+      else merged.set(use.videoUseId, { ...use, paths: [path] })
+    }
+  }
+  return [...merged.values()].sort((a, b) => (b.editedAt ?? '').localeCompare(a.editedAt ?? ''))
+}
+
+function toUse(row: Row): Omit<AdminVideoUse, 'paths'> {
+  return {
     videoUseId: String(row.videoUseId ?? ''),
     publicationId: String(row.publicationId ?? ''),
     name: text(row.name),
@@ -90,5 +108,50 @@ export async function readVideoUses(limit = 200): Promise<AdminVideoUse[]> {
     minGroup: Number(row.minGroup ?? 5),
     finalisedAt: text(row.finalisedAt),
     amount: count(row.amount),
+  }
+}
+
+/** One version of a use: who wrote it, by which act, when, and what the entry said then. */
+export interface AdminHistoryEntry {
+  versionNo: number
+  processName: string
+  actorId: string
+  recordedAt: string
+  status: VideoUseStatus
+  pricing: Pricing
+  price: number
+  periodFrom: string
+  periodTo: string
+  rejectReason: string | null
+  revision: number
+}
+
+/** Every version of a use, oldest first, through the path the page read it by. */
+export async function readVideoUseHistory(videoUseId: string, path: 'user' | 'provider'): Promise<AdminHistoryEntry[]> {
+  const answer = await runQuery<Row>(path === 'user' ? TEMPLATE.videoUseHistory : TEMPLATE.videoUseHistoryProvided,
+    { params: { videoUseId }, limit: 200 })
+  return answer.items.map((row) => ({
+    versionNo: Number(row.versionNo ?? 0),
+    processName: String(row.processName ?? ''),
+    actorId: String(row.actorId ?? ''),
+    recordedAt: String(row.recordedAt ?? ''),
+    status: String(row.status) as VideoUseStatus,
+    pricing: String(row.pricing) as Pricing,
+    price: Number(row.price ?? 0),
+    periodFrom: String(row.periodFrom ?? ''),
+    periodTo: String(row.periodTo ?? ''),
+    rejectReason: text(row.rejectReason),
+    revision: Number(row.revision ?? 0),
   }))
+}
+
+/** The act of a version from the process that wrote it. */
+export function actOf(processName: string, versionNo: number): 'CREATED' | 'CORRECTED' | 'SUBMITTED' | 'CONFIRMED'
+  | 'REJECTED' {
+  switch (processName) {
+    case 'QB_VIDEO_USE_SUBMIT': return 'SUBMITTED'
+    case 'QB_VIDEO_USE_CONFIRM': return 'CONFIRMED'
+    case 'QB_VIDEO_USE_REJECT': return 'REJECTED'
+    default: return versionNo <= 1 ? 'CREATED' : 'CORRECTED'
+  }
 }

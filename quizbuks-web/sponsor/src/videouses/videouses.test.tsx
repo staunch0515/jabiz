@@ -32,7 +32,7 @@ const USE = { videoUseId: 'use-1', status: 'DRAFT', periodFrom: '2026-11-01', pe
   confirmedRevision: null, rejectedAt: null, rejectReason: null, revision: 1 }
 
 /** The server: the two templates answer `rows`, the processes answer their output. */
-function serve(rows: Record<string, unknown>[]) {
+function serve(rows: Record<string, unknown>[], history: Record<string, unknown>[] = []) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input
@@ -40,6 +40,7 @@ function serve(rows: Record<string, unknown>[]) {
     const path = decodeURIComponent(new URL(request.url, window.location.origin).pathname)
     const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
     posted.push({ path, body })
+    if (path.includes('video-use-history')) return json(200, { items: history, offset: 0, limit: 200 })
     if (path.startsWith('/api/queries/')) return json(200, { items: rows, offset: 0, limit: 100 })
     if (path.startsWith('/api/processes/')) {
       return json(200, { output: { videoUseId: 'use-1', status: 'DRAFT', revision: 2 } })
@@ -183,6 +184,55 @@ describe("the provider's side of the ledger (F-S14)", () => {
     serve([])
     const { container } = wrap(<VideoUsesProvided />)
     expect(await screen.findByTestId('video-uses-provided-empty')).toBeInTheDocument()
+    await expectAccessible(container)
+  })
+})
+
+const HISTORY = [
+  { versionNo: 1, processName: 'QB_VIDEO_USE_SAVE', recordedAt: '2026-11-01T01:00:00Z', status: 'DRAFT',
+    pricing: 'FIXED', price: 50000, periodFrom: '2026-11-01', periodTo: '2026-11-30', rejectReason: null, revision: 1 },
+  { versionNo: 2, processName: 'QB_VIDEO_USE_SUBMIT', recordedAt: '2026-11-01T02:00:00Z', status: 'SUBMITTED',
+    pricing: 'FIXED', price: 50000, periodFrom: '2026-11-01', periodTo: '2026-11-30', rejectReason: null, revision: 2 },
+  { versionNo: 3, processName: 'QB_VIDEO_USE_REJECT', recordedAt: '2026-11-02T02:00:00Z', status: 'REJECTED',
+    pricing: 'FIXED', price: 50000, periodFrom: '2026-11-01', periodTo: '2026-11-30',
+    rejectReason: 'We agreed 60,000 yen', revision: 3 },
+  { versionNo: 4, processName: 'QB_VIDEO_USE_SAVE', recordedAt: '2026-11-03T02:00:00Z', status: 'DRAFT',
+    pricing: 'FIXED', price: 60000, periodFrom: '2026-11-01', periodTo: '2026-11-30',
+    rejectReason: 'We agreed 60,000 yen', revision: 4 },
+]
+
+describe('the history of a ledger entry (F-S14)', () => {
+  it('shows the user every version on request: the act, the side, the time and the reason sent back', async () => {
+    const posted = serve([row({ ...USE, status: 'DRAFT', revision: 4, pricing: 'FIXED', price: 60000,
+      rejectReason: 'We agreed 60,000 yen' })], HISTORY)
+    const user = userEvent.setup()
+    const { container } = wrap(<VideoUseSection publicationId="pub-1" />)
+    const toggle = await screen.findByTestId('video-use-history-toggle')
+    expect(screen.queryByTestId('video-use-history')).toBeNull()
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+    const entries = await screen.findAllByTestId('video-use-history-entry')
+    expect(entries.map((e) => e.dataset.act)).toEqual(['CREATED', 'SUBMITTED', 'REJECTED', 'CORRECTED'])
+    expect(entries[0]).toHaveTextContent('Written · You')
+    expect(entries[2]).toHaveTextContent('Sent back · Cat Co')
+    expect(within(entries[2]).getByTestId('video-use-history-reason')).toHaveTextContent('Reason: We agreed 60,000 yen')
+    expect(entries[3]).toHaveTextContent('60,000 yen')
+    expect(posted.find((p) => p.path === '/api/queries/qb.sponsor.video-use-history')?.body)
+      .toMatchObject({ params: { videoUseId: 'use-1' } })
+    await expectAccessible(container)
+  })
+
+  it('shows the provider the same history through its own side', async () => {
+    const posted = serve([row({ ...USE, status: 'REJECTED', revision: 3, pricing: 'FIXED', price: 50000,
+      submittedAt: '2026-11-01T02:00:00Z', rejectReason: 'We agreed 60,000 yen' })], HISTORY.slice(0, 3))
+    const user = userEvent.setup()
+    const { container } = wrap(<VideoUsesProvided />)
+    await user.click(await screen.findByTestId('video-use-history-toggle'))
+    const entries = await screen.findAllByTestId('video-use-history-entry')
+    expect(entries).toHaveLength(3)
+    expect(entries[0]).toHaveTextContent('Written · Bakery Co')
+    expect(entries[2]).toHaveTextContent('Sent back · You')
+    expect(posted.map((p) => p.path)).toContain('/api/queries/qb.sponsor.video-use-history-provided')
     await expectAccessible(container)
   })
 })

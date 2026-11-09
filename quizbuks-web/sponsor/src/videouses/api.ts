@@ -18,10 +18,17 @@ export const VIDEO_USE_PROCESS = {
 export const VIDEO_USE_TEMPLATE = {
   user: 'qb.sponsor.video-uses',
   provider: 'qb.sponsor.video-uses-provided',
+  userHistory: 'qb.sponsor.video-use-history',
+  providerHistory: 'qb.sponsor.video-use-history-provided',
 } as const
 
 export const videoUseQuery = (publicationId: string) => ['qb', 'video-uses', 'user', publicationId] as const
 export const PROVIDED_QUERY = ['qb', 'video-uses', 'provider'] as const
+export const historyQuery = (side: Side, videoUseId: string, revision: number) =>
+  ['qb', 'video-uses', 'history', side, videoUseId, revision] as const
+
+/** The two sides of a use: the Sponsor using the video and its provider. */
+export type Side = 'user' | 'provider'
 
 /** A use's states (`VideoUseRules.STATUSES`). */
 export type VideoUseStatus = 'DRAFT' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED'
@@ -178,4 +185,56 @@ export async function confirmVideoUse(videoUseId: string, baseRevision: number):
 
 export async function rejectVideoUse(videoUseId: string, reason: string, baseRevision: number): Promise<VideoUseOutput> {
   return runProcess<VideoUseOutput>(VIDEO_USE_PROCESS.reject, { videoUseId, reason, baseRevision })
+}
+
+/** The act that wrote a version (the process). */
+export type HistoryAct = 'CREATED' | 'CORRECTED' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED'
+
+/** One version of a use: the act, by which side, when, and what the entry said then. */
+export interface HistoryEntry {
+  versionNo: number
+  act: HistoryAct
+  /** The side that acted: the user writes and sends, the provider answers. */
+  by: Side
+  recordedAt: string
+  status: VideoUseStatus
+  pricing: Pricing
+  price: number
+  periodFrom: string
+  periodTo: string
+  rejectReason: string | null
+  revision: number
+}
+
+/** The act of a version from the process that wrote it (`VideoUseProcesses`). */
+export function actOf(processName: string, versionNo: number): HistoryAct {
+  switch (processName) {
+    case VIDEO_USE_PROCESS.submit: return 'SUBMITTED'
+    case VIDEO_USE_PROCESS.confirm: return 'CONFIRMED'
+    case VIDEO_USE_PROCESS.reject: return 'REJECTED'
+    default: return versionNo <= 1 ? 'CREATED' : 'CORRECTED'
+  }
+}
+
+/** Every version of a use, oldest first, as `side` reads it (the provider: once the user sent it). */
+export async function readHistory(side: Side, videoUseId: string): Promise<HistoryEntry[]> {
+  const page = await runQuery<Row>(side === 'user' ? VIDEO_USE_TEMPLATE.userHistory : VIDEO_USE_TEMPLATE.providerHistory,
+    { params: { videoUseId }, limit: 200 })
+  return page.items.map((row) => {
+    const versionNo = Number(row.versionNo ?? 0)
+    const act = actOf(String(row.processName ?? ''), versionNo)
+    return {
+      versionNo,
+      act,
+      by: act === 'CONFIRMED' || act === 'REJECTED' ? 'provider' : 'user',
+      recordedAt: String(row.recordedAt ?? ''),
+      status: String(row.status) as VideoUseStatus,
+      pricing: String(row.pricing) as Pricing,
+      price: Number(row.price ?? 0),
+      periodFrom: String(row.periodFrom ?? ''),
+      periodTo: String(row.periodTo ?? ''),
+      rejectReason: text(row.rejectReason),
+      revision: Number(row.revision ?? 0),
+    }
+  })
 }

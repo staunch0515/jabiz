@@ -73,6 +73,20 @@ const en = {
     rejected: 'Sent back to the Sponsor.',
     confirmNamed: 'Confirm the entry of {{name}}',
     rejectNamed: 'Send back the entry of {{name}}',
+    you: 'You',
+    history: {
+      title: 'History of the entry',
+      show: 'Show the history',
+      hide: 'Hide the history',
+      reason: 'Reason: {{reason}}',
+      act: {
+        CREATED: 'Written',
+        CORRECTED: 'Corrected',
+        SUBMITTED: 'Sent to the provider',
+        CONFIRMED: 'Confirmed',
+        REJECTED: 'Sent back',
+      },
+    },
   },
 }
 
@@ -147,6 +161,20 @@ const zh: typeof en = {
     rejected: '已拒绝，退回给对方。',
     confirmNamed: '确认 {{name}} 的台账',
     rejectNamed: '拒绝 {{name}} 的台账',
+    you: '你',
+    history: {
+      title: '台账的版本记录',
+      show: '查看版本记录',
+      hide: '收起版本记录',
+      reason: '原因：{{reason}}',
+      act: {
+        CREATED: '填写',
+        CORRECTED: '更正',
+        SUBMITTED: '提交给提供方',
+        CONFIRMED: '确认',
+        REJECTED: '拒绝',
+      },
+    },
   },
 }
 
@@ -221,6 +249,20 @@ const ja: typeof en = {
     rejected: '主催者に差し戻しました。',
     confirmNamed: '{{name}} の台帳を確認する',
     rejectNamed: '{{name}} の台帳を差し戻す',
+    you: 'あなた',
+    history: {
+      title: '台帳の履歴',
+      show: '履歴を表示',
+      hide: '履歴を閉じる',
+      reason: '理由：{{reason}}',
+      act: {
+        CREATED: '作成',
+        CORRECTED: '修正',
+        SUBMITTED: '提供者に提出',
+        CONFIRMED: '確認',
+        REJECTED: '差し戻し',
+      },
+    },
   },
 }
 

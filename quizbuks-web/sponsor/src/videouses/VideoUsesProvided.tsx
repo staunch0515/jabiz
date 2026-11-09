@@ -28,6 +28,7 @@ import {
   type VideoUse,
   type VideoUseRow,
 } from './api'
+import { VideoUseHistory } from './History'
 import { FiguresGrid, period, UseSummary, VideoUseBadge } from './parts'
 import './messages'
 
@@ -93,6 +94,8 @@ function ProvidedUse({ row }: { row: VideoUseRow }) {
               {t('videoUses.confirmedNote', { revision: use.confirmedRevision })}</p>
           )}
           <UseSummary row={row} use={use} />
+          <VideoUseHistory side="provider" use={use} userName={row.otherCompany ?? t('videoUses.noCompany')}
+            providerName={t('videoUses.you')} />
           {use.status === 'SUBMITTED' && (
             <div className="flex flex-wrap gap-2">
               <ConfirmDialog title={t('videoUses.confirmTitle')}

@@ -76,6 +76,10 @@ export const TEMPLATE = {
   exposureSuspicious: 'qb.admin.exposure-suspicious',
   /** F-S14: the ledger of shared videos' uses, read only (headquarters and the operators, scoped). */
   videoUses: 'qb.admin.video-uses',
+  /** F-S14: the same as the providers' operators read it, and the history of a use through each path. */
+  videoUsesProvided: 'qb.admin.video-uses-provided',
+  videoUseHistory: 'qb.admin.video-use-history',
+  videoUseHistoryProvided: 'qb.admin.video-use-history-provided',
   /** F-S12: the videos Sponsors share (headquarters every provider's, an operator its own Sponsors'). */
   sharedVideos: 'qb.admin.shared-videos',
   /** F-C3: the publications that went on with a shared video (an operator's own Sponsors' only). */

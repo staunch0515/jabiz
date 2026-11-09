@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -16,6 +17,8 @@ const server = vi.hoisted(() => ({
   permissions: new Set<string>(),
   runQuery: vi.fn(),
   rows: [] as Record<string, unknown>[],
+  provided: [] as Record<string, unknown>[],
+  history: [] as Record<string, unknown>[],
 }))
 
 vi.mock('@jabiz/admin', async (original) => {
@@ -43,8 +46,22 @@ beforeEach(() => {
   server.permissions = new Set([PERMISSION.videoUseRead])
   server.rows = [ROW, { ...ROW, videoUseId: 'use-2', status: 'REJECTED', rejectReason: 'Wrong price',
     confirmedRevision: null, finalisedAt: null, amount: null, successes: null }]
+  server.provided = []
+  server.history = [
+    { versionNo: '1', processName: 'QB_VIDEO_USE_SAVE', actorId: 'u-1', recordedAt: '2026-11-01T01:00:00Z',
+      status: 'DRAFT', pricing: 'PER_MILLE', price: '2000', periodFrom: '2026-11-01', periodTo: '2026-11-30',
+      rejectReason: null, revision: '1' },
+    { versionNo: '2', processName: 'QB_VIDEO_USE_SUBMIT', actorId: 'u-1', recordedAt: '2026-11-01T02:00:00Z',
+      status: 'SUBMITTED', pricing: 'PER_MILLE', price: '2000', periodFrom: '2026-11-01', periodTo: '2026-11-30',
+      rejectReason: null, revision: '2' },
+    { versionNo: '3', processName: 'QB_VIDEO_USE_REJECT', actorId: 'p-1', recordedAt: '2026-11-02T02:00:00Z',
+      status: 'REJECTED', pricing: 'PER_MILLE', price: '2000', periodFrom: '2026-11-01', periodTo: '2026-11-30',
+      rejectReason: 'Wrong price', revision: '3' },
+  ]
   server.runQuery.mockReset().mockImplementation(async (id: string) => ({
-    items: id === TEMPLATE.videoUses ? server.rows : [], offset: 0, limit: 200 }))
+    items: id === TEMPLATE.videoUses ? server.rows : id === TEMPLATE.videoUsesProvided ? server.provided
+      : id === TEMPLATE.videoUseHistory || id === TEMPLATE.videoUseHistoryProvided ? server.history : [],
+    offset: 0, limit: 200 }))
 })
 
 function renderPage() {
@@ -89,6 +106,28 @@ describe('the ledger of shared videos\' uses (F-S14)', () => {
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.videoUses, expect.objectContaining({
       sorts: [{ field: 'editedAt', asc: false }] }))
     await expectAccessible(container)
+  })
+
+  it('merges the providers\' operators\' path, each use once, and shows a use\'s history on request', async () => {
+    server.rows = [ROW]
+    server.provided = [{ ...ROW }, { ...ROW, videoUseId: 'use-3', name: 'Autumn quiz', editedAt: '2026-11-09T00:00:00Z' }]
+    const user = userEvent.setup()
+    const { container } = renderPage()
+    const rows = await screen.findAllByTestId('video-use-row')
+    expect(rows.map((r) => r.dataset.id)).toEqual(['use-3', 'use-1'])
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.videoUsesProvided, expect.anything())
+    await user.click(within(rows[1]).getByTestId('video-use-history-toggle'))
+    const entries = await screen.findAllByTestId('video-use-history-entry')
+    expect(entries.map((e) => e.dataset.act)).toEqual(['CREATED', 'SUBMITTED', 'REJECTED'])
+    expect(entries[2]).toHaveTextContent('name of p-1')
+    expect(within(entries[2]).getByTestId('video-use-history-reason')).toHaveTextContent('Sent back: Wrong price')
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.videoUseHistory, expect.objectContaining({
+      params: { videoUseId: 'use-1' } }))
+    await expectAccessible(container)
+    // A use only the providers' path brings reads its history through that path.
+    await user.click(within(rows[0]).getByTestId('video-use-history-toggle'))
+    await vi.waitFor(() => expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.videoUseHistoryProvided,
+      expect.objectContaining({ params: { videoUseId: 'use-3' } })))
   })
 
   it('says when there is none', async () => {
