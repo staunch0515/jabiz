@@ -344,8 +344,8 @@ export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110',
   '2160', '1130', '4120', '2150',
   // Q88b: the entry fees unsettled (until the daily job moves them to the sponsors' cash accounts).
   '2170',
-  // F-M1: the sponsors' granted credit (platform fee Kudos).
-  '2190'] as const
+  // F-M1: the sponsors' granted credit (platform fee Kudos); F-M2: its promotion expenses.
+  '2190', '5140'] as const
 
 /** A transfer still sending this long after it was created is in doubt (the backend's `STALE_AFTER`). */
 export const STALE_AFTER_MS = 60 * 60 * 1000

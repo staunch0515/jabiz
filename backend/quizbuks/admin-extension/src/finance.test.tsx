@@ -188,7 +188,7 @@ describe('FinanceOverviewPage', () => {
     expect(calledWith(TEMPLATE.financeSummary)[0][1].params.staleBefore).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     const accounts = await screen.findAllByTestId('finance-account')
     expect(accounts.map((row) => row.dataset.code)).toEqual(['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120',
-      '2160', '1130', '4120', '2150', '2170', '2190'])
+      '2160', '1130', '4120', '2150', '2170', '2190', '5140'])
     expect(accounts[3]).toHaveTextContent('1110 Stripe balance')
     // Q88b: the entry fees paid and not yet settled.
     expect(screen.getByTestId('finance-entry-fees')).toHaveTextContent('120')
