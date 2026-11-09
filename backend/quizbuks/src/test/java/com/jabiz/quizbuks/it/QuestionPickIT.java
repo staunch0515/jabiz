@@ -190,4 +190,119 @@ class QuestionPickIT extends PlayItSupport {
         assertThat(codes(refused(PublicationVersions.SWITCH, token, body("publicationId", live, "versionId",
             unequalVersion), 422))).containsExactly(PublishingCodes.SWITCH_PICK);
     }
+
+    /** F-S7: a version of five one-point questions, shuffled, each with the difficulty given (null: none). */
+    private String gradedVersion(String token, String title, String... levels) {
+        String quizId = newQuiz(token, title);
+        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", title, "timeLimitSec", 300,
+            "shuffleQuestions", true));
+        for (int i = 0; i < levels.length; i++) {
+            String[] parts = CAPITALS.get(i).split("\\|");
+            Map<String, Object> question = body("quizId", quizId, "stem", "Capital of " + parts[0] + "?", "points", 1,
+                "options", List.of(body("text", parts[1], "correct", true), body("text", parts[2])));
+            if (levels[i] != null) {
+                question.put("difficulty", levels[i]);
+            }
+            run("QB_QUESTION_SAVE", token, question);
+        }
+        return (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
+    }
+
+    private String stemOf(int no) {
+        return "Capital of " + CAPITALS.get(no - 1).split("\\|")[0] + "?";
+    }
+
+    /** F-S7 (§1): a shuffled quiz drawing three: the set is the taker's three in an order of their own, and stays. */
+    @Test
+    void aShuffledPickGivesTheTakersThreeInTheirOwnOrder() {
+        String sponsor = newSponsor("s-pick-order");
+        credit(sponsor, 10_000);
+        String token = sponsorToken(sponsor);
+        String versionId = gradedVersion(token, "Pick order quiz", null, null, null, null, null);
+        Map<String, Object> saved = run("QB_PUBLICATION_SAVE", token, pickingDraft(versionId, "Pick order"));
+        String publicationId = (String) saved.get("publicationId");
+        run("QB_PUBLICATION_SUBMIT", token, body("publicationId", publicationId));
+        Set<List<Integer>> orders = new HashSet<>();
+        boolean unsorted = false;
+        for (int i = 0; i < 8; i++) {
+            String taker = taker(newTaker("t-pick-order-" + i, "JP"));
+            Map<String, Object> started = start(taker, publicationId);
+            List<Integer> set = questionSet((String) started.get("attemptId"));
+            assertThat(set).hasSize(3).doesNotHaveDuplicates().allSatisfy(no -> assertThat(no).isBetween(1, 5));
+            // The taker sees them in the set's order, numbered by position.
+            List<Map<String, Object>> shown = questions(started);
+            assertThat(shown).extracting(q -> q.get("no")).containsExactly(1, 2, 3);
+            for (int q = 0; q < 3; q++) {
+                assertThat(shown.get(q).get("stem")).isEqualTo(stemOf(set.get(q)));
+            }
+            assertThat(questions(start(taker, publicationId))).isEqualTo(shown);
+            orders.add(set);
+            unsorted |= !set.equals(set.stream().sorted().toList());
+        }
+        assertThat(orders.size()).isGreaterThan(1);
+        // Eight takers' sets are not all in the version's order (the chance is (1/6)^8).
+        assertThat(unsorted).isTrue();
+    }
+
+    /**
+     * F-S7 (§2): one question of each difficulty; refused while a question has none or a level has too few, and a
+     * switch to a version that cannot give them.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aDrawByDifficultyTakesOneOfEachLevel() {
+        String sponsor = newSponsor("s-pick-levels");
+        credit(sponsor, 10_000);
+        String token = sponsorToken(sponsor);
+        // One question without a difficulty: refused.
+        String ungraded = gradedVersion(token, "Levels ungraded", "EASY", "EASY", "MEDIUM", "HARD", null);
+        Map<String, Object> draft = pickingDraft(ungraded, "Levels ungraded");
+        draft.remove("pickCount");
+        draft.put("pickByDifficulty", Map.of("EASY", 1, "MEDIUM", 1, "HARD", 1));
+        Map<String, Object> saved = run("QB_PUBLICATION_SAVE", token, draft);
+        assertThat(((List<Map<String, Object>>) saved.get("problems")).stream().map(p -> p.get("code")))
+            .contains(PublishingCodes.PICK_DIFFICULTY_UNSET);
+        assertThat(codes(refused("QB_PUBLICATION_SUBMIT", token, body("publicationId", saved.get("publicationId")),
+            422))).contains(PublishingCodes.PICK_DIFFICULTY_UNSET);
+
+        String versionId = gradedVersion(token, "Levels quiz", "EASY", "EASY", "MEDIUM", "HARD", "HARD");
+        // Three hard questions of two: refused.
+        Map<String, Object> tooHard = pickingDraft(versionId, "Levels too hard");
+        tooHard.remove("pickCount");
+        tooHard.put("pickByDifficulty", Map.of("HARD", 3));
+        Map<String, Object> savedTooHard = run("QB_PUBLICATION_SAVE", token, tooHard);
+        assertThat(((List<Map<String, Object>>) savedTooHard.get("problems")).stream().map(p -> p.get("code")))
+            .contains(PublishingCodes.PICK_DIFFICULTY_SHORT);
+
+        Map<String, Object> good = pickingDraft(versionId, "Levels");
+        good.remove("pickCount");
+        good.put("pickByDifficulty", Map.of("EASY", 1, "MEDIUM", 1, "HARD", 1));
+        Map<String, Object> savedGood = run("QB_PUBLICATION_SAVE", token, good);
+        assertThat(savedGood).containsEntry("fullScore", 3).containsEntry("problems", List.of());
+        String publicationId = (String) savedGood.get("publicationId");
+        run("QB_PUBLICATION_SUBMIT", token, body("publicationId", publicationId));
+        Map<String, Object> card = query("SELECT pick_count, pick_by_difficulty FROM qb_publication_card "
+            + "WHERE publication_id = ?::uuid", publicationId).getFirst();
+        assertThat(String.valueOf(card.get("pick_count"))).isEqualTo("3");
+        assertThat(card.get("pick_by_difficulty")).isEqualTo("{\"EASY\":1,\"MEDIUM\":1,\"HARD\":1}");
+        for (int i = 0; i < 6; i++) {
+            String taker = taker(newTaker("t-pick-levels-" + i, "JP"));
+            List<Integer> set = questionSet((String) start(taker, publicationId).get("attemptId"));
+            // Questions 1-2 are easy, 3 medium, 4-5 hard: one of each.
+            assertThat(set).hasSize(3).contains(3);
+            assertThat(set.stream().filter(no -> no <= 2)).hasSize(1);
+            assertThat(set.stream().filter(no -> no >= 4)).hasSize(1);
+        }
+
+        // A switch to a version without a medium question cannot give one: refused.
+        String quizId = String.valueOf(query("SELECT quiz_id FROM qb_quiz_version_version WHERE version_id = ?::uuid "
+            + "ORDER BY version_no DESC LIMIT 1", versionId).getFirst().get("quiz_id"));
+        String questionId = String.valueOf(query("SELECT question_id FROM qb_question_version WHERE quiz_id = ?::uuid "
+            + "AND difficulty = 'MEDIUM' ORDER BY version_no DESC LIMIT 1", quizId).getFirst().get("question_id"));
+        run("QB_QUESTION_DIFFICULTY_SET", token, body("quizId", quizId, "questionIds", List.of(questionId),
+            "difficulty", "HARD"));
+        String noMedium = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
+        assertThat(codes(refused(PublicationVersions.SWITCH, token, body("publicationId", publicationId, "versionId",
+            noMedium), 422))).containsExactly(PublishingCodes.SWITCH_PICK);
+    }
 }

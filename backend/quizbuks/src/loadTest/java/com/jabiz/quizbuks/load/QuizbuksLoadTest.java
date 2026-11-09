@@ -75,7 +75,9 @@ import java.util.regex.Pattern;
  * loop instead, every taker starting at its time whatever the others' answers took), {@code LOAD_READERS} (8),
  * {@code LOAD_BASELINE} (15s), {@code LOAD_SETUP_CONCURRENCY} (8), {@code LOAD_REWARD} (10), {@code LOAD_QUESTIONS}
  * (2: the quiz's questions, each with three options; a large bank makes the version's snapshot, and so the start, the
- * continuation and the submission, larger: launch checklist "性能"), {@code LOAD_CONTINUE} ({@code yes}: after its
+ * continuation and the submission, larger: launch checklist "性能"), {@code LOAD_DRAW} (F-S7: how many of them each
+ * taker is given, drawn at the start and shuffled: the publication's {@code pickCount}; none or 0 asks all of them,
+ * shuffled as every quiz is by default), {@code LOAD_CONTINUE} ({@code yes}: after its
  * start every taker opens the attempt again, {@code QB_ATTEMPT_START} on an attempt in progress, as reopening the
  * page does, measured apart; default no), {@code LOAD_LABEL}
  * (a heading for the run), {@code LOAD_REPORT} (a Markdown file to write), {@code LOAD_DB_URL} / {@code LOAD_DB_USER}
@@ -143,6 +145,12 @@ public final class QuizbuksLoadTest {
     private final boolean retryBusy = !"no".equals(env("LOAD_RETRY_BUSY", "yes"));
     /** The quiz's questions ({@code LOAD_QUESTIONS}, default 2), all answered right by every taker. */
     private final int questions = Integer.parseInt(env("LOAD_QUESTIONS", "2"));
+    /** F-S7: how many of the questions each taker is given (0: all of them). */
+    private final int draw = Integer.parseInt(env("LOAD_DRAW", "0"));
+    /** The questions an attempt is given: the draw, or every question. */
+    private int asked() {
+        return draw > 0 && draw < questions ? draw : questions;
+    }
     /** Whether every taker continues its attempt once before submitting ({@code LOAD_CONTINUE=yes}). */
     private final boolean continuing = "yes".equals(System.getenv("LOAD_CONTINUE"));
     /** Whether to read the application's meters ({@code LOAD_METRICS=yes}), from {@link #metricsUrl}. */
@@ -264,7 +272,8 @@ public final class QuizbuksLoadTest {
         line("");
         line("Target " + baseUrl + "; " + takers + " takers, " + (rate > 0 ? String.format(Locale.ROOT,
             "arriving at %.1f a second (open loop)", rate) : concurrency + " at a time") + ", each starting and "
-            + "submitting one attempt of one publication of " + questions + " question(s)" + (continuing
+            + "submitting one attempt of one publication of " + questions + " question(s)"
+            + (asked() < questions ? ", " + asked() + " drawn per taker" : "") + (continuing
             ? ", continuing it once in between" : "") + " (all answers right, reward " + reward + " each); " + readers
             + " readers of the feed and the publication's page; baseline of the readers alone " + baseline.toSeconds()
             + " s.");
@@ -845,11 +854,15 @@ public final class QuizbuksLoadTest {
         save.put("regions", List.of("GLOBAL"));
         save.put("startAt", now.minusSeconds(60).toString());
         save.put("endAt", now.plus(Duration.ofDays(1)).toString());
-        save.put("passScore", questions);
+        int asked = asked();
+        if (asked < questions) {
+            save.put("pickCount", asked);
+        }
+        save.put("passScore", asked);
         save.put("budgetCap", reward * (takers + 10));
         save.put("maxWinners", null);
-        save.put("tiers", List.of(Map.of("fromScore", 0, "toScore", questions - 1, "reward", 0), Map.of("fromScore",
-            questions, "toScore", questions, "reward", reward)));
+        save.put("tiers", List.of(Map.of("fromScore", 0, "toScore", asked - 1, "reward", 0), Map.of("fromScore",
+            asked, "toScore", asked, "reward", reward)));
         String publication = run(sponsor, "QB_PUBLICATION_SAVE", save).get("publicationId").asString();
         run(sponsor, "QB_PUBLICATION_SUBMIT", Map.of("publicationId", publication));
         String path = "/api/datasets/" + encode(PUBLICATIONS) + "/entities/" + publication;

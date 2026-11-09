@@ -362,7 +362,7 @@ steps:
     advanceClock: PT1H
   - actor: { id: "${a}", permissions: [qb.content.write, qb.publication.write] }
     process: QB_QUIZ_SAVE@latest
-    input: { title: World capitals, timeLimitSec: 300 }
+    input: { title: World capitals, timeLimitSec: 300, shuffleQuestions: false }
     save: { quiz: $.quizId }
   - actor: { id: "${a}", permissions: [qb.content.write] }
     process: QB_QUESTION_SAVE@latest

@@ -312,7 +312,18 @@ export function funnelOf(o: Overview): FunnelStage[] {
 }
 
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD'
-const DIFFICULTIES: readonly Difficulty[] = ['EASY', 'MEDIUM', 'HARD']
+export const DIFFICULTIES: readonly Difficulty[] = ['EASY', 'MEDIUM', 'HARD']
+
+/** F-S7: the right rate of the shown questions of each set difficulty: right answers over answers of those questions. */
+export function rateByDifficulty(questions: readonly QuestionFigures[]):
+  { difficulty: Difficulty; questions: number; rate: number }[] {
+  return DIFFICULTIES.flatMap((difficulty) => {
+    const shown = questions.filter((q) => q.difficulty === difficulty && !q.suppressed && q.completions)
+    const answers = shown.reduce((sum, q) => sum + (q.completions ?? 0), 0)
+    const right = shown.reduce((sum, q) => sum + (q.correct ?? 0), 0)
+    return answers > 0 ? [{ difficulty, questions: shown.length, rate: right / answers }] : []
+  })
+}
 
 /** A question of the publication (M-42); the figures are null while suppressed (fewer than k completions). */
 export interface QuestionFigures {
@@ -322,7 +333,12 @@ export interface QuestionFigures {
   completions: number | null
   correct: number | null
   correctRate: number | null
+  /** The difficulty its right rate shows (E-5; the template's `observedDifficulty`). */
+  observedDifficulty: Difficulty | null
+  /** F-S7: the difficulty the sponsor set on the question; null when none. */
   difficulty: Difficulty | null
+  /** F-S7: how many attempts were given it (null while suppressed). */
+  drawn: number | null
   suppressed: boolean
   basedOn: number
   minGroup: number
@@ -330,7 +346,8 @@ export interface QuestionFigures {
 }
 
 export function toQuestion(row: Row): QuestionFigures {
-  const difficulty = str(row.difficulty)
+  const observed = str(row.observedDifficulty)
+  const set = str(row.difficulty)
   const suppressed = bool(row.suppressed)
   return {
     questionNo: num(row.questionNo),
@@ -340,8 +357,11 @@ export function toQuestion(row: Row): QuestionFigures {
     completions: suppressed ? null : numOrNull(row.completions),
     correct: suppressed ? null : numOrNull(row.correct),
     correctRate: suppressed ? null : numOrNull(row.correctRate),
-    difficulty: !suppressed && difficulty && (DIFFICULTIES as readonly string[]).includes(difficulty)
-      ? (difficulty as Difficulty) : null,
+    observedDifficulty: !suppressed && observed && (DIFFICULTIES as readonly string[]).includes(observed)
+      ? (observed as Difficulty) : null,
+    // The sponsor's own setting, shown whatever the figures.
+    difficulty: set && (DIFFICULTIES as readonly string[]).includes(set) ? (set as Difficulty) : null,
+    drawn: suppressed ? null : numOrNull(row.drawn),
     suppressed,
     basedOn: num(row.basedOn),
     minGroup: num(row.minGroup),

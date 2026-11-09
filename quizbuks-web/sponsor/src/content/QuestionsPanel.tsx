@@ -69,6 +69,7 @@ import { BANK_LIMITS_QUERY, QUIZZES_QUERY } from './paths'
 import type { ContentLanguage } from '../qb/api'
 import { copiedAssetId, useAssetCopy, withAssets, type AssetCopy } from '../assets/copy'
 import { LibraryActions } from '../assets/LibraryActions'
+import { DifficultyDialog, DifficultyField, DifficultyFilter, setQuestionDifficulty, type Difficulty } from './Difficulty'
 
 interface OptionDraft {
   key: string
@@ -107,6 +108,8 @@ function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved,
   const [image, setImage] = useState<string | null>(question?.image ?? null)
   const [points, setPoints] = useState(String(question?.points ?? 1))
   const [selection, setSelection] = useState<Selection>(question?.selection ?? 'SINGLE')
+  // F-S7: a scored question's difficulty (a survey's questions are never drawn by it).
+  const [difficulty, setDifficulty] = useState<Difficulty | null>(question?.difficulty ?? null)
   const [options, setOptions] = useState<OptionDraft[]>(() => question
     ? question.options.map((o) => ({ key: o.optionId, optionId: o.optionId, text: o.text ?? '', image: o.image,
       correct: o.correct }))
@@ -137,7 +140,7 @@ function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved,
         ...withAssets({ imageAssetId: copiedAssetId(optionCopies[o.key] ?? null, o.image) }) })),
       ...withAssets({ imageAssetId: imageCopy.idFor(image) }),
       baseRevision: editing.revision(),
-      ...(survey ? { selection } : {}),
+      ...(survey ? { selection } : { difficulty: difficulty ?? '' }),
     }),
     onSuccess: async (output) => {
       onOpenChange(false)
@@ -220,6 +223,7 @@ function QuestionDialog({ question, number, survey, open, onOpenChange, onSaved,
             {pointsProblem && <p id={`${id}-points-error`} className="text-destructive text-sm">{pointsProblem}</p>}
           </div>
           )}
+          {!survey && <DifficultyField value={difficulty} onChange={setDifficulty} />}
           <fieldset className="flex flex-col gap-3">
             <legend className="mb-2 text-sm font-medium">{t('questions.options')}</legend>
             <p className="text-muted-foreground text-sm">
@@ -521,14 +525,17 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
   const [selected, setSelected] = useState<string[]>([])
   const [moving, setMoving] = useState<QuestionRow | null>(null)
   const [pointing, setPointing] = useState(false)
+  // F-S7: the list's filter by difficulty, and the dialog setting the selected questions' difficulty.
+  const [level, setLevel] = useState<Difficulty | 'NONE' | null>(null)
+  const [grading, setGrading] = useState(false)
   const [announcement, setAnnouncement] = useState('')
   const addRef = useRef<HTMLButtonElement>(null)
   const rowRefs = useRef(new Map<string, HTMLLIElement>())
   const limits = useQuery({ queryKey: BANK_LIMITS_QUERY, queryFn: readBankLimits, staleTime: 60_000 })
   const list = useQuery({
-    queryKey: [...QUIZZES_QUERY, 'questions', editing.quizId, search, page],
+    queryKey: [...QUIZZES_QUERY, 'questions', editing.quizId, search, page, level],
     queryFn: () => searchQuestions({ quizId: editing.quizId, search, offset: page * QUESTION_PAGE,
-      limit: QUESTION_PAGE }),
+      limit: QUESTION_PAGE, difficulty: level }),
     placeholderData: keepPreviousData,
   })
   const rows = list.data?.items ?? []
@@ -578,6 +585,17 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
       },
       (error: unknown) => failedRemoval(editing, error),
     )
+  const grade = useMutation({
+    mutationFn: ({ ids, value }: { ids: string[]; value: Difficulty | '' }) =>
+      setQuestionDifficulty(editing.quizId, ids, value, editing.revision()),
+    onSuccess: async (output, { ids }) => {
+      setGrading(false)
+      notify.success(t('bank.difficultySet', { count: ids.length }))
+      setSelected([])
+      await editing.edited(output)
+    },
+    onError: editing.failed,
+  })
   const points = useMutation({
     mutationFn: ({ ids, value }: { ids: string[]; value: number }) =>
       setQuestionPoints(editing.quizId, ids, value, editing.revision()),
@@ -603,7 +621,8 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
   /** Opens a question at its place (from 1): its page (unsearched), the row, scrolled to. */
   const open = (questionId: string, no: number) => {
     const index = no - 1
-    if (index >= 0 && (search || Math.floor(index / QUESTION_PAGE) !== page)) {
+    if (index >= 0 && (search || level || Math.floor(index / QUESTION_PAGE) !== page)) {
+      setLevel(null)
       setSearch('')
       setTyped('')
       setPage(Math.floor(index / QUESTION_PAGE))
@@ -666,6 +685,12 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
             <Search aria-hidden />
             {t('bank.searchButton')}
           </Button>
+          {!survey && (
+            <DifficultyFilter value={level} onChange={(next) => {
+              setLevel(next)
+              setPage(0)
+            }} />
+          )}
           {search && (
             <Button type="button" variant="ghost" data-testid="questions-search-clear" onClick={() => {
               setTyped('')
@@ -675,7 +700,7 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
               {t('bank.clearSearch')}
             </Button>
           )}
-          {search && list.data && (
+          {(search || level) && list.data && (
             <span role="status" className="text-muted-foreground text-sm" data-testid="questions-found">
               {t('bank.found', { count: total })}
             </span>
@@ -699,6 +724,15 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
                 {t('bank.pointsSelected')}
               </Button>
             )}
+            {!survey && (
+              <Button variant="outline" size="sm" disabled={busy || grade.isPending || editing.stale}
+                data-testid="bank-difficulty" onClick={() => {
+                  grade.reset()
+                  setGrading(true)
+                }}>
+                {t('bank.difficultySelected')}
+              </Button>
+            )}
             <ConfirmDialog destructive title={t('bank.deleteManyTitle', { count: selected.length })}
               description={t('bank.deleteManyText')} confirmLabel={t('editor.delete')} cancelLabel={t('common.cancel')}
               returnFocus={() => addRef.current} onConfirm={() => removeSelected(selected)}
@@ -716,7 +750,7 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
       )}
       {count === 0 && !list.data?.items.length
         ? <p className="text-muted-foreground text-sm" data-testid="questions-empty">{t('questions.none')}</p>
-        : search && list.data && rows.length === 0
+        : (search || level) && list.data && rows.length === 0
           ? <p className="text-muted-foreground text-sm" data-testid="questions-no-match">{t('bank.noMatch')}</p>
           : (
             <>
@@ -762,6 +796,11 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
                                 {row.stem?.split('\n')[0] ?? <span className="text-muted-foreground">{t('questions.noStem')}</span>}
                               </span>
                               <Badge variant="outline" data-testid="question-badge">{badge}</Badge>
+                              {!survey && row.difficulty && (
+                                <Badge variant="secondary" data-testid="question-difficulty-badge">
+                                  {t(`difficulty.levels.${row.difficulty}`)}
+                                </Badge>
+                              )}
                               <span className="text-muted-foreground text-xs" data-testid="question-option-count">
                                 {t('questions.optionCount', { count: row.optionCount })}
                               </span>
@@ -861,6 +900,7 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
             if (editingQuestion.question === null) {
               // A new question is the last: its page, unsearched.
               setSearch('')
+              setLevel(null)
               setTyped('')
               setPage(Math.floor(count / QUESTION_PAGE))
               setExpanded(id)
@@ -874,6 +914,10 @@ export function QuestionsPanel({ survey = false, language, count: quizCount }: {
           onMove={(to) => {
             if (to !== moving.no) move.mutate({ row: moving, to })
           }} />
+      )}
+      {grading && (
+        <DifficultyDialog count={selected.length} error={grade.error} pending={grade.isPending}
+          onClose={() => setGrading(false)} onSave={(value) => grade.mutate({ ids: selected, value })} />
       )}
       {pointing && (
         <PointsDialog count={selected.length} error={points.error} pending={points.isPending}

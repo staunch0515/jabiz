@@ -28,6 +28,8 @@ export interface Preview {
   questions: PreviewQuestion[]
   /** A quiz's draft has no publication yet: no reward, period or counts to show. */
   draft: boolean
+  /** F-S7: each taker gets the questions in an order of their own (the preview keeps the quiz's order). */
+  shuffled: boolean
 }
 
 type SnapshotMaterial = Snapshot['materials'][number]
@@ -109,6 +111,8 @@ export function publicationPreview(p: Publication, tiers: SponsorTier[], snapsho
   const video = videoOf(snapshot?.materials ?? [], p.sharedVideoId ? shared : null)
   return {
     draft: false,
+    // F-S7: a survey is never shuffled; a version says "fixed" when its questions keep their order.
+    shuffled: !!snapshot && snapshot.kind !== 'SURVEY' && snapshot.questionOrder !== 'fixed',
     video: video.player,
     videoVertical: video.vertical,
     tiers: tiers.map((tier, index) => ({ seq: index + 1, fromScore: tier.fromScore, toScore: tier.toScore,
@@ -156,6 +160,7 @@ export function draftPreview(draft: Draft, sponsor: Sponsor | null, now: Date = 
   const video = videoOf(draft.materials)
   return {
     draft: true,
+    shuffled: q.kind !== 'SURVEY' && q.shuffleQuestions !== false,
     video: video.player,
     videoVertical: video.vertical,
     tiers: [],

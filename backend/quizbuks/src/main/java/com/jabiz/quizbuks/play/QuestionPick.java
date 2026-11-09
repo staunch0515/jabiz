@@ -71,13 +71,19 @@ public final class QuestionPick {
      */
     public List<Integer> set(String userId, Object publicationId, QuizSnapshot snapshot,
         com.jabiz.runtime.EntityInstance card) {
-        Map<String, Integer> quotas = QuestionDifficulty.parseQuotas(card.get("pickByDifficulty"));
         Object count = card.get("pickCount");
+        return set(userId, publicationId, snapshot, count == null ? null : ((Number) count).intValue(),
+            QuestionDifficulty.parseQuotas(card.get("pickByDifficulty")));
+    }
+
+    /** As {@link #set(String, Object, QuizSnapshot, com.jabiz.runtime.EntityInstance)}, from the card's two values. */
+    public List<Integer> set(String userId, Object publicationId, QuizSnapshot snapshot, Integer pickCount,
+        Map<String, Integer> quotas) {
         List<Integer> drawn;
-        if (!quotas.isEmpty()) {
+        if (quotas != null && !quotas.isEmpty()) {
             drawn = pickByDifficulty(userId, publicationId, snapshot.questions(), quotas);
-        } else if (count != null) {
-            drawn = pick(userId, publicationId, snapshot.questions(), ((Number) count).intValue());
+        } else if (pickCount != null) {
+            drawn = pick(userId, publicationId, snapshot.questions(), pickCount);
         } else if (snapshot.shuffled()) {
             drawn = snapshot.questions().stream().map(QuizSnapshot.Question::no).toList();
         } else {

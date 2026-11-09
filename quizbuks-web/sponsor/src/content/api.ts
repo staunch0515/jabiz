@@ -311,6 +311,10 @@ export interface VersionRow {
   /** F-S9: the version's topics, which its publications inherit (none from the one-version template). */
   topics?: string[]
   customTopics?: string[]
+  /** F-S7: whether its questions are shuffled for each Taker (none from the one-version template: see its content). */
+  shuffled?: boolean
+  /** F-S7: how many of its questions are of each difficulty (the rest have none). */
+  difficultyCounts?: Record<Difficulty, number>
 }
 
 type SnapshotMaterial = {
@@ -644,6 +648,9 @@ function toVersionRow(row: Row): VersionRow {
     foreignVideo: foreignVideo(linksOf(row.videoLinks), mainlandSites(paramText(row.mainlandSites))),
     topics: codesOf(row.topics),
     customTopics: customOf(row.customTopics),
+    ...(row.shuffled === undefined ? {} : { shuffled: bool(row.shuffled) }),
+    ...(row.easyCount === undefined ? {} : { difficultyCounts: { EASY: num(row.easyCount),
+      MEDIUM: num(row.mediumCount), HARD: num(row.hardCount) } }),
   }
 }
 

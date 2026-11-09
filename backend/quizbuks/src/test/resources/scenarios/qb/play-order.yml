@@ -1,0 +1,537 @@
+# Question order and difficulty (docs/quizbuks/plans/impl/F-S7.md): QB_SETUP as in play.yml. Sponsor A's quiz of six
+# questions of one point, two of each difficulty, keeps the default: its questions are shuffled for each taker (A2-14).
+# One publication asks all six, each taker in an order of their own (U1's and U2's differ; the result keeps the
+# version's numbers); another draws one question of each difficulty (pickCount 3, full score 3), shuffled too. A draw
+# of more hard questions than the version has is refused (PICK_DIFFICULTY_SHORT); a question without a difficulty
+# stops a draw by difficulty (PICK_DIFFICULTY_UNSET) until it has one.
+name: Question order and difficulty
+# The jobs run within the replay's few seconds: the cluster lock must not outlast a run.
+properties:
+  jabiz.jobs.lock-at-least-for: 0s
+clock: 2026-10-01T00:00:00Z
+actor: { id: installer, permissions: ["*"] }
+steps:
+  - process: QB_SETUP@latest
+    input: {}
+    save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
+      p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
+      p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",
+      p14: "$.proposals[13]", p15: "$.proposals[14]", p16: "$.proposals[15]", p17: "$.proposals[16]",
+      p18: "$.proposals[17]", p19: "$.proposals[18]", p20: "$.proposals[19]", p21: "$.proposals[20]",
+      p22: "$.proposals[21]", p23: "$.proposals[22]", p24: "$.proposals[23]",
+      p25: "$.proposals[24]", p26: "$.proposals[25]", p27: "$.proposals[26]", p28: "$.proposals[27]",
+      p29: "$.proposals[28]", p30: "$.proposals[29]", p31: "$.proposals[30]",
+      p32: "$.proposals[31]", p33: "$.proposals[32]", p34: "$.proposals[33]",
+      p35: "$.proposals[34]", p36: "$.proposals[35]", p37: "$.proposals[36]", p38: "$.proposals[37]",
+      p39: "$.proposals[38]", p40: "$.proposals[39]", p41: "$.proposals[40]", p42: "$.proposals[41]",
+      p43: "$.proposals[42]", p44: "$.proposals[43]", p45: "$.proposals[44]", p46: "$.proposals[45]", p47: "$.proposals[46]",
+      p48: "$.proposals[47]", p49: "$.proposals[48]",
+      p50: "$.proposals[49]", p51: "$.proposals[50]", p52: "$.proposals[51]", p53: "$.proposals[52]", p54: "$.proposals[53]", p55: "$.proposals[54]", p56: "$.proposals[55]", p57: "$.proposals[56]", p58: "$.proposals[57]",
+      p59: "$.proposals[58]", p60: "$.proposals[59]", p61: "$.proposals[60]", p62: "$.proposals[61]", p63: "$.proposals[62]", p64: "$.proposals[63]", p65: "$.proposals[64]",
+      p66: "$.proposals[65]", p67: "$.proposals[66]", p68: "$.proposals[67]", p69: "$.proposals[68]", p70: "$.proposals[69]", p71: "$.proposals[70]", p72: "$.proposals[71]",
+      p73: "$.proposals[72]", p74: "$.proposals[73]", p75: "$.proposals[74]", p76: "$.proposals[75]", p77: "$.proposals[76]", p78: "$.proposals[77]", p79: "$.proposals[78]", p80: "$.proposals[79]", p81: "$.proposals[80]", p82: "$.proposals[81]", p83: "$.proposals[82]", p84: "$.proposals[83]", p85: "$.proposals[84]", p86: "$.proposals[85]", p87: "$.proposals[86]", p88: "$.proposals[87]", p89: "$.proposals[88]", p90: "$.proposals[89]", p91: "$.proposals[90]" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p1}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p2}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p3}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p4}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p5}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p6}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p7}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p8}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p9}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p10}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p11}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p12}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p13}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p14}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p15}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p16}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p17}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p18}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p19}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p20}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p21}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p22}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p23}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p24}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p25}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p26}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p27}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p28}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p29}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p30}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p31}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p32}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p33}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p34}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p35}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p36}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p37}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p38}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p39}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p40}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p41}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p42}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p43}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p44}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p45}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p46}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p47}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p48}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p49}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p50}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p51}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p52}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p53}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p54}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p55}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p56}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p57}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p58}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p59}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p60}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p61}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p62}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p63}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p64}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p65}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p66}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p67}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p68}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p69}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p70}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p71}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p72}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p73}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p74}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p75}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p76}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p77}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p78}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p79}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p80}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p81}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p82}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p83}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p84}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p85}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p86}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p87}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p88}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p89}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p90}" }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${p91}" }
+  - note: Publications go on without a review (the controlled switch, four eyes).
+    actor: { id: super-admin, permissions: [control.propose] }
+    process: CONTROL_CHANGE_PROPOSE@latest
+    input: { targetEntity: SysParam, values: { paramKey: qb.review.publication.auto, value: "true" },
+      reason: Review switch }
+    save: { auto: $.changeId }
+  - process: CONTROL_CHANGE_PUBLISH@latest
+    actor: { id: publisher, permissions: [control.publish] }
+    input: { changeId: "${auto}" }
+
+  - note: The people, created by an administrator.
+    process: SEC_USER_CREATE@latest
+    input: { userName: alice, displayName: Alice, email: alice@example.com }
+    save: { a: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u1, displayName: Ume, email: u1@example.com }
+    save: { u1: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u2, displayName: Ken, email: u2@example.com }
+    save: { u2: $.userId }
+  - process: SEC_USER_CREATE@latest
+    input: { userName: u3, displayName: Mio, email: u3@example.com }
+    save: { u3: $.userId }
+  - actor: { id: "${u1}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ume, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u2}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Ken, countryCode: JP, preferredCurrency: JPY }
+  - actor: { id: "${u3}", permissions: [qb.me] }
+    process: QB_PROFILE_SAVE@latest
+    input: { displayName: Mio, countryCode: JP, preferredCurrency: JPY }
+
+  - note: The platform's administrator creates the default operator with its lead, its own sponsor (F-S1).
+    actor: { id: installer, permissions: ["*"], mfa: true }
+    process: SEC_USER_CREATE@latest
+    input: { userName: operator-lead, displayName: Operator lead, email: operator-lead@example.com }
+    save: { operatorLead: $.userId }
+  - verifyEmail: "${operatorLead}"
+  - actor: { id: operators-admin, permissions: [qb.admin.operators.write] }
+    process: QB_OPERATOR_SAVE@latest
+    input: { name: QuizBuks, contactName: QuizBuks, contactEmail: support@quizbuks.example,
+      leadUserId: "${operatorLead}", defaultForNew: true }
+
+  - note: Sponsor A is onboarded (Q2); a content administrator approves.
+    actor: { id: "${a}", permissions: [qb.sponsor.me] }
+    process: QB_SPONSOR_APPLY@latest
+    input: { displayName: Alice, company: Capitals Inc, acceptTerms: true }
+    save: { onboarding: $.approvalRequestId }
+  - actor: { id: content-admin, permissions: [qb.review.sponsor, approval.decide] }
+    process: APPROVAL_DECIDE@latest
+    input: { requestId: "${onboarding}", decision: APPROVE }
+  - deliverEvents: true
+
+  - note: A's quiz, shuffled by default; six questions of one point, two of each difficulty.
+    advanceClock: PT1H
+  - actor: { id: "${a}", permissions: [qb.content.write, qb.publication.write] }
+    process: QB_QUIZ_SAVE@latest
+    input: { title: Numbers, timeLimitSec: 300 }
+    save: { quiz: $.quizId }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: One?, points: 1, difficulty: EASY,
+      options: [{ text: "1", correct: true }, { text: "11" }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Two?, points: 1, difficulty: EASY,
+      options: [{ text: "2", correct: true }, { text: "22" }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Three?, points: 1, difficulty: MEDIUM,
+      options: [{ text: "3", correct: true }, { text: "33" }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Four?, points: 1, difficulty: MEDIUM,
+      options: [{ text: "4", correct: true }, { text: "44" }] }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Five?, points: 1, difficulty: HARD,
+      options: [{ text: "5", correct: true }, { text: "55" }] }
+  - note: The sixth has no difficulty yet.
+    actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_SAVE@latest
+    input: { quizId: "${quiz}", stem: Six?, points: 1,
+      options: [{ text: "6", correct: true }, { text: "66" }] }
+    save: { six: $.itemId }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUIZ_PUBLISH_VERSION@latest
+    input: { quizId: "${quiz}" }
+    save: { v1: $.versionId }
+
+  - note: A draw by difficulty is refused while a question has none.
+    actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      versionId: "${v1}"
+      name: One of each
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 3
+      budgetCap: 20000
+      maxWinners: 100
+      pickByDifficulty: { EASY: 1, MEDIUM: 1, HARD: 1 }
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 3, reward: 10 }
+    save: { drawn: $.publicationId }
+  - expectError:
+      actor: { id: "${a}", permissions: [qb.publication.write] }
+      process: QB_PUBLICATION_SUBMIT@latest
+      input: { publicationId: "${drawn}" }
+      status: 422
+      ruleCode: QB_PUBLICATION_PICK_DIFFICULTY_UNSET
+
+  - note: The sixth is made hard (in bulk, as the editor does) and a second version saved.
+    actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUESTION_DIFFICULTY_SET@latest
+    input: { quizId: "${quiz}", questionIds: ["${six}"], difficulty: HARD }
+  - actor: { id: "${a}", permissions: [qb.content.write] }
+    process: QB_QUIZ_PUBLISH_VERSION@latest
+    input: { quizId: "${quiz}" }
+    save: { v2: $.versionId }
+
+  - note: Three hard questions are more than the version has.
+    actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      versionId: "${v2}"
+      name: Too hard
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 3
+      budgetCap: 20000
+      maxWinners: 100
+      pickByDifficulty: { HARD: 3 }
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 3, reward: 10 }
+    save: { tooHard: $.publicationId }
+  - expectError:
+      actor: { id: "${a}", permissions: [qb.publication.write] }
+      process: QB_PUBLICATION_SUBMIT@latest
+      input: { publicationId: "${tooHard}" }
+      status: 422
+      ruleCode: QB_PUBLICATION_PICK_DIFFICULTY_SHORT
+
+  - note: One of each difficulty from the second version; and all six, shuffled.
+    actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      publicationId: "${drawn}"
+      versionId: "${v2}"
+      name: One of each
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 3
+      budgetCap: 20000
+      maxWinners: 100
+      pickByDifficulty: { EASY: 1, MEDIUM: 1, HARD: 1 }
+      tiers:
+        - { fromScore: 0, toScore: 2, reward: 0 }
+        - { fromScore: 3, toScore: 3, reward: 10 }
+    expectOutput: { problems: [] }
+  - expect: { entity: QbPublication, id: "${drawn}", fields: { pickCount: 3 } }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SUBMIT@latest
+    input: { publicationId: "${drawn}" }
+    expectOutput: { status: LIVE, approval: NOT_REQUIRED }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SAVE@latest
+    input:
+      versionId: "${v2}"
+      name: All six
+      regions: [JP, ASIA]
+      startAt: 2026-10-01T01:00:00Z
+      endAt: 2026-10-08T00:00:00Z
+      passScore: 6
+      budgetCap: 20000
+      maxWinners: 100
+      tiers:
+        - { fromScore: 0, toScore: 5, reward: 0 }
+        - { fromScore: 6, toScore: 6, reward: 10 }
+    expectOutput: { problems: [] }
+    save: { all: $.publicationId }
+  - actor: { id: "${a}", permissions: [qb.publication.write] }
+    process: QB_PUBLICATION_SUBMIT@latest
+    input: { publicationId: "${all}" }
+    expectOutput: { status: LIVE, approval: NOT_REQUIRED }
+  - process: QB_WALLET_DEV_CREDIT@latest
+    input: { sponsorId: "${a}", amount: 100 }
+    expectOutput: { balance: 100 }
+
+  - note: U1 and U2 each get the six questions in an order of their own (the snapshot shows both).
+    advanceClock: PT5M
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${all}" }
+    expectOutput: { status: IN_PROGRESS, resumed: false }
+    save: { u1all: $.attemptId }
+  - actor: { id: "${u2}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${all}" }
+    save: { u2all: $.attemptId }
+  - note: Continuing gives the same order.
+    actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${all}" }
+    expectOutput: { attemptId: "${u1all}", resumed: true }
+  - note: U1 answers the first option of every place; the result names the version's numbers.
+    advanceClock: PT1M
+  - actor: { id: "${u1}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${u1all}", publicationId: "${all}", answers: [{ questionNo: 1, selected: [1] },
+      { questionNo: 2, selected: [1] }, { questionNo: 3, selected: [1] }, { questionNo: 4, selected: [1] },
+      { questionNo: 5, selected: [1] }, { questionNo: 6, selected: [1] }] }
+    expectOutput: { status: SUBMITTED }
+
+  - note: U3 is given one question of each difficulty, in an order of their own.
+    actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_START@latest
+    input: { publicationId: "${drawn}" }
+    expectOutput: { status: IN_PROGRESS, resumed: false }
+    save: { u3drawn: $.attemptId }
+  - advanceClock: PT1M
+  - actor: { id: "${u3}", permissions: [qb.play, qb.me] }
+    process: QB_ATTEMPT_SUBMIT@latest
+    input: { attemptId: "${u3drawn}", publicationId: "${drawn}", answers: [{ questionNo: 1, selected: [1] },
+      { questionNo: 2, selected: [1] }, { questionNo: 3, selected: [1] }] }
+    expectOutput: { status: SUBMITTED }
