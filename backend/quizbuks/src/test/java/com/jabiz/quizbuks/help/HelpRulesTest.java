@@ -18,6 +18,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 class HelpRulesTest {
 
     @Test
+    void cacheReadsCountTheirWeightTowardsTheMonthlyTokensWithinZeroAndOne() {
+        // F-C10b: declared 0.1; 30,000 cache reads of 32,100 input tokens count 3,000.
+        HelpSettings none = HelpSettings.of(null);
+        assertThat(none.cacheReadWeight()).isEqualByComparingTo("0.10");
+        assertThat(none.counted(32_100, 50, 30_000)).isEqualTo(2_100 + 3_000 + 50);
+        // Rounded up; never more cache reads than input.
+        assertThat(none.counted(10, 0, 5)).isEqualTo(5 + 1);
+        assertThat(none.counted(10, 0, 50)).isEqualTo(1);
+        assertThat(HelpSettings.of(new ParamValues(Instant.EPOCH, Map.of(QbParams.HELP_CACHE_READ_WEIGHT,
+            new BigDecimal("1")))).counted(100, 10, 60)).isEqualTo(110);
+        assertThat(HelpSettings.of(new ParamValues(Instant.EPOCH, Map.of(QbParams.HELP_CACHE_READ_WEIGHT,
+            new BigDecimal("7")))).cacheReadWeight()).isEqualByComparingTo("1");
+        assertThat(HelpSettings.of(new ParamValues(Instant.EPOCH, Map.of(QbParams.HELP_CACHE_READ_WEIGHT,
+            new BigDecimal("-0.5")))).counted(100, 0, 100)).isZero();
+    }
+
+    @Test
     void theSettingsAreTheirDeclaredValuesUntilSetAndTheSwitchIsOff() {
         HelpSettings none = HelpSettings.of(null);
         assertThat(none.enabled()).isFalse();

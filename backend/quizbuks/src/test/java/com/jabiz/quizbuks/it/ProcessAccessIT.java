@@ -187,6 +187,9 @@ class ProcessAccessIT extends QbItSupport {
         // F-C10: the AI help's job outcomes, its daily items and the usage check.
         Map.entry("QB_HELP_JOB_COMPLETED", ProcessAccess.INTERNAL),
         Map.entry("QB_HELP_JOB_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_MATERIALS_BUILD", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_MATERIALS_NOT_STORED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_MATERIALS_STORED", ProcessAccess.INTERNAL),
         Map.entry("QB_HELP_JOB_CANCELLED", ProcessAccess.INTERNAL),
         Map.entry("QB_HELP_RETENTION", ProcessAccess.INTERNAL),
         Map.entry("QB_HELP_AUTO_CLOSE", ProcessAccess.INTERNAL),

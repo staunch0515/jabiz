@@ -16,7 +16,7 @@ import java.math.RoundingMode;
  */
 public record HelpSettings(boolean enabled, String model, int userDaily, long globalMonthlyTokens, int historyTurns,
     int retentionDays, long manualMaxBytes, int pollSeconds, int pollMaxMinutes, int remindDays, int autoCloseDays,
-    int questionMaxLength, int answerMaxLength, int maxLinks) {
+    int questionMaxLength, int answerMaxLength, int maxLinks, BigDecimal cacheReadWeight) {
 
     /** The most turns sent with a question, whatever the parameter says. */
     public static final int MAX_HISTORY_TURNS = 20;
@@ -37,7 +37,28 @@ public record HelpSettings(boolean enabled, String model, int userDaily, long gl
             (int) Math.clamp(number(params, QbParams.HELP_AUTO_CLOSE_DAYS), 1, 3650),
             (int) Math.clamp(number(params, QbParams.HELP_QUESTION_MAX_LENGTH), 100, QbHelp.TEXT_LENGTH),
             (int) Math.clamp(number(params, QbParams.HELP_ANSWER_MAX_LENGTH), 500, QbHelp.ANSWER_LENGTH),
-            (int) Math.clamp(number(params, QbParams.HELP_MAX_LINKS), 0, HelpAnswers.MAX_LINKS));
+            (int) Math.clamp(number(params, QbParams.HELP_MAX_LINKS), 0, HelpAnswers.MAX_LINKS),
+            weight(params, QbParams.HELP_CACHE_READ_WEIGHT));
+    }
+
+    /**
+     * The tokens a usage row counts towards {@code qb.help.global-monthly-tokens} (F-C10b): every output token and
+     * input token, except that one read from the prompt cache counts {@code qb.help.cache-read-weight} (rounded up).
+     */
+    public long counted(long inputTokens, long outputTokens, long cacheReadTokens) {
+        long read = Math.clamp(cacheReadTokens, 0, Math.max(0, inputTokens));
+        long weighted = cacheReadWeight.multiply(BigDecimal.valueOf(read)).setScale(0, RoundingMode.CEILING)
+            .longValue();
+        return inputTokens - read + weighted + outputTokens;
+    }
+
+    /** A weight between 0 and 1 a parameter gives; its declared value while it is not there. */
+    static BigDecimal weight(ParamValues params, String key) {
+        BigDecimal value = params == null ? null : params.find(key, BigDecimal.class).orElse(null);
+        if (value == null) {
+            value = new BigDecimal(QbParams.defaultOf(key));
+        }
+        return value.max(BigDecimal.ZERO).min(BigDecimal.ONE);
     }
 
     /** A whole, non-negative number a parameter gives; its declared value while it is not there. */

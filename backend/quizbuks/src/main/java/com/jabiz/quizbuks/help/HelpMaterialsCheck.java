@@ -23,8 +23,8 @@ import java.util.Map;
  * The AI help's materials fit {@code qb.help.manual-max-bytes} (F-C10, startup check {@value #LOCATION}, an error): the
  * published FAQ, terms and manual of one entry and language go into every request of it, so materials above the limit
  * would make every question cost more than planned, or not fit at all. The materials are read by the
- * {@link HelpMaterials} beans (part b registers the manuals' and the snapshot's); without any, nothing is read and
- * nothing is reported. The limit is the parameter in effect, its declared value before the setup.
+ * {@link HelpMaterials} beans (F-C10b registers the snapshots' reader: each entry's and language's latest build,
+ * stored or not); without any, nothing is read and nothing is reported. The limit is the parameter in effect, its declared value before the setup.
  *
  * <p>Reads the database itself (JDBC with Flyway's connection settings, as {@code SetupParamsCheck} does), never on
  * the request path; without a database address it is skipped.
@@ -53,19 +53,15 @@ public class HelpMaterialsCheck implements PlatformCheck {
     @Override
     public List<CheckProblem> check() {
         List<HelpMaterials> all = readers.orderedStream().toList();
-        String url = environment.getProperty("spring.flyway.url");
-        if (all.isEmpty() || url == null || url.isBlank()) {
+        if (all.isEmpty()) {
             return List.of();
         }
         long limit;
         List<Materials> materials = new ArrayList<>();
-        try (Connection connection = DriverManager.getConnection(url, environment.getProperty("spring.flyway.user"),
-            environment.getProperty("spring.flyway.password"))) {
-            String schema = schema();
-            if (schema != null) {
-                connection.setSchema(schema);
+        try (Connection connection = connect(environment)) {
+            if (connection == null) {
+                return List.of();
             }
-            connection.setReadOnly(true);
             limit = limit(connection);
             for (HelpMaterials reader : all) {
                 materials.addAll(reader.read(connection));
@@ -113,7 +109,31 @@ public class HelpMaterialsCheck implements PlatformCheck {
         return Long.parseLong(QbParams.defaultOf(QbParams.HELP_MANUAL_MAX_BYTES));
     }
 
-    private String schema() {
+    /**
+     * A read-only connection with Flyway's settings, on its schema; null without a database address (the check is
+     * skipped). Shared by the help's other startup checks.
+     */
+    static Connection connect(Environment environment) throws SQLException {
+        String url = environment.getProperty("spring.flyway.url");
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        Connection connection = DriverManager.getConnection(url, environment.getProperty("spring.flyway.user"),
+            environment.getProperty("spring.flyway.password"));
+        try {
+            String schema = schema(environment);
+            if (schema != null) {
+                connection.setSchema(schema);
+            }
+            connection.setReadOnly(true);
+            return connection;
+        } catch (SQLException | RuntimeException e) {
+            connection.close();
+            throw e;
+        }
+    }
+
+    private static String schema(Environment environment) {
         String schema = environment.getProperty("spring.flyway.default-schema");
         if (schema == null || schema.isBlank()) {
             String schemas = environment.getProperty("spring.flyway.schemas");

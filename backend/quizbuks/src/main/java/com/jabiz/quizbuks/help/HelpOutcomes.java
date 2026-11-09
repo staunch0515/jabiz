@@ -135,7 +135,8 @@ public final class HelpOutcomes {
             .step("Take everybody's usage", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbHelp.usageLock(QbHelp.EVERYBODY)))
             .step("Load the monthly tokens and the answers' limits", LoadParams.<ProcessContext>optional(
-                ProcessContext::opTime, PARAMS, QbParams.HELP_GLOBAL_MONTHLY_TOKENS, QbParams.HELP_ANSWER_MAX_LENGTH,
+                ProcessContext::opTime, PARAMS, QbParams.HELP_GLOBAL_MONTHLY_TOKENS, QbParams.HELP_CACHE_READ_WEIGHT,
+                QbParams.HELP_ANSWER_MAX_LENGTH,
                 QbParams.HELP_MAX_LINKS))
             .step("Load the question and the usage", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbHelp.defaultDataset(QbHelp.THREAD),
@@ -167,7 +168,7 @@ public final class HelpOutcomes {
         ClaudeApi.Usage usage = outcome.attemptRan()
             ? charged(outcome.usage(), outcome.unrecordedAttempts(), model, reserved) : new ClaudeApi.Usage(0, 0);
         String servedModel = served(ctx);
-        BigDecimal cost = model == null ? null : AiCost.of(model, servedModel, usage, null);
+        BigDecimal cost = cost(model, servedModel, usage);
         if (ours && QbHelp.QUEUED.equals(question.get("jobStatus"))) {
             Instant now = HelpProcesses.stamp(ctx.opTime(), thread);
             Map<String, Object> values = new LinkedHashMap<>();
@@ -187,10 +188,21 @@ public final class HelpOutcomes {
         if (thread != null) {
             add(ctx, HelpProcesses.first(ctx, USER_USAGE), outcome.requestedBy(), month, outcome.kind(), usage, cost);
         }
-        long total = add(ctx, HelpProcesses.first(ctx, EVERYBODY_USAGE), QbHelp.EVERYBODY, month, outcome.kind(),
+        long[] total = add(ctx, HelpProcesses.first(ctx, EVERYBODY_USAGE), QbHelp.EVERYBODY, month, outcome.kind(),
             usage, cost);
-        ctx.put(PERCENT, percent(total, HelpSettings.of(ctx.contains(PARAMS) ? ctx.get(PARAMS, ParamValues.class)
-            : null).globalMonthlyTokens()));
+        HelpSettings settings = HelpSettings.of(ctx.contains(PARAMS) ? ctx.get(PARAMS, ParamValues.class) : null);
+        ctx.put(PERCENT, percent(settings.counted(total[0], total[1], total[2]), settings.globalMonthlyTokens()));
+    }
+
+    /**
+     * The dollars of a job at the models' list prices ({@link AiCost#of}: every input token at the input price, cache
+     * reads included, so the estimate errs high), with the premium of the prompt-cache writes (F-C10b), so that it never
+     * errs low; null for an unknown model.
+     */
+    static BigDecimal cost(String model, String servedModel, ClaudeApi.Usage usage) {
+        BigDecimal cost = model == null ? null : AiCost.of(model, servedModel, usage, null);
+        BigDecimal premium = cost == null ? null : AiCost.cacheWritePremium(model, usage.cacheWriteInputTokens());
+        return cost == null ? null : premium == null ? cost : cost.add(premium);
     }
 
     private static String served(ProcessContext ctx) {
@@ -256,7 +268,9 @@ public final class HelpOutcomes {
             metrics.getOrDefault(AiQuestionsJob.FALLBACK_INPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.FALLBACK_OUTPUT_TOKENS, 0L),
             metrics.getOrDefault(AiQuestionsJob.LONG_INPUT_TOKENS, 0L),
-            metrics.getOrDefault(AiQuestionsJob.LONG_OUTPUT_TOKENS, 0L));
+            metrics.getOrDefault(AiQuestionsJob.LONG_OUTPUT_TOKENS, 0L))
+            .withCache(metrics.getOrDefault(AiQuestionsJob.CACHE_WRITE_INPUT_TOKENS, 0L),
+                metrics.getOrDefault(AiQuestionsJob.CACHE_READ_INPUT_TOKENS, 0L));
         if (unrecordedAttempts <= 0) {
             return recorded;
         }
@@ -265,11 +279,13 @@ public final class HelpOutcomes {
         return new ClaudeApi.Usage(recorded.inputTokens() + n * each.inputTokens(),
             recorded.outputTokens() + n * each.outputTokens(), recorded.fallbackInputTokens(),
             recorded.fallbackOutputTokens(), recorded.longPromptInputTokens() + n * each.longPromptInputTokens(),
-            recorded.longPromptOutputTokens() + n * each.longPromptOutputTokens());
+            recorded.longPromptOutputTokens() + n * each.longPromptOutputTokens())
+            // An unrecorded attempt is charged as uncached input (its count is not known): it errs high.
+            .withCache(recorded.cacheWriteInputTokens(), recorded.cacheReadInputTokens());
     }
 
-    /** Adds the job to a usage row (made the first time); returns the row's tokens after it. */
-    private static long add(ProcessContext ctx, EntityInstance row, String userId, String month, String kind,
+    /** Adds the job to a usage row (made the first time); returns the row's input, output and cache-read tokens. */
+    private static long[] add(ProcessContext ctx, EntityInstance row, String userId, String month, String kind,
         ClaudeApi.Usage usage, BigDecimal cost) {
         long in = usage.inputTokens();
         long out = usage.outputTokens();
@@ -284,9 +300,11 @@ public final class HelpOutcomes {
             values.put("cancelledJobs", cancelled ? BigDecimal.ONE : BigDecimal.ZERO);
             values.put("inputTokens", BigDecimal.valueOf(in));
             values.put("outputTokens", BigDecimal.valueOf(out));
+            values.put("cacheWriteTokens", BigDecimal.valueOf(usage.cacheWriteInputTokens()));
+            values.put("cacheReadTokens", BigDecimal.valueOf(usage.cacheReadInputTokens()));
             values.put("costUsd", cost);
             ctx.changes().insert(QbHelp.USAGE, values);
-            return in + out;
+            return new long[] {in, out, usage.cacheReadInputTokens()};
         }
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("questions", BigDecimal.valueOf(HelpProcesses.number(row.get("questions")) + 1));
@@ -300,12 +318,20 @@ public final class HelpOutcomes {
         long tokensOut = HelpProcesses.number(row.get("outputTokens")) + out;
         values.put("inputTokens", BigDecimal.valueOf(tokensIn));
         values.put("outputTokens", BigDecimal.valueOf(tokensOut));
+        if (usage.cacheWriteInputTokens() > 0) {
+            values.put("cacheWriteTokens", BigDecimal.valueOf(HelpProcesses.number(row.get("cacheWriteTokens"))
+                + usage.cacheWriteInputTokens()));
+        }
+        long cacheRead = HelpProcesses.number(row.get("cacheReadTokens")) + usage.cacheReadInputTokens();
+        if (usage.cacheReadInputTokens() > 0) {
+            values.put("cacheReadTokens", BigDecimal.valueOf(cacheRead));
+        }
         if (cost != null) {
             Object before = row.get("costUsd");
             values.put("costUsd", (before == null ? BigDecimal.ZERO : new BigDecimal(before.toString())).add(cost));
         }
         ctx.changes().update(QbHelp.USAGE, row.id(), row.version(), values);
-        return tokensIn + tokensOut;
+        return new long[] {tokensIn, tokensOut, cacheRead};
     }
 
     /** The share of the monthly tokens used, in whole percent (100 and above: reached). */

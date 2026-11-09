@@ -32,6 +32,12 @@ public final class AiQuestionsJob {
     /** The part of them of calls the provider prices at its long-prompt rate (Q8b review L2), priced per call. */
     public static final String LONG_INPUT_TOKENS = "longPromptInputTokens";
     public static final String LONG_OUTPUT_TOKENS = "longPromptOutputTokens";
+    /**
+     * F-C10b: the input tokens the provider wrote to its prompt cache and read from it, recorded when there are any
+     * (requests with cached system blocks: the AI help's). Part of {@link #INPUT_TOKENS}, never added to it.
+     */
+    public static final String CACHE_WRITE_INPUT_TOKENS = "cacheWriteInputTokens";
+    public static final String CACHE_READ_INPUT_TOKENS = "cacheReadInputTokens";
 
     /** The most questions asked at once (A-12). */
     public static final int MAX_COUNT = 20;

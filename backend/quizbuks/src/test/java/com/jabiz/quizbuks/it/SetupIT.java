@@ -70,6 +70,13 @@ class SetupIT extends QbItSupport {
             .hasSize(QbLegal.KINDS.size())
             .allSatisfy(row -> assertThat(row.get("title").toString()).startsWith(LegalDrafts.MARKER));
         assertThat(query("SELECT count(*) AS n FROM qb_legal_version_version").getFirst()).containsEntry("n", 0L);
+        // F-C10b: a draft of each AI help manual, the repository's text; nothing published.
+        assertThat(first.get("helpManualsCreated")).isEqualTo(com.jabiz.quizbuks.help.QbHelp.ENTRIES);
+        assertThat(query("SELECT entry, published_body, source_hash FROM qb_help_manual_version ORDER BY entry"))
+            .hasSize(2).allSatisfy(row -> assertThat(row.get("published_body")).isNull())
+            .allSatisfy(row -> assertThat(row.get("source_hash")).isEqualTo(
+                com.jabiz.quizbuks.help.HelpManualDrafts.hash(com.jabiz.quizbuks.help.HelpManualDrafts.of(
+                    String.valueOf(row.get("entry"))))));
         assertThat(query("SELECT count(*) AS n FROM sys_sod_rule_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_approval_rule_version").getFirst()).containsEntry("n", 0L);
         assertThat(query("SELECT count(*) AS n FROM sys_param_version WHERE param_key = ?",
@@ -80,7 +87,7 @@ class SetupIT extends QbItSupport {
         // One record of each item setup made: it never adds the same item again.
         assertThat(before.get("qb_setup_record_version")).isEqualTo((long) QbRoles.all().size() + granted
             + QbLedger.ACCOUNTS.size() + QbParams.ALL.size() + 249 + QbApprovalRules.ALL.size() + QbSodRules.ALL.size()
-            + QbLegal.KINDS.size());
+            + QbLegal.KINDS.size() + com.jabiz.quizbuks.help.QbHelp.ENTRIES.size());
         assertThat(query("SELECT rule_code, left_permissions, right_permissions, enabled FROM sys_sod_rule_version "
             + "ORDER BY rule_code")).satisfiesExactly(
                 rule -> assertThat(rule).containsEntry("rule_code", QbSodRules.CONTROL.code())
@@ -200,13 +207,14 @@ class SetupIT extends QbItSupport {
             .containsEntry("accountsOpened", List.of()).containsEntry("countriesAdded", 0)
             .containsEntry("paramsCreated", List.of()).containsEntry("paramsProposed", List.of())
             .containsEntry("rulesProposed", List.of()).containsEntry("proposals", List.of())
-            .containsEntry("legalDraftsCreated", List.of());
+            .containsEntry("legalDraftsCreated", List.of()).containsEntry("helpManualsCreated", List.of());
         assertThat(rowCounts()).isEqualTo(before);
         assertCountries();
 
         assertOnlyInserted("qb_country_version");
         assertOnlyInserted("qb_setup_record_version");
         assertOnlyInserted("qb_legal_doc_version");
+        assertOnlyInserted("qb_help_manual_version");
     }
 
     /**
@@ -429,6 +437,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.HELP_MODEL, "claude-haiku-5-5");
         expected.put(QbParams.HELP_USER_DAILY, "20");
         expected.put(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, "20000000");
+        // F-C10b: a cache read's weight towards the monthly tokens (controlled).
+        expected.put(QbParams.HELP_CACHE_READ_WEIGHT, "0.10");
         expected.put(QbParams.HELP_HISTORY_TURNS, "6");
         expected.put(QbParams.HELP_RETENTION_DAYS, "180");
         expected.put(QbParams.HELP_MANUAL_MAX_BYTES, "204800");
