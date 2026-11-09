@@ -14,6 +14,7 @@ import {
   Label,
   RadioGroup,
   RadioGroupItem,
+  Switch,
   Textarea,
   useFieldArray,
   useForm,
@@ -209,6 +210,8 @@ function emptyDraft(): CampaignDraft {
   return {
     name: '', video: null, timeLimitSec: 120, passScore: 1, percent: 10,
     questions: [{ stem: '', options: [{ text: '', correct: true }, { text: '', correct: false }] }],
+    // F-S7 (A2-14): shuffled unless the staff turn it off.
+    shuffleQuestions: true,
   }
 }
 
@@ -219,6 +222,7 @@ function draftOf(campaign: Campaign, edit: boolean): CampaignDraft {
     name: campaign.name, video: campaign.video, timeLimitSec: campaign.timeLimitSec, passScore: campaign.passScore,
     percent: campaign.percent,
     questions: campaign.questions.map((q) => ({ stem: q.stem, options: q.options.map((o) => ({ ...o })) })),
+    shuffleQuestions: campaign.shuffleQuestions,
   }
 }
 
@@ -238,6 +242,7 @@ interface FormValues {
   passScore: number
   percent: number
   questions: FormQuestion[]
+  shuffleQuestions: boolean
 }
 
 function toForm(draft: CampaignDraft): FormValues {
@@ -249,6 +254,7 @@ function toForm(draft: CampaignDraft): FormValues {
       options: q.options.map((o) => ({ text: o.text })),
       correct: String(Math.max(0, q.options.findIndex((o) => o.correct))),
     })),
+    shuffleQuestions: draft.shuffleQuestions,
   }
 }
 
@@ -264,6 +270,7 @@ function fromForm(values: FormValues, draft: CampaignDraft): CampaignDraft {
       stem: q.stem.trim(),
       options: q.options.map((o, i) => ({ text: o.text.trim(), correct: String(i) === q.correct })),
     })),
+    shuffleQuestions: values.shuffleQuestions,
   }
 }
 
@@ -337,6 +344,7 @@ function CampaignEditor({ draft, onDone, onCancel }: {
                 validate: (value) => (value >= 1 && value <= form.getValues('questions').length)
                   || t('campaigns.form.passRange', { max: form.getValues('questions').length }) })} />
           </Field>
+          <ShuffleField form={form} />
         </CardContent>
       </Card>
 
@@ -364,6 +372,27 @@ function CampaignEditor({ draft, onDone, onCancel }: {
         <Button type="button" variant="outline" onClick={onCancel}>{t('campaigns.form.cancel')}</Button>
       </div>
     </form>
+  )
+}
+
+/**
+ * F-S7: whether each visitor gets the questions in an order of their own, the same switch as a sponsor's quiz setting
+ * (on by default on the storefront, A2-14).
+ */
+function ShuffleField({ form }: { form: UseFormReturn<FormValues> }) {
+  const { t } = useTranslation(SHOPIFY)
+  const shuffle = useWatch({ control: form.control, name: 'shuffleQuestions' })
+  return (
+    <div className="flex flex-col gap-1 sm:col-span-2">
+      <div className="flex items-center gap-3">
+        <Switch id="shuffleQuestions" checked={shuffle} aria-describedby="shuffleQuestions-hint"
+          onCheckedChange={(next) => form.setValue('shuffleQuestions', next, { shouldDirty: true })} />
+        <Label htmlFor="shuffleQuestions">{t('campaigns.form.shuffleQuestions')}</Label>
+      </div>
+      <p id="shuffleQuestions-hint" className="text-sm text-muted-foreground">
+        {t('campaigns.form.shuffleQuestionsHint')}
+      </p>
+    </div>
   )
 }
 

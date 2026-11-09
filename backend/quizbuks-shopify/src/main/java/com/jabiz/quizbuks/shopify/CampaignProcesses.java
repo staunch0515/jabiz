@@ -65,6 +65,8 @@ public final class CampaignProcesses {
      * @param campaignId   the draft to edit; none to create one
      * @param baseRevision the draft's revision as the editor read it (409 when it changed since); none to create
      * @param percent      the discount off the whole order, 1 to 90 %
+     * @param shuffleQuestions F-S7: whether each visitor gets the questions in an order of their own; when not
+     *                     given, a new draft shuffles (A2-14) and an edited one keeps its setting
      */
     public record SaveInput(@Size(max = QbsShops.ID_LENGTH) String campaignId, Long baseRevision,
         @NotBlank @Size(max = QbsStorefront.NAME_LENGTH) String name,
@@ -72,7 +74,15 @@ public final class CampaignProcesses {
         @NotNull @Min(Channel.MIN_TIME_LIMIT_SEC) @Max(Channel.MAX_TIME_LIMIT_SEC) Integer timeLimitSec,
         @NotNull @Min(1) @Max(Channel.MAX_QUESTIONS) Integer passScore,
         @NotNull @Min(1) @Max(90) Integer percent,
-        @NotNull @Size(min = 1, max = Channel.MAX_QUESTIONS) List<Channel.@Valid @NotNull QuestionInput> questions) {}
+        @NotNull @Size(min = 1, max = Channel.MAX_QUESTIONS) List<Channel.@Valid @NotNull QuestionInput> questions,
+        Boolean shuffleQuestions) {
+
+        /** A draft saved without the setting: shuffled if new, kept if edited. */
+        public SaveInput(String campaignId, Long baseRevision, String name, String video, Integer timeLimitSec,
+            Integer passScore, Integer percent, List<Channel.QuestionInput> questions) {
+            this(campaignId, baseRevision, name, video, timeLimitSec, passScore, percent, questions, null);
+        }
+    }
 
     public record CampaignRef(@NotBlank @Size(max = QbsShops.ID_LENGTH) String campaignId) {}
 
@@ -84,7 +94,7 @@ public final class CampaignProcesses {
     /** A campaign as the staff see it. */
     public record Campaign(String campaignId, String status, String name, String video, int timeLimitSec,
         int passScore, int percent, List<Channel.QuestionInput> questions, String publicationId, long revision,
-        Instant createdAt, Instant editedAt, Instant publishedAt, Instant endedAt) {}
+        Instant createdAt, Instant editedAt, Instant publishedAt, Instant endedAt, boolean shuffleQuestions) {}
 
     /**
      * @param available   codes of the running campaign the storefront can hand out (at least
@@ -144,8 +154,13 @@ public final class CampaignProcesses {
         values.put("passScore", BigDecimal.valueOf(input.passScore()));
         values.put("percent", BigDecimal.valueOf(input.percent()));
         values.put("questions", JSON.writeValueAsString(input.questions()));
+        if (input.shuffleQuestions() != null) {
+            values.put("shuffleQuestions", input.shuffleQuestions());
+        }
         values.put("editedAt", ctx.opTime());
         if (input.campaignId() == null) {
+            // F-S7 (A2-14): a new draft shuffles its questions unless told otherwise.
+            values.putIfAbsent("shuffleQuestions", true);
             values.put("shopId", String.valueOf(shop.id()));
             values.put("shopDomain", shop.get("shopDomain"));
             values.put("status", QbsStorefront.DRAFT);
@@ -228,7 +243,12 @@ public final class CampaignProcesses {
         EntityInstance campaign = ShopProcesses.first(ctx, CAMPAIGN);
         return new Channel.PublishInput(publisher(ShopProcesses.first(ctx, SHOPS)), campaign.get("name"),
             campaign.get("video"), integer(campaign.get("timeLimitSec")), integer(campaign.get("passScore")),
-            questions(campaign.get("questions")));
+            questions(campaign.get("questions")), shuffled(campaign.get("shuffleQuestions")));
+    }
+
+    /** A campaign's setting as read: shuffled unless it says otherwise (A2-14). */
+    static boolean shuffled(Object value) {
+        return value == null || Boolean.parseBoolean(value.toString());
     }
 
     static void published(ProcessContext ctx) {
@@ -420,7 +440,7 @@ public final class CampaignProcesses {
             (String) values.get("video"), integer(values.get("timeLimitSec")), integer(values.get("passScore")),
             integer(values.get("percent")), questions(values.get("questions")), (String) values.get("publicationId"),
             number(values.get("revision")), instant(values.get("createdAt")), instant(values.get("editedAt")),
-            instant(values.get("publishedAt")), instant(values.get("endedAt")));
+            instant(values.get("publishedAt")), instant(values.get("endedAt")), shuffled(values.get("shuffleQuestions")));
     }
 
     static int integer(Object value) {
