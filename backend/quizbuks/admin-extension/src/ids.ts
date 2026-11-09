@@ -144,6 +144,10 @@ export const TEMPLATE = {
   operatorFeeAccountLots: 'qb.operator.fee-account-lots',
   operatorFeePayments: 'qb.operator.fee-payments',
   feeRequests: 'qb.admin.fee-requests',
+  /** F-M2: the platform fee Kudos granted (headquarters, read only), each and summed; an operator's Sponsor's onboarding. */
+  feeCreditGrants: 'qb.admin.fee-credit-grants',
+  feeCreditSummary: 'qb.admin.fee-credit-summary',
+  operatorFeeCreditOnboarding: 'qb.operator.fee-credit-onboarding',
   /** The investors' figures (Q27): a row per UTC month of a period, and the sponsors behind them (finance). */
   investorMetrics: 'qb.admin.investor-metrics',
   investorSponsors: 'qb.admin.investor-sponsors',
@@ -312,6 +316,8 @@ export const PROCESS = {
 export const FEE_PROCESS = {
   request: 'QB_FEE_REQUEST',
   billingSet: 'QB_OPERATOR_BILLING_SET',
+  /** F-M2: a lead of the Sponsor's operator confirms the Sponsor, which grants the onboarding platform fee Kudos. */
+  onboarding: 'QB_FEE_CREDIT_ONBOARDING',
 } as const
 
 /** The platform's controlled changes (four eyes, decision D40): the mapping changes only through them. */
@@ -506,6 +512,8 @@ export const PERMISSION = {
   /** Q87: fees charged by hand and invoices voided (finance; another administrator approves), and a sponsor's billing. */
   feeManage: 'qb.fee.manage',
   feeBilling: 'qb.fee.billing',
+  /** F-M2: an operator's lead confirms a Sponsor and gives the onboarding platform fee Kudos. */
+  feeCreditOnboarding: 'qb.fee-credit.onboarding.confirm',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
