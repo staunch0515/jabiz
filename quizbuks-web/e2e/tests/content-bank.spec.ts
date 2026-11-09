@@ -134,3 +134,54 @@ test('a Sponsor translates a large bank a page at a time (F-S6c)', async ({ page
   await page.getByTestId('translation-only-pending').click()
   await expect(questions.getByTestId('translations-page')).toHaveText('Page 1 of 2')
 })
+
+/** F-S6d: the most API requests opening the editor on its questions may make, whatever the size of the bank. */
+const EDITOR_REQUESTS_BOUND = 25
+
+test('opening the editor costs the same requests for 1000 questions as for 3 (F-S6d)', async ({ page, request }) => {
+  test.setTimeout(240_000)
+  const { email, token } = await sponsor(request, 'Bea')
+  const [limits] = await query(request, token, 'qb.sponsor.quiz-limits', {})
+  const batch = Number(limits.importBatch)
+  const quizOf = async (count: number) => {
+    const quiz = await run(request, token, 'QB_QUIZ_SAVE', { title: unique(`Size ${count} `), intro: null,
+      cover: null, timeLimitSec: null, language: 'en' })
+    const quizId = quiz.quizId as string
+    for (let done = 0; done < count; done += batch) {
+      await run(request, token, 'QB_QUIZ_IMPORT_QUESTIONS', { quizId, document: quizFile(Math.min(batch,
+        count - done)), files: {} })
+    }
+    return quizId
+  }
+  const small = await quizOf(3)
+  const large = await quizOf(1000)
+
+  await signIn(page, '/sponsor/', email)
+  await expect(page).not.toHaveURL(/\/login/)
+  // The landing page's own requests finish before counting starts.
+  await page.waitForLoadState('networkidle')
+  /** The `/api/` requests from opening the editor until its questions tab has rendered and the page is idle. */
+  const opened = async (quizId: string, count: number) => {
+    const requests: string[] = []
+    const record = (r: { url: () => string }) => {
+      const url = new URL(r.url())
+      if (url.pathname.startsWith('/api/')) requests.push(url.pathname)
+    }
+    page.on('request', record)
+    await page.goto(`/sponsor/quizzes/${quizId}`)
+    await page.getByTestId('tab-questions').click()
+    await expect(page.getByTestId('questions-count')).toContainText(`${count} /`)
+    await expect(page.getByTestId('questions-score')).toBeVisible()
+    await expect(page.getByTestId('question').first()).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    page.off('request', record)
+    return requests
+  }
+  const few = await opened(small, 3)
+  const many = await opened(large, 1000)
+  console.log(`F-S6d: opening the editor: ${few.length} requests for 3 questions, ${many.length} for 1000`)
+  expect(many.length).toBeLessThanOrEqual(EDITOR_REQUESTS_BOUND)
+  expect(many.length).toBe(few.length)
+  expect([...many].sort()).toEqual([...few].sort().map((path) => path.replace(small, large)))
+  await expect(page.getByTestId('questions-page')).toContainText('Page 1 of 20')
+})

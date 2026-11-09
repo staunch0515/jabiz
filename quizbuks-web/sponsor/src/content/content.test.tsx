@@ -61,7 +61,8 @@ function bankOf(questions: Record<string, unknown>[], options: Record<string, un
   return [...questions].sort((a, b) => Number(a.seq) - Number(b.seq)).map((q, i) => ({
     questionId: q.questionId, questionNo: i + 1, stem: q.stem, image: q.image, points: q.points,
     selection: q.selection ?? null, optionCount: options.filter((o) => o.questionId === q.questionId).length,
-    translated: 0 }))
+    translated: 0, correctCount: options.filter((o) => o.questionId === q.questionId && o.correct).length,
+    optionImages: options.some((o) => o.questionId === q.questionId && o.image) }))
 }
 
 /**
@@ -111,7 +112,8 @@ function server(options: Server = {}) {
     }
     const question = /^\/api\/datasets\/urn:jabiz:dataset:sponsor:QbQuestion\/entities\/(.+)$/.exec(path)
     if (question) {
-      const row = (options.bank ?? []).find((r) => r.questionId === question[1])
+      // F-S6d: an opened question is read alone (the editor's draft has none).
+      const row = (options.bank ?? QUESTIONS).find((r) => r.questionId === question[1])
       return row ? json(200, { id: question[1], version: 1, attributes: { ...row, quizId: 'q1' } })
         : json(404, { detail: 'Not found' })
     }
@@ -134,7 +136,8 @@ function server(options: Server = {}) {
         // F-S6b: one question's options when opened on its own.
         const byQuestion = (body?.filters as { field: string; value: string }[] | undefined)
           ?.find((f) => f.field === 'questionId')?.value
-        return rows(byQuestion ? OPTIONS.filter((o) => o.questionId === byQuestion) : OPTIONS)
+        return rows(byQuestion ? OPTIONS.filter((o) => o.questionId === byQuestion).sort((a, b) => a.seq - b.seq)
+          : OPTIONS)
       }
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterial/query':
         return rows([...MATERIALS, ...(options.variants ?? [])])
@@ -193,6 +196,18 @@ function server(options: Server = {}) {
           return { language, missing: states.filter((x) => x === 'missing').length,
             stale: states.filter((x) => x === 'stale').length }
         }), offset: 0, limit: 10 })
+      }
+      case '/api/queries/qb.sponsor.quiz-question-summary': {
+        // As the template answers, from the bank's rows (their correct options) in their order.
+        const bank = options.bank ?? bankOf(QUESTIONS, OPTIONS)
+        const correct = (row: Record<string, unknown>) => Number(row.correctCount ?? 0)
+        const unmarked = bank.filter((row) => correct(row) === 0)
+        return json(200, { items: [{ quizId: 'q1', questionCount: bank.length,
+          fullScore: bank.reduce((sum, row) => sum + Number(row.points ?? 1), 0),
+          singleCount: bank.filter((row) => correct(row) === 1).length,
+          multipleCount: bank.filter((row) => correct(row) > 1).length, unmarkedCount: unmarked.length,
+          firstUnmarkedId: unmarked[0]?.questionId ?? null, firstUnmarkedNo: unmarked[0]?.questionNo ?? null }],
+          offset: 0, limit: 1 })
       }
       case '/api/queries/qb.sponsor.quiz-limits':
         return json(200, { items: [options.limits ?? { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 200 }],
@@ -377,7 +392,7 @@ describe('the quiz editor', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     await userEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    const options = within(questions[0]).getAllByTestId('option-row')
+    const options = await within(questions[0]).findAllByTestId('option-row')
     expect(options.map((o) => o.textContent)).toEqual(['1.Coffee(correct)', '2.Tea'])
     await expectAccessible()
     // Opening another closes it; the summary's link opens the unmarked one.
@@ -1131,6 +1146,52 @@ describe('the question bank (F-S6b)', () => {
       && JSON.stringify(p.body.filters).includes('"b7"'))).toBe(true)
     await userEvent.click(screen.getByTestId('questions-search-clear'))
     await waitFor(() => expect(screen.getAllByTestId('question')).toHaveLength(50))
+  })
+
+  it('opens with the same requests whatever the size of the bank, the summary counted by the server (F-S6d)',
+    async () => {
+      const opened = async (options: Server) => {
+        const { posted } = server(options)
+        const view = render(<App />)
+        await userEvent.click(await screen.findByTestId('tab-questions'))
+        await waitFor(() => expect(screen.getByTestId('questions-score')).toBeInTheDocument())
+        await waitFor(() => expect(screen.getAllByTestId('question').length).toBeGreaterThan(0))
+        const paths = (vi.mocked(globalThis.fetch).mock.calls).map(([input]) => decodeURIComponent(new URL(
+          input instanceof Request ? input.url : String(input), window.location.origin).pathname))
+          // The session's own calls are read once per page load, not per quiz.
+          .filter((path) => !path.startsWith('/api/auth/'))
+        const summary = screen.getByTestId('questions-summary').textContent
+        view.unmount()
+        vi.restoreAllMocks()
+        return { paths, posted, summary }
+      }
+      // 120 questions, the 7th with no correct option.
+      const bank = BANK.map((row, i) => ({ ...row, points: 2, correctCount: i === 6 ? 0 : i % 2 === 0 ? 1 : 2 }))
+      const big = await opened({ quiz: BIG, bank })
+      const small = await opened({})
+      // No question or option of the draft is read; the same requests either way.
+      expect(big.paths.filter((p) => p.includes(':QbQuestion/') || p.includes(':QbOption/'))).toEqual([])
+      expect([...new Set(big.paths)].sort()).toEqual([...new Set(small.paths)].sort())
+      expect(big.paths.length).toBe(small.paths.length)
+      expect(big.posted.find((p) => p.path === '/api/queries/qb.sponsor.quiz-question-summary')?.body)
+        .toMatchObject({ params: { quizId: 'q1' } })
+      expect(big.summary).toContain('120 / 1,000 questions')
+      expect(big.summary).toContain('Full score 240')
+      expect(big.summary).toContain('Single choice 59 · multiple choice 60')
+      expect(big.summary).toContain('1 question has no correct option')
+    })
+
+  it('goes to the first question without a correct option, on its page (F-S6d)', async () => {
+    const bank = BANK.map((row, i) => ({ ...row, correctCount: i === 76 ? 0 : 1 }))
+    server({ quiz: BIG, bank })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-questions'))
+    await userEvent.click(await screen.findByTestId('questions-unmarked'))
+    await waitFor(() => expect(screen.getByTestId('questions-page')).toHaveTextContent('Page 2 of 3'))
+    const row = screen.getAllByTestId('question').find((q) => q.dataset.no === '77')!
+    expect(within(row).getByTestId('question-row-toggle')).toHaveAttribute('aria-expanded', 'true')
+    expect(within(row).getByTestId('question-unmarked')).toBeInTheDocument()
+    await expectAccessible()
   })
 
   it('moves a question up or down with QB_QUESTION_MOVE and keeps the keyboard on it', async () => {
