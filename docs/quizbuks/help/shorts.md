@@ -18,14 +18,14 @@ YouTube 与 Vimeo 的视频点一下"开声音"后，之后的视频会继续有
 
 ホームでは、何枚かのカードの後に「ショート動画」という縦長の小さなカードの列が表示されます。動画が縦型（YouTube ショートなど）のクイズです。列は左右にスクロールでき、カードをタップすると全画面の縦型モードになります。
 全画面のモードでは、上にスワイプすると次の動画、下にスワイプすると前の動画です。右上の「前の動画」「次の動画」ボタンやキーボードの矢印キーでも移動できます。「回答する」でそのクイズの開始ページへ、左上の戻るボタン（または Esc キー、端末の戻る操作）でホームの元の位置に戻ります。
-YouTube と Vimeo の動画は「音声をオンにする」を一度タップすると、次の動画でも音声が出ます。ほかのサイトの動画は、プレーヤーをタップすると音声がオンになります。システムで「減少動態効果（視差効果を減らす、動きを減らす）」を設定していると動画は自動では再生されません。「再生」をタップしてください。
+YouTube と Vimeo の動画は「音声をオンにする」を一度タップすると、次の動画でも音声が出ます。ほかのサイトの動画は、プレーヤーをタップすると音声がオンになります。端末で「視差効果を減らす（動きを減らす）」を設定していると動画は自動では再生されません。「再生」をタップしてください。
 全画面のモードで見た動画も「動画を見て回答」の視聴に含まれます。見終わったら「回答する」からそのまま始められます。縦型動画のクイズがないときは、この列は表示されません。
 
 ### English · What are the "Shorts" on the home page?
 
 After a few cards, the home page shows a row of small upright cards titled "Shorts": quizzes whose video is vertical (such as YouTube Shorts). Scroll the row sideways and tap a card to open the full-screen vertical mode.
 In full screen, swipe up for the next video and down for the one before; the previous and next buttons at the top right and the arrow keys work too. "Answer" opens the quiz's start page; the back button at the top left (or Esc, or your device's back) returns to where you were on the home page.
-For YouTube and Vimeo videos, tap "Turn the sound on" once and the next videos keep their sound; for other sites, tap the player to turn its sound on. If your system is set to reduce motion, videos do not start by themselves: tap "Play".
+For YouTube and Vimeo videos, tap "Turn the sound on" once and the next videos keep their sound; for other sites, tap the player to turn its sound on. If your device is set to reduce motion, videos do not start by themselves: tap "Play".
 Watching a video in full screen counts towards "Watch to answer": when you have watched it, tap "Answer" and start right away. When there are no quizzes with a vertical video, the row is not shown.
 
 ## 二、给发起方（FAQ 的 `audience` = `SPONSOR`，分类 `PUBLISHING`）
