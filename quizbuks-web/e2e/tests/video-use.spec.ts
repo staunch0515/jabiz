@@ -23,8 +23,9 @@ import {
  * F-S14 (docs/quizbuks/plans/impl/F-S14.md): the ledger of a shared video's use. A provider shares a video link;
  * another Sponsor's publication goes live with it. The Sponsor using it writes the ledger entry on the publication's
  * page and sends it; the provider, on the asset library under the videos it shares, sends it back with a reason; the
- * Sponsor reads the reason, corrects the price and sends it again; the provider confirms it. Once the daily job ran,
- * both see the same figures (fewer than the minimum group, as nobody watched). Both pages pass axe, light and dark.
+ * Sponsor reads the reason, corrects the price and sends it again; the provider confirms it. Both open the entry's
+ * history (every act, the reason sent back). Once the daily job ran, both see the same figures (fewer than the minimum
+ * group, as nobody watched). Both pages pass axe, light and dark.
  */
 test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
@@ -159,6 +160,14 @@ test('the user files the ledger entry, the provider sends it back, the user corr
   await other.getByRole('alertdialog').getByRole('button', { name: /confirm|确认|確認/i }).click()
   await expect(item.getByTestId('video-use-status')).toHaveAttribute('data-status', 'CONFIRMED')
   await expect(item.getByTestId('video-use-confirmed')).toContainText('5')
+  // The provider opens the history: written, sent, sent back (with the reason), corrected, sent, confirmed.
+  await item.getByTestId('video-use-history-toggle').click()
+  const acts = ['CREATED', 'SUBMITTED', 'REJECTED', 'CORRECTED', 'SUBMITTED', 'CONFIRMED']
+  await expect(item.getByTestId('video-use-history-entry')).toHaveCount(acts.length)
+  expect(await item.getByTestId('video-use-history-entry').evaluateAll((all) =>
+    all.map((e) => (e as HTMLElement).dataset.act))).toEqual(acts)
+  await expect(item.getByTestId('video-use-history-reason')).toContainText('We agreed 120 yen per Taker')
+  await expectAccessible(other, 'sponsor provider ledger history')
 
   // 5. The daily job counts the figures: both sides see them (fewer than the minimum group: nobody watched).
   await runJobNow(request, 'qb.video-use-figures')
@@ -167,6 +176,10 @@ test('the user files the ledger entry, the provider sends it back, the user corr
   await expect(section.getByTestId('video-use-counted')).toBeVisible()
   await expect(section.getByTestId('video-use-figures-successes-value')).toContainText('5')
   await expect(section.getByTestId('video-use-amount')).not.toContainText('120 yen')
+  // The user opens the same history.
+  await section.getByTestId('video-use-history-toggle').click()
+  await expect(section.getByTestId('video-use-history-entry')).toHaveCount(acts.length)
+  await expect(section.getByTestId('video-use-history-reason')).toContainText('We agreed 120 yen per Taker')
   await other.reload()
   await expect(item.getByTestId('video-use-counted')).toBeVisible()
   await expect(item.getByTestId('video-use-provided-figures-goes-value')).toContainText('5')
@@ -178,7 +191,9 @@ test('the user files the ledger entry, the provider sends it back, the user corr
   await setAppearance(page, 'dark')
   await page.goto(`/sponsor/publications/${publicationId}`)
   await expect(section.getByTestId('video-use-counted')).toBeVisible()
-  await expectAccessible(page, 'sponsor ledger with figures (dark)')
+  await section.getByTestId('video-use-history-toggle').click()
+  await expect(section.getByTestId('video-use-history-entry')).toHaveCount(acts.length)
+  await expectAccessible(page, 'sponsor ledger with figures and history (dark)')
   const dark = await browser.newContext({ baseURL: test.info().project.use.baseURL })
   const darkPage = await dark.newPage()
   await setAppearance(darkPage, 'dark')
