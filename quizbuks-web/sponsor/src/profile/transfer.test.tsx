@@ -173,3 +173,57 @@ describe('importing a profile package', () => {
     expect(posted.some((p) => p.path.includes('QB_PROFILE'))).toBe(false)
   })
 })
+
+describe('the prompt for another AI tool', () => {
+  function clipboard() {
+    const writeText = vi.fn<(text: string) => Promise<void>>(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    return writeText
+  }
+
+  it('fills in the sponsor\'s website, name and the products limit, and copies the whole prompt', async () => {
+    server()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin)
+      const path = decodeURIComponent(url.pathname)
+      if (path.endsWith('/query') && path.includes('qb.sponsor.product-limit')) return json(200, { items: [{ max: '12' }] })
+      return json(404, {})
+    })
+    const writeText = clipboard()
+    renderCard()
+    await userEvent.click(screen.getByTestId('profile-prompt'))
+    const dialog = await screen.findByTestId('profile-prompt-dialog')
+    const copy = within(dialog).getByTestId('profile-prompt-copy')
+    // No website and no name yet (the server knows neither): nothing to copy.
+    expect(copy).toBeDisabled()
+    await userEvent.type(within(dialog).getByTestId('profile-prompt-website'), 'https://aini.example/')
+    await userEvent.type(within(dialog).getByTestId('profile-prompt-contact'), 'Sara')
+    await userEvent.click(within(dialog).getByTestId('profile-prompt-other-ja'))
+    expect(copy).toBeEnabled()
+    const text = (within(dialog).getByTestId('profile-prompt-text') as HTMLTextAreaElement).value
+    expect(text).toContain('- 官网地址：https://aini.example/\n')
+    expect(text).toContain('：Sara\n')
+    expect(text).toContain('- 其他语言：ja')
+    await expectAccessible()
+    await userEvent.click(copy)
+    expect(writeText).toHaveBeenCalledWith(text)
+  })
+
+  it('copies the problems of a refused file, alone or with the fixing prompt', async () => {
+    server({ status: 422, body: { title: 'Refused', violations: [{ field: 'products[0].image',
+      ruleCode: 'QB_FILE_NOT_OWN', message: 'Not your file' }] } })
+    const writeText = clipboard()
+    renderCard()
+    await userEvent.upload(screen.getByTestId('profile-import-file'), new File(['nope'], 'x.json',
+      { type: 'application/json' }))
+    const problems = await screen.findByTestId('profile-import-problems')
+    await userEvent.click(within(problems).getByTestId('profile-problems-copy'))
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('not a profile package'))
+    await userEvent.click(within(problems).getByTestId('profile-problems-copy-fix'))
+    const fix = String(writeText.mock.calls.at(-1)?.[0])
+    expect(fix).toContain('not a profile package')
+    expect(fix).toContain('文件：')
+    await expectAccessible()
+  })
+})
+

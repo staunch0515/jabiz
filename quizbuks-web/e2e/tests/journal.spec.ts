@@ -19,30 +19,47 @@ test('finance exports the next month and downloads its voucher', async ({ page, 
   await mapAccounts(request)
   await postingLastMonth(request)
   const finance = await accountant(request)
-  // The reconciliation runs every minute here: wait for a run after this test's data.
-  await expect.poll(async () => {
-    const next = await previewOf(request, finance.token)
-    return !next.periodEnded || next.reconOk
-  }, { message: 'a clean reconciliation after the month', timeout: 150_000, intervals: [5_000] }).toBe(true)
-  const next = await previewOf(request, finance.token)
+  // The server's own verdict decides what the page must show, so the test waits for a settled one: ready, or waiting
+  // because the next month has not ended. Anything else (a reconciliation that is not clean yet or is running just
+  // now, a database transaction open for a moment, an account moved after the mapping) comes and goes with the work
+  // the earlier tests leave running, and is not what this test is about. The reconciliation runs every minute here.
+  const settled = async () => {
+    let last = await previewOf(request, finance.token)
+    for (let i = 0; i < 30 && !(last.ready || !last.periodEnded); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5_000))
+      last = await previewOf(request, finance.token)
+    }
+    expect(last.ready || !last.periodEnded, `a settled preview of the next export: ${JSON.stringify(last)}`).toBe(true)
+    return last
+  }
+  const next = await settled()
 
   await signInAdminAs(page, finance.email)
   await page.goto('/admin/qb/finance/journal')
-  await page.getByTestId('journal-preview').click()
   const preview = page.getByTestId('journal-preview-result')
-  await expect(preview).toHaveAttribute('data-month', next.month)
+  // The page asks the server itself: ask again until it says what the settled verdict said (a flap is retried; a
+  // verdict that stays different fails with what the page showed).
+  await expect(async () => {
+    await page.getByTestId('journal-preview').click()
+    await expect(preview).toHaveAttribute('data-month', next.month)
+    const shown = await page.getByTestId('journal-blockers').allInnerTexts()
+    const message = `the page's verdict against the server's ${JSON.stringify({ next, shown })}`
+    if (next.ready) {
+      expect(await page.getByTestId('journal-blockers').count(), message).toBe(0)
+    } else {
+      // Exported up to the current month by an earlier run: the next month has not ended, and the page says so.
+      await expect(page.getByTestId('journal-blocker-open'), message).toBeVisible({ timeout: 2_000 })
+    }
+  }).toPass({ timeout: 60_000, intervals: [3_000] })
   await expect(preview.getByTestId('journal-detail-size')).toHaveAttribute('data-parts', String(next.detailParts))
 
   if (next.ready) {
     // The voucher's lines, or none: a posting recorded within the last ten minutes waits for the next export.
     await expect(preview.getByTestId('journal-lines').or(preview.getByTestId('journal-no-lines'))).toBeVisible()
-    await expect(page.getByTestId('journal-blockers')).toHaveCount(0)
     await page.getByTestId('journal-export').click()
     await page.getByRole('alertdialog').getByRole('button', { name: 'Export' }).click()
     await expect(page.getByText(/^Exported as QBJ-\d{4}-\d{5}\.$/)).toBeVisible()
   } else {
-    // Exported up to the current month by an earlier run: the next month has not ended, and the page says so.
-    await expect(page.getByTestId('journal-blocker-open')).toBeVisible()
     await expect(page.getByTestId('journal-export')).toHaveCount(0)
   }
 

@@ -44,11 +44,17 @@ test('a paid reward is a message in the inbox; the badge counts it until it is r
   const row = page.getByTestId('inbox-row').and(page.locator('[data-kind="MESSAGE"]'))
   await expect(row).toHaveAttribute('data-unread', 'true')
   await expect(row).toContainText('10 Kudos')
+  // The mark of the reading is written a moment after the item is shown: a taker who goes straight back (this test
+  // does, with the request held for 1.5 s) must still see the item read in the list.
+  await page.route('**/api/processes/QB_MESSAGE_MARK/latest', async (route) => {
+    if (route.request().postData()?.includes('"READ"')) await new Promise((resolve) => setTimeout(resolve, 1500))
+    await route.continue()
+  })
   await row.getByRole('link').click()
   await expect(page.getByTestId('inbox-item')).toBeVisible()
   await expect(page.getByTestId('inbox-item-go')).toBeVisible()
   await page.getByTestId('inbox-back').click()
-  await expect(row).toHaveAttribute('data-unread', 'false')
+  await expect(row).toHaveAttribute('data-unread', 'false', { timeout: 15_000 })
   await expect(page.getByTestId('nav-inbox-badge')).toBeHidden()
 })
 
