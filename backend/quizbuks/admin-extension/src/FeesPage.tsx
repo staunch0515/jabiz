@@ -34,6 +34,7 @@ import {
   type ColumnDef,
 } from '@jabiz/admin'
 import { EmptyState, LoadFailed, StatusBadge } from './components'
+import { FeeCreditGrants } from './FeeCreditGrants'
 import { FEES_KEY, INVOICE_STATUSES, readFeeCharges, readFeeInvoices, readFeeRequests, recordFeeRequest, REQUEST_REVIEW,
   REQUEST_STATUSES, type FeeCharge, type FeeInvoice, type FeeRequest, type RequestKind } from './fee-api'
 import { parseAmount } from './finance'
@@ -50,7 +51,7 @@ const CHARGE_SORTS = { chargedAt: 'chargedAt', total: 'total' } as const
 const INVOICE_SORTS = { issuedAt: 'issuedAt', dueOn: 'dueOn', total: 'total', status: 'status' } as const
 const REQUEST_SORTS = { requestedAt: 'requestedAt', status: 'status' } as const
 
-type Tab = 'charges' | 'invoices' | 'requests'
+type Tab = 'charges' | 'invoices' | 'requests' | 'grants'
 
 /**
  * Records a fee request (`QB_FEE_REQUEST`, Q87): a fee by hand names the sponsor, the amount before tax and the
@@ -62,13 +63,16 @@ function RequestDialog({ kind, invoiceId, onClose }: { kind: RequestKind; invoic
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const id = useId()
   const queryClient = useQueryClient()
-  const manual = kind === 'MANUAL'
+  // A fee by hand and a grant by hand (F-M2) both name a sponsor and an amount.
+  const manual = kind !== 'VOID'
+  const credit = kind === 'CREDIT'
   const sponsors = useQuery({ queryKey: [...FEES_KEY, 'sponsors'], queryFn: readApprovedSponsors, enabled: manual })
   const capped = (sponsors.data?.length ?? 0) >= SPONSOR_CHOICES
   const [sponsorId, setSponsorId] = useState('')
   const [typedId, setTypedId] = useState('')
   const [invoice, setInvoice] = useState(invoiceId ?? '')
   const [amount, setAmount] = useState('')
+  const [validDays, setValidDays] = useState('')
   const [reason, setReason] = useState('')
   const [invalid, setInvalid] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -78,15 +82,20 @@ function RequestDialog({ kind, invoiceId, onClose }: { kind: RequestKind; invoic
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const value = manual ? parseAmount(amount) : 0
-    const bad = manual && (value === null || value <= 0)
+    const days = credit && validDays.trim() ? Number(validDays.trim()) : null
+    const bad = (manual && (value === null || value <= 0))
+      || (days !== null && (!Number.isInteger(days) || days < 1 || days > 999))
     setInvalid(bad)
     if (bad || busy || !complete) return
     setBusy(true)
     setProblem(null)
     try {
-      await recordFeeRequest(manual
-        ? { kind: 'MANUAL', sponsorId: chosen, amount: value!, reason: reason.trim() }
-        : { kind: 'VOID', invoiceId: invoice.trim(), reason: reason.trim() })
+      await recordFeeRequest(credit
+        ? { kind: 'CREDIT', sponsorId: chosen, amount: value!, reason: reason.trim(),
+          ...(days !== null ? { validDays: days } : {}) }
+        : manual
+          ? { kind: 'MANUAL', sponsorId: chosen, amount: value!, reason: reason.trim() }
+          : { kind: 'VOID', invoiceId: invoice.trim(), reason: reason.trim() })
       notify.success(t('fee.dialog.done'))
       void queryClient.invalidateQueries({ queryKey: FEES_KEY })
       onClose()
@@ -101,8 +110,10 @@ function RequestDialog({ kind, invoiceId, onClose }: { kind: RequestKind; invoic
       <DialogContent data-testid="fee-request-dialog" data-kind={kind}>
         <form noValidate onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
           <DialogHeader>
-            <DialogTitle>{t(manual ? 'fee.dialog.manualTitle' : 'fee.dialog.voidTitle')}</DialogTitle>
-            <DialogDescription>{t(manual ? 'fee.dialog.manualHint' : 'fee.dialog.voidHint')}</DialogDescription>
+            <DialogTitle>{t(credit ? 'fee.dialog.creditTitle' : manual ? 'fee.dialog.manualTitle'
+              : 'fee.dialog.voidTitle')}</DialogTitle>
+            <DialogDescription>{t(credit ? 'fee.dialog.creditHint' : manual ? 'fee.dialog.manualHint'
+              : 'fee.dialog.voidHint')}</DialogDescription>
           </DialogHeader>
           {manual ? (
             <>
@@ -152,9 +163,23 @@ function RequestDialog({ kind, invoiceId, onClose }: { kind: RequestKind; invoic
                     setAmount(event.target.value)
                     setInvalid(false)
                   }} />
-                <p id={`${id}-amount-hint`} className="text-muted-foreground text-sm">{t('fee.dialog.amountHint')}</p>
+                <p id={`${id}-amount-hint`} className="text-muted-foreground text-sm">
+                  {t(credit ? 'fee.dialog.creditAmountHint' : 'fee.dialog.amountHint')}
+                </p>
                 {invalid && <p id={`${id}-amount-error`} className="text-destructive text-sm">{t('fee.dialog.invalid')}</p>}
               </div>
+              {credit && (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor={`${id}-days`}>{t('fee.dialog.validDays')}</Label>
+                  <Input id={`${id}-days`} value={validDays} inputMode="numeric" autoComplete="off" maxLength={3}
+                    aria-describedby={`${id}-days-hint`} data-testid="fee-request-valid-days"
+                    onChange={(event) => {
+                      setValidDays(event.target.value)
+                      setInvalid(false)
+                    }} />
+                  <p id={`${id}-days-hint`} className="text-muted-foreground text-sm">{t('fee.dialog.validDaysHint')}</p>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex flex-col gap-2">
@@ -415,7 +440,7 @@ export default function FeesPage() {
   const approver = can(PERMISSION.bankApprove)
   const manager = can(PERMISSION.feeManage)
   const asked = search.get('tab')
-  const tab: Tab = asked === 'invoices' || (asked === 'requests' && approver) ? asked : 'charges'
+  const tab: Tab = asked === 'invoices' || asked === 'grants' || (asked === 'requests' && approver) ? asked : 'charges'
   const [recording, setRecording] = useState<{ kind: RequestKind; invoiceId?: string } | null>(null)
   return (
     <div className="flex flex-col gap-4" data-testid="fees-page">
@@ -425,6 +450,9 @@ export default function FeesPage() {
             <Button variant="outline" onClick={() => setRecording({ kind: 'VOID' })} data-testid="fee-new-void">
               {t('fee.newVoid')}
             </Button>
+            <Button variant="outline" onClick={() => setRecording({ kind: 'CREDIT' })} data-testid="fee-new-credit">
+              {t('fee.newCredit')}
+            </Button>
             <Button onClick={() => setRecording({ kind: 'MANUAL' })} data-testid="fee-new-manual">{t('fee.newManual')}</Button>
           </span>
         )} />
@@ -433,12 +461,14 @@ export default function FeesPage() {
           <TabsTrigger value="charges" data-testid="tab-charges">{t('fee.tabs.charges')}</TabsTrigger>
           <TabsTrigger value="invoices" data-testid="tab-invoices">{t('fee.tabs.invoices')}</TabsTrigger>
           {approver && <TabsTrigger value="requests" data-testid="tab-requests">{t('fee.tabs.requests')}</TabsTrigger>}
+          <TabsTrigger value="grants" data-testid="tab-grants">{t('fee.tabs.grants')}</TabsTrigger>
         </TabsList>
         <TabsContent value="charges">{tab === 'charges' && <Charges />}</TabsContent>
         <TabsContent value="invoices">
           {tab === 'invoices' && <Invoices onVoid={manager ? (invoiceId) => setRecording({ kind: 'VOID', invoiceId }) : null} />}
         </TabsContent>
         {approver && <TabsContent value="requests">{tab === 'requests' && <Requests />}</TabsContent>}
+        <TabsContent value="grants">{tab === 'grants' && <FeeCreditGrants />}</TabsContent>
       </Tabs>
       {recording && <RequestDialog kind={recording.kind} invoiceId={recording.invoiceId} onClose={() => setRecording(null)} />}
     </div>

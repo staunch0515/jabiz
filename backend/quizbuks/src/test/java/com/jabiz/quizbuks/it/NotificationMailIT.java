@@ -660,7 +660,9 @@ class NotificationMailIT extends PayoutItSupport {
             .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
         assertThat((List<Map<String, Object>>) atConsole.get("templates"))
             .extracting(row -> row.get("template") + " " + row.get("displayName"))
-            .containsExactlyInAnyOrder("qb.publication.funds-short 公開の残高不足", "qb.publication.ended 公開の終了");
+            .containsExactlyInAnyOrder("qb.publication.funds-short 公開の残高不足", "qb.publication.ended 公開の終了",
+                // F-M2: the reminder of platform fee Kudos expiring.
+                "qb.fee-credit.expiring プラットフォーム料金の Kudos の期限");
         // Q48c/d: the prospecting mails go to businesses' addresses only (platform 17r): they are no user's
         // preference, and a sponsor cannot set them (the same refusal as for a name that does not exist).
         client.post().uri("/api/auth/mail/preferences").contentType(MediaType.APPLICATION_JSON)

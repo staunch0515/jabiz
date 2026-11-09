@@ -205,6 +205,21 @@ public final class QbParams {
     public static final String FEE_OVERDUE_BLOCK = "qb.fee.overdue.block-submit";
     public static final String FEE_DUE_DAYS = "qb.fee.due-days";
     /**
+     * F-M2: the platform fee Kudos granted to sponsors - whether the onboarding grant is given, its two amounts (an
+     * uncertified sponsor's, a certified one's), the days a lot is valid (all controlled); the most one manual grant
+     * may be (controlled, not created by {@code QB_SETUP}, read as optional: absent = no cap, as the spec says); and
+     * (ordinary) how many days before a lot expires its sponsor is reminded.
+     */
+    public static final String FEE_CREDIT_GRANT_ENABLED = "qb.fee-credit.grant.enabled";
+    public static final String FEE_CREDIT_GRANT_BASIC = "qb.fee-credit.grant.basic";
+    public static final String FEE_CREDIT_GRANT_CERTIFIED = "qb.fee-credit.grant.certified";
+    public static final String FEE_CREDIT_VALID_DAYS = "qb.fee-credit.valid-days";
+    public static final String FEE_CREDIT_MANUAL_MAX = "qb.fee-credit.manual.max";
+    public static final String FEE_CREDIT_EXPIRY_NOTICE_DAYS = "qb.fee-credit.expiry-notice-days";
+    /** The cap's kind, which the controlled change that first sets it gives (yen, whole). */
+    public static final Map<String, Object> FEE_CREDIT_MANUAL_MAX_KIND = Map.of("type", "monetary", "currency", "JPY",
+        "scale", 0);
+    /**
      * Q88b (D-Q88-14): whether sponsors may set an entry fee on a quiz (controlled; read only when a draft is saved:
      * off refuses a fee, what is live keeps charging).
      */
@@ -316,10 +331,12 @@ public final class QbParams {
     public static final String JOURNAL_ACCOUNT_2170 = JOURNAL_ACCOUNT_PREFIX + "2170";
     /** F-M1: the sponsors' platform fee Kudos (the fee credit). */
     public static final String JOURNAL_ACCOUNT_2190 = JOURNAL_ACCOUNT_PREFIX + "2190";
+    /** F-M2: the promotion expenses of the platform fee Kudos granted. */
+    public static final String JOURNAL_ACCOUNT_5140 = JOURNAL_ACCOUNT_PREFIX + "5140";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
         JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
         JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160, JOURNAL_ACCOUNT_1130,
-        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170, JOURNAL_ACCOUNT_2190);
+        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170, JOURNAL_ACCOUNT_2190, JOURNAL_ACCOUNT_5140);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -450,6 +467,9 @@ public final class QbParams {
     /** Q87b: the platform fees' switches (controlled, after the cash account's, in this order). */
     public static final List<String> FEE_PARAMS = List.of(FEE_MONTHLY, FEE_TAX_RATE, FEE_DEFAULT_BILLING_MODE,
         FEE_OVERDUE_BLOCK);
+    /** F-M2: the grants' switch, amounts and validity (controlled, last, in this order); the cap is not set up. */
+    public static final List<String> FEE_CREDIT_PARAMS = List.of(FEE_CREDIT_GRANT_ENABLED, FEE_CREDIT_GRANT_BASIC,
+        FEE_CREDIT_GRANT_CERTIFIED, FEE_CREDIT_VALID_DAYS);
 
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
@@ -461,7 +481,7 @@ public final class QbParams {
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
-        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED)
+        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -524,6 +544,7 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_2150, "2150 Consumption tax payable"),
         journal(JOURNAL_ACCOUNT_2170, "2170 Entry fees unsettled"),
         journal(JOURNAL_ACCOUNT_2190, "2190 Sponsor platform fee Kudos"),
+        journal(JOURNAL_ACCOUNT_5140, "5140 Promotion expenses (platform fee Kudos)"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
@@ -789,7 +810,20 @@ public final class QbParams {
         new Param(HELP_GLOBAL_MONTHLY_TOKENS, TOKENS, "20000000",
             "The tokens the AI help may use a month, everybody together"),
         new Param(HELP_CACHE_READ_WEIGHT, Map.of("type", "numeric", "precision", 3, "scale", 2), "0.10",
-            "How much an input token read from the prompt cache counts towards the AI help's monthly tokens (0 to 1)"));
+            "How much an input token read from the prompt cache counts towards the AI help's monthly tokens (0 to 1)"),
+        // F-M2: platform fee Kudos granted (the reminder ordinary, the rest controlled; last). Off keeps what the
+        // platform did before: nothing is granted.
+        new Param(FEE_CREDIT_EXPIRY_NOTICE_DAYS, DAYS, "14",
+            "How many days before a lot of platform fee Kudos expires its sponsor is reminded (1 to 365)"),
+        new Param(FEE_CREDIT_GRANT_ENABLED, BOOL, false,
+            "Whether an operator's lead may give an approved sponsor the onboarding platform fee Kudos (F-M2)"),
+        new Param(FEE_CREDIT_GRANT_BASIC, KUDOS, "1000",
+            "The onboarding platform fee Kudos of a sponsor not certified, in yen"),
+        new Param(FEE_CREDIT_GRANT_CERTIFIED, KUDOS, "10000",
+            "The onboarding platform fee Kudos of a certified sponsor, in yen (a sponsor certified later is topped up "
+                + "to it)"),
+        new Param(FEE_CREDIT_VALID_DAYS, DAYS, "90",
+            "How many days a lot of platform fee Kudos is valid for from when it is granted (1 to 999)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {
