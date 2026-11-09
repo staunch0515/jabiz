@@ -36,6 +36,8 @@ test('a Sponsor imports a large bank in batches, undoes one, searches, moves and
   const total = batch + 3
 
   await signIn(page, '/sponsor/', email)
+  // Signed in before going on: signIn only submits the form (a sponsor not yet approved lands on the profile).
+  await expect(page).not.toHaveURL(/\/login/)
   await page.goto(`/sponsor/quizzes/${quizId}`)
   await page.getByTestId('tab-questions').click()
   await expect(page.getByTestId('questions-empty')).toBeVisible()
@@ -48,7 +50,7 @@ test('a Sponsor imports a large bank in batches, undoes one, searches, moves and
   await dialog.getByTestId('bank-import-confirm').click()
   await expect(dialog.getByTestId('bank-import-done')).toContainText(`${total} questions imported in 2 batches`,
     { timeout: 60_000 })
-  await dialog.getByRole('button', { name: 'Close' }).click()
+  await dialog.locator('[data-slot="button"]', { hasText: 'Close' }).click()
   await expect(page.getByTestId('questions-count')).toContainText(`${total} /`)
   await expect(page.getByTestId('questions-page')).toContainText('Page 1 of')
 
