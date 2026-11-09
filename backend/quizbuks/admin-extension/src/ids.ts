@@ -146,6 +146,10 @@ export const TEMPLATE = {
   operatorFeeAccountLots: 'qb.operator.fee-account-lots',
   operatorFeePayments: 'qb.operator.fee-payments',
   feeRequests: 'qb.admin.fee-requests',
+  /** F-M2: the platform fee Kudos granted (headquarters, read only), each and summed; an operator's Sponsor's onboarding. */
+  feeCreditGrants: 'qb.admin.fee-credit-grants',
+  feeCreditSummary: 'qb.admin.fee-credit-summary',
+  operatorFeeCreditOnboarding: 'qb.operator.fee-credit-onboarding',
   /** The investors' figures (Q27): a row per UTC month of a period, and the sponsors behind them (finance). */
   investorMetrics: 'qb.admin.investor-metrics',
   investorSponsors: 'qb.admin.investor-sponsors',
@@ -314,6 +318,8 @@ export const PROCESS = {
 export const FEE_PROCESS = {
   request: 'QB_FEE_REQUEST',
   billingSet: 'QB_OPERATOR_BILLING_SET',
+  /** F-M2: a lead of the Sponsor's operator confirms the Sponsor, which grants the onboarding platform fee Kudos. */
+  onboarding: 'QB_FEE_CREDIT_ONBOARDING',
 } as const
 
 /** The platform's controlled changes (four eyes, decision D40): the mapping changes only through them. */
@@ -338,8 +344,8 @@ export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110',
   '2160', '1130', '4120', '2150',
   // Q88b: the entry fees unsettled (until the daily job moves them to the sponsors' cash accounts).
   '2170',
-  // F-M1: the sponsors' granted credit (platform fee Kudos).
-  '2190'] as const
+  // F-M1: the sponsors' granted credit (platform fee Kudos); F-M2: its promotion expenses.
+  '2190', '5140'] as const
 
 /** A transfer still sending this long after it was created is in doubt (the backend's `STALE_AFTER`). */
 export const STALE_AFTER_MS = 60 * 60 * 1000
@@ -515,6 +521,8 @@ export const PERMISSION = {
   adminHelp: 'qb.admin.help',
   /** F-C10c: what the AI help did not solve (headquarters' content administrators only). */
   adminHelpGaps: 'qb.admin.help.gaps',
+  /** F-M2: an operator's lead confirms a Sponsor and gives the onboarding platform fee Kudos. */
+  feeCreditOnboarding: 'qb.fee-credit.onboarding.confirm',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */

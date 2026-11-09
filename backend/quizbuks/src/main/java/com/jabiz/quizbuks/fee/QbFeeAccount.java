@@ -14,7 +14,8 @@ import java.util.List;
  * <ul>
  *   <li>{@value #GRANT}: one grant of fee credit, a lot (an ordinary table: its remaining amount changes): where it
  *       came from and what it stands for (unique for the sponsor), the amount and what is left, until when it may be
- *       spent, and the sponsor's operator when it was granted. F-M2 grants it; F-M1 only spends it.</li>
+ *       spent, and the sponsor's operator when it was granted; what expired of it unused (voided). F-M2 grants and
+ *       voids it ({@code fee.FeeCredits}); F-M1 spends it.</li>
  *   <li>{@value #CASH_LOT}: one sum of money that arrived in the cash account, a lot (an ordinary table): where it came
  *       from ({@value #CARD}, {@value #BANK}, {@value #OPERATOR}, {@value #OTHER}), the amount and what is left, when it
  *       arrived and the record it arrived with. Every movement of 2160 moves the lots with it, so that 2160 for a
@@ -89,11 +90,17 @@ public final class QbFeeAccount {
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("expiresAt", f -> f.physicalColumn("expires_at").immutable(true).required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
+        // F-M2: what the daily job voided when the lot expired (its remaining amount then), and when; when its sponsor
+        // was told it would expire (once a lot).
+        eb.field("voidedAmount", f -> f.physicalColumn("voided_amount").required(true).processOnly()
+            .asMonetary("JPY", 0));
+        eb.field("voidedAt", f -> f.physicalColumn("voided_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("remindedAt", f -> f.physicalColumn("reminded_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_fee_credit_grant_source", "sponsorId", "sourceKey");
         eb.listView("default", lv -> lv
-            .columns("sponsorId", "source", "amount", "remaining", "grantedAt", "expiresAt")
-            .filters("sponsorId", "source", "operatorId", "grantedAt", "expiresAt")
+            .columns("sponsorId", "source", "amount", "remaining", "voidedAmount", "grantedAt", "expiresAt")
+            .filters("sponsorId", "source", "operatorId", "grantedAt", "expiresAt", "voidedAt")
             .sorts("expiresAt", "grantedAt")
             .defaultSort("expiresAt", true));
     });

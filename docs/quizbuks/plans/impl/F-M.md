@@ -69,6 +69,19 @@
 - 冻结在预付中的赠送部分：本 PR 只有账户中的笔；冻结部分的作废规则随 M4 实现。
 - 月报 `FEE_CREDIT_GRANTED` / `FEE_CREDIT_VOIDED`；核对"推广费 = 发放 − 作废（按运营商）"。
 
+#### M2 实施记录（`1.3/quizbuks-FM2-grants`，叠在 M1 上）
+
+- **做法**：`fee.FeeCredits` 四个流程 + 纯 Java 的 `FeeCreditRules`（入驻金额、有效期、上限、可作废额、是否该提醒、24 小时）。`QB_FEE_CREDIT_GRANT`（`subProcessOnly`）在调用方的钱包锁内一条 `QueryEntities.all` 读同来源键的笔、发起方的运营商与 `FEE_CREDIT` 钱包；已有即返回原笔（`granted = false`），否则写笔（记 `operatorId`）、改钱包、`SaveChanges.now` 后 `LEDGER_POST`（借 5140 / 贷 2190，两行都带 `party`，来源为该笔）。`QB_FEE_CREDIT_ONBOARDING`：`OperatorChecks.member` + `ownSponsor`（别的运营商的发起方 404），负责人与开关在取锁前查，取锁后查通过、封禁与已领。到期作废与提醒各一个 `forEach` 任务（`jabiz.fiscal-year-zone` 的 02:47 与 10:13），逐项在钱包锁内重读。
+- **与计划不同**（总控 2026-11-09 同意）：
+  1. 追加赠送没有单独的 `QB_FEE_CREDIT_MANUAL_REQUEST` 与审批对象 `qb.fee-credit`，而是**平台费申请的第三种 `CREDIT`**（同一 `QB_FEE_REQUEST` / `QB_FEE_REQUEST_APPROVAL_RESULT`、审批对象 `qb.fee-request`、规则 `qb.fee-request.review`、同一申请页与审批人）。理由：四眼、自己的账号、另一位批准、拒绝、内容哈希的处理与手工记费完全相同，单立一套是重复；`CREDIT` 的审批内容多 `validDays`（只在有值时放入，已有申请的内容哈希不变）。上限在申请与批准时各查一次，批准时超限即拒绝。
+  2. 提醒是**另一个每日任务** `qb.fee-credit-remind`（计划只写了提醒本身）：按发起方逐项，每笔记 `reminded_at`（按笔去重），距上一封不足 24 小时不发；"按提醒日去重"由每日一次与每笔一次合起来实现。
+  3. `qb.fee-credit.manual.max` 与 `TREE_GATES` 一样列入 `ControlledParams`（`SetupConfig`），不在 `QbParams.CONTROLLED`（那里是 `QB_SETUP` 要提案的），以 `LoadParams.optional` 读。
+  4. 每日核对的 `FEE_CREDIT_PROMOTION` 一行的 `sponsorId` 列放运营商（`-` 为无）：核对项的键只有这一列。
+- **认证**：F-M3 之前所有发起方按未认证（`FeeCreditRules.onboardingAmount(false, …)`，代码注明）；钱包页"认证后补到 10,000"的提示与 `CERTIFIED_TOP_UP` 随 M3。
+- **迁移**：`V106`（V102 是 S3 的 #581，V103 是 M1 #578，V104、V105 是 S1 的 #582、#584；总控定）：`qb_fee_credit_grant` 加 `voided_amount`、`voided_at`、`reminded_at`（约束：作废时剩余为 0）与到期索引；`qb_fee_request` 加种类 `CREDIT`、`valid_days`、`grant_id`。科目 5140 与参数由 `QB_SETUP` 建。
+- **页面**：发起方钱包页各笔多"已用"；运营商的发起方页"入驻赠送"块与确认按钮（`qb.fee-credit.onboarding.confirm`）；平台管理系统"平台费"页的"追加赠送"按钮（`FEE_MANAGE`）与"平台费 Kudos"标签（按运营商 / 发起方 / 来源汇总与逐笔，财务只读）。
+- **平台缺口**：无。
+
 ### M3 企业实名认证（F-M3）
 - `QbSponsorVerification`（名称、域名、状态、审核、撤销；生效中的域名唯一）；`QB_SPONSOR_VERIFICATION_SUBMIT`（账户邮箱已是该域名即直接进审核，否则寄确认链接）；`…_CONFIRM`（`MailTokens.consume`）；审批 `qb.sponsor-verification`（绑定名称与域名，运营商另一位成员）；`…_REVOKE`（理由）；通过即 `CERTIFIED_TOP_UP`（补差额）。
 - 公共邮箱域名清单在代码中（`PublicMailDomains`）；`qb.sponsor-verification.link-hours`（48，普通）。
@@ -173,3 +186,18 @@
 - **迁移已有数据**：现有 2160 余额一次写成一笔（§2.c 第 3 条）；现有账单状态不变；现有已付账单不补分摊记录（分摊从上线起），核对 `FEE_PAYMENTS` 只核上线之后的。
 - **退回与到期交织**：预付退回时原笔已到期即作废；有专门的测试（跨到期日的释放）。
 - **上线顺序**：各开关缺省关；打开顺序写进 `operations.md`（先价目表、再开关），与 F-F10（资金开关，S3）对齐。
+
+## 5. 进度与下一步（S2，2026-11-09，按总控降速暂停）
+
+| 项 | 状态 |
+|---|---|
+| M1（F-M1、F-M13 的付款） | #578 已合（V103） |
+| M2（F-M2，不含 `LIGHT`） | 草稿 #585（V106，head 0a012282）：已合最新（#584），本机全部场景、受影响测试与 `platformCheck` 通过；e2e（S4）整轮 120/122，失败的 `topup.spec.ts` 已改，重跑 3/3 通过。等 CI 绿后报总控转 ready |
+| M3–M9 | 未开始（总控：额度重置前不开新项） |
+
+下一步（额度重置之后）：
+
+1. #585：CI 若红，按失败原因修；合入后删工作树 `/workspace/fm2`。
+2. M3 企业实名认证（F-M3）：按本文件 §M3 与 S1 的邮件令牌答复（`MailRecipient.user(userId, address, null)`、用途 `company-email`、`MailTokens.consume` 返回 `Consumed(messageId, userId, address)`；流程核对 userId 与规范化地址，地址先校验，400）。随 M3 补 M2 的 `CERTIFIED_TOP_UP` 与钱包页"认证后补到 10,000"的提示，入驻赠送改为按认证读 `grant.certified`。
+3. M4 起按 §1 的顺序；M4 含需求方确认的删除（`direct` 价目表与 `qb.audience.price.fallback`）。
+4. 平台的既有问题（转 S1，非本线）：`platformCheck` 结束时 `JobScheduler.scheduleNext` 记两条 `TaskRejectedException: ExecutorService in shutdown state`（关闭时的竞争，只是 ERROR 日志）。

@@ -1048,6 +1048,29 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   2. 一张账单的付款：`SELECT paid_at, sub_account, coalesce(grant_id, cash_lot_id) AS lot, amount, transaction_id FROM qb_fee_payment_version WHERE target_id IN ('<账单>', '<账单的 charge_id>') ORDER BY process_seq_id, row_id`。
   3. 部分付款的账单：`SELECT status, total, paid_amount, due_on FROM qb_fee_invoice WHERE invoice_id = '<账单>'`；剩余 = `total - paid_amount`，到期后照旧变为 `OVERDUE` 并提醒。
 
+### 7.39 赠送平台费 Kudos：入驻、追加、到期作废与提醒（F-M2）
+
+平台把**平台费 Kudos**（赠送额度，7.38 的 2190 / `FEE_CREDIT`）直接赠送给发起方，费用由平台作为**推广费**承担：科目 **5140 推广费（平台费 Kudos）**（费用），与学分的推广费 5120 分开。每笔赠送只经子流程 `QB_FEE_CREDIT_GRANT`（借 5140 / 贷 2190，维度 `party` = 发起方，来源为该笔 `QbFeeCreditGrant`）；同一发起方 + 来源键至多一笔（再调用一次只返回原来那笔），每笔记下**发放时**发起方所属的运营商（改派之后不变）。这一版的来源有两种：
+
+- **入驻赠送**（`ONBOARDING`，来源键 `onboarding`）：发起方入驻通过之后，**所属运营商的负责人**在运营商管理系统的发起方页"平台费账户"一块点"确认资料完整并发放"（`QB_FEE_CREDIT_ONBOARDING`，权限 `qb.fee-credit.onboarding.confirm`，角色 `QB_OPERATOR` 持有，流程另查调用者是该运营商的负责人）。未认证发 `qb.fee-credit.grant.basic`（1,000），已认证发 `qb.fee-credit.grant.certified`（10,000；企业认证 F-M3 之前所有发起方都按未认证，认证后的补差额随 F-M3）。拒绝（422）：开关 `qb.fee-credit.grant.enabled` 未开 `QB_FEE_CREDIT_OFF`、发起方未通过或已封禁 `QB_FEE_CREDIT_SPONSOR`、已领过 `QB_FEE_CREDIT_GIVEN`、不是负责人 `QB_FEE_CREDIT_LEAD`；别的运营商的发起方 404。
+- **追加赠送**（`MANUAL`，来源键 `manual:<申请>`）：总部财务在平台管理系统"平台费"页点"追加赠送平台费 Kudos"（`QB_FEE_REQUEST`，种类 `CREDIT`：发起方、金额、理由，可另定有效天数 1–999），与手工记费一样由另一位管理员批准（审批对象 `qb.fee-request`，规则 `qb.fee-request.review`）。受控参数 `qb.fee-credit.manual.max` 是每笔上限：**`QB_SETUP` 不建它，不设即不限**；要设时以受控变更新建（`valueKind` 为 JPY 整数），由另一位管理员发布。超过上限在申请时即拒（`QB_FEE_CREDIT_MAX`）；批准时上限已调低的，申请被拒绝而不发放。
+
+有效期：每笔自发放起 `qb.fee-credit.valid-days`（90）天（追加可另定）。
+
+- **部署**：迁移 V106 给 `qb_fee_credit_grant` 加 `voided_amount`、`voided_at`、`reminded_at`，给 `qb_fee_request` 加种类 `CREDIT`、`valid_days`、`grant_id`。之后：
+  1. 运行一次 `QB_SETUP`：建科目 5140、受控参数 `qb.journal.account.5140`（空值提案）与赠送的参数（受控的四个作为提案：`qb.fee-credit.grant.enabled` = false、`.grant.basic` = 1000、`.grant.certified` = 10000、`qb.fee-credit.valid-days` = 90；普通的 `qb.fee-credit.expiry-notice-days` = 14 直接建立），角色 `QB_OPERATOR` 得到 `qb.fee-credit.onboarding.confirm`。
+  2. **另一位管理员发布**这些提案；`qb.journal.account.5140` 是会计系统中"推广费（平台费 Kudos）"的科目代码，未发布之前分录导出会被拒。
+  3. 活动开始时，以受控变更把 `qb.fee-credit.grant.enabled` 改为 `true`（另一位管理员发布）；关掉即不再能确认入驻赠送（已发的照旧可用、照旧到期）。追加赠送不受这个开关影响。
+- **到期作废**：任务 `qb.fee-credit-expire`（每天 02:47，`jabiz.fiscal-year-zone`），逐笔（`QB_FEE_CREDIT_EXPIRE`，`internal()`）在发起方钱包锁内重读，把**到期时剩余的部分**作废：借 2190 / 贷 5140，`remaining` 归零、记 `voided_amount` 与 `voided_at`，钱包 `FEE_CREDIT` 减少。已用掉的部分不受影响。错过的运行以 `JOB_RUN_REQUEST` 补跑（同一时刻幂等）。冻结在预付中的赠送部分随 M4。
+- **到期前提醒**：任务 `qb.fee-credit-remind`（每天 10:13，同一时区）选出有一笔将在 `qb.fee-credit.expiry-notice-days` 天内到期、还有剩余、尚未提醒过的发起方；逐个（`QB_FEE_CREDIT_REMIND`）在钱包锁内把这些笔记上 `reminded_at`（每笔只提醒一次），距上一封不足 24 小时的不发（下一天再发），发出事件 `qb.fee-credit.expiring`，由 `QB_MAIL_FEE_CREDIT` 寄邮件 `qb.fee-credit.expiring`（通知类，可退订，只在发起方入口的偏好中）。
+- **页面**：发起方钱包页的"平台费账户"各笔显示来源、金额、已用、剩余与到期；运营商的发起方页显示入驻赠送是否已发与"确认"按钮（只有持权限者看得到，负责人之外的成员由服务器拒绝）；平台管理系统"平台费"页的"平台费 Kudos"标签（财务只读）按运营商（发放时）、发起方或来源汇总，并列出每一笔的赠送、已用、剩余与到期作废。
+- **每日核对**（`qb.system.recon-fee-account`）：新项 `FEE_CREDIT_PROMOTION`——按运营商（发放时记在笔上的；`-` 为无），以赠送为来源的分录在 5140 上的借减贷 = 各笔金额 − 到期作废之和（`sponsorId` 一列此处是运营商）。`FEE_CREDIT`（2190 = 钱包 = 各笔剩余）照旧覆盖赠送与作废。
+- **月报**（`qb.admin.monthly`）：两个新种类 `FEE_CREDIT_GRANTED`（借 5140 / 贷 2190）与 `FEE_CREDIT_VOIDED`（借 2190 / 贷 5140），新列 `feeCreditPromotion`（5140）；用赠送支付的平台费照旧在 `FEE_PAID` 的 `feeCredit` 一列。余额表多 5140 一行。
+- **排查**：
+  1. 某发起方的赠送：`SELECT grant_id, source, source_key, operator_id, amount, remaining, voided_amount, granted_at, expires_at, reminded_at FROM qb_fee_credit_grant WHERE sponsor_id = '<发起方>' ORDER BY granted_at`。
+  2. 一笔的分录：`SELECT t.description, a.account_code, e.direction, e.amount FROM ledger_transaction_version t JOIN ledger_entry_version e USING (transaction_id) JOIN ledger_account_version a ON a.account_id = e.account_id WHERE t.source_entity = 'QbFeeCreditGrant' AND t.source_id = '<grant_id>'`。
+  3. "说没收到提醒"：看 `reminded_at`（已提醒过的笔不再提醒）、该发起方最近一封 `qb.fee-credit.expiring`（`sys_mail_message`），以及其邮件偏好是否退订了这一类。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。

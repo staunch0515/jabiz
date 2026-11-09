@@ -206,7 +206,9 @@ public class FeeConfig {
     StaticDictionary qbFeeRequestKindDictionary() {
         return StaticDictionary.define(QbFees.REQUEST_KIND_DICTIONARY, d -> d
             .item(QbFees.REQUEST_MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
-            .item(QbFees.REQUEST_VOID, "en", "Invoice voided", "zh", "作废账单", "ja", "請求書の取消"));
+            .item(QbFees.REQUEST_VOID, "en", "Invoice voided", "zh", "作废账单", "ja", "請求書の取消")
+            .item(QbFees.REQUEST_CREDIT, "en", "Platform fee Kudos granted by hand", "zh", "追加赠送平台费 Kudos",
+                "ja", "利用料 Kudos の追加付与"));
     }
 
     @Bean
@@ -316,6 +318,52 @@ public class FeeConfig {
             qbFeeRequestApprovalResult) {
         return EventSubscription.of("qb.fee-request-rejected", ApprovalProcesses.REJECTED_EVENT,
             qbFeeRequestApprovalResult, TransferProcesses::resultInput);
+    }
+
+    // ---- F-M2: platform fee Kudos granted -------------------------------------------------------------------------
+
+    @Bean
+    ProcessDefinition<FeeCredits.GrantInput, FeeCredits.GrantOutput, ProcessContext> qbFeeCreditGrant() {
+        return FeeCredits.grant();
+    }
+
+    @Bean
+    ProcessDefinition<FeeCredits.OnboardingInput, FeeCredits.GrantOutput, ProcessContext> qbFeeCreditOnboarding() {
+        return FeeCredits.onboarding();
+    }
+
+    @Bean
+    ProcessDefinition<FeeCredits.GrantRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeCreditExpireItem() {
+        return FeeCredits.expireItem();
+    }
+
+    @Bean
+    ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeCreditRemindItem() {
+        return FeeCredits.remindItem();
+    }
+
+    /** Every day at 02:47 in the fiscal year's zone (Japan's): the lots expired with something left, voided. */
+    @Bean
+    JobDefinition<FeeCredits.GrantRef> qbFeeCreditExpireJob(
+        ProcessDefinition<FeeCredits.GrantRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeCreditExpireItem) {
+        return JobDefinition.forEach(FeeCredits.EXPIRE_JOB, "0 47 2 * * *", zone,
+                JobItems.template(FeeCredits.EXPIRE_DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "grantId"),
+                qbFeeCreditExpireItem,
+                (scheduledTime, row) -> new FeeCredits.GrantRef(String.valueOf(row.get("grantId"))))
+            .maxItems(10_000);
+    }
+
+    /** Every day at 10:13 in the fiscal year's zone: the sponsors whose lots expire within the notice, told. */
+    @Bean
+    JobDefinition<FeeCredits.SponsorRef> qbFeeCreditRemindJob(
+        ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeCreditRemindItem) {
+        return JobDefinition.forEach(FeeCredits.REMIND_JOB, "0 13 10 * * *", zone,
+                JobItems.template(FeeCredits.REMIND_DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "sponsorId"),
+                qbFeeCreditRemindItem,
+                (scheduledTime, row) -> new FeeCredits.SponsorRef(String.valueOf(row.get("sponsorId"))))
+            .maxItems(10_000);
     }
 
     // ---- jobs (the second of each month, Japan's: the fee of the month that begins, the invoices of the month that ended)

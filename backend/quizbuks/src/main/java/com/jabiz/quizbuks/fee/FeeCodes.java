@@ -26,8 +26,20 @@ public final class FeeCodes {
     /** Nothing to pay early: no postpaid fee is waiting for its invoice. */
     public static final String FEE_NOTHING_DUE = "QB_FEE_NOTHING_DUE";
 
+    /** F-M2: the onboarding platform fee Kudos are switched off ({@code qb.fee-credit.grant.enabled}). */
+    public static final String FEE_CREDIT_OFF = "QB_FEE_CREDIT_OFF";
+    /** F-M2: platform fee Kudos are granted to an approved sponsor who is not banned only. */
+    public static final String FEE_CREDIT_SPONSOR = "QB_FEE_CREDIT_SPONSOR";
+    /** F-M2: the sponsor received their onboarding platform fee Kudos already. */
+    public static final String FEE_CREDIT_GIVEN = "QB_FEE_CREDIT_GIVEN";
+    /** F-M2: a grant by hand above {@code qb.fee-credit.manual.max}. */
+    public static final String FEE_CREDIT_MAX = "QB_FEE_CREDIT_MAX";
+    /** F-M2: only a lead of the sponsor's operator confirms the sponsor. */
+    public static final String FEE_CREDIT_LEAD = "QB_FEE_CREDIT_LEAD";
+
     public static final List<String> ALL = List.of(FEE_UNPAID, FEE_CASH_SHORT, FEE_INVOICE_STATE, FEE_SPONSOR,
-        FEE_PERIOD, FEE_PARAMS, FEE_NO_REVIEW, FEE_BILLING_MODE, FEE_OWN, FEE_NOTHING_DUE);
+        FEE_PERIOD, FEE_PARAMS, FEE_NO_REVIEW, FEE_BILLING_MODE, FEE_OWN, FEE_NOTHING_DUE, FEE_CREDIT_OFF,
+        FEE_CREDIT_SPONSOR, FEE_CREDIT_GIVEN, FEE_CREDIT_MAX, FEE_CREDIT_LEAD);
 
     private FeeCodes() {}
 }

@@ -220,6 +220,11 @@ public final class QbPermissions {
     /** Q87: setting a sponsor's billing mode and credit limit (an operator for its own, headquarters for any). */
     public static final String FEE_BILLING = "qb.fee.billing";
     /**
+     * F-M2: an operator's lead confirms that an approved sponsor of the operator is complete and gives them the
+     * onboarding platform fee Kudos (the process checks the caller's place: a lead of the sponsor's operator).
+     */
+    public static final String FEE_CREDIT_ONBOARDING_CONFIRM = "qb.fee-credit.onboarding.confirm";
+    /**
      * The analytics job's item process ({@code QB_ANALYTICS_ITEM}, {@code internal()}), its templates and its own
      * datasets. Granted to no role.
      */
