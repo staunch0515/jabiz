@@ -1318,7 +1318,7 @@ const zh: typeof en = {
       PUBLICATION: '以后不会再看到这个 Quiz。',
       QUIZ: '以后不会再看到这个 Quiz 及它以后的各期。',
       SPONSOR: '以后不会再看到这个发起方的 Quiz。',
-      PROVIDER: '以后不会再看到用了这个提供方视频的 Quiz。',
+      PROVIDER: '以后不会再看到用了这个提供方的视频的 Quiz。',
     },
     undo: '撤销',
     undone: '已解除屏蔽。',
