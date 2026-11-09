@@ -1113,7 +1113,7 @@ const zh: typeof en = {
     regionUnavailableHint: '它含有在你现在所在的地区无法播放的视频（如 YouTube），因此在这里不能打开或作答。',
     invitedHint: '如果你收到过邮件邀请，请打开邮件中的链接，或用受邀的邮箱登录。',
     kind: '类型',
-    survey: '问卷',
+    survey: '调查问卷',
     surveyReward: '完整作答的奖励',
     questions: '题数',
     timeLimit: '答题时限',
