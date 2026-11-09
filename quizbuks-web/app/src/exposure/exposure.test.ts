@@ -156,3 +156,25 @@ describe('where the pushes stand (F-S13)', () => {
     expect(placePushes([card('s1')], pushes, 'gone', 2).map((c) => c.publicationId)).toEqual(['s1'])
   })
 })
+
+describe('reports left by an earlier page (F-S13)', () => {
+  it('are kept in the tab until the server has them, and sent by the next page', async () => {
+    vi.useFakeTimers()
+    client.runProcess.mockReturnValue(new Promise(() => {}))
+    queueReport({ publicationId: 'p9', kind: 'OPEN', surface: 'VERTICAL' })
+    void flushReports()
+    // The call is on its way when the page goes: still kept.
+    expect(JSON.parse(window.sessionStorage.getItem('qb.exposure.pending') ?? '[]')).toHaveLength(1)
+    // The next page (the module afresh) sends it.
+    const { resumeReports, forgetReports: forget } = await import('./reporter')
+    forget()
+    window.sessionStorage.setItem('qb.exposure.pending', JSON.stringify([{ publicationId: 'p9', kind: 'OPEN',
+      surface: 'VERTICAL' }]))
+    client.runProcess.mockReset().mockResolvedValue({ results: [], counted: 0 })
+    resumeReports()
+    await vi.advanceTimersByTimeAsync(5_100)
+    expect(client.runProcess).toHaveBeenCalledWith('QB_EXPOSURE_REPORT', { reports: [{ publicationId: 'p9',
+      kind: 'OPEN', surface: 'VERTICAL' }] })
+    expect(window.sessionStorage.getItem('qb.exposure.pending')).toBeNull()
+  })
+})

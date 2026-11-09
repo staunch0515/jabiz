@@ -81,7 +81,8 @@ async function live(request: APIRequestContext, token: string, name: string,
   const draft = await run(request, token, 'QB_PUBLICATION_SAVE', { versionId, name, regions: ['GLOBAL'],
     startAt: new Date(now - 60_000).toISOString(), endAt: new Date(now + 7 * 86_400_000).toISOString(),
     passScore: 1, budgetCap: 500, maxWinners: 5,
-    tiers: [{ fromScore: 0, toScore: 0, reward: 0 }, { fromScore: 1, toScore: 1, reward: 20 }] })
+    tiers: [{ fromScore: 0, toScore: 0, reward: 0 },
+      { fromScore: 1, toScore: 'shared' in video ? 2 : 1, reward: 20 }] })
   const publicationId = String(draft.publicationId)
   if ('shared' in video) {
     await run(request, token, 'QB_PUBLICATION_SHARED_VIDEO_SET', { publicationId, sharedVideoId: video.shared })
@@ -109,7 +110,9 @@ function watchReports(page: Page) {
   const sent: { publicationId: string; kind: string; surface: string }[] = []
   page.on('request', (request) => {
     if (request.method() === 'POST' && request.url().includes('/api/processes/QB_EXPOSURE_REPORT/')) {
-      sent.push(...((request.postDataJSON() as { reports: typeof sent }).reports))
+      // A call sent as the page goes may carry no readable body here: it is counted all the same.
+      const body = request.postDataJSON() as { reports?: typeof sent } | null
+      sent.push(...(body?.reports ?? [{ publicationId: '?', kind: '?', surface: '?' }]))
     }
   })
   return sent

@@ -8,6 +8,8 @@ import { DEFAULT_REPORT_BATCH, DEFAULT_REPORT_INTERVAL_SEC, MAX_BATCH, reportBat
  * the first, whichever comes first, and at once when the page goes to the background. A report is made once per
  * publication and kind in this tab (the server counts once per taker and publication anyway). A failed call keeps its
  * reports for the next time, unless the server refused them (a 4xx other than 429: nothing to gain from repeating).
+ * What is not sent yet is also kept in this tab's sessionStorage until the server has it: a call cut short by leaving
+ * the page (a reload, a link) is sent by the next page. Storage can be missing or refuse: every access is guarded.
  */
 
 export const REPORT_PROCESS = 'QB_EXPOSURE_REPORT'
@@ -28,6 +30,31 @@ let timer: ReturnType<typeof setTimeout> | null = null
 let sending: Promise<void> | null = null
 let listening = false
 
+const KEY = 'qb.exposure.pending'
+/** The reports of the call on its way (kept until it is answered). */
+let inFlight: ExposureReport[] = []
+
+function save() {
+  try {
+    const pending = [...inFlight, ...queue]
+    if (pending.length === 0) window.sessionStorage.removeItem(KEY)
+    else window.sessionStorage.setItem(KEY, JSON.stringify(pending))
+  } catch {
+    // Kept in memory only.
+  }
+}
+
+function restore(): ExposureReport[] {
+  try {
+    const text = window.sessionStorage.getItem(KEY)
+    const kept = text ? JSON.parse(text) as unknown : null
+    return Array.isArray(kept) ? kept.filter((r): r is ExposureReport => typeof r === 'object' && r !== null
+      && typeof (r as ExposureReport).publicationId === 'string').slice(0, MAX_BATCH * 4) : []
+  } catch {
+    return []
+  }
+}
+
 const keyOf = (report: Pick<ExposureReport, 'publicationId' | 'kind'>) => `${report.publicationId}:${report.kind}`
 
 /** The parameters as read (`qb.app.exposure-settings`), bounded as the server bounds them. */
@@ -47,6 +74,7 @@ export function queueReport(report: ExposureReport): boolean {
   if (made.has(key)) return false
   made.add(key)
   queue.push(report)
+  save()
   listen()
   if (queue.length >= batch) {
     void flushReports()
@@ -68,11 +96,14 @@ export async function flushReports(): Promise<void> {
   if (sending) await sending
   if (queue.length === 0) return
   const reports = queue.splice(0, MAX_BATCH)
+  inFlight = reports
   sending = runProcess(REPORT_PROCESS, { reports }).then(() => undefined, (error: unknown) => {
     const status = (error as { status?: number } | null)?.status
     if (status == null || status >= 500 || status === 429) queue.unshift(...reports)
   }).finally(() => {
+    inFlight = []
     sending = null
+    save()
   })
   await sending
   if (queue.length >= batch) await flushReports()
@@ -87,6 +118,9 @@ export async function flushReports(): Promise<void> {
 /** Forgets every report (on signing out, and between tests). */
 export function forgetReports() {
   queue.length = 0
+  inFlight = []
+  sending = null
+  save()
   made.clear()
   if (timer) clearTimeout(timer)
   timer = null
@@ -107,3 +141,25 @@ function listen() {
   })
   window.addEventListener('pagehide', () => void flushReports())
 }
+
+/** What an earlier page of this tab left unsent goes with the next call (or after the interval). */
+export function resumeReports() {
+  const kept = restore()
+  if (kept.length === 0) return
+  for (const report of kept) {
+    const key = keyOf(report)
+    if (!made.has(key)) {
+      made.add(key)
+      queue.push(report)
+    }
+  }
+  listen()
+  if (!timer) {
+    timer = setTimeout(() => {
+      timer = null
+      void flushReports()
+    }, Math.min(intervalMs, 5_000))
+  }
+}
+
+if (typeof window !== 'undefined') resumeReports()
