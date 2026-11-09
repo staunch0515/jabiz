@@ -864,6 +864,39 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   3. 其余按首页的排查（地区、客户匹配、中国大陆 §7.24、只看喜欢的主题 §7.26）。
 - **"发起方问谁屏蔽了我"**：不回答。屏蔽只属于学者本人，发起方只看到取整的人数。
 
+### 7.31 曝光计数与争议（F-S13）
+
+用了**其他发起方共享视频**（F-S12，卡片的提供方不是发布方）的发布，学者看得够久即计一次曝光（`docs/quizbuks/plans/impl/F-S13.md`）：竖视频在 App 的竖屏模式中（这类发布在那里作为"推送"每隔几屏出现一个，几家发起方轮流，打开过的不再推送给这个人），横视频在开始答题页（视频在画面上、页面在前台）；首页的预览与自动播放从不计。每位学者每个发布至多一次，每天至多 `qb.exposure.daily-cap-per-user` 次（日界按 `jabiz.fiscal-year-zone`，即日本时间的午夜，每日核对同）；发布方、提供方本人及两边的店员（Q39）不计；用自己视频的发布不计、不推送。给用户的帮助文案在 `docs/quizbuks/help/exposure.md`。屏蔽（§7.30）与"只看喜欢的主题"（§7.26）同样作用于推送：付多少钱都越不过。
+
+- **部署**：迁移 `V97`建 `qb_exposure`，发布（只追加表，只加列）与卡片加列 `exposure_purchased`。部署后运行一次 `QB_SETUP`：建九个普通参数（下表），给内容管理员补上 `qb.admin.exposure.read` / `.monitor`、给运营商补上 `qb.admin.exposure.read`。两个任务：`qb.exposure-ends`（每分钟，逐项）、`qb.exposure-check`（每天 UTC 19:47）。没有新的环境变量。
+- **已购次数**（总控决定 A）：发布的 `exposurePurchased`，空即不限（永不因曝光结束）。只由 F-M8 的购买流程经子流程 `QB_EXPOSURE_PURCHASED_SET` 写入；**本项没有任何页面能改它**（F-M8 之前所有发布都是"不限"）。
+- **用完即停**：每分钟的 `qb.exposure-ends` 找出成功次数 ≥ 已购的进行中发布，每个以 `QB_PUBLICATION_EXPOSURE_END` 结束（结束原因"曝光已用完" `EXPOSURE`，不是下架，可以复制）；进行中的答题照常完成，发起方收到"发布已结束"的邮件。补跑用平台的"定时任务"页（`job.run`）。
+- **超出不计费**：上报不取发布锁，任务每分钟一次，所以成功次数可能略超已购；超出的照记，**计费次数 = min（成功，已购）**（F-M8 按它结算）。发起方页面的发布页"共享视频的曝光"一节显示已购（或"不限"）、已成功、计费、超出、推送被打开、去答题。
+- **参数**（普通参数，`PARAM_SET`，不受控）：
+
+  | 参数 | 缺省 | 作用 | 调整的影响 |
+  |---|---|---|---|
+  | `qb.exposure.seconds` | `10` | 连续观看多少秒算一次（视频更短时看完即算；1–600） | 调高后难计；App 在下次读设置时（约 10 分钟内）照新值计时 |
+  | `qb.exposure.daily-cap-per-user` | `200` | 每位学者每天至多计多少次（1–10000） | 调低会让更多账号出现在可疑刷量页 |
+  | `qb.exposure.push.every` | `5` | 竖屏模式中每几屏一个推送（1–50） | 调低推送更密，影响学者体验 |
+  | `qb.exposure.report.batch` | `20` | App 攒多少条报告后上报（1–50） | 调低请求更多（限流每人每分钟 30 次） |
+  | `qb.exposure.report.interval-sec` | `30` | App 至多攒多少秒后上报（5–600） | 调高时数字更新得慢（切到别的应用、锁屏或离开页面时会先发，未发出的下一个页面补发） |
+  | `qb.exposure.report.max-per-call` | `50` | App 一次调用至多上报几条（1–200） | 超过的调用被拒（`QB_EXPOSURE_BATCH_TOO_LARGE`）；App 读到新值后照分批 |
+  | `qb.exposure.reconcile.min-tolerance` | `20` | 每日核对允许成功超出已购的最少次数 | 调低会让并发造成的小超出也成为差异 |
+  | `qb.exposure.reconcile.tolerance-percent` | `5` | 或超出已购的百分比（向上取整），取较大者（0–100） | 同上 |
+  | `qb.exposure.reconcile.end-grace-sec` | `60` | 结束后多少秒内的计数不算差异（途中的报告；0–86400） | 调低会让结束时途中的报告成为差异 |
+
+- **限流**：`QB_EXPOSURE_REPORT` 每人每分钟 30 次（`application.yml` 的 `jabiz.process.rate-limits`）。
+- **可疑刷量**：平台管理系统的"曝光计数"页（`/qb/exposure`，两边共用的组，`qb.admin.exposure.read`）按账号列出被每日上限拒绝过的学者（命中次数：一个发布一天（日本时间）记一次；被拒的发布数；最近一次；已成功次数），总部看全部，运营商只看自己发起方的发布上的。命中多的账号先看它的成功集中在哪些发布（下面的查询），确认刷量时按封禁流程处理（`QB_USER_BAN`）；已记的成功不删除（计费按 min（成功，已购），F-M8 的争议在那里处理）。
+- **每日核对**（`qb.exposure-check`）：成功次数超过已购 + 容差（max（`min-tolerance`，⌈已购 × `tolerance-percent`%⌉）），或已结束的发布在结束 `end-grace-sec` 秒之后还有成功，即给内容管理员（`qb.admin.exposure.monitor`）一个待办（一天一个）。差异不改钱（超出本来就不计费）；常见原因：任务停了（看"定时任务"页的 `qb.exposure-ends`）、迁移或手工改了数据。
+- **删除账号**：曝光行只有编号，保留（同答题与浏览，平台决策 D62 第 4 条）。
+- **"发起方说曝光数不对"的排查**：
+  1. 发布的数字：`SELECT count(*) FILTER (WHERE counted_at IS NOT NULL) AS successes, count(*) FILTER (WHERE opened_at IS NOT NULL) AS opens FROM qb_exposure WHERE publication_id = '<发布>'`；已购：`SELECT exposure_purchased, status, ended_at FROM qb_publication_card WHERE publication_id = '<发布>'`。
+  2. 按天与地方：`SELECT date_trunc('day', counted_at) AS day, surface, timer, count(*) FROM qb_exposure WHERE publication_id = '<发布>' AND counted_at IS NOT NULL GROUP BY 1, 2, 3 ORDER BY 1`。
+  3. 集中的账号：`SELECT user_id, capped_days, last_capped_on FROM qb_exposure WHERE publication_id = '<发布>' ORDER BY capped_days DESC LIMIT 20`。
+  4. 不计的常见原因：用自己的视频、方向不对（竖视频只在竖屏模式计，横视频只在开始页计）、学者没验证邮箱、店员、到了每日上限、发布已结束、系统设为"减少动态效果"时视频不自动播放（学者点播放才开始计）。
+- **"学者说竖屏模式里总是同一家"**：推送按发起方编号轮流（服务器按编号排轮次，一轮中谁先每天换一次），同一家的新的在前；打开过的不再推送。看 `qb.exposure.push.every` 与有几家在用共享视频。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。

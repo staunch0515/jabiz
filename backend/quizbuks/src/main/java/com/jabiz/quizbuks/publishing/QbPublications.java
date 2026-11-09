@@ -160,6 +160,9 @@ public final class QbPublications {
         // Only QB_PUBLICATION_SHARED_VIDEO_SET writes it; frozen with the policy (a withdrawal does not touch it).
         eb.field("sharedVideoId", f -> f.physicalColumn("shared_video_id").processOnly()
             .asText(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.ID_LENGTH));
+        // F-S13: the exposures bought for another's shared video (F-M8 buys them); none: unlimited, never ended for it.
+        // Only the sub-process QB_EXPOSURE_PURCHASED_SET writes it (decision A of 2026-11-09).
+        eb.field("exposurePurchased", f -> f.physicalColumn("exposure_purchased").processOnly().asNumeric(9, 0));
         eb.field("fullScore", f -> f.physicalColumn("full_score").processOnly().asNumeric(7, 0));
         eb.field("maxReward", f -> f.physicalColumn("max_reward").processOnly().asMonetary("JPY", 0));
         eb.field("maxSpend", f -> f.physicalColumn("max_spend").processOnly().asMonetary("JPY", 0));
@@ -426,6 +429,9 @@ public final class QbPublications {
             .asText(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.ID_LENGTH));
         eb.field("videoProviderId", f -> f.physicalColumn("video_provider_id")
             .asText(com.jabiz.quizbuks.identity.AccountLimits.USER_ID_LENGTH));
+        // F-S13: the publication's purchased exposures (none: unlimited), copied when it goes on and kept with it by
+        // QB_EXPOSURE_PURCHASED_SET: the job ending what used them up and the figures read it here.
+        eb.field("exposurePurchased", f -> f.physicalColumn("exposure_purchased").asNumeric(9, 0));
 
         eb.field("versionId", f -> f.physicalColumn("version_id").required(true)
             .asReference(QbContent.VERSION));

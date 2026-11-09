@@ -366,6 +366,25 @@ public final class QbParams {
     /** F-S8: the most blocks one taker has, and the smallest group of blockers a sponsor is shown a count of. */
     public static final String BLOCK_MAX_PER_USER = "qb.block.max-per-user";
     public static final String BLOCK_COUNT_MIN_GROUP = "qb.block.count-min-group";
+    /**
+     * F-S13: the seconds of watching that count one exposure, the most exposures one taker counts a UTC day, every how
+     * many screens of the vertical mode a push stands, and how many reports the App gathers and how long at most before
+     * it sends them; not controlled. Read as optional ({@code ExposureRules} bounds them).
+     */
+    public static final String EXPOSURE_SECONDS = "qb.exposure.seconds";
+    public static final String EXPOSURE_DAILY_CAP = "qb.exposure.daily-cap-per-user";
+    public static final String EXPOSURE_PUSH_EVERY = "qb.exposure.push.every";
+    public static final String EXPOSURE_REPORT_BATCH = "qb.exposure.report.batch";
+    public static final String EXPOSURE_REPORT_INTERVAL = "qb.exposure.report.interval-sec";
+    /**
+     * F-S13 (the requester: every number a parameter): the most reports one call takes; the daily reconciliation's
+     * tolerance beyond the purchase (at least so many, else so many percent of it); how long after its end an exposure
+     * may still be counted (a report on its way when the publication ended) before the reconciliation reports it.
+     */
+    public static final String EXPOSURE_REPORT_MAX_PER_CALL = "qb.exposure.report.max-per-call";
+    public static final String EXPOSURE_RECONCILE_MIN_TOLERANCE = "qb.exposure.reconcile.min-tolerance";
+    public static final String EXPOSURE_RECONCILE_TOLERANCE_PERCENT = "qb.exposure.reconcile.tolerance-percent";
+    public static final String EXPOSURE_END_GRACE_SEC = "qb.exposure.reconcile.end-grace-sec";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -635,7 +654,38 @@ public final class QbParams {
         new Param(BLOCK_COUNT_MIN_GROUP, Map.of("type", "numeric", "precision", 4, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.block.BlockRules.DEFAULT_COUNT_MIN_GROUP),
             "Below how many blockers a Sponsor is told only \"fewer than\" this number (at least 5); above it the "
-                + "count is rounded down to tens"));
+                + "count is rounded down to tens"),
+        // F-S13: the exposures and the pushes (ordinary; last, so that the setup's earlier keys stay as they were).
+        new Param(EXPOSURE_SECONDS, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_SECONDS),
+            "How many seconds of watching without a break count one exposure of another's shared video (a shorter "
+                + "video: all of it; at most 600)"),
+        new Param(EXPOSURE_DAILY_CAP, Map.of("type", "numeric", "precision", 5, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_DAILY_CAP),
+            "The most exposures one Taker counts a day (UTC; at most 10000); beyond it nothing counts"),
+        new Param(EXPOSURE_PUSH_EVERY, Map.of("type", "numeric", "precision", 2, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_PUSH_EVERY),
+            "Every how many screens of the App's vertical mode a push (another's shared video) stands (1 to 50)"),
+        new Param(EXPOSURE_REPORT_BATCH, Map.of("type", "numeric", "precision", 2, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_REPORT_BATCH),
+            "How many reports of exposures the App gathers before it sends them (1 to 50)"),
+        new Param(EXPOSURE_REPORT_INTERVAL, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_REPORT_INTERVAL_SEC),
+            "How many seconds at most the App keeps reports of exposures before it sends them (5 to 600)"),
+        // F-S13 (the requester, 2026-11-09: every number a parameter; ordinary, last).
+        new Param(EXPOSURE_REPORT_MAX_PER_CALL, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_MAX_PER_CALL),
+            "The most reports of exposures one call of the App takes (1 to 200); the App sends no more at once"),
+        new Param(EXPOSURE_RECONCILE_MIN_TOLERANCE, Map.of("type", "numeric", "precision", 9, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_MIN_TOLERANCE),
+            "The daily check of exposures lets the counted go beyond the purchased by at least this many"),
+        new Param(EXPOSURE_RECONCILE_TOLERANCE_PERCENT, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_TOLERANCE_PERCENT),
+            "... or by this percentage of the purchased, rounded up, whichever is more (0 to 100)"),
+        new Param(EXPOSURE_END_GRACE_SEC, Map.of("type", "numeric", "precision", 5, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_END_GRACE_SEC),
+            "How many seconds after a publication ended an exposure may still be counted (a report on its way) "
+                + "before the daily check reports it (0 to 86400)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

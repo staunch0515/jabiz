@@ -73,6 +73,8 @@ public final class OperatorScopes {
         fields.put(com.jabiz.quizbuks.region.QbRegion.EXCEPTION, "ownerId");
         // F-S12: the videos a sponsor shares, by their provider.
         fields.put(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.VIDEO, "providerId");
+        // F-S13: the exposures, by the publisher of the publication they are of.
+        fields.put(com.jabiz.quizbuks.exposure.QbExposures.EXPOSURE, "publisherId");
         // Q89: a benefit by its provider; the conversations and purchases by the sponsor that buys (the provider's
         // operator reads its side through its own datasets, Q89d).
         fields.put(com.jabiz.quizbuks.benefit.QbBenefits.OFFER, "providerId");
