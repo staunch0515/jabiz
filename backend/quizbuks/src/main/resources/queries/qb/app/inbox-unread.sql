@@ -3,7 +3,7 @@ id: qb.app.inbox-unread
 description: >-
   How many messages and announcements of the taker's inbox are unread (the navigation's badge, U-61), each counted to
   at most 99
-entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbPublicationCard, QbPublicationOwner]
+entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbPublicationCard, QbPublicationOwner, QbBlock]
 datasets:
   QbMessage: urn:jabiz:dataset:me:QbMessage
   QbBroadcastFeed: urn:jabiz:dataset:default:QbBroadcastFeed
@@ -14,6 +14,7 @@ datasets:
   QbCountry: urn:jabiz:dataset:default:QbCountry
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
+  QbBlock: urn:jabiz:dataset:me:QbBlock
 params:
   withOldest: { kind: { type: bool }, description: "Also when the oldest unread broadcast was sent (QB_MESSAGE_MARK's read-through mark)" }
   languages: { kind: { type: text, maxLength: 20 }, description: "Only the sponsors' notices about publications in these languages (Q59b), comma-separated (ja, zh, en): the taker's switches, or their interface language; all when not given" }
@@ -68,6 +69,19 @@ unread_feed AS NOT MATERIALIZED (
                           && string_to_array(CAST(:languages AS text), ','))
                   AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                                   WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}}))
+          -- F-S8: a sponsor's notice or a promotion about a publication the caller blocked (its publication, quiz, sponsor or
+          -- video's provider) is left out; a system announcement naming one stays. The condition of qb.app.feed
+          -- (block.BlockRules.blocks; BlockIT); the view holds the caller's own blocks only.
+          AND (c.{{QbPublicationCard.publicationId}} IS NULL
+               OR (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR' AND f.{{QbBroadcastFeed.type}} <> 'PROMO')
+               OR NOT EXISTS (
+                   SELECT 1 FROM {{QbBlock}} bl
+                   WHERE ((bl.{{QbBlock.kind}} = 'PUBLICATION'
+                           AND bl.{{QbBlock.objectId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text))
+                       OR (bl.{{QbBlock.kind}} = 'QUIZ' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.quizId}})
+                       OR (bl.{{QbBlock.kind}} = 'SPONSOR' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.publisherId}})
+                       OR (bl.{{QbBlock.kind}} = 'PROVIDER'
+                           AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.videoProviderId}}))))
 )
 SELECT
     (SELECT count(*) FROM (

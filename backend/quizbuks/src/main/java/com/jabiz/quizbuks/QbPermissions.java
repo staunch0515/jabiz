@@ -289,6 +289,11 @@ public final class QbPermissions {
      */
     public static final String ADMIN_TOPIC_READ = "qb.admin.topic.read";
     public static final String ADMIN_TOPIC_WRITE = "qb.admin.topic.write";
+    /**
+     * F-S8: headquarters' figures of blocking (counts by kind, the sponsors most blocked, rounded): aggregates only,
+     * never whose blocks. Headquarters' content administrators, not the operators.
+     */
+    public static final String ADMIN_BLOCK_READ = "qb.admin.block.read";
 
     /**
      * F-S12: the shared videos of every provider (read), and taking one down (write). Content administrators for

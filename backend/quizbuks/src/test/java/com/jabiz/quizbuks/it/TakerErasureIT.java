@@ -153,6 +153,29 @@ class TakerErasureIT extends PayoutItSupport {
                 .containsEntry("strict_topics", true));
     }
 
+    /** F-S8: what a taker blocked goes with the account; another taker's blocks of the same stay. */
+    @Test
+    void anErasedTakersBlocksGo() {
+        String sponsor = newSponsor("s-fs8-" + UUID.randomUUID().toString().substring(0, 8));
+        credit(sponsor, 1_000);
+        String publication = livePublication(sponsor, "FS8 erase");
+        String dee = payee("t-fs8-dee-" + UUID.randomUUID().toString().substring(0, 8));
+        String eve = payee("t-fs8-eve-" + UUID.randomUUID().toString().substring(0, 8));
+        for (String id : List.of(dee, eve)) {
+            run(com.jabiz.quizbuks.block.BlockProcesses.ADD, taker(id), body("publicationId", publication, "kind",
+                "SPONSOR"));
+            run(com.jabiz.quizbuks.block.BlockProcesses.ADD, taker(id), body("publicationId", publication, "kind",
+                "PUBLICATION"));
+        }
+
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", dee, "requestedBy", "it-support"));
+        deliverEvents();
+
+        assertThat(query("SELECT 1 FROM qb_block WHERE user_id = ?", dee)).isEmpty();
+        assertThat(query("SELECT kind FROM qb_block WHERE user_id = ?", eve)).extracting(row -> row.get("kind"))
+            .containsExactlyInAnyOrder("SPONSOR", "PUBLICATION");
+    }
+
     @Test
     void anErasedTakersMessagesLoseTheirTextAndTheirBlocksGo() {
 

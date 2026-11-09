@@ -3,7 +3,7 @@ id: qb.app.inbox
 description: >-
   The taker's inbox (U-60 - U-63; Q7c D-Q7-9), newest first - their own messages and the announcements and sponsors'
   notices that match them now, with what they read; filtered by kind, unread, text and time, or one item
-entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbSponsor, QbPublicationCard, QbPublicationOwner]
+entities: [QbMessage, QbBroadcastFeed, QbBroadcastTarget, QbBroadcastReceipt, QbInboxState, QbProfile, QbCountry, QbSponsor, QbPublicationCard, QbPublicationOwner, QbBlock]
 datasets:
   QbMessage: urn:jabiz:dataset:me:QbMessage
   QbBroadcastFeed: urn:jabiz:dataset:default:QbBroadcastFeed
@@ -15,6 +15,7 @@ datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbPublicationOwner: urn:jabiz:dataset:me:QbPublicationOwner
+  QbBlock: urn:jabiz:dataset:me:QbBlock
 params:
   category: { kind: { type: text, maxLength: 10 }, description: "Only SYSTEM (system messages, announcements and notices), PROMO, REWARD, REMINDER or SPONSOR (a sponsor's own messages, Q68)" }
   unread:   { kind: { type: bool }, description: Only the unread ones }
@@ -143,6 +144,19 @@ items AS (
                           && string_to_array(CAST(:languages AS text), ','))
               AND NOT EXISTS (SELECT 1 FROM {{QbPublicationOwner}} own
                               WHERE own.{{QbPublicationOwner.publicationId}} = f.{{QbBroadcastFeed.publicationId}}))
+      -- F-S8: a sponsor's notice or a promotion about a publication the caller blocked (its publication, quiz, sponsor or
+      -- video's provider) is left out; a system announcement naming one stays. The condition of qb.app.feed
+      -- (block.BlockRules.blocks; BlockIT); the view holds the caller's own blocks only.
+      AND (c.{{QbPublicationCard.publicationId}} IS NULL
+           OR (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR' AND f.{{QbBroadcastFeed.type}} <> 'PROMO')
+           OR NOT EXISTS (
+               SELECT 1 FROM {{QbBlock}} bl
+               WHERE ((bl.{{QbBlock.kind}} = 'PUBLICATION'
+                       AND bl.{{QbBlock.objectId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text))
+                   OR (bl.{{QbBlock.kind}} = 'QUIZ' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.quizId}})
+                   OR (bl.{{QbBlock.kind}} = 'SPONSOR' AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.publisherId}})
+                   OR (bl.{{QbBlock.kind}} = 'PROVIDER'
+                       AND bl.{{QbBlock.objectId}} = c.{{QbPublicationCard.videoProviderId}}))))
 )
 SELECT
     i.item_kind      AS itemKind,

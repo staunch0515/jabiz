@@ -654,6 +654,8 @@ final class PublicationEditing {
         card.put("rewardMethod", methodOf(publication.attributes()));
         card.put("audience", Audience.of(publication.get("audience")));
         card.put("quizTitle", version.get("title"));
+        // F-S8: the quiz, for blocking it (and its later publications).
+        card.put("quizId", String.valueOf((Object) version.get("quizId")));
         card.put("questionCount", version.get("questionCount"));
         card.put("cover", cardCover(publication, snapshot));
         // Q98b: and each language's where it is another.
