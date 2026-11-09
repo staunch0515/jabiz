@@ -418,11 +418,18 @@ public final class QbParams {
     public static final String HELP_ESCALATION_REMIND_DAYS = "qb.help.escalation-remind-days";
     /** Days after a person's reply without a new question before the conversation closes by itself. */
     public static final String HELP_AUTO_CLOSE_DAYS = "qb.help.auto-close-days";
+    /** The longest question (and words handed to a person) a user writes, in characters (100 to 4000). */
+    public static final String HELP_QUESTION_MAX_LENGTH = "qb.help.question-max-length";
+    /** The longest AI answer kept, in characters (500 to 8000); a longer one is cut with an ellipsis. */
+    public static final String HELP_ANSWER_MAX_LENGTH = "qb.help.answer-max-length";
+    /** The most links of the site one answer keeps (0 to 10). */
+    public static final String HELP_MAX_LINKS = "qb.help.max-links";
     /** The help's controlled parameters (last, in this order). */
     public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_GLOBAL_MONTHLY_TOKENS);
     public static final List<String> HELP = List.of(HELP_ENABLED, HELP_MODEL, HELP_USER_DAILY,
         HELP_GLOBAL_MONTHLY_TOKENS, HELP_HISTORY_TURNS, HELP_RETENTION_DAYS, HELP_MANUAL_MAX_BYTES, HELP_POLL_SECONDS,
-        HELP_POLL_MAX_MINUTES, HELP_ESCALATION_REMIND_DAYS, HELP_AUTO_CLOSE_DAYS);
+        HELP_POLL_MAX_MINUTES, HELP_ESCALATION_REMIND_DAYS, HELP_AUTO_CLOSE_DAYS, HELP_QUESTION_MAX_LENGTH,
+        HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS);
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -752,6 +759,12 @@ public final class QbParams {
             "Days an AI help conversation handed to a person waits before its handler is reminded"),
         new Param(HELP_AUTO_CLOSE_DAYS, DAYS, "14",
             "Days after a person's reply without a new question before an AI help conversation closes by itself"),
+        new Param(HELP_QUESTION_MAX_LENGTH, Map.of("type", "numeric", "precision", 4, "scale", 0), "2000",
+            "The longest question to the AI help (and words handed to a person), in characters (100 to 4000)"),
+        new Param(HELP_ANSWER_MAX_LENGTH, Map.of("type", "numeric", "precision", 4, "scale", 0), "8000",
+            "The longest AI help answer kept, in characters (500 to 8000); a longer one is cut"),
+        new Param(HELP_MAX_LINKS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
+            "The most links of the site one AI help answer keeps (0 to 10)"),
         new Param(HELP_ENABLED, BOOL, false, "Whether Takers and Sponsors may ask the AI help (Claude)"),
         new Param(HELP_GLOBAL_MONTHLY_TOKENS, TOKENS, "20000000",
             "The tokens the AI help may use a month, everybody together"));

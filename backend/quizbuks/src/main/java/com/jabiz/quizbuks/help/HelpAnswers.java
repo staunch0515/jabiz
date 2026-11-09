@@ -17,8 +17,8 @@ import java.util.regex.Pattern;
  */
 public final class HelpAnswers {
 
-    /** The most links one answer keeps. */
-    public static final int MAX_LINKS = 5;
+    /** The most links one answer keeps, whatever {@code qb.help.max-links} says. */
+    public static final int MAX_LINKS = 10;
     /** The longest path kept. */
     public static final int MAX_PATH = 200;
 
@@ -43,13 +43,14 @@ public final class HelpAnswers {
         }
     }
 
-    /** The links kept: the site's paths, at most {@link #MAX_LINKS}, each once, in order. */
-    public static List<String> links(List<String> links, Set<String> siteHosts) {
+    /** The links kept: the site's paths, at most {@code max} (and {@link #MAX_LINKS}), each once, in order. */
+    public static List<String> links(List<String> links, Set<String> siteHosts, int max) {
+        int limit = Math.clamp(max, 0, MAX_LINKS);
         Set<String> kept = new LinkedHashSet<>();
         if (links != null) {
             for (String link : links) {
                 String path = sitePath(link, siteHosts);
-                if (path != null && kept.size() < MAX_LINKS) {
+                if (path != null && kept.size() < limit) {
                     kept.add(path);
                 }
             }

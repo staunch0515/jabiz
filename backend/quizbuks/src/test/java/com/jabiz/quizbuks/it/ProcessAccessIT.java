@@ -188,7 +188,9 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_HELP_RETENTION", ProcessAccess.INTERNAL),
         Map.entry("QB_HELP_AUTO_CLOSE", ProcessAccess.INTERNAL),
         Map.entry("QB_HELP_REMIND", ProcessAccess.INTERNAL),
-        Map.entry("QB_HELP_USAGE_CHECK", ProcessAccess.INTERNAL));
+        Map.entry("QB_HELP_USAGE_CHECK", ProcessAccess.INTERNAL),
+        // F-C10: a reassigned Sponsor's help conversations (QB_SPONSOR_OPERATOR_ASSIGN's sub-process).
+        Map.entry("QB_HELP_OPERATOR_MOVE", ProcessAccess.SUB_PROCESS_ONLY));
 
     @Autowired
     ProcessRegistry registry;

@@ -434,6 +434,9 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.HELP_POLL_MAX_MINUTES, "3");
         expected.put(QbParams.HELP_ESCALATION_REMIND_DAYS, "2");
         expected.put(QbParams.HELP_AUTO_CLOSE_DAYS, "14");
+        expected.put(QbParams.HELP_QUESTION_MAX_LENGTH, "2000");
+        expected.put(QbParams.HELP_ANSWER_MAX_LENGTH, "8000");
+        expected.put(QbParams.HELP_MAX_LINKS, "5");
         expected.put(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, "3660");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");

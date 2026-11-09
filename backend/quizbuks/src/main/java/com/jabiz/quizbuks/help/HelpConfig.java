@@ -196,11 +196,17 @@ public class HelpConfig {
             .item(QbHelp.CLOSED_AUTO, "en", "Closed by itself", "zh", "自动关闭", "ja", "自動終了"));
     }
 
-    /** @param maxConcurrency help jobs running at a time across instances ({@code quizbuks.help.max-concurrency}) */
+    /**
+     * @param maxConcurrency help jobs running at a time across instances ({@code quizbuks.help.max-concurrency})
+     * @param attempts       attempts of one question ({@code quizbuks.help.attempts}, 1 to 5)
+     * @param attemptTimeout one attempt at most ({@code quizbuks.help.attempt-timeout}, 30 s to 10 min)
+     */
     @Bean
     ExternalJobType<HelpJob.Input, HelpJob.Result> qbHelpJob(
-        @Value("${quizbuks.help.max-concurrency:" + HelpJob.DEFAULT_CONCURRENCY + "}") int maxConcurrency) {
-        return HelpJob.type(maxConcurrency);
+        @Value("${quizbuks.help.max-concurrency:" + HelpJob.DEFAULT_CONCURRENCY + "}") int maxConcurrency,
+        @Value("${quizbuks.help.attempts:" + HelpJob.ATTEMPTS + "}") int attempts,
+        @Value("${quizbuks.help.attempt-timeout:PT3M}") java.time.Duration attemptTimeout) {
+        return HelpJob.type(maxConcurrency, attempts, attemptTimeout);
     }
 
     /** The site's host: the answers keep links to it only (and paths). */
@@ -233,6 +239,12 @@ public class HelpConfig {
     @Bean
     ProcessDefinition<HelpProcesses.ThreadRef, HelpProcesses.ThreadOutput, ProcessContext> qbHelpClose() {
         return HelpProcesses.close();
+    }
+
+    /** A reassigned Sponsor's conversations with a person go with them ({@code QB_SPONSOR_OPERATOR_ASSIGN}). */
+    @Bean
+    ProcessDefinition<HelpOperatorMove.Input, HelpOperatorMove.Output, ProcessContext> qbHelpOperatorMove() {
+        return HelpOperatorMove.move();
     }
 
     @Bean

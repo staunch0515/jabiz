@@ -247,6 +247,77 @@ class HelpIT extends HelpItSupport {
     }
 
     @Test
+    void aReassignedSponsorsConversationAndItsTasksGoToTheNewOperator() {
+        NewOperator north = newOperatorWithLead(operatorsAdmin(), unique("Help Old"), null);
+        NewOperator south = newOperatorWithLead(operatorsAdmin(), unique("Help New"), null);
+        String sponsor = newSponsor(unique("s-fc10-moved"));
+        run(OperatorProcesses.ASSIGN, operatorsAdmin(), body("userId", sponsor, "operatorId", north.operatorId(),
+            "reason", "F-C10"));
+        String threadId = (String) escalate(sponsorToken(sponsor), null, QbHelp.SPONSOR, "Who looks after me?")
+            .get("threadId");
+        advance(Duration.ofDays(3));
+        runDaily(remindJob);
+        assertThat(tasksLike("qb.help-remind:" + threadId)).singleElement()
+            .satisfies(task -> assertThat(task).containsEntry("status", "OPEN"));
+
+        // Moved with its pending work: the platform's APPROVAL_SCOPE_MOVE needs approval.scope.move besides.
+        String hq = TestTokens.bearer(tokens, "fc10-operators-admin", com.jabiz.quizbuks.QbPermissions.OPERATORS_WRITE,
+            com.jabiz.quizbuks.QbPermissions.OPERATORS_READ, "approval.scope.move");
+        run(OperatorProcesses.ASSIGN, hq, body("userId", sponsor, "operatorId", south.operatorId(), "reason",
+            "F-C10 moved"));
+        // Sessions of now (the clock moved past the earlier tokens' life).
+        String northStaff = memberSession(north.leadId(), north.operatorId());
+        String southStaff = memberSession(south.leadId(), south.operatorId());
+        assertThat(thread(threadId)).containsEntry("operator_id", south.operatorId());
+        assertThat(tasksOf(QbHelp.taskSource(threadId))).singleElement().satisfies(task -> assertThat(task)
+            .containsEntry("status", "OPEN").containsEntry("scope_value", south.operatorId()));
+        assertThat(query("SELECT scope_value FROM (SELECT DISTINCT ON (task_id) * FROM sys_task_version ORDER BY "
+            + "task_id, version_no DESC) t WHERE source_key LIKE ? AND status = 'OPEN'", "qb.help-remind:" + threadId
+            + "%")).singleElement().satisfies(task -> assertThat(task).containsEntry("scope_value",
+                south.operatorId()));
+        assertThat(tasks(southStaff)).extracting(t -> t.get("subjectId")).contains(threadId);
+        assertThat(tasks(northStaff)).extracting(t -> t.get("subjectId")).doesNotContain(threadId);
+
+        // The old operator no longer answers it; the new one does, and the Sponsor hears it.
+        refused(HelpProcesses.REPLY, northStaff, body("threadId", threadId, "text", "Still mine?", "close", false),
+            404);
+        run(HelpProcesses.REPLY, southStaff, body("threadId", threadId, "text", "We look after you now.", "close",
+            false));
+        deliverEvents();
+        assertThat(query("SELECT 1 FROM qb_message WHERE recipient_id = ? AND kind = ?", sponsor, QbInbox.HELP_REPLY))
+            .hasSize(1);
+        assertThat(tasksLike("qb.help-remind:" + threadId)).singleElement()
+            .satisfies(task -> assertThat(task).containsEntry("status", "DONE"));
+    }
+
+    @Test
+    void aQuestionIsNoLongerThanTheParameterSays() {
+        String taker = newTaker("t-fc10-long-" + UUID.randomUUID(), "JP");
+        setParam(QbParams.HELP_QUESTION_MAX_LENGTH, "100");
+        try {
+            String long101 = "x".repeat(101);
+            assertThat(codes(refused(HelpProcesses.ASK, taker(taker), askInput(null, QbHelp.APP, long101, null), 422)))
+                .containsExactly(HelpCodes.TEXT_TOO_LONG);
+            assertThat(codes(refused(HelpProcesses.ESCALATE, taker(taker), body("entry", QbHelp.APP, "language", "en",
+                "text", long101), 422))).containsExactly(HelpCodes.TEXT_TOO_LONG);
+            ask(taker(taker), null, QbHelp.APP, "x".repeat(100), null);
+            runJobs();
+        } finally {
+            setParam(QbParams.HELP_QUESTION_MAX_LENGTH, "2000");
+        }
+        // The answers keep at most qb.help.max-links of the site's links.
+        setParam(QbParams.HELP_MAX_LINKS, "1");
+        try {
+            CLAUDE.script(MESSAGES, helpAnswer("See these.", List.of("/help/a", "/help/b"), false));
+            Map<String, Object> asked = ask(taker(taker), null, QbHelp.APP, "Links?", null);
+            runJobs();
+            assertThat(messages(asked.get("threadId")).getLast()).containsEntry("links", "/help/a");
+        } finally {
+            setParam(QbParams.HELP_MAX_LINKS, "5");
+        }
+    }
+
+    @Test
     void aTakersAndADirectSponsorsQuestionGoToHeadquarters() {
         NewOperator north = newOperatorWithLead(operatorsAdmin(), unique("Help Direct"), null);
         String northStaff = memberSession(north.leadId(), north.operatorId());

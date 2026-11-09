@@ -29,13 +29,21 @@ class HelpRulesTest {
         assertThat(none.manualMaxBytes()).isEqualTo(204_800L);
         assertThat(List.of(none.pollSeconds(), none.pollMaxMinutes(), none.remindDays(), none.autoCloseDays()))
             .containsExactly(3, 3, 2, 14);
+        assertThat(List.of(none.questionMaxLength(), none.answerMaxLength(), none.maxLinks()))
+            .containsExactly(2000, 8000, 5);
         HelpSettings set = HelpSettings.of(new ParamValues(Instant.EPOCH, Map.of(QbParams.HELP_ENABLED, true,
             QbParams.HELP_MODEL, "gpt-x", QbParams.HELP_HISTORY_TURNS, new BigDecimal("99"),
-            QbParams.HELP_USER_DAILY, new BigDecimal("-3"))));
+            QbParams.HELP_USER_DAILY, new BigDecimal("-3"), QbParams.HELP_QUESTION_MAX_LENGTH, new BigDecimal("9999"),
+            QbParams.HELP_ANSWER_MAX_LENGTH, new BigDecimal("10"), QbParams.HELP_MAX_LINKS, new BigDecimal("50"))));
         assertThat(set.enabled()).isTrue();
         assertThat(set.model()).isNull();
         assertThat(set.historyTurns()).isEqualTo(HelpSettings.MAX_HISTORY_TURNS);
         assertThat(set.userDaily()).isZero();
+        // Each within its bounds: the columns and the stored links' size depend on them.
+        assertThat(set.questionMaxLength()).isEqualTo(QbHelp.TEXT_LENGTH);
+        assertThat(set.answerMaxLength()).isEqualTo(500);
+        assertThat(set.maxLinks()).isEqualTo(HelpAnswers.MAX_LINKS);
+        assertThat(QbHelp.LINKS_LENGTH).isGreaterThanOrEqualTo(HelpAnswers.MAX_LINKS * (HelpAnswers.MAX_PATH + 1));
     }
 
     @Test
@@ -75,6 +83,19 @@ class HelpRulesTest {
         assertThat(QbHelp.ofReference("help:t")).isNull();
         assertThat(QbHelp.ofReference("quiz:1")).isNull();
         assertThat(QbHelp.ofReference(null)).isNull();
+    }
+
+    @Test
+    void theJobsAttemptsAndTimeoutAreConfiguredWithinTheirBounds() {
+        assertThat(HelpJob.type(4, HelpJob.ATTEMPTS, HelpJob.ATTEMPT_TIMEOUT).name()).isEqualTo(HelpJob.TYPE);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> HelpJob.type(4, 0, HelpJob.ATTEMPT_TIMEOUT))
+            .hasMessageContaining("quizbuks.help.attempts");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> HelpJob.type(4, HelpJob.MAX_ATTEMPTS + 1,
+            HelpJob.ATTEMPT_TIMEOUT)).hasMessageContaining("quizbuks.help.attempts");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> HelpJob.type(4, 2, java.time.Duration.ofSeconds(5)))
+            .hasMessageContaining("quizbuks.help.attempt-timeout");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> HelpJob.type(4, 2, java.time.Duration.ofHours(1)))
+            .hasMessageContaining("quizbuks.help.attempt-timeout");
     }
 
     private static EntityInstance message(String kind, String body) {

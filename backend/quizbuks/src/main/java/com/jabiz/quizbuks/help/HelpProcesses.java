@@ -174,6 +174,7 @@ public final class HelpProcesses {
         EntityInstance thread = ownThread(ctx, input.threadId(), input.entry());
         Instant now = stamp(ctx.opTime(), thread);
         String text = input.text().strip();
+        requireLength(text, settings);
         if (thread != null && QbHelp.CLOSED.equals(thread.get("status"))) {
             throw refused(HelpCodes.CLOSED, "The conversation is closed", Map.of());
         }
@@ -316,7 +317,9 @@ public final class HelpProcesses {
             pb -> {
                 user(pb, "Hands an AI help conversation, or a question, to a person: a Sponsor's to its operator, a "
                     + "direct Sponsor's and a Taker's to headquarters.");
-                pb.step("Take the conversation's turn", HoldLock.<ProcessContext>exclusive(
+                pb.step("Load the questions' length", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
+                        PARAMS, QbParams.HELP_QUESTION_MAX_LENGTH))
+                    .step("Take the conversation's turn", HoldLock.<ProcessContext>exclusive(
                         ctx -> QbHelp.threadLock(ctx.get(INPUT, EscalateInput.class).threadId())))
                     .step("Load the conversation and who looks after the caller", QueryEntities.<ProcessContext>all(
                         QueryEntities.query(QbHelp.defaultDataset(QbHelp.THREAD),
@@ -349,6 +352,9 @@ public final class HelpProcesses {
         }
         if (thread == null && text == null) {
             throw refused(HelpCodes.TEXT_REQUIRED, "Write the question to hand over", Map.of());
+        }
+        if (text != null) {
+            requireLength(text, settings(ctx));
         }
         String operatorId = operatorOf(ctx, input.entry());
         Map<String, Object> values = new LinkedHashMap<>();
@@ -582,6 +588,14 @@ public final class HelpProcesses {
             throw notFound(threadId);
         }
         return thread;
+    }
+
+    /** A user's text within {@code qb.help.question-max-length} characters (code points). */
+    static void requireLength(String text, HelpSettings settings) {
+        if (text.codePointCount(0, text.length()) > settings.questionMaxLength()) {
+            throw refused(HelpCodes.TEXT_TOO_LONG, "The text is longer than " + settings.questionMaxLength()
+                + " characters", Map.of("max", settings.questionMaxLength()));
+        }
     }
 
     /** The entry must be the caller's: a Sponsor asks from {@code sponsor}, a Taker from {@code app}. */

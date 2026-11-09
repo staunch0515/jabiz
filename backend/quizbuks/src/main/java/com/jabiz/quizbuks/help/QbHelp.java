@@ -73,11 +73,15 @@ public final class QbHelp {
     public static final List<String> RATINGS = List.of(SOLVED, UNSOLVED);
 
     public static final int ID_LENGTH = 36;
-    /** The longest question or message a user writes, and a person's reply. */
-    public static final int TEXT_LENGTH = 2_000;
-    /** The longest answer kept (an answer cut at it ends with an ellipsis). */
+    /**
+     * The longest text any request carries (a question, the words handed over, a person's reply): the ceiling of
+     * {@code qb.help.question-max-length}, which the processes check below it.
+     */
+    public static final int TEXT_LENGTH = 4_000;
+    /** The longest answer stored: the ceiling of {@code qb.help.answer-max-length} (the column's size). */
     public static final int ANSWER_LENGTH = 8_000;
-    public static final int LINKS_LENGTH = 2_000;
+    /** The links stored: {@code qb.help.max-links} (at most 10) paths of at most 200 characters, one a line. */
+    public static final int LINKS_LENGTH = 4_000;
     public static final int PAGE_LENGTH = 40;
     public static final int CODE_LENGTH = 100;
 

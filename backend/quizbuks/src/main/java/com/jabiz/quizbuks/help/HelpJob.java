@@ -23,7 +23,13 @@ public final class HelpJob {
     public static final int MAX_TOKENS = 4_000;
     /** Short answers: thinking kept shallow. */
     public static final String EFFORT = "low";
+    /** The attempts and each attempt's time unless configured ({@code quizbuks.help.attempts} / {@code .attempt-timeout}). */
     public static final int ATTEMPTS = 2;
+    public static final Duration ATTEMPT_TIMEOUT = Duration.ofMinutes(3);
+    /** The configuration's bounds: an operator tunes them within these. */
+    public static final int MAX_ATTEMPTS = 5;
+    public static final Duration MIN_ATTEMPT_TIMEOUT = Duration.ofSeconds(30);
+    public static final Duration MAX_ATTEMPT_TIMEOUT = Duration.ofMinutes(10);
     /** Jobs one person has open at a time (one per conversation besides). */
     public static final int MAX_OPEN = 3;
     public static final int MAX_JOB_INPUT_BYTES = 64 * 1024;
@@ -70,11 +76,22 @@ public final class HelpJob {
         }
     }
 
-    /** Three minutes an attempt, two attempts; at most {@value #MAX_OPEN} open per person, one per conversation. */
-    public static ExternalJobType<Input, Result> type(int maxConcurrency) {
+    /**
+     * {@code attempts} attempts of at most {@code attemptTimeout} each (deployment configuration, not business
+     * parameters: the job type is fixed at startup), within {@link #MAX_ATTEMPTS} and {@link #MIN_ATTEMPT_TIMEOUT} to
+     * {@link #MAX_ATTEMPT_TIMEOUT} (outside: a startup error); at most {@value #MAX_OPEN} open per person.
+     */
+    public static ExternalJobType<Input, Result> type(int maxConcurrency, int attempts, Duration attemptTimeout) {
+        if (attempts < 1 || attempts > MAX_ATTEMPTS) {
+            throw new IllegalArgumentException("quizbuks.help.attempts: 1 to " + MAX_ATTEMPTS);
+        }
+        if (attemptTimeout.compareTo(MIN_ATTEMPT_TIMEOUT) < 0 || attemptTimeout.compareTo(MAX_ATTEMPT_TIMEOUT) > 0) {
+            throw new IllegalArgumentException("quizbuks.help.attempt-timeout: " + MIN_ATTEMPT_TIMEOUT + " to "
+                + MAX_ATTEMPT_TIMEOUT);
+        }
         return ExternalJobType.define(TYPE, Input.class, Result.class, t -> t
             .handler(HelpHandler.class).services(ClaudeService.SERVICE)
-            .timeout(Duration.ofMinutes(3)).retry(ATTEMPTS, Duration.ofSeconds(5), Duration.ofSeconds(30))
+            .timeout(attemptTimeout).retry(attempts, Duration.ofSeconds(5), Duration.ofSeconds(30))
             .maxConcurrency(maxConcurrency).maxOpenPerRequester(MAX_OPEN).oneOpenPerReference()
             .maxInputSize(MAX_JOB_INPUT_BYTES)
             .onCompleted(HelpOutcomes.COMPLETED).onFailed(HelpOutcomes.FAILED)

@@ -134,8 +134,9 @@ public final class HelpOutcomes {
                 ctx -> QbHelp.usageLock(outcome(ctx).requestedBy())))
             .step("Take everybody's usage", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbHelp.usageLock(QbHelp.EVERYBODY)))
-            .step("Load the monthly tokens", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
-                QbParams.HELP_GLOBAL_MONTHLY_TOKENS))
+            .step("Load the monthly tokens and the answers' limits", LoadParams.<ProcessContext>optional(
+                ProcessContext::opTime, PARAMS, QbParams.HELP_GLOBAL_MONTHLY_TOKENS, QbParams.HELP_ANSWER_MAX_LENGTH,
+                QbParams.HELP_MAX_LINKS))
             .step("Load the question and the usage", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbHelp.defaultDataset(QbHelp.THREAD),
                     ctx -> HelpProcesses.byId("threadId", outcome(ctx).threadId()), THREAD),
@@ -221,8 +222,9 @@ public final class HelpOutcomes {
             body = text(messages, QUIZ_REFUSAL, locale);
             failure = HelpCodes.QUIZ_REFUSED;
         } else {
-            body = HelpAnswers.clip(HelpAnswers.text(result.answer(), siteHosts), QbHelp.ANSWER_LENGTH);
-            links = HelpAnswers.links(result.links(), siteHosts);
+            HelpSettings settings = HelpSettings.of(ctx.contains(PARAMS) ? ctx.get(PARAMS, ParamValues.class) : null);
+            body = HelpAnswers.clip(HelpAnswers.text(result.answer(), siteHosts), settings.answerMaxLength());
+            links = HelpAnswers.links(result.links(), siteHosts, settings.maxLinks());
             if (body.isBlank()) {
                 body = text(messages, NO_ANSWER, locale);
             }

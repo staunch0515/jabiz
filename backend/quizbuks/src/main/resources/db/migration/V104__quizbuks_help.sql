@@ -1,5 +1,5 @@
--- F-C10 (docs/quizbuks/plans/impl/F-C10.md): the AI help's conversations, messages and usage. The number is temporary:
--- renumbered to the highest on 1.3/quizbuks + 1 before merging (one file).
+-- F-C10 (docs/quizbuks/plans/impl/F-C10.md): the AI help's conversations, messages and usage. V104: V102 and V103
+-- are taken by other pull requests (the controller, 2026-11-09); one file.
 --
 -- Ordinary tables, never append-only: an erased account's conversations are deleted (platform decision D62), and the
 -- retention deletes old ones. Written by the QB_HELP_* processes only (every change audited by the platform); ids only,
@@ -43,7 +43,7 @@ CREATE TABLE qb_help_message (
     user_id               varchar(128)   NOT NULL,
     kind                  varchar(10)    NOT NULL CHECK (kind IN ('QUESTION', 'ANSWER', 'USER', 'STAFF')),
     body                  varchar(8000)  NOT NULL,
-    links                 varchar(2000),
+    links                 varchar(4000),
     page                  varchar(40),
     job_status            varchar(10)    CHECK (job_status IN ('QUEUED', 'ANSWERED', 'FAILED', 'CANCELLED')),
     failure_code          varchar(100),

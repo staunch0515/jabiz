@@ -15,7 +15,8 @@ import java.math.RoundingMode;
  * @param model a model the platform allows, or null when the parameter names another (refused)
  */
 public record HelpSettings(boolean enabled, String model, int userDaily, long globalMonthlyTokens, int historyTurns,
-    int retentionDays, long manualMaxBytes, int pollSeconds, int pollMaxMinutes, int remindDays, int autoCloseDays) {
+    int retentionDays, long manualMaxBytes, int pollSeconds, int pollMaxMinutes, int remindDays, int autoCloseDays,
+    int questionMaxLength, int answerMaxLength, int maxLinks) {
 
     /** The most turns sent with a question, whatever the parameter says. */
     public static final int MAX_HISTORY_TURNS = 20;
@@ -33,7 +34,10 @@ public record HelpSettings(boolean enabled, String model, int userDaily, long gl
             (int) Math.clamp(number(params, QbParams.HELP_POLL_SECONDS), 1, 600),
             (int) Math.clamp(number(params, QbParams.HELP_POLL_MAX_MINUTES), 1, 60),
             (int) Math.clamp(number(params, QbParams.HELP_ESCALATION_REMIND_DAYS), 1, 3650),
-            (int) Math.clamp(number(params, QbParams.HELP_AUTO_CLOSE_DAYS), 1, 3650));
+            (int) Math.clamp(number(params, QbParams.HELP_AUTO_CLOSE_DAYS), 1, 3650),
+            (int) Math.clamp(number(params, QbParams.HELP_QUESTION_MAX_LENGTH), 100, QbHelp.TEXT_LENGTH),
+            (int) Math.clamp(number(params, QbParams.HELP_ANSWER_MAX_LENGTH), 500, QbHelp.ANSWER_LENGTH),
+            (int) Math.clamp(number(params, QbParams.HELP_MAX_LINKS), 0, HelpAnswers.MAX_LINKS));
     }
 
     /** A whole, non-negative number a parameter gives; its declared value while it is not there. */

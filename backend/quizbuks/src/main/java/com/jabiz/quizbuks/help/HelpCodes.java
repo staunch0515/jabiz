@@ -25,6 +25,8 @@ public final class HelpCodes {
     public static final String NOT_RATABLE = "QB_HELP_NOT_RATABLE";
     /** A question, a message or a reply is empty. */
     public static final String TEXT_REQUIRED = "QB_HELP_TEXT_REQUIRED";
+    /** A question or the words handed over are longer than {@code qb.help.question-max-length}. */
+    public static final String TEXT_TOO_LONG = "QB_HELP_TEXT_TOO_LONG";
     /** {@code qb.help.model} names a model the platform does not allow. */
     public static final String MODEL = "QB_HELP_MODEL";
 
@@ -34,7 +36,7 @@ public final class HelpCodes {
     public static final String STOPPED = "QB_HELP_STOPPED";
 
     public static final List<String> ALL = List.of(DISABLED, DAILY_LIMIT, MONTHLY_LIMIT, WAITING, CLOSED,
-        ALREADY_ESCALATED, NOT_ESCALATED, ENTRY, NOT_RATABLE, TEXT_REQUIRED, MODEL, QUIZ_REFUSED, STOPPED);
+        ALREADY_ESCALATED, NOT_ESCALATED, ENTRY, NOT_RATABLE, TEXT_REQUIRED, TEXT_TOO_LONG, MODEL, QUIZ_REFUSED, STOPPED);
 
     private HelpCodes() {}
 }
