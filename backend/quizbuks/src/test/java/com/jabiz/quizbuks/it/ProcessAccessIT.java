@@ -172,7 +172,11 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_OPERATOR_TASK_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
         // F-S11: the daily check of the address database, and writing the refused starts.
         Map.entry("QB_REGION_CHECK_RUN", ProcessAccess.INTERNAL),
-        Map.entry("QB_REGION_REFUSALS_FLUSH", ProcessAccess.INTERNAL));
+        Map.entry("QB_REGION_REFUSALS_FLUSH", ProcessAccess.INTERNAL),
+        // F-S13: the end of what used up its exposures (job item), the daily check, and the purchase for F-M8.
+        Map.entry("QB_PUBLICATION_EXPOSURE_END", ProcessAccess.INTERNAL),
+        Map.entry("QB_EXPOSURE_CHECK_RUN", ProcessAccess.INTERNAL),
+        Map.entry("QB_EXPOSURE_PURCHASED_SET", ProcessAccess.SUB_PROCESS_ONLY));
 
     @Autowired
     ProcessRegistry registry;

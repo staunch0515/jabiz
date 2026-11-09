@@ -366,6 +366,16 @@ public final class QbParams {
     /** F-S8: the most blocks one taker has, and the smallest group of blockers a sponsor is shown a count of. */
     public static final String BLOCK_MAX_PER_USER = "qb.block.max-per-user";
     public static final String BLOCK_COUNT_MIN_GROUP = "qb.block.count-min-group";
+    /**
+     * F-S13: the seconds of watching that count one exposure, the most exposures one taker counts a UTC day, every how
+     * many screens of the vertical mode a push stands, and how many reports the App gathers and how long at most before
+     * it sends them; not controlled. Read as optional ({@code ExposureRules} bounds them).
+     */
+    public static final String EXPOSURE_SECONDS = "qb.exposure.seconds";
+    public static final String EXPOSURE_DAILY_CAP = "qb.exposure.daily-cap-per-user";
+    public static final String EXPOSURE_PUSH_EVERY = "qb.exposure.push.every";
+    public static final String EXPOSURE_REPORT_BATCH = "qb.exposure.report.batch";
+    public static final String EXPOSURE_REPORT_INTERVAL = "qb.exposure.report.interval-sec";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -635,7 +645,24 @@ public final class QbParams {
         new Param(BLOCK_COUNT_MIN_GROUP, Map.of("type", "numeric", "precision", 4, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.block.BlockRules.DEFAULT_COUNT_MIN_GROUP),
             "Below how many blockers a Sponsor is told only \"fewer than\" this number (at least 5); above it the "
-                + "count is rounded down to tens"));
+                + "count is rounded down to tens"),
+        // F-S13: the exposures and the pushes (ordinary; last, so that the setup's earlier keys stay as they were).
+        new Param(EXPOSURE_SECONDS, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_SECONDS),
+            "How many seconds of watching without a break count one exposure of another's shared video (a shorter "
+                + "video: all of it; at most 600)"),
+        new Param(EXPOSURE_DAILY_CAP, Map.of("type", "numeric", "precision", 5, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_DAILY_CAP),
+            "The most exposures one Taker counts a day (UTC; at most 10000); beyond it nothing counts"),
+        new Param(EXPOSURE_PUSH_EVERY, Map.of("type", "numeric", "precision", 2, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_PUSH_EVERY),
+            "Every how many screens of the App's vertical mode a push (another's shared video) stands (1 to 50)"),
+        new Param(EXPOSURE_REPORT_BATCH, Map.of("type", "numeric", "precision", 2, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_REPORT_BATCH),
+            "How many reports of exposures the App gathers before it sends them (1 to 50)"),
+        new Param(EXPOSURE_REPORT_INTERVAL, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_REPORT_INTERVAL_SEC),
+            "How many seconds at most the App keeps reports of exposures before it sends them (5 to 600)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

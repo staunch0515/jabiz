@@ -292,7 +292,8 @@ public class PublishingConfig {
             .item(PublicationStatus.TREE, "en", "Its knowledge map was retired", "zh", "所绑定的知识结构图已停用",
                 "ja", "結び付いた知識マップの使用停止")
             .item(PublicationStatus.SHARED_VIDEO, "en", "Its shared video was taken down", "zh", "所用的共享视频已下架",
-                "ja", "使用中の共有動画が公開停止"));
+                "ja", "使用中の共有動画が公開停止")
+            .item(PublicationStatus.EXPOSURE, "en", "Exposures used up", "zh", "曝光已用完", "ja", "表示回数を使い切り"));
     }
 
     /** Q22: how a reward reaches the taker. */

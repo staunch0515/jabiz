@@ -129,6 +129,15 @@ final class PublicationEditing {
         lockAndLoad(pb, true, QbPublications.defaultDataset(QbPublications.PUBLICATION));
     }
 
+    /**
+     * As {@link #lockAndLoad(ProcessDefinitionBuilder)} for a system's process that changes no state (F-S13: the
+     * purchased exposures): the publication's lock only, the publication read through the default dataset (404 when
+     * there is none).
+     */
+    static <I, O> void lockAndLoadAny(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        lockAndLoad(pb, false, QbPublications.defaultDataset(QbPublications.PUBLICATION));
+    }
+
     private static <I, O> void lockAndLoad(ProcessDefinitionBuilder<I, O, ProcessContext> pb, boolean starts) {
         lockAndLoad(pb, starts, QbPublications.sponsorDataset(QbPublications.PUBLICATION));
     }
@@ -643,7 +652,9 @@ final class PublicationEditing {
             // Q88b: the entry fee the start charges.
             "entryFee",
             // F-S2b1: the node it is bound to.
-            "treeId", "treeNodeId")) {
+            "treeId", "treeNodeId",
+            // F-S13: the exposures bought for another's shared video (none: unlimited).
+            "exposurePurchased")) {
             card.put(field, publication.get(field));
         }
         if (card.get("regions") == null) {
