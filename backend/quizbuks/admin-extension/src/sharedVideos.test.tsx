@@ -46,6 +46,7 @@ const video = (change: Row = {}): Row => ({ sharedVideoId: 'v1', providerId: 'sp
   withdrawnAt: null, takenDownAt: null, takedownReason: null, takedownOperatorId: null, usesRunning: '0', ...change })
 
 let rows: Row[] = []
+let uses: Row[] = []
 
 beforeAll(async () => {
   await i18next.use(initReactI18next).init({ lng: 'en', resources: { en: { [EXTENSION_NAMESPACE]: messages.en } } })
@@ -57,11 +58,14 @@ beforeEach(() => {
     PERMISSION.operatorUse])
   rows = [video(), video({ sharedVideoId: 'v2', status: 'APPROVED', approvalRequestId: 'r2', usesRunning: '4',
     vertical: false, durationSec: 3725 })]
+  uses = []
   server.runQuery.mockReset().mockImplementation(async (id: string, options: { filters?: Row[]; count?: boolean } = {}) => {
     let items: Row[] = []
     if (id === TEMPLATE.sharedVideos) {
       items = rows.filter((row) => (options.filters ?? []).every((f) => f.field === 'operatorId'
         || row[String(f.field)] === f.value))
+    } else if (id === TEMPLATE.sharedVideoUses) {
+      items = uses
     } else if (id === TEMPLATE.operators) {
       items = [{ operatorId: 'op-kanto', name: 'Kanto Partners', contactEmail: 'ops@kanto.example' }]
     }
@@ -158,6 +162,37 @@ describe('shared videos (F-S12)', () => {
     expect(content).toHaveTextContent('Infringes')
     expect(content).toHaveTextContent('The platform')
     expect(screen.queryByTestId('shared-video-takedown')).toBeNull()
+  })
+
+  it('lists the publications that used it, those the takedown ended with why and when (F-C3)', async () => {
+    rows = [video({ status: 'TAKEN_DOWN', takenDownAt: '2026-11-08T03:00:00Z', takedownReason: 'Infringes',
+      usesRunning: '0' })]
+    uses = [
+      { publicationId: 'p1', name: 'Autumn quiz', publisherKind: 'SPONSOR', publisherId: 'u1', status: 'ENDED',
+        startAt: '2026-11-01T00:00:00Z', endAt: '2026-12-01T00:00:00Z', endReason: 'SHARED_VIDEO',
+        endedAt: '2026-11-08T03:01:00Z' },
+      { publicationId: 'p2', name: 'Winter quiz', publisherKind: 'SPONSOR', publisherId: 'u2', status: 'LIVE',
+        startAt: '2026-11-02T00:00:00Z', endAt: '2026-12-01T00:00:00Z', endReason: null, endedAt: null },
+    ]
+    const { container } = renderAt('/qb/shared-videos/v1')
+    const listed = await screen.findAllByTestId('shared-video-use')
+    expect(listed).toHaveLength(2)
+    expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.sharedVideoUses, expect.objectContaining({
+      params: { sharedVideoId: 'v1' } }))
+    expect(within(listed[0]).getByTestId('shared-video-use-link')).toHaveAttribute('href',
+      '/qb/reviews/publications/p1')
+    expect(within(listed[0]).getByTestId('shared-video-use-link')).toHaveTextContent('Autumn quiz')
+    expect(listed[0]).toHaveAttribute('data-end-reason', 'SHARED_VIDEO')
+    expect(within(listed[0]).getByTestId('shared-video-use-ended').textContent).not.toBe('')
+    expect(within(listed[1]).getByTestId('shared-video-use-ended')).toHaveTextContent('')
+    // The count of those running is none after the takedown; the list still says which ended.
+    expect(screen.getByTestId('shared-video-uses')).toHaveTextContent('0 publications use it now.')
+    await expectAccessible(container)
+  })
+
+  it('says when no publication the session reads used it', async () => {
+    renderAt('/qb/shared-videos/v2')
+    expect(await screen.findByTestId('shared-video-uses-none')).toHaveTextContent('No publication you can see')
   })
 
   it('says a video of another operator\'s Sponsor is not found', async () => {

@@ -3,11 +3,12 @@ id: qb.sponsor.shared-videos
 description: >-
   F-S12: the catalog of shared videos, for the publication wizard: the videos other sponsors share that their operator
   approved, with the provider's company, newest first; searched by title (any language) or provider, by topic and by
-  orientation
-entities: [QbSharedVideo, QbSponsor]
+  orientation. F-C3: the caller's own videos are not in it (they pick them from their materials)
+entities: [QbSharedVideo, QbSponsor, QbProfile]
 datasets:
   QbSharedVideo: urn:jabiz:dataset:default:QbSharedVideo
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
+  QbProfile: urn:jabiz:dataset:me:QbProfile
 params:
   q:             { kind: { type: text, maxLength: 100 }, description: "Only videos whose title (any language) or provider contains this text" }
   topic:         { kind: { type: text, maxLength: 40 }, description: "Only videos with this topic (a code of the word list)" }
@@ -34,6 +35,10 @@ permissions: [qb.publication.write]
 -- became of it, so that the wizard says it was withdrawn or taken down. A provider whose onboarding is gone (an erased
 -- account) is not shown; the company is the onboarding's current one. The text is found as written: strpos takes it
 -- literally. The topics are matched as the codes are stored (comma-separated, no blanks).
+-- F-C3 (总控 2026-11-08): the catalog leaves out the caller's own videos, known by their profile (the me dataset holds
+-- the caller's only; every sponsor has one from their application): a video of one's own is no use of another's, and
+-- is picked from the materials. The lookup by key (a draft's pick) still finds one of the caller's own: a draft that
+-- picked it before keeps saying what became of it.
 SELECT * FROM (
     SELECT
         v.{{QbSharedVideo.sharedVideoId}}  AS sharedVideoId,
@@ -49,6 +54,8 @@ SELECT * FROM (
         v.{{QbSharedVideo.approvedAt}}     AS approvedAt
     FROM {{QbSharedVideo}} v
     WHERE (CASE WHEN CAST(:sharedVideoId AS text) IS NULL THEN v.{{QbSharedVideo.status}} = 'APPROVED'
+                    AND NOT EXISTS (SELECT 1 FROM {{QbProfile}} me
+                                    WHERE me.{{QbProfile.userId}} = v.{{QbSharedVideo.providerId}})
                 ELSE v.{{QbSharedVideo.sharedVideoId}} = CAST(:sharedVideoId AS text) END)
       AND (CAST(:vertical AS boolean) IS NULL OR v.{{QbSharedVideo.vertical}} = CAST(:vertical AS boolean))
       AND (CAST(:topic AS text) IS NULL
