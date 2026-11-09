@@ -336,5 +336,8 @@ public final class QbPermissions {
      */
     public static final String TREE_LIT_REVOKE = "qb.tree.lit.revoke";
 
+    /** F-C4: the sponsor packages' import records past their retention ({@code internal()}). Granted to no role. */
+    public static final String PACKAGE_SYSTEM = "qb.package.system";
+
     private QbPermissions() {}
 }

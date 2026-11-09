@@ -101,6 +101,8 @@ public class SponsorErasure {
                         "translations", "tags", "image", "pdf", "audio", "url", "body", "prizeDescription"),
                     // F-C2: the daily usage snapshots (numbers only).
                     ErasedEntity.delete(com.jabiz.quizbuks.usage.QbUsage.DAY, "sponsorId"),
+                    // F-C4: the records of their sponsor packages' imports.
+                    ErasedEntity.delete(com.jabiz.quizbuks.sponsorpackage.QbPackageImports.IMPORT, "sponsorId"),
                     ErasedEntity.delete(QbSponsorProducts.QUIZ_LINK, "ownerId"),
                     ErasedEntity.delete(QbSponsorProducts.PRODUCT, "userId", "name", "description", "image",
                         "shopUrl", "translations"),

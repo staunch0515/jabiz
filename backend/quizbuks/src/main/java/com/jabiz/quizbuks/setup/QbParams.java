@@ -385,6 +385,10 @@ public final class QbParams {
     public static final String EXPOSURE_RECONCILE_MIN_TOLERANCE = "qb.exposure.reconcile.min-tolerance";
     public static final String EXPOSURE_RECONCILE_TOLERANCE_PERCENT = "qb.exposure.reconcile.tolerance-percent";
     public static final String EXPOSURE_END_GRACE_SEC = "qb.exposure.reconcile.end-grace-sec";
+    /** F-C4: above how many bytes a sponsor package's export asks before it is saved. */
+    public static final String PACKAGE_CONFIRM_BYTES = "qb.package.confirm-bytes";
+    /** F-C4: how many days the record of a sponsor package's import is kept after its last change. */
+    public static final String PACKAGE_IMPORT_RETENTION_DAYS = "qb.package.import-retention-days";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -685,7 +689,12 @@ public final class QbParams {
         new Param(EXPOSURE_END_GRACE_SEC, Map.of("type", "numeric", "precision", 5, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.exposure.ExposureRules.DEFAULT_END_GRACE_SEC),
             "How many seconds after a publication ended an exposure may still be counted (a report on its way) "
-                + "before the daily check reports it (0 to 86400)"));
+                + "before the daily check reports it (0 to 86400)"),
+        // F-C4: the sponsor package (ordinary; last, so that the setup's earlier keys stay as they were).
+        new Param(PACKAGE_CONFIRM_BYTES, Map.of("type", "numeric", "precision", 12, "scale", 0), "104857600",
+            "Above how many bytes the export of a sponsor package asks before it is saved (100 MB by default)"),
+        new Param(PACKAGE_IMPORT_RETENTION_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0), "90",
+            "Days the record of a sponsor package's import is kept after its last change"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

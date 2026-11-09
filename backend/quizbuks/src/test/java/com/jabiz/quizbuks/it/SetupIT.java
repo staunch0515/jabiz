@@ -364,6 +364,9 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.EXPOSURE_RECONCILE_MIN_TOLERANCE, "20");
         expected.put(QbParams.EXPOSURE_RECONCILE_TOLERANCE_PERCENT, "5");
         expected.put(QbParams.EXPOSURE_END_GRACE_SEC, "60");
+        // F-C4: the sponsor package (ordinary parameters).
+        expected.put(QbParams.PACKAGE_CONFIRM_BYTES, "104857600");
+        expected.put(QbParams.PACKAGE_IMPORT_RETENTION_DAYS, "90");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // F-S2: the knowledge maps' limits and the review reminder (ordinary).
