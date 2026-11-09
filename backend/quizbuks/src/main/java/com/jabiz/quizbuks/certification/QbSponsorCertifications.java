@@ -32,9 +32,9 @@ public final class QbSponsorCertifications {
             .generated(true).asSemanticIdentity("urn:jabiz:entity:quizbuks:sponsor-certification"));
         eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).asText(128));
         eb.field("name", f -> f.physicalColumn("name").required(true)
-            .apply(I18nText.of(SponsorCertifications.NAME_LENGTH)));
+            .apply(I18nText.of(100)));
         eb.field("description", f -> f.physicalColumn("description")
-            .apply(I18nText.of(SponsorCertifications.DESCRIPTION_LENGTH).multiline()));
+            .apply(I18nText.of(500).multiline()));
         eb.field("validityDays", f -> f.physicalColumn("validity_days").required(true).asNumeric(4, 0));
         // The certification's own version (raised by the sponsor, D-Q88-1), not the row's.
         eb.field("certificationVersion", f -> f.physicalColumn("certification_version").required(true)

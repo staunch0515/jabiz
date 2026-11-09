@@ -15,7 +15,7 @@ const right = { className: 'text-right tabular-nums' }
 
 /**
  * Every referral (Q70), newest first, by state and referrer: who referred whom to which publication, until when and
- * what came of it. Read only: the referrals are the processes' alone; a referrer is checked by their certification.
+ * what came of it. Read only: the referrals are the processes' alone; a referrer is one who lit the gate's node (F-S2c).
  */
 export default function ReferralsPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)

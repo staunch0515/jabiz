@@ -50,7 +50,6 @@ export const TEMPLATE = {
   operatorTreeLit: 'qb.operator.tree-lit',
   /** F-C2: the sponsors' usage by month and meter (headquarters every sponsor, an operator its own). */
   usage: 'qb.admin.usage',
-  /** Q88a: the sponsors' own certifications (headquarters every one, an operator its sponsors'). */
   /** Q73e-1: a publication by the language its attempts are answered in. */
   publicationLanguages: 'qb.admin.publication-languages',
   /** Q73d-2: the latest AI comparison of a publication's translations in one language (its reviewers). */
@@ -404,22 +403,6 @@ export const DICTIONARY = {
   feeRequestStatus: 'urn:jabiz:dict:quizbuks:fee-request-status',
 } as const
 
-/** Certifications (Q69, backend `certification.CertificationProcesses`). */
-export const CERTIFICATION_PROCESS = {
-  overview: 'QB_CERTIFICATION_OVERVIEW',
-  roundAdd: 'QB_CERTIFICATION_ROUND_ADD',
-  roundClose: 'QB_CERTIFICATION_ROUND_CLOSE',
-  grant: 'QB_CERTIFICATION_GRANT',
-  revoke: 'QB_CERTIFICATION_REVOKE',
-  /** F-S1b: an operator's overview, for the platform (read only; `qb.certification.admin`). */
-  overviewOf: 'QB_CERTIFICATION_OVERVIEW_OF',
-} as const
-
-/** The certifications' keys (backend `certification.Certifications`); their names are `certification.names.<key>`. */
-export const CERTIFICATIONS = ['SPONSOR_APPLY', 'REFERRER', 'TERMS_APP_UNDERSTOOD', 'CONTEST_RULES_UNDERSTOOD',
-  'TERMS_SPONSOR_UNDERSTOOD', 'BENEFIT_PROVIDER', 'BENEFIT_SPONSOR'] as const
-export type Certification = (typeof CERTIFICATIONS)[number]
-
 /** Permissions (`QbPermissions`): they only decide what the pages offer; the server checks every call. */
 export const PERMISSION = {
   /** F-S2: every knowledge map (the platform's administrators), and revoking a lit node (operators and the platform). */
@@ -493,11 +476,8 @@ export const PERMISSION = {
   adminProspect: 'qb.admin.prospect',
   /** Q48b: recording the payment of an operator's settlement (finance; another administrator approves). */
   settlementPay: 'qb.operator.settlement.pay',
-  /** Q69: certification rounds and records by hand (content administrators and operators), and the official publishers (headquarters). */
-  certificationManage: 'qb.certification.manage',
   /** Q70: every referral. */
   referralsRead: 'qb.admin.referrals.read',
-  certificationAdmin: 'qb.certification.admin',
   /** Q47c: the audience rules (content administrators) and every owner's price list (finance). */
   audienceRulesWrite: 'qb.audience.rules.write',
   audiencePricesWrite: 'qb.audience.prices.write',
@@ -700,8 +680,6 @@ export const PATH = {
   /** Q48e-2: the operator's account (balance, bank account, withdrawals), and the withdrawals (finance). */
   operatorAccount: '/qb/operator/account',
   operatorWithdrawals: '/qb/finance/operator-withdrawals',
-  /** Q69: certification rounds, records by hand and the official publishers. */
-  certifications: '/qb/certifications',
   referrals: '/qb/referrals',
   /** Q47c: the audience rules, every owner's price list (headquarters), and the operator's own. */
   audienceRules: '/qb/audience/rules',

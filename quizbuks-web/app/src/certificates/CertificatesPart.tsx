@@ -54,6 +54,8 @@ export function CertificatesPart() {
             {held.data.map((h) => <HeldItem key={h.certification} held={h} />)}
           </ul>
         )}
+        {/* F-S2c (D8): no new certificate on a certification; certificates of the knowledge map's nodes replace them. */}
+        <p className="text-muted-foreground text-sm" data-testid="certificates-paused">{t('certificates.paused')}</p>
         <p className="text-muted-foreground text-sm">{t('certificates.hint')}</p>
       </AccountSection>
       <AccountSection title={t('certificates.page.title')} testId="certificates-page">
@@ -67,10 +69,10 @@ function HeldItem({ held }: { held: HeldCertification }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const download = useMutation({
-    mutationFn: () => downloadCertificate(held.certificateId!, held.verifyKey!),
+    mutationFn: () => downloadCertificate(held.certificateId, held.verifyKey),
     onError: (error) => notify.error(problemText(error)),
   })
-  const link = held.verifyKey ? appUrl(verifyPath(held.verifyKey)) : null
+  const link = appUrl(verifyPath(held.verifyKey))
   return (
     <li className="flex flex-col gap-2 rounded-lg border p-3" data-testid={`certificate-${held.certification}`}>
       <div className="flex items-start gap-2">
@@ -83,35 +85,23 @@ function HeldItem({ held }: { held: HeldCertification }) {
             </p>
           )}
           <p className="text-muted-foreground text-sm">
-            {t(`certificates.source.${held.source === 'GRANTED' ? 'GRANTED' : 'PASSED'}`)}
-            {' · '}
             {t('certificates.period', { from: formatDate(held.heldFrom), until: formatDate(held.heldUntil) })}
           </p>
         </div>
       </div>
-      {!held.certificateId && (
-        // F-S2c (D8): no new certificate on a certification; certificates of the knowledge map's nodes replace them.
-        <p className="text-muted-foreground text-sm" data-testid={`certificate-paused-${held.certification}`}>
-          {t('certificates.paused')}
-        </p>
-      )}
-      {held.certificateId && link && (
-        <>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" disabled={download.isPending} onClick={() => download.mutate()}
-              data-testid={`certificate-download-${held.certification}`}>
-              <Download aria-hidden />{t('certificates.download')}
-            </Button>
-            <Button size="sm" variant="outline" data-testid={`certificate-copy-${held.certification}`}
-              onClick={() => void copy(link, t('certificates.copied'), t('certificates.copyFailed'))}>
-              <Copy aria-hidden />{t('certificates.copy')}
-            </Button>
-          </div>
-          <p className="text-muted-foreground text-xs break-all" data-testid={`certificate-link-${held.certification}`}>
-            {link}
-          </p>
-        </>
-      )}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={download.isPending} onClick={() => download.mutate()}
+          data-testid={`certificate-download-${held.certification}`}>
+          <Download aria-hidden />{t('certificates.download')}
+        </Button>
+        <Button size="sm" variant="outline" data-testid={`certificate-copy-${held.certification}`}
+          onClick={() => void copy(link, t('certificates.copied'), t('certificates.copyFailed'))}>
+          <Copy aria-hidden />{t('certificates.copy')}
+        </Button>
+      </div>
+      <p className="text-muted-foreground text-xs break-all" data-testid={`certificate-link-${held.certification}`}>
+        {link}
+      </p>
     </li>
   )
 }

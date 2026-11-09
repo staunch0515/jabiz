@@ -4,9 +4,8 @@ import { adminToken, expect, insert, PASSWORD, rows, run, tokenOf, unique, verif
 import { query } from './content'
 
 /*
- * Operators for the end-to-end tests (F-S1, docs/quizbuks/plans/impl/F-S1.md): every sponsor belongs to an operator,
- * and the operators run the sponsors' certifications. An operator is created with its lead, whose account is the
- * operator's own sponsor (the official publisher of its certification rounds); the lead, registered at the sponsor
+ * Operators for the end-to-end tests (F-S1, docs/quizbuks/plans/impl/F-S1.md): every sponsor belongs to an operator.
+ * An operator is created with its lead, whose account is the operator's own sponsor; the lead, registered at the sponsor
  * entry, holds the sponsor role already. The role QB_OPERATOR asks for a second factor: the lead enrols TOTP at the
  * first sign-in at the operators' entry.
  */

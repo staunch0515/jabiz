@@ -89,8 +89,6 @@ abstract class AccountItSupport extends PublicationItSupport {
         return newOperatorWithLead(operatorsAdmin(), unique(name), null);
     }
 
-    private NewOperator certificationOperator;
-
     /** A session of a new member (not a lead) of the platform operator (F-S1: who runs the self-signed-up sponsors). */
     String platformOperatorMember() {
         String member = verifiedUser(unique("platform-member"));
@@ -103,18 +101,6 @@ abstract class AccountItSupport extends PublicationItSupport {
     String platformOperator() {
         return (String) query("SELECT operator_id FROM qb_operator WHERE default_for_new").getFirst()
             .get("operator_id");
-    }
-
-    /**
-     * A session that grants and revokes certifications by hand (F-S1: an operator's member, not headquarters): the
-     * lead of an operator made for the test.
-     */
-    String certificationGranter() {
-        if (certificationOperator == null) {
-            certificationOperator = officialOperator("Certifications");
-        }
-        // A new session each time: tests move the clock past a session's life.
-        return memberSession(certificationOperator.leadId(), certificationOperator.operatorId());
     }
 
     /** {@link #newOperatorWithLead}'s operator. */
