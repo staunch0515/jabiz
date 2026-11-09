@@ -186,3 +186,18 @@
 - **迁移已有数据**：现有 2160 余额一次写成一笔（§2.c 第 3 条）；现有账单状态不变；现有已付账单不补分摊记录（分摊从上线起），核对 `FEE_PAYMENTS` 只核上线之后的。
 - **退回与到期交织**：预付退回时原笔已到期即作废；有专门的测试（跨到期日的释放）。
 - **上线顺序**：各开关缺省关；打开顺序写进 `operations.md`（先价目表、再开关），与 F-F10（资金开关，S3）对齐。
+
+## 5. 进度与下一步（S2，2026-11-09，按总控降速暂停）
+
+| 项 | 状态 |
+|---|---|
+| M1（F-M1、F-M13 的付款） | #578 已合（V103） |
+| M2（F-M2，不含 `LIGHT`） | 草稿 #585（V106，head 0a012282）：已合最新（#584），本机全部场景、受影响测试与 `platformCheck` 通过；e2e（S4）整轮 120/122，失败的 `topup.spec.ts` 已改，重跑 3/3 通过。等 CI 绿后报总控转 ready |
+| M3–M9 | 未开始（总控：额度重置前不开新项） |
+
+下一步（额度重置之后）：
+
+1. #585：CI 若红，按失败原因修；合入后删工作树 `/workspace/fm2`。
+2. M3 企业实名认证（F-M3）：按本文件 §M3 与 S1 的邮件令牌答复（`MailRecipient.user(userId, address, null)`、用途 `company-email`、`MailTokens.consume` 返回 `Consumed(messageId, userId, address)`；流程核对 userId 与规范化地址，地址先校验，400）。随 M3 补 M2 的 `CERTIFIED_TOP_UP` 与钱包页"认证后补到 10,000"的提示，入驻赠送改为按认证读 `grant.certified`。
+3. M4 起按 §1 的顺序；M4 含需求方确认的删除（`direct` 价目表与 `qb.audience.price.fallback`）。
+4. 平台的既有问题（转 S1，非本线）：`platformCheck` 结束时 `JobScheduler.scheduleNext` 记两条 `TaskRejectedException: ExecutorService in shutdown state`（关闭时的竞争，只是 ERROR 日志）。
