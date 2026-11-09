@@ -87,7 +87,7 @@ const zh: typeof en = {
     figures: '数字',
     opens: '推送被打开',
     successes: '曝光成功',
-    goes: '去答题人数',
+    goes: '去答题的人数',
     qualified: '合格人数',
     fewer: '少于 {{n}}',
     fewerHint: '少于 {{n}} 的数字不显示，以保护学者的隐私。',
