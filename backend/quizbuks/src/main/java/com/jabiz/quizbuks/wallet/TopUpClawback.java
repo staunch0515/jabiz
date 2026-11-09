@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.wallet;
 
 import com.jabiz.ledger.Direction;
 import com.jabiz.process.ProcessContext;
+import com.jabiz.quizbuks.fee.CashLots;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
@@ -56,6 +57,7 @@ public final class TopUpClawback {
 
     private enum Kind { REFUND, DISPUTE_OPENED, DISPUTE_CLOSED }
 
+    static final String CASH_LOTS = "cashLots";
     static final String INPUT = "input";
     static final String EVENT = "event";
     static final String PAYMENT = "payment";
@@ -122,10 +124,13 @@ public final class TopUpClawback {
                         TopUpCrediting.first(ctx, FOUND) == null ? null
                             : String.valueOf(TopUpCrediting.first(ctx, FOUND).id())), TOPUP))
                 // Q87a: what the top-up credited is taken back from there: the Kudos wallet or the cash account.
-                .step("Read the wallet", QueryEntities.<ProcessContext>of(QbWallets.defaultDataset(QbWallets.WALLET),
-                    ctx -> QbWallets.query(TopUpTargets.walletKind(TopUpTargets.of(TopUpCrediting.first(ctx, TOPUP))),
-                        TopUpCrediting.first(ctx, TOPUP) == null ? null
-                            : TopUpCrediting.first(ctx, TOPUP).get("sponsorId")), WALLET))
+                .step("Read the wallet", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET),
+                        ctx -> QbWallets.query(TopUpTargets.walletKind(TopUpTargets.of(TopUpCrediting.first(ctx, TOPUP))),
+                            TopUpCrediting.first(ctx, TOPUP) == null ? null
+                                : TopUpCrediting.first(ctx, TOPUP).get("sponsorId")), WALLET),
+                    // F-M1: a cash top-up taken back takes from the cash lots, its own lot first (same statement).
+                    QueryEntities.query(CashLots.dataset(), ctx -> CashLots.open(cashSponsor(ctx)), CASH_LOTS)))
                 .compute("Decide", (metadata, ctx) -> decide(ctx, kind, settings))
                 .step("Post the clawback", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
                     LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
@@ -328,7 +333,16 @@ public final class TopUpClawback {
             QbWallets.change(ctx, TopUpCrediting.first(ctx, WALLET), TopUpTargets.walletKind(TopUpTargets.of(topUp)),
                 topUp.get("sponsorId"), balanceDelta, 0, BigDecimal.ZERO, heldDelta);
         }
+        if (balanceDelta.signum() < 0 && TopUpTargets.CASH.equals(TopUpTargets.of(topUp))) {
+            CashLots.take(ctx, TopUpCrediting.list(ctx, CASH_LOTS), balanceDelta.negate(), topUp.id());
+        }
         ctx.changes().update(QbTopUps.TOPUP, topUp.id(), topUp.version(), values);
+    }
+
+    /** The sponsor whose cash lots are read: a cash top-up's, none for a Kudos one. */
+    private static Object cashSponsor(ProcessContext ctx) {
+        EntityInstance topUp = TopUpCrediting.first(ctx, TOPUP);
+        return topUp != null && TopUpTargets.CASH.equals(TopUpTargets.of(topUp)) ? topUp.get("sponsorId") : null;
     }
 
     /** A dispute was closed and what it held is spendable again (a lost one took it back instead). */

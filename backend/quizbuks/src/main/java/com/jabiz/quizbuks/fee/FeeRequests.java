@@ -90,7 +90,7 @@ public final class FeeRequests {
     static final String CHARGED = "charged";
     static final String TRANSACTIONS = "transactions";
     static final String REVERSALS = "reversals";
-    static final String CASH_WALLET = "cashWallet";
+    static final String REFUNDED = "refunded";
     static final String STATUS_AFTER = "statusAfter";
     static final String DO_VOID = "doVoid";
     static final String DO_CHARGE = "doCharge";
@@ -249,8 +249,6 @@ public final class FeeRequests {
                             new QueryPredicate.Eq("reviewStatus", SponsorStatus.APPROVED)))).limit(1).build(), SPONSOR),
                     QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> FeeProcesses.byId("invoiceId",
                         first(ctx, FOUND) == null ? null : (String) first(ctx, FOUND).get("invoiceId")), INVOICE),
-                    QueryEntities.query(QbWallets.defaultDataset(QbWallets.WALLET), ctx -> QbWallets.query(QbWallets.CASH,
-                        first(ctx, FOUND) == null ? null : first(ctx, FOUND).get("sponsorId")), CASH_WALLET),
                     // Both keyed by the lookup: the row above is read in this same statement, not yet in hand.
                     QueryEntities.query(ApprovalEntities.REQUEST_DATASET, ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("requestId", foundRequest(ctx))).limit(1).build(), REQUEST),
@@ -286,6 +284,10 @@ public final class FeeRequests {
                     }
                     return reversals;
                 }, REVERSALS))
+                // F-M1: what paid the invoice back to the lots it came from (the reversals put the ledger back).
+                .step("Give the payments back", CallProcess.<ProcessContext>when(
+                    ctx -> Boolean.TRUE.equals(ctx.get(DO_VOID)), FeeSettlement.REFUND, 1, FeeRequests::refundInput,
+                    REFUNDED))
                 .compute("Record the outcome", (metadata, ctx) -> record(ctx))
                 .step("Close the reminder", CloseTasks.<ProcessContext>cancel(ctx -> Boolean.TRUE.equals(ctx.get(DO_VOID))
                     ? QbFees.overdueTaskSource(first(ctx, INVOICE).id()) : QbFees.overdueTaskSource("none"))));
@@ -380,12 +382,25 @@ public final class FeeRequests {
             voided.put("voidReason", row.get("reason"));
             voided.put("voidRequestedBy", row.get("requestedBy"));
             ctx.changes().update(QbFees.INVOICE, invoice.id(), invoice.version(), voided);
-            // A paid invoice voided gives the payment back to the cash account.
-            if (invoice.get("paidAt") != null) {
-                QbWallets.change(ctx, first(ctx, CASH_WALLET), QbWallets.CASH, invoice.get("sponsorId"),
-                    money(invoice.get("total")), 0, BigDecimal.ZERO);
+        }
+    }
+
+    /** The invoice voided, what was paid of it and the payment postings reversed, for {@code QB_FEE_REFUND}. */
+    @SuppressWarnings("unchecked")
+    static FeeSettlement.RefundInput refundInput(ProcessContext ctx) {
+        EntityInstance invoice = first(ctx, INVOICE);
+        List<FeeSettlement.Reversal> reversals = new ArrayList<>();
+        List<Object> outputs = (List<Object>) ctx.get(REVERSALS);
+        if (outputs != null) {
+            for (Object output : outputs) {
+                LedgerProcesses.ReverseOutput reversed = (LedgerProcesses.ReverseOutput) output;
+                reversals.add(new FeeSettlement.Reversal(reversed.reversedTransactionId(), reversed.transactionId()));
             }
         }
+        // Paid before F-M1 an invoice was paid in full or not at all, and has no paid amount of its own.
+        BigDecimal paidAmount = money(invoice.get("paidAmount"));
+        return new FeeSettlement.RefundInput(invoice.get("sponsorId"), String.valueOf(invoice.id()),
+            invoice.get("chargeId"), paidAmount, reversals);
     }
 
     @SuppressWarnings("unchecked")

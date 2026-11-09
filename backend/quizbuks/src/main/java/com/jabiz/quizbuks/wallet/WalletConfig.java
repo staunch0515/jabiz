@@ -150,7 +150,9 @@ class WalletConfig {
         return StaticDictionary.define(QbWallets.KIND_DICTIONARY, d -> d
             .item(QbWallets.SPONSOR, "en", "Sponsor", "zh", "发起方", "ja", "主催者")
             .item(QbWallets.TAKER, "en", "Taker", "zh", "学者", "ja", "テイカー")
-            .item(QbWallets.CASH, "en", "Sponsor cash account", "zh", "发起方现金账户", "ja", "主催者の現金口座"));
+            .item(QbWallets.CASH, "en", "Sponsor cash account", "zh", "发起方现金账户", "ja", "主催者の現金口座")
+            .item(QbWallets.FEE_CREDIT, "en", "Granted credit (platform fees)", "zh", "赠送额度（平台费）",
+                "ja", "付与クレジット（利用料）"));
     }
 
     @Bean

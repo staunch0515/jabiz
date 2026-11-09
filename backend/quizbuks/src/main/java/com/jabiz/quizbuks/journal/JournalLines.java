@@ -35,9 +35,9 @@ public final class JournalLines {
     public static final int EXTERNAL_VOUCHER_LENGTH = 50;
 
     /** The accounts carrying a line per sponsor. */
-    /** The accounts kept per sponsor: the Kudos wallets (2110) and, Q87a, the cash accounts (2160). */
+    /** The accounts kept per sponsor: the Kudos wallets (2110), Q87a the cash accounts (2160), F-M1 the fee credit (2190). */
     private static final java.util.Set<String> PER_SPONSOR = java.util.Set.of(QbLedger.SPONSOR_PREPAYMENTS,
-        QbLedger.SPONSOR_CASH);
+        QbLedger.SPONSOR_CASH, QbLedger.FEE_CREDIT);
 
     /** The detail's times, in Japan's time as the periods are. */
     private static final DateTimeFormatter TIME = DateTimeFormatter.ISO_OFFSET_DATE_TIME;

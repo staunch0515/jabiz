@@ -314,10 +314,12 @@ public final class QbParams {
     public static final String JOURNAL_ACCOUNT_2150 = JOURNAL_ACCOUNT_PREFIX + "2150";
     /** Q88b: the entry fees unsettled. */
     public static final String JOURNAL_ACCOUNT_2170 = JOURNAL_ACCOUNT_PREFIX + "2170";
+    /** F-M1: the sponsors' platform fee Kudos (the fee credit). */
+    public static final String JOURNAL_ACCOUNT_2190 = JOURNAL_ACCOUNT_PREFIX + "2190";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
         JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
         JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160, JOURNAL_ACCOUNT_1130,
-        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170);
+        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170, JOURNAL_ACCOUNT_2190);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -514,6 +516,7 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_4120, "4120 Platform fee revenue"),
         journal(JOURNAL_ACCOUNT_2150, "2150 Consumption tax payable"),
         journal(JOURNAL_ACCOUNT_2170, "2170 Entry fees unsettled"),
+        journal(JOURNAL_ACCOUNT_2190, "2190 Sponsor platform fee Kudos"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",

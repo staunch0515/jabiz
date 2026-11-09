@@ -17,9 +17,10 @@ import {
   type DescriptionItem,
 } from '@jabiz/admin'
 import { readAccountBalances, readFinanceSummary, readReconSummary } from './finance-api'
+import { readFeeAccountTotals } from './fee-api'
 import { LoadFailed, Section } from './components'
-import { money, when } from './hooks'
-import { ACCOUNTS, PATH, PERMISSION } from './ids'
+import { money, useLabels, when } from './hooks'
+import { ACCOUNTS, DICTIONARY, PATH, PERMISSION } from './ids'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
 
@@ -29,6 +30,62 @@ function CountLink({ to, count, label, testId }: { to: string; count: number; la
     <Link to={to} className={linkClass} data-testid={testId} data-count={count} aria-label={label}>
       {count.toLocaleString()}
     </Link>
+  )
+}
+
+/** The month this one is (UTC, as the monthly report): its first instant and the next month's. */
+function thisMonth(now = new Date()): { from: string; to: string } {
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+  return { from: from.toISOString(), to: to.toISOString() }
+}
+
+/**
+ * F-M1: the Sponsors' accounts that pay the platform's fees, by sub-account (the granted credit, the cash): what the
+ * wallets hold, what the lots have left and what paid fees this month, as the server sums them.
+ */
+function FeeAccounts() {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const subAccount = useLabels(DICTIONARY.feeSubAccount)
+  const month = thisMonth()
+  const totals = useQuery({ queryKey: ['qb-ext', 'finance', 'fee-accounts', month.from],
+    queryFn: () => readFeeAccountTotals(month.from, month.to) })
+  let body: ReactNode
+  if (totals.isError) body = <LoadFailed error={totals.error} onRetry={() => void totals.refetch()} />
+  else if (totals.isPending) body = <PageState kind="loading" />
+  else {
+    body = (
+      <Table aria-label={t('fee.totals.table')} data-testid="finance-fee-accounts">
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t('fee.totals.subAccount')}</TableHead>
+            <TableHead className="text-right">{t('fee.totals.balance')}</TableHead>
+            <TableHead className="text-right">{t('fee.totals.lotsRemaining')}</TableHead>
+            <TableHead className="text-right">{t('fee.totals.openLots')}</TableHead>
+            <TableHead className="text-right">{t('fee.totals.sponsors')}</TableHead>
+            <TableHead className="text-right">{t('fee.totals.paidFees')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {totals.data.map((row) => (
+            <TableRow key={row.subAccount} data-testid="finance-fee-account" data-sub-account={row.subAccount}>
+              <TableCell>{subAccount(row.subAccount)}</TableCell>
+              <TableCell className="text-right tabular-nums">{money(row.balance)}</TableCell>
+              <TableCell className="text-right tabular-nums">{money(row.lotsRemaining)}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.openLots.toLocaleString()}</TableCell>
+              <TableCell className="text-right tabular-nums">{row.sponsors.toLocaleString()}</TableCell>
+              <TableCell className="text-right tabular-nums">{money(row.paidFees)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    )
+  }
+  return (
+    <Section title={t('fee.totals.title')} testId="finance-fee-totals">
+      <p className="text-muted-foreground text-sm">{t('fee.totals.hint')}</p>
+      {body}
+    </Section>
   )
 }
 
@@ -153,6 +210,7 @@ export default function FinanceOverviewPage() {
         <Link to={PATH.reports} className={linkClass}>{t('menu.reports')}</Link>
       </nav>
       {numbers}
+      <FeeAccounts />
       {can(PERMISSION.ledgerRead) && <Accounts />}
     </div>
   )

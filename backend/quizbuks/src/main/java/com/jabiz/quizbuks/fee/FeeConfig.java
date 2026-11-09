@@ -61,6 +61,78 @@ public class FeeConfig {
         return QbFees.REQUEST_ENTITY;
     }
 
+    /** The account that pays the platform's fees (F-M1): the fee credit's lots, the cash lots, the payments. */
+    @Bean
+    EntityDefinition qbFeeCreditGrantEntity() {
+        return QbFeeAccount.GRANT_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbCashLotEntity() {
+        return QbFeeAccount.CASH_LOT_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbFeePaymentEntity() {
+        return QbFeeAccount.PAYMENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbFeeCreditGrantDataset() {
+        return processOnly(QbFeeAccount.GRANT);
+    }
+
+    @Bean
+    DatasetDefinition qbCashLotDataset() {
+        return processOnly(QbFeeAccount.CASH_LOT);
+    }
+
+    @Bean
+    DatasetDefinition qbFeePaymentDataset() {
+        return processOnly(QbFeeAccount.PAYMENT);
+    }
+
+    /** A sponsor's own lots and payments, read only (the wallet page's account block reads them by templates). */
+    @Bean
+    DatasetDefinition qbSponsorFeeCreditGrantDataset() {
+        return own(QbFeeAccount.SPONSOR_GRANTS, QbFeeAccount.GRANT);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorCashLotDataset() {
+        return own(QbFeeAccount.SPONSOR_CASH_LOTS, QbFeeAccount.CASH_LOT);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorFeePaymentDataset() {
+        return own(QbFeeAccount.SPONSOR_PAYMENTS, QbFeeAccount.PAYMENT);
+    }
+
+    @Bean
+    StaticDictionary qbFeeCreditSourceDictionary() {
+        return StaticDictionary.define(QbFeeAccount.GRANT_SOURCE_DICTIONARY, d -> d
+            .item(QbFeeAccount.ONBOARDING, "en", "Onboarding", "zh", "入驻赠送", "ja", "登録特典")
+            .item(QbFeeAccount.LIGHT, "en", "Node lit", "zh", "点亮赠送", "ja", "ノード達成特典")
+            .item(QbFeeAccount.MANUAL, "en", "Granted by hand", "zh", "手工赠送", "ja", "手動付与")
+            .item(QbFeeAccount.CERTIFIED_TOP_UP, "en", "Verified company", "zh", "企业认证赠送", "ja", "企業認証特典"));
+    }
+
+    @Bean
+    StaticDictionary qbCashSourceDictionary() {
+        return StaticDictionary.define(QbFeeAccount.CASH_SOURCE_DICTIONARY, d -> d
+            .item(QbFeeAccount.CARD, "en", "Card top-up", "zh", "银行卡充值", "ja", "カードでのチャージ")
+            .item(QbFeeAccount.BANK, "en", "Bank transfer", "zh", "银行转账", "ja", "銀行振込")
+            .item(QbFeeAccount.OPERATOR, "en", "From the operator", "zh", "运营商转入", "ja", "運営パートナーから")
+            .item(QbFeeAccount.OTHER, "en", "Other", "zh", "其他", "ja", "その他"));
+    }
+
+    @Bean
+    StaticDictionary qbFeeSubAccountDictionary() {
+        return StaticDictionary.define(QbFeeAccount.SUB_ACCOUNT_DICTIONARY, d -> d
+            .item(QbFeeAccount.FEE_CREDIT, "en", "Granted credit", "zh", "赠送额度", "ja", "付与クレジット")
+            .item(QbFeeAccount.CASH, "en", "Cash", "zh", "现金", "ja", "現金"));
+    }
+
     /** Finance reads every charge, invoice and request; only the processes write them. */
     @Bean
     DatasetDefinition qbFeeChargeDataset() {
@@ -124,6 +196,7 @@ public class FeeConfig {
     StaticDictionary qbFeeInvoiceStatusDictionary() {
         return StaticDictionary.define(QbFees.INVOICE_STATUS_DICTIONARY, d -> d
             .item(QbFees.OPEN, "en", "Open", "zh", "待付", "ja", "未払い")
+            .item(QbFees.PARTIAL, "en", "Partly paid", "zh", "部分已付", "ja", "一部支払済み")
             .item(QbFees.OVERDUE, "en", "Overdue", "zh", "逾期", "ja", "期限超過")
             .item(QbFees.PAID, "en", "Paid", "zh", "已付", "ja", "支払済み")
             .item(QbFees.VOID, "en", "Voided", "zh", "已作废", "ja", "取消済み"));
@@ -166,6 +239,16 @@ public class FeeConfig {
     @Bean
     ProcessDefinition<FeeProcesses.ChargeInput, FeeProcesses.ChargeOutput, ProcessContext> qbFeeCharge() {
         return FeeProcesses.charge(zone);
+    }
+
+    @Bean
+    ProcessDefinition<FeeSettlement.SettleInput, FeeSettlement.SettleOutput, ProcessContext> qbFeeSettle() {
+        return FeeSettlement.process();
+    }
+
+    @Bean
+    ProcessDefinition<FeeSettlement.RefundInput, FeeSettlement.RefundOutput, ProcessContext> qbFeeRefund() {
+        return FeeSettlement.refund();
     }
 
     @Bean
@@ -293,5 +376,10 @@ public class FeeConfig {
     @Bean
     RetentionPolicy qbFeeInvoiceRetention() {
         return RetentionPolicy.of(QbFees.INVOICE).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
+    }
+
+    @Bean
+    RetentionPolicy qbFeePaymentRetention() {
+        return RetentionPolicy.of(QbFeeAccount.PAYMENT).keep(RETENTION).from("paidAt").afterFiscalYearEnd();
     }
 }

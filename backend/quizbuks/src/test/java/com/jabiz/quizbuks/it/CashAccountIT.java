@@ -70,6 +70,14 @@ class CashAccountIT extends TopUpItSupport {
         return event(eventId(), "charge.refunded", charge);
     }
 
+    /** F-M1: the sponsor's cash lots, {@code source:amount:remaining}. */
+    static List<String> lots(String sponsorId) {
+        return query("SELECT source, amount, remaining FROM qb_cash_lot WHERE sponsor_id = ? ORDER BY arrived_at, "
+            + "source", sponsorId).stream().map(row -> row.get("source") + ":"
+            + money(row.get("amount")).stripTrailingZeros().toPlainString() + ":"
+            + money(row.get("remaining")).stripTrailingZeros().toPlainString()).toList();
+    }
+
     static int count(Map<String, Object> row) {
         return ((Number) row.get("transactionCount")).intValue();
     }
@@ -102,6 +110,8 @@ class CashAccountIT extends TopUpItSupport {
             .containsExactly("1110:DEBIT", "2160:CREDIT");
         assertThat(cash(sponsor)).isEqualByComparingTo("5000");
         assertThat(balance(sponsor)).isEqualByComparingTo("2000");
+        // F-M1: the cash arrived as a lot of its own, from the card; the Kudos top-up has none.
+        assertThat(lots(sponsor)).containsExactly("CARD:5000:5000");
         // The default may be the cash account.
         param(QbParams.TOPUP_DEFAULT_TARGET, "CASH");
         String byDefault = (String) run("QB_TOPUP_START", token, body("amount", 1000)).get("topUpId");
@@ -110,6 +120,7 @@ class CashAccountIT extends TopUpItSupport {
         // A refund takes back from where the top-up went.
         deliver(refund(cash, 5000, 1000));
         assertThat(cash(sponsor)).isEqualByComparingTo("4000");
+        assertThat(lots(sponsor)).containsExactly("CARD:5000:4000");
         assertThat(postingsOf(cash)).filteredOn(line -> "DEBIT".equals(line.get("direction"))
             && "2160".equals(line.get("account_code"))).singleElement()
             .satisfies(line -> assertThat(money(line.get("amount"))).isEqualByComparingTo("1000"));
@@ -124,6 +135,7 @@ class CashAccountIT extends TopUpItSupport {
         assertThat(money(bought.get("cashBalance"))).isEqualByComparingTo("1000");
         assertThat(balance(sponsor)).isEqualByComparingTo("5000");
         assertThat(cash(sponsor)).isEqualByComparingTo("1000");
+        assertThat(lots(sponsor)).containsExactly("CARD:5000:1000");
         assertThat(codes(refused("QB_KUDOS_BUY", token, body("amount", 1001), 422)))
             .containsExactly(WalletCodes.KUDOS_EXCHANGE_FUNDS);
 
@@ -134,6 +146,8 @@ class CashAccountIT extends TopUpItSupport {
         run("QB_KUDOS_SELL", token, body("amount", 500));
         assertThat(balance(sponsor)).isEqualByComparingTo("4500");
         assertThat(cash(sponsor)).isEqualByComparingTo("1500");
+        // Kudos sold back are cash that arrived now.
+        assertThat(lots(sponsor)).containsExactlyInAnyOrder("CARD:5000:1000", "OTHER:500:500");
         assertThat(exchangePostings(sponsor)).extracting(row -> row.get("exchange") + " " + row.get("account_code")
             + ":" + row.get("direction") + ":" + money(row.get("amount")).stripTrailingZeros().toPlainString())
             .containsExactly("TO_KUDOS 2160:DEBIT:3000", "TO_KUDOS 2110:CREDIT:3000",
