@@ -379,7 +379,8 @@ public final class QbContent {
         eb.temporal(t -> t.allowScheduled(false));
         eb.listView("default", lv -> lv
             .columns("quizId", "language", "elementKey", "text", "image")
-            .filters("quizId", "language")
+            // F-S6c: the editor reads only the quiz's own elements by key (the questions' come a page at a time).
+            .filters("quizId", "language", "elementKey")
             .sorts("elementKey")
             .defaultSort("elementKey", true));
     });

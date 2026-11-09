@@ -152,4 +152,68 @@ class QuizTranslationsTemplateIT extends ContentItSupport {
         assertThat(options(row)).extracting(o -> o.get("state")).containsExactly("missing", "missing");
         assertThat(number(row.get("pending"))).isEqualTo(2);
     }
+
+    private Map<String, Map<String, Object>> progress(String token, String quizId) {
+        Map<String, Map<String, Object>> byLanguage = new java.util.LinkedHashMap<>();
+        items("qb.sponsor.quiz-translation-progress", token, body("params", Map.of("quizId", quizId)))
+            .forEach(row -> byLanguage.put((String) row.get("language"), row));
+        return byLanguage;
+    }
+
+    @Test
+    void theProgressCountsEveryLanguagesMissingAndStaleTextsAsThePagesDo() {
+        String quizId = newQuiz(sponsorA(), "Progress");
+        List<String> ids = new ArrayList<>();
+        for (int i = 1; i <= 3; i++) {
+            ids.add(question(sponsorA(), quizId, "Question " + i));
+        }
+        // Before any other language: nothing to report.
+        assertThat(progress(sponsorA(), quizId)).isEmpty();
+        run("QB_QUIZ_LANGUAGES_SET", sponsorA(), body("quizId", quizId, "languages", List.of("ja", "zh")));
+        run("QB_TRANSLATION_SAVE", sponsorA(), body("quizId", quizId, "language", "ja", "entries", List.of(
+            body("key", ContentLanguages.TITLE, "text", "進捗"),
+            body("key", ContentLanguages.stem(ids.get(0)), "text", "問 1"),
+            body("key", ContentLanguages.stem(ids.get(1)), "text", "問 2"))));
+        // The title and 3 questions of 2 options each, no introduction: 10 texts.
+        assertThat(progress(sponsorA(), quizId)).containsOnlyKeys("ja", "zh");
+        assertThat(number(progress(sponsorA(), quizId).get("ja").get("missing"))).isEqualTo(7);
+        assertThat(number(progress(sponsorA(), quizId).get("ja").get("stale"))).isZero();
+        assertThat(number(progress(sponsorA(), quizId).get("zh").get("missing"))).isEqualTo(10);
+
+        // The base changes: what was made from the old text is out of date.
+        run("QB_QUIZ_SAVE", sponsorA(), body("quizId", quizId, "title", "Progress, renamed", "language", "en"));
+        run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "questionId", ids.get(0), "stem", "Question one"));
+        Map<String, Object> ja = progress(sponsorA(), quizId).get("ja");
+        assertThat(number(ja.get("missing"))).isEqualTo(7);
+        assertThat(number(ja.get("stale"))).isEqualTo(2);
+        // The questions' part is the sum of the translation page's pending counts.
+        int pending = rows(page(quizId, "ja", Map.of(), 0, 50)).stream().mapToInt(row -> number(row.get("pending")))
+            .sum();
+        assertThat(pending).as("all but the stale title")
+            .isEqualTo(number(ja.get("missing")) + number(ja.get("stale")) - 1);
+
+        // Another sponsor sees nothing of it.
+        assertThat(progress(sponsorB(), quizId)).isEmpty();
+    }
+
+    @Test
+    void theQuizsOwnTranslationsAreReadByKey() {
+        String quizId = newQuiz(sponsorA(), "By key");
+        String questionId = question(sponsorA(), quizId, "Question");
+        run("QB_QUIZ_LANGUAGES_SET", sponsorA(), body("quizId", quizId, "languages", List.of("ja")));
+        run("QB_TRANSLATION_SAVE", sponsorA(), body("quizId", quizId, "language", "ja", "entries", List.of(
+            body("key", ContentLanguages.TITLE, "text", "キー"),
+            body("key", ContentLanguages.stem(questionId), "text", "問"))));
+        Map<String, Object> page = client.post()
+            .uri("/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header(org.springframework.http.HttpHeaders.AUTHORIZATION, sponsorA())
+            .bodyValue(body("filters", List.of(body("field", "quizId", "op", "eq", "value", quizId),
+                body("field", "elementKey", "op", "in", "values", List.of(ContentLanguages.TITLE,
+                    ContentLanguages.INTRO, ContentLanguages.COVER))), "limit", 100))
+            .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> found = (List<Map<String, Object>>) page.get("items");
+        assertThat(found).singleElement().satisfies(item -> assertThat(item.toString()).contains("キー"));
+    }
 }
