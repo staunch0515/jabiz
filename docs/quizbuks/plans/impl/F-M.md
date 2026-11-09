@@ -57,7 +57,7 @@
 - **做法**：`fee.FeeAllocation`（纯 Java）定使用顺序；`QB_FEE_SETTLE`（`subProcessOnly`）在调用方的钱包锁内一条 `QueryEntities.all` 读未到期的赠送、现金笔与两个钱包，分摊、一次 `LEDGER_POST`、写分摊与各笔剩余；`QB_FEE_REFUND`（`subProcessOnly`）在作废的冲正之后按原分摊退回。`QB_FEE_CHARGE` 的预付即扣、`QB_FEE_INVOICE_PAY`、`QB_FEE_SETTLE_ITEM`（提前付清）都调 `QB_FEE_SETTLE`；子流程自己读锁内的行，调用方之后不再写这两个钱包（避免按旧版本更新）。
 - **行为的改变**（§2.d 之内）：预付的费用与账单先用赠送额度、再用现金，账户不够时付一部分（`PARTIAL`），只在一分也付不了时 `QB_FEE_CASH_SHORT`；提前付清仍要求付得起所选的全部（是选择，不是欠款）；`InvoiceOutput` 多 `paidAmount`、`paidNow`、`creditPaid`、`cashPaid`；催款邮件的金额是还欠的部分；文案"现金账户"在付款按钮上改为"平台费账户"。删除的功能：无。
 - **现金笔**：卡充值 `CARD`、银行转账 `BANK`（来源记录为充值）、报名费入账 `OTHER`（来源 `QbEntryFeeSettlement` + 日期）、学分换回 `OTHER`（来源为兑换记录）；买学分按进账先后取，扣回（退款、争议）先取该充值自己的一笔。取用时各笔不够也不拒绝（不因内部记账拒绝学分购买或退款），差异由 `CASH_LOTS` 报出。
-- **迁移**：表、钱包种类、账单 `PARTIAL` 与 `paid_amount`（已付记全额），每个发起方 2160 余额一笔 `OTHER`（`source_entity = 'MIGRATION'`，迁移的 `now()` 只定它在顺序中的位置，注释写明）。定为 `V102`（V99 是 #571，V100、V101 是 S1 的 #573；#578 先绿，总控定）；`FeeAccountMigrationIT` 按版本号前一个迁移取起点，改号时同时改它的 `MIGRATION` 常量。
+- **迁移**：表、钱包种类、账单 `PARTIAL` 与 `paid_amount`（已付记全额），每个发起方 2160 余额一笔 `OTHER`（`source_entity = 'MIGRATION'`，迁移的 `now()` 只定它在顺序中的位置，注释写明）。定为 `V103`（V99 是 #571，V100、V101 是 S1 的 #573，V102 是 S3 的 #581；总控定）；`FeeAccountMigrationIT` 按版本号前一个迁移取起点，改号时同时改它的 `MIGRATION` 常量。
 - **核对与月报**：`qb.system.recon-fee-account`（`FEE_CREDIT`、`CASH_LOTS`、`FEE_PAYMENTS`；F-M1 之前没有分摊的付款及其冲正不核）；`FEES_RECEIVABLE` 按还欠的部分；月报 `FEE_PAID` 认 1130 与 2160 / 2190 的组合，新列 `feeCredit`；余额表、过账检查、分录导出含 2190。
 - **语句数**：`QB_FEE_CHARGE` 的预付多一次读（子流程的 `QueryEntities.all`）与分摊的写入；本应用没有平台费的语句预算测试（`AttemptStatementBudgetIT` 只管答题，答题路径不碰 2160 / 2190，不变）。
 - **页面**：发起方钱包页的"平台费账户"块与账单的"已付"列、部分付款；平台管理系统发起方页的只读分解（财务；运营商以 `qb.operator.fee-*` 模板只读自己的发起方）；财务总览按子账户汇总。
@@ -72,13 +72,13 @@
 #### M2 实施记录（`1.3/quizbuks-FM2-grants`，叠在 M1 上）
 
 - **做法**：`fee.FeeCredits` 四个流程 + 纯 Java 的 `FeeCreditRules`（入驻金额、有效期、上限、可作废额、是否该提醒、24 小时）。`QB_FEE_CREDIT_GRANT`（`subProcessOnly`）在调用方的钱包锁内一条 `QueryEntities.all` 读同来源键的笔、发起方的运营商与 `FEE_CREDIT` 钱包；已有即返回原笔（`granted = false`），否则写笔（记 `operatorId`）、改钱包、`SaveChanges.now` 后 `LEDGER_POST`（借 5140 / 贷 2190，两行都带 `party`，来源为该笔）。`QB_FEE_CREDIT_ONBOARDING`：`OperatorChecks.member` + `ownSponsor`（别的运营商的发起方 404），负责人与开关在取锁前查，取锁后查通过、封禁与已领。到期作废与提醒各一个 `forEach` 任务（`jabiz.fiscal-year-zone` 的 02:47 与 10:13），逐项在钱包锁内重读。
-- **与计划不同**（请总控确认）：
+- **与计划不同**（总控 2026-11-09 同意）：
   1. 追加赠送没有单独的 `QB_FEE_CREDIT_MANUAL_REQUEST` 与审批对象 `qb.fee-credit`，而是**平台费申请的第三种 `CREDIT`**（同一 `QB_FEE_REQUEST` / `QB_FEE_REQUEST_APPROVAL_RESULT`、审批对象 `qb.fee-request`、规则 `qb.fee-request.review`、同一申请页与审批人）。理由：四眼、自己的账号、另一位批准、拒绝、内容哈希的处理与手工记费完全相同，单立一套是重复；`CREDIT` 的审批内容多 `validDays`（只在有值时放入，已有申请的内容哈希不变）。上限在申请与批准时各查一次，批准时超限即拒绝。
   2. 提醒是**另一个每日任务** `qb.fee-credit-remind`（计划只写了提醒本身）：按发起方逐项，每笔记 `reminded_at`（按笔去重），距上一封不足 24 小时不发；"按提醒日去重"由每日一次与每笔一次合起来实现。
   3. `qb.fee-credit.manual.max` 与 `TREE_GATES` 一样列入 `ControlledParams`（`SetupConfig`），不在 `QbParams.CONTROLLED`（那里是 `QB_SETUP` 要提案的），以 `LoadParams.optional` 读。
   4. 每日核对的 `FEE_CREDIT_PROMOTION` 一行的 `sponsorId` 列放运营商（`-` 为无）：核对项的键只有这一列。
 - **认证**：F-M3 之前所有发起方按未认证（`FeeCreditRules.onboardingAmount(false, …)`，代码注明）；钱包页"认证后补到 10,000"的提示与 `CERTIFIED_TOP_UP` 随 M3。
-- **迁移**：`V104`（定号于开 PR 时；V102 是 M1，V103 留给 S3 的 F-C4）：`qb_fee_credit_grant` 加 `voided_amount`、`voided_at`、`reminded_at`（约束：作废时剩余为 0）与到期索引；`qb_fee_request` 加种类 `CREDIT`、`valid_days`、`grant_id`。科目 5140 与参数由 `QB_SETUP` 建。
+- **迁移**：`V105`（V102 是 S3 的 #581，V103 是 M1 #578，V104 是 S1 的 F-C10a；总控定）：`qb_fee_credit_grant` 加 `voided_amount`、`voided_at`、`reminded_at`（约束：作废时剩余为 0）与到期索引；`qb_fee_request` 加种类 `CREDIT`、`valid_days`、`grant_id`。科目 5140 与参数由 `QB_SETUP` 建。
 - **页面**：发起方钱包页各笔多"已用"；运营商的发起方页"入驻赠送"块与确认按钮（`qb.fee-credit.onboarding.confirm`）；平台管理系统"平台费"页的"追加赠送"按钮（`FEE_MANAGE`）与"平台费 Kudos"标签（按运营商 / 发起方 / 来源汇总与逐笔，财务只读）。
 - **平台缺口**：无。
 

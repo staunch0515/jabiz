@@ -43,6 +43,8 @@ interface Server {
   items?: Record<string, unknown>[]
   /** Q59b: the languages of the quizzes switched on (comma-separated), none when absent. */
   contentLanguages?: string
+  /** The mark of an item is written only when this resolves (the taker may be quicker than the request). */
+  markGate?: Promise<unknown>
 }
 
 /** The server as the inbox sees it, for a verified taker in Japan. Records what was posted. */
@@ -82,8 +84,14 @@ function server(options: Server = {}) {
       }
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
-      case '/api/processes/QB_MESSAGE_MARK/latest':
+      case '/api/processes/QB_MESSAGE_MARK/latest': {
+        await options.markGate
+        if (body?.action === 'READ') {
+          const at = items.findIndex((item) => item.itemId === body.id)
+          if (at >= 0) items[at] = { ...items[at], unread: false, readAt: '2026-10-18T03:00:00Z' }
+        }
         return json(200, { output: { changed: true } })
+      }
       case '/api/processes/QB_INBOX_READ_ALL/latest':
         return json(200, { output: { promoOff, readAllBefore: '2026-10-18T02:00:00Z' } })
       case '/api/processes/QB_INBOX_SETTINGS_SAVE/latest':
@@ -271,6 +279,26 @@ describe('the inbox', () => {
 })
 
 describe('an item', () => {
+  it('shows as read in the list even when the taker is back before the mark was written', async () => {
+    let written!: () => void
+    const { processCalls } = server({ markGate: new Promise((resolve) => { written = () => resolve(null) }) })
+    window.history.replaceState(null, '', '/inbox')
+    const user = userEvent.setup()
+    render(<App />)
+    const row = () => screen.getAllByTestId('inbox-row').find((r) => r.getAttribute('data-id') === 'm1')!
+    await screen.findAllByTestId('inbox-row')
+    expect(row()).toHaveAttribute('data-unread', 'true')
+    await user.click(within(row()).getByRole('link'))
+    await waitFor(() => expect(processCalls('QB_MESSAGE_MARK')).toHaveLength(1))
+    await user.click(await screen.findByTestId('inbox-back'))
+    // The list asked for before the mark was written still has it unread ...
+    await screen.findAllByTestId('inbox-row')
+    expect(row()).toHaveAttribute('data-unread', 'true')
+    // ... and is asked again when the mark is written.
+    written()
+    await waitFor(() => expect(row()).toHaveAttribute('data-unread', 'false'))
+  })
+
   it('is read when opened and leads to its result', async () => {
     const { processCalls } = server()
     window.history.replaceState(null, '', '/inbox/message/m1')

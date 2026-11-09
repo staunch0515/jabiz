@@ -145,6 +145,17 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByRole('link', { name: 'Sponsor profile' }).click()
     await expect(page.getByTestId('profile-status')).toBeVisible()
     await expectAccessible(page, at('sponsor profile overview'))
+    // F-C5: the prompt for another AI tool, with the parameters filled in.
+    await page.getByTestId('profile-prompt').click()
+    const prompt = page.getByTestId('profile-prompt-dialog')
+    await expect(prompt).toBeVisible()
+    await prompt.getByTestId('profile-prompt-website').fill('https://aini.example/')
+    await prompt.getByTestId('profile-prompt-contact').fill('Sam Access')
+    await expect(prompt.getByTestId('profile-prompt-copy')).toBeEnabled()
+    await expect(prompt.getByTestId('profile-prompt-text')).toHaveValue(/官网地址：https:\/\/aini\.example\//)
+    await expectAccessible(page, at('sponsor profile prompt'))
+    await page.keyboard.press('Escape')
+    await expect(prompt).toBeHidden()
     await page.getByTestId('profile-nav-basics').click()
     await expect(page.getByTestId('onboarding-basic')).toBeVisible()
     await expectAccessible(page, at('sponsor basics'))
@@ -418,9 +429,10 @@ for (const appearance of ['light', 'dark'] as const) {
 
     await page.goto('/admin/qb/finance')
     await expect(page.getByTestId('finance-in-review')).toBeVisible()
-    // The extension's ACCOUNTS: Q9c's eight, Q87's four (cash accounts, fees receivable, fee revenue, tax) and Q88b's
-    // entry fees unsettled (2170).
-    await expect(page.getByTestId('finance-account')).toHaveCount(13)
+    // The extension's ACCOUNTS: Q9c's eight, Q87's four (cash accounts, fees receivable, fee revenue, tax), Q88b's
+    // entry fees unsettled (2170) and F-M1's granted credit (2190).
+    await expect(page.getByTestId('finance-account')).toHaveCount(14)
+    await expect(page.getByTestId('finance-fee-account')).toHaveCount(2)
     if (appearance === 'dark') await expect(page.locator('html')).toHaveClass(/dark/)
     await expectAccessible(page, at('admin finance overview'))
     await page.goto('/admin/qb/finance/transfers')

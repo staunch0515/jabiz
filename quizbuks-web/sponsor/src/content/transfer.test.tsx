@@ -61,6 +61,8 @@ interface Server {
   uploads?: { status: number; body: unknown }[]
   /** F-S6c: the quiz's other languages and translations. */
   translationLanguages?: string
+  /** F-C4: `qb.package.confirm-bytes` as the server gives it (none: the template answers nothing). */
+  confirmBytes?: number
   translations?: Record<string, unknown>[]
 }
 
@@ -133,6 +135,8 @@ function server(options: Server = {}) {
       case '/api/queries/qb.sponsor.quizzes':
         return json(200, { items: [{ ...QUIZ, publicationCount: 0, published: false }], offset: 0, limit: 20,
           total: 1 })
+      case '/api/queries/qb.sponsor.package-state':
+        return json(200, { items: options.confirmBytes == null ? [] : [{ confirmBytes: options.confirmBytes }] })
       default:
         return json(404, {})
     }
@@ -296,6 +300,21 @@ describe('the quiz list', () => {
       cover: 'f1' }, questions: [{ stem: 'First?', points: 2 }] })
     expect(document.products).toEqual({ quiz: [{ code: 'TEA-1' }], questions: [{ no: 1, product: { productId: 'pr2' } }] })
     expect(document.files.f1).toMatchObject({ type: 'image/png', size: 3, data: btoa('\x01\x02\x03') })
+  })
+
+  it('asks before saving a file above qb.package.confirm-bytes (F-C4)', async () => {
+    server({ confirmBytes: 10 })
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:quiz')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    window.history.replaceState(null, '', '/quizzes')
+    render(<App />)
+    const row = await screen.findByTestId('quiz-row')
+    await userEvent.click(within(row).getByRole('button', { name: 'Export Coffee basics' }))
+    const confirm = await screen.findByRole('alertdialog')
+    expect(click).not.toHaveBeenCalled()
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Download' }))
+    await waitFor(() => expect(click).toHaveBeenCalled())
   })
 
   it('exports every translation, read only when the export is asked for (F-S6c)', async () => {

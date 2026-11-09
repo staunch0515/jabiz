@@ -427,6 +427,9 @@ class SetupIT extends QbItSupport {
         // F-S14: the reminder of a shared video's use waiting for its provider (ordinary).
         expected.put(QbParams.VIDEO_USE_REMIND_DAYS, "7");
         expected.put(QbParams.VIDEO_USE_MAX_PERIOD_DAYS, "3660");
+        // F-C4: the sponsor package (ordinary parameters).
+        expected.put(QbParams.PACKAGE_CONFIRM_BYTES, "104857600");
+        expected.put(QbParams.PACKAGE_IMPORT_RETENTION_DAYS, "90");
         // F-M2: the platform fee Kudos granted (the reminder ordinary, the rest controlled; the cap not set up).
         expected.put(QbParams.FEE_CREDIT_EXPIRY_NOTICE_DAYS, "14");
         expected.put(QbParams.FEE_CREDIT_GRANT_ENABLED, "false");
