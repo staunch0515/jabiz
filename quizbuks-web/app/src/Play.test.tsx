@@ -993,9 +993,11 @@ describe('the feed as the screen scrolls (Q63)', () => {
     const { calls } = server({ feedPage: page })
     render(<App />)
     await waitFor(() => expect(screen.getAllByTestId('feed-card')).toHaveLength(10))
-    // F-S10: the shelf of short videos asks the same template once with `shorts`; the pages are the others.
+    // F-S10: the shelf of short videos asks the same template once with `shorts`, F-S13 the vertical mode's pushes
+    // once with `push`; the pages are the others.
     const reads = () => calls.filter((c) => c.path === '/api/queries/qb.app.feed'
-      && !(c.body as { params: { shorts?: boolean } }).params.shorts).map((c) =>
+      && !(c.body as { params: { shorts?: boolean; push?: boolean } }).params.shorts
+      && !(c.body as { params: { push?: boolean } }).params.push).map((c) =>
       (c.body as { offset: number; limit: number }))
     expect(reads()).toEqual([expect.objectContaining({ offset: 0, limit: 10 })])
     io.fire(screen.getByTestId('feed-end'), true, NEAR_END)

@@ -1,6 +1,7 @@
 import type { StartOutput, SubmitOutput } from '../qb/play'
 import { clockOffset } from './countdown'
 import { forgetPlayback } from '../video/playback'
+import { forgetReports } from '../exposure/reporter'
 
 /*
  * What the play and result pages keep in the tab: the output of QB_ATTEMPT_START (the questions and their options as
@@ -56,8 +57,9 @@ export function forgetAttempts() {
     // Nothing kept.
   }
   handed = null
-  // Q75: the videos watched are the signed-out person's too.
+  // Q75: the videos watched are the signed-out person's too; F-S13: and their reports not yet sent.
   forgetPlayback()
+  forgetReports()
 }
 
 /** A start's output with the server's clock offset measured when it arrived (see `countdown.ts`). */
