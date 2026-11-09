@@ -48,6 +48,10 @@ public final class PublishingCodes {
     public static final String SWITCH_PICK = "QB_PUBLICATION_SWITCH_PICK";
     /** Q81 (D-Q81-1): the pick is 1..n-1 of the version's n questions; all of them is left empty. */
     public static final String PICK_RANGE = "QB_PUBLICATION_PICK_RANGE";
+    /** F-S6: a version of more questions than one attempt gives must be drawn from. */
+    public static final String PICK_REQUIRED = "QB_PUBLICATION_PICK_REQUIRED";
+    /** F-S6: a pick gives at most as many questions as one attempt holds. */
+    public static final String PICK_TOO_MANY = "QB_PUBLICATION_PICK_TOO_MANY";
     /** Q88b: the entry fee (D-Q88-9, D-Q88-14): its range, a survey or a channel's publication cannot charge one, the switch is off. */
     public static final String ENTRY_FEE_RANGE = "QB_ENTRY_FEE_RANGE";
     public static final String ENTRY_FEE_NOT_ALLOWED = "QB_ENTRY_FEE_NOT_ALLOWED";
@@ -154,7 +158,8 @@ public final class PublishingCodes {
         REFERRAL_POOL_SHORT, LANGUAGES_INVALID, LANGUAGE_NOT_IN_VERSION, TEXT_MISSING, TEXT_STALE, TEXT_TOO_LONG,
         SWITCH_LANGUAGES, COVER_LANGUAGE,
         SWITCH_PICK, PICK_RANGE, PICK_UNEQUAL_POINTS, PICK_SURVEY,
-        ENTRY_FEE_RANGE, ENTRY_FEE_NOT_ALLOWED, ENTRY_FEE_OFF, NODE_UNKNOWN, NODE_NOT_BINDABLE, NODE_SPONSOR_LIT);
+        ENTRY_FEE_RANGE, ENTRY_FEE_NOT_ALLOWED, ENTRY_FEE_OFF, NODE_UNKNOWN, NODE_NOT_BINDABLE, NODE_SPONSOR_LIT,
+        PICK_REQUIRED, PICK_TOO_MANY);
 
     private PublishingCodes() {}
 }

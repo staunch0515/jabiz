@@ -352,7 +352,9 @@ class AiCostControlIT extends AiItSupport {
         List<String> quiz = quizWithArticle(token, title(), "Material.");
         Object ready = request(token, quiz.get(0), List.of(quiz.get(1)), 2).get("aiJobId");
         runJobs();
-        for (int i = 0; i < com.jabiz.quizbuks.content.ContentLimits.MAX_QUESTIONS - 1; i++) {
+        // F-S6: the bank's limit is the parameter qb.content.max-questions; three here.
+        setParam(com.jabiz.quizbuks.setup.QbParams.CONTENT_MAX_QUESTIONS, "3");
+        for (int i = 0; i < 2; i++) {
             question(token, quiz.get(0), "Question " + i + "?");
         }
         assertThat(codes(refused(AiProcesses.ACCEPT, token, body("aiJobId", ready, "quizId", quiz.get(0),
@@ -360,6 +362,7 @@ class AiCostControlIT extends AiItSupport {
         // One more fits.
         run(AiProcesses.ACCEPT, token, body("aiJobId", ready, "quizId", quiz.get(0), "questions",
             List.of(reviewed(1))));
+        setParam(com.jabiz.quizbuks.setup.QbParams.CONTENT_MAX_QUESTIONS, "1000");
     }
 
     @Test

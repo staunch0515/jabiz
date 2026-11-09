@@ -346,6 +346,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
 | 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足）；`GATE_INVALID` 出现（门槛参数指不到可点亮的节点，功能对所有人关闭） |
+| 题库（F-S6，§7.28） | 平台 `jabiz-job-failed`（`qb.content-check`）；每日核对的待办 `qb.content-health`（权限 `qb.admin.quiz.read`） | `SNAPSHOT_NEAR_LIMIT` 出现（某个版本的快照超过上限的 80 %，题库再增长即不能保存下一个版本） |
 | 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
 | 主机 | 主机监控 | 应用或数据库的 CPU 在业务高峰持续 > 70 %（§6）、内存、JVM 堆 |
@@ -362,7 +363,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - **上线前在目标硬件上重测**：压测程序放在另一台主机，读者按预期的读取量限速（`LOAD_READ_RATE`），对打包的 jar 运行 `./gradlew :quizbuks:loadTest`（`LOAD_*` 参数，`LOAD_METRICS=yes` 从回环的管理端口读许可持有与语句数）；确认峰值低于饱和点并有 1.3 倍余量，结果写进报告。
 - **大题库与继续答题**（上线清单"性能"）：`LOAD_QUESTIONS`（题数，缺省 2）使版本快照变大，开始、继续与提交都随之变重；`LOAD_CONTINUE=yes` 让每个学者在开始之后再打开一次答题（`QB_ATTEMPT_START` 对进行中的答题即继续），单列一行。
   本机对比（60 人、16 并发，2026-11-08，应用与数据库同机、CPU 饱和，只看相对值）：2 题 24.5 次完成 / 秒，开始 p95 249 ms、提交 p95 566 ms；100 题 15.9 次 / 秒，开始 p95 444 ms、继续 p95 437 ms、提交 p95 656 ms。
-  现在题数上限是 100（`ContentLimits.MAX_QUESTIONS`）；千题题库（F-S6）与抽题（F-S7）合入后，以 1000 题、每人抽 20 题重测（届时给压测程序加上抽题的参数）。
+  题库的题数现在是参数 `qb.content.max-questions`（缺省 1000，F-S6，§7.28）；抽题与乱序（F-S7）合入后，以 1000 题、每人抽 20 题重测（届时给压测程序加上抽题的参数）。
 - 单实例：准入的队列与限流按实例（D45 的已知限制）；多实例时热门发布的锁仍在数据库中串行，加实例不提高单个发布的容量。
 
 ## 7. 常见故障
@@ -876,3 +877,19 @@ S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析�
 6. 不需要再执行 `QB_SETUP`（没有新参数、新权限、新科目）。
 
 回滚：恢复升级前的备份（§2.3）并启动旧 jar；没有反向迁移。
+
+### 7.28 题库的上限与每日核对（F-S6）
+
+- **参数**（普通参数，`QB_SETUP` 建立，平台管理系统的参数页可以改，改动即时生效）：
+  - `qb.content.max-questions`（缺省 1000）：一个 Quiz（题库）至多几题。至多 2000（代码的技术上限 `ContentLimits.MAX_QUESTIONS_TECH`），填得更大也按 2000。调低后已有的大题库照常读取、修改、删除，只是不能再加题（`QB_TOO_MANY_QUESTIONS`，提示中带上限）。
+  - `qb.play.max-questions-per-attempt`（缺省 100）：一次答题至多几题，题库更大时发布必须抽题。至多 200（`PlayLimits.MAX_PER_ATTEMPT_TECH`，答题记录的列宽按它）。在 F-S7 合入前，发布只按 200 检查（`QB_PUBLICATION_PICK_REQUIRED` / `QB_PUBLICATION_PICK_TOO_MANY`）。
+  - `qb.content.import.batch-size`（缺省 200）：往已有的 Quiz 中导入时每批的题数（分批导入随 F-S6 的编辑器一起提供）。
+  - 部署后没有重跑 `QB_SETUP` 时，三个参数都按缺省值。
+- **每日核对**：任务 `qb.content-check`，每天 19:13 UTC，模板 `qb.admin.content-health`。
+  - `SNAPSHOT_NEAR_LIMIT`：版本的快照超过上限（6 MB）的 80 %。
+  - 有问题即给持 `qb.admin.quiz.read` 的人一个待办，每天一个。
+  - 处理：
+    - 模板 `qb.admin.large-versions`（参数 `overBytes`，每日核对用的是 5033164，即 6 MB 的 80 %）列出是哪些 Quiz 的哪个版本、多大；
+    - 请发起方把题库拆成两个 Quiz，或删去不用的题和翻译，之后才能保存新版本；
+    - 已有的版本照常可用。
+- **耗时**：千题、6 个选项、三语的题库实测见 `docs/quizbuks/perf/F-S6-large-bank.md`。

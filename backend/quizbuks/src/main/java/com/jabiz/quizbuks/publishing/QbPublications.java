@@ -105,7 +105,7 @@ public final class QbPublications {
         // Q81 (D-Q81-1): how many of the version's questions each taker is given, drawn at the start; none is all of
         // them. Frozen with the policy; the full score is then this many times the common points (D-Q81-2).
         eb.field("pickCount", f -> f.physicalColumn("pick_count").asNumeric(4, 0)
-            .apply(Rules.range(PublishingCodes.PICK_RANGE, BigDecimal.ONE, decimal(ContentLimits.MAX_QUESTIONS))));
+            .apply(Rules.range(PublishingCodes.PICK_RANGE, BigDecimal.ONE, decimal(com.jabiz.quizbuks.play.PlayLimits.MAX_PER_ATTEMPT_TECH))));
         // F-S2b1: the knowledge graph's node the publication is bound to (both or neither); a pass of it lights the
         // node, and the node's conditions before answering say who may start. Frozen with the policy.
         eb.field("treeId", f -> f.physicalColumn("tree_id").asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));

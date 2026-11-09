@@ -31,7 +31,7 @@ public final class ContentLanguages {
      * and image and each option's text and image.
      */
     public static final int MAX_TRANSLATION_ROWS = (MAX_LANGUAGES - 1)
-        * (3 + ContentLimits.MAX_QUESTIONS * (2 + 2 * ContentLimits.MAX_OPTIONS));
+        * (3 + ContentLimits.MAX_QUESTIONS_TECH * (2 + 2 * ContentLimits.MAX_OPTIONS));
 
     /** The length of a column listing languages ({@code ja,zh,en}). */
     public static final int LIST_LENGTH = 20;

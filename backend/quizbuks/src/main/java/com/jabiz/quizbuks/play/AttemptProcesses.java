@@ -5,7 +5,6 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.content.ContentLimits;
 import com.jabiz.quizbuks.content.QuizSnapshot;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.invitation.InvitationStatus;
@@ -122,7 +121,7 @@ public final class AttemptProcesses {
      * @param currentIndex the question the taker is on, from 0; unchanged when not given
      */
     public record SaveInput(@NotBlank @Size(max = 36) String attemptId, Integer currentIndex,
-        @Size(max = ContentLimits.MAX_QUESTIONS) List<Answers.@Valid @NotNull Given> answers) {}
+        @Size(max = PlayLimits.MAX_PER_ATTEMPT_TECH) List<Answers.@Valid @NotNull Given> answers) {}
 
     public record SaveOutput(String attemptId, int currentIndex, List<Answers.Given> answers, Instant deadline,
         Instant serverTime) {}

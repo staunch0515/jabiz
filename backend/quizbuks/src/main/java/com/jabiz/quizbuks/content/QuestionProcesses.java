@@ -2,12 +2,14 @@ package com.jabiz.quizbuks.content;
 
 import com.jabiz.entity.Violation;
 import com.jabiz.process.ProcessContext;
+import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessDefinition;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.asset.AssetUses;
 import com.jabiz.quizbuks.asset.QbAssets;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.process.steps.LoadParams;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -39,6 +41,9 @@ public final class QuestionProcesses {
     public static final String SAVE = "QB_QUESTION_SAVE";
     public static final String DELETE = "QB_QUESTION_DELETE";
     public static final String REORDER = "QB_QUESTION_REORDER";
+
+    /** F-S6: the bank's limits as read by a process ({@link QuizBankLimits}). */
+    static final String LIMITS = "bankLimits";
 
     /**
      * An option: an existing one by {@code optionId}, a new one without. Its place is its place in the list.
@@ -79,7 +84,7 @@ public final class QuestionProcesses {
 
     /** Every question of the quiz, in the new order. */
     public record ReorderInput(@NotNull UUID quizId,
-        @NotNull @Size(max = ContentLimits.MAX_QUESTIONS) List<@NotNull UUID> questionIds, Long baseRevision) {}
+        @NotNull @Size(max = ContentLimits.MAX_QUESTIONS_TECH) List<@NotNull UUID> questionIds, Long baseRevision) {}
 
     public static ProcessDefinition<QuestionInput, EditOutput, ProcessContext> save() {
         return ProcessDefinition.define(SAVE, 1, QuestionInput.class, EditOutput.class,
@@ -92,6 +97,9 @@ public final class QuestionProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, EditOutput.class))
                 .steps(QuizEditing::lockAndLoad)
                 .steps(b -> QuizEditing.loadAll(b, "Load the questions", QbContent.QUESTION, QUESTIONS))
+                // F-S6: the bank's limit, as in effect now.
+                .step("Load the bank's limits", LoadParams.<ProcessContext>optional(ProcessContext::opTime, LIMITS,
+                    QuizBankLimits.PARAMS))
                 .steps(b -> QuizEditing.loadPartsOf(b, "Load its options", QbContent.OPTION, "questionId",
                     ctx -> ctx.get(INPUT, QuestionInput.class).questionId(), OPTIONS))
                 // Q73a: an option taken out takes its translations with it.
@@ -112,6 +120,12 @@ public final class QuestionProcesses {
                 .compute("Save the question", (metadata, ctx) -> save(ctx)));
     }
 
+    /** The refusal of a question more than the bank's limit {@code max} (F-S6). */
+    static Violation tooMany(int max) {
+        return new Violation("questionId", ContentCodes.TOO_MANY_QUESTIONS, "A quiz has at most " + max
+            + " questions", Map.of("max", max));
+    }
+
     static void save(ProcessContext ctx) {
         QuestionInput input = ctx.get(INPUT, QuestionInput.class);
         EntityInstance quiz = quiz(ctx);
@@ -126,9 +140,8 @@ public final class QuestionProcesses {
                 ctx.reject(QuizEditing.notInQuiz("questionId", input.questionId()));
                 return;
             }
-        } else if (questions.size() >= ContentLimits.MAX_QUESTIONS) {
-            ctx.reject(new Violation("questionId", ContentCodes.TOO_MANY_QUESTIONS, "A quiz has at most "
-                + ContentLimits.MAX_QUESTIONS + " questions", Map.of("max", ContentLimits.MAX_QUESTIONS)));
+        } else if (questions.size() >= QuizBankLimits.maxQuestions(ctx.get(LIMITS, ParamValues.class))) {
+            ctx.reject(tooMany(QuizBankLimits.maxQuestions(ctx.get(LIMITS, ParamValues.class))));
             return;
         }
         // Loaded by the input's questionId: only when that question is in this quiz are they its options.

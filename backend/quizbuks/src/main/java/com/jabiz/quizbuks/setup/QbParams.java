@@ -225,6 +225,12 @@ public final class QbParams {
     public static final String PRODUCTS_MAX = "qb.products.max";
     /** F-S2: the most nodes one knowledge graph has (not controlled). */
     public static final String TREE_MAX_NODES = "qb.tree.max-nodes";
+    /** F-S6: the most questions one quiz (its bank) has (not controlled; at most ContentLimits.MAX_QUESTIONS_TECH). */
+    public static final String CONTENT_MAX_QUESTIONS = "qb.content.max-questions";
+    /** F-S6: the most questions one attempt gives (not controlled; at most PlayLimits.MAX_PER_ATTEMPT_TECH). */
+    public static final String PLAY_MAX_PER_ATTEMPT = "qb.play.max-questions-per-attempt";
+    /** F-S6: the most questions one import batch adds to a quiz (not controlled). */
+    public static final String CONTENT_IMPORT_BATCH = "qb.content.import.batch-size";
     /** F-S2: the most items (nodes and the pass) one node's condition names, at every level (not controlled). */
     public static final String TREE_MAX_CONDITIONS = "qb.tree.max-conditions-per-node";
     /** F-S2: the longest chain of nodes naming nodes, which bounds the lighting's chained evaluation (not controlled). */
@@ -614,6 +620,13 @@ public final class QbParams {
         new Param(TOPIC_CUSTOM_MAX_LENGTH, Map.of("type", "numeric", "precision", 3, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.topic.TopicRules.DEFAULT_CUSTOM_MAX_LENGTH),
             "The most characters of one custom topic (at most 60)"),
+        // F-S6: the question bank's limits (ordinary; last, so that the setup's earlier keys stay as they were).
+        new Param(CONTENT_MAX_QUESTIONS, Map.of("type", "numeric", "precision", 6, "scale", 0), "1000",
+            "The most questions one quiz has (its question bank; at most 2000)"),
+        new Param(PLAY_MAX_PER_ATTEMPT, Map.of("type", "numeric", "precision", 6, "scale", 0), "100",
+            "The most questions one attempt gives; a larger bank is drawn from (at most 200)"),
+        new Param(CONTENT_IMPORT_BATCH, Map.of("type", "numeric", "precision", 6, "scale", 0), "200",
+            "The most questions one import batch adds to a quiz"),
         // F-S8: blocking (ordinary; last, so that the setup's earlier keys stay as they were).
         new Param(BLOCK_MAX_PER_USER, Map.of("type", "numeric", "precision", 5, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.block.BlockRules.DEFAULT_MAX_PER_USER),
