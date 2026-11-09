@@ -152,6 +152,7 @@ export interface Draft {
   materials: Material[]
   /** The other languages' materials, each standing for a base material (`variantOf`). */
   variants: Material[]
+  /** The translations read with it: the quiz's own, or all (`readDraft`, F-S6c). */
   translations: Translation[]
 }
 
@@ -371,7 +372,7 @@ function readAll(dataset: string, quizId: string, sorts: Sort[]): Promise<Row[]>
   return readWhere(dataset, [{ field: 'quizId', op: 'eq', value: quizId }], sorts)
 }
 
-type Filter = { field: string; op: 'eq'; value: string }
+type Filter = { field: string; op: 'eq'; value: string } | { field: string; op: 'in'; values: string[] }
 
 /** Every row of one of the sponsor's datasets that matches the filters, page by page. */
 async function readWhere(dataset: string, filters: Filter[], sorts: Sort[]): Promise<Row[]> {
@@ -481,21 +482,49 @@ export function assembleDraft(quiz: Row, questions: Row[], options: Row[], mater
   }
 }
 
+/** F-S6c: the keys of the quiz's own translated elements (`languages.ts`'s TITLE_KEY, INTRO_KEY and COVER_KEY). */
+const QUIZ_KEYS = ['quiz.title', 'quiz.intro', 'quiz.cover']
+
+/**
+ * Which translations a draft is read with: only the quiz's own (its title, introduction and cover: what the editor
+ * shows from the draft; F-S6c reads the questions' a page at a time, `searchTranslations`), or all of them (an
+ * export, the preview).
+ */
+export type DraftTranslations = 'quiz' | 'all'
+
 /**
  * A quiz's draft, read from the sponsor's datasets; null when it is not theirs or removed (the datasets show only the
- * sponsor's own rows, and of quizzes only those not removed).
+ * sponsor's own rows, and of quizzes only those not removed). Its `translations` are the quiz's own unless `all` are
+ * asked for: a large bank has tens of thousands.
  */
-export async function readDraft(quizId: string): Promise<Draft | null> {
-  const [quiz, questions, options, materials, images, translations] = await Promise.all([
+export async function readDraft(quizId: string, translations: DraftTranslations = 'quiz'): Promise<Draft | null> {
+  const [quiz, questions, options, materials, images, rows] = await Promise.all([
     readQuizRow(quizId),
     readAll(CONTENT_DATASET.question, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.option, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.material, quizId, BY_SEQ),
     readAll(CONTENT_DATASET.materialImage, quizId, BY_SEQ),
-    readAll(CONTENT_DATASET.translation, quizId, [{ field: 'elementKey', asc: true }]),
+    translations === 'all'
+      ? readAll(CONTENT_DATASET.translation, quizId, [{ field: 'elementKey', asc: true }])
+      : readWhere(CONTENT_DATASET.translation, [{ field: 'quizId', op: 'eq', value: quizId },
+        { field: 'elementKey', op: 'in', values: QUIZ_KEYS }], [{ field: 'elementKey', asc: true }]),
   ])
   if (!quiz) return null
-  return assembleDraft(quiz, questions, options, materials, images, translations)
+  return assembleDraft(quiz, questions, options, materials, images, rows)
+}
+
+/** F-S6c: what one of the quiz's other languages lacks of the base's texts (`qb.sponsor.quiz-translation-progress`). */
+export interface TranslationProgress {
+  language: ContentLanguage
+  missing: number
+  stale: number
+}
+
+/** F-S6c: per other language of the quiz, its texts missing and out of date, counted by the server. */
+export async function readTranslationProgress(quizId: string): Promise<TranslationProgress[]> {
+  const page = await runQuery<Row>(CONTENT_TEMPLATE.quizTranslationProgress, { params: { quizId }, limit: 10 })
+  return page.items.map((row) => ({ language: contentLanguageOf(str(row.language) ?? undefined),
+    missing: num(row.missing), stale: num(row.stale) }))
 }
 
 /** The quiz's own row by its key; null when the sponsor's dataset does not have it (not theirs, or removed). */

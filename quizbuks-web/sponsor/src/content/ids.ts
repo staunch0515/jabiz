@@ -44,6 +44,8 @@ export const CONTENT_TEMPLATE = {
   quizLimits: 'qb.sponsor.quiz-limits',
   /** F-S6c: a page of a quiz's questions in one of its other languages, with their options and translations. */
   quizTranslations: 'qb.sponsor.quiz-translations',
+  /** F-S6c: per other language, the texts missing and out of date over the whole quiz. */
+  quizTranslationProgress: 'qb.sponsor.quiz-translation-progress',
 } as const
 
 /** The sponsor's own rows of the content entities (read only; writing is the processes'). */

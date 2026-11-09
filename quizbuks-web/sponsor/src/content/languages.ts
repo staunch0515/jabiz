@@ -105,7 +105,10 @@ export function materialComplete(m: Material): boolean {
   }
 }
 
-/** What a language lacks, as `QuizLanguages.Status` says it (the page's reading; the server's decides). */
+/**
+ * What a language lacks, as `QuizLanguages.Status` says it (the page's reading; the server's decides), for a draft read
+ * with all its translations. The editor counts with `qb.sponsor.quiz-translation-progress` instead (F-S6c).
+ */
 export function statusOf(draft: Draft, language: ContentLanguage, texts: SourceText[], hashes: Hashes)
   : LanguageStatus {
   const translations = translationsIn(draft, language)
@@ -116,13 +119,13 @@ export function statusOf(draft: Draft, language: ContentLanguage, texts: SourceT
     if (state === 'missing') missing.push(source.key)
     if (state === 'stale') stale.push(source.key)
   }
-  const materials = draft.materials.flatMap((m, i) => {
+  return { language, missing, stale, materials: incompleteMaterials(draft, language) }
+}
+
+/** The base materials (their numbers, from 1) whose version in the language lacks what a version requires. */
+export function incompleteMaterials(draft: Draft, language: ContentLanguage): number[] {
+  return draft.materials.flatMap((m, i) => {
     const own = variantOf(draft, m, language)
     return own && !materialComplete(own) ? [i + 1] : []
   })
-  return { language, missing, stale, materials }
 }
-
-/** How many things a language still needs. */
-export const pending = (status: LanguageStatus) =>
-  status.missing.length + status.stale.length + status.materials.length

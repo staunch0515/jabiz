@@ -22,6 +22,7 @@ import { QB } from '../qb/messages'
 import { fieldProblem } from '../qb/problems'
 import {
   deleteMaterial,
+  readTranslationProgress,
   saveTranslations,
   searchTranslations,
   setLanguages,
@@ -39,11 +40,10 @@ import {
   COVER_KEY,
   optionImageKey,
   optionTextKey,
-  pending,
+  incompleteMaterials,
   questionImageKey,
   sourceTexts,
   stemKey,
-  statusOf,
   textState,
   translationsIn,
   variantOf,
@@ -641,8 +641,13 @@ export function TranslationsPanel({ draft, generation }: { draft: Draft; generat
   const languages = draft.quiz.translationLanguages
   const [chosen, setChosen] = useState<ContentLanguage | null>(languages[0] ?? null)
   const language = chosen && languages.includes(chosen) ? chosen : languages[0] ?? null
-  const texts = useMemo(() => sourceTexts(draft, TEXT_LIMITS), [draft])
+  // The quiz's own texts (the questions' come a page at a time, with their states).
+  const texts = useMemo(() => sourceTexts(draft, TEXT_LIMITS).filter((s) => s.question === null), [draft])
   const hashes = useHashes(texts)
+  // F-S6c: what each language still needs of the texts, counted by the server over the whole quiz; the materials
+  // from the draft.
+  const progress = useQuery({ queryKey: [...QUIZZES_QUERY, 'translation-progress', draft.quiz.quizId],
+    queryFn: () => readTranslationProgress(draft.quiz.quizId), enabled: languages.length > 0 })
   const aiJob = useAiTranslationJob(draft.quiz.quizId).data ?? null
   const ready = aiJob?.status === 'READY' && aiJob.language === language ? aiJob : null
   const [onlyPending, setOnlyPending] = useState(false)
@@ -659,7 +664,9 @@ export function TranslationsPanel({ draft, generation }: { draft: Draft; generat
           <SegmentedControl<ContentLanguage> value={language} onChange={setChosen}
             aria-label={t('translations.choose')} data-testid="translation-language"
             options={languages.map((l) => {
-              const left = hashes ? pending(statusOf(draft, l, texts, hashes)) : null
+              const counted = progress.data?.find((p) => p.language === l)
+              const left = progress.data ? (counted ? counted.missing + counted.stale : 0)
+                + incompleteMaterials(draft, l).length : null
               return { value: l, label: left === null ? tQb(`languages.${l}`)
                 : left === 0 ? t('translations.languageDone', { language: tQb(`languages.${l}`) })
                   : t('translations.languagePending', { language: tQb(`languages.${l}`), count: left }) }

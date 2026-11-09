@@ -138,8 +138,12 @@ function server(options: Server = {}) {
       }
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterial/query':
         return rows([...MATERIALS, ...(options.variants ?? [])])
-      case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query':
-        return rows(options.translations ?? [])
+      case '/api/datasets/urn:jabiz:dataset:sponsor:QbContentTranslation/query': {
+        // F-S6c: by key when the filter names keys (the editor reads only the quiz's own).
+        const keys = (body?.filters as { field: string; values?: string[] }[] | undefined)
+          ?.find((f) => f.field === 'elementKey')?.values
+        return rows((options.translations ?? []).filter((t) => !keys || keys.includes(String(t.elementKey))))
+      }
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbMaterialImage/query':
         return rows([])
       case '/api/datasets/urn:jabiz:dataset:me:QbAsset/query':
@@ -174,6 +178,21 @@ function server(options: Server = {}) {
         const offset = Number(body?.offset ?? 0)
         const limit = Number(body?.limit ?? 50)
         return json(200, { items: all.slice(offset, offset + limit), offset, limit, total: all.length })
+      }
+      case '/api/queries/qb.sponsor.quiz-translation-progress': {
+        // As the template answers: per other language, the texts missing and out of date (by the stand-in hash).
+        const languages = String(quiz.current?.translationLanguages ?? '').split(',').filter(Boolean)
+        return json(200, { items: languages.map((language) => {
+          const of = (key: string) => (options.translations ?? [])
+            .find((t) => t.language === language && t.elementKey === key)
+          const texts: [string, unknown][] = [['quiz.title', quiz.current?.title], ['quiz.intro', quiz.current?.intro],
+            ...QUESTIONS.map((q): [string, unknown] => [`question:${q.questionId}.stem`, q.stem]),
+            ...OPTIONS.map((o): [string, unknown] => [`option:${o.optionId}.text`, o.text])]
+          const states = texts.filter(([, text]) => text).map(([key]) => !of(key)?.text ? 'missing'
+            : of(key)!.sourceHash === '0000000000000000' ? 'stale' : 'done')
+          return { language, missing: states.filter((x) => x === 'missing').length,
+            stale: states.filter((x) => x === 'stale').length }
+        }), offset: 0, limit: 10 })
       }
       case '/api/queries/qb.sponsor.quiz-limits':
         return json(200, { items: [options.limits ?? { maxQuestions: 1000, maxPerAttempt: 100, importBatch: 200 }],
@@ -685,7 +704,7 @@ describe('the quiz\'s other languages (Q73a)', () => {
   const FIRST_HASH = '4a3c3009935c1351'
 
   it('adds a language, shows the texts side by side and saves the changed ones', async () => {
-    const { processCalls } = server({
+    const { processCalls, posted } = server({
       quiz: { ...QUIZ, translationLanguages: 'en' },
       translations: [
         { translationId: 't1', quizId: 'q1', language: 'en', elementKey: 'question:k1.stem', text: 'First?',
@@ -699,6 +718,15 @@ describe('the quiz\'s other languages (Q73a)', () => {
     await userEvent.click(await screen.findByTestId('tab-languages'))
     const panel = await screen.findByTestId('translations')
     expect(screen.getByTestId('tab-languages')).toHaveTextContent('(2)')
+    // F-S6c: the draft reads only the quiz's own translations, by key; the counts are the server's.
+    const translationQueries = posted.filter((p) => p.path.endsWith(':QbContentTranslation/query'))
+    expect(translationQueries.length).toBeGreaterThan(0)
+    expect(translationQueries.every((p) => JSON.stringify(p.body.filters).includes(
+      '{"field":"elementKey","op":"in","values":["quiz.title","quiz.intro","quiz.cover"]}'))).toBe(true)
+    // English lacks: the title and introduction, question 2's text (out of date), and both options.
+    await waitFor(() => expect(within(panel).getByTestId('translation-language')).toHaveTextContent('English (5)'))
+    expect(posted.some((p) => p.path === '/api/queries/qb.sponsor.quiz-translation-progress'
+      && JSON.stringify(p.body.params) === '{"quizId":"q1"}')).toBe(true)
     // Done, out of date and missing, by the base's hashes.
     await waitFor(() => expect(within(panel).getAllByTestId('translation-text')
       .find((row) => row.dataset.key === 'question:k1.stem')).toHaveAttribute('data-state', 'done'))
@@ -891,6 +919,17 @@ describe('the quiz\'s other languages (Q73a)', () => {
     await userEvent.type(within(questions).getByTestId('translations-search'), 'nothing like it')
     await userEvent.click(within(questions).getByTestId('translations-search-submit'))
     expect(await within(questions).findByTestId('translations-no-questions')).toHaveTextContent('No question matches')
+  })
+
+  it('reads every translation only for the preview, when it opens (F-S6c)', async () => {
+    const { posted } = server({ quiz: { ...QUIZ, translationLanguages: 'en' }, translations: [
+      { translationId: 't1', quizId: 'q1', language: 'en', elementKey: 'question:k1.stem', text: 'First, in English?',
+        image: null, sourceHash: 'h' }] })
+    window.history.replaceState(null, '', '/quizzes/q1/preview')
+    render(<App />)
+    expect(await screen.findByTestId('preview-language')).toBeInTheDocument()
+    const filters = posted.filter((p) => p.path.endsWith(':QbContentTranslation/query')).map((p) => p.body.filters)
+    expect(filters).toEqual([[{ field: 'quizId', op: 'eq', value: 'q1' }]])
   })
 
   it('keeps the base language while the quiz has others', async () => {
