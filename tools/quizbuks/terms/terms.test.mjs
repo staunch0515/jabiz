@@ -84,6 +84,9 @@ export const EXCEPTIONS = [
 
 const isTest = (path) => /\.test\.|[/\\]test[/\\]|[/\\]testing[/\\]/.test(path)
 
+/** Proofreading notes quote the words they looked for; they are notes for developers, not texts anyone is shown. */
+const isReviewNote = (path) => /manual-review-notes\.md$/.test(path)
+
 function* files(dir, ext) {
   let names
   try {
@@ -96,7 +99,7 @@ function* files(dir, ext) {
     if (name === 'node_modules' || name === 'dist' || name === 'build' || name === 'db') continue
     const path = join(dir, name)
     if (statSync(path).isDirectory()) yield* files(path, ext)
-    else if (ext.some((e) => name.endsWith(e)) && !isTest(path)) yield path
+    else if (ext.some((e) => name.endsWith(e)) && !isTest(path) && !isReviewNote(path)) yield path
   }
 }
 

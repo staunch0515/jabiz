@@ -16,7 +16,7 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 
 - A quiz is a template: edit its draft as often as you like (materials such as articles, images, videos or PDFs, and the questions), then save a version when it is complete. Publications use saved versions.
 - A quiz can be scored (pass mark) or a survey (no right answers).
-- Questions can be imported from a file, and large question banks can draw a set of questions for each Taker.
+- Questions can be imported from a file, and large question banks can draw a set of questions for each Taker when you publish.
 - Translations: offer a version in several languages.
 - AI: AI can write candidate questions from the materials and translate texts; it uses your AI credit. You check every candidate before using it.
 - Topics: give quizzes and publications topics from the platform's list, so Takers who like them find them.
@@ -25,10 +25,10 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 
 - A publication puts a saved quiz version in front of Takers. "New publication" opens the wizard: Quiz (name and version) → Time and rewards (period, marks, reward tiers) → Customer matching (who it is for) → Check and submit.
 - Customer matching aims a quiz at Takers whose profile matches. Some conditions are charged per day; the wizard shows the estimated fee. Counts of matching Takers are rounded, so nobody can be singled out.
-- Rewards are paid in Kudos from your wallet, in cash at your place, as a prize collected at your place, or as a digital prize (codes, vouchers or links).
-- Submitted publications are reviewed before they go on. While in review you can withdraw one to change it; once approved it cannot be changed (copy it to publish it again with changes). A sent-back publication says why.
 - Who may answer: everyone in the chosen regions, or only the e-mail addresses you invite (an invitation list; the invitations are sent from your own mail server, set up in the Sponsor profile).
+- Rewards are paid in Kudos from your wallet, in cash at your place, as a prize collected at your place, or as a digital prize (codes, vouchers or links).
 - Referrals, entry fees and languages are set in the publication too.
+- Submitted publications are reviewed before they go on. While in review you can withdraw one to change it; once approved it cannot be changed (copy it to publish it again with changes). A sent-back publication says why.
 - Takers cannot start a publication while your wallet cannot pay its highest reward: top up. You can pause a publication and resume it (also from the app's My Sponsor account).
 
 ## Knowledge map (Tree, /sponsor/tree)
