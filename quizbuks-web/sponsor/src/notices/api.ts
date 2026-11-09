@@ -2,6 +2,7 @@ import { runProcess, runQuery } from '@jabiz/client'
 import { readDictionary, type DictionaryItem } from '../qb/api'
 import type { I18nText } from '../qb/legal'
 import { NOTICE_DICTIONARY, NOTICE_PROCESS, NOTICE_TEMPLATE } from './ids'
+import { MESSAGES_PATH } from '../shell/paths'
 
 /*
  * The message centre's calls, typed by hand after the Java records and templates of backend/quizbuks `messaging`
@@ -112,7 +113,7 @@ export interface Announcement {
   unread: boolean
 }
 
-export const MESSAGES_PATH = '/messages'
+export { MESSAGES_PATH }
 export const NOTICES_QUERY = ['qb', 'notices'] as const
 export const ANNOUNCEMENTS_QUERY = ['qb', 'announcements'] as const
 

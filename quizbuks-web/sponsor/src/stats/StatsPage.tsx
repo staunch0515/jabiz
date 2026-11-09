@@ -36,8 +36,9 @@ import {
   type StatsDay,
   type StatsPeriod,
 } from './api'
+import { STATS_PATH } from '../shell/paths'
 
-export const STATS_PATH = '/stats'
+export { STATS_PATH }
 
 /** A day as the reader writes a short date (`10/31`), from its `YYYY-MM-DD`. */
 function dayLabel(day: string, locale: string): string {
@@ -102,7 +103,7 @@ export function StatsPage() {
   return (
     <div className="flex flex-col gap-4" data-testid="stats-page">
       <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold">{t('stats.title')}</h1>
+        <h2 className="text-lg font-semibold">{t('stats.title')}</h2>
         <p className="text-muted-foreground text-sm">{t('stats.intro')}</p>
         <p className="text-muted-foreground text-xs" data-testid="stats-approximate">{t('stats.approximate')}</p>
       </div>

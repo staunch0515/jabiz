@@ -85,7 +85,7 @@ afterEach(() => {
 describe('top-ups by bank transfer (Q13a)', () => {
   it('asks for one from the wallet and opens its page, never Stripe\'s', async () => {
     const { processCalls } = server(bankTopUp('AWAITING'))
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('topup-open'))
@@ -94,7 +94,7 @@ describe('top-ups by bank transfer (Q13a)', () => {
     await user.type(screen.getByTestId('topup-amount'), '50,000')
     expect(screen.getByTestId('topup-submit')).toHaveTextContent('Get the transfer details')
     await user.click(screen.getByTestId('topup-submit'))
-    await waitFor(() => expect(window.location.pathname).toBe('/wallet/bank/b1'))
+    await waitFor(() => expect(window.location.pathname).toBe('/money/wallet/bank/b1'))
     expect(processCalls().map((call) => [call.path, call.body])).toEqual([
       ['/api/processes/QB_TOPUP_BANK_START/latest', { amount: 50000 }]])
     expect(await screen.findByTestId('bank-topup-code')).toHaveTextContent('1000042')
@@ -102,7 +102,7 @@ describe('top-ups by bank transfer (Q13a)', () => {
 
   it('offers no bank transfer while it is not set up, and says so (Q18)', async () => {
     server(null, { bank: null, branch: null, accountType: null, accountNumber: null, accountHolder: null })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('topup-open'))
@@ -115,16 +115,16 @@ describe('top-ups by bank transfer (Q13a)', () => {
 
   it('lists a bank top-up with its code and links to its page', async () => {
     server(bankTopUp('AWAITING'))
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     render(<App />)
     const row = await screen.findByTestId('topup-row')
     expect(within(row).getByTestId('topup-row-bank')).toHaveTextContent('Bank transfer · 1000042')
-    expect(within(row).getByRole('link', { name: /Details/ })).toHaveAttribute('href', '/wallet/bank/b1')
+    expect(within(row).getByRole('link', { name: /Details/ })).toHaveAttribute('href', '/money/wallet/bank/b1')
   })
 
   it('shows where to transfer and with which code, and reports it sent', async () => {
     const { processCalls } = server(bankTopUp('AWAITING'))
-    window.history.replaceState(null, '', '/wallet/bank/b1')
+    window.history.replaceState(null, '', '/money/wallet/bank/b1')
     const user = userEvent.setup()
     render(<App />)
     expect(await screen.findByTestId('bank-topup-state')).toHaveTextContent(
@@ -143,7 +143,7 @@ describe('top-ups by bank transfer (Q13a)', () => {
   it('withdraws a request after asking', async () => {
     const { processCalls } = server(bankTopUp('REPORTED', { payerName: '1000042 カ）エス',
       transferDate: '2026-10-22' }))
-    window.history.replaceState(null, '', '/wallet/bank/b1')
+    window.history.replaceState(null, '', '/money/wallet/bank/b1')
     const user = userEvent.setup()
     render(<App />)
     expect(await screen.findByTestId('bank-report-submit')).toHaveTextContent('Correct the report')
@@ -157,7 +157,7 @@ describe('top-ups by bank transfer (Q13a)', () => {
 
   it('shows what was credited when less arrived than asked, with nothing more to do', async () => {
     server(bankTopUp('PAID', { amount: 49560, paidAt: '2026-10-23T03:00:00Z', receivedOn: '2026-10-23' }))
-    window.history.replaceState(null, '', '/wallet/bank/b1')
+    window.history.replaceState(null, '', '/money/wallet/bank/b1')
     render(<App />)
     const state = await screen.findByTestId('bank-topup-state')
     expect(state).toHaveTextContent('49,560 Kudos were added to your wallet')
@@ -170,7 +170,7 @@ describe('top-ups by bank transfer (Q13a)', () => {
 
   it('reads a card top-up\'s address as not found', async () => {
     server({ ...bankTopUp('OPEN'), method: 'STRIPE' })
-    window.history.replaceState(null, '', '/wallet/bank/b1')
+    window.history.replaceState(null, '', '/money/wallet/bank/b1')
     render(<App />)
     expect(await screen.findByTestId('topup-missing')).toBeInTheDocument()
   })

@@ -520,50 +520,100 @@ describe('a signed-in Sponsor', () => {
     expect(screen.getByTestId('onboarding-submit')).toHaveTextContent('Apply again')
   })
 
-  it('approved, starts at the dashboard and changes the profile without the terms', async () => {
+  it('approved, starts at the home and changes the profile without the terms', async () => {
     server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null, reviewStatus: 'APPROVED',
       approvedAt: '2026-10-14T00:00:00Z', revision: 3 } })
     render(<App />)
-    await waitFor(() => expect(window.location.pathname).toBe('/dashboard'))
+    await waitFor(() => expect(window.location.pathname).toBe('/home'))
     expect(await screen.findByTestId('dashboard-status')).toHaveAttribute('data-status', 'APPROVED')
     // The hero greets the company (Q32); the wordmark sits in the sidebar.
     expect(screen.getByTestId('dashboard-hero')).toHaveTextContent('Hello, Acme')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Hello, Acme')
     expect(screen.getByTestId('wordmark')).toHaveTextContent('QuizBuks')
-    // The digital prizes (Q33) follow the cash rewards in the navigation.
-    const links = screen.getAllByRole('link').map((link) => link.textContent)
-    expect(links.indexOf('Digital prizes')).toBe(links.indexOf('Cash rewards') + 1)
-    expect(screen.getByRole('link', { name: 'Digital prizes' })).toHaveAttribute('href', '/digital-prizes')
-    // Q34b: the menu in five sections by what they are for, with rules between them.
-    const nav = screen.getByRole('navigation', { name: 'QuizBuks for Sponsors' })
-    expect(within(nav).getAllByRole('group').map((g) => g.getAttribute('aria-labelledby') && within(g).getAllByRole('link')
-      .map((link) => link.textContent))).toEqual([
-      // Q79: the sponsor's own pages (profile, products, staff, mail server) are the hub's sections, one entry here.
-      // F-C1c: the products are a tab of the asset library now.
-      ['Dashboard'], ['Quizzes', 'Publications', 'Tree', 'Asset library'], ['Cash rewards', 'Digital prizes', 'Prizes'],
-      // Q89a: buying other sponsors' benefits, and offering one's own.
-      ['Benefit catalog', 'My benefits', 'Inquiries', 'Purchases'],
-      ['Wallet', 'Transactions'], ['Sponsor profile', 'Page statistics', 'Messages', 'Account', 'Help']])
-    expect(within(nav).getByRole('group', { name: 'Rewards' })).toBeInTheDocument()
-    expect(within(nav).getAllByTestId('menu-separator')).toHaveLength(5)
-    await userEvent.click(screen.getByRole('link', { name: 'Sponsor profile' }))
+    // F-F3: the menu is the home and the areas (the benefits only for a holder of a benefit role); account, help
+    // and signing out are in the avatar menu.
+    const nav = screen.getByRole('navigation', { name: 'Areas' })
+    expect(within(nav).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Quizzes',
+      'Publications', 'Prizes', 'Customers & messages', 'Money', 'Asset library', 'Sponsor hub'])
+    expect(within(nav).getByRole('link', { name: 'Prizes' })).toHaveAttribute('href', '/prizes/redeem')
+    expect(within(nav).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('global-create')).toBeInTheDocument()
+    await userEvent.click(within(nav).getByRole('link', { name: 'Sponsor hub' }))
     expect(window.location.pathname).toBe('/profile')
     expect(await screen.findByTestId('profile-status')).toHaveAttribute('data-status', 'APPROVED')
-    // The mail server (Q29) and the others are sections of the hub.
-    expect(screen.getByTestId('profile-nav-mail-server')).toHaveAttribute('href', '/profile/mail-server')
-    await userEvent.click(screen.getByTestId('profile-nav-basics'))
+    // The mail server (Q29) and the others are the hub's tabs.
+    expect(screen.getByTestId('page-tab-mail-server')).toHaveAttribute('href', '/profile/mail-server')
+    expect(screen.getByTestId('page-tab-overview')).toHaveAttribute('aria-current', 'page')
+    await userEvent.click(screen.getByTestId('page-tab-basics'))
     expect(await screen.findByTestId('onboarding-submit')).toHaveTextContent('Save')
     expect(screen.queryByTestId('onboarding-terms')).toBeNull()
   })
 
-  it('hides the wallet and its top-ups from a Sponsor who may not pay in Kudos (Q28)', async () => {
+  it('opens the account, the help and signing out from the avatar menu (F-F3)', async () => {
+    const { asked } = server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null,
+      reviewStatus: 'APPROVED', approvedAt: '2026-10-14T00:00:00Z', revision: 3 } })
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/home'))
+    await userEvent.click(await screen.findByTestId('avatar-menu-open'))
+    expect(await screen.findByTestId('sponsor-user')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('avatar-account'))
+    await waitFor(() => expect(window.location.pathname).toBe('/account'))
+    await userEvent.click(screen.getByTestId('avatar-menu-open'))
+    await userEvent.click(await screen.findByTestId('avatar-help'))
+    await waitFor(() => expect(window.location.pathname).toBe('/help'))
+    await userEvent.click(screen.getByTestId('avatar-menu-open'))
+    await userEvent.click(await screen.findByTestId('sign-out'))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+    expect(asked).toContain('/api/auth/logout')
+  })
+
+  it('offers the bottom menu of the parameter\'s areas and "More" on a phone, and "+ New" anywhere (F-F3)', async () => {
+    atWidth(390)
+    server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null, reviewStatus: 'APPROVED',
+      approvedAt: '2026-10-14T00:00:00Z', revision: 3 } })
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/home'))
+    const bar = await screen.findByRole('navigation', { name: 'Main areas' })
+    // The parameter is not answered here: the declared value, the home, publications, redeeming and messages.
+    expect(within(bar).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Publications',
+      'Redeem', 'Messages'])
+    expect(within(bar).getByTestId('bottom-bar-home')).toHaveAttribute('aria-current', 'page')
+    expect(within(bar).getByTestId('bottom-bar-more')).toBeInTheDocument()
+    atWidth(1024)
+  })
+
+  it('opens a new quiz from "+ New" on any page (F-F3)', async () => {
+    server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null, reviewStatus: 'APPROVED',
+      approvedAt: '2026-10-14T00:00:00Z', revision: 3 } })
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname).toBe('/home'))
+    await userEvent.click(await screen.findByTestId('global-create'))
+    expect(await screen.findByTestId('global-create-import-settings')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('global-create-quiz'))
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/quizzes?new=1'))
+    expect(await screen.findByTestId('new-quiz-dialog')).toBeInTheDocument()
+  })
+
+  it('leads an old address to its new place, with its query where it keeps it (F-F3)', async () => {
+    server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null, reviewStatus: 'APPROVED',
+      approvedAt: '2026-10-14T00:00:00Z', revision: 3 } })
+    window.history.replaceState(null, '', '/transactions?publication=p1')
+    render(<App />)
+    await waitFor(() => expect(window.location.pathname + window.location.search)
+      .toBe('/money/transactions?publication=p1'))
+  })
+
+  it('hides the Kudos wallet and its top-ups from a Sponsor who may not pay in Kudos (Q28)', async () => {
     server({ sponsor: { contactName: 'Sara', company: 'Acme', intro: null, avatar: null, reviewStatus: 'APPROVED',
       approvedAt: '2026-10-14T00:00:00Z', revision: 3 }, rewardMethods: 'OFFLINE_REDEEM' })
     window.history.replaceState(null, '', '/wallet')
     render(<App />)
-    await screen.findByRole('link', { name: 'Transactions' })
-    await waitFor(() => expect(screen.queryByRole('link', { name: 'Wallet' })).toBeNull())
-    expect(await screen.findByText('This page does not exist.')).toBeInTheDocument()
+    // The old address leads to the Kudos wallet's tab, which does not show: the money area's first tab instead.
+    await waitFor(() => expect(window.location.pathname).toBe('/money/transactions'))
+    await screen.findByTestId('page-tab-transactions')
+    expect(screen.queryByTestId('page-tab-wallet')).toBeNull()
+    expect(screen.getByTestId('page-tab-account')).toBeInTheDocument()
+    expect(screen.getByTestId('page-tab-bills')).toBeInTheDocument()
   })
 
   it('is signed out after the entry\'s idle time and told why', async () => {
@@ -646,7 +696,7 @@ describe('a signed-in Sponsor', () => {
       revision: 3 } })
     window.history.replaceState(null, '', '/password-reset')
     render(<App />)
-    await waitFor(() => expect(window.location.pathname).toBe('/dashboard'))
+    await waitFor(() => expect(window.location.pathname).toBe('/home'))
   })
 
   it('has every field\'s refusal described on the field', async () => {

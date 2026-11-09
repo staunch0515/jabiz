@@ -10,8 +10,12 @@ export const publicationPath = (publicationId: string) => `${PUBLICATIONS_PATH}/
  */
 export function publicationIdOf(path: string): string | null {
   const match = /^\/publications\/([^/]+)\/?$/.exec(path)
-  return match ? decodeURIComponent(match[1]) : null
+  if (!match || RESERVED.includes(match[1])) return null
+  return decodeURIComponent(match[1])
 }
+
+/** The publications area's tabs under its address (F-F3): never a publication's key (those are UUIDs). */
+const RESERVED: readonly string[] = ['map']
 
 export const PUBLICATIONS_QUERY = ['qb', 'publications'] as const
 

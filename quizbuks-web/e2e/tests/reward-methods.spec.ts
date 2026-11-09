@@ -1,6 +1,17 @@
 import { completeQuiz, query } from './content'
 import { contentAdmin } from './legal'
-import { expect, expectAccessible, PASSWORD, prepareQuizbuks, rows, run, signIn, test, tokenOf } from './support'
+import {
+  expect,
+  expectAccessible,
+  openArea,
+  PASSWORD,
+  prepareQuizbuks,
+  rows,
+  run,
+  signIn,
+  test,
+  tokenOf,
+} from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
 import { reviewerFor } from './operators'
 
@@ -73,8 +84,8 @@ test('the Sponsor marks a cash reward paid and the Taker confirms it', async ({ 
   // The console: the reward owed, marked paid with a note.
   await signIn(page, '/sponsor/', owed.sponsor.email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.getByRole('link', { name: 'Cash rewards' }).click()
-  await expect(page).toHaveURL(/\/sponsor\/cash-rewards$/)
+  await openArea(page, 'prizes', 'cash')
+  await expect(page).toHaveURL(/\/sponsor\/prizes\/cash$/)
   const row = page.getByTestId('cash-row').filter({ hasText: owed.code })
   await expect(row).toHaveAttribute('data-status', 'DUE')
   await expect(row).toContainText('Mei')
@@ -121,8 +132,8 @@ test('a Taker collects a prize by scanning the code on the Sponsor\'s screen', a
   // The console's redeem page: the rotating code, as a link the phone's camera would open.
   await signIn(page, '/sponsor/', owed.sponsor.email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.getByRole('link', { name: 'Prizes', exact: true }).click()
-  await expect(page).toHaveURL(/\/sponsor\/redeem$/)
+  await openArea(page, 'prizes', 'redeem')
+  await expect(page).toHaveURL(/\/sponsor\/prizes\/redeem$/)
   await expect(page.getByTestId('redeem-rotating-image')).toBeVisible()
   const link = (await page.getByTestId('redeem-rotating-link').textContent())!.trim()
   expect(link).toMatch(/\/redeem\/[A-Za-z0-9_-]{30,}$/)
@@ -165,7 +176,7 @@ test('a Taker collects a prize by scanning the code on the Sponsor\'s screen', a
   })
   await signIn(page, '/sponsor/', owed.sponsor.email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.goto('/sponsor/redeem')
+  await page.goto('/sponsor/prizes/redeem')
   await expect(page.getByTestId('redeem-today-item').filter({ hasText: owed.code })).toBeVisible()
   await expect(page.getByTestId('redemption-row').filter({ hasText: owed.code })).toHaveAttribute('data-status',
     'REDEEMED')
@@ -179,7 +190,7 @@ test('a Taker collects a prize by scanning the Sponsor\'s screen with the app\'s
     // The QR code the sponsor's screen shows, as a picture.
     await signIn(page, '/sponsor/', owed.sponsor.email)
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
-    await page.goto('/sponsor/redeem')
+    await page.goto('/sponsor/prizes/redeem')
     const code = page.getByTestId('redeem-rotating-image')
     await expect(code).toBeVisible()
     const picture = `data:image/png;base64,${(await code.screenshot()).toString('base64')}`
@@ -269,8 +280,7 @@ test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at
     await signIn(page, '/sponsor/', owed.sponsor.email)
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
     // Q79: a section of the sponsor hub.
-    await page.getByRole('link', { name: 'Sponsor profile' }).click()
-    await page.getByTestId('profile-nav-staff').click()
+    await openArea(page, 'hub', 'staff')
     await expect(page).toHaveURL(/\/sponsor\/profile\/staff$/)
     await page.getByTestId('staff-id').fill(kaiId)
     await page.getByTestId('staff-find').click()
@@ -302,7 +312,7 @@ test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at
     await signOut()
     await signIn(page, '/sponsor/', owed.sponsor.email)
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
-    await page.goto('/sponsor/redeem')
+    await page.goto('/sponsor/prizes/redeem')
     await expect(page.getByTestId('redemption-row').filter({ hasText: owed.code }).getByTestId('redemption-staff'))
       .toContainText('Kai')
   })

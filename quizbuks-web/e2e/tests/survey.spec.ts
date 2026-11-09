@@ -1,8 +1,8 @@
 import type { APIRequestContext } from '@playwright/test'
 import {
-  
   expect,
   expectAccessible,
+  openArea,
   prepareQuizbuks,
   run,
   setAppearance,
@@ -62,7 +62,8 @@ for (const appearance of ['light', 'dark'] as const) {
     const sponsor = await fundedSponsor(request)
     const title = unique('Tea habits ')
     await signIn(page, '/sponsor/', sponsor.email)
-    await page.getByRole('link', { name: 'Quizzes' }).click()
+    await expect(page).toHaveURL(/\/sponsor\/home$/)
+    await openArea(page, 'quizzes')
     await page.getByTestId('new-quiz').click()
     await page.getByTestId('new-quiz-title').fill(title)
     await page.getByTestId('new-quiz-kind-SURVEY').click()

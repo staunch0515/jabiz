@@ -110,12 +110,14 @@ describe("the Sponsor's page editor (Q60a), a section of the Sponsor profile (Q6
     window.history.replaceState(null, '', OLD_PAGE_PATH)
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe(PAGE_PATH))
-    const nav = screen.getByRole('navigation', { name: 'QuizBuks for Sponsors' })
-    expect(within(nav).getByRole('link', { name: 'Sponsor profile' })).toHaveAttribute('href', HUB_PATH)
+    const nav = screen.getByRole('navigation', { name: 'Areas' })
+    expect(within(nav).getByRole('link', { name: 'Sponsor hub' })).toHaveAttribute('href', HUB_PATH)
     expect(within(nav).queryByRole('link', { name: 'My page' })).toBeNull()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sponsor profile')
-    const sections = screen.getByTestId('profile-nav')
-    expect(within(sections).getByTestId('profile-nav-page')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Shop page')
+    // F-F3: the hub's sections are the area's tabs; the page has its two parts, editing and statistics.
+    const sections = screen.getByRole('navigation', { name: 'Sponsor hub' })
+    expect(within(sections).getByTestId('page-tab-page')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('page-part-stats')).toHaveAttribute('href', '/profile/page/stats')
     expect(await screen.findByRole('heading', { level: 2, name: 'Shop page' })).toBeInTheDocument()
     // The page's logo and "About us" are the basic profile's: the shop page has no fields of its own for them.
     expect(screen.getByTestId('sponsor-page-from-profile')).toHaveTextContent('from the basic profile')
@@ -128,7 +130,7 @@ describe("the Sponsor's page editor (Q60a), a section of the Sponsor profile (Q6
     expect(screen.getByTestId('profile-page-preview-headline')).toHaveTextContent('Fresh bread')
     await expectAccessible()
     // The basics: the introduction takes up to 5,000 characters (the page's "About us").
-    await userEvent.click(within(sections).getByTestId('profile-nav-basics'))
+    await userEvent.click(within(sections).getByTestId('page-tab-basics'))
     expect(window.location.pathname).toBe(BASICS_PATH)
     expect(await screen.findByTestId('onboarding-intro')).toHaveAttribute('maxlength', '5000')
     expect(screen.getByText('Up to 5,000 characters. Markdown is allowed (no HTML).')).toBeInTheDocument()
@@ -147,7 +149,7 @@ describe("the Sponsor's page editor (Q60a), a section of the Sponsor profile (Q6
     expect(calls('QB_SPONSOR_PROFILE_SAVE')[0]).toMatchObject({ company: 'Acme Bakery', intro: 'Bread since 1990.' })
     expect(calls('QB_SPONSOR_PAGE_SAVE')).toEqual([])
 
-    await userEvent.click(screen.getByTestId('profile-nav-page'))
+    await userEvent.click(screen.getByTestId('page-tab-page'))
     await userEvent.type(await screen.findByTestId('sponsor-page-headline'), '!')
     await userEvent.click(screen.getByTestId('sponsor-page-save'))
     await waitFor(() => expect(calls('QB_SPONSOR_PAGE_SAVE')).toHaveLength(1))
@@ -173,7 +175,7 @@ describe("the Sponsor's page editor (Q60a), a section of the Sponsor profile (Q6
       introConfirmed: [] })
 
     // The page in Chinese as well, Chinese its main language, with its headline.
-    await userEvent.click(screen.getByTestId('profile-nav-page'))
+    await userEvent.click(screen.getByTestId('page-tab-page'))
     await userEvent.click(await screen.findByTestId('sponsor-page-offer-zh'))
     const headlineZh = within(screen.getByTestId('sponsor-page-translations-zh'))
       .getByTestId('sponsor-page-translations-input')

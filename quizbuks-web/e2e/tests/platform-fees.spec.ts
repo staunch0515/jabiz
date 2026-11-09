@@ -18,8 +18,8 @@ test('a Sponsor sees how the platform bills them; finance and the operator open 
   const sponsor = await approvedSponsor(request)
   await signIn(page, '/sponsor/', sponsor.email)
   // Signed in once the console has left the sign-in page (going elsewhere before would load it signed out).
-  await expect(page).toHaveURL(/\/sponsor\/dashboard$/)
-  await page.goto('/sponsor/wallet')
+  await expect(page).toHaveURL(/\/sponsor\/home$/)
+  await page.goto('/sponsor/money/bills')
   const billing = page.getByTestId('wallet-billing')
   await expect(billing).toBeVisible()
   await expect(billing).toHaveAttribute('data-mode', 'PREPAID')
@@ -28,7 +28,7 @@ test('a Sponsor sees how the platform bills them; finance and the operator open 
   await expect(page.getByTestId('wallet-overdue')).toHaveCount(0)
   await expect(page.getByTestId('invoice-pay-early')).toHaveCount(0)
   await expect(page.getByTestId('wallet-invoices')).toContainText('No invoices')
-  await expectAccessible(page, 'sponsor wallet with platform fees')
+  await expectAccessible(page, 'sponsor invoices with platform fees')
 
   await signInAdmin(page)
   await page.goto('/admin/qb/finance/fees')

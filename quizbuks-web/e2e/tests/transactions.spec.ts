@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import type { Page } from '@playwright/test'
-import { expect, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { expect, openArea, prepareQuizbuks, run, signIn, test, unique } from './support'
 import { completeQuiz, query } from './content'
 import { decideReview } from './publishing'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
@@ -42,9 +42,10 @@ test('a Sponsor reads, filters and exports their transactions', async ({ page, r
   expect(await submitRight(request, noah.token, noahAttempt)).toBe('PENDING')
 
   await signIn(page, '/sponsor/', sponsor.email)
-  await page.getByRole('link', { name: 'Wallet', exact: true }).click()
+  await expect(page).toHaveURL(/\/sponsor\/home$/)
+  await openArea(page, 'money', 'wallet')
   await page.getByTestId('wallet-transactions').click()
-  await expect(page).toHaveURL(/\/sponsor\/transactions$/)
+  await expect(page).toHaveURL(/\/sponsor\/money\/transactions$/)
   const rows = page.getByTestId('transaction-row')
   await expect(rows).toHaveCount(3)
   await expect(page.getByTestId('summary-total')).toHaveText('3')
@@ -90,7 +91,7 @@ test('a Sponsor reads, filters and exports their transactions', async ({ page, r
   // From the publication's page.
   await page.goto(`/sponsor/publications/${publicationId}`)
   await page.getByTestId('publication-transactions').click()
-  await expect(page).toHaveURL(new RegExp(`/sponsor/transactions\\?publication=${publicationId}$`))
+  await expect(page).toHaveURL(new RegExp(`/sponsor/money/transactions\\?publication=${publicationId}$`))
   await expect(rows).toHaveCount(2)
   await expect(page.getByRole('combobox', { name: 'Publication' })).toContainText(name)
 })

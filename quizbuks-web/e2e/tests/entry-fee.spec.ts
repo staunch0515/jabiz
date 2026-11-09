@@ -99,7 +99,7 @@ test('a quiz charges an entry fee from transferable Kudos, settled into the Spon
   // The sponsor: the fee waits for the daily settlement, then is in the cash account.
   await signIn(page, '/sponsor/', sponsor.email)
   await expect(page).not.toHaveURL(/\/login/)
-  await page.goto('/sponsor/wallet')
+  await page.goto('/sponsor/money/account')
   await expect(page.getByTestId('wallet-entry-fees')).toBeVisible()
   await runJobNow(request, 'qb.entry-fee-settle')
   await page.reload()

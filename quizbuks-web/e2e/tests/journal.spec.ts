@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { accountant, codeOf, issuerSet, mapAccounts, postingLastMonth, previewOf, signInAdminAs } from './journal'
-import { expect, prepareQuizbuks, signIn, test } from './support'
+import { expect, openArea, prepareQuizbuks, signIn, test } from './support'
 import { fundedSponsor } from './wallet'
 
 /*
@@ -88,7 +88,8 @@ test('a Sponsor downloads the receipt of a paid top-up', async ({ page, request 
   await issuerSet(request)
   const sponsor = await fundedSponsor(request, 1200)
   await signIn(page, '/sponsor/', sponsor.email)
-  await page.getByRole('link', { name: 'Wallet', exact: true }).click()
+  await expect(page).toHaveURL(/\/sponsor\/home$/)
+  await openArea(page, 'money', 'wallet')
   const row = page.getByTestId('topup-row').first()
   await expect(row.getByTestId('topup-row-status')).toHaveAttribute('data-status', 'PAID')
   const topUpId = await row.getAttribute('data-topup')

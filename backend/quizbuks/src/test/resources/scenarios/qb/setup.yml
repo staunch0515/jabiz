@@ -30,7 +30,7 @@ steps:
         qb.exposure.seconds, qb.exposure.daily-cap-per-user, qb.exposure.push.every, qb.exposure.report.batch,
         qb.exposure.report.interval-sec, qb.exposure.report.max-per-call, qb.exposure.reconcile.min-tolerance,
         qb.exposure.reconcile.tolerance-percent, qb.exposure.reconcile.end-grace-sec, qb.video-use.remind-days,
-        qb.video-use.max-period-days]
+        qb.video-use.max-period-days, qb.sponsor.bottom-bar]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,

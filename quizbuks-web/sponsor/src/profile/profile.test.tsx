@@ -108,7 +108,7 @@ describe('the Sponsor hub (Q79)', () => {
     expect(within(checklist).getByTestId('profile-check-products')).toHaveAttribute('data-done', 'true')
     // F-C1c: the listed products are still counted here; their page is the asset library's tab.
     expect(within(within(checklist).getByTestId('profile-check-products')).getByRole('link'))
-      .toHaveAttribute('href', '/assets?tab=products')
+      .toHaveAttribute('href', '/assets/products')
     expect(within(checklist).getByTestId('profile-check-staff')).toHaveAttribute('data-done', 'false')
     expect(within(checklist).getByTestId('profile-check-staff')).toHaveTextContent('optional')
     expect(within(within(checklist).getByTestId('profile-check-staff')).getByRole('link', { name: 'Go' }))
@@ -126,12 +126,12 @@ describe('the Sponsor hub (Q79)', () => {
     await waitFor(() => expect(within(methods).getAllByTestId('profile-method')).toHaveLength(2))
     expect(methods).toHaveTextContent('Kudos paid by QuizBuks')
     expect(methods).toHaveTextContent('500 Kudos')
-    // The sub-navigation: five sections (F-C1c: the products moved to the asset library), the overview current.
-    const nav = screen.getByTestId('profile-nav')
+    // The hub's tabs (F-F3): five sections (F-C1c: the products moved to the asset library), the overview current.
+    const nav = screen.getByRole('navigation', { name: 'Sponsor hub' })
     expect(within(nav).getAllByRole('link')).toHaveLength(5)
-    expect(within(nav).queryByTestId('profile-nav-products')).toBeNull()
-    expect(within(nav).getByTestId('profile-nav-overview')).toHaveAttribute('aria-current', 'page')
-    expect(within(nav).getByTestId('profile-nav-staff')).not.toHaveAttribute('aria-current')
+    expect(within(nav).queryByTestId('page-tab-products')).toBeNull()
+    expect(within(nav).getByTestId('page-tab-overview')).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByTestId('page-tab-staff')).not.toHaveAttribute('aria-current')
     // F-S1b: the operator that looks after the Sponsor, with how to reach it.
     const operator = screen.getByTestId('profile-operator')
     expect(await within(operator).findByTestId('profile-operator-name')).toHaveTextContent('Kanto Partners')
@@ -152,11 +152,11 @@ describe('the Sponsor hub (Q79)', () => {
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/profile/basics'))
     expect(await screen.findByTestId('onboarding-status')).toHaveAttribute('data-status', 'NONE')
-    expect(screen.getByTestId('profile-nav-basics')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('page-tab-basics')).toHaveAttribute('aria-current', 'page')
     expect(screen.getByTestId('profile-basics-aside')).toBeInTheDocument()
     await expectAccessible()
     // The overview of a sponsor who has not applied: next is the basics; nothing is done.
-    await userEvent.click(screen.getByTestId('profile-nav-overview'))
+    await userEvent.click(screen.getByTestId('page-tab-overview'))
     expect(await screen.findByTestId('profile-status')).toHaveAttribute('data-status', 'NONE')
     expect(screen.getByTestId('profile-next')).toHaveAttribute('href', '/profile/basics')
     await waitFor(() => expect(screen.getByTestId('profile-checklist')).toHaveTextContent('0 of 5 done'))

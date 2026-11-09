@@ -98,8 +98,8 @@ export function assetServer(options: { assets?: Record<string, unknown>[]; uses?
   return { calls, posted }
 }
 
-function openLibrary(search = '') {
-  window.history.replaceState(null, '', `/assets${search}`)
+function openLibrary(path = '') {
+  window.history.replaceState(null, '', `/assets${path}`)
   render(<App />)
 }
 
@@ -128,21 +128,22 @@ describe('the asset library (F-C1)', () => {
     for (const lng of LANGUAGES) expect(JSON.stringify(assetsMessages[lng])).not.toMatch(/后台|back office|管理画面/)
   })
 
-  it('is in the content menu and lists the assets in tabs, searched and filtered by tag', async () => {
+  it('is an area of the menu and lists the assets in tabs, searched and filtered by tag', async () => {
     assetServer({ assets: [LOGO, INTRO, REDEEM, PRIZE] })
     openLibrary()
     expect(await screen.findByRole('link', { name: 'Asset library' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('page-tab-all')).toHaveAttribute('aria-current', 'page')
     await waitFor(() => expect(screen.getAllByTestId('asset-row')).toHaveLength(4))
     expect(screen.getByTestId('assets-count')).toHaveTextContent('4 assets')
     // The texts tab.
-    await userEvent.click(screen.getByTestId('assets-tab-text'))
+    await userEvent.click(screen.getByTestId('page-tab-text'))
     await waitFor(() => expect(shownNames()).toEqual(['Welcome text', 'Coffee at the counter']))
-    expect(window.location.search).toBe('?tab=text')
+    expect(window.location.pathname).toBe('/assets/text')
     // The prizes tab.
-    await userEvent.click(screen.getByTestId('assets-tab-prize'))
+    await userEvent.click(screen.getByTestId('page-tab-prize'))
     await waitFor(() => expect(shownNames()).toEqual(['Gift card']))
     // All again: a tag found by the search, then the tag filter.
-    await userEvent.click(screen.getByTestId('assets-tab-all'))
+    await userEvent.click(screen.getByTestId('page-tab-all'))
     await userEvent.type(screen.getByTestId('assets-search'), 'LOGO')
     await waitFor(() => expect(shownNames()).toEqual(['Shop logo']))
     await userEvent.clear(screen.getByTestId('assets-search'))
@@ -156,9 +157,9 @@ describe('the asset library (F-C1)', () => {
 
   it('opens on the tab of its address and says when the library is empty', async () => {
     assetServer({ assets: [] })
-    openLibrary('?tab=prize')
+    openLibrary('/prizes')
     expect(await screen.findByTestId('assets-empty')).toBeInTheDocument()
-    expect(screen.getByTestId('assets-tab-prize')).toHaveAttribute('data-state', 'active')
+    expect(screen.getByTestId('page-tab-prize')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
   })
 
@@ -395,13 +396,13 @@ describe('the usage on the asset library (F-C2)', () => {
   it('above the free amount shows a banner that leads to the unused assets', async () => {
     assetServer({ assets: [USAGE_LOGO, USAGE_VIDEO, USAGE_POSTER], stats: USAGE_STATS, usage: { day: '2026-11-06', storageBytes: 600 * MB,
       storageFiles: 40, assetsCount: 3, freeBytes: 500 * MB, overFree: true } })
-    openLibrary('?tab=products')
+    openLibrary('/products')
     const banner = await screen.findByTestId('usage-over')
     expect(banner).toHaveTextContent('You are above the free storage')
     expect(banner).toHaveTextContent('Your files use 600.0 MB, above the free 500.0 MB. Uploads keep working')
     await expectAccessible()
     await userEvent.click(within(banner).getByTestId('usage-show-unused'))
-    await waitFor(() => expect(window.location.search).toBe('?tab=all'))
+    await waitFor(() => expect(window.location.pathname).toBe('/assets'))
     await waitFor(() => expect(shownNames()).toEqual(['Shop tour', 'Poster']))
     expect(screen.getByTestId('assets-unused')).toHaveAttribute('data-state', 'checked')
   })

@@ -39,11 +39,11 @@ class CheckoutRequestTest {
     @Test
     void theReturnAddressesComeFromTheConfigurationOnly() {
         CheckoutRequest.CheckoutInput input = CheckoutRequest.input(TOPUP, "s", BigDecimal.TEN, NOW, SETTINGS);
-        assertThat(input.successUrl()).isEqualTo("https://quizbuks.example.com/sponsor/wallet/topups/" + TOPUP
+        assertThat(input.successUrl()).isEqualTo("https://quizbuks.example.com/sponsor/money/wallet/topups/" + TOPUP
             + "?checkout=paid");
-        assertThat(input.cancelUrl()).startsWith("https://quizbuks.example.com/sponsor/wallet/topups/" + TOPUP);
+        assertThat(input.cancelUrl()).startsWith("https://quizbuks.example.com/sponsor/money/wallet/topups/" + TOPUP);
         assertThat(CheckoutRequest.returnUrl("https://q.example.com/sponsor", TOPUP, "paid"))
-            .isEqualTo("https://q.example.com/sponsor/wallet/topups/" + TOPUP + "?checkout=paid");
+            .isEqualTo("https://q.example.com/sponsor/money/wallet/topups/" + TOPUP + "?checkout=paid");
         assertThat(CheckoutRequest.form(input).get("success_url")).isEqualTo(input.successUrl());
     }
 

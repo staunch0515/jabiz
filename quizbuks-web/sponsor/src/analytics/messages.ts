@@ -31,7 +31,8 @@ const en = {
       invoicesValue: '{{amount}} ({{n}})',
       invoicesNone: 'None',
       invoicesOverdue: 'Overdue: {{n}}',
-      toWallet: 'Open the wallet',
+      toWallet: 'Open the platform fee account',
+      toBills: 'Open the invoices',
     },
     trend: {
       title: 'Trend',
@@ -201,7 +202,8 @@ const zh: typeof en = {
       invoicesValue: '{{amount}}（{{n}}）',
       invoicesNone: '无',
       invoicesOverdue: '逾期：{{n}}',
-      toWallet: '打开钱包',
+      toWallet: '打开平台费账户',
+      toBills: '打开账单',
     },
     trend: {
       title: '趋势',
@@ -371,7 +373,8 @@ const ja: typeof en = {
       invoicesValue: '{{amount}}（{{n}}）',
       invoicesNone: 'なし',
       invoicesOverdue: '期限超過：{{n}}',
-      toWallet: 'ウォレットを開く',
+      toWallet: 'プラットフォーム利用料アカウントを開く',
+      toBills: '請求書を開く',
     },
     trend: {
       title: '推移',

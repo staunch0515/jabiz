@@ -64,7 +64,7 @@ describe('the Sponsor\'s tree (Q85, being updated since F-S2c2)', () => {
       expect(keyPaths(bundle(SPONSOR, lng)), lng).toEqual(expect.arrayContaining(english))
       expect(emptyTexts(SPONSOR, lng), lng).toEqual([])
     }
-    expect(treePathOf(BASICS)).toBe(`/tree?node=${BASICS}`)
+    expect(treePathOf(BASICS)).toBe(`/publications/map?node=${BASICS}`)
   })
 
   it('stays at its address and says it is coming soon, reading no tree', async () => {

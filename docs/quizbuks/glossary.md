@@ -35,6 +35,24 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 - 其他公司产品自己的叫法照旧："Shopify 后台""Shopify 管理画面"、Google Play Console、Anthropic Console、 Stripe Dashboard 。
 - 用词测试 `terms.test.mjs` 的 `RETIRED_NAMES` 检查这些叫法。
 
+## 发起方页面的区域（F-F3，总控 2026-11-09）
+
+发起方页面的菜单是"首页 + 8 个区域"（`quizbuks-web/sponsor/src/shell/areas.ts`，文字在 `shell/messages.ts`）。下表是现在的叫法，需求方可以改（改时同时改 `shell/messages.ts` 与帮助）。底部菜单的短名在括号中。
+
+| 区域 | 中文 | 日文 | 英文 |
+|---|---|---|---|
+| `home` | 首页 | ホーム | Home |
+| `quizzes` | Quiz | クイズ | Quizzes |
+| `publications` | 发布 | 公開 | Publications |
+| `prizes` | 奖品与兑换（兑换） | 景品と引き換え（引き換え） | Prizes (Redeem) |
+| `messages` | 客户与消息（消息） | お客様とメッセージ（メッセージ） | Customers & messages (Messages) |
+| `benefits` | 合作权益 | 協賛特典 | Sponsored benefits |
+| `money` | 资金 | 資金 | Money |
+| `assets` | 资源库 | リソースライブラリ | Asset library |
+| `hub` | 发起方中心 | 主催者センター | Sponsor hub |
+
+资金区域的标签：交易 / 学分钱包 / 平台费账户 / AI 额度 / 账单（取引 / クドスウォレット / プラットフォーム利用料アカウント / AI クレジット / 請求書；Transactions / Kudos wallet / Platform fee account / AI credit / Invoices）。
+
 ## 写法
 
 - **英文**：两个称呼当作专有的称呼，首字母大写，写成不随称呼变形的样子："the Sponsor"、"a Taker"、"Sponsors' pages"。动词 sponsor（赞助）照常小写。

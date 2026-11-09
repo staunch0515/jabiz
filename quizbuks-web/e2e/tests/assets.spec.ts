@@ -1,7 +1,7 @@
 import { signInAdmin } from './admin'
 import { POLICY, PNG, sponsor, upload } from './content'
 import { approvedSponsor } from './publishing'
-import { expect, expectAccessible, prepareQuizbuks, rows, run, signIn, test, unique } from './support'
+import { expect, expectAccessible, openArea, prepareQuizbuks, rows, run, signIn, test, unique } from './support'
 
 /**
  * The Sponsor's asset library (F-C1, docs/quizbuks/plans/impl/F-C1.md F-C1c): a quiz's cover saved to the library,
@@ -46,7 +46,7 @@ test('a Sponsor saves a cover to the library, chooses it for another quiz and se
     await expect(page.getByTestId('heading-saved')).toBeVisible()
 
     // The library: the asset, changed; where it is used now says older content.
-    await page.getByRole('link', { name: 'Asset library' }).click()
+    await openArea(page, 'assets')
     const row = page.getByTestId('asset-row').filter({ hasText: name })
     await expect(row).toBeVisible()
     await expectAccessible(page, 'sponsor asset library')

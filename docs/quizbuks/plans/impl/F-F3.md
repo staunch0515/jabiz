@@ -13,8 +13,8 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 - **删除的功能：无。** 每个现有页面都有新位置（§2 的对照表逐项列出），旧地址全部转向。移动而不是删除的：页头的"退出"按钮与外观切换移进头像菜单；商户中心子导航右侧的说明移到概况的卡片上；
   `ProfileLayout` 的子导航换成页内标签。
 - **行为上的改变**（PR 描述中逐条列出）：
-  1. 旧的 `/messages`（缺省显示"我发的通知"）转到区域的第一个标签"对话"（`/messages/conversations`）；"我发的通知"在"通知与公告"标签。
-  2. 资金区域里"平台费账户"与"账单"对所有发起方显示；现在它们在钱包页内、钱包页只对可付 Kudos 的发起方显示（Q28），没有 Kudos 奖励方式的发起方看不到自己的账单——这是缺口，顺带补上（服务端照旧判断）。"学分钱包"仍只对可付 Kudos 的发起方显示。
+  1. （F-F3a 实现时取消）旧的 `/messages` 转到"通知与公告"（`/messages/notices`），与原来的缺省一致；`?tab=conversations` 转到"对话"。
+  2. 资金区域里"平台费账户"与"账单"对所有发起方显示（没有 Kudos 的发起方在平台费账户中充值到现金，充值记录与收据也列在那里）；现在它们在钱包页内、钱包页只对可付 Kudos 的发起方显示（Q28），没有 Kudos 奖励方式的发起方看不到自己的账单——这是缺口，顺带补上（服务端照旧判断）。"学分钱包"仍只对可付 Kudos 的发起方显示。
   3. 合作权益区域只对持有 `BENEFIT_PROVIDER` 或 `BENEFIT_SPONSOR` 的发起方显示（规格）；现在对所有人显示。直接打开地址照旧可用，能做什么由服务端判断。
   4. Stripe 充值的返回地址与邮件中的链接改为新地址（`CheckoutRequest.returnUrl`、`mail.qb.*` 中的 `{entryUrl.sponsor}wallet`），老邮件与进行中的 Checkout 靠转向。
 - **不做**：用户自定义首页、拖动菜单；运营商管理系统与平台管理系统扩展换框架；Quiz 编辑器内部的四个标签（基本信息 / 题目 / 资料 / 语言）改成路由（与 S1 的 F-S6、F-S7 冲突最大，留在页内，§2 注 3）；学者 App（F-F4）。
@@ -76,10 +76,10 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 | 21 | 钱包：平台的账单（Q87） | `/wallet` 页内 | 资金 → 账单 | `/money/bills` | — |
 | 22 | 卡充值的页面（Stripe 返回 `?checkout=`） | `/wallet/topups/<id>` | 资金 → 学分钱包 | `/money/wallet/topups/<id>`（带原查询） | 是（前缀） |
 | 23 | 银行转账充值的页面 | `/wallet/bank/<id>` | 资金 → 学分钱包 | `/money/wallet/bank/<id>` | 是（前缀） |
-| 24 | AI 用量卡（现在只在仪表盘） | — | 资金 → AI 额度（首页照旧有；F-M9（S2 的 M7）在此加购买，不放空标签） | `/money/ai` | — |
+| 24 | AI 用量卡（现在只在仪表盘） | — | 资金 → AI 额度（首页照旧有；本月的用量卡已有内容，所以首次就显示这个标签；F-M9（S2 的 M7）在此加购买） | `/money/ai` | — |
 | 25 | 交易（筛选在地址中） | `/transactions?…` | 资金 → 交易 | `/money/transactions?…`（带原查询） | 是 |
 | 26 | 发起方资料：概况、基本信息、公开主页、店员、邮件服务器 | `/profile/**` | 发起方中心 → 各标签 | 不变 | — |
-| 27 | 消息中心：我发的通知、收到的公告 | `/messages` | 客户与消息 → 通知与公告（页内"我发的 / 收到的"两段，`?view=inbox`） | `/messages/notices` | 是 |
+| 27 | 消息中心：我发的通知、收到的公告 | `/messages` | 客户与消息 → 通知与公告（页内"我发的 / 收到的"两个页内切换） | `/messages/notices` | 是 |
 | 28 | 消息中心：对话 | `/messages?tab=conversations` | 客户与消息 → 对话 | `/messages/conversations` | 是 |
 | 29 | 一个对话 | `/messages/conversations/<id>` | 客户与消息 → 对话 | 不变 | — |
 | 30 | 账户（地址、密码、二次验证、会话、登录记录、邮件设置、语言、音效、删除账号） | `/account` | 头像菜单 → 账户与安全 | 不变 | — |
@@ -157,7 +157,7 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 
 ## 6. 页面与模板
 
-- **区域页头**：`shell/AreaPageHeader.tsx` = `PageHeader` + 区域图标 + 区域名作标题 + 该区域的 `PageTabs`（标签是路由链接，`aria-current`），页面只传说明、`primaryAction`、`actions`。
+- **区域页头**：`shell/AreaPageHeader.tsx` = `PageHeader` + 区域图标 + 该区域的 `PageTabs`（标签是路由链接，`aria-current`）；标题是这个标签页自己的名字（读屏读出的是页面，区域名在菜单、标签行的名称与图标上；F-F3a 实现时定），页面传标题、说明、`primaryAction`、`actions`。
   现有各页把自己的 `<PageHeader title=…>` 换成 `<AreaPageHeader tab=… />`：每页一处小改，页面文件不搬家（降低与其他会话的冲突）。详情页（Quiz 编辑器、发布详情、对话、充值页、采购单）标题是对象的名字，带面包屑回区域、标题前同样有区域图标。
 - `AppShell`：`collapsible="icon"`（收起状态由平台记在本机）、`create`、`bottomBar`、`routeKey={path}`（路由改变时焦点到标题）；内容区套 `PageContent`（宽度 token）。
 - **路由表**：`SignedIn` 的 `if / else if` 链移到 `shell/routes.tsx`（`routeOf(path, search)` 纯函数 + 表），以后的功能加一行；`App.tsx` 只剩外框。
@@ -249,3 +249,11 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 - **发布编号与新的保留路径**：`/publications/map`、`/publications/stats` 与 `/publications/<id>` 共用前缀；编号是 UUIDv7，`routeOf` 先认保留字，测试覆盖。
 - **文件选择的手势**：全局新建的"导入发布设置"必须在点击的同一手势里打开文件框（§4），已在设计中处理，e2e 覆盖。
 - **帮助与 FAQ 不同步**：底稿改了，数据库中的 FAQ 要内容管理员照改；PR 描述与进度备注中写明。
+
+## 13. F-F3a 的实现记录（2026-11-09）
+
+- 分支 `1.3/quizbuks-ff3-sponsor-areas`。新目录 `sponsor/src/shell/`：`areas.ts`、`paths.ts`、`routes.tsx`（`pageOf`）、`legacy-paths.json` + `legacy.ts`、`AreaPageHeader.tsx`、`SponsorShell.tsx`、`AvatarMenu.tsx`、`layout.ts` + `bottom-bar.default.json`、`messages.ts`、`shell.test.tsx`。
+- 后端：参数 `qb.sponsor.bottom-bar`（普通，`QbParams` 最后）、模板 `qb.sponsor.layout`、`SponsorLayoutParamsTest`；`CheckoutRequest.returnUrl` 改为 `money/wallet/topups/`；邮件链接 `money/wallet`、`money/bills`（三语）。无迁移。
+- 页面文件不搬家：各标签页把 `PageHeader` 换成 `AreaPageHeader`；资源库与消息的 `?tab=` 改为路径标签；`WalletPage` 拆出 `FeeAccountPage`（现金账户，带"充值"，缺省选现金）、`BillsPage`（账单）、`AiCreditPage`（本月的 AI 用量）。S2 的 F-M1（#578）合入后，`FeeAccount` 放进 `FeeAccountPage`、`Invoices` 已在 `BillsPage`。
+- 全局新建的"导入发布设置"在外框中常驻一个不带按钮的 `ImportSettingsButton`（`opener`），点击的同一手势里打开文件框。
+- 未做（照拆分留给 b、c、d）：首页的"待我处理"与 `qb.sponsor.todo`（F-F3b）；发布详情的标签与共用的 `PublicationContent`（F-F3c）；列表 / 表单模板、主按钮改 `primaryAction`、概况的卡片与页头"导入与导出"（F-F3d）。

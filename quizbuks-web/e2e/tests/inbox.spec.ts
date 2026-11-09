@@ -63,7 +63,7 @@ test('a Sponsor\'s notice reaches its Takers and counts readers without naming t
     // The sponsor writes the notice in the message centre and sends it at once.
     await signIn(page, '/sponsor/', sponsor.email)
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
-    await page.goto('/sponsor/messages')
+    await page.goto('/sponsor/messages/notices')
     await page.getByTestId('notice-new').click()
     await page.getByTestId('notice-publication').click()
     await page.getByRole('option', { name: new RegExp(publication.name) }).click()

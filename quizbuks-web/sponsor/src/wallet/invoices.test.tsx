@@ -99,7 +99,7 @@ afterEach(() => vi.restoreAllMocks())
 describe("the platform's invoices", () => {
   it('shows the invoices unpaid and how the platform bills, all through formatKudos', async () => {
     server()
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/bills')
     render(<App />)
     const billing = await screen.findByTestId('wallet-billing')
     expect(billing).toHaveAttribute('data-mode', 'PREPAID')
@@ -112,13 +112,13 @@ describe("the platform's invoices", () => {
     expect(within(row).getByTestId('invoice-row-total')).toHaveTextContent('1,100 Kudos')
     expect(within(row).getByTestId('invoice-row-status')).toHaveTextContent('Open')
     expect(screen.getByTestId('wallet-invoices').textContent).not.toMatch(/JPY|yen|円/)
-    await expectAccessible(screen.getByTestId('wallet'))
+    await expectAccessible(screen.getByTestId('bills'))
   })
 
   it('warns of an overdue invoice and shows the credit of a monthly-billed Sponsor', async () => {
     server({ wallet: { ...WALLET, overdueCount: 1, billingMode: 'POSTPAID', creditLimit: '20000' },
       invoices: [{ ...INVOICE, status: 'OVERDUE', billingMode: 'POSTPAID' }] })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/bills')
     render(<App />)
     expect(await screen.findByTestId('wallet-overdue')).toHaveTextContent('overdue: 1')
     const billing = screen.getByTestId('wallet-billing')
@@ -133,7 +133,7 @@ describe("the platform's invoices", () => {
     URL.createObjectURL = vi.fn(() => 'blob:invoice')
     URL.revokeObjectURL = vi.fn()
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/bills')
     const user = userEvent.setup()
     render(<App />)
     const row = (await screen.findAllByTestId('invoice-row'))[0]
@@ -150,7 +150,7 @@ describe("the platform's invoices", () => {
   it('pays the fees not invoiced yet early, from the cash account', async () => {
     const { processCalls } = server({ wallet: { ...WALLET, unpaidTotal: '0', unpaidCount: 0, billingMode: 'POSTPAID',
       creditLimit: '20000', uninvoicedTotal: '2200' }, invoices: [] })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/bills')
     const user = userEvent.setup()
     render(<App />)
     const billing = await screen.findByTestId('wallet-billing')
@@ -164,7 +164,7 @@ describe("the platform's invoices", () => {
 
   it('cannot pay early what the cash does not cover', async () => {
     server({ wallet: { ...WALLET, cashBalance: '500', uninvoicedTotal: '2200' } })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/bills')
     render(<App />)
     const button = await screen.findByTestId('invoice-pay-early')
     expect(button).toBeDisabled()
@@ -173,7 +173,7 @@ describe("the platform's invoices", () => {
 
   it('cannot pay an invoice the cash does not cover', async () => {
     server({ wallet: { ...WALLET, cashBalance: '500' } })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/bills')
     render(<App />)
     const row = (await screen.findAllByTestId('invoice-row'))[0]
     expect(within(row).getByTestId('invoice-row-pay')).toBeDisabled()

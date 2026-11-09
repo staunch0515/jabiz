@@ -1,5 +1,15 @@
 import type { Page } from '@playwright/test'
-import { expect, expectAccessible, linkIn, mailTo, prepareQuizbuks, signIn, test, setAppearance } from './support'
+import {
+  expect,
+  expectAccessible,
+  linkIn,
+  mailTo,
+  openArea,
+  prepareQuizbuks,
+  setAppearance,
+  signIn,
+  test,
+} from './support'
 import { approvedSponsor, sponsorBalance } from './wallet'
 
 /**
@@ -37,8 +47,9 @@ for (const appearance of ['light', 'dark'] as const) {
     await setAppearance(page, appearance)
     const sponsor = await approvedSponsor(request)
     await signIn(page, '/sponsor/', sponsor.email)
-    await page.getByRole('link', { name: 'Wallet', exact: true }).click()
-    await expect(page).toHaveURL(/\/sponsor\/wallet$/)
+    await expect(page).toHaveURL(/\/sponsor\/home$/)
+    await openArea(page, 'money', 'wallet')
+    await expect(page).toHaveURL(/\/sponsor\/money\/wallet$/)
     await expect(page.getByTestId('wallet-available')).toContainText('0 Kudos')
     await expect(page.getByTestId('topup-row')).toHaveCount(0)
     await expectAccessible(page, at('sponsor wallet'))
@@ -46,7 +57,7 @@ for (const appearance of ['light', 'dark'] as const) {
     const topUpId = await startTopUp(page, '1500', () => expectAccessible(page, at('sponsor top-up dialog')))
     // The stub's "Pay": the checkout completes, its signed event goes to the server, the browser comes back.
     await page.getByRole('button', { name: 'Pay', exact: true }).click()
-    await page.waitForURL(new RegExp(`/sponsor/wallet/topups/${topUpId}\\?checkout=paid$`))
+    await page.waitForURL(new RegExp(`/sponsor/money/wallet/topups/${topUpId}\\?checkout=paid$`))
     const state = page.getByTestId('topup-state')
     await expect(state).toHaveAttribute('data-state', 'paid', { timeout: 30_000 })
     await expect(state).toContainText('1,500 Kudos')
@@ -65,7 +76,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
     // Mailed (Q7a, transactional), with a link to the console's wallet.
     const mail = await mailTo(request, sponsor.email, /top-up of 1,500 Kudos has arrived/)
-    expect(linkIn(mail.text, '/wallet').pathname).toBe('/sponsor/wallet')
+    expect(linkIn(mail.text, '/money/wallet').pathname).toBe('/sponsor/money/wallet')
 
     // The console's account page lists its two notifications, which the sponsor may turn off (D49).
     await page.goto('/sponsor/account')
@@ -81,7 +92,8 @@ test('the browser\'s return credits nothing; a cancelled checkout expires', asyn
   test.setTimeout(150_000)
   const sponsor = await approvedSponsor(request)
   await signIn(page, '/sponsor/', sponsor.email)
-  await page.getByRole('link', { name: 'Wallet', exact: true }).click()
+  await expect(page).toHaveURL(/\/sponsor\/home$/)
+  await openArea(page, 'money', 'wallet')
 
   // An amount outside the range: the server's own words, next to the field.
   await page.getByTestId('topup-open').click()
@@ -95,7 +107,7 @@ test('the browser\'s return credits nothing; a cancelled checkout expires', asyn
   const topUpId = await startTopUp(page, '2000')
   const checkout = page.url()
   // Coming back with "paid" without paying: the page waits for Stripe and the wallet stays as it was.
-  await page.goto(`/sponsor/wallet/topups/${topUpId}?checkout=paid`)
+  await page.goto(`/sponsor/money/wallet/topups/${topUpId}?checkout=paid`)
   const state = page.getByTestId('topup-state')
   await expect(state).toHaveAttribute('data-state', 'confirming')
   await expect(page.getByTestId('topup-status')).toHaveAttribute('data-status', 'OPEN')
@@ -104,7 +116,7 @@ test('the browser\'s return credits nothing; a cancelled checkout expires', asyn
   expect(await sponsorBalance(request, sponsor.token)).toBe(0)
 
   // Opened again from the list, the page offers the checkout instead of leaving by itself.
-  await page.goto('/sponsor/wallet')
+  await page.goto('/sponsor/money/wallet')
   await page.getByTestId('topup-row').filter({ has: page.locator(`[href$="/topups/${topUpId}"]`) })
     .getByTestId('topup-row-open').click()
   await expect(state).toHaveAttribute('data-state', 'open')
@@ -114,7 +126,7 @@ test('the browser\'s return credits nothing; a cancelled checkout expires', asyn
 
   // The stub's "Expire": the checkout ends unpaid and the browser comes back to the cancel address.
   await page.getByRole('button', { name: 'Expire', exact: true }).click()
-  await page.waitForURL(new RegExp(`/sponsor/wallet/topups/${topUpId}\\?checkout=cancelled$`))
+  await page.waitForURL(new RegExp(`/sponsor/money/wallet/topups/${topUpId}\\?checkout=cancelled$`))
   await expect(page.getByTestId('topup-status')).toHaveAttribute('data-status', 'EXPIRED', { timeout: 30_000 })
   await expect(state).toHaveAttribute('data-state', 'expired')
   await expectAccessible(page, 'sponsor top-up expired')

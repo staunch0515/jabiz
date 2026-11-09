@@ -13,7 +13,6 @@ import {
   DialogTitle,
   Input,
   Label,
-  PageHeader,
   PageState,
   RadioGroup,
   RadioGroupItem,
@@ -39,6 +38,7 @@ import { QuizLanguageField } from './QuizLanguageField'
 import { ExportQuizButton, ImportQuizButton } from './QuizTransfer'
 import { CardGrid, Pager, useListView, ViewSwitch } from '../ListView'
 import { CoverPlaceholder } from '../qb/Illustrations'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
 
 /** The labels of the quiz states, from the server's dictionary (the code until it answered). */
 export function useQuizStatusLabel() {
@@ -188,7 +188,7 @@ function QuizCard({ quiz, statusLabel }: { quiz: QuizRow; statusLabel: (status: 
   )
 }
 
-export function QuizListPage() {
+export function QuizListPage({ adding = false }: { adding?: boolean } = {}) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const id = useId()
@@ -197,7 +197,8 @@ export function QuizListPage() {
   const q = useDebounced(search, 300)
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [sorting, setSorting] = useState<SortingState>([{ id: 'editedAt', desc: true }])
-  const [creating, setCreating] = useState(false)
+  // The global "+ New" opens the dialog (`?new=1`, F-F3).
+  const [creating, setCreating] = useState(adding)
   const [view, setView] = useListView('quizzes')
 
   const quizzes = useQuery({
@@ -297,7 +298,7 @@ export function QuizListPage() {
 
   return (
     <section className="flex flex-col gap-4" data-testid="quiz-list">
-      <PageHeader title={t('quizzes.title')} description={t('quizzes.intro')}
+      <AreaPageHeader title={t('quizzes.title')} description={t('quizzes.intro')}
         actions={
           <div className="flex flex-wrap gap-2">
             <ImportQuizButton />

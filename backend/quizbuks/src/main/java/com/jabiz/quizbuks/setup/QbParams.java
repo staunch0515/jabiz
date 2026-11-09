@@ -392,6 +392,14 @@ public final class QbParams {
     public static final String VIDEO_USE_REMIND_DAYS = "qb.video-use.remind-days";
     /** F-S14 (the controller: every number a parameter): the longest period one use covers, in days; not controlled. */
     public static final String VIDEO_USE_MAX_PERIOD_DAYS = "qb.video-use.max-period-days";
+    /**
+     * F-F3: the areas of the Sponsor app's bottom menu on a phone, comma-separated area keys (home, quizzes,
+     * publications, prizes, messages, benefits, money, assets, hub; "More" follows them); not controlled. The Sponsor app
+     * reads it through {@code qb.sponsor.layout}, leaves out unknown keys and repeats, and starts from the same list as
+     * the declared value ({@code quizbuks-web/sponsor/src/shell/bottom-bar.default.json}, {@code
+     * SponsorLayoutParamsTest}). Changing it means changing the help's sentence about the bottom menu.
+     */
+    public static final String SPONSOR_BOTTOM_BAR = "qb.sponsor.bottom-bar";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -700,7 +708,12 @@ public final class QbParams {
         // F-S14: the longest period of a use (ordinary; last).
         new Param(VIDEO_USE_MAX_PERIOD_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.videouse.VideoUseRules.DEFAULT_MAX_PERIOD_DAYS),
-            "The longest period, in days, one ledger entry of a shared video's use covers (1 to 36600)"));
+            "The longest period, in days, one ledger entry of a shared video's use covers (1 to 36600)"),
+        // F-F3: the Sponsor app's bottom menu (ordinary; last).
+        new Param(SPONSOR_BOTTOM_BAR, Map.of("type", "text", "maxLength", 200), "home,publications,prizes,messages",
+            "The areas of the Sponsor app's bottom menu on a phone, comma-separated (home, quizzes, publications, "
+                + "prizes, messages, benefits, money, assets, hub; at most four, \"More\" follows; empty: this "
+                + "default)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

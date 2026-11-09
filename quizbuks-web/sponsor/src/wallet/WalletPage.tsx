@@ -14,7 +14,6 @@ import {
   DialogTitle,
   Input,
   Label,
-  PageHeader,
   PageState,
   RadioGroup,
   RadioGroupItem,
@@ -63,6 +62,10 @@ import {
   type TopUpStatus,
 } from './api'
 import './messages'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
+import { useShellState } from '../shell/context'
+import { AiUsageMetric } from '../ai/AiUsageMetric'
+import { useDashboard } from '../analytics/hooks'
 
 /** The labels of the top-up states, from the server's dictionary (the code until it answered). */
 export function useTopUpStatusLabel() {
@@ -137,7 +140,12 @@ function TopUpLimitNote() {
  * lost answer) starts one top-up only. The server checks the amount's range and the sponsor (approved, not banned,
  * verified) and words its refusals.
  */
-function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function TopUpDialog({ open, onOpenChange, preferred }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** F-F3: where a top-up goes first when both are offered (cash on the platform fee account's tab). */
+  preferred?: TopUpTarget
+}) {
   const { t } = useTranslation(SPONSOR)
   const id = useId()
   const [method, setMethod] = useState<TopUpMethod>('STRIPE')
@@ -145,7 +153,9 @@ function TopUpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (ope
   const settings = useQuery({ queryKey: [...WALLET_QUERY, 'cash-settings'], queryFn: readCashSettings, enabled: open })
   const [chosenTarget, setChosenTarget] = useState<TopUpTarget | null>(null)
   const choosing = (settings.data?.targets.length ?? 0) > 1
-  const target = chosenTarget ?? settings.data?.defaultTarget ?? null
+  const offered = settings.data?.targets ?? []
+  const target = chosenTarget ?? (preferred && offered.includes(preferred) ? preferred : settings.data?.defaultTarget)
+    ?? null
   // Without a choice the server's default decides (the switches as it reads them).
   const sentTarget = choosing ? target : null
   // Bank transfers are chosen only once the platform's account is set up (Q18): until then the choice says so.
@@ -399,12 +409,67 @@ function ReceiptButton({ row, onError }: { row: TopUpRow; onError: (error: unkno
 export function WalletPage() {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
-  const statusLabel = useTopUpStatusLabel()
   const [topping, setTopping] = useState(false)
+  const wallet = useQuery({ queryKey: [...WALLET_QUERY, 'summary'], queryFn: readWallet })
+
+  const data = wallet.data
+  return (
+    <section className="flex flex-col gap-6" data-testid="wallet">
+      <AreaPageHeader title={t('wallet.title')} description={t('wallet.intro')}
+        actions={
+          <Button onClick={() => setTopping(true)} data-testid="topup-open">
+            <Plus aria-hidden />
+            {t('wallet.topUp')}
+          </Button>
+        } />
+      {wallet.isPending ? (
+        <PageState kind="loading" />
+      ) : wallet.isError || !data ? (
+        <PageState kind="error" description={tQb('failed')}
+          action={<Button variant="outline" onClick={() => void wallet.refetch()}>{tQb('retry')}</Button>} />
+      ) : (
+        <section aria-labelledby="wallet-summary" className="flex flex-col gap-3">
+          <h2 id="wallet-summary" className="text-lg font-semibold">{t('wallet.summary')}</h2>
+          <p className="text-3xl font-semibold" data-testid="wallet-available">
+            <span className="text-muted-foreground block text-sm font-normal">{t('wallet.available')}</span>
+            {formatKudos(available(data))}
+          </p>
+          {data.pendingCount > 0 && (
+            <Alert variant="warning" data-testid="wallet-pending">
+              <AlertDescription>
+                {t('wallet.pendingAlert', { amount: formatKudos(data.pendingAmount), count: data.pendingCount })}
+              </AlertDescription>
+            </Alert>
+          )}
+          <DescriptionList columns={3} data-testid="wallet-figures" items={[
+            { key: 'balance', label: t('wallet.balance'), value: formatKudos(data.balance) },
+            ...(data.held > 0 ? [{ key: 'held', label: t('wallet.held'), value: formatKudos(data.held) }] : []),
+            { key: 'pending', label: t('wallet.pending'),
+              value: t('wallet.pendingValue', { amount: formatKudos(data.pendingAmount), count: data.pendingCount }) },
+            { key: 'toppedUp', label: t('wallet.toppedUp'),
+              value: t('wallet.toppedUpValue', { amount: formatKudos(data.toppedUp), count: data.topUpCount }) },
+            { key: 'spent', label: t('wallet.spent'), value: formatKudos(data.spent) },
+            { key: 'takenBack', label: t('wallet.takenBack'), value: formatKudos(data.takenBack) },
+          ]} />
+        </section>
+      )}
+      <TopUpsSection />
+      <TopUpDialog open={topping} onOpenChange={setTopping} />
+    </section>
+  )
+}
+
+/**
+ * The top-ups with their receipts (Q9d): on the Kudos wallet's tab, and on the platform fee account's for a Sponsor
+ * without Kudos (who tops up to cash there, F-F3).
+ */
+function TopUpsSection() {
+  const { t } = useTranslation(SPONSOR)
+  const { t: tQb } = useTranslation(QB)
+  const statusLabel = useTopUpStatusLabel()
   const [receiptError, setReceiptError] = useState<unknown>(null)
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }])
-  const wallet = useQuery({ queryKey: [...WALLET_QUERY, 'summary'], queryFn: readWallet })
   const topUps = useQuery({
     queryKey: [...WALLET_QUERY, 'topups', pagination, sorting],
     queryFn: () => searchTopUps({
@@ -486,77 +551,104 @@ export function WalletPage() {
     },
   ], [t, statusLabel])
 
-  const data = wallet.data
   return (
-    <section className="flex flex-col gap-6" data-testid="wallet">
-      <PageHeader title={t('wallet.title')} description={t('wallet.intro')}
-        actions={
-          <Button onClick={() => setTopping(true)} data-testid="topup-open">
-            <Plus aria-hidden />
-            {t('wallet.topUp')}
-          </Button>
-        } />
-      {wallet.isPending ? (
-        <PageState kind="loading" />
-      ) : wallet.isError || !data ? (
-        <PageState kind="error" description={tQb('failed')}
-          action={<Button variant="outline" onClick={() => void wallet.refetch()}>{tQb('retry')}</Button>} />
-      ) : (
-        <section aria-labelledby="wallet-summary" className="flex flex-col gap-3">
-          <h2 id="wallet-summary" className="text-lg font-semibold">{t('wallet.summary')}</h2>
-          <p className="text-3xl font-semibold" data-testid="wallet-available">
-            <span className="text-muted-foreground block text-sm font-normal">{t('wallet.available')}</span>
-            {formatKudos(available(data))}
-          </p>
-          {data.pendingCount > 0 && (
-            <Alert variant="warning" data-testid="wallet-pending">
-              <AlertDescription>
-                {t('wallet.pendingAlert', { amount: formatKudos(data.pendingAmount), count: data.pendingCount })}
-              </AlertDescription>
-            </Alert>
-          )}
-          <DescriptionList columns={3} data-testid="wallet-figures" items={[
-            { key: 'balance', label: t('wallet.balance'), value: formatKudos(data.balance) },
-            ...(data.held > 0 ? [{ key: 'held', label: t('wallet.held'), value: formatKudos(data.held) }] : []),
-            { key: 'pending', label: t('wallet.pending'),
-              value: t('wallet.pendingValue', { amount: formatKudos(data.pendingAmount), count: data.pendingCount }) },
-            { key: 'toppedUp', label: t('wallet.toppedUp'),
-              value: t('wallet.toppedUpValue', { amount: formatKudos(data.toppedUp), count: data.topUpCount }) },
-            { key: 'spent', label: t('wallet.spent'), value: formatKudos(data.spent) },
-            { key: 'takenBack', label: t('wallet.takenBack'), value: formatKudos(data.takenBack) },
-          ]} />
-        </section>
+    <section aria-labelledby="wallet-topups" className="flex flex-col gap-3" data-testid="wallet-topups-section">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="wallet-topups" className="text-lg font-semibold">{t('wallet.topUps')}</h2>
+        <Link to={TRANSACTIONS_PATH} className="text-sm underline underline-offset-4" data-testid="wallet-transactions">
+          {t('transactions.walletLink')}
+        </Link>
+      </div>
+      <p className="text-muted-foreground text-sm">{t('wallet.receiptHint')}</p>
+      {receiptError !== null && (
+        <Alert variant="destructive" data-testid="topup-receipt-problem">
+          <AlertDescription>{problemText(receiptError)}</AlertDescription>
+        </Alert>
       )}
-      {data && <CashAccount wallet={data} />}
-      {data && <Invoices wallet={data} />}
-      <section aria-labelledby="wallet-topups" className="flex flex-col gap-3" data-testid="wallet-topups-section">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="wallet-topups" className="text-lg font-semibold">{t('wallet.topUps')}</h2>
-          <Link to={TRANSACTIONS_PATH} className="text-sm underline underline-offset-4" data-testid="wallet-transactions">
-            {t('transactions.walletLink')}
-          </Link>
-        </div>
-        <p className="text-muted-foreground text-sm">{t('wallet.receiptHint')}</p>
-        {receiptError !== null && (
-          <Alert variant="destructive" data-testid="topup-receipt-problem">
-            <AlertDescription>{problemText(receiptError)}</AlertDescription>
-          </Alert>
+      {topUps.isError
+        ? <PageState kind="error" description={tQb('failed')}
+          action={<Button variant="outline" onClick={() => void topUps.refetch()}>{tQb('retry')}</Button>} />
+        : (
+          <DataTable label={t('wallet.topUpsTable')} columns={columns} data={topUps.data?.items ?? []}
+            storageKey="qb.sponsor.topups" getRowId={(row) => row.topUpId} loading={topUps.isPending} stale={topUps.isPlaceholderData}
+            empty={t('wallet.noTopUps')} pagination={pagination} onPaginationChange={setPagination}
+            rowCount={topUps.data?.total} sorting={sorting} onSortingChange={(next) => {
+              setSorting(next)
+              setPagination((p) => ({ ...p, pageIndex: 0 }))
+            }}
+            rowProps={(row) => ({ 'data-testid': 'topup-row', 'data-topup': row.topUpId })} />
         )}
-        {topUps.isError
-          ? <PageState kind="error" description={tQb('failed')}
-            action={<Button variant="outline" onClick={() => void topUps.refetch()}>{tQb('retry')}</Button>} />
-          : (
-            <DataTable label={t('wallet.topUpsTable')} columns={columns} data={topUps.data?.items ?? []}
-              storageKey="qb.sponsor.topups" getRowId={(row) => row.topUpId} loading={topUps.isPending} stale={topUps.isPlaceholderData}
-              empty={t('wallet.noTopUps')} pagination={pagination} onPaginationChange={setPagination}
-              rowCount={topUps.data?.total} sorting={sorting} onSortingChange={(next) => {
-                setSorting(next)
-                setPagination((p) => ({ ...p, pageIndex: 0 }))
-              }}
-              rowProps={(row) => ({ 'data-testid': 'topup-row', 'data-topup': row.topUpId })} />
-          )}
-      </section>
-      <TopUpDialog open={topping} onOpenChange={setTopping} />
+    </section>
+  )
+}
+
+/** The wallet's figures, read once for the money area's tabs (F-F3). */
+function useWallet() {
+  return useQuery({ queryKey: [...WALLET_QUERY, 'summary'], queryFn: readWallet })
+}
+
+function WalletState({ wallet }: { wallet: ReturnType<typeof useWallet> }) {
+  const { t: tQb } = useTranslation(QB)
+  return wallet.isPending ? <PageState kind="loading" /> : (
+    <PageState kind="error" description={tQb('failed')}
+      action={<Button variant="outline" onClick={() => void wallet.refetch()}>{tQb('retry')}</Button>} />
+  )
+}
+
+/**
+ * The money area's "platform fee account" tab (F-F3): what pays the platform's fees, the cash account (Q87a) with its
+ * exchange; a top-up to cash where the switches offer it. Shown to every Sponsor, whatever their reward methods (the
+ * wallet page was hidden from those without Kudos, and the cash account and the invoices with it).
+ */
+export function FeeAccountPage() {
+  const { t } = useTranslation(SPONSOR)
+  const { kudos } = useShellState()
+  const wallet = useWallet()
+  const settings = useQuery({ queryKey: [...WALLET_QUERY, 'cash-settings'], queryFn: readCashSettings })
+  const [topping, setTopping] = useState(false)
+  const data = wallet.data
+  const cash = settings.data && data && (settings.data.targets.includes('CASH') || data.cashBalance > 0
+    || data.entryFeesUnsettled > 0)
+  return (
+    <section className="flex flex-col gap-6" data-testid="fee-account">
+      <AreaPageHeader title={t('shell.account.title')} description={t('shell.account.intro')}
+        actions={settings.data?.targets.includes('CASH') && (
+          <Button onClick={() => setTopping(true)} data-testid="fee-account-topup">
+            <Plus aria-hidden />
+            {t('shell.account.topUp')}
+          </Button>
+        )} />
+      {!data ? <WalletState wallet={wallet} />
+        : cash ? <CashAccount wallet={data} />
+          : settings.data && <PageState kind="empty" description={t('wallet.cash.none')} />}
+      {!kudos && settings.data?.targets.includes('CASH') && <TopUpsSection />}
+      <TopUpDialog open={topping} onOpenChange={setTopping} preferred="CASH" />
+    </section>
+  )
+}
+
+/** The money area's "invoices" tab (F-F3): the platform's invoices (Q87), paid from the cash account. */
+export function BillsPage() {
+  const { t } = useTranslation(SPONSOR)
+  const wallet = useWallet()
+  return (
+    <section className="flex flex-col gap-6" data-testid="bills">
+      <AreaPageHeader title={t('shell.bills.title')} description={t('shell.bills.intro')} />
+      {wallet.data ? <Invoices wallet={wallet.data} /> : <WalletState wallet={wallet} />}
+    </section>
+  )
+}
+
+/** The money area's "AI credit" tab (F-F3): this month's use of the AI (Q8a); F-M9 adds buying credit here. */
+export function AiCreditPage() {
+  const { t } = useTranslation(SPONSOR)
+  const dashboard = useDashboard()
+  return (
+    <section className="flex flex-col gap-6" data-testid="ai-credit">
+      <AreaPageHeader title={t('shell.ai.title')} description={t('shell.ai.intro')} />
+      {dashboard.data
+        ? <div className="grid gap-4 sm:grid-cols-2"><AiUsageMetric zone={dashboard.data.zone} /></div>
+        : <PageState kind={dashboard.isError ? 'error' : 'loading'} />}
     </section>
   )
 }

@@ -1,7 +1,18 @@
 import { signInAdmin } from './admin'
 import { completeQuiz, query } from './content'
 import { contentAdmin } from './legal'
-import { expect, expectAccessible, PASSWORD, prepareQuizbuks, rows, run, signIn, test, tokenOf } from './support'
+import {
+  expect,
+  expectAccessible,
+  openArea,
+  PASSWORD,
+  prepareQuizbuks,
+  rows,
+  run,
+  signIn,
+  test,
+  tokenOf,
+} from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
 import { reviewerFor } from './operators'
 
@@ -118,8 +129,8 @@ test('a shared link is handed to the winner, shown on request, copied and confir
   await signOut(page)
   await signIn(page, '/sponsor/', draft.sponsor.email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.getByRole('link', { name: 'Digital prizes' }).click()
-  await expect(page).toHaveURL(/\/sponsor\/digital-prizes$/)
+  await openArea(page, 'prizes', 'digital')
+  await expect(page).toHaveURL(/\/sponsor\/prizes\/digital$/)
   const row = page.getByTestId('digital-row').filter({ hasText: 'Mei' })
   await expect(row).toHaveAttribute('data-status', 'CONFIRMED')
   await expect(row).not.toContainText('WELCOME')

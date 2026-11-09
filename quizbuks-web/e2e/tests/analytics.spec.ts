@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import type { APIRequestContext, Page } from '@playwright/test'
-import { expect, prepareQuizbuks, signIn, test, unique } from './support'
+import { expect, prepareQuizbuks, signIn, signOutSponsor, test, unique } from './support'
 import { rewardingPublication, startAttempt, submitRight } from './transactions'
 import { fundedSponsor, takerInJapan } from './wallet'
 
@@ -82,7 +82,7 @@ test('a Sponsor reads the dashboard and a publication\'s analytics, and exports 
   expect(othersTop.map((row) => row.publicationId)).not.toContain(publicationId)
 
   await signIn(page, '/sponsor/', sponsor.email)
-  await expect(page).toHaveURL(/\/sponsor\/dashboard$/)
+  await expect(page).toHaveURL(/\/sponsor\/home$/)
   await expect(page.getByTestId('metric-live')).toContainText('1 Running')
   await expect(page.getByTestId('metric-answering-value')).toHaveText('0')
   await expect(page.getByTestId('metric-spent-today-value')).toHaveText('200 Kudos')
@@ -137,10 +137,10 @@ test('a Sponsor reads the dashboard and a publication\'s analytics, and exports 
   await expect(page.getByTestId('overview-as-of')).toContainText('(Asia/Tokyo)')
 
   // Another sponsor opening the same address finds nothing, and the page asks for nothing more of it.
-  await page.getByTestId('sign-out').click()
+  await signOutSponsor(page)
   await expect(page).toHaveURL(/\/sponsor\/login$/)
   await signIn(page, '/sponsor/', other.email)
-  await expect(page).toHaveURL(/\/sponsor\/dashboard$/)
+  await expect(page).toHaveURL(/\/sponsor\/home$/)
   // Only the reads of this publication: the dashboard's own trend (of all the sponsor's) may still be on its way.
   const asked: string[] = []
   page.on('request', (request) => {

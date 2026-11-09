@@ -20,7 +20,6 @@ import {
   FileUpload,
   Input,
   Label,
-  PageHeader,
   PageState,
   Select,
   SelectContent,
@@ -83,6 +82,7 @@ import {
 import { BENEFIT, type BenefitKind } from './ids'
 import { PurchaseFollowUp } from './PurchaseFollowUp'
 import './messages'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
 
 const IMAGE_TYPES = 'image/jpeg,image/png'
 
@@ -162,7 +162,7 @@ export function CatalogPage() {
     queryFn: () => readCatalog({ kind: kind === 'ALL' ? null : kind, q }) })
   return (
     <section className="flex flex-col gap-4" data-testid="benefit-catalog">
-      <PageHeader title={t('benefits.catalog.title')} description={t('benefits.catalog.intro')} />
+      <AreaPageHeader title={t('benefits.catalog.title')} description={t('benefits.catalog.intro')} />
       <BenefitAccess />
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-2">
@@ -300,7 +300,7 @@ export function OffersPage() {
   ], [t])
   return (
     <section className="flex flex-col gap-4" data-testid="benefit-offers">
-      <PageHeader title={t('benefits.offers.title')} description={t('benefits.offers.intro')}
+      <AreaPageHeader title={t('benefits.offers.title')} description={t('benefits.offers.intro')}
         actions={<Button onClick={() => setEditing('new')} data-testid="benefit-offer-add">
           <Plus aria-hidden className="size-4" />{t('benefits.offers.add')}</Button>} />
       <BenefitAccess />
@@ -475,7 +475,7 @@ export function BenefitConversationsPage({ side }: { side: Side }) {
   ], [t, side])
   return (
     <section className="flex flex-col gap-4" data-testid="benefit-conversations">
-      <PageHeader title={t('benefits.conversations.title')} description={t('benefits.conversations.intro')} />
+      <AreaPageHeader title={t('benefits.conversations.title')} description={t('benefits.conversations.intro')} />
       <SideTabs side={side} base={BENEFIT_CONVERSATIONS_PATH} mine={t('benefits.conversations.mine')}
         received={t('benefits.conversations.received')} />
       <Loading query={list}>{() => (list.data ?? []).length === 0 ? (
@@ -592,7 +592,7 @@ export function PurchasesPage({ side }: { side: Side }) {
   ], [t, side])
   return (
     <section className="flex flex-col gap-4" data-testid="benefit-purchases">
-      <PageHeader title={t('benefits.purchases.title')} description={t('benefits.purchases.intro')} />
+      <AreaPageHeader title={t('benefits.purchases.title')} description={t('benefits.purchases.intro')} />
       <SideTabs side={side} base={PURCHASES_PATH} mine={t('benefits.purchases.mine')}
         received={t('benefits.purchases.received')} />
       <Loading query={list}>{() => (list.data ?? []).length === 0 ? (

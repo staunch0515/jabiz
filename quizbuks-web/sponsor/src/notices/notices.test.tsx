@@ -142,7 +142,7 @@ describe('the message centre helpers', () => {
 describe('the message centre', () => {
   it('lists the notices with the statistics the server gives, fewer than five unnamed', async () => {
     server()
-    window.history.replaceState(null, '', '/messages')
+    window.history.replaceState(null, '', '/messages/notices')
     render(<App />)
     const rows = await screen.findAllByTestId('notice-row')
     expect(rows).toHaveLength(3)
@@ -164,7 +164,7 @@ describe('the message centre', () => {
     expect(within(rows[0]).queryByTestId('notice-edit')).toBeNull()
     expect(within(rows[2]).getByTestId('notice-edit')).toBeInTheDocument()
     expect(within(rows[2]).getByTestId('notice-discard')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Messages' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Customers & messages' })).toHaveAttribute('aria-current', 'page')
     // Q80: a DataTable now, cards on request: the notice as the title, the status a badge, the figures listed.
     expect(within(screen.getByTestId('notices-table')).getByRole('table')).toBeInTheDocument()
     await userEvent.click(within(screen.getByTestId('data-table-view')).getByRole('radio', { name: 'Cards' }))
@@ -179,7 +179,7 @@ describe('the message centre', () => {
   it('writes a notice, shows the server\'s problems and sends it only once there are none', async () => {
     const { calls } = server({ problems: [[{ field: 'body', code: 'QB_BROADCAST_LINK',
       message: 'A notice is plain text: leave out web and e-mail addresses.' }], []] })
-    window.history.replaceState(null, '', '/messages')
+    window.history.replaceState(null, '', '/messages/notices')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('notice-new'))
@@ -216,7 +216,7 @@ describe('the message centre', () => {
 
   it('schedules for a time and withdraws a sent notice after asking', async () => {
     const { calls } = server()
-    window.history.replaceState(null, '', '/messages')
+    window.history.replaceState(null, '', '/messages/notices')
     const user = userEvent.setup()
     render(<App />)
     const rows = await screen.findAllByTestId('notice-row')
@@ -237,7 +237,7 @@ describe('the message centre', () => {
 
   it('shows QuizBuks\'s announcements to Sponsors, read when opened', async () => {
     const { calls } = server()
-    window.history.replaceState(null, '', '/messages')
+    window.history.replaceState(null, '', '/messages/notices')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('messages-tab-inbox'))
@@ -253,7 +253,7 @@ describe('the message centre', () => {
     await user.click(within(message).getByTestId('announcement-open'))
     expect(within(message).queryByTestId('markdown-view')).toBeNull()
     expect(message).toHaveTextContent('Someone **claims** the prize.')
-    expect(within(message).getByTestId('announcement-action')).toHaveAttribute('href', '/redeem')
+    expect(within(message).getByTestId('announcement-action')).toHaveAttribute('href', '/prizes/redeem')
     await waitFor(() => expect(calls('QB_MESSAGE_MARK')).toContainEqual({ kind: 'MESSAGE', id: 'm1', action: 'READ' }))
     // F-C2: the usage notice leads to the asset library.
     const usage = items[2]

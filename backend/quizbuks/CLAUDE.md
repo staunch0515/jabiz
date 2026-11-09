@@ -380,7 +380,12 @@
   流程的输入输出对照 Java record 手写在 `qb/api.ts`（答题的在 `qb/play.ts`；QuizBuks 没有自己的接口，因此没有 OpenAPI 类型），改了 record 就改这里并由 e2e 覆盖。
   **只有一个 SPA 用到的功能**（发起方页面的内容工坊）在该 SPA 自己的功能目录中照此各写一份：名字在 `<功能>/ids.ts`、手写类型与调用在 `<功能>/api.ts`（如 `sponsor/src/content/`），不进 `qb/`。
 - **商户资料包**（Q100，`page.ProfilePackage` / `ProfileTransferProcesses`、发起方页面 `profile/transfer.ts`，`docs/quizbuks/plans/Q100-profile-package.md`）：导入只经 `QB_PROFILE_IMPORT_CHECK` / `QB_PROFILE_IMPORT`，写入只以子流程运行商户中心各页本来的流程（规则与手填相同、一个事务）；**导入从不改变审核**：入驻未通过时基本信息只填进申请表，入驻未通过或主页审核中时不写主页；商品整体替换，先按商品编号（`code`，商户自定、可选、同一商户内唯一，Q100e）再按 `productId` 认商品，删除关联着 Quiz 的商品前商户须确认；邮件服务器的密码从不进资料包。Quiz 文件（版本 3）以商品编号（没有即 `productId`）写出 Quiz 的商品，导入时只关联导入者自己的、找不到的列出。商户中心各页增减字段时同时改资料包的读写（`ProfilePackage`、`exportProfile`）与测试。**商品上限**是普通参数 `qb.products.max`（缺省 50，F-C11，`docs/quizbuks/plans/impl/F-C11.md`）：`QB_PRODUCT_SAVE` 与资料包检查都以 `LoadParams` 读、经 `SponsorProductProcesses.maxProducts` 取值（纯 Java 的 `ProfilePackage.read(document, 上限)` 由流程给出上限），发起方页面的商品页经模板 `qb.sponsor.product-limit` 读同一个值（读不到即不限制、由保存判断）；读本人商品的查询不按上限截断（调低上限后已有的照常修改与删除）；代码中不再有商品个数的常数。 **给其他 AI 的提示词模板**（F-C5，`docs/quizbuks/profile-package-prompts.md`，帮助底稿 `help/profile-package.md`）：模板中的示例与数字（长度、地址名与币种的规则、商品上限的缺省值）由 `ProfilePackagePromptsTest` 与 `ProfilePackage` 及各常数核对；改了资料包的规则或这些常数，同时改模板。联系人姓名由使用者在提示词参数中自填，AI 不从官网取（Q104 P5）。
-- **商户中心**（Q79，`sponsor/src/profile/`，`docs/quizbuks/plans/Q79-sponsor-hub.md`）：商户自己的设置页都是页组 `/profile` 的节（概况、基本信息、公开主页、店员、邮件服务器；商品与认证自 F-C1c 起是资源库 `/assets` 的标签，旧地址经 `MOVED_PATHS` 转向），由 `ProfileLayout` 给出页头与子导航，节内只用 h2；新的商户设置页加为一个节（`profile/paths.ts` 的 `PROFILE_SECTIONS` 与文案 `profile.nav.*` / `navHint.*`），不另加菜单项；旧地址在 `LEGACY_PROFILE_PATHS` 中转向。概况的完成度清单是纯函数 `profile/checklist.ts`，只读各节已有的读取。
+- **发起方页面的区域**（F-F3，`sponsor/src/shell/`，`docs/quizbuks/plans/impl/F-F3.md`）：菜单是"首页 + 8 个区域"，区域与标签只在 `shell/areas.ts`（区域键、图标、标签的地址与显示条件；名称在 `shell/messages.ts` 的 `shell.areas.*` / `shell.tabs.*`，三语区域名在 `docs/quizbuks/glossary.md`），菜单、页内标签、底部菜单、"更多"与区域根地址都由它生成；区域里的页面用 `AreaPageHeader`（区域图标、标题、标签）。
+  **以后加功能只加标签（或头像菜单中的一项），不加菜单项，也不加底部菜单项**（两个 SPA 同一条规则：学者 App 见 F-F4；取代 Q79"新的商户设置页加为一个节"）。
+  路由只在 `shell/routes.tsx` 的 `pageOf`（新页面加一行）；全局"＋ 新建"只在 `shell/SponsorShell.tsx`（打开的对话框以 `?new=1` 进入，导入发布设置在点击的同一手势里打开文件框）；手机底部菜单只经参数 `qb.sponsor.bottom-bar`（普通参数，模板 `qb.sponsor.layout`，页面先用 `shell/bottom-bar.default.json`，`SponsorLayoutParamsTest` 核对它与 `QbParams` 的缺省一致）。
+  **旧地址只在 `shell/legacy-paths.json`**（取代 Q79 的 `LEGACY_PROFILE_PATHS` 与 F-C1c 的 `MOVED_PATHS`；每条带示例与期望，`shell/shell.test.tsx` 与 e2e `sponsor-areas.spec.ts` 逐条打开），改地址时加一条、目标直接写新地址（不连环转）；邮件与 Stripe 的返回地址用新地址（`CheckoutRequest.returnUrl` 为 `money/wallet/topups/`）。
+  显示条件只是隐藏（服务端照旧判断）：学分钱包只在可付 Kudos 时（Q28），合作权益只在 `qb.sponsor.benefit-access` 有角色开放时；不显示的标签的地址转到该区域第一个显示的标签。
+  发起方中心（Q79，`sponsor/src/profile/`）的各节是这个区域的标签（概况、基本信息、公开主页（含统计 `/profile/page/stats`）、店员、邮件服务器；商品是资源库的标签），由 `ProfileLayout` 给出页头，节内只用 h2；概况的完成度清单是纯函数 `profile/checklist.ts`，只读各节已有的读取。
 - **内容工坊**（`sponsor/src/content/`，QP3a）：每次编辑带上页面所见的 `revision` 作 `baseRevision`；`QB_QUIZ_CHANGED` / `QB_ORDER_MISMATCH` 或读到别人的新 revision 即提示重新加载，
   重新加载之前不再提交。上传只经 `uploadFile(内容策略)`（`qb.content.image|pdf|audio`），文件名用中性的 `<种类>.<扩展名>`（`content/api.ts` 的 `neutralName`，Q10b：答题人能读内容文件的元数据；商家头像同样以 `avatar.<扩展名>` 上传，内容与头像的策略都声明 `privateMetadata()`），页面的类型与大小检查只为省一次往返；图片按文件自己的变体显示（小图没有变体，`ContentImage`）。
   Markdown 只经 `MarkdownView`，外链只放 http(s) 并在新标签页打开。e2e 的数据准备（文件、完整的 Quiz 与版本）在 `e2e/tests/content.ts`，发布的测试从它开始。
@@ -395,10 +400,10 @@
   提交带上会话的 `publicationId`（服务端排队的键）。重试在页面离开时停止（`signal`，开始的晚到成功不再把人带回答题页），
   等待合计至多 60 秒，提交过了截止加宽限（5 秒）即不再重试、去结果页（服务端以已保存的答案结束）；提交前先经 `saver.settle()` 保存未存的答案（保存不排队），
   截止前 2 秒再保存一次：排队使提交晚于宽限而 EXPIRED 时，超时任务以全部已保存的答案结束（只差截止前最后不到一秒的改动）。
-- **支付页**（QP4，`sponsor/src/wallet/`、`app/src/wallet/`）：页面只读记录、从不入账；Stripe 的跳回（`?checkout=`、`?onboarding=`）只决定显示，结果一律等服务端的记录。
+- **支付页**（QP4，`sponsor/src/wallet/`、`app/src/wallet/`）：页面只读记录、从不入账；Stripe 的跳回（`?checkout=`、`?onboarding=`；发起方的充值页在 `/money/wallet/topups/<id>`）只决定显示，结果一律等服务端的记录。
   轮询只经 `wallet/poll.ts`（有界、退避、离开即停）；跳往 Checkout 或开通页只经 `wallet/stripePage.ts` 检查过的地址（https，或页面在本机时的本机桩）；
   刚发起的充值只自动跳转一次，其他时候给按钮；开通只跟随本次请求生成的新链接（Stripe 的链接只能用一次）。
-- **收据**（Q9d，`sponsor/src/wallet/`）：钱包页已到账的充值行有"收据"：`QB_TOPUP_RECEIPT_ISSUE`（当前界面语言，只在第一次签发时起作用）后下载存档的 PDF（`GET /api/documents/runs/{id}/pdf`）。
+- **收据**（Q9d，`sponsor/src/wallet/`）：学分钱包（没有 Kudos 的发起方在平台费账户）已到账的充值行有"收据"：`QB_TOPUP_RECEIPT_ISSUE`（当前界面语言，只在第一次签发时起作用）后下载存档的 PDF（`GET /api/documents/runs/{id}/pdf`）。
 - **分析页**（Q9e2，`sponsor/src/analytics/`，名字在 `ids.ts`、手写类型与调用在 `api.ts`）：页面只显示模板给出的值（不自己汇总、不判断 k、不算流失最大的一段），不足 k 时照模板的 `suppressed` 注明"至少 k 人作答后显示"；
   日期与时刻一律按任务记下的部署时区（`qb.sponsor.dashboard` 的 `zone`）显示，不按浏览器；"现在"取 `qb/legal.ts` 的 `minuteNow()`（按服务端时钟）。图表只经 `@jabiz/ui` 的 `ChartContainer`、颜色只用 `--chart-*`，每个图表有 `aria-label` 与合计的文字，并有可展开的数据表（`charts.tsx` 的 `DataDisclosure`）；
   两种量不共用一张图（上下两个小图）。导出只经平台的 `POST /api/queries/{id}/export`（趋势带页面所示期间的同一组参数）。e2e 以 `QB_ANALYTICS_RUN_CRON` 每分钟运行分析任务。**分析任务的时间是隐私控制**（概览是任务的快照，频率决定能把一个答题人的作答定位到多细，评审 M1）：

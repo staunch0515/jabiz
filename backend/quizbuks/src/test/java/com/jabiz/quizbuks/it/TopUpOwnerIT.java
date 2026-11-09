@@ -57,7 +57,7 @@ class TopUpOwnerIT extends TopUpItSupport {
             "sponsorId", u1(), "currency", "usd"));
         runJobs();
         assertThat(STRIPE.requests(SESSIONS)).singleElement().satisfies(request -> assertThat(form(request.body()))
-            .containsEntry("success_url", "https://sponsor.quizbuks.test/sponsor/wallet/topups/"
+            .containsEntry("success_url", "https://sponsor.quizbuks.test/sponsor/money/wallet/topups/"
                 + query("SELECT topup_id FROM qb_topup WHERE sponsor_id = ?", sponsor).getFirst().get("topup_id")
                 + "?checkout=paid")
             .containsEntry("metadata[sponsorId]", sponsor)

@@ -12,7 +12,6 @@ import {
   Input,
   Label,
   notify,
-  PageHeader,
   PageState,
   Select,
   SelectContent,
@@ -35,8 +34,10 @@ import { CASH_STATUSES, markCashPaid, searchCashRewards, type CashRewardRow, typ
 import { publicationPath } from './paths'
 import { useCashStatusLabel } from './shared'
 import { playSound } from '../qb/sound'
+import { CASH_REWARDS_PATH } from '../shell/paths'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
 
-export const CASH_REWARDS_PATH = '/cash-rewards'
+export { CASH_REWARDS_PATH }
 export const CASH_REWARDS_QUERY = ['qb', 'cash-rewards'] as const
 const PAGE_SIZE = 20
 
@@ -175,7 +176,7 @@ export function CashRewardsPage() {
 
   return (
     <section className="flex flex-col gap-4" data-testid="cash-rewards">
-      <PageHeader title={t('publishing.cash.title')} description={t('publishing.cash.intro')} />
+      <AreaPageHeader title={t('publishing.cash.title')} description={t('publishing.cash.intro')} />
       <div className="flex flex-wrap items-end gap-2">
         <form role="search" onSubmit={search} className="flex gap-2">
           <Label htmlFor={`${id}-q`} className="sr-only">{t('publishing.cash.search')}</Label>

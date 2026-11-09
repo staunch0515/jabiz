@@ -1,6 +1,7 @@
 import { api, fileNameOf, runProcess, runQuery, sessionFetch, toApiError, type Sort } from '@jabiz/client'
 import { readDictionary, type DictionaryItem } from '../qb/api'
 import { WALLET_DATASET, WALLET_DICTIONARY, WALLET_PROCESS, WALLET_TEMPLATE } from './ids'
+import { WALLET_PATH } from '../shell/paths'
 
 /*
  * The sponsor wallet's calls, typed by hand after the Java records and templates of backend/quizbuks `wallet`
@@ -547,7 +548,7 @@ export function checkoutReturn(search: string): 'paid' | 'cancelled' | null {
 }
 
 /** The wallet's pages and the keys of what they read. */
-export const WALLET_PATH = '/wallet'
+export { WALLET_PATH }
 export const topUpPath = (topUpId: string) => `${WALLET_PATH}/topups/${encodeURIComponent(topUpId)}`
 /** A bank top-up's page: the account to transfer to, the code, the report (Q13a). */
 export const bankTopUpPath = (topUpId: string) => `${WALLET_PATH}/bank/${encodeURIComponent(topUpId)}`
@@ -555,14 +556,14 @@ export const bankTopUpPath = (topUpId: string) => `${WALLET_PATH}/bank/${encodeU
 export const pathOfTopUp = (row: { topUpId: string; method: TopUpMethod }) =>
   row.method === 'BANK' ? bankTopUpPath(row.topUpId) : topUpPath(row.topUpId)
 
-/** The top-up of a page's path (`/wallet/topups/<id>`), or null. */
+/** The top-up of a page's path (`/money/wallet/topups/<id>`, F-F3), or null. */
 export function topUpIdOf(path: string): string | null {
-  return idOf(/^\/wallet\/topups\/([^/]+)\/?$/, path)
+  return idOf(/^\/money\/wallet\/topups\/([^/]+)\/?$/, path)
 }
 
-/** The bank top-up of a page's path (`/wallet/bank/<id>`), or null. */
+/** The bank top-up of a page's path (`/money/wallet/bank/<id>`, F-F3), or null. */
 export function bankTopUpIdOf(path: string): string | null {
-  return idOf(/^\/wallet\/bank\/([^/]+)\/?$/, path)
+  return idOf(/^\/money\/wallet\/bank\/([^/]+)\/?$/, path)
 }
 
 function idOf(pattern: RegExp, path: string): string | null {
