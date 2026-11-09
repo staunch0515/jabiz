@@ -110,6 +110,8 @@ public final class QbRoles {
         QbPermissions.CONVERSATION_READ,
         // Q87: how its sponsors pay the platform's fees (prepaid, or postpaid within a credit limit).
         QbPermissions.FEE_BILLING,
+        // F-M2: its lead's confirmation of a sponsor, which gives them the onboarding platform fee Kudos.
+        QbPermissions.FEE_CREDIT_ONBOARDING_CONFIRM,
         // F-S11 (the requester, 2026-11-07): the exceptions to the rule on foreign videos for its own sponsors (the
         // entry scope limits them); not the platform-wide refusal counts or the address database (ADMIN_REGION_MONITOR).
         QbPermissions.ADMIN_REGION_READ, QbPermissions.ADMIN_REGION_WRITE,
