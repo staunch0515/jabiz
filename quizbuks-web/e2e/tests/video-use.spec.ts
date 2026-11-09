@@ -98,6 +98,7 @@ test('the user files the ledger entry, the provider sends it back, the user corr
 
   // 1. The user writes the entry on the publication's page and sends it.
   await signIn(page, '/sponsor/', user.email)
+  await expect(page.getByTestId('dashboard-status')).toBeVisible()
   await page.goto(`/sponsor/publications/${publicationId}`)
   const section = page.getByTestId('video-use-section')
   await expect(section).toBeVisible()
@@ -122,6 +123,7 @@ test('the user files the ledger entry, the provider sends it back, the user corr
   const other = await elsewhere.newPage()
   await players(other)
   await signIn(other, '/sponsor/', provider.email)
+  await expect(other.getByTestId('dashboard-status')).toBeVisible()
   await other.goto('/sponsor/assets')
   const provided = other.getByTestId('video-uses-provided')
   const item = provided.locator(`[data-testid="video-use-provided"][data-publication="${publicationId}"]`)
@@ -181,6 +183,7 @@ test('the user files the ledger entry, the provider sends it back, the user corr
   const darkPage = await dark.newPage()
   await setAppearance(darkPage, 'dark')
   await signIn(darkPage, '/sponsor/', provider.email)
+  await expect(darkPage.getByTestId('dashboard-status')).toBeVisible()
   await darkPage.goto('/sponsor/assets')
   await expect(darkPage.getByTestId('video-uses-provided')
     .locator(`[data-testid="video-use-provided"][data-publication="${publicationId}"]`)
