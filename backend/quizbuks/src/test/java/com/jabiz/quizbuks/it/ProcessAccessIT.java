@@ -141,6 +141,9 @@ class ProcessAccessIT extends QbItSupport {
         // Q87: the platform fees' charge (a sub-process), its job items, the approval result and the invoice mails.
         Map.entry("QB_FEE_CHARGE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_SETTLE_ITEM", ProcessAccess.SUB_PROCESS_ONLY),
+        // F-M1: paying a fee from the account, and giving a voided invoice's payment back.
+        Map.entry("QB_FEE_SETTLE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_FEE_REFUND", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_MONTHLY_ITEM", ProcessAccess.INTERNAL),
         // Q88b: the daily settlement of the entry fees (job item).
         Map.entry("QB_ENTRY_FEE_SETTLE", ProcessAccess.INTERNAL),

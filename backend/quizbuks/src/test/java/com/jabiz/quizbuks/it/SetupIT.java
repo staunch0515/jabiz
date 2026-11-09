@@ -338,6 +338,8 @@ class SetupIT extends QbItSupport {
         expected.put("4120", "REVENUE");
         expected.put("2150", "LIABILITY");
         expected.put("2170", "LIABILITY");
+        // F-M1: the Sponsors' platform fee Kudos (granted credit).
+        expected.put("2190", "LIABILITY");
         assertThat(accounts).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

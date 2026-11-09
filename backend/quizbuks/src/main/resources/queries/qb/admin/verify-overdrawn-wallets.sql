@@ -1,7 +1,7 @@
 /*---
 id: qb.admin.verify-overdrawn-wallets
 description: >-
-  The wallets the ledger shows below 0: a party whose balance on 2110, 2120, 2130 or 2160 is a debit; none when the
+  The wallets the ledger shows below 0: a party whose balance on 2110, 2120, 2130, 2160 or 2190 is a debit; none when the
   ledger is sound. A restore check (operations.md section 2.4, DRILL_TEMPLATES): rows only when there is a problem
 entities: [LedgerAccount, LedgerEntry]
 results:
@@ -25,7 +25,7 @@ FROM (
                ELSE -e.{{LedgerEntry.amount}} END)               AS overdrawn
     FROM {{LedgerEntry}} e
     JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
-    WHERE a.{{LedgerAccount.accountCode}} IN ('2110', '2120', '2130', '2160')
+    WHERE a.{{LedgerAccount.accountCode}} IN ('2110', '2120', '2130', '2160', '2190')
       AND e.{{LedgerEntry.dimension1}} IS NOT NULL
     GROUP BY a.{{LedgerAccount.accountCode}}, e.{{LedgerEntry.dimension1}}) p
 WHERE p.overdrawn > 0
