@@ -94,7 +94,9 @@ export async function completeQuiz(request: APIRequestContext, token: string,
   options: { title?: string; questions?: number } = {}): Promise<QuizMade> {
   const title = options.title ?? unique('Quiz ')
   const cover = await upload(request, token, POLICY.image, 'cover.png', 'image/png', PNG)
-  const quiz = await run(request, token, 'QB_QUIZ_SAVE', { title, intro: 'An **e2e** quiz.', cover, timeLimitSec: 300 })
+  // F-S7: in the fixed order, so that the tests answering through the pages know which question comes first.
+  const quiz = await run(request, token, 'QB_QUIZ_SAVE', { title, intro: 'An **e2e** quiz.', cover, timeLimitSec: 300,
+    shuffleQuestions: false })
   const quizId = quiz.quizId as string
   for (let n = 1; n <= (options.questions ?? 2); n++) {
     await run(request, token, 'QB_QUESTION_SAVE', { quizId, stem: `Question ${n}?`, points: 1, options: [

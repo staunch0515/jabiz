@@ -21,7 +21,7 @@ class PublicationLanguagesIT extends PlayItSupport {
     @SuppressWarnings("unchecked")
     private String bilingualVersion(String token) {
         String quizId = (String) run("QB_QUIZ_SAVE", token, body("title", "Capitals", "language", "en",
-            "intro", "Two capitals.", "timeLimitSec", 300)).get("quizId");
+            "intro", "Two capitals.", "timeLimitSec", 300, "shuffleQuestions", false)).get("quizId");
         Map<String, Object> q1 = run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of France?",
             "points", 2, "options", List.of(body("text", "Paris", "correct", true), body("text", "Lyon"))));
         Map<String, Object> q2 = run("QB_QUESTION_SAVE", token, body("quizId", quizId, "stem", "Capital of Japan?",
