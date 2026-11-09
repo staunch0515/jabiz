@@ -258,3 +258,10 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 - 合作权益的入口：没有权益角色时概况上的卡片（`BenefitsEntryCard`，Vitest 两种情形在 `benefits/benefits.test.tsx`）。
 - 全局新建的"导入发布设置"在外框中常驻一个不带按钮的 `ImportSettingsButton`（`opener`），点击的同一手势里打开文件框。
 - 未做（照拆分留给 b、c、d）：首页的"待我处理"与 `qb.sponsor.todo`（F-F3b）；发布详情的标签与共用的 `PublicationContent`（F-F3c）；列表 / 表单模板、主按钮改 `primaryAction`、概况的卡片与页头"导入与导出"（F-F3d）。
+
+## 14. 进度与下一步（2026-11-09 18:10 UTC，按总控降速暂停）
+
+- **状态**：F-F3a 已推送（`952619fb`，含没有权益角色的发起方从发起方中心概况进入"合作权益"的入口与 `profile-links.spec` 的新菜单）；草稿 PR 已开，尚未合入最新 `1.3/quizbuks`。
+- **下一步 1：合入最新 `1.3/quizbuks`**（#578 F-M1、#582–#584 之后有 9 个冲突）：`backend/quizbuks/CLAUDE.md`、`QbParams.java`（基线的新参数在前、`qb.sponsor.bottom-bar` 在后）、`SetupIT.java`、`setup.yml` 与 `setup.snapshot.json`（解决后以 `--tests '*ScenarioTest' -Dscenario.update-snapshots=true` 重新生成）、`operations.md`（#583 给小节号去重并加了检查：本项的小节按基线最大号 + 1 重编）、`PublicationListPage.tsx`、`WalletPage.tsx` 与 `invoices.test.tsx`（#578 的 `<FeeAccount/>` 放进 `FeeAccountPage`，`Invoices` 已在 `BillsPage`，见 §8 与 S2 的约定）。
+- **下一步 2**：合入后跑整个 `:quizbuks:test :quizbuks:platformCheck`、发起方与 App 的 lint / typecheck / Vitest、`src/qb` 一致、用词测试、e2e typecheck；e2e 由 CI（ready 后）或 S4 跑：`sponsor-areas`、`a11y`、`analytics`、`assets`、`auth`、`cash-account`、`content`、`conversations`、`digital-prize`、`entry-fee`、`inbox`、`journal`、`mail-server`、`platform-fees`、`reward-methods`、`shared-video`、`sponsor`、`survey`、`topup`、`transactions`、`transfer`、`video-file`、`watch-video`、`profile-links`。
+- **之后**：F-F3b（首页与 `qb.sponsor.todo`）、F-F3c（发布详情标签与发起方预览共用标签）、F-F3d（页面模板、概况卡片、每个区域的 axe 与 360 px）。
