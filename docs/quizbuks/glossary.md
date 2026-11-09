@@ -9,6 +9,7 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 | 答题的一方 | 学者 | テイカー | Taker | 答题者、答题人、回答者；Quiz taker |
 | 发布的一方 | 发起方 | 主催者 | Sponsor | 商户、商家；スポンサー、加盟店；merchant |
 | 代管发起方的一方 | 运营商 | 運営パートナー | Operator | 運営会社（需求方 2026-11-07：日文统一为運営パートナー；专指法律上的公司时除外） |
+| 共享视频的所有者 | 视频提供方（上下文清楚时写"提供方"） | 動画の提供者 | video provider | 视频制作方、制作方 |
 | 奖励的点数 | Kudos（显示为"学分"） | Kudos（显示为"クドス"） | Kudos | 对外不写币种名（`backend/quizbuks/CLAUDE.md` §4） |
 | 一套题目 | Quiz | Quiz | Quiz | |
 | 计分的 Quiz | 测验 | クイズ | Quiz | |
