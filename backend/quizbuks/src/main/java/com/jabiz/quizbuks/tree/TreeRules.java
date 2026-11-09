@@ -33,11 +33,13 @@ public final class TreeRules {
     public static final String OTHER_SUBJECT = "QB_TREE_OTHER_SUBJECT";
     public static final String CYCLE = "QB_TREE_CYCLE";
     public static final String TOO_DEEP = "QB_TREE_TOO_DEEP";
+    /** F-S2d: a node named that more than one graph the draft may use has (ids are unique within a graph only). */
+    public static final String AMBIGUOUS_NODE = "QB_TREE_AMBIGUOUS_NODE";
 
     /** Every code, for the messages' test. */
     public static final List<String> CODES = List.of(TOO_MANY_NODES, TOO_MANY_CONDITIONS, EMPTY_GROUP, AT_LEAST_RANGE,
         BEFORE_ANSWER_NESTED, PASSED_TWICE, PASSED_BEFORE_ANSWER, UNKNOWN_NODE, SPONSOR_NODE_IN_PLATFORM, OTHER_SUBJECT,
-        CYCLE, TOO_DEEP);
+        CYCLE, TOO_DEEP, AMBIGUOUS_NODE);
 
     private TreeRules() {}
 
@@ -73,13 +75,7 @@ public final class TreeRules {
             problems.add(new Problem(null, TOO_MANY_NODES, Map.of("max", limits.maxNodes(),
                 "count", draft.nodes().size())));
         }
-        Map<String, Graph> graphOf = new HashMap<>();
-        for (Graph other : others) {
-            if (!other.treeId().equals(draft.treeId())) {
-                other.nodes().keySet().forEach(node -> graphOf.put(node, other));
-            }
-        }
-        draft.nodes().keySet().forEach(node -> graphOf.put(node, draft));
+        Map<String, List<Graph>> holders = holders(draft, others);
         for (Map.Entry<String, TreeCondition> node : draft.nodes().entrySet()) {
             String id = node.getKey();
             TreeCondition condition = node.getValue();
@@ -93,9 +89,13 @@ public final class TreeRules {
                 problems.add(new Problem(id, PASSED_TWICE, Map.of()));
             }
             for (String ref : references(condition)) {
-                Graph target = graphOf.get(ref);
-                if (target == null) {
+                List<Graph> found = draft.nodes().containsKey(ref) ? List.of(draft)
+                    : holders.getOrDefault(ref, List.of());
+                Graph target = found.size() == 1 ? found.getFirst() : null;
+                if (found.isEmpty()) {
                     problems.add(new Problem(id, UNKNOWN_NODE, Map.of("node", ref)));
+                } else if (target == null) {
+                    problems.add(new Problem(id, AMBIGUOUS_NODE, Map.of("node", ref, "count", found.size())));
                 } else if (target != draft) {
                     if (draft.platform() && !target.platform()) {
                         problems.add(new Problem(id, SPONSOR_NODE_IN_PLATFORM, Map.of("node", ref)));
@@ -129,6 +129,40 @@ public final class TreeRules {
             }
         }
         return List.copyOf(problems);
+    }
+
+    /** The other graphs that have each node id (never the draft's own: its draft replaces it). */
+    private static Map<String, List<Graph>> holders(Graph draft, List<Graph> others) {
+        Map<String, List<Graph>> holders = new HashMap<>();
+        for (Graph other : others) {
+            if (!other.treeId().equals(draft.treeId())) {
+                other.nodes().keySet().forEach(node -> holders.computeIfAbsent(node, n -> new ArrayList<>())
+                    .add(other));
+            }
+        }
+        return holders;
+    }
+
+    /**
+     * F-S2d: the graph each node the draft's conditions name is of: its own when it has the node, else the one other
+     * graph it may use that has it. A node no graph or more than one has is left out ({@link #check} reports it).
+     */
+    public static Map<String, String> resolve(Graph draft, List<Graph> others) {
+        Map<String, List<Graph>> holders = holders(draft, others);
+        Map<String, String> resolved = new LinkedHashMap<>();
+        for (TreeCondition condition : draft.nodes().values()) {
+            for (String ref : references(condition)) {
+                if (draft.nodes().containsKey(ref)) {
+                    resolved.put(ref, draft.treeId());
+                } else {
+                    List<Graph> found = holders.getOrDefault(ref, List.of());
+                    if (found.size() == 1) {
+                        resolved.put(ref, found.getFirst().treeId());
+                    }
+                }
+            }
+        }
+        return resolved;
     }
 
     private static void shape(String id, TreeCondition condition, boolean outermostAll, List<Problem> problems) {

@@ -1385,6 +1385,37 @@ describe('answering', () => {
     await waitFor(() => expect(posted('QB_ATTEMPT_START')).toEqual([{ publicationId: PUB, language: 'zh' }]))
   })
 
+  it('names the knowledge map node a publication is bound to, open to be lit or lit (F-S2d)', async () => {
+    const node = { treeId: 'tree-1', treeNodeId: 'node-1',
+      nodeName: { en: 'Latte art', zh: '拉花', ja: 'ラテアート' } }
+    server({ publicationPage: () => json(200, { items: [publication({ ...node, nodeLit: false })], offset: 0,
+      limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    const { unmount } = render(<App />)
+    const open = await screen.findByTestId('detail-node-state')
+    expect(open).toHaveAttribute('data-lit', 'false')
+    expect(open).toHaveTextContent('Latte art · lit it by passing')
+    unmount()
+    vi.restoreAllMocks()
+
+    server({ publicationPage: () => json(200, { items: [publication({ ...node, nodeLit: true })], offset: 0,
+      limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    const { unmount: again } = render(<App />)
+    const lit = await screen.findByTestId('detail-node-state')
+    expect(lit).toHaveAttribute('data-lit', 'true')
+    expect(lit).toHaveTextContent('Latte art · lit')
+    again()
+    vi.restoreAllMocks()
+
+    // Bound to no node: no such line.
+    server({ publicationPage: () => json(200, { items: [publication()], offset: 0, limit: 1 }) })
+    window.history.replaceState(null, '', `/p/${PUB}`)
+    render(<App />)
+    expect(await screen.findByTestId('detail-name')).toBeInTheDocument()
+    expect(screen.queryByTestId('detail-node')).not.toBeInTheDocument()
+  })
+
   it('says how much is missing for an entry fee, and asks before paying one (Q88b)', async () => {
     const page = () => json(200, { items: [publication({ entryFee: 30 })], offset: 0, limit: 1 })
     const wallet = (held: string) => (path: string) => path === '/api/queries/qb.app.wallet'

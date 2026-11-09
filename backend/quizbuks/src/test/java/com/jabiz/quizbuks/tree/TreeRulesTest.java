@@ -135,6 +135,28 @@ class TreeRulesTest {
     }
 
     @Test
+    void eachReferenceIsTheNodeOfOneGraphItsOwnFirst() {
+        // F-S2d: ids are unique within a graph only (a copy keeps its template's), so a node is its graph and its id.
+        Graph platform = graph("p", true, nodes("a", PASSED, "s", PASSED));
+        Graph sponsor = graph("s1", false, nodes("s", PASSED, "x", all(before("a"), before("s"), PASSED)));
+        assertThat(TreeRules.resolve(sponsor, List.of(platform)))
+            .containsExactlyInAnyOrderEntriesOf(Map.of("a", "p", "s", "s1"));
+        assertThat(TreeRules.check(sponsor, List.of(platform), LIMITS)).isEmpty();
+
+        // Two other graphs with the node: neither (the check says so); unknown: neither, as before.
+        Graph twin = graph("p2", true, nodes("a", PASSED));
+        Graph draft = graph("s2", false, nodes("x", all(before("a"), node("nowhere"), PASSED)));
+        assertThat(TreeRules.resolve(draft, List.of(platform, twin))).isEmpty();
+        assertThat(TreeRules.check(draft, List.of(platform, twin), LIMITS)).extracting(Problem::code, p -> p.params()
+                .get("node"))
+            .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple(TreeRules.AMBIGUOUS_NODE, "a"),
+                org.assertj.core.groups.Tuple.tuple(TreeRules.UNKNOWN_NODE, "nowhere"));
+        // The draft's own node wins over the others' (its own graph in effect is the draft's).
+        Graph own = graph("p2", true, nodes("a", all(before("s"), PASSED)));
+        assertThat(TreeRules.resolve(own, List.of(platform, twin))).containsExactlyEntriesOf(Map.of("s", "p"));
+    }
+
+    @Test
     void theDraftReplacesItsGraphInEffect() {
         // In effect: b depends on a. The draft drops the dependency, so a new one the other way is no cycle.
         Graph inEffect = graph("g", true, nodes("a", PASSED, "b", all(node("a"), PASSED)));

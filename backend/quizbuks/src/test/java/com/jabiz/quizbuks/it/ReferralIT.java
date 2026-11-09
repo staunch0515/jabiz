@@ -223,6 +223,32 @@ class ReferralIT extends TreeItSupport {
     }
 
     @Test
+    void aPublicationTheCallerDoesNotSeeHasNoLinkAndNoClaimUntilItsPrerequisiteIsLit() {
+        // F-S2d: a publication bound to a node whose prerequisite the caller has not lit is as if it did not exist.
+        String sponsor = newSponsor(unique("s-fs2d-ref"));
+        credit(sponsor, 10_000);
+        Map3 map = map(sponsor);
+        String basics = liveBound(sponsor, "Ref basics", map.treeId(), map.basics());
+        String advanced = liveBound(sponsor, "Ref advanced", map.treeId(), map.advanced(), Map.of("referral",
+            referral(RewardMethod.PLATFORM, 100, 4, ReferralPolicy.NONE, List.of(), null)));
+        String referrer = referrer(unique("t-fs2d-referrer"));
+
+        // The referrer has not lit the prerequisite: no link, as for a publication that does not exist.
+        refused(ReferralProcesses.LINK, taker(referrer), body("publicationId", advanced), 404);
+        play(referrer, basics, true, true);
+        deliverEvents();
+        String key = link(referrer, advanced);
+
+        // A friend who has not lit it claims nothing, and is not told the publication exists; once lit, it counts.
+        String friend = newTaker(unique("t-fs2d-friend"), "JP");
+        refused(ReferralProcesses.CLAIM, taker(friend), body("linkKey", key), 404);
+        assertThat(referralOf(advanced, friend)).isNull();
+        play(friend, basics, true, true);
+        deliverEvents();
+        assertThat(claim(friend, key)).containsEntry("counted", true);
+    }
+
+    @Test
     void aReferralEndsWhenItsFriendFailsOrItsTimeIsUp() {
         String sponsor = newSponsor("q70-school");
         credit(sponsor, 10_000);

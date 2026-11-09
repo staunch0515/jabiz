@@ -165,7 +165,9 @@ public class PublishingConfig {
                 // Q75: the share page says the video must be watched first, and how long it is.
                 "watchRequired", "videoDurationSec",
                 // F-S11: whether mainland China may answer it (the page passes where the visitor is).
-                "foreignVideo"))
+                "foreignVideo",
+                // F-S2d: the node it is bound to, whose prerequisites keep it off the public pages.
+                "treeId", "treeNodeId"))
             // Read anonymously through the public template only, which projects the whitelist. The dataset API, which
             // does not, is closed to everybody (no role holds the permission): an operator's session would read every
             // live card with its budget and operator (Q59c-2); headquarters reads the cards' own dataset.

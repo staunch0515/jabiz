@@ -1,12 +1,13 @@
 /*---
 id: qb.admin.tree-health
-description: "F-S2b2: what is wrong with the knowledge maps' lighting and review, one row a kind of problem: passes of bound publications that lit nothing (the daily recheck evaluates them), lit records naming no node, versions waiting for review past the reminder, gate parameters naming no node to light (F-S2c); empty when all is well"
-entities: [QbAttempt, QbPublicationCard, QbTree, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbTreeVersion, SysParam]
+description: "F-S2b2: what is wrong with the knowledge maps' lighting and review, one row a kind of problem: passes of bound publications that lit nothing (the daily recheck evaluates them), lit records naming no node, versions waiting for review past the reminder, gate parameters naming no node to light (F-S2c), nodes in effect naming a node no single graph has (F-S2d); empty when all is well"
+entities: [QbAttempt, QbPublicationCard, QbTree, QbTreeNode, QbTreeNodeRef, QbTreeLit, QbTreeLitRevocation, QbTreeVersion, SysParam]
 datasets:
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbTree: urn:jabiz:dataset:default:QbTree
   QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
+  QbTreeNodeRef: urn:jabiz:dataset:default:QbTreeNodeRef
   QbTreeLit: urn:jabiz:dataset:default:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
   QbTreeVersion: urn:jabiz:dataset:default:QbTreeVersion
@@ -80,4 +81,17 @@ WHERE p.{{SysParam.paramKey}} IN ('qb.tree.gate.sponsor-apply-node', 'qb.tree.ga
         AND tn.{{QbTreeNode.nodeId}} = split_part(p.{{SysParam.value}}, '/', 2)
         AND t.{{QbTree.ownerKind}} = 'PLATFORM' AND t.{{QbTree.subjectKind}} = 'TAKER'
         AND t.{{QbTree.status}} = 'ACTIVE' AND tn.{{QbTreeNode.active}})
+HAVING count(*) > 0
+UNION ALL
+-- BEFORE_ANSWER_UNRESOLVED (F-S2d): a node in effect whose condition names a node that no single graph it may name has
+-- (tree.TreeRules#resolve when its version went into effect, or the migration that wrote the graphs in): that node is
+-- never counted as lit, so the condition cannot hold and a publication needing it before answering is hidden.
+SELECT CAST('BEFORE_ANSWER_UNRESOLVED' AS varchar(30)), CAST(count(*) AS numeric)
+FROM {{QbTreeNode}} tn
+WHERE tn.{{QbTreeNode.active}}
+  AND (EXISTS (SELECT 1 FROM {{QbTreeNodeRef}} r
+               WHERE r.{{QbTreeNodeRef.treeId}} = tn.{{QbTreeNode.treeId}} AND r.{{QbTreeNodeRef.nodeId}} = tn.{{QbTreeNode.nodeId}}
+                 AND r.{{QbTreeNodeRef.refTreeId}} IS NULL)
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(CAST(coalesce(tn.{{QbTreeNode.beforeAnswer}}, '[]') AS jsonb)) AS ba(node)
+                  WHERE strpos(ba.node, '/') = 0))
 HAVING count(*) > 0

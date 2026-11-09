@@ -50,6 +50,7 @@ public final class TreeLighting {
     static final String LITS = "lighting.lits";
     static final String REVOCATIONS = "lighting.revocations";
     static final String REFS = "lighting.refs";
+    static final String CANDIDATE_REFS = "lighting.candidateRefs";
     static final String CANDIDATES = "lighting.candidates";
     static final String NODES = "lighting.nodes";
     static final String CARDS = "lighting.cards";
@@ -104,7 +105,7 @@ public final class TreeLighting {
                     QueryEntities.query(QbTrees.defaultDataset(QbTrees.REVOCATION), ctx -> mine(ctx), REVOCATIONS),
                     QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_REF), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("refNodeId", person(ctx) != null && input(ctx).dependants()
-                            ? new ArrayList<Object>(input(ctx).nodeIds()) : List.of()))
+                            ? new ArrayList<Object>(litIds(input(ctx).nodeIds())) : List.of()))
                         .limit(MAX_ROWS).build(), REFS)))
                 .compute("Know the nodes to evaluate", (metadata, ctx) -> ctx.put(CANDIDATES, candidates(ctx)))
                 .step("Load the nodes and the publications bound to them", QueryEntities.<ProcessContext>all(
@@ -112,7 +113,11 @@ public final class TreeLighting {
                         .where(new QueryPredicate.In("nodeId", candidateNodes(ctx))).limit(MAX_ROWS).build(), NODES),
                     QueryEntities.query(QbPublications.defaultDataset(QbPublications.CARD), ctx -> EntityQuery
                         .builder().where(new QueryPredicate.In("treeNodeId", candidateNodes(ctx)))
-                        .limit(MAX_ROWS).build(), CARDS)))
+                        .limit(MAX_ROWS).build(), CARDS),
+                    // F-S2d: the graphs of the nodes their conditions name.
+                    QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_REF), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("nodeId", candidateNodes(ctx))).limit(MAX_ROWS).build(),
+                        CANDIDATE_REFS)))
                 .step("Load the person's passes of them", QueryEntities.<ProcessContext>of(
                     QbPlay.defaultDataset(QbPlay.ATTEMPT), ctx -> {
                         List<Object> publications = new ArrayList<>();
@@ -159,13 +164,38 @@ public final class TreeLighting {
         }
         if (input.dependants()) {
             for (EntityInstance ref : list(ctx, REFS)) {
-                found.add(new Candidate(String.valueOf((Object) ref.get("treeId")),
-                    String.valueOf((Object) ref.get("nodeId"))));
+                if (namesALitNode(ref, input.nodeIds())) {
+                    found.add(new Candidate(String.valueOf((Object) ref.get("treeId")),
+                        String.valueOf((Object) ref.get("nodeId"))));
+                }
             }
         } else if (input.treeId() != null) {
             input.nodeIds().forEach(node -> found.add(new Candidate(input.treeId(), node)));
         }
         return List.copyOf(found);
+    }
+
+    /**
+     * The node ids of the nodes just lit ({@code <graph>/<node>}; a bare id from an event written before F-S2d names
+     * the node of any graph).
+     */
+    private static List<String> litIds(List<String> lit) {
+        return lit.stream().map(entry -> TreeLights.NodeRef.parse(entry).map(TreeLights.NodeRef::nodeId)
+            .orElse(entry)).distinct().toList();
+    }
+
+    /** Whether a reference names one of the nodes just lit, its graph and id both. */
+    private static boolean namesALitNode(EntityInstance ref, List<String> lit) {
+        String node = String.valueOf((Object) ref.get("refNodeId"));
+        Object graph = ref.get("refTreeId");
+        for (String entry : lit) {
+            TreeLights.NodeRef named = TreeLights.NodeRef.parse(entry).orElse(null);
+            if (named == null ? entry.equals(node)
+                : named.nodeId().equals(node) && graph != null && named.treeId().equals(String.valueOf(graph))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @SuppressWarnings("unchecked")
@@ -186,8 +216,9 @@ public final class TreeLighting {
      * is any finished, passed attempt of a publication bound to it (an ended publication's too).
      */
     static void light(ProcessContext ctx) {
-        Set<String> litNow = new LinkedHashSet<>(TreeLights.litNow(list(ctx, LITS).stream()
-                .map(row -> new TreeLights.Lit(String.valueOf(row.id()), String.valueOf((Object) row.get("nodeId"))))
+        Set<TreeLights.NodeRef> litNow = new LinkedHashSet<>(TreeLights.litNow(list(ctx, LITS).stream()
+                .map(row -> new TreeLights.Lit(String.valueOf(row.id()), String.valueOf((Object) row.get("treeId")),
+                    String.valueOf((Object) row.get("nodeId"))))
                 .toList(),
             list(ctx, REVOCATIONS).stream().map(row -> String.valueOf((Object) row.get("litId"))).toList()));
         Map<Candidate, EntityInstance> nodes = new LinkedHashMap<>();
@@ -227,18 +258,37 @@ public final class TreeLighting {
                 passedBy.putIfAbsent(node, String.valueOf(attempt.id()));
             }
         }
+        // F-S2d: each candidate's references with their graphs.
+        Map<Candidate, List<TreeLights.NodeRef>> refsOf = new LinkedHashMap<>();
+        for (EntityInstance ref : list(ctx, CANDIDATE_REFS)) {
+            Object graph = ref.get("refTreeId");
+            if (graph != null) {
+                refsOf.computeIfAbsent(new Candidate(String.valueOf((Object) ref.get("treeId")),
+                    String.valueOf((Object) ref.get("nodeId"))), c -> new ArrayList<>()).add(new TreeLights.NodeRef(
+                        String.valueOf(graph), String.valueOf((Object) ref.get("refNodeId"))));
+            }
+        }
         EvaluateInput input = input(ctx);
         List<String> lit = new ArrayList<>();
+        List<String> litKeys = new ArrayList<>();
         for (Candidate candidate : candidateList(ctx)) {
             EntityInstance node = nodes.get(candidate);
             if (node == null || !Boolean.TRUE.equals(node.get("active")) || node.get("condition") == null
-                || litNow.contains(candidate.nodeId())) {
+                || litNow.contains(new TreeLights.NodeRef(candidate.treeId(), candidate.nodeId()))) {
                 continue;
             }
             TreeCondition condition = TreeCondition.parse(TreeProcesses.parse(String.valueOf(
                 (Object) node.get("condition"))));
             String attempt = passedBy.get(candidate);
-            if (!TreeRules.holds(condition, litNow, attempt != null)) {
+            // The condition names nodes by id; one is lit when the node of the graph it resolved to is (a reference
+            // resolved to no single graph never is).
+            Set<String> litNamed = new LinkedHashSet<>();
+            for (TreeLights.NodeRef ref : refsOf.getOrDefault(candidate, List.of())) {
+                if (litNow.contains(ref)) {
+                    litNamed.add(ref.nodeId());
+                }
+            }
+            if (!TreeRules.holds(condition, litNamed, attempt != null)) {
                 continue;
             }
             Map<String, Object> basis = new LinkedHashMap<>();
@@ -257,10 +307,12 @@ public final class TreeLighting {
             values.put("basis", TreeProcesses.json(basis));
             ctx.changes().insert(QbTrees.LIT, values);
             // A node lit here counts for the next candidates of the same level.
-            litNow.add(candidate.nodeId());
+            TreeLights.NodeRef done = new TreeLights.NodeRef(candidate.treeId(), candidate.nodeId());
+            litNow.add(done);
             lit.add(candidate.nodeId());
+            litKeys.add(done.key());
         }
-        ctx.put(LIT_NOW, List.copyOf(lit));
+        ctx.put(LIT_NOW, List.copyOf(litKeys));
         ctx.put(OUTPUT, new EvaluateOutput(lit));
     }
 
