@@ -540,7 +540,7 @@ export const messages = {
       baseLanguage: '基准语言',
       languages: { ja: '日语', zh: '中文', en: '英语' },
       cover: '封面',
-      survey: '问卷',
+      survey: '调查问卷',
       selections: { SINGLE: '单选', MULTIPLE: '多选' },
       intro: '简介',
       materials: '资料（{{n}}）',

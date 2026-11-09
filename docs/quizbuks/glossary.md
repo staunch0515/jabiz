@@ -12,7 +12,8 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 | 奖励的点数 | Kudos（显示为"学分"） | Kudos（显示为"クドス"） | Kudos | 对外不写币种名（`backend/quizbuks/CLAUDE.md` §4） |
 | 一套题目 | Quiz | Quiz | Quiz | |
 | 计分的 Quiz | 测验 | クイズ | Quiz | |
-| 不计分的 Quiz | 问卷 | アンケート | Survey | |
+| 不计分的 Quiz | 调查问卷 | アンケート | Survey | 问卷（单独使用） |
+| 奖励 / 奖品 / 奖赏 | 奖励：各种形式的奖赏（学分、现金、到店领取、电子奖品都算）；奖品：专指作为奖励的物品（到店领取的东西、电子奖品）；奖赏：奖励在句中有歧义（如可能被误读为 Kudos / 学分）时改用 | | | |
 | 上架的一次活动 | 发布 | 公開 | Publication | |
 | 知识的结构 | 知识结构图 | 知識マップ | knowledge map | |
 | 付平台费的账户 | 平台费账户 | プラットフォーム利用料アカウント | Platform fee account | |
