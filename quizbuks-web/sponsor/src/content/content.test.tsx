@@ -52,6 +52,8 @@ interface Server {
   limits?: Record<string, unknown>
   /** F-S6: the quiz's import batches. */
   imports?: Record<string, unknown>[]
+  /** F-S6c: the rows of `qb.sponsor.quiz-translations` (else QUESTIONS and OPTIONS with `translations`). */
+  translationBank?: Record<string, unknown>[]
 }
 
 /** F-S6: the rows of `qb.sponsor.quiz-questions` of the default quiz: QUESTIONS in their order, numbered. */
@@ -60,6 +62,29 @@ function bankOf(questions: Record<string, unknown>[], options: Record<string, un
     questionId: q.questionId, questionNo: i + 1, stem: q.stem, image: q.image, points: q.points,
     selection: q.selection ?? null, optionCount: options.filter((o) => o.questionId === q.questionId).length,
     translated: 0 }))
+}
+
+/**
+ * F-S6c: the rows of `qb.sponsor.quiz-translations` of the default quiz in a language: QUESTIONS in their order with
+ * their options and translations. The server judges a translation's state by the hash of the base text; here the
+ * hash 0000000000000000 stands for one made from another text.
+ */
+function translationBankOf(language: string, translations: Record<string, unknown>[]) {
+  const of = (key: string) => translations.find((t) => t.language === language && t.elementKey === key)
+  const state = (text: unknown, key: string) => !text ? 'none' : !of(key)?.text ? 'missing'
+    : of(key)!.sourceHash === '0000000000000000' ? 'stale' : 'done'
+  return [...QUESTIONS].sort((a, b) => a.seq - b.seq).map((q, i) => {
+    const options = OPTIONS.filter((o) => o.questionId === q.questionId).sort((a, b) => a.seq - b.seq)
+      .map((o, j) => ({ optionId: o.optionId, no: j + 1, text: o.text, image: o.image,
+        translation: of(`option:${o.optionId}.text`)?.text ?? null, state: state(o.text, `option:${o.optionId}.text`),
+        by: of(`option:${o.optionId}.text`)?.translatedBy ?? null, ownImage: of(`option:${o.optionId}.image`)?.image ?? null }))
+    const stemState = state(q.stem, `question:${q.questionId}.stem`)
+    return { questionId: q.questionId, questionNo: i + 1, stem: q.stem, image: q.image,
+      stemText: of(`question:${q.questionId}.stem`)?.text ?? null, stemState,
+      stemBy: of(`question:${q.questionId}.stem`)?.translatedBy ?? null,
+      ownImage: of(`question:${q.questionId}.image`)?.image ?? null, options: JSON.stringify(options),
+      pending: [stemState, ...options.map((o) => o.state)].filter((x) => x === 'missing' || x === 'stale').length }
+  })
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor with one quiz. Records what was posted. */
@@ -133,6 +158,19 @@ function server(options: Server = {}) {
         const all = (options.bank ?? bankOf(QUESTIONS, OPTIONS)).filter((row) =>
           (params.q === undefined || String(row.stem ?? '').toLowerCase().includes(params.q.toLowerCase()))
           && (params.no === undefined || row.questionNo === params.no))
+        const offset = Number(body?.offset ?? 0)
+        const limit = Number(body?.limit ?? 50)
+        return json(200, { items: all.slice(offset, offset + limit), offset, limit, total: all.length })
+      }
+      case '/api/queries/qb.sponsor.quiz-translations': {
+        // As the template answers: searched by a question's or an option's text, only what needs doing, then the
+        // page asked for, counted.
+        const params = (body?.params ?? {}) as { language: string; q?: string; untranslated?: boolean }
+        const has = (text: unknown) => params.q === undefined
+          || String(text ?? '').toLowerCase().includes(params.q.toLowerCase())
+        const all = (options.translationBank ?? translationBankOf(params.language, options.translations ?? []))
+          .filter((row) => (has(row.stem) || (JSON.parse(String(row.options)) as { text: string }[])
+            .some((o) => has(o.text))) && (!params.untranslated || Number(row.pending) > 0))
         const offset = Number(body?.offset ?? 0)
         const limit = Number(body?.limit ?? 50)
         return json(200, { items: all.slice(offset, offset + limit), offset, limit, total: all.length })
@@ -694,38 +732,52 @@ describe('the quiz\'s other languages (Q73a)', () => {
         candidates: JSON.stringify({ schema: 1, language: 'en', translations: [
           { no: 1, key: 'quiz.title', sourceHash: 'h', text: 'Coffee basics (AI)' },
           { no: 2, key: 'option:o1.text', sourceHash: 'h', text: 'Coffee (AI)' }] }) },
-      processes: { QB_AI_TRANSLATION_ACCEPT: [edit(8)], QB_TRANSLATION_SAVE: [edit(9)] },
+      processes: { QB_AI_TRANSLATION_ACCEPT: [edit(8), edit(9)], QB_TRANSLATION_SAVE: [edit(10)] },
     })
     render(<App />)
     await userEvent.click(await screen.findByTestId('tab-languages'))
     const panel = await screen.findByTestId('translations')
     expect(await within(panel).findByTestId('ai-translate-ready')).toHaveTextContent('2 AI translations')
-    const rows = within(panel).getAllByTestId('translation-text')
-    const title = rows.find((row) => row.dataset.key === 'quiz.title')!
+    const texts = within(panel).getByTestId('translation-texts')
+    const title = within(texts).getAllByTestId('translation-text').find((row) => row.dataset.key === 'quiz.title')!
     expect(within(title).getByTestId('ai-suggestion')).toHaveTextContent('Coffee basics (AI)')
+    // F-S6c: the questions' suggestions are shown on their page.
+    const questions = within(panel).getByTestId('translation-questions')
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text').length).toBeGreaterThan(0))
+    const option = within(questions).getAllByTestId('translation-text')
+      .find((row) => row.dataset.key === 'option:o1.text')!
+    expect(within(option).getByTestId('ai-suggestion')).toHaveTextContent('Coffee (AI)')
     await expectAccessible()
 
-    // Every suggestion used at once; each must be checked before the save.
-    await userEvent.click(within(panel).getByTestId('ai-translate-use-all'))
+    // Every suggestion of the quiz's texts used at once; each must be checked before the save.
+    await userEvent.click(within(texts).getByTestId('ai-translate-use-all'))
     expect(within(title).getByTestId('translation-input')).toHaveValue('Coffee basics (AI)')
-    await userEvent.click(within(panel).getByTestId('translation-save'))
-    expect(within(panel).getByTestId('ai-translate-review-first')).toBeInTheDocument()
+    await userEvent.click(within(texts).getByTestId('translation-save'))
+    expect(within(texts).getByTestId('ai-translate-review-first')).toBeInTheDocument()
     expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toEqual([])
-
-    // The title checked as given; the option changed, then checked; the question translated by hand.
+    // The title checked as given.
     await userEvent.click(within(title).getByTestId('ai-suggestion-reviewed'))
-    const option = rows.find((row) => row.dataset.key === 'option:o1.text')!
+    await userEvent.click(within(texts).getByTestId('translation-save'))
+    await waitFor(() => expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toHaveLength(1))
+
+    // On the page: every suggestion of the page used, the option changed, then checked; the question translated by
+    // hand; saved together.
+    await userEvent.click(within(questions).getByTestId('ai-translate-use-all'))
+    expect(within(questions).getByTestId('ai-translate-use-all')).toHaveTextContent('on this page')
     await userEvent.clear(within(option).getByTestId('translation-input'))
     await userEvent.type(within(option).getByTestId('translation-input'), 'Coffee')
     await userEvent.click(within(option).getByTestId('ai-suggestion-reviewed'))
-    const question = rows.find((row) => row.dataset.key === 'question:k1.stem')!
+    const question = within(questions).getAllByTestId('translation-text')
+      .find((row) => row.dataset.key === 'question:k1.stem')!
     await userEvent.type(within(question).getByTestId('translation-input'), 'First?')
-    await userEvent.click(within(panel).getByTestId('translation-save'))
+    await userEvent.click(within(questions).getByTestId('translation-page-save'))
     await waitFor(() => expect(processCalls('QB_TRANSLATION_SAVE')).toHaveLength(1))
-    expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toEqual([{ aiJobId: 'j1', quizId: 'q1', baseRevision: 7,
-      translations: [{ candidateNo: 1, text: 'Coffee basics (AI)', reviewed: true },
-        { candidateNo: 2, text: 'Coffee', reviewed: true }] }])
-    expect(processCalls('QB_TRANSLATION_SAVE')).toEqual([{ quizId: 'q1', language: 'en', baseRevision: 8,
+    expect(processCalls('QB_AI_TRANSLATION_ACCEPT')).toEqual([
+      { aiJobId: 'j1', quizId: 'q1', baseRevision: 7,
+        translations: [{ candidateNo: 1, text: 'Coffee basics (AI)', reviewed: true }] },
+      { aiJobId: 'j1', quizId: 'q1', baseRevision: 8,
+        translations: [{ candidateNo: 2, text: 'Coffee', reviewed: true }] }])
+    expect(processCalls('QB_TRANSLATION_SAVE')).toEqual([{ quizId: 'q1', language: 'en', baseRevision: 9,
       entries: [{ key: 'question:k1.stem', text: 'First?' }] }])
   })
 
@@ -757,6 +809,88 @@ describe('the quiz\'s other languages (Q73a)', () => {
     await waitFor(() => expect(processCalls('QB_MATERIAL_SAVE')).toEqual([{ quizId: 'q1', materialId: null,
       kind: 'LINK', title: 'Read more (EN)', description: null, baseRevision: 7, variantOf: 'm1', language: 'en',
       url: 'https://example.com/en' }]))
+  })
+
+  /** F-S6c: 120 questions in English, as the template answers; question 2 already translated. */
+  const TRANSLATION_BANK = Array.from({ length: 120 }, (_, i) => ({ questionId: `b${i + 1}`, questionNo: i + 1,
+    stem: i === 60 ? 'Roast coffee?' : `Question ${i + 1}?`, image: i === 50 ? 'img51' : null,
+    stemText: i === 1 ? 'Frage 2?' : null, stemState: i === 1 ? 'done' : 'missing', stemBy: null,
+    ownImage: null, options: JSON.stringify([
+      { optionId: `b${i + 1}o1`, no: 1, text: 'Yes', image: null, translation: i === 1 ? 'Ja' : null,
+        state: i === 1 ? 'done' : 'missing', by: null, ownImage: null },
+      { optionId: `b${i + 1}o2`, no: 2, text: 'No', image: null, translation: i === 1 ? 'Nein' : null,
+        state: i === 1 ? 'done' : 'missing', by: null, ownImage: null }]),
+    pending: i === 1 ? 0 : 3 }))
+  const translationCalls = (posted: { path: string; body: Record<string, unknown> }[]) =>
+    posted.filter((p) => p.path === '/api/queries/qb.sponsor.quiz-translations').map((p) => p.body)
+
+  it('reads the questions a page at a time and saves a translation from the second page (F-S6c)', async () => {
+    const { posted, processCalls } = server({ quiz: { ...QUIZ, translationLanguages: 'en', questionCount: 120 },
+      translationBank: TRANSLATION_BANK, processes: { QB_TRANSLATION_SAVE: [edit(8)] } })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-languages'))
+    const questions = await screen.findByTestId('translation-questions')
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text')).toHaveLength(150))
+    expect(translationCalls(posted)[0]).toEqual({ params: { quizId: 'q1', language: 'en' }, offset: 0, limit: 50,
+      count: true })
+    expect(within(questions).getByTestId('translations-page')).toHaveTextContent('Page 1 of 3')
+    const done = within(questions).getAllByTestId('translation-text').find((row) => row.dataset.key === 'question:b2.stem')!
+    expect(done).toHaveAttribute('data-state', 'done')
+    expect(within(done).getByTestId('translation-input')).toHaveValue('Frage 2?')
+
+    await userEvent.click(within(questions).getByTestId('translations-next'))
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text')[0])
+      .toHaveAttribute('data-key', 'question:b51.stem'))
+    expect(translationCalls(posted).at(-1)).toEqual({ params: { quizId: 'q1', language: 'en' }, offset: 50,
+      limit: 50, count: true })
+    // The page's own images: question 51's.
+    expect(within(within(questions).getByTestId('translation-page-images')).getByTestId('translation-image'))
+      .toHaveAttribute('data-key', 'question:b51.image')
+    await expectAccessible()
+
+    const row = within(questions).getAllByTestId('translation-text')[0]
+    expect(row).toHaveTextContent('Question 51')
+    await userEvent.type(within(row).getByTestId('translation-input'), 'Frage 51?')
+    // A change not saved keeps the page.
+    expect(within(questions).getByTestId('translations-next')).toBeDisabled()
+    expect(within(questions).getByTestId('translations-save-first')).toBeInTheDocument()
+    expect(screen.getByTestId('translation-only-pending')).toBeDisabled()
+    await userEvent.click(within(questions).getByTestId('translation-page-save'))
+    await waitFor(() => expect(processCalls('QB_TRANSLATION_SAVE')).toEqual([{ quizId: 'q1', language: 'en',
+      entries: [{ key: 'question:b51.stem', text: 'Frage 51?' }], baseRevision: 7 }]))
+  })
+
+  it('searches the questions and shows only what needs doing (F-S6c)', async () => {
+    const { posted } = server({ quiz: { ...QUIZ, translationLanguages: 'en', questionCount: 120 },
+      translationBank: TRANSLATION_BANK })
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('tab-languages'))
+    const questions = await screen.findByTestId('translation-questions')
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text')).toHaveLength(150))
+    await userEvent.click(within(questions).getByTestId('translations-next'))
+    await waitFor(() => expect(translationCalls(posted).at(-1)).toMatchObject({ offset: 50 }))
+
+    // The filter starts again at the first page.
+    await userEvent.click(screen.getByTestId('translation-only-pending'))
+    await waitFor(() => expect(translationCalls(posted).at(-1)).toEqual({ params: { quizId: 'q1', language: 'en',
+      untranslated: true }, offset: 0, limit: 50, count: true }))
+    await waitFor(() => expect(within(questions).queryAllByTestId('translation-text')
+      .find((row) => row.dataset.key === 'question:b2.stem')).toBeUndefined())
+    expect(within(questions).getByTestId('translations-found')).toHaveTextContent('119 questions found')
+
+    await userEvent.type(within(questions).getByTestId('translations-search'), 'roast')
+    await userEvent.click(within(questions).getByTestId('translations-search-submit'))
+    await waitFor(() => expect(translationCalls(posted).at(-1)).toEqual({ params: { quizId: 'q1', language: 'en',
+      q: 'roast', untranslated: true }, offset: 0, limit: 50, count: true }))
+    await waitFor(() => expect(within(questions).getAllByTestId('translation-text')[0])
+      .toHaveAttribute('data-key', 'question:b61.stem'))
+    expect(within(questions).getByTestId('translations-found')).toHaveTextContent('1 question found')
+    await expectAccessible()
+
+    await userEvent.clear(within(questions).getByTestId('translations-search'))
+    await userEvent.type(within(questions).getByTestId('translations-search'), 'nothing like it')
+    await userEvent.click(within(questions).getByTestId('translations-search-submit'))
+    expect(await within(questions).findByTestId('translations-no-questions')).toHaveTextContent('No question matches')
   })
 
   it('keeps the base language while the quiz has others', async () => {

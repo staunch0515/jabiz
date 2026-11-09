@@ -736,6 +736,91 @@ export async function questionAt(quizId: string, no: number): Promise<QuestionRo
     optionCount: num(row.optionCount), translated: num(row.translated) } : null
 }
 
+/** F-S6c: the state of a text in a language, as `qb.sponsor.quiz-translations` and `languages.ts` judge it. */
+export type TranslationState = 'none' | 'missing' | 'stale' | 'done'
+
+const stateOf = (value: unknown): TranslationState =>
+  value === 'missing' || value === 'stale' || value === 'done' ? value : 'none'
+
+/** F-S6c: an option of a question on the translation page, with its translation into the language asked for. */
+export interface TranslatedOption {
+  optionId: string
+  /** Its place in the question (from 1). */
+  no: number
+  text: string | null
+  image: string | null
+  translation: string | null
+  state: TranslationState
+  /** Who wrote the translation (`SPONSOR` or `AI`); null without one. */
+  translatedBy: string | null
+  /** The language's own image of the option; null shows the base's. */
+  ownImage: string | null
+}
+
+/** F-S6c: a row of `qb.sponsor.quiz-translations`: a question and its options with their translations. */
+export interface TranslationRow {
+  questionId: string
+  /** Its place in the quiz (from 1). */
+  no: number
+  stem: string | null
+  image: string | null
+  stemText: string | null
+  stemState: TranslationState
+  stemBy: string | null
+  ownImage: string | null
+  options: TranslatedOption[]
+  /** How many of its texts (its own and its options') are missing or out of date. */
+  pending: number
+}
+
+function translatedOptions(value: unknown): TranslatedOption[] {
+  let list: unknown
+  try {
+    list = typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return []
+  }
+  if (!Array.isArray(list)) return []
+  return (list as Row[]).map((o) => ({
+    optionId: String(o.optionId), no: num(o.no), text: str(o.text), image: str(o.image),
+    translation: str(o.translation), state: stateOf(o.state), translatedBy: str(o.by), ownImage: str(o.ownImage),
+  }))
+}
+
+/**
+ * F-S6c: one page of a quiz's questions in one of its other languages, in their order, counted: searched by the text
+ * of a question or an option, or only those with a text missing or out of date.
+ */
+export async function searchTranslations({ quizId, language, search = '', untranslated = false, offset, limit }: {
+  quizId: string
+  language: ContentLanguage
+  search?: string
+  untranslated?: boolean
+  offset: number
+  limit: number
+}): Promise<{ items: TranslationRow[]; total: number }> {
+  const q = search.trim().slice(0, 100)
+  const page = await runQuery<Row>(CONTENT_TEMPLATE.quizTranslations, {
+    params: { quizId, language, ...(q ? { q } : {}), ...(untranslated ? { untranslated: true } : {}) },
+    offset,
+    limit,
+    count: true,
+  })
+  const items = page.items.map((row): TranslationRow => ({
+    questionId: String(row.questionId),
+    no: num(row.questionNo),
+    stem: str(row.stem),
+    image: str(row.image),
+    stemText: str(row.stemText),
+    stemState: stateOf(row.stemState),
+    stemBy: str(row.stemBy),
+    ownImage: str(row.ownImage),
+    options: translatedOptions(row.options),
+    pending: num(row.pending),
+  }))
+  return { items, total: page.total ?? items.length }
+}
+
 /** F-S6: the question bank's limits in effect (`qb.sponsor.quiz-limits`). */
 export interface BankLimits {
   /** The most questions a quiz has. */

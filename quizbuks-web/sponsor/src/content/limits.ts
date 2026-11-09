@@ -40,5 +40,8 @@ export const DOCUMENT_FIELD = { image: false }
 /** F-S6: the questions one page of the editor's list shows. */
 export const QUESTION_PAGE = 50
 
+/** F-S6c: the questions one page of the translation page shows. */
+export const TRANSLATION_PAGE = 50
+
 /** F-S6: up to this many questions the "move to" control lists every place; above it the place is typed. */
 export const MOVE_LIST_MAX = 100
