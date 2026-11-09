@@ -48,6 +48,8 @@ results:
   videoProviderId: { from: QbPublicationCard.videoProviderId }
   videoProviderName: { from: QbSponsor.company }
   exposed:        { kind: { type: bool } }
+  pushTurn:       { kind: { type: numeric, precision: 9, scale: 0 } }
+  pushRank:       { kind: { type: numeric, precision: 9, scale: 0 } }
   shortsPositions: { kind: { type: text, maxLength: 200 } }
   shortsPerShelf: { kind: { type: text, maxLength: 20 } }
   kind:           { from: QbPublicationCard.kind }
@@ -78,7 +80,7 @@ results:
   myDeadline:     { from: QbAttempt.deadline }
 list:
   filters: [sponsorCountry, sponsorName, sponsorCompany, maxReward, rewardMethod, completions, startAt]
-  sorts:   [startAt, maxReward, completions]
+  sorts:   [startAt, maxReward, completions, pushTurn, pushRank]
   defaultSort: { field: startAt, asc: false }
   key: [publicationId]
 permissions: [qb.play]
@@ -123,6 +125,18 @@ SELECT
     -- the vertical mode when vertical, on the start page otherwise (exposure.ExposureRules.othersVideo).
     (c.{{QbPublicationCard.sharedVideoId}} IS NOT NULL AND c.{{QbPublicationCard.videoProviderId}} IS NOT NULL
      AND c.{{QbPublicationCard.videoProviderId}} <> c.{{QbPublicationCard.publisherId}}) AS exposed,
+    -- F-S13: the pushes take turns among their publishers (by id, which never leaves the server): the publisher's n-th
+    -- push (newest first), and the publisher's place in a turn, an order of the publishers that changes every day (a
+    -- hash of the id and the day: who comes first rotates); sorting by the two gives every publisher's first, then every
+    -- publisher's second... The App gets the two numbers only. Only with push (none otherwise).
+    CASE WHEN CAST(:push AS boolean) IS TRUE
+         THEN row_number() OVER (PARTITION BY c.{{QbPublicationCard.publisherId}}
+                                 ORDER BY c.{{QbPublicationCard.startAt}} DESC, c.{{QbPublicationCard.publicationId}}) END
+        AS pushTurn,
+    CASE WHEN CAST(:push AS boolean) IS TRUE
+         THEN dense_rank() OVER (ORDER BY md5(c.{{QbPublicationCard.publisherId}}
+                                       || CAST(CAST(CAST(:at AS timestamptz) AT TIME ZONE 'UTC' AS date) AS text)),
+                                 c.{{QbPublicationCard.publisherId}}) END AS pushRank,
     CAST(shp.positions AS varchar(200))    AS shortsPositions,
     CAST(shp.perShelf AS varchar(20))      AS shortsPerShelf,
     c.{{QbPublicationCard.kind}}           AS kind,

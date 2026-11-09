@@ -95,7 +95,8 @@ class ExposureRulesTest {
                 .isEqualTo(row.get("billable").asLong());
             assertThat(ExposureRules.overshoot(successes, purchased)).as(row.toString())
                 .isEqualTo(row.get("overshoot").asLong());
-            assertThat(ExposureRules.reconciles(successes, purchased)).as(row.toString())
+            assertThat(ExposureRules.reconciles(successes, purchased, row.get("minTolerance").asLong(),
+                row.get("tolerancePercent").asInt())).as(row.toString())
                 .isEqualTo(row.get("reconciles").asBoolean());
         });
         assertThat(ExposureRules.billableRank(2, 2L)).isTrue();
@@ -111,6 +112,11 @@ class ExposureRulesTest {
         check(params.get("pushEvery"), ExposureRules::pushEvery);
         check(params.get("reportBatch"), ExposureRules::reportBatch);
         check(params.get("reportIntervalSec"), ExposureRules::reportIntervalSec);
+        check(params.get("maxPerCall"), ExposureRules::maxPerCall);
+        check(params.get("tolerancePercent"), ExposureRules::tolerancePercent);
+        check(params.get("endGraceSec"), ExposureRules::endGraceSec);
+        params.get("minTolerance").forEach(pair -> assertThat(ExposureRules.minTolerance(number(pair.get(0))))
+            .as(pair.toString()).isEqualTo(pair.get(1).asLong()));
     }
 
     private static void check(JsonNode pairs, Function<Integer, Integer> read) {
@@ -128,6 +134,6 @@ class ExposureRulesTest {
         assertThat(ExposureRules.fits("HOME", false)).isFalse();
         assertThat(ExposureRules.excluded(null, List.of(), new ExposureRules.Card("p", "v", true, true, true, null)))
             .isTrue();
-        assertThat(ExposureRules.tolerance(null)).isZero();
+        assertThat(ExposureRules.tolerance(null, 20, 5)).isZero();
     }
 }

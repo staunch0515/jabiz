@@ -16,7 +16,8 @@ import java.util.List;
  *   <li>A vertical video counts in the vertical mode only, a horizontal one on the start page only ({@link #fits}); the
  *       home's shelf and its autoplay never count. Played on, without a break, for {@code qb.exposure.seconds}, or the
  *       whole of a shorter video ({@link #neededSec}).</li>
- *   <li>At most once per taker and publication; at most {@code qb.exposure.daily-cap-per-user} a taker a UTC day.</li>
+ *   <li>At most once per taker and publication; at most {@code qb.exposure.daily-cap-per-user} a taker a day, the days
+ *       of the deployment's zone ({@code jabiz.fiscal-year-zone}, the same for the daily check).</li>
  *   <li>A push (a vertical one, another's video) stands at every {@code qb.exposure.push.every}-th screen from the one
  *       the vertical mode opened on ({@link #pushAt}); once opened, never pushed to that taker again
  *       ({@link #pushable}).</li>
@@ -64,8 +65,14 @@ public final class ExposureRules {
     public static final int DEFAULT_REPORT_BATCH = 20;
     public static final int DEFAULT_REPORT_INTERVAL_SEC = 30;
 
-    /** The most reports one call takes. */
-    public static final int MAX_BATCH = 50;
+    /** The most reports one call takes, whatever {@code qb.exposure.report.max-per-call} says. */
+    public static final int MAX_BATCH = 200;
+    public static final int DEFAULT_MAX_PER_CALL = 50;
+    /** The reconciliation's tolerance and the grace after an end, as {@code QbParams} declares them. */
+    public static final long DEFAULT_MIN_TOLERANCE = 20;
+    public static final int DEFAULT_TOLERANCE_PERCENT = 5;
+    public static final int DEFAULT_END_GRACE_SEC = 60;
+    public static final int MAX_END_GRACE_SEC = 86_400;
     /** The most seconds a report says (a day). */
     public static final int MAX_REPORTED_SEC = 86_400;
     public static final int MAX_SECONDS = 600;
@@ -73,8 +80,6 @@ public final class ExposureRules {
     public static final int MAX_PUSH_EVERY = 50;
     public static final int MIN_REPORT_INTERVAL_SEC = 5;
     public static final int MAX_REPORT_INTERVAL_SEC = 600;
-    /** The reconciliation's tolerance: at least this many beyond the purchased, else a twentieth of it. */
-    public static final long MIN_TOLERANCE = 20;
 
     /**
      * What of a publication's card the rules read.
@@ -186,14 +191,38 @@ public final class ExposureRules {
         return purchased == null || rank <= purchased;
     }
 
-    /** How far beyond the purchased the reconciliation lets the successes go: max(20, ⌈purchased / 20⌉). */
-    public static long tolerance(Long purchased) {
-        return purchased == null ? 0 : Math.max(MIN_TOLERANCE, (purchased + 19) / 20);
+    /**
+     * How far beyond the purchased the reconciliation lets the successes go: at least {@code minTolerance}
+     * ({@code qb.exposure.reconcile.min-tolerance}), else {@code percent} ({@code .tolerance-percent}) of the purchased,
+     * rounded up. The template {@code qb.system.exposure-differences} writes the same.
+     */
+    public static long tolerance(Long purchased, long minTolerance, int percent) {
+        return purchased == null ? 0 : Math.max(minTolerance, (purchased * percent + 99) / 100);
     }
 
     /** Whether the daily reconciliation finds the successes within the purchased and its tolerance. */
-    public static boolean reconciles(long successes, Long purchased) {
-        return purchased == null || successes <= purchased + tolerance(purchased);
+    public static boolean reconciles(long successes, Long purchased, long minTolerance, int percent) {
+        return purchased == null || successes <= purchased + tolerance(purchased, minTolerance, percent);
+    }
+
+    /** {@code qb.exposure.reconcile.min-tolerance} as read (null: not there yet), never negative. */
+    public static long minTolerance(Long parameter) {
+        return Math.max(0, parameter == null ? DEFAULT_MIN_TOLERANCE : parameter);
+    }
+
+    /** {@code qb.exposure.reconcile.tolerance-percent} as read, within 0 and 100. */
+    public static int tolerancePercent(Integer parameter) {
+        return Math.clamp(parameter == null ? DEFAULT_TOLERANCE_PERCENT : parameter, 0, 100);
+    }
+
+    /** {@code qb.exposure.reconcile.end-grace-sec} as read, within 0 and a day. */
+    public static int endGraceSec(Integer parameter) {
+        return Math.clamp(parameter == null ? DEFAULT_END_GRACE_SEC : parameter, 0, MAX_END_GRACE_SEC);
+    }
+
+    /** {@code qb.exposure.report.max-per-call} as read, within 1 and {@link #MAX_BATCH}. */
+    public static int maxPerCall(Integer parameter) {
+        return Math.clamp(parameter == null ? DEFAULT_MAX_PER_CALL : parameter, 1, MAX_BATCH);
     }
 
     /** {@code qb.exposure.seconds} as read (null: not there yet), within 1 and {@link #MAX_SECONDS}. */

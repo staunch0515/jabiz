@@ -18,6 +18,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
@@ -39,9 +40,20 @@ public class ExposureConfig {
         PublicationExposure.end();
 
     private final String poolRef;
+    /** The deployment's zone ({@code jabiz.fiscal-year-zone}): the days of the daily cap and of the daily check. */
+    private final ZoneId zone;
 
-    ExposureConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef) {
+    ExposureConfig(@Value("${jabiz.storage.default-pool-ref:default}") String poolRef,
+        @Value("${jabiz.fiscal-year-zone:UTC}") String zone) {
         this.poolRef = poolRef;
+        // An invalid zone is the platform's startup error (RETENTION): UTC here so that it is reported, not this.
+        ZoneId zoneId;
+        try {
+            zoneId = ZoneId.of(zone);
+        } catch (java.time.DateTimeException e) {
+            zoneId = ZoneOffset.UTC;
+        }
+        this.zone = zoneId;
     }
 
     @Bean
@@ -73,7 +85,7 @@ public class ExposureConfig {
 
     @Bean
     ProcessDefinition<ExposureProcesses.ReportInput, ExposureProcesses.ReportOutput, ProcessContext> qbExposureReport() {
-        return ExposureProcesses.report();
+        return ExposureProcesses.report(zone);
     }
 
     /** The only writer of a publication's purchased exposures: a sub-process for F-M8 (decision A of 2026-11-09). */
@@ -132,7 +144,7 @@ public class ExposureConfig {
 
     @Bean
     ProcessDefinition<ExposureCheck.RunInput, ExposureCheck.RunOutput, ProcessContext> qbExposureCheckRun() {
-        return ExposureCheck.run();
+        return ExposureCheck.run(zone);
     }
 
     @Bean

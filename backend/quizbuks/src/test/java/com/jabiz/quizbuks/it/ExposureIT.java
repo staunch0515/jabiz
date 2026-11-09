@@ -32,6 +32,7 @@ import org.springframework.context.annotation.Bean;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -53,6 +54,9 @@ class ExposureIT extends PlayItSupport {
 
     /** A site mainland China plays (F-S11): the tests' unknown address counts as mainland China. */
     static final String VIDEO = "https://www.bilibili.com/video/BV1GJ411x7h7";
+
+    /** The deployment's zone in the tests ({@code jabiz.fiscal-year-zone}). */
+    static final ZoneId TOKYO = ZoneId.of("Asia/Tokyo");
 
     /** A test-only root that runs the purchase's sub-process, as F-M8's purchase will. */
     static final String PURCHASE_RELAY = "IT_QB_EXPOSURE_PURCHASE_RELAY";
@@ -317,7 +321,19 @@ class ExposureIT extends PlayItSupport {
         refused(ExposureProcesses.REPORT, unverifiedTokenOf(unverified, QbRoles.TAKER),
             body("reports", List.of(watched(publication, ExposureRules.VERTICAL, 30))), 403);
         assertThat(exposure(publication, unverified)).isNull();
-        // A batch is bounded.
+        // A batch is bounded: by the parameter, and by the ceiling whatever the parameter says.
+        run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_REPORT_MAX_PER_CALL, "value", "3"));
+        try {
+            List<Map<String, Object>> four = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                four.add(watched(publication, ExposureRules.VERTICAL, 30));
+            }
+            assertThat(codes(refused(ExposureProcesses.REPORT, taker(otherStaff), body("reports", four), 422)))
+                .containsExactly(ExposureCodes.BATCH_TOO_LARGE);
+            assertThat(outcomes(taker(otherStaff), four.subList(0, 3))).hasSize(3);
+        } finally {
+            run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_REPORT_MAX_PER_CALL, "value", "50"));
+        }
         List<Map<String, Object>> tooMany = new ArrayList<>();
         for (int i = 0; i <= ExposureRules.MAX_BATCH; i++) {
             tooMany.add(watched(publication, ExposureRules.VERTICAL, 30));
@@ -344,7 +360,8 @@ class ExposureIT extends PlayItSupport {
             assertThat(outcomes(token, List.of(watched(first, ExposureRules.VERTICAL, 10),
                 watched(second, ExposureRules.VERTICAL, 10))))
                 .containsExactly(ExposureRules.COUNTED, ExposureRules.DAILY_CAP);
-            LocalDate today = LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC);
+            // The days are the deployment's zone's (jabiz.fiscal-year-zone: Asia/Tokyo in the tests too).
+            LocalDate today = LocalDate.ofInstant(clock.instant(), TOKYO);
             assertThat(exposure(second, takerId)).containsEntry("counted_at", null)
                 .satisfies(row -> assertThat(number(row.get("capped_days"))).isEqualTo(1))
                 .satisfies(row -> assertThat(row.get("last_capped_on").toString()).isEqualTo(today.toString()));
@@ -369,8 +386,15 @@ class ExposureIT extends PlayItSupport {
             refusedQuery("qb.admin.exposure-suspicious", sponsorToken(user));
             refusedQuery("qb.admin.exposure-suspicious", token);
 
-            // The next UTC day counts again (a new session: the clock moved past the old one's life).
-            clock.set(clock.instant().plus(Duration.ofDays(1)));
+            // The day ends at midnight in Tokyo, not in UTC (a new session each time: the clock moves past a session's
+            // life). A minute before: still refused; a minute after (still the same UTC day): counted.
+            Instant midnight = today.plusDays(1).atStartOfDay(TOKYO).toInstant();
+            clock.set(midnight.minusSeconds(60));
+            assertThat(outcome(taker(takerId), watched(second, ExposureRules.VERTICAL, 10)))
+                .isEqualTo(ExposureRules.DAILY_CAP);
+            clock.set(midnight.plusSeconds(60));
+            assertThat(LocalDate.ofInstant(clock.instant(), ZoneOffset.UTC))
+                .isEqualTo(LocalDate.ofInstant(midnight.minusSeconds(60), ZoneOffset.UTC));
             assertThat(outcome(taker(takerId), watched(second, ExposureRules.VERTICAL, 10)))
                 .isEqualTo(ExposureRules.COUNTED);
         } finally {
@@ -431,6 +455,47 @@ class ExposureIT extends PlayItSupport {
                     .as(liked + " strict " + strict).containsExactlyInAnyOrderElementsOf(expected);
             }
         }
+    }
+
+    /**
+     * The pushes take turns among their publishers by id, which never reaches the App: the feed gives each push its
+     * turn (the publisher's n-th) and its place in the turn (the same for one publisher's pushes), nothing of the id.
+     */
+    @Test
+    void thePushesTakeTurnsAmongPublishersByIdWithoutGivingItAway() {
+        String provider = newSponsor(unique("s-fs13-turn-provider"));
+        String one = newSponsor(unique("s-fs13-turn-one"));
+        String two = newSponsor(unique("s-fs13-turn-two"));
+        credit(one, 100_000);
+        credit(two, 100_000);
+        String shared = approvedVideo(provider, true);
+        Map<String, String> publisherOf = new LinkedHashMap<>();
+        for (String sponsor : List.of(one, one, one, two)) {
+            publisherOf.put(live(sponsor, "FS13 turn " + publisherOf.size(), shared), sponsor);
+            clock.set(clock.instant().plusSeconds(1));
+        }
+        String token = newTakerToken("turns");
+        List<Map<String, Object>> rows = items("qb.app.feed", token, Map.of("params", Map.of("at",
+            clock.instant().toString(), "country", "JP", "push", true, "q", "FS13 turn"), "limit", 50,
+            "sorts", List.of(Map.of("field", "pushTurn", "asc", true), Map.of("field", "pushRank", "asc", true))));
+        assertThat(rows).hasSize(4);
+        // Every publisher's first push before anybody's second: one's three are turns 1, 2, 3, two's one is turn 1.
+        assertThat(rows.subList(0, 2)).extracting(row -> publisherOf.get((String) row.get("publicationId")))
+            .containsExactlyInAnyOrder(one, two);
+        assertThat(rows.subList(2, 4)).extracting(row -> publisherOf.get((String) row.get("publicationId")))
+            .containsOnly(one);
+        assertThat(rows).extracting(row -> number(row.get("pushTurn"))).containsExactly(1L, 1L, 2L, 3L);
+        // One publisher's pushes share their place in the turn; the two publishers' differ.
+        Map<String, java.util.Set<Long>> ranks = new LinkedHashMap<>();
+        rows.forEach(row -> ranks.computeIfAbsent(publisherOf.get((String) row.get("publicationId")),
+            k -> new java.util.HashSet<>()).add(number(row.get("pushRank"))));
+        assertThat(ranks.get(one)).hasSize(1);
+        assertThat(ranks.get(two)).hasSize(1).doesNotContainAnyElementsOf(ranks.get(one));
+        // No publisher's id in what the App reads (the tests' company names are made of it: no value is the id).
+        assertThat(rows).allSatisfy(row -> assertThat(row.values()).doesNotContain(one, two));
+        // Without push, no turns.
+        assertThat(feed(token, "JP", Map.of("q", "FS13 turn"))).allSatisfy(row -> assertThat(row.get("pushTurn"))
+            .isNull());
     }
 
     // ---- the purchase, the end and what goes beyond -----------------------------------------------------------------
@@ -558,6 +623,52 @@ class ExposureIT extends PlayItSupport {
         assertThat(task()).isNotNull();
     }
 
+    /** The reconciliation's tolerance and the grace after an end are parameters (the requester: every number one). */
+    @Test
+    void theReconciliationsToleranceAndGraceAreParameters() {
+        String provider = newSponsor(unique("s-fs13-check-p-provider"));
+        String user = newSponsor(unique("s-fs13-check-p-user"));
+        credit(user, 100_000);
+        String shared = approvedVideo(provider, false);
+        String bought = live(user, "FS13 check param", shared);
+        purchase(bought, 10L);
+        insertSuccesses(bought, user, provider, 11, clock.instant());
+        runCheck();
+        assertThat(task()).as("11 of 10 within max(20, 5%)").isNull();
+        try {
+            run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_RECONCILE_MIN_TOLERANCE, "value", "0"));
+            run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_RECONCILE_TOLERANCE_PERCENT, "value", "10"));
+            clock.set(clock.instant().plus(Duration.ofDays(1)));
+            runCheck();
+            assertThat(task()).as("11 of 10 within 10% (1)").isNull();
+            run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_RECONCILE_TOLERANCE_PERCENT, "value", "0"));
+            clock.set(clock.instant().plus(Duration.ofDays(1)));
+            runCheck();
+            assertThat(task()).as("11 of 10 beyond none").isNotNull();
+        } finally {
+            run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_RECONCILE_MIN_TOLERANCE, "value", "20"));
+            run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_RECONCILE_TOLERANCE_PERCENT, "value", "5"));
+        }
+        // Counted 30 s after the end: within the default minute's grace; a grace of 10 s finds it.
+        clock.set(clock.instant().plus(Duration.ofDays(1)));
+        runCheckOnly(bought);
+        String ended = live(user, "FS13 check grace", shared);
+        run("QB_PUBLICATION_ADMIN_END", TestTokens.bearer(tokens, "fs13-content-admin",
+            QbPermissions.ADMIN_CONTENT_WRITE), body("publicationId", ended, "reason", "F-S13 test"));
+        insertSuccesses(ended, user, provider, 1, clock.instant().plusSeconds(30));
+        clock.set(clock.instant().plus(Duration.ofDays(1)));
+        runCheck();
+        assertThat(task()).as("30 s within 60 s").isNull();
+        try {
+            run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_END_GRACE_SEC, "value", "10"));
+            clock.set(clock.instant().plus(Duration.ofDays(1)));
+            runCheck();
+            assertThat(task()).as("30 s beyond 10 s").isNotNull();
+        } finally {
+            run("PARAM_SET", admin(), body("key", QbParams.EXPOSURE_END_GRACE_SEC, "value", "60"));
+        }
+    }
+
     /** As {@link #runCheck}, with the earlier differences put right first (so only the new one is found). */
     void runCheckOnly(String... fixed) {
         for (String publicationId : fixed) {
@@ -588,7 +699,7 @@ class ExposureIT extends PlayItSupport {
     /** Today's reconciliation task, if any. */
     Object task() {
         List<Map<String, Object>> tasks = query("SELECT task_id FROM sys_task_version WHERE source_key = ?",
-            ExposureCheck.source(clock.instant()));
+            ExposureCheck.source(clock.instant(), TOKYO));
         return tasks.isEmpty() ? null : tasks.getFirst().get("task_id");
     }
 }

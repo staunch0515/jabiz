@@ -1,5 +1,6 @@
 package com.jabiz.quizbuks.exposure;
 
+import com.jabiz.entity.Violation;
 import com.jabiz.param.ParamValues;
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
@@ -11,6 +12,7 @@ import com.jabiz.quizbuks.publishing.PublisherKind;
 import com.jabiz.quizbuks.publishing.QbPublications;
 import com.jabiz.quizbuks.reward.QbRewards;
 import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.runtime.BusinessRuleViolationException;
 import com.jabiz.runtime.EntityInstance;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
@@ -26,7 +28,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -40,7 +42,8 @@ import java.util.UUID;
  * publications using another's shared video ({@link ExposureRules}): a push opened in the vertical mode, an exposure
  * watched long enough on its surface, the taker going on to answer. Each publication's row of the caller's is made or
  * changed once per call; what counts is decided by {@link ExposureRules#decide} on the card as it is now (an ended
- * publication no longer counts) and the caller's exposures of the UTC day (the daily cap).
+ * publication no longer counts) and the caller's exposures of the day (the daily cap; the days of the deployment's zone,
+ * {@code jabiz.fiscal-year-zone}). At most {@code qb.exposure.report.max-per-call} reports a call.
  *
  * <p>Anyone who answers ({@code qb.play}) reports, with a verified address (platform: signed in and verified). It takes
  * the caller's own lock ({@link QbExposures#lockName}) only, never a publication's, start or wallet lock: counting
@@ -86,7 +89,8 @@ public final class ExposureProcesses {
 
     private ExposureProcesses() {}
 
-    public static ProcessDefinition<ReportInput, ReportOutput, ProcessContext> report() {
+    /** @param zone the zone whose days the daily cap counts ({@code jabiz.fiscal-year-zone}) */
+    public static ProcessDefinition<ReportInput, ReportOutput, ProcessContext> report(ZoneId zone) {
         return ProcessDefinition.define(REPORT, 1, ReportInput.class, ReportOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Records what the App saw of the videos of publications using another's shared video: "
@@ -100,7 +104,14 @@ public final class ExposureProcesses {
                 })
                 .outputMapper(ctx -> ctx.get(OUTPUT, ReportOutput.class))
                 .step("Load the parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
-                    QbParams.EXPOSURE_SECONDS, QbParams.EXPOSURE_DAILY_CAP))
+                    QbParams.EXPOSURE_SECONDS, QbParams.EXPOSURE_DAILY_CAP, QbParams.EXPOSURE_REPORT_MAX_PER_CALL))
+                .compute("Refuse a batch too large", (metadata, ctx) -> {
+                    int max = ExposureRules.maxPerCall(param(ctx, QbParams.EXPOSURE_REPORT_MAX_PER_CALL));
+                    if (ctx.get(INPUT, ReportInput.class).reports().size() > max) {
+                        throw new BusinessRuleViolationException(new Violation("reports",
+                            ExposureCodes.BATCH_TOO_LARGE, "At most " + max + " reports a call", Map.of("max", max)));
+                    }
+                })
                 .step("Load the cards and the caller's place on a staff", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbPublications.defaultDataset(QbPublications.CARD),
                         ctx -> EntityQuery.builder().where(new QueryPredicate.In("publicationId",
@@ -120,10 +131,10 @@ public final class ExposureProcesses {
                     QueryEntities.query(QbExposures.DEFAULT_DATASET, ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.And(List.of(
                             new QueryPredicate.Eq("userId", ctx.request().actorId()),
-                            new QueryPredicate.Gte("countedAt", dayStart(ctx.opTime())),
-                            new QueryPredicate.Lt("countedAt", dayStart(ctx.opTime()).plusSeconds(86_400)))))
+                            new QueryPredicate.Gte("countedAt", dayStart(ctx.opTime(), zone)),
+                            new QueryPredicate.Lt("countedAt", dayEnd(ctx.opTime(), zone)))))
                         .limit(cap(ctx) + 1).build(), TODAY)))
-                .compute("Record the reports", (metadata, ctx) -> record(ctx)));
+                .compute("Record the reports", (metadata, ctx) -> record(ctx, zone)));
     }
 
     /** The publications the reports name, once each, in their order. */
@@ -133,8 +144,14 @@ public final class ExposureProcesses {
         return ids;
     }
 
-    static Instant dayStart(Instant at) {
-        return at.atZone(ZoneOffset.UTC).toLocalDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+    /** The start of the day of {@code at} in {@code zone}. */
+    static Instant dayStart(Instant at, ZoneId zone) {
+        return at.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant();
+    }
+
+    /** The start of the next day (a day of 23 or 25 hours where the zone changes its clocks). */
+    static Instant dayEnd(Instant at, ZoneId zone) {
+        return at.atZone(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toInstant();
     }
 
     static int seconds(ProcessContext ctx) {
@@ -164,10 +181,10 @@ public final class ExposureProcesses {
         }
     }
 
-    static void record(ProcessContext ctx) {
+    static void record(ProcessContext ctx, ZoneId zone) {
         String caller = ctx.request().actorId();
         Instant now = ctx.opTime();
-        LocalDate today = now.atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate today = now.atZone(zone).toLocalDate();
         int seconds = seconds(ctx);
         int cap = cap(ctx);
         Map<String, EntityInstance> cards = new LinkedHashMap<>();

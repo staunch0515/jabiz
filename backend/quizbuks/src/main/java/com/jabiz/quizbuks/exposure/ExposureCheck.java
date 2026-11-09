@@ -9,15 +9,16 @@ import com.jabiz.runtime.task.TaskSpec;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
 /**
  * The daily reconciliation of the exposures (F-S13, docs/quizbuks/plans/impl/F-S13.md): {@value #RUN}, run by the job
  * {@value #JOB}, finds the publications whose successes went beyond their purchased exposures by more than the
- * tolerance ({@link ExposureRules#reconciles}), and the ended ones that counted an exposure more than a minute after
- * their end ({@value #DIFFERENCES_TEMPLATE}); with any, it asks headquarters ({@code qb.admin.exposure.monitor}) with a
+ * tolerance ({@link ExposureRules#reconciles}: the parameters {@code qb.exposure.reconcile.min-tolerance} and
+ * {@code .tolerance-percent}), and the ended ones that counted an exposure more than
+ * {@code qb.exposure.reconcile.end-grace-sec} after their end ({@value #DIFFERENCES_TEMPLATE}); with any, it asks headquarters ({@code qb.admin.exposure.monitor}) with a
  * task, one a day. It takes no lock and writes nothing else (what goes beyond the purchase is never charged anyway).
  */
 public final class ExposureCheck {
@@ -40,7 +41,8 @@ public final class ExposureCheck {
 
     private ExposureCheck() {}
 
-    public static ProcessDefinition<RunInput, RunOutput, ProcessContext> run() {
+    /** @param zone the zone whose days the tasks are of ({@code jabiz.fiscal-year-zone}, as the daily cap's) */
+    public static ProcessDefinition<RunInput, RunOutput, ProcessContext> run(ZoneId zone) {
         return ProcessDefinition.define(RUN, 1, RunInput.class, RunOutput.class, ProcessContext.class, pb -> pb
             .description("Checks every day that the exposures counted stay within what was bought and stop when a "
                 + "publication ends, and asks headquarters when they do not.")
@@ -58,12 +60,12 @@ public final class ExposureCheck {
                 ctx -> TaskSpec.forPermission(TASK_TYPE, TASK_TITLE, Map.of("count", String.valueOf(differences(ctx).size())),
                         QbPermissions.ADMIN_EXPOSURE_MONITOR)
                     .link("/qb/exposure")
-                    .source(source(ctx.get(INPUT, RunInput.class).scheduledTime())))));
+                    .source(source(ctx.get(INPUT, RunInput.class).scheduledTime(), zone)))));
     }
 
-    /** One task a day: the day of the run (UTC). */
-    public static String source(Instant scheduledTime) {
-        return TASK_TYPE + ":" + scheduledTime.atZone(ZoneOffset.UTC).toLocalDate();
+    /** One task a day: the day of the run in the deployment's zone. */
+    public static String source(Instant scheduledTime, ZoneId zone) {
+        return TASK_TYPE + ":" + scheduledTime.atZone(zone).toLocalDate();
     }
 
     @SuppressWarnings("unchecked")
