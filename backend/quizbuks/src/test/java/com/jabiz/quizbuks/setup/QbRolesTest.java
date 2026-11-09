@@ -190,6 +190,12 @@ class QbRolesTest {
         }
         QbRoles.all().forEach(role -> assertThat(role.permissions()).as(role.code())
             .doesNotContain(QbPermissions.HELP_SYSTEM));
+        // F-C10c (controller, 2026-11-09): the gaps report is headquarters' content administrators' alone (the super
+        // administrator holds what they hold); the operators and everybody else do not.
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.ADMIN_HELP_GAPS);
+        assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).contains(QbPermissions.ADMIN_HELP_GAPS);
+        QbRoles.all().stream().filter(role -> !List.of(QbRoles.ADMIN_CONTENT, QbRoles.ADMIN_SUPER).contains(role.code()))
+            .forEach(role -> assertThat(role.permissions()).as(role.code()).doesNotContain(QbPermissions.ADMIN_HELP_GAPS));
     }
 
     @Test

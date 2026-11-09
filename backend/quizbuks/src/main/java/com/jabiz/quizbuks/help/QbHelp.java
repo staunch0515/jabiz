@@ -180,6 +180,8 @@ public final class QbHelp {
         eb.field("escalated", f -> f.physicalColumn("escalated").required(true).processOnly().asBool());
         eb.field("escalatedAt", f -> f.physicalColumn("escalated_at").processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
+        // The month it was handed over in, in jabiz.fiscal-year-zone (the gaps report's month).
+        eb.field("escalatedMonth", f -> f.physicalColumn("escalated_month").processOnly().asText(7));
         // The operator it was handed to; none (and escalated): headquarters.
         eb.field("operatorId", f -> f.physicalColumn("operator_id").processOnly().asText(ID_LENGTH));
         eb.field("waitingFor", f -> f.physicalColumn("waiting_for").processOnly()
@@ -230,6 +232,8 @@ public final class QbHelp {
         eb.field("rating", f -> f.physicalColumn("rating").processOnly()
             .asCode(RATING_DICTIONARY, RATINGS.toArray(String[]::new)));
         eb.field("ratedAt", f -> f.physicalColumn("rated_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        // The month it was rated in, in jabiz.fiscal-year-zone (the gaps report's month).
+        eb.field("ratedMonth", f -> f.physicalColumn("rated_month").processOnly().asText(7));
         eb.field("createdAt", f -> f.physicalColumn("created_at").immutable(true).required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("version", f -> f.physicalColumn("version").asVersion());

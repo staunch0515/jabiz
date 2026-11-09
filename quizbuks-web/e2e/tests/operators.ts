@@ -173,3 +173,26 @@ async function operatorSession(request: APIRequestContext, email: string, known?
   const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')) as { exp: number }
   return { secret, token, expiresAt: claims.exp * 1000 }
 }
+
+/**
+ * F-C10c: a new member of the operator that looks after the Sponsor, for a test that signs in at the Operator
+ * Management System's page: the address and the TOTP secret enrolled (through the API, with the codes of two time
+ * steps; a page's sign-in waits for the next step's code, {@link nextCode}).
+ */
+export async function operatorMemberFor(request: APIRequestContext, sponsorToken: string, name = 'Helper') {
+  const [own] = await query(request, sponsorToken, 'qb.sponsor.operator', {})
+  expect(own, 'the Sponsor has an operator').toBeTruthy()
+  const member = await newMember(request, String(own.operatorId), name)
+  return { email: member.email, secret: member.secret, enrolledAt: Date.now() }
+}
+
+/**
+ * A TOTP code no sign-in used yet: enrolment used the codes of its time step and the next, so this waits until the
+ * clock is in that next step and gives the one after (the server allows a step of drift).
+ */
+export async function nextCode(secret: string, enrolledAt: number): Promise<string> {
+  const step = (time: number) => Math.floor(time / 30_000)
+  const wait = (step(enrolledAt) + 1) * 30_000 - Date.now() + 500
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
+  return totp(secret, Date.now() + 30_000)
+}

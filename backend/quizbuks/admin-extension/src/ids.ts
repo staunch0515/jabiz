@@ -517,6 +517,10 @@ export const PERMISSION = {
   /** Q87: fees charged by hand and invoices voided (finance; another administrator approves), and a sponsor's billing. */
   feeManage: 'qb.fee.manage',
   feeBilling: 'qb.fee.billing',
+  /** F-C10: the AI help's conversations handed to a person (content administrators, the operators' members). */
+  adminHelp: 'qb.admin.help',
+  /** F-C10c: what the AI help did not solve (headquarters' content administrators only). */
+  adminHelpGaps: 'qb.admin.help.gaps',
   /** F-M2: an operator's lead confirms a Sponsor and gives the onboarding platform fee Kudos. */
   feeCreditOnboarding: 'qb.fee-credit.onboarding.confirm',
 } as const
@@ -724,6 +728,13 @@ export const PATH = {
   operatorAudiencePrices: '/qb/operator/audience-prices',
   /** The platform's own pages. */
   tasks: '/tasks',
+  /** F-C10c: the AI help's conversations handed to a person (headquarters every one, an operator its own). */
+  help: '/qb/help',
+  helpThread: (threadId: string) => `/qb/help/${encodeURIComponent(threadId)}`,
+  /** F-C10c: what the AI help did not solve, by month (`?month=`). */
+  helpGaps: '/qb/help-gaps',
+  /** F-C10c: the AI help's usage manuals: publishing and loading the repository's text. */
+  helpManuals: '/qb/help-manuals',
 } as const
 
 /** The publisher kind of the sponsors' console (S0, `PublisherKind.SPONSOR`); other kinds come with their modules. */
@@ -753,3 +764,21 @@ export const AUDIENCE_PRICING = {
  * (`usage.UsageMeters`, the dictionary `usage-meter`); those of bytes are named `….bytes` / `…-bytes` there.
  */
 export const isByteMeter = (meter: string) => /[.-]bytes$/.test(meter)
+
+/**
+ * F-C10c: the AI help (`help.HelpProcesses`, `help.HelpMaterialsProcesses`; docs/quizbuks/plans/impl/F-C10.md): the
+ * people's replies, the gaps report, the usage, and the usage manuals.
+ */
+export const HELP = {
+  reply: 'QB_HELP_REPLY',
+  publish: 'QB_HELP_PUBLISH',
+  load: 'QB_HELP_MANUAL_LOAD',
+  threads: 'qb.admin.help-threads',
+  messages: 'qb.admin.help-messages',
+  gaps: 'qb.admin.help-gaps',
+  usage: 'qb.admin.help-usage',
+  manual: 'urn:jabiz:dataset:default:QbHelpManual',
+  material: 'urn:jabiz:dataset:default:QbHelpMaterial',
+  /** 422: the draft was edited since the repository's text was last loaded (keep it, or replace it). */
+  manualEdited: 'QB_HELP_MANUAL_EDITED',
+} as const

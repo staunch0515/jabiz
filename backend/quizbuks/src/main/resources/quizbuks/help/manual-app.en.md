@@ -67,4 +67,5 @@ Each quiz says how its reward is paid:
 ## Help and terms
 
 - Help centre with frequently asked questions: /taker/help. When the answer is not there, hand your question to a person.
+- Ask the AI: at the top of the help centre (/taker/help, from Account → Help). It answers how to use the app, with links to the pages; mark an answer solved or not solved. "Ask a person" hands the conversation to the support team, whose reply comes there and in the inbox. Your earlier conversations are under "Your conversations".
 - Terms of use: /taker/legal/terms. Privacy policy: /taker/legal/privacy. Official rules of reward campaigns: /taker/legal/contest-rules.

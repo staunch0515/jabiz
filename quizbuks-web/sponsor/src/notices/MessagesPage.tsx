@@ -28,6 +28,8 @@ import { ASSETS_PATH } from '../assets/api'
 import { useRegionLabel } from '../publishing/shared'
 import { Link } from '../qb/router'
 import { CONVERSATIONS_TAB } from '../conversations/api'
+import { openHelp } from '../help/HelpPanel'
+import '../help/messages'
 import { ConversationsTab, useUnreadConversations } from '../conversations/ConversationsPages'
 import {
   ANNOUNCEMENTS_QUERY,
@@ -249,7 +251,11 @@ function AnnouncementItem({ item }: { item: Announcement }) {
         <div id={panel} className="mt-2 flex flex-col gap-1">
           {item.markdown ? <MarkdownView text={body.text} lang={body.lang} />
             : <p className="whitespace-pre-line text-sm" lang={body.lang}>{body.text}</p>}
-          {item.action && (
+          {item.action === 'HELP' && item.actionId && (
+            <Button type="button" variant="link" className="h-auto w-fit p-0 text-sm" data-testid="announcement-help"
+              onClick={() => openHelp(item.actionId)}>{t('helpPanel.openThread')}</Button>
+          )}
+          {item.action && item.action !== 'HELP' && (
             <Link to={item.action === 'CASH' ? CASH_REWARDS_PATH : item.action === 'ASSETS' ? ASSETS_PATH : REDEEM_PATH}
               className="text-primary w-fit text-sm underline underline-offset-4" data-testid="announcement-action">
               {t(item.action === 'CASH' ? 'notices.inbox.openCash'

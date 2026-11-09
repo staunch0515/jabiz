@@ -1,5 +1,7 @@
 package com.jabiz.quizbuks.it;
 
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.content.ai.AiLimits;
 import com.jabiz.quizbuks.help.HelpCodes;
 import com.jabiz.quizbuks.help.HelpJob;
 import com.jabiz.quizbuks.help.HelpProcesses;
@@ -10,11 +12,14 @@ import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -31,6 +36,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * every job outcome (answered, failed, stopped, unanswered attempts) counted in {@code QbHelpUsage}.
  */
 class HelpIT extends HelpItSupport {
+
+    /** The deployment's zone in the tests ({@code jabiz.fiscal-year-zone}, application.yml). */
+    private static final ZoneId ZONE = ZoneId.of("Asia/Tokyo");
 
     @BeforeEach
     void on() {
@@ -318,6 +326,32 @@ class HelpIT extends HelpItSupport {
     }
 
     @Test
+    void thePagesReadTheSettingsAndOneConversationByItsKey() {
+        // F-C10c: the pages size the question box by the parameter and open one conversation (an inbox's link).
+        String taker = newTaker("t-fc10-pages-" + UUID.randomUUID(), "JP");
+        setParam(QbParams.HELP_QUESTION_MAX_LENGTH, "150");
+        try {
+            Map<String, Object> settings = items("qb.me.help-settings", taker(taker), Map.of()).getFirst();
+            assertThat(number(settings.get("questionMaxLength"))).isEqualTo(150);
+            assertThat(settings).containsEntry("enabled", true);
+        } finally {
+            setParam(QbParams.HELP_QUESTION_MAX_LENGTH, "2000");
+        }
+        Object first = escalate(taker(taker), null, QbHelp.APP, "First?").get("threadId");
+        escalate(taker(taker), null, QbHelp.APP, "Second?");
+        List<Map<String, Object>> byKey = List.of(Map.of("field", "threadId", "op", "eq", "value", first));
+        assertThat(items("qb.me.help-threads", taker(taker), Map.of("params", Map.of("entry", QbHelp.APP),
+            "filters", byKey))).singleElement().satisfies(row -> assertThat(row)
+                .containsEntry("threadId", first).containsEntry("firstQuestion", "First?"));
+        // Another's key finds nothing; the staff's list finds it the same way.
+        assertThat(items("qb.me.help-threads", taker(newTaker("t-fc10-pages-o-" + UUID.randomUUID(), "JP")),
+            Map.of("params", Map.of("entry", QbHelp.APP), "filters", byKey))).isEmpty();
+        assertThat(items("qb.admin.help-threads", hqHelp(), Map.of("filters", byKey))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("threadId", first).containsEntry("status",
+                QbHelp.ESCALATED));
+    }
+
+    @Test
     void aTakersAndADirectSponsorsQuestionGoToHeadquarters() {
         NewOperator north = newOperatorWithLead(operatorsAdmin(), unique("Help Direct"), null);
         String northStaff = memberSession(north.leadId(), north.operatorId());
@@ -477,7 +511,6 @@ class HelpIT extends HelpItSupport {
     @Test
     void theMonthsGapsListUnsolvedAndHandedOverQuestionsAndTheGaugeShowsTheShare() {
         String taker = newTaker("t-fc10-gaps-" + UUID.randomUUID(), "JP");
-        Instant from = clock.instant().minusSeconds(1);
         Map<String, Object> asked = ask(taker(taker), null, QbHelp.APP, "Unsolved question about wallets?", "wallet");
         runJobs();
         String answerId = (String) messages(asked.get("threadId")).getLast().get("message_id");
@@ -486,16 +519,14 @@ class HelpIT extends HelpItSupport {
         assertThat(thread(asked.get("threadId"))).containsEntry("resolved", false)
             .containsEntry("status", QbHelp.OPEN);
         Map<String, Object> handed = escalate(taker(taker), null, QbHelp.APP, "Handed over question?");
-        Instant to = clock.instant().plusSeconds(1);
-        List<Map<String, Object>> gaps = items(QbHelp.GAPS, hqHelp(), Map.of("params", Map.of("from", from.toString(),
-            "to", to.toString())));
+        String month = AiLimits.month(clock.instant(), ZONE);
+        List<Map<String, Object>> gaps = items(QbHelp.GAPS, hqHelp(), Map.of("params", Map.of("month", month)));
         assertThat(gaps).anySatisfy(row -> assertThat(row).containsEntry("reason", "UNSOLVED")
             .containsEntry("question", "Unsolved question about wallets?").containsEntry("page", "wallet"));
         assertThat(gaps).anySatisfy(row -> assertThat(row).containsEntry("reason", "ESCALATED")
             .containsEntry("question", "Handed over question?").containsEntry("threadId", handed.get("threadId")));
         // Only what was not solved: an answer rated solved is not a gap; neither is another period.
-        assertThat(items(QbHelp.GAPS, hqHelp(), Map.of("params", Map.of("from", to.toString(), "to",
-            to.plusSeconds(60).toString())))).isEmpty();
+        assertThat(items(QbHelp.GAPS, hqHelp(), Map.of("params", Map.of("month", "2001-01")))).isEmpty();
 
         param(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, "1000");
         try {
@@ -504,6 +535,41 @@ class HelpIT extends HelpItSupport {
         } finally {
             param(QbParams.HELP_GLOBAL_MONTHLY_TOKENS, "20000000");
         }
+    }
+
+    @Test
+    void theGapsMonthsAreTheDeploymentsZonesAndOnlyContentAdministratorsReadThem() {
+        assertThat(ZONE).isNotEqualTo(ZoneOffset.UTC);
+        String taker = newTaker("t-fc10-gapzone-" + UUID.randomUUID(), "JP");
+        // 23:30 on the last day of a month in UTC is already the next month in the zone (Asia/Tokyo, nine hours ahead),
+        // 2031 being a year no other test of this class writes into.
+        Instant before = clock.instant();
+        clock.set(Instant.parse("2031-05-31T23:30:00Z"));
+        try {
+            gapsOfTheZonesMonth(taker);
+        } finally {
+            clock.set(before);
+        }
+    }
+
+    private void gapsOfTheZonesMonth(String taker) {
+        Map<String, Object> asked = ask(taker(taker), null, QbHelp.APP, "Zone question near midnight?", "wallet");
+        runJobs();
+        String answerId = (String) messages(asked.get("threadId")).getLast().get("message_id");
+        run(HelpProcesses.RATE, taker(taker), body("threadId", asked.get("threadId"), "messageId", answerId, "rating",
+            QbHelp.UNSOLVED));
+        assertThat(AiLimits.month(clock.instant(), ZONE)).isEqualTo("2031-06");
+        assertThat(items(QbHelp.GAPS, hqHelp(), Map.of("params", Map.of("month", "2031-06"))))
+            .anySatisfy(row -> assertThat(row).containsEntry("question", "Zone question near midnight?"));
+        assertThat(items(QbHelp.GAPS, hqHelp(), Map.of("params", Map.of("month", "2031-05"))))
+            .noneSatisfy(row -> assertThat(row).containsEntry("question", "Zone question near midnight?"));
+
+        // An operator's member (the desk and the AI page, as before) is refused: the report has its own permission.
+        String operatorLike = TestTokens.bearer(tokens, "fc10-op-help", QbPermissions.ADMIN_HELP,
+            QbPermissions.ADMIN_AI_READ, "task.read");
+        client.post().uri("/api/queries/" + QbHelp.GAPS).contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, operatorLike).bodyValue(Map.of("params", Map.of("month", "2031-06")))
+            .exchange().expectStatus().isForbidden();
     }
 
     private void cancel(String operator, String jobId) {

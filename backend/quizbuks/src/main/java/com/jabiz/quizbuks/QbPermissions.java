@@ -349,6 +349,11 @@ public final class QbPermissions {
      */
     public static final String ADMIN_HELP = "qb.admin.help";
     /**
+     * F-C10c: the report of what the AI help did not solve (the questions' words, never who asked). Headquarters'
+     * content administrators only, not the operators (controller, 2026-11-09).
+     */
+    public static final String ADMIN_HELP_GAPS = "qb.admin.help.gaps";
+    /**
      * F-C10: the help's datasets read by processes only, its job outcomes and daily jobs ({@code internal()}). Granted
      * to no role.
      */

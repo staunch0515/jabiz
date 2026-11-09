@@ -159,7 +159,7 @@ abstract class HelpItSupport extends AiItSupport {
     /** A token of headquarters' content administrators (the help's people for Takers and direct Sponsors). */
     String hqHelp() {
         return TestTokens.bearer(tokens, "fc10-hq-help", com.jabiz.quizbuks.QbPermissions.ADMIN_HELP,
-            com.jabiz.quizbuks.QbPermissions.ADMIN_AI_READ, "task.read");
+            com.jabiz.quizbuks.QbPermissions.ADMIN_HELP_GAPS, com.jabiz.quizbuks.QbPermissions.ADMIN_AI_READ, "task.read");
     }
 
     static long number(Object value) {

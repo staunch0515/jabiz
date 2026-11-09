@@ -969,7 +969,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
   部署配置（改后重启；超出范围即启动失败）：`quizbuks.help.max-concurrency`（缺省 4）、`quizbuks.help.attempts`（每个提问的尝试次数，缺省 2，1–5）、`quizbuks.help.attempt-timeout`（每次尝试的时限，缺省 `PT3M`，30 秒–10 分钟）。
 
-- **统计**：每月"没解决"与转人工的提问 `qb.admin.help-gaps`（内容管理员据此补 FAQ 与手册）；帮助用量 `qb.admin.help-usage`（总部 AI 页，与发起方的 AI 用量分开）。
+- **统计**：每月"没解决"与转人工的提问 `qb.admin.help-gaps`（内容管理员据此补 FAQ 与手册；专用权限 `qb.admin.help.gaps`，只有总部内容管理员有，运营商没有；月份按 `jabiz.fiscal-year-zone`）；帮助用量 `qb.admin.help-usage`（总部 AI 页，与发起方的 AI 用量分开）。
 - **资料与使用手册（F-C10b）**：AI 只依据**快照**回答：每个入口（学者 `app` / 发起方 `sponsor`）× 语言（中日英）一份，内容是已发布的使用手册、已发布的 FAQ（该入口与"两者"）和当前生效的法律文本（学者：用户条款、隐私政策、有奖活动规则、AI 使用说明；发起方：发起方条款、隐私政策、特定商取引法标示、AI 使用说明）。快照存成文件（策略 `qb.help.materials`），每次提问作为作业的文件交给 AI，并经提供方的提示缓存（5 分钟）复用。
   - **部署**：迁移 `V105` 建 `qb_help_manual_version`（手册，只追加）与 `qb_help_material`（快照），`qb_help_usage` 加缓存的两列。部署后运行一次 `QB_SETUP`：建两份手册的草稿（仓库中的初稿，**不发布**）。新任务 `qb.help-materials`（每小时第 41 分，UTC）；新外部作业 `qb.help.materials`（只把文本存成文件，不调用外部服务）。
   - **编辑与发布手册**：平台管理系统 → "AI 问题解答使用手册"（`QbHelpManual`），编辑草稿（三语 Markdown，写本站路径如 `/taker/help`、`/sponsor/publications`，让回答能附链接；不要写外部网址，回答中的外部链接会被去掉）；行操作"发布"（`QB_HELP_PUBLISH`，内容管理员）。三语缺一、超过上限即 422，什么都不改。发布后几秒内生成新快照（事件），下一次提问就用新内容。快照的状态在"AI 问题解答资料"（`QbHelpMaterial`：在用的大小、生成时间，最近一次生成的大小，保存中）。
