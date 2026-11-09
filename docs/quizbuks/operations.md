@@ -900,7 +900,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 用了**其他发起方共享视频**的发布（F-S12，卡片的提供方不是发布方），使用方（发布的发起方）在发布页"共享视频的台账"中记下与提供方的线下约定：期间、计价方式（固定价、每千次曝光成功、每位去答题的学者）与价格，提交给提供方；提供方在资源页"我的视频的使用台账"中确认，或写原因拒绝，使用方更正后重新提交（`docs/quizbuks/plans/impl/F-S14.md`）。**平台不代收代付**，台账不进平台的会计账本。给用户的帮助文案在 `docs/quizbuks/help/video-uses.md`。
 
-- **部署**：迁移 `V99`（临时编号）建只追加表 `qb_video_use_version` 与普通表 `qb_video_use_figures`。部署后运行一次 `QB_SETUP`：建一个普通参数 `qb.video-use.remind-days`，给内容管理员与运营商补上 `qb.admin.video-use.read`。三个任务都每天一次：`qb.video-use-figures`（UTC 19:53，逐项）、`qb.video-use-check`（UTC 20:07）、`qb.video-use-remind`（UTC 00:47，逐项）。没有新的环境变量。
+- **部署**：迁移 `V100`（临时编号）建只追加表 `qb_video_use_version` 与普通表 `qb_video_use_figures`。部署后运行一次 `QB_SETUP`：建一个普通参数 `qb.video-use.remind-days`，给内容管理员与运营商补上 `qb.admin.video-use.read`。三个任务都每天一次：`qb.video-use-figures`（UTC 19:53，逐项）、`qb.video-use-check`（UTC 20:07）、`qb.video-use-remind`（UTC 00:47，逐项）。没有新的环境变量。
 - **版本**：每次保存、提交、确认、拒绝都是 `qb_video_use_version` 的新版本（不改旧行，平台的审计 `GET /api/audit/records` 有前后值）。等待提供方确认时使用方不能改；已确认的更正后回到草稿，须重新确认（确认记下所确认的版本号）。
 - **数字**：打开、曝光成功、去答题的人数、合格人数（去答题的人中合格的），每天由 `qb.video-use-figures` 从计数表 `qb_exposure` 与 `qb_attempt` 重算一次（截止为运行时刻），发布结束后的第一次运行**定稿**（截止为卡片的 `ended_at`），之后不再写。两边与运营商的页面上，少于统计的最小分组 `qb.stats.min-group`（Q9e，不小于 3）的数字不显示，所依据的数字不显示时参考金额也不显示。
 - **核对**（`qb.video-use-check`）：每天把定稿的数字按同一截止从计数表重算比较，不一致即给内容管理员（`qb.admin.exposure.monitor`）一个待办（一天一个）。计数表的行只设置一次，正常情况下不会不一致；常见原因是手工改了 `qb_exposure` 或迁移补了旧时间的行。
