@@ -80,6 +80,51 @@ class QuizQuestionsTemplateIT extends ContentItSupport {
             .isEmpty();
     }
 
+    @Test
+    void theSummaryAndTheBadgesAreCountedByTheServer() {
+        // F-S6d (§3.5c): the editor reads no question of its own for the summary line or the rows' badges.
+        String quizId = newQuiz(sponsorA(), "Summary");
+        Map<String, Object> empty = items("qb.sponsor.quiz-question-summary", sponsorA(),
+            body("params", Map.of("quizId", quizId))).getFirst();
+        assertThat(number(empty.get("questionCount"))).isZero();
+        assertThat(number(empty.get("fullScore"))).isZero();
+        assertThat(empty.get("firstUnmarkedId")).isNull();
+
+        String single = (String) run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem", "One", "points", 2,
+            "options", List.of(body("text", "a", "correct", true), body("text", "b")))).get("itemId");
+        String multiple = (String) run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem", "Two", "points",
+            3, "options", List.of(body("text", "a", "correct", true), body("text", "b", "correct", true)))).get("itemId");
+        String unmarked = (String) run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem", "Three",
+            "options", List.of(body("text", "a"), body("text", "b")))).get("itemId");
+        run("QB_QUESTION_SAVE", sponsorA(), body("quizId", quizId, "stem", "Four", "options",
+            List.of(body("text", "a"), body("text", "b"))));
+        Map<String, Object> summary = items("qb.sponsor.quiz-question-summary", sponsorA(),
+            body("params", Map.of("quizId", quizId))).getFirst();
+        assertThat(number(summary.get("questionCount"))).isEqualTo(4);
+        assertThat(number(summary.get("fullScore"))).isEqualTo(2 + 3 + 1 + 1);
+        assertThat(number(summary.get("singleCount"))).isEqualTo(1);
+        assertThat(number(summary.get("multipleCount"))).isEqualTo(1);
+        assertThat(number(summary.get("unmarkedCount"))).isEqualTo(2);
+        assertThat(summary).containsEntry("firstUnmarkedId", unmarked);
+        assertThat(number(summary.get("firstUnmarkedNo"))).isEqualTo(3);
+        // The first one unmarked follows the order.
+        run("QB_QUESTION_MOVE", sponsorA(), body("quizId", quizId, "questionId", unmarked, "beforeQuestionId", null));
+        Map<String, Object> moved = items("qb.sponsor.quiz-question-summary", sponsorA(),
+            body("params", Map.of("quizId", quizId))).getFirst();
+        assertThat(number(moved.get("firstUnmarkedNo"))).isEqualTo(3);
+        assertThat(moved).doesNotContainEntry("firstUnmarkedId", unmarked);
+
+        // The rows' badges: the correct options and whether an option has an image.
+        List<Map<String, Object>> rows = rows(page(quizId, Map.of(), 0, 10));
+        assertThat(rows).extracting(row -> row.get("questionId"), row -> number(row.get("correctCount")),
+            row -> row.get("optionImages")).startsWith(org.assertj.core.groups.Tuple.tuple(single, 1, false),
+            org.assertj.core.groups.Tuple.tuple(multiple, 2, false));
+
+        // Another sponsor: no summary at all.
+        assertThat(items("qb.sponsor.quiz-question-summary", sponsorB(), body("params", Map.of("quizId", quizId))))
+            .isEmpty();
+    }
+
     private Map<String, Object> limits() {
         return items("qb.sponsor.quiz-limits", sponsorA(), body()).getFirst();
     }
