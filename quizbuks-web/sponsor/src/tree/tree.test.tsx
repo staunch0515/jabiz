@@ -1,6 +1,7 @@
 import { configureClient, session } from '@jabiz/client'
 import { expectAccessible } from '@jabiz/ui/testing'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import '../messages'
@@ -16,9 +17,21 @@ function json(status: number, body: unknown) {
 const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: true, appPath: '/',
   sessionPersistence: 'tab' }
 const BASICS = '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b01'
+const MAP = { treeId: 't1', status: 'ACTIVE', revision: 3, createdAt: '2026-11-01T00:00:00Z', currentVersionId: 'v1',
+  currentVersionNo: 1, name: JSON.stringify({ en: 'Baking' }), description: null, openVersionId: 'v2',
+  openVersionNo: 2, openStatus: 'REJECTED', rejectReason: 'Name the node better', submittedAt: null, editedAt: null,
+  nodes: 2, runningBound: 1 }
+const NODES = [
+  { nodeId: BASICS, name: JSON.stringify({ en: 'Bread' }), description: null, seq: 1, inEffect: true, litCount: 12,
+    runningBound: 1, condition: JSON.stringify({ op: 'ALL', items: [{ passed: true }] }) },
+  { nodeId: 'n2', name: JSON.stringify({ en: 'Sourdough' }), description: null, seq: 2, inEffect: true, litCount: null,
+    runningBound: 0, condition: JSON.stringify({ op: 'ALL', items: [{ node: BASICS }, { passed: true }] }) },
+]
 
-/** The server as the tree page sees it: an approved sponsor; the page asks for nothing of its own. */
-function server() {
+const TREE = 't1'
+
+/** The server as the map page sees it: an approved Sponsor with one map in effect and a version sent back. */
+function server(maps: unknown[] = [MAP]) {
   const asked: string[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
@@ -34,6 +47,10 @@ function server() {
           permissions: ['qb.publication.write'], emailVerified: true, idleTimeoutSeconds: 1800 })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsor/query':
         return json(200, { items: [{ id: 's', version: 1, attributes: { reviewStatus: 'APPROVED' } }] })
+      case '/api/queries/qb.sponsor.trees':
+        return json(200, { items: maps, offset: 0, limit: 50 })
+      case '/api/queries/qb.sponsor.tree':
+        return json(200, { items: NODES, offset: 0, limit: 500 })
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
       case '/api/queries/qb.sponsor.conversations-unread':
@@ -56,7 +73,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('the Sponsor\'s tree (Q85, being updated since F-S2c2)', () => {
+describe('the Sponsor\'s knowledge map (F-S3c)', () => {
   it('has every text in every language, and its address', () => {
     const english = keyPaths(treeMessages.en)
     for (const lng of LANGUAGES) {
@@ -65,16 +82,29 @@ describe('the Sponsor\'s tree (Q85, being updated since F-S2c2)', () => {
       expect(emptyTexts(SPONSOR, lng), lng).toEqual([])
     }
     expect(treePathOf(BASICS)).toBe(`/tree?node=${BASICS}`)
+    expect(treePathOf(null)).toBe('/tree')
   })
 
-  it('stays at its address and says it is coming soon, reading no tree', async () => {
+  it('draws the map in effect with the lit counts, and says the open version was sent back', async () => {
     const { asked } = server()
     window.history.replaceState(null, '', treePathOf(BASICS))
     render(<App />)
-    const page = await screen.findByTestId('tree-page')
-    expect(await screen.findByTestId('tree-soon')).toHaveTextContent('Coming soon')
-    expect(page).toBeInTheDocument()
-    expect(asked.filter((path) => path.startsWith('/api/queries/qb.sponsor.tree'))).toEqual([])
+    const map = await screen.findByTestId('tree-map')
+    expect(map).toHaveAttribute('data-tree', TREE)
+    expect(within(map).getByTestId('tree-version')).toHaveTextContent('Version 1 in effect')
+    expect(within(map).getByTestId('tree-open')).toHaveTextContent('Version 2 was sent back: Name the node better')
+    expect(await within(map).findByTestId('knowledge-map')).toBeInTheDocument()
+    expect(asked).toContain('/api/queries/qb.sponsor.tree')
+    await userEvent.click(within(map).getAllByTestId('knowledge-map-node')[0])
+    expect(within(map).getByTestId('knowledge-map-lit-count')).toHaveTextContent('12')
+    await expectAccessible()
+  })
+
+  it('says when there is no map yet', async () => {
+    server([])
+    window.history.replaceState(null, '', '/tree')
+    render(<App />)
+    expect(await screen.findByTestId('tree-none')).toHaveTextContent('no knowledge map')
     await expectAccessible()
   })
 })

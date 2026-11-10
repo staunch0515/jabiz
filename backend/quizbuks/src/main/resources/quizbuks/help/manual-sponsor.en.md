@@ -31,9 +31,10 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 - Submitted publications are reviewed before they go on. While in review you can withdraw one to change it; once approved it cannot be changed (copy it to publish it again with changes). A sent-back publication says why.
 - Takers cannot start a publication while your wallet cannot pay its highest reward: top up. You can pause a publication and resume it (also from the app's My Sponsor account).
 
-## Knowledge map (Tree, /sponsor/tree)
+## Knowledge map (/sponsor/tree)
 
 - Link your publications into a knowledge map: passing one lights its node, and lit nodes open later quizzes or a certification. Publish the map so Takers see it.
+- The page shows your map in effect and how many Takers lit each node (shown only from the statistics' minimum group up), the publications bound and not ended, and whether a newer version is a draft, in review or was sent back (with the reviewer's reason). Takers see the map on your page.
 
 ## Asset library (/sponsor/assets)
 

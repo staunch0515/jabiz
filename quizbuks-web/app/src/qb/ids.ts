@@ -160,3 +160,17 @@ export const HELP_CODE = {
   /** A job's failure: the help was asked to answer a quiz. */
   quizRefused: 'QB_HELP_QUIZ_REFUSED',
 } as const
+
+/**
+ * Knowledge graphs as the pages read them (F-S3, docs/quizbuks/plans/impl/F-S3.md §2): a Taker's ("my maps", one map,
+ * and the feed's `tree` parameter for what they can start), anybody's on a Sponsor's page, and a Sponsor's own.
+ */
+export const TREE = {
+  myTrees: 'qb.app.trees',
+  tree: 'qb.app.tree',
+  publicPageTree: 'qb.public.sponsor-page-tree',
+  sponsorTrees: 'qb.sponsor.trees',
+  sponsorVersions: 'qb.sponsor.tree-versions',
+  sponsorTree: 'qb.sponsor.tree',
+  sponsorBindable: 'qb.sponsor.tree-bindable-nodes',
+} as const

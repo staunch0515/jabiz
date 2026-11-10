@@ -35,11 +35,6 @@ export interface PagePublication {
   pickCount?: number | null
   maxReward: unknown
   rewardMethod: RewardMethod
-  /**
-   * Q76: the listed publications it required first, as JSON. F-S2c2 (D4) removed the prerequisites and the template
-   * gives none; the page's levels (`levels.ts`) read it until F-S3 replaces them.
-   */
-  prerequisites?: string | null
 }
 
 /** A published page by its handle (typed in any case); null when there is none. */

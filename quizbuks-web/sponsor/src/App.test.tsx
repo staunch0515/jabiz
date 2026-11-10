@@ -540,7 +540,7 @@ describe('a signed-in Sponsor', () => {
       .map((link) => link.textContent))).toEqual([
       // Q79: the sponsor's own pages (profile, products, staff, mail server) are the hub's sections, one entry here.
       // F-C1c: the products are a tab of the asset library now.
-      ['Dashboard'], ['Quizzes', 'Publications', 'Tree', 'Asset library'], ['Cash rewards', 'Digital prizes', 'Prizes'],
+      ['Dashboard'], ['Quizzes', 'Publications', 'Knowledge map', 'Asset library'], ['Cash rewards', 'Digital prizes', 'Prizes'],
       // Q89a: buying other sponsors' benefits, and offering one's own.
       ['Benefit catalog', 'My benefits', 'Inquiries', 'Purchases'],
       ['Wallet', 'Transactions'], ['Sponsor profile', 'Page statistics', 'Messages', 'Account', 'Help']])
