@@ -214,14 +214,29 @@ public class TreeConfig {
         return mine(QbTrees.MY_REVOCATIONS, QbTrees.REVOCATION);
     }
 
+    /** F-S4b: a Sponsor's own lit records (the subject is the caller as a Sponsor), for the reward methods' gates. */
+    @Bean
+    DatasetDefinition qbMySponsorTreeLitDataset() {
+        return mine(QbTrees.MY_SPONSOR_LITS, QbTrees.LIT, QbTrees.SPONSOR);
+    }
+
+    @Bean
+    DatasetDefinition qbMySponsorTreeLitRevocationDataset() {
+        return mine(QbTrees.MY_SPONSOR_REVOCATIONS, QbTrees.REVOCATION, QbTrees.SPONSOR);
+    }
+
     private DatasetDefinition mine(String id, String entity) {
+        return mine(id, entity, QbTrees.USER);
+    }
+
+    private DatasetDefinition mine(String id, String entity, String subjectKind) {
         return DatasetDefinition.define(id, d -> d
             .targetEntityType(entity)
             .permissions(QbPermissions.TREES_READ, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
             .scope(s -> s.fromContext("subjectId", "actorId", RequestContext::actorId)
-                .fixed("subjectKind", QbTrees.USER)));
+                .fixed("subjectKind", subjectKind)));
     }
 
     @Bean

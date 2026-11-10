@@ -244,6 +244,9 @@ export async function prepareQuizbuks(request: APIRequestContext) {
       await run(request, publisher, 'CONTROL_CHANGE_PUBLISH', { changeId: change.id })
     }
   }
+  // F-S4b: the default reward methods are empty after setup (a new Sponsor gets what a lit node opens); the tests
+  // publish with the platform's Kudos, as before (backend RewardMethodsIT checks the empty default).
+  await setControlledParam(request, 'qb.reward.default-methods', 'PLATFORM')
   // The terms and the privacy policy in effect, as before going live (Q7b); loaded when needed (it uses these helpers).
   await (await import('./legal')).termsInEffect(request)
   // F-S1: the default operator, without which nobody signs up as a sponsor.

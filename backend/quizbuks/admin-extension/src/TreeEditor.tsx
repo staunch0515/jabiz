@@ -74,7 +74,7 @@ export default function TreeEditor({ tree, operator, onClose }: { tree: TreeRow;
   if (version.isError) return <LoadFailed error={version.error} onRetry={() => void version.refetch()} />
   const nodes: DraftNode[] = (version.data ?? []).filter((row) => row.change !== 'REMOVED').map((row) => ({
     nodeId: row.nodeId, key: row.nodeId, name: parse(row.name) ?? {}, description: parse(row.description),
-    condition: parseCondition(row.condition), runningBound: row.runningBound,
+    condition: parseCondition(row.condition), runningBound: row.runningBound, grantAmount: row.grantAmount,
   }))
   const draft: Draft = { treeId: tree.treeId, revision: tree.revision, name: parse(tree.draftName) ?? {},
     description: parse(tree.description), nodes }

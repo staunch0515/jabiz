@@ -123,10 +123,22 @@ abstract class PublicationItSupport extends ContentItSupport {
         }
         if (installs() && query("SELECT 1 FROM qb_setup_record_version LIMIT 1").isEmpty()) {
             publishProposals(setup());
+            platformRewardMethods();
             installDefaultOperator();
             onboard(SPONSOR_A);
             onboard(SPONSOR_B);
         }
+    }
+
+    /**
+     * F-S4b: the default reward methods are empty after setup (a new Sponsor gets what a lit node opens); the tests
+     * publish with the platform's Kudos, as installs did before (RewardMethodsIT checks the empty).
+     */
+    void platformRewardMethods() {
+        Map<String, Object> methods = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", QbParams.REWARD_DEFAULT_METHODS, "value", "PLATFORM"),
+            "reason", "Tests publish with the platform's Kudos"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", methods.get("changeId")));
     }
 
     /**

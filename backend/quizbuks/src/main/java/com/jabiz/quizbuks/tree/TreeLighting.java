@@ -57,6 +57,10 @@ public final class TreeLighting {
     static final String PASSES = "lighting.passes";
     static final String PARAMS = "lighting.params";
     static final String LIT_NOW = "lighting.litNow";
+    /** F-S4b: the candidates' maps (for a copy's template, whose node row holds the grant). */
+    static final String TREES = "lighting.trees";
+    /** F-S4b: whether a lit record here holds a grant (the grant is then asked for). */
+    static final String GRANTED = "lighting.granted";
     static final int MAX_ROWS = 5000;
 
     private TreeLighting() {}
@@ -117,7 +121,13 @@ public final class TreeLighting {
                     // F-S2d: the graphs of the nodes their conditions name.
                     QueryEntities.query(QbTrees.defaultDataset(QbTrees.NODE_REF), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("nodeId", candidateNodes(ctx))).limit(MAX_ROWS).build(),
-                        CANDIDATE_REFS)))
+                        CANDIDATE_REFS),
+                    // F-S4b: a Sponsor's candidates' maps, for the template whose node grants (the node rows above,
+                    // read by node id, hold the template's row too: a copy keeps its template's node ids).
+                    QueryEntities.query(QbTrees.defaultDataset(QbTrees.TREE), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("treeId", QbTrees.SPONSOR.equals(subject(ctx))
+                            ? candidateList(ctx).stream().map(c -> (Object) c.treeId()).distinct().toList()
+                            : List.of())).limit(MAX_ROWS).build(), TREES)))
                 .step("Load the person's passes of them", QueryEntities.<ProcessContext>of(
                     QbPlay.defaultDataset(QbPlay.ATTEMPT), ctx -> {
                         List<Object> publications = new ArrayList<>();
@@ -135,7 +145,10 @@ public final class TreeLighting {
                     QbParams.TREE_MAX_DEPTH))
                 .compute("Light the nodes that hold", (metadata, ctx) -> light(ctx))
                 .step("Evaluate the nodes depending on them", PublishEvent.<ProcessContext>when(
-                    TreeLighting::goesDeeper, LIT_EVENT, TreeLighting::litPayload)));
+                    TreeLighting::goesDeeper, LIT_EVENT, TreeLighting::litPayload))
+                // F-S4b: the grants are given outside the lighting, under the Sponsor's wallet lock (fee.LightGrants).
+                .step("Ask for the grants", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(GRANTED),
+                    com.jabiz.quizbuks.fee.LightGrants.DUE_EVENT, ctx -> Map.of("sponsorId", person(ctx)))));
     }
 
     /**
@@ -322,6 +335,12 @@ public final class TreeLighting {
             values.put("nodeId", candidate.nodeId());
             values.put("litAt", ctx.opTime());
             values.put("basis", TreeProcesses.json(basis));
+            // F-S4b: a Sponsor's lighting freezes the grant of the template's version in effect.
+            java.math.BigDecimal grant = QbTrees.SPONSOR.equals(subject(ctx)) ? grantOf(ctx, nodes, candidate) : null;
+            values.put("grantAmount", grant);
+            if (grant != null) {
+                ctx.put(GRANTED, true);
+            }
             ctx.changes().insert(QbTrees.LIT, values);
             // A node lit here counts for the next candidates of the same level.
             TreeLights.NodeRef done = new TreeLights.NodeRef(candidate.treeId(), candidate.nodeId());
@@ -331,6 +350,29 @@ public final class TreeLighting {
         }
         ctx.put(LIT_NOW, List.copyOf(litKeys));
         ctx.put(OUTPUT, new EvaluateOutput(lit));
+    }
+
+    /**
+     * F-S4b: the grant lighting {@code candidate} earns: the node row of its template in effect (the map itself when it
+     * is a platform template Sponsors light, an operator's copy's template otherwise); none for another map, a node the
+     * template no longer has, or no grant.
+     */
+    private static java.math.BigDecimal grantOf(ProcessContext ctx, Map<Candidate, EntityInstance> nodes,
+        Candidate candidate) {
+        EntityInstance tree = list(ctx, TREES).stream()
+            .filter(row -> candidate.treeId().equals(String.valueOf(row.id()))).findFirst().orElse(null);
+        if (tree == null || !QbTrees.SPONSOR.equals(tree.get("subjectKind"))) {
+            return null;
+        }
+        String templateId = QbTrees.PLATFORM.equals(tree.get("ownerKind")) ? String.valueOf(tree.id())
+            : QbTrees.OPERATOR.equals(tree.get("ownerKind")) && tree.get("templateTreeId") != null
+                ? String.valueOf((Object) tree.get("templateTreeId")) : null;
+        EntityInstance row = templateId == null ? null : nodes.get(new Candidate(templateId, candidate.nodeId()));
+        if (row == null || !Boolean.TRUE.equals(row.get("active")) || row.get("grantAmount") == null) {
+            return null;
+        }
+        java.math.BigDecimal amount = new java.math.BigDecimal(row.get("grantAmount").toString());
+        return amount.signum() > 0 ? amount : null;
     }
 
     @SuppressWarnings("unchecked")

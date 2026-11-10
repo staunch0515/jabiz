@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  afterSave, outer, passAllowed, referrers, saveInputOf, withBeforeAnswer, withItem, withMoved, withN, withNewNode,
+  afterSave, outer, passAllowed, referrers, saveInputOf, withBeforeAnswer, withItem, withMoved, withN, withNewNode, withNode,
   withOp, withoutItem, withoutNode, type Condition, type Draft,
 } from './tree-draft'
 
@@ -75,5 +75,15 @@ describe('the draft', () => {
     expect(saved.revision).toBe(4)
     expect(saved.nodes[2]).toMatchObject({ nodeId: 'c', key: 'c' })
     expect(saved.nodes[1].condition).toEqual({ op: 'ANY', items: [{ node: 'c' }] })
+  })
+
+  it('sends each node\'s grant back as read, so that a save never drops it (F-S4b)', () => {
+    const read = draft()
+    const granting = { ...read, nodes: read.nodes.map((n) => n.key === 'a' ? { ...n, grantAmount: 300 } : n) }
+    const input = saveInputOf(withNewNode(granting, { en: 'Rye' }))
+    expect(input.nodes.map((n) => [n.key ?? n.nodeId, n.grantAmount])).toEqual([['a', 300], ['b', null],
+      ['new-3', null]])
+    const renamed = withNode(granting, 'a', (n) => ({ ...n, name: { en: 'Wheat' } }))
+    expect(saveInputOf(renamed).nodes[0].grantAmount).toBe(300)
   })
 })

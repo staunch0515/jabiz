@@ -109,9 +109,17 @@ public final class TreeProcesses {
      * @param nodeId    the node's id; none for a new one, which is named by {@code key} in the save's conditions
      * @param key       a new node's name within this save (any text; replaced by the id the save gives it)
      * @param condition the condition ({@link TreeCondition#toMap()}), naming nodes by id or, new ones, by key
+     * @param grantAmount F-S4b: the platform fee Kudos lighting the node grants (a platform template Sponsors light
+     *                    only; an operator's copy keeps its template's); none for no grant
      */
     public record NodeInput(String nodeId, String key, @NotNull Map<String, String> name,
-        Map<String, String> description, @NotNull Map<String, Object> condition) {}
+        Map<String, String> description, @NotNull Map<String, Object> condition, BigDecimal grantAmount) {
+
+        public NodeInput(String nodeId, String key, Map<String, String> name, Map<String, String> description,
+            Map<String, Object> condition) {
+            this(nodeId, key, name, description, condition, null);
+        }
+    }
 
     /** @param nodes the draft's every node, in order (given is complete: a node left out is no longer in it) */
     public record SaveInput(@NotBlank String treeId, Long baseRevision, @NotNull Map<String, String> name,
@@ -324,14 +332,21 @@ public final class TreeProcesses {
         Object versionId = insertVersion(ctx, treeId, 1, i18n(version.get("name")), i18n(version.get("description")));
         for (EntityInstance def : list(ctx, TEMPLATE_DEFS)) {
             insertDef(ctx, versionId, def.get("nodeId"), i18n(def.get("name")), i18n(def.get("description")),
-                String.valueOf((Object) def.get("condition")), AccountEditing.number(def.get("seq")));
+                String.valueOf((Object) def.get("condition")), AccountEditing.number(def.get("seq")),
+                grantOf(def));
         }
         ctx.put(OUTPUT, new TreeOutput(String.valueOf(treeId), String.valueOf(versionId), 1, QbTrees.DRAFT, 1,
             Map.of(), List.of(), null, null));
     }
 
+    /** F-S4b: a node definition's grant, none for no grant. */
+    static BigDecimal grantOf(EntityInstance def) {
+        Object amount = def == null ? null : def.get("grantAmount");
+        return amount == null ? null : new BigDecimal(amount.toString());
+    }
+
     private static void insertDef(ProcessContext ctx, Object versionId, Object nodeId, Map<String, String> name,
-        Map<String, String> description, String condition, long seq) {
+        Map<String, String> description, String condition, long seq, BigDecimal grantAmount) {
         Map<String, Object> def = new LinkedHashMap<>();
         def.put("versionId", String.valueOf(versionId));
         def.put("nodeId", String.valueOf(nodeId));
@@ -339,6 +354,7 @@ public final class TreeProcesses {
         def.put("description", description == null || description.isEmpty() ? null : description);
         def.put("condition", condition);
         def.put("seq", BigDecimal.valueOf(seq));
+        def.put("grantAmount", grantAmount);
         ctx.changes().insert(QbTrees.NODE_DEF, def);
     }
 
@@ -487,7 +503,49 @@ public final class TreeProcesses {
     private static <I, O> void loadRules(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         loadGraphsInEffect(pb);
         pb.step("Load the limits", LoadParams.<ProcessContext>of(ProcessContext::opTime, PARAMS,
-            QbParams.TREE_MAX_NODES, QbParams.TREE_MAX_CONDITIONS, QbParams.TREE_MAX_DEPTH));
+            QbParams.TREE_MAX_NODES, QbParams.TREE_MAX_CONDITIONS, QbParams.TREE_MAX_DEPTH))
+            // F-S4b: the most a node may grant (controlled, optional: absent, no grant can be set).
+            .step("Load the most a node may grant", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
+                GRANT_PARAMS, QbParams.TREE_GRANT_MAX_PER_NODE));
+    }
+
+    static final String GRANT_PARAMS = "grantParams";
+    /** F-S4b: set while taking a template's nodes into a copy, whose grants then come from the template. */
+    static final String ADOPTING = "adopting";
+
+    /** F-S4b: the most a node may grant, from {@link #loadRules}; none while the parameter is not published. */
+    private static BigDecimal maxGrant(ProcessContext ctx) {
+        ParamValues params = ctx.contains(GRANT_PARAMS) ? ctx.get(GRANT_PARAMS, ParamValues.class) : null;
+        Object value = params == null ? null : params.find(QbParams.TREE_GRANT_MAX_PER_NODE, Object.class)
+            .orElse(null);
+        if (value == null || value.toString().isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value.toString().strip());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * F-S4b: the grants' problems of a draft: a copy keeps the grants it has (given otherwise:
+     * {@link TreeRules#GRANT_COPY}); any other graph's follow {@link TreeRules#grantProblems}.
+     */
+    private static List<Problem> grantProblems(ProcessContext ctx, EntityInstance tree,
+        Map<String, BigDecimal> grants, Map<String, BigDecimal> kept) {
+        if (QbTrees.OPERATOR.equals(tree.get("ownerKind"))) {
+            List<Problem> problems = new ArrayList<>();
+            grants.forEach((nodeId, amount) -> {
+                BigDecimal had = kept.get(nodeId);
+                if (amount != null && (had == null || amount.compareTo(had) != 0)) {
+                    problems.add(new Problem(nodeId, TreeRules.GRANT_COPY, Map.of()));
+                }
+            });
+            return problems;
+        }
+        return TreeRules.grantProblems(QbTrees.PLATFORM.equals(tree.get("ownerKind")),
+            Subject.valueOf(String.valueOf((Object) tree.get("subjectKind"))), grants, maxGrant(ctx));
     }
 
     /**
@@ -584,7 +642,21 @@ public final class TreeProcesses {
             }
             conditions.put(order.get(i), condition);
         }
-        List<Problem> problems = TreeRules.check(graph(tree, conditions), graphs(ctx), limits(ctx));
+        List<Problem> problems = new ArrayList<>(TreeRules.check(graph(tree, conditions), graphs(ctx),
+            limits(ctx)));
+        // F-S4b: the grants. A copy keeps what its draft (or version in effect) has, whatever is given, except while
+        // taking its template's nodes; a problem says a different one was given.
+        Map<String, BigDecimal> kept = new HashMap<>();
+        EntityInstance had = open(ctx) != null ? open(ctx) : version(ctx, QbTrees.IN_EFFECT);
+        if (had != null) {
+            defsOf(ctx, had).forEach(def -> kept.put(String.valueOf((Object) def.get("nodeId")), grantOf(def)));
+        }
+        boolean copy = QbTrees.OPERATOR.equals(tree.get("ownerKind")) && !ctx.contains(ADOPTING);
+        Map<String, BigDecimal> grants = new LinkedHashMap<>();
+        for (int i = 0; i < input.nodes().size(); i++) {
+            grants.put(order.get(i), input.nodes().get(i).grantAmount());
+        }
+        problems.addAll(ctx.contains(ADOPTING) ? List.of() : grantProblems(ctx, tree, grants, kept));
 
         // The draft: the open one (a version in review goes back to its draft), or a new one after the version in
         // effect.
@@ -619,7 +691,8 @@ public final class TreeProcesses {
         for (int i = 0; i < input.nodes().size(); i++) {
             NodeInput node = input.nodes().get(i);
             insertDef(ctx, versionId, order.get(i), node.name(), node.description(),
-                json(conditions.get(order.get(i)).toMap()), i);
+                json(conditions.get(order.get(i)).toMap()), i,
+                copy ? kept.get(order.get(i)) : node.grantAmount());
         }
         @SuppressWarnings("unchecked")
         Map<String, Object> more = ctx.contains(TOUCH) ? (Map<String, Object>) ctx.get(TOUCH) : Map.of();
@@ -758,7 +831,9 @@ public final class TreeProcesses {
         // Written as a save of the whole draft would be.
         List<NodeInput> nodes = new ArrayList<>();
         draft.forEach((nodeId, def) -> nodes.add(new NodeInput(nodeId, null, i18n(def.get("name")),
-            i18n(def.get("description")), parse(String.valueOf(def.get("condition"))))));
+            i18n(def.get("description")), parse(String.valueOf(def.get("condition"))),
+            def.get("grantAmount") == null ? null : new BigDecimal(def.get("grantAmount").toString()))));
+        ctx.put(ADOPTING, true);
         ctx.put(INPUT, new SaveInput(input.treeId(), input.baseRevision(), i18n(base.get("name")),
             i18n(base.get("description")), nodes));
         // The copy has now taken the template up to its version in effect (what it took or left is in its versions),
@@ -772,6 +847,7 @@ public final class TreeProcesses {
         fields.put("name", def.get("name"));
         fields.put("description", def.get("description"));
         fields.put("condition", def.get("condition"));
+        fields.put("grantAmount", def.get("grantAmount"));
         return fields;
     }
 
@@ -812,7 +888,14 @@ public final class TreeProcesses {
         }
         EntityInstance tree = first(ctx, TREE);
         List<EntityInstance> defs = defsOf(ctx, draft);
-        List<Problem> problems = TreeRules.check(graph(tree, conditionsOf(defs)), graphs(ctx), limits(ctx));
+        List<Problem> problems = new ArrayList<>(TreeRules.check(graph(tree, conditionsOf(defs)), graphs(ctx),
+            limits(ctx)));
+        // F-S4b: a template's grants within the limit now (a copy's are its template's, taken over).
+        if (!QbTrees.OPERATOR.equals(tree.get("ownerKind"))) {
+            Map<String, BigDecimal> grants = new LinkedHashMap<>();
+            defs.forEach(def -> grants.put(String.valueOf((Object) def.get("nodeId")), grantOf(def)));
+            problems.addAll(grantProblems(ctx, tree, grants, Map.of()));
+        }
         if (!problems.isEmpty()) {
             throw new BusinessRuleViolationException(problems.stream().map(p -> new Violation(
                 p.nodeId() == null ? null : "nodes." + p.nodeId(), p.code(), "The draft has problems", p.params()))
@@ -904,6 +987,8 @@ public final class TreeProcesses {
         values.put("approvalRequestId", requestId);
         ctx.changes().update(QbTrees.VERSION, version.id(), version.version(), values);
         Map<String, TreeCondition> conditions = conditionsOf(defsOf(ctx, version));
+        Map<String, BigDecimal> grants = new HashMap<>();
+        defsOf(ctx, version).forEach(def -> grants.put(String.valueOf((Object) def.get("nodeId")), grantOf(def)));
         // F-S2d: each node a condition names, as the node of one graph (unresolved: kept bare, reported daily).
         Map<String, String> graphOf = TreeRules.resolve(graph(tree, conditions), graphs(ctx));
         Map<String, EntityInstance> rows = new HashMap<>();
@@ -917,6 +1002,8 @@ public final class TreeProcesses {
                 .map(ref -> graphOf.containsKey(ref) ? graphOf.get(ref) + "/" + ref : ref).toList()));
             row.put("bindable", TreeRules.asksForAPass(node.getValue()));
             row.put("condition", json(node.getValue().toMap()));
+            // F-S4b: what lighting the node grants now (a lit record freezes its template's).
+            row.put("grantAmount", grants.get(node.getKey()));
             EntityInstance existing = rows.remove(node.getKey());
             if (existing == null) {
                 row.put("treeId", String.valueOf(tree.id()));

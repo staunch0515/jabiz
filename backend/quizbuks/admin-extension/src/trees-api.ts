@@ -92,6 +92,8 @@ export interface VersionNode {
   answeredUnlit: number | null
   /** The last day counted (null: not counted yet). */
   countedOn: string | null
+  /** F-S4b: the platform fee Kudos lighting the node grants (null: none). */
+  grantAmount: number | null
 }
 
 /** A version node by node: the platform's template, or an operator's (only the maps the operator looks after). */
@@ -100,7 +102,8 @@ export async function readTreeVersion(operator: boolean, versionId: string): Pro
   return page.items.map((row) => ({ nodeId: String(row.nodeId), change: String(row.change ?? ''), name: str(row.name),
     description: str(row.description),
     condition: row.condition == null ? null : typeof row.condition === 'string' ? row.condition : JSON.stringify(row.condition), runningBound: num(row.runningBound),
-    answeredUnlit: row.answeredUnlit == null ? null : num(row.answeredUnlit), countedOn: str(row.countedOn) }))
+    answeredUnlit: row.answeredUnlit == null ? null : num(row.answeredUnlit), countedOn: str(row.countedOn),
+    grantAmount: row.grantAmount == null ? null : num(row.grantAmount) }))
 }
 
 /** A lit record of the map (`qb.admin.tree-lit`), with its revocation and the request to revoke it in review. */

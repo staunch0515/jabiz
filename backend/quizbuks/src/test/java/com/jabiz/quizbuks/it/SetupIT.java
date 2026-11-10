@@ -485,7 +485,8 @@ class SetupIT extends QbItSupport {
         // Q33: the days a sponsor has to send a digital prize by hand.
         expected.put(QbParams.DIGITAL_SEND_DAYS, "3");
         // Q28: the default methods and the highest reward per attempt.
-        expected.put(QbParams.REWARD_DEFAULT_METHODS, "PLATFORM");
+        // F-S4b: empty, none (a new Sponsor gets what a lit node opens).
+        expected.put(QbParams.REWARD_DEFAULT_METHODS, "");
         expected.put(QbParams.REWARD_MAX_PER_ATTEMPT, "0");
         // Q48: AI prospecting off, its model and effort, the operators' cost cap and rate.
         expected.putAll(Map.of(QbParams.PROSPECT_ENABLED, "false", QbParams.PROSPECT_MODEL, "claude-opus-5-5",
