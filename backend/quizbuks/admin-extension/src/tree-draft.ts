@@ -242,3 +242,13 @@ export function levelsOf(nodes: readonly DraftNode[]): Map<string, number> {
   return levels
 }
 
+/**
+ * A node's grant as typed (F-S4c): empty is none; any other number is sent as it is, the server's rules
+ * (`TreeRules.grantProblems`: a whole, positive amount within `qb.tree.grant.max-per-node`) answer for it.
+ */
+export function grantOf(typed: string): number | null {
+  const text = typed.trim()
+  if (text === '') return null
+  const value = Number(text)
+  return Number.isFinite(value) ? value : null
+}

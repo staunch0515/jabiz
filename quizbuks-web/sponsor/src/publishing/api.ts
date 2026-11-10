@@ -1233,6 +1233,17 @@ export function asSurvey(form: PublicationForm, fullScore: number, reward: strin
 }
 
 /**
+ * F-S4c: a challenge's form as it is sent (`publishing.PublicationChallenges`): one tier of 0 over every score, and
+ * none of the extras (entry fee, budget, winners, referral); everyone it reaches is the operator's Sponsors.
+ */
+export function asChallenge(form: PublicationForm, fullScore: number): PublicationForm {
+  const tier: TierDraft = { key: form.tiers[0]?.key ?? tierKey(), tierId: form.tiers[0]?.tierId ?? null,
+    fromScore: '0', toScore: String(fullScore), reward: '0' }
+  return { ...form, tiers: [tier], entryFee: '', budgetCap: '', maxWinners: '', referralEnabled: false,
+    audience: 'PUBLIC' }
+}
+
+/**
  * A new tier after the last: from the score after the last one's end (0 for the first) to the full score, without a
  * reward yet.
  */

@@ -6,7 +6,8 @@
 export const PROFILE_PATH = '/profile'
 
 // F-C1c (the requester, 2026-11-07): the products moved to the asset library's "products" tab (`MOVED_PATHS`).
-export const PROFILE_SECTIONS = ['overview', 'basics', 'page', 'staff', 'mail-server'] as const
+// F-S4c: the challenges of the Sponsor's operator, answered here (the plan's "challenges" tab of the hub).
+export const PROFILE_SECTIONS = ['overview', 'basics', 'page', 'staff', 'mail-server', 'challenges'] as const
 export type ProfileSection = (typeof PROFILE_SECTIONS)[number]
 
 /** The address of a section; the overview is the hub's own. */

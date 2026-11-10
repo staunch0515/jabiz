@@ -442,7 +442,11 @@ public final class PublicationProcesses {
         List<TierPlan> tiers = tierPlan(ctx, input.tiers(), PublicationEditing.ordered(list(ctx, TIERS)));
         String method = input.rewardMethod() == null || input.rewardMethod().isBlank() ? RewardMethod.PLATFORM
             : input.rewardMethod();
-        PublicationEditing.methodProblems(ctx, method).forEach(ctx::reject);
+        // F-S4c: a challenge pays nothing (its tiers are all 0), so no reward method is asked of it: a Sponsor whose
+        // default methods are empty (F-S4b) publishes challenges too.
+        if (!PublicationNodes.forSponsors(ctx)) {
+            PublicationEditing.methodProblems(ctx, method).forEach(ctx::reject);
+        }
         // Q70: the referral reward's method is one the sponsor may use too (the rest is a problem of the draft).
         ReferralPolicy referral = input.referral() == null ? null : input.referral().policy();
         if (referral != null && referral.method() != null && RewardMethod.ALL.contains(referral.method())) {
@@ -773,7 +777,9 @@ public final class PublicationProcesses {
         // What submitting would also say: the caller is no approved sponsor, or is banned (D-Q2-6); the method is
         // one they may not use (Q22: a copy of a publication made before the method was taken away).
         problems.addAll(PublicationEditing.sponsorProblems(ctx));
-        problems.addAll(PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(values)));
+        if (!Boolean.TRUE.equals(values.get("forSponsors"))) {
+            problems.addAll(PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(values)));
+        }
         problems.addAll(PublicationEditing.languageProblems(values, version));
         ReferralPolicy referral = ReferralPolicy.fromJson(values.get("referral"));
         if (referral != null && RewardMethod.ALL.contains(referral.method())) {

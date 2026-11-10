@@ -17,7 +17,9 @@ export const CONTENT_ROLE = 'QB_E2E_CONTENT'
 // F-C10c: the AI help's desk, its gaps and usage (help.spec), as headquarters' content administrators have them.
 const CONTENT_PERMISSIONS = ['qb.admin.content.write', 'qb.admin.users.read', 'qb.admin.reward-methods',
   'qb.audience.rules.write', 'qb.audience.prices.write',
-  'qb.admin.operators.write', 'qb.admin.topic.read', 'qb.admin.topic.write', 'qb.admin.help', 'qb.admin.help.gaps', 'qb.admin.ai.read']
+  'qb.admin.operators.write', 'qb.admin.topic.read', 'qb.admin.topic.write', 'qb.admin.help', 'qb.admin.help.gaps', 'qb.admin.ai.read',
+  // F-S4c: the platform's map templates (as QB_ADMIN_CONTENT), and moving a Sponsor to another operator.
+  'qb.tree.edit', 'qb.tree.platform.write', 'qb.admin.trees.read', 'approval.scope.move']
 
 const ROLES = 'urn:jabiz:dataset:platform:SecRole'
 const ROLE_PERMISSIONS = 'urn:jabiz:dataset:platform:SecRolePermission'

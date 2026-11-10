@@ -69,7 +69,7 @@ function tree(openStatus: string | null = 'REVIEW'): Row {
 const OPEN_NODES: Row[] = [
   { nodeId: 'basics', change: 'SAME', name: name('Basics'), description: null,
     condition: JSON.stringify({ op: 'ALL', items: [{ passed: true }] }), seq: 0, runningBound: 1,
-    answeredUnlit: 8, countedOn: '2026-11-09' },
+    answeredUnlit: 8, countedOn: '2026-11-09', litCount: 12 },
   { nodeId: 'extra', change: 'ADDED', name: name('Extra'), description: name('More beans'),
     condition: JSON.stringify({ op: 'ALL', items: [{ node: 'basics', beforeAnswer: true }, { passed: true }] }),
     seq: 1, runningBound: 0 },
@@ -173,6 +173,9 @@ describe('TreeReviewPage', () => {
     // F-S3f: the daily count, as of its day; a node not counted says so.
     expect(within(nodes[0]).getByTestId('tree-node-unlit')).toHaveTextContent('8as of 2026-11-09')
     expect(within(nodes[1]).getByTestId('tree-node-unlit')).toHaveTextContent('Not counted yet')
+    // F-S4c: lit now, from the minimum group up.
+    expect(within(nodes[0]).getByTestId('tree-node-lit')).toHaveTextContent('12')
+    expect(within(nodes[1]).getByTestId('tree-node-lit')).toHaveTextContent('Under the minimum group')
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.treeVersion, expect.objectContaining({
       params: { versionId: OPEN_ID } }))
     // The lit records name their node, here one the version removes.
@@ -353,6 +356,44 @@ describe('the map editor (F-S3e)', () => {
       baseRevision: 3, nodeIds: ['basics'] }))
     expect(screen.getByTestId('tree-edit')).toBeInTheDocument()
     await expectAccessible(container)
+  })
+
+  it('gives a template Sponsors light its grant, sent with the draft; the review and a copy show it', async () => {
+    const granted = OPEN_NODES.map((node, i) => (i === 0 ? { ...node, grantAmount: '200' } : node))
+    const read = server.runQuery.getMockImplementation()!
+    server.runQuery.mockImplementation(async (id: string, options: { params?: Row } = {}) =>
+      (id === TEMPLATE.treeVersion || id === TEMPLATE.operatorTreeVersion)
+        ? { items: granted, offset: 0, limit: 100 } : read(id, options))
+    server.templates.set(TEMPLATE.trees, [{ ...template(), subjectKind: 'SPONSOR' }])
+    server.runProcess.mockResolvedValue(saved())
+    const { container, unmount } = renderReview()
+    expect((await screen.findAllByTestId('tree-node-grant'))[0]).toHaveTextContent('200')
+    await userEvent.click(await screen.findByTestId('tree-edit'))
+    const editor = await screen.findByTestId('tree-editor')
+    const fields = within(editor).getAllByTestId('tree-editor-node-grant')
+    expect(fields[0]).toHaveValue(200)
+    expect(fields[1]).toHaveValue(null)
+    await userEvent.clear(fields[0])
+    await userEvent.type(fields[0], '300')
+    await userEvent.click(within(editor).getByTestId('tree-editor-save'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeSave, expect.anything()))
+    const input = server.runProcess.mock.calls.find((call) => call[0] === PROCESS.treeSave)![1] as
+      { nodes: { grantAmount: number | null }[] }
+    expect(input.nodes.map((n) => n.grantAmount)).toEqual([300, null])
+    await expectAccessible(container)
+    unmount()
+
+    // An operator's copy: the template's grant is shown, not edited (it is kept on save).
+    server.permissions = new Set(['qb.operator.use', 'qb.tree.edit'])
+    server.templates.set(TEMPLATE.operatorTrees, [{ ...tree('DRAFT'), ownerKind: 'OPERATOR', ownerId: 'op1',
+      subjectKind: 'SPONSOR', templateTreeId: 'tmpl', approvalRequestId: null }])
+    server.templates.set(TEMPLATE.operatorTreeLit, [])
+    server.templates.set(TEMPLATE.operatorTreeTemplateDiff, [])
+    renderReview()
+    await userEvent.click(await screen.findByTestId('tree-edit'))
+    const copy = await screen.findByTestId('tree-editor')
+    expect(within(copy).queryByTestId('tree-editor-node-grant')).toBeNull()
+    expect(within(copy).getByTestId('tree-editor-node-grant-copy')).toHaveTextContent('200')
   })
 
   it('creates a platform template from the list', async () => {

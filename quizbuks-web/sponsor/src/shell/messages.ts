@@ -29,7 +29,7 @@ const en = {
       money: { transactions: 'Transactions', wallet: 'Kudos wallet', account: 'Platform fee account', ai: 'AI credit',
         bills: 'Invoices' },
       assets: { all: 'All', media: 'Media', text: 'Texts', prize: 'Prizes', products: 'Products' },
-      hub: { overview: 'Overview', basics: 'Basics', page: 'Public page', staff: 'Staff', 'mail-server': 'Mail server' },
+      hub: { overview: 'Overview', basics: 'Basics', page: 'Public page', staff: 'Staff', 'mail-server': 'Mail server', challenges: 'Challenges' },
     },
     create: {
       label: 'New',
@@ -84,7 +84,7 @@ const zh: typeof en = {
       benefits: { catalog: '权益目录', offers: '我的权益', conversations: '洽谈', purchases: '采购单' },
       money: { transactions: '交易', wallet: '学分钱包', account: '平台费账户', ai: 'AI 额度', bills: '账单' },
       assets: { all: '全部', media: '素材', text: '文字', prize: '奖品', products: '商品' },
-      hub: { overview: '概况', basics: '基本信息', page: '公开主页', staff: '店员', 'mail-server': '邮件服务器' },
+      hub: { overview: '概况', basics: '基本信息', page: '公开主页', staff: '店员', 'mail-server': '邮件服务器', challenges: '挑战' },
     },
     create: {
       label: '新建',
@@ -140,7 +140,7 @@ const ja: typeof en = {
       money: { transactions: '取引', wallet: 'クドスウォレット', account: 'プラットフォーム利用料アカウント', ai: 'AI クレジット',
         bills: '請求書' },
       assets: { all: 'すべて', media: '素材', text: 'テキスト', prize: '賞品', products: '商品' },
-      hub: { overview: '概要', basics: '基本情報', page: '公開ページ', staff: 'スタッフ', 'mail-server': 'メールサーバー' },
+      hub: { overview: '概要', basics: '基本情報', page: '公開ページ', staff: 'スタッフ', 'mail-server': 'メールサーバー', challenges: 'チャレンジ' },
     },
     create: {
       label: '新規作成',

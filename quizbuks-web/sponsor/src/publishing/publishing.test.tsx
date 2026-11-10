@@ -491,6 +491,30 @@ describe('the publication wizard', () => {
     await expectAccessible()
   })
 
+  it('makes a node Sponsors light a challenge: one tier of 0, no reward or audience fields (F-S4c)', async () => {
+    const { processCalls } = server({
+      bindable: [{ treeId: 'c1', ownerKind: 'SPONSOR', subjectKind: 'SPONSOR', treeName: JSON.stringify({ en: 'Skills' }),
+        nodeId: 'n1', name: JSON.stringify({ en: 'Getting started' }), description: null, seq: 1 }],
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const field = await screen.findByTestId('publication-node-field')
+    await userEvent.click(within(field).getByTestId('publication-node'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Getting started · Skills' }))
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    const sent = processCalls('QB_PUBLICATION_SAVE')[0] as { tiers: { fromScore: number; reward: number }[];
+      entryFee: number; referral: unknown; audience: string }
+    expect(sent).toMatchObject({ treeId: 'c1', treeNodeId: 'n1', entryFee: 0, referral: null, audience: 'PUBLIC' })
+    expect(sent.tiers).toHaveLength(1)
+    expect(sent.tiers[0]).toMatchObject({ fromScore: 0, reward: 0 })
+    expect(await screen.findByTestId('publication-challenge-note')).toBeInTheDocument()
+    expect(screen.queryByTestId('publication-method')).toBeNull()
+    expect(screen.queryByTestId('publication-budget')).toBeNull()
+    expect(screen.queryByTestId('publication-max-winners')).toBeNull()
+    await expectAccessible()
+  })
+
   it('says where to make a node when there is none to choose (F-S3d)', async () => {
     server()
     window.history.replaceState(null, '', '/publications/new')

@@ -1,13 +1,15 @@
 /*---
 id: qb.operator.tree-version
 description: "F-S2b3a: qb.admin.tree-version for an operator's member: a version of one of the maps the operator looks after (its copies, its Sponsors' maps), node by node against the version in effect; another operator's version gives no rows"
-entities: [QbTreeVersion, QbTreeNodeDef, QbTree, QbPublicationCard, QbTreeNodeCount, SysParam, QbOperatorMember, QbSponsorOperator]
+entities: [QbTreeVersion, QbTreeNodeDef, QbTree, QbPublicationCard, QbTreeNodeCount, QbTreeLit, QbTreeLitRevocation, SysParam, QbOperatorMember, QbSponsorOperator]
 datasets:
   QbTreeVersion: urn:jabiz:dataset:default:QbTreeVersion
   QbTreeNodeDef: urn:jabiz:dataset:default:QbTreeNodeDef
   QbTree: urn:jabiz:dataset:default:QbTree
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbTreeNodeCount: urn:jabiz:dataset:default:QbTreeNodeCount
+  QbTreeLit: urn:jabiz:dataset:default:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
   SysParam: urn:jabiz:dataset:now:SysParam
   QbOperatorMember: urn:jabiz:dataset:operator:QbOperatorMember
   QbSponsorOperator: urn:jabiz:dataset:default:QbSponsorOperator
@@ -22,6 +24,7 @@ results:
   seq:          { kind: { type: numeric, precision: 4, scale: 0 } }
   runningBound: { kind: { type: numeric, precision: 9, scale: 0 } }
   answeredUnlit: { kind: { type: numeric, precision: 9, scale: 0 } }
+  litCount:    { kind: { type: numeric, precision: 9, scale: 0 } }
   countedOn:    { from: QbTreeNodeCount.countedOn }
   grantAmount:  { from: QbTreeNodeDef.grantAmount }
 list:
@@ -57,6 +60,16 @@ k AS (
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.stats.min-group'
 ),
+-- F-S4c: how many people have the node lit now (a lit record without a revocation, tree.TreeLights), from the
+-- minimum group up, as answeredUnlit.
+lits AS (
+    SELECT l.{{QbTreeLit.nodeId}} AS nodeId, count(DISTINCT l.{{QbTreeLit.subjectId}}) AS n
+    FROM {{QbTreeLit}} l
+    JOIN v ON l.{{QbTreeLit.treeId}} = CAST(v.treeId AS text)
+    WHERE NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} rv
+                      WHERE rv.{{QbTreeLitRevocation.litId}} = CAST(l.{{QbTreeLit.litId}} AS text))
+    GROUP BY l.{{QbTreeLit.nodeId}}
+),
 running AS (
     SELECT c.{{QbPublicationCard.treeNodeId}} AS nodeId, count(*) AS n
     FROM {{QbPublicationCard}} c
@@ -78,20 +91,22 @@ SELECT d.{{QbTreeNodeDef.nodeId}} AS nodeId,
        CASE WHEN nc.{{QbTreeNodeCount.answeredUnlit}} >= k.k THEN nc.{{QbTreeNodeCount.answeredUnlit}} END
            AS answeredUnlit,
        nc.{{QbTreeNodeCount.countedOn}} AS countedOn,
-       d.{{QbTreeNodeDef.grantAmount}} AS grantAmount
+       d.{{QbTreeNodeDef.grantAmount}} AS grantAmount,
+       CAST(CASE WHEN coalesce(lt.n, 0) >= k.k THEN lt.n END AS numeric(9, 0)) AS litCount
 FROM v
 CROSS JOIN k
 JOIN {{QbTreeNodeDef}} d ON d.{{QbTreeNodeDef.versionId}} = v.versionId
 LEFT JOIN {{QbTreeNodeDef}} e ON e.{{QbTreeNodeDef.versionId}} = v.effectId
     AND e.{{QbTreeNodeDef.nodeId}} = d.{{QbTreeNodeDef.nodeId}}
 LEFT JOIN running r ON r.nodeId = d.{{QbTreeNodeDef.nodeId}}
+LEFT JOIN lits lt ON lt.nodeId = d.{{QbTreeNodeDef.nodeId}}
 LEFT JOIN {{QbTreeNodeCount}} nc ON nc.{{QbTreeNodeCount.treeId}} = v.treeId
     AND nc.{{QbTreeNodeCount.nodeId}} = d.{{QbTreeNodeDef.nodeId}}
 UNION ALL
 SELECT e.{{QbTreeNodeDef.nodeId}}, 'REMOVED', CAST(e.{{QbTreeNodeDef.name}} AS text),
        CAST(e.{{QbTreeNodeDef.description}} AS text), e.{{QbTreeNodeDef.condition}},
        10000 + e.{{QbTreeNodeDef.seq}}, coalesce(r.n, 0), CAST(NULL AS numeric(9, 0)), CAST(NULL AS date),
-       e.{{QbTreeNodeDef.grantAmount}}
+       e.{{QbTreeNodeDef.grantAmount}}, CAST(NULL AS numeric(9, 0))
 FROM v
 JOIN {{QbTreeNodeDef}} e ON e.{{QbTreeNodeDef.versionId}} = v.effectId AND v.effectId <> v.versionId
 LEFT JOIN running r ON r.nodeId = e.{{QbTreeNodeDef.nodeId}}

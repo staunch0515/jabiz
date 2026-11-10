@@ -155,6 +155,8 @@ export async function readSponsorVersion(map: Pick<SponsorMap, 'treeId' | 'name'
 export interface BindableNode {
   treeId: string
   ownerKind: 'PLATFORM' | 'SPONSOR'
+  /** Who lights it (F-S4c): a node of an operator's copy Sponsors light makes the publication a challenge. */
+  subjectKind: 'TAKER' | 'SPONSOR'
   treeName: I18nText
   nodeId: string
   name: I18nText
@@ -168,6 +170,7 @@ export async function readBindableNodes(): Promise<BindableNode[]> {
   return (await runQuery<Row>(TREE.sponsorBindable, { params: {}, limit: 500 })).items.map((row) => ({
     treeId: String(row.treeId),
     ownerKind: row.ownerKind === 'PLATFORM' ? 'PLATFORM' : 'SPONSOR',
+    subjectKind: row.subjectKind === 'SPONSOR' ? 'SPONSOR' : 'TAKER',
     treeName: json<I18nText>(row.treeName, {}),
     nodeId: String(row.nodeId),
     name: json<I18nText>(row.name, {}),
@@ -252,4 +255,14 @@ export function submitMap(treeId: string, baseRevision: number | null): Promise<
 
 export function withdrawMap(treeId: string, baseRevision: number | null): Promise<TreeOutput> {
   return runProcess<TreeOutput>(TREE.withdraw, { treeId, baseRevision })
+}
+
+/**
+ * Whether the node chosen among the bindable ones is lit by Sponsors (F-S4a/F-S4c): the publication is a challenge,
+ * with no reward, audience or extras (`publishing.PublicationChallenges`).
+ */
+export function isChallengeNode(nodes: readonly BindableNode[] | undefined,
+  chosen: { treeId: string; nodeId: string } | null | undefined): boolean {
+  return !!chosen && !!nodes?.some((node) => node.treeId === chosen.treeId && node.nodeId === chosen.nodeId
+    && node.subjectKind === 'SPONSOR')
 }
