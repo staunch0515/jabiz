@@ -358,6 +358,24 @@ public class FeeConfig {
             .maxItems(10_000);
     }
 
+    // ---- F-M3: the top-up of a verified company ---------------------------------------------------------------------
+
+    @Bean
+    ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeCreditCertifiedTopUp() {
+        return CertifiedTopUps.item();
+    }
+
+    /** The top-ups a verification's approval could not make (the switch off, a ban), each Sponsor in a transaction. */
+    @Bean
+    JobDefinition<FeeCredits.SponsorRef> qbFeeCreditCertifiedDueJob(
+        ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeCreditCertifiedTopUp) {
+        return JobDefinition.forEach(CertifiedTopUps.DUE_JOB, CertifiedTopUps.DUE_CRON, zone,
+                JobItems.template(CertifiedTopUps.DUE_TEMPLATE, "sponsorId"),
+                qbFeeCreditCertifiedTopUp,
+                (scheduledTime, row) -> new FeeCredits.SponsorRef(String.valueOf(row.get("sponsorId"))))
+            .maxItems(10_000);
+    }
+
     // ---- F-M2: platform fee Kudos granted -------------------------------------------------------------------------
 
     @Bean

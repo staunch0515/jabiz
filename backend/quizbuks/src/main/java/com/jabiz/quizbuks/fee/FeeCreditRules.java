@@ -33,6 +33,22 @@ public final class FeeCreditRules {
         return whole(amount) ? Optional.of(amount.setScale(0)) : Optional.empty();
     }
 
+    /**
+     * F-M3: the top-up due to a Sponsor whose company is verified (D-Q105-6): the certified amount less the onboarding
+     * lot's, once. Nothing while the grants' switch is off (the controller, 2026-11-10), to a Sponsor not approved,
+     * banned or not verified, without an onboarding lot (confirming them later gives the certified amount), with a
+     * top-up already, or when the onboarding was the certified amount or more (or the amount is not whole yen).
+     */
+    public static Optional<BigDecimal> certifiedTopUp(boolean enabled, boolean approved, boolean banned,
+        boolean verified, BigDecimal onboardingAmount, boolean toppedUp, BigDecimal certifiedAmount) {
+        if (!enabled || !approved || banned || !verified || onboardingAmount == null || toppedUp
+            || !whole(certifiedAmount)) {
+            return Optional.empty();
+        }
+        BigDecimal difference = certifiedAmount.subtract(onboardingAmount).setScale(0, java.math.RoundingMode.DOWN);
+        return difference.signum() > 0 ? Optional.of(difference) : Optional.empty();
+    }
+
     /** Until when a lot granted at {@code grantedAt} is valid; empty for a number of days out of 1 to 999. */
     public static Optional<Instant> expiresAt(Instant grantedAt, BigDecimal validDays) {
         if (!whole(validDays) || validDays.compareTo(BigDecimal.valueOf(MAX_VALID_DAYS)) > 0) {

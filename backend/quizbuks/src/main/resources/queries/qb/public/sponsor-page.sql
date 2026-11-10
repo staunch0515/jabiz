@@ -7,10 +7,11 @@ description: >-
 access: public
 cacheSeconds: 60
 timeoutMs: 2000
-entities: [QbSponsorPage, QbSponsor]
+entities: [QbSponsorPage, QbSponsor, QbSponsorVerification]
 datasets:
   QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
   QbSponsor: urn:jabiz:dataset:public:QbSponsor
+  QbSponsorVerification: urn:jabiz:dataset:public:QbSponsorVerification
 params:
   handle: { like: QbSponsorPage.handle, required: true, description: The page's handle (lowercase) }
   languages: { kind: { type: text, maxLength: 20 }, description: "Q73c: the languages to show it in, comma-separated, the preferred first (a link's ?lang=, the visitor's); the first the page offers is shown, else its main one" }
@@ -25,6 +26,7 @@ results:
   company:  { from: QbSponsor.company }
   languages:       { from: QbSponsorPage.languages }
   displayLanguage: { from: QbSponsorPage.language }
+  verifiedDomain:  { from: QbSponsorVerification.domain }
 list:
   key: [handle]
 ---*/
@@ -33,6 +35,8 @@ list:
 -- page reads them as before. The handle is stored lowercase: the caller lowercases what was typed.
 -- Q73c: the page in the first of the asked languages it offers (else its main one, the first it offers): its headline
 -- and the introduction in it when translated, else its own.
+-- F-M3: verifiedDomain is the domain of the company's verification in effect (the public dataset holds approved ones
+-- only, one per Sponsor); none when the company is not verified.
 SELECT
     p.{{QbSponsorPage.handle}}   AS handle,
     p.{{QbSponsorPage.language}} AS language,
@@ -45,9 +49,11 @@ SELECT
     p.{{QbSponsorPage.website}}  AS website,
     sp.{{QbSponsor.company}}     AS company,
     coalesce(p.{{QbSponsorPage.languages}}, p.{{QbSponsorPage.language}}) AS languages,
-    dl.lang                      AS displayLanguage
+    dl.lang                      AS displayLanguage,
+    v.{{QbSponsorVerification.domain}} AS verifiedDomain
 FROM {{QbSponsorPage}} p
 JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = p.{{QbSponsorPage.userId}}
+LEFT JOIN {{QbSponsorVerification}} v ON v.{{QbSponsorVerification.sponsorId}} = p.{{QbSponsorPage.userId}}
 CROSS JOIN LATERAL (
     SELECT coalesce((SELECT u.l FROM unnest(string_to_array(CAST(:languages AS text), ',')) WITH ORDINALITY AS u(l, i)
                      WHERE u.l = ANY(string_to_array(coalesce(p.{{QbSponsorPage.languages}},

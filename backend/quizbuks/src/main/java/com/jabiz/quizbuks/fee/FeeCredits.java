@@ -118,6 +118,7 @@ public final class FeeCredits {
     static final String INPUT = "input";
     static final String PARAMS = "params";
     static final String EXISTING = "existing";
+    static final String VERIFIED = "verified";
     static final String ASSIGNMENT = "assignment";
     static final String CREDIT_WALLET = "creditWallet";
     static final String NEW_ID = "newId";
@@ -241,7 +242,13 @@ public final class FeeCredits {
                             .where(new QueryPredicate.And(List.of(
                                 new QueryPredicate.In("sponsorId", FeeGate.ids(onboardingInput(ctx).sponsorId())),
                                 new QueryPredicate.Eq("sourceKey", FeeCreditRules.ONBOARDING_KEY)))).limit(1).build(),
-                            EXISTING)))
+                            EXISTING),
+                        // F-M3: verified now (read under the wallet lock, which a verification's top-up takes too).
+                        QueryEntities.query(com.jabiz.quizbuks.verification.QbVerifications.DEFAULT_DATASET,
+                            ctx -> EntityQuery.builder().where(new QueryPredicate.And(List.of(
+                                new QueryPredicate.Eq("sponsorId", onboardingInput(ctx).sponsorId()),
+                                new QueryPredicate.Eq("status", com.jabiz.quizbuks.verification.QbVerifications.APPROVED))))
+                                .limit(1).build(), VERIFIED)))
                     .compute("Check the sponsor", (metadata, ctx) -> checkSponsor(ctx))
                     .step("Grant the onboarding", CallProcess.<ProcessContext>of(GRANT, 1,
                         ctx -> new GrantInput(onboardingInput(ctx).sponsorId(), QbFeeAccount.ONBOARDING,
@@ -259,8 +266,15 @@ public final class FeeCredits {
             throw new BusinessRuleViolationException(new Violation(null, FeeCodes.FEE_CREDIT_OFF,
                 "The onboarding platform fee Kudos are switched off", Map.of()));
         }
-        // F-M3 certifies sponsors: until then every sponsor is uncertified, and is topped up when certified.
-        boolean certified = false;
+    }
+
+    /**
+     * The onboarding amount (F-M3): the certified one for a Sponsor whose company is verified now, otherwise the basic
+     * one (a verification afterwards tops it up, {@link CertifiedTopUps}).
+     */
+    static void onboardingAmount(ProcessContext ctx) {
+        ParamValues params = ctx.get(PARAMS, ParamValues.class);
+        boolean certified = FeeGate.first(ctx, VERIFIED) != null;
         BigDecimal amount = FeeCreditRules.onboardingAmount(certified,
                 params.get(QbParams.FEE_CREDIT_GRANT_BASIC, BigDecimal.class),
                 params.get(QbParams.FEE_CREDIT_GRANT_CERTIFIED, BigDecimal.class))
@@ -281,6 +295,7 @@ public final class FeeCredits {
             throw new BusinessRuleViolationException(new Violation("sponsorId", FeeCodes.FEE_CREDIT_GIVEN,
                 "The sponsor received their onboarding platform fee Kudos already", Map.of()));
         }
+        onboardingAmount(ctx);
     }
 
     // ---- the expiry -------------------------------------------------------------------------------------------------
