@@ -29,7 +29,7 @@ class CertificateIT extends LegalItSupport {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> held(String userId) {
-        return (List<Map<String, Object>>) run(CertificateProcesses.MINE, taker(userId), body()).get("held");
+        return certificates(userId).stream().filter(c -> "CERTIFICATION".equals(c.get("source"))).toList();
     }
 
     @SuppressWarnings("unchecked")
@@ -81,7 +81,7 @@ class CertificateIT extends LegalItSupport {
             .getFirst().get("certificate_id");
         assertThat(held(ann)).singleElement().satisfies(h -> {
             assertThat(h).containsEntry("certification", CERT).containsEntry("certificateId", certificateId)
-                .containsEntry("verifyKey", key).doesNotContainKey("source");
+                .containsEntry("verifyKey", key).containsEntry("source", "CERTIFICATION");
             assertThat(h.get("heldUntil")).isNotNull();
         });
         // The certificates list has it too, as Q77's, with its end; there is no PDF to issue and no sharing to set.

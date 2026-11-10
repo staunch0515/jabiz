@@ -1,64 +1,15 @@
-import { fileNameOf, runProcess, sessionFetch, toApiError } from '@jabiz/client'
-import { certificationNamesOf } from '../qb/certifications'
-import { publicQuery, serverNow, type I18nText } from '../qb/legal'
+import { i18n } from '@jabiz/client'
+import type { TFunction } from 'i18next'
+import { certificationName, certificationNamesOf } from '../qb/certifications'
+import { SOURCE_NODE } from '../qb/certificates'
+import { pickText, publicQuery, serverNow, type I18nText } from '../qb/legal'
 import { hrefOf } from '../qb/router'
-import { CERTIFICATE_LAYOUT, CERTIFICATE_PROCESS, CERTIFICATE_TEMPLATE } from './ids'
+import { CERTIFICATE_TEMPLATE } from './ids'
 
 /*
- * The certificates' calls (Q77), typed by hand after `CertificateProcesses` and the public templates; the end-to-end
- * test `certificates.spec.ts` runs them against the server.
+ * The public certificate pages' calls (Q77, F-S5b), typed by hand after the public templates; the end-to-end test
+ * `certificates.spec.ts` runs them against the server. The caller's own list is `qb/certificates.ts`.
  */
-
-/** A certificate of the caller's still valid (`CertificateProcesses.Held`; F-S2c2b: no certification is held any more). */
-export interface HeldCertification {
-  certification: string
-  heldFrom: string
-  heldUntil: string
-  certificateId: string
-  verifyKey: string
-  /** Q88a: a sponsor's own certification's names by language and the sponsor's name; null for the catalog's. */
-  name?: I18nText | null
-  sponsorName?: string | null
-}
-
-export async function readMyCertifications(): Promise<HeldCertification[]> {
-  const output = await runProcess<{ held?: HeldCertification[] }>(CERTIFICATE_PROCESS.mine, {})
-  return output.held ?? []
-}
-
-export interface IssuedCertificate {
-  certificateId: string
-  verifyKey: string
-  heldUntil: string
-  issued: boolean
-}
-
-/** The certificate languages; another interface language issues it in English. */
-export function certificateLanguage(language: string | undefined): 'en' | 'zh' | 'ja' {
-  const code = (language ?? '').slice(0, 2)
-  return code === 'zh' || code === 'ja' ? code : 'en'
-}
-
-/** The PDF of a certificate exactly as issued, handed to the browser. */
-export async function downloadCertificate(certificateId: string, verifyKey: string) {
-  const runs = await sessionFetch(`/api/documents/runs?layout=${encodeURIComponent(CERTIFICATE_LAYOUT)}`
-    + `&subject=${encodeURIComponent(certificateId)}&limit=1`)
-  if (!runs.ok) throw await toApiError(runs)
-  const [run] = (await runs.json()) as { runId: string }[]
-  if (!run) throw new Error('No document of the certificate')
-  const response = await sessionFetch(`/api/documents/runs/${encodeURIComponent(run.runId)}/pdf`)
-  if (!response.ok) throw await toApiError(response)
-  const url = URL.createObjectURL(await response.blob())
-  try {
-    const link = document.createElement('a')
-    link.href = url
-    link.download = fileNameOf(response.headers.get('Content-Disposition')) ?? `${verifyKey}.pdf`
-    link.rel = 'noopener'
-    link.click()
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(url), 0)
-  }
-}
 
 /** The app's page that verifies a certificate (the address printed on it, below the app's root). */
 export function verifyPath(key: string): string {
@@ -70,17 +21,26 @@ export function takerPagePath(handle: string): string {
   return `/u/${encodeURIComponent(handle)}`
 }
 
-/** A certificate as its verify page shows it. */
+/**
+ * A certificate as its verify page shows it (`qb.public.certificate`): a lit node's (names `certificateNames`, no end), or
+ * Q77's (the certification and its holding). One its holder stopped sharing has nothing but `shared: false`.
+ */
 export interface VerifiedCertificate {
-  certification: string
-  certificationVersion: number
-  /** Q88a: a sponsor's own certification's names and the sponsor as the issuer; null for the catalog's. */
+  source: string
+  shared: boolean
+  certification: string | null
+  certificationVersion: number | null
+  /** Q88a: a sponsor's own certification's names; null for the catalog's. */
   certificationNames: I18nText | null
+  /** A lit node's certificate's names by language. */
+  certificateNames: I18nText | null
+  /** The issuer as frozen on a node's certificate; for Q77's the Sponsor whose certification it is. */
   issuerName: string | null
-  holderName: string
-  heldFrom: string
-  validUntil: string
-  issuedAt: string
+  holderName: string | null
+  heldFrom: string | null
+  /** Q77's end of the holding; a node's certificate has none. */
+  validUntil: string | null
+  issuedAt: string | null
   revokedAt: string | null
 }
 
@@ -93,32 +53,50 @@ export async function readVerifiedCertificate(key: string): Promise<VerifiedCert
 /** A certificate on a public certification page. */
 export interface PublicCertificate {
   handle: string
-  certification: string
+  source: string
+  certification: string | null
   certificationNames: I18nText | null
+  certificateNames: I18nText | null
   issuerName: string | null
   holderName: string
   heldFrom: string
-  validUntil: string
+  validUntil: string | null
   verifyKey: string
 }
 
-/** The issued, unrevoked certificates of a page that is on (none when it is off or unknown), still valid at `now`. */
+/**
+ * The shared, unrevoked certificates of a page that is on (none when it is off or unknown): a node's, and Q77's still
+ * valid at `now` (a node's has no end).
+ */
 export async function readTakerPage(handle: string, now: number = serverNow()): Promise<PublicCertificate[]> {
   const rows = await publicQuery<PublicCertificate>(CERTIFICATE_TEMPLATE.takerPage, { handle: handle.toLowerCase() },
     20)
-  return rows.filter((row) => Date.parse(row.validUntil) > now).map(withNames)
+  return rows.filter((row) => row.validUntil == null || Date.parse(row.validUntil) > now).map(withNames)
 }
 
-/** The names column as the template gives it (a JSON text) read into an object. */
-function withNames<T extends { certificationNames: I18nText | null }>(row: T): T {
-  return { ...row, certificationNames: certificationNamesOf(row.certificationNames) }
+/** The names columns as the template gives them (JSON texts) read into objects. */
+function withNames<T extends { certificationNames: I18nText | null; certificateNames: I18nText | null }>(row: T): T {
+  return { ...row, certificationNames: certificationNamesOf(row.certificationNames),
+    certificateNames: certificationNamesOf(row.certificateNames) }
 }
 
-export type CertificateState = 'VALID' | 'EXPIRED' | 'REVOKED'
+/** What a certificate is called, in the reader's language: a node's by its names, Q77's by its certification. */
+export function nameOf(c: Pick<VerifiedCertificate, 'source' | 'certification' | 'certificationNames' | 'certificateNames'>,
+  tQb: TFunction, language: string = i18n.language): string {
+  if (c.source === SOURCE_NODE || !c.certification) return pickText(c.certificateNames, language).text
+  return certificationName(c.certification, c.certificationNames, language, tQb)
+}
 
-/** A certificate's state: revoked after its holding began, else valid until its end (by the server's clock as known). */
+export type CertificateState = 'VALID' | 'EXPIRED' | 'REVOKED' | 'DISABLED'
+
+/**
+ * A certificate's state: its holder turned the link off (nothing else is known then), else revoked, else valid
+ * (a node's certificate has no end) or, for Q77's, until its end (by the server's clock as known).
+ */
 export function stateOf(certificate: VerifiedCertificate, now: number = serverNow()): CertificateState {
+  if (!certificate.shared) return 'DISABLED'
   if (certificate.revokedAt) return 'REVOKED'
+  if (certificate.validUntil == null) return 'VALID'
   return Date.parse(certificate.validUntil) > now ? 'VALID' : 'EXPIRED'
 }
 

@@ -1,15 +1,8 @@
 /**
- * The names the app's certificates call on the server (Q77, docs/quizbuks/plans/Q77-certificates.md): the caller's
- * certifications and certificates, and the two public templates anybody reads.
+ * The names the app's certificate pages call on the server (Q77, docs/quizbuks/plans/Q77-certificates.md): the two
+ * public templates anybody reads. The caller's own certificates and their processes are `qb/certificates.ts` (shared
+ * with the Sponsor app).
  */
-
-export const CERTIFICATE_PROCESS = {
-  mine: 'QB_MY_CERTIFICATIONS',
-  issue: 'QB_CERTIFICATE_ISSUE',
-} as const
-
-/** The certificate's document layout (its PDFs are documents of it whose subject is the certificate). */
-export const CERTIFICATE_LAYOUT = 'qb.certificate'
 
 export const CERTIFICATE_TEMPLATE = {
   verify: 'qb.public.certificate',

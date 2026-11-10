@@ -84,9 +84,9 @@ class NodeCertificateIT extends NodeCertificateItSupport {
             .containsEntry("source", "NODE").containsEntry("verifyKey", row.get("verify_key"))
             .containsEntry("issuerName", row.get("issuer_name")).containsEntry("revokedAt", null)
             .containsEntry("shared", true).containsEntry("runId", null).containsEntry("heldUntil", null));
-        // The held certifications of Q77's kind stay as they were: none.
-        assertThat(run(com.jabiz.quizbuks.certification.CertificateProcesses.MINE, taker(ann), body()).get("held"))
-            .isEqualTo(List.of());
+        // F-S5b: the list is the one `certificates`; the earlier `held` output is gone.
+        assertThat(run(com.jabiz.quizbuks.certification.CertificateProcesses.MINE, taker(ann), body()))
+            .doesNotContainKey("held");
 
         // The verify page: valid (no revocation), with no end.
         assertThat(verify(row.get("verify_key"))).containsEntry("source", "NODE").containsEntry("shared", true)
