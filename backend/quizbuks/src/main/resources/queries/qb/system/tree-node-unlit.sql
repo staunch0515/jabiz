@@ -1,8 +1,9 @@
 /*---
 id: qb.system.tree-node-unlit
 description: "F-S3f: one graph's nodes in effect, each with the people who finished an attempt at a publication bound to it before the given time and have not lit it now (QB_TREE_NODE_COUNT writes the counts)"
-entities: [QbTreeNode, QbPublicationCard, QbAttempt, QbTreeLit, QbTreeLitRevocation]
+entities: [QbTree, QbTreeNode, QbPublicationCard, QbAttempt, QbTreeLit, QbTreeLitRevocation]
 datasets:
+  QbTree: urn:jabiz:dataset:default:QbTree
   QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
@@ -36,7 +37,12 @@ SELECT n.{{QbTreeNode.nodeId}} AS nodeId,
              WHERE x.nodeId = n.{{QbTreeNode.nodeId}}
                AND NOT EXISTS (
                    SELECT 1 FROM {{QbTreeLit}} l
-                   WHERE l.{{QbTreeLit.subjectKind}} = 'USER' AND l.{{QbTreeLit.subjectId}} = x.userId
+                   -- F-S4c: a map Sponsors light is lit for the Sponsor (subject SPONSOR, the attempt's user), others for the user.
+                   WHERE l.{{QbTreeLit.subjectKind}} = (SELECT CASE t.{{QbTree.subjectKind}} WHEN 'SPONSOR'
+                                                             THEN 'SPONSOR' ELSE 'USER' END
+                                                       FROM {{QbTree}} t
+                                                       WHERE CAST(t.{{QbTree.treeId}} AS text) = CAST(:treeId AS text))
+                     AND l.{{QbTreeLit.subjectId}} = x.userId
                      AND l.{{QbTreeLit.treeId}} = n.{{QbTreeNode.treeId}}
                      AND l.{{QbTreeLit.nodeId}} = n.{{QbTreeNode.nodeId}}
                      AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} r

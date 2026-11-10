@@ -90,6 +90,13 @@ function NodesTable({ nodes, title }: { nodes: VersionNode[]; title: string }) {
         </span>
       ) : <span data-testid="tree-node-running">{row.original.runningBound}</span>
     } },
+    // F-S4c: how many have the node lit now, from the minimum group up (a removed node: none).
+    { id: 'lit', header: t('trees.nodes.lit'), cell: ({ row }) => (
+      <span data-testid="tree-node-lit">
+        {row.original.litCount ?? (row.original.change === 'REMOVED' ? ''
+          : <span className="text-muted-foreground">{t('trees.nodes.unlitHidden')}</span>)}
+      </span>
+    ) },
     { id: 'unlit', header: t('trees.nodes.unlit'), cell: ({ row }) => (
       <span className="flex flex-col" data-testid="tree-node-unlit">
         {row.original.countedOn == null ? <span className="text-muted-foreground">{t('trees.nodes.unlitNone')}</span>
