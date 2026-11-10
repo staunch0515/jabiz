@@ -1,7 +1,7 @@
 /*---
 id: qb.system.recon-fee-account
-description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them; and (F-M3) the top-ups of verified companies with their verifications and certified amounts (the daily reconciliation; differences only)
-entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor]
+description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them; and (F-M3) the top-ups of verified companies with their verifications and certified amounts; and (F-M4) by operator its account (2140) with its settlements, withdrawals and transfers (the daily reconciliation; differences only)
+entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
@@ -12,6 +12,9 @@ datasets:
   QbTree: urn:jabiz:dataset:default:QbTree
   QbSponsorVerification: urn:jabiz:dataset:default:QbSponsorVerification
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
+  QbOperatorSettlement: urn:jabiz:dataset:default:QbOperatorSettlement
+  QbOperatorWithdrawal: urn:jabiz:dataset:default:QbOperatorWithdrawal
+  QbOperatorTransfer: urn:jabiz:dataset:default:QbOperatorTransfer
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
   sponsorId: { kind: { type: text, maxLength: 128 } }
@@ -45,6 +48,10 @@ permissions: [qb.wallet.system]
 --   or a new submission; an erased Sponsor's verifications go with the account and are not checked), expected 0 and
 --   actual the top-up; and the onboarding plus the top-up above the certified amount the top-up recorded when it was
 --   granted (expected that amount, actual the two).
+-- OPERATOR_ACCOUNT (F-M4): for an operator (sponsorId holds the operator), 2140 posted from its settlements,
+--   withdrawals and transfers (credit less debit, each connected to the operator by its source) against the records:
+--   every settlement's payable less those paid on their own (PAID, before accounts existed), the withdrawals paid and
+--   the transfers to its direct Sponsor.
 WITH credit_ledger AS (
     SELECT e.{{LedgerEntry.dimension1}} AS r_party,
            sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
@@ -147,6 +154,40 @@ light_unearned AS (
                                                   AND x.r_key = g.{{QbFeeCreditGrant.sourceKey}})
     GROUP BY g.{{QbFeeCreditGrant.sponsorId}}
 ),
+operator_ledger AS (
+    SELECT coalesce(st.{{QbOperatorSettlement.operatorId}}, wd.{{QbOperatorWithdrawal.operatorId}},
+                    tr.{{QbOperatorTransfer.operatorId}}, '-') AS r_operator,
+           sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
+               ELSE -e.{{LedgerEntry.amount}} END) AS r_balance
+    FROM {{LedgerTransaction}} t
+    JOIN {{LedgerEntry}} e ON e.{{LedgerEntry.transactionId}} = t.{{LedgerTransaction.transactionId}}
+    JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
+    LEFT JOIN {{QbOperatorSettlement}} st ON t.{{LedgerTransaction.sourceEntity}} = 'QbOperatorSettlement'
+        AND CAST(st.{{QbOperatorSettlement.settlementId}} AS text) = t.{{LedgerTransaction.sourceId}}
+    LEFT JOIN {{QbOperatorWithdrawal}} wd ON t.{{LedgerTransaction.sourceEntity}} = 'QbOperatorWithdrawal'
+        AND CAST(wd.{{QbOperatorWithdrawal.withdrawalId}} AS text) = t.{{LedgerTransaction.sourceId}}
+    LEFT JOIN {{QbOperatorTransfer}} tr ON t.{{LedgerTransaction.sourceEntity}} = 'QbOperatorTransfer'
+        AND CAST(tr.{{QbOperatorTransfer.transferId}} AS text) = t.{{LedgerTransaction.sourceId}}
+    WHERE a.{{LedgerAccount.accountCode}} = '2140'
+    GROUP BY 1
+),
+operator_records AS (
+    SELECT r.r_operator, sum(r.r_amount) AS r_balance
+    FROM (
+        SELECT s.{{QbOperatorSettlement.operatorId}} AS r_operator,
+               s.{{QbOperatorSettlement.payable}}
+               - CASE WHEN s.{{QbOperatorSettlement.status}} = 'PAID' THEN s.{{QbOperatorSettlement.payable}}
+                      ELSE 0 END AS r_amount
+        FROM {{QbOperatorSettlement}} s
+        UNION ALL
+        SELECT w.{{QbOperatorWithdrawal.operatorId}}, -w.{{QbOperatorWithdrawal.amount}}
+        FROM {{QbOperatorWithdrawal}} w
+        WHERE w.{{QbOperatorWithdrawal.status}} = 'PAID'
+        UNION ALL
+        SELECT x.{{QbOperatorTransfer.operatorId}}, -x.{{QbOperatorTransfer.amount}}
+        FROM {{QbOperatorTransfer}} x) r
+    GROUP BY r.r_operator
+),
 light_left AS (
     SELECT g.{{QbFeeCreditGrant.sponsorId}} AS r_party, sum(g.{{QbFeeCreditGrant.remaining}}) AS r_amount
     FROM {{QbFeeCreditGrant}} g
@@ -187,6 +228,12 @@ FROM light_unearned u
 UNION ALL
 SELECT CAST('LIGHT_VOIDS' AS varchar(30)), CAST(v.r_party AS varchar(128)), CAST(0 AS numeric), v.r_amount
 FROM light_left v
+UNION ALL
+SELECT CAST('OPERATOR_ACCOUNT' AS varchar(30)), CAST(coalesce(orc.r_operator, ol.r_operator) AS varchar(128)),
+       coalesce(orc.r_balance, 0), coalesce(ol.r_balance, 0)
+FROM operator_records orc
+FULL OUTER JOIN operator_ledger ol ON ol.r_operator = orc.r_operator
+WHERE coalesce(orc.r_balance, 0) <> coalesce(ol.r_balance, 0)
 UNION ALL
 SELECT CAST('CERTIFIED_GRANTS' AS varchar(30)), CAST(t.{{QbFeeCreditGrant.sponsorId}} AS varchar(128)),
        CAST(0 AS numeric), t.{{QbFeeCreditGrant.amount}}

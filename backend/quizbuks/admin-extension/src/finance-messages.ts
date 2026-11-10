@@ -47,6 +47,9 @@ export const financeMessages = {
       FEE_VOIDED: 'Platform fees voided',
       ENTRY_FEE: 'Entry fees paid',
       ENTRY_FEE_SETTLED: 'Entry fees settled into cash accounts',
+      FEE_CREDIT_GRANTED: 'Platform fee Kudos granted',
+      FEE_CREDIT_VOIDED: 'Platform fee Kudos expired and voided',
+      OPERATOR_TRANSFER_TO_DIRECT: 'Operator account moved to its direct Sponsor',
       OTHER: 'Other postings',
     },
     overview: {
@@ -361,6 +364,9 @@ export const financeMessages = {
       FEE_VOIDED: '平台费作废',
       ENTRY_FEE: '报名费支付',
       ENTRY_FEE_SETTLED: '报名费入账到现金账户',
+      FEE_CREDIT_GRANTED: '赠送平台费 Kudos',
+      FEE_CREDIT_VOIDED: '平台费 Kudos 到期作废',
+      OPERATOR_TRANSFER_TO_DIRECT: '运营商账户转给直营发起方',
       OTHER: '其他分录',
     },
     overview: {
@@ -675,6 +681,9 @@ export const financeMessages = {
       FEE_VOIDED: 'プラットフォーム料金の取り消し',
       ENTRY_FEE: '参加費の支払い',
       ENTRY_FEE_SETTLED: '参加費の現金口座への精算',
+      FEE_CREDIT_GRANTED: '利用料クドスの付与',
+      FEE_CREDIT_VOIDED: '利用料クドスの期限切れ失効',
+      OPERATOR_TRANSFER_TO_DIRECT: '運営パートナー口座から直営主催者への振替',
       OTHER: 'その他の仕訳',
     },
     overview: {

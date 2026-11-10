@@ -38,7 +38,7 @@ import { TRANSACTIONS_PATH } from '../transactions/api'
 import '../transactions/messages'
 import {
   available,
-  availableCash,
+  buyableCash,
   bankAccountSet,
   bankTopUpPath,
   downloadReceipt,
@@ -312,6 +312,11 @@ function CashAccount({ wallet }: { wallet: SponsorWallet }) {
         ...(wallet.cashHeld > 0
           ? [{ key: 'cashHeld', label: t('wallet.cash.held'), value: formatKudos(wallet.cashHeld) }] : []),
         // Q88b (D-Q88-11): the entry fees paid for your quizzes, settled into the cash account each day.
+        // F-M4: the cash the operator moved here pays the platform's fees only.
+        ...(wallet.cashFromOperator > 0
+          ? [{ key: 'fromOperator', label: t('wallet.cash.fromOperator'),
+            value: <span data-testid="wallet-cash-from-operator">{t('wallet.cash.fromOperatorValue',
+              { amount: formatKudos(wallet.cashFromOperator) })}</span> }] : []),
         ...(wallet.entryFeesUnsettled > 0
           ? [{ key: 'entryFees', label: t('wallet.cash.entryFees'),
             value: <span data-testid="wallet-entry-fees">{t('wallet.cash.entryFeesValue',
@@ -319,7 +324,7 @@ function CashAccount({ wallet }: { wallet: SponsorWallet }) {
       ]} />
       <div className="grid gap-4 sm:grid-cols-2">
         {settings.data.buyEnabled && (
-          <Exchange toKudos max={availableCash(wallet)} />
+          <Exchange toKudos max={buyableCash(wallet)} />
         )}
         {settings.data.sellEnabled && (
           <Exchange toKudos={false} max={available(wallet)} />

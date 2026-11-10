@@ -42,6 +42,20 @@ class KudosExchangesTest {
     }
 
     @Test
+    void buyingNeverTakesWhatTheOperatorMovedHere() {
+        // F-M4: 5,000 of cash, 1,000 of it held by a dispute and 3,000 moved here by the operator: 1,000 buys Kudos.
+        EntityInstance cash = wallet(5000, 1000, 0, 0);
+        assertThat(KudosExchanges.problems(true, true, BigDecimal.valueOf(1000), null, cash, BigDecimal.valueOf(3000)))
+            .isEmpty();
+        assertThat(codes(KudosExchanges.problems(true, true, BigDecimal.valueOf(1001), null, cash,
+            BigDecimal.valueOf(3000)))).containsExactly(WalletCodes.KUDOS_EXCHANGE_FUNDS);
+        // Selling Kudos back is not concerned.
+        EntityInstance kudos = wallet(3000, 0, 0, 0);
+        assertThat(KudosExchanges.problems(false, true, BigDecimal.valueOf(3000), kudos, cash,
+            BigDecimal.valueOf(3000))).isEmpty();
+    }
+
+    @Test
     void sellingNeverOvertakesRewardsWaitingForTheKudos() {
         EntityInstance kudos = wallet(3000, 0, 0, 0);
         assertThat(KudosExchanges.problems(false, true, BigDecimal.valueOf(3000), kudos, null)).isEmpty();

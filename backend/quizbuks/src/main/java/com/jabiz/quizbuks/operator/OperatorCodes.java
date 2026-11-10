@@ -94,6 +94,14 @@ public final class OperatorCodes {
     public static final String WITHDRAWAL_OPEN = "QB_OPERATOR_WITHDRAWAL_OPEN";
     /** Q48e-2: the withdrawal is not in a state for this (param {@code status}). */
     public static final String WITHDRAWAL_STATE = "QB_OPERATOR_WITHDRAWAL_STATE";
+    /** F-M4: the amount is not whole yen from 1 to the account's balance (param {@code balance}). */
+    public static final String TRANSFER_AMOUNT = "QB_OPERATOR_TRANSFER_AMOUNT";
+    /** F-M4: the operator has no direct Sponsor, or its onboarding is not approved. */
+    public static final String TRANSFER_NO_DIRECT = "QB_OPERATOR_TRANSFER_NO_DIRECT";
+    /** F-M4: the operator's direct Sponsor is banned: nothing is transferred to it (the controller, 2026-11-10). */
+    public static final String TRANSFER_DIRECT_BANNED = "QB_OPERATOR_TRANSFER_DIRECT_BANNED";
+    /** A transfer with a request key the operator already used (a submission made twice without its replay). */
+    public static final String TRANSFER_REPEATED = "QB_OPERATOR_TRANSFER_REPEATED";
     /** Q48e-2: no approval rule asks for a second person on the operators' withdrawals. */
     public static final String WITHDRAWAL_NO_REVIEW = "QB_OPERATOR_WITHDRAWAL_NO_REVIEW";
 
@@ -104,6 +112,7 @@ public final class OperatorCodes {
         NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR, MONTH_OPEN, NO_SHARE, SETTLEMENT_STATE,
         SETTLEMENT_NOTHING, SETTLEMENT_NO_REVIEW, NO_RATE, PLAN_MONTH, PLAN_PENDING, PLAN_NO_REVIEW, NO_PLAN,
         BANK_ACCOUNT, WITHDRAWAL_NO_ACCOUNT, WITHDRAWAL_COOLDOWN, WITHDRAWAL_AMOUNT, WITHDRAWAL_OPEN, WITHDRAWAL_STATE,
+        TRANSFER_AMOUNT, TRANSFER_NO_DIRECT, TRANSFER_DIRECT_BANNED, TRANSFER_REPEATED,
         WITHDRAWAL_NO_REVIEW);
 
     private OperatorCodes() {}

@@ -97,6 +97,15 @@ public final class KudosExchanges {
      */
     public static List<Violation> problems(boolean toKudos, Boolean enabled, BigDecimal amount,
         EntityInstance kudosWallet, EntityInstance cashWallet) {
+        return problems(toKudos, enabled, amount, kudosWallet, cashWallet, BigDecimal.ZERO);
+    }
+
+    /**
+     * As the other, where {@code operatorCash} of the cash came from the Sponsor's operator (F-M4): it pays the
+     * platform's fees only and is never turned into Kudos (the controller, 2026-11-10).
+     */
+    public static List<Violation> problems(boolean toKudos, Boolean enabled, BigDecimal amount,
+        EntityInstance kudosWallet, EntityInstance cashWallet, BigDecimal operatorCash) {
         List<Violation> problems = new ArrayList<>();
         if (!Boolean.TRUE.equals(enabled)) {
             problems.add(new Violation(null, WalletCodes.KUDOS_EXCHANGE_OFF, toKudos
@@ -106,6 +115,9 @@ public final class KudosExchanges {
         }
         // What open disputes hold is not available on either side (it may be taken back).
         BigDecimal available = QbWallets.available(toKudos ? cashWallet : kudosWallet);
+        if (toKudos && operatorCash != null) {
+            available = available.subtract(operatorCash);
+        }
         if (!toKudos && QbWallets.pendingCount(kudosWallet) > 0) {
             // Rewards wait to be paid from these Kudos, in their order: none of them goes back to cash first.
             problems.add(new Violation(null, WalletCodes.KUDOS_EXCHANGE_PENDING,
@@ -171,7 +183,9 @@ public final class KudosExchanges {
     static void record(ProcessContext ctx, boolean toKudos, String switchKey) {
         List<Violation> problems = new ArrayList<>(SponsorChecks.problems(ctx));
         Boolean enabled = ctx.get(PARAMS, ParamValues.class).find(switchKey, Boolean.class).orElse(null);
-        problems.addAll(problems(toKudos, enabled, amount(ctx), first(ctx, KUDOS_WALLET), first(ctx, CASH_WALLET)));
+        problems.addAll(problems(toKudos, enabled, amount(ctx), first(ctx, KUDOS_WALLET), first(ctx, CASH_WALLET),
+            toKudos ? CashLots.remainingOf(TopUpCrediting.list(ctx, CASH_LOTS), QbFeeAccount.OPERATOR)
+                : BigDecimal.ZERO));
         if (toKudos) {
             ParamValues params = ctx.get(PARAMS, ParamValues.class);
             Violation unpaid = com.jabiz.quizbuks.fee.FeeGate.refusal(ctx,
@@ -212,7 +226,7 @@ public final class KudosExchanges {
             toKudos ? amount : amount.negate(), 0, BigDecimal.ZERO);
         QbWallets.change(ctx, first(ctx, CASH_WALLET), QbWallets.CASH, sponsorId,
             toKudos ? amount.negate() : amount, 0, BigDecimal.ZERO);        if (toKudos) {
-            CashLots.take(ctx, TopUpCrediting.list(ctx, CASH_LOTS), amount, null);
+            CashLots.takeExcept(ctx, TopUpCrediting.list(ctx, CASH_LOTS), amount, QbFeeAccount.OPERATOR);
         } else {
             // F-M1: Kudos sold back are cash that arrived now.
             CashLots.add(ctx, sponsorId, QbFeeAccount.OTHER, amount, EXCHANGE, ctx.get(EXCHANGE_ID));

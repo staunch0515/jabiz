@@ -44,7 +44,8 @@ const LEAD = '0192f0a0-0000-7000-8000-00000000b002'
 
 const account = (change: Row = {}): Row => ({ operatorId: OPERATOR, lead: true, credited: '52345', withdrawn: '40000',
   balance: '12345', minimum: '10000', cooldownHours: '72', bankName: 'Mizuho', branchName: 'Umeda',
-  accountType: 'ORDINARY', accountNumber: '***4567', accountHolder: 'カンサイ', changedAt: '2026-10-01T01:00:00Z', ...change })
+  accountType: 'ORDINARY', accountNumber: '***4567', accountHolder: 'カンサイ', changedAt: '2026-10-01T01:00:00Z',
+  transferred: '0', hasDirectSponsor: true, ...change })
 
 const terms = [['1', '0', '0.5000'], ['2', '20000', '0.4000'], ['3', '40000', '0.3000'], ['4', '60000', '0.2000'],
   ['5', '100000', '0.1000']].map(([plan, fixedFee, platformShare]) => ({ kind: 'TERMS', plan, fixedFee, platformShare,
@@ -202,6 +203,61 @@ describe("the operator's account", () => {
     expect(screen.queryByTestId('bank-edit')).not.toBeInTheDocument()
     expect(screen.queryByTestId('withdraw-form')).not.toBeInTheDocument()
     expect(within(rows[0]).queryByTestId('withdrawal-cancel')).not.toBeInTheDocument()
+  })
+})
+
+describe("the transfers to the direct Sponsor (F-M4)", () => {
+  it('lets the lead move an amount with a note after confirming, and lists the transfers', async () => {
+    server.rows[TEMPLATE.ownTransfers] = [{ transferId: 't1', amount: '3000', note: 'October fees',
+      requestedBy: LEAD, transferredAt: '2026-10-31T01:00:00Z' }]
+    server.account = account({ transferred: '3000' })
+    renderAccount()
+    const user = userEvent.setup()
+    expect(await screen.findByTestId('account-transferred')).toHaveTextContent('3,000 Kudos')
+    expect(await screen.findByTestId('transfer-row')).toHaveTextContent('October fees')
+    await user.type(screen.getByTestId('transfer-amount'), '2000')
+    await user.type(screen.getByTestId('transfer-note'), 'November')
+    await user.click(screen.getByTestId('transfer-submit'))
+    // Nothing is sent before the confirmation.
+    expect(await screen.findByTestId('transfer-confirm')).toHaveTextContent('2,000 Kudos')
+    expect(server.runProcess).not.toHaveBeenCalled()
+    await user.click(screen.getByTestId('transfer-confirm-button'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledTimes(1))
+    const [name, input, options] = server.runProcess.mock.calls[0]
+    expect(name).toBe(ACCOUNT_PROCESS.transferToDirect)
+    expect(input).toMatchObject({ amount: 2000, note: 'November' })
+    // The submission's key goes with the input and as its Idempotency-Key.
+    expect(input.requestKey).toMatch(/^[0-9a-f-]{36}$/)
+    expect(options).toEqual({ idempotencyKey: input.requestKey })
+    await expectAccessible(document.body)
+    // The next submission has a new key.
+    await user.type(screen.getByTestId('transfer-amount'), '1000')
+    await user.click(screen.getByTestId('transfer-submit'))
+    await user.click(await screen.findByTestId('transfer-confirm-button'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledTimes(2))
+    expect(server.runProcess.mock.calls[1][1].requestKey).not.toBe(input.requestKey)
+  })
+
+  it('shows the server’s refusal of a transfer', async () => {
+    server.runProcess.mockRejectedValueOnce(new ApiError(422, { detail: 'The direct Sponsor is suspended.' }))
+    renderAccount()
+    const user = userEvent.setup()
+    await user.type(await screen.findByTestId('transfer-amount'), '100')
+    await user.click(screen.getByTestId('transfer-submit'))
+    await user.click(await screen.findByTestId('transfer-confirm-button'))
+    expect(await screen.findByTestId('transfer-problem')).toHaveTextContent('The direct Sponsor is suspended.')
+  })
+
+  it('offers no transfer to a member who does not lead, nor without a direct Sponsor', async () => {
+    server.account = account({ lead: false })
+    const { unmount } = renderAccount()
+    expect(await screen.findByTestId('account-transfers')).toBeInTheDocument()
+    expect(screen.queryByTestId('transfer-form')).not.toBeInTheDocument()
+    unmount()
+    server.account = account({ hasDirectSponsor: false })
+    renderAccount()
+    expect(await screen.findByTestId('account-transfers')).toHaveTextContent('no direct Sponsor')
+    expect(screen.queryByTestId('transfer-form')).not.toBeInTheDocument()
   })
 })
 

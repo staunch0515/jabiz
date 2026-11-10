@@ -56,6 +56,8 @@ export interface SponsorWallet {
   entryFeesUnsettled: number
   /** F-M1: the granted credit (platform fee Kudos), spent on the platform's fees before the cash. */
   feeCreditBalance: number
+  /** F-M4: what is left of the cash the Sponsor's operator moved to it: platform fees only, never Kudos. */
+  cashFromOperator: number
 }
 
 /** How the platform's fees are billed (Q87b): taken from the cash account at once, or invoiced monthly within a credit. */
@@ -135,6 +137,7 @@ export async function readWallet(): Promise<SponsorWallet> {
     uninvoicedTotal: num(row.uninvoicedTotal),
     entryFeesUnsettled: num(row.entryFeesUnsettled),
     feeCreditBalance: num(row.feeCreditBalance),
+    cashFromOperator: num(row.cashFromOperator),
   }
 }
 
@@ -180,6 +183,9 @@ export async function readCashSettings(): Promise<CashSettings> {
 
 /** What the cash account can give now: its balance less what open disputes hold. */
 export const availableCash = (wallet: SponsorWallet): number => Math.max(0, wallet.cashBalance - wallet.cashHeld)
+
+/** F-M4: what the cash account can turn into Kudos: what it can give less what the operator moved to it. */
+export const buyableCash = (wallet: SponsorWallet): number => Math.max(0, availableCash(wallet) - wallet.cashFromOperator)
 
 /** `KudosExchanges.Output`. */
 export interface ExchangeOutput {

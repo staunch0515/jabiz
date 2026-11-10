@@ -45,6 +45,8 @@ interface Server {
   cashBalance?: string
   /** Q88b: the entry fees waiting for the daily settlement. */
   entryFees?: string
+  /** F-M4: the cash moved here by the Sponsor's operator. */
+  fromOperator?: string
   exchange?: { status: number; body: unknown }
 }
 
@@ -76,7 +78,8 @@ function server(options: Server = {}) {
       case '/api/queries/qb.sponsor.wallet':
         return json(200, { items: [{ balance: '5000', held: '1000', pendingCount: 2, pendingAmount: '700',
           toppedUp: '6000', takenBack: '0', topUpCount: 2, spent: '1000', cashBalance: options.cashBalance ?? '0',
-          cashHeld: '0', entryFeesUnsettled: options.entryFees ?? '0' }], offset: 0, limit: 1 })
+          cashHeld: '0', entryFeesUnsettled: options.entryFees ?? '0',
+          cashFromOperator: options.fromOperator ?? '0' }], offset: 0, limit: 1 })
       case '/api/queries/qb.sponsor.fee-invoices':
         return json(200, { items: [], offset: 0, limit: 10, total: 0 })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:fee-invoice-status':
@@ -333,6 +336,17 @@ describe('the cash account (Q87a)', () => {
     window.history.replaceState(null, '', '/money/account')
     render(<App />)
     expect(await screen.findByTestId('wallet-entry-fees')).toHaveTextContent('90 Kudos (settled daily)')
+  })
+
+  it('shows the cash the operator moved here and never buys Kudos with it (F-M4)', async () => {
+    server({ cashBalance: '3500', fromOperator: '3000', cash: { targets: 'CASH', defaultTarget: 'CASH',
+      buyEnabled: true, sellEnabled: false } })
+    window.history.replaceState(null, '', '/money/account')
+    render(<App />)
+    expect(await screen.findByTestId('wallet-cash-from-operator')).toHaveTextContent('3,000 Kudos')
+    expect(screen.getByTestId('wallet-cash-from-operator')).toHaveTextContent('cannot be turned into Kudos')
+    // Only the 500 of its own can buy Kudos.
+    expect(await screen.findByTestId('cash-buy')).toHaveTextContent('500 Kudos')
   })
 
   it('shows the server\'s refusal of an exchange', async () => {

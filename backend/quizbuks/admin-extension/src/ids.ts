@@ -214,6 +214,8 @@ export const TEMPLATE = {
   /** Q48e-2, the operator's own (`qb.operator.use`): its account (balance, bank account), withdrawals and plans. */
   operatorAccount: 'qb.operator.account',
   ownWithdrawals: 'qb.operator.withdrawals',
+  /** F-M4: the caller operator's transfers to its direct Sponsor. */
+  ownTransfers: 'qb.operator.transfers',
   ownPlans: 'qb.operator.plans',
   /** Q48e-2: every operator's withdrawals (finance) and plan changes (headquarters). */
   operatorWithdrawals: 'qb.admin.operator-withdrawals',
@@ -235,6 +237,8 @@ export const ACCOUNT_PROCESS = {
   bankAccountSave: 'QB_OPERATOR_BANK_ACCOUNT_SAVE',
   withdrawalRequest: 'QB_OPERATOR_WITHDRAWAL_REQUEST',
   withdrawalCancel: 'QB_OPERATOR_WITHDRAWAL_CANCEL',
+  /** F-M4: the lead moves money of the account to the operator's direct Sponsor (platform fees only). */
+  transferToDirect: 'QB_OPERATOR_TRANSFER_TO_DIRECT',
   withdrawalPay: 'QB_OPERATOR_WITHDRAWAL_PAY',
   withdrawalReject: 'QB_OPERATOR_WITHDRAWAL_REJECT',
   planSet: 'QB_OPERATOR_PLAN_SET',

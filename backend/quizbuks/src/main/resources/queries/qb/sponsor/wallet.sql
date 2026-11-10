@@ -1,7 +1,7 @@
 /*---
 id: qb.sponsor.wallet
 description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, (Q87a) the cash account and (F-M1) the fee credit
-entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbFeeCharge, QbSponsor, SysParam]
+entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbFeeCharge, QbSponsor, QbCashLot, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:sponsor:QbWallet
   QbFeeInvoice: urn:jabiz:dataset:sponsor:QbFeeInvoice
@@ -10,6 +10,7 @@ datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
   QbTopUp: urn:jabiz:dataset:sponsor:QbTopUp
   LedgerEntry: urn:jabiz:dataset:sponsor:LedgerEntry
+  QbCashLot: urn:jabiz:dataset:sponsor:QbCashLot
 results:
   balance:       { from: QbWallet.balance }
   held:          { from: QbWallet.held }
@@ -29,6 +30,7 @@ results:
   uninvoicedTotal: { kind: { type: monetary, currency: JPY, scale: 0 } }
   entryFeesUnsettled: { kind: { type: monetary, currency: JPY, scale: 0 } }
   feeCreditBalance: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  cashFromOperator: { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
@@ -52,8 +54,15 @@ SELECT
     coalesce(sp.sp_limit, 0)        AS creditLimit,
     coalesce(u.u_total, 0)          AS uninvoicedTotal,
     coalesce(ef.ef_total, 0)        AS entryFeesUnsettled,
-    coalesce(fc.fc_balance, 0)      AS feeCreditBalance
+    coalesce(fc.fc_balance, 0)      AS feeCreditBalance,
+    coalesce(ol.ol_remaining, 0)    AS cashFromOperator
 FROM (SELECT 1 AS one) base
+-- F-M4: what is left of the cash the Sponsor's operator moved to it: it pays the platform's fees only (buying Kudos
+-- takes none of it).
+CROSS JOIN (
+    SELECT sum(l.{{QbCashLot.remaining}}) AS ol_remaining
+    FROM {{QbCashLot}} l
+    WHERE l.{{QbCashLot.source}} = 'OPERATOR') ol
 -- Q88b: the entry fees takers paid for the sponsor's quizzes, not yet moved to the cash account by the daily job
 -- (2170 for the sponsor, credit less debit; the sponsor's ledger view holds their lines).
 CROSS JOIN (

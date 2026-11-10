@@ -71,6 +71,8 @@ public final class TopUpClawback {
     static final String POSTING = "posting";
     static final String VALUES = "values";
     static final String SHORTFALL = "shortfall";
+    /** F-M4: what a cash top-up taken back took from the cash the operator moved to the Sponsor. */
+    static final String FROM_OPERATOR = "fromOperator";
     static final String HELD_DELTA = "heldDelta";
 
     public static ProcessDefinition<TopUpEvents.InboundRef, ClawbackOutput, ProcessContext> refunded(
@@ -139,6 +141,10 @@ public final class TopUpClawback {
                     ctx -> released(ctx) && TopUpTargets.paysRewards(TopUpTargets.of(TopUpCrediting.first(ctx, TOPUP))),
                     QbWallets.SETTLE_EVENT,
                     ctx -> Map.of("sponsorId", TopUpCrediting.first(ctx, TOPUP).get("sponsorId"))))
+                .step("Tell finance the operator's money was taken back", CreateTask.<ProcessContext>when(
+                    ctx -> ctx.contains(FROM_OPERATOR), ctx -> TopUpTasks.operatorCash(
+                        String.valueOf(TopUpCrediting.first(ctx, TOPUP).id()), (BigDecimal) ctx.get(FROM_OPERATOR),
+                        event(ctx).externalEventId())))
                 .step("Ask a person", CreateTask.<ProcessContext>when(ctx -> ctx.contains(REASON), ctx -> {
                     EntityInstance topUp = TopUpCrediting.first(ctx, TOPUP);
                     ReceivedEvent event = event(ctx);
@@ -334,7 +340,13 @@ public final class TopUpClawback {
                 topUp.get("sponsorId"), balanceDelta, 0, BigDecimal.ZERO, heldDelta);
         }
         if (balanceDelta.signum() < 0 && TopUpTargets.CASH.equals(TopUpTargets.of(topUp))) {
-            CashLots.take(ctx, TopUpCrediting.list(ctx, CASH_LOTS), balanceDelta.negate(), topUp.id());
+            // F-M4: what the operator moved here is reached last; when it is, finance is asked to look (the
+            // operator's money went back to the card with the refund).
+            BigDecimal fromOperator = CashLots.takeLast(ctx, TopUpCrediting.list(ctx, CASH_LOTS),
+                balanceDelta.negate(), topUp.id(), com.jabiz.quizbuks.fee.QbFeeAccount.OPERATOR);
+            if (fromOperator.signum() > 0) {
+                ctx.put(FROM_OPERATOR, fromOperator);
+            }
         }
         ctx.changes().update(QbTopUps.TOPUP, topUp.id(), topUp.version(), values);
     }

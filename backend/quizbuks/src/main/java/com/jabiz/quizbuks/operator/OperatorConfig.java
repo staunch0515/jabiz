@@ -462,6 +462,32 @@ public class OperatorConfig {
             qbOperatorPlanApprovalResult, TransferProcesses::resultInput);
     }
 
+    // ---- F-M4: the operator's account to its direct Sponsor ----------------------------------------------------------
+
+    @Bean
+    EntityDefinition qbOperatorTransferEntity() {
+        return OperatorTransfers.TRANSFER_ENTITY;
+    }
+
+    /** Finance reads the transfers (the operator through its own template); only the transfer writes them. */
+    @Bean
+    DatasetDefinition qbOperatorTransferDataset() {
+        return financeDataset(OperatorTransfers.TRANSFER_ENTITY_NAME);
+    }
+
+    @Bean
+    ProcessDefinition<OperatorTransfers.TransferInput, OperatorTransfers.TransferOutput, ProcessContext>
+        qbOperatorTransferToDirect() {
+        return OperatorTransfers.transfer();
+    }
+
+    /** Accounting evidence: ten years from the end of its fiscal year (as the platform fees). */
+    @Bean
+    com.jabiz.retention.RetentionPolicy qbOperatorTransferRetention() {
+        return com.jabiz.retention.RetentionPolicy.of(OperatorTransfers.TRANSFER_ENTITY_NAME)
+            .keep(java.time.Period.ofYears(10)).from("transferredAt").afterFiscalYearEnd();
+    }
+
     @Bean
     ProcessDefinition<OperatorWithdrawals.BankAccountInput, OperatorWithdrawals.BankAccountOutput, ProcessContext>
         qbOperatorBankAccountSave() {

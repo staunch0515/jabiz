@@ -259,3 +259,60 @@
 2. **补发失败不挡认证**（低 2）：补发不再是批准结果中的子流程；批准结果提交后，事件 `qb.sponsor-verification.decided` 的消费者 `qb.fee-credit-certified` 在自己的事务中运行 `QB_FEE_CREDIT_CERTIFIED_TOP_UP`（驳回、撤销的事件同样运行，什么也不做）。补发的配置或过账失败只留下事件的重试，认证照常 `APPROVED`，每日任务补上。
 3. **到期模板**（低 3）：参数先以正则判断（不是整数日元即不选人，不报错），开关关着时不选人。
 4. **核对项 `CERTIFIED_GRANTS`**（`qb.system.recon-fee-account`）：有 `CERTIFIED_TOP_UP` 一笔而该发起方从未有过 `APPROVED` 的认证（`verified_at` 只由批准写入，撤销与改名后仍在；删除账号的发起方不查）；开户 + 补发超过补发时记下的认证金额。
+
+## 7. F-M4 运营商的账与直营发起方（S2，2026-11-10，待总控批准）
+
+规格 F-M4；`F-M.md` §1 M8 的前一半（转给直营发起方）。M8 的后一半（结算基数改为平台费、扣回赠送，F-M12）要等 M4–M7 的费用有了才有数可算，另作一项。
+
+### 7.1 数据（迁移：当时的下一个空号）
+- 只追加、只记一次的 `QbOperatorTransfer`（`qb_operator_transfer_version`，`writeOnce`，照 `QbFeeCharge`）：`transferId`、`operatorId`、`sponsorId`（直营发起方，取自运营商行，不取自输入）、`amount`（JPY 0 位）、`note`（可选，负责人写给自己的说明）、`requestedBy`、`createdAt`。保留期照财务记录（`RetentionPolicy`，10 年）。
+- 现金一笔：已有的来源 `OPERATOR`（F-M1 已预留），`sourceEntity = QbOperatorTransfer`。
+
+### 7.2 流程 `QB_OPERATOR_TRANSFER_TO_DIRECT`
+- 运营商负责人（与提现同一判断：入口范围给出运营商，先取运营商锁再查成员关系与负责人）；`requiresVerifiedEmail()`、`refuseBanned`、**每次二次验证**；支持幂等键。
+- 锁序 `qb.operator:<运营商>` →（成员的共享锁）→ `qb.wallet:SPONSOR:<直营发起方>`。锁内读运营商的账户（`qb.system.operator-balance` 加上已转出的合计：余额 = 记入 − 提现（未驳回未取消）− 转出），金额 ≤ 余额，否则 422（如 `QB_OPERATOR_TRANSFER_EXCEEDS`）；运营商停用、没有直营发起方或其入驻未通过即 422。
+- 写转入记录 → `SaveChanges.now` → `LEDGER_POST` 借 2140 / 贷 2160（维度：直营发起方）→ 现金钱包加、`CashLots.add(OPERATOR)`。转出之后提现可用额随之减少（同一模板）。
+- 不可撤回：钱进的是负责人自己的直营发起方，没有"转错人"；更正就是不再转。
+
+### 7.3 "只能付平台费，不能转出或提现"
+- 平台费照 F-M1 的顺序用（赠送先、再按进账先后用现金，`OPERATOR` 笔与其他现金同等）。
+- 2160 的其他出口：**买学分 `QB_KUDOS_BUY`** 会把转入的钱变成 Kudos（再付给学者），等于转出。计划：买学分的可用额不含 `OPERATOR` 笔的剩余（`KudosExchanges.problems` 与页面的可用额一起改，`CashLots.take` 跳过 `OPERATOR` 笔）。发起方没有现金提现；充值退款只扣该充值自己的那一笔，不受影响。
+
+### 7.4 核对、月报与页面
+- 每日核对新项 `OPERATOR_ACCOUNT`（`qb.system.recon-fee-account` 或运营商核对模板）：按运营商比较 2140（经来源单据：结算、提现、转入连到运营商）与"记入的结算 − 已付的提现 − 转入"；`CASH_LOTS` 照旧覆盖 2160 与各笔（含 `OPERATOR`）。
+- 月报新类 `OPERATOR_TRANSFER_TO_DIRECT`（来源 `QbOperatorTransfer`，借 2140 / 贷 2160），`AdminFinanceIT` 逐行期望。
+- 运营商管理系统的"账户"页：余额旁的"转给直营发起方"（金额、说明、确认、二次验证）与转入记录列表（模板 `qb.operator.transfers`，运营商范围）；总部的财务页可读全部转入。
+- 发起方的平台费账户页：现金按来源已分列，`OPERATOR` 显示为"运营商转入"（三语字典已在，核对文字）；买学分处说明"运营商转入的部分不能换学分"。
+- 文档：`operations.md` 新小节（规则、核对差异的处理），帮助底稿与使用手册（发起方、运营商）三语。
+
+### 7.5 测试
+- 单元：余额与可转额的规则、买学分的可用额（不含 `OPERATOR`）。
+- IT：只能负责人、只到本运营商的直营发起方（别的运营商 404）；超额 422 且什么也没写；与提现并发时合计不超过余额；分录 2140/2160、现金笔、钱包；平台费先用赠送再用转入；买学分拒绝动用转入；核对 0 行、月报一行；二次验证。
+- e2e：负责人转一笔，直营发起方在平台费账户看到"运营商转入"。
+
+### 7.6 请总控确认
+1. 范围只做 F-M4（转入）；F-M12（结算基数、扣回赠送）在 M4–M7 之后另作。
+2. 买学分不能动用运营商转入的钱（§7.3）。
+3. 直营发起方被封禁时：拒绝转入（建议），还是照转。
+4. 不设四眼（负责人转给自己的直营发起方，钱不离开平台），只要二次验证；提现照旧四眼。
+- 删除的功能：无。钱：写完先报分支名、不开 PR。
+
+### 7.7 总控的决定（2026-11-10，计划批准）
+1. 只做 F-M4；F-M12（结算基数、扣回赠送）待 M4–M7 之后另作。
+2. 买学分不能动用 `OPERATOR` 来源的钱（加 IT）。
+3. 直营发起方被封禁时拒绝转入（422，什么也不写）。
+4. 不设四眼：每次二次验证 + 幂等键。写完先报分支名，额外审查后再开 PR。
+
+### 7.8 实施记录（S2，2026-11-10）
+- 迁移 `V113`：只追加、只记一次的 `qb_operator_transfer_version`（外键到 `qb_operator`）。
+- `operator.OperatorTransfers`：`QB_OPERATOR_TRANSFER_TO_DIRECT`（`qb.operator.use`、负责人（`OperatorWithdrawals.lead`）、`requiresVerifiedEmail`、每次二次验证、`refuseBanned`）；锁内一条 `QueryEntities.all` 读直营发起方的现金钱包、入驻与封禁，再读余额模板；`OperatorRules.transferable`（整数、> 0、≤ 余额）。错误码 `QB_OPERATOR_TRANSFER_AMOUNT` / `_NO_DIRECT` / `_DIRECT_BANNED`。负责人本人就是直营发起方时，封禁先由 `refuseBanned` 拒绝（`QB_USER_BANNED`）；另一位负责人转给被封禁的直营发起方即 `_DIRECT_BANNED`。
+- 余额：`qb.system.operator-balance` 与 `qb.operator.account` 都减去转出（另给出 `transferred`、`hasDirectSponsor`）；新模板 `qb.operator.transfers`。
+- 买学分：`KudosExchanges.problems(..., operatorCash)` 的可用额减去 `OPERATOR` 笔的剩余，`CashLots.takeExcept` 不取它们；`qb.sponsor.wallet` 给出 `cashFromOperator`，页面的买入上限为 `buyableCash`。充值退款与争议的扣回见 §7.9。
+- 核对 `OPERATOR_ACCOUNT`（`recon-fee-account`）；月报 `OPERATOR_TRANSFER_TO_DIRECT`（管理系统扩展同时补上 F-M2 漏掉的 `FEE_CREDIT_GRANTED` / `FEE_CREDIT_VOIDED` 的文字）。
+- 页面：运营商「账户」页的"转给直营发起方"（金额、说明、确认、二次验证由平台询问）与转入记录；发起方平台费账户页的"运营商转入"一行。
+- 测试：`OperatorTransferIT`（5 例：负责人、他人、超额与非整数、幂等键、分录与现金笔、模板、月报、核对；封禁；买学分与平台费；并发两笔；核对找出没有分录的转入）、`OperatorRulesTest`、`KudosExchangesTest`、扩展与发起方页面的 Vitest。e2e 没有新用例：运营商账户要有结算记入才有余额，e2e 中没有结算的途径（与提现相同），页面由扩展的测试覆盖。
+
+### 7.9 总控额外审查后的修改（S2，2026-11-10，审查 @9180dac18）
+- **【中 1】扣回不先取运营商的钱**：`TopUpClawback` 改用 `CashLots.takeLast`（`FeeAllocation.takeCash(..., first, last)`）：该充值自己的那一笔 → 非 `OPERATOR` 各笔（按进账先后）→ 最后才取 `OPERATOR`。取到 `OPERATOR` 时 `CreateTask`（`TopUpTasks.operatorCash`，权限 `qb.reconcile`，来源 `stripe-operator-cash:<事件>`，消息 `task.qb.refund-check.OPERATOR_CASH` 三种语言）。operations §7.43 改写。测试：`OperatorCashClawbackIT`（卡充值 A → 买学分用完 A → 运营商转入 C → 银行充值 B → A 部分退款：取 B、`OPERATOR` 不动、无待办、核对无差异；只剩 `OPERATOR` 时取它并生成待办）、`FeeAllocationTest.cashTakenBackLeavesTheNamedLastLotsToTheEnd`。
+- **【低 2】补测试**（`OperatorTransferIT`）：转入 × 提现并发（一成一拒，合计 ≤ 余额）；`REQUESTED` 的提现减少可转额、转入减少可提现额；缺近期二次验证即 403 `MFA_REQUIRED`。
+- **【低 3】幂等键必填**：平台不能在流程上声明"必须有幂等键"，流程也读不到请求头，所以输入加必填的 `requestKey`（`@NotBlank`，≤ 128，缺少即 400）并记在转入上（列 `request_key`，V113 中 `UNIQUE (operator_id, request_key)`；锁内先查，重复即 422 `QB_OPERATOR_TRANSFER_REPEATED`）。页面每次确认生成新键，同时作为输入与 `Idempotency-Key`（重发同一次提交由平台回放第一次的回答）。测试：IT 缺键 400、同键换幂等键 422、别的运营商可用同一键；扩展 Vitest 断言键随输入与请求头、下一次提交换新键。
