@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import {
   Alert,
   AlertDescription,
@@ -34,6 +34,8 @@ import { AfterDecision, EmptyState, LoadFailed, Section, StatusBadge } from './c
 import { useAfterDecision, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { TreeOwner } from './TreesPage'
+import TreeEditor from './TreeEditor'
+import { AdoptSection } from './TreeActions'
 import { useConditionText, useOperatorTrees } from './trees-hooks'
 import {
   i18nText,
@@ -235,6 +237,15 @@ export default function TreeReviewPage() {
   const statusLabel = useLabels(DICTIONARY.treeStatus)
   const versionLabel = useLabels(DICTIONARY.treeVersionStatus)
   const subjectLabel = useLabels(DICTIONARY.treeSubject)
+  // F-S3e: the editor, opened by its button or by `?edit=1` (a template just created or copied).
+  const [search, setSearch] = useSearchParams()
+  const editing = search.get('edit') === '1'
+  const setEditing = (on: boolean) => setSearch((now) => {
+    const next = new URLSearchParams(now)
+    if (on) next.set('edit', '1')
+    else next.delete('edit')
+    return next
+  }, { replace: true })
   const tree = useQuery({
     queryKey: [...TREES_KEY, 'one', operator, treeId],
     queryFn: () => readTree(operator, treeId),
@@ -331,12 +342,19 @@ export default function TreeReviewPage() {
   }
 
   const shownNo = m.openVersionId ? m.openVersionNo : m.versionNo
+  // Who may edit (the server checks again): a platform template, for its writers; an operator's copy, for its members.
+  const editable = m.status === 'ACTIVE' && ((m.ownerKind === 'PLATFORM' && !operator && can(PERMISSION.treePlatformWrite))
+    || (m.ownerKind === 'OPERATOR' && operator && can(PERMISSION.treeEdit)))
   return (
     <div className="flex flex-col gap-4" data-testid="tree-review" data-status={m.openStatus ?? m.status}>
       <div>{back}</div>
       <PageHeader title={name} className="pb-0" description={
         <StatusBadge code={m.status} label={statusLabel(m.status)} testId="tree-status" />
-      } />
+      } actions={editable && !editing ? (
+        <Button type="button" data-testid="tree-edit" onClick={() => setEditing(true)}>{t('trees.editor.edit')}</Button>
+      ) : undefined} />
+      {editable && editing && <TreeEditor tree={m} operator={operator} onClose={() => setEditing(false)} />}
+      {editable && m.ownerKind === 'OPERATOR' && m.templateTreeId && <AdoptSection tree={m} />}
       <Section title={t('trees.details')} testId="tree-details">
         <DescriptionList items={items} columns={2} />
       </Section>

@@ -37,6 +37,7 @@ import VideoUsesPage from './VideoUsesPage'
 import BankTopUpPage from './BankTopUpPage'
 import TreesPage from './TreesPage'
 import TreeReviewPage from './TreeReviewPage'
+import TreeSupportPage from './TreeSupportPage'
 import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
 import BankWithdrawalsPage from './BankWithdrawalsPage'
@@ -134,6 +135,7 @@ export default defineExtension({
     // F-S2b3a: the knowledge maps and the review of a map's version (headquarters every map, an operator its own).
     { path: PATH.trees, element: <TreesPage /> },
     { path: '/qb/trees/:treeId', element: <TreeReviewPage /> },
+    { path: PATH.treeSupport, element: <TreeSupportPage /> },
     // F-S12: the videos Sponsors share: an operator's own Sponsors' to review and take down, the platform's all.
     { path: PATH.sharedVideos, element: <SharedVideosPage /> },
     { path: '/qb/shared-videos/:sharedVideoId', element: <SharedVideoPage /> },

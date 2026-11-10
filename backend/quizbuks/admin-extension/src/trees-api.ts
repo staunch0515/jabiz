@@ -44,6 +44,10 @@ export interface TreeRow {
   remindedAt: string | null
   nodes: number
   litSubjects: number
+  /** F-S3e: the graph's revision (the editor's `baseRevision`), and the name and description the editor starts from. */
+  revision: number
+  draftName: string | null
+  description: string | null
 }
 
 function treeRow(row: Row): TreeRow {
@@ -55,6 +59,7 @@ function treeRow(row: Row): TreeRow {
     openStatus: str(row.openStatus), openVersionNo: row.openVersionNo == null ? null : num(row.openVersionNo),
     approvalRequestId: str(row.approvalRequestId), submittedAt: str(row.submittedAt), remindedAt: str(row.remindedAt),
     nodes: num(row.nodes), litSubjects: num(row.litSubjects),
+    revision: num(row.revision), draftName: str(row.draftName), description: str(row.description),
   }
 }
 
@@ -147,3 +152,108 @@ function toCondition(value: Row): Condition {
   if (value.node != null) return { kind: 'node', nodeId: String(value.node), beforeAnswer: value.beforeAnswer === true }
   return { kind: 'passed' }
 }
+
+// ---- F-S3e: editing a platform template or an operator's copy (`tree.TreeProcesses`) -----------------------------
+
+/** A problem the server finds in a draft (`TreeProcesses.ProblemView`), on a node or (null) the graph. */
+export interface TreeProblem {
+  nodeId: string | null
+  code: string
+  params: Record<string, unknown>
+}
+
+/** `TreeProcesses.TreeOutput`. */
+export interface TreeOutput {
+  treeId: string
+  versionId: string
+  versionNo: number
+  status: string
+  revision: number
+  nodeIds: Record<string, string> | null
+  problems: TreeProblem[] | null
+  approval: string | null
+  approvalRequestId: string | null
+}
+
+/** A new platform template (`qb.tree.platform.write`), lit by Takers or by Sponsors. */
+export const createTemplate = (subjectKind: 'TAKER' | 'SPONSOR', name: Record<string, string>) =>
+  runProcess<TreeOutput>(PROCESS.treeCreate, { ownerKind: 'PLATFORM', subjectKind, name })
+
+/** The caller's operator's copy of a template lit by Sponsors (one per template). */
+export const copyTemplate = (templateTreeId: string) =>
+  runProcess<TreeOutput>(PROCESS.treeCopy, { templateTreeId })
+
+/** Saves the whole draft (`TreeProcesses.SaveInput`). */
+export const saveTreeDraft = (input: Record<string, unknown>) => runProcess<TreeOutput>(PROCESS.treeSave, input)
+
+export const submitTree = (treeId: string, baseRevision: number) =>
+  runProcess<TreeOutput>(PROCESS.treeSubmit, { treeId, baseRevision })
+
+export const withdrawTree = (treeId: string, baseRevision: number) =>
+  runProcess<TreeOutput>(PROCESS.treeWithdraw, { treeId, baseRevision })
+
+/** Takes the template's nodes into an operator's copy, node by node (`QB_TREE_ADOPT`). */
+export const adoptTemplate = (treeId: string, baseRevision: number, nodeIds: string[]) =>
+  runProcess<TreeOutput>(PROCESS.treeAdopt, { treeId, baseRevision, nodeIds })
+
+export type TemplateChange = 'ADDED' | 'CHANGED' | 'SAME' | 'NOT_IN_TEMPLATE'
+
+/** A node of an operator's copy against its template's version in effect (`qb.operator.tree-template-diff`). */
+export interface TemplateDiffRow {
+  nodeId: string
+  change: TemplateChange | string
+  name: string | null
+  copyName: string | null
+  condition: string | null
+  templateVersionNo: number | null
+  takenVersionNo: number | null
+}
+
+export async function readTemplateDiff(treeId: string): Promise<TemplateDiffRow[]> {
+  const page = await runQuery<Row>(TEMPLATE.operatorTreeTemplateDiff, { params: { treeId }, limit: 1000 })
+  return page.items.map((row) => ({ nodeId: String(row.nodeId), change: String(row.change ?? ''), name: str(row.name),
+    copyName: str(row.copyName), condition: row.condition == null ? null : String(row.condition),
+    templateVersionNo: row.templateVersionNo == null ? null : num(row.templateVersionNo),
+    takenVersionNo: row.takenVersionNo == null ? null : num(row.takenVersionNo) }))
+}
+
+/** A template an operator may copy (`qb.operator.tree-templates`): lit by Sponsors, in effect. */
+export interface TemplateRow {
+  treeId: string
+  name: string | null
+  versionNo: number | null
+  copyTreeId: string | null
+}
+
+export async function readCopyableTemplates(): Promise<TemplateRow[]> {
+  const page = await runQuery<Row>(TEMPLATE.operatorTreeTemplates, { limit: 200 })
+  return page.items.map((row) => ({ treeId: String(row.treeId), name: str(row.name),
+    versionNo: row.versionNo == null ? null : num(row.versionNo), copyTreeId: str(row.copyTreeId) }))
+}
+
+/** One person's lighting of one map, read by support and recorded (`QB_SUPPORT_TREE_STATE`). */
+export interface SupportLit {
+  litId: string
+  litAt: string | null
+  revokedAt: string | null
+  revokeReason: string | null
+}
+
+export interface SupportNode {
+  nodeId: string
+  /** The node's names by language (as a map or its JSON text). */
+  name: unknown
+  state: 'LIT' | 'OPEN' | 'UNMET' | string
+  unmet: string[]
+  lits: SupportLit[]
+}
+
+export interface SupportState {
+  treeId: string
+  ownerKind: string
+  ownerId: string | null
+  nodes: SupportNode[]
+}
+
+export const readSupportTreeState = (userId: string, treeId: string) =>
+  runProcess<SupportState>(PROCESS.supportTreeState, { userId, treeId })

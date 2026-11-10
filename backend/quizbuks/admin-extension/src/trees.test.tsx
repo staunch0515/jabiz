@@ -12,6 +12,8 @@ import { PROCESS, TEMPLATE } from './ids'
 import { messages } from './messages'
 import TreeReviewPage from './TreeReviewPage'
 import TreesPage from './TreesPage'
+import TreeSupportPage from './TreeSupportPage'
+import { levelsOf } from './tree-draft'
 
 type Row = Record<string, unknown>
 
@@ -258,5 +260,140 @@ describe('TreeReviewPage', () => {
     await userEvent.click(within(dialog).getByTestId('tree-revoke-submit'))
     await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeLitRevoke,
       { litId: LIT_ID, reason: 'Shared answers' }))
+  })
+})
+
+describe('the map editor (F-S3e)', () => {
+  const template = (openStatus: string | null = 'DRAFT'): Row => ({ ...tree(openStatus), ownerKind: 'PLATFORM',
+    ownerId: null, approvalRequestId: null, draftName: name('Coffee'), description: null })
+  const saved = (extra: Row = {}) => ({ treeId: TREE_ID, versionId: OPEN_ID, versionNo: 2, status: 'DRAFT',
+    revision: 4, nodeIds: {}, problems: [], approval: null, approvalRequestId: null, ...extra })
+
+  it('lists a template\'s draft by level, saves it whole, and shows the server\'s problems by node', async () => {
+    server.templates.set(TEMPLATE.trees, [template()])
+    server.runProcess.mockImplementation(async (processName: string) => processName === PROCESS.treeSave
+      ? saved({ nodeIds: { 'new-3': 'fresh' }, problems: [{ nodeId: 'fresh', code: 'QB_TREE_EMPTY_GROUP', params: {} }] })
+      : saved())
+    const { container } = renderReview()
+    await userEvent.click(await screen.findByTestId('tree-edit'))
+    const editor = await screen.findByTestId('tree-editor')
+    const nodes = within(editor).getAllByTestId('tree-editor-node')
+    // The removed node is not in the draft; Extra needs Basics, so it is a level below.
+    expect(nodes.map((n) => [n.getAttribute('data-node'), n.getAttribute('data-level')]))
+      .toEqual([['basics', '1'], ['extra', '2']])
+    expect(within(nodes[0]).getByTestId('tree-editor-remove')).toBeDisabled()
+    expect(within(nodes[0]).getByTestId('tree-editor-in-use')).toHaveTextContent('1 publications')
+    // Before answering only on the outermost "all"; one pass at most.
+    expect(within(nodes[1]).getByTestId('condition-before-answer')).toBeInTheDocument()
+    expect(within(nodes[1]).queryByTestId('condition-add-pass')).toBeNull()
+    await userEvent.click(within(editor).getByTestId('tree-editor-add'))
+    const added = within(editor).getAllByTestId('tree-editor-node').find((n) => n.getAttribute('data-node') === 'new-3')!
+    await userEvent.click(within(added).getByTestId('condition-remove'))
+    await userEvent.click(within(editor).getByTestId('tree-editor-save'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeSave, expect.objectContaining({
+      treeId: TREE_ID, baseRevision: 3, name: { en: 'Coffee' } })))
+    const input = server.runProcess.mock.calls.find((call) => call[0] === PROCESS.treeSave)![1] as
+      { nodes: { nodeId: string | null; key: string | null; condition: unknown }[] }
+    expect(input.nodes.map((n) => [n.nodeId, n.key])).toEqual([['basics', null], ['extra', null], [null, 'new-3']])
+    expect(input.nodes[2].condition).toEqual({ op: 'ALL', items: [] })
+    expect(await within(editor).findByTestId('tree-editor-node-problems')).toHaveTextContent('at least one item')
+    expect(within(editor).getByTestId('tree-editor-submit')).toBeDisabled()
+    await expectAccessible(container)
+  })
+
+  it('submits a clean draft and takes it back from review', async () => {
+    server.templates.set(TEMPLATE.trees, [template()])
+    server.runProcess.mockImplementation(async (processName: string) => processName === PROCESS.treeSubmit
+      ? saved({ status: 'REVIEW', revision: 5 }) : saved({ revision: 6 }))
+    renderReview()
+    await userEvent.click(await screen.findByTestId('tree-edit'))
+    const editor = await screen.findByTestId('tree-editor')
+    await userEvent.click(within(editor).getByTestId('tree-editor-submit'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeSubmit, { treeId: TREE_ID,
+      baseRevision: 3 }))
+    await userEvent.click(await within(editor).findByTestId('tree-editor-withdraw'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeWithdraw, { treeId: TREE_ID,
+      baseRevision: 5 }))
+  })
+
+  it('offers no editing of a Sponsor\'s map, nor without the permission', async () => {
+    renderReview()
+    await screen.findByTestId('tree-review')
+    expect(screen.queryByTestId('tree-edit')).toBeNull()
+  })
+
+  it('shows an operator\'s copy the template\'s changes and takes the chosen ones', async () => {
+    server.permissions = new Set(['qb.operator.use', 'qb.tree.edit'])
+    server.templates.set(TEMPLATE.operatorTrees, [{ ...tree('DRAFT'), ownerKind: 'OPERATOR', ownerId: 'op1',
+      subjectKind: 'SPONSOR', templateTreeId: 'tmpl', approvalRequestId: null }])
+    server.templates.set(TEMPLATE.operatorTreeLit, [])
+    server.templates.set(TEMPLATE.operatorTreeVersion, OPEN_NODES)
+    server.templates.set(TEMPLATE.operatorTreeTemplateDiff, [
+      { nodeId: 'basics', change: 'CHANGED', name: name('Basics better'), copyName: name('Basics'), condition: null,
+        templateVersionNo: 3, takenVersionNo: 2 },
+      { nodeId: 'extra', change: 'SAME', name: name('Extra'), copyName: name('Extra'), condition: null,
+        templateVersionNo: 3, takenVersionNo: 2 },
+      { nodeId: 'gone', change: 'NOT_IN_TEMPLATE', name: name('Gone'), copyName: name('Gone'), condition: null,
+        templateVersionNo: 3, takenVersionNo: 2 },
+    ])
+    server.runProcess.mockResolvedValue(saved())
+    const { container } = renderReview()
+    const adopt = await screen.findByTestId('tree-adopt')
+    expect(await within(adopt).findByTestId('tree-adopt-versions')).toHaveTextContent('version 3')
+    const rows = await within(adopt).findAllByTestId('tree-adopt-node')
+    expect(rows.map((r) => r.getAttribute('data-change'))).toEqual(['CHANGED', 'NOT_IN_TEMPLATE'])
+    expect(within(adopt).getByTestId('tree-adopt-submit')).toBeDisabled()
+    await userEvent.click(within(rows[0]).getByRole('checkbox'))
+    await userEvent.click(within(adopt).getByTestId('tree-adopt-submit'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeAdopt, { treeId: TREE_ID,
+      baseRevision: 3, nodeIds: ['basics'] }))
+    expect(screen.getByTestId('tree-edit')).toBeInTheDocument()
+    await expectAccessible(container)
+  })
+
+  it('creates a platform template from the list', async () => {
+    server.runProcess.mockResolvedValue(saved({ treeId: 'new-tree' }))
+    renderAt('/qb/trees', '/qb/trees', <TreesPage />)
+    await userEvent.click(await screen.findByTestId('tree-create'))
+    await userEvent.click(screen.getByTestId('tree-create-submit'))
+    expect(await screen.findByText('Enter a name.')).toBeInTheDocument()
+    await userEvent.type(screen.getByTestId('tree-create-name'), 'Learning')
+    await userEvent.click(screen.getByTestId('tree-create-submit'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeCreate, { ownerKind: 'PLATFORM',
+      subjectKind: 'TAKER', name: { en: 'Learning' } }))
+  })
+
+  it('places each node one level above the highest it needs, cutting cycles', () => {
+    const node = (key: string, refs: string[]) => ({ nodeId: key, key, name: {}, description: null, runningBound: 0,
+      condition: { op: 'ALL' as const, items: refs.map((ref) => ({ node: ref })) } })
+    const levels = levelsOf([node('c', ['b']), node('a', []), node('b', ['a', 'other']), node('x', ['y']),
+      node('y', ['x'])])
+    // A cycle is cut where it is met: still some order, never a loop.
+    expect(Object.fromEntries(levels)).toEqual({ a: 0, b: 1, c: 2, x: 2, y: 1 })
+  })
+})
+
+describe('TreeSupportPage (F-S3e)', () => {
+  const renderSupport = () => renderAt('/qb/tree-support', '/qb/tree-support', <TreeSupportPage />)
+
+  it('looks up one person\'s lighting of one map, each node with its state and records', async () => {
+    server.permissions = new Set(['qb.operator.use', 'qb.admin.tree-state.read'])
+    server.templates.set(TEMPLATE.operatorTrees, [tree(null)])
+    server.runProcess.mockResolvedValue({ treeId: TREE_ID, ownerKind: 'SPONSOR', ownerId: SPONSOR_ID, nodes: [
+      { nodeId: 'basics', name: { en: 'Basics' }, state: 'LIT', unmet: [], lits: [{ litId: 'l1',
+        litAt: '2026-11-02T00:00:00Z', revokedAt: null, revokeReason: null }] },
+      { nodeId: 'extra', name: name('Extra'), state: 'UNMET', unmet: [`${TREE_ID}/basics`], lits: [] },
+    ] })
+    const { container } = renderSupport()
+    await userEvent.type(await screen.findByTestId('tree-support-user-id'), TAKER_ID)
+    await userEvent.click(screen.getByTestId('tree-support-map'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Coffee' }))
+    await userEvent.click(screen.getByTestId('tree-support-submit'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.supportTreeState, { userId: TAKER_ID,
+      treeId: TREE_ID }))
+    const nodes = await screen.findAllByTestId('tree-support-node')
+    expect(nodes.map((n) => n.getAttribute('data-state'))).toEqual(['LIT', 'UNMET'])
+    expect(nodes[1]).toHaveTextContent('Light first: Basics')
+    await expectAccessible(container)
   })
 })
