@@ -109,3 +109,43 @@ In the publication wizard choose "Bind to a node" (optional) and pick a node of 
 ### English · What is a challenge, and what does passing it give?
 
 A challenge is a quiz your operator sets on a node of its copy of a platform map, answered only by Sponsors, on the "Challenges" tab of the Sponsor hub. Choose a node to see its state, what lighting it opens (such as digital prizes or prizes collected in person) and its granted credit, and the challenges you can start. A challenge has no reward, and each is answered once. Passing lights the node: the reward methods it opens can be chosen for your publications, and the granted credit goes to your platform fee account (once per node; it expires). If you did not pass, wait for your operator's next challenge. You can answer once your Sponsor application is approved.
+
+## 三、怎样核实证书（F-S5）
+
+节点证书：节点写明了证书名称，点亮它的那一刻就得到证书（不写有效期；点亮之前才加到节点上的证书不补发）。核实页（`/taker/verify/<证书编号>`，无需登录）显示证书名称、颁发方、证书上的名字、点亮日期与状态，不显示分数、住址或邮箱。核实页有最长 60 秒的缓存：撤销点亮或停用链接后，核实页最多晚一分钟（60 秒）才更新。截图由 e2e `quizbuks-web/e2e/tests/certificates.spec.ts` 覆盖的页面对应。
+
+### 中文 · 怎样核实证书？怎样分享、停用我的证书？（学者）
+
+别人只要拿到证书的链接（"我的 → 证书与你的公开页"里每张证书都有"复制链接"），就能在核实页看到：证书名称、颁发方、证书上的名字、点亮日期和状态。节点证书没有有效期，所以页面不写有效期：状态是"有效"，被撤销的点亮会显示"已收回"（原来那次合格不再算），已删除账号的证书显示"没有这张证书"。核实页不显示你的分数、住址或邮箱。
+链接默认可用，链接本身是一串无法猜出的编号。你可以随时在证书上"停用分享"：之后打开链接的人只会看到"链接已停用"，看不到证书的任何内容；再打开开关即恢复，链接不变。公开认证页只在你开启并取了公开名之后才列出你分享的、没有被撤销的证书。
+停用或被撤销后，核实页最多晚一分钟才更新：页面缓存了这么久。
+下载 PDF：第一次点"下载 PDF"时才签发，之后下载的都是同一份；PDF 上写点亮日期、颁发方和核实地址，没有有效期。
+
+### 日本語 · 証明書はどうやって確認してもらいますか？ 共有を止めるには？（テイカー）
+
+証明書のリンクを知っている人なら、確認ページで証明書の名前、発行者、証明書上の名前、点灯日、状態を見られます（「マイページ → 証明書と公開ページ」の各証明書に「リンクをコピー」があります）。ノードの証明書に有効期限はないため、ページにも期限は載りません。状態は「有効」で、点灯が取り消されると「取り消し」と表示されます（そのときの合格は無効になります）。アカウントを削除した人の証明書は「この証明書は見つかりません」になります。確認ページにスコア・住所・メールアドレスは表示されません。
+リンクは初期状態で有効で、推測できない番号です。証明書ごとに「共有を止める」ことがいつでもでき、止めるとリンクを開いた人には「リンクは無効」とだけ表示され、証明書の内容は何も見えません。スイッチを戻せば再び有効になり、リンクは変わりません。公開の認定ページには、公開名を付けて公開をオンにしたときだけ、共有中で取り消されていない証明書が並びます。
+共有を止めた後や取り消された後、確認ページに反映されるまで最大 1 分かかります（その間ページはキャッシュされるためです）。
+PDF は「PDF をダウンロード」を初めて押したときに発行され、以降は同じものがダウンロードされます。PDF には点灯日、発行者、確認用アドレスが載り、有効期限はありません。
+
+### English · How do I let others verify my certificate, and turn sharing off?（Taker）
+
+Anyone with a certificate's link (each certificate under "Me → Certificates and your public page" has "Copy link") sees on the verify page the certificate's name, who issued it, the name on it, the day it was lit and its state. A node's certificate has no end date, so the page shows none: it is "Valid"; a revoked lighting shows "Revoked" (the pass it came from no longer counts), and the certificate of a deleted account shows "No such certificate". The page never shows your scores, address or e-mail.
+The link works by default, and it is a number nobody can guess. You can turn sharing off on a certificate at any time: whoever opens the link is then told only that the link is turned off, and sees nothing of the certificate. Turn it on again and the same link works. Your public certification page lists a certificate only when you have turned the page on under a name of your own, the certificate is shared and its lighting is not revoked.
+After you turn sharing off, or a lighting is revoked, the verify page can take up to a minute (60 seconds) to show it: the page is cached for that long.
+The PDF is issued the first time you choose "Download PDF"; every later download is that same file. It shows the day it was lit, the issuer and the verify address, and no end date.
+
+### 中文 · 发起方的证书怎样核实与分享？
+
+发起方点亮节点（例如运营商出的挑战）得到的证书在发起方中心的"证书"标签里：可以下载 PDF（第一次下载时签发）、复制核实链接、停用与恢复分享。核实页与学者的证书相同：显示证书名称、颁发方（图的主人：平台、运营商或设置了证书的发起方）、证书上的公司名、点亮日期与状态，没有有效期；点亮被撤销显示"已收回"，账号删除后显示"没有这张证书"。发起方的证书不出现在任何公开页上，只有拿到链接的人才能看到。停用与撤销最多晚一分钟（60 秒）才在核实页上更新。
+你自己的图（发起方中心 → 发布 → 知识结构图）里可以给节点填"证书名称"：点亮这个节点的人会得到这个名称的证书，颁发方是你的公司；这随版本一起由运营商审核。运营商的副本沿用平台模板的证书，不能改。
+
+### 日本語 · 主催者の証明書はどう確認してもらいますか？
+
+主催者がノード（運営パートナーのチャレンジなど）を点灯して得た証明書は、主催者センターの「証明書」タブにあります。PDF のダウンロード（初回に発行）、確認用リンクのコピー、共有の停止と再開ができます。確認ページはテイカーの証明書と同じで、証明書の名前、発行者（マップの持ち主：プラットフォーム、運営パートナー、または証明書を設定した主催者）、証明書上の会社名、点灯日、状態を表示し、有効期限はありません。点灯が取り消されると「取り消し」、アカウントを削除すると「この証明書は見つかりません」になります。主催者の証明書はどの公開ページにも載らず、リンクを知っている人だけが見られます。共有の停止や取り消しが確認ページに反映されるまで最大 1 分（60 秒）かかります。
+自分のマップ（主催者センター → 公開 → 知識マップ）では、ノードに「証明書の名前」を入力できます。そのノードを点灯した人に、この名前の証明書が貴社名義で発行されます。版と一緒に運営パートナーが審査します。運営パートナーのコピーはプラットフォームのテンプレートの証明書をそのまま使い、変更できません。
+
+### English · How can others verify a Sponsor's certificate?
+
+The certificates a Sponsor gets by lighting a node (such as an operator's challenge) are on the "Certificates" tab of the Sponsor hub: download the PDF (issued the first time), copy the verify link, turn sharing off and on. The verify page is the same as for a Taker's certificate: its name, who issued it (the owner of the map: the platform, an operator, or a Sponsor who named a certificate), the company name on it, the day it was lit and its state, with no end date; a revoked lighting shows "Revoked", and once the account is deleted it shows "No such certificate". A Sponsor's certificate is on no public page: only someone with the link sees it. Turning sharing off, or a revocation, can take up to a minute (60 seconds) to show on the verify page.
+In your own map (Sponsor hub → Publications → Knowledge map) you can fill in a "Certificate name" for a node: whoever lights it gets a certificate with that name, issued by your company, reviewed by your operator with the rest of the version. An operator's copy keeps the platform template's certificate and cannot change it.
