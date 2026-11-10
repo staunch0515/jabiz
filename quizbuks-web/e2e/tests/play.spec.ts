@@ -89,6 +89,41 @@ async function choose(page: Page, text: string) {
   await saved
 }
 
+/** F-F4c: the publication's page in four tabs (`?tab=`), the start fixed above the bottom menu and clear of the content. */
+test('a publication opens on its introduction, has the rules, reward and materials under tabs, and keeps the start in view', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(180_000)
+  await page.setViewportSize({ width: 360, height: 640 })
+  const seeded = await seedPublication(request, 300)
+  const me = await taker(request, 'Tabs')
+  await untilLive(request, me.token, seeded.publicationId)
+  await signIn(page, '/taker/', me.email)
+  await expect(page.getByTestId('home')).toBeVisible()
+  await openFromFeed(page, seeded.name)
+  await expect(page.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'about')
+  const start = page.getByTestId('detail-start')
+  const bar = page.getByTestId('bottom-bar-home')
+  for (const tab of ['about', 'reward', 'materials', 'rules']) {
+    await page.getByTestId(`page-tab-${tab}`).click()
+    await expect(page.getByTestId('detail-tabs')).toHaveAttribute('data-tab', tab)
+    await expect(page).toHaveURL(tab === 'about' ? /\/p\/[^?]+$/ : new RegExp(`\\?tab=${tab}$`))
+    // The start stays on the screen, above the bottom menu.
+    await expect(start).toBeInViewport()
+    const startBox = (await start.boundingBox())!
+    const barBox = (await bar.boundingBox())!
+    expect(startBox.y + startBox.height, `${tab}: the start is above the bottom menu`).toBeLessThanOrEqual(barBox.y + 1)
+  }
+  // At the end of the page the last line of the tab is above the start, not under it.
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  const last = (await page.getByTestId('detail-footer').boundingBox())!
+  expect(last.y + last.height).toBeLessThanOrEqual((await start.boundingBox())!.y + 1)
+  // Back leaves the page, not the last tab.
+  await page.goBack()
+  await expect(page.getByTestId('home')).toBeVisible()
+})
+
 for (const appearance of ['light', 'dark'] as const) {
   const at = (name: string) => (appearance === 'light' ? name : `${name} (dark)`)
 
@@ -108,8 +143,10 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('home')).toBeVisible()
     await openFromFeed(page, seeded.name)
     await expectAccessible(page, at('app feed'))
-    // The materials under the title (Q34: a row each): the article opens on a sheet as Markdown, a link in a new tab;
-    // the tiers in Kudos.
+    // F-F4c: the page opens on its introduction; the materials (Q34: a row each) are under their tab: the article
+    // opens on a sheet as Markdown, a link in a new tab; the tiers in Kudos are under the reward tab.
+    await expect(page.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'about')
+    await page.getByTestId('page-tab-materials').click()
     await page.getByTestId('materials').locator('[data-kind="ARTICLE"]').getByTestId('material-open').click()
     const sheet = page.getByTestId('material-sheet')
     await expect(sheet.locator('strong')).toHaveText('the capital')
@@ -117,6 +154,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.keyboard.press('Escape')
     await expect(sheet).toHaveCount(0)
     await expect(page.getByTestId('material-link')).toHaveAttribute('target', '_blank')
+    await page.getByTestId('page-tab-reward').click()
     await expect(page.getByTestId('detail-tiers')).toContainText(`${seeded.reward.toLocaleString('en-US')} Kudos`)
     await expect(page.getByTestId('detail-tiers')).not.toContainText('JPY')
     await expectAccessible(page, at('app publication'))

@@ -347,3 +347,9 @@ F-F4a 先合，使基线截图出自未改动的界面；F-F4b、F-F4c 不得更
   5. `qb.app.prizes` 多一列 `code`（现金与到店的编码，状态行沿用 `history.cash.*`），其余同 §4.1；`ACCOUNT_*` 地址移到无依赖的 `pages/accountPaths.ts`、`SCAN_PATH` 移到 `scan/path.ts`（`frame/areas.ts` 读它们，避免与页面互相引用），原处仍再导出。
   6. 首页只改了一处：严格主题提示的"更改"链接指向 `/account/blocks`（主题已移到那里）；像素基线未动。
   下一步：F-F4c（发布详情的四个标签与固定的"开始答题"）。
+- 2026-11-10：F-F4c 在分支 `1.3/quizbuks-ff4c-publication-tabs` 实现，未开 PR。`PublicationContent`（两份）**未改**：F-F3c 已有 `tabs`，本项只在 `pages/PublicationPage.tsx` 传入。与计划不同或补充之处：
+  1. 标签归属与 §2.5 一致：说明（介绍、热度）/ 奖励（方式与奖品、各档、问卷提示；`extra`：`ReferralPanel`）/ 资料（素材；`extra`：商品 `publication-products`、发起方主页 `sponsor-visit`；发起方介绍由 `PublicationContent` 放在这里）/ 规则（完整规则；`extra`：`detail-footer` 即比赛规则链接、举报、屏蔽菜单）。没有商品、发起方主页、素材与发起方介绍时不显示"资料"，地址要它则落到第一个标签。
+  2. `?tab=` 缺省与未知值都是"说明"；"说明"的链接不带 `tab`。标签链接保留其他查询参数；用 `replace` 切换（`FrameLink` 加可选 `replace`），`itemPage` 与 `scanTarget` 只读路径、不变；`AppFrame` 只在路径变化时移动焦点，换标签不动它。
+  3. "开始答题"栏仍是 `sticky`（在文档流的最后，所以最后一行不会被它遮住；滚动时停在屏幕下方）：窄屏 `bottom: var(--bottom-bar-height) + 安全区`，宽屏 `md:bottom-0`；页面另在 `<html>` 上设 `scroll-padding-bottom`（栏高 + 底部菜单高），键盘焦点滚动时不留在栏下（WCAG 2.4.11），离开页面即还原。
+  4. 发起方预览仍是 F-F3c 的标签，未动；首页基线未动。
+  测试：`Play.test.tsx` 改掉依赖竖排的 12 个用例并新增 `a publication's tabs` 8 个；e2e `play.spec.ts`、`survey.spec.ts` 改走标签，`play.spec.ts` 新增 360 px 的标签与固定开始栏（只做了类型检查，未运行）。

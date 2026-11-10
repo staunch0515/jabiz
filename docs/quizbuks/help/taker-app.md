@@ -1,10 +1,11 @@
-# 帮助文案：学者 App 的底部菜单与"我的"（F-F4）
+# 帮助文案：学者 App 的底部菜单、"我的"与 Quiz 页的标签（F-F4）
 
 给学者看的帮助文案（三语）。帮助中心的内容存在数据库里（FAQ 为 `QbFaqEntry`），**由内容管理员在平台管理系统的"FAQ"中发布**，改了不用重新发版。
 用词照 `docs/quizbuks/glossary.md`（"学者 App 的区域与条目"）；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。结构与理由见 `docs/quizbuks/plans/impl/F-F4.md`。
 
 - 名字（写进文案的是现在的叫法，改界面文字时同步改这里）：底部五项 首页 / 已答 / 扫一扫 / 消息 / 我的（日文 ホーム / 回答済み / スキャン / メッセージ / マイページ；英文 Home / Answered / Scan / Messages / Me）；学者在柜台出示的码：领奖码 / 引き換えパス / pass。
 - 平台原则（写进文案）：所有旧的链接、书签与邮件里的地址照常可用；没有功能被删除。
+- 名字（Quiz 页的标签，F-F4c）：说明 / 奖励 / 资料 / 规则（日文 説明 / 報酬 / 資料 / ルール；英文 About / Reward / Materials / Rules）；底部固定的按钮：开始答题 / Start the quiz。
 - 内部备注（不写进 FAQ）：宽屏时底部菜单变为左侧一列，条目相同；"证书"一个数字待 F-S5 合并节点证书后改文案。
 
 ## 一、给学者（FAQ 的 `audience` = `TAKER`，分类 `ANSWERING`）
@@ -29,6 +30,10 @@
 
 退出登录在"我的"页的最下方。外观在"我的 → 设置 → App 设置 → 外观"，可以选浅色、深色或跟随系统。原来右上角菜单里的"扫一扫"和"我的推荐"分别在底部菜单和"我的 → 我拥有的 → 推荐"。你保存的书签、旧邮件里的链接都照常可用。
 
+### 中文 · Quiz 页上的"说明、奖励、资料、规则"各是什么？"开始答题"在哪里？
+
+打开一个 Quiz，封面（或视频）、名称和要点在最上面，下面分四个标签：**说明**（介绍和有多少人答过）、**奖励**（奖励怎么发、各分数档能得多少；有推荐奖励时在这里）、**资料**（发起方提供的资料、商品和发起方的主页）、**规则**（题数、合格线、时限、参加费、截止时间，以及比赛规则、举报和屏蔽）。"开始答题"始终固定在屏幕下方（手机上在底部菜单之上），换哪个标签都在，不会盖住内容。分享给别人的链接照旧；想直接给别人看奖励，把地址末尾加上 `?tab=reward` 即可（资料 `materials`、规则 `rules`）。
+
 ### 日本語 · 下のメニューの 5 つは、それぞれ何をするところ？
 
 - **ホーム**：今すぐ答えられるクイズです。検索や絞り込みもできます。
@@ -49,6 +54,10 @@
 
 ログアウトは「マイページ」の一番下です。外観は「マイページ → 設定 → アプリの設定 → 外観」で、ライト・ダーク・端末に合わせるから選べます。以前、右上のメニューにあった「スキャン」は下のメニューに、「紹介の一覧」は「マイページ → 持っているもの → 紹介」にあります。保存したブックマークや過去のメールのリンクも、そのまま使えます。
 
+### 日本語 · クイズのページの「説明・報酬・資料・ルール」は何？「クイズを始める」はどこ？
+
+クイズを開くと、表紙（または動画）・名前・要点が一番上にあり、その下が 4 つのタブです。**説明**（紹介と回答した人数）、**報酬**（報酬の支払い方と得点ごとの金額。紹介報酬もここ）、**資料**（主催者の資料・商品・主催者のページ）、**ルール**（問題数・合格点・制限時間・参加費・締め切り、そして公式ルール・通報・ブロック）。「クイズを始める」は画面の下に固定され（スマートフォンでは下のメニューの上）、どのタブでも見え、内容を隠しません。共有されたリンクはそのまま使えます。報酬のタブを直接見せたいときは、アドレスの最後に `?tab=reward`（資料は `materials`、ルールは `rules`）を付けます。
+
 ### English · What do the five entries at the bottom do?
 
 - **Home**: the quizzes you can answer now, with search and filters;
@@ -68,3 +77,7 @@ In the "To collect" tab of "Answered": prizes to collect at a Sponsor's place, p
 ### English · Where do I sign out or switch between light and dark? Do my old links still work?
 
 Signing out is at the bottom of "Me". The appearance is in "Me → Settings → App settings → Appearance": light, dark or following your system. "Scan" and "My referrals", which were in the menu at the top right, are now in the bottom menu and in "Me → What I have → Referrals". Your bookmarks and the links in old mails still work.
+
+### English · What are "About, Reward, Materials and Rules" on a quiz page? Where is "Start the quiz"?
+
+When you open a quiz, the cover (or video), the name and the key facts are at the top, and four tabs are below: **About** (the introduction and how many people answered), **Reward** (how the reward is paid and what each score earns; a referral reward is here too), **Materials** (the Sponsor's materials, products and page) and **Rules** (the number of questions, pass mark, time limit, entry fee and deadline, plus the official rules, reporting and blocking). "Start the quiz" stays at the bottom of the screen (above the bottom menu on a phone) on every tab and never covers the content. Shared links work as before; to point someone straight to the reward, add `?tab=reward` to the address (`materials`, `rules`).
