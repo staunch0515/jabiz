@@ -19,6 +19,8 @@ public final class QbTrees {
     public static final String VERSION = "QbTreeVersion";
     public static final String NODE = "QbTreeNode";
     public static final String NODE_DEF = "QbTreeNodeDef";
+    /** F-S3f: a node's daily count of the people who answered its publications and have not lit it. */
+    public static final String NODE_COUNT = "QbTreeNodeCount";
     /** Which nodes a node's condition in effect names (F-S2b1): who to evaluate when a node is lit. */
     public static final String NODE_REF = "QbTreeNodeRef";
     /** A node lit by a person or a Sponsor (F-S2b1, written once). */
@@ -201,6 +203,28 @@ public final class QbTrees {
             .filters("treeId", "nodeId", "active")
             .sorts("createdInVersion")
             .defaultSort("createdInVersion", true));
+    });
+
+    /** F-S3f: the latest daily count of a node (job qb.tree-node-counts), one row per node, updated in place. */
+    public static final EntityDefinition NODE_COUNT_ENTITY = EntityDefinition.define(NODE_COUNT, eb -> {
+        eb.physicalTable("qb_tree_node_count");
+        eb.primaryKey("rowId");
+        eb.field("rowId", f -> f.physicalColumn("row_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:tree-node-count"));
+        eb.field("treeId", f -> f.physicalColumn("tree_id").immutable(true).required(true).asText(ID_LENGTH));
+        eb.field("nodeId", f -> f.physicalColumn("node_id").immutable(true).required(true).asText(ID_LENGTH));
+        // People who finished an attempt at a publication bound to the node before the day ended and have not lit it.
+        eb.field("answeredUnlit", f -> f.physicalColumn("answered_unlit").required(true).processOnly()
+            .asNumeric(9, 0));
+        // The last day the count covers (in UTC).
+        eb.field("countedOn", f -> f.physicalColumn("counted_on").required(true).processOnly().asDate());
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.unique("uk_qb_tree_node_count", "treeId", "nodeId");
+        eb.listView("default", lv -> lv
+            .columns("treeId", "nodeId", "answeredUnlit", "countedOn")
+            .filters("treeId", "nodeId")
+            .sorts("countedOn")
+            .defaultSort("countedOn", false));
     });
 
     public static final EntityDefinition NODE_DEF_ENTITY = EntityDefinition.define(NODE_DEF, eb -> {

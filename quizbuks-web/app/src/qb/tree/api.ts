@@ -2,7 +2,7 @@ import { runProcess, runQuery } from '@jabiz/client'
 import { publicQuery, type I18nText } from '../legal'
 import { PLAY, TREE } from '../ids'
 import { graphOf, type Graph } from './states'
-import type { Startable } from './KnowledgeMap'
+import type { Startable, UnlitCount } from './KnowledgeMap'
 
 /*
  * The knowledge graphs' reads (F-S3, docs/quizbuks/plans/impl/F-S3.md §2, §4), typed by hand after the templates
@@ -131,6 +131,8 @@ export async function readSponsorMaps(): Promise<SponsorMap[]> {
 export interface SponsorVersion {
   graph: Graph
   litCounts: Map<string, number | null>
+  /** F-S3f: the daily count of those who answered and have not lit, for the nodes counted (null: under the minimum). */
+  unlitCounts: Map<string, UnlitCount>
   runningBound: Map<string, number>
 }
 
@@ -143,6 +145,8 @@ export async function readSponsorVersion(map: Pick<SponsorMap, 'treeId' | 'name'
   return {
     graph,
     litCounts: new Map(rows.map((row) => [String(row.nodeId), row.litCount == null ? null : num(row.litCount)])),
+    unlitCounts: new Map(rows.filter((row) => row.countedOn != null).map((row) => [String(row.nodeId),
+      { count: row.answeredUnlit == null ? null : num(row.answeredUnlit), countedOn: String(row.countedOn) }])),
     runningBound: new Map(rows.map((row) => [String(row.nodeId), num(row.runningBound)])),
   }
 }

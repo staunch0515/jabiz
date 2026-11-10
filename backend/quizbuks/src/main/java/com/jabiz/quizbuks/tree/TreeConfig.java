@@ -89,6 +89,16 @@ public class TreeConfig {
         return defaultDataset(QbTrees.NODE_DEF);
     }
 
+    @Bean
+    EntityDefinition qbTreeNodeCountEntity() {
+        return QbTrees.NODE_COUNT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbTreeNodeCountDataset() {
+        return defaultDataset(QbTrees.NODE_COUNT);
+    }
+
     // ---- F-S2b1: references, lit records and revocations ------------------------------------------------------------
 
     @Bean
@@ -407,6 +417,24 @@ public class TreeConfig {
                     "versionId"),
                 qbTreeReviewRemind,
                 (scheduledTime, row) -> new TreeUpkeep.RemindInput(String.valueOf(row.get("versionId"))))
+            .maxItems(10_000);
+    }
+
+    // ---- F-S3f: the daily count of the people who answered and have not lit ----------------------------------------
+
+    @Bean
+    ProcessDefinition<TreeNodeCounts.CountInput, TreeNodeCounts.CountOutput, ProcessContext> qbTreeNodeCount() {
+        return TreeNodeCounts.definition();
+    }
+
+    /** Each graph in effect that Takers light is counted in a transaction of its own. */
+    @Bean
+    JobDefinition<TreeNodeCounts.CountInput> qbTreeNodeCountJob(
+        ProcessDefinition<TreeNodeCounts.CountInput, TreeNodeCounts.CountOutput, ProcessContext> qbTreeNodeCount) {
+        return JobDefinition.forEach(TreeNodeCounts.JOB, TreeNodeCounts.CRON, ZoneOffset.UTC,
+                JobItems.template(TreeNodeCounts.ITEMS_TEMPLATE, "treeId"),
+                qbTreeNodeCount,
+                (scheduledTime, row) -> new TreeNodeCounts.CountInput(scheduledTime, String.valueOf(row.get("treeId"))))
             .maxItems(10_000);
     }
 

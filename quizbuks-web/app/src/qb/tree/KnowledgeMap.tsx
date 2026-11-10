@@ -7,6 +7,13 @@ import { layout } from './layout'
 import { gateKey } from './messages'
 import type { Condition, Graph, GraphNode, NodeState } from './states'
 
+/** A node's daily count of the people who answered and have not lit (F-S3f): null under the minimum group. */
+export interface UnlitCount {
+  count: number | null
+  /** The last day counted (`YYYY-MM-DD`). */
+  countedOn: string
+}
+
 /**
  * The shared knowledge map (F-S3, docs/quizbuks/plans/impl/F-S3.md §3), replacing Q85's tree: the whole map laid out
  * automatically by levels (what must come first above), each node with its state for the person when there is one, and
@@ -32,6 +39,11 @@ export interface KnowledgeMapProps {
   publicationLink?: (publication: Startable) => ReactNode
   /** Per node, how many Takers lit it (the Sponsor's own map; null: under the minimum group). */
   litCounts?: ReadonlyMap<string, number | null>
+  /**
+   * F-S3f: per node counted by the daily job, how many answered its publications and have not lit it, and the last day
+   * counted (null count: under the minimum group). A node not counted yet has none.
+   */
+  unlitCounts?: ReadonlyMap<string, UnlitCount>
   /** The view first shown. */
   initialView?: 'graph' | 'list'
 }
@@ -53,7 +65,8 @@ const STATE_BADGE: Record<NodeState, 'default' | 'secondary' | 'outline'> = {
   LIT: 'default', CAN_ANSWER: 'secondary', WAITING: 'outline', MISSING: 'outline', LOCKED: 'outline',
 }
 
-export function KnowledgeMap({ graph, states, startable, publicationLink, litCounts, initialView = 'graph' }:
+export function KnowledgeMap({ graph, states, startable, publicationLink, litCounts, unlitCounts,
+  initialView = 'graph' }:
   KnowledgeMapProps) {
   const { t, i18n } = useTranslation(QB)
   const [view, setView] = useState<'graph' | 'list'>(initialView)
@@ -99,6 +112,7 @@ export function KnowledgeMap({ graph, states, startable, publicationLink, litCou
         <NodeDetails node={nodes.get(selected)!} state={states?.get(selected)}
           startable={startable?.get(selected) ?? []} publicationLink={publicationLink}
           litCount={litCounts?.has(selected) ? litCounts.get(selected) : undefined}
+          unlitCount={unlitCounts?.get(selected)}
           nodeName={(id) => name(nodes.get(id)?.name)} />
       )}
     </section>
@@ -239,12 +253,13 @@ function ListView({ placement, nodes, states, selected, onSelect, nodeName }:
 }
 
 /** One node: what it is to the person, what lighting it gives, its condition marked, and what can be answered. */
-function NodeDetails({ node, state, startable, publicationLink, litCount, nodeName }: {
+function NodeDetails({ node, state, startable, publicationLink, litCount, unlitCount, nodeName }: {
   node: GraphNode
   state?: NodeState
   startable: Startable[]
   publicationLink?: (publication: Startable) => ReactNode
   litCount?: number | null
+  unlitCount?: UnlitCount
   nodeName: (nodeId: string) => string
 }) {
   const { t, i18n } = useTranslation(QB)
@@ -293,6 +308,12 @@ function NodeDetails({ node, state, startable, publicationLink, litCount, nodeNa
       {litCount !== undefined && (
         <p className="text-muted-foreground text-sm" data-testid="knowledge-map-lit-count">
           {litCount === null ? t('tree.litCountHidden') : t('tree.litCount', { count: litCount })}
+        </p>
+      )}
+      {unlitCount && (
+        <p className="text-muted-foreground text-sm" data-testid="knowledge-map-unlit-count">
+          {unlitCount.count === null ? t('tree.unlitCountHidden', { day: unlitCount.countedOn })
+            : t('tree.unlitCount', { count: unlitCount.count, day: unlitCount.countedOn })}
         </p>
       )}
     </section>

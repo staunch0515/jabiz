@@ -66,7 +66,8 @@ function tree(openStatus: string | null = 'REVIEW'): Row {
 
 const OPEN_NODES: Row[] = [
   { nodeId: 'basics', change: 'SAME', name: name('Basics'), description: null,
-    condition: JSON.stringify({ op: 'ALL', items: [{ passed: true }] }), seq: 0, runningBound: 1 },
+    condition: JSON.stringify({ op: 'ALL', items: [{ passed: true }] }), seq: 0, runningBound: 1,
+    answeredUnlit: 8, countedOn: '2026-11-09' },
   { nodeId: 'extra', change: 'ADDED', name: name('Extra'), description: name('More beans'),
     condition: JSON.stringify({ op: 'ALL', items: [{ node: 'basics', beforeAnswer: true }, { passed: true }] }),
     seq: 1, runningBound: 0 },
@@ -167,6 +168,9 @@ describe('TreeReviewPage', () => {
       .toHaveTextContent('at least 1 of: node “Basics” lit, passed a bound publication')
     expect(within(nodes[2]).getByTestId('tree-node-running-removed'))
       .toHaveTextContent('2 running publications are bound to this removed node')
+    // F-S3f: the daily count, as of its day; a node not counted says so.
+    expect(within(nodes[0]).getByTestId('tree-node-unlit')).toHaveTextContent('8as of 2026-11-09')
+    expect(within(nodes[1]).getByTestId('tree-node-unlit')).toHaveTextContent('Not counted yet')
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.treeVersion, expect.objectContaining({
       params: { versionId: OPEN_ID } }))
     // The lit records name their node, here one the version removes.
