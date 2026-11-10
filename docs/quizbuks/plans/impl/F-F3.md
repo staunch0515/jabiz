@@ -266,3 +266,13 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 - **下一步 2**：合入后跑整个 `:quizbuks:test :quizbuks:platformCheck`、发起方与 App 的 lint / typecheck / Vitest、`src/qb` 一致、用词测试、e2e typecheck；e2e 由 CI（ready 后）或 S4 跑：`sponsor-areas`、`a11y`、`analytics`、`assets`、`auth`、`cash-account`、`content`、`conversations`、`digital-prize`、`entry-fee`、`inbox`、`journal`、`mail-server`、`platform-fees`、`reward-methods`、`shared-video`、`sponsor`、`survey`、`topup`、`transactions`、`transfer`、`video-file`、`watch-video`、`profile-links`。
 - **之后**：F-F3b（首页与 `qb.sponsor.todo`）、F-F3c（发布详情标签与发起方预览共用标签）、F-F3d（页面模板、概况卡片、每个区域的 axe 与 360 px）。
 - **2026-11-10（F-F3a 的整轮）**：a11y 在 360 px 下发现横向滚动（资金 → 交易 224 px，奖品与兑换也有），属于 F-F3d 的"内容宽度"与"360 px 每个区域无横向滚动"（§9）：F-F3a 只断言每个区域在 360 px 能打开并通过 axe，`scrollWidth` 的断言随 F-F3d 加回，并先修这两处。
+
+## 15. F-F3b 的实现记录（2026-11-10）
+
+- 分支 `1.3/quizbuks-ff3b-sponsor-home`（F-F3a #587 之后）。无迁移。
+- 后端：模板 `qb.sponsor.todo`（`queries/qb/sponsor/todo.sql`，一行十列，权限 `qb.publication.write`，各数据视图限本人；参数 `at` 是客户端此刻，只用于赠送额度的到期窗口）、`SponsorTodoIT`（每一列各一例；另一个发起方不计入；没有时全 0；到期天数改参数后随之变）。
+- 各列的含义：`claimsToConfirm` = 本人的、状态 `CLAIMED` 的领取（不含权益供应方经手的，同 `qb.sponsor.redemptions`）；`digitalToSend` = 电子奖品 `DUE`、`OVERDUE`（发起方欠着）与 `DISPUTED`（学者提出异议）；`fundsShort` = 状态 `FUNDS_SHORT` 的发布；`rewardsWaiting` = 学分钱包的 `pendingCount`（钱包页同一个数）；`invoicesOverdue` = 状态 `OVERDUE` 的平台费账单；`publicationsInReview` = `PENDING_REVIEW` 的发布；`pageInReview` = 公开主页 `PENDING`；`sharedVideosInReview` = 本人共享的视频 `PENDING`；`videoUsesToConfirm` = 提交给本人（提供方）、状态 `SUBMITTED` 的台账；`creditsExpiring` = 还有余额、未过期、在 `qb.fee-credit.expiry-notice-days`（F-M2 的提醒用的同一个参数，缺省 14）天内到期的赠送额度批次。模板里没有新数字；参数缺失或格式不对时 `creditsExpiring` 为 0。
+- 前端：`sponsor/src/home/`（`api.ts`、`todo.ts` 纯函数与去处表、`useTodo.ts`、`TodoList.tsx`、`messages.ts` 三语、`home.test.tsx`）；`profile/useChecklist.ts` 从概况页抽出（概况页与首页共用，`ready` 表示各部分都已读到）；首页 = 问候带 + 待我处理 + 图表（未通过入驻时没有图表，待我处理只有"申请审核中"与资料缺项）；奖品与兑换的菜单与底部徽标 = `claimsToConfirm + digitalToSend`（App 的 `badges`）；读取节奏同未读对话的徽标（进入、回到前台、5 分钟、后台不读，两处共用一个查询）；读取失败时不显示"都处理完了"。发布列表读 `?status=`（待我处理的"预算不足""审核中"带过去）。
+- 决定：电子奖品一列含 `OVERDUE` 与 `DISPUTED`（计划写"待发送 / 有争议"，一列合计）；资料缺项数的是必需的未完成项（`optional: false`），选填项不进待办；入驻被驳回不单列（问候带已显示原因与按钮）。
+- 平台费账户不够支付（F-M1）：列 `feeInvoicesUncovered` = 状态 `OPEN` / `PARTIAL` / `OVERDUE` 的账单中，未付额（`total − paidAmount`）大于平台费账户可用额的张数；可用额与 `feeAccountAvailable`（账单页）同一个算法：赠送额度钱包 `FEE_CREDIT` 的余额（不小于 0）加现金钱包 `CASH` 的余额减冻结额（不小于 0）。去 `/money/bills`。`SponsorTodoIT` 覆盖够与不够（含冻结的现金）。
+- **AI 额度不足（F-M9）** 未做：F-M9 尚未合入。F-M9 加列 `aiCreditShort`（可用额度不够再出一次题即提示，不设新数字，总控 2026-11-09 ②）时：在 `todo.sql` 加一列并在 `TodoColumn` / `TODO_COLUMNS` / `TODO_ORDER` / `TODO_PATH`（`/money/ai`）与三语 `home.todo.items.aiCreditShort` 各加一处，`SponsorTodoIT` 加一例。

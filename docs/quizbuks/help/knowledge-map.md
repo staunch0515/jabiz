@@ -3,7 +3,8 @@
 给学者与发起方看的帮助文案（三语）。帮助中心的内容存在数据库里（FAQ 为 `QbFaqEntry`），**由内容管理员在平台管理系统的"FAQ"中发布**，改了不用重新部署；这里是文案的底稿，功能改了先改这里再请内容管理员照改。
 用词照 `docs/quizbuks/glossary.md`；`tools/quizbuks/terms/terms.test.mjs` 扫描本目录。规则与运维见 `docs/quizbuks/plans/impl/F-S2.md`、`operations.md` §7.27。
 
-- **发布的时机**：看图与编辑的页面在 F-S3。F-S3 上线之前不发布这些条目（页面上还看不到图）。
+- **可以发布**（F-S3e）：看图与编辑的页面都已上线。学者的页面：App 账户菜单"学习 → 知识结构图"（`/taker/maps`）与发起方页面上的图；发起方的页面："发布 → 知识结构图"（`/sponsor/publications/map`，编辑器与版本），发布向导第一步的"绑定节点"。
+- **截图**：由 e2e `quizbuks-web/e2e/tests/tree-graph.spec.ts` 截取（亮色、英文界面），在 CI 的 e2e 报告（`quizbuks-e2e-report-*`）中该用例的附件：`knowledge-map-sponsor-editor.png`（编辑器）、`knowledge-map-sponsor-map.png`（生效的图与点亮人数）、`knowledge-map-taker-locked.png`（学者的图：前置未点亮的节点）、`knowledge-map-taker-lit.png`（合格后节点点亮）。页面改了，下一轮 CI 的截图随之更新；内容管理员发布条目时取最新一轮的。
 - 参数（写进文案的是缺省值，改了参数时同步改这里）：一张图至多 200 个节点（`qb.tree.max-nodes`），一位发起方一张自己的图（`qb.tree.sponsor.max-trees`）。
 
 ## 一、给学者（FAQ 的 `audience` = `TAKER`，分类 `ANSWERING`）
@@ -69,8 +70,8 @@ A quiz bound to a knowledge map node shows once you have lit the nodes it needs 
 
 ### 中文 · 怎样建立与发布自己的知识结构图？
 
-每位发起方可以有一张自己的图（点亮的是学者）。保存草稿时会列出全部问题（例如条件绕成一个圈、引用了不存在的节点），有问题照样能保存，但提交审核前要改好。提交后由你的运营商的另一位成员审核，批准后生效；驳回时会附理由，改好后再提交。
-节点的条件只能是"全部""任一"或"至少 N 个"，对象是其他节点，或"在绑定本节点的 Quiz 上合格"。"答题前须点亮"的节点只能放在最外层的"全部"中。你的图可以引用平台中由学者点亮的图的节点。
+每位发起方可以有一张自己的图（点亮的是学者），在"发布 → 知识结构图"中点"创建我的图"，再点"编辑"。保存草稿时会列出全部问题（例如条件绕成一个圈、引用了不存在的节点），有问题照样能保存，但提交审核前要改好。提交后由你的运营商的另一位成员审核，批准后生效；驳回时会附理由，改好后再提交。
+节点的条件只能是"全部""任一"或"至少 N 个"，对象是其他节点，或"在绑定本节点的 Quiz 上合格"。"答题前须点亮"的节点只能放在最外层的"全部"中。你的图可以引用平台中由学者点亮的图的节点：在"添加节点"中，它们按平台的图名列在本图的节点之后。
 新版本不能去掉仍有进行中发布绑定的节点；停用整张图时，绑定它的进行中发布会结束，你会收到通知。
 
 ### 中文 · 怎样让发布点亮节点？
@@ -79,8 +80,8 @@ A quiz bound to a knowledge map node shows once you have lit the nodes it needs 
 
 ### 日本語 · 自分の知識マップを作って公開するには？
 
-主催者はそれぞれ自分のマップを一枚持てます（点灯するのはテイカーです）。下書きを保存すると問題点（条件が輪になっている、存在しないノードを参照しているなど）がすべて表示されます。問題があっても保存はできますが、審査に出す前に直してください。提出すると、あなたの運営パートナーの別のメンバーが審査し、承認されると有効になります。差し戻しのときは理由が付きます。直してから再提出してください。
-ノードの条件は「すべて」「いずれか」「少なくとも N 個」だけで、対象はほかのノード、または「このノードに結び付いたクイズに合格」です。「回答前に点灯が必要」なノードは、いちばん外側の「すべて」の中にだけ置けます。プラットフォームの、テイカーが点灯するマップのノードを参照することもできます。
+主催者はそれぞれ自分のマップを一枚持てます（点灯するのはテイカーです）。「公開 → 知識マップ」で「マップを作成」を押し、「編集」を押します。下書きを保存すると問題点（条件が輪になっている、存在しないノードを参照しているなど）がすべて表示されます。問題があっても保存はできますが、審査に出す前に直してください。提出すると、あなたの運営パートナーの別のメンバーが審査し、承認されると有効になります。差し戻しのときは理由が付きます。直してから再提出してください。
+ノードの条件は「すべて」「いずれか」「少なくとも N 個」だけで、対象はほかのノード、または「このノードに結び付いたクイズに合格」です。「回答前に点灯が必要」なノードは、いちばん外側の「すべて」の中にだけ置けます。プラットフォームの、テイカーが点灯するマップのノードを参照することもできます。「ノードを追加」で、このマップのノードのあとにプラットフォームのマップ名ごとに並びます。
 実施中の公開が結び付いているノードは、新しい版で削除できません。マップ全体の使用を停止すると、結び付いた実施中の公開は終了し、お知らせが届きます。
 
 ### 日本語 · 公開でノードを点灯させるには？
@@ -89,8 +90,8 @@ A quiz bound to a knowledge map node shows once you have lit the nodes it needs 
 
 ### English · How do I make and publish my own knowledge map?
 
-Each Sponsor may have one map of their own (lit by Takers). Saving a draft lists every problem (a condition going round in a circle, a node that does not exist, and so on); a draft with problems is still saved, but fix them before submitting it for review. Another member of your operator reviews it; once approved it is in effect. A map sent back comes with the reason: fix it and submit it again.
-A node's condition is "all", "any" or "at least N", over other nodes or "passing a quiz bound to this node". A node "to be lit before answering" can only be in the outermost "all". Your map may name nodes of the platform's maps that Takers light.
+Each Sponsor may have one map of their own (lit by Takers): in "Publications → Knowledge maps" choose "Create my map", then "Edit". Saving a draft lists every problem (a condition going round in a circle, a node that does not exist, and so on); a draft with problems is still saved, but fix them before submitting it for review. Another member of your operator reviews it; once approved it is in effect. A map sent back comes with the reason: fix it and submit it again.
+A node's condition is "all", "any" or "at least N", over other nodes or "passing a quiz bound to this node". A node "to be lit before answering" can only be in the outermost "all". Your map may name nodes of the platform's maps that Takers light: "Add a node" lists them under each platform map's name, after your map's own nodes.
 A new version cannot remove a node that running publications are bound to; retiring the whole map ends the running publications bound to it, and you are told.
 
 ### English · How does a publication light a node?

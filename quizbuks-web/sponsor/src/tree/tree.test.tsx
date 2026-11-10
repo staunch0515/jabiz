@@ -29,6 +29,7 @@ const NODES = [
 ]
 
 const TREE = 't1'
+const GATE = '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4b99'
 const VERSIONS = [
   { versionId: 'v2', versionNo: 2, status: 'REJECTED', name: JSON.stringify({ en: 'Baking' }), submittedAt: null,
     decidedAt: null, rejectReason: 'Name the node better', editedAt: null },
@@ -39,7 +40,8 @@ const output = (extra: Record<string, unknown>) => json(200, { output: { treeId:
   status: 'DRAFT', revision: 4, nodeIds: {}, problems: [], approval: null, approvalRequestId: null, ...extra } })
 
 /** The server as the map page sees it: an approved Sponsor with one map in effect and a version sent back. */
-function server(maps: unknown[] = [MAP], processes: Record<string, (input: Record<string, unknown>) => Response> = {}) {
+function server(maps: unknown[] = [MAP], processes: Record<string, (input: Record<string, unknown>) => Response> = {},
+  nodes: unknown[] = NODES) {
   const asked: string[] = []
   const sent: { name: string; input: Record<string, unknown> }[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -66,7 +68,10 @@ function server(maps: unknown[] = [MAP], processes: Record<string, (input: Recor
       case '/api/queries/qb.sponsor.trees':
         return json(200, { items: maps, offset: 0, limit: 50 })
       case '/api/queries/qb.sponsor.tree':
-        return json(200, { items: NODES, offset: 0, limit: 500 })
+        return json(200, { items: nodes, offset: 0, limit: 500 })
+      case '/api/queries/qb.sponsor.tree-referenceable-nodes':
+        return json(200, { items: [{ treeId: 'pt', treeName: JSON.stringify({ en: 'Gates' }), nodeId: GATE,
+          name: JSON.stringify({ en: 'Fair dealing' }), seq: 1 }], offset: 0, limit: 1000 })
       case '/api/queries/qb.sponsor.tree-versions':
         return json(200, { items: VERSIONS, offset: 0, limit: 100 })
       case '/api/queries/qb.me.consents':
@@ -216,6 +221,22 @@ describe('the Sponsor\'s map editor (F-S3d)', () => {
     const group = within(sourdough).getByTestId('condition-group')
     expect(within(group).queryByTestId('condition-before-answer')).toBeNull()
     expect(within(group).queryByTestId('condition-add-group')).toBeNull()
+  })
+
+  it('names a node of a platform map by its map, and keeps it when saving (F-S3e)', async () => {
+    const withGate = [NODES[0], { ...NODES[1], condition: JSON.stringify({ op: 'ALL', items: [
+      { node: GATE, beforeAnswer: true }, { node: BASICS }, { passed: true }] }) }]
+    const { sent, asked } = server([MAP], { QB_TREE_DRAFT_SAVE: () => output({}) }, withGate)
+    const editor = await open()
+    const sourdough = within(editor).getAllByTestId('tree-editor-node')[1]
+    expect(await within(sourdough).findByText('“Fair dealing (platform map Gates)” lit')).toBeInTheDocument()
+    expect(asked).toContain('/api/queries/qb.sponsor.tree-referenceable-nodes')
+    await userEvent.click(within(editor).getByTestId('tree-editor-save'))
+    await vi.waitFor(() => expect(sent).toHaveLength(1))
+    const saved = sent[0].input as { nodes: { condition: unknown }[] }
+    expect(saved.nodes[1].condition).toEqual({ op: 'ALL', items: [{ node: GATE, beforeAnswer: true },
+      { node: BASICS }, { passed: true }] })
+    await expectAccessible()
   })
 
   it('says when the map was changed elsewhere, and sends nothing more', async () => {

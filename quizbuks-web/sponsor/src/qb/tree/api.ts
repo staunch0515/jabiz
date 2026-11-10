@@ -174,6 +174,24 @@ export async function readBindableNodes(): Promise<BindableNode[]> {
   }))
 }
 
+/** A node of a platform graph Takers light that a Sponsor's map may name (`qb.sponsor.tree-referenceable-nodes`). */
+export interface ReferenceableNode {
+  treeId: string
+  treeName: I18nText
+  nodeId: string
+  name: I18nText
+}
+
+/** The nodes of other graphs the Sponsor's map editor offers, the same the draft's rules accept (F-S3e). */
+export async function readReferenceableNodes(): Promise<ReferenceableNode[]> {
+  return (await runQuery<Row>(TREE.sponsorReferenceable, { params: {}, limit: 1000 })).items.map((row) => ({
+    treeId: String(row.treeId),
+    treeName: json<I18nText>(row.treeName, {}),
+    nodeId: String(row.nodeId),
+    name: json<I18nText>(row.name, {}),
+  }))
+}
+
 /** A version of the Sponsor's graph (`qb.sponsor.tree-versions`), newest first. */
 export interface SponsorVersionRow {
   versionId: string
