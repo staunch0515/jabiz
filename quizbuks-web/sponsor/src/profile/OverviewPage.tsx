@@ -8,19 +8,16 @@ import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { readMySponsorPage } from '../page/api'
 import { SPONSOR_PAGE_QUERY } from '../page/SponsorPageEditor'
-import { readMyProducts } from '../products/api'
-import { PRODUCTS_QUERY } from '../products/ProductsPage'
-import { readRewardSettings, readStaff, REWARD_SETTINGS_QUERY } from '../publishing/api'
-import { useMailServer } from '../publishing/MailServerPage'
+import { readRewardSettings, REWARD_SETTINGS_QUERY } from '../publishing/api'
 import { qrFileName, qrImageUrl, qrPng, qrSvg } from '../publishing/qr'
 import { useRewardMethodLabel } from '../publishing/shared'
-import { STAFF_QUERY } from '../publishing/StaffPage'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { sponsorPageLink } from '../qb/page'
 import { Link } from '../qb/router'
 import { readYourOperator, useMySponsor, YOUR_OPERATOR_QUERY, type YourOperator } from './api'
-import { checklist, progress, type ChecklistKey } from './checklist'
+import { progress, type ChecklistKey } from './checklist'
+import { useChecklist } from './useChecklist'
 import { PRODUCTS_TAB_PATH, profilePath } from './paths'
 import { STATS_PATH } from '../shell/paths'
 import { BenefitsEntryCard } from './BenefitsEntryCard'
@@ -44,20 +41,11 @@ export function OverviewPage() {
   const { t: tQb } = useTranslation(QB)
   const sponsor = useMySponsor()
   const page = useQuery({ queryKey: SPONSOR_PAGE_QUERY, queryFn: readMySponsorPage })
-  const products = useQuery({ queryKey: PRODUCTS_QUERY, queryFn: readMyProducts })
-  const staff = useQuery({ queryKey: STAFF_QUERY, queryFn: readStaff })
-  const mailServer = useMailServer()
+  const { items } = useChecklist()
   const rewards = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
   if (sponsor.isPending) return <PageState kind="loading" />
   if (sponsor.isError) return <PageState kind="error" description={tQb('failed')} />
   const status = sponsor.data?.reviewStatus ?? 'NONE'
-  const items = checklist({
-    sponsor: sponsor.data ?? null,
-    page: page.data ?? null,
-    listedProducts: (products.data ?? []).filter((p) => p.status === 'LISTED').length,
-    staff: (staff.data ?? []).length,
-    mailServerVerified: !!mailServer.data?.verifiedAt,
-  })
   const { done, total } = progress(items)
   const next = status !== 'APPROVED' ? 'basics' : page.data?.status === 'PUBLISHED' ? null : 'page'
   return (

@@ -86,3 +86,21 @@ test('the menu of areas, the bottom menu on a phone, "+ New" and the avatar menu
   await signOutSponsor(page)
   await expect(page).toHaveURL(/\/sponsor\/login$/)
 })
+
+test('the home lists what needs the Sponsor and each item leads to the page that handles it (F-F3b)', async ({
+  page, request }) => {
+  test.setTimeout(120_000)
+  const sponsor = await approvedSponsor(request)
+  await signIn(page, '/sponsor/', sponsor.email)
+  await expect(page).toHaveURL(/\/sponsor\/home$/)
+  // A new approved Sponsor has nothing waiting for a person, but the public page is not published yet.
+  const todo = page.getByTestId('todo')
+  await expect(todo).toBeVisible()
+  await expect(todo.getByTestId('todo-claimsToConfirm')).toHaveCount(0)
+  const missing = todo.getByTestId('todo-profileMissing')
+  await expect(missing).toHaveAttribute('data-count', '1')
+  await missing.click()
+  await expect(page).toHaveURL(/\/sponsor\/profile$/)
+  // The prizes' entry has no badge while no claim or digital prize waits.
+  await expect(page.getByTestId('menu-prizes')).not.toContainText(/\d/)
+})

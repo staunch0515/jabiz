@@ -5,6 +5,8 @@ import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
 import { navigate } from '../qb/router'
 import { GrowthArt, PlanArt } from '../qb/Illustrations'
+import { TodoList } from '../home/TodoList'
+import { useTodoItems } from '../home/useTodo'
 import { useMySponsor } from '../profile/api'
 import { profilePath } from '../profile/paths'
 
@@ -22,6 +24,7 @@ export function DashboardPage() {
       : status === 'REJECTED' ? t('dashboard.rejected')
         : t('dashboard.none')
   const name = sponsor.data?.company || sponsor.data?.contactName
+  const todo = useTodoItems()
   return (
     <section className="flex flex-col gap-4" aria-labelledby="dashboard-title" data-testid="dashboard">
       {/* The hero band (Q32): the greeting and where the sponsor stands, the illustration beside the text. */}
@@ -50,6 +53,8 @@ export function DashboardPage() {
       </div>
       {sponsor.isPending && <PageState kind="loading" />}
       {sponsor.isError && <PageState kind="error" description={tQb('failed')} />}
+      {/* F-F3b: what needs the Sponsor, also before the approval (the application, the profile); the charts after it. */}
+      {sponsor.isSuccess && <TodoList items={todo.items} ready={todo.ready} />}
       {sponsor.isSuccess && status === 'APPROVED' && <DashboardCharts />}
     </section>
   )

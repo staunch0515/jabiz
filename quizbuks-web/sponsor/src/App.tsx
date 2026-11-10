@@ -31,6 +31,8 @@ import TrialPage, { trialKeyOf } from './trial/TrialPage'
 import { useMySponsor } from './profile/api'
 import { profilePath } from './profile/paths'
 import { useUnreadConversations } from './conversations/ConversationsPages'
+import { prizesBadge } from './home/todo'
+import { useTodoCounts } from './home/useTodo'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { GrowthArt, Wordmark } from './qb/Illustrations'
 import { HelpPage } from './qb/HelpPage'
@@ -119,6 +121,8 @@ function SignedIn({ path }: { path: string }) {
   const { search } = useLocation()
   // Q82: the menu's badge of the takers' conversations.
   const unreadConversations = useUnreadConversations(!!userId)
+  // F-F3b: the prizes area's badge, the claims and digital prizes waiting for the Sponsor (`qb.sponsor.todo`).
+  const todo = useTodoCounts(!!userId && sponsor.data?.reviewStatus === 'APPROVED')
   // The pages start from who is signed in (the sign-up name prefills the onboarding): wait until the server said so.
   if (!userId) return <PageState kind="loading" />
 
@@ -136,7 +140,7 @@ function SignedIn({ path }: { path: string }) {
     ?? <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
 
   const shell = (
-    <SponsorShell path={path} state={state} badges={{ messages: unreadConversations }} displayName={displayName}
+    <SponsorShell path={path} state={state} badges={{ messages: unreadConversations, prizes: prizesBadge(todo) }} displayName={displayName}
       helpPath={HELP} onSignOut={() => void signOut().then(toSignIn)}
       tools={<HelpPanel path={path} search={search} />}>
       <div className="flex flex-col gap-4">

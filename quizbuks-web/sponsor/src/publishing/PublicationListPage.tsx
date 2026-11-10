@@ -23,7 +23,7 @@ import { SPONSOR } from '../messages'
 import { EmptyState } from '../EmptyState'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { Link, navigate } from '../qb/router'
+import { Link, navigate, useLocation } from '../qb/router'
 import { PUBLICATION_STATUSES, PUBLISHING_LIMITS, searchPublications, type PublicationRow,
   type PublicationStatus } from './api'
 import { NEW_PUBLICATION, publicationPath, PUBLICATIONS_QUERY } from './paths'
@@ -111,7 +111,12 @@ export function PublicationListPage() {
   const regionsText = useRegionsText()
   const [search, setSearch] = useState('')
   const q = useDebounced(search, 300)
-  const [status, setStatus] = useState<PublicationStatus | null>(null)
+  // The home's "to do" leads here with the state it means (`?status=FUNDS_SHORT`, F-F3b); the filter is still the user's.
+  const { search: locationSearch } = useLocation()
+  const [status, setStatus] = useState<PublicationStatus | null>(() => {
+    const asked = new URLSearchParams(locationSearch).get('status')
+    return PUBLICATION_STATUSES.find((code) => code === asked) ?? null
+  })
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: PAGE_SIZE })
   const [sorting, setSorting] = useState<SortingState>([{ id: 'editedAt', desc: true }])
   const firstPage = () => setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
