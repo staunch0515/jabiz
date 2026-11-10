@@ -1,6 +1,6 @@
 # F-S4 实施计划：发起方在发起方页面答题点亮与好处
 
-规格：`docs/quizbuks/first-launch-spec.md` F-S4（需求方 2026-11-07 晚：新发起方缺省没有奖励方式，点亮"电子奖品"/"线下兑奖"节点即开通）；来源 `Q90-trees.md` §0-20、§0-21、§2.8，F-M 的 `LIGHT` 来源（`plans/impl/F-M.md` §M2 与问题 4）。负责：S2。状态：**草稿，等总控批准**（§8 的问题）。
+规格：`docs/quizbuks/first-launch-spec.md` F-S4（需求方 2026-11-07 晚：新发起方缺省没有奖励方式，点亮"电子奖品"/"线下兑奖"节点即开通）；来源 `Q90-trees.md` §0-20、§0-21、§2.8，F-M 的 `LIGHT` 来源（`plans/impl/F-M.md` §M2 与问题 4）。负责：S2。状态：**总控 2026-11-10 批准**（§8 六点已定），按 F-S4a → b → c。
 
 ## 0. 现状（2026-11-10 盘点）
 
@@ -36,10 +36,10 @@
 
 ## 3. F-S4b 好处（后端）
 
-- **奖励方式按节点开通**（需求方 2026-11-07 晚）：两个受控参数 `qb.tree.gate.digital-prize-node`、`qb.tree.gate.offline-redeem-node`，值是**平台模板**的 `<图>/<节点>`（点亮者为发起方）。"开通" = 本人在该模板或其**任一副本**中点亮了同一节点编号、没有撤销（副本沿用模板的节点编号，改派后照样算数，Q90 §0-21）。规则在 `TreeGates` 加一种"发起方门槛"（`names()` 按主体分两种，`GATE_INVALID` 同样核对），`PublicationEditing.methodProblems` 与 `qb.sponsor.reward-methods` 取"记录或缺省 ∪ 已开通"。**不写 `QbSponsorRewardMethods`**（见 §8 问题 1：规格原写"点亮事件写入表"；门槛做法使撤销自动关闭、不需要第二份状态，且是 CLAUDE.md"新的门槛功能照此加一个参数，不另写判断"的做法）。
+- **奖励方式按节点开通**（需求方 2026-11-07 晚）：两个受控参数 `qb.tree.gate.digital-prize-node`、`qb.tree.gate.offline-redeem-node`，值是**平台模板**的 `<图>/<节点>`（点亮者为发起方）。"开通" = 本人在该模板或其**任一副本**中点亮了同一节点编号、没有撤销（副本沿用模板的节点编号，改派后照样算数，Q90 §0-21）。规则在 `TreeGates` 加一种"发起方门槛"（`names()` 按主体分两种，`GATE_INVALID` 同样核对），`PublicationEditing.methodProblems` 与 `qb.sponsor.reward-methods` 取"记录或缺省 ∪ 已开通"。不写 `QbSponsorRewardMethods`，也不删它与缺省参数（§8 第 1 点）：可用 = 缺省 ∪ 单独设定 ∪ 已开通。
 - **节点的点亮赠送**：节点定义加 `grantAmount`（`Monetary` JPY 0 位，可空）。只能设在**平台模板**中点亮者为发起方的图上；不超过受控参数 `qb.tree.grant.max-per-node`（缺省空 = 不能设，`TreeRules` 给出 `QB_TREE_GRANT_NOT_ALLOWED` / `_TOO_LARGE`）；随版本经已有的四眼审批（审批内容含它）。副本不能改它（复制与采用照抄；`QB_TREE_DRAFT_SAVE` 对副本给出 `QB_TREE_GRANT_COPY`），点亮副本的节点时按**模板生效版本**的金额。
 - **发放**：点亮时把金额冻结在点亮记录上（`QbTreeLit.grantAmount`，只追加表加列）。事件 `qb.tree.lit` 的新消费者 `QB_TREE_LIT_GRANT`（`internal()`）只取钱包锁 `qb.wallet:SPONSOR:<发起方>`，以子流程 `QB_FEE_CREDIT_GRANT` 发放（来源 `LIGHT`，来源键 `lit:<点亮记录>`：重复事件只返回原笔）；赠送功能的总开关照 F-M2 的 `qb.fee-credit.grant.enabled`。**不在答题提交中做**。失败的由每日逐项任务 `qb.tree-grant-retry`（模板 `qb.system.tree-grants-due`：有金额、没有对应赠送、没有撤销的点亮）补发。
-- **撤销扣回**：`qb.tree.lit-revoked` 的消费者 `QB_TREE_LIT_GRANT_VOID`（`internal()`，钱包锁内）作废该笔赠送**剩余未用的部分**（借 2190 / 贷 5140，同 F-M2 的到期作废；已用掉的不追回，见 §8 问题 4），写作废记录。
+- **撤销扣回**：`qb.tree.lit-revoked` 的消费者 `QB_TREE_LIT_GRANT_VOID`（`internal()`，钱包锁内）作废该笔赠送**剩余未用的部分**（借 2190 / 贷 5140，同 F-M2 的到期作废；已用掉的不追回，§8 第 4 点），写作废记录。
 - **核对与管理**：`qb.system.recon-fee-account` 加 `LIGHT_GRANTS`（每条有金额的未撤销点亮恰好一笔 `LIGHT` 赠送，反之亦然）；总部财务页的赠送列表能按来源 `LIGHT` 筛选、看到"待发放"（模板 `qb.admin.tree-grants-pending`）；月报沿用 `FEE_CREDIT_GRANTED` / `_VOIDED`。
 - **节点人数**：F-S3f 的每日快照与 `qb.operator.tree-version` 扩到点亮者为发起方的副本（点亮人数、答过未点亮人数，最小分组）。
 - **测试**：`TreeGrantIT`（四眼、上限、副本不能改、点亮恰好发一次、重复事件、失败补发、撤销作废剩余、核对项）、`RewardMethodGateIT`（缺省空时没有方式；点亮电子奖品节点即可保存 `DIGITAL_PRIZE`；撤销后关闭；副本节点算数；`qb.sponsor.reward-methods` 与 Java 一致）、`TreeRulesTest`、`AdminFinanceIT`、`ReconIT`。
@@ -71,14 +71,16 @@
 - **F-M 的提交费用**：挑战发布不应收配送费；要在 F-M 的计费点上明确跳过（S2 自己的代码）。
 - **主体从写死改为输入**：`TreeLighting` 的锁名、查询与事件载荷都要按主体；IT 覆盖两种主体。
 
-## 8. 要定的点（总控 / 需求方）
+## 8. 总控与需求方的决定（2026-11-10）
 
-1. **奖励方式怎样开通**：建议用**门槛参数**（`qb.tree.gate.digital-prize-node` / `offline-redeem-node`，此刻点亮即开通，撤销即关闭），不写 `QbSponsorRewardMethods`；规格原文是"由点亮的事件写入表"。若坚持写表，撤销点亮时还要另写关闭的流程。
-2. **挑战绑定哪张图**：按 Q90 §0-21 只绑**本运营商的副本**，门槛与赠送按模板的节点编号认（副本沿用编号）。请确认平台模板本身不直接用于挑战。
-3. **挑战发布收不收配送费、要不要扣预算**：建议都不收不扣（不付奖励、发起方答题不是推广）。
-4. **撤销扣回**：建议只作废赠送**剩余未用**的部分，已用掉的不追回（追回会使账户为负）。
-5. **"挑战"标签放在哪个区域**：建议"发起方中心"（`/profile/challenges`）；也可放"发布"区域。
-6. **学者打开挑战的链接**：规格写 422；也可与 F-S2d 一致按"不存在" 404。建议照规格 422（文案说明这是给发起方的）。
+1. **奖励方式用门槛参数开通**：`qb.tree.gate.digital-prize-node` / `qb.tree.gate.offline-redeem-node`（受控，缺省空，撤销点亮即失效）。**不删除**现有的 `qb.reward.default-methods` 与对单个发起方的设定（`QbSponsorRewardMethods` / `QB_SPONSOR_REWARD_METHODS_SET`）：彩排与阶段一要用。可用的奖励方式 = 缺省参数 ∪ 单独设定 ∪ 已点亮门槛开通的（需求方 2026-11-10 确认；规格已改）。
+2. 挑战只绑**本运营商的副本**，平台模板不直接用于挑战。
+3. 挑战发布不收配送费、不扣预算。
+4. 撤销点亮只作废赠送中**没用完的部分**，已用掉的不追回（需求方 2026-11-10 确认；规格已改）。
+5. "挑战"标签在发起方中心 `/profile/challenges`（与 F-F3 的外框对齐）。
+6. 学者打开挑战的链接照规格 422。
+
+F-S4b 涉及赠送额度（钱）：开 PR 前总控安排一次额外的审查。
 
 ## 9. 粗估
 
