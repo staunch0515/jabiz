@@ -1,6 +1,8 @@
 import type { APIRequestContext } from '@playwright/test'
+import { query } from './content'
+import { contentAdmin } from './legal'
 import { decideReview, publicationOf } from './publishing'
-import { expect, run } from './support'
+import { adminToken, expect, PASSWORD, run, tokenOf, unique } from './support'
 
 /*
  * What the knowledge map tests prepare through the API (tree-visibility.spec, tree-graph.spec): a live publication
@@ -54,4 +56,24 @@ export async function operatorTree(request: APIRequestContext, token: string, tr
     if (found || items.length < 100) return found ?? null
   }
   return null
+}
+
+const passed = { op: 'ALL', items: [{ passed: true }] }
+
+/** A platform map in effect with one node that names a certificate; the other administrator reviews it. */
+export async function platformMap(request: APIRequestContext, subjectKind: 'TAKER' | 'SPONSOR', certificate: string) {
+  const writer = await tokenOf(request, await contentAdmin(request, 'Maps'), PASSWORD, 'admin')
+  const tree = await run(request, writer, 'QB_TREE_CREATE', { ownerKind: 'PLATFORM', subjectKind,
+    name: { en: unique('Certificates ') } })
+  const saved = await run(request, writer, 'QB_TREE_DRAFT_SAVE', { treeId: tree.treeId, baseRevision: tree.revision,
+    name: { en: 'Certificates' }, nodes: [{ key: 'node', name: { en: 'Fair dealing' }, condition: passed,
+      certificateNames: { en: certificate } }] })
+  expect(saved.problems).toEqual([])
+  const submitted = await run(request, writer, 'QB_TREE_SUBMIT', { treeId: tree.treeId, baseRevision: saved.revision })
+  await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
+    decision: 'APPROVE' })
+  await expect.poll(async () => (await query(request, writer, 'qb.admin.trees', {}))
+    .find((row) => row.treeId === tree.treeId)?.currentVersionId ?? null,
+  { message: 'the map is in effect', timeout: 30_000 }).not.toBeNull()
+  return { treeId: String(tree.treeId), node: (saved.nodeIds as Record<string, string>).node }
 }

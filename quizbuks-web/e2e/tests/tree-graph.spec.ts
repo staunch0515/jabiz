@@ -4,7 +4,7 @@ import { reviewerFor } from './operators'
 import { fundedSponsor, taker } from './play'
 import { boundPublication, operatorTree, pass } from './tree'
 import {
-  expect, expectAccessible, openArea, prepareQuizbuks, run, setAppearance, signIn, signOut, test, unique,
+  accessibleInBoth, expect, openArea, prepareQuizbuks, run, signIn, signOut, test, unique,
 } from './support'
 
 /*
@@ -25,15 +25,6 @@ test.beforeEach(async ({ request }) => {
 async function picture(page: Page, name: string) {
   await test.info().attach(`knowledge-map-${name}.png`, { body: await page.screenshot({ fullPage: true }),
     contentType: 'image/png' })
-}
-
-/** Both appearances pass axe on the page as it is. */
-async function accessibleInBoth(page: Page, name: string) {
-  for (const appearance of ['light', 'dark'] as const) {
-    await setAppearance(page, appearance)
-    await expectAccessible(page, `${name} (${appearance})`)
-  }
-  await setAppearance(page, 'light')
 }
 
 test('a Sponsor builds a map, its operator approves it, and a Taker lights a node', async ({ page, request }) => {

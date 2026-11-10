@@ -1,17 +1,14 @@
 import { signInAdmin } from './admin'
 import { completeQuiz, query } from './content'
-import { contentAdmin } from './legal'
+import { allowRewardMethods } from './publishing'
 import {
   expect,
   expectAccessible,
   openArea,
-  PASSWORD,
   prepareQuizbuks,
-  rows,
   run,
   signIn,
   test,
-  tokenOf,
   takerArea,
 } from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
@@ -34,11 +31,7 @@ const LINK = 'https://capitals.example/premium?code=WELCOME-2026'
 /** A sponsor allowed digital prizes, with a saved (not yet submitted) publication delivering them as `delivery`. */
 async function digitalDraft(request: Parameters<typeof approvedSponsor>[0], delivery: Delivery) {
   const sponsor = await approvedSponsor(request, 'Digi')
-  const userId = (await rows(request, sponsor.token, 'urn:jabiz:dataset:sponsor:QbSponsor', []))[0].attributes.userId as string
-  // Allowing the methods asks for a verified address, which the first administrator has not: a content administrator.
-  const allower = await tokenOf(request, await contentAdmin(request, 'Rin'), PASSWORD, 'admin')
-  await run(request, allower, 'QB_SPONSOR_REWARD_METHODS_SET', { userId, methods: ['PLATFORM', 'DIGITAL_PRIZE'],
-    note: 'e2e' })
+  await allowRewardMethods(request, sponsor.token, ['PLATFORM', 'DIGITAL_PRIZE'])
   const quiz = await completeQuiz(request, sponsor.token, { questions: 1 })
   const versionId = (await query(request, sponsor.token, 'qb.sponsor.quiz-versions', { quizId: quiz.quizId }))[0].versionId
   const now = Date.now()

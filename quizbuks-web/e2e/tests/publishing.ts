@@ -1,6 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { query, sponsor } from './content'
-import { expect, rows, run } from './support'
+import { contentAdmin } from './legal'
+import { expect, PASSWORD, rows, run, tokenOf } from './support'
 import { reviewerFor } from './operators'
 
 /*
@@ -23,6 +24,16 @@ export async function approvedSponsor(request: APIRequestContext, name = 'Pia') 
   await expect.poll(async () => (await rows(request, made.token, SPONSOR_DATASET, []))[0]?.attributes.reviewStatus,
     { message: 'the Sponsor is approved', timeout: 30_000 }).toBe('APPROVED')
   return made
+}
+
+/**
+ * What the Sponsor may pay a reward with (Q22): a content administrator sets the methods (allowing them asks for a
+ * verified address, which the first administrator has not).
+ */
+export async function allowRewardMethods(request: APIRequestContext, sponsorToken: string, methods: string[]) {
+  const userId = (await rows(request, sponsorToken, SPONSOR_DATASET, []))[0].attributes.userId as string
+  const allower = await tokenOf(request, await contentAdmin(request, 'Rin'), PASSWORD, 'admin')
+  await run(request, allower, 'QB_SPONSOR_REWARD_METHODS_SET', { userId, methods, note: 'e2e' })
 }
 
 /** A publication of the sponsor's as their dataset has it now. */

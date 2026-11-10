@@ -402,5 +402,16 @@ export async function expectAccessible(page: Page, name: string) {
   await expectAccessibleWith(page, name, { expect })
 }
 
+/**
+ * Both appearances pass axe on the page as it is now (the page is left in the light one).
+ */
+export async function accessibleInBoth(page: Page, name: string) {
+  for (const appearance of ['light', 'dark'] as const) {
+    await setAppearance(page, appearance)
+    await expectAccessible(page, `${name} (${appearance})`)
+  }
+  await setAppearance(page, 'light')
+}
+
 /** Chooses the appearance before any page loads (the platform keeps it in localStorage as `jabiz.appearance`). */
 export { setAppearance }
