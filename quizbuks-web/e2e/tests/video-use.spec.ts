@@ -100,7 +100,7 @@ test('the user files the ledger entry, the provider sends it back, the user corr
   // 1. The user writes the entry on the publication's page and sends it.
   await signIn(page, '/sponsor/', user.email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.goto(`/sponsor/publications/${publicationId}`)
+  await page.goto(`/sponsor/publications/${publicationId}/fees`)
   const section = page.getByTestId('video-use-section')
   await expect(section).toBeVisible()
   await expect(section.getByTestId('video-use-none')).toBeVisible()
@@ -189,7 +189,7 @@ test('the user files the ledger entry, the provider sends it back, the user corr
 
   // 6. The dark appearance of both sides.
   await setAppearance(page, 'dark')
-  await page.goto(`/sponsor/publications/${publicationId}`)
+  await page.goto(`/sponsor/publications/${publicationId}/fees`)
   await expect(section.getByTestId('video-use-counted')).toBeVisible()
   await section.getByTestId('video-use-history-toggle').click()
   await expect(section.getByTestId('video-use-history-entry')).toHaveCount(acts.length)

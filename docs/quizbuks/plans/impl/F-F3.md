@@ -276,3 +276,20 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 - 决定：电子奖品一列含 `OVERDUE` 与 `DISPUTED`（计划写"待发送 / 有争议"，一列合计）；资料缺项数的是必需的未完成项（`optional: false`），选填项不进待办；入驻被驳回不单列（问候带已显示原因与按钮）。
 - 平台费账户不够支付（F-M1）：列 `feeInvoicesUncovered` = 状态 `OPEN` / `PARTIAL` / `OVERDUE` 的账单中，未付额（`total − paidAmount`）大于平台费账户可用额的张数；可用额与 `feeAccountAvailable`（账单页）同一个算法：赠送额度钱包 `FEE_CREDIT` 的余额（不小于 0）加现金钱包 `CASH` 的余额减冻结额（不小于 0）。去 `/money/bills`。`SponsorTodoIT` 覆盖够与不够（含冻结的现金）。
 - **AI 额度不足（F-M9）** 未做：F-M9 尚未合入。F-M9 加列 `aiCreditShort`（可用额度不够再出一次题即提示，不设新数字，总控 2026-11-09 ②）时：在 `todo.sql` 加一列并在 `TodoColumn` / `TODO_COLUMNS` / `TODO_ORDER` / `TODO_PATH`（`/money/ai`）与三语 `home.todo.items.aiCreditShort` 各加一处，`SponsorTodoIT` 加一例。
+
+## 16. F-F3c 的实现记录（2026-11-10）
+
+- 分支 `1.3/quizbuks-ff3c-publication-tabs`（F-F3a #587、F-F3b #605 之后）。无后端改动、无迁移；删除的功能：无（每个块与操作仍可达）。
+- **标签 → 地址 → 块**（`publishing/PublicationPage.tsx`，`publishing/PublicationTabs.tsx` 用平台 `PageTabs`；页面用平台 `DetailPage`，右栏 = 状态、说明一句、预览与 `PublicationActions`、去统计 / 交易 / 结构图的链接，每个标签都在）：
+  概况 `/publications/<id>`：预算不足提示、`AdminNotice`、名称 / 封面 / 期间 / 入场费、入场费收入（Q88b）、日期；
+  题目与版本 `…/questions`：版本、时限、合格线、抽题（含按难度）、乱序（F-S7）、满分 + `VersionNotice`；
+  受众 `…/audience`：`MainlandNotice`（含换版本中的）、受众、地区、受众条件（Q47）、`InvitationsSection`；
+  奖励 `…/rewards`：预算、人数上限、奖励方式与奖品、推荐、最高奖励与支出、档位表、`ReferralsSection`、`DigitalPoolSection`；
+  费用 `…/fees`：一句说明、`ExposureSection`（F-S13）、`VideoUseSection`（F-S14）；F-M6 / M7 / M8 的配送费、受众规则费、曝光费由各项加在这里；
+  统计 `…/analytics`（地址不变，`PublicationAnalyticsPage` 的页头加同一排标签）；
+  分享与二维码 `…/share`：`PublicationQrPanel`（从 `PublicationQrDialog` 抽出，对话框仍从页头打开）。
+- 草稿照旧是向导；草稿的 `…/<标签>` 用 `Redirect` 转回 `/publications/<id>`。旧地址没有变化，`legacy-paths.json` 不动。`publicationTabOf` 只认五个页内标签（`analytics`、`preview` 照旧各有自己的路由）。
+- `PublicationSummary` 的各项按 `PART_OF` 分到四块（`SummaryBlock part=overview|quiz|audience|rewards`，奖励块带档位表）；向导的复核仍用合成的 `PublicationSummary`（同一份项、原来的顺序，读取不变）。
+- **共用的 `qb/view/PublicationContent.tsx`**（两个 SPA 逐字相同）：可选参数 `tabs: ContentTabs`（`current`、`path`、`renderLink`、可选的 `extra` 供 F-F4c 加商品 / 比赛规则 / 举报 / 屏蔽）；四个标签说明 / 奖励 / 资料 / 规则（`CONTENT_TABS`），封面、名称、要点与仅受邀提示始终在标签之上；草稿的预览没有"奖励"，没有素材、发起方介绍与 `extra` 时没有"资料"。**不给 `tabs` 时输出不变**（竖排，折叠块照旧；App 首页基线不受影响）。发起方预览的标签是按钮（预览没有各标签的地址），F-F4c 用链接 `?tab=`。规则标签 = 要点的完整句（题数 / 抽题、合格线、时限、参加费、截止、节点），比赛规则链接与举报等只有 App 的内容由 F-F4c 经 `extra` 放入。
+- 测试：`publishing.test.tsx`（七个标签的地址与 `aria-current`、各标签的块、分享标签、草稿的标签地址转回、预览的四个标签；原来依赖竖排详情页的用例改到对应标签），`qb/view/PublicationContent.test.tsx`（两份相同：有 / 无 `tabs`、隐藏无内容的标签、`extra`、axe）。e2e（只改了类型检查通过，未运行）：`invitation`（`/audience`）、`video-use`（`/fees`）、`content-bank`（`/questions`）、`digital-prize`（`/rewards`）、`a11y` 的发起方发布测试（每个标签各一次，亮暗各循环）。
+- 帮助：`help/sponsor-areas.md`（提交后的发布的七个标签）、`help/exposure.md`、`help/video-uses.md`（"费用"标签）；发起方手册初稿三语各一行。

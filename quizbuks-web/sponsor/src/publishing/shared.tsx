@@ -243,10 +243,21 @@ export function useConditionsText(): (conditions: readonly Condition[]) => strin
   }).join(' · ')
 }
 
-export function PublicationSummary({ values }: { values: SummaryValues }) {
+/**
+ * The summary's parts (F-F3c): each tab of a submitted publication's page shows its own; the wizard's review shows them
+ * all in one list. An item belongs to exactly one part.
+ */
+export type SummaryPart = 'overview' | 'quiz' | 'audience' | 'rewards'
+const PART_OF: Record<string, SummaryPart> = {
+  name: 'overview', cover: 'overview', period: 'overview', entryFee: 'overview',
+  version: 'quiz', timeLimit: 'quiz', passScore: 'quiz', pickCount: 'quiz', pickByDifficulty: 'quiz',
+  questionOrder: 'quiz', fullScore: 'quiz',
+  audience: 'audience', regions: 'audience', conditions: 'audience',
+}
+
+function useSummaryItems(values: SummaryValues): DescriptionItem[] {
   const { t } = useTranslation(SPONSOR)
   const regionsText = useRegionsText()
-  const tiersId = useId()
   const notSet = t('publishing.notSet')
   const noLimit = t('publishing.noLimit')
   const methodLabel = useRewardMethodLabel()
@@ -329,9 +340,25 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
     { key: 'maxSpend', label: t('publishing.summary.maxSpend'),
       value: <span data-testid="summary-max-spend">{values.maxSpend === null ? noLimit : formatKudos(values.maxSpend)}</span> },
   ]
+  return items
+}
+
+/** One part of the summary as a list (nothing when it has no item). */
+export function SummaryBlock({ values, part }: { values: SummaryValues; part: SummaryPart }) {
+  const items = useSummaryItems(values).filter((item) => ((item.key && PART_OF[item.key]) || 'rewards') === part)
   return (
-    <div className="flex flex-col gap-4" data-testid="publication-summary">
+    <div className="flex flex-col gap-4" data-testid="publication-summary" data-part={part}>
       <DescriptionList items={items} columns={2} />
+      {part === 'rewards' && <SummaryTiers values={values} />}
+    </div>
+  )
+}
+
+/** The tiers' table (the rewards part). */
+export function SummaryTiers({ values }: { values: Pick<SummaryValues, 'tiers'> }) {
+  const { t } = useTranslation(SPONSOR)
+  const tiersId = useId()
+  return (
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium" id={tiersId}>{t('publishing.summary.tiersTable')}</h3>
         {values.tiers.length === 0
@@ -357,6 +384,16 @@ export function PublicationSummary({ values }: { values: SummaryValues }) {
             </Table>
           )}
       </div>
+  )
+}
+
+/** What a publication is: all the parts in one list, then the tiers (the wizard's review). */
+export function PublicationSummary({ values }: { values: SummaryValues }) {
+  const items = useSummaryItems(values)
+  return (
+    <div className="flex flex-col gap-4" data-testid="publication-summary">
+      <DescriptionList items={items} columns={2} />
+      <SummaryTiers values={values} />
     </div>
   )
 }
