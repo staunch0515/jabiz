@@ -40,14 +40,18 @@ const TARGETS = [['QUIZ_COVER', 'Quiz cover'], ['QUIZ_INTRO', 'Quiz introduction
 /** The server as the asset pages see it, for an approved sponsor. Records what was posted. */
 export function assetServer(options: { assets?: Record<string, unknown>[]; uses?: Record<string, unknown>[];
   candidates?: Record<string, unknown>[]; answers?: Record<string, (body: Record<string, unknown>) => Response>;
-  usage?: Record<string, unknown>; stats?: Record<string, unknown>[]; shared?: Record<string, unknown>[] } = {}) {
+  usage?: Record<string, unknown>; stats?: Record<string, unknown>[]; shared?: Record<string, unknown>[];
+  /** The library is read again only when this resolves, once the collection has been answered (a slow refresh). */
+  holdLibraryAfterCollect?: Promise<unknown> } = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
+  let collected = false
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
     const url = new URL(request.url, window.location.origin)
     const path = decodeURIComponent(url.pathname)
     const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
     if (request.method === 'POST') posted.push({ path, body })
+    if (collected && path === '/api/datasets/urn:jabiz:dataset:me:QbAsset/query') await options.holdLibraryAfterCollect
     const name = /^\/api\/processes\/([A-Z_]+)\/latest$/.exec(path)?.[1]
     if (name && options.answers?.[name]) return options.answers[name](body)
     switch (path) {
@@ -87,6 +91,7 @@ export function assetServer(options: { assets?: Record<string, unknown>[]; uses?
       case '/api/processes/QB_ASSET_DELETE/latest':
         return json(200, { output: { assetId: body?.assetId, uses: 0 } })
       case '/api/processes/QB_ASSET_COLLECT/latest':
+        collected = true
         return json(200, { output: { created: [{ index: 0, assetId: 'c1' }], skipped: [{ index: 1, assetId: 'a1',
           sameAs: null }] } })
       default:
@@ -264,6 +269,27 @@ describe('the asset library (F-C1)', () => {
       { kind: 'TEXT', name: 'Quiz introduction', description: null, language: 'ja', tags: [], body: 'ようこそ',
         usage: 'QUIZ_INTRO' },
     ] }])
+  })
+})
+
+describe('the collection dialog while the library is read again', () => {
+  it('closes as soon as it says what was added, however slowly the library is read again', async () => {
+    let release!: () => void
+    const held = new Promise<void>((resolve) => { release = resolve })
+    assetServer({ holdLibraryAfterCollect: held, candidates: [
+      { candidateKey: 'f:f9', kind: 'IMAGE', usage: null, sourceKind: 'QUIZ_COVER', sourceId: 'q1', quizId: 'q1',
+        publicationId: null, name: 'Coffee quiz', description: null, language: 'en', image: 'f9' },
+    ] })
+    openLibrary()
+    await userEvent.click(await screen.findByTestId('asset-collect'))
+    const dialog = await screen.findByTestId('asset-collect-dialog')
+    await userEvent.click(await within(dialog).findByTestId('asset-collect-all'))
+    await userEvent.click(within(dialog).getByTestId('asset-collect-run'))
+    expect(await within(dialog).findByTestId('asset-collect-done')).toBeInTheDocument()
+    // The library is still being read: a sponsor who is done presses Escape, and the dialog goes.
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByTestId('asset-collect-dialog')).toBeNull())
+    release()
   })
 })
 
