@@ -154,4 +154,43 @@ class CertificateErasureIT extends NodeCertificateItSupport {
             "fs5a-erase-items", com.jabiz.quizbuks.QbPermissions.CERTIFICATE_SYSTEM), Map.of("limit", 500)))
             .extracting(row -> row.get("subjectId")).doesNotContain(dan);
     }
+
+    @Test
+    void aCertificateWrittenAfterTheErasureIsReportedAndRemovedByTheJob() {
+        // The race: a settlement read before ACCOUNT_ERASE (which takes no lock of ours) and inserted after it. Simulated
+        // by writing the row of an erased person as that settlement would have.
+        Gate gate = gate(names("Raced"));
+        String eve = newTaker("fs5a-race-eve-" + UUID.randomUUID().toString().substring(0, 8), "JP");
+        light(gate, eve);
+        Map<String, Object> row = only(certificateRows(eve));
+        runAsSystem("ACCOUNT_ERASE", Map.of("userId", eve, "requestedBy", "it-support"));
+        deliverEvents();
+        assertThat(certificateRows(eve)).isEmpty();
+        String key = java.util.HexFormat.of().formatHex(java.nio.ByteBuffer.allocate(16)
+            .putLong(UUID.randomUUID().getMostSignificantBits()).putLong(UUID.randomUUID().getLeastSignificantBits())
+            .array());
+        execute("INSERT INTO qb_certificate (certificate_id, user_id, held_from, holder_name, verify_key, issued_at, "
+            + "source, subject_kind, lit_id, tree_id, node_id, certificate_names, issuer_name, shared, version) "
+            + "VALUES (?, ?, now(), 'Late Name', ?, now(), 'NODE', 'USER', ?, ?, ?, '{\"en\":\"Raced\"}'::jsonb, "
+            + "'Issuer', true, 1)", UUID.randomUUID().toString(), eve, key, UUID.randomUUID().toString(),
+            row.get("tree_id"), row.get("node_id"));
+        assertThat(verify(key)).isNotNull();
+        String token = com.jabiz.runtime.test.TestTokens.bearer(tokens, "fs5a-race", 
+            com.jabiz.quizbuks.QbPermissions.TREES_READ, com.jabiz.quizbuks.QbPermissions.CERTIFICATE_SYSTEM);
+        Map<String, Object> at = Map.of("params", Map.of("at", clock.instant().toString()));
+        assertThat(items("qb.admin.tree-health", token, at)).extracting(r -> r.get("checkCode"))
+            .contains("CERTIFICATE_OF_ERASED");
+        assertThat(items("qb.system.tree-certificates-due", token, Map.of("limit", 500)))
+            .extracting(r -> r.get("subjectId")).contains(eve);
+
+        runRetry();
+        assertThat(query("SELECT 1 FROM qb_certificate WHERE user_id = ?", eve)).isEmpty();
+        assertThat(verify(key)).isNull();
+        // (a day later: a token of its own)
+        String later = com.jabiz.runtime.test.TestTokens.bearer(tokens, "fs5a-race-later",
+            com.jabiz.quizbuks.QbPermissions.TREES_READ);
+        assertThat(items("qb.admin.tree-health", later, Map.of("params", Map.of("at", clock.instant().toString()))))
+            .extracting(r -> r.get("checkCode")).doesNotContain("CERTIFICATE_OF_ERASED");
+        assertThat(occurrences("Late Name")).isEmpty();
+    }
 }

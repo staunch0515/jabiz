@@ -116,3 +116,11 @@ WHERE l.{{QbTreeLit.certificateNames}} IS NOT NULL
                   WHERE c.{{QbCertificate.litId}} = CAST(l.{{QbTreeLit.litId}} AS text))
   AND NOT EXISTS (SELECT 1 FROM {{Erasure}} e WHERE CAST(e.{{Erasure.userId}} AS text) = l.{{QbTreeLit.subjectId}})
 HAVING count(*) > 0
+UNION ALL
+-- CERTIFICATE_OF_ERASED: a node's certificate of an erased account (written by a settlement that read before the erasure
+-- committed); the daily job qb.tree-certificate-retry removes it, so one found here has not been removed yet.
+SELECT CAST('CERTIFICATE_OF_ERASED' AS varchar(30)), CAST(count(*) AS numeric)
+FROM {{QbCertificate}} c
+WHERE c.{{QbCertificate.source}} = 'NODE'
+  AND EXISTS (SELECT 1 FROM {{Erasure}} e WHERE CAST(e.{{Erasure.userId}} AS text) = c.{{QbCertificate.userId}})
+HAVING count(*) > 0

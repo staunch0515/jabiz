@@ -179,7 +179,7 @@ public final class NodeCertificates {
      * whose account was erased (the lit records stay, holding ids only).
      */
     static List<EntityInstance> due(ProcessContext ctx) {
-        if (list(ctx, ERASED).stream().anyMatch(user -> user.get("erasedAt") != null)) {
+        if (erased(ctx)) {
             return List.of();
         }
         Set<String> revoked = new LinkedHashSet<>();
@@ -194,6 +194,10 @@ public final class NodeCertificates {
             .toList();
     }
 
+    private static boolean erased(ProcessContext ctx) {
+        return list(ctx, ERASED).stream().anyMatch(user -> user.get("erasedAt") != null);
+    }
+
     /** The ids of the owners of the maps read, of one kind. */
     private static List<Object> owners(ProcessContext ctx, String ownerKind) {
         Set<Object> ids = new LinkedHashSet<>();
@@ -203,6 +207,15 @@ public final class NodeCertificates {
     }
 
     static void write(ProcessContext ctx, MessageCatalog messages) {
+        // An account erased: platform ACCOUNT_ERASE does not take our lock, so a certificate written by a settlement that
+        // read before the erasure committed can outlive it. Removed here through the normal write path (the audit and the
+        // purge see it). Its PDF, if any, is the erasure's purge's (a row written after the erasure has none).
+        if (erased(ctx)) {
+            list(ctx, EXISTING).forEach(row -> ctx.changes().delete(QbCertificates.CERTIFICATE, row.id(),
+                row.version()));
+            ctx.put(WRITTEN, 0);
+            return;
+        }
         int written = 0;
         byte[] seed = ctx.get(SEED, byte[].class);
         for (EntityInstance lit : due(ctx)) {

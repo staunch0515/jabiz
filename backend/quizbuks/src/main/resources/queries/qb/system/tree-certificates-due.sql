@@ -26,3 +26,10 @@ WHERE l.{{QbTreeLit.certificateNames}} IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM {{QbCertificate}} c
                   WHERE c.{{QbCertificate.litId}} = CAST(l.{{QbTreeLit.litId}} AS text))
   AND NOT EXISTS (SELECT 1 FROM {{Erasure}} e WHERE CAST(e.{{Erasure.userId}} AS text) = l.{{QbTreeLit.subjectId}})
+UNION
+-- A node's certificate of an erased account (platform ACCOUNT_ERASE takes no lock of ours, so one can be written after it):
+-- the item removes it.
+SELECT DISTINCT c.{{QbCertificate.userId}}
+FROM {{QbCertificate}} c
+WHERE c.{{QbCertificate.source}} = 'NODE'
+  AND EXISTS (SELECT 1 FROM {{Erasure}} e WHERE CAST(e.{{Erasure.userId}} AS text) = c.{{QbCertificate.userId}})

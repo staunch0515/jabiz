@@ -122,3 +122,4 @@ F-S5a 1.5–2 天、F-S5b 1–1.5 天，合计 2.5–3.5 天（规格粗估 2–
 - **删除账号只有一条声明**（`TakerErasure`，三种版式的 PDF）：平台的删除器对每个账号都运行，发起方账号的证书行与 `qb.node_certificate_sponsor` 的 PDF 同样被清（`CertificateErasureIT`）。冻结在别人证书上的颁发方名（发起方自己的图）不在清除范围内：它是证书的内容，不是持有人的个人信息；发起方删除账号后他们的图上已发出的证书仍写着他们的公司名（待需求方确认是否要清）。
 - 核实页的公开缓存仍是 60 秒（`cacheSeconds`，与 Q77 一样）：撤销与停用分享最多晚一分钟显示。
 - 语句数：`QB_TREE_LIT_CERTIFICATE` 写一张证书 7 条、无事可做 5 条；首次下载 10 条、再次下载 6 条（`CertificateStatementBudgetIT`）；`AttemptStatementBudgetIT` 不变。
+- **删除账号与写入的竞争**（安全评审）：平台的 `ACCOUNT_ERASE` 不取 `qb.certificate:<人>` 锁，读过后才提交的删除会让刚写入的证书行活下来。`QB_TREE_LIT_CERTIFICATE` 对已删除的账号改为经 `ctx.changes().delete` 删除其节点证书行（审计与清除可见）；任务条目模板加入"已删除账号的节点证书"，`qb.admin.tree-health` 加 `CERTIFICATE_OF_ERASED`（`CertificateErasureIT`）。这样的行没有 PDF（持有人没有机会下载）；PDF 本来只由平台删除的清除处理。
