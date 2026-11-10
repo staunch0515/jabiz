@@ -346,7 +346,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 安全 | 平台 `jabiz-refresh-reuse-granted`、`jabiz-refresh-reuse-revoked`（F-F6） | |
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
-| 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`、`qb.tree-node-counts`）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足）；`GATE_INVALID` 出现（门槛参数指不到可点亮的节点，功能对所有人关闭） |
+| 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`、`qb.tree-node-counts`、F-S4b 的 `qb.tree-grant-retry`，§7.41）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足）；`GATE_INVALID` 出现（门槛参数指不到可点亮的节点，功能对所有人关闭） |
 | 题库（F-S6，§7.37） | 平台 `jabiz-job-failed`（`qb.content-check`）；每日核对的待办 `qb.content-health`（权限 `qb.admin.quiz.read`） | `SNAPSHOT_NEAR_LIMIT` 出现（某个版本的快照超过上限的 80 %，题库再增长即不能保存下一个版本） |
 | 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
@@ -1097,6 +1097,18 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **旧地址**：全部在 `shell/legacy-paths.json` 中转到新地址（书签、已发出的邮件、进行中的 Stripe Checkout 的返回地址 `/wallet/topups/<id>?checkout=…`，查询照带）。发起方说"旧链接打不开"时，先核对该地址是否在清单中；不在即缺一条，按 `backend/quizbuks/CLAUDE.md` 第 5 节加。
 - **邮件中的链接**用新地址（充值与收据 → `money/wallet`，平台费账单 → `money/bills`）；在平台管理系统"邮件模版"中覆盖过这些邮件文字的（F-C8），旧链接靠转向照样能用，有空时按新的缺省改一次。
 - **手机底部菜单**：普通参数 `qb.sponsor.bottom-bar`（`PARAM_SET`，不受控），缺省 `home,publications,prizes,messages`；值是区域键，以逗号分隔（home、quizzes、publications、prizes、messages、benefits、money、assets、hub），不认识的键与重复的被忽略，至多四个（后面是"更多"），空即缺省。**改了它要同时改帮助**（`help/sponsor-areas.md` 中"手机上"一句，请内容管理员照改 FAQ）。
+
+### 7.41 点亮的好处：奖励方式与赠送平台费 Kudos（F-S4b）
+
+发起方在运营商的副本上答挑战合格（点亮节点）得到两种好处（`docs/quizbuks/plans/impl/F-S4.md` §3）。
+
+- **奖励方式按节点开通**：受控参数 `qb.tree.gate.digital-prize-node`（电子奖品）、`qb.tree.gate.offline-redeem-node`（到店领取的奖品），值是**发起方点亮的平台模板**的 `<图编号>/<节点编号>`（不是副本的）；`QB_SETUP` 不建立，没有即关闭。发起方在该模板或任一运营商的副本中点亮了同一节点、没有撤销即开通；撤销点亮即关闭。可用的奖励方式 = 缺省参数 `qb.reward.default-methods` ∪ 对单个发起方的设定（`QB_SPONSOR_REWARD_METHODS_SET`）∪ 已开通的（需求方 2026-11-10；以前单独设定取代缺省，现在是并集）。参数写错或节点失效即对所有人关闭、每日核对报 `GATE_INVALID`（同其他门槛参数，§7.27）。
+- **节点的赠送**：平台模板（点亮者为发起方）的节点可设"点亮时赠送的平台费 Kudos"（节点定义 `grantAmount`），不超过受控参数 `qb.tree.grant.max-per-node`（`QB_SETUP` 不建立；没有即不能设，保存给出 `QB_TREE_GRANT_NOT_ALLOWED`）；随版本经已有的四眼审核（审批内容含它）。副本照抄模板的金额、不能改（`QB_TREE_GRANT_COPY`），采用模板的改动时一起更新；点亮时按**模板生效版本**的金额冻结在点亮记录上（`qb_tree_lit_version.grant_amount`，迁移 V110）。
+- **发放**：点亮之后（不在答题中）事件 `qb.tree.grant-due` → `QB_TREE_LIT_GRANT`（`internal()`，发起方钱包锁内）对该发起方每条有金额、没有撤销、还没发的点亮以子流程 `QB_FEE_CREDIT_GRANT` 发一笔（来源 `LIGHT`，来源键 `lit:<点亮记录>`：同一键至多一笔），有效期、记账、到期与提醒同 §7.39。总开关 `qb.fee-credit.grant.enabled` 关闭时不发，开启后由每日任务 `qb.tree-grant-retry`（每天 03:29，`jabiz.fiscal-year-zone`，模板 `qb.system.tree-grants-due`，逐个发起方）补发；事件消费失败的同样由它补发。待发的点亮在平台管理系统的模板 `qb.admin.tree-grants-pending`（`qb.admin.finance.read`）中可见。错过的运行以 `JOB_RUN_REQUEST`（`POST /api/jobs/qb.tree-grant-retry/runs`，`job.run`）补跑（同一来源键不会发第二笔）。
+- **撤销扣回**：撤销点亮（§7.27 的四眼）之后，事件 `qb.tree.lit-revoked` → `QB_TREE_LIT_GRANT_VOID`（`internal()`，钱包锁内）把该笔赠送**剩余未用的部分**作废（借 2190 / 贷 5140，`remaining` 归零、`voided_amount` 增加）；已用掉的不追回（需求方 2026-11-10）。撤销在发放之前的不发。
+- **每日核对**（`qb.system.recon-fee-account`）：新项 `LIGHT_GRANTS`——按发起方，来源 `LIGHT` 的各笔金额之和 = 赚得赠送的点亮金额之和（已发的；没有撤销、开关开着时尚未发的也算，所以事件与补发都失败时出现差异）。差异先看 `qb.admin.tree-grants-pending` 与任务 `qb.tree-grant-retry` 的最近一次运行。月报沿用 `FEE_CREDIT_GRANTED` / `FEE_CREDIT_VOIDED`。
+- **部署**：迁移 V110；之后需要时以受控变更设 `qb.tree.grant.max-per-node` 与两个门槛参数（另一位管理员发布），再在平台模板上设赠送金额并提交审核。
+- **排查**：某发起方点亮的赠送：`SELECT l.lit_id, l.tree_id, l.node_id, l.lit_at, l.grant_amount, g.amount, g.remaining, g.voided_amount FROM qb_tree_lit_version l LEFT JOIN qb_fee_credit_grant g ON g.sponsor_id = l.subject_id AND g.source_key = 'lit:' || l.lit_id WHERE l.subject_kind = 'SPONSOR' AND l.subject_id = '<发起方>'`。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

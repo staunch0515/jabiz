@@ -178,12 +178,21 @@ abstract class TreeItSupport extends PlayItSupport {
 
     @SuppressWarnings("unchecked")
     Copy copy() {
+        return copy(null);
+    }
+
+    /** F-S4b: as {@link #copy()}, the template's first node granting {@code grant} (the limit published first). */
+    Copy copy(java.math.BigDecimal grant) {
         String writer = mapWriter();
         Map<String, Object> template = run(TreeProcesses.CREATE, writer, body("ownerKind", "PLATFORM",
             "subjectKind", "SPONSOR", "name", name("Sponsor skills")));
-        Map<String, Object> saved = save(writer, template, List.of(
-            node(null, "start", "Getting started", all(passed())),
+        Map<String, Object> start = node(null, "start", "Getting started", all(passed()));
+        if (grant != null) {
+            start.put("grantAmount", grant);
+        }
+        Map<String, Object> saved = save(writer, template, List.of(start,
             node(null, "next", "Running a quiz", all(lit("start", true), passed()))));
+        assertThat((List<?>) saved.get("problems")).as("problems").isEmpty();
         Map<String, String> ids = (Map<String, String>) saved.get("nodeIds");
         decide(mapWriter(), submit(writer, saved).get("approvalRequestId"), "APPROVE", null);
         NewOperator operator = officialOperator("FS4a challenges");

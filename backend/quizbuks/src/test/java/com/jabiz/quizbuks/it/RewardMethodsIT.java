@@ -132,10 +132,11 @@ class RewardMethodsIT extends PlayItSupport {
                 .containsExactly(PublishingCodes.REWARD_ABOVE_MAX);
             rewardParam(QbParams.REWARD_MAX_PER_ATTEMPT, "100");
             assertThat(submit(token, publicationId)).containsEntry("status", "LIVE");
-            // An administrator's own setting replaces the default.
+            // F-S4b (the requester, 2026-11-10): an administrator's own setting adds to the default (it replaced it
+            // before).
             allow(sponsor, RewardMethod.PLATFORM);
             assertThat(rows("qb.sponsor.reward-methods", token, Map.of())).singleElement().satisfies(row ->
-                assertThat(row).containsEntry("methods", "PLATFORM").containsEntry("own", true));
+                assertThat(row).containsEntry("methods", "PLATFORM,OFFLINE_REDEEM").containsEntry("own", true));
         } finally {
             rewardParam(QbParams.REWARD_DEFAULT_METHODS, QbParams.defaultOf(QbParams.REWARD_DEFAULT_METHODS));
             rewardParam(QbParams.REWARD_MAX_PER_ATTEMPT, QbParams.defaultOf(QbParams.REWARD_MAX_PER_ATTEMPT));

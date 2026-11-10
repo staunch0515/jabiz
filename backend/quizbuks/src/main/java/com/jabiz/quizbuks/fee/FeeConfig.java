@@ -320,6 +320,44 @@ public class FeeConfig {
             qbFeeRequestApprovalResult, TransferProcesses::resultInput);
     }
 
+    // ---- F-S4b: the platform fee Kudos lighting a node grants ----------------------------------------------------------
+
+    @Bean
+    ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant() {
+        return LightGrants.grant();
+    }
+
+    @Bean
+    ProcessDefinition<LightGrants.LitRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrantVoid() {
+        return LightGrants.voidGrant();
+    }
+
+    @Bean
+    com.jabiz.event.EventSubscription<FeeCredits.SponsorRef> qbTreeGrantDueSubscription(
+        ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant) {
+        return com.jabiz.event.EventSubscription.of(LightGrants.DUE_CONSUMER, LightGrants.DUE_EVENT, qbTreeLitGrant,
+            event -> new FeeCredits.SponsorRef(String.valueOf(event.payload().get("sponsorId"))));
+    }
+
+    @Bean
+    com.jabiz.event.EventSubscription<LightGrants.LitRef> qbTreeGrantVoidSubscription(
+        ProcessDefinition<LightGrants.LitRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrantVoid) {
+        return com.jabiz.event.EventSubscription.of(LightGrants.VOID_CONSUMER,
+            com.jabiz.quizbuks.tree.TreeRevocations.REVOKED_EVENT, qbTreeLitGrantVoid,
+            event -> new LightGrants.LitRef(String.valueOf(event.payload().get("litId"))));
+    }
+
+    /** What a lighting's event did not grant (it failed, or the switch was off), each Sponsor in a transaction. */
+    @Bean
+    JobDefinition<FeeCredits.SponsorRef> qbTreeGrantRetryJob(
+        ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant) {
+        return JobDefinition.forEach(LightGrants.RETRY_JOB, LightGrants.RETRY_CRON, zone,
+                JobItems.template(LightGrants.DUE_TEMPLATE, "sponsorId"),
+                qbTreeLitGrant,
+                (scheduledTime, row) -> new FeeCredits.SponsorRef(String.valueOf(row.get("sponsorId"))))
+            .maxItems(10_000);
+    }
+
     // ---- F-M2: platform fee Kudos granted -------------------------------------------------------------------------
 
     @Bean

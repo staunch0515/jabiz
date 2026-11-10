@@ -1,12 +1,15 @@
 /*---
 id: qb.system.recon-fee-account
-description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; and by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided (the daily reconciliation; differences only)
-entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction]
+description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them (the daily reconciliation; differences only)
+entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
   QbCashLot: urn:jabiz:dataset:default:QbCashLot
   QbFeePayment: urn:jabiz:dataset:default:QbFeePayment
+  QbTreeLit: urn:jabiz:dataset:default:QbTreeLit
+  QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
+  SysParam: urn:jabiz:dataset:now:SysParam
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
   sponsorId: { kind: { type: text, maxLength: 128 } }
@@ -29,6 +32,10 @@ permissions: [qb.wallet.system]
 --   voided invoice's reversal gives it back) against the parts written for those postings. A payment from before F-M1
 --   has no parts: a posting no part names, of a payment made before the first part was written, is left out, and so is
 --   its reversal (the plan's §4: the parts are checked from F-M1 on).
+-- LIGHT_GRANTS (F-S4b): for a sponsor, the lots of the source LIGHT (fee.LightGrants) against the grants of their lit
+--   records that earned one: each lot names its lit record (lit:<id>) and has its amount; a lit record with a grant that is
+--   not revoked has its lot while the grants' switch qb.fee-credit.grant.enabled is on (off, the job grants it later and
+--   it is not counted); a revoked one only when it was granted before the revocation.
 WITH credit_ledger AS (
     SELECT e.{{LedgerEntry.dimension1}} AS r_party,
            sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
@@ -112,6 +119,26 @@ checked_tx AS (
     WHERE pt.r_tx IS NOT NULL
        OR EXISTS (SELECT 1 FROM parts q WHERE q.r_tx = CAST(f.r_original AS text))
        OR NOT (fp.r_at IS NULL OR o.{{LedgerTransaction.createdTime}} < fp.r_at)
+),
+light_lots AS (
+    SELECT g.{{QbFeeCreditGrant.sponsorId}} AS r_party, sum(g.{{QbFeeCreditGrant.amount}}) AS r_amount
+    FROM {{QbFeeCreditGrant}} g
+    WHERE g.{{QbFeeCreditGrant.source}} = 'LIGHT'
+    GROUP BY g.{{QbFeeCreditGrant.sponsorId}}
+),
+light_lits AS (
+    SELECT l.{{QbTreeLit.subjectId}} AS r_party, sum(l.{{QbTreeLit.grantAmount}}) AS r_amount
+    FROM {{QbTreeLit}} l
+    WHERE l.{{QbTreeLit.subjectKind}} = 'SPONSOR' AND l.{{QbTreeLit.grantAmount}} > 0
+      AND (EXISTS (SELECT 1 FROM {{QbFeeCreditGrant}} g
+                   WHERE g.{{QbFeeCreditGrant.sponsorId}} = l.{{QbTreeLit.subjectId}}
+                     AND g.{{QbFeeCreditGrant.sourceKey}} = 'lit:' || CAST(l.{{QbTreeLit.litId}} AS text))
+           OR (NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} r
+                           WHERE r.{{QbTreeLitRevocation.litId}} = CAST(l.{{QbTreeLit.litId}} AS text))
+               AND EXISTS (SELECT 1 FROM {{SysParam}} p
+                           WHERE p.{{SysParam.paramKey}} = 'qb.fee-credit.grant.enabled'
+                             AND lower(btrim(p.{{SysParam.value}})) = 'true')))
+    GROUP BY l.{{QbTreeLit.subjectId}}
 )
 SELECT CAST('FEE_CREDIT' AS varchar(30)) AS checkCode,
        CAST(coalesce(l.r_party, w.r_party, g.r_party) AS varchar(128)) AS sponsorId,
@@ -139,3 +166,9 @@ SELECT CAST('FEE_PAYMENTS' AS varchar(30)), CAST(k.r_party AS varchar(128)), sum
 FROM checked_tx k
 GROUP BY k.r_party
 HAVING sum(k.r_taken) <> sum(k.r_parts)
+UNION ALL
+SELECT CAST('LIGHT_GRANTS' AS varchar(30)), CAST(coalesce(ll.r_party, lo.r_party) AS varchar(128)),
+       coalesce(ll.r_amount, 0), coalesce(lo.r_amount, 0)
+FROM light_lits ll
+FULL OUTER JOIN light_lots lo ON lo.r_party = ll.r_party
+WHERE coalesce(ll.r_amount, 0) <> coalesce(lo.r_amount, 0)
