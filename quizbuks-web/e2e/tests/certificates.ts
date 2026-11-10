@@ -9,11 +9,13 @@ import { expect, run, runJobNow } from './support'
 type Row = Record<string, unknown>
 
 /**
- * The caller's certificates once there is one: the lighting's event issues it, and the daily job (run now when the event
- * is slow) is what makes sure of it.
+ * The caller's certificates once there is one (one that names `named`, when given): the lighting's event issues it,
+ * and the daily job (run now when the event is slow) is what makes sure of it.
  */
-export async function certificatesOf(request: APIRequestContext, token: string, process: string): Promise<Row[]> {
-  const list = async () => (await run(request, token, process, {})).certificates as Row[]
+export async function certificatesOf(request: APIRequestContext, token: string, process: string,
+  named?: string): Promise<Row[]> {
+  const list = async () => ((await run(request, token, process, {})).certificates as Row[])
+    .filter((row) => named === undefined || JSON.stringify(row).includes(named))
   try {
     await expect.poll(async () => (await list()).length, { message: 'the certificate is issued', timeout: 30_000 })
       .toBeGreaterThan(0)
