@@ -99,7 +99,8 @@ class SetupIT extends QbItSupport {
                     .containsEntry("right_permissions", "control.publish,approval.decide")
                     .containsEntry("enabled", true));
         assertThat(query("SELECT rule_code, subject, enabled, priority, condition, levels "
-            + "FROM sys_approval_rule_version ORDER BY rule_code"))
+            // In code-point order, whatever the database's collation ("qb.sponsor-…" before "qb.sponsor.…").
+            + "FROM sys_approval_rule_version ORDER BY rule_code COLLATE \"C\""))
             .satisfiesExactly(
                 // Q87b: a fee by hand or an invoice voided takes another administrator's approval.
                 rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.fee.QbFees.REVIEW_RULE)
