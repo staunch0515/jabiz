@@ -59,6 +59,8 @@ public final class QbRoles {
         QbPermissions.TREE_EDIT, QbPermissions.TREE_PLATFORM_WRITE, QbPermissions.TREES_READ,
         // F-S2b2: revoking a lit node of any graph, and approving another administrator's request.
         QbPermissions.TREE_LIT_REVOKE,
+        // F-S3: support's recorded read of one person's lighting on a graph.
+        QbPermissions.TREE_STATE_READ,
         // Platform 16y: closing by hand, with a note, a task no process will close (never an approval's).
         "task.resolve",
         // Q13a: the second person on a bank top-up finance recorded.
@@ -123,6 +125,8 @@ public final class QbRoles {
         QbPermissions.TREE_EDIT, QbPermissions.REVIEW_TREE,
         // F-S2b2: revoking a lit node of its Sponsors' graphs and its copies, and approving another member's request.
         QbPermissions.TREE_LIT_REVOKE,
+        // F-S3: support's recorded read of a person's lighting on its Sponsors' graphs and the platform's.
+        QbPermissions.TREE_STATE_READ,
         // F-S12: its own sponsors' shared videos (reviewing them is REVIEW_PUBLICATION's) and taking them down.
         QbPermissions.ADMIN_SHARED_VIDEO_READ, QbPermissions.ADMIN_SHARED_VIDEO_WRITE,
         // F-S13: the suspicious inflation of exposures on its own sponsors' publications (not the reconciliation's task).

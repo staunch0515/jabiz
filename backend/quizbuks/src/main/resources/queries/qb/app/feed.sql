@@ -32,6 +32,7 @@ params:
   mainlandChina: { kind: { type: bool }, description: "F-S11: whether the caller's address is in mainland China, as GET /api/client/region said; publications with a foreign video and no exception are then not for them" }
   shorts:  { kind: { type: bool }, description: "F-S10: if true, only the publications whose video is vertical (QbPublicationCard.videoVertical), for the home's shelf of shorts and its full-screen vertical mode; the same conditions as the feed otherwise" }
   push:    { kind: { type: bool }, description: "F-S13: if true, only the pushes of the vertical mode: publications whose vertical video is another's shared video (its provider is not its publisher) that the caller never opened; the same conditions as the feed otherwise (blocks, strict mode, region)" }
+  tree:    { kind: { type: text, maxLength: 36 }, description: "F-S3: only publications bound to a node of this knowledge graph (QbPublicationCard.treeId): what the caller can start now to light its nodes, under every other condition of the feed" }
   languages: { kind: { type: text, maxLength: 20 }, description: "Only publications offering one of these languages (Q59a, Q73b), comma-separated in the taker's order (ja, zh, en): their switches, or their interface language; each shown in the first of them it offers; all when not given" }
 results:
   publicationId:  { from: QbPublicationCard.publicationId }
@@ -73,6 +74,8 @@ results:
   pickCount:      { from: QbPublicationCard.pickCount }
   entryFee:       { from: QbPublicationCard.entryFee }
   fullScore:      { from: QbPublicationCard.fullScore }
+  treeId:         { from: QbPublicationCard.treeId }
+  treeNodeId:     { from: QbPublicationCard.treeNodeId }
   myAttemptId:    { from: QbAttempt.attemptId }
   myStatus:       { from: QbAttempt.status }
   myDeadline:     { from: QbAttempt.deadline }
@@ -108,6 +111,9 @@ SELECT
     -- Q75: whether that video must be watched before starting, and how long it is.
     c.{{QbPublicationCard.watchRequired}}  AS watchRequired,
     c.{{QbPublicationCard.videoDurationSec}} AS videoDurationSec,
+    -- F-S3: the knowledge graph's node the publication is bound to (the graph page links "can answer" to it).
+    c.{{QbPublicationCard.treeId}}         AS treeId,
+    c.{{QbPublicationCard.treeNodeId}}     AS treeNodeId,
     -- F-S10: whether that video is vertical, and where the home puts its shelves of shorts and how many each shows
     -- (the uncontrolled parameters qb.feed.shorts.positions and .per-shelf; none before the setup made them: the App
     -- then takes the setup's values).
@@ -220,6 +226,9 @@ WHERE c.{{QbPublicationCard.status}} = 'LIVE'
                            WHERE ex.{{QbExposure.publicationId}} = CAST(c.{{QbPublicationCard.publicationId}} AS text)
                              AND ex.{{QbExposure.openedAt}} IS NOT NULL)))
   AND (CAST(:method AS text) IS NULL OR c.{{QbPublicationCard.rewardMethod}} = CAST(:method AS text))
+  -- F-S3: the graph page asks for the publications bound to one graph's nodes, under every other condition of the feed
+  -- (tree.TreeNodeStates: a node with a row here is CAN_ANSWER for the caller).
+  AND (CAST(:tree AS text) IS NULL OR c.{{QbPublicationCard.treeId}} = CAST(:tree AS text))
   -- Q59a: publications of different languages are not listed together; the client says which the taker sees. Q73b:
   -- one offering several is listed when it offers one of them, once, in the first of them it offers.
   AND (CAST(:languages AS text) IS NULL
