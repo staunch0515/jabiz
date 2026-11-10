@@ -46,6 +46,8 @@ export interface KnowledgeMapProps {
   unlitCounts?: ReadonlyMap<string, UnlitCount>
   /** The view first shown. */
   initialView?: 'graph' | 'list'
+  /** F-S4c: per node, the granted credit lighting it gives (a map Sponsors light), as the page formats it. */
+  grants?: ReadonlyMap<string, string>
 }
 
 const CARD_W = 208
@@ -65,7 +67,7 @@ const STATE_BADGE: Record<NodeState, 'default' | 'secondary' | 'outline'> = {
   LIT: 'default', CAN_ANSWER: 'secondary', WAITING: 'outline', MISSING: 'outline', LOCKED: 'outline',
 }
 
-export function KnowledgeMap({ graph, states, startable, publicationLink, litCounts, unlitCounts,
+export function KnowledgeMap({ graph, states, startable, publicationLink, litCounts, unlitCounts, grants,
   initialView = 'graph' }:
   KnowledgeMapProps) {
   const { t, i18n } = useTranslation(QB)
@@ -112,7 +114,7 @@ export function KnowledgeMap({ graph, states, startable, publicationLink, litCou
         <NodeDetails node={nodes.get(selected)!} state={states?.get(selected)}
           startable={startable?.get(selected) ?? []} publicationLink={publicationLink}
           litCount={litCounts?.has(selected) ? litCounts.get(selected) : undefined}
-          unlitCount={unlitCounts?.get(selected)}
+          unlitCount={unlitCounts?.get(selected)} grant={grants?.get(selected)}
           nodeName={(id) => name(nodes.get(id)?.name)} />
       )}
     </section>
@@ -253,8 +255,9 @@ function ListView({ placement, nodes, states, selected, onSelect, nodeName }:
 }
 
 /** One node: what it is to the person, what lighting it gives, its condition marked, and what can be answered. */
-function NodeDetails({ node, state, startable, publicationLink, litCount, unlitCount, nodeName }: {
+function NodeDetails({ node, state, startable, publicationLink, litCount, unlitCount, grant, nodeName }: {
   node: GraphNode
+  grant?: string
   state?: NodeState
   startable: Startable[]
   publicationLink?: (publication: Startable) => ReactNode
@@ -298,10 +301,11 @@ function NodeDetails({ node, state, startable, publicationLink, litCount, unlitC
       )}
       <div className="text-sm">
         <span className="font-medium">{t('tree.gives')}</span>
-        {description || gates.length > 0 ? (
+        {description || gates.length > 0 || grant ? (
           <div data-testid="knowledge-map-gives">
             {description && <p className="whitespace-pre-line">{description}</p>}
             {gates.map((key) => <p key={key}>{t(`tree.gates.${key}`)}</p>)}
+            {grant && <p data-testid="knowledge-map-grant">{t('tree.grant', { amount: grant })}</p>}
           </div>
         ) : <p className="text-muted-foreground">{t('tree.noGives')}</p>}
       </div>

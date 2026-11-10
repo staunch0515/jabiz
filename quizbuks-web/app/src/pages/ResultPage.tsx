@@ -1,4 +1,4 @@
-import { questionProducts, type PublicationProduct } from '../qb/products'
+import { questionProducts } from '../qb/products'
 import { PassButton } from '../pass/PassDialog'
 import { readPublicationProducts } from '../share/api'
 import { countProductClick } from '../share/counting'
@@ -22,10 +22,9 @@ import {
   notify,
   PageState,
   Textarea,
-  cn,
 } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Banknote, CircleCheck, CircleX, Clock, Copy, ExternalLink, Gift, Hourglass, ListChecks, Ticket, Trophy }
+import { Banknote, CircleCheck, Clock, Copy, ExternalLink, Gift, Hourglass, ListChecks, Ticket, Trophy }
   from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -39,11 +38,11 @@ import { SoundOnce } from '../qb/SoundSettings'
 import { playSound, type SoundCue } from '../qb/sound'
 import { QB } from '../qb/messages'
 import { confirmCashReward, confirmDigitalPrize, disputeCashReward, disputeDigitalPrize, openDigitalPrize,
-  readAttemptResult, readPublication, type AttemptResult, type CashView, type DigitalView, type QuestionResult, type QuestionView,
+  readAttemptResult, readPublication, type AttemptResult, type CashView, type DigitalView, type QuestionResult,
   type RedeemView, type RewardStatus, type StartOutput, type SubmitOutput } from '../qb/play'
 import { problemText } from '../qb/problems'
 import { Link, Redirect } from '../qb/router'
-import { letter } from './PlayPage'
+import { QuestionRow, SurveyRow } from '../qb/answer/QuestionReview'
 
 /** How often the page asks again while the server finishes an attempt whose time ran out. */
 export const FINISHING_POLL_MS = 5_000
@@ -94,72 +93,6 @@ export function prizeLink(content: string): string | null {
   } catch {
     return null
   }
-}
-
-/** The texts of a question's options, in the order they were shown (letters), for the chosen numbers. */
-function optionTexts(question: QuestionView | undefined, numbers: number[]): string[] {
-  if (!question) return []
-  return question.options
-    .map((option, i) => ({ option, label: letter(i) }))
-    .filter(({ option }) => numbers.includes(option.no))
-    .map(({ option, label }) => (option.text ? `${label}. ${option.text}` : label))
-}
-
-/** A survey's question (Q12): what was chosen, never right or wrong. */
-function SurveyRow({ result, question, index, product }: { result: QuestionResult; question?: QuestionView; index: number;
-  product?: PublicationProduct }) {
-  const { t } = useTranslation(APP)
-  const mine = optionTexts(question, result.selected)
-  return (
-    <li className="flex flex-col gap-1 rounded-lg border p-3" data-testid="result-question">
-      <p className="font-medium">{t('result.question', { n: index + 1 })}</p>
-      {question?.stem && <p className="text-sm">{question.stem}</p>}
-      {question && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-          <dt className="text-muted-foreground">{t('result.yourAnswer')}</dt>
-          <dd data-testid="result-mine">{mine.length > 0 ? mine.join(', ') : t('result.noAnswer')}</dd>
-        </dl>
-      )}
-      {product && <ProductCards products={[product]} testId="result-product" onOpen={countProductClick} />}
-    </li>
-  )
-}
-
-function QuestionRow({ result, question, index, product }: { result: QuestionResult; question?: QuestionView;
-  index: number; product?: PublicationProduct }) {
-  const { t } = useTranslation(APP)
-  // Scoring's rule: right when the options chosen are exactly the correct ones.
-  const right = result.correct.length > 0 && [...result.selected].sort().join() === [...result.correct].sort().join()
-  const Icon = right ? CircleCheck : CircleX
-  const mine = optionTexts(question, result.selected)
-  const correct = optionTexts(question, result.correct)
-  return (
-    <li className="flex flex-col gap-1 rounded-lg border p-3" data-testid="result-question"
-      data-correct={right ? 'true' : 'false'}>
-      <p className="flex items-center gap-2 font-medium">
-        <Icon aria-hidden className={cn('size-5 shrink-0', right ? 'text-success' : 'text-destructive')} />
-        <span className="flex-1">{t('result.question', { n: index + 1 })}</span>
-        <span className="text-sm">{right ? t('result.right') : t('result.wrong')}</span>
-      </p>
-      {question?.stem && <p className="text-sm">{question.stem}</p>}
-      {question && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-          <dt className="text-muted-foreground">{t('result.yourAnswer')}</dt>
-          <dd data-testid="result-mine">{mine.length > 0 ? mine.join(', ') : t('result.noAnswer')}</dd>
-          {/* Q65: the right answer only where it differs from the taker's. */}
-          {!right && (
-            <>
-              <dt className="text-muted-foreground">{t('result.correctAnswer')}</dt>
-              <dd data-testid="result-correct">{correct.join(', ')}</dd>
-            </>
-          )}
-        </dl>
-      )}
-      <p className="text-muted-foreground text-xs">{t('result.earned', { earned: result.earned, points: result.points })}</p>
-      {/* Q60b: the sponsor's product for this question, after its answer is shown. */}
-      {product && <ProductCards products={[product]} testId="result-product" onOpen={countProductClick} />}
-    </li>
-  )
 }
 
 /** The taker says what is wrong with the cash reward (Q22); an administrator decides. */
@@ -635,11 +568,15 @@ export function ResultPage({ attemptId }: { attemptId: string }) {
             {survey ? t('result.surveyAnswers') : t('result.questions')}
           </h2>
           <ol className="flex flex-col gap-2">
-            {outcome.questions.map((result, i) => survey
-              ? <SurveyRow key={result.no} result={result} question={byNo.get(result.no)} index={i}
-                product={productOf.get(result.no)} />
-              : <QuestionRow key={result.no} result={result} question={byNo.get(result.no)} index={i}
-                product={productOf.get(result.no)} />)}
+            {outcome.questions.map((result, i) => {
+              // Q60b: the Sponsor's product for this question, after its answer is shown.
+              const product = productOf.get(result.no)
+              const extra = product
+                ? <ProductCards products={[product]} testId="result-product" onOpen={countProductClick} /> : undefined
+              return survey
+                ? <SurveyRow key={result.no} result={result} question={byNo.get(result.no)} index={i} extra={extra} />
+                : <QuestionRow key={result.no} result={result} question={byNo.get(result.no)} index={i} extra={extra} />
+            })}
           </ol>
         </section>
       )}
