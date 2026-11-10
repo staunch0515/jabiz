@@ -5,7 +5,7 @@
 
 - 对象：发起方（FAQ 的 `audience` = `SPONSOR`）
 - 分类：`PUBLISHING`
-- 页面：发起方资料的"概况"页（`/sponsor/profile`）的"发起方包"卡片；发布列表的"提交全部草稿"
+- 页面：发起方资料的"概况"页（`/sponsor/profile`）页头的"导入与导出"菜单；发布列表的"提交全部草稿"
 - 参数（写进文案的是缺省值，改了参数时同步改这里）：超过 100 MB 的导出先确认（`qb.package.confirm-bytes`）；导入记录保留 90 天（`qb.package.import-retention-days`）
 
 ## 帮助页
@@ -14,7 +14,7 @@
 
 **是什么**：发起方包是一个文件，里面有你的资料（基本信息、主页、商品、邮件服务器的设置，不含密码）、全部 Quiz（连同正在用的发布所用的版本）、没有结束的发布的设置，以及你的知识结构图。用它可以把内容导入另一个账户或另一个环境。只带内容与设置：不带审核结果、答题与奖励的记录、钱包与交易、店员、码与邀请名单，也不带资源库。
 
-**导出**：在"概况"页的"发起方包"点"导出发起方包"。文件超过 100 MB 时会先问你是否保存。
+**导出**：在"概况"页头点"导入与导出"，选"发起方包"下的"导出发起方包"。文件超过 100 MB 时会先问你是否保存。
 
 **导入**：点"导入发起方包"并选择文件。页面先检查整个包，一次列出全部问题与将要生成的内容（知识结构图、Quiz 与版本、发布草稿）；有问题时先解决再导入。确认之前什么也不写入。
 - 从未提交过发布的账户可以导入整个包；已有的 Quiz 草稿不影响，标题相同的会标出来（导入的另外新建）。
@@ -32,7 +32,7 @@
 
 **とは**：主催者パッケージは 1 つのファイルで、プロフィール（基本情報、ページ、商品、メールサーバーの設定。パスワードは含みません）、すべてのクイズ（使用中の公開が使っているバージョンを含む）、終了していない公開の設定、知識マップが入っています。別のアカウントや別の環境に内容をインポートできます。内容と設定だけを持ち運び、審査結果、回答と報酬の記録、ウォレットと取引、スタッフ、コードと招待リスト、リソースライブラリは含みません。
 
-**エクスポート**：「概要」ページの「主催者パッケージ」で「主催者パッケージをエクスポート」を押します。ファイルが 100 MB を超えるときは、保存の前に確認があります。
+**エクスポート**：「概要」ページ上部の「インポートとエクスポート」から「主催者パッケージ」の「主催者パッケージをエクスポート」を押します。ファイルが 100 MB を超えるときは、保存の前に確認があります。
 
 **インポート**：「主催者パッケージをインポート」を押してファイルを選びます。まずパッケージ全体を確認し、すべての問題と作成するもの（知識マップ、クイズとバージョン、公開の下書き）を一覧で表示します。問題があるときは先に解決してください。確定するまで何も書き込みません。
 - 公開を申請したことのないアカウントはパッケージ全体をインポートできます。既存のクイズの下書きは影響しません。同じタイトルのものは表示されます（インポートでは別に新しく作成します）。
@@ -50,7 +50,7 @@
 
 **What it is**: a sponsor package is one file holding your profile (basics, page, products and the mail server's settings, without its password), all your quizzes (with the versions your running publications use), the settings of your publications not ended, and your knowledge maps. With it you bring the content into another account or environment. Only content and settings travel: no review results, no records of answers or rewards, no wallet or transactions, no staff, codes or invitation lists, and not your asset library.
 
-**Exporting**: on the "Overview" page, in "Sponsor package", choose "Export sponsor package". A file over 100 MB asks before it is saved.
+**Exporting**: on the "Overview" page, open "Import and export" in its head and under "Sponsor package" choose "Export sponsor package". A file over 100 MB asks before it is saved.
 
 **Importing**: choose "Import sponsor package" and pick the file. The page first checks the whole package and lists every problem and what it will make (knowledge maps, quizzes and versions, publication drafts); fix the problems first. Nothing is written before you confirm.
 - An account that never submitted a publication imports the whole package. Quiz drafts you have do not matter; those with the same title are pointed out (the import adds new ones).

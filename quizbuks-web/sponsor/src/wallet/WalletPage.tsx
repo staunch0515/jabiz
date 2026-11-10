@@ -64,6 +64,7 @@ import {
 } from './api'
 import './messages'
 import { AreaPageHeader } from '../shell/AreaPageHeader'
+import { mainAction } from '../shell/mainAction'
 import { useShellState } from '../shell/context'
 import { AiUsageMetric } from '../ai/AiUsageMetric'
 import { useDashboard } from '../analytics/hooks'
@@ -417,12 +418,8 @@ export function WalletPage() {
   return (
     <section className="flex flex-col gap-6" data-testid="wallet">
       <AreaPageHeader title={t('wallet.title')} description={t('wallet.intro')}
-        actions={
-          <Button onClick={() => setTopping(true)} data-testid="topup-open">
-            <Plus aria-hidden />
-            {t('wallet.topUp')}
-          </Button>
-        } />
+        primaryAction={mainAction({ label: t('wallet.topUp'), icon: Plus, testId: 'topup-open',
+          onClick: () => setTopping(true) })} />
       {wallet.isPending ? (
         <PageState kind="loading" />
       ) : wallet.isError || !data ? (
@@ -613,12 +610,9 @@ export function FeeAccountPage() {
   return (
     <section className="flex flex-col gap-6" data-testid="fee-account">
       <AreaPageHeader title={t('shell.account.title')} description={t('shell.account.intro')}
-        actions={settings.data?.targets.includes('CASH') && (
-          <Button onClick={() => setTopping(true)} data-testid="fee-account-topup">
-            <Plus aria-hidden />
-            {t('shell.account.topUp')}
-          </Button>
-        )} />
+        primaryAction={settings.data?.targets.includes('CASH')
+          ? mainAction({ label: t('shell.account.topUp'), icon: Plus, testId: 'fee-account-topup',
+            onClick: () => setTopping(true) }) : undefined} />
       {!data ? <WalletState wallet={wallet} />
         : cash ? <CashAccount wallet={data} />
           : settings.data && <PageState kind="empty" description={t('wallet.cash.none')} />}

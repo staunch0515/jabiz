@@ -66,6 +66,7 @@ import { ASSET_LIMITS } from './ids'
 import './messages'
 import { UsageCard } from './UsageCard'
 import { AreaPageHeader } from '../shell/AreaPageHeader'
+import { mainAction, type HostedAdd } from '../shell/mainAction'
 import { ASSET_STATS_QUERY, formatBytes, readAssetStats, sizeOf, USAGE_QUERY } from './usage'
 
 const ALL = '*'
@@ -101,6 +102,8 @@ export function AssetsPage({ tab, adding = false }: { tab: AssetTab; adding?: bo
   const kindLabel = useAssetKindLabel()
   const assets = useQuery({ queryKey: ASSETS_QUERY, queryFn: readMyAssets, enabled: isAssetTab(tab) })
   const [search, setSearch] = useState('')
+  // The products tab hands up its "Add" for this head (F-F3d).
+  const [productAdd, setProductAdd] = useState<HostedAdd | null>(null)
   const [kind, setKind] = useState<string>(ALL)
   const [tag, setTag] = useState<string>(ALL)
   const [unusedOnly, setUnusedOnly] = useState(false)
@@ -204,16 +207,17 @@ export function AssetsPage({ tab, adding = false }: { tab: AssetTab; adding?: bo
   return (
     <section className="flex flex-col gap-4" data-testid="assets-page">
       <AreaPageHeader title={t('assets.title')} description={t('assets.intro')}
-        actions={isAssetTab(tab) && <span className="flex flex-wrap gap-2">
+        primaryAction={isAssetTab(tab) ? mainAction({ label: t('assets.add'), icon: Plus, testId: 'asset-add',
+          onClick: () => setEditing('new') })
+          : tab === 'products' && productAdd ? mainAction({ label: t('products.add'), icon: Plus, testId: 'product-add',
+            onClick: productAdd.open, disabled: productAdd.disabled }) : undefined}
+        actions={isAssetTab(tab) && (
           <Button variant="outline" data-testid="asset-collect" onClick={() => setCollecting(true)}>
             <FolderInput aria-hidden />{t('assets.collect')}
           </Button>
-          <Button data-testid="asset-add" onClick={() => setEditing('new')}>
-            <Plus aria-hidden />{t('assets.add')}
-          </Button>
-        </span>} />
+        )} />
       <UsageCard onShowUnused={showUnused} />
-      {tab === 'products' && <ProductsPage />}
+      {tab === 'products' && <ProductsPage onAdd={setProductAdd} />}
       {isAssetTab(tab) && <div className="flex flex-col gap-4" data-testid={`assets-tab-content-${tab}`}>
           <div className="flex flex-wrap items-end gap-3" role="search" aria-label={t('assets.search')}>
             <div className="flex flex-col gap-1">

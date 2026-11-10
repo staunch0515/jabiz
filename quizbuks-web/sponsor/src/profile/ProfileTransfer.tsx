@@ -1,8 +1,8 @@
-import { Alert, AlertDescription, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Dialog,
+import { Alert, AlertDescription, Button, Checkbox, Dialog,
   DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, notify } from '@jabiz/ui'
 import { useQueryClient } from '@tanstack/react-query'
-import { Copy, Download, Sparkles, Upload } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { Copy } from 'lucide-react'
+import { useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { reasonsOf } from '../content/QuizTransfer'
 import { download, readJsonFile } from '../content/transfer'
@@ -33,12 +33,25 @@ type ImportState =
   | { kind: 'refused'; problems: string[] }
   | { kind: 'failed'; problems: string[] }
 
+/** What the menu in the overview's head does with the profile package (F-F3d). */
+export interface ProfileTransferControls {
+  exportNow: () => void
+  /** Opens the file choice: browsers allow it only within the click itself, so this clicks the input. */
+  pickFile: () => void
+  openPrompt: () => void
+}
+
 /**
  * The profile package (Q100a, docs/quizbuks/plans/Q100-profile-package.md): exports the hub's pages as one file with
  * their images and the mail server's settings (never its password), and imports such a file after showing what it
  * does. The plan is the server's; an import never changes a review (D-Q100-3).
  */
-export function ProfileTransferCard() {
+export function ProfileTransfer({ controls, onExporting }: {
+  /** The page head's "Import and export" menu (F-F3d) starts each of the three through this; the dialogs stay here. */
+  controls?: Ref<ProfileTransferControls>
+  /** Whether an export is running, for the menu's item. */
+  onExporting?: (exporting: boolean) => void
+}) {
   const { t, i18n } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
   const input = useRef<HTMLInputElement>(null)
@@ -57,6 +70,7 @@ export function ProfileTransferCard() {
   const replacement = useRef<HTMLInputElement>(null)
   const [replacing, setReplacing] = useState<LinkNeed | null>(null)
   const setLink = (path: string, next: LinkState) => setLinkStates((all) => ({ ...all, [path]: next }))
+  useEffect(() => onExporting?.(exporting), [exporting, onExporting])
 
   const exportNow = async () => {
     setExporting(true)
@@ -74,6 +88,12 @@ export function ProfileTransferCard() {
       setExporting(false)
     }
   }
+
+  useImperativeHandle(controls, () => ({
+    exportNow: () => void exportNow(),
+    pickFile: () => input.current?.click(),
+    openPrompt: () => setPrompting(true),
+  }))
 
   // F-C5: the problems as they are, for the AI tool that wrote the file (alone, or in the fixing prompt).
   const copyProblems = async (problems: string[], withPrompt: boolean) => {
@@ -161,32 +181,13 @@ export function ProfileTransferCard() {
   const refused = (plan?.links ?? []).filter((link) => linkStates[link.path]?.kind === 'failed')
   const downloading = (plan?.links ?? []).some((link) => linkStates[link.path]?.kind === 'loading')
   return (
-    <Card data-testid="profile-transfer">
-      <CardHeader>
-        <CardTitle>{t('profile.transfer.title')}</CardTitle>
-        <CardDescription>{t('profile.transfer.hint')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={exporting} aria-busy={exporting || undefined}
-          data-testid="profile-export" onClick={() => void exportNow()}>
-          <Download aria-hidden />
-          {exporting ? t('profile.transfer.exporting') : t('profile.transfer.export')}
-        </Button>
-        <input ref={input} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden
-          data-testid="profile-import-file" onChange={(event) => {
-            const file = event.target.files?.[0]
-            event.target.value = ''
-            if (file) void chosen(file)
-          }} />
-        <Button variant="outline" data-testid="profile-import" onClick={() => input.current?.click()}>
-          <Upload aria-hidden />
-          {t('profile.transfer.import')}
-        </Button>
-        <Button variant="outline" data-testid="profile-prompt" onClick={() => setPrompting(true)}>
-          <Sparkles aria-hidden />
-          {t('profile.transfer.prompt.open')}
-        </Button>
-      </CardContent>
+    <>
+      <input ref={input} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden
+        data-testid="profile-import-file" onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          if (file) void chosen(file)
+        }} />
       <AiPromptDialog open={prompting} onClose={() => setPrompting(false)} />
       <Dialog open={state !== null} onOpenChange={(open) => {
         if (!open && !busy) setState(null)
@@ -340,6 +341,6 @@ export function ProfileTransferCard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </>
   )
 }

@@ -1,11 +1,21 @@
 import { PageTabs } from '@jabiz/ui'
+import { UserPlus } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { AreaPageHeader } from '../shell/AreaPageHeader'
 import { spaLink } from '../shell/links'
+import { mainAction } from '../shell/mainAction'
 import { STATS_PATH } from '../shell/paths'
 import { profilePath, type ProfileSection } from './paths'
+import { TransferMenu, TransferTools } from './TransferMenu'
+
+/** The staff page's main button takes the sponsor to the field that names a new staff member (Q39). */
+function focusStaffId() {
+  const field = document.querySelector<HTMLInputElement>('[data-testid="staff-id"]')
+  field?.scrollIntoView({ block: 'center' })
+  field?.focus()
+}
 
 /** The message key of a section (the hyphen is no key character). */
 export const sectionKey = (section: ProfileSection) => section === 'mail-server' ? 'mailServer' : section
@@ -16,13 +26,18 @@ export const sectionKey = (section: ProfileSection) => section === 'mail-server'
  */
 export function ProfileLayout({ section, children }: { section: ProfileSection; children: ReactNode }) {
   const { t } = useTranslation(SPONSOR)
-  return (
+  const frame = (
     <div className="flex flex-col gap-4" data-testid="profile" data-section={section}>
       <AreaPageHeader title={t(`profile.nav.${sectionKey(section)}`)}
-        description={t(`profile.navHint.${sectionKey(section)}`)} />
+        description={t(`profile.navHint.${sectionKey(section)}`)}
+        primaryAction={section === 'staff' ? mainAction({ label: t('publishing.staff.addTitle'), icon: UserPlus,
+          testId: 'staff-add-open', onClick: focusStaffId }) : undefined}
+        actions={section === 'overview' ? <TransferMenu /> : undefined} />
       <div className="flex min-w-0 flex-col gap-6" data-testid="profile-content">{children}</div>
     </div>
   )
+  // F-F3d: the overview's head has "Import and export" (the profile package, the sponsor package).
+  return section === 'overview' ? <TransferTools>{frame}</TransferTools> : frame
 }
 
 /**
