@@ -367,10 +367,12 @@ function CollectDialog({ onClose, onCollected }: { onClose: () => void; onCollec
   const collect = useMutation({
     mutationFn: () => collectAssets(list.filter((c) => chosen.has(c.candidateKey)),
       (candidate: Candidate) => targetLabel(candidate.sourceKind)),
-    onSuccess: async (output) => {
+    // The refresh is not awaited: the mutation would stay pending while the library is read again, and a dialog
+    // that already says what was added would ignore Escape and Close until then.
+    onSuccess: (output) => {
       setDone(output)
       setChosen(new Set())
-      await onCollected()
+      void onCollected()
     },
   })
   const all = list.length > 0 && chosen.size === list.length
