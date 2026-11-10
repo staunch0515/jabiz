@@ -246,6 +246,11 @@ public final class PublicationLifecycle {
             publication.get("treeNodeId") != null).forEach(ctx::reject);
         PublicationNodes.problems(ctx, publication.get("publisherId"), (String) publication.get("treeId"),
             (String) publication.get("treeNodeId")).forEach(ctx::reject);
+        // F-S4a: a challenge pays nothing and has none of the extras.
+        if (Boolean.TRUE.equals(publication.get("forSponsors"))) {
+            PublicationChallenges.problems(publication.attributes(),
+                PublicationEditing.tiersOf(list(ctx, TIERS))).forEach(ctx::reject);
+        }
         PublicationReadiness.pool(PublicationEditing.draftOf(publication), list(ctx, POOL).size())
             .forEach(ctx::reject);
         PublicationEditing.sponsorProblems(ctx).forEach(ctx::reject);

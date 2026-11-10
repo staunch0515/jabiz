@@ -198,6 +198,8 @@ LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCa
 WHERE c.{{QbPublicationCard.status}} = 'LIVE'
   -- S0 (D-S0-4): the App lists the sponsors' publications; a shop's (S2) are answered in its storefront.
   AND c.{{QbPublicationCard.publisherKind}} = 'SPONSOR'
+  -- F-S4a: a challenge is answered by the operator's Sponsors in the Sponsor app, never by Takers.
+  AND NOT c.{{QbPublicationCard.forSponsors}}
   -- Q25: an invited publication is reached from its mail only, never listed.
   AND c.{{QbPublicationCard.audience}} = 'PUBLIC'
   AND c.{{QbPublicationCard.startAt}} <= :at AND :at < c.{{QbPublicationCard.endAt}}

@@ -23,8 +23,10 @@ import java.util.function.Function;
  * statement (none for a publication bound to no node), and report the same problems; the card freezes the binding.
  *
  * <p>A publication may be bound to a node in effect whose condition asks for a pass, of the publisher's own graph,
- * or, for an operator's direct Sponsor (the operator's official publisher, F-S1), of a platform graph Takers light.
- * The graphs Sponsors light cannot be bound before Sponsors answer in the Sponsor app (F-S4).
+ * or, for an operator's direct Sponsor (the operator's official publisher, F-S1), of a platform graph Takers light or
+ * (F-S4a, docs/quizbuks/plans/impl/F-S4.md §2) of the operator's own copy, which Sponsors light: such a publication is a
+ * challenge the operator's Sponsors answer in the Sponsor app ({@link #forSponsors}). A platform template Sponsors light
+ * is answered only through an operator's copy (the controller, 2026-11-10).
  */
 public final class PublicationNodes {
 
@@ -83,14 +85,14 @@ public final class PublicationNodes {
         List<Violation> problems = new ArrayList<>();
         Map<String, Object> params = Map.of("treeId", treeId, "treeNodeId", nodeId);
         if (node == null || tree == null || !Boolean.TRUE.equals(node.get("active"))
-            || !QbTrees.ACTIVE.equals(tree.get("status")) || !mayBind(tree, publisherId, first(ctx, DIRECT) != null)) {
+            || !QbTrees.ACTIVE.equals(tree.get("status")) || !mayBind(tree, publisherId, first(ctx, DIRECT))) {
             problems.add(new Violation("treeNodeId", PublishingCodes.NODE_UNKNOWN, "No node in effect of a "
                 + "knowledge graph this publication may be bound to", params));
             return problems;
         }
-        if (QbTrees.SPONSOR.equals(tree.get("subjectKind"))) {
-            problems.add(new Violation("treeNodeId", PublishingCodes.NODE_SPONSOR_LIT, "Sponsors light this graph's "
-                + "nodes, which they cannot answer yet", params));
+        if (QbTrees.PLATFORM.equals(tree.get("ownerKind")) && QbTrees.SPONSOR.equals(tree.get("subjectKind"))) {
+            problems.add(new Violation("treeNodeId", PublishingCodes.NODE_SPONSOR_LIT, "Sponsors answer this "
+                + "template's nodes through their operator's copy", params));
         } else if (!Boolean.TRUE.equals(node.get("bindable"))) {
             problems.add(new Violation("treeNodeId", PublishingCodes.NODE_NOT_BINDABLE, "The node's condition asks "
                 + "for no pass of a publication", params));
@@ -98,13 +100,29 @@ public final class PublicationNodes {
         return problems;
     }
 
-    /** The publisher's own graph, or a platform graph (an operator's direct Sponsor's). */
-    private static boolean mayBind(EntityInstance tree, Object publisherId, boolean directSponsor) {
+    /**
+     * The publisher's own graph, or (an operator's direct Sponsor's) a platform graph or the operator's own copy.
+     * {@code direct} is the operator whose direct Sponsor the caller is, null when none.
+     */
+    private static boolean mayBind(EntityInstance tree, Object publisherId, EntityInstance direct) {
         Object kind = tree.get("ownerKind");
         if (QbTrees.SPONSOR.equals(kind)) {
             return Objects.equals(String.valueOf((Object) tree.get("ownerId")), String.valueOf(publisherId));
         }
-        return QbTrees.PLATFORM.equals(kind) && directSponsor;
+        if (direct == null) {
+            return false;
+        }
+        return QbTrees.PLATFORM.equals(kind) || QbTrees.OPERATOR.equals(kind)
+            && Objects.equals(String.valueOf((Object) tree.get("ownerId")), String.valueOf(direct.id()));
+    }
+
+    /**
+     * F-S4a: whether the publication's node, as {@link #load} read it, is of a map Sponsors light: a challenge for the
+     * operator's Sponsors, not for Takers. False when bound to none (or to a node not found: its problems say so).
+     */
+    static boolean forSponsors(ProcessContext ctx) {
+        EntityInstance tree = first(ctx, TREE);
+        return tree != null && QbTrees.SPONSOR.equals(tree.get("subjectKind"));
     }
 
     @SuppressWarnings("unchecked")

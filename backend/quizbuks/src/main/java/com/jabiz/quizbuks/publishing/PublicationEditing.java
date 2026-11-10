@@ -659,6 +659,8 @@ final class PublicationEditing {
             "exposurePurchased")) {
             card.put(field, publication.get(field));
         }
+        // F-S4a: a challenge for the operator's Sponsors (none before F-S4 was).
+        card.put("forSponsors", Boolean.TRUE.equals(publication.get("forSponsors")));
         if (card.get("regions") == null) {
             // Q25: an invited publication chose none; its card says GLOBAL, which no feed reads (the audience keeps
             // it out) and no start checks (the invitation does instead).

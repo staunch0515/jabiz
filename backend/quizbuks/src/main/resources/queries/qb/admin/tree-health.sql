@@ -36,7 +36,8 @@ FROM (
     WHERE c.{{QbPublicationCard.treeNodeId}} IS NOT NULL
       AND NOT EXISTS (
           SELECT 1 FROM {{QbTreeLit}} l
-          WHERE l.{{QbTreeLit.subjectKind}} = 'USER' AND l.{{QbTreeLit.subjectId}} = a.{{QbAttempt.userId}}
+          WHERE l.{{QbTreeLit.subjectKind}} = CASE WHEN a.{{QbAttempt.onBehalfOf}} IS NULL THEN 'USER' ELSE 'SPONSOR' END
+            AND l.{{QbTreeLit.subjectId}} = a.{{QbAttempt.userId}}
             AND l.{{QbTreeLit.treeId}} = c.{{QbPublicationCard.treeId}}
             AND l.{{QbTreeLit.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
             AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} r
@@ -45,7 +46,8 @@ FROM (
           SELECT max(r.{{QbTreeLitRevocation.revokedAt}})
           FROM {{QbTreeLitRevocation}} r
           JOIN {{QbTreeLit}} l ON CAST(l.{{QbTreeLit.litId}} AS text) = r.{{QbTreeLitRevocation.litId}}
-          WHERE l.{{QbTreeLit.subjectKind}} = 'USER' AND l.{{QbTreeLit.subjectId}} = a.{{QbAttempt.userId}}
+          WHERE l.{{QbTreeLit.subjectKind}} = CASE WHEN a.{{QbAttempt.onBehalfOf}} IS NULL THEN 'USER' ELSE 'SPONSOR' END
+            AND l.{{QbTreeLit.subjectId}} = a.{{QbAttempt.userId}}
             AND l.{{QbTreeLit.treeId}} = c.{{QbPublicationCard.treeId}}
             AND l.{{QbTreeLit.nodeId}} = c.{{QbPublicationCard.treeNodeId}}), '-infinity')
 ) missing

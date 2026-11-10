@@ -192,7 +192,8 @@ public final class AttemptProcesses {
         EntityInstance card = first(ctx, CARD);
         String userId = ctx.request().actorId();
         // S2: a channel's publication (a shop's storefront quiz) is no App taker's: as good as none.
-        if (card == null || !PublisherKind.sponsor(card.get("publisherKind"))
+        // F-S4a: nor is a challenge (the operator's Sponsors answer it in the Sponsor app).
+        if (card == null || !PublisherKind.sponsor(card.get("publisherKind")) || Boolean.TRUE.equals(card.get("forSponsors"))
             || !(first(ctx, MINE) != null || shown(ctx, card))
             || !TreeGate.visible(ctx, card, first(ctx, MINE) != null)) {
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + publicationId + " not found");
@@ -295,6 +296,8 @@ public final class AttemptProcesses {
                             + " not found");
                     }
                 })
+                // F-S4a: a challenge is the operator's Sponsors', answered in the Sponsor app (SponsorPlay).
+                .compute("Refuse a challenge", (metadata, ctx) -> refuseChallenge(ctx))
                 .compute("Continue an attempt in progress", (metadata, ctx) -> resume(ctx))
                 // F-S8: a new start of a publication the caller blocked (its publication, quiz, sponsor or video's
                 // provider) is refused, whatever it pays. A caller without blocks sends nothing more (the first read
@@ -422,6 +425,15 @@ public final class AttemptProcesses {
     /** The App's report of the playback, when the input is the App's (a channel's start has none). */
     static WatchRules.Playback playback(ProcessContext ctx) {
         return ctx.get(INPUT) instanceof PublicationRef ref ? ref.playback() : null;
+    }
+
+    /** F-S4a: 422 when a Taker starts a challenge (the operator's Sponsors answer it in the Sponsor app). */
+    static void refuseChallenge(ProcessContext ctx) {
+        EntityInstance card = first(ctx, CARD_BEFORE);
+        if (starting(ctx) && card != null && Boolean.TRUE.equals(card.get("forSponsors"))) {
+            ctx.reject(new com.jabiz.entity.Violation("publicationId", PlayCodes.FOR_SPONSORS, "This challenge is "
+                + "answered by Sponsors in the Sponsor app", Map.of()));
+        }
     }
 
     static void refuseUnwatched(ProcessContext ctx) {

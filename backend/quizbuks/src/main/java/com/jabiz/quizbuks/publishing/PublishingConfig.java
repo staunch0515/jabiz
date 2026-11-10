@@ -156,8 +156,9 @@ public class PublishingConfig {
             .targetEntityType(QbPublications.CARD)
             // Q25: an invited publication has no public page; its link carries the invitee's sign-in.
             // S0 (D-S0-4): the share page is the sponsors' system's; a shop's publication (S2) has its own storefront.
+            // F-S4a: a challenge is for the operator's Sponsors, never on a public page.
             .scope(s -> s.fixed("status", PublicationStatus.LIVE).fixed("audience", Audience.PUBLIC)
-                .fixed("publisherKind", PublisherKind.SPONSOR))
+                .fixed("publisherKind", PublisherKind.SPONSOR).fixed("forSponsors", false))
             // Q60b: the version, for the template of the products its quiz shows (no template returns it).
             .publicRead(p -> p.fields("publicationId", "publisherId", "versionId", "name", "quizTitle", "kind",
                 "startAt", "endAt", "timeLimitSec", "questionCount", "pickCount", "fullScore", "passScore", "maxReward",

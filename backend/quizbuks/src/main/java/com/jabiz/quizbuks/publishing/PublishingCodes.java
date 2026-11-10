@@ -148,6 +148,12 @@ public final class PublishingCodes {
     public static final String NODE_NOT_BINDABLE = "QB_PUBLICATION_NODE_NOT_BINDABLE";
     /** F-S2b1: Sponsors light the graph's nodes, which they cannot answer yet (F-S4). */
     public static final String NODE_SPONSOR_LIT = "QB_PUBLICATION_NODE_SPONSOR_LIT";
+    /** F-S4a: a challenge (bound to a node Sponsors light) pays nothing, invites nobody, has no referrals, no entry fee. */
+    public static final String CHALLENGE_REWARD = "QB_PUBLICATION_CHALLENGE_REWARD";
+    public static final String CHALLENGE_INVITED = "QB_PUBLICATION_CHALLENGE_INVITED";
+    public static final String CHALLENGE_REFERRAL = "QB_PUBLICATION_CHALLENGE_REFERRAL";
+    public static final String CHALLENGE_ENTRY_FEE = "QB_PUBLICATION_CHALLENGE_ENTRY_FEE";
+    public static final String CHALLENGE_SHARED_VIDEO = "QB_PUBLICATION_CHALLENGE_SHARED_VIDEO";
     /** Every code above that is publishing's own (not the shared review and account codes). */
 
     public static final List<String> ALL = List.of(NAME_BLANK, REGIONS_FORMAT, AUDIENCE_INVALID, TIME_LIMIT_RANGE, SCORE_RANGE,
@@ -165,6 +171,7 @@ public final class PublishingCodes {
         SWITCH_LANGUAGES, COVER_LANGUAGE,
         SWITCH_PICK, PICK_RANGE, PICK_UNEQUAL_POINTS, PICK_SURVEY,
         ENTRY_FEE_RANGE, ENTRY_FEE_NOT_ALLOWED, ENTRY_FEE_OFF, NODE_UNKNOWN, NODE_NOT_BINDABLE, NODE_SPONSOR_LIT,
+        CHALLENGE_REWARD, CHALLENGE_INVITED, CHALLENGE_REFERRAL, CHALLENGE_ENTRY_FEE, CHALLENGE_SHARED_VIDEO,
         PICK_REQUIRED, PICK_TOO_MANY, PICK_DIFFICULTY_SHORT, PICK_DIFFICULTY_UNSET, PICK_DIFFICULTY_INVALID);
 
     private PublishingCodes() {}
