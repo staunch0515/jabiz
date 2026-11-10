@@ -151,7 +151,9 @@ for (const appearance of ['light', 'dark'] as const) {
       await expect(page.getByTestId(ready)).toBeVisible()
       await expectAccessible(page, at(`sponsor area ${area}`))
     }
-    // The money area's other tabs (the Kudos wallet only with Kudos; a new Sponsor has none).
+    // The money area's other tabs (the Kudos wallet only with Kudos; a new Sponsor has none), from the money area.
+    await openArea(page, 'money')
+    await expect(page.getByTestId('transactions')).toBeVisible()
     for (const tab of ['account', 'ai', 'bills']) {
       await page.getByTestId(`page-tab-${tab}`).click()
       await expect(page.getByTestId('page-tab-' + tab)).toHaveAttribute('aria-current', 'page')
@@ -200,15 +202,15 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByTestId('avatar-account').click()
     await expect(page.getByTestId('sign-in').first()).toBeVisible()
     await expectAccessible(page, at('sponsor account'))
-    // At a phone's width (F-F3: 360 px): the bottom menu and "More"; every area opens without sideways scrolling.
+    // At a phone's width (F-F3: 360 px): the bottom menu and "More"; every area opens and passes axe (no sideways
+    // scrolling is F-F3d's, with the pages' content width: plan section 9).
     await page.setViewportSize({ width: 360, height: 780 })
     await expectAccessible(page, at('sponsor account 360px'))
     await expect(page.getByTestId('bottom-bar-home')).toBeVisible()
     for (const area of ['home', 'quizzes', 'publications', 'prizes', 'messages', 'money', 'assets', 'hub']) {
       await openArea(page, area)
-      await expect(page.getByTestId('page-title')).toBeVisible()
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
-        area).toBeLessThanOrEqual(0)
+      // Each page's title (the home's is its banner's until F-F3b gives it the area's head).
+      await expect(page.locator('h1').filter({ visible: true }).first()).toBeVisible()
       await expectAccessible(page, at(`sponsor area ${area} 360px`))
     }
   })
