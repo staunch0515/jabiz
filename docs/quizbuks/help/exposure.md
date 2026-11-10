@@ -29,7 +29,7 @@ In the full-screen vertical mode of "Shorts", every few screens a quiz using a v
 - **横视频**：在开始答题页，视频在画面上且 App 在前台连续 10 秒。首页的自动播放不计。
 
 每位学者每个发布至多计一次；你自己、视频的提供方和你们的店员看不计；每位学者每天有上限。用你自己的视频（自己的资料）不计曝光。
-发布页"共享视频的曝光"一节显示已购次数（没有购买时为"不限"）、已成功、计费、推送被打开与去答题的人数。买的次数用完后，发布会在一分钟内自动结束（结束原因"曝光已用完"），已经开始的答题照常完成，你会收到邮件；同时可能多计几次，超出已购的不收费。
+发布详情的"费用"标签中，"共享视频的曝光"一节显示已购次数（没有购买时为"不限"）、已成功、计费、推送被打开与去答题的人数。买的次数用完后，发布会在一分钟内自动结束（结束原因"曝光已用完"），已经开始的答题照常完成，你会收到邮件；同时可能多计几次，超出已购的不收费。
 
 ### 日本語 · 共有動画を使った公開の表示回数はどう数えますか？
 
@@ -38,7 +38,7 @@ In the full-screen vertical mode of "Shorts", every few screens a quiz using a v
 - **横型の動画**：クイズの開始ページで、動画が画面に表示され、アプリが前面にある状態で 10 秒続いたとき。ホームの自動再生はカウントしません。
 
 テイカー 1 人につき 1 つの公開で 1 回までです。あなた自身、動画の提供者、それぞれのスタッフの視聴はカウントしません。テイカーごとに 1 日の上限があります。あなた自身の動画（自分の資料）は表示回数をカウントしません。
-公開のページの「共有動画の表示回数」に、購入した回数（購入していないときは「上限なし」）、カウント済み、課金の対象、開かれたプッシュ、回答に進んだ人数を表示します。購入した回数を使い切ると、公開は 1 分以内に自動で終了し（終了の理由「表示回数を使い切り」）、始まっている回答は通常どおり最後までできます。メールでお知らせします。終了までの間に少し多くカウントされることがありますが、購入した回数を超えた分は課金されません。
+公開の詳細の「費用」タブの「共有動画の表示回数」に、購入した回数（購入していないときは「上限なし」）、カウント済み、課金の対象、開かれたプッシュ、回答に進んだ人数を表示します。購入した回数を使い切ると、公開は 1 分以内に自動で終了し（終了の理由「表示回数を使い切り」）、始まっている回答は通常どおり最後までできます。メールでお知らせします。終了までの間に少し多くカウントされることがありますが、購入した回数を超えた分は課金されません。
 
 ### English · How are exposures counted for a publication using a shared video?
 
@@ -47,4 +47,4 @@ When your publication uses a video another Sponsor shared, each Taker who watche
 - **Horizontal videos**: 10 seconds on the quiz's start page with the video on the screen and the App in front. Autoplay on the home page does not count.
 
 At most once per Taker and publication; your own views, the video provider's and your staff's are not counted; each Taker has a daily limit. Your own videos (your own materials) do not count exposures.
-The "Exposures of the shared video" section of your publication's page shows the exposures bought ("Unlimited" when none were bought), counted, charged, the pushes opened and the Takers who went on to answer. Once the exposures bought are used up, the publication ends within a minute (the reason: "Exposures used up"); attempts already started finish as usual, and you get an email. A few more may be counted meanwhile: what goes beyond what you bought is not charged.
+The "Exposures of the shared video" section on the "Fees" tab of your publication shows the exposures bought ("Unlimited" when none were bought), counted, charged, the pushes opened and the Takers who went on to answer. Once the exposures bought are used up, the publication ends within a minute (the reason: "Exposures used up"); attempts already started finish as usual, and you get an email. A few more may be counted meanwhile: what goes beyond what you bought is not charged.

@@ -241,7 +241,7 @@ test('a Sponsor sets difficulties in bulk and a publication draws one of each fo
   const publicationId = saved.publicationId as string
   await run(request, funded.token, 'QB_PUBLICATION_SUBMIT', { publicationId })
   await decideReview(request, funded.token, publicationId, 'APPROVE')
-  await page.goto(`/sponsor/publications/${publicationId}`)
+  await page.goto(`/sponsor/publications/${publicationId}/questions`)
   await expect(page.getByTestId('summary-by-difficulty')).toContainText('Easy 1 · Hard 1')
   await expect(page.getByTestId('summary-question-order')).toContainText('Shuffled for each Taker')
 

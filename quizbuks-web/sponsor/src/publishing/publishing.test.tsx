@@ -299,7 +299,7 @@ describe('the version a publication shows (Q34b)', () => {
         versionedAt: '2026-10-20T00:00:00Z', contentHash: 'b' },
       { versionId: 'v1', versionNo: 1, label: 'v1.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
         versionedAt: '2026-10-10T00:00:00Z', contentHash: 'a' }] })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/questions')
     render(<App />)
     const notice = await screen.findByTestId('publication-version')
     expect(notice).toHaveTextContent('Takers see version v1.0 of the quiz')
@@ -338,7 +338,7 @@ describe('mainland China cannot see a quiz with a foreign video (F-S11)', () => 
         versionedAt: '2026-10-20T00:00:00Z', contentHash: 'b', videoLinks: YOUTUBE },
       { versionId: 'v1', versionNo: 1, label: 'v1.0', title: 'Coffee basics', questionCount: 2, fullScore: 2,
         versionedAt: '2026-10-10T00:00:00Z', contentHash: 'a', videoLinks: BILIBILI }] })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/audience')
     render(<App />)
     expect(await screen.findByTestId('publication-mainland-pending')).toHaveTextContent('once switched')
     expect(screen.queryByTestId('publication-mainland')).toBeNull()
@@ -356,7 +356,7 @@ describe('switching the version of a publication that runs (Q51)', () => {
   it('asks for the switch to the newest version, said to be reviewed, with the revision seen', async () => {
     const { processCalls } = server({ publication: { ...DRAFT, status: 'LIVE' }, versions: TWO,
       processes: { QB_PUBLICATION_SWITCH_VERSION: [switched] } })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/questions')
     render(<App />)
     const notice = await screen.findByTestId('publication-version')
     expect(await within(notice).findByTestId('publication-version-newer')).toHaveTextContent('the switch is reviewed')
@@ -373,7 +373,7 @@ describe('switching the version of a publication that runs (Q51)', () => {
     const { processCalls } = server({ publication: { ...DRAFT, status: 'LIVE', pendingVersionId: 'v2',
       pendingVersionLabel: 'v2.0', pendingSince: '2026-10-21T00:00:00Z' }, versions: TWO,
       processes: { QB_PUBLICATION_SWITCH_WITHDRAW: [switched] } })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/questions')
     render(<App />)
     const pending = await screen.findByTestId('publication-switch-pending')
     expect(pending).toHaveTextContent('The switch to version v2.0 is in review')
@@ -388,7 +388,7 @@ describe('switching the version of a publication that runs (Q51)', () => {
 
   it('offers no switch to another full score, nor after an administrator took it down', async () => {
     server({ publication: { ...DRAFT, status: 'LIVE' }, versions: [{ ...TWO[0], fullScore: 3 }, TWO[1]] })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/questions')
     const { unmount } = render(<App />)
     expect(await screen.findByTestId('publication-version-newer'))
       .toHaveTextContent('its full score is 3, not 2')
@@ -403,7 +403,7 @@ describe('switching the version of a publication that runs (Q51)', () => {
 
   it('says why the last switch was rejected or not made', async () => {
     server({ publication: { ...DRAFT, status: 'LIVE', switchRejectReason: 'The cover is misleading.' }, versions: TWO })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/questions')
     const { unmount } = render(<App />)
     expect(await screen.findByTestId('publication-switch-rejected'))
       .toHaveTextContent('The switch to another version was rejected: The cover is misleading.')
@@ -430,9 +430,17 @@ describe('the preview (Q34b)', () => {
     // The quiz page first: the taker app's own layout, from the version's snapshot and the sponsor's profile.
     expect(within(frame).getByTestId('detail-quiz-title')).toHaveTextContent('Coffee basics')
     expect(within(frame).getByTestId('detail-sponsor')).toHaveTextContent('Acme')
-    expect(within(frame).getByTestId('material-title')).toHaveTextContent('Bean guide')
-    expect(within(frame).getByTestId('detail-prize')).toHaveTextContent('A free espresso')
+    // F-F3c: the page in the App's tabs (about first): the introduction, then the reward and the materials.
     expect(within(frame).getByText('easy').tagName).toBe('STRONG')
+    expect(within(frame).getByTestId('page-tab-about')).toHaveAttribute('aria-current', 'page')
+    await userEvent.click(within(frame).getByTestId('page-tab-reward'))
+    expect(within(frame).getByTestId('detail-prize')).toHaveTextContent('A free espresso')
+    expect(within(frame).getByTestId('page-tab-reward')).toHaveAttribute('aria-current', 'page')
+    expect(within(frame).queryByTestId('detail-intro')).toBeNull()
+    await userEvent.click(within(frame).getByTestId('page-tab-materials'))
+    expect(within(frame).getByTestId('material-title')).toHaveTextContent('Bean guide')
+    await userEvent.click(within(frame).getByTestId('page-tab-rules'))
+    expect(within(frame).getByTestId('detail-rules')).toHaveTextContent('Time limit')
     expect(within(frame).getByTestId('preview-start')).toBeDisabled()
     await expectAccessible()
     // The home's card leads nowhere here.
@@ -1045,7 +1053,7 @@ describe('digital prizes (Q33)', () => {
         QB_DIGITAL_CODES_REVOKE: [{ status: 200, body: { output: { publicationId: 'p1', revoked: 3, available: 0 } } }],
       },
     })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/rewards')
     render(<App />)
     const pool = await screen.findByTestId('digital-pool')
     expect(await within(pool).findByTestId('digital-pool-available')).toHaveTextContent('1')
@@ -1077,7 +1085,7 @@ describe('digital prizes (Q33)', () => {
   it('offers no taking back while the publication runs, and shows the pool under a draft\'s wizard', async () => {
     server({ publication: { ...DRAFT, status: 'LIVE', rewardMethod: 'DIGITAL_PRIZE', digitalDelivery: 'POOL',
       digitalDescription: 'A coffee voucher', maxWinners: 2 }, digitalPool: { available: 2, issued: 0, revoked: 0 } })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/rewards')
     render(<App />)
     const pool = await screen.findByTestId('digital-pool')
     expect(await within(pool).findByTestId('digital-pool-available')).toHaveTextContent('2')
@@ -1308,6 +1316,79 @@ describe('the staff (Q39)', () => {
   })
 })
 
+describe('the tabs of a submitted publication (F-F3c)', () => {
+  const LIVE = { ...DRAFT, status: 'LIVE', revision: 6, budgetCap: '1000', maxReward: '100', maxSpend: '1000',
+    entryFee: 30, audience: 'INVITED' }
+  const open = async (path: string, publication: Record<string, unknown> = LIVE) => {
+    server({ publication })
+    window.history.replaceState(null, '', path)
+    render(<App />)
+    return screen.findByTestId('publication-view')
+  }
+
+  it('has the seven tabs, each with its own address, the current one marked', async () => {
+    const view = await open('/publications/p1')
+    const tabs = within(screen.getByRole('navigation', { name: 'Parts of the publication' }))
+    const expected: Record<string, string> = { overview: '/publications/p1', questions: '/publications/p1/questions',
+      audience: '/publications/p1/audience', rewards: '/publications/p1/rewards', fees: '/publications/p1/fees',
+      analytics: '/publications/p1/analytics', share: '/publications/p1/share' }
+    for (const [key, path] of Object.entries(expected)) {
+      expect(tabs.getByTestId(`page-tab-${key}`)).toHaveAttribute('href', path)
+    }
+    expect(tabs.getByTestId('page-tab-overview')).toHaveAttribute('aria-current', 'page')
+    expect(tabs.getByTestId('page-tab-questions')).not.toHaveAttribute('aria-current')
+    // The overview: status in the aside, the entry fee's income, the dates; the other parts are not on it.
+    expect(view).toHaveAttribute('data-tab', 'overview')
+    expect(screen.getByTestId('publication-status')).toBeInTheDocument()
+    expect(screen.getByTestId('summary-entry-fee')).toHaveTextContent('30 Kudos')
+    expect(screen.getByTestId('publication-entry-fees')).toBeInTheDocument()
+    expect(screen.queryByTestId('summary-audience')).toBeNull()
+    expect(screen.queryByTestId('summary-max-spend')).toBeNull()
+    expect(screen.getByTestId('publication-pause')).toBeInTheDocument()
+    expect(screen.getByTestId('publication-analytics-link')).toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it('moves between the tabs without leaving the page, each showing its blocks', async () => {
+    await open('/publications/p1')
+    await userEvent.click(screen.getByTestId('page-tab-questions'))
+    expect(window.location.pathname).toBe('/publications/p1/questions')
+    expect(await screen.findByTestId('publication-version')).toBeInTheDocument()
+    expect(screen.getByTestId('page-tab-questions')).toHaveAttribute('aria-current', 'page')
+    await userEvent.click(screen.getByTestId('page-tab-audience'))
+    expect(await screen.findByTestId('summary-audience')).toHaveTextContent('Invited e-mail addresses only')
+    expect(await screen.findByTestId('invitations')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('page-tab-rewards'))
+    expect(await screen.findByTestId('summary-reward-method')).toBeInTheDocument()
+    expect(screen.getByTestId('summary-max-spend')).toHaveTextContent('1,000 Kudos')
+    expect(screen.queryByTestId('invitations')).toBeNull()
+    await userEvent.click(screen.getByTestId('page-tab-fees'))
+    expect(await screen.findByTestId('publication-fees-hint')).toBeInTheDocument()
+    expect(screen.queryByTestId('summary-max-spend')).toBeNull()
+    await expectAccessible()
+  })
+
+  it('shows the share link and the QR code on its tab, as in the dialog', async () => {
+    await open('/publications/p1/share')
+    expect(await screen.findByTestId('publication-share-panel')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('publication-qr-link')).toHaveTextContent(shareLink('p1', 'zh')))
+    expect(await screen.findByTestId('publication-qr-image')).toBeInTheDocument()
+    expect(screen.getByTestId('publication-qr-poster')).toBeEnabled()
+    expect(screen.queryByTestId('publication-qr-dialog')).toBeNull()
+    expect(screen.getByTestId('page-tab-share')).toHaveAttribute('aria-current', 'page')
+    await expectAccessible()
+  })
+
+  it('sends the address of a tab of a draft back to the draft, which keeps the wizard', async () => {
+    server({ publication: DRAFT })
+    window.history.replaceState(null, '', '/publications/p1/rewards')
+    render(<App />)
+    expect(await screen.findByTestId('publication-wizard')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/publications/p1')
+    expect(screen.queryByTestId('page-tab-rewards')).toBeNull()
+  })
+})
+
 describe('a submitted publication', () => {
   it('is shown frozen, and pauses after the Sponsor confirms', async () => {
     const pausedOut = { status: 200, body: { output: { publicationId: 'p1', status: 'PAUSED', revision: 7,
@@ -1317,7 +1398,10 @@ describe('a submitted publication', () => {
     window.history.replaceState(null, '', '/publications/p1')
     render(<App />)
     const view = await screen.findByTestId('publication-view')
-    expect(view).toHaveTextContent('1,000 Kudos')
+    expect(view).toHaveTextContent('Coffee week')
+    // F-F3c: the money is under the rewards tab.
+    await userEvent.click(screen.getByTestId('page-tab-rewards'))
+    expect(await screen.findByTestId('summary-max-spend')).toHaveTextContent('1,000 Kudos')
     expect(screen.queryByTestId('publication-wizard')).toBeNull()
     expect(screen.queryByTestId('publication-delete')).toBeNull()
 
@@ -1597,7 +1681,7 @@ describe('invitation-only publications (Q25)', () => {
         QB_INVITATION_REMOVE: [{ status: 200, body: { output: { invitationId: 'i3' } } }],
       },
     })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/audience')
     render(<App />)
     const section = await screen.findByTestId('invitations')
     // The dictionary's label replaces the code once the server answered.
@@ -1714,7 +1798,7 @@ describe('the mail server (Q29)', () => {
     server({ publication: live, mailServer: null, invitations: [
       { invitationId: 'i3', email: 'carol@example.com', status: 'ADDED', addedAt: '2026-10-17T01:00:00Z', sentCount: 0,
         lastSentAt: null, startedAt: null, answeredAt: null, score: null, reward: null }] })
-    window.history.replaceState(null, '', '/publications/p1')
+    window.history.replaceState(null, '', '/publications/p1/audience')
     render(<App />)
     const section = await screen.findByTestId('invitations')
     expect(await within(section).findByTestId('invitations-needs-server')).toHaveTextContent('own mail server')

@@ -21,7 +21,7 @@ import { FileImage } from '../qb/FileImage'
 import { QB } from '../qb/messages'
 import { Link } from '../qb/router'
 import { FeedCardView } from '../qb/view/FeedCard'
-import { PublicationContent } from '../qb/view/PublicationContent'
+import { PublicationContent, type ContentTab, type ContentTabs } from '../qb/view/PublicationContent'
 import { draftIn, draftPreview, publicationPreview, snapshotIn, type Preview, type PreviewQuestion } from './model'
 import { CONTENT_LANGUAGES, type ContentLanguage } from '../qb/api'
 import type { PreviewTarget } from './paths'
@@ -79,6 +79,15 @@ function QuestionScreen({ questions }: { questions: PreviewQuestion[] }) {
 function Screens({ preview }: { preview: Preview }) {
   const { t } = useTranslation(SPONSOR)
   const [screen, setScreen] = useState<Screen>('page')
+  // F-F3c: the page in the tabs the App has; the preview has no address per tab, so they are buttons.
+  const [tab, setTab] = useState<ContentTab>('about')
+  const tabs: ContentTabs = {
+    current: tab,
+    path: (key) => `#${key}`,
+    renderLink: (item, { children, ...props }) => (
+      <button type="button" {...props} onClick={() => setTab(item.key as ContentTab)}>{children}</button>
+    ),
+  }
   return (
     <div className="flex flex-col items-center gap-4">
       <SegmentedControl<Screen> value={screen} onChange={setScreen} aria-label={t('preview.screens')}
@@ -98,7 +107,7 @@ function Screens({ preview }: { preview: Preview }) {
         )}
         {screen === 'page' && (
           <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">
-            <PublicationContent publication={preview.view} tiers={preview.tiers} titleAs="h2" draft={preview.draft} />
+            <PublicationContent publication={preview.view} tiers={preview.tiers} titleAs="h2" draft={preview.draft} tabs={tabs} />
             <Button size="lg" className="w-full" disabled data-testid="preview-start">
               <Play aria-hidden />{t('preview.start')}
             </Button>

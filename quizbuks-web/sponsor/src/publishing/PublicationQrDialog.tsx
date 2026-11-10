@@ -25,8 +25,7 @@ import { posterPng, qrFileName, qrImageUrl, qrPng, qrSvg } from './qr'
  * The QR code of a publication's share link (Q21): shown with the link, saved as PNG or SVG for the sponsor's own
  * design, or as a ready poster (A4) to print and post at the stops nearby.
  */
-export function PublicationQrDialog({ publicationId, language, languages = [], names = {}, name, open,
-  onOpenChange }: {
+export function PublicationQrPanel({ publicationId, language, languages = [], names = {}, name, inDialog = false }: {
   publicationId: string
   /** The language the link carries (Q59b): the publication's main one (Q73b), else the quiz's. */
   language: string | null
@@ -34,8 +33,8 @@ export function PublicationQrDialog({ publicationId, language, languages = [], n
   languages?: ContentLanguage[]
   names?: Partial<Record<string, string>>
   name: string
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  /** In the dialog the buttons are its footer; on the share tab (F-F3c) they are a row of their own. */
+  inDialog?: boolean
 }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
@@ -61,36 +60,32 @@ export function PublicationQrDialog({ publicationId, language, languages = [], n
   // The poster's instruction in every language the App speaks: a stop's passers-by are not all alike.
   const instructions = LANGUAGES.map((lng) => t('publishing.qr.posterLine', { lng }))
 
+  const Buttons = inDialog ? DialogFooter : 'div'
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="publication-qr-dialog">
-        <DialogHeader>
-          <DialogTitle>{t('publishing.qr.title')}</DialogTitle>
-          <DialogDescription>{t('publishing.qr.text')}</DialogDescription>
-        </DialogHeader>
-        {languages.length > 1 && (
-          <div className="flex flex-col items-center gap-1">
-            <SegmentedControl<string> value={shown ?? languages[0]} onChange={setChosen}
-              aria-label={t('publishing.qr.language')} data-testid="publication-qr-language"
-              options={languages.map((l) => ({ value: l, label: tQb(`languages.${l}`) }))} />
-            <p className="text-muted-foreground text-xs">{t('publishing.qr.languageHint')}</p>
-          </div>
-        )}
-        <div className="flex flex-col items-center gap-3">
-          {image.data ? (
-            // The image carries its own light background: it stays scannable in the dark appearance.
-            <img src={image.data} alt={t('publishing.qr.alt', { name: shownName })} width={240} height={240}
-              className="rounded-md" data-testid="publication-qr-image" />
-          ) : image.isError ? (
-            <p role="alert" className="text-destructive text-sm" data-testid="publication-qr-failed">
-              {t('publishing.qr.failed')}
-            </p>
-          ) : (
-            <div className="bg-muted size-[240px] animate-pulse rounded-md" aria-hidden />
-          )}
-          <p className="text-muted-foreground text-center text-sm break-all" data-testid="publication-qr-link">{link}</p>
+    <>
+      {languages.length > 1 && (
+        <div className="flex flex-col items-center gap-1">
+          <SegmentedControl<string> value={shown ?? languages[0]} onChange={setChosen}
+            aria-label={t('publishing.qr.language')} data-testid="publication-qr-language"
+            options={languages.map((l) => ({ value: l, label: tQb(`languages.${l}`) }))} />
+          <p className="text-muted-foreground text-xs">{t('publishing.qr.languageHint')}</p>
         </div>
-        <DialogFooter className="flex-wrap">
+      )}
+      <div className="flex flex-col items-center gap-3">
+        {image.data ? (
+          // The image carries its own light background: it stays scannable in the dark appearance.
+          <img src={image.data} alt={t('publishing.qr.alt', { name: shownName })} width={240} height={240}
+            className="rounded-md" data-testid="publication-qr-image" />
+        ) : image.isError ? (
+          <p role="alert" className="text-destructive text-sm" data-testid="publication-qr-failed">
+            {t('publishing.qr.failed')}
+          </p>
+        ) : (
+          <div className="bg-muted size-[240px] animate-pulse rounded-md" aria-hidden />
+        )}
+        <p className="text-muted-foreground text-center text-sm break-all" data-testid="publication-qr-link">{link}</p>
+      </div>
+      <Buttons className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={saving !== null} aria-busy={saving === 'png' || undefined}
             data-testid="publication-qr-png"
             onClick={() => void save('png', () => qrPng(link), qrFileName(shownName, 'QR', 'png'))}>
@@ -110,7 +105,25 @@ export function PublicationQrDialog({ publicationId, language, languages = [], n
             <FileImage aria-hidden />
             {t('publishing.qr.poster')}
           </Button>
-        </DialogFooter>
+      </Buttons>
+    </>
+  )
+}
+
+/** The QR code in a dialog, opened from the page's head. */
+export function PublicationQrDialog({ open, onOpenChange, ...panel }: Parameters<typeof PublicationQrPanel>[0] & {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const { t } = useTranslation(SPONSOR)
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="publication-qr-dialog">
+        <DialogHeader>
+          <DialogTitle>{t('publishing.qr.title')}</DialogTitle>
+          <DialogDescription>{t('publishing.qr.text')}</DialogDescription>
+        </DialogHeader>
+        <PublicationQrPanel {...panel} inDialog />
       </DialogContent>
     </Dialog>
   )

@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { publicationPath } from '../publishing/paths'
 import { StatusBadge } from '../publishing/shared'
+import { PublicationTabs } from '../publishing/PublicationTabs'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { Link, navigate } from '../qb/router'
@@ -443,6 +444,7 @@ export function PublicationAnalyticsPage({ publicationId }: { publicationId: str
         }
         title={<span data-testid="analytics-title">{t('analytics.publication.title', { name: o.name })}</span>}
         description={<StatusBadge status={o.status} startAt={null} endAt={null} />}
+        tabs={<PublicationTabs publicationId={publicationId} current="analytics" />}
         className="pb-0" />
       <UpdatedNote refreshedAt={o.refreshedAt} zone={o.zone} />
       <OverviewSection o={o} />
