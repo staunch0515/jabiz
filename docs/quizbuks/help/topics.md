@@ -10,21 +10,21 @@
 
 ### 中文 · 怎样只看我喜欢的主题？
 
-打开"账户 → 关于我"，在"喜欢的主题"中勾选你喜欢的主题，每次勾选都会立刻保存。然后打开"只看喜欢的主题"：首页与"短视频"一排只显示带有你喜欢的主题的 Quiz，首页上方会提示"只显示你喜欢的主题"。
+打开"我的 → 设置 → 屏蔽与主题"，在"喜欢的主题"中勾选你喜欢的主题，每次勾选都会立刻保存。然后打开"只看喜欢的主题"：首页与"短视频"一排只显示带有你喜欢的主题的 Quiz，首页上方会提示"只显示你喜欢的主题"。
 发到你邮箱的邀请与你和发起方的对话不受影响。想看全部时，随时可以在同一个地方关掉；关掉之前不能把喜欢的主题全部去掉。
 主题是平台词表中的词。不再提供的词，如果你以前选过，会继续显示为"已不再提供"，取消勾选后就不能再选。
 没有设主题词的发布（包括这项功能推出之前就已发布的）在"只看喜欢的主题"中不会出现；关掉后照常可以看到。
 
 ### 日本語 · 好きなトピックだけを表示するには？
 
-「アカウント → わたしについて」を開き、「好きなトピック」で好きなトピックにチェックを入れてください。チェックするたびにすぐ保存されます。続けて「好きなトピックだけ表示」をオンにすると、ホームと「ショート動画」の列には好きなトピックを含むクイズだけが表示され、ホームの上部に「好きなトピックだけを表示しています」と表示されます。
+「マイページ → 設定 → ブロックとトピック」を開き、「好きなトピック」で好きなトピックにチェックを入れてください。チェックするたびにすぐ保存されます。続けて「好きなトピックだけ表示」をオンにすると、ホームと「ショート動画」の列には好きなトピックを含むクイズだけが表示され、ホームの上部に「好きなトピックだけを表示しています」と表示されます。
 あなたのメールアドレスに届いた招待と、主催者との会話は影響を受けません。すべて見たいときは、同じ場所でいつでもオフにできます。オンのままでは好きなトピックをすべて外すことはできません。
 トピックはプラットフォームの語彙リストの語です。提供が終了した語は、以前に選んでいれば「提供終了」と表示されたまま残り、チェックを外すと選び直せなくなります。
 トピックが設定されていない公開（この機能の開始前から公開中のものを含む）は、「好きなトピックだけ表示」では表示されません。オフにすれば通常どおり表示されます。
 
 ### English · How do I see only the topics I like?
 
-Open "Account → About me" and tick the topics you like under "Topics you like"; each tick is saved at once. Then turn on "Show only the topics I like": the home page and the "Shorts" row show only quizzes with one of your topics, and the home page says "Showing only the topics you like."
+Open "Me → Settings → Blocks and topics" and tick the topics you like under "Topics you like"; each tick is saved at once. Then turn on "Show only the topics I like": the home page and the "Shorts" row show only quizzes with one of your topics, and the home page says "Showing only the topics you like."
 Quizzes sent to your email address and your conversations with Sponsors are not affected. To see everything again, turn it off in the same place at any time; while it is on you cannot untick every topic.
 Topics are words of the platform's list. A word that is no longer offered stays listed as "No longer offered" if you chose it before; once unticked it cannot be chosen again.
 Publications without topics (including those published before this feature) do not appear while "Show only the topics I like" is on; turn it off to see them as usual.

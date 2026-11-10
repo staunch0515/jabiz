@@ -356,6 +356,23 @@ export async function openArea(page: Page, area: string, tab?: string) {
   if (tab) await page.getByTestId(`page-tab-${tab}`).click()
 }
 
+/** The five areas of the taker app (F-F4). */
+export type TakerArea = 'home' | 'history' | 'scan' | 'messages' | 'me'
+
+/**
+ * The frame's entry for an area of the taker app: in the bottom menu on a phone, in the left column on a wide screen
+ * (the page draws both and shows one by the width).
+ */
+export function takerArea(page: Page, area: TakerArea) {
+  return page.locator(`[data-testid="bottom-bar-${area}"]:visible, [data-testid="side-rail-${area}"]:visible`)
+}
+
+/** Signs out of the taker app: "Me", then the button at the bottom of it (F-F4). */
+export async function signOutTaker(page: Page) {
+  await takerArea(page, 'me').click()
+  await page.getByTestId('sign-out').click()
+}
+
 /** Signs out of the Sponsor app from the avatar menu at the top right (F-F3). */
 export async function signOutSponsor(page: Page) {
   await page.getByTestId('avatar-menu-open').click()

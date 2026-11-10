@@ -12,6 +12,7 @@ import {
   signIn,
   test,
   tokenOf,
+  takerArea,
 } from './support'
 import { approvedSponsor, takerInJapan } from './wallet'
 import { reviewerFor } from './operators'
@@ -121,7 +122,7 @@ test('a shared link is handed to the winner, shown on request, copied and confir
   await expect(reward).toHaveAttribute('data-digital-status', 'CONFIRMED')
   await expect(reward.getByTestId('digital-confirm')).toHaveCount(0)
   // The history agrees.
-  await page.getByTestId('nav-history').click()
+  await takerArea(page, 'history').click()
   await expect(page.getByTestId('history-row').filter({ hasText: draft.name }).getByTestId('history-digital'))
     .toHaveAttribute('data-status', 'CONFIRMED')
 

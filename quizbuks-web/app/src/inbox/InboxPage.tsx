@@ -1,5 +1,6 @@
 import { formatDateTime, i18n } from '@jabiz/client'
-import { TitleBadge } from '../pages/TitleBadge'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 import {
   Badge,
   Button,
@@ -17,7 +18,7 @@ import {
   cn,
 } from '@jabiz/ui'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, Inbox, Search } from 'lucide-react'
+import { CheckCheck, Search } from 'lucide-react'
 import { useEffect, useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -42,7 +43,6 @@ import {
 } from './api'
 import './messages'
 import { useMySponsor } from '../mysponsor/api'
-import { ConversationsLink } from '../conversation/ConversationPages'
 
 /** Items per page of the inbox. */
 export const INBOX_PAGE = 20
@@ -157,17 +157,13 @@ export function InboxPage() {
   const filtered = !!(filter.q || filter.category || filter.unread || filter.from || filter.to)
   return (
     <section className="flex flex-col gap-4" aria-labelledby="inbox-title" data-testid="inbox">
-      <div className="flex items-center gap-3">
-        <TitleBadge icon={Inbox} />
-        <h1 id="inbox-title" className="mr-auto text-xl font-semibold">{t('inbox.title')}</h1>
-        <Button variant="outline" size="sm" disabled={all.isPending} onClick={() => all.mutate()}
-          data-testid="inbox-read-all">
-          <CheckCheck aria-hidden />
-          {t('inbox.readAll')}
-        </Button>
-      </div>
-      {/* Q82: the conversations with sponsors have their own page. */}
-      <ConversationsLink />
+      {/* Q82: the conversations with sponsors are the other tab (F-F4). */}
+      <AreaHeader area="messages" tab="inbox" id="inbox-title" title={t('frame.areas.messages')} />
+      <Button variant="outline" size="sm" className="self-end" disabled={all.isPending} onClick={() => all.mutate()}
+        data-testid="inbox-read-all">
+        <CheckCheck aria-hidden />
+        {t('inbox.readAll')}
+      </Button>
       <p role="status" className="text-muted-foreground text-sm empty:hidden" data-testid="inbox-read-all-done">
         {done ? t('inbox.readAllDone') : ''}
       </p>

@@ -16,6 +16,7 @@ import {
   run,
   setAppearance,
   signIn,
+  takerArea,
   test,
   tokenOf,
   verifiedUser,
@@ -103,9 +104,9 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByRole('option').first()).toBeVisible()
     await expectAccessible(page, at('app country picker'))
     await page.keyboard.press('Escape')
-    // Q62: signing out is in the header's menu.
-    await page.getByTestId('app-menu').click()
-    await expectAccessible(page, at('app header menu'))
+    // F-F4: the welcome step has no menu, and signing out is in its header.
+    await expect(page.getByTestId('app-menu')).toHaveCount(0)
+    await expect(page.getByTestId('bottom-menu')).toHaveCount(0)
     await page.getByTestId('sign-out').click()
     await expect(page).toHaveURL(/\/login$/)
 
@@ -113,7 +114,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('environment-banner')).toBeVisible()
     await expectAccessible(page, at('app home'))
     // The account is a menu with a page per part (Q56): the menu, then the sign-in and security page.
-    await page.getByTestId('nav-account').click()
+    await takerArea(page, 'me').click()
     await expect(page.getByTestId('account-menu-security')).toBeVisible()
     await expectAccessible(page, at('app account menu'))
     await page.getByTestId('account-menu-security').click()
@@ -121,6 +122,25 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('app account security'))
     await page.setViewportSize({ width: 1280, height: 900 })
     await expectAccessible(page, at('app account security 1280px'))
+
+    // F-F4: every area with its tabs, and the pages of "Me" that are new, at a phone's and a desktop's width.
+    for (const width of [360, 1280]) {
+      await page.setViewportSize({ width, height: 844 })
+      for (const [path, name] of [
+        ['/taker/history', 'app answered'],
+        ['/taker/history/prizes', 'app to collect'],
+        ['/taker/scan/pass', 'app show my pass'],
+        ['/taker/conversations', 'app conversations'],
+        ['/taker/account', 'app me'],
+        ['/taker/account/blocks', 'app blocks and topics'],
+        ['/taker/account/preferences', 'app settings'],
+      ]) {
+        await page.goto(path)
+        await expect(page.locator('[data-slot="page-title"]').first()).toBeVisible()
+        await page.waitForLoadState('networkidle')
+        await expectAccessible(page, at(`${name} ${width}px`))
+      }
+    }
   })
 
   test(`the Sponsor console's pages pass axe (${appearance})`, async ({ page, request }) => {
@@ -658,7 +678,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.setViewportSize({ width: 390, height: 844 })
     await signIn(page, '/taker/', taker.email)
     await expect(page.getByTestId('home')).toBeVisible()
-    await page.getByTestId('nav-inbox').click()
+    await takerArea(page, 'messages').click()
     // The reward's message comes from the event's consumer: wait for both rows (and the network) before checking.
     await expect(async () => {
       await page.reload()

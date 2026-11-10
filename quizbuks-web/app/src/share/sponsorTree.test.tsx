@@ -147,8 +147,8 @@ describe('my knowledge maps (F-S3c)', () => {
     expect(item).toHaveTextContent('By Acme')
     expect(within(item).getByTestId('maps-progress')).toHaveTextContent('1 of 2 nodes lit')
     expect(asked.find((q) => q.path === '/api/queries/qb.app.trees')?.params).toEqual({})
-    // The bottom navigation keeps the account marked.
-    expect(screen.getByTestId('nav-account')).toHaveAttribute('aria-current', 'page')
+    // The bottom menu keeps "Me" marked.
+    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
     await userEvent.click(item)
     expect(await screen.findByTestId('map-title')).toHaveTextContent('Baking')

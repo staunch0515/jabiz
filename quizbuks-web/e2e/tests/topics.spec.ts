@@ -164,7 +164,8 @@ test('headquarters add topics, a sponsor uses them, and strict mode keeps only t
   await expect(cards).toHaveCount(3)
   await expect(page.getByTestId('home-strict-topics')).toHaveCount(0)
 
-  await page.goto('/taker/account/details')
+  // F-F4: the liked topics are on "Blocks and topics" (they were a section of "About me").
+  await page.goto('/taker/account/blocks')
   const section = page.getByTestId('account-topics')
   await expect(section).toBeVisible()
   const strict = section.getByTestId('strict-topics-switch')
@@ -189,7 +190,7 @@ test('headquarters add topics, a sponsor uses them, and strict mode keeps only t
 
   // Dark: the same two states.
   await setAppearance(page, 'dark')
-  await page.goto('/taker/account/details')
+  await page.goto('/taker/account/blocks')
   await expect(page.getByTestId('account-topics').getByTestId('strict-topics-switch')).toBeChecked()
   await expectAccessible(page, 'app liked topics (dark)')
   cards = await homeCards(page, base)
@@ -198,7 +199,7 @@ test('headquarters add topics, a sponsor uses them, and strict mode keeps only t
 
   // "Change" leads to the setting; strict mode off, the home lists everything again.
   await page.getByTestId('home-strict-topics-change').click()
-  await expect(page).toHaveURL(/\/taker\/account\/details$/)
+  await expect(page).toHaveURL(/\/taker\/account\/blocks$/)
   const again = page.getByTestId('account-topics').getByTestId('strict-topics-switch')
   await again.click()
   await expect(again).not.toBeChecked()

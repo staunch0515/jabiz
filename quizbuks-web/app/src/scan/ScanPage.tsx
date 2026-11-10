@@ -1,15 +1,21 @@
 import { Alert, AlertDescription, Button } from '@jabiz/ui'
-import { CameraOff, ScanLine } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { CameraOff, QrCode } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
-import { navigate } from '../qb/router'
+import { AreaHeader } from '../frame/AreaHeader'
+import { MY_PASSES_PATH } from '../frame/areas'
+import { DUE_PASSES_QUERY, readDuePasses } from '../frame/prizes'
+import '../frame/messages'
+import { PassButton } from '../pass/PassDialog'
+import { Link, navigate } from '../qb/router'
 import { createDecoder } from './decoder'
 import './messages'
+import { SCAN_PATH } from './path'
 import { scanTarget, targetPath } from './target'
 
-/** The app's scanner (Q52). */
-export const SCAN_PATH = '/scan'
+export { SCAN_PATH }
 
 /** How often the picture is read: often enough to feel instant, rarely enough to spare an old phone's battery. */
 export const SCAN_INTERVAL_MS = 200
@@ -33,6 +39,26 @@ function problemOf(error: unknown): Problem {
   if (name === 'NotAllowedError' || name === 'SecurityError') return 'denied'
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'noCamera'
   return 'failed'
+}
+
+/**
+ * The way to the pass at the counter (F-F4 section 2.3), above the camera: with one prize to collect at a Sponsor's
+ * place the button shows its pass at once; with several it opens the tab that lists them; with none it is not there.
+ * A failed read shows nothing: the tab "Show my pass" is one tap away.
+ */
+function PassShortcut() {
+  const { t } = useTranslation(APP)
+  const passes = useQuery({ queryKey: DUE_PASSES_QUERY, queryFn: readDuePasses, staleTime: 0, gcTime: 0 })
+  const due = passes.data ?? []
+  if (due.length === 0) return null
+  const label = t('pass.mine.button', { count: due.length })
+  return due.length === 1 ? (
+    <PassButton redemptionId={due[0].prizeId} collected={false} label={label} className="w-full" />
+  ) : (
+    <Button asChild className="w-full">
+      <Link to={MY_PASSES_PATH} data-testid="pass-shortcut"><QrCode aria-hidden />{label}</Link>
+    </Button>
+  )
 }
 
 /**
@@ -114,10 +140,8 @@ export function ScanPage() {
 
   return (
     <section className="flex flex-col gap-4" aria-labelledby="scan-title" data-testid="scan-page">
-      <h1 id="scan-title" className="flex items-center gap-2 text-xl font-semibold">
-        <ScanLine aria-hidden className="text-primary size-5" />
-        {t('scan.title')}
-      </h1>
+      <AreaHeader area="scan" tab="scan" id="scan-title" title={t('frame.areas.scan')} />
+      <PassShortcut />
       {problem ? (
         <Alert variant="warning" data-testid={`scan-${problem}`}>
           <CameraOff aria-hidden />

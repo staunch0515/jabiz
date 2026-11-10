@@ -1,5 +1,5 @@
 import { configureClient, session } from '@jabiz/client'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { expectAccessible } from '@jabiz/ui/testing'
@@ -210,6 +210,20 @@ describe('the wallet', () => {
     expect(screen.queryByTestId('wallet-held')).toBeNull()
   })
 
+  it('says "Coming soon" beside the Kudos only while neither way of using them is on (F-F4)', async () => {
+    server({ wallet: { available: '1250', totalEarned: '1500', pendingCount: 0, pendingAmount: '0', inTransfer: '0',
+      held: '0', heldOpen: '0', heldUntil: null, usable: false } })
+    window.history.replaceState(null, '', '/wallet')
+    render(<App />)
+    expect(await screen.findByTestId('wallet-soon')).toHaveTextContent('Coming soon')
+    cleanup()
+    server({ wallet: { available: '1250', totalEarned: '1500', pendingCount: 0, pendingAmount: '0', inTransfer: '0',
+      held: '0', heldOpen: '0', heldUntil: null, usable: true } })
+    render(<App />)
+    expect(await screen.findByTestId('wallet-available')).toHaveTextContent('1,250 Kudos')
+    expect(screen.queryByTestId('wallet-soon')).toBeNull()
+  })
+
   it('shows the Kudos at hand and earned in all, and a menu of its pages (Q62)', async () => {
     server()
     window.history.replaceState(null, '', '/wallet')
@@ -224,15 +238,15 @@ describe('the wallet', () => {
     expect(screen.queryByTestId('kudos')).toBeNull()
     expect(await screen.findByTestId('wallet-payout')).toHaveAttribute('data-status', 'NONE')
     expect(screen.getByTestId('wallet-payout')).toHaveAttribute('href', '/wallet/payout')
-    expect(screen.getByTestId('nav-wallet')).toHaveTextContent('My Kudos')
-    expect(screen.getByTestId('nav-wallet')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('bottom-bar-me')).toHaveTextContent('Me')
+    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
 
     for (const [part, testId] of [['balance', 'wallet-balance'], ['rewards', 'kudos'], ['history', 'ledger']]) {
       await user.click(screen.getByTestId(`wallet-menu-${part}`))
       expect(window.location.pathname).toBe(`/wallet/${part}`)
       expect(await screen.findByTestId(testId)).toBeInTheDocument()
-      expect(screen.getByTestId('nav-wallet')).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
       await user.click(screen.getByTestId('wallet-back'))
       expect(await screen.findByTestId('wallet-summary')).toBeInTheDocument()
     }
@@ -282,7 +296,7 @@ describe('the wallet', () => {
     expect(rows[2]).toHaveTextContent('back in My Kudos')
     expect(document.body).not.toHaveTextContent('JPY')
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Transactions')
-    expect(screen.getByTestId('nav-wallet')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
 
     await user.click(screen.getByRole('radio', { name: 'Payouts' }))
     await waitFor(() => expect(queryBodies('qb.app.ledger').at(-1)).toMatchObject({
@@ -302,7 +316,7 @@ describe('the payout account', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     render(<App />)
     expect(await screen.findByTestId('payout-status')).toHaveTextContent('Being set up')
-    expect(screen.getByTestId('nav-wallet')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
     await user.click(screen.getByTestId('payout-onboard'))
     expect(screen.getByTestId('payout-state')).toHaveAttribute('data-state', 'preparing')
     await act(async () => {

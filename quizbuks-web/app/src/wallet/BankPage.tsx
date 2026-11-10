@@ -36,6 +36,8 @@ import {
   type PayoutMethod,
 } from './api'
 import './messages'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 
 const METHODS: PayoutMethod[] = ['STRIPE', 'BANK']
 
@@ -60,7 +62,7 @@ export function BankPage() {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="bank-title" data-testid="bank">
       {back}
-      <h1 id="bank-title" className="text-xl font-semibold">{t('bank.title')}</h1>
+      <AreaHeader area="me" id="bank-title" title={t('bank.title')} />
       {settings.isError && (
         <Alert variant="destructive"><AlertDescription>{problemText(settings.error)}</AlertDescription></Alert>
       )}

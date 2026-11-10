@@ -1,4 +1,4 @@
-import { expect, expectAccessible, prepareQuizbuks, rows, signIn, test, setAppearance } from './support'
+import { expect, expectAccessible, prepareQuizbuks, rows, signIn, test, setAppearance, takerArea } from './support'
 import { earnReward, takerInJapan } from './wallet'
 
 /**
@@ -28,7 +28,8 @@ for (const appearance of ['light', 'dark'] as const) {
 
     await signIn(page, '/taker/', me.email)
     await expect(page.getByTestId('home')).toBeVisible()
-    await page.getByTestId('nav-wallet').click()
+    await takerArea(page, 'me').click()
+    await page.getByTestId('me-number-kudos').click()
     await expect(page).toHaveURL(/\/wallet$/)
     // The reward less the commission is the taker's: some Kudos, never more than the reward.
     const available = page.getByTestId('wallet-available')

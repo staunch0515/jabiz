@@ -163,7 +163,7 @@ describe('blocking (F-S8)', () => {
     expect(await screen.findByTestId('detail')).toBeInTheDocument()
   })
 
-  it('lists every block in the app\'s settings, each unblocked on its own', async () => {
+  it('lists every block in "Blocks and topics", each unblocked on its own', async () => {
     const { calls } = server({ blocks: [
       { blockId: 'b-1', kind: 'SPONSOR', objectId: 's-1', name: 'Neko Co', publicationId: null,
         createdAt: '2026-11-08T00:00:00Z' },
@@ -172,7 +172,7 @@ describe('blocking (F-S8)', () => {
       { blockId: 'b-3', kind: 'QUIZ', objectId: 'q-3', name: null, publicationId: null,
         createdAt: '2026-11-06T00:00:00Z' },
     ] })
-    window.history.replaceState(null, '', '/account/preferences')
+    window.history.replaceState(null, '', '/account/blocks')
     const { container } = render(<App />)
     const section = await screen.findByTestId('account-blocks')
     expect(section).toHaveTextContent('Blocked')
@@ -189,7 +189,7 @@ describe('blocking (F-S8)', () => {
 
   it('says when nothing is blocked', async () => {
     server()
-    window.history.replaceState(null, '', '/account/preferences')
+    window.history.replaceState(null, '', '/account/blocks')
     render(<App />)
     expect(await screen.findByTestId('block-list-empty')).toHaveTextContent('You have not blocked anything.')
   })

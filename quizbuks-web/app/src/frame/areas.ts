@@ -1,15 +1,42 @@
 import { MAIL_LINK_PAGES } from '@jabiz/ui'
-import { History, House, MessagesSquare, ScanLine, UserRound, type LucideIcon } from 'lucide-react'
+import {
+  Award,
+  CircleHelp,
+  Coins,
+  FileText,
+  Gift,
+  History,
+  House,
+  IdCard,
+  Info,
+  Mail,
+  MessagesSquare,
+  Network,
+  ScanLine,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  Ban,
+  UserRound,
+  UserRoundPlus,
+  type LucideIcon,
+} from 'lucide-react'
 import { verifyKeyOf, takerHandleOf } from '../certificates/PublicCertificates'
 import { conversationOf, CONVERSATIONS_PATH } from '../conversation/api'
 import { inboxItemOf, INBOX_PATH } from '../inbox/api'
 import { mapOf, MAPS_PATH } from '../maps/paths'
 import { MY_SPONSOR_PATH } from '../mysponsor/api'
-import { ACCOUNT_DELETION_PATH, ACCOUNT_DETAILS_PATH, ACCOUNT_PARTS, ACCOUNT_PATH } from '../pages/AccountPage'
-import { legalKindOf } from '../qb/legal'
+import {
+  ACCOUNT_BLOCKS_PATH,
+  ACCOUNT_DELETION_PATH,
+  ACCOUNT_DETAILS_PATH,
+  ACCOUNT_PARTS,
+  ACCOUNT_PATH,
+} from '../pages/accountPaths'
+import { legalKindOf, legalPath } from '../qb/legal'
 import { REFERRALS_PATH } from '../referral/api'
 import { itemPage } from '../routes'
-import { SCAN_PATH } from '../scan/ScanPage'
+import { SCAN_PATH } from '../scan/path'
 import { sponsorPageOf } from '../share/SponsorPage'
 import { HANDLED_PATH, STAFF_PATH } from '../staff/api'
 import { BANK_PATH, PAYOUT_PATH, WALLET_PATH, walletPartOf } from '../wallet/api'
@@ -20,8 +47,10 @@ import { kudosMethodOf } from '../wallet/kudos'
  * the addresses that changed. The one place for all three: the bottom menu (the left column on a wide screen), the
  * areas' title icons and the redirects read it, and new pages are added here (backend/quizbuks/CLAUDE.md section 5).
  *
- * F-F4a only records it: the frame that reads it (the bottom menu, the tabs, "Me") is F-F4b, the publication's tabs
- * F-F4c. Until then the app looks as before; only the redirects already read `LEGACY_APP_PATHS`.
+ * F-F4a recorded the areas and the addresses; F-F4b's frame reads them: the bottom menu (the left column on a wide
+ * screen), the tabs of the areas, the rows of "Me" and the titles' icons. A new feature is a tab of an area or a row
+ * of "Me", never a sixth area (backend/quizbuks/CLAUDE.md section 5). The "knowledge maps" row exists since F-S3c at
+ * `/maps` (not `/account/map`, which the plan had reserved).
  */
 
 /** The five areas, in the bottom menu's order (F-F4: scanning in the middle, raised). */
@@ -37,6 +66,11 @@ export interface Area {
   raised?: true
 }
 
+/** The pages F-F4b added (F-F4 section 2): the prizes to collect, the passes to show, and blocks and topics. */
+export const PRIZES_PATH = '/history/prizes'
+export const MY_PASSES_PATH = '/scan/pass'
+export { ACCOUNT_BLOCKS_PATH }
+
 /** The bottom menu (the left column on a wide screen). New features become tabs or rows of "Me", never a sixth area. */
 export const AREAS: readonly Area[] = [
   { key: 'home', path: '/', icon: House },
@@ -50,6 +84,60 @@ export const AREAS: readonly Area[] = [
 export function areaOf(key: AreaKey): Area {
   return AREAS.find((area) => area.key === key)!
 }
+
+/** A tab of an area (a page of its own, with an address): the key names its text (`frame.tabs.<key>`). */
+export interface AreaTab {
+  key: string
+  path: string
+}
+
+/** The areas that have tabs under their title (F-F4 section 2.2); the first tab is the area's own page. */
+export const AREA_TABS: Readonly<Partial<Record<AreaKey, readonly AreaTab[]>>> = {
+  history: [{ key: 'answered', path: '/history' }, { key: 'prizes', path: PRIZES_PATH }],
+  scan: [{ key: 'scan', path: SCAN_PATH }, { key: 'pass', path: MY_PASSES_PATH }],
+  messages: [{ key: 'inbox', path: INBOX_PATH }, { key: 'conversations', path: CONVERSATIONS_PATH }],
+}
+
+/**
+ * A row of "Me" (F-F4 section 2.4): where it leads, its icon, and its title and hint as message keys. `ns` is the
+ * namespace of the title (`app` or the shared `qb`); a row without `hint` shows the title only.
+ */
+export interface MeRow {
+  key: string
+  path: string
+  icon: LucideIcon
+  ns?: 'app' | 'qb'
+  title: string
+  hint?: string
+}
+
+/** "What I have". "My Sponsor account" (only for a Sponsor) and "Become a Sponsor" are placed by the page. */
+export const ME_OWNED: readonly MeRow[] = [
+  { key: 'prizes', path: PRIZES_PATH, icon: Gift, title: 'me.rows.prizes', hint: 'me.rows.prizesHint' },
+  { key: 'certificates', path: `${ACCOUNT_PATH}/certificates`, icon: Award, title: 'account.titles.certificates',
+    hint: 'account.hints.certificates' },
+  { key: 'maps', path: MAPS_PATH, icon: Network, title: 'maps.menu', hint: 'maps.menuHint' },
+  { key: 'referrals', path: REFERRALS_PATH, icon: UserRoundPlus, title: 'referral.mine' },
+  { key: 'kudos', path: WALLET_PATH, icon: Coins, title: 'me.rows.kudos', hint: 'me.rows.kudosHint' },
+]
+
+/** "Settings": the account's parts, then help and the texts (public pages, readable without signing in too). */
+export const ME_SETTINGS: readonly MeRow[] = [
+  { key: 'profile', path: `${ACCOUNT_PATH}/profile`, icon: UserRound, title: 'profile.title', hint: 'account.hints.profile' },
+  { key: 'details', path: ACCOUNT_DETAILS_PATH, icon: Sparkles, title: 'details.title', hint: 'account.hints.details' },
+  { key: 'security', path: `${ACCOUNT_PATH}/security`, icon: ShieldCheck, title: 'account.titles.security',
+    hint: 'account.hints.security' },
+  { key: 'mail', path: `${ACCOUNT_PATH}/mail`, icon: Mail, title: 'account.titles.mail', hint: 'account.hints.mail' },
+  { key: 'blocks', path: ACCOUNT_BLOCKS_PATH, icon: Ban, title: 'account.titles.blocks', hint: 'account.hints.blocks' },
+  { key: 'preferences', path: `${ACCOUNT_PATH}/preferences`, icon: SlidersHorizontal,
+    title: 'account.titles.preferences', hint: 'account.hints.preferences' },
+  { key: 'id', path: `${ACCOUNT_PATH}/id`, icon: IdCard, title: 'account.titles.id', hint: 'account.hints.id' },
+  { key: 'help', path: '/help', icon: CircleHelp, ns: 'qb', title: 'help.title' },
+  { key: 'terms', path: legalPath('TERMS_APP'), icon: FileText, ns: 'qb', title: 'legal.kinds.TERMS_APP' },
+  { key: 'privacy', path: legalPath('PRIVACY'), icon: FileText, ns: 'qb', title: 'legal.kinds.PRIVACY' },
+  { key: 'contest', path: legalPath('CONTEST_RULES'), icon: FileText, ns: 'qb', title: 'legal.kinds.CONTEST_RULES' },
+  { key: 'about', path: '/about', icon: Info, title: 'account.about' },
+]
 
 /**
  * The pages of the app. `entry`: the platform's entry pages (17zk) and the mailed links; `public`: readable without
@@ -78,11 +166,6 @@ export interface Route {
   /** Whether the frame's navigation shows: not while answering, nor on the welcome step, nor outside the areas. */
   nav: boolean
 }
-
-/** The pages F-F4b adds (F-F4 section 2): their routes are recorded already; the app shows them from F-F4b on. */
-export const PRIZES_PATH = '/history/prizes'
-export const MY_PASSES_PATH = '/scan/pass'
-export const ACCOUNT_BLOCKS_PATH = `${ACCOUNT_PATH}/blocks`
 
 const route = (page: PageName, area: AreaKey | null, nav = area !== null): Route => ({ page, area, nav })
 

@@ -19,7 +19,7 @@
 
 屏蔽后，提示中可以马上"撤销"。被屏蔽的内容不会出现在首页、"短视频"、搜索与收件箱的推广中，也不能开始答题。这是硬屏蔽：发起方付多少钱都越不过。
 打开被屏蔽的 Quiz 的链接时，页面会显示"你已屏蔽"，可以在那里解除。已经开始或答过的 Quiz 仍可以继续答完、查看结果。
-在"账户 → App 设置 → 屏蔽"中可以看到你屏蔽的全部内容，逐个解除。最多可以屏蔽 1000 项。
+在"我的 → 设置 → 屏蔽与主题"中可以看到你屏蔽的全部内容，逐个解除。最多可以屏蔽 1000 项。
 屏蔽只属于你自己：发起方看不到是谁屏蔽了他们，只能看到大约有多少人。删除账号时，你的屏蔽一起删除。
 
 ### 日本語 · 見たくないものをブロックするには？解除するには？
@@ -32,7 +32,7 @@
 
 ブロックした直後は、表示されるメッセージから「元に戻す」ことができます。ブロックしたものは、ホーム・「ショート動画」・検索・受信箱のおすすめに表示されず、回答も始められません。これは強いブロックで、主催者がいくら支払っても越えられません。
 ブロックしたクイズのリンクを開くと「ブロックしています」と表示され、その場で解除できます。すでに始めた、または回答したクイズは、最後まで回答したり結果を見たりできます。
-「アカウント → アプリの設定 → ブロック」で、ブロックしたものをすべて確認し、1 つずつ解除できます。最大 1000 件までブロックできます。
+「マイページ → 設定 → ブロックとトピック」で、ブロックしたものをすべて確認し、1 つずつ解除できます。最大 1000 件までブロックできます。
 ブロックはあなただけのものです。主催者には誰がブロックしたかは表示されず、おおよその人数だけが表示されます。アカウントを削除すると、ブロックも一緒に削除されます。
 
 ### English · How do I block what I don't want to see, and unblock it?
@@ -45,7 +45,7 @@ Tap ⋮ on a card on the home page, on the full-screen "Shorts" view or on a qui
 
 Right after blocking, the message offers "Undo". What you block does not appear on your home page, in "Shorts", in search or in the promotions in your inbox, and cannot be started. It is a hard block: no Sponsor can pay to get past it.
 Opening the link of a quiz you blocked shows "You blocked this", where you can unblock it. A quiz you already started or answered can still be finished, and its result seen.
-"Account → App settings → Blocked" lists everything you blocked; unblock each one there. You can block up to 1000 things.
+"Me → Settings → Blocks and topics" lists everything you blocked; unblock each one there. You can block up to 1000 things.
 Your blocks are yours alone: Sponsors never see who blocked them, only roughly how many people did. Deleting your account deletes your blocks too.
 
 ## 二、给发起方（FAQ 的 `audience` = `SPONSOR`，分类 `PUBLISHING`）

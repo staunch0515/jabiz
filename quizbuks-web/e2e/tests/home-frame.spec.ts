@@ -143,9 +143,11 @@ test('the home stays pixel for pixel as it was before F-F4', async ({ page, requ
         const header = page.locator('header').first()
         const wordmark = header.getByTestId('wordmark')
         await expect(wordmark).toBeVisible()
-        // The buttons at the right: the filters and the search stay (the menu goes with F-F4b, which checks it).
+        // The buttons at the right: the filters and the search stay; the menu is gone (F-F4b), its entries are in the
+        // bottom menu and in "Me".
         await expect(header.getByTestId('feed-filters-open')).toBeVisible()
         await expect(header.getByTestId('search-open')).toBeVisible()
+        await expect(page.getByTestId('app-menu')).toHaveCount(0)
         await expect(header.getByTestId('header-my-sponsor')).toHaveCount(0)
         const box = (await header.boundingBox())!
         const mark = (await wordmark.boundingBox())!

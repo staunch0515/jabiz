@@ -3,7 +3,7 @@ import { signInAdmin } from './admin'
 import { contentAdmin, legalAdmin } from './legal'
 import { rewardingPublication } from './transactions'
 import { earnReward, fundedSponsor, takerInJapan } from './wallet'
-import { expect, PASSWORD, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { expect, PASSWORD, prepareQuizbuks, run, signIn, takerArea, test, unique } from './support'
 
 /*
  * The inbox and the announcements (docs/quizbuks/plans/Q7-messages-legal.md, Q7c): a paid reward becomes a message
@@ -38,9 +38,10 @@ test('a paid reward is a message in the inbox; the badge counts it until it is r
   await page.setViewportSize({ width: 390, height: 844 })
   await signIn(page, '/taker/', taker.email)
   await expect(page.getByTestId('home')).toBeVisible()
-  await expect(page.getByTestId('nav-inbox-badge')).toHaveText('1')
-  await expect(page.getByTestId('nav-inbox')).toHaveAccessibleName(/1 unread/)
-  await page.getByTestId('nav-inbox').click()
+  // F-F4: the number is on the bottom menu's Messages, whose name says it too.
+  await expect(takerArea(page, 'messages')).toHaveText(/Messages\s*1/)
+  await expect(takerArea(page, 'messages')).toHaveAccessibleName('Messages, 1 unread')
+  await takerArea(page, 'messages').click()
   const row = page.getByTestId('inbox-row').and(page.locator('[data-kind="MESSAGE"]'))
   await expect(row).toHaveAttribute('data-unread', 'true')
   await expect(row).toContainText('10 Kudos')
@@ -55,7 +56,7 @@ test('a paid reward is a message in the inbox; the badge counts it until it is r
   await expect(page.getByTestId('inbox-item-go')).toBeVisible()
   await page.getByTestId('inbox-back').click()
   await expect(row).toHaveAttribute('data-unread', 'false', { timeout: 15_000 })
-  await expect(page.getByTestId('nav-inbox-badge')).toBeHidden()
+  await expect(takerArea(page, 'messages')).toHaveAccessibleName('Messages')
 })
 
 test('a Sponsor\'s notice reaches its Takers and counts readers without naming them; QuizBuks withdraws it',
@@ -88,7 +89,7 @@ test('a Sponsor\'s notice reaches its Takers and counts readers without naming t
     const app = await takerContext.newPage()
     await signIn(app, '/taker/', taker.email)
     await expect(app.getByTestId('home')).toBeVisible()
-    await app.getByTestId('nav-inbox').click()
+    await takerArea(app, 'messages').click()
     const row = app.getByTestId('inbox-row').and(app.locator(`[data-id="${broadcastId}"]`))
     await expect(row).toContainText(title)
     await row.getByRole('link').click()

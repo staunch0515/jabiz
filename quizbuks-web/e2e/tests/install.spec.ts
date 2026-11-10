@@ -32,7 +32,11 @@ test('an iPhone is guided through the Share menu from the account page', async (
   const page = await context.newPage()
   await signIn(page, '/taker/', email)
   await expect(page).not.toHaveURL(/\/login/)
-  await page.goto('/taker/account/preferences')
+  // The offer stays in "App settings", under "Me" and "Settings" (F-F4).
+  await page.goto('/taker/account')
+  await page.getByTestId('account-menu-preferences').click()
+  await expect(page).toHaveURL(/\/taker\/account\/preferences$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'App settings' })).toBeVisible()
   const offer = page.getByTestId('pwa-install')
   await expect(offer).toHaveAttribute('data-situation', 'ios')
   // The account page's entry stays: nothing to close.

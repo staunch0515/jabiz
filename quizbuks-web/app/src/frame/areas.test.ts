@@ -3,10 +3,13 @@ import { History, House, MessagesSquare, ScanLine, UserRound } from 'lucide-reac
 import { scanTarget, targetPath } from '../scan/target'
 import {
   ACCOUNT_BLOCKS_PATH,
+  AREA_TABS,
   AREAS,
   areaOf,
   LEGACY_APP_PATHS,
   legacyTarget,
+  ME_OWNED,
+  ME_SETTINGS,
   MY_PASSES_PATH,
   OLD_ROUTES,
   PRIZES_PATH,
@@ -142,5 +145,47 @@ describe('a scanned code (T12 unchanged)', () => {
       expect(target).toEqual({ page, id: 'abc' })
       expect(routeOf(targetPath(target!))?.area).toBe(area)
     }
+  })
+})
+
+describe('the tabs of the areas (F-F4)', () => {
+  it('are the pages of their area, the first being the area\'s own page', () => {
+    expect(Object.keys(AREA_TABS)).toEqual(['history', 'scan', 'messages'])
+    for (const [key, tabs] of Object.entries(AREA_TABS)) {
+      expect(tabs!.length, key).toBe(2)
+      expect(tabs![0].path, key).toBe(areaOf(key as AreaKey).path)
+      for (const tab of tabs!) expect(routeOf(tab.path)?.area, tab.path).toBe(key)
+    }
+    expect(AREA_TABS.history!.map((tab) => tab.path)).toEqual(['/history', PRIZES_PATH])
+    expect(AREA_TABS.scan!.map((tab) => tab.path)).toEqual(['/scan', MY_PASSES_PATH])
+    expect(AREA_TABS.messages!.map((tab) => tab.path)).toEqual(['/inbox', '/conversations'])
+  })
+})
+
+describe('the rows of "Me" (F-F4)', () => {
+  const rows = [...ME_OWNED, ...ME_SETTINGS]
+
+  it('have an address that is a page of the app, each key once', () => {
+    expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length)
+    for (const row of rows) expect(routeOf(row.path), row.path).not.toBeNull()
+  })
+
+  it('lead to pages of "Me", except the prizes (a tab of "Answered") and help and the texts (public pages)', () => {
+    for (const row of rows) {
+      const area = routeOf(row.path)!.area
+      if (['help', 'terms', 'privacy', 'contest', 'about'].includes(row.key)) expect(area, row.key).toBeNull()
+      else if (row.key === 'prizes') expect(area, row.key).toBe('history')
+      else expect(area, row.key).toBe('me')
+    }
+  })
+
+  it('hold every entry the old account menu and the top-right menu had', () => {
+    const paths = rows.map((row) => row.path)
+    for (const old of ['/account/profile', '/account/details', '/account/certificates', '/account/security',
+      '/account/mail', '/account/preferences', '/account/id', '/referrals', '/wallet', '/maps', '/help', '/about']) {
+      expect(paths, old).toContain(old)
+    }
+    expect(paths).toContain(PRIZES_PATH)
+    expect(paths).toContain(ACCOUNT_BLOCKS_PATH)
   })
 })

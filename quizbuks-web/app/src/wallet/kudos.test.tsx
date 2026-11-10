@@ -124,7 +124,7 @@ describe('the wallet\'s Kudos by method (Q58)', () => {
     expect(bodies('qb.app.history').at(-1)).toMatchObject({
       filters: [{ field: 'rewardStatus', op: 'in', values: ['CASH'] }] })
     expect(within(page).getByRole('radio', { name: 'This month' })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByTestId('nav-wallet')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
     await userEvent.click(within(page).getByTestId('kudos-back'))
     expect(window.location.pathname).toBe('/wallet/rewards')

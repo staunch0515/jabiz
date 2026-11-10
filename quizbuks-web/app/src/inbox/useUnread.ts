@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { shownLanguages } from '../qb/api'
 import { useSoundSetting } from '../qb/SoundSettings'
+import { readConversationsUnread, CONVERSATIONS_QUERY } from '../conversation/api'
 import { readUnread, UNREAD_INTERVAL, UNREAD_QUERY } from './api'
 
 /**
@@ -35,4 +36,40 @@ export function useUnread(enabled = true) {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [enabled, refetch])
   return unread.data?.total ?? 0
+}
+
+/**
+ * The conversations with the sponsors that have something unread (F-F4 decision 10): counted into the Messages
+ * badge, on the same rhythm as {@link useUnread} (on entering, on coming back to the front, every five minutes while
+ * it is in front), never polled constantly. A failure shows nothing.
+ */
+export function useConversationsUnread(enabled = true) {
+  const unread = useQuery({
+    queryKey: [...CONVERSATIONS_QUERY, 'unread'],
+    queryFn: readConversationsUnread,
+    enabled,
+    refetchInterval: UNREAD_INTERVAL,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  })
+  const { refetch } = unread
+  useEffect(() => {
+    if (!enabled) return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refetch()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [enabled, refetch])
+  return unread.data ?? 0
+}
+
+/**
+ * The same count read from the cache only, for a tab's badge: {@link useConversationsUnread} (mounted once, in the
+ * frame) asks; a second asking observer would double the requests on every return to the front.
+ */
+export function useConversationsUnreadShown(): number {
+  const unread = useQuery({ queryKey: [...CONVERSATIONS_QUERY, 'unread'], queryFn: readConversationsUnread, enabled: false })
+  return unread.data ?? 0
 }

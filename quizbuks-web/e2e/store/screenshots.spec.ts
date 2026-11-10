@@ -4,7 +4,7 @@ import { mkdirSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 import { untilLive } from '../tests/play'
 import { contentAdmin } from '../tests/legal'
-import { adminToken, expect, PASSWORD, prepareQuizbuks, rows, run, signIn, test, tokenOf } from '../tests/support'
+import { adminToken, expect, PASSWORD, prepareQuizbuks, rows, run, signIn, takerArea, test, tokenOf } from '../tests/support'
 import { approvedSponsor, takerInJapan } from '../tests/wallet'
 import { CONTENT, FEATURE, type Language, type StoreQuiz } from './content'
 
@@ -197,7 +197,7 @@ async function photograph(chromium: Browser, request: APIRequestContext, languag
   await page.evaluate(() => window.scrollTo(0, 0))
   await shoot(page, dir, '5-result')
 
-  await page.getByTestId('nav-history').click()
+  await takerArea(page, 'history').click()
   await expect(page.getByTestId('history-row')).toHaveCount(2)
   await shoot(page, dir, '6-history')
   await context.close()

@@ -4,6 +4,7 @@ import { QrCode, RefreshCw } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PRIZES_QUERY } from '../frame/prizes'
 import { APP } from '../messages'
 import { problemText } from '../qb/problems'
 import { issuePass, passLink, type IssuedPass } from '../staff/api'
@@ -27,7 +28,13 @@ export const spaced = (digits: string) => `${digits.slice(0, 3)} ${digits.slice(
  * (counted from the answer's arrival, so the device's clock does not matter) and once; a new one when it runs out.
  * While it is shown the prize is read again, and the dialog says when the counter has handed it over.
  */
-export function PassButton({ redemptionId, collected }: { redemptionId: string; collected: boolean }) {
+export function PassButton({ redemptionId, collected, label, className }: {
+  redemptionId: string
+  collected: boolean
+  /** In place of "Show my pass" (the scanner's shortcut counts the passes). */
+  label?: string
+  className?: string
+}) {
   const { t } = useTranslation(APP)
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -53,6 +60,7 @@ export function PassButton({ redemptionId, collected }: { redemptionId: string; 
     const poll = window.setInterval(() => {
       void queryClient.invalidateQueries({ queryKey: ['qb', 'attempt-result'] })
       void queryClient.invalidateQueries({ queryKey: ['qb', 'redemptions'] })
+      void queryClient.invalidateQueries({ queryKey: PRIZES_QUERY })
     }, POLL_EVERY)
     return () => {
       window.clearInterval(tick)
@@ -70,9 +78,9 @@ export function PassButton({ redemptionId, collected }: { redemptionId: string; 
     <>
       {/* Collected: no pass to show; a dialog open when the counter handed it over stays, to say so. */}
       {!collected && (
-        <Button size="sm" className="self-start" onClick={openDialog} data-testid="pass-show">
+        <Button size="sm" className={className ?? 'self-start'} onClick={openDialog} data-testid="pass-show">
           <QrCode aria-hidden />
-          {t('pass.show')}
+          {label ?? t('pass.show')}
         </Button>
       )}
       <Dialog open={open} onOpenChange={setOpen}>
