@@ -94,6 +94,8 @@ export interface VersionNode {
   countedOn: string | null
   /** F-S4b: the platform fee Kudos lighting the node grants (null: none). */
   grantAmount: number | null
+  /** F-S5a: the name of the certificate lighting the node issues, as JSON by language (null: none). */
+  certificateNames: string | null
   /** F-S4c: how many have the node lit now (null: under the minimum group, or a removed node). */
   litCount: number | null
 }
@@ -105,7 +107,7 @@ export async function readTreeVersion(operator: boolean, versionId: string): Pro
     description: str(row.description),
     condition: row.condition == null ? null : typeof row.condition === 'string' ? row.condition : JSON.stringify(row.condition), runningBound: num(row.runningBound),
     answeredUnlit: row.answeredUnlit == null ? null : num(row.answeredUnlit), countedOn: str(row.countedOn),
-    grantAmount: row.grantAmount == null ? null : num(row.grantAmount),
+    grantAmount: row.grantAmount == null ? null : num(row.grantAmount), certificateNames: str(row.certificateNames),
     litCount: row.litCount == null ? null : num(row.litCount) }))
 }
 

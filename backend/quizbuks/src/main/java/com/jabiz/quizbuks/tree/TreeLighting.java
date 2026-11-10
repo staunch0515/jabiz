@@ -61,6 +61,8 @@ public final class TreeLighting {
     static final String TREES = "lighting.trees";
     /** F-S4b: whether a lit record here holds a grant (the grant is then asked for). */
     static final String GRANTED = "lighting.granted";
+    /** F-S5a: whether a lit record here froze a certificate's names (the certificate is then asked for). */
+    static final String CERTIFIED = "lighting.certified";
     static final int MAX_ROWS = 5000;
 
     private TreeLighting() {}
@@ -148,7 +150,12 @@ public final class TreeLighting {
                     TreeLighting::goesDeeper, LIT_EVENT, TreeLighting::litPayload))
                 // F-S4b: the grants are given outside the lighting, under the Sponsor's wallet lock (fee.LightGrants).
                 .step("Ask for the grants", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(GRANTED),
-                    com.jabiz.quizbuks.fee.LightGrants.DUE_EVENT, ctx -> Map.of("sponsorId", person(ctx)))));
+                    com.jabiz.quizbuks.fee.LightGrants.DUE_EVENT, ctx -> Map.of("sponsorId", person(ctx))))
+                // F-S5a: the certificates are written outside the lighting too, under their own lock
+                // (certification.NodeCertificates); here only a record of what was frozen and an event.
+                .step("Ask for the certificates", PublishEvent.<ProcessContext>when(ctx -> ctx.contains(CERTIFIED),
+                    com.jabiz.quizbuks.certification.NodeCertificates.DUE_EVENT,
+                    ctx -> Map.of("subjectKind", subject(ctx), "subjectId", person(ctx)))));
     }
 
     /**
@@ -340,6 +347,13 @@ public final class TreeLighting {
             values.put("grantAmount", grant);
             if (grant != null) {
                 ctx.put(GRANTED, true);
+            }
+            // F-S5a: the certificate the node issues now, frozen as lit (a node row of its own graph: a copy has the
+            // template's, taken over with its nodes).
+            Object certificate = node.get("certificateNames");
+            values.put("certificateNames", certificate);
+            if (certificate != null) {
+                ctx.put(CERTIFIED, true);
             }
             ctx.changes().insert(QbTrees.LIT, values);
             // A node lit here counts for the next candidates of the same level.

@@ -17,10 +17,11 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Certificates (Q77, docs/quizbuks/plans/Q77-certificates.md): F-S2c (D8) pauses issuing until the knowledge map's
- * certificates (F-S5); one issued before stays a platform document only its holder reads; anybody with its key
- * verifies it, revoked or not; the public certification page lists the issued, unrevoked ones once its holder turned
- * it on under a name of their own.
+ * Certificates of Q77's kind (docs/quizbuks/plans/Q77-certificates.md): F-S2c (D8) stopped issuing them and F-S5a
+ * (docs/quizbuks/plans/impl/F-S5.md) put the certificates of lit nodes in their place; one issued before stays a
+ * platform document only its holder reads, valid until its end, with no PDF to issue again and no sharing to set; anybody
+ * with its key verifies it, revoked or not; the public certification page lists the issued, unrevoked ones once its
+ * holder turned it on under a name of their own. {@code NodeCertificateIT} has the node's.
  */
 class CertificateIT extends LegalItSupport {
 
@@ -29,6 +30,11 @@ class CertificateIT extends LegalItSupport {
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> held(String userId) {
         return (List<Map<String, Object>>) run(CertificateProcesses.MINE, taker(userId), body()).get("held");
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> certificates(String userId) {
+        return (List<Map<String, Object>>) run(CertificateProcesses.MINE, taker(userId), body()).get("certificates");
     }
 
     @SuppressWarnings("unchecked")
@@ -62,12 +68,10 @@ class CertificateIT extends LegalItSupport {
     }
 
     @Test
-    void issuingIsPausedAndACertificateIssuedBeforeIsTheHoldersToRead() throws Exception {
+    void nothingIsIssuedAnyMoreAndACertificateIssuedBeforeIsTheHoldersToRead() throws Exception {
         String ann = newTaker("q77-ann", "JP");
-        // F-S2c (D8): no certificate is issued any more, held or not.
+        // F-S2c (D8): no certificate is issued of a certification any more, held or not.
         assertThat(held(ann)).isEmpty();
-        assertThat(codes(refused(CertificateProcesses.ISSUE, taker(ann), body("certification", CERT, "language",
-            "en"), 422))).containsExactly(CertificateProcesses.PAUSED);
         assertThat(query("SELECT 1 FROM qb_certificate WHERE user_id = ?", ann)).isEmpty();
 
         // One issued before: the holder's list shows it until its end (F-S2c2b: no certification is held any more,
@@ -80,6 +84,15 @@ class CertificateIT extends LegalItSupport {
                 .containsEntry("verifyKey", key).doesNotContainKey("source");
             assertThat(h.get("heldUntil")).isNotNull();
         });
+        // The certificates list has it too, as Q77's, with its end; there is no PDF to issue and no sharing to set.
+        assertThat(certificates(ann)).singleElement().satisfies(c -> assertThat(c)
+            .containsEntry("source", "CERTIFICATION").containsEntry("certificateId", certificateId)
+            .containsEntry("shared", true).containsEntry("revokedAt", null).containsEntry("certification", CERT)
+            .containsEntry("runId", null).extracting(m -> m.get("heldUntil")).isNotNull());
+        assertThat(codes(refused(CertificateProcesses.ISSUE, taker(ann), body("certificateId", certificateId,
+            "language", "en"), 422))).containsExactly(CertificateProcesses.NOT_NODE);
+        assertThat(codes(refused(CertificateProcesses.SHARE, taker(ann), body("certificateId", certificateId,
+            "shared", false), 422))).containsExactly(CertificateProcesses.NOT_NODE);
 
         // The PDF: one run of the layout, the holder's own.
         List<Map<String, Object>> runs = runsOf(certificateId, taker(ann));

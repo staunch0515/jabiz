@@ -75,9 +75,13 @@ public class TakerErasure {
                     // F-S8: what they blocked (publications, quizzes, Sponsors, video providers) goes with them; the
                     // rows naming an erased Sponsor as the object stay, holding ids only.
                     ErasedEntity.delete(com.jabiz.quizbuks.block.QbBlocks.BLOCK, "userId"),
-                    // Q77: their certificates (the verify page finds none since) and the PDFs issued of them.
-                    ErasedEntity.delete(QbCertificates.CERTIFICATE, "userId", "holderName", "verifyKey")
-                        .documents(QbCertificates.LAYOUT_ID),
+                    // Q77, F-S5a: their certificates, as a Taker or as a Sponsor (the verify page finds none since) and
+                    // the PDFs issued of them; what the node's certificate was named is the node's, not theirs, but goes
+                    // with the row.
+                    ErasedEntity.delete(QbCertificates.CERTIFICATE, "userId", "holderName", "verifyKey",
+                            "certificateNames")
+                        .documents(QbCertificates.LAYOUT_ID, QbCertificates.NODE_LAYOUT_ID,
+                            QbCertificates.NODE_SPONSOR_LAYOUT_ID),
                     // Records the accounts need (ten years): who was paid stays a number, not a name.
                     ErasedEntity.keep(QbPayouts.TRANSFER, "userId", "accountNumber", "accountHolder"),
                     ErasedEntity.keep(QbRewards.CASH_REWARD, "userId", "markedPaidNote", "disputeNote",
