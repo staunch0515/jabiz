@@ -678,7 +678,7 @@ describe('a digital prize (Q33)', () => {
   it('says how a quiz with a digital prize pays on its page, with what the prize is', async () => {
     server({ publicationPage: () => json(200, { items: [publication({ rewardMethod: 'DIGITAL_PRIZE',
       digitalDelivery: 'SHARED', digitalDescription: '10% off at our online shop' })], offset: 0, limit: 1 }) })
-    window.history.replaceState(null, '', `/p/${PUB}`)
+    window.history.replaceState(null, '', `/p/${PUB}?tab=reward`)
     render(<App />)
     await screen.findByTestId('detail')
     expect(screen.getByTestId('detail-method')).toHaveAttribute('data-method', 'DIGITAL_PRIZE')
@@ -811,6 +811,7 @@ describe('the video to watch (Q19, Q63)', () => {
     await waitFor(() => expect(within(hero).getByTestId('video-slot')).toHaveAttribute('data-mode', 'page'))
     // The card's player carries on (not a new one); the version's own video plays further down, in its own player.
     expect(screen.getByTestId('video-stage').querySelector('iframe')).toBe(frame)
+    await userEvent.click(screen.getByTestId('page-tab-materials'))
     const materials = screen.getByTestId('materials')
     expect(within(materials).getByText('Background')).toBeInTheDocument()
     expect(materials.querySelector('iframe')).toHaveAttribute('src', 'https://player.vimeo.com/video/76979871')
@@ -969,6 +970,7 @@ describe('a card\'s progress and its Sponsor (Q64, Q66)', () => {
     await userEvent.click(within((await screen.findAllByTestId('feed-card'))[0]).getByTestId('feed-card-link'))
     expect(await screen.findByTestId('detail-name')).toBeInTheDocument()
     expect(screen.queryByText('All quizzes')).toBeNull()
+    await userEvent.click(screen.getByTestId('page-tab-materials'))
     const visit = await screen.findByTestId('sponsor-visit')
     expect(visit).toHaveAttribute('href', '/s/capitals')
     expect(visit).toHaveTextContent('Visit Capitals Inc')
@@ -1020,6 +1022,11 @@ describe('a publication\'s page', () => {
     window.history.replaceState(null, '', `/p/${PUB}`)
     render(<App />)
     expect(await screen.findByTestId('detail-name')).toHaveTextContent('Capitals week')
+    // F-F4c: the reward tab has the tiers, the materials tab the rows.
+    expect(await screen.findByTestId('detail-tab-about')).toBeInTheDocument()
+    expect(screen.queryByTestId('materials')).toBeNull()
+    await userEvent.click(screen.getByTestId('page-tab-materials'))
+    expect(window.location.search).toBe('?tab=materials')
     const materials = screen.getByTestId('materials')
     // Q34: a row per material with its title and its description on one line; the article opens on a sheet.
     // Q63: the video the app plays leads the page, playing muted as it opens; it is not among the materials again.
@@ -1047,6 +1054,7 @@ describe('a publication\'s page', () => {
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     expect(within(materials).queryByTitle('On YouTube')).toBeNull()
+    await userEvent.click(screen.getByTestId('page-tab-reward'))
     expect(await screen.findByTestId('detail-tiers')).toHaveTextContent('100 Kudos')
     await waitFor(() => expect(posted('QB_VIEW')).toEqual([{ publicationId: PUB }]))
   })
@@ -1058,7 +1066,7 @@ describe('a publication\'s page', () => {
         ? json(422, { status: 422, code: 'QB_REPORT_ALREADY_REPORTED',
           detail: 'You reported this quiz already; we are looking into it.' })
         : json(200, { output: { reportId: 'r1' } }) })
-      window.history.replaceState(null, '', `/p/${PUB}`)
+      window.history.replaceState(null, '', `/p/${PUB}?tab=rules`)
       render(<App />)
       const footer = await screen.findByTestId('detail-footer')
       expect(await within(footer).findByTestId('detail-contest-rules')).toHaveAttribute('href', '/legal/contest-rules')
@@ -1099,6 +1107,7 @@ describe('a publication\'s page', () => {
       // Still more to show after closing it again.
       expect(toggle).toHaveTextContent('Show more')
       // The link has a description: its row opens the sheet with the description in full and the link.
+      await userEvent.click(screen.getByTestId('page-tab-materials'))
       await userEvent.click(screen.getByTestId('material-open'))
       const sheet = await screen.findByTestId('material-sheet')
       expect(within(sheet).getByText(/And who grows them/)).toBeInTheDocument()
@@ -1135,15 +1144,16 @@ describe('a publication\'s page', () => {
     expect(facts).toHaveTextContent('Pass 3/5')
     expect(facts).toHaveTextContent('Until')
     expect(facts).toHaveClass('flex-wrap')
-    // The introduction without a card of its own; the reward folded to one line, its details inside.
+    // F-F4c: the introduction and the counts (opened) under the first tab, the rest under the others.
     expect(screen.getByTestId('detail-intro')).toHaveAccessibleName('About this quiz')
-    expect(screen.getByTestId('detail-reward-line')).toHaveTextContent('Your reward: Kudos')
-    expect(screen.getByTestId('detail-reward')).not.toHaveAttribute('open')
-    expect(screen.getByTestId('detail-reward')).toHaveTextContent('Kudos paid by QuizBuks')
-    // The counts in one line, the details and the sponsor folded.
     expect(screen.getByTestId('detail-stats-line')).toHaveTextContent('2 in the last 24 hours · 2 in total')
-    expect(screen.getByTestId('detail-stats')).not.toHaveAttribute('open')
-    expect(screen.getByTestId('detail-sponsor-intro')).not.toHaveAttribute('open')
+    expect(screen.getByTestId('detail-stats')).toHaveTextContent('Last 7 days')
+    expect(screen.queryByTestId('detail-reward')).toBeNull()
+    await userEvent.click(screen.getByTestId('page-tab-reward'))
+    expect(screen.getByTestId('detail-reward-line')).toHaveTextContent('Your reward: Kudos')
+    expect(screen.getByTestId('detail-reward')).toHaveTextContent('Kudos paid by QuizBuks')
+    await userEvent.click(screen.getByTestId('page-tab-materials'))
+    expect(screen.getByTestId('detail-sponsor-intro')).toHaveTextContent('A shop by the river.')
     await expectAccessible()
   })
 
@@ -1254,7 +1264,7 @@ describe('referrals (Q70)', () => {
       referral: JSON.stringify(POLICY) })], offset: 0, limit: 1 }),
     extra: (path) => path === '/api/processes/QB_REFERRAL_LINK/latest'
       ? json(200, { output: { publicationId: PUB, linkKey: KEY, quotaLeft: 19 } }) : undefined })
-    window.history.replaceState(null, '', `/p/${PUB}`)
+    window.history.replaceState(null, '', `/p/${PUB}?tab=reward`)
     render(<App />)
     expect(await screen.findByTestId('referral-offer')).toHaveTextContent('you get 300 Kudos')
     await userEvent.click(screen.getByTestId('referral-make'))
@@ -1270,7 +1280,7 @@ describe('referrals (Q70)', () => {
       ? json(422, { title: 'Unprocessable', status: 422, violations: [{ field: 'publicationId',
         ruleCode: 'QB_REFERRAL_NOT_REFERRER', message: 'Pass the referrer certification quiz first.' }] })
       : undefined })
-    window.history.replaceState(null, '', `/p/${PUB}`)
+    window.history.replaceState(null, '', `/p/${PUB}?tab=reward`)
     render(<App />)
     await userEvent.click(await screen.findByTestId('referral-make'))
     expect(await screen.findByTestId('referral-error')).toHaveTextContent('Pass the referrer certification quiz first.')
@@ -1290,6 +1300,7 @@ describe('referrals (Q70)', () => {
     window.history.replaceState(null, '', `/p/${PUB}?ref=${KEY}`)
     takeReferralFromAddress()
     expect(window.location.search).toBe('')
+    window.history.replaceState(null, '', `/p/${PUB}?tab=reward`)
     render(<App />)
     await waitFor(() => expect(claims).toEqual([{ linkKey: KEY }]))
     expect(await screen.findByTestId('referral-referred')).toHaveTextContent('A friend referred you')
@@ -1985,7 +1996,7 @@ describe("the Sponsor's products (Q60b)", () => {
 
   it("shows the quiz's products on its page", async () => {
     server({ publicationProducts: products })
-    window.history.replaceState(null, '', `/p/${PUB}`)
+    window.history.replaceState(null, '', `/p/${PUB}?tab=materials`)
     render(<App />)
     const items = await screen.findAllByTestId('publication-products-item')
     expect(items).toHaveLength(1)
@@ -2239,6 +2250,114 @@ describe('a video file on any https address (F-S15)', () => {
     await userEvent.click(within(card).getByTestId('feed-card-link'))
     const hero = await screen.findByTestId('detail-hero')
     expect(hero).not.toHaveAttribute('data-video')
+    await userEvent.click(screen.getByTestId('page-tab-materials'))
     expect(within(screen.getByTestId('materials')).getAllByTestId('material').length).toBeGreaterThan(0)
+  })
+})
+
+describe("a publication's tabs (F-F4c)", () => {
+  const PRODUCTS = [{ questionNo: 0, seq: 0, productId: 'p1', name: 'Rye loaf', description: null, image: null,
+    price: '1200', currency: 'JPY', shopUrl: 'https://shop.example/rye' }]
+  const open = async (search = '', over: Record<string, unknown> = {}, extra: { publicationProducts?: Record<string, unknown>[] } = {}) => {
+    server({ publicationPage: () => json(200, { items: [publication({ sponsorHandle: 'capitals',
+      referral: JSON.stringify({ reward: 300, quota: 20, maxPerFriend: 1, days: 30, enabled: true }), ...over })],
+    offset: 0, limit: 1 }), publicationProducts: PRODUCTS, ...extra })
+    window.history.replaceState(null, '', `/p/${PUB}${search}`)
+    render(<App />)
+    await screen.findByTestId('detail-name')
+  }
+
+  it('opens the introduction without a tab in the address, with the four tabs as links that keep the page', async () => {
+    await open()
+    expect(screen.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'about')
+    expect(screen.getByTestId('detail-intro')).toBeInTheDocument()
+    expect(screen.getByTestId('detail-stats')).toHaveTextContent('Last 7 days')
+    expect(screen.getByTestId('page-tab-about')).toHaveAttribute('href', `/p/${PUB}`)
+    expect(screen.getByTestId('page-tab-reward')).toHaveAttribute('href', `/p/${PUB}?tab=reward`)
+    expect(screen.getByTestId('page-tab-materials')).toHaveAttribute('href', `/p/${PUB}?tab=materials`)
+    expect(screen.getByTestId('page-tab-rules')).toHaveAttribute('href', `/p/${PUB}?tab=rules`)
+    for (const id of ['detail-footer', 'publication-products', 'sponsor-visit', 'detail-reward', 'materials']) {
+      expect(screen.queryByTestId(id)).toBeNull()
+    }
+    // The cover stays above whichever tab.
+    expect(screen.getByTestId('detail-hero')).toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it('switches by replacing the history entry, so back leaves the page and not the last tab', async () => {
+    await open()
+    const length = window.history.length
+    await userEvent.click(screen.getByTestId('page-tab-rules'))
+    expect(window.location.pathname).toBe(`/p/${PUB}`)
+    expect(window.location.search).toBe('?tab=rules')
+    expect(window.history.length).toBe(length)
+    expect(screen.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'rules')
+    await userEvent.click(screen.getByTestId('page-tab-about'))
+    expect(window.location.search).toBe('')
+    expect(screen.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'about')
+  })
+
+  it('treats an unknown tab as the introduction', async () => {
+    await open('?tab=nonsense')
+    expect(screen.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'about')
+  })
+
+  it('has the reward, the tiers and the referral under the reward tab', async () => {
+    await open('?tab=reward')
+    const tab = screen.getByTestId('detail-tab-reward')
+    expect(within(tab).getByTestId('detail-reward')).toHaveTextContent('Kudos paid by QuizBuks')
+    expect(await within(tab).findByTestId('detail-tiers')).toBeInTheDocument()
+    expect(await within(tab).findByTestId('referral-offer')).toBeInTheDocument()
+    expect(screen.queryByTestId('detail-footer')).toBeNull()
+    await expectAccessible()
+  })
+
+  it('has the materials, the products and the sponsor visit under the materials tab', async () => {
+    await open('?tab=materials')
+    const tab = screen.getByTestId('detail-tab-materials')
+    expect(within(tab).getByTestId('materials')).toBeInTheDocument()
+    expect((await within(tab).findAllByTestId('publication-products-item'))).toHaveLength(1)
+    expect(within(tab).getByTestId('sponsor-visit')).toHaveAttribute('href', '/s/capitals')
+    await expectAccessible()
+  })
+
+  it('has the rules, the contest rules, the report and the block menu under the rules tab', async () => {
+    await open('?tab=rules')
+    const tab = screen.getByTestId('detail-tab-rules')
+    expect(within(tab).getByTestId('detail-rules')).toHaveTextContent('Pass')
+    const footer = within(tab).getByTestId('detail-footer')
+    expect(await within(footer).findByTestId('detail-contest-rules')).toBeInTheDocument()
+    expect(within(footer).getByTestId('report-open')).toBeInTheDocument()
+    expect(within(footer).getByTestId('block-menu')).toBeInTheDocument()
+    await expectAccessible()
+  })
+
+  it('offers no materials tab when there is nothing for it', async () => {
+    await open('?tab=materials', { materials: '[]', sponsorHandle: null, sponsorIntro: null }, {
+      publicationProducts: [] })
+    await waitFor(() => expect(screen.queryByTestId('page-tab-materials')).toBeNull())
+    // The address asks for a tab that is not there: the first one is shown.
+    expect(screen.getByTestId('detail-tabs')).toHaveAttribute('data-tab', 'about')
+  })
+
+  it('keeps the start in a bar at the foot on every tab, in the flow after the content', async () => {
+    await open()
+    for (const tab of ['about', 'reward', 'materials', 'rules']) {
+      await userEvent.click(screen.getByTestId(`page-tab-${tab}`))
+      const bar = screen.getByTestId('detail-start-bar')
+      expect(within(bar).getByTestId('detail-start')).toBeInTheDocument()
+      expect(bar).toHaveClass('sticky')
+      expect(bar.className).toContain('var(--bottom-bar-height)')
+      // After the tab's content, so that the last line is never behind it.
+      expect(screen.getByTestId('detail-tabs').compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .toBeTruthy()
+    }
+  })
+
+  it('keeps the focus clear of the bar by the page\'s scroll padding, and gives it back on leaving', async () => {
+    await open()
+    expect(document.documentElement.style.scrollPaddingBottom).toContain('var(--bottom-bar-height')
+    cleanup()
+    expect(document.documentElement.style.scrollPaddingBottom).toBe('')
   })
 })

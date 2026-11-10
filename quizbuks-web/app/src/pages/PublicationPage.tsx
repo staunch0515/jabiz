@@ -7,7 +7,7 @@ import { i18n, useAuth } from '@jabiz/client'
 import { Alert, AlertDescription, Button, ConfirmDialog, PageState } from '@jabiz/ui'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { MailWarning, Play, UserRoundSearch } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { playProblemText } from '../play/busy'
@@ -19,7 +19,8 @@ import { useSoundSetting } from '../qb/SoundSettings'
 import { linkLanguageOf } from '../linkLanguage'
 import { readPublication, readTiers, recordView, type PublicationView } from '../qb/play'
 import { problemText } from '../qb/problems'
-import { Link } from '../qb/router'
+import { Link, useLocation } from '../qb/router'
+import { FrameLink } from '../frame/FrameLink'
 import { prefersStillVideo, trackable } from '../qb/video'
 import { VideoPlayer } from '../qb/view/VideoPlayer'
 import { SponsorVisit } from './SponsorVisit'
@@ -27,7 +28,7 @@ import { VideoSlot } from '../video/stage'
 import { StartPageExposure } from '../exposure/ExposureWatch'
 import { queueReport } from '../exposure/reporter'
 import { clock, satisfied, shortfallSec, toInput, usePlayback } from '../video/playback'
-import { PublicationContent, useDuration } from '../qb/view/PublicationContent'
+import { CONTENT_TABS, PublicationContent, useDuration, type ContentTab, type ContentTabs } from '../qb/view/PublicationContent'
 import { formatKudos } from '../qb/kudos'
 import { readWallet, transferable, WALLET_QUERY } from '../wallet/api'
 import { ReferralPanel } from '../referral/ReferralPanel'
@@ -210,6 +211,35 @@ function Action({ publication, onLanguage }: { publication: PublicationView; onL
   )
 }
 
+/** The tab an address asks for (`?tab=`); the introduction when none or an unknown one. */
+function tabOf(search: string): ContentTab {
+  const asked = new URLSearchParams(search).get('tab')
+  return CONTENT_TABS.find((tab) => tab === asked) ?? 'about'
+}
+
+/**
+ * The start bar stays at the foot of the screen, so what the keyboard focuses while moving through the page is not
+ * left under it (WCAG 2.4.11): the page scrolls it clear, by the bar's own height and the bottom menu's.
+ */
+function useStartBarClearance(bar: RefObject<HTMLElement | null>, active: boolean) {
+  useEffect(() => {
+    const element = bar.current
+    if (!active || !element) return undefined
+    const root = document.documentElement
+    const apply = () => {
+      root.style.scrollPaddingBottom =
+        `calc(${element.offsetHeight}px + var(--bottom-bar-height, 0px) + env(safe-area-inset-bottom, 0px))`
+    }
+    apply()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(apply)
+    observer?.observe(element)
+    return () => {
+      observer?.disconnect()
+      root.style.scrollPaddingBottom = ''
+    }
+  }, [bar, active])
+}
+
 /**
  * A publication's page (U-20 – U-23; templates `qb.app.publication` and `qb.app.publication-tiers`): the materials
  * under the title, the introduction, the facts and reward tiers, the completions, and the big start button. Opening
@@ -242,6 +272,18 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
   const products = useQuery({ queryKey: ['qb', 'publication-products', publicationId],
     queryFn: () => readPublicationProducts(publicationId), enabled: !!publication.data, retry: false })
   const { t: tView } = useTranslation(QBVIEW)
+  // F-F4c: the tab is in the address (`?tab=`, the page's own path stays what `itemPage` and `scanTarget` read).
+  const location = useLocation()
+  const tab = tabOf(location.search)
+  const tabPath = (to: ContentTab) => {
+    const query = new URLSearchParams(location.search)
+    if (to === 'about') query.delete('tab')
+    else query.set('tab', to)
+    const text = query.toString()
+    return text ? `${location.path}?${text}` : location.path
+  }
+  const startBar = useRef<HTMLDivElement>(null)
+  useStartBarClearance(startBar, !!publication.data)
 
   // The funnel's first view; a failure (a banned caller, a publication gone) changes nothing on the page.
   const [viewed, setViewed] = useState<string | null>(null)
@@ -301,6 +343,34 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
       </section>
     )
   }
+  const productList = quizProducts(products.data)
+  // F-F4c: what only the app has goes under the tab it belongs to (F-F4 section 2.5).
+  const extra: ContentTabs['extra'] = {
+    reward: <ReferralPanel publication={p} />,
+    materials: productList.length > 0 || p.sponsorHandle ? (
+      <>
+        <ProductCards products={productList}
+          title={tView('products.title')} testId="publication-products" onOpen={countProductClick} />
+        {/* Q64: the sponsor's own page, with all their products, from the start page as from the result. */}
+        <SponsorVisit handle={p.sponsorHandle} sponsor={p.sponsorCompany ?? p.sponsorName} avatar={p.sponsorAvatar}
+          products={productList.length > 0} />
+      </>) : undefined,
+    rules: (
+      // Q49a: the official rules of a quiz with a reward (Apple 5.3, Google Play's contest policy), and reporting it
+      // (Apple 1.2).
+      <div className="flex flex-wrap items-center justify-between gap-2" data-testid="detail-footer">
+        {(tiers.data ?? []).length > 0
+          ? <Link to={legalPath('CONTEST_RULES')} className="text-muted-foreground text-sm underline"
+            data-testid="detail-contest-rules">{t('contestRules')}</Link>
+          : <span />}
+        <span className="flex items-center gap-1">
+          {/* The server takes reports of verified takers only (as it records views). */}
+          {emailVerified && <ReportButton publicationId={p.publicationId} name={p.name} />}
+          {/* F-S8: not interested, or block its quiz, Sponsor or video provider. */}
+          <BlockMenu item={p} />
+        </span>
+      </div>),
+  }
   return (
     <article className="flex flex-col gap-3" aria-labelledby="detail-title" data-testid="detail">
       {/* F-S8: blocked after starting it: the attempt stays reachable (its result, or the rest of its time). */}
@@ -320,28 +390,13 @@ export function PublicationPage({ publicationId, country }: { publicationId: str
               // way.
               : <VideoPlayer player={player} title={title} autoplay className="bg-muted aspect-video w-full overflow-hidden sm:border" />}
           </StartPageExposure>
-        )} />
-      <ProductCards products={quizProducts(products.data)}
-        title={tView('products.title')} testId="publication-products" onOpen={countProductClick} />
-      {/* Q64: the sponsor's own page, with all their products, from the start page as from the result. */}
-      <SponsorVisit handle={p.sponsorHandle} sponsor={p.sponsorCompany ?? p.sponsorName} avatar={p.sponsorAvatar}
-        products={quizProducts(products.data).length > 0} />
-      <ReferralPanel publication={p} />
-      {/* Q49a: the official rules of a quiz with a reward (Apple 5.3, Google Play's contest policy), and reporting it
-          (Apple 1.2). */}
-      <div className="flex flex-wrap items-center justify-between gap-2" data-testid="detail-footer">
-        {(tiers.data ?? []).length > 0
-          ? <Link to={legalPath('CONTEST_RULES')} className="text-muted-foreground text-sm underline"
-            data-testid="detail-contest-rules">{t('contestRules')}</Link>
-          : <span />}
-        <span className="flex items-center gap-1">
-          {/* The server takes reports of verified takers only (as it records views). */}
-          {emailVerified && <ReportButton publicationId={p.publicationId} name={p.name} />}
-          {/* F-S8: not interested, or block its quiz, Sponsor or video provider. */}
-          <BlockMenu item={p} />
-        </span>
-      </div>
-      <div className="bg-background sticky bottom-20 -mx-4 border-t px-4 py-3">
+        )}
+        tabs={{ current: tab, path: tabPath, extra, renderLink: (item, props) => (
+          <FrameLink to={item.path} replace {...props} />) }} />
+      {/* F-F4c: the start stays at the foot of the screen (above the bottom menu of a phone) while the page scrolls;
+          at the end of the page it sits in the flow, so the last line is never under it. */}
+      <div ref={startBar} data-testid="detail-start-bar"
+        className="bg-background sticky bottom-[calc(var(--bottom-bar-height)+env(safe-area-inset-bottom))] z-10 -mx-4 border-t px-4 py-3 md:bottom-0">
         <Action publication={p} onLanguage={setChosen} />
       </div>
     </article>
