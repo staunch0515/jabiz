@@ -19,7 +19,9 @@ const CONTENT_PERMISSIONS = ['qb.admin.content.write', 'qb.admin.users.read', 'q
   'qb.audience.rules.write', 'qb.audience.prices.write',
   'qb.admin.operators.write', 'qb.admin.topic.read', 'qb.admin.topic.write', 'qb.admin.help', 'qb.admin.help.gaps', 'qb.admin.ai.read',
   // F-S4c: the platform's map templates (as QB_ADMIN_CONTENT), and moving a Sponsor to another operator.
-  'qb.tree.edit', 'qb.tree.platform.write', 'qb.admin.trees.read', 'approval.scope.move']
+  'qb.tree.edit', 'qb.tree.platform.write', 'qb.admin.trees.read', 'approval.scope.move',
+  // F-S5b: asking for a lit node to be revoked (certificates.spec; another administrator approves).
+  'qb.tree.lit.revoke']
 
 const ROLES = 'urn:jabiz:dataset:platform:SecRole'
 const ROLE_PERMISSIONS = 'urn:jabiz:dataset:platform:SecRolePermission'

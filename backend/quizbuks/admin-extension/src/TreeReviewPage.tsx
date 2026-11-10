@@ -108,6 +108,11 @@ function NodesTable({ nodes, title }: { nodes: VersionNode[]; title: string }) {
           )}
       </span>
     ) },
+    // F-S5b: the certificate lighting the node issues, reviewed with the version (it is the name printed with the issuer).
+    ...(nodes.some((node) => node.certificateNames != null) ? [{
+      id: 'certificate', header: t('trees.nodes.certificate'), cell: ({ row }) => (
+        <span data-testid="tree-node-certificate">{i18nText(row.original.certificateNames, language)}</span>
+      ) } satisfies ColumnDef<VersionNode, unknown>] : []),
     // F-S4c: what lighting the node grants (a platform template Sponsors light, reviewed with the version).
     ...(nodes.some((node) => node.grantAmount != null) ? [{
       id: 'grant', header: t('trees.nodes.grant'), cell: ({ row }) => (

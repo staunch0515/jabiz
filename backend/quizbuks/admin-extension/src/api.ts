@@ -554,29 +554,75 @@ export const readConsents = (userId: string, offset: number, limit: number, sort
     effectiveAt: str(row.effectiveAt),
   }), { params: { userId }, sorts, offset, limit })
 
-/** A row of `qb.admin.certificates` (Q77): a certificate a user issued, with its number (the verify key). */
+/**
+ * A row of `qb.admin.certificates` / `qb.operator.certificates` (Q77, F-S5b): a certificate of a lit node or of Q77's
+ * certification, with its number (the verify key). The operator's template gives only a node's certificates (and no
+ * certification, end or language).
+ */
 export interface CertificateRow {
   certificateId: string
+  userId: string
+  /** `NODE` (a lit node's) or `CERTIFICATION` (Q77's). */
+  source: string
+  /** Whose lighting: `USER` (a Taker) or `SPONSOR`. */
+  subjectKind: string
   certification: string
+  litId: string | null
+  treeId: string | null
+  nodeId: string | null
+  /** A node's certificate's names by language, as JSON. */
+  certificateNames: string | null
+  issuerName: string | null
+  /** Whether its verify page shows (the holder may turn the link off). */
+  shared: boolean
   holderName: string
   heldFrom: string | null
   validUntil: string | null
   verifyKey: string
   language: string
   issuedAt: string | null
+  /** When the lighting it came from was revoked. */
+  revokedAt: string | null
 }
 
-export const readCertificates = (userId: string, offset: number, limit: number, sorts?: SortSpec[]) =>
-  page(TEMPLATE.certificates, (row): CertificateRow => ({
+function certificateRow(row: Row): CertificateRow {
+  return {
     certificateId: String(row.certificateId),
+    userId: String(row.userId ?? ''),
+    source: String(row.source ?? 'NODE'),
+    subjectKind: String(row.subjectKind ?? 'USER'),
     certification: String(row.certification ?? ''),
+    litId: str(row.litId),
+    treeId: str(row.treeId),
+    nodeId: str(row.nodeId),
+    certificateNames: str(row.certificateNames),
+    issuerName: str(row.issuerName),
+    shared: row.shared !== false,
     holderName: String(row.holderName ?? ''),
     heldFrom: str(row.heldFrom),
     validUntil: str(row.validUntil),
     verifyKey: String(row.verifyKey ?? ''),
     language: String(row.language ?? ''),
     issuedAt: str(row.issuedAt),
-  }), { params: { userId }, sorts, offset, limit })
+    revokedAt: str(row.revokedAt),
+  }
+}
+
+export const readCertificates = (userId: string, offset: number, limit: number, sorts?: SortSpec[]) =>
+  page(TEMPLATE.certificates, certificateRow, { params: { userId }, sorts, offset, limit })
+
+/**
+ * F-S5b: the lookup, by holder and/or by certificate number: the platform's reads every certificate
+ * (`qb.admin.certificates`), an operator's member those of the maps its operator looks after
+ * (`qb.operator.certificates`).
+ */
+export const readCertificateLookup = (operator: boolean, search: { userId?: string | null; verifyKey?: string | null },
+  offset: number, limit: number, sorts?: SortSpec[]) =>
+  page(operator ? TEMPLATE.operatorCertificates : TEMPLATE.certificates, certificateRow, {
+    params: search.userId ? { userId: search.userId } : {},
+    filters: search.verifyKey ? [{ field: 'verifyKey', op: 'eq', value: search.verifyKey }] : undefined,
+    sorts, offset, limit,
+  })
 
 /** A row of `qb.admin.attempts`. */
 export interface AttemptRow {

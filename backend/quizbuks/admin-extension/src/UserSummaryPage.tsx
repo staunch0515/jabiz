@@ -34,6 +34,8 @@ import {
   type TransferRow,
   type UserRow,
 } from './api'
+import { useCertificateName } from './certificate-state'
+import { CertificateStateBadge } from './certificate-view'
 import { DICTIONARY, isUserId, PATH, PERMISSION } from './ids'
 import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
 import { PayoutPanel } from './PayoutPanel'
@@ -178,25 +180,29 @@ function Consents({ userId }: { userId: string }) {
 }
 
 /**
- * The certificates the user issued (Q77): which certification, the name on it, the holding and its number, which a
- * verifier quotes (the verify page `/taker/verify/<number>`). Revocations are the certification page's.
+ * The certificates the user holds (Q77, F-S5b): of the nodes they lit and Q77's, with the name on it, the issuer, the
+ * day it was lit (or Q77's holding), its state and its number, which a verifier quotes (the verify page
+ * `/taker/verify/<number>`). The lookup page finds one by its number.
  */
 function Certificates({ userId }: { userId: string }) {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const nameOf = useCertificateName()
   const { query: certificates, table } = usePaged(['qb-ext', 'certificates', userId],
     (offset, limit, sorts) => readCertificates(userId, offset, limit, sorts))
   const columns = useMemo<ColumnDef<CertificateRow, unknown>[]>(() => [
-    { id: 'certification', header: t('user.certificateCertification'),
-      cell: ({ row }) => t(`certification.names.${row.original.certification}`,
-        { defaultValue: row.original.certification }) },
+    { id: 'certification', header: t('user.certificateCertification'), cell: ({ row }) => nameOf(row.original) },
+    { id: 'issuerName', header: t('user.certificateIssuer'), cell: ({ row }) => row.original.issuerName ?? '' },
     { id: 'holderName', header: t('user.certificateHolder'), cell: ({ row }) => row.original.holderName },
     { id: 'validUntil', header: t('user.certificateHeld'),
-      cell: ({ row }) => `${when(row.original.heldFrom)} – ${when(row.original.validUntil)}` },
+      cell: ({ row }) => (row.original.source === 'NODE' || !row.original.validUntil
+        ? t('user.certificateLit', { date: when(row.original.heldFrom) })
+        : `${when(row.original.heldFrom)} – ${when(row.original.validUntil)}`) },
+    { id: 'state', header: t('user.certificateState'), cell: ({ row }) => <CertificateStateBadge row={row.original} /> },
     { id: 'verifyKey', header: t('user.certificateNumber'),
       cell: ({ row }) => <span className="font-mono text-xs break-all" data-testid="certificate-number">
         {row.original.verifyKey}</span> },
     { id: 'issuedAt', header: t('user.certificateIssuedAt'), cell: ({ row }) => when(row.original.issuedAt) },
-  ], [t])
+  ], [t, nameOf])
   return (
     <Section title={t('user.certificates')} testId="user-certificates">
       {certificates.isError ? <LoadFailed error={certificates.error} onRetry={() => void certificates.refetch()} /> : (
