@@ -38,7 +38,7 @@ public final class TreeApprovals {
         return facts;
     }
 
-    /** The version's content as stored: its name and description, and its nodes (with their grants) in order by id. */
+    /** The version's content as stored: its name and description, and its nodes (with their grants and certificates) in order by id. */
     static Map<String, Object> content(EntityInstance version, List<EntityInstance> defs) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("versionNo", String.valueOf((Object) version.get("versionNo")));
@@ -57,6 +57,11 @@ public final class TreeApprovals {
             java.math.BigDecimal grant = TreeProcesses.grantOf(def);
             if (grant != null) {
                 node.put("grantAmount", grant.toPlainString());
+            }
+            // F-S5a: likewise the certificate (reviewed with the version: it names who vouches for what).
+            Map<String, String> certificate = TreeProcesses.certificateOf(def);
+            if (certificate != null) {
+                node.put("certificateNames", new java.util.TreeMap<>(certificate).toString());
             }
             nodes.add(node);
         });

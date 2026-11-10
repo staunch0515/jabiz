@@ -111,13 +111,22 @@ public final class TreeProcesses {
      * @param condition the condition ({@link TreeCondition#toMap()}), naming nodes by id or, new ones, by key
      * @param grantAmount F-S4b: the platform fee Kudos lighting the node grants (a platform template Sponsors light
      *                    only; an operator's copy keeps its template's); none for no grant
+     * @param certificateNames F-S5a: the name of the certificate lighting the node issues, by language (a platform
+     *                    template's or a Sponsor's own graph's; an operator's copy keeps its template's); none for no
+     *                    certificate
      */
     public record NodeInput(String nodeId, String key, @NotNull Map<String, String> name,
-        Map<String, String> description, @NotNull Map<String, Object> condition, BigDecimal grantAmount) {
+        Map<String, String> description, @NotNull Map<String, Object> condition, BigDecimal grantAmount,
+        Map<String, String> certificateNames) {
 
         public NodeInput(String nodeId, String key, Map<String, String> name, Map<String, String> description,
             Map<String, Object> condition) {
-            this(nodeId, key, name, description, condition, null);
+            this(nodeId, key, name, description, condition, null, null);
+        }
+
+        public NodeInput(String nodeId, String key, Map<String, String> name, Map<String, String> description,
+            Map<String, Object> condition, BigDecimal grantAmount) {
+            this(nodeId, key, name, description, condition, grantAmount, null);
         }
     }
 
@@ -333,7 +342,7 @@ public final class TreeProcesses {
         for (EntityInstance def : list(ctx, TEMPLATE_DEFS)) {
             insertDef(ctx, versionId, def.get("nodeId"), i18n(def.get("name")), i18n(def.get("description")),
                 String.valueOf((Object) def.get("condition")), AccountEditing.number(def.get("seq")),
-                grantOf(def));
+                grantOf(def), certificateOf(def));
         }
         ctx.put(OUTPUT, new TreeOutput(String.valueOf(treeId), String.valueOf(versionId), 1, QbTrees.DRAFT, 1,
             Map.of(), List.of(), null, null));
@@ -345,8 +354,15 @@ public final class TreeProcesses {
         return amount == null ? null : new BigDecimal(amount.toString());
     }
 
+    /** F-S5a: a node definition's certificate names, none for no certificate. */
+    static Map<String, String> certificateOf(EntityInstance def) {
+        Object names = def == null ? null : def.get("certificateNames");
+        return names == null ? null : TreeRules.certificateNames(i18n(names));
+    }
+
     private static void insertDef(ProcessContext ctx, Object versionId, Object nodeId, Map<String, String> name,
-        Map<String, String> description, String condition, long seq, BigDecimal grantAmount) {
+        Map<String, String> description, String condition, long seq, BigDecimal grantAmount,
+        Map<String, String> certificateNames) {
         Map<String, Object> def = new LinkedHashMap<>();
         def.put("versionId", String.valueOf(versionId));
         def.put("nodeId", String.valueOf(nodeId));
@@ -355,6 +371,7 @@ public final class TreeProcesses {
         def.put("condition", condition);
         def.put("seq", BigDecimal.valueOf(seq));
         def.put("grantAmount", grantAmount);
+        def.put("certificateNames", certificateNames);
         ctx.changes().insert(QbTrees.NODE_DEF, def);
     }
 
@@ -549,6 +566,25 @@ public final class TreeProcesses {
     }
 
     /**
+     * F-S5a: the certificates' problems of a draft: a copy keeps the ones it has (given otherwise:
+     * {@link TreeRules#CERTIFICATE_COPY}); any other graph's names must be usable ({@link TreeRules#certificateProblems}).
+     */
+    private static List<Problem> certificateProblems(EntityInstance tree, Map<String, Map<String, String>> given,
+        Map<String, Map<String, String>> kept) {
+        if (QbTrees.OPERATOR.equals(tree.get("ownerKind"))) {
+            List<Problem> problems = new ArrayList<>();
+            given.forEach((nodeId, texts) -> {
+                Map<String, String> asGiven = TreeRules.certificateNames(texts);
+                if (asGiven != null && !asGiven.equals(kept.get(nodeId))) {
+                    problems.add(new Problem(nodeId, TreeRules.CERTIFICATE_COPY, Map.of()));
+                }
+            });
+            return problems;
+        }
+        return TreeRules.certificateProblems(given, QbTrees.NAME_LENGTH);
+    }
+
+    /**
      * The graphs in effect the graph may name nodes of, with their nodes' definitions: the rules check a draft against
      * them, and a version going into effect resolves its references with them (F-S2d). Nothing without a graph.
      */
@@ -657,6 +693,18 @@ public final class TreeProcesses {
             grants.put(order.get(i), input.nodes().get(i).grantAmount());
         }
         problems.addAll(ctx.contains(ADOPTING) ? List.of() : grantProblems(ctx, tree, grants, kept));
+        // F-S5a: the certificates, likewise: a copy keeps what its draft (or version in effect) has.
+        Map<String, Map<String, String>> keptCertificates = new HashMap<>();
+        if (had != null) {
+            defsOf(ctx, had).forEach(def -> keptCertificates.put(String.valueOf((Object) def.get("nodeId")),
+                certificateOf(def)));
+        }
+        Map<String, Map<String, String>> certificates = new LinkedHashMap<>();
+        for (int i = 0; i < input.nodes().size(); i++) {
+            certificates.put(order.get(i), input.nodes().get(i).certificateNames());
+        }
+        problems.addAll(ctx.contains(ADOPTING) ? List.of() : certificateProblems(tree, certificates,
+            keptCertificates));
 
         // The draft: the open one (a version in review goes back to its draft), or a new one after the version in
         // effect.
@@ -692,7 +740,8 @@ public final class TreeProcesses {
             NodeInput node = input.nodes().get(i);
             insertDef(ctx, versionId, order.get(i), node.name(), node.description(),
                 json(conditions.get(order.get(i)).toMap()), i,
-                copy ? kept.get(order.get(i)) : node.grantAmount());
+                copy ? kept.get(order.get(i)) : node.grantAmount(),
+                copy ? keptCertificates.get(order.get(i)) : TreeRules.certificateNames(node.certificateNames()));
         }
         @SuppressWarnings("unchecked")
         Map<String, Object> more = ctx.contains(TOUCH) ? (Map<String, Object>) ctx.get(TOUCH) : Map.of();
@@ -832,7 +881,8 @@ public final class TreeProcesses {
         List<NodeInput> nodes = new ArrayList<>();
         draft.forEach((nodeId, def) -> nodes.add(new NodeInput(nodeId, null, i18n(def.get("name")),
             i18n(def.get("description")), parse(String.valueOf(def.get("condition"))),
-            def.get("grantAmount") == null ? null : new BigDecimal(def.get("grantAmount").toString()))));
+            def.get("grantAmount") == null ? null : new BigDecimal(def.get("grantAmount").toString()),
+            def.get("certificateNames") == null ? null : i18n(def.get("certificateNames")))));
         ctx.put(ADOPTING, true);
         ctx.put(INPUT, new SaveInput(input.treeId(), input.baseRevision(), i18n(base.get("name")),
             i18n(base.get("description")), nodes));
@@ -848,6 +898,7 @@ public final class TreeProcesses {
         fields.put("description", def.get("description"));
         fields.put("condition", def.get("condition"));
         fields.put("grantAmount", def.get("grantAmount"));
+        fields.put("certificateNames", def.get("certificateNames"));
         return fields;
     }
 
@@ -989,6 +1040,9 @@ public final class TreeProcesses {
         Map<String, TreeCondition> conditions = conditionsOf(defsOf(ctx, version));
         Map<String, BigDecimal> grants = new HashMap<>();
         defsOf(ctx, version).forEach(def -> grants.put(String.valueOf((Object) def.get("nodeId")), grantOf(def)));
+        Map<String, Map<String, String>> certificates = new HashMap<>();
+        defsOf(ctx, version).forEach(def -> certificates.put(String.valueOf((Object) def.get("nodeId")),
+            certificateOf(def)));
         // F-S2d: each node a condition names, as the node of one graph (unresolved: kept bare, reported daily).
         Map<String, String> graphOf = TreeRules.resolve(graph(tree, conditions), graphs(ctx));
         Map<String, EntityInstance> rows = new HashMap<>();
@@ -1004,6 +1058,8 @@ public final class TreeProcesses {
             row.put("condition", json(node.getValue().toMap()));
             // F-S4b: what lighting the node grants now (a lit record freezes its template's).
             row.put("grantAmount", grants.get(node.getKey()));
+            // F-S5a: the certificate lighting the node issues now (a lit record freezes it).
+            row.put("certificateNames", certificates.get(node.getKey()));
             EntityInstance existing = rows.remove(node.getKey());
             if (existing == null) {
                 row.put("treeId", String.valueOf(tree.id()));

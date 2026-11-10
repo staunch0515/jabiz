@@ -200,6 +200,9 @@ public final class QbTrees {
         // F-S4b: the version in effect's grant of platform-fee Kudos for lighting the node (a template's; a copy's is the
         // template's, copied); none for no grant.
         eb.field("grantAmount", f -> f.physicalColumn("grant_amount").processOnly().asMonetary("JPY", 0));
+        // F-S5a: the version in effect's certificate lighting the node issues (its name by language); none for none.
+        eb.field("certificateNames", f -> f.physicalColumn("certificate_names").processOnly()
+            .apply(I18nText.of(NAME_LENGTH)));
         // F-S2b1: the version in effect's condition (TreeCondition#toMap as JSON), which lighting evaluates.
         eb.field("condition", f -> f.physicalColumn("condition").processOnly().asText(null, true));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
@@ -249,6 +252,9 @@ public final class QbTrees {
         // F-S4b: the platform-fee Kudos a Sponsor is granted for lighting the node (only a platform template Sponsors
         // light sets it, within qb.tree.grant.max-per-node; a copy keeps its template's); none for no grant.
         eb.field("grantAmount", f -> f.physicalColumn("grant_amount").asMonetary("JPY", 0));
+        // F-S5a: the name of the certificate lighting the node issues, by language (a platform template's or a Sponsor's
+        // own graph's; a copy keeps its template's); none for no certificate.
+        eb.field("certificateNames", f -> f.physicalColumn("certificate_names").apply(I18nText.of(NAME_LENGTH)));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_tree_node_def", "versionId", "nodeId");
         eb.listView("default", lv -> lv
@@ -298,6 +304,10 @@ public final class QbTrees {
         // F-S4b: the grant of platform-fee Kudos the lighting earns, frozen when lit (the template's version in effect);
         // none for no grant (and for a Taker's).
         eb.field("grantAmount", f -> f.physicalColumn("grant_amount").immutable(true).asMonetary("JPY", 0));
+        // F-S5a: the certificate the lighting issues, its names frozen when lit (the node row of the graph itself);
+        // none for no certificate.
+        eb.field("certificateNames", f -> f.physicalColumn("certificate_names").immutable(true)
+            .apply(I18nText.of(NAME_LENGTH)));
         eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.listView("default", lv -> lv
             .columns("subjectKind", "subjectId", "treeId", "nodeId", "litAt")
