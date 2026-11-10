@@ -339,6 +339,12 @@ public final class QbPermissions {
     public static final String TREE_LIT_REVOKE = "qb.tree.lit.revoke";
 
     /**
+     * F-S3: support's read of one person's lighting on one graph ({@code QB_SUPPORT_TREE_STATE}, a recorded read).
+     * Content administrators (any graph), operators (their Sponsors' graphs and the platform's).
+     */
+    public static final String TREE_STATE_READ = "qb.admin.tree-state.read";
+
+    /**
      * F-C10: asking the AI help, rating its answers, handing a question to a person and closing one's own conversations
      * (one's own only). Takers and Sponsors.
      */

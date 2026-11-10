@@ -316,6 +316,12 @@ public class TreeConfig {
         return REVOKE_RESULT;
     }
 
+    /** F-S3: support's recorded read of one person's lighting on a graph. */
+    @Bean
+    ProcessDefinition<TreeSupport.Input, TreeSupport.Output, ProcessContext> qbSupportTreeState() {
+        return TreeSupport.process();
+    }
+
     @Bean
     ProcessDefinition<TreeRevocations.RevokeInput, TreeRevocations.RevokeOutput, ProcessContext> qbTreeLitRevoke() {
         return TreeRevocations.revoke();
