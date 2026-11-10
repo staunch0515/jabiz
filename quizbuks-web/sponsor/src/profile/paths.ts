@@ -8,7 +8,9 @@ export const PROFILE_PATH = '/profile'
 // F-C1c (the requester, 2026-11-07): the products moved to the asset library's "products" tab (`MOVED_PATHS`).
 // F-S4c: the challenges of the Sponsor's operator, answered here (the plan's "challenges" tab of the hub).
 // F-M3: the company verification, beside the basics it verifies.
-export const PROFILE_SECTIONS = ['overview', 'basics', 'verification', 'page', 'staff', 'mail-server', 'challenges'] as const
+// F-S5b: the certificates of the nodes the Sponsor lit.
+export const PROFILE_SECTIONS = ['overview', 'basics', 'verification', 'page', 'staff', 'mail-server', 'challenges',
+  'certificates'] as const
 export type ProfileSection = (typeof PROFILE_SECTIONS)[number]
 
 /** The address of a section; the overview is the hub's own. */

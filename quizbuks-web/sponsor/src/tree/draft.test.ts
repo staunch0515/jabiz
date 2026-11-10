@@ -43,6 +43,17 @@ describe('the editor\'s condition rules (tree.TreeRules\' shape)', () => {
   })
 })
 
+describe('the certificate names (F-S5b)', () => {
+  it('go back as the version read had them, none as null, whatever else the save changed', () => {
+    const named: Draft = { ...draft(), nodes: [
+      { ...draft().nodes[0], certificateNames: { en: 'Baker', ja: 'パン職人' } }, draft().nodes[1]] }
+    const input = saveInputOf(withNewNode(named, { en: 'Rye' }))
+    expect(input.nodes.map((n) => n.certificateNames)).toEqual([{ en: 'Baker', ja: 'パン職人' }, null, null])
+    // The new node's name changed nothing of the others'.
+    expect(saveInputOf(named).nodes[0].certificateNames).toEqual(named.nodes[0].certificateNames)
+  })
+})
+
 describe('the draft', () => {
   it('adds a node with a key of its own and a pass as its condition', () => {
     const added = withNewNode(withNewNode(draft(), { en: 'Rye' }), { en: 'Spelt' })

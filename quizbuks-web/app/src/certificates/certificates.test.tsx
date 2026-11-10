@@ -5,7 +5,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import '../messages'
-import { certificateLanguage, stateOf, type VerifiedCertificate } from './api'
+import { certificateLanguage } from '../qb/certificates'
+import { stateOf, type VerifiedCertificate } from './api'
 import { takerHandleOf, verifyKeyOf } from './PublicCertificates'
 
 function json(status: number, body: unknown) {
@@ -17,26 +18,32 @@ const ENTRY = { name: 'app', selfRegistration: true, requireVerifiedEmail: false
 const USER = '01a0f4fe-4660-7000-8000-0000000000cc'
 const KEY = '0123456789abcdef0123456789abcdef'
 
-const HELD = { certification: 'SPONSOR_APPLY', heldFrom: '2026-10-01T00:00:00Z',
-  heldUntil: '2099-10-01T00:00:00Z', certificateId: 'c1', verifyKey: KEY }
+const NODE = { source: 'NODE', certificateId: 'c1', verifyKey: KEY, names: { en: 'Coffee basics', ja: 'コーヒー基礎' },
+  issuerName: 'Beans Platform', litAt: '2026-10-01T00:00:00Z', revokedAt: null, shared: true, runId: null,
+  heldUntil: null, certification: null }
+const OLD = { source: 'CERTIFICATION', certificateId: 'c0', verifyKey: 'f'.repeat(32), names: null, issuerName: null,
+  litAt: '2026-09-01T00:00:00Z', revokedAt: null, shared: true, runId: null, heldUntil: '2099-10-01T00:00:00Z',
+  certification: 'SPONSOR_APPLY' }
 
-const VERIFIED: VerifiedCertificate = { certification: 'SPONSOR_APPLY', certificationVersion: 1, holderName: 'Mei',
-  heldFrom: '2026-10-01T00:00:00Z', validUntil: '2099-10-01T00:00:00Z', issuedAt: '2026-10-02T00:00:00Z',
-  revokedAt: null, certificationNames: null, issuerName: null }
+const VERIFIED: VerifiedCertificate = { source: 'NODE', shared: true, certification: null, certificationVersion: null,
+  certificationNames: null, certificateNames: { en: 'Coffee basics' }, issuerName: 'Beans Platform', holderName: 'Mei',
+  heldFrom: '2026-10-01T00:00:00Z', validUntil: null, issuedAt: '2026-10-01T00:00:00Z', revokedAt: null }
+const VERIFIED_OLD: VerifiedCertificate = { ...VERIFIED, source: 'CERTIFICATION', certification: 'SPONSOR_APPLY',
+  certificationVersion: 1, certificateNames: null, issuerName: null, validUntil: '2099-10-01T00:00:00Z' }
 
 interface Server {
   signedIn?: boolean
-  held?: Record<string, unknown>[]
+  certificates?: Record<string, unknown>[]
   settings?: Record<string, unknown> | null
   verified?: Record<string, unknown> | null
   page?: Record<string, unknown>[]
   settingsRefusal?: Record<string, unknown>
 }
 
-/** The server as the app sees it: a verified taker (or nobody), their certifications and the public templates. */
+/** The server as the app sees it: a verified taker (or nobody), their certificates and the public templates. */
 function server(options: Server = {}) {
   const posted: { path: string; body: Record<string, unknown> }[] = []
-  let held = options.held ?? [HELD]
+  let certificates = options.certificates ?? [NODE]
   let settings = options.settings ?? null
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
     const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin))
@@ -62,10 +69,21 @@ function server(options: Server = {}) {
       case '/api/queries/qb.app.inbox-unread':
         return json(200, { items: [{ messages: 0, broadcasts: 0 }], offset: 0, limit: 1 })
       case '/api/processes/QB_MY_CERTIFICATIONS/latest':
-        return json(200, { output: { held } })
+        return json(200, { output: { certificates } })
       case '/api/processes/QB_CERTIFICATE_ISSUE/latest':
-        held = held.map((h) => ({ ...h, certificateId: 'c1', verifyKey: KEY }))
-        return json(200, { output: { certificateId: 'c1', verifyKey: KEY, heldUntil: HELD.heldUntil, issued: true } })
+        certificates = certificates.map((c) => c.certificateId === body?.certificateId ? { ...c, runId: 'run1' } : c)
+        return json(200, { output: { certificateId: body?.certificateId, verifyKey: KEY, runId: 'run1', issued: true } })
+      case '/api/processes/QB_CERTIFICATE_SHARE_SET/latest':
+        certificates = certificates.map((c) => c.certificateId === body?.certificateId
+          ? { ...c, shared: body?.shared } : c)
+        return json(200, { output: { certificateId: body?.certificateId, shared: body?.shared } })
+      case '/api/documents/runs/run1/pdf':
+        return new Response('%PDF-1.4', { status: 200, headers: { 'Content-Type': 'application/pdf',
+          'Content-Disposition': 'attachment; filename="certificate.pdf"' } })
+      case '/api/documents/runs':
+        return json(200, [{ runId: 'run0' }])
+      case '/api/documents/runs/run0/pdf':
+        return new Response('%PDF-1.4', { status: 200, headers: { 'Content-Type': 'application/pdf' } })
       case '/api/processes/QB_SETTINGS_SAVE/latest': {
         if (options.settingsRefusal) return json(422, options.settingsRefusal)
         const given = body as { publicHandle: string | null; publicPage: boolean | null }
@@ -90,10 +108,19 @@ function server(options: Server = {}) {
   return { processCalls }
 }
 
+const clicked: HTMLAnchorElement[] = []
+
 beforeAll(() => configureClient({ entry: 'app' }))
 beforeEach(() => {
   session.clear()
   configureClient({ entry: 'app' })
+  clicked.length = 0
+  // jsdom has neither object URLs nor navigation: the download is the anchor that was clicked.
+  URL.createObjectURL = vi.fn(() => 'blob:certificate')
+  URL.revokeObjectURL = vi.fn()
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    clicked.push(this)
+  })
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -101,7 +128,7 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('certificates (Q77)', () => {
+describe('certificates (Q77, F-S5b)', () => {
   it('reads the verify and public page paths, the language and the state', () => {
     expect(verifyKeyOf(`/verify/${KEY.toUpperCase()}`)).toBe(KEY)
     expect(verifyKeyOf('/verify/')).toBeNull()
@@ -111,29 +138,112 @@ describe('certificates (Q77)', () => {
     expect(certificateLanguage('zh-CN')).toBe('zh')
     expect(certificateLanguage('fr')).toBe('en')
     const now = Date.parse('2027-01-01T00:00:00Z')
+    // A node's certificate has no end: valid until revoked or switched off.
     expect(stateOf(VERIFIED, now)).toBe('VALID')
-    expect(stateOf({ ...VERIFIED, validUntil: '2026-12-31T00:00:00Z' }, now)).toBe('EXPIRED')
+    expect(stateOf(VERIFIED, Date.parse('2999-01-01T00:00:00Z'))).toBe('VALID')
     expect(stateOf({ ...VERIFIED, revokedAt: '2026-11-01T00:00:00Z' }, now)).toBe('REVOKED')
+    expect(stateOf({ ...VERIFIED, shared: false }, now)).toBe('DISABLED')
+    expect(stateOf({ ...VERIFIED, shared: false, revokedAt: '2026-11-01T00:00:00Z' }, now)).toBe('DISABLED')
+    // Q77's certificates keep their end.
+    expect(stateOf(VERIFIED_OLD, now)).toBe('VALID')
+    expect(stateOf({ ...VERIFIED_OLD, validUntil: '2026-12-31T00:00:00Z' }, now)).toBe('EXPIRED')
   })
 
-  it('lists the certificates still valid with their links; issuing is paused (F-S2c, F-S2c2b)', async () => {
+  it('lists the certificates: a node\'s with its issuer and day, Q77\'s with its holding, nothing about paused issuing',
+    async () => {
+      session.store('access', 'refresh')
+      server({ certificates: [NODE, OLD] })
+      window.history.replaceState(null, '', '/account/certificates')
+      render(<App />)
+      const items = await screen.findAllByTestId('certificate-item')
+      expect(items).toHaveLength(2)
+      const [node, old] = items
+      expect(within(node).getByTestId('certificate-name')).toHaveTextContent('Coffee basics')
+      expect(within(node).getByTestId('certificate-issuer')).toHaveTextContent('Issued by Beans Platform')
+      expect(within(node).getByTestId('certificate-dates')).toHaveTextContent('Lit on')
+      expect(within(node).getByTestId('certificate-dates')).not.toHaveTextContent('–')
+      expect(within(node).getByTestId('certificate-link')).toHaveTextContent(`/verify/${KEY}`)
+      expect(within(node).getByTestId('certificate-share')).toBeChecked()
+      expect(within(old).getByTestId('certificate-name')).toHaveTextContent('Sponsor Certification')
+      expect(within(old).getByTestId('certificate-dates')).toHaveTextContent('–')
+      // Q77's certificate has no sharing to set.
+      expect(within(old).queryByTestId('certificate-share')).toBeNull()
+      expect(screen.queryByTestId('certificates-paused')).toBeNull()
+      await expectAccessible()
+    })
+
+  it('issues the PDF on the first download only, then downloads the stored one', async () => {
     session.store('access', 'refresh')
-    const { processCalls } = server({ held: [HELD] })
+    const { processCalls } = server({ certificates: [NODE] })
     window.history.replaceState(null, '', '/account/certificates')
     render(<App />)
-    const item = await screen.findByTestId('certificate-SPONSOR_APPLY')
-    expect(item).toHaveTextContent('Sponsor Certification')
-    expect(within(item).getByTestId('certificate-link-SPONSOR_APPLY')).toHaveTextContent(`/verify/${KEY}`)
-    expect(within(item).getByTestId('certificate-download-SPONSOR_APPLY')).toBeEnabled()
-    // F-S2c (D8): no certificate is issued any more; the page says so once.
-    expect(screen.getByTestId('certificates-paused')).toHaveTextContent('not issued for now')
+    await userEvent.click(await screen.findByTestId('certificate-download'))
+    await waitFor(() => expect(clicked).toHaveLength(1))
+    expect(processCalls('QB_CERTIFICATE_ISSUE')).toEqual([{ certificateId: 'c1', language: 'en' }])
+    expect(clicked[0].download).toBe('certificate.pdf')
+    // The list read again has the run: the next click is the stored PDF, no issuing.
+    await waitFor(() => expect(processCalls('QB_MY_CERTIFICATIONS').length).toBeGreaterThan(1))
+    await userEvent.click(screen.getByTestId('certificate-download'))
+    await waitFor(() => expect(clicked).toHaveLength(2))
+    expect(processCalls('QB_CERTIFICATE_ISSUE')).toHaveLength(1)
+  })
+
+  it('downloads a Q77 certificate\'s PDF as issued back then, without issuing', async () => {
+    session.store('access', 'refresh')
+    const { processCalls } = server({ certificates: [OLD] })
+    window.history.replaceState(null, '', '/account/certificates')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('certificate-download'))
+    await waitFor(() => expect(clicked).toHaveLength(1))
     expect(processCalls('QB_CERTIFICATE_ISSUE')).toEqual([])
+  })
+
+  it('copies the verify link and turns its sharing off and back on', async () => {
+    session.store('access', 'refresh')
+    const { processCalls } = server({ certificates: [NODE] })
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    window.history.replaceState(null, '', '/account/certificates')
+    render(<App />)
+    await userEvent.click(await screen.findByTestId('certificate-copy'))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(`/verify/${KEY}`))
+
+    await userEvent.click(screen.getByTestId('certificate-share'))
+    await waitFor(() => expect(processCalls('QB_CERTIFICATE_SHARE_SET')).toEqual([{ certificateId: 'c1', shared: false }]))
+    // Off: the hint says so, and there is no link to copy.
+    await waitFor(() => expect(screen.getByTestId('certificate-share')).not.toBeChecked())
+    expect(screen.getByTestId('certificate-share-hint')).toHaveTextContent('turned off')
+    expect(screen.queryByTestId('certificate-copy')).toBeNull()
+    expect(screen.queryByTestId('certificate-link')).toBeNull()
+    await expectAccessible()
+
+    await userEvent.click(screen.getByTestId('certificate-share'))
+    await waitFor(() => expect(processCalls('QB_CERTIFICATE_SHARE_SET')).toContainEqual({ certificateId: 'c1', shared: true }))
+    await waitFor(() => expect(screen.getByTestId('certificate-copy')).toBeInTheDocument())
+  })
+
+  it('marks a revoked certificate and shares nothing of it; one issued before stays downloadable', async () => {
+    session.store('access', 'refresh')
+    const revoked = { ...NODE, revokedAt: '2026-11-01T00:00:00Z' }
+    server({ certificates: [revoked, { ...revoked, certificateId: 'c2', verifyKey: 'e'.repeat(32), runId: 'run1' }] })
+    window.history.replaceState(null, '', '/account/certificates')
+    render(<App />)
+    const [first, second] = await screen.findAllByTestId('certificate-item')
+    for (const item of [first, second]) {
+      expect(within(item).getByTestId('certificate-revoked')).toHaveTextContent('Revoked')
+      expect(item).toHaveAttribute('data-revoked', 'true')
+      expect(within(item).queryByTestId('certificate-share')).toBeNull()
+      expect(within(item).queryByTestId('certificate-copy')).toBeNull()
+    }
+    // Never issued: the server would refuse the first PDF, so none is offered; an issued one is.
+    expect(within(first).queryByTestId('certificate-download')).toBeNull()
+    expect(within(second).getByTestId('certificate-download')).toBeInTheDocument()
     await expectAccessible()
   })
 
-  it('says when nothing is held, and turns the public page on only with a name', async () => {
+  it('says when there is none, and turns the public page on only with a name', async () => {
     session.store('access', 'refresh')
-    const { processCalls } = server({ held: [] })
+    const { processCalls } = server({ certificates: [] })
     window.history.replaceState(null, '', '/account/certificates')
     render(<App />)
     expect(await screen.findByTestId('certificates-none')).toBeInTheDocument()
@@ -154,7 +264,7 @@ describe('certificates (Q77)', () => {
 
   it('shows the server\'s reason when a name is refused', async () => {
     session.store('access', 'refresh')
-    server({ held: [], settingsRefusal: { status: 422, title: 'Unprocessable', detail: 'Rejected',
+    server({ certificates: [], settingsRefusal: { status: 422, title: 'Unprocessable', detail: 'Rejected',
       violations: [{ field: 'publicHandle', code: 'QB_PUBLIC_HANDLE_TAKEN',
         message: 'This public name is taken. Please choose another.' }] } })
     window.history.replaceState(null, '', '/account/certificates')
@@ -164,14 +274,19 @@ describe('certificates (Q77)', () => {
     expect(await screen.findByText(/public name is taken/)).toBeInTheDocument()
   })
 
-  it('verifies a certificate for anybody: valid, revoked, or none', async () => {
+  it('verifies a certificate for anybody: valid with no validity row, revoked, switched off, or none', async () => {
     server({ signedIn: false })
     window.history.replaceState(null, '', `/verify/${KEY}`)
     render(<App />)
     const page = await screen.findByTestId('verify-page')
     expect(within(page).getByTestId('verify-state')).toHaveTextContent('Valid')
     expect(within(page).getByTestId('verify-holder')).toHaveTextContent('Mei')
-    expect(within(page).getByTestId('verify-certification')).toHaveTextContent('Sponsor Certification')
+    expect(within(page).getByTestId('verify-certification')).toHaveTextContent('Coffee basics')
+    expect(within(page).getByTestId('verify-issuer')).toHaveTextContent('Beans Platform')
+    // A node's certificate has a day it was lit and no validity (A2-12).
+    expect(within(page).getByTestId('verify-lit')).toBeInTheDocument()
+    expect(within(page).queryByTestId('verify-held')).toBeNull()
+    expect(within(page).queryByText(/valid until|expires/i)).toBeNull()
     expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute('content', 'noindex')
     await expectAccessible()
     cleanup()
@@ -183,23 +298,55 @@ describe('certificates (Q77)', () => {
     cleanup()
     vi.restoreAllMocks()
 
+    // Switched off by the holder: the state and nothing of the certificate.
+    server({ signedIn: false, verified: { source: 'NODE', shared: false, certification: null, certificationVersion: null,
+      certificationNames: null, certificateNames: null, issuerName: null, holderName: null, heldFrom: null,
+      validUntil: null, issuedAt: null, revokedAt: null } })
+    render(<App />)
+    expect(await screen.findByTestId('verify-state')).toHaveTextContent('Link turned off')
+    expect(screen.getByTestId('verify-disabled')).toBeInTheDocument()
+    expect(screen.queryByTestId('verify-holder')).toBeNull()
+    expect(screen.queryByTestId('verify-certification')).toBeNull()
+    await expectAccessible()
+    cleanup()
+    vi.restoreAllMocks()
+
     server({ signedIn: false, verified: null })
     render(<App />)
     expect(await screen.findByText('No such certificate')).toBeInTheDocument()
   })
 
-  it('shows a public page\'s valid certificates, each leading to its verify page', async () => {
+  it('verifies a Q77 certificate with its holding', async () => {
+    server({ signedIn: false, verified: { ...VERIFIED_OLD } })
+    window.history.replaceState(null, '', `/verify/${KEY}`)
+    render(<App />)
+    const page = await screen.findByTestId('verify-page')
+    expect(within(page).getByTestId('verify-certification')).toHaveTextContent('Sponsor Certification')
+    expect(within(page).getByTestId('verify-held')).toHaveTextContent('–')
+    expect(within(page).queryByTestId('verify-lit')).toBeNull()
+  })
+
+  it('shows a public page\'s certificates, each leading to its verify page', async () => {
     server({ signedIn: false, page: [
-      { handle: 'mei-q77', certification: 'SPONSOR_APPLY', holderName: 'Mei', heldFrom: VERIFIED.heldFrom,
-        validUntil: VERIFIED.validUntil, verifyKey: KEY },
-      { handle: 'mei-q77', certification: 'REFERRER', holderName: 'Mei', heldFrom: '2020-01-01T00:00:00Z',
+      { handle: 'mei-q77', source: 'NODE', certification: null, certificationNames: null,
+        certificateNames: '{"en":"Coffee basics"}', issuerName: 'Beans Platform', holderName: 'Mei',
+        heldFrom: VERIFIED.heldFrom, validUntil: null, verifyKey: KEY },
+      { handle: 'mei-q77', source: 'CERTIFICATION', certification: 'SPONSOR_APPLY', certificationNames: null,
+        certificateNames: null, issuerName: null, holderName: 'Mei', heldFrom: '2026-10-01T00:00:00Z',
+        validUntil: '2099-10-01T00:00:00Z', verifyKey: 'd'.repeat(32) },
+      { handle: 'mei-q77', source: 'CERTIFICATION', certification: 'REFERRER', certificationNames: null,
+        certificateNames: null, issuerName: null, holderName: 'Mei', heldFrom: '2020-01-01T00:00:00Z',
         validUntil: '2021-01-01T00:00:00Z', verifyKey: 'f'.repeat(32) }] })
     window.history.replaceState(null, '', '/u/mei-q77')
     render(<App />)
     const page = await screen.findByTestId('taker-page')
     expect(within(page).getByTestId('taker-page-name')).toHaveTextContent('Mei')
-    expect(within(page).getByTestId('taker-page-SPONSOR_APPLY')).toHaveAttribute('href', `/verify/${KEY}`)
-    // Expired: left out.
+    const node = within(page).getByTestId(`taker-page-${KEY}`)
+    expect(node).toHaveAttribute('href', `/verify/${KEY}`)
+    expect(node).toHaveTextContent('Coffee basics')
+    expect(node).toHaveTextContent('Lit on')
+    expect(within(page).getByTestId('taker-page-SPONSOR_APPLY')).toHaveTextContent('–')
+    // Q77's, expired: left out.
     expect(within(page).queryByTestId('taker-page-REFERRER')).toBeNull()
     await expectAccessible()
     cleanup()

@@ -20,6 +20,11 @@ export interface DraftNode {
   condition: Condition
   /** Publications bound to it and not ended (from the version in effect): it cannot be removed until they end. */
   runningBound: number
+  /**
+   * F-S5b: the name of the certificate lighting it issues, by language (null: none), as the version read has it. A
+   * save sends it back as it is (a save that left it out would drop the certificate), whatever the editor changed.
+   */
+  certificateNames?: I18nText | null
 }
 
 export interface Draft {
@@ -178,7 +183,7 @@ export interface SaveInput {
   name: I18nText
   description: I18nText | null
   nodes: { nodeId: string | null; key: string | null; name: I18nText; description: I18nText | null;
-    condition: Condition }[]
+    condition: Condition; certificateNames: I18nText | null }[]
 }
 
 export function saveInputOf(draft: Draft): SaveInput {
@@ -188,7 +193,7 @@ export function saveInputOf(draft: Draft): SaveInput {
     name: draft.name,
     description: draft.description,
     nodes: draft.nodes.map((node) => ({ nodeId: node.nodeId, key: node.nodeId ? null : node.key, name: node.name,
-      description: node.description, condition: node.condition })),
+      description: node.description, condition: node.condition, certificateNames: node.certificateNames ?? null })),
   }
 }
 

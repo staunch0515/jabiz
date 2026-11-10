@@ -276,6 +276,23 @@ class NodeCertificateIT extends NodeCertificateItSupport {
         assertThat(problemCodes(save(lead, current(copy), List.of(same)))).isEmpty();
     }
 
+    /** F-S5b: the Sponsor's editor reads the names back (the template it reads) and sends them again unchanged. */
+    @Test
+    void aSponsorsOwnGraphGivesItsCertificateNamesBackToTheEditor() {
+        String token = sponsorToken(newSponsor(unique("s-fs5b-editor")));
+        Map<String, Object> tree = run(TreeProcesses.CREATE, token, body("ownerKind", "SPONSOR", "name", name("Tea")));
+        Map<String, Object> named = node(null, "one", "One", all(passed()));
+        named.put("certificateNames", Map.of("en", "Tea expert", "ja", "お茶の達人"));
+        Map<String, Object> plain = node(null, "two", "Two", all(passed()));
+        Map<String, Object> saved = save(token, tree, List.of(named, plain));
+        assertThat(problemCodes(saved)).isEmpty();
+        List<Map<String, Object>> rows = items("qb.sponsor.tree", token, Map.of("params",
+            Map.of("versionId", String.valueOf(saved.get("versionId")))));
+        assertThat(rows).hasSize(2);
+        assertThat(String.valueOf(rows.get(0).get("certificateNames"))).contains("Tea expert").contains("お茶の達人");
+        assertThat(rows.get(1).get("certificateNames")).isNull();
+    }
+
     private Map<String, Object> current(Map<String, Object> tree) {
         return Map.of("treeId", tree.get("treeId"), "revision", ((Number) query(
             "SELECT revision FROM qb_tree WHERE tree_id = ?", String.valueOf(tree.get("treeId"))).getFirst()

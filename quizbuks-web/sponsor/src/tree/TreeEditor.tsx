@@ -52,7 +52,8 @@ export function TreeEditor({ map, onClose }: { map: SponsorMap; onClose: () => v
   if (version.isError) return <PageState kind="error" description={problemText(version.error)} />
   const nodes: DraftNode[] = (version.data?.graph.nodes ?? []).map((node) => ({ nodeId: node.nodeId, key: node.nodeId,
     name: node.name, description: node.description, condition: node.condition,
-    runningBound: version.data?.runningBound.get(node.nodeId) ?? 0 }))
+    runningBound: version.data?.runningBound.get(node.nodeId) ?? 0,
+    certificateNames: version.data?.certificateNames.get(node.nodeId) ?? null }))
   const draft: Draft = { treeId: map.treeId, revision: map.revision, name: map.name, description: map.description,
     nodes }
   return <EditorForm key={`${map.treeId}:${map.revision}`} initial={draft} map={map} onClose={onClose} t={t} />
@@ -218,6 +219,18 @@ function EditorForm({ initial, map, onClose, t }: { initial: Draft; map: Sponsor
                   disabled={locked} placeholder={t('tree.edit.nodeDescriptionHint')}
                   onChange={(event) => edit(withNode(draft, node.key,
                     (n) => ({ ...n, description: withText(n.description, event.target.value) })))} />
+                {/* F-S5b: lighting a node with a certificate name issues a certificate in that name (issuer: this company). */}
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`${id}-node-certificate-${index}`}>{t('tree.edit.certificate')}</Label>
+                  <Input id={`${id}-node-certificate-${index}`} value={node.certificateNames?.[language()] ?? ''}
+                    disabled={locked} data-testid="tree-editor-node-certificate"
+                    aria-describedby={`${id}-node-certificate-hint-${index}`}
+                    onChange={(event) => edit(withNode(draft, node.key, (n) => ({ ...n,
+                      certificateNames: withText(n.certificateNames ?? null, event.target.value) })))} />
+                  <p id={`${id}-node-certificate-hint-${index}`} className="text-muted-foreground text-sm">
+                    {t('tree.edit.certificateHint')}
+                  </p>
+                </div>
                 <ConditionEditor condition={node.condition} others={others} foreign={foreign} nameOf={nameOf}
                   disabled={locked}
                   onChange={(condition) => edit(withNode(draft, node.key, (n) => ({ ...n, condition })))} />

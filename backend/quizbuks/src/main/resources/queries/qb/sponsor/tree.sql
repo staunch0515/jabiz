@@ -1,6 +1,6 @@
 /*---
 id: qb.sponsor.tree
-description: "F-S3: one version of one of the caller's own knowledge graphs node by node: the definition (name, description, condition, order) the editor shows and saves back, whether the node is in effect, how many Takers have lit it (in effect only; under the minimum group, none) and how many publications bound to it are not ended (a node with any cannot be removed)"
+description: "F-S3: one version of one of the caller's own knowledge graphs node by node: the definition (name, description, condition, order and, F-S5b, the certificate names) the editor shows and saves back, whether the node is in effect, how many Takers have lit it (in effect only; under the minimum group, none) and how many publications bound to it are not ended (a node with any cannot be removed)"
 entities: [SysParam, QbTree, QbTreeVersion, QbTreeNode, QbTreeNodeDef, QbTreeLit, QbTreeLitRevocation, QbPublicationCard, QbTreeNodeCount]
 datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
@@ -19,6 +19,7 @@ results:
   name:         { kind: { type: text } }
   description:  { kind: { type: text } }
   condition:    { kind: { type: text } }
+  certificateNames: { kind: { type: text } }
   seq:          { from: QbTreeNodeDef.seq }
   inEffect:     { kind: { type: bool } }
   litCount:     { kind: { type: numeric, precision: 9, scale: 0 } }
@@ -66,6 +67,7 @@ running AS (
 SELECT d.{{QbTreeNodeDef.nodeId}} AS nodeId,
        CAST(d.{{QbTreeNodeDef.name}} AS text) AS name, CAST(d.{{QbTreeNodeDef.description}} AS text) AS description,
        d.{{QbTreeNodeDef.condition}} AS condition, d.{{QbTreeNodeDef.seq}} AS seq,
+       CAST(d.{{QbTreeNodeDef.certificateNames}} AS text) AS certificateNames,
        coalesce(n.{{QbTreeNode.active}}, FALSE) AS inEffect,
        CASE WHEN coalesce(n.{{QbTreeNode.active}}, FALSE) AND coalesce(lit.n, 0) >= k.k THEN lit.n END AS litCount,
        coalesce(running.n, 0) AS runningBound,

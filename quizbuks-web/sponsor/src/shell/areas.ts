@@ -107,6 +107,7 @@ export const AREAS: readonly Area[] = [
     { key: 'staff', path: profilePath('staff') },
     { key: 'mail-server', path: profilePath('mail-server') },
     { key: 'challenges', path: profilePath('challenges') },
+    { key: 'certificates', path: profilePath('certificates') },
   ] },
 ]
 

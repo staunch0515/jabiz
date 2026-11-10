@@ -239,6 +239,31 @@ describe('the Sponsor\'s map editor (F-S3d)', () => {
     await expectAccessible()
   })
 
+  it('sends the certificate names back as read when a save changes something else, and writes the field in the interface language (F-S5b)',
+    async () => {
+      const named = [{ ...NODES[0], certificateNames: JSON.stringify({ en: 'Bread baker', ja: 'パン職人' }) }, NODES[1]]
+      const { sent } = server([MAP], { QB_TREE_DRAFT_SAVE: () => output({}) }, named)
+      const editor = await open()
+      const [basics, sourdough] = within(editor).getAllByTestId('tree-editor-node')
+      expect(within(basics).getByTestId('tree-editor-node-certificate')).toHaveValue('Bread baker')
+      expect(within(sourdough).getByTestId('tree-editor-node-certificate')).toHaveValue('')
+      // A save that changes only a node's name carries both nodes' certificate names as they were.
+      await userEvent.type(within(sourdough).getByTestId('tree-editor-node-name'), '!')
+      await userEvent.click(within(editor).getByTestId('tree-editor-save'))
+      await vi.waitFor(() => expect(sent).toHaveLength(1))
+      let saved = sent[0].input as { nodes: { certificateNames: unknown }[] }
+      expect(saved.nodes.map((n) => n.certificateNames)).toEqual([{ en: 'Bread baker', ja: 'パン職人' }, null])
+      await expectAccessible()
+
+      // Typing a name keeps the other languages; emptying the interface language's keeps the rest; none left is null.
+      await userEvent.type(within(sourdough).getByTestId('tree-editor-node-certificate'), 'Sourdough baker')
+      await userEvent.clear(within(basics).getByTestId('tree-editor-node-certificate'))
+      await userEvent.click(within(editor).getByTestId('tree-editor-save'))
+      await vi.waitFor(() => expect(sent).toHaveLength(2))
+      saved = sent[1].input as { nodes: { certificateNames: unknown }[] }
+      expect(saved.nodes.map((n) => n.certificateNames)).toEqual([{ ja: 'パン職人' }, { en: 'Sourdough baker' }])
+    })
+
   it('says when the map was changed elsewhere, and sends nothing more', async () => {
     const { sent } = server([MAP], { QB_TREE_DRAFT_SAVE: () => json(409, { status: 409, title: 'Conflict',
       violations: [{ ruleCode: 'QB_TREE_CHANGED', message: 'The map was changed.' }] }) })
