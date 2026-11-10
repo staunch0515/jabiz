@@ -217,6 +217,8 @@ public final class QbParams {
     public static final String FEE_CREDIT_VALID_DAYS = "qb.fee-credit.valid-days";
     public static final String FEE_CREDIT_MANUAL_MAX = "qb.fee-credit.manual.max";
     public static final String FEE_CREDIT_EXPIRY_NOTICE_DAYS = "qb.fee-credit.expiry-notice-days";
+    /** F-M3: how many hours the link that proves a company's mailbox stays good (ordinary; 1 to 168). */
+    public static final String VERIFICATION_LINK_HOURS = "qb.sponsor-verification.link-hours";
     /** The cap's kind, which the controlled change that first sets it gives (yen, whole). */
     public static final Map<String, Object> FEE_CREDIT_MANUAL_MAX_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);
@@ -851,7 +853,10 @@ public final class QbParams {
         new Param(SPONSOR_BOTTOM_BAR, Map.of("type", "text", "maxLength", 200), "home,publications,prizes,messages",
             "The areas of the Sponsor app's bottom menu on a phone, comma-separated (home, quizzes, publications, "
                 + "prizes, messages, benefits, money, assets, hub; at most four, \"More\" follows; empty: this "
-                + "default)"));
+                + "default)"),
+        // F-M3: company verification (ordinary; last).
+        new Param(VERIFICATION_LINK_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
+            "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

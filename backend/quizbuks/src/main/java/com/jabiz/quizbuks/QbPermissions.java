@@ -373,6 +373,21 @@ public final class QbPermissions {
     public static final String HELP_SYSTEM = "qb.help.system";
 
     /**
+     * F-M3: a Sponsor's own company verification (submitting it, confirming the mailed link, reading its state).
+     * Sponsors.
+     */
+    public static final String SPONSOR_VERIFICATION = "qb.sponsor.verification";
+    /**
+     * F-M3: every Sponsor's company verifications (the review's pages; an operator its own Sponsors', the entry scope
+     * limits it). Reviewing one is {@link #REVIEW_SPONSOR}'s. Content administrators and operators.
+     */
+    public static final String ADMIN_VERIFICATION_READ = "qb.admin.verification.read";
+    /** F-M3: withdrawing a Sponsor's company verification (a reason, always a second factor). As the read. */
+    public static final String VERIFICATION_REVOKE = "qb.sponsor-verification.revoke";
+    /** F-M3: the verifications' approval results and the top-up job ({@code internal()}). Granted to no role. */
+    public static final String VERIFICATION_SYSTEM = "qb.sponsor-verification.system";
+
+    /**
      * Codes that no longer exist (F-S2c2b, D1: the certifications and their rounds are gone). {@code QB_SETUP} removes
      * every grant of them, from any role, so that an installation that had them keeps no stale grant.
      */

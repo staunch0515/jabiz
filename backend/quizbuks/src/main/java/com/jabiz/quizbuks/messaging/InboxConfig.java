@@ -247,7 +247,13 @@ public class InboxConfig {
                 "共有動画の差し戻し")
             .item(QbInbox.SHARED_VIDEO_TAKEN_DOWN, "en", "Shared video taken down", "zh", "共享视频被下架", "ja",
                 "共有動画の公開停止")
-            .item(QbInbox.HELP_REPLY, "en", "Help desk reply", "zh", "客服的回复", "ja", "サポートからの返信"));
+            .item(QbInbox.HELP_REPLY, "en", "Help desk reply", "zh", "客服的回复", "ja", "サポートからの返信")
+            .item(QbInbox.VERIFICATION_APPROVED, "en", "Company verified", "zh", "企业实名认证已通过", "ja",
+                "企業認証の完了")
+            .item(QbInbox.VERIFICATION_REJECTED, "en", "Company verification sent back", "zh", "企业实名认证被驳回",
+                "ja", "企業認証の差し戻し")
+            .item(QbInbox.VERIFICATION_REVOKED, "en", "Company verification withdrawn", "zh", "企业实名认证被撤销",
+                "ja", "企業認証の取り消し"));
     }
 
     @Bean
@@ -622,6 +628,16 @@ public class InboxConfig {
         return EventSubscription.of(MessageProcesses.SHARED_VIDEO_REJECTED_CONSUMER,
             com.jabiz.quizbuks.sharedvideo.SharedVideoProcesses.REJECTED_EVENT, qbMessageFromEvent,
             event -> MessageProcesses.sharedVideoInput(event, QbInbox.SHARED_VIDEO_REJECTED));
+    }
+
+    /** F-M3: a Sponsor hears that their company verification was approved, sent back or withdrawn. */
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageVerificationSubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.VERIFICATION_CONSUMER,
+            com.jabiz.quizbuks.verification.VerificationProcesses.DECIDED_EVENT, qbMessageFromEvent,
+            MessageProcesses::verificationInput);
     }
 
     /** F-C3: a provider whose shared video was taken down hears it in their inbox too (beside the mail). */

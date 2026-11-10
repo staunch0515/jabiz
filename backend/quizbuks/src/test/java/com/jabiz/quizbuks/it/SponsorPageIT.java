@@ -172,8 +172,10 @@ class SponsorPageIT extends PlayItSupport {
             .containsEntry("logo", logo).containsEntry("story", "Since **1990**.")
             // Q73c: the languages it offers and the one it is shown in.
             .containsEntry("languages", "en").containsEntry("displayLanguage", "en")
+            // F-M3: the verified company's domain, none while not verified.
+            .containsEntry("verifiedDomain", null)
             .containsOnlyKeys("handle", "language", "headline", "story", "logo", "cover", "website", "company",
-                "languages", "displayLanguage"));
+                "languages", "displayLanguage", "verifiedDomain"));
         client.get().uri("/api/public/files/" + cover).exchange().expectStatus().isOk();
         client.get().uri("/api/public/files/" + logo).exchange().expectStatus().isOk();
         // The profile changes the published page at once, without the page's review.

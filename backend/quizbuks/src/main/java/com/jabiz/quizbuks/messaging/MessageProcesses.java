@@ -99,6 +99,8 @@ public final class MessageProcesses {
     public static final String TREE_LIT_REVOKED_CONSUMER = "qb.msg-tree-lit-revoked";
     /** F-C3: a shared video sent back by its review, or taken down. */
     public static final String SHARED_VIDEO_REJECTED_CONSUMER = "qb.msg-shared-video-rejected";
+    /** F-M3: the Sponsor's company verification decided or withdrawn. */
+    public static final String VERIFICATION_CONSUMER = "qb.msg-sponsor-verification";
     public static final String SHARED_VIDEO_TAKEN_DOWN_CONSUMER = "qb.msg-shared-video-taken-down";
     /** F-C10: a person's reply in an AI help conversation. */
     public static final String HELP_REPLY_CONSUMER = "qb.msg-help-reply";
@@ -163,6 +165,7 @@ public final class MessageProcesses {
     /** F-S5a: the certificate of the lit record a revocation ended, when it had one. */
     static final String REVOKED_CERTIFICATE = "revokedCertificate";
     static final String SHARED_VIDEO = "sharedVideo";
+    static final String VERIFICATION = "verification";
     static final String HELP_REPLY = "helpReply";
 
     /** A push: which, to whom, and the page of the app a tap opens. */
@@ -233,6 +236,10 @@ public final class MessageProcesses {
                     QueryEntities.query(com.jabiz.quizbuks.sharedvideo.QbSharedVideos.DEFAULT_DATASET,
                         ctx -> byId("sharedVideoId", QbInbox.SHARED_VIDEO_KINDS.contains(input(ctx).kind())
                             ? input(ctx).sourceId() : null), SHARED_VIDEO),
+                    // F-M3: the verification the event names (still as the event says?).
+                    QueryEntities.query(com.jabiz.quizbuks.verification.QbVerifications.DEFAULT_DATASET,
+                        ctx -> byId("verificationId", QbInbox.VERIFICATION_KINDS.contains(input(ctx).kind())
+                            ? input(ctx).sourceId() : null), VERIFICATION),
                     // F-C10: the reply the event names.
                     QueryEntities.query(com.jabiz.quizbuks.help.QbHelp.defaultDataset(
                         com.jabiz.quizbuks.help.QbHelp.MESSAGE), ctx -> byId("messageId",
@@ -335,6 +342,8 @@ public final class MessageProcesses {
             case QbInbox.TREE_LIT_REVOKED -> revokedMessage(ctx, texts, params);
             case QbInbox.SHARED_VIDEO_REJECTED, QbInbox.SHARED_VIDEO_TAKEN_DOWN -> sharedVideoMessage(ctx, input, params);
             case QbInbox.HELP_REPLY -> helpReplyMessage(ctx);
+            case QbInbox.VERIFICATION_APPROVED, QbInbox.VERIFICATION_REJECTED, QbInbox.VERIFICATION_REVOKED ->
+                verificationMessage(ctx, input, params);
             default -> null;
         };
         if (draft != null) {
@@ -721,6 +730,39 @@ public final class MessageProcesses {
         }
         return new Draft(reply.get("userId"), QbInbox.TYPE_SYSTEM, QbInbox.HELP_REPLY, null, QbInbox.ACTION_HELP,
             String.valueOf((Object) reply.get("threadId")));
+    }
+
+    /**
+     * F-M3: the Sponsor's company verification approved, sent back or withdrawn, only while it still is; the company
+     * and domain, and the reason as the reviewer or the one who withdrew it wrote it. Linked to the verification page.
+     */
+    private static Draft verificationMessage(ProcessContext ctx, EventInput input,
+        Map<String, MessageTexts.Value> params) {
+        EntityInstance row = first(ctx, VERIFICATION);
+        String status = switch (input.kind()) {
+            case QbInbox.VERIFICATION_APPROVED -> com.jabiz.quizbuks.verification.QbVerifications.APPROVED;
+            case QbInbox.VERIFICATION_REJECTED -> com.jabiz.quizbuks.verification.QbVerifications.REJECTED;
+            default -> com.jabiz.quizbuks.verification.QbVerifications.REVOKED;
+        };
+        if (row == null || !status.equals(row.get("status"))) {
+            return null;
+        }
+        params.put("company", MessageTexts.Value.of(String.valueOf((Object) row.get("companyName"))));
+        params.put("domain", MessageTexts.Value.of(String.valueOf((Object) row.get("domain"))));
+        Object reason = row.get(QbInbox.VERIFICATION_REVOKED.equals(input.kind()) ? "revokeReason" : "rejectReason");
+        params.put("reason", MessageTexts.Value.of(reason == null || reason.toString().isBlank() ? "—"
+            : reason.toString().strip()));
+        return new Draft(row.get("sponsorId"), QbInbox.TYPE_SYSTEM, input.kind(), null, QbInbox.ACTION_VERIFICATION,
+            null);
+    }
+
+    /** F-M3: a verification's event: the verification, and which outcome. */
+    static EventInput verificationInput(DomainEvent event) {
+        String status = text(event, "status");
+        String kind = com.jabiz.quizbuks.verification.QbVerifications.APPROVED.equals(status)
+            ? QbInbox.VERIFICATION_APPROVED : com.jabiz.quizbuks.verification.QbVerifications.REVOKED.equals(status)
+            ? QbInbox.VERIFICATION_REVOKED : QbInbox.VERIFICATION_REJECTED;
+        return new EventInput(kind, text(event, "verificationId"), null, event.createdTime());
     }
 
     /** F-C10: a person's reply in an AI help conversation (the reply). */

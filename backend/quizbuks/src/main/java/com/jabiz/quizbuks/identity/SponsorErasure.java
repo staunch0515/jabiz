@@ -103,6 +103,11 @@ public class SponsorErasure {
                     ErasedEntity.delete(com.jabiz.quizbuks.usage.QbUsage.DAY, "sponsorId"),
                     // F-C4: the records of their sponsor packages' imports.
                     ErasedEntity.delete(com.jabiz.quizbuks.sponsorpackage.QbPackageImports.IMPORT, "sponsorId"),
+                    // F-M3: their company verifications (the address the link went to masked in the audit records);
+                    // the domain is free again for the company's next account. The platform fee Kudos follow the
+                    // wallet's own erasure.
+                    ErasedEntity.delete(com.jabiz.quizbuks.verification.QbVerifications.VERIFICATION, "sponsorId",
+                        "confirmAddress"),
                     ErasedEntity.delete(QbSponsorProducts.QUIZ_LINK, "ownerId"),
                     ErasedEntity.delete(QbSponsorProducts.PRODUCT, "userId", "name", "description", "image",
                         "shopUrl", "translations"),

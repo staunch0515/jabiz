@@ -79,6 +79,8 @@ public final class OperatorScopes {
         fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.USE, "sponsorId");
         fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.FIGURES, "sponsorId");
         fields.put(com.jabiz.quizbuks.videouse.QbVideoUses.HISTORY, "sponsorId");
+        // F-M3: a Sponsor's company verifications.
+        fields.put(com.jabiz.quizbuks.verification.QbVerifications.VERIFICATION, "sponsorId");
         // F-C4: a Sponsor's imports of sponsor packages.
         fields.put(com.jabiz.quizbuks.sponsorpackage.QbPackageImports.IMPORT, "sponsorId");
         // F-C10: the AI help's conversations and messages, by their user (a Sponsor's; a Taker's are no operator's).

@@ -61,6 +61,7 @@ class SetupIT extends QbItSupport {
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_PLATFORM_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.TREE_LIT_REVOKE_REVIEW.code(),
             com.jabiz.quizbuks.setup.QbApprovalRules.SHARED_VIDEO_REVIEW.code(),
+            com.jabiz.quizbuks.setup.QbApprovalRules.VERIFICATION_REVIEW.code(),
             QbSodRules.CONTROL.code(), QbSodRules.SECURITY.code()));
         assertThat((List<?>) first.get("proposals")).hasSize(QbParams.CONTROLLED.size() + QbApprovalRules.ALL.size()
             + QbSodRules.ALL.size());
@@ -98,7 +99,8 @@ class SetupIT extends QbItSupport {
                     .containsEntry("right_permissions", "control.publish,approval.decide")
                     .containsEntry("enabled", true));
         assertThat(query("SELECT rule_code, subject, enabled, priority, condition, levels "
-            + "FROM sys_approval_rule_version ORDER BY rule_code"))
+            // In code-point order, whatever the database's collation ("qb.sponsor-…" before "qb.sponsor.…").
+            + "FROM sys_approval_rule_version ORDER BY rule_code COLLATE \"C\""))
             .satisfiesExactly(
                 // Q87b: a fee by hand or an invoice voided takes another administrator's approval.
                 rule -> assertThat(rule).containsEntry("rule_code", com.jabiz.quizbuks.fee.QbFees.REVIEW_RULE)
@@ -150,6 +152,13 @@ class SetupIT extends QbItSupport {
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))
                     .satisfies(r -> assertThat(r.get("levels").toString())
                         .contains(QbPermissions.REVIEW_SPONSOR)),
+                // F-M3: every company verification, reviewed by the Sponsor's operator.
+                rule -> assertThat(rule).containsEntry("rule_code",
+                    com.jabiz.quizbuks.verification.VerificationApprovals.RULE)
+                    .containsEntry("subject", com.jabiz.quizbuks.verification.VerificationApprovals.SUBJECT)
+                    .containsEntry("enabled", true)
+                    .satisfies(r -> assertThat(r.get("condition").toString()).contains("verification"))
+                    .satisfies(r -> assertThat(r.get("levels").toString()).contains(QbPermissions.REVIEW_SPONSOR)),
                 rule -> assertThat(rule).containsEntry("rule_code", SponsorApprovals.RULE)
                     .containsEntry("subject", SponsorApprovals.SUBJECT).containsEntry("enabled", true)
                     .satisfies(r -> assertThat(r.get("condition").toString()).contains("autoApprove"))
@@ -518,6 +527,8 @@ class SetupIT extends QbItSupport {
             QbParams.operatorPlanFee("5"), "100000", QbParams.operatorPlanShare("5"), "0.1000"));
         expected.putAll(Map.of(QbParams.OPERATOR_WITHDRAWAL_MIN, "10000",
             QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
+        // F-M3: how long the company verification's link is good (not controlled).
+        expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 

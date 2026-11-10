@@ -1,7 +1,7 @@
 /*---
 id: qb.system.recon-fee-account
-description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them (the daily reconciliation; differences only)
-entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree]
+description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them; and (F-M3) the top-ups of verified companies with their verifications and certified amounts (the daily reconciliation; differences only)
+entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
@@ -10,6 +10,8 @@ datasets:
   QbTreeLit: urn:jabiz:dataset:default:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
   QbTree: urn:jabiz:dataset:default:QbTree
+  QbSponsorVerification: urn:jabiz:dataset:default:QbSponsorVerification
+  QbSponsor: urn:jabiz:dataset:default:QbSponsor
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
   sponsorId: { kind: { type: text, maxLength: 128 } }
@@ -38,6 +40,11 @@ permissions: [qb.wallet.system]
 --   of it revoked): the settlement voids it (the revocation's event or the daily qb.tree-grant-retry), also after a
 --   voided invoice gave something back to it. A grant still to be given is not a difference (the switch or the
 --   Sponsor's standing may hold it): qb.admin.tree-grants-pending lists them.
+-- CERTIFIED_GRANTS (F-M3): for a sponsor, a top-up (source CERTIFIED_TOP_UP) though they were never verified (no
+--   verification of theirs was ever APPROVED: verifiedAt is written by the approval only and kept after a revocation
+--   or a new submission; an erased Sponsor's verifications go with the account and are not checked), expected 0 and
+--   actual the top-up; and the onboarding plus the top-up above the certified amount the top-up recorded when it was
+--   granted (expected that amount, actual the two).
 WITH credit_ledger AS (
     SELECT e.{{LedgerEntry.dimension1}} AS r_party,
            sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
@@ -180,3 +187,22 @@ FROM light_unearned u
 UNION ALL
 SELECT CAST('LIGHT_VOIDS' AS varchar(30)), CAST(v.r_party AS varchar(128)), CAST(0 AS numeric), v.r_amount
 FROM light_left v
+UNION ALL
+SELECT CAST('CERTIFIED_GRANTS' AS varchar(30)), CAST(t.{{QbFeeCreditGrant.sponsorId}} AS varchar(128)),
+       CAST(0 AS numeric), t.{{QbFeeCreditGrant.amount}}
+FROM {{QbFeeCreditGrant}} t
+JOIN {{QbSponsor}} sp ON sp.{{QbSponsor.userId}} = t.{{QbFeeCreditGrant.sponsorId}}
+WHERE t.{{QbFeeCreditGrant.source}} = 'CERTIFIED_TOP_UP'
+  AND NOT EXISTS (SELECT 1 FROM {{QbSponsorVerification}} v
+                  WHERE v.{{QbSponsorVerification.sponsorId}} = t.{{QbFeeCreditGrant.sponsorId}}
+                    AND v.{{QbSponsorVerification.verifiedAt}} IS NOT NULL)
+UNION ALL
+SELECT CAST('CERTIFIED_GRANTS' AS varchar(30)), CAST(t.{{QbFeeCreditGrant.sponsorId}} AS varchar(128)),
+       coalesce(t.{{QbFeeCreditGrant.certifiedAmount}}, o.{{QbFeeCreditGrant.certifiedAmount}}, CAST(0 AS numeric)),
+       o.{{QbFeeCreditGrant.amount}} + t.{{QbFeeCreditGrant.amount}}
+FROM {{QbFeeCreditGrant}} t
+JOIN {{QbFeeCreditGrant}} o ON o.{{QbFeeCreditGrant.sponsorId}} = t.{{QbFeeCreditGrant.sponsorId}}
+    AND o.{{QbFeeCreditGrant.sourceKey}} = 'onboarding'
+WHERE t.{{QbFeeCreditGrant.source}} = 'CERTIFIED_TOP_UP'
+  AND o.{{QbFeeCreditGrant.amount}} + t.{{QbFeeCreditGrant.amount}}
+      > coalesce(t.{{QbFeeCreditGrant.certifiedAmount}}, o.{{QbFeeCreditGrant.certifiedAmount}}, CAST(0 AS numeric))

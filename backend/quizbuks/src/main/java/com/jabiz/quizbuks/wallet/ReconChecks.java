@@ -43,6 +43,11 @@ public final class ReconChecks {
     public static final String LIGHT_GRANTS = "LIGHT_GRANTS";
     /** F-S4b: what is left of a sponsor's lighting lots whose node they no longer hold lit (to be voided). */
     public static final String LIGHT_VOIDS = "LIGHT_VOIDS";
+    /**
+     * F-M3: a sponsor's top-up of a verified company (source CERTIFIED_TOP_UP) though never verified, or with the
+     * onboarding above the certified amount recorded when it was granted.
+     */
+    public static final String CERTIFIED_GRANTS = "CERTIFIED_GRANTS";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -75,7 +80,7 @@ public final class ReconChecks {
         TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE, TAKER_WALLET,
         TAKER_IN_TRANSFER, TAKER_WALLET_LAG, TRANSFER_LEDGER, TRANSFER_IN_TRANSIT, CASH_ACCOUNT, TOTAL_2160,
         FEES_RECEIVABLE, ENTRY_FEES_UNSETTLED, FEE_CREDIT, CASH_LOTS, FEE_PAYMENTS, FEE_CREDIT_PROMOTION,
-        LIGHT_GRANTS, LIGHT_VOIDS);
+        LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG);

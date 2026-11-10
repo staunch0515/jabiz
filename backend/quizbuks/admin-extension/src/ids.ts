@@ -88,6 +88,8 @@ export const TEMPLATE = {
   sharedVideos: 'qb.admin.shared-videos',
   /** F-C3: the publications that went on with a shared video (an operator's own Sponsors' only). */
   sharedVideoUses: 'qb.admin.shared-video-uses',
+  /** F-M3: the Sponsors' company verifications (headquarters every Sponsor's, an operator its own). */
+  sponsorVerifications: 'qb.admin.sponsor-verifications',
   /** Q60c-2: one sponsor's page views and product clicks in a period. */
   sponsorStats: 'qb.admin.sponsor-stats',
   /** The reward parameters in force (Q28): the default methods and the highest reward per attempt. */
@@ -488,6 +490,9 @@ export const PERMISSION = {
   /** F-S12: the shared videos (read) and taking one down (write); reviewing them is `reviewPublication`'s. */
   sharedVideoRead: 'qb.admin.shared-video.read',
   sharedVideoWrite: 'qb.admin.shared-video.write',
+  /** F-M3: the company verifications (read) and revoking one (always with a second factor). */
+  verificationRead: 'qb.admin.verification.read',
+  verificationRevoke: 'qb.sponsor-verification.revoke',
   /** F-S9: the word list of topics and its figures (read), adding, renaming, deactivating and merging (write). */
   topicRead: 'qb.admin.topic.read',
   topicWrite: 'qb.admin.topic.write',
@@ -594,6 +599,11 @@ export const SHARED_VIDEO_PROCESS = {
   version: 1,
 } as const
 
+/** F-M3: revoking a Sponsor's company verification (a second factor is asked for by the platform). */
+export const SPONSOR_VERIFICATION_PROCESS = {
+  revoke: 'QB_SPONSOR_VERIFICATION_REVOKE',
+} as const
+
 /** F-S9: headquarters' upkeep of the word list of topics (run on the platform's process page). */
 export const TOPIC_PROCESS = {
   add: 'QB_TOPIC_ADD',
@@ -663,6 +673,9 @@ export const PATH = {
   /** F-S12: the videos Sponsors share, and one video's review and takedown. */
   sharedVideos: '/qb/shared-videos',
   sharedVideo: (sharedVideoId: string) => `/qb/shared-videos/${encodeURIComponent(sharedVideoId)}`,
+  /** F-M3: the Sponsors' company verifications, and one verification. */
+  sponsorVerifications: '/qb/sponsor-verifications',
+  sponsorVerification: (verificationId: string) => `/qb/sponsor-verifications/${encodeURIComponent(verificationId)}`,
 
   /** Q82: one conversation between a taker and a sponsor, read only (from a report of it). */
   conversation: (conversationId: string) => `/qb/conversations/${encodeURIComponent(conversationId)}`,

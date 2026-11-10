@@ -35,6 +35,9 @@ import { challengeRouteOf } from '../challenges/api'
 import { ChallengePlayPage } from '../challenges/ChallengePlayPage'
 import { ChallengeResultPage } from '../challenges/ChallengeResultPage'
 import { ChallengesPage } from '../challenges/ChallengesPage'
+import { VerificationConfirmPage } from '../verification/VerificationConfirmPage'
+import { VerificationPage } from '../verification/VerificationPage'
+import { VERIFICATION_CONFIRM_PATH } from '../verification/api'
 import { OverviewPage } from '../profile/OverviewPage'
 import { profileSectionOf } from '../profile/paths'
 import { ProfileLayout, PublicPageParts } from '../profile/ProfileLayout'
@@ -165,6 +168,10 @@ export function pageOf(path: string, search: string, state: ShellState): ReactNo
       : <ProfileLayout section="challenges"><ChallengePlayPage key={challenge.publicationId}
         publicationId={challenge.publicationId} /></ProfileLayout>
   }
+  // F-M3: the link mailed to the company's address lands under the hub's company verification.
+  if (path === VERIFICATION_CONFIRM_PATH) {
+    return <ProfileLayout section="verification"><VerificationConfirmPage search={search} /></ProfileLayout>
+  }
   const section = profileSectionOf(path)
   if (section) {
     return (
@@ -174,6 +181,7 @@ export function pageOf(path: string, search: string, state: ShellState): ReactNo
             : section === 'page' ? <><PublicPageParts current="edit" /><SponsorPagePage /></>
               : section === 'staff' ? <StaffPage />
                 : section === 'challenges' ? <ChallengesPage />
+                  : section === 'verification' ? <VerificationPage />
                   : <MailServerPage />}
       </ProfileLayout>
     )
