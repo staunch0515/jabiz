@@ -171,6 +171,15 @@ class KnowledgeMapIT extends TreeItSupport {
             + "t.current_version_id WHERE t.tree_id = ? AND d.node_id = ?", String.valueOf(copy.get("treeId")),
             ids.get("start")).getFirst()).containsEntry("name", "Getting started");
 
+        // F-S3e: the editor shows the template's changes node by node before taking them.
+        assertThat(templateDiff(lead, copy.get("treeId"))).extracting(row -> row.get("nodeId") + ":" + row.get("change"))
+            .containsExactly(ids.get("start") + ":CHANGED", ids.get("next") + ":SAME");
+        assertThat(templateDiff(lead, copy.get("treeId")).getFirst()).containsEntry("templateVersionNo", 2)
+            .containsEntry("takenVersionNo", 1);
+        NewOperator stranger = newOperatorWithLead(operatorsAdmin(), unique("FS3e other"), null);
+        assertThat(templateDiff(memberSession(stranger.leadId(), stranger.operatorId()), copy.get("treeId")))
+            .isEmpty();
+
         Map<String, Object> copyNow = Map.of("treeId", copy.get("treeId"), "revision",
             ((Number) treeRow(copy.get("treeId")).get("revision")).longValue());
         Map<String, Object> adopted = run(TreeProcesses.ADOPT, lead, body("treeId", copy.get("treeId"),
@@ -179,6 +188,18 @@ class KnowledgeMapIT extends TreeItSupport {
             adopted.get("versionId"), ids.get("start")).getFirst()).containsEntry("name", "Getting started well");
         assertThat(treeRow(copy.get("treeId"))).containsEntry("template_version_no",
             new java.math.BigDecimal(2));
+        assertThat(templateDiff(lead, copy.get("treeId"))).extracting(row -> row.get("change"))
+            .containsOnly("SAME");
+        // The list gives the editor the name and description of the open version, else the one in effect.
+        assertThat(items("qb.operator.trees", lead, Map.of("limit", 50))).filteredOn(row -> copy.get("treeId")
+            .equals(row.get("treeId"))).singleElement().satisfies(row -> assertThat(String.valueOf(row.get("draftName")))
+                .isEqualTo(query("SELECT name::text AS name FROM qb_tree_version WHERE version_id = ?",
+                    adopted.get("versionId")).getFirst().get("name")));
+    }
+
+    private List<Map<String, Object>> templateDiff(String token, Object treeId) {
+        return items("qb.operator.tree-template-diff", token, Map.of("params", Map.of("treeId", treeId),
+            "limit", 500));
     }
 
     @Test
