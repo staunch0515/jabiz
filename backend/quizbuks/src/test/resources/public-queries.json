@@ -1,7 +1,7 @@
 {
   "queries" : [ {
     "cacheSeconds" : 60,
-    "description" : "A certificate as its verify page (/taker/verify/<key>) shows it to anybody who has its key (Q77, D-Q77-6): the holder's name when issued, the certification, the holding and the latest revocation of it after the holding began; none for an unknown key. Whether it is still valid the page reads from validUntil.",
+    "description" : "A certificate as its verify page (/taker/verify/<key>) shows it to anybody who has its key (Q77, D-Q77-6; F-S5a): the holder's name when issued, what the certificate is (a lit node's, with its names and issuer, or Q77's certification with its holding) and its state - the latest revocation (of the lighting a node's came from; of the certification after the holding began, Q77's); none for an unknown key. A node's certificate has no end; Q77's validity the page reads from validUntil. A certificate its holder stopped sharing shows nothing but that: every other column is empty.",
     "id" : "qb.public.certificate",
     "list" : {
       "filters" : [ ],
@@ -19,6 +19,10 @@
       }
     },
     "results" : {
+      "certificateNames" : {
+        "multiline" : false,
+        "type" : "text"
+      },
       "certification" : {
         "maxLength" : 40,
         "multiline" : false,
@@ -47,13 +51,21 @@
         "type" : "temporal"
       },
       "issuerName" : {
-        "maxLength" : 100,
+        "maxLength" : 200,
         "multiline" : false,
         "type" : "text"
       },
       "revokedAt" : {
         "role" : "EVENT_TIME",
         "type" : "temporal"
+      },
+      "shared" : {
+        "type" : "bool"
+      },
+      "source" : {
+        "maxLength" : 16,
+        "multiline" : false,
+        "type" : "text"
       },
       "validUntil" : {
         "role" : "EVENT_TIME",
@@ -914,11 +926,15 @@
     }
   }, {
     "cacheSeconds" : 60,
-    "description" : "A taker's public certification page (/taker/u/<name>, Q77, D-Q77-5) as anybody sees it: the certificates they issued that no revocation ended, the latest of each certification, with the name on it and its key for the verify link; none when the page is off or the name unknown. The page leaves out the ones whose validUntil passed.",
+    "description" : "A taker's public certification page (/taker/u/<name>, Q77, D-Q77-5) as anybody sees it: the certificates of the nodes they lit that no revocation of the lighting ended and they share (F-S5a), and Q77's certificates they issued that no revocation ended, the latest of each certification, with the name on it and its key for the verify link; none when the page is off or the name unknown. The page leaves out Q77's whose validUntil passed. A Sponsor's certificates are on no public page.",
     "id" : "qb.public.taker-page",
     "list" : {
+      "defaultSort" : {
+        "asc" : false,
+        "field" : "heldFrom"
+      },
       "filters" : [ ],
-      "sorts" : [ ]
+      "sorts" : [ "heldFrom" ]
     },
     "params" : {
       "handle" : {
@@ -932,6 +948,10 @@
       }
     },
     "results" : {
+      "certificateNames" : {
+        "multiline" : false,
+        "type" : "text"
+      },
       "certification" : {
         "maxLength" : 40,
         "multiline" : false,
@@ -961,7 +981,12 @@
         "type" : "text"
       },
       "issuerName" : {
-        "maxLength" : 100,
+        "maxLength" : 200,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "source" : {
+        "maxLength" : 16,
         "multiline" : false,
         "type" : "text"
       },

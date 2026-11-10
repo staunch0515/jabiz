@@ -407,6 +407,7 @@ public final class CertificateProcesses {
         return ProcessDefinition.define(code, 1, ShareInput.class, ShareOutput.class, ProcessContext.class, pb -> pb
             .description(description)
             .permissions(permission)
+            .requiresVerifiedEmail()
             .contextFactory((start, input) -> {
                 ProcessContext ctx = new ProcessContext(start);
                 ctx.put(INPUT, input);
