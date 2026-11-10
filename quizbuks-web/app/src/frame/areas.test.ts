@@ -125,6 +125,15 @@ describe('the pages F-F4b adds', () => {
   })
 })
 
+describe('the knowledge maps (F-S3c)', () => {
+  it('are pages of "Me", new addresses', () => {
+    expect(routeOf('/maps')).toEqual({ page: 'maps', area: 'me', nav: true })
+    expect(routeOf('/maps/sample')).toEqual({ page: 'map', area: 'me', nav: true })
+    expect(routeOf('/maps/a/b')).toBeNull()
+    for (const path of ['/maps', '/maps/sample']) expect(OLD_ROUTES).not.toContain(path)
+  })
+})
+
 describe('a scanned code (T12 unchanged)', () => {
   it('opens a page of the home or of scanning', () => {
     const origin = 'https://quizbuks.example'

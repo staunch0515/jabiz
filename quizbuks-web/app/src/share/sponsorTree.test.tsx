@@ -68,7 +68,8 @@ function server(options: { signedIn?: boolean } = {}) {
       case '/api/public/queries/qb.public.sponsor-page-products':
         return json(200, { items: [], offset: 0, limit: 50 })
       case '/api/public/queries/qb.public.sponsor-page-tree':
-        return json(200, { items: NODES.map(({ lit: _lit, unmet: _unmet, ...node }) => node), offset: 0, limit: 500 })
+        return json(200, { items: NODES.map((node) => Object.fromEntries(
+          Object.entries(node).filter(([key]) => key !== 'lit' && key !== 'unmet'))), offset: 0, limit: 500 })
       case '/api/queries/qb.app.trees':
         return json(200, { items: [{ treeId: TREE, ownerKind: 'SPONSOR', ownerId: 's1', sponsorCompany: 'Acme',
           name: NAME, description: null, nodes: 2, litNodes: 1 }], offset: 0, limit: 10 })
