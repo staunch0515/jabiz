@@ -249,7 +249,9 @@ class TopUpConfig {
             .item(ReconChecks.LIGHT_VOIDS, "en", "Grants left after a revoked lighting", "zh", "撤销点亮后赠送的剩余",
                 "ja", "取り消された点灯の付与の残り")
             .item(ReconChecks.CERTIFIED_GRANTS, "en", "Top-ups of verified companies", "zh", "企业认证的补发",
-                "ja", "企業認証の追加付与"));
+                "ja", "企業認証の追加付与")
+            .item(ReconChecks.OPERATOR_ACCOUNT, "en", "Operators' accounts (2140)", "zh", "运营商账户（2140）",
+                "ja", "運営パートナーの口座（2140）"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */

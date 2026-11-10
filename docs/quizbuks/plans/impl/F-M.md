@@ -296,3 +296,18 @@
 3. 直营发起方被封禁时：拒绝转入（建议），还是照转。
 4. 不设四眼（负责人转给自己的直营发起方，钱不离开平台），只要二次验证；提现照旧四眼。
 - 删除的功能：无。钱：写完先报分支名、不开 PR。
+
+### 7.7 总控的决定（2026-11-10，计划批准）
+1. 只做 F-M4；F-M12（结算基数、扣回赠送）待 M4–M7 之后另作。
+2. 买学分不能动用 `OPERATOR` 来源的钱（加 IT）。
+3. 直营发起方被封禁时拒绝转入（422，什么也不写）。
+4. 不设四眼：每次二次验证 + 幂等键。写完先报分支名，额外审查后再开 PR。
+
+### 7.8 实施记录（S2，2026-11-10）
+- 迁移 `V112`：只追加、只记一次的 `qb_operator_transfer_version`（外键到 `qb_operator`）。
+- `operator.OperatorTransfers`：`QB_OPERATOR_TRANSFER_TO_DIRECT`（`qb.operator.use`、负责人（`OperatorWithdrawals.lead`）、`requiresVerifiedEmail`、每次二次验证、`refuseBanned`）；锁内一条 `QueryEntities.all` 读直营发起方的现金钱包、入驻与封禁，再读余额模板；`OperatorRules.transferable`（整数、> 0、≤ 余额）。错误码 `QB_OPERATOR_TRANSFER_AMOUNT` / `_NO_DIRECT` / `_DIRECT_BANNED`。负责人本人就是直营发起方时，封禁先由 `refuseBanned` 拒绝（`QB_USER_BANNED`）；另一位负责人转给被封禁的直营发起方即 `_DIRECT_BANNED`。
+- 余额：`qb.system.operator-balance` 与 `qb.operator.account` 都减去转出（另给出 `transferred`、`hasDirectSponsor`）；新模板 `qb.operator.transfers`。
+- 买学分：`KudosExchanges.problems(..., operatorCash)` 的可用额减去 `OPERATOR` 笔的剩余，`CashLots.takeExcept` 不取它们；`qb.sponsor.wallet` 给出 `cashFromOperator`，页面的买入上限为 `buyableCash`。充值退款与争议的扣回照旧可以取任何笔（2160 与各笔必须一致），写在 operations §7.43。
+- 核对 `OPERATOR_ACCOUNT`（`recon-fee-account`）；月报 `OPERATOR_TRANSFER_TO_DIRECT`（管理系统扩展同时补上 F-M2 漏掉的 `FEE_CREDIT_GRANTED` / `FEE_CREDIT_VOIDED` 的文字）。
+- 页面：运营商「账户」页的"转给直营发起方"（金额、说明、确认、二次验证由平台询问）与转入记录；发起方平台费账户页的"运营商转入"一行。
+- 测试：`OperatorTransferIT`（5 例：负责人、他人、超额与非整数、幂等键、分录与现金笔、模板、月报、核对；封禁；买学分与平台费；并发两笔；核对找出没有分录的转入）、`OperatorRulesTest`、`KudosExchangesTest`、扩展与发起方页面的 Vitest。e2e 没有新用例：运营商账户要有结算记入才有余额，e2e 中没有结算的途径（与提现相同），页面由扩展的测试覆盖。

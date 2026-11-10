@@ -79,6 +79,20 @@ public final class CashLots {
         }
     }
 
+    /**
+     * F-M4: {@link #take} from the lots that did not come from {@code source} only (buying Kudos never takes what an
+     * operator moved to its direct Sponsor: that money pays the platform's fees only).
+     */
+    public static void takeExcept(ProcessContext ctx, List<EntityInstance> lots, BigDecimal amount, String source) {
+        take(ctx, lots.stream().filter(lot -> !source.equals(lot.get("source"))).toList(), amount, null);
+    }
+
+    /** What is left of the lots that came from {@code source}. */
+    public static BigDecimal remainingOf(List<EntityInstance> lots, String source) {
+        return lots.stream().filter(lot -> source.equals(lot.get("source")))
+            .map(lot -> FeeGate.money(lot.get("remaining"))).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     /** The lots as the order sees them. */
     public static List<FeeAllocation.Cash> cash(List<EntityInstance> lots) {
         return lots.stream().map(lot -> new FeeAllocation.Cash(String.valueOf(lot.id()), FeeGate.money(lot.get("remaining")),

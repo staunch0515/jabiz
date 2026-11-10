@@ -68,6 +68,7 @@ Once verified, the onboarding granted credit you received is topped up to the ve
 ## Money
 
 - Wallet (/sponsor/wallet): your Kudos pay the rewards of your publications. Top up to keep them running (by card, or by bank transfer where it is offered). Your cash account holds money you turn into Kudos when needed; pay open invoices of fees from it.
+- Moved here by your operator (an operator's direct Sponsor only): your operator's lead may move money from the operator's account into your platform fee account, shown as "From the operator". It pays platform fees only (after any granted platform fee Kudos); it cannot be turned into Kudos or withdrawn.
 - Transactions (/sponsor/transactions): every movement, receipts and invoices; exportable.
 
 ## Settings and messages

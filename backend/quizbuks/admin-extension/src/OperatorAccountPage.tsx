@@ -31,12 +31,15 @@ import {
   percent,
   planInEffect,
   readAccount,
+  readOwnTransfers,
   readOwnWithdrawals,
   readPlans,
   requestWithdrawal,
   saveBankAccount,
+  transferToDirect,
   type BankAccountInput,
   type OperatorAccount,
+  type OwnTransfer,
   type OwnWithdrawal,
 } from './account-api'
 import { EmptyState, LoadFailed, Section, StatusBadge } from './components'
@@ -48,6 +51,7 @@ const right = { className: 'text-right tabular-nums' }
 
 /** The columns sorted on the server, by the template's `list.sorts` field. */
 const SORTS = { requestedAt: 'requestedAt', amount: 'amount', status: 'status' } as const
+const TRANSFER_SORTS = { transferredAt: 'transferredAt', amount: 'amount' } as const
 
 /** What a failed call says, as the server words it. */
 const problemOf = (e: unknown) => (e instanceof ApiError ? e.display : String(e))
@@ -64,6 +68,8 @@ function Balance({ account }: { account: OperatorAccount }) {
         <dd className="tabular-nums" data-testid="account-credited">{points(account.credited)}</dd>
         <dt className="text-muted-foreground">{t('account.withdrawn')}</dt>
         <dd className="tabular-nums" data-testid="account-withdrawn">{points(account.withdrawn)}</dd>
+        <dt className="text-muted-foreground">{t('account.transferred')}</dt>
+        <dd className="tabular-nums" data-testid="account-transferred">{points(account.transferred)}</dd>
       </dl>
       <p className="text-muted-foreground text-sm">
         {t('account.creditedHint')}{' '}
@@ -344,6 +350,106 @@ function Withdrawals({ account }: { account: OperatorAccount }) {
 }
 
 /**
+ * F-M4: the lead moves a whole amount of the balance to the operator's direct Sponsor, after a confirmation (and the
+ * second factor the platform asks for every time); the server decides the amount and whether the Sponsor may have it.
+ */
+function TransferForm({ account }: { account: OperatorAccount }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const id = useId()
+  const queryClient = useQueryClient()
+  const points = usePoints()
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const whole = /^[1-9]\d{0,14}$/.test(amount.trim())
+  const ask = (event: FormEvent) => {
+    event.preventDefault()
+    if (!whole) return
+    setProblem(null)
+    setConfirming(true)
+  }
+  const confirm = async () => {
+    if (busy || !whole) return
+    setBusy(true)
+    try {
+      await transferToDirect(Number(amount.trim()), note.trim() === '' ? null : note.trim())
+      notify.success(t('account.transferDone'))
+      setAmount('')
+      setNote('')
+      setConfirming(false)
+      await queryClient.invalidateQueries({ queryKey: ACCOUNT_KEY })
+    } catch (e) {
+      setProblem(problemOf(e))
+      setConfirming(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <form noValidate className="flex flex-col gap-2" data-testid="transfer-form" onSubmit={ask}>
+      <Label htmlFor={`${id}-amount`}>{t('account.amount')}</Label>
+      <Input id={`${id}-amount`} value={amount} inputMode="numeric" autoComplete="off" maxLength={15} className="w-48"
+        aria-describedby={`${id}-amount-hint`} data-testid="transfer-amount" disabled={confirming}
+        onChange={(event) => setAmount(event.target.value)} />
+      <p id={`${id}-amount-hint`} className="text-muted-foreground text-sm">
+        {t('account.transferAmountHint', { balance: points(account.balance) })}
+      </p>
+      <Label htmlFor={`${id}-note`}>{t('account.transferNote')}</Label>
+      <Input id={`${id}-note`} value={note} autoComplete="off" maxLength={200} className="w-96 max-w-full"
+        data-testid="transfer-note" disabled={confirming} onChange={(event) => setNote(event.target.value)} />
+      {confirming ? (
+        <Alert data-testid="transfer-confirm">
+          <AlertDescription className="flex flex-col gap-2">
+            <span>{t('account.transferConfirm', { amount: points(amount.trim()) })}</span>
+            <span className="flex flex-wrap gap-2">
+              <Button type="button" disabled={busy} aria-busy={busy || undefined} data-testid="transfer-confirm-button"
+                onClick={() => void confirm()}>{t('account.transferConfirmButton')}</Button>
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirming(false)}>
+                {t('account.cancel')}
+              </Button>
+            </span>
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <div>
+          <Button type="submit" disabled={!whole} data-testid="transfer-submit">{t('account.transfer')}</Button>
+        </div>
+      )}
+      {problem && <Alert variant="destructive" data-testid="transfer-problem"><AlertDescription>{problem}</AlertDescription></Alert>}
+    </form>
+  )
+}
+
+/** F-M4: the transfers to the direct Sponsor, the newest first; the lead makes new ones. */
+function Transfers({ account }: { account: OperatorAccount }) {
+  const { t } = useTranslation(EXTENSION_NAMESPACE)
+  const points = usePoints()
+  const { query, table, sortable } = usePaged([...ACCOUNT_KEY, 'transfers'], readOwnTransfers, true, TRANSFER_SORTS)
+  const columns = useMemo<ColumnDef<OwnTransfer, unknown>[]>(() => [
+    { id: 'transferredAt', header: t('account.transferredAt'), cell: ({ row }) => when(row.original.transferredAt) },
+    { id: 'amount', header: t('account.amount'), meta: right, cell: ({ row }) => points(row.original.amount) },
+    { id: 'note', header: t('account.transferNote'), cell: ({ row }) => row.original.note ?? '' },
+  ], [t, points])
+  const hint = !account.hasDirectSponsor ? 'account.transfersNoDirect'
+    : account.lead ? 'account.transfersHint' : 'account.transfersLeadOnly'
+  return (
+    <Section title={t('account.transfers')} testId="account-transfers">
+      <p className="text-muted-foreground text-sm">{t(hint)}</p>
+      {account.lead && account.hasDirectSponsor && <TransferForm account={account} />}
+      {query.isError
+        ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} />
+        : (
+          <DataTable label={t('account.transfers')} columns={sortable(columns)} {...table}
+            getRowId={(row) => row.transferId} empty={<EmptyState art="money" title={t('account.transferNone')} />}
+            rowProps={(row) => ({ 'data-testid': 'transfer-row', 'data-id': row.transferId })} />
+        )}
+    </Section>
+  )
+}
+
+/**
  * The operator's account (Q48e-2): money stays with the platform. Each month's settlement is credited here; the
  * operator's lead sets the bank account and withdraws to it (both with a recent second factor, which the platform
  * asks for); finance pays and another administrator approves. Also the plan in effect and the five plans' terms.
@@ -367,6 +473,7 @@ export default function OperatorAccountPage() {
       <Plans />
       <BankAccount account={account.data} />
       <Withdrawals account={account.data} />
+      <Transfers account={account.data} />
     </div>
   )
 }

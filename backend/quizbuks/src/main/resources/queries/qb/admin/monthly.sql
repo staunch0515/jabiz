@@ -181,6 +181,9 @@ kinds AS (
                     AND p.a5140 > 0 AND p.a2190 < 0 THEN 'FEE_CREDIT_GRANTED'
                WHEN p.src = 'QbFeeCreditGrant' AND NOT p.reversal AND p.accts = '2190,5140'
                     AND p.a5140 < 0 AND p.a2190 > 0 THEN 'FEE_CREDIT_VOIDED'
+               -- F-M4: an operator's account (2140) moved to its direct Sponsor's cash (2160), the source the transfer.
+               WHEN p.src = 'QbOperatorTransfer' AND NOT p.reversal AND p.accts = '2140,2160'
+                    AND p.a2140 > 0 AND p.a2160 < 0 THEN 'OPERATOR_TRANSFER_TO_DIRECT'
                ELSE 'OTHER'
            END AS kind
     FROM per_tx p
@@ -213,7 +216,8 @@ FROM (VALUES (1, 'TOPUP'), (2, 'BANK_TOPUP'), (3, 'MANUAL_TOPUP'), (4, 'GRANT'),
              (16, 'OPERATOR_SHARE'), (17, 'OPERATOR_PAID'), (18, 'REFERRAL_REWARD'), (19, 'CASH_TOPUP'),
              (20, 'CASH_BANK_TOPUP'), (21, 'CASH_REFUND'), (22, 'CASH_DISPUTE'), (23, 'KUDOS_BOUGHT'),
              (24, 'KUDOS_SOLD'), (25, 'FEE_CHARGED'), (26, 'FEE_PAID'), (27, 'FEE_VOIDED'), (28, 'ENTRY_FEE'),
-             (29, 'ENTRY_FEE_SETTLED'), (30, 'FEE_CREDIT_GRANTED'), (31, 'FEE_CREDIT_VOIDED'), (32, 'OTHER'))
+             (29, 'ENTRY_FEE_SETTLED'), (30, 'FEE_CREDIT_GRANTED'), (31, 'FEE_CREDIT_VOIDED'),
+             (32, 'OPERATOR_TRANSFER_TO_DIRECT'), (33, 'OTHER'))
          AS c (seq, kind)
 LEFT JOIN kinds k ON k.kind = c.kind
 GROUP BY c.seq, c.kind

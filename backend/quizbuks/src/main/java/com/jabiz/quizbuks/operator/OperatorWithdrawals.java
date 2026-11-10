@@ -195,7 +195,7 @@ public final class OperatorWithdrawals {
      * The operator's lead acts for it: the operator's lock (the session's entry scope names it), then the membership,
      * which must be that operator's lead.
      */
-    private static <I, O> void lead(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+    static <I, O> void lead(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
         pb.step("Lock the operator", HoldLock.<ProcessContext>exclusive(
                 ctx -> QbOperators.operatorLockName(scopedOperator(ctx))))
             .steps(OperatorChecks::member)

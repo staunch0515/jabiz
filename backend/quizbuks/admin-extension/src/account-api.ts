@@ -52,6 +52,10 @@ export interface OperatorAccount {
   lead: boolean
   credited: string
   withdrawn: string
+  /** F-M4: what the account moved to the operator's direct Sponsor. */
+  transferred: string
+  /** F-M4: whether the operator has a direct Sponsor to move money to. */
+  hasDirectSponsor: boolean
   balance: string
   /** The least one withdrawal may take (`qb.operator.withdrawal.min`). */
   minimum: string | null
@@ -77,6 +81,8 @@ export async function readAccount(): Promise<OperatorAccount | null> {
     lead: bool(row.lead),
     credited: amount(row.credited),
     withdrawn: amount(row.withdrawn),
+    transferred: amount(row.transferred),
+    hasDirectSponsor: bool(row.hasDirectSponsor),
     balance: amount(row.balance),
     minimum: str(row.minimum),
     cooldownHours: str(row.cooldownHours),
@@ -177,6 +183,38 @@ export async function readOwnWithdrawals(offset: number, limit: number, sorts?: 
   const page = await runQuery<Row>(TEMPLATE.ownWithdrawals, { sorts, offset, limit, count: true })
   return { total: page.total, items: page.items.map(toOwnWithdrawal) }
 }
+
+/** A row of `qb.operator.transfers` (F-M4): a move of the account's money to the operator's direct Sponsor. */
+export interface OwnTransfer {
+  transferId: string
+  amount: string
+  note: string | null
+  requestedBy: string | null
+  transferredAt: string | null
+}
+
+/** The caller operator's transfers to its direct Sponsor, the newest first. */
+export async function readOwnTransfers(offset: number, limit: number, sorts?: SortSpec[]): Promise<Page<OwnTransfer>> {
+  const page = await runQuery<Row>(TEMPLATE.ownTransfers, { sorts, offset, limit, count: true })
+  return {
+    total: page.total,
+    items: page.items.map((row) => ({
+      transferId: String(row.transferId),
+      amount: amount(row.amount),
+      note: str(row.note),
+      requestedBy: str(row.requestedBy),
+      transferredAt: str(row.transferredAt),
+    })),
+  }
+}
+
+/**
+ * Moves a whole amount of the account to the operator's direct Sponsor (F-M4: its lead, with a second factor every
+ * time); it pays that Sponsor's platform fees only and is not taken back.
+ */
+export const transferToDirect = (amount: number, note: string | null) =>
+  runProcess<{ transferId: string; amount: string; balance: string; transferredAt: string }>(
+    ACCOUNT_PROCESS.transferToDirect, { amount, note })
 
 /** What setting the bank account sends (`QB_OPERATOR_BANK_ACCOUNT_SAVE`): the Zengin format, the holder in katakana. */
 export interface BankAccountInput {

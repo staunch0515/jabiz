@@ -1127,6 +1127,16 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **补发失败**（已认证、平台费账户页仍提示"认证后补到"、次日仍未补）：查任务 `qb.fee-credit-certified-due` 最近一次运行中该发起方一项的结果，与消费者 `qb.fee-credit-certified` 对该事件的尝试（`sys_outbox_attempt`）。常见原因：赠送开关关着（开启后次日补）、封禁中（解封后次日补）、赠送参数不合格（`qb.fee-credit.valid-days` 不在 1–999、`qb.fee-credit.grant.certified` 不是整数日元：以受控变更改正并发布）、过账失败（科目 5140 / 2190 未启用等，修好后）。改正后等次日的任务，或以 `JOB_RUN_REQUEST` 补跑 `qb.fee-credit-certified-due`（带原因）；不手工写赠送或分录。认证本身不受影响，不必重新审核。
 - **每日核对 `CERTIFIED_GRANTS`**（`qb.system.recon-fee-account`）：有补发而从未认证过（`expected` 0、`actual` 补发金额），或开户 + 补发超过补发时记下的认证金额（`expected` 记下的金额、`actual` 两笔之和）。都不应出现：出现即停开关（`qb.fee-credit.grant.enabled` 改为 false）、保留现场，报开发；多发的部分由财务以人工调整的流程处理，不改赠送表。
 
+### 7.43 运营商转给直营发起方（F-M4）
+
+运营商负责人可以把运营商账户的余额转进本运营商的直营发起方的平台费账户（`docs/quizbuks/plans/impl/F-M.md` §7）。
+
+- **规则**：只经 `QB_OPERATOR_TRANSFER_TO_DIRECT`（运营商管理系统「账户」页的"转给直营发起方"，负责人、每次二次验证、可带幂等键）。金额为不超过余额的整数（余额 = 结算记入 − 未驳回未取消的提现 − 已转出，模板 `qb.system.operator-balance`，提现与转入共用）；直营发起方取自运营商行，不能转给别的发起方；直营发起方入驻未通过或被封禁即拒绝（`QB_OPERATOR_TRANSFER_NO_DIRECT` / `_DIRECT_BANNED`，什么也不写）。不设四眼（钱给本运营商自己的发起方、不出平台），转出后**不能撤回**。
+- **账务**：每笔转入只记一次（`qb_operator_transfer_version`，保留 10 年）；过账借 2140 / 贷 2160（维度：直营发起方），同一事务中直营发起方的现金账户与现金笔（来源 `OPERATOR`）随之增加。这笔钱照 F-M1 的顺序付平台费（赠送额度先用，再按进账先后），**不能换学分**（`QB_KUDOS_BUY` 的可用额不含 `OPERATOR` 笔，页面显示"运营商转入（只用于支付平台费）"），发起方没有现金提现。例外：直营发起方的卡充值被退款或争议扣回、而该充值自己的那一笔已用掉时，扣回照现有规则可以取到任何现金笔（含 `OPERATOR`），以保持 2160 与各笔一致。
+- **核对与月报**：每日核对 `OPERATOR_ACCOUNT`（`qb.system.recon-fee-account`，`sponsorId` 一列此处是运营商）比较 2140（经来源单据：结算、提现、转入）与"各结算的应付 − 单独付清的结算 − 已付的提现 − 转入"；`CASH_LOTS` 照旧比较 2160 与各笔。月报新类 `OPERATOR_TRANSFER_TO_DIRECT`。
+- **差异的处理**：`OPERATOR_ACCOUNT` 出现差异时，先查 `SELECT * FROM qb_operator_transfer_version WHERE operator_id = '<运营商>'` 与来源为 `QbOperatorTransfer` 的分录是否一一对应（每笔转入恰有一笔借 2140 / 贷 2160），再查该运营商的结算与提现。不手工写分录或改表；报开发。
+- **常见询问**：负责人说按钮不出现——运营商没有直营发起方（每日核对 `qb.admin.operator-health`），或登录的不是负责人；发起方说现金不能换学分——见页面的"运营商转入"一行。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
