@@ -316,3 +316,42 @@
 - **【中 1】扣回不先取运营商的钱**：`TopUpClawback` 改用 `CashLots.takeLast`（`FeeAllocation.takeCash(..., first, last)`）：该充值自己的那一笔 → 非 `OPERATOR` 各笔（按进账先后）→ 最后才取 `OPERATOR`。取到 `OPERATOR` 时 `CreateTask`（`TopUpTasks.operatorCash`，权限 `qb.reconcile`，来源 `stripe-operator-cash:<事件>`，消息 `task.qb.refund-check.OPERATOR_CASH` 三种语言）。operations §7.43 改写。测试：`OperatorCashClawbackIT`（卡充值 A → 买学分用完 A → 运营商转入 C → 银行充值 B → A 部分退款：取 B、`OPERATOR` 不动、无待办、核对无差异；只剩 `OPERATOR` 时取它并生成待办）、`FeeAllocationTest.cashTakenBackLeavesTheNamedLastLotsToTheEnd`。
 - **【低 2】补测试**（`OperatorTransferIT`）：转入 × 提现并发（一成一拒，合计 ≤ 余额）；`REQUESTED` 的提现减少可转额、转入减少可提现额；缺近期二次验证即 403 `MFA_REQUIRED`。
 - **【低 3】幂等键必填**：平台不能在流程上声明"必须有幂等键"，流程也读不到请求头，所以输入加必填的 `requestKey`（`@NotBlank`，≤ 128，缺少即 400）并记在转入上（列 `request_key`，V113 中 `UNIQUE (operator_id, request_key)`；锁内先查，重复即 422 `QB_OPERATOR_TRANSFER_REPEATED`）。页面每次确认生成新键，同时作为输入与 `Idempotency-Key`（重发同一次提交由平台回放第一次的回答）。测试：IT 缺键 400、同键换幂等键 422、别的运营商可用同一键；扩展 Vitest 断言键随输入与请求头、下一次提交换新键。
+
+## 8. F-M5 提交发布时的资金检查与预付款（S2，2026-11-10，待总控批准）
+
+规格 F-M5（规则、运营闭合、验收）；§1 的 M4 把 F-M5、F-M11、F-M7、F-M13 贷项放在一起，总控 2026-11-10 定为先做 F-M5。分支 `1.3/quizbuks-FM5-funds-check`，迁移取开 PR 时的下一个号（现在最大 V113）。
+
+### 8.1 现状与范围
+- 提交（`PublicationLifecycle` 的 `QB_PUBLICATION_SUBMIT`）只有 `FeeGate`（有未付账单即拦）；`QB_DISTRIBUTION_FUNDS`、`QB_AUDIENCE_FEE_FUNDS` 不存在。配送费（F-M6）、受众规则费的扣款（F-M7）、曝光费（F-M8）都还没有，**提交时可算的金额现在都是 0**。
+- 本项做：检查、冻结（2180）、释放、对账与页面这套"提交时的钱"，以及 F-M11 的冻结运营商；各费用作为"提交时的项"（`SubmitCost`：用途、金额、明细）接入，F-M6/F-M7/F-M8 各加一项。第一项见 8.7 问题 1。
+
+### 8.2 数据（一个迁移）
+- 科目 **2180 预收平台费**（负债；维度 1 `party`、2 `publication`、3 `purpose`），维度字典 `purpose`：`DISTRIBUTION`、`EXPOSURE`、`AUDIENCE`、`AI`；分录导出映射 `qb.journal.account.2180`（受控）。
+- `QbPrepayment`（普通表，按版本更新）：发起方、发布（AI 时为空）、用途、方式（`PREPAID` 冻结了钱 / `POSTPAID` 只占信用额、不动钱）、金额、剩余、冻结时的运营商、状态 `OPEN` / `RELEASED`、时刻。分摊照旧记 `QbFeePayment`（对象为预付款）。
+- 发布（版本）加 `billingOperatorId`：提交时冻结（F-M11）；之后与发布相关的 `QbFeeCharge.operatorId` 一律由调用方给出。
+
+### 8.3 提交
+- 锁序：测验（共享）→ 权益购买 → `qb.wallet:SPONSOR:<发起方>`。锁内**一条** `QueryEntities.all`：发起方行（付费方式、信用额）、未付账单（`FeeGate` 原有）、未到期的赠送各笔、现金各笔、两个钱包、本发起方 `OPEN` 的预付款；`StatementBudgetIT` 的提交预算随之改（多一把锁；读取仍一条），PR 中说明。
+- 各项相加为合计。预付的：可用额（赠送 + 现金）≥ 合计，否则 422 `QB_PUBLICATION_FUNDS`（各项金额、合计、可用额、差额），**什么也不写**；后付的：1130 余额（含未开账单的费用）+ `OPEN` 的 `POSTPAID` 预付款剩余 + 本次 ≤ 信用额，否则同一个码。`FeeGate` 的拦截照旧（沿用 `qb.fee.overdue.block-submit`）。
+- 合计 > 0 时冻结：子流程 `QB_PREPAYMENT_FREEZE`（`subProcessOnly`）按 F-M1 的顺序（赠送最早到期先用，再现金按进账、`OPERATOR` 照 F-M4 可付平台费）分摊，一次 `LEDGER_POST`：借 2190 / 2160、贷 2180（维度：发起方、发布、用途），写 `QbFeePayment` 与各笔剩余；后付的只写一行 `POSTPAID` 预付款，不过账。合计为 0 不写预付款。
+
+### 8.4 释放（一个子流程 `QB_PREPAYMENT_RELEASE`，`subProcessOnly`）
+- 按原分摊退回：赠送退回原笔（原笔已到期即作废：借 2180 / 贷 5140，与到期作废同科目），现金退回原笔；借 2180、贷 2190 / 2160；`POSTPAID` 只关闭。
+- 调用处：撤回（`QB_PUBLICATION_WITHDRAW`）、驳回（`QB_PUBLICATION_APPROVAL_RESULT` 的驳回）、审核过期（`QB_PUBLICATION_ADVANCE` 撤下过期的审核）——三处全额释放。
+- 发布结束（到期、配额、预算、曝光用完、管理员下架、树退役、封禁……结束的写法有七八处）**不在各处改**：每日任务 `qb.prepayment-release`（`JobDefinition.forEach`，每项一个事务）取"已结束、还有 `OPEN` 预付款"的发布逐个释放剩余；F-M6 加上"该发布最后一次结算已写"的条件（以数据为条件，同 §2.a 的答复）。
+
+### 8.5 读取与页面
+- 向导检查一步：`QB_PUBLICATION_FUNDS_CHECK`（只读，与提交同一段 Java：各项、合计、可用额、差额），显示明细，不足时"去充值"链接到平台费账户页；提交被 422 拒绝时显示同一明细。
+- 发起方的发布页：预付款余额（模板 `qb.sponsor.publication-prepayments`）；平台费账户页"冻结在预付款中"一行；运营商与总部的发起方页只读同样分解。帮助（三种语言）写明"预付款不是费用，结束后退回"。
+
+### 8.6 对账、月报与测试
+- 核对 `PREPAYMENTS`：2180 按发起方 = `OPEN` 预付款剩余之和；草稿、已驳回或已结束且释放任务已跑过的发布仍有 `OPEN` 预付款 → 差异。月报 `PREPAYMENT_FROZEN` / `PREPAYMENT_RELEASED`（`AdminFinanceIT` 逐行、场景快照）。
+- IT：只有赠送额度的新发起方能提交；不足 422 什么也没写；冻结后撤回、驳回、审核过期三处释放，赠送退回原笔、原笔已到期即作废；结束后任务释放；后付的信用额含未开账单与已占用的；两次提交并发不超用；`StatementBudgetIT`。单元：检查规则。发起方页面 Vitest。e2e：`launch-loop.spec.ts` 第 2 步插入 2′（不足 → 422 明细 → 补足 → 提交通过；赠送额度先用），照 F-F12 §1。
+- `PersonalDataEraser`：`QbPrepayment` 照现有钱表登记（注销收尾仍随 F-M15）。
+
+### 8.7 请总控确认
+1. **现在让检查有金额的第一项**：各费用都未做，只做框架则检查恒为 0、e2e 2′ 无法真跑。建议本项同时接入**受众规则费的冻结**：提交时按发布冻结的运营商价目（Q47c-1 的 `QB_AUDIENCE_FEE_QUOTE` 同一算法）冻结到 2180（用途 `AUDIENCE`），发布开始时从预付款记费（种类 `AUDIENCE`，归属冻结的运营商），驳回、撤回、过期全额释放；没有结束时间的续扣、欠费结束、贷项凭证与 `direct` 价目的删除仍随 F-M7。或者：本项只做框架，e2e 2′ 随 F-M7 / F-M6 补。
+2. **`direct` 价目与 `qb.audience.price.fallback` 的删除**（§2.d，需求方 M4 前答复）：答复到了吗？没到之前本项照现有的价目选择，不删。
+3. F-M11（冻结 `billingOperatorId`、调用方给 `operatorId`）随本项，同 §1。
+4. 结束后的释放用每日任务（8.4），不改七八处结束的写法。
+5. 共用文件：`PublicationLifecycle`（S1、S3 改过）只加提交、撤回、驳回、过期四处的步骤；发起方向导的检查一步与 F-F3 的新框架——开工前把要改的行发给 S1、S3。
