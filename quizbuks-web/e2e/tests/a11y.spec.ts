@@ -140,6 +140,9 @@ for (const appearance of ['light', 'dark'] as const) {
     // F-F3: the home and every area of the menu, each with its first tab, then the hub's sections and the avatar menu.
     await openArea(page, 'home')
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
+    // F-F3b: the list of what needs the Sponsor (a new Sponsor has the profile's parts to fill in) is part of the page.
+    await expect(page.getByTestId('todo')).toBeVisible()
+    await expect(page.getByTestId('todo-profileMissing')).toBeVisible()
     await expectAccessible(page, at('sponsor home'))
     // Q60a-2: the sponsor's page editor, a section of the hub since Q65b (no "My page" in the menu).
     await expect(page.getByRole('link', { name: 'My page' })).toHaveCount(0)
