@@ -44,6 +44,9 @@ public final class QbTrees {
     public static final String PUBLIC_NODE_DEFS = "urn:jabiz:dataset:public:" + NODE_DEF;
     public static final String PUBLIC_NODE_REFS = "urn:jabiz:dataset:public:" + NODE_REF;
     public static final String MY_REVOCATIONS = "urn:jabiz:dataset:me:" + REVOCATION;
+    /** F-S4b: a Sponsor's own lit records and revocations (the subject is the caller as a Sponsor), read only. */
+    public static final String MY_SPONSOR_LITS = "urn:jabiz:dataset:me-sponsor:" + LIT;
+    public static final String MY_SPONSOR_REVOCATIONS = "urn:jabiz:dataset:me-sponsor:" + REVOCATION;
     /** F-C4: a Sponsor's own graphs, read only (the sponsor package's export and its binding by node key). */
     public static final String SPONSOR_TREES = "urn:jabiz:dataset:sponsor:" + TREE;
 

@@ -114,7 +114,9 @@ class RewardMethodsIT extends PlayItSupport {
         rewardParam(QbParams.REWARD_MAX_PER_ATTEMPT, "50");
         try {
             assertThat(rows("qb.sponsor.reward-methods", token, Map.of())).singleElement().satisfies(row -> {
-                assertThat(row).containsEntry("methods", "OFFLINE_REDEEM, NOT_A_METHOD").containsEntry("own", false);
+                // F-S4b: the template gives the methods themselves (the processes' rule), a name that is no method
+                // dropped (the console dropped it before).
+                assertThat(row).containsEntry("methods", "OFFLINE_REDEEM").containsEntry("own", false);
                 assertThat(new BigDecimal(String.valueOf(row.get("maxRewardPerAttempt")))).isEqualByComparingTo("50");
             });
             Map<String, Object> save = complete(versionId, "Prize week", now, now.plus(Duration.ofDays(7)));

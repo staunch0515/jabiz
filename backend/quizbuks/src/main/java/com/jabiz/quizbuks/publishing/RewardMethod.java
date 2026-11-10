@@ -39,6 +39,22 @@ public final class RewardMethod {
 
     public static final String DICTIONARY = "urn:jabiz:dict:quizbuks:reward-method";
 
+    /**
+     * F-S4b: the methods a Sponsor unlocks by lighting a node (the gate parameter of each,
+     * {@code tree.SponsorGates}), besides the default and their own setting.
+     */
+    public static final java.util.Map<String, String> GATES = java.util.Map.of(
+        DIGITAL_PRIZE, QbParams.TREE_GATE_DIGITAL_PRIZE, OFFLINE_REDEEM, QbParams.TREE_GATE_OFFLINE_REDEEM);
+
+    /**
+     * F-S4b (the requester, 2026-11-10): the methods a Sponsor may publish with: the default parameter's, their own
+     * setting's (none without a row) and those a lit gate opens; in the order of {@link #ALL}.
+     */
+    public static List<String> available(List<String> defaults, List<String> own, java.util.Collection<String> openGates) {
+        return ALL.stream().filter(method -> defaults.contains(method) || own.contains(method)
+            || openGates.contains(GATES.get(method))).toList();
+    }
+
     /** The methods a sponsor without a setting may use when the parameter is not readable: the platform's only. */
     public static final List<String> DEFAULT = List.of(PLATFORM);
 

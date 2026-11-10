@@ -267,6 +267,14 @@ public final class QbParams {
     public static final String TREE_GATE_BENEFIT_SPONSOR = "qb.tree.gate.benefit-sponsor-node";
     public static final List<String> TREE_GATES = List.of(TREE_GATE_SPONSOR_APPLY, TREE_GATE_REFERRER,
         TREE_GATE_BENEFIT_PROVIDER, TREE_GATE_BENEFIT_SPONSOR);
+    /**
+     * F-S4b: the reward methods a Sponsor unlocks by lighting a node of a platform template Sponsors light, in any
+     * operator's copy of it ({@code tree.SponsorGates}): {@code DIGITAL_PRIZE} and {@code OFFLINE_REDEEM}. As
+     * {@link #TREE_GATES}: controlled, not created by {@code QB_SETUP}, read as optional, absent = closed.
+     */
+    public static final String TREE_GATE_DIGITAL_PRIZE = "qb.tree.gate.digital-prize-node";
+    public static final String TREE_GATE_OFFLINE_REDEEM = "qb.tree.gate.offline-redeem-node";
+    public static final List<String> SPONSOR_TREE_GATES = List.of(TREE_GATE_DIGITAL_PRIZE, TREE_GATE_OFFLINE_REDEEM);
     /** The kind the controlled change that creates a gate parameter gives: two UUIDs and a slash. */
     public static final Map<String, Object> TREE_GATE_KIND = Map.of("type", "text", "maxLength", 73);
     /** The oldest version of the app that may still be used. */
