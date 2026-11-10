@@ -846,6 +846,74 @@
     }
   }, {
     "cacheSeconds" : 60,
+    "description" : "F-S3c: the knowledge graph in effect of the Sponsor whose published page has the handle, node by node (what the page shows to anybody): the names, descriptions and conditions only, nothing of anybody's lighting; none when the page is not published or the Sponsor has no graph in effect",
+    "id" : "qb.public.sponsor-page-tree",
+    "list" : {
+      "defaultSort" : {
+        "asc" : true,
+        "field" : "seq"
+      },
+      "filters" : [ ],
+      "sorts" : [ "seq" ]
+    },
+    "params" : {
+      "handle" : {
+        "kind" : {
+          "maxLength" : 30,
+          "multiline" : false,
+          "type" : "text"
+        },
+        "list" : false,
+        "required" : true
+      }
+    },
+    "results" : {
+      "condition" : {
+        "multiline" : false,
+        "type" : "text"
+      },
+      "description" : {
+        "multiline" : false,
+        "type" : "text"
+      },
+      "name" : {
+        "multiline" : false,
+        "type" : "text"
+      },
+      "nodeId" : {
+        "maxLength" : 36,
+        "multiline" : false,
+        "type" : "text"
+      },
+      "ownerKind" : {
+        "allowedValues" : [ "PLATFORM", "OPERATOR", "SPONSOR" ],
+        "dictUrn" : "urn:jabiz:dict:quizbuks:tree-owner",
+        "type" : "code"
+      },
+      "refs" : {
+        "multiline" : false,
+        "type" : "text"
+      },
+      "seq" : {
+        "precision" : 4,
+        "scale" : 0,
+        "type" : "numeric"
+      },
+      "treeDescription" : {
+        "multiline" : false,
+        "type" : "text"
+      },
+      "treeId" : {
+        "type" : "semanticIdentity",
+        "urn" : "urn:jabiz:entity:quizbuks:tree"
+      },
+      "treeName" : {
+        "multiline" : false,
+        "type" : "text"
+      }
+    }
+  }, {
+    "cacheSeconds" : 60,
     "description" : "A taker's public certification page (/taker/u/<name>, Q77, D-Q77-5) as anybody sees it: the certificates they issued that no revocation ended, the latest of each certification, with the name on it and its key for the verify link; none when the page is off or the name unknown. The page leaves out the ones whose validUntil passed.",
     "id" : "qb.public.taker-page",
     "list" : {

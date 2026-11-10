@@ -227,6 +227,7 @@ class TreeStatesIT extends TreeItSupport {
         String mine = taker(newTaker(unique("t-fs3-page"), "JP"));
         // A draft page is nobody's to find.
         assertThat(pageTrees(mine, handle)).isEmpty();
+        assertThat(publicTree(handle)).isEmpty();
 
         Map<String, Object> submitted = run(SponsorPageProcesses.SUBMIT, token, body());
         assertThat(submitted).containsEntry("status", QbSponsorPages.PENDING);
@@ -239,6 +240,24 @@ class TreeStatesIT extends TreeItSupport {
             .containsEntry("nodes", 3).containsEntry("litNodes", 0));
         assertThat(myTrees(mine)).doesNotContain(map.treeId());
         assertThat(pageTrees(mine, "fs3-nobody")).isEmpty();
+        // Signed out: the same graph's nodes, their names and conditions, nobody's lighting.
+        assertThat(publicTree(handle)).extracting(row -> row.get("nodeId"))
+            .containsExactlyInAnyOrder(map.basics(), map.advanced(), map.expert());
+        assertThat(publicTree(handle)).allSatisfy(row -> assertThat(row)
+            .containsOnlyKeys("treeId", "ownerKind", "treeName", "treeDescription", "nodeId", "name", "description",
+                "condition", "seq", "refs")
+            .containsEntry("treeId", map.treeId()));
+        assertThat(publicTree(handle)).filteredOn(row -> map.expert().equals(row.get("nodeId"))).singleElement()
+            .satisfies(row -> assertThat(String.valueOf(row.get("refs"))).contains(map.basics())
+                .doesNotContain("\"lit\": true"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> publicTree(String handle) {
+        Map<String, Object> page = client.get().uri(b -> b.path("/api/public/queries/qb.public.sponsor-page-tree")
+                .queryParam("p.handle", "{handle}").queryParam("limit", 500).build(handle))
+            .exchange().expectStatus().isOk().expectBody(MAP).returnResult().getResponseBody();
+        return (List<Map<String, Object>>) page.get("items");
     }
 
     private List<Map<String, Object>> pageTrees(String token, String handle) {

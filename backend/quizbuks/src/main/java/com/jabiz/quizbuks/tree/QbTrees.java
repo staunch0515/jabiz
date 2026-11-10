@@ -33,6 +33,14 @@ public final class QbTrees {
     public static final String MY_LITS = "urn:jabiz:dataset:me:" + LIT;
     /** F-S2d: the nodes as the public pages read them (whether a node has prerequisites), templates only. */
     public static final String PUBLIC_NODES = "urn:jabiz:dataset:public:" + NODE;
+    /**
+     * F-S3c: a Sponsor's page shows the Sponsor's graph to anybody (templates only): graphs Takers light in effect,
+     * their versions in effect, those versions' node definitions and the nodes their conditions name.
+     */
+    public static final String PUBLIC_TREES = "urn:jabiz:dataset:public:" + TREE;
+    public static final String PUBLIC_VERSIONS = "urn:jabiz:dataset:public:" + VERSION;
+    public static final String PUBLIC_NODE_DEFS = "urn:jabiz:dataset:public:" + NODE_DEF;
+    public static final String PUBLIC_NODE_REFS = "urn:jabiz:dataset:public:" + NODE_REF;
     public static final String MY_REVOCATIONS = "urn:jabiz:dataset:me:" + REVOCATION;
     /** F-C4: a Sponsor's own graphs, read only (the sponsor package's export and its binding by node key). */
     public static final String SPONSOR_TREES = "urn:jabiz:dataset:sponsor:" + TREE;
