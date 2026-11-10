@@ -26,6 +26,7 @@
       "customTopics" : null,
       "sharedVideoId" : null,
       "videoProviderId" : null,
+      "exposurePurchased" : null,
       "versionId" : "#uuid:3",
       "quizId" : "#uuid:4",
       "maxReward" : "500",
@@ -34,9 +35,11 @@
       "timeLimitSec" : "300",
       "questionCount" : "2",
       "pickCount" : null,
+      "pickByDifficulty" : null,
       "entryFee" : "0",
       "treeId" : null,
       "treeNodeId" : null,
+      "forSponsors" : false,
       "budgetCap" : null,
       "maxWinners" : "100",
       "tiers" : "[{\"fromScore\":0,\"reward\":\"0\",\"tierId\":\"01a0f4f9-b280-7000-9298-60b080000003\",\"toScore\":2},{\"fromScore\":3,\"reward\":\"500\",\"tierId\":\"01a0f4f9-b280-7000-9298-60b080000004\",\"toScore\":5}]",
@@ -81,6 +84,7 @@
       "customTopics" : null,
       "sharedVideoId" : null,
       "videoProviderId" : null,
+      "exposurePurchased" : null,
       "versionId" : "#uuid:3",
       "quizId" : "#uuid:4",
       "maxReward" : "1000",
@@ -89,9 +93,11 @@
       "timeLimitSec" : "300",
       "questionCount" : "2",
       "pickCount" : null,
+      "pickByDifficulty" : null,
       "entryFee" : "0",
       "treeId" : null,
       "treeNodeId" : null,
+      "forSponsors" : false,
       "budgetCap" : null,
       "maxWinners" : "2",
       "tiers" : "[{\"fromScore\":0,\"reward\":\"0\",\"tierId\":\"01a0f4ff-30c0-7000-9298-60b080000005\",\"toScore\":2},{\"fromScore\":3,\"reward\":\"1000\",\"tierId\":\"01a0f4ff-30c0-7000-9298-60b080000006\",\"toScore\":5}]",
@@ -141,6 +147,7 @@
       "watchedSec" : null,
       "videoEnded" : null,
       "playbackStatus" : null,
+      "onBehalfOf" : null,
       "version" : 2
     }, {
       "attemptId" : "#uuid:10",
@@ -170,6 +177,7 @@
       "watchedSec" : null,
       "videoEnded" : null,
       "playbackStatus" : null,
+      "onBehalfOf" : null,
       "version" : 2
     }, {
       "attemptId" : "#uuid:13",
@@ -199,6 +207,7 @@
       "watchedSec" : null,
       "videoEnded" : null,
       "playbackStatus" : null,
+      "onBehalfOf" : null,
       "version" : 2
     } ],
     "QbDigitalPrize" : [ {

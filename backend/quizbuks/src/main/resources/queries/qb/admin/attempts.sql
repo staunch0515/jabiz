@@ -24,8 +24,9 @@ results:
   watchedSec:          { from: QbAttempt.watchedSec }
   videoEnded:          { from: QbAttempt.videoEnded }
   playbackStatus:      { from: QbAttempt.playbackStatus }
+  onBehalfOf:          { from: QbAttempt.onBehalfOf }
 list:
-  filters: [userId, publicationId, publisherKind, publisherId, status, rewardStatus, startedAt, submittedAt]
+  filters: [userId, publicationId, publisherKind, publisherId, status, rewardStatus, startedAt, submittedAt, onBehalfOf]
   sorts:   [startedAt, submittedAt, status, score]
   defaultSort: { field: startedAt, asc: false }
   key: [attemptId]
@@ -51,6 +52,8 @@ SELECT
     -- Q75 (D-Q75-9): what the App reported of the video's playback at the start.
     m.{{QbAttempt.watchedSec}}          AS watchedSec,
     m.{{QbAttempt.videoEnded}}          AS videoEnded,
-    m.{{QbAttempt.playbackStatus}}      AS playbackStatus
+    m.{{QbAttempt.playbackStatus}}      AS playbackStatus,
+    -- F-S4a: the Sponsor the attempt was answered as (a challenge, in the Sponsor app); none for a Taker's.
+    m.{{QbAttempt.onBehalfOf}}          AS onBehalfOf
 FROM {{QbAttempt}} m
 JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = m.{{QbAttempt.publicationId}}

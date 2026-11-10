@@ -117,6 +117,20 @@ class AttemptStatementBudgetIT extends TreeItSupport {
      */
     static final Budget FEE_TOTAL = new Budget(17, 22);
     static final Budget FEE_LOCKED = new Budget(10, 15);
+    /**
+     * F-S4a: {@code QB_SPONSOR_ATTEMPT_START}, a new attempt of a challenge: the operation, banned?, one read of the
+     * caller's attempt, the card, the publication, the onboarding and the operator, the version, the start lock, then
+     * under it {@link #START_LOCKED}. Three fewer than {@link #START_TOTAL}: no overdue cash reward, profile or wallet.
+     */
+    static final Budget SPONSOR_START_TOTAL = new Budget(8, 10);
+    /**
+     * F-S4a: {@code QB_SPONSOR_ATTEMPT_SUBMIT} of a challenge's pass: the operation, banned?, the attempt, the version,
+     * the commission rate, the publication's lock, then under it the attempt, the counters and the card again (one
+     * statement), the event {@code qb.tree.passed}, the attempt and the counters at the version read, the idempotency
+     * result (held: these in one statement), {@code COMMIT}. Nothing paid: no wallet lock and no posting.
+     */
+    static final Budget CHALLENGE_SUBMIT_TOTAL = new Budget(9, 12);
+    static final Budget CHALLENGE_SUBMIT_LOCKED = new Budget(3, 6);
 
     @Autowired
     WriteBatching batching;
@@ -196,6 +210,52 @@ class AttemptStatementBudgetIT extends TreeItSupport {
         int event = batching.acrossTransaction() ? 0 : 1;
         assertBudget("QB_ATTEMPT_SUBMIT (a node's pass)", submit, budget(SUBMIT_TOTAL) + event,
             budget(SUBMIT_LOCKED) + event);
+    }
+
+    /**
+     * F-S4a: a Sponsor answering a challenge ({@code QB_SPONSOR_ATTEMPT_START} / {@code _SUBMIT}). The start reads the
+     * caller's onboarding and operator in its first statement and nothing of a Taker's (no overdue cash reward, profile,
+     * audience, block or wallet); the lock's part is an ordinary start's. The pass pays nothing (no wallet lock, no
+     * posting) and sends {@code qb.tree.passed} for the lighting.
+     */
+    @Test
+    void aSponsorStartsAndPassesAChallenge() {
+        warmUp();
+        Copy copy = copy();
+        String publicationId = liveBound(copy.operator().leadId(), "Budget challenge", copy.treeId(), copy.start(),
+            Map.of("regions", List.of("GLOBAL"), "maxWinners", 100_000, "budgetCap", 1_000_000, "tiers",
+                List.of(body("fromScore", 0, "toScore", 5, "reward", 0))));
+        // Warm: another Sponsor of the operator starts and passes it, as counted below.
+        challenge(sponsorOf(copy.operator(), "s-budget-challenge-warm"), publicationId);
+        String token = sponsorToken(sponsorOf(copy.operator(), "s-budget-challenge"));
+
+        SqlStatementLog.clear();
+        Map<String, Object> started = keyed(com.jabiz.quizbuks.play.SponsorPlay.START, token, body("publicationId",
+            publicationId));
+        List<List<String>> start = SqlStatementLog.transactions();
+        report("QB_SPONSOR_ATTEMPT_START", start);
+        assertBudget("QB_SPONSOR_ATTEMPT_START", start, budget(SPONSOR_START_TOTAL), budget(START_LOCKED));
+        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.startLockName(publicationId));
+
+        SqlStatementLog.clear();
+        Map<String, Object> submitted = keyed(com.jabiz.quizbuks.play.SponsorPlay.SUBMIT, token, body("attemptId",
+            started.get("attemptId"), "publicationId", publicationId, "currentIndex", 1, "answers",
+            shown((String) started.get("attemptId"), answers(true, true))));
+        assertThat(submitted).containsEntry("passed", true);
+        List<List<String>> submit = SqlStatementLog.transactions();
+        report("QB_SPONSOR_ATTEMPT_SUBMIT (a challenge's pass)", submit);
+        assertBudget("QB_SPONSOR_ATTEMPT_SUBMIT (a challenge's pass)", submit, budget(CHALLENGE_SUBMIT_TOTAL),
+            budget(CHALLENGE_SUBMIT_LOCKED));
+        assertThat(SqlStatementLog.locks()).containsExactly(PublicationMoves.lockName(publicationId));
+    }
+
+    private void challenge(String sponsor, String publicationId) {
+        String token = sponsorToken(sponsor);
+        Map<String, Object> started = keyed(com.jabiz.quizbuks.play.SponsorPlay.START, token, body("publicationId",
+            publicationId));
+        keyed(com.jabiz.quizbuks.play.SponsorPlay.SUBMIT, token, body("attemptId", started.get("attemptId"),
+            "publicationId", publicationId, "currentIndex", 1, "answers", shown((String) started.get("attemptId"),
+                answers(true, true))));
     }
 
     /**

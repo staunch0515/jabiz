@@ -183,6 +183,7 @@
       "watchedSec" : null,
       "videoEnded" : null,
       "playbackStatus" : null,
+      "onBehalfOf" : null,
       "version" : 2
     }, {
       "attemptId" : "#uuid:16",
@@ -212,6 +213,7 @@
       "watchedSec" : null,
       "videoEnded" : null,
       "playbackStatus" : null,
+      "onBehalfOf" : null,
       "version" : 3
     } ],
     "QbPublicationCard" : [ {
@@ -238,6 +240,7 @@
       "customTopics" : null,
       "sharedVideoId" : null,
       "videoProviderId" : null,
+      "exposurePurchased" : null,
       "versionId" : "#uuid:10",
       "quizId" : "#uuid:1",
       "maxReward" : "30",
@@ -250,6 +253,7 @@
       "entryFee" : "0",
       "treeId" : null,
       "treeNodeId" : null,
+      "forSponsors" : false,
       "budgetCap" : "3000",
       "maxWinners" : "100",
       "tiers" : "[{\"fromScore\":0,\"reward\":\"0\",\"tierId\":\"01a0f4f9-b280-7000-9298-60b080000001\",\"toScore\":1},{\"fromScore\":2,\"reward\":\"30\",\"tierId\":\"01a0f4f9-b280-7000-9298-60b080000002\",\"toScore\":2}]",

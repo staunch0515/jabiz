@@ -180,6 +180,10 @@ class QbRolesTest {
             .contains(QbPermissions.BENEFIT_USE).doesNotContain(QbPermissions.BENEFIT_SYSTEM,
                 QbPermissions.BENEFIT_READ);
         assertThat(QbRoles.of(QbRoles.TAKER).permissions()).doesNotContain(QbPermissions.BENEFIT_USE);
+        // F-S4a: answering their operator's challenges is the Sponsors' alone (a Taker, staff or an administrator
+        // answers none as a Sponsor).
+        QbRoles.all().forEach(role -> assertThat(role.permissions().contains(QbPermissions.SPONSOR_CHALLENGE))
+            .as(role.code()).isEqualTo(QbRoles.SPONSOR.equals(role.code())));
         assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions()).contains(QbPermissions.BENEFIT_READ);
         // F-C10: the help's people are headquarters' content administrators and the operators; nobody runs its
         // system processes.

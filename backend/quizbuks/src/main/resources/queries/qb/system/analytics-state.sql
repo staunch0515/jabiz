@@ -81,6 +81,8 @@ chunk AS (
     FROM {{QbPublicationCard}} k
     LEFT JOIN {{QbAnalyticsCursor}} f ON f.{{QbAnalyticsCursor.publicationId}} = k.{{QbPublicationCard.publicationId}}
     WHERE k.{{QbPublicationCard.publicationId}} BETWEEN CAST(:firstId AS uuid) AND CAST(:lastId AS uuid)
+      -- F-S4a: a challenge within the chunk's range is not read (qb.system.analytics-items leaves it out).
+      AND NOT k.{{QbPublicationCard.forSponsors}}
       AND (k.{{QbPublicationCard.status}} IN ('LIVE', 'PAUSED', 'FUNDS_SHORT')
            OR (k.{{QbPublicationCard.status}} = 'ENDED'
                AND (k.{{QbPublicationCard.endedAt}} > CAST(:recent AS timestamptz)

@@ -2,6 +2,7 @@ package com.jabiz.quizbuks.play;
 
 import com.jabiz.process.ProcessContext;
 import com.jabiz.process.ProcessDefinition;
+import com.jabiz.process.ProcessDefinitionBuilder;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
@@ -96,6 +97,15 @@ public final class AttemptResults {
                 .outputMapper(ctx -> ctx.get(OUTPUT, ResultOutput.class))
                 // Through the caller's own dataset: another taker's attempt is not found (404).
                 .step("Load the attempt", LoadEntity.by(QbPlay.TAKER_ATTEMPTS, ATTEMPT_KEY, ATTEMPT))
+                .steps(AttemptResults::readSteps));
+    }
+
+    /**
+     * The steps after the attempt is loaded under {@link #ATTEMPT}: the version, the card and the reward's records,
+     * then the result (F-S4a: a Sponsor's challenge reads it the same way, {@link SponsorPlay}).
+     */
+    static void readSteps(ProcessDefinitionBuilder<ResultInput, ResultOutput, ProcessContext> pb) {
+        pb
                 // The frozen version the attempt was answered from, and the card (its name and pass mark): one
                 // statement, as the two depend on the attempt alone (platform decision D46).
                 .step("Load the version and the card", QueryEntities.<ProcessContext>all(
@@ -115,7 +125,7 @@ public final class AttemptResults {
                         .where(new QueryPredicate.In("userId", external(ctx)
                             ? List.of(String.valueOf((Object) ctx.get(ATTEMPT, EntityInstance.class).get("publisherId")))
                             : List.of())).limit(1).build(), SPONSOR)))
-                .compute("Read the result", (metadata, ctx) -> read(ctx)));
+                .compute("Read the result", (metadata, ctx) -> read(ctx));
     }
 
     static void read(ProcessContext ctx) {

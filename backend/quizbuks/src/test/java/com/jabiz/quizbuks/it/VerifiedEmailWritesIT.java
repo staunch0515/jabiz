@@ -31,6 +31,8 @@ class VerifiedEmailWritesIT extends PostgresIntegrationTest {
     /** Writes an unverified account may make, and why. */
     static final Map<String, String> EXCEPTIONS = Map.of(
         "process QB_ATTEMPT_RESULT", "reads the result of one of the caller's own attempts and writes nothing",
+        "process QB_SPONSOR_ATTEMPT_RESULT", "reads the result of one of the calling Sponsor's own challenge attempts "
+            + "and writes nothing (F-S4a)",
         "process QB_REFERRAL_VIEW", "reads one of the caller's own referrals as its referrer and writes nothing (Q70)",
         "process QB_MY_CERTIFICATIONS", "lists the certifications the caller holds and writes nothing (Q77; issuing "
             + "one, QB_CERTIFICATE_ISSUE, needs the verified address)",

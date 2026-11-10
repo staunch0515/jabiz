@@ -233,6 +233,8 @@ public final class QbRoles {
             QbPermissions.BENEFIT_USE,
             // F-S2: their own knowledge graph.
             QbPermissions.TREE_EDIT,
+            // F-S4a: answering their operator's challenges.
+            QbPermissions.SPONSOR_CHALLENGE,
             // F-C10: the AI help.
             QbPermissions.HELP_USE));
         add(SHOPIFY_SHOP, labels("Shopify shop staff", "Shopify 店铺员工", "Shopify ストアのスタッフ"), false,
