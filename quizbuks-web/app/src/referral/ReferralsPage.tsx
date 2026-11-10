@@ -1,7 +1,6 @@
 import { formatDateTime } from '@jabiz/client'
 import { Alert, AlertDescription, Badge, Button, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import { UserRoundPlus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { formatKudos } from '../qb/kudos'
@@ -10,7 +9,8 @@ import { problemText } from '../qb/problems'
 import { Link } from '../qb/router'
 import { sharePath } from '../share/share'
 import { CashReward, DigitalPrize, Redemption, type Outcome } from '../pages/ResultPage'
-import { TitleBadge } from '../pages/TitleBadge'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 import { LinkCard, useReferralReward } from './ReferralPanel'
 import { readMyLinks, readMyReferrals, readReferral, REFERRALS_QUERY, referralQueryKey, type ReferralStatus } from './api'
 
@@ -38,10 +38,7 @@ export function ReferralsPage() {
   }
   return (
     <div className="flex flex-col gap-4" data-testid="referrals">
-      <h1 className="flex items-center gap-2 text-2xl font-semibold">
-        <TitleBadge icon={UserRoundPlus} />
-        {t('referral.page.title')}
-      </h1>
+      <AreaHeader area="me" title={t('referral.page.title')} />
       <p className="text-muted-foreground text-sm">{t('referral.page.intro')}</p>
       <section aria-labelledby="referral-links-title" className="flex flex-col gap-2">
         <h2 id="referral-links-title" className="text-lg font-semibold">{t('referral.page.links')}</h2>

@@ -14,6 +14,8 @@ import { KnowledgeMap, type Startable } from '../qb/tree/KnowledgeMap'
 import { statesOf } from '../qb/tree/states'
 import { appPublicationPath } from '../qb/page'
 import { mapPath, MAPS_PATH } from './paths'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 
 /**
  * "My maps" (F-S3c, docs/quizbuks/plans/impl/F-S3.md §4): the knowledge maps the Taker sees (`qb.app.trees`: the
@@ -26,7 +28,7 @@ export function MapsPage() {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="maps-title" data-testid="maps">
       <div className="flex flex-col gap-1">
-        <h1 id="maps-title" className="text-xl font-semibold">{t('maps.title')}</h1>
+        <AreaHeader area="me" id="maps-title" title={t('maps.title')} />
         <p className="text-muted-foreground text-sm">{t('maps.intro')}</p>
       </div>
       {maps.isPending ? <PageState kind="loading" />

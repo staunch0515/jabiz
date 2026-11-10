@@ -110,16 +110,14 @@ describe('what a scanned code opens (Q52)', () => {
 })
 
 describe('the scanner (Q52)', () => {
-  it('is offered in the header\'s menu, starts the camera, ignores a foreign code and opens the scanned redeem code', async () => {
+  it('is the third entry of the bottom menu, starts the camera, ignores a foreign code and opens the scanned redeem code', async () => {
     const { posted } = server()
     const { stopTrack, getUserMedia } = camera([null, 'https://evil.example/redeem/x', `${ORIGIN}/redeem/k1`])
     window.history.replaceState(null, '', '/account')
     render(<App />)
-    // Q62: one menu at the right of the header holds scanning, the appearance and signing out.
-    await userEvent.click(await screen.findByTestId('app-menu'))
-    const open = await screen.findByTestId('scan-open')
-    expect(open).toHaveTextContent('Scan')
-    await userEvent.click(open)
+    // F-F4: scanning is in the bottom menu, in the middle and raised, no longer in a menu at the top.
+    expect(screen.queryByTestId('app-menu')).toBeNull()
+    await userEvent.click(await screen.findByTestId('bottom-bar-scan'))
     expect(window.location.pathname).toBe('/scan')
     expect(await screen.findByTestId('scan-page')).toBeInTheDocument()
     // The back camera, no sound.
@@ -134,8 +132,8 @@ describe('the scanner (Q52)', () => {
     expect(stopTrack).toHaveBeenCalled()
     expect(posted.filter((p) => p.path === '/api/processes/QB_REDEEM_TOKEN_CHECK/latest').map((p) => p.body))
       .toEqual([{ scannedKey: 'k1' }])
-    // The scanner is not in the history: back leaves the prize for where the person was.
-    expect(screen.getByTestId('app-menu')).toBeInTheDocument()
+    // The scanner is not in the history: back leaves the prize for where the person was. The prize is a page of scanning.
+    expect(screen.getByTestId('bottom-bar-scan')).toHaveAttribute('aria-current', 'page')
   })
 
   it('opens a publication\'s page from a shop\'s poster', async () => {
@@ -154,8 +152,8 @@ describe('the scanner (Q52)', () => {
     window.history.replaceState(null, '', '/scan')
     render(<App />)
     expect(await screen.findByTestId('scan-denied')).toHaveTextContent('Allow it in your phone\'s settings')
-    // The header does not offer the scanner on the scanner.
-    expect(screen.queryByTestId('scan-open')).toBeNull()
+    // The pass is one tap away without the camera (F-F4).
+    expect(screen.getByTestId('page-tab-pass')).toHaveAttribute('href', '/scan/pass')
     await expectAccessible()
     await userEvent.click(screen.getByTestId('scan-again'))
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2))

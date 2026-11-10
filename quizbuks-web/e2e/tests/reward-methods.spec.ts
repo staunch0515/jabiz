@@ -9,6 +9,7 @@ import {
   rows,
   run,
   signIn,
+  takerArea,
   test,
   tokenOf,
 } from './support'
@@ -120,7 +121,7 @@ test('the Sponsor marks a cash reward paid and the Taker confirms it', async ({ 
   await expect(reward.getByTestId('cash-confirm')).toHaveCount(0)
 
   // The history and the home agree.
-  await page.getByTestId('nav-history').click()
+  await takerArea(page, 'history').click()
   await expect(page.getByTestId('history-row').filter({ hasText: owed.name }).getByTestId('history-cash'))
     .toHaveAttribute('data-status', 'CONFIRMED')
 })
@@ -222,15 +223,16 @@ test('a Taker collects a prize by scanning the Sponsor\'s screen with the app\'s
       }
     }, picture)
     await signIn(page, '/taker/', owed.taker.email)
-    // On a 360 px phone the header fits: the page is no wider than the screen (a wider one is zoomed out, and taps
-    // miss what they aim at). Q62: the scanner is in the header's menu.
+    // On a 360 px phone the page is no wider than the screen (a wider one is zoomed out, and taps miss what they aim
+    // at). F-F4: the scanner is the bottom menu's middle entry, raised, and its tab is the camera.
     await page.setViewportSize({ width: 360, height: 780 })
-    await page.getByTestId('app-menu').click()
-    const open = page.getByTestId('scan-open')
+    const open = page.getByTestId('bottom-bar-scan')
     await expect(open).toBeVisible()
     await expect(open).toHaveAccessibleName('Scan')
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
       .toBeLessThanOrEqual(0)
+    const box = (await open.boundingBox())!
+    expect(Math.abs(box.x + box.width / 2 - 180), 'scanning is in the middle').toBeLessThanOrEqual(1)
     await open.click()
     await expect(page.getByTestId('scan-page')).toBeVisible()
     await expectAccessible(page, 'app scanner')
@@ -249,6 +251,41 @@ test('a Taker collects a prize by scanning the Sponsor\'s screen with the app\'s
     await expect(page.getByTestId('redeem-done')).toHaveAttribute('data-status', 'REDEEMED')
   })
 
+test('a Taker finds the prize under "To collect" and shows the pass from the scanner in one step (F-F4)',
+  async ({ page, request }) => {
+    test.setTimeout(240_000)
+    const owed = await rewardOwed(request, 'OFFLINE_REDEEM')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await signIn(page, '/taker/', owed.taker.email)
+    await expect(page.getByTestId('home')).toBeVisible()
+
+    // The bottom menu's "Answered" says something waits, and so does the tab (one query, one number).
+    await expect(takerArea(page, 'history')).toHaveAccessibleName(/to collect/)
+    await takerArea(page, 'history').click()
+    await page.getByTestId('page-tab-prizes').click()
+    await expect(page).toHaveURL(/\/taker\/history\/prizes$/)
+    const prize = page.getByTestId('prize-row').filter({ hasText: owed.name })
+    await expect(prize).toHaveAttribute('data-status', 'DUE')
+    await expect(prize).toContainText('A coffee at our counter')
+    await expectAccessible(page, 'app to collect')
+
+    // From the scanner: one prize to collect, so one tap on its button shows the pass.
+    await takerArea(page, 'scan').click()
+    const show = page.getByTestId('pass-show')
+    await expect(show).toContainText('Show my pass (1)')
+    await show.click()
+    await expect(page.getByTestId('pass-dialog')).toBeVisible()
+    await expect(page.getByTestId('pass-digits')).toHaveText(/^\d{3} \d{3}$/)
+    await expectAccessible(page, 'app pass from the scanner')
+    await page.keyboard.press('Escape')
+
+    // The tab beside the camera lists the same pass, and needs no camera.
+    await page.getByTestId('page-tab-pass').click()
+    await expect(page).toHaveURL(/\/taker\/scan\/pass$/)
+    await expect(page.getByTestId('my-pass')).toHaveCount(1)
+    await expectAccessible(page, 'app show my pass')
+  })
+
 test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at the counter (Q39)',
   async ({ page, request }) => {
     test.setTimeout(240_000)
@@ -262,11 +299,10 @@ test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at
       })
     }
 
-    // Kai reads their ID on the app's account page (once signed in: the home is shown).
+    // Kai reads their ID in "Me" (once signed in: the home is shown): Settings, Staff counter (F-F4).
     await signIn(page, '/taker/', kai.email)
     await expect(page.getByTestId('home')).toBeVisible()
-    // The account is a menu (Q56): Kai's ID is on its own page.
-    await page.goto('/taker/account')
+    await takerArea(page, 'me').click()
     await expectAccessible(page, 'app account menu')
     await page.getByTestId('account-menu-id').click()
     await expect(page).toHaveURL(/\/taker\/account\/id$/)
@@ -293,7 +329,9 @@ test('a Sponsor names a Taker to the staff by their ID, who hands out a prize at
     await signOut()
     await signIn(page, '/taker/', kai.email)
     await expect(page.getByTestId('home')).toBeVisible()
-    await page.goto('/taker/account/id')
+    // F-F4: "Me", Settings, Staff counter, then the desk.
+    await takerArea(page, 'me').click()
+    await page.getByTestId('account-menu-id').click()
     await page.getByTestId('staff-desk-link').click()
     await expect(page).toHaveURL(/\/taker\/staff$/)
     await expect(page.getByTestId('staff-code-image')).toBeVisible()

@@ -1,6 +1,6 @@
 import type { APIRequestContext } from '@playwright/test'
 import { completeQuiz, query } from './content'
-import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { expect, expectAccessible, prepareQuizbuks, run, signIn, takerArea, test, unique } from './support'
 import { fundedSponsor, takerInJapan } from './wallet'
 import { reviewerFor } from './operators'
 
@@ -102,8 +102,10 @@ test('a Taker writes to the Sponsor from a result, the Sponsor answers, the Take
     return response.ok() ? Number(((await response.json()).items ?? [])[0]?.unread ?? 0) : 0
   }, { message: 'the reply is unread', timeout: 30_000 }).toBe(1)
   await app.goto('/taker/inbox')
-  await expect(app.getByTestId('inbox-conversations-unread')).toBeVisible()
-  await app.getByTestId('inbox-conversations').click()
+  // F-F4: the conversations are the inbox's second tab, the unread ones counted on it and on the bottom menu.
+  await expect(app.getByTestId('page-tab-conversations')).toHaveText(/Conversations\s*1/)
+  await expect(takerArea(app, 'messages')).toHaveAccessibleName(/unread/)
+  await app.getByTestId('page-tab-conversations').click()
   await app.getByTestId('conversation-row').filter({ hasText: company }).click()
   await expect(app.getByTestId('conversation-message')).toHaveCount(2)
   await expect(app.getByTestId('conversation-messages')).toContainText('Yes, from next month.')

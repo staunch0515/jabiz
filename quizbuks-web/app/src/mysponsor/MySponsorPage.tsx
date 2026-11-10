@@ -1,11 +1,12 @@
 import { formatDateTime } from '@jabiz/client'
 import { Alert, AlertDescription, Badge, Button, ConfirmDialog, PageState, Spinner } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChartNoAxesColumn, ExternalLink, Pause, Play, Store } from 'lucide-react'
+import { ChartNoAxesColumn, ExternalLink, Pause, Play } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
-import { TitleBadge } from '../pages/TitleBadge'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
@@ -50,19 +51,17 @@ export function MySponsorPage() {
   if (!sponsor) return <PageState kind="notFound" titleAs="h1" description={t('notFound')} />
   return (
     <section className="flex flex-col gap-6" aria-labelledby="my-sponsor-title" data-testid="my-sponsor">
-      <div className="flex items-center gap-3">
-        {sponsor.avatar
+      <AreaHeader area="me" id="my-sponsor-title" title={t('mySponsor.title')}
+        badge={sponsor.avatar
           ? <LazyImage fileId={sponsor.avatar} variant="w128" alt="" className="size-12 shrink-0 rounded-full" />
-          : <TitleBadge icon={Store} />}
-        <div className="min-w-0">
-          <h1 id="my-sponsor-title" className="text-xl font-semibold">{t('mySponsor.title')}</h1>
+          : undefined}
+        note={(
           <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
             <span className="truncate" data-testid="my-sponsor-company">{sponsor.company ?? sponsor.contactName}</span>
             <Badge variant={approved ? 'success' : 'secondary'} data-testid="my-sponsor-status"
               data-status={sponsor.reviewStatus}>{t(`mySponsor.status.${sponsor.reviewStatus}`)}</Badge>
           </p>
-        </div>
-      </div>
+        )} />
       {!approved ? (
         <Alert data-testid="my-sponsor-onboarding">
           <AlertDescription>{t('mySponsor.notApproved')}</AlertDescription>

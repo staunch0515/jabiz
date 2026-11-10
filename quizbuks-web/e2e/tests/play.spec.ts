@@ -9,6 +9,7 @@ import {
   test,
   unique,
   setAppearance,
+  takerArea,
 } from './support'
 import { fundedSponsor, searchHome, taker, untilLive } from './play'
 import { reviewerFor } from './operators'
@@ -175,7 +176,7 @@ for (const appearance of ['light', 'dark'] as const) {
     // The attempt is over: its play page leads to the result, and the publication offers no second try.
     await page.goto(attemptUrl)
     await expect(page).toHaveURL(/\/result\/[^/]+$/)
-    await page.getByTestId('nav-history').click()
+    await takerArea(page, 'history').click()
     const row = page.getByTestId('history-row').filter({ hasText: seeded.name })
     await expect(row).toHaveAttribute('data-category', 'PASSED')
     await expect(row).toContainText('Pending')

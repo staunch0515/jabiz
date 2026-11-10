@@ -40,6 +40,8 @@ const ANNOUNCEMENT = {
 
 interface Server {
   unread?: { messages: number; broadcasts: number }
+  /** F-F4: conversations with a sponsor's message not read yet (counted into the Messages badge). */
+  conversationsUnread?: number
   items?: Record<string, unknown>[]
   /** Q59b: the languages of the quizzes switched on (comma-separated), none when absent. */
   contentLanguages?: string
@@ -77,6 +79,8 @@ function server(options: Server = {}) {
           offset: 0, limit: 1 })
       case '/api/queries/qb.app.inbox-unread':
         return json(200, { items: [options.unread ?? { messages: 1, broadcasts: 2 }], offset: 0, limit: 1 })
+      case '/api/queries/qb.app.conversations-unread':
+        return json(200, { items: [{ unread: options.conversationsUnread ?? 0 }], offset: 0, limit: 1 })
       case '/api/queries/qb.app.inbox': {
         const params = (body?.params ?? {}) as Record<string, unknown>
         const found = params.itemId ? items.filter((item) => item.itemId === params.itemId) : items
@@ -161,21 +165,31 @@ describe('the languages (Q59b)', () => {
 })
 
 describe('the badge', () => {
-  it('shows the unread count on the fifth entry, its name saying it too, and "99+" past 99', async () => {
+  it('shows the unread count on the Messages entry, its name saying it too, and "99+" past 99', async () => {
     server({ unread: { messages: 1, broadcasts: 2 } })
     window.history.replaceState(null, '', '/')
     render(<App />)
     const nav = await screen.findByRole('navigation', { name: 'App' })
     expect(within(nav).getAllByRole('link')).toHaveLength(5)
-    expect(await screen.findByTestId('nav-inbox-badge')).toHaveTextContent('3')
-    expect(screen.getByTestId('nav-inbox')).toHaveAccessibleName('Inbox, 3 unread')
+    await waitFor(() => expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Messages, 3 unread'))
+    expect(screen.getByTestId('bottom-bar-messages')).toHaveTextContent('3')
+    // The wide screen's column says it too.
+    expect(screen.getByTestId('side-rail-messages')).toHaveAccessibleName('Messages, 3 unread')
+  })
+
+  it('counts the conversations with something unread into the same badge (F-F4)', async () => {
+    server({ unread: { messages: 1, broadcasts: 0 }, conversationsUnread: 2 })
+    window.history.replaceState(null, '', '/')
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Messages, 3 unread'))
   })
 
   it('says 99+ when there are more', async () => {
     server({ unread: { messages: 99, broadcasts: 60 } })
     window.history.replaceState(null, '', '/')
     render(<App />)
-    expect(await screen.findByTestId('nav-inbox-badge')).toHaveTextContent('99+')
+    await waitFor(() => expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Messages, 99+ unread'))
+    expect(screen.getByTestId('bottom-bar-messages')).toHaveTextContent('99+')
   })
 
   it('shows nothing when nothing is unread', async () => {
@@ -183,8 +197,20 @@ describe('the badge', () => {
     window.history.replaceState(null, '', '/')
     render(<App />)
     await waitFor(() => expect(queryBodies('qb.app.inbox-unread')).toHaveLength(1))
-    expect(screen.queryByTestId('nav-inbox-badge')).toBeNull()
-    expect(screen.getByTestId('nav-inbox')).toHaveAccessibleName('Inbox')
+    expect(screen.getByTestId('bottom-bar-messages')).toHaveAccessibleName('Messages')
+    expect(screen.getByTestId('bottom-bar-messages')).not.toHaveTextContent(/\d/)
+  })
+
+  it('puts the conversations in a tab beside the inbox, with the unread ones counted on it (F-F4)', async () => {
+    server({ conversationsUnread: 2 })
+    window.history.replaceState(null, '', '/inbox')
+    render(<App />)
+    const tabs = await screen.findByRole('navigation', { name: 'Messages' })
+    expect(within(tabs).getByTestId('page-tab-inbox')).toHaveAttribute('aria-current', 'page')
+    expect(within(tabs).getByTestId('page-tab-conversations')).toHaveAttribute('href', '/conversations')
+    await waitFor(() => expect(within(tabs).getByTestId('page-tab-conversations')).toHaveTextContent('2'))
+    // The inbox's card to the conversations is gone: the tab replaces it.
+    expect(screen.queryByTestId('inbox-conversations')).toBeNull()
   })
 
   it('asks on entering, on coming back to the front and every five minutes, not more often', async () => {
@@ -234,7 +260,7 @@ describe('the inbox', () => {
     expect(rows[1]).toHaveTextContent('From Capitals Inc')
     expect(rows[1].querySelector('[lang="ja"]')).not.toBeNull()
     expect(within(rows[2]).queryByTestId('inbox-unread')).toBeNull()
-    expect(screen.getByTestId('nav-inbox')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('bottom-bar-messages')).toHaveAttribute('aria-current', 'page')
     expect(queryBodies('qb.app.inbox').at(-1)).toMatchObject({ params: { lang: 'en' } })
     // The device's clock is no parameter (review L1).
     expect(queryBodies('qb.app.inbox').at(-1)?.params).not.toHaveProperty('at')
@@ -312,7 +338,7 @@ describe('an item', () => {
     expect(screen.queryAllByRole('link').filter((link) => link.getAttribute('href')?.startsWith('http'))).toEqual([])
     await waitFor(() => expect(processCalls('QB_MESSAGE_MARK')).toHaveLength(1))
     expect(processCalls('QB_MESSAGE_MARK')[0].body).toEqual({ kind: 'MESSAGE', id: 'm1', action: 'READ' })
-    expect(screen.getByTestId('nav-inbox')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('bottom-bar-messages')).toHaveAttribute('aria-current', 'page')
     await user.click(screen.getByTestId('inbox-item-go'))
     await waitFor(() => expect(window.location.pathname).toBe('/result/a1'))
     expect(processCalls('QB_MESSAGE_MARK').at(-1)?.body).toEqual({ kind: 'MESSAGE', id: 'm1', action: 'CLICK' })

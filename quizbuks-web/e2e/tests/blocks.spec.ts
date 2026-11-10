@@ -111,13 +111,13 @@ test('blocking a video provider hides both of its publications; a blocked link s
     await expect(card(own)).toBeVisible()
     await expectAccessible(page, 'app home after blocking a video provider')
 
-    // 2. The app's settings list it; unblocked there, both come back.
-    await page.goto('/taker/account/preferences')
+    // 2. "Blocks and topics" (F-F4) list it; unblocked there, both come back.
+    await page.goto('/taker/account/blocks')
     const list = page.getByTestId('account-blocks')
     const item = list.getByTestId('block-list-item')
     await expect(item).toHaveCount(1)
     await expect(item).toHaveAttribute('data-kind', 'PROVIDER')
-    await expectAccessible(page, 'app settings with a block')
+    await expectAccessible(page, 'app blocks and topics with a block')
     await item.getByTestId('block-list-unblock').click()
     await expect(list.getByTestId('block-list-empty')).toBeVisible()
     await page.goto('/taker/')

@@ -23,6 +23,8 @@ import {
   STAFF_QUERY,
 } from './api'
 import './messages'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 
 /** The page asks for a new rotating code every minute, as the sponsor's console does; the server's lasts two. */
 const ROTATE_EVERY = 60_000
@@ -201,9 +203,8 @@ export function StaffDeskPage() {
   }
   return (
     <section className="flex flex-col gap-4" aria-labelledby="staff-title" data-testid="staff-desk">
-      <h1 id="staff-title" className="text-xl font-semibold">
-        {t('staff.deskTitle', { sponsor: place.data.sponsorCompany ?? t('staff.theSponsor') })}
-      </h1>
+      <AreaHeader area="me" id="staff-title"
+        title={t('staff.deskTitle', { sponsor: place.data.sponsorCompany ?? t('staff.theSponsor') })} />
       <Alert>
         <Gift aria-hidden />
         <AlertTitle className="sr-only">{t('staff.codeTitle')}</AlertTitle>

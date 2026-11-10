@@ -256,7 +256,7 @@ describe('the feed', () => {
     expect(card).not.toHaveTextContent('JPY')
     const feed = calls.find((c) => c.path === '/api/queries/qb.app.feed')!.body as { params: Record<string, unknown> }
     expect(feed.params).toMatchObject({ country: 'JP', q: null })
-    expect(screen.getByTestId('nav-history')).toBeInTheDocument()
+    expect(screen.getByTestId('bottom-bar-history')).toBeInTheDocument()
   })
 
   it('shows a cover grid with a placeholder pattern, the reward badge, the Sponsor and the completions (Q32)', async () => {
@@ -914,20 +914,23 @@ describe('the video to watch (Q19, Q63)', () => {
 })
 
 describe('the pages of the bottom bar (Q67)', () => {
-  it('puts a round badge before the title of each page of the bottom bar, as the account has (Q67)', async () => {
+  it('puts a round badge before the title of each area, with the icon of the bottom menu (Q67, F-F4)', async () => {
     server()
     render(<App />)
     await screen.findByTestId('home')
-    for (const [nav, title] of [['nav-history', 'history-title'], ['nav-wallet', 'wallet-title'],
-      ['nav-inbox', 'inbox-title'], ['nav-account', 'account-title']]) {
-      await userEvent.click(screen.getByTestId(nav))
+    for (const [area, title] of [['history', 'history-title'], ['scan', 'scan-title'], ['messages', 'inbox-title'],
+      ['me', 'account-title']]) {
+      const entry = screen.getByTestId(`bottom-bar-${area}`)
+      // lucide names its icons by class (`lucide-history`): the page's badge is the menu entry's icon.
+      const icon = [...entry.querySelector('svg')!.classList].find((name) => name.startsWith('lucide-') && name !== 'lucide')!
+      await userEvent.click(entry)
       const heading = await screen.findByRole('heading', { level: 1 })
       expect(heading).toHaveAttribute('id', title)
       const badge = heading.closest('section')!.querySelector('[data-testid="title-badge"]')!
       expect(badge).toHaveAttribute('aria-hidden', 'true')
-      // The bar's icon for the three pages; the account's initial.
-      if (nav === 'nav-account') expect(badge).toHaveTextContent('M')
-      else expect(badge.querySelector('svg')).not.toBeNull()
+      // The account has the initial in place of the icon.
+      if (area === 'me') expect(badge).toHaveTextContent('M')
+      else expect(badge.querySelector('svg')).toHaveClass(icon)
     }
   })
 })
@@ -1877,7 +1880,7 @@ describe('the history', () => {
     expect(within(item).getByTestId('history-open')).toHaveAccessibleName('See the result: Capitals week')
     expect(within(item).getByTestId('history-open')).toHaveTextContent('')
     await expectAccessible()
-    expect(screen.getByTestId('nav-history')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('bottom-bar-history')).toHaveAttribute('aria-current', 'page')
     await userEvent.click(screen.getByRole('radio', { name: 'Unfinished' }))
     await waitFor(() => expect(calls.some((c) => JSON.stringify(c.body).includes('"values":["IN_PROGRESS","TIMED_OUT"]')))
       .toBe(true))
@@ -1920,7 +1923,7 @@ describe('the history', () => {
     await act(async () => userEvent.click(await screen.findByTestId('history-continue')))
     expect(await screen.findByTestId('history-continue-busy')).toHaveTextContent('Many people are answering')
     // Away to the home page: no more tries, and no late start takes the user back to the quiz.
-    await userEvent.click(screen.getByTestId('nav-home'))
+    await userEvent.click(screen.getByTestId('bottom-bar-home'))
     await waitFor(() => expect(window.location.pathname).toBe('/'))
     const tries = posted('QB_ATTEMPT_START').length
     await act(async () => {

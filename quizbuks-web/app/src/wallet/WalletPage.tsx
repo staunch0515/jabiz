@@ -1,8 +1,9 @@
 import { formatDate, formatDateTime, i18n } from '@jabiz/client'
-import { TitleBadge } from '../pages/TitleBadge'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 import { Badge, Button, Input, Label, PageState, SegmentedControl, Spinner } from '@jabiz/ui'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Banknote, Coins, CreditCard, Gift, Hourglass, ReceiptText, Search, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, Banknote, CreditCard, Gift, Hourglass, ReceiptText, Search, type LucideIcon } from 'lucide-react'
 import { useId, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
@@ -25,6 +26,7 @@ import {
   WALLET_PARTS,
   WALLET_PATH,
   WALLET_QUERY,
+  WALLET_SUMMARY_QUERY,
   walletPartOf,
   walletPath,
   type WalletPart,
@@ -85,7 +87,7 @@ function Entry({ row }: { row: LedgerRow }) {
 
 const ICONS: Record<WalletPart, LucideIcon> = { balance: Hourglass, rewards: Gift, history: ReceiptText }
 
-const SUMMARY_QUERY = [...WALLET_QUERY, 'summary'] as const
+const SUMMARY_QUERY = WALLET_SUMMARY_QUERY
 
 /** A part's title: the same words on its page and in the menu. */
 function partTitle(part: WalletPart, t: (key: string) => string): string {
@@ -130,10 +132,7 @@ function WalletMenu() {
   const data = wallet.data
   return (
     <section className="flex flex-col gap-6" aria-labelledby="wallet-title" data-testid="wallet">
-      <div className="flex items-center gap-3">
-        <TitleBadge icon={Coins} />
-        <h1 id="wallet-title" className="text-xl font-semibold">{t('wallet.title')}</h1>
-      </div>
+      <AreaHeader area="me" id="wallet-title" title={t('wallet.title')} />
       {!data ? <SummaryState query={wallet} /> : (
         <div className="grid grid-cols-2 gap-3 rounded-lg border p-4" data-testid="wallet-summary">
           <p className="flex flex-col">
@@ -141,6 +140,10 @@ function WalletMenu() {
             <span className="text-3xl font-semibold tabular-nums" data-testid="wallet-available">
               {formatKudos(data.available)}
             </span>
+            {/* F-F4: from the switches (neither transfers nor bank withdrawals are on yet), not written in. */}
+            {data.usable === false && (
+              <Badge variant="secondary" className="mt-1 w-fit" data-testid="wallet-soon">{t('me.soon')}</Badge>
+            )}
           </p>
           <p className="flex flex-col">
             <span className="text-muted-foreground text-sm">{t('wallet.totalEarned')}</span>
@@ -200,7 +203,7 @@ function WalletPartPage({ part }: { part: WalletPart }) {
           <ArrowLeft aria-hidden className="size-4" />
           {t('wallet.back')}
         </Link>
-        <h1 id="wallet-part-title" className="text-xl font-semibold">{partTitle(part, t)}</h1>
+        <AreaHeader area="me" id="wallet-part-title" title={partTitle(part, t)} />
       </div>
       {part === 'balance' ? <Balance /> : part === 'rewards' ? <KudosOverview /> : <Ledger />}
     </section>

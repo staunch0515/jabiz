@@ -1,16 +1,7 @@
 import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
-  APPEARANCES,
   AppearanceProvider,
   Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
   EntryLayoutProvider,
   EnvironmentBanner,
   Input,
@@ -27,37 +18,17 @@ import {
   StepUpProvider,
   ThemeToggle,
   Toaster,
-  UI_NAMESPACE,
   VerifyEmailBanner,
   cn,
-  useAppearance,
   useEntryNotices,
-  type Appearance,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import {
-  ArrowLeft,
-  Coins,
-  History,
-  House,
-  Inbox,
-  LogOut,
-  Menu,
-  Monitor,
-  Moon,
-  ScanLine,
-  Search,
-  Store,
-  Sun,
-  UserRound,
-  UserRoundPlus,
-  type LucideIcon,
-} from 'lucide-react'
+import { ArrowLeft, LogOut, Search, Store } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
 import { takerHandleOf, TakerPage, verifyKeyOf, VerifyPage } from './certificates/PublicCertificates'
-import { ACCOUNT_PATH, ACCOUNT_SECURITY_PATH, AccountPage, isAccountPath, rememberLinked } from './pages/AccountPage'
+import { ACCOUNT_SECURITY_PATH, AccountPage, isAccountPath, rememberLinked } from './pages/AccountPage'
 import { VideoStage } from './video/stage'
 import { FeedControlsProvider, FeedFiltersButton, FeedPage, searchOf, searchPath } from './pages/FeedPage'
 import { HistoryPage } from './pages/HistoryPage'
@@ -70,7 +41,7 @@ import { WelcomePage } from './pages/WelcomePage'
 import { AboutPage } from './pages/AboutPage'
 import { IntroPage, introSeen, rememberSeen } from './pages/IntroPage'
 import { QuizArt, Wordmark } from './qb/Illustrations'
-import { badgeText, inboxItemOf, INBOX_PATH } from './inbox/api'
+import { inboxItemOf, INBOX_PATH } from './inbox/api'
 import { MY_SPONSOR_PATH, MY_SPONSOR_QUERY, readFigures, useMySponsor } from './mysponsor/api'
 import { MySponsorPage, SPONSOR_CONSOLE } from './mysponsor/MySponsorPage'
 import { ReferralPage, ReferralsPage } from './referral/ReferralsPage'
@@ -79,10 +50,13 @@ import { conversationOf, CONVERSATIONS_PATH } from './conversation/api'
 import { REFERRALS_PATH } from './referral/api'
 import { InboxItemPage } from './inbox/InboxItemPage'
 import { InboxPage } from './inbox/InboxPage'
-import { useUnread } from './inbox/useUnread'
 import { forgetAttempts } from './play/storage'
 import { itemPage } from './routes'
-import { legacyTarget } from './frame/areas'
+import { AppFrame } from './frame/AppFrame'
+import { legacyTarget, MY_PASSES_PATH, PRIZES_PATH } from './frame/areas'
+import { useSignOut } from './frame/signOut'
+import { PrizesPage } from './pages/PrizesPage'
+import { MyPassesPage } from './pass/MyPassesPage'
 import { pendingRedeem, redeemPath, rememberRedeem } from './redeemReturn'
 import { signInOrder } from './signin'
 import { InAppBrowserNotice, useInAppNotice } from './install'
@@ -100,7 +74,7 @@ import { canGoBack, currentPath, Link, navigate, navigation, Redirect, useLocati
 import { resultPublication } from './pages/resultPublication'
 import { useSoundSetting } from './qb/SoundSettings'
 import { useSessionLock } from './qb/session'
-import { BANK_PATH, isWalletPath, PAYOUT_PATH, WALLET_PATH } from './wallet/api'
+import { BANK_PATH, isWalletPath, PAYOUT_PATH } from './wallet/api'
 import { kudosMethodOf } from './wallet/kudos'
 import { KudosMethodPage } from './wallet/KudosOverview'
 import { BankPage } from './wallet/BankPage'
@@ -117,7 +91,7 @@ import { WalletPage } from './wallet/WalletPage'
 import { ONE_LINE_BANNER } from './banner'
 import { MaintenanceRedirect } from './maintenance'
 import { MapPage, MapsPage } from './maps/MapsPage'
-import { isMapsPath, mapOf, MAPS_PATH } from './maps/paths'
+import { mapOf, MAPS_PATH } from './maps/paths'
 
 /** Where a signed-in taker starts. */
 const HOME = '/'
@@ -144,21 +118,10 @@ const MAIL_PAGES = new Set(MAIL_LINK_PAGES.map((page) => `/auth/${page}`))
  */
 const UNSUBSCRIBE_PATH = '/mail/unsubscribe'
 
-/** The bottom navigation's entries (docs/quizbuks/02-design.md section 7.1; the inbox fifth, Q7c, QP Q-8). */
-const NAV: { path: string; key: string; icon: LucideIcon }[] = [
-  { path: HOME, key: 'nav.home', icon: House },
-  { path: HISTORY, key: 'nav.history', icon: History },
-  { path: WALLET_PATH, key: 'wallet.nav', icon: Coins },
-  { path: INBOX_PATH, key: 'inbox.nav', icon: Inbox },
-  { path: ACCOUNT_PATH, key: 'nav.account', icon: UserRound },
-]
-
 /** Back to the sign-in page, once signed out. */
 function toSignIn() {
   navigate('/login', { replace: true })
 }
-
-const APPEARANCE_ICONS: Record<Appearance, LucideIcon> = { light: Sun, dark: Moon, system: Monitor }
 
 /** The header's search (Q63): the box in place of the header's row; a search shows the home's results. */
 function HeaderSearch({ initial, onClose }: { initial: string; onClose: () => void }) {
@@ -235,15 +198,14 @@ function SponsorEntry({ current }: { current: boolean }) {
 }
 
 /**
- * The app's header (Q62): the name, and at the right one menu of scanning a sponsor's code (Q52), the appearance and
- * signing out, so that the bar stays the name and one button on any phone.
+ * The app's header (Q62): the name, and at the right the home's filters and search and a Sponsor's own page. The menu
+ * that was at its right end is gone (F-F4): scanning is in the bottom menu, the referrals, the appearance and signing
+ * out are in "Me"; the welcome step, which has no menu, has its own way to sign out.
  */
-function Header({ scan = false, search = false }: { scan?: boolean; search?: boolean }) {
+function Header({ search = false, welcome = false }: { search?: boolean; welcome?: boolean }) {
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
-  const { t: tUi } = useTranslation(UI_NAMESPACE)
-  const { signOut } = useAuth()
-  const { appearance, setAppearance } = useAppearance()
+  const signOut = useSignOut()
   const { path, search: query } = useLocation()
   const [searching, setSearching] = useState(false)
   if (searching) {
@@ -271,109 +233,22 @@ function Header({ scan = false, search = false }: { scan?: boolean; search?: boo
         {search && path === HOME && <FeedFiltersButton />}
         {/* Q68: a sponsor's own account, for a sponsor only; a dot when something needs them. */}
         {search && <SponsorEntry current={path === MY_SPONSOR_PATH} />}
-        {/* Q63: the home's search is opened here, a magnifier beside the menu. */}
+        {/* Q63: the home's search is opened here, a magnifier. */}
         {search && (
           <Button variant="ghost" size="icon-sm" aria-label={tApp('feed.search')} data-testid="search-open"
             onClick={() => setSearching(true)}>
             <Search aria-hidden />
           </Button>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label={tApp('menu.open')} data-testid="app-menu">
-              <Menu aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-48">
-            {/* Q52: in the shop, the sponsor's code is scanned here, in the signed-in app. */}
-            {scan && (
-              <>
-                <DropdownMenuItem data-testid="scan-open" onSelect={() => navigate(SCAN_PATH)}>
-                  <ScanLine aria-hidden />
-                  {tApp('scan.open')}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            {/* Q70: the caller's referral links and the friends who came. */}
-            <DropdownMenuItem data-testid="referrals-open" onSelect={() => navigate(REFERRALS_PATH)}>
-              <UserRoundPlus aria-hidden />
-              {tApp('referral.mine')}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>{tUi('appearance.label')}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={appearance} onValueChange={(value) => setAppearance(value as Appearance)}
-              data-testid="appearance-choices">
-              {APPEARANCES.map((value) => {
-                const Icon = APPEARANCE_ICONS[value]
-                return (
-                  <DropdownMenuRadioItem key={value} value={value} data-testid={`appearance-${value}`}>
-                    <Icon aria-hidden />
-                    {tUi(`appearance.${value}`)}
-                  </DropdownMenuRadioItem>
-                )
-              })}
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem data-testid="sign-out"
-              onSelect={() => void signOut().then(() => {
-                forgetAttempts()
-                toSignIn()
-              })}>
-              <LogOut aria-hidden />
-              {t('signOut')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* F-F4: the welcome step has no bottom menu and so no "Me": signing out is here. */}
+        {welcome && (
+          <Button variant="ghost" size="sm" onClick={signOut} data-testid="sign-out">
+            <LogOut aria-hidden />
+            {t('signOut')}
+          </Button>
+        )}
       </div>
     </header>
-  )
-}
-
-/**
- * The bottom navigation of a phone app, kept on screen; the current page is marked for assistive technology. The
- * inbox's entry carries the unread count (its name says it too), refreshed as `useUnread` says.
- */
-function BottomNav({ path }: { path: string }) {
-  const { t } = useTranslation(APP)
-  const unread = useUnread()
-  // A publication's page belongs to home, an attempt's to the history, the payout account and the Kudos by method
-  // (Q58) and the parts of My Kudos (Q62) to My Kudos, a message to the inbox, the staff's counter (Q39) and the
-  // account's parts (Q56) to the account.
-  const item = itemPage(path)
-  const section = item ? (item.page === 'p' ? HOME : HISTORY) : isWalletPath(path) ? WALLET_PATH
-    : inboxItemOf(path) || path === CONVERSATIONS_PATH || conversationOf(path) ? INBOX_PATH : path === STAFF_PATH || path === HANDLED_PATH || isAccountPath(path) || isMapsPath(path) ? ACCOUNT_PATH : path
-  return (
-    <nav aria-label={t('nav.label')}
-      className="bg-card fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-12px_var(--overlay)]">
-      <ul className="mx-auto flex max-w-md">
-        {NAV.map((item) => {
-          const Icon = item.icon
-          const current = section === item.path
-          const badge = item.path === INBOX_PATH && unread > 0 ? badgeText(unread) : null
-          return (
-            <li key={item.path} className="flex-1">
-              <Link to={item.path} current={current} data-testid={`nav-${item.path.replace('/', '') || 'home'}`}
-                aria-label={badge ? t('inbox.navUnread', { count: badge }) : undefined}
-                className={cn('flex flex-col items-center gap-0.5 py-2 text-xs',
-                  current ? 'text-primary font-medium' : 'text-muted-foreground hover:text-foreground')}>
-                <span className="relative">
-                  <Icon aria-hidden className="size-5" />
-                  {badge && (
-                    <span aria-hidden data-testid="nav-inbox-badge"
-                      className={cn('bg-destructive text-destructive-foreground absolute -top-1.5 left-3 min-w-4',
-                        'rounded-full px-1 text-center text-[10px] leading-4 font-semibold')}>
-                      {badge}
-                    </span>
-                  )}
-                </span>
-                {t(item.key)}
-              </Link>
-            </li>
-          )
-        })}
-      </ul>
-    </nav>
   )
 }
 
@@ -414,6 +289,8 @@ function SignedIn({ path }: { path: string }) {
   if (path === WELCOME) page = <WelcomePage profile={profile.data} />
   else if (path === HOME) page = <FeedPage name={complete?.displayName || displayName || ''} country={country} />
   else if (path === HISTORY) page = <HistoryPage />
+  else if (path === PRIZES_PATH) page = <PrizesPage />
+  else if (path === MY_PASSES_PATH) page = <MyPassesPage />
   else if (path === PAYOUT_PATH) page = <PayoutPage />
   else if (path === BANK_PATH) page = <BankPage />
   else if (kudosMethodOf(path)) page = <KudosMethodPage key={path} method={kudosMethodOf(path)!} />
@@ -443,20 +320,21 @@ function SignedIn({ path }: { path: string }) {
   // The navigation is the app's; the welcome step stands alone, and answering keeps the screen to the question.
   const nav = path !== WELCOME && item?.page !== 'play'
   const pages = (
-    <div className="flex min-h-full flex-col">
-      <Header scan={nav && path !== SCAN_PATH} search={nav} />
+    <AppFrame nav={nav}>
+      <Header search={nav} welcome={path === WELCOME} />
       {/* Q65: the one video player, laid over the place that shows it. The home and a start page begin right under
           the header (Q66). */}
       <VideoStage />
-      <main className={cn('mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-4', nav && 'pb-24',
+      {/* Under the bottom menu of a phone the page keeps clear of it (F-F4); a wide screen has none. */}
+      <main className={cn('mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-4',
+        nav && 'pb-[calc(var(--bottom-bar-height)+env(safe-area-inset-bottom)+1rem)] md:pb-4',
         (path === HOME || item?.page === 'p') && 'pt-0')}>
         <OfflineBanner />
         <PwaUpdatePrompt />
         <VerifyEmailBanner />
         {page}
       </main>
-      {nav && <BottomNav path={path} />}
-    </div>
+    </AppFrame>
   )
   // Whoever completed the profile before the texts in effect accepts them first (D-Q7-5); registration's second
   // step accepts them with the profile.

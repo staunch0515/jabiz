@@ -12,6 +12,7 @@ import {
   tokenOf,
   unique,
   verifiedUser,
+  takerArea,
 } from './support'
 
 /*
@@ -101,14 +102,15 @@ test('after a change of substance a Taker accepts again on signing in; a rewordi
   expect(await refused.text()).toContain('QB_CONSENT_REQUIRED')
 
   // The page read the texts before the change: the server's refusal brings the prompt up at once (review M3).
-  await page.getByTestId('nav-wallet').click()
+  await takerArea(page, 'me').click()
+  await page.getByTestId('me-number-kudos').click()
   await page.getByTestId('wallet-payout').click()
   await page.getByTestId('payout-onboard').click()
   const gate = page.getByTestId('consent-gate')
   await expect(gate).toBeVisible()
   await expect(gate.getByTestId('consent-item-TERMS_APP')).toContainText(`Version ${version}`)
   await expect(gate.getByTestId('consent-item-TERMS_APP')).toContainText('Changed for the tests')
-  await expect(page.getByTestId('nav-home')).toHaveCount(0)
+  await expect(takerArea(page, 'home')).toHaveCount(0)
   await expect(page.getByTestId('consent-accept')).toBeDisabled()
   await page.getByTestId('consent-agree').click()
   await page.getByTestId('consent-accept').click()

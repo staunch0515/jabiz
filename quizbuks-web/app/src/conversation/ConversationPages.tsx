@@ -22,7 +22,8 @@ import { APP } from '../messages'
 import { QB } from '../qb/messages'
 import { problemText } from '../qb/problems'
 import { Link, navigate } from '../qb/router'
-import { TitleBadge } from '../pages/TitleBadge'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 import { reportConversation } from '../report/api'
 import { REPORT_NOTE_LENGTH } from '../report/ids'
 import {
@@ -35,7 +36,6 @@ import {
   openConversation,
   readBlocks,
   readConversations,
-  readConversationsUnread,
   readMessages,
   sendMessage,
   unblockSponsor,
@@ -51,19 +51,16 @@ export function ConversationsPage() {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   const list = useQuery({ queryKey: [...CONVERSATIONS_QUERY, 'list'], queryFn: () => readConversations() })
-  if (list.isPending) return <PageState kind="loading" />
-  if (list.isError) {
-    return <PageState kind="error" description={problemText(list.error)}
-      action={<Button variant="outline" onClick={() => void list.refetch()}>{tQb('retry')}</Button>} />
-  }
   return (
     <div className="flex flex-col gap-4" data-testid="conversations">
-      <h1 className="flex items-center gap-2 text-2xl font-semibold">
-        <TitleBadge icon={MessagesSquare} />
-        {t('conversation.list.title')}
-      </h1>
+      <AreaHeader area="messages" tab="conversations" title={t('frame.areas.messages')} />
       <p className="text-muted-foreground text-sm">{t('conversation.list.intro')}</p>
-      {list.data.length === 0 ? (
+      {list.isPending ? (
+        <PageState kind="loading" />
+      ) : list.isError ? (
+        <PageState kind="error" description={problemText(list.error)}
+          action={<Button variant="outline" onClick={() => void list.refetch()}>{tQb('retry')}</Button>} />
+      ) : list.data.length === 0 ? (
         <p className="text-muted-foreground text-sm" data-testid="conversations-empty">{t('conversation.list.empty')}</p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -400,22 +397,5 @@ export function ContactSponsor({ publicationId, company }: { publicationId: stri
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-/** The inbox's way to the conversations (Q82), with how many have a reply not read yet. */
-export function ConversationsLink() {
-  const { t } = useTranslation(APP)
-  const unread = useQuery({ queryKey: [...CONVERSATIONS_QUERY, 'unread'], queryFn: readConversationsUnread,
-    refetchOnWindowFocus: false })
-  return (
-    <Link to={CONVERSATIONS_PATH} data-testid="inbox-conversations"
-      className="hover:bg-accent flex items-center gap-2 rounded-lg border p-3 text-sm">
-      <MessagesSquare aria-hidden className="size-4" />
-      <span className="flex-1">{t('conversation.list.title')}</span>
-      {(unread.data ?? 0) > 0 && (
-        <Badge data-testid="inbox-conversations-unread">{t('conversation.list.unread', { count: unread.data })}</Badge>
-      )}
-    </Link>
   )
 }

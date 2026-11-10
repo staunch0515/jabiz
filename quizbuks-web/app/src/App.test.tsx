@@ -549,7 +549,7 @@ describe('a signed-in Taker', () => {
       displayName: 'Mei Tanaka', countryCode: 'JP', city: 'Osaka', preferredCurrency: 'JPY', baseRevision: null } })
     expect(await screen.findByTestId('home')).toHaveTextContent('Mei Tanaka')
     expect(screen.getByRole('navigation', { name: 'App' })).toBeInTheDocument()
-    expect(screen.getByTestId('nav-home')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('bottom-bar-home')).toHaveAttribute('aria-current', 'page')
   })
 
   it('unverified, browses the app with the banner rather than being held at the welcome page', async () => {
@@ -581,27 +581,67 @@ describe('a signed-in Taker', () => {
     expect(await screen.findByTestId('home')).toHaveTextContent('Mei')
   })
 
-  it('keeps the header to the name and one menu: scanning, the appearance and signing out (Q62)', async () => {
+  it('keeps the header to the name, the filters and the search: no menu at the top right (F-F4)', async () => {
     server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 3 } })
     window.history.replaceState(null, '', '/')
-    const user = userEvent.setup()
     render(<App />)
     expect(await screen.findByTestId('home')).toBeInTheDocument()
     const header = screen.getByRole('banner')
-    // Q63: the home's search beside the menu, at the right.
-    // Q64: the home's filters beside it.
+    // Q63: the home's search at the right. Q64: the home's filters beside it.
     expect(within(header).getAllByRole('button').map((b) => b.dataset.testid))
-      .toEqual(['feed-filters-open', 'search-open', 'app-menu'])
+      .toEqual(['feed-filters-open', 'search-open'])
+    expect(screen.queryByTestId('app-menu')).toBeNull()
     expect(within(header).queryByTestId('sign-out')).toBeNull()
-    await user.click(within(header).getByTestId('app-menu'))
-    const menu = await screen.findByRole('menu')
-    expect(within(menu).getByTestId('scan-open')).toHaveTextContent('Scan')
-    await user.click(within(menu).getByRole('menuitemradio', { name: 'Dark' }))
-    expect(document.documentElement).toHaveClass('dark')
-    await user.click(within(header).getByTestId('app-menu'))
-    expect(await screen.findByRole('menuitemradio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'true')
     await expectAccessible()
-    await user.click(screen.getByTestId('sign-out'))
+  })
+
+  it('shows the bottom menu of five, scanning in the middle, and the left column beside it (F-F4)', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 3 } })
+    window.history.replaceState(null, '', '/')
+    render(<App />)
+    expect(await screen.findByTestId('home')).toBeInTheDocument()
+    const bottom = screen.getByRole('navigation', { name: 'App' })
+    expect(within(bottom).getAllByRole('link').map((link) => link.dataset.testid)).toEqual([
+      'bottom-bar-home', 'bottom-bar-history', 'bottom-bar-scan', 'bottom-bar-messages', 'bottom-bar-me'])
+    expect(within(bottom).getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Home', 'Answered', 'Scan', 'Messages', 'Me'])
+    // The two are one frame switched by the width in CSS: the phone's by `md:hidden`, the wide screen's the other way.
+    expect(screen.getByTestId('bottom-menu')).toHaveClass('md:hidden')
+    const rail = screen.getByRole('navigation', { name: 'Main menu' })
+    expect(rail).toHaveClass('hidden', 'md:flex')
+    expect(within(rail).getAllByRole('link').map((link) => link.dataset.testid)).toEqual([
+      'side-rail-home', 'side-rail-history', 'side-rail-scan', 'side-rail-messages', 'side-rail-me'])
+    expect(within(rail).getByTestId('side-rail-home')).toHaveAttribute('aria-current', 'page')
+    await userEvent.click(within(bottom).getByTestId('bottom-bar-scan'))
+    expect(window.location.pathname).toBe('/scan')
+    expect(within(screen.getByRole('navigation', { name: 'App' })).getByTestId('bottom-bar-scan'))
+      .toHaveAttribute('aria-current', 'page')
+  })
+
+  it('has no bottom menu or column on the welcome step, which signs out from its header', async () => {
+    server({ profile: null })
+    window.history.replaceState(null, '', '/welcome')
+    render(<App />)
+    expect(await screen.findByTestId('profile-name')).toBeInTheDocument()
+    expect(screen.queryByTestId('bottom-menu')).toBeNull()
+    expect(screen.queryByTestId('side-rail')).toBeNull()
+    await userEvent.click(within(screen.getByRole('banner')).getByTestId('sign-out'))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+  })
+
+  it('signs out from the bottom of "Me", and picks the appearance in the app settings (F-F4)', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 3 } })
+    window.history.replaceState(null, '', '/account/preferences')
+    const user = userEvent.setup()
+    render(<App />)
+    const group = await screen.findByTestId('appearance-choices')
+    await user.click(within(group).getByTestId('appearance-dark'))
+    expect(document.documentElement).toHaveClass('dark')
+    expect(within(group).getByTestId('appearance-dark')).toHaveAttribute('aria-pressed', 'true')
+    expect(within(group).getByTestId('appearance-light')).toHaveAttribute('aria-pressed', 'false')
+    await expectAccessible()
+    await user.click(screen.getByTestId('account-back'))
+    await user.click(await screen.findByTestId('sign-out'))
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
   })
 
@@ -613,8 +653,12 @@ describe('a signed-in Taker', () => {
     expect(await within(menu).findByTestId('account-who')).toHaveTextContent('Mei · mei@example.com')
     const settings = within(menu).getByRole('navigation', { name: 'Settings' })
     expect(within(settings).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
-      '/account/profile', '/account/details', '/account/certificates', '/account/security', '/account/mail', '/account/preferences',
-      '/account/id'])
+      '/account/profile', '/account/details', '/account/security', '/account/mail', '/account/blocks',
+      '/account/preferences', '/account/id', '/help', '/legal/terms', '/legal/privacy', '/legal/contest-rules',
+      '/about'])
+    const owned = within(menu).getByRole('navigation', { name: 'What I have' })
+    expect(within(owned).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      '/history/prizes', '/account/certificates', '/maps', '/referrals', '/wallet'])
     expect(within(menu).getByTestId('account-menu-security')).toHaveTextContent('Sign-in and security')
     // Only the menu: no form of a part on it.
     expect(screen.queryByTestId('profile-name')).toBeNull()
@@ -624,8 +668,8 @@ describe('a signed-in Taker', () => {
     expect(window.location.pathname).toBe('/account/security')
     expect(await screen.findByRole('heading', { level: 1, name: 'Sign-in and security' })).toBeInTheDocument()
     expect(screen.getByTestId('account-email')).toHaveTextContent('mei@example.com')
-    // The bottom navigation still marks the account.
-    expect(screen.getByTestId('nav-account')).toHaveAttribute('aria-current', 'page')
+    // The bottom menu still marks "Me".
+    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
     await userEvent.click(screen.getByTestId('account-back'))
     expect(window.location.pathname).toBe('/account')
     expect(await screen.findByTestId('account-menu-profile')).toBeInTheDocument()

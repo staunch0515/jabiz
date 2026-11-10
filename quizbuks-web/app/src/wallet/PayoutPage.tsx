@@ -21,6 +21,8 @@ import {
 import './messages'
 import { pollUntil } from './poll'
 import { goToStripe, stripePageUrl } from './stripePage'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 
 /** How long the page waits for Stripe's link, and for Stripe's report after the taker came back. */
 export const LINK_TIMEOUT_MS = 60_000
@@ -194,7 +196,7 @@ export function PayoutPage() {
   return (
     <section className="flex flex-col gap-4" aria-labelledby="payout-title" data-testid="payout">
       {backLink}
-      <h1 id="payout-title" className="text-xl font-semibold">{t('payout.title')}</h1>
+      <AreaHeader area="me" id="payout-title" title={t('payout.title')} />
       <p className="text-muted-foreground text-sm">{t('payout.intro')}</p>
       {account.isError && (
         <Alert variant="destructive"><AlertDescription>{problemText(account.error)}</AlertDescription></Alert>

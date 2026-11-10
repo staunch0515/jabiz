@@ -1,37 +1,21 @@
-import { getAccountDeletion, useAuth, type IdentityLinked } from '@jabiz/client'
-import { BecomeSponsor } from '../mysponsor/BecomeSponsor'
-import { TitleBadge } from './TitleBadge'
+import type { IdentityLinked } from '@jabiz/client'
 import { AccountDeletion, PageState, PushPreferences } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
-import {
-  ArrowLeft,
-  Award,
-  CircleHelp,
-  FileText,
-  IdCard,
-  Info,
-  Mail,
-  Network,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
-  Trash2,
-  UserRound,
-  type LucideIcon,
-} from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AppearanceChoice } from '../frame/AppearanceChoice'
+import { AreaHeader } from '../frame/AreaHeader'
+import { MePage } from '../frame/MePage'
+import '../frame/messages'
 import { APP } from '../messages'
 import { AccountInstallEntry } from '../install'
 import { AccountSection, MailSection, SecuritySections } from '../qb/AccountSections'
 import { readMyProfile } from '../qb/api'
 import { LanguageSelect } from '../qb/LanguageSelect'
 import { QB } from '../qb/messages'
-import { legalPath } from '../qb/legal'
 import { SoundSwitch } from '../qb/SoundSettings'
 import { Link, navigate, Redirect } from '../qb/router'
-import { MenuItem, MenuList } from './Menu'
-import { MAPS_PATH } from '../maps/paths'
 import { LikedTopics } from './LikedTopics'
 import { BlockList } from '../blocks/BlockList'
 import { ProfileDetails } from './ProfileDetails'
@@ -39,31 +23,30 @@ import { QuizLanguages } from './QuizLanguages'
 import { PROFILE_QUERY, ProfileForm } from './ProfileForm'
 import { StaffAccount } from '../staff/StaffAccount'
 import { CertificatesPart } from '../certificates/CertificatesPart'
+import {
+  ACCOUNT_BLOCKS_PATH,
+  ACCOUNT_DELETION_PATH,
+  ACCOUNT_DETAILS_PATH,
+  ACCOUNT_PARTS,
+  ACCOUNT_PATH,
+  ACCOUNT_SECURITY_PATH,
+  accountPath,
+  isAccountPath,
+  type AccountPart,
+} from './accountPaths'
 
-/** The account's menu (Q56); each part of the account is a page of its own under it. */
-export const ACCOUNT_PATH = '/account'
-
-/** The parts of the account, each at `/account/<part>` (docs/quizbuks/plans/Q56-account-menu.md). */
-export const ACCOUNT_PARTS = ['profile', 'details', 'certificates', 'security', 'mail', 'preferences', 'id'] as const
-export type AccountPart = (typeof ACCOUNT_PARTS)[number]
-
-/** Deleting the account (Q71): its own page, in the menu only where the entry allows it. */
-export const ACCOUNT_DELETION_PATH = `${ACCOUNT_PATH}/delete`
-
-/** A part's page. */
-export function accountPath(part: AccountPart): string {
-  return `${ACCOUNT_PATH}/${part}`
-}
-
-/** The details for matching (Q47), from a quiz the caller's profile does not match. */
-export const ACCOUNT_DETAILS_PATH = accountPath('details')
-
-/** Where a round trip through an identity provider to link an account comes back to, and the step-up's setup. */
-export const ACCOUNT_SECURITY_PATH = accountPath('security')
-
-/** Whether a path is the account's menu or one of its parts (the bottom navigation marks the account for all). */
-export function isAccountPath(path: string): boolean {
-  return path === ACCOUNT_PATH || path.startsWith(`${ACCOUNT_PATH}/`)
+// The addresses live in `accountPaths.ts` (no imports, so that `frame/areas.ts` can read them too); the pages that
+// were used to take them from here still can.
+export {
+  ACCOUNT_BLOCKS_PATH,
+  ACCOUNT_DELETION_PATH,
+  ACCOUNT_DETAILS_PATH,
+  ACCOUNT_PARTS,
+  ACCOUNT_PATH,
+  ACCOUNT_SECURITY_PATH,
+  accountPath,
+  isAccountPath,
+  type AccountPart,
 }
 
 /** The part a path names; null for the menu, undefined for a part there is not. */
@@ -86,28 +69,20 @@ function takeLinked(): IdentityLinked | null {
   return linked
 }
 
-const ICONS: Record<AccountPart, LucideIcon> = {
-  profile: UserRound,
-  details: Sparkles,
-  certificates: Award,
-  security: ShieldCheck,
-  mail: Mail,
-  preferences: SlidersHorizontal,
-  id: IdCard,
-}
-
 /**
- * The taker's own account (U-70, U-71; M-02 for sign-ins), as a menu of its parts (Q56): the profile, the details for
+ * "Me" and the parts of the account under it (U-70, U-71; M-02 for sign-ins; Q56, F-F4): the profile, the details for
  * matching (Q47), signing in and security (the address, which cannot be changed, U-70; the password, two-step
- * verification, linked accounts, the sessions and the latest sign-ins), the notifications (the mail, Q7a; push on this device, platform 17k), the app's settings (the
- * interface language, the sound effects, installing the app), the taker's ID and their place on a sponsor's staff (Q39); then help and
- * the legal texts. The old `/account?section=details` leads to the details (`frame/areas.ts`, `LEGACY_APP_PATHS`).
+ * verification, linked accounts, the sessions and the latest sign-ins), the notifications (the mail, Q7a; push on this
+ * device, platform 17k), blocks and topics (F-S8, F-S9), the app's settings (the interface language, the sound
+ * effects, the appearance, installing the app), and the taker's ID and their place on a sponsor's staff (Q39). The
+ * menu itself is `frame/MePage.tsx`. The old `/account?section=details` leads to the details (`frame/areas.ts`,
+ * `LEGACY_APP_PATHS`).
  */
 export function AccountPage({ path }: { path: string }) {
   const part = partOf(path)
   if (path === ACCOUNT_DELETION_PATH) return <DeletionPage />
   if (part === undefined) return <Redirect to={ACCOUNT_PATH} />
-  if (part === null) return <AccountMenu />
+  if (part === null) return <MePage />
   return <AccountPartPage part={part} />
 }
 
@@ -123,64 +98,15 @@ function partTitle(part: AccountPart, tApp: T): string {
   }
 }
 
-/** The menu: who is signed in, the parts, and help and information. */
-function AccountMenu() {
-  const { t } = useTranslation(QB)
-  const { t: tApp } = useTranslation(APP)
-  const { email } = useAuth()
-  const profile = useQuery({ queryKey: PROFILE_QUERY, queryFn: readMyProfile })
-  const name = profile.data?.displayName
+/** The way back to "Me" above a part's title. */
+function BackToMe() {
+  const { t } = useTranslation(APP)
   return (
-    <section className="flex flex-col gap-6" aria-labelledby="account-title" data-testid="account">
-      <div className="flex items-center gap-3">
-        <TitleBadge>{(name || email || '?').trim().charAt(0).toUpperCase()}</TitleBadge>
-        <div className="min-w-0">
-          <h1 id="account-title" className="text-xl font-semibold">{t('account.title')}</h1>
-          <p className="text-muted-foreground truncate text-sm" data-testid="account-who">
-            {name && email ? `${name} · ${email}` : name || email}
-          </p>
-        </div>
-      </div>
-      <MenuList label={tApp('account.settings')}>
-        {ACCOUNT_PARTS.map((part) => (
-          <MenuItem key={part} to={accountPath(part)} icon={ICONS[part]} title={partTitle(part, tApp)}
-            hint={tApp(`account.hints.${part}`)} testId={`account-menu-${part}`} />
-        ))}
-      </MenuList>
-      {/* F-S3c: the knowledge maps. */}
-      <MenuList label={tApp('maps.group')} testId="account-learning">
-        <MenuItem to={MAPS_PATH} icon={Network} title={tApp('maps.menu')} hint={tApp('maps.menuHint')}
-          testId="account-menu-maps" />
-      </MenuList>
-      {/* Q69: a taker who is no sponsor may apply, with the certification. */}
-      <BecomeSponsor />
-      <MenuList label={tApp('account.info')} testId="account-info">
-        <MenuItem to="/help" icon={CircleHelp} title={t('help.title')} />
-        <MenuItem to={legalPath('TERMS_APP')} icon={FileText} title={t('legal.kinds.TERMS_APP')} />
-        <MenuItem to={legalPath('PRIVACY')} icon={FileText} title={t('legal.kinds.PRIVACY')} />
-        <MenuItem to={legalPath('CONTEST_RULES')} icon={FileText} title={t('legal.kinds.CONTEST_RULES')} />
-        <MenuItem to="/about" icon={Info} title={tApp('account.about')} testId="account-about" />
-      </MenuList>
-      <DeletionEntry />
-    </section>
-  )
-}
-
-const DELETION_QUERY = ['qb', 'account-deletion']
-
-/**
- * The menu's way to deleting the account (Q71; Apple 5.1.1(v)): where the app entry allows it
- * (`QB_APP_ACCOUNT_DELETION`), or while a request is pending even if it no longer does.
- */
-function DeletionEntry() {
-  const { t: tApp } = useTranslation(APP)
-  const status = useQuery({ queryKey: DELETION_QUERY, queryFn: getAccountDeletion, retry: false })
-  if (!status.data || !(status.data.available || status.data.pending)) return null
-  return (
-    <MenuList label={tApp('account.deletion.group')} testId="account-deletion-menu">
-      <MenuItem to={ACCOUNT_DELETION_PATH} icon={Trash2} title={tApp('account.deletion.title')}
-        hint={tApp('account.deletion.menuHint')} testId="account-menu-delete" />
-    </MenuList>
+    <Link to={ACCOUNT_PATH} data-testid="account-back"
+      className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm">
+      <ArrowLeft aria-hidden className="size-4" />
+      {t('account.back')}
+    </Link>
   )
 }
 
@@ -190,12 +116,8 @@ function DeletionPage() {
   return (
     <section className="flex flex-col gap-6" aria-labelledby="account-part-title" data-testid="account-delete-page">
       <div className="flex flex-col gap-2">
-        <Link to={ACCOUNT_PATH} data-testid="account-back"
-          className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm">
-          <ArrowLeft aria-hidden className="size-4" />
-          {tApp('account.back')}
-        </Link>
-        <h1 id="account-part-title" className="text-xl font-semibold">{tApp('account.deletion.title')}</h1>
+        <BackToMe />
+        <AreaHeader area="me" id="account-part-title" title={tApp('account.deletion.title')} />
       </div>
       <p className="text-muted-foreground text-sm">{tApp('account.deletion.hint')}</p>
       <AccountDeletion />
@@ -209,12 +131,8 @@ function AccountPartPage({ part }: { part: AccountPart }) {
   return (
     <section className="flex flex-col gap-6" aria-labelledby="account-part-title" data-testid={`account-${part}-page`}>
       <div className="flex flex-col gap-2">
-        <Link to={ACCOUNT_PATH} data-testid="account-back"
-          className="text-muted-foreground hover:text-foreground inline-flex w-fit items-center gap-1 text-sm">
-          <ArrowLeft aria-hidden className="size-4" />
-          {tApp('account.back')}
-        </Link>
-        <h1 id="account-part-title" className="text-xl font-semibold">{partTitle(part, tApp)}</h1>
+        <BackToMe />
+        <AreaHeader area="me" id="account-part-title" title={partTitle(part, tApp)} />
       </div>
       <PartContent part={part} />
     </section>
@@ -229,16 +147,28 @@ function PartContent({ part }: { part: AccountPart }) {
     case 'security': return <SecurityPart />
     case 'mail': return <MailPart />
     case 'preferences': return <PreferencesPart />
+    case 'blocks': return <BlocksPart />
     case 'id': return <div className="flex flex-col gap-8"><StaffAccount /></div>
   }
 }
 
-/** "About me": the details for matching (Q47) and, F-S9, the topics liked with strict mode. */
+/** "About me": the details for matching (Q47). The topics liked moved to "Blocks and topics" (F-F4). */
 function DetailsPart() {
-  const { t: tApp } = useTranslation(APP)
   return (
     <div className="flex flex-col gap-8">
       <div data-testid="account-details"><ProfileDetails /></div>
+    </div>
+  )
+}
+
+/** "Blocks and topics" (F-F4): everything blocked, each unblocked on its own (F-S8), and the topics liked (F-S9). */
+function BlocksPart() {
+  const { t: tApp } = useTranslation(APP)
+  return (
+    <div className="flex flex-col gap-8">
+      <AccountSection title={tApp('blocks.title')} testId="account-blocks">
+        <BlockList />
+      </AccountSection>
       <AccountSection title={tApp('topics.title')} testId="account-topics">
         <LikedTopics />
       </AccountSection>
@@ -285,7 +215,7 @@ function MailPart() {
   )
 }
 
-/** The app's own settings: the interface language, the quizzes' languages (Q59a), the sound (Q57), installing the app. */
+/** The app's own settings: the interface language, the quizzes' languages (Q59a), the sound (Q57), the appearance, installing the app. */
 function PreferencesPart() {
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
@@ -300,9 +230,9 @@ function PreferencesPart() {
       <AccountSection title={t('sound.title')} testId="account-sound">
         <SoundSwitch />
       </AccountSection>
-      {/* F-S8: everything blocked, each unblocked on its own. */}
-      <AccountSection title={tApp('blocks.title')} testId="account-blocks">
-        <BlockList />
+      {/* F-F4: the choice the top-right menu had. */}
+      <AccountSection title={tApp('account.appearance')} testId="account-appearance">
+        <AppearanceChoice />
       </AccountSection>
       <AccountInstallEntry />
     </div>

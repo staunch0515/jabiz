@@ -46,7 +46,7 @@ Takers' pages open inside the app; every other page opens in Safari.
 
 Shops publish quizzes on a separate website. Nothing can be bought in the app. Every quiz is reviewed before it is
 published; users can report a quiz from its page. Apple is not a Sponsor of the prizes; the official rules are
-linked from every quiz. Accounts can be deleted from Account → Delete account.
+linked from every quiz. Accounts can be deleted from Me → Delete account.
 ```
 
 - **联系信息**：需求方的姓名、电话与邮箱（Apple 只用于审核联系）。

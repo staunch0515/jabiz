@@ -26,6 +26,11 @@ export interface TakerWallet {
   heldOpen: number
   /** When the last reward held for its age only is free; null without one. */
   heldUntil: string | null
+  /**
+   * Whether Kudos can be used yet: transfers or bank withdrawals are switched on (F-F4). False shows "Coming soon"
+   * beside the Kudos; null when the server does not say.
+   */
+  usable: boolean | null
 }
 
 /** What may be transferred: what the taker has less what is held back. */
@@ -86,6 +91,7 @@ export async function readWallet(): Promise<TakerWallet> {
     held: row.held == null ? null : num(row.held),
     heldOpen: num(row.heldOpen),
     heldUntil: str(row.heldUntil),
+    usable: typeof row.usable === 'boolean' ? row.usable : null,
   }
 }
 
@@ -290,5 +296,7 @@ export function isWalletPath(path: string): boolean {
   return path === WALLET_PATH || path.startsWith(`${WALLET_PATH}/`)
 }
 export const WALLET_QUERY = ['qb', 'taker-wallet'] as const
+/** The wallet's summary: My Kudos' page and the number on "Me" read it with one request. */
+export const WALLET_SUMMARY_QUERY = [...WALLET_QUERY, 'summary'] as const
 export const PAYOUT_QUERY = [...WALLET_QUERY, 'payout-account'] as const
 export const BANK_QUERY = [...WALLET_QUERY, 'bank-account'] as const

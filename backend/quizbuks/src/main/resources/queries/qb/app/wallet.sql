@@ -1,6 +1,6 @@
 /*---
 id: qb.app.wallet
-description: The taker's wallet (U-50) - what is available, earned in all, waiting for the sponsors, on its way out, and what is held back from transfers
+description: The taker's wallet (U-50) - what is available, earned in all, waiting for the sponsors, on its way out, what is held back from transfers, and whether Kudos can be used yet
 entities: [LedgerEntry, LedgerAccount, LedgerTransaction, QbAttempt, QbPublicationCard, QbTopUp, SysParam]
 datasets:
   LedgerEntry: urn:jabiz:dataset:taker:LedgerEntry
@@ -19,6 +19,7 @@ results:
   held:          { kind: { type: monetary, currency: JPY, scale: 0 } }
   heldOpen:      { kind: { type: monetary, currency: JPY, scale: 0 } }
   heldUntil:     { kind: { type: temporal, role: EVENT_TIME } }
+  usable:        { kind: { type: bool } }
 permissions: [qb.me]
 ---*/
 -- The caller's own ledger lines (party = the caller, indexed) and attempts: one row. Available is account 2120 for
@@ -123,7 +124,8 @@ SELECT
     coalesce(l.l_transfer, 0)  AS inTransfer,
     CASE WHEN CAST(:at AS timestamptz) IS NOT NULL AND EXISTS (SELECT 1 FROM hold) THEN h.held END AS held,
     CASE WHEN CAST(:at AS timestamptz) IS NOT NULL AND EXISTS (SELECT 1 FROM hold) THEN h.held_open END AS heldOpen,
-    CASE WHEN CAST(:at AS timestamptz) IS NOT NULL AND EXISTS (SELECT 1 FROM hold) THEN h.held_until END AS heldUntil
+    CASE WHEN CAST(:at AS timestamptz) IS NOT NULL AND EXISTS (SELECT 1 FROM hold) THEN h.held_until END AS heldUntil,
+    u.usable                   AS usable
 FROM (
     SELECT
         sum(CASE WHEN a.{{LedgerAccount.accountCode}} = '2120' THEN CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT'
@@ -142,3 +144,9 @@ CROSS JOIN (
     FROM {{QbAttempt}} m
     WHERE m.{{QbAttempt.rewardStatus}} = 'PENDING') p
 CROSS JOIN holds h
+CROSS JOIN (
+    -- F-F4: "coming soon" is shown while neither way of using Kudos is on (transfers, bank withdrawals): the switches
+    -- themselves, so that switching one on removes the label (launch step F-F10) without a change of the App.
+    SELECT coalesce(bool_or(p.{{SysParam.paramKey}} IN ('qb.transfer.enabled', 'qb.withdrawal.bank.enabled')
+                            AND p.{{SysParam.value}} = 'true'), false) AS usable
+    FROM {{SysParam}} p) u

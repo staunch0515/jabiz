@@ -20,6 +20,8 @@ import {
   type HandledPeriod,
 } from './api'
 import './messages'
+import { AreaHeader } from '../frame/AreaHeader'
+import '../frame/messages'
 
 const PAGE = 20
 
@@ -64,7 +66,7 @@ export function StaffHandledPage() {
   return (
     <section className="flex flex-col gap-4" data-testid="staff-handled">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">{t('staff.handled.title')}</h1>
+        <AreaHeader area="me" title={t('staff.handled.title')} />
         <p className="text-muted-foreground text-sm">{t('staff.handled.intro', { sponsor })}</p>
       </div>
       <Button asChild className="w-fit">

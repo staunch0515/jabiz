@@ -339,3 +339,11 @@ F-F4a 先合，使基线截图出自未改动的界面；F-F4b、F-F4c 不得更
 - 2026-11-10：需求方要求完成并合并；按总控的决定加了 `home-baselines` 作业（§15）。下一步：总控在本分支运行它 → 看图 → 推送一次触发整轮 → 连续两次整轮都绿 → 转 ready。
 - 2026-11-10：总控运行 `home-baselines`（run 42727330030，成功），12 张基线由 CI 提交（`53e0ef3d`）；S3 逐张看过：卡片与短视频一排、没有匹配时的空状态、页头左半，亮暗与三种宽度都完整，没有加载中的占位或残缺的图片。下一步：草稿轮绿 → ready → 整轮连续两次都绿 → 合并。
 - 之后：F-F4b（外框、我的、消息、待领奖、出示领奖码、`qb.app.prizes` 与 `qb.app.wallet.usable`、e2e、帮助、CLAUDE.md §5）、F-F4c（发布详情标签与固定的开始答题）。F-F4b/c 不得更新首页基线。
+- 2026-11-10：F-F4b 在分支 `1.3/quizbuks-ff4b-taker-frame`（F-F4a、F-F3 已合入的 `origin/1.3/quizbuks`）实现，未开 PR。与计划不同或补充之处：
+  1. 底部菜单与左列**同时画出**、由 CSS（`md:hidden` / `hidden md:flex`）切换，所以单元测试断言类名与两份导航（`bottom-bar-<键>`、`side-rail-<键>`），不以 `matchMedia` 模拟；e2e 用 `takerArea()` 取当前可见的那一个。
+  2. "知识结构图"已由 F-S3c 放在 `/maps`（入口在"我拥有的"），不另设 `/account/map`；`/account/id` 改名"店员柜台"，标题键 `account.titles.id`。
+  3. 徽标只问一次：`AppFrame` 调用 `useUnread` / `useConversationsUnread` / `useOpenPrizes`，标签上的数字只读缓存（两份询问各挂一个"回到前台"的监听会多问一次）。进入另一个区域时作废 `PRIZES_QUERY`（已领取、已确认的随即消失），仍不轮询。
+  4. 外观在"App 设置"是三个 `aria-pressed` 的按钮（`appearance-<值>` 沿用），不是菜单里的单选项。
+  5. `qb.app.prizes` 多一列 `code`（现金与到店的编码，状态行沿用 `history.cash.*`），其余同 §4.1；`ACCOUNT_*` 地址移到无依赖的 `pages/accountPaths.ts`、`SCAN_PATH` 移到 `scan/path.ts`（`frame/areas.ts` 读它们，避免与页面互相引用），原处仍再导出。
+  6. 首页只改了一处：严格主题提示的"更改"链接指向 `/account/blocks`（主题已移到那里）；像素基线未动。
+  下一步：F-F4c（发布详情的四个标签与固定的"开始答题"）。

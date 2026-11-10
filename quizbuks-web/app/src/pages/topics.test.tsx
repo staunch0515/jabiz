@@ -125,9 +125,9 @@ describe('liked topics and strict mode (F-S9)', () => {
       expect.objectContaining({ strictTopics: false })))
   })
 
-  it('shows them in the account\'s "about me" and says on the home that only liked topics show', async () => {
+  it('shows them in "Blocks and topics" and says on the home that only liked topics show', async () => {
     server({ likedTopics: 'travel', strictTopics: true })
-    window.history.replaceState(null, '', '/account/details')
+    window.history.replaceState(null, '', '/account/blocks')
     const { container } = render(<App />)
     expect(await screen.findByTestId('account-topics')).toHaveTextContent('Topics you like')
     expect(await screen.findByTestId('liked-topic-travel')).toBeChecked()
@@ -136,6 +136,6 @@ describe('liked topics and strict mode (F-S9)', () => {
     render(<App />)
     expect(await screen.findByTestId('home-strict-topics')).toHaveTextContent('Showing only the topics you like.')
     expect(screen.getByTestId('home-strict-topics-change')).toHaveAttribute('href', expect.stringContaining(
-      '/account/details'))
+      '/account/blocks'))
   })
 })

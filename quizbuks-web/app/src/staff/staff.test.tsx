@@ -161,8 +161,8 @@ describe('the counter (Q39)', () => {
     expect(claim).toHaveTextContent('C-ABCD1234')
     expect(claim).toHaveTextContent('Mei')
     expect(await screen.findByTestId('staff-today-item')).toHaveTextContent('C-00000002')
-    // The counter belongs to the account in the navigation.
-    expect(screen.getByTestId('nav-account')).toHaveAttribute('aria-current', 'page')
+    // The counter belongs to "Me" in the navigation.
+    expect(screen.getByTestId('bottom-bar-me')).toHaveAttribute('aria-current', 'page')
     await expectAccessible()
     await userEvent.click(within(claim).getByTestId('staff-claim-confirm'))
     await waitFor(() => expect(processCalls('QB_STAFF_REDEMPTION_CONFIRM')).toEqual([{ redemptionId: 'r1' }]))

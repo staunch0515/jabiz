@@ -26,6 +26,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { Gift, HandCoins, LayoutGrid, SlidersHorizontal, X, type LucideIcon } from 'lucide-react'
 import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ACCOUNT_BLOCKS_PATH } from './accountPaths'
 import { APP } from '../messages'
 import { EmptyArt } from '../qb/Illustrations'
 import { FeedCardView, REWARD_METHOD_ICONS } from '../qb/view/FeedCard'
@@ -582,7 +583,7 @@ export function FeedPage({ name, country }: { name: string; country: string | nu
       {strictTopics && (
         <div className="text-muted-foreground flex items-center gap-2 text-sm" data-testid="home-strict-topics">
           <span className="min-w-0">{t('topics.homeNotice')}</span>
-          <Link to="/account/details" className="text-foreground underline underline-offset-4"
+          <Link to={ACCOUNT_BLOCKS_PATH} className="text-foreground underline underline-offset-4"
             data-testid="home-strict-topics-change">{t('topics.homeChange')}</Link>
         </div>
       )}

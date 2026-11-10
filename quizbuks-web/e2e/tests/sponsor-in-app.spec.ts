@@ -13,6 +13,7 @@ import {
   test,
   tokenOf,
   unique,
+  takerArea,
 } from './support'
 
 /*
@@ -54,6 +55,10 @@ test('a Sponsor reads their publication in the app and pauses and resumes it', a
   await expect(row).toHaveAttribute('data-status', 'LIVE')
   await expect(row.getByTestId('my-sponsor-counts')).toContainText('Answered: 0')
   await expectAccessible(page, 'app Sponsor page')
+  // F-F4: "Me" has the way to the Sponsor's page too (the header's icon stays).
+  await takerArea(page, 'me').click()
+  await page.getByTestId('account-menu-my-sponsor').click()
+  await expect(page).toHaveURL(/\/my-sponsor$/)
 
   await row.getByTestId('my-sponsor-pause').click()
   await page.getByRole('alertdialog').getByRole('button', { name: 'Pause' }).click()
