@@ -37,6 +37,22 @@ F-F5（`docs/quizbuks/first-launch-spec.md`）固定的用词。界面、邮件�
 - 其他公司产品自己的叫法照旧："Shopify 后台""Shopify 管理画面"、Google Play Console、Anthropic Console、 Stripe Dashboard 。
 - 用词测试 `terms.test.mjs` 的 `RETIRED_NAMES` 检查这些叫法。
 
+## 学者 App 的区域与条目（F-F4，总控 2026-11-09）
+
+界面上的名字；路由与消息键不改（`docs/quizbuks/plans/impl/F-F4.md` §5.5）。
+
+| 位置 | 中文 | 日文 | 英文 | 停用 |
+|---|---|---|---|---|
+| 底部菜单（宽屏为左侧一列） | 首页 / 已答 / 扫一扫 / 消息 / 我的 | ホーム / 回答済み / スキャン / メッセージ / マイページ | Home / Answered / Scan / Messages / Me | 记录、我的学分、账户（作底部菜单项）；右上角菜单 |
+| 已答的标签 | 已答 / 待领奖 | 回答済み / 受け取り待ち | Answered / To collect | |
+| 扫一扫的标签 | 扫码 / 出示领奖码 | スキャン / 引き換えパスを表示 | Scan / Show my pass | |
+| 学者在柜台出示的码（Q89c） | 领奖码 | 引き換えパス | pass | 通行码 |
+| 消息的标签 | 收件箱 / 对话 | 受信箱 / 会話 | Inbox / Conversations | |
+| 我的：顶部三个数字 | 学分 / 待领奖品 / 证书 | クドス / 受け取り待ちの景品 / 証明書 | Kudos / Prizes to collect / Certificates | |
+| 学分还不能使用时的标注 | 即将开放 | 近日公開 | Coming soon | |
+| 我的：两组 | 我拥有的 / 设置 | 持っているもの / 設定 | What I have / Settings | |
+| 设置中的新条目 | 屏蔽与主题 / 店员柜台 | ブロックとトピック / スタッフカウンター | Blocks and topics / Staff counter | |
+
 ## 发起方页面的区域（F-F3，总控 2026-11-09）
 
 发起方页面的菜单是"首页 + 8 个区域"（`quizbuks-web/sponsor/src/shell/areas.ts`，文字在 `shell/messages.ts`）。下表是现在的叫法，需求方可以改（改时同时改 `shell/messages.ts` 与帮助）。底部菜单的短名在括号中。

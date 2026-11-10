@@ -171,7 +171,7 @@ tools/quizbuks/e2e.sh stop | status | logs | env            # env：给应用的
   退订链接同样指向邮件所属入口的前端（平台 16v-1：商家通知 `/sponsor/mail/unsubscribe`、欢迎邮件 `/taker/mail/unsubscribe`，答题人与商家不需要打开 `/admin/`）；此前发出的 `/admin/auth/…` 与 `/admin/mail/unsubscribe` 旧链接仍可用。升级说明：把 `JABIZ_MAIL_BASE_URL` 从 `…/admin` 改为主机的根地址。
   商家邮件（入驻通过、驳回）中的商家后台链接同样取自它（`{entryUrl.sponsor}`，即该主机上的 `/sponsor/`），不再取 `QB_SPONSOR_LINK`。
 - **在反向代理之后**运行时设置 `JABIZ_TRUSTED_PROXIES`（代理的地址或网段），否则登录记录中的 IP 都是代理的地址。不要同时设置 `server.forward-headers-strategy`（启动错误）。
-- **商家入驻**：商家注册、验证邮箱后在商家后台申请入驻，由内容管理员在 `/tasks` 的审批面板中审核；通过后才能提交发布。
+- **发起方入驻**：发起方注册、验证邮箱后在发起方页面申请入驻，由其运营商的成员在运营商管理系统审核（审核即终审；推广期可设为免审，`docs/quizbuks/operations.md` §7.13 与 §3「阶段一的设置」）；通过后才能提交发布。
   Q2 之前由管理员手工建的商家账号没有入驻记录，须申请一次（`QB_SPONSOR_APPLY`）。
 - **封禁**：超级管理员在后台对用户执行 `QB_USER_BAN`；被封禁的人三个入口都不能登录，已登录的会话在下一次刷新（至多 15 分钟）后失效，期间提交发布等动作被拒。
 - 只起数据库做本地开发：`docker compose -f deploy/quizbuks/compose.dev.yaml up -d db`，再在 `backend/` 下
