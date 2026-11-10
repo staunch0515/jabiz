@@ -1,14 +1,13 @@
 import { readFileSync } from 'node:fs'
-import type { APIRequestContext, Browser, Page } from '@playwright/test'
+import { certificatesOf, stateOfVerifyPage, verifyPage } from './certificates'
 import { query } from './content'
 import { contentAdmin } from './legal'
 import { decideAsOperator, operatorWithLead, reviewerFor } from './operators'
 import { taker } from './play'
-import { boundPublication, operatorTree, pass } from './tree'
+import { boundPublication, operatorTree, pass, platformMap } from './tree'
 import { approvedSponsor } from './wallet'
 import {
-  adminToken, expect, expectAccessible, PASSWORD, prepareQuizbuks, run, runJobNow, setAppearance, signIn, test, tokenOf,
-  unique,
+  accessibleInBoth, adminToken, expect, PASSWORD, prepareQuizbuks, run, signIn, test, tokenOf, unique,
 } from './support'
 
 /*
@@ -29,71 +28,6 @@ test.beforeEach(async ({ request }) => {
 })
 
 type Row = Record<string, unknown>
-const pass1 = { op: 'ALL', items: [{ passed: true }] }
-
-/** Both appearances pass axe on the page as it is. */
-async function accessibleInBoth(page: Page, name: string) {
-  for (const appearance of ['light', 'dark'] as const) {
-    await setAppearance(page, appearance)
-    await expectAccessible(page, `${name} (${appearance})`)
-  }
-  await setAppearance(page, 'light')
-}
-
-/** A platform map in effect with one node that names a certificate; the other administrator reviews it. */
-async function platformMap(request: APIRequestContext, subjectKind: 'TAKER' | 'SPONSOR', certificate: string) {
-  const writer = await tokenOf(request, await contentAdmin(request, 'Maps'), PASSWORD, 'admin')
-  const tree = await run(request, writer, 'QB_TREE_CREATE', { ownerKind: 'PLATFORM', subjectKind,
-    name: { en: unique('Certificates ') } })
-  const saved = await run(request, writer, 'QB_TREE_DRAFT_SAVE', { treeId: tree.treeId, baseRevision: tree.revision,
-    name: { en: 'Certificates' }, nodes: [{ key: 'node', name: { en: 'Fair dealing' }, condition: pass1,
-      certificateNames: { en: certificate } }] })
-  expect(saved.problems).toEqual([])
-  const submitted = await run(request, writer, 'QB_TREE_SUBMIT', { treeId: tree.treeId, baseRevision: saved.revision })
-  await run(request, await adminToken(request), 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId,
-    decision: 'APPROVE' })
-  await expect.poll(async () => (await query(request, writer, 'qb.admin.trees', {}))
-    .find((row) => row.treeId === tree.treeId)?.currentVersionId ?? null,
-  { message: 'the map is in effect', timeout: 30_000 }).not.toBeNull()
-  return { treeId: String(tree.treeId), node: (saved.nodeIds as Record<string, string>).node }
-}
-
-/**
- * The caller's certificates once there is one: the lighting's event issues it, and the daily job (run now when the event
- * is slow) is what makes sure of it.
- */
-async function certificatesOf(request: APIRequestContext, token: string, process: string): Promise<Row[]> {
-  const list = async () => (await run(request, token, process, {})).certificates as Row[]
-  try {
-    await expect.poll(async () => (await list()).length, { message: 'the certificate is issued', timeout: 30_000 })
-      .toBeGreaterThan(0)
-  } catch {
-    await runJobNow(request, 'qb.tree-certificate-retry')
-    await expect.poll(async () => (await list()).length, { message: 'the certificate is issued by the job',
-      timeout: 30_000 }).toBeGreaterThan(0)
-  }
-  return list()
-}
-
-/** The verify page as anybody sees it, in a browser of its own (no cache, nobody signed in). */
-async function verifyPage(browser: Browser, baseURL: string | undefined, key: string) {
-  const context = await browser.newContext({ baseURL })
-  const visitor = await context.newPage()
-  await visitor.goto(`/taker/verify/${key}`)
-  return { visitor, close: () => context.close() }
-}
-
-/** The state the verify page of the key shows, as anybody sees it. */
-async function stateOfVerifyPage(browser: Browser, baseURL: string | undefined, key: string) {
-  const { visitor, close } = await verifyPage(browser, baseURL, key)
-  try {
-    await expect(visitor.getByTestId('verify-state').or(visitor.getByText('No such certificate'))).toBeVisible()
-    const state = visitor.getByTestId('verify-page')
-    return (await state.count()) > 0 ? await state.getAttribute('data-state') : 'NONE'
-  } finally {
-    await close()
-  }
-}
 
 test('a Taker lights a node: the certificate is in the app, its PDF is issued on the first download, anybody verifies it, the holder turns the link off and on, and a deleted account leaves nothing',
   async ({ page, browser, baseURL, request }) => {
