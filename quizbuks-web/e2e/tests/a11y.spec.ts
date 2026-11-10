@@ -304,11 +304,13 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('publication-step-title')).toHaveText('Time and rewards')
     await page.getByTestId('tier-add').click()
     await page.getByTestId('tier-reward').fill('10')
+    await whereTheStepOpens(page)
     await expectAccessible(page, at('sponsor publication audience and rewards'))
     // Typed wrong: the field is marked and says why.
     await page.getByTestId('publication-pass-score').fill('1.5')
     await page.getByTestId('publication-next').click()
     await expect(page.getByTestId('publication-pass-score')).toHaveAttribute('aria-invalid', 'true')
+    await whereTheStepOpens(page)
     await expectAccessible(page, at('sponsor publication typed wrong'))
     await page.getByTestId('publication-pass-score').fill('')
     await page.getByTestId('publication-next').click()
@@ -666,4 +668,17 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('broadcast-ready')).toBeVisible()
     await expectAccessible(page, at('admin announcement editor'))
   })
+}
+
+/**
+ * The page put back where a step of the wizard opens (its top) before axe looks. With a sticky header, a control is
+ * left partly under it at some scroll positions, and axe's target-size counts a partly covered target against it (a
+ * wholly covered one is not checked): the result depends on where the test's last action stopped the scroll, not on
+ * the step's layout (CI, F-F3a: the dates' calendar buttons at y 54-90 under the header at 32-80 after filling a
+ * reward, scrollY 454). The rule is unchanged and every target is checked; the page's scroll-padding-top keeps what
+ * the browser scrolls to below the header (shell/stickyTop.ts).
+ */
+async function whereTheStepOpens(page: Page) {
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
 }
