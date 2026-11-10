@@ -38,6 +38,7 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_TREE_LIT_REVOKE_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_TREE_CHECK_RUN", ProcessAccess.INTERNAL),
         Map.entry("QB_TREE_REVIEW_REMIND", ProcessAccess.INTERNAL),
+        Map.entry("QB_TREE_NODE_COUNT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_TREE_END", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_PUBLICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_PUBLICATION_BAN_PAUSE", ProcessAccess.SUB_PROCESS_ONLY),

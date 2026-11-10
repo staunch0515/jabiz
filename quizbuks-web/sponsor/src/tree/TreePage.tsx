@@ -95,7 +95,8 @@ function OwnMap({ map }: { map: SponsorMap }) {
       )}
       {versionId && (version.isPending ? <PageState kind="loading" />
         : version.isError ? <PageState kind="error" description={tQb('failed')} />
-        : version.data ? <KnowledgeMap key={versionId} graph={version.data.graph} litCounts={version.data.litCounts} />
+        : version.data ? <KnowledgeMap key={versionId} graph={version.data.graph} litCounts={version.data.litCounts}
+          unlitCounts={version.data.unlitCounts} />
         : null)}
       <details className="text-sm" data-testid="tree-history">
         <summary className="cursor-pointer font-medium">{t('tree.history')}</summary>

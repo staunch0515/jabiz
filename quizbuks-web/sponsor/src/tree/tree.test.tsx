@@ -23,7 +23,7 @@ const MAP = { treeId: 't1', status: 'ACTIVE', revision: 3, createdAt: '2026-11-0
   nodes: 2, runningBound: 1 }
 const NODES = [
   { nodeId: BASICS, name: JSON.stringify({ en: 'Bread' }), description: null, seq: 1, inEffect: true, litCount: 12,
-    runningBound: 1, condition: JSON.stringify({ op: 'ALL', items: [{ passed: true }] }) },
+    answeredUnlit: 6, countedOn: '2026-11-09', runningBound: 1, condition: JSON.stringify({ op: 'ALL', items: [{ passed: true }] }) },
   { nodeId: 'n2', name: JSON.stringify({ en: 'Sourdough' }), description: null, seq: 2, inEffect: true, litCount: null,
     runningBound: 0, condition: JSON.stringify({ op: 'ALL', items: [{ node: BASICS }, { passed: true }] }) },
 ]
@@ -120,6 +120,7 @@ describe('the Sponsor\'s knowledge map (F-S3c)', () => {
     expect(asked).toContain('/api/queries/qb.sponsor.tree')
     await userEvent.click(within(map).getAllByTestId('knowledge-map-node')[0])
     expect(within(map).getByTestId('knowledge-map-lit-count')).toHaveTextContent('12')
+    expect(within(map).getByTestId('knowledge-map-unlit-count')).toHaveTextContent('6 Takers answered and have not lit it (as of 2026-11-09)')
     await expectAccessible()
   })
 
