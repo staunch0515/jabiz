@@ -201,3 +201,44 @@
 2. M3 企业实名认证（F-M3）：按本文件 §M3 与 S1 的邮件令牌答复（`MailRecipient.user(userId, address, null)`、用途 `company-email`、`MailTokens.consume` 返回 `Consumed(messageId, userId, address)`；流程核对 userId 与规范化地址，地址先校验，400）。随 M3 补 M2 的 `CERTIFIED_TOP_UP` 与钱包页"认证后补到 10,000"的提示，入驻赠送改为按认证读 `grant.certified`。
 3. M4 起按 §1 的顺序；M4 含需求方确认的删除（`direct` 价目表与 `qb.audience.price.fallback`）。
 4. 平台的既有问题（转 S1，非本线）：`platformCheck` 结束时 `JobScheduler.scheduleNext` 记两条 `TaskRejectedException: ExecutorService in shutdown state`（关闭时的竞争，只是 ERROR 日志）。
+
+## 6. M3 企业实名认证（F-M3）的细化（S2，2026-11-10，待总控批准）
+
+规格 F-M3（规则、参数、运营闭合、验收）与 Q105 §3.5、D-Q105-6、D-Q105-11；平台的邮件令牌按 S1 的答复（§5 第 2 条）。分支 `1.3/quizbuks-FM3-verification`，迁移取开 PR 时的下一个号（现在最大 V110）。
+
+### 6.1 数据
+- **`QbSponsorVerification`**（普通表，经 `DatasetEntityManager` 写入、平台审计；默认数据视图 `processOnlyWrites`，读权限给总部与运营商、登记 `OperatorScopes`（按 `sponsorId`）；`me:` 视图只读本人）：一次提交一行，保留历史。字段：`sponsorId`、`companyName`（≤ 200）、`domain`（规范化后，≤ 253）、`confirmAddress`（发确认链接的地址，`auditMasked`，删除账号时清空）、`status`（`LINK_SENT` → `REVIEW` → `APPROVED` / `REJECTED`；`APPROVED` → `REVOKED` / `SUPERSEDED`；`LINK_SENT` / `REVIEW` → `WITHDRAWN`，即同一发起方再次提交）、`linkMessageId`（只认最新一封的链接）、`linkSentAt`、`approvalRequestId`、`decidedAt`、`rejectReason`、`revokedAt` / `revokedBy` / `revokeReason`、`verifiedAt`。
+- **唯一**：部分唯一索引 `(domain) WHERE status = 'APPROVED'`（同一域名只认证一个发起方）与 `(sponsor_id) WHERE status IN ('LINK_SENT','REVIEW','APPROVED')`（每个发起方至多一个进行中或生效的）。
+- **不改 `QbSponsor`**（入驻行是时态表、被审批绑定）：Q105 说"记在入驻行上"，改为"此刻已认证 = 本人有一行 `APPROVED`"，只此一个定义（`verification.VerificationRules.verified`），公开主页、入驻赠送与钱包页的提示都读它。
+- 公共邮箱域名清单在代码 `verification.PublicMailDomains`（gmail.com、qq.com、163.com、outlook.com、yahoo、icloud 等，含子域；补充即改代码，测试列出）。
+
+### 6.2 流程（都 `requiresVerifiedEmail()`、先 `CallerChecks::refuseBanned`；锁 `qb.sponsor-verification:<发起方>`，批准时另取 `qb.sponsor-verification-domain:<域名>`，锁序：发起方锁 → 域名锁 → 审批 → `qb.wallet:SPONSOR:<发起方>`）
+- `QB_SPONSOR_VERIFICATION_SUBMIT {companyName, domain, confirmAddress?}`（`qb.sponsor.verification`，给 `QB_SPONSOR`）：入驻已通过；域名规范化（小写、去掉 `www.`、只收 ASCII 标签或 punycode，不经 URL 解析器）与格式检查；公共域名拒绝（422 `QB_VERIFICATION_PUBLIC_DOMAIN`）；该域名已被别的发起方认证即拒绝（422 `QB_VERIFICATION_DOMAIN_TAKEN`，只说"已被认证"，不说是谁）。账户的已验证邮箱的域名是该域名或其子域 → 直接 `REVIEW` 并开审批；否则 `confirmAddress` 必须在该域名（或子域）下 → `LINK_SENT` 并以 `SendMail` 寄确认链接（模板 `qb.sponsor-verification.confirm`，事务邮件；`MailRecipient.user(发起方, 地址, null)`，令牌用途 `company-email`，有效期 `qb.sponsor-verification.link-hours` 小时）。同一发起方再次提交：进行中的那行 `WITHDRAWN`（撤回其审批），生效的那行 `SUPERSEDED`——**名称或域名改变即失去认证**，直到新的通过；内容不变的再次提交只用于"重发链接"（只换 `linkMessageId`，旧链接失效）。
+- `QB_SPONSOR_VERIFICATION_CONFIRM {token}`（同权限，本人登录后打开链接）：`MailTokens.consume("company-email")`，核对令牌的用户是本人、地址等于该行的 `confirmAddress`、`messageId` 等于该行最新的一封、行仍是 `LINK_SENT`；过期或用过即 422 `QB_VERIFICATION_LINK_INVALID`。通过 → `REVIEW` 并开审批。
+- **审批** `qb.sponsor-verification`（`ApprovalSubject`，内容哈希绑定 `companyName` + `domain`，事实 `operatorId`；`ApprovalCase.scope` 为发起方所属运营商；审批人持 `qb.review.sponsor`；规则 `qb.sponsor-verification.review` 由 `QB_SETUP` 以受控变更提出，没有规则即拒绝 `QB_REVIEW_NOT_CONFIGURED`）。准备人是发起方，平台挡住自审；直营发起方由本运营商的另一位成员审。改派运营商时随 `APPROVAL_SCOPE_MOVE` 一起移动（`QB_SPONSOR_OPERATOR_ASSIGN` 已移动发起方作为准备人的全部请求，不另写）。
+- `QB_SPONSOR_VERIFICATION_APPROVAL_RESULT`（`internal()`，订阅 `jabiz.approval.approved` / `rejected`，只认本行的请求）：批准 → 在域名锁内再查唯一（被别家先认证即改为 `REJECTED`，理由代码 `QB_VERIFICATION_DOMAIN_TAKEN`）、`APPROVED`、`verifiedAt`；然后**认证补发**（6.3）；发事件 `qb.sponsor-verification.decided` → 站内信（种类 `VERIFICATION_DECIDED`，动作到"企业认证"）。驳回 → `REJECTED` 与审批人的理由，同一站内信。
+- `QB_SPONSOR_VERIFICATION_REVOKE {sponsorId, reason}`（`qb.sponsor-verification.revoke`：总部内容管理员与运营商成员；运营商经 `OperatorChecks.memberWhenScoped` + `ownSponsor`，别人的 404；总是要求二次验证；理由必填，发起方可见）：`APPROVED` → `REVOKED`，**不收回已发的额度**；站内信。
+
+### 6.3 认证补发（`CERTIFIED_TOP_UP`）与入驻金额
+- 入驻赠送 `QB_FEE_CREDIT_ONBOARDING`：`certified` 改为读 `VerificationRules.verified`（M2 留下的 `boolean certified = false`）。
+- 批准时（同一事务、钱包锁内）：本人已领开户赠送且其金额 < `qb.fee-credit.grant.certified` → 以 `QB_FEE_CREDIT_GRANT`（来源 `CERTIFIED_TOP_UP`、来源键 `certified`，终身一笔）发差额；没领开户的什么也不发（以后确认资料完整时直接发认证金额）。撤销后再次认证不再补（来源键已用）。条件见 6.6 第 1 条。
+- 钱包页（平台费账户的赠送块）加 M2 留下的提示"企业实名认证后补到 {certified}"：只在已领开户、未认证、差额 > 0 时显示，链到"企业认证"。
+
+### 6.4 读取与页面
+- 模板：`qb.sponsor.verification`（本人最新一行、链接是否过期——按 `linkSentAt` + 参数与服务端时钟、`verified`、补发金额）；`qb.admin.sponsor-verifications` 与 `qb.operator.sponsor-verifications`（列表与筛选，运营商经成员数据视图限定本运营商的发起方；不给出 `confirmAddress` 以外的个人信息）；公开主页 `qb.public.sponsor-page` 加 `verified` 与 `verifiedDomain`（公开视图 `QbSponsorVerification` 只含 `APPROVED` 行的 `sponsorId`、`domain`、`verifiedAt`，`public-queries.json` 快照随之）；App 已登录的商户主页模板同样加两列。
+- 发起方页面：发起方中心加标签"企业认证"（`profile/verification`，只加标签）：提交表单（域名缺省取主页"网站"的域名）、状态、重发链接、驳回理由与改正再提交、撤销理由；确认链接的落地页 `profile/verification/confirm?token=…`（未登录先登录再回来，`hrefOf`）。公开主页与 App 的商户主页显示"已实名认证 · 域名"标记（共用组件放 `qb/`）。
+- 管理系统扩展：`/qb/sponsor-verifications`（列表、详情；决定只经平台的 `ApprovalPanel`，读好名称、域名、确认方式、账户邮箱的域名后才给出；撤销对话框要求理由）；发起方详情页加"企业认证"一栏。
+- 文案三语；词表加"企业实名认证 / 企業認証 / company verification"。
+
+### 6.5 运营闭合、测试与文档
+- 链接过期即失效、可重发；驳回可改正再提交；撤销；审批待办由平台给审核人；**每日核对**（并入 `qb.operator-check` 的模板 `qb.admin.operator-health`）：`REVIEW` 超过 `qb.sponsor-verification.review-remind-days`（普通参数，7）未决的给运营商一个待办，`APPROVED` 的域名重复（索引兜底，报告即事故）。
+- 删除账号：`SponsorErasure` 清空 `confirmAddress`、`companyName` 照留（企业名不是个人信息；如需清除随 `PersonalDataEraser` 的声明），认证行改 `REVOKED`。
+- 测试：`VerificationRulesTest`（规范化、公共域名、子域、`verified`）；`SponsorVerificationIT`（公共域名拒绝；账户邮箱同域直接审核；确认链接一次性、过期、旧链接在重发后失效、别人打开无效；另一位成员审核、本人不能审；同域名第二家被拒（提交时与批准时两处）；名称或域名改变即失去认证；撤销后标记消失、额度不收回；入驻前后两种补发：先领 1,000 后认证补 9,000、先认证后确认直接 10,000、补发只一次；改派运营商后审批随之移动）；公开模板快照；`InboxIT` 新种类；场景快照（`QB_SETUP` 新参数、规则、权限）；前端两个 SPA 与扩展的测试与 axe；e2e `sponsor-verification.spec.ts`（经 Mailpit 打开确认链接、运营商成员批准、公开主页出现标记、钱包页补发）——本机先跑再提。
+- 文档：`operations.md` §7.42（判断方法：官网与公司名一致、WHOIS 不作为依据；撤销；排查链接收不到）、帮助底稿三语、发起方手册三语初稿、`backend/quizbuks/CLAUDE.md` 一条、`troubleshooting.md` 视需要。
+- 删除的功能：无。行为改变：入驻赠送的金额按认证读（原来一律未认证）。
+
+### 6.6 请总控决定
+1. **补发的条件**：建议认证通过时补差额**不看赠送开关**（开关管的是"开户赠送活动"，补发是把已给的开户赠送补足），但封禁中不补、以后也不自动补（解封后由总部的追加赠送处理）。或者：开关关着也不补。
+2. **"名称或域名改变须重新认证"**：建议发起方提交不同的名称或域名即**当场失去**原认证（标记立即消失，直到新的通过）；另一种是原认证保留到新的通过为止。
+3. **账户邮箱的子域**：建议账户邮箱在该域名的子域（`tokyo.example.co.jp` 对 `example.co.jp`）也算"已是该域名"，确认地址同样可以在子域。
+4. **撤销的权限**：建议总部内容管理员与运营商的任一成员都可撤销（总是二次验证、理由必填）；或只限运营商负责人与总部。
