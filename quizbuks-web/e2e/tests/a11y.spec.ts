@@ -304,13 +304,11 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('publication-step-title')).toHaveText('Time and rewards')
     await page.getByTestId('tier-add').click()
     await page.getByTestId('tier-reward').fill('10')
-    await fromTheTop(page)
     await expectAccessible(page, at('sponsor publication audience and rewards'))
     // Typed wrong: the field is marked and says why.
     await page.getByTestId('publication-pass-score').fill('1.5')
     await page.getByTestId('publication-next').click()
     await expect(page.getByTestId('publication-pass-score')).toHaveAttribute('aria-invalid', 'true')
-    await fromTheTop(page)
     await expectAccessible(page, at('sponsor publication typed wrong'))
     await page.getByTestId('publication-pass-score').fill('')
     await page.getByTestId('publication-next').click()
@@ -668,15 +666,4 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('broadcast-ready')).toBeVisible()
     await expectAccessible(page, at('admin announcement editor'))
   })
-}
-
-/**
- * The page scrolled back to its top before axe looks, as a step of the wizard opens. Filling a field lower down lets
- * Playwright scroll the page so far that the dates' calendar buttons stand half under the sticky header (CI, F-F3a:
- * the buttons at y 54-90 under the header at 32-80, scrollY 454), which axe's target-size counts against them; that is
- * where the last action left the scroll, not the step's layout. The rule and every target stay checked.
- */
-async function fromTheTop(page: Page) {
-  await page.evaluate(() => window.scrollTo(0, 0))
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
 }

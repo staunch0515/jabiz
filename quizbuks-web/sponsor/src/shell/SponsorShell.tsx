@@ -14,6 +14,7 @@ import { AvatarMenu } from './AvatarMenu'
 import { ShellContext } from './context'
 import { DEFAULT_BOTTOM_BAR, LAYOUT_QUERY, readLayout } from './layout'
 import { spaLink } from './links'
+import { useStickyTop } from './stickyTop'
 import { ASSETS_PATH, NEW_PARAM, NOTICES_PATH } from './paths'
 import './messages'
 
@@ -37,6 +38,7 @@ export function SponsorShell({ path, state, badges, displayName, helpPath, onSig
 }) {
   const { t } = useTranslation(SPONSOR)
   const importSettings = useRef<{ open: () => void }>(null)
+  useStickyTop()
   const layout = useQuery({ queryKey: LAYOUT_QUERY, queryFn: readLayout, staleTime: Infinity, retry: false })
   const current = placeOf(path)?.area.key
   const shown = AREAS.filter((area) => areaShown(area, state))
