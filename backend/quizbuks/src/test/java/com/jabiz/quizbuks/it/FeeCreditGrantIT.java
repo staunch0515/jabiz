@@ -351,6 +351,14 @@ class FeeCreditGrantIT extends PlayItSupport {
     @Test
     @Order(7)
     void headquartersReadTheGrantsSummedByOperatorSponsorAndSource() {
+        // Its own grants, one per source: the summary must not depend on what earlier methods granted.
+        switchOn();
+        Setting s = setting("summary");
+        run(FeeCredits.ONBOARDING, s.lead(), body("sponsorId", s.sponsor()));
+        Map<String, Object> requested = run(FeeRequests.RECORD, finance(), body("kind", "CREDIT", "sponsorId",
+            s.sponsor(), "amount", 500, "reason", "Summary"));
+        approve((String) requested.get("approvalRequestId"));
+        assertThat(lots(s.sponsor())).hasSize(2);
         String token = finance();
         List<Map<String, Object>> byOperator = items("qb.admin.fee-credit-summary", token, Map.of("params",
             Map.of("groupBy", "OPERATOR")));
