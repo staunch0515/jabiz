@@ -1,9 +1,9 @@
 import type { APIRequestContext } from '@playwright/test'
 import { query } from './content'
 import { contentAdmin } from './legal'
-import { decideAsOperator, operatorWithLead } from './operators'
+import { decideAsOperator, operatorWithLead, reviewerFor } from './operators'
 import { taker } from './play'
-import { boundPublication } from './tree'
+import { boundPublication, operatorTree } from './tree'
 import { approvedSponsor } from './wallet'
 import {
   adminToken, expect, expectAccessible, PASSWORD, prepareQuizbuks, run, setControlledParam, signIn, signOut, test, tokenOf,
@@ -69,6 +69,10 @@ test('a Sponsor passes a challenge: the node is lit, digital prizes open, the gr
     const submitted = await run(request, operator.operatorToken, 'QB_TREE_SUBMIT', { treeId: copy.treeId,
       baseRevision: copy.revision })
     await decideAsOperator(request, operator.sponsorToken, submitted.approvalRequestId, 'APPROVE')
+    // The copy is in effect once the decision's event is delivered.
+    const reviewer = await reviewerFor(request, operator.sponsorToken)
+    await expect.poll(async () => (await operatorTree(request, reviewer, String(copy.treeId)))?.currentVersionId ?? null,
+    { message: 'the copy is in effect', timeout: 30_000 }).not.toBeNull()
     // The direct Sponsor publishes a challenge on the copy's node (the copy keeps the template's node ids).
     const name = unique('First prizes ')
     const publicationId = await boundPublication(request, operator.sponsorToken, String(copy.treeId), made.node, name)
