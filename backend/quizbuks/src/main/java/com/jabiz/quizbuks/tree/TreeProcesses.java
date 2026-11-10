@@ -566,6 +566,16 @@ public final class TreeProcesses {
     }
 
     /**
+     * F-S5a: the names a draft stores: those a certificate may have ({@link TreeRules#certificateProblems} finds none),
+     * none otherwise (the draft carries the problem and cannot be submitted; a text the platform would refuse as too long
+     * is not stored).
+     */
+    private static Map<String, String> storable(Map<String, String> names) {
+        return TreeRules.certificateProblems(Map.of("n", names == null ? Map.of() : names), QbTrees.NAME_LENGTH)
+            .isEmpty() ? TreeRules.certificateNames(names) : null;
+    }
+
+    /**
      * F-S5a: the certificates' problems of a draft: a copy keeps the ones it has (given otherwise:
      * {@link TreeRules#CERTIFICATE_COPY}); any other graph's names must be usable ({@link TreeRules#certificateProblems}).
      */
@@ -741,7 +751,7 @@ public final class TreeProcesses {
             insertDef(ctx, versionId, order.get(i), node.name(), node.description(),
                 json(conditions.get(order.get(i)).toMap()), i,
                 copy ? kept.get(order.get(i)) : node.grantAmount(),
-                copy ? keptCertificates.get(order.get(i)) : TreeRules.certificateNames(node.certificateNames()));
+                copy ? keptCertificates.get(order.get(i)) : storable(node.certificateNames()));
         }
         @SuppressWarnings("unchecked")
         Map<String, Object> more = ctx.contains(TOUCH) ? (Map<String, Object>) ctx.get(TOUCH) : Map.of();

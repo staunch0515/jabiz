@@ -376,7 +376,6 @@ public final class CertificateProcesses {
         DocumentProcesses.IssueOutput issued = ctx.get(ISSUED, DocumentProcesses.IssueOutput.class);
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("runId", issued.runId());
-        values.put("language", ctx.get(INPUT, IssueInput.class).language());
         ctx.changes().update(QbCertificates.CERTIFICATE, certificate.id(), certificate.version(), values);
     }
 

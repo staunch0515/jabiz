@@ -239,4 +239,36 @@ class TreeRulesTest {
             .containsExactly(TreeRules.GRANT_INVALID);
         assertThat(grantCodes(true, Subject.SPONSOR, max, Map.of("a", new java.math.BigDecimal("2.00")))).isEmpty();
     }
+
+    @Test
+    void aCertificateNeedsATextInAPlatformLanguageNotTooLong() {
+        Map<String, Map<String, String>> names = new LinkedHashMap<>();
+        names.put("a", Map.of("en", "Fair dealing"));
+        names.put("b", null);
+        names.put("c", Map.of());
+        names.put("d", Map.of("ja", "認定", "zh", ""));
+        assertThat(TreeRules.certificateProblems(names, 120)).isEmpty();
+        // Blank in every language given, too long in one, a language the platform has not.
+        assertThat(TreeRules.certificateProblems(Map.of("a", Map.of("en", "  ", "zh", "")), 120)).singleElement()
+            .satisfies(p -> {
+                assertThat(p.code()).isEqualTo(TreeRules.CERTIFICATE_INVALID);
+                assertThat(p.nodeId()).isEqualTo("a");
+                assertThat(p.params()).containsEntry("max", 120);
+            });
+        assertThat(TreeRules.certificateProblems(Map.of("a", Map.of("en", "x".repeat(121))), 120)).hasSize(1);
+        assertThat(TreeRules.certificateProblems(Map.of("a", Map.of("en", "x".repeat(120))), 120)).isEmpty();
+        assertThat(TreeRules.certificateProblems(Map.of("a", Map.of("xx", "Name")), 120)).hasSize(1);
+    }
+
+    @Test
+    void storedNamesAreTheNonBlankTextsStrippedAndNoneForNone() {
+        Map<String, String> given = new LinkedHashMap<>();
+        given.put("en", " Fair dealing ");
+        given.put("zh", " ");
+        given.put("ja", null);
+        assertThat(TreeRules.certificateNames(given)).containsExactly(Map.entry("en", "Fair dealing"));
+        assertThat(TreeRules.certificateNames(Map.of("en", ""))).isNull();
+        assertThat(TreeRules.certificateNames(Map.of())).isNull();
+        assertThat(TreeRules.certificateNames(null)).isNull();
+    }
 }

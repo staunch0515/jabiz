@@ -1,7 +1,7 @@
 /*---
 id: qb.admin.tree-health
 description: "F-S2b2: what is wrong with the knowledge maps' lighting and review, one row a kind of problem: passes of bound publications that lit nothing (the daily recheck evaluates them), lit records naming no node, versions waiting for review past the reminder, gate parameters naming no node to light (F-S2c), nodes in effect naming a node no single graph has (F-S2d), lit records whose certificate was not written (F-S5a); empty when all is well"
-entities: [QbAttempt, QbPublicationCard, QbTree, QbTreeNode, QbTreeNodeRef, QbTreeLit, QbTreeLitRevocation, QbTreeVersion, QbCertificate, SysParam]
+entities: [QbAttempt, QbPublicationCard, QbTree, QbTreeNode, QbTreeNodeRef, QbTreeLit, QbTreeLitRevocation, QbTreeVersion, QbCertificate, Erasure, SysParam]
 datasets:
   QbAttempt: urn:jabiz:dataset:default:QbAttempt
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
@@ -12,6 +12,7 @@ datasets:
   QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
   QbTreeVersion: urn:jabiz:dataset:default:QbTreeVersion
   QbCertificate: urn:jabiz:dataset:default:QbCertificate
+  Erasure: urn:jabiz:dataset:platform:Erasure
   SysParam: urn:jabiz:dataset:now:SysParam
 params:
   at: { kind: { type: temporal, role: EVENT_TIME }, required: true, description: The time checked for }
@@ -104,7 +105,7 @@ WHERE tn.{{QbTreeNode.active}}
 HAVING count(*) > 0
 UNION ALL
 -- CERTIFICATE_MISSING (F-S5a): a lit record that froze the names of a certificate, was not revoked and has none written
--- (qb.system.tree-certificates-due, the same conditions, counted). The daily job qb.tree-certificate-retry runs before this
+-- (qb.system.tree-certificates-due, the same conditions, counted; an erased account's lit records need none). The daily job qb.tree-certificate-retry runs before this
 -- check (03:41 against 19:23 UTC), so a record found here has failed to get its certificate.
 SELECT CAST('CERTIFICATE_MISSING' AS varchar(30)), CAST(count(*) AS numeric)
 FROM {{QbTreeLit}} l
@@ -113,4 +114,5 @@ WHERE l.{{QbTreeLit.certificateNames}} IS NOT NULL
                   WHERE r.{{QbTreeLitRevocation.litId}} = CAST(l.{{QbTreeLit.litId}} AS text))
   AND NOT EXISTS (SELECT 1 FROM {{QbCertificate}} c
                   WHERE c.{{QbCertificate.litId}} = CAST(l.{{QbTreeLit.litId}} AS text))
+  AND NOT EXISTS (SELECT 1 FROM {{Erasure}} e WHERE CAST(e.{{Erasure.userId}} AS text) = l.{{QbTreeLit.subjectId}})
 HAVING count(*) > 0

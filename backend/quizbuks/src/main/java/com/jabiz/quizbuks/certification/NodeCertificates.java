@@ -7,11 +7,13 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.QbAccounts;
 import com.jabiz.quizbuks.operator.QbOperators;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.tree.QbTrees;
 import com.jabiz.runtime.EntityInstance;
+import com.jabiz.runtime.security.SecurityEntities;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.QueryEntities;
@@ -76,6 +78,7 @@ public final class NodeCertificates {
     static final String EXISTING = "nodeCertificate.existing";
     static final String PROFILE = "nodeCertificate.profile";
     static final String SPONSOR_SELF = "nodeCertificate.sponsorSelf";
+    static final String ERASED = "nodeCertificate.erased";
     static final String TREES = "nodeCertificate.trees";
     static final String OPERATORS = "nodeCertificate.operators";
     static final String OWNERS = "nodeCertificate.owners";
@@ -145,7 +148,11 @@ public final class NodeCertificates {
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.PROFILE), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.Eq("userId", subjectId(ctx))).limit(1).build(), PROFILE),
                     QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
-                        .where(new QueryPredicate.Eq("userId", subjectId(ctx))).limit(1).build(), SPONSOR_SELF)))
+                        .where(new QueryPredicate.Eq("userId", subjectId(ctx))).limit(1).build(), SPONSOR_SELF),
+                    // An erased account (platform D62) has no certificate to be made again from the lit records that stay.
+                    QueryEntities.query(SecurityEntities.USER_DATASET, ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("userId", AccountEditing.uuids(subjectId(ctx)))).limit(1).build(),
+                        ERASED)))
             .step("Read the maps of the lit records", QueryEntities.<ProcessContext>of(
                 QbTrees.defaultDataset(QbTrees.TREE), ctx -> {
                     Set<Object> treeIds = new LinkedHashSet<>();
@@ -167,8 +174,14 @@ public final class NodeCertificates {
         return ctx.get(INPUT, SubjectRef.class).subjectId();
     }
 
-    /** The lit records that need a certificate now: names frozen, not revoked, none written, oldest first. */
+    /**
+     * The lit records that need a certificate now: names frozen, not revoked, none written, oldest first; none for a person
+     * whose account was erased (the lit records stay, holding ids only).
+     */
     static List<EntityInstance> due(ProcessContext ctx) {
+        if (list(ctx, ERASED).stream().anyMatch(user -> user.get("erasedAt") != null)) {
+            return List.of();
+        }
         Set<String> revoked = new LinkedHashSet<>();
         list(ctx, REVOCATIONS).forEach(row -> revoked.add(String.valueOf((Object) row.get("litId"))));
         Set<String> done = new LinkedHashSet<>();
