@@ -46,7 +46,7 @@ test('a video to watch is shown on the home with its reward and starts the quiz'
   await signIn(page, '/sponsor/', sponsor.email)
   // Signed in once the console has left the sign-in page (going elsewhere before would load it signed out).
   await expect(page).not.toHaveURL(/\/login/)
-  await expect(page.getByRole('link', { name: 'Quizzes' })).toBeVisible()
+  await expect(page.getByTestId('menu-quizzes')).toBeVisible()
   await page.goto(`/sponsor/quizzes/${quizId}`)
   await page.getByTestId('tab-materials').click()
   await page.getByTestId('material-add').click()

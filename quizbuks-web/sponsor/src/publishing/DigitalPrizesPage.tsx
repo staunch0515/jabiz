@@ -5,7 +5,6 @@ import {
   DataTable,
   Input,
   Label,
-  PageHeader,
   PageState,
   Select,
   SelectContent,
@@ -27,8 +26,10 @@ import { Link } from '../qb/router'
 import { DIGITAL_STATUSES, searchDigitalPrizes, type DigitalPrizeRow, type DigitalStatus } from './api'
 import { publicationPath } from './paths'
 import { useDigitalDeliveryLabel, useDigitalStatusLabel } from './shared'
+import { DIGITAL_PRIZES_PATH } from '../shell/paths'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
 
-export const DIGITAL_PRIZES_PATH = '/digital-prizes'
+export { DIGITAL_PRIZES_PATH }
 export const DIGITAL_PRIZES_QUERY = ['qb', 'digital-prizes'] as const
 const PAGE_SIZE = 20
 
@@ -121,7 +122,7 @@ export function DigitalPrizesPage() {
 
   return (
     <section className="flex flex-col gap-4" data-testid="digital-prizes">
-      <PageHeader title={t('publishing.digital.title')} description={t('publishing.digital.intro')} />
+      <AreaPageHeader title={t('publishing.digital.title')} description={t('publishing.digital.intro')} />
       <div className="flex flex-wrap items-end gap-2">
         <form role="search" onSubmit={search} className="flex gap-2">
           <Label htmlFor={`${id}-q`} className="sr-only">{t('publishing.digital.search')}</Label>

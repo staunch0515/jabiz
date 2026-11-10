@@ -226,3 +226,27 @@ describe('sponsored benefits (Q89a)', () => {
       { purchaseId: 'p3', reason: 'Shop closed', voidUnused: true }]))
   })
 })
+
+describe('the way to the sponsored benefits (F-F3)', () => {
+  it('without a benefit role: no area in the menu, but the hub\'s overview leads to the catalog and its card', async () => {
+    server({ held: false })
+    window.history.replaceState(null, '', '/profile')
+    render(<App />)
+    const entry = await screen.findByTestId('profile-benefits-entry')
+    expect(screen.queryByTestId('menu-benefits')).toBeNull()
+    expect(within(entry).getByTestId('profile-benefits-link')).toHaveAttribute('href', '/benefits')
+    await userEvent.click(within(entry).getByTestId('profile-benefits-link'))
+    await waitFor(() => expect(window.location.pathname).toBe('/benefits'))
+    // The catalog's card says which node opens each role (as before F-F3).
+    expect(await screen.findByTestId('benefit-access')).toBeInTheDocument()
+  })
+
+  it('with a benefit role: the area is in the menu, and the overview needs no way there', async () => {
+    server({ held: true })
+    window.history.replaceState(null, '', '/profile')
+    render(<App />)
+    expect(await screen.findByTestId('menu-benefits')).toBeInTheDocument()
+    await screen.findByTestId('profile-aside')
+    expect(screen.queryByTestId('profile-benefits-entry')).toBeNull()
+  })
+})

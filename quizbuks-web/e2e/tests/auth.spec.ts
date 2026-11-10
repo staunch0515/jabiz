@@ -168,7 +168,7 @@ test('a Sponsor registers, verifies at the console\'s own page, applies and is a
   await page.getByTestId('onboarding-submit').click()
   await expect(page.getByTestId('onboarding-done')).toBeVisible()
   await page.goto('/sponsor/')
-  await expect(page).toHaveURL(/\/sponsor\/dashboard$/)
+  await expect(page).toHaveURL(/\/sponsor\/home$/)
   await expect(page.getByTestId('dashboard-status')).toHaveAttribute('data-status', 'APPROVED')
 })
 

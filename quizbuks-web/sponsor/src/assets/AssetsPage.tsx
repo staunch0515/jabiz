@@ -14,17 +14,12 @@ import {
   Input,
   Label,
   notify,
-  PageHeader,
   PageState,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
   type ColumnDef,
   type SortingState,
 } from '@jabiz/ui'
@@ -70,14 +65,18 @@ import { VideoUsesProvided } from '../videouses/VideoUsesProvided'
 import { ASSET_LIMITS } from './ids'
 import './messages'
 import { UsageCard } from './UsageCard'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
 import { ASSET_STATS_QUERY, formatBytes, readAssetStats, sizeOf, USAGE_QUERY } from './usage'
 
 const ALL = '*'
 
-/** The tab of the page's address (`?tab=`); all for anything else. */
-export function tabOf(search: string): AssetTab {
-  const tab = new URLSearchParams(search).get('tab')
-  return (ASSET_TABS as readonly string[]).includes(tab ?? '') ? tab as AssetTab : 'all'
+/** The tab's address (F-F3: tabs of the area, `/assets/<tab>`; the prizes' tab is `/assets/prizes`). */
+export const assetTabPath = (tab: AssetTab) => tab === 'all' ? ASSETS_PATH
+  : `${ASSETS_PATH}/${tab === 'prize' ? 'prizes' : tab}`
+
+/** The tab of a path of the library; null for a path that is no tab of it. */
+export function tabOf(path: string): AssetTab | null {
+  return ASSET_TABS.find((tab) => assetTabPath(tab) === path.replace(/\/+$/, '') ) ?? null
 }
 
 /**
@@ -94,7 +93,7 @@ export function tabOf(search: string): AssetTab {
  * F-C3: a video link's row shows how its latest share stands (`qb.sponsor.my-shared-videos`); "Share" is offered while
  * no share stands (never shared, or the last one sent back, withdrawn or taken down).
  */
-export function AssetsPage({ tab }: { tab: AssetTab }) {
+export function AssetsPage({ tab, adding = false }: { tab: AssetTab; adding?: boolean }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const id = useId()
@@ -107,7 +106,8 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
   const [unusedOnly, setUnusedOnly] = useState(false)
   const [sorting, setSorting] = useState<SortingState>([])
   const stats = useQuery({ queryKey: ASSET_STATS_QUERY, queryFn: readAssetStats, enabled: isAssetTab(tab) })
-  const [editing, setEditing] = useState<Asset | 'new' | null>(null)
+  // The global "+ New" opens the library with the new asset's dialog (`?new=1`, F-F3).
+  const [editing, setEditing] = useState<Asset | 'new' | null>(adding && isAssetTab(tab) ? 'new' : null)
   const [usesOf, setUsesOf] = useState<Asset | null>(null)
   const [collecting, setCollecting] = useState(false)
   // F-S12: the video link being shared with other Sponsors.
@@ -144,7 +144,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
     * (bySize.desc ? -1 : 1)) : filtered
   const showUnused = () => {
     setUnusedOnly(true)
-    if (!isAssetTab(tab)) navigate(`${ASSETS_PATH}?tab=all`, { replace: true })
+    if (!isAssetTab(tab)) navigate(ASSETS_PATH, { replace: true })
   }
 
   const columns = useMemo<ColumnDef<Asset, unknown>[]>(() => [
@@ -203,7 +203,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
 
   return (
     <section className="flex flex-col gap-4" data-testid="assets-page">
-      <PageHeader title={t('assets.title')} description={t('assets.intro')}
+      <AreaPageHeader title={t('assets.title')} description={t('assets.intro')}
         actions={isAssetTab(tab) && <span className="flex flex-wrap gap-2">
           <Button variant="outline" data-testid="asset-collect" onClick={() => setCollecting(true)}>
             <FolderInput aria-hidden />{t('assets.collect')}
@@ -213,14 +213,8 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
           </Button>
         </span>} />
       <UsageCard onShowUnused={showUnused} />
-      <Tabs value={tab} onValueChange={(value) => navigate(`${ASSETS_PATH}?tab=${value}`, { replace: true })}>
-        <TabsList aria-label={t('assets.tabs.label')}>
-          {ASSET_TABS.map((value) => (
-            <TabsTrigger key={value} value={value} data-testid={`assets-tab-${value}`}>{t(`assets.tabs.${value}`)}</TabsTrigger>
-          ))}
-        </TabsList>
-        {tab === 'products' && <TabsContent value={tab}><ProductsPage /></TabsContent>}
-        {isAssetTab(tab) && <TabsContent value={tab} className="flex flex-col gap-4">
+      {tab === 'products' && <ProductsPage />}
+      {isAssetTab(tab) && <div className="flex flex-col gap-4" data-testid={`assets-tab-content-${tab}`}>
           <div className="flex flex-wrap items-end gap-3" role="search" aria-label={t('assets.search')}>
             <div className="flex flex-col gap-1">
               <Label htmlFor={`${id}-search`}>{t('assets.search')}</Label>
@@ -274,8 +268,7 @@ export function AssetsPage({ tab }: { tab: AssetTab }) {
                 rowProps={(row) => ({ 'data-testid': 'asset-row', 'data-id': row.assetId, 'data-kind': row.kind })} />
             </>
           )}
-        </TabsContent>}
-      </Tabs>
+        </div>}
       {editing && (
         <AssetDialog key={editing === 'new' ? 'new' : editing.assetId} asset={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}

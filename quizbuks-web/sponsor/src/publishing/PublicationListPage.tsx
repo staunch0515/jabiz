@@ -5,7 +5,6 @@ import {
   DataTable,
   Input,
   Label,
-  PageHeader,
   PageState,
   Select,
   SelectContent,
@@ -33,6 +32,7 @@ import { CardGrid, Pager, useListView, ViewSwitch } from '../ListView'
 import { CoverPlaceholder } from '../qb/Illustrations'
 import { Thumbnail } from '../content/ContentImage'
 import { ImportSettingsButton } from './PublicationTransfer'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
 import { SubmitAllDraftsButton } from './SubmitAllDrafts'
 
 const PAGE_SIZE = 20
@@ -228,7 +228,7 @@ export function PublicationListPage() {
 
   return (
     <section className="flex flex-col gap-4" data-testid="publication-list">
-      <PageHeader title={t('publishing.list.title')} description={t('publishing.list.intro')}
+      <AreaPageHeader title={t('publishing.list.title')} description={t('publishing.list.intro')}
         actions={
           <div className="flex flex-wrap gap-2">
             <ImportSettingsButton />

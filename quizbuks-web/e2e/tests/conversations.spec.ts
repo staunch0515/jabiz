@@ -81,7 +81,7 @@ test('a Taker writes to the Sponsor from a result, the Sponsor answers, the Take
   const desk = await sponsorContext.newPage()
   await signIn(desk, '/sponsor/', sponsor.email)
   await expect(desk).not.toHaveURL(/\/login/)
-  await desk.goto('/sponsor/messages?tab=conversations')
+  await desk.goto('/sponsor/messages/conversations')
   const row = desk.getByTestId('conversation-row').filter({ hasText: quiz.name })
   await expect(row).toBeVisible()
   await expect(row.getByTestId('conversation-waiting')).toBeVisible()

@@ -1,8 +1,6 @@
 import { AuthProvider, useAuth, type SignInStep } from '@jabiz/client'
 import {
   AppearanceProvider,
-  AppShell,
-  Button,
   EntryLayoutProvider,
   EnvironmentBanner,
   MAIL_LINK_PAGES,
@@ -12,7 +10,6 @@ import {
   OidcCallback,
   PageState,
   PasswordResetRequest,
-  ShellNav,
   SignInForm,
   SignUpForm,
   StepUpProvider,
@@ -20,76 +17,20 @@ import {
   Toaster,
   VerifyEmailBanner,
   useEntryNotices,
-  type ShellMenuGroup,
 } from '@jabiz/ui'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { CircleHelp, FileQuestion, LayoutDashboard, Megaphone, MessagesSquare, Network, ReceiptText, Store, UserRound,
-  Wallet,
-  HandCoins,
-  Gift,
-  ChartColumn,
-  Ticket,
-  Handshake,
-  Package,
-  MessageCircle,
-  ClipboardList,
-  Library,
-} from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { analyticsIdOf } from './analytics/api'
-import { ASSETS_PATH } from './assets/api'
-import { AssetsPage, tabOf } from './assets/AssetsPage'
-import { PublicationAnalyticsPage } from './analytics/PublicationAnalyticsPage'
-import { QuizEditorPage } from './content/QuizEditorPage'
-import { QuizListPage } from './content/QuizListPage'
-import { quizIdOf, QUIZZES_PATH } from './content/paths'
+import { BENEFITS_QUERY, readAccess } from './benefits/api'
 import { SPONSOR } from './messages'
-import { ACCOUNT_PATH, AccountPage } from './pages/AccountPage'
-import { DashboardPage } from './pages/DashboardPage'
+import { ACCOUNT_PATH } from './pages/AccountPage'
 import { readRewardSettings, REWARD_SETTINGS_QUERY } from './publishing/api'
-import { PublicationListPage } from './publishing/PublicationListPage'
-import { PublicationPage } from './publishing/PublicationPage'
-import { CASH_REWARDS_PATH, CashRewardsPage } from './publishing/CashRewardsPage'
-import { DIGITAL_PRIZES_PATH, DigitalPrizesPage } from './publishing/DigitalPrizesPage'
-import { REDEEM_PATH, RedeemPage } from './publishing/RedeemPage'
-import { StaffPage } from './publishing/StaffPage'
-import { MailServerPage } from './publishing/MailServerPage'
-import { APP_BASE, publicationIdOf, PUBLICATIONS_PATH } from './publishing/paths'
-import { PreviewPage } from './preview/PreviewPage'
-import { TreePage } from './tree/TreePage'
-import { TREE_PATH } from './tree/api'
-import { previewOf } from './preview/paths'
+import { APP_BASE } from './publishing/paths'
 import { rememberSource } from './trial/claim'
 import TrialPage, { trialKeyOf } from './trial/TrialPage'
 import { useMySponsor } from './profile/api'
-import { BasicsPage } from './profile/BasicsPage'
-import { OverviewPage } from './profile/OverviewPage'
-import { LEGACY_PROFILE_PATHS, MOVED_PATHS, PROFILE_PATH, profilePath, profileSectionOf } from './profile/paths'
-import { ProfileLayout } from './profile/ProfileLayout'
-import { SponsorPagePage } from './page/SponsorPageEditor'
-import { STATS_PATH, StatsPage } from './stats/StatsPage'
-import { MESSAGES_PATH } from './notices/api'
-import { MessagesPage } from './notices/MessagesPage'
-import { conversationOf } from './conversations/api'
-import { ConversationPage, useUnreadConversations } from './conversations/ConversationsPages'
-import {
-  BENEFIT_CONVERSATIONS_PATH,
-  BENEFITS_PATH,
-  idOf,
-  NEW_PURCHASE,
-  OFFERS_PATH,
-  PURCHASES_PATH,
-  sideOf,
-} from './benefits/api'
-import {
-  BenefitConversationPage,
-  BenefitConversationsPage,
-  CatalogPage,
-  OffersPage,
-  PurchasePage,
-  PurchasesPage,
-} from './benefits/BenefitsPages'
+import { profilePath } from './profile/paths'
+import { useUnreadConversations } from './conversations/ConversationsPages'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { GrowthArt, Wordmark } from './qb/Illustrations'
 import { HelpPage } from './qb/HelpPage'
@@ -102,14 +43,11 @@ import { QB } from './qb/messages'
 import { hrefOf, navigate, navigation, Redirect, useLocation } from './qb/router'
 import { useSessionLock } from './qb/session'
 import { useSoundSetting } from './qb/SoundSettings'
-import { TRANSACTIONS_PATH } from './transactions/api'
-import { TransactionsPage } from './transactions/TransactionsPage'
-import { BankTopUpPage } from './wallet/BankTopUpPage'
-import { bankTopUpIdOf, topUpIdOf, WALLET_PATH } from './wallet/api'
-import { TopUpPage } from './wallet/TopUpPage'
-import { WalletPage } from './wallet/WalletPage'
+import { legacyTarget } from './shell/legacy'
+import { HOME_PATH } from './shell/paths'
+import { pageOf } from './shell/routes'
+import { SponsorShell } from './shell/SponsorShell'
 
-const DASHBOARD = '/dashboard'
 const HELP = '/help'
 
 /** The texts the console links to (the sponsors' terms, the privacy policy and the commerce notice). */
@@ -159,24 +97,25 @@ function toSignIn() {
 }
 
 /**
- * The pages of a signed-in sponsor in the console's frame (`AppShell`): the dashboard, the quizzes (editing content
- * needs no approval, publishing does), the publications, the wallet and the transactions, the message centre (Q7c),
- * the sponsor profile (onboarding) and the account.
+ * The pages of a signed-in sponsor in the Sponsor app's frame (F-F3: the home and eight areas, `shell/`): old
+ * addresses lead to their new ones first (`shell/legacy-paths.json`), then the route table (`shell/routes.tsx`).
  * The home page leads to the onboarding until the sponsor is approved.
  */
 function SignedIn({ path }: { path: string }) {
-  const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const { displayName, signOut, userId } = useAuth()
   useSessionLock(lockIdle)
   const sponsor = useMySponsor()
-  // Q28: a sponsor who may not pay in the platform's Kudos has no use for the wallet and its top-ups; the server
-  // decides what they may publish, this only hides the pages. Until the answer is in (or without one) they show.
+  // Q28: a sponsor who may not pay in the platform's Kudos has no use for the Kudos wallet and its top-ups; the server
+  // decides what they may publish, this only hides the tab. Until the answer is in (or without one) it shows.
   // Q57: the sound effects follow the sponsor's switch.
   useSoundSetting()
   const rewards = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
   const kudos = rewards.data ? rewards.data.methods.includes('PLATFORM') : true
-  // The transactions page starts from its address's filters: another address (the nav, back, forward) starts it anew.
+  // F-F3: the area of sponsored benefits only for a holder of one of the benefit roles (until the answer is in, none).
+  const access = useQuery({ queryKey: [...BENEFITS_QUERY, 'access'], queryFn: readAccess, staleTime: 60_000,
+    enabled: !!userId })
+  const benefits = access.data?.some((row) => row.open) ?? false
   const { search } = useLocation()
   // Q82: the menu's badge of the takers' conversations.
   const unreadConversations = useUnreadConversations(!!userId)
@@ -185,141 +124,21 @@ function SignedIn({ path }: { path: string }) {
 
   if (path === '/' || path === '') {
     if (sponsor.isPending) return <PageState kind="loading" />
-    // Q79: a sponsor not yet approved starts at the hub's basics (the application); approved, at the dashboard.
-    return <Redirect to={sponsor.data?.reviewStatus === 'APPROVED' ? DASHBOARD : profilePath('basics')} />
+    // Q79: a sponsor not yet approved starts at the hub's basics (the application); approved, at the home.
+    return <Redirect to={sponsor.data?.reviewStatus === 'APPROVED' ? HOME_PATH : profilePath('basics')} />
   }
 
-  let page: ReactNode
-  const quizId = quizIdOf(path)
-  const topUpId = topUpIdOf(path)
-  const bankTopUpId = bankTopUpIdOf(path)
   const open = publicPage(path)
-  const preview = previewOf(path)
-  const profileSection = profileSectionOf(path)
-  const legacyProfile = LEGACY_PROFILE_PATHS[path]
-  // F-C1c: the products and the certifications are tabs of the asset library now.
-  const moved = MOVED_PATHS[path]
-  if (open) page = open
-  else if (moved) page = <Redirect to={moved} />
-  else if (preview) page = <PreviewPage key={path} target={preview} />
-  else if (path === DASHBOARD) page = <DashboardPage />
-  else if (path === QUIZZES_PATH) page = <QuizListPage />
-  else if (quizId) page = <QuizEditorPage key={quizId} quizId={quizId} />
-  else if (path === PUBLICATIONS_PATH) page = <PublicationListPage />
-  else if (path === TREE_PATH) page = <TreePage key={search} />
-  // F-C1: the asset library (in the content group until the new frame's "library" area, F-F3).
-  else if (path === ASSETS_PATH) page = <AssetsPage tab={tabOf(search)} />
-  else if (path === CASH_REWARDS_PATH) page = <CashRewardsPage />
-  else if (path === DIGITAL_PRIZES_PATH) page = <DigitalPrizesPage />
-  else if (path === REDEEM_PATH) page = <RedeemPage />
-  // Q89a: sponsored benefits between sponsors (the catalog, one's own, inquiries and purchases, by side).
-  else if (path === BENEFITS_PATH) page = <CatalogPage />
-  else if (path === OFFERS_PATH) page = <OffersPage />
-  else if (path === BENEFIT_CONVERSATIONS_PATH) page = <BenefitConversationsPage key={search} side={sideOf(search)} />
-  else if (idOf(path, BENEFIT_CONVERSATIONS_PATH)) {
-    page = <BenefitConversationPage key={path + search} conversationId={idOf(path, BENEFIT_CONVERSATIONS_PATH)!}
-      side={sideOf(search)} />
-  } else if (path === PURCHASES_PATH) page = <PurchasesPage key={search} side={sideOf(search)} />
-  else if (idOf(path, PURCHASES_PATH)) {
-    const purchaseId = idOf(path, PURCHASES_PATH)!
-    page = purchaseId === NEW_PURCHASE
-      ? <PurchasePage key={path + search} purchaseId={null} side="SPONSOR"
-        offerId={new URLSearchParams(search).get('offer')} />
-      : <PurchasePage key={path + search} purchaseId={purchaseId} side={sideOf(search)} />
-  }
-  else if (analyticsIdOf(path)) page = <PublicationAnalyticsPage key={path} publicationId={analyticsIdOf(path)!} />
-  else if (publicationIdOf(path)) page = <PublicationPage key={path} publicationId={publicationIdOf(path)!} />
-  // Q79: the sponsor hub and its sections; the pages' old addresses lead to them.
-  else if (profileSection) {
-    page = (
-      <ProfileLayout section={profileSection}>
-        {profileSection === 'overview' ? <OverviewPage />
-          : profileSection === 'basics' ? <BasicsPage />
-            : profileSection === 'page' ? <SponsorPagePage />
-                : profileSection === 'staff' ? <StaffPage />
-                  : <MailServerPage />}
-      </ProfileLayout>
-    )
-  } else if (legacyProfile) page = <Redirect to={profilePath(legacyProfile)} />
-  else if (path === STATS_PATH) page = <StatsPage />
-  else if (path === WALLET_PATH && kudos) page = <WalletPage />
-  else if (topUpId && kudos) page = <TopUpPage key={topUpId} topUpId={topUpId} />
-  else if (bankTopUpId && kudos) page = <BankTopUpPage key={bankTopUpId} topUpId={bankTopUpId} />
-  else if (path === TRANSACTIONS_PATH) page = <TransactionsPage key={search} />
-  else if (path === MESSAGES_PATH) page = <MessagesPage tab={new URLSearchParams(search).get('tab')} />
-  else if (conversationOf(path)) page = <ConversationPage key={path} conversationId={conversationOf(path)!} />
-  else if (path === ACCOUNT_PATH) page = <AccountPage />
-  else page = <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
+  const legacy = open ? null : legacyTarget(path, search)
+  if (legacy) return <Redirect to={legacy} />
+  const state = { kudos, benefits }
+  const page = open ?? pageOf(path, search, state)
+    ?? <PageState kind="notFound" titleAs="h1" description={tQb('notFound')} />
 
-  // Q34b: the menu in sections by what they are for, with a rule between them (platform 16zi).
-  const groups: ShellMenuGroup[] = [
-    { key: 'overview', label: t('nav.groups.overview'), items: [
-      { key: 'dashboard', label: t('nav.dashboard'), path: DASHBOARD, icon: LayoutDashboard },
-    ] },
-    { key: 'content', label: t('nav.groups.content'), items: [
-      { key: 'quizzes', label: t('nav.quizzes'), path: QUIZZES_PATH, icon: FileQuestion },
-      { key: 'publications', label: t('publishing.nav'), path: PUBLICATIONS_PATH, icon: Megaphone },
-      // Q85: the publications as a tree, with the customers on it.
-      { key: 'tree', label: t('tree.nav'), path: TREE_PATH, icon: Network },
-      // F-C1: the asset library (moves to the new frame's "library" area in F-F3).
-      { key: 'assets', label: t('assets.nav'), path: ASSETS_PATH, icon: Library },
-    ] },
-    { key: 'rewards', label: t('nav.groups.rewards'), items: [
-      { key: 'cash', label: t('publishing.cash.nav'), path: CASH_REWARDS_PATH, icon: HandCoins },
-      { key: 'digital', label: t('publishing.digital.nav'), path: DIGITAL_PRIZES_PATH, icon: Ticket },
-      { key: 'redeem', label: t('publishing.redeem.nav'), path: REDEEM_PATH, icon: Gift },
-    ] },
-    // Q89a: buying other sponsors' benefits for one's takers, and offering one's own.
-    { key: 'benefits', label: t('benefits.nav.group'), items: [
-      { key: 'benefit-catalog', label: t('benefits.nav.catalog'), path: BENEFITS_PATH, icon: Handshake },
-      { key: 'benefit-offers', label: t('benefits.nav.offers'), path: OFFERS_PATH, icon: Package },
-      { key: 'benefit-conversations', label: t('benefits.nav.conversations'), path: BENEFIT_CONVERSATIONS_PATH,
-        icon: MessageCircle },
-      { key: 'benefit-purchases', label: t('benefits.nav.purchases'), path: PURCHASES_PATH, icon: ClipboardList },
-    ] },
-    { key: 'money', label: t('nav.groups.money'), items: [
-      ...(kudos ? [{ key: 'wallet', label: t('wallet.nav'), path: WALLET_PATH, icon: Wallet }] : []),
-      { key: 'transactions', label: t('transactions.nav'), path: TRANSACTIONS_PATH, icon: ReceiptText },
-    ] },
-    // Q79: the sponsor's own things (profile, page, products, staff, mail server) are the hub's sections.
-    { key: 'settings', label: t('nav.groups.settings'), items: [
-      { key: 'onboarding', label: t('nav.onboarding'), path: PROFILE_PATH, icon: Store },
-      { key: 'stats', label: t('stats.nav'), path: STATS_PATH, icon: ChartColumn },
-      // Q82: the badge counts the takers' conversations with something unread.
-      { key: 'messages', label: t('notices.nav'), path: MESSAGES_PATH, icon: MessagesSquare,
-        badge: unreadConversations },
-      { key: 'account', label: t('nav.account'), path: ACCOUNT_PATH, icon: UserRound },
-      { key: 'help', label: t('nav.help'), path: HELP, icon: CircleHelp },
-    ] },
-  ]
   const shell = (
-    <AppShell
-      brand={<Wordmark name={t('brand')} compact className="px-2 py-1" />}
-      navigation={
-        <ShellNav label={t('nav.label')} groups={groups} isActive={(p) => path === p || (p !== BENEFITS_PATH && path.startsWith(`${p}/`))}
-          renderLink={(item, props) => (
-            <a href={hrefOf(item.path)} onClick={(event) => {
-              props.onClick()
-              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-              event.preventDefault()
-              navigate(item.path)
-            }}>
-              {props.children}
-            </a>
-          )} />
-      }
-      header={
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-muted-foreground hidden text-sm sm:inline" data-testid="sponsor-user">{displayName}</span>
-          {/* F-C10c: the AI help, over any page (moved as it is to the new frame's header in F-F3). */}
-          <HelpPanel path={path} search={search} />
-          <ThemeToggle />
-          <Button variant="outline" size="sm" data-testid="sign-out" onClick={() => void signOut().then(toSignIn)}>
-            {tQb('signOut')}
-          </Button>
-        </div>
-      }
-    >
+    <SponsorShell path={path} state={state} badges={{ messages: unreadConversations }} displayName={displayName}
+      helpPath={HELP} onSignOut={() => void signOut().then(toSignIn)}
+      tools={<HelpPanel path={path} search={search} />}>
       <div className="flex flex-col gap-4">
         <OfflineBanner />
         {/* Signed in unverified (Q40): every write waits for the address, so say so and offer the mail again. */}
@@ -327,7 +146,7 @@ function SignedIn({ path }: { path: string }) {
         {page}
         <LegalLinks kinds={LINKED} className="mt-8 border-t pt-4" />
       </div>
-    </AppShell>
+    </SponsorShell>
   )
   // A sponsor who applied before the texts in effect accepts them first (D-Q7-5); applying accepts them with the
   // application. The texts and the help stay readable (the prompt links to them).

@@ -5,14 +5,14 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 - 对象：发起方（FAQ 的 `audience` = `SPONSOR`）
 - 分类：`PUBLISHING`
-- 页面：发起方页面的菜单"内容 → 资源库"（`/sponsor/assets`）
+- 页面：发起方页面的菜单"资源库"（`/sponsor/assets`，标签：全部 / 素材 / 文字 / 奖品 / 商品，F-F3）
 - 参数（写进文案的数字是缺省值，改了参数时同步改这里）：`qb.assets.max-count` = 1000、`qb.assets.max-tags` = 10、`qb.assets.tag-length` = 30；一次收集至多 200 项（`AssetRules.MAX_COLLECT`）
 
 ## 帮助页
 
 ### 中文 · 资源库
 
-**资源库是什么**：你自己的图片、PDF、音频、视频链接、网页链接、文章、常用文字（Quiz 简介、到店兑换说明、电子奖品说明、推荐奖励说明）和奖品卡片，存一次，以后在 Quiz 和发布里反复用。可以搜索、加标签、按种类查看。菜单"内容 → 资源库"。
+**资源库是什么**：你自己的图片、PDF、音频、视频链接、网页链接、文章、常用文字（Quiz 简介、到店兑换说明、电子奖品说明、推荐奖励说明）和奖品卡片，存一次，以后在 Quiz 和发布里反复用。可以搜索、加标签、按种类查看。菜单"资源库"。
 
 **选了就复制**：在 Quiz 编辑器（封面、简介、资料、题目与选项的图片）和发布向导（封面、奖品、各说明）里点"从库里选"，资源的内容就复制到这一处，保存后生效。图片等文件不会多存一份，只是引用同一个文件。复制以后两边各管各的：改这一处不会改资源，改资源也不会改已经用了它的地方，已经提交的发布更不会变。复制的是资源的基准语言，其他语言的译文在这一处照常另做。
 
@@ -24,7 +24,7 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 **删除资源**：删除只是从资源库里拿掉，已经复制到 Quiz 和发布里的内容不受影响。删除后不能恢复，需要时重新存入。
 
-**商品与认证**：原来在"发起方资料"中的"商品"和菜单中的"认证"搬到了资源库的"商品""认证"两个标签，页面和用法都没有变，旧的地址会自动转过来。
+**商品**：原来在"发起方资料"中的"商品"搬到了资源库的"商品"标签，页面和用法都没有变；原来的"认证"已经停用。旧的地址会自动转到资源库。
 
 **上限**：每个发起方至多 1000 个资源；每个资源至多 10 个标签，每个标签至多 30 个字。名称、说明、文字的长度和它们要复制到的地方相同（例如到店兑换说明的长度上限就是发布里那一栏的上限）。到了上限，先删除不用的资源再新建。
 
@@ -42,7 +42,7 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 **リソースの削除**：削除はライブラリから外すだけで、クイズや公開にコピー済みの内容には影響しません。削除したリソースは元に戻せないので、必要なときはもう一度保存してください。
 
-**商品と認定**：以前「主催者情報」にあった「商品」とメニューの「認定」は、リソースライブラリの「商品」「認定」タブに移りました。画面と使い方は変わらず、以前のアドレスも自動で移動します。
+**商品**：以前「主催者情報」にあった「商品」は、リソースライブラリの「商品」タブに移りました。画面と使い方は変わりません。以前の「認定」は廃止されました。以前のアドレスはリソースライブラリに自動で移動します。
 
 **上限**：リソースは 1 人の主催者につき 1000 件まで、タグは 1 件につき 10 個まで、タグ 1 つは 30 文字までです。名前、説明、テキストの長さの上限は、コピー先の欄と同じです（たとえば店頭引き換えの説明は、公開のその欄と同じ上限）。上限に達したら、使わないリソースを削除してから作成してください。
 
@@ -60,7 +60,7 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 
 **Deleting an asset**: deleting only takes it out of the library; what was copied into your quizzes and publications stays as it is. A deleted asset cannot be brought back: save it again if you need it.
 
-**Products and certifications**: "Products" (formerly in the Sponsor profile) and "Certifications" (formerly in the menu) are now the library's "Products" and "Certifications" tabs. The pages work as before, and the old addresses lead there.
+**Products**: "Products" (formerly in the Sponsor profile) is now the library's "Products" tab and works as before; the former "Certifications" were retired. The old addresses lead to the library.
 
 **Limits**: up to 1,000 assets per Sponsor; up to 10 tags per asset, each up to 30 characters. Names, descriptions and texts may be as long as the field they are copied into (an in-store prize description, for example, as long as the publication's field). At the limit, delete assets you no longer use before adding new ones.
 

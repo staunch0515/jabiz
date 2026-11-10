@@ -59,7 +59,7 @@ class TopUpIT extends TopUpItSupport {
             .containsEntry("client_reference_id", topUpId)
             .containsEntry("metadata[sponsorId]", sponsor)
             .containsEntry("adaptive_pricing[enabled]", "false")
-            .containsEntry("success_url", "https://sponsor.quizbuks.test/sponsor/wallet/topups/" + topUpId
+            .containsEntry("success_url", "https://sponsor.quizbuks.test/sponsor/money/wallet/topups/" + topUpId
                 + "?checkout=paid");
         Map<String, Object> open = topUp(topUpId);
         assertThat(open).containsEntry("status", "OPEN");

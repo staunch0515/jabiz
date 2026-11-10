@@ -31,13 +31,13 @@ import {
   readTopUp,
   reportBankTransfer,
   todayInJapan,
-  WALLET_PATH,
   WALLET_QUERY,
   type BankAccount,
   type TopUp,
 } from './api'
 import './messages'
 import { STATUS_BADGES, useTopUpStatusLabel } from './WalletPage'
+import { useTopUpsHome } from './home'
 
 /**
  * Tells finance the money was sent (optional: finance finds it by the code anyway): the payer's name as the bank
@@ -171,6 +171,7 @@ function AccountDetails({ account }: { account: BankAccount }) {
  * recorded, and never credits anything.
  */
 export function BankTopUpPage({ topUpId }: { topUpId: string }) {
+  const home = useTopUpsHome()
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const statusLabel = useTopUpStatusLabel()
@@ -179,7 +180,7 @@ export function BankTopUpPage({ topUpId }: { topUpId: string }) {
 
   const backLink = (
     <Button asChild variant="ghost" size="sm" className="w-fit">
-      <Link to={WALLET_PATH} data-testid="topup-back">
+      <Link to={home} data-testid="topup-back">
         <ArrowLeft aria-hidden />
         {t('wallet.detail.back')}
       </Link>

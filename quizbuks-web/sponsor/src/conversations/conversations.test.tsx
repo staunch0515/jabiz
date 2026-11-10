@@ -99,13 +99,14 @@ describe('the Takers\' conversations (Q82)', () => {
 
   it('list those waiting for a reply first, with the menu\'s badge', async () => {
     server()
-    window.history.replaceState(null, '', '/messages?tab=conversations')
+    window.history.replaceState(null, '', '/messages/conversations')
     render(<App />)
     const rows = await screen.findAllByTestId('conversation-row')
     expect(rows.map((row) => row.getAttribute('data-id'))).toEqual([ID, 'c2'])
     expect(rows[0]).toHaveTextContent('Mei')
     expect(within(rows[0]).getByTestId('conversation-waiting')).toHaveTextContent('New')
-    expect(await screen.findByTestId('messages-tab-conversations-unread')).toHaveTextContent('1')
+    // The area's entry in the menu counts them (F-F3).
+    await waitFor(() => expect(screen.getByTestId('menu-messages')).toHaveTextContent('1'))
     await expectAccessible()
   })
 

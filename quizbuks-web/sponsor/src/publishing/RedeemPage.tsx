@@ -10,7 +10,6 @@ import {
   Input,
   Label,
   notify,
-  PageHeader,
   PageState,
   Select,
   SelectContent,
@@ -48,8 +47,10 @@ import { posterPng, qrFileName, qrImageUrl, qrPng, qrSvg } from './qr'
 import { useRedemptionStatusLabel } from './shared'
 import { playSound } from '../qb/sound'
 import '../benefits/messages'
+import { REDEEM_PATH } from '../shell/paths'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
 
-export const REDEEM_PATH = '/redeem'
+export { REDEEM_PATH }
 export const REDEMPTIONS_QUERY = ['qb', 'redemptions'] as const
 const HANDLERS_QUERY = [...REDEMPTIONS_QUERY, 'handlers'] as const
 
@@ -485,7 +486,7 @@ export function RedeemPage() {
   const queryClient = useQueryClient()
   return (
     <section className="flex flex-col gap-6" data-testid="redeem-page">
-      <PageHeader title={t('publishing.redeem.title')} description={t('publishing.redeem.intro')} />
+      <AreaPageHeader title={t('publishing.redeem.title')} description={t('publishing.redeem.intro')} />
       <Claims />
       <Claims provided />
       <div className="grid gap-4 md:grid-cols-2">

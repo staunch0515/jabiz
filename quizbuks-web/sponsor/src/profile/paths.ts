@@ -22,24 +22,9 @@ export function profileSectionOf(path: string): ProfileSection | null {
   return (PROFILE_SECTIONS as readonly string[]).includes(rest) && rest !== 'overview' ? rest as ProfileSection : null
 }
 
-/** The addresses the pages had before the hub, each leading to its section (bookmarks and the PWA's start). */
-export const LEGACY_PROFILE_PATHS: Readonly<Record<string, ProfileSection>> = {
-  '/onboarding': 'basics',
-  '/page': 'page',
-  '/staff': 'staff',
-  '/mail-server': 'mail-server',
-}
-
 /**
- * The addresses of pages that moved out of the hub and the menu into the asset library's tabs (F-C1c, the requester
- * 2026-11-07): the products (`/profile/products`, and `/products` before the hub) and the certifications. Old
- * bookmarks keep working; the certifications' went with them (F-S2c2, D6) and lead to the library.
+ * The products' tab of the asset library (F-C1c, the requester 2026-11-07). The addresses the hub's pages had before
+ * (Q79) and those of the pages that moved out of it are in the one list of old addresses (`shell/legacy-paths.json`,
+ * F-F3).
  */
-export const PRODUCTS_TAB_PATH = '/assets?tab=products'
-export const MOVED_PATHS: Readonly<Record<string, string>> = {
-  '/products': PRODUCTS_TAB_PATH,
-  '/profile/products': PRODUCTS_TAB_PATH,
-  '/profile/products/': PRODUCTS_TAB_PATH,
-  '/certifications': '/assets',
-  '/certifications/': '/assets',
-}
+export const PRODUCTS_TAB_PATH = '/assets/products'

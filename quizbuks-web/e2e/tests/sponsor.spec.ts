@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { completeQuiz } from './content'
 import { approvedSponsor, decideReview, publicationIdIn, publicationOf, typeTime } from './publishing'
-import { expect, prepareQuizbuks, signIn, test, unique } from './support'
+import { expect, openArea, prepareQuizbuks, signIn, test, unique } from './support'
 
 /**
  * Publishing in the sponsor console (docs/quizbuks/plans/QP-pages.md, QP3b): an approved sponsor's quiz version through
@@ -49,7 +49,7 @@ test('a Sponsor publishes a quiz version through review and runs the publication
 
   await signIn(page, '/sponsor/', email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.getByRole('link', { name: 'Publications' }).click()
+  await openArea(page, 'publications')
   await expect(page.getByTestId('publication-list')).toBeVisible()
   await page.getByTestId('new-publication').click()
 

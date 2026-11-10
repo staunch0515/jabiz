@@ -317,7 +317,7 @@ class NotificationMailIT extends PayoutItSupport {
         assertThat(sent(sponsor, "qb.topup.paid")).containsExactly("SENT");
         MimeMessage mail = received(addressOf(name)).getLast();
         assertThat(subject(mail)).isEqualTo("Your top-up of 3,000 Kudos has arrived");
-        assertThat(text(mail)).contains(SPONSOR + "wallet");
+        assertThat(text(mail)).contains(SPONSOR + "money/wallet");
         // Once: the same event again (Stripe retries) is the platform's duplicate.
         deliver(event(eventId(), "checkout.session.completed", completed(topUpId)));
         assertThat(sent(sponsor, "qb.topup.paid")).hasSize(1);
@@ -437,7 +437,7 @@ class NotificationMailIT extends PayoutItSupport {
         // What is waiting, where to top up, and how to stop these mails (a notification): on the console's own page
         // (jabiz.mail.unsubscribe-paths.sponsor, platform decision D52), not the administration's.
         assertThat(text(mail)).contains("\"Short A\", \"Short B\"",
-                "Rewards waiting for payment: 2, together 200 Kudos", SPONSOR + "wallet", SPONSOR + "account",
+                "Rewards waiting for payment: 2, together 200 Kudos", SPONSOR + "money/wallet", SPONSOR + "account",
                 SPONSOR + "mail/unsubscribe?token=")
             .doesNotContain("Still live");
         assertThat(status(untouched)).isEqualTo("LIVE");

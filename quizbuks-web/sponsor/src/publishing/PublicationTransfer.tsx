@@ -21,7 +21,7 @@ import {
 } from '@jabiz/ui'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Upload } from 'lucide-react'
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { useId, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { readVersions, searchQuizzes } from '../content/api'
 import { QUIZZES_QUERY, versionsQuery } from '../content/paths'
@@ -257,10 +257,17 @@ export function ExportSettingsButton({ publicationId }: { publicationId: string 
  * "Import settings" (Q102): a settings file, then the quiz version, start, days and name, make a new draft saved as
  * one typed by hand (every rule applies, every problem is listed); the draft opens at its last step.
  */
-export function ImportSettingsButton() {
+export function ImportSettingsButton({ opener }: {
+  /**
+   * F-F3: the frame's global "+ New" mounts one without its button and gets the file choice through this: browsers
+   * open a file picker only within the click itself, so the menu's item clicks the input (not a page after it).
+   */
+  opener?: Ref<{ open: () => void }>
+} = {}) {
   const { t } = useTranslation(SPONSOR)
   const openPlaced = useOpenPlaced()
   const input = useRef<HTMLInputElement>(null)
+  useImperativeHandle(opener, () => ({ open: () => input.current?.click() }), [])
   const [settings, setSettings] = useState<PublicationSettings | null>(null)
   const [refused, setRefused] = useState<string | null>(null)
   const [value, setValue] = useState<PlacementValue | null>(null)
@@ -307,15 +314,17 @@ export function ImportSettingsButton() {
   return (
     <>
       <input ref={input} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1}
-        aria-hidden data-testid="publication-import-file" onChange={(event) => {
+        aria-hidden data-testid={opener ? 'global-import-file' : 'publication-import-file'} onChange={(event) => {
           const file = event.target.files?.[0]
           event.target.value = ''
           if (file) void chosen(file)
         }} />
-      <Button variant="outline" data-testid="publication-import" onClick={() => input.current?.click()}>
-        <Upload aria-hidden />
-        {t('publishing.transfer.import')}
-      </Button>
+      {!opener && (
+        <Button variant="outline" data-testid="publication-import" onClick={() => input.current?.click()}>
+          <Upload aria-hidden />
+          {t('publishing.transfer.import')}
+        </Button>
+      )}
       <Dialog open={value !== null} onOpenChange={(open) => {
         if (!open && !run.isPending) close()
       }}>

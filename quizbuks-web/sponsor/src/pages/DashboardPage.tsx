@@ -9,7 +9,7 @@ import { useMySponsor } from '../profile/api'
 import { profilePath } from '../profile/paths'
 
 /**
- * The console's first page: where the onboarding stands, leading to it while the sponsor is not approved; once
+ * The Sponsor app's home (F-F3: the area "Home"): where the onboarding stands, leading to it while the sponsor is not approved; once
  * approved, the analytics (M-10, M-11; Q9e2).
  */
 export function DashboardPage() {
@@ -28,7 +28,8 @@ export function DashboardPage() {
       <div className="from-qb-hero-from to-qb-hero-to text-qb-hero-foreground relative min-h-32 overflow-hidden rounded-2xl bg-linear-to-br p-5 shadow-sm sm:min-h-40 sm:p-6"
         data-testid="dashboard-hero">
         <div className="relative z-10 flex max-w-xl flex-col gap-2 pr-28 sm:pr-40">
-          <h1 id="dashboard-title" className="text-xl font-semibold sm:text-2xl">
+          <h1 id="dashboard-title" className="text-xl font-semibold outline-none sm:text-2xl" data-slot="page-title"
+            tabIndex={-1}>
             {name ? t('dashboard.greeting', { name }) : t('dashboard.title')}
           </h1>
           {sponsor.isSuccess && (

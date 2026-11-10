@@ -4,7 +4,7 @@
 
 - 对象：发起方（FAQ 的 `audience` = `SPONSOR`）
 - 分类：`ACCOUNT`
-- 页面：发起方页面"概况"的"发起方资料包"卡片
+- 页面：发起方页面"发起方中心 → 概况"的"发起方资料包"卡片
 - 模板：`docs/quizbuks/profile-package-prompts.md`（规则与示例由测试 `ProfilePackagePromptsTest` 与服务器的检查核对；页面上的提示词由 `aiPrompt.test.ts` 核对与它相同）
 - 规则：`docs/quizbuks/first-launch-spec.md` F-C5
 

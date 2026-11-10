@@ -9,7 +9,8 @@ import { StatusBadge } from '../publishing/shared'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
 import { Link } from '../qb/router'
-import { readWallet, WALLET_PATH, WALLET_QUERY } from '../wallet/api'
+import { readWallet, WALLET_QUERY } from '../wallet/api'
+import { BILLS_PATH, FEE_ACCOUNT_PATH } from '../shell/paths'
 import { analyticsPath, zoneTime, type Dashboard } from './api'
 import { ScrollRegion, TrendCharts } from './charts'
 import { useDashboard, useTop, useTrend } from './hooks'
@@ -40,7 +41,9 @@ function CashMetrics() {
   const wallet = useQuery({ queryKey: [...WALLET_QUERY, 'summary'], queryFn: readWallet })
   if (!wallet.data) return null
   const w = wallet.data
-  const link = <Link to={WALLET_PATH} className="underline underline-offset-4">{t('analytics.metrics.toWallet')}</Link>
+  // F-F3: the cash account is the money area's platform fee account, the invoices its own tab.
+  const link = <Link to={FEE_ACCOUNT_PATH} className="underline underline-offset-4">{t('analytics.metrics.toWallet')}</Link>
+  const bills = <Link to={BILLS_PATH} className="underline underline-offset-4">{t('analytics.metrics.toBills')}</Link>
   return (
     <>
       <Metric testId="metric-cash" label={t('analytics.metrics.cash')} value={formatKudos(w.cashBalance)} icon={Wallet}
@@ -51,7 +54,7 @@ function CashMetrics() {
           : t('analytics.metrics.invoicesNone')}
         hint={w.overdueCount > 0
           ? <span className="text-destructive" data-testid="metric-invoices-overdue">{t('analytics.metrics.invoicesOverdue', { n: w.overdueCount })}</span>
-          : link} />
+          : bills} />
     </>
   )
 }

@@ -4,7 +4,7 @@
 
 - 对象：发起方（FAQ 的 `audience` = `SPONSOR`）
 - 分类：`ACCOUNT`
-- 页面：发起方页面"发起方资料 → 概况"右栏的"你的运营商"卡片（模板 `qb.sponsor.operator`）
+- 页面：发起方页面"发起方中心 → 概况"右栏的"你的运营商"卡片（模板 `qb.sponsor.operator`）
 - 规则：`docs/quizbuks/first-launch-spec.md` F-S1；运维步骤：`docs/quizbuks/operations.md` 的运营商一节
 
 ## 帮助页
@@ -13,7 +13,7 @@
 
 **运营商是什么**：每个发起方都由一个运营商负责。运营商审核你的入驻申请、发布、公开主页与商品，处理学者对你的 Quiz 的举报，并回答你的问题。平台本身不做这些审核。
 
-**我的运营商是谁**：在"发起方资料 → 概况"的"你的运营商"卡片上可以看到它的名称、联系人与邮箱。有问题时直接写信给这个邮箱。
+**我的运营商是谁**：在"发起方中心 → 概况"的"你的运营商"卡片上可以看到它的名称、联系人与邮箱。有问题时直接写信给这个邮箱。
 
 **运营商是怎样定的**：自己注册的发起方归平台指定的默认运营商；通过某个运营商发来的链接注册的，归那个运营商。提交入驻申请时即已确定，之前卡片上显示"还没有运营商"。
 
@@ -25,7 +25,7 @@
 
 **運営パートナーとは**：すべての主催者は、いずれかの運営パートナーが担当します。運営パートナーは、主催者の申し込み、公開、ショップページと商品を審査し、あなたの Quiz へのテイカーからの通報に対応し、質問に答えます。プラットフォーム自体はこれらの審査を行いません。
 
-**担当はどこか**：「主催者情報 → 概要」の「あなたの運営パートナー」カードに、名前・担当者・メールアドレスが表示されます。質問はこのアドレスに直接お送りください。
+**担当はどこか**：「主催者センター → 概要」の「あなたの運営パートナー」カードに、名前・担当者・メールアドレスが表示されます。質問はこのアドレスに直接お送りください。
 
 **担当の決まり方**：ご自身で登録した主催者は、プラットフォームが指定した既定の運営パートナーの担当になります。運営パートナーから届いたリンクで登録した場合は、その運営パートナーの担当です。申し込みを送った時点で決まり、それまではカードに「まだ担当の運営パートナーはいません」と表示されます。
 
@@ -37,7 +37,7 @@
 
 **What an operator is**: every Sponsor is looked after by an operator. The operator reviews your application, your publications, your public page and your products, handles Takers' reports about your quizzes, and answers your questions. The platform itself does not do these reviews.
 
-**Who mine is**: the "Your operator" card on "Sponsor profile → Overview" shows its name, contact and email address. Write to that address with any question.
+**Who mine is**: the "Your operator" card on "Sponsor hub → Overview" shows its name, contact and email address. Write to that address with any question.
 
 **How it is decided**: a Sponsor who signs up on their own is looked after by the platform's default operator; one who signs up through an operator's link is looked after by that operator. It is decided when you send your application; until then the card says no operator looks after your account yet.
 

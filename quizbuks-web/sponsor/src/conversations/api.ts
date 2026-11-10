@@ -1,5 +1,5 @@
 import { runProcess, runQuery } from '@jabiz/client'
-import { MESSAGES_PATH } from '../notices/api'
+import { CONVERSATIONS_PATH, MESSAGES_PATH } from '../shell/paths'
 import { CONVERSATION_PROCESS, CONVERSATION_TEMPLATE } from './ids'
 
 /*
@@ -9,9 +9,8 @@ import { CONVERSATION_PROCESS, CONVERSATION_TEMPLATE } from './ids'
  */
 
 export const CONVERSATIONS_QUERY = ['qb', 'sponsor-conversations'] as const
-export const CONVERSATIONS_TAB = 'conversations'
-/** The message centre opened on its conversations. */
-export const CONVERSATIONS_PATH = `${MESSAGES_PATH}?tab=${CONVERSATIONS_TAB}`
+/** The conversations' tab of the area "Customers & messages" (F-F3). */
+export { CONVERSATIONS_PATH }
 
 export type ConversationStatus = 'OPEN' | 'CLOSED'
 export type Side = 'TAKER' | 'SPONSOR'

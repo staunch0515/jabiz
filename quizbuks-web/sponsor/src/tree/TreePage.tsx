@@ -1,5 +1,5 @@
 import { i18n } from '@jabiz/client'
-import { Alert, AlertDescription, Badge, Button, PageHeader, PageState } from '@jabiz/ui'
+import { Alert, AlertDescription, Badge, Button, PageState } from '@jabiz/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -15,6 +15,7 @@ import { TreeEditor } from './TreeEditor'
 import { KnowledgeMap } from '../qb/tree/KnowledgeMap'
 import { PUBLICATIONS_PATH } from '../publishing/paths'
 import './messages'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
 
 /**
  * The Sponsor's knowledge map (F-S3c, docs/quizbuks/plans/impl/F-S3.md §4; Q85's tree page before, at the same
@@ -33,7 +34,7 @@ export function TreePage() {
   })
   return (
     <div className="flex flex-col gap-4" data-testid="tree-page">
-      <PageHeader title={t('tree.title')} description={t('tree.intro')} />
+      <AreaPageHeader title={t('tree.title')} description={t('tree.intro')} />
       {maps.isPending ? <PageState kind="loading" />
         : maps.isError ? <PageState kind="error" description={tQb('failed')}
           action={<Button variant="outline" onClick={() => void maps.refetch()}>{tQb('retry')}</Button>} />

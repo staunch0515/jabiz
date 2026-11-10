@@ -1,6 +1,6 @@
 import { PNG } from './content'
 import { approvedSponsor } from './publishing'
-import { expect, expectAccessible, prepareQuizbuks, rows, setAppearance, signIn, test, unique } from './support'
+import { expect, expectAccessible, openArea, prepareQuizbuks, rows, setAppearance, signIn, test, unique } from './support'
 
 /*
  * F-C6 (docs/quizbuks/plans/impl/F-C6.md): a profile package whose cover is a link. The server downloads links only
@@ -32,7 +32,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
     await signIn(page, '/sponsor/', email)
     // Signed in: the menu is there before the page is left (a click on submit alone does not wait for it).
-    await page.getByRole('link', { name: 'Sponsor profile' }).click()
+    await openArea(page, 'hub')
     await expect(page.getByTestId('profile-transfer')).toBeVisible()
     await page.getByTestId('profile-import-file').setInputFiles({ name: 'lena.quizbuks-profile.json',
       mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(document)) })
