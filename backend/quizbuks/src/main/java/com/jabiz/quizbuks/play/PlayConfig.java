@@ -188,6 +188,30 @@ public class PlayConfig {
         return ChannelPlay.submit(messages);
     }
 
+    /** F-S4a: a Sponsor answering their operator's challenges. */
+    @Bean
+    ProcessDefinition<AttemptProcesses.PublicationRef, AttemptProcesses.StartOutput, ProcessContext>
+        qbSponsorAttemptStart(com.jabiz.integrity.IntegrityKey integrityKey) {
+        return SponsorPlay.start(OptionShuffle.of(integrityKey), QuestionPick.of(integrityKey));
+    }
+
+    @Bean
+    ProcessDefinition<AttemptProcesses.SaveInput, AttemptProcesses.SaveOutput, ProcessContext> qbSponsorAttemptSave() {
+        return SponsorPlay.save();
+    }
+
+    @Bean
+    ProcessDefinition<AttemptFinishing.SubmitInput, AttemptFinishing.SubmitOutput, ProcessContext>
+        qbSponsorAttemptSubmit(MessageCatalog messages) {
+        return SponsorPlay.submit(messages);
+    }
+
+    @Bean
+    ProcessDefinition<AttemptResults.ResultInput, AttemptResults.ResultOutput, ProcessContext>
+        qbSponsorAttemptResult() {
+        return SponsorPlay.result();
+    }
+
     @Bean
     ProcessDefinition<AttemptFinishing.ExpireInput, AttemptFinishing.ExpireOutput, ProcessContext> qbAttemptExpire(
         MessageCatalog messages) {

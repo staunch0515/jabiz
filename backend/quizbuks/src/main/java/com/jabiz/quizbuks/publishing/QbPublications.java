@@ -115,6 +115,9 @@ public final class QbPublications {
         eb.field("treeId", f -> f.physicalColumn("tree_id").asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
         eb.field("treeNodeId", f -> f.physicalColumn("tree_node_id")
             .asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
+        // F-S4a: bound to a node of a map Sponsors light (an operator's copy): a challenge Sponsors answer in the Sponsor
+        // app, which no Taker sees. Set by the save from the node's map (null before F-S4: false).
+        eb.field("forSponsors", f -> f.physicalColumn("for_sponsors").processOnly().asBool());
         eb.field("budgetCap", f -> f.physicalColumn("budget_cap").asMonetary("JPY", 0)
             .apply(Rules.range(PublishingCodes.BUDGET_RANGE, BigDecimal.ONE, PublishingLimits.MAX_MONEY)));
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").asNumeric(9, 0)
@@ -459,6 +462,8 @@ public final class QbPublications {
             .asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
         eb.field("treeNodeId", f -> f.physicalColumn("tree_node_id").immutable(true)
             .asText(com.jabiz.quizbuks.tree.QbTrees.ID_LENGTH));
+        // F-S4a: a challenge Sponsors answer in the Sponsor app; Takers' lists leave it out, their start refuses it.
+        eb.field("forSponsors", f -> f.physicalColumn("for_sponsors").immutable(true).required(true).asBool());
         eb.field("budgetCap", f -> f.physicalColumn("budget_cap").immutable(true).asMonetary("JPY", 0));
         eb.field("maxWinners", f -> f.physicalColumn("max_winners").immutable(true).asNumeric(9, 0));
         // CardTiers' JSON: the tiers are frozen at submission too.

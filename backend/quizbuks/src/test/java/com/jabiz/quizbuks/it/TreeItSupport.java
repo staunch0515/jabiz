@@ -173,6 +173,46 @@ abstract class TreeItSupport extends PlayItSupport {
         light(gate, userIds);
     }
 
+    /** F-S4a: a platform map Sponsors light, its copy by a new operator in effect, the operator and its two nodes. */
+    record Copy(String templateId, String treeId, String start, String next, NewOperator operator) {}
+
+    @SuppressWarnings("unchecked")
+    Copy copy() {
+        String writer = mapWriter();
+        Map<String, Object> template = run(TreeProcesses.CREATE, writer, body("ownerKind", "PLATFORM",
+            "subjectKind", "SPONSOR", "name", name("Sponsor skills")));
+        Map<String, Object> saved = save(writer, template, List.of(
+            node(null, "start", "Getting started", all(passed())),
+            node(null, "next", "Running a quiz", all(lit("start", true), passed()))));
+        Map<String, String> ids = (Map<String, String>) saved.get("nodeIds");
+        decide(mapWriter(), submit(writer, saved).get("approvalRequestId"), "APPROVE", null);
+        NewOperator operator = officialOperator("FS4a challenges");
+        String lead = memberSession(operator.leadId(), operator.operatorId());
+        Map<String, Object> copy = run(TreeProcesses.COPY, lead, body("templateTreeId", template.get("treeId")));
+        String other = verifiedUser(unique("fs4a-member"));
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.MEMBER_ADD, operatorsAdmin(), body("operatorId", operator.operatorId(), "userId", other,
+            "lead", false));
+        decide(memberSession(other, operator.operatorId()), submit(lead, copy).get("approvalRequestId"), "APPROVE",
+            null);
+        return new Copy(String.valueOf(template.get("treeId")), String.valueOf(copy.get("treeId")), ids.get("start"),
+            ids.get("next"), operator);
+    }
+
+    /** A challenge's publication: every tier 0. */
+    Map<String, Object> challenge(String token, String treeId, String nodeId, String name) {
+        Map<String, Object> save = bound(version(token, name + " quiz"), name, treeId, nodeId);
+        save.put("tiers", List.of(body("fromScore", 0, "toScore", 5, "reward", 0)));
+        return save;
+    }
+
+    /** A Sponsor of the operator: onboarded, then moved into it. */
+    String sponsorOf(NewOperator operator, String name) {
+        String sponsor = newSponsor(unique(name));
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, operatorsAdmin(), body("userId", sponsor, "operatorId", operator.operatorId(),
+            "reason", "F-S4a"));
+        return sponsor;
+    }
+
     void advance(Duration duration) {
         clock.set(clock.instant().plus(duration));
     }

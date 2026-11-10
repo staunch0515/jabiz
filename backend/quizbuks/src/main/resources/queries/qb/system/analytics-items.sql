@@ -39,19 +39,22 @@ WITH run AS (
     SELECT max(r.{{QbStatsRun.refreshedAt}}) AS prev
     FROM {{QbStatsRun}} r
     WHERE r.{{QbStatsRun.job}} = 'qb.analytics'),
+-- F-S4a: never a challenge (a Sponsor's answering is no Taker's figure; the recounts are among these).
 due AS (
     SELECT k.{{QbPublicationCard.publicationId}} AS pid
     FROM {{QbPublicationCard}} k
-    WHERE k.{{QbPublicationCard.status}} IN ('LIVE', 'PAUSED', 'FUNDS_SHORT')
+    WHERE k.{{QbPublicationCard.status}} IN ('LIVE', 'PAUSED', 'FUNDS_SHORT') AND NOT k.{{QbPublicationCard.forSponsors}}
     UNION
     SELECT k.{{QbPublicationCard.publicationId}} AS pid
     FROM {{QbPublicationCard}} k
     WHERE k.{{QbPublicationCard.status}} = 'ENDED' AND k.{{QbPublicationCard.endedAt}} > CAST(:recent AS timestamptz)
+      AND NOT k.{{QbPublicationCard.forSponsors}}
     UNION
     SELECT k.{{QbPublicationCard.publicationId}} AS pid
     FROM {{QbAnalyticsCursor}} c
     JOIN {{QbPublicationCard}} k ON k.{{QbPublicationCard.publicationId}} = c.{{QbAnalyticsCursor.publicationId}}
-    WHERE c.{{QbAnalyticsCursor.finalizedAt}} IS NULL AND k.{{QbPublicationCard.status}} = 'ENDED'),
+    WHERE c.{{QbAnalyticsCursor.finalizedAt}} IS NULL AND k.{{QbPublicationCard.status}} = 'ENDED'
+      AND NOT k.{{QbPublicationCard.forSponsors}}),
 numbered AS (
     SELECT d.pid, (row_number() OVER (ORDER BY CAST(d.pid AS text)) - 1) / CAST(:chunkSize AS bigint) AS n
     FROM due d),

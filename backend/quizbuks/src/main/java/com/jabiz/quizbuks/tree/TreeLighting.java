@@ -99,7 +99,7 @@ public final class TreeLighting {
                 .outputMapper(ctx -> ctx.contains(OUTPUT) ? ctx.get(OUTPUT, EvaluateOutput.class)
                     : new EvaluateOutput(List.of()))
                 .step("Lock the subject's lighting", HoldLock.<ProcessContext>exclusive(ctx -> person(ctx) == null
-                    ? null : QbTrees.litLockName(QbTrees.USER, person(ctx))))
+                    ? null : QbTrees.litLockName(subject(ctx), person(ctx))))
                 .step("Load the subject's lit nodes and the nodes depending on these", QueryEntities.<ProcessContext>all(
                     QueryEntities.query(QbTrees.defaultDataset(QbTrees.LIT), ctx -> mine(ctx), LITS),
                     QueryEntities.query(QbTrees.defaultDataset(QbTrees.REVOCATION), ctx -> mine(ctx), REVOCATIONS),
@@ -122,7 +122,7 @@ public final class TreeLighting {
                     QbPlay.defaultDataset(QbPlay.ATTEMPT), ctx -> {
                         List<Object> publications = new ArrayList<>();
                         for (EntityInstance card : list(ctx, CARDS)) {
-                            if (candidate(ctx, card.get("treeId"), card.get("treeNodeId"))) {
+                            if (candidate(ctx, card.get("treeId"), card.get("treeNodeId")) && countsFor(ctx, card)) {
                                 publications.add(card.get("publicationId"));
                             }
                         }
@@ -138,11 +138,27 @@ public final class TreeLighting {
                     TreeLighting::goesDeeper, LIT_EVENT, TreeLighting::litPayload)));
     }
 
-    /** The person evaluated: a Taker's evaluation; none for another kind of subject (nothing to do before F-S4). */
+    /**
+     * The subject evaluated: a Taker ({@code USER}) or (F-S4a) a Sponsor answering challenges ({@code SPONSOR}); none for
+     * another kind.
+     */
     private static String person(ProcessContext ctx) {
         EvaluateInput input = input(ctx);
-        return QbTrees.USER.equals(input.subjectKind()) && input.subjectId() != null
+        return QbTrees.LIT_SUBJECTS.contains(input.subjectKind()) && input.subjectId() != null
             && !input.subjectId().isBlank() && !input.nodeIds().isEmpty() ? input.subjectId() : null;
+    }
+
+    /** The kind of the subject evaluated ({@link #person} says whether there is one). */
+    private static String subject(ProcessContext ctx) {
+        return input(ctx).subjectKind();
+    }
+
+    /**
+     * F-S4a: whether a card's passes count for the subject: a Sponsor lights by passing challenges (bound to maps
+     * Sponsors light), a Taker by passing the others.
+     */
+    private static boolean countsFor(ProcessContext ctx, EntityInstance card) {
+        return Boolean.TRUE.equals(card.get("forSponsors")) == QbTrees.SPONSOR.equals(subject(ctx));
     }
 
     private static EvaluateInput input(ProcessContext ctx) {
@@ -153,7 +169,8 @@ public final class TreeLighting {
         String person = person(ctx);
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
             new QueryPredicate.In("subjectId", person == null ? List.of() : List.of(person)),
-            new QueryPredicate.Eq("subjectKind", QbTrees.USER)))).limit(MAX_ROWS).build();
+            new QueryPredicate.Eq("subjectKind", person == null ? QbTrees.USER : subject(ctx))))).limit(MAX_ROWS)
+            .build();
     }
 
     private static List<Candidate> candidates(ProcessContext ctx) {
@@ -299,7 +316,7 @@ public final class TreeLighting {
                 basis.put("nodes", input.nodeIds());
             }
             Map<String, Object> values = new LinkedHashMap<>();
-            values.put("subjectKind", QbTrees.USER);
+            values.put("subjectKind", subject(ctx));
             values.put("subjectId", person(ctx));
             values.put("treeId", candidate.treeId());
             values.put("nodeId", candidate.nodeId());
@@ -329,7 +346,7 @@ public final class TreeLighting {
 
     private static Map<String, Object> litPayload(ProcessContext ctx) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("subjectKind", QbTrees.USER);
+        payload.put("subjectKind", subject(ctx));
         payload.put("subjectId", person(ctx));
         payload.put("nodeIds", litHere(ctx));
         payload.put("depth", input(ctx).depth() + 1);
@@ -340,7 +357,10 @@ public final class TreeLighting {
     static EvaluateInput passedInput(DomainEvent event) {
         Map<String, Object> payload = event.payload();
         Object node = payload.get("nodeId");
-        return new EvaluateInput(QbTrees.USER, text(payload.get("userId")), text(payload.get("treeId")),
+        // F-S4a: a Sponsor's pass of a challenge names its subject; a Taker's is the user's.
+        Object kind = payload.get("subjectKind");
+        return new EvaluateInput(kind == null ? QbTrees.USER : String.valueOf(kind),
+            text(payload.get(kind == null ? "userId" : "subjectId")), text(payload.get("treeId")),
             node == null ? List.of() : List.of(String.valueOf(node)), false, 1, text(payload.get("attemptId")));
     }
 

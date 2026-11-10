@@ -390,5 +390,7 @@ LEFT JOIN {{QbInvitation}} inv ON inv.{{QbInvitation.publicationId}} = c.{{QbPub
 WHERE c.{{QbPublicationCard.publicationId}} = :publicationId
   -- S0 (D-S0-4): a shop's publication (S2) is not a page of the App.
   AND c.{{QbPublicationCard.publisherKind}} = 'SPONSOR'
+  -- F-S4a: a challenge is answered by the operator's Sponsors in the Sponsor app, never by Takers.
+  AND NOT c.{{QbPublicationCard.forSponsors}}
 ) d
 WHERE (d.shown OR d.myAttemptId IS NOT NULL) AND d.visible

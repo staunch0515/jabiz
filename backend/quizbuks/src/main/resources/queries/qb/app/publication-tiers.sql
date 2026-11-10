@@ -38,6 +38,8 @@ LEFT JOIN {{QbAttempt}} m ON m.{{QbAttempt.publicationId}} = c.{{QbPublicationCa
 LEFT JOIN {{QbInvitation}} inv ON inv.{{QbInvitation.publicationId}} = c.{{QbPublicationCard.publicationId}}
 CROSS JOIN LATERAL jsonb_array_elements(CAST(c.{{QbPublicationCard.tiers}} AS jsonb)) WITH ORDINALITY AS t(tier, seq)
 WHERE c.{{QbPublicationCard.publicationId}} = :publicationId
+  -- F-S4a: a challenge is answered by the operator's Sponsors in the Sponsor app, never by Takers.
+  AND NOT c.{{QbPublicationCard.forSponsors}}
   AND (m.{{QbAttempt.attemptId}} IS NOT NULL
        OR (c.{{QbPublicationCard.status}} = 'LIVE'
            AND c.{{QbPublicationCard.startAt}} <= :at AND :at < c.{{QbPublicationCard.endAt}}

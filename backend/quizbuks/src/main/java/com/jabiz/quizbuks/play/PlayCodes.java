@@ -67,12 +67,14 @@ public final class PlayCodes {
     public static final String TREE_NOT_UNLOCKED = "QB_TREE_NOT_UNLOCKED";
     /** F-S2b1: the node the publication is bound to is no longer in effect. */
     public static final String TREE_NODE_CLOSED = "QB_TREE_NODE_CLOSED";
+    /** F-S4a: a challenge (bound to a node Sponsors light) is answered by the operator's Sponsors, not by Takers. */
+    public static final String FOR_SPONSORS = "QB_ATTEMPT_FOR_SPONSORS";
 
     public static final List<String> ALL = List.of(TOO_FAST, NOT_OPEN, NOT_VISIBLE, BUDGET_FULL, QUOTA_FULL, FUNDS_SHORT,
         ALREADY_TAKEN, VERSION_CHANGED, OWN_PUBLICATION, EXPIRED, NOT_IN_PROGRESS, FINISHED, ANSWER_INVALID, INCOMPLETE, SINGLE_CHOICE, PUBLICATION_MISMATCH,
         FEE_RATE_INVALID, REWARD_PENDING, REWARD_CASH, REWARD_REDEEM, REWARD_DIGITAL,
         REWARD_DIGITAL_DUE, LANGUAGE, WATCH_REQUIRED, ENTRY_FEE_SHORT, TREE_NOT_UNLOCKED,
-        TREE_NODE_CLOSED);
+        TREE_NODE_CLOSED, FOR_SPONSORS);
 
     private PlayCodes() {}
 }

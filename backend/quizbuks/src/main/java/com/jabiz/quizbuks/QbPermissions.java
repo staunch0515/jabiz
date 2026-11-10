@@ -184,6 +184,11 @@ public final class QbPermissions {
      */
     public static final String SPONSOR_APP = "qb.sponsor.app";
     /**
+     * F-S4a: a Sponsor answering their operator's challenges in the Sponsor app ({@code QB_SPONSOR_ATTEMPT_*}, the
+     * template {@code qb.sponsor.challenges}). Sponsors only: their staff answer nothing as them.
+     */
+    public static final String SPONSOR_CHALLENGE = "qb.sponsor.challenge";
+    /**
      * Q70: the referrals' system processes ({@code QB_REFERRAL_REWARD}, {@code _EXPIRE}, {@code internal()}), their
      * templates and the default datasets. Granted to no role.
      */

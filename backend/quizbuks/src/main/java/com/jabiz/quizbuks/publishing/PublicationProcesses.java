@@ -549,6 +549,8 @@ public final class PublicationProcesses {
         boolean bound = input.treeNodeId() != null && !input.treeNodeId().isBlank();
         values.put("treeId", bound && input.treeId() != null ? input.treeId().strip() : null);
         values.put("treeNodeId", bound && input.treeId() != null ? input.treeNodeId().strip() : null);
+        // F-S4a: a node of a map Sponsors light makes it a challenge (the map's kind never changes).
+        values.put("forSponsors", PublicationNodes.forSponsors(ctx));
         // Q88b (D-Q88-9, D-Q88-14): the entry fee, none by default; set only while the switch is on.
         BigDecimal entryFee = input.entryFee() == null ? BigDecimal.ZERO : input.entryFee();
         if (entryFee.signum() > 0 && !PublicationEditing.entryFeeEnabled(ctx)) {
@@ -764,6 +766,10 @@ public final class PublicationProcesses {
         // F-S2b1: the node it is bound to.
         problems.addAll(PublicationNodes.problems(ctx, ctx.request().actorId(), (String) values.get("treeId"),
             (String) values.get("treeNodeId")));
+        // F-S4a: a challenge pays nothing and has none of the extras.
+        if (Boolean.TRUE.equals(values.get("forSponsors"))) {
+            problems.addAll(PublicationChallenges.problems(values, ranges));
+        }
         // What submitting would also say: the caller is no approved sponsor, or is banned (D-Q2-6); the method is
         // one they may not use (Q22: a copy of a publication made before the method was taken away).
         problems.addAll(PublicationEditing.sponsorProblems(ctx));
@@ -876,8 +882,8 @@ public final class PublicationProcesses {
             "benefitPurchaseId", "benefitSnapshot", "fulfillerId",
             // Q88b: the entry fee (the copy keeps it whatever the switch says now: what was set stays set).
             "entryFee",
-            // F-S2b1: the node (the copy's submission checks it again).
-            "treeId", "treeNodeId")) {
+            // F-S2b1: the node (the copy's submission checks it again). F-S4a: and whether it is a challenge.
+            "treeId", "treeNodeId", "forSponsors")) {
             values.put(field, source.get(field));
         }
         values.put("rewardMethod", PublicationEditing.methodOf(source.attributes()));

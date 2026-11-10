@@ -97,6 +97,8 @@ public final class QbPlay {
         eb.field("videoEnded", f -> f.physicalColumn("video_ended").immutable(true).processOnly().asBool());
         eb.field("playbackStatus", f -> f.physicalColumn("playback_status").immutable(true).processOnly()
             .asText(10));
+        // F-S4a: the Sponsor the attempt answers for (the Sponsor's own account: userId); null for a Taker's.
+        eb.field("onBehalfOf", f -> f.physicalColumn("on_behalf_of").immutable(true).asText(36));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         // Finished is final: the platform refuses any other move as well.
         eb.stateTransitions("status", st -> st

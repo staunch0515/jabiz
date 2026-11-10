@@ -10,6 +10,7 @@ datasets:
   QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
 results:
   itemKey: { kind: { type: text, maxLength: 32 } }
+  subjectKind: { kind: { type: text, maxLength: 10 } }
   userId: { from: QbAttempt.userId }
   treeId: { from: QbPublicationCard.treeId }
   nodeId: { from: QbPublicationCard.treeNodeId }
@@ -19,12 +20,14 @@ list:
   key: [itemKey]
 permissions: [qb.tree.system]
 ---*/
--- The item's key is an md5 of the three ids (a job's item keys are at most 36 characters).
+-- The item's key is an md5 of the three ids (a job's item keys are at most 36 characters). F-S4a: a Sponsor's pass of a
+-- challenge (on_behalf_of) lights the Sponsor (subject SPONSOR, the same account's id), a Taker's the user (USER).
 -- A pass counts only after the person's last revoked lighting of the node (tree.TreeLighting, the same rule): a
 -- revoked lighting is not lit again from the passes it rested on. QB_TREE_EVALUATE reads everything again under the
 -- person's lighting lock and lights only what holds; the node's condition may ask for more than the pass.
 SELECT DISTINCT md5(a.{{QbAttempt.userId}} || '|' || c.{{QbPublicationCard.treeId}} || '|'
            || c.{{QbPublicationCard.treeNodeId}}) AS itemKey,
+       CASE WHEN a.{{QbAttempt.onBehalfOf}} IS NULL THEN 'USER' ELSE 'SPONSOR' END AS subjectKind,
        a.{{QbAttempt.userId}} AS userId, c.{{QbPublicationCard.treeId}} AS treeId,
        c.{{QbPublicationCard.treeNodeId}} AS nodeId
 FROM {{QbPublicationCard}} c
@@ -35,7 +38,8 @@ JOIN {{QbAttempt}} a ON a.{{QbAttempt.publicationId}} = c.{{QbPublicationCard.pu
 WHERE c.{{QbPublicationCard.treeNodeId}} IS NOT NULL
   AND NOT EXISTS (
       SELECT 1 FROM {{QbTreeLit}} l
-      WHERE l.{{QbTreeLit.subjectKind}} = 'USER' AND l.{{QbTreeLit.subjectId}} = a.{{QbAttempt.userId}}
+      WHERE l.{{QbTreeLit.subjectKind}} = CASE WHEN a.{{QbAttempt.onBehalfOf}} IS NULL THEN 'USER' ELSE 'SPONSOR' END
+        AND l.{{QbTreeLit.subjectId}} = a.{{QbAttempt.userId}}
         AND l.{{QbTreeLit.treeId}} = c.{{QbPublicationCard.treeId}}
         AND l.{{QbTreeLit.nodeId}} = c.{{QbPublicationCard.treeNodeId}}
         AND NOT EXISTS (SELECT 1 FROM {{QbTreeLitRevocation}} r
@@ -44,6 +48,7 @@ WHERE c.{{QbPublicationCard.treeNodeId}} IS NOT NULL
       SELECT max(r.{{QbTreeLitRevocation.revokedAt}})
       FROM {{QbTreeLitRevocation}} r
       JOIN {{QbTreeLit}} l ON CAST(l.{{QbTreeLit.litId}} AS text) = r.{{QbTreeLitRevocation.litId}}
-      WHERE l.{{QbTreeLit.subjectKind}} = 'USER' AND l.{{QbTreeLit.subjectId}} = a.{{QbAttempt.userId}}
+      WHERE l.{{QbTreeLit.subjectKind}} = CASE WHEN a.{{QbAttempt.onBehalfOf}} IS NULL THEN 'USER' ELSE 'SPONSOR' END
+        AND l.{{QbTreeLit.subjectId}} = a.{{QbAttempt.userId}}
         AND l.{{QbTreeLit.treeId}} = c.{{QbPublicationCard.treeId}}
         AND l.{{QbTreeLit.nodeId}} = c.{{QbPublicationCard.treeNodeId}}), '-infinity')

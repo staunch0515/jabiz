@@ -142,6 +142,8 @@ public final class AttemptProcesses {
     static final String VIEWS = "play.views";
     static final String ATTEMPT = "play.attempt";
     static final String NEW = "play.new";
+    /** F-S4a: the Sponsor an attempt is answered as ({@link SponsorPlay}); absent for a Taker's or a channel's. */
+    static final String ON_BEHALF_OF = "play.onBehalfOf";
     /**
      * Q88b: a publication charging an entry fee reads, under the taker's wallet lock, their wallet row, the hold
      * period's parameter and their transferable balance; the posting of the fee, once the attempt is written.
@@ -192,7 +194,8 @@ public final class AttemptProcesses {
         EntityInstance card = first(ctx, CARD);
         String userId = ctx.request().actorId();
         // S2: a channel's publication (a shop's storefront quiz) is no App taker's: as good as none.
-        if (card == null || !PublisherKind.sponsor(card.get("publisherKind"))
+        // F-S4a: nor is a challenge (the operator's Sponsors answer it in the Sponsor app).
+        if (card == null || !PublisherKind.sponsor(card.get("publisherKind")) || Boolean.TRUE.equals(card.get("forSponsors"))
             || !(first(ctx, MINE) != null || shown(ctx, card))
             || !TreeGate.visible(ctx, card, first(ctx, MINE) != null)) {
             throw new EntityNotFoundException(QbPublications.PUBLICATION + " " + publicationId + " not found");
@@ -295,6 +298,8 @@ public final class AttemptProcesses {
                             + " not found");
                     }
                 })
+                // F-S4a: a challenge is the operator's Sponsors', answered in the Sponsor app (SponsorPlay).
+                .compute("Refuse a challenge", (metadata, ctx) -> refuseChallenge(ctx))
                 .compute("Continue an attempt in progress", (metadata, ctx) -> resume(ctx))
                 // F-S8: a new start of a publication the caller blocked (its publication, quiz, sponsor or video's
                 // provider) is refused, whatever it pays. A caller without blocks sends nothing more (the first read
@@ -424,6 +429,18 @@ public final class AttemptProcesses {
         return ctx.get(INPUT) instanceof PublicationRef ref ? ref.playback() : null;
     }
 
+    /**
+     * F-S4a: 422 when a Taker starts a challenge (the operator's Sponsors answer it in the Sponsor app), or continues
+     * one: an attempt of it is a Sponsor's ({@link SponsorPlay}), even when the same person is also a Taker.
+     */
+    static void refuseChallenge(ProcessContext ctx) {
+        EntityInstance card = first(ctx, CARD_BEFORE);
+        if (card != null && Boolean.TRUE.equals(card.get("forSponsors"))) {
+            ctx.reject(new com.jabiz.entity.Violation("publicationId", PlayCodes.FOR_SPONSORS, "This challenge is "
+                + "answered by Sponsors in the Sponsor app", Map.of()));
+        }
+    }
+
     static void refuseUnwatched(ProcessContext ctx) {
         if (!starting(ctx)) {
             return;
@@ -525,7 +542,9 @@ public final class AttemptProcesses {
         }
         // Q47: an invited publication takes its list; a sponsor's public one only the takers whose profile meets it.
         // A channel's publication has no conditions and its takers no profile (ChannelPlay reads neither): never asked.
-        if (PublisherKind.sponsor(card.get("publisherKind")) && !PlaySteps.invited(card) && !AudienceRows.matches(PlaySteps.list(ctx, CONDITIONS),
+        // F-S4a: a Sponsor answering a challenge has no Taker's profile either (SponsorPlay reads none).
+        if (!ctx.contains(ON_BEHALF_OF) && PublisherKind.sponsor(card.get("publisherKind")) && !PlaySteps.invited(card)
+            && !AudienceRows.matches(PlaySteps.list(ctx, CONDITIONS),
             PlaySteps.list(ctx, ATTRIBUTES), ctx.opTime())) {
             ctx.reject(new com.jabiz.entity.Violation("publicationId", AudienceCodes.NOT_MATCHED, "The caller's "
                 + "profile does not meet the publication's conditions", Map.of("publicationId",
@@ -576,6 +595,9 @@ public final class AttemptProcesses {
         // Q88b: the entry fee paid at this start (0 for a card charging none, and for a channel's taker).
         BigDecimal entryFee = ctx.contains(FEE_CHECKED) ? (BigDecimal) ctx.get(FEE_CHECKED) : BigDecimal.ZERO;
         values.put("entryFee", entryFee);
+        if (ctx.contains(ON_BEHALF_OF)) {
+            values.put("onBehalfOf", ctx.get(ON_BEHALF_OF));
+        }
         Object attemptId = ctx.changes().insert(QbPlay.ATTEMPT, values);
         if (entryFee.signum() > 0) {
             // The wallet row read under its lock, reduced at that version (D-Q88-12); the cache follows the ledger

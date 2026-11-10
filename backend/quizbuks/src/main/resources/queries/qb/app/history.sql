@@ -91,7 +91,9 @@ JOIN {{QbPublicationCard}} c ON c.{{QbPublicationCard.publicationId}} = m.{{QbAt
 LEFT JOIN {{QbCashReward}} cr ON cr.{{QbCashReward.attemptId}} = m.{{QbAttempt.attemptId}}
 LEFT JOIN {{QbRedemption}} rd ON rd.{{QbRedemption.attemptId}} = m.{{QbAttempt.attemptId}}
 LEFT JOIN {{QbDigitalPrize}} dg ON dg.{{QbDigitalPrize.attemptId}} = m.{{QbAttempt.attemptId}}
-WHERE (CAST(:q AS text) IS NULL
+-- F-S4a: a Sponsor's challenge attempts are the Sponsor app's, not the Taker's history.
+WHERE m.{{QbAttempt.onBehalfOf}} IS NULL
+  AND (CAST(:q AS text) IS NULL
        OR strpos(lower(c.{{QbPublicationCard.name}}), lower(CAST(:q AS text))) > 0
        OR strpos(lower(c.{{QbPublicationCard.quizTitle}}), lower(CAST(:q AS text))) > 0
        OR strpos(lower(coalesce(CAST(c.{{QbPublicationCard.translations}} AS jsonb) -> m.{{QbAttempt.language}}

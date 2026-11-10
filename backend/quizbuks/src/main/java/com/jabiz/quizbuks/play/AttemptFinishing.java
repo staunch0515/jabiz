@@ -411,6 +411,12 @@ public final class AttemptFinishing {
         payload.put("userId", plan.attempt().get("userId"));
         payload.put("treeId", plan.card().get("treeId"));
         payload.put("nodeId", plan.card().get("treeNodeId"));
+        // F-S4a: a Sponsor's pass of a challenge lights the Sponsor's node (the subject SPONSOR).
+        Object onBehalfOf = plan.attempt().get("onBehalfOf");
+        if (onBehalfOf != null) {
+            payload.put("subjectKind", com.jabiz.quizbuks.tree.QbTrees.SPONSOR);
+            payload.put("subjectId", String.valueOf(onBehalfOf));
+        }
         return payload;
     }
 

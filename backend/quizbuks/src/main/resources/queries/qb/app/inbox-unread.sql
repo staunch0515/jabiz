@@ -65,7 +65,7 @@ unread_feed AS NOT MATERIALIZED (
                OR NOT me.no_promo AND me.registered_at IS NOT NULL
                   AND me.registered_at <= f.{{QbBroadcastFeed.sentAt}})
           AND (f.{{QbBroadcastFeed.senderKind}} <> 'SPONSOR'
-               OR c.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE')
+               OR c.{{QbPublicationCard.status}} IN ('SCHEDULED', 'LIVE') AND NOT c.{{QbPublicationCard.forSponsors}}
                   AND string_to_array(c.{{QbPublicationCard.regions}}, ',') && string_to_array(me.me_regions, ',')
                   -- Q59b: as the inbox's list.
                   AND (CAST(:languages AS text) IS NULL
