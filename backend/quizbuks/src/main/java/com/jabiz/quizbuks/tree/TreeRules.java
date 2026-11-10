@@ -45,10 +45,16 @@ public final class TreeRules {
     /** F-S4b: an operator's copy keeps its template's grants (taken over with the template's nodes, never edited). */
     public static final String GRANT_COPY = "QB_TREE_GRANT_COPY";
 
+    /** F-S5a: a certificate name that is blank in every language given, too long or in a language the platform lacks. */
+    public static final String CERTIFICATE_INVALID = "QB_TREE_CERTIFICATE_INVALID";
+    /** F-S5a: an operator's copy keeps its template's certificates (taken over with the template's nodes, never edited). */
+    public static final String CERTIFICATE_COPY = "QB_TREE_CERTIFICATE_COPY";
+
     /** Every code, for the messages' test. */
     public static final List<String> CODES = List.of(TOO_MANY_NODES, TOO_MANY_CONDITIONS, EMPTY_GROUP, AT_LEAST_RANGE,
         BEFORE_ANSWER_NESTED, PASSED_TWICE, PASSED_BEFORE_ANSWER, UNKNOWN_NODE, SPONSOR_NODE_IN_PLATFORM, OTHER_SUBJECT,
-        CYCLE, TOO_DEEP, AMBIGUOUS_NODE, GRANT_NOT_ALLOWED, GRANT_TOO_LARGE, GRANT_INVALID, GRANT_COPY);
+        CYCLE, TOO_DEEP, AMBIGUOUS_NODE, GRANT_NOT_ALLOWED, GRANT_TOO_LARGE, GRANT_INVALID, GRANT_COPY,
+        CERTIFICATE_INVALID, CERTIFICATE_COPY);
 
     private TreeRules() {}
 
@@ -74,6 +80,43 @@ public final class TreeRules {
             }
         });
         return problems;
+    }
+
+    /**
+     * F-S5a: the certificate names of a draft's nodes that cannot be (each node's, none or empty for no certificate): a
+     * node that names one has at least one language with a text, none too long ({@code maxLength} code points) and
+     * only languages the platform has. Who may set them is the caller's (a copy keeps its template's).
+     */
+    public static List<Problem> certificateProblems(Map<String, Map<String, String>> names, int maxLength) {
+        List<Problem> problems = new ArrayList<>();
+        names.forEach((nodeId, texts) -> {
+            if (texts == null || texts.isEmpty()) {
+                return;
+            }
+            boolean blank = texts.values().stream().allMatch(text -> text == null || text.isBlank());
+            boolean tooLong = texts.values().stream().anyMatch(text -> text != null
+                && text.codePointCount(0, text.length()) > maxLength);
+            boolean unknown = texts.keySet().stream().anyMatch(language -> !com.jabiz.i18n.PlatformLanguages
+                .isSupported(language));
+            if (blank || tooLong || unknown) {
+                problems.add(new Problem(nodeId, CERTIFICATE_INVALID, Map.of("max", maxLength)));
+            }
+        });
+        return problems;
+    }
+
+    /** F-S5a: a certificate's names as they are stored: the texts that are not blank, none when there is none. */
+    public static Map<String, String> certificateNames(Map<String, String> texts) {
+        if (texts == null) {
+            return null;
+        }
+        Map<String, String> kept = new LinkedHashMap<>();
+        texts.forEach((language, text) -> {
+            if (text != null && !text.isBlank()) {
+                kept.put(language, text.strip());
+            }
+        });
+        return kept.isEmpty() ? null : kept;
     }
 
     /** Who lights a graph's nodes. */

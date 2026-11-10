@@ -304,7 +304,7 @@
 4. 不设四眼：每次二次验证 + 幂等键。写完先报分支名，额外审查后再开 PR。
 
 ### 7.8 实施记录（S2，2026-11-10）
-- 迁移 `V112`：只追加、只记一次的 `qb_operator_transfer_version`（外键到 `qb_operator`）。
+- 迁移 `V113`：只追加、只记一次的 `qb_operator_transfer_version`（外键到 `qb_operator`）。
 - `operator.OperatorTransfers`：`QB_OPERATOR_TRANSFER_TO_DIRECT`（`qb.operator.use`、负责人（`OperatorWithdrawals.lead`）、`requiresVerifiedEmail`、每次二次验证、`refuseBanned`）；锁内一条 `QueryEntities.all` 读直营发起方的现金钱包、入驻与封禁，再读余额模板；`OperatorRules.transferable`（整数、> 0、≤ 余额）。错误码 `QB_OPERATOR_TRANSFER_AMOUNT` / `_NO_DIRECT` / `_DIRECT_BANNED`。负责人本人就是直营发起方时，封禁先由 `refuseBanned` 拒绝（`QB_USER_BANNED`）；另一位负责人转给被封禁的直营发起方即 `_DIRECT_BANNED`。
 - 余额：`qb.system.operator-balance` 与 `qb.operator.account` 都减去转出（另给出 `transferred`、`hasDirectSponsor`）；新模板 `qb.operator.transfers`。
 - 买学分：`KudosExchanges.problems(..., operatorCash)` 的可用额减去 `OPERATOR` 笔的剩余，`CashLots.takeExcept` 不取它们；`qb.sponsor.wallet` 给出 `cashFromOperator`，页面的买入上限为 `buyableCash`。充值退款与争议的扣回照旧可以取任何笔（2160 与各笔必须一致），写在 operations §7.43。

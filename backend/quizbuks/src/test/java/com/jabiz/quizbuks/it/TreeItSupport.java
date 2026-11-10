@@ -125,10 +125,19 @@ abstract class TreeItSupport extends PlayItSupport {
      * free publication of an operator's own Sponsor bound to its node (the only Sponsor who may bind a platform map).
      */
     Gate gate() {
+        return gate(null);
+    }
+
+    /** F-S5a: as {@link #gate()}, its node issuing a certificate named {@code certificateNames} (none when null). */
+    Gate gate(Map<String, Object> certificateNames) {
         String writer = mapWriter();
         Map<String, Object> tree = run(TreeProcesses.CREATE, writer, body("ownerKind", "PLATFORM", "subjectKind",
             "TAKER", "name", name("Gates")));
-        Map<String, Object> saved = save(writer, tree, List.of(node(null, "gate", "Fair dealing", all(passed()))));
+        Map<String, Object> gate = node(null, "gate", "Fair dealing", all(passed()));
+        if (certificateNames != null) {
+            gate.put("certificateNames", certificateNames);
+        }
+        Map<String, Object> saved = save(writer, tree, List.of(gate));
         assertThat((List<?>) saved.get("problems")).isEmpty();
         @SuppressWarnings("unchecked")
         String nodeId = ((Map<String, String>) saved.get("nodeIds")).get("gate");

@@ -36,6 +36,8 @@ class VerifiedEmailWritesIT extends PostgresIntegrationTest {
         "process QB_REFERRAL_VIEW", "reads one of the caller's own referrals as its referrer and writes nothing (Q70)",
         "process QB_MY_CERTIFICATIONS", "lists the certifications the caller holds and writes nothing (Q77; issuing "
             + "one, QB_CERTIFICATE_ISSUE, needs the verified address)",
+        "process QB_SPONSOR_MY_CERTIFICATES", "lists the certificates of the nodes the calling Sponsor lit and writes "
+            + "nothing (F-S5a; issuing the PDF and the sharing need the verified address)",
         "process QB_SETTINGS_SAVE", "the caller's own sound switch (Q57): one row of their own, which reaches nobody "
             + "else, so an unverified taker browsing the app can mute it too");
 

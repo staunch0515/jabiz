@@ -162,6 +162,8 @@ public final class MessageProcesses {
     static final String FREE = "free";
     static final String OPERATOR = "operator";
     static final String REVOKE_REQUEST = "revokeRequest";
+    /** F-S5a: the certificate of the lit record a revocation ended, when it had one. */
+    static final String REVOKED_CERTIFICATE = "revokedCertificate";
     static final String SHARED_VIDEO = "sharedVideo";
     static final String VERIFICATION = "verification";
     static final String HELP_REPLY = "helpReply";
@@ -252,6 +254,13 @@ public final class MessageProcesses {
                         .orderBy("day", false).limit(1).build(), USAGE),
                     QueryEntities.query(QbWallets.PARAMS_NOW, ctx -> byId("paramKey", usageSponsor(ctx) == null
                         ? null : QbParams.USAGE_FREE_BYTES), FREE)))
+                // F-S5a: a revoked lighting voids the certificate it issued; the message says so.
+                .step("Load the certificate of a revoked lighting", QueryEntities.<ProcessContext>of(
+                    com.jabiz.quizbuks.certification.QbCertificates.DATASET, ctx -> {
+                        EntityInstance request = first(ctx, REVOKE_REQUEST);
+                        return byId("litId", QbInbox.TREE_LIT_REVOKED.equals(input(ctx).kind()) && request != null
+                            ? request.get("litId") : null);
+                    }, REVOKED_CERTIFICATE))
                 .compute("Make the message", (metadata, ctx) -> fromEvent(ctx, texts))
                 .step("Push a prize won", SendPush.<ProcessContext>when(ctx -> ctx.contains(PUSH)
                         && ctx.get(PUSH, Push.class).template() == PRIZE_WON, PRIZE_WON,
@@ -330,7 +339,7 @@ public final class MessageProcesses {
             case QbInbox.CONVERSATION_REPLY -> conversationMessage(ctx, params);
             case QbInbox.USAGE_OVER_FREE -> usageMessage(ctx, input, params);
             case QbInbox.OPERATOR_CHANGED -> operatorMessage(ctx, input, params);
-            case QbInbox.TREE_LIT_REVOKED -> revokedMessage(ctx, params);
+            case QbInbox.TREE_LIT_REVOKED -> revokedMessage(ctx, texts, params);
             case QbInbox.SHARED_VIDEO_REJECTED, QbInbox.SHARED_VIDEO_TAKEN_DOWN -> sharedVideoMessage(ctx, input, params);
             case QbInbox.HELP_REPLY -> helpReplyMessage(ctx);
             case QbInbox.VERIFICATION_APPROVED, QbInbox.VERIFICATION_REJECTED, QbInbox.VERIFICATION_REVOKED ->
@@ -668,13 +677,17 @@ public final class MessageProcesses {
     }
 
     /** F-S2b2: a person's lit node revoked, only while the request says so; the reason as the reviewers wrote it. */
-    private static Draft revokedMessage(ProcessContext ctx, Map<String, MessageTexts.Value> params) {
+    private static Draft revokedMessage(ProcessContext ctx, MessageTexts texts,
+        Map<String, MessageTexts.Value> params) {
         EntityInstance request = first(ctx, REVOKE_REQUEST);
         if (request == null || !com.jabiz.quizbuks.tree.QbTrees.REVOKE_DONE.equals(request.get("status"))
             || !com.jabiz.quizbuks.tree.QbTrees.USER.equals(request.get("subjectKind"))) {
             return null;
         }
         params.put("reason", MessageTexts.Value.of(request.get("reason")));
+        // F-S5a: the sentence is there only when the lighting had issued a certificate.
+        params.put("certificate", first(ctx, REVOKED_CERTIFICATE) == null ? MessageTexts.Value.of("")
+            : texts.message("qb.msg.TREE_LIT_REVOKED.certificate"));
         return new Draft(request.get("subjectId"), QbInbox.TYPE_SYSTEM, QbInbox.TREE_LIT_REVOKED, null, null, null);
     }
 
