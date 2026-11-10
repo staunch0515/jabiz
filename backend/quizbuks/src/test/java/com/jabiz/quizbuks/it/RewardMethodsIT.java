@@ -104,6 +104,32 @@ class RewardMethodsIT extends PlayItSupport {
      * phase: prizes only), which the console reads from {@code qb.sponsor.reward-methods}; a tier paying more than
      * {@code qb.reward.max-per-attempt} is a problem of the draft and refuses the submission.
      */
+    /**
+     * F-S4b (the requester 2026-11-07, the controller 2026-11-10): the default published empty gives a new Sponsor no
+     * method at all, the platform's Kudos included; their own setting or a lit node is what opens one.
+     */
+    @Test
+    void anEmptyDefaultGivesNoMethod() {
+        String sponsor = newSponsor("s-fs4b-empty-default");
+        String token = sponsorToken(sponsor);
+        String versionId = version(token, "Empty default quiz");
+        Instant now = clock.instant();
+        rewardParam(QbParams.REWARD_DEFAULT_METHODS, "");
+        try {
+            assertThat(rows("qb.sponsor.reward-methods", token, Map.of())).singleElement().satisfies(row ->
+                assertThat(row).containsEntry("methods", "").containsEntry("own", false));
+            Map<String, Object> save = complete(versionId, "Nothing yet", now, now.plus(Duration.ofDays(7)));
+            assertThat(codes(refused("QB_PUBLICATION_SAVE", token, save, 422)))
+                .containsExactly(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+            allow(sponsor, RewardMethod.PLATFORM);
+            assertThat(rows("qb.sponsor.reward-methods", token, Map.of())).singleElement().satisfies(row ->
+                assertThat(row).containsEntry("methods", "PLATFORM").containsEntry("own", true));
+            assertThat((Object) run("QB_PUBLICATION_SAVE", token, save).get("publicationId")).isNotNull();
+        } finally {
+            rewardParam(QbParams.REWARD_DEFAULT_METHODS, "PLATFORM");
+        }
+    }
+
     @Test
     void theDefaultMethodsAndTheHighestRewardComeFromTheParameters() {
         String sponsor = newSponsor("s-q28-defaults");
@@ -114,7 +140,9 @@ class RewardMethodsIT extends PlayItSupport {
         rewardParam(QbParams.REWARD_MAX_PER_ATTEMPT, "50");
         try {
             assertThat(rows("qb.sponsor.reward-methods", token, Map.of())).singleElement().satisfies(row -> {
-                assertThat(row).containsEntry("methods", "OFFLINE_REDEEM, NOT_A_METHOD").containsEntry("own", false);
+                // F-S4b: the template gives the methods themselves (the processes' rule), a name that is no method
+                // dropped (the console dropped it before).
+                assertThat(row).containsEntry("methods", "OFFLINE_REDEEM").containsEntry("own", false);
                 assertThat(new BigDecimal(String.valueOf(row.get("maxRewardPerAttempt")))).isEqualByComparingTo("50");
             });
             Map<String, Object> save = complete(versionId, "Prize week", now, now.plus(Duration.ofDays(7)));
@@ -130,12 +158,14 @@ class RewardMethodsIT extends PlayItSupport {
                 .containsExactly(PublishingCodes.REWARD_ABOVE_MAX);
             rewardParam(QbParams.REWARD_MAX_PER_ATTEMPT, "100");
             assertThat(submit(token, publicationId)).containsEntry("status", "LIVE");
-            // An administrator's own setting replaces the default.
+            // F-S4b (the requester, 2026-11-10): an administrator's own setting adds to the default (it replaced it
+            // before).
             allow(sponsor, RewardMethod.PLATFORM);
             assertThat(rows("qb.sponsor.reward-methods", token, Map.of())).singleElement().satisfies(row ->
-                assertThat(row).containsEntry("methods", "PLATFORM").containsEntry("own", true));
+                assertThat(row).containsEntry("methods", "PLATFORM,OFFLINE_REDEEM").containsEntry("own", true));
         } finally {
-            rewardParam(QbParams.REWARD_DEFAULT_METHODS, QbParams.defaultOf(QbParams.REWARD_DEFAULT_METHODS));
+            // F-S4b: the declared value is empty now; the other tests publish with the platform's Kudos.
+            rewardParam(QbParams.REWARD_DEFAULT_METHODS, "PLATFORM");
             rewardParam(QbParams.REWARD_MAX_PER_ATTEMPT, QbParams.defaultOf(QbParams.REWARD_MAX_PER_ATTEMPT));
         }
     }

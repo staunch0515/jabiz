@@ -80,8 +80,7 @@
 2. **第二位能审核的成员**：直营发起方的发布由同一运营商的**另一位**成员审核（准备人不能审批）；只有负责人一人时每日核对报 `FEW_REVIEWERS`。
    做法在运维 §7.13「签下一个运营商」第 2–5 步：建账户、在运营商页面添加成员、给成员分配角色 `QB_OPERATOR`（**受保护的授权，要另一位超级管理员审批**）、成员登录 `/operator/` 并绑定二次验证。
 3. **阶段一（推广期）的设置**（运维 §3「阶段一」清单，由超级管理员提出、财务管理员发布，都是受控参数）：
-   - `qb.reward.default-methods`：**到店兑换**（`OFFLINE_REDEEM`）与**电子奖品**（`DIGITAL_PRIZE`）两种。运维 §3 写的缺省是 `OFFLINE_REDEEM`，值「逗号分隔」（§3 第 6 步）；电子奖品的方式码取自代码（`RewardMethod`）。
-     也可以只对彩排的发起方单独开通：平台管理系统「发起方审核」页，`QB_SPONSOR_REWARD_METHODS_SET`（单个管理员，运维 §3 阶段一第一条）。**待确认**：两种写在缺省里是否被接受；F-S4 还没做，不被接受就改用单独开通。
+   - `qb.reward.default-methods`：F-S4b 起**空 = 没有任何方式**（`QB_SETUP` 提出的首个值即为空；首次上线照此）。彩排要用到奖励时二选一：明确发布 `OFFLINE_REDEEM,DIGITAL_PRIZE`（逗号分隔，所有发起方都可用；方式码取自代码 `RewardMethod`），或只对彩排的发起方单独开通（平台管理系统「发起方审核」页，`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员，与缺省取并集）。也可以照首次上线的做法，让发起方答平台图上的考试点亮门槛节点开通（运维 §7.41）。
    - `qb.reward.max-per-attempt` = **`0`（不限）**——这是 staging 的取法；**正式环境须等法务给值**（运维 §3 阶段一第二条）。
    - `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = `false`（发布一律在上架前审核）；
    - `qb.transfer.enabled` 保持 `false`，`qb.ai.enabled` 保持 `false`（清单「AI」一节）。
@@ -136,5 +135,5 @@
 仍要在彩排中确认的：
 
 1. staging 的邮件能不能发（第 2 步第 3 点的结果）。
-2. `qb.reward.default-methods` 写两种（`OFFLINE_REDEEM,DIGITAL_PRIZE`）是否被接受；不被接受就对发起方单独开通。（第 5 步第 3 点）
+2. ~~`qb.reward.default-methods` 写两种是否被接受~~：已确定（F-S4b）——写两种即两种都开通；空即没有任何方式。（第 5 步第 3 点）
 3. 电子奖品：发起方装码的页面入口与操作；到店兑换、电子奖品争议在运营商管理系统里的处理步骤——文档里没有逐屏写。（第 7、8 步）

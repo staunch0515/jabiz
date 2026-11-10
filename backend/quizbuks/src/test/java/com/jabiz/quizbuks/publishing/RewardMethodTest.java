@@ -30,8 +30,10 @@ class RewardMethodTest {
     void theDefaultComesFromTheParameterKnownMethodsOnlyInTheFixedOrder() {
         assertThat(RewardMethod.defaultMethods(null)).containsExactly("PLATFORM");
         assertThat(RewardMethod.defaultMethods(values(Map.of()))).containsExactly("PLATFORM");
-        assertThat(RewardMethod.defaultMethods(values(Map.of(QbParams.REWARD_DEFAULT_METHODS, " "))))
-            .containsExactly("PLATFORM");
+        // F-S4b (the controller, 2026-11-10): a blank value gives none; only a missing parameter (before setup) gives
+        // the platform's Kudos.
+        assertThat(RewardMethod.defaultMethods(values(Map.of(QbParams.REWARD_DEFAULT_METHODS, " ")))).isEmpty();
+        assertThat(RewardMethod.defaultMethods(values(Map.of(QbParams.REWARD_DEFAULT_METHODS, "")))).isEmpty();
         assertThat(RewardMethod.defaultMethods(values(Map.of(QbParams.REWARD_DEFAULT_METHODS,
             "OFFLINE_REDEEM, bogus, PLATFORM")))).containsExactly("PLATFORM", "OFFLINE_REDEEM");
         // A value naming no method allows nothing: less, never more.

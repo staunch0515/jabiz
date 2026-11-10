@@ -679,6 +679,11 @@ class Run:
         made = self.app.run(self.admin, "QB_SETUP", {})
         published = self.publish_proposals(made.get("proposals") or [])
         changed = []
+        # F-S4b: an empty default gives no reward method; this run pays the platform's Kudos.
+        if self.param("qb.reward.default-methods") is not None and not str(
+                self.param("qb.reward.default-methods")).strip():
+            self.set_param("qb.reward.default-methods", "PLATFORM")
+            changed.append("qb.reward.default-methods=PLATFORM")
         if str(self.param("qb.transfer.enabled")).lower() != "true":
             self.set_param("qb.transfer.enabled", "true")
             changed.append("qb.transfer.enabled=true")

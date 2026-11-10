@@ -70,18 +70,22 @@ WHERE v.{{QbTreeVersion.status}} = 'REVIEW'
 HAVING count(*) > 0
 UNION ALL
 -- GATE_INVALID (F-S2c): a gate parameter that names no node to light (tree.TreeGates.names: a node in effect of a
--- platform map Takers light, as <treeId>/<nodeId>): the feature it opens is closed to everyone.
+-- platform map Takers light, as <treeId>/<nodeId>; F-S4b: for the reward methods' gates, TreeGates.namesForSponsors:
+-- of a platform template Sponsors light): the feature it opens is closed to everyone.
 SELECT CAST('GATE_INVALID' AS varchar(30)), CAST(count(*) AS numeric)
 FROM {{SysParam}} p
 WHERE p.{{SysParam.paramKey}} IN ('qb.tree.gate.sponsor-apply-node', 'qb.tree.gate.referrer-node',
-                                  'qb.tree.gate.benefit-provider-node', 'qb.tree.gate.benefit-sponsor-node')
+                                  'qb.tree.gate.benefit-provider-node', 'qb.tree.gate.benefit-sponsor-node',
+                                  'qb.tree.gate.digital-prize-node', 'qb.tree.gate.offline-redeem-node')
   AND NOT EXISTS (
       SELECT 1 FROM {{QbTree}} t
       JOIN {{QbTreeNode}} tn ON tn.{{QbTreeNode.treeId}} = CAST(t.{{QbTree.treeId}} AS text)
       WHERE p.{{SysParam.value}} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         AND CAST(t.{{QbTree.treeId}} AS text) = split_part(p.{{SysParam.value}}, '/', 1)
         AND tn.{{QbTreeNode.nodeId}} = split_part(p.{{SysParam.value}}, '/', 2)
-        AND t.{{QbTree.ownerKind}} = 'PLATFORM' AND t.{{QbTree.subjectKind}} = 'TAKER'
+        AND t.{{QbTree.ownerKind}} = 'PLATFORM'
+        AND t.{{QbTree.subjectKind}} = CASE WHEN p.{{SysParam.paramKey}} IN ('qb.tree.gate.digital-prize-node',
+                                            'qb.tree.gate.offline-redeem-node') THEN 'SPONSOR' ELSE 'TAKER' END
         AND t.{{QbTree.status}} = 'ACTIVE' AND tn.{{QbTreeNode.active}})
 HAVING count(*) > 0
 UNION ALL

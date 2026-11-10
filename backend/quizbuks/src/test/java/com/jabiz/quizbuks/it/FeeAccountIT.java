@@ -2,9 +2,11 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.fee.FeeCodes;
+import com.jabiz.quizbuks.fee.FeeCredits;
 import com.jabiz.quizbuks.fee.FeeProcesses;
 import com.jabiz.quizbuks.fee.FeeRequests;
 import com.jabiz.quizbuks.fee.FeeRules;
+import com.jabiz.quizbuks.fee.QbFeeAccount;
 import com.jabiz.quizbuks.fee.QbFees;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
@@ -275,6 +277,38 @@ class FeeAccountIT extends PlayItSupport {
         assertThat(lines(QbFees.CHARGE, chargeId)).containsExactly("1130 DEBIT 1100", "4120 CREDIT 1000",
             "2150 CREDIT 100", "2190 DEBIT 500", "2160 DEBIT 600", "1130 CREDIT 1100");
         assertThat(invoice(sponsor)).containsEntry("status", QbFees.PAID);
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    /**
+     * F-S4b review M3: an invoice voided after a lot that paid part of it expired and was voided gives that part back
+     * to the lot voided again at once (the lot never holds anything again; before, the refund broke the lot's check
+     * and the void never went through).
+     */
+    @Test
+    void whatAVoidedInvoiceGivesBackToAnExpiredAndVoidedLotIsVoidedAgain() {
+        String sponsor = newSponsor(unique("s-fm1-expired"));
+        Instant now = clock.instant();
+        String credit = grant(sponsor, 2000, now.minus(Duration.ofDays(1)), now.plus(Duration.ofMinutes(1)));
+        assertThat(monthly(sponsor)).isEqualTo("CHARGED");
+        assertThat(remaining("qb_fee_credit_grant", "grant_id", credit)).isEqualByComparingTo("900");
+        clock.set(now.plus(Duration.ofMinutes(2)));
+        assertThat(((FeeProcesses.ItemOutput) systemRun(FeeCredits.EXPIRE_ITEM, body("grantId", credit))).outcome())
+            .isEqualTo("VOIDED");
+
+        String invoiceId = String.valueOf(invoice(sponsor).get("invoice_id"));
+        Map<String, Object> voiding = run(FeeRequests.RECORD, finance(), body("kind", "VOID", "invoiceId", invoiceId,
+            "reason", "Charged by mistake"));
+        run("APPROVAL_DECIDE", content(), body("requestId", voiding.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+        assertThat(invoice(sponsor)).containsEntry("status", QbFees.VOID);
+        Map<String, Object> lot = query("SELECT remaining, voided_amount FROM qb_fee_credit_grant WHERE grant_id = ?",
+            credit).getFirst();
+        assertThat((BigDecimal) lot.get("remaining")).isEqualByComparingTo("0");
+        assertThat((BigDecimal) lot.get("voided_amount")).isEqualByComparingTo("2000");
+        assertThat(lines(QbFeeAccount.GRANT, credit)).containsExactly("2190 DEBIT 900", "5140 CREDIT 900",
+            "2190 DEBIT 1100", "5140 CREDIT 1100");
+        assertThat(balance(sponsor, QbWallets.FEE_CREDIT)).isEqualByComparingTo("0");
         assertThat(differences(sponsor)).isEmpty();
     }
 }

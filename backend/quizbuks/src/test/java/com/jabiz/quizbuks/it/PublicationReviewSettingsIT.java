@@ -65,6 +65,7 @@ class PublicationReviewSettingsIT extends PublicationItSupport {
         // The parameters and the sponsors' rule published (the sponsor is onboarded), not the publications' rule: no
         // review would be asked for, which is refused too.
         publishProposals(Map.of("proposals", proposals.subList(0, rules)));
+        platformRewardMethods();
         publishProposals(Map.of("proposals", proposals.subList(rules + 1, rules + 2)));
         onboard(SPONSOR_A);
         assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorA(), body("publicationId", id), 422)))

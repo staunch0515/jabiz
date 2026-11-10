@@ -320,6 +320,44 @@ public class FeeConfig {
             qbFeeRequestApprovalResult, TransferProcesses::resultInput);
     }
 
+    // ---- F-S4b: the platform fee Kudos lighting a node grants ----------------------------------------------------------
+
+    /** How many lots one settlement grants at most (the rest by the next one or the daily job; not business). */
+    @Value("${quizbuks.tree-grants.max-per-run:50}")
+    int treeGrantsMaxPerRun;
+
+    @Bean
+    ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant() {
+        return LightGrants.settle(treeGrantsMaxPerRun);
+    }
+
+    @Bean
+    com.jabiz.event.EventSubscription<FeeCredits.SponsorRef> qbTreeGrantDueSubscription(
+        ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant) {
+        return com.jabiz.event.EventSubscription.of(LightGrants.DUE_CONSUMER, LightGrants.DUE_EVENT, qbTreeLitGrant,
+            event -> new FeeCredits.SponsorRef(String.valueOf(event.payload().get("sponsorId"))));
+    }
+
+    /** A revoked lighting: the subject is settled (a Taker's has no lots: nothing is done). */
+    @Bean
+    com.jabiz.event.EventSubscription<FeeCredits.SponsorRef> qbTreeGrantRevokedSubscription(
+        ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant) {
+        return com.jabiz.event.EventSubscription.of(LightGrants.REVOKED_CONSUMER,
+            com.jabiz.quizbuks.tree.TreeRevocations.REVOKED_EVENT, qbTreeLitGrant,
+            event -> new FeeCredits.SponsorRef(String.valueOf(event.payload().get("userId"))));
+    }
+
+    /** Whatever the events missed (a failure, the switch off, a voided invoice's refund), each Sponsor in a transaction. */
+    @Bean
+    JobDefinition<FeeCredits.SponsorRef> qbTreeGrantRetryJob(
+        ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant) {
+        return JobDefinition.forEach(LightGrants.RETRY_JOB, LightGrants.RETRY_CRON, zone,
+                JobItems.template(LightGrants.DUE_TEMPLATE, "sponsorId"),
+                qbTreeLitGrant,
+                (scheduledTime, row) -> new FeeCredits.SponsorRef(String.valueOf(row.get("sponsorId"))))
+            .maxItems(10_000);
+    }
+
     // ---- F-M2: platform fee Kudos granted -------------------------------------------------------------------------
 
     @Bean

@@ -242,9 +242,16 @@ final class PublicationEditing {
                     .where(new QueryPredicate.Eq("userId", ctx.request().actorId())).limit(1).build(), SPONSOR_METHODS))
             // Optional: before setup the parameters are missing and their declared values apply (a draft is saved).
             // Q88b: the entry fee's switch in the same read (D-Q88-14: it only decides whether a fee can be set).
+            // F-S4b: the gates of the reward methods a lit node opens, in the same read.
             .step("Load the reward parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, REWARD_PARAMS,
-                QbParams.REWARD_DEFAULT_METHODS, QbParams.REWARD_MAX_PER_ATTEMPT, QbParams.ENTRY_FEE_ENABLED));
+                QbParams.REWARD_DEFAULT_METHODS, QbParams.REWARD_MAX_PER_ATTEMPT, QbParams.ENTRY_FEE_ENABLED,
+                QbParams.TREE_GATE_DIGITAL_PRIZE, QbParams.TREE_GATE_OFFLINE_REDEEM))
+            .steps(b -> com.jabiz.quizbuks.tree.SponsorGates.load(b, REWARD_PARAMS, QbParams.SPONSOR_TREE_GATES,
+                METHOD_GATES));
     }
+
+    /** F-S4b: the context keys of the reward methods' gates ({@code tree.SponsorGates}). */
+    static final String METHOD_GATES = "methodGates.";
 
     /** Q88b (D-Q88-14): whether a fee may be set now, from {@link #loadSponsorMethods}; unpublished reads as off. */
     static boolean entryFeeEnabled(ProcessContext ctx) {
@@ -257,10 +264,15 @@ final class PublicationEditing {
         return ctx.contains(REWARD_PARAMS) ? ctx.get(REWARD_PARAMS, ParamValues.class) : null;
     }
 
-    /** The methods the caller may publish with, from {@link #loadSponsorMethods}: their own setting, or the default. */
+    /**
+     * The methods the caller may publish with, from {@link #loadSponsorMethods}: the default's, their own setting's
+     * and those a lit gate opens (F-S4b, the requester 2026-11-10; before F-S4b a setting replaced the default).
+     */
     static List<String> allowedMethods(ProcessContext ctx) {
         EntityInstance setting = first(ctx, SPONSOR_METHODS);
-        return setting == null ? RewardMethod.defaultMethods(rewardParams(ctx)) : RewardMethod.parse(setting.get("methods"));
+        return RewardMethod.available(RewardMethod.defaultMethods(rewardParams(ctx)),
+            setting == null ? List.of() : RewardMethod.parse(setting.get("methods")),
+            com.jabiz.quizbuks.tree.SponsorGates.open(ctx, REWARD_PARAMS, QbParams.SPONSOR_TREE_GATES, METHOD_GATES));
     }
 
     /** The highest reward one attempt may win (Q28), from {@link #loadSponsorMethods}; null for no cap. */

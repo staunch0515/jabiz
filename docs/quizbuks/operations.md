@@ -232,7 +232,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    - **科目映射** `qb.journal.account.1110 … 5110`（会计系统中的科目代码；平台管理系统"QuizBuks 财务 → 分录导出 → 科目映射"只读显示，修改走受控变更）；没映射的科目使分录导出被拒；
    - 金额参数按业务确认：`qb.creator-fee-rate`、`qb.transfer.threshold`、`qb.transfer.review-above`、`qb.transfer.fee`、`qb.topup.min` / `max`；
    - `qb.transfer.enabled` **保持 false**，直到取得法务意见（§4）；
-   - **奖励的缺省**（Q28）：`qb.reward.default-methods`（没有单独设定的发起方可用的支付方式，逗号分隔；声明值 `PLATFORM`，推广期发布 `OFFLINE_REDEEM`，见下文"阶段一的设置"）与 `qb.reward.max-per-attempt`（每次答题可得的最高奖励，Kudos；`0` 不限；景品表示法的上限由法务给出）；
+   - **奖励的缺省**（Q28）：`qb.reward.default-methods`（**所有**发起方都可用的支付方式，逗号分隔；F-S4b 起与单独设定、点亮门槛开通的取并集；声明值与 `QB_SETUP` 提出的首个值都是**空 = 没有任何方式**（新发起方点亮相应节点或被单独开通才有，需求方 2026-11-07，§7.41）；参数还不存在时（`QB_SETUP` 之前）按平台 Kudos；见下文"阶段一的设置"）与 `qb.reward.max-per-attempt`（每次答题可得的最高奖励，Kudos；`0` 不限；景品表示法的上限由法务给出）；
    - 法律文本的最长预告期 `qb.legal.max-announce-days`（缺省 180 天；未发布时同样按 180 天）。
    - `qb.ai.enabled` 由 `QB_SETUP` 提出 `false`，**照样发布**（AI 在上线检查清单的条件满足后才开启）。发布之前参数不存在：启动检查 `EXTERNAL` 对 `job qb.ai.questions` 与 `job qb.ai.cover` 各报一条**警告**
      `enabledBy: parameter qb.ai.enabled has no value in effect now; the type is paused …`，执行器第一次轮询时也记一条 WARN。这在新安装上是预期的（参数缺失与 `false` 一样：请求被拒、没有作业），
@@ -257,12 +257,12 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 **阶段一（推广期）的设置（Q28，`plans/Q28-phase1-defaults.md`）**：推广期只有线下奖品、发起方免费、不经手资金（招商网站 §7.11 的承诺）。由超级管理员提出、财务管理员发布（都是受控参数，四眼），按顺序：
 
-- [ ] `qb.reward.default-methods` = `OFFLINE_REDEEM`：没有单独设定的发起方只能以线下奖品作奖励；发起方页面随之不显示学分钱包（资金 → 学分钱包）；平台费账户与账单照常显示（F-F3）。要让某个发起方付 Kudos 或现金，在平台管理系统"发起方审核"页单独允许（`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员）。
+- [ ] `qb.reward.default-methods` 保持**空**（首次上线：新发起方缺省没有任何奖励方式，答平台图上"电子奖品" / "线下兑奖"的考试点亮节点后才开通，门槛参数见 §7.41）；发起方页面在没有 Kudos 方式时不显示学分钱包（资金 → 学分钱包），平台费账户与账单照常显示（F-F3）。要让所有发起方都能用某种方式，把它写进这个参数（逗号分隔，如 `OFFLINE_REDEEM,DIGITAL_PRIZE`）；只给某个发起方，在平台管理系统"发起方审核"页单独允许（`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员，与缺省取并集）。
 - [ ] `qb.reward.max-per-attempt` = 法务给出的上限（Kudos 等值）。按答对与否给奖是景品表示法的"懸賞"而不是"総付"：与购买或到店挂钩的一般懸賞，单个景品至多交易额的 20 倍（交易额不足 5,000 日元）或 10 万日元（5,000 日元以上），总额不超过预计销售额的 2%；不要求购买的开放式懸賞没有上限（填 `0`）。线下兑换是否算与购买挂钩由法务认定。高于它的奖励档在保存时报 `QB_REWARD_ABOVE_MAX`、提交被拒。
 - [ ] `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = **`false`**：发起方的入驻在推广期不逐个人工审核（线下奖品不经手资金；封禁照常可用），**发布一律在发布前审核**（需求方 2026-10-28，商店 App 的上架要求，`plans/Q49d-store.md` D-Q49d-7）。
   审核员拒绝以酒类、烟草或毒品为题材或奖品的问卷（商店的内容分级按"没有受管制物质"申报，`docs/quizbuks/store/play-content-rating.md`）。
 - [ ] `qb.transfer.enabled` 保持 `false`、`qb.ai.enabled` 按上线检查清单。
-- [ ] 开始收费（招商网站价格页的"计划中"项）前：把 `qb.reward.default-methods` 改为所售套餐的方式，发布 `qb.creator-fee-rate`，并在网站去掉"计划中"。
+- [ ] 开始收费（招商网站价格页的"计划中"项）前：把 `qb.reward.default-methods` 改为所售套餐的方式（或按发起方单独开通），发布 `qb.creator-fee-rate`，并在网站去掉"计划中"。
 
 **受保护的授权（平台 16r / 16u，决策 D48、D51；10 §16）**：分配或增加 `security.user-role.write`、`security.role.write`、`security.protected-change.decide`、`approval.decide`、`control.publish`、`ledger.*`、
 `platform.param.write`、`*`，以及对持有它们的用户重设密码、二次验证、邮箱或关联外部账号，平台要求**另一位管理员审批**——但只在建立期结束之后。
@@ -346,7 +346,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 | 安全 | 平台 `jabiz-refresh-reuse-granted`、`jabiz-refresh-reuse-revoked`（F-F6） | |
 | 地址库 | 平台 `jabiz-geoip-stale`、`jabiz-geoip-empty`（P5） | |
 | 境外视频（F-S11，§7.24） | 平台 `jabiz-job-failed`（`qb.region-check`、`qb.region-refusals`）；地址库的待办 `qb.region-check`（权限 `qb.admin.region.monitor`，只有总部）；被拒次数在 `/admin/qb/region` | 地址库的待办出现（缺失、读不了或过旧）；某天被拒次数突然上升（地址库误判，或发布方大量用了境外视频；`jabiz.process{process="QB_ATTEMPT_START", outcome="rejected"}` 在仪表盘上看） |
-| 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`、`qb.tree-node-counts`）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足）；`GATE_INVALID` 出现（门槛参数指不到可点亮的节点，功能对所有人关闭） |
+| 知识结构图（F-S2，§7.27） | 平台 `jabiz-job-failed`（`qb.tree-check`、`qb.tree-recheck`、`qb.tree-review-remind`、`qb.tree-node-counts`、F-S4b 的 `qb.tree-grant-retry`，§7.41）；每日核对的待办 `qb.tree-health`（权限 `qb.admin.trees.read`）；审核提醒的待办 `qb.tree-review` | `UNLIT_PASS` 连续两天出现（点亮的事件消费或 `QB_TREE_EVALUATE` 一直失败）；`ORPHAN_LIT` 出现；`REVIEW_OVERDUE` 持续增加（审核方人手不足）；`GATE_INVALID` 出现（门槛参数指不到可点亮的节点，功能对所有人关闭） |
 | 题库（F-S6，§7.37） | 平台 `jabiz-job-failed`（`qb.content-check`）；每日核对的待办 `qb.content-health`（权限 `qb.admin.quiz.read`） | `SNAPSHOT_NEAR_LIMIT` 出现（某个版本的快照超过上限的 80 %，题库再增长即不能保存下一个版本） |
 | 应用的磁盘 | 平台 `jabiz-disk-usage`（`JABIZ_ALERT_DISK_PERCENT`，缺省 80，F-F13）；应用停止时没有这个指标，由 `jabiz-metrics-absent` 告警 | 应用测量两个文件系统：工作目录 `/app`（在容器的文件系统上，也就是服务器上存放 Docker 镜像与容器日志的那块盘，T8 满的就是它）与上传文件的卷。处理：`df -h /`、`docker system df` 看占用；旧镜像部署时自动只留最近几个（`DEPLOY.md`"旧镜像的清理"，`QB_DEPLOY_KEEP_IMAGES`），仍不够时删不用的镜像与已停止的容器（`docker image prune`、`docker container prune`，只删没有容器在用的），再看日志与上传文件；扩容。试发：`tools/ops/alert-fire-test.sh disk <目录>` |
 | 数据库主机 | **托管方或主机监控的告警**（不由应用测量；pgBackRest 的备份与 WAL 归档见 `deploy/quizbuks/DEPLOY.md`"备份"，失败由死人开关与邮件通知） | WAL 归档延迟 > 15 分钟、最近的基础备份超过 26 小时、数据库所在磁盘 > 80 %、连接数、死锁 > 0、`pg_stat_statements` 的前几名 |
@@ -1097,6 +1097,19 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **旧地址**：全部在 `shell/legacy-paths.json` 中转到新地址（书签、已发出的邮件、进行中的 Stripe Checkout 的返回地址 `/wallet/topups/<id>?checkout=…`，查询照带）。发起方说"旧链接打不开"时，先核对该地址是否在清单中；不在即缺一条，按 `backend/quizbuks/CLAUDE.md` 第 5 节加。
 - **邮件中的链接**用新地址（充值与收据 → `money/wallet`，平台费账单 → `money/bills`）；在平台管理系统"邮件模版"中覆盖过这些邮件文字的（F-C8），旧链接靠转向照样能用，有空时按新的缺省改一次。
 - **手机底部菜单**：普通参数 `qb.sponsor.bottom-bar`（`PARAM_SET`，不受控），缺省 `home,publications,prizes,messages`；值是区域键，以逗号分隔（home、quizzes、publications、prizes、messages、benefits、money、assets、hub），不认识的键与重复的被忽略，至多四个（后面是"更多"），空即缺省。**改了它要同时改帮助**（`help/sponsor-areas.md` 中"手机上"一句，请内容管理员照改 FAQ）。
+
+### 7.41 点亮的好处：奖励方式与赠送平台费 Kudos（F-S4b）
+
+发起方在运营商的副本上答挑战合格（点亮节点）得到两种好处（`docs/quizbuks/plans/impl/F-S4.md` §3）。
+
+- **奖励方式按节点开通**：受控参数 `qb.tree.gate.digital-prize-node`（电子奖品）、`qb.tree.gate.offline-redeem-node`（到店领取的奖品），值是**发起方点亮的平台模板**的 `<图编号>/<节点编号>`（不是副本的）；`QB_SETUP` 不建立，没有即关闭。发起方在该模板或任一运营商的副本中点亮了同一节点、没有撤销即开通；撤销点亮即关闭。可用的奖励方式 = 缺省参数 `qb.reward.default-methods` ∪ 对单个发起方的设定（`QB_SPONSOR_REWARD_METHODS_SET`）∪ 已开通的（需求方 2026-11-10；以前单独设定取代缺省，现在是并集）。参数写错或节点失效即对所有人关闭、每日核对报 `GATE_INVALID`（同其他门槛参数，§7.27）。
+- **节点的赠送**：平台模板（点亮者为发起方）的节点可设"点亮时赠送的平台费 Kudos"（节点定义 `grantAmount`），不超过受控参数 `qb.tree.grant.max-per-node`（`QB_SETUP` 不建立；没有即不能设，保存给出 `QB_TREE_GRANT_NOT_ALLOWED`）；随版本经已有的四眼审核（审批内容含它）。副本照抄模板的金额、不能改（`QB_TREE_GRANT_COPY`），采用模板的改动时一起更新；点亮时按**模板生效版本**的金额冻结在点亮记录上（`qb_tree_lit_version.grant_amount`，迁移 V110）。
+- **一次终身**：每个发起方对平台模板的每个节点**终身只得一笔**（来源 `LIGHT`，来源键 `light:<模板>/<节点>`；需求方 2026-11-10）：撤销后再答合格、改派后在另一个运营商的副本中点亮同一节点都不再发。
+- **结算**：`QB_TREE_LIT_GRANT`（`internal()`，发起方钱包锁内）按发起方两个方向结算：节点"仍被点亮"（有没有撤销、有金额的点亮记录）而没有赠送的，以子流程 `QB_FEE_CREDIT_GRANT` 按最早一条点亮冻结的金额发一笔（有效期、记账、到期与提醒同 §7.39；每次至多 `quizbuks.tree-grants.max-per-run` 笔，缺省 50，其余下次）；有赠送而节点不再被点亮、还有剩余的作废剩余（借 2190 / 贷 5140，`remaining` 归零、`voided_amount` 累加；已用掉的不追回，需求方 2026-11-10）。总开关 `qb.fee-credit.grant.enabled` 关闭时、发起方已封禁或入驻未通过时不发（作废照做）。由三处触发：点亮后的事件 `qb.tree.grant-due`、撤销点亮（§7.27 的四眼）之后的事件 `qb.tree.lit-revoked`、每日任务 `qb.tree-grant-retry`（每天 03:29，`jabiz.fiscal-year-zone`，模板 `qb.system.tree-grants-due` 列出有待发或有待作废的发起方，逐个结算）——事件消费失败、开关开启之前点亮的、账单作废退回到撤销而未作废的赠送，都由它补上。开启之前已经撤销的点亮不发。待发的赠送在平台管理系统的模板 `qb.admin.tree-grants-pending`（`qb.admin.finance.read`，每个发起方每个来源键一行）中可见。错过的运行以 `JOB_RUN_REQUEST`（`POST /api/jobs/qb.tree-grant-retry/runs`，`job.run`）补跑（同一来源键不会发第二笔）。
+- **账单作废的退回**：作废账单时退回到**已作废**的赠送（到期作废或撤销作废）的部分当即再作废（`QB_FEE_REFUND` 过账借 2190 / 贷 5140，钱包不增加），不会让作废过的赠送重新可用。
+- **每日核对**（`qb.system.recon-fee-account`）：`LIGHT_GRANTS`——开关开着、节点仍被点亮而没有赠送（事件与补发都失败）；`LIGHT_VOIDS`——节点不再被点亮而赠送还有剩余（撤销的作废失败、或作废之后有退回而尚未补作废）。差异先看 `qb.admin.tree-grants-pending` 与任务 `qb.tree-grant-retry` 的最近一次运行；`LIGHT_VOIDS` 一般在次日的任务之后消失。月报沿用 `FEE_CREDIT_GRANTED` / `FEE_CREDIT_VOIDED`。
+- **部署**：迁移 V110；之后需要时以受控变更设 `qb.tree.grant.max-per-node` 与两个门槛参数（另一位管理员发布），再在平台模板上设赠送金额并提交审核。
+- **排查**：某发起方点亮的赠送：`SELECT l.lit_id, l.tree_id, l.node_id, l.lit_at, l.grant_amount, g.amount, g.remaining, g.voided_amount FROM qb_tree_lit_version l JOIN qb_tree t ON t.tree_id = l.tree_id LEFT JOIN qb_fee_credit_grant g ON g.sponsor_id = l.subject_id AND g.source = 'LIGHT' AND g.source_key = 'light:' || coalesce(t.template_tree_id, t.tree_id) || '/' || l.node_id WHERE l.subject_kind = 'SPONSOR' AND l.subject_id = '<发起方>'`。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

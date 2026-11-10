@@ -76,6 +76,33 @@ public final class TreeGates {
     /** A node's map as the gate sees it. */
     public record Tree(String ownerKind, String subjectKind, String status) {}
 
+    // ---- F-S4b: Sponsor gates ---------------------------------------------------------------------------------------
+
+    /**
+     * F-S4b: whether a Sponsor gate's parameter names a node that can be lit to open it: a node in effect of a
+     * platform template Sponsors light, in effect (the daily check's {@code GATE_INVALID} for the Sponsor gates).
+     */
+    public static boolean namesForSponsors(Tree tree, Boolean nodeActive) {
+        return tree != null && QbTrees.PLATFORM.equals(tree.ownerKind()) && QbTrees.SPONSOR.equals(tree.subjectKind())
+            && QbTrees.ACTIVE.equals(tree.status()) && Boolean.TRUE.equals(nodeActive);
+    }
+
+    /** A Sponsor's lit record of a gate's node: its map, and whether that map is the template or a copy of it. */
+    public record SponsorLit(String litId, String treeId, String templateTreeId) {}
+
+    /**
+     * F-S4b (Q90 §0-21): whether a Sponsor gate is open to the Sponsor: the parameter names a node of a platform
+     * template Sponsors light ({@link #namesForSponsors}), and the Sponsor lit the same node, in the template or in any
+     * operator's copy of it (a copy keeps the template's node ids; a lit record in a former operator's copy still
+     * counts after a reassignment), with no revocation of that record.
+     */
+    public static boolean openForSponsors(GateNode gate, Tree tree, Boolean nodeActive, Collection<SponsorLit> lits,
+        Collection<String> revokedLits) {
+        return gate != null && namesForSponsors(tree, nodeActive) && lits.stream().anyMatch(lit ->
+            (gate.treeId().equals(lit.treeId()) || gate.treeId().equals(lit.templateTreeId()))
+                && !revokedLits.contains(lit.litId()));
+    }
+
     /**
      * Reads the gate {@code paramKey} for the caller, under keys starting with {@code prefix}, only when
      * {@code wanted} (otherwise the queries are empty and send nothing; the parameter is still read).
