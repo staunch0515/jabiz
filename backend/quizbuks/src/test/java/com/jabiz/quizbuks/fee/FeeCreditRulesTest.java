@@ -73,4 +73,48 @@ class FeeCreditRulesTest {
         assertThat(FeeCreditRules.reminderAllowed(NOW.minus(Duration.ofHours(23)), NOW)).isFalse();
         assertThat(FeeCreditRules.manualKey("r1")).isEqualTo("manual:r1");
     }
+
+    @Test
+    void aVerifiedSponsorIsToppedUpToTheCertifiedAmountOnce() {
+        BigDecimal basic = new BigDecimal("1000");
+        BigDecimal certified = new BigDecimal("10000");
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, certified, false, certified))
+            .contains(new BigDecimal("9000"));
+        // The switch off, not approved, banned, not verified, no onboarding yet, topped up already: nothing.
+        assertThat(FeeCreditRules.certifiedTopUp(false, true, false, true, basic, certified, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, false, false, true, basic, certified, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, true, true, basic, certified, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, false, basic, certified, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, null, null, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, certified, true, certified)).isEmpty();
+        // Granted certified (the lot records its own amount), or more than the parameter now: nothing.
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, certified, certified, false, certified))
+            .isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, new BigDecimal("12000"),
+            new BigDecimal("12000"), false, certified)).isEmpty();
+        // No certified amount, or not whole yen: nothing.
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, certified, false, null)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, certified, false,
+            new BigDecimal("10000.5"))).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, new BigDecimal("10000.5"), false,
+            certified)).isEmpty();
+    }
+
+    @Test
+    void raisingTheCertifiedAmountTopsUpNothingGrantedBefore() {
+        BigDecimal basic = new BigDecimal("1000");
+        BigDecimal then = new BigDecimal("10000");
+        BigDecimal raised = new BigDecimal("15000");
+        // Granted certified at 10000, the parameter raised to 15000 since: never topped up.
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, then, then, false, raised)).isEmpty();
+        // Granted basic while the certified amount was 10000: topped up to 10000, not to the 15000 raised since.
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, then, false, raised))
+            .contains(new BigDecimal("9000"));
+        // The parameter lowered to 5000 since: topped up to 5000 only.
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, then, false, new BigDecimal("5000")))
+            .contains(new BigDecimal("4000"));
+        // A lot granted before the amount was recorded (V111): the parameter now.
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, null, false, raised))
+            .contains(new BigDecimal("14000"));
+    }
 }

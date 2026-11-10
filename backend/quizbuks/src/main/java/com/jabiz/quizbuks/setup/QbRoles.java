@@ -93,7 +93,9 @@ public final class QbRoles {
         // F-C10: the AI help's conversations handed to a person (every one), replying and closing them.
         QbPermissions.ADMIN_HELP,
         // F-C10c: what the help did not solve (the controller, 2026-11-09: content administrators only).
-        QbPermissions.ADMIN_HELP_GAPS);
+        QbPermissions.ADMIN_HELP_GAPS,
+        // F-M3: every Sponsor's company verification, and withdrawing one.
+        QbPermissions.ADMIN_VERIFICATION_READ, QbPermissions.VERIFICATION_REVOKE);
 
     /**
 
@@ -134,7 +136,9 @@ public final class QbRoles {
         // F-S14: the ledger of shared videos' uses of its own sponsors' publications, read only.
         QbPermissions.ADMIN_VIDEO_USE_READ,
         // F-C10: its own Sponsors' AI help conversations handed to a person, replying and closing them.
-        QbPermissions.ADMIN_HELP);
+        QbPermissions.ADMIN_HELP,
+        // F-M3: its own Sponsors' company verifications (reviewing them is REVIEW_SPONSOR's), and withdrawing one.
+        QbPermissions.ADMIN_VERIFICATION_READ, QbPermissions.VERIFICATION_REVOKE);
 
     private static final List<String> FINANCE = List.of(QbPermissions.COUNTRY_READ, QbPermissions.ADMIN_USERS_READ,
         QbPermissions.ADMIN_FINANCE_READ, QbPermissions.ADMIN_PUBLICATION_READ, QbPermissions.PAYOUT_REVIEW,
@@ -236,7 +240,9 @@ public final class QbRoles {
             // F-S4a: answering their operator's challenges.
             QbPermissions.SPONSOR_CHALLENGE,
             // F-C10: the AI help.
-            QbPermissions.HELP_USE));
+            QbPermissions.HELP_USE,
+            // F-M3: their own company verification.
+            QbPermissions.SPONSOR_VERIFICATION));
         add(SHOPIFY_SHOP, labels("Shopify shop staff", "Shopify 店铺员工", "Shopify ストアのスタッフ"), false,
             List.of(com.jabiz.quizbuks.shopify.Shopify.USE));
         add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);

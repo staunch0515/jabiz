@@ -19,6 +19,8 @@ export interface PublicSponsorPage {
   /** Q73c: the languages it offers (`en,zh`, the main one first) and the one it is shown in. */
   languages?: string | null
   displayLanguage?: string | null
+  /** F-M3: the domain the company proved it owns; null (or absent) when it is not verified. */
+  verifiedDomain?: string | null
 }
 
 /** A live public publication the page lists. */

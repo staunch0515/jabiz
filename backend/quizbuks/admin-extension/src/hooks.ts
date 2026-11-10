@@ -160,5 +160,6 @@ export const QUEUE = {
   exposure: ['qb-ext', 'exposure'],
   videoUses: ['qb-ext', 'video-uses'],
   sharedVideos: ['qb-ext', 'shared-videos'],
+  sponsorVerifications: ['qb-ext', 'sponsor-verifications'],
 
 } as const

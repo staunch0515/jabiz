@@ -68,6 +68,7 @@ import { mainAction } from '../shell/mainAction'
 import { useShellState } from '../shell/context'
 import { AiUsageMetric } from '../ai/AiUsageMetric'
 import { useDashboard } from '../analytics/hooks'
+import { VerificationTopUpLink } from '../verification/VerificationPage'
 
 /** The labels of the top-up states, from the server's dictionary (the code until it answered). */
 export function useTopUpStatusLabel() {
@@ -618,6 +619,8 @@ export function FeeAccountPage() {
           : settings.data && <PageState kind="empty" description={t('wallet.cash.none')} />}
       {/* F-M1: the account that pays the platform's fees: the granted credit and the cash, by lot. */}
       {data && <FeeAccount wallet={data} />}
+      {/* F-M3: what verifying the company would top up. */}
+      <VerificationTopUpLink />
       {!kudos && settings.data?.targets.includes('CASH') && <TopUpsSection />}
       <TopUpDialog open={topping} onOpenChange={setTopping} preferred="CASH" />
     </section>

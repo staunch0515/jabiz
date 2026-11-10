@@ -96,6 +96,10 @@ public final class QbFeeAccount {
             .asMonetary("JPY", 0));
         eb.field("voidedAt", f -> f.physicalColumn("voided_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("remindedAt", f -> f.physicalColumn("reminded_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
+        // F-M3: the onboarding's and its top-up's certified amount when granted (what a verification tops up to; the
+        // amount itself when granted certified); none for the other sources and the lots granted before V111.
+        eb.field("certifiedAmount", f -> f.physicalColumn("certified_amount").immutable(true).processOnly()
+            .asMonetary("JPY", 0));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_fee_credit_grant_source", "sponsorId", "sourceKey");
         eb.listView("default", lv -> lv

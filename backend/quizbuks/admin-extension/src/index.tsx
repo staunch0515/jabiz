@@ -27,7 +27,7 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban, Eye, NotebookTabs, LifeBuoy,
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, BadgeCheck, Ban, Eye, NotebookTabs, LifeBuoy,
   MessageCircleQuestion, BookOpen } from 'lucide-react'
 import TopicsPage from './TopicsPage'
 import BlocksPage from './BlocksPage'
@@ -51,6 +51,8 @@ import ReferralsPage from './ReferralsPage'
 import RegionPage from './RegionPage'
 import SharedVideosPage from './SharedVideosPage'
 import SharedVideoPage from './SharedVideoPage'
+import SponsorVerificationsPage from './SponsorVerificationsPage'
+import SponsorVerificationPage from './SponsorVerificationPage'
 import AiPage from './AiPage'
 import { HelpThreadPage, HelpThreadsPage } from './HelpDeskPages'
 import { HelpGapsPage, HelpManualsPage } from './HelpContentPages'
@@ -139,6 +141,9 @@ export default defineExtension({
     // F-S12: the videos Sponsors share: an operator's own Sponsors' to review and take down, the platform's all.
     { path: PATH.sharedVideos, element: <SharedVideosPage /> },
     { path: '/qb/shared-videos/:sharedVideoId', element: <SharedVideoPage /> },
+    // F-M3: the Sponsors' company verifications: an operator's own Sponsors' to review, the platform's all.
+    { path: PATH.sponsorVerifications, element: <SponsorVerificationsPage /> },
+    { path: '/qb/sponsor-verifications/:verificationId', element: <SponsorVerificationPage /> },
     // F-S9: the word list of topics (headquarters).
     { path: PATH.topics, element: <TopicsPage /> },
     // F-S8: the figures of blocking (headquarters, aggregates only).
@@ -271,6 +276,9 @@ export default defineExtension({
         // Sponsors', the platform's reads every operator's (filtered by operator) and takes down in an emergency.
         { key: 'qb-shared-videos', label: 'menu.sharedVideos', path: PATH.sharedVideos, icon: Clapperboard,
           permission: PERMISSION.sharedVideoRead },
+        // F-M3: the Sponsors' company verifications, one entry for both (an operator's session: its own Sponsors').
+        { key: 'qb-sponsor-verifications', label: 'menu.sponsorVerifications', path: PATH.sponsorVerifications,
+          icon: BadgeCheck, permission: PERMISSION.verificationRead },
         // F-S13: the exposures of shared videos, one entry for both: the Takers the daily cap refused (an operator's
         // session reads its own Sponsors' publications only).
         { key: 'qb-exposure', label: 'menu.exposure', path: PATH.exposure, icon: Eye,

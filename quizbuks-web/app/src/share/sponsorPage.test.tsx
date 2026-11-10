@@ -209,3 +209,23 @@ describe("a Sponsor's page (Q60a)", () => {
     expect(items[0]).toHaveTextContent('Rye loaf')
   })
 })
+
+describe('the verified company mark (F-M3)', () => {
+  it('shows the verified domain beside the company name, and passes axe', async () => {
+    server({ page: { ...PAGE, verifiedDomain: 'acme.example' } })
+    window.history.replaceState(null, '', '/s/acme-bakery')
+    render(<App />)
+    const mark = await screen.findByTestId('sponsor-verified')
+    expect(mark).toHaveTextContent('Verified company · acme.example')
+    expect(mark).toHaveAttribute('aria-label', 'Verified company · acme.example')
+    await expectAccessible()
+  })
+
+  it('shows nothing when the company is not verified', async () => {
+    server({ page: { ...PAGE, verifiedDomain: null } })
+    window.history.replaceState(null, '', '/s/acme-bakery')
+    render(<App />)
+    await screen.findByTestId('sponsor-page-company')
+    expect(screen.queryByTestId('sponsor-verified')).toBeNull()
+  })
+})

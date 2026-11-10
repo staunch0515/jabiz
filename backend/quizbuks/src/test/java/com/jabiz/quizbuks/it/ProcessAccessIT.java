@@ -33,6 +33,8 @@ class ProcessAccessIT extends QbItSupport {
     private static final Map<String, ProcessAccess> CLOSED = Map.ofEntries(
         Map.entry("QB_SPONSOR_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_SPONSOR_PAGE_APPROVAL_RESULT", ProcessAccess.INTERNAL),
+        // F-M3: the verification's review decided, and the top-up of a verified company (event and daily job).
+        Map.entry("QB_SPONSOR_VERIFICATION_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_TREE_APPROVAL_RESULT", ProcessAccess.INTERNAL),
         Map.entry("QB_TREE_EVALUATE", ProcessAccess.INTERNAL),
         Map.entry("QB_TREE_LIT_REVOKE_APPROVAL_RESULT", ProcessAccess.INTERNAL),
@@ -150,6 +152,7 @@ class ProcessAccessIT extends QbItSupport {
         // F-M2: the grant (under its caller's wallet lock), the daily expiry and reminder, and the reminder's mail.
         Map.entry("QB_FEE_CREDIT_GRANT", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_CREDIT_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_CREDIT_CERTIFIED_TOP_UP", ProcessAccess.INTERNAL),
         Map.entry("QB_FEE_CREDIT_REMIND", ProcessAccess.INTERNAL),
         Map.entry("QB_MAIL_FEE_CREDIT", ProcessAccess.INTERNAL),
         Map.entry("QB_FEE_MONTHLY_ITEM", ProcessAccess.INTERNAL),

@@ -1113,6 +1113,20 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **排查（挑战）**：发起方说看不到挑战：确认其入驻已通过、其归属的运营商（`qb.sponsor.operator`）与挑战卡片的 `operatorId` 一致、卡片 `forSponsors` 且在期间内；答过的挑战只列在"答过的挑战"中。
 - **排查**：某发起方点亮的赠送：`SELECT l.lit_id, l.tree_id, l.node_id, l.lit_at, l.grant_amount, g.amount, g.remaining, g.voided_amount FROM qb_tree_lit_version l JOIN qb_tree t ON t.tree_id = l.tree_id LEFT JOIN qb_fee_credit_grant g ON g.sponsor_id = l.subject_id AND g.source = 'LIGHT' AND g.source_key = 'light:' || coalesce(t.template_tree_id, t.tree_id) || '/' || l.node_id WHERE l.subject_kind = 'SPONSOR' AND l.subject_id = '<发起方>'`。
 
+### 7.42 企业实名认证（F-M3）
+
+发起方以公司自己的邮箱域名证明公司身份（`docs/quizbuks/plans/impl/F-M.md` §6）。
+
+- **流程**：发起方在发起方中心的"企业认证"标签（`/sponsor/profile/verification`）提交公司的正式名称与域名（`QB_SPONSOR_VERIFICATION_SUBMIT`）。账户的已验证邮箱在该域名或其子域下的直接进入审核；否则发起方填该域名下的一个地址，平台向它发一次性确认链接（邮件 `qb.sponsor-verification.confirm`，有效期为普通参数 `qb.sponsor-verification.link-hours`，缺省 48 小时、至多 168）。发起方须在**登录本人账户**的状态下打开链接（`/sponsor/profile/verification/confirm?token=…`，`QB_SPONSOR_VERIFICATION_CONFIRM`）；只认最新的一封，重新发送后旧链接失效。之后进入所属运营商的审核（审批对象 `qb.sponsor-verification`，规则 `qb.sponsor-verification.review` 由 `QB_SETUP` 提出，审批人持 `qb.review.sponsor`，同一运营商的另一位成员；平台挡住本人审核自己的）。通过即"已认证"，公开主页显示"已实名认证 · 域名"；驳回附理由，发起方改正后重新提交。结果都以站内信告知发起方（`VERIFICATION_APPROVED` / `_REJECTED` / `_REVOKED`）。
+- **不接受**：公共邮箱服务的域名及其子域（gmail.com、outlook.com、yahoo.co.jp、qq.com、163.com、docomo.ne.jp 等，清单在代码 `verification.VerificationRules.PUBLIC_MAIL_DOMAINS`，需要补充时改代码）；已为别的发起方认证的域名（提交时与批准时各查一次，部分唯一索引兜底，`QB_VERIFICATION_DOMAIN_TAKEN`，不说是谁）。
+- **审核的判断方法**：打开该域名的官网，确认网站上的公司名称与申请的名称一致（含法人格的写法）、网站确实是这家公司的（备案、会社概要、联系方式）；确认方式是"链接"的，看收件地址是否是公司的通用地址或员工地址。不以 WHOIS 作为依据（多为代理登记）。拿不准就驳回并写明需要发起方补充什么。
+- **变更与撤销**：发起方提交不同的名称或域名，原认证**当场结束**（`SUPERSEDED`，总控 2026-11-10），直到新的通过。总部内容管理员与运营商的任一成员可撤销（`QB_SPONSOR_VERIFICATION_REVOKE`，平台管理系统 `/admin/qb/sponsor-verifications`，总是二次验证、理由必填、发起方可见）；撤销**不收回**已发的赠送额度。删除账号时认证记录随之删除（确认地址在审计中遮蔽），域名可再被认证。
+- **认证补发**：已领开户赠送（未认证金额 `qb.fee-credit.grant.basic`）的发起方通过认证时，补发到认证金额的差额（来源 `CERTIFIED_TOP_UP`，来源键 `certified`，终身一笔；`QB_FEE_CREDIT_CERTIFIED_TOP_UP` 在钱包锁内）。认证金额是**开户赠送发放时**的 `qb.fee-credit.grant.certified`（记在那一笔的 `certified_amount`），不超过现在的参数：**调高参数不对已发的开户赠送补差**，调低之后只补到调低后的金额；已按认证金额开户的永不补。补发在批准提交之后、自己的事务中进行（事件 `qb.sponsor-verification.decided` 的消费者 `qb.fee-credit-certified`），补发失败不影响认证。**要看赠送开关** `qb.fee-credit.grant.enabled`（总控 2026-11-10）：开关关闭或发起方封禁中时不补，每日任务 `qb.fee-credit-certified-due`（03:41，`jabiz.fiscal-year-zone`，模板 `qb.system.fee-credit-certified-due`）在开启、解封后补上；错过的运行以 `JOB_RUN_REQUEST` 补跑。先认证、后确认资料完整的，开户赠送直接按认证金额发。发起方的平台费账户页在可补发时提示"认证后补到"并链到企业认证。
+- **部署**：迁移 V111；部署后执行一次 `QB_SETUP`（新的参数、审核规则与权限 `qb.sponsor.verification`、`qb.admin.verification.read`、`qb.sponsor-verification.revoke`），由另一位管理员发布审核规则的提案。邮件需 `jabiz.mail.enabled` 与 `jabiz.mail.base-url`（链接指向发起方页面）。
+- **排查**：发起方说收不到链接：查 `sys_mail_message` 中模板 `qb.sponsor-verification.confirm` 给该地址的记录与发送状态，再请对方查垃圾邮件、公司邮件网关是否拦截外部邮件；链接用不了（`QB_VERIFICATION_LINK_INVALID`）：是否过期、是否已被后发的链接取代、是否用别的账户登录打开。某发起方的认证记录：`SELECT verification_id, company_name, domain, method, status, submitted_at, verified_at, ended_at, reject_reason, revoke_reason FROM qb_sponsor_verification WHERE sponsor_id = '<发起方>' ORDER BY submitted_at DESC`。补发：`SELECT * FROM qb_fee_credit_grant WHERE sponsor_id = '<发起方>' AND source_key IN ('onboarding', 'certified')`。
+- **补发失败**（已认证、平台费账户页仍提示"认证后补到"、次日仍未补）：查任务 `qb.fee-credit-certified-due` 最近一次运行中该发起方一项的结果，与消费者 `qb.fee-credit-certified` 对该事件的尝试（`sys_outbox_attempt`）。常见原因：赠送开关关着（开启后次日补）、封禁中（解封后次日补）、赠送参数不合格（`qb.fee-credit.valid-days` 不在 1–999、`qb.fee-credit.grant.certified` 不是整数日元：以受控变更改正并发布）、过账失败（科目 5140 / 2190 未启用等，修好后）。改正后等次日的任务，或以 `JOB_RUN_REQUEST` 补跑 `qb.fee-credit-certified-due`（带原因）；不手工写赠送或分录。认证本身不受影响，不必重新审核。
+- **每日核对 `CERTIFIED_GRANTS`**（`qb.system.recon-fee-account`）：有补发而从未认证过（`expected` 0、`actual` 补发金额），或开户 + 补发超过补发时记下的认证金额（`expected` 记下的金额、`actual` 两笔之和）。都不应出现：出现即停开关（`qb.fee-credit.grant.enabled` 改为 false）、保留现场，报开发；多发的部分由财务以人工调整的流程处理，不改赠送表。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。

@@ -8,6 +8,11 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 - Profile package: export everything on these pages as one file, or import such a file. An AI tool can write one from your website with the prompt the page gives.
 - If an operator looks after your account, they are your first contact.
 
+## Company verification (/sponsor/profile/verification)
+
+In "Sponsor hub → Company verification", enter your company's registered name and domain to show it is who it says by its own mail domain. If your account's address is on the domain (or a subdomain) it goes to your operator's review at once; otherwise enter an address on the domain and open the one-time link sent there (signed in to this account, within 48 hours; sending it again makes the earlier link stop working). Once your operator confirms it, you are verified and your public page shows "Verified company" with the domain. Public mail services' domains (Gmail, Outlook, QQ and the like) cannot be used, and one domain verifies one Sponsor only.
+Once verified, the onboarding granted credit you received is topped up to the verified amount (once). Submitting a different name or domain ends the current verification at once; your operator or the platform may withdraw it, telling you why, and the credit given is kept.
+
 ## Dashboard (/sponsor/dashboard)
 
 - Your application's status and how your publications are doing.
