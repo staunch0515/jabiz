@@ -36,7 +36,10 @@ const en = {
       referrer: 'You can recommend quizzes to friends.',
       'benefit-provider': 'You can offer sponsored benefits.',
       'benefit-sponsor': 'You can buy sponsored benefits.',
+      'digital-prize': 'You can give digital prizes.',
+      'offline-redeem': 'You can give prizes collected in person.',
     },
+    grant: 'Granted credit {{amount}} (once)',
     condition: {
       ALL: 'All of these',
       ANY: 'Any one of these',
@@ -83,7 +86,10 @@ const zh: typeof en = {
       referrer: '可以向朋友推荐 Quiz。',
       'benefit-provider': '可以上架赞助权益。',
       'benefit-sponsor': '可以购买赞助权益。',
+      'digital-prize': '可以用电子奖品作奖励。',
+      'offline-redeem': '可以用到店领取的奖品作奖励。',
     },
+    grant: '赠送额度 {{amount}}（一次）',
     condition: {
       ALL: '以下全部',
       ANY: '以下任一',
@@ -132,7 +138,10 @@ const ja: typeof en = {
       referrer: '友だちに Quiz を推薦できます。',
       'benefit-provider': '協賛特典を出品できます。',
       'benefit-sponsor': '協賛特典を購入できます。',
+      'digital-prize': 'デジタル賞品を報酬にできます。',
+      'offline-redeem': '店頭で受け取る賞品を報酬にできます。',
     },
+    grant: '付与クレジット {{amount}}（1 回）',
     condition: {
       ALL: '以下のすべて',
       ANY: '以下のいずれか',

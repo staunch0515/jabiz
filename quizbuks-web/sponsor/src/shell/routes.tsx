@@ -31,6 +31,10 @@ import { SponsorPagePage } from '../page/SponsorPageEditor'
 import { PreviewPage } from '../preview/PreviewPage'
 import { previewOf } from '../preview/paths'
 import { BasicsPage } from '../profile/BasicsPage'
+import { challengeRouteOf } from '../challenges/api'
+import { ChallengePlayPage } from '../challenges/ChallengePlayPage'
+import { ChallengeResultPage } from '../challenges/ChallengeResultPage'
+import { ChallengesPage } from '../challenges/ChallengesPage'
 import { OverviewPage } from '../profile/OverviewPage'
 import { profileSectionOf } from '../profile/paths'
 import { ProfileLayout, PublicPageParts } from '../profile/ProfileLayout'
@@ -152,6 +156,15 @@ export function pageOf(path: string, search: string, state: ShellState): ReactNo
   if (path === STATS_PATH) {
     return <ProfileLayout section="page"><PublicPageParts current="stats" /><StatsPage /></ProfileLayout>
   }
+  // F-S4c: a challenge answered, and an answered one's result, under the hub's challenges.
+  const challenge = challengeRouteOf(path)
+  if (challenge) {
+    return 'attemptId' in challenge
+      ? <ProfileLayout section="challenges"><ChallengeResultPage key={challenge.attemptId}
+        attemptId={challenge.attemptId} /></ProfileLayout>
+      : <ProfileLayout section="challenges"><ChallengePlayPage key={challenge.publicationId}
+        publicationId={challenge.publicationId} /></ProfileLayout>
+  }
   const section = profileSectionOf(path)
   if (section) {
     return (
@@ -160,7 +173,8 @@ export function pageOf(path: string, search: string, state: ShellState): ReactNo
           : section === 'basics' ? <BasicsPage />
             : section === 'page' ? <><PublicPageParts current="edit" /><SponsorPagePage /></>
               : section === 'staff' ? <StaffPage />
-                : <MailServerPage />}
+                : section === 'challenges' ? <ChallengesPage />
+                  : <MailServerPage />}
       </ProfileLayout>
     )
   }
