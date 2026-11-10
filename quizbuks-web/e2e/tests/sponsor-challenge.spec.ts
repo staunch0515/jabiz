@@ -87,6 +87,8 @@ test('a Sponsor passes a challenge: the node is lit, digital prizes open, the gr
 
     // The Sponsor finds it on the challenges tab, by the node.
     await signIn(page, '/sponsor/', sponsor.email)
+    // Signed in once the home is drawn (the session is kept only then).
+    await expect(page.getByTestId('dashboard-status')).toBeVisible()
     await page.goto('/sponsor/profile/challenges')
     const map = page.locator(`[data-testid="challenge-map"][data-tree="${copy.treeId}"]`)
     await expect(map).toBeVisible()
@@ -124,6 +126,7 @@ test('a Sponsor passes a challenge: the node is lit, digital prizes open, the gr
         selected: q.options.filter((o) => o.text !== 'Paris').map((o) => o.no) })) })
     await signOut(page)
     await signIn(page, '/sponsor/', other.email)
+    await expect(page.getByTestId('dashboard-status')).toBeVisible()
     await page.goto(`/sponsor/profile/challenges/results/${started.attemptId}`)
     await expect(page.getByTestId('challenge-result')).toHaveAttribute('data-passed', 'false')
     await expect(page.getByTestId('challenge-next')).toBeVisible()
