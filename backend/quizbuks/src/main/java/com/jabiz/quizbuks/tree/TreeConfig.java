@@ -130,10 +130,52 @@ public class TreeConfig {
     DatasetDefinition qbPublicTreeNodeDataset() {
         return DatasetDefinition.define(QbTrees.PUBLIC_NODES, d -> d
             .targetEntityType(QbTrees.NODE)
-            .publicRead(p -> p.allRows().fields("treeId", "nodeId", "beforeAnswer"))
+            .publicRead(p -> p.allRows().fields("treeId", "nodeId", "beforeAnswer", "active"))
             .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
             .policy(p -> p.readOnly(true).allowTimeTravel(false))
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
+    }
+
+    /** F-S3c: the graphs in effect that Takers light (the Sponsor's page shows its owner's), templates only. */
+    @Bean
+    DatasetDefinition qbPublicTreeDataset() {
+        return publicDataset(QbTrees.PUBLIC_TREES, QbTrees.TREE, d -> d
+            .scope(s -> s.fixed("status", QbTrees.ACTIVE).fixed("subjectKind", QbTrees.TAKER))
+            .publicRead(p -> p.fields("treeId", "ownerKind", "ownerId", "currentVersionId")));
+    }
+
+    /** F-S3c: the versions in effect: a graph's name and description. */
+    @Bean
+    DatasetDefinition qbPublicTreeVersionDataset() {
+        return publicDataset(QbTrees.PUBLIC_VERSIONS, QbTrees.VERSION, d -> d
+            .scope(s -> s.fixed("status", QbTrees.IN_EFFECT))
+            .publicRead(p -> p.fields("versionId", "treeId", "name", "description")));
+    }
+
+    /** F-S3c: the node definitions; templates join them to a version in effect only. */
+    @Bean
+    DatasetDefinition qbPublicTreeNodeDefDataset() {
+        return publicDataset(QbTrees.PUBLIC_NODE_DEFS, QbTrees.NODE_DEF, d -> d
+            .publicRead(p -> p.allRows().fields("versionId", "nodeId", "name", "description", "condition", "seq")));
+    }
+
+    /** F-S3c: the nodes a condition in effect names, as the version resolved them. */
+    @Bean
+    DatasetDefinition qbPublicTreeNodeRefDataset() {
+        return publicDataset(QbTrees.PUBLIC_NODE_REFS, QbTrees.NODE_REF, d -> d
+            .publicRead(p -> p.allRows().fields("treeId", "nodeId", "refNodeId", "refTreeId")));
+    }
+
+    /** A public view: read through the public templates only (the dataset API is closed to everybody). */
+    private DatasetDefinition publicDataset(String id, String entity,
+            java.util.function.Consumer<DatasetDefinition.Builder> declare) {
+        return DatasetDefinition.define(id, d -> {
+            d.targetEntityType(entity)
+                .permissions(QbPermissions.SPONSOR_VIEW_WRITE, QbPermissions.SPONSOR_VIEW_WRITE)
+                .policy(p -> p.readOnly(true).allowTimeTravel(false))
+                .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef));
+            declare.accept(d);
+        });
     }
 
     /**

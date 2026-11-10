@@ -12,11 +12,10 @@ import { FileImage } from '../qb/FileImage'
 import { CoverPlaceholder } from '../qb/Illustrations'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
-import { levelsOf } from './levels'
-import { prerequisitesOf } from '../qb/play'
 import { readPagePublications, readPublicSponsorPage } from './api'
 import { Link } from '../qb/router'
 import { sharePath } from './share'
+import { SponsorMap } from './SponsorMap'
 import { countPageView, countProductClick } from './counting'
 import { linkLanguageOf } from '../linkLanguage'
 import { useMainlandChina } from '../qb/region'
@@ -44,7 +43,7 @@ function httpsUrl(url: string | null): string | null {
  * logo, the company, the headline, the story (Markdown, no HTML), the website, and the sponsor's quizzes open now,
  * each leading to its own page (the share page before signing in). From the public templates only.
  */
-export function SponsorPage({ handle }: { handle: string }) {
+export function SponsorPage({ handle, signedIn = false }: { handle: string; signedIn?: boolean }) {
   const { t } = useTranslation(APP)
   const { t: tQb } = useTranslation(QB)
   // Q73c: in the language chosen on the page (a link's ?lang= first), else the interface's, else the page's main one.
@@ -133,48 +132,35 @@ export function SponsorPage({ handle }: { handle: string }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="sponsor-page-quizzes" className="text-lg font-semibold">{t('sponsorPage.quizzes')}</h2>
         </div>
-        {/* F-S2c2 (D4, D5): the old tree and the levels from the prerequisites are gone; F-S3 shows the knowledge
-            maps here (plan F-S2 §0 item 3). */}
-        <p className="text-muted-foreground text-sm" data-testid="sponsor-page-tree-soon">{t('sponsorPage.treeSoon')}</p>
         {publications.isPending && <PageState kind="loading" />}
         {publications.isError && <PageState kind="error" description={tQb('failed')} />}
         {publications.isSuccess && publications.data.length === 0 && (
           <p className="text-muted-foreground text-sm" data-testid="sponsor-page-none">{t('sponsorPage.none')}</p>
         )}
-        {publications.isSuccess && publications.data.length > 0 && levelsOf(publications.data).map((level, _i, all) => (
-          // Q76 (D-Q76-8): the sponsor's levels, when its publications lead to one another; one level is a plain list.
-          <div key={level.level} className="flex flex-col gap-2" data-testid="sponsor-page-level" data-level={level.level}>
-            {all.length > 1 && (
-              <h3 className="text-muted-foreground text-sm font-medium">{t('sponsorPage.level', { n: level.level })}</h3>
-            )}
-            <ul className="flex flex-col gap-2" data-testid="sponsor-page-publications">
-              {level.items.map((publication) => {
-                const names = prerequisitesOf(publication.prerequisites).map((p) => publications.data
-                  .find((other) => other.publicationId === p.requiredPublicationId)?.name).filter(Boolean)
-                return (
-                  <li key={publication.publicationId}>
-                    <Link to={sharePath(publication.publicationId)}
-                      className="bg-card hover:bg-accent flex flex-col gap-1 border p-3"
-                      data-testid="sponsor-page-publication">
-                      <span className="font-medium">{publication.name}</span>
-                      <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                        <span className="inline-flex items-center gap-1">
-                          <Trophy aria-hidden className="size-3.5" />
-                          {t('sponsorPage.upTo', { amount: formatKudos(publication.maxReward) })}
-                        </span>
-                        <span>{t('sponsorPage.endsAt', { time: formatDateTime(publication.endAt) })}</span>
-                        {names.length > 0 && (
-                          <span data-testid="sponsor-page-after">{t('sponsorPage.after', { names: names.join(', ') })}</span>
-                        )}
-                      </span>
-                    </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        ))}
+        {publications.isSuccess && publications.data.length > 0 && (
+          <ul className="flex flex-col gap-2" data-testid="sponsor-page-publications">
+            {publications.data.map((publication) => (
+              <li key={publication.publicationId}>
+                <Link to={sharePath(publication.publicationId)}
+                  className="bg-card hover:bg-accent flex flex-col gap-1 border p-3"
+                  data-testid="sponsor-page-publication">
+                  <span className="font-medium">{publication.name}</span>
+                  <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <span className="inline-flex items-center gap-1">
+                      <Trophy aria-hidden className="size-3.5" />
+                      {t('sponsorPage.upTo', { amount: formatKudos(publication.maxReward) })}
+                    </span>
+                    <span>{t('sponsorPage.endsAt', { time: formatDateTime(publication.endAt) })}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
+      {/* F-S3c: the Sponsor's knowledge map, in place of the old levels (D4, D5): the signed-in Taker's states, or
+          anybody's names and conditions. */}
+      <SponsorMap handle={p.handle} signedIn={signedIn} />
     </article>
   )
 }

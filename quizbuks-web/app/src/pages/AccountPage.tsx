@@ -11,6 +11,7 @@ import {
   IdCard,
   Info,
   Mail,
+  Network,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -30,6 +31,7 @@ import { legalPath } from '../qb/legal'
 import { SoundSwitch } from '../qb/SoundSettings'
 import { Link, navigate, Redirect } from '../qb/router'
 import { MenuItem, MenuList } from './Menu'
+import { MAPS_PATH } from '../maps/paths'
 import { LikedTopics } from './LikedTopics'
 import { BlockList } from '../blocks/BlockList'
 import { ProfileDetails } from './ProfileDetails'
@@ -144,6 +146,11 @@ function AccountMenu() {
           <MenuItem key={part} to={accountPath(part)} icon={ICONS[part]} title={partTitle(part, tApp)}
             hint={tApp(`account.hints.${part}`)} testId={`account-menu-${part}`} />
         ))}
+      </MenuList>
+      {/* F-S3c: the knowledge maps. */}
+      <MenuList label={tApp('maps.group')} testId="account-learning">
+        <MenuItem to={MAPS_PATH} icon={Network} title={tApp('maps.menu')} hint={tApp('maps.menuHint')}
+          testId="account-menu-maps" />
       </MenuList>
       {/* Q69: a taker who is no sponsor may apply, with the certification. */}
       <BecomeSponsor />

@@ -1,7 +1,7 @@
 /*---
 id: qb.app.trees
 description: "F-S3: the knowledge graphs in effect the caller's \"my graphs\" lists: the platform's graphs Takers light, and each Sponsor's graph the caller has lit a node of or answered a publication bound to, with how many of its nodes the caller has lit"
-entities: [QbTree, QbTreeVersion, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbAttempt, QbPublicationCard, QbSponsor]
+entities: [QbTree, QbTreeVersion, QbTreeNode, QbTreeLit, QbTreeLitRevocation, QbAttempt, QbPublicationCard, QbSponsor, QbSponsorPage]
 datasets:
   QbTree: urn:jabiz:dataset:default:QbTree
   QbTreeVersion: urn:jabiz:dataset:default:QbTreeVersion
@@ -11,6 +11,9 @@ datasets:
   QbAttempt: urn:jabiz:dataset:taker:QbAttempt
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
+  QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
+params:
+  handle: { like: QbSponsorPage.handle, description: "F-S3c: instead, the graphs in effect of the Sponsor whose published page has this handle (the Sponsor's page shows them to everyone signed in)" }
 results:
   treeId:      { from: QbTree.treeId }
   ownerKind:   { from: QbTree.ownerKind }
@@ -55,6 +58,11 @@ SELECT CAST(t.{{QbTree.treeId}} AS text) AS treeId, t.{{QbTree.ownerKind}} AS ow
 FROM {{QbTree}} t
 JOIN {{QbTreeVersion}} v ON v.{{QbTreeVersion.versionId}} = t.{{QbTree.currentVersionId}}
 WHERE t.{{QbTree.status}} = 'ACTIVE' AND t.{{QbTree.subjectKind}} = 'TAKER'
-  AND (t.{{QbTree.ownerKind}} = 'PLATFORM'
-       OR (t.{{QbTree.ownerKind}} = 'SPONSOR'
-           AND EXISTS (SELECT 1 FROM mine WHERE mine.treeId = CAST(t.{{QbTree.treeId}} AS text))))
+  AND (CASE WHEN CAST(:handle AS text) IS NOT NULL
+            -- F-S3c: the Sponsor's page asks for that Sponsor's graphs (a graph Takers light is everybody's to see).
+            THEN t.{{QbTree.ownerKind}} = 'SPONSOR' AND t.{{QbTree.ownerId}} IN (
+                     SELECT pg.{{QbSponsorPage.userId}} FROM {{QbSponsorPage}} pg
+                     WHERE pg.{{QbSponsorPage.handle}} = CAST(:handle AS text))
+            ELSE t.{{QbTree.ownerKind}} = 'PLATFORM'
+                 OR (t.{{QbTree.ownerKind}} = 'SPONSOR'
+                     AND EXISTS (SELECT 1 FROM mine WHERE mine.treeId = CAST(t.{{QbTree.treeId}} AS text))) END)

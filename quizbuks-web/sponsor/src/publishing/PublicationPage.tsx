@@ -151,7 +151,7 @@ function PublicationView({ detail, stale, onStale }: {
             data-testid="publication-transactions">
             {t('transactions.publicationLink')}
           </Link>
-          <Link to={treePathOf(publication.publicationId)} className="w-fit underline underline-offset-4"
+          <Link to={treePathOf(publication.treeNodeId)} className="w-fit underline underline-offset-4"
             data-testid="publication-tree">
             {t('tree.onTree')}
           </Link>

@@ -116,6 +116,8 @@ import { PayoutPage } from './wallet/PayoutPage'
 import { WalletPage } from './wallet/WalletPage'
 import { ONE_LINE_BANNER } from './banner'
 import { MaintenanceRedirect } from './maintenance'
+import { MapPage, MapsPage } from './maps/MapsPage'
+import { isMapsPath, mapOf, MAPS_PATH } from './maps/paths'
 
 /** Where a signed-in taker starts. */
 const HOME = '/'
@@ -340,7 +342,7 @@ function BottomNav({ path }: { path: string }) {
   // account's parts (Q56) to the account.
   const item = itemPage(path)
   const section = item ? (item.page === 'p' ? HOME : HISTORY) : isWalletPath(path) ? WALLET_PATH
-    : inboxItemOf(path) || path === CONVERSATIONS_PATH || conversationOf(path) ? INBOX_PATH : path === STAFF_PATH || path === HANDLED_PATH || isAccountPath(path) ? ACCOUNT_PATH : path
+    : inboxItemOf(path) || path === CONVERSATIONS_PATH || conversationOf(path) ? INBOX_PATH : path === STAFF_PATH || path === HANDLED_PATH || isAccountPath(path) || isMapsPath(path) ? ACCOUNT_PATH : path
   return (
     <nav aria-label={t('nav.label')}
       className="bg-card fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-12px_var(--overlay)]">
@@ -421,6 +423,8 @@ function SignedIn({ path }: { path: string }) {
   else if (path === STAFF_PATH) page = <StaffDeskPage />
   else if (path === HANDLED_PATH) page = <StaffHandledPage />
   else if (path === MY_SPONSOR_PATH) page = <MySponsorPage />
+  else if (path === MAPS_PATH) page = <MapsPage />
+  else if (mapOf(path)) page = <MapPage key={path} treeId={mapOf(path)!} country={country} />
   else if (path === REFERRALS_PATH) page = <ReferralsPage />
   else if (path === CONVERSATIONS_PATH) page = <ConversationsPage />
   else if (conversationOf(path)) page = <ConversationPage key={path} conversationId={conversationOf(path)!} />
@@ -593,7 +597,7 @@ function Routes() {
   // A sponsor's page (Q60a): anybody's, signed in or not, from the public templates.
   const sponsorHandle = sponsorPageOf(path)
   if (sponsorHandle) {
-    return <PublicPage path={path} signedIn={signedIn}><SponsorPage key={sponsorHandle} handle={sponsorHandle} /></PublicPage>
+    return <PublicPage path={path} signedIn={signedIn}><SponsorPage key={sponsorHandle} handle={sponsorHandle} signedIn={signedIn} /></PublicPage>
   }
   // A publication's share link before signing in (Q15): its public page with the address to sign in by.
   const shared = itemPage(path)

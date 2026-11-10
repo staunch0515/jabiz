@@ -3,6 +3,7 @@ import { History, House, MessagesSquare, ScanLine, UserRound, type LucideIcon } 
 import { verifyKeyOf, takerHandleOf } from '../certificates/PublicCertificates'
 import { conversationOf, CONVERSATIONS_PATH } from '../conversation/api'
 import { inboxItemOf, INBOX_PATH } from '../inbox/api'
+import { mapOf, MAPS_PATH } from '../maps/paths'
 import { MY_SPONSOR_PATH } from '../mysponsor/api'
 import { ACCOUNT_DELETION_PATH, ACCOUNT_DETAILS_PATH, ACCOUNT_PARTS, ACCOUNT_PATH } from '../pages/AccountPage'
 import { legalKindOf } from '../qb/legal'
@@ -65,7 +66,7 @@ export type PageName =
   | 'inbox' | 'inboxItem' | 'conversations' | 'conversation'
   // Me
   | 'account' | 'accountPart' | 'accountBlocks' | 'accountDeletion' | 'wallet' | 'walletPart' | 'kudosMethod'
-  | 'payout' | 'bank' | 'referrals' | 'referral' | 'mySponsor' | 'staffDesk' | 'staffHandled'
+  | 'payout' | 'bank' | 'referrals' | 'referral' | 'mySponsor' | 'staffDesk' | 'staffHandled' | 'maps' | 'map'
   // Outside the areas
   | 'welcome' | 'help' | 'legal' | 'about' | 'verify' | 'takerPage' | 'sponsorPage'
   | 'signIn' | 'signUp' | 'passwordReset' | 'mailLink' | 'oidcCallback' | 'unsubscribe'
@@ -104,6 +105,8 @@ const FIXED: Readonly<Record<string, Route>> = {
   [MY_SPONSOR_PATH]: route('mySponsor', 'me'),
   [STAFF_PATH]: route('staffDesk', 'me'),
   [HANDLED_PATH]: route('staffHandled', 'me'),
+  // F-S3c: the knowledge maps, a row of "Me".
+  [MAPS_PATH]: route('maps', 'me'),
   '/welcome': route('welcome', null),
   '/help': route('help', null),
   '/about': route('about', null),
@@ -141,6 +144,7 @@ export function routeOf(path: string, search = ''): Route | null {
   if (conversationOf(path)) return route('conversation', 'messages')
   if (kudosMethodOf(path)) return route('kudosMethod', 'me')
   if (walletPartOf(path)) return route('walletPart', 'me')
+  if (mapOf(path)) return route('map', 'me')
   if (path.startsWith(`${ACCOUNT_PATH}/`)
     && (ACCOUNT_PARTS as readonly string[]).includes(path.slice(ACCOUNT_PATH.length + 1))) {
     return route('accountPart', 'me')

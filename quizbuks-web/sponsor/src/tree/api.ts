@@ -1,10 +1,12 @@
 /*
- * The sponsor's tree page (Q85). F-S2c2 (D5) removed its templates (qb.sponsor.tree, -people, -person) with the old
- * tree; the page stays at its address, saying that it is being updated, until F-S3 shows the knowledge maps.
+ * The Sponsor's knowledge map page (F-S3c, docs/quizbuks/plans/impl/F-S3.md §4; Q85's tree page before): the reads
+ * are the shared `qb/tree/api.ts` (`qb.sponsor.trees`, `qb.sponsor.tree`). The page stays at its address; after F-F3
+ * it moves under the publishing area's "map" tab.
  */
 import { MAP_PATH } from '../shell/paths'
 
 export const TREE_PATH = MAP_PATH
 
-/** The tree page with a node marked (the publication page links to it). */
-export const treePathOf = (publicationId: string) => `${TREE_PATH}?node=${encodeURIComponent(publicationId)}`
+/** The map page with a node marked (a publication bound to it links there); the page without one. */
+export const treePathOf = (nodeId: string | null | undefined) =>
+  nodeId ? `${TREE_PATH}?node=${encodeURIComponent(nodeId)}` : TREE_PATH
