@@ -38,7 +38,7 @@ public final class TreeApprovals {
         return facts;
     }
 
-    /** The version's content as stored: its name and description, and its nodes in order by id. */
+    /** The version's content as stored: its name and description, and its nodes (with their grants) in order by id. */
     static Map<String, Object> content(EntityInstance version, List<EntityInstance> defs) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("versionNo", String.valueOf((Object) version.get("versionNo")));
@@ -52,6 +52,12 @@ public final class TreeApprovals {
             node.put("description", text(def.get("description")));
             node.put("condition", String.valueOf((Object) def.get("condition")));
             node.put("seq", String.valueOf((Object) def.get("seq")));
+            // F-S4b: the grant is reviewed with the version; written only when set, so a version without grants
+            // hashes as before.
+            java.math.BigDecimal grant = TreeProcesses.grantOf(def);
+            if (grant != null) {
+                node.put("grantAmount", grant.toPlainString());
+            }
             nodes.add(node);
         });
         content.put("nodes", nodes);

@@ -36,12 +36,45 @@ public final class TreeRules {
     /** F-S2d: a node named that more than one graph the draft may use has (ids are unique within a graph only). */
     public static final String AMBIGUOUS_NODE = "QB_TREE_AMBIGUOUS_NODE";
 
+    /** F-S4b: a grant on a graph that has none (only a platform template Sponsors light), or none allowed now. */
+    public static final String GRANT_NOT_ALLOWED = "QB_TREE_GRANT_NOT_ALLOWED";
+    /** F-S4b: a grant above {@code qb.tree.grant.max-per-node}. */
+    public static final String GRANT_TOO_LARGE = "QB_TREE_GRANT_TOO_LARGE";
+    /** F-S4b: a grant of no Kudos or a fraction of one. */
+    public static final String GRANT_INVALID = "QB_TREE_GRANT_INVALID";
+    /** F-S4b: an operator's copy keeps its template's grants (taken over with the template's nodes, never edited). */
+    public static final String GRANT_COPY = "QB_TREE_GRANT_COPY";
+
     /** Every code, for the messages' test. */
     public static final List<String> CODES = List.of(TOO_MANY_NODES, TOO_MANY_CONDITIONS, EMPTY_GROUP, AT_LEAST_RANGE,
         BEFORE_ANSWER_NESTED, PASSED_TWICE, PASSED_BEFORE_ANSWER, UNKNOWN_NODE, SPONSOR_NODE_IN_PLATFORM, OTHER_SUBJECT,
-        CYCLE, TOO_DEEP, AMBIGUOUS_NODE);
+        CYCLE, TOO_DEEP, AMBIGUOUS_NODE, GRANT_NOT_ALLOWED, GRANT_TOO_LARGE, GRANT_INVALID, GRANT_COPY);
 
     private TreeRules() {}
+
+    /**
+     * F-S4b: everything wrong with the grants of a draft that is not a copy ({@code grants}: each node's, none for no
+     * grant). Only a platform template Sponsors light grants, each node at most {@code maxPerNode}; none may be set while
+     * the parameter is not published ({@code maxPerNode} null). A grant is a whole positive number of Kudos.
+     */
+    public static List<Problem> grantProblems(boolean platform, Subject subject, Map<String, java.math.BigDecimal> grants,
+        java.math.BigDecimal maxPerNode) {
+        List<Problem> problems = new ArrayList<>();
+        boolean granting = platform && subject == Subject.SPONSOR;
+        grants.forEach((nodeId, amount) -> {
+            if (amount == null) {
+                return;
+            }
+            if (!granting || maxPerNode == null) {
+                problems.add(new Problem(nodeId, GRANT_NOT_ALLOWED, Map.of()));
+            } else if (amount.signum() <= 0 || amount.stripTrailingZeros().scale() > 0) {
+                problems.add(new Problem(nodeId, GRANT_INVALID, Map.of()));
+            } else if (amount.compareTo(maxPerNode) > 0) {
+                problems.add(new Problem(nodeId, GRANT_TOO_LARGE, Map.of("max", maxPerNode.toPlainString())));
+            }
+        });
+        return problems;
+    }
 
     /** Who lights a graph's nodes. */
     public enum Subject { TAKER, SPONSOR }

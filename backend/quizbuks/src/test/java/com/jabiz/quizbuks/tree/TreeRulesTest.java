@@ -203,4 +203,40 @@ class TreeRulesTest {
         assertThatThrownBy(() -> TreeCondition.parse(Map.of("node", " "))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> TreeCondition.parse(Map.of())).isInstanceOf(IllegalArgumentException.class);
     }
+
+    // ---- F-S4b: grants ----------------------------------------------------------------------------------------------
+
+    private static List<String> grantCodes(boolean platform, Subject subject, java.math.BigDecimal max,
+        Map<String, java.math.BigDecimal> grants) {
+        return TreeRules.grantProblems(platform, subject, grants, max).stream().map(Problem::code).toList();
+    }
+
+    @Test
+    void onlyAPlatformTemplateSponsorsLightGrantsAndWithinTheMostPerNode() {
+        java.math.BigDecimal max = new java.math.BigDecimal("500");
+        Map<String, java.math.BigDecimal> grants = new LinkedHashMap<>();
+        grants.put("a", new java.math.BigDecimal("500"));
+        grants.put("b", null);
+        assertThat(grantCodes(true, Subject.SPONSOR, max, grants)).isEmpty();
+        // Another graph, or no limit published: none may be set (a node without a grant is never a problem).
+        assertThat(grantCodes(true, Subject.TAKER, max, grants)).containsExactly(TreeRules.GRANT_NOT_ALLOWED);
+        assertThat(grantCodes(false, Subject.SPONSOR, max, grants)).containsExactly(TreeRules.GRANT_NOT_ALLOWED);
+        assertThat(grantCodes(true, Subject.SPONSOR, null, grants)).containsExactly(TreeRules.GRANT_NOT_ALLOWED);
+        assertThat(grantCodes(true, Subject.TAKER, null, Map.of("b", java.math.BigDecimal.ZERO)))
+            .containsExactly(TreeRules.GRANT_NOT_ALLOWED);
+        // Above the most, none, negative or a fraction.
+        assertThat(TreeRules.grantProblems(true, Subject.SPONSOR, Map.of("a", new java.math.BigDecimal("501")), max))
+            .singleElement().satisfies(p -> {
+                assertThat(p.code()).isEqualTo(TreeRules.GRANT_TOO_LARGE);
+                assertThat(p.nodeId()).isEqualTo("a");
+                assertThat(p.params()).containsEntry("max", "500");
+            });
+        assertThat(grantCodes(true, Subject.SPONSOR, max, Map.of("a", java.math.BigDecimal.ZERO)))
+            .containsExactly(TreeRules.GRANT_INVALID);
+        assertThat(grantCodes(true, Subject.SPONSOR, max, Map.of("a", new java.math.BigDecimal("-1"))))
+            .containsExactly(TreeRules.GRANT_INVALID);
+        assertThat(grantCodes(true, Subject.SPONSOR, max, Map.of("a", new java.math.BigDecimal("1.5"))))
+            .containsExactly(TreeRules.GRANT_INVALID);
+        assertThat(grantCodes(true, Subject.SPONSOR, max, Map.of("a", new java.math.BigDecimal("2.00")))).isEmpty();
+    }
 }

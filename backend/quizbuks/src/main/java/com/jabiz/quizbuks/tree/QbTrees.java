@@ -197,6 +197,9 @@ public final class QbTrees {
         eb.field("beforeAnswer", f -> f.physicalColumn("before_answer").processOnly().asText(null, true));
         // Whether the version in effect's condition asks for a pass: only then may publications be bound to it.
         eb.field("bindable", f -> f.physicalColumn("bindable").required(true).processOnly().asBool());
+        // F-S4b: the version in effect's grant of platform-fee Kudos for lighting the node (a template's; a copy's is the
+        // template's, copied); none for no grant.
+        eb.field("grantAmount", f -> f.physicalColumn("grant_amount").processOnly().asMonetary("JPY", 0));
         // F-S2b1: the version in effect's condition (TreeCondition#toMap as JSON), which lighting evaluates.
         eb.field("condition", f -> f.physicalColumn("condition").processOnly().asText(null, true));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
@@ -243,6 +246,9 @@ public final class QbTrees {
         // The condition as JSON (TreeCondition#toMap).
         eb.field("condition", f -> f.physicalColumn("condition").required(true).asText(null, true));
         eb.field("seq", f -> f.physicalColumn("seq").required(true).asNumeric(4, 0));
+        // F-S4b: the platform-fee Kudos a Sponsor is granted for lighting the node (only a platform template Sponsors
+        // light sets it, within qb.tree.grant.max-per-node; a copy keeps its template's); none for no grant.
+        eb.field("grantAmount", f -> f.physicalColumn("grant_amount").asMonetary("JPY", 0));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_tree_node_def", "versionId", "nodeId");
         eb.listView("default", lv -> lv
@@ -289,6 +295,9 @@ public final class QbTrees {
             .asTemporal(TemporalRole.EVENT_TIME));
         // What lit it, as JSON: the attempt passed, or the node whose lighting made the condition hold.
         eb.field("basis", f -> f.physicalColumn("basis").immutable(true).asText(null, true));
+        // F-S4b: the grant of platform-fee Kudos the lighting earns, frozen when lit (the template's version in effect);
+        // none for no grant (and for a Taker's).
+        eb.field("grantAmount", f -> f.physicalColumn("grant_amount").immutable(true).asMonetary("JPY", 0));
         eb.temporal(t -> t.allowScheduled(false).writeOnce());
         eb.listView("default", lv -> lv
             .columns("subjectKind", "subjectId", "treeId", "nodeId", "litAt")

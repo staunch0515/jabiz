@@ -275,6 +275,12 @@ public final class QbParams {
     public static final String TREE_GATE_DIGITAL_PRIZE = "qb.tree.gate.digital-prize-node";
     public static final String TREE_GATE_OFFLINE_REDEEM = "qb.tree.gate.offline-redeem-node";
     public static final List<String> SPONSOR_TREE_GATES = List.of(TREE_GATE_DIGITAL_PRIZE, TREE_GATE_OFFLINE_REDEEM);
+    /**
+     * F-S4b: the most platform-fee Kudos one node of a platform template Sponsors light may grant for lighting it.
+     * Controlled (money), not created by {@code QB_SETUP}, read as optional: absent, no grant can be set (as
+     * {@link #FEE_CREDIT_MANUAL_MAX}).
+     */
+    public static final String TREE_GRANT_MAX_PER_NODE = "qb.tree.grant.max-per-node";
     /** The kind the controlled change that creates a gate parameter gives: two UUIDs and a slash. */
     public static final Map<String, Object> TREE_GATE_KIND = Map.of("type", "text", "maxLength", 73);
     /** The oldest version of the app that may still be used. */
