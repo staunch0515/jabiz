@@ -32,11 +32,11 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 - The page of a submitted publication has seven tabs, each with its own address: Overview, Quiz & version, Audience, Rewards, Fees, Statistics, and Share & QR code; the status and next steps (pause, copy, preview and more) are beside them. A draft still opens in the wizard.
 - Takers cannot start a publication while your wallet cannot pay its highest reward: top up. You can pause a publication and resume it (also from the app's My Sponsor account).
 
-## Knowledge map (/sponsor/tree)
+## Knowledge map (/sponsor/publications/map)
 
 - Link your publications into a knowledge map: passing one lights its node, and lit nodes open later quizzes or a certification. Publish the map so Takers see it.
 - The page shows your map in effect and how many Takers lit each node (shown only from the statistics' minimum group up), the publications bound and not ended, and whether a newer version is a draft, in review or was sent back (with the reviewer's reason). Takers see the map on your page.
-- "Create my map" starts one; "Edit" opens the editor. Each node has a name, what lighting it gives, and its condition: all, any, or at least n of its items, each another node lit or a pass of a publication bound to this node. "Before answering" can be set only on node items of the outermost "all" (their quizzes stay hidden until those nodes are lit), and a pass at most once. Save the draft: the editor lists every problem by node. Then submit it: another member of your operator reviews it; a version sent back shows the reason, and a draft in review can be taken back. A node with publications still running cannot be removed. "Versions" lists every version; any of them can be shown.
+- "Create my map" starts one; "Edit" opens the editor. Each node has a name, what lighting it gives, and its condition: all, any, or at least n of its items, each another node lit (of your map, or of a platform map Takers light, listed under the map's name) or a pass of a publication bound to this node. "Before answering" can be set only on node items of the outermost "all" (their quizzes stay hidden until those nodes are lit), and a pass at most once. Save the draft: the editor lists every problem by node. Then submit it: another member of your operator reviews it; a version sent back shows the reason, and a draft in review can be taken back. A node with publications still running cannot be removed. "Versions" lists every version; any of them can be shown.
 
 ## Asset library (/sponsor/assets)
 

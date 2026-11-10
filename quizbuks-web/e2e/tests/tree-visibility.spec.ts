@@ -2,7 +2,7 @@ import type { APIRequestContext } from '@playwright/test'
 import { query } from './content'
 import { reviewerFor } from './operators'
 import { fundedSponsor, searchHome, taker } from './play'
-import { decideReview, publicationOf } from './publishing'
+import { boundPublication, operatorTree, pass } from './tree'
 import { expect, expectAccessible, prepareQuizbuks, run, signIn, test, unique } from './support'
 
 /*
@@ -30,41 +30,9 @@ async function sponsorMap(request: APIRequestContext, token: string) {
   // event is delivered.
   const reviewer = await reviewerFor(request, token)
   await run(request, reviewer, 'APPROVAL_DECIDE', { requestId: submitted.approvalRequestId, decision: 'APPROVE' })
-  await expect.poll(async () => (await query(request, reviewer, 'qb.operator.trees', {}))
-    .find((row) => row.treeId === tree.treeId)?.currentVersionId ?? null,
+  await expect.poll(async () => (await operatorTree(request, reviewer, String(tree.treeId)))?.currentVersionId ?? null,
   { message: 'the map is in effect', timeout: 30_000 }).not.toBeNull()
   return { treeId: String(tree.treeId), basics: ids.basics, advanced: ids.advanced }
-}
-
-/** A live publication of one question ("Paris" right), bound to the node, paying nothing (a bound one may not). */
-async function boundPublication(request: APIRequestContext, token: string, treeId: string, nodeId: string,
-  name: string) {
-  const quiz = await run(request, token, 'QB_QUIZ_SAVE', { title: name, intro: null, timeLimitSec: 300 })
-  await run(request, token, 'QB_QUESTION_SAVE', { quizId: quiz.quizId, stem: 'Capital of France?', points: 1,
-    options: [{ text: 'Paris', correct: true }, { text: 'Lyon' }] })
-  const version = await run(request, token, 'QB_QUIZ_PUBLISH_VERSION', { quizId: quiz.quizId })
-  const now = Date.now()
-  const saved = await run(request, token, 'QB_PUBLICATION_SAVE', { versionId: version.versionId, name,
-    regions: ['GLOBAL'], startAt: new Date(now - 60_000).toISOString(),
-    endAt: new Date(now + 7 * 86_400_000).toISOString(), passScore: 1, budgetCap: 500, maxWinners: 1000, treeId, treeNodeId: nodeId,
-    tiers: [{ fromScore: 0, toScore: 1, reward: 0 }] })
-  expect(saved.problems).toEqual([])
-  const publicationId = saved.publicationId as string
-  await run(request, token, 'QB_PUBLICATION_SUBMIT', { publicationId })
-  await decideReview(request, token, publicationId, 'APPROVE')
-  await expect.poll(async () => (await publicationOf(request, token, publicationId)).status,
-    { message: 'the publication is live', timeout: 30_000 }).toBe('LIVE')
-  return publicationId
-}
-
-/** The taker passes the publication through the API (the answering is play.spec's). */
-async function pass(request: APIRequestContext, token: string, publicationId: string) {
-  const started = await run(request, token, 'QB_ATTEMPT_START', { publicationId })
-  const questions = started.questions as { no: number; options: { no: number; text: string }[] }[]
-  const submitted = await run(request, token, 'QB_ATTEMPT_SUBMIT', { attemptId: started.attemptId, publicationId,
-    answers: questions.map((q) => ({ questionNo: q.no,
-      selected: q.options.filter((o) => o.text === 'Paris').map((o) => o.no) })) })
-  expect(submitted.passed).toBe(true)
 }
 
 /** Whether the taker's page of the publication exists (the template gives no row for an invisible one). */

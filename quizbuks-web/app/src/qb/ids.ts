@@ -173,6 +173,8 @@ export const TREE = {
   sponsorVersions: 'qb.sponsor.tree-versions',
   sponsorTree: 'qb.sponsor.tree',
   sponsorBindable: 'qb.sponsor.tree-bindable-nodes',
+  /** F-S3e: the platform's nodes a Sponsor's map may name in its conditions. */
+  sponsorReferenceable: 'qb.sponsor.tree-referenceable-nodes',
   /** F-S3d: the Sponsor's editor (`tree.TreeProcesses`). */
   create: 'QB_TREE_CREATE',
   save: 'QB_TREE_DRAFT_SAVE',

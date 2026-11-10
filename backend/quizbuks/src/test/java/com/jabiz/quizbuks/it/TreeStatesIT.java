@@ -185,6 +185,27 @@ class TreeStatesIT extends TreeItSupport {
     }
 
     @Test
+    void anySponsorsEditorOffersThePlatformsNodesTheRulesAccept() {
+        Gate gate = gate();
+        String sponsor = newSponsor(unique("s-fs3e-ref"));
+        String token = sponsorToken(sponsor);
+        Map3 own = map(sponsor);
+        List<Map<String, Object>> offered = items("qb.sponsor.tree-referenceable-nodes", token, Map.of("limit", 500));
+        // The platform's graph Takers light, in effect, for any Sponsor (no operator needed); never a Sponsor's graph.
+        assertThat(offered).filteredOn(row -> gate.treeId().equals(row.get("treeId"))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("nodeId", gate.nodeId()));
+        assertThat(offered).noneMatch(row -> own.treeId().equals(row.get("treeId")));
+        // What it offers the draft's rules accept: a draft naming the node saves without problems.
+        String other = sponsorToken(newSponsor(unique("s-fs3e-ref-draft")));
+        Map<String, Object> tree = run(TreeProcesses.CREATE, other, body("ownerKind", "SPONSOR", "name", name("Ref")));
+        assertThat(items("qb.sponsor.tree-referenceable-nodes", other, Map.of("limit", 500)))
+            .extracting(row -> row.get("nodeId")).contains(gate.nodeId());
+        Map<String, Object> saved = save(other, tree, List.of(node(null, "after", "After the gate",
+            all(lit(gate.nodeId(), true), passed()))));
+        assertThat((List<?>) saved.get("problems")).isEmpty();
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     void supportReadsOnePersonsLightingRecordedAndAnotherOperatorFindsNothing() {
         String sponsor = newSponsor(unique("s-fs3-support"));
