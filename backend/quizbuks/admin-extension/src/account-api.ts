@@ -210,11 +210,13 @@ export async function readOwnTransfers(offset: number, limit: number, sorts?: So
 
 /**
  * Moves a whole amount of the account to the operator's direct Sponsor (F-M4: its lead, with a second factor every
- * time); it pays that Sponsor's platform fees only and is not taken back.
+ * time); it pays that Sponsor's platform fees only and is not taken back. `requestKey` names the submission: the
+ * server requires it and makes one transfer per key; it is also the request's Idempotency-Key, so sending the same
+ * submission again replays its first answer.
  */
-export const transferToDirect = (amount: number, note: string | null) =>
+export const transferToDirect = (amount: number, note: string | null, requestKey: string) =>
   runProcess<{ transferId: string; amount: string; balance: string; transferredAt: string }>(
-    ACCOUNT_PROCESS.transferToDirect, { amount, note })
+    ACCOUNT_PROCESS.transferToDirect, { amount, note, requestKey }, { idempotencyKey: requestKey })
 
 /** What setting the bank account sends (`QB_OPERATOR_BANK_ACCOUNT_SAVE`): the Zengin format, the holder in katakana. */
 export interface BankAccountInput {

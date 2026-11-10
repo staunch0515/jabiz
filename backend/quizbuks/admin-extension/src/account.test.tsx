@@ -222,9 +222,20 @@ describe("the transfers to the direct Sponsor (F-M4)", () => {
     expect(await screen.findByTestId('transfer-confirm')).toHaveTextContent('2,000 Kudos')
     expect(server.runProcess).not.toHaveBeenCalled()
     await user.click(screen.getByTestId('transfer-confirm-button'))
-    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(ACCOUNT_PROCESS.transferToDirect,
-      { amount: 2000, note: 'November' }))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledTimes(1))
+    const [name, input, options] = server.runProcess.mock.calls[0]
+    expect(name).toBe(ACCOUNT_PROCESS.transferToDirect)
+    expect(input).toMatchObject({ amount: 2000, note: 'November' })
+    // The submission's key goes with the input and as its Idempotency-Key.
+    expect(input.requestKey).toMatch(/^[0-9a-f-]{36}$/)
+    expect(options).toEqual({ idempotencyKey: input.requestKey })
     await expectAccessible(document.body)
+    // The next submission has a new key.
+    await user.type(screen.getByTestId('transfer-amount'), '1000')
+    await user.click(screen.getByTestId('transfer-submit'))
+    await user.click(await screen.findByTestId('transfer-confirm-button'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledTimes(2))
+    expect(server.runProcess.mock.calls[1][1].requestKey).not.toBe(input.requestKey)
   })
 
   it('shows the server’s refusal of a transfer', async () => {

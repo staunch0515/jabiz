@@ -307,7 +307,12 @@
 - 迁移 `V113`：只追加、只记一次的 `qb_operator_transfer_version`（外键到 `qb_operator`）。
 - `operator.OperatorTransfers`：`QB_OPERATOR_TRANSFER_TO_DIRECT`（`qb.operator.use`、负责人（`OperatorWithdrawals.lead`）、`requiresVerifiedEmail`、每次二次验证、`refuseBanned`）；锁内一条 `QueryEntities.all` 读直营发起方的现金钱包、入驻与封禁，再读余额模板；`OperatorRules.transferable`（整数、> 0、≤ 余额）。错误码 `QB_OPERATOR_TRANSFER_AMOUNT` / `_NO_DIRECT` / `_DIRECT_BANNED`。负责人本人就是直营发起方时，封禁先由 `refuseBanned` 拒绝（`QB_USER_BANNED`）；另一位负责人转给被封禁的直营发起方即 `_DIRECT_BANNED`。
 - 余额：`qb.system.operator-balance` 与 `qb.operator.account` 都减去转出（另给出 `transferred`、`hasDirectSponsor`）；新模板 `qb.operator.transfers`。
-- 买学分：`KudosExchanges.problems(..., operatorCash)` 的可用额减去 `OPERATOR` 笔的剩余，`CashLots.takeExcept` 不取它们；`qb.sponsor.wallet` 给出 `cashFromOperator`，页面的买入上限为 `buyableCash`。充值退款与争议的扣回照旧可以取任何笔（2160 与各笔必须一致），写在 operations §7.43。
+- 买学分：`KudosExchanges.problems(..., operatorCash)` 的可用额减去 `OPERATOR` 笔的剩余，`CashLots.takeExcept` 不取它们；`qb.sponsor.wallet` 给出 `cashFromOperator`，页面的买入上限为 `buyableCash`。充值退款与争议的扣回见 §7.9。
 - 核对 `OPERATOR_ACCOUNT`（`recon-fee-account`）；月报 `OPERATOR_TRANSFER_TO_DIRECT`（管理系统扩展同时补上 F-M2 漏掉的 `FEE_CREDIT_GRANTED` / `FEE_CREDIT_VOIDED` 的文字）。
 - 页面：运营商「账户」页的"转给直营发起方"（金额、说明、确认、二次验证由平台询问）与转入记录；发起方平台费账户页的"运营商转入"一行。
 - 测试：`OperatorTransferIT`（5 例：负责人、他人、超额与非整数、幂等键、分录与现金笔、模板、月报、核对；封禁；买学分与平台费；并发两笔；核对找出没有分录的转入）、`OperatorRulesTest`、`KudosExchangesTest`、扩展与发起方页面的 Vitest。e2e 没有新用例：运营商账户要有结算记入才有余额，e2e 中没有结算的途径（与提现相同），页面由扩展的测试覆盖。
+
+### 7.9 总控额外审查后的修改（S2，2026-11-10，审查 @9180dac18）
+- **【中 1】扣回不先取运营商的钱**：`TopUpClawback` 改用 `CashLots.takeLast`（`FeeAllocation.takeCash(..., first, last)`）：该充值自己的那一笔 → 非 `OPERATOR` 各笔（按进账先后）→ 最后才取 `OPERATOR`。取到 `OPERATOR` 时 `CreateTask`（`TopUpTasks.operatorCash`，权限 `qb.reconcile`，来源 `stripe-operator-cash:<事件>`，消息 `task.qb.refund-check.OPERATOR_CASH` 三种语言）。operations §7.43 改写。测试：`OperatorCashClawbackIT`（卡充值 A → 买学分用完 A → 运营商转入 C → 银行充值 B → A 部分退款：取 B、`OPERATOR` 不动、无待办、核对无差异；只剩 `OPERATOR` 时取它并生成待办）、`FeeAllocationTest.cashTakenBackLeavesTheNamedLastLotsToTheEnd`。
+- **【低 2】补测试**（`OperatorTransferIT`）：转入 × 提现并发（一成一拒，合计 ≤ 余额）；`REQUESTED` 的提现减少可转额、转入减少可提现额；缺近期二次验证即 403 `MFA_REQUIRED`。
+- **【低 3】幂等键必填**：平台不能在流程上声明"必须有幂等键"，流程也读不到请求头，所以输入加必填的 `requestKey`（`@NotBlank`，≤ 128，缺少即 400）并记在转入上（列 `request_key`，V113 中 `UNIQUE (operator_id, request_key)`；锁内先查，重复即 422 `QB_OPERATOR_TRANSFER_REPEATED`）。页面每次确认生成新键，同时作为输入与 `Idempotency-Key`（重发同一次提交由平台回放第一次的回答）。测试：IT 缺键 400、同键换幂等键 422、别的运营商可用同一键；扩展 Vitest 断言键随输入与请求头、下一次提交换新键。

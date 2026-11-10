@@ -100,6 +100,8 @@ public final class OperatorCodes {
     public static final String TRANSFER_NO_DIRECT = "QB_OPERATOR_TRANSFER_NO_DIRECT";
     /** F-M4: the operator's direct Sponsor is banned: nothing is transferred to it (the controller, 2026-11-10). */
     public static final String TRANSFER_DIRECT_BANNED = "QB_OPERATOR_TRANSFER_DIRECT_BANNED";
+    /** A transfer with a request key the operator already used (a submission made twice without its replay). */
+    public static final String TRANSFER_REPEATED = "QB_OPERATOR_TRANSFER_REPEATED";
     /** Q48e-2: no approval rule asks for a second person on the operators' withdrawals. */
     public static final String WITHDRAWAL_NO_REVIEW = "QB_OPERATOR_WITHDRAWAL_NO_REVIEW";
 
@@ -110,7 +112,7 @@ public final class OperatorCodes {
         NOT_AN_OPERATOR_DECISION, SPOT_CHECK_NOTE, SAME_OPERATOR, MONTH_OPEN, NO_SHARE, SETTLEMENT_STATE,
         SETTLEMENT_NOTHING, SETTLEMENT_NO_REVIEW, NO_RATE, PLAN_MONTH, PLAN_PENDING, PLAN_NO_REVIEW, NO_PLAN,
         BANK_ACCOUNT, WITHDRAWAL_NO_ACCOUNT, WITHDRAWAL_COOLDOWN, WITHDRAWAL_AMOUNT, WITHDRAWAL_OPEN, WITHDRAWAL_STATE,
-        TRANSFER_AMOUNT, TRANSFER_NO_DIRECT, TRANSFER_DIRECT_BANNED,
+        TRANSFER_AMOUNT, TRANSFER_NO_DIRECT, TRANSFER_DIRECT_BANNED, TRANSFER_REPEATED,
         WITHDRAWAL_NO_REVIEW);
 
     private OperatorCodes() {}

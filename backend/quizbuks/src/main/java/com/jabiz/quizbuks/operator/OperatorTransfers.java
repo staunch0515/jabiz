@@ -29,6 +29,7 @@ import com.jabiz.runtime.process.steps.RunTemplate;
 import com.jabiz.runtime.process.steps.SaveChanges;
 import com.jabiz.security.MfaRequirement;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -70,6 +71,9 @@ public final class OperatorTransfers {
     static final String BALANCE = "balance";
     static final String NEW_ID = "newId";
     static final String POSTING = "posting";
+    static final String SAME_REQUEST = "sameRequest";
+    /** Longest request key, as the platform's idempotency keys. */
+    public static final int REQUEST_KEY_LENGTH = 128;
 
     public static final EntityDefinition TRANSFER_ENTITY = EntityDefinition.define(TRANSFER_ENTITY_NAME, eb -> {
         eb.physicalTable("qb_operator_transfer_version");
@@ -83,6 +87,9 @@ public final class OperatorTransfers {
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).required(true).asMonetary("JPY", 0));
         // The lead's own note, for the operator's records.
         eb.field("note", f -> f.physicalColumn("note").immutable(true).asText(NOTE_LENGTH, true));
+        // The page's key for the submission (also sent as its Idempotency-Key): one transfer per key and operator.
+        eb.field("requestKey", f -> f.physicalColumn("request_key").immutable(true).required(true)
+            .asText(REQUEST_KEY_LENGTH));
         eb.field("requestedBy", f -> f.physicalColumn("requested_by").immutable(true).required(true).asText(128));
         eb.field("transferredAt", f -> f.physicalColumn("transferred_at").immutable(true).required(true)
             .asTemporal(TemporalRole.EVENT_TIME));
@@ -97,9 +104,13 @@ public final class OperatorTransfers {
     /**
      * @param amount whole yen, at most the operator's account's balance
      * @param note   the lead's own note, optional
+     * @param requestKey the page's key for this submission, required: the page sends the same value as the
+     *               request's Idempotency-Key, so a retried submission replays the first answer; a second transfer
+     *               with a key the operator already used is refused (the controller's review, L3)
      */
     public record TransferInput(@NotNull @DecimalMin("1") BigDecimal amount,
-        @Size(max = NOTE_LENGTH) String note) {}
+        @Size(max = NOTE_LENGTH) String note,
+        @NotBlank @Size(max = REQUEST_KEY_LENGTH) String requestKey) {}
 
     /** @param balance what the operator's account has left after it */
     public record TransferOutput(String transferId, BigDecimal amount, BigDecimal balance, Instant transferredAt) {}
@@ -133,7 +144,12 @@ public final class OperatorTransfers {
                             .where(new QueryPredicate.Eq("userId", ctx.get(SPONSOR_ID))).limit(1).build(), ONBOARDING),
                         QueryEntities.query(QbAccounts.defaultDataset(QbAccounts.BAN), ctx -> EntityQuery.builder()
                             .where(new QueryPredicate.In("userId", AccountEditing.uuids(ctx.get(SPONSOR_ID))))
-                            .limit(1).build(), BAN)))
+                            .limit(1).build(), BAN),
+                        QueryEntities.query(QbOperators.defaultDataset(TRANSFER_ENTITY_NAME), ctx -> EntityQuery
+                            .builder().where(new QueryPredicate.And(List.of(
+                                new QueryPredicate.Eq("operatorId", ctx.get(OperatorWithdrawals.OPERATOR_ID)),
+                                new QueryPredicate.Eq("requestKey", ctx.get(INPUT, TransferInput.class).requestKey()))))
+                            .limit(1).build(), SAME_REQUEST)))
                     .step("Read the account's balance", RunTemplate.<ProcessContext>of(
                         OperatorWithdrawals.BALANCE_TEMPLATE,
                         ctx -> Map.of("operatorId", ctx.get(OperatorWithdrawals.OPERATOR_ID)), BALANCE))
@@ -165,6 +181,10 @@ public final class OperatorTransfers {
 
     static void record(ProcessContext ctx) {
         TransferInput input = ctx.get(INPUT, TransferInput.class);
+        if (OperatorWithdrawals.first(ctx, SAME_REQUEST) != null) {
+            throw new BusinessRuleViolationException(new Violation("requestKey", OperatorCodes.TRANSFER_REPEATED,
+                "This submission was already made", Map.of()));
+        }
         EntityInstance onboarding = OperatorWithdrawals.first(ctx, ONBOARDING);
         if (onboarding == null || !SponsorStatus.APPROVED.equals(onboarding.get("reviewStatus"))) {
             throw new BusinessRuleViolationException(new Violation(null, OperatorCodes.TRANSFER_NO_DIRECT,
@@ -187,6 +207,7 @@ public final class OperatorTransfers {
         values.put("amount", amount.setScale(0));
         String note = input.note() == null || input.note().isBlank() ? null : input.note().strip();
         values.put("note", note);
+        values.put("requestKey", input.requestKey());
         values.put("requestedBy", ctx.request().actorId());
         values.put("transferredAt", ctx.opTime());
         ctx.put(NEW_ID, String.valueOf(ctx.changes().insert(TRANSFER_ENTITY_NAME, values)));

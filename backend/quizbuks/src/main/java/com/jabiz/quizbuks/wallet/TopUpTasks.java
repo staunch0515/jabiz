@@ -37,6 +37,15 @@ final class TopUpTasks {
         return task(REFUND_CHECK, "task.qb.refund-check." + reason, topUpId, amount, currency, source, inboundEventId);
     }
 
+    /**
+     * F-M4: a cash top-up taken back reached the cash the Sponsor's operator moved there (pays the platform's fees
+     * only): {@code amount} of it went back with the refund or the dispute. One per event.
+     */
+    static TaskSpec operatorCash(String topUpId, BigDecimal amount, String externalEventId) {
+        return task(REFUND_CHECK, "task.qb.refund-check.OPERATOR_CASH", topUpId, amount, "jpy",
+            source("stripe-operator-cash:", externalEventId), null);
+    }
+
     private static TaskSpec task(String type, String titleKey, String topUpId, BigDecimal amount, String currency,
         String source, String inboundEventId) {
         Map<String, String> params = new LinkedHashMap<>();

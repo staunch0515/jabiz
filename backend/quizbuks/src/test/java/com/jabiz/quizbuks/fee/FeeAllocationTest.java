@@ -97,6 +97,20 @@ class FeeAllocationTest {
     }
 
     @Test
+    void cashTakenBackLeavesTheNamedLastLotsToTheEnd() {
+        // F-M4 (the review's M1): the operator's money ("op") is taken after every other lot, even an older one.
+        List<FeeAllocation.Cash> lots = List.of(cash("card", 0, "2026-10-01T00:00:00Z"),
+            cash("op", 3000, "2026-10-02T00:00:00Z"), cash("bank", 2000, "2026-10-03T00:00:00Z"));
+        assertThat(FeeAllocation.takeCash(lots, BigDecimal.valueOf(2000), "card", java.util.Set.of("op")))
+            .extracting(p -> p.lotId() + ":" + p.amount().toPlainString()).containsExactly("bank:2000");
+        assertThat(FeeAllocation.takeCash(lots, BigDecimal.valueOf(2500), "card", java.util.Set.of("op")))
+            .extracting(p -> p.lotId() + ":" + p.amount().toPlainString()).containsExactly("bank:2000", "op:500");
+        // The top-up's own lot still comes first, even when it is one of `last`.
+        assertThat(FeeAllocation.takeCash(lots, BigDecimal.valueOf(3500), "op", java.util.Set.of("op")))
+            .extracting(p -> p.lotId() + ":" + p.amount().toPlainString()).containsExactly("op:3000", "bank:500");
+    }
+
+    @Test
     void cashTakenBeyondTheLotsTakesWhatTheyHave() {
         // The daily check CASH_LOTS reports the difference; a Kudos purchase or a refund is not refused for it.
         assertThat(FeeAllocation.takeCash(List.of(cash("a", 100, "2026-10-01T00:00:00Z")), BigDecimal.valueOf(250),

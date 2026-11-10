@@ -80,6 +80,39 @@ public final class CashLots {
     }
 
     /**
+     * F-M4: {@link #take}, the lots that came from {@code source} last of all (a top-up taken back: its own lot, then
+     * the Sponsor's other cash in the order it arrived, and only then what the operator moved there). Gives what was
+     * taken from those lots (none when the rest sufficed).
+     */
+    public static BigDecimal takeLast(ProcessContext ctx, List<EntityInstance> lots, BigDecimal amount,
+        Object firstSourceId, String source) {
+        if (amount == null || amount.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        String first = null;
+        java.util.Set<String> last = new java.util.HashSet<>();
+        for (EntityInstance lot : lots) {
+            if (first == null && firstSourceId != null && String.valueOf(firstSourceId).equals(lot.get("sourceId"))) {
+                first = String.valueOf(lot.id());
+            }
+            if (source.equals(lot.get("source"))) {
+                last.add(String.valueOf(lot.id()));
+            }
+        }
+        List<FeeAllocation.Part> parts = FeeAllocation.takeCash(cash(lots), amount, first, last);
+        Map<String, EntityInstance> byId = new LinkedHashMap<>();
+        lots.forEach(lot -> byId.put(String.valueOf(lot.id()), lot));
+        BigDecimal fromLast = BigDecimal.ZERO;
+        for (FeeAllocation.Part part : parts) {
+            changeRemaining(ctx, byId.get(part.lotId()), part.amount().negate());
+            if (last.contains(part.lotId())) {
+                fromLast = fromLast.add(part.amount());
+            }
+        }
+        return fromLast;
+    }
+
+    /**
      * F-M4: {@link #take} from the lots that did not come from {@code source} only (buying Kudos never takes what an
      * operator moved to its direct Sponsor: that money pays the platform's fees only).
      */

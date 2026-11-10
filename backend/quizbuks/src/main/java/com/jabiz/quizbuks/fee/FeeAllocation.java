@@ -103,10 +103,22 @@ public final class FeeAllocation {
      * purchase of Kudos or a refund is not refused for the platform's own bookkeeping).
      */
     public static List<Part> takeCash(List<Cash> cash, BigDecimal amount, String first) {
+        return takeCash(cash, amount, first, java.util.Set.of());
+    }
+
+    /**
+     * As the other, the lots in {@code last} after every other (F-M4: the cash the Sponsor's operator moved there,
+     * which pays the platform's fees only, is the last a top-up taken back reaches), each group in the order it
+     * arrived.
+     */
+    public static List<Part> takeCash(List<Cash> cash, BigDecimal amount, String first,
+        java.util.Set<String> last) {
         BigDecimal left = amount;
         List<Part> parts = new ArrayList<>();
         List<Cash> order = new ArrayList<>(cash.stream().filter(c -> c.remaining().signum() > 0)
             .sorted(Comparator.comparing(Cash::arrivedAt).thenComparing(Cash::lotId)).toList());
+        // Stable sorts: the top-up's own lot first, the lots of `last` at the end, otherwise as they arrived.
+        order.sort(Comparator.comparing(c -> last.contains(c.lotId())));
         if (first != null) {
             order.sort(Comparator.comparing(c -> !first.equals(c.lotId())));
         }

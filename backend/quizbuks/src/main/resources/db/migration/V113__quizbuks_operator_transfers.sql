@@ -14,6 +14,7 @@ CREATE TABLE qb_operator_transfer_version (
     sponsor_id        varchar(128)   NOT NULL,
     amount            numeric(19, 0) NOT NULL CHECK (amount > 0),
     note              varchar(200),
+    request_key       varchar(128)   NOT NULL,
     requested_by      varchar(128)   NOT NULL,
     transferred_at    timestamptz    NOT NULL,
     CONSTRAINT qb_operator_transfer_version_uk UNIQUE (transfer_id, version_no)
@@ -24,5 +25,7 @@ CREATE INDEX qb_operator_transfer_version_process_idx ON qb_operator_transfer_ve
 -- Written once: one row per key.
 CREATE UNIQUE INDEX qb_operator_transfer_version_once_idx ON qb_operator_transfer_version (transfer_id);
 CREATE INDEX qb_operator_transfer_version_operator_idx ON qb_operator_transfer_version (operator_id, transferred_at);
+-- One transfer per submission: the page's request key, per operator.
+CREATE UNIQUE INDEX qb_operator_transfer_version_request_idx ON qb_operator_transfer_version (operator_id, request_key);
 CREATE INDEX qb_operator_transfer_version_sponsor_idx ON qb_operator_transfer_version (sponsor_id);
 SELECT jabiz_protect_append_only('qb_operator_transfer_version');

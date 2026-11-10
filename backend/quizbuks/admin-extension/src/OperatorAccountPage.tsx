@@ -361,6 +361,8 @@ function TransferForm({ account }: { account: OperatorAccount }) {
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [confirming, setConfirming] = useState(false)
+  // A new key for each confirmed submission, kept while it is being sent (F-M4, the review's L3).
+  const [requestKey, setRequestKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const whole = /^[1-9]\d{0,14}$/.test(amount.trim())
@@ -368,13 +370,14 @@ function TransferForm({ account }: { account: OperatorAccount }) {
     event.preventDefault()
     if (!whole) return
     setProblem(null)
+    setRequestKey(crypto.randomUUID())
     setConfirming(true)
   }
   const confirm = async () => {
     if (busy || !whole) return
     setBusy(true)
     try {
-      await transferToDirect(Number(amount.trim()), note.trim() === '' ? null : note.trim())
+      await transferToDirect(Number(amount.trim()), note.trim() === '' ? null : note.trim(), requestKey)
       notify.success(t('account.transferDone'))
       setAmount('')
       setNote('')
