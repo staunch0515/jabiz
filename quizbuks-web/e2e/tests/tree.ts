@@ -39,14 +39,19 @@ export async function pass(request: APIRequestContext, token: string, publicatio
 }
 
 /**
- * The operator's row of one map (`qb.operator.trees`, filtered: an operator looks after many maps, sorted by id, so
- * the first page need not hold a new one).
+ * The operator's row of one map (`qb.operator.trees`, which filters by no id: an operator looks after many maps, so
+ * the newest first, page by page, until the map is found; ids are time-ordered, so a new map is on the first page).
  */
 export async function operatorTree(request: APIRequestContext, token: string, treeId: string) {
-  const response = await request.post('/api/queries/qb.operator.trees', {
-    headers: { Authorization: `Bearer ${token}` },
-    data: { params: {}, filters: [{ field: 'treeId', op: 'eq', value: treeId }], limit: 1 },
-  })
-  expect(response.status(), await response.text()).toBe(200)
-  return (((await response.json()).items ?? []) as Record<string, unknown>[])[0] ?? null
+  for (let offset = 0; offset < 1000; offset += 100) {
+    const response = await request.post('/api/queries/qb.operator.trees', {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { params: {}, sorts: [{ field: 'treeId', asc: false }], offset, limit: 100 },
+    })
+    expect(response.status(), await response.text()).toBe(200)
+    const items = ((await response.json()).items ?? []) as Record<string, unknown>[]
+    const found = items.find((row) => row.treeId === treeId)
+    if (found || items.length < 100) return found ?? null
+  }
+  return null
 }
