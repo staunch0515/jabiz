@@ -1,0 +1,27 @@
+{
+  "about": "F-S3: what the graph component shows of a node to a person. The server's tree.TreeNodeStates (TreeNodeStatesTest) and the pages' qb/tree/states.ts pass these cases. litRefs are the nodes the condition names that are lit now; startable: qb.app.feed with the tree parameter has a row of the node.",
+  "cases": [
+    { "name": "lit wins over everything", "lit": true, "unmet": ["g/a"], "startable": true, "litRefs": [],
+      "condition": { "op": "ALL", "items": [{ "node": "a", "beforeAnswer": true }, { "passed": true }] }, "state": "LIT" },
+    { "name": "a prerequisite not lit locks it", "lit": false, "unmet": ["g/a"], "startable": false, "litRefs": [],
+      "condition": { "op": "ALL", "items": [{ "node": "a", "beforeAnswer": true }, { "passed": true }] }, "state": "LOCKED" },
+    { "name": "only a pass missing and a publication to start", "lit": false, "unmet": [], "startable": true, "litRefs": ["a"],
+      "condition": { "op": "ALL", "items": [{ "node": "a", "beforeAnswer": true }, { "passed": true }] }, "state": "CAN_ANSWER" },
+    { "name": "only a pass missing and nothing to start: waiting", "lit": false, "unmet": [], "startable": false, "litRefs": ["a"],
+      "condition": { "op": "ALL", "items": [{ "node": "a", "beforeAnswer": true }, { "passed": true }] }, "state": "WAITING" },
+    { "name": "another node missing besides the pass", "lit": false, "unmet": [], "startable": true, "litRefs": [],
+      "condition": { "op": "ALL", "items": [{ "node": "b" }, { "passed": true }] }, "state": "MISSING" },
+    { "name": "any: a pass alone is enough", "lit": false, "unmet": [], "startable": false, "litRefs": [],
+      "condition": { "op": "ANY", "items": [{ "node": "b" }, { "passed": true }] }, "state": "WAITING" },
+    { "name": "at least two of three, one lit, the pass would make two", "lit": false, "unmet": [], "startable": true, "litRefs": ["b"],
+      "condition": { "op": "AT_LEAST", "n": 2, "items": [{ "node": "b" }, { "node": "c" }, { "passed": true }] }, "state": "CAN_ANSWER" },
+    { "name": "at least two of three, none lit: still missing one", "lit": false, "unmet": [], "startable": true, "litRefs": [],
+      "condition": { "op": "AT_LEAST", "n": 2, "items": [{ "node": "b" }, { "node": "c" }, { "passed": true }] }, "state": "MISSING" },
+    { "name": "no pass asked, nodes missing", "lit": false, "unmet": [], "startable": false, "litRefs": ["b"],
+      "condition": { "op": "ALL", "items": [{ "node": "b" }, { "node": "c" }] }, "state": "MISSING" },
+    { "name": "no pass asked, all lit (lighting not yet run)", "lit": false, "unmet": [], "startable": false, "litRefs": ["b", "c"],
+      "condition": { "op": "ALL", "items": [{ "node": "b" }, { "node": "c" }] }, "state": "WAITING" },
+    { "name": "nested groups", "lit": false, "unmet": [], "startable": true, "litRefs": ["c"],
+      "condition": { "op": "ALL", "items": [{ "op": "ANY", "items": [{ "node": "b" }, { "node": "c" }] }, { "passed": true }] }, "state": "CAN_ANSWER" }
+  ]
+}
