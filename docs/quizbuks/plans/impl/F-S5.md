@@ -17,7 +17,7 @@
 
 | PR | 内容 | 迁移 |
 |---|---|---|
-| **F-S5a** 后端 | 节点的证书声明（定义、四眼、副本照抄）、点亮时冻结、签发（事件 + 逐个主体的内部流程 + 每日补发）、持有人的签发 PDF / 分享开关 / 列表、公开核实页与认证页、管理查询、删除账号、核对、语句数 | 一个（V111，临时，先绿先合，合并前按最大号 + 1） |
+| **F-S5a** 后端 | 节点的证书声明（定义、四眼、副本照抄）、点亮时冻结、签发（事件 + 逐个主体的内部流程 + 每日补发）、持有人的签发 PDF / 分享开关 / 列表、公开核实页与认证页、管理查询、删除账号、核对、语句数 | 一个（V112，临时，先绿先合，合并前按最大号 + 1） |
 | **F-S5b** 界面、e2e 与文档 | App"证书"（含撤销的标记、分享开关、下载）、发起方页面"证书"标签、核实页新状态、管理系统扩展（节点编辑器的证书字段、按号查询）、e2e（闭环第 5、6 步）、帮助"怎样核实证书"、`operations.md`、`backend/quizbuks/CLAUDE.md` | 无 |
 
 ## 2. F-S5a 后端
@@ -52,7 +52,7 @@
 - **删除账号**：`TakerErasure` 条目改为 `delete(CERTIFICATE, "userId", "holderName", "verifyKey", "certificateNames")` 并 `.documents` 加 `qb.node_certificate`；`SponsorErasure` 加同一实体（发起方的证书行与 `qb.node_certificate_sponsor` 的 PDF），`ErasureIT` 的全表搜索覆盖新列。核实页此后"查无此证"，不泄露个人信息；`QbTreeLit` 照旧只留编号（冻结的证书名称不是个人信息；它在 `ErasedEntity.keep` 中无需列）。
 - **每日核对**：`TreeUpkeep` 的 `qb.admin.tree-health` 加一类 `CERTIFICATE_MISSING`（有冻结名称、没有撤销、没有证书行的点亮；该检查在 19:23 UTC，在 03:41 的补发之后，所以出现即是真的失败，不需要宽限参数），进入已有的每日待办 `qb.tree-health`。
 
-### 2.5 迁移 V111（临时，先绿先合，合并前按最大号 + 1）
+### 2.5 迁移 V112（原 V111；F-M3 先合用了 V111）
 
 - `qb_tree_node_def`、`qb_tree_node`、`qb_tree_lit_version` 各加 `certificate_names jsonb`（只加列，不碰封存过的列，`SealedColumnsHistory` 通过）。
 - `qb_certificate`：`certification`、`certification_version`、`valid_until` 去掉 `NOT NULL`；加 `source varchar(12) NOT NULL DEFAULT 'CERTIFICATION'`、`subject_kind varchar(10) NOT NULL DEFAULT 'USER'`、`lit_id varchar(36)`（`UNIQUE`，空值不比较，满足启动检查对唯一约束的索引要求）、`tree_id`、`node_id`、`certificate_names jsonb`、`issuer_name varchar(200)`、`shared boolean NOT NULL DEFAULT true`；`CHECK`：`source = 'NODE'` 时 `lit_id`、`tree_id`、`node_id`、`certificate_names`、`issuer_name` 非空且 `valid_until` 为空，`CERTIFICATION` 时 `certification`、`valid_until` 非空；索引 `(user_id, subject_kind, issued_at)`。不回填。
