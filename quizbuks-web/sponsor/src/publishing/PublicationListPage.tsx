@@ -33,6 +33,7 @@ import { CoverPlaceholder } from '../qb/Illustrations'
 import { Thumbnail } from '../content/ContentImage'
 import { ImportSettingsButton } from './PublicationTransfer'
 import { AreaPageHeader } from '../shell/AreaPageHeader'
+import { mainAction } from '../shell/mainAction'
 import { SubmitAllDraftsButton } from './SubmitAllDrafts'
 
 const PAGE_SIZE = 20
@@ -234,15 +235,13 @@ export function PublicationListPage() {
   return (
     <section className="flex flex-col gap-4" data-testid="publication-list">
       <AreaPageHeader title={t('publishing.list.title')} description={t('publishing.list.intro')}
+        primaryAction={mainAction({ label: t('publishing.list.new'), icon: Plus, testId: 'new-publication',
+          onClick: () => navigate(publicationPath(NEW_PUBLICATION)) })}
         actions={
           <div className="flex flex-wrap gap-2">
             <ImportSettingsButton />
             {/* F-C4: every draft into review, one by one; those refused are listed with the reasons. */}
             <SubmitAllDraftsButton />
-            <Button onClick={() => navigate(publicationPath(NEW_PUBLICATION))} data-testid="new-publication">
-              <Plus aria-hidden />
-              {t('publishing.list.new')}
-            </Button>
           </div>
         } />
       <form role="search" className="flex flex-wrap items-end gap-4" onSubmit={(event) => event.preventDefault()}>

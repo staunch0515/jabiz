@@ -9,7 +9,8 @@ import { bundle, keyPaths } from '../qb/messageKeys'
 import { SubmitAllDraftsButton } from '../publishing/SubmitAllDrafts'
 import { SPONSOR } from '../messages'
 import { packageMessages } from './packageMessages'
-import { SponsorPackageCard } from './SponsorPackage'
+import { OpenImportNotice } from './SponsorPackage'
+import { TransferMenu, TransferTools, useAbandonImport } from './TransferMenu'
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -110,9 +111,13 @@ function server({ submittedPublication = false, open = null, failOnce = {} }: Se
   return { posted, steps }
 }
 
+function Notice() {
+  return <OpenImportNotice onAbandon={useAbandonImport()} />
+}
+
 function renderCard() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={client}><SponsorPackageCard /></QueryClientProvider>)
+  return render(<QueryClientProvider client={client}><TransferTools><TransferMenu /><Notice /></TransferTools></QueryClientProvider>)
 }
 
 beforeAll(() => configureClient({ entry: 'sponsor' }))

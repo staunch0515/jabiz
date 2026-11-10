@@ -6,6 +6,7 @@ import { AreaPageHeader } from '../shell/AreaPageHeader'
 import { spaLink } from '../shell/links'
 import { STATS_PATH } from '../shell/paths'
 import { profilePath, type ProfileSection } from './paths'
+import { TransferMenu, TransferTools } from './TransferMenu'
 
 /** The message key of a section (the hyphen is no key character). */
 export const sectionKey = (section: ProfileSection) => section === 'mail-server' ? 'mailServer' : section
@@ -16,13 +17,16 @@ export const sectionKey = (section: ProfileSection) => section === 'mail-server'
  */
 export function ProfileLayout({ section, children }: { section: ProfileSection; children: ReactNode }) {
   const { t } = useTranslation(SPONSOR)
-  return (
+  const frame = (
     <div className="flex flex-col gap-4" data-testid="profile" data-section={section}>
       <AreaPageHeader title={t(`profile.nav.${sectionKey(section)}`)}
-        description={t(`profile.navHint.${sectionKey(section)}`)} />
+        description={t(`profile.navHint.${sectionKey(section)}`)}
+        actions={section === 'overview' ? <TransferMenu /> : undefined} />
       <div className="flex min-w-0 flex-col gap-6" data-testid="profile-content">{children}</div>
     </div>
   )
+  // F-F3d: the overview's head has "Import and export" (the profile package, the sponsor package).
+  return section === 'overview' ? <TransferTools>{frame}</TransferTools> : frame
 }
 
 /**

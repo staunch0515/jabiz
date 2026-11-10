@@ -293,3 +293,15 @@ F-F5b（不再用那个停用的叫法，S3 自己）须先合入：本项的新
 - **共用的 `qb/view/PublicationContent.tsx`**（两个 SPA 逐字相同）：可选参数 `tabs: ContentTabs`（`current`、`path`、`renderLink`、可选的 `extra` 供 F-F4c 加商品 / 比赛规则 / 举报 / 屏蔽）；四个标签说明 / 奖励 / 资料 / 规则（`CONTENT_TABS`），封面、名称、要点与仅受邀提示始终在标签之上；草稿的预览没有"奖励"，没有素材、发起方介绍与 `extra` 时没有"资料"。**不给 `tabs` 时输出不变**（竖排，折叠块照旧；App 首页基线不受影响）。发起方预览的标签是按钮（预览没有各标签的地址），F-F4c 用链接 `?tab=`。规则标签 = 要点的完整句（题数 / 抽题、合格线、时限、参加费、截止、节点），比赛规则链接与举报等只有 App 的内容由 F-F4c 经 `extra` 放入。
 - 测试：`publishing.test.tsx`（七个标签的地址与 `aria-current`、各标签的块、分享标签、草稿的标签地址转回、预览的四个标签；原来依赖竖排详情页的用例改到对应标签），`qb/view/PublicationContent.test.tsx`（两份相同：有 / 无 `tabs`、隐藏无内容的标签、`extra`、axe）。e2e（只改了类型检查通过，未运行）：`invitation`（`/audience`）、`video-use`（`/fees`）、`content-bank`（`/questions`）、`digital-prize`（`/rewards`）、`a11y` 的发起方发布测试（每个标签各一次，亮暗各循环）。
 - 帮助：`help/sponsor-areas.md`（提交后的发布的七个标签）、`help/exposure.md`、`help/video-uses.md`（"费用"标签）；发起方手册初稿三语各一行。
+
+## 17. F-F3d 的实现记录（2026-11-10）
+
+- 分支 `1.3/quizbuks-ff3d-templates`（F-F3a #587、F-F3b #605、F-F3c #608 之后）。无后端改动、无迁移；删除的功能：无（每个按钮、对话框与测试 id 仍在）。
+- **主按钮**：页头的 `primaryAction`（宽屏紧挨标题，手机是浮动按钮）：Quiz 列表（`new-quiz`）、发布列表（`new-publication`）、资源库（`asset-add`）、权益的"我的权益"（`benefit-offer-add`）、学分钱包（`topup-open`）、平台费账户（`fee-account-topup`）。平台的主按钮测试 id 固定为 `page-primary-action`，所以由 `shell/mainAction.tsx` 用 `renderLink` 给出带页面自己测试 id 的元素（桌面与手机的浮动按钮同一个 id）；次要的按钮（导入 Quiz、导入发布设置、全部提交、资源库的"收集"、交易导出）仍在页头的 `actions`。页面宽度早已由外框的 `PageContent`（`--content-max`）给出，页面文件不搬家。
+- **概况的"导入与导出"**：页头一个菜单 `profile-transfer`，两组：发起方资料包（导出 `profile-export` / 导入 `profile-import` / 给 AI 工具的提示词 `profile-prompt`）、发起方包（导出 `sponsor-package-export` / 导入 `sponsor-package-import`）。`ProfileTransferCard` 与 `SponsorPackageCard` 去掉卡片，成为只带对话框与文件框的 `ProfileTransfer`、`SponsorPackage`（经 `controls` 交出动作），由 `profile/TransferMenu.tsx` 的 `TransferTools` 挂一次；文件框（`profile-import-file`、`sponsor-package-file`）与所有对话框的测试 id 不变。上次中断的发起方包导入的提示（`OpenImportNotice`，`sponsor-package-open` / `-abandon`）留在概况页上。完成度卡片（状态、清单、每节的说明与"去设置"）沿用现有的，"从官网生成"（F-C7）未合入，不加占位。列表页 / 表单页模板的其余部分：各页的筛选与保存规则不同，只套页头与宽度，不加底部保存条、不改筛选（同 §6 对发布向导与 Quiz 编辑器的做法）。
+- **360 px 的横向滚动**（用 Chrome 在 360 px 下逐页量 `scrollWidth`，页面接口用假数据，含日文 / 中文；Vitest 量不了布局）：
+  - 资金 → 交易（224 px）：平台 `FilterBar` 的范围行（`div.flex.items-center`，不换行）里两个日期框合计 584 px。`TransactionsPage` 给 `FilterBar` 加 `className="[&_[role=group]>div]:flex-wrap"`，两个日期框在手机上换行。平台组件不改。
+  - 奖品与兑换（到店兑换 / 现金奖励 / 电子奖品）：带假数据（长名称、备注、争议说明），卡片与表格两种视图在 360 px 都没有横向滚动，没有复现；`RedeemPage` 的二维码（固定 320 px）比手机上的卡片内容宽 26 px（居中，被内边距吸收），顺手加 `max-w-full`（图片 `h-auto`）。
+  - 其余区域（首页、Quiz、发布与结构图、消息、合作权益四个标签、资金五个标签、资源库五个标签、发起方中心各节、账户、帮助）在 360 px 都是 0。
+- e2e（未运行）：`a11y.spec.ts` 加回 360 px 每个区域的 `scrollWidth - clientWidth <= 0`，加 1920 px 下三个主按钮（`new-quiz`、`new-publication`、`asset-add`）与标题的距离不超过一个按钮宽（`expectBesideTitle`），概况的"导入与导出"菜单一条 axe；`sponsor-package.spec.ts` 先打开菜单。每个区域亮 / 暗各一条 axe 早已在 a11y 中。
+- 测试：`shell/mainAction.test.tsx`（测试 id、点击、禁用）；`profile/transfer.test.tsx`、`SponsorPackage.test.tsx` 改为经菜单与提示。帮助：`help/profile-package.md`、`help/sponsor-package.md` 的位置。

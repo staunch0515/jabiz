@@ -66,6 +66,7 @@ import { ASSET_LIMITS } from './ids'
 import './messages'
 import { UsageCard } from './UsageCard'
 import { AreaPageHeader } from '../shell/AreaPageHeader'
+import { mainAction } from '../shell/mainAction'
 import { ASSET_STATS_QUERY, formatBytes, readAssetStats, sizeOf, USAGE_QUERY } from './usage'
 
 const ALL = '*'
@@ -204,14 +205,13 @@ export function AssetsPage({ tab, adding = false }: { tab: AssetTab; adding?: bo
   return (
     <section className="flex flex-col gap-4" data-testid="assets-page">
       <AreaPageHeader title={t('assets.title')} description={t('assets.intro')}
-        actions={isAssetTab(tab) && <span className="flex flex-wrap gap-2">
+        primaryAction={isAssetTab(tab) ? mainAction({ label: t('assets.add'), icon: Plus, testId: 'asset-add',
+          onClick: () => setEditing('new') }) : undefined}
+        actions={isAssetTab(tab) && (
           <Button variant="outline" data-testid="asset-collect" onClick={() => setCollecting(true)}>
             <FolderInput aria-hidden />{t('assets.collect')}
           </Button>
-          <Button data-testid="asset-add" onClick={() => setEditing('new')}>
-            <Plus aria-hidden />{t('assets.add')}
-          </Button>
-        </span>} />
+        )} />
       <UsageCard onShowUnused={showUnused} />
       {tab === 'products' && <ProductsPage />}
       {isAssetTab(tab) && <div className="flex flex-col gap-4" data-testid={`assets-tab-content-${tab}`}>

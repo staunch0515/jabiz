@@ -93,6 +93,7 @@ const en = {
       products: 'What the page shows', staff: 'Who hands out prizes', mailServer: 'Invitations in your name' },
     transfer: {
       title: 'Profile package',
+      menu: 'Import and export',
       hint: 'Save everything on these pages as one file (with the images and the mail server settings, never its password), or import such a file. An import never changes a review.',
       export: 'Export', exporting: 'Exporting…', exported: 'The profile package is saved.',
       import: 'Import', importTitle: 'Import a profile package',
@@ -322,6 +323,7 @@ const zh: typeof en = {
       products: '主页展示的商品', staff: '负责发奖的人', mailServer: '以你的名义发邀请' },
     transfer: {
       title: '发起方资料包',
+      menu: '导入与导出',
       hint: '把这些页面的全部内容存成一个文件（含图片和邮件服务器的设置，不含密码），或导入这样的文件。导入不会改变任何审核。',
       export: '导出', exporting: '正在导出…', exported: '资料包已保存。',
       import: '导入', importTitle: '导入发起方资料包',
@@ -551,6 +553,7 @@ const ja: typeof en = {
       products: 'ページに載せる商品', staff: '景品を渡す人', mailServer: 'あなたの名前で招待を送る' },
     transfer: {
       title: '主催者資料パッケージ',
+      menu: 'インポートとエクスポート',
       hint: 'これらのページの内容をまとめて 1 つのファイルに保存（画像とメールサーバーの設定を含み、パスワードは含みません）、またはそのファイルを取り込みます。取り込みで審査が変わることはありません。',
       export: '書き出す', exporting: '書き出しています…', exported: '資料パッケージを保存しました。',
       import: '取り込む', importTitle: '主催者資料パッケージの取り込み',

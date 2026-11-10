@@ -55,7 +55,8 @@ test('a sponsor package is exported, imported into a new account and its drafts 
   // Signed in before leaving the page: a navigation now would cut the sign-in request off.
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
   await page.goto('/sponsor/profile')
-  await expect(page.getByTestId('sponsor-package')).toBeVisible()
+  // F-F3d: the packages are in the head's "Import and export" menu.
+  await page.getByTestId('profile-transfer').click()
   const downloaded = page.waitForEvent('download')
   await page.getByTestId('sponsor-package-export').click()
   const file = await downloaded
