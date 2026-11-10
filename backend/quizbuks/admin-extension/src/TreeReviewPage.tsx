@@ -90,6 +90,17 @@ function NodesTable({ nodes, title }: { nodes: VersionNode[]; title: string }) {
         </span>
       ) : <span data-testid="tree-node-running">{row.original.runningBound}</span>
     } },
+    { id: 'unlit', header: t('trees.nodes.unlit'), cell: ({ row }) => (
+      <span className="flex flex-col" data-testid="tree-node-unlit">
+        {row.original.countedOn == null ? <span className="text-muted-foreground">{t('trees.nodes.unlitNone')}</span>
+          : (
+            <>
+              <span>{row.original.answeredUnlit ?? t('trees.nodes.unlitHidden')}</span>
+              <span className="text-muted-foreground text-sm">{t('trees.nodes.unlitOn', { day: row.original.countedOn })}</span>
+            </>
+          )}
+      </span>
+    ) },
   ], [t, language, nameOf, conditionText])
   return (
     <DataTable label={title} columns={columns} data={nodes} getRowId={(row) => `${row.change}:${row.nodeId}`}

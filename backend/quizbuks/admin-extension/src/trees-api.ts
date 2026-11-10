@@ -88,6 +88,10 @@ export interface VersionNode {
   description: string | null
   condition: string | null
   runningBound: number
+  /** F-S3f: the daily count of those who answered and have not lit (null: under the minimum group or not counted). */
+  answeredUnlit: number | null
+  /** The last day counted (null: not counted yet). */
+  countedOn: string | null
 }
 
 /** A version node by node: the platform's template, or an operator's (only the maps the operator looks after). */
@@ -95,7 +99,8 @@ export async function readTreeVersion(operator: boolean, versionId: string): Pro
   const page = await runQuery<Row>(operator ? TEMPLATE.operatorTreeVersion : TEMPLATE.treeVersion, { params: { versionId }, limit: 1000 })
   return page.items.map((row) => ({ nodeId: String(row.nodeId), change: String(row.change ?? ''), name: str(row.name),
     description: str(row.description),
-    condition: row.condition == null ? null : typeof row.condition === 'string' ? row.condition : JSON.stringify(row.condition), runningBound: num(row.runningBound) }))
+    condition: row.condition == null ? null : typeof row.condition === 'string' ? row.condition : JSON.stringify(row.condition), runningBound: num(row.runningBound),
+    answeredUnlit: row.answeredUnlit == null ? null : num(row.answeredUnlit), countedOn: str(row.countedOn) }))
 }
 
 /** A lit record of the map (`qb.admin.tree-lit`), with its revocation and the request to revoke it in review. */

@@ -1,12 +1,14 @@
 /*---
 id: qb.admin.tree-version
 description: "F-S2b3a: one version of a knowledge map node by node, as its reviewer compares it with the version in effect: ADDED, CHANGED (name, description or condition) or SAME, and REMOVED for the nodes in effect it drops; with how many running publications are bound to each node (a removed node's would no longer start)"
-entities: [QbTreeVersion, QbTreeNodeDef, QbTree, QbPublicationCard]
+entities: [QbTreeVersion, QbTreeNodeDef, QbTree, QbPublicationCard, QbTreeNodeCount, SysParam]
 datasets:
   QbTreeVersion: urn:jabiz:dataset:default:QbTreeVersion
   QbTreeNodeDef: urn:jabiz:dataset:default:QbTreeNodeDef
   QbTree: urn:jabiz:dataset:default:QbTree
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
+  QbTreeNodeCount: urn:jabiz:dataset:default:QbTreeNodeCount
+  SysParam: urn:jabiz:dataset:now:SysParam
 params:
   versionId: { like: QbTreeVersion.versionId, required: true, description: The version }
 results:
@@ -17,6 +19,8 @@ results:
   condition:    { kind: { type: text } }
   seq:          { kind: { type: numeric, precision: 4, scale: 0 } }
   runningBound: { kind: { type: numeric, precision: 9, scale: 0 } }
+  answeredUnlit: { kind: { type: numeric, precision: 9, scale: 0 } }
+  countedOn:    { from: QbTreeNodeCount.countedOn }
 list:
   sorts: [seq]
   defaultSort: { field: seq, asc: true }
@@ -33,6 +37,14 @@ WITH v AS (
     JOIN {{QbTree}} t ON t.{{QbTree.treeId}} = v.{{QbTreeVersion.treeId}}
     WHERE v.{{QbTreeVersion.versionId}} = CAST(:versionId AS text)
 ),
+-- F-S3f: the daily count of the people who answered and have not lit (qb.tree-node-counts) as of countedOn, from
+-- the statistics' minimum group up (the same k as qb.sponsor.tree); a removed node has none.
+k AS (
+    SELECT greatest(3, coalesce(max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,9}$'
+                                         THEN CAST(p.{{SysParam.value}} AS int) END), 5)) AS k
+    FROM {{SysParam}} p
+    WHERE p.{{SysParam.paramKey}} = 'qb.stats.min-group'
+),
 running AS (
     SELECT c.{{QbPublicationCard.treeNodeId}} AS nodeId, count(*) AS n
     FROM {{QbPublicationCard}} c
@@ -48,16 +60,22 @@ SELECT d.{{QbTreeNodeDef.nodeId}} AS nodeId,
             THEN 'CHANGED' ELSE 'SAME' END AS change,
        CAST(d.{{QbTreeNodeDef.name}} AS text) AS name, CAST(d.{{QbTreeNodeDef.description}} AS text) AS description,
        d.{{QbTreeNodeDef.condition}} AS condition, d.{{QbTreeNodeDef.seq}} AS seq,
-       coalesce(r.n, 0) AS runningBound
+       coalesce(r.n, 0) AS runningBound,
+       CASE WHEN nc.{{QbTreeNodeCount.answeredUnlit}} >= k.k THEN nc.{{QbTreeNodeCount.answeredUnlit}} END
+           AS answeredUnlit,
+       nc.{{QbTreeNodeCount.countedOn}} AS countedOn
 FROM v
+CROSS JOIN k
 JOIN {{QbTreeNodeDef}} d ON d.{{QbTreeNodeDef.versionId}} = v.versionId
 LEFT JOIN {{QbTreeNodeDef}} e ON e.{{QbTreeNodeDef.versionId}} = v.effectId
     AND e.{{QbTreeNodeDef.nodeId}} = d.{{QbTreeNodeDef.nodeId}}
 LEFT JOIN running r ON r.nodeId = d.{{QbTreeNodeDef.nodeId}}
+LEFT JOIN {{QbTreeNodeCount}} nc ON nc.{{QbTreeNodeCount.treeId}} = v.treeId
+    AND nc.{{QbTreeNodeCount.nodeId}} = d.{{QbTreeNodeDef.nodeId}}
 UNION ALL
 SELECT e.{{QbTreeNodeDef.nodeId}}, 'REMOVED', CAST(e.{{QbTreeNodeDef.name}} AS text),
        CAST(e.{{QbTreeNodeDef.description}} AS text), e.{{QbTreeNodeDef.condition}},
-       10000 + e.{{QbTreeNodeDef.seq}}, coalesce(r.n, 0)
+       10000 + e.{{QbTreeNodeDef.seq}}, coalesce(r.n, 0), CAST(NULL AS numeric(9, 0)), CAST(NULL AS date)
 FROM v
 JOIN {{QbTreeNodeDef}} e ON e.{{QbTreeNodeDef.versionId}} = v.effectId AND v.effectId <> v.versionId
 LEFT JOIN running r ON r.nodeId = e.{{QbTreeNodeDef.nodeId}}

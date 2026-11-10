@@ -2,7 +2,9 @@ package com.jabiz.quizbuks.it;
 
 import com.jabiz.job.JobDefinition;
 import com.jabiz.quizbuks.tree.TreeCodes;
+import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.tree.TreeLighting;
+import com.jabiz.quizbuks.tree.TreeNodeCounts;
 import com.jabiz.quizbuks.tree.TreeProcesses;
 import com.jabiz.quizbuks.tree.TreeRevocations;
 import com.jabiz.quizbuks.tree.TreeUpkeep;
@@ -36,9 +38,21 @@ class TreeUpkeepIT extends TreeItSupport {
     @Qualifier("qbTreeReviewRemindJob")
     JobDefinition<TreeUpkeep.RemindInput> remindJob;
 
+    @Autowired
+    @Qualifier("qbTreeNodeCountJob")
+    JobDefinition<TreeNodeCounts.CountInput> countJob;
+
     private void runJob(JobDefinition<?> job) {
+        runJob(job, clock.instant());
+    }
+
+    private void runJob(JobDefinition<?> job, java.time.Instant at) {
         execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
-        jobs.execute(job, clock.instant());
+        jobs.execute(job, at);
+    }
+
+    private static Map<String, Object> byKey(List<Map<String, Object>> rows, String key, Object value) {
+        return rows.stream().filter(row -> value.equals(row.get(key))).findFirst().orElseThrow();
     }
 
     private List<Map<String, Object>> lits(String userId) {
@@ -180,6 +194,66 @@ class TreeUpkeepIT extends TreeItSupport {
         runJob(recheckJob);
         deliverEvents();
         assertThat(lits(userId)).extracting(row -> row.get("node_id")).containsExactly(map.basics());
+    }
+
+    @Test
+    void theDailyCountGivesThePeopleWhoAnsweredAndHaveNotLitFromTheMinimumGroupUp() {
+        String sponsor = newSponsor(unique("s-fs3f-count"));
+        credit(sponsor, 10_000);
+        String token = sponsorToken(sponsor);
+        Map3 map = map(sponsor);
+        String basics = liveBound(sponsor, "Count basics", map.treeId(), map.basics());
+        // Three answer and fail, one passes (lit, so not counted).
+        for (int i = 0; i < 3; i++) {
+            assertThat(play(newTaker(unique("t-fs3f-fail"), "JP"), basics, false, false)).containsEntry("passed",
+                false);
+        }
+        String passer = newTaker(unique("t-fs3f-pass"), "JP");
+        assertThat(play(passer, basics, true, true)).containsEntry("passed", true);
+        deliverEvents();
+        assertThat(lits(passer)).extracting(row -> row.get("node_id")).containsExactly(map.basics());
+        String versionId = String.valueOf(items("qb.sponsor.trees", token, Map.of("limit", 50)).stream()
+            .filter(row -> map.treeId().equals(row.get("treeId"))).findFirst().orElseThrow().get("currentVersionId"));
+
+        // Not counted yet: no figure, no day.
+        assertThat(byKey(items("qb.sponsor.tree", token, Map.of("params", Map.of("versionId", versionId))), "nodeId",
+            map.basics())).containsEntry("answeredUnlit", null).containsEntry("countedOn", null);
+
+        // The next day's run counts the day's attempts: three, under the default minimum group (5) not shown.
+        java.time.Instant tomorrow = clock.instant().plus(Duration.ofDays(1));
+        runJob(countJob, tomorrow);
+        String day = clock.instant().atZone(java.time.ZoneOffset.UTC).toLocalDate().toString();
+        List<Map<String, Object>> rows = query("SELECT node_id, answered_unlit, counted_on FROM qb_tree_node_count "
+            + "WHERE tree_id = ? ORDER BY node_id", map.treeId());
+        assertThat(rows).hasSize(3);
+        assertThat(byKey(rows, "node_id", map.basics())).satisfies(row -> {
+            assertThat(((Number) row.get("answered_unlit")).intValue()).isEqualTo(3);
+            assertThat(String.valueOf(row.get("counted_on"))).isEqualTo(day);
+        });
+        assertThat(byKey(rows, "node_id", map.advanced()).get("answered_unlit")).satisfies(n ->
+            assertThat(((Number) n).intValue()).isZero());
+        Map<String, Object> shown = byKey(items("qb.sponsor.tree", token, Map.of("params",
+            Map.of("versionId", versionId))), "nodeId", map.basics());
+        assertThat(shown.get("answeredUnlit")).isNull();
+        assertThat(String.valueOf(shown.get("countedOn"))).isEqualTo(day);
+
+        // From the minimum group up, the Sponsor's page and the review page show it; the same run again changes nothing.
+        setParam(QbParams.STATS_MIN_GROUP, "3");
+        try {
+            assertThat(byKey(items("qb.sponsor.tree", token, Map.of("params", Map.of("versionId", versionId))),
+                "nodeId", map.basics()).get("answeredUnlit")).satisfies(n -> assertThat(((Number) n).intValue())
+                    .isEqualTo(3));
+            assertThat(byKey(items("qb.admin.tree-version", admin(), Map.of("params", Map.of("versionId",
+                versionId))), "nodeId", map.basics()).get("answeredUnlit")).satisfies(n ->
+                    assertThat(((Number) n).intValue()).isEqualTo(3));
+        } finally {
+            setParam(QbParams.STATS_MIN_GROUP, "5");
+        }
+        Object before = query("SELECT version FROM qb_tree_node_count WHERE tree_id = ? AND node_id = ?",
+            map.treeId(), map.basics()).getFirst().get("version");
+        runJob(countJob, tomorrow.plus(Duration.ofHours(1)));
+        assertThat(query("SELECT version FROM qb_tree_node_count WHERE tree_id = ? AND node_id = ?", map.treeId(),
+            map.basics()).getFirst().get("version")).isEqualTo(before);
     }
 
     @Test

@@ -76,7 +76,8 @@ describe('the knowledge map', () => {
 
   it('has a list view of the same nodes by level, and shows lit counts on a Sponsor\'s own map', async () => {
     const user = userEvent.setup()
-    render(<KnowledgeMap graph={{ ...GRAPH, ownerKind: 'PLATFORM' }} litCounts={new Map([['a', 12], ['b', null]])} />)
+    render(<KnowledgeMap graph={{ ...GRAPH, ownerKind: 'PLATFORM' }} litCounts={new Map([['a', 12], ['b', null]])}
+      unlitCounts={new Map([['a', { count: 7, countedOn: '2026-11-09' }], ['b', { count: null, countedOn: '2026-11-09' }]])} />)
     expect(screen.getByTestId('knowledge-map-kind')).toHaveTextContent('Platform map')
     await user.click(screen.getByTestId('knowledge-map-view-list'))
     expect(screen.getByRole('heading', { name: 'Level 1' })).toBeInTheDocument()
@@ -86,8 +87,11 @@ describe('the knowledge map', () => {
     expect(listed.map((n) => n.getAttribute('data-state'))).toEqual(['', '', '', ''])
     await user.click(within(listed[0]).getByRole('button', { name: 'Basics' }))
     expect(screen.getByTestId('knowledge-map-lit-count')).toHaveTextContent('12 Takers lit it')
+    expect(screen.getByTestId('knowledge-map-unlit-count'))
+      .toHaveTextContent('7 Takers answered and have not lit it (as of 2026-11-09)')
     await user.click(within(listed[1]).getByRole('button', { name: 'Advanced' }))
     expect(screen.getByTestId('knowledge-map-lit-count')).toHaveTextContent('Fewer Takers than shown in statistics')
+    expect(screen.getByTestId('knowledge-map-unlit-count')).toHaveTextContent('(as of 2026-11-09)')
     await expectAccessible()
   })
 

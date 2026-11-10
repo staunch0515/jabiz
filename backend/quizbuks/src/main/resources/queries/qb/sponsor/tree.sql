@@ -1,7 +1,7 @@
 /*---
 id: qb.sponsor.tree
 description: "F-S3: one version of one of the caller's own knowledge graphs node by node: the definition (name, description, condition, order) the editor shows and saves back, whether the node is in effect, how many Takers have lit it (in effect only; under the minimum group, none) and how many publications bound to it are not ended (a node with any cannot be removed)"
-entities: [SysParam, QbTree, QbTreeVersion, QbTreeNode, QbTreeNodeDef, QbTreeLit, QbTreeLitRevocation, QbPublicationCard]
+entities: [SysParam, QbTree, QbTreeVersion, QbTreeNode, QbTreeNodeDef, QbTreeLit, QbTreeLitRevocation, QbPublicationCard, QbTreeNodeCount]
 datasets:
   SysParam: urn:jabiz:dataset:now:SysParam
   QbTree: urn:jabiz:dataset:sponsor:QbTree
@@ -11,6 +11,7 @@ datasets:
   QbTreeLit: urn:jabiz:dataset:default:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:default:QbTreeLitRevocation
   QbPublicationCard: urn:jabiz:dataset:default:QbPublicationCard
+  QbTreeNodeCount: urn:jabiz:dataset:default:QbTreeNodeCount
 params:
   versionId: { like: QbTreeVersion.versionId, required: true, description: "A version of the caller's own graph (none for another's)" }
 results:
@@ -22,6 +23,8 @@ results:
   inEffect:     { kind: { type: bool } }
   litCount:     { kind: { type: numeric, precision: 9, scale: 0 } }
   runningBound: { kind: { type: numeric, precision: 9, scale: 0 } }
+  answeredUnlit: { kind: { type: numeric, precision: 9, scale: 0 } }
+  countedOn:    { from: QbTreeNodeCount.countedOn }
 list:
   sorts: [seq]
   defaultSort: { field: seq, asc: true }
@@ -30,7 +33,9 @@ permissions: [qb.sponsor.me]
 ---*/
 -- The view holds the caller's own graphs only, so another's version has no rows. Lit: a lit record with no revocation
 -- (tree.TreeLights), counted by person; a count under the minimum group k is not given (stats.MinGroup: the same
--- greatest(3, … 5) as the analytics templates), so that it never tells one person's progress.
+-- greatest(3, … 5) as the analytics templates), so that it never tells one person's progress. F-S3f: answeredUnlit is
+-- the daily job's count (qb.tree-node-counts) of the people who answered and have not lit, as of countedOn, under the
+-- same minimum group (countedOn stays, so that the page can say when it was counted).
 WITH v AS (
     SELECT v.{{QbTreeVersion.versionId}} AS versionId, v.{{QbTreeVersion.treeId}} AS treeId
     FROM {{QbTreeVersion}} v
@@ -63,10 +68,15 @@ SELECT d.{{QbTreeNodeDef.nodeId}} AS nodeId,
        d.{{QbTreeNodeDef.condition}} AS condition, d.{{QbTreeNodeDef.seq}} AS seq,
        coalesce(n.{{QbTreeNode.active}}, FALSE) AS inEffect,
        CASE WHEN coalesce(n.{{QbTreeNode.active}}, FALSE) AND coalesce(lit.n, 0) >= k.k THEN lit.n END AS litCount,
-       coalesce(running.n, 0) AS runningBound
+       coalesce(running.n, 0) AS runningBound,
+       CASE WHEN coalesce(n.{{QbTreeNode.active}}, FALSE) AND nc.{{QbTreeNodeCount.answeredUnlit}} >= k.k
+            THEN nc.{{QbTreeNodeCount.answeredUnlit}} END AS answeredUnlit,
+       CASE WHEN coalesce(n.{{QbTreeNode.active}}, FALSE) THEN nc.{{QbTreeNodeCount.countedOn}} END AS countedOn
 FROM v
 CROSS JOIN k
 JOIN {{QbTreeNodeDef}} d ON d.{{QbTreeNodeDef.versionId}} = v.versionId
 LEFT JOIN {{QbTreeNode}} n ON n.{{QbTreeNode.treeId}} = v.treeId AND n.{{QbTreeNode.nodeId}} = d.{{QbTreeNodeDef.nodeId}}
 LEFT JOIN lit ON lit.nodeId = d.{{QbTreeNodeDef.nodeId}}
 LEFT JOIN running ON running.nodeId = d.{{QbTreeNodeDef.nodeId}}
+LEFT JOIN {{QbTreeNodeCount}} nc ON nc.{{QbTreeNodeCount.treeId}} = v.treeId
+    AND nc.{{QbTreeNodeCount.nodeId}} = d.{{QbTreeNodeDef.nodeId}}
