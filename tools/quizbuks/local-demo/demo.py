@@ -46,6 +46,7 @@ ROLES = "urn:jabiz:dataset:platform:SecRole"
 ROLE_PERMISSIONS = "urn:jabiz:dataset:platform:SecRolePermission"
 USER_ROLES = "urn:jabiz:dataset:platform:SecUserRole"
 CONTROL_CHANGES = "urn:jabiz:dataset:platform:SysControlChange"
+PARAMS = "urn:jabiz:dataset:platform:SysParam"
 SPONSORS = "urn:jabiz:dataset:sponsor:QbSponsor"
 TOPUPS = "urn:jabiz:dataset:sponsor:QbTopUp"
 WALLETS = "urn:jabiz:dataset:sponsor:QbWallet"
@@ -156,6 +157,14 @@ def setup():
         for change in proposed:
             run(publisher, "CONTROL_CHANGE_PUBLISH", {"changeId": change["id"]})
     print(f"  {len(proposed)} proposals published by {PUBLISHER_USER}")
+    # F-S4b: the default reward methods are empty after setup (a new Sponsor gets what a lit node opens); the demo's
+    # publications pay the platform's Kudos, so the demo allows them for every Sponsor (four eyes as above).
+    found = rows(admin, PARAMS, [{"field": "paramKey", "op": "eq", "value": "qb.reward.default-methods"}], 1)
+    if found and not str(found[0]["attributes"].get("value") or "").strip():
+        change = run(admin, "CONTROL_CHANGE_PROPOSE", {"targetEntity": "SysParam", "values": {
+            "paramKey": "qb.reward.default-methods", "value": "PLATFORM"}, "reason": "Local demo"})
+        run(publisher_token(admin), "CONTROL_CHANGE_PUBLISH", {"changeId": change["changeId"]})
+        print("  qb.reward.default-methods = PLATFORM (the demo pays the platform's Kudos)")
 
 
 def verified_user(entry, email, name):

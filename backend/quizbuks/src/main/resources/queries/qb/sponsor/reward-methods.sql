@@ -22,7 +22,8 @@ permissions: [qb.publication.write]
 ---*/
 -- One row, for the wizard's choice and the console's navigation. The rule is the processes' (publishing.RewardMethod
 -- and PublicationEditing, which decide when a draft is saved or submitted): the parameter's names (before setup the
--- parameter is missing and the platform's Kudos alone apply, as the processes read it; a blank value too), with the
+-- parameter is missing and the platform's Kudos alone apply, as the processes read it; F-S4b: a blank value gives
+-- none), with the
 -- sponsor's own row of the setting and (F-S4b, the requester 2026-11-10) the methods a lit gate opens, in the order of
 -- RewardMethod.ALL; names that are no method are dropped. A gate is open as tree.SponsorGates decides: its parameter
 -- names a node in effect of a platform template Sponsors light, and the caller lit that node id in the template or in
@@ -62,8 +63,7 @@ methods AS (
     SELECT a.m, a.ord,
            a.gate IS NOT NULL AND a.gate IN (SELECT gt.gate FROM gates gt) AS opened,
            a.m IN (SELECT btrim(x) FROM params, regexp_split_to_table(
-                       CASE WHEN params.p_methods IS NULL OR btrim(params.p_methods) = '' THEN 'PLATFORM'
-                            ELSE params.p_methods END, ',') AS x)
+                       CASE WHEN params.p_methods IS NULL THEN 'PLATFORM' ELSE params.p_methods END, ',') AS x)
            OR a.m IN (SELECT btrim(y) FROM mine, regexp_split_to_table(
                        CASE WHEN mine.rows_found > 0 AND btrim(coalesce(mine.methods, '')) = '' THEN 'PLATFORM'
                             ELSE coalesce(mine.methods, '') END, ',') AS y) AS given

@@ -86,8 +86,9 @@ public final class QbParams {
     /** Whether publications are approved without a person's review. */
     public static final String REVIEW_PUBLICATION_AUTO = "qb.review.publication.auto";
     /**
-     * The reward methods a sponsor without a setting of their own may publish with (Q28, docs/quizbuks/plans/
-     * Q28-phase1-defaults.md): the methods' names, comma-separated. The launch phase publishes {@code OFFLINE_REDEEM}.
+     * The reward methods every sponsor may publish with (Q28, docs/quizbuks/plans/Q28-phase1-defaults.md), besides their
+     * own setting and what a lit node opens (F-S4b): the methods' names, comma-separated. F-S4b: empty (the declared
+     * value, the first launch's) gives none.
      */
     public static final String REWARD_DEFAULT_METHODS = "qb.reward.default-methods";
     /** The highest reward one attempt may win, in Kudos; 0 for no cap (Q28: the premiums law's limit). */
@@ -546,9 +547,9 @@ public final class QbParams {
         new Param(TOPUP_NEW_SPONSOR_MAX_TOTAL, KUDOS, "100000",
             "What a new sponsor may top up in all during that time, in Kudos"),
         // The declared value keeps what the platform did before Q28; the launch phase publishes OFFLINE_REDEEM.
-        new Param(REWARD_DEFAULT_METHODS, Map.of("type", "text", "maxLength", 50), "PLATFORM",
-            "Reward methods a sponsor without a setting of their own may publish with: PLATFORM, SPONSOR_CASH, "
-                + "OFFLINE_REDEEM, comma-separated"),
+        new Param(REWARD_DEFAULT_METHODS, Map.of("type", "text", "maxLength", 50), "",
+            "Reward methods every Sponsor may publish with, besides their own setting and what a lit node opens: "
+                + "PLATFORM, SPONSOR_CASH, OFFLINE_REDEEM, DIGITAL_PRIZE, comma-separated (empty: none)"),
         new Param(REWARD_MAX_PER_ATTEMPT, KUDOS, "0", "The highest reward one attempt may win, in Kudos (0: no cap)"),
         journal(JOURNAL_ACCOUNT_1110, "1110 Stripe balance"),
         journal(JOURNAL_ACCOUNT_1120, "1120 Bank deposits"),

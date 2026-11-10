@@ -59,13 +59,20 @@ public final class RewardMethod {
     public static final List<String> DEFAULT = List.of(PLATFORM);
 
     /**
-     * The methods a sponsor without a setting of their own may use (Q28): the parameter
-     * {@code qb.reward.default-methods} as read at the operation time, its declared value before setup; names that
-     * are no method are ignored, so a mistyped value allows less, never more (none of them: the sponsor publishes
-     * once an administrator sets their methods); blank, as before setup, means the platform's Kudos only.
+     * The methods of the default (Q28) {@code qb.reward.default-methods} as read at the operation time; names that are no
+     * method are ignored, so a mistyped value allows less, never more. F-S4b (the requester 2026-11-07, the controller
+     * 2026-11-10): a blank value gives none (a new Sponsor publishes with what a lit node opens or an administrator
+     * allows them); the parameter not there at all (before setup) gives the platform's Kudos, as before.
      */
     public static List<String> defaultMethods(ParamValues params) {
-        List<String> named = parse(QbParams.text(params, QbParams.REWARD_DEFAULT_METHODS));
+        String value = params == null ? null : params.find(QbParams.REWARD_DEFAULT_METHODS, String.class).orElse(null);
+        if (value == null) {
+            return DEFAULT;
+        }
+        if (value.isBlank()) {
+            return List.of();
+        }
+        List<String> named = parse(value);
         return ALL.stream().filter(named::contains).toList();
     }
 

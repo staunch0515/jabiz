@@ -96,7 +96,8 @@ F-S4b 涉及赠送额度（钱）：开 PR 前总控安排一次额外的审查�
 **F-S4b**（分支 `1.3/quizbuks-FS4b-benefits`，迁移 `V110`）与 §3 的差别：
 
 - 奖励方式的门槛另建 `tree.SponsorGates`（不改 `TreeGates.names` 的学者门槛）：参数与奖励参数同一次读取，加两条语句（门槛节点、本人的点亮与撤销；点亮所在的图）；点亮按发起方主体的 `me-sponsor:` 视图读。
-- 并集按规格字面：单独设定再也不能比缺省更窄（`RewardMethodsIT` 改了期望）；模板 `qb.sponsor.reward-methods` 去掉认不出的名字（以前留给页面去掉）。缺省参数空白的含义（"什么都不给"还是平台 Kudos）已问总控，本 PR 未改。
+- 并集按规格字面：单独设定再也不能比缺省更窄（`RewardMethodsIT` 改了期望）；模板 `qb.sponsor.reward-methods` 去掉认不出的名字（以前留给页面去掉）。
+- 缺省参数（总控 2026-11-10 选 A）：发布的值空白 = 没有任何方式，声明值改为空（`QB_SETUP` 提出空）；参数不存在（`QB_SETUP` 之前）仍按平台 Kudos，已发布 `PLATFORM` 的安装不受影响。IT 的安装、场景、e2e 的准备、本机演示与 Stripe 测试模式在发布提案之后另发布 `PLATFORM`（它们以平台 Kudos 出题）；`RewardMethodsIT.anEmptyDefaultGivesNoMethod` 断言空值。
 - 赠送的发放不订阅 `qb.tree.lit`（它只在有下游节点时发出），而是点亮时另发 `qb.tree.grant-due`；`QB_TREE_LIT_GRANT` 与补发任务都按发起方处理其全部待发的点亮（每次至多 50 笔，其余下次）。流程放在 `fee` 包（钱包锁与记账同 F-M2）。
 - 节点行 `QbTreeNode` 也记 `grantAmount`（生效版本写入），点亮时读模板的行（副本沿用模板的节点编号，按节点编号读到的行里就有）。
 - 副本的保存：给出与现有不同的金额即 `QB_TREE_GRANT_COPY`，存的仍是现有的；采用模板的改动时取模板的金额。管理系统扩展的编辑器还不发 `grantAmount`：在 F-S4c 加字段之前，经扩展保存平台模板会清掉它的赠送。
