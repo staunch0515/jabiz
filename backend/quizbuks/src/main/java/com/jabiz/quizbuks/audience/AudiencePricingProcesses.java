@@ -44,8 +44,8 @@ import java.util.UUID;
  * Managing the audience rules and their prices (Q47c-1, docs/quizbuks/plans/Q47c-audience-billing.md):
  * <ul>
  *   <li>{@value #RULES_SET}: headquarters open or close the kinds of rule, say which are charged for, and order them;</li>
- *   <li>{@value #PRICES_SET}: headquarters save any owner's price list (their own {@code direct} one, or an
- *       operator's); {@value #OPERATOR_PRICES_SET}: an operator's lead saves the operator's own (rules are the
+ *   <li>{@value #PRICES_SET}: headquarters save any operator's price list (F-M5: no list of their own any more,
+ *       the requester 2026-11-09); {@value #OPERATOR_PRICES_SET}: an operator's lead saves the operator's own (rules are the
  *       platform's product line; the operators sell them at their own prices, 2026-11-03). A reason is required;</li>
  *   <li>{@value #QUOTE}: what a sponsor's draft would pay for its rules now ({@link AudienceBilling}): the wizard shows
  *       it; Q47c-2 charges the same figure on submit.</li>
@@ -95,8 +95,8 @@ public final class AudiencePricingProcesses {
         @NotNull @Min(0) @Max(QbAudiencePricing.MAX_PRICE) Long dailyPrice) {}
 
     /**
-     * @param owner      whose list ({@value QbAudiencePricing#DIRECT} or an operator's id); headquarters only, the
-     *                   operator's own process takes the caller's operator
+     * @param owner      the operator whose list it is; headquarters only (required), the operator's own process takes
+     *                   the caller's operator
      * @param minimumFee the least a publication using a charged rule pays, JPY
      * @param prices     the whole list: rules not given cost 0
      * @param reason     why it changes (the audit keeps it)
@@ -229,21 +229,20 @@ public final class AudiencePricingProcesses {
     public static ProcessDefinition<PricesInput, PricesOutput, ProcessContext> pricesSet() {
         return ProcessDefinition.define(PRICES_SET, 1, PricesInput.class, PricesOutput.class, ProcessContext.class,
             pb -> {
-                pb.description("Saves an owner's audience price list: headquarters' own for the sponsors nobody "
-                        + "looks after, or an operator's.")
+                pb.description("Saves an operator's audience price list (headquarters).")
                     .permissions(QbPermissions.AUDIENCE_PRICES_WRITE);
                 common(pb);
                 pb.outputMapper(ctx -> ctx.get(OUTPUT, PricesOutput.class))
                     .compute("Whose list", (metadata, ctx) -> {
                         String owner = ctx.get(INPUT, PricesInput.class).owner();
-                        ctx.put(OWNER, owner == null || owner.isBlank() ? QbAudiencePricing.DIRECT : owner.strip());
+                        ctx.put(OWNER, owner == null ? "" : owner.strip());
                     })
                     .step("Load the operator named", QueryEntities.<ProcessContext>of(
                         QbOperators.defaultDataset(QbOperators.OPERATOR), ctx -> EntityQuery.builder()
-                            .where(new QueryPredicate.In("operatorId", QbAudiencePricing.DIRECT.equals(owner(ctx))
+                            .where(new QueryPredicate.In("operatorId", owner(ctx).isEmpty()
                                 ? List.of() : List.of(owner(ctx)))).limit(1).build(), OPERATOR))
                     .compute("Refuse an unknown owner", (metadata, ctx) -> {
-                        if (!QbAudiencePricing.DIRECT.equals(owner(ctx)) && first(ctx, OPERATOR) == null) {
+                        if (first(ctx, OPERATOR) == null) {
                             throw new EntityNotFoundException(QbOperators.OPERATOR + " " + owner(ctx) + " not found");
                         }
                     });
@@ -356,7 +355,7 @@ public final class AudiencePricingProcesses {
                 .step("Load the publication", LoadEntity.by(QbPublications.sponsorDataset(QbPublications.PUBLICATION),
                     "publicationId", PUBLICATION))
                 .step("Load the parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, PARAMS,
-                    QbParams.AUDIENCE_BILLING_ENABLED, QbParams.AUDIENCE_PRICE_FALLBACK))
+                    QbParams.AUDIENCE_BILLING_ENABLED))
                 .steps(AudiencePricingProcesses::loadPricing)
                 .compute("Quote", (metadata, ctx) -> ctx.put(OUTPUT, new QuoteOutput(quoteOf(ctx,
                     ctx.get(PUBLICATION, EntityInstance.class)), rulePrices(ctx)))));
@@ -377,12 +376,9 @@ public final class AudiencePricingProcesses {
                     .where(new QueryPredicate.Eq("userId", sponsorOf(ctx))).limit(1).build(), ASSIGNMENT)))
             .step("Load the price lists", QueryEntities.<ProcessContext>of(
                 QbAudiencePricing.defaultDataset(QbAudiencePricing.PRICE_LIST), ctx -> {
-                    List<Object> owners = new ArrayList<>(List.of(QbAudiencePricing.DIRECT));
                     String operator = operatorOf(ctx);
-                    if (operator != null) {
-                        owners.add(operator);
-                    }
-                    return EntityQuery.builder().where(new QueryPredicate.In("owner", owners)).limit(3).build();
+                    return EntityQuery.builder().where(new QueryPredicate.In("owner",
+                        operator == null ? List.of() : List.of(operator))).limit(1).build();
                 }, LISTS))
             .step("Load their prices", QueryEntities.<ProcessContext>of(
                 QbAudiencePricing.defaultDataset(QbAudiencePricing.PRICE), ctx -> EntityQuery.builder()
@@ -402,13 +398,9 @@ public final class AudiencePricingProcesses {
     }
 
     static AudienceBilling.PriceList applicableList(ProcessContext ctx) {
-        ParamValues params = ctx.get(PARAMS, ParamValues.class);
-        String fallback = params.find(QbParams.AUDIENCE_PRICE_FALLBACK, String.class)
-            .orElse(AudienceBilling.FALLBACK_DIRECT);
         String operator = operatorOf(ctx);
         Map<String, AudienceBilling.PriceList> lists = priceLists(list(ctx, LISTS), list(ctx, PRICES));
-        return AudienceBilling.applicable(operator, operator == null ? null : lists.get(operator),
-            lists.get(QbAudiencePricing.DIRECT), fallback);
+        return AudienceBilling.applicable(operator, operator == null ? null : lists.get(operator));
     }
 
     /** The quote of the publication from the reads of {@link #loadPricing} and the parameters at {@link #PARAMS}. */
@@ -422,7 +414,7 @@ public final class AudiencePricingProcesses {
             instant(publication.get("endAt")));
     }
 
-    static Map<String, AudienceBilling.PriceList> priceLists(List<EntityInstance> lists, List<EntityInstance> prices) {
+    public static Map<String, AudienceBilling.PriceList> priceLists(List<EntityInstance> lists, List<EntityInstance> prices) {
         Map<String, AudienceBilling.PriceList> result = new HashMap<>();
         for (EntityInstance list : lists) {
             Map<String, BigDecimal> daily = new HashMap<>();

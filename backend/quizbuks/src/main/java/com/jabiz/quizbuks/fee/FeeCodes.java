@@ -37,7 +37,10 @@ public final class FeeCodes {
     /** F-M2: only a lead of the sponsor's operator confirms the sponsor. */
     public static final String FEE_CREDIT_LEAD = "QB_FEE_CREDIT_LEAD";
 
-    public static final List<String> ALL = List.of(FEE_UNPAID, FEE_CASH_SHORT, FEE_INVOICE_STATE, FEE_SPONSOR,
+    /** F-M5: what a publication sets aside is more than the account (prepaid) or the credit limit (postpaid) allows. */
+    public static final String PUBLICATION_FUNDS = "QB_PUBLICATION_FUNDS";
+
+    public static final List<String> ALL = List.of(PUBLICATION_FUNDS, FEE_UNPAID, FEE_CASH_SHORT, FEE_INVOICE_STATE, FEE_SPONSOR,
         FEE_PERIOD, FEE_PARAMS, FEE_NO_REVIEW, FEE_BILLING_MODE, FEE_OWN, FEE_NOTHING_DUE, FEE_CREDIT_OFF,
         FEE_CREDIT_SPONSOR, FEE_CREDIT_GIVEN, FEE_CREDIT_MAX, FEE_CREDIT_LEAD);
 

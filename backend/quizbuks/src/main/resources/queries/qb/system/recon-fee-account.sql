@@ -1,7 +1,7 @@
 /*---
 id: qb.system.recon-fee-account
-description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them; and (F-M3) the top-ups of verified companies with their verifications and certified amounts; and (F-M4) by operator its account (2140) with its settlements, withdrawals and transfers (the daily reconciliation; differences only)
-entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer]
+description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them; and (F-M3) the top-ups of verified companies with their verifications and certified amounts; and (F-M4) by operator its account (2140) with its settlements, withdrawals and transfers; and (F-M5) by sponsor the prepayments (2180) with what their open prepayments hold, and no prepayment held for a publication back in its draft (the daily reconciliation; differences only)
+entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer, QbPrepayment, QbPublication]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
@@ -15,6 +15,8 @@ datasets:
   QbOperatorSettlement: urn:jabiz:dataset:default:QbOperatorSettlement
   QbOperatorWithdrawal: urn:jabiz:dataset:default:QbOperatorWithdrawal
   QbOperatorTransfer: urn:jabiz:dataset:default:QbOperatorTransfer
+  QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
+  QbPublication: urn:jabiz:dataset:default:QbPublication
 results:
   checkCode: { kind: { type: text, maxLength: 30 } }
   sponsorId: { kind: { type: text, maxLength: 128 } }
@@ -52,6 +54,9 @@ permissions: [qb.wallet.system]
 --   withdrawals and transfers (credit less debit, each connected to the operator by its source) against the records:
 --   every settlement's payable less those paid on their own (PAID, before accounts existed), the withdrawals paid and
 --   the transfers to its direct Sponsor.
+-- PREPAYMENTS (F-M5): 2180 for a sponsor (credit less debit) against what their open prepaid prepayments hold.
+-- PREPAYMENT_STALE (F-M5): a publication back in its draft (withdrawn, rejected, its review expired) whose
+--   prepayment is still open: expected 0, actual what it holds (a postpaid one: what it still counts).
 WITH credit_ledger AS (
     SELECT e.{{LedgerEntry.dimension1}} AS r_party,
            sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
@@ -89,6 +94,21 @@ parts AS (
     SELECT p.{{QbFeePayment.transactionId}} AS r_tx, sum(p.{{QbFeePayment.amount}}) AS r_amount
     FROM {{QbFeePayment}} p
     GROUP BY p.{{QbFeePayment.transactionId}}
+),
+prepayment_ledger AS (
+    SELECT e.{{LedgerEntry.dimension1}} AS r_party,
+           sum(CASE WHEN e.{{LedgerEntry.direction}} = 'CREDIT' THEN e.{{LedgerEntry.amount}}
+               ELSE -e.{{LedgerEntry.amount}} END) AS r_balance
+    FROM {{LedgerEntry}} e
+    JOIN {{LedgerAccount}} a ON a.{{LedgerAccount.accountId}} = e.{{LedgerEntry.accountId}}
+    WHERE a.{{LedgerAccount.accountCode}} = '2180'
+    GROUP BY e.{{LedgerEntry.dimension1}}
+),
+prepayments_held AS (
+    SELECT p.{{QbPrepayment.sponsorId}} AS r_party, sum(p.{{QbPrepayment.remaining}}) AS r_remaining
+    FROM {{QbPrepayment}} p
+    WHERE p.{{QbPrepayment.status}} = 'OPEN' AND p.{{QbPrepayment.mode}} = 'PREPAID'
+    GROUP BY p.{{QbPrepayment.sponsorId}}
 ),
 promotion_ledger AS (
     SELECT coalesce(g.{{QbFeeCreditGrant.operatorId}}, '-') AS r_operator,
@@ -253,3 +273,16 @@ JOIN {{QbFeeCreditGrant}} o ON o.{{QbFeeCreditGrant.sponsorId}} = t.{{QbFeeCredi
 WHERE t.{{QbFeeCreditGrant.source}} = 'CERTIFIED_TOP_UP'
   AND o.{{QbFeeCreditGrant.amount}} + t.{{QbFeeCreditGrant.amount}}
       > coalesce(t.{{QbFeeCreditGrant.certifiedAmount}}, o.{{QbFeeCreditGrant.certifiedAmount}}, CAST(0 AS numeric))
+UNION ALL
+SELECT CAST('PREPAYMENTS' AS varchar(30)), CAST(coalesce(ph.r_party, pl.r_party) AS varchar(128)),
+       coalesce(ph.r_remaining, 0), coalesce(pl.r_balance, 0)
+FROM prepayments_held ph
+FULL OUTER JOIN prepayment_ledger pl ON pl.r_party = ph.r_party
+WHERE coalesce(ph.r_remaining, 0) <> coalesce(pl.r_balance, 0)
+UNION ALL
+SELECT CAST('PREPAYMENT_STALE' AS varchar(30)), CAST(pp.{{QbPrepayment.sponsorId}} AS varchar(128)),
+       CAST(0 AS numeric), pp.{{QbPrepayment.remaining}}
+FROM {{QbPrepayment}} pp
+JOIN {{QbPublication}} pub ON CAST(pub.{{QbPublication.publicationId}} AS text) = pp.{{QbPrepayment.publicationId}}
+WHERE pp.{{QbPrepayment.status}} = 'OPEN'
+  AND pub.{{QbPublication.status}} = 'DRAFT'

@@ -77,6 +77,92 @@ public class FeeConfig {
         return QbFeeAccount.PAYMENT_ENTITY;
     }
 
+    /** F-M5: the prepayments publications' submissions set aside; finance reads them, the processes write them. */
+    @Bean
+    EntityDefinition qbPrepaymentEntity() {
+        return QbPrepayments.PREPAYMENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbPrepaymentDataset() {
+        return processOnly(QbPrepayments.PREPAYMENT);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorPrepaymentDataset() {
+        return own(QbPrepayments.SPONSOR_PREPAYMENTS, QbPrepayments.PREPAYMENT);
+    }
+
+    @Bean
+    StaticDictionary qbPrepaymentPurposeDictionary() {
+        return StaticDictionary.define(QbPrepayments.PURPOSE_DICTIONARY, d -> d
+            .item(QbPrepayments.DISTRIBUTION, "en", "Distribution fee", "zh", "配送费", "ja", "配信料")
+            .item(QbPrepayments.EXPOSURE, "en", "Exposure fee", "zh", "曝光费", "ja", "露出料")
+            .item(QbPrepayments.AUDIENCE, "en", "Audience rules", "zh", "受众规则费", "ja", "対象者ルール料")
+            .item(QbPrepayments.AI, "en", "AI credit", "zh", "AI 额度", "ja", "AI クレジット"));
+    }
+
+    @Bean
+    StaticDictionary qbPrepaymentModeDictionary() {
+        return StaticDictionary.define(QbPrepayments.MODE_DICTIONARY, d -> d
+            .item(QbPrepayments.PREPAID, "en", "Money set aside", "zh", "已冻结资金", "ja", "資金を確保")
+            .item(QbPrepayments.POSTPAID, "en", "Counted against the credit limit", "zh", "占用信用额",
+                "ja", "与信枠を使用"));
+    }
+
+    @Bean
+    StaticDictionary qbPrepaymentStatusDictionary() {
+        return StaticDictionary.define(QbPrepayments.STATUS_DICTIONARY, d -> d
+            .item(QbPrepayments.OPEN, "en", "Held", "zh", "冻结中", "ja", "確保中")
+            .item(QbPrepayments.RELEASED, "en", "Given back", "zh", "已退回", "ja", "返却済み"));
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.FreezeInput, Prepayments.FreezeOutput, ProcessContext> qbPrepaymentFreeze() {
+        return Prepayments.freeze();
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.UseInput, FeeSettlement.SettleOutput, ProcessContext> qbPrepaymentUse() {
+        return Prepayments.use();
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.ChargeInput, Prepayments.ChargeOutput, ProcessContext> qbPrepaymentCharge() {
+        return Prepayments.charge(zone);
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.ReleaseInput, Prepayments.ReleaseOutput, ProcessContext> qbPrepaymentRelease() {
+        return Prepayments.release();
+    }
+
+    @Bean
+    ProcessDefinition<Prepayments.ReleaseRef, FeeProcesses.ItemOutput, ProcessContext> qbPrepaymentReleaseItem() {
+        return Prepayments.releaseItem();
+    }
+
+    /**
+     * Every day at 03:23 in the fiscal year's zone: what ended publications' prepayments still hold goes back (F-M5:
+     * "within a day of the end"; F-M6 adds "after its last settlement" to the template).
+     */
+    @Bean
+    JobDefinition<Prepayments.ReleaseRef> qbPrepaymentReleaseJob(
+        ProcessDefinition<Prepayments.ReleaseRef, FeeProcesses.ItemOutput, ProcessContext> qbPrepaymentReleaseItem) {
+        return JobDefinition.forEach(Prepayments.RELEASE_JOB, "0 23 3 * * *", zone,
+                JobItems.template(Prepayments.RELEASE_DUE_TEMPLATE, scheduledTime -> Map.of("at", scheduledTime),
+                    "publicationId"),
+                qbPrepaymentReleaseItem,
+                (scheduledTime, row) -> new Prepayments.ReleaseRef(String.valueOf(row.get("publicationId")),
+                    String.valueOf(row.get("sponsorId"))))
+            .maxItems(10_000);
+    }
+
+    @Bean
+    RetentionPolicy qbPrepaymentRetention() {
+        return RetentionPolicy.of(QbPrepayments.PREPAYMENT).keep(RETENTION).from("frozenAt").afterFiscalYearEnd();
+    }
+
     @Bean
     DatasetDefinition qbFeeCreditGrantDataset() {
         return processOnly(QbFeeAccount.GRANT);
@@ -182,7 +268,8 @@ public class FeeConfig {
     StaticDictionary qbFeeKindDictionary() {
         return StaticDictionary.define(QbFees.KIND_DICTIONARY, d -> d
             .item(FeeRules.MONTHLY, "en", "Monthly fee", "zh", "月费", "ja", "月額料金")
-            .item(FeeRules.MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金"));
+            .item(FeeRules.MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
+            .item(FeeRules.AUDIENCE, "en", "Audience rules", "zh", "受众规则费", "ja", "対象者ルール料"));
     }
 
     @Bean

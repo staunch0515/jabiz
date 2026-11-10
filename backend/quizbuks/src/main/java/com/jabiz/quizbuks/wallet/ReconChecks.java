@@ -50,6 +50,10 @@ public final class ReconChecks {
     public static final String CERTIFIED_GRANTS = "CERTIFIED_GRANTS";
     /** F-M4: an operator's account (2140) against its settlements, paid withdrawals and transfers to its Sponsor. */
     public static final String OPERATOR_ACCOUNT = "OPERATOR_ACCOUNT";
+    /** F-M5: a sponsor's prepayments (2180) against what their open prepaid prepayments hold. */
+    public static final String PREPAYMENTS = "PREPAYMENTS";
+    /** F-M5: a prepayment still open for a publication back in its draft (withdrawn, rejected, review expired). */
+    public static final String PREPAYMENT_STALE = "PREPAYMENT_STALE";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -82,7 +86,7 @@ public final class ReconChecks {
         TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE, TAKER_WALLET,
         TAKER_IN_TRANSFER, TAKER_WALLET_LAG, TRANSFER_LEDGER, TRANSFER_IN_TRANSIT, CASH_ACCOUNT, TOTAL_2160,
         FEES_RECEIVABLE, ENTRY_FEES_UNSETTLED, FEE_CREDIT, CASH_LOTS, FEE_PAYMENTS, FEE_CREDIT_PROMOTION,
-        LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS, OPERATOR_ACCOUNT);
+        LIGHT_GRANTS, LIGHT_VOIDS, CERTIFIED_GRANTS, OPERATOR_ACCOUNT, PREPAYMENTS, PREPAYMENT_STALE);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG);

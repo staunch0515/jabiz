@@ -297,7 +297,7 @@ public final class FeeSettlement {
     }
 
     /** The open fee credit not expired at {@code now}: the earliest to expire first. */
-    static EntityQuery credits(Object sponsorId, Instant now) {
+    public static EntityQuery credits(Object sponsorId, Instant now) {
         return EntityQuery.builder().where(new QueryPredicate.And(List.of(
                 new QueryPredicate.In("sponsorId", FeeGate.ids(sponsorId)),
                 new QueryPredicate.Gt("remaining", BigDecimal.ZERO),

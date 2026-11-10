@@ -387,6 +387,12 @@ public class PublishingConfig {
     }
 
     @Bean
+    ProcessDefinition<PublicationProcesses.PublicationRef, PublicationPrepayments.CheckOutput, ProcessContext>
+        qbPublicationFundsCheck() {
+        return PublicationPrepayments.check();
+    }
+
+    @Bean
     ProcessDefinition<PublicationProcesses.PublicationRef, PublicationOutput, ProcessContext> qbPublicationSubmit() {
         return PublicationLifecycle.submit();
     }
