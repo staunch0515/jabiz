@@ -97,3 +97,15 @@ A new version cannot remove a node that running publications are bound to; retir
 ### English · How does a publication light a node?
 
 In the publication wizard choose "Bind to a node" (optional) and pick a node of your map that asks for a pass. A publication bound to a node may have no reward tiers. A Taker who passes it lights the node; when the node needs other nodes lit before answering, Takers who have not lit them neither see nor start the publication.
+
+### 中文 · 什么是挑战？合格后得到什么？
+
+挑战是你所属运营商在平台图副本的节点上出的 Quiz，只给发起方答，在发起方中心的"挑战"标签里。点节点可看它的状态、点亮后开放的功能（如电子奖品、到店领取的奖品）与赠送额度，以及可以开始的挑战。挑战没有奖励，每个只能答一次。合格后节点点亮：开放的奖励方式即可在发布中使用，赠送额度进入平台费账户（每个节点只赠送一次，有到期日）。不合格时请等运营商的下一场挑战。入驻申请通过后才能答。
+
+### 日本語 · チャレンジとは？ 合格すると何が得られますか？
+
+チャレンジは、所属する運営パートナーがプラットフォームマップのコピーのノードに出すクイズで、主催者だけが回答します。主催者センターの「チャレンジ」タブにあります。ノードを押すと、状態、点灯で使えるようになる機能（デジタル賞品、店頭で受け取る賞品など）と付与クレジット、始められるチャレンジがわかります。チャレンジに報酬はなく、各チャレンジに回答できるのは 1 回だけです。合格するとノードが点灯し、使えるようになった報酬の方法を公開で選べるようになります。付与クレジットはプラットフォーム利用料アカウントに入ります（ノードごとに 1 回だけ、有効期限あり）。不合格のときは次のチャレンジをお待ちください。主催者の申し込みが承認されると回答できます。
+
+### English · What is a challenge, and what does passing it give?
+
+A challenge is a quiz your operator sets on a node of its copy of a platform map, answered only by Sponsors, on the "Challenges" tab of the Sponsor hub. Choose a node to see its state, what lighting it opens (such as digital prizes or prizes collected in person) and its granted credit, and the challenges you can start. A challenge has no reward, and each is answered once. Passing lights the node: the reward methods it opens can be chosen for your publications, and the granted credit goes to your platform fee account (once per node; it expires). If you did not pass, wait for your operator's next challenge. You can answer once your Sponsor application is approved.
