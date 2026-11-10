@@ -1,10 +1,11 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import { DataTable, EXTENSION_NAMESPACE, PageHeader, UserName, useLanguage, type ColumnDef } from '@jabiz/admin'
+import { DataTable, EXTENSION_NAMESPACE, PageHeader, UserName, useAuth, useLanguage, type ColumnDef } from '@jabiz/admin'
+import { CopyTemplateButton, CreateTemplateButton } from './TreeActions'
 import { EmptyState, LoadFailed, StatusBadge } from './components'
 import { useLabels, usePaged, when } from './hooks'
-import { DICTIONARY, PATH } from './ids'
+import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { useOperatorTrees } from './trees-hooks'
 import { i18nText, readTrees, TREES_KEY, type TreeRow } from './trees-api'
 
@@ -30,6 +31,7 @@ export default function TreesPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
   const language = useLanguage()
   const operator = useOperatorTrees()
+  const { can } = useAuth()
   const statusLabel = useLabels(DICTIONARY.treeStatus)
   const versionLabel = useLabels(DICTIONARY.treeVersionStatus)
   const subjectLabel = useLabels(DICTIONARY.treeSubject)
@@ -63,7 +65,17 @@ export default function TreesPage() {
   return (
     <div className="flex flex-col gap-4" data-testid="qb-trees">
       <PageHeader title={t('trees.title')} className="pb-0"
-        description={operator ? t('trees.operatorDescription') : t('trees.description')} />
+        description={operator ? t('trees.operatorDescription') : t('trees.description')}
+        actions={(
+          <span className="flex flex-wrap gap-2">
+            {/* F-S3e: a new platform template (its writers), an operator's copy of one (its members). */}
+            {!operator && can(PERMISSION.treePlatformWrite) && <CreateTemplateButton />}
+            {operator && can(PERMISSION.treeEdit) && <CopyTemplateButton />}
+            {can(PERMISSION.treeStateRead) && (
+              <Link to={PATH.treeSupport} className={linkClass} data-testid="tree-support-link">{t('trees.support.title')}</Link>
+            )}
+          </span>
+        )} />
       {query.isError ? <LoadFailed error={query.error} onRetry={() => void query.refetch()} /> : (
         <DataTable label={t('trees.table')} columns={sortable(columns)} {...table}
           getRowId={(row) => row.treeId} empty={<EmptyState art="search" title={t('trees.none')} />}

@@ -18,6 +18,8 @@ results:
   revision:          { from: QbTree.revision }
   currentVersionId:  { from: QbTree.currentVersionId }
   name:              { kind: { type: text } }
+  description:       { kind: { type: text } }
+  draftName:         { kind: { type: text } }
   versionNo:         { kind: { type: numeric, precision: 6, scale: 0 } }
   openVersionId:     { kind: { type: text, maxLength: 36 } }
   openStatus:        { kind: { type: text, maxLength: 20 } }
@@ -40,6 +42,9 @@ SELECT t.{{QbTree.treeId}} AS treeId, t.{{QbTree.ownerKind}} AS ownerKind, t.{{Q
        t.{{QbTree.templateTreeId}} AS templateTreeId, t.{{QbTree.revision}} AS revision,
        t.{{QbTree.currentVersionId}} AS currentVersionId,
        CAST(coalesce(eff.{{QbTreeVersion.name}}, o.{{QbTreeVersion.name}}) AS text) AS name,
+       -- F-S3e: the name and description the editor starts from (the open version's, else the one in effect).
+       CAST(coalesce(o.{{QbTreeVersion.description}}, eff.{{QbTreeVersion.description}}) AS text) AS description,
+       CAST(coalesce(o.{{QbTreeVersion.name}}, eff.{{QbTreeVersion.name}}) AS text) AS draftName,
        eff.{{QbTreeVersion.versionNo}} AS versionNo,
        o.{{QbTreeVersion.versionId}} AS openVersionId, o.{{QbTreeVersion.status}} AS openStatus,
        o.{{QbTreeVersion.versionNo}} AS openVersionNo, o.{{QbTreeVersion.approvalRequestId}} AS approvalRequestId,
