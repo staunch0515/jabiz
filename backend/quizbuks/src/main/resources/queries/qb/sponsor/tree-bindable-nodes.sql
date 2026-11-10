@@ -12,6 +12,7 @@ datasets:
 results:
   treeId:      { from: QbTree.treeId }
   ownerKind:   { from: QbTree.ownerKind }
+  subjectKind: { from: QbTree.subjectKind }
   treeName:    { kind: { type: text } }
   nodeId:      { from: QbTreeNodeDef.nodeId }
   name:        { kind: { type: text } }
@@ -36,6 +37,7 @@ direct AS (
     FROM {{QbOperator}} o JOIN me ON o.{{QbOperator.directSponsorId}} = me.userId
 )
 SELECT CAST(t.{{QbTree.treeId}} AS text) AS treeId, t.{{QbTree.ownerKind}} AS ownerKind,
+       t.{{QbTree.subjectKind}} AS subjectKind,
        CAST(v.{{QbTreeVersion.name}} AS text) AS treeName,
        d.{{QbTreeNodeDef.nodeId}} AS nodeId,
        CAST(d.{{QbTreeNodeDef.name}} AS text) AS name, CAST(d.{{QbTreeNodeDef.description}} AS text) AS description,

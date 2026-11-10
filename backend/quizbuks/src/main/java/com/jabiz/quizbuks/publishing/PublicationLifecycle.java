@@ -260,8 +260,11 @@ public final class PublicationLifecycle {
         if (unpaidFees != null) {
             ctx.reject(unpaidFees);
         }
-        PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
-            .forEach(ctx::reject);
+        // F-S4c: a challenge pays nothing; no reward method is asked of it (PublicationProcesses#save).
+        if (!Boolean.TRUE.equals(publication.get("forSponsors"))) {
+            PublicationEditing.methodProblems(ctx, PublicationEditing.methodOf(publication.attributes()))
+                .forEach(ctx::reject);
+        }
         PublicationEditing.languageProblems(publication.attributes(), version).forEach(ctx::reject);
         benefitProblems(ctx, publication);
         // F-S12: the shared video it picked is still in the catalog (not withdrawn or taken down since).

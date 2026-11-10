@@ -86,6 +86,23 @@ class SponsorChallengesIT extends TreeItSupport {
     }
 
     @Test
+    void aSponsorWithNoRewardMethodPublishesAChallenge() throws Exception {
+        // F-S4c: the default methods empty (F-S4b, option A): a challenge pays nothing and is published all the same.
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", QbParams.REWARD_DEFAULT_METHODS, "value", ""), "reason", "F-S4c test"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+        try {
+            Copy copy = copy();
+            String publicationId = liveBound(copy.operator().leadId(), unique("FS4c no methods"), copy.treeId(),
+                copy.start(), Map.of("tiers", List.of(body("fromScore", 0, "toScore", 5, "reward", 0))));
+            assertThat(publications(row(sponsorOf(copy.operator(), "s-fs4c-nomethod"), copy.treeId(), copy.start())))
+                .singleElement().satisfies(p -> assertThat(p).containsEntry("publicationId", publicationId));
+        } finally {
+            platformRewardMethods();
+        }
+    }
+
+    @Test
     void theGrantShownIsTheTemplatesNodesNow() {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("paramKey", QbParams.TREE_GRANT_MAX_PER_NODE);
