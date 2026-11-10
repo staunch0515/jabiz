@@ -23,7 +23,7 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 
 ## Publications (/sponsor/publications)
 
-- A publication puts a saved quiz version in front of Takers. "New publication" opens the wizard: Quiz (name and version) → Time and rewards (period, marks, reward tiers) → Customer matching (who it is for) → Check and submit.
+- A publication puts a saved quiz version in front of Takers. "New publication" opens the wizard: Quiz (the knowledge map node it lights, if any; name and version) → Time and rewards (period, marks, reward tiers) → Customer matching (who it is for) → Check and submit.
 - Customer matching aims a quiz at Takers whose profile matches. Some conditions are charged per day; the wizard shows the estimated fee. Counts of matching Takers are rounded, so nobody can be singled out.
 - Who may answer: everyone in the chosen regions, or only the e-mail addresses you invite (an invitation list; the invitations are sent from your own mail server, set up in the Sponsor profile).
 - Rewards are paid in Kudos from your wallet, in cash at your place, as a prize collected at your place, or as a digital prize (codes, vouchers or links).
@@ -35,6 +35,7 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 
 - Link your publications into a knowledge map: passing one lights its node, and lit nodes open later quizzes or a certification. Publish the map so Takers see it.
 - The page shows your map in effect and how many Takers lit each node (shown only from the statistics' minimum group up), the publications bound and not ended, and whether a newer version is a draft, in review or was sent back (with the reviewer's reason). Takers see the map on your page.
+- "Create my map" starts one; "Edit" opens the editor. Each node has a name, what lighting it gives, and its condition: all, any, or at least n of its items, each another node lit or a pass of a publication bound to this node. "Before answering" can be set only on node items of the outermost "all" (their quizzes stay hidden until those nodes are lit), and a pass at most once. Save the draft: the editor lists every problem by node. Then submit it: another member of your operator reviews it; a version sent back shows the reason, and a draft in review can be taken back. A node with publications still running cannot be removed. "Versions" lists every version; any of them can be shown.
 
 ## Asset library (/sponsor/assets)
 

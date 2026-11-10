@@ -71,7 +71,8 @@ describe('the wizard\'s form', () => {
       pickCount: null, entryFee: 0, budgetCap: 1000, maxWinners: 10, baseRevision: 4, tiers: [
         { tierId: 't1', fromScore: 0, toScore: 1, reward: 0 },
         { tierId: null, fromScore: 2, toScore: 2, reward: 100 },
-      ], rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null } })
+      ], rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
+      treeId: null, treeNodeId: null } })
   })
 
   it('sends "referrals welcome" whole when switched on, the rules in the catalog\'s order (Q70)', () => {

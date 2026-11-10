@@ -78,6 +78,8 @@ interface Server {
   staff?: Record<string, unknown>[]
   /** F-C1: the sponsor's asset library. */
   assets?: Record<string, unknown>[]
+  /** F-S3d: the nodes the wizard may bind a publication to. */
+  bindable?: Record<string, unknown>[]
 }
 
 /** The server as the console sees it, for a signed-in, approved sponsor. Records what was posted. */
@@ -219,6 +221,8 @@ function server(options: Server = {}) {
         return json(200, { items: options.versions ?? VERSIONS, offset: 0, limit: 100 })
       case '/api/queries/qb.sponsor.ai-jobs':
         return json(200, { items: options.aiTexts ? [options.aiTexts] : [], offset: 0, limit: 1 })
+      case '/api/queries/qb.sponsor.tree-bindable-nodes':
+        return json(200, { items: options.bindable ?? [], offset: 0, limit: 500 })
       case '/api/datasets/urn:jabiz:dataset:me:QbAsset/query':
         return json(200, { items: (options.assets ?? []).map((attributes, i) => ({ id: String(i), version: 1,
           attributes })), offset: 0, limit: 200 })
@@ -456,7 +460,35 @@ describe('the publication wizard', () => {
     expect(window.location.search).toBe('?step=1')
     expect(processCalls('QB_PUBLICATION_SAVE')).toEqual([{ publicationId: null, versionId: null, name: 'Tea week',
       cover: null, regions: [], startAt: null, endAt: null, timeLimitSec: null, passScore: null, pickCount: null, entryFee: 0, budgetCap: null,
-      maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null }])
+      maxWinners: null, tiers: [], baseRevision: null, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
+      treeId: null, treeNodeId: null }])
+  })
+
+  it('binds the publication to a node of the Sponsor\'s map as its first choice, and can unbind it (F-S3d)', async () => {
+    const { processCalls } = server({
+      bindable: [{ treeId: 't1', ownerKind: 'SPONSOR', treeName: JSON.stringify({ en: 'Baking' }), nodeId: 'n1',
+        name: JSON.stringify({ en: 'Bread' }), description: null, seq: 1 }],
+      processes: { QB_PUBLICATION_SAVE: [saved(4)] } })
+    window.history.replaceState(null, '', '/publications/p1')
+    render(<App />)
+    const field = await screen.findByTestId('publication-node-field')
+    // The first field of the first step.
+    expect(field.compareDocumentPosition(screen.getByTestId('publication-name')) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy()
+    await userEvent.click(within(field).getByTestId('publication-node'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Bread · Baking' }))
+    await userEvent.click(screen.getByTestId('publication-next'))
+    await waitFor(() => expect(processCalls('QB_PUBLICATION_SAVE')).toHaveLength(1))
+    expect(processCalls('QB_PUBLICATION_SAVE')[0]).toMatchObject({ treeId: 't1', treeNodeId: 'n1' })
+    await expectAccessible()
+  })
+
+  it('says where to make a node when there is none to choose (F-S3d)', async () => {
+    server()
+    window.history.replaceState(null, '', '/publications/new')
+    render(<App />)
+    const field = await screen.findByTestId('publication-node-field')
+    await waitFor(() => expect(field).toHaveTextContent('No node to choose yet'))
   })
 
   it('offers the version\'s other languages with the publication\'s texts in them (Q73b)', async () => {
@@ -626,7 +658,7 @@ describe('the publication wizard', () => {
     expect(processCalls('QB_PUBLICATION_SAVE').at(-1)).toEqual({ publicationId: 'p1', versionId: 'v1', name: 'Coffee week',
       cover: null, regions: ['GLOBAL', 'JP'], startAt: '2026-11-01T00:00:00Z', endAt: '2026-11-08T00:00:00Z', timeLimitSec: 300,
       passScore: 2, pickCount: null, entryFee: 0, budgetCap: null, maxWinners: null, baseRevision: 4, rewardMethod: 'PLATFORM', redeemDescription: null, audience: 'PUBLIC', referral: null,
-      tiers: [{ tierId: 't9', fromScore: 0, toScore: 2, reward: 100 }] })
+      treeId: null, treeNodeId: null, tiers: [{ tierId: 't9', fromScore: 0, toScore: 2, reward: 100 }] })
     // The conditions were not touched: not sent.
     expect(processCalls('QB_PUBLICATION_AUDIENCE_SAVE')).toEqual([])
   })

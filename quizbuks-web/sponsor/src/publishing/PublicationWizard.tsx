@@ -91,6 +91,7 @@ import { LibraryActions, type StoredContent } from '../assets/LibraryActions'
 import { contentLanguageOf } from '../qb/api'
 import { PublicationTopicsField } from '../topics/PublicationTopicsField'
 import { setPublicationSharedVideo } from '../sharedvideos/api'
+import { NodeField } from './NodeField'
 import { SharedVideoField, sharedVideoForeign, useSharedVideo } from '../sharedvideos/SharedVideoField'
 
 /** What of a prize the library copies (F-C1): the method and the fields of that method, compared before naming it. */
@@ -514,8 +515,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   )
 
   const steps: ReactNode[] = [
-    // 1. The quiz version and the name.
+    // 1. The knowledge map node it lights (F-S3d: the first choice), the quiz version and the name.
     <div key="content" className="flex flex-col gap-4">
+      <NodeField id={`${id}-node`} value={form.treeNode ?? null} onChange={(node) => set('treeNode', node)}
+        disabled={locked} problem={problemOf('treeNodeId') ?? problemOf('treeId')} />
       <Field id={`${id}-name`} label={t('publishing.field.name')} problem={problemOf('name')} shown="publicationName"
         hint={t('publishing.field.nameHint', { max: PUBLISHING_LIMITS.name })}>
         {(aria) => (

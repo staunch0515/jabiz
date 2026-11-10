@@ -173,4 +173,11 @@ export const TREE = {
   sponsorVersions: 'qb.sponsor.tree-versions',
   sponsorTree: 'qb.sponsor.tree',
   sponsorBindable: 'qb.sponsor.tree-bindable-nodes',
+  /** F-S3d: the Sponsor's editor (`tree.TreeProcesses`). */
+  create: 'QB_TREE_CREATE',
+  save: 'QB_TREE_DRAFT_SAVE',
+  submit: 'QB_TREE_SUBMIT',
+  withdraw: 'QB_TREE_WITHDRAW',
+  /** A save or submit refused because the graph changed since the page read it. */
+  changedCode: 'QB_TREE_CHANGED',
 } as const

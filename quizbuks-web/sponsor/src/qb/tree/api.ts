@@ -1,4 +1,4 @@
-import { runQuery } from '@jabiz/client'
+import { runProcess, runQuery } from '@jabiz/client'
 import { publicQuery, type I18nText } from '../legal'
 import { PLAY, TREE } from '../ids'
 import { graphOf, type Graph } from './states'
@@ -103,6 +103,8 @@ export interface SponsorMap {
   editedAt: string | null
   nodes: number
   runningBound: number
+  /** The graph's revision (`baseRevision` of the editor's saves). */
+  revision: number
 }
 
 export async function readSponsorMaps(): Promise<SponsorMap[]> {
@@ -121,6 +123,7 @@ export async function readSponsorMaps(): Promise<SponsorMap[]> {
     editedAt: str(row.editedAt),
     nodes: num(row.nodes),
     runningBound: num(row.runningBound),
+    revision: num(row.revision),
   }))
 }
 
@@ -142,4 +145,89 @@ export async function readSponsorVersion(map: Pick<SponsorMap, 'treeId' | 'name'
     litCounts: new Map(rows.map((row) => [String(row.nodeId), row.litCount == null ? null : num(row.litCount)])),
     runningBound: new Map(rows.map((row) => [String(row.nodeId), num(row.runningBound)])),
   }
+}
+
+/** A node the publication wizard may bind a publication to (`qb.sponsor.tree-bindable-nodes`). */
+export interface BindableNode {
+  treeId: string
+  ownerKind: 'PLATFORM' | 'SPONSOR'
+  treeName: I18nText
+  nodeId: string
+  name: I18nText
+}
+
+/**
+ * The nodes the caller may bind a publication to, as `publishing.PublicationNodes` allows: their own graph's in effect
+ * asking for a pass, and, for an operator's direct Sponsor, the platform's graphs Takers light.
+ */
+export async function readBindableNodes(): Promise<BindableNode[]> {
+  return (await runQuery<Row>(TREE.sponsorBindable, { params: {}, limit: 500 })).items.map((row) => ({
+    treeId: String(row.treeId),
+    ownerKind: row.ownerKind === 'PLATFORM' ? 'PLATFORM' : 'SPONSOR',
+    treeName: json<I18nText>(row.treeName, {}),
+    nodeId: String(row.nodeId),
+    name: json<I18nText>(row.name, {}),
+  }))
+}
+
+/** A version of the Sponsor's graph (`qb.sponsor.tree-versions`), newest first. */
+export interface SponsorVersionRow {
+  versionId: string
+  versionNo: number
+  status: VersionStatus
+  name: I18nText
+  submittedAt: string | null
+  decidedAt: string | null
+  rejectReason: string | null
+  editedAt: string | null
+}
+
+export async function readSponsorVersions(treeId: string): Promise<SponsorVersionRow[]> {
+  return (await runQuery<Row>(TREE.sponsorVersions, { params: { treeId }, limit: 100 })).items.map((row) => ({
+    versionId: String(row.versionId),
+    versionNo: num(row.versionNo),
+    status: String(row.status) as VersionStatus,
+    name: json<I18nText>(row.name, {}),
+    submittedAt: str(row.submittedAt),
+    decidedAt: str(row.decidedAt),
+    rejectReason: str(row.rejectReason),
+    editedAt: str(row.editedAt),
+  }))
+}
+
+/** A problem the server finds in a draft (`TreeProcesses.ProblemView`), on a node or (null) the graph. */
+export interface TreeProblem {
+  nodeId: string | null
+  code: string
+  params: Record<string, unknown>
+}
+
+/** The output of the editor's processes (`TreeProcesses.TreeOutput`). */
+export interface TreeOutput {
+  treeId: string
+  versionId: string
+  versionNo: number
+  status: VersionStatus
+  revision: number
+  /** New nodes' ids by the save's keys. */
+  nodeIds: Record<string, string> | null
+  problems: TreeProblem[] | null
+  approval: string | null
+  approvalRequestId: string | null
+}
+
+export function createSponsorMap(name: I18nText): Promise<TreeOutput> {
+  return runProcess<TreeOutput>(TREE.create, { ownerKind: 'SPONSOR', name })
+}
+
+export function saveMapDraft(input: Record<string, unknown>): Promise<TreeOutput> {
+  return runProcess<TreeOutput>(TREE.save, input)
+}
+
+export function submitMap(treeId: string, baseRevision: number | null): Promise<TreeOutput> {
+  return runProcess<TreeOutput>(TREE.submit, { treeId, baseRevision })
+}
+
+export function withdrawMap(treeId: string, baseRevision: number | null): Promise<TreeOutput> {
+  return runProcess<TreeOutput>(TREE.withdraw, { treeId, baseRevision })
 }
