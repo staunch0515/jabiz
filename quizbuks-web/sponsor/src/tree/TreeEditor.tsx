@@ -10,9 +10,9 @@ import { pickText } from '../qb/legal'
 import { problemText } from '../qb/problems'
 import { TREE } from '../qb/ids'
 import {
-  readSponsorVersion, saveMapDraft, submitMap, withdrawMap, type SponsorMap, type TreeProblem,
+  readReferenceableNodes, readSponsorVersion, saveMapDraft, submitMap, withdrawMap, type SponsorMap, type TreeProblem,
 } from '../qb/tree/api'
-import { ConditionEditor } from './ConditionEditor'
+import { ConditionEditor, type ForeignNode } from './ConditionEditor'
 import {
   afterSave, referrers, saveInputOf, withMoved, withNewNode, withNode, withoutNode, type Draft, type DraftNode,
 } from './draft'
@@ -68,9 +68,17 @@ function EditorForm({ initial, map, onClose, t }: { initial: Draft; map: Sponsor
   const [inReview, setInReview] = useState(map.openStatus === 'REVIEW')
   const [stale, setStale] = useState(false)
   const [dirty, setDirty] = useState(false)
+  // F-S3e: the platform's nodes Takers light that the map may name (the draft's rules accept the same).
+  const referenceable = useQuery({ queryKey: ['qb', 'sponsor-map-referenceable'], queryFn: readReferenceableNodes,
+    staleTime: 60_000 })
+  const foreign: ForeignNode[] = (referenceable.data ?? []).map((node) => ({ key: node.nodeId,
+    name: pickText(node.name, i18n.language).text || t('tree.edit.unnamed'),
+    mapName: pickText(node.treeName, i18n.language).text || t('tree.edit.unnamed') }))
   const nameOf = (node: string) => {
     const found = draft.nodes.find((n) => n.key === node || n.nodeId === node)
-    return found ? pickText(found.name, i18n.language).text || t('tree.edit.unnamed') : t('tree.edit.otherMap')
+    if (found) return pickText(found.name, i18n.language).text || t('tree.edit.unnamed')
+    const other = foreign.find((n) => n.key === node)
+    return other ? t('tree.edit.platformNode', { name: other.name, map: other.mapName }) : t('tree.edit.otherMap')
   }
   const edit = (next: Draft) => {
     setDraft(next)
@@ -210,7 +218,8 @@ function EditorForm({ initial, map, onClose, t }: { initial: Draft; map: Sponsor
                   disabled={locked} placeholder={t('tree.edit.nodeDescriptionHint')}
                   onChange={(event) => edit(withNode(draft, node.key,
                     (n) => ({ ...n, description: withText(n.description, event.target.value) })))} />
-                <ConditionEditor condition={node.condition} others={others} nameOf={nameOf} disabled={locked}
+                <ConditionEditor condition={node.condition} others={others} foreign={foreign} nameOf={nameOf}
+                  disabled={locked}
                   onChange={(condition) => edit(withNode(draft, node.key, (n) => ({ ...n, condition })))} />
                 {nodeProblems.length > 0 && (
                   <ul className="text-destructive list-disc pl-4 text-sm" data-testid="tree-editor-node-problems">

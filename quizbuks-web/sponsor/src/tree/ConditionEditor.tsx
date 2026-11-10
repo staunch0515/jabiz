@@ -1,4 +1,6 @@
-import { Button, Checkbox, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@jabiz/ui'
+import {
+  Button, Checkbox, Input, Label, Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
+} from '@jabiz/ui'
 import { Plus, Trash2 } from 'lucide-react'
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -15,27 +17,37 @@ const OPS: Group['op'][] = ['ALL', 'ANY', 'AT_LEAST']
 
 /**
  * A node's condition in the editor (F-S3d, F-S3 §5): the outermost group and one level of groups inside it, each item
- * another node of the map or a pass of a publication bound to this node. Only what `tree.TreeRules` accepts in shape is
- * offered (`draft.ts`); a condition saved with deeper groups or nodes of other maps keeps them, shown by name.
+ * another node of the map, a node of a platform map Takers light (F-S3e), or a pass of a publication bound to this node.
+ * Only what `tree.TreeRules` accepts in shape is offered (`draft.ts`); a condition saved with deeper groups keeps them.
  */
-export function ConditionEditor({ condition, onChange, others, nameOf, disabled }: {
+/** A node of another map the condition may name, by its id, with its map's name. */
+export interface ForeignNode {
+  key: string
+  name: string
+  mapName: string
+}
+
+export function ConditionEditor({ condition, onChange, others, foreign = [], nameOf, disabled }: {
   condition: Condition
   onChange: (condition: Condition) => void
   /** The other nodes of the map, by key, to name. */
   others: { key: string; name: string }[]
+  /** F-S3e: the nodes of the platform's maps Takers light (`qb.sponsor.tree-referenceable-nodes`). */
+  foreign?: ForeignNode[]
   /** The name of a node by key or id (another map's included), for what the editor cannot pick. */
   nameOf: (node: string) => string
   disabled?: boolean
 }) {
-  return <GroupEditor group={outer(condition)} whole={condition} outermost others={others} nameOf={nameOf}
-    disabled={disabled} onChange={onChange} />
+  return <GroupEditor group={outer(condition)} whole={condition} outermost others={others} foreign={foreign}
+    nameOf={nameOf} disabled={disabled} onChange={onChange} />
 }
 
-function GroupEditor({ group, whole, outermost, others, nameOf, disabled, onChange }: {
+function GroupEditor({ group, whole, outermost, others, foreign, nameOf, disabled, onChange }: {
   group: Group
   whole: Condition
   outermost: boolean
   others: { key: string; name: string }[]
+  foreign: ForeignNode[]
   nameOf: (node: string) => string
   disabled?: boolean
   onChange: (group: Group) => void
@@ -45,6 +57,8 @@ function GroupEditor({ group, whole, outermost, others, nameOf, disabled, onChan
   const allowBefore = beforeAnswerAllowed(group, outermost)
   const named = new Set(group.items.flatMap((item) => (!isGroup(item) && 'node' in item ? [item.node] : [])))
   const free = others.filter((node) => !named.has(node.key))
+  const freeForeign = foreign.filter((node) => !named.has(node.key))
+  const maps = [...new Set(freeForeign.map((node) => node.mapName))]
   return (
     <fieldset className="flex flex-col gap-2 rounded-md border p-3" data-testid={outermost ? 'condition' : 'condition-group'}>
       <legend className="px-1 text-sm font-medium">{outermost ? t('tree.edit.condition') : t('tree.edit.group')}</legend>
@@ -72,7 +86,7 @@ function GroupEditor({ group, whole, outermost, others, nameOf, disabled, onChan
             {isGroup(item)
               ? (outermost
                 ? <div className="w-full"><GroupEditor group={item} whole={whole} outermost={false} others={others}
-                  nameOf={nameOf} disabled={disabled}
+                  foreign={foreign} nameOf={nameOf} disabled={disabled}
                   onChange={(next) => onChange(withItemAt(group, index, next))} /></div>
                 : <span className="text-sm">{t('tree.edit.deeper')}</span>)
               : 'node' in item ? (
@@ -97,14 +111,27 @@ function GroupEditor({ group, whole, outermost, others, nameOf, disabled, onChan
         ))}
       </ul>
       <div className="flex flex-wrap items-center gap-2">
-        {free.length > 0 && (
+        {free.length + freeForeign.length > 0 && (
           <Select value="" disabled={disabled}
             onValueChange={(node) => onChange(withItem(group, { node }, whole))}>
             <SelectTrigger className="w-56" aria-label={t('tree.edit.addNode')} data-testid="condition-add-node">
               <SelectValue placeholder={t('tree.edit.addNode')} />
             </SelectTrigger>
             <SelectContent>
-              {free.map((node) => <SelectItem key={node.key} value={node.key}>{node.name}</SelectItem>)}
+              {free.length > 0 && (
+                <SelectGroup>
+                  {freeForeign.length > 0 && <SelectLabel>{t('tree.edit.thisMap')}</SelectLabel>}
+                  {free.map((node) => <SelectItem key={node.key} value={node.key}>{node.name}</SelectItem>)}
+                </SelectGroup>
+              )}
+              {maps.map((map) => (
+                <SelectGroup key={map}>
+                  <SelectLabel>{t('tree.edit.platformMap', { name: map })}</SelectLabel>
+                  {freeForeign.filter((node) => node.mapName === map).map((node) => (
+                    <SelectItem key={node.key} value={node.key} data-testid="condition-platform-node">{node.name}</SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
             </SelectContent>
           </Select>
         )}
