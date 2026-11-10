@@ -735,16 +735,29 @@ describe('UserSummaryPage', () => {
       { params: { userId: SPONSOR_ID }, offset: 0, limit: 20 })
   })
 
-  it('shows the certificates the user issued, with their numbers (Q77)', async () => {
-    server.templates.set(TEMPLATE.certificates, [{ certificateId: 'cert-1', certification: 'SPONSOR_APPLY',
-      holderName: 'Mei', heldFrom: '2026-10-01T00:00:00Z', validUntil: '2027-10-01T00:00:00Z',
-      verifyKey: '0123456789abcdef0123456789abcdef', language: 'en', issuedAt: '2026-10-02T00:00:00Z' }])
+  it('shows the certificates the user holds, with their numbers, issuer and state (Q77, F-S5b)', async () => {
+    server.templates.set(TEMPLATE.certificates, [
+      { certificateId: 'cert-1', source: 'CERTIFICATION', subjectKind: 'USER', certification: 'SPONSOR_APPLY',
+        holderName: 'Mei', heldFrom: '2026-10-01T00:00:00Z', validUntil: '2099-10-01T00:00:00Z',
+        verifyKey: '0123456789abcdef0123456789abcdef', language: 'en', issuedAt: '2026-10-02T00:00:00Z',
+        shared: true, revokedAt: null },
+      { certificateId: 'cert-2', source: 'NODE', subjectKind: 'USER', certification: null, litId: 'lit-1',
+        treeId: 'tree-1', nodeId: 'node-1', certificateNames: JSON.stringify({ en: 'Fair dealing' }),
+        issuerName: 'Beans Platform', holderName: 'Mei', heldFrom: '2026-11-02T00:00:00Z', validUntil: null,
+        verifyKey: 'fedcba9876543210fedcba9876543210', language: null, issuedAt: '2026-11-02T00:00:00Z',
+        shared: true, revokedAt: '2026-11-05T00:00:00Z' }])
     renderUser()
     const certificates = await screen.findByTestId('user-certificates')
-    expect(await within(certificates).findByTestId('certificate-number'))
-      .toHaveTextContent('0123456789abcdef0123456789abcdef')
+    const numbers = await within(certificates).findAllByTestId('certificate-number')
+    expect(numbers[0]).toHaveTextContent('0123456789abcdef0123456789abcdef')
     expect(certificates).toHaveTextContent('May apply to become a Sponsor')
     expect(certificates).toHaveTextContent('Mei')
+    // A node's certificate: its name, issuer, the day it was lit (no end), and that it was revoked.
+    expect(certificates).toHaveTextContent('Fair dealing')
+    expect(certificates).toHaveTextContent('Beans Platform')
+    expect(certificates).toHaveTextContent('Lit on')
+    expect(within(certificates).getAllByTestId('certificate-state').map((badge) => badge.textContent))
+      .toEqual(['Valid', 'Revoked'])
     expect(server.runQuery).toHaveBeenCalledWith(TEMPLATE.certificates,
       { params: { userId: SPONSOR_ID }, offset: 0, limit: 20 })
   })

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { LogOut, Store, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { CERTIFICATIONS_QUERY } from '../certificates/CertificatesPart'
-import { readMyCertifications } from '../certificates/api'
+import { readCertificates, TAKER_CERTIFICATES } from '../qb/certificates'
 import { MY_SPONSOR_PATH, useMySponsor } from '../mysponsor/api'
 import { BecomeSponsor } from '../mysponsor/BecomeSponsor'
 import { MenuItem, MenuList } from '../pages/Menu'
@@ -51,7 +51,7 @@ function Numbers() {
   const { t } = useTranslation(APP)
   const wallet = useQuery({ queryKey: WALLET_SUMMARY_QUERY, queryFn: readWallet })
   const prizes = useOpenPrizes()
-  const certificates = useQuery({ queryKey: CERTIFICATIONS_QUERY, queryFn: readMyCertifications })
+  const certificates = useQuery({ queryKey: CERTIFICATIONS_QUERY, queryFn: () => readCertificates(TAKER_CERTIFICATES) })
   return (
     <ul className="grid grid-cols-3 gap-2" aria-label={t('me.numbersLabel')} data-testid="me-numbers">
       <NumberTile testId="me-number-kudos" to={WALLET_PATH} name={t('me.numbers.kudos')}
@@ -60,7 +60,7 @@ function Numbers() {
       <NumberTile testId="me-number-prizes" to={PRIZES_PATH} name={t('me.numbers.prizes')}
         value={prizes === undefined ? UNKNOWN : String(prizes)} />
       <NumberTile testId="me-number-certificates" to={`${ACCOUNT_PATH}/certificates`}
-        name={t('me.numbers.certificates')} value={certificates.data ? String(certificates.data.length) : UNKNOWN} />
+        name={t('me.numbers.certificates')} value={certificates.data ? String(certificates.data.filter((c) => !c.revokedAt).length) : UNKNOWN} />
     </ul>
   )
 }

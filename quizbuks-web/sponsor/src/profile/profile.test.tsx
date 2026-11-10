@@ -126,11 +126,12 @@ describe('the Sponsor hub (Q79)', () => {
     await waitFor(() => expect(within(methods).getAllByTestId('profile-method')).toHaveLength(2))
     expect(methods).toHaveTextContent('Kudos paid by QuizBuks')
     expect(methods).toHaveTextContent('500 Kudos')
-    // The hub's tabs (F-F3): seven sections (F-C1c: the products moved to the asset library; F-S4c: the challenges;
-    // F-M3: the company verification), the overview current.
+    // The hub's tabs (F-F3): eight sections (F-C1c: the products moved to the asset library; F-S4c: the challenges;
+    // F-M3: the company verification; F-S5b: the certificates), the overview current.
     const nav = screen.getByRole('navigation', { name: 'Sponsor hub' })
-    expect(within(nav).getAllByRole('link')).toHaveLength(7)
+    expect(within(nav).getAllByRole('link')).toHaveLength(8)
     expect(within(nav).getByTestId('page-tab-challenges')).toBeInTheDocument()
+    expect(within(nav).getByTestId('page-tab-certificates')).toBeInTheDocument()
     expect(within(nav).queryByTestId('page-tab-products')).toBeNull()
     expect(within(nav).getByTestId('page-tab-overview')).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByTestId('page-tab-staff')).not.toHaveAttribute('aria-current')

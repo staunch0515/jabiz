@@ -75,7 +75,7 @@ export function frameServer(options: FrameServer = {}) {
         return options.wallet ? json(200, { items: [options.wallet], offset: 0, limit: 1 })
           : json(500, { status: 500, title: 'Failed' })
       case '/api/processes/QB_MY_CERTIFICATIONS/latest':
-        return json(200, { output: { held: options.certificates ?? [] } })
+        return json(200, { output: { certificates: options.certificates ?? [] } })
       case '/api/queries/qb.app.my-sponsor':
         return json(200, { items: options.sponsor ? [{ sponsorId: 's1', company: 'Neko Co', reviewStatus: 'APPROVED' }] : [],
           offset: 0, limit: 1 })

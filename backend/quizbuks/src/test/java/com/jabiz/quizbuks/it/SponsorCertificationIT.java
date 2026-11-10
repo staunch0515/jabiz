@@ -48,11 +48,11 @@ class SponsorCertificationIT extends LegalItSupport {
         String verifyKey = issuedBefore(holder, key, "Taker JP", "en", Map.of("certificationName", "Keyboard expert",
             "issuerName", company));
         List<Map<String, Object>> mine = (List<Map<String, Object>>) run(CertificateProcesses.MINE, taker(holder),
-            body()).get("held");
+            body()).get("certificates");
         assertThat(mine).singleElement().satisfies(h -> {
-            assertThat(h).containsEntry("certification", key).containsEntry("sponsorName", company)
-                .containsEntry("verifyKey", verifyKey);
-            assertThat((Map<String, Object>) h.get("name")).containsEntry("en", "Keyboard expert");
+            assertThat(h).containsEntry("certification", key).containsEntry("issuerName", company)
+                .containsEntry("verifyKey", verifyKey).containsEntry("source", "CERTIFICATION");
+            assertThat((Map<String, Object>) h.get("names")).containsEntry("en", "Keyboard expert");
         });
         assertThat(publicItems("qb.public.certificate", "p.key=" + verifyKey)).singleElement().satisfies(row -> {
             assertThat(row).containsEntry("certification", key).containsEntry("issuerName", company);
@@ -67,7 +67,7 @@ class SponsorCertificationIT extends LegalItSupport {
         assertThat(play(passer, round, true, true)).containsEntry("passed", true);
         assertThat(query("SELECT count(*) AS n FROM qb_certification_record WHERE user_id = ?", passer).getFirst()
             .get("n")).isEqualTo(0L);
-        assertThat(run(CertificateProcesses.MINE, taker(passer), body()).get("held")).isEqualTo(List.of());
+        assertThat(run(CertificateProcesses.MINE, taker(passer), body()).get("certificates")).isEqualTo(List.of());
 
         // A draft paying nothing cannot be submitted (only a node's may, F-S2b1).
         String versionId = version(token, "FS2c2 free quiz");

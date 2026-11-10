@@ -28,7 +28,7 @@ import {
   Receipt,
   Globe,
   ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, BadgeCheck, Ban, Eye, NotebookTabs, LifeBuoy,
-  MessageCircleQuestion, BookOpen } from 'lucide-react'
+  MessageCircleQuestion, BookOpen, Award } from 'lucide-react'
 import TopicsPage from './TopicsPage'
 import BlocksPage from './BlocksPage'
 import ExposurePage from './ExposurePage'
@@ -38,6 +38,7 @@ import BankTopUpPage from './BankTopUpPage'
 import TreesPage from './TreesPage'
 import TreeReviewPage from './TreeReviewPage'
 import TreeSupportPage from './TreeSupportPage'
+import CertificatesPage from './CertificatesPage'
 import BankSettingsPage from './BankSettingsPage'
 import BankTopUpsPage from './BankTopUpsPage'
 import BankWithdrawalsPage from './BankWithdrawalsPage'
@@ -138,6 +139,8 @@ export default defineExtension({
     { path: PATH.trees, element: <TreesPage /> },
     { path: '/qb/trees/:treeId', element: <TreeReviewPage /> },
     { path: PATH.treeSupport, element: <TreeSupportPage /> },
+    // F-S5b: the lookup of certificates by number or holder (support, and an operator's members for their maps').
+    { path: PATH.certificates, element: <CertificatesPage /> },
     // F-S12: the videos Sponsors share: an operator's own Sponsors' to review and take down, the platform's all.
     { path: PATH.sharedVideos, element: <SharedVideosPage /> },
     { path: '/qb/shared-videos/:sharedVideoId', element: <SharedVideoPage /> },
@@ -242,6 +245,9 @@ export default defineExtension({
         // F-S2b3a: the operator's and its Sponsors' knowledge maps, and their reviews.
         { key: 'qb-operator-trees', label: 'menu.operatorTrees', path: PATH.trees, icon: Network,
           permission: PERMISSION.operatorUse },
+        // F-S5b: the certificates of those maps' lit nodes, by number or holder.
+        { key: 'qb-operator-certificates', label: 'menu.certificates', path: PATH.certificates, icon: Award,
+          permission: PERMISSION.operatorUse },
       ],
     },
     // F-S1b: the sponsors' day-to-day, shared by both: an operator's session reads and runs its own sponsors' (the
@@ -341,6 +347,9 @@ export default defineExtension({
           permission: PERMISSION.audiencePricesWrite },
         // F-S2b3a: every knowledge map, its versions' reviews and its lit nodes.
         { key: 'qb-trees', label: 'menu.trees', path: PATH.trees, icon: Network, permission: PERMISSION.treesRead },
+        // F-S5b: support checks a certificate a verifier asks about, by its number or its holder.
+        { key: 'qb-certificates', label: 'menu.certificates', path: PATH.certificates, icon: Award,
+          permission: PERMISSION.usersRead },
       ],
     },
     {

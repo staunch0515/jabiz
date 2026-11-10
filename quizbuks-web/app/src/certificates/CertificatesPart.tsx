@@ -1,25 +1,17 @@
-import { formatDate, i18n } from '@jabiz/client'
 import { Button, Input, Label, notify, PageState, Switch } from '@jabiz/ui'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Award, Copy, Download, ExternalLink } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Copy, ExternalLink } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from '../messages'
 import { AccountSection } from '../qb/AccountSections'
 import { DEFAULT_SETTINGS, saveMySettings, type UserSettings } from '../qb/api'
 import { problemText } from '../qb/problems'
-import { certificationName } from '../qb/certifications'
+import { CertificateList } from '../qb/CertificateList'
+import { TAKER_CERTIFICATES } from '../qb/certificates'
 import { Link } from '../qb/router'
-import { QB } from '../qb/messages'
 import { SETTINGS_QUERY, useSoundSetting } from '../qb/SoundSettings'
-import {
-  appUrl,
-  downloadCertificate,
-  readMyCertifications,
-  takerPagePath,
-  verifyPath,
-  type HeldCertification,
-} from './api'
+import { appUrl, takerPagePath, verifyPath } from './api'
 
 export const CERTIFICATIONS_QUERY = ['qb', 'my-certifications']
 
@@ -34,75 +26,22 @@ async function copy(text: string, done: string, failed: string) {
 }
 
 /**
- * The taker's certifications and certificates (Q77, docs/quizbuks/plans/Q77-certificates.md): each certification held
- * now, with its certificate to issue, download and share; then the public certification page, off until turned on
- * under a name of the taker's own. Issuing makes a certificate public (D-Q77-5): the page lists the issued ones.
+ * The taker's certificates (F-S5b, docs/quizbuks/plans/impl/F-S5.md section 3): those of the nodes they lit, each to
+ * download (issued on the first click), to copy the verify link of and to stop sharing, and the Q77 ones still valid;
+ * then the public certification page, off until turned on under a name of the taker's own.
  */
 export function CertificatesPart() {
   const { t } = useTranslation(APP)
-  const held = useQuery({ queryKey: CERTIFICATIONS_QUERY, queryFn: readMyCertifications })
   return (
     <div className="flex flex-col gap-8">
       <AccountSection title={t('certificates.held')} testId="certificates">
-        {held.isPending && <PageState kind="loading" />}
-        {held.isError && <PageState kind="error" description={problemText(held.error)} />}
-        {held.isSuccess && held.data.length === 0 && (
-          <p className="text-muted-foreground text-sm" data-testid="certificates-none">{t('certificates.none')}</p>
-        )}
-        {held.isSuccess && held.data.length > 0 && (
-          <ul className="flex flex-col gap-3">
-            {held.data.map((h) => <HeldItem key={h.certification} held={h} />)}
-          </ul>
-        )}
-        {/* F-S2c (D8): no new certificate on a certification; certificates of the knowledge map's nodes replace them. */}
-        <p className="text-muted-foreground text-sm" data-testid="certificates-paused">{t('certificates.paused')}</p>
-        <p className="text-muted-foreground text-sm">{t('certificates.hint')}</p>
+        <CertificateList calls={TAKER_CERTIFICATES} queryKey={CERTIFICATIONS_QUERY}
+          verifyLink={(key) => appUrl(verifyPath(key))} />
       </AccountSection>
       <AccountSection title={t('certificates.page.title')} testId="certificates-page">
         <PublicPageSettings />
       </AccountSection>
     </div>
-  )
-}
-
-function HeldItem({ held }: { held: HeldCertification }) {
-  const { t } = useTranslation(APP)
-  const { t: tQb } = useTranslation(QB)
-  const download = useMutation({
-    mutationFn: () => downloadCertificate(held.certificateId, held.verifyKey),
-    onError: (error) => notify.error(problemText(error)),
-  })
-  const link = appUrl(verifyPath(held.verifyKey))
-  return (
-    <li className="flex flex-col gap-2 rounded-lg border p-3" data-testid={`certificate-${held.certification}`}>
-      <div className="flex items-start gap-2">
-        <Award aria-hidden className="text-primary mt-0.5 size-5 shrink-0" />
-        <div className="min-w-0">
-          <p className="font-medium">{certificationName(held.certification, held.name, i18n.language, tQb)}</p>
-          {held.sponsorName && (
-            <p className="text-muted-foreground text-sm" data-testid="certificate-issuer">
-              {tQb('certification.issuedBy', { sponsor: held.sponsorName })}
-            </p>
-          )}
-          <p className="text-muted-foreground text-sm">
-            {t('certificates.period', { from: formatDate(held.heldFrom), until: formatDate(held.heldUntil) })}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" disabled={download.isPending} onClick={() => download.mutate()}
-          data-testid={`certificate-download-${held.certification}`}>
-          <Download aria-hidden />{t('certificates.download')}
-        </Button>
-        <Button size="sm" variant="outline" data-testid={`certificate-copy-${held.certification}`}
-          onClick={() => void copy(link, t('certificates.copied'), t('certificates.copyFailed'))}>
-          <Copy aria-hidden />{t('certificates.copy')}
-        </Button>
-      </div>
-      <p className="text-muted-foreground text-xs break-all" data-testid={`certificate-link-${held.certification}`}>
-        {link}
-      </p>
-    </li>
   )
 }
 

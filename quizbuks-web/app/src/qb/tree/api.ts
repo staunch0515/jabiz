@@ -134,6 +134,8 @@ export interface SponsorVersion {
   /** F-S3f: the daily count of those who answered and have not lit, for the nodes counted (null: under the minimum). */
   unlitCounts: Map<string, UnlitCount>
   runningBound: Map<string, number>
+  /** F-S5b: each node's certificate names as the version has them (null: none); the editor sends them back as read. */
+  certificateNames: Map<string, I18nText | null>
 }
 
 export async function readSponsorVersion(map: Pick<SponsorMap, 'treeId' | 'name' | 'description'>,
@@ -148,6 +150,7 @@ export async function readSponsorVersion(map: Pick<SponsorMap, 'treeId' | 'name'
     unlitCounts: new Map(rows.filter((row) => row.countedOn != null).map((row) => [String(row.nodeId),
       { count: row.answeredUnlit == null ? null : num(row.answeredUnlit), countedOn: String(row.countedOn) }])),
     runningBound: new Map(rows.map((row) => [String(row.nodeId), num(row.runningBound)])),
+    certificateNames: new Map(rows.map((row) => [String(row.nodeId), json<I18nText | null>(row.certificateNames, null)])),
   }
 }
 

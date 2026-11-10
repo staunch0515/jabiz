@@ -84,9 +84,9 @@ class NodeCertificateIT extends NodeCertificateItSupport {
             .containsEntry("source", "NODE").containsEntry("verifyKey", row.get("verify_key"))
             .containsEntry("issuerName", row.get("issuer_name")).containsEntry("revokedAt", null)
             .containsEntry("shared", true).containsEntry("runId", null).containsEntry("heldUntil", null));
-        // The held certifications of Q77's kind stay as they were: none.
-        assertThat(run(com.jabiz.quizbuks.certification.CertificateProcesses.MINE, taker(ann), body()).get("held"))
-            .isEqualTo(List.of());
+        // F-S5b: the list is the one `certificates`; the earlier `held` output is gone.
+        assertThat(run(com.jabiz.quizbuks.certification.CertificateProcesses.MINE, taker(ann), body()))
+            .doesNotContainKey("held");
 
         // The verify page: valid (no revocation), with no end.
         assertThat(verify(row.get("verify_key"))).containsEntry("source", "NODE").containsEntry("shared", true)
@@ -274,6 +274,23 @@ class NodeCertificateIT extends NodeCertificateItSupport {
         Map<String, Object> same = node(nodeId, null, "N", all(passed()));
         same.put("certificateNames", Map.of("ja", "認定"));
         assertThat(problemCodes(save(lead, current(copy), List.of(same)))).isEmpty();
+    }
+
+    /** F-S5b: the Sponsor's editor reads the names back (the template it reads) and sends them again unchanged. */
+    @Test
+    void aSponsorsOwnGraphGivesItsCertificateNamesBackToTheEditor() {
+        String token = sponsorToken(newSponsor(unique("s-fs5b-editor")));
+        Map<String, Object> tree = run(TreeProcesses.CREATE, token, body("ownerKind", "SPONSOR", "name", name("Tea")));
+        Map<String, Object> named = node(null, "one", "One", all(passed()));
+        named.put("certificateNames", Map.of("en", "Tea expert", "ja", "お茶の達人"));
+        Map<String, Object> plain = node(null, "two", "Two", all(passed()));
+        Map<String, Object> saved = save(token, tree, List.of(named, plain));
+        assertThat(problemCodes(saved)).isEmpty();
+        List<Map<String, Object>> rows = items("qb.sponsor.tree", token, Map.of("params",
+            Map.of("versionId", String.valueOf(saved.get("versionId")))));
+        assertThat(rows).hasSize(2);
+        assertThat(String.valueOf(rows.get(0).get("certificateNames"))).contains("Tea expert").contains("お茶の達人");
+        assertThat(rows.get(1).get("certificateNames")).isNull();
     }
 
     private Map<String, Object> current(Map<String, Object> tree) {

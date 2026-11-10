@@ -34,7 +34,7 @@ import java.util.Map;
 /**
  * A person's certificates (Q77, docs/quizbuks/plans/Q77-certificates.md; F-S5a, docs/quizbuks/plans/impl/F-S5.md):
  * {@link #MINE} lists the caller's (a Taker's; {@link #SPONSOR_MINE} a Sponsor's) certificates of lit nodes, revoked ones
- * marked, and those of Q77 still valid. F-S2c (D8) paused issuing the Q77 kind and F-S2c2b (D1) removed the certifications
+ * marked, and those of Q77 still valid (F-S5b: the App reads this one list; the earlier {@code held} output is gone). F-S2c (D8) paused issuing the Q77 kind and F-S2c2b (D1) removed the certifications
  * themselves: what was issued stays valid, verifiable and downloadable until its end, unless a revocation recorded before
  * ends it. A node's certificate is written by the lighting ({@link NodeCertificates}); here its holder issues its PDF on
  * their first download ({@link #ISSUE}, {@link #SPONSOR_ISSUE}: the document is the holder's alone to read, so the holder
@@ -64,17 +64,6 @@ public final class CertificateProcesses {
     public record MineInput() {}
 
     /**
-     * One Q77 certificate still valid.
-     *
-     * @param certificateId the certificate; its PDF is the document whose subject it is
-     * @param name          Q88a: a Sponsor's certification's name by language (null for the catalog's, whose names
-     *                      are the App's texts)
-     * @param sponsorName   Q88a: the Sponsor whose certification it is (null for the catalog's)
-     */
-    public record Held(String certification, Instant heldFrom, Instant heldUntil, String certificateId,
-        String verifyKey, Map<String, String> name, String sponsorName) {}
-
-    /**
      * One certificate, of either source.
      *
      * @param source        {@code NODE} (a lit node's) or {@code CERTIFICATION} (Q77's)
@@ -92,8 +81,7 @@ public final class CertificateProcesses {
         String issuerName, Instant litAt, Instant revokedAt, boolean shared, String runId, Instant heldUntil,
         String certification) {}
 
-    /** @param held the Q77 certificates still valid (kept for the App before it reads {@code certificates}) */
-    public record MineOutput(List<Held> held, List<Certificate> certificates) {}
+    public record MineOutput(List<Certificate> certificates) {}
 
     /** @param certificateId the node's certificate; @param language the PDF's language, used the first time only */
     public record IssueInput(@NotBlank @Pattern(regexp = ID) String certificateId,
@@ -130,7 +118,7 @@ public final class CertificateProcesses {
                 .outputMapper(ctx -> ctx.get(OUTPUT, MineOutput.class));
             load(pb);
             pb.compute("Find the certificates", (metadata, ctx) -> ctx.put(OUTPUT,
-                new MineOutput(held(ctx), certificates(ctx))));
+                new MineOutput(certificates(ctx))));
         });
     }
 
@@ -148,7 +136,7 @@ public final class CertificateProcesses {
                     QbTrees.defaultDataset(QbTrees.REVOCATION), CertificateProcesses::nodeRevocations,
                     NODE_REVOCATIONS))
                 .compute("Find the certificates", (metadata, ctx) -> ctx.put(OUTPUT,
-                    new MineOutput(List.of(), certificates(ctx)))));
+                    new MineOutput(certificates(ctx)))));
     }
 
     /**
@@ -197,19 +185,6 @@ public final class CertificateProcesses {
      * The Q77 certificates still valid now, the latest of each certification, in the order they were issued: not past
      * their end, and no revocation of the certification after the holding began (as the verify page reads it).
      */
-    static List<Held> held(ProcessContext ctx) {
-        List<Held> held = new ArrayList<>();
-        for (EntityInstance certificate : valid(ctx)) {
-            String key = String.valueOf((Object) certificate.get("certification"));
-            EntityInstance row = sponsorRow(ctx, key);
-            held.add(new Held(key, instant(certificate.get("heldFrom")), instant(certificate.get("validUntil")),
-                String.valueOf(certificate.id()), certificate.get("verifyKey"),
-                row == null ? null : SponsorCertifications.texts(row.get("name")),
-                row == null ? null : sponsorName(ctx, row)));
-        }
-        return List.copyOf(held);
-    }
-
     private static List<EntityInstance> valid(ProcessContext ctx) {
         Instant now = ctx.opTime();
         Map<String, EntityInstance> latest = new LinkedHashMap<>();

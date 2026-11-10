@@ -396,6 +396,55 @@ describe('the map editor (F-S3e)', () => {
     expect(within(copy).getByTestId('tree-editor-node-grant-copy')).toHaveTextContent('200')
   })
 
+  it('names the certificate of a template\'s node, kept with the draft; a copy shows it and sends it back (F-S5b)', async () => {
+    const named = OPEN_NODES.map((node, i) => (i === 0 ? { ...node, certificateNames: JSON.stringify({ en: 'Fair dealing',
+      ja: '公正な取引' }) } : node))
+    const read = server.runQuery.getMockImplementation()!
+    server.runQuery.mockImplementation(async (id: string, options: { params?: Row } = {}) =>
+      (id === TEMPLATE.treeVersion || id === TEMPLATE.operatorTreeVersion)
+        ? { items: named, offset: 0, limit: 100 } : read(id, options))
+    server.templates.set(TEMPLATE.trees, [template()])
+    server.runProcess.mockResolvedValue(saved())
+    const { container, unmount } = renderReview()
+    // The review shows the name next to the version's other contents.
+    expect((await screen.findAllByTestId('tree-node-certificate'))[0]).toHaveTextContent('Fair dealing')
+    await userEvent.click(await screen.findByTestId('tree-edit'))
+    const editor = await screen.findByTestId('tree-editor')
+    const fields = within(editor).getAllByTestId('tree-editor-node-certificate')
+    expect(fields[0]).toHaveValue('Fair dealing')
+    expect(fields[1]).toHaveValue('')
+    // Typing writes the interface language's text and keeps the others.
+    await userEvent.clear(fields[0])
+    await userEvent.type(fields[0], 'Fair trader')
+    await userEvent.type(fields[1], 'Beans expert')
+    await userEvent.click(within(editor).getByTestId('tree-editor-save'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeSave, expect.anything()))
+    const input = server.runProcess.mock.calls.find((call) => call[0] === PROCESS.treeSave)![1] as
+      { nodes: { certificateNames: unknown }[] }
+    expect(input.nodes.map((n) => n.certificateNames)).toEqual([{ en: 'Fair trader', ja: '公正な取引' },
+      { en: 'Beans expert' }])
+    await expectAccessible(container)
+    unmount()
+
+    // An operator's copy: the template's certificate is shown, not edited, and a save sends it back as read.
+    server.runProcess.mockClear()
+    server.permissions = new Set(['qb.operator.use', 'qb.tree.edit'])
+    server.templates.set(TEMPLATE.operatorTrees, [{ ...tree('DRAFT'), ownerKind: 'OPERATOR', ownerId: 'op1',
+      subjectKind: 'SPONSOR', templateTreeId: 'tmpl', approvalRequestId: null }])
+    server.templates.set(TEMPLATE.operatorTreeLit, [])
+    server.templates.set(TEMPLATE.operatorTreeTemplateDiff, [])
+    renderReview()
+    await userEvent.click(await screen.findByTestId('tree-edit'))
+    const copy = await screen.findByTestId('tree-editor')
+    expect(within(copy).queryByTestId('tree-editor-node-certificate')).toBeNull()
+    expect(within(copy).getByTestId('tree-editor-node-certificate-copy')).toHaveTextContent('Fair dealing')
+    await userEvent.click(within(copy).getByTestId('tree-editor-save'))
+    await waitFor(() => expect(server.runProcess).toHaveBeenCalledWith(PROCESS.treeSave, expect.anything()))
+    const sent = server.runProcess.mock.calls.find((call) => call[0] === PROCESS.treeSave)![1] as
+      { nodes: { certificateNames: unknown }[] }
+    expect(sent.nodes.map((n) => n.certificateNames)).toEqual([{ en: 'Fair dealing', ja: '公正な取引' }, null])
+  })
+
   it('creates a platform template from the list', async () => {
     server.runProcess.mockResolvedValue(saved({ treeId: 'new-tree' }))
     renderAt('/qb/trees', '/qb/trees', <TreesPage />)

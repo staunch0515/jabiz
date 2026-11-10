@@ -16,12 +16,14 @@ afterEach(() => vi.restoreAllMocks())
 
 const WALLET = { available: '1250', totalEarned: '1500', pendingCount: 0, pendingAmount: '0', inTransfer: '0',
   held: '0', heldOpen: '0', heldUntil: null, usable: false }
-const CERT = { certification: 'REFERRER', heldFrom: '2026-10-01T00:00:00Z', heldUntil: '2027-10-01T00:00:00Z',
-  certificateId: 'c1', verifyKey: 'k1' }
+const CERT = { source: 'NODE', certificateId: 'c1', verifyKey: 'k1', names: { en: 'Coffee' }, issuerName: 'Beans',
+  litAt: '2026-10-01T00:00:00Z', revokedAt: null, shared: true, runId: null, heldUntil: null, certification: null }
+// A revoked certificate is listed (marked) but not counted.
+const REVOKED = { ...CERT, certificateId: 'c2', verifyKey: 'k2', revokedAt: '2026-10-05T00:00:00Z' }
 
 describe('"Me" (F-F4)', () => {
   it('shows the three numbers as links, Kudos with "Coming soon" while they cannot be used', async () => {
-    frameServer({ wallet: WALLET, prizes: [prize(), prize({ prizeId: 'r2' })], certificates: [CERT, CERT, CERT] })
+    frameServer({ wallet: WALLET, prizes: [prize(), prize({ prizeId: 'r2' })], certificates: [CERT, CERT, CERT, REVOKED] })
     window.history.replaceState(null, '', '/account')
     render(<App />)
     const numbers = await screen.findByTestId('me-numbers')

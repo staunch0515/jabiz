@@ -170,6 +170,8 @@ export const TEMPLATE = {
   consents: 'qb.admin.consents',
   /** Q77: the certificates people issued (support checks one a verifier asks about). */
   certificates: 'qb.admin.certificates',
+  /** F-S5b: an operator's members' own lookup of the certificates of the maps their operator looks after. */
+  operatorCertificates: 'qb.operator.certificates',
   /** The published versions of the legal texts and their withdrawals (Q7b review M1; `qb.admin.content.write`). */
   legalVersions: 'qb.admin.legal-versions',
   /** AI generation (Q8a; `qb.admin.ai.read`): usage by sponsor and month, the jobs, the parameters in force. */
@@ -648,6 +650,8 @@ export const PATH = {
   tree: (treeId: string) => `/qb/trees/${encodeURIComponent(treeId)}`,
   /** F-S3e: support's lookup of one person's lighting of one map. */
   treeSupport: '/qb/tree-support',
+  /** F-S5b: the lookup of certificates by number or holder (support, and an operator's members). */
+  certificates: '/qb/certificates',
   reviews: '/qb/reviews',
   /** F-C2: the sponsors' usage by month (`?sponsor=` for one). */
   usage: '/qb/usage',

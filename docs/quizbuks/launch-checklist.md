@@ -9,6 +9,7 @@
 - [ ] **Q6b 转账的法务意见**（资金決済法：Kudos 与转账是否构成资金移动、前払式支付手段等；`03-plan.md` 第 4 节）已取得，结论允许按现设计开放转账；否则 `qb.transfer.enabled` 保持 false 上线
 - [ ] **收据**：登记号（`qb.issuer.registration-no`，适格请求书发行事业者登记号）与税的表述（收据不声称是适格请求书；日元金额与 Kudos 的写法）经财务或法务确认
 - [ ] 收据开具方的名称与地址（`qb.issuer.name`、`qb.issuer.address`）已以受控变更设好
+- [ ] **节点证书的颁发方**（F-S5，`operations.md` §7.27）：平台图的证书上印的颁发方是 `qb.issuer.name`（与收据同一个值）；**上线前必须已设好**，否则证书上写缺省的平台名；已发出的证书保持当时的名字，事后改名不会改它们。核实页最长 60 秒的缓存（撤销与停用分享最多晚一分钟显示）已知并接受
 - [ ] **平台费的账单**（Q87，版式 `qb.fee_invoice`）：是否收月费（`qb.fee.monthly`）、税率（`qb.fee.tax-rate`）与账单上登录番号、税的写法经财务确认；不收费时 `qb.fee.monthly` 保持 `0`（不出任何账单）
 - [ ] **现金账户**（Q87）：充值的目标（`qb.topup.targets` / `qb.topup.default-target`）、现金换学分与换回的开关（`qb.kudos.buy.enabled` / `qb.kudos.sell.enabled`）按需求方的决定设好（缺省：两个目标、缺省直接成学分、能换出、不能换回）；抽成 `qb.creator-fee-rate` 与 `qb.transfer.fee-rate` 按决定设（上线为 `0`）
 - [ ] **隐私政策**（个人信息的取得与利用目的、第三方提供：Stripe、邮件服务商、Google、Facebook 与 LINE 登录；保存期间；海外传输）已发布，App 与发起方页面可达；草稿见 `legal/`（填好【】占位后发布）

@@ -42,7 +42,7 @@ export const treesMessages = {
       hint: 'Against the version in effect. A removed node’s running publications can no longer start once this version takes effect; they must end first.',
       table: 'Nodes of the version',
       none: 'This version has no nodes.',
-      node: 'Node', change: 'Change', condition: 'Lit when', running: 'Running publications', grant: 'Granted credit',
+      node: 'Node', change: 'Change', condition: 'Lit when', running: 'Running publications', grant: 'Granted credit', certificate: 'Certificate',
       lit: 'Lit now', unlit: 'Answered, not lit', unlitHidden: 'Under the minimum group', unlitNone: 'Not counted yet',
       unlitOn: 'as of {{day}}',
       changes: { ADDED: 'Added', CHANGED: 'Changed', SAME: 'Unchanged', REMOVED: 'Removed' },
@@ -104,6 +104,9 @@ export const treesMessages = {
       grant: 'Granted credit for lighting it',
       grantHint: 'Empty: none. Each Sponsor is granted a node once (within the most a node may grant).',
       grantOfTemplate: 'Lighting it grants {{amount}} of granted credit (the template\'s amount)',
+      certificate: 'Certificate name',
+      certificateHint: 'Empty: no certificate. Whoever lights the node gets a certificate with this name, issued by the platform; it is reviewed with the version. A name needs text in at least one language.',
+      certificateOfTemplate: 'Lighting it issues the certificate “{{name}}” (the template\'s: a copy keeps it)',
       condition: 'Lit when',
       group: 'Group',
       op: 'How the items count',
@@ -213,7 +216,9 @@ export const treesMessages = {
       QB_TREE_OTHER_SUBJECT: 'The condition names a node of a map that others light.',
       QB_TREE_CYCLE: 'The conditions go round in a circle; a node cannot depend on itself.',
       QB_TREE_TOO_DEEP: 'This chain of nodes is {{depth}} long; at most {{max}} is allowed.',
-      QB_TREE_AMBIGUOUS_NODE: 'The condition names node {{node}}, which {{count}} of the maps it may use have; it must be the node of one map.'
+      QB_TREE_AMBIGUOUS_NODE: 'The condition names node {{node}}, which {{count}} of the maps it may use have; it must be the node of one map.',
+      QB_TREE_CERTIFICATE_INVALID: 'A certificate\'s name needs text in at least one language, at most {{max}} characters each.',
+      QB_TREE_CERTIFICATE_COPY: 'A copy keeps its template\'s certificates. Take the template\'s change to update them.'
     },
   },
   zh: {
@@ -251,7 +256,7 @@ export const treesMessages = {
       hint: '与生效版本对比。该版本生效后，被去掉的节点上进行中的发布将不能再开始，须先结束。',
       table: '版本的节点',
       none: '这个版本没有节点。',
-      node: '节点', change: '变化', condition: '点亮条件', running: '进行中的发布', grant: '赠送额度',
+      node: '节点', change: '变化', condition: '点亮条件', running: '进行中的发布', grant: '赠送额度', certificate: '证书',
       lit: '已点亮', unlit: '答过未点亮', unlitHidden: '少于统计下限', unlitNone: '尚未统计',
       unlitOn: '截至 {{day}}',
       changes: { ADDED: '新增', CHANGED: '已修改', SAME: '未变', REMOVED: '去掉' },
@@ -313,6 +318,9 @@ export const treesMessages = {
       grant: '点亮时的赠送额度',
       grantHint: '留空即不赠送。每个发起方一个节点只得一次（不超过每个节点的上限）。',
       grantOfTemplate: '点亮时赠送 {{amount}} 的赠送额度（模板设定的金额）',
+      certificate: '证书名称',
+      certificateHint: '留空即不颁发证书。点亮该节点的人会得到这个名称的证书，颁发方是平台；它随版本一起审核。名称至少要有一种语言的文字。',
+      certificateOfTemplate: '点亮时颁发证书“{{name}}”（模板设定的：副本沿用它）',
       condition: '点亮条件',
       group: '一组',
       op: '各项怎样算',
@@ -422,7 +430,9 @@ export const treesMessages = {
       QB_TREE_OTHER_SUBJECT: '条件引用了由另一类人点亮的知识结构图的节点。',
       QB_TREE_CYCLE: '条件绕成了圈：节点不能依赖自己。',
       QB_TREE_TOO_DEEP: '这条节点链长 {{depth}}，至多 {{max}}。',
-      QB_TREE_AMBIGUOUS_NODE: '条件引用的节点 {{node}} 在可引用的知识结构图中有 {{count}} 张都有；必须是一张图的节点。'
+      QB_TREE_AMBIGUOUS_NODE: '条件引用的节点 {{node}} 在可引用的知识结构图中有 {{count}} 张都有；必须是一张图的节点。',
+      QB_TREE_CERTIFICATE_INVALID: '证书名称至少要有一种语言的文字，每种最多 {{max}} 个字符。',
+      QB_TREE_CERTIFICATE_COPY: '副本沿用模板的证书。要更新，请采用模板的改动。'
     },
   },
   ja: {
@@ -460,7 +470,7 @@ export const treesMessages = {
       hint: '有効な版との比較です。この版が有効になると、外されたノードの進行中の公開は開始できなくなるため、先に終了が必要です。',
       table: '版のノード',
       none: 'この版にノードはありません。',
-      node: 'ノード', change: '変更', condition: '点灯の条件', running: '進行中の公開', grant: '付与クレジット',
+      node: 'ノード', change: '変更', condition: '点灯の条件', running: '進行中の公開', grant: '付与クレジット', certificate: '証明書',
       lit: '点灯中', unlit: '回答済み・未点灯', unlitHidden: '統計の下限未満', unlitNone: '未集計',
       unlitOn: '{{day}} 時点',
       changes: { ADDED: '追加', CHANGED: '変更', SAME: '変更なし', REMOVED: '削除' },
@@ -522,6 +532,9 @@ export const treesMessages = {
       grant: '点灯時の付与クレジット',
       grantHint: '空欄なら付与しません。主催者ごとに 1 つのノードにつき 1 回だけです（ノードごとの上限まで）。',
       grantOfTemplate: '点灯すると付与クレジット {{amount}} を付与します（テンプレートの金額）',
+      certificate: '証明書の名前',
+      certificateHint: '空欄なら証明書は発行されません。このノードを点灯した人に、この名前の証明書をプラットフォーム名義で発行します。版と一緒に審査されます。名前は少なくとも 1 つの言語で入力してください。',
+      certificateOfTemplate: '点灯すると証明書「{{name}}」を発行します（テンプレートのもの。コピーはそのまま使います）',
       condition: '点灯の条件',
       group: 'グループ',
       op: '項目の数え方',
@@ -631,7 +644,9 @@ export const treesMessages = {
       QB_TREE_OTHER_SUBJECT: '条件が、別の人が点灯する知識マップのノードを指しています。',
       QB_TREE_CYCLE: '条件が循環しています。ノードは自分自身に依存できません。',
       QB_TREE_TOO_DEEP: 'このノードの連なりは {{depth}} で、上限は {{max}} です。',
-      QB_TREE_AMBIGUOUS_NODE: '条件のノード {{node}} は、使える知識マップのうち {{count}} 枚にあります。1 枚のマップのノードを指してください。'
+      QB_TREE_AMBIGUOUS_NODE: '条件のノード {{node}} は、使える知識マップのうち {{count}} 枚にあります。1 枚のマップのノードを指してください。',
+      QB_TREE_CERTIFICATE_INVALID: '証明書の名前は、少なくとも 1 つの言語で入力してください（各言語 {{max}} 文字まで）。',
+      QB_TREE_CERTIFICATE_COPY: 'コピーはテンプレートの証明書をそのまま使います。更新するにはテンプレートの変更を採用してください。'
     },
   },
 }

@@ -34,6 +34,8 @@ const en = {
       "nodeName": "Node {{n}}",
       "nodeDescription": "What lighting it gives",
       "nodeDescriptionHint": "Shown to Takers as what lighting the node gives.",
+      "certificate": "Certificate name",
+      "certificateHint": "Empty: no certificate. Whoever lights the node gets a certificate with this name, issued by your company; it is part of the version your operator reviews.",
       "newNode": "New node",
       "unnamed": "(no name)",
       "otherMap": "a node of another map",
@@ -112,7 +114,8 @@ const en = {
       "QB_TREE_OTHER_SUBJECT": "The condition names a node of a map that others light.",
       "QB_TREE_CYCLE": "The conditions go round in a circle; a node cannot depend on itself.",
       "QB_TREE_TOO_DEEP": "This chain of nodes is {{depth}} long; at most {{max}} is allowed.",
-      "QB_TREE_AMBIGUOUS_NODE": "The condition names node {{node}}, which {{count}} of the maps it may use have; it must be the node of one map."
+      "QB_TREE_AMBIGUOUS_NODE": "The condition names node {{node}}, which {{count}} of the maps it may use have; it must be the node of one map.",
+      "QB_TREE_CERTIFICATE_INVALID": "A certificate's name needs text in at least one language, at most {{max}} characters each."
     }
   },
 }
@@ -146,6 +149,8 @@ const zh: typeof en = {
       "nodeName": "节点 {{n}}",
       "nodeDescription": "点亮后得到",
       "nodeDescriptionHint": "向学者显示为点亮该节点后得到什么。",
+      "certificate": "证书名称",
+      "certificateHint": "留空即不颁发证书。点亮该节点的人会得到这个名称的证书，颁发方是你的公司；它是所属运营商审核的版本内容的一部分。",
       "newNode": "新节点",
       "unnamed": "（无名称）",
       "otherMap": "另一张图的节点",
@@ -224,7 +229,8 @@ const zh: typeof en = {
       "QB_TREE_OTHER_SUBJECT": "条件引用了由另一类人点亮的知识结构图的节点。",
       "QB_TREE_CYCLE": "条件绕成了圈：节点不能依赖自己。",
       "QB_TREE_TOO_DEEP": "这条节点链长 {{depth}}，至多 {{max}}。",
-      "QB_TREE_AMBIGUOUS_NODE": "条件引用的节点 {{node}} 在可引用的知识结构图中有 {{count}} 张都有；必须是一张图的节点。"
+      "QB_TREE_AMBIGUOUS_NODE": "条件引用的节点 {{node}} 在可引用的知识结构图中有 {{count}} 张都有；必须是一张图的节点。",
+      "QB_TREE_CERTIFICATE_INVALID": "证书名称至少要有一种语言的文字，每种最多 {{max}} 个字符。"
     }
   },
 }
@@ -258,6 +264,8 @@ const ja: typeof en = {
       "nodeName": "ノード {{n}}",
       "nodeDescription": "点灯すると得られるもの",
       "nodeDescriptionHint": "テイカーに、このノードを点灯すると得られるものとして表示されます。",
+      "certificate": "証明書の名前",
+      "certificateHint": "空欄なら証明書は発行されません。このノードを点灯した人に、この名前の証明書を貴社の名義で発行します。運営パートナーが審査する版の内容に含まれます。",
       "newNode": "新しいノード",
       "unnamed": "（名前なし）",
       "otherMap": "別のマップのノード",
@@ -336,7 +344,8 @@ const ja: typeof en = {
       "QB_TREE_OTHER_SUBJECT": "条件が、別の人が点灯する知識マップのノードを指しています。",
       "QB_TREE_CYCLE": "条件が循環しています。ノードは自分自身に依存できません。",
       "QB_TREE_TOO_DEEP": "このノードの連なりは {{depth}} で、上限は {{max}} です。",
-      "QB_TREE_AMBIGUOUS_NODE": "条件のノード {{node}} は、使える知識マップのうち {{count}} 枚にあります。1 枚のマップのノードを指してください。"
+      "QB_TREE_AMBIGUOUS_NODE": "条件のノード {{node}} は、使える知識マップのうち {{count}} 枚にあります。1 枚のマップのノードを指してください。",
+      "QB_TREE_CERTIFICATE_INVALID": "証明書の名前は、少なくとも 1 つの言語で入力してください（各言語 {{max}} 文字まで）。"
     }
   },
 }

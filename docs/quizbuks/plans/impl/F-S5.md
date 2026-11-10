@@ -119,7 +119,20 @@ F-S5a 1.5–2 天、F-S5b 1–1.5 天，合计 2.5–3.5 天（规格粗估 2–
 - **`QB_MY_CERTIFICATIONS` 的 `certificates`** 含节点证书（撤销的也列出，标 `revokedAt`）与仍有效的旧证书（`source = CERTIFICATION`）；`held` 原样保留。新增错误码 `QB_CERTIFICATE_NOT_NODE`（旧证书没有 PDF 可签发、没有分享可设）与 `QB_CERTIFICATE_REVOKED`（撤销了的点亮首次签发 PDF；签发过的照常下载）取代 `QB_CERTIFICATE_PAUSED`。
 - **证书名称取该图自己的节点行**（运营商的副本在复制 / 采用时已带上模板的），不像赠送那样读模板的行；副本不能改，模板改了证书要采用才到副本。名称无效（空白、过长、语言不在平台内）时草稿带问题保存并**不存**这些名称（过长的文字平台会拒收）。
 - **管理系统扩展的草稿原样带回证书名称**（`qb.admin.tree-version`、`qb.operator.tree-version` 返回 `certificateNames`，`tree-draft.ts` 原样送回；F-S4b 的教训）；发起方编辑器（`quizbuks-web/sponsor/src/tree/`）属 F-S5b，那时一并加字段与原样带回。
-- **删除账号只有一条声明**（`TakerErasure`，三种版式的 PDF）：平台的删除器对每个账号都运行，发起方账号的证书行与 `qb.node_certificate_sponsor` 的 PDF 同样被清（`CertificateErasureIT`）。冻结在别人证书上的颁发方名（发起方自己的图）不在清除范围内：它是证书的内容，不是持有人的个人信息；发起方删除账号后他们的图上已发出的证书仍写着他们的公司名（待需求方确认是否要清）。
-- 核实页的公开缓存仍是 60 秒（`cacheSeconds`，与 Q77 一样）：撤销与停用分享最多晚一分钟显示。
+- **删除账号只有一条声明**（`TakerErasure`，三种版式的 PDF）：平台的删除器对每个账号都运行，发起方账号的证书行与 `qb.node_certificate_sponsor` 的 PDF 同样被清（`CertificateErasureIT`）。冻结在别人证书上的颁发方名（发起方自己的图）不在清除范围内：它是证书的内容，不是持有人的个人信息；发起方删除账号后他们的图上已发出的证书仍写着他们的公司名（总控 2026-11-10 接受：留着）。
+- 核实页的公开缓存仍是 60 秒（`cacheSeconds`，与 Q77 一样）：撤销与停用分享最多晚一分钟显示（总控 2026-11-10 接受；写在帮助"怎样核实证书"与 `operations.md` §7.27）。
 - 语句数：`QB_TREE_LIT_CERTIFICATE` 写一张证书 7 条、无事可做 5 条；首次下载 10 条、再次下载 6 条（`CertificateStatementBudgetIT`）；`AttemptStatementBudgetIT` 不变。
 - **删除账号与写入的竞争**（安全评审）：平台的 `ACCOUNT_ERASE` 不取 `qb.certificate:<人>` 锁，读过后才提交的删除会让刚写入的证书行活下来。`QB_TREE_LIT_CERTIFICATE` 对已删除的账号改为经 `ctx.changes().delete` 删除其节点证书行（审计与清除可见）；任务条目模板加入"已删除账号的节点证书"，`qb.admin.tree-health` 加 `CERTIFICATE_OF_ERASED`（`CertificateErasureIT`）。这样的行没有 PDF（持有人没有机会下载）；PDF 本来只由平台删除的清除处理。
+
+## 11. 实施记录（F-S5b，2026-11-10）
+
+按 §3 实现，无迁移；计划之外的决定：
+
+- **共用组件**：App 与发起方中心的证书列表是同一个 `qb/CertificateList.tsx`（数据与动作在 `qb/certificates.ts`，两个 SPA 的 `qb/` 逐字节相同；文字在 `qb` 命名空间的 `certificateList.*`）；两边只给出各自的流程名与核实链接（App 用 `appUrl`，发起方用 `<站点>/taker/verify/<键>`）。
+- **`QB_MY_CERTIFICATIONS` 的 `held` 已删**（后端、IT 与 App 同一项）：旧证书在 `certificates` 中是 `source = CERTIFICATION`，旧证书的功能（有效期一行、PDF 按版式 `qb.certificate` 与证书为主体找、核实、过期、撤销）都保留。`qb.sponsor.tree` 加列 `certificateNames`，发起方的编辑器才能原样带回（`NodeCertificateIT` 断言）。
+- **撤销了的证书**：列表中标"已收回"、不显示分享开关与复制链接；从未下载过的撤销证书不提供下载（服务器会拒 `QB_CERTIFICATE_REVOKED`），已签发 PDF 的照常下载。"我的"的证书数不含撤销的。
+- **核实页**：状态 `VALID` / `EXPIRED` / `REVOKED` / `DISABLED`；节点证书写"点亮日期"、不写有效期；`DISABLED` 只显示状态与一句说明；"没有这张证书"同时覆盖未知键与已删除账号。核实页最长 60 秒的缓存：e2e 的每次查看都用新的浏览器上下文（没有缓存）。
+- **管理系统扩展**：节点编辑器的证书名称只对平台模板可编辑（运营商的副本只读显示并原样带回）；版本审核表在有证书名称时加"证书"一列（审核的内容）；新页"证书查询"（`/qb/certificates`，平台菜单 `qb.admin.users.read`，运营商菜单 `qb.operator.use`）按证书号（`verifyKey` 过滤）或持有人查，状态一列（有效 / 已收回 / 已过期 / 链接已停用），链接到图的页面（点亮记录在那里）与核实页；用户页"证书"一节加颁发方与状态两列、节点证书写点亮日期。
+- **e2e**：`certificates.spec.ts` 三个用例（学者：平台图点亮 → App 证书 → 键盘下载 PDF → 匿名核实页有效且无有效期行 → 停用 → 恢复 → 管理员排定删除账号、任务运行后"没有这张证书"；发起方：运营商副本的挑战 → 证书标签 → 下载 → 撤销（四眼）→ 核实页已收回；没有证书时的公开页与未知号），键盘操作与 axe 亮暗。账号删除需要冷静期缩到一秒：`quizbuks-web/e2e/app.env` 加 `JABIZ_SECURITY_ACCOUNT_DELETION_COOLING_OFF=PT1S`（只在 e2e），`legal.ts` 的内容管理员角色加 `qb.tree.lit.revoke`。
+- 语句数与后端行为不变（除 `held` 与 `qb.sponsor.tree` 的一列）。
+

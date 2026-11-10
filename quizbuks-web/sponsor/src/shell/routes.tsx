@@ -31,6 +31,7 @@ import { SponsorPagePage } from '../page/SponsorPageEditor'
 import { PreviewPage } from '../preview/PreviewPage'
 import { previewOf } from '../preview/paths'
 import { BasicsPage } from '../profile/BasicsPage'
+import { CertificatesPage } from '../certificates/CertificatesPage'
 import { challengeRouteOf } from '../challenges/api'
 import { ChallengePlayPage } from '../challenges/ChallengePlayPage'
 import { ChallengeResultPage } from '../challenges/ChallengeResultPage'
@@ -181,8 +182,9 @@ export function pageOf(path: string, search: string, state: ShellState): ReactNo
             : section === 'page' ? <><PublicPageParts current="edit" /><SponsorPagePage /></>
               : section === 'staff' ? <StaffPage />
                 : section === 'challenges' ? <ChallengesPage />
-                  : section === 'verification' ? <VerificationPage />
-                  : <MailServerPage />}
+                  : section === 'certificates' ? <CertificatesPage />
+                    : section === 'verification' ? <VerificationPage />
+                      : <MailServerPage />}
       </ProfileLayout>
     )
   }

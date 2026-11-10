@@ -152,6 +152,9 @@ function EditorForm({ initial, tree, onClose, t }: { initial: Draft; tree: TreeR
   // F-S4b/F-S4c: a node of a platform template Sponsors light may grant platform fee Kudos; a copy shows its
   // template's (kept on save, never changed here). Other maps have none.
   const grants = tree.subjectKind !== 'SPONSOR' ? null : tree.ownerKind === 'PLATFORM' ? 'edit' : 'show'
+  // F-S5b: a platform template (either subject) names the certificate lighting a node issues; an operator's copy keeps
+  // its template's (shown, sent back as read, never edited).
+  const certificates = tree.ownerKind === 'PLATFORM' ? 'edit' : 'show'
   const busy = save.isPending || submit.isPending || withdraw.isPending
   const locked = busy || stale
   const failure = [save.error, submit.error, withdraw.error].find((e) => e && !(e instanceof ApiError
@@ -263,6 +266,24 @@ function EditorForm({ initial, tree, onClose, t }: { initial: Draft; tree: TreeR
                 {grants === 'show' && node.grantAmount != null && (
                   <p className="text-sm" data-testid="tree-editor-node-grant-copy">
                     {t('trees.editor.grantOfTemplate', { amount: money(String(node.grantAmount)) })}
+                  </p>
+                )}
+                {certificates === 'edit' && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`${id}-node-certificate-${index}`}>{t('trees.editor.certificate')}</Label>
+                    <Input id={`${id}-node-certificate-${index}`} value={node.certificateNames?.[language] ?? ''}
+                      disabled={locked} aria-describedby={`${id}-node-certificate-hint-${index}`}
+                      data-testid="tree-editor-node-certificate"
+                      onChange={(event) => edit(withNode(draft, node.key, (n) => ({ ...n,
+                        certificateNames: withText(n.certificateNames ?? null, event.target.value) })))} />
+                    <p id={`${id}-node-certificate-hint-${index}`} className="text-muted-foreground text-sm">
+                      {t('trees.editor.certificateHint')}
+                    </p>
+                  </div>
+                )}
+                {certificates === 'show' && node.certificateNames && (
+                  <p className="text-sm" data-testid="tree-editor-node-certificate-copy">
+                    {t('trees.editor.certificateOfTemplate', { name: text(node.certificateNames) })}
                   </p>
                 )}
                 <GroupEditor group={outer(node.condition)} whole={node.condition} outermost others={others}
