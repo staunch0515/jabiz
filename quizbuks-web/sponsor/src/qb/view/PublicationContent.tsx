@@ -1,5 +1,6 @@
 import { formatDateTime } from '@jabiz/client'
-import { MarkdownView, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@jabiz/ui'
+import { MarkdownView, PageTabs, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn,
+  type PageTab, type PageTabLinkProps } from '@jabiz/ui'
 import { BookOpen, CalendarClock, ChevronDown, ListChecks, MailCheck, Network, Store, Target, Ticket, Timer, TrendingUp, Trophy, type LucideIcon } from 'lucide-react'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -134,13 +135,116 @@ function Disclosure({ summary, icon: Icon, testId, children }: {
   )
 }
 
+/** The tabs and the tab shown (F-F3c): each part as the stacked page has it, opened, under its own tab. */
+function TabbedBody({ tabs, p, draft, lead, rewardBody, statsBody, duration, nodeName }: {
+  tabs: ContentTabs
+  p: PublicationView
+  draft: boolean
+  lead: number | undefined
+  rewardBody: ReactNode
+  statsBody: ReactNode
+  duration: (seconds: number) => string
+  nodeName: string
+}) {
+  const { t } = useTranslation(QBVIEW)
+  const { extra = {} } = tabs
+  const materials = p.materials.filter((m) => m.no !== lead)
+  const survey = p.kind === 'SURVEY'
+  const shown: ContentTab[] = CONTENT_TABS.filter((tab) =>
+    tab === 'reward' ? !draft : tab === 'materials' ? materials.length > 0 || !!p.sponsorIntro || !!extra.materials : true)
+  const current = shown.includes(tabs.current) ? tabs.current : shown[0]
+  const rules: [string, ReactNode][] = [
+    [survey ? t('detail.kind') : t('detail.questions'), p.pickCount != null
+      ? t('detail.pickCount', { count: p.pickCount, total: p.questionCount })
+      : t('detail.questionCount', { count: p.questionCount })],
+    ...(survey ? [] : [[t('detail.passScore'), t('detail.passOf', { pass: draft ? '–' : p.passScore, full: p.fullScore })] as [string, ReactNode]]),
+    [t('detail.timeLimit'), duration(p.timeLimitSec)],
+    ...(p.entryFee ? [[t('detail.entryFee'), formatKudos(p.entryFee)] as [string, ReactNode]] : []),
+    [t('detail.endAt'), draft ? '–' : t('detail.until', { time: formatDateTime(p.endAt) })],
+    ...(nodeName ? [[t('detail.node'), nodeName] as [string, ReactNode]] : []),
+  ]
+  return (
+    <div className="flex flex-col gap-3" data-testid="detail-tabs" data-tab={current}>
+      <PageTabs label={t('detail.tabs.label')} current={current}
+        tabs={shown.map((tab) => ({ key: tab, label: t(`detail.tabs.${tab}`), path: tabs.path(tab) }))}
+        renderLink={tabs.renderLink} />
+      <div className="flex flex-col gap-3" data-testid={`detail-tab-${current}`}>
+        {current === 'about' && (
+          <>
+            {p.intro && (
+              <section aria-label={t('detail.intro')} className="px-0.5 text-sm" data-testid="detail-intro">
+                <Expandable testId="detail-intro-text"><MarkdownView text={p.intro} /></Expandable>
+              </section>
+            )}
+            <section aria-label={t('detail.tabs.about')} className="flex flex-col gap-1 text-sm" data-testid="detail-stats">
+              <p className="font-medium" data-testid="detail-stats-line">
+                {t('detail.statsLine', { recent: p.last24h, total: p.completions })}
+              </p>
+              {statsBody}
+            </section>
+          </>
+        )}
+        {current === 'reward' && (
+          <section aria-label={t('detail.rewardTitle')} className="flex flex-col gap-2" data-testid="detail-reward">
+            <p className="font-medium" data-testid="detail-reward-line">
+              {t('detail.rewardLine', { method: t(`methods.${p.rewardMethod}Short`) })}
+            </p>
+            {rewardBody}
+          </section>
+        )}
+        {current === 'materials' && (
+          <>
+            <Materials materials={p.materials} exclude={lead} />
+            {p.sponsorIntro && (
+              <section aria-label={t('detail.aboutSponsor')} className="flex flex-col gap-1 text-sm"
+                data-testid="detail-sponsor-intro">
+                <h3 className="font-medium">{t('detail.aboutSponsor')}</h3>
+                <p className="whitespace-pre-line">{p.sponsorIntro}</p>
+              </section>
+            )}
+          </>
+        )}
+        {current === 'rules' && (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" data-testid="detail-rules">
+            {rules.map(([label, value]) => (
+              <div key={label} className="contents">
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="font-medium">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {extra[current]}
+      </div>
+    </div>
+  )
+}
+
+/** The parts of the page under its tabs (F-F4, F-F3c): the introduction and heat, the reward, the materials, the rules. */
+export const CONTENT_TABS = ['about', 'reward', 'materials', 'rules'] as const
+export type ContentTab = (typeof CONTENT_TABS)[number]
+
+/**
+ * The page in tabs instead of one column (F-F4 section 2.5; the sponsor console's preview uses it, the App when its
+ * frame does): the cover, name and facts stay above; a tab without content is not offered. A link is what the App
+ * renders (an address `?tab=`), a button what the preview renders (no address of its own).
+ */
+export interface ContentTabs {
+  current: ContentTab
+  /** Where a tab leads (the App's address; the preview's buttons ignore it). */
+  path: (tab: ContentTab) => string
+  renderLink: (tab: PageTab, props: PageTabLinkProps) => ReactNode
+  /** More under a tab, after its own content (what only the App has: products, rules link, report, block). */
+  extra?: Partial<Record<ContentTab, ReactNode>>
+}
+
 /**
  * What a taker reads of a publication on its page (Q34; U-20 – U-23), from the picture to the sponsor's introduction:
  * the taker app draws it above the start button, the sponsor console's preview (Q34b) the same from the sponsor's
  * own data. Layout and the place of every text: docs/quizbuks/plans/Q34-ui-polish.md, D-Q34-11.
  */
 export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1', draft = false,
-  linkSponsor = false, autoplay = false, video }: {
+  linkSponsor = false, autoplay = false, video, tabs }: {
   publication: PublicationView
   tiers: Tier[]
   /** The name's heading: the page's own on the taker's page, under the preview's heading in the console. */
@@ -153,6 +257,8 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
   autoplay?: boolean
   /** Q65: the app's own place for the leading video (its one player, carried over from the home's card). */
   video?: (player: string, title: string) => ReactNode
+  /** Tabs under the facts; without them the page is one column. */
+  tabs?: ContentTabs
 }) {
   const { t } = useTranslation(QBVIEW)
   const { i18n } = useTranslation(QB)
@@ -186,6 +292,41 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
             data-testid="detail-sponsor-page">{t('detail.by', { sponsor })}</Link>
           : <span>{t('detail.by', { sponsor })}</span>}
       </p>
+  )
+  const rewardBody = (
+    <div className="flex flex-col gap-2">
+      {/* Q22: what the sponsor does after a pass, in their words for a prize. */}
+      <p className="text-sm" data-testid="detail-method-name">{t(`methods.${p.rewardMethod}`)}</p>
+      {p.rewardMethod !== 'PLATFORM' && (
+        <div className="bg-accent text-accent-foreground flex flex-col gap-1 px-3 py-2 text-sm"
+          data-testid="detail-method-note" data-method={p.rewardMethod}>
+          <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
+          {prizeText && <span className="font-medium whitespace-pre-line" data-testid="detail-prize">{prizeText}</span>}
+          {/* Q89b-1: another sponsor's benefit is collected at its provider's place. */}
+          {p.rewardMethod === 'OFFLINE_REDEEM' && p.fulfillerCompany && (
+            <span data-testid="detail-fulfiller">{t('detail.collectAt', { company: p.fulfillerCompany })}</span>
+          )}
+        </div>
+      )}
+      {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
+      {!survey && <Tiers tiers={tiers} />}
+    </div>
+  )
+  const statsBody = (
+    <>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+        {([['last1h', p.last1h], ['last24h', p.last24h], ['last7d', p.last7d], ['last30d', p.last30d],
+          ['total', p.completions]] as const).map(([key, value]) => (
+          <div key={key} className="flex justify-between gap-2">
+            <dt className="text-muted-foreground">{t(`detail.${key}`)}</dt>
+            <dd className="font-medium">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {p.statsAt && (
+        <p className="text-muted-foreground mt-2 text-xs">{t('detail.statsAt', { time: formatDateTime(p.statsAt) })}</p>
+      )}
+    </>
   )
   return (
     <>
@@ -254,6 +395,8 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
           {t('detail.invitedOnly')}
         </p>
       )}
+      {tabs ? <TabbedBody tabs={tabs} p={p} draft={draft} lead={lead?.material?.no}
+        rewardBody={rewardBody} statsBody={statsBody} duration={duration} nodeName={nodeName} /> : (<>
       <Materials materials={p.materials} exclude={lead?.material?.no} />
       {p.intro && (
         // Q65: the introduction without a card of its own, its first lines and the rest on demand.
@@ -265,45 +408,19 @@ export function PublicationContent({ publication: p, tiers, titleAs: Title = 'h1
       // Q65: the reward folded to one line (the amount is beside the name); how it is paid and the tiers inside.
       <Disclosure icon={MethodIcon} testId="detail-reward" summary={
         <span data-testid="detail-reward-line">{t('detail.rewardLine', { method: t(`methods.${p.rewardMethod}Short`) })}</span>}>
-        <div className="flex flex-col gap-2">
-          {/* Q22: what the sponsor does after a pass, in their words for a prize. */}
-          <p className="text-sm" data-testid="detail-method-name">{t(`methods.${p.rewardMethod}`)}</p>
-          {p.rewardMethod !== 'PLATFORM' && (
-            <div className="bg-accent text-accent-foreground flex flex-col gap-1 px-3 py-2 text-sm"
-              data-testid="detail-method-note" data-method={p.rewardMethod}>
-              <span>{t(`methods.${p.rewardMethod}Hint`)}</span>
-              {prizeText && <span className="font-medium whitespace-pre-line" data-testid="detail-prize">{prizeText}</span>}
-              {/* Q89b-1: another sponsor's benefit is collected at its provider's place. */}
-              {p.rewardMethod === 'OFFLINE_REDEEM' && p.fulfillerCompany && (
-                <span data-testid="detail-fulfiller">{t('detail.collectAt', { company: p.fulfillerCompany })}</span>
-              )}
-            </div>
-          )}
-          {survey && <p className="text-muted-foreground text-sm" data-testid="detail-survey">{t('detail.surveyHint')}</p>}
-          {!survey && <Tiers tiers={tiers} />}
-        </div>
+        {rewardBody}
       </Disclosure>
       )}
       <Disclosure icon={TrendingUp} testId="detail-stats" summary={
         <span data-testid="detail-stats-line">{t('detail.statsLine', { recent: p.last24h, total: p.completions })}</span>}>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          {([['last1h', p.last1h], ['last24h', p.last24h], ['last7d', p.last7d], ['last30d', p.last30d],
-            ['total', p.completions]] as const).map(([key, value]) => (
-            <div key={key} className="flex justify-between gap-2">
-              <dt className="text-muted-foreground">{t(`detail.${key}`)}</dt>
-              <dd className="font-medium">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        {p.statsAt && (
-          <p className="text-muted-foreground mt-2 text-xs">{t('detail.statsAt', { time: formatDateTime(p.statsAt) })}</p>
-        )}
+        {statsBody}
       </Disclosure>
       {p.sponsorIntro && (
         <Disclosure icon={Store} testId="detail-sponsor-intro" summary={t('detail.aboutSponsor')}>
           <p className="text-sm whitespace-pre-line">{p.sponsorIntro}</p>
         </Disclosure>
       )}
+      </>)}
     </>
   )
 }

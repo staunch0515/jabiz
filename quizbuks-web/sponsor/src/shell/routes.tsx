@@ -39,7 +39,7 @@ import { DigitalPrizesPage } from '../publishing/DigitalPrizesPage'
 import { MailServerPage } from '../publishing/MailServerPage'
 import { PublicationListPage } from '../publishing/PublicationListPage'
 import { PublicationPage } from '../publishing/PublicationPage'
-import { publicationIdOf, PUBLICATIONS_PATH } from '../publishing/paths'
+import { publicationIdOf, publicationTabOf, PUBLICATIONS_PATH } from '../publishing/paths'
 import { RedeemPage } from '../publishing/RedeemPage'
 import { StaffPage } from '../publishing/StaffPage'
 import { StatsPage } from '../stats/StatsPage'
@@ -102,7 +102,12 @@ export function pageOf(path: string, search: string, state: ShellState): ReactNo
   const analyticsId = analyticsIdOf(path)
   if (analyticsId) return <PublicationAnalyticsPage key={path} publicationId={analyticsId} />
   const publicationId = publicationIdOf(path)
-  if (publicationId) return <PublicationPage key={path} publicationId={publicationId} />
+  if (publicationId) return <PublicationPage key={publicationId} publicationId={publicationId} />
+  const publicationTab = publicationTabOf(path)
+  if (publicationTab) {
+    // One page for the tabs: the head and the aside stay while the tab changes.
+    return <PublicationPage key={publicationTab.id} publicationId={publicationTab.id} tab={publicationTab.tab} />
+  }
 
   const assetTab = tabOf(path)
   // One page for all the tabs: what is chosen on it ("only the unused") stays when the tab changes.

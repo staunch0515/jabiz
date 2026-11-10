@@ -1,31 +1,34 @@
 import { formatDateTime } from '@jabiz/client'
-import { Alert, AlertDescription, AlertTitle, Button, DescriptionList, PageHeader, PageState } from '@jabiz/ui'
+import { Alert, AlertDescription, AlertTitle, Button, DescriptionList, DetailPage, PageHeader, PageState } from '@jabiz/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SPONSOR } from '../messages'
 import { QB } from '../qb/messages'
-import { Link, navigate, useLocation } from '../qb/router'
+import { Link, navigate, Redirect, useLocation } from '../qb/router'
 import { treePathOf } from '../tree/api'
 import '../tree/messages'
 import { conditionsQuery, readConditions, readEntryFeesCollected,
   readPublication, type Publication, type PublicationDetail } from './api'
 import { formatKudos } from '../qb/kudos'
-import { NEW_PUBLICATION, publicationQuery, PUBLICATIONS_PATH, PUBLICATIONS_QUERY } from './paths'
+import { NEW_PUBLICATION, publicationPath, publicationQuery, PUBLICATIONS_PATH, PUBLICATIONS_QUERY,
+  type PageOfPublicationTab } from './paths'
 import { analyticsPath } from '../analytics/api'
 import '../analytics/messages'
 import { transactionsOf } from '../transactions/api'
 import '../transactions/messages'
 import { DigitalPoolSection } from './DigitalPool'
 import { InvitationsSection } from './Invitations'
-import { PublicationActions } from './PublicationActions'
+import { PublicationActions, usePublicationLanguage } from './PublicationActions'
+import { PublicationQrPanel } from './PublicationQrDialog'
+import { PublicationTabs } from './PublicationTabs'
 import { StaleBanner, PublicationWizard } from './PublicationWizard'
 import { ReferralsSection } from './ReferralsSection'
 import { ExposureSection } from '../exposure/ExposureCounts'
 import { VideoUseSection } from '../videouses/VideoUseSection'
 import '../sharedvideos/messages'
-import { MainlandNotice, PublicationSummary, reachesMainland, StatusBadge, useEndReasonLabel, useVersionOf }
-  from './shared'
+import { MainlandNotice, reachesMainland, StatusBadge, SummaryBlock, useEndReasonLabel, useVersionOf,
+  type SummaryValues } from './shared'
 import { PreviewButton } from '../preview/PreviewButton'
 import { previewOfPublication } from '../preview/paths'
 import { VersionNotice } from './VersionNotice'
@@ -101,13 +104,13 @@ const pooled = (publication: Publication) =>
 const poolMode = (publication: Publication) => (publication.benefitPurchaseId ? 'watch' : 'own')
 
 /** A submitted publication: frozen (D-Q4-2), shown as it is with what can still be done in its state. */
-function PublicationView({ detail, stale, onStale }: {
+function PublicationView({ detail, stale, onStale, tab }: {
   detail: PublicationDetail
   stale: boolean
   onStale: () => void
+  tab: PageOfPublicationTab
 }) {
   const { t } = useTranslation(SPONSOR)
-  const endReason = useEndReasonLabel()
   const { publication, tiers } = detail
   const { versions, version } = useVersionOf(publication.quizId, publication.versionId)
   // F-S11: the version shown, or the one a switch in review would show, has a video mainland China cannot play.
@@ -116,6 +119,102 @@ function PublicationView({ detail, stale, onStale }: {
   // Q47: the conditions it was submitted with (frozen with it).
   const conditions = useQuery({ queryKey: conditionsQuery(publication.publicationId),
     queryFn: () => readConditions(publication.publicationId), enabled: publication.audience === 'PUBLIC' })
+  const values = {
+    ...publication,
+    quizTitle: version?.title ?? null,
+    questionCount: version?.questionCount ?? null,
+    // F-S7: whether the version shuffles its questions (unknown while it is read: not shown).
+    shuffled: version?.shuffled,
+    tiers,
+    conditions: conditions.data,
+  }
+  const id = publication.publicationId
+  return (
+    <div data-testid="publication-view" data-status={publication.status} data-tab={tab}>
+      <DetailPage breadcrumb={<Breadcrumb />} title={<span data-testid="publication-title">{publication.name}</span>}
+        description={
+          <span className="text-muted-foreground text-sm">
+            {t('publishing.detail.edited', { time: formatDateTime(publication.editedAt) })}
+          </span>
+        }
+        tabs={<PublicationTabs publicationId={id} current={tab} />}
+        asideLabel={t('publishing.tabs.aside')}
+        aside={<>
+          <h2 className="text-sm font-medium">{t('publishing.tabs.status')}</h2>
+          <StatusBadge status={publication.status} startAt={publication.startAt} endAt={publication.endAt} />
+          <p className="text-muted-foreground text-sm">
+            {publication.status === 'PENDING_REVIEW' ? t('publishing.detail.inReview') : t('publishing.detail.frozen')}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <PreviewButton to={previewOfPublication(id)} />
+            <PublicationActions publication={publication} revision={publication.revision} disabled={stale}
+              onStale={onStale} />
+          </div>
+          {publication.status !== 'PENDING_REVIEW' && (
+            <nav aria-label={t('publishing.tabs.links')} className="flex flex-col gap-1 text-sm">
+              <Link to={analyticsPath(id)} className="w-fit underline underline-offset-4"
+                data-testid="publication-analytics-link">
+                {t('analytics.publication.link')}
+              </Link>
+              <Link to={transactionsOf(id)} className="w-fit underline underline-offset-4"
+                data-testid="publication-transactions">
+                {t('transactions.publicationLink')}
+              </Link>
+              <Link to={treePathOf(publication.treeNodeId)} className="w-fit underline underline-offset-4"
+                data-testid="publication-tree">
+                {t('tree.onTree')}
+              </Link>
+            </nav>
+          )}
+        </>}>
+        {tab === 'overview' && <OverviewTab publication={publication} values={values} />}
+        {tab === 'questions' && (
+          <>
+            <SummaryBlock values={values} part="quiz" />
+            <VersionNotice publication={publication} disabled={stale} onStale={onStale} />
+          </>
+        )}
+        {tab === 'audience' && (
+          <>
+            {reaches && version?.foreignVideo && <MainlandNotice testId="publication-mainland" />}
+            {reaches && !version?.foreignVideo && pendingVersion?.foreignVideo && (
+              <MainlandNotice testId="publication-mainland-pending" pending />
+            )}
+            <SummaryBlock values={values} part="audience" />
+            {publication.audience === 'INVITED' && (
+              <InvitationsSection publicationId={id} status={publication.status} />
+            )}
+          </>
+        )}
+        {tab === 'rewards' && (
+          <>
+            <SummaryBlock values={values} part="rewards" />
+            {publication.referral && <ReferralsSection publicationId={id} />}
+            {pooled(publication) && <DigitalPoolSection publicationId={id} status={publication.status}
+              mode={poolMode(publication)} />}
+          </>
+        )}
+        {tab === 'fees' && (
+          <>
+            <p className="text-muted-foreground text-sm" data-testid="publication-fees-hint">
+              {t('publishing.tabs.feesHint')}
+            </p>
+            {/* F-S13: the exposures of another Sponsor's shared video it uses (nothing for its own videos). */}
+            <ExposureSection publicationId={id} />
+            {/* F-S14: the ledger of that shared video and both sides' figures (nothing for its own videos). */}
+            <VideoUseSection publicationId={id} />
+          </>
+        )}
+        {tab === 'share' && <ShareTab publication={publication} />}
+      </DetailPage>
+    </div>
+  )
+}
+
+/** The overview: what happened to the publication, what it earned, its name, period and dates. */
+function OverviewTab({ publication, values }: { publication: Publication; values: SummaryValues }) {
+  const { t } = useTranslation(SPONSOR)
+  const endReason = useEndReasonLabel()
   const dates = [
     { key: 'submittedAt', value: publication.submittedAt },
     { key: 'approvedAt', value: publication.approvedAt },
@@ -123,73 +222,15 @@ function PublicationView({ detail, stale, onStale }: {
     { key: 'endedAt', value: publication.endedAt },
   ].filter((d) => d.value)
   return (
-    <section className="flex flex-col gap-4" data-testid="publication-view" data-status={publication.status}>
-      <PageHeader breadcrumb={<Breadcrumb />} title={<span data-testid="publication-title">{publication.name}</span>}
-        description={
-          <span className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={publication.status} startAt={publication.startAt} endAt={publication.endAt} />
-            <span className="text-muted-foreground text-sm">
-              {t('publishing.detail.edited', { time: formatDateTime(publication.editedAt) })}
-            </span>
-          </span>
-        }
-        actions={<div className="flex flex-wrap gap-2">
-          <PreviewButton to={previewOfPublication(publication.publicationId)} />
-          <PublicationActions publication={publication} revision={publication.revision} disabled={stale}
-            onStale={onStale} />
-        </div>} />
-      <p className="text-muted-foreground text-sm">
-        {publication.status === 'PENDING_REVIEW' ? t('publishing.detail.inReview') : t('publishing.detail.frozen')}
-      </p>
-      {publication.status !== 'PENDING_REVIEW' && (
-        <span className="flex flex-wrap gap-4 text-sm">
-          <Link to={analyticsPath(publication.publicationId)} className="w-fit underline underline-offset-4"
-            data-testid="publication-analytics-link">
-            {t('analytics.publication.link')}
-          </Link>
-          <Link to={transactionsOf(publication.publicationId)} className="w-fit underline underline-offset-4"
-            data-testid="publication-transactions">
-            {t('transactions.publicationLink')}
-          </Link>
-          <Link to={treePathOf(publication.treeNodeId)} className="w-fit underline underline-offset-4"
-            data-testid="publication-tree">
-            {t('tree.onTree')}
-          </Link>
-        </span>
-      )}
+    <>
       {publication.status === 'FUNDS_SHORT' && (
         <Alert variant="warning"><AlertDescription>{t('publishing.detail.fundsShort')}</AlertDescription></Alert>
       )}
       <AdminNotice publication={publication} />
-      <VersionNotice publication={publication} disabled={stale} onStale={onStale} />
-      {reaches && version?.foreignVideo && <MainlandNotice testId="publication-mainland" />}
-      {reaches && !version?.foreignVideo && pendingVersion?.foreignVideo && (
-        <MainlandNotice testId="publication-mainland-pending" pending />
-      )}
-      <PublicationSummary values={{
-        ...publication,
-        quizTitle: version?.title ?? null,
-        questionCount: version?.questionCount ?? null,
-        // F-S7: whether the version shuffles its questions (unknown while it is read: not shown).
-        shuffled: version?.shuffled,
-        tiers,
-        conditions: conditions.data,
-      }} />
-      {publication.entryFee > 0 && publication.status !== 'DRAFT' && (
+      <SummaryBlock values={values} part="overview" />
+      {publication.entryFee > 0 && (
         <EntryFeesCollected publicationId={publication.publicationId} fee={publication.entryFee} />
       )}
-      {publication.audience === 'INVITED' && (
-        <InvitationsSection publicationId={publication.publicationId} status={publication.status} />
-      )}
-      {publication.referral && publication.status !== 'DRAFT' && (
-        <ReferralsSection publicationId={publication.publicationId} />
-      )}
-      {/* F-S13: the exposures of another Sponsor's shared video it uses (nothing for its own videos). */}
-      {publication.status !== 'DRAFT' && <ExposureSection publicationId={publication.publicationId} />}
-      {/* F-S14: the ledger of that shared video and both sides' figures (nothing for its own videos). */}
-      {publication.status !== 'DRAFT' && <VideoUseSection publicationId={publication.publicationId} />}
-      {pooled(publication) && <DigitalPoolSection publicationId={publication.publicationId} status={publication.status}
-        mode={poolMode(publication)} />}
       {dates.length > 0 && (
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-medium">{t('publishing.detail.dates')}</h2>
@@ -201,6 +242,21 @@ function PublicationView({ detail, stale, onStale }: {
           ]} />
         </div>
       )}
+    </>
+  )
+}
+
+/** The share link and its QR code (the dialog of the page's head shows the same). */
+function ShareTab({ publication }: { publication: Publication }) {
+  const { t } = useTranslation(SPONSOR)
+  const language = usePublicationLanguage(publication.versionId)
+  return (
+    <section className="flex flex-col gap-4" aria-label={t('publishing.tabs.share')} data-testid="publication-share-panel">
+      <p className="text-muted-foreground text-sm">{t('publishing.tabs.shareText')}</p>
+      <PublicationQrPanel publicationId={publication.publicationId} language={language}
+        languages={publication.languages}
+        names={Object.fromEntries(Object.entries(publication.translations).map(([l, texts]) => [l, texts?.name]))}
+        name={publication.name} />
     </section>
   )
 }
@@ -209,7 +265,11 @@ function PublicationView({ detail, stale, onStale }: {
  * A publication's page (`/publications/new`, `/publications/<id>`): a draft opens in the wizard, a submitted one as it
  * is with its actions. Only the sponsor's own publications are found; anything else is "does not exist".
  */
-export function PublicationPage({ publicationId }: { publicationId: string }) {
+export function PublicationPage({ publicationId, tab = 'overview' }: {
+  publicationId: string
+  /** The tab of a submitted publication (F-F3c); a draft is the wizard whatever the address says. */
+  tab?: PageOfPublicationTab
+}) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const queryClient = useQueryClient()
@@ -272,6 +332,8 @@ export function PublicationPage({ publicationId }: { publicationId: string }) {
   }
   const detail = found.data
   if (detail.publication.status === 'DRAFT') {
+    // A draft has no tabs: an address of one goes back to the draft.
+    if (tab !== 'overview') return <Redirect to={publicationPath(publicationId)} />
     // A draft's codes are loaded below the wizard once the saved draft hands out prizes from a pool (Q33): the
     // readiness check wants the pool to cover the winners before it is submitted.
     return (
@@ -288,7 +350,7 @@ export function PublicationPage({ publicationId }: { publicationId: string }) {
   return (
     <div className="flex flex-col gap-4">
       {banner}
-      <PublicationView key={generation} detail={detail} stale={stale} onStale={() => setStale(true)} />
+      <PublicationView key={generation} detail={detail} stale={stale} onStale={() => setStale(true)} tab={tab} />
     </div>
   )
 }

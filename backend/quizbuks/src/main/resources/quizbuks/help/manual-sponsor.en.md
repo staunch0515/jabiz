@@ -29,6 +29,7 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 - Rewards are paid in Kudos from your wallet, in cash at your place, as a prize collected at your place, or as a digital prize (codes, vouchers or links).
 - Referrals, entry fees and languages are set in the publication too.
 - Submitted publications are reviewed before they go on. While in review you can withdraw one to change it; once approved it cannot be changed (copy it to publish it again with changes). A sent-back publication says why.
+- The page of a submitted publication has seven tabs, each with its own address: Overview, Quiz & version, Audience, Rewards, Fees, Statistics, and Share & QR code; the status and next steps (pause, copy, preview and more) are beside them. A draft still opens in the wizard.
 - Takers cannot start a publication while your wallet cannot pay its highest reward: top up. You can pause a publication and resume it (also from the app's My Sponsor account).
 
 ## Knowledge map (/sponsor/publications/map)

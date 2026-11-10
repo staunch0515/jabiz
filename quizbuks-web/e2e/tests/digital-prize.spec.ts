@@ -186,7 +186,7 @@ test('codes are loaded into the pool in the console and handed out one each', as
   await signOut(page)
   await signIn(page, '/sponsor/', draft.sponsor.email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.goto(`/sponsor/publications/${draft.publicationId}`)
+  await page.goto(`/sponsor/publications/${draft.publicationId}/rewards`)
   await expect(page.getByTestId('digital-pool-available')).toHaveText(/0/)
   await expect(page.getByTestId('digital-pool-issued')).toHaveText(/2/)
   await signOut(page)

@@ -94,7 +94,8 @@ test('an invited address answers through its mailed link; nobody else sees the p
   await signIn(page, '/sponsor/', sponsor.email)
   // The console's session is set once the dashboard shows; a navigation before that lands on the sign-in page.
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
-  await page.goto(`/sponsor/publications/${publicationId}`)
+  // F-F3c: the audience and its invitations are the audience tab's.
+  await page.goto(`/sponsor/publications/${publicationId}/audience`)
   await expect(page.getByTestId('publication-view')).toBeVisible()
   await expect(page.getByTestId('summary-audience')).toHaveText('Invited e-mail addresses only')
   const invitations = page.getByTestId('invitations')

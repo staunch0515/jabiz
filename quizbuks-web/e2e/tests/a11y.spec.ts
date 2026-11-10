@@ -338,6 +338,16 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.goto(`/sponsor/publications/${live}`)
     await expect(page.getByTestId('publication-view')).toHaveAttribute('data-status', 'LIVE')
     await expectAccessible(page, at('sponsor live publication'))
+    // F-F3c: each tab of the page once (the analytics have their own test below).
+    for (const tab of ['questions', 'audience', 'rewards', 'fees', 'share']) {
+      await page.getByTestId(`page-tab-${tab}`).click()
+      await expect(page.getByTestId(`page-tab-${tab}`)).toHaveAttribute('aria-current', 'page')
+      await expect(page).toHaveURL(new RegExp(`/sponsor/publications/${live}/${tab}$`))
+      if (tab === 'share') await expect(page.getByTestId('publication-qr-image')).toBeVisible()
+      await expectAccessible(page, at(`sponsor live publication ${tab} tab`))
+    }
+    await page.getByTestId('page-tab-overview').click()
+    await expect(page).toHaveURL(new RegExp(`/sponsor/publications/${live}$`))
     await page.getByTestId('publication-pause').click()
     await expect(page.getByRole('alertdialog')).toBeVisible()
     await expectAccessible(page, at('sponsor publication pause'))
