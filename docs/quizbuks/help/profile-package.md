@@ -4,7 +4,7 @@
 
 - 对象：发起方（FAQ 的 `audience` = `SPONSOR`）
 - 分类：`ACCOUNT`
-- 页面：发起方页面"发起方中心 → 概况"的"发起方资料包"卡片
+- 页面：发起方页面"发起方中心 → 概况"页头的"导入与导出"菜单
 - 模板：`docs/quizbuks/profile-package-prompts.md`（规则与示例由测试 `ProfilePackagePromptsTest` 与服务器的检查核对；页面上的提示词由 `aiPrompt.test.ts` 核对与它相同）
 - 规则：`docs/quizbuks/first-launch-spec.md` F-C5
 
@@ -12,7 +12,7 @@
 
 ### 中文 · 想用 AI 根据官网生成发起方资料包
 
-**怎么做**：在"概况 → 发起方资料包"点"给 AI 工具的提示词"，填好官网地址和联系人姓名，点"复制提示词"，交给能读网页的 AI 工具（ChatGPT、Gemini、Claude 等）。AI 会回答一个 JSON，保存成 `.quizbuks-profile.json` 文件，在"概况 → 发起方资料包 → 导入"中选择它。
+**怎么做**：在"概况"页头点"导入与导出"，选"发起方资料包"下的"给 AI 工具的提示词"，填好官网地址和联系人姓名，点"复制提示词"，交给能读网页的 AI 工具（ChatGPT、Gemini、Claude 等）。AI 会回答一个 JSON，保存成 `.quizbuks-profile.json` 文件，在"导入与导出 → 发起方资料包 → 导入"中选择它。
 
 **一定要校对**：导入前的确认页会列出将新增、修改与删除的内容。AI 可能读错或漏掉信息，请把公司名、简介、商品的价格与链接与官网逐项对照。导入只写草稿，主页照常提交审核。
 
@@ -22,7 +22,7 @@
 
 ### 日本語 · AI で公式サイトから主催者資料パッケージを作る
 
-**手順**：「概要 → 主催者資料パッケージ」の「AI ツール用のプロンプト」を開き、公式サイトの URL と担当者名を入れて「プロンプトをコピー」し、ウェブページを読める AI ツール（ChatGPT、Gemini、Claude など）に渡します。AI が返した JSON を `.quizbuks-profile.json` として保存し、「概要 → 主催者資料パッケージ → 取り込む」で選びます。
+**手順**：「概要」ページ上部の「インポートとエクスポート」から「主催者資料パッケージ」の「AI ツール用のプロンプト」を開き、公式サイトの URL と担当者名を入れて「プロンプトをコピー」し、ウェブページを読める AI ツール（ChatGPT、Gemini、Claude など）に渡します。AI が返した JSON を `.quizbuks-profile.json` として保存し、「インポートとエクスポート → 主催者資料パッケージ → 取り込む」で選びます。
 
 **必ず確認してください**：取り込み前の確認画面に、追加・変更・削除される内容が表示されます。AI は読み違いや抜けをすることがあるため、会社名・紹介文・商品の価格とリンクを公式サイトと一つずつ照らし合わせてください。取り込まれるのは下書きだけで、ページは通常どおり審査に提出します。
 
@@ -32,7 +32,7 @@
 
 ### English · Create a profile package from your website with an AI tool
 
-**How**: In "Overview → Profile package" open "Prompt for an AI tool", enter your website address and the contact name, press "Copy the prompt" and give it to an AI tool that can read web pages (ChatGPT, Gemini, Claude and others). The AI answers with one JSON; save it as a `.quizbuks-profile.json` file and choose it in "Overview → Profile package → Import".
+**How**: In the head of "Overview" open "Import and export", and under "Profile package" choose "Prompt for an AI tool", enter your website address and the contact name, press "Copy the prompt" and give it to an AI tool that can read web pages (ChatGPT, Gemini, Claude and others). The AI answers with one JSON; save it as a `.quizbuks-profile.json` file and choose it in "Import and export → Profile package → Import".
 
 **Always check it**: the confirmation screen before the import lists what will be added, changed and removed. An AI can misread or miss things, so compare the company name, the introduction and each product's price and link with your website. The import writes drafts only, and your page is submitted for review as usual.
 

@@ -291,7 +291,9 @@ export function TransactionsPage() {
 
       <section aria-labelledby="transactions-list" className="flex flex-col gap-3">
         <h2 id="transactions-list" className="text-lg font-semibold">{t('transactions.table')}</h2>
+        {/* F-F3d: the platform's range row does not wrap, and two date fields are wider than a phone (360 px). */}
         <FilterBar label={t('transactions.filters.label')} fields={fields} values={values}
+          className="[&_[role=group]>div]:flex-wrap"
           onSubmit={(next) => filter({
             ...filters,
             type: oneOf<TransactionType>(next.type, TRANSACTION_TYPES),

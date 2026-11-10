@@ -29,6 +29,18 @@ test.beforeEach(async ({ request }) => {
   await prepareQuizbuks(request)
 })
 
+/** The widest screen F-F1's rule is checked on (F-F3d): a main button is still beside its title. */
+const WIDE_SCREEN = 1920
+
+/** The main button is beside the title: no farther from it than one button's width, however wide the screen. */
+async function expectBesideTitle(page: Page, testId: string) {
+  const title = await page.getByTestId('page-title').boundingBox()
+  const button = await page.getByTestId(testId).boundingBox()
+  expect(title, 'the title is drawn').not.toBeNull()
+  expect(button, `${testId} is drawn`).not.toBeNull()
+  expect(button!.x - (title!.x + title!.width), `${testId} beside the title`).toBeLessThanOrEqual(button!.width)
+}
+
 /** A taker with a complete profile, signed in at the app. */
 async function takerWithProfile(page: Page, request: APIRequestContext) {
   const email = await verifiedUser(request, 'app', 'Aiko')
@@ -167,6 +179,8 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('profile-status')).toBeVisible()
     await expectAccessible(page, at('sponsor profile overview'))
     // F-C5: the prompt for another AI tool, with the parameters filled in.
+    await page.getByTestId('profile-transfer').click()
+    await expectAccessible(page, at('sponsor profile import and export menu'))
     await page.getByTestId('profile-prompt').click()
     const prompt = page.getByTestId('profile-prompt-dialog')
     await expect(prompt).toBeVisible()
@@ -205,8 +219,16 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByTestId('avatar-account').click()
     await expect(page.getByTestId('sign-in').first()).toBeVisible()
     await expectAccessible(page, at('sponsor account'))
-    // At a phone's width (F-F3: 360 px): the bottom menu and "More"; every area opens and passes axe (no sideways
-    // scrolling is F-F3d's, with the pages' content width: plan section 9).
+    // F-F3d: at the widest screen the page's main button stays by the title (F-F1's rule on the Sponsor pages).
+    await page.setViewportSize({ width: WIDE_SCREEN, height: 900 })
+    for (const [area, tab, button] of [['quizzes', undefined, 'new-quiz'], ['publications', undefined, 'new-publication'],
+      ['assets', undefined, 'asset-add'], ['assets', 'products', 'product-add'], ['messages', 'notices', 'notice-new'],
+      ['hub', 'staff', 'staff-add-open']] as const) {
+      await openArea(page, area, tab)
+      await expectBesideTitle(page, button)
+    }
+    // At a phone's width (F-F3: 360 px): the bottom menu and "More"; every area opens without sideways scrolling and
+    // passes axe.
     await page.setViewportSize({ width: 360, height: 780 })
     await expectAccessible(page, at('sponsor account 360px'))
     await expect(page.getByTestId('bottom-bar-home')).toBeVisible()
@@ -214,6 +236,8 @@ for (const appearance of ['light', 'dark'] as const) {
       await openArea(page, area)
       // Each page's title (the home's is its banner's until F-F3b gives it the area's head).
       await expect(page.locator('h1').filter({ visible: true }).first()).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth),
+        area).toBeLessThanOrEqual(0)
       await expectAccessible(page, at(`sponsor area ${area} 360px`))
     }
   })

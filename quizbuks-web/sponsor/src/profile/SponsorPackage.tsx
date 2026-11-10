@@ -1,11 +1,10 @@
 import { formatBytes } from '@jabiz/client'
-import { Alert, AlertDescription, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmDialog,
+import { Alert, AlertDescription, Button, ConfirmDialog,
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Label, notify }
   from '@jabiz/ui'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
-import { Download, Upload } from 'lucide-react'
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { useTranslation } from 'react-i18next'
 import { readBankLimits, searchQuizzes } from '../content/api'
 import { reasonsOf } from '../content/QuizTransfer'
@@ -142,13 +141,26 @@ async function checkPackage(document: SponsorPackageDocument, hash: string, t: T
   return { document, hash, context, plan, profilePlan, quizChecks, sharedVideos, problems }
 }
 
+/** What the menu in the overview's head (and the notice of an import left open) does with the package (F-F3d). */
+export interface SponsorPackageControls {
+  exportNow: () => void
+  /** Opens the file choice: browsers allow it only within the click itself, so this clicks the input. */
+  pickFile: () => void
+  askAbandon: (importId: string) => void
+}
+
 /**
  * The sponsor package on the overview (F-C4, docs/quizbuks/plans/impl/F-C4.md): exports the profile, quizzes,
  * publications not ended and knowledge maps as one file; imports such a file after a check page listing every problem
  * and what it makes, step by step with its progress, through the server's import record. An import stopped half-way
  * goes on with the same file (no step is done twice) or is given up (its drafts removed).
  */
-export function SponsorPackageCard() {
+export function SponsorPackage({ controls, onExporting }: {
+  /** The page head's "Import and export" menu (F-F3d) starts each through this; the dialogs stay here. */
+  controls?: Ref<SponsorPackageControls>
+  /** What an export in progress is on (null when none), for the menu's item. */
+  onExporting?: (what: string | null) => void
+}) {
   const { t, i18n } = useTranslation(SPONSOR)
   const queryClient = useQueryClient()
   const input = useRef<HTMLInputElement>(null)
@@ -158,7 +170,7 @@ export function SponsorPackageCard() {
   const [state, setState] = useState<State | null>(null)
   const [password, setPassword] = useState('')
   const [abandoning, setAbandoning] = useState<string | null>(null)
-  const open = useQuery({ queryKey: OPEN_IMPORT_QUERY, queryFn: readOpenImport })
+  useEffect(() => onExporting?.(exporting), [exporting, onExporting])
 
   const exportNow = async () => {
     setExporting(t('package.exportingProfile'))
@@ -246,6 +258,12 @@ export function SponsorPackageCard() {
     }
   }
 
+  useImperativeHandle(controls, () => ({
+    exportNow: () => void exportNow(),
+    pickFile: () => input.current?.click(),
+    askAbandon: setAbandoning,
+  }))
+
   const busy = state?.kind === 'checking' || state?.kind === 'importing'
   const checked = state && 'checked' in state ? state.checked : null
   const plan = checked?.plan
@@ -261,42 +279,13 @@ export function SponsorPackageCard() {
     ['links', (checked?.profilePlan?.links ?? []).map((l) => l.path), 'paths'],
   ] as const).filter(([, list]) => list.length > 0) : []
   return (
-    <Card data-testid="sponsor-package">
-      <CardHeader>
-        <CardTitle>{t('package.title')}</CardTitle>
-        <CardDescription>{t('package.hint')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <p className="text-muted-foreground text-sm">{t('package.reviewNote')}</p>
-        {open.data && (
-          <Alert data-testid="sponsor-package-open">
-            <AlertDescription className="flex flex-col gap-2">
-              <span>{t('package.open', { done: open.data.stepsDone, total: open.data.stepsTotal })}</span>
-              <span>
-                <Button variant="outline" size="sm" data-testid="sponsor-package-abandon"
-                  onClick={() => setAbandoning(open.data!.importId)}>{t('package.abandon')}</Button>
-              </span>
-            </AlertDescription>
-          </Alert>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={exporting !== null} aria-busy={exporting !== null || undefined}
-            data-testid="sponsor-package-export" onClick={() => void exportNow()}>
-            <Download aria-hidden />
-            {exporting ? t('package.exporting', { what: exporting }) : t('package.export')}
-          </Button>
-          <input ref={input} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden
-            data-testid="sponsor-package-file" onChange={(event) => {
-              const file = event.target.files?.[0]
-              event.target.value = ''
-              if (file) void chosen(file)
-            }} />
-          <Button variant="outline" data-testid="sponsor-package-import" onClick={() => input.current?.click()}>
-            <Upload aria-hidden />
-            {t('package.import')}
-          </Button>
-        </div>
-      </CardContent>
+    <>
+      <input ref={input} type="file" accept="application/json,.json" className="sr-only" tabIndex={-1} aria-hidden
+        data-testid="sponsor-package-file" onChange={(event) => {
+          const file = event.target.files?.[0]
+          event.target.value = ''
+          if (file) void chosen(file)
+        }} />
       <ConfirmDialog open={large !== null} onOpenChange={(value) => !value && setLarge(null)}
         title={t('package.largeTitle')} description={large ? t('package.largeText', { size: formatBytes(large.size) })
           : undefined} confirmLabel={t('package.largeConfirm')} cancelLabel={t('package.cancel')}
@@ -317,6 +306,7 @@ export function SponsorPackageCard() {
             <DialogTitle>{t('package.importTitle')}</DialogTitle>
             <DialogDescription>{t('package.importHint')}</DialogDescription>
           </DialogHeader>
+          <p className="text-muted-foreground text-sm">{t('package.reviewNote')}</p>
           {state?.kind === 'checking' && <p role="status" className="text-sm">{t('package.checking')}</p>}
           {state?.kind === 'refused' && (
             <Alert variant="destructive" data-testid="sponsor-package-refused">
@@ -417,6 +407,28 @@ export function SponsorPackageCard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </>
+  )
+}
+
+/**
+ * An import stopped half-way (F-C4), told on the overview itself, not in the menu: it goes on with the same file
+ * (the menu's import) or is given up here.
+ */
+export function OpenImportNotice({ onAbandon }: { onAbandon?: (importId: string) => void }) {
+  const { t } = useTranslation(SPONSOR)
+  const open = useQuery({ queryKey: OPEN_IMPORT_QUERY, queryFn: readOpenImport })
+  if (!open.data) return null
+  const importId = open.data.importId
+  return (
+    <Alert data-testid="sponsor-package-open">
+      <AlertDescription className="flex flex-col gap-2">
+        <span>{t('package.open', { done: open.data.stepsDone, total: open.data.stepsTotal })}</span>
+        <span>
+          <Button variant="outline" size="sm" data-testid="sponsor-package-abandon"
+            onClick={() => onAbandon?.(importId)}>{t('package.abandon')}</Button>
+        </span>
+      </AlertDescription>
+    </Alert>
   )
 }

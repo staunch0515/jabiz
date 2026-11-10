@@ -9,7 +9,7 @@ import type { MySponsorPage } from '../page/api'
 import type { MyProduct } from '../products/api'
 import { PRODUCT_LIMIT_QUERY, PRODUCTS_QUERY } from '../products/ProductsPage'
 import type { Sponsor } from '../qb/api'
-import { ProfileTransferCard } from './ProfileTransfer'
+import { TransferMenu, TransferTools } from './TransferMenu'
 import { exportProfile, keepApplyDraft, packageFileName, takeApplyDraft, type ImportPlan } from './transfer'
 
 function json(status: number, body: unknown) {
@@ -112,7 +112,7 @@ function server(importAnswer: Answer = { status: 200, body: { output: { plan: PL
 
 
 function renderCard(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
-  return render(<QueryClientProvider client={client}><ProfileTransferCard /></QueryClientProvider>)
+  return render(<QueryClientProvider client={client}><TransferTools><TransferMenu /></TransferTools></QueryClientProvider>)
 }
 
 const FILE = new File([JSON.stringify({ format: 'quizbuks-profile', schema: 1, languages: ['ja'],
@@ -205,7 +205,8 @@ describe('the prompt for another AI tool', () => {
     })
     const writeText = clipboard()
     renderCard()
-    await userEvent.click(screen.getByTestId('profile-prompt'))
+    await userEvent.click(screen.getByTestId('profile-transfer'))
+    await userEvent.click(await screen.findByTestId('profile-prompt'))
     const dialog = await screen.findByTestId('profile-prompt-dialog')
     const copy = within(dialog).getByTestId('profile-prompt-copy')
     // No website and no name yet (the server knows neither): nothing to copy.

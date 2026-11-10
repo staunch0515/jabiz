@@ -83,6 +83,7 @@ import { BENEFIT, type BenefitKind } from './ids'
 import { PurchaseFollowUp } from './PurchaseFollowUp'
 import './messages'
 import { AreaPageHeader } from '../shell/AreaPageHeader'
+import { mainAction } from '../shell/mainAction'
 
 const IMAGE_TYPES = 'image/jpeg,image/png'
 
@@ -301,8 +302,8 @@ export function OffersPage() {
   return (
     <section className="flex flex-col gap-4" data-testid="benefit-offers">
       <AreaPageHeader title={t('benefits.offers.title')} description={t('benefits.offers.intro')}
-        actions={<Button onClick={() => setEditing('new')} data-testid="benefit-offer-add">
-          <Plus aria-hidden className="size-4" />{t('benefits.offers.add')}</Button>} />
+        primaryAction={mainAction({ label: t('benefits.offers.add'), icon: Plus, testId: 'benefit-offer-add',
+          onClick: () => setEditing('new') })} />
       <BenefitAccess />
       <Loading query={offers}>{() => (offers.data ?? []).length === 0 ? (
         <PageState kind="empty" title={t('benefits.offers.empty')} />

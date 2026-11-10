@@ -22,8 +22,8 @@ import { PRODUCTS_TAB_PATH, profilePath } from './paths'
 import { STATS_PATH } from '../shell/paths'
 import { BenefitsEntryCard } from './BenefitsEntryCard'
 import { PreviewCard } from './PreviewCard'
-import { ProfileTransferCard } from './ProfileTransfer'
-import { SponsorPackageCard } from './SponsorPackage'
+import { OpenImportNotice } from './SponsorPackage'
+import { useAbandonImport } from './TransferMenu'
 
 /** Where each item of the checklist is set up; the products are in the asset library since F-C1c. */
 const PATH_OF: Record<ChecklistKey, string> = {
@@ -42,6 +42,7 @@ export function OverviewPage() {
   const sponsor = useMySponsor()
   const page = useQuery({ queryKey: SPONSOR_PAGE_QUERY, queryFn: readMySponsorPage })
   const { items } = useChecklist()
+  const abandonImport = useAbandonImport()
   const rewards = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
   if (sponsor.isPending) return <PageState kind="loading" />
   if (sponsor.isError) return <PageState kind="error" description={tQb('failed')} />
@@ -51,6 +52,8 @@ export function OverviewPage() {
   return (
     <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
       <div className="flex min-w-0 flex-col gap-6">
+        <OpenImportNotice onAbandon={abandonImport} />
+
         <Card data-testid="profile-status" data-status={status}>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-2">
@@ -119,10 +122,6 @@ export function OverviewPage() {
             </ol>
           </CardContent>
         </Card>
-
-        <ProfileTransferCard />
-
-        <SponsorPackageCard />
 
         <Card data-testid="profile-methods">
           <CardHeader>

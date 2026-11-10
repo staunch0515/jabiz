@@ -39,6 +39,7 @@ import { ExportQuizButton, ImportQuizButton } from './QuizTransfer'
 import { CardGrid, Pager, useListView, ViewSwitch } from '../ListView'
 import { CoverPlaceholder } from '../qb/Illustrations'
 import { AreaPageHeader } from '../shell/AreaPageHeader'
+import { mainAction } from '../shell/mainAction'
 
 /** The labels of the quiz states, from the server's dictionary (the code until it answered). */
 export function useQuizStatusLabel() {
@@ -299,15 +300,9 @@ export function QuizListPage({ adding = false }: { adding?: boolean } = {}) {
   return (
     <section className="flex flex-col gap-4" data-testid="quiz-list">
       <AreaPageHeader title={t('quizzes.title')} description={t('quizzes.intro')}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <ImportQuizButton />
-            <Button onClick={() => setCreating(true)} data-testid="new-quiz">
-              <Plus aria-hidden />
-              {t('quizzes.new')}
-            </Button>
-          </div>
-        } />
+        primaryAction={mainAction({ label: t('quizzes.new'), icon: Plus, testId: 'new-quiz',
+          onClick: () => setCreating(true) })}
+        actions={<ImportQuizButton />} />
       <div className="flex flex-wrap items-end justify-between gap-4">
       <form role="search" className="flex w-full max-w-sm flex-col gap-2" onSubmit={(event) => event.preventDefault()}>
         <Label htmlFor={`${id}-search`}>{t('quizzes.search')}</Label>
