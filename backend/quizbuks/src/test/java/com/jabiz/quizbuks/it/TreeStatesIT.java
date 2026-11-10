@@ -2,6 +2,8 @@ package com.jabiz.quizbuks.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.jabiz.quizbuks.page.QbSponsorPages;
+import com.jabiz.quizbuks.page.SponsorPageProcesses;
 import com.jabiz.quizbuks.tree.TreeNodeStates;
 import com.jabiz.quizbuks.tree.TreeProcesses;
 import com.jabiz.quizbuks.tree.TreeSupport;
@@ -10,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -211,6 +214,35 @@ class TreeStatesIT extends TreeItSupport {
             "treeId", map.treeId()), 404);
         refused(TreeSupport.PROCESS, taker(newTaker(unique("t-fs3-nosy"), "JP")), body("userId", userId,
             "treeId", map.treeId()), 403);
+    }
+
+    @Test
+    void theSponsorsPageListsItsGraphsToAnyoneSignedInOncePublished() {
+        String sponsor = newSponsor(unique("s-fs3-page"));
+        Map3 map = map(sponsor);
+        String token = sponsorToken(sponsor);
+        String handle = "fs3-" + UUID.randomUUID().toString().substring(0, 8);
+        run(SponsorPageProcesses.SAVE, token, body("handle", handle, "language", "en", "headline", "Coffee",
+            "website", "https://example.com/shop"));
+        String mine = taker(newTaker(unique("t-fs3-page"), "JP"));
+        // A draft page is nobody's to find.
+        assertThat(pageTrees(mine, handle)).isEmpty();
+
+        Map<String, Object> submitted = run(SponsorPageProcesses.SUBMIT, token, body());
+        assertThat(submitted).containsEntry("status", QbSponsorPages.PENDING);
+        run("APPROVAL_DECIDE", sponsorReviewer(), body("requestId", submitted.get("approvalRequestId"),
+            "decision", "APPROVE"));
+        deliverEvents();
+        // Published: the Sponsor's graph, though the person has neither answered nor lit anything in it; only it.
+        assertThat(pageTrees(mine, handle)).singleElement().satisfies(row -> assertThat(row)
+            .containsEntry("treeId", map.treeId()).containsEntry("ownerKind", "SPONSOR")
+            .containsEntry("nodes", 3).containsEntry("litNodes", 0));
+        assertThat(myTrees(mine)).doesNotContain(map.treeId());
+        assertThat(pageTrees(mine, "fs3-nobody")).isEmpty();
+    }
+
+    private List<Map<String, Object>> pageTrees(String token, String handle) {
+        return items("qb.app.trees", token, Map.of("params", Map.of("handle", handle), "limit", 500));
     }
 
     private List<Object> myTrees(String token) {
