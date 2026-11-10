@@ -43,6 +43,7 @@ import { AudienceConditions, AudienceCountPanel, AudienceFeePanel } from './Audi
 import { LanguagesFields } from './LanguagesFields'
 import { ReferralFields } from './ReferralFields'
 import {
+  asChallenge,
   asSurvey,
   conditionsQuery,
   countAudience,
@@ -92,6 +93,7 @@ import { contentLanguageOf } from '../qb/api'
 import { PublicationTopicsField } from '../topics/PublicationTopicsField'
 import { setPublicationSharedVideo } from '../sharedvideos/api'
 import { NodeField } from './NodeField'
+import { isChallengeNode, readBindableNodes } from '../qb/tree/api'
 import { SharedVideoField, sharedVideoForeign, useSharedVideo } from '../sharedvideos/SharedVideoField'
 
 /** What of a prize the library copies (F-C1): the method and the fields of that method, compared before naming it. */
@@ -312,6 +314,10 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
     : version?.fullScore ?? output?.fullScore ?? detail?.publication.fullScore ?? null
   const quizTitle = version?.title ?? versions.data?.[0]?.title
     ?? quizzes.data?.items.find((quiz) => quiz.quizId === form.quizId)?.title ?? null
+  // F-S4c: bound to a node Sponsors light, the publication is a challenge: no reward, audience or extras; the page
+  // sends its one tier of 0 (the server checks it all the same, publishing.PublicationChallenges).
+  const bindable = useQuery({ queryKey: ['qb', 'tree-bindable-nodes'], queryFn: readBindableNodes })
+  const challenge = isChallengeNode(bindable.data, form.treeNode)
   // A survey (Q12) has one reward for a complete response: the page builds its pass mark and tiers.
   const survey = (version?.kind ?? quizzes.data?.items.find((quiz) => quiz.quizId === form.quizId)?.kind) === 'SURVEY'
 
@@ -452,7 +458,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   /** Saves the whole draft when what is typed can be sent; marks what cannot. */
   const run = (then: 'stay' | 'next' | 'count') => {
     const chosen = rewardMethod === form.rewardMethod ? form : { ...form, rewardMethod }
-    const shaped = survey && fullScore !== null ? asSurvey(chosen, fullScore, surveyReward(chosen)) : chosen
+    const shaped = challenge && fullScore !== null ? asChallenge(chosen, fullScore)
+      : survey && fullScore !== null ? asSurvey(chosen, fullScore, surveyReward(chosen)) : chosen
     if (shaped !== form) setForm(shaped)
     const built = inputOf(shaped, publicationId, revision)
     setTyped(built.errors ?? {})
@@ -590,12 +597,17 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           {t('topics.chooseVersion')}</p>
       )}
       {/* F-S12: a video another Sponsor shares, shown by this publication. */}
-      <SharedVideoField value={sharedVideoId} onChange={setEditedShared} disabled={locked} />
+      {!challenge && <SharedVideoField value={sharedVideoId} onChange={setEditedShared} disabled={locked} />}
     </div>,
 
 
     // 2. Who sees it and when, the marks, the rewards and the money.
     <div key="policy" className="flex flex-col gap-6">
+      {/* F-S4c: a challenge pays nothing and has none of the extras: its reward fields are not offered. */}
+      {challenge && (
+        <p className="text-muted-foreground text-sm" data-testid="publication-challenge-note">{t('publishing.challenge.note')}</p>
+      )}
+      {!challenge && (<>
       {settings.data?.maxRewardPerAttempt != null && (
         <p className="text-muted-foreground text-sm" data-testid="publication-reward-cap">
           {t('publishing.field.rewardCap', { max: settings.data.maxRewardPerAttempt.toLocaleString() })}
@@ -743,6 +755,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
             || t('publishing.referral.description'), language: baseLanguage,
           content: { body: form.referralDescription, usage: 'REFERRAL_DESCRIPTION' } } : null}
           onStored={(assetId) => referralCopy.chose(assetId, form.referralDescription)} />} />
+      </>)}
       {/* Q73b: the languages offered and the publication's texts in them. */}
       <LanguagesFields id={id} form={form} set={set} version={version} method={rewardMethod} locked={locked}
         problemOf={problemOf} publicationId={publicationId} />
@@ -810,7 +823,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         )}
         {/* Q88b (D-Q88-14, D-Q88-16): a quiz may charge an entry fee while the switch is on; one set before stays
             visible (the server refuses a new one while it is off). */}
-        {!survey && (settings.data?.entryFeeEnabled || form.entryFee.trim() !== '') && (
+        {!survey && !challenge && (settings.data?.entryFeeEnabled || form.entryFee.trim() !== '') && (
           <Field id={`${id}-entry-fee`} label={t('publishing.field.entryFee')} problem={problemOf('entryFee')}
             hint={t('publishing.field.entryFeeHint')}>
             {(aria) => (
@@ -820,11 +833,11 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
           </Field>
         )}
       </div>
-      {!survey && (
+      {!survey && !challenge && (
         <TiersEditor tiers={form.tiers} onChange={(tiers) => set('tiers', tiers)} fullScore={fullScore}
           problemOf={problemOf} disabled={locked} />
       )}
-      <div className="grid gap-4 md:grid-cols-2">
+      {!challenge && <div className="grid gap-4 md:grid-cols-2">
         <Field id={`${id}-budget`} label={t('publishing.field.budgetCap')} problem={problemOf('budgetCap')}
           hint={t('publishing.field.budgetHint')}>
           {(aria) => (
@@ -840,12 +853,12 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
               data-testid="publication-max-winners" onChange={(event) => set('maxWinners', event.target.value)} />
           )}
         </Field>
-      </div>
+      </div>}
     </div>,
 
     // 3. Who it is for (Q47): public in regions, or invited; and the takers' profiles it is aimed at.
     <div key="audience" className="flex flex-col gap-6">
-      <fieldset className="flex flex-col gap-2" data-testid="publication-audience"
+      {!challenge && <fieldset className="flex flex-col gap-2" data-testid="publication-audience"
         aria-describedby={[`${id}-audience-hint`, problemOf('audience') ? `${id}-audience-error` : undefined]
           .filter(Boolean).join(' ')}>
         <legend className="text-sm font-medium">{t('publishing.field.audience')}</legend>
@@ -867,7 +880,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         {problemOf('audience') && (
           <p id={`${id}-audience-error`} className="text-destructive text-sm">{problemOf('audience')}</p>
         )}
-      </fieldset>
+      </fieldset>}
       {form.audience === 'PUBLIC' && (
       <fieldset className="flex flex-col gap-2" aria-describedby={[`${id}-regions-hint`,
         problemOf('regions') ? `${id}-regions-error` : undefined].filter(Boolean).join(' ')} data-testid="publication-regions">
@@ -890,7 +903,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
         )}
       </fieldset>
       )}
-      {form.audience === 'PUBLIC' && (
+      {form.audience === 'PUBLIC' && !challenge && (
         <div className="flex flex-col gap-3" data-testid="publication-conditions">
           <div className="flex flex-col gap-1">
             <h3 className="text-sm font-medium">{t('publishing.audience.title')}</h3>
