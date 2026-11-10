@@ -221,9 +221,10 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor account'))
     // F-F3d: at the widest screen the page's main button stays by the title (F-F1's rule on the Sponsor pages).
     await page.setViewportSize({ width: WIDE_SCREEN, height: 900 })
-    for (const [area, button] of [['quizzes', 'new-quiz'], ['publications', 'new-publication'],
-      ['assets', 'asset-add']] as const) {
-      await openArea(page, area)
+    for (const [area, tab, button] of [['quizzes', undefined, 'new-quiz'], ['publications', undefined, 'new-publication'],
+      ['assets', undefined, 'asset-add'], ['assets', 'products', 'product-add'], ['messages', 'notices', 'notice-new'],
+      ['hub', 'staff', 'staff-add-open']] as const) {
+      await openArea(page, area, tab)
       await expectBesideTitle(page, button)
     }
     // At a phone's width (F-F3: 360 px): the bottom menu and "More"; every area opens without sideways scrolling and

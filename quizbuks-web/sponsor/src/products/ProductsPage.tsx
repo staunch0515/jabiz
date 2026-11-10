@@ -1,4 +1,5 @@
 import { uploadFile } from '@jabiz/client'
+import { useHostedAdd, type HostedAdd } from '../shell/mainAction'
 import {
   Alert,
   AlertDescription,
@@ -91,7 +92,10 @@ function inputOf(product: MyProduct | null): ProductInput {
  * currency and shop link, in the sponsor's order; added, changed, moved and deleted here (`QB_PRODUCT_SAVE`,
  * `QB_PRODUCT_DELETE`). A product taken down shows why and stays hidden whatever is saved.
  */
-export function ProductsPage() {
+export function ProductsPage({ onAdd }: {
+  /** Hosted under a page head (the asset library): "Add" is that head's main button, not one of this section's. */
+  onAdd?: (add: HostedAdd | null) => void
+} = {}) {
   const { t, i18n } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const queryClient = useQueryClient()
@@ -101,6 +105,7 @@ export function ProductsPage() {
   const max = limit.data ?? null
   const full = max != null && (products.data ?? []).length >= max
   const [editing, setEditing] = useState<MyProduct | 'new' | null>(null)
+  useHostedAdd(onAdd, () => setEditing('new'), full)
   const refresh = () => queryClient.invalidateQueries({ queryKey: PRODUCTS_QUERY })
   const remove = useMutation({
     mutationFn: (productId: string) => deleteProduct(productId),
@@ -134,9 +139,11 @@ export function ProductsPage() {
       {products.isSuccess && (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={full} data-testid="product-add" onClick={() => setEditing('new')}>
-              <Plus aria-hidden />{t('products.add')}
-            </Button>
+            {!onAdd && (
+              <Button disabled={full} data-testid="product-add" onClick={() => setEditing('new')}>
+                <Plus aria-hidden />{t('products.add')}
+              </Button>
+            )}
             {full && (
               <span className="text-muted-foreground text-sm" data-testid="products-full">{t('products.full', { max })}</span>
             )}

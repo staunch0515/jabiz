@@ -1,4 +1,5 @@
 import type { PageAction } from '@jabiz/ui'
+import { useEffect, useRef } from 'react'
 import type { LucideIcon } from 'lucide-react'
 
 /**
@@ -23,4 +24,25 @@ export function mainAction({ label, icon, testId, onClick, disabled }: {
       </button>
     ),
   }
+}
+
+/** What a section hosted under a page's head hands up for that head's main button (F-F3d): open the editor, or not. */
+export interface HostedAdd {
+  open: () => void
+  disabled?: boolean
+}
+
+/**
+ * A section whose "add" belongs in the page head (the notices tab, the products tab) tells its host through `onAdd`
+ * while it is on screen. Used alone (no `onAdd`), the section keeps its own button.
+ */
+export function useHostedAdd(onAdd: ((add: HostedAdd | null) => void) | undefined, open: () => void, disabled: boolean) {
+  const latest = useRef(open)
+  useEffect(() => {
+    latest.current = open
+  })
+  useEffect(() => {
+    onAdd?.({ open: () => latest.current(), disabled })
+    return () => onAdd?.(null)
+  }, [onAdd, disabled])
 }

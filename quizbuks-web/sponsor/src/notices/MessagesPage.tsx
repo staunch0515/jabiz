@@ -27,6 +27,7 @@ import { ASSETS_PATH } from '../assets/api'
 import { useRegionLabel } from '../publishing/shared'
 import { Link } from '../qb/router'
 import { AreaPageHeader } from '../shell/AreaPageHeader'
+import { mainAction, useHostedAdd, type HostedAdd } from '../shell/mainAction'
 import { ConversationsTab } from '../conversations/ConversationsPages'
 import { openHelp } from '../help/HelpPanel'
 import '../help/messages'
@@ -133,7 +134,7 @@ function Actions({ row, onEdit }: { row: NoticeRow; onEdit: () => void }) {
   )
 }
 
-function Notices({ adding = false }: { adding?: boolean }) {
+function Notices({ adding = false, onAdd }: { adding?: boolean; onAdd?: (add: HostedAdd | null) => void }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const status = useStatusLabel()
@@ -143,6 +144,7 @@ function Notices({ adding = false }: { adding?: boolean }) {
   const counted = (notices.data ?? []).map((row) => row.snapshotAt).filter((at): at is string => !!at).sort().at(-1)
   // The global "+ New" opens the editor (`?new=1`, F-F3).
   const [editing, setEditing] = useState<NoticeRow | 'new' | null>(adding ? 'new' : null)
+  useHostedAdd(onAdd, () => setEditing('new'), editing !== null)
   // Q80: the notices as a `DataTable` (cards on a phone): the title with its target and fate, the status a badge, the
   // time under the title, the figures listed, the actions at the foot.
   const noticeColumns = useMemo<ColumnDef<NoticeRow, unknown>[]>(() => [
@@ -191,12 +193,14 @@ function Notices({ adding = false }: { adding?: boolean }) {
         <NoticeEditor key={editing === 'new' ? 'new' : editing.broadcastId}
           row={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />
       ) : (
-        <div>
-          <Button onClick={() => setEditing('new')} data-testid="notice-new">
-            <Plus aria-hidden />
-            {t('notices.new')}
-          </Button>
-        </div>
+        !onAdd && (
+          <div>
+            <Button onClick={() => setEditing('new')} data-testid="notice-new">
+              <Plus aria-hidden />
+              {t('notices.new')}
+            </Button>
+          </div>
+        )
       )}
       {notices.isPending ? (
         <PageState kind="loading" />
@@ -296,6 +300,7 @@ function Announcements() {
  */
 export function MessagesPage({ tab, adding = false }: { tab: 'conversations' | 'notices'; adding?: boolean }) {
   const { t } = useTranslation(SPONSOR)
+  const [noticeAdd, setNoticeAdd] = useState<HostedAdd | null>(null)
   if (tab === 'conversations') {
     return (
       <section className="flex flex-col gap-4" data-testid="messages-page" data-tab={tab}>
@@ -306,13 +311,15 @@ export function MessagesPage({ tab, adding = false }: { tab: 'conversations' | '
   }
   return (
     <section className="flex flex-col gap-4" data-testid="messages-page" data-tab={tab}>
-      <AreaPageHeader title={t('shell.notices.title')} description={t('notices.intro')} />
+      <AreaPageHeader title={t('shell.notices.title')} description={t('notices.intro')}
+        primaryAction={noticeAdd ? mainAction({ label: t('notices.new'), icon: Plus, testId: 'notice-new',
+          onClick: noticeAdd.open, disabled: noticeAdd.disabled }) : undefined} />
       <Tabs defaultValue="mine">
         <TabsList aria-label={t('notices.tabs.label')}>
           <TabsTrigger value="mine" data-testid="messages-tab-mine">{t('notices.tabs.mine')}</TabsTrigger>
           <TabsTrigger value="inbox" data-testid="messages-tab-inbox">{t('notices.tabs.inbox')}</TabsTrigger>
         </TabsList>
-        <TabsContent value="mine" className="pt-2"><Notices adding={adding} /></TabsContent>
+        <TabsContent value="mine" className="pt-2"><Notices adding={adding} onAdd={setNoticeAdd} /></TabsContent>
         <TabsContent value="inbox" className="pt-2"><Announcements /></TabsContent>
       </Tabs>
     </section>
