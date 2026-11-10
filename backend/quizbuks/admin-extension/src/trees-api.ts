@@ -96,6 +96,8 @@ export interface VersionNode {
   grantAmount: number | null
   /** F-S5a: the name of the certificate lighting the node issues, as JSON by language (null: none). */
   certificateNames: string | null
+  /** F-S4c: how many have the node lit now (null: under the minimum group, or a removed node). */
+  litCount: number | null
 }
 
 /** A version node by node: the platform's template, or an operator's (only the maps the operator looks after). */
@@ -105,7 +107,8 @@ export async function readTreeVersion(operator: boolean, versionId: string): Pro
     description: str(row.description),
     condition: row.condition == null ? null : typeof row.condition === 'string' ? row.condition : JSON.stringify(row.condition), runningBound: num(row.runningBound),
     answeredUnlit: row.answeredUnlit == null ? null : num(row.answeredUnlit), countedOn: str(row.countedOn),
-    grantAmount: row.grantAmount == null ? null : num(row.grantAmount), certificateNames: str(row.certificateNames) }))
+    grantAmount: row.grantAmount == null ? null : num(row.grantAmount), certificateNames: str(row.certificateNames),
+    litCount: row.litCount == null ? null : num(row.litCount) }))
 }
 
 /** A lit record of the map (`qb.admin.tree-lit`), with its revocation and the request to revoke it in review. */

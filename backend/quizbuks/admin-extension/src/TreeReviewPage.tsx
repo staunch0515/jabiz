@@ -31,7 +31,7 @@ import {
   type DescriptionItem,
 } from '@jabiz/admin'
 import { AfterDecision, EmptyState, LoadFailed, Section, StatusBadge } from './components'
-import { useAfterDecision, useLabels, usePaged, when } from './hooks'
+import { money, useAfterDecision, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { TreeOwner } from './TreesPage'
 import TreeEditor from './TreeEditor'
@@ -90,6 +90,13 @@ function NodesTable({ nodes, title }: { nodes: VersionNode[]; title: string }) {
         </span>
       ) : <span data-testid="tree-node-running">{row.original.runningBound}</span>
     } },
+    // F-S4c: how many have the node lit now, from the minimum group up (a removed node: none).
+    { id: 'lit', header: t('trees.nodes.lit'), cell: ({ row }) => (
+      <span data-testid="tree-node-lit">
+        {row.original.litCount ?? (row.original.change === 'REMOVED' ? ''
+          : <span className="text-muted-foreground">{t('trees.nodes.unlitHidden')}</span>)}
+      </span>
+    ) },
     { id: 'unlit', header: t('trees.nodes.unlit'), cell: ({ row }) => (
       <span className="flex flex-col" data-testid="tree-node-unlit">
         {row.original.countedOn == null ? <span className="text-muted-foreground">{t('trees.nodes.unlitNone')}</span>
@@ -101,7 +108,13 @@ function NodesTable({ nodes, title }: { nodes: VersionNode[]; title: string }) {
           )}
       </span>
     ) },
-  ], [t, language, nameOf, conditionText])
+    // F-S4c: what lighting the node grants (a platform template Sponsors light, reviewed with the version).
+    ...(nodes.some((node) => node.grantAmount != null) ? [{
+      id: 'grant', header: t('trees.nodes.grant'), cell: ({ row }) => (
+        <span data-testid="tree-node-grant">{row.original.grantAmount == null ? ''
+          : money(String(row.original.grantAmount))}</span>
+      ) } satisfies ColumnDef<VersionNode, unknown>] : []),
+  ], [t, language, nameOf, conditionText, nodes])
   return (
     <DataTable label={title} columns={columns} data={nodes} getRowId={(row) => `${row.change}:${row.nodeId}`}
       empty={<EmptyState title={t('trees.nodes.none')} />}

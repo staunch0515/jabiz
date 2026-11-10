@@ -38,6 +38,13 @@ How to use the Sponsor app as a Sponsor. Paths are pages of the Sponsor app (the
 - The page shows your map in effect and how many Takers lit each node (shown only from the statistics' minimum group up) and, counted once a day, how many answered its publications and have not lit it (with the day counted, under the same minimum), the publications bound and not ended, and whether a newer version is a draft, in review or was sent back (with the reviewer's reason). Takers see the map on your page.
 - "Create my map" starts one; "Edit" opens the editor. Each node has a name, what lighting it gives, and its condition: all, any, or at least n of its items, each another node lit (of your map, or of a platform map Takers light, listed under the map's name) or a pass of a publication bound to this node. "Before answering" can be set only on node items of the outermost "all" (their quizzes stay hidden until those nodes are lit), and a pass at most once. Save the draft: the editor lists every problem by node. Then submit it: another member of your operator reviews it; a version sent back shows the reason, and a draft in review can be taken back. A node with publications still running cannot be removed. "Versions" lists every version; any of them can be shown.
 
+## Challenges (/sponsor/profile/challenges)
+
+- The "Challenges" tab of the Sponsor hub shows your operator's copies of the platform's maps: each node's state for you (lit, prerequisites not met, a challenge to answer, waiting for the next one), what lighting it opens (such as digital prizes or prizes collected in person) and its granted credit, and the challenges you can start. Choose a node to see its details and the link to answer.
+- Answering is as for Takers: a countdown, saved as you go, submitted on the last question or when the time runs out. A challenge has no reward, and each is answered once.
+- The result says your score and whether you passed. Once you pass, the node is lit (shown shortly after): the reward methods it opens can be chosen for your publications, and the granted credit goes to your platform fee account (once per node; it expires). If you did not pass, wait for your operator's next challenge.
+- You can answer challenges once your Sponsor application is approved.
+
 ## Asset library (/sponsor/assets)
 
 - Your images, videos, files and products in one place, with storage usage and the free amount.

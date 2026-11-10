@@ -173,10 +173,12 @@ async function publisherToken(request: APIRequestContext, admin: string): Promis
  * Sets a controlled business parameter with four eyes (decision D40): the administrator proposes, the tests' second
  * administrator publishes. The change stays (the tables only grow): only set what every later run may live with.
  */
-export async function setControlledParam(request: APIRequestContext, paramKey: string, value: string) {
+export async function setControlledParam(request: APIRequestContext, paramKey: string, value: string,
+  valueKind?: Record<string, unknown>) {
   const admin = await adminToken(request)
+  // A parameter QB_SETUP does not create (F-S4b's gates and grant limit) is created with its kind the first time.
   const change = await run(request, admin, 'CONTROL_CHANGE_PROPOSE', { targetEntity: 'SysParam',
-    values: { paramKey, value }, reason: 'End-to-end test' })
+    values: { paramKey, value, ...(valueKind ? { valueKind } : {}) }, reason: 'End-to-end test' })
   await run(request, await publisherToken(request, admin), 'CONTROL_CHANGE_PUBLISH', { changeId: change.changeId })
 }
 

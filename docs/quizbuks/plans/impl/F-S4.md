@@ -114,6 +114,14 @@ F-S4b 涉及赠送额度（钱）：开 PR 前总控安排一次额外的审查�
 - **扩展**：模板编辑器保存时原样带回读到的 `grantAmount`（不加编辑字段），不再清掉赠送。
 - **测试**：`TreeGrantIT`（一次终身、撤销前未发、改派、封禁、版本冻结、部分用掉后撤销与账单作废、漏掉的作废）、`TreeGrantRunLimitIT`（每次上限与下次补发）、`FeeAccountIT`（到期作废后的退回）、扩展的 `tree-draft.test.ts`。
 
+**F-S4c**（分支 `1.3/quizbuks-FS4c-ui`，无迁移）与 §4 的差别：
+
+- **答题组件**：搬到共用的 `qb/answer/` 的是答题页的 `Player`、结果的题目回顾（`QuestionReview`）与 `countdown` / `saver` / `busy`；App 的 `play/storage.ts`（依赖 App 自己的视频与曝光模块）留在 App，以 `AnswerFlow` 的回调交给 `Player`。App 的 `play/*` 只是转出，页面与测试不变（App 全部 1 034 个测试照旧通过）。文案照抄为共用命名空间的 `answer.*` / `review.*`，App 自己的 `play.*` / `result.*` 不删。
+- **挑战页**：知识结构图组件照用（加可选的 `grants`），节点状态用共用的 `statesOf`（"等下一场"即 `WAITING`）；结果页在合格后读 `qb.sponsor.challenges` 直到节点点亮。
+- **发现的缺陷**：挑战的保存与提交仍查奖励方式，缺省为空（F-S4b 选 A）的直营发起方因此发布不了挑战——挑战不再查（`SponsorChallengesIT.aSponsorWithNoRewardMethodPublishesAChallenge`，修复前失败）。
+- **节点人数**（F-S4b 留下的）：每日 `qb.tree-node-counts` 也统计点亮者为发起方的图；审核页的两个模板加"已点亮"人数（按最小分组，实时读点亮记录，不加表）。
+- e2e `sponsor-challenge.spec.ts`：模板由测试的内容管理员（加了 `qb.tree.platform.write` 等）建、首个管理员审核；另一位发起方由测试改派到该运营商（`approval.scope.move`）。
+
 ## 9. 粗估
 
 F-S4a 2 天、F-S4b 1.5–2 天、F-S4c 2–2.5 天（其中搬答题组件约 1 天），合计 5.5–6.5 天（规格粗估 3–4 天未含搬组件与副本）。

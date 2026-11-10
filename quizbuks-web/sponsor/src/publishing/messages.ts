@@ -63,6 +63,7 @@ export const publishingEn = {
     period: '{{start}} – {{end}}',
     notSet: 'Not set',
     noLimit: 'No limit',
+    challenge: { note: 'This is a challenge: no reward, answered only by the Sponsors of the same operator, and a pass lights the node (rewards, audience, referrals and the like do not apply).' },
     steps: {
       label: 'Steps of the publication',
       content: 'Quiz',
@@ -677,6 +678,7 @@ export const publishingZh: typeof publishingEn = {
     period: '{{start}} – {{end}}',
     notSet: '未设置',
     noLimit: '不限',
+    challenge: { note: '这是挑战：没有奖励，只由同一运营商的发起方作答，合格即点亮节点（奖励、受众、推荐等设置不适用）。' },
     steps: {
       label: '发布的步骤',
       content: 'Quiz',
@@ -1291,6 +1293,7 @@ export const publishingJa: typeof publishingEn = {
     period: '{{start}} – {{end}}',
     notSet: '未設定',
     noLimit: '上限なし',
+    challenge: { note: 'チャレンジです。報酬はなく、同じ運営パートナーの主催者だけが回答します。合格するとノードが点灯します（報酬・対象者・紹介などの設定はありません）。' },
     steps: {
       label: '公開の手順',
       content: 'クイズ',

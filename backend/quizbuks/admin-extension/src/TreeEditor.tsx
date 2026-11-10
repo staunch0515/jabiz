@@ -22,10 +22,11 @@ import {
   useLanguage,
 } from '@jabiz/admin'
 import { LoadFailed, Section } from './components'
+import { money } from './hooks'
 import { i18nText, readTreeVersion, saveTreeDraft, submitTree, TREES_KEY, withdrawTree, type TreeProblem,
   type TreeRow } from './trees-api'
 import {
-  afterSave, beforeAnswerAllowed, isGroup, levelsOf, outer, passAllowed, referrers, saveInputOf, withBeforeAnswer,
+  afterSave, beforeAnswerAllowed, grantOf, isGroup, levelsOf, outer, passAllowed, referrers, saveInputOf, withBeforeAnswer,
   withItem, withItemAt, withMoved, withN, withNewNode, withNode, withOp, withoutItem, withoutNode, type Condition,
   type Draft, type DraftNode, type I18nText,
 } from './tree-draft'
@@ -148,6 +149,9 @@ function EditorForm({ initial, tree, onClose, t }: { initial: Draft; tree: TreeR
     },
     onError,
   })
+  // F-S4b/F-S4c: a node of a platform template Sponsors light may grant platform fee Kudos; a copy shows its
+  // template's (kept on save, never changed here). Other maps have none.
+  const grants = tree.subjectKind !== 'SPONSOR' ? null : tree.ownerKind === 'PLATFORM' ? 'edit' : 'show'
   const busy = save.isPending || submit.isPending || withdraw.isPending
   const locked = busy || stale
   const failure = [save.error, submit.error, withdraw.error].find((e) => e && !(e instanceof ApiError
@@ -243,6 +247,24 @@ function EditorForm({ initial, tree, onClose, t }: { initial: Draft; tree: TreeR
                 <Textarea id={`${id}-node-description-${index}`} value={node.description?.[language] ?? ''}
                   disabled={locked} onChange={(event) => edit(withNode(draft, node.key,
                     (n) => ({ ...n, description: withText(n.description, event.target.value) })))} />
+                {grants === 'edit' && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`${id}-node-grant-${index}`}>{t('trees.editor.grant')}</Label>
+                    <Input id={`${id}-node-grant-${index}`} type="number" inputMode="numeric" min={0} step={1}
+                      className="w-40" value={node.grantAmount ?? ''} disabled={locked}
+                      aria-describedby={`${id}-node-grant-hint-${index}`} data-testid="tree-editor-node-grant"
+                      onChange={(event) => edit(withNode(draft, node.key, (n) => ({ ...n,
+                        grantAmount: grantOf(event.target.value) })))} />
+                    <p id={`${id}-node-grant-hint-${index}`} className="text-muted-foreground text-sm">
+                      {t('trees.editor.grantHint')}
+                    </p>
+                  </div>
+                )}
+                {grants === 'show' && node.grantAmount != null && (
+                  <p className="text-sm" data-testid="tree-editor-node-grant-copy">
+                    {t('trees.editor.grantOfTemplate', { amount: money(String(node.grantAmount)) })}
+                  </p>
+                )}
                 <GroupEditor group={outer(node.condition)} whole={node.condition} outermost others={others}
                   nameOf={nameOf} disabled={locked} t={t}
                   onChange={(condition) => edit(withNode(draft, node.key, (n) => ({ ...n, condition })))} />
