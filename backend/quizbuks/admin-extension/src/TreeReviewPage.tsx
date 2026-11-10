@@ -31,7 +31,7 @@ import {
   type DescriptionItem,
 } from '@jabiz/admin'
 import { AfterDecision, EmptyState, LoadFailed, Section, StatusBadge } from './components'
-import { useAfterDecision, useLabels, usePaged, when } from './hooks'
+import { money, useAfterDecision, useLabels, usePaged, when } from './hooks'
 import { DICTIONARY, PATH, PERMISSION } from './ids'
 import { TreeOwner } from './TreesPage'
 import TreeEditor from './TreeEditor'
@@ -101,7 +101,13 @@ function NodesTable({ nodes, title }: { nodes: VersionNode[]; title: string }) {
           )}
       </span>
     ) },
-  ], [t, language, nameOf, conditionText])
+    // F-S4c: what lighting the node grants (a platform template Sponsors light, reviewed with the version).
+    ...(nodes.some((node) => node.grantAmount != null) ? [{
+      id: 'grant', header: t('trees.nodes.grant'), cell: ({ row }) => (
+        <span data-testid="tree-node-grant">{row.original.grantAmount == null ? ''
+          : money(String(row.original.grantAmount))}</span>
+      ) } satisfies ColumnDef<VersionNode, unknown>] : []),
+  ], [t, language, nameOf, conditionText, nodes])
   return (
     <DataTable label={title} columns={columns} data={nodes} getRowId={(row) => `${row.change}:${row.nodeId}`}
       empty={<EmptyState title={t('trees.nodes.none')} />}

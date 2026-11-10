@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  afterSave, outer, passAllowed, referrers, saveInputOf, withBeforeAnswer, withItem, withMoved, withN, withNewNode, withNode,
+  grantOf, afterSave, outer, passAllowed, referrers, saveInputOf, withBeforeAnswer, withItem, withMoved, withN, withNewNode, withNode,
   withOp, withoutItem, withoutNode, type Condition, type Draft,
 } from './tree-draft'
 
@@ -85,5 +85,15 @@ describe('the draft', () => {
       ['new-3', null]])
     const renamed = withNode(granting, 'a', (n) => ({ ...n, name: { en: 'Wheat' } }))
     expect(saveInputOf(renamed).nodes[0].grantAmount).toBe(300)
+  })
+})
+
+describe('grantOf (F-S4c)', () => {
+  it('reads an empty field as none and any number as typed, for the server to judge', () => {
+    expect(grantOf('')).toBeNull()
+    expect(grantOf('  ')).toBeNull()
+    expect(grantOf('200')).toBe(200)
+    expect(grantOf('12.5')).toBe(12.5)
+    expect(grantOf('abc')).toBeNull()
   })
 })
