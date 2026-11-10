@@ -35,17 +35,23 @@ public final class FeeCreditRules {
 
     /**
      * F-M3: the top-up due to a Sponsor whose company is verified (D-Q105-6): the certified amount less the onboarding
-     * lot's, once. Nothing while the grants' switch is off (the controller, 2026-11-10), to a Sponsor not approved,
-     * banned or not verified, without an onboarding lot (confirming them later gives the certified amount), with a
-     * top-up already, or when the onboarding was the certified amount or more (or the amount is not whole yen).
+     * lot's, once. The certified amount is the one recorded on the onboarding lot when it was granted
+     * ({@code onboardingCertified}; the amount itself when granted certified, so never topped up), and no more than the
+     * parameter now ({@code certifiedAmount}): raising the parameter tops up nothing granted before it (the review of
+     * F-M3, M1). A lot granted before the amount was recorded (V111) has none and takes the parameter now. Nothing while
+     * the grants' switch is off (the controller, 2026-11-10), to a Sponsor not approved, banned or not verified, without
+     * an onboarding lot (confirming them later gives the certified amount), with a top-up already, or when the
+     * onboarding was the certified amount or more (or the amounts are not whole yen).
      */
     public static Optional<BigDecimal> certifiedTopUp(boolean enabled, boolean approved, boolean banned,
-        boolean verified, BigDecimal onboardingAmount, boolean toppedUp, BigDecimal certifiedAmount) {
+        boolean verified, BigDecimal onboardingAmount, BigDecimal onboardingCertified, boolean toppedUp,
+        BigDecimal certifiedAmount) {
         if (!enabled || !approved || banned || !verified || onboardingAmount == null || toppedUp
-            || !whole(certifiedAmount)) {
+            || !whole(certifiedAmount) || onboardingCertified != null && !whole(onboardingCertified)) {
             return Optional.empty();
         }
-        BigDecimal difference = certifiedAmount.subtract(onboardingAmount).setScale(0, java.math.RoundingMode.DOWN);
+        BigDecimal target = onboardingCertified == null ? certifiedAmount : onboardingCertified.min(certifiedAmount);
+        BigDecimal difference = target.subtract(onboardingAmount).setScale(0, java.math.RoundingMode.DOWN);
         return difference.signum() > 0 ? Optional.of(difference) : Optional.empty();
     }
 

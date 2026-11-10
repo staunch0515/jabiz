@@ -34,12 +34,21 @@ import java.util.Optional;
  * <p>{@value #ITEM} ({@code internal()}, the Sponsor's wallet lock) reads everything again and grants only while the
  * grants' switch {@code qb.fee-credit.grant.enabled} is on (the controller, 2026-11-10: no source goes round the
  * switch), to a Sponsor approved, not banned and verified; otherwise nothing, and the daily job {@value #DUE_JOB}
- * (template {@value #DUE_TEMPLATE}) tries again until it is granted. A verification's approval runs it in the same
- * transaction. A verification withdrawn afterwards keeps what was granted; a second verification grants nothing more.
+ * (template {@value #DUE_TEMPLATE}) tries again until it is granted. A verification's approval runs it in a
+ * transaction of its own (the consumer {@value #CONSUMER} of {@code qb.sponsor-verification.decided}), so a failure here
+ * never rolls the verification back: the job makes it later. A verification withdrawn afterwards keeps what was
+ * granted; a second verification grants nothing more.
+ *
+ * <p>What is due tops up to the certified amount recorded on the onboarding lot when it was granted, no more than the
+ * parameter now (the review of F-M3, M1): raising {@code qb.fee-credit.grant.certified} tops up nothing granted before
+ * it, and an onboarding granted certified records its own amount (never topped up). The top-up lot records the total
+ * it made (the onboarding plus it), which the reconciliation {@code CERTIFIED_GRANTS} checks.
  */
 public final class CertifiedTopUps {
 
     public static final String ITEM = "QB_FEE_CREDIT_CERTIFIED_TOP_UP";
+    /** The consumer of a verification decided: runs {@value #ITEM} for its Sponsor. */
+    public static final String CONSUMER = "qb.fee-credit-certified";
     /** Every day at 03:41 (in {@code jabiz.fiscal-year-zone}): the verified Sponsors with a top-up due. */
     public static final String DUE_JOB = "qb.fee-credit-certified-due";
     public static final String DUE_CRON = "0 41 3 * * *";
@@ -120,10 +129,15 @@ public final class CertifiedTopUps {
         Optional<BigDecimal> amount = FeeCreditRules.certifiedTopUp(enabled,
             onboarding != null && SponsorStatus.APPROVED.equals(onboarding.get("reviewStatus")),
             BanRules.banned(ban == null ? null : ban.attributes()), FeeGate.first(ctx, VERIFIED) != null,
-            onboardingLot == null ? null : FeeGate.money(onboardingLot.get("amount")), topUpLot != null, certified);
+            onboardingLot == null ? null : FeeGate.money(onboardingLot.get("amount")),
+            onboardingLot == null || onboardingLot.get("certifiedAmount") == null ? null
+                : FeeGate.money(onboardingLot.get("certifiedAmount")), topUpLot != null,
+            certified);
         if (amount.isPresent()) {
+            // The top-up lot records what it topped up to: the onboarding plus it (the check CERTIFIED_GRANTS).
+            BigDecimal onboardingAmount = FeeGate.money(onboardingLot.get("amount"));
             ctx.put(DUE, new FeeCredits.GrantInput(sponsorId(ctx), QbFeeAccount.CERTIFIED_TOP_UP, KEY, amount.get(),
-                null));
+                null, onboardingAmount.add(amount.get())));
             ctx.put(OUTCOME, "GRANTED");
         } else {
             ctx.put(OUTCOME, topUpLot != null ? "DONE" : "NONE");

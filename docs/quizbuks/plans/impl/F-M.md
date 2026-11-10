@@ -221,7 +221,7 @@
 
 ### 6.3 认证补发（`CERTIFIED_TOP_UP`）与入驻金额
 - 入驻赠送 `QB_FEE_CREDIT_ONBOARDING`：`certified` 改为读 `VerificationRules.verified`（M2 留下的 `boolean certified = false`）。
-- 批准时（同一事务、钱包锁内）：本人已领开户赠送且其金额 < `qb.fee-credit.grant.certified` → 以 `QB_FEE_CREDIT_GRANT`（来源 `CERTIFIED_TOP_UP`、来源键 `certified`，终身一笔）发差额；没领开户的什么也不发（以后确认资料完整时直接发认证金额）。撤销后再次认证不再补（来源键已用）。条件见 6.6 第 1 条。
+- 批准后（自己的事务、钱包锁内，见 6.8）：本人已领开户赠送且其金额 < 开户时记下的认证金额（不超过现在的 `qb.fee-credit.grant.certified`，见 6.8 第 1 条）→ 以 `QB_FEE_CREDIT_GRANT`（来源 `CERTIFIED_TOP_UP`、来源键 `certified`，终身一笔）发差额；没领开户的什么也不发（以后确认资料完整时直接发认证金额）。撤销后再次认证不再补（来源键已用）。条件见 6.6 第 1 条。
 - 钱包页（平台费账户的赠送块）加 M2 留下的提示"企业实名认证后补到 {certified}"：只在已领开户、未认证、差额 > 0 时显示，链到"企业认证"。
 
 ### 6.4 读取与页面
@@ -238,7 +238,7 @@
 - 删除的功能：无。行为改变：入驻赠送的金额按认证读（原来一律未认证）。
 
 ### 6.6 总控的决定（2026-11-10，计划批准）
-1. **补发要看赠送开关** `qb.fee-credit.grant.enabled`（与入驻赠送、节点赠送一致；总开关不能被某一来源绕过）。开关关闭时记为待补，开启后由每日任务补发（同 `LIGHT`）；封禁中不补。实现：补发只在一个逐项流程 `QB_FEE_CREDIT_CERTIFIED_TOP_UP`（`internal()`，钱包锁内重读：已认证、已领开户、少于认证金额、没有 `certified` 一笔、开关开、入驻通过、未封禁，否则什么也不做）；批准结果在同一事务中以子流程调用它，每日逐项任务 `qb.fee-credit-certified-due`（模板 `qb.system.fee-credit-certified-due` 选出待补的）补上开关关着、封禁中错过的。6.3 的"不看开关、以后也不自动补"作废。
+1. **补发要看赠送开关** `qb.fee-credit.grant.enabled`（与入驻赠送、节点赠送一致；总开关不能被某一来源绕过）。开关关闭时记为待补，开启后由每日任务补发（同 `LIGHT`）；封禁中不补。实现：补发只在一个逐项流程 `QB_FEE_CREDIT_CERTIFIED_TOP_UP`（`internal()`，钱包锁内重读：已认证、已领开户、少于认证金额、没有 `certified` 一笔、开关开、入驻通过、未封禁，否则什么也不做）；批准结果提交后由事件 `qb.sponsor-verification.decided` 的消费者 `qb.fee-credit-certified` 在自己的事务中运行它（6.8 第 2 条；原为同一事务中的子流程），每日逐项任务 `qb.fee-credit-certified-due`（模板 `qb.system.fee-credit-certified-due` 选出待补的）补上开关关着、封禁中错过的。6.3 的"不看开关、以后也不自动补"作废。
 2. 改名称或域名当场失去认证（照 6.2）。
 3. 账户邮箱的子域算同域（公共域名清单仍先拒）。
 4. 总部内容管理员与运营商任一成员可撤销，二次验证、理由必填、不收回额度。
@@ -249,6 +249,13 @@
   - **确认链接不记 `linkMessageId`**：平台的 `SendMail` 不把消息编号交给流程；平台的令牌本来就"只认该用途、该用户的最新一封"（`MailTokens`），重新发送即令旧链接失效，效果相同。令牌用途为 `qb.companyEmail`（平台的用途名不允许连字符）。
   - **链接有效期**：邮件模板的令牌有效期是定义时的固定值，模板定为上限 168 小时，参数 `qb.sponsor-verification.link-hours` 在确认时按 `linkSentAt` 检查（页面显示的到期时刻按同一参数算）。
   - **不另设审核提醒**（6.5 原写"审核超 7 天给运营商待办"与参数 `qb.sponsor-verification.review-remind-days`）：规格没有要求，平台的审批本来就给审核人待办；参数因此没有加。
-  - **补发**：批准结果在同一事务中先 `SaveChanges.now`（子流程才读得到"已认证"），再以子流程 `QB_FEE_CREDIT_CERTIFIED_TOP_UP` 补发；开户赠送在钱包锁内读认证（与补发同一把锁，不会两边都按未认证处理）。
+  - **补发**：（6.8 第 2 条起）批准结果提交后，消费者 `qb.fee-credit-certified`（事件 `qb.sponsor-verification.decided`）在自己的事务中运行 `QB_FEE_CREDIT_CERTIFIED_TOP_UP`；开户赠送在钱包锁内读认证（与补发同一把锁，不会两边都按未认证处理）。
   - 公开主页的标记由公开模板 `qb.public.sponsor-page` 的新列 `verifiedDomain` 给出（公开视图只含 `APPROVED` 行），学者 App 的发起方主页与发起方页面共用 `qb/VerifiedMark`。
 - 测试：`SponsorVerificationIT`（8 例：公共域名与格式、未通过入驻、账户邮箱同域与子域、链接只认最新一封与本人、过期、一次性、本人不能审、同域名第二家（提交时与批准时）、改名当场失去、撤销与站内信、补发一次与先认证后开户、开关关闭时由每日任务补发）、`VerificationRulesTest`、`FeeCreditRulesTest` 的补发规则；场景快照（新参数、规则、权限）与 `SetupIT`；公开模板快照；前端两个 SPA、扩展（`ext:check`）与 e2e `sponsor-verification.spec.ts`。
+
+
+### 6.8 额外审查的修改（2026-11-10，审查 @4a73ba7）
+1. **调高认证金额不对存量补差**（中 1，按 D-Q105-6 的本意）：开户赠送的一笔记下发放时的认证金额（`qb_fee_credit_grant.certified_amount`，V111；按认证发的记下它自己的金额，永不补），补发只补到这个金额，且不超过现在的参数（调低之后只补到调低后的）；调高 `qb.fee-credit.grant.certified` 对已发的开户赠送一律不补。补发的一笔记下它补到的合计（开户 + 补发）。V111 之前发的开户赠送没有记录，按补发时的参数（上线前没有生产数据）。规则 `FeeCreditRules.certifiedTopUp`，每日的模板与发起方页面的"认证后补到"同一算法。
+2. **补发失败不挡认证**（低 2）：补发不再是批准结果中的子流程；批准结果提交后，事件 `qb.sponsor-verification.decided` 的消费者 `qb.fee-credit-certified` 在自己的事务中运行 `QB_FEE_CREDIT_CERTIFIED_TOP_UP`（驳回、撤销的事件同样运行，什么也不做）。补发的配置或过账失败只留下事件的重试，认证照常 `APPROVED`，每日任务补上。
+3. **到期模板**（低 3）：参数先以正则判断（不是整数日元即不选人，不报错），开关关着时不选人。
+4. **核对项 `CERTIFIED_GRANTS`**（`qb.system.recon-fee-account`）：有 `CERTIFIED_TOP_UP` 一笔而该发起方从未有过 `APPROVED` 的认证（`verified_at` 只由批准写入，撤销与改名后仍在；删除账号的发起方不查）；开户 + 补发超过补发时记下的认证金额。

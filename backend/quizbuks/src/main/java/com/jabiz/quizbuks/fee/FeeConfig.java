@@ -365,7 +365,19 @@ public class FeeConfig {
         return CertifiedTopUps.item();
     }
 
-    /** The top-ups a verification's approval could not make (the switch off, a ban), each Sponsor in a transaction. */
+    /**
+     * A verification decided (or revoked: the item then finds nothing due): the top-up, in a transaction of its own
+     * after the verification's (the review of F-M3, L2: a failure here never rolls the verification back).
+     */
+    @Bean
+    com.jabiz.event.EventSubscription<FeeCredits.SponsorRef> qbFeeCreditCertifiedSubscription(
+        ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeCreditCertifiedTopUp) {
+        return com.jabiz.event.EventSubscription.of(CertifiedTopUps.CONSUMER,
+            com.jabiz.quizbuks.verification.VerificationProcesses.DECIDED_EVENT, qbFeeCreditCertifiedTopUp,
+            event -> new FeeCredits.SponsorRef(String.valueOf(event.payload().get("sponsorId"))));
+    }
+
+    /** The top-ups the event could not make (a failure, the switch off, a ban), each Sponsor in a transaction. */
     @Bean
     JobDefinition<FeeCredits.SponsorRef> qbFeeCreditCertifiedDueJob(
         ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbFeeCreditCertifiedTopUp) {

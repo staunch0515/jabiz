@@ -36,3 +36,9 @@ CREATE UNIQUE INDEX ux_qb_sponsor_verification_standing ON qb_sponsor_verificati
 -- A Sponsor's submissions (their page, an operator's scope); the review's list by status.
 CREATE INDEX qb_sponsor_verification_sponsor_idx ON qb_sponsor_verification (sponsor_id, submitted_at DESC);
 CREATE INDEX qb_sponsor_verification_status_idx ON qb_sponsor_verification (status, submitted_at DESC);
+
+-- The onboarding's (and its top-up's) certified amount when granted (F-M3, the review's M1): a verification tops the
+-- onboarding up to it, never to a certified amount raised afterwards; equal to the amount when granted certified (never
+-- topped up). The onboarding lots granted before this migration have none: they were all uncertified, and are topped up
+-- to the parameter in effect then (none were granted in production yet).
+ALTER TABLE qb_fee_credit_grant ADD COLUMN certified_amount numeric(19, 0);

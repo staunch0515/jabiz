@@ -158,6 +158,64 @@ class SponsorVerificationIT extends TreeItSupport {
         run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
     }
 
+    /** Proposes and publishes a business parameter (four eyes). */
+    void param(String key, String value) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("paramKey", key);
+        values.put("value", value);
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", values, "reason", "F-M3 test"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+    }
+
+    void runDueJob() {
+        execute("UPDATE jabiz_shedlock SET lock_until = locked_at");
+        jobRunner.run(dueJob, clock.instant());
+    }
+
+    /** Verifies the Sponsor's company by the account's own address on the domain, approved by another member. */
+    void verify(Setting s, String domain) {
+        verifiedAddress(s.sponsor(), "owner@" + domain);
+        decide(s.member(), submit(s.sponsor(), "Company " + domain, domain, null).get("approvalRequestId"), "APPROVE",
+            null);
+    }
+
+    static BigDecimal granted(String sponsor) {
+        return lots(sponsor).stream().map(lot -> (BigDecimal) lot.get("amount")).reduce(BigDecimal.ZERO,
+            BigDecimal::add);
+    }
+
+    static List<String> ledgerLines(Object grantId) {
+        return query("SELECT a.account_code, e.direction, e.amount FROM ledger_transaction_version t "
+            + "JOIN ledger_entry_version e ON e.transaction_id = t.transaction_id "
+            + "JOIN ledger_account_version a ON a.account_id = e.account_id "
+            + "WHERE t.source_entity = 'QbFeeCreditGrant' AND t.source_id = ? ORDER BY t.process_seq_id, e.line_no",
+            String.valueOf(grantId)).stream().map(p -> p.get("account_code") + " " + p.get("direction") + " "
+            + ((BigDecimal) p.get("amount")).stripTrailingZeros().toPlainString()).toList();
+    }
+
+    static BigDecimal feeCreditWallet(String sponsor) {
+        List<Map<String, Object>> rows = query("SELECT balance FROM qb_wallet WHERE owner_id = ? AND kind = "
+            + "'FEE_CREDIT'", sponsor);
+        return rows.isEmpty() ? BigDecimal.ZERO : (BigDecimal) rows.getFirst().get("balance");
+    }
+
+    List<Map<String, Object>> differences() {
+        return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "fm3-recon",
+            QbPermissions.WALLET_SYSTEM), Map.of());
+    }
+
+    /** The monthly report's platform fee Kudos granted from {@code from} until a day after now. */
+    BigDecimal grantedInReport(java.time.Instant from) {
+        String finance = tokenOf(userWithRole(unique("fm3-finance"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE),
+            com.jabiz.quizbuks.setup.QbRoles.ADMIN_FINANCE);
+        return items("qb.admin.monthly", finance, Map.of("params", Map.of("from", from.toString(), "to",
+            clock.instant().plus(Duration.ofDays(1)).toString()))).stream()
+            .filter(row -> "FEE_CREDIT_GRANTED".equals(row.get("category")))
+            .map(row -> new BigDecimal(String.valueOf(row.get("feeCreditPromotion"))))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     @Test
     @Order(1)
     void aPublicDomainOrAnythingButADomainIsRefused() {
@@ -358,5 +416,217 @@ class SponsorVerificationIT extends TreeItSupport {
         jobRunner.run(dueJob, clock.instant());
         assertThat(lots(s.sponsor())).hasSize(2);
         assertThat((BigDecimal) topUp(s.sponsor()).get("amount")).isEqualByComparingTo("9000");
+    }
+
+    @Test
+    @Order(9)
+    void raisingTheCertifiedAmountTopsUpNothingGrantedBefore() {
+        grantsSwitch(true);
+        // Granted certified at 10000: the lot records it.
+        Setting early = setting("raise-early");
+        verify(early, "acme-raise-early.example");
+        run(FeeCredits.ONBOARDING, early.lead(), body("sponsorId", early.sponsor()));
+        assertThat(lots(early.sponsor())).singleElement().satisfies(lot -> {
+            assertThat((BigDecimal) lot.get("amount")).isEqualByComparingTo("10000");
+            assertThat((BigDecimal) lot.get("certified_amount")).isEqualByComparingTo("10000");
+        });
+        // Granted basic while the certified amount was 10000: the lot records 10000.
+        Setting late = setting("raise-late");
+        run(FeeCredits.ONBOARDING, late.lead(), body("sponsorId", late.sponsor()));
+        assertThat((BigDecimal) lots(late.sponsor()).getFirst().get("certified_amount")).isEqualByComparingTo("10000");
+
+        param(QbParams.FEE_CREDIT_GRANT_CERTIFIED, "15000");
+        try {
+            runDueJob();
+            assertThat(lots(early.sponsor())).hasSize(1);
+            // Verified after the raise: topped up to the 10000 recorded, not to 15000.
+            verify(late, "acme-raise-late.example");
+            assertThat((BigDecimal) topUp(late.sponsor()).get("amount")).isEqualByComparingTo("9000");
+            assertThat((BigDecimal) topUp(late.sponsor()).get("certified_amount")).isEqualByComparingTo("10000");
+            assertThat(granted(late.sponsor())).isEqualByComparingTo("10000");
+            assertThat(mine(late.sponsor())).satisfies(row ->
+                assertThat(new BigDecimal(String.valueOf(row.get("certifiedAmount")))).isEqualByComparingTo("10000"));
+            runDueJob();
+            assertThat(lots(early.sponsor())).hasSize(1);
+            assertThat(lots(late.sponsor())).hasSize(2);
+            assertThat(differences()).isEmpty();
+        } finally {
+            param(QbParams.FEE_CREDIT_GRANT_CERTIFIED, "10000");
+        }
+    }
+
+    @Test
+    @Order(10)
+    void aBannedSponsorIsToppedUpByTheJobOnceUnbanned() {
+        grantsSwitch(true);
+        Setting s = setting("banned");
+        run(FeeCredits.ONBOARDING, s.lead(), body("sponsorId", s.sponsor()));
+        verifiedAddress(s.sponsor(), "owner@acme-banned.example");
+        Map<String, Object> submitted = submit(s.sponsor(), "Acme Banned", "acme-banned.example", null);
+        String boss = userWithRole(unique("fm3-boss"), com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER);
+        String bossToken = tokenOf(boss, com.jabiz.quizbuks.setup.QbRoles.ADMIN_SUPER);
+        run("QB_USER_BAN", bossToken, body("userId", s.sponsor(), "reason", "Fraud"));
+        decide(s.member(), submitted.get("approvalRequestId"), "APPROVE", null);
+        // Verified, but nothing while banned: neither the approval nor the job.
+        assertThat(row(submitted.get("verificationId"))).containsEntry("status", "APPROVED");
+        assertThat(lots(s.sponsor())).hasSize(1);
+        runDueJob();
+        assertThat(lots(s.sponsor())).hasSize(1);
+
+        run(com.jabiz.quizbuks.identity.BanProcesses.UNBAN, bossToken, body("userId", s.sponsor(), "note", "Cleared"));
+        deliverEvents();
+        advance(Duration.ofDays(1));
+        runDueJob();
+        assertThat((BigDecimal) topUp(s.sponsor()).get("amount")).isEqualByComparingTo("9000");
+        assertThat(granted(s.sponsor())).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    @Order(11)
+    void revokedBeforeTheJobNothingThenOnceWhenVerifiedAgain() {
+        grantsSwitch(true);
+        Setting s = setting("revoked");
+        run(FeeCredits.ONBOARDING, s.lead(), body("sponsorId", s.sponsor()));
+        grantsSwitch(false);
+        verify(s, "acme-revoked.example");
+        assertThat(lots(s.sponsor())).hasSize(1);
+        run(VerificationProcesses.REVOKE, hq(), body("sponsorId", s.sponsor(), "reason", "Not theirs"));
+        deliverEvents();
+        grantsSwitch(true);
+        runDueJob();
+        assertThat(lots(s.sponsor())).hasSize(1);
+
+        // Verified again with the switch on: topped up once, by the approval; the job adds nothing.
+        decide(s.member(), submit(s.sponsor(), "Company acme-revoked.example", "acme-revoked.example", null)
+            .get("approvalRequestId"), "APPROVE", null);
+        assertThat(lots(s.sponsor())).hasSize(2);
+        advance(Duration.ofDays(1));
+        runDueJob();
+        assertThat(lots(s.sponsor())).hasSize(2);
+        assertThat(granted(s.sponsor())).isEqualByComparingTo("10000");
+    }
+
+    @Test
+    @Order(12)
+    void anOnboardingAtTheCertifiedAmountOrMoreIsNeverToppedUp() {
+        grantsSwitch(true);
+        // The basic amount as high as the certified one when granted.
+        param(QbParams.FEE_CREDIT_GRANT_BASIC, "12000");
+        Setting s = setting("above");
+        try {
+            run(FeeCredits.ONBOARDING, s.lead(), body("sponsorId", s.sponsor()));
+        } finally {
+            param(QbParams.FEE_CREDIT_GRANT_BASIC, "1000");
+        }
+        assertThat((BigDecimal) lots(s.sponsor()).getFirst().get("amount")).isEqualByComparingTo("12000");
+        verify(s, "acme-above.example");
+        assertThat(lots(s.sponsor())).hasSize(1);
+        assertThat(mine(s.sponsor())).containsEntry("toppedUp", false);
+        advance(Duration.ofDays(1));
+        runDueJob();
+        assertThat(lots(s.sponsor())).hasSize(1);
+    }
+
+    @Test
+    @Order(13)
+    void theTopUpPostsAndReconcilesAndIsInTheMonthlyReport() {
+        grantsSwitch(true);
+        Setting s = setting("ledger");
+        run(FeeCredits.ONBOARDING, s.lead(), body("sponsorId", s.sponsor()));
+        java.time.Instant from = clock.instant().minus(Duration.ofDays(1));
+        BigDecimal before = grantedInReport(from);
+        verify(s, "acme-ledger.example");
+        Map<String, Object> lot = topUp(s.sponsor());
+        assertThat(ledgerLines(lot.get("grant_id"))).containsExactly("5140 DEBIT 9000", "2190 CREDIT 9000");
+        assertThat(feeCreditWallet(s.sponsor())).isEqualByComparingTo("10000");
+        assertThat(ledger("2190", s.sponsor())).isEqualByComparingTo("10000");
+        assertThat(differences()).isEmpty();
+        assertThat(grantedInReport(from).subtract(before)).isEqualByComparingTo("9000");
+    }
+
+    @Test
+    @Order(14)
+    void theApprovalAndTheOnboardingAtOnceGrantTheCertifiedAmountOnce() throws Exception {
+        grantsSwitch(true);
+        for (int i = 0; i < 3; i++) {
+            Setting s = setting("race-" + i);
+            verifiedAddress(s.sponsor(), "owner@acme-race-" + i + ".example");
+            Object requestId = submit(s.sponsor(), "Acme Race", "acme-race-" + i + ".example", null)
+                .get("approvalRequestId");
+            java.util.concurrent.CompletableFuture<Void> approval = java.util.concurrent.CompletableFuture.runAsync(
+                () -> decide(s.member(), requestId, "APPROVE", null));
+            java.util.concurrent.CompletableFuture<Void> onboarding = java.util.concurrent.CompletableFuture.runAsync(
+                () -> run(FeeCredits.ONBOARDING, s.lead(), body("sponsorId", s.sponsor())));
+            approval.get();
+            onboarding.get();
+            deliverEvents();
+            runDueJob();
+            assertThat(lots(s.sponsor())).hasSizeBetween(1, 2);
+            assertThat(granted(s.sponsor())).isEqualByComparingTo("10000");
+        }
+        assertThat(differences()).isEmpty();
+    }
+
+    @Test
+    @Order(15)
+    void aFailedTopUpLeavesTheVerificationAndTheJobGrantsIt() {
+        grantsSwitch(true);
+        Setting s = setting("failed");
+        run(FeeCredits.ONBOARDING, s.lead(), body("sponsorId", s.sponsor()));
+        // A validity the grant refuses (0 days): the top-up fails, the verification stands.
+        param(QbParams.FEE_CREDIT_VALID_DAYS, "0");
+        try {
+            verifiedAddress(s.sponsor(), "owner@acme-failed.example");
+            Map<String, Object> submitted = submit(s.sponsor(), "Acme Failed", "acme-failed.example", null);
+            decide(s.member(), submitted.get("approvalRequestId"), "APPROVE", null);
+            assertThat(row(submitted.get("verificationId"))).containsEntry("status", "APPROVED");
+            assertThat(mine(s.sponsor())).containsEntry("verified", true).containsEntry("toppedUp", false);
+            assertThat(lots(s.sponsor())).hasSize(1);
+        } finally {
+            param(QbParams.FEE_CREDIT_VALID_DAYS, "90");
+        }
+        advance(Duration.ofDays(1));
+        runDueJob();
+        assertThat((BigDecimal) topUp(s.sponsor()).get("amount")).isEqualByComparingTo("9000");
+        // The event retried later finds it done.
+        advance(Duration.ofHours(2));
+        deliverEvents();
+        assertThat(lots(s.sponsor())).hasSize(2);
+        assertThat(differences()).isEmpty();
+    }
+
+    @Test
+    @Order(16)
+    void theCheckFindsATopUpNeverVerifiedOrAboveTheCertifiedAmount() {
+        grantsSwitch(true);
+        Setting never = setting("never");
+        run(FeeCredits.ONBOARDING, never.lead(), body("sponsorId", never.sponsor()));
+        Setting over = setting("over");
+        run(FeeCredits.ONBOARDING, over.lead(), body("sponsorId", over.sponsor()));
+        // Lots the processes would never write: inserted by hand, removed again afterwards.
+        String copy = "INSERT INTO qb_fee_credit_grant (grant_id, sponsor_id, source, source_key, operator_id, amount, "
+            + "remaining, voided_amount, granted_at, expires_at, certified_amount, version) SELECT ?, sponsor_id, "
+            + "'CERTIFIED_TOP_UP', 'certified', operator_id, ?, ?, 0, granted_at, expires_at, 10000, 1 "
+            + "FROM qb_fee_credit_grant WHERE sponsor_id = ? AND source_key = 'onboarding'";
+        String a = java.util.UUID.randomUUID().toString();
+        String b = java.util.UUID.randomUUID().toString();
+        execute(copy, a, new BigDecimal("9000"), new BigDecimal("9000"), never.sponsor());
+        execute(copy, b, new BigDecimal("9500"), new BigDecimal("9500"), over.sponsor());
+        verifiedAddress(over.sponsor(), "owner@acme-over.example");
+        decide(over.member(), submit(over.sponsor(), "Acme Over", "acme-over.example", null).get("approvalRequestId"),
+            "APPROVE", null);
+        try {
+            List<Map<String, Object>> found = differences().stream()
+                .filter(row -> "CERTIFIED_GRANTS".equals(row.get("checkCode"))).toList();
+            assertThat(found).extracting(row -> row.get("sponsorId"))
+                .containsExactlyInAnyOrder(never.sponsor(), over.sponsor());
+            assertThat(found).filteredOn(row -> over.sponsor().equals(row.get("sponsorId"))).singleElement()
+                .satisfies(row -> {
+                    assertThat(new BigDecimal(String.valueOf(row.get("expected")))).isEqualByComparingTo("10000");
+                    assertThat(new BigDecimal(String.valueOf(row.get("actual")))).isEqualByComparingTo("10500");
+                });
+        } finally {
+            execute("DELETE FROM qb_fee_credit_grant WHERE grant_id IN (?, ?)", a, b);
+        }
     }
 }

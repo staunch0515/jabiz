@@ -10,8 +10,6 @@ import com.jabiz.process.ProcessStart;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
-import com.jabiz.quizbuks.fee.CertifiedTopUps;
-import com.jabiz.quizbuks.fee.FeeCredits;
 import com.jabiz.quizbuks.identity.AccountEditing;
 import com.jabiz.quizbuks.identity.CallerChecks;
 import com.jabiz.quizbuks.identity.QbAccounts;
@@ -29,12 +27,10 @@ import com.jabiz.runtime.approval.RequireApproval;
 import com.jabiz.runtime.approval.WithdrawApproval;
 import com.jabiz.runtime.mail.MailTokens;
 import com.jabiz.runtime.mail.SendMail;
-import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.HoldLock;
 import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
-import com.jabiz.runtime.process.steps.SaveChanges;
 import com.jabiz.runtime.security.SecurityEntities;
 import com.jabiz.security.MfaRequirement;
 import com.jabiz.security.Sensitive;
@@ -64,13 +60,14 @@ import java.util.Optional;
  *       address the submission's, not older than {@code qb.sponsor-verification.link-hours}; it goes to the review.</li>
  *   <li>{@value #APPROVAL_RESULT}: run for the approval events, as the system: verifies or sends back the submission
  *       whose own request was decided, still bound to it as stored. A domain verified for another Sponsor meanwhile is
- *       sent back. A verification tops up the onboarding platform fee Kudos ({@code QB_FEE_CREDIT_CERTIFIED_TOP_UP}).</li>
+ *       sent back. The top-up of the onboarding platform fee Kudos ({@code QB_FEE_CREDIT_CERTIFIED_TOP_UP}) follows in a
+ *       transaction of its own, from the event {@value #DECIDED_EVENT} (the review of F-M3, L2: money failing never
+ *       holds up the verification; the daily job {@code qb.fee-credit-certified-due} makes what it missed).</li>
  *   <li>{@value #REVOKE}: headquarters or a member of the Sponsor's operator withdraws a verification, with a reason
  *       the Sponsor reads; the platform fee Kudos given are kept.</li>
  * </ul>
  * Locks: the Sponsor's verification ({@code qb.sponsor-verification:<sponsor>}), then the domain's
- * ({@code qb.sponsor-verification-domain:<domain>}, an approval only), then the platform's approvals, then the
- * Sponsor's wallet (the top-up).
+ * ({@code qb.sponsor-verification-domain:<domain>}, an approval only), then the platform's approvals.
  */
 public final class VerificationProcesses {
 
@@ -139,7 +136,6 @@ public final class VerificationProcesses {
     static final String DECISIONS = "decisions";
     static final String VERIFIED_NOW = "verifiedNow";
     static final String DECIDED_NOW = "decidedNow";
-    static final String TOPPED_UP = "toppedUp";
 
     private VerificationProcesses() {
     }
@@ -441,8 +437,7 @@ public final class VerificationProcesses {
     public static ProcessDefinition<ApprovalResultInput, VerificationOutput, ProcessContext> approvalResult() {
         return ProcessDefinition.define(APPROVAL_RESULT, 1, ApprovalResultInput.class, VerificationOutput.class,
             ProcessContext.class, pb -> pb
-                .description("Verifies or sends back a company verification after its review is decided, and tops up "
-                    + "the onboarding platform fee Kudos.")
+                .description("Verifies or sends back a company verification after its review is decided.")
                 .permissions(QbPermissions.VERIFICATION_SYSTEM)
                 .internal()
                 .contextFactory((start, input) -> start(start, input,
@@ -471,12 +466,6 @@ public final class VerificationProcesses {
                     VerificationApprovals.SUBJECT, ctx -> storedCase(ctx).preparedBy(result(ctx).preparerId()),
                     APPROVAL))
                 .compute("Verify or send back", (metadata, ctx) -> decided(ctx))
-                // Written now, so that the top-up reads the Sponsor as verified.
-                .step("Save the verification", SaveChanges.now())
-                .step("Top up the onboarding platform fee Kudos", CallProcess.<ProcessContext>when(
-                    ctx -> !ctx.hasViolations() && Boolean.TRUE.equals(ctx.get(VERIFIED_NOW)), CertifiedTopUps.ITEM, 1,
-                    ctx -> new FeeCredits.SponsorRef(String.valueOf((Object) first(ctx, ROW).get("sponsorId"))),
-                    TOPPED_UP))
                 .step("Tell the Sponsor", PublishEvent.<ProcessContext>when(
                     ctx -> !ctx.hasViolations() && ctx.contains(DECIDED_NOW), DECIDED_EVENT,
                     ctx -> eventPayload(first(ctx, ROW), (String) ctx.get(DECIDED_NOW)))));

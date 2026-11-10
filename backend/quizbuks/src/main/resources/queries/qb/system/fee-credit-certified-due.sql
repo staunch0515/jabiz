@@ -15,15 +15,31 @@ list:
 permissions: [qb.fee.system]
 ---*/
 -- The same rule as fee.FeeCreditRules#certifiedTopUp, which the item runs again under the Sponsor's wallet lock (with
--- the switch, the onboarding's approval and the ban): while the switch is off, or the Sponsor is banned, the item
--- grants nothing and the Sponsor is listed again.
+-- the onboarding's approval and the ban): while the Sponsor is banned the item grants nothing and the Sponsor is listed
+-- again. Nobody while the grants' switch is off, or the certified amount is not whole yen (then nothing is due: the
+-- same as the item, not an error). What is due tops up to the certified amount recorded on the onboarding lot when it
+-- was granted, no more than the parameter now (the parameter now for a lot granted before it was recorded): raising
+-- the parameter selects nobody granted before it.
+WITH switch AS (
+    SELECT bool_or(p.{{SysParam.value}} = 'true') AS r_enabled
+    FROM {{SysParam}} p
+    WHERE p.{{SysParam.paramKey}} = 'qb.fee-credit.grant.enabled'
+),
+certified AS (
+    SELECT max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,13}$' THEN CAST(p.{{SysParam.value}} AS numeric) END) AS r_amount
+    FROM {{SysParam}} p
+    WHERE p.{{SysParam.paramKey}} = 'qb.fee-credit.grant.certified'
+)
 SELECT DISTINCT v.{{QbSponsorVerification.sponsorId}} AS sponsorId
 FROM {{QbSponsorVerification}} v
 JOIN {{QbFeeCreditGrant}} o ON o.{{QbFeeCreditGrant.sponsorId}} = v.{{QbSponsorVerification.sponsorId}}
     AND o.{{QbFeeCreditGrant.sourceKey}} = 'onboarding'
-JOIN {{SysParam}} c ON c.{{SysParam.paramKey}} = 'qb.fee-credit.grant.certified'
+CROSS JOIN switch
+CROSS JOIN certified c
 WHERE v.{{QbSponsorVerification.status}} = 'APPROVED'
-  AND o.{{QbFeeCreditGrant.amount}} < CAST(c.{{SysParam.value}} AS numeric)
+  AND switch.r_enabled IS TRUE
+  AND c.r_amount IS NOT NULL
+  AND o.{{QbFeeCreditGrant.amount}} < coalesce(least(o.{{QbFeeCreditGrant.certifiedAmount}}, c.r_amount), c.r_amount)
   AND NOT EXISTS (SELECT 1 FROM {{QbFeeCreditGrant}} t
                   WHERE t.{{QbFeeCreditGrant.sponsorId}} = v.{{QbSponsorVerification.sponsorId}}
                     AND t.{{QbFeeCreditGrant.sourceKey}} = 'certified')

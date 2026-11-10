@@ -42,8 +42,21 @@ WITH latest AS (
     LIMIT 1
 ),
 hours AS (
-    SELECT CAST(max(p.{{SysParam.value}}) AS int) AS h FROM {{SysParam}} p
+    SELECT max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,9}$' THEN CAST(p.{{SysParam.value}} AS int) END) AS h
+    FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} = 'qb.sponsor-verification.link-hours'
+),
+-- What a verification tops up to (fee.FeeCreditRules#certifiedTopUp): the certified amount recorded on the onboarding
+-- lot when granted, no more than the parameter now; the parameter now for a lot granted before it was recorded.
+certified AS (
+    SELECT max(CASE WHEN p.{{SysParam.value}} ~ '^[0-9]{1,13}$' THEN CAST(p.{{SysParam.value}} AS numeric) END) AS r_amount
+    FROM {{SysParam}} p
+    WHERE p.{{SysParam.paramKey}} = 'qb.fee-credit.grant.certified'
+),
+onboarding AS (
+    SELECT g.{{QbFeeCreditGrant.amount}} AS r_amount, g.{{QbFeeCreditGrant.certifiedAmount}} AS r_certified
+    FROM {{QbFeeCreditGrant}} g
+    WHERE g.{{QbFeeCreditGrant.sourceKey}} = 'onboarding'
 )
 SELECT
     CAST(l.{{QbSponsorVerification.verificationId}} AS text) AS verificationId,
@@ -62,10 +75,9 @@ SELECT
     l.{{QbSponsorVerification.endedAt}} AS endedAt,
     EXISTS (SELECT 1 FROM {{QbSponsorVerification}} a
             WHERE a.{{QbSponsorVerification.status}} = 'APPROVED') AS verified,
-    (SELECT g.{{QbFeeCreditGrant.amount}} FROM {{QbFeeCreditGrant}} g
-     WHERE g.{{QbFeeCreditGrant.sourceKey}} = 'onboarding') AS onboardingAmount,
-    (SELECT CAST(max(p.{{SysParam.value}}) AS numeric) FROM {{SysParam}} p
-     WHERE p.{{SysParam.paramKey}} = 'qb.fee-credit.grant.certified') AS certifiedAmount,
+    (SELECT o.r_amount FROM onboarding o) AS onboardingAmount,
+    (SELECT CASE WHEN o.r_certified IS NULL THEN c.r_amount ELSE least(o.r_certified, c.r_amount) END
+     FROM certified c LEFT JOIN onboarding o ON true) AS certifiedAmount,
     EXISTS (SELECT 1 FROM {{QbFeeCreditGrant}} t WHERE t.{{QbFeeCreditGrant.sourceKey}} = 'certified') AS toppedUp
 FROM (SELECT 1 AS one) one
 LEFT JOIN latest l ON true

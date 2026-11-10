@@ -6,7 +6,7 @@
 - 对象：发起方（FAQ 的 `audience` = `SPONSOR`）
 - 分类：`ACCOUNT`
 - 页面：发起方中心的标签"企业认证"（`/sponsor/profile/verification`）
-- 参数（写进文案的数字是缺省值，改了参数时同步改这里）：确认链接 48 小时内有效（`qb.sponsor-verification.link-hours`）；开户赠送额度未认证 1,000、认证后 10,000（`qb.fee-credit.grant.basic` / `.certified`，补发要在赠送开关开着时）
+- 参数（写进文案的数字是缺省值，改了参数时同步改这里）：确认链接 48 小时内有效（`qb.sponsor-verification.link-hours`）；开户赠送额度未认证 1,000、认证后 10,000（`qb.fee-credit.grant.basic` / `.certified`，补发要在赠送开关开着时；补到的是开户赠送发放时的认证金额，之后调高参数不补差）
 
 ## FAQ（三条）
 

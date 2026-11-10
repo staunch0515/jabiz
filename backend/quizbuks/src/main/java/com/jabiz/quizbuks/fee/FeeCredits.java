@@ -93,13 +93,24 @@ public final class FeeCredits {
      * @param sourceKey what it stands for, once per sponsor
      * @param amount    in yen
      * @param validDays for how many days; none: {@code qb.fee-credit.valid-days}
+     * @param certifiedAmount F-M3: the onboarding's (and its top-up's) certified amount when granted, which a later
+     *                  verification tops up to (equal to {@code amount}: granted certified, never topped up); none for
+     *                  the other sources
      */
     public record GrantInput(@NotBlank @Size(max = 128) String sponsorId,
         @NotBlank @Pattern(regexp = "ONBOARDING|LIGHT|MANUAL|CERTIFIED_TOP_UP") String source,
         @NotBlank @Size(max = QbFeeAccount.SOURCE_KEY_LENGTH) String sourceKey,
         @NotNull @DecimalMin("1") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0)
         BigDecimal amount,
-        @Min(1) @Max(FeeCreditRules.MAX_VALID_DAYS) Integer validDays) {}
+        @Min(1) @Max(FeeCreditRules.MAX_VALID_DAYS) Integer validDays,
+        @DecimalMin("1") @DecimalMax(FeeProcesses.MAX_AMOUNT) @Digits(integer = 13, fraction = 0)
+        BigDecimal certifiedAmount) {
+
+        /** A grant of a source other than the onboarding (no certified amount). */
+        public GrantInput(String sponsorId, String source, String sourceKey, BigDecimal amount, Integer validDays) {
+            this(sponsorId, source, sourceKey, amount, validDays, null);
+        }
+    }
 
     /**
      * @param granted       whether this call granted it (false: the sponsor had it for this key already, given back)
@@ -119,6 +130,7 @@ public final class FeeCredits {
     static final String PARAMS = "params";
     static final String EXISTING = "existing";
     static final String VERIFIED = "verified";
+    static final String CERTIFIED_AMOUNT = "certifiedAmount";
     static final String ASSIGNMENT = "assignment";
     static final String CREDIT_WALLET = "creditWallet";
     static final String NEW_ID = "newId";
@@ -188,6 +200,7 @@ public final class FeeCredits {
         values.put("voidedAmount", BigDecimal.ZERO);
         values.put("grantedAt", ctx.opTime());
         values.put("expiresAt", expiresAt);
+        values.put("certifiedAmount", input.certifiedAmount() == null ? null : input.certifiedAmount().setScale(0));
         String grantId = String.valueOf(ctx.changes().insert(QbFeeAccount.GRANT, values));
         ctx.put(NEW_ID, grantId);
         ctx.put(NEW_VALUES, values);
@@ -252,7 +265,9 @@ public final class FeeCredits {
                     .compute("Check the sponsor", (metadata, ctx) -> checkSponsor(ctx))
                     .step("Grant the onboarding", CallProcess.<ProcessContext>of(GRANT, 1,
                         ctx -> new GrantInput(onboardingInput(ctx).sponsorId(), QbFeeAccount.ONBOARDING,
-                            FeeCreditRules.ONBOARDING_KEY, ctx.get(AMOUNT, BigDecimal.class), null), GRANTED_NOW));
+                            FeeCreditRules.ONBOARDING_KEY, ctx.get(AMOUNT, BigDecimal.class), null,
+                            ctx.contains(CERTIFIED_AMOUNT) ? ctx.get(CERTIFIED_AMOUNT, BigDecimal.class) : null),
+                        GRANTED_NOW));
             });
     }
 
@@ -281,6 +296,14 @@ public final class FeeCredits {
             .orElseThrow(() -> new BusinessRuleViolationException(new Violation(null, FeeCodes.FEE_PARAMS,
                 "The onboarding amount is not a whole positive number of yen", Map.of())));
         ctx.put(AMOUNT, amount);
+        // F-M3: what a later verification tops this onboarding up to: the certified amount now (the amount itself
+        // when certified now: never topped up). Raising the parameter afterwards tops up nothing granted before.
+        // A certified amount that is not whole yen records none (the top-up then takes the parameter when it is due).
+        BigDecimal target = certified ? amount : FeeCreditRules.onboardingAmount(true, null,
+            params.find(QbParams.FEE_CREDIT_GRANT_CERTIFIED, BigDecimal.class).orElse(null)).orElse(null);
+        if (target != null) {
+            ctx.put(CERTIFIED_AMOUNT, target);
+        }
     }
 
     static void checkSponsor(ProcessContext ctx) {
