@@ -244,8 +244,10 @@ class TopUpConfig {
             .item(ReconChecks.FEE_PAYMENTS, "en", "Platform fee payments", "zh", "平台费付款", "ja", "利用料の支払い")
             .item(ReconChecks.FEE_CREDIT_PROMOTION, "en", "Promotion expenses of granted credit (5140, by operator)",
                 "zh", "赠送额度推广费（5140，按运营商）", "ja", "付与クレジットの販促費（5140、運営パートナー別）")
-            .item(ReconChecks.LIGHT_GRANTS, "en", "Grants for lit nodes", "zh", "点亮节点的赠送",
-                "ja", "ノード点灯の付与"));
+            .item(ReconChecks.LIGHT_GRANTS, "en", "Grants for lit nodes not earned", "zh", "无对应点亮的点亮赠送",
+                "ja", "対応する点灯のない点灯の付与")
+            .item(ReconChecks.LIGHT_VOIDS, "en", "Grants left after a revoked lighting", "zh", "撤销点亮后赠送的剩余",
+                "ja", "取り消された点灯の付与の残り"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */

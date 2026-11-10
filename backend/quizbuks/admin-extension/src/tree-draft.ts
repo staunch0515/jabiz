@@ -30,6 +30,11 @@ export interface DraftNode {
   condition: Condition
   /** Publications bound to it and not ended (from the version in effect): it cannot be removed until they end. */
   runningBound: number
+  /**
+   * F-S4b: the platform fee Kudos lighting it grants, as the version read has it (null: none). The editor has no field
+   * for it yet (F-S4c) and sends it back as read, so that a save never drops it.
+   */
+  grantAmount?: number | null
 }
 
 export interface Draft {
@@ -188,7 +193,7 @@ export interface SaveInput {
   name: I18nText
   description: I18nText | null
   nodes: { nodeId: string | null; key: string | null; name: I18nText; description: I18nText | null;
-    condition: Condition }[]
+    condition: Condition; grantAmount: number | null }[]
 }
 
 export function saveInputOf(draft: Draft): SaveInput {
@@ -198,7 +203,7 @@ export function saveInputOf(draft: Draft): SaveInput {
     name: draft.name,
     description: draft.description,
     nodes: draft.nodes.map((node) => ({ nodeId: node.nodeId, key: node.nodeId ? null : node.key, name: node.name,
-      description: node.description, condition: node.condition })),
+      description: node.description, condition: node.condition, grantAmount: node.grantAmount ?? null })),
   }
 }
 

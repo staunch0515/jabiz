@@ -324,7 +324,9 @@ public final class FeeCredits {
         String sponsorId = lot.get("sponsorId");
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("remaining", BigDecimal.ZERO);
-        values.put("voidedAmount", voided);
+        // Added to what was voided before: a lot a voided invoice gave back to after it expired is voided again
+        // (F-S4b review M3: the promotion's check compares the amount less everything voided).
+        values.put("voidedAmount", FeeGate.money(lot.get("voidedAmount")).add(voided));
         values.put("voidedAt", ctx.opTime());
         ctx.changes().update(QbFeeAccount.GRANT, lot.id(), lot.version(), values);
         QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, sponsorId, voided.negate(), 0,

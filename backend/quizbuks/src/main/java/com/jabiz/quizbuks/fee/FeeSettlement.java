@@ -107,6 +107,10 @@ public final class FeeSettlement {
     static final String ALLOCATION = "allocation";
     static final String POST_INPUT = "postInput";
     static final String POSTING = "posting";
+    static final String VOIDED_BACK = "voidedBack";
+    static final String VOIDED_POSTED = "voidedPosted";
+    /** The posting's description when what a voided invoice gives back to a voided lot is voided again. */
+    static final String VOIDED_AGAIN = "Platform fee Kudos given back to a voided lot, voided again";
 
     private FeeSettlement() {}
 
@@ -142,7 +146,10 @@ public final class FeeSettlement {
      * with the amount negated (the reversal its posting), each lot's remaining amount and each wallet back by its part;
      * what was paid of the invoice without parts (paid before F-M1, from the cash only) back to the cash as a lot of
      * its own ({@value QbFeeAccount#OTHER}, the invoice its record). A lot of fee credit given back after it expired
-     * stays expired (F-M2's daily job voids it).
+     * stays expired (F-M2's daily job voids it). A lot voided already (expired and voided, or F-S4b: its node's lighting
+     * revoked) is voided again at once by what it is given back: its remaining amount stays 0, what it is given back
+     * adds to what was voided, the wallet does not grow by it, and it is posted as the lot's other voids
+     * (2190 / 5140, the lot its record).
      */
     public static ProcessDefinition<RefundInput, RefundOutput, ProcessContext> refund() {
         return ProcessDefinition.define(REFUND, 1, RefundInput.class, RefundOutput.class, ProcessContext.class, pb -> pb
@@ -176,7 +183,9 @@ public final class FeeSettlement {
                 QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT),
                     ctx -> byIds("grantId", lotIds(ctx, "grantId")), PAID_GRANTS),
                 QueryEntities.query(CashLots.dataset(), ctx -> byIds("lotId", lotIds(ctx, "cashLotId")), PAID_LOTS)))
-            .compute("Give it back", (metadata, ctx) -> giveBack(ctx)));
+            .compute("Give it back", (metadata, ctx) -> giveBack(ctx))
+            .step("Post what voided lots were given back", CallProcess.<ProcessContext>forEach(LedgerProcesses.POST, 1,
+                ctx -> ctx.contains(VOIDED_BACK) ? (List<?>) ctx.get(VOIDED_BACK) : List.of(), VOIDED_POSTED)));
     }
 
     static List<Object> lotIds(ProcessContext ctx, String field) {
@@ -219,7 +228,7 @@ public final class FeeSettlement {
             String lotId = String.valueOf((Object) payment.get(credit ? "grantId" : "cashLotId"));
             (credit ? creditBack : cashBack).merge(lotId, amount, BigDecimal::add);
         }
-        BigDecimal credit = backTo(ctx, QbFeeAccount.GRANT, byId(FeeGate.list(ctx, PAID_GRANTS)), creditBack);
+        BigDecimal credit = creditBack(ctx, input.sponsorId(), byId(FeeGate.list(ctx, PAID_GRANTS)), creditBack);
         BigDecimal cash = backTo(ctx, QbFeeAccount.CASH_LOT, byId(FeeGate.list(ctx, PAID_LOTS)), cashBack);
         // Paid before F-M1 (no parts): from the cash only, given back as cash.
         BigDecimal legacy = input.paidAmount().subtract(parts).max(BigDecimal.ZERO);
@@ -235,6 +244,29 @@ public final class FeeSettlement {
                 0, BigDecimal.ZERO);
         }
         ctx.put(REFUNDED, new RefundOutput(credit, cash.add(legacy), legacy));
+    }
+
+    /** {@link #backTo} for the lots of fee credit: what goes back to a voided lot is voided again (not counted). */
+    private static BigDecimal creditBack(ProcessContext ctx, String sponsorId, Map<String, EntityInstance> lots,
+        Map<String, BigDecimal> back) {
+        Map<String, BigDecimal> open = new LinkedHashMap<>();
+        List<LedgerProcesses.PostInput> posts = new ArrayList<>();
+        for (Map.Entry<String, BigDecimal> entry : back.entrySet()) {
+            EntityInstance lot = lots.get(entry.getKey());
+            if (lot == null || lot.get("voidedAt") == null) {
+                open.put(entry.getKey(), entry.getValue());
+                continue;
+            }
+            ctx.changes().update(QbFeeAccount.GRANT, lot.id(), lot.version(), Map.of("voidedAmount",
+                FeeGate.money(lot.get("voidedAmount")).add(entry.getValue())));
+            Map<String, String> party = Map.of(QbLedger.PARTY, String.valueOf(sponsorId));
+            posts.add(new LedgerProcesses.PostInput(ctx.opTime(), VOIDED_AGAIN, lot.get("source"), List.of(
+                new LedgerProcesses.Line(QbLedger.FEE_CREDIT, Direction.DEBIT, entry.getValue(), null, party),
+                new LedgerProcesses.Line(QbLedger.FEE_CREDIT_PROMOTION, Direction.CREDIT, entry.getValue(), null,
+                    party)), QbFeeAccount.GRANT, String.valueOf(lot.id())));
+        }
+        ctx.put(VOIDED_BACK, List.copyOf(posts));
+        return backTo(ctx, QbFeeAccount.GRANT, lots, open);
     }
 
     private static BigDecimal backTo(ProcessContext ctx, String entity, Map<String, EntityInstance> lots,

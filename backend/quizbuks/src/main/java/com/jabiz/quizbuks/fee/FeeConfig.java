@@ -322,14 +322,13 @@ public class FeeConfig {
 
     // ---- F-S4b: the platform fee Kudos lighting a node grants ----------------------------------------------------------
 
-    @Bean
-    ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant() {
-        return LightGrants.grant();
-    }
+    /** How many lots one settlement grants at most (the rest by the next one or the daily job; not business). */
+    @Value("${quizbuks.tree-grants.max-per-run:50}")
+    int treeGrantsMaxPerRun;
 
     @Bean
-    ProcessDefinition<LightGrants.LitRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrantVoid() {
-        return LightGrants.voidGrant();
+    ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant() {
+        return LightGrants.settle(treeGrantsMaxPerRun);
     }
 
     @Bean
@@ -339,15 +338,16 @@ public class FeeConfig {
             event -> new FeeCredits.SponsorRef(String.valueOf(event.payload().get("sponsorId"))));
     }
 
+    /** A revoked lighting: the subject is settled (a Taker's has no lots: nothing is done). */
     @Bean
-    com.jabiz.event.EventSubscription<LightGrants.LitRef> qbTreeGrantVoidSubscription(
-        ProcessDefinition<LightGrants.LitRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrantVoid) {
-        return com.jabiz.event.EventSubscription.of(LightGrants.VOID_CONSUMER,
-            com.jabiz.quizbuks.tree.TreeRevocations.REVOKED_EVENT, qbTreeLitGrantVoid,
-            event -> new LightGrants.LitRef(String.valueOf(event.payload().get("litId"))));
+    com.jabiz.event.EventSubscription<FeeCredits.SponsorRef> qbTreeGrantRevokedSubscription(
+        ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant) {
+        return com.jabiz.event.EventSubscription.of(LightGrants.REVOKED_CONSUMER,
+            com.jabiz.quizbuks.tree.TreeRevocations.REVOKED_EVENT, qbTreeLitGrant,
+            event -> new FeeCredits.SponsorRef(String.valueOf(event.payload().get("userId"))));
     }
 
-    /** What a lighting's event did not grant (it failed, or the switch was off), each Sponsor in a transaction. */
+    /** Whatever the events missed (a failure, the switch off, a voided invoice's refund), each Sponsor in a transaction. */
     @Bean
     JobDefinition<FeeCredits.SponsorRef> qbTreeGrantRetryJob(
         ProcessDefinition<FeeCredits.SponsorRef, FeeProcesses.ItemOutput, ProcessContext> qbTreeLitGrant) {
