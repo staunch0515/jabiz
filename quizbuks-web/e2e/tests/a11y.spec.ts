@@ -304,13 +304,13 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('publication-step-title')).toHaveText('Time and rewards')
     await page.getByTestId('tier-add').click()
     await page.getByTestId('tier-reward').fill('10')
-    await logCoveredTargets(page, '[data-slot="date-time-picker"] [data-slot="popover-trigger"]', 'audience and rewards')
+    await fromTheTop(page)
     await expectAccessible(page, at('sponsor publication audience and rewards'))
     // Typed wrong: the field is marked and says why.
     await page.getByTestId('publication-pass-score').fill('1.5')
     await page.getByTestId('publication-next').click()
     await expect(page.getByTestId('publication-pass-score')).toHaveAttribute('aria-invalid', 'true')
-    await logCoveredTargets(page, '[data-slot="date-time-picker"] [data-slot="popover-trigger"]', 'typed wrong')
+    await fromTheTop(page)
     await expectAccessible(page, at('sponsor publication typed wrong'))
     await page.getByTestId('publication-pass-score').fill('')
     await page.getByTestId('publication-next').click()
@@ -671,28 +671,12 @@ for (const appearance of ['light', 'dark'] as const) {
 }
 
 /**
- * Diagnosis only (F-F3a: on CI the calendar buttons of the publication's dates were reported partly covered, which no
- * local run reproduces): for each target, its box and, at its centre and four inner corners, the element on top when it
- * is neither the target nor inside it, written to the log. It changes nothing and asserts nothing; axe still decides.
+ * The page scrolled back to its top before axe looks, as a step of the wizard opens. Filling a field lower down lets
+ * Playwright scroll the page so far that the dates' calendar buttons stand half under the sticky header (CI, F-F3a:
+ * the buttons at y 54-90 under the header at 32-80, scrollY 454), which axe's target-size counts against them; that is
+ * where the last action left the scroll, not the step's layout. The rule and every target stay checked.
  */
-async function logCoveredTargets(page: Page, selector: string, label: string) {
-  const report = await page.evaluate((css) => {
-    const describe = (el: Element | null) => {
-      if (!el) return 'nothing'
-      const r = el.getBoundingClientRect()
-      return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''} testid=${el.getAttribute('data-testid') ?? '-'} ` +
-        `slot=${el.getAttribute('data-slot') ?? '-'} class="${(el.getAttribute('class') ?? '').slice(0, 120)}" ` +
-        `box=${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}`
-    }
-    return [...document.querySelectorAll(css)].map((target) => {
-      const r = target.getBoundingClientRect()
-      const points = [[r.x + r.width / 2, r.y + r.height / 2], [r.x + 2, r.y + 2], [r.right - 2, r.y + 2],
-        [r.x + 2, r.bottom - 2], [r.right - 2, r.bottom - 2]]
-      const covers = points.map(([x, y]) => document.elementFromPoint(x, y))
-        .filter((el) => el && el !== target && !target.contains(el)).map(describe)
-      return covers.length === 0 ? null : `${describe(target)} viewport=${window.innerWidth}x${window.innerHeight} ` +
-        `scrollY=${Math.round(window.scrollY)} covered by: ${[...new Set(covers)].join(' | ')}`
-    }).filter((line) => line !== null)
-  }, selector)
-  for (const line of report) console.log(`[covered target] ${label}: ${line}`)
+async function fromTheTop(page: Page) {
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
 }
