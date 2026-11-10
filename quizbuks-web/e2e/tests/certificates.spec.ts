@@ -171,10 +171,10 @@ test('a Taker lights a node: the certificate is in the app, its PDF is issued on
     const myId = String((await (await request.get('/api/auth/me', { headers: { Authorization: `Bearer ${me.token}` } }))
       .json()).userId)
     await run(request, await adminToken(request), 'SEC_USER_DELETION_SCHEDULE', { userId: myId })
-    await expect.poll(async () => {
-      await runJobNow(request, 'jabiz.account-deletion')
-      return stateOfVerifyPage(browser, baseURL, key)
-    }, { message: 'the certificate is gone with the account', timeout: 120_000, intervals: [3_000] }).toBe('NONE')
+    // The deletion job runs every minute here (app.env): not asked for by hand, which a scheduled run holding its lock
+    // answers 409 JOB_BUSY, and which would only take the requests due by an earlier scheduled time anyway.
+    await expect.poll(() => stateOfVerifyPage(browser, baseURL, key), {
+      message: 'the certificate is gone with the account', timeout: 180_000, intervals: [5_000] }).toBe('NONE')
     const gone = await verifyPage(browser, baseURL, key)
     await expect(gone.visitor.getByText('No such certificate')).toBeVisible()
     await accessibleInBoth(gone.visitor, 'certificate verify page, no such certificate')
