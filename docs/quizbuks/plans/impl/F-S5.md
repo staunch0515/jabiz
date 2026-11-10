@@ -108,3 +108,17 @@
 ## 9. 粗估
 
 F-S5a 1.5–2 天、F-S5b 1–1.5 天，合计 2.5–3.5 天（规格粗估 2–3 天；增量来自旧证书的两种形状、运营商查询与发起方一侧）。
+
+## 10. 实施记录（F-S5a，2026-11-10）
+
+计划之外的决定（实现时定，均在 PR 描述中说明）：
+
+- **内部流程按人而不是按（种类, 人）**：每日任务的条目键只能是 36 个字符以内（`JobItems.ITEM_KEY`），`<种类>:<用户编号>` 放不下。`QB_TREE_LIT_CERTIFICATE` 的输入只有 `subjectId`（`subjectKind` 仅作事件的参考），一次处理这个人的学者与发起方两种点亮记录；锁为 `qb.certificate:<用户编号>`；模板 `qb.system.tree-certificates-due` 每人一条。
+- **PDF 的单据编号存在证书行上**：`qb_certificate` 加 `run_id`（首次下载时由持有人的流程写入），`language` 去掉非空（节点证书的语言是 PDF 的，不在证书上）。所以行上被更新的列只有 `shared` 与 `run_id`（平台审计记录；`NodeCertificateIT` 的 `@AfterEach` 断言）。已签发过的再次下载不再读撤销（少一条语句）。
+- **删除了的账号不再补发**：点亮记录在删除账号后仍在（只留编号），证书行被删后每日任务会把它再写出来。流程读 `SecUser.erasedAt`，模板（任务条目与 `CERTIFICATE_MISSING`）读 `sys_erasure`，已删除的账号两处都不算（`CertificateErasureIT`）。
+- **`QB_MY_CERTIFICATIONS` 的 `certificates`** 含节点证书（撤销的也列出，标 `revokedAt`）与仍有效的旧证书（`source = CERTIFICATION`）；`held` 原样保留。新增错误码 `QB_CERTIFICATE_NOT_NODE`（旧证书没有 PDF 可签发、没有分享可设）与 `QB_CERTIFICATE_REVOKED`（撤销了的点亮首次签发 PDF；签发过的照常下载）取代 `QB_CERTIFICATE_PAUSED`。
+- **证书名称取该图自己的节点行**（运营商的副本在复制 / 采用时已带上模板的），不像赠送那样读模板的行；副本不能改，模板改了证书要采用才到副本。名称无效（空白、过长、语言不在平台内）时草稿带问题保存并**不存**这些名称（过长的文字平台会拒收）。
+- **管理系统扩展的草稿原样带回证书名称**（`qb.admin.tree-version`、`qb.operator.tree-version` 返回 `certificateNames`，`tree-draft.ts` 原样送回；F-S4b 的教训）；发起方编辑器（`quizbuks-web/sponsor/src/tree/`）属 F-S5b，那时一并加字段与原样带回。
+- **删除账号只有一条声明**（`TakerErasure`，三种版式的 PDF）：平台的删除器对每个账号都运行，发起方账号的证书行与 `qb.node_certificate_sponsor` 的 PDF 同样被清（`CertificateErasureIT`）。冻结在别人证书上的颁发方名（发起方自己的图）不在清除范围内：它是证书的内容，不是持有人的个人信息；发起方删除账号后他们的图上已发出的证书仍写着他们的公司名（待需求方确认是否要清）。
+- 核实页的公开缓存仍是 60 秒（`cacheSeconds`，与 Q77 一样）：撤销与停用分享最多晚一分钟显示。
+- 语句数：`QB_TREE_LIT_CERTIFICATE` 写一张证书 7 条、无事可做 5 条；首次下载 10 条、再次下载 6 条（`CertificateStatementBudgetIT`）；`AttemptStatementBudgetIT` 不变。

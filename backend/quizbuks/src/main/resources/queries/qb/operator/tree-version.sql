@@ -24,6 +24,7 @@ results:
   answeredUnlit: { kind: { type: numeric, precision: 9, scale: 0 } }
   countedOn:    { from: QbTreeNodeCount.countedOn }
   grantAmount:  { from: QbTreeNodeDef.grantAmount }
+  certificateNames: { kind: { type: text } }
 list:
   sorts: [seq]
   defaultSort: { field: seq, asc: true }
@@ -71,6 +72,8 @@ SELECT d.{{QbTreeNodeDef.nodeId}} AS nodeId,
               OR CAST(e.{{QbTreeNodeDef.condition}} AS jsonb) IS DISTINCT FROM CAST(d.{{QbTreeNodeDef.condition}} AS jsonb)
               -- F-S4b: the grant is reviewed with the version.
               OR e.{{QbTreeNodeDef.grantAmount}} IS DISTINCT FROM d.{{QbTreeNodeDef.grantAmount}}
+              -- F-S5a: and the certificate it issues.
+              OR CAST(e.{{QbTreeNodeDef.certificateNames}} AS jsonb) IS DISTINCT FROM CAST(d.{{QbTreeNodeDef.certificateNames}} AS jsonb)
             THEN 'CHANGED' ELSE 'SAME' END AS change,
        CAST(d.{{QbTreeNodeDef.name}} AS text) AS name, CAST(d.{{QbTreeNodeDef.description}} AS text) AS description,
        d.{{QbTreeNodeDef.condition}} AS condition, d.{{QbTreeNodeDef.seq}} AS seq,
@@ -78,7 +81,8 @@ SELECT d.{{QbTreeNodeDef.nodeId}} AS nodeId,
        CASE WHEN nc.{{QbTreeNodeCount.answeredUnlit}} >= k.k THEN nc.{{QbTreeNodeCount.answeredUnlit}} END
            AS answeredUnlit,
        nc.{{QbTreeNodeCount.countedOn}} AS countedOn,
-       d.{{QbTreeNodeDef.grantAmount}} AS grantAmount
+       d.{{QbTreeNodeDef.grantAmount}} AS grantAmount,
+       CAST(d.{{QbTreeNodeDef.certificateNames}} AS text) AS certificateNames
 FROM v
 CROSS JOIN k
 JOIN {{QbTreeNodeDef}} d ON d.{{QbTreeNodeDef.versionId}} = v.versionId
@@ -91,7 +95,7 @@ UNION ALL
 SELECT e.{{QbTreeNodeDef.nodeId}}, 'REMOVED', CAST(e.{{QbTreeNodeDef.name}} AS text),
        CAST(e.{{QbTreeNodeDef.description}} AS text), e.{{QbTreeNodeDef.condition}},
        10000 + e.{{QbTreeNodeDef.seq}}, coalesce(r.n, 0), CAST(NULL AS numeric(9, 0)), CAST(NULL AS date),
-       e.{{QbTreeNodeDef.grantAmount}}
+       e.{{QbTreeNodeDef.grantAmount}}, CAST(e.{{QbTreeNodeDef.certificateNames}} AS text)
 FROM v
 JOIN {{QbTreeNodeDef}} e ON e.{{QbTreeNodeDef.versionId}} = v.effectId AND v.effectId <> v.versionId
 LEFT JOIN running r ON r.nodeId = e.{{QbTreeNodeDef.nodeId}}

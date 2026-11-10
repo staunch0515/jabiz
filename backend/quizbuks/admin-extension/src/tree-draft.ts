@@ -35,6 +35,11 @@ export interface DraftNode {
    * for it yet (F-S4c) and sends it back as read, so that a save never drops it.
    */
   grantAmount?: number | null
+  /**
+   * F-S5a: the name of the certificate lighting it issues, by language (null: none), as the version read has it. The
+   * editor has no field for it yet (F-S5b) and sends it back as read, so that a save never drops it.
+   */
+  certificateNames?: I18nText | null
 }
 
 export interface Draft {
@@ -193,7 +198,7 @@ export interface SaveInput {
   name: I18nText
   description: I18nText | null
   nodes: { nodeId: string | null; key: string | null; name: I18nText; description: I18nText | null;
-    condition: Condition; grantAmount: number | null }[]
+    condition: Condition; grantAmount: number | null; certificateNames: I18nText | null }[]
 }
 
 export function saveInputOf(draft: Draft): SaveInput {
@@ -203,7 +208,8 @@ export function saveInputOf(draft: Draft): SaveInput {
     name: draft.name,
     description: draft.description,
     nodes: draft.nodes.map((node) => ({ nodeId: node.nodeId, key: node.nodeId ? null : node.key, name: node.name,
-      description: node.description, condition: node.condition, grantAmount: node.grantAmount ?? null })),
+      description: node.description, condition: node.condition, grantAmount: node.grantAmount ?? null,
+      certificateNames: node.certificateNames ?? null })),
   }
 }
 

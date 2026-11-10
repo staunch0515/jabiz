@@ -75,6 +75,7 @@ export default function TreeEditor({ tree, operator, onClose }: { tree: TreeRow;
   const nodes: DraftNode[] = (version.data ?? []).filter((row) => row.change !== 'REMOVED').map((row) => ({
     nodeId: row.nodeId, key: row.nodeId, name: parse(row.name) ?? {}, description: parse(row.description),
     condition: parseCondition(row.condition), runningBound: row.runningBound, grantAmount: row.grantAmount,
+    certificateNames: parse(row.certificateNames),
   }))
   const draft: Draft = { treeId: tree.treeId, revision: tree.revision, name: parse(tree.draftName) ?? {},
     description: parse(tree.description), nodes }

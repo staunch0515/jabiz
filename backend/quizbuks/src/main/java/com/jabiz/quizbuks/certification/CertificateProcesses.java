@@ -307,7 +307,8 @@ public final class CertificateProcesses {
             .step("Load the certificate", LoadEntity.by(dataset, CERT_ID, CERTIFICATE))
             .step("Load its revocation", QueryEntities.<ProcessContext>of(QbTrees.defaultDataset(QbTrees.REVOCATION),
                 ctx -> {
-                    Object lit = ctx.get(CERTIFICATE, EntityInstance.class).get("litId");
+                    // Only a PDF not issued yet needs to know (one issued before is given whatever became of the lighting).
+                    Object lit = issuedBefore(ctx) ? null : ctx.get(CERTIFICATE, EntityInstance.class).get("litId");
                     return EntityQuery.builder().where(new QueryPredicate.In("litId",
                         lit == null ? List.of() : List.of(String.valueOf(lit)))).limit(1).build();
                 }, REVOCATIONS))

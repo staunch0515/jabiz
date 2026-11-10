@@ -86,4 +86,14 @@ describe('the draft', () => {
     const renamed = withNode(granting, 'a', (n) => ({ ...n, name: { en: 'Wheat' } }))
     expect(saveInputOf(renamed).nodes[0].grantAmount).toBe(300)
   })
+
+  it('sends each node\'s certificate name back as read, so that a save never drops it (F-S5a)', () => {
+    const read = draft()
+    const certified = { ...read, nodes: read.nodes.map((n) => n.key === 'a' ? { ...n, certificateNames: { en: 'Fair dealing' } } : n) }
+    const input = saveInputOf(withNewNode(certified, { en: 'Rye' }))
+    expect(input.nodes.map((n) => [n.key ?? n.nodeId, n.certificateNames])).toEqual([['a', { en: 'Fair dealing' }],
+      ['b', null], ['new-3', null]])
+    const renamed = withNode(certified, 'a', (n) => ({ ...n, name: { en: 'Wheat' } }))
+    expect(saveInputOf(renamed).nodes[0].certificateNames).toEqual({ en: 'Fair dealing' })
+  })
 })
