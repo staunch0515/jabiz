@@ -26,6 +26,7 @@ import { STATS_PATH } from '../shell/paths'
 import { BenefitsEntryCard } from './BenefitsEntryCard'
 import { PreviewCard } from './PreviewCard'
 import { ProfileTransferCard } from './ProfileTransfer'
+import { SponsorPackageCard } from './SponsorPackage'
 
 /** Where each item of the checklist is set up; the products are in the asset library since F-C1c. */
 const PATH_OF: Record<ChecklistKey, string> = {
@@ -132,6 +133,8 @@ export function OverviewPage() {
         </Card>
 
         <ProfileTransferCard />
+
+        <SponsorPackageCard />
 
         <Card data-testid="profile-methods">
           <CardHeader>

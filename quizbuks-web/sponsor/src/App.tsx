@@ -34,6 +34,7 @@ import { useUnreadConversations } from './conversations/ConversationsPages'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { GrowthArt, Wordmark } from './qb/Illustrations'
 import { HelpPage } from './qb/HelpPage'
+import { HelpPanel } from './help/HelpPanel'
 import { LEGAL } from './qb/ids'
 import { legalKindOf, type LegalKind } from './qb/legal'
 import { EntryLegalLinks, LegalLinks } from './qb/LegalLinks'
@@ -136,7 +137,8 @@ function SignedIn({ path }: { path: string }) {
 
   const shell = (
     <SponsorShell path={path} state={state} badges={{ messages: unreadConversations }} displayName={displayName}
-      helpPath={HELP} onSignOut={() => void signOut().then(toSignIn)}>
+      helpPath={HELP} onSignOut={() => void signOut().then(toSignIn)}
+      tools={<HelpPanel path={path} search={search} />}>
       <div className="flex flex-col gap-4">
         <OfflineBanner />
         {/* Signed in unverified (Q40): every write waits for the address, so say so and offer the mail again. */}

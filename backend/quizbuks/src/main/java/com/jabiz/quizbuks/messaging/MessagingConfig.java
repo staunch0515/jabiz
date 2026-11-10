@@ -150,6 +150,24 @@ class MessagingConfig {
     }
 
     @Bean
+    MailTemplate qbFeeCreditExpiringMail() {
+        return NotificationMails.FEE_CREDIT_EXPIRING;
+    }
+
+    @Bean
+    ProcessDefinition<MailProcesses.FeeCreditMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeCredit(
+        MessageCatalog messages, MailValues qbMailValues) {
+        return MailProcesses.feeCredit(messages, qbMailValues);
+    }
+
+    @Bean
+    EventSubscription<MailProcesses.FeeCreditMailInput> qbMailFeeCreditExpiringSubscription(
+        ProcessDefinition<MailProcesses.FeeCreditMailInput, MailProcesses.MailOutput, ProcessContext> qbMailFeeCredit) {
+        return EventSubscription.of(MailProcesses.FEE_CREDIT_EXPIRING_CONSUMER,
+            com.jabiz.quizbuks.fee.FeeCredits.EXPIRING_EVENT, qbMailFeeCredit, MailProcesses::feeCreditInput);
+    }
+
+    @Bean
     ProcessDefinition<MailProcesses.PublicationMailInput, MailProcesses.MailOutput, ProcessContext>
         qbPublicationNotify(MessageCatalog messages, MailValues qbMailValues) {
         return MailProcesses.publication(messages, qbMailValues);

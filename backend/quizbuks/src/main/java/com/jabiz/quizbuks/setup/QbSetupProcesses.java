@@ -8,6 +8,9 @@ import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.country.CountryCatalog;
 import com.jabiz.quizbuks.country.CountryData;
 import com.jabiz.quizbuks.country.QbCountries;
+import com.jabiz.quizbuks.help.HelpManualDrafts;
+import com.jabiz.quizbuks.help.QbHelp;
+import com.jabiz.quizbuks.help.QbHelpMaterials;
 import com.jabiz.quizbuks.messaging.LegalDrafts;
 import com.jabiz.quizbuks.messaging.QbLegal;
 import com.jabiz.quizbuks.wallet.QbLedger;
@@ -76,11 +79,14 @@ public final class QbSetupProcesses {
      * @param legalDraftsCreated the kinds of legal text whose draft was created (Q7b: marked test placeholders,
      *                         {@link LegalDrafts}); nothing is published
      * @param legalDraftIds    the keys of those drafts, in the same order ({@code QB_LEGAL_PUBLISH} takes them)
+     * @param helpManualsCreated the entries whose AI help usage manual was created (F-C10b: a draft of the
+     *                         repository's text, {@link HelpManualDrafts}); nothing is published
      */
     public record SetupOutput(List<String> rolesCreated, int permissionsAdded, int permissionsRemoved,
         List<String> accountsOpened,
         int countriesAdded, List<String> paramsCreated, List<String> paramsProposed, List<String> rulesProposed,
-        List<String> proposals, List<String> legalDraftsCreated, List<String> legalDraftIds) {}
+        List<String> proposals, List<String> legalDraftsCreated, List<String> legalDraftIds,
+        List<String> helpManualsCreated) {}
 
     static final String RECORDS = "records";
     static final String ROLES = "roles";
@@ -94,6 +100,7 @@ public final class QbSetupProcesses {
     static final String RULES = "rules";
     static final String SOD_RULES = "sodRules";
     static final String LEGAL_DOCS = "legalDocs";
+    static final String HELP_MANUALS = "helpManuals";
     static final String OPEN = "open";
     static final String CREATE = "create";
     static final String PROPOSE = "propose";
@@ -155,6 +162,8 @@ public final class QbSetupProcesses {
                 SOD_RULES))
             .step("Load the drafts of the legal texts", QueryEntities.of(QbLegal.defaultDataset(QbLegal.DOC),
                 ctx -> all(new QueryPredicate.In("kind", new ArrayList<>(QbLegal.KINDS))), LEGAL_DOCS))
+            .step("Load the AI help's manuals", QueryEntities.of(
+                QbHelpMaterials.defaultDataset(QbHelpMaterials.MANUAL), ctx -> all(), HELP_MANUALS))
             .compute("Add what has never existed", (metadata, ctx) -> setup(ctx, catalog.countries()))
             .step("Open the ledger accounts", CallProcess.forEach(LedgerProcesses.OPEN_ACCOUNT, 1,
                 ctx -> listOf(ctx, OPEN), null))
@@ -171,7 +180,7 @@ public final class QbSetupProcesses {
         return new SetupOutput(made.rolesCreated(), made.permissionsAdded(), made.permissionsRemoved(),
             made.accountsOpened(),
             made.countriesAdded(), made.paramsCreated(), made.paramsProposed(), made.rulesProposed(), proposals,
-            made.legalDraftsCreated(), made.legalDraftIds());
+            made.legalDraftsCreated(), made.legalDraftIds(), made.helpManualsCreated());
     }
 
     static void setup(ProcessContext ctx, List<CountryData.Country> catalog) {
@@ -198,6 +207,7 @@ public final class QbSetupProcesses {
         list(ctx, RULES).forEach(rule -> found.add(QbSetupRecords.approvalRule(rule.get("ruleCode"))));
         list(ctx, SOD_RULES).forEach(rule -> found.add(QbSetupRecords.sodRule(rule.get("ruleCode"))));
         list(ctx, LEGAL_DOCS).forEach(doc -> found.add(QbSetupRecords.legalDraft(doc.get("kind"))));
+        list(ctx, HELP_MANUALS).forEach(manual -> found.add(QbSetupRecords.helpManual(manual.get("entry"))));
 
         Recorder recorder = new Recorder(ctx, seen, found);
         List<String> created = new ArrayList<>();
@@ -313,13 +323,28 @@ public final class QbSetupProcesses {
             }
         }
 
+        // F-C10b: one draft of the AI help's usage manual per entry, the repository's text (published by a content
+        // administrator after reading it).
+        List<String> manuals = new ArrayList<>();
+        for (String entry : QbHelp.ENTRIES) {
+            if (recorder.isNew(QbSetupRecords.helpManual(entry))) {
+                Map<String, String> body = HelpManualDrafts.of(entry);
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("entry", entry);
+                row.put("body", body);
+                row.put("sourceHash", HelpManualDrafts.hash(body));
+                ctx.changes().insert(QbHelpMaterials.MANUAL, row);
+                manuals.add(entry);
+            }
+        }
+
         ctx.put(OPEN, List.copyOf(open));
         ctx.put(CREATE, List.copyOf(create));
         ctx.put(PROPOSE, List.copyOf(propose));
         ctx.put(OUTPUT, new SetupOutput(List.copyOf(created), added, removed,
             open.stream().map(LedgerProcesses.OpenAccountInput::accountCode).toList(), countriesAdded,
             create.stream().map(ParamProcesses.CreateInput::key).toList(), List.copyOf(proposed), List.copyOf(rules),
-            List.of(), List.copyOf(drafts), List.copyOf(draftIds)));
+            List.of(), List.copyOf(drafts), List.copyOf(draftIds), List.copyOf(manuals)));
     }
 
     /**

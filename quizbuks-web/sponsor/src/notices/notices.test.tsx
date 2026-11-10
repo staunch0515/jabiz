@@ -60,7 +60,7 @@ function server(options: Server = {}) {
         return json(200, [])
       case '/api/auth/me':
         return json(200, { userId: 's1', displayName: 'Sara', email: 'sara@example.com', roles: ['QB_SPONSOR'],
-          permissions: ['qb.broadcast.write', 'qb.sponsor.me'], emailVerified: true, idleTimeoutSeconds: 1800 })
+          permissions: ['qb.broadcast.write', 'qb.sponsor.me', 'qb.help.use'], emailVerified: true, idleTimeoutSeconds: 1800 })
       case '/api/datasets/urn:jabiz:dataset:sponsor:QbSponsor/query':
         return json(200, { items: [{ id: 's', version: 1, attributes: { reviewStatus: 'APPROVED' } }] })
       case '/api/dictionaries/urn:jabiz:dict:quizbuks:broadcast-status':
@@ -86,6 +86,11 @@ function server(options: Server = {}) {
         { itemKind: 'MESSAGE', itemId: 'm2', type: 'SYSTEM', kind: 'USAGE_OVER_FREE',
           title: { en: 'Your storage is above the free amount' }, body: { en: 'Your files use 600.0 MB.' },
           markdown: false, action: 'ASSETS', actionId: null, at: '2026-10-14T00:00:00Z', expiresAt: null,
+          readAt: null, unread: true },
+        // F-C10c: a person's reply in the AI help: to its conversation, in the help's panel.
+        { itemKind: 'MESSAGE', itemId: 'm3', type: 'SYSTEM', kind: 'HELP_REPLY',
+          title: { en: 'Help desk reply' }, body: { en: 'The support team replied.' },
+          markdown: false, action: 'HELP', actionId: 'h1', at: '2026-10-13T00:00:00Z', expiresAt: null,
           readAt: null, unread: true }], offset: 0, limit: 100 })
       case '/api/queries/qb.me.consents':
         return json(200, { items: [], offset: 0, limit: 20 })
@@ -260,5 +265,12 @@ describe('the message centre', () => {
     await user.click(within(usage).getByTestId('announcement-open'))
     expect(within(usage).getByTestId('announcement-action')).toHaveAttribute('href', '/assets')
     expect(within(usage).getByTestId('announcement-action')).toHaveTextContent('Open the asset library')
+    // F-C10c: a person's reply in the AI help opens the help's panel on its conversation.
+    const reply = items[3]
+    await user.click(within(reply).getByTestId('announcement-open'))
+    expect(within(reply).queryByTestId('announcement-action')).toBeNull()
+    await user.click(within(reply).getByTestId('announcement-help'))
+    const panel = await screen.findByTestId('help-panel')
+    expect(within(panel).getByTestId('help-ai')).toHaveAttribute('data-thread', 'h1')
   })
 })

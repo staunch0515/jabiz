@@ -136,6 +136,21 @@ public class TreeConfig {
             .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef)));
     }
 
+    /**
+     * F-C4: the caller's own graphs (a Sponsor's), read only: the templates of the sponsor package join their versions
+     * and nodes from the default datasets through it, so that a Sponsor reads only their own.
+     */
+    @Bean
+    DatasetDefinition qbSponsorTreeDataset() {
+        return DatasetDefinition.define(QbTrees.SPONSOR_TREES, d -> d
+            .targetEntityType(QbTrees.TREE)
+            .permissions(QbPermissions.SPONSOR_ME, QbPermissions.SPONSOR_VIEW_WRITE)
+            .policy(p -> p.readOnly(true).allowTimeTravel(false))
+            .storage(s -> s.driver("r2dbc-postgresql").connectionPoolRef(poolRef))
+            .scope(s -> s.fromContext("ownerId", "actorId", RequestContext::actorId)
+                .fixed("ownerKind", QbTrees.SPONSOR)));
+    }
+
     /** A person's own lit records (a Taker's: the subject is the caller as a person), for the templates and a start. */
     @Bean
     DatasetDefinition qbMyTreeLitDataset() {

@@ -26,6 +26,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { FileDown, Plus } from 'lucide-react'
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { FeeAccount } from './FeeAccount'
 import { Invoices } from './Invoices'
 
 import { SPONSOR } from '../messages'
@@ -621,6 +622,8 @@ export function FeeAccountPage() {
       {!data ? <WalletState wallet={wallet} />
         : cash ? <CashAccount wallet={data} />
           : settings.data && <PageState kind="empty" description={t('wallet.cash.none')} />}
+      {/* F-M1: the account that pays the platform's fees: the granted credit and the cash, by lot. */}
+      {data && <FeeAccount wallet={data} />}
       {!kudos && settings.data?.targets.includes('CASH') && <TopUpsSection />}
       <TopUpDialog open={topping} onOpenChange={setTopping} preferred="CASH" />
     </section>

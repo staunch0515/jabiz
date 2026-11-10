@@ -1,6 +1,6 @@
 /*---
 id: qb.admin.fee-requests
-description: The requests about the platform's fees waiting for or given another administrator's approval (Q87) - a fee charged by hand, an invoice voided
+description: The requests about the platform's fees waiting for or given another administrator's approval (Q87) - a fee charged by hand, an invoice voided, platform fee Kudos granted by hand (F-M2)
 entities: [QbFeeRequest, QbSponsor]
 datasets:
   QbFeeRequest: urn:jabiz:dataset:default:QbFeeRequest
@@ -19,6 +19,8 @@ results:
   approvalRequestId: { from: QbFeeRequest.approvalRequestId }
   decidedAt:         { from: QbFeeRequest.decidedAt }
   chargeId:          { from: QbFeeRequest.chargeId }
+  validDays:         { from: QbFeeRequest.validDays }
+  grantId:           { from: QbFeeRequest.grantId }
 list:
   filters: [kind, sponsorId, status, requestedAt]
   sorts:   [requestedAt, status]
@@ -41,6 +43,8 @@ SELECT
     r.{{QbFeeRequest.requestedAt}}       AS requestedAt,
     r.{{QbFeeRequest.approvalRequestId}} AS approvalRequestId,
     r.{{QbFeeRequest.decidedAt}}         AS decidedAt,
-    r.{{QbFeeRequest.chargeId}}          AS chargeId
+    r.{{QbFeeRequest.chargeId}}          AS chargeId,
+    r.{{QbFeeRequest.validDays}}         AS validDays,
+    r.{{QbFeeRequest.grantId}}           AS grantId
 FROM {{QbFeeRequest}} r
 LEFT JOIN {{QbSponsor}} s ON s.{{QbSponsor.userId}} = r.{{QbFeeRequest.sponsorId}}

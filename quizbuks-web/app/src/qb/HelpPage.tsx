@@ -2,7 +2,7 @@ import { useOptionalAuth } from '@jabiz/client'
 import { Input, Label, MarkdownView, PageState } from '@jabiz/ui'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, Mail } from 'lucide-react'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FAQ_CATEGORIES, pickText, readFaq, readSupportEmail, type FaqAudience, type FaqEntry } from './legal'
 import { QB } from './messages'
@@ -65,9 +65,9 @@ function Contact() {
 /**
  * The help centre (U-72, P-05; Q7-7): the published questions for this front end (and those for both), by category,
  * searched in any language, folded. Readable without signing in (public template `qb.public.faq`); the contact
- * address shows to signed-in users only.
+ * address shows to signed-in users only. F-C10c: `top` goes above the questions (the app's "Ask the AI").
  */
-export function HelpPage({ audience }: { audience: FaqAudience }) {
+export function HelpPage({ audience, top }: { audience: FaqAudience; top?: ReactNode }) {
   const { t } = useTranslation(QB)
   const id = useId()
   const [search, setSearch] = useState('')
@@ -87,6 +87,7 @@ export function HelpPage({ audience }: { audience: FaqAudience }) {
         <h1 id="help-title" className="text-xl font-semibold">{t('help.title')}</h1>
         <p className="text-muted-foreground text-sm">{t('help.intro')}</p>
       </div>
+      {top}
       <div className="flex flex-col gap-2" role="search">
         <Label htmlFor={`${id}-search`}>{t('help.search')}</Label>
         <Input id={`${id}-search`} type="search" value={search} maxLength={100} data-testid="help-search"

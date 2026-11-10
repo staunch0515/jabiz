@@ -67,6 +67,11 @@ public class QbSetupRecords {
         return "legal-draft:" + kind;
     }
 
+    /** F-C10b: the AI help's usage manual of an entry. */
+    static String helpManual(String entry) {
+        return "help-manual:" + entry;
+    }
+
     @Bean
     EntityDefinition qbSetupRecordEntity() {
         return RECORD_ENTITY;

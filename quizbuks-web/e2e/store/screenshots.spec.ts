@@ -75,8 +75,9 @@ async function publish(request: APIRequestContext, token: string, quiz: StoreQui
   })
   expect(uploaded.status(), await uploaded.text()).toBeLessThan(300)
   // The quiz's language (Q59a): the home page lists only the taker's languages, and the request's is not the quiz's.
+  // F-S7: in the fixed order, so that the screenshots answer the questions in the order of the content.
   const saved = await run(request, token, 'QB_QUIZ_SAVE', { title: quiz.title, intro: quiz.intro,
-    cover: (await uploaded.json()).fileId, timeLimitSec: 300, language })
+    cover: (await uploaded.json()).fileId, timeLimitSec: 300, language, shuffleQuestions: false })
   const quizId = saved.quizId as string
   for (const question of quiz.questions) {
     await run(request, token, 'QB_QUESTION_SAVE', { quizId, stem: question.stem, points: 1,

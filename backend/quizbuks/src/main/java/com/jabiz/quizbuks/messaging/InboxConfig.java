@@ -246,7 +246,8 @@ public class InboxConfig {
             .item(QbInbox.SHARED_VIDEO_REJECTED, "en", "Shared video sent back", "zh", "共享视频被驳回", "ja",
                 "共有動画の差し戻し")
             .item(QbInbox.SHARED_VIDEO_TAKEN_DOWN, "en", "Shared video taken down", "zh", "共享视频被下架", "ja",
-                "共有動画の公開停止"));
+                "共有動画の公開停止")
+            .item(QbInbox.HELP_REPLY, "en", "Help desk reply", "zh", "客服的回复", "ja", "サポートからの返信"));
     }
 
     @Bean
@@ -624,6 +625,15 @@ public class InboxConfig {
     }
 
     /** F-C3: a provider whose shared video was taken down hears it in their inbox too (beside the mail). */
+    /** F-C10: a person's reply in the user's AI help conversation. */
+    @Bean
+    EventSubscription<MessageProcesses.EventInput> qbMessageHelpReplySubscription(
+        ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>
+            qbMessageFromEvent) {
+        return EventSubscription.of(MessageProcesses.HELP_REPLY_CONSUMER, com.jabiz.quizbuks.help.QbHelp.REPLIED_EVENT,
+            qbMessageFromEvent, MessageProcesses::helpReplyInput);
+    }
+
     @Bean
     EventSubscription<MessageProcesses.EventInput> qbMessageSharedVideoTakenDownSubscription(
         ProcessDefinition<MessageProcesses.EventInput, MessageProcesses.MessageOutput, ProcessContext>

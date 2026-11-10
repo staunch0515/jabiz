@@ -220,6 +220,11 @@ public final class QbPermissions {
     /** Q87: setting a sponsor's billing mode and credit limit (an operator for its own, headquarters for any). */
     public static final String FEE_BILLING = "qb.fee.billing";
     /**
+     * F-M2: an operator's lead confirms that an approved sponsor of the operator is complete and gives them the
+     * onboarding platform fee Kudos (the process checks the caller's place: a lead of the sponsor's operator).
+     */
+    public static final String FEE_CREDIT_ONBOARDING_CONFIRM = "qb.fee-credit.onboarding.confirm";
+    /**
      * The analytics job's item process ({@code QB_ANALYTICS_ITEM}, {@code internal()}), its templates and its own
      * datasets. Granted to no role.
      */
@@ -334,11 +339,35 @@ public final class QbPermissions {
     public static final String TREE_LIT_REVOKE = "qb.tree.lit.revoke";
 
     /**
+     * F-C10: asking the AI help, rating its answers, handing a question to a person and closing one's own conversations
+     * (one's own only). Takers and Sponsors.
+     */
+    public static final String HELP_USE = "qb.help.use";
+    /**
+     * F-C10: the conversations handed to a person (their tasks and pages), replying and closing them. Content
+     * administrators for every conversation, the operators for their own Sponsors' (the entry scope limits them).
+     */
+    public static final String ADMIN_HELP = "qb.admin.help";
+    /**
+     * F-C10c: the report of what the AI help did not solve (the questions' words, never who asked). Headquarters'
+     * content administrators only, not the operators (controller, 2026-11-09).
+     */
+    public static final String ADMIN_HELP_GAPS = "qb.admin.help.gaps";
+    /**
+     * F-C10: the help's datasets read by processes only, its job outcomes and daily jobs ({@code internal()}). Granted
+     * to no role.
+     */
+    public static final String HELP_SYSTEM = "qb.help.system";
+
+    /**
      * Codes that no longer exist (F-S2c2b, D1: the certifications and their rounds are gone). {@code QB_SETUP} removes
      * every grant of them, from any role, so that an installation that had them keeps no stale grant.
      */
     public static final java.util.Set<String> RETIRED = java.util.Set.of("qb.certification.manage",
         "qb.certification.admin");
+
+    /** F-C4: the sponsor packages' import records past their retention ({@code internal()}). Granted to no role. */
+    public static final String PACKAGE_SYSTEM = "qb.package.system";
 
     private QbPermissions() {}
 }

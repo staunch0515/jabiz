@@ -115,7 +115,7 @@ export const CONTENT: Record<Language, StoreContent> = {
 /** The line of the feature graphic per language. */
 const TAGLINE: Record<Language, [string, string]> = {
   ja: ['クイズに答えて、お店の特典を', 'お店や企業のクイズに答えるだけ'],
-  zh: ['答题，领取门店好礼', '回答商家出的问卷，到店领取奖品'],
+  zh: ['答题，领取门店好礼', '答门店与品牌出的题，到店领取奖品'],
   en: ['Answer quizzes. Win treats.', 'Quizzes from shops and brands, prizes at their counter'],
 }
 

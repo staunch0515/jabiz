@@ -35,6 +35,8 @@ public final class QbFees {
     /** A request's kinds: a fee charged by hand, an invoice voided. */
     public static final String REQUEST_MANUAL = "MANUAL";
     public static final String REQUEST_VOID = "VOID";
+    /** F-M2: platform fee Kudos granted to a sponsor by hand (four eyes, within {@code qb.fee-credit.manual.max}). */
+    public static final String REQUEST_CREDIT = "CREDIT";
     /** A request's statuses: waiting for the approval, done, rejected (or approved by the sponsor themselves). */
     public static final String REVIEW = "REVIEW";
     public static final String DONE = "DONE";
@@ -61,12 +63,14 @@ public final class QbFees {
     public static final String INVOICE_SEQUENCE = "qb.fee-invoice";
 
     public static final String OPEN = "OPEN";
+    /** Paid in part (F-M1): {@code paidAmount} of {@code total}, not past its due day. */
+    public static final String PARTIAL = "PARTIAL";
     public static final String OVERDUE = "OVERDUE";
     public static final String PAID = "PAID";
     public static final String VOID = "VOID";
-    public static final List<String> INVOICE_STATUSES = List.of(OPEN, OVERDUE, PAID, VOID);
-    /** The statuses an invoice is owed in. */
-    public static final List<String> UNPAID = List.of(OPEN, OVERDUE);
+    public static final List<String> INVOICE_STATUSES = List.of(OPEN, PARTIAL, OVERDUE, PAID, VOID);
+    /** The statuses an invoice is owed in (what is owed: {@code total - paidAmount}). */
+    public static final List<String> UNPAID = List.of(OPEN, PARTIAL, OVERDUE);
 
     /** Event: an invoice was issued ({@code {invoiceId, sponsorId}}), for the mail. */
     public static final String INVOICE_ISSUED_EVENT = "qb.fee.invoice-issued";
@@ -142,6 +146,9 @@ public final class QbFees {
         eb.field("issuedAt", f -> f.physicalColumn("issued_at").immutable(true).required(true).processOnly()
             .asTemporal(TemporalRole.EVENT_TIME));
         eb.field("dueOn", f -> f.physicalColumn("due_on").immutable(true).required(true).processOnly().asDate());
+        // What has been paid of the total (F-M1: an invoice may be paid in part); the total once PAID.
+        eb.field("paidAmount", f -> f.physicalColumn("paid_amount").required(true).processOnly()
+            .asMonetary("JPY", 0));
         eb.field("paidAt", f -> f.physicalColumn("paid_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         eb.field("paymentTransactionId", f -> f.physicalColumn("payment_transaction_id").processOnly().asText(64));
         eb.field("voidedAt", f -> f.physicalColumn("voided_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
@@ -158,13 +165,14 @@ public final class QbFees {
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.unique("uk_qb_fee_invoice_no", "invoiceNo");
         eb.stateTransitions("status", st -> st
-            .initial(OPEN, PAID)
-            .from(OPEN).to(OVERDUE, PAID, VOID)
+            .initial(OPEN, PARTIAL, PAID)
+            .from(OPEN).to(PARTIAL, OVERDUE, PAID, VOID)
+            .from(PARTIAL).to(OVERDUE, PAID, VOID)
             .from(OVERDUE).to(PAID, VOID)
             .from(PAID).to(VOID));
         eb.listView("default", lv -> lv
-            .columns("invoiceNo", "sponsorId", "operatorId", "billingMode", "period", "total", "status", "issuedAt",
-                "dueOn", "paidAt")
+            .columns("invoiceNo", "sponsorId", "operatorId", "billingMode", "period", "total", "paidAmount", "status",
+                "issuedAt", "dueOn", "paidAt")
             .filters("sponsorId", "operatorId", "status", "period", "issuedAt", "dueOn", "chargeId", "invoiceNo")
             .sorts("issuedAt", "dueOn", "total")
             .defaultSort("issuedAt", false));
@@ -176,12 +184,14 @@ public final class QbFees {
         eb.field("requestId", f -> f.physicalColumn("request_id").immutable(true).required(true).generated(true)
             .asSemanticIdentity("urn:jabiz:entity:quizbuks:fee-request"));
         eb.field("kind", f -> f.physicalColumn("kind").immutable(true).required(true).processOnly()
-            .asCode(REQUEST_KIND_DICTIONARY, REQUEST_MANUAL, REQUEST_VOID));
+            .asCode(REQUEST_KIND_DICTIONARY, REQUEST_MANUAL, REQUEST_VOID, REQUEST_CREDIT));
         eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).processOnly()
             .asText(128));
         // A manual fee: what and why; a void: which invoice and why.
         eb.field("amount", f -> f.physicalColumn("amount").immutable(true).processOnly().asMonetary("JPY", 0));
         eb.field("invoiceId", f -> f.physicalColumn("invoice_id").immutable(true).processOnly().asText(36));
+        // A grant by hand (F-M2): for how many days it is valid (none: qb.fee-credit.valid-days at the approval).
+        eb.field("validDays", f -> f.physicalColumn("valid_days").immutable(true).processOnly().asNumeric(3, 0));
         eb.field("reason", f -> f.physicalColumn("reason").immutable(true).required(true).processOnly()
             .asText(REASON_LENGTH, true));
         eb.field("status", f -> f.physicalColumn("status").required(true).processOnly()
@@ -194,6 +204,7 @@ public final class QbFees {
         eb.field("decidedAt", f -> f.physicalColumn("decided_at").processOnly().asTemporal(TemporalRole.EVENT_TIME));
         // What the approval made: the charge, or the invoice voided.
         eb.field("chargeId", f -> f.physicalColumn("charge_id").processOnly().asText(36));
+        eb.field("grantId", f -> f.physicalColumn("grant_id").processOnly().asText(36));
         eb.field("version", f -> f.physicalColumn("version").asVersion());
         eb.stateTransitions("status", st -> st
             .initial(REVIEW)

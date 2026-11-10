@@ -23,7 +23,7 @@ import './messages'
  * menu at the top right, and on a phone the bottom menu of the areas the parameter `qb.sponsor.bottom-bar` names, with
  * "More" opening the whole menu. The focus moves to the page's title when the route changes.
  */
-export function SponsorShell({ path, state, badges, displayName, helpPath, onSignOut, children }: {
+export function SponsorShell({ path, state, badges, displayName, helpPath, onSignOut, tools, children }: {
   path: string
   state: ShellState
   /** Counts after the areas' names (the conversations waiting, Q82). */
@@ -31,6 +31,8 @@ export function SponsorShell({ path, state, badges, displayName, helpPath, onSig
   displayName: string | null | undefined
   helpPath: string
   onSignOut: () => void
+  /** What the header shows before the avatar menu (the AI help of F-C10c, over any page). */
+  tools?: ReactNode
   children: ReactNode
 }) {
   const { t } = useTranslation(SPONSOR)
@@ -77,6 +79,7 @@ export function SponsorShell({ path, state, badges, displayName, helpPath, onSig
         ) : undefined}
         header={
           <div className="ml-auto flex items-center gap-2">
+            {tools}
             <AvatarMenu name={displayName} accountPath={ACCOUNT_PATH} helpPath={helpPath} onSignOut={onSignOut} />
           </div>
         }

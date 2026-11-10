@@ -817,7 +817,7 @@ export const publishingZh: typeof publishingEn = {
       entryFee: '报名费（学分）',
       entryFeeHint: '学者开始时从学分中付这么多，至多 10,000；留空或 0 即不收。只付一次、不退，每日入账到你的现金账户。',
       surveyReward: '完整作答的奖励',
-      surveyRewardHint: '问卷向回答全部题目的每个人发这笔奖励，不论答了什么。',
+      surveyRewardHint: '调查问卷向回答全部题目的每个人发这笔奖励，不论答了什么。',
       budgetCap: '预算',
       budgetHint: '可选：这个发布最多支付的奖励，单位学分。',
       maxWinners: '最大获奖人数',

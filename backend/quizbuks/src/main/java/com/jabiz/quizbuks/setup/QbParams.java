@@ -205,6 +205,21 @@ public final class QbParams {
     public static final String FEE_OVERDUE_BLOCK = "qb.fee.overdue.block-submit";
     public static final String FEE_DUE_DAYS = "qb.fee.due-days";
     /**
+     * F-M2: the platform fee Kudos granted to sponsors - whether the onboarding grant is given, its two amounts (an
+     * uncertified sponsor's, a certified one's), the days a lot is valid (all controlled); the most one manual grant
+     * may be (controlled, not created by {@code QB_SETUP}, read as optional: absent = no cap, as the spec says); and
+     * (ordinary) how many days before a lot expires its sponsor is reminded.
+     */
+    public static final String FEE_CREDIT_GRANT_ENABLED = "qb.fee-credit.grant.enabled";
+    public static final String FEE_CREDIT_GRANT_BASIC = "qb.fee-credit.grant.basic";
+    public static final String FEE_CREDIT_GRANT_CERTIFIED = "qb.fee-credit.grant.certified";
+    public static final String FEE_CREDIT_VALID_DAYS = "qb.fee-credit.valid-days";
+    public static final String FEE_CREDIT_MANUAL_MAX = "qb.fee-credit.manual.max";
+    public static final String FEE_CREDIT_EXPIRY_NOTICE_DAYS = "qb.fee-credit.expiry-notice-days";
+    /** The cap's kind, which the controlled change that first sets it gives (yen, whole). */
+    public static final Map<String, Object> FEE_CREDIT_MANUAL_MAX_KIND = Map.of("type", "monetary", "currency", "JPY",
+        "scale", 0);
+    /**
      * Q88b (D-Q88-14): whether sponsors may set an entry fee on a quiz (controlled; read only when a draft is saved:
      * off refuses a fee, what is live keeps charging).
      */
@@ -314,10 +329,14 @@ public final class QbParams {
     public static final String JOURNAL_ACCOUNT_2150 = JOURNAL_ACCOUNT_PREFIX + "2150";
     /** Q88b: the entry fees unsettled. */
     public static final String JOURNAL_ACCOUNT_2170 = JOURNAL_ACCOUNT_PREFIX + "2170";
+    /** F-M1: the sponsors' platform fee Kudos (the fee credit). */
+    public static final String JOURNAL_ACCOUNT_2190 = JOURNAL_ACCOUNT_PREFIX + "2190";
+    /** F-M2: the promotion expenses of the platform fee Kudos granted. */
+    public static final String JOURNAL_ACCOUNT_5140 = JOURNAL_ACCOUNT_PREFIX + "5140";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
         JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
         JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160, JOURNAL_ACCOUNT_1130,
-        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170);
+        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170, JOURNAL_ACCOUNT_2190, JOURNAL_ACCOUNT_5140);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -392,6 +411,55 @@ public final class QbParams {
     public static final String VIDEO_USE_REMIND_DAYS = "qb.video-use.remind-days";
     /** F-S14 (the controller: every number a parameter): the longest period one use covers, in days; not controlled. */
     public static final String VIDEO_USE_MAX_PERIOD_DAYS = "qb.video-use.max-period-days";
+    /** F-C4: above how many bytes the export of a sponsor package or a quiz file asks before it is saved. */
+    public static final String PACKAGE_CONFIRM_BYTES = "qb.package.confirm-bytes";
+    /** F-C4: how many days the record of a sponsor package's import is kept after its last change. */
+    public static final String PACKAGE_IMPORT_RETENTION_DAYS = "qb.package.import-retention-days";
+
+    /*
+     * F-C10 (docs/quizbuks/first-launch-spec.md F-C10, plans/impl/F-C10.md): the AI help. The switch and the platform's
+     * monthly tokens are controlled (they decide what the platform pays); the rest ordinary. The help's usage is its own
+     * (QbHelpUsage), never a Sponsor's AI usage, fees or limits.
+     */
+    public static final String HELP_ENABLED = "qb.help.enabled";
+    /** The model the help asks: only one the platform allows (the parameter's kind, and again per request). */
+    public static final String HELP_MODEL = "qb.help.model";
+    /** The questions to the AI one person asks a day (the deployment's zone). */
+    public static final String HELP_USER_DAILY = "qb.help.user-daily";
+    /** The tokens the help uses a month, everybody together; judged from the usage recorded (it may go a little over). */
+    public static final String HELP_GLOBAL_MONTHLY_TOKENS = "qb.help.global-monthly-tokens";
+    /** The latest turns of a conversation sent with a question. */
+    public static final String HELP_HISTORY_TURNS = "qb.help.history-turns";
+    /** Days after its last activity a conversation is deleted. */
+    public static final String HELP_RETENTION_DAYS = "qb.help.retention-days";
+    /** The largest materials (FAQ, terms, manual) one request's prompt takes, in bytes; above it the startup check fails. */
+    public static final String HELP_MANUAL_MAX_BYTES = "qb.help.manual-max-bytes";
+    /** How often the pages ask for an answer, in seconds, and for how many minutes at most. */
+    public static final String HELP_POLL_SECONDS = "qb.help.poll-seconds";
+    public static final String HELP_POLL_MAX_MINUTES = "qb.help.poll-max-minutes";
+    /** Days a conversation handed to a person waits before its handler is reminded. */
+    public static final String HELP_ESCALATION_REMIND_DAYS = "qb.help.escalation-remind-days";
+    /** Days after a person's reply without a new question before the conversation closes by itself. */
+    public static final String HELP_AUTO_CLOSE_DAYS = "qb.help.auto-close-days";
+    /** The longest question (and words handed to a person) a user writes, in characters (100 to 4000). */
+    public static final String HELP_QUESTION_MAX_LENGTH = "qb.help.question-max-length";
+    /** The longest AI answer kept, in characters (500 to 8000); a longer one is cut with an ellipsis. */
+    public static final String HELP_ANSWER_MAX_LENGTH = "qb.help.answer-max-length";
+    /** The most links of the site one answer keeps (0 to 10). */
+    public static final String HELP_MAX_LINKS = "qb.help.max-links";
+    /**
+     * F-C10b: how much one input token read from the provider's prompt cache counts towards
+     * {@code qb.help.global-monthly-tokens} (0 to 1; the provider bills such a token at about a tenth). Controlled: it
+     * changes what the help may spend.
+     */
+    public static final String HELP_CACHE_READ_WEIGHT = "qb.help.cache-read-weight";
+    /** The help's controlled parameters (last, in this order). */
+    public static final List<String> HELP_CONTROLLED = List.of(HELP_ENABLED, HELP_GLOBAL_MONTHLY_TOKENS,
+        HELP_CACHE_READ_WEIGHT);
+    public static final List<String> HELP = List.of(HELP_ENABLED, HELP_MODEL, HELP_USER_DAILY,
+        HELP_GLOBAL_MONTHLY_TOKENS, HELP_HISTORY_TURNS, HELP_RETENTION_DAYS, HELP_MANUAL_MAX_BYTES, HELP_POLL_SECONDS,
+        HELP_POLL_MAX_MINUTES, HELP_ESCALATION_REMIND_DAYS, HELP_AUTO_CLOSE_DAYS, HELP_QUESTION_MAX_LENGTH,
+        HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS, HELP_CACHE_READ_WEIGHT);
     /**
      * F-F3: the areas of the Sponsor app's bottom menu on a phone, comma-separated area keys (home, quizzes,
      * publications, prizes, messages, benefits, money, assets, hub; "More" follows them); not controlled. The Sponsor app
@@ -407,6 +475,9 @@ public final class QbParams {
     /** Q87b: the platform fees' switches (controlled, after the cash account's, in this order). */
     public static final List<String> FEE_PARAMS = List.of(FEE_MONTHLY, FEE_TAX_RATE, FEE_DEFAULT_BILLING_MODE,
         FEE_OVERDUE_BLOCK);
+    /** F-M2: the grants' switch, amounts and validity (controlled, last, in this order); the cap is not set up. */
+    public static final List<String> FEE_CREDIT_PARAMS = List.of(FEE_CREDIT_GRANT_ENABLED, FEE_CREDIT_GRANT_BASIC,
+        FEE_CREDIT_GRANT_CERTIFIED, FEE_CREDIT_VALID_DAYS);
 
     /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
@@ -418,7 +489,7 @@ public final class QbParams {
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
-        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES))
+        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -480,6 +551,8 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_4120, "4120 Platform fee revenue"),
         journal(JOURNAL_ACCOUNT_2150, "2150 Consumption tax payable"),
         journal(JOURNAL_ACCOUNT_2170, "2170 Entry fees unsettled"),
+        journal(JOURNAL_ACCOUNT_2190, "2190 Sponsor platform fee Kudos"),
+        journal(JOURNAL_ACCOUNT_5140, "5140 Promotion expenses (platform fee Kudos)"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
@@ -709,6 +782,56 @@ public final class QbParams {
         new Param(VIDEO_USE_MAX_PERIOD_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0),
             String.valueOf(com.jabiz.quizbuks.videouse.VideoUseRules.DEFAULT_MAX_PERIOD_DAYS),
             "The longest period, in days, one ledger entry of a shared video's use covers (1 to 36600)"),
+        // F-C4: the sponsor package (ordinary).
+        new Param(PACKAGE_CONFIRM_BYTES, Map.of("type", "numeric", "precision", 12, "scale", 0), "104857600",
+            "Above how many bytes the export of a sponsor package or a quiz file asks before it is saved (100 MB by "
+                + "default)"),
+        new Param(PACKAGE_IMPORT_RETENTION_DAYS, Map.of("type", "numeric", "precision", 5, "scale", 0), "90",
+            "Days the record of a sponsor package's import is kept after its last change"),
+        // F-C10: the AI help (the ordinary ones, then the controlled ones in the order of HELP_CONTROLLED; last).
+        new Param(HELP_MODEL, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:ai-model", "allowedValues",
+            List.of("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")), "claude-haiku-5-5",
+            "The model the AI help asks (a smaller, faster one)"),
+        new Param(HELP_USER_DAILY, Map.of("type", "numeric", "precision", 4, "scale", 0), "20",
+            "The questions to the AI help one person asks a day (0: none)"),
+        new Param(HELP_HISTORY_TURNS, Map.of("type", "numeric", "precision", 2, "scale", 0), "6",
+            "The latest turns of a conversation sent to the AI with a question (0 to 20)"),
+        new Param(HELP_RETENTION_DAYS, DAYS, "180", "Days after its last activity an AI help conversation is deleted"),
+        new Param(HELP_MANUAL_MAX_BYTES, Map.of("type", "numeric", "precision", 9, "scale", 0), "204800",
+            "The largest materials (FAQ, terms, manual) one AI help request takes, in bytes; above it the startup "
+                + "check fails"),
+        new Param(HELP_POLL_SECONDS, Map.of("type", "numeric", "precision", 3, "scale", 0), "3",
+            "How often, in seconds, the pages ask for the AI help's answer"),
+        new Param(HELP_POLL_MAX_MINUTES, Map.of("type", "numeric", "precision", 3, "scale", 0), "3",
+            "For how many minutes at most the pages wait for the AI help's answer"),
+        new Param(HELP_ESCALATION_REMIND_DAYS, DAYS, "2",
+            "Days an AI help conversation handed to a person waits before its handler is reminded"),
+        new Param(HELP_AUTO_CLOSE_DAYS, DAYS, "14",
+            "Days after a person's reply without a new question before an AI help conversation closes by itself"),
+        new Param(HELP_QUESTION_MAX_LENGTH, Map.of("type", "numeric", "precision", 4, "scale", 0), "2000",
+            "The longest question to the AI help (and words handed to a person), in characters (100 to 4000)"),
+        new Param(HELP_ANSWER_MAX_LENGTH, Map.of("type", "numeric", "precision", 4, "scale", 0), "8000",
+            "The longest AI help answer kept, in characters (500 to 8000); a longer one is cut"),
+        new Param(HELP_MAX_LINKS, Map.of("type", "numeric", "precision", 2, "scale", 0), "5",
+            "The most links of the site one AI help answer keeps (0 to 10)"),
+        new Param(HELP_ENABLED, BOOL, false, "Whether Takers and Sponsors may ask the AI help (Claude)"),
+        new Param(HELP_GLOBAL_MONTHLY_TOKENS, TOKENS, "20000000",
+            "The tokens the AI help may use a month, everybody together"),
+        new Param(HELP_CACHE_READ_WEIGHT, Map.of("type", "numeric", "precision", 3, "scale", 2), "0.10",
+            "How much an input token read from the prompt cache counts towards the AI help's monthly tokens (0 to 1)"),
+        // F-M2: platform fee Kudos granted (the reminder ordinary, the rest controlled; last). Off keeps what the
+        // platform did before: nothing is granted.
+        new Param(FEE_CREDIT_EXPIRY_NOTICE_DAYS, DAYS, "14",
+            "How many days before a lot of platform fee Kudos expires its sponsor is reminded (1 to 365)"),
+        new Param(FEE_CREDIT_GRANT_ENABLED, BOOL, false,
+            "Whether an operator's lead may give an approved sponsor the onboarding platform fee Kudos (F-M2)"),
+        new Param(FEE_CREDIT_GRANT_BASIC, KUDOS, "1000",
+            "The onboarding platform fee Kudos of a sponsor not certified, in yen"),
+        new Param(FEE_CREDIT_GRANT_CERTIFIED, KUDOS, "10000",
+            "The onboarding platform fee Kudos of a certified sponsor, in yen (a sponsor certified later is topped up "
+                + "to it)"),
+        new Param(FEE_CREDIT_VALID_DAYS, DAYS, "90",
+            "How many days a lot of platform fee Kudos is valid for from when it is granted (1 to 999)"),
         // F-F3: the Sponsor app's bottom menu (ordinary; last).
         new Param(SPONSOR_BOTTOM_BAR, Map.of("type", "text", "maxLength", 200), "home,publications,prizes,messages",
             "The areas of the Sponsor app's bottom menu on a phone, comma-separated (home, quizzes, publications, "

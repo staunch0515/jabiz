@@ -35,6 +35,14 @@ public final class QbLedger {
      * job settles them into their cash accounts (2160). Its lines carry the sponsor as the party and the publication.
      */
     public static final String ENTRY_FEES_UNSETTLED = "2170";
+    /**
+     * F-M1: the sponsors' platform fee Kudos (the fee credit granted to them, F-M2), a sub-account of the account that
+     * pays the platform's fees beside the cash (2160): spent before the cash, only on platform fees, never on rewards,
+     * never turned into Kudos or money. Its lines carry the sponsor; each grant is a lot ({@code QbFeeCreditGrant}).
+     */
+    public static final String FEE_CREDIT = "2190";
+    /** F-M2: what the platform spends granting platform fee Kudos (granted less voided), apart from 5120's Kudos. */
+    public static final String FEE_CREDIT_PROMOTION = "5140";
 
     /** The name of the dimension that carries the party (a user's id) on the wallet accounts. */
     public static final String PARTY = "party";
@@ -58,7 +66,9 @@ public final class QbLedger {
         new Account(FEES_RECEIVABLE, "Platform fees receivable", "ASSET"),
         new Account(PLATFORM_FEE_REVENUE, "Platform fee revenue", "REVENUE"),
         new Account(TAX_PAYABLE, "Consumption tax payable", "LIABILITY"),
-        new Account(ENTRY_FEES_UNSETTLED, "Entry fees unsettled", "LIABILITY"));
+        new Account(ENTRY_FEES_UNSETTLED, "Entry fees unsettled", "LIABILITY"),
+        new Account(FEE_CREDIT, "Sponsor platform fee Kudos (fee credit)", "LIABILITY"),
+        new Account(FEE_CREDIT_PROMOTION, "Promotion expenses (platform fee Kudos granted)", "EXPENSE"));
 
     private QbLedger() {}
 }

@@ -189,6 +189,13 @@ class BankTopUpIT extends PlayItSupport {
         assertThat(balance(sponsor)).isEqualByComparingTo("0");
         assertThat((BigDecimal) query("SELECT balance FROM qb_wallet WHERE owner_id = ? AND kind = 'CASH'", sponsor)
             .getFirst().get("balance")).isEqualByComparingTo("20000");
+        // F-M1: a lot of its own, from the bank, its record the top-up.
+        assertThat(query("SELECT source, amount, remaining, source_entity, source_id FROM qb_cash_lot "
+            + "WHERE sponsor_id = ?", sponsor)).singleElement().satisfies(lot -> {
+                assertThat(lot).containsEntry("source", "BANK").containsEntry("source_entity", "QbTopUp")
+                    .containsEntry("source_id", topUpId);
+                assertThat((BigDecimal) lot.get("remaining")).isEqualByComparingTo("20000");
+            });
         assertBooksBalance();
     }
 

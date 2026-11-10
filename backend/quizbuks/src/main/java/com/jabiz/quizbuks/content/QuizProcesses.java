@@ -375,6 +375,28 @@ public final class QuizProcesses {
         if (!QuizEditing.current(ctx, quiz, ctx.get(INPUT, QuizRef.class).baseRevision())) {
             return;
         }
+        clearContent(ctx);
+        // The version files are released in chunks, each its own commit within the dataset's write limit.
+        Set<UUID> needed = filesStillNeeded(ctx);
+        List<UUID> released = list(ctx, VERSION_FILES).stream().filter(file -> !needed.contains(fileOf(file)))
+            .map(file -> uuid(file.id())).toList();
+        UUID quizId = uuid(quiz.id());
+        ctx.put(RELEASE, Chunks.of(released, ContentLimits.RELEASE_CHUNK).stream()
+            .map(chunk -> new ReleaseInput(quizId, chunk)).toList());
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("removed", true);
+        values.put("cover", null);
+        values.put("questionCount", BigDecimal.ZERO);
+        values.put("materialCount", BigDecimal.ZERO);
+        QuizEditing.touch(ctx, quiz, values, null, List.of());
+    }
+
+    /**
+     * Deletes every part of the loaded quiz (its translations, material images, materials, options and questions) and
+     * forgets where the asset library filled them; the quiz itself stays. Removing a quiz and F-C4's replacement of its
+     * content ({@link #replaceContent}) share it.
+     */
+    static void clearContent(ProcessContext ctx) {
         // Parts before what they belong to: an instance still referred to cannot be deleted (a material of another
         // language refers to its base material, Q73a).
         list(ctx, TranslationProcesses.TRANSLATIONS).forEach(row -> ctx.changes().delete(QbContent.TRANSLATION,
@@ -391,19 +413,113 @@ public final class QuizProcesses {
             rows.forEach(row -> ctx.changes().delete(entity, row.id(), row.version()));
         }
         places(ctx).forEach(place -> AssetUses.forget(ctx, place.targetKind(), List.of(place.targetId())));
-        // The version files are released in chunks, each its own commit within the dataset's write limit.
-        Set<UUID> needed = filesStillNeeded(ctx);
-        List<UUID> released = list(ctx, VERSION_FILES).stream().filter(file -> !needed.contains(fileOf(file)))
-            .map(file -> uuid(file.id())).toList();
-        UUID quizId = uuid(quiz.id());
-        ctx.put(RELEASE, Chunks.of(released, ContentLimits.RELEASE_CHUNK).stream()
-            .map(chunk -> new ReleaseInput(quizId, chunk)).toList());
+    }
+
+    /** The key of the publications of a quiz whose content {@link #replaceContent} replaces. */
+    public static final String REPLACED_PUBLICATIONS = "replacedPublications";
+    /** The key of the quiz {@link #loadForReplace} found (a list: none without {@code intoQuizId}). */
+    public static final String REPLACED_QUIZ = "replacedQuiz";
+
+    /** The quiz {@link #loadForReplace} reads, as a list of its id (none without one). */
+    private static List<Object> replaced(ProcessContext ctx) {
+        Object quizId = ctx.contains(QUIZ_ID) ? ctx.get(QUIZ_ID) : null;
+        return quizId == null ? new ArrayList<>() : new ArrayList<>(List.of(quizId));
+    }
+
+    private static EntityQuery partsOf(ProcessContext ctx) {
+        return EntityQuery.builder().where(new QueryPredicate.In("quizId", replaced(ctx))).limit(Integer.MAX_VALUE)
+            .build();
+    }
+
+    /**
+     * F-C4: what replacing the content of the quiz in {@link QuizEditing#QUIZ_ID} reads, nothing when there is none
+     * (a new draft): the quiz's lock, the quiz through the sponsor's dataset (another's or removed: none), every part,
+     * one of its publications (any, drafts too), and where the asset library filled its places.
+     */
+    public static <I, O> void loadForReplace(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+        pb.step("Lock the quiz replaced", HoldLock.<ProcessContext>exclusive(ctx -> QbContent.lockName(
+                replaced(ctx).isEmpty() ? null : replaced(ctx).getFirst())))
+            .step("Load the quiz replaced", QueryEntities.<ProcessContext>of(
+                QbContent.sponsorDataset(QbContent.QUIZ), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("quizId", replaced(ctx))).limit(1).build(), REPLACED_QUIZ))
+            .step("Load its parts and a publication", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbContent.defaultDataset(QbContent.MATERIAL), QuizProcesses::partsOf, MATERIALS),
+                QueryEntities.query(QbContent.defaultDataset(QbContent.MATERIAL_IMAGE), QuizProcesses::partsOf,
+                    IMAGES),
+                QueryEntities.query(QbContent.defaultDataset(QbContent.QUESTION), QuizProcesses::partsOf, QUESTIONS),
+                QueryEntities.query(QbContent.defaultDataset(QbContent.OPTION), QuizProcesses::partsOf, OPTIONS),
+                QueryEntities.query(QbContent.defaultDataset(QbContent.TRANSLATION), QuizProcesses::partsOf,
+                    TranslationProcesses.TRANSLATIONS),
+                QueryEntities.query(QbContent.defaultDataset(QbPublications.PUBLICATION), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("quizId", replaced(ctx))).limit(1).build(), REPLACED_PUBLICATIONS)))
+            .steps(b -> AssetUses.load(b, ctx -> List.of(), ctx -> {
+                if (replaced(ctx).isEmpty() || list(ctx, REPLACED_QUIZ).isEmpty()) {
+                    return List.of();
+                }
+                ctx.put(QuizEditing.QUIZ, list(ctx, REPLACED_QUIZ).getFirst());
+                return places(ctx);
+            }));
+    }
+
+    /**
+     * F-C4: replaces the whole content of the quiz {@link #loadForReplace} read with {@code content}, as a new draft
+     * would be made of it ({@link #insertContent}): its parts deleted, the content's inserted, its heading (title,
+     * introduction, cover, time limit, language) the content's, one revision more. Refused: no such quiz of the
+     * caller's (404), a quiz with any publication (422 {@code QB_QUIZ_IMPORT_HAS_PUBLICATIONS}) or of another kind
+     * (422 {@code QB_QUIZ_KIND_FIXED}). Its versions stay as they were.
+     *
+     * @return the quiz's id, or null when refused with violations
+     */
+    public static Object replaceContent(ProcessContext ctx, QuizSnapshot content, String title, Object language,
+        Map<String, Map<String, String>> hashes) {
+        List<EntityInstance> found = list(ctx, REPLACED_QUIZ);
+        if (found.isEmpty()) {
+            throw new EntityNotFoundException(QbContent.QUIZ + " " + ctx.get(QUIZ_ID) + " not found");
+        }
+        EntityInstance quiz = found.getFirst();
+        ctx.put(QuizEditing.QUIZ, quiz);
+        if (!list(ctx, REPLACED_PUBLICATIONS).isEmpty()) {
+            ctx.reject(new Violation("intoQuizId", ContentCodes.IMPORT_HAS_PUBLICATIONS, "Only a quiz without "
+                + "publications takes another content", Map.of()));
+        }
+        String kind = content.kind();
+        if (!kind.equals(quiz.get("kind"))) {
+            ctx.reject(new Violation("document.quiz.kind", ContentCodes.QUIZ_KIND_FIXED, "The file is a " + kind
+                + ", the quiz a " + quiz.get("kind"), Map.of()));
+        }
+        if (ctx.hasViolations()) {
+            return null;
+        }
+        clearContent(ctx);
+        Object quizId = quiz.id();
+        String owner = ctx.request().actorId();
+        Object base = language != null ? language : quiz.get("language");
+        Map<Integer, Object> materialIds = new LinkedHashMap<>();
+        for (QuizSnapshot.Material material : content.materials()) {
+            materialIds.put(material.no(), insertMaterial(ctx, quizId, owner, material, null, null));
+        }
+        Map<Integer, Object> questionIds = new LinkedHashMap<>();
+        Map<String, Object> optionIds = new LinkedHashMap<>();
+        insertQuestions(ctx, quizId, owner, content.questions(), 0, question -> Map.of(), questionIds, optionIds);
+        List<String> languages = QbContent.LANGUAGES.stream().filter(content.translations()::containsKey)
+            .filter(l -> !l.equals(base)).toList();
+        for (String translated : languages) {
+            insertLanguage(ctx, quizId, owner, translated, content, content.translations().get(translated),
+                hashes.getOrDefault(translated, Map.of()), materialIds, questionIds, optionIds);
+        }
         Map<String, Object> values = new LinkedHashMap<>();
-        values.put("removed", true);
-        values.put("cover", null);
-        values.put("questionCount", BigDecimal.ZERO);
-        values.put("materialCount", BigDecimal.ZERO);
+        values.put("title", title);
+        values.put("language", base);
+        values.put("intro", content.intro());
+        values.put("cover", content.cover());
+        values.put("timeLimitSec", content.timeLimitSec() == null ? null : decimal(content.timeLimitSec()));
+        // F-S7: the replaced content brings its order setting, as an import into a new quiz does.
+        values.put("shuffleQuestions", !content.fixedOrder());
+        values.put("questionCount", decimal(content.questions().size()));
+        values.put("materialCount", decimal(content.materials().size()));
+        values.put("translationLanguages", ContentLanguages.joinList(languages));
         QuizEditing.touch(ctx, quiz, values, null, List.of());
+        return quizId;
     }
 
     /** F-C1b: every place of the quiz an asset may have filled: its own two, its materials, questions and options. */

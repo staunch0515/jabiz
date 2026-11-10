@@ -67,9 +67,15 @@ jabiz:
       "[QB_PUBLICATION_AUDIENCE_SAVE]": { per-user: 120, period: 1h }
       "[QB_PROFILE_ATTRIBUTES_SAVE]": { per-user: 60, period: 1h }
       "[QB_WITHDRAWAL_REQUEST]": { per-user: 20, period: 1h }
-      # Q16: importing a quiz file makes a whole draft (up to 100 questions) in one transaction.
-      "[QB_QUIZ_IMPORT_CHECK]": { per-user: 60, period: 1h }
+      # Q16: importing a quiz file makes a whole draft (up to 100 questions) in one transaction. F-C4: a sponsor
+      # package's check page checks every quiz file it carries (each version and the current content) once.
+      "[QB_QUIZ_IMPORT_CHECK]": { per-user: 300, period: 1h }
       "[QB_QUIZ_IMPORT]": { per-user: 20, period: 1h }
+      # F-C4: a sponsor package is imported step by step (each step one transaction of the pages' processes); a large
+      # package has hundreds of steps, its start and giving up happen a few times.
+      "[QB_PACKAGE_IMPORT_START]": { per-user: 30, period: 1h }
+      "[QB_PACKAGE_IMPORT_STEP]": { per-user: 3000, period: 1h }
+      "[QB_PACKAGE_IMPORT_ABANDON]": { per-user: 30, period: 1h }
       "[QB_TOPUP_START]": { per-user: 20, period: 1h }
       "[QB_JOURNAL_PREVIEW]": { per-user: 10, period: 1m }
       # Q20: the result page polls it every 5 s while an expired attempt is finished; a script could loop on it.
@@ -122,6 +128,12 @@ jabiz:
       "[QB_AI_PUBLICATION_TRANSLATE_REQUEST]": { per-user: 5, period: 1m }
       "[QB_AI_PUBLICATION_TEXTS_ACCEPT]": { per-user: 30, period: 1m }
       "[QB_AI_TRANSLATION_CHECK_REQUEST]": { per-user: 5, period: 1m }
+      # F-C10: the AI help (free to its users, the platform pays): a person asks a few questions a minute; per address
+      # as well, so that many accounts behind one address do not add up (the daily count per person is qb.help.user-daily).
+      "[QB_HELP_ASK]": { per-user: 6, per-address: 30, period: 1m }
+      "[QB_HELP_ESCALATE]": { per-user: 10, period: 1h }
+      "[QB_HELP_RATE]": { per-user: 60, period: 1m }
+      "[QB_HELP_REPLY]": { per-user: 60, period: 1m }
   # The key signing the integrity seals (docs/design/21-audit-retention.md section 2), from the environment only:
   # Base64, at least 32 bytes. Startup fails without it. Keep a copy: without it the existing seals cannot be verified.
   integrity:

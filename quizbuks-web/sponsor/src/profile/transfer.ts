@@ -185,11 +185,13 @@ export async function uploadForLink(link: LinkNeed, file: Blob, name: string): P
 }
 
 /**
- * Uploads the images the plan needs, then imports; a refusal throws and nothing is changed. `linked` holds the files
- * downloaded (or uploaded instead) for the plan's links, by path: a link without one leaves the image there is.
+ * Uploads the images the plan needs, each through its policy; their paths with the uploaded ids. `linked` holds the
+ * files downloaded (or uploaded instead) for the plan's links, by path (F-C6): a link without one leaves the image
+ * there is. F-C4's sponsor package imports the same profile part through its own import record.
  */
-export async function importProfile(document: Record<string, unknown>, plan: ImportPlan, mailPassword: string,
-  onProgress?: (done: number, total: number) => void, linked: Record<string, string> = {}): Promise<ImportPlan> {
+export async function uploadProfileImages(document: Record<string, unknown>, plan: ImportPlan,
+  onProgress?: (done: number, total: number) => void, linked: Record<string, string> = {}):
+  Promise<Record<string, string>> {
   const files = (document.files ?? {}) as Record<string, Partial<PackageFile>>
   const uploaded: Record<string, string> = { ...linked }
   let done = 0
@@ -203,6 +205,13 @@ export async function importProfile(document: Record<string, unknown>, plan: Imp
     uploaded[need.path] = fileId
     onProgress?.(++done, plan.files.length)
   }
+  return uploaded
+}
+
+/** Uploads the images the plan needs, then imports; a refusal throws and nothing is changed. */
+export async function importProfile(document: Record<string, unknown>, plan: ImportPlan, mailPassword: string,
+  onProgress?: (done: number, total: number) => void, linked: Record<string, string> = {}): Promise<ImportPlan> {
+  const uploaded = await uploadProfileImages(document, plan, onProgress, linked)
   const output = await runProcess<{ plan: ImportPlan }>(PROFILE_TRANSFER.import, {
     document: withoutData(document), files: uploaded, mailPassword: mailPassword || null,
   })

@@ -54,6 +54,8 @@ export interface SponsorWallet {
   uninvoicedTotal: number
   /** Q88b: the entry fees takers paid, waiting for the daily settlement into the cash account. */
   entryFeesUnsettled: number
+  /** F-M1: the granted credit (platform fee Kudos), spent on the platform's fees before the cash. */
+  feeCreditBalance: number
 }
 
 /** How the platform's fees are billed (Q87b): taken from the cash account at once, or invoiced monthly within a credit. */
@@ -132,8 +134,16 @@ export async function readWallet(): Promise<SponsorWallet> {
     creditLimit: num(row.creditLimit),
     uninvoicedTotal: num(row.uninvoicedTotal),
     entryFeesUnsettled: num(row.entryFeesUnsettled),
+    feeCreditBalance: num(row.feeCreditBalance),
   }
 }
+
+/**
+ * F-M1: what the account that pays the platform's fees may pay with now: the granted credit and the cash not held by a
+ * dispute. Only for the buttons; the server allocates (and leaves out credit past its expiry).
+ */
+export const feeAccountAvailable = (wallet: SponsorWallet): number =>
+  Math.max(0, wallet.feeCreditBalance) + Math.max(0, wallet.cashBalance - wallet.cashHeld)
 
 /** Q87a: where a top-up is credited - the Kudos wallet or the cash account. */
 export type TopUpTarget = 'KUDOS' | 'CASH'
@@ -397,10 +407,11 @@ export const readInvoiceStatuses = (): Promise<DictionaryItem[]> => readDictiona
 
 
 /** The states of the platform's invoices (`fee.QbFees`): only the server moves them. */
-export type InvoiceStatus = 'OPEN' | 'OVERDUE' | 'PAID' | 'VOID'
-export const INVOICE_UNPAID: readonly InvoiceStatus[] = ['OPEN', 'OVERDUE']
+export type InvoiceStatus = 'OPEN' | 'PARTIAL' | 'OVERDUE' | 'PAID' | 'VOID'
+/** F-M1: a partly paid invoice is still owed (its total less what was paid). */
+export const INVOICE_UNPAID: readonly InvoiceStatus[] = ['OPEN', 'PARTIAL', 'OVERDUE']
 const invoiceStatusOf = (value: unknown): InvoiceStatus =>
-  value === 'OVERDUE' || value === 'PAID' || value === 'VOID' ? value : 'OPEN'
+  value === 'PARTIAL' || value === 'OVERDUE' || value === 'PAID' || value === 'VOID' ? value : 'OPEN'
 
 /** A row of `qb.sponsor.fee-invoices`. */
 export interface InvoiceRow {
@@ -412,6 +423,8 @@ export interface InvoiceRow {
   amount: number
   tax: number
   total: number
+  /** F-M1: what has been paid of the total. */
+  paidAmount: number
   status: InvoiceStatus
   issuedAt: string
   dueOn: string | null
@@ -431,6 +444,7 @@ export async function searchFeeInvoices({ sorts, offset, limit }: TopUpSearch) {
       amount: num(row.amount),
       tax: num(row.tax),
       total: num(row.total),
+      paidAmount: num(row.paidAmount),
       status: invoiceStatusOf(row.status),
       issuedAt: String(row.issuedAt ?? ''),
       dueOn: str(row.dueOn),
@@ -484,13 +498,16 @@ export interface InvoicePayOutput {
   status: InvoiceStatus
   total: number
   cashBalance: number
+  /** F-M1: what has been paid of the total after, and of it now (from the granted credit and the cash). */
+  paidAmount: number
+  paidNow: number
 }
 
-/** Pays an invoice from the cash account; the server checks the state and the cash. */
+/** Pays an invoice from the account, as far as it goes; the server checks the state and allocates. */
 export async function payInvoice(invoiceId: string): Promise<InvoicePayOutput> {
   const out = await runProcess<Record<string, unknown>>(WALLET_PROCESS.invoicePay, { invoiceId })
   return { invoiceId: String(out.invoiceId), invoiceNo: String(out.invoiceNo ?? ''), status: invoiceStatusOf(out.status),
-    total: num(out.total), cashBalance: num(out.cashBalance) }
+    total: num(out.total), cashBalance: num(out.cashBalance), paidAmount: num(out.paidAmount), paidNow: num(out.paidNow) }
 }
 
 /** What `QB_FEE_PAY_EARLY` answers: how many fees were settled, their total, the cash left, their invoices. */
@@ -609,3 +626,48 @@ export function forgetJustStarted() {
     // Nothing kept.
   }
 }
+
+// ---- F-M1: the account that pays the platform's fees -----------------------------------------------------------------
+
+/** A lot with money left (`qb.sponsor.fee-account-lots`), in the order the account is spent. */
+export interface FeeAccountLot {
+  seq: number
+  subAccount: 'FEE_CREDIT' | 'CASH'
+  lotId: string
+  source: string
+  amount: number
+  remaining: number
+  arrivedAt: string | null
+  expiresAt: string | null
+}
+
+/** A part of a payment (`qb.sponsor.fee-payments`); negative: given back when an invoice was voided. */
+export interface FeePaymentPart {
+  paymentId: string
+  paidAt: string | null
+  invoiceNo: string | null
+  subAccount: 'FEE_CREDIT' | 'CASH'
+  source: string | null
+  amount: number
+}
+
+const subAccountOf = (value: unknown): 'FEE_CREDIT' | 'CASH' => (value === 'FEE_CREDIT' ? 'FEE_CREDIT' : 'CASH')
+
+export async function readFeeAccountLots(offset: number, limit: number) {
+  const page = await runQuery<Row>(WALLET_TEMPLATE.feeAccountLots, { offset, limit, count: true })
+  return { total: page.total, items: page.items.map((row): FeeAccountLot => ({
+    seq: num(row.seq), subAccount: subAccountOf(row.subAccount), lotId: String(row.lotId ?? ''),
+    source: String(row.source ?? ''), amount: num(row.amount), remaining: num(row.remaining),
+    arrivedAt: str(row.arrivedAt), expiresAt: str(row.expiresAt) })) }
+}
+
+export async function readFeePayments(offset: number, limit: number) {
+  const page = await runQuery<Row>(WALLET_TEMPLATE.feePayments, { offset, limit, count: true })
+  return { total: page.total, items: page.items.map((row): FeePaymentPart => ({
+    paymentId: String(row.paymentId), paidAt: str(row.paidAt), invoiceNo: str(row.invoiceNo),
+    subAccount: subAccountOf(row.subAccount), source: str(row.source), amount: num(row.amount) })) }
+}
+
+export const readFeeSubAccounts = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.feeSubAccount)
+export const readFeeCreditSources = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.feeCreditSource)
+export const readCashSources = (): Promise<DictionaryItem[]> => readDictionary(WALLET_DICTIONARY.cashSource)

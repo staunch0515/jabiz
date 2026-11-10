@@ -37,10 +37,10 @@ report:
 -- ACCOUNT rows, by code: every postable account, its balance being debit less credit as in
 -- jabiz.ledger.account_balances (whose balance at the month's last instant is the closing here). CHECK rows, which
 -- read the ledger only (its wallet caches are the daily reconciliation's, qb.admin.recon-runs):
---   SPONSOR_WALLETS:     every 2110 and (Q87a) 2160 line carries its sponsor (the party, dimension 1): the two
+--   SPONSOR_WALLETS:     every 2110, (Q87a) 2160 and (F-M1) 2190 line carries its sponsor (the party, dimension 1): the two
 --                        against what their lines with a party add up to (partyTotal); a line without one is a difference;
 --   TAKER_WALLETS:       the same for 2120 + 2130 (the takers' balances and what is on its way to them);
---   NO_OVERDRAWN_WALLET: no party's balance on 2110, 2120, 2130 or 2160 is a debit (a wallet below 0); closing is what the
+--   NO_OVERDRAWN_WALLET: no party's balance on 2110, 2120, 2130, 2160 or 2190 is a debit (a wallet below 0); closing is what the
 --                        overdrawn ones add up to;
 --   BALANCED:            the month's debits against its credits, every closing adding up to 0: the ledger's own
 --                        invariant (LEDGER_POST refuses an unbalanced transaction), shown for completeness.
@@ -75,7 +75,7 @@ parties AS (
     SELECT w.{{LedgerAccount.accountCode}} AS code, m.party, sum(m.debit - m.credit) AS party_balance
     FROM moves m
     JOIN {{LedgerAccount}} w ON w.{{LedgerAccount.accountId}} = m.acct
-    WHERE w.{{LedgerAccount.accountCode}} IN ('2110', '2120', '2130', '2160', '1130') AND m.party IS NOT NULL
+    WHERE w.{{LedgerAccount.accountCode}} IN ('2110', '2120', '2130', '2160', '2190', '1130') AND m.party IS NOT NULL
     GROUP BY w.{{LedgerAccount.accountCode}}, m.party
 )
 SELECT CAST(row_number() OVER (ORDER BY code) AS integer) AS seq,
@@ -88,11 +88,11 @@ SELECT CAST(row_number() OVER (ORDER BY code) AS integer) AS seq,
        CAST(NULL AS boolean)          AS matches
 FROM accounts
 UNION ALL
-SELECT 901, 'CHECK', 'SPONSOR_WALLETS', 'Every sponsor wallet and cash account line (2110, 2160) carries its sponsor', NULL,
+SELECT 901, 'CHECK', 'SPONSOR_WALLETS', 'Every sponsor wallet, cash account and fee credit line (2110, 2160, 2190) carries its sponsor', NULL,
        coalesce(sum(opening), 0), coalesce(sum(debit_total), 0), coalesce(sum(credit_total), 0),
        coalesce(sum(closing), 0), coalesce(sum(party_total), 0),
        coalesce(sum(closing), 0) = coalesce(sum(party_total), 0)
-FROM accounts WHERE code IN ('2110', '2160')
+FROM accounts WHERE code IN ('2110', '2160', '2190')
 UNION ALL
 SELECT 902, 'CHECK', 'TAKER_WALLETS', 'Every user wallet line (2120, 2130) carries its user', NULL,
        coalesce(sum(opening), 0), coalesce(sum(debit_total), 0), coalesce(sum(credit_total), 0),

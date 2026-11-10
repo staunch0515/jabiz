@@ -24,6 +24,7 @@ import {
 } from '@jabiz/admin'
 import { EVERYBODY, failureRate, PARAM_LABELS, proposeSwitch, readAiJobs, readAiSettings, readAiUsage } from './ai-api'
 import { LoadFailed, Section } from './components'
+import { HelpGapsLink, HelpUsageSection } from './HelpContentPages'
 import { CONTROL, PERMISSION } from './ids'
 
 const linkClass = 'text-primary font-medium underline-offset-4 hover:underline'
@@ -90,6 +91,7 @@ function Switch({ on, exists }: { on: boolean; exists: boolean }) {
  */
 export default function AiPage() {
   const { t, i18n } = useTranslation(EXTENSION_NAMESPACE)
+  const { can } = useAuth()
   const id = useId()
   const [month, setMonth] = useState('')
   const [failedOnly, setFailedOnly] = useState(false)
@@ -242,6 +244,9 @@ export default function AiPage() {
             onChange={(event) => setMonth(event.target.value)} />
         </div>
       }>{usageBody}</Section>
+      {/* F-C10c: the AI help Takers and Sponsors use, counted apart from the Sponsors' AI usage above. */}
+      <HelpUsageSection month={shownMonth} />
+      {can(PERMISSION.adminHelp) && <HelpGapsLink month={shownMonth} />}
       <Section title={t('ai.recent')} testId="ai-jobs-section" actions={
         <div className="flex items-center gap-2">
           <Checkbox id={`${id}-failed`} checked={failedOnly} data-testid="ai-failed-only"
