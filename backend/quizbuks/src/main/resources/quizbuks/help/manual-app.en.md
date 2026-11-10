@@ -63,6 +63,8 @@ Each quiz says how its reward is paid:
 ## Knowledge maps
 
 - A Sponsor's knowledge map links quizzes. Passing a quiz lights its node; lit nodes can unlock other quizzes, a certification or a feature (such as referring friends or applying to become a Sponsor).
+- My knowledge maps (account menu, /taker/maps) lists the platform's maps and each Sponsor's map you have answered or lit something in, with how many nodes you lit. Open one to see each node: lit, locked (light the nodes it needs first), can answer (with links to the quizzes), waiting for the next quiz, or conditions missing. Arrow keys move between nodes; the list view shows the same.
+- A Sponsor's page (/taker/s/…) shows the Sponsor's map: signed in, with your own progress; signed out, only the nodes and their conditions.
 
 ## Help and terms
 

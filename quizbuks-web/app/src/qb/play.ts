@@ -1,4 +1,3 @@
-import { certificationNamesOf } from './certifications'
 import type { I18nText } from './legal'
 import { runProcess, runQuery, type Filter, type QueryPage, type Sort } from '@jabiz/client'
 import { trustedPlayer } from './video'
@@ -374,56 +373,6 @@ export interface PublicationView {
    */
   nodeName?: I18nText | null
   nodeLit?: boolean
-}
-
-/**
- * Q76: one prerequisite as the templates gave it (their `prerequisites` JSON). F-S2c2 (D4) removed the prerequisites;
- * only the sponsor page's levels (`share/levels.ts`) still read this, finding none, until F-S3 replaces them.
- */
-export interface PublicationPrerequisite {
-  /** The required publication; null for a certification required (Q86). */
-  requiredPublicationId: string | null
-  /** Q86: the certification the taker must hold, by its key; null for a required publication. */
-  certification: string | null
-  requirement: 'PASSED' | 'ANSWERED'
-  name: string
-  /** Whether the required publication accepts attempts now (ended or paused: the taker cannot meet it there). */
-  live: boolean
-  /** Whether the caller met it. */
-  met: boolean
-  /** Q86: the publication of the certification's current round, to send the taker to; null when none is open. */
-  roundPublicationId: string | null
-  /** Q88a: a sponsor's own certification's names by language; null for the catalog's (named by the texts). */
-  certificationNames: I18nText | null
-}
-
-/** A `prerequisites` JSON (no template gives one since F-S2c2); none on bad JSON. */
-export function prerequisitesOf(value: unknown): PublicationPrerequisite[] {
-  let raw: unknown = value
-  if (typeof raw === 'string') {
-    try {
-      raw = JSON.parse(raw)
-    } catch {
-      return []
-    }
-  }
-  if (!Array.isArray(raw)) return []
-  return raw.flatMap((item): PublicationPrerequisite[] => {
-    if (!item || typeof item !== 'object') return []
-    const p = item as Record<string, unknown>
-    const certification = typeof p.certification === 'string' && p.certification ? p.certification : null
-    if (typeof p.requiredPublicationId !== 'string' && !certification) return []
-    return [{
-      requiredPublicationId: typeof p.requiredPublicationId === 'string' ? p.requiredPublicationId : null,
-      certification,
-      requirement: p.requirement === 'ANSWERED' ? 'ANSWERED' : 'PASSED',
-      name: typeof p.name === 'string' ? p.name : '',
-      live: p.live === true || p.live === 'true',
-      met: p.met === true || p.met === 'true' || p.held === true || p.held === 'true',
-      roundPublicationId: typeof p.roundPublicationId === 'string' ? p.roundPublicationId : null,
-      certificationNames: certificationNamesOf(p.certificationNames),
-    }]
-  })
 }
 
 export interface Tier {

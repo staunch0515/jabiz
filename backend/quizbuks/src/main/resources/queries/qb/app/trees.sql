@@ -13,7 +13,7 @@ datasets:
   QbSponsor: urn:jabiz:dataset:default:QbSponsor
   QbSponsorPage: urn:jabiz:dataset:public:QbSponsorPage
 params:
-  handle: { like: QbSponsorPage.handle, description: "F-S3c: instead, the graphs in effect of the Sponsor whose published page has this handle (the merchant page shows them to everyone signed in)" }
+  handle: { like: QbSponsorPage.handle, description: "F-S3c: instead, the graphs in effect of the Sponsor whose published page has this handle (the Sponsor's page shows them to everyone signed in)" }
 results:
   treeId:      { from: QbTree.treeId }
   ownerKind:   { from: QbTree.ownerKind }
