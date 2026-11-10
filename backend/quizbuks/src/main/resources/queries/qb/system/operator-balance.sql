@@ -18,19 +18,20 @@ permissions: [qb.operator.settlement.system]
 -- Always one row. Settlements issued before accounts existed (ISSUED, PAYING, PAID) are paid on their own and are
 -- not in the account.
 WITH credited AS (
-    SELECT coalesce(sum(s.{{QbOperatorSettlement.payable}}), 0) AS amount
+    SELECT coalesce(sum(s.{{QbOperatorSettlement.payable}}), 0) AS r_amount
     FROM {{QbOperatorSettlement}} s
     WHERE s.{{QbOperatorSettlement.operatorId}} = :operatorId
       AND s.{{QbOperatorSettlement.status}} = 'CREDITED'
 ), withdrawn AS (
-    SELECT coalesce(sum(w.{{QbOperatorWithdrawal.amount}}), 0) AS amount
+    SELECT coalesce(sum(w.{{QbOperatorWithdrawal.amount}}), 0) AS r_amount
     FROM {{QbOperatorWithdrawal}} w
     WHERE w.{{QbOperatorWithdrawal.operatorId}} = :operatorId
       AND w.{{QbOperatorWithdrawal.status}} IN ('REQUESTED', 'PAYING', 'PAID')
 ), transferred AS (
-    SELECT coalesce(sum(t.{{QbOperatorTransfer.amount}}), 0) AS amount
+    SELECT coalesce(sum(t.{{QbOperatorTransfer.amount}}), 0) AS r_amount
     FROM {{QbOperatorTransfer}} t
     WHERE t.{{QbOperatorTransfer.operatorId}} = :operatorId
 )
-SELECT c.amount AS credited, w.amount AS withdrawn, t.amount AS transferred, c.amount - w.amount - t.amount AS balance
+SELECT c.r_amount AS credited, w.r_amount AS withdrawn, t.r_amount AS transferred,
+       c.r_amount - w.r_amount - t.r_amount AS balance
 FROM credited c CROSS JOIN withdrawn w CROSS JOIN transferred t
