@@ -21,6 +21,7 @@ import { certificationMessages } from './certification-messages'
 import { referralMenu, referralMessages } from './referral-messages'
 import { feeMenu, feeMessages } from './fee-messages'
 import { assetMessages } from './asset-messages'
+import { packageImportMessages } from './package-messages'
 import { pickersMessages } from './pickers-messages'
 import { usageMenu, usageMessages } from './usage-messages'
 import { regionMenu, regionMessages } from './region-messages'
@@ -31,6 +32,7 @@ import { blockMenu, blockMessages } from './block-messages'
 import { exposureMenu, exposureMessages } from './exposure-messages'
 import { videoUseMenu, videoUseMessages } from './video-use-messages'
 import { sharedVideoMenu, sharedVideoMessages } from './shared-video-messages'
+import { helpMenu, helpMessages } from './help-messages'
 import { BRAND_NAMES } from './brand'
 
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
@@ -39,7 +41,8 @@ export const messages = {
     menu: { group: BRAND_NAMES.en, reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
       ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
       ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en, ...accountMenu.en, ...pageMenu.en, ...productMenu.en, ...abuseReportMenu.en,
-      ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en, ...usageMenu.en, ...regionMenu.en, ...homeMenu.en, ...treesMenu.en, ...topicMenu.en, ...blockMenu.en, ...sharedVideoMenu.en, ...exposureMenu.en, ...videoUseMenu.en },
+      ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en, ...usageMenu.en, ...regionMenu.en, ...homeMenu.en, ...treesMenu.en, ...topicMenu.en, ...blockMenu.en, ...sharedVideoMenu.en, ...exposureMenu.en, ...videoUseMenu.en, ...helpMenu.en },
+    help: helpMessages.en,
     region: regionMessages.en,
     home: homeMessages.en,
     trees: treesMessages.en,
@@ -50,6 +53,7 @@ export const messages = {
     videoUses: videoUseMessages.en,
     fee: feeMessages.en,
     assets: assetMessages.en,
+    packageImports: packageImportMessages.en,
     pickers: pickersMessages.en,
     usage: usageMessages.en,
     certification: certificationMessages.en,
@@ -354,7 +358,8 @@ export const messages = {
     menu: { group: BRAND_NAMES.zh, reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
       ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
       ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh, ...accountMenu.zh, ...pageMenu.zh, ...productMenu.zh, ...abuseReportMenu.zh,
-      ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh, ...usageMenu.zh, ...regionMenu.zh, ...homeMenu.zh, ...treesMenu.zh, ...topicMenu.zh, ...blockMenu.zh, ...sharedVideoMenu.zh, ...exposureMenu.zh, ...videoUseMenu.zh },
+      ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh, ...usageMenu.zh, ...regionMenu.zh, ...homeMenu.zh, ...treesMenu.zh, ...topicMenu.zh, ...blockMenu.zh, ...sharedVideoMenu.zh, ...exposureMenu.zh, ...videoUseMenu.zh, ...helpMenu.zh },
+    help: helpMessages.zh,
     region: regionMessages.zh,
     home: homeMessages.zh,
     trees: treesMessages.zh,
@@ -365,6 +370,7 @@ export const messages = {
     videoUses: videoUseMessages.zh,
     fee: feeMessages.zh,
     assets: assetMessages.zh,
+    packageImports: packageImportMessages.zh,
     pickers: pickersMessages.zh,
     usage: usageMessages.zh,
     certification: certificationMessages.zh,
@@ -511,7 +517,7 @@ export const messages = {
       textField: '文字',
       textBase: '原文',
       textTranslated: '{{language}}',
-      textFields: { name: '名称', redeemDescription: '到店领取的奖品', digitalDescription: '数字奖品', referralDescription: '推荐奖励' },
+      textFields: { name: '名称', redeemDescription: '到店领取的奖品', digitalDescription: '电子奖品', referralDescription: '推荐奖励' },
       admin: '下架处理',
       adminHint: '暂停、恢复或结束此发布。发起方能看到理由；需要二次验证。',
       adminPause: '暂停',
@@ -537,7 +543,7 @@ export const messages = {
       baseLanguage: '基准语言',
       languages: { ja: '日语', zh: '中文', en: '英语' },
       cover: '封面',
-      survey: '问卷',
+      survey: '调查问卷',
       selections: { SINGLE: '单选', MULTIPLE: '多选' },
       intro: '简介',
       materials: '资料（{{n}}）',
@@ -669,7 +675,8 @@ export const messages = {
     menu: { group: BRAND_NAMES.ja, reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
       ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
       ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja, ...accountMenu.ja, ...pageMenu.ja, ...productMenu.ja, ...abuseReportMenu.ja,
-      ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja, ...usageMenu.ja, ...regionMenu.ja, ...homeMenu.ja, ...treesMenu.ja, ...topicMenu.ja, ...blockMenu.ja, ...sharedVideoMenu.ja, ...exposureMenu.ja, ...videoUseMenu.ja },
+      ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja, ...usageMenu.ja, ...regionMenu.ja, ...homeMenu.ja, ...treesMenu.ja, ...topicMenu.ja, ...blockMenu.ja, ...sharedVideoMenu.ja, ...exposureMenu.ja, ...videoUseMenu.ja, ...helpMenu.ja },
+    help: helpMessages.ja,
     region: regionMessages.ja,
     home: homeMessages.ja,
     trees: treesMessages.ja,
@@ -680,6 +687,7 @@ export const messages = {
     videoUses: videoUseMessages.ja,
     fee: feeMessages.ja,
     assets: assetMessages.ja,
+    packageImports: packageImportMessages.ja,
     pickers: pickersMessages.ja,
     usage: usageMessages.ja,
     certification: certificationMessages.ja,

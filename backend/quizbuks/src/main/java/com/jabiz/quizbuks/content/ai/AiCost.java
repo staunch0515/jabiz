@@ -89,5 +89,23 @@ public final class AiCost {
         return total.divide(MILLION, 6, RoundingMode.HALF_UP);
     }
 
+    /** What a prompt-cache write costs above the input price it is already counted at: a quarter more (5 minutes). */
+    static final BigDecimal CACHE_WRITE_PREMIUM = new BigDecimal("0.25");
+
+    /**
+     * F-C10b: the premium of {@code tokens} written to the provider's prompt cache, in dollars to six places; null for
+     * a model QuizBuks does not know. {@link #of} prices every input token at the list price, cache reads included
+     * (they cost a tenth of it), so the estimate errs high; only the writes cost more than that, and this premium is
+     * added so that it never errs low.
+     */
+    public static BigDecimal cacheWritePremium(String model, long tokens) {
+        Price price = known(model);
+        if (price == null) {
+            return null;
+        }
+        return price.input().multiply(CACHE_WRITE_PREMIUM).multiply(BigDecimal.valueOf(Math.max(0, tokens)))
+            .divide(MILLION, 6, RoundingMode.HALF_UP);
+    }
+
     private AiCost() {}
 }

@@ -141,6 +141,14 @@ class ProcessAccessIT extends QbItSupport {
         // Q87: the platform fees' charge (a sub-process), its job items, the approval result and the invoice mails.
         Map.entry("QB_FEE_CHARGE", ProcessAccess.SUB_PROCESS_ONLY),
         Map.entry("QB_FEE_SETTLE_ITEM", ProcessAccess.SUB_PROCESS_ONLY),
+        // F-M1: paying a fee from the account, and giving a voided invoice's payment back.
+        Map.entry("QB_FEE_SETTLE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_FEE_REFUND", ProcessAccess.SUB_PROCESS_ONLY),
+        // F-M2: the grant (under its caller's wallet lock), the daily expiry and reminder, and the reminder's mail.
+        Map.entry("QB_FEE_CREDIT_GRANT", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_FEE_CREDIT_EXPIRE", ProcessAccess.INTERNAL),
+        Map.entry("QB_FEE_CREDIT_REMIND", ProcessAccess.INTERNAL),
+        Map.entry("QB_MAIL_FEE_CREDIT", ProcessAccess.INTERNAL),
         Map.entry("QB_FEE_MONTHLY_ITEM", ProcessAccess.INTERNAL),
         // Q88b: the daily settlement of the entry fees (job item).
         Map.entry("QB_ENTRY_FEE_SETTLE", ProcessAccess.INTERNAL),
@@ -180,7 +188,23 @@ class ProcessAccessIT extends QbItSupport {
         // F-S14: the figures of a shared video's use (job item), the reminder (job item) and the daily check.
         Map.entry("QB_VIDEO_USE_FIGURES_REFRESH", ProcessAccess.INTERNAL),
         Map.entry("QB_VIDEO_USE_REMIND", ProcessAccess.INTERNAL),
-        Map.entry("QB_VIDEO_USE_CHECK_RUN", ProcessAccess.INTERNAL));
+        Map.entry("QB_VIDEO_USE_CHECK_RUN", ProcessAccess.INTERNAL),
+        // F-C10: the AI help's job outcomes, its daily items and the usage check.
+        Map.entry("QB_HELP_JOB_COMPLETED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_JOB_FAILED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_MATERIALS_BUILD", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_MATERIALS_NOT_STORED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_MATERIALS_STORED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_JOB_CANCELLED", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_RETENTION", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_AUTO_CLOSE", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_REMIND", ProcessAccess.INTERNAL),
+        Map.entry("QB_HELP_USAGE_CHECK", ProcessAccess.INTERNAL),
+        // F-C10: a reassigned Sponsor's help conversations (QB_SPONSOR_OPERATOR_ASSIGN's sub-process).
+        Map.entry("QB_HELP_OPERATOR_MOVE", ProcessAccess.SUB_PROCESS_ONLY),
+
+        // F-C4: the retention job's item deleting an old record of a sponsor package's import.
+        Map.entry("QB_PACKAGE_IMPORT_EXPIRE", ProcessAccess.INTERNAL));
 
     @Autowired
     ProcessRegistry registry;

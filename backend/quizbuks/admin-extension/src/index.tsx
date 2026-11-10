@@ -27,7 +27,8 @@ import {
   Radar,
   Receipt,
   Globe,
-  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban, Eye, NotebookTabs } from 'lucide-react'
+  ShoppingBag, UserRoundPlus, Flag, SlidersHorizontal, Tags, HardDrive, Network, Tag, Clapperboard, Ban, Eye, NotebookTabs, LifeBuoy,
+  MessageCircleQuestion, BookOpen } from 'lucide-react'
 import TopicsPage from './TopicsPage'
 import BlocksPage from './BlocksPage'
 import ExposurePage from './ExposurePage'
@@ -50,6 +51,8 @@ import RegionPage from './RegionPage'
 import SharedVideosPage from './SharedVideosPage'
 import SharedVideoPage from './SharedVideoPage'
 import AiPage from './AiPage'
+import { HelpThreadPage, HelpThreadsPage } from './HelpDeskPages'
+import { HelpGapsPage, HelpManualsPage } from './HelpContentPages'
 import AttemptsPage from './AttemptsPage'
 import { BRAND } from './brand'
 import FinanceOverviewPage from './FinanceOverviewPage'
@@ -172,6 +175,12 @@ export default defineExtension({
     { path: PATH.legal, element: <LegalPage /> },
     { path: PATH.broadcasts, element: <BroadcastsPage /> },
     { path: PATH.ai, element: <AiPage /> },
+    // F-C10c: the AI help's conversations handed to a person (headquarters and the operators, scoped), its gaps by
+    // month and its usage manuals (content administrators).
+    { path: PATH.help, element: <HelpThreadsPage /> },
+    { path: '/qb/help/:threadId', element: <HelpThreadPage /> },
+    { path: PATH.helpGaps, element: <HelpGapsPage /> },
+    { path: PATH.helpManuals, element: <HelpManualsPage /> },
     // Q48a: headquarters' operators and spot checks, and the operators' own pages in their back office.
     { path: PATH.operators, element: <OperatorsPage /> },
     { path: '/qb/operators/:operatorId', element: <OperatorPage /> },
@@ -267,6 +276,9 @@ export default defineExtension({
         // F-S14: the ledger of shared videos' uses, read only (an operator's session reads its own Sponsors').
         { key: 'qb-video-uses', label: 'menu.videoUses', path: PATH.videoUses, icon: NotebookTabs,
           permission: PERMISSION.videoUseRead },
+        // F-C10c: the AI help's conversations handed to a person, one entry for both: an operator's session answers its
+        // own Sponsors', the platform's the Takers' and the direct Sponsors' (and reads every one).
+        { key: 'qb-help', label: 'menu.help', path: PATH.help, icon: LifeBuoy, permission: PERMISSION.adminHelp },
         // Q22: the cash rewards sponsors pay takers themselves (F-S1: nobody here decides their disputes).
         { key: 'qb-cash-rewards', label: 'menu.cashRewards', path: PATH.cashRewards, icon: HandCoins,
           permission: PERMISSION.publicationRead },
@@ -307,6 +319,11 @@ export default defineExtension({
         { key: 'qb-broadcasts', label: 'menu.broadcasts', path: PATH.broadcasts, icon: Megaphone,
           permission: PERMISSION.contentWrite },
         { key: 'qb-ai', label: 'menu.ai', path: PATH.ai, icon: Sparkles, permission: PERMISSION.aiRead },
+        // F-C10c: what the AI help did not solve (to add to the FAQ and the manuals), and the manuals.
+        { key: 'qb-help-gaps', label: 'menu.helpGaps', path: PATH.helpGaps, icon: MessageCircleQuestion,
+          permission: PERMISSION.adminHelpGaps },
+        { key: 'qb-help-manuals', label: 'menu.helpManuals', path: PATH.helpManuals, icon: BookOpen,
+          permission: PERMISSION.contentWrite },
         // Q47c: the audience rules (content administrators) and every owner's prices (finance).
         { key: 'qb-audience-rules', label: 'menu.audienceRules', path: PATH.audienceRules, icon: SlidersHorizontal,
           permission: PERMISSION.audienceRulesWrite },

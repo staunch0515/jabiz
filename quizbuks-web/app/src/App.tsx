@@ -53,7 +53,7 @@ import {
   UserRoundPlus,
   type LucideIcon,
 } from 'lucide-react'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { APP } from './messages'
 import { takerHandleOf, TakerPage, verifyKeyOf, VerifyPage } from './certificates/PublicCertificates'
@@ -89,6 +89,8 @@ import { InAppBrowserNotice, useInAppNotice } from './install'
 import { readMyProfile } from './qb/api'
 import { ConsentGate, LegalLink, newQbQueryClient } from './qb/ConsentGate'
 import { HelpPage } from './qb/HelpPage'
+import { AskPanel } from './help/AskPanel'
+import { notePage } from './help/pages'
 import { LEGAL } from './qb/ids'
 import { legalKindOf } from './qb/legal'
 import { EntryLegalLinks, LegalLinks } from './qb/LegalLinks'
@@ -468,7 +470,7 @@ function PublicPage({ path, signedIn, children }: { path: string; signedIn: bool
   const { t } = useTranslation(QB)
   const { t: tApp } = useTranslation(APP)
   const kind = legalKindOf(path)
-  const page = children ? children : path === HELP ? <HelpPage audience="APP" />
+  const page = children ? children : path === HELP ? <HelpPage audience="APP" top={<AskPanel />} />
     : path === ABOUT ? <AboutPage />
     : kind ? <LegalPage key={kind} kind={kind} />
     : null
@@ -541,6 +543,8 @@ function Routes() {
   const { t: tApp } = useTranslation(APP)
   const { ready, signedIn } = useAuth()
   const { path, search } = useLocation()
+  // F-C10c: the AI help is told the page the Taker came from (a name of its list, never the path).
+  useEffect(() => notePage(path, search), [path, search])
   const brand = <Wordmark name={t('brand')} className="text-primary" />
   // Every entry page in the template, with the notices that were over the card before (offline, a new version, the
   // way out of another app's browser).

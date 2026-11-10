@@ -25,9 +25,10 @@ import java.time.Duration;
  *   <li>no answer at all (a time-out, a lost connection, an answer too large to read) is charged
  *       {@link ClaudeApi#unanswered} before it fails: the provider may have billed an answer nobody read.</li>
  * </ul>
- * Usage above what the job reserved for an attempt is logged as a warning (job type only: no ids, D16).
+ * Usage above what the job reserved for an attempt is logged as a warning (job type only: no ids, D16). Public for the
+ * other AI jobs of QuizBuks (F-C10's help, {@code com.jabiz.quizbuks.help}), which call Claude the same way.
  */
-final class ClaudeCalls {
+public final class ClaudeCalls {
 
     private static final Logger log = LoggerFactory.getLogger(ClaudeCalls.class);
 
@@ -38,8 +39,8 @@ final class ClaudeCalls {
      * The configuration both writers use ({@code quizbuks.ai.request-timeout}: more than zero and at most the
      * service's two minutes), one bean.
      */
-    record Settings(Duration requestTimeout) {
-        Settings {
+    public record Settings(Duration requestTimeout) {
+        public Settings {
             if (requestTimeout.isNegative() || requestTimeout.isZero()
                 || requestTimeout.compareTo(ExternalService.MAX_REQUEST_TIMEOUT) > 0) {
                 throw new IllegalArgumentException("quizbuks.ai.request-timeout: more than zero and at most "
@@ -52,7 +53,7 @@ final class ClaudeCalls {
      * What an attempt of the job may use, as the request reserved it: its input and its output in all. Null fields
      * are not checked (jobs started before Q8b).
      */
-    record Reserved(String jobType, Long inputTokens, long totalTokens) {}
+    public record Reserved(String jobType, Long inputTokens, long totalTokens) {}
 
     /**
      * The request with the provider's count of its input when it has documents (the request as it is otherwise);
@@ -73,7 +74,7 @@ final class ClaudeCalls {
     }
 
     /** Sends the request and returns an answer that ended its turn; throws the attempt's failure otherwise. */
-    static ClaudeApi.Answer ask(ExternalJobContext ctx, JsonMapper json, ClaudeApi.Request request,
+    public static ClaudeApi.Answer ask(ExternalJobContext ctx, JsonMapper json, ClaudeApi.Request request,
         Duration timeout, Reserved reserved) {
         ClaudeApi.Answer answer;
         try {
@@ -119,6 +120,13 @@ final class ClaudeCalls {
             ctx.recordUsage(AiQuestionsJob.LONG_INPUT_TOKENS, priced.longPromptInputTokens());
             ctx.recordUsage(AiQuestionsJob.LONG_OUTPUT_TOKENS, priced.longPromptOutputTokens());
         }
+        // F-C10b: the part of the input written to and read from the prompt cache (already in the input above).
+        if (priced.cacheWriteInputTokens() > 0) {
+            ctx.recordUsage(AiQuestionsJob.CACHE_WRITE_INPUT_TOKENS, priced.cacheWriteInputTokens());
+        }
+        if (priced.cacheReadInputTokens() > 0) {
+            ctx.recordUsage(AiQuestionsJob.CACHE_READ_INPUT_TOKENS, priced.cacheReadInputTokens());
+        }
         if (reserved != null && usage.inputTokens() + usage.outputTokens() > reserved.totalTokens()) {
             // The limits counted on the reservation (a provider's fallback runs the input again): worth a look.
             log.warn("AI usage of one attempt above its reservation (job type {})", reserved.jobType());
@@ -129,7 +137,7 @@ final class ClaudeCalls {
      * One call's usage with the part the provider prices at the long-prompt rate: the whole of a call above
      * {@value #LONG_PROMPT_FROM} input tokens of a model that has that rate ({@link AiCost}).
      */
-    static ClaudeApi.Usage priced(String model, ClaudeApi.Usage usage) {
+    public static ClaudeApi.Usage priced(String model, ClaudeApi.Usage usage) {
         return AiCost.hasLongPromptRate(model) && usage.inputTokens() > LONG_PROMPT_FROM ? usage.asLongPrompt() : usage;
     }
 

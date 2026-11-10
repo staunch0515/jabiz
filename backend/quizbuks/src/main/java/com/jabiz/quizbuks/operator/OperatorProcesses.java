@@ -138,6 +138,8 @@ public final class OperatorProcesses {
     static final String LEAD_ASSIGNMENT = "leadAssignment";
     static final String PENDING_REVIEWS = "pendingReviews";
     static final String FROM = "fromOperatorId";
+    /** F-C10: the sponsor's AI help conversations with a person. */
+    static final String HELP_THREADS = "helpThreads";
     static final String TARGET = "target";
     static final String PLACE = "place";
     static final String USERS = "users";
@@ -626,16 +628,32 @@ public final class OperatorProcesses {
                             new QueryPredicate.In("preparerId", List.of(person(ctx))),
                             new QueryPredicate.In("status", List.of(ApprovalEntities.PENDING)),
                             new QueryPredicate.In("scopeName", List.of(QbOperators.SCOPE)))))
-                        .limit(maxMoved + 1).build(), PENDING_REVIEWS)))
+                        .limit(maxMoved + 1).build(), PENDING_REVIEWS),
+                    // F-C10: the AI help conversations handed to the sponsor's operator: their tasks move with them.
+                    QueryEntities.query(com.jabiz.quizbuks.help.QbHelp.defaultDataset(
+                        com.jabiz.quizbuks.help.QbHelp.THREAD), ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.And(List.of(
+                            new QueryPredicate.In("userId", List.of(person(ctx))),
+                            new QueryPredicate.In("status", List.of(com.jabiz.quizbuks.help.QbHelp.ESCALATED)))))
+                        .limit(maxMoved + 1).build(), HELP_THREADS)))
                 .compute("Assign", (metadata, ctx) -> assign(ctx, ctx.get(INPUT, AssignInput.class), maxMoved))
-                // D76: the sponsor's pending reviews and their tasks go to the new operator; the caller needs
+                // D76: the sponsor's pending reviews and their tasks go to the new operator, and (F-C10) the tasks of
+                // their AI help conversations with a person, named by their source keys; the caller needs
                 // approval.scope.move besides this process's.
-                .step("Move the sponsor's reviews", CallProcess.<ProcessContext>when(
+                .step("Move the sponsor's reviews and help tasks", CallProcess.<ProcessContext>when(
                     ctx -> ctx.contains(OUTPUT) && ctx.get(OUTPUT, AssignOutput.class).changed()
-                        && !reviewCases(ctx).isEmpty(),
+                        && (!reviewCases(ctx).isEmpty() || !helpTaskKeys(ctx).isEmpty()),
                     ApprovalScopeMove.MOVE, 1, ctx -> new ApprovalScopeMove.MoveInput(QbOperators.SCOPE,
-                        ctx.get(OUTPUT, AssignOutput.class).operatorId(), reviewCases(ctx), null,
+                        ctx.get(OUTPUT, AssignOutput.class).operatorId(), reviewCases(ctx),
+                        helpTaskKeys(ctx).isEmpty() ? null : helpTaskKeys(ctx),
                         ctx.get(INPUT, AssignInput.class).reason().strip()), null))
+                // F-C10: the conversations answer to the new operator now (QB_HELP_REPLY checks it).
+                .step("Hand the sponsor's help conversations over", CallProcess.<ProcessContext>when(
+                    ctx -> ctx.contains(OUTPUT) && ctx.get(OUTPUT, AssignOutput.class).changed()
+                        && !helpThreadsMoved(ctx).isEmpty(),
+                    com.jabiz.quizbuks.help.HelpOperatorMove.PROCESS, 1,
+                    ctx -> new com.jabiz.quizbuks.help.HelpOperatorMove.Input(person(ctx),
+                        ctx.get(OUTPUT, AssignOutput.class).operatorId(), helpThreadsMoved(ctx)), null))
                 .step("Tell the sponsor", com.jabiz.runtime.process.steps.PublishEvent.<ProcessContext>when(
                     ctx -> ctx.contains(OUTPUT) && ctx.get(OUTPUT, AssignOutput.class).changed(),
                     OPERATOR_CHANGED_EVENT, ctx -> Map.of("userId", person(ctx), "operatorId",
@@ -653,6 +671,26 @@ public final class OperatorProcesses {
             .map(request -> new ApprovalScopeMove.Case(String.valueOf((Object) request.get("subject")),
                 String.valueOf((Object) request.get("entityId"))))
             .distinct().toList();
+    }
+
+    /**
+     * F-C10: the sponsor's AI help conversations with a person that another operator than the target answers (those
+     * headquarters answers stay there).
+     */
+    static List<String> helpThreadsMoved(ProcessContext ctx) {
+        String target = ctx.contains(OUTPUT) ? ctx.get(OUTPUT, AssignOutput.class).operatorId() : target(ctx);
+        return OperatorChecks.list(ctx, HELP_THREADS).stream()
+            .filter(thread -> thread.get("operatorId") != null
+                && !String.valueOf((Object) thread.get("operatorId")).equals(target))
+            .map(thread -> String.valueOf(thread.id())).toList();
+    }
+
+    /** F-C10: the source keys of those conversations' tasks: the handing over's, and the reminder of a wait. */
+    static List<String> helpTaskKeys(ProcessContext ctx) {
+        List<String> moved = helpThreadsMoved(ctx);
+        return OperatorChecks.list(ctx, HELP_THREADS).stream()
+            .filter(thread -> moved.contains(String.valueOf(thread.id())))
+            .flatMap(thread -> com.jabiz.quizbuks.help.HelpOperatorMove.taskKeys(thread).stream()).toList();
     }
 
     static void assign(ProcessContext ctx, AssignInput input, int maxMoved) {
@@ -689,6 +727,11 @@ public final class OperatorProcesses {
         if (OperatorChecks.list(ctx, PENDING_REVIEWS).size() > maxMoved) {
             ctx.reject(new Violation("userId", OperatorCodes.REVIEW_PENDING, "The sponsor has more open reviews "
                 + "than one move takes", Map.of("max", maxMoved)));
+        }
+        // F-C10: their help conversations' tasks move in the same call: within the platform's limit too.
+        if (helpTaskKeys(ctx).size() > maxMoved) {
+            ctx.reject(new Violation("userId", OperatorCodes.HELP_PENDING, "The sponsor has more help conversations "
+                + "with a person than one move takes", Map.of("max", maxMoved)));
         }
         if (ctx.hasViolations()) {
             return;

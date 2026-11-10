@@ -10,7 +10,7 @@
 
 ### 中文 · 竖屏模式里为什么会出现我没点的 Quiz？
 
-在"短视频"的全屏竖屏模式中，每滑几屏会出现一个用了其他发起方共享视频的 Quiz（推送），几家发起方轮流出现。打开过一次的推送不会再推给你。你屏蔽的内容（发布、Quiz、发起方、视频制作方）和打开"只看喜欢的主题"后不符合的 Quiz 都不会被推送：付多少钱都越不过你的设置。首页的内容不变。
+在"短视频"的全屏竖屏模式中，每滑几屏会出现一个用了其他发起方共享视频的 Quiz（推送），几家发起方轮流出现。打开过一次的推送不会再推给你。你屏蔽的内容（发布、Quiz、发起方、视频提供方）和打开"只看喜欢的主题"后不符合的 Quiz 都不会被推送：付多少钱都越不过你的设置。首页的内容不变。
 
 ### 日本語 · 縦型モードに、自分で選んでいないクイズが出てくるのはなぜですか？
 
@@ -18,7 +18,7 @@
 
 ### English · Why does the vertical mode show quizzes I did not tap?
 
-In the full-screen vertical mode of "Shorts", every few screens a quiz using a video another Sponsor shared appears (a push), several Sponsors taking turns. A push you opened once is not shown to you again. Nothing you blocked (a quiz, every round of a quiz, a Sponsor, a video provider) and, with "Only topics I like" on, no quiz outside your topics is pushed: no payment gets past your settings. Your home page stays as it is.
+In the full-screen vertical mode of "Shorts", every few screens a quiz using a video another Sponsor shared appears (a push), several Sponsors taking turns. A push you opened once is not shown to you again. Nothing you blocked (a quiz, every round of a quiz, a Sponsor, a video provider) and, with "Show only the topics I like" on, no quiz outside your topics is pushed: no payment gets past your settings. Your home page stays as it is.
 
 ## 二、给发起方（FAQ 的 `audience` = `SPONSOR`，分类 `PUBLISHING`）
 

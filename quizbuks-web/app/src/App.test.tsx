@@ -65,7 +65,7 @@ function server(me?: Me, providers: unknown[] = []) {
         return json(200, deletionStatus)
       case '/api/auth/me':
         return me ? json(200, { userId: 'u1', displayName: 'Mei', email: 'mei@example.com', roles: ['QB_TAKER'],
-          permissions: ['qb.me', 'qb.account.read', 'qb.country.read'], emailVerified: me.emailVerified ?? true,
+          permissions: ['qb.me', 'qb.account.read', 'qb.country.read', 'qb.help.use'], emailVerified: me.emailVerified ?? true,
           idleTimeoutSeconds: 0 }) : json(401, {})
       case '/api/datasets/urn:jabiz:dataset:me:QbProfile/query':
         return json(200, { items: profile ? [{ id: 'p1', version: 1, attributes: profile }] : [], offset: 0, limit: 1 })
@@ -512,6 +512,22 @@ describe('the in-app browser\'s note among the entry pages\' notices (17zk; P4 r
 
 describe('a signed-in Taker', () => {
   beforeEach(() => session.store('access', 'refresh'))
+
+  it('asks the AI at the top of the help page (F-C10c), never on the answering pages', async () => {
+    server({ profile: { displayName: 'Mei', countryCode: 'JP', city: null, preferredCurrency: 'JPY', revision: 3 } })
+    window.history.replaceState(null, '', '/help')
+    render(<App />)
+    const help = await screen.findByTestId('help')
+    expect(within(help).getByTestId('help-ask')).toBeVisible()
+    cleanup()
+    for (const path of ['/play/a1', '/result/a1']) {
+      window.history.replaceState(null, '', path)
+      render(<App />)
+      await waitFor(() => expect(screen.queryByTestId('help-ask')).toBeNull())
+      expect(screen.queryByTestId('help-ai')).toBeNull()
+      cleanup()
+    }
+  })
 
   it('completes the profile first, starting from the sign-up name and the browser\'s country', async () => {
     const { posted } = server({ profile: null })

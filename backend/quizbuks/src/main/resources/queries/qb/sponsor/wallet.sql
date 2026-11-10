@@ -1,6 +1,6 @@
 /*---
 id: qb.sponsor.wallet
-description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, and (Q87a) the cash account
+description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, (Q87a) the cash account and (F-M1) the fee credit
 entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbFeeCharge, QbSponsor, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:sponsor:QbWallet
@@ -28,6 +28,7 @@ results:
   creditLimit:   { kind: { type: monetary, currency: JPY, scale: 0 } }
   uninvoicedTotal: { kind: { type: monetary, currency: JPY, scale: 0 } }
   entryFeesUnsettled: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  feeCreditBalance: { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
@@ -50,7 +51,8 @@ SELECT
     CAST(coalesce(sp.sp_mode, d.d_mode, 'PREPAID') AS varchar(10)) AS billingMode,
     coalesce(sp.sp_limit, 0)        AS creditLimit,
     coalesce(u.u_total, 0)          AS uninvoicedTotal,
-    coalesce(ef.ef_total, 0)        AS entryFeesUnsettled
+    coalesce(ef.ef_total, 0)        AS entryFeesUnsettled,
+    coalesce(fc.fc_balance, 0)      AS feeCreditBalance
 FROM (SELECT 1 AS one) base
 -- Q88b: the entry fees takers paid for the sponsor's quizzes, not yet moved to the cash account by the daily job
 -- (2170 for the sponsor, credit less debit; the sponsor's ledger view holds their lines).
@@ -71,12 +73,17 @@ LEFT JOIN (
     SELECT x.{{QbWallet.balance}} AS c_balance, x.{{QbWallet.held}} AS c_held
     FROM {{QbWallet}} x
     WHERE x.{{QbWallet.kind}} = 'CASH') c ON true
--- Q87b: the platform fees still owed, and the billing mode in effect (the sponsor's own, else the platform's default).
+-- F-M1: the fee credit (platform fee Kudos), the third row of the same owner.
+LEFT JOIN (
+    SELECT x.{{QbWallet.balance}} AS fc_balance
+    FROM {{QbWallet}} x
+    WHERE x.{{QbWallet.kind}} = 'FEE_CREDIT') fc ON true
+-- Q87b: the platform fees still owed (F-M1: less what is paid of them), and the billing mode in effect (the sponsor's own, else the platform's default).
 CROSS JOIN (
-    SELECT sum(i.{{QbFeeInvoice.total}}) AS f_total, count(*) AS f_count,
+    SELECT sum(i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.paidAmount}}) AS f_total, count(*) AS f_count,
            count(*) FILTER (WHERE i.{{QbFeeInvoice.status}} = 'OVERDUE') AS f_overdue
     FROM {{QbFeeInvoice}} i
-    WHERE i.{{QbFeeInvoice.status}} IN ('OPEN', 'OVERDUE')) f
+    WHERE i.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')) f
 -- Q87b: the postpaid fees not on an invoice yet (the month's, or one of their own when paid early).
 CROSS JOIN (
     SELECT sum(c.{{QbFeeCharge.total}}) AS u_total

@@ -121,7 +121,9 @@ public final class QbInbox {
     public static final String SHARED_VIDEO_REJECTED = "SHARED_VIDEO_REJECTED";
     public static final String SHARED_VIDEO_TAKEN_DOWN = "SHARED_VIDEO_TAKEN_DOWN";
     public static final List<String> SHARED_VIDEO_KINDS = List.of(SHARED_VIDEO_REJECTED, SHARED_VIDEO_TAKEN_DOWN);
-    public static final List<String> MESSAGE_KINDS = List.of(SHARED_VIDEO_REJECTED, SHARED_VIDEO_TAKEN_DOWN,
+    /** F-C10: a person replied in the user's AI help conversation (the source is the reply; linked to the help). */
+    public static final String HELP_REPLY = "HELP_REPLY";
+    public static final List<String> MESSAGE_KINDS = List.of(HELP_REPLY, SHARED_VIDEO_REJECTED, SHARED_VIDEO_TAKEN_DOWN,
         USAGE_OVER_FREE, OPERATOR_CHANGED, TREE_LIT_REVOKED, CONVERSATION_REPLY, REFERRAL_CLAIMED, REFERRAL_REWARDED, REFERRAL_EXPIRED,
         REFERRAL_FUNDS_SHORT, REWARD_PAID, REWARD_PENDING, TRANSFER_SENT,
         TRANSFER_FAILED, PAYOUT_ACTION_NEEDED, PAYOUT_REMINDER, CASH_DUE, CASH_MARKED_PAID, CASH_CONFIRMED,
@@ -145,8 +147,10 @@ public final class QbInbox {
     public static final String ACTION_CONVERSATION = "CONVERSATION";
     /** F-C2: the sponsor console's asset library (where the usage is shown and the unused assets are found). */
     public static final String ACTION_ASSETS = "ASSETS";
+    /** F-C10: the AI help's conversation ({@code actionId}). */
+    public static final String ACTION_HELP = "HELP";
     public static final List<String> ACTIONS = List.of(ACTION_RESULT, ACTION_WALLET, ACTION_PAYOUT, ACTION_CASH,
-        ACTION_REDEEM, ACTION_DIGITAL, ACTION_REFERRALS, ACTION_CONVERSATION, ACTION_ASSETS);
+        ACTION_REDEEM, ACTION_DIGITAL, ACTION_REFERRALS, ACTION_CONVERSATION, ACTION_ASSETS, ACTION_HELP);
 
     // ---- broadcasts ------------------------------------------------------------------------------------------------
 

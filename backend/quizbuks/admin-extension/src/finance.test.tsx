@@ -86,6 +86,9 @@ beforeEach(() => {
     [TEMPLATE.payoutAccounts, [{ status: 'ENABLED', payoutsEnabled: true, externalAccountId: 'acct_1234567890WXYZ' }]],
     [TEMPLATE.attemptRewards, [{ attemptId: 'a1', name: 'Capitals', submittedAt: '2026-10-14T00:00:00Z', reward: 100,
       fee: 20, rewardStatus: 'PAID' }]],
+    [TEMPLATE.feeAccountTotals, [
+      { subAccount: 'FEE_CREDIT', balance: 900, lotsRemaining: 900, openLots: 1, sponsors: 1, paidFees: 800 },
+      { subAccount: 'CASH', balance: 1700, lotsRemaining: 1700, openLots: 3, sponsors: 2, paidFees: 300 }]],
     [TEMPLATE.reconRuns, [{ runId: RUN, scheduledTime: '2026-10-15T18:37:00Z', status: 'DIFF', itemCount: 3 }]],
     [TEMPLATE.reconItems, [
       { itemId: 'i1', checkCode: 'TOPUP_REFUNDS', partyId: TAKER, reference: TOPUP, expected: 100, actual: 150,
@@ -185,10 +188,16 @@ describe('FinanceOverviewPage', () => {
     expect(calledWith(TEMPLATE.financeSummary)[0][1].params.staleBefore).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     const accounts = await screen.findAllByTestId('finance-account')
     expect(accounts.map((row) => row.dataset.code)).toEqual(['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120',
-      '2160', '1130', '4120', '2150', '2170'])
+      '2160', '1130', '4120', '2150', '2170', '2190', '5140'])
     expect(accounts[3]).toHaveTextContent('1110 Stripe balance')
     // Q88b: the entry fees paid and not yet settled.
     expect(screen.getByTestId('finance-entry-fees')).toHaveTextContent('120')
+    // F-M1: the platform fee accounts by sub-account, as the server sums them for this (UTC) month.
+    const feeAccounts = await screen.findAllByTestId('finance-fee-account')
+    expect(feeAccounts.map((row) => row.dataset.subAccount)).toEqual(['FEE_CREDIT', 'CASH'])
+    expect(feeAccounts[1]).toHaveTextContent('1,700')
+    const [, totalsOptions] = calledWith(TEMPLATE.feeAccountTotals)[0]
+    expect(totalsOptions.params.from).toMatch(/^\d{4}-\d{2}-01T00:00:00\.000Z$/)
   })
 
   it('does not ask for the ledger, the reconciliation or the tasks without the permissions to read them', async () => {

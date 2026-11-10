@@ -92,6 +92,9 @@ public final class MailProcesses {
     public static final String FEE_INVOICE_ISSUED_CONSUMER = "qb.mail-fee-invoice-issued";
     public static final String FEE_INVOICE_OVERDUE_CONSUMER = "qb.mail-fee-invoice-overdue";
     public static final String PUBLICATION_CONSUMER = "qb.publication-notify";
+    /** F-M2: a sponsor's platform fee Kudos expire soon. */
+    public static final String FEE_CREDIT = "QB_MAIL_FEE_CREDIT";
+    public static final String FEE_CREDIT_EXPIRING_CONSUMER = "qb.mail-fee-credit-expiring";
 
     /** The hourly per-sponsor job that sends the deferred short-of-funds mail once their window has passed. */
     public static final String FUNDS_SHORT_JOB = "qb.mail-funds-short-due";
@@ -118,6 +121,16 @@ public final class MailProcesses {
 
     /** @param reminder which reminder of an overdue invoice (1 – 3); null for an invoice issued */
     public record FeeInvoiceMailInput(@NotBlank String invoiceId, @NotNull Instant occurredAt, Integer reminder) {}
+
+    /**
+     * The payload of {@code qb.fee-credit.expiring} (F-M2), and when it was published.
+     *
+     * @param amount    what is left of the lots expiring, in yen
+     * @param count     how many lots
+     * @param expiresAt when the first of them expires
+     */
+    public record FeeCreditMailInput(@NotBlank String sponsorId, @NotBlank String amount, @NotNull Integer count,
+        @NotBlank String expiresAt, @NotNull Instant occurredAt) {}
 
     /**
      * The payload of {@link PublicationNotices#EVENT}, and when it was published. The publisher is not validated: an
@@ -261,7 +274,9 @@ public final class MailProcesses {
                     String.valueOf((Object) invoice.get("status")))) {
                     decide(ctx, reminder ? NotificationMails.FEE_INVOICE_OVERDUE : NotificationMails.FEE_INVOICE_ISSUED,
                         Map.of("invoiceNo", String.valueOf((Object) invoice.get("invoiceNo")),
-                            "total", MailValues.amount(invoice.get("total")),
+                            // What is still owed (F-M1: an invoice may be paid in part).
+                            "total", MailValues.amount(new java.math.BigDecimal(String.valueOf((Object) invoice.get("total")))
+                                .subtract(new java.math.BigDecimal(String.valueOf((Object) invoice.get("paidAmount"))))),
                             "dueOn", String.valueOf((Object) invoice.get("dueOn"))));
                 }
             }, messages, NotificationMails.FEE_INVOICE_ISSUED, NotificationMails.FEE_INVOICE_OVERDUE);
@@ -275,6 +290,29 @@ public final class MailProcesses {
         Object reminder = event.payload().get("reminder");
         return new FeeInvoiceMailInput(text(event, "invoiceId"), event.createdTime(),
             reminder == null ? 1 : Integer.valueOf(String.valueOf(reminder)));
+    }
+
+    // ---- platform fee Kudos (F-M2) -----------------------------------------------------------------------------------
+
+    public static ProcessDefinition<FeeCreditMailInput, MailOutput, ProcessContext> feeCredit(MessageCatalog messages,
+        MailValues values) {
+        return define(FEE_CREDIT, "Mails a sponsor that some of their platform fee Kudos expire soon.",
+            FeeCreditMailInput.class, FeeCreditMailInput::occurredAt, pb -> pb
+                .step("Load the sponsor", loadUser(ctx -> input(ctx, FeeCreditMailInput.class).sponsorId())),
+            ctx -> {
+                FeeCreditMailInput input = input(ctx, FeeCreditMailInput.class);
+                // The reminder decided under the wallet lock (each lot once, once in 24 hours); the mail only says it.
+                decide(ctx, NotificationMails.FEE_CREDIT_EXPIRING, Map.of(
+                    "amount", MailValues.amount(new java.math.BigDecimal(input.amount())),
+                    "count", MailValues.count(input.count()),
+                    "expiresAt", values.time(Instant.parse(input.expiresAt()))));
+            }, messages, NotificationMails.FEE_CREDIT_EXPIRING);
+    }
+
+    static FeeCreditMailInput feeCreditInput(DomainEvent event) {
+        Object count = event.payload().get("count");
+        return new FeeCreditMailInput(text(event, "sponsorId"), text(event, "amount"),
+            count == null ? null : Integer.valueOf(String.valueOf(count)), text(event, "expiresAt"), event.createdTime());
     }
 
     // ---- publications ----------------------------------------------------------------------------------------------

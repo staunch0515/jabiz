@@ -54,6 +54,13 @@ public final class NotificationMails {
     public static final MailTemplate FEE_INVOICE_OVERDUE = MailTemplate.define("qb.fee.invoice-overdue", t -> t
         .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "dueOn"));
 
+    /**
+     * F-M2: a sponsor's platform fee Kudos expire soon (each lot once, at most once per sponsor in 24 hours): what is
+     * left of the lots, how many, and when the first expires. The sponsor console's, opted out of in its preferences.
+     */
+    public static final MailTemplate FEE_CREDIT_EXPIRING = MailTemplate.define("qb.fee-credit.expiring", t -> t
+        .category(MailCategory.NOTIFICATION).entries("sponsor").param("amount", "count", "expiresAt"));
+
     /** A sponsor's publication passed its review. */
     public static final MailTemplate PUBLICATION_APPROVED = MailTemplate.define("qb.publication.approved", t -> t
         .category(MailCategory.TRANSACTIONAL).param("name", "start"));
@@ -79,7 +86,7 @@ public final class NotificationMails {
         .category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "reason", "completions"));
 
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
-        TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
+        TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, FEE_CREDIT_EXPIRING, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,
         PUBLICATION_ENDED);
 
     /**

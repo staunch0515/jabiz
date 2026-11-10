@@ -48,13 +48,13 @@ A video mainland China cannot play (such as YouTube) also keeps Takers in mainla
 
 ### 日本語 · 共有動画が公開停止されたら、自分の公開はどうなりますか？
 
-違法または権利侵害の動画は、提供元の運営パートナーまたはプラットフォームが公開停止します。その動画を使う公開は（1 分以内に）終了し、開始済みの回答は通常どおり完了して報酬も支払われます。メールでお知らせします。**あなたの違反にはなりません**。これまでどおり公開できます（この公開を複製し、別の動画にして公開し直せます）。
-提供元には公開停止の理由を添えたメールとお知らせが届き、「共有している動画」でも確認できます。公開停止は元に戻せません。
+違法または権利侵害の動画は、動画の提供者の運営パートナーまたはプラットフォームが公開停止します。その動画を使う公開は（1 分以内に）終了し、開始済みの回答は通常どおり完了して報酬も支払われます。メールでお知らせします。**あなたの違反にはなりません**。これまでどおり公開できます（この公開を複製し、別の動画にして公開し直せます）。
+動画の提供者には公開停止の理由を添えたメールとお知らせが届き、「共有している動画」でも確認できます。公開停止は元に戻せません。
 
 ### English · What happens to my publication when a shared video is taken down?
 
-The provider's operator or the platform takes down a video that is illegal or infringing. The publications using it end (within a minute); attempts already started complete and are paid as usual. You are told by mail; **this is not a breach on your part**, and you publish as before (you can copy the publication and publish it again with another video).
-The provider gets a mail and a notice with the reason, also shown under "Videos you share". A takedown cannot be undone.
+The video provider's operator or the platform takes down a video that is illegal or infringing. The publications using it end (within a minute); attempts already started complete and are paid as usual. You are told by mail; **this is not a breach on your part**, and you publish as before (you can copy the publication and publish it again with another video).
+The video provider gets a mail and a notice with the reason, also shown under "Videos you share". A takedown cannot be undone.
 
 ### 中文 · 账号被封禁时，我共享的视频会怎样？
 

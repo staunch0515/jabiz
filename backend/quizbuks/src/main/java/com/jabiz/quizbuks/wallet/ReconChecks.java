@@ -31,6 +31,14 @@ public final class ReconChecks {
     public static final String FEES_RECEIVABLE = "FEES_RECEIVABLE";
     /** Q88b: 2170 for a sponsor (the entry fees not yet settled into their cash account) is never below zero. */
     public static final String ENTRY_FEES_UNSETTLED = "ENTRY_FEES_UNSETTLED";
+    /** F-M1: 2190 for a sponsor against their fee credit wallet and what their grants have left. */
+    public static final String FEE_CREDIT = "FEE_CREDIT";
+    /** F-M1: 2160 for a sponsor against what their cash lots have left. */
+    public static final String CASH_LOTS = "CASH_LOTS";
+    /** F-M1: what fee payments took from 2160 and 2190 for a sponsor against the payments' parts. */
+    public static final String FEE_PAYMENTS = "FEE_PAYMENTS";
+    /** F-M2: the promotion expenses of the grants (5140) by operator against what was granted less what was voided. */
+    public static final String FEE_CREDIT_PROMOTION = "FEE_CREDIT_PROMOTION";
     /** Account 2110 in all against all sponsors' cached balances. */
     public static final String TOTAL_2110 = "TOTAL_2110";
     /** Every posted line's debit less credit: 0. */
@@ -62,7 +70,7 @@ public final class ReconChecks {
     public static final List<String> ALL = List.of(SPONSOR_WALLET, SPONSOR_PENDING_COUNT, SPONSOR_PENDING_AMOUNT,
         TOTAL_2110, LEDGER_ZERO, TOPUP_LEDGER, TOPUP_ARRIVALS, TOPUP_REFUNDS, TOPUP_FEE, TAKER_WALLET,
         TAKER_IN_TRANSFER, TAKER_WALLET_LAG, TRANSFER_LEDGER, TRANSFER_IN_TRANSIT, CASH_ACCOUNT, TOTAL_2160,
-        FEES_RECEIVABLE, ENTRY_FEES_UNSETTLED);
+        FEES_RECEIVABLE, ENTRY_FEES_UNSETTLED, FEE_CREDIT, CASH_LOTS, FEE_PAYMENTS, FEE_CREDIT_PROMOTION);
 
     /** The checks that only note something: a run with notes alone is {@code OK}. */
     public static final Set<String> NOTES = Set.of(TAKER_WALLET_LAG);

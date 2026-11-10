@@ -209,7 +209,7 @@ groups:
             datasourceUid: prometheus
             model:
               refId: A
-              expr: 'max(jabiz_external_job_held{job="$JABIZ_ALERT_SERVICE", job_type=~"qb.ai.*"}) > $JABIZ_ALERT_QB_AI_HELD_MAX'
+              expr: 'max(jabiz_external_job_held{job="$JABIZ_ALERT_SERVICE", job_type=~"qb.ai.*", job_type!="qb.ai.help"}) > $JABIZ_ALERT_QB_AI_HELD_MAX'
               instant: true
               range: false
           - refId: C
@@ -227,3 +227,30 @@ groups:
         annotations:
           summary: 'The AI jobs wait because qb.ai.enabled is not true. Set JABIZ_ALERT_QB_AI_HELD_MAX=0 once AI is meant to be on (default 1: no alert while it is off on purpose).'
           runbook: docs/quizbuks/operations.md section 7.8
+      - uid: qb-help-usage-high
+        title: AI help near its monthly tokens
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: 'max(qb_help_usage_percent{job="$JABIZ_ALERT_SERVICE"}) >= $JABIZ_ALERT_QB_HELP_USAGE_PERCENT'
+              instant: true
+              range: false
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels: { severity: warning, area: ai }
+        annotations:
+          summary: 'The AI help used at least $JABIZ_ALERT_QB_HELP_USAGE_PERCENT% of qb.help.global-monthly-tokens this month (the gauge qb.help.usage.percent; at 100% questions are refused until the month ends or the limit is raised with four eyes).'
+          runbook: docs/quizbuks/operations.md section 7.34

@@ -37,6 +37,8 @@ export const DATASET = {
    */
   asset: 'urn:jabiz:dataset:default:QbAsset',
   assetUse: 'urn:jabiz:dataset:default:QbAssetUse',
+  /** F-C4: a Sponsor's imports of sponsor packages, read only (the same readers as the asset library). */
+  packageImport: 'urn:jabiz:dataset:default:QbPackageImport',
 } as const
 
 /** SQL templates (`queries/qb/admin`). */
@@ -135,7 +137,19 @@ export const TEMPLATE = {
   /** Q87: the platform's fees charged to sponsors, their invoices, and the requests another administrator approves. */
   feeCharges: 'qb.admin.fee-charges',
   feeInvoices: 'qb.admin.fee-invoices',
+  /** F-M1: one Sponsor's account that pays the platform's fees (finance; an operator's own Sponsors'), and in all. */
+  feeAccount: 'qb.admin.fee-account',
+  feeAccountLots: 'qb.admin.fee-account-lots',
+  feePayments: 'qb.admin.fee-payments',
+  feeAccountTotals: 'qb.admin.fee-account-totals',
+  operatorFeeAccount: 'qb.operator.fee-account',
+  operatorFeeAccountLots: 'qb.operator.fee-account-lots',
+  operatorFeePayments: 'qb.operator.fee-payments',
   feeRequests: 'qb.admin.fee-requests',
+  /** F-M2: the platform fee Kudos granted (headquarters, read only), each and summed; an operator's Sponsor's onboarding. */
+  feeCreditGrants: 'qb.admin.fee-credit-grants',
+  feeCreditSummary: 'qb.admin.fee-credit-summary',
+  operatorFeeCreditOnboarding: 'qb.operator.fee-credit-onboarding',
   /** The investors' figures (Q27): a row per UTC month of a period, and the sponsors behind them (finance). */
   investorMetrics: 'qb.admin.investor-metrics',
   investorSponsors: 'qb.admin.investor-sponsors',
@@ -304,6 +318,8 @@ export const PROCESS = {
 export const FEE_PROCESS = {
   request: 'QB_FEE_REQUEST',
   billingSet: 'QB_OPERATOR_BILLING_SET',
+  /** F-M2: a lead of the Sponsor's operator confirms the Sponsor, which grants the onboarding platform fee Kudos. */
+  onboarding: 'QB_FEE_CREDIT_ONBOARDING',
 } as const
 
 /** The platform's controlled changes (four eyes, decision D40): the mapping changes only through them. */
@@ -327,7 +343,9 @@ export const ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110',
   // Q87: the sponsors' cash accounts, the fees receivable, the fee revenue and the tax on it.
   '2160', '1130', '4120', '2150',
   // Q88b: the entry fees unsettled (until the daily job moves them to the sponsors' cash accounts).
-  '2170'] as const
+  '2170',
+  // F-M1: the sponsors' granted credit (platform fee Kudos); F-M2: its promotion expenses.
+  '2190', '5140'] as const
 
 /** A transfer still sending this long after it was created is in doubt (the backend's `STALE_AFTER`). */
 export const STALE_AFTER_MS = 60 * 60 * 1000
@@ -356,6 +374,9 @@ export const DICTIONARY = {
   assetKind: 'urn:jabiz:dict:quizbuks:asset-kind',
   assetTextUsage: 'urn:jabiz:dict:quizbuks:asset-text-usage',
   assetUseTarget: 'urn:jabiz:dict:quizbuks:asset-use-target',
+  /** F-C4: how a sponsor package was imported, and the import's state. */
+  packageImportMode: 'urn:jabiz:dict:quizbuks:package-import-mode',
+  packageImportStatus: 'urn:jabiz:dict:quizbuks:package-import-status',
   sponsorPageStatus: 'urn:jabiz:dict:quizbuks:sponsor-page-status',
   sponsorProductStatus: 'urn:jabiz:dict:quizbuks:sponsor-product-status',
   reportReason: 'urn:jabiz:dict:quizbuks:report-reason',
@@ -405,6 +426,10 @@ export const DICTIONARY = {
   billingMode: 'urn:jabiz:dict:quizbuks:billing-mode',
   feeKind: 'urn:jabiz:dict:quizbuks:fee-kind',
   feeInvoiceStatus: 'urn:jabiz:dict:quizbuks:fee-invoice-status',
+  /** F-M1: the account's sub-accounts and where its lots came from. */
+  feeSubAccount: 'urn:jabiz:dict:quizbuks:fee-sub-account',
+  feeCreditSource: 'urn:jabiz:dict:quizbuks:fee-credit-source',
+  cashSource: 'urn:jabiz:dict:quizbuks:cash-source',
   feeRequestKind: 'urn:jabiz:dict:quizbuks:fee-request-kind',
   feeRequestStatus: 'urn:jabiz:dict:quizbuks:fee-request-status',
 } as const
@@ -492,6 +517,12 @@ export const PERMISSION = {
   /** Q87: fees charged by hand and invoices voided (finance; another administrator approves), and a sponsor's billing. */
   feeManage: 'qb.fee.manage',
   feeBilling: 'qb.fee.billing',
+  /** F-C10: the AI help's conversations handed to a person (content administrators, the operators' members). */
+  adminHelp: 'qb.admin.help',
+  /** F-C10c: what the AI help did not solve (headquarters' content administrators only). */
+  adminHelpGaps: 'qb.admin.help.gaps',
+  /** F-M2: an operator's lead confirms a Sponsor and gives the onboarding platform fee Kudos. */
+  feeCreditOnboarding: 'qb.fee-credit.onboarding.confirm',
 } as const
 
 /** The bank top-up states finance may record money against, and the one an approval waits in (Q13a). */
@@ -697,6 +728,13 @@ export const PATH = {
   operatorAudiencePrices: '/qb/operator/audience-prices',
   /** The platform's own pages. */
   tasks: '/tasks',
+  /** F-C10c: the AI help's conversations handed to a person (headquarters every one, an operator its own). */
+  help: '/qb/help',
+  helpThread: (threadId: string) => `/qb/help/${encodeURIComponent(threadId)}`,
+  /** F-C10c: what the AI help did not solve, by month (`?month=`). */
+  helpGaps: '/qb/help-gaps',
+  /** F-C10c: the AI help's usage manuals: publishing and loading the repository's text. */
+  helpManuals: '/qb/help-manuals',
 } as const
 
 /** The publisher kind of the sponsors' console (S0, `PublisherKind.SPONSOR`); other kinds come with their modules. */
@@ -726,3 +764,21 @@ export const AUDIENCE_PRICING = {
  * (`usage.UsageMeters`, the dictionary `usage-meter`); those of bytes are named `….bytes` / `…-bytes` there.
  */
 export const isByteMeter = (meter: string) => /[.-]bytes$/.test(meter)
+
+/**
+ * F-C10c: the AI help (`help.HelpProcesses`, `help.HelpMaterialsProcesses`; docs/quizbuks/plans/impl/F-C10.md): the
+ * people's replies, the gaps report, the usage, and the usage manuals.
+ */
+export const HELP = {
+  reply: 'QB_HELP_REPLY',
+  publish: 'QB_HELP_PUBLISH',
+  load: 'QB_HELP_MANUAL_LOAD',
+  threads: 'qb.admin.help-threads',
+  messages: 'qb.admin.help-messages',
+  gaps: 'qb.admin.help-gaps',
+  usage: 'qb.admin.help-usage',
+  manual: 'urn:jabiz:dataset:default:QbHelpManual',
+  material: 'urn:jabiz:dataset:default:QbHelpMaterial',
+  /** 422: the draft was edited since the repository's text was last loaded (keep it, or replace it). */
+  manualEdited: 'QB_HELP_MANUAL_EDITED',
+} as const
