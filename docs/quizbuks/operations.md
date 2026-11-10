@@ -257,7 +257,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 **阶段一（推广期）的设置（Q28，`plans/Q28-phase1-defaults.md`）**：推广期只有线下奖品、发起方免费、不经手资金（招商网站 §7.11 的承诺）。由超级管理员提出、财务管理员发布（都是受控参数，四眼），按顺序：
 
-- [ ] `qb.reward.default-methods` = `OFFLINE_REDEEM`：没有单独设定的发起方只能以线下奖品作奖励；发起方页面随之不显示钱包与充值。要让某个发起方付 Kudos 或现金，在平台管理系统"发起方审核"页单独允许（`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员）。
+- [ ] `qb.reward.default-methods` = `OFFLINE_REDEEM`：没有单独设定的发起方只能以线下奖品作奖励；发起方页面随之不显示学分钱包（资金 → 学分钱包）；平台费账户与账单照常显示（F-F3）。要让某个发起方付 Kudos 或现金，在平台管理系统"发起方审核"页单独允许（`QB_SPONSOR_REWARD_METHODS_SET`，单个管理员）。
 - [ ] `qb.reward.max-per-attempt` = 法务给出的上限（Kudos 等值）。按答对与否给奖是景品表示法的"懸賞"而不是"総付"：与购买或到店挂钩的一般懸賞，单个景品至多交易额的 20 倍（交易额不足 5,000 日元）或 10 万日元（5,000 日元以上），总额不超过预计销售额的 2%；不要求购买的开放式懸賞没有上限（填 `0`）。线下兑换是否算与购买挂钩由法务认定。高于它的奖励档在保存时报 `QB_REWARD_ABOVE_MAX`、提交被拒。
 - [ ] `qb.review.sponsor.auto` = `true`、`qb.review.publication.auto` = **`false`**：发起方的入驻在推广期不逐个人工审核（线下奖品不经手资金；封禁照常可用），**发布一律在发布前审核**（需求方 2026-10-28，商店 App 的上架要求，`plans/Q49d-store.md` D-Q49d-7）。
   审核员拒绝以酒类、烟草或毒品为题材或奖品的问卷（商店的内容分级按"没有受管制物质"申报，`docs/quizbuks/store/play-content-rating.md`）。
@@ -430,7 +430,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 - **任务** `qb.analytics`（每 10 分钟，:00、:10 …；逐项任务，每项一个事务的 `QB_ANALYTICS_ITEM`）：读进行中、暂停、预算不足、1 天内结束与结束后尚未定稿的发布，按发布编号分块（每块一项），把计数的增量写进按小时的桶，从水位线读已完成的会话（滞后 5 分钟）；结束 30 分钟后每个发布一项整体重算并定稿；最后一项写运行记录并删除 400 天前的小时桶（每次至多 2 000 行）。不取业务锁，不影响答题。
   **一项失败不影响其他项**：其他项照常提交，运行记为 `PARTIAL`，失败的项由平台退避后在以后的运行中重试（平台的任务项记录中有错误），其间该块的发布的数字停在上次。
-  发起方页面上的"每 10 分钟更新，最近更新 hh:mm"就是这个任务最近一次运行的时刻（`qb_stats_run` 中 `job = 'qb.analytics'` 的行，`zone` 是它按哪个时区分日：`jabiz.fiscal-year-zone`，日本部署 `Asia/Tokyo`）。
+  发起方页面首页上的"每 10 分钟更新，最近更新 hh:mm"就是这个任务最近一次运行的时刻（`qb_stats_run` 中 `job = 'qb.analytics'` 的行，`zone` 是它按哪个时区分日：`jabiz.fiscal-year-zone`，日本部署 `Asia/Tokyo`）。
 - **每题的"被抽到"**（F-S7，`QbQuestionStat.drawn`）：已结束（完成或超时）的答题中被给出这一题的次数，**完成后才计入**：进行中的答题不算，结束后由下一次运行计入（总部 2026-11-09 确认）。与其他每题数字一起按最小分组发表；今天它与完成数相同。发起方的题目统计在这一栏旁注明"完成后才计入"。
 - **参数** `qb.stats.min-group`（普通参数，缺省 5，任何值都至少按 3）：分组小于它时每题正确率、平均用时与超时人数不显示，且这些数字只在新增至少这么多个完成后才变化。调大立即生效（模板按现值隐藏）；调小只在下次新增够数时显示新值。
 - **配置**（`application.yml` 的 `quizbuks.analytics.*`，通常不改）：`chunk-size`（每块的发布数，缺省 100，至多 200）、`max-attempts-per-chunk`（每块每次至多读的已完成会话，缺省 50 000，至多 200 000；热门发布每 10 分钟约 3 万个，`perf/Q9e-analytics.md`）、`max-recount`（结束后整体重算的发布至多有多少个完成，缺省 1 000 000，使重算在读取时限 2 分钟之内；更大的发布在逐块读完之后不重算即定稿）。
@@ -499,7 +499,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 
 ### 7.12 发起方的邮件服务器（Q29）
 
-邀请邮件只经发起方在发起方页面「邮件服务器」页验证过的 SMTP 服务器、以发起方的名义发出（平台决策 D56）；平台自己的邮件（验证、重置、欢迎、给发起方的通知）仍经 `SPRING_MAIL_*`。
+邀请邮件只经发起方在发起方页面「发起方中心 → 邮件服务器」验证过的 SMTP 服务器、以发起方的名义发出（平台决策 D56）；平台自己的邮件（验证、重置、欢迎、给发起方的通知）仍经 `SPRING_MAIL_*`。
 保存即经该服务器给发起方自己的地址发测试邮件：寄出即"已验证"，否则页面显示服务器或连接的回答（`qb_sponsor_mail_server.last_error`），邀请在验证之前被拒（422 `QB_INVITATION_NO_MAIL_SERVER`）。
 平台拒绝的设置（主机不是公开域名、端口不在 25 / 465 / 587 / 2525、没有 TLS）在保存时按字段报错，不会保存。
 
@@ -599,7 +599,7 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
   账单 PDF 的开具方沿用收据的 `qb.issuer.*`（没设名称时发起方下载账单被拒 `QB_FEE_PARAMS`）。
 - **预付 / 后付**：缺省全平台预付；运营商（或总部财务）在「运营商 → 发起方」给单个发起方设后付与信用额（理由必填，`QB_OPERATOR_BILLING_SET`，审计中可查）。预付的发起方记费时立即从现金扣、不够即一张 `OPEN` 账单；后付的发起方每月 2 日 01:17（日本时间）出上月的账单。
   **有未付账单的发起方不能换学分、不能提交新发布**（预付：任何未付；后付：未付合计超过信用额；开关 `qb.fee.overdue.block-submit`），其他一切照常；不自动停用。
-  后付的发起方可以在月底之前**提前付清**尚未开账单的费用（钱包页的"现在用现金账户付清"，`QB_FEE_PAY_EARLY`）：每笔费用各开一张已付的账单，月初的账单只合成剩下的。运营商在「运营商 → 发起方的计费方式」看到每个发起方的计费方式、未付、逾期与尚未开账单的金额，并在那里改。
+  后付的发起方可以在月底之前**提前付清**尚未开账单的费用（发起方页面「资金 → 账单」的"现在用现金账户付清"，`QB_FEE_PAY_EARLY`）：每笔费用各开一张已付的账单，月初的账单只合成剩下的。运营商在「运营商 → 发起方的计费方式」看到每个发起方的计费方式、未付、逾期与尚未开账单的金额，并在那里改。
 - **任务**：`qb.fee-monthly`（每月 2 日 01:07 日本时间，记当月月费）、`qb.fee-invoice`（每月 2 日 01:17，后付的账单）、`qb.fee-overdue`（每日 02:37，过期的账单 → `OVERDUE`，提醒邮件 7 天一封至多三封，待办给 `qb.fee.manage` 与发起方的运营商）。都是逐项任务、每项一个事务，可补跑（已记过的月份不再记）。
 - **手工记费与作废**：平台管理系统「QuizBuks 财务 → 平台费」：财务（`qb.fee.manage`）登记手工记费（发起方、金额、理由）或作废账单（理由），另一位持有 `qb.topup.bank.approve` 的管理员在待办中批准；作废 = 冲正该账单的分录，已付的退回发起方的现金账户。更正一律这样做，不改记录。
 - **核对**（每日 `qb.reconcile`）多一项 `FEES_RECEIVABLE`（1130 ≠ 未付账单 + 尚未开账单的后付记费）；处理同 §7.2。
@@ -1070,6 +1070,28 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
   1. 某发起方的赠送：`SELECT grant_id, source, source_key, operator_id, amount, remaining, voided_amount, granted_at, expires_at, reminded_at FROM qb_fee_credit_grant WHERE sponsor_id = '<发起方>' ORDER BY granted_at`。
   2. 一笔的分录：`SELECT t.description, a.account_code, e.direction, e.amount FROM ledger_transaction_version t JOIN ledger_entry_version e USING (transaction_id) JOIN ledger_account_version a ON a.account_id = e.account_id WHERE t.source_entity = 'QbFeeCreditGrant' AND t.source_id = '<grant_id>'`。
   3. "说没收到提醒"：看 `reminded_at`（已提醒过的笔不再提醒）、该发起方最近一封 `qb.fee-credit.expiring`（`sys_mail_message`），以及其邮件偏好是否退订了这一类。
+
+### 7.40 发起方页面的区域与旧地址（F-F3）
+
+发起方页面的菜单是"首页 + 8 个区域"（`quizbuks-web/sponsor/src/shell/areas.ts`，计划 `plans/impl/F-F3.md`）。客服与运营描述位置时用下表（三语叫法见 `glossary.md`，帮助底稿 `help/sponsor-areas.md`）：
+
+| 区域 | 地址（`/sponsor` 之后） | 标签 |
+|---|---|---|
+| 首页 | `/home` | 仪表盘（分析、屏蔽你的学者、AI 用量） |
+| Quiz | `/quizzes` | 列表；编辑 `/quizzes/<id>` |
+| 发布 | `/publications` | 全部发布 / 知识结构图 `/publications/map`；单个发布 `/publications/<id>` |
+| 奖品与兑换 | `/prizes/redeem` | 到店兑换 / 现金奖励 `/prizes/cash` / 电子奖品 `/prizes/digital` |
+| 客户与消息 | `/messages/conversations` | 对话 / 通知与公告 `/messages/notices` |
+| 合作权益 | `/benefits` | 目录 / 我的权益 / 洽谈 / 采购单（菜单只对有权益角色的发起方显示；没有角色的从"发起方中心 → 概况"的"合作权益"卡片进入，看怎样开通） |
+| 资金 | `/money/transactions` | 交易 / 学分钱包 `/money/wallet`（只在可付 Kudos 时）/ 平台费账户 `/money/account` / AI 额度 `/money/ai` / 账单 `/money/bills` |
+| 资源库 | `/assets` | 全部 / 素材 / 文字 / 奖品 / 商品（`/assets/<标签>`） |
+| 发起方中心 | `/profile` | 概况 / 基本信息 / 公开主页（含统计 `/profile/page/stats`）/ 店员 / 邮件服务器 |
+
+账户与安全（`/account`）、外观、语言、帮助（`/help`）与退出在右上角的头像菜单中。
+
+- **旧地址**：全部在 `shell/legacy-paths.json` 中转到新地址（书签、已发出的邮件、进行中的 Stripe Checkout 的返回地址 `/wallet/topups/<id>?checkout=…`，查询照带）。发起方说"旧链接打不开"时，先核对该地址是否在清单中；不在即缺一条，按 `backend/quizbuks/CLAUDE.md` 第 5 节加。
+- **邮件中的链接**用新地址（充值与收据 → `money/wallet`，平台费账单 → `money/bills`）；在平台管理系统"邮件模版"中覆盖过这些邮件文字的（F-C8），旧链接靠转向照样能用，有空时按新的缺省改一次。
+- **手机底部菜单**：普通参数 `qb.sponsor.bottom-bar`（`PARAM_SET`，不受控），缺省 `home,publications,prizes,messages`；值是区域键，以逗号分隔（home、quizzes、publications、prizes、messages、benefits、money、assets、hub），不认识的键与重复的被忽略，至多四个（后面是"更多"），空即缺省。**改了它要同时改帮助**（`help/sponsor-areas.md` 中"手机上"一句，请内容管理员照改 FAQ）。
 
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 

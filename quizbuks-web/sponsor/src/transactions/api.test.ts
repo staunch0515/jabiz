@@ -32,7 +32,7 @@ describe('the transactions parameters', () => {
     expect(filtersOf('?publication=p%201')).toEqual(NO_FILTERS)
     expect(filtersOf('?publication=0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b%27%20OR%201%3D1')).toEqual(NO_FILTERS)
     expect(filtersOf('?publication=&user=u1&type=TOPUP')).toEqual(NO_FILTERS)
-    expect(transactionsOf('p 1')).toBe('/transactions?publication=p%201')
+    expect(transactionsOf('p 1')).toBe('/money/transactions?publication=p%201')
   })
 })
 

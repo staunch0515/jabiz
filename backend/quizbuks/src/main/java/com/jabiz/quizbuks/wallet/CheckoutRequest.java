@@ -31,10 +31,10 @@ public final class CheckoutRequest {
             returnUrl(settings.sponsorLink(), topUpId, "paid"), returnUrl(settings.sponsorLink(), topUpId, "cancelled"));
     }
 
-    /** {@code <sponsor console>/wallet/topups/<topUpId>?checkout=<outcome>}. */
+    /** {@code <Sponsor app>/money/wallet/topups/<topUpId>?checkout=<outcome>} (F-F3: the money area's Kudos wallet). */
     public static String returnUrl(String sponsorLink, String topUpId, String outcome) {
         String base = sponsorLink.endsWith("/") ? sponsorLink : sponsorLink + "/";
-        return base + "wallet/topups/" + topUpId + "?checkout=" + outcome;
+        return base + "money/wallet/topups/" + topUpId + "?checkout=" + outcome;
     }
 
     /**

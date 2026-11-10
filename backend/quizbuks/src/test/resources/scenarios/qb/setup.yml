@@ -35,7 +35,7 @@ steps:
         qb.help.retention-days, qb.help.manual-max-bytes, qb.help.poll-seconds, qb.help.poll-max-minutes,
         qb.help.escalation-remind-days, qb.help.auto-close-days, qb.help.question-max-length,
         qb.help.answer-max-length, qb.help.max-links,
-        qb.fee-credit.expiry-notice-days]
+        qb.fee-credit.expiry-notice-days, qb.sponsor.bottom-bar]
       paramsProposed: [qb.creator-fee-rate, qb.transfer.threshold, qb.transfer.review-above, qb.transfer.enabled,
         qb.review.sponsor.auto, qb.review.publication.auto, qb.topup.min, qb.topup.max, qb.transfer.fee,
         qb.transfer.hold-days, qb.topup.new-sponsor.days, qb.topup.new-sponsor.max-total,

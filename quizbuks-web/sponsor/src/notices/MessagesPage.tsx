@@ -6,7 +6,6 @@ import {
   Button,
   ConfirmDialog,
   MarkdownView,
-  PageHeader,
   PageState,
   Tabs,
   TabsContent,
@@ -27,10 +26,10 @@ import { REDEEM_PATH } from '../publishing/RedeemPage'
 import { ASSETS_PATH } from '../assets/api'
 import { useRegionLabel } from '../publishing/shared'
 import { Link } from '../qb/router'
-import { CONVERSATIONS_TAB } from '../conversations/api'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
+import { ConversationsTab } from '../conversations/ConversationsPages'
 import { openHelp } from '../help/HelpPanel'
 import '../help/messages'
-import { ConversationsTab, useUnreadConversations } from '../conversations/ConversationsPages'
 import {
   ANNOUNCEMENTS_QUERY,
   cancelNotice,
@@ -134,7 +133,7 @@ function Actions({ row, onEdit }: { row: NoticeRow; onEdit: () => void }) {
   )
 }
 
-function Notices() {
+function Notices({ adding = false }: { adding?: boolean }) {
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const status = useStatusLabel()
@@ -142,7 +141,8 @@ function Notices() {
   const notices = useQuery({ queryKey: [...NOTICES_QUERY, 'list'], queryFn: readNotices })
   // The latest of the day's counts (all notices are counted by one run).
   const counted = (notices.data ?? []).map((row) => row.snapshotAt).filter((at): at is string => !!at).sort().at(-1)
-  const [editing, setEditing] = useState<NoticeRow | 'new' | null>(null)
+  // The global "+ New" opens the editor (`?new=1`, F-F3).
+  const [editing, setEditing] = useState<NoticeRow | 'new' | null>(adding ? 'new' : null)
   // Q80: the notices as a `DataTable` (cards on a phone): the title with its target and fate, the status a badge, the
   // time under the title, the figures listed, the actions at the foot.
   const noticeColumns = useMemo<ColumnDef<NoticeRow, unknown>[]>(() => [
@@ -290,29 +290,30 @@ function Announcements() {
 }
 
 /**
- * The message centre (M-60, M-61; Q7c): the sponsor's notices to the takers of their publications, with their state
- * and statistics, written in an editor that shows how they look in the app; and QuizBuks's announcements to sponsors.
+ * The area "Customers & messages" (F-F3): the takers' conversations (Q82) on one tab; on the other, the sponsor's
+ * notices to the takers of their publications (M-60, M-61; Q7c), with their state and statistics, written in an
+ * editor that shows how they look in the app, and QuizBuks's announcements to sponsors.
  */
-export function MessagesPage({ tab }: { tab?: string | null } = {}) {
+export function MessagesPage({ tab, adding = false }: { tab: 'conversations' | 'notices'; adding?: boolean }) {
   const { t } = useTranslation(SPONSOR)
-  const unread = useUnreadConversations()
+  if (tab === 'conversations') {
+    return (
+      <section className="flex flex-col gap-4" data-testid="messages-page" data-tab={tab}>
+        <AreaPageHeader title={t('shell.conversations.title')} />
+        <ConversationsTab />
+      </section>
+    )
+  }
   return (
-    <section className="flex flex-col gap-4" data-testid="messages-page">
-      <PageHeader title={t('notices.title')} description={t('notices.intro')} />
-      {/* Q82: the takers' conversations are the third tab (?tab=conversations opens it). */}
-      <Tabs defaultValue={tab === CONVERSATIONS_TAB ? CONVERSATIONS_TAB : 'mine'}>
+    <section className="flex flex-col gap-4" data-testid="messages-page" data-tab={tab}>
+      <AreaPageHeader title={t('shell.notices.title')} description={t('notices.intro')} />
+      <Tabs defaultValue="mine">
         <TabsList aria-label={t('notices.tabs.label')}>
           <TabsTrigger value="mine" data-testid="messages-tab-mine">{t('notices.tabs.mine')}</TabsTrigger>
           <TabsTrigger value="inbox" data-testid="messages-tab-inbox">{t('notices.tabs.inbox')}</TabsTrigger>
-          <TabsTrigger value={CONVERSATIONS_TAB} data-testid="messages-tab-conversations">
-            {t('conversations.tab')}
-            {unread > 0 && <Badge className="ml-1" data-testid="messages-tab-conversations-unread">
-              {unread > 99 ? '99+' : unread}</Badge>}
-          </TabsTrigger>
         </TabsList>
-        <TabsContent value="mine" className="pt-2"><Notices /></TabsContent>
+        <TabsContent value="mine" className="pt-2"><Notices adding={adding} /></TabsContent>
         <TabsContent value="inbox" className="pt-2"><Announcements /></TabsContent>
-        <TabsContent value={CONVERSATIONS_TAB} className="pt-2"><ConversationsTab /></TabsContent>
       </Tabs>
     </section>
   )

@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 import { PDF, png, PNG, POLICY, query, sponsor, upload } from './content'
-import { expect, prepareQuizbuks, run, signIn, test, unique } from './support'
+import { expect, openArea, prepareQuizbuks, run, signIn, test, unique } from './support'
 
 /**
  * The sponsor console's content workshop (docs/quizbuks/plans/QP-pages.md, QP3a; M-20 – M-24, M-27, M-28) against the
@@ -35,7 +35,7 @@ test('a Sponsor makes a quiz with questions, images and materials, and saves ver
   await signIn(page, '/sponsor/', email)
   // Not approved yet: the onboarding, but the quizzes are open (editing needs no approval).
   await expect(page).toHaveURL(/\/sponsor\/profile\/basics$/)
-  await page.getByRole('link', { name: 'Quizzes' }).click()
+  await openArea(page, 'quizzes')
   await expect(page.getByTestId('quiz-list')).toBeVisible()
 
   await page.getByTestId('new-quiz').click()

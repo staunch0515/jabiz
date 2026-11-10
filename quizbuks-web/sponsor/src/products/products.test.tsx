@@ -115,7 +115,7 @@ describe("the Sponsor's products (Q60b)", () => {
 
   it('lists them with their state and the reason of a takedown', async () => {
     server()
-    window.history.replaceState(null, '', '/assets?tab=products')
+    window.history.replaceState(null, '', '/assets/products')
     render(<App />)
     const rows = await screen.findAllByTestId('product')
     expect(rows.map((row) => row.dataset.status)).toEqual(['LISTED', 'TAKEN_DOWN'])
@@ -125,7 +125,7 @@ describe("the Sponsor's products (Q60b)", () => {
 
   it('adds one, last, with its price as typed', async () => {
     const { calls } = server()
-    window.history.replaceState(null, '', '/assets?tab=products')
+    window.history.replaceState(null, '', '/assets/products')
     render(<App />)
     await userEvent.click(await screen.findByTestId('product-add'))
     const dialog = await screen.findByTestId('product-dialog')
@@ -146,18 +146,18 @@ describe("the Sponsor's products (Q60b)", () => {
     server()
     window.history.replaceState(null, '', from)
     render(<App />)
-    await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/assets?tab=products'))
+    await waitFor(() => expect(window.location.pathname + window.location.search).toBe('/assets/products'))
     expect(await screen.findByTestId('products')).toBeInTheDocument()
-    expect(screen.getByTestId('assets-tab-products')).toHaveAttribute('data-state', 'active')
+    expect(screen.getByTestId('page-tab-products')).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Asset library' })).toHaveAttribute('aria-current', 'page')
     // The hub no longer has a section of its own for them.
-    expect(screen.queryByTestId('profile-nav-products')).toBeNull()
+    expect(screen.queryByTestId('page-tab-products-section')).toBeNull()
   })
 
   it("shows the server's refusal of a price at the field", async () => {
     server({ answers: { QB_PRODUCT_SAVE: () => json(422, { title: 'Unprocessable', status: 422, violations: [
       { field: 'price', ruleCode: 'QB_PRODUCT_PRICE', message: 'No decimals in yen.' }] }) } })
-    window.history.replaceState(null, '', '/assets?tab=products')
+    window.history.replaceState(null, '', '/assets/products')
     render(<App />)
     await userEvent.click((await screen.findAllByTestId('product-edit'))[0])
     const dialog = await screen.findByTestId('product-dialog')
@@ -169,7 +169,7 @@ describe("the Sponsor's products (Q60b)", () => {
   // F-C11: the limit is the parameter qb.products.max, as the server reads it.
   it('take the limit from the server', async () => {
     const { calls } = server({ limit: 2 })
-    window.history.replaceState(null, '', '/assets?tab=products')
+    window.history.replaceState(null, '', '/assets/products')
     render(<App />)
     expect(await screen.findByTestId('products-full')).toHaveTextContent('You have 2 products')
     expect(screen.getByTestId('product-add')).toBeDisabled()
@@ -180,7 +180,7 @@ describe("the Sponsor's products (Q60b)", () => {
 
   it('with a higher limit, add more; unknown, leave it to the save', async () => {
     server({ limit: 3 })
-    window.history.replaceState(null, '', '/assets?tab=products')
+    window.history.replaceState(null, '', '/assets/products')
     const { unmount } = render(<App />)
     await waitFor(() => expect(screen.getByTestId('products-intro')).toHaveTextContent('Up to 3 products.'))
     expect(await screen.findByTestId('product-add')).toBeEnabled()
@@ -206,7 +206,7 @@ describe("the Sponsor's products (Q60b)", () => {
 
   it('moves one by swapping places with its neighbour, and deletes one on confirmation', async () => {
     const { calls } = server()
-    window.history.replaceState(null, '', '/assets?tab=products')
+    window.history.replaceState(null, '', '/assets/products')
     render(<App />)
     await userEvent.click(await screen.findByRole('button', { name: 'Move Rye loaf down' }))
     await waitFor(() => expect(calls('QB_PRODUCT_SAVE')).toHaveLength(2))

@@ -7,7 +7,6 @@ import {
   DataTable,
   DescriptionList,
   FilterBar,
-  PageHeader,
   PageState,
   type ColumnDef,
   type FilterField,
@@ -43,6 +42,7 @@ import {
   type TransactionType,
 } from './api'
 import './messages'
+import { AreaPageHeader } from '../shell/AreaPageHeader'
 
 const PAGE_SIZE = 20
 
@@ -237,7 +237,7 @@ export function TransactionsPage() {
   const totals = summary.data
   return (
     <section className="flex flex-col gap-6" data-testid="transactions">
-      <PageHeader title={t('transactions.title')} description={t('transactions.intro')}
+      <AreaPageHeader title={t('transactions.title')} description={t('transactions.intro')}
         actions={
           <div className="flex flex-wrap gap-2" role="group" aria-label={t('transactions.export.hint')}>
             {(['csv', 'xlsx'] as const).map((format) => (

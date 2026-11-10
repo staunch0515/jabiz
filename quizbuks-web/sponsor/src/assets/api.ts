@@ -4,13 +4,14 @@ import { parseStoredTranslations, type TextsByLanguage } from '../content/TextTr
 import { readDictionary, type ContentLanguage } from '../qb/api'
 import type { DigitalDelivery } from '../publishing/api'
 import { ASSET_DATASET, ASSET_DICTIONARY, ASSET_LIMITS, ASSET_PROCESS, ASSET_TEMPLATE } from './ids'
+import { ASSETS_PATH } from '../shell/paths'
 
 /*
  * The sponsor's asset library (F-C1), typed by hand after `asset.AssetProcesses`'s records, the `me:QbAsset` dataset
  * and the two templates. The end-to-end test `assets.spec.ts` runs these against the server.
  */
 
-export const ASSETS_PATH = '/assets'
+export { ASSETS_PATH }
 export const ASSETS_QUERY = ['qb', 'my-assets'] as const
 export const assetUsesQuery = (assetId: string) => ['qb', 'asset-uses', assetId] as const
 

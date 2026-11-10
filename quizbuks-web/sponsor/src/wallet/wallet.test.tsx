@@ -137,7 +137,7 @@ afterEach(() => {
 describe('the wallet', () => {
   it('shows what is available, the waiting rewards and the top-ups, all in Kudos', async () => {
     server()
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     render(<App />)
     // Available is the balance less what disputes hold.
     expect(await screen.findByTestId('wallet-available')).toHaveTextContent('4,000 Kudos')
@@ -147,7 +147,7 @@ describe('the wallet', () => {
     expect(rows).toHaveLength(2)
     expect(within(rows[0]).getByTestId('topup-row-status')).toHaveTextContent('Awaiting payment')
     expect(within(rows[0]).getByRole('link', { name: /Continue to payment/ })).toHaveAttribute('href',
-      '/wallet/topups/t1')
+      '/money/wallet/topups/t1')
     expect(within(rows[1]).getByRole('link', { name: /Details/ })).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent('JPY')
     // Q80: as cards: the amount as the title, the status a badge, the buttons at the foot.
@@ -159,13 +159,15 @@ describe('the wallet', () => {
     expect(within(cards[0]).getByTestId('topup-row-status')).toHaveTextContent('Awaiting payment')
     expect(within(cards[0]).getByRole('link', { name: /Continue to payment/ })).toBeInTheDocument()
     window.localStorage.clear()
-    expect(screen.getByRole('link', { name: 'Wallet' })).toHaveAttribute('aria-current', 'page')
+    // F-F3: the Kudos wallet is a tab of the money area.
+    expect(screen.getByRole('link', { name: 'Money' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByTestId('page-tab-wallet')).toHaveAttribute('aria-current', 'page')
   })
 
   it('says the range of a top-up and what a new Sponsor may still top up (Q10b)', async () => {
     server({ limit: { min: '1000', max: '1000000', limited: true, maxTotal: '100000', remaining: '40000',
       until: '2026-11-12T01:01:00Z' } })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('topup-open'))
@@ -177,7 +179,7 @@ describe('the wallet', () => {
 
   it('says nothing of a new Sponsor\'s limit once it no longer applies', async () => {
     server({ limit: { min: '1000', max: '1000000', limited: false, maxTotal: null, remaining: null, until: null } })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('topup-open'))
@@ -187,7 +189,7 @@ describe('the wallet', () => {
 
   it('starts a top-up, waits for its checkout and goes there once', async () => {
     const { processCalls, reads } = server({ topUps: [topUp('OPENING', { checkoutUrl: null }), topUp('OPEN')] })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('topup-open'))
@@ -202,7 +204,7 @@ describe('the wallet', () => {
     // not earlier, where the dialog's opening runs on timers of its own).
     vi.useFakeTimers({ shouldAdvanceTime: true })
     await user.click(screen.getByTestId('topup-submit'))
-    await waitFor(() => expect(window.location.pathname).toBe('/wallet/topups/t1'))
+    await waitFor(() => expect(window.location.pathname).toBe('/money/wallet/topups/t1'))
     expect(processCalls()).toHaveLength(1)
     expect(processCalls()[0].body).toEqual({ amount: 1500 })
     expect(processCalls()[0].key).toBeTruthy()
@@ -231,7 +233,7 @@ describe('the wallet', () => {
   it('forgets the mark of a just-started top-up at once, even when it never opened', async () => {
     window.sessionStorage.setItem('qb.topup.just-started', 't1')
     server({ topUps: [null] })
-    window.history.replaceState(null, '', '/wallet/topups/t1')
+    window.history.replaceState(null, '', '/money/wallet/topups/t1')
     render(<App />)
     expect(await screen.findByTestId('topup-missing')).toBeInTheDocument()
     expect(window.sessionStorage.getItem('qb.topup.just-started')).toBeNull()
@@ -240,7 +242,7 @@ describe('the wallet', () => {
   it('a top-up left while its checkout was opening does not leave by itself when opened again', async () => {
     window.sessionStorage.setItem('qb.topup.just-started', 't1')
     server({ topUps: [topUp('OPENING', { checkoutUrl: null }), topUp('OPEN')] })
-    window.history.replaceState(null, '', '/wallet/topups/t1')
+    window.history.replaceState(null, '', '/money/wallet/topups/t1')
     const first = render(<App />)
     expect(await screen.findByTestId('topup-state')).toHaveAttribute('data-state', 'opening')
     first.unmount()
@@ -256,14 +258,14 @@ describe('the wallet', () => {
     const { processCalls } = server({ start: { status: 422, body: { status: 422, code: 'QB_TOPUP_AMOUNT_RANGE', detail: 'Refused',
       violations: [{ field: 'amount', ruleCode: 'QB_TOPUP_AMOUNT_RANGE',
         message: 'A top-up is a whole number of Kudos from 1000 to 1000000.' }] } } })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('topup-open'))
     await user.type(screen.getByTestId('topup-amount'), '10')
     await user.click(screen.getByTestId('topup-submit'))
     expect(await screen.findByText('A top-up is a whole number of Kudos from 1000 to 1000000.')).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/wallet')
+    expect(window.location.pathname).toBe('/money/wallet')
     // Cancel starts the next opening afresh: no amount, no refusal, a new idempotency key.
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByTestId('topup-dialog')).not.toBeInTheDocument())
@@ -280,7 +282,7 @@ describe('the wallet', () => {
 describe('the cash account (Q87a)', () => {
   it('stays out of the way while top-ups go to the Kudos wallet only', async () => {
     const { processCalls } = server()
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     render(<App />)
     expect(await screen.findByTestId('wallet-available')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByTestId('wallet-cash')).toBeNull())
@@ -298,13 +300,16 @@ describe('the cash account (Q87a)', () => {
       buyEnabled: true, sellEnabled: false },
     moreRows: [{ topUpId: 't2', amount: '3000', status: 'PAID', createdAt: '2026-10-12T01:00:00Z',
       expiresAt: LATER, checkoutUrl: null, paidAt: '2026-10-12T01:01:00Z', refundedAmount: '0', target: 'CASH' }] })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     render(<App />)
+    const rows = await screen.findAllByTestId('topup-row')
+    expect(within(rows[2]).getByTestId('topup-row-cash')).toHaveTextContent('Cash account')
+    // F-F3: the cash account is the money area's platform fee account.
+    expect(screen.queryByTestId('wallet-cash')).toBeNull()
+    await userEvent.click(screen.getByTestId('page-tab-account'))
     const cash = await screen.findByTestId('wallet-cash')
     expect(within(cash).getByTestId('wallet-cash-balance')).toHaveTextContent('3,000 Kudos')
     expect(screen.queryByTestId('cash-sell')).toBeNull()
-    const rows = await screen.findAllByTestId('topup-row')
-    expect(within(rows[2]).getByTestId('topup-row-cash')).toHaveTextContent('Cash account')
     await expectAccessible()
 
     await userEvent.type(within(cash).getByTestId('cash-buy-amount'), '1000')
@@ -313,8 +318,9 @@ describe('the cash account (Q87a)', () => {
       .toEqual({ amount: 1000 }))
     expect(processCalls().find((c) => c.path.includes('QB_KUDOS_BUY'))?.key).toBeTruthy()
 
-    await userEvent.click(screen.getByTestId('topup-open'))
-    await userEvent.click(await screen.findByTestId('topup-target-CASH'))
+    // Topping up from the platform fee account starts with the cash account chosen.
+    await userEvent.click(screen.getByTestId('fee-account-topup'))
+    expect(await screen.findByTestId('topup-target-CASH')).toHaveAttribute('data-state', 'checked')
     await userEvent.type(screen.getByTestId('topup-amount'), '2000')
     await userEvent.click(screen.getByTestId('topup-submit'))
     await waitFor(() => expect(processCalls().find((c) => c.path.includes('QB_TOPUP_START'))?.body)
@@ -324,7 +330,7 @@ describe('the cash account (Q87a)', () => {
   it('shows the entry fees waiting for the daily settlement (Q88b)', async () => {
     server({ cashBalance: '500', entryFees: '90', cash: { targets: 'CASH', defaultTarget: 'CASH', buyEnabled: true,
       sellEnabled: false } })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/account')
     render(<App />)
     expect(await screen.findByTestId('wallet-entry-fees')).toHaveTextContent('90 Kudos (settled daily)')
   })
@@ -333,7 +339,7 @@ describe('the cash account (Q87a)', () => {
     server({ cashBalance: '500', cash: { targets: 'CASH', defaultTarget: 'CASH', buyEnabled: true,
       sellEnabled: true }, exchange: { status: 422, body: { detail: 'Refused', violations: [{ field: 'amount',
       ruleCode: 'QB_KUDOS_EXCHANGE_FUNDS', message: 'Not enough is available: 500.' }] } } })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/account')
     render(<App />)
     const sell = await screen.findByTestId('cash-sell')
     await userEvent.type(within(sell).getByTestId('cash-sell-amount'), '9000')
@@ -350,7 +356,7 @@ describe('the terms', () => {
     const { posted } = server({ consentsAfterStart: [terms], start: { status: 422, body: { status: 422,
       code: 'QB_CONSENT_REQUIRED', detail: 'Refused', violations: [{ field: null, ruleCode: 'QB_CONSENT_REQUIRED',
         message: 'Accept version 2 of TERMS_SPONSOR first.' }] } } })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     const user = userEvent.setup()
     render(<App />)
     await user.click(await screen.findByTestId('topup-open'))
@@ -367,7 +373,7 @@ describe('the receipts', () => {
     URL.createObjectURL = vi.fn(() => 'blob:receipt')
     URL.revokeObjectURL = vi.fn()
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     const user = userEvent.setup()
     render(<App />)
     const rows = await screen.findAllByTestId('topup-row')
@@ -390,7 +396,7 @@ describe('the receipts', () => {
         checkoutUrl: null, paidAt: '2026-10-11T01:01:00Z', refundedAmount: '0', method: 'MANUAL',
         transferCode: '1000078', manualKind: 'GRANT' },
     ] })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     render(<App />)
     const rows = await screen.findAllByTestId('topup-row')
     expect(rows).toHaveLength(4)
@@ -403,7 +409,7 @@ describe('the receipts', () => {
   it('shows the server\'s refusal', async () => {
     server({ receipt: { status: 422, body: { status: 422, detail: 'Refused', violations: [{
       ruleCode: 'QB_RECEIPT_NO_ISSUER', message: 'Receipts cannot be issued yet.' }] } } })
-    window.history.replaceState(null, '', '/wallet')
+    window.history.replaceState(null, '', '/money/wallet')
     const user = userEvent.setup()
     render(<App />)
     const rows = await screen.findAllByTestId('topup-row')
@@ -424,7 +430,7 @@ describe('a top-up\'s page', () => {
   it('never follows an address that is not Stripe\'s', async () => {
     window.sessionStorage.setItem('qb.topup.just-started', 't1')
     server({ topUps: [topUp('OPEN', { checkoutUrl: 'javascript:alert(1)' })] })
-    window.history.replaceState(null, '', '/wallet/topups/t1')
+    window.history.replaceState(null, '', '/money/wallet/topups/t1')
     render(<App />)
     expect(await screen.findByTestId('topup-state')).toHaveAttribute('data-state', 'unsafe')
     expect(goToStripe).not.toHaveBeenCalled()
@@ -433,7 +439,7 @@ describe('a top-up\'s page', () => {
 
   it('opened again, offers the checkout instead of leaving by itself', async () => {
     server({ topUps: [topUp('OPEN')] })
-    window.history.replaceState(null, '', '/wallet/topups/t1')
+    window.history.replaceState(null, '', '/money/wallet/topups/t1')
     const user = userEvent.setup()
     render(<App />)
     expect(await screen.findByTestId('topup-state')).toHaveAttribute('data-state', 'open')
@@ -447,7 +453,7 @@ describe('a top-up\'s page', () => {
     // The polls wait seconds between reads: time is advanced, not waited for (no real sleeps under load).
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const { processCalls } = server({ topUps: [topUp('OPEN'), topUp('OPEN'), topUp('PAID')] })
-    window.history.replaceState(null, '', '/wallet/topups/t1?checkout=paid')
+    window.history.replaceState(null, '', '/money/wallet/topups/t1?checkout=paid')
     render(<App />)
     const state = await screen.findByTestId('topup-state')
     expect(state).toHaveAttribute('data-state', 'confirming')
@@ -465,7 +471,7 @@ describe('a top-up\'s page', () => {
   it('stops asking after a while and says the wallet will update', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const { reads } = server({ topUps: [topUp('OPEN')] })
-    window.history.replaceState(null, '', '/wallet/topups/t1?checkout=paid')
+    window.history.replaceState(null, '', '/money/wallet/topups/t1?checkout=paid')
     render(<App />)
     const state = await screen.findByTestId('topup-state')
     expect(state).toHaveAttribute('data-state', 'confirming')
@@ -485,7 +491,7 @@ describe('a top-up\'s page', () => {
 
   it('back after cancelling, offers the checkout until it expires', async () => {
     server({ topUps: [topUp('OPEN')] })
-    window.history.replaceState(null, '', '/wallet/topups/t1?checkout=cancelled')
+    window.history.replaceState(null, '', '/money/wallet/topups/t1?checkout=cancelled')
     render(<App />)
     expect(await screen.findByTestId('topup-state')).toHaveAttribute('data-state', 'cancelled')
     expect(screen.getByTestId('topup-pay')).toBeInTheDocument()
@@ -494,7 +500,7 @@ describe('a top-up\'s page', () => {
 
   it('says an expired top-up charged nothing', async () => {
     server({ topUps: [topUp('EXPIRED')] })
-    window.history.replaceState(null, '', '/wallet/topups/t1?checkout=cancelled')
+    window.history.replaceState(null, '', '/money/wallet/topups/t1?checkout=cancelled')
     render(<App />)
     expect(await screen.findByTestId('topup-state')).toHaveAttribute('data-state', 'expired')
     expect(screen.queryByTestId('topup-pay')).not.toBeInTheDocument()
@@ -502,7 +508,7 @@ describe('a top-up\'s page', () => {
 
   it('does not show another Sponsor\'s top-up', async () => {
     server({ topUps: [null] })
-    window.history.replaceState(null, '', '/wallet/topups/t1')
+    window.history.replaceState(null, '', '/money/wallet/topups/t1')
     render(<App />)
     expect(await screen.findByTestId('topup-missing')).toBeInTheDocument()
   })

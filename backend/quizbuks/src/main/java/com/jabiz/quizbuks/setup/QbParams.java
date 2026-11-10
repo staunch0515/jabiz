@@ -460,6 +460,14 @@ public final class QbParams {
         HELP_GLOBAL_MONTHLY_TOKENS, HELP_HISTORY_TURNS, HELP_RETENTION_DAYS, HELP_MANUAL_MAX_BYTES, HELP_POLL_SECONDS,
         HELP_POLL_MAX_MINUTES, HELP_ESCALATION_REMIND_DAYS, HELP_AUTO_CLOSE_DAYS, HELP_QUESTION_MAX_LENGTH,
         HELP_ANSWER_MAX_LENGTH, HELP_MAX_LINKS, HELP_CACHE_READ_WEIGHT);
+    /**
+     * F-F3: the areas of the Sponsor app's bottom menu on a phone, comma-separated area keys (home, quizzes,
+     * publications, prizes, messages, benefits, money, assets, hub; "More" follows them); not controlled. The Sponsor app
+     * reads it through {@code qb.sponsor.layout}, leaves out unknown keys and repeats, and starts from the same list as
+     * the declared value ({@code quizbuks-web/sponsor/src/shell/bottom-bar.default.json}, {@code
+     * SponsorLayoutParamsTest}). Changing it means changing the help's sentence about the bottom menu.
+     */
+    public static final String SPONSOR_BOTTOM_BAR = "qb.sponsor.bottom-bar";
 
     /** Q87a: the cash account's switches and the transfers' rate (controlled, last, in this order). */
     public static final List<String> CASH_ACCOUNT_PARAMS = List.of(TOPUP_TARGETS, TOPUP_DEFAULT_TARGET,
@@ -823,7 +831,12 @@ public final class QbParams {
             "The onboarding platform fee Kudos of a certified sponsor, in yen (a sponsor certified later is topped up "
                 + "to it)"),
         new Param(FEE_CREDIT_VALID_DAYS, DAYS, "90",
-            "How many days a lot of platform fee Kudos is valid for from when it is granted (1 to 999)"));
+            "How many days a lot of platform fee Kudos is valid for from when it is granted (1 to 999)"),
+        // F-F3: the Sponsor app's bottom menu (ordinary; last).
+        new Param(SPONSOR_BOTTOM_BAR, Map.of("type", "text", "maxLength", 200), "home,publications,prizes,messages",
+            "The areas of the Sponsor app's bottom menu on a phone, comma-separated (home, quizzes, publications, "
+                + "prizes, messages, benefits, money, assets, hub; at most four, \"More\" follows; empty: this "
+                + "default)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

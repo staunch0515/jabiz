@@ -78,7 +78,7 @@ test('a video file plays muted on the home and is the video to watch before the 
 
   await signIn(page, '/sponsor/', sponsor.email)
   await expect(page).not.toHaveURL(/\/login/)
-  await expect(page.getByRole('link', { name: 'Quizzes' })).toBeVisible()
+  await expect(page.getByTestId('menu-quizzes')).toBeVisible()
   await page.goto(`/sponsor/quizzes/${quizId}`)
   await page.getByTestId('tab-materials').click()
   await page.getByTestId('material-add').click()

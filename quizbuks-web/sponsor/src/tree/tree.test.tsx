@@ -81,8 +81,8 @@ describe('the Sponsor\'s knowledge map (F-S3c)', () => {
       expect(keyPaths(bundle(SPONSOR, lng)), lng).toEqual(expect.arrayContaining(english))
       expect(emptyTexts(SPONSOR, lng), lng).toEqual([])
     }
-    expect(treePathOf(BASICS)).toBe(`/tree?node=${BASICS}`)
-    expect(treePathOf(null)).toBe('/tree')
+    expect(treePathOf(BASICS)).toBe(`/publications/map?node=${BASICS}`)
+    expect(treePathOf(null)).toBe('/publications/map')
   })
 
   it('draws the map in effect with the lit counts, and says the open version was sent back', async () => {

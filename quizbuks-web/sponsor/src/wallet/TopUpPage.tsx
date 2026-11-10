@@ -14,7 +14,6 @@ import {
   forgetJustStarted,
   payableUrl,
   readTopUp,
-  WALLET_PATH,
   WALLET_QUERY,
   wasJustStarted,
   type TopUp,
@@ -24,6 +23,7 @@ import { pollUntil } from './poll'
 import { goToStripe, stripePageUrl } from './stripePage'
 import { STATUS_BADGES, useTopUpStatusLabel } from './WalletPage'
 import { SoundOnce } from '../qb/SoundSettings'
+import { useTopUpsHome } from './home'
 
 /** How long the page asks before saying it will update later. */
 export const OPEN_TIMEOUT_MS = 60_000
@@ -45,6 +45,7 @@ type Phase = 'watching' | 'settled' | 'late'
  * Reads are bounded (`pollUntil`); after the time is up the page says the wallet will update shortly.
  */
 export function TopUpPage({ topUpId }: { topUpId: string }) {
+  const home = useTopUpsHome()
   const { t } = useTranslation(SPONSOR)
   const { t: tQb } = useTranslation(QB)
   const statusLabel = useTopUpStatusLabel()
@@ -128,7 +129,7 @@ export function TopUpPage({ topUpId }: { topUpId: string }) {
 
   const backLink = (
     <Button asChild variant="ghost" size="sm" className="w-fit">
-      <Link to={WALLET_PATH} data-testid="topup-back">
+      <Link to={home} data-testid="topup-back">
         <ArrowLeft aria-hidden />
         {t('wallet.detail.back')}
       </Link>
@@ -248,7 +249,7 @@ export function TopUpPage({ topUpId }: { topUpId: string }) {
         )}
         {over && (
           <Button asChild variant="outline">
-            <Link to={WALLET_PATH}>{t('wallet.detail.newTopUp')}</Link>
+            <Link to={home}>{t('wallet.detail.newTopUp')}</Link>
           </Button>
         )}
       </div>

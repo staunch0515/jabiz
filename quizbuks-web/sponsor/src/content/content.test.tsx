@@ -401,9 +401,8 @@ describe('the quiz editor', () => {
     expect(within(questions[0]).getByTestId('question-option-count')).toHaveTextContent('2 options')
     expect(within(questions[1]).getByTestId('question-option-count')).toHaveTextContent('0 options')
     expect(screen.queryByTestId('option-row')).toBeNull()
-    // Q79 (after Q78 moved them to the settings): the staff are a section of the sponsor hub, in no menu group.
-    expect(within(screen.getByTestId('menu-group-settings')).queryByTestId('menu-staff')).toBeNull()
-    expect(within(screen.getByTestId('menu-group-rewards')).queryByTestId('menu-staff')).toBeNull()
+    // Q79, F-F3: the staff are a tab of the Sponsor hub, not an entry of the menu.
+    expect(screen.queryByTestId('menu-staff')).toBeNull()
     const summary = screen.getByTestId('questions-summary')
     expect(summary).toHaveTextContent('2 / 1,000 questions')
     expect(summary).toHaveTextContent('Full score 3')

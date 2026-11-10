@@ -53,11 +53,11 @@ describe('the top-up helpers', () => {
   })
 
   it('finds the top-up of a path', () => {
-    expect(topUpIdOf('/wallet/topups/t1')).toBe('t1')
+    expect(topUpIdOf('/money/wallet/topups/t1')).toBe('t1')
     expect(topUpIdOf(topUpPath('a b'))).toBe('a b')
-    expect(topUpIdOf('/wallet/topups/%E0%A4%A')).toBeNull()
-    expect(topUpIdOf('/wallet')).toBeNull()
-    expect(topUpIdOf('/wallet/topups/t1/x')).toBeNull()
+    expect(topUpIdOf('/money/wallet/topups/%E0%A4%A')).toBeNull()
+    expect(topUpIdOf('/money/wallet')).toBeNull()
+    expect(topUpIdOf('/money/wallet/topups/t1/x')).toBeNull()
   })
 
   it('offers the checkout only while it can be paid', () => {

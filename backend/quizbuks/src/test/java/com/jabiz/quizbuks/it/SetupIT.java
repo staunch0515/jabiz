@@ -461,6 +461,8 @@ class SetupIT extends QbItSupport {
         expected.put(QbParams.FEE_CREDIT_GRANT_BASIC, "1000");
         expected.put(QbParams.FEE_CREDIT_GRANT_CERTIFIED, "10000");
         expected.put(QbParams.FEE_CREDIT_VALID_DAYS, "90");
+        // F-F3: the Sponsor app's bottom menu on a phone (ordinary).
+        expected.put(QbParams.SPONSOR_BOTTOM_BAR, "home,publications,prizes,messages");
 
         expected.put(QbParams.VIDEO_MAINLAND_SITES, "bilibili,youku,tencent");
         // F-S2: the knowledge maps' limits and the review reminder (ordinary).

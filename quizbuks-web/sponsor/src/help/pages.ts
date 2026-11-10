@@ -17,18 +17,23 @@ export function sponsorPageName(path: string, search = ''): SponsorPageName | nu
   const [head, second, third] = path.split('?')[0].split('/').filter(Boolean)
   const tab = new URLSearchParams(search).get('tab')
   switch (head) {
+    // F-F3's addresses first; the old ones (redirected by shell/legacy-paths.json) still name their pages.
+    case 'home':
     case 'dashboard': return 'dashboard'
     case 'quizzes': return second ? 'quiz-edit' : 'quizzes'
     case 'publications':
       if (!second) return 'publications'
+      if (second === 'map') return 'tree'
+      if (second === 'stats') return 'analytics'
       if (third === 'analytics') return 'analytics'
       return second === 'new' ? 'publication-edit' : 'publication-detail'
     case 'stats': return 'analytics'
-    case 'assets': return tab === 'products' ? 'products' : 'assets'
+    case 'assets': return second === 'products' || tab === 'products' ? 'products' : 'assets'
     case 'benefits': return 'benefits'
     case 'messages': return second === 'conversations' || tab === 'conversations' ? 'conversations' : 'notices'
     case 'profile': return second === 'page' ? 'page' : 'profile'
     case 'tree': return 'tree'
+    case 'money': return second === 'transactions' ? 'transactions' : 'wallet'
     case 'wallet': return 'wallet'
     case 'transactions': return 'transactions'
     case 'account': return 'account'

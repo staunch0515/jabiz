@@ -1,6 +1,7 @@
 import { fileNameOf, runQuery, sessionFetch, toApiError, type Sort } from '@jabiz/client'
 import { PUBLISHING_TEMPLATE } from '../publishing/ids'
 import { TRANSACTIONS_TEMPLATE } from './ids'
+import { TRANSACTIONS_PATH } from '../shell/paths'
 
 /*
  * The transactions page's calls, typed by hand after the templates `qb.sponsor.transactions` and
@@ -190,7 +191,7 @@ export async function exportTransactions(format: ExportFormat, params: Record<st
 }
 
 /** The page, and its address for one publication's transactions (`?publication=`). */
-export const TRANSACTIONS_PATH = '/transactions'
+export { TRANSACTIONS_PATH }
 export const transactionsOf = (publicationId: string) =>
   `${TRANSACTIONS_PATH}?publication=${encodeURIComponent(publicationId)}`
 

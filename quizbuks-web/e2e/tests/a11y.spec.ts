@@ -9,6 +9,7 @@ import { contentAdmin, legalAdmin, publishVersion } from './legal'
 import {
   expect,
   expectAccessible,
+  openArea,
   PASSWORD,
   prepareQuizbuks,
   rows,
@@ -136,13 +137,30 @@ for (const appearance of ['light', 'dark'] as const) {
     await page.getByTestId('onboarding-submit').click()
     await expect(page.locator('form .text-destructive').first()).toBeVisible()
     await expectAccessible(page, at('sponsor onboarding refused'))
-    await page.getByRole('link', { name: 'Dashboard' }).click()
+    // F-F3: the home and every area of the menu, each with its first tab, then the hub's sections and the avatar menu.
+    await openArea(page, 'home')
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
-    await expectAccessible(page, at('sponsor dashboard'))
-    // Q60a-2: the sponsor's page editor, a section of the sponsor profile since Q65b (no "My page" in the menu).
+    await expectAccessible(page, at('sponsor home'))
+    // Q60a-2: the sponsor's page editor, a section of the hub since Q65b (no "My page" in the menu).
     await expect(page.getByRole('link', { name: 'My page' })).toHaveCount(0)
+    for (const [area, ready] of [['quizzes', 'quiz-list'], ['publications', 'publication-list'],
+      ['prizes', 'redeem-page'], ['messages', 'messages-page'], ['money', 'transactions'],
+      ['assets', 'assets-page']] as const) {
+      await openArea(page, area)
+      await expect(page.getByTestId('page-title')).toBeVisible()
+      await expect(page.getByTestId(ready)).toBeVisible()
+      await expectAccessible(page, at(`sponsor area ${area}`))
+    }
+    // The money area's other tabs (the Kudos wallet only with Kudos; a new Sponsor has none), from the money area.
+    await openArea(page, 'money')
+    await expect(page.getByTestId('transactions')).toBeVisible()
+    for (const tab of ['account', 'ai', 'bills']) {
+      await page.getByTestId(`page-tab-${tab}`).click()
+      await expect(page.getByTestId('page-tab-' + tab)).toHaveAttribute('aria-current', 'page')
+      await expectAccessible(page, at(`sponsor money ${tab}`))
+    }
     // Q79: the sponsor hub: the overview, then its sections.
-    await page.getByRole('link', { name: 'Sponsor profile' }).click()
+    await openArea(page, 'hub')
     await expect(page.getByTestId('profile-status')).toBeVisible()
     await expectAccessible(page, at('sponsor profile overview'))
     // F-C5: the prompt for another AI tool, with the parameters filled in.
@@ -156,25 +174,45 @@ for (const appearance of ['light', 'dark'] as const) {
     await expectAccessible(page, at('sponsor profile prompt'))
     await page.keyboard.press('Escape')
     await expect(prompt).toBeHidden()
-    await page.getByTestId('profile-nav-basics').click()
+    await page.getByTestId('page-tab-basics').click()
     await expect(page.getByTestId('onboarding-basic')).toBeVisible()
     await expectAccessible(page, at('sponsor basics'))
-    await page.getByTestId('profile-nav-page').click()
+    await page.getByTestId('page-tab-page').click()
     await expect(page.getByTestId('sponsor-page-form')).toBeVisible()
     await expectAccessible(page, at('sponsor page editor'))
+    await page.getByTestId('page-part-stats').click()
+    await expect(page.getByTestId('stats-page')).toBeVisible()
+    await expectAccessible(page, at('sponsor page statistics'))
     // Q60b-2: the sponsor's products, a tab of the asset library since F-C1c.
-    await page.getByRole('link', { name: 'Asset library' }).click()
-    await expect(page.getByTestId('assets-page')).toBeVisible()
-    await expectAccessible(page, at('sponsor asset library'))
-    await page.getByTestId('assets-tab-products').click()
+    await openArea(page, 'assets', 'products')
     await expect(page.getByTestId('product-add')).toBeVisible()
     await expectAccessible(page, at('sponsor products'))
-    await page.getByRole('link', { name: 'Account' }).click()
+    // The sponsored benefits are no menu entry without a benefit role; their address still opens.
+    await expect(page.getByTestId('menu-benefits')).toHaveCount(0)
+    await page.goto('/sponsor/benefits')
+    await expect(page.getByTestId('page-title')).toBeVisible()
+    await expectAccessible(page, at('sponsor benefits'))
+    await page.getByTestId('global-create').click()
+    await expect(page.getByTestId('global-create-quiz')).toBeVisible()
+    await expectAccessible(page, at('sponsor new menu'))
+    await page.keyboard.press('Escape')
+    await page.getByTestId('avatar-menu-open').click()
+    await expect(page.getByTestId('avatar-account')).toBeVisible()
+    await expectAccessible(page, at('sponsor avatar menu'))
+    await page.getByTestId('avatar-account').click()
     await expect(page.getByTestId('sign-in').first()).toBeVisible()
     await expectAccessible(page, at('sponsor account'))
-    // The console at a phone's width: the menu is a sheet.
-    await page.setViewportSize({ width: 390, height: 844 })
-    await expectAccessible(page, at('sponsor account 390px'))
+    // At a phone's width (F-F3: 360 px): the bottom menu and "More"; every area opens and passes axe (no sideways
+    // scrolling is F-F3d's, with the pages' content width: plan section 9).
+    await page.setViewportSize({ width: 360, height: 780 })
+    await expectAccessible(page, at('sponsor account 360px'))
+    await expect(page.getByTestId('bottom-bar-home')).toBeVisible()
+    for (const area of ['home', 'quizzes', 'publications', 'prizes', 'messages', 'money', 'assets', 'hub']) {
+      await openArea(page, area)
+      // Each page's title (the home's is its banner's until F-F3b gives it the area's head).
+      await expect(page.locator('h1').filter({ visible: true }).first()).toBeVisible()
+      await expectAccessible(page, at(`sponsor area ${area} 360px`))
+    }
   })
 
   test(`the Sponsor console's quiz pages pass axe (${appearance})`, async ({ page, request }) => {
@@ -266,11 +304,13 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('publication-step-title')).toHaveText('Time and rewards')
     await page.getByTestId('tier-add').click()
     await page.getByTestId('tier-reward').fill('10')
+    await whereTheStepOpens(page)
     await expectAccessible(page, at('sponsor publication audience and rewards'))
     // Typed wrong: the field is marked and says why.
     await page.getByTestId('publication-pass-score').fill('1.5')
     await page.getByTestId('publication-next').click()
     await expect(page.getByTestId('publication-pass-score')).toHaveAttribute('aria-invalid', 'true')
+    await whereTheStepOpens(page)
     await expectAccessible(page, at('sponsor publication typed wrong'))
     await page.getByTestId('publication-pass-score').fill('')
     await page.getByTestId('publication-next').click()
@@ -487,7 +527,7 @@ for (const appearance of ['light', 'dark'] as const) {
     await signIn(page, '/sponsor/', sponsor.email)
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
 
-    await page.goto('/sponsor/transactions')
+    await page.goto('/sponsor/money/transactions')
     await expect(page.getByTestId('transaction-row')).toHaveCount(2)
     await expect(page.getByTestId('summary-total')).toHaveText('2')
     await expectAccessible(page, at('sponsor transactions'))
@@ -600,7 +640,7 @@ for (const appearance of ['light', 'dark'] as const) {
 
     await signIn(page, '/sponsor/', sponsor.email)
     await expect(page.getByTestId('dashboard-status')).toBeVisible()
-    await page.goto('/sponsor/messages')
+    await page.goto('/sponsor/messages/notices')
     await expect(page.getByTestId('notice-row')).toHaveCount(1)
     await page.waitForLoadState('networkidle')
     await expectAccessible(page, at('sponsor message centre'))
@@ -628,4 +668,17 @@ for (const appearance of ['light', 'dark'] as const) {
     await expect(page.getByTestId('broadcast-ready')).toBeVisible()
     await expectAccessible(page, at('admin announcement editor'))
   })
+}
+
+/**
+ * The page put back where a step of the wizard opens (its top) before axe looks. With a sticky header, a control is
+ * left partly under it at some scroll positions, and axe's target-size counts a partly covered target against it (a
+ * wholly covered one is not checked): the result depends on where the test's last action stopped the scroll, not on
+ * the step's layout (CI, F-F3a: the dates' calendar buttons at y 54-90 under the header at 32-80 after filling a
+ * reward, scrollY 454). The rule is unchanged and every target is checked; the page's scroll-padding-top keeps what
+ * the browser scrolls to below the header (shell/stickyTop.ts).
+ */
+async function whereTheStepOpens(page: Page) {
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
 }

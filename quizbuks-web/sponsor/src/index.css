@@ -15,6 +15,12 @@ body,
   margin: 0;
 }
 
+/* F-F3: what the browser scrolls to (Tab, scrollIntoView) stops below the frame's sticky top (WCAG 2.4.11); the
+   frame keeps the variable at that height (shell/stickyTop.ts). */
+html {
+  scroll-padding-top: var(--qb-sticky-top, 0px);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

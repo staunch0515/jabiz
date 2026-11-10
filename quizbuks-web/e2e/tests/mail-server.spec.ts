@@ -1,4 +1,4 @@
-import { expect, expectAccessible, mailTo, MERCHANT_MAIL, prepareQuizbuks, signIn, test } from './support'
+import { expect, expectAccessible, mailTo, MERCHANT_MAIL, openArea, prepareQuizbuks, signIn, test } from './support'
 import { approvedSponsor } from './publishing'
 
 /**
@@ -16,8 +16,7 @@ test('a Sponsor sets up the mail server: the test mail arrives, a wrong port is 
   await signIn(page, '/sponsor/', sponsor.email)
   await expect(page.getByTestId('dashboard-status')).toBeVisible()
   // Q79: a section of the sponsor hub.
-  await page.getByRole('link', { name: 'Sponsor profile' }).click()
-  await page.getByTestId('profile-nav-mail-server').click()
+  await openArea(page, 'hub', 'mail-server')
   await expect(page.getByTestId('mail-server-status')).toHaveAttribute('data-status', 'NONE')
   await expectAccessible(page, 'mail server, empty')
 
