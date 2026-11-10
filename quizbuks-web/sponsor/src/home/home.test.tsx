@@ -19,7 +19,7 @@ function json(status: number, body: unknown) {
 const ENTRY = { name: 'sponsor', selfRegistration: true, requireVerifiedEmail: true, appPath: '/',
   sessionPersistence: 'tab' }
 
-const ALL: TodoCounts = { claimsToConfirm: 2, digitalToSend: 3, fundsShort: 1, rewardsWaiting: 4, invoicesOverdue: 1,
+const ALL: TodoCounts = { claimsToConfirm: 2, digitalToSend: 3, fundsShort: 1, rewardsWaiting: 4, invoicesOverdue: 1, feeInvoicesUncovered: 2,
   publicationsInReview: 2, pageInReview: 1, sharedVideosInReview: 1, videoUsesToConfirm: 5, creditsExpiring: 1 }
 
 interface Options {
@@ -130,6 +130,7 @@ describe('the home\'s to-do list (F-F3b)', () => {
       ['fundsShort', '1', '/publications?status=FUNDS_SHORT'],
       ['rewardsWaiting', '4', '/money/wallet'],
       ['invoicesOverdue', '1', '/money/bills'],
+      ['feeInvoicesUncovered', '2', '/money/bills'],
       ['creditsExpiring', '1', '/money/account'],
       ['publicationsInReview', '2', '/publications?status=PENDING_REVIEW'],
       ['pageInReview', '1', '/profile/page'],

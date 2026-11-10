@@ -3,7 +3,7 @@ id: qb.sponsor.todo
 description: >-
   F-F3b: what the sponsor has to do, as counts for the home page's "to do" list and the prizes badge - claims to
   confirm, digital prizes to send or disputed, publications short of budget, rewards waiting for a top-up, overdue
-  platform fee invoices, items in review (publications, the public page, shared videos), the uses of the sponsor's
+  platform fee invoices, open ones the fee account cannot cover, items in review (publications, the public page, shared videos), the uses of the sponsor's
   shared videos waiting for the sponsor as provider, and platform fee Kudos about to expire
 entities: [QbRedemption, QbDigitalPrize, QbPublicationCard, QbPublication, QbWallet, QbFeeInvoice, QbSponsorPage, QbSharedVideo, QbVideoUse, QbFeeCreditGrant, SysParam]
 datasets:
@@ -30,6 +30,7 @@ results:
   pageInReview:         { kind: { type: numeric, precision: 9, scale: 0 } }
   sharedVideosInReview: { kind: { type: numeric, precision: 9, scale: 0 } }
   videoUsesToConfirm:   { kind: { type: numeric, precision: 9, scale: 0 } }
+  feeInvoicesUncovered: { kind: { type: numeric, precision: 9, scale: 0 } }
   creditsExpiring:      { kind: { type: numeric, precision: 9, scale: 0 } }
 permissions: [qb.publication.write]
 ---*/
@@ -40,6 +41,14 @@ permissions: [qb.publication.write]
 -- qb.sponsor.redemptions); the digital prizes are those the sponsor owes (to send, late) or that the taker disputes.
 -- Rewards waiting are the wallet's pending count, as the wallet page shows. A page or a shared video counts while its
 -- review is open.
+-- feeInvoicesUncovered: the open invoices (OPEN, PARTIAL, OVERDUE, as qb.sponsor.wallet's unpaid ones) whose owed
+-- amount (total less paid) is more than the fee account holds, as the wallet page works it out (feeAccountAvailable):
+-- the fee credit's balance plus the cash account's balance less what is held.
+WITH account AS (
+    SELECT coalesce(sum(greatest(0, w.{{QbWallet.balance}})) FILTER (WHERE w.{{QbWallet.kind}} = 'FEE_CREDIT'), 0)
+         + coalesce(sum(greatest(0, w.{{QbWallet.balance}} - w.{{QbWallet.held}}))
+                    FILTER (WHERE w.{{QbWallet.kind}} = 'CASH'), 0) AS available
+    FROM {{QbWallet}} w)
 SELECT
     (SELECT count(*) FROM {{QbRedemption}} r
       WHERE r.{{QbRedemption.status}} = 'CLAIMED' AND r.{{QbRedemption.fulfillerId}} IS NULL) AS claimsToConfirm,
@@ -59,6 +68,9 @@ SELECT
       WHERE v.{{QbSharedVideo.status}} = 'PENDING') AS sharedVideosInReview,
     (SELECT count(*) FROM {{QbVideoUse}} u
       WHERE u.{{QbVideoUse.status}} = 'SUBMITTED') AS videoUsesToConfirm,
+    (SELECT count(*) FROM {{QbFeeInvoice}} i CROSS JOIN account a
+      WHERE i.{{QbFeeInvoice.status}} IN ('OPEN', 'PARTIAL', 'OVERDUE')
+        AND i.{{QbFeeInvoice.total}} - i.{{QbFeeInvoice.paidAmount}} > a.available) AS feeInvoicesUncovered,
     (SELECT count(*) FROM {{QbFeeCreditGrant}} g
       WHERE g.{{QbFeeCreditGrant.remaining}} > 0
         AND g.{{QbFeeCreditGrant.expiresAt}} > CAST(:at AS timestamptz)

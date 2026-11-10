@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SponsorTodoIT extends VideoUseItSupport {
 
     private static final List<String> COLUMNS = List.of("claimsToConfirm", "digitalToSend", "fundsShort",
-        "rewardsWaiting", "invoicesOverdue", "publicationsInReview", "pageInReview", "sharedVideosInReview",
+        "rewardsWaiting", "invoicesOverdue", "feeInvoicesUncovered", "publicationsInReview", "pageInReview", "sharedVideosInReview",
         "videoUsesToConfirm", "creditsExpiring");
 
     private Map<String, Object> todo(String sponsor) {
@@ -158,9 +158,29 @@ class SponsorTodoIT extends VideoUseItSupport {
         // Overdue invoices count, open and paid ones do not.
         invoice(a, "2026-08", "OPEN");
         invoice(a, "2026-09", "PAID");
+        want.put("feeInvoicesUncovered", 1);
         assertCounts(a, want);
         invoice(a, "2026-10", "OVERDUE");
         want.put("invoicesOverdue", 1);
+        want.put("feeInvoicesUncovered", 2);
+        assertCounts(a, want);
+        // The fee account covers an invoice when it holds at least what is owed (1100): fee credit and cash less held.
+        feeCredit(a, 1099);
+        assertCounts(a, want);
+        feeCredit(a, 1100);
+        want.put("feeInvoicesUncovered", 0);
+        assertCounts(a, want);
+        feeCredit(a, 0);
+        // Cash the sponsor has set aside is not available: 2000 in cash with 1000 held covers nothing.
+        execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, held, pending_count, pending_amount, "
+            + "pending_out, version) VALUES (?, ?, 'CASH', 2000, 1000, 0, 0, 0, 1)", UUID.randomUUID().toString(), a);
+        want.put("feeInvoicesUncovered", 2);
+        assertCounts(a, want);
+        execute("UPDATE qb_wallet SET held = 900 WHERE owner_id = ? AND kind = 'CASH'", a);
+        want.put("feeInvoicesUncovered", 0);
+        assertCounts(a, want);
+        execute("DELETE FROM qb_wallet WHERE owner_id = ? AND kind = 'CASH'", a);
+        want.put("feeInvoicesUncovered", 2);
         assertCounts(a, want);
 
         // The public page in review (a draft is the sponsor's own and not counted).
@@ -203,6 +223,12 @@ class SponsorTodoIT extends VideoUseItSupport {
 
         // The user of the shared video has none of it: the entry it sent is the provider's to confirm.
         assertCounts(other, Map.of());
+    }
+
+    private void feeCredit(String sponsor, long balance) {
+        execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, pending_count, pending_amount, "
+            + "pending_out, version) VALUES (?, ?, 'FEE_CREDIT', ?, 0, 0, 0, 1) ON CONFLICT (owner_id, kind) DO "
+            + "UPDATE SET balance = EXCLUDED.balance", UUID.randomUUID().toString(), sponsor, balance);
     }
 
     private void invoice(String sponsor, String period, String status) {

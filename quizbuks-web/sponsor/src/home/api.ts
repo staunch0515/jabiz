@@ -11,7 +11,7 @@ export const TODO_TEMPLATE = 'qb.sponsor.todo'
 
 /** The columns of the template, in the order the list shows them (the list's own order is `todo.ts`'s). */
 export const TODO_COLUMNS = ['claimsToConfirm', 'digitalToSend', 'fundsShort', 'rewardsWaiting', 'invoicesOverdue',
-  'publicationsInReview', 'pageInReview', 'sharedVideosInReview', 'videoUsesToConfirm', 'creditsExpiring'] as const
+  'feeInvoicesUncovered', 'publicationsInReview', 'pageInReview', 'sharedVideosInReview', 'videoUsesToConfirm', 'creditsExpiring'] as const
 export type TodoColumn = (typeof TODO_COLUMNS)[number]
 export type TodoCounts = Record<TodoColumn, number>
 
