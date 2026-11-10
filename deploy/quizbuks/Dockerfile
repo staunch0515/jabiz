@@ -44,9 +44,9 @@ FROM eclipse-temurin:21-jre
 # the health check's client (below and deploy/quizbuks/server/compose.yaml), installed rather than assumed. The base
 # image's packages are brought up to date first: security fixes published after the base image was built
 # (docs/quizbuks/security/dependency-review.md).
-RUN apt-get update \
-    && apt-get upgrade -y --no-install-recommends \
-    && apt-get install -y --no-install-recommends fonts-ipafont-gothic fonts-droid-fallback curl \
+RUN apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 update \
+    && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 upgrade -y --no-install-recommends \
+    && apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 install -y --no-install-recommends fonts-ipafont-gothic fonts-droid-fallback curl \
     && rm -rf /var/lib/apt/lists/*
 ENV JABIZ_REPORTS_PDF_FONTS=/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf,/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf
 RUN useradd --system --uid 10001 --home-dir /app jabiz \
