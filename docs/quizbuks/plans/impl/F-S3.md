@@ -23,18 +23,16 @@
 
 ## 2. F-S3a 读模型（后端）
 
-- `qb.app.trees`（`qb.app.me`）：本人看得到的图——点亮者为学者的平台图，以及本人答过或可答的发起方的图（发起方图整体可见：规格"图整体可见"）。
-- `qb.app.tree`（参数 `treeId`）：生效版本的每个节点与**本人的状态**：
-  - `LIT`（有点亮且没有撤销）；
-  - `LOCKED`（答题前条件未满足，给出缺的节点）；
-  - 状态 2 细分：`CAN_ANSWER`（有他此刻能开始的开放发布，给出这些发布）/ `WAITING`（没有能开始的）/ `MISSING`（条件除答题前之外还缺什么）。
-  - "能开始"与 `qb.app.publication` 的 `canStart` 用同一段 SQL；答题前条件与 `TreeLights` 一致。
-- 商户主页（公开且登录可选）：`qb.app.sponsor-tree`（发起方图的节点与本人状态；不登录只给节点，不给状态）。
-- `qb.sponsor.trees` / `qb.sponsor.tree`（`qb.sponsor.me`）：本人的图、草稿与各版本（状态、提交时间、驳回理由）、草稿的节点与条件，生效版本各节点的点亮人数、可答与等待人数（按最小分组 `qb.stats.min-group`）、每个节点的开放绑定发布数（编辑器据此提示"不能删"）。
-- `qb.sponsor.tree-bindable-nodes`：向导可选的节点，与 `PublicationNodes.binding()` 同一规则（比较测试）。
-- 运营商与平台的编辑器读草稿：在已有的 `qb.operator.*` / `qb.admin.*` 上补草稿的节点与条件（同列，只加 `draft` 版本）。
-- **客服按人查看**：流程 `QB_SUPPORT_TREE_STATE`（权限 `qb.admin.tree-state.read`，给内容与客服管理员；运营商成员只限本运营商的发起方图与平台图），输入用户与图，输出与 `qb.app.tree` 相同的状态。**用流程而不是模板，是为了"读取留记录"**：每次读取写一条操作记录（`op_process`，输入摘要只有用户与图的编号），不需要新的平台能力。
-- 测试：`TreeStatesIT`（五种状态逐一构造；Java `TreeLights` 与三个新模板的比较；能开始的判断与 `qb.app.publication` 一致；最小分组；看不到不能开始的发布）；`TreeBindableNodesIT`（直营与非直营、本人与他人的图）；`ProcessAccessIT`、`MessagesTest`、OpenAPI / 公开模板快照。
+- **"能开始"不另写**：`qb.app.feed` 加参数 `tree`（图编号：只列绑定这张图的节点的发布）与结果列 `treeId` / `treeNodeId`。首页的全部条件（受众、邀请、地区、境外视频、屏蔽、答题前条件、一人一次）因此原样适用（同 F-S10 的 `shorts`、F-S13 的 `push`）；`BlockIT` 等比较测试照旧覆盖它。某节点在其中有行 = **可答**，这些行就是"链接到能开始的发布"。
+- `qb.app.tree`（`qb.app.me`，参数 `treeId`）：生效版本的每个节点给出**事实**——名称、说明、条件（JSON）、顺序；本人是否点亮；`unmet`（答题前须点亮而未点亮的 `<图>/<节点>`，与 `qb.app.publication` 的 `nodeUnlocked` 同一段 SQL）；`refs`（条件引用的节点按 `QbTreeNodeRef` 解析到的图、是否点亮）；`passed`（在最后一次撤销之后合格过一个绑定本节点的发布，同 `TreeLighting`）；门槛节点所开放的功能（按 `now:SysParam` 中指向它的 `qb.tree.gate.*`）。只看生效的图：学者点亮的平台图与发起方图。
+- **五种状态由纯 Java 的 `tree.TreeNodeStates` 定义**：`LIT`（点亮）→ `LOCKED`（`unmet` 不空）→ `CAN_ANSWER`（`qb.app.feed` 有行）→ `WAITING`（假定合格后条件即成立：只差答题）→ `MISSING`（否则；列出不成立的条目）。条件的判断复用 `TreeRules.holds`。发起方页面与 App 的整图组件照抄（`src/qb/tree/states.ts`，F-S3b），**同一组用例** `quizbuks-web/app/src/qb/tree/tree-state-cases.json`（两个 SPA 的 `qb/` 相同；Java 的 `TreeNodeStatesTest` 读同一文件，同 F-S13 的 `exposure-cases.json`）。
+- `qb.app.trees`：本人看得到的图——生效的、学者点亮的平台图，以及本人在其中有点亮记录或答过其绑定发布的发起方图。
+- `qb.sponsor.trees` / `qb.sponsor.tree`（`qb.sponsor.me`）：本人的图；版本（状态、提交、驳回理由、时间）；所选版本的节点与条件；生效版本各节点的点亮人数与等待人数（**按最小分组**：少于 `qb.stats.min-group` 不给）与进行中的绑定发布数（编辑器据此提示"不能删"）。
+- `qb.sponsor.tree-bindable-nodes`：向导可选的节点，与 `PublicationNodes.binding()` 同一规则（`TreeBindableNodesIT` 比较）。
+- 运营商与平台的编辑器读草稿：已有的 `qb.admin.tree-version` / `qb.operator.tree-version` 已能按版本读节点与条件，不另加。
+- **客服按人查看**：流程 `QB_SUPPORT_TREE_STATE`（只读；权限 `qb.admin.tree-state.read`，给内容与客服管理员、运营商成员；运营商成员只限本运营商的发起方图与平台图，经入口范围与 `OperatorChecks`），输入用户与图，输出各节点的点亮记录、撤销与 `TreeLights.State`。读取经平台的操作记录留痕（输入摘要只有两个编号）。IT 证明越界的读不到（404）。
+- 商户主页的图（不登录也看，公开模板与公开数据视图）放到 F-S3c，随页面一起做。
+- 测试：`TreeNodeStatesTest`（用例文件）、`TreeStatesIT`（五种状态逐一构造：经 `qb.app.tree` + `qb.app.feed?tree` 得到的状态与 Java 一致；看不到不能开始的发布）、`TreeSponsorReadIT`（版本、驳回理由、最小分组、绑定数）、`TreeBindableNodesIT`、`SupportTreeStateIT`（权限、越界 404、操作记录）；`ProcessAccessIT`、`MessagesTest`、`SetupIT`（新权限）。
 
 ## 3. F-S3b 整图组件（共用 `src/qb/tree/`，两个 SPA 相同）
 
