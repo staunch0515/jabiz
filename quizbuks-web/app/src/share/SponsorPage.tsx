@@ -12,6 +12,7 @@ import { FileImage } from '../qb/FileImage'
 import { CoverPlaceholder } from '../qb/Illustrations'
 import { formatKudos } from '../qb/kudos'
 import { QB } from '../qb/messages'
+import { VerifiedMark } from '../qb/VerifiedMark'
 import { readPagePublications, readPublicSponsorPage } from './api'
 import { Link } from '../qb/router'
 import { sharePath } from './share'
@@ -107,6 +108,7 @@ export function SponsorPage({ handle, signedIn = false }: { handle: string; sign
             data-testid="sponsor-page-logo" />}
           <div className="flex min-w-0 flex-col">
             <h1 id="sponsor-page-title" className="text-xl font-semibold" data-testid="sponsor-page-company">{p.company}</h1>
+            {p.verifiedDomain && <VerifiedMark domain={p.verifiedDomain} />}
             {/* The sponsor's own words are in the page's language; the rest is the interface's. */}
             <p className="text-muted-foreground text-sm" lang={shownIn} data-testid="sponsor-page-headline">
               {p.headline}</p>
