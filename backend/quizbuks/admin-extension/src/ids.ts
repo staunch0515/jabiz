@@ -50,6 +50,9 @@ export const TEMPLATE = {
   treeLit: 'qb.admin.tree-lit',
   operatorTreeVersion: 'qb.operator.tree-version',
   operatorTreeLit: 'qb.operator.tree-lit',
+  /** F-S3e: an operator's copy against its template, and the templates an operator may copy. */
+  operatorTreeTemplateDiff: 'qb.operator.tree-template-diff',
+  operatorTreeTemplates: 'qb.operator.tree-templates',
   /** F-C2: the sponsors' usage by month and meter (headquarters every sponsor, an operator its own). */
   usage: 'qb.admin.usage',
   /** Q73e-1: a publication by the language its attempts are answered in. */
@@ -275,6 +278,15 @@ export const BROADCAST = {
 export const PROCESS = {
   /** F-S2b2: asks another member to approve revoking a lit node (`qb.tree.lit.revoke`, reason required). */
   treeLitRevoke: 'QB_TREE_LIT_REVOKE',
+  /** F-S3e: editing a platform template (`qb.tree.platform.write`) or an operator's copy (`qb.tree.edit`). */
+  treeCreate: 'QB_TREE_CREATE',
+  treeCopy: 'QB_TREE_COPY',
+  treeSave: 'QB_TREE_DRAFT_SAVE',
+  treeSubmit: 'QB_TREE_SUBMIT',
+  treeWithdraw: 'QB_TREE_WITHDRAW',
+  treeAdopt: 'QB_TREE_ADOPT',
+  /** F-S3a: one person's lighting of one map, recorded (`qb.admin.tree-state.read`). */
+  supportTreeState: 'QB_SUPPORT_TREE_STATE',
   /** Lets transfers to a taker held after a rejected or reversed transfer go on (`qb.payout.review`). */
   holdRelease: 'QB_TRANSFER_HOLD_RELEASE',
   /** Q14: what the daily run would do for a taker now (`qb.admin.finance.read`), and doing it at once (`qb.transfer.now`). */
@@ -442,6 +454,9 @@ export const PERMISSION = {
   /** F-S2a: deciding the review of a Sponsor's map or an operator's copy (operators), of a platform template. */
   reviewTree: 'qb.review.tree',
   treePlatformWrite: 'qb.tree.platform.write',
+  /** F-S3e: editing a map one may edit (the server checks the owner), and support's lookup of one person. */
+  treeEdit: 'qb.tree.edit',
+  treeStateRead: 'qb.admin.tree-state.read',
   reviewPublication: 'qb.review.publication',
   reviewSponsor: 'qb.review.sponsor',
   quizRead: 'qb.admin.quiz.read',
@@ -621,6 +636,8 @@ export const PATH = {
   /** F-S2b3a: the knowledge maps, and one map's review and lit nodes. */
   trees: '/qb/trees',
   tree: (treeId: string) => `/qb/trees/${encodeURIComponent(treeId)}`,
+  /** F-S3e: support's lookup of one person's lighting of one map. */
+  treeSupport: '/qb/tree-support',
   reviews: '/qb/reviews',
   /** F-C2: the sponsors' usage by month (`?sponsor=` for one). */
   usage: '/qb/usage',

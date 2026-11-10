@@ -139,10 +139,17 @@ class KnowledgeMapIT extends TreeItSupport {
         // An operator's member copies it: the copy keeps the template's node ids, as a draft.
         NewOperator operator = newOperatorWithLead(operatorsAdmin(), unique("FS2 copy"), null);
         String lead = memberSession(operator.leadId(), operator.operatorId());
+        // F-S3e: the templates an operator may copy, before and after its copy.
+        assertThat(items("qb.operator.tree-templates", lead, Map.of("limit", 200)))
+            .filteredOn(row -> template.get("treeId").equals(row.get("treeId"))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("copyTreeId", null).containsEntry("versionNo", 1));
         Map<String, Object> copy = run(TreeProcesses.COPY, lead, body("templateTreeId", template.get("treeId")));
         assertThat(query("SELECT node_id FROM qb_tree_node_def WHERE version_id = ? ORDER BY seq",
             copy.get("versionId"))).extracting(row -> row.get("node_id"))
             .containsExactly(ids.get("start"), ids.get("next"));
+        assertThat(items("qb.operator.tree-templates", lead, Map.of("limit", 200)))
+            .filteredOn(row -> template.get("treeId").equals(row.get("treeId"))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("copyTreeId", String.valueOf(copy.get("treeId"))));
         assertThat(codes(refused(TreeProcesses.COPY, lead, body("templateTreeId", template.get("treeId")), 422)))
             .containsExactly("QB_TREE_COPY_EXISTS");
         // A Sponsor cannot copy, nor edit the operator's copy.
