@@ -21,11 +21,9 @@ public final class VerificationCodes {
     public static final String LINK_INVALID = "QB_VERIFICATION_LINK_INVALID";
     /** The submission is not in a state that allows this ({@code status}). */
     public static final String STATE = "QB_VERIFICATION_STATE";
-    /** The Sponsor has no address to mail the link from: the platform's mail is off. */
-    public static final String MAIL_OFF = "QB_VERIFICATION_MAIL_OFF";
 
     public static final List<String> ALL = List.of(NOT_APPROVED, DOMAIN_FORMAT, PUBLIC_DOMAIN, DOMAIN_TAKEN,
-        ADDRESS_REQUIRED, ADDRESS_DOMAIN, LINK_INVALID, STATE, MAIL_OFF);
+        ADDRESS_REQUIRED, ADDRESS_DOMAIN, LINK_INVALID, STATE);
 
     private VerificationCodes() {
     }

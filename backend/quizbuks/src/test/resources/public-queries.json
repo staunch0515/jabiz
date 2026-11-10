@@ -668,6 +668,11 @@
         "multiline" : true,
         "type" : "text"
       },
+      "verifiedDomain" : {
+        "maxLength" : 253,
+        "multiline" : false,
+        "type" : "text"
+      },
       "website" : {
         "maxLength" : 300,
         "multiline" : false,

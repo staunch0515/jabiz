@@ -73,4 +73,27 @@ class FeeCreditRulesTest {
         assertThat(FeeCreditRules.reminderAllowed(NOW.minus(Duration.ofHours(23)), NOW)).isFalse();
         assertThat(FeeCreditRules.manualKey("r1")).isEqualTo("manual:r1");
     }
+
+    @Test
+    void aVerifiedSponsorIsToppedUpToTheCertifiedAmountOnce() {
+        BigDecimal basic = new BigDecimal("1000");
+        BigDecimal certified = new BigDecimal("10000");
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, false, certified))
+            .contains(new BigDecimal("9000"));
+        // The switch off, not approved, banned, not verified, no onboarding yet, topped up already: nothing.
+        assertThat(FeeCreditRules.certifiedTopUp(false, true, false, true, basic, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, false, false, true, basic, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, true, true, basic, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, false, basic, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, null, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, true, certified)).isEmpty();
+        // The onboarding was the certified amount already, or more (the parameter lowered since): nothing.
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, certified, false, certified)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, new BigDecimal("12000"), false, certified))
+            .isEmpty();
+        // No certified amount, or not whole yen: nothing.
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, false, null)).isEmpty();
+        assertThat(FeeCreditRules.certifiedTopUp(true, true, false, true, basic, false, new BigDecimal("10000.5")))
+            .isEmpty();
+    }
 }

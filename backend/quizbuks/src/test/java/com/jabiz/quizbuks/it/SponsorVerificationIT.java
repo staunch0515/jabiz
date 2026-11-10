@@ -143,6 +143,12 @@ class SponsorVerificationIT extends TreeItSupport {
             CertifiedTopUps.KEY).getFirst();
     }
 
+    /** The Sponsor's in-app notices of a kind. */
+    static List<Map<String, Object>> notices(String userId, String kind) {
+        return query("SELECT kind, action, body::text AS body FROM qb_message WHERE recipient_id = ? AND kind = ?",
+            userId, kind);
+    }
+
     void grantsSwitch(boolean on) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("paramKey", QbParams.FEE_CREDIT_GRANT_ENABLED);
@@ -232,6 +238,8 @@ class SponsorVerificationIT extends TreeItSupport {
         decide(s.member(), confirmed.get("approvalRequestId"), "REJECT", "The site names another company");
         assertThat(row(first.get("verificationId"))).containsEntry("status", "REJECTED")
             .containsEntry("reject_reason", "The site names another company");
+        assertThat(notices(s.sponsor(), "VERIFICATION_REJECTED")).singleElement().satisfies(n ->
+            assertThat(n.get("body").toString()).contains("The site names another company"));
     }
 
     @Test
@@ -286,6 +294,10 @@ class SponsorVerificationIT extends TreeItSupport {
         assertThat(revoked).containsEntry("status", "REVOKED");
         assertThat(row(renamed.get("verificationId"))).containsEntry("revoke_reason", "The domain lapsed");
         assertThat(mine(s.sponsor())).containsEntry("verified", false);
+        deliverEvents();
+        assertThat(notices(s.sponsor(), "VERIFICATION_APPROVED")).hasSize(2);
+        assertThat(notices(s.sponsor(), "VERIFICATION_REVOKED")).singleElement().satisfies(n ->
+            assertThat(n.get("body").toString()).contains("The domain lapsed"));
         assertThat(codes(refused(VerificationProcesses.REVOKE, s.member(), body("sponsorId", s.sponsor(), "reason",
             "Again"), 422))).containsExactly(VerificationCodes.STATE);
     }
