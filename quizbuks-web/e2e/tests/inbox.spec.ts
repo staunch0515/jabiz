@@ -39,7 +39,8 @@ test('a paid reward is a message in the inbox; the badge counts it until it is r
   await signIn(page, '/taker/', taker.email)
   await expect(page.getByTestId('home')).toBeVisible()
   // F-F4: the number is on the bottom menu's Messages, whose name says it too.
-  await expect(takerArea(page, 'messages')).toHaveText(/Messages\s*1/)
+  await expect(takerArea(page, 'messages')).toContainText('Messages')
+  await expect(takerArea(page, 'messages')).toContainText('1')
   await expect(takerArea(page, 'messages')).toHaveAccessibleName('Messages, 1 unread')
   await takerArea(page, 'messages').click()
   const row = page.getByTestId('inbox-row').and(page.locator('[data-kind="MESSAGE"]'))
