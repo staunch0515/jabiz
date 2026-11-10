@@ -256,6 +256,9 @@ export interface SaveInput {
   languages?: ContentLanguage[] | null
   /** Q73b: the publication's texts in each offered language other than the base, the whole set. */
   translations?: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>> | null
+  /** F-S3d (F-S2b1): the knowledge map node it is bound to, both or neither (`PublicationNodes`). */
+  treeId?: string | null
+  treeNodeId?: string | null
   /** F-C1b: the assets of the library parts of the draft are still copies of (`PublicationAssets`); none: none changes. */
   assets?: PublicationAssets
 }
@@ -1022,6 +1025,8 @@ export interface PublicationForm {
   storedTranslations?: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>>
   translationHashes?: Partial<Record<ContentLanguage, Partial<Record<PublicationTextField, string>>>>
   confirmed?: string[]
+  /** F-S3d: the knowledge map node it is bound to (none: not bound); sent with every save, as the server writes it. */
+  treeNode?: { treeId: string; nodeId: string } | null
 }
 
 let keys = 0
@@ -1072,6 +1077,7 @@ export function formOf(detail: PublicationDetail | null): PublicationForm {
     storedTranslations: p?.translations ?? {},
     translationHashes: p?.translationHashes ?? {},
     confirmed: [],
+    treeNode: p?.treeId && p?.treeNodeId ? { treeId: p.treeId, nodeId: p.treeNodeId } : null,
     tiers: (detail?.tiers ?? []).map((tier) => ({ key: tierKey(), tierId: tier.tierId,
       fromScore: String(tier.fromScore), toScore: String(tier.toScore), reward: tier.reward })),
   }
@@ -1187,6 +1193,9 @@ export function inputOf(form: PublicationForm, publicationId: string | null, bas
       } : {}),
       audience: form.audience,
       referral,
+      // F-S3d: the node, or none; the server writes what is given (leaving it out unbinds).
+      treeId: form.treeNode?.treeId ?? null,
+      treeNodeId: form.treeNode?.nodeId ?? null,
       // Q73b: the texts of the languages offered only; neither for a publication of its version's base only.
       ...(form.languages.length > 0 ? {
         languages: form.languages,
