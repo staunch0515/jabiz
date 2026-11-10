@@ -109,7 +109,7 @@ export interface Announcement {
    * Where a message leads: the cash rewards or the redeem page (Q22), the asset library (F-C2), the AI help's
    * conversation (F-C10c, `actionId`); null for an announcement.
    */
-  action: 'CASH' | 'REDEEM' | 'ASSETS' | 'HELP' | null
+  action: 'CASH' | 'REDEEM' | 'ASSETS' | 'VERIFICATION' | 'HELP' | null
   actionId: string | null
   at: string
   expiresAt: string | null
@@ -188,7 +188,8 @@ export async function readAnnouncements(): Promise<Announcement[]> {
     title: text(row.title),
     body: text(row.body),
     markdown: row.markdown !== false,
-    action: row.action === 'CASH' || row.action === 'REDEEM' || row.action === 'ASSETS' ? row.action
+    action: row.action === 'CASH' || row.action === 'REDEEM' || row.action === 'ASSETS'
+      || row.action === 'VERIFICATION' ? row.action
       : row.action === 'HELP' && row.actionId ? 'HELP' : null,
     actionId: str(row.actionId),
     at: String(row.at),

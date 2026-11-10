@@ -47,6 +47,7 @@ import {
 } from './api'
 import { NoticeEditor } from './NoticeEditor'
 import './messages'
+import { VERIFICATION_PATH } from '../verification/api'
 
 const VARIANT: Record<NoticeStatus, 'outline' | 'secondary' | 'success' | 'warning'> = {
   DRAFT: 'outline',
@@ -260,10 +261,12 @@ function AnnouncementItem({ item }: { item: Announcement }) {
               onClick={() => openHelp(item.actionId)}>{t('helpPanel.openThread')}</Button>
           )}
           {item.action && item.action !== 'HELP' && (
-            <Link to={item.action === 'CASH' ? CASH_REWARDS_PATH : item.action === 'ASSETS' ? ASSETS_PATH : REDEEM_PATH}
+            <Link to={item.action === 'CASH' ? CASH_REWARDS_PATH : item.action === 'ASSETS' ? ASSETS_PATH
+              : item.action === 'VERIFICATION' ? VERIFICATION_PATH : REDEEM_PATH}
               className="text-primary w-fit text-sm underline underline-offset-4" data-testid="announcement-action">
               {t(item.action === 'CASH' ? 'notices.inbox.openCash'
-                : item.action === 'ASSETS' ? 'notices.inbox.openAssets' : 'notices.inbox.openRedeem')}
+                : item.action === 'ASSETS' ? 'notices.inbox.openAssets'
+                  : item.action === 'VERIFICATION' ? 'notices.inbox.openVerification' : 'notices.inbox.openRedeem')}
             </Link>
           )}
           {item.expiresAt && (

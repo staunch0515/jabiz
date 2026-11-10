@@ -32,6 +32,7 @@ import { blockMenu, blockMessages } from './block-messages'
 import { exposureMenu, exposureMessages } from './exposure-messages'
 import { videoUseMenu, videoUseMessages } from './video-use-messages'
 import { sharedVideoMenu, sharedVideoMessages } from './shared-video-messages'
+import { verificationMenu, verificationMessages } from './verification-messages'
 import { helpMenu, helpMessages } from './help-messages'
 import { BRAND_NAMES } from './brand'
 
@@ -41,12 +42,13 @@ export const messages = {
     menu: { group: BRAND_NAMES.en, reviews: 'Reviews', users: 'Users', ...legalMenu.en, ...aiMenu.en,
       ...financeMenu.en, ...broadcastsMenu.en, ...attemptsMenu.en, ...bankMenu.en, ...manualMenu.en, ...rewardMenu.en, ...settingsMenu.en, ...withdrawalMenu.en,
       ...overviewMenu.en, ...operatorMenu.en, ...prospectMenu.en, ...settlementMenu.en, ...accountMenu.en, ...pageMenu.en, ...productMenu.en, ...abuseReportMenu.en,
-      ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en, ...usageMenu.en, ...regionMenu.en, ...homeMenu.en, ...treesMenu.en, ...topicMenu.en, ...blockMenu.en, ...sharedVideoMenu.en, ...exposureMenu.en, ...videoUseMenu.en, ...helpMenu.en },
+      ...referralMenu.en, ...audiencePricingMenu.en, ...feeMenu.en, ...usageMenu.en, ...regionMenu.en, ...homeMenu.en, ...treesMenu.en, ...topicMenu.en, ...blockMenu.en, ...sharedVideoMenu.en, ...verificationMenu.en, ...exposureMenu.en, ...videoUseMenu.en, ...helpMenu.en },
     help: helpMessages.en,
     region: regionMessages.en,
     home: homeMessages.en,
     trees: treesMessages.en,
     sharedVideos: sharedVideoMessages.en,
+    verifications: verificationMessages.en,
     topics: topicMessages.en,
     blocks: blockMessages.en,
     exposure: exposureMessages.en,
@@ -358,12 +360,13 @@ export const messages = {
     menu: { group: BRAND_NAMES.zh, reviews: '审核', users: '用户', ...legalMenu.zh, ...aiMenu.zh,
       ...financeMenu.zh, ...broadcastsMenu.zh, ...attemptsMenu.zh, ...bankMenu.zh, ...manualMenu.zh, ...rewardMenu.zh, ...settingsMenu.zh, ...withdrawalMenu.zh,
       ...overviewMenu.zh, ...operatorMenu.zh, ...prospectMenu.zh, ...settlementMenu.zh, ...accountMenu.zh, ...pageMenu.zh, ...productMenu.zh, ...abuseReportMenu.zh,
-      ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh, ...usageMenu.zh, ...regionMenu.zh, ...homeMenu.zh, ...treesMenu.zh, ...topicMenu.zh, ...blockMenu.zh, ...sharedVideoMenu.zh, ...exposureMenu.zh, ...videoUseMenu.zh, ...helpMenu.zh },
+      ...referralMenu.zh, ...audiencePricingMenu.zh, ...feeMenu.zh, ...usageMenu.zh, ...regionMenu.zh, ...homeMenu.zh, ...treesMenu.zh, ...topicMenu.zh, ...blockMenu.zh, ...sharedVideoMenu.zh, ...verificationMenu.zh, ...exposureMenu.zh, ...videoUseMenu.zh, ...helpMenu.zh },
     help: helpMessages.zh,
     region: regionMessages.zh,
     home: homeMessages.zh,
     trees: treesMessages.zh,
     sharedVideos: sharedVideoMessages.zh,
+    verifications: verificationMessages.zh,
     topics: topicMessages.zh,
     blocks: blockMessages.zh,
     exposure: exposureMessages.zh,
@@ -675,12 +678,13 @@ export const messages = {
     menu: { group: BRAND_NAMES.ja, reviews: '審査', users: 'ユーザー', ...legalMenu.ja, ...aiMenu.ja,
       ...financeMenu.ja, ...broadcastsMenu.ja, ...attemptsMenu.ja, ...bankMenu.ja, ...manualMenu.ja, ...rewardMenu.ja, ...settingsMenu.ja, ...withdrawalMenu.ja,
       ...overviewMenu.ja, ...operatorMenu.ja, ...prospectMenu.ja, ...settlementMenu.ja, ...accountMenu.ja, ...pageMenu.ja, ...productMenu.ja, ...abuseReportMenu.ja,
-      ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja, ...usageMenu.ja, ...regionMenu.ja, ...homeMenu.ja, ...treesMenu.ja, ...topicMenu.ja, ...blockMenu.ja, ...sharedVideoMenu.ja, ...exposureMenu.ja, ...videoUseMenu.ja, ...helpMenu.ja },
+      ...referralMenu.ja, ...audiencePricingMenu.ja, ...feeMenu.ja, ...usageMenu.ja, ...regionMenu.ja, ...homeMenu.ja, ...treesMenu.ja, ...topicMenu.ja, ...blockMenu.ja, ...sharedVideoMenu.ja, ...verificationMenu.ja, ...exposureMenu.ja, ...videoUseMenu.ja, ...helpMenu.ja },
     help: helpMessages.ja,
     region: regionMessages.ja,
     home: homeMessages.ja,
     trees: treesMessages.ja,
     sharedVideos: sharedVideoMessages.ja,
+    verifications: verificationMessages.ja,
     topics: topicMessages.ja,
     blocks: blockMessages.ja,
     exposure: exposureMessages.ja,

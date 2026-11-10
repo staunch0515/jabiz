@@ -29,6 +29,7 @@ import { AVATAR_VARIANTS, DICTIONARY, isUserId, PATH, PERMISSION, SPONSOR_PENDIN
 import { AfterDecision, LoadFailed, Section, StatusBadge } from './components'
 import { SponsorAssets } from './SponsorAssets'
 import { SponsorFeeAccount } from './SponsorFeeAccount'
+import { SponsorVerificationLine } from './SponsorVerificationLine'
 import { SponsorPackageImports } from './SponsorPackageImports'
 import { QUEUE, useAfterDecision, useLabels, when } from './hooks'
 
@@ -232,6 +233,8 @@ export default function SponsorReviewPage() {
         ))}
       </Section>
       <Section title={t('publication.decision')} testId="sponsor-decision">{decision}</Section>
+      {/* F-M3: the Sponsor's company verification now, with a link to its verifications. */}
+      {can(PERMISSION.verificationRead) && <SponsorVerificationLine userId={userId} />}
       <RewardMethods userId={userId} />
       {/* F-C1d: the Sponsor's asset library, read only, for support (an operator's: its own Sponsors'). */}
       {can(PERMISSION.publicationRead) && <SponsorAssets userId={userId} />}

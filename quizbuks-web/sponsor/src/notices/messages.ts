@@ -92,6 +92,7 @@ const en = {
       openCash: 'Open the cash rewards',
       openRedeem: 'Open the prizes page',
       openAssets: 'Open the asset library',
+      openVerification: 'Open the company verification',
     },
   },
 }
@@ -184,6 +185,7 @@ const zh: Texts = {
       openCash: '打开现金奖励',
       openRedeem: '打开奖品领取页',
       openAssets: '打开资源库',
+      openVerification: '打开企业认证',
     },
   },
 }
@@ -274,6 +276,7 @@ const ja: Texts = {
       openCash: '現金報酬を開く',
       openRedeem: '賞品の引き換えページを開く',
       openAssets: 'リソースライブラリを開く',
+      openVerification: '企業認証を開く',
     },
   },
 }

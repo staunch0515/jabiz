@@ -243,3 +243,12 @@
 3. 账户邮箱的子域算同域（公共域名清单仍先拒）。
 4. 总部内容管理员与运营商任一成员可撤销，二次验证、理由必填、不收回额度。
 - `CERTIFIED_TOP_UP` 是钱：写完先报分支名、不开 PR，由总控安排额外审查。
+
+### 6.7 实施记录（S2，2026-11-10）
+- 分支 `1.3/quizbuks-FM3-verification`，迁移 V111。照 6.1–6.6 做，与计划不同的几处：
+  - **确认链接不记 `linkMessageId`**：平台的 `SendMail` 不把消息编号交给流程；平台的令牌本来就"只认该用途、该用户的最新一封"（`MailTokens`），重新发送即令旧链接失效，效果相同。令牌用途为 `qb.companyEmail`（平台的用途名不允许连字符）。
+  - **链接有效期**：邮件模板的令牌有效期是定义时的固定值，模板定为上限 168 小时，参数 `qb.sponsor-verification.link-hours` 在确认时按 `linkSentAt` 检查（页面显示的到期时刻按同一参数算）。
+  - **不另设审核提醒**（6.5 原写"审核超 7 天给运营商待办"与参数 `qb.sponsor-verification.review-remind-days`）：规格没有要求，平台的审批本来就给审核人待办；参数因此没有加。
+  - **补发**：批准结果在同一事务中先 `SaveChanges.now`（子流程才读得到"已认证"），再以子流程 `QB_FEE_CREDIT_CERTIFIED_TOP_UP` 补发；开户赠送在钱包锁内读认证（与补发同一把锁，不会两边都按未认证处理）。
+  - 公开主页的标记由公开模板 `qb.public.sponsor-page` 的新列 `verifiedDomain` 给出（公开视图只含 `APPROVED` 行），学者 App 的发起方主页与发起方页面共用 `qb/VerifiedMark`。
+- 测试：`SponsorVerificationIT`（8 例：公共域名与格式、未通过入驻、账户邮箱同域与子域、链接只认最新一封与本人、过期、一次性、本人不能审、同域名第二家（提交时与批准时）、改名当场失去、撤销与站内信、补发一次与先认证后开户、开关关闭时由每日任务补发）、`VerificationRulesTest`、`FeeCreditRulesTest` 的补发规则；场景快照（新参数、规则、权限）与 `SetupIT`；公开模板快照；前端两个 SPA、扩展（`ext:check`）与 e2e `sponsor-verification.spec.ts`。
