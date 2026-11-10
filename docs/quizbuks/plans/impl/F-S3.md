@@ -42,7 +42,7 @@
 - 节点卡片：名称、状态（颜色只用主题 token，并有文字与图标，不只靠颜色）、"点亮后得到什么"（节点说明）、可答时链接到能开始的发布、锁定或差条件时列出缺的条件。
 - 平台图与发起方图标识不同（标签与边框样式）。
 - 无障碍：图是 `role="tree"` 风格的可聚焦网格，方向键在节点与依赖之间移动，Enter 打开详情；另有"文字列表"视图（同一数据的分层列表）；亮暗两种外观过 axe。
-- 删除 `qb/TechTree.tsx`、`qb/tree.ts`、`share/levels.ts` 及其测试（Q85 的旧树，D4/D5 已确认删除，现在无人引用）。
+- 组件在 `src/qb/tree/`（`states.ts`、`layout.ts`、`messages.ts`、`KnowledgeMap.tsx`），以文件路径引用，与旧的 `qb/tree.ts` 不冲突。旧的 `qb/TechTree.tsx`、`qb/tree.ts`、`share/levels.ts` 及其测试（Q85，D4/D5 已确认删除）**在 F-S3c 中删除**：商户主页（`share/SponsorPage.tsx`）仍以 `levels.ts` 列出发布，随它换成看图一起删。
 
 ## 4. F-S3c 看图
 
