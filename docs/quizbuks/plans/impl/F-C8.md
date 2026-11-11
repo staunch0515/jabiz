@@ -43,3 +43,11 @@
 1. 授权分配（见做什么第 1 条）：内容管理员提出、财务管理员发布，超级管理员不授予。同时影响 F-C9。是否照此？
 2. 须审批的安全通知清单：自动判定的（带令牌或登录链接）之外，只加 `qb.bank-account.changed`，是否够？是否还要加 `qb.payout.action-needed`（收款账户受限）、转账失败等与钱有关的通知？
 3. 运维文档是新开一节还是并入已有的「邮件」一节（`operations.md` 里邮件的章节在哪一节，我定稿时对齐）：请核号后告诉我。
+
+## 总控的决定（2026-11-11 批准）
+
+1. 授权照建议（内容管理员 `mail.text.read|write` + `control.propose`；财务管理员 `mail.text.read|write`；超级管理员不授予）。授权改动放在先开的 F-C9 的 PR，`QbRolesTest` 写明；本项在其合入后（合并最新的 `1.3/quizbuks`）再做。`QB_E2E_PUBLISHER` 加 `mail.text.write`（只在测试里）。
+2. 须审批的安全通知：自动判定的之外，用 `t.protectedText()` 纳入 `qb.bank-account.changed`、`qb.payout.action-needed`、`qb.transfer.failed`。充值类（`qb.topup.*`）和发布结果仍是普通通知。
+3. 官网主机、标志、页脚见 F-C9 的决定；链接的主机限制同。
+4. `operations.md` 用 §7.46（F-C9 用 §7.45），一项一节并互相引用；同号先合者占，后合者改号。
+5. F-C8 合并前须经 Fable 审（涉及邮件令牌，总控安排）；顺序在 F-C9 之后。
