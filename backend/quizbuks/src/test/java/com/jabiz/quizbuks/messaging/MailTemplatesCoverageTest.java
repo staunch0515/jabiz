@@ -23,15 +23,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  * F-C8 (platform decision D72): the texts of every QuizBuks mail can be changed online, and the administrator who does
  * it sees the mail by its name and previews it with example values. So each template has its name in the three
  * languages ({@code mail.<name>.name}) and an example value for every parameter ({@code .sample}); a template added
- * later without them fails here, not on an administrator's screen. The templates of the security notices that carry no
- * token (money and bank accounts: a changed text could lead a taker to transfer to the wrong place) are the ones whose
- * changes another administrator publishes.
+ * later without them fails here, not on an administrator's screen. The templates that ask for a payment or speak of a
+ * payout account or a payment method, and carry no token, are declared protected: their changes another administrator
+ * publishes.
  */
 class MailTemplatesCoverageTest {
 
-    /** The mail that is about money or a bank account, with no token to make it protected by itself. */
-    private static final List<String> PROTECTED = List.of("qb.bank-account.changed", "qb.payout.action-needed",
-        "qb.transfer.failed");
+    /**
+     * The mail that asks the recipient to pay or transfer, or speaks of the account money is received on or the way it
+     * is paid (a changed text could lead a taker or a sponsor to pay or transfer to the wrong place), without a token
+     * to make it protected by itself. The rule for every template, old and new: anything that asks for a payment,
+     * names a payout account or a payment method is protected. Confirmations that name neither ({@code qb.topup.paid},
+     * {@code qb.topup.granted}, {@code qb.fee-credit.expiring}) stay ordinary notices.
+     */
+    private static final List<String> PROTECTED = List.of("qb.bank-account.changed", "qb.transfer.sent",
+        "qb.transfer.failed", "qb.payout.action-needed", "qb.fee.invoice-issued", "qb.fee.invoice-overdue",
+        "qb.topup.paid-cash", "qb.publication.funds-short");
 
     private static List<MailTemplate> declared() throws ClassNotFoundException, IllegalAccessException {
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false) {
@@ -88,7 +95,7 @@ class MailTemplatesCoverageTest {
     }
 
     @Test
-    void theMoneyNoticesWithoutATokenAreProtectedAndNothingElseIsExceptByItsToken() throws Exception {
+    void theNoticesAboutPayingAndPayoutAccountsAreProtectedAndNothingElseIsExceptByItsToken() throws Exception {
         List<MailTemplate> templates = declared();
         assertThat(templates.stream().filter(MailTemplate::protectedText).map(MailTemplate::name).toList())
             .containsExactlyInAnyOrderElementsOf(PROTECTED);

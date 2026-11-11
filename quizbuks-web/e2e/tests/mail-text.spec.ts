@@ -1,7 +1,8 @@
 import type { APIRequestContext } from '@playwright/test'
 import { adminOfRole, contentAdmin } from './legal'
 import { approvedSponsor } from './publishing'
-import { expect, mailTo, PASSWORD, prepareQuizbuks, run, test, tokenOf, verifiedUser } from './support'
+import { signInAdmin } from './admin'
+import { expect, expectAccessible, mailTo, PASSWORD, prepareQuizbuks, run, setAppearance, test, tokenOf } from './support'
 
 /*
  * The texts of the mail (F-C8, platform decision D72): a content administrator changes an ordinary notice and the next
@@ -78,7 +79,14 @@ test('the verification mail changes only when another administrator publishes wh
   expect(await refused.text()).toContain('MAIL_TEXT_NEEDS_APPROVAL')
   const change = await run(request, proposer, 'CONTROL_CHANGE_PROPOSE', { targetEntity: 'MailText',
     values: { template, locale: 'en', subject, body: current.defaultBody }, reason: 'End-to-end test' })
-  await verifiedUser(request, 'sponsor', 'Quinn') // a mail goes out meanwhile, on the default text
+  // A mail that goes out while the proposal waits is still on the default text.
+  const waiting = `verify-waiting-${Date.now()}@example.com`
+  const early = await request.post('/api/auth/register', {
+    data: { email: waiting, password: PASSWORD, displayName: 'Quinn', locale: 'en', entry: 'sponsor' } })
+  expect(early.status(), await early.text()).toBe(202)
+  const first = await mailTo(request, waiting, /verify|confirm|address/i)
+  expect(first.subject).not.toContain(marker)
+  expect(first.text).not.toContain(marker)
   expect((await english(request, proposer, template)).state).toBe('DEFAULT')
 
   await run(request, publisher, 'CONTROL_CHANGE_PUBLISH', { changeId: change.changeId })
@@ -94,3 +102,15 @@ test('the verification mail changes only when another administrator publishes wh
     await reset(request, proposer, template)
   }
 })
+
+// The platform's page of the mail texts in the administration, in both appearances.
+for (const appearance of ['light', 'dark'] as const) {
+  test(`the mail texts page passes axe (${appearance})`, async ({ page }) => {
+    await setAppearance(page, appearance)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await signInAdmin(page)
+    await page.goto('/admin/mail/texts')
+    await expect(page.getByTestId(/^mail-template-/).first()).toBeVisible()
+    await expectAccessible(page, appearance === 'light' ? 'admin mail texts' : 'admin mail texts (dark)')
+  })
+}

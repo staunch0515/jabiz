@@ -30,7 +30,8 @@ public final class NotificationMails {
         .category(MailCategory.TRANSACTIONAL).param("amount", "fee", "net")
             .sample("amount", "1,000")
             .sample("fee", "100")
-            .sample("net", "900"));
+            .sample("net", "900")
+            .protectedText());
 
     /** A taker's transfer failed for certain; the money is back on their balance. */
     public static final MailTemplate TRANSFER_FAILED = MailTemplate.define("qb.transfer.failed", t -> t
@@ -52,7 +53,8 @@ public final class NotificationMails {
     /** Q87: a sponsor's top-up is in their cash account (not Kudos yet). */
     public static final MailTemplate TOPUP_PAID_CASH = MailTemplate.define("qb.topup.paid-cash", t -> t
         .category(MailCategory.TRANSACTIONAL).param("amount")
-            .sample("amount", "10,000"));
+            .sample("amount", "10,000")
+            .protectedText());
 
     /** Kudos granted to a sponsor by hand are on their wallet (Q18b): no money was received, so no receipt. */
     public static final MailTemplate TOPUP_GRANTED = MailTemplate.define("qb.topup.granted", t -> t
@@ -63,12 +65,14 @@ public final class NotificationMails {
         .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "dueOn")
             .sample("invoiceNo", "INV-0001")
             .sample("total", "1,000")
-            .sample("dueOn", "2026-01-31"));
+            .sample("dueOn", "2026-01-31")
+            .protectedText());
     public static final MailTemplate FEE_INVOICE_OVERDUE = MailTemplate.define("qb.fee.invoice-overdue", t -> t
         .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "dueOn")
             .sample("invoiceNo", "INV-0001")
             .sample("total", "1,000")
-            .sample("dueOn", "2026-01-31"));
+            .sample("dueOn", "2026-01-31")
+            .protectedText());
 
     /**
      * F-M2: a sponsor's platform fee Kudos expire soon (each lot once, at most once per sponsor in 24 hours): what is
@@ -107,7 +111,8 @@ public final class NotificationMails {
             .param("publications", "pendingCount", "pendingAmount")
             .sample("publications", "Spring quiz")
             .sample("pendingCount", "3")
-            .sample("pendingAmount", "300"));
+            .sample("pendingAmount", "300")
+            .protectedText());
 
     /** A sponsor's publication ended by its time, its winners or its budget. */
     public static final MailTemplate PUBLICATION_ENDED = MailTemplate.define("qb.publication.ended", t -> t
