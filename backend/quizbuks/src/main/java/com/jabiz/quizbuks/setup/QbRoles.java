@@ -40,7 +40,8 @@ public final class QbRoles {
     }
 
     /**
-     * Headquarters' content administrators (F-S1): monitoring, the global rules and emergencies only. The day-to-day
+     * Headquarters' content administrators (F-S1): monitoring, the global rules and emergencies only. They also hold
+     * {@link #MAIL_TEXT_PROPOSE} (F-C8, F-C9), whose {@code control.propose} lets them propose other controlled changes. The day-to-day
      * running of sponsors (reviews, reward methods, disputes, prospecting, certifications) is the operators': the
      * headquarters staff who do it are members of the platform operator ({@code QB_OPERATOR}).
      */
@@ -213,6 +214,11 @@ public final class QbRoles {
      * about money, and the letterhead, only when another administrator publishes them); the finance administrators are
      * that other administrator, since they hold {@code control.publish}. Apart from the other lists because the super
      * administrator is built from them and holds none of this (separation of duties).
+     *
+     * <p>Side effect of {@code control.propose}: it is the controlled changes' general permission to propose, so the
+     * content administrators can propose other controlled changes too (parameters, approval rules). A proposal takes
+     * effect only when a finance administrator publishes it (four eyes), and the platform asks {@code mail.text.write},
+     * a protected grant, only of those who change mail texts. Noted in operations.md (the letterhead's section).
      */
     private static final List<String> MAIL_TEXT_PROPOSE = List.of("mail.text.read", "mail.text.write", "control.propose");
     private static final List<String> MAIL_TEXT_PUBLISH = List.of("mail.text.read", "mail.text.write");
