@@ -558,6 +558,8 @@ public final class Prepayments {
         // The fee credit: back to the grants still to be spent; to those expired or voided meanwhile, voided again.
         BigDecimal credit = BigDecimal.ZERO;
         BigDecimal voided = BigDecimal.ZERO;
+        // What expired lots still held when voided now (the daily job would have): it leaves the wallet too.
+        BigDecimal expiredLeft = BigDecimal.ZERO;
         List<LedgerProcesses.PostInput> voids = new ArrayList<>();
         Map<String, String> party = Map.of(QbLedger.PARTY, input.sponsorId());
         for (Map.Entry<String, BigDecimal> entry : grantBack.entrySet()) {
@@ -565,16 +567,27 @@ public final class Prepayments {
             if (grant == null) {
                 throw new IllegalStateException("Fee credit lot " + entry.getKey() + " a prepayment came from is gone");
             }
-            boolean expired = grant.get("voidedAt") != null || !((Instant) grant.get("expiresAt")).isAfter(ctx.opTime());
+            boolean voidedBefore = grant.get("voidedAt") != null;
+            boolean expired = voidedBefore || !((Instant) grant.get("expiresAt")).isAfter(ctx.opTime());
             if (expired) {
-                ctx.changes().update(QbFeeAccount.GRANT, grant.id(), grant.version(), Map.of("voidedAmount",
-                    FeeGate.money(grant.get("voidedAmount")).add(entry.getValue())));
+                // A voided lot holds nothing (voided_at set, remaining 0): what comes back is voided again at once,
+                // and an expired lot the daily job has not voided yet is voided now, whole.
+                BigDecimal left = voidedBefore ? BigDecimal.ZERO : FeeGate.money(grant.get("remaining"));
+                BigDecimal amount = entry.getValue().add(left);
+                Map<String, Object> values = new LinkedHashMap<>();
+                values.put("voidedAmount", FeeGate.money(grant.get("voidedAmount")).add(amount));
+                values.put("remaining", BigDecimal.ZERO);
+                if (!voidedBefore) {
+                    values.put("voidedAt", ctx.opTime());
+                }
+                ctx.changes().update(QbFeeAccount.GRANT, grant.id(), grant.version(), values);
                 voids.add(new LedgerProcesses.PostInput(ctx.opTime(), FeeSettlement.VOIDED_AGAIN, grant.get("source"),
                     List.of(
-                        new LedgerProcesses.Line(QbLedger.FEE_CREDIT, Direction.DEBIT, entry.getValue(), null, party),
-                        new LedgerProcesses.Line(QbLedger.FEE_CREDIT_PROMOTION, Direction.CREDIT, entry.getValue(), null,
+                        new LedgerProcesses.Line(QbLedger.FEE_CREDIT, Direction.DEBIT, amount, null, party),
+                        new LedgerProcesses.Line(QbLedger.FEE_CREDIT_PROMOTION, Direction.CREDIT, amount, null,
                             party)), QbFeeAccount.GRANT, String.valueOf(grant.id())));
                 voided = voided.add(entry.getValue());
+                expiredLeft = expiredLeft.add(left);
             } else {
                 ctx.changes().update(QbFeeAccount.GRANT, grant.id(), grant.version(),
                     Map.of("remaining", FeeGate.money(grant.get("remaining")).add(entry.getValue())));
@@ -591,9 +604,9 @@ public final class Prepayments {
                 Map.of("remaining", FeeGate.money(lot.get("remaining")).add(entry.getValue())));
             cash = cash.add(entry.getValue());
         }
-        if (credit.signum() > 0) {
-            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, input.sponsorId(), credit, 0,
-                BigDecimal.ZERO);
+        if (credit.subtract(expiredLeft).signum() != 0) {
+            QbWallets.change(ctx, FeeGate.first(ctx, CREDIT_WALLET), QbWallets.FEE_CREDIT, input.sponsorId(),
+                credit.subtract(expiredLeft), 0, BigDecimal.ZERO);
         }
         if (cash.signum() > 0) {
             QbWallets.change(ctx, FeeGate.first(ctx, CASH_WALLET), QbWallets.CASH, input.sponsorId(), cash, 0,

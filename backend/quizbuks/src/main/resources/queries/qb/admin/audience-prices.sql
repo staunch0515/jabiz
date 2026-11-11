@@ -1,6 +1,6 @@
 /*---
 id: qb.admin.audience-prices
-description: "Every owner's audience price list (Q47c): headquarters' own (direct) and each operator's, with the least fee, the daily prices by rule and who changed it last and why"
+description: "Every operator's audience price list (Q47c), with the least fee, the daily prices by rule and who changed it last and why (F-M5: headquarters' own list is gone, the requester 2026-11-09; its rows stay unread until a later clean-up)"
 entities: [QbAudiencePriceList, QbAudiencePrice, QbOperator]
 datasets:
   QbAudiencePriceList: urn:jabiz:dataset:default:QbAudiencePriceList
@@ -36,5 +36,5 @@ SELECT
     l.{{QbAudiencePriceList.updatedAt}}   AS updatedAt,
     l.{{QbAudiencePriceList.updatedBy}}   AS updatedBy
 FROM {{QbAudiencePriceList}} l
-LEFT JOIN {{QbOperator}} o ON CAST(o.{{QbOperator.operatorId}} AS text) = l.{{QbAudiencePriceList.owner}}
+JOIN {{QbOperator}} o ON CAST(o.{{QbOperator.operatorId}} AS text) = l.{{QbAudiencePriceList.owner}}
 WHERE (CAST(:owner AS text) IS NULL OR l.{{QbAudiencePriceList.owner}} = CAST(:owner AS text))

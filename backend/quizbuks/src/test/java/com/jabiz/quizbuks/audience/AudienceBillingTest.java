@@ -61,14 +61,12 @@ class AudienceBillingTest {
     }
 
     @Test
-    void theOperatorsListAppliesElseTheFallback() {
-        AudienceBilling.PriceList direct = list("direct", 0, Map.of());
+    void onlyTheOperatorsListApplies() {
+        // F-M5: no headquarters' list and no fallback to it (the requester, 2026-11-09).
         AudienceBilling.PriceList north = list("north", 0, Map.of());
-        assertThat(AudienceBilling.applicable(null, null, direct, AudienceBilling.FALLBACK_FREE)).isSameAs(direct);
-        assertThat(AudienceBilling.applicable("north", north, direct, AudienceBilling.FALLBACK_FREE)).isSameAs(north);
-        assertThat(AudienceBilling.applicable("north", null, direct, AudienceBilling.FALLBACK_DIRECT))
-            .isSameAs(direct);
-        assertThat(AudienceBilling.applicable("north", null, direct, AudienceBilling.FALLBACK_FREE)).isNull();
+        assertThat(AudienceBilling.applicable("north", north)).isSameAs(north);
+        assertThat(AudienceBilling.applicable("north", null)).isNull();
+        assertThat(AudienceBilling.applicable(null, north)).isNull();
     }
 
     @Test

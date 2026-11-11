@@ -507,8 +507,8 @@ class SetupIT extends QbItSupport {
         // Q82: the conversations' daily cap and quiet days (not controlled).
         expected.put(QbParams.CONVERSATION_DAILY_CAP, "20");
         expected.put(QbParams.CONVERSATION_CLOSE_DAYS, "90");
-        // Q47c: charging for the audience rules (off), its fallback and the unused-days refund (all controlled).
-        expected.putAll(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "false", QbParams.AUDIENCE_PRICE_FALLBACK, "DIRECT",
+        // Q47c: charging for the audience rules (off) and the unused-days refund (controlled; F-M5 removed the fallback).
+        expected.putAll(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "false",
             QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "false"));
         // Q87a: where top-ups go, the exchange's switches and the transfers' rate (all controlled).
         expected.putAll(Map.of(QbParams.TOPUP_TARGETS, "KUDOS,CASH", QbParams.TOPUP_DEFAULT_TARGET, "KUDOS",

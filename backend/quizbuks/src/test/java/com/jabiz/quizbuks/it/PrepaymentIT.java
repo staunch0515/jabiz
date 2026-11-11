@@ -1,0 +1,311 @@
+package com.jabiz.quizbuks.it;
+
+import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.audience.AudiencePricingProcesses;
+import com.jabiz.quizbuks.fee.FeeCodes;
+import com.jabiz.quizbuks.fee.Prepayments;
+import com.jabiz.quizbuks.publishing.PublicationPrepayments;
+import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.runtime.test.TestTokens;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+
+import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * F-M5 (docs/quizbuks/plans/impl/F-M.md §8): one funds check of a publication's submission against the whole account
+ * that pays the platform's fees, the fee set aside in 2180 (today the audience rules' fee, F-M7), charged from it when
+ * the publication goes on, given back where it came from when the publication goes back to its draft (withdrawn,
+ * rejected, its review expired) or a day after it ends; a shortfall writes nothing; a postpaid Sponsor's credit limit
+ * counts what they owe, invoiced or not, and what their other submissions set aside; the daily check agrees.
+ */
+class PrepaymentIT extends PlayItSupport {
+
+    /** 100 a day for gender over a seven-day run: 700, and 10% tax: 770 set aside. */
+    static final BigDecimal SET_ASIDE = new BigDecimal("770");
+    private static boolean switched;
+
+    @BeforeEach
+    void switches() {
+        if (!switched) {
+            param(QbParams.AUDIENCE_BILLING_ENABLED, "true");
+            switched = true;
+        }
+    }
+
+    void param(String key, String value) {
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
+            "values", Map.of("paramKey", key, "value", value), "reason", "F-M5 test"));
+        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+    }
+
+    /** A Sponsor of a new operator of its own that prices gender at 100 a day (headquarters set its list). */
+    String pricedSponsor(String name) {
+        String sponsor = newSponsor(unique(name));
+        String operator = newOperator(TestTokens.bearer(tokens, "fm5-hq", QbPermissions.OPERATORS_WRITE,
+            QbPermissions.OPERATORS_READ), unique(name + " operator"));
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, TestTokens.bearer(tokens, "fm5-hq",
+            QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ), body("userId", sponsor, "operatorId",
+            operator, "reason", "F-M5"));
+        price(operator);
+        return sponsor;
+    }
+
+    /**
+     * A Sponsor of the default operator (whose members review its Sponsors' publications in these tests), which prices
+     * gender at 100 a day.
+     */
+    String reviewedSponsor(String name) {
+        String sponsor = newSponsor(unique(name));
+        price(String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?", sponsor)
+            .getFirst().get("operator_id")));
+        return sponsor;
+    }
+
+    void price(String operator) {
+        run(AudiencePricingProcesses.PRICES_SET, TestTokens.bearer(tokens, "fm5-prices",
+            QbPermissions.AUDIENCE_PRICES_WRITE), body("owner", operator, "minimumFee", 0, "prices",
+            List.of(body("ruleKey", "gender", "dailyPrice", 100)), "reason", "F-M5"));
+    }
+
+    /** A seven-day draft of the Sponsor's that uses the gender rule. */
+    String audienceDraft(String sponsor, String name) {
+        String token = sponsorToken(sponsor);
+        String publicationId = draft(token, version(token, name + " quiz"), name);
+        Map<String, Object> gender = new HashMap<>();
+        gender.put("key", "gender");
+        gender.put("options", List.of("FEMALE"));
+        run("QB_PUBLICATION_AUDIENCE_SAVE", token, body("publicationId", publicationId, "criteria",
+            new ArrayList<>(List.of(gender))));
+        return publicationId;
+    }
+
+    /** Fee credit as F-M2 grants it (5140 / 2190, the lot, the wallet's cache), expiring at {@code expiresAt}. */
+    String grant(String sponsor, long amount, Instant expiresAt) {
+        String grantId = UUID.randomUUID().toString();
+        execute("INSERT INTO qb_fee_credit_grant (grant_id, sponsor_id, source, source_key, amount, remaining, "
+            + "voided_amount, granted_at, expires_at, version) VALUES (?, ?, 'MANUAL', ?, ?, ?, 0, ?, ?, 1)", grantId,
+            sponsor, "test:" + grantId, amount, amount, Timestamp.from(clock.instant()), Timestamp.from(expiresAt));
+        run("LEDGER_POST", TestTokens.bearer(tokens, "ledger-test", "ledger.post"), body("bookingTime",
+            clock.instant().toString(), "description", "Granted credit (test)", "sourceEntity", "QbFeeCreditGrant",
+            "sourceId", grantId, "entries", List.of(
+                body("accountCode", "5140", "direction", "DEBIT", "amount", amount, "dimensions",
+                    Map.of("party", sponsor)),
+                body("accountCode", "2190", "direction", "CREDIT", "amount", amount, "dimensions",
+                    Map.of("party", sponsor)))));
+        execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, pending_count, pending_amount, pending_out, "
+            + "version) VALUES (?, ?, 'FEE_CREDIT', ?, 0, 0, 0, 1) ON CONFLICT (owner_id, kind) DO UPDATE SET "
+            + "balance = qb_wallet.balance + EXCLUDED.balance, version = qb_wallet.version + 1",
+            UUID.randomUUID().toString(), sponsor, amount);
+        return grantId;
+    }
+
+    static List<Map<String, Object>> prepayments(String publicationId) {
+        return query("SELECT * FROM qb_prepayment WHERE publication_id = ? ORDER BY frozen_at, prepayment_id",
+            publicationId);
+    }
+
+    static BigDecimal remainingOf(String grantId) {
+        return (BigDecimal) query("SELECT remaining FROM qb_fee_credit_grant WHERE grant_id = ?", grantId).getFirst()
+            .get("remaining");
+    }
+
+    static BigDecimal ledger(String code, String party) {
+        Object value = query("SELECT coalesce(sum(CASE WHEN e.direction = 'CREDIT' THEN e.amount ELSE -e.amount END), "
+            + "0) AS b FROM ledger_entry_version e JOIN ledger_account_version a ON a.account_id = e.account_id "
+            + "WHERE a.account_code = ? AND e.dimension_1 = ?", code, party).getFirst().get("b");
+        return new BigDecimal(String.valueOf(value));
+    }
+
+    /** What the daily check finds about the Sponsor in the account that pays the platform's fees (none: agrees). */
+    List<Map<String, Object>> differences(String sponsor) {
+        return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM),
+            Map.of()).stream().filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
+                && !"FEE_CREDIT_PROMOTION".equals(row.get("checkCode"))).toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> check(String sponsor, String publicationId) {
+        return run(PublicationPrepayments.CHECK, sponsorToken(sponsor), body("publicationId", publicationId));
+    }
+
+    @Test
+    void aNewSponsorWithGrantedCreditOnlySubmitsAndAShortfallWritesNothing() {
+        autoApprove(false);
+        String sponsor = pricedSponsor("fm5-new");
+        String publicationId = audienceDraft(sponsor, "FM5 new");
+
+        // Nothing in the account: the wizard says so, and the submission is refused with every amount.
+        Map<String, Object> look = check(sponsor, publicationId);
+        assertThat(look).containsEntry("enough", false).containsEntry("billingMode", "PREPAID");
+        assertThat(new BigDecimal(String.valueOf(look.get("total")))).isEqualByComparingTo(SET_ASIDE);
+        Map<String, Object> refusal = refused("QB_PUBLICATION_SUBMIT", sponsorToken(sponsor),
+            body("publicationId", publicationId), 422);
+        assertThat(codes(refusal)).containsExactly(FeeCodes.PUBLICATION_FUNDS);
+        assertThat(String.valueOf(violations(refusal).getFirst().get("message"))).contains("770");
+        assertThat(status(publicationId)).isEqualTo("DRAFT");
+        assertThat(prepayments(publicationId)).isEmpty();
+        assertThat(query("SELECT 1 FROM sys_approval_request_version WHERE entity_id = ?", publicationId)).isEmpty();
+
+        // Granted credit alone covers it: set aside from the grant, the rest still to spend.
+        String grantId = grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        assertThat(check(sponsor, publicationId)).containsEntry("enough", true);
+        submit(sponsorToken(sponsor), publicationId);
+        assertThat(status(publicationId)).isEqualTo("PENDING_REVIEW");
+        assertThat(prepayments(publicationId)).singleElement().satisfies(p -> {
+            assertThat(p).containsEntry("purpose", "AUDIENCE").containsEntry("mode", "PREPAID")
+                .containsEntry("status", "OPEN");
+            assertThat((BigDecimal) p.get("remaining")).isEqualByComparingTo(SET_ASIDE);
+            assertThat((BigDecimal) p.get("charge_amount")).isEqualByComparingTo("700");
+        });
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("230");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo(SET_ASIDE);
+        assertThat(row(publicationId).get("billing_operator_id")).isNotNull();
+        assertThat((BigDecimal) row(publicationId).get("prepayment_total")).isEqualByComparingTo(SET_ASIDE);
+        assertThat(differences(sponsor)).isEmpty();
+
+        // Withdrawn: everything back to the grant it came from.
+        run("QB_PUBLICATION_WITHDRAW", sponsorToken(sponsor), body("publicationId", publicationId));
+        assertThat(prepayments(publicationId)).singleElement().satisfies(p -> {
+            assertThat(p).containsEntry("status", "RELEASED").containsEntry("release_reason", "WITHDRAWN");
+            assertThat((BigDecimal) p.get("remaining")).isEqualByComparingTo("0");
+        });
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("1000");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(row(publicationId).get("prepayment_total")).isNull();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void rejectedOrExpiredInReviewGivesItBackAndAnExpiredGrantIsVoidedAgain() {
+        autoApprove(false);
+        String sponsor = reviewedSponsor("fm5-reject");
+        String grantId = grant(sponsor, 2_000, clock.instant().plus(Duration.ofDays(90)));
+        String rejected = audienceDraft(sponsor, "FM5 rejected");
+        String requestId = String.valueOf(submit(sponsorToken(sponsor), rejected).get("approvalRequestId"));
+        decide(requestId, "REJECT", "Not this time");
+        assertThat(status(rejected)).isEqualTo("DRAFT");
+        assertThat(prepayments(rejected)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("release_reason", "REJECTED"));
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("2000");
+
+        // A grant that expires while the publication waits: what goes back to it is voided at once.
+        String shortGrant = grant(sponsor, 800, clock.instant().plus(Duration.ofHours(30)));
+        String expiring = audienceDraft(sponsor, "FM5 expiring");
+        submit(sponsorToken(sponsor), expiring);
+        assertThat(remainingOf(shortGrant)).isEqualByComparingTo("30");
+        clock.set(clock.instant().plus(Duration.ofDays(9)));
+        runTick();
+        assertThat(status(expiring)).isEqualTo("DRAFT");
+        assertThat(prepayments(expiring)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("release_reason", "REVIEW_EXPIRED"));
+        Map<String, Object> lot = query("SELECT remaining, voided_amount FROM qb_fee_credit_grant WHERE grant_id = ?",
+            shortGrant).getFirst();
+        // Expired while it waited: what comes back and what it still held (30) are voided at once.
+        assertThat((BigDecimal) lot.get("remaining")).isEqualByComparingTo("0");
+        assertThat((BigDecimal) lot.get("voided_amount")).isEqualByComparingTo("800");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void goingOnChargesTheFeeFromItsPrepaymentToTheFrozenOperatorAndTheEndClosesIt() {
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-live");
+        grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        String publicationId = audienceDraft(sponsor, "FM5 live");
+        String operator = String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?",
+            sponsor).getFirst().get("operator_id"));
+        submit(sponsorToken(sponsor), publicationId);
+        assertThat(status(publicationId)).isEqualTo("SCHEDULED");
+        Map<String, Object> charge = query("SELECT * FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = "
+            + "'AUDIENCE'", sponsor).getFirst();
+        assertThat(charge).containsEntry("operator_id", operator);
+        assertThat((BigDecimal) charge.get("total")).isEqualByComparingTo(SET_ASIDE);
+        assertThat(query("SELECT status FROM qb_fee_invoice WHERE charge_id = ?", String.valueOf(charge.get(
+            "charge_id")))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "PAID"));
+        assertThat(prepayments(publicationId)).singleElement().satisfies(p ->
+            assertThat((BigDecimal) p.get("remaining")).isEqualByComparingTo("0"));
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(ledger("1130", sponsor)).isEqualByComparingTo("0");
+        assertThat(differences(sponsor)).isEmpty();
+
+        // A day after its end, the daily job closes what is left.
+        clock.set(clock.instant().plus(Duration.ofDays(9)));
+        runTick();
+        assertThat(status(publicationId)).isEqualTo("ENDED");
+        systemRun(Prepayments.RELEASE_ITEM, body("publicationId", publicationId, "sponsorId", sponsor));
+        assertThat(prepayments(publicationId)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "RELEASED")
+            .containsEntry("release_reason", "ENDED"));
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void aPostpaidSponsorsLimitCountsWhatTheyOweAndWhatIsSetAside() {
+        autoApprove(false);
+        String sponsor = pricedSponsor("fm5-postpaid");
+        run(com.jabiz.quizbuks.fee.FeeProcesses.BILLING_SET, TestTokens.bearer(tokens, "fm5-hq-billing",
+            QbPermissions.FEE_BILLING), body("userId", sponsor, "billingMode", "POSTPAID", "creditLimit", 1200,
+            "reason", "F-M5"));
+        String first = audienceDraft(sponsor, "FM5 post 1");
+        submit(sponsorToken(sponsor), first);
+        assertThat(prepayments(first)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("mode", "POSTPAID"));
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        // 770 counted already: a second 770 is above 1,200.
+        String second = audienceDraft(sponsor, "FM5 post 2");
+        assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorToken(sponsor), body("publicationId", second), 422)))
+            .containsExactly(FeeCodes.PUBLICATION_FUNDS);
+        run("QB_PUBLICATION_WITHDRAW", sponsorToken(sponsor), body("publicationId", first));
+        submit(sponsorToken(sponsor), second);
+        assertThat(differences(sponsor)).isEmpty();
+        // What they owe, invoiced or not (1130 for them), counts too: 500 owed + 770 is above 1,200.
+        run("QB_PUBLICATION_WITHDRAW", sponsorToken(sponsor), body("publicationId", second));
+        run("LEDGER_POST", TestTokens.bearer(tokens, "ledger-test", "ledger.post"), body("bookingTime",
+            clock.instant().toString(), "description", "A fee not invoiced (test)", "entries", List.of(
+                body("accountCode", "1130", "direction", "DEBIT", "amount", 500, "dimensions",
+                    Map.of("party", sponsor)),
+                body("accountCode", "4120", "direction", "CREDIT", "amount", 500))));
+        assertThat(check(sponsor, second)).containsEntry("enough", false);
+        assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorToken(sponsor), body("publicationId", second), 422)))
+            .containsExactly(FeeCodes.PUBLICATION_FUNDS);
+    }
+
+    @Test
+    void twoSubmissionsAtOnceNeverSetAsideMoreThanTheAccountHas() throws Exception {
+        autoApprove(false);
+        String sponsor = pricedSponsor("fm5-race");
+        grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        String one = audienceDraft(sponsor, "FM5 race 1");
+        String two = audienceDraft(sponsor, "FM5 race 2");
+        // One call first: the platform readies its input conversion once (BlockHound would flag two at once).
+        check(sponsor, one);
+        CompletableFuture<Integer> a = CompletableFuture.supplyAsync(() -> submitStatus(sponsor, one));
+        CompletableFuture<Integer> b = CompletableFuture.supplyAsync(() -> submitStatus(sponsor, two));
+        assertThat(List.of(a.get(), b.get())).containsExactlyInAnyOrder(200, 422);
+        assertThat(query("SELECT 1 FROM qb_prepayment WHERE sponsor_id = ? AND status = 'OPEN'", sponsor)).hasSize(1);
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    private int submitStatus(String sponsor, String publicationId) {
+        return client.post().uri("/api/processes/QB_PUBLICATION_SUBMIT/latest")
+            .contentType(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, sponsorToken(sponsor))
+            .header("Idempotency-Key", UUID.randomUUID().toString()).bodyValue(body("publicationId", publicationId))
+            .exchange().returnResult(String.class).getStatus().value();
+    }
+}
