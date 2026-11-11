@@ -27,51 +27,76 @@ public final class NotificationMails {
 
     /** A taker's transfer reached their Stripe account. */
     public static final MailTemplate TRANSFER_SENT = MailTemplate.define("qb.transfer.sent", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("amount", "fee", "net"));
+        .category(MailCategory.TRANSACTIONAL).param("amount", "fee", "net")
+            .sample("amount", "1,000")
+            .sample("fee", "100")
+            .sample("net", "900"));
 
     /** A taker's transfer failed for certain; the money is back on their balance. */
     public static final MailTemplate TRANSFER_FAILED = MailTemplate.define("qb.transfer.failed", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("amount", "reason"));
+        .category(MailCategory.TRANSACTIONAL).param("amount", "reason")
+            .sample("amount", "1,000")
+            .sample("reason", "The receiving account could not be reached.")
+            .protectedText());
 
     /** Stripe holds back a taker's payout account that was enabled: they must give what it asks for. */
     public static final MailTemplate PAYOUT_ACTION_NEEDED = MailTemplate.define("qb.payout.action-needed", t -> t
-        .category(MailCategory.TRANSACTIONAL));
+        .category(MailCategory.TRANSACTIONAL)
+            .protectedText());
 
     /** A sponsor's top-up is on their wallet. */
     public static final MailTemplate TOPUP_PAID = MailTemplate.define("qb.topup.paid", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("amount"));
+        .category(MailCategory.TRANSACTIONAL).param("amount")
+            .sample("amount", "10,000"));
 
     /** Q87: a sponsor's top-up is in their cash account (not Kudos yet). */
     public static final MailTemplate TOPUP_PAID_CASH = MailTemplate.define("qb.topup.paid-cash", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("amount"));
+        .category(MailCategory.TRANSACTIONAL).param("amount")
+            .sample("amount", "10,000"));
 
     /** Kudos granted to a sponsor by hand are on their wallet (Q18b): no money was received, so no receipt. */
     public static final MailTemplate TOPUP_GRANTED = MailTemplate.define("qb.topup.granted", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("amount"));
+        .category(MailCategory.TRANSACTIONAL).param("amount")
+            .sample("amount", "10,000"));
     /** Q87: a platform fee invoice issued, and a reminder of one overdue (transactional: a bill is not opted out of). */
     public static final MailTemplate FEE_INVOICE_ISSUED = MailTemplate.define("qb.fee.invoice-issued", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "dueOn"));
+        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "dueOn")
+            .sample("invoiceNo", "INV-0001")
+            .sample("total", "1,000")
+            .sample("dueOn", "2026-01-31"));
     public static final MailTemplate FEE_INVOICE_OVERDUE = MailTemplate.define("qb.fee.invoice-overdue", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "dueOn"));
+        .category(MailCategory.TRANSACTIONAL).param("invoiceNo", "total", "dueOn")
+            .sample("invoiceNo", "INV-0001")
+            .sample("total", "1,000")
+            .sample("dueOn", "2026-01-31"));
 
     /**
      * F-M2: a sponsor's platform fee Kudos expire soon (each lot once, at most once per sponsor in 24 hours): what is
      * left of the lots, how many, and when the first expires. The sponsor console's, opted out of in its preferences.
      */
     public static final MailTemplate FEE_CREDIT_EXPIRING = MailTemplate.define("qb.fee-credit.expiring", t -> t
-        .category(MailCategory.NOTIFICATION).entries("sponsor").param("amount", "count", "expiresAt"));
+        .category(MailCategory.NOTIFICATION).entries("sponsor").param("amount", "count", "expiresAt")
+            .sample("amount", "1,000")
+            .sample("count", "2")
+            .sample("expiresAt", "2026-01-31"));
 
     /** A sponsor's publication passed its review. */
     public static final MailTemplate PUBLICATION_APPROVED = MailTemplate.define("qb.publication.approved", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("name", "start"));
+        .category(MailCategory.TRANSACTIONAL).param("name", "start")
+            .sample("name", "Spring quiz")
+            .sample("start", "2026-01-01"));
 
     /** A sponsor's publication was sent back by its reviewer. */
     public static final MailTemplate PUBLICATION_REJECTED = MailTemplate.define("qb.publication.rejected", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("name", "reason"));
+        .category(MailCategory.TRANSACTIONAL).param("name", "reason")
+            .sample("name", "Spring quiz")
+            .sample("reason", "The prize description is missing."));
 
     /** An administrator paused or ended a sponsor's publication. */
     public static final MailTemplate PUBLICATION_TAKEN_DOWN = MailTemplate.define("qb.publication.taken-down", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("name", "reason"));
+        .category(MailCategory.TRANSACTIONAL).param("name", "reason")
+            .sample("name", "Spring quiz")
+            .sample("reason", "Paused for a check."));
 
     /**
      * A sponsor's wallet could not pay a reward: their publications short of funds take no new attempts until topped
@@ -79,11 +104,17 @@ public final class NotificationMails {
      */
     public static final MailTemplate PUBLICATION_FUNDS_SHORT = MailTemplate.define("qb.publication.funds-short",
         t -> t.category(MailCategory.NOTIFICATION).entries("sponsor")
-            .param("publications", "pendingCount", "pendingAmount"));
+            .param("publications", "pendingCount", "pendingAmount")
+            .sample("publications", "Spring quiz")
+            .sample("pendingCount", "3")
+            .sample("pendingAmount", "300"));
 
     /** A sponsor's publication ended by its time, its winners or its budget. */
     public static final MailTemplate PUBLICATION_ENDED = MailTemplate.define("qb.publication.ended", t -> t
-        .category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "reason", "completions"));
+        .category(MailCategory.NOTIFICATION).entries("sponsor").param("name", "reason", "completions")
+            .sample("name", "Spring quiz")
+            .sample("reason", "The period ended.")
+            .sample("completions", "120"));
 
     public static final List<MailTemplate> ALL = List.of(TRANSFER_SENT, TRANSFER_FAILED, PAYOUT_ACTION_NEEDED,
         TOPUP_PAID, TOPUP_PAID_CASH, TOPUP_GRANTED, FEE_INVOICE_ISSUED, FEE_INVOICE_OVERDUE, FEE_CREDIT_EXPIRING, PUBLICATION_APPROVED, PUBLICATION_REJECTED, PUBLICATION_TAKEN_DOWN, PUBLICATION_FUNDS_SHORT,

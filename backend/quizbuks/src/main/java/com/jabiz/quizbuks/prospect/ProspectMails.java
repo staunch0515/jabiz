@@ -21,7 +21,14 @@ public final class ProspectMails {
 
     public static final MailTemplate PROSPECT = MailTemplate.define("qb.prospect", t -> t
         .category(MailCategory.NOTIFICATION).addressesOnly().entries("sponsor")
-        .param("subject", "mailBody", "trialKey", "company", "senderName", "senderAddress", "senderContact"));
+        .param("subject", "mailBody", "trialKey", "company", "senderName", "senderAddress", "senderContact")
+            .sample("subject", "An invitation")
+            .sample("mailBody", "Hello.")
+            .sample("trialKey", "sample")
+            .sample("company", "Sample Co.")
+            .sample("senderName", "Sample Sender")
+            .sample("senderAddress", "Sample Street 1")
+            .sample("senderContact", "contact@example.com"));
 
     /**
      * The one follow-up (Q48d): the template's own text in the site's language, a reminder of the trial with its link
@@ -29,7 +36,12 @@ public final class ProspectMails {
      */
     public static final MailTemplate FOLLOW_UP = MailTemplate.define("qb.prospect.follow-up", t -> t
         .category(MailCategory.NOTIFICATION).addressesOnly().entries("sponsor")
-        .param("trialKey", "company", "senderName", "senderAddress", "senderContact"));
+        .param("trialKey", "company", "senderName", "senderAddress", "senderContact")
+            .sample("trialKey", "sample")
+            .sample("company", "Sample Co.")
+            .sample("senderName", "Sample Sender")
+            .sample("senderAddress", "Sample Street 1")
+            .sample("senderContact", "contact@example.com"));
 
     /** The languages the mail's own texts are written in; another site's language gets English. */
     static Locale language(Object language) {

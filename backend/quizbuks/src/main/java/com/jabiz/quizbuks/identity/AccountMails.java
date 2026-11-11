@@ -19,15 +19,19 @@ public final class AccountMails {
      * app's mail preferences (platform decision D49).
      */
     public static final MailTemplate WELCOME = MailTemplate.define("qb.welcome", t -> t
-        .category(MailCategory.NOTIFICATION).entries("app").param("name"));
+        .category(MailCategory.NOTIFICATION).entries("app").param("name")
+            .sample("name", "Alex"));
 
     /** The sponsor's onboarding was approved, by a reviewer or at once. */
     public static final MailTemplate SPONSOR_APPROVED = MailTemplate.define("qb.sponsor.approved", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("company"));
+        .category(MailCategory.TRANSACTIONAL).param("company")
+            .sample("company", "Sample Co."));
 
     /** The sponsor's onboarding was sent back, with the reviewer's reason. */
     public static final MailTemplate SPONSOR_REJECTED = MailTemplate.define("qb.sponsor.rejected", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("company", "reason"));
+        .category(MailCategory.TRANSACTIONAL).param("company", "reason")
+            .sample("company", "Sample Co.")
+            .sample("reason", "The company name could not be confirmed."));
 
     private AccountMails() {}
 }
