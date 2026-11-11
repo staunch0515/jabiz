@@ -362,3 +362,19 @@
 3. F-M11 随本项。
 4. 结束后的释放用每日任务；帮助与发布页写"结束后一天内退回"。
 5. 共用文件只需与 S3 对齐（S3 在做 F-F10）。钱的部分写完先报分支名，总控安排额外审查后再开 PR。
+
+### 8.9 进度（S2，2026-11-11，需求方决定暂停开发，WIP）
+分支 `1.3/quizbuks-FM5-funds-check`（迁移 `V114`，开 PR 时如被占用改下一个空号），未开 PR。
+
+**已做**：
+- 后端：`QbPrepayment`（V114）、科目 2180 与维度 3 `purpose`、`PrepaymentRules`、`Prepayments`（`QB_PREPAYMENT_FREEZE` / `USE` / `CHARGE` / `RELEASE` / `RELEASE_ITEM`，每日 `qb.prepayment-release`）、`PublicationPrepayments`（提交时在钱包锁内检查与冻结、`QB_PUBLICATION_FUNDS_CHECK`、`PublicationEditing.write` 的 `note` 与提交 / 撤回 / 审批结果 / `ADVANCE` 末尾的 `after`）、`QB_FEE_CHARGE` 的 `operatorId` / `prepaymentId`（F-M11）、费用种类 `AUDIENCE`、核对 `PREPAYMENTS` / `PREPAYMENT_STALE`、月报三类与列 `feePrepayments`、模板 `qb.system.fee-receivable` / `prepayments-due`、`qb.sponsor.publication-prepayments`、`qb.sponsor.wallet` 的 `prepaymentHeld`、三语消息。
+- 删除（需求方 2026-11-09 确认）：`direct` 受众价目与 `qb.audience.price.fallback`（后端、管理系统扩展的价目页、测试；页面删去的项见扩展的 `audiencePricing` 改动）。
+- 页面：发起方向导确认步的"资金"一栏与"去充值"、发布页"预付款"、平台费账户"冻结在预付款中"；管理系统扩展的月报标签与 2180 列。
+- 测试：`PrepaymentIT`（5 例通过）、`PrepaymentRulesTest`；`AudiencePricingIT`、`AudienceBillingTest`、`NoDirectOwnerTest`、`SetupIT`、`ProcessAccessIT`、`AdminFinanceIT` 与 setup / publishing / payout / topup 场景快照已随之改（单独运行通过）；发起方页面 Vitest 1245、扩展 502 通过；`platformCheck` 无错误。
+- 文档：`operations.md` §7.44、发起方手册底稿三语、`backend/quizbuks/CLAUDE.md`、规格与 §2.d 的删除说明、走查清单第 2′ 步；e2e `launch-loop.spec.ts` 第 2′ 步与 `wallet.ts` 的 `fund`（**未在本机运行**）。
+
+**下一步（恢复后）**：
+1. 合并最新 `1.3/quizbuks`；跑模块全部测试与 `platformCheck`（暂停时全量运行被中止，未得结果）。
+2. 本机 e2e：`tools/quizbuks/e2e.sh run --build --fresh -- tests/launch-loop.spec.ts`，并检查 `sponsor.spec.ts` 是否要随向导的"资金"一栏改。
+3. 补：提交的语句数（多一把钱包锁、一条合并读取，有受众条件时多两条价目读取，后付多一条 1130 读取，冻结子流程）写进 PR；`QbPrepayment` 的 `PersonalDataEraser` 照钱表随 F-M15。
+4. 报总控分支名，额外审查后开 PR（描述逐条对照验收、删除的功能逐项列出）；F-F12 的 2′ 随本项验收。
