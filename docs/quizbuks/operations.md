@@ -1144,6 +1144,17 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **差异的处理**：`OPERATOR_ACCOUNT` 出现差异时，先查 `SELECT * FROM qb_operator_transfer_version WHERE operator_id = '<运营商>'` 与来源为 `QbOperatorTransfer` 的分录是否一一对应（每笔转入恰有一笔借 2140 / 贷 2160），再查该运营商的结算与提现。不手工写分录或改表；报开发。
 - **常见询问**：负责人说按钮不出现——运营商没有直营发起方（每日核对 `qb.admin.operator-health`），或登录的不是负责人；发起方说现金不能换学分——见页面的"运营商转入"一行。
 
+### 7.44 提交时的资金检查与预付款（F-M5）
+
+发布提交时一次算清它要预留的费用，按整个平台费账户检查，并冻结为预付款（`docs/quizbuks/plans/impl/F-M.md` §8）。现在预留的只有受众规则费（F-M7 的提交部分）；配送费（F-M6）、曝光费（F-M8）随各自的项加入同一检查。
+
+- **规则**：提交（`QB_PUBLICATION_SUBMIT`）在申请审核之后、发起方的钱包锁内检查一次：预付的发起方可用额（未到期的赠送额度 + 现金）≥ 合计；后付的发起方未付（1130，含未开账单的费用）+ 其他已提交发布占用的额度 + 本次 ≤ 信用额。不足即 422 `QB_PUBLICATION_FUNDS`（各项金额、合计、可用额、差额），整个提交什么也不写。通过时冻结（`QB_PREPAYMENT_FREEZE`）：按平台费账户的顺序取（赠送先、现金后），借 2190 / 2160、贷 2180（维度：发起方、发布、用途）；后付的只占信用额、不过账。同时在发布上冻结费用的归属运营商（F-M11，`billingOperatorId`）。
+- **记费与退回**：发布上架（审核通过或免审）时从预付款记受众规则费（`QB_PREPAYMENT_CHARGE` → `QB_FEE_CHARGE` 种类 `AUDIENCE`，归属冻结的运营商；借 2180、贷 1130）。撤回、驳回、审核过期时全额退回（`QB_PREPAYMENT_RELEASE`）：按原分摊退回各笔，赠送退回原笔；原笔已到期或已作废的，当即连同其剩余一起作废（2190 / 5140）。发布结束后由每日任务 `qb.prepayment-release`（03:23 日本时间）退回剩余，即"结束后一天内退回"。
+- **核对与月报**：每日核对 `PREPAYMENTS`（2180 按发起方 = 未关闭预付款的剩余）与 `PREPAYMENT_STALE`（已回到草稿的发布仍有未关闭的预付款）；月报新类 `PREPAYMENT_FROZEN`、`PREPAYMENT_USED`、`PREPAYMENT_RELEASED`，新列 `feePrepayments`（2180）。分录导出需要映射 `qb.journal.account.2180`（受控，`QB_SETUP` 提出，另一位管理员发布）。
+- **差异的处理**：`PREPAYMENTS` 有差异时，先查 `SELECT * FROM qb_prepayment WHERE sponsor_id = '<发起方>'` 与来源为 `QbPrepayment` 的分录、`qb_fee_payment_version` 中 `target_id` 或 `prepayment_id` 为该预付款的分摊是否对应；`PREPAYMENT_STALE` 多半是退回失败，查该发布的操作记录。`ENDED` 的发布仍有预付款而任务已跑过：手工运行任务的补跑（`JOB_RUN_REQUEST` `qb.prepayment-release`，带原因）。不手工写分录或改表；报开发。
+- **常见询问**：发起方说提交被拒——向导最后一步的"资金"一栏写明各项与差额，充值或等赠送到账后再提交；发起方问钱去了哪里——发布页的"预付款"与平台费账户的"冻结在预付款中"一行；预付款不是费用，回到草稿时全额退回、结束后一天内退回剩余。
+- **受众规则价目**：需求方 2026-11-09 确认删除总部自己的 `direct` 价目表与参数 `qb.audience.price.fallback`：只有运营商的价目表（负责人或总部为它设置），运营商没有价目表即不收。已有安装中 `direct` 的价目行与该参数保留不读，下次清理时删除。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
