@@ -46,5 +46,5 @@
 1. 授权照建议：内容管理员 `mail.text.read|write` + `control.propose`；财务管理员 `mail.text.read|write`；超级管理员不授予。授权改动放在本项（先开的 PR），`QbRolesTest` 写明；测试角色 `QB_E2E_PUBLISHER` 加 `mail.text.write`（只在测试里）。
 2. 标志首次上线不放（`logo-url` 留空）。页脚只写品牌名、客服邮箱、官网，不写住所、不编造（住所由总控问需求方；页脚以后可在线改）。
 3. 官网主机：`JABIZ_MAIL_BASE_URL` 按部署而定（staging 为 `staging.quizbuks.com`），与官网主机不同。做法：`build.gradle.kts` 从品牌档案的 `siteUrl` 算出只含主机名的 token `QB_BRAND_SITE_HOST`，`application.yml` 把它放进 `jabiz.mail.texts.allowed-link-hosts`；不写死 `quizbuks.com`。`siteUrl` 为空时页脚不放官网链接。`MailLayoutDefaultsTest` 覆盖这两种情况，并把 base-url 设成与官网不同的主机跑一次 `platformCheck`。
-4. `operations.md` 用 §7.45（F-M5 占 §7.44），与 F-C8 的 §7.46 互相引用；同号先合者占，后合者改号。
+4. `operations.md` 的节号：总控定 F-C9 用 7.45、F-C8 用 7.46（F-M5 占 7.44）。F-M5 尚未合入时节号不连续，`ops-sections` 检查会失败，所以本项现用 7.44，F-M5 合入后改为 7.45（F-C8 的下一号），与 F-C8 的一节互相引用；同号先合者占，后合者改号。
 5. 顺序：F-C9 先，F-C8 后；F-C8 合并前经 Fable 审（总控安排）。draft PR，CI 全绿后报 PR 号与 40 位 SHA。

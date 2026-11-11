@@ -1,4 +1,5 @@
 import com.jabiz.gradle.Pwa
+import java.net.URI
 
 // QuizBuks (docs/quizbuks/02-design.md): the runtime with the QuizBuks declarations in one jar, serving three front
 // ends (docs/quizbuks/plans/QP-pages.md): the takers' app at /taker/ (a PWA; Q30 moved it from /), the sponsor console
@@ -140,6 +141,24 @@ tasks.named("check") {
 // Q55b: the brand profile QB_BRAND chooses (quizbuks-web/brands/<brand>/brand.json, docs/quizbuks/plans/Q54-brand-profile.md)
 // is written into the resources when they are packaged: @QB_BRAND_NAME@ (and the support address and site) in the
 // messages, quizbuks/brand.properties and application.yml. A brand is deployed on its own, so the jar is the brand's.
+/**
+ * F-C9: the tokens of the mail layout's footer and of the link hosts it needs. The site's host is not the host of
+ * jabiz.mail.base-url (staging has its own), so it is listed in jabiz.mail.texts.allowed-link-hosts by its own token;
+ * a brand without a site or a support address gets a footer without that link instead of a footer that fails to start.
+ */
+fun qbBrandMailTokens(supportEmail: String, siteUrl: String): Map<String, String> {
+    val site = siteUrl.trim()
+    val host = if (site.isEmpty()) "" else URI(site).host.orEmpty()
+    require(site.isEmpty() || (site.startsWith("https://") && host.isNotEmpty())) { "the brand profile's siteUrl must be an https address, was \"$site\"" }
+    val email = supportEmail.trim()
+    require(!site.contains('"') && !email.contains('"')) { "the brand profile's siteUrl and supportEmail must not hold quotes" }
+    return mapOf(
+        "QB_BRAND_SITE_HOST" to host,
+        "QB_BRAND_FOOTER_SITE" to if (site.isEmpty()) "" else " · [$site]($site)",
+        "QB_BRAND_FOOTER_SUPPORT" to if (email.isEmpty()) "" else " · [$email](mailto:$email)",
+    )
+}
+
 val qbBrandTokens: Provider<Map<String, String>> = providers.environmentVariable("QB_BRAND")
     .map { it.trim() }.filter { it.isNotEmpty() }.orElse("quizbuks")
     .map { id ->
@@ -158,7 +177,7 @@ val qbBrandTokens: Provider<Map<String, String>> = providers.environmentVariable
             "QB_BRAND_NAME_ja" to names["ja"].toString(),
             "QB_BRAND_SUPPORT_EMAIL" to profile["supportEmail"].toString(),
             "QB_BRAND_SITE_URL" to profile["siteUrl"].toString(),
-        )
+        ) + qbBrandMailTokens(profile["supportEmail"].toString(), profile["siteUrl"].toString())
     }
 
 

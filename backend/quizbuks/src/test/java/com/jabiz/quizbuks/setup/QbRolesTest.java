@@ -83,16 +83,31 @@ class QbRolesTest {
     }
 
     @Test
+    void contentAdministratorsProposeMailTextsAndFinanceAdministratorsPublishThem() {
+        // F-C8, F-C9 (decision D72): the platform asks mail.text.write of whoever saves, proposes or publishes a mail
+        // text or the letterhead, so the one who publishes holds it too. Content proposes (control.propose), finance
+        // publishes (control.publish); the super administrator, who is built from both lists, holds neither side.
+        assertThat(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions())
+            .contains("mail.text.read", "mail.text.write", "control.propose").doesNotContain("control.publish");
+        assertThat(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions())
+            .contains("mail.text.read", "mail.text.write", "control.publish").doesNotContain("control.propose");
+        assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions()).doesNotContain("mail.text.read", "mail.text.write");
+        assertThat(QbRoles.all().stream().filter(role -> role.permissions().contains("mail.text.write")).map(QbRoles.Role::code))
+            .containsExactlyInAnyOrder(QbRoles.ADMIN_CONTENT, QbRoles.ADMIN_FINANCE);
+    }
+
+    @Test
     void theSuperAdministratorHoldsWhatTheOtherAdministratorsHold() {
         // But publishing controlled changes, Stripe's events and deciding approvals (Q10b, L3: QbSodRules).
         assertThat(QbRoles.of(QbRoles.ADMIN_SUPER).permissions())
             .containsAll(QbRoles.of(QbRoles.ADMIN_CONTENT).permissions().stream()
-                .filter(permission -> !permission.equals("approval.decide")).toList())
+                .filter(permission -> !permission.equals("approval.decide") && !permission.startsWith("mail.text."))
+                .toList())
             .containsAll(QbRoles.of(QbRoles.ADMIN_FINANCE).permissions().stream()
                 .filter(permission -> !permission.equals("control.publish") && !permission.equals("inbound.read")
-                    && !permission.equals("approval.decide"))
+                    && !permission.equals("approval.decide") && !permission.startsWith("mail.text."))
                 .toList())
-            .doesNotContain("approval.decide", "control.publish")
+            .doesNotContain("approval.decide", "control.publish", "mail.text.read", "mail.text.write")
             .contains(QbPermissions.SETUP, QbPermissions.ADMIN_USERS_BAN, "platform.param.read", "control.propose",
                 "security.user-role.write")
             .doesNotHaveDuplicates();
