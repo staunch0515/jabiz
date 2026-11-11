@@ -332,10 +332,10 @@ jobs:
   # End to end (docs/quizbuks/plans/QP-pages.md section 7): the packaged jar against PostgreSQL, its mail caught by
   # Mailpit, Stripe and Claude answered by the local stubs (tools/quizbuks/stripe-stub, claude-stub), driven by Playwright through the app,
   # the sponsor console and the mailed links; axe in both appearances.
-  # In two shards, each with its own jar, database and mail servers (every test makes data of its own); the job e2e
-  # below is their result.
+  # In three shards, each with its own jar, database and mail servers (every test makes data of its own); the job e2e
+  # below is their result. Three, not two: the slower of two shards took ~24m41s against the 25-minute limit kept under.
   e2e-shard:
-    name: e2e (${{ matrix.shard }}/2)
+    name: e2e (${{ matrix.shard }}/3)
     if: ${{ !github.event.pull_request.draft && !inputs.home-baselines }}
     # Pinned: ubuntu-latest became 26.04, where Playwright 1.56 has no Chromium ("does not support chromium on
     # ubuntu26.04-x64"). Back to ubuntu-latest once Playwright is upgraded to a version that supports it.
@@ -344,7 +344,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:16
@@ -441,7 +441,7 @@ jobs:
         working-directory: quizbuks-web/e2e
       - run: pnpm exec playwright install --with-deps chromium
         working-directory: quizbuks-web/e2e
-      - run: pnpm e2e --shard=${{ matrix.shard }}/2
+      - run: pnpm e2e --shard=${{ matrix.shard }}/3
         working-directory: quizbuks-web/e2e
       - if: failure()
         uses: actions/upload-artifact@v6
