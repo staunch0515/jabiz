@@ -1694,6 +1694,84 @@ export const feeQuoteQuery = (publicationId: string | null) => ['qb', 'publicati
 export const readFeeQuote = (publicationId: string) =>
   runProcess<FeeQuoteOutput>(AUDIENCE.feeQuote, { publicationId })
 
+// ---- F-M5: funds at submission and the prepayments ------------------------------------------------------------------
+
+/** `QbPrepayment.purpose`: what a sum set aside is for. */
+export type PrepaymentPurpose = 'AUDIENCE' | 'DISTRIBUTION' | 'EXPOSURE' | 'AI'
+export const PREPAYMENT_PURPOSES: readonly PrepaymentPurpose[] = ['AUDIENCE', 'DISTRIBUTION', 'EXPOSURE', 'AI']
+const purposeOf = (value: unknown): PrepaymentPurpose =>
+  PREPAYMENT_PURPOSES.find((p) => p === value) ?? 'AUDIENCE'
+
+/** One item submitting sets aside: `amount` is with tax, `chargeAmount` before it. */
+export interface FundsItem {
+  purpose: PrepaymentPurpose
+  amount: number
+  chargeAmount: number
+}
+
+/** `QB_PUBLICATION_FUNDS_CHECK`'s answer: what submitting would set aside and whether the account holds it. */
+export interface FundsCheck {
+  items: FundsItem[]
+  total: number
+  available: number
+  shortfall: number
+  billingMode: 'PREPAID' | 'POSTPAID'
+  enough: boolean
+}
+
+/** The query of a draft's funds check: read again after each save (the server checks what is stored). */
+export const fundsCheckQuery = (publicationId: string | null, revision: number | null) =>
+  ['qb', 'publication-funds', publicationId, revision] as const
+
+export async function readFundsCheck(publicationId: string): Promise<FundsCheck> {
+  const out = await runProcess<Row>(PUBLISHING_PROCESS.fundsCheck, { publicationId })
+  return {
+    items: ((out.items as Row[] | undefined) ?? []).map((item) => ({ purpose: purposeOf(item.purpose),
+      amount: Number(item.amount ?? 0), chargeAmount: Number(item.chargeAmount ?? 0) })),
+    total: Number(out.total ?? 0),
+    available: Number(out.available ?? 0),
+    shortfall: Number(out.shortfall ?? 0),
+    billingMode: out.billingMode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+    enough: out.enough === true,
+  }
+}
+
+/** `QbPrepayment.releaseReason`: why a sum was given back. */
+export type ReleaseReason = 'WITHDRAWN' | 'REJECTED' | 'REVIEW_EXPIRED' | 'ENDED'
+
+/** A row of `qb.sponsor.publication-prepayments`. */
+export interface PublicationPrepayment {
+  prepaymentId: string
+  purpose: PrepaymentPurpose
+  mode: 'PREPAID' | 'POSTPAID'
+  amount: number
+  remaining: number
+  status: 'OPEN' | 'RELEASED'
+  frozenAt: string | null
+  chargedAt: string | null
+  releasedAt: string | null
+  releaseReason: ReleaseReason | null
+}
+
+export const prepaymentsQuery = (publicationId: string) => ['qb', 'publication-prepayments', publicationId] as const
+
+export async function readPublicationPrepayments(publicationId: string): Promise<PublicationPrepayment[]> {
+  const page = await runQuery<Row>(PUBLISHING_TEMPLATE.prepayments,
+    { params: { publicationId }, limit: 100 })
+  return page.items.map((row) => ({
+    prepaymentId: String(row.prepaymentId),
+    purpose: purposeOf(row.purpose),
+    mode: row.mode === 'POSTPAID' ? 'POSTPAID' : 'PREPAID',
+    amount: Number(row.amount ?? 0),
+    remaining: Number(row.remaining ?? 0),
+    status: row.status === 'RELEASED' ? 'RELEASED' : 'OPEN',
+    frozenAt: str(row.frozenAt),
+    chargedAt: str(row.chargedAt),
+    releasedAt: str(row.releasedAt),
+    releaseReason: row.releaseReason == null ? null : (String(row.releaseReason) as ReleaseReason),
+  }))
+}
+
 /** Q89c: `PassProcesses.CheckOutput`: the prize a taker's pass is for, before handing it over. */
 export interface PassPrize {
   passId: string

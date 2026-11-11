@@ -40,6 +40,8 @@ import { Link, navigate } from '../qb/router'
 import { WALLET_PATH } from '../wallet/api'
 import type { Condition } from '../qb/audience'
 import { AudienceConditions, AudienceCountPanel, AudienceFeePanel } from './AudienceConditions'
+import { FundsPanel } from './FundsPanel'
+import { PUBLISHING_CODE } from './ids'
 import { LanguagesFields } from './LanguagesFields'
 import { ReferralFields } from './ReferralFields'
 import {
@@ -498,7 +500,11 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       },
       (error: unknown) => {
         if (isStale(error)) onStale()
-        else setSubmitError(error)
+        else {
+          setSubmitError(error)
+          // F-M5: the account may have changed since the check was read.
+          if (hasRule(error, PUBLISHING_CODE.funds)) void queryClient.invalidateQueries({ queryKey: ['qb', 'publication-funds'] })
+        }
         noticeConsentProblem(queryClient, error)
       },
     )
@@ -958,6 +964,8 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
       {form.audience === 'PUBLIC' && (
         <AudienceFeePanel quote={feeQuote.data?.quote ?? null} pending={feeQuote.isFetching && !feeQuote.data} />
       )}
+      {/* F-M5: what submitting sets aside from the fee account, read again after each save. */}
+      {publicationId && <FundsPanel publicationId={publicationId} revision={revision} />}
       {/* F-S11: said again where the publication is checked before submitting (a notice only). */}
       {foreignVideo && reachesMainland(form.audience, form.regions) && (
         <MainlandNotice testId="publication-mainland-check" />
