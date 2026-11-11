@@ -1,5 +1,6 @@
 import { approvedSponsor } from './publishing'
 import { adminOfRole, contentAdmin } from './legal'
+import { loadBrand } from '../../brands/brand.mjs'
 import { signInAdmin } from './admin'
 import { expect, expectAccessible, mailTo, PASSWORD, prepareQuizbuks, run, setAppearance, test, tokenOf } from './support'
 
@@ -10,6 +11,8 @@ import { expect, expectAccessible, mailTo, PASSWORD, prepareQuizbuks, run, setAp
  * content and the finance administrators; the production roles are checked by QbRolesTest and MailLayoutIT.
  */
 
+// The brand the build chose: its English name heads the default letterhead and its support address is in the footer.
+const BRAND = loadBrand()
 const PUBLISHER_ROLE = 'QB_E2E_PUBLISHER'
 const LAYOUTS = '/api/mail/layouts'
 
@@ -34,7 +37,8 @@ test('a letterhead one administrator proposes and another publishes goes on the 
   // Before: a mail comes on the default letterhead, the brand's.
   const before = await approvedSponsor(request, 'Mia')
   const first = await mailTo(request, before.email, /approved/i)
-  expect(first.text).toContain('QuizBuks')
+  expect(first.text).toContain(BRAND.names.en)
+  expect(first.text).toContain(BRAND.supportEmail)
   expect(first.text).not.toContain('E2E letterhead')
 
   const displayName = `E2E letterhead ${Date.now()}`
@@ -59,7 +63,8 @@ test('a letterhead one administrator proposes and another publishes goes on the 
   const last = await approvedSponsor(request, 'Omar')
   const reset = await mailTo(request, last.email, /approved/i)
   expect(reset.text).not.toContain(displayName)
-  expect(reset.text).toContain('QuizBuks')
+  expect(reset.text).toContain(BRAND.names.en)
+  expect(reset.text).toContain(BRAND.supportEmail)
 })
 
 // The platform's letterhead page in the administration, with the brand's default letterhead in it, in both appearances.

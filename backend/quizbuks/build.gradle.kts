@@ -1,5 +1,4 @@
 import com.jabiz.gradle.Pwa
-import java.net.URI
 
 // QuizBuks (docs/quizbuks/02-design.md): the runtime with the QuizBuks declarations in one jar, serving three front
 // ends (docs/quizbuks/plans/QP-pages.md): the takers' app at /taker/ (a PWA; Q30 moved it from /), the sponsor console
@@ -147,11 +146,17 @@ tasks.named("check") {
  * a brand without a site or a support address gets a footer without that link instead of a footer that fails to start.
  */
 fun qbBrandMailTokens(supportEmail: String, siteUrl: String): Map<String, String> {
+    // The same rules as quizbuks-web/brands/brand.mjs (tested in brand.test.mjs): the values become Markdown links in
+    // every mail's footer, so nothing that could end a link, start another or name more than a host gets through.
     val site = siteUrl.trim()
-    val host = if (site.isEmpty()) "" else URI(site).host.orEmpty()
-    require(site.isEmpty() || (site.startsWith("https://") && host.isNotEmpty())) { "the brand profile's siteUrl must be an https address, was \"$site\"" }
     val email = supportEmail.trim()
-    require(!site.contains('"') && !email.contains('"')) { "the brand profile's siteUrl and supportEmail must not hold quotes" }
+    require(site.isEmpty() || Regex("https://[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*").matches(site)) {
+        "the brand profile's siteUrl must be https://host, without a path, port or user information, was \"$site\""
+    }
+    require(email.isEmpty() || Regex("[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}").matches(email)) {
+        "the brand profile's supportEmail must be an e-mail address of plain characters, was \"$email\""
+    }
+    val host = if (site.isEmpty()) "" else site.removePrefix("https://")
     return mapOf(
         "QB_BRAND_SITE_HOST" to host,
         "QB_BRAND_FOOTER_SITE" to if (site.isEmpty()) "" else " · [$site]($site)",

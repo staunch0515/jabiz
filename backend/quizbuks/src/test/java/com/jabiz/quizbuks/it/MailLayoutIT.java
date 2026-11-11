@@ -9,7 +9,10 @@ import org.springframework.http.HttpHeaders;
 import java.util.List;
 import java.util.Map;
 
+import com.jabiz.runtime.test.TestTokens;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The letterhead of every mail (F-C9, platform decision D72 item 6) as QuizBuks gives it: the default is the brand's
@@ -83,8 +86,29 @@ class MailLayoutIT extends AccountItSupport {
         assertThat(custom).containsEntry("state", "CUSTOM");
         assertThat(custom.get("layout").toString()).contains("Letterhead");
 
+        // The versions are only appended: the platform's triggers refuse an update and a delete of a stored layout.
+        assertThatThrownBy(() -> execute("UPDATE sys_mail_layout_version SET is_deleted = true"))
+            .hasMessageContaining("append");
+        assertThatThrownBy(() -> execute("DELETE FROM sys_mail_layout_version")).hasMessageContaining("append");
+
         // Back to the default at once, by the content administrator alone.
         run("MAIL_LAYOUT_RESET", content(), body("locale", "en", "baseVersionNo", custom.get("versionNo")));
         assertThat(language("en")).containsEntry("state", "DEFAULT");
+    }
+
+    @Test
+    void nobodyHoldsBothSidesAndTheFourEyesAreKeptTwiceOver() {
+        // QuizBuks's separation of duties (qb.sod.control-changes) refuses a person holding both the right to propose
+        // and the right to publish before they can propose at all; the platform's own CONTROL_SAME_PERSON (a person
+        // publishing their own proposal) is the second line, covered by its MailLayoutIT.
+        String both = TestTokens.bearer(tokens, "fc9-both-sides", "mail.text.read", "mail.text.write",
+            "control.propose", "control.publish");
+        var refused = call("CONTROL_CHANGE_PROPOSE", both, proposal("Own letterhead", "Sent by us")).expectBody(MAP)
+            .returnResult();
+        assertThat(refused.getStatus().value()).isEqualTo(403);
+        assertThat(codes(refused.getResponseBody())).contains("SOD_CONFLICT");
+        assertThat(language("en")).containsEntry("state", "DEFAULT");
+        assertThat(QbRoles.all().stream().filter(role -> role.permissions().contains("control.propose")
+            && role.permissions().contains("control.publish")).map(QbRoles.Role::code).toList()).isEmpty();
     }
 }
