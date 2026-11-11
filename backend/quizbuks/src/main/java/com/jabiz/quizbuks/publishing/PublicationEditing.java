@@ -245,7 +245,7 @@ final class PublicationEditing {
             // F-S4b: the gates of the reward methods a lit node opens, in the same read.
             .step("Load the reward parameters", LoadParams.<ProcessContext>optional(ProcessContext::opTime, REWARD_PARAMS,
                 QbParams.REWARD_DEFAULT_METHODS, QbParams.REWARD_MAX_PER_ATTEMPT, QbParams.ENTRY_FEE_ENABLED,
-                QbParams.TREE_GATE_DIGITAL_PRIZE, QbParams.TREE_GATE_OFFLINE_REDEEM))
+                QbParams.TREE_GATE_DIGITAL_PRIZE, QbParams.TREE_GATE_OFFLINE_REDEEM, QbParams.REWARD_KUDOS_ENABLED))
             .steps(b -> com.jabiz.quizbuks.tree.SponsorGates.load(b, REWARD_PARAMS, QbParams.SPONSOR_TREE_GATES,
                 METHOD_GATES));
     }
@@ -270,9 +270,10 @@ final class PublicationEditing {
      */
     static List<String> allowedMethods(ProcessContext ctx) {
         EntityInstance setting = first(ctx, SPONSOR_METHODS);
-        return RewardMethod.available(RewardMethod.defaultMethods(rewardParams(ctx)),
+        List<String> available = RewardMethod.available(RewardMethod.defaultMethods(rewardParams(ctx)),
             setting == null ? List.of() : RewardMethod.parse(setting.get("methods")),
             com.jabiz.quizbuks.tree.SponsorGates.open(ctx, REWARD_PARAMS, QbParams.SPONSOR_TREE_GATES, METHOD_GATES));
+        return RewardMethod.withKudosSwitch(available, rewardParams(ctx));
     }
 
     /** The highest reward one attempt may win (Q28), from {@link #loadSponsorMethods}; null for no cap. */

@@ -76,6 +76,19 @@ public final class RewardMethod {
         return ALL.stream().filter(named::contains).toList();
     }
 
+    /**
+     * F-F10a: the methods without {@link #PLATFORM} when the switch {@code qb.reward.kudos.enabled} is off, whoever has
+     * the method by default, setting or lit node; unchanged when it is on, and when it is not there (before setup),
+     * as the default methods' parameter not there gives the platform's Kudos (F-S4b). The one place the switch is
+     * applied: saving, copying, submitting and importing a package all ask
+     * {@code PublicationEditing.allowedMethods}, and the sponsor console's template says the same in SQL.
+     */
+    public static List<String> withKudosSwitch(List<String> methods, ParamValues params) {
+        boolean off = params != null
+            && Boolean.FALSE.equals(params.find(QbParams.REWARD_KUDOS_ENABLED, Boolean.class).orElse(null));
+        return off ? methods.stream().filter(method -> !PLATFORM.equals(method)).toList() : methods;
+    }
+
     /** Whether the method is {@link #PLATFORM} (null, as a publication from before Q22 is read, counts as it). */
     public static boolean platform(Object method) {
         return method == null || PLATFORM.equals(method);

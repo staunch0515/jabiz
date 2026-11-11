@@ -497,6 +497,16 @@ public final class QbParams {
         FEE_CREDIT_GRANT_CERTIFIED, FEE_CREDIT_VALID_DAYS);
 
     /**
+     * F-F10a: whether a publication may be published with the reward method {@code PLATFORM} (Kudos paid by QuizBuks).
+     * The declared value is today's behaviour (true); the first launch's value ({@code FirstLaunchSwitches}) is false,
+     * so no publication can offer a Kudos reward however a sponsor is set up. Not there at all (before setup): not
+     * blocked, as {@code qb.reward.default-methods} not there gives the platform's Kudos (F-S4b).
+     */
+    public static final String REWARD_KUDOS_ENABLED = "qb.reward.kudos.enabled";
+    /** F-F10a: the Kudos reward switch (controlled, last, in the order of CONTROLLED). */
+    public static final List<String> REWARD_KUDOS = List.of(REWARD_KUDOS_ENABLED);
+
+    /**
      * The parameters that change only through controlled changes (proposed by one administrator, published by
      * another): the money settings, and the review switches, since turning one on removes a person's review.
      */
@@ -506,7 +516,8 @@ public final class QbParams {
         REWARD, JOURNAL_ACCOUNTS, ISSUER, List.of(LEGAL_MAX_ANNOUNCE_DAYS), AI_CONTROLLED, PROSPECT_CONTROLLED,
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
-        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS)
+        List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
+        REWARD_KUDOS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -849,6 +860,10 @@ public final class QbParams {
                 + "to it)"),
         new Param(FEE_CREDIT_VALID_DAYS, DAYS, "90",
             "How many days a lot of platform fee Kudos is valid for from when it is granted (1 to 999)"),
+        // F-F10a: the Kudos reward switch (controlled, after the F-M2 ones, in the order of CONTROLLED).
+        new Param(REWARD_KUDOS_ENABLED, BOOL, true,
+            "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "
+                + "launch (F-F10a)"),
         // F-F3: the Sponsor app's bottom menu (ordinary; last).
         new Param(SPONSOR_BOTTOM_BAR, Map.of("type", "text", "maxLength", 200), "home,publications,prizes,messages",
             "The areas of the Sponsor app's bottom menu on a phone, comma-separated (home, quizzes, publications, "

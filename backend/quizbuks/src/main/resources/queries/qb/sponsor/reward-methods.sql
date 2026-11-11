@@ -28,16 +28,19 @@ permissions: [qb.publication.write]
 -- RewardMethod.ALL; names that are no method are dropped. A gate is open as tree.SponsorGates decides: its parameter
 -- names a node in effect of a platform template Sponsors light, and the caller lit that node id in the template or in
 -- an operator's copy of it (OPERATOR, templateTreeId), not revoked. The parameters are read at the server's clock (the
--- dataset without time travel). "unlocked" lists the methods a gate opens (the console's explanation).
+-- dataset without time travel). F-F10a: the switch qb.reward.kudos.enabled, when false, takes PLATFORM out of the
+-- methods (PublicationEditing#allowedMethods does the same). "unlocked" lists the methods a gate opens (the console's explanation).
 WITH params AS (
     SELECT
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.reward.default-methods' THEN p.{{SysParam.value}} END) AS p_methods,
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.reward.max-per-attempt' THEN p.{{SysParam.value}} END) AS p_max,
         -- Q88b (D-Q88-14): whether the wizard offers the entry fee; the save refuses one when it is off.
-        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.play.entry-fee.enabled' THEN p.{{SysParam.value}} END) AS p_fee
+        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.play.entry-fee.enabled' THEN p.{{SysParam.value}} END) AS p_fee,
+        -- F-F10a: off (false) takes PLATFORM away from every sponsor; not there is not off (before setup).
+        max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.reward.kudos.enabled' THEN p.{{SysParam.value}} END) AS p_kudos
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} IN ('qb.reward.default-methods', 'qb.reward.max-per-attempt',
-        'qb.play.entry-fee.enabled')),
+        'qb.play.entry-fee.enabled', 'qb.reward.kudos.enabled')),
 mine AS (
     SELECT max(m.{{QbSponsorRewardMethods.methods}}) AS methods, count(*) AS rows_found
     FROM {{QbSponsorRewardMethods}} m),
@@ -71,7 +74,9 @@ methods AS (
                  ('OFFLINE_REDEEM', 3, 'qb.tree.gate.offline-redeem-node'),
                  ('DIGITAL_PRIZE', 4, 'qb.tree.gate.digital-prize-node')) AS a(m, ord, gate))
 SELECT
-    coalesce((SELECT string_agg(x.m, ',' ORDER BY x.ord) FROM methods x WHERE x.given OR x.opened), '') AS methods,
+    coalesce((SELECT string_agg(x.m, ',' ORDER BY x.ord) FROM methods x
+        WHERE (x.given OR x.opened)
+          AND NOT (x.m = 'PLATFORM' AND coalesce(lower(btrim(params.p_kudos)) = 'false', false))), '') AS methods,
     mine.rows_found > 0 AS own,
     coalesce((SELECT string_agg(x.m, ',' ORDER BY x.ord) FROM methods x WHERE x.opened), '') AS unlocked,
     CASE WHEN params.p_max ~ '^[0-9]{1,18}$' AND CAST(params.p_max AS numeric) > 0
