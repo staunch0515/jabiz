@@ -150,6 +150,11 @@ class ProcessAccessIT extends QbItSupport {
         Map.entry("QB_FEE_SETTLE_ITEM", ProcessAccess.SUB_PROCESS_ONLY),
         // F-M1: paying a fee from the account, and giving a voided invoice's payment back.
         Map.entry("QB_FEE_SETTLE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_PREPAYMENT_FREEZE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_PREPAYMENT_USE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_PREPAYMENT_CHARGE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_PREPAYMENT_RELEASE", ProcessAccess.SUB_PROCESS_ONLY),
+        Map.entry("QB_PREPAYMENT_RELEASE_ITEM", ProcessAccess.INTERNAL),
         Map.entry("QB_FEE_REFUND", ProcessAccess.SUB_PROCESS_ONLY),
         // F-M2: the grant (under its caller's wallet lock), the daily expiry and reminder, and the reminder's mail.
         Map.entry("QB_FEE_CREDIT_GRANT", ProcessAccess.SUB_PROCESS_ONLY),

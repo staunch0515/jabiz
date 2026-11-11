@@ -355,6 +355,7 @@ class SetupIT extends QbItSupport {
         expected.put("4120", "REVENUE");
         expected.put("2150", "LIABILITY");
         expected.put("2170", "LIABILITY");
+        expected.put("2180", "LIABILITY");
         // F-M1: the Sponsors' platform fee Kudos (granted credit).
         expected.put("2190", "LIABILITY");
         // F-M2: the promotion expenses of the platform fee Kudos granted.

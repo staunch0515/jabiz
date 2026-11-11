@@ -42,6 +42,8 @@
       "topicChanges" : null,
       "sharedVideoId" : null,
       "exposurePurchased" : null,
+      "billingOperatorId" : "#uuid:4",
+      "prepaymentTotal" : null,
       "fullScore" : "5",
       "maxReward" : "100",
       "maxSpend" : "10000",
@@ -49,7 +51,7 @@
       "status" : "ENDED",
       "rejectReason" : null,
       "rejectCode" : null,
-      "approvalRequestId" : "#uuid:4",
+      "approvalRequestId" : "#uuid:5",
       "submittedAt" : "2026-10-01T04:00:00Z",
       "approvedAt" : "2026-10-01T05:00:00Z",
       "pausedAt" : null,
@@ -72,7 +74,7 @@
       "createdTime" : "2026-10-10T00:00:00Z",
       "processSeqId" : "#op:8"
     }, {
-      "publicationId" : "#uuid:5",
+      "publicationId" : "#uuid:6",
       "publisherKind" : "SPONSOR",
       "publisherId" : "sponsor-a",
       "quizId" : "#uuid:2",
@@ -111,6 +113,8 @@
       "topicChanges" : null,
       "sharedVideoId" : null,
       "exposurePurchased" : null,
+      "billingOperatorId" : null,
+      "prepaymentTotal" : null,
       "fullScore" : "5",
       "maxReward" : "100",
       "maxSpend" : "10000",
@@ -142,7 +146,7 @@
       "processSeqId" : "#op:9"
     } ],
     "QbRewardTier" : [ {
-      "tierId" : "#uuid:6",
+      "tierId" : "#uuid:7",
       "publicationId" : "#uuid:1",
       "publisherKind" : "SPONSOR",
       "publisherId" : "sponsor-a",
@@ -155,7 +159,7 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:4"
     }, {
-      "tierId" : "#uuid:7",
+      "tierId" : "#uuid:8",
       "publicationId" : "#uuid:1",
       "publisherKind" : "SPONSOR",
       "publisherId" : "sponsor-a",
@@ -168,7 +172,7 @@
       "createdTime" : "2026-10-01T01:00:00Z",
       "processSeqId" : "#op:4"
     }, {
-      "tierId" : "#uuid:8",
+      "tierId" : "#uuid:9",
       "publicationId" : "#uuid:1",
       "publisherKind" : "SPONSOR",
       "publisherId" : "sponsor-a",
@@ -181,8 +185,8 @@
       "createdTime" : "2026-10-01T04:00:00Z",
       "processSeqId" : "#op:6"
     }, {
-      "tierId" : "#uuid:9",
-      "publicationId" : "#uuid:5",
+      "tierId" : "#uuid:10",
+      "publicationId" : "#uuid:6",
       "publisherKind" : "SPONSOR",
       "publisherId" : "sponsor-a",
       "seq" : "1",
@@ -194,8 +198,8 @@
       "createdTime" : "2026-10-10T01:00:00Z",
       "processSeqId" : "#op:9"
     }, {
-      "tierId" : "#uuid:10",
-      "publicationId" : "#uuid:5",
+      "tierId" : "#uuid:11",
+      "publicationId" : "#uuid:6",
       "publisherKind" : "SPONSOR",
       "publisherId" : "sponsor-a",
       "seq" : "2",
@@ -207,8 +211,8 @@
       "createdTime" : "2026-10-10T01:00:00Z",
       "processSeqId" : "#op:9"
     }, {
-      "tierId" : "#uuid:11",
-      "publicationId" : "#uuid:5",
+      "tierId" : "#uuid:12",
+      "publicationId" : "#uuid:6",
       "publisherKind" : "SPONSOR",
       "publisherId" : "sponsor-a",
       "seq" : "3",
@@ -243,12 +247,12 @@
       "version" : 4
     } ],
     "SysApprovalRequest" : [ {
-      "requestId" : "#uuid:12",
+      "requestId" : "#uuid:13",
       "subject" : "qb.sponsor",
-      "entityId" : "#uuid:13",
+      "entityId" : "#uuid:14",
       "status" : "APPROVED",
       "preparerId" : "sponsor-a",
-      "ruleId" : "#uuid:14",
+      "ruleId" : "#uuid:15",
       "ruleVersionNo" : "1",
       "contentHash" : "137bca596cf866de987c0f713ad4023297a2a16da9dbad449c4796781ddcc925",
       "levels" : "[{\"permission\":\"qb.review.sponsor\"}]",
@@ -256,7 +260,7 @@
       "facts" : "{\"autoApprove\":false}",
       "reference" : "Capitals Inc",
       "scopeName" : "operator",
-      "scopeValue" : "#uuid:15",
+      "scopeValue" : "#uuid:4",
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T00:00:00Z",
       "createdTime" : "2026-10-01T00:00:00Z",
@@ -275,13 +279,13 @@
       "facts" : "{\"rewardMethod\":\"PLATFORM\",\"autoApprove\":false,\"takenDown\":false,\"maxReward\":300,\"maxSpend\":20000,\"publisherKind\":\"SPONSOR\",\"publisherId\":\"sponsor-a\",\"regions\":\"JP,ASIA\"}",
       "reference" : "Capitals week",
       "scopeName" : "operator",
-      "scopeValue" : "#uuid:15",
+      "scopeValue" : "#uuid:4",
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T03:00:00Z",
       "createdTime" : "2026-10-01T03:00:00Z",
       "processSeqId" : "#op:5"
     }, {
-      "requestId" : "#uuid:4",
+      "requestId" : "#uuid:5",
       "subject" : "qb.publication",
       "entityId" : "#uuid:1",
       "status" : "APPROVED",
@@ -294,7 +298,7 @@
       "facts" : "{\"rewardMethod\":\"PLATFORM\",\"autoApprove\":false,\"takenDown\":false,\"maxReward\":100,\"maxSpend\":10000,\"publisherKind\":\"SPONSOR\",\"publisherId\":\"sponsor-a\",\"regions\":\"JP,ASIA\"}",
       "reference" : "Capitals week",
       "scopeName" : "operator",
-      "scopeValue" : "#uuid:15",
+      "scopeValue" : "#uuid:4",
       "versionNo" : 2,
       "effectStartTime" : "2026-10-01T05:00:00Z",
       "createdTime" : "2026-10-01T05:00:00Z",
@@ -328,7 +332,7 @@
       "createdTime" : "2026-10-01T00:00:00Z",
       "processSeqId" : "#op:1"
     }, {
-      "onboardingId" : "#uuid:13",
+      "onboardingId" : "#uuid:14",
       "userId" : "sponsor-a",
       "contactName" : "Alice",
       "company" : "Capitals Inc",
@@ -338,7 +342,7 @@
       "reviewStatus" : "APPROVED",
       "termsAcceptedAt" : "2026-10-01T00:00:00Z",
       "termsVersionNo" : null,
-      "approvalRequestId" : "#uuid:12",
+      "approvalRequestId" : "#uuid:13",
       "submittedAt" : "2026-10-01T00:00:00Z",
       "approvedAt" : "2026-10-01T00:00:00Z",
       "rejectReason" : null,
