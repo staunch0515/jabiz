@@ -142,13 +142,6 @@ jabiz:
     # The key signing access tokens comes from the environment only (docs/design/10-security.md).
     jwt:
       secret: ${JABIZ_JWT_SECRET:}
-    # The protected permissions (decision D48): granting one needs another administrator's approval. This is the
-    # platform's default list (ProtectedPermissions.DEFAULT) and mail.text.write (F-C8, F-C9): whoever holds it saves,
-    # proposes and publishes the texts and the letterhead of every mail, so it is not given by one administrator alone
-    # (the finance administrator approves giving it to a content administrator). Setting this key replaces the
-    # platform's list: MailProtectedGrantsTest fails if a permission the platform adds to its default is missing here.
-    protected-grants:
-      permissions: "*,security.user-role.write,security.role.write,approval.decide,security.protected-change.decide,control.publish,ledger.post,ledger.reverse,platform.param.write,job.run,mail.text.write"
     # The key encrypting the users' TOTP secrets (docs/design/10-security.md section 9), from the environment only:
     # Base64, at least 32 bytes. Startup fails without it; without it, enrolled users cannot pass their second factor.
     mfa:
