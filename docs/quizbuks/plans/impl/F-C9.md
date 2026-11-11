@@ -40,3 +40,11 @@
 2. **标志图片**：邮件客户端大多不显示 SVG，品牌档案里只有 `mark.svg`；规格要求标志只许 `{baseUrl}` 下的地址。建议首次上线信纸只有显示名、没有标志（`logo-url` 留空），以后要加标志时放一张 PNG 到品牌档案的 `public` 下。请确认。
 3. **页脚的住所**：品牌档案没有住所字段。建议首次上线页脚只写品牌名、客服邮箱、官网，不写住所；若需求方要求法律上的发件人住所，请给出文字（再加品牌档案的字段）。
 4. 官网链接的主机（风险一）：官网 `quizbuks.com` 与邮件的 `base-url` 主机相同吗？不同的话放进 `allowed-link-hosts`，还是页脚不放官网链接？
+
+## 总控的决定（2026-11-11 批准）
+
+1. 授权照建议：内容管理员 `mail.text.read|write` + `control.propose`；财务管理员 `mail.text.read|write`；超级管理员不授予。授权改动放在本项（先开的 PR），`QbRolesTest` 写明；测试角色 `QB_E2E_PUBLISHER` 加 `mail.text.write`（只在测试里）。
+2. 标志首次上线不放（`logo-url` 留空）。页脚只写品牌名、客服邮箱、官网，不写住所、不编造（住所由总控问需求方；页脚以后可在线改）。
+3. 官网主机：`JABIZ_MAIL_BASE_URL` 按部署而定（staging 为 `staging.quizbuks.com`），与官网主机不同。做法：`build.gradle.kts` 从品牌档案的 `siteUrl` 算出只含主机名的 token `QB_BRAND_SITE_HOST`，`application.yml` 把它放进 `jabiz.mail.texts.allowed-link-hosts`；不写死 `quizbuks.com`。`siteUrl` 为空时页脚不放官网链接。`MailLayoutDefaultsTest` 覆盖这两种情况，并把 base-url 设成与官网不同的主机跑一次 `platformCheck`。
+4. `operations.md` 用 §7.45（F-M5 占 §7.44），与 F-C8 的 §7.46 互相引用；同号先合者占，后合者改号。
+5. 顺序：F-C9 先，F-C8 后；F-C8 合并前经 Fable 审（总控安排）。draft PR，CI 全绿后报 PR 号与 40 位 SHA。
