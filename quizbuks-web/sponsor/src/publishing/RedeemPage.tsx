@@ -489,7 +489,9 @@ export function RedeemPage() {
       <AreaPageHeader title={t('publishing.redeem.title')} description={t('publishing.redeem.intro')} />
       <Claims />
       <Claims provided />
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* grid-cols-1 (minmax(0, 1fr)): an auto column would grow to the 320 px placeholder of the code while it loads,
+          10 px of sideways scrolling at 360 px. */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <RotatingCode />
         <PrintedCode />
       </div>
