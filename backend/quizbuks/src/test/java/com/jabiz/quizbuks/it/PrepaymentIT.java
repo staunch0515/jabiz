@@ -256,6 +256,37 @@ class PrepaymentIT extends PlayItSupport {
     }
 
     @Test
+    void movedToAnotherOperatorWhileInReviewTheFeeStillBelongsToTheOneFrozenAtTheSubmission() {
+        // F-M11: the submission freezes the operator; a move before it goes on does not change whose fee it is.
+        autoApprove(false);
+        String sponsor = reviewedSponsor("fm11-move");
+        grant(sponsor, 2_000, clock.instant().plus(Duration.ofDays(90)));
+        String frozen = String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?",
+            sponsor).getFirst().get("operator_id"));
+        String publicationId = audienceDraft(sponsor, "FM11 moved");
+        String requestId = String.valueOf(submit(sponsorToken(sponsor), publicationId).get("approvalRequestId"));
+        String hq = TestTokens.bearer(tokens, "fm11-hq", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ,
+            "approval.scope.move");
+        String other = newOperator(hq, unique("FM11 other operator"));
+        price(other);
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq, body("userId", sponsor, "operatorId", other,
+            "reason", "F-M11"));
+        decide(requestId, "APPROVE", null);
+        assertThat(status(publicationId)).isEqualTo("SCHEDULED");
+        assertThat(query("SELECT operator_id FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = 'AUDIENCE'",
+            sponsor)).singleElement().satisfies(row -> assertThat(row).containsEntry("operator_id", frozen));
+        assertThat(prepayments(publicationId)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("operator_id", frozen));
+
+        // What it submits now belongs to the new operator.
+        String later = audienceDraft(sponsor, "FM11 after the move");
+        submit(sponsorToken(sponsor), later);
+        assertThat(prepayments(later)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("operator_id", other));
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
     void aPostpaidSponsorsLimitCountsWhatTheyOweAndWhatIsSetAside() {
         autoApprove(false);
         String sponsor = pricedSponsor("fm5-postpaid");

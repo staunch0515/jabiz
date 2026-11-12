@@ -123,7 +123,7 @@ test.describe.serial('the first launch\'s loop', () => {
         const saved = await run(request, sora.token, 'QB_PUBLICATION_SAVE', { versionId: version.versionId,
           name: unique('Coffee for women '), regions: ['GLOBAL'], startAt: new Date(start).toISOString(),
           endAt: new Date(start + 7 * 86_400_000).toISOString(), passScore: 1, budgetCap: 500, maxWinners: 1000,
-          tiers: [{ fromScore: 0, toScore: 1, reward: 0 }] })
+          tiers: [{ fromScore: 0, toScore: 0, reward: 0 }, { fromScore: 1, toScore: 1, reward: 10 }] })
         const publicationId = saved.publicationId as string
         await run(request, sora.token, 'QB_PUBLICATION_AUDIENCE_SAVE', { publicationId,
           criteria: [{ key: 'gender', options: ['FEMALE'] }] })
