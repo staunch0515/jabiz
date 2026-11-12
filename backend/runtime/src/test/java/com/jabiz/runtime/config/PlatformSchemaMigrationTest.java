@@ -86,7 +86,11 @@ class PlatformSchemaMigrationTest {
     @Test
     void platformTablesAreDeclared() {
         Flyway.configure().configuration(application()).locations(PlatformSchemaMigration.PLATFORM_LOCATION)
-            .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE).load().migrate();
+            .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE)
+            .configuration(PlatformScriptPlaceholders.NON_TRANSACTIONAL_LOCK)
+            // The production setting: V66 builds its index CONCURRENTLY, outside a transaction.
+            .placeholders(PlatformScriptPlaceholders.defaults())
+            .load().migrate();
 
         assertThat(tables()).containsExactlyInAnyOrderElementsOf(PlatformSchemaMigration.PLATFORM_TABLES);
     }
