@@ -536,9 +536,10 @@ test.describe.serial('the first launch\'s loop', () => {
 
   test('7. the distribution fee: set aside when submitted, settled by the final job once it ends, the rest given back',
     async ({ request }) => {
-      // Up to a minute and a half of the publication running and the next minute's final job (QB_DISTRIBUTION_FINAL_CRON
-      // runs every minute in the end-to-end run, and a run looks at the publications ended before its time).
-      test.setTimeout(STEP_TIMEOUT_MS + 180_000)
+      // Up to a minute and a half of the publication running, the grace of a minute after its end (the least, review
+      // L1) and the first minute's final job after that (QB_DISTRIBUTION_FINAL_CRON runs every minute in the
+      // end-to-end run; a run settles the publications ended a grace before its scheduled time).
+      test.setTimeout(STEP_TIMEOUT_MS + 300_000)
       const { sora, operator, rin, map } = loop
       const restore = await rememberParams(request, [
         { key: 'qb.distribution.billing.enabled', absent: 'false' },
@@ -577,7 +578,7 @@ test.describe.serial('the first launch\'s loop', () => {
           // Asked again (D77) so that a run whose time was before the end does not leave it to the next minute's.
           await runJobNow(request, 'qb.distribution-final').catch(() => undefined)
           return false
-        }, { message: 'the final settlement', timeout: 210_000, intervals: [10_000] }).toBe(true)
+        }, { message: 'the final settlement', timeout: 270_000, intervals: [10_000] }).toBe(true)
         const settlements = await query(request, sora.token, 'qb.sponsor.publication-distribution-settlements',
           { publicationId: made.publicationId })
         expect(settlements).toEqual([expect.objectContaining({ final: true, starts: 1, toStarts: 1, amount: 1, tax: 0,
