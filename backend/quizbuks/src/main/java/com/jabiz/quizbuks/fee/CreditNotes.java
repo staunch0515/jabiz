@@ -15,6 +15,7 @@ import com.jabiz.runtime.ledger.LedgerProcesses;
 import com.jabiz.runtime.numbering.AssignNumber;
 import com.jabiz.runtime.process.steps.CallProcess;
 import com.jabiz.runtime.process.steps.QueryEntities;
+import com.jabiz.runtime.process.steps.SaveChanges;
 import com.jabiz.runtime.task.CloseTasks;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -181,6 +182,8 @@ public final class CreditNotes {
             .step("Number the note", AssignNumber.<ProcessContext>when(ctx -> ctx.contains(DECIDED),
                 QbCreditNotes.SEQUENCE, ctx -> FeeRules.period(ctx.opTime(), zone).substring(0, 4), NOTE_NO))
             .compute("Write the note and where it goes", (metadata, ctx) -> record(ctx))
+            // Written first: the postings name it as their source.
+            .step("Save the note", SaveChanges.now())
             .step("Post the note and what it gives back", CallProcess.<ProcessContext>forEach(LedgerProcesses.POST, 1,
                 ctx -> ctx.contains(POSTS) ? (List<?>) ctx.get(POSTS) : List.of(), POSTED))
             .compute("Record what it gave back", (metadata, ctx) -> recordBack(ctx))

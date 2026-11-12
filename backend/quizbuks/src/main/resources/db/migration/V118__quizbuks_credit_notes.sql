@@ -105,6 +105,7 @@ CREATE INDEX qb_prepayment_refund_due_idx ON qb_prepayment (purpose, charged_at)
 
 -- A credit note by hand is a fee request of its own kind (the same four eyes): the fee credited, the amount, why;
 -- and the note the approval made.
+ALTER TABLE qb_fee_request ALTER COLUMN kind TYPE varchar(20);
 ALTER TABLE qb_fee_request DROP CONSTRAINT qb_fee_request_kind_check;
 ALTER TABLE qb_fee_request ADD CONSTRAINT qb_fee_request_kind_check
     CHECK (kind IN ('MANUAL', 'VOID', 'CREDIT', 'CREDIT_NOTE'));

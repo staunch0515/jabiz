@@ -16,3 +16,5 @@ permissions: [qb.fee.system]
 SELECT p.{{QbPublication.startAt}} AS startAt, p.{{QbPublication.endAt}} AS endAt
 FROM {{QbPublication}} p
 WHERE p.{{QbPublication.publicationId}} = :publicationId
+  -- The time is the slice the publication is read at (timeSlice).
+  AND CAST(:at AS timestamptz) IS NOT NULL
