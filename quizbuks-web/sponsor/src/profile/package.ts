@@ -1,6 +1,6 @@
 import { api, runProcess, runQuery, unwrap } from '@jabiz/client'
 import { readDraft, readVersion, readVersions, searchQuizzes, type VersionDetail } from '../content/api'
-import { splitQuestions } from '../content/bank'
+import { bytesOf, planBatches, splitQuestions } from '../content/bank'
 import {
   exportQuiz,
   exportVersion,
@@ -479,7 +479,11 @@ export type PlannedStep =
   | { kind: 'profile'; key: string }
   | { kind: 'tree'; key: string; tree: PackageTree }
   | { kind: 'content'; key: string; quiz: string; label: string; title: string; check: string;
-    document: Record<string, unknown>; into: string | null; topics: { topics: string[]; customTopics: string[] } }
+    document: Record<string, unknown>; into: string | null; topics: { topics: string[]; customTopics: string[] };
+    /** The steps that clear the content this one replaces, before it (0 for the first content). */
+    clears: number }
+  | { kind: 'clear'; key: string; quiz: string; label: string; title: string; clear: number; clears: number;
+    quizStep: string }
   | { kind: 'batch'; key: string; quiz: string; label: string; title: string; check: string; batch: number;
     batches: number; document: Record<string, unknown>; quizStep: string }
   | { kind: 'version'; key: string; quiz: string; label: string; title: string; versionKey: string;
@@ -500,6 +504,8 @@ export interface OwnNode {
 export interface PlanContext {
   mode: ImportMode
   batchSize: number
+  /** The bytes one request takes at most (`importBatchBytes`); 0 or none: only the questions are counted. */
+  batchBytes?: number
   maxQuestions: number
   state: AccountState
   /** The titles of the account's quizzes (same titles are only pointed out). */
@@ -514,6 +520,8 @@ export interface PlanContext {
 export interface ImportPlanned {
   mode: ImportMode
   batchSize: number
+  /** The bytes one request takes at most, as planned (0: not limited). */
+  batchBytes: number
   steps: PlannedStep[]
   /** What the import makes. */
   makes: { profile: boolean; trees: number; quizzes: number; versions: number; publications: number }
@@ -528,6 +536,11 @@ export interface ImportPlanned {
   videosAgain: string[]
   /** Quizzes over the question bank's limit (not importable). */
   tooLarge: string[]
+  /**
+   * F-F11b: what no request can take within the byte limit, by the quiz's title: a question that alone is over it
+   * (its number in the file), or the heading and materials (null). The import does not start until the file is mended.
+   */
+  oversized: { title: string; question: number | null }[]
   /** Publications naming a quiz or version the package lacks (not imported). */
   orphans: string[]
 }
@@ -562,6 +575,87 @@ export function firstBatch(file: Record<string, unknown>, size: number): Record<
   return { ...file, questions: questions.slice(0, size), translations, products }
 }
 
+/** The rows one step that clears a content takes at most (the server's `ContentLimits.CLEAR_ROWS_TECH`). */
+export const CLEAR_ROWS = 2000
+
+/**
+ * The parts (rows) a quiz file makes: its materials (and their images), questions, options and every text, image and
+ * material it translates. The server deletes a content part by part, so this says how many steps clear it (F-F11b;
+ * the count of the server's own tests, `PackageFixtures.partsOf`, with the materials' images counted too: a count that
+ * is short only makes the step that follows slower).
+ */
+export function partsOf(file: Record<string, unknown>): number {
+  const length = (value: unknown) => (Array.isArray(value) ? value.length : 0)
+  const size = (value: unknown) => (isObject(value) ? Object.keys(value).length : 0)
+  let parts = length(file.materials)
+  if (Array.isArray(file.materials)) {
+    for (const material of file.materials) parts += isObject(material) ? length(material.images) : 0
+  }
+  for (const question of questionsOf(file)) {
+    parts += 1 + (isObject(question) ? length(question.options) : 0)
+  }
+  if (isObject(file.translations)) {
+    for (const t of Object.values(file.translations)) {
+      if (isObject(t)) parts += size(t.texts) + size(t.images) + length(t.materials)
+    }
+  }
+  return parts
+}
+
+/** A content cut into the requests of its steps. */
+export interface ContentCut {
+  /** The first step: the heading, the materials and as many questions as both limits allow. */
+  first: Record<string, unknown>
+  /** The questions after it, as batches. */
+  batches: Record<string, unknown>[]
+  /** What no request can take within the byte limit: question numbers (from 1), and null for the heading and materials. */
+  oversized: (number | null)[]
+}
+
+/**
+ * The content of a file cut by the questions (`size`) and, when `maxBytes` is above 0, by the bytes a request takes:
+ * the first step (heading, materials and their translations, the first questions) and the batches of the rest each
+ * within both (F-F11b, the same cut as the server's tests make with `PackageFixtures.splitContentByBytes`). Without
+ * the byte limit it is the cut there always was.
+ */
+export function planContent(file: Record<string, unknown>, size: number, maxBytes: number): ContentCut {
+  const questions = questionsOf(file)
+  if (maxBytes <= 0) {
+    return { first: firstBatch(file, size), batches: splitQuestions(file, size).slice(1), oversized: [] }
+  }
+  const room = Math.min(size, questions.length)
+  // The most questions the first step takes: the first step grows with them, so halve.
+  let low = 0
+  let high = room
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (bytesOf(firstBatch(file, middle)) <= maxBytes) low = middle
+    else high = middle - 1
+  }
+  const first = firstBatch(file, low)
+  const oversized: (number | null)[] = []
+  if (bytesOf(first) > maxBytes) oversized.push(null)
+  const rest = planBatches(file, size, maxBytes, low)
+  rest.tooLarge.forEach((n) => oversized.push(n))
+  return { first, batches: rest.batches, oversized }
+}
+
+/**
+ * The checks of the pieces a content is cut into, as one check of the content (F-F11b): a large bank is checked
+ * piece by piece (a request holds only so many bytes), and what the steps need of the check, the files to upload, is
+ * the pieces' together, each once.
+ */
+export function mergeChecks(checks: ImportCheck[]): ImportCheck {
+  const [head, ...rest] = checks
+  if (rest.length === 0) return head
+  const files = new Map(head.files.map((file) => [file.key, file]))
+  for (const check of rest) for (const file of check.files) if (!files.has(file.key)) files.set(file.key, file)
+  return { ...head, questions: checks.reduce((sum, check) => sum + check.questions, 0), files: [...files.values()],
+    ...(head.products === undefined ? {} : { products: checks.reduce((sum, check) => sum + (check.products ?? 0), 0) }),
+    ...(head.missingProducts === undefined ? {} : { missingProducts: [...new Set(checks.flatMap(
+      (check) => check.missingProducts ?? []))] }) }
+}
+
 /** The keys of the files a quiz file's content uses (every string naming one of its files). */
 export function usedFiles(document: Record<string, unknown>): Set<string> {
   const files = isObject(document.files) ? document.files : {}
@@ -593,9 +687,11 @@ function sameName(a: Texts | null | undefined, b: Texts | null | undefined): boo
 export function planImport(document: SponsorPackageDocument, context: PlanContext): ImportPlanned {
   const steps: PlannedStep[] = []
   const size = Math.max(1, Math.floor(context.batchSize))
-  const planned: ImportPlanned = { mode: context.mode, batchSize: size, steps,
+  const bytes = context.batchBytes && context.batchBytes > 0 ? Math.floor(context.batchBytes) : 0
+  const planned: ImportPlanned = { mode: context.mode, batchSize: size, batchBytes: bytes, steps,
     makes: { profile: !!document.profile, trees: 0, quizzes: 0, versions: 0, publications: 0 },
-    sameTitles: [], treesSkipped: [], treesKept: false, unbound: [], videosAgain: [], tooLarge: [], orphans: [] }
+    sameTitles: [], treesSkipped: [], treesKept: false, unbound: [], videosAgain: [], tooLarge: [], oversized: [],
+    orphans: [] }
   if (document.profile) steps.push({ kind: 'profile', key: 'profile' })
   if (context.mode === 'PROFILE') return planned
 
@@ -642,12 +738,19 @@ export function planImport(document: SponsorPackageDocument, context: PlanContex
       const check = `${quiz.key}:${content.versionKey ?? 'current'}`
       const contentKey = `${base}:content`
       if (c === 0) firstSteps.set(quiz.key, contentKey)
+      // F-F11b: the content replaced is cleared in steps of CLEAR_ROWS parts before the step that brings the next
+      // (a count that is short only leaves the rest to that step, which is slower, never wrong).
+      const clears = c === 0 ? 0 : Math.ceil(partsOf(contents[c - 1].file) / CLEAR_ROWS)
+      for (let k = 1; k <= clears; k++) {
+        steps.push({ kind: 'clear', key: `${base}:clear:${k}`, quiz: quiz.key, label: content.label, title, clear: k,
+          clears, quizStep: firstSteps.get(quiz.key)! })
+      }
+      const cut = planContent(content.file, size, bytes)
+      cut.oversized.forEach((question) => planned.oversized.push({ title, question }))
       steps.push({ kind: 'content', key: contentKey, quiz: quiz.key, label: content.label, title, check,
-        document: firstBatch(content.file, size), into: c === 0 ? null : firstSteps.get(quiz.key)!,
-        topics: content.topics })
-      const rest = splitQuestions(content.file, size).slice(1)
-      rest.forEach((batch, b) => steps.push({ kind: 'batch', key: `${base}:batch:${b + 2}`, quiz: quiz.key,
-        label: content.label, title, check, batch: b + 2, batches: rest.length + 1, document: batch,
+        document: cut.first, into: c === 0 ? null : firstSteps.get(quiz.key)!, topics: content.topics, clears })
+      cut.batches.forEach((batch, b) => steps.push({ kind: 'batch', key: `${base}:batch:${b + 2}`, quiz: quiz.key,
+        label: content.label, title, check, batch: b + 2, batches: cut.batches.length + 1, document: batch,
         quizStep: firstSteps.get(quiz.key)! }))
       if (content.versionKey) {
         const versionKey = `${base}:version`
@@ -697,6 +800,8 @@ export interface ImportView {
   mode: ImportMode
   status: 'RUNNING' | 'DONE' | 'ABANDONED'
   batchSize: number
+  /** The bytes the import was started with (F-F11a); null for one started before. */
+  batchBytes: number | null
   stepsTotal: number
   stepsDone: number
   done: Record<string, Record<string, unknown>>
@@ -800,6 +905,8 @@ async function stepInput(step: PlannedStep, document: SponsorPackageDocument, ch
       return { quiz: { document: withoutData(step.document), files, ...(into ? { intoQuizId: into } : {}) },
         quizTopics: step.topics }
     }
+    case 'clear':
+      return { clear: { quizId: id(step.quizStep, 'quizId'), rows: CLEAR_ROWS } }
     case 'batch': {
       const check = checks.quizzes[step.check]
       if (!check) throw new Error(`The quiz file ${step.check} was not checked`)
@@ -849,16 +956,22 @@ export async function runImport({ document, hash, plan, checks, onProgress, now 
   checks: ImportChecks
   onProgress?: RunProgress
   now?: Date
-  /** The plan again with another batch size (an import gone on with keeps the batches it started with). */
-  replan?: (batchSize: number) => ImportPlanned
+  /**
+   * The plan again with the batch size and the bytes an import gone on with was started with: it keeps the batches it
+   * began with, whatever the limits are now (the steps' keys count the batches).
+   */
+  replan?: (batchSize: number, batchBytes: number) => ImportPlanned
 }): Promise<ImportRun> {
-  const start = (steps: number, batchSize: number) => runProcess<ImportView>(PACKAGE_PROCESS.start, {
-    packageHash: hash, formatVersion: document.version, mode: plan.mode, batchSize, stepsTotal: steps })
+  const start = (steps: number, batchSize: number, batchBytes: number) => runProcess<ImportView>(
+    PACKAGE_PROCESS.start, { packageHash: hash, formatVersion: document.version, mode: plan.mode, batchSize,
+      ...(batchBytes > 0 ? { batchBytes } : {}), stepsTotal: steps })
   let current = plan
-  let view = await start(current.steps.length, current.batchSize)
-  if (view.batchSize !== current.batchSize && replan) {
-    current = replan(view.batchSize)
-    view = await start(current.steps.length, view.batchSize)
+  let view = await start(current.steps.length, current.batchSize, current.batchBytes)
+  // An import gone on with returns what it was started with (none for the bytes: one started before F-F11a).
+  const recorded = view.batchBytes ?? 0
+  if ((view.batchSize !== current.batchSize || recorded !== current.batchBytes) && replan) {
+    current = replan(view.batchSize, recorded)
+    view = await start(current.steps.length, view.batchSize, recorded)
   }
   const results: Record<string, Record<string, unknown>> = { ...view.done }
   let status: string = view.status

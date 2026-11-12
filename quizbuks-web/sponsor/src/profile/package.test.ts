@@ -5,8 +5,12 @@ import { exportVersion, type QuizFileDocument } from '../content/transfer'
 import { parseSettings, type PublicationSettings } from '../publishing/settings'
 import {
   buildPackage,
+  CLEAR_ROWS,
   firstBatch,
+  mergeChecks,
   PACKAGE_FORMAT,
+  partsOf,
+  planContent,
   planImport,
   readPackage,
   runImport,
@@ -186,11 +190,12 @@ describe('planning an import', () => {
       'profile',
       'tree:1',
       'quiz:q1:v:q1v1:content', 'quiz:q1:v:q1v1:batch:2', 'quiz:q1:v:q1v1:version',
-      'quiz:q1:v:q1v2:content', 'quiz:q1:v:q1v2:version',
-      'quiz:q1:c:content',
+      // F-F11b: the content each next one replaces is cleared before it (here a small one: one step each).
+      'quiz:q1:v:q1v2:clear:1', 'quiz:q1:v:q1v2:content', 'quiz:q1:v:q1v2:version',
+      'quiz:q1:c:clear:1', 'quiz:q1:c:content',
       'publication:1',
     ])
-    const [, , first, batch, , second, , current, publication] = plan.steps
+    const [, , first, batch, , , second, , , current, publication] = plan.steps
     expect(first).toMatchObject({ into: null, topics: { topics: ['coffee'], customTopics: [] } })
     expect(first.kind === 'content' && (first.document.questions as unknown[]).length).toBe(2)
     expect(batch.kind === 'batch' && (batch.document.questions as unknown[]).length).toBe(1)
@@ -270,8 +275,9 @@ describe('running an import', () => {
       const path = decodeURIComponent(new URL(request.url).pathname)
       const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
       if (path === '/api/processes/QB_PACKAGE_IMPORT_START/latest') {
-        expect(body).toMatchObject({ packageHash: 'h', formatVersion: 2, mode: 'FULL', batchSize: 2, stepsTotal: 8 })
-        return json(200, { output: { importId: 'imp', mode: 'FULL', status: 'RUNNING', batchSize: 2, stepsTotal: 8,
+        expect(body).toMatchObject({ packageHash: 'h', formatVersion: 2, mode: 'FULL', batchSize: 2, stepsTotal: 10 })
+        return json(200, { output: { importId: 'imp', mode: 'FULL', status: 'RUNNING', batchSize: 2, batchBytes: null,
+          stepsTotal: 10,
           stepsDone: 2, resumed: true, done: {
             'tree:1': { treeId: 'T1', nodeIds: { n1: 'node-1', n2: 'node-2' } },
             'quiz:q1:v:q1v1:content': { quizId: 'Q1' } } } })
@@ -281,7 +287,7 @@ describe('running an import', () => {
         const step = (body as { step: string }).step
         const result = step.endsWith(':version') ? { quizId: 'Q1', versionId: `V-${step}` }
           : step.startsWith('publication') ? { publicationId: 'P1' } : { quizId: 'Q1' }
-        return json(200, { output: { importId: 'imp', step, status: 'RUNNING', stepsDone: 3, stepsTotal: 8, result,
+        return json(200, { output: { importId: 'imp', step, status: 'RUNNING', stepsDone: 3, stepsTotal: 10, result,
           repeated: false } })
       }
       return json(404, {})
@@ -294,15 +300,164 @@ describe('running an import', () => {
     const run = await runImport({ document, hash: 'h', plan, checks, now: new Date('2026-11-09T10:20:00Z'),
       onProgress: (step, _i, _n, phase) => phase === 'done' && progress.push(step.key) })
     expect(steps.map((s) => s.step)).toEqual(['quiz:q1:v:q1v1:batch:2', 'quiz:q1:v:q1v1:version',
-      'quiz:q1:v:q1v2:content', 'quiz:q1:v:q1v2:version', 'quiz:q1:c:content', 'publication:1'])
-    expect(progress).toHaveLength(8)
+      'quiz:q1:v:q1v2:clear:1', 'quiz:q1:v:q1v2:content', 'quiz:q1:v:q1v2:version', 'quiz:q1:c:clear:1',
+      'quiz:q1:c:content', 'publication:1'])
+    expect(progress).toHaveLength(10)
     expect(steps[0]).toMatchObject({ importId: 'imp', questions: { quizId: 'Q1' } })
-    expect(steps[2]).toMatchObject({ quiz: { intoQuizId: 'Q1' }, quizTopics: { topics: [], customTopics: [] } })
-    expect(steps[5]).toMatchObject({ publication: {
+    // The clearing steps name the quiz this import made and the most rows a step takes.
+    expect(steps[2]).toMatchObject({ clear: { quizId: 'Q1', rows: CLEAR_ROWS } })
+    expect(steps[3]).toMatchObject({ quiz: { intoQuizId: 'Q1' }, quizTopics: { topics: [], customTopics: [] } })
+    expect(steps[7]).toMatchObject({ publication: {
       save: { publicationId: null, versionId: 'V-quiz:q1:v:q1v1:version', treeId: 'T1', treeNodeId: 'node-1',
         name: 'Spring', startAt: '2026-11-09T11:00:00.000Z', endAt: '2026-11-16T11:00:00.000Z' },
       topics: { customAdd: ['latte'] }, sharedVideoId: 'sv-1', criteria: null } })
     expect(run).toMatchObject({ importId: 'imp' })
-    expect(Object.keys(run.results)).toHaveLength(8)
+    expect(Object.keys(run.results)).toHaveLength(10)
+  })
+})
+
+/** A quiz file of `count` questions of `options` options each, each text `size` characters long. */
+function bigFile(count: number, options: number, size: number, extra: Record<string, unknown> = {}) {
+  const text = (n: number, what: string) => `${what}${n} ${'x'.repeat(size)}`
+  return { ...quizFile('Big', 0), quiz: { kind: 'QUIZ', title: 'Big', language: 'en' },
+    questions: Array.from({ length: count }, (_, i) => ({ stem: text(i + 1, 'Q'), image: null, points: 1,
+      selection: null, options: Array.from({ length: options }, (_, o) => ({ text: text(o + 1, 'O'), image: null,
+        correct: o === 0 })) })), ...extra } as Record<string, unknown>
+}
+
+describe('the steps that clear a content, and the cuts by bytes (F-F11b)', () => {
+  it('counts the parts a file makes: materials and their images, questions and options, every translation', () => {
+    const file = { ...quizFile('T', 2), materials: [{ kind: 'IMAGES', images: [{ image: 'a' }, { image: 'b' }] },
+      { kind: 'ARTICLE' }],
+    translations: { ja: { texts: { title: 'a', 'q1.stem': 'b' }, images: { 'q1.image': 'f' }, materials: [{ no: 1 }],
+      hashes: { title: 'h' } } } }
+    // 2 materials + 2 images, 2 questions + 4 options, 2 texts + 1 image + 1 material translated.
+    expect(partsOf(file)).toBe(2 + 2 + 2 + 4 + 2 + 1 + 1)
+    expect(partsOf({})).toBe(0)
+  })
+
+  it('plans ceil(parts / 2000) clearing steps before each content that replaces one, naming the new content', () => {
+    // 1000 questions of 3 options: 4000 parts, so two steps; the next content has two questions.
+    const document = packageOf()
+    document.quizzes[0].versions = [
+      { key: 'q1v1', label: 'v1', file: bigFile(1000, 3, 1) as never },
+      { key: 'q1v2', label: 'v2', file: { ...quizFile('Big', 2) } as never }]
+    document.quizzes[0].current = null
+    const plan = planImport(document, context({ batchSize: 1000, maxQuestions: 1000 }))
+    const keys = plan.steps.map((s) => s.key).filter((key) => key.startsWith('quiz:'))
+    expect(keys).toEqual(['quiz:q1:v:q1v1:content', 'quiz:q1:v:q1v1:version', 'quiz:q1:v:q1v2:clear:1',
+      'quiz:q1:v:q1v2:clear:2', 'quiz:q1:v:q1v2:content', 'quiz:q1:v:q1v2:version'])
+    const clear = plan.steps.find((s) => s.key === 'quiz:q1:v:q1v2:clear:2')
+    expect(clear).toMatchObject({ kind: 'clear', clear: 2, clears: 2, quizStep: 'quiz:q1:v:q1v1:content' })
+    // The step that follows says how many cleared before it (a refusal there leaves the draft empty).
+    expect(plan.steps.find((s) => s.key === 'quiz:q1:v:q1v2:content')).toMatchObject({ clears: 2 })
+    // The first content replaces nothing.
+    expect(plan.steps.find((s) => s.key === 'quiz:q1:v:q1v1:content')).toMatchObject({ clears: 0 })
+  })
+
+  it('cuts the first step too: heading and materials with as many questions as both limits allow', () => {
+    const file = bigFile(10, 2, 200, { materials: [{ kind: 'ARTICLE', title: 'M', body: 'b'.repeat(3000) }] })
+    const bytes = JSON.stringify(firstBatch(file, 4)).length + 50
+    const cut = planContent(file, 10, bytes)
+    const count = (document: Record<string, unknown>) => (document.questions as unknown[]).length
+    expect(count(cut.first)).toBeGreaterThan(0)
+    expect(count(cut.first)).toBeLessThan(10)
+    expect(count(cut.first) + cut.batches.reduce((sum, batch) => sum + count(batch), 0)).toBe(10)
+    // The first step keeps the materials; the batches have none.
+    expect((cut.first.materials as unknown[]).length).toBe(1)
+    expect(cut.batches.every((batch) => (batch.materials as unknown[]).length === 0)).toBe(true)
+    // Every piece is within the limit; nothing is reported.
+    for (const piece of [cut.first, ...cut.batches]) expect(new TextEncoder().encode(JSON.stringify(piece)).length).toBeLessThanOrEqual(bytes)
+    expect(cut.oversized).toEqual([])
+    // Without a byte limit it is the cut by questions it always was.
+    const plain = planContent(file, 4, 0)
+    expect(count(plain.first)).toBe(4)
+    expect(plain.batches.map(count)).toEqual([4, 2])
+  })
+
+  it('reports what no request can take: a question alone over the limit, or the heading and materials', () => {
+    const file = bigFile(3, 2, 20)
+    ;(file.questions as { stem: string }[])[1].stem = 'y'.repeat(20_000)
+    const limit = 5000
+    const cut = planContent(file, 10, limit)
+    expect(cut.oversized).toEqual([2])
+    const heavy = bigFile(2, 2, 20, { materials: [{ kind: 'ARTICLE', title: 'M', body: 'b'.repeat(20_000) }] })
+    expect(planContent(heavy, 10, limit).oversized).toContain(null)
+    const plan = planImport({ ...packageOf(), quizzes: [{ ...packageOf().quizzes[0], versions: [],
+      current: file as never }] }, context({ batchSize: 10, batchBytes: limit }))
+    expect(plan.oversized).toEqual([{ title: 'Big', question: 2 }])
+    expect(plan.batchBytes).toBe(limit)
+  })
+
+  it('puts the cuts into the steps: the batches are numbered from 2 as the server keys them', () => {
+    const document = { ...packageOf(), quizzes: [{ ...packageOf().quizzes[0], versions: [],
+      current: bigFile(6, 2, 300) as never }] }
+    const limit = JSON.stringify(firstBatch(bigFile(6, 2, 300), 2)).length + 60
+    const plan = planImport(document, context({ batchSize: 6, batchBytes: limit }))
+    const keys = plan.steps.map((s) => s.key).filter((key) => key.startsWith('quiz:'))
+    expect(keys[0]).toBe('quiz:q1:c:content')
+    expect(keys.length).toBeGreaterThan(2)
+    keys.slice(1).forEach((key, i) => expect(key).toBe(`quiz:q1:c:batch:${i + 2}`))
+    const last = plan.steps.filter((s) => s.kind === 'batch').at(-1)
+    expect(last).toMatchObject({ batches: keys.length })
+  })
+
+  it('merges the checks of the pieces: the files once each, the questions summed', () => {
+    const a = { formatVersion: 3, currentVersion: 3, readers: [3], kind: 'QUIZ', title: 'T', questions: 2, materials: 1,
+      files: [{ key: 'f1' }, { key: 'f2' }], language: 'en', languages: [] }
+    const b = { ...a, questions: 3, materials: 0, files: [{ key: 'f2' }, { key: 'f3' }] }
+    const merged = mergeChecks([a, b] as never)
+    expect(merged.questions).toBe(5)
+    expect(merged.files.map((f) => f.key)).toEqual(['f1', 'f2', 'f3'])
+    expect(mergeChecks([a] as never)).toBe(a)
+  })
+})
+
+describe('starting an import with the bytes (F-F11b)', () => {
+  function server(view: Record<string, unknown>) {
+    const started: Record<string, unknown>[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(new URL(String(input), window.location.origin), init)
+      const path = decodeURIComponent(new URL(request.url).pathname)
+      const body = request.method === 'POST' ? await request.clone().json().catch(() => null) : null
+      if (path === '/api/processes/QB_PACKAGE_IMPORT_START/latest') {
+        started.push(body as Record<string, unknown>)
+        return json(200, { output: { importId: 'imp', mode: 'PROFILE', status: 'RUNNING', stepsTotal: 1, stepsDone: 0,
+          resumed: false, done: {}, ...view } })
+      }
+      return json(404, {})
+    })
+    return started
+  }
+  const profileOnly = (more: Partial<PlanContext>) => ({ document: { ...packageOf(), profile: null }, hash: 'h',
+    checks: { profile: null, mailPassword: '', sharedVideos: new Set<string>(), quizzes: {} },
+    plan: planImport({ ...packageOf(), profile: null }, context({ mode: 'PROFILE', ...more })) })
+
+  it('sends the bytes the plan was cut by, and none when it was cut by the questions alone', async () => {
+    const started = server({ batchSize: 2, batchBytes: 65_536 })
+    await runImport(profileOnly({ batchBytes: 65_536 }))
+    expect(started[0]).toMatchObject({ batchSize: 2, batchBytes: 65_536 })
+    started.length = 0
+    const none = server({ batchSize: 2, batchBytes: null })
+    await runImport(profileOnly({ batchBytes: 0 }))
+    expect(none[0]).not.toHaveProperty('batchBytes')
+  })
+
+  it('goes on with the batches and the bytes the import began with, whatever the limits are now', async () => {
+    const started = server({ batchSize: 5, batchBytes: 100_000, resumed: true })
+    const replan = vi.fn((batchSize: number, batchBytes: number) => planImport({ ...packageOf(), profile: null },
+      context({ mode: 'PROFILE', batchSize, batchBytes })))
+    await runImport({ ...profileOnly({ batchBytes: 65_536 }), replan })
+    expect(replan).toHaveBeenCalledWith(5, 100_000)
+    // Started again with the recorded numbers, so that the record is the one it began with.
+    expect(started.at(-1)).toMatchObject({ batchSize: 5, batchBytes: 100_000 })
+  })
+
+  it('goes on with an import begun before the bytes were kept as one cut by the questions alone', async () => {
+    server({ batchSize: 2, batchBytes: null, resumed: true })
+    const replan = vi.fn((batchSize: number, batchBytes: number) => planImport({ ...packageOf(), profile: null },
+      context({ mode: 'PROFILE', batchSize, batchBytes })))
+    await runImport({ ...profileOnly({ batchBytes: 65_536 }), replan })
+    expect(replan).toHaveBeenCalledWith(2, 0)
   })
 })

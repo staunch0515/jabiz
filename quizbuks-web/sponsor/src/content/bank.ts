@@ -108,13 +108,14 @@ export interface BatchPlan {
  * (the page reports it and does not start). The bytes are measured on the batch as sent, translations and files
  * included, which grow with the questions: the largest fitting batch is found by halving.
  */
-export function planBatches(document: Doc, size: number, maxBytes: number | null | undefined): BatchPlan {
+export function planBatches(document: Doc, size: number, maxBytes: number | null | undefined, start = 0): BatchPlan {
   const questions = Array.isArray(document.questions) ? document.questions : []
   const per = Math.max(1, Math.floor(size))
   const limit = maxBytes && maxBytes > 0 ? Math.floor(maxBytes) : 0
   const batches: Doc[] = []
   const tooLarge: number[] = []
-  let from = 0
+  // `start`: the questions before it were taken by an earlier step (the first step of a package's content).
+  let from = Math.max(0, Math.floor(start))
   while (from < questions.length) {
     let to = Math.min(from + per, questions.length)
     if (limit > 0 && bytesOf(batchOf(document, from, to)) > limit) {

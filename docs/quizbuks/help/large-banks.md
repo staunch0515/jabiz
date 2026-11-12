@@ -8,7 +8,7 @@ Q109 的使用手册（F-C10）建立时，把下面的"帮助页"一节原样�
 - 页面：Quiz 编辑器的"题目"标签（`/sponsor/quizzes/<Quiz>`），发布向导的"每人抽题数"
 - 参数（写进文案的数字是缺省值，改了参数时同步改这里；页面显示的是当时的值，读模板 `qb.sponsor.quiz-limits`）：`qb.content.max-questions` = 1000、`qb.play.max-questions-per-attempt` = 100、`qb.content.import.batch-size` = 200、`qb.content.import.batch-bytes` = 3145728（3 MB，F-F11）；一次批量操作至多 200 道题（`QuestionBatchProcesses.MAX_BATCH`）
 - 计划：`docs/quizbuks/plans/impl/F-S6.md`
-- **发布时机**："分批导入"一段中关于请求大小（3 MB）的那两句，**在 F-F11b（页面按字节切批）合入后再发布**；在那之前发布时去掉这两句（F-F11a 审查 L5）。
+- **发布时机**：F-F11b（页面按字节切批）已合入，"分批导入"一段中关于请求大小（3 MB）的句子可以一并发布。
 
 ## 帮助页
 
