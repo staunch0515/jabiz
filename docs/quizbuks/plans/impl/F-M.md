@@ -92,9 +92,9 @@
 - 发布（版本）上冻结：运营商 `billingOperatorId`、受众规则费的明细、（以后的）配送单价与曝光单价；`QbFeeCharge.operatorId` 一律由调用方给（F-M11）。
 - 一次读取（与 `FeeGate` 合成一条 `QueryEntities.all`）、一个 422 `QB_PUBLICATION_FUNDS`（各项金额、可用额）；预付的：可用额（赠送 + 现金）≥ 合计；后付的：未付 + 未开账单 + 已提交未结算的预付等额 + 本次 ≤ 信用额。
 - 科目 2180"预收平台费"（负债，维度 `party` + `publication` + 新维度 `purpose`，见 §2.b）；`QbPrepayment`（发布或 AI、用途、金额、剩余，及其分摊）；释放子流程 `QB_PREPAYMENT_RELEASE`（驳回、撤回、审核过期、结束后最后一次结算后；按原分摊退回，赠送退回原笔，已到期即作废）。
-- F-M7：费用种类 `AUDIENCE`；有结束时间一次扣全期；没有结束时间扣到当月月底、每月最后一天续扣下月（`qb.audience-renewal`，`JobDefinition.forEach`，cron `0 7 0 L * *`，`jabiz.fiscal-year-zone`）；不足即未付并通知、`qb.audience-unpaid-end`（每日）在宽限后以平台的结束流程结束（原因 `AUDIENCE_FEE_UNPAID`）；退回：预付的作废原费用、后付的已出账单开**贷项凭证**（`QbFeeCreditNote` + 版式 `qb.fee_credit_note` + 编号 `qb.fee-credit-note`），抵下一张账单。
+- F-M7（第二稿 §10，需求方 2026-11-12 Q1 选 b）：费用种类 `AUDIENCE`；提交时冻结、上架时一次记全期（F-M5）；上架后提前结束（可退的原因）且开关打开时按未用天数开**贷项凭证**（`QbFeeCreditNote` + 版式 `qb.fee_credit_note` + 编号 `qb.fee-credit-note`），预付的退回原子账户、后付的抵下一张账单；不作废原费用。没有结束时间的发布、续扣与欠费结束以后单独立项。
 - 价目改为按发布冻结的运营商；**去掉 `direct` 价目表与 `qb.audience.price.fallback`**（规格："Q92a 后没有 direct 与 fallback；没有价目表 = 0"），直营发起方按平台运营商的价目（见 §2.d）。
-- 参数：`qb.audience.renewal.notice-days`（7，普通）、`qb.audience.renewal.grace-days`（7，受控）；沿用 `qb.audience.billing.enabled`、`qb.audience.fee.refund-unused-days`。
+- 参数：沿用 `qb.audience.billing.enabled`、`qb.audience.fee.refund-unused-days`（续扣的两个参数随以后的项目）。
 - 语句预算：提交多一条读取，`StatementBudgetIT` 的提交预算随之改并说明；`AttemptStatementBudgetIT` 不变。
 
 ### M5 配送费（F-M6）
@@ -593,111 +593,270 @@
 9. **N5 的测试**：发布名额上限（`PublishingLimits.MAX_WINNERS`）乘范围内的单价到不了一笔费用的上限，测试直接在表中写一个超出范围的价目来触发 422，代码的检查作为防线保留。
 
 
-## 10. F-M7 受众规则费：上架后的退回、贷项凭证与续扣（S2，2026-11-12，待总控批准、Fable 审）
+## 10. F-M7 受众规则费：上架后的退回与贷项凭证（S2，2026-11-12；第二稿，待 Fable 核对）
 
-规格 F-M7（规则、参数、运营闭合、验收）；§1 的 M4。F-M5（#640）已做：提交时冻结、上架时从预付款记费、驳回 / 撤回 / 审核过期全额释放、结束后释放剩余。本项是 F-M7 余下的部分。分支 `1.3/quizbuks-FM7-audience`（从合入 F-M6 后的基分支拉出），迁移取开 PR 时的下一个空号（现在暂定 `V118`）。
+规格 F-M7（规则、参数、运营闭合、验收）；§1 的 M4。F-M5（#640）已做：
+- 提交时冻结、上架时从预付款记费；
+- 驳回 / 撤回 / 审核过期全额释放；
+- 结束后释放剩余。
+
+本项做 F-M7 余下的、有结束时间的部分（需求方 2026-11-12，Q1 选 b）。
+- 分支 `1.3/quizbuks-FM7-audience`，从合入 F-M6 后的基分支拉出。
+- 迁移取开 PR 时的下一个空号（F-M6 用 `V117`，暂定 `V118`）。
+
+第二稿按 Fable 对第一稿（@98d251ac）的审查与总控的决定（§10.7）、需求方对 Q1 与 Q3 的答复（§10.6）改写。
 
 ### 10.1 现状（读代码得到的事实）
 
-1. **记费时刻**：F-M5 §8.8-1（总控批准）定为**上架时**记 `AUDIENCE` 费（`QB_PREPAYMENT_CHARGE` → `QB_FEE_CHARGE`，带 `prepaymentId`），不是规格写的"提交时扣"。驳回、撤回、审核过期都在上架之前：那时只有冻结、没有费用，F-M5 只释放预付款（已测）。
+1. **记费时刻**：F-M5 §8.8-1（总控批准）定为**上架时**记 `AUDIENCE` 费（`QB_PREPAYMENT_CHARGE` → `QB_FEE_CHARGE`，带 `prepaymentId`），不是规格写的"提交时扣"。
+   - 驳回、撤回、审核过期都在上架之前：那时只有冻结、没有费用，F-M5 只释放预付款（已测）。
+   - 记费的来源键是 `publication:<发布>`，费用表上**没有**唯一约束。一笔预付款至多记一次（`chargedAt`），但一个发布可以有不止一笔 `AUDIENCE` 费：上架后回到草稿、改过（例如改 `endAt`）再提交，会冻结新的预付款，再次上架时再记。实施时以 IT 核实（§10.4），所以凭证按**原费用**而不按发布唯一（§10.3-2）。
 2. **两种付款方式**：
    - 预付：上架时借 2180 / 贷 1130，同时开一张即开的 `PAID` 账单（每笔费用一张，`chargeId` 为该费用）。
    - 后付：冻结不动钱，只占信用额；记费照常借 1130，费用进入那个月的后付月账单（`chargeId` 为空的一张，金额 = 该月未单独付清的后付费用之和，开账单时不过账）。
 3. **费用只追加、只能整张作废**：
    - `QbFeeCharge` 是 `writeOnce`，`amount > 0`。
-   - 作废只有四眼的 `QB_FEE_REQUEST`（`VOID`，整张账单）：冲正该账单的全部分录（`qb.system.fee-invoice-transactions`），并由 `QB_FEE_REFUND` 按原分摊退回整张已付（负的 `QbFeePayment` 行）。
-   - **没有**部分退回，**没有**贷项凭证，也没有负的费用。
-4. **发布都有结束时间**：`PublicationReadiness` 要求 `endAt`，运行至多 `PublishingLimits.MAX_RUNNING`（366 天）。首次上线的规格里也没有一项让发布可以不设结束时间。
-5. **提前结束的原因**（`PublicationStatus.END_REASONS`）：`EXPIRED`（到期，不算提前）、`QUOTA`（名额满）、`BUDGET`、`ADMIN`、`PUBLISHER`、`TREE`、`SHARED_VIDEO`、`EXPOSURE`。各结束路径不读费用，F-M5 的退回也是由每日任务事后做的。
-6. **运营商分成**：月结算的分成基数含平台费（`qb.system.operator-fees` 按 `QbFeeCharge.operatorId` 与 `chargedAt` 求和）。退回若不扣减基数，运营商会按没收到的钱分成。
+   - 作废只有四眼的 `QB_FEE_REQUEST`（`VOID`，整张账单）：冲正该账单的全部分录，并由 `QB_FEE_REFUND` 按原分摊退回整张已付（负的 `QbFeePayment` 行）。
+   - 从预付款付的部分（F-M5 审查 H1）：冲正把它放回 2180，再借 2180（预付款的维度）/ 贷 2190、2160 退回原子账户（月报 `PREPAYMENT_RELEASED`），已到期的赠送当即作废（借 2190 / 贷 5140，`FEE_CREDIT_VOIDED`）。
+   - 没有部分退回，没有贷项凭证，也没有负的费用。
+4. **发布都有结束时间**：`PublicationReadiness` 要求 `endAt`，运行至多 `PublishingLimits.MAX_RUNNING`（366 天）。
+5. **提前结束的原因**（`PublicationStatus.END_REASONS`）：`EXPIRED`（到期，不算提前）、`QUOTA`、`BUDGET`、`ADMIN`、`PUBLISHER`、`TREE`、`SHARED_VIDEO`、`EXPOSURE`。各结束路径不读费用，F-M5 的退回也是由每日任务事后做的。
+6. **运营商分成**：
+   - 月结算的分成基数含平台费（`qb.system.operator-fees` 按 `QbFeeCharge.operatorId` 与 `chargedAt` 求和）。
+   - 结算已有"扣不完结转下月"（`carriedIn` / `carriedOut`，获客费用 Q48d）。
+7. **计费的开始**：`AudienceBilling.days(start, end)` 的 `start` 是冻结报价时的 `startAt`，记在预付款的明细中。暂停（`PAUSED`）不改 `startAt` 与 `endAt`，暂停的天数照样计费。
 
-### 10.2 先要决定的（请总控 / 需求方）
+### 10.2 已定的问题（第一稿 §10.2 的 Q1–Q4）
+- **Q1（需求方 2026-11-12，选 b）**：本项只做有结束时间的部分。下列都移到以后单独立项的"不设结束时间的发布"，不建没有读取的参数与任务：
+  - 没有结束时间的发布与按月续扣；
+  - 欠费结束；
+  - 参数 `qb.audience.renewal.notice-days` / `.grace-days`；
+  - 任务 `qb.audience-renewal` / `qb.audience-unpaid-end`；
+  - 核对"本月未续扣"。
 
-**Q1 没有结束时间的发布（阻塞续扣）。** 规格 F-M7 下列内容都以"没有结束时间的发布"为前提，而这种发布现在不存在：
-- 续扣（开始到当月月底、每月最后一天扣下一个整月）；
-- 欠费结束（结束原因"受众规则费未付"）；
-- 参数 `qb.audience.renewal.notice-days`、`.grace-days`；
-- 任务 `qb.audience-renewal`、`qb.audience-unpaid-end`；
-- 核对"本月未续扣"。
+  规格 F-M7 随本计划改写，写明这一拆分。
+- **Q2（总控）**：规格改为"提交时冻结、上架时记费；驳回、撤回、审核过期的退回就是释放预付款；贷项凭证只用于上架之后的退回"。
+- **Q3（需求方 2026-11-12）**：
+  - 违规下架（`ADMIN`）**不退**；
+  - 知识结构图退役（`TREE`）、共享视频下架（`SHARED_VIDEO`）照退；
+  - 其余提前结束的原因（`PUBLISHER`、`QUOTA`、`BUDGET`、`EXPOSURE`）照退：发起方自己结束、名额或预算用完、曝光用完，都已不再占用受众规则。
 
-可选：
-- a. 本项一并做"不设结束时间的发布"。这要改向导、提交检查、卡片、首页与公开模板里按 `endAt` 判断的地方、`qb.publication-tick`、分析的定稿、F-M6 的结束结算、邀请与推荐的期限……它改变发布的含义，范围远超 4–5 天，应当是规格中单独的一项，并由需求方确认。
-- **b.（建议）** 本项只做有结束时间的部分（下面 10.3），续扣、欠费结束与两个参数等"不设结束时间的发布"进入规格之后再做。规格 F-M7 写明这一分割；不建没有读取的参数。
-- c. 只做续扣的引擎、不开放入口：无从测试，不建议。
+  可退的原因写成一处常量 `AudienceRefunds.REFUNDABLE_REASONS`（规则、模板参数与核对都引用它）。
+- **Q4（总控）**：预付的退回按原分摊逆序回到原子账户（最后用的先退：先现金、后赠送额度），退到已到期的赠送当即作废，同 F-M5。
 
-**Q2 规格的"提交时扣"与"三处退回"。** 按 F-M5 已批准的写法（上架时记费），三处退回（驳回、撤回、审核过期）就是释放预付款，既不需作废也不需贷项。建议把规格的这一句改成："提交时冻结、上架时记费；驳回、撤回、审核过期全额释放；作废与贷项凭证只用于上架之后的退回"。
+### 10.3 本项做什么
 
-**Q3 上架后提前结束的未用天数退回**（开关 `qb.audience.fee.refund-unused-days`，受控，缺省关）。建议的规则：
-- 已用天数 = ⌈（结束时刻 − 开始）/ 24 小时⌉，至少 1，与计费同一取整（`AudienceBilling.days`）。
-- 应收 = max（最低使用费，日价合计 × 已用天数），按冻结时的报价（预付款上记的明细）计算，不读现在的价目。
-- 退回 = 原费用 − 应收，不小于 0。税 = 原税 − ⌊应收 × 税率⌋，也就是按应收重算后的差。
-- "提前" = 卡片在 `endAt` 之前变为 `ENDED`，原因不是 `EXPIRED`。
-- 开关在**结束时**（卡片的 `endedAt`）为开才退，按结束时的参数值。
-- 请需求方确认：管理员下架（`ADMIN`，违规）与运营商下架**是否也退**。建议不退：下架是发起方的违约。`TREE` 与 `SHARED_VIDEO` 不是发起方的过错，照退。
+**1. 规则**（纯 Java `AudienceRefunds`；审查中 6、10）
+- 已用天数：
+  - 已用天数 = ⌈（结束时刻 − 计费的 `startAt`）/ 24 小时⌉，至少 1，与计费同一取整（`AudienceBilling.days`）。
+  - `startAt` 取预付款明细中冻结时的那个（不读发布现在的值）。
+  - 暂停的天数算作已用。
+- 应收与退回：
+  - 应收 = max（最低使用费，日价合计 × 已用天数），按冻结时的报价明细（不读现在的价目），取整与原费用一样（`CEILING`）。
+  - 退回额 = 原费用的 `amount` − 应收，不小于 0。
+  - 税差 = 原费用的 `tax` − ⌊应收 × 原费用的 `taxRate`⌋（用原费用的税率，不读现在的参数）。
+- "提前"的判定：卡片在 `endAt` 之前变为 `ENDED`，且原因在 `REFUNDABLE_REASONS` 中。
+- 开关：
+  - 开关 `qb.audience.fee.refund-unused-days` 以 `LoadParams.of(ctx -> endedAt, …)` 按**结束时刻**读；结束时为开才退。
+  - 两个方向都测：结束时开、此后关仍退；结束时关、此后开不补退。
+- 单元测试：最低费、只用了一天、`endAt` 当天结束、0 退回、暂停跨日、税率改过之后、各原因。
 
-**Q4 预付发起方退回到哪里。** 原费用由预付款付（预付款当初从赠送额度与现金冻结）。建议：
-- 退回进**原来的子账户**，最后用的先退：先现金，再赠送额度。
-- 退到已到期的赠送额度的部分当即作废，与 F-M5 的释放同一规则。
+**2. 贷项凭证 `QbFeeCreditNote`**（只追加、`writeOnce`；审查中 4、11、13）
+- 字段：
+  - 发起方、运营商（原费用的 `operatorId`）；
+  - 原费用、原账单号、发布；
+  - 金额、税率（原费用的）、税、合计；
+  - 原因（`AUDIENCE_UNUSED` 与结束原因）；
+  - 退回方式（`REFUND` / `CREDIT`，§10.3-5）；
+  - 其中退回现金与退回赠送各多少（`REFUND`，审查 5b）；
+  - 开具时刻。
+- 唯一与编号：
+  - 来源键 `audience-unused:<原费用>`，`(sponsorId, sourceKey)` 唯一：一笔费用至多一张。凭证按原费用而不按发布唯一，因为一个发布可以有两笔费用（§10.1-1）。
+  - 编号 `qb.fee-credit-note`（`QBC-<年>-00001`，`AssignNumber`）。
+- 单据版式 `qb.fee_credit_note`：
+  - 三语；开具方 `qb.issuer.*`；
+  - 印原账单号、税率、原因；
+  - 发起方按需签发 PDF，同收据。
+- 凭证本身不改：
+  - 后付凭证的可用余额 = 合计 − Σ `QbFeeCreditNoteUse.amount`，在钱包锁内现算（审查 4），凭证上不记余额。
+  - `QbFeeCreditNoteUse` 也是只追加。
+- 开具时过账（来源 `QbFeeCreditNote`）：借 4120（金额）、借 2150（税）/ 贷 1130（合计）。
+  - 应收与收入同时减少，**不冲正**原费用：原费用与它的账单不变。
+  - 已开过凭证的账单不能作废（下一条）。
 
-另一个选项是按原比例分摊。请总控定。
+**3. 已开凭证的账单不能作废**（审查 1）
+- 原费用所在的账单只要有一张凭证，`QB_FEE_REQUEST(VOID)` 就一律 422 `QB_FEE_INVOICE_HAS_CREDIT_NOTE`（新错误码，三语）。
+  - 提出时检查，批准执行时再检查一次。
+  - 要更正金额，就再开一张贷项凭证（以后由财务手工开，见 §10.3-12）。
+- IT：开凭证后申请作废被拒，钱与账都不变。
 
-### 10.3 本项做什么（按 Q1 选 b）
+**4. 预付的退回**（审查 7、9）
+- 方式按**原费用**的 `billingMode`（即预付款的 `mode`），不按发起方此刻的。
+- 同一事务、钱包锁内，与 F-M5 作废时"从预付款付的部分"走**同一条路径**：
+  1. 凭证过账（上条）：借 4120、2150 / 贷 1130。
+  2. 退回到预付款（来源 `QbFeeCreditNote`）：借 1130 / 贷 2180，维度为原预付款（发起方、发布、用途 `AUDIENCE`）。
+  3. 从 2180 退回原子账户：借 2180 / 贷 2160、2190。用 F-M5 的同一段 `prepaymentBack`（`FeeSettlement`），来源为该预付款。退回顺序为原分摊的逆序：先现金、后赠送。
+  4. 退到已到期赠送的部分当即作废：借 2190 / 贷 5140，同 F-M5。
+- 分摊：
+  - 记负的 `QbFeePayment` 行，对象为贷项凭证，带 `prepaymentId`，各笔的剩余与两个钱包同步。
+  - 原账单不改（仍是 `PAID`），贷项凭证就是退回的凭证。
+- 核对与月报的归类（写进计划，免得 F-M14 再定）：
+  - `FEE_PAYMENTS`：对象为凭证的负分摊计入（同 `REFUND` 的负分摊）。
+  - `PREPAYMENT_PARTS`：只看正的分摊（已如此），凭证的负分摊不影响预付款的剩余。
+  - 月报：
+    - 凭证的过账为新类 `FEE_CREDIT_NOTE`，预付与后付同一类；
+    - 第 2 步为 `FEE_PAID` 的反向，`FEE_PAID` 一行按来源 `QbFeeCreditNote` 记负数，与作废时的冲正同类；
+    - 第 3 步为 `PREPAYMENT_RELEASED`（同 F-M5）；
+    - 第 4 步为 `FEE_CREDIT_VOIDED`（同 F-M5）。
+  - `AdminFinanceIT` 逐行。
 
-1. **规则**（纯 Java `AudienceRefunds`）：已用天数、应收、退回额与税差，输入是冻结时的报价明细与卡片的开始、结束时刻。用例写进单元测试，包括：最低费、只用了一天、`endAt` 当天结束、0 退回。
-2. **贷项凭证 `QbFeeCreditNote`**（只追加、`writeOnce`）。
-   - 字段：发起方、运营商（原费用的 `operatorId`）、原费用、发布、金额、税、合计、原因 `AUDIENCE_UNUSED`、来源键 `audience-unused:<发布>`（唯一，一个发布至多一张）、方式（`REFUND` 预付退回 / `CREDIT` 后付抵减）、开具时刻；编号 `qb.fee-credit-note`（`QBC-<年>-00001`，`AssignNumber`）；版式 `qb.fee_credit_note`（三语，开具方 `qb.issuer.*`，发起方按需签发 PDF，同收据）。
-   - 预付与后付都开一张：同一种单据、同一编号；预付的方式是 `REFUND`，后付的是 `CREDIT`。月报与发起方的账单列表因此只有一种"退回"。
-   - 开具时过账（来源 `QbFeeCreditNote`）：借 4120（金额）、借 2150（税）/ 贷 1130（合计）。应收与收入同时减少，**不冲正**原费用（原费用与它的账单不变）。
-3. **预付的退回**：同一事务、钱包锁内，以新的子流程 `QB_FEE_CREDIT_NOTE_REFUND` 把合计退回：借 1130 / 贷 2160 或 2190，按 Q4 的顺序。
-   - 分摊记负的 `QbFeePayment` 行，对象为贷项凭证；各笔的剩余与两个钱包同步。
-   - 原账单不改（仍是 `PAID`），贷项凭证就是退回的凭证。
-4. **后付的抵减**：贷项凭证记为可用余额（`remaining = 合计`），开下一张后付月账单时先用它抵（包括同一个月、账单还没开的情况）：
-   - 账单多一列 `creditApplied`（V118 加列）；合计不变，欠的 = 合计 − `creditApplied` − `paidAmount`。
-   - 每次抵用写只追加的 `QbFeeCreditNoteUse`（凭证、账单、金额）。抵用时不过账：开具时已减了 1130。
-   - 抵不完的留到下一张；不退现金（规格："没有下一张时留作贷项，下次自动抵"）。
-   - **所有读"欠多少"的地方一起改**（`FeeGate`、`qb.system.fee-receivable`、账单列表与逾期、提前付、自动付的模板）。在一处 SQL / Java 写下"欠的"定义，`FeeOwedIT` 比较两者。
-5. **流程与任务**：每日逐项任务 `qb.audience-refund`（`JobDefinition.forEach`，项为一个发布，`internal()` 的 `QB_AUDIENCE_REFUND_ITEM`，只取 `qb.wallet:SPONSOR:<发起方>`）。
-   - 模板 `qb.system.audience-refund-due`：有 `AUDIENCE` 费、卡片 `ENDED` 且 `endedAt < endAt`、原因可退、还没有凭证的发布。
-   - 项在锁内重读，开关此刻在结束时刻的值不是 `true` 就什么也不做（日后打开开关不补退以前结束的）；退回为 0 也不开凭证。
-   - 不改任何结束路径（同 F-M5 的释放）。
-6. **运营商分成**：`qb.system.operator-fees` 减去该期间开具的贷项凭证（按凭证的 `operatorId` 与开具时刻）。基数不低于 0，低于 0 的部分不跨期结转，写进 `operations.md`。
-7. **核对**（`qb.system.recon-fee-account`，各一条语句）：
-   - `CREDIT_NOTES`：1130 按发起方 = 未付账单的欠额 + 未开账单的后付费用 − 未用贷项。
-   - `AUDIENCE_REFUND_MISSING`：可退、结束超过一天、没有凭证。
-   - `AUDIENCE_CHARGE_STATE`：有 `AUDIENCE` 费而发布从未上架。
-   - `FEE_PAYMENTS` 排除贷项凭证的抵用（它没有分录）。
-8. **月报**：`AUDIENCE_REFUND`（预付：凭证的过账加退回的分录）与 `FEE_CREDIT_NOTE`（后付：凭证的过账），`AdminFinanceIT` 逐行。
-9. **页面**：
-   - 发起方页面：发布页「预付款」一栏下列出记费、提前结束的退回（凭证号、天数、金额）；平台费账户的账单列表加"贷项凭证"（PDF），账单显示"已抵减"。
-   - 向导：继续写"按天收费、提前结束是否退回按平台设置"（开关关时不承诺退回）。
-   - 管理系统扩展：财务的"贷项凭证"列表（筛选发起方、运营商、月份）与发起方详情的一栏。
-   - 运营商：只读本运营商的（`OperatorScopes`）。
-10. **首发开关**：`qb.audience.billing.enabled` 由 `WAITING(F-M7)` 改为 `ACTIVE`，首次上线的值按 F-F10 计划的意图为 true（请总控确认）。`qb.audience.fee.refund-unused-days` 已存在，登记一行 `ACTIVE` false（缺省不退，规格）。资金开关卡片随之改（同 F-M6）。
-11. **文档**：`operations.md` 新一节（退回、贷项凭证、抵减、分成扣减与核对的处理）、规格 F-M7 的修订（Q1、Q2 的结论）、三语使用手册、`backend/quizbuks/CLAUDE.md`、走查清单。
-12. **e2e**：`fees` 或闭环加一步。开关开时发起方提前结束一个受众规则发布，第二天的任务（`JOB_RUN_REQUEST` 补跑）开出贷项凭证并退回现金；后付的抵减由 IT 覆盖。
+**5. 后付的抵减**（审查 3、9）
+- 凭证的合计成为可用的贷项，开下一张后付月账单时先用它抵（包括同一个月、账单还没开的情况）。
+  - 每次抵用写 `QbFeeCreditNoteUse`（凭证、账单、金额）。
+  - 抵用时不过账：开具时已减了 1130。
+  - 抵不完的留到下一张；不退现金（规格："没有下一张时留作贷项，下次自动抵"）。
+- 后付转为预付之后，未用的贷项也抵即开账单（预付费用记费时在钱包锁内先用贷项）。
+- 封禁与注销时未用的贷项：登记到 F-M15（注销收尾）的清单，本项不处理。
+- **`qb.system.fee-receivable` 不改**：1130 已经反映了凭证。
+- **逐个改的地方**（审查 3 列的全部，`FeeOwedIT` 逐个比对"欠多少"）：
+  - 核对 `FEES_RECEIVABLE`：改这一项，不另加 `CREDIT_NOTES`。1130 按发起方 = 未付账单的欠额 + 未开账单的后付费用 − 未用贷项。
+  - `FeeGate.standing`（提交拦截）。
+  - 账单状态机：
+    - 欠额 = 合计 − 已抵 − 已付；
+    - 贷项抵满即 `PAID` 并写 `paidAt`；
+    - 约束与注释随之改；
+    - 抵减部分不开收据（不是收款）。
+  - `qb.system.fee-overdue-due` 与催款邮件的金额（按欠额）。
+  - `qb.sponsor.todo`、发起方钱包页（`wallet`）、`qb.sponsor.fee-invoices`。
+  - `qb.operator.sponsor-billing`、`qb.admin.fee-invoices`。
+  - `FeeRequests`（作废的检查，上条）、`InvoiceOutput`（加 `creditApplied`）。
+  - 账单 PDF 印"已抵减 X（凭证号）"。
+  - 管理系统扩展 `FeesPage`。
+- 账单加列 `creditApplied`（V118）：合计不变，欠额 = 合计 − `creditApplied` − `paidAmount`。
+
+**6. 任务与流程**（审查 2、14）
+- 每日逐项任务 `qb.audience-refund`（`JobDefinition.forEach`）。
+  - 项为一笔原费用，`internal()` 的 `QB_AUDIENCE_REFUND_ITEM`，只取 `qb.wallet:SPONSOR:<发起方>`。
+  - cron 与每次的上限写成部署设置 `QB_AUDIENCE_REFUND_CRON`（缺省 03:37，在 03:07 的配送费结束结算与 03:23 的预付款退回之后）、`quizbuks.audience-refund.max-items`（缺省 10000）。
+- **"已判定"落到数据上**（审查 2）：
+  - `AUDIENCE` 预付款加列 `refund_decided_at` 与 `refund_outcome`（`REFUNDED` / `CREDITED` / `NONE_SWITCH_OFF` / `NONE_REASON` / `NONE_ZERO`）。
+  - 项判定后写入（`QbPrepayment` 是普通表，经 `DatasetEntityManager`）。
+  - 取项模板 `qb.system.audience-refund-due` 只取 `refund_decided_at IS NULL` 的。开关关时第二次运行的取项为空，核对也没有差异（IT）。
+- 项在锁内重读，按 §10.3-1 判定。
+- 不改任何结束路径（同 F-M5 的释放）。
+- 测与 03:07、03:23 两个任务交叠：同一发布的配送费 `final` 与预付款释放并发，都只成一次（IT）。
+
+**7. 运营商分成**（审查 5）
+- 凭证中**退回现金**的部分在开具的月份从分成基数中减去：`qb.system.operator-fees` 按凭证的 `operatorId` 与开具时刻。
+- **退回赠送**的部分不减基数，减"扣回"。赠送付的费用本来就不进基数，扣回由 F-M12 做；本项在凭证上记下这一部分，F-M12 读它。
+- 基数不够减时**沿用结算已有的"结转下月"**（`carriedIn` / `carriedOut`），不追回已付的分成。
+- IT：上月记费并已结算，本月开凭证。本月的分成减少；不够减的结转到下月。
+
+**8. 核对**（`qb.system.recon-fee-account`，各一条语句）
+- `FEES_RECEIVABLE`：改为含未用贷项（上面第 5 条）。
+- `AUDIENCE_REFUND_MISSING`：可退、结束超过一天、`refund_decided_at` 仍为空。
+- `AUDIENCE_CHARGE_STATE`：有 `AUDIENCE` 费而发布从未上架。
+- `CREDIT_NOTE_USES`：每张凭证的 Σ 抵用 ≤ 合计。
+- `FEE_PAYMENTS`、`PREPAYMENT_PARTS` 按第 4 条。
+
+**9. 月报**：新类 `FEE_CREDIT_NOTE`；其余按第 4 条归类。`AdminFinanceIT` 逐行，预付与后付各一。
+
+**10. 页面**
+- 发起方页面：
+  - 发布页「预付款」一栏下列出记费与提前结束的退回（凭证号、天数、金额）；
+  - 平台费账户的账单列表加"贷项凭证"（PDF），账单显示"已抵减"。
+- 向导：写"按天收费；提前结束是否退回未用天数，按平台的设置"。开关关时不承诺退回。
+- 管理系统扩展：
+  - 财务的"贷项凭证"列表（筛选发起方、运营商、月份）；
+  - 发起方详情的一栏；
+  - `FeesPage` 的账单显示已抵减。
+- 运营商：只读本运营商的（`OperatorScopes`）。
+
+**11. 规格的偏离与范围**（审查 8；规格 F-M7、F-M13 与 §1 M9 一并改，免得 F-M13 再做一遍）
+1. **规格 F-M7 的"提交时扣"** → 提交时冻结、上架时记费（Q2）。
+2. **规格 F-M7 的"预付的以系统作废原费用退回"** → 预付与后付都开贷项凭证，不作废原费用。理由是作废只能整张，而这里只退未用的天数；凭证与作废走同一条退回路径（第 4 条）。
+3. **规格 F-M13 的"贷项凭证（后付的退回）"** → 贷项凭证也用于预付（方式 `REFUND`）。凭证的记录、版式、编号、抵减、核对与月报类都由本项做。F-M13 余下的是：PDF 分列来源、自动付、作废与贷项的总部列表的其余部分。
+4. **§1 M9 的范围**相应缩小：去掉贷项凭证，剩下 PDF 分列、自动付与 F-M14、F-M15。
+
+**12. 不做**
+- 财务手工开凭证（更正金额）：留给以后，当前只有本项的自动凭证；作废被拒时的说明写"请联系开发"。
+- 封禁、注销时未用的贷项：F-M15。
+- 续扣：以后的项目（Q1）。
+
+**13. 首发开关**（审查 14）
+- `qb.audience.billing.enabled`：由 `WAITING(F-M7)` 改为 `ACTIVE`，首次上线为 true（总控）。
+- `qb.audience.fee.refund-unused-days` 登记一行 `ACTIVE` false（缺省不退）。
+- 打开的顺序与 `FirstLaunchSwitches` 的登记一致：先 `billing`，`refund-unused-days` 由需求方另定。资金开关卡片随之改（同 F-M6）。
+
+**14. 保留与删除账号**（审查 12）
+- 凭证的单据进 `RetentionPolicy.of("DocumentRun")` 的范围（按收据）。
+- `QbFeeCreditNote`、`QbFeeCreditNoteUse` 登记到 `PersonalDataEraser`（`keep`，同账单）。
+
+**15. 文档**
+- `operations.md` 新一节：退回、贷项凭证、抵减、作废被拒、分成扣减与结转、核对的处理、补跑。
+- 规格 F-M7、F-M13 的修订（第 11 条）。
+- 三语使用手册、`backend/quizbuks/CLAUDE.md`、走查清单。
+
+**16. e2e**
+- 闭环加一步：开关开时发起方提前结束一个受众规则发布，任务（`JOB_RUN_REQUEST` 补跑）开出贷项凭证并退回现金，发布页列出凭证。
+- 后付的抵减由 IT 覆盖，另加一条场景快照（审查 13）。
 
 ### 10.4 测试
-- `AudienceRefundsTest`：规则的全部用例。
+- `AudienceRefundsTest`：§10.3-1 的全部用例，含各原因、暂停、税率改过。
 - `AudienceRefundIT`：
-  - 预付的退回顺序（Q4）、到期赠送的作废；
-  - 后付的凭证抵减当月未开的账单、抵减下一张、抵不完的留存；
-  - 开关关时不退、开关在结束后才打开不补退；
-  - `ADMIN` 不退（若 Q3 如此定）；
-  - 一个发布只一张（再运行不多开）；
-  - 分成基数扣减；
-  - 核对三项；
+  - 预付：
+    - 退回顺序（先现金、后赠送）、到期赠送的作废；
+    - 分录与 F-M5 作废路径相同；
+    - `FEE_PAYMENTS` / `PREPAYMENT_PARTS` 无差异。
+  - 后付：
+    - 抵减当月未开的账单、抵减下一张、抵满即 `PAID`、抵不完的留存；
+    - 后付转为预付后抵即开账单。
+  - 开关与原因：
+    - 结束时开、此后关仍退；结束时关、此后开不补退（第二次运行取项为空、核对无差异）；
+    - `ADMIN` 不退，`TREE`、`SHARED_VIDEO`、`PUBLISHER` 退。
+  - 唯一与作废：
+    - 一笔费用只一张（再运行不多开）；
+    - 回到草稿再提交的发布有两笔费用时各自判定（并核实来源键，§10.1-1）；
+    - 开凭证后作废被拒（422，钱与账不变）。
+  - 分成：上月已结算、本月开凭证，基数减少与结转。
+  - 交叠：与 03:07、03:23 两个任务交叠。
+  - 核对四项。
   - `qb_fee_credit_note` 与 `_use` 没有 UPDATE / DELETE。
-- `FeeOwedIT`：各处"欠的"一致。
-- 月报 `AdminFinanceIT` 逐行；场景回放与快照；`SetupIT`（新的编号与版式）；`FirstLaunchSwitches*Test`。
-- 语句数：退回不在提交与答题路径上，`SubmitStatementBudgetIT`、`AttemptStatementBudgetIT` 不变。
+- `FeeOwedIT`：§10.3-5 列出的每一处"欠多少"一致。
+- 月报 `AdminFinanceIT` 逐行（预付、后付各一）。
+- 场景回放与快照（含后付抵减一条）；`SetupIT`（新的编号与版式）；`FirstLaunchSwitches*Test`。
+- 语句数：退回不在提交与答题路径上，`SubmitStatementBudgetIT`、`AttemptStatementBudgetIT` 不变；`QB_FEE_CHARGE` 的语句数在预付款路径上可能多一条读贷项，用 `SqlStatementLog` 断言并在 PR 中说明。
 
 ### 10.5 风险
-- "欠的"的定义多处手写，改漏一处即账单与拦截不一致；靠 `FeeOwedIT` 与核对 `CREDIT_NOTES` 兜底。
-- 贷项凭证是新单据：保留期（`RetentionPolicy` 的 `DocumentRun` 范围，按收据加进）与删除账号时的处理（与账单一起保留）要一起定。
-- 粗估：Q1 选 b 时约 4 天；选 a 另需单独估算。
+- "欠多少"的定义多处手写，改漏一处即账单与拦截不一致：靠 `FeeOwedIT` 与核对 `FEES_RECEIVABLE` 兜底。
+- 凭证与作废并存：作废已开凭证的账单一律拒绝，避免两次退回。
+- 粗估：约 4–5 天（比第一稿多出账单状态机、抵减的各处读取与分成的结转）。
 
-### 10.6 决定（总控 2026-11-12）
-1. **Q2 同意**：规格改为"提交时冻结、上架时记费；作废与贷项凭证只用于上架之后的退回"。驳回、撤回、审核过期的退回就是 F-M5 已做的释放。
-2. **Q4 同意**：预付的退回按原分摊逆序回到原子账户（最后用的先退：先现金、后赠送额度），退到已到期的赠送额度当即作废，同 F-M5 的释放。
-3. **首发开关**：`qb.audience.billing.enabled` 由本项从 `WAITING(F-M7)` 改为 `ACTIVE`，首次上线的值为 true（照 F-F10 计划）。
-4. **Q1**（没有结束时间的发布）与 **Q3**（管理员、运营商下架是否退回）：总控转问需求方，答复后连同 Fable 的审查意见改第二稿。
+### 10.6 需求方的答复（2026-11-12）
+1. **Q1 选 b**：只做有结束时间的部分；没有结束时间的发布、续扣、两个参数、两个任务与"本月未续扣"的核对以后立项。
+2. **Q3**：违规下架（`ADMIN`）不退；`TREE`、`SHARED_VIDEO` 照退。
+
+### 10.7 决定（总控 2026-11-12）
+第一稿：
+1. Q2 同意。
+2. Q4 同意。
+3. `qb.audience.billing.enabled` 由本项改为 `ACTIVE`，首次上线为 true。
+
+Fable 对第一稿（@98d251ac）的审查，"修后再审"：
+
+| 审查 | 决定 | 写在 |
+|---|---|---|
+| 高 1 | 已开凭证的账单作废一律 422（新码，三语），更正再开凭证；IT | §10.3-3 |
+| 高 2 | "已判定"落到数据（`refund_decided_at` 与结果）；取项与核对以它为条件；IT | §10.3-6 |
+| 高 3 | `fee-receivable` 不改；逐个列出要改处；`FEES_RECEIVABLE` 改而不另加；`FeeOwedIT` 逐个比对 | §10.3-5 |
+| 高 4 | 余额 = 合计 − Σ 抵用，锁内现算，凭证 `writeOnce` | §10.3-2 |
+| 中 5 | 分成：(a) 沿用结转下月；(b) 现金减基数、赠送减扣回；(c) IT | §10.3-7 |
+| 中 6 | 原税率、`CEILING`、计费的 `startAt`、暂停算已用；补测试 | §10.3-1 |
+| 中 7 | 与 F-M5 作废同一路径；各核对与月报的归类 | §10.3-4 |
+| 中 8 | 规格偏离三处与 M9 的范围 | §10.3-11 |
+| 中 9 | 按原费用的 `billingMode`；后付转预付后抵即开账单；封禁注销的未用贷项登记 F-M15 | §10.3-4、-5 |
+| 中 10 | `LoadParams.of(ctx -> endedAt, …)`，两个方向；可退原因一处常量 | §10.3-1、§10.2 |
+| 低 11 | 凭证带原账单号、税率、原因 | §10.3-2 |
+| 低 12 | `RetentionPolicy`、`PersonalDataEraser` | §10.3-14 |
+| 低 13 | 来源键核实（按原费用唯一）；后付抵减一条场景快照 | §10.1-1、§10.3-2、-16 |
+| 低 14 | cron 与上限为部署设置；与 03:07、03:23 交叠；开关顺序同 `FirstLaunchSwitches` | §10.3-6、-13 |
