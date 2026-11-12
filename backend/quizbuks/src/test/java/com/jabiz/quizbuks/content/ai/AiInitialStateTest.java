@@ -18,21 +18,27 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class AiInitialStateTest {
 
+    /** The files with the text, each once (the text counts as often as it occurs in the file, in the order of the files). */
     private static List<String> filesWith(String text) throws IOException {
         try (Stream<Path> walk = Files.walk(Path.of("src/main/java/com/jabiz/quizbuks"))) {
-            return walk.filter(path -> path.toString().endsWith(".java")).filter(path -> {
+            return walk.filter(path -> path.toString().endsWith(".java")).sorted().flatMap(path -> {
                 try {
-                    return Files.readString(path).replaceAll("\\s+", " ").contains(text);
+                    String code = Files.readString(path).replaceAll("\\s+", " ");
+                    int count = 0;
+                    for (int at = code.indexOf(text); at >= 0; at = code.indexOf(text, at + 1)) {
+                        count++;
+                    }
+                    return java.util.Collections.nCopies(count, path.getFileName().toString()).stream();
                 } catch (IOException e) {
                     throw new java.io.UncheckedIOException(e);
                 }
-            }).map(path -> path.getFileName().toString()).sorted().toList();
+            }).toList();
         }
     }
 
     @Test
     void aJobIsInsertedInTwoPlacesAndOnlyTheSiteQuizOneStartsReady() throws IOException {
-        // Every other job is inserted by the request flow, which starts it QUEUED (its record method).
+        // Exactly once in each file: a second insert in either would be a new way to start a job.
         assertThat(filesWith("insert(QbAi.JOB")).containsExactly("AiProcesses.java", "SiteQuizProcesses.java");
         assertThat(filesWith("values.put(\"status\", QbAi.QUEUED); values.put(\"inputBytes\"")).containsExactly("AiProcesses.java");
         assertThat(filesWith("values.put(\"status\", QbAi.READY); values.put(\"candidates\", AiProcesses.candidatesJson"))

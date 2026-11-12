@@ -22,7 +22,7 @@ const DRAFT = {
       shopUrl: 'https://www.aini.example/shop/ah-100' }],
   },
   sources: { 'basics.company': 'https://www.aini.example/about', 'page.headline': 'javascript:alert(1)' },
-  notFound: ['page.cover', 'basics.avatar'],
+  notFound: ['page.cover', 'basics.avatar', 'products[0].image', 'products[0].shopUrl', 'page.other'],
   dropped: [{ path: 'basics.intro.ja', reason: 'Contact details were removed' },
     { path: 'products[1]', reason: 'Price is not a number' }],
   translated: ['en'],
@@ -137,7 +137,7 @@ describe('a draft from the website, as the page reads it', () => {
     expect(draft.address).toBe('https://www.aini.example/')
     expect(draft.languages).toEqual(['ja', 'en'])
     expect(draft.profile?.basics).toMatchObject({ company: 'アイニ株式会社' })
-    expect(draft.notFound).toEqual(['page.cover', 'basics.avatar'])
+    expect(draft.notFound).toEqual(['page.cover', 'basics.avatar', 'products[0].image', 'products[0].shopUrl', 'page.other'])
     expect(draft.dropped).toHaveLength(2)
     expect(draft.translated).toEqual(['en'])
     expect(draft.handle).toEqual({ handle: 'aini', taken: true, alternatives: ['aini-2', 'aini-3'] })
@@ -292,6 +292,10 @@ describe('reviewing the draft', () => {
     expect(within(headline).queryByTestId('site-source')).toBeNull()
     expect(headline).toHaveTextContent('did not say which page')
     // Fields are named as the sponsor knows them, never by their path.
+    expect(within(confirmation).getByTestId('site-not-found')).toHaveTextContent('Cover image of your page')
+    expect(within(confirmation).getByTestId('site-not-found')).toHaveTextContent('Your logo or picture')
+    expect(within(confirmation).getByTestId('site-not-found')).toHaveTextContent('Product 1: image')
+    expect(within(confirmation).getByTestId('site-not-found')).toHaveTextContent('Product 1: link to buy')
     expect(within(confirmation).getByTestId('site-not-found')).toHaveTextContent('another detail')
     expect(within(confirmation).getByTestId('site-not-found')).not.toHaveTextContent('page.cover')
     const dropped = within(confirmation).getByTestId('site-dropped')

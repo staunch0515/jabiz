@@ -264,6 +264,11 @@ public final class QuizTransferProcesses {
 
     static void imported(ProcessContext ctx) {
         ImportInput input = ctx.get(INPUT, ImportInput.class);
+        if (input.intoQuizId() != null && Boolean.TRUE.equals(input.aiGenerated())) {
+            ctx.reject(new Violation("aiGenerated", ContentCodes.IMPORT_AI_INTO_QUIZ,
+                "The AI mark goes on a new draft, not on a quiz whose content a file replaces", Map.of()));
+            return;
+        }
         QuizFile file = read(ctx, input.document());
         if (file == null) {
             return;
