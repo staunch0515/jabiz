@@ -3,6 +3,8 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.audience.AudiencePricingProcesses;
 import com.jabiz.quizbuks.fee.FeeCodes;
+import com.jabiz.quizbuks.fee.FeeProcesses;
+import com.jabiz.quizbuks.fee.FeeRules;
 import com.jabiz.quizbuks.fee.FeeRequests;
 import com.jabiz.quizbuks.fee.QbFees;
 import com.jabiz.quizbuks.fee.Prepayments;
@@ -323,6 +325,111 @@ class PrepaymentIT extends PlayItSupport {
         assertThat(remainingOf(grantId)).isEqualByComparingTo("1000");
         assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
         assertThat(query("SELECT 1 FROM qb_fee_charge_version WHERE sponsor_id = ?", sponsor)).isEmpty();
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    void billing(String sponsor, String mode, long creditLimit) {
+        run(FeeProcesses.BILLING_SET, TestTokens.bearer(tokens, "fm5-hq-billing", QbPermissions.FEE_BILLING),
+            body("userId", sponsor, "billingMode", mode, "creditLimit", creditLimit, "reason", "F-M5"));
+    }
+
+    /** The month's postpaid invoice as the job's item issues it for the sponsor: its outcome. */
+    Object invoiceTheMonth(String sponsor) {
+        return ((FeeProcesses.ItemOutput) systemRun(FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor, "period",
+            FeeRules.period(clock.instant(), java.time.ZoneId.of("Asia/Tokyo"))))).outcome();
+    }
+
+    static Map<String, Object> chargeOf(String sponsor) {
+        return query("SELECT * FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = 'AUDIENCE'", sponsor)
+            .getFirst();
+    }
+
+    @Test
+    void whatThePrepaymentDoesNotCoverIsPaidFromTheAccount() {
+        // M1 of the F-M5 review: the tax rate changed while it waited: the prepayment pays what it holds, the account
+        // the rest, in its order, on the charge's one invoice.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-short");
+        String grantId = grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        String publicationId = audienceDraft(sponsor, "FM5 short");
+        submit(sponsorToken(sponsor), publicationId);
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("230");
+        param(QbParams.FEE_TAX_RATE, "0.2");
+        try {
+            goLive(publicationId);
+        } finally {
+            param(QbParams.FEE_TAX_RATE, "0.1");
+        }
+        Map<String, Object> charge = chargeOf(sponsor);
+        assertThat((BigDecimal) charge.get("total")).isEqualByComparingTo("840");
+        Map<String, Object> invoice = query("SELECT * FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(charge.get("charge_id"))).getFirst();
+        assertThat(invoice).containsEntry("status", "PAID");
+        assertThat((BigDecimal) invoice.get("paid_amount")).isEqualByComparingTo("840");
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("160");
+        assertThat(query("SELECT coalesce(sum(amount), 0) AS n FROM qb_fee_payment_version WHERE target_id = ? AND "
+            + "prepayment_id IS NOT NULL", String.valueOf(charge.get("charge_id"))).getFirst().get("n"))
+            .satisfies(n -> assertThat((BigDecimal) n).isEqualByComparingTo("770"));
+        assertThat(query("SELECT coalesce(sum(amount), 0) AS n FROM qb_fee_payment_version WHERE target_id = ? AND "
+            + "prepayment_id IS NULL", String.valueOf(charge.get("charge_id"))).getFirst().get("n"))
+            .satisfies(n -> assertThat((BigDecimal) n).isEqualByComparingTo("70"));
+        assertThat(ledger("1130", sponsor)).isEqualByComparingTo("0");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(differences(sponsor)).isEmpty();
+
+        // Voided: both payments go back where they came from.
+        voidInvoice(invoice.get("invoice_id"));
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("1000");
+        assertThat(ledger("2190", sponsor)).isEqualByComparingTo("1000");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(differences(sponsor)).isEmpty();
+        everyPostingHasItsKind();
+    }
+
+    @Test
+    void aPrepaidPrepaymentIsPaidAsPrepaidAfterTheSponsorTurnsPostpaid() {
+        // M2 of the F-M5 review: the prepayment's mode decides how its fee is paid, not the sponsor's now; the
+        // month's postpaid invoice does not take it again.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-turned-post");
+        grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        String publicationId = audienceDraft(sponsor, "FM5 turned postpaid");
+        submit(sponsorToken(sponsor), publicationId);
+        billing(sponsor, "POSTPAID", 5_000);
+        goLive(publicationId);
+        Map<String, Object> charge = chargeOf(sponsor);
+        assertThat(charge).containsEntry("billing_mode", "PREPAID");
+        assertThat(query("SELECT status FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(charge.get("charge_id")))).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "PAID"));
+        assertThat(invoiceTheMonth(sponsor)).isEqualTo("NONE");
+        assertThat(query("SELECT 1 FROM qb_fee_invoice WHERE sponsor_id = ? AND charge_id IS NULL", sponsor)).isEmpty();
+        assertThat(ledger("1130", sponsor)).isEqualByComparingTo("0");
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void aPostpaidPrepaymentIsOwedAsPostpaidAfterTheSponsorTurnsPrepaid() {
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-turned-pre");
+        billing(sponsor, "POSTPAID", 5_000);
+        grant(sponsor, 1_000, clock.instant().plus(Duration.ofDays(90)));
+        String publicationId = audienceDraft(sponsor, "FM5 turned prepaid");
+        submit(sponsorToken(sponsor), publicationId);
+        billing(sponsor, "PREPAID", 0);
+        goLive(publicationId);
+        Map<String, Object> charge = chargeOf(sponsor);
+        assertThat(charge).containsEntry("billing_mode", "POSTPAID");
+        assertThat(query("SELECT 1 FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(charge.get("charge_id")))).isEmpty();
+        // Owed, not paid from the account: the granted credit is untouched.
+        assertThat(ledger("1130", sponsor)).isEqualByComparingTo("-770");
+        assertThat(ledger("2190", sponsor)).isEqualByComparingTo("1000");
+        // The month's invoice takes it, once.
+        assertThat(invoiceTheMonth(sponsor)).isEqualTo("ISSUED");
+        assertThat(invoiceTheMonth(sponsor)).isEqualTo("NONE");
+        assertThat(query("SELECT total FROM qb_fee_invoice WHERE sponsor_id = ? AND charge_id IS NULL", sponsor))
+            .singleElement().satisfies(row -> assertThat((BigDecimal) row.get("total")).isEqualByComparingTo("770"));
         assertThat(differences(sponsor)).isEmpty();
     }
 
