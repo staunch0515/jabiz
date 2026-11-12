@@ -2,6 +2,7 @@ package com.jabiz.runtime.test;
 
 import com.jabiz.runtime.integrity.IntegrityStore;
 import com.jabiz.runtime.config.PlatformSchemaMigration;
+import com.jabiz.runtime.config.PlatformScriptPlaceholders;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.callback.Callback;
 import org.flywaydb.core.api.callback.Context;
@@ -128,7 +129,10 @@ public final class SealedColumnsHistory {
         try {
             FluentConfiguration platform = configure(schema).createSchemas(true)
                 .locations(PlatformSchemaMigration.PLATFORM_LOCATION)
-                .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE);
+                .table(PlatformSchemaMigration.PLATFORM_HISTORY_TABLE)
+                .configuration(PlatformScriptPlaceholders.NON_TRANSACTIONAL_LOCK)
+                // Other test classes migrate their schemas at the same time: no CONCURRENTLY (V66).
+                .placeholders(PlatformScriptPlaceholders.with(Map.of(PlatformScriptPlaceholders.CONCURRENTLY, "")));
             if (location == null) {
                 platform.callbacks(snapshot);
             }

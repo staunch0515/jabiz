@@ -80,7 +80,9 @@ public final class PlatformCheckLauncher {
             "--spring.flyway.schemas=" + schema,
             "--spring.flyway.default-schema=" + schema,
             "--spring.flyway.create-schemas=true",
-            "--spring.flyway.output-query-results=false");
+            "--spring.flyway.output-query-results=false",
+            // Several schemas migrate side by side in one database; see the test application.properties.
+            "--spring.flyway.placeholders.concurrently=");
     }
 
     /** {@code args[0]} is the application class, the rest are further Spring Boot arguments. */
