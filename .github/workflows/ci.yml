@@ -245,7 +245,8 @@ jobs:
 
   # Migrations stay in order (17zz8): every Flyway migration a pull request adds or renames comes after the highest one
   # of its sequence on the target branch's latest commit, and no version occurs twice (tools/check-migration-order.sh;
-  # 2026-11-08 a V80 merged after a V81 failed its deployment). The platform's sequences are the script's own; an
+  # 2026-11-08 a V80 merged after a V81 failed its deployment); no migration the target branch already has is edited,
+  # deleted or renamed, nor its .sql.conf (17zz18: Flyway's checksum check). The platform's sequences are the script's own; an
   # application branch adds its own in .jabiz-migration-sequences (one directory regex per line, # comments). Drafts too.
   migration-order:
     runs-on: ubuntu-latest

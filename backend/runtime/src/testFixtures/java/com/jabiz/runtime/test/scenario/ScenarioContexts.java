@@ -66,6 +66,7 @@ public final class ScenarioContexts {
         properties.put("spring.flyway.schemas", schema);
         properties.put("spring.flyway.default-schema", schema);
         properties.put("spring.flyway.create-schemas", "true");
+        properties.put("spring.flyway.placeholders.concurrently", "");
         properties.put("spring.flyway.locations", "classpath:db/migration,classpath:db/testmigration");
         properties.put("spring.main.banner-mode", "off");
         // Replays upload nothing; the application only needs a storage directory to start with its file policies.
