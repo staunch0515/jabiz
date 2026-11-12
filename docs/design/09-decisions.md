@@ -1402,6 +1402,7 @@ schema 中任何表上有则不复用读到的实例（第 4 条的前提）。�
 `SELECT … FROM (VALUES (0), (1), …) k(jabiz_q) LEFT JOIN (第 0 个读取) b0 ON k.jabiz_q = 0 LEFT JOIN …`，每个读取的列各自取别名、保留数据库的类型，由驱动按原样解码，不经 JSON 还原
 （没有数字小数位、时间、数组、`jsonb` 的还原问题）；每个读取照旧由 `QueryCompiler` 编译（范围、数据期限、逻辑删除、时间切片），参数按读取改名，各自的 `ORDER BY`/`LIMIT`/`OFFSET` 不变；读主引擎（如 `findById`），不读副本，所以流程中的读取看得到本事务的写入；只有查询时限相同的读取合成一条（各自的时限不放宽）。
 等价性由 `WriteCombiningIT.combinedReadsGiveExactlyWhatEachReadGivesAlone` 对应用的每个数据视图比较（同样的实例、每个值同样的类型、或同样的拒绝），代替计划中的 jqwik 属性测试。
+2026-11-12（17zz20）：合并读取的写法改为 `LEFT JOIN LATERAL (… WHERE k.jabiz_q = i) bi ON true`，代价是各读取之和（原写法的 `ON k.jabiz_q = i` 只能逐对检验，代价是乘积），由 `CombinedReadCostIT` 以实际执行的计划检查；本条规则不变。
 `CheckPosting` 先单独取科目锁，再以一条语句读取全部维度取值、来源单据与科目（原"读科目"步骤并入，`LEDGER_POST` 少一个步骤）；字典维度照旧取缓存；违规按原来的顺序（维度依次、再来源）报告。
 平台步骤 `QueryEntities.all(QueryEntities.query(…), …)` 开放给应用（P-12）。
 ⑧**按已知版本更新**（T7）：读集中有完整实例、读取的视图解析为同一张表、值在写入视图的范围内（且未逻辑删除）时不再读；`UPDATE … WHERE pk AND version` 与审计、事件以

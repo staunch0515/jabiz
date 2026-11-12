@@ -212,4 +212,41 @@ public class SqlStatementLog {
     private static String connection(io.r2dbc.proxy.core.ConnectionInfo info) {
         return info == null ? "?" : info.getConnectionId();
     }
+
+    /**
+     * The plan of {@code ran} as the platform sent it, explained again with what it bound, as PostgreSQL's JSON (the
+     * top node, "Plan"): {@code options} go into {@code EXPLAIN (…)} besides {@code FORMAT JSON}; {@code settings} are
+     * set for it alone ({@code SET LOCAL} in a transaction that is always rolled back, so the pooled connection keeps
+     * its settings). Run through {@code connections}, the statement is recorded here too.
+     */
+    public static String explain(ConnectionFactory connections, Execution ran, String options,
+        Map<String, String> settings) {
+        java.time.Duration timeout = java.time.Duration.ofSeconds(60);
+        io.r2dbc.spi.Connection connection = reactor.core.publisher.Mono.from(connections.create()).block(timeout);
+        try {
+            reactor.core.publisher.Mono.from(connection.beginTransaction()).block(timeout);
+            try {
+                for (Map.Entry<String, String> setting : settings.entrySet()) {
+                    reactor.core.publisher.Flux.from(connection.createStatement("SET LOCAL " + setting.getKey() + " = "
+                        + setting.getValue()).execute()).flatMap(io.r2dbc.spi.Result::getRowsUpdated).blockLast(timeout);
+                }
+                io.r2dbc.spi.Statement explain = connection.createStatement("EXPLAIN ("
+                    + (options.isBlank() ? "" : options + ", ") + "FORMAT JSON) " + ran.sql());
+                for (int i = 0; i < ran.bound().size(); i++) {
+                    Object bound = ran.bound().get(i);
+                    if (bound instanceof NullValue nothing) {
+                        explain.bindNull(i, nothing.type());
+                    } else {
+                        explain.bind(i, bound);
+                    }
+                }
+                return reactor.core.publisher.Flux.from(explain.execute())
+                    .flatMap(result -> result.map((row, meta) -> row.get(0, String.class))).blockFirst(timeout);
+            } finally {
+                reactor.core.publisher.Mono.from(connection.rollbackTransaction()).block(timeout);
+            }
+        } finally {
+            reactor.core.publisher.Mono.from(connection.close()).block(timeout);
+        }
+    }
 }
