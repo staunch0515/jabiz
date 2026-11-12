@@ -43,8 +43,8 @@ export interface SiteDraft {
   handle: HandleInfo | null
   materials: number
   questions: number
-  /** Whether a quiz was made from this draft already (one a draft). */
-  quizMade: boolean
+  /** The quiz made from this draft (one a draft), or null. */
+  quizId: string | null
 }
 
 const isLanguage = (value: unknown): value is ContentLanguage =>
@@ -90,7 +90,7 @@ export function toSiteDraft(row: Row): SiteDraft {
       ? { handle: handle.handle, taken: handle.taken === true, alternatives: strings(handle.alternatives) } : null,
     materials: Array.isArray(draft.materials) ? draft.materials.length : 0,
     questions: Array.isArray(draft.questions) ? draft.questions.length : 0,
-    quizMade: Number(row.acceptedCount) > 0,
+    quizId: text(row.siteQuizId),
   }
 }
 

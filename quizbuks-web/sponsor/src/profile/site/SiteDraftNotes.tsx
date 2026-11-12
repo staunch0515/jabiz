@@ -141,8 +141,17 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
       {draft.materials > 0 && (
         <div className="flex flex-col gap-2" data-testid="site-quiz">
           <p className="text-muted-foreground">{t('site.review.quiz', { n: draft.materials, q: draft.questions })}</p>
-          {draft.quizMade
-            ? <p role="status" data-testid="site-quiz-made">{t('site.review.quizMade')}</p>
+          {draft.quizId
+            ? (
+              <p role="status" data-testid="site-quiz-made">
+                {t('site.review.quizMade')}{' '}
+                <a href={quizPath(draft.quizId)} className="underline" data-testid="site-quiz-open"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    navigate(quizPath(draft.quizId!))
+                  }}>{t('site.review.quizOpen')}</a>
+              </p>
+            )
             : (
               <>
                 <p>{t('site.review.quizHint')}</p>

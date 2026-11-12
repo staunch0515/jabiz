@@ -35,7 +35,7 @@ import java.util.UUID;
  *       question, each marked reviewed by the sponsor;</li>
  *   <li>no usage is counted: the website job counted what the AI used.</li>
  * </ul>
- * One quiz a draft ({@code acceptedCount} of the website job); the draft stays for the profile's review.
+ * One quiz a draft (the website job's {@code siteQuizId}); the draft stays for the profile's review.
  */
 public final class SiteQuizProcesses {
 
@@ -110,7 +110,7 @@ public final class SiteQuizProcesses {
         if (!com.jabiz.quizbuks.content.QuizEditing.instant(job.get("expiresAt")).isAfter(ctx.opTime())) {
             refuse(AiCodes.JOB_EXPIRED, "The AI candidates expired");
         }
-        if (job.get("acceptedCount") instanceof Number made && made.intValue() > 0) {
+        if (job.get("siteQuizId") != null) {
             refuse(AiCodes.SITE_QUIZ_MADE, "A quiz was made from this draft already");
         }
         JsonNode stored = JSON.readTree(String.valueOf((Object) job.get("candidates")));
@@ -208,7 +208,7 @@ public final class SiteQuizProcesses {
         }
         // The draft is used once for a quiz (the profile's review of it goes on).
         Map<String, Object> used = new LinkedHashMap<>();
-        used.put("acceptedCount", BigDecimal.ONE);
+        used.put("siteQuizId", imported.quizId().toString());
         ctx.changes().update(QbAi.JOB, job.id(), job.version(), used);
         ctx.put(AiProcesses.OUTPUT, new QuizOutput(imported.quizId(), questionsJob, materials, checked.valid().size()));
     }

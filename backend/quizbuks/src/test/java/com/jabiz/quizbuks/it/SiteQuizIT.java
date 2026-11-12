@@ -103,7 +103,8 @@ class SiteQuizIT extends AiItSupport {
             .doesNotContain("\"materials\":[9]").contains("\"materials\":[2]");
         // The website draft stays for the profile's review, and is marked used.
         assertThat(job(aiJobId)).containsEntry("status", QbAi.READY);
-        assertThat(((Number) job(aiJobId).get("accepted_count")).intValue()).isEqualTo(1);
+        assertThat(job(aiJobId).get("site_quiz_id")).isEqualTo(UUID.fromString(quizId));
+        assertThat(job(aiJobId).get("accepted_count")).isNull();
         assertThat(String.valueOf(job(aiJobId).get("candidates"))).contains("Aini Inc.");
 
         // One quiz a draft.

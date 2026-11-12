@@ -32,6 +32,7 @@ const DRAFT = {
 }
 
 const row = (status: string, extra: Record<string, unknown> = {}) => ({
+  siteQuizId: null,
   aiJobId: 'j1', externalJobId: 'x1', status,
   params: JSON.stringify({ url: 'https://www.aini.example/', language: 'ja', languages: ['ja', 'en'] }),
   candidates: status === 'READY' ? JSON.stringify(DRAFT) : null, candidateCount: 0, invalidCount: 0, acceptedCount: null,
@@ -298,7 +299,7 @@ describe('reviewing the draft', () => {
 
 describe('the "get to know us" quiz', () => {
   async function review(options: Options) {
-    const calls = server({ rows: [[row('READY', options.quizFails ? { acceptedCount: 1 } : {})]], ...options })
+    const calls = server({ rows: [[row('READY', options.quizFails ? { siteQuizId: 'quiz-9' } : {})]], ...options })
     renderMenu()
     const dialog = await openDialog()
     await userEvent.click(await within(dialog).findByTestId('site-review'))
@@ -317,6 +318,7 @@ describe('the "get to know us" quiz', () => {
   it('does not offer a second quiz from the same draft', async () => {
     const { confirmation } = await review({ quizFails: true })
     expect(within(confirmation).getByTestId('site-quiz-made')).toHaveTextContent('A quiz was made from this draft')
+    expect(within(confirmation).getByTestId('site-quiz-open')).toHaveAttribute('href', expect.stringContaining('quiz-9'))
     expect(within(confirmation).queryByTestId('site-quiz-make')).toBeNull()
   })
 

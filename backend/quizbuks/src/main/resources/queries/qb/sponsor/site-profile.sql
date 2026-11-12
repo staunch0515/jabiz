@@ -16,6 +16,7 @@ results:
   candidateCount: { from: QbAiJob.candidateCount }
   invalidCount:   { from: QbAiJob.invalidCount }
   acceptedCount:  { from: QbAiJob.acceptedCount }
+  siteQuizId:     { from: QbAiJob.siteQuizId }
   failureCode:    { from: QbAiJob.failureCode }
   requestedAt:    { from: QbAiJob.requestedAt }
   finishedAt:     { from: QbAiJob.finishedAt }
@@ -37,6 +38,7 @@ SELECT
     j.{{QbAiJob.candidateCount}} AS candidateCount,
     j.{{QbAiJob.invalidCount}}   AS invalidCount,
     j.{{QbAiJob.acceptedCount}}  AS acceptedCount,
+    j.{{QbAiJob.siteQuizId}}     AS siteQuizId,
     j.{{QbAiJob.failureCode}}    AS failureCode,
     j.{{QbAiJob.requestedAt}}    AS requestedAt,
     j.{{QbAiJob.finishedAt}}     AS finishedAt,
