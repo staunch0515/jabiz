@@ -36,7 +36,7 @@ describe('the brand profiles', () => {
       'description.ja: a text of 1 to 120 characters',
       'themeColor: a colour #rrggbb in lower case',
       'supportEmail: an e-mail address',
-      'siteUrl: https://host, without a path',
+      'siteUrl: https://host, without a path, port or user information',
       'mark.svg: missing',
     ])
   })

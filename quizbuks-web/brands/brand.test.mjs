@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { test } from 'node:test'
-import { BRANDS_DIR, brandIds, loadBrand } from './brand.mjs'
+import { BRANDS_DIR, brandIds, loadBrand, problems } from './brand.mjs'
 
 const WEB = join(BRANDS_DIR, '..')
 
@@ -103,3 +103,22 @@ for (const file of FRONT_ENDS.flatMap((path) => sources(join(WEB, path)))) {
     assert.deepEqual([local.zh, local.ja].filter((name) => text.includes(name)), [])
   })
 }
+
+// F-C9: the support address and the site are written into the footer of every mail as Markdown links, and the site's
+// host into the list of hosts mail may link to. A value that could end a link, start another or name more than a host
+// is refused when the build starts (build.gradle.kts checks the same), not found in a footer.
+test('the support address and the site of a profile are refused when they could break a link in the mail footer', () => {
+  const good = JSON.parse(readFileSync(join(BRANDS_DIR, 'sample', 'brand.json'), 'utf8'))
+  const found = (change) => problems('sample', { ...good, ...change }, () => true)
+  assert.deepEqual(found({}), [])
+  for (const siteUrl of ['https://user:secret@example.com', 'https://example.com:8443', 'https://example.com/path',
+    'https://example.com)[x](https://evil.example', 'https://example.com\\evil', 'https://example.com]', 'https://exa mple.com',
+    'https://example.com\nhttps://evil.example', 'http://example.com', 'https://']) {
+    assert.deepEqual(found({ siteUrl }).map((p) => p.split(':')[0]), ['siteUrl'], siteUrl)
+  }
+  for (const supportEmail of ['a b@example.com', 'a)@example.com', 'a]@example.com', 'a\\b@example.com', 'a@example.com\nb@evil.example',
+    'a"b@example.com', 'a@example', 'no-at-sign']) {
+    assert.deepEqual(found({ supportEmail }).map((p) => p.split(':')[0]), ['supportEmail'], supportEmail)
+  }
+  assert.deepEqual(found({ siteUrl: 'https://www.example.co.jp', supportEmail: 'help+qb@mail.example.co.jp' }), [])
+})

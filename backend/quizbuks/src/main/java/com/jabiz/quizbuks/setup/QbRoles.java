@@ -40,7 +40,8 @@ public final class QbRoles {
     }
 
     /**
-     * Headquarters' content administrators (F-S1): monitoring, the global rules and emergencies only. The day-to-day
+     * Headquarters' content administrators (F-S1): monitoring, the global rules and emergencies only. They also hold
+     * {@link #MAIL_TEXT_PROPOSE} (F-C8, F-C9), whose {@code control.propose} lets them propose other controlled changes. The day-to-day
      * running of sponsors (reviews, reward methods, disputes, prospecting, certifications) is the operators': the
      * headquarters staff who do it are members of the platform operator ({@code QB_OPERATOR}).
      */
@@ -206,6 +207,22 @@ public final class QbRoles {
      */
     private static final List<String> FINANCE_ONLY = List.of("inbound.read");
 
+    /**
+     * F-C8, F-C9 (platform decision D72): the mail texts and the letterhead. Whoever saves or proposes one, and whoever
+     * publishes a proposal, holds {@code mail.text.write} (the platform asks it of both) and a verified address. The
+     * content administrators write and propose (texts of ordinary notices take effect when saved; those with a token or
+     * about money, and the letterhead, only when another administrator publishes them); the finance administrators are
+     * that other administrator, since they hold {@code control.publish}. Apart from the other lists because the super
+     * administrator is built from them and holds none of this (separation of duties).
+     *
+     * <p>Side effect of {@code control.propose}: it is the controlled changes' general permission to propose, so the
+     * content administrators can propose other controlled changes too (parameters, approval rules). A proposal takes
+     * effect only when a finance administrator publishes it (four eyes), and the platform asks {@code mail.text.write},
+     * a protected grant, only of those who change mail texts. Noted in operations.md (the letterhead's section).
+     */
+    private static final List<String> MAIL_TEXT_PROPOSE = List.of("mail.text.read", "mail.text.write", "control.propose");
+    private static final List<String> MAIL_TEXT_PUBLISH = List.of("mail.text.read", "mail.text.write");
+
     private static final Map<String, Role> ROLES = new LinkedHashMap<>();
 
     static {
@@ -245,9 +262,10 @@ public final class QbRoles {
             QbPermissions.SPONSOR_VERIFICATION));
         add(SHOPIFY_SHOP, labels("Shopify shop staff", "Shopify 店铺员工", "Shopify ストアのスタッフ"), false,
             List.of(com.jabiz.quizbuks.shopify.Shopify.USE));
-        add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT);
+        add(ADMIN_CONTENT, labels("Content administrator", "内容管理员", "コンテンツ管理者"), true, CONTENT,
+            MAIL_TEXT_PROPOSE);
         add(ADMIN_FINANCE, labels("Finance administrator", "财务管理员", "財務管理者"), true, FINANCE, PUBLISH,
-            FINANCE_ONLY);
+            FINANCE_ONLY, MAIL_TEXT_PUBLISH);
         add(ADMIN_SUPER, labels("Super administrator", "超级管理员", "スーパー管理者"), true,
             withoutApprovals(CONTENT), withoutApprovals(FINANCE), SUPER);
         add(OPERATOR, labels("Operator", "运营商", "運営パートナー"), true, OPERATOR_PERMISSIONS);
