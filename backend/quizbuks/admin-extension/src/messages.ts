@@ -36,6 +36,7 @@ import { videoUseMenu, videoUseMessages } from './video-use-messages'
 import { sharedVideoMenu, sharedVideoMessages } from './shared-video-messages'
 import { verificationMenu, verificationMessages } from './verification-messages'
 import { helpMenu, helpMessages } from './help-messages'
+import { fundSwitchMessages } from './fund-switch-messages'
 import { BRAND_NAMES } from './brand'
 
 /** Texts of the QuizBuks admin extension, in every platform language (namespace EXTENSION_NAMESPACE, `app`). */
@@ -57,6 +58,7 @@ export const messages = {
     exposure: exposureMessages.en,
     videoUses: videoUseMessages.en,
     fee: feeMessages.en,
+    fundSwitch: fundSwitchMessages.en,
     assets: assetMessages.en,
     packageImports: packageImportMessages.en,
     pickers: pickersMessages.en,
@@ -380,6 +382,7 @@ export const messages = {
     exposure: exposureMessages.zh,
     videoUses: videoUseMessages.zh,
     fee: feeMessages.zh,
+    fundSwitch: fundSwitchMessages.zh,
     assets: assetMessages.zh,
     packageImports: packageImportMessages.zh,
     pickers: pickersMessages.zh,
@@ -703,6 +706,7 @@ export const messages = {
     exposure: exposureMessages.ja,
     videoUses: videoUseMessages.ja,
     fee: feeMessages.ja,
+    fundSwitch: fundSwitchMessages.ja,
     assets: assetMessages.ja,
     packageImports: packageImportMessages.ja,
     pickers: pickersMessages.ja,

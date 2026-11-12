@@ -1,6 +1,7 @@
 package com.jabiz.quizbuks.it;
 
 import com.jabiz.quizbuks.play.QbPlay;
+import com.jabiz.quizbuks.setup.FirstLaunchSwitches;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.test.StubHttpServer;
@@ -460,6 +461,56 @@ class AdminFinanceIT extends PayoutItSupport {
             .value()).isEqualTo(403);
         assertThat(items("qb.admin.transfers", finance, Map.of("filters", List.of(Map.of("field", "held", "op", "eq",
             "value", true))))).allSatisfy(r -> assertThat(r).containsEntry("held", true));
+    }
+
+    /**
+     * F-F10b: the overview's card of the first launch's switches. The system here is a test one (declared values), so
+     * the rows that the first launch would turn off read as on: the card shows them as different, and the template says
+     * what the first launch proposes next to what is in force. Finance reads it; nobody else does.
+     */
+    @Test
+    void theFirstLaunchSwitchesCardReadsTheValuesInForceNextToTheFirstLaunchsValues() {
+        String id = "qb.admin.first-launch-switches";
+        client.post().uri("/api/queries/" + id).contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, tokenOf(user("f-content-card"), QbRoles.ADMIN_CONTENT)).bodyValue(Map.of())
+            .exchange().expectStatus().isForbidden();
+        client.post().uri("/api/queries/" + id).contentType(MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, sponsorToken(newSponsor("s-f10b-card"))).bodyValue(Map.of())
+            .exchange().expectStatus().isForbidden();
+
+        List<Map<String, Object>> rows = items(id, TestTokens.bearer(tokens, "f-read-only-card",
+            "qb.admin.finance.read"), Map.of("limit", 100));
+        // The active rows, then the waiting ones whose key exists (the first launch has them off), in the registry's order.
+        List<String> keys = new java.util.ArrayList<>();
+        List<String> expectedValues = new java.util.ArrayList<>();
+        for (FirstLaunchSwitches.Row row : FirstLaunchSwitches.ALL) {
+            if (row.status() == FirstLaunchSwitches.Status.ACTIVE) {
+                keys.add(row.key());
+                expectedValues.add(row.value() == null ? null : String.valueOf(row.value()));
+            }
+        }
+        for (FirstLaunchSwitches.Row row : FirstLaunchSwitches.ALL) {
+            if (row.status() == FirstLaunchSwitches.Status.WAITING
+                && FirstLaunchSwitches.KEY_BEFORE_MEANING.contains(row.key())) {
+                keys.add(row.key());
+                expectedValues.add("false");
+            }
+        }
+        assertThat(rows).extracting(r -> r.get("paramKey")).containsExactlyElementsOf(keys);
+        // What the first launch proposes (null for an amount); the waiting rows with a key are off.
+        assertThat(rows).extracting(r -> r.get("expected")).containsExactlyElementsOf(expectedValues);
+        assertThat(rows).filteredOn(r -> QbParams.AUDIENCE_BILLING_ENABLED.equals(r.get("paramKey")))
+            .singleElement().satisfies(r -> assertThat(r).containsEntry("value", "false").containsEntry("grp", "audience"));
+        // The install published the declared values: every parameter is there, and cash into Kudos is on.
+        assertThat(rows).allSatisfy(r -> assertThat(r).containsEntry("paramExists", true));
+        Map<String, Object> buy = rows.stream().filter(r -> QbParams.KUDOS_BUY_ENABLED.equals(r.get("paramKey")))
+            .findFirst().orElseThrow();
+        assertThat(buy).containsEntry("value", "true").containsEntry("expected", "false").containsEntry("grp", "kudos");
+        // The numbers keep the form the parameter stores them in (the card compares them as numbers).
+        Map<String, Object> rate = rows.stream().filter(r -> QbParams.CREATOR_FEE_RATE.equals(r.get("paramKey")))
+            .findFirst().orElseThrow();
+        assertThat(new java.math.BigDecimal(String.valueOf(rate.get("value")))).isZero();
+        assertThat(rate).containsEntry("expected", "0");
     }
 
     @Test
