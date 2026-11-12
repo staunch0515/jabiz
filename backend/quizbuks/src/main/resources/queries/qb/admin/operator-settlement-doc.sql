@@ -17,6 +17,7 @@ results:
   platformShare:   { kind: { type: text, maxLength: 10 } }
   operatorShare:   { from: QbOperatorSettlement.operatorShare }
   prospectingCost: { from: QbOperatorSettlement.prospectingCost }
+  creditNoteDeduction: { from: QbOperatorSettlement.creditNoteDeduction }
   plan: { from: QbOperatorSettlement.plan }
   fixedFee: { from: QbOperatorSettlement.fixedFee }
   carriedIn:       { from: QbOperatorSettlement.carriedIn }
@@ -35,6 +36,7 @@ SELECT
     CAST(trim(to_char(s.{{QbOperatorSettlement.platformShare}} * 100, 'FM990.99')) || '%' AS varchar(10)) AS platformShare,
     s.{{QbOperatorSettlement.operatorShare}} AS operatorShare,
     s.{{QbOperatorSettlement.prospectingCost}} AS prospectingCost,
+    s.{{QbOperatorSettlement.creditNoteDeduction}} AS creditNoteDeduction,
     s.{{QbOperatorSettlement.plan}} AS plan,
     s.{{QbOperatorSettlement.fixedFee}} AS fixedFee,
     s.{{QbOperatorSettlement.carriedIn}} AS carriedIn,

@@ -295,6 +295,32 @@ public class FeeConfig {
         return own(QbFees.SPONSOR_INVOICES, QbFees.INVOICE);
     }
 
+    /** F-M7: credit notes and what their credit paid; finance reads them, the processes write them. */
+    @Bean
+    EntityDefinition qbFeeCreditNoteEntity() {
+        return QbCreditNotes.CREDIT_NOTE_ENTITY;
+    }
+
+    @Bean
+    EntityDefinition qbFeeCreditNoteUseEntity() {
+        return QbCreditNotes.USE_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbFeeCreditNoteDataset() {
+        return processOnly(QbCreditNotes.CREDIT_NOTE);
+    }
+
+    @Bean
+    DatasetDefinition qbFeeCreditNoteUseDataset() {
+        return processOnly(QbCreditNotes.USE);
+    }
+
+    @Bean
+    DatasetDefinition qbSponsorFeeCreditNoteDataset() {
+        return own(QbCreditNotes.SPONSOR_CREDIT_NOTES, QbCreditNotes.CREDIT_NOTE);
+    }
+
     private DatasetDefinition processOnly(String entity) {
         return DatasetDefinition.define(QbFees.defaultDataset(entity), d -> d
             .targetEntityType(entity)
@@ -345,7 +371,32 @@ public class FeeConfig {
             .item(QbFees.REQUEST_MANUAL, "en", "Fee charged by hand", "zh", "手工记费", "ja", "手動の料金")
             .item(QbFees.REQUEST_VOID, "en", "Invoice voided", "zh", "作废账单", "ja", "請求書の取消")
             .item(QbFees.REQUEST_CREDIT, "en", "Platform fee Kudos granted by hand", "zh", "追加赠送平台费 Kudos",
-                "ja", "利用料 Kudos の追加付与"));
+                "ja", "利用料 Kudos の追加付与")
+            .item(QbFees.REQUEST_CREDIT_NOTE, "en", "Credit note by hand", "zh", "手工开贷项凭证", "ja",
+                "手動の返還インボイス"));
+    }
+
+    @Bean
+    StaticDictionary qbFeeCreditNoteReasonDictionary() {
+        return StaticDictionary.define(QbCreditNotes.REASON_DICTIONARY, d -> d
+            .item(QbCreditNotes.AUDIENCE_UNUSED, "en", "Unused days after an early end", "zh", "提前结束后未用的天数",
+                "ja", "早期終了後の未使用日数")
+            .item(QbCreditNotes.MANUAL, "en", "By hand", "zh", "手工", "ja", "手動"));
+    }
+
+    @Bean
+    StaticDictionary qbAudienceRefundOutcomeDictionary() {
+        return StaticDictionary.define(QbPrepayments.REFUND_OUTCOME_DICTIONARY, d -> d
+            .item(AudienceRefunds.REFUNDED, "en", "Given back", "zh", "已退回", "ja", "返金済み")
+            .item(AudienceRefunds.CREDITED, "en", "Credited", "zh", "已作贷项", "ja", "クレジット済み")
+            .item(AudienceRefunds.NONE_SWITCH_OFF, "en", "None: refunds were off", "zh", "不退：开关关闭", "ja",
+                "返金なし：設定がオフ")
+            .item(AudienceRefunds.NONE_REASON, "en", "None: not refundable", "zh", "不退：原因不可退", "ja",
+                "返金なし：対象外の理由")
+            .item(AudienceRefunds.NONE_ZERO, "en", "None: no unused days", "zh", "不退：没有未用天数", "ja",
+                "返金なし：未使用日数なし")
+            .item(AudienceRefunds.NONE_NO_PERIOD, "en", "None: no period", "zh", "不退：没有计费期间", "ja",
+                "返金なし：期間なし"));
     }
 
     @Bean
@@ -360,6 +411,12 @@ public class FeeConfig {
     @Bean
     NumberSequence qbFeeInvoiceNumbers() {
         return NumberSequence.define(QbFees.INVOICE_SEQUENCE, s -> s.format("QBF-{scope}-{n:5}").scoped());
+    }
+
+    /** {@code QBC-2026-00001}: credit notes, one count per year, without gaps (F-M7). */
+    @Bean
+    NumberSequence qbFeeCreditNoteNumbers() {
+        return NumberSequence.define(QbCreditNotes.SEQUENCE, s -> s.format("QBC-{scope}-{n:5}").scoped());
     }
 
     @Bean

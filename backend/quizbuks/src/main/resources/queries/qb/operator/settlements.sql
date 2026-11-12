@@ -16,6 +16,7 @@ results:
   platformShare: { from: QbOperatorSettlement.platformShare }
   operatorShare: { from: QbOperatorSettlement.operatorShare }
   prospectingCost: { from: QbOperatorSettlement.prospectingCost }
+  creditNoteDeduction: { from: QbOperatorSettlement.creditNoteDeduction }
   plan: { from: QbOperatorSettlement.plan }
   fixedFee: { from: QbOperatorSettlement.fixedFee }
   carriedIn: { from: QbOperatorSettlement.carriedIn }
@@ -47,6 +48,7 @@ SELECT
     s.{{QbOperatorSettlement.platformShare}} AS platformShare,
     s.{{QbOperatorSettlement.operatorShare}} AS operatorShare,
     s.{{QbOperatorSettlement.prospectingCost}} AS prospectingCost,
+    s.{{QbOperatorSettlement.creditNoteDeduction}} AS creditNoteDeduction,
     s.{{QbOperatorSettlement.plan}} AS plan,
     s.{{QbOperatorSettlement.fixedFee}} AS fixedFee,
     s.{{QbOperatorSettlement.carriedIn}} AS carriedIn,
