@@ -85,7 +85,7 @@ function Picker({ onPick, onClose }: { onPick: (video: SharedVideo) => void; onC
     placeholderData: keepPreviousData })
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="shared-video-picker">
+      <DialogContent className="sm:max-w-2xl" data-testid="shared-video-picker">
         <DialogHeader>
           <DialogTitle>{t('sharedVideos.picker.title')}</DialogTitle>
           <DialogDescription>{t('sharedVideos.picker.intro')} {t('sharedVideos.picker.ownHint')}</DialogDescription>

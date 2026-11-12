@@ -355,7 +355,7 @@ function OfferDialog({ offer, onClose, onSaved }: { offer: Offer | null; onClose
   )
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" data-testid="benefit-offer-dialog">
+      <DialogContent className="sm:max-w-lg" data-testid="benefit-offer-dialog">
         <DialogHeader>
           <DialogTitle>{offer ? t('benefits.offers.dialogEdit') : t('benefits.offers.dialogNew')}</DialogTitle>
           <DialogDescription>{t('benefits.offers.intro')}</DialogDescription>

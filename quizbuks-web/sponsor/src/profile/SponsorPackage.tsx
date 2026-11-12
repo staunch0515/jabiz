@@ -322,7 +322,7 @@ export function SponsorPackage({ controls, onExporting }: {
       <Dialog open={state !== null} onOpenChange={(value) => {
         if (!value && !busy) setState(null)
       }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="sponsor-package-dialog">
+        <DialogContent className="sm:max-w-2xl" data-testid="sponsor-package-dialog">
           <DialogHeader>
             <DialogTitle>{t('package.importTitle')}</DialogTitle>
             <DialogDescription>{t('package.importHint')}</DialogDescription>

@@ -147,7 +147,7 @@ export function AssetDialog({ asset, onClose, onSaved }: {
   const body = content.body ?? ''
   return (
     <Dialog open onOpenChange={(open) => !open && !save.isPending && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="asset-dialog">
+      <DialogContent className="sm:max-w-2xl" data-testid="asset-dialog">
         <DialogHeader>
           <DialogTitle>{asset ? t('assets.dialog.editTitle') : t('assets.dialog.newTitle')}</DialogTitle>
           <DialogDescription>{t('assets.dialog.hint')}</DialogDescription>

@@ -267,7 +267,7 @@ function ProductDialog({ product, seq, max, onClose, onSaved }: {
   }
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" data-testid="product-dialog">
+      <DialogContent className="sm:max-w-lg" data-testid="product-dialog">
         <DialogHeader>
           <DialogTitle>{product ? t('products.dialogEdit') : t('products.dialogNew')}</DialogTitle>
           <DialogDescription>{introOf(t, max)}</DialogDescription>

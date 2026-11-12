@@ -291,7 +291,7 @@ export function MaterialDialog({ material, number, open, onOpenChange, variant, 
     <Dialog open={open} onOpenChange={(next) => {
       if (!save.isPending) onOpenChange(next)
     }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="material-dialog">
+      <DialogContent className="sm:max-w-2xl" data-testid="material-dialog">
         <form noValidate onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
             <DialogTitle>

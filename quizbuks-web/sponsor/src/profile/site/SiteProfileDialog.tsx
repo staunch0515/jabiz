@@ -93,7 +93,7 @@ export function SiteProfileDialog({ open, onClose, onReview, onPrompt }: {
     ? failed.failureCode : 'general'
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next && !request.isPending) onClose() }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="site-dialog">
+      <DialogContent className="sm:max-w-2xl" data-testid="site-dialog">
         <DialogHeader>
           <DialogTitle>{t('site.title')}</DialogTitle>
           <DialogDescription>{t('site.description')}</DialogDescription>
