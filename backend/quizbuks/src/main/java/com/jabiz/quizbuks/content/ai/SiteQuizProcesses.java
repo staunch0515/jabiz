@@ -48,8 +48,12 @@ public final class SiteQuizProcesses {
 
     /** The titles of the quiz in the draft's base language, with the company's name. */
     private static final Map<String, String> TITLES = Map.of("en", "Get to know %s", "zh", "认识 %s", "ja", "%sを知ろう");
-    /** What stands for the company's name when the draft has none: "us" in the quiz's language. */
-    private static final Map<String, String> US = Map.of("en", "us", "zh", "我们", "ja", "私たち");
+    /** The wording when the draft has no company name ("us" in the quiz's language): a title and an introduction. */
+    private static final Map<String, String> US_TITLES = Map.of("en", "Get to know us", "zh", "认识我们", "ja", "私たちを知ろう");
+    private static final Map<String, String> US_INTROS = Map.of(
+        "en", "Read these articles from our website, then answer the questions.",
+        "zh", "读一读我们官网上的这几篇文章，再回答问题。",
+        "ja", "私たちの公式サイトの記事を読んで、問題に答えましょう。");
     private static final Map<String, String> INTROS = Map.of(
         "en", "Read these articles from the website of %s, then answer the questions.",
         "zh", "读一读 %s 官网上的这几篇文章，再回答问题。",
@@ -122,7 +126,7 @@ public final class SiteQuizProcesses {
         }
         Map<String, Object> params = AiProcesses.params(job);
         String language = params.get("language") instanceof String l && TITLES.containsKey(l) ? l : "en";
-        String company = company(stored.path("profile"), language);
+        String company = company(stored.path("profile"));
         List<Map<String, Object>> articles = new ArrayList<>();
         for (JsonNode material : materials) {
             Map<String, Object> article = new LinkedHashMap<>();
@@ -138,8 +142,8 @@ public final class SiteQuizProcesses {
         }
         Map<String, Object> quiz = new LinkedHashMap<>();
         quiz.put("kind", "QUIZ");
-        quiz.put("title", clip(TITLES.get(language).formatted(company), com.jabiz.quizbuks.content.ContentLimits.TITLE_LENGTH));
-        quiz.put("intro", INTROS.get(language).formatted(company));
+        quiz.put("title", clip(title(language, company), com.jabiz.quizbuks.content.ContentLimits.TITLE_LENGTH));
+        quiz.put("intro", intro(language, company));
         quiz.put("language", language);
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("format", QuizFileFormat.FORMAT);
@@ -152,10 +156,9 @@ public final class SiteQuizProcesses {
         if (params.get("languages") instanceof List<?> asked) {
             for (Object other : asked) {
                 if (other instanceof String code && !code.equals(language) && TITLES.containsKey(code)) {
-                    String name = company(stored.path("profile"), code);
                     translations.put(code, Map.of("texts", Map.of(
-                        "title", clip(TITLES.get(code).formatted(name), com.jabiz.quizbuks.content.ContentLimits.TITLE_LENGTH),
-                        "intro", INTROS.get(code).formatted(name))));
+                        "title", clip(title(code, company), com.jabiz.quizbuks.content.ContentLimits.TITLE_LENGTH),
+                        "intro", intro(code, company))));
                 }
             }
         }
@@ -169,10 +172,19 @@ public final class SiteQuizProcesses {
         ctx.put(MATERIALS, articles.size());
     }
 
-    private static String company(JsonNode profile, String language) {
+    /** The company's name as the draft gives it; null when the draft has none (only the quiz was asked for, or not found). */
+    private static String company(JsonNode profile) {
         JsonNode name = profile.path("basics").path("company");
         String text = name.isString() ? name.asString().strip() : "";
-        return text.isEmpty() ? US.get(language) : text;
+        return text.isEmpty() ? null : text;
+    }
+
+    private static String title(String language, String company) {
+        return company == null ? US_TITLES.get(language) : TITLES.get(language).formatted(company);
+    }
+
+    private static String intro(String language, String company) {
+        return company == null ? US_INTROS.get(language) : INTROS.get(language).formatted(company);
     }
 
     private static String clip(String text, int max) {

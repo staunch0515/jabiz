@@ -28,7 +28,7 @@
 
 **链接名与图片**：主页的链接名由官网域名得出；被其他发起方用了时，确认页给出几个可选的，选好才能导入。图片只给链接，你点导入时服务器才把它们逐张下载（同资料包的“图片”一节）。
 
-**“认识我们”的 Quiz**：确认页下方点“建立 Quiz 草稿”，官网上的文章成为 Quiz 的资料，AI 起草的题目留在 Quiz 里等你审核：每一道题要你逐题勾选“我已校对此题”才会加入。一份草稿只能建一个 Quiz。
+**“认识我们”的 Quiz**：确认页下方点“建立 Quiz 草稿”，官网上的文章成为 Quiz 的资料，AI 起草的题目留在 Quiz 里等你审核：每一道题要你逐题勾选“我已校对此题”才会加入。一份草稿只能建一个 Quiz。你选了其他语言时，Quiz 的标题和简介会带这些语言的译文；文章和题目只有网站的语言，其他语言请在 Quiz 编辑器里用翻译补上。
 
 **读不了时**：打不开、网站不允许这类读取（robots.txt）、几乎没有文字（页面靠脚本绘制）、用时太长或没有找到可用的内容时，页面会写明原因。可以改用“给 AI 工具的提示词”，或者手工填写。
 
@@ -50,7 +50,7 @@
 
 **リンク名と画像**：ページのリンク名はサイトのドメインから作られます。他の主催者が使っているときは確認画面に代わりの候補が出るので、選ぶまで取り込めません。画像はリンクだけで、取り込みを押したときにサーバーが一枚ずつダウンロードします（資料パッケージの「画像」と同じです）。
 
-**「私たちを知る」クイズ**：確認画面の下の「クイズの下書きを作る」を押すと、サイトの記事がクイズの教材になり、AI が下書きした問題はクイズの中で確認待ちになります。1 問ずつ「この問題を確認しました」にチェックしたものだけが追加されます。1 つの下書きから作れるクイズは 1 つです。
+**「私たちを知る」クイズ**：確認画面の下の「クイズの下書きを作る」を押すと、サイトの記事がクイズの教材になり、AI が下書きした問題はクイズの中で確認待ちになります。1 問ずつ「この問題を確認しました」にチェックしたものだけが追加されます。1 つの下書きから作れるクイズは 1 つです。他の言語を選んだ場合、クイズのタイトルと紹介文はその言語の訳つきになります。記事と問題はサイトの言語だけなので、他の言語はクイズエディターの翻訳で補ってください。
 
 **読み取れないとき**：開けない、サイトがこの種の読み取りを許可していない（robots.txt）、文章がほとんどない（スクリプトで描画している）、時間がかかりすぎた、使える内容がなかった場合は、理由が表示されます。「AI ツール用のプロンプト」を使うか、手入力に切り替えてください。
 
@@ -72,7 +72,7 @@
 
 **Link name and images**: your page's link name is made from your website's domain; when another Sponsor has it, the confirmation screen offers free ones to choose from, and you cannot import before you choose. Images are only links: the server downloads each one when you press import (the same as the "Images" part of the profile package).
 
-**The "get to know us" quiz**: press "Make the quiz draft" below the confirmation screen's list: the website's articles become the quiz's materials, and the questions the AI drafted wait in the quiz for your review: only the questions you tick "I have reviewed this question" one by one are added. One quiz can be made from a draft.
+**The "get to know us" quiz**: press "Make the quiz draft" below the confirmation screen's list: the website's articles become the quiz's materials, and the questions the AI drafted wait in the quiz for your review: only the questions you tick "I have reviewed this question" one by one are added. One quiz can be made from a draft. If you chose other languages, the quiz's title and introduction come with those translations; the articles and questions are in the website's language only, so add the other languages with the translation in the quiz editor.
 
 **When it cannot be read**: if the website did not open, does not allow this kind of reading (robots.txt), shows almost no text (it draws its pages with scripts), took too long or gave nothing usable, the page says why. Use the prompt for an AI tool instead, or fill it in by hand.
 

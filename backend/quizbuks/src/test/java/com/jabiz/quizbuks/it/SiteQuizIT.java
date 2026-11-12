@@ -272,4 +272,21 @@ class SiteQuizIT extends AiItSupport {
             .extracting(row -> row.get("language") + ":" + row.get("element_key") + ":" + row.get("text"))
             .contains("en:quiz.title:Get to know Aini Inc.");
     }
+
+    @Test
+    void withoutTheCompanyNameTheTitleSaysUsInTheQuizsLanguage() {
+        // Only the quiz was asked for: the draft has no profile, so no company name to put in the title.
+        Map<String, String> titles = Map.of("ja", "私たちを知ろう", "en", "Get to know us", "zh", "认识我们");
+        titles.forEach((language, title) -> {
+            draft = DRAFT.replace("\"company\": \"Aini Inc.\"", "\"company\": null");
+            String token = sponsorFull(newSponsor("site-quiz-u-" + language + "-" + UUID.randomUUID()));
+            Object aiJobId = run(SiteProfileProcesses.REQUEST, token, body("siteAddress", "https://www.aini.example/",
+                "language", language, "otherLanguages", List.of(), "profile", false, "products", false, "quiz", true,
+                "rightsDeclared", true, "aiNoticeVersionNo", noticeVersion())).get("aiJobId");
+            runJobs();
+            String quizId = String.valueOf(run(SiteQuizProcesses.QUIZ, token, body("aiJobId", aiJobId)).get("quizId"));
+            assertThat(latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst())
+                .containsEntry("title", title);
+        });
+    }
 }

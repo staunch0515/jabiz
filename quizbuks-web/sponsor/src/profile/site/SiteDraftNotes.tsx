@@ -73,16 +73,18 @@ export function SiteDraftNotes({ draft, handle, onHandle }: {
   const pathLabel = (raw: string): string => {
     // A text of one language (`basics.intro.ja`) is the field itself.
     const path = raw.replace(/\.(ja|en|zh)$/, '')
-    const product = /^products\[(\d+)]\.?(name|price)?$/.exec(path)
+    const product = /^products\[(\d+)]\.?(name|price|image|description|shopUrl)?$/.exec(path)
     if (product) {
       const n = Number(product[1]) + 1
-      return product[2] === 'name' ? t('site.review.productName', { n })
-        : product[2] === 'price' ? t('site.review.productPrice', { n }) : t('site.review.productWhole', { n })
+      const part = product[2]
+      return part === 'name' ? t('site.review.productName', { n })
+        : part === 'price' ? t('site.review.productPrice', { n })
+        : part ? t(`site.review.product.${part}`, { n }) : t('site.review.productWhole', { n })
     }
     const article = /^materials\[(\d+)]/.exec(path)
     if (article) return t('site.review.article', { n: Number(article[1]) + 1 })
     const known: Record<string, string> = { 'basics.company': 'company', 'basics.intro': 'intro',
-      'page.headline': 'headline', 'page.website': 'website' }
+      'page.headline': 'headline', 'page.website': 'website', 'page.cover': 'cover', 'basics.avatar': 'avatar' }
     return known[path] ? t(`site.review.${known[path]}`) : t('site.review.pathOther')
   }
   const taken = draft.handle?.taken ?? false
