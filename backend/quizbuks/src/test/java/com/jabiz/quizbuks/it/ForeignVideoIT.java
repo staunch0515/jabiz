@@ -522,4 +522,67 @@ class ForeignVideoIT extends PlayItSupport {
         "https://v.qq.com.evil.example/x/page/x0029zdtwz6.html", "https://evil.example/txp/iframe/player.html?vid=x0029zdtwz6",
         "https://user@www.bilibili.com/video/BV1GJ411x7h7", "https://www.bilibili.com:8443/video/BV1GJ411x7h7",
         "ftp://www.bilibili.com/video/BV1GJ411x7h7", "https://video.example/capitals", "not a link");
+
+    /**
+     * F-F11a (docs/quizbuks/plans/impl/F-F11.md section 6.1): a sample Sponsor restored from its package. The
+     * publications its package made, on a quiz with a link to YouTube, cannot be answered from mainland China; once
+     * headquarters sets an exception for the Sponsor, the same publication can, and a publication the package makes
+     * (and submits) afterwards as well; revoked, both are refused again. Every write left an audit row.
+     */
+    @Test
+    void aRestoredSamplesYouTubePublicationsNeedTheSponsorsExceptionAndOnlyThat() {
+        autoApprove(true);
+        String sponsor = newSponsor(unique("s-ff11-sample"));
+        credit(sponsor, 1_000_000);
+        run(com.jabiz.quizbuks.publishing.RewardMethodProcesses.SET, TestTokens.bearer(tokens, "ff11-methods-admin",
+            QbPermissions.ADMIN_REWARD_METHODS, QbPermissions.ADMIN_USERS_READ, QbPermissions.ADMIN_PUBLICATION_READ),
+            body("userId", sponsor, "methods", List.of(com.jabiz.quizbuks.publishing.RewardMethod.PLATFORM,
+                com.jabiz.quizbuks.publishing.RewardMethod.OFFLINE_REDEEM), "note", "F-F11 sample"));
+        String token = sponsorToken(sponsor);
+        PackageFixtures.Calls calls = (process, input, label) -> run(process, token, input);
+        // The second sample: its second quiz has a link to YouTube, and its publications 3 and 4 are on that quiz.
+        PackageFixtures.Sample sample = PackageFixtures.sample(1, 0, 20);
+        List<PackageFixtures.Step> plan = PackageFixtures.plan(sample, 200, clock.instant());
+        Object importId = PackageFixtures.start(calls, "f".repeat(64), plan.size(), 200, 3_145_728).get("importId");
+        int later = java.util.stream.IntStream.range(0, plan.size()).filter(i -> plan.get(i).key()
+            .equals("publication:4")).findFirst().orElseThrow();
+        PackageFixtures.Imported first = PackageFixtures.runSteps(calls, plan, 0, later, Map.of(), importId);
+        String foreign = String.valueOf(first.results().get("publication:3").get("publicationId"));
+        String plain = String.valueOf(first.results().get("publication:1").get("publicationId"));
+        assertThat(submit(token, foreign).get("status")).isEqualTo("LIVE");
+        assertThat(submit(token, plain).get("status")).isEqualTo("LIVE");
+        assertThat(foreignOf(foreign)).isEqualTo(true);
+        assertThat(foreignOf(plain)).isEqualTo(false);
+
+        address = MAINLAND;
+        assertThat(startRefused(taker(newTaker(unique("t-ff11-0"), "JP")), foreign))
+            .containsExactly(RegionCodes.REGION_VIDEO);
+        assertThat(start(taker(newTaker(unique("t-ff11-0b"), "JP")), plain)).containsEntry("resumed", false);
+
+        // Headquarters' exception for the Sponsor: the publication can be answered from mainland China.
+        String exceptionId = (String) run("QB_REGION_EXCEPTION_ADD", regionAdmin(), body("kind", "SPONSOR",
+            "sponsorId", sponsor, "reason", "Sample: testing access from mainland China")).get("exceptionId");
+        assertThat(start(taker(newTaker(unique("t-ff11-1"), "JP")), foreign)).containsEntry("resumed", false);
+
+        // The rest of the package is imported afterwards: its publication on the quiz with the link is answered too.
+        PackageFixtures.Imported rest = PackageFixtures.runSteps(calls, plan, later, plan.size(), first.results(),
+            importId);
+        String afterwards = String.valueOf(rest.results().get("publication:4").get("publicationId"));
+        assertThat(submit(token, afterwards).get("status")).isEqualTo("LIVE");
+        assertThat(foreignOf(afterwards)).isEqualTo(true);
+        assertThat(start(taker(newTaker(unique("t-ff11-2"), "JP")), afterwards)).containsEntry("resumed", false);
+
+        // Revoked: both are refused again, from mainland China only.
+        run("QB_REGION_EXCEPTION_REVOKE", regionAdmin(), body("exceptionId", exceptionId, "reason", "Sample test over"));
+        assertThat(startRefused(taker(newTaker(unique("t-ff11-3"), "JP")), foreign))
+            .containsExactly(RegionCodes.REGION_VIDEO);
+        assertThat(startRefused(taker(newTaker(unique("t-ff11-4"), "JP")), afterwards))
+            .containsExactly(RegionCodes.REGION_VIDEO);
+        address = JAPAN;
+        assertThat(start(taker(newTaker(unique("t-ff11-5"), "JP")), foreign)).containsEntry("resumed", false);
+
+        // The exception's writes (adding, revoking) went through the audit.
+        assertThat(query("SELECT action FROM sys_audit_record WHERE entity_type = 'QbRegionException' AND entity_id = ?",
+            exceptionId)).hasSize(2);
+    }
 }

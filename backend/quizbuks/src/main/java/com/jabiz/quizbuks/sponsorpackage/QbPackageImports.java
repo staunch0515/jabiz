@@ -55,6 +55,8 @@ public final class QbPackageImports {
         // The questions a batch of a large bank holds, as the import started (a resumed import keeps its batches).
         eb.field("batchSize", f -> f.physicalColumn("batch_size").immutable(true).required(true).processOnly()
             .asNumeric(6, 0));
+        // F-F11a: the bytes of a request as the import started (empty: it started before the limit existed).
+        eb.field("batchBytes", f -> f.physicalColumn("batch_bytes").immutable(true).processOnly().asNumeric(7, 0));
         eb.field("stepsTotal", f -> f.physicalColumn("steps_total").required(true).processOnly().asNumeric(6, 0));
         eb.field("stepsDone", f -> f.physicalColumn("steps_done").required(true).processOnly().asNumeric(6, 0));
         eb.field("lastStep", f -> f.physicalColumn("last_step").processOnly()

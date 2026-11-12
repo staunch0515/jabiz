@@ -24,39 +24,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LargeBankIT extends PlayItSupport {
 
     static final int QUESTIONS = 1000;
-    static final int OPTIONS = 6;
+    static final int OPTIONS = PackageFixtures.OPTIONS;
     static final int DRAWN = 100;
 
     /** A quiz file of {@code count} one-point questions, base English, with Chinese and Japanese for every text. */
     static Map<String, Object> bank(int count) {
-        List<Object> questions = new ArrayList<>();
-        Map<String, Object> zh = new LinkedHashMap<>();
-        Map<String, Object> ja = new LinkedHashMap<>();
-        zh.put("title", "大题库");
-        ja.put("title", "大きな問題集");
-        for (int q = 1; q <= count; q++) {
-            List<Object> options = new ArrayList<>();
-            for (int o = 1; o <= OPTIONS; o++) {
-                options.add(map("text", "Option " + o + " of question " + q + ", a plausible answer", "correct",
-                    o == 1));
-                zh.put("q" + q + ".o" + o + ".text", "第 " + q + " 题的选项 " + o + "，一个看似合理的答案");
-                ja.put("q" + q + ".o" + o + ".text", "問題 " + q + " の選択肢 " + o + "、もっともらしい答え");
-            }
-            questions.add(map("stem", "Question " + q + ": which of these statements about the subject is the "
-                + "correct one, given what the material explains?", "points", 1, "options", options));
-            zh.put("q" + q + ".stem", "第 " + q + " 题：根据资料的说明，关于这个主题，下列哪一种说法是正确的？");
-            ja.put("q" + q + ".stem", "問題 " + q + "：資料の説明によると、このテーマについて正しいのは次のうちどれですか？");
-        }
-        Map<String, Object> document = new LinkedHashMap<>();
-        document.put("format", "quizbuks.quiz");
-        document.put("formatVersion", 3);
-        document.put("quiz", map("kind", "QUIZ", "title", "Large bank", "timeLimitSec", 3600, "language", "en"));
-        document.put("materials", List.of());
-        document.put("questions", questions);
-        document.put("files", Map.of());
-        document.put("translations", map("zh", map("texts", zh, "images", Map.of(), "materials", List.of()),
-            "ja", map("texts", ja, "images", Map.of(), "materials", List.of())));
-        return document;
+        return PackageFixtures.bank(count);
     }
 
     static Map<String, Object> map(Object... pairs) {
@@ -138,5 +111,49 @@ class LargeBankIT extends PlayItSupport {
         System.out.printf("F-S6 large bank: %d questions x %d options x 3 languages; snapshot %d bytes; import %d ms, "
             + "version %d ms, start %d ms, continue %d ms, submit %d ms%n", QUESTIONS, OPTIONS, snapshotBytes,
             imported, versioned, startMs, continueMs, submitMs);
+    }
+
+    /**
+     * F-F11a (docs/quizbuks/plans/impl/F-F11.md section 6.1): the most a batch can hold (200 questions of a
+     * 1000-character stem and six 300-character options, in three languages, every character of three bytes: about 5
+     * MB) is refused by the framework before any process sees it, because the body passes
+     * {@code spring.http.codecs.max-in-memory-size}; the same questions cut by {@code qb.content.import.batch-bytes} are
+     * all imported, each batch within the technical ceiling and the limit.
+     */
+    @Test
+    void theLargestBatchIsRefusedByTheFrameworkAndTheSameQuestionsCutByBytesAreImported() {
+        String token = sponsorToken(newSponsor("s-large-bytes"));
+        String quizId = (String) run("QB_QUIZ_IMPORT", token, body("document", PackageFixtures.bank("Worst bank", 1, OPTIONS, 9L)))
+            .get("quizId");
+
+        Map<String, Object> worst = PackageFixtures.worstBatch(200);
+        int whole = PackageFixtures.bytesOf(worst);
+        // The premise: the batch is within every limit of the question count and of the characters, and too big a body.
+        assertThat(whole).isGreaterThan(4 * 1024 * 1024);
+        var refused = call("QB_QUIZ_IMPORT_QUESTIONS", token, body("quizId", quizId, "document", worst)).expectBody(MAP)
+            .returnResult();
+        assertThat(refused.getStatus().value()).as("the whole batch of " + whole + " bytes: " + refused.getResponseBody())
+            .isEqualTo(413);
+        assertThat(query("SELECT count(*) AS n FROM qb_question_version WHERE quiz_id = ?::uuid", quizId).getFirst()
+            .get("n")).isEqualTo(1L);
+
+        // Cut by the parameter's value (3 MiB): several batches, each a request the framework takes.
+        int limit = Integer.parseInt(com.jabiz.quizbuks.setup.QbParams.defaultOf(
+            com.jabiz.quizbuks.setup.QbParams.CONTENT_IMPORT_BATCH_BYTES));
+        List<Map<String, Object>> batches = PackageFixtures.splitByBytes(worst, 200, limit);
+        assertThat(batches).hasSizeGreaterThan(1);
+        assertThat(batches.stream().mapToInt(b -> ((List<?>) b.get("questions")).size()).sum()).isEqualTo(200);
+        long imported = 0;
+        for (Map<String, Object> batch : batches) {
+            Map<String, Object> request = body("quizId", quizId, "document", batch);
+            assertThat(PackageFixtures.bytesOf(request)).isLessThan(ContentLimits.IMPORT_BATCH_BYTES_TECH);
+            imported += ((Number) run("QB_QUIZ_IMPORT_QUESTIONS", token, request).get("questions")).longValue();
+        }
+        assertThat(imported).isEqualTo(200);
+        assertThat(query("SELECT count(DISTINCT question_id) AS n FROM qb_question_version WHERE quiz_id = ?::uuid",
+            quizId).getFirst().get("n")).isEqualTo(201L);
+        System.out.printf("F-F11 the largest batch: %d bytes refused (413); cut by %d bytes into %d batches of %s "
+            + "questions%n", whole, limit, batches.size(),
+            batches.stream().map(b -> String.valueOf(((List<?>) b.get("questions")).size())).toList());
     }
 }

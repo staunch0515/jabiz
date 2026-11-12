@@ -278,6 +278,11 @@ public final class QbParams {
     public static final String PLAY_MAX_PER_ATTEMPT = "qb.play.max-questions-per-attempt";
     /** F-S6: the most questions one import batch adds to a quiz (not controlled). */
     public static final String CONTENT_IMPORT_BATCH = "qb.content.import.batch-size";
+    /**
+     * F-F11a: the most bytes of one import request's body (not controlled; from ContentLimits.IMPORT_BATCH_BYTES_MIN
+     * to ContentLimits.IMPORT_BATCH_BYTES_TECH): the page cuts a large bank by it as well as by the question count.
+     */
+    public static final String CONTENT_IMPORT_BATCH_BYTES = "qb.content.import.batch-bytes";
     /** F-S2: the most items (nodes and the pass) one node's condition names, at every level (not controlled). */
     public static final String TREE_MAX_CONDITIONS = "qb.tree.max-conditions-per-node";
     /** F-S2: the longest chain of nodes naming nodes, which bounds the lighting's chained evaluation (not controlled). */
@@ -972,6 +977,10 @@ public final class QbParams {
         new Param(PREPAYMENT_RELEASE_OVERDUE_DAYS, DAYS, "2",
             "How many days after a publication ends a prepayment still open is reported by the daily check (1 to 30; "
                 + "the daily job gives it back within a day)"),
+        // F-F11a: the bytes of one import request (ordinary).
+        new Param(CONTENT_IMPORT_BATCH_BYTES, Map.of("type", "numeric", "precision", 7, "scale", 0), "3145728",
+            "The most bytes one import request carries; the page cuts a large bank into batches by it as well as by "
+                + "the question count (65536 to 3500000)"),
         // F-M7 (N9): the daily check (ordinary; last).
         new Param(AUDIENCE_REFUND_MISSING_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
             "After how many hours of a publication's end an audience fee whose unused days are not decided yet is "

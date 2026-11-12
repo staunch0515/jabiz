@@ -308,6 +308,11 @@ public class ContentConfig {
     }
 
     @Bean
+    ProcessDefinition<QuizProcesses.ClearInput, QuizProcesses.ClearOutput, ProcessContext> qbQuizClearContent() {
+        return QuizProcesses.clearContentProcess();
+    }
+
+    @Bean
     ProcessDefinition<QuizProcesses.QuizRef, QuizProcesses.VersionOutput, ProcessContext> qbQuizPublishVersion() {
         return QuizProcesses.publishVersion();
     }

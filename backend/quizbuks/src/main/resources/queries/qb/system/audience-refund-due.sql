@@ -19,7 +19,7 @@ list:
 permissions: [qb.fee.system]
 ---*/
 -- Once charged, an audience fee is decided once (refund_decided_at, F-M7 §10.3-6); a decided one is never taken
--- again, whatever the switch is later. Through the partial index on what is not decided (V118). The item reads the
+-- again, whatever the switch is later. Through the partial index on what is not decided (V119). The item reads the
 -- prepayment, the publication and the fee again under the sponsor's wallet lock.
 SELECT CAST(p.{{QbPrepayment.prepaymentId}} AS text) AS prepaymentId,
        p.{{QbPrepayment.publicationId}} AS publicationId, p.{{QbPrepayment.sponsorId}} AS sponsorId,
