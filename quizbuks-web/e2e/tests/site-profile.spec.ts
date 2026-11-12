@@ -57,7 +57,8 @@ for (const appearance of ['light', 'dark'] as const) {
       await expect(confirmation.getByTestId('site-notes')).toBeVisible()
       await expect(confirmation.getByTestId('site-fields')).toContainText(`Stub Company ${label}`)
       const dropped = confirmation.getByTestId('site-dropped')
-      await expect(dropped).toContainText('basics.intro')
+      // The field is named as the sponsor knows it, not by its path.
+      await expect(dropped).toContainText('About you')
       await expect(dropped).toContainText('e-mail address, phone number or social account was removed')
       await expect(confirmation.getByTestId('site-fields')).not.toContainText('taro@')
       await expect(confirmation.getByTestId('site-fields')).not.toContainText('03-1234-5678')
