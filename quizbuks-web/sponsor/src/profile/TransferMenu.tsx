@@ -1,8 +1,11 @@
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger } from '@jabiz/ui'
-import { ArrowDownUp, Download, Sparkles, Upload } from 'lucide-react'
+import { ArrowDownUp, Download, Globe, Sparkles, Upload } from 'lucide-react'
 import { createContext, useContext, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
+import { AI_USAGE_QUERY } from '../ai/AiQuestionsPanel'
+import { readAiUsage } from '../ai/api'
 import { SPONSOR } from '../messages'
 import { ProfileTransfer, type ProfileTransferControls } from './ProfileTransfer'
 import { SponsorPackage, type SponsorPackageControls } from './SponsorPackage'
@@ -49,6 +52,8 @@ export function useAbandonImport() {
 export function TransferMenu() {
   const { t } = useTranslation(SPONSOR)
   const tools = useContext(Tools)
+  // F-C7: only where the deployment has drafting from a website on.
+  const usage = useQuery({ queryKey: AI_USAGE_QUERY, queryFn: () => readAiUsage(), enabled: tools !== null })
   if (!tools) return null
   const { profile, pack, profileExporting, packExporting } = tools
   return (
@@ -71,6 +76,12 @@ export function TransferMenu() {
             <Upload aria-hidden />
             {t('profile.transfer.import')}
           </DropdownMenuItem>
+          {usage.data?.siteProfileEnabled && (
+            <DropdownMenuItem data-testid="profile-site" onSelect={() => profile.current?.openSite()}>
+              <Globe aria-hidden />
+              {t('site.menu')}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem data-testid="profile-prompt" onSelect={() => profile.current?.openPrompt()}>
             <Sparkles aria-hidden />
             {t('profile.transfer.prompt.open')}
