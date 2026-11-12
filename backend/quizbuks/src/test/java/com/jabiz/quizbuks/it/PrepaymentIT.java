@@ -481,6 +481,33 @@ class PrepaymentIT extends PrepaymentItSupport {
     }
 
     @Test
+    void aFeePaidFromItsPrepaymentSpendsTheFeeCreditThatExpiresFirst() {
+        // L2 of the F-M5 review: the earlier grant (smaller id) expires later; the fee takes the later grant first.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-order");
+        String later = grant(sponsor, 500, clock.instant().plus(Duration.ofDays(90)));
+        String sooner = grant(sponsor, 500, clock.instant().plus(Duration.ofDays(30)));
+        String publicationId = audienceDraft(sponsor, "FM5 order");
+        submit(sponsorToken(sponsor), publicationId);
+        assertThat(remainingOf(sooner)).isEqualByComparingTo("0");
+        assertThat(remainingOf(later)).isEqualByComparingTo("230");
+        // The tax lowered while it waited: the fee (700) is less than what was set aside (770).
+        param(QbParams.FEE_TAX_RATE, "0");
+        try {
+            goLive(publicationId);
+        } finally {
+            param(QbParams.FEE_TAX_RATE, "0.1");
+        }
+        String chargeId = String.valueOf(chargeOf(sponsor).get("charge_id"));
+        assertThat(query("SELECT grant_id, amount FROM qb_fee_payment_version WHERE target_id = ? ORDER BY amount DESC",
+            chargeId)).extracting(row -> row.get("grant_id") + " " + ((BigDecimal) row.get("amount")).toPlainString())
+            .containsExactly(sooner + " 500", later + " 200");
+        assertThat(prepayments(publicationId)).singleElement()
+            .satisfies(row -> assertThat((BigDecimal) row.get("remaining")).isEqualByComparingTo("70"));
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
     void voidingAnInvoicePaidFromItsPrepaymentGivesItBackToTheAccountAndTheBooksAgree() {
         // H1 (F-M5 review): what paid the invoice from the prepayment goes back to the fee credit and the cash it came
         // from, and is posted out of 2180 back to 2190 / 2160.

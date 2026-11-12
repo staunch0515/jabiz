@@ -274,6 +274,11 @@ public final class Prepayments {
                     QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.PAYMENT), ctx -> EntityQuery.builder()
                         .where(new QueryPredicate.In("prepaymentId", List.of(useInput(ctx).prepaymentId())))
                         .limit(MAX_PARTS + 1).build(), USED_PARTS)))
+                // L2 of the F-M5 review: the fee credit it holds is spent in the account's order (the earliest to
+                // expire first), which needs the lots' expiry.
+                .step("Read the fee credit it was taken from", QueryEntities.<ProcessContext>of(
+                    QbFeeAccount.defaultDataset(QbFeeAccount.GRANT),
+                    ctx -> FeeSettlement.byIds("grantId", lotIds(ctx, "grantId")), GRANTS))
                 .compute("Take the fee from it", (metadata, ctx) -> take(ctx))
                 .step("Post the payment", CallProcess.<ProcessContext>when(ctx -> ctx.contains(POST_INPUT),
                     LedgerProcesses.POST, 1, ctx -> ctx.get(POST_INPUT), POSTING))
@@ -303,7 +308,7 @@ public final class Prepayments {
         }
         List<Held> taken = new ArrayList<>();
         BigDecimal left = paid;
-        for (Held held : held(FeeGate.list(ctx, PARTS), FeeGate.list(ctx, USED_PARTS))) {
+        for (Held held : held(FeeGate.list(ctx, PARTS), FeeGate.list(ctx, USED_PARTS), expiries(ctx))) {
             if (left.signum() == 0) {
                 break;
             }
@@ -312,6 +317,11 @@ public final class Prepayments {
                 taken.add(new Held(held.subAccount(), held.lotId(), part));
                 left = left.subtract(part);
             }
+        }
+        if (left.signum() > 0) {
+            // L3 of the F-M5 review: its parts hold less than it says it holds: a defect, never a payment short.
+            throw new IllegalStateException("Prepayment " + input.prepaymentId() + " holds " + remaining
+                + " but its parts " + paid.subtract(left));
         }
         ctx.put(TAKEN, List.copyOf(taken));
         BigDecimal credit = sum(taken, QbFeeAccount.FEE_CREDIT);
@@ -346,11 +356,12 @@ public final class Prepayments {
     }
 
     /**
-     * What a prepayment still holds, lot by lot, in the order it is spent: the fee credit first, then the cash, each
-     * in the order the lots were taken (their ids are time-ordered). Its own parts (positive: set aside; negative:
-     * given back) less what fees took of each lot ({@code used}, its positive parts).
+     * What a prepayment still holds, lot by lot, in the order it is spent: the fee credit first, the earliest to
+     * expire first (L2 of the F-M5 review: the account's order, {@link FeeAllocation}), then the cash, in the order the
+     * lots were taken (their ids are time-ordered). Its own parts (positive: set aside; negative: given back) less what
+     * fees took of each lot ({@code used}, its positive parts).
      */
-    static List<Held> held(List<EntityInstance> parts, List<EntityInstance> used) {
+    static List<Held> held(List<EntityInstance> parts, List<EntityInstance> used, Map<String, Instant> expiries) {
         Map<String, Held> byLot = new LinkedHashMap<>();
         for (EntityInstance part : parts) {
             add(byLot, part, FeeGate.money(part.get("amount")));
@@ -365,8 +376,18 @@ public final class Prepayments {
         }
         return byLot.values().stream().filter(h -> h.amount().signum() > 0)
             .sorted(Comparator.comparing((Held h) -> QbFeeAccount.FEE_CREDIT.equals(h.subAccount()) ? 0 : 1)
+                .thenComparing(h -> expiries.getOrDefault(h.lotId(), Instant.MAX))
                 .thenComparing(Held::lotId))
             .toList();
+    }
+
+    /** When each lot of fee credit read ({@value #GRANTS}) expires. */
+    static Map<String, Instant> expiries(ProcessContext ctx) {
+        Map<String, Instant> expiries = new LinkedHashMap<>();
+        for (EntityInstance grant : FeeGate.list(ctx, GRANTS)) {
+            expiries.put(String.valueOf(grant.id()), (Instant) grant.get("expiresAt"));
+        }
+        return expiries;
     }
 
     private static void add(Map<String, Held> byLot, EntityInstance part, BigDecimal amount) {
@@ -497,7 +518,8 @@ public final class Prepayments {
                     FeeGate.list(ctx, PARTS).stream()
                         .filter(p -> id.equals(String.valueOf((Object) p.get("targetId")))).toList(),
                     FeeGate.list(ctx, USED_PARTS).stream()
-                        .filter(p -> id.equals(String.valueOf((Object) p.get("prepaymentId")))).toList());
+                        .filter(p -> id.equals(String.valueOf((Object) p.get("prepaymentId")))).toList(),
+                    expiries(ctx));
                 BigDecimal left = FeeGate.money(prepayment.get("remaining"));
                 for (Held h : held) {
                     BigDecimal part = h.amount().min(left);
@@ -505,6 +527,12 @@ public final class Prepayments {
                         back.add(new Held(h.subAccount(), h.lotId(), part));
                         left = left.subtract(part);
                     }
+                }
+                if (left.signum() > 0) {
+                    // L3 of the F-M5 review: its parts hold less than it says it holds: a defect.
+                    throw new IllegalStateException("Prepayment " + id + " holds "
+                        + FeeGate.money(prepayment.get("remaining")) + " but its parts " + FeeGate.money(
+                        prepayment.get("remaining")).subtract(left));
                 }
                 BigDecimal total = back.stream().map(Held::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
                 if (total.signum() > 0) {
