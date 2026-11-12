@@ -379,6 +379,7 @@ jabizApp {
   主屏幕上的 App 与 Safari 的存储分开，须再登录一次）与 Android 浏览器的菜单（`situation="menu"`、`browser`，17m）；内置浏览器的提示以警示样式显示（那里别的都做不了）；用户关掉后 30 天内不再出现、关掉 3 次后不再出现（`snoozeDays`、`maxDismissals`，记在本浏览器的
   `localStorage`，按 SPA 前缀分开，存储不可用时下次照常出现）；`dismissible={false}` 用于作为安装入口的页面（账户页）：没有关闭按钮，已安装时说明已安装。
   何时显示由应用决定（不要放在首次访问或登录页：多半被直接关掉）。
+- 对话框的高度（17zz19）：`DialogContent` 与 `AlertDialogContent` 缺省至多为视口高度减 2rem（`max-h-[calc(100dvh-2rem)]`），更长的内容在框内滚动（`overflow-y-auto`），按钮不会被挤出小屏幕（对话框是固定定位的，背后的页面不滚动）。要固定页脚的对话框传 `flex flex-col overflow-hidden`、把页头与页脚之间的部分设为 `min-h-0 overflow-y-auto`；调用者的 `max-h-*` 或 `overflow-*` 替换缺省值。应用不在各自的对话框上另加高度上限。端到端测试 `e2e/dialog-height.spec.ts` 在 320×420 的窗口中以两种外观检查长对话框的按钮能滚动到。
 
 ## 13. 应用框架与页面模板（阶段 17zj，QuizBuks 首次上线 P3）
 
