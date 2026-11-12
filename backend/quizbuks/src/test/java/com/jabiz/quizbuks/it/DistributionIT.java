@@ -45,6 +45,8 @@ class DistributionIT extends PrepaymentItSupport {
     JobDefinition<DistributionSettlements.SettleRef> qbDistributionMonthlyJob;
     @Autowired
     JobDefinition<DistributionSettlements.SettleRef> qbDistributionFinalJob;
+    @Autowired
+    JobDefinition<FeeProcesses.InvoiceInput> qbFeeInvoiceJob;
 
     void distribution(boolean on) {
         param(QbParams.DISTRIBUTION_BILLING_ENABLED, String.valueOf(on));
@@ -419,6 +421,321 @@ class DistributionIT extends PrepaymentItSupport {
             422);
         assertThat(codes(problem)).contains(FeeCodes.DISTRIBUTION_DEPOSIT_RANGE);
         assertThat(query("SELECT 1 FROM qb_prepayment WHERE publication_id = ?", publicationId)).isEmpty();
+    }
+
+    // ---- H1 of the review: the cases of F-M.md §9.9 not covered above ---------------------------------------------
+
+    /** Runs both at once; each one's outcome, or its failure's message. */
+    static List<Object> atOnce(java.util.function.Supplier<Object> one, java.util.function.Supplier<Object> two) {
+        java.util.concurrent.CompletableFuture<Object> a = java.util.concurrent.CompletableFuture.supplyAsync(one);
+        java.util.concurrent.CompletableFuture<Object> b = java.util.concurrent.CompletableFuture.supplyAsync(two);
+        return java.util.stream.Stream.of(a, b).map(f -> {
+            try {
+                return f.get();
+            } catch (Exception e) {
+                return (Object) ("failed: " + e.getMessage());
+            }
+        }).toList();
+    }
+
+    /** Takers who start and answer wrong: starts that keep no winner's place. */
+    void failedStarts(String publicationId, int count, String name) {
+        for (int i = 0; i < count; i++) {
+            String taker = taker(newTaker(unique(name + "-taker-" + i), null));
+            String attemptId = String.valueOf(start(taker, publicationId).get("attemptId"));
+            assertThat(submit(taker, attemptId, answers(false, false))).containsEntry("passed", false);
+        }
+    }
+
+    static Map<String, Object> settleRef(String publicationId, String sponsor, String period, boolean last) {
+        return body("publicationId", publicationId, "sponsorId", sponsor, "period", period, "last", last);
+    }
+
+    /** The 2nd of the month after {@code month} at 00:37 (the monthly run's time). */
+    static Instant runTimeAfter(String month) {
+        return YearMonth.parse(month).plusMonths(1).atDay(2).atTime(0, 37).atZone(ZONE).toInstant();
+    }
+
+    static List<Map<String, Object>> distributionCharges(String sponsor) {
+        return query("SELECT * FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = 'DISTRIBUTION' "
+            + "ORDER BY charged_at, charge_id", sponsor);
+    }
+
+    @Test
+    void theSameItemRunTwiceAtOnceWritesOneRowAndChargesOnce() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-twice");
+        cash(sponsor, 1_000);
+        String publicationId = publication(sponsor, "FM6 twice", Map.of());
+        starts(publicationId, 2, "fm6-twice");
+        String month = period(clock.instant());
+        clock.set(runTimeAfter(month));
+        Map<String, Object> ref = settleRef(publicationId, sponsor, month, false);
+        List<Object> outcomes = atOnce(() -> systemRunItem(DistributionSettlements.SETTLE, ref),
+            () -> systemRunItem(DistributionSettlements.SETTLE, ref));
+        assertThat(outcomes).as("at least one ran").anyMatch(o -> !String.valueOf(o).startsWith("failed"));
+        assertThat(settlements(publicationId)).singleElement()
+            .satisfies(row -> assertThat((BigDecimal) row.get("amount")).isEqualByComparingTo("10"));
+        assertThat(distributionCharges(sponsor)).hasSize(1);
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void theMonthlyAndTheFinalSettlementAtOnceWriteOneFinalRowAndGiveBackOnce() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-overlap");
+        cash(sponsor, 1_000);
+        String publicationId = publication(sponsor, "FM6 overlap", Map.of());
+        starts(publicationId, 1, "fm6-overlap");
+        String month = period(clock.instant());
+        end(publicationId);
+        // Both see it ended past the grace: the monthly item writes it final, so does the daily one.
+        clock.set(runTimeAfter(month));
+        atOnce(() -> systemRunItem(DistributionSettlements.SETTLE, settleRef(publicationId, sponsor, month, false)),
+            () -> systemRunItem(DistributionSettlements.SETTLE, settleRef(publicationId, sponsor, null, true)));
+        assertThat(settlements(publicationId)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("final", true);
+            assertThat((BigDecimal) row.get("amount")).isEqualByComparingTo("5");
+        });
+        assertThat(distributionCharges(sponsor)).hasSize(1);
+        Map<String, Object> deposit = distributionPrepayment(publicationId);
+        assertThat(deposit).containsEntry("status", "RELEASED");
+        assertThat(query("SELECT 1 FROM qb_fee_payment_version WHERE target_id = ? AND amount < 0",
+            String.valueOf(deposit.get("prepayment_id")))).hasSize(1);
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(differences(sponsor)).isEmpty();
+    }
+
+    @Test
+    void theDistributionDepositWaitsForItsFinalRowWhileTheAudienceOneIsGivenBackByItself() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-purposes");
+        grant(sponsor, 10_000, clock.instant().plus(Duration.ofDays(400)));
+        String publicationId = audienceDraft(sponsor, "FM6 purposes");
+        submit(sponsorToken(sponsor), publicationId);
+        goLive(publicationId);
+        end(publicationId);
+        // The daily release job's item for the distribution deposit before its final row: nothing.
+        systemRun(com.jabiz.quizbuks.fee.Prepayments.RELEASE_ITEM, body("publicationId", publicationId,
+            "sponsorId", sponsor, "purpose", "DISTRIBUTION"));
+        assertThat(distributionPrepayment(publicationId)).containsEntry("status", "OPEN");
+        // The final settlement gives back the distribution deposit only: the audience one stays open for its job.
+        finalRun(clock.instant().plus(Duration.ofHours(2)));
+        assertThat(distributionPrepayment(publicationId)).containsEntry("status", "RELEASED");
+        assertThat(query("SELECT status FROM qb_prepayment WHERE publication_id = ? AND purpose = 'AUDIENCE'",
+            publicationId)).singleElement().satisfies(row -> assertThat(row).containsEntry("status", "OPEN"));
+        systemRun(com.jabiz.quizbuks.fee.Prepayments.RELEASE_ITEM, body("publicationId", publicationId,
+            "sponsorId", sponsor, "purpose", "AUDIENCE"));
+        assertThat(query("SELECT status FROM qb_prepayment WHERE publication_id = ? AND purpose = 'AUDIENCE'",
+            publicationId)).singleElement().satisfies(row -> assertThat(row).containsEntry("status", "RELEASED"));
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void beyondTheDepositTheFeeCreditThenCashPayAndTheRestIsOwedPartlyThenWhole() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-sources");
+        // Two winners at most: 10 and 1 tax set aside, of the fee credit (20), which keeps 9.
+        grant(sponsor, 20, clock.instant().plus(Duration.ofDays(400)));
+        cash(sponsor, 30);
+        String publicationId = publication(sponsor, "FM6 sources", Map.of("maxWinners", 2, "endAt",
+            clock.instant().plus(Duration.ofDays(70)).toString()));
+        assertThat((BigDecimal) distributionPrepayment(publicationId).get("amount")).isEqualByComparingTo("11");
+        // Ten starts (each fails: no winner's place is kept): 50 and 5 tax = 55, of the deposit (11), the fee credit
+        // (9), the cash (30); 5 owed.
+        failedStarts(publicationId, 10, "fm6-sources");
+        String month = period(clock.instant());
+        monthly();
+        Map<String, Object> first = distributionCharges(sponsor).getFirst();
+        List<Map<String, Object>> parts = query("SELECT sub_account, prepayment_id, amount FROM qb_fee_payment_version "
+            + "WHERE target_id = ? AND amount > 0", String.valueOf(first.get("charge_id")));
+        assertThat(parts.stream().filter(p -> p.get("prepayment_id") != null).map(p -> (BigDecimal) p.get("amount"))
+            .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("11");
+        assertThat(parts.stream().filter(p -> p.get("prepayment_id") == null && "FEE_CREDIT".equals(p.get("sub_account")))
+            .map(p -> (BigDecimal) p.get("amount")).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("9");
+        assertThat(parts.stream().filter(p -> "CASH".equals(p.get("sub_account")))
+            .map(p -> (BigDecimal) p.get("amount")).reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo("30");
+        assertThat(query("SELECT status, total, paid_amount FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(first.get("charge_id")))).singleElement().satisfies(invoice -> {
+                assertThat(invoice).containsEntry("status", "PARTIAL");
+                assertThat((BigDecimal) invoice.get("total")).isEqualByComparingTo("55");
+                assertThat((BigDecimal) invoice.get("paid_amount")).isEqualByComparingTo("50");
+            });
+        // The next month: a start more, nothing left to pay from: the invoice is open, nothing paid.
+        failedStarts(publicationId, 1, "fm6-sources-next");
+        monthlyIn(YearMonth.parse(month).plusMonths(2));
+        Map<String, Object> second = distributionCharges(sponsor).getLast();
+        assertThat(second.get("charge_id")).isNotEqualTo(first.get("charge_id"));
+        assertThat(query("SELECT status, paid_amount FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(second.get("charge_id")))).singleElement().satisfies(invoice -> {
+                assertThat(invoice).containsEntry("status", "OPEN");
+                assertThat((BigDecimal) invoice.get("paid_amount")).isEqualByComparingTo("0");
+            });
+    }
+
+    @Test
+    void aPriceBelowAYenAStartIsChargedOnTheCumulativeCountMonthByMonth() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-rounding");
+        cash(sponsor, 1_000);
+        // 0.4 a start (in the table: the range's least floor is 1): 1 start, 1 more, 1 more → 1, 0, 1.
+        execute("UPDATE qb_distribution_price SET rate = 0.004, unit_floor = 0.1 WHERE operator_id = ?",
+            operatorOf(sponsor));
+        YearMonth first = YearMonth.parse(period(clock.instant()));
+        String publicationId = publication(sponsor, "FM6 rounding", Map.of("endAt",
+            first.plusMonths(3).atDay(20).atStartOfDay(ZONE).toInstant().toString()));
+        assertThat((BigDecimal) row(publicationId).get("distribution_unit")).isEqualByComparingTo("0.4");
+        for (int i = 1; i <= 3; i++) {
+            starts(publicationId, 1, "fm6-rounding-" + i);
+            monthlyIn(first.plusMonths(i));
+        }
+        assertThat(settlements(publicationId)).extracting(row -> ((BigDecimal) row.get("amount")).intValue())
+            .containsExactly(1, 0, 1);
+        assertThat(settlements(publicationId)).extracting(row -> row.get("charge_id") != null)
+            .containsExactly(true, false, true);
+        assertThat(distributionCharges(sponsor)).hasSize(2);
+    }
+
+    @Test
+    void theFrozenOperatorAndPriceHoldAfterAReassignmentAPriceChangeAndAVersionSwitch() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-frozen");
+        cash(sponsor, 5_000);
+        String operatorA = operatorOf(sponsor);
+        String before = publication(sponsor, "FM6 frozen", Map.of());
+        assertThat((BigDecimal) row(before).get("distribution_unit")).isEqualByComparingTo("5");
+
+        // The quiz's version switched: the price stays.
+        String token = sponsorToken(sponsor);
+        String quizId = String.valueOf(query("SELECT quiz_id FROM qb_quiz_version_version WHERE version_id = ?::uuid",
+            String.valueOf(row(before).get("version_id"))).getFirst().get("quiz_id"));
+        run("QB_QUIZ_SAVE", token, body("quizId", quizId, "title", "FM6 frozen revised", "timeLimitSec", 300));
+        String second = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
+        run(com.jabiz.quizbuks.publishing.PublicationVersions.SWITCH, token, body("publicationId", before,
+            "versionId", second));
+        assertThat(String.valueOf(row(before).get("version_id"))).isEqualTo(second);
+        assertThat((BigDecimal) row(before).get("distribution_unit")).isEqualByComparingTo("5");
+
+        // A's price doubled: only what is submitted after takes it.
+        run(DistributionPrices.SET, TestTokens.bearer(tokens, "fm6-hq", QbPermissions.FEE_MANAGE), body("operatorId",
+            operatorA, "rate", "0.1", "unitFloor", "1", "unitCeiling", "20", "minimumDeposit", 500, "reason", "Up"));
+        String afterPrice = publication(sponsor, "FM6 after price", Map.of());
+        assertThat((BigDecimal) row(afterPrice).get("distribution_unit")).isEqualByComparingTo("10");
+        assertThat((BigDecimal) row(before).get("distribution_unit")).isEqualByComparingTo("5");
+
+        // Moved to operator B (another price): the fees of what was submitted stay A's at A's frozen price.
+        String hq = TestTokens.bearer(tokens, "fm6-ops4", QbPermissions.OPERATORS_WRITE, QbPermissions.OPERATORS_READ);
+        String operatorB = newOperator(hq, unique("fm6 operator b"));
+        run(DistributionPrices.SET, TestTokens.bearer(tokens, "fm6-hq", QbPermissions.FEE_MANAGE), body("operatorId",
+            operatorB, "rate", "0.15", "unitFloor", "1", "unitCeiling", "20", "minimumDeposit", 500, "reason", "B"));
+        run(com.jabiz.quizbuks.operator.OperatorProcesses.ASSIGN, hq, body("userId", sponsor, "operatorId", operatorB,
+            "reason", "F-M6"));
+        String afterMove = publication(sponsor, "FM6 after move", Map.of());
+        assertThat((BigDecimal) row(afterMove).get("distribution_unit")).isEqualByComparingTo("15");
+        starts(before, 2, "fm6-frozen");
+        monthly();
+        assertThat(settlements(before)).singleElement()
+            .satisfies(row -> assertThat((BigDecimal) row.get("amount")).isEqualByComparingTo("10"));
+        assertThat(query("SELECT c.operator_id FROM qb_fee_charge_version c JOIN qb_distribution_settlement_version s "
+            + "ON s.charge_id = CAST(c.charge_id AS text) WHERE s.publication_id = ?", before)).singleElement()
+            .satisfies(charge -> assertThat(charge).containsEntry("operator_id", operatorA));
+        assertThat(distributionPrepayment(afterMove)).containsEntry("operator_id", operatorB);
+    }
+
+    @Test
+    void theMonthEndsInJapanAndAStartBeforeTheMonthlyRunCountsInTheMonthBefore() {
+        // M1 (review, accepted): the month's row takes the counter as the run on the 2nd at 00:37 reads it.
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-jst");
+        cash(sponsor, 1_000);
+        YearMonth month = YearMonth.parse(period(clock.instant()));
+        Instant evening = month.atEndOfMonth().atTime(20, 0).atZone(ZONE).toInstant();
+        if (!clock.instant().isBefore(evening)) {
+            month = month.plusMonths(1);
+            evening = month.atEndOfMonth().atTime(20, 0).atZone(ZONE).toInstant();
+        }
+        clock.set(evening);
+        String publicationId = publication(sponsor, "FM6 JST", Map.of());
+        Instant lastMinute = month.atEndOfMonth().atTime(23, 59).atZone(ZONE).toInstant();
+        Instant midnight = month.plusMonths(1).atDay(1).atStartOfDay(ZONE).toInstant();
+        // In UTC both are the same day; in Japan they are two months.
+        assertThat(lastMinute.atZone(java.time.ZoneOffset.UTC).getMonth())
+            .isEqualTo(midnight.atZone(java.time.ZoneOffset.UTC).getMonth());
+        assertThat(period(lastMinute)).isEqualTo(month.toString());
+        assertThat(period(midnight)).isEqualTo(month.plusMonths(1).toString());
+        clock.set(lastMinute);
+        starts(publicationId, 1, "fm6-jst-a");
+        clock.set(midnight);
+        starts(publicationId, 1, "fm6-jst-b");
+        monthlyIn(month.plusMonths(1));
+        String settled = month.toString();
+        assertThat(settlements(publicationId)).singleElement().satisfies(row -> {
+            assertThat(row).containsEntry("period", settled);
+            assertThat(((Number) row.get("starts")).longValue()).isEqualTo(2);
+        });
+    }
+
+    @Test
+    void aMonthSettledTwoMonthsLateIsInvoicedOnTheNextRunAndNeverOnTheFirst() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-late");
+        billing(sponsor, "POSTPAID", 100_000);
+        String a = publication(sponsor, "FM6 late A", Map.of());
+        String b = publication(sponsor, "FM6 late B", Map.of());
+        String month = period(clock.instant());
+        starts(a, 1, "fm6-late-a");
+        starts(b, 1, "fm6-late-b");
+        // Two months on, A settled and B not: the month's invoice waits.
+        YearMonth late = YearMonth.parse(month).plusMonths(2);
+        clock.set(late.atDay(3).atTime(9, 0).atZone(ZONE).toInstant());
+        systemRun(DistributionSettlements.SETTLE, settleRef(a, sponsor, month, false));
+        assertThat(invoicesDue(late.toString())).noneMatch(row -> sponsor.equals(row.get("sponsorId")));
+        systemRun(DistributionSettlements.SETTLE, settleRef(b, sponsor, month, false));
+        assertThat(invoicesDue(late.toString())).filteredOn(row -> sponsor.equals(row.get("sponsorId")))
+            .singleElement().satisfies(row -> assertThat(row).containsEntry("period", month));
+        assertThat(systemRunItem(FeeProcesses.INVOICE_ITEM, body("sponsorId", sponsor, "period", month)))
+            .isEqualTo("ISSUED");
+        // The job never runs on the 1st: from the last day of a month its next run is the 2nd at 01:17.
+        var cron = org.springframework.scheduling.support.CronExpression.parse(qbFeeInvoiceJob.cron());
+        java.time.ZonedDateTime at = late.atEndOfMonth().atTime(12, 0).atZone(ZONE);
+        assertThat(cron.next(at)).isEqualTo(late.plusMonths(1).atDay(2).atTime(1, 17).atZone(ZONE));
+        for (int i = 0; i < 70; i++) {
+            at = cron.next(at);
+            assertThat(at.getDayOfMonth()).isNotEqualTo(1);
+        }
+    }
+
+    @Test
+    void aPostpaidSponsorsDepositAndItsSettledFeeTakeTheCreditLimitOnce() {
+        autoApprove(true);
+        distribution(true);
+        String sponsor = distributionSponsor("fm6-limit");
+        // 165 held for the first; after 16 is charged, 16 is owed and 149 held: 165 of 335, 170 left.
+        billing(sponsor, "POSTPAID", 335);
+        String first = publication(sponsor, "FM6 limit", Map.of());
+        starts(first, 3, "fm6-limit");
+        monthly();
+        assertThat(ledger("1130", sponsor)).isEqualByComparingTo("-16");
+        assertThat((BigDecimal) distributionPrepayment(first).get("remaining")).isEqualByComparingTo("149");
+        String token = sponsorToken(sponsor);
+        Map<String, Object> save = complete(version(token, "FM6 limit second quiz"), "FM6 limit second",
+            clock.instant(), clock.instant().plus(Duration.ofDays(7)));
+        save.put("maxWinners", 30);
+        save.put("regions", List.of("GLOBAL"));
+        String second = (String) run("QB_PUBLICATION_SAVE", token, save).get("publicationId");
+        Map<String, Object> funds = check(sponsor, second);
+        assertThat(dec(funds.get("available"))).isEqualByComparingTo("170");
+        assertThat(dec(funds.get("total"))).isEqualByComparingTo("165");
+        submit(token, second);
+        assertThat(distributionPrepayment(second)).containsEntry("mode", "POSTPAID");
     }
 
     // ---- helpers -----------------------------------------------------------------------------------------------------

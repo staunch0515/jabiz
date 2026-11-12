@@ -404,6 +404,78 @@ class AdminFinanceIT extends PayoutItSupport {
             .singleElement().satisfies(r -> assertThat(money(r.get("closing"))).isEqualByComparingTo("30"));
     }
 
+    /**
+     * F-M6 (H1 of its review): the distribution fee's three kinds with something in them, row by row. In a month of its
+     * own: a deposit of 165 set aside of the fee credit, a final settlement of 3 starts charging 15 and 1 tax, paid
+     * from the deposit, and the rest (149) given back.
+     */
+    @Test
+    void theDistributionFeesKindsAreTheirPostingsRowByRow() {
+        autoApprove(true);
+        param(QbParams.DISTRIBUTION_BILLING_ENABLED, "true");
+        String sponsor = newSponsor(unique("s-f08-distribution"));
+        credit(sponsor, 5_000);
+        String operator = String.valueOf(query("SELECT operator_id FROM qb_sponsor_operator WHERE user_id = ?",
+            sponsor).getFirst().get("operator_id"));
+        run(com.jabiz.quizbuks.fee.DistributionPrices.SET, TestTokens.bearer(tokens, "f08-hq",
+            com.jabiz.quizbuks.QbPermissions.FEE_MANAGE), body("operatorId", operator, "rate", "0.05", "unitFloor", "1",
+            "unitCeiling", "20", "minimumDeposit", 500, "reason", "F-M6"));
+        ZonedDateTime month = now().atZone(ZoneOffset.UTC).plusMonths(3).withDayOfMonth(1).truncatedTo(ChronoUnit.DAYS);
+        Instant from = month.toInstant();
+        Instant to = month.plusMonths(1).toInstant();
+        // The fee credit before the month (granted as F-M2 does: 5140 / 2190).
+        clock.set(from.minus(Duration.ofHours(2)));
+        String grantId = java.util.UUID.randomUUID().toString();
+        execute("INSERT INTO qb_fee_credit_grant (grant_id, sponsor_id, source, source_key, amount, remaining, "
+            + "voided_amount, granted_at, expires_at, version) VALUES (?, ?, 'MANUAL', ?, 1000, 1000, 0, ?, ?, 1)",
+            grantId, sponsor, "test:" + grantId, java.sql.Timestamp.from(clock.instant()),
+            java.sql.Timestamp.from(to.plus(Duration.ofDays(400))));
+        run("LEDGER_POST", TestTokens.bearer(tokens, "ledger-test", "ledger.post"), body("bookingTime",
+            clock.instant().toString(), "description", "Granted credit (test)", "sourceEntity", "QbFeeCreditGrant",
+            "sourceId", grantId, "entries", List.of(
+                body("accountCode", "5140", "direction", "DEBIT", "amount", 1000, "dimensions", Map.of("party", sponsor)),
+                body("accountCode", "2190", "direction", "CREDIT", "amount", 1000, "dimensions",
+                    Map.of("party", sponsor)))));
+        execute("INSERT INTO qb_wallet (wallet_id, owner_id, kind, balance, pending_count, pending_amount, pending_out, "
+            + "version) VALUES (?, ?, 'FEE_CREDIT', 1000, 0, 0, 0, 1) ON CONFLICT (owner_id, kind) DO UPDATE SET "
+            + "balance = qb_wallet.balance + EXCLUDED.balance, version = qb_wallet.version + 1", java.util.UUID.randomUUID().toString(), sponsor);
+
+        clock.set(from.plus(Duration.ofHours(1)));
+        String publicationId = livePublication(sponsor, "F08 distribution", Map.of("maxWinners", 30, "regions",
+            List.of("GLOBAL")));
+        for (int i = 0; i < 3; i++) {
+            start(taker(newTaker(unique("t-f08-distribution-" + i), null)), publicationId);
+        }
+        run("QB_PUBLICATION_ADMIN_END", TestTokens.bearer(tokens, "f08-content",
+            com.jabiz.quizbuks.QbPermissions.ADMIN_CONTENT_WRITE), body("publicationId", publicationId, "reason", "F08"));
+        clock.set(from.plus(Duration.ofHours(4)));
+        systemRun(com.jabiz.quizbuks.fee.DistributionSettlements.SETTLE, body("publicationId", publicationId,
+            "sponsorId", sponsor, "period", null, "last", true));
+        assertThat(query("SELECT status FROM qb_prepayment WHERE publication_id = ?", publicationId)).singleElement()
+            .satisfies(row -> assertThat(row).containsEntry("status", "RELEASED"));
+
+        List<Expected> expected = List.of(
+            // The fee is charged (receivable, revenue, tax) and paid from the deposit (F-M5's kind).
+            row("DISTRIBUTION_CHARGED", 1, 16, "1130", 16, "4120", -15, "2150", -1),
+            row("PREPAYMENT_USED", 1, 16, "2180", 16, "1130", -16),
+            row("DISTRIBUTION_DEPOSIT", 1, 165, "2190", 165, "2180", -165),
+            row("DISTRIBUTION_RELEASED", 1, 149, "2180", 149, "2190", -149));
+        Map<String, Map<String, Object>> monthly = report(MONTHLY, from, to).stream()
+            .collect(Collectors.toMap(r -> (String) r.get("category"), Function.identity()));
+        for (Expected want : expected) {
+            Map<String, Object> got = monthly.get(want.category());
+            assertThat(((Number) got.get("transactionCount")).longValue()).as(want.category() + " count " + got)
+                .isEqualTo(want.count());
+            assertThat(money(got.get("amount"))).as(want.category() + " amount " + got)
+                .isEqualByComparingTo(BigDecimal.valueOf(want.amount()));
+            for (Map.Entry<String, String> column : COLUMNS.entrySet()) {
+                assertThat(money(got.get(column.getValue()))).as(want.category() + " " + column.getKey() + " " + got)
+                    .isEqualByComparingTo(BigDecimal.valueOf(want.moves().getOrDefault(column.getKey(), 0L)));
+            }
+        }
+        assertBooksBalance();
+    }
+
     @Test
     void onlyFinanceReadsTheMoney() {
         String content = tokenOf(user("f-content"), QbRoles.ADMIN_CONTENT);
