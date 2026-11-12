@@ -151,12 +151,17 @@ def setup():
     made = run(admin, "QB_SETUP", {})
     print(f"  QB_SETUP: {len(made.get('rolesCreated') or [])} roles, {made.get('countriesAdded', 0)} countries, "
           f"{len(made.get('paramsProposed') or []) + len(made.get('rulesProposed') or [])} proposals")
-    proposed = rows(admin, CONTROL_CHANGES, [{"field": "status", "op": "eq", "value": "PROPOSED"}])
-    if proposed:
+    # A page at a time until none is left: QB_SETUP proposes more than one page (F-M6 took it past 100).
+    published = 0
+    while True:
+        proposed = rows(admin, CONTROL_CHANGES, [{"field": "status", "op": "eq", "value": "PROPOSED"}])
+        if not proposed:
+            break
         publisher = publisher_token(admin)
         for change in proposed:
             run(publisher, "CONTROL_CHANGE_PUBLISH", {"changeId": change["id"]})
-    print(f"  {len(proposed)} proposals published by {PUBLISHER_USER}")
+        published += len(proposed)
+    print(f"  {published} proposals published by {PUBLISHER_USER}")
     # F-S4b: the default reward methods are empty after setup (a new Sponsor gets what a lit node opens); the demo's
     # publications pay the platform's Kudos, so the demo allows them for every Sponsor (four eyes as above).
     found = rows(admin, PARAMS, [{"field": "paramKey", "op": "eq", "value": "qb.reward.default-methods"}], 1)
