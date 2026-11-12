@@ -1220,7 +1220,7 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 
 发起方按开始答题的人数向平台付配送费，由运营商定价、每月结算（`docs/quizbuks/plans/impl/F-M.md` §9）。学者读到的内容不变。
 
-- **价目与范围**：每个运营商一行价目（`QbDistributionPrice`）：比例（**日元 / Kudos**：发布最高档位每 1 Kudos、每人收多少日元，不是百分比）、单价下限、单价上限、最低预付（没有中奖名额上限的发布冻结它）。由运营商负责人在运营商管理系统的"配送费价目"页（`QB_OPERATOR_DISTRIBUTION_PRICE_SET`）或总部在平台管理系统的"配送费价目"页（`QB_DISTRIBUTION_PRICE_SET`，`qb.fee.billing`）保存，理由必填；没有价目的运营商不收配送费。总部的范围是受控参数 `qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`（一位管理员提出、另一位发布）；保存价目时按当时的范围检查，范围改窄后已有的价目不变，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`（`sponsorId` 一列是运营商），请运营商或总部改价。`qb.distribution.unit-floor.min` 的缺省值 1 日元是占位，**打开开关之前由需求方确认**。
+- **价目与范围**：每个运营商一行价目（`QbDistributionPrice`）：比例（**日元 / Kudos**：发布最高档位每 1 Kudos、每人收多少日元，不是百分比）、单价下限、单价上限、最低预付（没有中奖名额上限的发布冻结它）。由运营商负责人在运营商管理系统的"配送费价目"页（`QB_OPERATOR_DISTRIBUTION_PRICE_SET`）或总部在平台管理系统的"配送费价目"页（`QB_DISTRIBUTION_PRICE_SET`，`qb.fee.manage`：只有总部的财务管理员，运营商没有）保存，理由必填；没有价目的运营商不收配送费。总部的范围是受控参数 `qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`（一位管理员提出、另一位发布）；保存价目时按当时的范围检查，范围改窄后已有的价目不变，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`（`sponsorId` 一列是运营商），请运营商或总部改价。`qb.distribution.unit-floor.min` 的缺省值 1 日元是占位，**打开开关之前由需求方确认**。
 - **开关**：`qb.distribution.billing.enabled`（受控，缺省关）只在提交时读。打开后提交的发布冻结单价（clamp（比例 × 最高档位，下限，上限），四位小数）与预付（`⌈名额 × 单价⌉ + 税`，或最低预付），预付是 F-M5 的预付款，用途 `DISTRIBUTION`。**关掉不追溯**：已冻结单价的发布照常结算到结束。挑战与店面的发布不收；直营发起方照付。名额乘单价超过一笔费用的上限即 422 `QB_DISTRIBUTION_DEPOSIT_RANGE`。
 - **结算**（`QB_DISTRIBUTION_SETTLE`，逐项任务，每项一个事务，只取发起方的钱包锁）：
   - 月度 `qb.distribution-fee`：每月 2 日 00:37（`jabiz.fiscal-year-zone`，部署设置 `QB_DISTRIBUTION_MONTHLY_CRON`），结算上个月该结算的发布（上架时间早于月末、月初之前没有结束、还没有 `final` 行）；已结束超过宽限的直接写成 `final` 并退回剩余。

@@ -352,9 +352,10 @@ export default defineExtension({
           permission: PERMISSION.audienceRulesWrite },
         { key: 'qb-audience-prices', label: 'menu.audiencePrices', path: PATH.audiencePrices, icon: Tags,
           permission: PERMISSION.audiencePricesWrite },
-        // F-M6: every operator's distribution price (headquarters' billing) and the settlements (finance).
+        // F-M6: every operator's distribution price and the settlements (finance; the operators, who hold
+        // qb.fee.billing, see only their own price on their own page).
         { key: 'qb-distribution-prices', label: 'menu.distributionPrices', path: PATH.distributionPrices, icon: Tags,
-          permission: PERMISSION.feeBilling },
+          permission: PERMISSION.feeManage },
         { key: 'qb-distribution-settlements', label: 'menu.distributionSettlements', path: PATH.distributionSettlements,
           icon: Tags, permission: PERMISSION.financeRead },
         // F-S2b3a: every knowledge map, its versions' reviews and its lit nodes.

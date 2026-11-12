@@ -433,7 +433,7 @@
   - **按累计取整**（总控决定 6）：累计应收 = ⌈累计人数 × 单价⌉（日元）；本次金额 = 累计应收 − 该发布此前各结算行的金额之和；税 = 本次金额 × `qb.fee.tax-rate` 向下取整（`FeeRules` 现有的 `FLOOR`）。
   - 预付 `deposit(maxWinners, unit, minimumDeposit)` = `maxWinners` 有值时 ⌈maxWinners × unit⌉ + 税，否则 `minimumDeposit`。
   - `priceProblems`：各值 ≥ 0、下限 ≤ 上限、都在总部范围内。
-- `QB_OPERATOR_DISTRIBUTION_PRICE_SET`（运营商负责人，`OperatorChecks.member` 且是负责人，锁 `qb.operator:<运营商>`）与 `QB_DISTRIBUTION_PRICE_SET`（总部 `qb.fee.billing`，为某个运营商设）。理由必填；只影响此后提交的发布（单价在提交时冻结）。
+- `QB_OPERATOR_DISTRIBUTION_PRICE_SET`（运营商负责人，`OperatorChecks.member` 且是负责人，锁 `qb.operator:<运营商>`）与 `QB_DISTRIBUTION_PRICE_SET`（总部的财务 `qb.fee.manage`，为某个运营商设；不用 `qb.fee.billing`：运营商持有它，用于本运营商发起方的计费方式）。理由必填；只影响此后提交的发布（单价在提交时冻结）。
 - 总部范围是受控参数（四眼）：`qb.distribution.rate.min|max`、`unit-floor.min|max`、`unit-ceiling.max`、`minimum-deposit.max`。
   - 保存价目时按当时的范围检查。范围改窄后已有价目不自动改，每日核对报 `DISTRIBUTION_PRICE_OUT_OF_RANGE`，给 `qb.admin.finance.read` 待办。
 - 规格补写定价规则（随本项提交）：单价按档位金额的最大值算，为 0 或没有档位即按下限。

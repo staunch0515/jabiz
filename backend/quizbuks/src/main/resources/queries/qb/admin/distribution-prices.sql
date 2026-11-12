@@ -20,7 +20,7 @@ list:
   sorts: [operatorName]
   defaultSort: { field: operatorName, asc: true }
   key: [operatorId]
-permissions: [qb.fee.billing]
+permissions: [qb.fee.manage]
 ---*/
 -- The headquarters' range is the parameters qb.distribution.* (the page reads them as parameters).
 SELECT o.{{QbOperator.operatorId}} AS operatorId, o.{{QbOperator.name}} AS operatorName,

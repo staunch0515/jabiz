@@ -73,8 +73,10 @@ public final class DistributionPrices {
 
     public static ProcessDefinition<PriceInput, PriceOutput, ProcessContext> set() {
         return ProcessDefinition.define(SET, 1, PriceInput.class, PriceOutput.class, ProcessContext.class, pb -> {
+            // Headquarters' fee management (finance), not qb.fee.billing: the operators hold that one for their
+            // own sponsors' billing mode, and this process names any operator.
             pb.description("Saves an operator's distribution price (headquarters).")
-                .permissions(QbPermissions.FEE_BILLING)
+                .permissions(QbPermissions.FEE_MANAGE)
                 .outputMapper(ctx -> ctx.get(OUTPUT, PriceOutput.class));
             common(pb);
             pb.compute("Whose price", (metadata, ctx) -> {
