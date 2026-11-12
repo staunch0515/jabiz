@@ -132,6 +132,22 @@ class SocialSignUpIT extends AccountItSupport {
             .map(row -> String.valueOf(row.get("role_code"))).toList();
     }
 
+    /**
+     * The mail text as the reader sees it: since the letterhead (F-C9) every mail is multipart with quoted-printable
+     * parts, whose soft line breaks ({@code =} at the end of a line) and escapes ({@code =3D}) are undone.
+     */
+    private static String decoded(String body) {
+        String joined = body.replace("=\r\n", "").replace("=\n", "");
+        Matcher escape = Pattern.compile("=([0-9A-F]{2})").matcher(joined);
+        StringBuilder out = new StringBuilder();
+        while (escape.find()) {
+            escape.appendReplacement(out, Matcher.quoteReplacement(String.valueOf((char) Integer.parseInt(
+                escape.group(1), 16))));
+        }
+        escape.appendTail(out);
+        return out.toString();
+    }
+
     /** The token of the latest verification link mailed to the address. */
     private static String verificationToken(String email) {
         List<MimeMessage> mail = Arrays.stream(MAIL.getReceivedMessages()).filter(message -> {
@@ -142,7 +158,7 @@ class SocialSignUpIT extends AccountItSupport {
             }
         }).toList();
         for (int i = mail.size() - 1; i >= 0; i--) {
-            Matcher matcher = VERIFY_LINK.matcher(GreenMailUtil.getBody(mail.get(i)).replace("=\r\n", ""));
+            Matcher matcher = VERIFY_LINK.matcher(decoded(GreenMailUtil.getBody(mail.get(i))));
             if (matcher.find()) {
                 return matcher.group(1);
             }

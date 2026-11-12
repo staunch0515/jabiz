@@ -66,7 +66,7 @@ steps:
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review,
         qb.tree.review, qb.tree.copy.review, qb.tree.platform.review, qb.tree.lit-revoke.review, qb.shared-video.review,
         qb.sponsor-verification.review,
-        qb.sod.control-changes, qb.sod.security-administration]
+        qb.sod.control-changes, qb.sod.security-administration, qb.sod.mail-texts]
       legalDraftsCreated: [TERMS_APP, TERMS_SPONSOR, PRIVACY, COMMERCE_NOTICE, AI_NOTICE, CONTEST_RULES]
       helpManualsCreated: [app, sponsor]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",

@@ -20,7 +20,7 @@ steps:
         qb.operator-withdrawal.review, qb.fee-request.review,
         qb.tree.review, qb.tree.copy.review, qb.tree.platform.review, qb.tree.lit-revoke.review, qb.shared-video.review,
         qb.sponsor-verification.review,
-        qb.sod.control-changes, qb.sod.security-administration]
+        qb.sod.control-changes, qb.sod.security-administration, qb.sod.mail-texts]
     save: { p1: "$.proposals[0]", p2: "$.proposals[1]", p3: "$.proposals[2]", p4: "$.proposals[3]",
       p5: "$.proposals[4]", p6: "$.proposals[5]", p7: "$.proposals[6]", p8: "$.proposals[7]", p9: "$.proposals[8]",
       p10: "$.proposals[9]", p11: "$.proposals[10]", p12: "$.proposals[11]", p13: "$.proposals[12]",

@@ -31,7 +31,17 @@ public final class QbSodRules {
         List.of("security.role.write", "security.user-role.write"), List.of("control.publish", "approval.decide"),
         "Who manages roles and role assignments neither publishes controlled changes nor decides approvals");
 
-    public static final List<Rule> ALL = List.of(CONTROL, SECURITY);
+    /**
+     * Who manages roles and their holders does not hold the right to write mail texts and the letterhead (F-C8, F-C9):
+     * they could give it to themselves, and the texts of the mail with a token or about payment are what a phishing
+     * mail would be made of. {@code mail.text.write} is held by the content and the finance administrators only.
+     * Until this rule is published only the access review catches a grant to the wrong person (operations.md).
+     */
+    public static final Rule MAIL_TEXTS = new Rule("qb.sod.mail-texts",
+        List.of("security.role.write", "security.user-role.write"), List.of("mail.text.write"),
+        "Who manages roles and role assignments does not write mail texts and the letterhead");
+
+    public static final List<Rule> ALL = List.of(CONTROL, SECURITY, MAIL_TEXTS);
 
     private QbSodRules() {}
 }

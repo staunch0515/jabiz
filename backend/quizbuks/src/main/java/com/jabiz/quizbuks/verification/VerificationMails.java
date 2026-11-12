@@ -20,7 +20,10 @@ public final class VerificationMails {
 
     /** To an address on the company's domain: open the link, signed in, to prove the mailbox is the company's. */
     public static final MailTemplate CONFIRM = MailTemplate.define("qb.sponsor-verification.confirm", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("companyName", "domain", "hours").token(PURPOSE, MAX_VALIDITY));
+        .category(MailCategory.TRANSACTIONAL).param("companyName", "domain", "hours").token(PURPOSE, MAX_VALIDITY)
+            .sample("companyName", "Sample Co.")
+            .sample("domain", "example.com")
+            .sample("hours", "24"));
 
     private VerificationMails() {
     }
