@@ -87,6 +87,15 @@ public final class QbFees {
 
     private QbFees() {}
 
+    /**
+     * F-M7 (§10.3-5): what an invoice still owes, the one definition every reader uses: its total less what credit
+     * notes paid of it and what was paid of it, never below 0.
+     */
+    public static java.math.BigDecimal owed(com.jabiz.runtime.EntityInstance invoice) {
+        return FeeGate.money(invoice.get("total")).subtract(FeeGate.money(invoice.get("creditApplied")))
+            .subtract(FeeGate.money(invoice.get("paidAmount"))).max(java.math.BigDecimal.ZERO);
+    }
+
     public static String defaultDataset(String entity) {
         return QbAccounts.defaultDataset(entity);
     }

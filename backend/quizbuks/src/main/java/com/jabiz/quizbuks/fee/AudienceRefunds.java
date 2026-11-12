@@ -2,10 +2,13 @@ package com.jabiz.quizbuks.fee;
 
 import com.jabiz.quizbuks.audience.AudienceBilling;
 import com.jabiz.quizbuks.publishing.PublicationStatus;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,7 +23,59 @@ import java.util.Set;
  */
 public final class AudienceRefunds {
 
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final TypeReference<Map<String, Object>> OBJECT = new TypeReference<>() {};
+
     private AudienceRefunds() {}
+
+    /**
+     * The quote frozen with an audience fee's prepayment ({@code detail}): the daily prices of its rules and the least
+     * fee, and the start and end it was billed for. A prepayment frozen before F-M7 has no start and end: {@code
+     * startAt} / {@code endAt} are the publication's at the time it was frozen (N5), read by the caller; none when
+     * that read found nothing. Null when the detail cannot be read.
+     */
+    public static Quote quote(String detail, Instant startAt, Instant endAt) {
+        if (detail == null || detail.isBlank()) {
+            return null;
+        }
+        Map<String, Object> parsed;
+        try {
+            parsed = JSON.readValue(detail, OBJECT);
+        } catch (RuntimeException e) {
+            return null;
+        }
+        Map<String, BigDecimal> prices = new LinkedHashMap<>();
+        if (parsed.get("items") instanceof List<?> items) {
+            for (Object item : items) {
+                if (item instanceof Map<?, ?> map && map.get("ruleKey") != null
+                    && map.get("dailyPrice") instanceof Number price) {
+                    prices.put(String.valueOf(map.get("ruleKey")), new BigDecimal(price.toString()));
+                }
+            }
+        }
+        BigDecimal minimum = parsed.get("minimumFee") instanceof Number number ? new BigDecimal(number.toString())
+            : BigDecimal.ZERO;
+        Instant start = instant(parsed.get("startAt"));
+        Instant end = instant(parsed.get("endAt"));
+        return new Quote(prices, minimum, start != null ? start : startAt, end != null ? end : endAt);
+    }
+
+    /** Whether the stored quote has its own period (frozen after F-M7). */
+    public static boolean hasPeriod(String detail) {
+        Quote own = quote(detail, null, null);
+        return own != null && own.startAt() != null && own.endAt() != null;
+    }
+
+    private static Instant instant(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Instant.parse(String.valueOf(value));
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
 
     /**
      * The end reasons that give back the unused days (the requester, 2026-11-12, Q3): a takedown for a violation

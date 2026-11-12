@@ -117,6 +117,18 @@ public class FeeConfig {
             .item(QbPrepayments.RELEASED, "en", "Given back", "zh", "已退回", "ja", "返却済み"));
     }
 
+    /** F-M7: issuing a credit note (under the wallet lock its callers hold), and the reminders of what it paid. */
+    @Bean
+    ProcessDefinition<CreditNotes.IssueInput, CreditNotes.IssueOutput, ProcessContext> qbFeeCreditNoteIssue() {
+        return CreditNotes.issue(zone);
+    }
+
+    @Bean
+    ProcessDefinition<CreditNotes.TaskCloseInput, CreditNotes.TaskCloseOutput, ProcessContext>
+        qbFeeCreditNoteTaskClose() {
+        return CreditNotes.taskClose();
+    }
+
     @Bean
     ProcessDefinition<Prepayments.FreezeInput, Prepayments.FreezeOutput, ProcessContext> qbPrepaymentFreeze() {
         return Prepayments.freeze();
