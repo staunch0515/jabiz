@@ -55,6 +55,6 @@
 ## Fable 审查后的修改（2026-11-11）
 
 - **受保护的通知**改按原则判定：凡是让收件人付款、转账，或讲到收款账户、付款方式的，一律 `protectedText()`。24 个模版逐个过后，清单为：`qb.bank-account.changed`、`qb.payout.action-needed`、`qb.transfer.sent`、`qb.transfer.failed`、`qb.fee.invoice-issued`、`qb.fee.invoice-overdue`、`qb.topup.paid-cash`、`qb.publication.funds-short`（共 8 个）；`qb.topup.paid`、`qb.topup.granted`、`qb.fee-credit.expiring` 只是不涉及付款方式的确认，仍是普通通知。上面"做什么"第 3 条与总控的决定第 2 条以此为准。
-- **`mail.text.write` 是受保护的授权**：`jabiz.security.protected-grants.permissions` 写出平台缺省加它（在 F-C9 的 PR 里，`MailProtectedGrantsTest`）。
+- **`mail.text.write` 由职责分离规则保护**（在 F-C9 的 PR 里：`qb.sod.mail-texts`，管理角色与角色分配的人不能持有它；先前"列为平台受保护授权"的做法已撤回，因为那样建立期之后没人能批准任命，见 F-C9.md）。
 - **断言**：`sys_mail_text_version` / `sys_mail_layout_version` 只追加（`MailTextIT`、`MailLayoutIT`）；令牌在非 `{entryUrl}` 开头的链接里与在标题里都被拒；"发信用新文字且投递记录带版本号""测试发送只到本人、不生成令牌、限流"由平台的 `MailTextIT`（`anOrdinaryTemplatesTextsAreInEffectOnceSavedAndTheDeliveryRecordsTheirVersion`、`theTestMailGoesToItsOperatorOnlyWithoutATokenAndIsLimited`）覆盖；"同一人发布自己提出的"在 QuizBuks 里先被 `qb.sod.control-changes` 挡在提出之前（`MailLayoutIT`），平台的 `CONTROL_SAME_PERSON` 是第二道（平台 `MailTextIT.securityTextsChangeOnlyThroughAControlledChangeAnotherPersonPublishes`）。
 - 「邮件模版」页的亮暗 axe 检查加在 `mail-text.spec.ts`；`mail-text.spec.ts` 的"等待期间发出的验证邮件仍是缺省文字"补上断言。

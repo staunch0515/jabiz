@@ -48,3 +48,10 @@
 3. 官网主机：`JABIZ_MAIL_BASE_URL` 按部署而定（staging 为 `staging.quizbuks.com`），与官网主机不同。做法：`build.gradle.kts` 从品牌档案的 `siteUrl` 算出只含主机名的 token `QB_BRAND_SITE_HOST`，`application.yml` 把它放进 `jabiz.mail.texts.allowed-link-hosts`；不写死 `quizbuks.com`。`siteUrl` 为空时页脚不放官网链接。`MailLayoutDefaultsTest` 覆盖这两种情况，并把 base-url 设成与官网不同的主机跑一次 `platformCheck`。
 4. `operations.md` 的节号：总控定 F-C9 用 7.45、F-C8 用 7.46（F-M5 占 7.44）。F-M5 尚未合入时节号不连续，`ops-sections` 检查会失败，所以本项现用 7.44，F-M5 合入后改为 7.45（F-C8 的下一号），与 F-C8 的一节互相引用；同号先合者占，后合者改号。
 5. 顺序：F-C9 先，F-C8 后；F-C8 合并前经 Fable 审（总控安排）。draft PR，CI 全绿后报 PR 号与 40 位 SHA。
+
+## Fable 审查后的修改（2026-11-11）
+
+- **`mail.text.write` 不列为平台的受保护授权，改用职责分离**（撤回审查中 2 的第一种做法：把它列入 `jabiz.security.protected-grants.permissions` 后，平台要求审批人持有该权限，而超级管理员不持有，建立期之后谁也批不了，内容与财务管理员两个角色分配不出去，staging 的 `QB_SETUP` 也会被拒）。做法：`QbSodRules.MAIL_TEXTS`（`qb.sod.mail-texts`：左 `security.role.write`、`security.user-role.write`，右 `mail.text.write`），由 `QB_SETUP` 提出、另一位发布；发布之后超级管理员不能持有 `mail.text.write`，也就没法自己给自己加。规则发布之前只能靠访问审查（`operations.md` 写明）。删除了 `application.yml` 的 `protected-grants.permissions` 与 `MailProtectedGrantsTest`。
+- 测试：`MailLayoutIT`（超级管理员给自己的角色加 `mail.text.write` 被拒 `SOD_CONFLICT`；内容与财务管理员的任命照常成功）、`SetupIT`、setup / publishing / accounts 场景（多一个提案）、`QbRolesTest`。
+- 其余审查修改见 PR 描述：品牌档案的官网与邮箱加严、`control.propose` 的副作用、取品牌名而不写死、只追加的断言。
+

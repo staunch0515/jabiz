@@ -3,6 +3,7 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.setup.Brand;
 import com.jabiz.quizbuks.setup.QbRoles;
 import com.jabiz.runtime.mail.MailLayoutEntities;
+import com.jabiz.runtime.security.SecurityEntities;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 
@@ -110,5 +111,30 @@ class MailLayoutIT extends AccountItSupport {
         assertThat(language("en")).containsEntry("state", "DEFAULT");
         assertThat(QbRoles.all().stream().filter(role -> role.permissions().contains("control.propose")
             && role.permissions().contains("control.publish")).map(QbRoles.Role::code).toList()).isEmpty();
+    }
+
+    @Test
+    void whoManagesRolesCannotGiveThemselvesTheRightToWriteMailTexts() {
+        // qb.sod.mail-texts (published by the setup): role management on one side, mail.text.write on the other.
+        String holder = userWithRole("fc9-role-manager", QbRoles.ADMIN_SUPER);
+        assertThat(holder).isNotBlank();
+        String superRole = (String) query("SELECT role_id FROM sec_role_version WHERE role_code = ? LIMIT 1",
+            QbRoles.ADMIN_SUPER).getFirst().get("role_id").toString();
+        var refused = client.post().uri("/api/datasets/" + SecurityEntities.ROLE_PERMISSION_DATASET + "/commit")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .header(HttpHeaders.AUTHORIZATION, admin()).bodyValue(Map.of("changes", List.of(Map.of("action", "INSERT",
+                "attributes", Map.of("roleId", superRole, "permission", "mail.text.write")))))
+            .exchange().expectBody(MAP).returnResult();
+        assertThat(refused.getStatus().value()).isEqualTo(422);
+        assertThat(codes(refused.getResponseBody())).contains("SOD_CONFLICT");
+        assertThat(query("SELECT 1 FROM sys_sod_rule_version WHERE rule_code = 'qb.sod.mail-texts'")).isNotEmpty();
+    }
+
+    @Test
+    void theContentAndFinanceRolesAreStillGivenToPeopleAsBefore() {
+        // The rule keeps the super administrator out of mail.text.write; it does not stop anyone approving the two roles
+        // that hold it (those are protected by approval.decide and control.publish, not by mail.text.write).
+        assertThat(userWithRole("fc9-content-person", QbRoles.ADMIN_CONTENT)).isNotBlank();
+        assertThat(userWithRole("fc9-finance-person", QbRoles.ADMIN_FINANCE)).isNotBlank();
     }
 }

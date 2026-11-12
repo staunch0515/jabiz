@@ -151,7 +151,6 @@ class MailTextIT extends AccountItSupport {
     @Test
     void theTextsAreOnlyAppended() {
         // The platform's triggers refuse an update and a delete of a stored version (decision D9); the first text is one.
-        Map<String, Object> current = english(NOTICE);
         run("MAIL_TEXT_SAVE", content(), save(NOTICE, "Append check: {name}", "**{name}** {start}"));
         assertThatThrownBy(() -> execute("UPDATE sys_mail_text_version SET is_deleted = true"))
             .hasMessageContaining("append");
@@ -159,6 +158,5 @@ class MailTextIT extends AccountItSupport {
         Map<String, Object> custom = english(NOTICE);
         run("MAIL_TEXT_RESET", content(), body("template", NOTICE, "locale", "en", "baseVersionNo",
             custom.get("versionNo")));
-        assertThat(current).containsKey("state");
     }
 }
