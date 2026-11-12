@@ -63,7 +63,8 @@ steps:
         qb.play.entry-fee.enabled, qb.usage.storage.free-bytes, qb.video.mainland-accessible-sites, qb.help.enabled,
         qb.help.global-monthly-tokens, qb.help.cache-read-weight,
         qb.fee-credit.grant.enabled, qb.fee-credit.grant.basic, qb.fee-credit.grant.certified, qb.fee-credit.valid-days,
-        qb.ai.site-profile.enabled, qb.ai.site-profile.monthly]
+        qb.ai.site-profile.enabled, qb.ai.site-profile.monthly,
+        qb.reward.kudos.enabled]
       rulesProposed: [qb.publication.review, qb.sponsor.review, qb.transfer.review, qb.topup-bank.review,
         qb.topup-manual.review, qb.operator-settlement.review, qb.sponsor-page.review, qb.operator-plan.review, qb.operator-withdrawal.review, qb.fee-request.review,
         qb.tree.review, qb.tree.copy.review, qb.tree.platform.review, qb.tree.lit-revoke.review, qb.shared-video.review,

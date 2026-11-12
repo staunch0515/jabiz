@@ -75,6 +75,7 @@ public abstract class PostgresIntegrationTest {
         registry.add("spring.flyway.schemas", () -> current);
         registry.add("spring.flyway.default-schema", () -> current);
         registry.add("spring.flyway.create-schemas", () -> "true");
+        registry.add("spring.flyway.placeholders.concurrently", () -> "");
         registry.add("spring.flyway.locations", () -> "classpath:db/migration,classpath:db/testmigration");
         try {
             files = Files.createTempDirectory("jabiz-files-");

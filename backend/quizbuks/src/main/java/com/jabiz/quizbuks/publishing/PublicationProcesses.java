@@ -346,7 +346,8 @@ public final class PublicationProcesses {
 
     // ---- save ------------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<SaveInput, SaveOutput, ProcessContext> save(MessageCatalog messages) {
+    public static ProcessDefinition<SaveInput, SaveOutput, ProcessContext> save(MessageCatalog messages,
+        boolean firstLaunch) {
         return ProcessDefinition.define(SAVE, 1, SaveInput.class, SaveOutput.class, ProcessContext.class, pb -> pb
             .description("Creates a draft publication or changes its version, policy or reward tiers.")
             .permissions(QbPermissions.PUBLICATION_WRITE)
@@ -371,7 +372,7 @@ public final class PublicationProcesses {
                 return PublicationNodes.binding(input.treeId(), input.treeNodeId());
             }))
             .steps(PublicationEditing::loadSponsor)
-            .steps(PublicationEditing::loadSponsorMethods)
+            .steps(b -> PublicationEditing.loadSponsorMethods(b, firstLaunch))
             // Q64: who uploaded the covers given (Q98b: in each language too), which must be the sponsor's own files.
             .steps(b -> QuizEditing.loadFiles(b, ctx -> {
                 SaveInput input = ctx.get(INPUT, SaveInput.class);
@@ -831,7 +832,8 @@ public final class PublicationProcesses {
 
     // ---- copy ------------------------------------------------------------------------------------------------------
 
-    public static ProcessDefinition<CopyInput, SaveOutput, ProcessContext> copy(MessageCatalog messages) {
+    public static ProcessDefinition<CopyInput, SaveOutput, ProcessContext> copy(MessageCatalog messages,
+        boolean firstLaunch) {
         return ProcessDefinition.define(COPY, 1, CopyInput.class, SaveOutput.class, ProcessContext.class, pb -> pb
             .description("Copies a publication's policy and reward tiers into a new draft, with another version or "
                 + "other times if given.")
@@ -848,7 +850,7 @@ public final class PublicationProcesses {
             // F-S2b1: the node the source is bound to, which the copy keeps (its problems say if no longer usable).
             .steps(b -> PublicationNodes.load(b, ctx -> PublicationNodes.binding(PublicationEditing.publication(ctx))))
             .steps(PublicationEditing::loadSponsor)
-            .steps(PublicationEditing::loadSponsorMethods)
+            .steps(b -> PublicationEditing.loadSponsorMethods(b, firstLaunch))
             .steps(b -> PublicationEditing.loadVersion(b, ctx -> {
                 UUID given = ctx.get(INPUT, CopyInput.class).versionId();
                 return given != null ? given : PublicationEditing.publication(ctx).get("versionId");

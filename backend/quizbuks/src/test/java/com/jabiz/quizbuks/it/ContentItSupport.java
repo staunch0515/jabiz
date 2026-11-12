@@ -66,6 +66,18 @@ abstract class ContentItSupport extends QbItSupport {
         }
     }
 
+    /**
+     * Changes a controlled parameter of QuizBuks's with four eyes, as the administrators do: one proposes, another
+     * publishes (the value is the parameter's text).
+     */
+    void setControlledParam(String key, String value) {
+        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", TestTokens.bearer(tokens, "super-admin",
+            "control.propose"), body("targetEntity", "SysParam", "values", Map.of("paramKey", key, "value", value),
+            "reason", "test"));
+        run("CONTROL_CHANGE_PUBLISH", TestTokens.bearer(tokens, "finance-admin", "control.publish"),
+            body("changeId", change.get("changeId")));
+    }
+
     Map<String, Object> run(String process, String token, Map<String, ?> body) {
         var result = call(process, token, body).expectBody(MAP).returnResult();
         assertThat(result.getStatus().value()).as(process + " answered " + result.getResponseBody()).isEqualTo(200);

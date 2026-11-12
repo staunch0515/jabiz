@@ -51,3 +51,46 @@ GRAFANA_USER=… GRAFANA_PASSWORD=… tools/ops/alert-fire-test.sh disk /var/lib
 | 邮件文字与信纸（D72，17zh） | `jabiz.mail.texts.*`（标题与正文上限、允许的链接主机）、缺省信纸 `jabiz.mail.layout.<语言>.*` | 管理系统"邮件文字""信纸"页；`sys_mail_message` 的 `FAILED` | 改文字经 `MAIL_TEXT_SAVE`；带令牌、登录链接或受保护的文字、以及信纸的修改要另一位管理员发布；改坏了用"恢复缺省"（`MAIL_TEXT_RESET` / `MAIL_LAYOUT_RESET`） |
 | 恢复核对（17zv） | `jabiz.ops.verify-restore.*`（只在演练时） | 演练记录 | 见 §3 |
 | 密钥轮换（D78，17zw） | `JABIZ_*_PREVIOUS`；`jabiz.key-rotation.cron`（每 10 分钟）、`.batch-size`（500） | 启动检查 `KEYS`；任务 `jabiz.key-rotation` 的输出 | 见 §4；`unreadable` 大于 0 先查应用的 `SealedFields` 声明 |
+
+## 6. 并发建索引与无效索引（INVALID，17zz18）
+
+平台迁移里的 `CREATE INDEX CONCURRENTLY`（目前是 `V66`，账本的科目 + 第一维度索引）不阻塞过账，但有几点要求（决策 D81）：
+
+- **会话级咨询锁**：运行平台脚本的 Flyway 用会话级锁（`flyway.postgresql.transactional.lock=false`）。默认的事务级锁由 Flyway 在**另一条连接**上以 `pg_advisory_xact_lock` 取得，
+  该连接的事务开到整次迁移结束（`idle in transaction`）；并发建索引要等比它的快照旧的全部事务，也就等这一个（`pg_locks` 中对其 virtualxid 的 `ShareLock` 未授予），
+  Flyway 又等建索引结束，两边永远等下去，PostgreSQL 也不当作死锁（一方在客户端等）。这在 PostgreSQL 16 + Flyway 11 上实测复现过。
+  平台的 `PlatformSchemaMigration` 只对平台脚本设了会话级锁（它复制配置，应用自己的 Flyway 不受影响）；**应用不需要为平台做任何设置**。
+  只有应用自己的迁移（`db/migration`）也要并发建索引时，才在应用中设 `spring.flyway.postgresql.transactional-lock=false`，并照样用 `.sql.conf` 的 `executeInTransaction=false`。
+  不经 `PlatformSchemaMigration` 直接运行平台脚本的工具（Flyway CLI、测试夹具 `SealedColumnsHistory`）必须同样设置。
+- **占位符 `${concurrently}`**：`PlatformSchemaMigration` 缺省为 `CONCURRENTLY`；不经它运行平台脚本而没有定义该占位符时，Flyway 立即报未解析的占位符（而不是卡住）。
+  同一数据库里并行迁移多个 schema（测试）时设为空（`spring.flyway.placeholders.concurrently=`），因为并发建索引要等整个数据库的旧事务。
+- **直连数据库**：Flyway（应用启动时的迁移）必须直连 PostgreSQL，不能经事务模式的 PgBouncer 等连接池：会话级咨询锁与并发建索引都需要一个始终是同一会话的连接。
+- **长事务与快照**：并发建索引要等开始之前就有的全部事务（整个数据库，不只是本 schema）：运行中的报表与导出、`pg_dump`、`idle in transaction` 的会话都会让它等，
+  等多久迁移就卡多久（不阻塞写入）。部署前看一眼：`SELECT pid, state, xact_start, left(query, 60) FROM pg_stat_activity WHERE xact_start < now() - interval '5 minutes';`
+- **锁等待时限** `jabiz.schema.migration.lock-timeout`（环境变量 `JABIZ_SCHEMA_MIGRATION_LOCK_TIMEOUT`，缺省 `0s` 即不限）：设了之后，平台迁移的每条连接执行 `SET lock_timeout`，
+  任何语句等锁超过它即失败。对普通迁移，这避免一条 `ALTER` 排在长事务之后、让后面所有写入跟着排队；对并发建索引，等旧事务也是等锁，超时即失败：Flyway 把 `V66` 记为失败，要按下面的步骤 repair。
+  因此缺省不开；部署时有已知的长事务又不想等，就设一个值（如 `2m`），失败后再处理。
+- **大表上耗时长**：建索引期间 Flyway 的启动在此等待，实例还没有就绪。大表上要么在部署时放宽启动探针与超时，要么先单独跑一次迁移（例如用同一镜像与同一设置启动一个实例、等它就绪后再启动其余实例，
+  或一次性的 Flyway `migrate`，设置同上），再启动各实例。其他实例启动时等 Flyway 的锁。
+
+**失败与恢复**
+
+- 建索引语句失败（锁等待超时、死锁、被取消）：Flyway 把 `V66` 记为失败，下次启动在校验处停下。先排除原因，再对平台的历史表（`jabiz_schema_history`，与应用的 `flyway_schema_history` 分开）执行 repair，然后重启。
+  `tools/ops` 里没有 repair 工具，用 Flyway CLI：
+  `flyway -url=jdbc:postgresql://主机/库 -user=… -password=… -schemas=<schema> -table=jabiz_schema_history -locations=… repair`；
+  或直接在库里：`DELETE FROM jabiz_schema_history WHERE version = '66' AND NOT success;`（repair 对失败的记录做的就是删去它）。
+- 进程在建索引时被杀：没有历史记录，重启时 `V66` 重跑，不需要 repair。但数据库里执行 `CREATE INDEX CONCURRENTLY` 的后端进程可能还活着，要扫完整张表才结束。
+  **重启之前**先确认没有遗留的建索引：`SELECT pid, state, now() - query_start AS running, left(query, 80) FROM pg_stat_activity WHERE query ILIKE 'CREATE INDEX%ledger_entry_version_account_dimension_1_idx%';`
+  （别的角色的会话只有超级用户或 `pg_read_all_stats` 的成员能看到语句；否则看 `pg_locks` 中对 `ledger_entry_version` 持有 `ShareUpdateExclusiveLock` 的 `pid`）。
+  有就等它结束，或以 `SELECT pg_cancel_backend(<pid>);` 取消，再重启。
+- 重跑的 `V66` 先看同名索引：存在且 INVALID 时删去，有效的索引从不删；然后 `CREATE INDEX CONCURRENTLY IF NOT EXISTS`。删去用普通的 `DROP INDEX`（`DROP INDEX CONCURRENTLY` 不能放在 `DO` 块里），
+  对 `ledger_entry_version` 取 ACCESS EXCLUSIVE 锁：**只有没有会话还在建该索引时才是一瞬间**。所以脚本删除之前先看是否有别的客户端会话（`backend_type = 'client backend'`，autovacuum 不算）对该表持有 `ShareUpdateExclusiveLock`，
+  有就报错 `… is still being built by another session, or a session is running VACUUM on the table or building another index (pid …)` 而不排队；
+  看不到其类型的会话（别的角色的会话，`pg_stat_activity` 只对 `pg_read_all_stats` 的成员完整显示）交给下面的等锁时限。**建议让运行迁移的数据库角色是 `pg_read_all_stats` 的成员**（`GRANT pg_read_all_stats TO <迁移角色>;`），这样它能认出别的会话，启动检查 `SCHEMA` 也能看到别的角色正在建的索引；删除等锁也至多等占位符 `drop_lock_timeout`（`PlatformSchemaMigration` 缺省 `3s`，可经 `spring.flyway.placeholders.drop_lock_timeout` 改）。
+  这两种失败都让 Flyway 把 `V66` 记为失败：按上一条确认没有遗留的建索引（或手工 VACUUM 已结束、长读取已结束）后，repair 再重启。
+- 启动检查 `SCHEMA`（`SchemaIndexChecks`，默认连接池当前 schema 的全部索引）把每个 INVALID 索引报为**警告**（从不阻止启动，`platformCheck` 也只列出），并设仪表 `jabiz.schema.invalid-indexes`，
+  大于 0 时告警 `jabiz-schema-invalid-indexes`（设计 13 §7）。仪表在每次启动时更新：手工处理后到下次启动才归零。
+  警告分三种说法：正在建（有会话在 `pg_stat_progress_create_index` 中建它，或另一会话持有该表的 SHARE UPDATE EXCLUSIVE 锁，并发建索引从头到尾持有它，VACUUM / ANALYZE 也持有，所以只说"可能"）；
+  `REINDEX CONCURRENTLY` 的临时索引（`*_ccnew`、`*_ccold`）；其余是失败留下的。`pg_stat_progress_create_index` 只对超级用户与 `pg_read_all_stats` 的成员显示别的角色的会话所建的索引，
+  迁移与应用用不同的数据库角色时看的是锁（`pg_locks` 对所有人可读）。
+- 查看：`SELECT indexrelid::regclass, indrelid::regclass, indisready FROM pg_index WHERE NOT indisvalid;`；单个索引手工处理：`DROP INDEX CONCURRENTLY <索引名>;` 再重建。
