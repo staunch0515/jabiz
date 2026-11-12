@@ -292,39 +292,59 @@ class PackageImportIT extends TreeItSupport {
 
     @Test
     void aContentIsClearedInStepsOfAFewRowsAndWhatIsLeftIsReplacedWithThem() {
-        // F-F11a: three questions of two options are nine rows: cleared four at a time, 4 + 4 + 1.
+        // F-F11a: three questions of two options are nine rows: cleared four at a time, 4 + 4 + 1, as steps of a
+        // package import (the clearing is a sub-process only: on its own it would leave a half-emptied quiz).
         String token = sponsorToken(newSponsor(unique("s-ff11-clear")));
         String quizId = newQuiz(token, "Cleared");
         run("QB_QUIZ_IMPORT", token, body("document", quizFile("Cleared", "One?", "Two?", "Three?"), "files", body(),
             "intoQuizId", quizId));
         assertThat(stemsOf(quizId)).hasSize(3);
-        assertThat(run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4)))
-            .containsEntry("cleared", 4).containsEntry("remaining", 5);
-        assertThat(run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4)))
+        Object importId = start(token, HASH_A, "FULL", 20).get("importId");
+        assertThat(result(step(token, importId, "clear:1", "clear", body("quizId", quizId, "rows", 4))))
+            .containsEntry("quizId", quizId).containsEntry("cleared", 4).containsEntry("remaining", 5);
+        // Four options gone, no question yet: the heading still counts three.
+        assertThat(questionCount(quizId)).isEqualTo("3");
+        assertThat(result(step(token, importId, "clear:2", "clear", body("quizId", quizId, "rows", 4))))
             .containsEntry("cleared", 4).containsEntry("remaining", 1);
-        assertThat(run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4)))
+        // The heading counts what is left, as every change of the parts does: an import stopped here leaves a
+        // consistent draft.
+        assertThat(stemsOf(quizId)).hasSize(1);
+        assertThat(questionCount(quizId)).isEqualTo("1");
+        assertThat(result(step(token, importId, "clear:3", "clear", body("quizId", quizId, "rows", 4))))
             .containsEntry("cleared", 1).containsEntry("remaining", 0);
         assertThat(stemsOf(quizId)).isEmpty();
-        assertThat(run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4)))
+        assertThat(questionCount(quizId)).isEqualTo("0");
+        assertThat(result(step(token, importId, "clear:4", "clear", body("quizId", quizId, "rows", 4))))
             .containsEntry("cleared", 0).containsEntry("remaining", 0);
 
         // A count that is short is not wrong: the replacement deletes what is left.
         run("QB_QUIZ_IMPORT", token, body("document", quizFile("Again", "A?", "B?"), "files", body(),
             "intoQuizId", quizId));
-        run("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 2));
+        step(token, importId, "clear:5", "clear", body("quizId", quizId, "rows", 2));
         run("QB_QUIZ_IMPORT", token, body("document", quizFile("Last", "Only?"), "files", body(),
             "intoQuizId", quizId));
         assertThat(stemsOf(quizId)).containsExactly("Only?");
+        assertThat(questionCount(quizId)).isEqualTo("1");
 
+        // Not a process of its own.
+        refused("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4), 403);
         // Another's quiz: not found; a number of rows beyond the limit: 400; a quiz with a publication: refused.
-        refused("QB_QUIZ_CLEAR_CONTENT", sponsorToken(newSponsor(unique("s-ff11-clear-other"))),
-            body("quizId", quizId, "rows", 4), 404);
-        refused("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 2001), 400);
+        String other = sponsorToken(newSponsor(unique("s-ff11-clear-other")));
+        Object othersImport = start(other, HASH_A, "FULL", 20).get("importId");
+        refused(PackageImportProcesses.STEP, other, body("importId", othersImport, "step", "clear:1",
+            "clear", body("quizId", quizId, "rows", 4)), 404);
+        refused(PackageImportProcesses.STEP, token, body("importId", importId, "step", "clear:6",
+            "clear", body("quizId", quizId, "rows", 2001)), 400);
         String versionId = (String) run("QB_QUIZ_PUBLISH_VERSION", token, body("quizId", quizId)).get("versionId");
         draft(token, versionId, "Cleared's draft");
-        assertThat(codes(refused("QB_QUIZ_CLEAR_CONTENT", token, body("quizId", quizId, "rows", 4), 422)))
-            .containsExactly(ContentCodes.IMPORT_HAS_PUBLICATIONS);
+        assertThat(codes(refused(PackageImportProcesses.STEP, token, body("importId", importId, "step", "clear:7",
+            "clear", body("quizId", quizId, "rows", 4)), 422))).containsExactly(ContentCodes.IMPORT_HAS_PUBLICATIONS);
         assertThat(stemsOf(quizId)).containsExactly("Only?");
+    }
+
+    private static String questionCount(Object quizId) {
+        return latest("qb_quiz_version", "quiz_id", "quiz_id = '" + quizId + "'").getFirst().get("question_count")
+            .toString();
     }
 
     @Test

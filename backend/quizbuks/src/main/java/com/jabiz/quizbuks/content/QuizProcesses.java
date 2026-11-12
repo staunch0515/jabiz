@@ -412,7 +412,7 @@ public final class QuizProcesses {
      * content ({@link #replaceContent}) share it.
      */
     static void clearContent(ProcessContext ctx) {
-        clearContent(ctx, Integer.MAX_VALUE);
+        clearContent(ctx, Integer.MAX_VALUE, new HashSet<>());
         places(ctx).forEach(place -> AssetUses.forget(ctx, place.targetKind(), List.of(place.targetId())));
     }
 
@@ -423,15 +423,18 @@ public final class QuizProcesses {
      * statements (it reads the row, checks for a legal hold, appends the tombstone), so a bank of a thousand questions
      * is some twenty thousand rows and takes tens of seconds; {@link #clearContentProcess()} deletes it in steps.
      *
+     * @param deleted where the ids of the deleted rows are added
      * @return the parts left
      */
-    static int clearContent(ProcessContext ctx, int limit) {
+    static int clearContent(ProcessContext ctx, int limit, Set<Object> deleted) {
         int budget = limit;
         int left = 0;
         List<EntityInstance> translations = list(ctx, TranslationProcesses.TRANSLATIONS);
         int cut = Math.min(budget, translations.size());
-        translations.subList(0, cut).forEach(row -> ctx.changes().delete(QbContent.TRANSLATION, row.id(),
-            row.version()));
+        translations.subList(0, cut).forEach(row -> {
+            ctx.changes().delete(QbContent.TRANSLATION, row.id(), row.version());
+            deleted.add(row.id());
+        });
         budget -= cut;
         left += translations.size() - cut;
         for (String key : List.of(IMAGES, MATERIALS, OPTIONS, QUESTIONS)) {
@@ -449,7 +452,10 @@ public final class QuizProcesses {
             rows.sort(java.util.Comparator.comparing(row -> row.get("variantOf") == null));
             cut = Math.min(budget, rows.size());
             List<EntityInstance> gone = rows.subList(0, cut);
-            gone.forEach(row -> ctx.changes().delete(entity, row.id(), row.version()));
+            gone.forEach(row -> {
+                ctx.changes().delete(entity, row.id(), row.version());
+                deleted.add(row.id());
+            });
             if (kind != null && limit != Integer.MAX_VALUE) {
                 String targetKind = kind;
                 gone.forEach(row -> AssetUses.forget(ctx, targetKind, List.of(row.id())));
@@ -472,6 +478,8 @@ public final class QuizProcesses {
         return ProcessDefinition.define(CLEAR_CONTENT, 1, ClearInput.class, ClearOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Deletes part of the content of a quiz without publications, to be replaced.")
+                // Only the package import's steps call it: on its own it would leave a sponsor a half-emptied quiz.
+                .subProcessOnly()
                 .permissions(QbPermissions.CONTENT_WRITE)
                 .requiresVerifiedEmail()
                 .steps(CallerChecks::refuseBanned)
@@ -490,7 +498,20 @@ public final class QuizProcesses {
                     }
                     int before = list(ctx, TranslationProcesses.TRANSLATIONS).size() + list(ctx, IMAGES).size()
                         + list(ctx, MATERIALS).size() + list(ctx, OPTIONS).size() + list(ctx, QUESTIONS).size();
-                    int left = clearContent(ctx, input.rows());
+                    Set<Object> deleted = new HashSet<>();
+                    int left = clearContent(ctx, input.rows(), deleted);
+                    if (!deleted.isEmpty()) {
+                        // The heading keeps counting what is there, as every other change of the parts does (an
+                        // import stopped between its steps leaves a consistent draft), and the revision moves on so
+                        // that an editor open on the quiz sees it changed.
+                        long questions = list(ctx, QUESTIONS).stream().filter(row -> !deleted.contains(row.id()))
+                            .count();
+                        long materials = QuizLanguages.bases(list(ctx, MATERIALS)).stream()
+                            .filter(row -> !deleted.contains(row.id())).count();
+                        QuizEditing.touch(ctx, list(ctx, REPLACED_QUIZ).getFirst(), Map.of(
+                            "questionCount", decimal((int) questions), "materialCount", decimal((int) materials)),
+                            null, List.of());
+                    }
                     ctx.put(OUTPUT, new ClearOutput(input.quizId(), before - left, left));
                 }));
     }
