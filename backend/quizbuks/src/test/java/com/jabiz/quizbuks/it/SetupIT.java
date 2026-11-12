@@ -533,7 +533,7 @@ class SetupIT extends QbItSupport {
         expected.putAll(Map.of(QbParams.SITE_PROFILE_ENABLED, "false", QbParams.SITE_PROFILE_MONTHLY, "10",
             QbParams.SITE_PROFILE_DAILY, "3", QbParams.SITE_PROFILE_MAX_PAGES, "10",
             QbParams.SITE_PROFILE_QUESTIONS, "5", QbParams.SITE_PROFILE_OPTIONS, "4",
-            QbParams.SITE_PROFILE_MATERIALS_MAX, "5"));
+            QbParams.SITE_PROFILE_MATERIALS_MAX, "5", QbParams.SITE_PROFILE_HANDLE_ALTERNATIVES, "3"));
         assertThat(values).containsExactlyInAnyOrderEntriesOf(expected);
     }
 
