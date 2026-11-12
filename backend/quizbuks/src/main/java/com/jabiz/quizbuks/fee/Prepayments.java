@@ -348,7 +348,7 @@ public final class Prepayments {
     /**
      * What a prepayment still holds, lot by lot, in the order it is spent: the fee credit first, then the cash, each
      * in the order the lots were taken (their ids are time-ordered). Its own parts (positive: set aside; negative:
-     * given back) less what fees took of each lot ({@code used}).
+     * given back) less what fees took of each lot ({@code used}, its positive parts).
      */
     static List<Held> held(List<EntityInstance> parts, List<EntityInstance> used) {
         Map<String, Held> byLot = new LinkedHashMap<>();
@@ -356,7 +356,12 @@ public final class Prepayments {
             add(byLot, part, FeeGate.money(part.get("amount")));
         }
         for (EntityInstance part : used) {
-            add(byLot, part, FeeGate.money(part.get("amount")).negate());
+            // Only what fees took: a voided invoice gives what its prepayment paid back to the account, not to the
+            // prepayment (its negative parts name the prepayment too, H1 of the F-M5 review).
+            BigDecimal amount = FeeGate.money(part.get("amount"));
+            if (amount.signum() > 0) {
+                add(byLot, part, amount.negate());
+            }
         }
         return byLot.values().stream().filter(h -> h.amount().signum() > 0)
             .sorted(Comparator.comparing((Held h) -> QbFeeAccount.FEE_CREDIT.equals(h.subAccount()) ? 0 : 1)

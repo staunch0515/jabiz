@@ -168,8 +168,10 @@ kinds AS (
                WHEN p.src IN ('QbFeeCharge', 'QbFeeInvoice') AND NOT p.reversal
                     AND p.accts IN ('1130,2160', '1130,2190', '1130,2160,2190')
                     AND p.a2160 >= 0 AND p.a2190 >= 0 AND p.a1130 < 0 THEN 'FEE_PAID'
+               -- F-M5: a fee paid from its prepayment (1130 / 2180) reversed with its invoice is voided as well.
                WHEN p.src IN ('QbFeeCharge', 'QbFeeInvoice') AND p.reversal
-                    AND p.accts IN ('1130,4120', '1130,2150,4120', '1130,2160', '1130,2190', '1130,2160,2190')
+                    AND p.accts IN ('1130,4120', '1130,2150,4120', '1130,2160', '1130,2190', '1130,2160,2190',
+                                    '1130,2180')
                     THEN 'FEE_VOIDED'
                -- Q88b: an entry fee paid at a start (the taker's 2120 to 2170 for the sponsor), and a day's fees
                -- settled into the sponsor's cash account (2170 to 2160; the source is the cash wallet row).

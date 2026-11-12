@@ -3,9 +3,13 @@ package com.jabiz.quizbuks.it;
 import com.jabiz.quizbuks.QbPermissions;
 import com.jabiz.quizbuks.audience.AudiencePricingProcesses;
 import com.jabiz.quizbuks.fee.FeeCodes;
+import com.jabiz.quizbuks.fee.FeeRequests;
+import com.jabiz.quizbuks.fee.QbFees;
 import com.jabiz.quizbuks.fee.Prepayments;
 import com.jabiz.quizbuks.publishing.PublicationPrepayments;
 import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.quizbuks.setup.QbRoles;
+import com.jabiz.quizbuks.wallet.KudosExchanges;
 import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +46,7 @@ class PrepaymentIT extends PlayItSupport {
     void switches() {
         if (!switched) {
             param(QbParams.AUDIENCE_BILLING_ENABLED, "true");
+            param(QbParams.KUDOS_SELL_ENABLED, "true");
             switched = true;
         }
     }
@@ -253,6 +258,77 @@ class PrepaymentIT extends PlayItSupport {
             .satisfies(row -> assertThat(row).containsEntry("status", "RELEASED")
             .containsEntry("release_reason", "ENDED"));
         assertThat(differences(sponsor)).isEmpty();
+    }
+
+    /** Money in the cash account: Kudos credited and sold back (a lot of its own). */
+    void cash(String sponsor, long amount) {
+        credit(sponsor, amount);
+        run(KudosExchanges.SELL, sponsorToken(sponsor), body("amount", amount));
+    }
+
+    /** Past its start: the minute's job puts the publication on. */
+    void goLive(String publicationId) {
+        clock.set(clock.instant().plus(Duration.ofDays(1)).plus(Duration.ofMinutes(5)));
+        runTick();
+        assertThat(status(publicationId)).isEqualTo("LIVE");
+    }
+
+    /** Voids an invoice as finance does: recorded by one administrator, approved by another. */
+    void voidInvoice(Object invoiceId) {
+        Map<String, Object> voiding = run(FeeRequests.RECORD, tokenOf(user("fm5-finance"), QbRoles.ADMIN_FINANCE),
+            body("kind", "VOID", "invoiceId", String.valueOf(invoiceId), "reason", "Charged by mistake"));
+        run("APPROVAL_DECIDE", tokenOf(user("fm5-content"), QbRoles.ADMIN_CONTENT),
+            body("requestId", voiding.get("approvalRequestId"), "decision", "APPROVE"));
+        deliverEvents();
+    }
+
+    /**
+     * Every posting so far is of a kind of the monthly report: OTHER holds only the postings of no source (none of
+     * this class's processes posts without one).
+     */
+    void everyPostingHasItsKind() {
+        Instant from = Instant.parse("2000-01-01T00:00:00Z");
+        Instant to = clock.instant().plus(Duration.ofDays(1));
+        Map<String, Object> other = items("qb.admin.monthly", TestTokens.bearer(tokens, "fm5-monthly",
+            QbPermissions.ADMIN_FINANCE_READ), Map.of("params", Map.of("from", from.toString(), "to", to.toString()),
+            "limit", 100)).getLast();
+        assertThat(other).containsEntry("category", "OTHER");
+        long noSource = ((Number) query("SELECT count(*) AS n FROM ledger_transaction_version WHERE source_entity "
+            + "IS NULL").getFirst().get("n")).longValue();
+        assertThat(((Number) other.get("transactionCount")).longValue()).isEqualTo(noSource);
+    }
+
+    @Test
+    void voidingAnInvoicePaidFromItsPrepaymentGivesItBackToTheAccountAndTheBooksAgree() {
+        // H1 (F-M5 review): what paid the invoice from the prepayment goes back to the fee credit and the cash it came
+        // from, and is posted out of 2180 back to 2190 / 2160.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-void");
+        String grantId = grant(sponsor, 300, clock.instant().plus(Duration.ofDays(90)));
+        cash(sponsor, 1_000);
+        String publicationId = audienceDraft(sponsor, "FM5 void");
+        submit(sponsorToken(sponsor), publicationId);
+        goLive(publicationId);
+        Map<String, Object> charge = query("SELECT * FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = "
+            + "'AUDIENCE'", sponsor).getFirst();
+        Map<String, Object> invoice = query("SELECT * FROM qb_fee_invoice WHERE charge_id = ?",
+            String.valueOf(charge.get("charge_id"))).getFirst();
+        assertThat(invoice).containsEntry("status", "PAID");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+
+        voidInvoice(invoice.get("invoice_id"));
+        assertThat(query("SELECT status FROM qb_fee_invoice WHERE invoice_id = ?", String.valueOf(
+            invoice.get("invoice_id"))).getFirst()).containsEntry("status", QbFees.VOID);
+        assertThat(remainingOf(grantId)).isEqualByComparingTo("300");
+        assertThat(ledger("2190", sponsor)).isEqualByComparingTo("300");
+        assertThat(ledger("2160", sponsor)).isEqualByComparingTo("1000");
+        assertThat(ledger("2180", sponsor)).isEqualByComparingTo("0");
+        assertThat(ledger("1130", sponsor)).isEqualByComparingTo("0");
+        // What came back names the prepayment it had been paid from, as what paid did.
+        assertThat(query("SELECT 1 FROM qb_fee_payment_version WHERE sponsor_id = ? AND amount < 0 AND target_entity "
+            + "= 'QbFeeCharge' AND prepayment_id IS NULL", sponsor)).isEmpty();
+        assertThat(differences(sponsor)).isEmpty();
+        everyPostingHasItsKind();
     }
 
     @Test

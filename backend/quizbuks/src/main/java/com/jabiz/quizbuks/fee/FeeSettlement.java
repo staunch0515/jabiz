@@ -108,9 +108,17 @@ public final class FeeSettlement {
     static final String POST_INPUT = "postInput";
     static final String POSTING = "posting";
     static final String VOIDED_BACK = "voidedBack";
+    static final String PAID_PREPAYMENTS = "paidPrepayments";
+    static final String PREPAYMENT_BACK = "prepaymentBack";
+    static final String PREPAYMENT_POSTED = "prepaymentPosted";
     static final String VOIDED_POSTED = "voidedPosted";
     /** The posting's description when what a voided invoice gives back to a voided lot is voided again. */
     static final String VOIDED_AGAIN = "Platform fee Kudos given back to a voided lot, voided again";
+    /**
+     * F-M5 (H1 of its review): the posting's description when a voided invoice gives back what its prepayment paid:
+     * the reversal of the payment put it back in 2180; it leaves 2180 for the fee credit and the cash it came from.
+     */
+    static final String PREPAYMENT_GIVEN_BACK = "Platform fee paid from its prepayment given back (invoice voided)";
 
     private FeeSettlement() {}
 
@@ -182,8 +190,14 @@ public final class FeeSettlement {
             .step("Read the lots they were taken from", QueryEntities.<ProcessContext>all(
                 QueryEntities.query(QbFeeAccount.defaultDataset(QbFeeAccount.GRANT),
                     ctx -> byIds("grantId", lotIds(ctx, "grantId")), PAID_GRANTS),
-                QueryEntities.query(CashLots.dataset(), ctx -> byIds("lotId", lotIds(ctx, "cashLotId")), PAID_LOTS)))
+                QueryEntities.query(CashLots.dataset(), ctx -> byIds("lotId", lotIds(ctx, "cashLotId")), PAID_LOTS),
+                QueryEntities.query(QbFeeAccount.defaultDataset(QbPrepayments.PREPAYMENT),
+                    ctx -> byIds("prepaymentId", lotIds(ctx, "prepaymentId")), PAID_PREPAYMENTS)))
             .compute("Give it back", (metadata, ctx) -> giveBack(ctx))
+            // Out of 2180 first: what the voided lots are given back is then voided out of 2190.
+            .step("Post what its prepayments paid back to the account", CallProcess.<ProcessContext>forEach(
+                LedgerProcesses.POST, 1, ctx -> ctx.contains(PREPAYMENT_BACK) ? (List<?>) ctx.get(PREPAYMENT_BACK)
+                    : List.of(), PREPAYMENT_POSTED))
             .step("Post what voided lots were given back", CallProcess.<ProcessContext>forEach(LedgerProcesses.POST, 1,
                 ctx -> ctx.contains(VOIDED_BACK) ? (List<?>) ctx.get(VOIDED_BACK) : List.of(), VOIDED_POSTED)));
     }
@@ -213,6 +227,8 @@ public final class FeeSettlement {
         input.reversals().forEach(r -> reversalOf.put(r.transactionId(), r.reversalId()));
         Map<String, BigDecimal> creditBack = new LinkedHashMap<>();
         Map<String, BigDecimal> cashBack = new LinkedHashMap<>();
+        // F-M5: what each prepayment paid, of the fee credit and of the cash.
+        Map<String, BigDecimal[]> byPrepayment = new LinkedHashMap<>();
         BigDecimal parts = BigDecimal.ZERO;
         for (EntityInstance payment : payments) {
             BigDecimal amount = FeeGate.money(payment.get("amount"));
@@ -222,12 +238,20 @@ public final class FeeSettlement {
             }
             String transactionId = String.valueOf((Object) payment.get("transactionId"));
             boolean credit = QbFeeAccount.FEE_CREDIT.equals(payment.get("subAccount"));
+            Object prepaymentId = payment.get("prepaymentId");
             insertPayment(ctx, input.sponsorId(), payment.get("targetEntity"), payment.get("targetId"),
                 payment.get("subAccount"), payment.get("grantId"), payment.get("cashLotId"), amount.negate(),
-                reversalOf.getOrDefault(transactionId, transactionId));
+                reversalOf.getOrDefault(transactionId, transactionId),
+                prepaymentId == null ? null : String.valueOf(prepaymentId));
             String lotId = String.valueOf((Object) payment.get(credit ? "grantId" : "cashLotId"));
             (credit ? creditBack : cashBack).merge(lotId, amount, BigDecimal::add);
+            if (prepaymentId != null) {
+                BigDecimal[] paid = byPrepayment.computeIfAbsent(String.valueOf(prepaymentId),
+                    id -> new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO});
+                paid[credit ? 0 : 1] = paid[credit ? 0 : 1].add(amount);
+            }
         }
+        ctx.put(PREPAYMENT_BACK, prepaymentBack(ctx, input.sponsorId(), byPrepayment));
         BigDecimal credit = creditBack(ctx, input.sponsorId(), byId(FeeGate.list(ctx, PAID_GRANTS)), creditBack);
         BigDecimal cash = backTo(ctx, QbFeeAccount.CASH_LOT, byId(FeeGate.list(ctx, PAID_LOTS)), cashBack);
         // Paid before F-M1 (no parts): from the cash only, given back as cash.
@@ -244,6 +268,41 @@ public final class FeeSettlement {
                 0, BigDecimal.ZERO);
         }
         ctx.put(REFUNDED, new RefundOutput(credit, cash.add(legacy), legacy));
+    }
+
+    /**
+     * F-M5 (H1 of its review): a payment paid from a prepayment ({@code QB_PREPAYMENT_USE}) was posted 2180 / 1130;
+     * its reversal put it back in 2180. The invoice is voided, not the prepayment: what it paid goes back to the
+     * account it was set aside from, posted debit 2180 (the prepayment's dimensions), credit 2190 / 2160, the
+     * prepayment its source (the monthly report's {@code PREPAYMENT_RELEASED}). A lot of fee credit expired meanwhile
+     * is voided again as any other ({@link #creditBack}).
+     */
+    private static List<LedgerProcesses.PostInput> prepaymentBack(ProcessContext ctx, String sponsorId,
+        Map<String, BigDecimal[]> byPrepayment) {
+        Map<String, EntityInstance> prepayments = byId(FeeGate.list(ctx, PAID_PREPAYMENTS));
+        Map<String, String> party = Map.of(QbLedger.PARTY, sponsorId);
+        List<LedgerProcesses.PostInput> posts = new ArrayList<>();
+        for (Map.Entry<String, BigDecimal[]> entry : byPrepayment.entrySet()) {
+            EntityInstance prepayment = prepayments.get(entry.getKey());
+            if (prepayment == null) {
+                throw new IllegalStateException("Prepayment " + entry.getKey() + " a payment was paid from is gone");
+            }
+            BigDecimal credit = entry.getValue()[0];
+            BigDecimal cash = entry.getValue()[1];
+            List<LedgerProcesses.Line> lines = new ArrayList<>();
+            lines.add(new LedgerProcesses.Line(QbLedger.FEE_PREPAYMENTS, Direction.DEBIT, credit.add(cash), null,
+                Prepayments.dimensions(sponsorId, prepayment.get("publicationId"), prepayment.get("purpose"))));
+            if (credit.signum() > 0) {
+                lines.add(new LedgerProcesses.Line(QbLedger.FEE_CREDIT, Direction.CREDIT, credit, null, party));
+            }
+            if (cash.signum() > 0) {
+                lines.add(new LedgerProcesses.Line(QbLedger.SPONSOR_CASH, Direction.CREDIT, cash, null, party));
+            }
+            posts.add(new LedgerProcesses.PostInput(ctx.opTime(), PREPAYMENT_GIVEN_BACK,
+                Prepayments.reference(String.valueOf((Object) prepayment.get("purpose"))), lines,
+                QbPrepayments.PREPAYMENT, entry.getKey()));
+        }
+        return List.copyOf(posts);
     }
 
     /** {@link #backTo} for the lots of fee credit: what goes back to a voided lot is voided again (not counted). */
@@ -359,6 +418,14 @@ public final class FeeSettlement {
     /** One part of a payment (negative: given back), written once. */
     static void insertPayment(ProcessContext ctx, Object sponsorId, Object targetEntity, Object targetId,
         Object subAccount, Object grantId, Object cashLotId, BigDecimal amount, String transactionId) {
+        insertPayment(ctx, sponsorId, targetEntity, targetId, subAccount, grantId, cashLotId, amount, transactionId,
+            null);
+    }
+
+    /** {@link #insertPayment}; {@code prepaymentId}: the part was paid from (or, negative, paid back for) it. */
+    static void insertPayment(ProcessContext ctx, Object sponsorId, Object targetEntity, Object targetId,
+        Object subAccount, Object grantId, Object cashLotId, BigDecimal amount, String transactionId,
+        String prepaymentId) {
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", sponsorId);
         values.put("targetEntity", targetEntity);
@@ -369,6 +436,7 @@ public final class FeeSettlement {
         values.put("amount", amount);
         values.put("paidAt", ctx.opTime());
         values.put("transactionId", transactionId);
+        values.put("prepaymentId", prepaymentId);
         ctx.changes().insert(QbFeeAccount.PAYMENT, values);
     }
 
