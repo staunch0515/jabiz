@@ -47,7 +47,7 @@ export function SubmitAllDraftsButton({ size = 'default' }: { size?: 'default' |
         description={t('submitAll.text')} confirmLabel={t('submitAll.confirm')} cancelLabel={t('package.cancel')}
         onConfirm={() => void run()} />
       <Dialog open={results !== null} onOpenChange={(open) => !open && setResults(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="submit-all-results">
+        <DialogContent data-testid="submit-all-results">
           <DialogHeader>
             <DialogTitle>{t('submitAll.resultTitle')}</DialogTitle>
             <DialogDescription>

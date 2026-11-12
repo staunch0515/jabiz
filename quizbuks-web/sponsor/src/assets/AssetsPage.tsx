@@ -309,7 +309,7 @@ function UsesDialog({ asset, onClose }: { asset: Asset; onClose: () => void }) {
   const uses = useQuery({ queryKey: assetUsesQuery(asset.assetId), queryFn: () => readAssetUses(asset.assetId) })
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" data-testid="asset-uses-dialog">
+      <DialogContent className="sm:max-w-lg" data-testid="asset-uses-dialog">
         <DialogHeader>
           <DialogTitle>{t('assets.uses.title', { name: asset.name })}</DialogTitle>
           <DialogDescription>{t('assets.uses.hint')}</DialogDescription>
@@ -375,7 +375,7 @@ function CollectDialog({ onClose, onCollected }: { onClose: () => void; onCollec
   const all = list.length > 0 && chosen.size === list.length
   return (
     <Dialog open onOpenChange={(open) => !open && !collect.isPending && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="asset-collect-dialog">
+      <DialogContent className="sm:max-w-2xl" data-testid="asset-collect-dialog">
         <DialogHeader>
           <DialogTitle>{t('assets.collectDialog.title')}</DialogTitle>
           <DialogDescription>{t('assets.collectDialog.intro')}</DialogDescription>
