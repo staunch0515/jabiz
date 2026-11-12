@@ -60,8 +60,9 @@ public final class SiteProfileAnswer {
         List<SiteProfileJob.Material> materials = input.quiz() ? materials(node.get("materials"), input, dropped) : List.of();
         AiCandidates.Checked questions = input.quiz() && !materials.isEmpty()
             ? questions(node.get("questions"), materials.size(), input, dropped) : new AiCandidates.Checked(List.of(), 0);
-        return new SiteProfileJob.Result(servedModel, fellBack, null, profile, sources, notFound, dropped, translated,
-            materials, questions.valid(), questions.invalid(), input.handleAlternatives());
+        return new SiteProfileJob.Result(servedModel, fellBack, null, profile, sources, notFound,
+            dropped.size() > SiteProfileJob.Dropped.MAX_LISTED ? dropped.subList(0, SiteProfileJob.Dropped.MAX_LISTED) : dropped,
+            translated, materials, questions.valid(), questions.invalid(), input.handleAlternatives());
     }
 
     // ---- the package -----------------------------------------------------------------------------------------------
@@ -92,6 +93,7 @@ public final class SiteProfileAnswer {
         check.put("basics", basics);
         check.put("page", page);
         check.put("products", products);
+        onlyLanguages(check, input.languages(), dropped);
         removePersonalDetails(check, dropped);
         offSite(check, input, dropped);
         for (int pass = 0; pass < PASSES; pass++) {
@@ -185,6 +187,45 @@ public final class SiteProfileAnswer {
             }
         }
         return false;
+    }
+
+    static final String OTHER_LANGUAGE = "Not one of the languages asked for";
+
+    /**
+     * A text in a language that was not asked for is taken out of its text (and listed): the AI sometimes adds one, and
+     * a required text with a language the package does not have would otherwise fail the whole package.
+     */
+    @SuppressWarnings("unchecked")
+    private static void onlyLanguages(Map<String, Object> check, List<String> languages,
+        List<SiteProfileJob.Dropped> dropped) {
+        for (String section : List.of("basics", "page")) {
+            byLanguage((Map<String, Object>) check.get(section), section + ".", languages, dropped);
+        }
+        List<Object> products = (List<Object>) check.get("products");
+        for (int i = 0; i < products.size(); i++) {
+            if (products.get(i) instanceof Map<?, ?> map) {
+                byLanguage((Map<String, Object>) map, "products[" + i + "].", languages, dropped);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void byLanguage(Map<String, Object> owner, String path, List<String> languages,
+        List<SiteProfileJob.Dropped> dropped) {
+        for (Map.Entry<String, Object> entry : owner.entrySet()) {
+            if (entry.getValue() instanceof Map<?, ?> texts && !entry.getKey().equals("avatar")
+                && !entry.getKey().equals("cover") && !entry.getKey().equals("image")) {
+                Map<String, Object> kept = new LinkedHashMap<>();
+                for (Map.Entry<?, ?> text : texts.entrySet()) {
+                    if (languages.contains(String.valueOf(text.getKey()))) {
+                        kept.put(String.valueOf(text.getKey()), text.getValue());
+                    } else {
+                        dropped.add(new SiteProfileJob.Dropped(path + entry.getKey() + "." + text.getKey(), OTHER_LANGUAGE));
+                    }
+                }
+                entry.setValue(kept);
+            }
+        }
     }
 
     /** Removes a person's contact details from every text of the package, listing each text that held some. */

@@ -82,7 +82,8 @@ jobs AS (
     SELECT
         coalesce(sum(j.{{QbAiJob.estimatedTokens}}) FILTER (WHERE j.{{QbAiJob.finishedAt}} IS NULL), 0)
             AS v_reserved,
-        count(*) FILTER (WHERE j.{{QbAiJob.requestedAt}} >= c.day_start) AS v_today
+        count(*) FILTER (WHERE j.{{QbAiJob.requestedAt}} >= c.day_start
+                           AND j.{{QbAiJob.fromSiteDraftId}} IS NULL) AS v_today
     FROM {{QbAiJob}} j
     CROSS JOIN clock c
     WHERE j.{{QbAiJob.requestedAt}} >= c.day_start

@@ -113,6 +113,34 @@ class SiteProfileAnswerTest {
     }
 
     @Test
+    void theListOfWhatWasLeftOutIsShortAndItsPathsAreClipped() {
+        assertThat(new SiteProfileJob.Dropped("x".repeat(500), "y".repeat(500)).path()).hasSize(SiteProfileJob.Dropped.MAX_LENGTH);
+        assertThat(new SiteProfileJob.Dropped("x".repeat(500), "y".repeat(500)).reason()).hasSize(SiteProfileJob.Dropped.MAX_LENGTH);
+        // Sixty products with a price that is not a number: every one is left out, and only some are listed.
+        StringBuilder many = new StringBuilder();
+        for (int i = 0; i < 60; i++) {
+            many.append(i > 0 ? "," : "").append("{\"name\": {\"ja\": \"品").append(i).append("\", \"en\": \"P").append(i)
+                .append("\"}, \"price\": \"free\", \"currency\": \"JPY\"}");
+        }
+        String reply = "{\"failure\": null, \"package\": {\"basics\": {\"company\": \"Aini\"}, \"page\": {\"handle\": \"aini\", "
+            + "\"headline\": {\"ja\": \"a\", \"en\": \"a\"}}, \"products\": [" + many + "]}, \"sources\": {}, \"notFound\": [], "
+            + "\"translated\": [], \"materials\": [], \"questions\": []}";
+        SiteProfileJob.Input wide = new SiteProfileJob.Input("claude-opus-5-5", "medium", "https://www.aini.example/", SITE, "ja",
+            List.of("ja", "en"), true, true, false, 10, 80, 5, 2, 3, "key");
+        assertThat(SiteProfileAnswer.parse("m", false, reply, wide, JSON).dropped().size())
+            .isLessThanOrEqualTo(SiteProfileJob.Dropped.MAX_LISTED);
+    }
+
+    @Test
+    void anArticleWhoseAddressIsTooLongForADescriptionIsNotTaken() {
+        String reply = GOOD.replace("https://www.aini.example/about", "https://www.aini.example/" + "a".repeat(400));
+        SiteProfileJob.Result result = SiteProfileAnswer.parse("m", false, reply, input(true, true, true), JSON);
+        assertThat(result.materials()).extracting(SiteProfileJob.Material::url)
+            .allSatisfy(url -> assertThat(url.length()).isLessThanOrEqualTo(com.jabiz.quizbuks.content.ContentLimits.MATERIAL_DESCRIPTION_LENGTH));
+        assertThat(result.materials()).extracting(SiteProfileJob.Material::title).doesNotContain("About us");
+    }
+
+    @Test
     void whatWasNotAskedForIsNotInTheResult() {
         SiteProfileJob.Result result = SiteProfileAnswer.parse("m", false, GOOD, input(false, false, false), JSON);
         assertThat(result.profile()).doesNotContainKeys("basics", "page");
@@ -209,5 +237,22 @@ class SiteProfileAnswerTest {
         SiteProfileJob.Result result = SiteProfileAnswer.parse("claude-opus-5-5", false, MESSY,
             input(true, true, false), JSON);
         assertThat(result.notFound()).containsExactly("page.cover", "basics.intro", "products[0].image");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aTextInALanguageNotAskedForIsTakenOutAndListedNotTheWholePackage() {
+        // The sponsor asked for Japanese only; the AI also wrote English headlines and introductions.
+        SiteProfileJob.Input japanese = new SiteProfileJob.Input("claude-opus-5-5", "medium", "https://www.aini.example/",
+            SITE, "ja", List.of("ja"), true, true, false, 10, 50, 5, 2, 3, "key");
+        SiteProfileJob.Result result = SiteProfileAnswer.parse("claude-opus-5-5", false, GOOD, japanese, JSON);
+        Map<String, Object> basics = (Map<String, Object>) result.profile().get("basics");
+        assertThat((Map<String, Object>) basics.get("intro")).containsOnlyKeys("ja");
+        Map<String, Object> page = (Map<String, Object>) result.profile().get("page");
+        assertThat((Map<String, Object>) page.get("headline")).containsOnlyKeys("ja");
+        assertThat(result.dropped()).extracting(SiteProfileJob.Dropped::path).contains("basics.intro.en",
+            "page.headline.en");
+        assertThat(result.dropped()).filteredOn(d -> d.path().equals("page.headline.en"))
+            .extracting(SiteProfileJob.Dropped::reason).containsExactly(SiteProfileAnswer.OTHER_LANGUAGE);
     }
 }
