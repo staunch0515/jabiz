@@ -188,7 +188,7 @@ export function ImportQuizButton() {
       <Dialog open={state !== null} onOpenChange={(open) => {
         if (!open && !busy) setState(null)
       }}>
-        <DialogContent data-testid="quiz-import-dialog">
+        <DialogContent className="max-h-[90vh] overflow-y-auto" data-testid="quiz-import-dialog">
           <DialogHeader>
             <DialogTitle>{t('quizzes.transfer.importTitle')}</DialogTitle>
             <DialogDescription>{t('quizzes.transfer.importHint')}</DialogDescription>

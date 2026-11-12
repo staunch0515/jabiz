@@ -210,10 +210,13 @@ export async function uploadProfileImages(document: Record<string, unknown>, pla
 
 /** Uploads the images the plan needs, then imports; a refusal throws and nothing is changed. */
 export async function importProfile(document: Record<string, unknown>, plan: ImportPlan, mailPassword: string,
-  onProgress?: (done: number, total: number) => void, linked: Record<string, string> = {}): Promise<ImportPlan> {
+  onProgress?: (done: number, total: number) => void, linked: Record<string, string> = {},
+  siteDraftId?: string): Promise<ImportPlan> {
   const uploaded = await uploadProfileImages(document, plan, onProgress, linked)
   const output = await runProcess<{ plan: ImportPlan }>(PROFILE_TRANSFER.import, {
     document: withoutData(document), files: uploaded, mailPassword: mailPassword || null,
+    // The website draft it came from: its request to review is closed with the import.
+    ...(siteDraftId ? { siteDraftId } : {}),
   })
   return output.plan
 }
