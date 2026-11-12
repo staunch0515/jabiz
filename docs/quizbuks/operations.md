@@ -312,7 +312,11 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - [ ] `./gradlew :quizbuks:platformCheck` 以正式的设置（不含密钥值的同形假值）跑一遍；启动日志中没有 `Platform check failed`
 - [ ] 首次启动（§3）完成：两位管理员都有二次验证，提案已发布，开具方与科目映射已设
 - [ ] **首次上线的开关**（F-F10；`setup.FirstLaunchSwitches` 是唯一的清单，`JABIZ_WEB_ENVIRONMENT` 须为 `production`，测试系统为 `staging`：只有这两个环境的 `QB_SETUP` 提出首次上线的值，其他环境提出声明值，卡片上会显示"不同"）：
-  1. 执行 `QB_SETUP` 后，核对平台管理系统"数据 → SysControlChange"中待发布的提案，与"QuizBuks 财务"总览页的卡片"首次上线的资金开关"一致（每行：首次上线的值、现值、状态；读提案需要 `approval.read`，财务角色已有）。卡片显示"待发布的值与首次上线的值不同"时**不要发布**：多半是 `JABIZ_WEB_ENVIRONMENT` 没设成 `production` 就执行了 `QB_SETUP`，改好环境变量重新部署，以 `CONTROL_CHANGE_WITHDRAW` 撤回这些提案，再按卡片上"首次上线的值"一栏逐条手工提出（`CONTROL_CHANGE_PROPOSE`，`QB_SETUP` 每项只提一次，再执行不会重新提出）；
+  1. 执行 `QB_SETUP` 后，核对平台管理系统"数据 → SysControlChange"中待发布的提案，与"QuizBuks 财务"总览页的卡片"首次上线的资金开关"一致（每行：首次上线的值、现值、状态；读提案需要 `approval.read`，财务角色已有）。卡片显示"待发布的值与首次上线的值不同"时**不要发布**：多半是 `JABIZ_WEB_ENVIRONMENT` 没设成 `production` 就执行了 `QB_SETUP`，改好环境变量重新部署，然后：
+     - **撤回**：只有提案人能撤回，即当初执行 `QB_SETUP` 的管理员。在"数据 → SysControlChange"中对这几行执行行操作"撤回"（`CONTROL_CHANGE_WITHDRAW`）；
+     - **重提**（`QB_SETUP` 每项只提一次，再执行不会重新提出）：首次上线的值与声明值不同的只有这 7 条：`qb.fee-credit.grant.enabled` → `true`、`qb.help.enabled` → `true`、`qb.ai.enabled` → `true`、`qb.topup.targets` → `CASH`、`qb.topup.default-target` → `CASH`、`qb.kudos.buy.enabled` → `false`、`qb.reward.kudos.enabled` → `false`。以被撤回提案的 `changeValues` 为准，原样填 `paramKey`、`valueKind`、`description`，只改 `value`（字符串）；
+     - **用接口提交**（本机演练过：撤回后重提得到新的待发布提案）：先 `POST /api/auth/login`（`{"userName":…,"password":…,"entry":"admin"}`）取 `accessToken`，再以 `Authorization: Bearer <accessToken>`、每次新的 `Idempotency-Key` 调用 `POST /api/processes/CONTROL_CHANGE_PROPOSE/latest`，正文如 `{"targetEntity":"SysParam","values":{"paramKey":"qb.kudos.buy.enabled","valueKind":{"type":"bool"},"value":"false","description":"Whether sponsors may turn cash into Kudos"},"reason":"首次上线的值：QB_SETUP 未按 production 执行后重提"}`（不带 `targetId` 即新建参数）。平台管理系统的流程表单中 `values` 是一个 JSON 输入框，按理也能提交同样的内容，但没有在浏览器里演练过，以接口为准；
+     - 重提后卡片应显示"待发布"（值与首次上线的值相同），再由另一位管理员发布；
   2. 发布的顺序：
      - 先发布 `qb.reward.kudos.enabled` 与 `qb.reward.default-methods` 这两个键，**再**发布审批规则（`qb.sponsor.review`、`qb.publication.review`）：正式环境里学分奖励的开关没有发布就算关，这样发起方入驻与发布的流程不会出现不一致的中间状态；
      - 法务相关的不打开：`qb.transfer.enabled`、`qb.withdrawal.bank.enabled` 保持 `false`（§1.3b、§1.3c）；`qb.kudos.buy.enabled`、`qb.kudos.sell.enabled`、`qb.reward.kudos.enabled`、`qb.play.entry-fee.enabled` 的首次上线的值也是 `false`（学分只显示、不使用，学分的帮助见 `help/fee-account.md`）；
