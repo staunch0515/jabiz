@@ -1251,6 +1251,21 @@ Quiz 与发布有主题词（平台词表中的词与自定义词），学者可
 - **差异的处理**：`DISTRIBUTION_UNSETTLED` / `DISTRIBUTION_FINAL_MISSING` 多半是任务没有运行或该项失败：看任务的运行与失败的项，修好原因后补跑该时刻。补跑哪一个时刻：`DISTRIBUTION_UNSETTLED` 的月份 M 补跑 `qb.distribution-fee` 在 M 的次月 2 日 00:37 的计划时刻（`POST /api/jobs/qb.distribution-fee/runs`，带该时刻与原因；同一时刻幂等，已结的项不再写）；几个月都缺时从最早的月份起逐月补跑，一次只补一个月（期间由时刻决定）。`DISTRIBUTION_FINAL_MISSING` 补跑 `qb.distribution-final` 最近一次的计划时刻（任何一天的都结所有已过宽限的结束发布）。后付发起方的账单在补上之后的下一次 01:17 开出。`DISTRIBUTION_DEPOSITS` 有差异同 §7.47 的 `PREPAYMENTS`，报开发。不手工写结算行（只追加、只写一次）、分录或改表。
 - **常见询问**：发起方问配送费怎么算——发布页的"配送费"写明单价、上次结算以来开始的人数与目前约多少；"学者得到的奖励就是您设定的全部，配送费另由平台按开始答题的人数收取"。
 
+### 7.49 受众规则费的退回与贷项凭证（F-M7）
+
+受众规则费上架时一次记全期（F-M5）；发布提前结束时按未用天数开**贷项凭证**；财务也可以对任何一笔费用手工开凭证（四眼）。原费用与它的账单从不修改（`docs/quizbuks/plans/impl/F-M.md` §10）。
+
+- **开关**：`qb.audience.billing.enabled`（受控，首次上线为开）；`qb.audience.fee.refund-unused-days`（受控，缺省关，由需求方另定）。退不退按**发布结束那一刻**的开关：结束时关、之后打开不补退；结束时开、之后关掉照退。下架（`ADMIN`）与到期结束（`EXPIRED`）不退。
+- **退回任务** `qb.audience-refund`：每天 03:37（`jabiz.fiscal-year-zone`，部署设置 `QB_AUDIENCE_REFUND_CRON`；一次至多 `quizbuks.audience-refund.max-items`，缺省 10000），在 03:07 的配送费结束结算与 03:23 的预付款退回之后。每项一笔已记费的受众规则费，只判定一次，结果写在预付款上（`refund_decided_at` / `refund_outcome`：`REFUNDED` 退回、`CREDITED` 成为贷项、`NONE_SWITCH_OFF`、`NONE_REASON`、`NONE_ZERO`、`NONE_NO_PERIOD`）。已用天数 = 从计费的开始到结束，按 24 小时向上取整、至少 1 天（暂停的天也算）；应收 = max（最低使用费，日价合计 × 已用天数），按冻结时的报价；退回额 = 原费用 − 应收。F-M7 之前冻结的预付款没有计费期间，取冻结时刻的发布期间；读不到即 `NONE_NO_PERIOD`。
+- **凭证的去向（一条规则）**：先抵这笔费用所在账单还欠的部分（`OPEN` / `PARTIAL` / `OVERDUE`）；**预付**的费用再把超出部分退回付款的地方（最后付的先退：同一时刻先退账户付的、再退预付款付的，各自先现金后赠送），从预付款付的部分经预付款退回（与作废时同一条路径），退到已作废的赠送当即再作废；**后付**的从不退现金。再剩下的是**贷项**：立即按开具时刻抵该发起方其他未付的账单，抵不完的留给下一张账单（预付记费、后付月账单、提前付清都先用贷项）。所以"有未用贷项"与"有未付账单"不会同时出现（核对 `CREDIT_UNUSED_WITH_DUE`）。
+- **欠多少**：账单的欠额 = 合计 − 已抵（`creditApplied`）− 已付。被凭证抵完的账单为 `PAID`（`paid_at` 有值，没有付款分录，不开收据）。
+- **过账**：凭证 借 4120（金额）、2150（税）/ 贷 1130（合计），来源 `QbFeeCreditNote`；退回 借 1130 / 贷 2160、2190（账户付的）与 2180（预付款付的），再 借 2180 / 贷 2160、2190（来源预付款）。月报：凭证为 `FEE_CREDIT_NOTE`；退回为 `FEE_PAID` 的负数；出 2180 为 `PREPAYMENT_RELEASED`；再作废为 `FEE_CREDIT_VOIDED`。抵用不过账。
+- **手工开凭证**（平台管理系统"平台费"页，费用行的"开贷项凭证"）：财务（`qb.fee.manage`）提出原费用、金额（不含税）与原因（印在凭证上），另一位管理员批准（`qb.fee-request.review`）。**上限**：一笔费用的全部凭证（自动与手工）的金额 ≤ 原费用的金额，税 ≤ 原费用的税；每张凭证的税 = min（⌊金额 × 原费用税率⌋，税的余额），开满的那张取税的余额。超出即 422 `QB_FEE_CREDIT_NOTE_EXCEEDS`。**批准时余额已不够**（期间开了别的凭证）：不少开，申请为 `FAILED`，财务收到待办"已批准的平台费申请未能执行"，按新的余额重新提出。账单已作废的费用不能开凭证（422 `QB_FEE_CREDIT_NOTE_VOIDED`）。
+- **何时作废、何时开凭证**：账单整张开错、还没有凭证也没被凭证抵过时作废；有凭证或被抵过的账单不能作废（422 `QB_FEE_INVOICE_HAS_CREDIT_NOTE`，批准时才出现的也同样以 `FAILED` 结束并给财务待办），更正只能开凭证。
+- **运营商分成**：运营商月结算多两列：当月开具的凭证金额（不含税，按费用记费时的运营商）与扣减 = ⌊凭证 × （1 − 当月方案的平台比例）⌋。扣减是成本（与固定费、获客费用并列），不够扣的结转下月；结算单上有"贷项凭证扣减"一行。
+- **核对**（每日对账）：`AUDIENCE_REFUND_MISSING`（结束超过 `qb.audience.refund.missing-after-hours` 小时（普通参数，缺省 30）仍未判定：看任务的运行与失败的项，修好后用 `JOB_RUN_REQUEST` 补跑 `qb.audience-refund` 最近的计划时刻）；`AUDIENCE_REFUND_NO_PERIOD`（判定为没有期间的：由财务决定是否手工开凭证，不是差异的修复）；`AUDIENCE_CHARGE_STATE`（有受众规则费而发布从未上架：报开发）；`CREDIT_NOTE_USES`、`CREDIT_NOTE_LIMITS`、`CREDIT_NOTE_USE_VOID`、`CREDIT_UNUSED_WITH_DUE`（报开发，不手工改表）；`FEES_RECEIVABLE` 已含未用贷项。
+- **发起方看到的**：发布页"预付款"下列出该发布的凭证（号、天数、金额）；"资金 → 账单"有"贷项凭证"一栏（可下载 PDF，首次下载时签发，之后给同一份），账单上写明已用凭证抵减的金额，平台费账户显示未用的贷项。凭证的 PDF 与收据一同保留（十年）。
+
 ## 8. 升级到线 1.3（S0 的迁移 V29、V30）
 
 S0（`shopify/S0-publisher.md`）给发布、档位、卡片、会话、分析、现金 / 兑换 / 电子奖品与码池、邀请加上 `publisher_kind`（已有的行全部为 `SPONSOR`），并把普通表的 `sponsor_id` 列改名为 `publisher_id`。
