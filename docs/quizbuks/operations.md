@@ -312,7 +312,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - [ ] `./gradlew :quizbuks:platformCheck` 以正式的设置（不含密钥值的同形假值）跑一遍；启动日志中没有 `Platform check failed`
 - [ ] 首次启动（§3）完成：两位管理员都有二次验证，提案已发布，开具方与科目映射已设
 - [ ] **首次上线的开关**（F-F10；`setup.FirstLaunchSwitches` 是唯一的清单，`JABIZ_WEB_ENVIRONMENT` 须为 `production`，测试系统为 `staging`：只有这两个环境的 `QB_SETUP` 提出首次上线的值，其他环境提出声明值，卡片上会显示"不同"）：
-  1. 执行 `QB_SETUP` 后，核对平台管理系统"数据 → SysControlChange"中待发布的提案，与"QuizBuks 财务"总览页的卡片"首次上线的资金开关"一致（每行：首次上线的值、现值、状态；读提案需要 `approval.read`，财务角色已有）。卡片显示"待发布的值与首次上线的值不同"时**不要发布**：多半是 `JABIZ_WEB_ENVIRONMENT` 没设成 `production` 就执行了 `QB_SETUP`，改好环境变量重新部署，撤回这些提案后再执行一次 `QB_SETUP`；
+  1. 执行 `QB_SETUP` 后，核对平台管理系统"数据 → SysControlChange"中待发布的提案，与"QuizBuks 财务"总览页的卡片"首次上线的资金开关"一致（每行：首次上线的值、现值、状态；读提案需要 `approval.read`，财务角色已有）。卡片显示"待发布的值与首次上线的值不同"时**不要发布**：多半是 `JABIZ_WEB_ENVIRONMENT` 没设成 `production` 就执行了 `QB_SETUP`，改好环境变量重新部署，以 `CONTROL_CHANGE_WITHDRAW` 撤回这些提案，再按卡片上"首次上线的值"一栏逐条手工提出（`CONTROL_CHANGE_PROPOSE`，`QB_SETUP` 每项只提一次，再执行不会重新提出）；
   2. 发布的顺序：
      - 先发布 `qb.reward.kudos.enabled` 与 `qb.reward.default-methods` 这两个键，**再**发布审批规则（`qb.sponsor.review`、`qb.publication.review`）：正式环境里学分奖励的开关没有发布就算关，这样发起方入驻与发布的流程不会出现不一致的中间状态；
      - 法务相关的不打开：`qb.transfer.enabled`、`qb.withdrawal.bank.enabled` 保持 `false`（§1.3b、§1.3c）；`qb.kudos.buy.enabled`、`qb.kudos.sell.enabled`、`qb.reward.kudos.enabled`、`qb.play.entry-fee.enabled` 的首次上线的值也是 `false`（学分只显示、不使用，学分的帮助见 `help/fee-account.md`）；
