@@ -6,7 +6,7 @@
 
 1. `docs/quizbuks/profile-package-prompts.md`：主提示词（参数：官网地址、联系人姓名、基准语言、其他语言、要不要商品、商品个数上限）、格式规则、两个完整示例（只有基准语言；三语带商品）、文件被拒时的修正提示词、规则一览。
 2. `docs/quizbuks/quiz-file-prompts.md` 新增第 7 节「从企业官网生成『认识我们』的 Quiz」（Q104 §4 的规则）。
-3. 帮助文案底稿 `docs/quizbuks/help/profile-package.md`（三语，由内容管理员发布为 FAQ；说明模板的用法、必须校对、被拒时把确认页的问题原样复制给 AI）。
+3. 帮助文案底稿 `docs/quizbuks/help/profile-package.md`（三语，由内容管理员发布为 FAQ；说明模板的用法、必须校对、被拒时把确认页的问题原样复制给 AI）。F-C11b 把它改写为完整的"发起方资料包"一节（导出、导入、商品、图片、邮件服务器、用 AI 起草，三语同结构，`ProfilePackageHelpTest` 核对数字与按钮名）；本条的内容并入其中，没有丢。
 4. 测试 `ProfilePackagePromptsTest`。
 
 ## 决定
