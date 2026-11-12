@@ -108,7 +108,7 @@ public final class FeeProcesses {
 
     /**
      * @param sponsorId the sponsor (their user id) charged
-     * @param kind      {@code MONTHLY}, {@code MANUAL} or (F-M5) {@code AUDIENCE}
+     * @param kind      {@code MONTHLY}, {@code MANUAL}, (F-M5) {@code AUDIENCE} or (F-M6) {@code DISTRIBUTION}
      * @param period    the month ({@code yyyy-MM}) the fee belongs to
      * @param amount    the fee before tax, in yen
      * @param reason    why (a manual fee); a monthly fee has none
@@ -120,7 +120,7 @@ public final class FeeProcesses {
      *                  counting against the credit limit); none: paid from the account as fees arise
      */
     public record ChargeInput(@NotBlank @Size(max = 128) String sponsorId,
-        @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|AUDIENCE") String kind,
+        @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|AUDIENCE|DISTRIBUTION") String kind,
         @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @Size(max = QbFees.REASON_LENGTH) String reason, @Size(max = QbFees.SOURCE_LENGTH) String sourceKey,
@@ -163,7 +163,7 @@ public final class FeeProcesses {
      * operator the fee was charged under, and the due days loaded once.
      */
     public record SettleInput(@NotBlank @Size(max = 128) String sponsorId, @NotBlank @Size(max = 36) String chargeId,
-        @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period, @NotBlank @Pattern(regexp = "MONTHLY|MANUAL") String kind,
+        @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String period, @NotBlank @Pattern(regexp = "MONTHLY|MANUAL|DISTRIBUTION") String kind,
         @NotNull @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal amount,
         @NotNull @DecimalMin("0") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal tax,
         @NotNull @DecimalMin("1") @DecimalMax(MAX_AMOUNT) @Digits(integer = 13, fraction = 0) BigDecimal total,
@@ -224,7 +224,10 @@ public final class FeeProcesses {
     static final String INVOICE = "invoice";
     static final String FOUND = "found";
     static final String BILLING_MODE = "billingMode";
+    static final String MONTH_INVOICE = "monthInvoice";
     static final String TOTAL = "total";
+    /** The month the charge is written for (review L3: a late postpaid one is the current month, not the input's). */
+    static final String CHARGE_PERIOD = "chargePeriod";
     static final String PAID_NOW = "paidNow";
     static final String CASH_AFTER = "cashAfter";
     static final String OUTCOME = "outcome";
@@ -255,8 +258,14 @@ public final class FeeProcesses {
                     chargeInput(ctx).sponsorId()), ASSIGNMENT),
                 // F-M5 (M2 of its review): a fee paid from a prepayment is paid as the prepayment was set aside.
                 QueryEntities.query(QbFeeAccount.defaultDataset(QbPrepayments.PREPAYMENT), ctx -> byId("prepaymentId",
-                    chargeInput(ctx).prepaymentId()), PREPAYMENT)))
-            .compute("Check and record the charge", (metadata, ctx) -> insertCharge(ctx))
+                    chargeInput(ctx).prepaymentId()), PREPAYMENT),
+                // F-M6 (§9.6, N3): the month's postpaid invoice, if issued already (in the same statement).
+                QueryEntities.query(QbFees.defaultDataset(QbFees.INVOICE), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.And(List.of(
+                        new QueryPredicate.Eq("sponsorId", chargeInput(ctx).sponsorId()),
+                        new QueryPredicate.Eq("period", chargeInput(ctx).period()),
+                        new QueryPredicate.IsNull("chargeId")))).limit(1).build(), MONTH_INVOICE)))
+            .compute("Check and record the charge", (metadata, ctx) -> insertCharge(ctx, zone))
             // Written first: the posting names it as its source.
             .step("Save the charge", SaveChanges.now())
             .step("Post the fee", CallProcess.<ProcessContext>of(LedgerProcesses.POST, 1,
@@ -267,20 +276,20 @@ public final class FeeProcesses {
                     && chargeInput(ctx).prepaymentId() == null,
                 FeeSettlement.SETTLE, 1, ctx -> new FeeSettlement.SettleInput(chargeInput(ctx).sponsorId(),
                     QbFees.CHARGE, (String) ctx.get(CHARGE_ID), ctx.get(TOTAL, BigDecimal.class),
-                    reference(chargeInput(ctx))), SETTLEMENT))
+                    chargeReference(ctx)), SETTLEMENT))
             // F-M5: a publication's fee is paid from what its submission set aside (a postpaid sponsor's prepayment
             // only stops counting against the credit limit; the fee is owed as their other fees).
             .step("Pay the fee from its prepayment", CallProcess.<ProcessContext>when(
                 ctx -> chargeInput(ctx).prepaymentId() != null, Prepayments.USE, 1,
                 ctx -> new Prepayments.UseInput(chargeInput(ctx).prepaymentId(), (String) ctx.get(CHARGE_ID),
-                    ctx.get(TOTAL, BigDecimal.class), reference(chargeInput(ctx))), SETTLEMENT))
+                    ctx.get(TOTAL, BigDecimal.class), chargeReference(ctx)), SETTLEMENT))
             // M1 of the F-M5 review: what the prepayment does not cover (the tax rate changed while it waited) is
             // paid from the account in its order, as any prepaid fee; the rest stays owed on the same invoice.
             .step("Pay the rest from the account", CallProcess.<ProcessContext>when(
                 ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)) && chargeInput(ctx).prepaymentId() != null
                     && unpaid(ctx).signum() > 0,
                 FeeSettlement.SETTLE, 1, ctx -> new FeeSettlement.SettleInput(chargeInput(ctx).sponsorId(),
-                    QbFees.CHARGE, (String) ctx.get(CHARGE_ID), unpaid(ctx), reference(chargeInput(ctx))),
+                    QbFees.CHARGE, (String) ctx.get(CHARGE_ID), unpaid(ctx), chargeReference(ctx)),
                 SETTLEMENT_REST))
             .step("Number the invoice", AssignNumber.<ProcessContext>when(
                 ctx -> FeeRules.PREPAID.equals(ctx.get(BILLING_MODE)), QbFees.INVOICE_SEQUENCE,
@@ -291,12 +300,22 @@ public final class FeeProcesses {
                 QbFees.INVOICE_ISSUED_EVENT, FeeProcesses::invoicePayload)));
     }
 
-    static void insertCharge(ProcessContext ctx) {
+    static void insertCharge(ProcessContext ctx, ZoneId zone) {
         ChargeInput input = chargeInput(ctx);
         ParamValues params = ctx.get(PARAMS, ParamValues.class);
         List<Violation> problems = new ArrayList<>();
         EntityInstance sponsor = first(ctx, SPONSOR);
-        if (sponsor == null || !SponsorStatus.APPROVED.equals(sponsor.get("reviewStatus"))) {
+        // N1 of Fable's second F-M6 review: a defence; the callers read the prepayment of the sponsor they charge.
+        EntityInstance held = first(ctx, PREPAYMENT);
+        if (held != null && !input.sponsorId().equals(String.valueOf((Object) held.get("sponsorId")))) {
+            throw new IllegalStateException("Prepayment " + held.id() + " is not " + input.sponsorId() + "'s");
+        }
+        // M3 of the F-M6 review: a fee charged from a prepayment is for what was bought with money already set aside
+        // (an audience fee at the start, a distribution fee at its settlement), and is billed as the prepayment was
+        // (below): it is charged whatever the onboarding is now. A sponsor who erased their account has none, and
+        // their ended publication's final settlement still charges its deposit and gives back the rest.
+        if (first(ctx, PREPAYMENT) == null
+            && (sponsor == null || !SponsorStatus.APPROVED.equals(sponsor.get("reviewStatus")))) {
             problems.add(new Violation("sponsorId", FeeCodes.FEE_SPONSOR, "Only an approved sponsor is charged",
                 Map.of()));
         }
@@ -319,12 +338,17 @@ public final class FeeProcesses {
         String billingMode = prepayment != null ? String.valueOf((Object) prepayment.get("mode"))
             : FeeRules.billingModeOf(sponsor.get("billingMode"), params.get(QbParams.FEE_DEFAULT_BILLING_MODE,
                 String.class));
+        // F-M6 (§9.6): a postpaid fee of a month whose invoice is out already (a settlement run late) goes on the
+        // invoice of the month it is charged in; the invoice is issued under the same wallet lock, so they never cross.
+        String period = FeeRules.POSTPAID.equals(billingMode) && first(ctx, MONTH_INVOICE) != null
+            ? FeeRules.period(ctx.opTime(), zone) : input.period();
         Map<String, Object> values = new LinkedHashMap<>();
         values.put("sponsorId", input.sponsorId());
         values.put("operatorId", operatorOf(ctx));
         values.put("billingMode", billingMode);
         values.put("kind", input.kind());
-        values.put("period", input.period());
+        ctx.put(CHARGE_PERIOD, period);
+        values.put("period", period);
         values.put("amount", input.amount());
         values.put("taxRate", rate);
         values.put("tax", tax);
@@ -360,8 +384,15 @@ public final class FeeProcesses {
         if (tax.signum() > 0) {
             lines.add(new LedgerProcesses.Line(QbLedger.TAX_PAYABLE, Direction.CREDIT, tax));
         }
-        return new LedgerProcesses.PostInput(ctx.opTime(), "Platform fee", reference(input), lines, QbFees.CHARGE,
+        return new LedgerProcesses.PostInput(ctx.opTime(), "Platform fee", chargeReference(ctx), lines, QbFees.CHARGE,
             (String) ctx.get(CHARGE_ID));
+    }
+
+    /** The charge's postings' reference: its kind and the month it is actually written for (review L3). */
+    static String chargeReference(ProcessContext ctx) {
+        ChargeInput input = chargeInput(ctx);
+        String period = ctx.contains(CHARGE_PERIOD) ? (String) ctx.get(CHARGE_PERIOD) : input.period();
+        return reference(input.kind(), period);
     }
 
     /** The posting's reference: {@code fee_<kind>_<period>}, so that the monthly report tells the kinds apart. */

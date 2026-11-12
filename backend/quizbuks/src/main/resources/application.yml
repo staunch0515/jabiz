@@ -530,6 +530,12 @@ quizbuks:
   prepayment:
     release-cron: ${QB_PREPAYMENT_RELEASE_CRON:0 23 3 * * *}
     release-max-items: ${QB_PREPAYMENT_RELEASE_MAX_ITEMS:10000}
+  # F-M6: the distribution fee's settlements, six-field crons in jabiz.fiscal-year-zone: the month that ended on the
+  # 2nd at 00:37 (before the postpaid invoices at 01:17), and the ended publications' final ones at 03:07 (before the
+  # prepayments' release at 03:23).
+  distribution:
+    monthly-cron: ${QB_DISTRIBUTION_MONTHLY_CRON:0 37 0 2 * *}
+    final-cron: ${QB_DISTRIBUTION_FINAL_CRON:0 7 3 * * *}
   # The end-to-end tests' switch (Q9e2 review M1): only their deployment sets it; refused next to live mode.
   e2e:
     enabled: ${QB_E2E_ENABLED:false}

@@ -140,9 +140,24 @@ abstract class PrepaymentItSupport extends PlayItSupport {
 
     /** What the daily check finds about the Sponsor in the account that pays the platform's fees (none: agrees). */
     List<Map<String, Object>> differences(String sponsor) {
+        // The hours of the distribution checks as the reconciliation passes them: the published parameters (F-M6, L4).
+        Map<String, Object> params = new HashMap<>(Map.of("at", clock.instant().toString(), "zone", "Asia/Tokyo"));
+        params.put("unsettledHours", paramValue(QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS));
+        params.put("missingHours", paramValue(QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS));
         return items("qb.system.recon-fee-account", TestTokens.bearer(tokens, "fm5-recon", QbPermissions.WALLET_SYSTEM),
-            Map.of("params", Map.of("at", clock.instant().toString()))).stream().filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
-                && !"FEE_CREDIT_PROMOTION".equals(row.get("checkCode"))).toList();
+            Map.of("params", params)).stream()
+            .filter(row -> sponsor.equals(String.valueOf(row.get("sponsorId")))
+                && !"FEE_CREDIT_PROMOTION".equals(row.get("checkCode"))
+                && !"DISTRIBUTION_AT_FLOOR".equals(row.get("checkCode"))).toList();
+    }
+
+    /** A parameter's published value now (none: not published). */
+    Object paramValue(String key) {
+        List<Map<String, Object>> rows = query("SELECT param_value AS value, is_deleted FROM sys_param_version WHERE param_key = ? "
+            + "AND effect_start_time <= ? ORDER BY effect_start_time DESC, version_no DESC LIMIT 1", key,
+            Timestamp.from(clock.instant()));
+        return rows.isEmpty() || Boolean.TRUE.equals(rows.getFirst().get("is_deleted")) ? null
+            : rows.getFirst().get("value");
     }
 
     @SuppressWarnings("unchecked")

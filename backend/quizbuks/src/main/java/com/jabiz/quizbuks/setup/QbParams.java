@@ -219,6 +219,33 @@ public final class QbParams {
     public static final String VERIFICATION_LINK_HOURS = "qb.sponsor-verification.link-hours";
     /** F-M5 (M3 of its review): days after its end an open prepayment is a difference of the daily check. */
     public static final String PREPAYMENT_RELEASE_OVERDUE_DAYS = "qb.prepayment.release.overdue-days";
+    /**
+     * F-M6 (docs/quizbuks/plans/impl/F-M.md §9): the distribution fee. Whether a submission sets its deposit aside and
+     * freezes its price per start (read at the submission only: turning it off does not touch what was submitted);
+     * the headquarters' range of the operators' prices (the rate in yen per Kudos of the highest tier, the floor and
+     * ceiling of the price per start, the least deposit); how long after its end a publication's final settlement
+     * waits (the starts in its start lock by then are committed); after how many hours of a month a publication
+     * still unsettled for the month before, or one ended without its final settlement, is reported. All controlled.
+     */
+    public static final String DISTRIBUTION_BILLING_ENABLED = "qb.distribution.billing.enabled";
+    public static final String DISTRIBUTION_RATE_MIN = "qb.distribution.rate.min";
+    public static final String DISTRIBUTION_RATE_MAX = "qb.distribution.rate.max";
+    public static final String DISTRIBUTION_UNIT_FLOOR_MIN = "qb.distribution.unit-floor.min";
+    public static final String DISTRIBUTION_UNIT_FLOOR_MAX = "qb.distribution.unit-floor.max";
+    public static final String DISTRIBUTION_UNIT_CEILING_MAX = "qb.distribution.unit-ceiling.max";
+    public static final String DISTRIBUTION_MINIMUM_DEPOSIT_MAX = "qb.distribution.minimum-deposit.max";
+    public static final String DISTRIBUTION_FINAL_END_GRACE_SEC = "qb.distribution.final.end-grace-sec";
+    public static final String DISTRIBUTION_UNSETTLED_AFTER_HOURS = "qb.distribution.unsettled-after-hours";
+    public static final String DISTRIBUTION_FINAL_MISSING_AFTER_HOURS = "qb.distribution.final-missing-after-hours";
+    /** The headquarters' range of the operators' distribution prices, in the order the price check reads them. */
+    public static final List<String> DISTRIBUTION_RANGE = List.of(DISTRIBUTION_RATE_MIN, DISTRIBUTION_RATE_MAX,
+        DISTRIBUTION_UNIT_FLOOR_MIN, DISTRIBUTION_UNIT_FLOOR_MAX, DISTRIBUTION_UNIT_CEILING_MAX,
+        DISTRIBUTION_MINIMUM_DEPOSIT_MAX);
+    /** The controlled ones, in the order of {@link #CONTROLLED} (before {@link #REWARD_KUDOS}). */
+    public static final List<String> DISTRIBUTION_CONTROLLED = java.util.stream.Stream.of(
+        List.of(DISTRIBUTION_BILLING_ENABLED), DISTRIBUTION_RANGE, List.of(DISTRIBUTION_FINAL_END_GRACE_SEC,
+            DISTRIBUTION_UNSETTLED_AFTER_HOURS, DISTRIBUTION_FINAL_MISSING_AFTER_HOURS))
+        .flatMap(List::stream).toList();
     /** The cap's kind, which the controlled change that first sets it gives (yen, whole). */
     public static final Map<String, Object> FEE_CREDIT_MANUAL_MAX_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);
@@ -543,7 +570,7 @@ public final class QbParams {
         OPERATOR_PLANS, OPERATOR_WITHDRAWAL, List.of(TOPUP_BANK_MIN, TOPUP_BANK_MAX), BANK_RECEIVING, WITHDRAWAL_BANK, AUDIENCE_BILLING_PARAMS,
         CASH_ACCOUNT_PARAMS, FEE_PARAMS,
         List.of(ENTRY_FEE_ENABLED), List.of(USAGE_FREE_BYTES), List.of(VIDEO_MAINLAND_SITES), HELP_CONTROLLED, FEE_CREDIT_PARAMS,
-        SITE_PROFILE_CONTROLLED, REWARD_KUDOS)
+        SITE_PROFILE_CONTROLLED, DISTRIBUTION_CONTROLLED, REWARD_KUDOS)
         .flatMap(List::stream).toList();
 
     /** A parameter: its key, kind (as the platform writes kinds) and first value. */
@@ -559,6 +586,9 @@ public final class QbParams {
     private static final Map<String, Object> TOKENS = Map.of("type", "numeric", "precision", 12, "scale", 0);
     private static final Map<String, Object> USD = Map.of("type", "numeric", "precision", 8, "scale", 4);
     /** An account code of the accounting system: at most 20 characters (letters, digits, {@code . _ -}). */
+    /** F-M6: a rate or a price per start, in yen with four decimals. */
+    public static final Map<String, Object> DISTRIBUTION_RATE_KIND = Map.of("type", "numeric", "precision", 12,
+        "scale", 4);
     private static final Map<String, Object> ACCOUNT_CODE = Map.of("type", "text", "maxLength", 20);
 
     public static final List<Param> ALL = List.of(
@@ -907,6 +937,33 @@ public final class QbParams {
             "Whether sponsors may ask the AI to draft a profile package and a quiz from their website"),
         new Param(SITE_PROFILE_MONTHLY, Map.of("type", "numeric", "precision", 3, "scale", 0), "10",
             "How many times a sponsor may ask the AI to draft from their website a month"),
+        // F-M6: the distribution fee (controlled, before the Kudos reward switch: that one stays the last proposal).
+        new Param(DISTRIBUTION_BILLING_ENABLED, BOOL, false,
+            "Whether a publication's submission freezes its price per start and sets its distribution fee's deposit "
+                + "aside (read at the submission only; publications submitted while on are settled to their end)"),
+        new Param(DISTRIBUTION_RATE_MIN, DISTRIBUTION_RATE_KIND, "0.0000",
+            "The least rate an operator may set: yen per start for each Kudos of the publication's highest tier"),
+        new Param(DISTRIBUTION_RATE_MAX, DISTRIBUTION_RATE_KIND, "1.0000",
+            "The highest rate an operator may set: yen per start for each Kudos of the publication's highest tier"),
+        new Param(DISTRIBUTION_UNIT_FLOOR_MIN, DISTRIBUTION_RATE_KIND, "1.0000",
+            "The least floor of the price per start an operator may set, in yen (a placeholder: confirmed by the "
+                + "requester before qb.distribution.billing.enabled is turned on; a tier set too low lands on it)"),
+        new Param(DISTRIBUTION_UNIT_FLOOR_MAX, DISTRIBUTION_RATE_KIND, "100.0000",
+            "The highest floor of the price per start an operator may set, in yen"),
+        new Param(DISTRIBUTION_UNIT_CEILING_MAX, DISTRIBUTION_RATE_KIND, "1000.0000",
+            "The highest ceiling of the price per start an operator may set, in yen"),
+        new Param(DISTRIBUTION_MINIMUM_DEPOSIT_MAX, KUDOS, "100000",
+            "The highest least deposit an operator may set (a publication without a cap on its winners sets it "
+                + "aside), in yen"),
+        new Param(DISTRIBUTION_FINAL_END_GRACE_SEC, Map.of("type", "numeric", "precision", 5, "scale", 0), "3600",
+            "How many seconds after a publication ended its final distribution settlement waits, so that every "
+                + "start before the end is counted (60 to 86400; less counts as 60)"),
+        new Param(DISTRIBUTION_UNSETTLED_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "30",
+            "After how many hours of a month a publication not settled for the month before is reported by the "
+                + "daily check (the monthly settlement runs on the 2nd at 00:37)"),
+        new Param(DISTRIBUTION_FINAL_MISSING_AFTER_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0),
+            "48", "After how many hours of its end a publication without its final distribution settlement is "
+                + "reported by the daily check"),
         // F-F10a: the Kudos reward switch (controlled, after the F-C7 ones: the last of CONTROLLED, and so the last proposal of QB_SETUP, which follows this list).
         new Param(REWARD_KUDOS_ENABLED, BOOL, true,
             "Whether a publication may offer the reward method PLATFORM (Kudos paid by QuizBuks); off at the first "

@@ -7,6 +7,8 @@ import com.jabiz.process.ProcessDefinition;
 import com.jabiz.query.EntityQuery;
 import com.jabiz.query.QueryPredicate;
 import com.jabiz.quizbuks.QbPermissions;
+import com.jabiz.quizbuks.setup.QbParams;
+import com.jabiz.runtime.process.steps.LoadParams;
 import com.jabiz.runtime.process.steps.PublishEvent;
 import com.jabiz.runtime.process.steps.QueryEntities;
 import com.jabiz.runtime.process.steps.RunTemplate;
@@ -118,6 +120,7 @@ public final class Reconciliation {
     static final String RECEIVABLE = "receivable";
     static final String ENTRY_FEES = "entryFees";
     static final String FEE_ACCOUNT = "feeAccount";
+    static final String DISTRIBUTION_PARAMS = "distributionParams";
     static final String PREVIOUS = "previous";
     static final String PREVIOUS_TAKERS = "previousTakers";
     static final String RESYNC = "resync";
@@ -128,7 +131,8 @@ public final class Reconciliation {
         return "urn:jabiz:dataset:default:" + entity;
     }
 
-    public static ProcessDefinition<ReconcileInput, ReconcileOutput, ProcessContext> process() {
+    /** @param zone the fiscal year's zone: F-M6's months of the distribution fee (the unsettled publications) */
+    public static ProcessDefinition<ReconcileInput, ReconcileOutput, ProcessContext> process(java.time.ZoneId zone) {
         return ProcessDefinition.define(RUN, 1, ReconcileInput.class, ReconcileOutput.class, ProcessContext.class,
             pb -> pb
                 .description("Reconciles the wallets, the pending rewards and the top-ups with the ledger.")
@@ -162,8 +166,12 @@ public final class Reconciliation {
                     ctx -> Map.of(), RECEIVABLE))
                 .step("Check the entry fees unsettled", RunTemplate.<ProcessContext>of(ENTRY_FEES_TEMPLATE,
                     ctx -> Map.of(), ENTRY_FEES))
+                // F-M6 (review L4): the distribution checks' hours are the parameters' values, none written in the SQL.
+                .step("Load the distribution checks' hours", LoadParams.<ProcessContext>optional(ProcessContext::opTime,
+                    DISTRIBUTION_PARAMS, QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS,
+                    QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS))
                 .step("Compare the fee account", RunTemplate.<ProcessContext>of(FEE_ACCOUNT_TEMPLATE,
-                    ctx -> Map.of("at", ctx.get(INPUT, ReconcileInput.class).scheduledTime()), FEE_ACCOUNT))
+                    ctx -> feeAccountParams(ctx, zone), FEE_ACCOUNT))
                 // The takers' cache follows by events: one found behind counts only when the previous run found them.
                 .step("Find the previous run", QueryEntities.<ProcessContext>of(defaultDataset(RUN_ENTITY_NAME),
                     ctx -> EntityQuery.builder().where(new QueryPredicate.Lt("scheduledTime",
@@ -280,4 +288,17 @@ public final class Reconciliation {
     }
 
     private Reconciliation() {}
+
+    /** The fee account's template parameters: the run's time and zone, and the distribution checks' hours (or none). */
+    static Map<String, Object> feeAccountParams(ProcessContext ctx, java.time.ZoneId zone) {
+        com.jabiz.param.ParamValues params = ctx.get(DISTRIBUTION_PARAMS, com.jabiz.param.ParamValues.class);
+        Map<String, Object> values = new java.util.HashMap<>();
+        values.put("at", ctx.get(INPUT, ReconcileInput.class).scheduledTime());
+        values.put("zone", zone.getId());
+        values.put("unsettledHours", params.find(QbParams.DISTRIBUTION_UNSETTLED_AFTER_HOURS, java.math.BigDecimal.class)
+            .orElse(null));
+        values.put("missingHours", params.find(QbParams.DISTRIBUTION_FINAL_MISSING_AFTER_HOURS,
+            java.math.BigDecimal.class).orElse(null));
+        return values;
+    }
 }

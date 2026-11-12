@@ -72,6 +72,9 @@ export const PUBLISHING_TEMPLATE = {
   mailServer: 'qb.sponsor.mail-server',
   /** F-M5: what a publication's submission set aside from the fee account, and what became of it. */
   prepayments: 'qb.sponsor.publication-prepayments',
+  /** F-M6: the publication's distribution fee and its settlements. */
+  distribution: 'qb.sponsor.publication-distribution',
+  distributionSettlements: 'qb.sponsor.publication-distribution-settlements',
 } as const
 
 /** The sponsor's own rows of the publishing entities (read only; writing is the processes'). */

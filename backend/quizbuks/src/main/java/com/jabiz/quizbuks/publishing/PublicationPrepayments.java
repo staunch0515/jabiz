@@ -64,6 +64,9 @@ public final class PublicationPrepayments {
     static final String ASSIGNMENT = "funds.assignment";
     static final String LISTS = "funds.lists";
     static final String PRICES = "funds.prices";
+    /** F-M6: the operator's distribution price, and what the publication's distribution fee came to. */
+    static final String DISTRIBUTION_PRICE = "funds.distributionPrice";
+    static final String DISTRIBUTION = "funds.distribution";
     static final String ITEMS = "funds.items";
     static final String OWED = "funds.owed";
     static final String FUNDS = "funds.funds";
@@ -80,7 +83,9 @@ public final class PublicationPrepayments {
 
     /** The parameters the submission's funds read (optional: not published reads as off, as the fee gate's). */
     static final List<String> PARAM_KEYS = List.of(QbParams.AUDIENCE_BILLING_ENABLED, QbParams.FEE_TAX_RATE,
-        QbParams.FEE_DEFAULT_BILLING_MODE);
+        QbParams.FEE_DEFAULT_BILLING_MODE, QbParams.DISTRIBUTION_BILLING_ENABLED, QbParams.DISTRIBUTION_RATE_MIN,
+        QbParams.DISTRIBUTION_RATE_MAX, QbParams.DISTRIBUTION_UNIT_FLOOR_MIN, QbParams.DISTRIBUTION_UNIT_FLOOR_MAX,
+        QbParams.DISTRIBUTION_UNIT_CEILING_MAX, QbParams.DISTRIBUTION_MINIMUM_DEPOSIT_MAX);
 
     private PublicationPrepayments() {}
 
@@ -137,10 +142,16 @@ public final class PublicationPrepayments {
                     .where(new QueryPredicate.In("userId",
                         FeeGate.ids(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null)))
                     .limit(1).build(), ASSIGNMENT)))
-            .step("Read the operator's audience prices", QueryEntities.<ProcessContext>of(
-                QbAudiencePricing.defaultDataset(QbAudiencePricing.PRICE_LIST), ctx -> EntityQuery.builder()
-                    .where(new QueryPredicate.In("owner", FeeGate.ids(reads.test(ctx) && audiencePriced(ctx)
-                        ? operatorOf(ctx) : null))).limit(1).build(), LISTS))
+            // F-M6: the operator's distribution price joins the audience price list's read (one statement when either
+            // is wanted, none when neither: a switch on adds one read to a submission without audience rules).
+            .step("Read the operator's audience and distribution prices", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(QbAudiencePricing.defaultDataset(QbAudiencePricing.PRICE_LIST),
+                    ctx -> EntityQuery.builder().where(new QueryPredicate.In("owner", FeeGate.ids(reads.test(ctx)
+                        && audiencePriced(ctx) ? operatorOf(ctx) : null))).limit(1).build(), LISTS),
+                QueryEntities.query(com.jabiz.quizbuks.fee.QbDistributions.defaultDataset(
+                    com.jabiz.quizbuks.fee.QbDistributions.PRICE), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("operatorId", FeeGate.ids(reads.test(ctx) && distributionPriced(ctx)
+                        ? operatorOf(ctx) : null))).limit(1).build(), DISTRIBUTION_PRICE)))
             .step("Read their prices", QueryEntities.<ProcessContext>of(
                 QbAudiencePricing.defaultDataset(QbAudiencePricing.PRICE), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("priceListId", FeeGate.list(ctx, LISTS).stream()
@@ -159,6 +170,47 @@ public final class PublicationPrepayments {
     private static boolean audiencePriced(ProcessContext ctx) {
         return !FeeGate.list(ctx, CRITERIA).isEmpty() && operatorOf(ctx) != null
             && Boolean.TRUE.equals(params(ctx).find(QbParams.AUDIENCE_BILLING_ENABLED, Boolean.class).orElse(false));
+    }
+
+    /** F-M6: whether the distribution fee is switched on and the sponsor has an operator (only then its price is read). */
+    private static boolean distributionPriced(ProcessContext ctx) {
+        return operatorOf(ctx) != null && Boolean.TRUE.equals(
+            params(ctx).find(QbParams.DISTRIBUTION_BILLING_ENABLED, Boolean.class).orElse(false));
+    }
+
+    /**
+     * F-M6: the publication's distribution fee as its submission freezes it: the price per start (from the operator's
+     * price and the highest tier), whether that is the floor, and the deposit set aside with its tax.
+     */
+    public record DistributionQuote(java.math.BigDecimal unit, boolean atFloor, java.math.BigDecimal maxReward,
+        Integer maxWinners, java.math.BigDecimal deposit, java.math.BigDecimal depositBeforeTax) {}
+
+    /** F-M6: the distribution fee of the publication, or none (switched off, the operator has no price). */
+    static DistributionQuote distribution(ProcessContext ctx, EntityInstance publication) {
+        if (!distributionPriced(ctx)) {
+            return null;
+        }
+        EntityInstance row = FeeGate.first(ctx, DISTRIBUTION_PRICE);
+        if (row == null) {
+            return null;
+        }
+        com.jabiz.quizbuks.fee.DistributionRules.Price price = new com.jabiz.quizbuks.fee.DistributionRules.Price(
+            FeeGate.money(row.get("rate")), FeeGate.money(row.get("unitFloor")), FeeGate.money(row.get("unitCeiling")),
+            FeeGate.money(row.get("minimumDeposit")));
+        BigDecimal maxReward = TierCoverage.maxReward(PublicationEditing.tiersOf(FeeGate.list(ctx,
+            PublicationEditing.TIERS)));
+        com.jabiz.quizbuks.fee.DistributionRules.Unit unit = com.jabiz.quizbuks.fee.DistributionRules.unit(price,
+            maxReward);
+        Integer maxWinners = PublicationEditing.integer(publication.get("maxWinners"));
+        // Review L4: no tax rate of our own; check() refuses the submission without one.
+        BigDecimal rate = params(ctx).find(QbParams.FEE_TAX_RATE, BigDecimal.class).orElse(null);
+        if (rate == null) {
+            return null;
+        }
+        return new DistributionQuote(unit.unit(), unit.atFloor(), maxReward, maxWinners,
+            com.jabiz.quizbuks.fee.DistributionRules.deposit(maxWinners, unit.unit(), price.minimumDeposit(), rate),
+            com.jabiz.quizbuks.fee.DistributionRules.depositBeforeTax(maxWinners, unit.unit(),
+                price.minimumDeposit()));
     }
 
     /** What the publication sets aside: the audience fee and its tax (F-M7), when there is one. */
@@ -181,7 +233,25 @@ public final class PublicationPrepayments {
             BigDecimal withTax = fee.add(tax == null ? BigDecimal.ZERO : tax);
             items.add(new PrepaymentRules.Item(QbPrepayments.AUDIENCE, withTax, fee, detail(quote, withTax)));
         }
+        // F-M6: the distribution fee's deposit; nothing is charged from it when the publication goes on (the
+        // settlements charge it a month at a time), so its fee before tax is 0.
+        DistributionQuote distribution = distribution(ctx, publication);
+        if (distribution != null) {
+            ctx.put(DISTRIBUTION, distribution);
+            if (distribution.deposit().signum() > 0) {
+                items.add(new PrepaymentRules.Item(QbPrepayments.DISTRIBUTION, distribution.deposit(), BigDecimal.ZERO,
+                    distributionDetail(distribution)));
+            }
+        }
         return List.copyOf(items);
+    }
+
+    /** F-M6: the distribution fee as stored with its deposit's prepayment. */
+    static String distributionDetail(DistributionQuote quote) {
+        return "{\"unit\":" + quote.unit().toPlainString() + ",\"atFloor\":" + quote.atFloor()
+            + ",\"maxReward\":" + (quote.maxReward() == null ? "null" : quote.maxReward().toPlainString())
+            + ",\"maxWinners\":" + quote.maxWinners() + ",\"depositBeforeTax\":"
+            + quote.depositBeforeTax().toPlainString() + ",\"deposit\":" + quote.deposit().toPlainString() + "}";
     }
 
     /** The audience fee's quote as stored with its prepayment: whose list, the days, the rules and the figures. */
@@ -206,6 +276,24 @@ public final class PublicationPrepayments {
     static void check(ProcessContext ctx, EntityInstance publication) {
         if (!ctx.contains(ITEMS)) {
             return;
+        }
+        com.jabiz.entity.Violation unpriced = distributionProblem(ctx);
+        if (unpriced != null) {
+            ctx.reject(unpriced);
+            return;
+        }
+        // F-M6 (N5): a cap on the winners whose distribution fee is more than any fee may be is refused here, not when
+        // the freeze would fail.
+        if (ctx.contains(DISTRIBUTION)) {
+            DistributionQuote distribution = ctx.get(DISTRIBUTION, DistributionQuote.class);
+            if (distribution.deposit().compareTo(new BigDecimal(com.jabiz.quizbuks.fee.FeeProcesses.MAX_AMOUNT)) > 0) {
+                ctx.reject(new com.jabiz.entity.Violation("maxWinners",
+                    com.jabiz.quizbuks.fee.FeeCodes.DISTRIBUTION_DEPOSIT_RANGE, "The cap on the winners times the "
+                        + "price per start is more than a fee may be", Map.of("maxWinners",
+                        String.valueOf(distribution.maxWinners()), "unit", distribution.unit().toPlainString(),
+                        "max", com.jabiz.quizbuks.fee.FeeProcesses.MAX_AMOUNT)));
+                return;
+            }
         }
         PrepaymentRules.Funds funds = funds(ctx);
         ctx.put(FUNDS, funds);
@@ -295,6 +383,11 @@ public final class PublicationPrepayments {
         values.put("billingOperatorId", operatorOf(ctx));
         BigDecimal total = ctx.get(FUNDS, PrepaymentRules.Funds.class).total();
         values.put("prepaymentTotal", total.signum() > 0 ? total : null);
+        // F-M6: the price per start frozen (none: no distribution fee for this publication, nothing is settled).
+        DistributionQuote distribution = ctx.contains(DISTRIBUTION) ? ctx.get(DISTRIBUTION, DistributionQuote.class)
+            : null;
+        values.put("distributionUnit", distribution == null ? null : distribution.unit());
+        values.put("distributionAtFloor", distribution == null ? null : distribution.atFloor());
         return values;
     }
 
@@ -358,8 +451,12 @@ public final class PublicationPrepayments {
     public static final String CHECK = "QB_PUBLICATION_FUNDS_CHECK";
     static final String CHECKED = "funds.checked";
 
-    /** One fee the publication would set aside: what for, with its tax, and the fee before tax. */
-    public record CheckItem(String purpose, BigDecimal amount, BigDecimal chargeAmount) {}
+    /**
+     * One fee the publication would set aside: what for, with its tax, and the fee before tax; F-M6: the distribution
+     * fee's price per start and whether it is the operator's floor (none for the other purposes).
+     */
+    public record CheckItem(String purpose, BigDecimal amount, BigDecimal chargeAmount, BigDecimal unit,
+        Boolean atFloor) {}
 
     /**
      * @param total     what submitting now would set aside
@@ -392,19 +489,48 @@ public final class PublicationPrepayments {
                         QbPublications.sponsorDataset(QbPublications.PUBLICATION), PublicationEditing.PUB_ID,
                         PublicationEditing.PUBLICATION))
                     .step("Load the fee parameters", com.jabiz.runtime.process.steps.LoadParams.<ProcessContext>optional(
-                        ProcessContext::opTime, PARAMS, QbParams.FEE_DEFAULT_BILLING_MODE,
-                        QbParams.AUDIENCE_BILLING_ENABLED, QbParams.FEE_TAX_RATE))
-                    .steps(b -> FeeGate.load(b, ctx -> ctx.request().actorId()));
+                        ProcessContext::opTime, PARAMS, PARAM_KEYS.toArray(String[]::new)))
+                    .steps(b -> FeeGate.load(b, ctx -> ctx.request().actorId()))
+                    // F-M6: the highest tier sets the price per start.
+                    .steps(PublicationEditing::loadTiers);
                 load(pb, ctx -> ctx.get(PublicationEditing.PUBLICATION, EntityInstance.class), ctx -> true, false);
                 pb.compute("Check", (metadata, ctx) -> {
+                    com.jabiz.entity.Violation unpriced = distributionProblem(ctx);
+                    if (unpriced != null) {
+                        throw new com.jabiz.runtime.BusinessRuleViolationException(List.of(unpriced));
+                    }
                     PrepaymentRules.Funds funds = ctx.contains(ITEMS) ? funds(ctx)
                         : PrepaymentRules.check(List.of(), new PrepaymentRules.Standing(FeeRules.PREPAID,
                             BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
+                    DistributionQuote distribution = ctx.contains(DISTRIBUTION)
+                        ? ctx.get(DISTRIBUTION, DistributionQuote.class) : null;
                     ctx.put(CHECKED, new CheckOutput(funds.items().stream()
-                        .map(item -> new CheckItem(item.purpose(), item.amount(), item.chargeAmount())).toList(),
+                        .map(item -> QbPrepayments.DISTRIBUTION.equals(item.purpose()) && distribution != null
+                            ? new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), distribution.unit(),
+                                distribution.atFloor())
+                            : new CheckItem(item.purpose(), item.amount(), item.chargeAmount(), null, null)).toList(),
                         funds.total(), funds.available(), funds.shortfall(), funds.billingMode(), funds.enough()));
                 });
             });
+    }
+
+    /**
+     * F-M6 (review L2, L4): with a distribution price to freeze, the headquarters' range and the tax rate must be
+     * published; either missing refuses the submission (and the wizard's check) rather than freezing a price no bound
+     * applies to, or a deposit without its tax.
+     */
+    static com.jabiz.entity.Violation distributionProblem(ProcessContext ctx) {
+        if (!distributionPriced(ctx) || FeeGate.first(ctx, DISTRIBUTION_PRICE) == null) {
+            return null;
+        }
+        if (!com.jabiz.quizbuks.fee.DistributionPrices.range(params(ctx)).complete()) {
+            return com.jabiz.quizbuks.fee.DistributionRules.rangeMissing();
+        }
+        if (params(ctx).find(QbParams.FEE_TAX_RATE, BigDecimal.class).isEmpty()) {
+            return new com.jabiz.entity.Violation(null, com.jabiz.quizbuks.fee.FeeCodes.FEE_PARAMS,
+                "The tax rate cannot be used", Map.of("rate", "null"));
+        }
+        return null;
     }
 
     static String sponsorOf(EntityInstance publication) {
