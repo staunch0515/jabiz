@@ -5591,7 +5591,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 |---|---|
 | 17zz20-1 | `R2dbcStorageEngine.executeQueries`：`LEFT JOIN LATERAL (… WHERE k.jabiz_q = i) bi ON true`，编号成为各读取内的一次性条件（One-Time Filter），每个读取只在自己那一行执行。列、类型、行号、排序与拆分不变，仍是一条语句（`StatementBudgetIT` 不变）。比较过的写法：`UNION ALL` 加标记不可行（其他读取的列只能是无类型的 NULL，多路合并时先解析为 text，遇 uuid 等报 "UNION types text and uuid cannot be matched"）；`FULL JOIN … ON false` 同样线性，但依赖优化器对常量假条件的特例 |
 | 17zz20-2 | 测试 `CombinedReadCostIT`（先写，旧写法上失败）：300、1,200、3,000 行的三个读取合成一条，每个读取的行与单独读取相同；实际执行的语句以绑定的值 `EXPLAIN (ANALYZE)`，Memoize 开与关两种计划中，任何一步处理的行（返回的行 × 循环次数，加过滤掉的行）不超过读取行数之和的 20 倍。实测：旧写法 4,504,500，新写法 4,500 |
-| 17zz20-3 | 文档：决策 D46 第 7 项的写法（不改规则）、设计 03 §3.1 |
+| 17zz20-3 | 文档：决策 D46 第 7 项后加一行带日期的说明（原文不改，规则不变）、设计 03 §3.1 |
 
 **验收**：`:runtime:check`、`WriteCombiningIT`、`StatementBudgetIT`、`CombinedReadCostIT` 绿。
 
