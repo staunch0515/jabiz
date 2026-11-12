@@ -24,6 +24,24 @@ test('finance reviews a large transfer and issues the monthly report', async ({ 
   await expect(inReview).toBeVisible()
   expect(Number(await inReview.getAttribute('data-count'))).toBeGreaterThanOrEqual(1)
   await expectOverviewAccounts(page, request)
+  // F-F10b: the first launch's money switches, one row for each parameter of the registry (setup.FirstLaunchSwitches):
+  // the 22 rows from the server (20 active, and the 2 that wait for a feature but whose key exists), the 4 that wait for a
+  // feature of the charge groups and the 2 set up by hand.
+  // What the active rows say depends on the system (this one proposes the declared values, other specs change some),
+  // so only the states that cannot change are fixed here.
+  await expect(page.getByTestId('fund-switches')).toBeVisible()
+  await expect(page.getByTestId('fund-switch')).toHaveCount(28)
+  await expect(page.locator('[data-testid="fund-switch"][data-key="qb.exposure.billing.enabled"]'))
+    .toHaveAttribute('data-state', 'waiting')
+  // Its key exists: the card reads its value, and says it waits for its feature.
+  const audience = page.locator('[data-testid="fund-switch"][data-key="qb.audience.billing.enabled"]')
+  await expect(audience).toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
+  await expect(audience.getByTestId('fund-switch-note')).toContainText('F-M7')
+  await expect(page.locator('[data-testid="fund-switch"][data-key="qb.fee-credit.manual.max"]'))
+    .toHaveAttribute('data-state', 'manual')
+  await expect(page.locator('[data-testid="fund-switch"][data-key="qb.kudos.buy.enabled"]'))
+    .toHaveAttribute('data-state', /^(match|differs|proposed|proposedDiffers|missing)$/)
+  await expect(page.getByTestId('fund-switches-summary')).toBeVisible()
   await inReview.click()
   await expect(page).toHaveURL(/\/admin\/qb\/finance\/transfers\?status=REVIEW$/)
   const row = page.locator(`[data-testid="transfer-row"][data-id="${transferId}"]`)

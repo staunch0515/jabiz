@@ -71,6 +71,8 @@ public final class FirstLaunchSwitches {
         active(QbParams.REWARD_KUDOS_ENABLED, "kudos", false,
             "no publication offers a Kudos reward at the launch (declared on: today's behaviour)"),
         active(QbParams.REWARD_DEFAULT_METHODS, "kudos", "", null),
+        // Kudos are only shown at the launch, not used: an entry fee is paid in Kudos, so a sponsor may not set one.
+        active(QbParams.ENTRY_FEE_ENABLED, "kudos", false, null),
         // The charge groups of F-M: their rows turn ACTIVE in the pull request that adds the key (F-F10 plan, 2).
         waiting("qb.distribution.billing.enabled", "distribution", true, "F-M6"),
         waiting(QbParams.AUDIENCE_BILLING_ENABLED, "audience", true, "F-M7"),
