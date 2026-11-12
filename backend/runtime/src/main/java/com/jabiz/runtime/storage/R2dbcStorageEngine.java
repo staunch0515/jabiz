@@ -317,8 +317,13 @@ public final class R2dbcStorageEngine implements StorageEngine {
     /**
      * The reads as one statement (16p, T5): each plan's statement as {@link #executeQuery} sends it, the rows of each
      * joined to its number only, so every column keeps its type and nothing is converted on the way:
-     * {@code SELECT … FROM (VALUES (0), (1)) k(jabiz_q) LEFT JOIN (rows of read 0) b0 ON k.jabiz_q = 0 LEFT JOIN …},
-     * in the order of each read.
+     * {@code SELECT … FROM (VALUES (0), (1)) k(jabiz_q) LEFT JOIN LATERAL (rows of read 0 WHERE k.jabiz_q = 0) b0 ON
+     * true LEFT JOIN LATERAL …}, in the order of each read. The number is tested inside each read, where it is a
+     * condition on the outer row alone, so each read runs for its own number only and the statement costs what the
+     * reads cost one after another (ROADMAP 17zz20). Joined {@code ON k.jabiz_q = 0}, the same condition could only be
+     * tested on every pair of rows: the reads' product, not their sum. This holds while each branch is a subquery the
+     * planner keeps whole (its window function, the numbering, does that): pulled up into the outer query, the condition
+     * would become a join condition again ({@code CombinedReadCostIT} checks the plan).
      */
     @Override
     public Mono<List<List<Map<String, Object>>>> executeQueries(List<PlanRead> reads) {
@@ -359,8 +364,8 @@ public final class R2dbcStorageEngine implements StorageEngine {
                     selected.add("r." + SqlIdentifiers.require(read.columns().get(j)) + " AS " + alias);
                     columns.append(", ").append(branch).append('.').append(alias);
                 }
-                joins.append(" LEFT JOIN (SELECT ").append(String.join(", ", selected)).append(" FROM (").append(sql)
-                    .append(") r) ").append(branch).append(" ON k.jabiz_q = ").append(i);
+                joins.append(" LEFT JOIN LATERAL (SELECT ").append(String.join(", ", selected)).append(" FROM (")
+                    .append(sql).append(") r WHERE k.jabiz_q = ").append(i).append(") ").append(branch).append(" ON true");
                 numbers.add(branch + ".jabiz_n" + i);
                 keys.add("(" + i + ")");
                 if (plan.timeout().compareTo(timeout) > 0) {

@@ -12,13 +12,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import tools.jackson.databind.JsonNode;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.sql.SQLException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -42,8 +39,6 @@ class LedgerAccountDimensionIndexIT extends LedgerItSupport {
     static final String TEMPLATE = "it.ledger_account_dimension_sum";
     /** The plan nodes that read an index; which one the planner picks depends on the volume, not on the index. */
     static final Set<String> INDEX_READS = Set.of("Index Scan", "Index Only Scan", "Bitmap Index Scan");
-
-    static final Duration TIMEOUT = Duration.ofSeconds(30);
 
     @Autowired
     ConnectionFactory connections;
@@ -116,32 +111,9 @@ class LedgerAccountDimensionIndexIT extends LedgerItSupport {
      * index serves the template's conditions, not the planner's cost model at this volume.
      */
     private JsonNode explain(SqlStatementLog.Execution ran) {
-        io.r2dbc.spi.Connection connection = Mono.from(connections.create()).block(TIMEOUT);
-        try {
-            run(connection, "ANALYZE ledger_entry_version");
-            Mono.from(connection.beginTransaction()).block(TIMEOUT);
-            run(connection, "SET LOCAL enable_seqscan = off");
-            io.r2dbc.spi.Statement explain = connection.createStatement("EXPLAIN (FORMAT JSON) " + ran.sql());
-            for (int i = 0; i < ran.bound().size(); i++) {
-                Object bound = ran.bound().get(i);
-                if (bound instanceof SqlStatementLog.NullValue nothing) {
-                    explain.bindNull(i, nothing.type());
-                } else {
-                    explain.bind(i, bound);
-                }
-            }
-            String plan = Flux.from(explain.execute())
-                .flatMap(result -> result.map((row, meta) -> row.get(0, String.class))).blockFirst(TIMEOUT);
-            Mono.from(connection.rollbackTransaction()).block(TIMEOUT);
-            return json.readTree(plan).get(0).get("Plan");
-        } finally {
-            Mono.from(connection.close()).block(TIMEOUT);
-        }
-    }
-
-    private static void run(io.r2dbc.spi.Connection connection, String sql) {
-        Flux.from(connection.createStatement(sql).execute()).flatMap(io.r2dbc.spi.Result::getRowsUpdated)
-            .blockLast(TIMEOUT);
+        execute("ANALYZE ledger_entry_version");
+        return json.readTree(SqlStatementLog.explain(connections, ran, "", Map.of("enable_seqscan", "off")))
+            .get(0).get("Plan");
     }
 
     /** Every index read of the plan, as "node type index name". */
