@@ -94,7 +94,11 @@ public final class BankWithdrawals {
 
     /** A taker's bank account was saved or changed: when they may withdraw to it (transactional, not unsubscribable). */
     public static final MailTemplate ACCOUNT_CHANGED_MAIL = MailTemplate.define("qb.bank-account.changed", t -> t
-        .category(MailCategory.TRANSACTIONAL).param("bank", "account", "usableFrom"));
+        .category(MailCategory.TRANSACTIONAL).param("bank", "account", "usableFrom")
+            .sample("bank", "Sample Bank")
+            .sample("account", "****1234")
+            .sample("usableFrom", "2026-01-01")
+            .protectedText());
 
     /** The taker's bank account as typed; the number is masked wherever the input is recorded. */
     public record AccountInput(@NotBlank @Size(max = 8) String bankCode,
