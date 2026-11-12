@@ -5536,7 +5536,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **验收**：CI 绿（平台分支上分片不运行；下一个应用同步 PR 中三片在 40 分钟内完成）。
 
-**17zz16 状态**：📝 待评审（分支 `1.3/phase-17zz16-shard-timeout`）。
+**17zz16 状态**：✅ 已合并（#560）。
 
 ### 17zz17 关闭时定时任务调度器不再报 TaskRejectedException（2026-11-09，S2 报告）
 
@@ -5549,7 +5549,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **验收**：`:runtime:check`、`:app:test --tests '*Job*'` 绿；`:app:platformCheck` 输出无 `TaskRejectedException`。
 
-**17zz17 状态**：📝 待评审（分支 `1.3/phase-17zz17-job-scheduler-shutdown`）。
+**17zz17 状态**：✅ 已合并（#586）。
 
 ### 17zz18 账本：科目 + 第一维度的索引（2026-11-12，QuizBuks F-M5）
 
@@ -5566,7 +5566,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **验收**：`:runtime:check`、`:app:platformCheck` 绿；封存、`SealedColumnsHistory`、`StatementBudgetIT`、账本测试不变。
 
-**17zz18 状态**：📝 待评审（分支 `1.3/phase-17zz18-ledger-dimension-index`）。
+**17zz18 状态**：✅ 已合并（#631）。
 
 ### 17zz19 对话框缺省的高度上限（2026-11-12，QuizBuks e2e 中发现）
 
@@ -5581,7 +5581,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **验收**：前端 lint、typecheck、全部 Vitest 绿；e2e 全绿。
 
-**17zz19 状态**：📝 待评审（分支 `1.3/phase-17zz19-dialog-max-height`）。
+**17zz19 状态**：✅ 已合并（#639）。
 
 ### 17zz20 合并读取的代价从乘积改为和（2026-11-12，QuizBuks 替换题库时发现）
 
@@ -5595,7 +5595,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **验收**：`:runtime:check`、`WriteCombiningIT`、`StatementBudgetIT`、`CombinedReadCostIT` 绿。
 
-**17zz20 状态**：📝 待评审（分支 `1.3/phase-17zz20-combined-read-lateral`）。
+**17zz20 状态**：✅ 已合并（#648）。
 
 ### 17zz21 时态实体的连续删除先预读（2026-11-12，QuizBuks 替换题库时发现）
 
@@ -5613,7 +5613,7 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **验收**：`:runtime:check`、`TemporalDeleteBatchIT`、`StatementBudgetIT`、`WriteCombiningIT` 绿。
 
-**17zz21 状态**：📝 待评审（分支 `1.3/phase-17zz21-batched-temporal-deletes`）。
+**17zz21 状态**：✅ 已合并（#650）。
 
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
