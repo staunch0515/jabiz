@@ -116,7 +116,7 @@ export function TranslateDialog({ language, onOpenChange, send, sent }: {
     <Dialog open onOpenChange={(next) => {
       if (!request.isPending) onOpenChange(next)
     }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl" data-testid="ai-translate-dialog">
+      <DialogContent className="sm:max-w-xl" data-testid="ai-translate-dialog">
         <form noValidate onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
             <DialogTitle>{t('ai.translate.dialogTitle', { language: name })}</DialogTitle>

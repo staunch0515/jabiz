@@ -202,7 +202,7 @@ function RequestDialog({ quiz, materials, maxCount, open, onOpenChange }: {
     <Dialog open={open} onOpenChange={(next) => {
       if (!request.isPending) onOpenChange(next)
     }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="ai-dialog">
+      <DialogContent className="sm:max-w-2xl" data-testid="ai-dialog">
         <form noValidate onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
             <DialogTitle>{t('ai.dialog.title')}</DialogTitle>

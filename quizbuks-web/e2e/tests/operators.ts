@@ -1,7 +1,7 @@
-import type { APIRequestContext } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 import { contentAdmin, totp } from './legal'
 import { adminToken, expect, insert, PASSWORD, rows, run, tokenOf, unique, verifiedUser } from './support'
-import { query } from './content'
+import { query, sponsor } from './content'
 
 /*
  * Operators for the end-to-end tests (F-S1, docs/quizbuks/plans/impl/F-S1.md): every sponsor belongs to an operator.
@@ -22,6 +22,9 @@ export interface OperatorLead {
   operatorToken: string
   /** A session at the sponsor entry: the operator's own sponsor. */
   sponsorToken: string
+  /** The TOTP secret enrolled at the first sign-in, and when: a page's sign-in ({@link signInOperatorDesk}) needs them. */
+  secret: string
+  enrolledAt: number
 }
 
 /** A new operator and its lead, signed in at both entries. */
@@ -40,8 +43,9 @@ export async function operatorWithLead(request: APIRequestContext, name = 'Ope')
   expect(sponsorToken, 'a session at the sponsor entry').toBeTruthy()
   const roleId = (await rows(request, admin, ROLES, [{ field: 'roleCode', op: 'eq', value: 'QB_OPERATOR' }], 1))[0].id
   await insert(request, admin, USER_ROLES, { userId, roleId })
-  return { operatorId: String(saved.operatorId), userId, email, operatorToken: await operatorSignIn(request, email),
-    sponsorToken }
+  const session = await operatorSession(request, email)
+  return { operatorId: String(saved.operatorId), userId, email, operatorToken: session.token, sponsorToken,
+    secret: session.secret, enrolledAt: Date.now() }
 }
 
 /** A member of the operator holding QB_OPERATOR, signed in at the operators' entry; returns the session. */
@@ -123,11 +127,6 @@ export async function ensureDefaultOperator(request: APIRequestContext): Promise
   return String(saved.operatorId)
 }
 
-/** Signs in at the operators' entry, enrolling TOTP the first time (the role requires a second factor). */
-async function operatorSignIn(request: APIRequestContext, email: string): Promise<string> {
-  return (await operatorSession(request, email)).token
-}
-
 interface OperatorSession {
   /** The TOTP secret enrolled at the first sign-in. */
   secret: string
@@ -195,4 +194,41 @@ export async function nextCode(secret: string, enrolledAt: number): Promise<stri
   const wait = (step(enrolledAt) + 1) * 30_000 - Date.now() + 500
   if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait))
   return totp(secret, Date.now() + 30_000)
+}
+
+/**
+ * Signs a page in at the Operator Management System as an enrolled member (the lead of {@link operatorWithLead}, or
+ * {@link operatorMemberFor}'s member): the address and password, then the second factor's next unused code.
+ */
+export async function signInOperatorDesk(page: Page, member: { email: string; secret: string; enrolledAt: number }) {
+  await page.goto('/operator/login')
+  await page.getByPlaceholder('User name', { exact: true }).fill(member.email)
+  await page.getByPlaceholder('Password', { exact: true }).fill(PASSWORD)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  const code = page.locator('input[autocomplete="one-time-code"]')
+  await code.fill(await nextCode(member.secret, member.enrolledAt))
+  await code.press('Enter')
+  await expect(page).not.toHaveURL(/\/login/)
+}
+
+/**
+ * An approved Sponsor of the operator (not of the default one): one signs up with the default operator, which approves
+ * the application, and the platform's content administrator then moves the Sponsor to the operator (an account must
+ * exist to be moved). The session is signed in again after the move, as the Sponsor's operator is read from the
+ * token's account.
+ */
+export async function sponsorOfOperator(request: APIRequestContext, operator: OperatorLead, name: string,
+  company: string) {
+  const made = await sponsor(request, name)
+  const applied = await run(request, made.token, 'QB_SPONSOR_APPLY', { displayName: name, company,
+    acceptTerms: true })
+  if (applied.approval === 'PENDING') await decideAsOperator(request, made.token, applied.approvalRequestId)
+  await expect.poll(async () => (await rows(request, made.token, 'urn:jabiz:dataset:sponsor:QbSponsor', []))[0]
+    ?.attributes.reviewStatus, { message: 'the Sponsor is approved', timeout: 30_000 }).toBe('APPROVED')
+  const me = await (await request.get('/api/auth/me', { headers: { Authorization: `Bearer ${made.token}` } })).json()
+  const userId = String(me.userId)
+  const hq = await tokenOf(request, await contentAdmin(request), PASSWORD, 'admin')
+  await run(request, hq, 'QB_SPONSOR_OPERATOR_ASSIGN', { userId, operatorId: operator.operatorId,
+    reason: 'End-to-end test' })
+  return { email: made.email, token: await tokenOf(request, made.email, PASSWORD, 'sponsor'), userId, company }
 }

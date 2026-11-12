@@ -186,7 +186,7 @@ export function VersionsPanel({ quizId, stale }: { quizId: string; stale: boolea
       <Dialog open={viewing !== null} onOpenChange={(open) => {
         if (!open) setViewing(null)
       }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl" data-testid="version-dialog">
+        <DialogContent className="sm:max-w-3xl" data-testid="version-dialog">
           <DialogHeader>
             <DialogTitle>{viewing ? t('versions.viewTitle', { label: viewing.label }) : ''}</DialogTitle>
             <DialogDescription>

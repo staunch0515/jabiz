@@ -59,6 +59,22 @@ public class TemporalStore {
         return select(engine, table, def, id, "").map(row -> toVersion(def, row)).collectList();
     }
 
+    /**
+     * The versions of several instances at once (ROADMAP 17zz21, the deletions of one commit read ahead), each list as
+     * {@link #load} reads it; an instance without versions has an empty list.
+     */
+    public Mono<Map<UUID, List<EntityVersion>>> loadAll(StorageEngine engine, String table, EntityDefinition def,
+        java.util.Collection<UUID> ids) {
+        Map<UUID, List<EntityVersion>> versions = new LinkedHashMap<>();
+        ids.forEach(id -> versions.put(id, new ArrayList<>()));
+        if (ids.isEmpty()) {
+            return Mono.just(versions);
+        }
+        return select(engine, table, def, "= ANY(:id)", BoundValue.of(ids.toArray(UUID[]::new)), "")
+            .doOnNext(row -> versions.get(Rows.uuid(row.get(def.primaryKeyColumn()))).add(toVersion(def, row)))
+            .then(Mono.just(versions));
+    }
+
     /** A version with the operation that wrote it. */
     public record HistoryEntry(EntityVersion version, String actorId, String processName, Instant opTime,
         String reason) {
@@ -100,6 +116,12 @@ public class TemporalStore {
 
     private Flux<Map<String, Object>> select(StorageEngine engine, String table, EntityDefinition def, UUID id,
         String extraColumns) {
+        return select(engine, table, def, "= :id", BoundValue.of(id), extraColumns);
+    }
+
+    /** The versions of the instances whose id is {@code idCondition} ({@code :id} bound to {@code ids}), by id then number. */
+    private Flux<Map<String, Object>> select(StorageEngine engine, String table, EntityDefinition def, String idCondition,
+        BoundValue ids, String extraColumns) {
         String idColumn = SqlIdentifiers.require(def.primaryKeyColumn());
         String versionColumn = SqlIdentifiers.require(def.systemColumn(TemporalSpec.VERSION_NO));
         String sql = "SELECT t.*, i.changed_fields AS " + CHANGED_FIELDS + ", i.action AS " + ACTION
@@ -110,8 +132,8 @@ public class TemporalStore {
             + " AND i.entity_type = :entityType AND i.entity_id = t." + idColumn
             + " AND i.version_no = t." + versionColumn
             + (extraColumns.isEmpty() ? "" : " LEFT JOIN op_process p ON p.process_seq_id = i.process_seq_id")
-            + " WHERE t." + idColumn + " = :id ORDER BY t." + versionColumn;
-        Map<String, BoundValue> params = Map.of("entityType", BoundValue.of(def.name), "id", BoundValue.of(id));
+            + " WHERE t." + idColumn + " " + idCondition + " ORDER BY t." + idColumn + ", t." + versionColumn;
+        Map<String, BoundValue> params = Map.of("entityType", BoundValue.of(def.name), "id", ids);
         // An item is written together with its version, so only held versions of this table can change the result,
         // not items held for other entities (decision D46 rule 1); the history reads the operations as well.
         return extraColumns.isEmpty() ? engine.select(sql, params, Set.of(table)) : engine.select(sql, params);
@@ -280,6 +302,39 @@ public class TemporalStore {
             + version + " DESC) s ON true WHERE NOT s." + SqlIdentifiers.require(def.systemColumn(TemporalSpec.DELETED))
             + " AND s." + column + " = :target LIMIT 1";
         return engine.select(sql, params).hasElements();
+    }
+
+    /**
+     * {@link #referencedLater} for several targets at once (ROADMAP 17zz21), each asked as one deletion asks it: the
+     * targets a scheduled version will refer to, as pairs {@code [referrer, target]}, at most {@code most} per target; the
+     * referrer is named only when {@code byWhom} (a self-reference, which also leaves the target itself out), otherwise
+     * an empty string.
+     */
+    public Mono<List<Object[]>> referrersLater(StorageEngine engine, String table, EntityDefinition def, String field,
+        java.util.Collection<UUID> targetIds, boolean byWhom, int most, Instant now) {
+        if (targetIds.isEmpty()) {
+            return Mono.just(List.of());
+        }
+        String id = SqlIdentifiers.require(def.primaryKeyColumn());
+        String effective = SqlIdentifiers.require(def.systemColumn(TemporalSpec.EFFECT_START_TIME));
+        String version = SqlIdentifiers.require(def.systemColumn(TemporalSpec.VERSION_NO));
+        String column = SqlIdentifiers.require(def.physicalColumn(field));
+        String source = SqlIdentifiers.require(table);
+        Map<String, BoundValue> params = new LinkedHashMap<>();
+        params.put("now", BoundValue.of(now));
+        params.put("targets", BoundValue.of(targetIds.toArray(UUID[]::new)));
+        String sql = "SELECT t.jabiz_target AS jabiz_target, r.jabiz_referrer AS jabiz_referrer"
+            + " FROM unnest(:targets) AS t(jabiz_target) JOIN LATERAL ("
+            + "SELECT " + (byWhom ? "s." + id : "''") + " AS jabiz_referrer FROM (SELECT DISTINCT " + id + " AS cid FROM "
+            + source + " WHERE " + column + " = t.jabiz_target AND " + effective + " > :now"
+            + (byWhom ? " AND " + id + " <> t.jabiz_target" : "") + ") cand"
+            + " JOIN LATERAL (SELECT DISTINCT ON (v." + effective + ") * FROM " + source + " v WHERE v." + id
+            + " = cand.cid AND v." + effective + " > :now ORDER BY v." + effective + ", v." + version + " DESC) s ON true"
+            + " WHERE NOT s." + SqlIdentifiers.require(def.systemColumn(TemporalSpec.DELETED)) + " AND s." + column
+            + " = t.jabiz_target LIMIT " + most + ") r ON true";
+        return engine.select(sql, params)
+            .map(row -> new Object[] {row.get("jabiz_referrer"), row.get("jabiz_target")})
+            .collectList();
     }
 
     private static Violation violation(EntityDefinition def, UniqueConstraint unique) {

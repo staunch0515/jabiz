@@ -44,7 +44,7 @@ export function AiPromptDialog({ open, onClose }: { open: boolean; onClose: () =
   }
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose() }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="profile-prompt-dialog">
+      <DialogContent className="sm:max-w-2xl" data-testid="profile-prompt-dialog">
         <DialogHeader>
           <DialogTitle>{t('profile.transfer.prompt.title')}</DialogTitle>
           <DialogDescription>{t('profile.transfer.prompt.hint')}</DialogDescription>

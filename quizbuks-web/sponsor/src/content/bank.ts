@@ -1,6 +1,8 @@
 import { importQuestions, type ImportQuestionsOutput } from './api'
 import { checkImport, ImportStepError, uploadImportFiles, withoutData, type ImportStep } from './transfer'
 
+const encoder = new TextEncoder()
+
 /*
  * F-S6b (docs/quizbuks/plans/impl/F-S6.md §3.5): a quiz file's questions imported into an open quiz in batches of the
  * bank's `importBatch` (`QB_QUIZ_IMPORT_QUESTIONS`, each batch its own transaction). Each batch is a quiz file of its
@@ -61,45 +63,87 @@ export function leftOutOf(document: Doc): { materials: number; products: boolean
   return { materials: own + translated, products: isObject(document.products) }
 }
 
-/**
- * The quiz file's questions as batches of at most `size`, each a quiz file of its own: the same format and heading
- * (without its cover), only its questions numbered 1..k, each other language's texts, images and hashes of those
- * questions renumbered to match, no materials, no products, and only the files its questions use.
- */
-export function splitQuestions(document: Doc, size: number): Doc[] {
+/** The bytes a document takes in a request (as the server's limit counts them: its JSON, files without their data). */
+export const bytesOf = (document: Doc): number => encoder.encode(JSON.stringify(withoutData(document))).length
+
+/** The batch holding the questions `from .. to - 1` (0-based) of the file: see {@link splitQuestions}. */
+function batchOf(document: Doc, from: number, to: number): Doc {
   const questions = Array.isArray(document.questions) ? document.questions : []
-  const per = Math.max(1, Math.floor(size))
   const files = isObject(document.files) ? document.files : {}
   const heading = isObject(document.quiz) ? { ...document.quiz, cover: null } : document.quiz
-  const batches: Doc[] = []
-  for (let from = 0; from < questions.length; from += per) {
-    const own = questions.slice(from, from + per)
-    const used = new Set(own.flatMap(fileKeysOf))
-    const batch: Doc = {
-      ...document,
-      quiz: heading,
-      materials: [],
-      questions: own,
-      files: {},
+  const own = questions.slice(from, to)
+  const used = new Set(own.flatMap(fileKeysOf))
+  const batch: Doc = { ...document, quiz: heading, materials: [], questions: own, files: {} }
+  delete batch.products
+  if (isObject(document.translations)) {
+    const translations: Record<string, unknown> = {}
+    for (const [language, t] of Object.entries(document.translations)) {
+      if (!isObject(t)) continue
+      const images = renumbered(t.images, from, own.length)
+      for (const key of Object.values(images)) if (typeof key === 'string') used.add(key)
+      translations[language] = { texts: renumbered(t.texts, from, own.length), images,
+        materials: [], hashes: renumbered(t.hashes, from, own.length) }
     }
-    delete batch.products
-    if (isObject(document.translations)) {
-      const translations: Record<string, unknown> = {}
-      for (const [language, t] of Object.entries(document.translations)) {
-        if (!isObject(t)) continue
-        const images = renumbered(t.images, from, own.length)
-        for (const key of Object.values(images)) if (typeof key === 'string') used.add(key)
-        translations[language] = { texts: renumbered(t.texts, from, own.length), images,
-          materials: [], hashes: renumbered(t.hashes, from, own.length) }
-      }
-      batch.translations = translations
-    }
-    const batchFiles: Record<string, unknown> = {}
-    for (const key of used) if (key in files) batchFiles[key] = files[key]
-    batch.files = batchFiles
-    batches.push(batch)
+    batch.translations = translations
   }
-  return batches
+  const batchFiles: Record<string, unknown> = {}
+  for (const key of used) if (key in files) batchFiles[key] = files[key]
+  batch.files = batchFiles
+  return batch
+}
+
+/** The batches of a quiz file's questions and the questions too large to go in any request. */
+export interface BatchPlan {
+  batches: Doc[]
+  /** The numbers (from 1, as in the file) of the questions that alone take more than the byte limit. */
+  tooLarge: number[]
+  /** The most bytes a batch takes (0: not limited). */
+  maxBytes: number
+}
+
+/**
+ * F-F11b: the batches by both limits, the bank's `importBatch` questions and the request's `importBatchBytes` bytes
+ * (0 or none: only the questions count). Each batch takes as many questions as both allow, so a batch is the largest
+ * the limits let it be; a question that alone takes more than the bytes is a batch of its own, listed in `tooLarge`
+ * (the page reports it and does not start). The bytes are measured on the batch as sent, translations and files
+ * included, which grow with the questions: the largest fitting batch is found by halving.
+ */
+export function planBatches(document: Doc, size: number, maxBytes: number | null | undefined, start = 0): BatchPlan {
+  const questions = Array.isArray(document.questions) ? document.questions : []
+  const per = Math.max(1, Math.floor(size))
+  const limit = maxBytes && maxBytes > 0 ? Math.floor(maxBytes) : 0
+  const batches: Doc[] = []
+  const tooLarge: number[] = []
+  // `start`: the questions before it were taken by an earlier step (the first step of a package's content).
+  let from = Math.max(0, Math.floor(start))
+  while (from < questions.length) {
+    let to = Math.min(from + per, questions.length)
+    if (limit > 0 && bytesOf(batchOf(document, from, to)) > limit) {
+      // The largest `to` that fits: `from + 1` always counts as a batch, even when it does not fit.
+      let low = from + 1
+      let high = to - 1
+      while (low <= high) {
+        const middle = Math.floor((low + high) / 2)
+        if (bytesOf(batchOf(document, from, middle)) <= limit) low = middle + 1
+        else high = middle - 1
+      }
+      to = Math.max(from + 1, low - 1)
+      if (to === from + 1 && bytesOf(batchOf(document, from, to)) > limit) tooLarge.push(from + 1)
+    }
+    batches.push(batchOf(document, from, to))
+    from = to
+  }
+  return { batches, tooLarge, maxBytes: limit }
+}
+
+/**
+ * The quiz file's questions as batches of at most `size` (and, when given, `maxBytes`), each a quiz file of its own:
+ * the same format and heading (without its cover), only its questions numbered 1..k, each other language's texts,
+ * images and hashes of those questions renumbered to match, no materials, no products, and only the files its
+ * questions use.
+ */
+export function splitQuestions(document: Doc, size: number, maxBytes?: number | null): Doc[] {
+  return planBatches(document, size, maxBytes).batches
 }
 
 /** How far an import into a quiz got: the batch at work (from 1) of all, and its files uploaded. */
@@ -144,16 +188,18 @@ export class BatchImportError extends Error {
  * then imported with the revision the last batch left (`revision` for the first). `onImported` hears every batch
  * imported. A failure throws {@link BatchImportError}; the batches before it stay.
  */
-export async function importInBatches({ quizId, document, size, revision, onProgress, onImported, wait }: {
+export async function importInBatches({ quizId, document, size, maxBytes, revision, onProgress, onImported, wait }: {
   quizId: string
   document: Doc
   size: number
+  /** The request's byte limit (`importBatchBytes`); none: only the questions count. */
+  maxBytes?: number | null
   revision: number
   onProgress?: (progress: BatchProgress) => void
   onImported?: (output: ImportQuestionsOutput) => void
   wait?: (ms: number) => Promise<unknown>
 }): Promise<BatchesImported> {
-  const batches = splitQuestions(document, size)
+  const batches = splitQuestions(document, size, maxBytes)
   const skipped = new Set<string>()
   let imported = 0
   let current = revision

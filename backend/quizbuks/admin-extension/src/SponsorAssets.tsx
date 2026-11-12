@@ -85,7 +85,7 @@ function AssetUses({ asset, onClose }: { asset: AssetRow; onClose: () => void })
   }, [t, can, target, asset.revision])
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl" data-testid="sponsor-asset-uses">
+      <DialogContent className="sm:max-w-3xl" data-testid="sponsor-asset-uses">
         <DialogHeader>
           <DialogTitle>{t('assets.uses.title', { name: asset.name })}</DialogTitle>
           <DialogDescription>{t('assets.uses.hint')}</DialogDescription>

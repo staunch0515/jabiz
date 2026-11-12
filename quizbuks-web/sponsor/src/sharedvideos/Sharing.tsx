@@ -80,7 +80,7 @@ export function ShareVideoDialog({ asset, onClose, onShared }: {
   const full = topics.length >= MAX_TOPICS
   return (
     <Dialog open onOpenChange={(open) => !open && !share.isPending && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" data-testid="share-video-dialog">
+      <DialogContent className="sm:max-w-lg" data-testid="share-video-dialog">
         <DialogHeader>
           <DialogTitle>{t('sharedVideos.dialogTitle')}</DialogTitle>
           <DialogDescription>{t('sharedVideos.dialogIntro')}</DialogDescription>
