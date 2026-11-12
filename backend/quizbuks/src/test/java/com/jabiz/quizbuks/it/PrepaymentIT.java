@@ -507,6 +507,72 @@ class PrepaymentIT extends PrepaymentItSupport {
         assertThat(differences(sponsor)).isEmpty();
     }
 
+    /** Headquarters' content administrator (a token of now: the clock moves). */
+    String contentAdmin() {
+        return TestTokens.bearer(tokens, "fm5-resume-admin", QbPermissions.ADMIN_CONTENT_WRITE);
+    }
+
+    @Test
+    void pausedBeforeItStartsAndResumedAfterIsChargedOnceAsAnyStart() {
+        // N1 of the F-M5 recheck: a resume that puts it live is its start: the fee is charged then, once; a pause and
+        // a resume after it was charged charge nothing more. The Sponsor's own resume, and headquarters'.
+        autoApprove(true);
+        for (boolean byAdmin : List.of(false, true)) {
+            String sponsor = pricedSponsor(byAdmin ? "fm5-resume-hq" : "fm5-resume");
+            grant(sponsor, 2_000, clock.instant().plus(Duration.ofDays(90)));
+            String publicationId = audienceDraft(sponsor, byAdmin ? "FM5 resumed by HQ" : "FM5 resumed");
+            submit(sponsorToken(sponsor), publicationId);
+            assertThat(status(publicationId)).isEqualTo("SCHEDULED");
+            if (byAdmin) {
+                run("QB_PUBLICATION_ADMIN_PAUSE", contentAdmin(), body("publicationId", publicationId, "reason", "F-M5 test"));
+            } else {
+                run("QB_PUBLICATION_PAUSE", sponsorToken(sponsor), body("publicationId", publicationId));
+            }
+            clock.set(clock.instant().plus(Duration.ofDays(1)).plus(Duration.ofMinutes(5)));
+            runTick();
+            assertThat(status(publicationId)).isEqualTo("PAUSED");
+            // Paused before it started: not charged, and rightly so.
+            assertThat(differences(sponsor)).isEmpty();
+            if (byAdmin) {
+                run("QB_PUBLICATION_ADMIN_RESUME", contentAdmin(), body("publicationId", publicationId, "reason", "F-M5 test"));
+            } else {
+                run("QB_PUBLICATION_RESUME", sponsorToken(sponsor), body("publicationId", publicationId));
+            }
+            assertThat(status(publicationId)).isEqualTo("LIVE");
+            assertThat(query("SELECT 1 FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = 'AUDIENCE'",
+                sponsor)).as("charged when resumed live").hasSize(1);
+
+            // Charged already: paused and resumed again, nothing more.
+            run("QB_PUBLICATION_PAUSE", sponsorToken(sponsor), body("publicationId", publicationId));
+            run("QB_PUBLICATION_RESUME", sponsorToken(sponsor), body("publicationId", publicationId));
+            assertThat(query("SELECT 1 FROM qb_fee_charge_version WHERE sponsor_id = ? AND kind = 'AUDIENCE'",
+                sponsor)).hasSize(1);
+            assertThat(differences(sponsor)).isEmpty();
+        }
+    }
+
+    @Test
+    void theDailyCheckFindsAStartedPublicationWhoseAudienceFeeWasNotCharged() {
+        // N1 of the F-M5 recheck: any way in to LIVE that missed the charge is a difference.
+        autoApprove(true);
+        String sponsor = pricedSponsor("fm5-uncharged");
+        grant(sponsor, 2_000, clock.instant().plus(Duration.ofDays(90)));
+        String publicationId = audienceDraft(sponsor, "FM5 uncharged");
+        submit(sponsorToken(sponsor), publicationId);
+        // Scheduled, not started: nothing to charge yet.
+        assertThat(differences(sponsor)).isEmpty();
+        // Live, and as if the way in had not charged it.
+        goLiveWithoutCharge(publicationId);
+        assertThat(differences(sponsor)).extracting(row -> row.get("checkCode")).contains("PREPAYMENT_UNCHARGED");
+    }
+
+    /** Puts it live as the minute's job does, then takes its charge's mark off (a way in that missed it). */
+    void goLiveWithoutCharge(String publicationId) {
+        goLive(publicationId);
+        execute("UPDATE qb_prepayment SET charged_at = NULL, version = version + 1 WHERE publication_id = ?",
+            publicationId);
+    }
+
     @Test
     void voidingAnInvoicePaidFromItsPrepaymentGivesItBackToTheAccountAndTheBooksAgree() {
         // H1 (F-M5 review): what paid the invoice from the prepayment goes back to the fee credit and the cash it came

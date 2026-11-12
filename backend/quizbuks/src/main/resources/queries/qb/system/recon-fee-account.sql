@@ -1,7 +1,7 @@
 /*---
 id: qb.system.recon-fee-account
 description: Whether the account that pays the platform's fees agrees with its lots and payments, by sponsor (F-M1) - the fee credit (2190) with its wallet and grants, the cash (2160) with its lots, and the fee payments posted with their parts; by operator (F-M2) the promotion expenses of the grants (5140) with what was granted less what was voided; and (F-S4b) by sponsor the lighting grants with the lit records that earned them; and (F-M3) the top-ups of verified companies with their verifications and certified amounts; and (F-M4) by operator its account (2140) with its settlements, withdrawals and transfers; and (F-M5) by sponsor the prepayments (2180) with what their open prepayments hold, and no prepayment held for a publication back in its draft (the daily reconciliation; differences only)
-entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer, QbPrepayment, QbPublication, SysParam]
+entities: [QbWallet, QbFeeCreditGrant, QbCashLot, QbFeePayment, LedgerEntry, LedgerAccount, LedgerTransaction, QbTreeLit, QbTreeLitRevocation, QbTree, QbSponsorVerification, QbSponsor, QbOperatorSettlement, QbOperatorWithdrawal, QbOperatorTransfer, QbPrepayment, QbPublication, QbPublicationStartCounter, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:default:QbWallet
   QbFeeCreditGrant: urn:jabiz:dataset:default:QbFeeCreditGrant
@@ -17,6 +17,7 @@ datasets:
   QbOperatorTransfer: urn:jabiz:dataset:default:QbOperatorTransfer
   QbPrepayment: urn:jabiz:dataset:default:QbPrepayment
   QbPublication: urn:jabiz:dataset:default:QbPublication
+  QbPublicationStartCounter: urn:jabiz:dataset:default:QbPublicationStartCounter
   SysParam: urn:jabiz:dataset:now:SysParam
 params:
   at: { like: QbPublication.endedAt, description: "The run's time: an ended publication's prepayment still open a while after it is a difference (none: not checked)" }
@@ -62,6 +63,8 @@ permissions: [qb.wallet.system]
 --   in its draft (withdrawn, rejected, its review expired), of one ended more than qb.prepayment.release.overdue-days
 --   before :at (the daily job gives it back within a day; 1 to 30, anything else or none: 2), or of a publication that
 --   is not there: expected 0, actual what they hold (a postpaid one: what it still counts).
+-- PREPAYMENT_UNCHARGED (F-M5 recheck N1): by sponsor, the audience fees not charged though the publication started
+--   (live or underfunded, or with a start already): expected 0, actual the fees before tax.
 -- PREPAYMENT_PARTS (F-M5 review M3): by sponsor, the prepaid prepayments whose parts (set aside, given back, less
 --   what fees took of them) do not add up to what they hold: expected what they hold, actual what the parts say.
 WITH credit_ledger AS (
@@ -320,4 +323,17 @@ LEFT JOIN (SELECT f.{{QbFeePayment.prepaymentId}} AS r_id, sum(f.{{QbFeePayment.
            GROUP BY f.{{QbFeePayment.prepaymentId}}) taken ON taken.r_id = pp.{{QbPrepayment.prepaymentId}}
 WHERE pp.{{QbPrepayment.mode}} = 'PREPAID'
   AND pp.{{QbPrepayment.remaining}} <> coalesce(own.r_amount, 0) - coalesce(taken.r_amount, 0)
+GROUP BY pp.{{QbPrepayment.sponsorId}}
+UNION ALL
+SELECT CAST('PREPAYMENT_UNCHARGED' AS varchar(30)), CAST(pp.{{QbPrepayment.sponsorId}} AS varchar(128)),
+       CAST(0 AS numeric), sum(pp.{{QbPrepayment.chargeAmount}})
+FROM {{QbPrepayment}} pp
+JOIN {{QbPublication}} pub ON CAST(pub.{{QbPublication.publicationId}} AS text) = pp.{{QbPrepayment.publicationId}}
+LEFT JOIN {{QbPublicationStartCounter}} sc
+    ON sc.{{QbPublicationStartCounter.publicationId}} = pub.{{QbPublication.publicationId}}
+WHERE pp.{{QbPrepayment.purpose}} = 'AUDIENCE'
+  AND pp.{{QbPrepayment.status}} = 'OPEN'
+  AND pp.{{QbPrepayment.chargedAt}} IS NULL
+  AND pp.{{QbPrepayment.chargeAmount}} > 0
+  AND (pub.{{QbPublication.status}} IN ('LIVE', 'FUNDS_SHORT') OR coalesce(sc.{{QbPublicationStartCounter.starts}}, 0) > 0)
 GROUP BY pp.{{QbPrepayment.sponsorId}}

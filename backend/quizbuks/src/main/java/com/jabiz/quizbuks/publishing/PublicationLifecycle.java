@@ -464,7 +464,10 @@ public final class PublicationLifecycle {
                         return;
                     }
                     resumed(ctx, publication, null);
-                }));
+                })
+                // N1 of the F-M5 recheck: resumed live is its start when it has not started yet (paused while
+                // scheduled): the audience fee is charged then (lock order: the publication's, then the wallet's).
+                .steps(PublicationPrepayments::after));
     }
 
     /**

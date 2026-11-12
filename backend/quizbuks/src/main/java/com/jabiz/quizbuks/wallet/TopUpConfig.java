@@ -257,7 +257,9 @@ class TopUpConfig {
             .item(ReconChecks.PREPAYMENT_STALE, "en", "Prepayments not given back (draft, ended, or no publication)",
                 "zh", "应退回而未退回的预付款（草稿、已结束或发布不存在）", "ja", "戻っていない前払金（下書き・終了・掲載なし）")
             .item(ReconChecks.PREPAYMENT_PARTS, "en", "Prepayments against their parts",
-                "zh", "预付款与其分摊", "ja", "前払金と内訳"));
+                "zh", "预付款与其分摊", "ja", "前払金と内訳")
+            .item(ReconChecks.PREPAYMENT_UNCHARGED, "en", "Audience fees not charged though the publication started",
+                "zh", "发布已开始但未记的受众规则费", "ja", "開始済みの掲載で未請求のオーディエンス料金"));
     }
 
     /** Accounting evidence is kept ten years from the end of its fiscal year (Q10b, item 13; L-4). */

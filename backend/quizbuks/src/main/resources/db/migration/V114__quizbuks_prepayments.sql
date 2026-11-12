@@ -48,8 +48,3 @@ ALTER TABLE qb_publication_version ADD COLUMN prepayment_total numeric(19, 0);
 
 -- Finding the ended publications whose prepayments the daily job gives back.
 CREATE INDEX qb_prepayment_open_frozen_idx ON qb_prepayment (frozen_at) WHERE status = 'OPEN';
-
--- What a postpaid sponsor owes (qb.system.fee-receivable: 1130 by sponsor, read by their submission under the wallet
--- lock): by account and party, so that a sponsor's many other lines (2110 for every reward) are not read.
-CREATE INDEX qb_ledger_entry_account_party_idx ON ledger_entry_version (account_id, dimension_1)
-    WHERE dimension_1 IS NOT NULL;
