@@ -367,6 +367,32 @@ public class FeeConfig {
         return own(QbCreditNotes.SPONSOR_USES, QbCreditNotes.USE);
     }
 
+    @Bean
+    EntityDefinition qbFeeCreditNoteDocumentEntity() {
+        return QbCreditNotes.DOCUMENT_ENTITY;
+    }
+
+    @Bean
+    DatasetDefinition qbFeeCreditNoteDocumentDataset() {
+        return processOnly(QbCreditNotes.DOCUMENT);
+    }
+
+    /** The sponsor's own: their document process reads (and writes, as the process) through it. */
+    @Bean
+    DatasetDefinition qbSponsorFeeCreditNoteDocumentDataset() {
+        return own(QbCreditNotes.SPONSOR_DOCUMENTS, QbCreditNotes.DOCUMENT);
+    }
+
+    @Bean
+    DocumentLayout qbFeeCreditNoteLayout() {
+        return FeeDocuments.CREDIT_NOTE_LAYOUT;
+    }
+
+    @Bean
+    ProcessDefinition<CreditNotes.DocumentInput, CreditNotes.DocumentOutput, ProcessContext> qbFeeCreditNoteDocument() {
+        return CreditNotes.document();
+    }
+
     private DatasetDefinition processOnly(String entity) {
         return DatasetDefinition.define(QbFees.defaultDataset(entity), d -> d
             .targetEntityType(entity)
@@ -781,6 +807,22 @@ public class FeeConfig {
     @Bean
     RetentionPolicy qbFeeInvoiceRetention() {
         return RetentionPolicy.of(QbFees.INVOICE).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
+    }
+
+    /** F-M7: credit notes and what their credit paid are accounting evidence as invoices are. */
+    @Bean
+    RetentionPolicy qbFeeCreditNoteRetention() {
+        return RetentionPolicy.of(QbCreditNotes.CREDIT_NOTE).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
+    }
+
+    @Bean
+    RetentionPolicy qbFeeCreditNoteUseRetention() {
+        return RetentionPolicy.of(QbCreditNotes.USE).keep(RETENTION).from("usedAt").afterFiscalYearEnd();
+    }
+
+    @Bean
+    RetentionPolicy qbFeeCreditNoteDocumentRetention() {
+        return RetentionPolicy.of(QbCreditNotes.DOCUMENT).keep(RETENTION).from("issuedAt").afterFiscalYearEnd();
     }
 
     @Bean

@@ -325,7 +325,7 @@ class TopUpConfig {
     @Bean
     RetentionPolicy qbDocumentRunRetention() {
         return RetentionPolicy.of("DocumentRun").only("layoutId", TopUpReceipts.LAYOUT_ID, OperatorSettlements.LAYOUT_ID,
-                com.jabiz.quizbuks.fee.FeeProcesses.LAYOUT_ID)
+                com.jabiz.quizbuks.fee.FeeProcesses.LAYOUT_ID, com.jabiz.quizbuks.fee.QbCreditNotes.LAYOUT_ID)
             .keep(RETENTION).from("issuedTime").afterFiscalYearEnd();
     }
 

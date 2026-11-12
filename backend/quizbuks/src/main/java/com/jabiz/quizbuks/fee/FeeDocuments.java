@@ -17,9 +17,26 @@ public final class FeeDocuments {
         .number(FeeProcesses.DOCUMENT_TEMPLATE, "invoiceNo")
         .party("issuer", FeeProcesses.ISSUER_TEMPLATE, "name", "address", "registrationNo")
         .party("sponsor", FeeProcesses.DOCUMENT_TEMPLATE, "company", "contactName")
-        .facts(FeeProcesses.DOCUMENT_TEMPLATE, "period", "billingMode", "issuedAt", "dueOn", "status")
+        .facts(FeeProcesses.DOCUMENT_TEMPLATE, "period", "billingMode", "issuedAt", "dueOn", "status", "creditApplied")
         .table(FeeProcesses.LINES_TEMPLATE, "kind", "period", "description", "amount", "tax", "total")
         .totals(FeeProcesses.DOCUMENT_TEMPLATE, "amount", "tax", "total")
+        .note("note"));
+
+    /**
+     * F-M7: a credit note as a platform document: the issuer, the sponsor, the invoice it credits, why, the tax rate,
+     * what it gave back; the invoices its credit paid as lines (as at its issue); and its totals. The sponsor issues it
+     * from their fee account ({@code QB_FEE_CREDIT_NOTE_DOCUMENT}); its templates read the sponsor's own datasets.
+     */
+    public static final DocumentLayout CREDIT_NOTE_LAYOUT = DocumentLayout.define(QbCreditNotes.LAYOUT_ID, d -> d
+        .permissions(QbPermissions.TOPUP)
+        .subject(QbCreditNotes.CREDIT_NOTE, "creditNoteId")
+        .number(CreditNotes.DOCUMENT_TEMPLATE, "creditNoteNo")
+        .party("issuer", FeeProcesses.ISSUER_TEMPLATE, "name", "address", "registrationNo")
+        .party("sponsor", CreditNotes.DOCUMENT_TEMPLATE, "company", "contactName")
+        .facts(CreditNotes.DOCUMENT_TEMPLATE, "invoiceNo", "reason", "endReason", "usedDays", "explanation", "taxRate",
+            "issuedAt", "refundedCash", "refundedCredit")
+        .table(CreditNotes.LINES_TEMPLATE, "invoiceNo", "usedAt", "amount")
+        .totals(CreditNotes.DOCUMENT_TEMPLATE, "amount", "tax", "total")
         .note("note"));
 
     private FeeDocuments() {}

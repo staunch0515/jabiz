@@ -57,6 +57,10 @@ public final class CreditNotes {
 
     public static final String ISSUE = "QB_FEE_CREDIT_NOTE_ISSUE";
     public static final String TASK_CLOSE = "QB_FEE_CREDIT_NOTE_TASK_CLOSE";
+    /** The sponsor: a note's PDF, issued the first time it is asked for, given again after. */
+    public static final String DOCUMENT = "QB_FEE_CREDIT_NOTE_DOCUMENT";
+    public static final String DOCUMENT_TEMPLATE = "qb.sponsor.fee-credit-note-doc";
+    public static final String LINES_TEMPLATE = "qb.sponsor.fee-credit-note-lines";
 
     /** How many notes and uses of a sponsor's are read: more than any sponsor has. */
     public static final int MAX_NOTES = 1000;
@@ -107,6 +111,11 @@ public final class CreditNotes {
 
     public record TaskCloseInput(@NotBlank @Size(max = 36) String invoiceId) {}
 
+    /** @param language the document's language (none: the sponsor's) */
+    public record DocumentInput(@NotBlank @Size(max = 36) String creditNoteId, @Size(max = 10) String language) {}
+
+    public record DocumentOutput(String creditNoteId, String creditNoteNo, String documentRunId, String documentNo) {}
+
     public record TaskCloseOutput(String invoiceId) {}
 
     static final String INPUT = "input";
@@ -125,6 +134,8 @@ public final class CreditNotes {
     static final String PREPAYMENT_INDEX = "prepaymentIndex";
     static final String OUTPUT = "output";
     static final String PAID_OVERDUE = "paidOverdue";
+    static final String NOTE = "note";
+    static final String NOTE_DOCUMENT = "noteDocument";
 
     /** What was decided before the note is written. */
     record Decided(EntityInstance charge, EntityInstance invoice, BigDecimal amount, BigDecimal tax, BigDecimal total,
@@ -206,6 +217,85 @@ public final class CreditNotes {
                 .outputMapper(ctx -> new TaskCloseOutput(ctx.get(INPUT, TaskCloseInput.class).invoiceId()))
                 .step("Close the reminder", CloseTasks.<ProcessContext>done(
                     ctx -> QbFees.overdueTaskSource(ctx.get(INPUT, TaskCloseInput.class).invoiceId()))));
+    }
+
+    /**
+     * {@value #DOCUMENT}: a note of one's own as a PDF ({@code qb.fee_credit_note}), issued once (the first time it is
+     * asked for: a job holds no permission to issue a document) and given again after; through the sponsor's own
+     * dataset, another sponsor's note is not found (404).
+     */
+    public static ProcessDefinition<DocumentInput, DocumentOutput, ProcessContext> document() {
+        return ProcessDefinition.define(DOCUMENT, 1, DocumentInput.class, DocumentOutput.class, ProcessContext.class,
+            pb -> pb
+                .description("Issues one's own credit note as a PDF the first time it is asked for, and gives the "
+                    + "same document after.")
+                .permissions(QbPermissions.TOPUP)
+                .requiresVerifiedEmail()
+                .actsOn(QbCreditNotes.CREDIT_NOTE, "creditNoteId")
+                .steps(com.jabiz.quizbuks.identity.CallerChecks::refuseBanned)
+                .contextFactory((start, input) -> {
+                    ProcessContext ctx = new ProcessContext(start);
+                    ctx.put(INPUT, input);
+                    ctx.put("creditNoteId", input.creditNoteId());
+                    return ctx;
+                })
+                .outputMapper(CreditNotes::documentOutput)
+                .step("Take the note's lock", com.jabiz.runtime.process.steps.HoldLock.<ProcessContext>exclusive(
+                    ctx -> "qb.fee-credit-note:" + ctx.get(INPUT, DocumentInput.class).creditNoteId()))
+                .step("Load the note", com.jabiz.runtime.process.steps.LoadEntity.by(
+                    QbCreditNotes.SPONSOR_CREDIT_NOTES, "creditNoteId", NOTE))
+                .step("Load its document and the issuer", QueryEntities.<ProcessContext>all(
+                    QueryEntities.query(QbCreditNotes.SPONSOR_DOCUMENTS, ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In("creditNoteId",
+                            FeeGate.ids(ctx.get(INPUT, DocumentInput.class).creditNoteId()))).limit(1).build(),
+                        NOTE_DOCUMENT),
+                    QueryEntities.query(com.jabiz.runtime.param.ParamEntities.DATASET, ctx -> EntityQuery.builder()
+                        .where(new QueryPredicate.In(com.jabiz.runtime.param.ParamEntities.KEY,
+                            new ArrayList<>(com.jabiz.quizbuks.setup.QbParams.ISSUER)))
+                        .limit(com.jabiz.quizbuks.setup.QbParams.ISSUER.size()).build(), FeeProcesses.ISSUER)))
+                .compute("Check the issuer", (metadata, ctx) -> {
+                    boolean named = FeeGate.list(ctx, FeeProcesses.ISSUER).stream().anyMatch(p ->
+                        com.jabiz.quizbuks.setup.QbParams.ISSUER_NAME.equals(p.get(
+                            com.jabiz.runtime.param.ParamEntities.KEY)) && p.get("value") != null
+                            && !String.valueOf((Object) p.get("value")).isBlank());
+                    if (!named) {
+                        throw new BusinessRuleViolationException(new Violation(null, FeeCodes.FEE_PARAMS,
+                            "The issuer's name is not set", Map.of("param",
+                                com.jabiz.quizbuks.setup.QbParams.ISSUER_NAME)));
+                    }
+                })
+                .step("Issue the document", CallProcess.<ProcessContext>when(
+                    ctx -> FeeGate.first(ctx, NOTE_DOCUMENT) == null,
+                    com.jabiz.runtime.document.DocumentProcesses.ISSUE, 1,
+                    ctx -> new com.jabiz.runtime.document.DocumentProcesses.IssueInput(QbCreditNotes.LAYOUT_ID,
+                        Map.of("creditNoteId", ctx.get(INPUT, DocumentInput.class).creditNoteId()), null, null,
+                        ctx.get(INPUT, DocumentInput.class).language()), FeeProcesses.ISSUED))
+                .compute("Record the document", (metadata, ctx) -> {
+                    if (!ctx.contains(FeeProcesses.ISSUED)) {
+                        return;
+                    }
+                    com.jabiz.runtime.document.DocumentProcesses.IssueOutput issued = ctx.get(FeeProcesses.ISSUED,
+                        com.jabiz.runtime.document.DocumentProcesses.IssueOutput.class);
+                    EntityInstance note = FeeGate.first(ctx, NOTE);
+                    Map<String, Object> values = new LinkedHashMap<>();
+                    values.put("creditNoteId", String.valueOf(note.id()));
+                    values.put("sponsorId", note.get("sponsorId"));
+                    values.put("documentRunId", issued.runId());
+                    values.put("documentNo", issued.documentNo());
+                    values.put("issuedAt", ctx.opTime());
+                    ctx.changes().insert(QbCreditNotes.DOCUMENT, values);
+                }));
+    }
+
+    static DocumentOutput documentOutput(ProcessContext ctx) {
+        EntityInstance note = FeeGate.first(ctx, NOTE);
+        EntityInstance document = FeeGate.first(ctx, NOTE_DOCUMENT);
+        com.jabiz.runtime.document.DocumentProcesses.IssueOutput issued = ctx.contains(FeeProcesses.ISSUED)
+            ? ctx.get(FeeProcesses.ISSUED, com.jabiz.runtime.document.DocumentProcesses.IssueOutput.class) : null;
+        return new DocumentOutput(note == null ? null : String.valueOf(note.id()),
+            note == null ? null : note.get("creditNoteNo"),
+            issued != null ? issued.runId() : document == null ? null : document.get("documentRunId"),
+            issued != null ? issued.documentNo() : document == null ? null : document.get("documentNo"));
     }
 
     // ---- reads ---------------------------------------------------------------------------------------------------------

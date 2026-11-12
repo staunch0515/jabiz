@@ -73,7 +73,8 @@ DROP FUNCTION quizbuks_create_temporal_table(text, text, text);
 
 -- A note's issued document (the sponsor issues it when they first ask, as an invoice's).
 CREATE TABLE qb_fee_credit_note_document (
-    credit_note_id  varchar(36)  PRIMARY KEY,
+    document_id     varchar(36)  PRIMARY KEY,
+    credit_note_id  varchar(36)  NOT NULL CONSTRAINT uk_qb_fee_credit_note_document UNIQUE,
     sponsor_id      varchar(128) NOT NULL,
     document_run_id varchar(36)  NOT NULL,
     document_no     varchar(100) NOT NULL,

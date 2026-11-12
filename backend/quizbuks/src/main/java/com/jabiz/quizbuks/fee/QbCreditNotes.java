@@ -15,6 +15,10 @@ public final class QbCreditNotes {
 
     public static final String CREDIT_NOTE = "QbFeeCreditNote";
     public static final String USE = "QbFeeCreditNoteUse";
+    /** A note's PDF, issued when the sponsor first asks for it (the note itself is written once). */
+    public static final String DOCUMENT = "QbFeeCreditNoteDocument";
+    public static final String SPONSOR_DOCUMENTS = "urn:jabiz:dataset:sponsor:" + DOCUMENT;
+    public static final String LAYOUT_ID = "qb.fee_credit_note";
     public static final String SPONSOR_CREDIT_NOTES = "urn:jabiz:dataset:sponsor:" + CREDIT_NOTE;
     public static final String SPONSOR_USES = "urn:jabiz:dataset:sponsor:" + USE;
     public static final String REASON_DICTIONARY = "urn:jabiz:dict:quizbuks:credit-note-reason";
@@ -105,5 +109,29 @@ public final class QbCreditNotes {
             .filters("creditNoteId", "sponsorId", "invoiceId", "usedAt")
             .sorts("usedAt")
             .defaultSort("usedAt", false));
+    });
+
+    public static final EntityDefinition DOCUMENT_ENTITY = EntityDefinition.define(DOCUMENT, eb -> {
+        eb.physicalTable("qb_fee_credit_note_document");
+        eb.primaryKey("documentId");
+        eb.field("documentId", f -> f.physicalColumn("document_id").immutable(true).required(true).generated(true)
+            .asSemanticIdentity("urn:jabiz:entity:quizbuks:fee-credit-note-document"));
+        eb.field("creditNoteId", f -> f.physicalColumn("credit_note_id").immutable(true).required(true).processOnly()
+            .asText(36));
+        eb.field("sponsorId", f -> f.physicalColumn("sponsor_id").immutable(true).required(true).processOnly()
+            .asText(128));
+        eb.field("documentRunId", f -> f.physicalColumn("document_run_id").immutable(true).required(true)
+            .processOnly().asText(36));
+        eb.field("documentNo", f -> f.physicalColumn("document_no").immutable(true).required(true).processOnly()
+            .asText(100));
+        eb.field("issuedAt", f -> f.physicalColumn("issued_at").immutable(true).required(true).processOnly()
+            .asTemporal(TemporalRole.EVENT_TIME));
+        eb.field("version", f -> f.physicalColumn("version").asVersion());
+        eb.unique("uk_qb_fee_credit_note_document", "creditNoteId");
+        eb.listView("default", lv -> lv
+            .columns("creditNoteId", "sponsorId", "documentNo", "issuedAt")
+            .filters("creditNoteId", "sponsorId")
+            .sorts("issuedAt")
+            .defaultSort("issuedAt", false));
     });
 }
