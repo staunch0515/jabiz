@@ -434,6 +434,32 @@ public final class SiteProfileProcesses {
                     ctx -> reviewSource(ctx.get(AiProcesses.INPUT, ReviewRef.class).aiJobId()))));
     }
 
+    public static final String REVIEW_DONE = "QB_SITE_PROFILE_REVIEW_DONE";
+
+    /**
+     * Closes the request to review a site draft as done, once the sponsor has imported it (the profile import calls
+     * it). Only the caller's own draft: {@code CloseTasks} closes by source key and does not look at who owns the
+     * task, so the draft is loaded and checked first; anybody else's, or none, closes nothing and says nothing.
+     */
+    public static ProcessDefinition<ReviewRef, AiProcesses.JobOutput, ProcessContext> reviewDone() {
+        return ProcessDefinition.define(REVIEW_DONE, 1, ReviewRef.class, AiProcesses.JobOutput.class,
+            ProcessContext.class, pb -> pb
+                .description("Closes the request to review the draft from the sponsor's website, once it is imported.")
+                .permissions(QbPermissions.SPONSOR_ME)
+                .subProcessOnly()
+                .contextFactory(AiProcesses::context)
+                .outputMapper(ctx -> new AiProcesses.JobOutput(ctx.get(AiProcesses.INPUT, ReviewRef.class).aiJobId(),
+                    null))
+                .step("Load the draft", AiProcesses.loadJob(ctx -> java.util.UUID.fromString(
+                    ctx.get(AiProcesses.INPUT, ReviewRef.class).aiJobId())))
+                .step("Close the request to review", CloseTasks.<ProcessContext>done(ctx -> {
+                    EntityInstance job = AiProcesses.first(ctx, AiProcesses.JOB);
+                    return job != null && QbAi.KIND_SITE_PROFILE.equals(job.get("kind"))
+                        && ctx.request().actorId().equals(job.get("sponsorId"))
+                        ? reviewSource(String.valueOf(job.id())) : "site-profile:none";
+                })));
+    }
+
     /** Whether the outcome just kept is a site draft waiting for the sponsor. */
     static boolean draftReady(ProcessContext ctx) {
         ExternalJobCompletion completion = ctx.get(AiProcesses.INPUT, ExternalJobCompletion.class);

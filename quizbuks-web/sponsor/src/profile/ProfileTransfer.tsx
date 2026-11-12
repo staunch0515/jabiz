@@ -193,7 +193,7 @@ export function ProfileTransfer({ controls, onExporting }: {
     setState({ kind: 'importing', done: 0, total: plan.files.length })
     try {
       await importProfile(document, plan, password, (done, total) => setState({ kind: 'importing', done, total }),
-        linked)
+        linked, site?.draft.aiJobId)
       setState(null)
       notify.success(t('profile.transfer.imported'))
       await queryClient.invalidateQueries({ queryKey: ['qb'] })
@@ -231,7 +231,8 @@ export function ProfileTransfer({ controls, onExporting }: {
       <Dialog open={state !== null} onOpenChange={(open) => {
         if (!open && !busy) setState(null)
       }}>
-        <DialogContent data-testid="profile-import-dialog">
+        {/* The review of a draft from a website is long (fields, notes, articles, the quiz): the dialog scrolls, so that its buttons are always reachable. */}
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="profile-import-dialog">
           <DialogHeader>
             <DialogTitle>{t('profile.transfer.importTitle')}</DialogTitle>
             <DialogDescription>{t('profile.transfer.importHint')}</DialogDescription>
