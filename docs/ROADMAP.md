@@ -5597,6 +5597,24 @@ QuizBuks 的 #545、#546、#547 用了 43.5–45 分钟，#545 到点被取消�
 
 **17zz20 状态**：📝 待评审（分支 `1.3/phase-17zz20-combined-read-lateral`）。
 
+### 17zz21 时态实体的连续删除先预读（2026-11-12，QuizBuks 替换题库时发现）
+
+**缘由**：删除时态实体时，平台每行读一次它的版本、每种指向它的引用读两次（当前与以后生效的版本）、读一次法律保全，墓碑在下一行读同一张表之前逐行写出。没有引用的实体每行 3 条语句，1.9 万行约 39 秒（S3 实测）。
+
+| # | 内容 |
+|---|---|
+| 17zz21-1 | `DatasetEntityManager` 把一次提交中连续删除同一时态实体的变更分为一段，第一个删除之前预读（`DeletePrefetch`，只在这一段的 Reactor 上下文中）：`TemporalStore.loadAll`（这些实例的版本，`= ANY`）、每种引用一条"当前"（经引用者视图的当前切片，与逐行检查同样不加范围）与一条"以后生效"（`TemporalStore.referrersLater`），都以引用者与目标成对、`DeletionGuard.holdsInForce`（法律保全，一次）。按 `jabiz.storage.delete-prefetch.chunk-size`（缺省 1000，上限 30000）分块 |
+| 17zz21-2 | `TemporalWriter.delete` 先取预读的版本（每个实例取一次，同一实例再删一次时照旧查库）；引用检查与保全检查先问预读：自引用的引用者在同一段中先被删除时，该行照旧查库，所以结果与逐行时相同。删除照旧逐行经 `VersionAppender` 规划、检查、追加墓碑与审计 |
+| 17zz21-3 | 应急开关 `jabiz.storage.write-batching.enabled=false`（以及 `WriteBatching.statementByStatement`）时不预读，与原来逐行相同 |
+| 17zz21-4 | 语句数（`StatementBudgetIT`）：一次删 5 个没有引用的实例 7 条（开关关闭时 19 条），有两种引用的 11 条（39 条），在分块之内与行数无关 |
+| 17zz21-5 | 测试 `TemporalDeleteBatchIT`（块大小设为 3，7 行分 3 块）：版本按块读、墓碑一条语句写出、表上没有 UPDATE / DELETE；与逐行删除的版本、操作项、审计（含前值）、事件逐项相同；被引用（当前与以后生效的版本）、自引用（先删引用者可以、先删被引用者拒绝）、法律保全的拒绝与逐行时相同（同一行、同一违规），且整批不写入；同一提交中先插入、先更新再删除；封存与校验（`INTEGRITY_SEAL` / `INTEGRITY_VERIFY`）完好。去掉预读时语句数的断言失败 |
+| 17zz21-6 | 实测（`TemporalDeleteTimingIT`，按需运行：`JABIZ_TEST_DELETE_TIMING=19000`；本机 PostgreSQL 16，190 次提交、每次 100 行）：19,000 行的删除，预读前 43.3 秒，预读后 7.4 秒 |
+| 17zz21-7 | 文档：决策 D46 后加一行带日期的说明（不改变 D46 的规则）、设计 06 §3.1、`CLAUDE.md` 第 4 节"语句数" |
+
+**验收**：`:runtime:check`、`TemporalDeleteBatchIT`、`StatementBudgetIT`、`WriteCombiningIT` 绿。
+
+**17zz21 状态**：📝 待评审（分支 `1.3/phase-17zz21-batched-temporal-deletes`）。
+
 ### 线 1.3 的候选（未排期，2026-11-08 总控：首次上线前不做）
 
 | 候选 | 缘由 | 粗估 |

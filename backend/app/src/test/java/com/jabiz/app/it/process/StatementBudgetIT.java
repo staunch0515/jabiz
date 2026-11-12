@@ -6,6 +6,7 @@ import com.jabiz.app.commerce.SupplierDefinitions;
 import com.jabiz.app.it.fixture.ItBudgetFixtures;
 import com.jabiz.app.it.fixture.ItLockFixtures;
 import com.jabiz.app.it.fixture.ItProcessFixtures;
+import com.jabiz.app.it.fixture.ItTemporalFixtures;
 import com.jabiz.app.it.fixture.SqlStatementLog;
 import com.jabiz.context.RequestContext;
 import com.jabiz.ledger.Direction;
@@ -129,6 +130,20 @@ class StatementBudgetIT extends PostgresIntegrationTest {
      */
     static final Budget IDEMPOTENT_ROOT = new Budget(3, 4);
     static final int IDEMPOTENT_LOOKUP = 1;
+    /**
+     * Five deletions of a temporal entity nothing refers to, in one commit (ROADMAP 17zz21): operation (its number and
+     * record), the five instances' versions read ahead in one statement, the legal holds on the entity, the held
+     * tombstones with their items and audit records in one statement, the result, {@code COMMIT}; as many for any
+     * number up to {@code jabiz.storage.delete-prefetch.chunk-size} [16p-1, the switch off: per deletion its versions,
+     * the holds and its tombstone written before the next deletion reads, 19].
+     */
+    static final Budget TEMPORAL_DELETES = new Budget(7, 19);
+    /**
+     * Five deletions of a temporal entity another refers to and it refers to itself: as above, and for each of the two
+     * incoming references who refers to them now and in scheduled versions, 4 [the switch off: per deletion also the 4
+     * reference checks, 39].
+     */
+    static final Budget TEMPORAL_DELETES_REFERENCED = new Budget(11, 39);
 
     // ---- the cases ----------------------------------------------------------------------------------------------
 
@@ -236,6 +251,47 @@ class StatementBudgetIT extends PostgresIntegrationTest {
     }
 
     // ---- counting -------------------------------------------------------------------------------------------------
+
+    @Test
+    void temporalDeletionsInOneCommit() {
+        List<List<String>> notes = new ArrayList<>();
+        assertBudget("temporal deletions", TEMPORAL_DELETES,
+            () -> notes.add(inserted(ItTemporalFixtures.NOTE_DATASET, "ItNote", "noteId", 5,
+                i -> Map.of("body", "budget " + i))),
+            () -> deleted(ItTemporalFixtures.NOTE_DATASET, "ItNote", notes.getLast()));
+    }
+
+    @Test
+    void referencedTemporalDeletionsInOneCommit() {
+        List<List<String>> prices = new ArrayList<>();
+        assertBudget("referenced temporal deletions", TEMPORAL_DELETES_REFERENCED,
+            () -> prices.add(inserted(ItTemporalFixtures.PRICE_DATASET, "ItPrice", "priceId", 5,
+                i -> Map.of("sku", "B" + UUID.randomUUID().toString().substring(0, 12), "region", "JP",
+                    "amount", 100, "status", "DRAFT"))),
+            () -> deleted(ItTemporalFixtures.PRICE_DATASET, "ItPrice", prices.getLast()));
+    }
+
+    /** {@code count} new instances; their ids. */
+    private List<String> inserted(String dataset, String entity, String key, int count,
+        java.util.function.IntFunction<Map<String, Object>> attributes) {
+        List<EntityChange> changes = new ArrayList<>();
+        List<String> ids = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            String id = UUID.randomUUID().toString();
+            ids.add(id);
+            Map<String, Object> values = new java.util.HashMap<>(attributes.apply(i));
+            values.put(key, id);
+            changes.add(new EntityChange(EntityAction.INSERT, new EntityInstance(id, entity, 0, null, values), null));
+        }
+        asRequest(CLERK, entities.commitBatch(datasets.findById(dataset).orElseThrow(), changes)).block();
+        return ids;
+    }
+
+    private Object deleted(String dataset, String entity, List<String> ids) {
+        return asRequest(CLERK, entities.commitBatch(datasets.findById(dataset).orElseThrow(), ids.stream()
+            .map(id -> new EntityChange(EntityAction.DELETE, new EntityInstance(id, entity, 1, null, Map.of()), null))
+            .toList())).block();
+    }
 
     private void assertBudget(String name, Budget budget, Supplier<Object> run) {
         assertBudget(name, budget, () -> null, run);
