@@ -389,6 +389,12 @@ public class PublishingConfig {
     }
 
     @Bean
+    ProcessDefinition<PublicationProcesses.PublicationRef, PublicationPrepayments.CheckOutput, ProcessContext>
+        qbPublicationFundsCheck() {
+        return PublicationPrepayments.check();
+    }
+
+    @Bean
     ProcessDefinition<PublicationProcesses.PublicationRef, PublicationOutput, ProcessContext> qbPublicationSubmit(
         JabizWebProperties web) {
         return PublicationLifecycle.submit(FirstLaunchSwitches.appliesTo(web.environment()));

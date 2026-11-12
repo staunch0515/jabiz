@@ -38,9 +38,7 @@ beforeAll(async () => {
 beforeEach(() => {
   server.rules = [{ ruleKey: 'interest', enabled: false, billable: true, sortOrder: 5, updatedAt: '2026-11-01T01:00:00Z',
     updatedBy: 'u1' }]
-  server.lists = [{ priceListId: 'l1', owner: 'direct', operatorName: null, minimumFee: 1000,
-    prices: '{"gender":100,"age":200}', reason: 'Launch', updatedAt: '2026-11-01T01:00:00Z', updatedBy: 'u1' },
-  { priceListId: 'l2', owner: NORTH, operatorName: 'North', minimumFee: 500, prices: '{"gender":50}',
+  server.lists = [{ priceListId: 'l2', owner: NORTH, operatorName: 'North', minimumFee: 500, prices: '{"gender":50}',
     reason: 'Ours', updatedAt: '2026-11-02T01:00:00Z', updatedBy: 'u2' }]
   server.own = []
   server.runProcess.mockReset().mockResolvedValue({})
@@ -80,12 +78,16 @@ describe('the audience rules page (Q47c)', () => {
 })
 
 describe('the audience prices pages (Q47c)', () => {
-  it('shows headquarters\' own list, and saves an operator\'s with a reason', async () => {
+  it('has no list of headquarters\' own: asks for an operator first, then saves its list with a reason', async () => {
     const { container } = renderPage(<AudiencePricesPage />)
-    const prices = await screen.findAllByTestId('price-list-price')
-    expect(screen.getByTestId('price-list-minimum')).toHaveValue('1000')
-    expect(prices.find((input) => input.dataset.rule === 'age')).toHaveValue('200')
-    expect(prices.find((input) => input.dataset.rule === 'interest')).toHaveValue('0')
+    expect(await screen.findByTestId('price-list-pick')).toBeInTheDocument()
+    expect(screen.queryByTestId('price-list-form')).toBeNull()
+    // Only operators are offered (the lists read are theirs); nothing says "direct".
+    await userEvent.click(screen.getByTestId('price-list-owner'))
+    const options = await screen.findAllByRole('option')
+    expect(options.map((option) => option.textContent)).toEqual(['North'])
+    expect(screen.queryByText(/direct/i)).toBeNull()
+    await userEvent.keyboard('{Escape}')
     await expectAccessible(container)
 
     await userEvent.type(screen.getByTestId('price-list-operator-id'), NORTH)

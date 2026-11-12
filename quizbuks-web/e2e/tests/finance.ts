@@ -1,4 +1,4 @@
-import type { APIRequestContext } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 import { adminToken, expect, rows, run, setControlledParam } from './support'
 import { earnReward, takerInJapan } from './wallet'
 
@@ -93,4 +93,30 @@ export async function bookingMonthOf(request: APIRequestContext, sourceEntity: s
   const times = postings.map((p) => String(p.attributes.bookingTime)).sort()
   expect(times.length, `a posting of ${sourceEntity} ${sourceId}`).toBeGreaterThan(0)
   return new Date(times[0]).toISOString().slice(0, 7)
+}
+
+/**
+ * The accounts the finance overview lists, in its order: the extension's `ACCOUNTS` (admin-extension `ids.ts`), which
+ * leaves out the operators' 2140 and 5130 (the operator pages show them). The one place the tests name them: a new
+ * account on the overview is added here and in `ids.ts` together.
+ */
+export const FINANCE_OVERVIEW_ACCOUNTS = ['2110', '2120', '2130', '1110', '1120', '4110', '5110', '5120',
+  '2160', '1130', '4120', '2150', '2170', '2180', '2190', '5140'] as const
+
+/**
+ * The finance overview lists exactly {@link FINANCE_OVERVIEW_ACCOUNTS}, and each is an account of the ledger
+ * (`jabiz.ledger.account_balances`, what the page reads): a code the ledger does not have would show an empty row.
+ */
+export async function expectOverviewAccounts(page: Page, request: APIRequestContext) {
+  const listed = page.getByTestId('finance-account')
+  await expect(listed).toHaveCount(FINANCE_OVERVIEW_ACCOUNTS.length)
+  expect(await listed.evaluateAll((cells) => cells.map((cell) => cell.getAttribute('data-code'))))
+    .toEqual([...FINANCE_OVERVIEW_ACCOUNTS])
+  const response = await request.post('/api/queries/jabiz.ledger.account_balances', {
+    headers: { Authorization: `Bearer ${await adminToken(request)}` },
+    data: { params: { asOf: new Date().toISOString() }, limit: 100 },
+  })
+  expect(response.status(), await response.text()).toBe(200)
+  const codes = ((await response.json()).items as { accountCode: string }[]).map((row) => row.accountCode)
+  expect(codes).toEqual(expect.arrayContaining([...FINANCE_OVERVIEW_ACCOUNTS]))
 }

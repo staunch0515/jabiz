@@ -359,6 +359,7 @@ class SetupIT extends QbItSupport {
         expected.put("4120", "REVENUE");
         expected.put("2150", "LIABILITY");
         expected.put("2170", "LIABILITY");
+        expected.put("2180", "LIABILITY");
         // F-M1: the Sponsors' platform fee Kudos (granted credit).
         expected.put("2190", "LIABILITY");
         // F-M2: the promotion expenses of the platform fee Kudos granted.
@@ -513,8 +514,8 @@ class SetupIT extends QbItSupport {
         // Q82: the conversations' daily cap and quiet days (not controlled).
         expected.put(QbParams.CONVERSATION_DAILY_CAP, "20");
         expected.put(QbParams.CONVERSATION_CLOSE_DAYS, "90");
-        // Q47c: charging for the audience rules (off), its fallback and the unused-days refund (all controlled).
-        expected.putAll(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "false", QbParams.AUDIENCE_PRICE_FALLBACK, "DIRECT",
+        // Q47c: charging for the audience rules (off) and the unused-days refund (controlled; F-M5 removed the fallback).
+        expected.putAll(Map.of(QbParams.AUDIENCE_BILLING_ENABLED, "false",
             QbParams.AUDIENCE_REFUND_UNUSED_DAYS, "false"));
         // Q87a: where top-ups go, the exchange's switches and the transfers' rate (all controlled).
         expected.putAll(Map.of(QbParams.TOPUP_TARGETS, "KUDOS,CASH", QbParams.TOPUP_DEFAULT_TARGET, "KUDOS",
@@ -535,6 +536,8 @@ class SetupIT extends QbItSupport {
             QbParams.OPERATOR_WITHDRAWAL_COOLDOWN_HOURS, "24"));
         // F-M3: how long the company verification's link is good (not controlled).
         expected.put(QbParams.VERIFICATION_LINK_HOURS, "48");
+        // F-M5: when an ended publication's open prepayment is a difference (not controlled).
+        expected.put(QbParams.PREPAYMENT_RELEASE_OVERDUE_DAYS, "2");
         // F-C7: drafting from a website (the switch off; the limits of one request and of a month).
         expected.putAll(Map.of(QbParams.SITE_PROFILE_ENABLED, "false", QbParams.SITE_PROFILE_MONTHLY, "10",
             QbParams.SITE_PROFILE_DAILY, "3", QbParams.SITE_PROFILE_MAX_PAGES, "10",

@@ -150,6 +150,9 @@ public final class PublicationAdmin {
                 })
                 .compute("Act", (metadata, ctx) -> compute.accept(ctx,
                     ctx.get(PublicationEditing.INPUT, AdminInput.class)))
+                // N1 of the F-M5 recheck: a resume that puts it live is its start when it has not started yet: the
+                // audience fee is charged then. Nothing noted (a pause, an end): no lock, no statement.
+                .steps(PublicationPrepayments::after)
                 .steps(PublicationNotices::announce));
     }
 

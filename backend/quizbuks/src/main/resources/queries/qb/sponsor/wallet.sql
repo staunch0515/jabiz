@@ -1,7 +1,7 @@
 /*---
 id: qb.sponsor.wallet
-description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, (Q87a) the cash account and (F-M1) the fee credit
-entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbFeeCharge, QbSponsor, QbCashLot, SysParam]
+description: The sponsor's wallet (M-04) - the balance, the rewards waiting for a top-up, what came in and went out, (Q87a) the cash account, (F-M1) the fee credit and (F-M5) what its publications' prepayments hold
+entities: [QbWallet, QbTopUp, LedgerEntry, LedgerAccount, QbFeeInvoice, QbFeeCharge, QbSponsor, QbCashLot, QbPrepayment, SysParam]
 datasets:
   QbWallet: urn:jabiz:dataset:sponsor:QbWallet
   QbFeeInvoice: urn:jabiz:dataset:sponsor:QbFeeInvoice
@@ -11,6 +11,7 @@ datasets:
   QbTopUp: urn:jabiz:dataset:sponsor:QbTopUp
   LedgerEntry: urn:jabiz:dataset:sponsor:LedgerEntry
   QbCashLot: urn:jabiz:dataset:sponsor:QbCashLot
+  QbPrepayment: urn:jabiz:dataset:sponsor:QbPrepayment
 results:
   balance:       { from: QbWallet.balance }
   held:          { from: QbWallet.held }
@@ -31,6 +32,7 @@ results:
   entryFeesUnsettled: { kind: { type: monetary, currency: JPY, scale: 0 } }
   feeCreditBalance: { kind: { type: monetary, currency: JPY, scale: 0 } }
   cashFromOperator: { kind: { type: monetary, currency: JPY, scale: 0 } }
+  prepaymentHeld: { kind: { type: monetary, currency: JPY, scale: 0 } }
 permissions: [qb.sponsor.finance.read]
 ---*/
 -- Every dataset is the caller's own (their wallet, top-ups and ledger lines), so this is one row. The balance is the
@@ -55,8 +57,15 @@ SELECT
     coalesce(u.u_total, 0)          AS uninvoicedTotal,
     coalesce(ef.ef_total, 0)        AS entryFeesUnsettled,
     coalesce(fc.fc_balance, 0)      AS feeCreditBalance,
-    coalesce(ol.ol_remaining, 0)    AS cashFromOperator
+    coalesce(ol.ol_remaining, 0)    AS cashFromOperator,
+    coalesce(pp.pp_remaining, 0)    AS prepaymentHeld
 FROM (SELECT 1 AS one) base
+-- F-M5: what the Sponsor's publications set aside of the account and still hold (given back when they go back to
+-- their drafts or a day after they end): not a fee, not in the balances above.
+CROSS JOIN (
+    SELECT sum(x.{{QbPrepayment.remaining}}) AS pp_remaining
+    FROM {{QbPrepayment}} x
+    WHERE x.{{QbPrepayment.status}} = 'OPEN' AND x.{{QbPrepayment.mode}} = 'PREPAID') pp
 -- F-M4: what is left of the cash the Sponsor's operator moved to it: it pays the platform's fees only (buying Kudos
 -- takes none of it).
 CROSS JOIN (

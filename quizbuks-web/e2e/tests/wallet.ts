@@ -49,6 +49,25 @@ export async function fundedSponsor(request: APIRequestContext, amount: number, 
   return sponsor
 }
 
+/**
+ * Cash in a Sponsor's platform fee account (F-M5, the closed loop's step 2'): a top-up into the cash account paid at the
+ * Stripe stub's checkout through the API; waits until the cash account holds `atLeast`.
+ */
+export async function fund(request: APIRequestContext, token: string, amount: number, atLeast = amount) {
+  const topUp = await run(request, token, 'QB_TOPUP_START', { amount, target: 'CASH' })
+  let checkoutUrl: string | undefined
+  await expect.poll(async () => {
+    const found = (await rows(request, token, SPONSOR_TOPUPS, [])).find((r) => r.id === topUp.topUpId)
+    checkoutUrl = found?.attributes.checkoutUrl as string | undefined
+    return !!checkoutUrl
+  }, { message: 'the checkout opens', timeout: 30_000 }).toBe(true)
+  const paid = await request.post(`${checkoutUrl}/paid`, { maxRedirects: 0 })
+  expect(paid.status()).toBeLessThan(400)
+  await expect.poll(async () => Number((await rows(request, token, SPONSOR_WALLETS, []))
+    .find((r) => r.attributes.kind === 'CASH')?.attributes.balance ?? 0),
+  { message: 'the cash top-up is credited', timeout: 30_000 }).toBeGreaterThanOrEqual(atLeast)
+}
+
 /** A verified taker in Japan; returns the address and a token at the app's entry. */
 export async function takerInJapan(request: APIRequestContext, name = 'Aki') {
   const email = await verifiedUser(request, 'app', name)

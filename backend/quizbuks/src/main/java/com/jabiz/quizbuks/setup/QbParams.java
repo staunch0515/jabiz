@@ -179,8 +179,6 @@ public final class QbParams {
     public static final String CONVERSATION_CLOSE_DAYS = "qb.conversation.close-days";
     /** Q47c: whether publications pay for the audience rules they use (controlled; off: everything is free). */
     public static final String AUDIENCE_BILLING_ENABLED = "qb.audience.billing.enabled";
-    /** Q47c: how a sponsor whose operator has no price list is priced: {@code DIRECT} (headquarters' list) or {@code FREE}. */
-    public static final String AUDIENCE_PRICE_FALLBACK = "qb.audience.price.fallback";
     /** Q47c: whether the unused days are refunded when a publication ends early (Q47c-2 charges; controlled). */
     public static final String AUDIENCE_REFUND_UNUSED_DAYS = "qb.audience.fee.refund-unused-days";
     /**
@@ -219,6 +217,8 @@ public final class QbParams {
     public static final String FEE_CREDIT_EXPIRY_NOTICE_DAYS = "qb.fee-credit.expiry-notice-days";
     /** F-M3: how many hours the link that proves a company's mailbox stays good (ordinary; 1 to 168). */
     public static final String VERIFICATION_LINK_HOURS = "qb.sponsor-verification.link-hours";
+    /** F-M5 (M3 of its review): days after its end an open prepayment is a difference of the daily check. */
+    public static final String PREPAYMENT_RELEASE_OVERDUE_DAYS = "qb.prepayment.release.overdue-days";
     /** The cap's kind, which the controlled change that first sets it gives (yen, whole). */
     public static final Map<String, Object> FEE_CREDIT_MANUAL_MAX_KIND = Map.of("type", "monetary", "currency", "JPY",
         "scale", 0);
@@ -350,10 +350,13 @@ public final class QbParams {
     public static final String JOURNAL_ACCOUNT_2190 = JOURNAL_ACCOUNT_PREFIX + "2190";
     /** F-M2: the promotion expenses of the platform fee Kudos granted. */
     public static final String JOURNAL_ACCOUNT_5140 = JOURNAL_ACCOUNT_PREFIX + "5140";
+    /** F-M5: the platform fee prepayments. */
+    public static final String JOURNAL_ACCOUNT_2180 = JOURNAL_ACCOUNT_PREFIX + "2180";
     public static final List<String> JOURNAL_ACCOUNTS = List.of(JOURNAL_ACCOUNT_1110, JOURNAL_ACCOUNT_1120,
         JOURNAL_ACCOUNT_2110, JOURNAL_ACCOUNT_2120, JOURNAL_ACCOUNT_2130, JOURNAL_ACCOUNT_4110, JOURNAL_ACCOUNT_5110,
         JOURNAL_ACCOUNT_5120, JOURNAL_ACCOUNT_2140, JOURNAL_ACCOUNT_5130, JOURNAL_ACCOUNT_2160, JOURNAL_ACCOUNT_1130,
-        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170, JOURNAL_ACCOUNT_2190, JOURNAL_ACCOUNT_5140);
+        JOURNAL_ACCOUNT_4120, JOURNAL_ACCOUNT_2150, JOURNAL_ACCOUNT_2170, JOURNAL_ACCOUNT_2190, JOURNAL_ACCOUNT_5140,
+        JOURNAL_ACCOUNT_2180);
 
     /*
      * The issuer of the top-up receipts (Q9d, F-09, D-4): the operator's name, address and registration number as the
@@ -366,7 +369,7 @@ public final class QbParams {
     public static final List<String> ISSUER = List.of(ISSUER_NAME, ISSUER_ADDRESS, ISSUER_REGISTRATION_NO);
 
     /** Q47c: the audience rules' charging (controlled, last, in this order). */
-    public static final List<String> AUDIENCE_BILLING_PARAMS = List.of(AUDIENCE_BILLING_ENABLED, AUDIENCE_PRICE_FALLBACK,
+    public static final List<String> AUDIENCE_BILLING_PARAMS = List.of(AUDIENCE_BILLING_ENABLED,
         AUDIENCE_REFUND_UNUSED_DAYS);
 
 
@@ -599,6 +602,7 @@ public final class QbParams {
         journal(JOURNAL_ACCOUNT_2170, "2170 Entry fees unsettled"),
         journal(JOURNAL_ACCOUNT_2190, "2190 Sponsor platform fee Kudos"),
         journal(JOURNAL_ACCOUNT_5140, "5140 Promotion expenses (platform fee Kudos)"),
+        journal(JOURNAL_ACCOUNT_2180, "2180 Platform fee prepayments"),
         new Param(ISSUER_NAME, Map.of("type", "text", "maxLength", 200), "",
             "Name of the operator issuing the top-up receipts"),
         new Param(ISSUER_ADDRESS, Map.of("type", "text", "maxLength", 500), "",
@@ -696,9 +700,6 @@ public final class QbParams {
             "Hours after a bank account is saved or changed before anything may be withdrawn to it"),
         // Q47c: the audience rules' charging (controlled, last, in the order of AUDIENCE_BILLING_PARAMS).
         new Param(AUDIENCE_BILLING_ENABLED, BOOL, false, "Whether publications pay for the audience rules they use"),
-        new Param(AUDIENCE_PRICE_FALLBACK, Map.of("type", "code", "dictUrn", "urn:jabiz:dict:quizbuks:audience-fallback",
-            "allowedValues", List.of("DIRECT", "FREE")), "DIRECT",
-            "How sponsors of an operator without a price list are priced: headquarters' list, or free"),
         new Param(AUDIENCE_REFUND_UNUSED_DAYS, BOOL, false,
             "Whether the unused days of the audience rules are refunded when a publication ends early"),
         // Q87a: the cash account (controlled, last, in the order of CASH_ACCOUNT_PARAMS). The defaults keep what was:
@@ -907,7 +908,11 @@ public final class QbParams {
                 + "launch (F-F10a)"),
         // F-M3: company verification (ordinary; last).
         new Param(VERIFICATION_LINK_HOURS, Map.of("type", "numeric", "precision", 3, "scale", 0), "48",
-            "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"));
+            "How many hours the link mailed to a company address to verify a sponsor's company stays good (1 to 168)"),
+        // F-M5 (M3 of its review): the daily check (ordinary; last).
+        new Param(PREPAYMENT_RELEASE_OVERDUE_DAYS, DAYS, "2",
+            "How many days after a publication ends a prepayment still open is reported by the daily check (1 to 30; "
+                + "the daily job gives it back within a day)"));
 
     /** The declared value of a parameter: what {@code QB_SETUP} writes. */
     public static String defaultOf(String key) {

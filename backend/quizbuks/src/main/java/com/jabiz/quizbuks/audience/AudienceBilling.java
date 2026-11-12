@@ -12,17 +12,13 @@ import java.util.Set;
 
 /**
  * What a publication's audience rules cost (Q47c, D-Q47c-2 / D-Q47c-3), pure Java: the price list that applies (the
- * sponsor's operator's, else the fallback), the days of the publication's run rounded up, and the fee
+ * sponsor's operator's; none: free, F-M5 — the requester removed headquarters' {@code direct} list and its fallback
+ * on 2026-11-09), the days of the publication's run rounded up, and the fee
  * = max(least fee, Σ the daily prices of the charged rules it uses × days). A rule counts once however many of its
  * options are chosen; the regions are free; a publication using no charged rule pays nothing (not even the least fee).
  * The quote the wizard shows and the charge on submit (Q47c-2) both come from here.
  */
 public final class AudienceBilling {
-
-    /** Where a sponsor whose operator has no price list is priced (`qb.audience.price.fallback`). */
-    public static final String FALLBACK_DIRECT = "DIRECT";
-    public static final String FALLBACK_FREE = "FREE";
-    public static final List<String> FALLBACKS = List.of(FALLBACK_DIRECT, FALLBACK_FREE);
 
     private static final Duration DAY = Duration.ofDays(1);
 
@@ -78,19 +74,12 @@ public final class AudienceBilling {
     }
 
     /**
-     * The price list a sponsor is priced by: their operator's when it has one; else headquarters' when the fallback
-     * is {@link #FALLBACK_DIRECT} (and it has one); else none (free). A direct sponsor (no operator) is priced by
-     * headquarters' list.
+     * The price list a sponsor is priced by: their operator's (every sponsor has one, F-S1); an operator without a
+     * list prices nothing (free). F-M5: headquarters' {@code direct} list and the fallback to it are gone (the
+     * requester, 2026-11-09).
      */
-    public static PriceList applicable(String operatorId, PriceList operatorList, PriceList directList,
-        String fallback) {
-        if (operatorId == null) {
-            return directList;
-        }
-        if (operatorList != null) {
-            return operatorList;
-        }
-        return FALLBACK_FREE.equals(fallback) ? null : directList;
+    public static PriceList applicable(String operatorId, PriceList operatorList) {
+        return operatorId == null ? null : operatorList;
     }
 
     /**

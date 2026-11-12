@@ -371,6 +371,8 @@ export const MONTHLY_COLUMNS: Record<string, string> = {
   '2150': 'taxPayable',
   /** Q88b: the entry fees unsettled. */
   '2170': 'entryFeesUnsettled',
+  /** F-M5: the platform fees prepaid when a publication is submitted (2180). */
+  '2180': 'feePrepayments',
 }
 
 export async function readMonthly(period: Period): Promise<MonthlyRow[]> {
