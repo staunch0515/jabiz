@@ -208,6 +208,8 @@ export const TEMPLATE = {
   adminProspectFunnel: 'qb.admin.prospect-funnel',
   /** F-F8 (T9): the platform switch of prospecting in force (`qb.admin.prospect`). */
   adminProspectSwitch: 'qb.admin.prospect-switch',
+  /** F-F10b: the first launch's money switches in force, set against the registry (`qb.admin.finance.read`). */
+  adminFirstLaunchSwitches: 'qb.admin.first-launch-switches',
   /** Q48b: the operators' monthly settlements, every operator's (finance) and the caller operator's own. */
   operatorSettlements: 'qb.admin.operator-settlements',
   ownSettlements: 'qb.operator.settlements',

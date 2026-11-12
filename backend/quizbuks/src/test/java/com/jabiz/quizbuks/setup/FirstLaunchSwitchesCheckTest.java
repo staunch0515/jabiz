@@ -24,10 +24,20 @@ class FirstLaunchSwitchesCheckTest {
     }
 
     @Test
+    void anEntryFeeSwitchThatIsOnWarns() {
+        assertThat(FirstLaunchSwitchesCheck.problems(Map.of(QbParams.KUDOS_BUY_ENABLED, "false",
+            QbParams.KUDOS_SELL_ENABLED, "false", QbParams.TRANSFER_ENABLED, "false",
+            QbParams.WITHDRAWAL_BANK_ENABLED, "false", QbParams.REWARD_KUDOS_ENABLED, "false",
+            QbParams.ENTRY_FEE_ENABLED, "true"))).singleElement()
+            .satisfies(problem -> assertThat(problem.location()).isEqualTo("parameter " + QbParams.ENTRY_FEE_ENABLED));
+    }
+
+    @Test
     void allOffIsQuiet() {
         assertThat(FirstLaunchSwitchesCheck.problems(Map.of(QbParams.KUDOS_BUY_ENABLED, "false",
             QbParams.KUDOS_SELL_ENABLED, "false", QbParams.TRANSFER_ENABLED, "false",
-            QbParams.WITHDRAWAL_BANK_ENABLED, "false", QbParams.REWARD_KUDOS_ENABLED, "false"))).isEmpty();
+            QbParams.WITHDRAWAL_BANK_ENABLED, "false", QbParams.REWARD_KUDOS_ENABLED, "false",
+            QbParams.ENTRY_FEE_ENABLED, "false"))).isEmpty();
     }
 
     @Test
@@ -60,7 +70,7 @@ class FirstLaunchSwitchesCheckTest {
     void theSwitchesThatMustBeOffAreTheRegistrysActiveRowsWithAFalseValue() {
         assertThat(FirstLaunchSwitchesCheck.MUST_BE_OFF).containsExactlyInAnyOrder(QbParams.KUDOS_BUY_ENABLED,
             QbParams.KUDOS_SELL_ENABLED, QbParams.TRANSFER_ENABLED, QbParams.WITHDRAWAL_BANK_ENABLED,
-            QbParams.REWARD_KUDOS_ENABLED);
+            QbParams.REWARD_KUDOS_ENABLED, QbParams.ENTRY_FEE_ENABLED);
         // A waiting row (the intent is true or false) never counts: its feature does not exist yet.
         FirstLaunchSwitches.ALL.stream().filter(row -> row.status() == FirstLaunchSwitches.Status.WAITING)
             .forEach(row -> assertThat(FirstLaunchSwitchesCheck.MUST_BE_OFF).doesNotContain(row.key()));

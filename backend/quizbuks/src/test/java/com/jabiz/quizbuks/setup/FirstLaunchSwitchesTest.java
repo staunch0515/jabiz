@@ -124,9 +124,7 @@ class FirstLaunchSwitchesTest {
      */
     private static final Map<String, String> NOT_IN_THE_REGISTRY = Map.of(
         QbParams.PROSPECT_ENABLED, "AI prospecting finds and researches businesses for the platform's own outreach: no "
-            + "money moves, and the declared value (off) is also the first launch's; its own switch page proposes it",
-        QbParams.ENTRY_FEE_ENABLED, "the declared value (off) is the first launch's already, and a sponsor's entry fee "
-            + "moves money only after a Taker pays it, which needs the wallet switches of the registry first");
+            + "money moves, and the declared value (off) is also the first launch's; its own switch page proposes it");
 
     @Test
     void everyControlledBooleanEnabledSwitchIsInTheRegistryOrExemptWithAReason() {

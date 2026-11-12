@@ -4,6 +4,7 @@ import com.jabiz.quizbuks.setup.FirstLaunchSwitches;
 import com.jabiz.quizbuks.setup.FirstLaunchSwitchesCheck;
 import com.jabiz.quizbuks.setup.QbParams;
 import com.jabiz.runtime.check.CheckProblem;
+import com.jabiz.runtime.test.TestTokens;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
@@ -43,6 +44,12 @@ class FirstLaunchSetupIT extends ContentItSupport {
         return values;
     }
 
+    /** The finance page's card of the switches, as finance reads it. */
+    private List<Map<String, Object>> cardRows() {
+        return items("qb.admin.first-launch-switches", TestTokens.bearer(tokens, "f-card", "qb.admin.finance.read"),
+            Map.of("limit", 100));
+    }
+
     private String current(String key) {
         return (String) query("SELECT param_value FROM sys_param_version WHERE param_key = ? ORDER BY version_no DESC "
             + "LIMIT 1", key).getFirst().get("param_value");
@@ -67,16 +74,54 @@ class FirstLaunchSetupIT extends ContentItSupport {
         // The cases the registry exists for.
         assertThat(proposed).containsEntry(QbParams.REWARD_KUDOS_ENABLED, "false")
             .containsEntry(QbParams.KUDOS_BUY_ENABLED, "false").containsEntry(QbParams.TOPUP_TARGETS, "CASH")
-            .containsEntry(QbParams.TOPUP_DEFAULT_TARGET, "CASH");
+            .containsEntry(QbParams.TOPUP_DEFAULT_TARGET, "CASH")
+            .containsEntry(QbParams.ENTRY_FEE_ENABLED, "false");
+        // The three that are on at the first launch, each stated here and not through the registry, so that a row
+        // turned off there (or a value read wrongly from it) cannot pass unnoticed. The proposals of AI and help are
+        // only published once the AI notice is (operations.md); the test publishes them to see the platform take them.
+        assertThat(proposed.get(QbParams.AI_ENABLED)).as(QbParams.AI_ENABLED).isEqualTo("true");
+        assertThat(proposed.get(QbParams.HELP_ENABLED)).as(QbParams.HELP_ENABLED).isEqualTo("true");
+        assertThat(proposed.get(QbParams.FEE_CREDIT_GRANT_ENABLED)).as(QbParams.FEE_CREDIT_GRANT_ENABLED)
+            .isEqualTo("true");
 
         // Before anything is published the Kudos reward switch is "not there": the check says so, once.
         assertThat(check.check()).extracting(CheckProblem::location)
             .containsExactly("parameter " + QbParams.REWARD_KUDOS_ENABLED);
 
+        // The card's template: nothing is published yet, so a controlled parameter is "not created yet" and holds no
+        // value, while an ordinary one (user-daily of the AI help, say) was created by the setup itself.
+        List<Map<String, Object>> before = cardRows();
+        assertThat(before).hasSize((int) FirstLaunchSwitches.ALL.stream()
+            .filter(row -> row.status() == FirstLaunchSwitches.Status.ACTIVE).count());
+        for (Map<String, Object> row : before) {
+            boolean controlled = QbParams.CONTROLLED.contains(String.valueOf(row.get("paramKey")));
+            assertThat(row).as(String.valueOf(row.get("paramKey"))).containsEntry("paramExists", !controlled);
+            if (controlled) {
+                assertThat(row.get("value")).as(String.valueOf(row.get("paramKey"))).isNull();
+            }
+        }
+        assertThat(before).anySatisfy(row -> assertThat(row).containsEntry("paramKey", QbParams.REWARD_KUDOS_ENABLED)
+            .containsEntry("paramExists", false).containsEntry("expected", "false"));
+
         // The platform's own validation takes them (CASH, 0 and the booleans); publish every one.
         publishProposals(first);
+        // And once published, each row holds the value in force: the first launch's, as the parameter stores it.
+        for (Map<String, Object> row : cardRows()) {
+            assertThat(row).as(String.valueOf(row.get("paramKey"))).containsEntry("paramExists", true);
+            if (row.get("expected") != null) {
+                String expected = String.valueOf(row.get("expected"));
+                String stored = String.valueOf(row.get("value"));
+                assertThat(expected.matches("-?\\d+(\\.\\d+)?") ? new java.math.BigDecimal(stored)
+                    .compareTo(new java.math.BigDecimal(expected)) == 0 : stored.equals(expected))
+                    .as("%s in force %s, the first launch's %s", row.get("paramKey"), stored, expected).isTrue();
+            }
+        }
         assertThat(current(QbParams.REWARD_KUDOS_ENABLED)).isEqualTo("false");
         assertThat(current(QbParams.TOPUP_TARGETS)).isEqualTo("CASH");
+        assertThat(current(QbParams.ENTRY_FEE_ENABLED)).isEqualTo("false");
+        assertThat(current(QbParams.AI_ENABLED)).isEqualTo("true");
+        assertThat(current(QbParams.HELP_ENABLED)).isEqualTo("true");
+        assertThat(current(QbParams.FEE_CREDIT_GRANT_ENABLED)).isEqualTo("true");
         // A rate or an amount of 0 is a value the numeric kind takes (written with its scale).
         assertThat(new java.math.BigDecimal(current(QbParams.FEE_MONTHLY))).isZero();
         assertThat(new java.math.BigDecimal(current(QbParams.CREATOR_FEE_RATE))).isZero();
