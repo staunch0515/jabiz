@@ -18,7 +18,7 @@
   }
 }
 * { box-sizing: border-box; }
-html { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Sans", "Noto Sans CJK JP", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
+html { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
 body { margin: 0; background: var(--bg); color: var(--fg); line-height: 1.65; font-size: 16px; }
 a { color: var(--accent); }
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -43,3 +43,17 @@ h2 { font-size: 1.25rem; margin: 2rem 0 .5rem; }
 .steps strong { display: block; }
 .updated { color: var(--muted); font-size: .9rem; }
 .foot { border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; padding-top: 1rem; padding-bottom: 2rem; }
+
+/*
+ * CJK text (F-F12): each language has its own font stack, the Latin letters first and the language's own CJK fonts
+ * after them, and only system fonts (web fonts load slowly or not at all in mainland China). One stack for all three
+ * languages put a Japanese font before the Chinese ones, so a Chinese page was set in Japanese glyphs with the
+ * characters that font lacks falling to another family one by one; and a weight only some of the fonts have (800) was
+ * drawn thick in one and thin in the other. Chinese and Japanese headings are 600, which PingFang, Hiragino, Noto,
+ * Source Han and YaHei all have; no negative letter spacing, which spoils the characters.
+ */
+html:lang(zh) { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif; }
+html:lang(ja) { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", "Yu Gothic", "Meiryo", sans-serif; }
+html:lang(en) { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+html:lang(zh) :is(h1, h2, h3, .brand), html:lang(ja) :is(h1, h2, h3, .brand) { font-weight: 600; }
+html:lang(zh) *, html:lang(ja) * { letter-spacing: 0 !important; }

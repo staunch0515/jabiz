@@ -219,6 +219,7 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    邀请要求邮件已开启（`JABIZ_MAIL_ENABLED=true`，否则 422 `MAIL_DISABLED`），只寄到建号时填写、之后没改过的邮箱：邮箱填错时重新建号。
    已用临时密码建好、尚未经邮件设定密码的管理员账号，同样对其执行"发送邀请"（替换已有密码另需 `security.user.password`，首个管理员持有）。
 5. 财务管理员在平台管理系统**发布** `QB_SETUP` 的提案（`CONTROL_CHANGE_PUBLISH`，四眼：提出人不能发布自己的），**包括三条职责分离规则**（含 F-C8、F-C9 的 `qb.sod.mail-texts`）。发布之前发起方入驻与提交发布一律被拒。
+   发布的顺序有要求：**先发布 `qb.reward.kudos.enabled` 与 `qb.reward.default-methods` 这两个参数，再发布审批规则 `qb.sponsor.review` 与 `qb.publication.review`**，另有几项要等前置条件满足后才发布（见 §4 的"首次上线的开关"）。
    操作：平台管理系统"数据 → SysControlChange"列出提案，在状态为待发布（`PROPOSED`）的一行执行行操作 `CONTROL_CHANGE_PUBLISH`。财务角色以 `approval.read` 读这个视图；
    这项权限在 2026-10-29 才加入财务角色，此前建好的系统要由超级管理员再执行一次 `QB_SETUP` 补上（不是受保护的权限，当即生效），财务管理员重新登录后才看得到。
    职责分离规则须在建立期结束（下一步）之前发布：之后任命内容或财务管理员要由一位超级管理员审批，而超级管理员不持有、也不能持有 `approval.decide` 与 `control.publish`，
@@ -234,9 +235,10 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
    - `qb.transfer.enabled` **保持 false**，直到取得法务意见（§4）；
    - **奖励的缺省**（Q28）：`qb.reward.default-methods`（**所有**发起方都可用的支付方式，逗号分隔；F-S4b 起与单独设定、点亮门槛开通的取并集；声明值与 `QB_SETUP` 提出的首个值都是**空 = 没有任何方式**（新发起方点亮相应节点或被单独开通才有，需求方 2026-11-07，§7.41）；参数还不存在时（`QB_SETUP` 之前）按平台 Kudos；见下文"阶段一的设置"）与 `qb.reward.max-per-attempt`（每次答题可得的最高奖励，Kudos；`0` 不限；景品表示法的上限由法务给出）；
    - 法律文本的最长预告期 `qb.legal.max-announce-days`（缺省 180 天；未发布时同样按 180 天）。
-   - `qb.ai.enabled` 由 `QB_SETUP` 提出 `false`，**照样发布**（AI 在上线检查清单的条件满足后才开启）。发布之前参数不存在：启动检查 `EXTERNAL` 对 `job qb.ai.questions` 与 `job qb.ai.cover` 各报一条**警告**
+   - `qb.ai.enabled`：`JABIZ_WEB_ENVIRONMENT` 为 `production` 或 `staging` 时 `QB_SETUP` 提出 `true`（其他环境提出声明值 `false`），**AI 使用说明（法律文本 `AI_NOTICE`，发布方法见本节第 9 步，上线条件见 `launch-checklist.md`）发布之后才发布这条提案**（学者的 AI 问题解答 `qb.help.enabled` 同样，见 §4 的"首次上线的开关"）。
+     发布之前参数不存在：启动检查 `EXTERNAL` 对 `job qb.ai.questions` 与 `job qb.ai.cover` 各报一条**警告**
      `enabledBy: parameter qb.ai.enabled has no value in effect now; the type is paused …`，执行器第一次轮询时也记一条 WARN。这在新安装上是预期的（参数缺失与 `false` 一样：请求被拒、没有作业），
-     发布 `false` 之后不再出现；已发布之后仍出现即参数被删或读不出来，应调查（§5"AI 作业暂停"）。
+     提案发布之后不再出现；已发布之后仍出现即参数被删或读不出来，应调查（§5"AI 作业暂停"）。
 7. 在测试模式下做一次 Stripe 测试模式全流程（`stripe-test-mode.md`），并按 §2.4 做一次恢复演练。
 8. 每次部署新版本后：再执行一次 `QB_SETUP`，发布它的新提案（README 各阶段的"部署后"）。忘了的话，启动日志与 `platformCheck` 对每个没有生效值的业务参数各报一条警告 `QUIZBUKS | parameter <键>`（从未执行过设置的数据库只报一条 `QB_SETUP has not run yet`）；读这些参数的流程在那之前一律失败（`PARAM_NOT_FOUND`）。
 9. **条款、隐私政策与帮助**（Q7b）：`QB_SETUP` 为四种法律文本（学者条款、发起方条款、隐私政策、特定商取引法表记）各建一份**明确标注 `[TEST PLACEHOLDER]` 的草稿**，什么也不发布。
@@ -309,6 +311,21 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
 - [ ] `QB_SPONSOR_LINK`、`QB_APP_LINK`、`JABIZ_MAIL_BASE_URL` 都是正式的 `https` 地址；正式域名写进 `tools/quizbuks/stripe-test-mode/production-hosts`
 - [ ] `./gradlew :quizbuks:platformCheck` 以正式的设置（不含密钥值的同形假值）跑一遍；启动日志中没有 `Platform check failed`
 - [ ] 首次启动（§3）完成：两位管理员都有二次验证，提案已发布，开具方与科目映射已设
+- [ ] **首次上线的开关**（F-F10；`setup.FirstLaunchSwitches` 是唯一的清单，`JABIZ_WEB_ENVIRONMENT` 须为 `production`，测试系统为 `staging`：只有这两个环境的 `QB_SETUP` 提出首次上线的值，其他环境提出声明值，卡片上会显示"不同"）：
+  1. 执行 `QB_SETUP` 后，核对平台管理系统"数据 → SysControlChange"中待发布的提案，与"QuizBuks 财务"总览页的卡片"首次上线的资金开关"一致（每行：首次上线的值、现值、状态；读提案需要 `approval.read`，财务角色已有）。卡片显示"待发布的值与首次上线的值不同"时**不要发布**：多半是 `JABIZ_WEB_ENVIRONMENT` 没设成 `production` 就执行了 `QB_SETUP`，改好环境变量重新部署，然后：
+     - **撤回**：只有提案人能撤回，即当初执行 `QB_SETUP` 的管理员。在"数据 → SysControlChange"中对这几行执行行操作"撤回"（`CONTROL_CHANGE_WITHDRAW`）；
+     - **重提**（`QB_SETUP` 每项只提一次，再执行不会重新提出）：首次上线的值与声明值不同的只有这 7 条：`qb.fee-credit.grant.enabled` → `true`、`qb.help.enabled` → `true`、`qb.ai.enabled` → `true`、`qb.topup.targets` → `CASH`、`qb.topup.default-target` → `CASH`、`qb.kudos.buy.enabled` → `false`、`qb.reward.kudos.enabled` → `false`。以被撤回提案的 `changeValues` 为准，原样填 `paramKey`、`valueKind`、`description`，只改 `value`（字符串）；
+     - **用接口提交**（本机演练过：撤回后重提得到新的待发布提案）：先 `POST /api/auth/login`（`{"userName":…,"password":…,"entry":"admin"}`）取 `accessToken`，再以 `Authorization: Bearer <accessToken>`、每次新的 `Idempotency-Key` 调用 `POST /api/processes/CONTROL_CHANGE_PROPOSE/latest`，正文如 `{"targetEntity":"SysParam","values":{"paramKey":"qb.kudos.buy.enabled","valueKind":{"type":"bool"},"value":"false","description":"Whether sponsors may turn cash into Kudos"},"reason":"首次上线的值：QB_SETUP 未按 production 执行后重提"}`（不带 `targetId` 即新建参数）。平台管理系统的流程表单中 `values` 是一个 JSON 输入框，按理也能提交同样的内容，但没有在浏览器里演练过，以接口为准；
+     - 重提后卡片应显示"待发布"（值与首次上线的值相同），再由另一位管理员发布；
+  2. 发布的顺序：
+     - 先发布 `qb.reward.kudos.enabled` 与 `qb.reward.default-methods` 这两个键，**再**发布审批规则（`qb.sponsor.review`、`qb.publication.review`）：正式环境里学分奖励的开关没有发布就算关，这样发起方入驻与发布的流程不会出现不一致的中间状态；
+     - 法务相关的不打开：`qb.transfer.enabled`、`qb.withdrawal.bank.enabled` 保持 `false`（§1.3b、§1.3c）；`qb.kudos.buy.enabled`、`qb.kudos.sell.enabled`、`qb.reward.kudos.enabled`、`qb.play.entry-fee.enabled` 的首次上线的值也是 `false`（学分只显示、不使用，学分的帮助见 `help/fee-account.md`）；
+     - `qb.fee.monthly`、`qb.creator-fee-rate`（与 `qb.transfer.fee-rate`）的提案值是 0，**必须先发布**（与其他提案一起，不等价目表）：首次上线不收这些费用，发布后参数才存在、卡片才显示"一致"，以后改声明值也不会改到已上线的系统；价目表设好、收费开始前再由受控变更改为实际金额；赠送额度的开关 `qb.fee-credit.grant.enabled` 在价目表与赠送额度（`qb.fee-credit.grant.*`）设好之后发布；
+     - AI 使用说明发布、**且 AI 使用手册（`manual-sponsor.*.md`、`manual-app.*.md`）已按首次上线的状态（学分只显示、不使用，无报名费）改好并由内容管理员重新载入、发布**之后，才发布 `qb.ai.enabled` 与 `qb.help.enabled`（两条提案的值都是 `true`）；
+     - 收费组尚未上线的行：已经存在的两个键 `qb.audience.billing.enabled`（F-M7）、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；其余四个键（配送费 `qb.distribution.billing.enabled`、曝光费 `qb.exposure.billing.enabled`、AI 费 `qb.ai.fee.enabled`、自动付账单 `qb.fee.auto-pay.enabled`）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
+  3. 财务页卡片中可比较的行全部显示"一致"（金额类的行显示"金额，不比较"）。新建的测试系统（`staging`）同样应全部一致；只有此前已经建过参数的测试系统，以及本地环境（不是 `production` / `staging`，提出声明值），才会显示"不同"；
+  4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，受众规则费 `qb.audience.billing.enabled` 或网站资料的 AI `qb.ai.site-profile.enabled` 为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
+  运营商自己的提现（`qb.operator.withdrawal.*`）没有开关：那是运营商的收入，不是学分，不由本项挡住。
 - [ ] 小额实测：一位内部发起方用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe Dashboard 全额退款，确认扣回；次日核对为 `OK`
 - [ ] 资金调度：充值在 Stripe 上几天后才变为可用余额，转账从可用余额转出；定好打开转账前的余额与打款计划
 - [ ] 法务意见允许后，才提出并发布 `qb.transfer.enabled=true`；第一次每日转账（01:07 UTC）后核对每一笔
@@ -586,6 +603,7 @@ AI 为运营商找发起方（F-S1：所有者一律是运营商；平台不自�
 | `qb.journal.account.2160` | 空 | 分录导出 2160 的科目代码：现金账户有过账后，导出前必须设好 |
 
 - 发布之前一切同 Q87 之前（只进学分钱包、不能兑换）。
+- 首个值是声明值（`QB_SETUP` 在 `production` / `staging` 以外的环境提出的值）。**首次上线**在 `production` / `staging` 提出的是 `CASH`、`CASH`、关（现金只进现金账户、不能换学分，学分只显示、不使用），见 §4 的"首次上线的开关"。
 - 进现金账户的卡充值被退款或争议败诉时从现金账户扣回；每日核对多两项（`CASH_ACCOUNT`、`TOTAL_2160`）。
 - 月报多一列"2160 发起方现金账户"与六类（现金充值、银行转账进现金、现金退款、现金争议、现金换学分、学分换回现金）。
 

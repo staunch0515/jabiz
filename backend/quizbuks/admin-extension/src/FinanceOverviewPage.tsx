@@ -19,6 +19,7 @@ import {
 import { readAccountBalances, readFinanceSummary, readReconSummary } from './finance-api'
 import { readFeeAccountTotals } from './fee-api'
 import { LoadFailed, Section } from './components'
+import { FundSwitches } from './FundSwitches'
 import { money, useLabels, when } from './hooks'
 import { ACCOUNTS, DICTIONARY, PATH, PERMISSION } from './ids'
 
@@ -128,7 +129,8 @@ function Accounts() {
 /**
  * Finance's overview (Q9c): the ledger's accounts now, the wallets' totals and what waits for finance today, each
  * number leading to the page that lists it: transfers waiting for review, in doubt or holding a taker, the latest
- * reconciliation and its differences, and the money tasks in the platform's task list.
+ * reconciliation and its differences, and the money tasks in the platform's task list; then the platform fee accounts,
+ * the first launch's money switches (F-F10b) and the ledger's accounts.
  */
 export default function FinanceOverviewPage() {
   const { t } = useTranslation(EXTENSION_NAMESPACE)
@@ -211,6 +213,7 @@ export default function FinanceOverviewPage() {
       </nav>
       {numbers}
       <FeeAccounts />
+      <FundSwitches />
       {can(PERMISSION.ledgerRead) && <Accounts />}
     </div>
   )
