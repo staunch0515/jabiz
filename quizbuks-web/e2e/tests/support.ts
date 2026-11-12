@@ -249,6 +249,13 @@ export async function prepareQuizbuks(request: APIRequestContext) {
   // F-S4b: the default reward methods are empty after setup (a new Sponsor gets what a lit node opens); the tests
   // publish with the platform's Kudos, as before (backend RewardMethodsIT checks the empty default).
   await setControlledParam(request, 'qb.reward.default-methods', 'PLATFORM')
+  // F-F10a: a run cut short while the Kudos reward switch was off (kudos-reward-ban.spec closes it for a moment) must
+  // not leave it closed for the specs that publish with the platform's Kudos.
+  const [kudos] = await rows(request, admin, 'urn:jabiz:dataset:platform:SysParam',
+    [{ field: 'paramKey', op: 'eq', value: 'qb.reward.kudos.enabled' }], 1)
+  if (kudos && String(kudos.attributes.value) !== 'true') {
+    await setControlledParam(request, 'qb.reward.kudos.enabled', 'true')
+  }
   // The terms and the privacy policy in effect, as before going live (Q7b); loaded when needed (it uses these helpers).
   await (await import('./legal')).termsInEffect(request)
   // F-S1: the default operator, without which nobody signs up as a sponsor.

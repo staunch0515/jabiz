@@ -116,4 +116,42 @@ class FirstLaunchSwitchesTest {
         assertThat(FirstLaunchSwitches.valueFor(reward, true)).isEqualTo(false);
         assertThat(QbParams.CONTROLLED).contains(QbParams.REWARD_KUDOS_ENABLED);
     }
+
+    /**
+     * Every boolean {@code *.enabled} switch that changes only through controlled changes is either in the registry or
+     * here with the reason it is left out: a switch added to {@link QbParams} without either fails, so the first launch
+     * cannot forget one (the registry is the one list, backend/quizbuks/CLAUDE.md).
+     */
+    private static final Map<String, String> NOT_IN_THE_REGISTRY = Map.of(
+        QbParams.PROSPECT_ENABLED, "AI prospecting finds and researches businesses for the platform's own outreach: no "
+            + "money moves, and the declared value (off) is also the first launch's; its own switch page proposes it",
+        QbParams.ENTRY_FEE_ENABLED, "the declared value (off) is the first launch's already, and a sponsor's entry fee "
+            + "moves money only after a Taker pays it, which needs the wallet switches of the registry first");
+
+    @Test
+    void everyControlledBooleanEnabledSwitchIsInTheRegistryOrExemptWithAReason() {
+        for (QbParams.Param param : QbParams.ALL) {
+            boolean bool = param.value() instanceof Boolean;
+            if (!bool || !param.key().endsWith(".enabled") || !QbParams.CONTROLLED.contains(param.key())) {
+                continue;
+            }
+            boolean registered = FirstLaunchSwitches.row(param.key()).isPresent();
+            boolean exempt = NOT_IN_THE_REGISTRY.containsKey(param.key());
+            assertThat(registered || exempt).as("%s: add a row to FirstLaunchSwitches.ALL (its first launch value), or "
+                + "list it in NOT_IN_THE_REGISTRY with the reason", param.key()).isTrue();
+            assertThat(registered && exempt).as("%s is both registered and exempt", param.key()).isFalse();
+        }
+        // And the exemptions name switches that exist.
+        NOT_IN_THE_REGISTRY.forEach((key, reason) -> {
+            assertThat(PARAMS).as("the exempt switch %s exists", key).containsKey(key);
+            assertThat(reason).isNotBlank();
+        });
+    }
+
+    @Test
+    void theSwitchesThatMustBeOffAreDerivedFromTheRegistry() {
+        List<String> off = FirstLaunchSwitches.ALL.stream()
+            .filter(row -> row.status() == Status.ACTIVE && Boolean.FALSE.equals(row.value())).map(Row::key).toList();
+        assertThat(FirstLaunchSwitchesCheck.MUST_BE_OFF).isEqualTo(off).isNotEmpty();
+    }
 }

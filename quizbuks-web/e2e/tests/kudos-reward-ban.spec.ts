@@ -1,6 +1,6 @@
 import { completeQuiz, query } from './content'
 import { allowRewardMethods } from './publishing'
-import { expect, prepareQuizbuks, run, setControlledParam, test } from './support'
+import { expect, prepareQuizbuks, run, setControlledParam, signIn, test } from './support'
 import { approvedSponsor } from './wallet'
 
 /**
@@ -15,10 +15,10 @@ test.beforeEach(async ({ request }) => {
 
 test.describe.configure({ mode: 'serial' })
 
-test('a publication with a Kudos reward is refused at submit while the switch is off', async ({ request }) => {
+test('a publication with a Kudos reward is refused at submit while the switch is off', async ({ page, request }) => {
   test.setTimeout(240_000)
   const sponsor = await approvedSponsor(request, 'Kudos')
-  await allowRewardMethods(request, sponsor.token, ['PLATFORM', 'SPONSOR_CASH'])
+  await allowRewardMethods(request, sponsor.token, ['PLATFORM', 'SPONSOR_CASH', 'OFFLINE_REDEEM'])
   const quiz = await completeQuiz(request, sponsor.token, { questions: 1 })
   const versionId = (await query(request, sponsor.token, 'qb.sponsor.quiz-versions', { quizId: quiz.quizId }))[0].versionId
   const now = Date.now()
@@ -36,12 +36,30 @@ test('a publication with a Kudos reward is refused at submit while the switch is
       data: { publicationId } })
     expect(refused.status(), await refused.text()).toBe(422)
     const body = await refused.json()
-    expect(JSON.stringify(body)).toContain('QB_REWARD_METHOD_NOT_ALLOWED')
+    expect(JSON.stringify(body)).toContain('QB_REWARD_KUDOS_DISABLED')
     expect(JSON.stringify(body)).toContain('cannot be used to publish until it is opened')
     // The Sponsor is offered the other methods only.
     const methods = await query(request, sponsor.token, 'qb.sponsor.reward-methods', {})
     expect(String(methods[0].methods).split(',')).not.toContain('PLATFORM')
+
+    // The page: the draft's reward methods offer the other two, and not the platform's Kudos.
+    await signIn(page, '/sponsor/', sponsor.email)
+    await expect(page.getByTestId('dashboard-status')).toBeVisible()
+    await page.goto(`/sponsor/publications/${publicationId}/rewards`)
+    await expect(page.getByTestId('publication-method')).toBeVisible()
+    await expect(page.getByTestId('publication-method-SPONSOR_CASH')).toBeVisible()
+    await expect(page.getByTestId('publication-method-OFFLINE_REDEEM')).toBeVisible()
+    await expect(page.getByTestId('publication-method-PLATFORM')).toHaveCount(0)
   } finally {
     await setControlledParam(request, 'qb.reward.kudos.enabled', 'true')
   }
+})
+
+test('the switch is open again for the other specs', async ({ request }) => {
+  // Not the test above, which restores it in `finally`: this one is for a run that was cut short while it was off
+  // (prepareQuizbuks closes that gap too), and asserts what the other specs rely on.
+  const sponsor = await approvedSponsor(request, 'Kudos open')
+  await allowRewardMethods(request, sponsor.token, ['PLATFORM'])
+  const methods = await query(request, sponsor.token, 'qb.sponsor.reward-methods', {})
+  expect(String(methods[0].methods).split(',')).toContain('PLATFORM')
 })

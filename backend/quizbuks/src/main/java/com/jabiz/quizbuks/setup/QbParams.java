@@ -499,8 +499,10 @@ public final class QbParams {
     /**
      * F-F10a: whether a publication may be published with the reward method {@code PLATFORM} (Kudos paid by QuizBuks).
      * The declared value is today's behaviour (true); the first launch's value ({@code FirstLaunchSwitches}) is false,
-     * so no publication can offer a Kudos reward however a sponsor is set up. Not there at all (before setup): not
-     * blocked, as {@code qb.reward.default-methods} not there gives the platform's Kudos (F-S4b).
+     * so no publication can offer a Kudos reward however a sponsor is set up. Not there at all (before setup):
+     * not blocked on a system that does not say it is production or staging (as {@code qb.reward.default-methods} not
+     * there gives the platform's Kudos, F-S4b); on production and staging it counts as off (default-deny, so a system
+     * whose proposals were never published pays no Kudos reward).
      */
     public static final String REWARD_KUDOS_ENABLED = "qb.reward.kudos.enabled";
     /** F-F10a: the Kudos reward switch (controlled, last, in the order of CONTROLLED). */

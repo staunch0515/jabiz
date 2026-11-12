@@ -236,7 +236,7 @@ final class PublicationEditing {
      * the parameter's default, Q28) and the reward parameters. By the immutable user, read only: a setting changed
      * meanwhile is caught by the next action, as the ban is.
      */
-    static <I, O> void loadSponsorMethods(ProcessDefinitionBuilder<I, O, ProcessContext> pb) {
+    static <I, O> void loadSponsorMethods(ProcessDefinitionBuilder<I, O, ProcessContext> pb, boolean firstLaunch) {
         pb.step("Load the sponsor's reward methods", QueryEntities.<ProcessContext>of(
                 QbPublications.defaultDataset(QbPublications.SPONSOR_METHODS), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.Eq("userId", ctx.request().actorId())).limit(1).build(), SPONSOR_METHODS))
@@ -247,7 +247,16 @@ final class PublicationEditing {
                 QbParams.REWARD_DEFAULT_METHODS, QbParams.REWARD_MAX_PER_ATTEMPT, QbParams.ENTRY_FEE_ENABLED,
                 QbParams.TREE_GATE_DIGITAL_PRIZE, QbParams.TREE_GATE_OFFLINE_REDEEM, QbParams.REWARD_KUDOS_ENABLED))
             .steps(b -> com.jabiz.quizbuks.tree.SponsorGates.load(b, REWARD_PARAMS, QbParams.SPONSOR_TREE_GATES,
-                METHOD_GATES));
+                METHOD_GATES))
+            // F-F10a: whether this system is default-deny for the Kudos reward (production, staging), for allowedMethods.
+            .compute("Note the system's first launch mode", (metadata, ctx) -> ctx.put(FIRST_LAUNCH, firstLaunch));
+    }
+
+    /** F-F10a: whether the system proposes the first launch's values, put by {@link #loadSponsorMethods}. */
+    static final String FIRST_LAUNCH = "firstLaunch";
+
+    private static boolean firstLaunch(ProcessContext ctx) {
+        return ctx.contains(FIRST_LAUNCH) && Boolean.TRUE.equals(ctx.get(FIRST_LAUNCH, Boolean.class));
     }
 
     /** F-S4b: the context keys of the reward methods' gates ({@code tree.SponsorGates}). */
@@ -270,10 +279,10 @@ final class PublicationEditing {
      */
     static List<String> allowedMethods(ProcessContext ctx) {
         EntityInstance setting = first(ctx, SPONSOR_METHODS);
-        List<String> available = RewardMethod.available(RewardMethod.defaultMethods(rewardParams(ctx)),
+        List<String> available = RewardMethod.available(RewardMethod.defaultMethods(rewardParams(ctx), firstLaunch(ctx)),
             setting == null ? List.of() : RewardMethod.parse(setting.get("methods")),
             com.jabiz.quizbuks.tree.SponsorGates.open(ctx, REWARD_PARAMS, QbParams.SPONSOR_TREE_GATES, METHOD_GATES));
-        return RewardMethod.withKudosSwitch(available, rewardParams(ctx));
+        return RewardMethod.withKudosSwitch(available, rewardParams(ctx), firstLaunch(ctx));
     }
 
     /** The highest reward one attempt may win (Q28), from {@link #loadSponsorMethods}; null for no cap. */
@@ -283,7 +292,8 @@ final class PublicationEditing {
     }
 
     /**
-     * Why the publication's method may not be used by the caller (422 {@code QB_REWARD_METHOD_NOT_ALLOWED}); none
+     * Why the publication's method may not be used by the caller (422 {@code QB_REWARD_METHOD_NOT_ALLOWED}, or {@code QB_REWARD_KUDOS_DISABLED} for the platform's
+     * Kudos while the switch keeps it closed); none
      * when it may. Checked when a draft is saved and again when it is submitted: an administrator may have taken the
      * method away meanwhile.
      */
@@ -291,6 +301,12 @@ final class PublicationEditing {
         List<String> allowed = allowedMethods(ctx);
         if (method == null || allowed.contains(method.toString())) {
             return List.of();
+        }
+        // F-F10a: the Kudos reward is not open (the switch): say so rather than "not allowed to you".
+        if (RewardMethod.PLATFORM.equals(method.toString()) && RewardMethod.kudosOff(rewardParams(ctx), firstLaunch(ctx))) {
+            return List.of(new Violation("rewardMethod", PublishingCodes.REWARD_KUDOS_DISABLED, "The reward method "
+                + "PLATFORM (Kudos paid by the platform) is not open; allowed: " + String.join(", ", allowed),
+                Map.of("rewardMethod", method.toString(), "allowed", String.join(",", allowed))));
         }
         return List.of(new Violation("rewardMethod", PublishingCodes.REWARD_METHOD_NOT_ALLOWED, "This sponsor "
             + "may not publish with the reward method " + method + "; allowed: " + String.join(", ", allowed),

@@ -41,6 +41,7 @@ import { WALLET_PATH } from '../wallet/api'
 import type { Condition } from '../qb/audience'
 import { AudienceConditions, AudienceCountPanel, AudienceFeePanel } from './AudienceConditions'
 import { LanguagesFields } from './LanguagesFields'
+import { useRewardSettings } from './useRewardSettings'
 import { ReferralFields } from './ReferralFields'
 import {
   asChallenge,
@@ -55,8 +56,6 @@ import {
   inputOf,
   isStale,
   PUBLISHING_LIMITS,
-  readRewardSettings,
-  REWARD_SETTINGS_QUERY,
   REDEEM_DESCRIPTION_LENGTH,
   DIGITAL_CONTENT_LENGTH,
   DIGITAL_DELIVERIES,
@@ -322,7 +321,7 @@ export function PublicationWizard({ detail, initialStep, onStale, stale, header 
   const survey = (version?.kind ?? quizzes.data?.items.find((quiz) => quiz.quizId === form.quizId)?.kind) === 'SURVEY'
 
   // Q22: the methods an administrator allowed this sponsor; the choice is shown only when there is one to make.
-  const settings = useQuery({ queryKey: REWARD_SETTINGS_QUERY, queryFn: readRewardSettings, staleTime: 60_000 })
+  const settings = useRewardSettings()
   const allowed = settings.data?.methods
   const methodLabel = useRewardMethodLabel()
   const deliveryLabel = useDigitalDeliveryLabel()

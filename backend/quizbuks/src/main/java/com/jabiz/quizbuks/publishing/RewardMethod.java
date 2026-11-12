@@ -65,9 +65,18 @@ public final class RewardMethod {
      * allows them); the parameter not there at all (before setup) gives the platform's Kudos, as before.
      */
     public static List<String> defaultMethods(ParamValues params) {
+        return defaultMethods(params, false);
+    }
+
+    /**
+     * As {@link #defaultMethods(ParamValues)}, and on a system that proposes the first launch's values ({@code firstLaunch}:
+     * {@code production} or {@code staging}, F-F10a) the parameter not there gives none: the fallback to the platform's
+     * Kudos is for a system that has not been set up, and such a system must not publish a Kudos reward by default.
+     */
+    public static List<String> defaultMethods(ParamValues params, boolean firstLaunch) {
         String value = params == null ? null : params.find(QbParams.REWARD_DEFAULT_METHODS, String.class).orElse(null);
         if (value == null) {
-            return DEFAULT;
+            return firstLaunch ? List.of() : DEFAULT;
         }
         if (value.isBlank()) {
             return List.of();
@@ -77,16 +86,25 @@ public final class RewardMethod {
     }
 
     /**
-     * F-F10a: the methods without {@link #PLATFORM} when the switch {@code qb.reward.kudos.enabled} is off, whoever has
-     * the method by default, setting or lit node; unchanged when it is on, and when it is not there (before setup),
-     * as the default methods' parameter not there gives the platform's Kudos (F-S4b). The one place the switch is
-     * applied: saving, copying, submitting and importing a package all ask
-     * {@code PublicationEditing.allowedMethods}, and the sponsor console's template says the same in SQL.
+     * F-F10a: whether the switch {@code qb.reward.kudos.enabled} keeps {@link #PLATFORM} from being published: it is
+     * {@code false}, or it is not there on a system that proposes the first launch's values ({@code firstLaunch}:
+     * default-deny, the switch was never published). Not there on any other system (before setup) is not off, as the
+     * default methods' parameter not there gives the platform's Kudos (F-S4b).
      */
-    public static List<String> withKudosSwitch(List<String> methods, ParamValues params) {
-        boolean off = params != null
-            && Boolean.FALSE.equals(params.find(QbParams.REWARD_KUDOS_ENABLED, Boolean.class).orElse(null));
-        return off ? methods.stream().filter(method -> !PLATFORM.equals(method)).toList() : methods;
+    public static boolean kudosOff(ParamValues params, boolean firstLaunch) {
+        Boolean value = params == null ? null : params.find(QbParams.REWARD_KUDOS_ENABLED, Boolean.class).orElse(null);
+        return Boolean.FALSE.equals(value) || (firstLaunch && value == null);
+    }
+
+    /**
+     * F-F10a: the methods without {@link #PLATFORM} when the switch is {@link #kudosOff off}, whoever has the method by
+     * default, setting or lit node; unchanged otherwise. The one place the switch is applied: saving, copying,
+     * submitting and importing a package all ask {@code PublicationEditing.allowedMethods}, and the sponsor console's
+     * template says the same in SQL.
+     */
+    public static List<String> withKudosSwitch(List<String> methods, ParamValues params, boolean firstLaunch) {
+        return kudosOff(params, firstLaunch) ? methods.stream().filter(method -> !PLATFORM.equals(method)).toList()
+            : methods;
     }
 
     /** Whether the method is {@link #PLATFORM} (null, as a publication from before Q22 is read, counts as it). */

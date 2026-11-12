@@ -29,7 +29,7 @@ import java.util.Map;
  * The money switches of the first launch (F-F10a, docs/quizbuks/plans/impl/F-F10.md section 1.5), at startup and in
  * {@code platformCheck} (category {@value CountryCatalog#CATEGORY}). On the real system ({@code jabiz.web.environment}
  * {@code production}) it warns for each of the switches that must be off at the first launch while it is on, and while
- * the Kudos reward switch has no value at all (publishing is then not blocked); a warning only, since the application
+ * the Kudos reward switch has no value at all (a Kudos reward is then refused: not there counts as off); a warning only, since the application
  * has to start for the finance administrators to publish the proposals. It does not warn for a value that is not
  * published yet ({@link SetupParamsCheck} says so). It also warns when Stripe is in live mode on a system that does not
  * say it is production: that system proposes the declared values, not the first launch's.
@@ -42,9 +42,13 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
 
     static final String LOCATION = "first launch";
 
-    /** The switches that are off at the first launch, as the registry lists them: on is a warning. */
-    static final List<String> MUST_BE_OFF = List.of(QbParams.KUDOS_BUY_ENABLED, QbParams.KUDOS_SELL_ENABLED,
-        QbParams.TRANSFER_ENABLED, QbParams.WITHDRAWAL_BANK_ENABLED, QbParams.REWARD_KUDOS_ENABLED);
+    /**
+     * The switches that are off at the first launch: the registry's active rows whose first launch value is false (the
+     * registry is the one list, so a switch added there is checked without a second edit); on is a warning.
+     */
+    static final List<String> MUST_BE_OFF = FirstLaunchSwitches.ALL.stream()
+        .filter(row -> row.status() == FirstLaunchSwitches.Status.ACTIVE && Boolean.FALSE.equals(row.value()))
+        .map(FirstLaunchSwitches.Row::key).toList();
 
     private final JabizWebProperties web;
     private final StripeSettings stripe;
@@ -63,8 +67,8 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
 
     @Override
     public List<CheckProblem> check() {
-        List<CheckProblem> problems = new ArrayList<>(liveModeProblems(web.environment(), stripe.livemode()));
-        if (!JabizWebProperties.PRODUCTION.equals(web.environment())) {
+        List<CheckProblem> problems = new ArrayList<>(liveModeProblems(web.environment(), web.production(), stripe.livemode()));
+        if (!web.production()) {
             return List.copyOf(problems);
         }
         String url = environment.getProperty("spring.flyway.url");
@@ -86,15 +90,23 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
         return List.copyOf(problems);
     }
 
-    /** Stripe's live mode on a system that is not production: it proposes the declared values, not the first launch's. */
-    static List<CheckProblem> liveModeProblems(String environment, boolean livemode) {
-        if (!livemode || JabizWebProperties.PRODUCTION.equals(environment)) {
+    /**
+     * Stripe's live mode on a system that is not production. A staging system proposes the first launch's values like
+     * production does, so the warning there is that live money runs on a system that is not the real one; any other
+     * system proposes the declared values (cash into Kudos on, Kudos rewards on), which live money must not meet.
+     */
+    static List<CheckProblem> liveModeProblems(String environment, boolean production, boolean livemode) {
+        if (!livemode || production) {
             return List.of();
         }
+        String effect = FirstLaunchSwitches.appliesTo(environment)
+            ? "QB_SETUP proposes the first launch's values here as in production, but this is not the real system: "
+                + "live keys belong to production only"
+            : "QB_SETUP proposes the declared values of the money switches (cash into Kudos on, Kudos rewards on), "
+                + "not the first launch's. Set JABIZ_WEB_ENVIRONMENT=production (operations.md)";
         return List.of(CheckProblem.warning(CountryCatalog.CATEGORY, "jabiz.web.environment",
             "Stripe is in live mode (quizbuks.stripe.livemode=true) but jabiz.web.environment is '" + environment
-                + "', not production: QB_SETUP proposes the declared values of the money switches (cash into Kudos on, "
-                + "Kudos rewards on), not the first launch's. Set JABIZ_WEB_ENVIRONMENT=production (operations.md)"));
+                + "', not production: " + effect));
     }
 
     /**
@@ -109,8 +121,9 @@ public class FirstLaunchSwitchesCheck implements PlatformCheck {
             if (value == null) {
                 if (QbParams.REWARD_KUDOS_ENABLED.equals(key)) {
                     problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, "parameter " + key, "has no value: "
-                        + "a publication may still offer a Kudos reward until it is off at the first launch "
-                        + "(operations.md section 4: run QB_SETUP and have another administrator publish it)"));
+                        + "no publication can offer a Kudos reward here until it is published (off at the first "
+                        + "launch; not there counts as off in production). operations.md section 4: run QB_SETUP and "
+                        + "have another administrator publish it"));
                 }
             } else if ("true".equalsIgnoreCase(value.trim())) {
                 problems.add(CheckProblem.warning(CountryCatalog.CATEGORY, "parameter " + key, "is on, but the first "

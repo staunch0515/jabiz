@@ -12,6 +12,8 @@ datasets:
   QbTreeNode: urn:jabiz:dataset:default:QbTreeNode
   QbTreeLit: urn:jabiz:dataset:me-sponsor:QbTreeLit
   QbTreeLitRevocation: urn:jabiz:dataset:me-sponsor:QbTreeLitRevocation
+params:
+  firstLaunch: { kind: { type: bool }, description: "True on a system that proposes the first launch's values (production, staging): the Kudos switch and the default methods not there then mean off and none (F-F10a). Only what the console offers; the processes decide for themselves" }
 results:
   methods:             { kind: { type: text, maxLength: 100 } }
   own:                 { kind: { type: bool } }
@@ -29,14 +31,17 @@ permissions: [qb.publication.write]
 -- names a node in effect of a platform template Sponsors light, and the caller lit that node id in the template or in
 -- an operator's copy of it (OPERATOR, templateTreeId), not revoked. The parameters are read at the server's clock (the
 -- dataset without time travel). F-F10a: the switch qb.reward.kudos.enabled, when false, takes PLATFORM out of the
--- methods (PublicationEditing#allowedMethods does the same). "unlocked" lists the methods a gate opens (the console's explanation).
+-- methods (PublicationEditing#allowedMethods does the same); on a system that proposes the first launch's values
+-- (firstLaunch, the caller says it: production, staging) the switch not there counts as off, and the default methods
+-- not there give none instead of the platform's Kudos. The parameter only shapes what the console offers: the
+-- processes read the system's own environment. "unlocked" lists the methods a gate opens (the console's explanation).
 WITH params AS (
     SELECT
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.reward.default-methods' THEN p.{{SysParam.value}} END) AS p_methods,
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.reward.max-per-attempt' THEN p.{{SysParam.value}} END) AS p_max,
         -- Q88b (D-Q88-14): whether the wizard offers the entry fee; the save refuses one when it is off.
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.play.entry-fee.enabled' THEN p.{{SysParam.value}} END) AS p_fee,
-        -- F-F10a: off (false) takes PLATFORM away from every sponsor; not there is not off (before setup).
+        -- F-F10a: off (false) takes PLATFORM away from every sponsor; not there is off only on a first-launch system.
         max(CASE WHEN p.{{SysParam.paramKey}} = 'qb.reward.kudos.enabled' THEN p.{{SysParam.value}} END) AS p_kudos
     FROM {{SysParam}} p
     WHERE p.{{SysParam.paramKey}} IN ('qb.reward.default-methods', 'qb.reward.max-per-attempt',
@@ -66,7 +71,9 @@ methods AS (
     SELECT a.m, a.ord,
            a.gate IS NOT NULL AND a.gate IN (SELECT gt.gate FROM gates gt) AS opened,
            a.m IN (SELECT btrim(x) FROM params, regexp_split_to_table(
-                       CASE WHEN params.p_methods IS NULL THEN 'PLATFORM' ELSE params.p_methods END, ',') AS x)
+                       CASE WHEN params.p_methods IS NULL
+                            THEN CASE WHEN coalesce(CAST(:firstLaunch AS boolean), false) THEN '' ELSE 'PLATFORM' END
+                            ELSE params.p_methods END, ',') AS x)
            OR a.m IN (SELECT btrim(y) FROM mine, regexp_split_to_table(
                        CASE WHEN mine.rows_found > 0 AND btrim(coalesce(mine.methods, '')) = '' THEN 'PLATFORM'
                             ELSE coalesce(mine.methods, '') END, ',') AS y) AS given
@@ -76,7 +83,8 @@ methods AS (
 SELECT
     coalesce((SELECT string_agg(x.m, ',' ORDER BY x.ord) FROM methods x
         WHERE (x.given OR x.opened)
-          AND NOT (x.m = 'PLATFORM' AND coalesce(lower(btrim(params.p_kudos)) = 'false', false))), '') AS methods,
+          AND NOT (x.m = 'PLATFORM' AND (coalesce(lower(btrim(params.p_kudos)) = 'false', false)
+                   OR (params.p_kudos IS NULL AND coalesce(CAST(:firstLaunch AS boolean), false))))), '') AS methods,
     mine.rows_found > 0 AS own,
     coalesce((SELECT string_agg(x.m, ',' ORDER BY x.ord) FROM methods x WHERE x.opened), '') AS unlocked,
     CASE WHEN params.p_max ~ '^[0-9]{1,18}$' AND CAST(params.p_max AS numeric) > 0

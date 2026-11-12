@@ -40,9 +40,29 @@ class FirstLaunchSwitchesCheckTest {
 
     @Test
     void liveModeOnASystemThatIsNotProductionWarns() {
-        assertThat(FirstLaunchSwitchesCheck.liveModeProblems("test", true)).hasSize(1);
-        assertThat(FirstLaunchSwitchesCheck.liveModeProblems("staging", true)).hasSize(1);
-        assertThat(FirstLaunchSwitchesCheck.liveModeProblems("production", true)).isEmpty();
-        assertThat(FirstLaunchSwitchesCheck.liveModeProblems("test", false)).isEmpty();
+        assertThat(FirstLaunchSwitchesCheck.liveModeProblems("test", false, true)).hasSize(1);
+        assertThat(FirstLaunchSwitchesCheck.liveModeProblems("production", true, true)).isEmpty();
+        assertThat(FirstLaunchSwitchesCheck.liveModeProblems("test", false, false)).isEmpty();
+    }
+
+    @Test
+    void theLiveModeWarningSaysWhichValuesTheSystemProposes() {
+        // Staging proposes the first launch's values, any other test system the declared ones.
+        assertThat(FirstLaunchSwitchesCheck.liveModeProblems("staging", false, true)).singleElement()
+            .satisfies(problem -> assertThat(problem.message()).contains("first launch's values here")
+                .doesNotContain("declared values"));
+        assertThat(FirstLaunchSwitchesCheck.liveModeProblems("test", false, true)).singleElement()
+            .satisfies(problem -> assertThat(problem.message()).contains("declared values")
+                .doesNotContain("first launch's values here"));
+    }
+
+    @Test
+    void theSwitchesThatMustBeOffAreTheRegistrysActiveRowsWithAFalseValue() {
+        assertThat(FirstLaunchSwitchesCheck.MUST_BE_OFF).containsExactlyInAnyOrder(QbParams.KUDOS_BUY_ENABLED,
+            QbParams.KUDOS_SELL_ENABLED, QbParams.TRANSFER_ENABLED, QbParams.WITHDRAWAL_BANK_ENABLED,
+            QbParams.REWARD_KUDOS_ENABLED);
+        // A waiting row (the intent is true or false) never counts: its feature does not exist yet.
+        FirstLaunchSwitches.ALL.stream().filter(row -> row.status() == FirstLaunchSwitches.Status.WAITING)
+            .forEach(row -> assertThat(FirstLaunchSwitchesCheck.MUST_BE_OFF).doesNotContain(row.key()));
     }
 }

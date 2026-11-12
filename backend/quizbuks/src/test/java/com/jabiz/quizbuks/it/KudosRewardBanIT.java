@@ -20,11 +20,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The Kudos reward switch {@code qb.reward.kudos.enabled} (F-F10a, docs/quizbuks/plans/impl/F-F10.md section 1.4): off,
  * no publication can offer the reward method {@code PLATFORM} whatever gave it to the sponsor (their own setting here),
- * at saving (the referral reward too), copying, submitting and in the package import's publication step, with the same
- * 422 {@code QB_REWARD_METHOD_NOT_ALLOWED}; the other methods are untouched, a publication already live goes on, and
- * the sponsor console's template offers the same methods as the processes accept.
+ * at saving (the referral reward too), copying, submitting and in the package import's publication step, with
+ * 422 {@code QB_REWARD_KUDOS_DISABLED} (any other method that is not allowed keeps {@code QB_REWARD_METHOD_NOT_ALLOWED}
+ * and its message); the other methods are untouched, a publication already live or in review goes on, a challenge
+ * pays nothing and is not asked, and the sponsor console's template offers the same methods as the processes accept.
+ * The system that says it is production is default-deny: {@code KudosRewardBanProductionIT}.
  */
-class KudosRewardBanIT extends PlayItSupport {
+class KudosRewardBanIT extends TreeItSupport {
 
     private String methodsAdmin() {
         return TestTokens.bearer(tokens, "ff10a-admin", QbPermissions.ADMIN_REWARD_METHODS,
@@ -38,10 +40,7 @@ class KudosRewardBanIT extends PlayItSupport {
 
     /** Sets the switch with four eyes. */
     private void kudosRewards(boolean on) {
-        Map<String, Object> change = run("CONTROL_CHANGE_PROPOSE", proposer(), body("targetEntity", "SysParam",
-            "values", Map.of("paramKey", QbParams.REWARD_KUDOS_ENABLED, "value", String.valueOf(on)),
-            "reason", "F-F10a test"));
-        run("CONTROL_CHANGE_PUBLISH", financeAdmin(), body("changeId", change.get("changeId")));
+        setControlledParam(QbParams.REWARD_KUDOS_ENABLED, String.valueOf(on));
     }
 
     private static List<Object> problemCodes(Map<String, Object> saved) {
@@ -54,8 +53,9 @@ class KudosRewardBanIT extends PlayItSupport {
 
     @Test
     void theSwitchIsDeclaredOnSoNothingChangesUntilItIsTurnedOff() {
-        assertThat(query("SELECT param_value FROM sys_param_version WHERE param_key = ?",
-            QbParams.REWARD_KUDOS_ENABLED)).extracting(row -> row.get("param_value")).containsExactly("true");
+        // The first version is the setup's proposal as published, in the order the table keeps them.
+        assertThat(query("SELECT param_value FROM sys_param_version WHERE param_key = ? ORDER BY version_no",
+            QbParams.REWARD_KUDOS_ENABLED)).extracting(row -> row.get("param_value")).first().isEqualTo("true");
     }
 
     @Test
@@ -84,10 +84,10 @@ class KudosRewardBanIT extends PlayItSupport {
             // Saving: the default method (none named) is the platform's, and so is a named one.
             Map<String, Object> save = complete(versionId, "Kudos now", start, end);
             assertThat(codes(refused("QB_PUBLICATION_SAVE", token, save, 422)))
-                .containsExactly(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+                .containsExactly(PublishingCodes.REWARD_KUDOS_DISABLED);
             save.put("rewardMethod", RewardMethod.PLATFORM);
             assertThat(codes(refused("QB_PUBLICATION_SAVE", token, save, 422)))
-                .containsExactly(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+                .containsExactly(PublishingCodes.REWARD_KUDOS_DISABLED);
 
             // The referral reward is a Kudos reward too.
             save.put("rewardMethod", RewardMethod.SPONSOR_CASH);
@@ -101,20 +101,21 @@ class KudosRewardBanIT extends PlayItSupport {
             referral.put("days", 7);
             save.put("referral", referral);
             assertThat(codes(refused("QB_PUBLICATION_SAVE", token, save, 422)))
-                .contains(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+                .contains(PublishingCodes.REWARD_KUDOS_DISABLED);
             save.remove("referral");
 
             // The other methods are untouched.
             Map<String, Object> cash = run("QB_PUBLICATION_SAVE", token, save);
-            assertThat(problemCodes(cash)).doesNotContain(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+            assertThat(problemCodes(cash)).doesNotContain(PublishingCodes.REWARD_METHOD_NOT_ALLOWED,
+                PublishingCodes.REWARD_KUDOS_DISABLED);
 
             // Copying a publication paid by the platform says so as a problem of the copy.
             assertThat(problemCodes(run("QB_PUBLICATION_COPY", token, body("publicationId", live))))
-                .containsExactly(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+                .containsExactly(PublishingCodes.REWARD_KUDOS_DISABLED);
 
             // Submitting a draft saved while the switch was on is refused.
             assertThat(codes(refused("QB_PUBLICATION_SUBMIT", token, body("publicationId", draft), 422)))
-                .containsExactly(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+                .containsExactly(PublishingCodes.REWARD_KUDOS_DISABLED);
 
             // The package import's publication step is the same save (a sponsor of its own: an account that
             // submitted a publication imports only its profile).
@@ -130,7 +131,7 @@ class KudosRewardBanIT extends PlayItSupport {
             imported.put("publication", body("save", complete(importVersion, "Imported", start, end),
                 "topics", body()));
             assertThat(codes(refused(PackageImportProcesses.STEP, importToken, imported, 422)))
-                .containsExactly(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+                .containsExactly(PublishingCodes.REWARD_KUDOS_DISABLED);
 
             // What is live goes on as it is.
             assertThat(status(live)).isEqualTo("LIVE");
@@ -142,5 +143,91 @@ class KudosRewardBanIT extends PlayItSupport {
         assertThat(consoleMethods(token)).singleElement().satisfies(row ->
             assertThat(row).containsEntry("methods", "PLATFORM,SPONSOR_CASH"));
         assertThat(submit(token, draft)).containsEntry("status", "SCHEDULED");
+    }
+
+    @Test
+    void anotherMethodThatIsNotAllowedKeepsItsCodeAndItsMessageWhateverTheSwitchSays() {
+        String sponsor = newSponsor("s-ff10a-other");
+        String token = sponsorToken(sponsor);
+        allow(sponsor, RewardMethod.PLATFORM, RewardMethod.SPONSOR_CASH);
+        String versionId = version(token, "Other quiz");
+        Instant now = clock.instant();
+        Map<String, Object> save = complete(versionId, "Offline", now.plus(Duration.ofDays(1)), now.plus(Duration.ofDays(8)));
+        save.put("rewardMethod", RewardMethod.OFFLINE_REDEEM);
+
+        // The switch on: the prize at the sponsor's place is not theirs to use.
+        Map<String, Object> on = refused("QB_PUBLICATION_SAVE", token, save, 422);
+        assertThat(codes(on)).containsExactly(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+        String original = String.valueOf(violations(on).getFirst().get("message"));
+        assertThat(original).doesNotContain("until it is opened");
+
+        kudosRewards(false);
+        try {
+            // The switch off: the same refusal, word for word, without the sentence about Kudos.
+            Map<String, Object> off = refused("QB_PUBLICATION_SAVE", token, save, 422);
+            assertThat(codes(off)).containsExactly(PublishingCodes.REWARD_METHOD_NOT_ALLOWED);
+            assertThat(String.valueOf(violations(off).getFirst().get("message")))
+                .doesNotContain("until it is opened").contains("Allowed: SPONSOR_CASH");
+            // Kudos paid by the platform has its own refusal and message (the brand is the product's, not a token).
+            save.put("rewardMethod", RewardMethod.PLATFORM);
+            Map<String, Object> kudos = refused("QB_PUBLICATION_SAVE", token, save, 422);
+            assertThat(codes(kudos)).containsExactly(PublishingCodes.REWARD_KUDOS_DISABLED);
+            assertThat(String.valueOf(violations(kudos).getFirst().get("message")))
+                .contains("cannot be used to publish until it is opened").doesNotContain("@QB_BRAND_NAME@");
+        } finally {
+            kudosRewards(true);
+        }
+    }
+
+    @Test
+    void aPublicationInReviewIsApprovedAfterTheSwitchIsOffAndGoesLiveAsSubmitted() {
+        // The plan (section 1.4, b): what was submitted, in review or live, is not broken by a later switch. The
+        // method is checked when a draft is saved and submitted, not when a reviewer decides.
+        String sponsor = newSponsor("s-ff10a-review");
+        String token = sponsorToken(sponsor);
+        allow(sponsor, RewardMethod.PLATFORM);
+        String versionId = version(token, "Review quiz");
+        Instant now = clock.instant();
+        String publicationId = (String) run("QB_PUBLICATION_SAVE", token, complete(versionId, "In review", now,
+            now.plus(Duration.ofDays(7)))).get("publicationId");
+        autoApprove(false);
+        try {
+            Map<String, Object> submitted = submit(token, publicationId);
+            assertThat(submitted).containsEntry("status", "PENDING_REVIEW");
+            kudosRewards(false);
+            try {
+                decide((String) submitted.get("approvalRequestId"), "APPROVE", null);
+                assertThat(status(publicationId)).isIn("LIVE", "SCHEDULED");
+                assertThat(row(publicationId)).containsEntry("reward_method", RewardMethod.PLATFORM);
+            } finally {
+                kudosRewards(true);
+            }
+        } finally {
+            autoApprove(true);
+        }
+    }
+
+    @Test
+    void aChallengePaysNothingAndIsNotAskedForTheRewardMethod() {
+        Copy copy = copy();
+        String direct = sponsorToken(copy.operator().leadId());
+        kudosRewards(false);
+        try {
+            Map<String, Object> saved = run("QB_PUBLICATION_SAVE", direct, challenge(direct, copy.treeId(),
+                copy.start(), "Challenge while Kudos are closed"));
+            assertThat(problemCodes(saved)).isEmpty();
+            assertThat(submit(direct, (String) saved.get("publicationId")).get("status")).isIn("LIVE", "SCHEDULED");
+        } finally {
+            kudosRewards(true);
+        }
+    }
+
+    @Test
+    void theSwitchTouchesOnlyThePlatformsKudosAndNeverAChannelsMethod() {
+        // A channel's publication has the method CHANNEL, which no sponsor may be allowed (it is not in ALL) and which
+        // never goes through the sponsor's methods; ShopifyStorefrontIT publishes a campaign with the switch off.
+        assertThat(RewardMethod.ALL).doesNotContain(RewardMethod.CHANNEL);
+        assertThat(RewardMethod.withKudosSwitch(List.of(RewardMethod.CHANNEL, RewardMethod.PLATFORM), null, true))
+            .containsExactly(RewardMethod.CHANNEL);
     }
 }
