@@ -434,6 +434,24 @@ class PrepaymentIT extends PlayItSupport {
     }
 
     @Test
+    void theCheckCountsWhatTheFreezeCanTakeWhenTheCashLotsAreApartFromTheWallet() {
+        // M4 of the F-M5 review: the check and the freeze use one order (FeeAllocation); with the lots short of the
+        // cash wallet (the daily check CASH_LOTS reports it) the submission is refused with the funds' code, not 500.
+        autoApprove(false);
+        String sponsor = pricedSponsor("fm5-lots");
+        cash(sponsor, 1_000);
+        execute("UPDATE qb_cash_lot SET remaining = 100, version = version + 1 WHERE sponsor_id = ?", sponsor);
+        String publicationId = audienceDraft(sponsor, "FM5 lots apart");
+        Map<String, Object> look = check(sponsor, publicationId);
+        assertThat(look).containsEntry("enough", false);
+        assertThat(new BigDecimal(String.valueOf(look.get("available")))).isEqualByComparingTo("100");
+        assertThat(codes(refused("QB_PUBLICATION_SUBMIT", sponsorToken(sponsor), body("publicationId", publicationId),
+            422))).containsExactly(FeeCodes.PUBLICATION_FUNDS);
+        assertThat(prepayments(publicationId)).isEmpty();
+        assertThat(differences(sponsor)).extracting(row -> row.get("checkCode")).contains("CASH_LOTS");
+    }
+
+    @Test
     void voidingAnInvoicePaidFromItsPrepaymentGivesItBackToTheAccountAndTheBooksAgree() {
         // H1 (F-M5 review): what paid the invoice from the prepayment goes back to the fee credit and the cash it came
         // from, and is posted out of 2180 back to 2190 / 2160.

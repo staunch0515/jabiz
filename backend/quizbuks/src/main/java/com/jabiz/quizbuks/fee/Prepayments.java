@@ -674,7 +674,7 @@ public final class Prepayments {
         return "prepay_" + purpose.toLowerCase(java.util.Locale.ROOT);
     }
 
-    static List<FeeAllocation.Credit> credits(List<EntityInstance> rows) {
+    public static List<FeeAllocation.Credit> credits(List<EntityInstance> rows) {
         return rows.stream().map(grant -> new FeeAllocation.Credit(String.valueOf(grant.id()),
             FeeGate.money(grant.get("remaining")), (Instant) grant.get("grantedAt"), (Instant) grant.get("expiresAt")))
             .toList();

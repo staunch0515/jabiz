@@ -56,6 +56,8 @@ public final class PublicationPrepayments {
     static final String PARAMS = PublicationLifecycle.FEE_PARAMS;
     static final String CREDITS = "funds.credits";
     static final String CASH_WALLET = "funds.cashWallet";
+    static final String LOTS = "funds.lots";
+    static final String SPONSOR = "funds.sponsor";
     static final String POSTPAID = "funds.postpaid";
     static final String CRITERIA = "funds.criteria";
     static final String RULES = "funds.rules";
@@ -72,6 +74,9 @@ public final class PublicationPrepayments {
     static final String CHARGE = "funds.charge";
     static final String RELEASED = "funds.released";
     static final String CHARGED = "funds.charged";
+
+    /** How many open postpaid prepayments one sponsor has at most: more is a defect, refused rather than undercounted. */
+    static final int MAX_POSTPAID = 1000;
 
     /** The parameters the submission's funds read (optional: not published reads as off, as the fee gate's). */
     static final List<String> PARAM_KEYS = List.of(QbParams.AUDIENCE_BILLING_ENABLED, QbParams.FEE_TAX_RATE,
@@ -97,7 +102,17 @@ public final class PublicationPrepayments {
             pb.step("Lock the sponsor's wallets", HoldLock.<ProcessContext>exclusive(ctx -> reads.test(ctx)
                 ? QbWallets.lockName(QbWallets.SPONSOR, sponsorOf(publication.apply(ctx))) : null));
         }
+        // One statement under the lock (L1 of the F-M5 review: the sponsor's billing and credit limit too); a
+        // publication not concerned reads nothing (each condition is an IN of no values: no SQL at all, L5).
         pb.step("Read the account, the audience rules and the operator", QueryEntities.<ProcessContext>all(
+                QueryEntities.query(com.jabiz.quizbuks.identity.QbAccounts.defaultDataset(
+                    com.jabiz.quizbuks.identity.QbAccounts.SPONSOR), ctx -> EntityQuery.builder()
+                    .where(new QueryPredicate.In("userId",
+                        FeeGate.ids(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null))).limit(1).build(),
+                    SPONSOR),
+                // M4 of the F-M5 review: the cash lots, so that the check counts what the freeze can take.
+                QueryEntities.query(com.jabiz.quizbuks.fee.CashLots.dataset(), ctx -> com.jabiz.quizbuks.fee.CashLots
+                    .open(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null), LOTS),
                 QueryEntities.query(QbFees.defaultDataset(com.jabiz.quizbuks.fee.QbFeeAccount.GRANT),
                     ctx -> FeeSettlement.credits(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null,
                         ctx.opTime()), CREDITS),
@@ -109,12 +124,15 @@ public final class PublicationPrepayments {
                             FeeGate.ids(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null)),
                         new QueryPredicate.Eq("mode", QbPrepayments.POSTPAID),
                         new QueryPredicate.Eq("status", QbPrepayments.OPEN))))
-                    .limit(10_000).build(), POSTPAID),
+                    .limit(MAX_POSTPAID + 1).build(), POSTPAID),
                 QueryEntities.query(QbAudience.CRITERION_DATASET, ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("publicationId",
                         FeeGate.ids(reads.test(ctx) ? publication.apply(ctx).id() : null)))
                     .limit(QbAudience.MAX_ROWS).build(), CRITERIA),
-                AudiencePricingProcesses.loadRules(RULES),
+                QueryEntities.query(QbAudiencePricing.defaultDataset(QbAudiencePricing.RULE), ctx -> reads.test(ctx)
+                    ? EntityQuery.builder().limit(com.jabiz.quizbuks.audience.AudienceCriteria.ALL.size() + 1).build()
+                    : EntityQuery.builder().where(new QueryPredicate.In("ruleKey", List.of())).limit(1).build(),
+                    RULES),
                 QueryEntities.query(QbOperators.defaultDataset(QbOperators.ASSIGNMENT), ctx -> EntityQuery.builder()
                     .where(new QueryPredicate.In("userId",
                         FeeGate.ids(reads.test(ctx) ? sponsorOf(publication.apply(ctx)) : null)))
@@ -208,14 +226,36 @@ public final class PublicationPrepayments {
     /** The funds of the publication from the reads (the check, and the wizard's look). */
     static PrepaymentRules.Funds funds(ProcessContext ctx) {
         List<PrepaymentRules.Item> items = itemsOf(ctx);
-        FeeRules.Standing standing = FeeGate.standing(ctx, params(ctx)
-            .find(QbParams.FEE_DEFAULT_BILLING_MODE, String.class).orElse(null));
+        if (FeeGate.list(ctx, POSTPAID).size() > MAX_POSTPAID) {
+            throw new IllegalStateException("More than " + MAX_POSTPAID + " open postpaid prepayments");
+        }
         BigDecimal setAside = FeeGate.list(ctx, POSTPAID).stream().map(row -> FeeGate.money(row.get("remaining")))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal owed = ctx.contains(OWED) ? owedOf(ctx) : BigDecimal.ZERO;
-        return PrepaymentRules.check(items, new PrepaymentRules.Standing(standing.billingMode(),
-            FeeSettlement.spendable(FeeGate.list(ctx, CREDITS), FeeGate.first(ctx, CASH_WALLET), ctx.opTime()),
-            owed, setAside, standing.creditLimit()));
+        EntityInstance sponsor = FeeGate.first(ctx, SPONSOR);
+        return PrepaymentRules.check(items, new PrepaymentRules.Standing(billingMode(ctx), spendable(ctx), owed,
+            setAside, sponsor == null ? null : FeeGate.money(sponsor.get("creditLimit"))));
+    }
+
+    /**
+     * What the account may set aside now, as {@code QB_PREPAYMENT_FREEZE} takes it (M4 of the F-M5 review): the fee
+     * credit not expired, then the cash lots as far as the cash wallet's available amount goes. Were the lots and the
+     * wallet ever apart (the daily check {@code CASH_LOTS} reports it), the check refuses with the funds' code instead
+     * of the freeze failing.
+     */
+    static BigDecimal spendable(ProcessContext ctx) {
+        List<EntityInstance> credits = FeeGate.list(ctx, CREDITS);
+        EntityInstance cashWallet = FeeGate.first(ctx, CASH_WALLET);
+        return com.jabiz.quizbuks.fee.FeeAllocation.allocate(com.jabiz.quizbuks.fee.Prepayments.credits(credits),
+            com.jabiz.quizbuks.fee.CashLots.cash(FeeGate.list(ctx, LOTS)), QbWallets.available(cashWallet),
+            FeeSettlement.spendable(credits, cashWallet, ctx.opTime()), ctx.opTime()).paid();
+    }
+
+    /** The sponsor's billing as read under the lock (L1 of the F-M5 review), else the default. */
+    static String billingMode(ProcessContext ctx) {
+        EntityInstance sponsor = FeeGate.first(ctx, SPONSOR);
+        return FeeRules.billingModeOf(sponsor == null ? null : sponsor.get("billingMode"),
+            params(ctx).find(QbParams.FEE_DEFAULT_BILLING_MODE, String.class).orElse(null));
     }
 
     @SuppressWarnings("unchecked")
@@ -237,8 +277,7 @@ public final class PublicationPrepayments {
     }
 
     private static boolean postpaid(ProcessContext ctx) {
-        return FeeRules.POSTPAID.equals(FeeGate.standing(ctx, params(ctx)
-            .find(QbParams.FEE_DEFAULT_BILLING_MODE, String.class).orElse(null)).billingMode());
+        return FeeRules.POSTPAID.equals(billingMode(ctx));
     }
 
     /** Sets the publication's fees aside ({@code QB_PREPAYMENT_FREEZE}, one a purpose), under the wallet lock. */
