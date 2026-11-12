@@ -316,10 +316,10 @@ FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 20;
   2. 发布的顺序：
      - 先发布 `qb.reward.kudos.enabled` 与 `qb.reward.default-methods` 这两个键，**再**发布审批规则（`qb.sponsor.review`、`qb.publication.review`）：正式环境里学分奖励的开关没有发布就算关，这样发起方入驻与发布的流程不会出现不一致的中间状态；
      - 法务相关的不打开：`qb.transfer.enabled`、`qb.withdrawal.bank.enabled` 保持 `false`（§1.3b、§1.3c）；`qb.kudos.buy.enabled`、`qb.kudos.sell.enabled`、`qb.reward.kudos.enabled`、`qb.play.entry-fee.enabled` 的首次上线的值也是 `false`（学分只显示、不使用，学分的帮助见 `help/fee-account.md`）；
-     - 价目表设好之后才发布收费类的开关（`qb.fee.monthly`、`qb.creator-fee-rate` 的首次上线的值是 0，收费开始前由受控变更改）；赠送额度的开关 `qb.fee-credit.grant.enabled` 在价目表与赠送额度（`qb.fee-credit.grant.*`）设好之后发布；
-     - AI 使用说明发布之后才发布 `qb.ai.enabled` 与 `qb.help.enabled`（两条提案的值都是 `true`）；
-     - 收费组尚未上线的行（配送费、受众规则费、曝光费、AI 费、自动付账单）在卡片上显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
-  3. 财务页卡片中可比较的行全部显示"一致"（金额类的行显示"金额，不比较"）。测试系统与本地环境显示"不同"是预期的；
+     - `qb.fee.monthly`、`qb.creator-fee-rate`（与 `qb.transfer.fee-rate`）的提案值是 0，**必须先发布**（与其他提案一起，不等价目表）：首次上线不收这些费用，发布后参数才存在、卡片才显示"一致"，以后改声明值也不会改到已上线的系统；价目表设好、收费开始前再由受控变更改为实际金额；赠送额度的开关 `qb.fee-credit.grant.enabled` 在价目表与赠送额度（`qb.fee-credit.grant.*`）设好之后发布；
+     - AI 使用说明发布、**且 AI 使用手册（`manual-sponsor.*.md`、`manual-app.*.md`）已按首次上线的状态（学分只显示、不使用，无报名费）改好并由内容管理员重新载入、发布**之后，才发布 `qb.ai.enabled` 与 `qb.help.enabled`（两条提案的值都是 `true`）；
+     - 收费组尚未上线的行：已经存在的两个键 `qb.audience.billing.enabled`（F-M7）、`qb.ai.site-profile.enabled`（F-M9）由 `QB_SETUP` 提出 `false`，**照常发布**，卡片比较它们的现值（为开即"不同"，启动检查警告）；其余四个键（配送费 `qb.distribution.billing.enabled`、曝光费 `qb.exposure.billing.enabled`、AI 费 `qb.ai.fee.enabled`、自动付账单 `qb.fee.auto-pay.enabled`）尚不存在，卡片显示"等 F-Mx 上线"，不提案、不用管；它们的上线顺序见 `plans/impl/F-M.md` §4；
+  3. 财务页卡片中可比较的行全部显示"一致"（金额类的行显示"金额，不比较"）。新建的测试系统（`staging`）同样应全部一致；只有此前已经建过参数的测试系统，以及本地环境（不是 `production` / `staging`，提出声明值），才会显示"不同"；
   4. 启动日志没有 `FirstLaunchSwitchesCheck` 的警告（`production` 上：学分买卖、转账、提现、学分奖励、报名费的开关为开，或学分奖励的开关从未发布；Stripe 正式模式而环境不是 `production`）。
   运营商自己的提现（`qb.operator.withdrawal.*`）没有开关：那是运营商的收入，不是学分，不由本项挡住。
 - [ ] 小额实测：一位内部发起方用真实卡充值最小额（`qb.topup.min`），确认到账、手续费分录、收据；在 Stripe Dashboard 全额退款，确认扣回；次日核对为 `OK`
